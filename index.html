@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Moon-Runner</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ccircle cx=%2250%22 cy=%2250%22 r=%2244%22 fill=%22%23ffd23f%22 stroke=%22%23120a1e%22 stroke-width=%228%22/%3E%3Ccircle cx=%2235%22 cy=%2240%22 r=%2210%22 fill=%22%23120a1e%22/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="game"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="topleft">
+      <div id="credits" class="chip">₵0</div>
+      <div id="style" class="chip pink"></div>
+      <div id="mission" class="panel hidden"></div>
+    </div>
+    <canvas id="minimap" width="210" height="210"></canvas>
+
+    <div id="speedo" class="panel">
+      <canvas id="speedo-dial" width="240" height="134"></canvas>
+      <div class="speed-read"><span id="speed-num">0</span><span class="unit">KM/H</span></div>
+      <div id="skates">Q-LOCK: OFF</div>
+      <div class="bar"><label>HULL</label><div class="track"><div id="hp-fill" class="fill hp"></div></div></div>
+      <div class="bar"><label>JET</label><div class="track"><div id="en-fill" class="fill en"></div></div></div>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="obj-arrow" class="hidden">➤</div>
+    <div id="obj-marker" class="hidden"><div class="diamond"></div><span></span></div>
+    <div id="alert" class="hidden"></div>
+    <div id="zonewarn" class="hidden"></div>
+    <div id="toast" class="hidden"></div>
+    <div id="prompt" class="hidden"></div>
+    <div id="tip" class="hidden"></div>
+    <div id="grab" class="hidden"><div class="grab-label">PIRATE GRABBING CARGO! SHAKE 'EM!</div><div class="track"><div id="grab-fill" class="fill"></div></div></div>
+    <div id="banner" class="hidden"></div>
+    <div id="result" class="panel result hidden"></div>
+    <div id="popups"></div>
+    <div id="action-panel" class="hidden"><div id="panel-caption"></div></div>
+  </div>
+
+  <div id="board" class="panel hidden"></div>
+
+  <div id="help" class="panel hidden">
+    <h2>CONTROLS</h2>
+    <table>
+      <tr><td>Mouse</td><td>Look / aim</td></tr>
+      <tr><td>W A S D</td><td>Run · steer / carve on skates</td></tr>
+      <tr><td>SPACE (hold)</td><td>Quantum-Lock Skates — frictionless glide</td></tr>
+      <tr><td>E / Right mouse</td><td>Thruster (uses JET)</td></tr>
+      <tr><td>SHIFT</td><td>Mag-jump</td></tr>
+      <tr><td>Left mouse</td><td>Pulse Spinner (splash knocks you around — disc-jump!)</td></tr>
+      <tr><td>F</td><td>Job board / upgrades (in hubs)</td></tr>
+      <tr><td>M</td><td>Big map</td></tr>
+      <tr><td>R</td><td>Emergency recall to ILMB</td></tr>
+      <tr><td>H</td><td>Toggle this help</td></tr>
+    </table>
+  </div>
+
+  <div id="pause" class="overlay hidden"><div class="panel center-card"><h1>PAUSED</h1><p>Click to resume</p></div></div>
+  <div id="death" class="overlay hidden"><div class="panel center-card lose"><h1>K.O.!</h1><p id="death-cause"></p><p class="small">Click or press ENTER to redeploy at the ILMB.</p></div></div>
+
+  <div id="title" class="overlay">
+    <div class="cover">
+      <div class="issue">ISSUE #1 · 25¢ · LUNAR FRONTIER COMICS</div>
+      <h1 class="logo">MOON<span>-</span>RUNNER</h1>
+      <div class="tagline">QUANTUM-LOCK DELIVERY SERVICE</div>
+      <div class="cover-panels">
+        <div class="cp"><b>DIVE</b> into craters!</div>
+        <div class="cp"><b>LAUNCH</b> off the rims!</div>
+        <div class="cp"><b>DELIVER</b> — whatever it takes!</div>
+      </div>
+      <div class="controls-mini">
+        <span><b>SPACE</b> hold = skates</span><span><b>WASD</b> move</span><span><b>E/RMB</b> thrust</span>
+        <span><b>SHIFT</b> jump</span><span><b>LMB</b> shoot</span><span><b>F</b> job board</span><span><b>H</b> help</span>
+      </div>
+      <div id="load-status">Loading…</div>
+      <button id="start-btn" class="hidden">START YOUR SHIFT!</button>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
