@@ -36,6 +36,7 @@ Click **START YOUR SHIFT!** to lock the mouse.
 | `1` `2` `3` `4` | Switch weapon: Pulse Spinner, Vostok Scattergun, Daedalus Rail Lance, Rustmoon Junk Mortar |
 | `C` | Wardrobe: cycle owned outfits, skate finishes and pulse-disc colours |
 | `N` | Music on / off |
+| `` ` `` (backtick) | Cheat / testing menu |
 | `G` / `X` | Scoop into your containment jar / empty it (into the antimatter reactor when you're beside it) |
 | `F` | Job board / upgrades (inside hubs and settlements) |
 | `M` | Globe map: drag to spin, scroll to zoom. Fog of war covers anywhere you haven't been |
@@ -136,6 +137,14 @@ and appear on the globe map and the Reputation Log. Ride up to a beacon to start
 
 Base pay is deliberately low and grows with reputation: ×0.8 at WARY up to ×2.4 at HONORED.
 Contract clocks are tight. If you miss one, the job still pays 50% when you deliver.
+
+## Cheat menu (testing)
+
+Press `` ` `` (backtick) during play. Options: +₵10,000 · reveal the whole map · set reputation per faction
+(±10, FRIENDLY / TRUSTED / HONORED / NEUTRAL / HOSTILE, or all factions HONORED) · teleport to any location ·
+god mode · unlock all gear, weapons and cosmetics · lab kit (big jar, items, 3 chimeras) · and under MORE: join
+Rustmoon, spawn a pirate squad or the Mega Mite, spawn an event for any faction (and teleport to it), max out
+the unlock counters, cure mutations, or reset all progress. Number keys pick, Esc closes.
 
 ## Threat Scanner
 
@@ -247,6 +256,7 @@ src/
   mapview.js     draggable fog-of-war globe map
   alchemy.js     containment jar, reactor recipes, wild mites, followers, splice-pod mutations, Mega Mite
   chimera.js     gene splicing + procedural chimera models
+  cheats.js      testing menu (backtick)
   cosmetics.js   outfits, skate finishes, laser colours, wardrobe
   race.js        Chimera Derby: track, betting, chaos racing
   highlights.js  action-shot capture + Hall of Highlights board

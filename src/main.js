@@ -19,6 +19,7 @@ import { GlobeMap } from './mapview.js';
 import { Alchemy, MUTATIONS } from './alchemy.js';
 import { Race } from './race.js';
 import { Cosmetics } from './cosmetics.js';
+import { Cheats } from './cheats.js';
 import { WEAPONS } from './weapons.js';
 import { clamp, pick, mulberry32 } from './rng.js';
 import { inkMat } from './toon.js';
@@ -130,6 +131,7 @@ class Game {
     this.race = new Race(this);
     this.cosmetics = new Cosmetics(this);
     this.cosmetics.apply();
+    this.cheats = new Cheats(this);
     this.alchemy.start();
     this.player.applyUpgrades(this.upgrades);
     this.player.health = this.player.maxHealth;
@@ -211,6 +213,7 @@ class Game {
         if (code === 'KeyM') this.openMap();
         if (code === 'KeyJ') this.openLog();
         if (code === 'KeyH') document.getElementById('help').classList.toggle('hidden');
+        if (code === 'Backquote') this.cheats.open();
         if (code === 'KeyL') {
           this.lampMode = this.lampMode === 'auto' ? 'off' : this.lampMode === 'off' ? 'on' : 'auto';
           this.hud.toast(`HELMET LAMP: ${this.lampMode.toUpperCase()}`);
@@ -416,7 +419,7 @@ class Game {
 
   damagePlayer(amount, cause) {
     const P = this.player;
-    if (P.dead || amount <= 0) return;
+    if (P.dead || amount <= 0 || this.cheats.god) return;
     P.health -= amount;
     this.damageFlash = Math.min(1, this.damageFlash + 0.25 + amount / 40);
     this.cam.shake = Math.min(1.5, this.cam.shake + amount / 25);
