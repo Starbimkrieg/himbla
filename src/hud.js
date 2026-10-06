@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FACTIONS } from './locations.js';
+import { arcDist, anglesFromDir, darkness } from './geo.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -90,10 +91,10 @@ export class HUD {
   }
 
   // ---- Job board / shop ----
-  openBoard(loc, offers, { onAccept, onClose, shop, onBuy, upgrades, credits, active, onAbandon }) {
+  openBoard(loc, offers, { onAccept, onClose, shop, onBuy, upgrades, credits, active, onAbandon, highlights }) {
     const el = $('board');
     const f = FACTIONS[loc.faction];
-    let html = `<div class="board-head" style="background:${f.color}"><span>${loc.name.toUpperCase()}</span><span class="board-credits">₵${credits}</span></div>`;
+    let html = `<div class="board-head" style="background:${f.color}"><span>${loc.name.toUpperCase()}</span><span class="board-right"><span class="board-credits">₵${credits}</span><button class="board-close" data-close="1">✕ CLOSE</button></span></div>`;
     if (active) {
       html += `<div class="board-active">ACTIVE: ${active.cargo.name} → ${active.to.name}<button data-abandon="1">ABANDON</button></div>`;
     }
@@ -109,7 +110,7 @@ export class HUD {
         <div class="job-cargo">${o.cargo.name}</div>
         <div class="job-route">${o.pickup === o.board ? 'HERE' : o.pickup.name} → <b>${o.to.name}</b> · ${(o.dist / 1000).toFixed(1)} km · ${o.time}s</div>
         <div class="bubble"><b>${o.client}:</b> “${o.text}”</div>
-        <div class="job-tags">Fragile ${fr} &nbsp; Pirate risk ${hot}${o.clearance ? ' &nbsp; <span class="clr">MILITARY CLEARANCE</span>' : ''}</div>
+        <div class="job-tags">Fragile ${fr} &nbsp; Pirate risk ${hot}${o.clearance ? ' &nbsp; <span class="clr">MILITARY CLEARANCE</span>' : ''}${o.dark ? ' &nbsp; <span class="darktag">☾ DARK SIDE · HAZARD PAY</span>' : ''}</div>
       </div>`;
     });
     html += `</div>`;
@@ -125,12 +126,19 @@ export class HUD {
       }
       html += `</div>`;
     }
-    html += `</div><div class="board-foot">Click a contract or press 1-${Math.max(1, offers.length)} · ESC / F to close</div>`;
+    html += `</div>`;
+    if (highlights && highlights.length) {
+      html += `<div class="board-hl"><h3>HALL OF HIGHLIGHTS</h3><div class="hl-strip">`;
+      for (const h of highlights) html += `<figure><img src="${h.url}" alt=""><figcaption>${h.caption}</figcaption></figure>`;
+      html += `</div></div>`;
+    }
+    html += `<div class="board-foot">Click a contract or press 1-${Math.max(1, offers.length)} · F / ESC / ✕ to close</div>`;
     el.innerHTML = html;
     el.classList.remove('hidden');
     el.onclick = (ev) => {
       const job = ev.target.closest('.job');
       const buy = ev.target.closest('[data-buy]');
+      if (ev.target.closest('[data-close]')) { onClose(); return; }
       if (ev.target.closest('[data-abandon]')) { onAbandon(); return; }
       if (job && !job.classList.contains('disabled')) onAccept(offers[+job.dataset.i]);
       else if (buy && !buy.classList.contains('disabled')) onBuy(buy.dataset.buy);
@@ -168,7 +176,7 @@ export class HUD {
       const obj = ms.objective();
       mp.classList.remove('hidden');
       const t = Math.max(0, ms.timer);
-      const dist = obj ? Math.hypot(obj.pos.x - P.pos.x, obj.pos.z - P.pos.z) : 0;
+      const dist = obj ? arcDist(obj.pos, P.pos) : 0;
       mp.innerHTML = `<div class="m-head" style="background:${FACTIONS[a.faction].color}">CONTRACT · ${a.client}</div>
         <div class="m-cargo">${a.cargo.name}</div>
         <div class="m-obj">${obj ? obj.label : ''} <span>${(dist / 1000).toFixed(2)} km</span></div>
@@ -221,32 +229,37 @@ export class HUD {
     }
   }
 
+  // Heading-up local map: everything is projected onto the tangent plane around you.
   drawMinimap() {
+    if (this.bigMap) { this.drawMoonMap(); return; }
     const g = this.game;
     const P = g.player;
     const c = this.mctx;
-    const big = this.bigMap;
     const W = this.mini.width, H = this.mini.height;
-    const range = big ? 2000 : 700;
-    const cx = big ? 0 : P.pos.x, cz = big ? 0 : P.pos.z;
+    const range = 700;
     const s = (W / 2) / range;
-    const tx = (x) => W / 2 + (x - cx) * s;
-    const tz = (z) => H / 2 + (z - cz) * s;
-    c.fillStyle = '#2a2440';
+    const up = P.up, fwd = g.cam.fwd, right = g.cam.right;
+    const proj = (p) => {
+      const n = this.v.copy(p).normalize();
+      const d = arcDist(n, up);
+      const tx = n.dot(right), ty = n.dot(fwd);
+      const l = Math.hypot(tx, ty) || 1;
+      return [W / 2 + (tx / l) * d * s, H / 2 - (ty / l) * d * s, d];
+    };
+    const dark = darkness(up);
+    c.fillStyle = dark > 0.5 ? '#0e0b18' : '#2a2440';
     c.fillRect(0, 0, W, H);
-    // craters as rings
     c.strokeStyle = 'rgba(255,255,255,0.12)';
     c.lineWidth = 1;
-    for (const cr of g.terrain.craters) {
-      if (cr.R < (big ? 60 : 30)) continue;
-      const x = tx(cr.x), y = tz(cr.z), r = cr.R * s;
-      if (x + r < 0 || x - r > W || y + r < 0 || y - r > H) continue;
-      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.stroke();
+    for (const cr of g.planet.craters) {
+      if (cr.R < 30 || cr.d.dot(up) < 0.9) continue;
+      const [x, y, d] = proj(cr.d);
+      if (d > range + cr.R) continue;
+      c.beginPath(); c.arc(x, y, cr.R * s, 0, Math.PI * 2); c.stroke();
     }
-    c.strokeStyle = 'rgba(255,255,255,0.3)';
-    c.beginPath(); c.arc(tx(0), tz(0), 1950 * s, 0, Math.PI * 2); c.stroke();
     for (const l of g.locations) {
-      const x = tx(l.x), y = tz(l.z);
+      const [x, y, d] = proj(l.dir);
+      if (d > range * 1.6) continue;
       if (l.zoneR) {
         c.fillStyle = 'rgba(255,42,74,0.18)';
         c.strokeStyle = '#ff2a4a';
@@ -257,43 +270,77 @@ export class HUD {
       c.strokeStyle = '#120a1e';
       c.lineWidth = 3;
       c.beginPath(); c.arc(x, y, Math.max(5, l.r * s * 0.6), 0, Math.PI * 2); c.fill(); c.stroke();
-      if (big || (Math.abs(x - W / 2) < W / 2 && Math.abs(y - H / 2) < H / 2)) {
-        c.font = `${big ? 15 : 12}px Bangers, Impact, sans-serif`;
-        c.fillStyle = '#fff';
-        c.textAlign = 'center';
-        c.strokeText(l.short, x, y - 10); c.fillText(l.short, x, y - 10);
-      }
+      c.font = '12px Bangers, Impact, sans-serif';
+      c.fillStyle = '#fff';
+      c.textAlign = 'center';
+      c.strokeText(l.short, x, y - 10); c.fillText(l.short, x, y - 10);
     }
-    // traffic
     c.fillStyle = '#9be7ff';
-    for (const sh of g.world.shuttles) c.fillRect(tx(sh.pos.x) - 2, tz(sh.pos.z) - 2, 4, 4);
-    // enemies
+    for (const v of g.world.vehicles) {
+      const [x, y, d] = proj(v.pos);
+      if (d < range) c.fillRect(x - 2, y - 2, 4, 4);
+    }
     for (const e of g.enemies.list) {
-      if (e.dead) continue;
-      const p = e.body ? e.body.pos : e.center;
+      if (e.dead || (e.faction === 'mil' && !e.base.awake)) continue;
+      const [x, y, d] = proj(e.body ? e.body.pos : e.center);
+      if (d > range) continue;
       c.fillStyle = e.faction === 'pirate' ? '#7dff3a' : (e.base.hostile ? '#ff2a4a' : '#8a8aa0');
-      const x = tx(p.x), y = tz(p.z);
       c.beginPath(); c.arc(x, y, e.carrying ? 6 : 3.5, 0, Math.PI * 2); c.fill();
       if (e.carrying) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); }
     }
-    // drops
-    for (const d of g.enemies.drops) { c.fillStyle = '#2ee6ff'; c.fillRect(tx(d.pos.x) - 4, tz(d.pos.z) - 4, 8, 8); }
-    // objective
+    for (const d of g.enemies.drops) { const [x, y] = proj(d.pos); c.fillStyle = '#2ee6ff'; c.fillRect(x - 4, y - 4, 8, 8); }
     const obj = g.missions.objective();
     if (obj) {
-      const x = Math.max(8, Math.min(W - 8, tx(obj.pos.x))), y = Math.max(8, Math.min(H - 8, tz(obj.pos.z)));
+      let [x, y] = proj(obj.pos);
+      x = Math.max(8, Math.min(W - 8, x)); y = Math.max(8, Math.min(H - 8, y));
       c.strokeStyle = '#ffd23f'; c.lineWidth = 3;
       c.beginPath(); c.arc(x, y, 9 + Math.sin(performance.now() / 150) * 2, 0, Math.PI * 2); c.stroke();
     }
-    // player arrow
-    const px = tx(P.pos.x), py = tz(P.pos.z);
-    const yaw = g.cam.yaw;
-    c.save();
-    c.translate(px, py);
-    c.rotate(-yaw + Math.PI);
     c.fillStyle = '#ff4f2e'; c.strokeStyle = '#fff'; c.lineWidth = 2;
-    c.beginPath(); c.moveTo(0, -9); c.lineTo(6, 7); c.lineTo(0, 3); c.lineTo(-6, 7); c.closePath(); c.fill(); c.stroke();
-    c.restore();
+    c.beginPath(); c.moveTo(W / 2, H / 2 - 9); c.lineTo(W / 2 + 6, H / 2 + 7); c.lineTo(W / 2, H / 2 + 3); c.lineTo(W / 2 - 6, H / 2 + 7); c.closePath(); c.fill(); c.stroke();
+  }
+
+  // Whole-moon map: centred on the sub-solar point; the outer ring is the dark side.
+  drawMoonMap() {
+    const g = this.game;
+    const c = this.mctx;
+    const W = this.mini.width, H = this.mini.height;
+    const Rm = W / 2 - 14;
+    const toXY = (d) => {
+      const { theta, phi } = anglesFromDir(this.v.copy(d).normalize());
+      const r = (theta / Math.PI) * Rm;
+      return [W / 2 + Math.cos(phi) * r, H / 2 - Math.sin(phi) * r];
+    };
+    c.fillStyle = '#05030c';
+    c.fillRect(0, 0, W, H);
+    const grad = c.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Rm);
+    grad.addColorStop(0, '#5a4f86'); grad.addColorStop(0.45, '#3b3260'); grad.addColorStop(0.55, '#15111f'); grad.addColorStop(1, '#07050d');
+    c.fillStyle = grad;
+    c.beginPath(); c.arc(W / 2, H / 2, Rm, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#ffd23f'; c.setLineDash([6, 6]); c.lineWidth = 1.5;
+    c.beginPath(); c.arc(W / 2, H / 2, Rm / 2, 0, Math.PI * 2); c.stroke();
+    c.setLineDash([]);
+    c.font = '13px Bangers, Impact, sans-serif'; c.textAlign = 'center';
+    c.fillStyle = '#ffd23f'; c.fillText('TERMINATOR', W / 2, H / 2 - Rm / 2 - 4);
+    c.fillStyle = '#8a84a8'; c.fillText('☾ DARK SIDE ☾', W / 2, H / 2 - Rm * 0.8);
+    for (const l of g.locations) {
+      const [x, y] = toXY(l.dir);
+      c.fillStyle = FACTIONS[l.faction].color;
+      c.strokeStyle = '#120a1e'; c.lineWidth = 3;
+      c.beginPath(); c.arc(x, y, l.zoneR ? 7 : 5, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.font = '13px Bangers, Impact, sans-serif';
+      c.fillStyle = '#fff';
+      c.strokeText(l.short, x, y - 9); c.fillText(l.short, x, y - 9);
+    }
+    const obj = g.missions.objective();
+    if (obj) {
+      const [x, y] = toXY(obj.pos);
+      c.strokeStyle = '#ffd23f'; c.lineWidth = 3;
+      c.beginPath(); c.arc(x, y, 11 + Math.sin(performance.now() / 150) * 2, 0, Math.PI * 2); c.stroke();
+    }
+    const [px, py] = toXY(g.player.pos);
+    c.fillStyle = '#ff4f2e'; c.strokeStyle = '#fff'; c.lineWidth = 2;
+    c.beginPath(); c.arc(px, py, 6, 0, Math.PI * 2); c.fill(); c.stroke();
   }
 
   updateArrow() {
@@ -302,21 +349,23 @@ export class HUD {
     const el = $('obj-arrow');
     const mk = $('obj-marker');
     if (!obj || g.player.dead) { el.classList.add('hidden'); mk.classList.add('hidden'); return; }
-    const y = g.terrain.height(obj.pos.x, obj.pos.z) + 25;
-    this.v.set(obj.pos.x, y, obj.pos.z).project(g.camera);
+    const up = obj.pos.clone().normalize();
+    this.v.copy(g.planet.ground(up)).addScaledVector(up, 25).project(g.camera);
     const onScreen = this.v.z < 1 && Math.abs(this.v.x) < 0.95 && Math.abs(this.v.y) < 0.92;
-    const dist = Math.hypot(obj.pos.x - g.player.pos.x, obj.pos.z - g.player.pos.z);
+    const dist = arcDist(obj.pos, g.player.pos);
     if (onScreen) {
       el.classList.add('hidden');
       mk.classList.remove('hidden');
       mk.style.left = ((this.v.x + 1) / 2) * 100 + '%';
       mk.style.top = ((1 - this.v.y) / 2) * 100 + '%';
-      mk.querySelector('span').textContent = `${obj.label} · ${Math.round(dist)}m`;
+      mk.querySelector('span').textContent = `${obj.label} · ${dist > 2000 ? (dist / 1000).toFixed(1) + 'km' : Math.round(dist) + 'm'}`;
     } else {
       mk.classList.add('hidden');
       el.classList.remove('hidden');
-      let x = this.v.x, yy = this.v.y;
-      if (this.v.z > 1) { x = -x; yy = -yy; }
+      // beyond the horizon: point along the surface toward it
+      const P = g.player;
+      const t = obj.pos.clone().normalize().addScaledVector(P.up, -obj.pos.clone().normalize().dot(P.up));
+      let x = t.dot(g.cam.right), yy = t.dot(g.cam.fwd);
       const a = Math.atan2(yy, x);
       const r = 0.82;
       const ex = Math.cos(a), ey = Math.sin(a);

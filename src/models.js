@@ -15,8 +15,13 @@ export function makeRunner({
   scarf = 0xffd23f, scale = 1, pirate = false,
 } = {}) {
   const root = new THREE.Group();
+  // trick pivot sits at the centre of mass so flips rotate around the body, not the feet
+  const trick = new THREE.Group();
+  trick.position.y = 1.2;
+  root.add(trick);
   const body = new THREE.Group();
-  root.add(body);
+  body.position.y = -1.2;
+  trick.add(body);
   const suitM = toon(suit), dark = toon(0x221d33), helmetM = toon(helmet), accentM = toon(accent);
   const glowM = glow(accent);
 
@@ -77,8 +82,12 @@ export function makeRunner({
   collar.rotation.x = Math.PI / 2;
   scarfPivot.add(collar);
 
+  // helmet lamp lens (the actual light is owned by the player)
+  const lamp = part(new THREE.SphereGeometry(0.08, 8, 6), glow(0xfff6a8), 0.26, 0.12, 0.26, 0);
+  head.add(lamp);
+
   root.scale.setScalar(scale);
-  return { root, body, torso, head, legL: legs[0], legR: legs[1], armL: arms[0], armR: arms[1], scarf: scarfPivot, cargoSlot, glowM, accent };
+  return { root, trick, body, bodyBase: -1.2, torso, head, legL: legs[0], legR: legs[1], armL: arms[0], armR: arms[1], scarf: scarfPivot, cargoSlot, glowM, accent };
 }
 
 // Cheap NPC figure for ambient life.
@@ -178,4 +187,58 @@ export function makeDish(size = 10, color = 0xf5f5f5) {
   tilt.add(part(new THREE.CylinderGeometry(size * 0.03, size * 0.03, r * 0.9), toon(0x333344), 0, r * 0.45, 0, 0.04));
   tilt.add(part(new THREE.SphereGeometry(size * 0.06, 8, 6), glow(0xff2e88), 0, r * 0.9, 0, 0));
   return { root, yaw, tilt };
+}
+
+// --- traffic of all sizes ---
+
+export function makeHoverCar({ color = 0xff7ad9, trim = 0xfff4e0 } = {}) {
+  const root = new THREE.Group();
+  root.add(part(new THREE.CapsuleGeometry(1.1, 2.6, 4, 10).rotateX(Math.PI / 2), toon(color), 0, 0, 0, 0.08));
+  root.add(part(new THREE.SphereGeometry(1.0, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), toon(0x9be7ff), 0, 0.5, 0.2, 0.05));
+  for (const sx of [-1, 1]) root.add(part(new THREE.CylinderGeometry(0.45, 0.6, 0.4, 10), glow(0x2ee6ff), sx * 1.1, -0.9, 0, 0.04));
+  root.add(part(new THREE.BoxGeometry(2.6, 0.2, 0.6), toon(trim), 0, -0.2, -1.8, 0.04));
+  return { root, size: 3 };
+}
+
+export function makeFreighter({ color = 0xb8b4c8, stripe = 0xff9f1c } = {}) {
+  const root = new THREE.Group();
+  const hullM = toon(color), stripeM = toon(stripe), dark = toon(0x2a2540);
+  root.add(part(new THREE.BoxGeometry(14, 10, 46), hullM, 0, 0, 0, 0.3));
+  root.add(part(new THREE.CylinderGeometry(6, 8, 12, 12).rotateX(Math.PI / 2), hullM, 0, 1, 28, 0.3));
+  root.add(part(new THREE.BoxGeometry(8, 4, 8), toon(0x9be7ff), 0, 4, 30, 0.15));
+  root.add(part(new THREE.BoxGeometry(14.4, 2, 46.4), stripeM, 0, -1, 0, 0));
+  // cargo pods
+  for (let i = 0; i < 4; i++) for (const sx of [-1, 1]) root.add(part(new THREE.BoxGeometry(5, 5, 7), toon([0xffd23f, 0x2ec4ff, 0xff3b5c, 0x7dff6a][i]), sx * 10, -2, -14 + i * 9, 0.15));
+  for (const sx of [-1, 1]) {
+    root.add(part(new THREE.BoxGeometry(14, 1.2, 10), dark, sx * 13, 3, -10, 0.15));
+    root.add(part(new THREE.CylinderGeometry(3, 3.6, 7, 12).rotateX(Math.PI / 2), dark, sx * 6, 0, -26, 0.2));
+    root.add(part(new THREE.CylinderGeometry(2.4, 2.4, 1, 12).rotateX(Math.PI / 2), glow(0xff9f1c), sx * 6, 0, -30, 0));
+  }
+  // nav lights so they read in the dark
+  root.add(part(new THREE.SphereGeometry(0.8, 8, 6), glow(0xff2a4a), -20, 3, -10, 0));
+  root.add(part(new THREE.SphereGeometry(0.8, 8, 6), glow(0x7dff6a), 20, 3, -10, 0));
+  return { root, size: 30 };
+}
+
+export function makeRocket({ color = 0xfff4e0, stripe = 0xff4f2e } = {}) {
+  const root = new THREE.Group();
+  const bodyM = toon(color), stripeM = toon(stripe);
+  root.add(part(new THREE.CylinderGeometry(4, 4.4, 30, 18), bodyM, 0, 19, 0, 0.25));
+  root.add(part(new THREE.ConeGeometry(4, 10, 18), stripeM, 0, 39, 0, 0.25));
+  root.add(part(new THREE.CylinderGeometry(4.45, 4.45, 3, 18), stripeM, 0, 22, 0, 0));
+  root.add(part(new THREE.CylinderGeometry(1.4, 1.4, 0.4, 12).rotateX(Math.PI / 2), toon(0x9be7ff), 0, 30, 4.3, 0.05));
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const fin = part(new THREE.BoxGeometry(0.6, 9, 5), stripeM, Math.cos(a) * 5, 6, Math.sin(a) * 5, 0.1);
+    fin.rotation.y = -a;
+    root.add(fin);
+    const leg = part(new THREE.CylinderGeometry(0.3, 0.3, 6), toon(0x4a4660), Math.cos(a + 0.78) * 5.5, 2.5, Math.sin(a + 0.78) * 5.5, 0.05);
+    root.add(leg);
+  }
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(3.2, 14, 14, 1, true).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85, depthWrite: false }));
+  flame.position.y = -4;
+  const core = new THREE.Mesh(new THREE.ConeGeometry(1.8, 9, 12, 1, true).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  core.position.y = -2;
+  root.add(flame, core);
+  return { root, flame, core };
 }

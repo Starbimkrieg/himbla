@@ -34,26 +34,27 @@ export class Projectiles {
 
   update(dt) {
     const g = this.game;
-    const terrain = g.terrain;
+    const planet = g.planet;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const p = this.list[i];
       p.life -= dt;
       p.prev.copy(p.pos);
-      p.vel.y -= p.gravity * dt;
+      if (p.gravity) p.vel.addScaledVector(_rel.copy(p.pos).normalize(), -p.gravity * dt);
       p.pos.addScaledVector(p.vel, dt);
       p.mesh.position.copy(p.pos);
       // stretch along velocity for a comic smear
       const sp = p.vel.length();
+      p.mesh.up.copy(p.pos).normalize();
       p.mesh.lookAt(_rel.copy(p.pos).add(p.vel));
       p.mesh.scale.set(p.size, p.size, p.size * (1 + Math.min(4, sp / 40)));
 
       let hit = p.life <= 0;
-      if (!hit && p.pos.y <= terrain.height(p.pos.x, p.pos.z)) {
-        hit = true;
-        p.pos.y = terrain.height(p.pos.x, p.pos.z) + 0.3;
+      if (!hit) {
+        const sr = planet.surface(p.pos);
+        if (p.pos.length() <= sr) { hit = true; p.pos.setLength(sr + 0.3); }
       }
       if (!hit) {
-        for (const c of g.colliders.query(p.pos.x, p.pos.z, 2, _near)) {
+        for (const c of g.colliders.query(p.pos, 2, _near)) {
           if (g.colliders.contact(c, p.pos, 0.3, _seg) > 0) { hit = true; break; }
         }
       }

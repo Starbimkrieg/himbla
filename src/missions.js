@@ -1,5 +1,6 @@
 import { CARGO, MIL_CARGO, CLIENTS, FACTIONS } from './locations.js';
 import { pick } from './rng.js';
+import { arcDist } from './geo.js';
 
 const LINES = {
   intl: [
@@ -54,16 +55,18 @@ export class Missions {
       if (faction === 'sci') pool = pool.filter((l) => l.type !== 'hub' || Math.random() < 0.5);
       to = pick(pool.length ? pool : this.civilianDestinations(pickup.id));
     }
-    const d1 = pickup === board ? 0 : Math.hypot(pickup.x - board.x, pickup.z - board.z);
-    const d2 = Math.hypot(to.x - pickup.x, to.z - pickup.z);
+    const d1 = pickup === board ? 0 : arcDist(pickup.dir, board.dir);
+    const d2 = arcDist(to.dir, pickup.dir);
     const dist = d1 + d2;
-    const time = Math.ceil((dist / 30 + 30) / 5) * 5;
-    let reward = 90 + dist * 0.18 + cargo.hot * 70 + cargo.fragile * 60;
+    const dark = !!(to.dark || pickup.dark);
+    const time = Math.ceil((dist / 30 + 35 + (dark ? 25 : 0)) / 5) * 5;
+    let reward = 90 + dist * 0.12 + cargo.hot * 70 + cargo.fragile * 60;
+    if (dark) reward *= 1.6; // hazard pay for the dark side
     if (clearance) reward += 150;
     reward = Math.round(reward / 5) * 5;
     const client = pick(CLIENTS[faction] || CLIENTS.intl);
     const text = pick(LINES[faction] || LINES.intl)(cargo.name, to.name);
-    return { id: this.nextId++, board, faction, client, cargo, pickup, to, dist, time, reward, clearance, text };
+    return { id: this.nextId++, board, faction, client, cargo, pickup, to, dist, time, reward, clearance, text, dark };
   }
 
   offersFor(loc) {
@@ -98,17 +101,17 @@ export class Missions {
   objective() {
     const a = this.active;
     if (!a) return null;
-    if (this.cargoState === 'toPickup') return { pos: a.pickup, label: `PICK UP @ ${a.pickup.short}` };
-    if (this.cargoState === 'held') return { pos: a.to, label: `DELIVER @ ${a.to.short}` };
-    if (this.cargoState === 'stolen' && this.thief && !this.thief.dead) return { pos: { x: this.thief.body.pos.x, z: this.thief.body.pos.z }, label: 'RECOVER STOLEN CARGO', thief: true };
-    if (this.cargoState === 'dropped' && this.dropPos) return { pos: { x: this.dropPos.x, z: this.dropPos.z }, label: 'GRAB DROPPED CARGO' };
+    if (this.cargoState === 'toPickup') return { pos: a.pickup.pos, label: `PICK UP @ ${a.pickup.short}` };
+    if (this.cargoState === 'held') return { pos: a.to.pos, label: `DELIVER @ ${a.to.short}` };
+    if (this.cargoState === 'stolen' && this.thief && !this.thief.dead) return { pos: this.thief.body.pos, label: 'RECOVER STOLEN CARGO', thief: true };
+    if (this.cargoState === 'dropped' && this.dropPos) return { pos: this.dropPos, label: 'GRAB DROPPED CARGO' };
     return null;
   }
 
   checkPickup() {
     const a = this.active;
     const P = this.game.player;
-    if (this.cargoState === 'toPickup' && Math.hypot(P.pos.x - a.pickup.x, P.pos.z - a.pickup.z) < a.pickup.r * 0.75) {
+    if (this.cargoState === 'toPickup' && arcDist(P.pos, a.pickup.dir) < a.pickup.r * 0.75) {
       this.cargoState = 'held';
       P.setCargo(a.cargo.color);
       this.game.audio.pickup();
@@ -124,7 +127,7 @@ export class Missions {
     if (this.timer <= 0) { this.fail('Out of time! The client found another runner.'); return; }
     this.checkPickup();
     const P = g.player;
-    if (this.cargoState === 'held' && Math.hypot(P.pos.x - a.to.x, P.pos.z - a.to.z) < a.to.r * 0.75) this.complete();
+    if (this.cargoState === 'held' && arcDist(P.pos, a.to.dir) < a.to.r * 0.75) this.complete();
   }
 
   jostle(amount, skates) {
@@ -171,8 +174,8 @@ export class Missions {
     g.style(20, 'Recovery');
   }
 
-  onFenced() {
-    this.fail('Pirates fenced your cargo at Scrapjaw Gulch.');
+  onFenced(lair) {
+    this.fail(`Pirates fenced your cargo at ${lair ? lair.name : 'a pirate den'}.`);
   }
 
   complete() {

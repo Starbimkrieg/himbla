@@ -3,10 +3,11 @@ import * as THREE from 'three';
 // Comic-book post pass: depth-based ink lines, halftone shadows, radial speed lines,
 // damage vignette, and a warm paper grade.
 export class ComicPost {
-  constructor(renderer, camera) {
+  constructor(renderer, camera, fixedSize = null) {
     this.renderer = renderer;
     this.camera = camera;
-    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    this.fixed = fixedSize;
+    const size = fixedSize ? fixedSize.clone() : renderer.getDrawingBufferSize(new THREE.Vector2());
     this.target = new THREE.WebGLRenderTarget(size.x, size.y, {
       type: THREE.HalfFloatType,
       depthTexture: new THREE.DepthTexture(size.x, size.y),
@@ -97,15 +98,20 @@ export class ComicPost {
   }
 
   setSize() {
+    if (this.fixed) return;
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     this.target.setSize(size.x, size.y);
     this.material.uniforms.res.value.copy(size);
   }
 
-  render(scene, camera) {
+  render(scene, camera, output = null) {
+    const u = this.material.uniforms;
+    u.near.value = camera.near;
+    u.far.value = camera.far;
     this.renderer.setRenderTarget(this.target);
     this.renderer.render(scene, camera);
-    this.renderer.setRenderTarget(null);
+    this.renderer.setRenderTarget(output);
     this.renderer.render(this.scene, this.ortho);
+    this.renderer.setRenderTarget(null);
   }
 }

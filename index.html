@@ -18,6 +18,7 @@
     <div id="topleft">
       <div id="credits" class="chip">₵0</div>
       <div id="style" class="chip pink"></div>
+      <div id="darkchip" class="chip dark hidden">☾ DARK SIDE — PIRATE COUNTRY</div>
       <div id="mission" class="panel hidden"></div>
     </div>
     <canvas id="minimap" width="210" height="210"></canvas>
@@ -38,6 +39,7 @@
     <div id="toast" class="hidden"></div>
     <div id="prompt" class="hidden"></div>
     <div id="tip" class="hidden"></div>
+    <div id="clickhint" class="hidden">CLICK TO GRAB THE CONTROLS</div>
     <div id="grab" class="hidden"><div class="grab-label">PIRATE GRABBING CARGO! SHAKE 'EM!</div><div class="track"><div id="grab-fill" class="fill"></div></div></div>
     <div id="banner" class="hidden"></div>
     <div id="result" class="panel result hidden"></div>
@@ -53,8 +55,11 @@
       <tr><td>Mouse</td><td>Look / aim</td></tr>
       <tr><td>W A S D</td><td>Run · steer / carve on skates</td></tr>
       <tr><td>SPACE (hold)</td><td>Quantum-Lock Skates — frictionless glide</td></tr>
-      <tr><td>E / Right mouse</td><td>Thruster (uses JET)</td></tr>
-      <tr><td>SHIFT</td><td>Mag-jump</td></tr>
+      <tr><td>E / Right mouse</td><td>Dive thrusters — push into slopes for speed (uses JET)</td></tr>
+      <tr><td>SHIFT</td><td>Mag-jump · in the air: Superman pose</td></tr>
+      <tr><td>Q + W/S · Q + A/D</td><td>Mid-air flips · spins (land upright!)</td></tr>
+      <tr><td>T</td><td>Swap thrusters: dive ↔ jetpack</td></tr>
+      <tr><td>L</td><td>Helmet lamp: auto / off / on</td></tr>
       <tr><td>Left mouse</td><td>Pulse Spinner (splash knocks you around — disc-jump!)</td></tr>
       <tr><td>F</td><td>Job board / upgrades (in hubs)</td></tr>
       <tr><td>M</td><td>Big map</td></tr>
@@ -77,8 +82,8 @@
         <div class="cp"><b>DELIVER</b> — whatever it takes!</div>
       </div>
       <div class="controls-mini">
-        <span><b>SPACE</b> hold = skates</span><span><b>WASD</b> move</span><span><b>E/RMB</b> thrust</span>
-        <span><b>SHIFT</b> jump</span><span><b>LMB</b> shoot</span><span><b>F</b> job board</span><span><b>H</b> help</span>
+        <span><b>SPACE</b> hold = skates</span><span><b>WASD</b> move</span><span><b>E/RMB</b> dive thrust</span>
+        <span><b>SHIFT</b> jump</span><span><b>Q</b>+WASD tricks</span><span><b>LMB</b> shoot</span><span><b>L</b> lamp</span><span><b>F</b> job board</span><span><b>H</b> help</span>
       </div>
       <div id="load-status">Loading…</div>
       <button id="start-btn" class="hidden">START YOUR SHIFT!</button>

@@ -52,17 +52,17 @@ export class FX {
     return { mesh, pts: [], N, mat };
   }
 
-  updateTrail(i, footPos, side, strength) {
+  updateTrail(i, footPos, side, strength, up) {
     const t = this.trails[i];
-    t.pts.unshift(footPos.clone(), side.clone());
+    t.pts.unshift(footPos.clone().addScaledVector(up, 0.05), side.clone());
     if (t.pts.length > t.N * 2) t.pts.length = t.N * 2;
     const pos = t.mesh.geometry.attributes.position.array;
     for (let k = 0; k < t.N; k++) {
       const j = Math.min(k, t.pts.length / 2 - 1) * 2;
       const p = t.pts[j], s = t.pts[j + 1];
       const w = 0.18;
-      pos[k * 6] = p.x - s.x * w; pos[k * 6 + 1] = p.y + 0.05; pos[k * 6 + 2] = p.z - s.z * w;
-      pos[k * 6 + 3] = p.x + s.x * w; pos[k * 6 + 4] = p.y + 0.05; pos[k * 6 + 5] = p.z + s.z * w;
+      pos[k * 6] = p.x - s.x * w; pos[k * 6 + 1] = p.y - s.y * w; pos[k * 6 + 2] = p.z - s.z * w;
+      pos[k * 6 + 3] = p.x + s.x * w; pos[k * 6 + 4] = p.y + s.y * w; pos[k * 6 + 5] = p.z + s.z * w;
     }
     t.mesh.geometry.attributes.position.needsUpdate = true;
     t.mat.uniforms.strength.value += (strength - t.mat.uniforms.strength.value) * 0.2;
@@ -79,8 +79,8 @@ export class FX {
     }
   }
 
-  dust(pos, vel, amount = 4, color = 0xd8d0c4) {
-    this.spawn(pos, vel.clone().multiplyScalar(0.25).add(new THREE.Vector3(0, 2, 0)), { color, size: 0.5, life: 1.2, gravity: 1.62, drag: 0.6, count: amount, spread: 4 });
+  dust(pos, vel, amount = 4, up = pos.clone().normalize(), color = 0xd8d0c4) {
+    this.spawn(pos, vel.clone().multiplyScalar(0.25).addScaledVector(up, 2), { color, size: 0.5, life: 1.2, gravity: 1.62, drag: 0.6, count: amount, spread: 4 });
   }
 
   explosion(pos, radius = 6, big = false) {
@@ -94,14 +94,16 @@ export class FX {
     g.position.copy(pos);
     this.scene.add(g);
     this.booms.push({ g, t: 0, dur: big ? 0.7 : 0.45, radius, mats: [core.material, outer.material, ink.material] });
-    this.spawn(pos, new THREE.Vector3(0, 3, 0), { color: 0xffd23f, size: radius * 0.08, life: 0.7, gravity: 1, count: big ? 26 : 12, spread: radius * 4 });
-    this.spawn(pos, new THREE.Vector3(0, 2, 0), { color: 0x3a3550, size: radius * 0.1, life: 1.4, gravity: 1.62, count: big ? 18 : 8, spread: radius * 2.5 });
+    const up = pos.clone().normalize();
+    this.spawn(pos, up.clone().multiplyScalar(3), { color: 0xffd23f, size: radius * 0.08, life: 0.7, gravity: 1, count: big ? 26 : 12, spread: radius * 4 });
+    this.spawn(pos, up.clone().multiplyScalar(2), { color: 0x3a3550, size: radius * 0.1, life: 1.4, gravity: 1.62, count: big ? 18 : 8, spread: radius * 2.5 });
   }
 
   warningRing(pos, radius, dur) {
     const m = new THREE.Mesh(new THREE.RingGeometry(radius * 0.9, radius, 40), new THREE.MeshBasicMaterial({ color: 0xff2a4a, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
-    m.rotation.x = -Math.PI / 2;
-    m.position.copy(pos).add(new THREE.Vector3(0, 0.6, 0));
+    const up = pos.clone().normalize();
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), up);
+    m.position.copy(pos).addScaledVector(up, 0.6);
     const inner = new THREE.Mesh(new THREE.CircleGeometry(radius, 40), new THREE.MeshBasicMaterial({ color: 0xff2a4a, transparent: true, opacity: 0.15, side: THREE.DoubleSide, depthWrite: false }));
     m.add(inner);
     this.scene.add(m);
@@ -132,7 +134,7 @@ export class FX {
       const p = this.particles[i];
       p.life -= dt;
       if (p.life <= 0) { this.particles.splice(i, 1); continue; }
-      p.vel.y -= p.gravity * dt;
+      if (p.gravity) p.vel.addScaledVector(this.v.copy(p.pos).normalize(), -p.gravity * dt);
       p.vel.multiplyScalar(1 - p.drag * dt);
       p.pos.addScaledVector(p.vel, dt);
       const k = p.life / p.max;

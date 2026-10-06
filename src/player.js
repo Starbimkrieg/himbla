@@ -2,14 +2,21 @@ import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { makeBody, stepSkater } from './physics.js';
 import { makeRunner, makeCrate } from './models.js';
+import { frameQuat } from './geo.js';
 
-const UP = new THREE.Vector3(0, 1, 0);
 const SPEED_MARKS = [
   { kmh: 150, text: 'WHOOSH!' },
   { kmh: 250, text: 'ZOOOM!' },
   { kmh: 350, text: 'KA-ZOOM!!' },
   { kmh: 450, text: 'LUDICROUS!!!' },
 ];
+const TAU = Math.PI * 2;
+const FLIP_RATE = 11; // rad/s ≈ 1.75 rotations per second
+const SPIN_RATE = 12;
+const NUMS = ['', '', 'DOUBLE ', 'TRIPLE ', 'QUAD ', 'QUINT '];
+
+const _q = new THREE.Quaternion();
+const _v = new THREE.Vector3();
 
 export class Player {
   constructor(game, spawn) {
@@ -21,24 +28,30 @@ export class Player {
     this.health = 100;
     this.dead = false;
     this.center = new THREE.Vector3();
-    this.heading = 0;
-    this.prevHeading = 0;
+    this.heading = new THREE.Vector3(0, 0, 1);
     this.roll = 0;
     this.fireCd = 0;
     this.cargoMesh = null;
     this.speedMarks = SPEED_MARKS.map(() => false);
-    this.bigAirShown = false;
     this.launchCheck = -1;
     this.anim = 0;
-    this.upSmooth = new THREE.Vector3(0, 1, 0);
+    this.upSmooth = spawn.clone().normalize();
     this.impacts = [];
     this.params = { ...PHYS };
-    this.lastHurt = 0;
+    this.trick = { flip: 0, spin: 0, superman: 0, active: false, lastAir: 0 };
+
+    // helmet lamp + a faint suit glow; intensities are driven by how dark it is
+    this.lamp = new THREE.SpotLight(0xfff2c8, 0, 170, 0.5, 0.55, 1.2);
+    this.lamp.castShadow = false;
+    game.scene.add(this.lamp, this.lamp.target);
+    this.glowLight = new THREE.PointLight(0x9be7ff, 0, 26, 1.5);
+    game.scene.add(this.glowLight);
   }
 
   get pos() { return this.body.pos; }
   get vel() { return this.body.vel; }
   get speed() { return this.body.vel.length(); }
+  get up() { return this.body.up; }
 
   applyUpgrades(up) {
     this.params.skateSafeImpact = PHYS.skateSafeImpact + up.dampers * 8;
@@ -47,13 +60,18 @@ export class Player {
     this.damageMult = 1 + up.spinner * 0.3;
   }
 
-  respawn(pos) {
+  respawn(pos, facing) {
     this.body.pos.copy(pos);
     this.body.vel.set(0, 0, 0);
+    this.body.up.copy(pos).normalize();
+    this.body.groundN.copy(this.body.up);
     this.body.energy = this.body.maxEnergy;
     this.health = this.maxHealth;
     this.dead = false;
     this.model.root.visible = true;
+    this.upSmooth.copy(this.body.up);
+    if (facing) this.heading.copy(facing);
+    this.resetTrick();
   }
 
   setCargo(color) {
@@ -64,60 +82,77 @@ export class Player {
     }
   }
 
+  resetTrick() {
+    const t = this.trick;
+    t.flip = t.spin = t.superman = 0;
+    t.active = false;
+    this.model.trick.rotation.set(0, 0, 0);
+  }
+
   update(dt, input, cam) {
     const g = this.game;
     const b = this.body;
     if (this.dead) return;
+    const up = b.up;
 
-    const fwd = new THREE.Vector3(Math.sin(cam.yaw), 0, Math.cos(cam.yaw));
-    const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
     const wish = new THREE.Vector3();
-    if (input.down('KeyW')) wish.add(fwd);
-    if (input.down('KeyS')) wish.sub(fwd);
-    if (input.down('KeyD')) wish.add(right);
-    if (input.down('KeyA')) wish.sub(right);
-    if (wish.lengthSq() > 0) wish.normalize();
+    const trickHeld = input.down('KeyQ') && !b.grounded && b.airTime > 0.12;
+    if (!trickHeld) {
+      if (input.down('KeyW')) wish.add(cam.fwd);
+      if (input.down('KeyS')) wish.sub(cam.fwd);
+      if (input.down('KeyD')) wish.add(cam.right);
+      if (input.down('KeyA')) wish.sub(cam.right);
+      if (wish.lengthSq() > 0) wish.normalize();
+    }
 
-    const look = cam.forward;
-    const thrustDir = new THREE.Vector3().copy(look).addScaledVector(UP, 0.9);
-    if (wish.lengthSq() > 0) thrustDir.addScaledVector(wish, 0.4);
-    thrustDir.normalize();
+    let thrustDir;
+    if (this.params.thrustMode === 'down') {
+      // dive thrusters: shove you into the slope / down onto the next downslope
+      thrustDir = up.clone().negate();
+    } else {
+      thrustDir = cam.look.clone().addScaledVector(up, 0.9);
+      if (wish.lengthSq() > 0) thrustDir.addScaledVector(wish, 0.4);
+      thrustDir.normalize();
+    }
 
     const ctrl = {
       wish,
       skates: input.down('Space'),
       thrust: input.down('KeyE') || input.mouse[2],
-      jump: input.pressed('ShiftLeft') || input.pressed('ShiftRight'),
+      jump: b.grounded && (input.pressed('ShiftLeft') || input.pressed('ShiftRight')),
       thrustDir,
     };
 
     const wasGrounded = b.grounded;
     const airBefore = b.airTime;
     b.jumped = false;
-    // fixed sub-steps for stable high-speed contact
     const steps = Math.ceil(dt / (1 / 120));
     const h = dt / steps;
+    let landed = false;
     for (let i = 0; i < steps; i++) {
-      const imp = stepSkater(b, ctrl, h, g.terrain, g.colliders, this.params, this.impacts);
+      const before = b.grounded;
+      const imp = stepSkater(b, ctrl, h, g.planet, g.colliders, this.params, this.impacts);
+      if (!before && b.grounded) landed = true;
       for (const it of imp) this.onImpact(it, ctrl.skates);
       ctrl.jump = false;
     }
-    if (b.jumped) { g.audio.jump(); g.fx.dust(b.pos, b.vel, 6); }
+    if (b.jumped) { g.audio.jump(); g.fx.dust(b.pos, b.vel, 6, up); }
 
-    // landing / airtime style
-    if (!wasGrounded && b.grounded && airBefore > 2.2) {
+    this.updateTricks(dt, input, trickHeld, landed && !wasGrounded ? airBefore : -1);
+
+    if (!wasGrounded && b.grounded && airBefore > 2.2 && !this.trickLanding) {
       g.style(Math.round(airBefore * 15), `BIG AIR ${airBefore.toFixed(1)}s`);
     }
-    if (wasGrounded && !b.grounded && this.speed > 40 && b.vel.y > 6) this.launchCheck = 0.6;
+    this.trickLanding = false;
+    if (wasGrounded && !b.grounded && this.speed > 40 && b.vel.dot(up) > 6) this.launchCheck = 0.6;
     if (this.launchCheck > 0) {
       this.launchCheck -= dt;
-      if (this.launchCheck <= 0 && !b.grounded && b.vel.y > 0) {
+      if (this.launchCheck <= 0 && !b.grounded && b.vel.dot(up) > 0) {
         g.fx.pop(this.speed > 70 ? 'SKY-HIGH!' : 'LAUNCH!', null, { color: '#2ee6ff', size: 72 });
         g.actionPanel('launch');
       }
     }
 
-    // speed milestones
     const kmh = this.speed * 3.6;
     SPEED_MARKS.forEach((m, i) => {
       if (!this.speedMarks[i] && kmh > m.kmh) {
@@ -131,25 +166,85 @@ export class Player {
     this.fireCd -= dt;
     if (input.mouse[0] && this.fireCd <= 0 && input.locked) {
       this.fireCd = 0.55;
-      const muzzle = this.center.clone().addScaledVector(right, 0.5).addScaledVector(UP, 0.3);
-      const aim = cam.position.clone().addScaledVector(look, 350);
+      const muzzle = this.center.clone().addScaledVector(cam.right, 0.5).addScaledVector(up, 0.3);
+      const aim = cam.position.clone().addScaledVector(cam.look, 350);
       const dir = aim.sub(muzzle).normalize();
       const vel = dir.multiplyScalar(115).addScaledVector(b.vel, 0.5);
       g.projectiles.fire('player', muzzle, vel, { damage: 34 * (this.damageMult || 1), splash: 7, color: 0x9be7ff, size: 0.45, knock: 1.6 });
       g.audio.shoot();
     }
 
-    // dust plumes while gliding fast
     if (b.grounded && b.skating && this.speed > 25 && Math.random() < dt * 30) {
-      g.fx.dust(b.pos, b.vel.clone().multiplyScalar(-0.2), 1, 0xe8e2d8);
+      g.fx.dust(b.pos, b.vel.clone().multiplyScalar(-0.2), 1, up, 0xe8e2d8);
     }
     if (b.thrusting && Math.random() < dt * 40) {
       const back = this.model.cargoSlot.getWorldPosition(new THREE.Vector3());
       g.fx.spawn(back, thrustDir.clone().multiplyScalar(-12).add(b.vel), { color: Math.random() < 0.5 ? 0x2ee6ff : 0xffffff, size: 0.35, life: 0.35, spread: 2 });
     }
 
-    this.center.copy(b.pos).addScaledVector(UP, 1.3);
+    this.center.copy(b.pos).addScaledVector(up, 1.3);
     this.animate(dt, cam, ctrl);
+
+    // helmet lamp follows your gaze
+    const head = this.model.head.getWorldPosition(_v);
+    this.lamp.position.copy(head).addScaledVector(up, 0.3);
+    this.lamp.target.position.copy(head).addScaledVector(cam.look, 30).addScaledVector(up, -4);
+    this.glowLight.position.copy(head).addScaledVector(up, 1.5);
+  }
+
+  // --- mid-air tricks: hold Q + W/S to flip, A/D to spin; SHIFT in the air = Superman ---
+  updateTricks(dt, input, held, landedAfter) {
+    const t = this.trick;
+    const b = this.body;
+    const g = this.game;
+    if (!b.grounded) {
+      if (held) {
+        if (input.down('KeyW')) { t.flip += FLIP_RATE * dt; t.active = true; }
+        if (input.down('KeyS')) { t.flip -= FLIP_RATE * dt; t.active = true; }
+        if (input.down('KeyD')) { t.spin -= SPIN_RATE * dt; t.active = true; }
+        if (input.down('KeyA')) { t.spin += SPIN_RATE * dt; t.active = true; }
+      } else {
+        // auto-level toward the nearest full rotation when you let go
+        const tf = Math.round(t.flip / TAU) * TAU, ts = Math.round(t.spin / TAU) * TAU;
+        t.flip += (tf - t.flip) * Math.min(1, dt * 5);
+        t.spin += (ts - t.spin) * Math.min(1, dt * 5);
+      }
+      if ((input.down('ShiftLeft') || input.down('ShiftRight')) && b.airTime > 0.3) { t.superman += dt; t.active = true; }
+      this.model.trick.rotation.set(t.flip, t.spin, 0, 'YXZ');
+    }
+    if (landedAfter >= 0 && t.active) {
+      const flips = Math.round(Math.abs(t.flip) / TAU);
+      const spins = Math.round(Math.abs(t.spin) / TAU);
+      const rf = Math.abs(t.flip - Math.round(t.flip / TAU) * TAU);
+      const rs = Math.abs(t.spin - Math.round(t.spin / TAU) * TAU);
+      const sup = t.superman > 0.5 ? t.superman : 0;
+      const clean = rf < 0.75 && rs < 0.95;
+      if (clean && (flips || spins || sup)) {
+        const parts = [];
+        if (flips) parts.push(`${NUMS[Math.min(flips, 5)] || flips + 'x '}${t.flip > 0 ? 'FRONTFLIP' : 'BACKFLIP'}`);
+        if (spins) parts.push(`${spins * 360} SPIN`);
+        if (sup) parts.push('SUPERMAN');
+        let pts = flips * 45 + spins * 25 + Math.round(sup * 14);
+        if (parts.length > 1) pts = Math.round(pts * (1 + 0.5 * (parts.length - 1)));
+        pts += Math.round(landedAfter * 5);
+        const name = parts.join(' + ');
+        g.style(pts, name);
+        g.fx.pop('STUCK IT!', null, { color: '#7dff6a', size: 70, rot: 6 });
+        this.trickLanding = true;
+        g.stats.bestTrick = Math.max(g.stats.bestTrick || 0, pts);
+        if (pts >= 60) g.actionPanel('trick', null, `${name}! +${pts}`);
+      } else if (!clean) {
+        g.fx.pop('WIPEOUT!', null, { color: '#ff2a4a', size: 84, rot: -8 });
+        g.damagePlayer(8, 'impact');
+        b.vel.multiplyScalar(0.55);
+        g.missions.jostle(18, true);
+        g.audio.thud(30);
+        this.trickLanding = true;
+      }
+      this.resetTrick();
+    } else if (b.grounded && !t.active) {
+      this.model.trick.rotation.set(0, 0, 0);
+    }
   }
 
   onImpact(it, skates) {
@@ -159,10 +254,10 @@ export class Player {
     if (it.speed > safe) {
       const dmg = (it.speed - safe) * this.params.impactDamage;
       g.damagePlayer(dmg, 'impact');
-      g.fx.pop(it.speed - safe > 12 ? 'KRA-KOOM!' : 'KRAK!', this.body.pos.clone().add(new THREE.Vector3(0, 2, 0)), { color: '#ff4f2e', size: 54 });
-      g.fx.dust(this.body.pos, this.body.vel, 14);
+      g.fx.pop(it.speed - safe > 12 ? 'KRA-KOOM!' : 'KRAK!', this.body.pos.clone().addScaledVector(this.up, 2), { color: '#ff4f2e', size: 54 });
+      g.fx.dust(this.body.pos, this.body.vel, 14, this.up);
     } else if (it.speed > 9) {
-      g.fx.dust(this.body.pos, this.body.vel, 5);
+      g.fx.dust(this.body.pos, this.body.vel, 5, this.up);
     }
     if (it.speed > 14) g.missions.jostle(it.speed - 14, skates);
   }
@@ -170,47 +265,55 @@ export class Player {
   animate(dt, cam, ctrl) {
     const b = this.body;
     const m = this.model;
+    const up = b.up;
     const sp = this.speed;
-    const hv = new THREE.Vector3(b.vel.x, 0, b.vel.z);
-    let target = this.heading;
-    if (b.skating && hv.length() > 4) target = Math.atan2(hv.x, hv.z);
-    else if (ctrl.wish.lengthSq() > 0) target = Math.atan2(ctrl.wish.x, ctrl.wish.z);
-    else if (!b.skating) target = cam.yaw;
-    let d = target - this.heading;
-    d = Math.atan2(Math.sin(d), Math.cos(d));
-    this.heading += d * Math.min(1, dt * 10);
-    const turnRate = Math.atan2(Math.sin(this.heading - this.prevHeading), Math.cos(this.heading - this.prevHeading)) / Math.max(dt, 1e-3);
-    this.prevHeading = this.heading;
+    // keep heading tangent to the sphere
+    this.heading.addScaledVector(up, -this.heading.dot(up));
+    if (this.heading.lengthSq() < 1e-6) this.heading.copy(cam.fwd);
+    this.heading.normalize();
+    const hv = _v.copy(b.vel).addScaledVector(up, -b.vel.dot(up));
+    let target = null;
+    if (b.skating && hv.length() > 4) target = hv.normalize();
+    else if (ctrl.wish.lengthSq() > 0) target = ctrl.wish.clone().normalize();
+    else if (!b.skating) target = cam.fwd;
+    let turnRate = 0;
+    if (target) {
+      const cross = new THREE.Vector3().crossVectors(this.heading, target).dot(up);
+      const ang = Math.atan2(cross, this.heading.dot(target));
+      const step = ang * Math.min(1, dt * 10);
+      this.heading.applyQuaternion(_q.setFromAxisAngle(up, step));
+      turnRate = step / Math.max(dt, 1e-3);
+    }
     const targetRoll = THREE.MathUtils.clamp(-turnRate * sp * 0.012, -0.7, 0.7);
     this.roll += (targetRoll - this.roll) * Math.min(1, dt * 6);
 
-    // orientation: align with ground when grounded
-    const upT = b.grounded ? b.groundN : UP;
+    const upT = b.grounded ? b.groundN : up;
     this.upSmooth.lerp(upT, Math.min(1, dt * 8)).normalize();
-    const qUp = new THREE.Quaternion().setFromUnitVectors(UP, this.upSmooth);
-    const qYaw = new THREE.Quaternion().setFromAxisAngle(UP, this.heading);
-    const qRoll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), this.roll);
-    m.root.quaternion.copy(qUp).multiply(qYaw).multiply(qRoll);
+    frameQuat(this.upSmooth, this.heading, m.root.quaternion);
+    m.root.quaternion.multiply(_q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), this.roll));
     m.root.position.copy(b.pos);
 
     this.anim += dt * (2 + Math.min(sp, 10) * 1.1);
     const s = Math.sin(this.anim);
+    const base = m.bodyBase;
     if (!b.grounded) {
-      m.torso.rotation.x = 0.15;
-      m.legL.rotation.x = -0.5; m.legR.rotation.x = 0.3;
-      m.armL.rotation.z = -1.1; m.armR.rotation.z = 1.1;
-      m.armL.rotation.x = m.armR.rotation.x = 0;
-      m.body.position.y = 0;
+      const sup = this.trick.superman > 0;
+      m.torso.rotation.x = sup ? 1.1 : 0.15;
+      m.legL.rotation.x = sup ? 0.2 : -0.5; m.legR.rotation.x = sup ? 0.2 : 0.3;
+      m.armL.rotation.z = sup ? -0.2 : -1.1; m.armR.rotation.z = sup ? 0.2 : 1.1;
+      m.armL.rotation.x = m.armR.rotation.x = sup ? -2.9 : 0;
+      m.body.position.y = base;
+      if (this.trick.active && (this.trick.flip || this.trick.spin)) { m.legL.rotation.x = m.legR.rotation.x = -1.2; m.torso.rotation.x = 0.6; }
     } else if (b.skating) {
       const crouch = Math.min(1, sp / 40);
-      m.body.position.y = -0.18 * crouch;
+      m.body.position.y = base - 0.18 * crouch;
       m.torso.rotation.x = 0.25 + 0.35 * crouch;
       m.legL.rotation.x = 0.35 * crouch; m.legR.rotation.x = -0.35 * crouch;
       m.armL.rotation.x = m.armR.rotation.x = -0.9 * crouch;
       m.armL.rotation.z = -0.3; m.armR.rotation.z = 0.3;
     } else {
       const run = Math.min(1, sp / 6);
-      m.body.position.y = Math.abs(s) * 0.12 * run;
+      m.body.position.y = base + Math.abs(s) * 0.12 * run;
       m.torso.rotation.x = 0.1 * run;
       m.legL.rotation.x = s * 0.9 * run; m.legR.rotation.x = -s * 0.9 * run;
       m.armL.rotation.x = -s * 0.8 * run; m.armR.rotation.x = s * 0.8 * run;
@@ -220,11 +323,10 @@ export class Player {
     m.scarf.rotation.y = Math.sin(this.anim * 2.3) * 0.15;
     m.glowM.color.setHex(b.skating ? 0x2ee6ff : 0x3a3550);
 
-    // skate trails
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(m.root.quaternion);
     const strength = b.skating && b.grounded ? Math.min(1, sp / 30) : 0;
     const g = this.game;
-    g.fx.updateTrail(0, b.pos.clone().addScaledVector(right, -0.2), right, strength);
-    g.fx.updateTrail(1, b.pos.clone().addScaledVector(right, 0.2), right, strength);
+    g.fx.updateTrail(0, b.pos.clone().addScaledVector(right, -0.2), right, strength, up);
+    g.fx.updateTrail(1, b.pos.clone().addScaledVector(right, 0.2), right, strength, up);
   }
 }
