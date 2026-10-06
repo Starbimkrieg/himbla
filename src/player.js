@@ -123,6 +123,20 @@ export class Player {
       thrustDir,
     };
 
+    // driving a faction vehicle: the garage does the physics, you can still shoot
+    if (this.vehicle) {
+      g.garage.drive(dt, input, cam);
+      this.center.copy(b.pos).addScaledVector(b.up, 1.3);
+      this.updateWeapons(dt, input, cam);
+      const m = this.model;
+      m.root.position.copy(b.pos);
+      frameQuat(b.up, this.heading, m.root.quaternion);
+      m.legL.rotation.x = m.legR.rotation.x = -1.3;
+      m.body.position.y = m.bodyBase - 0.5;
+      this.upSmooth.copy(b.up);
+      return;
+    }
+
     const wasGrounded = b.grounded;
     const airBefore = b.airTime;
     b.jumped = false;
@@ -180,21 +194,7 @@ export class Player {
       } else if (this.speedMarks[i] && kmh < m.kmh - 60) this.speedMarks[i] = false;
     });
 
-    // weapons: 1-4 to switch, left mouse to fire
-    for (let i = 0; i < WEAPONS.length; i++) {
-      if (!input.pressed('Digit' + (i + 1))) continue;
-      if (weaponUnlocked(WEAPONS[i], g.upgrades)) { this.weapon = i; g.hud.toast(WEAPONS[i].name.toUpperCase(), 1.2); }
-      else g.hud.toast(`${WEAPONS[i].name} — not unlocked yet`, 1.5);
-    }
-    const w = WEAPONS[this.weapon || 0];
-    this.fireCd -= dt;
-    if (input.mouse[0] && this.fireCd <= 0 && input.locked) {
-      this.fireCd = w.delay * (1 - 0.15 * (g.upgrades.overcharge || 0)) * (this.mutFire || 1);
-      const muzzle = this.center.clone().addScaledVector(cam.right, 0.5).addScaledVector(up, 0.3);
-      const aim = cam.position.clone().addScaledVector(cam.look, 350);
-      const dir = aim.sub(muzzle).normalize();
-      fireWeapon(g, w, muzzle, dir, b.vel, this.damageMult || 1, this.homing || 0.9);
-    }
+    this.updateWeapons(dt, input, cam);
 
     if (b.onLake && b.grounded && !b.skating) b.vel.multiplyScalar(1 - Math.min(1, 2.5 * dt)); // wading
     if (b.onLake && b.grounded && this.speed > 8 && Math.random() < dt * 20) g.fx.spawn(b.pos, up.clone().multiplyScalar(3), { color: 0x2a1f4f, size: 0.4, life: 0.6, gravity: 2, count: 2, spread: 3 });
@@ -214,6 +214,28 @@ export class Player {
     this.lamp.position.copy(head).addScaledVector(up, 0.3);
     this.lamp.target.position.copy(head).addScaledVector(cam.look, 30).addScaledVector(up, -4);
     this.glowLight.position.copy(head).addScaledVector(up, 1.5);
+  }
+
+  // weapons: 1-4 to switch, left mouse to fire
+  updateWeapons(dt, input, cam) {
+    const g = this.game;
+    const b = this.body;
+    const up = b.up;
+    for (let i = 0; i < WEAPONS.length; i++) {
+      if (!input.pressed('Digit' + (i + 1))) continue;
+      if (weaponUnlocked(WEAPONS[i], g.upgrades)) { this.weapon = i; g.hud.toast(WEAPONS[i].name.toUpperCase(), 1.2); }
+      else g.hud.toast(`${WEAPONS[i].name} — not unlocked yet`, 1.5);
+    }
+    const w = WEAPONS[this.weapon || 0];
+    this.fireCd -= dt;
+    if (input.mouse[0] && this.fireCd <= 0 && input.locked) {
+      this.fireCd = w.delay * (1 - 0.15 * (g.upgrades.overcharge || 0)) * (this.mutFire || 1);
+      const muzzle = this.center.clone().addScaledVector(cam.right, 0.5).addScaledVector(up, 0.3);
+      const aim = cam.position.clone().addScaledVector(cam.look, 350);
+      const dir = aim.sub(muzzle).normalize();
+      fireWeapon(g, w, muzzle, dir, b.vel, this.damageMult || 1, this.homing || 0.9);
+    }
+
   }
 
   // --- mid-air tricks: hold Q + W/S to flip, A/D to spin ---
@@ -286,7 +308,7 @@ export class Player {
       g.fx.dust(this.body.pos, this.body.vel, 5, this.up);
     }
     if (it.speed > 14) g.missions.jostle(it.speed - 14, skates);
-    if (it.speed > 6) g.events.onImpact(it.speed);
+    if (it.speed > 6) { g.events.onImpact(it.speed); g.story.onImpact(it.speed); }
   }
 
   animate(dt, cam, ctrl) {

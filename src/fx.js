@@ -9,6 +9,7 @@ export class FX {
     this.scene = scene;
     this.camera = camera;
     this.particles = [];
+    this.density = 1; // settings: particle density multiplier
     const geo = new THREE.IcosahedronGeometry(1, 0);
     this.pMesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_P);
     this.pMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_P * 3), 3);
@@ -69,6 +70,7 @@ export class FX {
   }
 
   spawn(pos, vel, { color = 0xffffff, size = 0.3, life = 0.8, gravity = 0, drag = 0.5, count = 1, spread = 2 } = {}) {
+    if (this.density !== 1) count = Math.floor(count * this.density + Math.random()); // settings
     for (let i = 0; i < count; i++) {
       if (this.particles.length >= MAX_P) this.particles.shift();
       this.particles.push({

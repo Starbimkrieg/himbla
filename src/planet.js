@@ -450,7 +450,8 @@ export class Planet {
     for (const ch of this.chunks) {
       const d = camPos.distanceTo(ch.center) - ch.radius;
       let want = -1;
-      if (d < limit) want = d < 260 ? 0 : d < 800 ? 1 : d < 1700 ? 2 : 3;
+      const dl = d / (this.lodScale || 1); // settings: terrain detail
+      if (d < limit) want = dl < 260 ? 0 : dl < 800 ? 1 : dl < 1700 ? 2 : 3;
       ch.want = want;
       if (want >= 0) ch.lastWanted = now;
       let show = -1;

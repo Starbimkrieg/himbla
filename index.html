@@ -34,6 +34,7 @@
       <div class="bar"><label>JET</label><div class="track"><div id="en-fill" class="fill en"></div></div></div>
       <div id="weaponchip"></div>
       <div id="jarchip" class="hidden"></div>
+      <div id="techchip"></div>
     </div>
 
     <div id="crosshair"></div>
@@ -55,6 +56,7 @@
   <div id="board" class="panel hidden"></div>
   <div id="replog" class="panel hidden"></div>
   <div id="dialog" class="overlay hidden"></div>
+  <div id="casino" class="overlay hidden"></div>
   <div id="globe-wrap" class="overlay hidden"><canvas id="globe" width="760" height="760"></canvas></div>
   <div id="globe-tip" class="hidden"></div>
 
@@ -74,6 +76,8 @@
       <tr><td>1 2 3 4</td><td>Switch weapon once unlocked at the military HQs / Rustmoon</td></tr>
       <tr><td>C</td><td>Wardrobe: outfit, skate finish, pulse-disc colour</td></tr>
       <tr><td>N</td><td>Music on / off</td></tr>
+      <tr><td>V</td><td>Call / board / leave your faction vehicle (once unlocked)</td></tr>
+      <tr><td>Z · T</td><td>Phase Dash · Personal Teleporter (story tech)</td></tr>
       <tr><td>P</td><td>Holding pen (once you own the remote pen link)</td></tr>
       <tr><td>G · X</td><td>Scoop into your jar · empty it (into the antimatter reactor if you're beside it)</td></tr>
       <tr><td>F</td><td>Job board / upgrades (in hubs)</td></tr>
@@ -84,7 +88,8 @@
     </table>
   </div>
 
-  <div id="pause" class="overlay hidden"><div class="panel center-card"><h1>PAUSED</h1><p>Click to resume</p></div></div>
+  <div id="pause" class="overlay hidden"><div class="panel center-card"><h1>PAUSED</h1><p>Click to resume</p><button id="settings-btn-pause" class="set-open">⚙ SETTINGS</button></div></div>
+  <div id="settings" class="overlay hidden"></div>
   <div id="death" class="overlay hidden"><div class="panel center-card lose"><h1>K.O.!</h1><p id="death-cause"></p><p class="small">Click or press ENTER to redeploy at the ILMB.</p></div></div>
 
   <div id="title" class="overlay">
@@ -103,6 +108,7 @@
       </div>
       <div id="load-status">Loading…</div>
       <button id="start-btn" class="hidden">START YOUR SHIFT!</button>
+      <button id="settings-btn-title" class="set-open">⚙ SETTINGS</button>
     </div>
   </div>
 

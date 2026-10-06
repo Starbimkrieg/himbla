@@ -15,8 +15,10 @@ export class Audio {
     }
     const ctx = this.ctx;
     this.master = ctx.createGain();
-    this.master.gain.value = 0.5;
-    this.master.connect(ctx.destination);
+    this.master.gain.value = 0.5 * (this.vol ? this.vol.sfx : 1); // settings: master = effects bus
+    this.out = ctx.createGain(); this.out.gain.value = this.vol ? this.vol.master : 1; // settings
+    this.musicBus = ctx.createGain(); this.musicBus.gain.value = 0.5 * (this.vol ? this.vol.music : 1); // settings
+    this.master.connect(this.out); this.musicBus.connect(this.out); this.out.connect(ctx.destination); // settings
 
     const len = ctx.sampleRate * 2;
     this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -56,7 +58,7 @@ export class Audio {
     this.musicOn = this.musicOn ?? true;
     this.music = ctx.createGain(); this.music.gain.value = 0;
     this.musicTone = ctx.createBiquadFilter(); this.musicTone.type = 'lowpass'; this.musicTone.frequency.value = 900; this.musicTone.Q.value = 0.4;
-    this.music.connect(this.musicTone).connect(this.master);
+    this.music.connect(this.musicTone).connect(this.musicBus); // settings
     // dreamy echo for pads, arp and snare
     this.echoIn = ctx.createGain(); this.echoIn.gain.value = 1;
     const delay = ctx.createDelay(1); delay.delayTime.value = (60 / 96) * 0.75;
@@ -153,6 +155,16 @@ export class Audio {
       this.nextNote += sixteenth;
       this.step++;
     }
+  }
+
+  // settings: master / music / effects volume (0..1); safe to call before init()
+  setVolumes(master, music, sfx) {
+    this.vol = { master, music, sfx };
+    if (!this.ctx || !this.out) return;
+    const t = this.ctx.currentTime;
+    this.out.gain.setTargetAtTime(master, t, 0.03);
+    this.musicBus.gain.setTargetAtTime(0.5 * music, t, 0.03);
+    this.master.gain.setTargetAtTime(0.5 * sfx, t, 0.03);
   }
 
   toggleMusic() {

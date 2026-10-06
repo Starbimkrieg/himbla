@@ -26,6 +26,7 @@ export class ComicPost {
         alert: { value: 0 },
         boost: { value: 0 },
         invert: { value: 0 },
+        halftone: { value: 1 }, lines: { value: 1 }, inkK: { value: 1 }, // settings
       },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
       fragmentShader: /* glsl */ `
@@ -33,6 +34,7 @@ export class ComicPost {
         uniform sampler2D tColor; uniform sampler2D tDepth;
         uniform vec2 res; uniform float near; uniform float far; uniform float time;
         uniform float speed; uniform float damage; uniform float alert; uniform float boost; uniform float invert;
+        uniform float halftone; uniform float lines; uniform float inkK; // settings
         varying vec2 vUv;
         float lin(vec2 uv){ float d = texture2D(tDepth, uv).x; return -perspectiveDepthToViewZ(d, near, far); }
         float hash(float n){ return fract(sin(n) * 43758.5453123); }
@@ -61,10 +63,10 @@ export class ComicPost {
           vec2 f = fract(g) - 0.5;
           float amt = clamp((0.55 - lum) * 1.6, 0.0, 1.0);
           float dotMask = 1.0 - smoothstep(0.0, 0.08, length(f) - 0.55 * sqrt(amt));
-          if (!sky) col *= 1.0 - dotMask * 0.33;
+          if (!sky) col *= 1.0 - dotMask * 0.33 * halftone; // settings
 
           // ink
-          col = mix(col, vec3(0.03, 0.015, 0.05), edge);
+          col = mix(col, vec3(0.03, 0.015, 0.05), clamp(edge * inkK, 0.0, 1.0)); // settings
 
           // speed lines
           vec2 p = vUv - 0.5; p.x *= res.x / res.y;
@@ -75,10 +77,10 @@ export class ComicPost {
           float rnd = hash(id * 1.31 + floor(time * 14.0));
           float width = 0.12 + 0.2 * hash(id + 7.0);
           float line = step(0.72, rnd) * (1.0 - smoothstep(0.0, width, abs(fr - 0.5)));
-          float mask = smoothstep(0.22 + 0.25 * (1.0 - speed), 0.75, rad) * speed;
+          float mask = smoothstep(0.22 + 0.25 * (1.0 - speed), 0.75, rad) * speed * lines; // settings
           col = mix(col, vec3(1.0, 0.98, 0.9), line * mask * 0.75);
           // thrust: cyan streaks
-          col = mix(col, vec3(0.2, 0.9, 1.0), line * boost * smoothstep(0.35, 0.8, rad) * 0.35);
+          col = mix(col, vec3(0.2, 0.9, 1.0), line * boost * lines * smoothstep(0.35, 0.8, rad) * 0.35); // settings
 
           // vignettes
           col *= 1.0 - smoothstep(0.55, 1.05, rad) * 0.45;

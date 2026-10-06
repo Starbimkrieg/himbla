@@ -36,6 +36,9 @@ Click **START YOUR SHIFT!** to lock the mouse.
 | `1` `2` `3` `4` | Switch weapon: Pulse Spinner, Vostok Scattergun, Daedalus Rail Lance, Rustmoon Junk Mortar |
 | `C` | Wardrobe: cycle owned outfits, skate finishes and pulse-disc colours |
 | `N` | Music on / off |
+| `V` | Call / board / leave your faction vehicle (story unlock) |
+| `Z` · `T` | Phase Dash · Personal Teleporter (story tech) |
+| `Esc` → SETTINGS | Graphics, gameplay, camera, audio and key remapping |
 | `P` | Holding pen, anywhere (needs the remote pen link from Dr. Zbornak) |
 | `` ` `` (backtick) | Cheat / testing menu |
 | `G` / `X` | Scoop into your containment jar / empty it (into the antimatter reactor when you're beside it) |
@@ -138,6 +141,73 @@ and appear on the globe map and the Reputation Log. Ride up to a beacon to start
 
 Base pay is deliberately low and grows with reputation: ×0.8 at WARY up to ×2.4 at HONORED.
 Contract clocks are tight. If you miss one, the job still pays 50% when you deliver.
+
+## Faction stories
+
+Every faction has a leader standing on a podium at their HQ: **Admiral Ada Okonkwo** (SPACECOM, ILMB),
+**General Yuri Volkov** (Vostok), **Chairwoman Lucinda Vane** (Meridian), **Mayor Hettie "Gran" Pike**
+(Kepler), **Director Ilsa Moreau** (Daedalus) and **Captain Vex "Longshot" Kade** (Rustmoon, at Rustmoon
+Hold once you're FRIENDLY with the pirates). Each offers a four-chapter story, starting at FRIENDLY (10 rep);
+later chapters need 15, 25 and 35. **Finishing the first chapter of any story commits you to it**: the other
+leaders stop dealing with you, so each playthrough tells one coherent story.
+
+- **Military (SPACECOM, Vostok, Daedalus):** clear ambushes, then **capture outposts**: kill the guards and
+  hold the ground while reinforcements arrive; the outpost flips to your faction and the territory border
+  moves. Captures unlock **vehicles**. Vostok and Daedalus fight each other (captures cost the rival rep).
+  SPACECOM's finale is hunting down Kade himself.
+- **Civilian (Kepler):** haul prefab parts (crack them with a hard landing and you go back for more) to
+  **found homesteads** you own. Each outpost terminal builds up to 6 modules: Greenhouse (heals nearby),
+  Clinic (you redeploy there after a K.O.), Beacon (charts 1.5 km and links beacons for fast travel),
+  Militia Turret (shoots pirates), Market (₵40/min to collect) and Garage (hauler vehicle).
+- **Research (Meridian, plus Daedalus):** plant sensor relays, survive **phase-field experiments**
+  (anomalies strike where the warning rings appear), carry unstable antimatter without cracking it, and
+  build a research station. Rewards are **tech**: Phase Dash (`Z`, blink ~30 m), Deflector Shield (absorbs a
+  hit every 12 s) and a Personal Teleporter (`T`, any discovered location or your outposts).
+- **Rustmoon (Kade):** take a SPACECOM depot, crack an armoured convoy, sabotage relay masts, then the Big
+  Score: run a Meridian vault cube home while every gun on the Moon chases you.
+- **Vehicles** (`V` calls the crane drop, boards and leaves; W/S drive, A/D steer, Shift hops, you can still
+  shoot): SPACECOM Lunar Interceptor (fast), Vostok BTR-M APC (slow tank), Daedalus Phase Skimmer (hover,
+  drifts), Kepler Homestead Mule, Meridian Courier Hover-Van, Rustmoon Scrapjaw War-Rig. Ramming pirates
+  at speed hurts them; vehicles soak up a share of incoming damage.
+
+**Longshot Kade.** On the dark side, a regular pirate squad occasionally (8 %) brings the King of Rustmoon:
+slow-motion, a comic splash panel and a close-up. He's a sniper who keeps his distance. When the red laser
+locks on you get ~2 s of warning (LASER LOCK, rising beeps), then the dot freezes for a split second and he
+fires where you WERE: 45 damage. Keep moving sideways or break line of sight. Knock him below a third of his
+health and he escapes ("THIS AIN'T OVER, RUNNER!") for ₵500; he comes back later. Not while you ride with
+Rustmoon.
+
+## Lucky Crater Casino
+
+A neon strange place on the sunlit side, about 1 km from the ILMB (giant tumbling die, upright roulette wheel,
+spinning sign, slot machines and a bouncer out front). Press `F` at the door. Inside (number keys switch games,
+◀ ▶ change the bet, Esc leaves):
+1. **Lunar Slots:** 3 reels, WILD, paytable, auto ×10 and a saved progressive jackpot (~95 % return).
+2. **Black Hole Blackjack:** 6-deck shoe, dealer stands on 17, double down, blackjack pays 3:2.
+3. **Crater Roulette:** European wheel; numbers, dozens, red/black, odd/even, low/high.
+4. **Prize Wheel:** a free spin every 10 minutes, paid spins for ₵150.
+5. **High-Low:** streak game, cash out any time.
+6. **Prize Counter:** spend Lucky Chips (earned by wagering) on casino-only outfits and skates.
+7. **Loan Shark:** Rusty "Knuckles" Vasquez lends at outrageous compound interest.
+
+Total wagered raises your VIP tier (Bronze → Moon Royalty), which raises the max bet and unlocks prizes. Pit boss
+Vinnie "The Visor" has opinions about your luck.
+
+## Territory
+
+No spot on the Moon is unclaimed. Territory is a weighted split around every faction's settlements and
+~120 smaller outposts (watchtowers, supply depots, farm domes, relay masts, trading kiosks, scrap shacks).
+Glowing faction-coloured pylons mark the borders, a chip shows whose land you're on, and the globe map is
+tinted by owner. Military patrols drive between their faction's outposts and shoot pirates (never you, so
+settlement threat radii are unchanged). Captured and founded outposts move the borders.
+
+## Settings
+
+`Esc` → SETTINGS (or the button on the title screen). Graphics: render scale, FOV, view distance, terrain
+detail, shadows and their resolution, halftone, speed lines, ink strength, particles, screen shake, damage
+flash, frame cap. Gameplay: mouse sensitivity, invert Y, camera distance/height/shoulder/smoothing, comic
+panels and highlight-photo frequency, tips, default lamp mode, minimap, HUD scale, km/h or m/s. Audio:
+master, music, effects. Controls: remap every action key (taking a key that's in use swaps the two).
 
 ## Cheat menu (testing)
 
@@ -260,6 +330,11 @@ src/
   alchemy.js     containment jar, reactor recipes, wild mites, followers, splice-pod mutations, Mega Mite
   chimera.js     gene splicing + procedural chimera models
   cheats.js      testing menu (backtick)
+  story.js       faction leaders, chapters, outposts you found, tech, Longshot Kade
+  territory.js   faction territory, border pylons, small outposts, patrols
+  vehicles.js    drivable faction vehicles
+  settings.js    settings menu + key remapping
+  casino.js      Lucky Crater Casino games, VIP, prizes, loan shark (casinoWorld.js: the building)
   cosmetics.js   outfits, skate finishes, laser colours, wardrobe
   race.js        Chimera Derby: track, betting, chaos racing
   highlights.js  action-shot capture + Hall of Highlights board

@@ -118,6 +118,11 @@ export const LOCATIONS = [
     theta: 30, phi: 135, r: 110, safe: true, repair: 6,
     blurb: 'Abandoned inflatable theme park. The domes still hold air. Great for tricks.',
   },
+  { // casino
+    id: 'casino', name: 'Lucky Crater Casino', short: 'CASINO', type: 'casino', faction: 'none', poi: true,
+    theta: 50, phi: -22, r: 110, safe: true, repair: 6,
+    blurb: 'Neon, slot machines and a pit boss in a visor. The house always wins. Usually.',
+  },
   {
     id: 'gulch', name: 'Scrapjaw Gulch', short: 'GULCH', type: 'pirate', faction: 'rustmoon',
     theta: 116, phi: -42, r: 120, hostile: true, dark: true,

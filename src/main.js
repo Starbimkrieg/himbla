@@ -20,6 +20,11 @@ import { Alchemy, MUTATIONS } from './alchemy.js';
 import { Race } from './race.js';
 import { Cosmetics } from './cosmetics.js';
 import { Cheats } from './cheats.js';
+import { Territory } from './territory.js';
+import { Story } from './story.js';
+import { Garage } from './vehicles.js';
+import { Settings } from './settings.js'; // settings
+import { Casino } from './casino.js'; // casino
 import { WEAPONS } from './weapons.js';
 import { clamp, pick, mulberry32 } from './rng.js';
 import { inkMat } from './toon.js';
@@ -61,6 +66,8 @@ class Game {
   async init() {
     const status = document.getElementById('load-status');
     const step = async (t) => { status.textContent = t; await sleep(); };
+    this.settings = new Settings(); // settings
+    this.settings.attach(this); // settings
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -132,6 +139,11 @@ class Game {
     this.cosmetics = new Cosmetics(this);
     this.cosmetics.apply();
     this.cheats = new Cheats(this);
+    this.casino = new Casino(this); // casino
+    this.territory = new Territory(this);
+    this.story = new Story(this);
+    this.garage = new Garage(this);
+    this.slowmo = 0;
     this.alchemy.start();
     this.player.applyUpgrades(this.upgrades);
     this.player.health = this.player.maxHealth;
@@ -150,6 +162,7 @@ class Game {
     this.lastCapture = -999;
     this.wasDark = false;
 
+    this.settings.apply(this, true); // settings
     this.bindUI();
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -209,6 +222,8 @@ class Game {
         if (code === 'Enter') this.pickDialog(0);
         else if (n >= 1 && n <= this.dialogButtons.length) this.pickDialog(n - 1);
         else if (esc) this.pickDialog(this.dialogButtons.length - 1, esc);
+      } else if (this.state === 'casino') { // casino
+        if (esc) this.casino.close(true); else this.casino.onKey(code);
       } else if (this.state === 'play') {
         if (code === 'KeyM') this.openMap();
         if (code === 'KeyJ') this.openLog();
@@ -392,7 +407,7 @@ class Game {
   }
 
   objective() {
-    return (this.events.active && this.events.objective()) || this.missions.objective();
+    return this.story.objective() || (this.events.active && this.events.objective()) || this.missions.objective();
   }
 
   resize() {
@@ -425,10 +440,12 @@ class Game {
   damagePlayer(amount, cause) {
     const P = this.player;
     if (P.dead || amount <= 0 || this.cheats.god) return;
+    if (this.story.absorb()) return;
+    if (P.vehicle && cause !== 'sniper') amount *= P.vehicle.def.armor;
     P.health -= amount;
     this.damageFlash = Math.min(1, this.damageFlash + 0.25 + amount / 40);
     this.cam.shake = Math.min(1.5, this.cam.shake + amount / 25);
-    this.missions.onDamage(amount);
+    if (!(P.vehicle && P.vehicle.def.cargoSafe)) this.missions.onDamage(amount);
     if (this.hurtCd <= 0 && amount > 4) { this.audio.hurt(); this.hurtCd = 0.3; }
     if (P.health <= 0) this.die(cause);
   }
@@ -442,6 +459,8 @@ class Game {
     this.fx.pop('K.O.!', P.center.clone().addScaledVector(P.up, 3), { color: '#ff2a4a', size: 110, life: 2 });
     this.audio.boom(true);
     if (this.missions.active) this.missions.fail('You went down — the cargo is lost.');
+    this.story.onDeath();
+    if (P.vehicle) this.garage.exit();
     const fee = Math.min(this.credits, 100);
     this.credits -= fee;
     const causes = {
@@ -450,6 +469,8 @@ class Game {
       pirate: 'Scrapjaw pirates blasted you off your skates.',
       mil: 'Military defences turned you into a crater.',
       player: 'Your own Pulse Spinner. Classic.',
+      sniper: 'Longshot Kade. You never even saw him. Well, you saw the red dot.',
+      anomaly: 'Vaporised by a phase anomaly. For science.',
     };
     this.hud.death(`${causes[cause] || 'Knocked out.'} Med-evac fee: ₵${fee}`);
     this.state = 'dead';
@@ -463,8 +484,13 @@ class Game {
     this.hud.show('death', false);
     this.enemies.clearPirates();
     this.projectiles.clear();
-    this.player.respawn(this.spawnPoint, this.spawnFacing);
-    this.cam.fwd.copy(this.spawnFacing);
+    // redeploy at your nearest clinic outpost if you have one, otherwise the ILMB
+    const clinic = this.story.clinicSpawn(this.player.pos.clone().normalize());
+    if (clinic) this.story.teleportTo(clinic.dir);
+    else {
+      this.player.respawn(this.spawnPoint, this.spawnFacing);
+      this.cam.fwd.copy(this.spawnFacing);
+    }
     this.state = 'play';
     this.input.lock();
   }
@@ -517,6 +543,9 @@ class Game {
 
   actionPanel(kind, subject, caption) {
     if (this.panel && this.panel.t > 0.5 && kind === 'launch') return;
+    const pf = this.settings ? this.settings.v.panels : 'normal'; // settings: pop-up frequency
+    if (pf === 'off' || (pf === 'rare' && (kind === 'launch' || kind === 'trick') && this.time - (this.lastPanelAt ?? -999) < 25)) return; // settings
+    this.lastPanelAt = this.time; // settings
     const captions = {
       launch: ['MEANWHILE, FORTY METRES UP…', 'NO BRAKES. NO REGRETS.', 'GRAVITY? NEVER HEARD OF IT.', 'THE CRATER COULDN\'T HOLD HER!'],
       stolen: ['THE SCRAPJAW GANG STRIKES!', 'HEY! THAT\'S MY PACKAGE!'],
@@ -526,7 +555,7 @@ class Game {
     const text = caption || pick(captions[kind]);
     // big moments get pinned to the Hall of Highlights
     const worthy = kind === 'trick' || kind === 'delivered' || kind === 'stolen' || (kind === 'launch' && this.player.speed > 55);
-    this.panel = { kind, subject, t: 2.6, text, capture: worthy && this.time - this.lastCapture > 15 ? 0.45 : -1 };
+    this.panel = { kind, subject, t: 2.6, text, capture: worthy && this.time - this.lastCapture > (this.settings ? this.settings.photoGap() : 15) ? 0.45 : -1 }; // settings
     document.getElementById('panel-caption').textContent = text;
     const el = document.getElementById('action-panel');
     el.classList.remove('hidden');
@@ -601,6 +630,7 @@ class Game {
   // ---------- main loop ----------
   frame() {
     const now = performance.now();
+    if (this.settings && this.settings.skip(now)) return; // settings: frame-rate cap
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     this.time += dt;
@@ -622,7 +652,7 @@ class Game {
     this.audio.update(P.dead ? 0 : P.speed, P.body.skating, P.body.grounded, P.body.thrusting && playing);
 
     const dark = darkness(P.up);
-    this.planet.update(this.camera.position, { budgetMs: 4, maxDist: dark > 0.7 ? 1500 : 3200 });
+    this.planet.update(this.camera.position, { budgetMs: 4, maxDist: (dark > 0.7 ? 1500 : 3200) * (this.settings ? this.settings.v.viewDist : 1) }); // settings
 
     const u = this.post.material.uniforms;
     u.time.value = this.time;
@@ -630,7 +660,7 @@ class Game {
     u.boost.value = P.body.thrusting ? 1 : 0;
     u.invert.value += ((this.alchemy && this.alchemy.buffs.invert > 0 ? 1 : 0) - u.invert.value) * 0.1;
     this.damageFlash = Math.max(0, this.damageFlash - dt * 1.5);
-    u.damage.value = this.damageFlash * 0.8 + (P.health / P.maxHealth < 0.25 && !P.dead ? 0.25 : 0);
+    u.damage.value = (this.damageFlash * 0.8 + (P.health / P.maxHealth < 0.25 && !P.dead ? 0.25 : 0)) * (this.settings ? this.settings.v.damageFlash : 1); // settings
     u.alert.value = this.enemies.bases.some((b) => b.inside && ((b.restricted && !b.authorized) || b.hostile)) ? 1 : 0;
 
     this.renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
@@ -677,6 +707,8 @@ class Game {
   }
 
   updatePlay(dt) {
+    // dramatic slow-motion (villain entrances)
+    if (this.slowmo > 0) { this.slowmo -= dt; dt *= 0.3; }
     const [mx, my] = this.input.consumeMouse();
     const c = this.cam;
     const P = this.player;
@@ -685,8 +717,10 @@ class Game {
     c.fwd.addScaledVector(c.up, -c.fwd.dot(c.up));
     if (c.fwd.lengthSq() < 1e-6) c.fwd.copy(P.heading);
     c.fwd.normalize();
-    c.fwd.applyQuaternion(_q.setFromAxisAngle(c.up, -mx * 0.0022));
-    c.pitch = clamp(c.pitch - my * 0.0022, -1.25, 0.95);
+    const sv = this.settings ? this.settings.v : null; // settings
+    const sens = 0.0022 * (sv ? sv.sensitivity : 1); // settings
+    c.fwd.applyQuaternion(_q.setFromAxisAngle(c.up, -mx * sens));
+    c.pitch = clamp(c.pitch - my * sens * (sv && sv.invertY ? -1 : 1), -1.25, 0.95);
     c.right.crossVectors(c.fwd, c.up).normalize();
     c.look.copy(c.fwd).multiplyScalar(Math.cos(c.pitch)).addScaledVector(c.up, Math.sin(c.pitch));
     this.hurtCd -= dt;
@@ -695,7 +729,12 @@ class Game {
     P.update(dt, this.input, c);
     this.missions.update(dt);
     this.events.update(dt);
+    if (!this.events.active) this.hud.eventPanel(this.story.panel());
     this.globe.update(dt);
+    this.territory.update(dt);
+    this.story.update(dt);
+    this.garage.update(dt);
+    document.getElementById('techchip').innerHTML = this.story.hudTech();
     this.alchemy.update(dt);
     this.race.update(dt);
     if (this.input.pressed('KeyG')) this.alchemy.scoop();
@@ -705,6 +744,9 @@ class Game {
       if (this.upgrades.penlink) this.alchemy.penMenu();
       else this.hud.toast('No pen link. Dr. Zbornak sells a remote holding-pen link at the Antimatter Lab.', 3);
     }
+    if (this.input.pressed('KeyV') && this.boardCooldown <= 0) this.garage.toggle();
+    if (this.input.pressed('KeyZ')) this.story.useTech('dash');
+    if (this.input.pressed('KeyT') && this.boardCooldown <= 0) this.story.useTech('teleport');
     if (this.input.pressed('KeyN')) this.hud.toast(this.audio.toggleMusic() ? '♪ Music on' : 'Music off', 1.5);
     this.cosmetics.update(dt);
     this.updateScanner(dt);
@@ -754,7 +796,12 @@ class Game {
     const nearPod = lab && z === lab.loc && P.pos.distanceTo(lab.pod) < 4;
     const nearPen = lab && z === lab.loc && P.pos.distanceTo(lab.penTerm) < 5;
     const nearBooth = this.race.near(P.pos);
-    if (nearPen) {
+    if (this.story.interact(P)) {
+      // a leader or one of your outposts' terminals
+    } else if (this.casino.near(P.pos)) { // casino
+      this.hud.prompt('<b>F</b> — ENTER THE LUCKY CRATER CASINO');
+      if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.casino.open();
+    } else if (nearPen) {
       this.hud.prompt(`<b>F</b> — HOLDING PEN (${this.alchemy.chimeras.length} chimeras)`);
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.alchemy.penMenu();
     } else if (nearPod) {
@@ -783,7 +830,7 @@ class Game {
       this.fx.pop('RECALLED!', null, { color: '#2ee6ff' });
     }
 
-    if (this.tipIndex < TIPS.length) {
+    if (this.tipIndex < TIPS.length && (!this.settings || this.settings.v.tips)) { // settings
       this.tipTimer -= dt;
       if (this.tipTimer <= 0) {
         const el = document.getElementById('tip');
@@ -823,10 +870,12 @@ class Game {
       c.look.copy(c.fwd).multiplyScalar(Math.cos(c.pitch)).addScaledVector(up, Math.sin(c.pitch));
     }
     const sp = P.speed;
-    const targetDist = 7.5 + Math.min(7, sp * 0.06);
+    const sv = this.settings ? this.settings.v : null; // settings
+    const targetDist = (7.5 + Math.min(7, sp * 0.06)) * (sv ? sv.camDist : 1); // settings
     c.dist += (targetDist - c.dist) * Math.min(1, dt * 3);
     const target = P.pos.clone().addScaledVector(up, 2.3);
-    const want = target.clone().addScaledVector(c.look, -c.dist).addScaledVector(up, 0.8);
+    const want = target.clone().addScaledVector(c.look, -c.dist).addScaledVector(up, 0.8 + (sv ? sv.camHeight : 0)); // settings
+    if (sv && sv.shoulder) want.addScaledVector(c.right, sv.shoulder); // settings
     const alt = this.planet.altitude(want);
     if (alt < 1.2) want.addScaledVector(want.clone().normalize(), 1.2 - alt);
     // keep the camera out of walls (matters indoors)
@@ -843,17 +892,18 @@ class Game {
       if (hit) { want.copy(target).addScaledVector(span, Math.max(0.15, (i - 1) / steps)); break; }
     }
     if (snap) c.position.copy(want);
-    else c.position.lerp(want, Math.min(1, dt * 18));
+    else c.position.lerp(want, sv && sv.camSmooth < 0.05 ? 1 : Math.min(1, dt * 18 / (sv ? sv.camSmooth : 1))); // settings
     this.camera.position.copy(c.position);
     if (c.shake > 0) {
       c.shake = Math.max(0, c.shake - dt * 2.5);
-      this.camera.position.x += (Math.random() - 0.5) * c.shake;
-      this.camera.position.y += (Math.random() - 0.5) * c.shake;
-      this.camera.position.z += (Math.random() - 0.5) * c.shake;
+      const sk = c.shake * (sv ? sv.shake : 1); // settings
+      this.camera.position.x += (Math.random() - 0.5) * sk;
+      this.camera.position.y += (Math.random() - 0.5) * sk;
+      this.camera.position.z += (Math.random() - 0.5) * sk;
     }
     this.camera.up.copy(up);
     this.camera.lookAt(target.addScaledVector(c.look, 30));
-    const fov = 72 + Math.min(30, Math.max(0, sp - 15) * 0.3);
+    const fov = (sv ? sv.fov : 72) + Math.min(30, Math.max(0, sp - 15) * 0.3); // settings
     c.fov += (fov - c.fov) * Math.min(1, dt * 3);
     if (Math.abs(this.camera.fov - c.fov) > 0.01) {
       this.camera.fov = c.fov;
@@ -875,7 +925,12 @@ class Game {
     const up = P.up;
     const side = (f) => new THREE.Vector3().crossVectors(f, up).normalize();
     let focus, from;
-    if (p.kind === 'stolen' && p.subject && !p.subject.dead) {
+    if (p.kind === 'villain' && p.subject && p.subject.model) {
+      // close-up on the villain's face
+      focus = p.subject.center.clone().addScaledVector(up, 0.5);
+      const f = p.subject.heading.clone();
+      from = focus.clone().addScaledVector(f, 3.2).addScaledVector(side(f), 1.2).addScaledVector(up, 0.2);
+    } else if (p.kind === 'stolen' && p.subject && !p.subject.dead) {
       focus = p.subject.center.clone();
       const hv = tangent(p.subject.body.vel, up);
       if (hv.lengthSq() < 1) hv.copy(this.cam.fwd);

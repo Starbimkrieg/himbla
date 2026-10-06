@@ -2,6 +2,8 @@ import { FACTIONS, SHOPS } from './locations.js';
 import { OUTFITS, SKATES } from './cosmetics.js';
 import { spliceGenes } from './chimera.js';
 import { pick } from './rng.js';
+import { VEHICLES } from './vehicles.js';
+import { TECH } from './story.js';
 
 // Testing menu on the ` (backtick) key. Everything goes through the normal dialog, so number
 // keys pick options and Esc closes.
@@ -36,8 +38,24 @@ export class Cheats {
       { label: '5 · UNLOCK-STAT COUNTERS (events, deliveries, wins)', fn: () => { Object.assign(g.stats, { meridianEvents: Math.max(3, g.stats.meridianEvents || 0), darkDeliveries: Math.max(5, g.stats.darkDeliveries || 0), raceWins: Math.max(1, g.stats.raceWins || 0) }); g.save(); this.moreMenu(); } },
       { label: '6 · CURE MUTATIONS', fn: () => { g.alchemy.cure(); this.moreMenu(); } },
       { label: '7 · RESET ALL PROGRESS (reloads)', fn: () => this.confirmReset() },
-      { label: '8 · BACK', fn: () => this.open() },
-      { label: '9 · CLOSE' },
+      { label: '8 · STORY…', fn: () => this.storyMenu() },
+      { label: '9 · BACK', fn: () => this.open() },
+      { label: 'CLOSE' },
+    ]);
+  }
+
+  storyMenu() {
+    const g = this.game;
+    const S = g.story;
+    const A = S.active;
+    g.dialog('CHEAT MENU · STORY', `<small>Committed to: <b>${S.faction ? FACTIONS[S.faction].name : 'nobody yet'}</b>${A ? ` · active: ${A.def.title} (step ${A.si + 1}/${A.steps.length})` : ''}<br>Vehicles: ${S.vehicles.join(', ') || 'none'} · Tech: ${S.tech.join(', ') || 'none'}</small>`, [
+      { label: '1 · SKIP CURRENT STEP', fn: () => { if (S.active) S.next(); this.storyMenu(); } },
+      { label: '2 · TELEPORT TO CURRENT OBJECTIVE', fn: () => { const o = S.objective(); if (o) { S.teleportTo(o.pos.clone().normalize()); } } },
+      { label: '3 · SPAWN LONGSHOT KADE (ambush)', fn: () => { S.spawnKade(false); } },
+      { label: '4 · ALL VEHICLES + TECH', fn: () => { S.vehicles = Object.keys(VEHICLES); S.tech = Object.keys(TECH); S.save(); this.storyMenu(); } },
+      { label: '5 · RESET STORY (keeps outposts)', fn: () => { if (S.active) S.fail('Reset.'); S.faction = null; S.progress = {}; S.kade.captured = false; S.save(); this.storyMenu(); } },
+      { label: '6 · BACK', fn: () => this.moreMenu() },
+      { label: '7 · CLOSE' },
     ]);
   }
 

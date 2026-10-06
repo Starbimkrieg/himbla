@@ -4,6 +4,7 @@ import { makeDish, makeFigure, makeShuttle, makeRover, makeHoverCar, makeFreight
 import { mulberry32 } from './rng.js';
 import { FACTIONS } from './locations.js';
 import { SUN, frameQuat, arcDist, dirFromAngles } from './geo.js';
+import { buildCasino } from './casinoWorld.js'; // casino
 
 function mesh(geo, mat, outline = 0.15) {
   const m = new THREE.Mesh(geo, mat);
@@ -314,6 +315,7 @@ export class World {
       case 'lab': this.buildLab(loc); break;
       case 'monolith': this.buildMonolith(loc); break;
       case 'funpark': this.buildFunpark(loc); break;
+      case 'casino': this.casino = buildCasino(this, loc); break; // casino
     }
     if (loc.dark && loc.type !== 'pirate') {
       // dark-side settlements ring themselves with lamps
@@ -748,6 +750,7 @@ export class World {
       this.reactorLight.intensity = near < 80 ? (6 + r.flash * 30) * (0.8 + Math.random() * 0.4) : 0;
     } else if (this.reactorLight) this.reactorLight.intensity = 0;
     if (this.monolith && this.monolith.loc.active) this.monolith.halo.material.opacity = 0.3 + 0.25 * Math.sin(time * 2);
+    if (this.casino && this.casino.loc.active) this.casino.update(dt, time); // casino
     if (this.crystals) for (const c of this.crystals) c.mesh.visible = !c.taken && c.pos.distanceToSquared(camPos) < 450 * 450;
 
     this.updateRocket(dt, camPos);

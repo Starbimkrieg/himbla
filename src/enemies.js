@@ -22,7 +22,7 @@ function steerToward(heading, up, target, maxAngle) {
 }
 
 // Wheeled vehicle on the sphere: engine along heading, strong lateral grip and downforce.
-function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engine = 16, grip = 0, turn = 1.8, radius = 2.4 } = {}) {
+export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engine = 16, grip = 0, turn = 1.8, radius = 2.4 } = {}) {
   const b = e.body;
   const up = b.up.copy(b.pos).normalize();
   steerToward(e.heading, up, targetDir, (turn / (1 + b.vel.length() / 60)) * dt);
@@ -217,6 +217,8 @@ export class Enemies {
     if (spawned) {
       g.hud.alert(opts.rogue ? 'RENEGADE RAIDERS INBOUND!' : 'PIRATE INTERCEPT INBOUND!', '#7dff3a', 3);
       g.audio.alarm();
+      // now and then the King of Rustmoon comes along for the ride
+      if (!opts.rogue && g.story) g.story.maybeKade();
     }
     return spawned;
   }
@@ -331,6 +333,7 @@ export class Enemies {
       if (e.kind === 'milrover') e.respawn = 60;
     }
     g.events.onKill(e, byPlayer);
+    g.story.onKill(e);
   }
 
   dropCargo(pos) {
@@ -430,6 +433,7 @@ export class Enemies {
       if (e.base && !e.base.awake) continue;
       if (e.kind === 'core') { this.updateCore(e, dt, time); continue; }
       if (e.kind === 'megamite') { g.alchemy.updateBeast(e, dt); if (e.flash > 0) e.flash -= dt; continue; }
+      if (e.kind === 'sniper') { g.story.updateSniper(e, dt); if (e.dead) continue; }
       if (e.kind === 'skater') this.updateSkater(e, dt, time);
       else if (e.kind === 'rover') this.updateRover(e, dt);
       else if (e.kind === 'milrover') this.updateMilRover(e, dt);

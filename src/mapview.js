@@ -157,8 +157,13 @@ export class GlobeMap {
       const p = this.project(tmp, v);
       if (p.z <= 0) continue;
       const lit = THREE.MathUtils.clamp(tmp.dot(SUN) * 1.3 + 0.12, 0, 1);
-      const r = Math.round(28 + lit * 170), gg = Math.round(22 + lit * 160), b = Math.round(48 + lit * 160);
-      c.fillStyle = `rgb(${r},${gg},${b})`;
+      let r = 28 + lit * 170, gg = 22 + lit * 160, b = 48 + lit * 160;
+      // territory: every cell is tinted by the faction that holds it
+      if (g.territory) {
+        const tc = g.territory.cellColor(k, tmp.x, tmp.y, tmp.z);
+        r = r * 0.62 + tc.r * 255 * 0.38; gg = gg * 0.62 + tc.g * 255 * 0.38; b = b * 0.62 + tc.b * 255 * 0.38;
+      }
+      c.fillStyle = `rgb(${Math.round(r)},${Math.round(gg)},${Math.round(b)})`;
       const s = cell * (0.55 + 0.45 * p.z);
       c.fillRect(p.x - s / 2, p.y - s / 2, s, s);
     }
@@ -226,6 +231,23 @@ export class GlobeMap {
       c.lineWidth = 3; c.strokeStyle = '#120a1e'; c.fillStyle = '#fff';
       c.strokeText(l.short, p.x, p.y - r - 4); c.fillText(l.short, p.x, p.y - r - 4);
       this.pins.push({ x: p.x, y: p.y, html: `<b>${l.name}</b><br><span style="color:${f.color}">${f.name}</span>${l.hq ? ' · HQ' : ''}${ruined ? ' · RUINED' : ''}<br>${l.blurb}` });
+    }
+    // outposts you've charted: small diamonds (yours get a white rim and a name)
+    if (g.territory) {
+      const mine = new Set(g.story ? g.story.founded.concat(g.story.capturedIds) : []);
+      for (const o of g.territory.outposts) {
+        if (!this.explored[this.cellOf(o.dir)]) continue;
+        const p = this.project(o.dir, v);
+        if (p.z <= 0) continue;
+        const f = FACTIONS[o.faction];
+        const own = mine.has(o.id);
+        const s2 = own ? 6 : 3.5;
+        c.fillStyle = f.color; c.strokeStyle = own ? '#fff' : '#120a1e'; c.lineWidth = own ? 2 : 1.2;
+        c.beginPath(); c.moveTo(p.x, p.y - s2); c.lineTo(p.x + s2, p.y); c.lineTo(p.x, p.y + s2); c.lineTo(p.x - s2, p.y); c.closePath(); c.fill(); c.stroke();
+        const nm = g.territory.name(o);
+        if (own) { c.font = '12px Bangers, Impact, sans-serif'; c.lineWidth = 3; c.strokeStyle = '#120a1e'; c.fillStyle = '#fff'; c.strokeText(nm, p.x, p.y - 9); c.fillText(nm, p.x, p.y - 9); }
+        this.pins.push({ x: p.x, y: p.y, html: `<b>${nm}</b><br><span style="color:${f.color}">${f.name}</span>${own ? ' · YOURS' : ''}` });
+      }
     }
     for (const ev of g.events.list) {
       const p = this.project(ev.start, v);

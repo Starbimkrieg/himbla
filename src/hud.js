@@ -55,7 +55,7 @@ export class HUD {
   banner(loc) {
     const el = $('banner');
     const f = FACTIONS[loc.faction];
-    const kind = { trade: 'TRADE HUB', lab: 'STRANGE PLACE — RESEARCH', monolith: 'STRANGE PLACE', funpark: 'STRANGE PLACE — FUNPARK', hub: 'INTERNATIONAL HUB', civilian: 'CIVILIAN HABITAT', research: 'RESEARCH FACILITY', military: 'MILITARY — RESTRICTED', industrial: 'INDUSTRIAL OUTPOST', pirate: 'PIRATE TERRITORY' }[loc.type];
+    const kind = { trade: 'TRADE HUB', lab: 'STRANGE PLACE — RESEARCH', monolith: 'STRANGE PLACE', funpark: 'STRANGE PLACE — FUNPARK', casino: 'STRANGE PLACE — CASINO', hub: 'INTERNATIONAL HUB', civilian: 'CIVILIAN HABITAT', research: 'RESEARCH FACILITY', military: 'MILITARY — RESTRICTED', industrial: 'INDUSTRIAL OUTPOST', pirate: 'PIRATE TERRITORY' }[loc.type]; // casino: banner kind
     el.innerHTML = `<div class="b-kind" style="background:${f.color}">${kind}</div><div class="b-name">${loc.name}</div><div class="b-blurb">${loc.blurb}</div>`;
     el.classList.remove('hidden');
     el.classList.remove('slam'); void el.offsetWidth; el.classList.add('slam');
@@ -236,7 +236,7 @@ export class HUD {
     c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(na) * (R - 6), cy + Math.sin(na) * (R - 6)); c.stroke();
     c.lineWidth = 3; c.strokeStyle = '#ff4f2e';
     c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(na) * (R - 8), cy + Math.sin(na) * (R - 8)); c.stroke();
-    const txt = String(Math.round(kmh));
+    const txt = String(Math.round(this.game.settings && this.game.settings.v.units === 'ms' ? kmh / 3.6 : kmh)); // settings
     if (txt !== this.lastSpeedTxt) {
       $('speed-num').textContent = txt;
       this.lastSpeedTxt = txt;
