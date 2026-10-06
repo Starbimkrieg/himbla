@@ -897,8 +897,29 @@ export class World {
     const podSign = textSprite('SPLICE POD', { color: '#7dff3a', size: 50, scale: 0.35 });
     podSign.position.set(px, 7.4, pz);
     loc.group.add(podSign);
+    // the chimera holding pen out front, with a terminal at its gate
+    const pen = { x0: 28, z0: 22, x1: 62, z1: 64 };
+    const rail = toon(0xffd23f), postM = toon(0x3a3550);
+    const fence = (ax, az, bx, bz) => {
+      const len = Math.hypot(bx - ax, bz - az);
+      const n = Math.ceil(len / 4);
+      for (let i = 0; i <= n; i++) this.put(mesh(new THREE.CylinderGeometry(0.2, 0.2, 2.2, 6), postM, 0.04), loc, ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n, 1.1);
+      const r = mesh(new THREE.BoxGeometry(0.15, 0.25, len), rail, 0.03);
+      this.put(r, loc, (ax + bx) / 2, (az + bz) / 2, 1.7, Math.atan2(bx - ax, bz - az));
+      this.col(loc, { type: 'box', x: (ax + bx) / 2, y: 1.1, z: (az + bz) / 2, hx: Math.abs(bx - ax) / 2 + 0.2, hy: 1.1, hz: Math.abs(bz - az) / 2 + 0.2 });
+    };
+    fence(pen.x0, pen.z1, pen.x1, pen.z1);
+    fence(pen.x1, pen.z0, pen.x1, pen.z1);
+    fence(pen.x0, pen.z0 + 8, pen.x0, pen.z1);
+    fence(pen.x0 + 8, pen.z0, pen.x1, pen.z0);
+    const term = mesh(new THREE.BoxGeometry(1.6, 2.4, 1), toon(0x2ec4ff), 0.06);
+    this.put(term, loc, pen.x0 - 2, pen.z0 - 2, 1.2);
+    this.put(new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.8), glow(0x7dff3a)), loc, pen.x0 - 2, pen.z0 - 1.48, 1.8);
+    const penSign = textSprite('HOLDING PEN', { color: '#7dff3a', size: 50, scale: 0.35 });
+    penSign.position.set(pen.x0 - 2, 4, pen.z0 - 2);
+    loc.group.add(penSign);
     loc.group.updateMatrixWorld(true);
-    this.lab = { loc, reactor: this.toWorld(loc, rx, 2, rz), scientist: this.toWorld(loc, 13, 0, 3.5), pod: this.toWorld(loc, px, 1, pz), half: { w: W, d: D, h: H } };
+    this.lab = { loc, reactor: this.toWorld(loc, rx, 2, rz), scientist: this.toWorld(loc, 13, 0, 3.5), pod: this.toWorld(loc, px, 1, pz), penTerm: this.toWorld(loc, pen.x0 - 2, 0, pen.z0 - 2), half: { w: W, d: D, h: H } };
     // a permanent light in the scene (never added/removed, so shaders don't recompile)
     this.reactorLight = new THREE.PointLight(0xff2e88, 0, 60, 1.5);
     this.reactorLight.position.copy(this.toWorld(loc, rx, H / 2, rz));

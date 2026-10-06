@@ -304,8 +304,8 @@ export class HUD {
       if (e.dead || (e.base && !e.base.awake) || e.kind === 'core') continue;
       const [x, y, d] = proj(e.body ? e.body.pos : e.center);
       if (d > range) continue;
-      c.fillStyle = e.faction === 'pirate' ? (g.enemies.friendly(e) ? '#2ee6ff' : '#7dff3a') : (e.base.hostile ? '#ff2a4a' : '#8a8aa0');
-      c.beginPath(); c.arc(x, y, e.carrying ? 6 : 3.5, 0, Math.PI * 2); c.fill();
+      c.fillStyle = e.faction === 'pirate' ? (g.enemies.friendly(e) ? '#2ee6ff' : '#7dff3a') : e.kind === 'megamite' ? '#b8e986' : (e.base && e.base.hostile ? '#ff2a4a' : '#8a8aa0');
+      c.beginPath(); c.arc(x, y, e.kind === 'megamite' ? 8 : e.carrying ? 6 : 3.5, 0, Math.PI * 2); c.fill();
       if (e.carrying) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); }
     }
     for (const d of g.enemies.drops) { const [x, y] = proj(d.pos); c.fillStyle = '#2ee6ff'; c.fillRect(x - 4, y - 4, 8, 8); }

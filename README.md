@@ -36,6 +36,7 @@ Click **START YOUR SHIFT!** to lock the mouse.
 | `1` `2` `3` `4` | Switch weapon: Pulse Spinner, Vostok Scattergun, Daedalus Rail Lance, Rustmoon Junk Mortar |
 | `C` | Wardrobe: cycle owned outfits, skate finishes and pulse-disc colours |
 | `N` | Music on / off |
+| `P` | Holding pen, anywhere (needs the remote pen link from Dr. Zbornak) |
 | `` ` `` (backtick) | Cheat / testing menu |
 | `G` / `X` | Scoop into your containment jar / empty it (into the antimatter reactor when you're beside it) |
 | `F` | Job board / upgrades (inside hubs and settlements) |
@@ -185,14 +186,16 @@ The wind rumble is a soft low-passed swell instead of high-frequency hiss. `N` t
   comes a chimera: body, legs and head are picked from the parents (car wheels, six mite legs, pirate
   boots…), sometimes with a spare head, plus mutations from anything non-living in the mix (black water
   → void aura "the Unholy", rock → crystal spikes, dirt/mud → mud blobs). Each gets a mashed-up name,
-  a top speed and a chaos rating. Your newest three hop after you; the rest live in a pen behind the lab.
-  Chimeras are saved.
+  a top speed and a chaos rating. Up to three follow you; any number more live in the **holding pen** in
+  front of the lab. Use the pen terminal (or `P` anywhere once you buy Dr. Zbornak's ₵1200 remote pen link) to
+  call chimeras out, send them back, or release them for good. Chimeras are saved.
 - **New things to scoop:** Moon Mites skitter around sunlit craters (they flee if you rush them); hover-cars
   can be scooped straight out of traffic (two jar slots, the car is gone ~150 s); pirate skaters at ≤45 %
   hull get **DAZED** for 6 s and can be jarred (Rustmoon −3 if you're aligned).
 - **Solo reactor results:** a lone mite becomes the **MEGA MITE** (600 HP stomping boss, ₵400 bounty), a
   lone car goes into orbit (₵150 hush money), a lone pirate comes out reformed with a doctorate (SPACECOM +3).
-- **Splice pod** (corner of the lab, `F`): put the jar into *yourself*. Up to 3 mutations: Wheel Feet (car,
+- **Splice pod** (corner of the lab, `F`): put the jar into *yourself*. The game doesn't list what it does;
+  players find out by experimenting. (Spoilers follow.) Up to 3 mutations: Wheel Feet (car,
   22 m/s running), Mite Wings (mite, 60 % gravity in the air), Extra Arms (person, fire 30 % faster),
   Void Skin (water/void-touched, see in the dark and harder to hit), Stone Hide (rock, +40 hull, more drag),
   Burrower Claws (dirt/mud, painless boot landings), Pirate Blood (pirate, hunting squads mostly ignore you).

@@ -42,6 +42,9 @@ export const MUTATIONS = {
 };
 const MAX_MUTATIONS = 3;
 const MAX_FOLLOW = 3;
+// holding pen area behind the lab (lab-local coordinates) and how many pen residents get models
+export const PEN = { x0: 28, z0: 22, x1: 62, z1: 64 };
+const PEN_SHOWN = 36;
 const KEY = 'moonrunner-lab-v1';
 
 const NAMES = ['Gary', 'Priya', 'Tomasz', 'Little Juno', 'Ade', 'Wen', 'Marisol', 'Big Lars', 'Fen', 'Doris', 'Okon', 'Bea'];
@@ -275,6 +278,7 @@ export class Alchemy {
   breed(items) {
     const g = this.game;
     const genes = spliceGenes(items);
+    genes.follow = this.followingCount() < MAX_FOLLOW;
     this.chimeras.push(genes);
     this.save();
     this.syncChimeras();
@@ -284,7 +288,7 @@ export class Alchemy {
     const parts = `${genes.body} body, ${genes.legs} legs, ${genes.head} head${genes.extraHead ? `, and a spare ${genes.extraHead} head` : ''}`;
     return {
       title: `BEHOLD: ${genes.name.toUpperCase()}`,
-      text: `"It has a ${parts}${genes.mods.length ? `, ${genes.mods.join(' and ')}-touched` : ''}. Top speed about ${Math.round(genes.speed * 3.6)} km/h, chaos rating ${genes.chaos}. It loves you. Race it at the Bounce Dome Funpark!"`,
+      text: `"It has a ${parts}${genes.mods.length ? `, ${genes.mods.join(' and ')}-touched` : ''}. Top speed about ${Math.round(genes.speed * 3.6)} km/h, chaos rating ${genes.chaos}. It loves you. ${genes.follow ? 'Race it at the Bounce Dome Funpark!' : 'Three already follow you, so it\'s gone to the holding pen behind the lab.'}"`,
     };
   }
 
@@ -312,11 +316,15 @@ export class Alchemy {
   spawnMegaMite() {
     const g = this.game;
     const lab = g.world.lab;
-    const pos = g.planet.ground(g.world.toWorld(lab.loc, 0, 0, 60), new THREE.Vector3());
+    const P = g.player;
+    // out by the lab door if you're there (it came out of the reactor), otherwise right in front of you
+    const atLab = lab && P.pos.distanceTo(lab.reactor) < 300;
+    const spot = atLab ? g.world.toWorld(lab.loc, 0, 0, 60) : P.pos.clone().addScaledVector(P.heading, 70);
+    const pos = g.planet.ground(spot, new THREE.Vector3());
     const m = makeChimera({ seed: 7, body: 'mite', legs: 'mite', head: 'mite', extraHead: 'mite', mods: ['void'], size: 6, tint: 0xb8e986 });
     m.root.position.copy(pos);
     g.scene.add(m.root);
-    const e = { kind: 'megamite', faction: 'beast', model: m, hp: 600, maxHp: 600, body: { pos: pos.clone(), vel: new THREE.Vector3() }, center: pos.clone(), radius: 7, dead: false, t: 0, hop: 0, vy: 0, dir: new THREE.Vector3(1, 0, 0), stompCd: 0 };
+    const e = { kind: 'megamite', faction: 'beast', model: m, hp: 600, maxHp: 600, body: { pos: pos.clone(), vel: new THREE.Vector3() }, center: pos.clone(), radius: 7, dead: false, t: 0, hop: 0, vy: 0, dir: tangent(P.pos.clone().sub(pos), pos.clone().normalize()).normalize(), stompCd: 0 };
     g.enemies.list.push(e);
     g.hud.alert('MEGA MITE ON THE LOOSE!', '#b8e986', 4);
     g.audio.alarm();
@@ -335,11 +343,15 @@ export class Alchemy {
     e.hop += e.vy * dt; e.vy -= 8 * dt;
     if (e.hop <= 0) {
       if (e.vy < -6) {
-        // STOMP
-        g.fx.explosion(e.body.pos.clone().addScaledVector(up, 1), 10, true);
-        g.fx.pop('STOMP!', e.body.pos.clone().addScaledVector(up, 6), { color: '#b8e986', size: 70 });
-        if (P.pos.distanceTo(e.body.pos) < 16) { g.damagePlayer(14, 'ram'); P.vel.addScaledVector(P.up, 12); P.body.grounded = false; }
-        g.cam.shake = Math.max(g.cam.shake, P.pos.distanceTo(e.body.pos) < 120 ? 0.8 : 0);
+        // STOMP (only felt, seen and heard when you're nearby)
+        const dist = P.pos.distanceTo(e.body.pos);
+        if (dist < 400) {
+          g.fx.explosion(e.body.pos.clone().addScaledVector(up, 1), 10, true);
+          if (g.planet.visible(g.camera.position, e.center)) g.fx.pop('STOMP!', e.body.pos.clone().addScaledVector(up, 6), { color: '#b8e986', size: 70 });
+          g.audio.thud(Math.max(5, 40 - dist / 10));
+        }
+        if (dist < 16) { g.damagePlayer(14, 'ram'); P.vel.addScaledVector(P.up, 12); P.body.grounded = false; }
+        if (dist < 120) g.cam.shake = Math.max(g.cam.shake, 0.8);
       }
       e.hop = 0;
       e.vy = 9 + Math.random() * 4;
@@ -354,30 +366,80 @@ export class Alchemy {
   }
 
   // ---------- chimeras: followers and the lab pen ----------
+  followingCount() { return this.chimeras.filter((c) => c.follow).length; }
+
+  // Followers hop after you; everyone else lives in the holding pen behind the lab.
   syncChimeras() {
     const g = this.game;
     const lab = g.world.lab;
-    // remove existing chimera models
+    // old saves: the newest three follow
+    for (let i = this.chimeras.length - 1; i >= 0; i--) {
+      const c = this.chimeras[i];
+      if (c.follow === undefined) c.follow = this.followingCount() < MAX_FOLLOW;
+    }
     for (const f of this.followers.filter((f) => f.kind === 'chimera')) f.root.removeFromParent();
     this.followers = this.followers.filter((f) => f.kind !== 'chimera');
     for (const p of this.pen) p.root.removeFromParent();
     this.pen = [];
     const racing = g.race && g.race.entrant;
-    this.chimeras.forEach((genes, i) => {
-      if (racing === genes) return;
-      const m = makeChimera(genes);
-      const following = i >= this.chimeras.length - MAX_FOLLOW;
-      if (following) {
+    for (const genes of this.chimeras) {
+      if (racing === genes) continue;
+      if (genes.follow) {
+        const m = makeChimera(genes);
         m.root.position.copy(g.player.pos);
         g.scene.add(m.root);
         this.followers.push({ root: m.root, anim: m.anim, kind: 'chimera', genes, vy: 0, h: 0, t: Math.random() * 5 });
-      } else if (lab) {
+      } else if (lab && this.pen.length < PEN_SHOWN) {
+        // the pen holds any number; only the first few dozen are shown milling about
+        const m = makeChimera(genes);
         const k = this.pen.length;
-        m.root.position.set(34 + (k % 4) * 5, 0, 24 + Math.floor(k / 4) * 5);
+        m.root.position.set(PEN.x0 + 3 + (k % 6) * 5, 0, PEN.z0 + 3 + Math.floor(k / 6) * 5);
         lab.loc.group.add(m.root);
         this.pen.push({ root: m.root, anim: m.anim, genes, t: Math.random() * 5 });
       }
-    });
+    }
+    this.save();
+  }
+
+  // Holding pen menu: at the lab terminal, or anywhere with the remote pen link.
+  penMenu(page = 0) {
+    const g = this.game;
+    const list = this.chimeras;
+    if (!list.length) { g.dialog('HOLDING PEN', '"Empty. Put two living things in the reactor and come back."', [{ label: 'OK' }]); return; }
+    const per = 6;
+    const pages = Math.ceil(list.length / per);
+    page = Math.min(page, pages - 1);
+    const slice = list.slice(page * per, page * per + per);
+    const buttons = slice.map((c, i) => ({ label: `${i + 1} · ${c.follow ? '★ ' : ''}${c.name}${c.wins ? ` 🏆${c.wins}` : ''} — ${c.follow ? 'WITH YOU' : 'IN PEN'}`, fn: () => this.chimeraMenu(c, page) }));
+    if (pages > 1) buttons.push({ label: `${buttons.length + 1} · NEXT PAGE (${page + 1}/${pages})`, fn: () => this.penMenu((page + 1) % pages) });
+    buttons.push({ label: `${buttons.length + 1} · CLOSE` });
+    g.dialog('HOLDING PEN', `<small>${list.length} chimera${list.length === 1 ? '' : 's'} · ${this.followingCount()}/${MAX_FOLLOW} following you. Pick one to call it out or send it back.</small>`, buttons);
+  }
+
+  chimeraMenu(c, page) {
+    const g = this.game;
+    const info = `<b>${c.name}</b><br><small>${c.parents.join(' + ')}${c.mods.length ? ` · ${c.mods.join(', ')}` : ''} · ${Math.round(c.speed * 3.6)} km/h · chaos ${c.chaos}${c.wins ? ` · ${c.wins} Derby win${c.wins > 1 ? 's' : ''}` : ''}</small>`;
+    g.dialog('HOLDING PEN', info, [
+      {
+        label: c.follow ? '1 · SEND TO THE PEN' : '1 · BRING ALONG',
+        fn: () => {
+          if (!c.follow && this.followingCount() >= MAX_FOLLOW) { g.hud.toast(`Only ${MAX_FOLLOW} can follow you. Send one back first.`, 2.5); this.penMenu(page); return; }
+          c.follow = !c.follow;
+          this.syncChimeras();
+          g.fx.pop(c.follow ? `${c.name.toUpperCase()}, HEEL!` : 'BACK TO THE PEN', null, { color: '#7dff3a', size: 40 });
+          this.penMenu(page);
+        },
+      },
+      { label: '2 · RELEASE INTO THE WILD (gone for good)', fn: () => this.confirmRelease(c, page) },
+      { label: '3 · BACK', fn: () => this.penMenu(page) },
+    ]);
+  }
+
+  confirmRelease(c, page) {
+    this.game.dialog('RELEASE?', `${c.name} will wander off into the craters forever.`, [
+      { label: '1 · GOODBYE, FRIEND', fn: () => { this.chimeras = this.chimeras.filter((x) => x !== c); this.syncChimeras(); this.game.fx.pop('BYE!', null, { color: '#ff9f1c', size: 40 }); this.penMenu(page); } },
+      { label: '2 · NO, KEEP IT', fn: () => this.chimeraMenu(c, page) },
+    ]);
   }
 
   // ---------- splicing yourself ----------

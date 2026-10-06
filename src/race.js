@@ -93,7 +93,7 @@ export class Race {
       g.dialog('CHIMERA DERBY', '"No chimera, no race, pal. Go see the egghead at the Antimatter Lab, put two living things in his reactor, and bring me whatever crawls out. Cars count. Mites count. People… legally count."', [{ label: 'FINE' }]);
       return;
     }
-    const recent = ch.slice(-4).reverse();
+    const recent = [...ch.filter((c) => c.follow), ...ch.filter((c) => !c.follow).reverse()].slice(0, 8);
     g.dialog('CHIMERA DERBY', `"Which of your… <i>creatures</i>… is running today?" <br><small>Two laps. Anything goes. Literally anything. Record: ${g.stats.raceWins || 0} wins.</small>`, recent.map((c, i) => ({
       label: `${i + 1} · ${c.name.toUpperCase()} — ${Math.round(c.speed * 3.6)} km/h · chaos ${c.chaos}`,
       fn: () => this.chooseBet(c),

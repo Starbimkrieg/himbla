@@ -302,8 +302,13 @@ class Game {
       this.credits -= 200 * muts; this.audio.cash(); this.alchemy.cure(); this.save();
       this.dialog('DR. ZBORNAK', '"There. Back to boring. I kept the extra arms in a jar, for science."', [{ label: 'THANKS…?' }]);
     } });
+    if (!this.upgrades.penlink) buttons.push({ label: `${buttons.length + 1} · REMOTE PEN LINK — ₵1200`, fn: () => {
+      if (this.credits < 1200) { this.hud.toast('Not enough credits (need ₵1200).', 2); return; }
+      this.credits -= 1200; this.upgrades.penlink = 1; this.audio.cash(); this.save();
+      this.dialog('DR. ZBORNAK', '"A quantum tether to the holding pen. Press <b>P</b> anywhere and your creatures will be… relocated. Don\'t think about how. I don\'t."', [{ label: 'NEAT' }]);
+    } });
     const chims = this.alchemy.chimeras.length;
-    if (chims) buttons.push({ label: `${buttons.length + 1} · MY CHIMERAS (${chims})`, fn: () => this.dialog('YOUR CHIMERAS', this.alchemy.chimeras.slice().reverse().map((c) => `<b>${c.name}</b> — ${c.parents.join(' + ')}${c.mods.length ? ` (${c.mods.join(', ')})` : ''} · ${Math.round(c.speed * 3.6)} km/h · chaos ${c.chaos}${c.wins ? ` · 🏆${c.wins}` : ''}`).join('<br>') + '<br><br><small>The newest three follow you around; the rest live in the pen behind the lab.</small>', [{ label: 'GOOD CREATURES' }]) });
+    if (chims) buttons.push({ label: `${buttons.length + 1} · HOLDING PEN (${chims})`, fn: () => this.alchemy.penMenu() });
     buttons.push({ label: `${buttons.length + 1} · HOW DOES THIS WORK?`, fn: () => this.dialog('DR. ZBORNAK', '"Press <b>G</b> to scoop: rock samples (the glowing crystals on the sunny side), moon dirt (anywhere), black water (stand on a black lake), people, wild moon mites, a dazed pirate, even a whole hover-car if it fits. Things left together in a jar start to react. Bring the jar here and press <b>X</b> to throw everything into my reactor. <b>Two living things make a CHIMERA</b> — race it at the Bounce Dome Derby! One thing alone does… other things. Three different non-living things: don\'t. And the splice pod in the corner puts the jar into <i>you</i>."', [{ label: 'GOT IT' }]) });
     buttons.push({ label: `${buttons.length + 1} · LEAVE` });
     const greet = lvl ? `"Back already? Your jar holds ${2 + lvl}. What have you brought me?"` : '"Ah, a runner! Want to help science? You will need a containment jar. Everything goes in the jar. EVERYTHING."';
@@ -358,10 +363,10 @@ class Game {
   // The splice pod: put yourself in with the jar.
   usePod() {
     const A = this.alchemy;
-    const list = Object.values(MUTATIONS).map((m) => `<b>${m.name}</b> ← ${m.from.join(' / ')}: ${m.desc}`).join('<br>');
-    const mine = A.mutations.length ? `<br><br>You have: <b>${A.mutations.map((k) => MUTATIONS[k].name).join(', ')}</b> (${A.mutations.length}/3)` : '';
+    // no recipe list on purpose: what the pod does is for players to find out
+    const mine = A.mutations.length ? `<br><br>Currently spliced into you: <b>${A.mutations.map((k) => MUTATIONS[k].name).join(', ')}</b>` : '';
     const buttons = A.jar.length ? [{ label: '1 · SPLICE ME WITH THE JAR', fn: () => A.spliceSelf() }, { label: '2 · ABSOLUTELY NOT' }] : [{ label: 'OK' }];
-    this.dialog('SPLICE POD', `<small>${list}</small>${mine}`, buttons);
+    this.dialog('SPLICE POD', `A humming glass pod, warm to the touch. The label reads: <i>"INSERT JAR. INSERT SELF. RESULTS NOT GUARANTEED, REVERSIBLE, OR EXPLAINED."</i>${mine}`, buttons);
   }
 
   buyJar(cost) {
@@ -696,6 +701,10 @@ class Game {
     if (this.input.pressed('KeyG')) this.alchemy.scoop();
     if (this.input.pressed('KeyX')) this.alchemy.empty();
     if (this.input.pressed('KeyC') && this.boardCooldown <= 0) this.cosmetics.wardrobe();
+    if (this.input.pressed('KeyP') && this.boardCooldown <= 0) {
+      if (this.upgrades.penlink) this.alchemy.penMenu();
+      else this.hud.toast('No pen link. Dr. Zbornak sells a remote holding-pen link at the Antimatter Lab.', 3);
+    }
     if (this.input.pressed('KeyN')) this.hud.toast(this.audio.toggleMusic() ? '♪ Music on' : 'Music off', 1.5);
     this.cosmetics.update(dt);
     this.updateScanner(dt);
@@ -743,8 +752,12 @@ class Game {
     const nearDoc = lab && z === lab.loc && P.pos.distanceTo(lab.scientist) < 8;
     const nearReactor = lab && z === lab.loc && P.pos.distanceTo(lab.reactor) < 11;
     const nearPod = lab && z === lab.loc && P.pos.distanceTo(lab.pod) < 4;
+    const nearPen = lab && z === lab.loc && P.pos.distanceTo(lab.penTerm) < 5;
     const nearBooth = this.race.near(P.pos);
-    if (nearPod) {
+    if (nearPen) {
+      this.hud.prompt(`<b>F</b> — HOLDING PEN (${this.alchemy.chimeras.length} chimeras)`);
+      if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.alchemy.penMenu();
+    } else if (nearPod) {
       this.hud.prompt(this.alchemy.jar.length ? '<b>F</b> — STEP INTO THE SPLICE POD (with your jar)' : 'SPLICE POD — BRING A FULL JAR. (<b>F</b> to read the label)');
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.usePod();
     } else if (nearBooth) {
