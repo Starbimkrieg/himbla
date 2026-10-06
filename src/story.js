@@ -313,32 +313,43 @@ export class Story {
       ink(pod, 0.05);
       g.world.put(pod, loc, spot.x, spot.z, 0.2);
       m.root.position.y = 0.4;
-      const sign = textSprite(L.name.toUpperCase(), { color: FACTIONS[f].color, size: 46, scale: 0.42, bg: '#120a1e' });
-      sign.position.set(spot.x, 4.3, spot.z);
+      const sign = textSprite(L.name.toUpperCase(), { color: FACTIONS[f].color, size: 52, scale: 0.5, bg: '#120a1e' });
+      sign.position.set(spot.x, 5.4, spot.z);
       loc.group.add(sign);
+      // faction-coloured beacon: a glowing ring on the ground and a soft light column you can spot from afar
+      const fc = new THREE.Color(FACTIONS[f].color).getHex();
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.18, 8, 40), glow(fc));
+      ring.rotation.x = Math.PI / 2;
+      g.world.put(ring, loc, spot.x, spot.z, 0.15, 0, true);
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.2, 40, 20, 1, true).translate(0, 20, 0), new THREE.MeshBasicMaterial({ color: fc, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      g.world.put(beam, loc, spot.x, spot.z, 0, 0, true);
       loc.group.updateMatrixWorld(true);
-      this.leaders[f] = { f, loc, model: m, sign, pod, pos: g.world.toWorld(loc, spot.x, 1, spot.z), t: Math.random() * 5 };
+      this.leaders[f] = { f, loc, model: m, sign, pod, ring, beam, pos: g.world.toWorld(loc, spot.x, 1, spot.z), t: Math.random() * 5 };
     }
   }
 
+  // An open, visible spot for a leader: well clear of buildings (so the name sign never clips),
+  // just off to the side of where you usually arrive (not blocking the path in).
   findSpot(loc) {
     const g = this.game;
-    const R = Math.min(loc.r * 0.5, 60);
-    for (let ring = 0; ring < 6; ring++) {
-      const rad = R * (0.45 + ring * 0.12);
-      for (let k = 0; k < 16; k++) {
-        const a = (k / 16) * Math.PI * 2 + ring;
-        const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
-        // clear of buildings (exact contact test) for a few metres around
-        let blocked = false;
-        for (const y of [1.2, 3]) {
-          const p = g.world.toWorld(loc, x, y, z);
-          if (g.colliders.query(p, 5, []).some((c) => g.colliders.contact(c, p, 4.5, _v) > 0)) { blocked = true; break; }
-        }
-        if (!blocked) return { x, z };
+    const cands = [];
+    const r0 = Math.max(24, loc.r * 0.3), r1 = Math.min(loc.r * 0.78, 150);
+    for (let rad = r0; rad <= r1; rad += 8) {
+      for (let k = 0; k < 24; k++) {
+        const a = (k / 24) * Math.PI * 2;
+        cands.push({ x: Math.sin(a) * rad, z: Math.cos(a) * rad, score: Math.abs(Math.abs(a > Math.PI ? a - Math.PI * 2 : a) - 0.5) + Math.abs(rad - (r0 + r1) / 2) / 60 });
       }
     }
-    return { x: 12, z: 18 };
+    cands.sort((p, q) => p.score - q.score);
+    for (const c of cands) {
+      let blocked = false;
+      for (const y of [1.2, 3.5, 6]) {
+        const p = g.world.toWorld(loc, c.x, y, c.z);
+        if (g.colliders.query(p, 9, []).some((col) => g.colliders.contact(col, p, 8, _v) > 0)) { blocked = true; break; }
+      }
+      if (!blocked) return c;
+    }
+    return { x: 0, z: Math.min(loc.r * 0.6, 90) };
   }
 
   addRifle(m, slung) {
@@ -372,7 +383,7 @@ export class Story {
     const g = this.game;
     for (const L of Object.values(this.leaders)) {
       L.model.root.visible = this.leaderVisible(L.f);
-      L.sign.visible = L.model.root.visible;
+      L.sign.visible = L.ring.visible = L.beam.visible = L.pod.visible = L.model.root.visible;
       if (!L.model.root.visible || !L.loc.active || P.pos.distanceTo(L.pos) > 6) continue;
       g.hud.prompt(`<b>F</b> — TALK TO ${LEADERS[L.f].name.toUpperCase()}`);
       if (g.input.pressed('KeyF') && g.boardCooldown <= 0) this.talk(L.f);
@@ -1182,6 +1193,8 @@ export class Story {
       if (!L.loc.active) continue;
       L.t += dt;
       L.model.head.rotation.y = Math.sin(L.t * 0.7) * 0.4;
+      L.ring.scale.setScalar(1 + Math.sin(L.t * 3) * 0.06);
+      L.beam.material.opacity = 0.12 + Math.sin(L.t * 2) * 0.05;
       L.model.armL.rotation.z = -0.3 + Math.sin(L.t * 1.3) * 0.15;
     }
     if (this.active) {

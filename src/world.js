@@ -1041,16 +1041,53 @@ export class World {
       for (const t of dirs) { let m = -Infinity; for (let r = 5; r < c.R * 1.4; r += 5) m = Math.max(m, along(t, r)); rimMin = Math.min(rimMin, m); }
       const level = Math.min(s0 + c.depth * 0.32, rimMin - 1.5);
       if (level < s0 + 1.2 || this.lakes.length >= 16) continue;
-      let rad = Infinity;
-      for (const t of dirs) for (let r = 4; r < c.R * 1.4; r += 3) if (along(t, r) > level) { rad = Math.min(rad, r); break; }
-      if (!isFinite(rad) || rad < 20) continue;
-      rad -= 1;
-      const lake = { d: c.d.clone(), level, rad, cos: Math.cos(rad / P.R), name: 'Black Lake' };
-      const m = new THREE.Mesh(new THREE.CircleGeometry(rad + 2, 48), mat);
-      m.position.copy(c.d).multiplyScalar(level + 0.05);
-      frameQuat(c.d, c.e1, m.quaternion);
-      m.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
-      m.updateMatrix(); m.matrixAutoUpdate = false;
+      // trace the real shoreline in every direction, so the pool fills the valley's shape
+      const N = 64;
+      const shore = [];
+      let rad = Infinity, maxR = 0;
+      for (let i = 0; i < N; i++) {
+        const a = (i / N) * Math.PI * 2;
+        const t = c.e1.clone().multiplyScalar(Math.cos(a)).addScaledVector(c.e2, Math.sin(a));
+        let r = 4;
+        while (r < c.R * 1.4 && along(t, r) <= level) r += 1.5;
+        shore.push(r);
+        rad = Math.min(rad, r);
+        maxR = Math.max(maxR, r);
+      }
+      if (rad < 20) continue;
+      const lake = { d: c.d.clone(), e1: c.e1.clone(), e2: c.e2.clone(), level, rad, shore, cos: Math.cos((maxR + 2) / P.R), name: 'Black Lake' };
+      // a curved surface hugging the planet at the liquid level; the rim tucks just under the banks
+      const RINGS = 10;
+      const pos = [], uv = [], idx = [];
+      pos.push(...c.d.clone().multiplyScalar(level + 0.05).toArray()); uv.push(0.5, 0.5);
+      for (let k = 1; k <= RINGS; k++) {
+        for (let i = 0; i < N; i++) {
+          const a = (i / N) * Math.PI * 2;
+          const r = ((shore[i] + 1.5) * k) / RINGS;
+          const t = c.e1.clone().multiplyScalar(Math.cos(a)).addScaledVector(c.e2, Math.sin(a));
+          const ang = r / P.R;
+          const dir = c.d.clone().multiplyScalar(Math.cos(ang)).addScaledVector(t, Math.sin(ang));
+          pos.push(...dir.multiplyScalar(level + 0.05).toArray());
+          const f = (k / RINGS) * 0.5;
+          uv.push(0.5 + Math.cos(a) * f, 0.5 + Math.sin(a) * f);
+        }
+      }
+      for (let i = 0; i < N; i++) idx.push(0, 1 + i, 1 + ((i + 1) % N));
+      for (let k = 1; k < RINGS; k++) {
+        const r0 = 1 + (k - 1) * N, r1 = 1 + k * N;
+        for (let i = 0; i < N; i++) {
+          const j = (i + 1) % N;
+          idx.push(r0 + i, r1 + i, r1 + j, r0 + i, r1 + j, r0 + j);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      geo.computeBoundingSphere();
+      const m = new THREE.Mesh(geo, mat);
+      mat.side = THREE.DoubleSide;
+      m.matrixAutoUpdate = false;
       this.scene.add(m);
       lake.mesh = m;
       this.lakes.push(lake);

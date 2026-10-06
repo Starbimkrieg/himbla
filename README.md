@@ -64,6 +64,10 @@ Click **START YOUR SHIFT!** to lock the mouse.
 
 ## How it plays
 
+**First shift:** a new game offers Instructor Bolt's training run. Each step waits until you've actually done
+it (look, walk, glide on skates, carve, mag-jump, thrusters, open and close the map, find the job board), then
+you take a pirate-free TRAINING RUN contract and deliver it for a ₵200 bonus. You can skip it at the start.
+
 - **Magnetic grip:** while the skates are touching the ground (or just left it), they pull you
   toward the surface. You hold contact over small bumps instead of skipping off, but a real
   ramp or crater rim still launches you. Tune `grip`, `gripWindow` and `gripRange` in `src/config.js`.

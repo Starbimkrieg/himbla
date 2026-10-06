@@ -26,6 +26,7 @@ import { Cheats } from './cheats.js';
 import { Territory } from './territory.js';
 import { Story } from './story.js';
 import { Garage } from './vehicles.js';
+import { Tutorial } from './tutorial.js';
 import { Settings } from './settings.js'; // settings
 import { Casino } from './casino.js'; // casino
 import { WEAPONS } from './weapons.js';
@@ -146,6 +147,7 @@ class Game {
     this.territory = new Territory(this);
     this.story = new Story(this);
     this.garage = new Garage(this);
+    this.tutorial = new Tutorial(this);
     this.slowmo = 0;
     this.alchemy.start();
     this.player.applyUpgrades(this.upgrades);
@@ -183,6 +185,8 @@ class Game {
       this.state = 'play';
       this.input.lock();
       this.hud.banner(this.hub);
+      // brand-new runners get the guided training shift
+      if (!this.tutorial.done && !this.tutorial.active) this.schedule(1.2, () => this.tutorial.offer());
     };
     document.getElementById('start-btn').addEventListener('click', start);
     document.getElementById('pause').addEventListener('click', () => {
@@ -265,6 +269,7 @@ class Game {
   }
 
   openMap() {
+    this.tutorial.on('map');
     this.openModal('map');
     document.getElementById('globe-wrap').classList.remove('hidden');
     this.globe.center();
@@ -411,7 +416,7 @@ class Game {
   }
 
   objective() {
-    return this.story.objective() || (this.events.active && this.events.objective()) || this.missions.objective();
+    return this.tutorial.objective() || this.story.objective() || (this.events.active && this.events.objective()) || this.missions.objective();
   }
 
   resize() {
@@ -568,6 +573,7 @@ class Game {
 
   // ---------- job board ----------
   openBoard(loc) {
+    this.tutorial.on('board');
     this.boardLoc = loc;
     this.openModal('board');
     this.refreshBoard();
@@ -737,6 +743,7 @@ class Game {
     this.globe.update(dt);
     this.territory.update(dt);
     this.story.update(dt);
+    this.tutorial.update(dt);
     this.garage.update(dt);
     document.getElementById('techchip').innerHTML = this.story.hudTech();
     this.alchemy.update(dt);
@@ -791,7 +798,10 @@ class Game {
       zw.innerHTML = `✔ CLEARANCE ACCEPTED — ${base.loc.name.toUpperCase()}`;
     } else zw.classList.add('hidden');
 
-    if (this.isSafe(z) && !P.dead) P.health = Math.min(P.maxHealth, P.health + (z.repair || 6) * dt);
+    // settlements patch you up, unless their defences are currently shooting at you
+    const zBase = z && this.enemies.bases.find((b) => b.loc === z);
+    const engaged = zBase && (zBase.hostile || zBase.aggro > 0);
+    if (this.isSafe(z) && !P.dead && !engaged) P.health = Math.min(P.maxHealth, P.health + (z.repair || 6) * dt);
     const canBoard = z && (this.jobsAt(z).length || (SHOPS[z.id] && (z.type !== 'pirate' || this.rep.aligned())));
     const canSwear = z && z.id === 'rustmoon' && this.rep.rustmoon === 'known';
     const lab = this.world.lab;

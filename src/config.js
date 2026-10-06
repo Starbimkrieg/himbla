@@ -41,7 +41,7 @@ export const PHYS = {
   energyRegen: 14,
   maxEnergy: 100,
 
-  skateSafeImpact: 38,
-  bootSafeImpact: 11,
-  impactDamage: 2.6,
+  skateSafeImpact: 44,
+  bootSafeImpact: 15,
+  impactDamage: 1.8,
 };

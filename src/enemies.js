@@ -386,7 +386,7 @@ export class Enemies {
     // --- spawning: hunting squads (not if you ride with Rustmoon) ---
     const carrying = ms.active && ms.cargoState === 'held';
     const inSafe = g.isSafe(g.currentZone);
-    if (!P.dead && !inSafe && !aligned) {
+    if (!P.dead && !inSafe && !aligned && !(g.tutorial && g.tutorial.quiet())) {
       if (carrying) {
         this.pirateTimer -= dt * (1 + dark) * blood;
         if (this.pirateTimer <= 0) {
@@ -459,11 +459,13 @@ export class Enemies {
             g.fx.pop('SMASH!', e.center.clone().addScaledVector(P.up, 3), { color: '#ffd23f', size: 70 });
             g.damagePlayer(4, 'ram');
             g.audio.thud(rs);
-          } else if (e.kind === 'rover' && closing > 10 && !this.friendly(e)) {
-            g.damagePlayer((closing - 8) * 1.6, 'ram');
+          } else if (e.kind === 'rover' && closing > 15 && !(e.ramCd > 0) && !this.friendly(e)) {
+            // playtest tuning: rams need a real run-up, hurt less, and can't chain
+            e.ramCd = 2.5;
+            g.damagePlayer(Math.min(28, (closing - 12) * 1.1), 'ram');
             g.fx.pop('WHAM!', P.center.clone(), { color: '#7dff3a', size: 70 });
             g.audio.thud(closing);
-            P.vel.addScaledVector(n, closing * 0.6).addScaledVector(P.up, 6);
+            P.vel.addScaledVector(n, closing * 0.4).addScaledVector(P.up, 5);
             P.body.grounded = false;
             P.body.sinceContact = 1;
           }
@@ -705,8 +707,9 @@ export class Enemies {
     const b = e.body;
     const friendly = this.friendly(e);
     const target = this.targetFor(e, 2);
-    const max = friendly ? 14 : e.state === 'flee' ? 55 : 72;
-    stepRover(e, dt, g.planet, g.colliders, target.clone().sub(b.pos), max, { engine: 30, grip: 14, turn: 2.6, radius: 3.6 });
+    if (e.ramCd > 0) e.ramCd -= dt;
+    const max = friendly ? 14 : e.state === 'flee' ? 50 : 56;
+    stepRover(e, dt, g.planet, g.colliders, target.clone().sub(b.pos), max, { engine: 22, grip: 14, turn: 2.2, radius: 3.6 });
     this.poseVehicle(e, dt);
     if (e.state === 'chase' && !friendly) {
       this.tryGrab(e, dt);

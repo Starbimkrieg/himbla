@@ -220,7 +220,8 @@ export class Planet {
     this.lastLake = null;
     for (let k = 0; k < this.lakes.length; k++) {
       const lk = this.lakes[k];
-      if (dx * lk.d.x + dy * lk.d.y + dz * lk.d.z > lk.cos && lk.level > r) {
+      const cd = dx * lk.d.x + dy * lk.d.y + dz * lk.d.z;
+      if (cd > lk.cos && lk.level > r && (!lk.shore || this.inLake(lk, dx, dy, dz, cd))) {
         this.lastLake = lk;
         if (outN) outN.set(dx, dy, dz);
         return lk.level;
@@ -228,6 +229,14 @@ export class Planet {
     }
     if (outN) outN.copy(_c);
     return r;
+  }
+
+  // is this direction inside the lake's traced shoreline?
+  inLake(lk, dx, dy, dz, cd) {
+    const x = dx * lk.e1.x + dy * lk.e1.y + dz * lk.e1.z, y = dx * lk.e2.x + dy * lk.e2.y + dz * lk.e2.z;
+    const n = lk.shore.length;
+    const i = Math.round((Math.atan2(y, x) / (Math.PI * 2)) * n + n) % n;
+    return Math.acos(Math.min(1, cd)) * this.R < lk.shore[i];
   }
 
   altitude(p) { return p.length() - this.surface(p); }

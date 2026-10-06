@@ -300,7 +300,8 @@ export class Player {
       return;
     }
     if (it.speed > safe) {
-      const dmg = (it.speed - safe) * this.params.impactDamage;
+      // capped so one bad landing hurts but rarely kills outright
+      const dmg = Math.min(60, (it.speed - safe) * this.params.impactDamage);
       g.damagePlayer(dmg, 'impact');
       g.fx.pop(it.speed - safe > 12 ? 'KRA-KOOM!' : 'KRAK!', this.body.pos.clone().addScaledVector(this.up, 2), { color: '#ff4f2e', size: 54 });
       g.fx.dust(this.body.pos, this.body.vel, 14, this.up);

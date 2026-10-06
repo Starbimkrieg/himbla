@@ -212,7 +212,7 @@ export class HUD {
     const maxK = 500;
     const a0 = Math.PI, a1 = 2 * Math.PI;
     c.lineWidth = 18;
-    c.strokeStyle = '#120a1e';
+    c.strokeStyle = '#2a2440';
     c.beginPath(); c.arc(cx, cy, R, a0, a1); c.stroke();
     const k = Math.min(1, kmh / maxK);
     const zones = [[0, 0.3, '#2ee6ff'], [0.3, 0.6, '#ffd23f'], [0.6, 1, '#ff2e88']];
@@ -222,7 +222,7 @@ export class HUD {
       c.strokeStyle = col;
       c.beginPath(); c.arc(cx, cy, R, a0 + s * Math.PI, a0 + Math.min(k, e) * Math.PI); c.stroke();
     }
-    c.strokeStyle = '#120a1e';
+    c.strokeStyle = 'rgba(232,226,248,0.75)';
     c.lineWidth = 3;
     for (let i = 0; i <= 10; i++) {
       const a = a0 + (i / 10) * Math.PI;
@@ -232,7 +232,7 @@ export class HUD {
       c.stroke();
     }
     const na = a0 + k * Math.PI;
-    c.lineWidth = 6; c.strokeStyle = '#120a1e';
+    c.lineWidth = 6; c.strokeStyle = '#05030c';
     c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(na) * (R - 6), cy + Math.sin(na) * (R - 6)); c.stroke();
     c.lineWidth = 3; c.strokeStyle = '#ff4f2e';
     c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(na) * (R - 8), cy + Math.sin(na) * (R - 8)); c.stroke();
