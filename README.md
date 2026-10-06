@@ -25,17 +25,17 @@ Click **START YOUR SHIFT!** to lock the mouse.
 | Input | Action |
 | --- | --- |
 | Mouse | Look / aim |
-| `W A S D` | Run in boots · steer and carve on skates |
+| `W A S D` | Run in boots. On skates, `A`/`D` steer you along the ground: full input carves hard, `W`+`A` carves gently |
 | `SPACE` (hold) | **Quantum-Lock Skates**: near-frictionless glide. Release to brake hard in boots |
-| `E` / right mouse (hold) | **Dive thrusters**: push you down into slopes and onto downslopes for speed (drains JET) |
-| `T` | Swap thrusters between dive (down) and classic jetpack (up) |
-| `SHIFT` | Mag-jump · in the air: Superman pose |
+| `E` / right mouse (hold) | Thrusters: mostly forward, with only a little lift or dive (drains JET) |
+| `SHIFT` | Mag-jump |
 | `Q` + `W`/`S` (air) | Front / back flips |
 | `Q` + `A`/`D` (air) | Spins |
 | `L` | Helmet lamp: auto / off / on |
-| Left mouse | Pulse Spinner (splash knocks you around too, so you can disc-jump) |
+| Left mouse | Pulse Spinner: slightly homing discs; their splash knocks you around too, so you can disc-jump |
 | `F` | Job board / upgrades (inside hubs and settlements) |
-| `M` | Toggle the big map |
+| `M` | Globe map: drag to spin, scroll to zoom. Fog of war covers anywhere you haven't been |
+| `J` | Reputation Log |
 | `R` | Emergency recall to the ILMB (forfeits the current contract) |
 | `H` | Help |
 
@@ -44,7 +44,8 @@ Click **START YOUR SHIFT!** to lock the mouse.
 - **Magnetic grip:** while the skates are touching the ground (or just left it), they pull you
   toward the surface. You hold contact over small bumps instead of skipping off, but a real
   ramp or crater rim still launches you. Tune `grip`, `gripWindow` and `gripRange` in `src/config.js`.
-- **Tricks:** flips, spins and Superman holds score style points if you land upright. Land
+- **Tricks:** flips and spins score style points if you land upright. Buses, cars and freighters
+  have solid decks: land on one and it carries you along, then launch off it. Land
   crooked and you **WIPE OUT**: you take damage, lose speed and the cargo gets jostled. Without
   an active contract, style pays out half its value in credits straight away.
 - **Hall of Highlights:** big launches, trick landings, thefts and deliveries are snapped by the
@@ -59,6 +60,8 @@ Click **START YOUR SHIFT!** to lock the mouse.
 - **Deliveries:** pick a contract at a job board. Each one has a cargo type, fragility,
   pirate risk, distance and time limit. Some start with a pickup somewhere else. You're paid
   for cargo integrity, time left and **style** (big air, speed milestones, recoveries).
+- **Pirate war-rigs:** pirate rovers are big, fast, and grip the ground. They ram you hard. Your
+  Pulse Spinner homes in slightly to even the odds; the SPACECOM Seeker Module makes it home harder.
 - **Moon Pirates:** "hot" cargo draws Scrapjaw pirates on skates and armed Moon-Rovers. If one
   stays close for about a second, they **steal the cargo** and run for Scrapjaw Gulch. Blast
   or ram them (on skates, above roughly 80 km/h) so they drop it, then grab it back before
@@ -77,18 +80,62 @@ Click **START YOUR SHIFT!** to lock the mouse.
 - **Upgrades** at the ILMB repair bay: Flux Capacitor, Ablative Plating, Mag-Cushion
   Dampers and Pulse Spinner Mk+. Progress is saved in `localStorage`.
 
+## Factions & reputation
+
+| Faction | What they are | HQ |
+| --- | --- | --- |
+| **SPACECOM** | International Moon Force: military, civilian and research | International Moon Base (a fortress ringed by walls and turrets) |
+| **Vostok** | Military, bases 1–9. At war with Daedalus | Bastion Vostok-9 (plus the Vostok-4 Outpost) |
+| **Meridian** | Trade & research | Meridian Exchange |
+| **Kepler Settlements** | Civilian governments | Kepler Civic Center |
+| **Daedalus** | Dark-side military. At war with Vostok | Daedalus Citadel (plus a Forward Post) |
+| **Rustmoon** | Pirate clans. Hidden in the Reputation Log until you meet them | Rustmoon Hold |
+
+Standing goes from HOSTILE through WARY, NEUTRAL, FRIENDLY and TRUSTED up to HONORED. You earn it
+with deliveries and events, and lose it by shooting a faction's people. Helping Vostok angers
+Daedalus, and vice versa.
+
+- **Pay:** contract pay scales with your tier, from ×0.85 up to ×1.75. FRIENDLY factions also offer ★ PRIORITY contracts.
+- **Faction gear:** each HQ sells unique gear gated by reputation: SPACECOM Seeker Module (homing),
+  Meridian Gyro-Edges (steering), Kepler Cargo Cradle (protects cargo and tubes), Vostok Flak Weave
+  (health, knockback), Daedalus Overcharger (fire rate) and Rustmoon Shadow Rig (harder to hit).
+- **Clearance:** TRUSTED with Vostok or Daedalus grants permanent clearance in their zones.
+- **Hostile factions:** a HOSTILE faction won't hire you, and its settlement turrets open fire.
+
+## Events
+
+Every faction keeps one event open somewhere on the Moon. Events are marked by a coloured beacon
+and appear on the globe map and the Reputation Log. Ride up to a beacon to start one:
+
+- **Clear a pirate den** (SPACECOM, Vostok, Daedalus): destroy the den's signal pylon. Destroyed dens go
+  dark and repopulate after five minutes. You can also knock dens out without an event.
+- **Strike** (Vostok ↔ Daedalus): destroy turrets at the rival military installation.
+- **Seismic survey** (Meridian): carry a seismograph to a site, plant it, and defend it while it records.
+- **Black lake sample** (SPACECOM, Meridian): fill a vacuum tube at one of the black lakes in the
+  dark-side craters and bring it back. The fluid really sloshes: hard carves and braking spill it,
+  and crashes crack the tube so it leaks. You're paid for whatever is left.
+- **Downed transit** (Meridian, Kepler): escort a broken-down crawler to the nearest outpost.
+  It only moves while you're close, and raiders come for it.
+- **Supply drop / relay sweep** (Kepler, SPACECOM): reach every pod or beacon before time runs out.
+- **Raid** (Rustmoon, once you've joined): knock out a settlement's defenses. Bigger targets unlock
+  with Rustmoon reputation. At HONORED, you can raid the International Moon Base itself.
+- **Pirate Wreck** (one time only): a distress signal from the dark side. Fetch med supplies from the
+  nearest lit outpost and get back before the pirate's air runs out.
+  - **If you save them:** you can swear in with Rustmoon. Pirates then treat you as crew, dens open their
+    job boards and gear to you, and raids unlock. SPACECOM will notice.
+  - **If you fail:** you're locked out of Rustmoon for good.
+
 ## Locations
 
 | Location | Type | Notes |
 | --- | --- | --- |
-| International Moon Base (ILMB) | Hub | Embassies, multi-faction job board, repair bay & upgrades, launch pad, Hall of Highlights |
-| Tranquility Commons, Aldrin Heights | Civilian | Family habitat domes, safe rest and repair |
-| Shackleton Radar Array, Kepler Bio-Lab | Research | Fragile, high-value cargo |
-| Helium-3 Extractor 7 | Industrial | Volatile, pirate-magnet canisters |
-| Fort Meridian, Bastion Vostok-9 | Military | Restricted zones with turrets, patrols and artillery |
-| Twilight Waystation | Civilian (terminator) | Last light before the dark side |
-| Farside Listening Post, Daedalus Deep Observatory, Hertzsprung Refuge | Dark side | Hazard-pay destinations |
-| Scrapjaw Gulch, Blackrock Den, Gloom Harbor, Rustmoon Camp + scattered camps | Pirate (dark side) | Stolen cargo is fenced at the nearest den |
+| International Moon Base (ILMB) | SPACECOM HQ | Fortress walls, turrets, artillery, embassies, job board, repair bay, launch pad, Hall of Highlights |
+| Meridian Exchange · Shackleton Radar Array · Helium-3 Exchange | Meridian | Trade hub, radar research, volatile canisters |
+| Kepler Civic Center · Tranquility Commons · Aldrin Heights · Twilight Waystation · Hertzsprung Refuge | Kepler | Towns, safe rest and repair |
+| Farside Listening Post | SPACECOM (dark side) | Hazard-pay destination |
+| Bastion Vostok-9 · Vostok-4 Outpost | Vostok | Restricted zones: turrets, patrols, artillery |
+| Daedalus Citadel · Daedalus Forward Post | Daedalus (dark side) | Restricted zones: turrets, patrols, artillery |
+| Rustmoon Hold · Scrapjaw Gulch · Blackrock Den · Gloom Harbor + scattered camps | Rustmoon (dark side) | Stolen cargo is fenced at the nearest working den |
 
 ## Keeping it light on the GPU
 
@@ -124,6 +171,9 @@ src/
   config.js      world size and physics tuning
   planet.js      spherical moon: cube-sphere heightfield, craters, LOD chunk streaming, exact surface queries
   geo.js         sun/dark-side frame, great-circle and local-frame helpers
+  reputation.js  faction standing, tiers, unlocks, Rustmoon state
+  events.js      per-faction events, fluid sloshing, escorts, the Pirate Wreck
+  mapview.js     draggable fog-of-war globe map
   highlights.js  action-shot capture + Hall of Highlights board
   physics.js     collider hash + shared skater movement model (player and pirate skaters)
   player.js      input → movement, weapon, animation, style events

@@ -38,7 +38,7 @@ export class Player {
     this.upSmooth = spawn.clone().normalize();
     this.impacts = [];
     this.params = { ...PHYS };
-    this.trick = { flip: 0, spin: 0, superman: 0, active: false, lastAir: 0 };
+    this.trick = { flip: 0, spin: 0, active: false };
 
     // helmet lamp + a faint suit glow; intensities are driven by how dark it is
     this.lamp = new THREE.SpotLight(0xfff2c8, 0, 170, 0.5, 0.55, 1.2);
@@ -55,9 +55,13 @@ export class Player {
 
   applyUpgrades(up) {
     this.params.skateSafeImpact = PHYS.skateSafeImpact + up.dampers * 8;
+    this.params.handling = PHYS.handling + (up.gyro || 0) * 0.55;
     this.body.maxEnergy = PHYS.maxEnergy + up.capacitor * 25;
-    this.maxHealth = 100 + up.armor * 25;
+    this.maxHealth = 100 + up.armor * 25 + (up.flak || 0) * 20;
     this.damageMult = 1 + up.spinner * 0.3;
+    this.fireDelay = 0.55 * (1 - 0.15 * (up.overcharge || 0));
+    this.homing = 0.9 + (up.seeker || 0) * 1.3; // rad/s the disc can turn toward a target
+    this.knockResist = 1 - (up.flak || 0) * 0.15;
   }
 
   respawn(pos, facing) {
@@ -84,7 +88,7 @@ export class Player {
 
   resetTrick() {
     const t = this.trick;
-    t.flip = t.spin = t.superman = 0;
+    t.flip = t.spin = 0;
     t.active = false;
     this.model.trick.rotation.set(0, 0, 0);
   }
@@ -105,15 +109,10 @@ export class Player {
       if (wish.lengthSq() > 0) wish.normalize();
     }
 
-    let thrustDir;
-    if (this.params.thrustMode === 'down') {
-      // dive thrusters: shove you into the slope / down onto the next downslope
-      thrustDir = up.clone().negate();
-    } else {
-      thrustDir = cam.look.clone().addScaledVector(up, 0.9);
-      if (wish.lengthSq() > 0) thrustDir.addScaledVector(wish, 0.4);
-      thrustDir.normalize();
-    }
+    // Thrusters push mostly forward (where you aim / steer); only a little lift or dive.
+    const thrustDir = (wish.lengthSq() > 0 ? wish.clone() : cam.fwd.clone());
+    const tv = this.params.thrustVertical;
+    thrustDir.addScaledVector(up, THREE.MathUtils.clamp(Math.sin(cam.pitch) * 0.6 + 0.06, -tv, tv)).normalize();
 
     const ctrl = {
       wish,
@@ -126,6 +125,11 @@ export class Player {
     const wasGrounded = b.grounded;
     const airBefore = b.airTime;
     b.jumped = false;
+    // ride moving vehicles: carry along with the deck you're standing on
+    const plat = b.platform;
+    if (plat) b.pos.add(_v.subVectors(plat.pos, plat.prevPos));
+    this.prevVel = (this.prevVel || new THREE.Vector3()).copy(b.vel);
+    if (plat) this.prevVel.add(plat.vel);
     const steps = Math.ceil(dt / (1 / 120));
     const h = dt / steps;
     let landed = false;
@@ -137,6 +141,13 @@ export class Player {
       ctrl.jump = false;
     }
     if (b.jumped) { g.audio.jump(); g.fx.dust(b.pos, b.vel, 6, up); }
+    // velocities on a deck are relative to it; convert when stepping on or off
+    if (!plat && b.platform) { b.vel.sub(b.platform.vel); g.fx.pop('ALL ABOARD!', null, { color: '#2ee6ff', size: 44, life: 1 }); }
+    else if (plat && b.platform !== plat) { b.vel.add(plat.vel); if (b.platform) b.vel.sub(b.platform.vel); }
+    // world-space acceleration (for sloshing fluids)
+    const worldVel = _v.copy(b.vel);
+    if (b.platform) worldVel.add(b.platform.vel);
+    this.accel = (this.accel || new THREE.Vector3()).subVectors(worldVel, this.prevVel).divideScalar(Math.max(dt, 1e-3));
 
     this.updateTricks(dt, input, trickHeld, landed && !wasGrounded ? airBefore : -1);
 
@@ -165,15 +176,17 @@ export class Player {
     // weapon: Pulse Spinner
     this.fireCd -= dt;
     if (input.mouse[0] && this.fireCd <= 0 && input.locked) {
-      this.fireCd = 0.55;
+      this.fireCd = this.fireDelay || 0.55;
       const muzzle = this.center.clone().addScaledVector(cam.right, 0.5).addScaledVector(up, 0.3);
       const aim = cam.position.clone().addScaledVector(cam.look, 350);
       const dir = aim.sub(muzzle).normalize();
       const vel = dir.multiplyScalar(115).addScaledVector(b.vel, 0.5);
-      g.projectiles.fire('player', muzzle, vel, { damage: 34 * (this.damageMult || 1), splash: 7, color: 0x9be7ff, size: 0.45, knock: 1.6 });
+      g.projectiles.fire('player', muzzle, vel, { damage: 34 * (this.damageMult || 1), splash: 7, color: 0x9be7ff, size: 0.45, knock: 1.6, homing: this.homing || 0.9 });
       g.audio.shoot();
     }
 
+    if (b.onLake && b.grounded && !b.skating) b.vel.multiplyScalar(1 - Math.min(1, 2.5 * dt)); // wading
+    if (b.onLake && b.grounded && this.speed > 8 && Math.random() < dt * 20) g.fx.spawn(b.pos, up.clone().multiplyScalar(3), { color: 0x2a1f4f, size: 0.4, life: 0.6, gravity: 2, count: 2, spread: 3 });
     if (b.grounded && b.skating && this.speed > 25 && Math.random() < dt * 30) {
       g.fx.dust(b.pos, b.vel.clone().multiplyScalar(-0.2), 1, up, 0xe8e2d8);
     }
@@ -192,7 +205,7 @@ export class Player {
     this.glowLight.position.copy(head).addScaledVector(up, 1.5);
   }
 
-  // --- mid-air tricks: hold Q + W/S to flip, A/D to spin; SHIFT in the air = Superman ---
+  // --- mid-air tricks: hold Q + W/S to flip, A/D to spin ---
   updateTricks(dt, input, held, landedAfter) {
     const t = this.trick;
     const b = this.body;
@@ -209,7 +222,6 @@ export class Player {
         t.flip += (tf - t.flip) * Math.min(1, dt * 5);
         t.spin += (ts - t.spin) * Math.min(1, dt * 5);
       }
-      if ((input.down('ShiftLeft') || input.down('ShiftRight')) && b.airTime > 0.3) { t.superman += dt; t.active = true; }
       this.model.trick.rotation.set(t.flip, t.spin, 0, 'YXZ');
     }
     if (landedAfter >= 0 && t.active) {
@@ -217,14 +229,12 @@ export class Player {
       const spins = Math.round(Math.abs(t.spin) / TAU);
       const rf = Math.abs(t.flip - Math.round(t.flip / TAU) * TAU);
       const rs = Math.abs(t.spin - Math.round(t.spin / TAU) * TAU);
-      const sup = t.superman > 0.5 ? t.superman : 0;
       const clean = rf < 0.75 && rs < 0.95;
-      if (clean && (flips || spins || sup)) {
+      if (clean && (flips || spins)) {
         const parts = [];
         if (flips) parts.push(`${NUMS[Math.min(flips, 5)] || flips + 'x '}${t.flip > 0 ? 'FRONTFLIP' : 'BACKFLIP'}`);
         if (spins) parts.push(`${spins * 360} SPIN`);
-        if (sup) parts.push('SUPERMAN');
-        let pts = flips * 45 + spins * 25 + Math.round(sup * 14);
+        let pts = flips * 45 + spins * 25;
         if (parts.length > 1) pts = Math.round(pts * (1 + 0.5 * (parts.length - 1)));
         pts += Math.round(landedAfter * 5);
         const name = parts.join(' + ');
@@ -260,6 +270,7 @@ export class Player {
       g.fx.dust(this.body.pos, this.body.vel, 5, this.up);
     }
     if (it.speed > 14) g.missions.jostle(it.speed - 14, skates);
+    if (it.speed > 6) g.events.onImpact(it.speed);
   }
 
   animate(dt, cam, ctrl) {
@@ -297,11 +308,10 @@ export class Player {
     const s = Math.sin(this.anim);
     const base = m.bodyBase;
     if (!b.grounded) {
-      const sup = this.trick.superman > 0;
-      m.torso.rotation.x = sup ? 1.1 : 0.15;
-      m.legL.rotation.x = sup ? 0.2 : -0.5; m.legR.rotation.x = sup ? 0.2 : 0.3;
-      m.armL.rotation.z = sup ? -0.2 : -1.1; m.armR.rotation.z = sup ? 0.2 : 1.1;
-      m.armL.rotation.x = m.armR.rotation.x = sup ? -2.9 : 0;
+      m.torso.rotation.x = 0.15;
+      m.legL.rotation.x = -0.5; m.legR.rotation.x = 0.3;
+      m.armL.rotation.z = -1.1; m.armR.rotation.z = 1.1;
+      m.armL.rotation.x = m.armR.rotation.x = 0;
       m.body.position.y = base;
       if (this.trick.active && (this.trick.flip || this.trick.spin)) { m.legL.rotation.x = m.legR.rotation.x = -1.2; m.torso.rotation.x = 0.6; }
     } else if (b.skating) {

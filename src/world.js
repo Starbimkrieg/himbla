@@ -38,6 +38,7 @@ export class World {
     this.buildSky();
     for (const loc of locations) this.buildLocation(loc);
     this.buildTraffic();
+    this.buildLakes();
   }
 
   r() { return this.rand(); }
@@ -303,9 +304,10 @@ export class World {
     const fc = FACTIONS[loc.faction].color;
     switch (loc.type) {
       case 'hub': this.buildHub(loc); break;
-      case 'civilian': this.buildCivilian(loc); break;
-      case 'research': loc.id === 'shackleton' || loc.id === 'farside' ? this.buildArray(loc) : this.buildBioLab(loc); break;
+      case 'civilian': this.buildCivilian(loc); if (loc.id === 'kepler') this.buildCivic(loc); break;
+      case 'research': this.buildArray(loc); break;
       case 'industrial': this.buildMine(loc); break;
+      case 'trade': this.buildTrade(loc); break;
       case 'military': this.buildMilitary(loc); break;
       case 'pirate': loc.camp ? this.buildCamp(loc) : this.buildGulch(loc); break;
     }
@@ -316,6 +318,11 @@ export class World {
         this.lamp(loc, Math.cos(a) * loc.r * 0.8, Math.sin(a) * loc.r * 0.8, 0xfff1b0, 9, 20);
       }
     }
+    if (loc.hq) {
+      const hq = textSprite(`★ ${FACTIONS[loc.faction].name.toUpperCase()} HQ ★`, { color: '#ffffff', size: 60, scale: 0.8 });
+      hq.position.set(0, loc.type === 'hub' ? 110 : 62, 0);
+      loc.group.add(hq);
+    }
     this.sign(loc, loc.name.toUpperCase(), fc, loc.type === 'hub' ? 95 : loc.camp ? 26 : 50);
   }
 
@@ -323,10 +330,10 @@ export class World {
     this.dome(loc, 0, 0, 58, 0x9be7ff, 0.35);
     this.tower(loc, 0, 0, 82, 4, 0xfff4e0, 0xffd23f);
     const embassies = [
-      { f: 'accord', a: 0.6, colors: [0x2ec4ff, 0xffffff, 0x1b3a8f] },
-      { f: 'directorate', a: 2.2, colors: [0xff3b5c, 0xffd23f] },
-      { f: 'equa', a: 3.8, colors: [0xc77dff, 0x7dff6a, 0xc77dff] },
-      { f: 'sci', a: 5.2, colors: [0x7dff6a, 0xffffff] },
+      { f: 'meridian', a: 0.6, colors: [0x2ec4ff, 0xffffff, 0x1b3a8f] },
+      { f: 'vostok', a: 2.2, colors: [0xff3b5c, 0xffd23f] },
+      { f: 'daedalus', a: 3.8, colors: [0xc77dff, 0x111111, 0xc77dff] },
+      { f: 'kepler', a: 5.2, colors: [0xff9f1c, 0xffffff] },
     ];
     for (const e of embassies) {
       const dx = Math.cos(e.a) * 112, dz = Math.sin(e.a) * 112;
@@ -407,7 +414,74 @@ export class World {
     this.rocket = { ...rocket, loc, lp, t: 0, alt: 900, period: 76 };
     this.launchPad = { loc, x: lp.x, z: lp.z };
 
+    this.fortify(loc);
     this.addFigures(loc, 14, { kind: 'worker', look: (i) => ({ suit: [0xff9f1c, 0xffd23f, 0x2ec4ff, 0xffffff][i % 4] }) });
+    this.addFigures(loc, 10, { kind: 'soldier', look: () => ({ suit: 0x55607a, helmet: 0xffd23f, visor: 0x111111 }) });
+  }
+
+  // SPACECOM fortress ring: the most heavily defended place on the Moon.
+  fortify(loc) {
+    const R = 248, segs = 40;
+    const gates = [0.25 * Math.PI * 2, 0.5 * Math.PI * 2, 0.75 * Math.PI * 2, Math.PI * 2];
+    for (let i = 0; i < segs; i++) {
+      const a = (i / segs) * Math.PI * 2;
+      if (gates.some((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g))) < 0.1)) continue;
+      const len = ((2 * Math.PI * R) / segs) * 0.96;
+      this.block(loc, Math.cos(a) * R, Math.sin(a) * R, len, 9, 4, 0x5b5870, -a + Math.PI / 2, 0xffd23f);
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+      this.tower(loc, Math.cos(a) * (R + 6), Math.sin(a) * (R + 6), 26, 3.2, 0x4a4660, 0xff2a4a);
+    }
+    for (const g of gates) {
+      for (const s of [-1, 1]) {
+        const a = g + s * 0.14;
+        this.block(loc, Math.cos(a) * R, Math.sin(a) * R, 8, 16, 8, 0xffd23f, -a + Math.PI / 2, 0x2a2540);
+      }
+    }
+    // barracks, vehicle depot, command bunker
+    this.block(loc, 175, 120, 34, 10, 16, 0x5b5870, -0.6, 0xffd23f);
+    this.block(loc, -175, 125, 34, 10, 16, 0x5b5870, 0.6, 0xffd23f);
+    this.block(loc, 190, -40, 26, 12, 26, 0x4a4660, 0.3, 0x2a2540);
+    for (let i = 0; i < 3; i++) {
+      const r = makeRover({ color: 0x55607a, trim: 0xffd23f, pirate: false, flag: 0xffd23f });
+      r.root.scale.setScalar(1.15);
+      this.put(r.root, loc, 150 + i * 12, -95 + i * 6, 0, 1.2);
+    }
+    const sc = textSprite('SPACECOM', { color: '#ffd23f', size: 90, scale: 1.1 });
+    sc.position.set(0, 132, 0);
+    loc.group.add(sc);
+  }
+
+  buildCivic(loc) {
+    this.dome(loc, 0, 0, 30, 0xffd23f, 0.3);
+    this.block(loc, 0, 36, 30, 14, 10, 0xfff4e0, 0, 0xff9f1c);
+    this.flag(loc, -20, 46, [0xff9f1c, 0xffffff, 0xff9f1c], 18);
+    this.flag(loc, 20, 46, [0xff9f1c, 0xffffff, 0xff9f1c], 18);
+  }
+
+  // Meridian Exchange: warehouses, container stacks, cranes and a lab dome.
+  buildTrade(loc) {
+    const cols = [0x2ec4ff, 0xff9f1c, 0x7dff6a, 0xff3b5c, 0xffd23f, 0xc77dff];
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + 0.4;
+      this.block(loc, Math.cos(a) * 70, Math.sin(a) * 70, 34, 12, 18, 0xd8d4e8, -a, 0x2ec4ff);
+    }
+    for (let i = 0; i < 18; i++) {
+      const x = -30 + (i % 6) * 10, z = -100 + Math.floor(i / 6) * 6;
+      const h = 1 + Math.floor((i * 7) % 3);
+      this.block(loc, x, z, 8, h * 3.6 - 0.6, 4.5, cols[i % cols.length], 0, cols[(i + 1) % cols.length]);
+    }
+    for (const [x, z] of [[-60, 10], [60, -10]]) {
+      this.tower(loc, x, z, 34, 1.4, 0xffd23f, 0x2ec4ff);
+      const arm = mesh(new THREE.BoxGeometry(30, 1.6, 1.6), toon(0xffd23f), 0.08);
+      this.put(arm, loc, x + 13, z, 33);
+    }
+    this.dome(loc, 0, 40, 24, 0x9be7ff, 0.3);
+    this.pad(loc, 100, 60, 16, 0x2ec4ff);
+    this.pad(loc, -100, -60, 16, 0x2ec4ff);
+    this.flag(loc, 0, 110, [0x2ec4ff, 0xffffff, 0x2ec4ff], 20);
+    this.addFigures(loc, 12, { kind: 'worker', look: (i) => ({ suit: cols[i % cols.length] }) });
   }
 
   buildCivilian(loc) {
@@ -496,22 +570,25 @@ export class World {
 
   buildMilitary(loc) {
     const fc = new THREE.Color(FACTIONS[loc.faction].color).getHex();
-    const wallR = 95, segs = 14;
+    const small = !!loc.small;
+    const wallR = small ? 55 : 95, segs = small ? 10 : 14;
     for (let i = 1; i < segs; i++) {
       const a = (i / segs) * Math.PI * 2;
       const len = (2 * Math.PI * wallR) / segs * 0.92;
       this.block(loc, Math.cos(a) * wallR, Math.sin(a) * wallR, len, 7, 3, 0x5b5870, -a + Math.PI / 2, fc);
     }
-    this.block(loc, 0, 0, 30, 12, 30, 0x4a4660, 0.785, fc);
-    this.block(loc, 40, -30, 26, 8, 14, 0x5b5870, 0.2, 0x2a2540);
-    this.block(loc, -35, 35, 20, 10, 20, 0x5b5870, -0.4, 0x2a2540);
-    this.tower(loc, -40, -40, 50, 2.2, 0x5b5870, 0xff2a4a);
-    const dish = makeDish(12, 0xb0b0c0);
-    this.put(dish.root, loc, 50, 40, 0, 0, true);
+    this.block(loc, 0, 0, small ? 18 : 30, small ? 9 : 12, small ? 18 : 30, 0x4a4660, 0.785, fc);
+    if (!small) {
+      this.block(loc, 40, -30, 26, 8, 14, 0x5b5870, 0.2, 0x2a2540);
+      this.block(loc, -35, 35, 20, 10, 20, 0x5b5870, -0.4, 0x2a2540);
+    }
+    this.tower(loc, -30, -30, small ? 30 : 50, 2.2, 0x5b5870, 0xff2a4a);
+    const dish = makeDish(small ? 8 : 12, 0xb0b0c0);
+    this.put(dish.root, loc, 30, 30, 0, 0, true);
     this.dishes.push({ ...dish, speed: 0.6, loc });
-    this.col(loc, { type: 'cyl', x: 50, z: 40, y0: -2, y1: 11, r: 2.5 });
-    this.flag(loc, 0, 70, loc.faction === 'accord' ? [0x2ec4ff, 0xffffff, 0x1b3a8f] : [0xff3b5c, 0xffd23f], 20);
-    this.addFigures(loc, 8, { kind: 'soldier', look: () => ({ suit: 0x55607a, helmet: fc, visor: 0x111111 }) });
+    this.col(loc, { type: 'cyl', x: 30, z: 30, y0: -2, y1: 11, r: 2.5 });
+    this.flag(loc, 0, small ? 40 : 70, loc.faction === 'vostok' ? [0xff3b5c, 0xffd23f, 0xff3b5c] : [0xc77dff, 0x111111, 0xc77dff], 20);
+    this.addFigures(loc, small ? 4 : 8, { kind: 'soldier', look: () => ({ suit: 0x55607a, helmet: fc, visor: 0x111111 }) });
 
     const mat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, side: THREE.DoubleSide,
@@ -598,19 +675,21 @@ export class World {
       cruise = 22; endAlt = 4; speed = 26; radius = 5.5; view = 1600;
     } else {
       model = makeFreighter({ stripe: [0xff9f1c, 0xff2e88, 0x2ec4ff][this.vehicles.length % 3] });
-      cruise = 150; endAlt = 70; speed = 42; radius = 20; view = 4200;
+      cruise = 55 + (this.vehicles.length % 3) * 25; endAlt = 30; speed = 40; radius = 20; view = 4200;
     }
     const { pts, len } = this.route(A, B, cruise, endAlt);
     model.root.matrixAutoUpdate = true;
     this.scene.add(model.root);
-    this.vehicles.push({ ...model, kind, pts, len, t: this.r(), dir: 1, speed: speed / len, wait: 0, radius, view, pos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3() });
+    // decks you can land on: box colliders that ride along with the vehicle
+    const deck = kind === 'car' ? [1.3, 1.1, 2.7] : kind === 'bus' ? [2.6, 2.5, 7.0] : [7.2, 5.0, 23.5];
+    this.vehicles.push({ ...model, kind, pts, len, t: this.r(), dir: 1, speed: speed / len, wait: 0, radius, view, pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(), deck, col: null });
   }
 
   buildTraffic() {
     const L = Object.fromEntries(this.locations.map((l) => [l.id, l]));
     const cars = [['ilmb', 'tranq'], ['ilmb', 'aldrin'], ['tranq', 'kepler'], ['ilmb', 'meridian'], ['aldrin', 'shackleton'], ['shackleton', 'twilight']];
     const buses = [['ilmb', 'tranq'], ['ilmb', 'shackleton'], ['ilmb', 'mine'], ['tranq', 'kepler'], ['aldrin', 'twilight'], ['twilight', 'farside']];
-    const ships = [['ilmb', 'farside'], ['ilmb', 'daedalus'], ['mine', 'hertz'], ['twilight', 'gloom'], ['kepler', 'vostok']];
+    const ships = [['ilmb', 'farside'], ['ilmb', 'hertz'], ['mine', 'twilight'], ['twilight', 'gloom'], ['kepler', 'vostok'], ['meridian', 'aldrin']];
     for (const [a, b] of cars) if (L[a] && L[b]) this.addVehicle('car', L[a], L[b]);
     for (const [a, b] of buses) if (L[a] && L[b]) this.addVehicle('bus', L[a], L[b]);
     for (const [a, b] of ships) if (L[a] && L[b]) this.addVehicle('ship', L[a], L[b]);
@@ -649,6 +728,7 @@ export class World {
       b.mat.color.copy(b.base).multiplyScalar(Math.sin(time * 3 + b.phase) > 0.2 ? 1 : 0.25);
     }
     for (const z of this.zoneWalls) z.mat.uniforms.time.value = time;
+    if (this.lakeMat) this.lakeMat.uniforms.time.value = time;
 
     this.updateRocket(dt, camPos);
     this.updateTraffic(dt, camPos);
@@ -677,7 +757,8 @@ export class World {
   updateTraffic(dt, camPos) {
     const tmp = _v;
     for (const s of this.vehicles) {
-      if (s.wait > 0) { s.wait -= dt; s.vel.set(0, 0, 0); continue; }
+      s.prevPos.copy(s.pos);
+      if (s.wait > 0) { s.wait -= dt; s.vel.set(0, 0, 0); this.syncDeck(s, camPos); continue; }
       s.t += s.speed * s.dir * dt;
       if (s.t >= 1 || s.t <= 0) { s.t = Math.min(1, Math.max(0, s.t)); s.dir *= -1; s.wait = s.kind === 'ship' ? 2 : 5; }
       const f = s.t * (s.pts.length - 1);
@@ -691,7 +772,7 @@ export class World {
       s.root.position.copy(s.pos);
       s.fwd.copy(s.pts[i + 1]).sub(s.pts[i]).multiplyScalar(s.dir);
       frameQuat(tmp.copy(s.pos).normalize(), s.fwd, s.root.quaternion);
-      s.root.position.addScaledVector(tmp, Math.sin(time() + s.len) * 0.3);
+      this.syncDeck(s, camPos);
     }
     for (const c of this.crawlers) {
       c.t += c.speed * c.dir * dt;
@@ -707,6 +788,73 @@ export class World {
       c.root.position.copy(p);
       frameQuat(d, new THREE.Vector3().subVectors(c.B, c.A).multiplyScalar(c.dir), c.root.quaternion);
       for (const w of c.wheels) w.rotation.x += dt * 8;
+    }
+  }
+
+  // Keep a vehicle's deck collider in the spatial hash while it is near the camera.
+  syncDeck(s, camPos) {
+    const near = s.pos.distanceTo(camPos) < 350;
+    if (s.col) { this.colliders.remove(s.col); if (!near) { s.col = null; return; } }
+    if (!near) return;
+    if (s.pos.lengthSq() < 1) return;
+    const up = _v.copy(s.pos).normalize();
+    const q = frameQuat(up, s.fwd.lengthSq() > 0 ? s.fwd : new THREE.Vector3(1, 0, 0), _q);
+    const c = s.col || { type: 'box', platform: s, ax: new THREE.Vector3(), ay: new THREE.Vector3(), az: new THREE.Vector3() };
+    c.c = s.pos;
+    c.ax.set(1, 0, 0).applyQuaternion(q); c.ay.set(0, 1, 0).applyQuaternion(q); c.az.set(0, 0, 1).applyQuaternion(q);
+    c.hx = s.deck[0]; c.hy = s.deck[1]; c.hz = s.deck[2];
+    s.col = this.colliders.add(c);
+  }
+
+  // Black lakes: still pools of dark liquid filling crater floors, mostly on the dark side.
+  buildLakes() {
+    const P = this.planet;
+    const picks = P.craters.filter((c) => c.R > 65 && c.R < 190 && SUN.dot(c.d) < 0.15)
+      .filter((c) => this.locations.every((l) => arcDist(c.d, l.dir) > (l.zoneR || l.r) * 2 + c.R));
+    const rr = mulberry32(31);
+    const chosen = [];
+    for (const c of picks) {
+      if (chosen.length >= 40) break;
+      if (rr() < 0.25 || chosen.some((o) => arcDist(o.d, c.d) < 450)) continue;
+      chosen.push(c);
+    }
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { time: { value: 0 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: `uniform float time; varying vec2 vUv;
+        void main(){ vec2 p = vUv - 0.5; float r = length(p) * 2.0;
+          float ripple = sin(r * 40.0 - time * 1.5) * 0.5 + 0.5;
+          float glint = smoothstep(0.92, 1.0, ripple) * (1.0 - r) * 0.35;
+          float rim = smoothstep(0.86, 0.98, r);
+          vec3 col = vec3(0.03, 0.02, 0.06) + vec3(0.35, 0.22, 0.6) * glint + vec3(0.25, 0.15, 0.45) * rim;
+          gl_FragColor = vec4(col, 1.0); }`,
+    });
+    this.lakeMat = mat;
+    this.lakes = [];
+    for (const c of chosen) {
+      const s0 = P.surface(c.d.clone().multiplyScalar(P.R));
+      // fill only up to the lowest point of the rim, so the pool never overhangs
+      const dirs = [];
+      for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; dirs.push(c.e1.clone().multiplyScalar(Math.cos(a)).addScaledVector(c.e2, Math.sin(a))); }
+      const along = (t, r) => { const a = r / P.R; return P.surface(c.d.clone().multiplyScalar(Math.cos(a)).addScaledVector(t, Math.sin(a)).multiplyScalar(P.R)); };
+      let rimMin = Infinity;
+      for (const t of dirs) { let m = -Infinity; for (let r = 5; r < c.R * 1.4; r += 5) m = Math.max(m, along(t, r)); rimMin = Math.min(rimMin, m); }
+      const level = Math.min(s0 + c.depth * 0.32, rimMin - 1.5);
+      if (level < s0 + 1.2 || this.lakes.length >= 16) continue;
+      let rad = Infinity;
+      for (const t of dirs) for (let r = 4; r < c.R * 1.4; r += 3) if (along(t, r) > level) { rad = Math.min(rad, r); break; }
+      if (!isFinite(rad) || rad < 20) continue;
+      rad -= 1;
+      const lake = { d: c.d.clone(), level, rad, cos: Math.cos(rad / P.R), name: 'Black Lake' };
+      const m = new THREE.Mesh(new THREE.CircleGeometry(rad + 2, 48), mat);
+      m.position.copy(c.d).multiplyScalar(level + 0.05);
+      frameQuat(c.d, c.e1, m.quaternion);
+      m.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
+      m.updateMatrix(); m.matrixAutoUpdate = false;
+      this.scene.add(m);
+      lake.mesh = m;
+      this.lakes.push(lake);
+      P.lakes.push(lake);
     }
   }
 

@@ -77,6 +77,8 @@ export class Planet {
     scene.add(this.core);
     this.queue = [];
     this.stats = { built: 0, visible: 0 };
+    this.lakes = []; // black lakes: { d, cos, level } — flat liquid surfaces in crater floors
+    this.lastLake = null;
   }
 
   base(x, y, z, far) {
@@ -213,9 +215,19 @@ export class Planet {
     _c.crossVectors(_a, _b);
     if (_c.dot(A) < 0) _c.negate();
     _c.normalize();
-    if (outN) outN.copy(_c);
     const denom = _c.x * dx + _c.y * dy + _c.z * dz;
-    return _c.dot(A) / Math.max(denom, 0.05);
+    const r = _c.dot(A) / Math.max(denom, 0.05);
+    this.lastLake = null;
+    for (let k = 0; k < this.lakes.length; k++) {
+      const lk = this.lakes[k];
+      if (dx * lk.d.x + dy * lk.d.y + dz * lk.d.z > lk.cos && lk.level > r) {
+        this.lastLake = lk;
+        if (outN) outN.set(dx, dy, dz);
+        return lk.level;
+      }
+    }
+    if (outN) outN.copy(_c);
+    return r;
   }
 
   altitude(p) { return p.length() - this.surface(p); }

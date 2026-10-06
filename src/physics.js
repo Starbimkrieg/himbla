@@ -158,6 +158,8 @@ export function makeBody(pos) {
     thrusting: false,
     skating: false,
     lastLat: 0,
+    platform: null,
+    onLake: null,
   };
 }
 
@@ -187,10 +189,15 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
       if (speed < params.skatePushMax) v.addScaledVector(wish, params.skatePush * dt);
       if (speed > 2) {
         const vh = _tmp.copy(v).divideScalar(speed);
+        // Steering: the sideways part of your input (relative to where you're going) sets a
+        // turn rate. Full A/D = hardest carve, W+A = a gentle one. Speed is preserved.
         _lat.copy(wish).addScaledVector(vh, -wish.dot(vh));
         lat = _lat.length();
-        v.addScaledVector(_lat, params.carve * dt);
-        v.setLength(Math.max(speed, Math.min(v.length(), params.skatePushMax)));
+        if (lat > 1e-3) {
+          const side = Math.sign(_gt.crossVectors(vh, _lat).dot(n)) || 1;
+          v.applyAxisAngle(n, side * params.handling * (1 + 8 / (speed + 4)) * Math.min(1, lat) * dt);
+          vh.copy(v).divideScalar(speed);
+        }
         // slope assist: the cushion converts some of the downhill pull into extra speed
         _gt.copy(up).multiplyScalar(-G);
         _gt.addScaledVector(n, -_gt.dot(n));
@@ -266,6 +273,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
     b.grounded = true;
     b.groundN.copy(_sn);
     b.altitude = 0;
+    b.onLake = planet.lastLake;
   } else if (alt < 0.3 && wasGrounded && !input.skates && v.dot(_sn) < 1.5) {
     // boots stick to the ground when walking
     b.pos.multiplyScalar(sr / len);
@@ -282,6 +290,8 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
   }
 
   // obstacles
+  const prevPlat = b.platform;
+  b.platform = null;
   if (colliders) {
     const r = params.radius;
     const cp = _cp.copy(b.pos).addScaledVector(up, r);
@@ -299,6 +309,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
           b.grounded = true;
           b.groundN.copy(_n);
           b.altitude = 0;
+          if (c.platform) b.platform = c.platform;
           if (-vn > (input.skates ? params.skateSafeImpact : params.bootSafeImpact)) impacts.push({ speed: -vn, kind: 'obstacle', normal: _n.clone() });
         } else {
           v.addScaledVector(_n, -vn * 1.35);
@@ -308,6 +319,8 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
     }
   }
 
+  // stay "on deck" through tiny separations so riding a vehicle doesn't flicker
+  if (!b.platform && prevPlat && alt > 0 && b.sinceContact < 0.15 && b.pos.distanceTo(prevPlat.pos) < 40) b.platform = prevPlat;
   if (b.grounded) { b.airTime = 0; b.sinceContact = 0; } else { b.airTime += dt; b.sinceContact += dt; }
   return impacts;
 }

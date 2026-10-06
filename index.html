@@ -20,6 +20,8 @@
       <div id="style" class="chip pink"></div>
       <div id="darkchip" class="chip dark hidden">☾ DARK SIDE — PIRATE COUNTRY</div>
       <div id="mission" class="panel hidden"></div>
+      <div id="eventpanel" class="panel hidden"></div>
+      <canvas id="fluid" class="hidden" width="200" height="74"></canvas>
     </div>
     <canvas id="minimap" width="210" height="210"></canvas>
 
@@ -48,6 +50,10 @@
   </div>
 
   <div id="board" class="panel hidden"></div>
+  <div id="replog" class="panel hidden"></div>
+  <div id="dialog" class="overlay hidden"></div>
+  <div id="globe-wrap" class="overlay hidden"><canvas id="globe" width="760" height="760"></canvas></div>
+  <div id="globe-tip" class="hidden"></div>
 
   <div id="help" class="panel hidden">
     <h2>CONTROLS</h2>
@@ -55,14 +61,15 @@
       <tr><td>Mouse</td><td>Look / aim</td></tr>
       <tr><td>W A S D</td><td>Run · steer / carve on skates</td></tr>
       <tr><td>SPACE (hold)</td><td>Quantum-Lock Skates — frictionless glide</td></tr>
-      <tr><td>E / Right mouse</td><td>Dive thrusters — push into slopes for speed (uses JET)</td></tr>
-      <tr><td>SHIFT</td><td>Mag-jump · in the air: Superman pose</td></tr>
+      <tr><td>A / D on skates</td><td>Steer along the ground (W+A = gentle, A = hard carve)</td></tr>
+      <tr><td>E / Right mouse</td><td>Thrusters — mostly forward (uses JET)</td></tr>
+      <tr><td>SHIFT</td><td>Mag-jump</td></tr>
       <tr><td>Q + W/S · Q + A/D</td><td>Mid-air flips · spins (land upright!)</td></tr>
-      <tr><td>T</td><td>Swap thrusters: dive ↔ jetpack</td></tr>
       <tr><td>L</td><td>Helmet lamp: auto / off / on</td></tr>
+      <tr><td>J</td><td>Reputation Log</td></tr>
       <tr><td>Left mouse</td><td>Pulse Spinner (splash knocks you around — disc-jump!)</td></tr>
       <tr><td>F</td><td>Job board / upgrades (in hubs)</td></tr>
-      <tr><td>M</td><td>Big map</td></tr>
+      <tr><td>M</td><td>Globe map (drag to spin, scroll to zoom)</td></tr>
       <tr><td>R</td><td>Emergency recall to ILMB</td></tr>
       <tr><td>H</td><td>Toggle this help</td></tr>
     </table>
@@ -82,8 +89,8 @@
         <div class="cp"><b>DELIVER</b> — whatever it takes!</div>
       </div>
       <div class="controls-mini">
-        <span><b>SPACE</b> hold = skates</span><span><b>WASD</b> move</span><span><b>E/RMB</b> dive thrust</span>
-        <span><b>SHIFT</b> jump</span><span><b>Q</b>+WASD tricks</span><span><b>LMB</b> shoot</span><span><b>L</b> lamp</span><span><b>F</b> job board</span><span><b>H</b> help</span>
+        <span><b>SPACE</b> hold = skates</span><span><b>WASD</b> move</span><span><b>E/RMB</b> thrust</span>
+        <span><b>SHIFT</b> jump</span><span><b>Q</b>+WASD tricks</span><span><b>LMB</b> shoot</span><span><b>M</b> map</span><span><b>J</b> reputation</span><span><b>L</b> lamp</span><span><b>F</b> job board</span><span><b>H</b> help</span>
       </div>
       <div id="load-status">Loading…</div>
       <button id="start-btn" class="hidden">START YOUR SHIFT!</button>

@@ -20,6 +20,8 @@ export const PHYS = {
   skatePush: 3.5,
   skatePushMax: 18,
   carve: 16,
+  // Ground steering on skates: max turn rate (rad/s) at full lateral input. Speed is kept.
+  handling: 1.5,
   skateFriction: 0.004,
   slopeAssist: 0.35, // extra downhill pull: the magnetic cushion "harvests" slope energy
   // Magnetic grip: while the skates are in contact (or just left it) they pull toward the
@@ -32,10 +34,9 @@ export const PHYS = {
 
   jumpSpeed: 10,
   jumpCost: 15,
-  // 'down' = dive thrusters (push into the slope / dive onto downslopes),
-  // 'up'   = classic jetpack. Toggle in-game with T.
-  thrustMode: 'down',
-  thrustAccel: 16,
+  // Thrusters push mostly forward; only a little lift or dive is allowed.
+  thrustAccel: 15,
+  thrustVertical: 0.22,
   thrustDrain: 30,
   energyRegen: 14,
   maxEnergy: 100,

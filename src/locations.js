@@ -1,95 +1,123 @@
 // Static data for the lunar frontier. Positions are (theta, phi) in degrees relative to the
 // sub-solar point: theta < 90 is the lit near side, theta > 90 the dark side.
 export const FACTIONS = {
-  intl: { name: 'ILMB Authority', color: '#ffd23f' },
-  accord: { name: 'Atlantic Accord', color: '#2ec4ff' },
-  directorate: { name: 'Pan-Pacific Directorate', color: '#ff3b5c' },
-  civ: { name: "Settlers' Union", color: '#ff9f1c' },
-  sci: { name: 'Lunar Science Consortium', color: '#7dff6a' },
-  equa: { name: 'Equatorial Federation', color: '#c77dff' },
-  pirate: { name: 'Scrapjaw Pirates', color: '#9a9a9a' },
+  spacecom: {
+    name: 'SPACECOM', color: '#ffd23f', hq: 'ilmb', kind: 'International Moon Force',
+    blurb: 'The International Moon Force. Military, civilian and research under one flag — and the biggest guns on the Moon.',
+  },
+  vostok: {
+    name: 'Vostok', color: '#ff3b5c', hq: 'vostok', kind: 'Military (Bases 1–9)', enemy: 'daedalus',
+    blurb: 'A chain of nine hard-line military bases. At open war with Daedalus.',
+  },
+  meridian: {
+    name: 'Meridian', color: '#2ec4ff', hq: 'meridian', kind: 'Trade & Research',
+    blurb: 'Merchants and scientists. If it can be shipped, sold or measured, Meridian has a contract for it.',
+  },
+  kepler: {
+    name: 'Kepler Settlements', color: '#ff9f1c', hq: 'kepler', kind: 'Civilian Governments',
+    blurb: 'The elected councils of the lunar towns. Families, farms and a lot of paperwork.',
+  },
+  daedalus: {
+    name: 'Daedalus', color: '#c77dff', hq: 'daedalus', kind: 'Military (Dark Side)', enemy: 'vostok',
+    blurb: 'A secretive dark-side military power dug into the far side. At open war with Vostok.',
+  },
+  rustmoon: {
+    name: 'Rustmoon', color: '#7dff3a', hq: 'rustmoon', kind: 'Pirate Clans', hidden: true,
+    blurb: 'The pirate clans of the dark side. They remember who helped them — and who didn\'t.',
+  },
 };
 
 export const LOCATIONS = [
   {
-    id: 'ilmb', name: 'International Moon Base', short: 'ILMB', type: 'hub', faction: 'intl',
-    theta: 45, phi: 0, r: 230, jobs: ['intl', 'intl', 'accord', 'directorate', 'equa'], safe: true, repair: 14, shop: true,
-    blurb: 'Neutral hub of the lunar frontier. Embassies, mission boards, repair bays — and the launch pad.',
+    id: 'ilmb', name: 'International Moon Base', short: 'ILMB', type: 'hub', faction: 'spacecom', hq: true,
+    theta: 45, phi: 0, r: 280, jobs: ['spacecom', 'spacecom', 'meridian', 'kepler', 'vostok'], safe: true, repair: 14,
+    defense: { ring: 240, turrets: 10, inner: 4, patrols: 3 },
+    blurb: 'SPACECOM headquarters: the largest, most heavily defended place on the Moon.',
   },
   {
-    id: 'tranq', name: 'Tranquility Commons', short: 'TRANQ', type: 'civilian', faction: 'civ',
-    theta: 33, phi: 48, r: 130, jobs: ['civ', 'civ'], safe: true, repair: 8,
+    id: 'tranq', name: 'Tranquility Commons', short: 'TRANQ', type: 'civilian', faction: 'kepler',
+    theta: 33, phi: 48, r: 130, jobs: ['kepler', 'kepler'], safe: true, repair: 8, defense: { ring: 100, turrets: 2 },
     blurb: 'Family habitat domes. Kids, gardens, and the best noodle bar on the Moon.',
   },
   {
-    id: 'aldrin', name: 'Aldrin Heights', short: 'ALDRIN', type: 'civilian', faction: 'civ',
-    theta: 63, phi: -32, r: 115, jobs: ['civ', 'sci'], safe: true, repair: 8,
+    id: 'aldrin', name: 'Aldrin Heights', short: 'ALDRIN', type: 'civilian', faction: 'kepler',
+    theta: 63, phi: -32, r: 115, jobs: ['kepler', 'meridian'], safe: true, repair: 8, defense: { ring: 95, turrets: 2 },
     blurb: 'Hillside settlement for observatory crews and their families.',
   },
   {
-    id: 'shackleton', name: 'Shackleton Radar Array', short: 'SHACK', type: 'research', faction: 'sci',
-    theta: 76, phi: 34, r: 140, jobs: ['sci', 'sci'], safe: true, repair: 4,
-    blurb: 'Deep-space radar dishes on the edge of the light. High-value calibration cargo.',
+    id: 'shackleton', name: 'Shackleton Radar Array', short: 'SHACK', type: 'research', faction: 'meridian',
+    theta: 76, phi: 34, r: 140, jobs: ['meridian', 'meridian'], safe: true, repair: 4, defense: { ring: 110, turrets: 2 },
+    blurb: 'Meridian deep-space radar dishes on the edge of the light.',
   },
   {
-    id: 'kepler', name: 'Kepler Bio-Lab', short: 'KEPLER', type: 'research', faction: 'sci',
-    theta: 24, phi: -75, r: 115, jobs: ['sci', 'civ'], safe: true, repair: 4,
-    blurb: 'Sealed bio-domes growing lunar crops and stranger things.',
+    id: 'kepler', name: 'Kepler Civic Center', short: 'KEPLER', type: 'civilian', faction: 'kepler', hq: true,
+    theta: 24, phi: -75, r: 140, jobs: ['kepler', 'kepler', 'spacecom'], safe: true, repair: 10, defense: { ring: 115, turrets: 4 },
+    blurb: 'Seat of the Kepler councils: town hall, greenhouses and a very long queue.',
   },
   {
-    id: 'mine', name: 'Helium-3 Extractor 7', short: 'HE3-7', type: 'industrial', faction: 'equa',
-    theta: 56, phi: 82, r: 110, jobs: ['equa'], safe: true, repair: 4,
-    blurb: 'Regolith strip-mine. Volatile canisters, volatile workers.',
+    id: 'mine', name: 'Helium-3 Exchange', short: 'HE3', type: 'industrial', faction: 'meridian',
+    theta: 56, phi: 82, r: 110, jobs: ['meridian'], safe: true, repair: 4, defense: { ring: 95, turrets: 2 },
+    blurb: 'Meridian strip-mine and commodity exchange. Volatile canisters, volatile prices.',
   },
   {
-    id: 'meridian', name: 'Fort Meridian', short: 'MERIDIAN', type: 'military', faction: 'accord',
-    theta: 18, phi: 25, r: 140, zoneR: 380, restricted: true,
-    blurb: 'Atlantic Accord forward base. Restricted airspace.',
+    id: 'meridian', name: 'Meridian Exchange', short: 'MERIDIAN', type: 'trade', faction: 'meridian', hq: true,
+    theta: 18, phi: 25, r: 150, jobs: ['meridian', 'meridian', 'kepler'], safe: true, repair: 8, defense: { ring: 125, turrets: 4 },
+    blurb: 'Meridian headquarters: warehouses, cranes, labs and a trading floor that never sleeps.',
   },
   {
-    id: 'vostok', name: 'Bastion Vostok-9', short: 'VOSTOK', type: 'military', faction: 'directorate',
-    theta: 72, phi: 125, r: 140, zoneR: 380, restricted: true,
-    blurb: 'Directorate artillery bastion. Do not linger.',
+    id: 'vostok', name: 'Bastion Vostok-9', short: 'VOSTOK-9', type: 'military', faction: 'vostok', hq: true,
+    theta: 72, phi: 125, r: 140, zoneR: 380, restricted: true, jobs: ['vostok', 'vostok'],
+    blurb: 'Vostok command bastion. Do not linger without clearance.',
   },
   {
-    id: 'twilight', name: 'Twilight Waystation', short: 'TWILIGHT', type: 'civilian', faction: 'civ',
-    theta: 93, phi: -8, r: 110, jobs: ['civ', 'sci', 'intl'], safe: true, repair: 10,
+    id: 'vostok4', name: 'Vostok-4 Outpost', short: 'VOSTOK-4', type: 'military', faction: 'vostok', small: true,
+    theta: 98, phi: 150, r: 80, zoneR: 260, restricted: true,
+    blurb: 'Vostok forward artillery post, glaring across the terminator at Daedalus.',
+  },
+  {
+    id: 'twilight', name: 'Twilight Waystation', short: 'TWILIGHT', type: 'civilian', faction: 'kepler',
+    theta: 93, phi: -8, r: 110, jobs: ['kepler', 'meridian', 'spacecom'], safe: true, repair: 10, defense: { ring: 90, turrets: 2 },
     blurb: 'Last lights before the dark side. Charge your lamp and say your prayers.',
   },
   {
-    id: 'farside', name: 'Farside Listening Post', short: 'FARSIDE', type: 'research', faction: 'sci',
-    theta: 128, phi: 12, r: 115, jobs: ['sci', 'sci'], safe: true, repair: 4, dark: true,
-    blurb: 'Radio-quiet far side observatory. No Earth chatter — just pirates.',
+    id: 'farside', name: 'Farside Listening Post', short: 'FARSIDE', type: 'research', faction: 'spacecom',
+    theta: 128, phi: 12, r: 115, jobs: ['spacecom', 'meridian'], safe: true, repair: 4, dark: true, defense: { ring: 95, turrets: 3 },
+    blurb: 'SPACECOM radio-quiet observatory. No Earth chatter — just pirates.',
   },
   {
-    id: 'hertz', name: 'Hertzsprung Refuge', short: 'HERTZ', type: 'civilian', faction: 'civ',
-    theta: 140, phi: -82, r: 110, jobs: ['civ', 'civ'], safe: true, repair: 6, dark: true,
-    blurb: 'A huddle of domes for people who wanted to be very, very far away.',
+    id: 'hertz', name: 'Hertzsprung Refuge', short: 'HERTZ', type: 'civilian', faction: 'kepler',
+    theta: 140, phi: -82, r: 110, jobs: ['kepler', 'kepler'], safe: true, repair: 6, dark: true, defense: { ring: 90, turrets: 2 },
+    blurb: 'A huddle of Kepler domes for people who wanted to be very, very far away.',
   },
   {
-    id: 'daedalus', name: 'Daedalus Deep Observatory', short: 'DAEDALUS', type: 'research', faction: 'sci',
-    theta: 155, phi: 105, r: 120, jobs: ['sci', 'equa'], safe: true, repair: 4, dark: true,
-    blurb: 'The quietest place in the solar system. Mostly.',
+    id: 'daedalus', name: 'Daedalus Citadel', short: 'DAEDALUS', type: 'military', faction: 'daedalus', hq: true,
+    theta: 155, phi: 105, r: 140, zoneR: 380, restricted: true, dark: true, jobs: ['daedalus', 'daedalus'],
+    blurb: 'Daedalus command citadel, buried in the deepest dark.',
   },
   {
-    id: 'gulch', name: 'Scrapjaw Gulch', short: 'GULCH', type: 'pirate', faction: 'pirate',
+    id: 'daedalus2', name: 'Daedalus Forward Post', short: 'DAED-FWD', type: 'military', faction: 'daedalus', small: true,
+    theta: 118, phi: 95, r: 80, zoneR: 260, restricted: true, dark: true,
+    blurb: 'Daedalus listening bunker pointed straight at Vostok.',
+  },
+  {
+    id: 'gulch', name: 'Scrapjaw Gulch', short: 'GULCH', type: 'pirate', faction: 'rustmoon',
     theta: 116, phi: -42, r: 120, hostile: true, dark: true,
     blurb: 'Pirate scrapyard. Stolen cargo ends up here.',
   },
   {
-    id: 'blackrock', name: 'Blackrock Den', short: 'BLACKROCK', type: 'pirate', faction: 'pirate',
+    id: 'blackrock', name: 'Blackrock Den', short: 'BLACKROCK', type: 'pirate', faction: 'rustmoon',
     theta: 152, phi: -140, r: 110, hostile: true, dark: true,
     blurb: 'Pirate warren carved into a crater wall.',
   },
   {
-    id: 'gloom', name: 'Gloom Harbor', short: 'GLOOM', type: 'pirate', faction: 'pirate',
+    id: 'gloom', name: 'Gloom Harbor', short: 'GLOOM', type: 'pirate', faction: 'rustmoon',
     theta: 165, phi: 30, r: 110, hostile: true, dark: true,
     blurb: 'Smugglers\' landing field at the darkest point on the Moon.',
   },
   {
-    id: 'rustmoon', name: 'Rustmoon Camp', short: 'RUSTMOON', type: 'pirate', faction: 'pirate',
-    theta: 122, phi: 168, r: 110, hostile: true, dark: true,
-    blurb: 'A ring of wrecked rovers and bad intentions.',
+    id: 'rustmoon', name: 'Rustmoon Hold', short: 'RUSTMOON', type: 'pirate', faction: 'rustmoon', hq: true,
+    theta: 122, phi: 168, r: 130, hostile: true, dark: true, jobs: ['rustmoon', 'rustmoon'],
+    blurb: 'Seat of the Rustmoon clans. A ring of wrecked ships and bad intentions.',
   },
 ];
 
@@ -114,10 +142,46 @@ export const MIL_CARGO = [
 ];
 
 export const CLIENTS = {
-  intl: ['Dispatcher Okafor', 'Quartermaster Lindqvist', 'Chief Ambassador Ruiz'],
-  accord: ['Major Halvorsen', 'Attaché Bell'],
-  directorate: ['Commissar Tanaka', 'Colonel Zhou'],
-  civ: ['Auntie Mbeki', 'Little Juno (age 9)', 'Mayor Castellanos', 'Noodle-bar Kenji'],
-  sci: ['Dr. Abernathy', 'Prof. Nakamura-Webb', 'Lab Tech Priya'],
-  equa: ['Foreman Adeyemi', 'Shift Boss Ortega'],
+  spacecom: ['Dispatcher Okafor', 'Quartermaster Lindqvist', 'Commander Ruiz'],
+  vostok: ['Commissar Tanaka', 'Colonel Volkova'],
+  meridian: ['Broker Adeyemi', 'Dr. Abernathy', 'Prof. Nakamura-Webb'],
+  kepler: ['Auntie Mbeki', 'Little Juno (age 9)', 'Mayor Castellanos', 'Noodle-bar Kenji'],
+  daedalus: ['Marshal Okonkwo', 'Agent Seven'],
+  rustmoon: ['One-Eyed Imelda', 'Captain Grit', 'Scrapjaw Sal'],
+};
+
+// Reputation tiers. Contract pay scales with tier; faction gear unlocks by tier.
+export const TIERS = [
+  { min: -Infinity, name: 'HOSTILE', color: '#ff2a4a', pay: 0 },
+  { min: -20, name: 'WARY', color: '#ff9f1c', pay: 0.85 },
+  { min: 0, name: 'NEUTRAL', color: '#c9c3d9', pay: 1 },
+  { min: 10, name: 'FRIENDLY', color: '#7dff6a', pay: 1.2 },
+  { min: 25, name: 'TRUSTED', color: '#2ec4ff', pay: 1.45 },
+  { min: 50, name: 'HONORED', color: '#ffd23f', pay: 1.75 },
+];
+
+// Faction gear sold at each headquarters; each level needs a higher reputation.
+export const SHOPS = {
+  ilmb: [
+    { key: 'capacitor', name: 'Flux Capacitor', desc: '+25 thruster energy', cost: 400, max: 3 },
+    { key: 'armor', name: 'Ablative Suit Plating', desc: '+25 max health', cost: 350, max: 3 },
+    { key: 'dampers', name: 'Mag-Cushion Dampers', desc: 'Safer hard landings, less cargo jostle', cost: 450, max: 3 },
+    { key: 'spinner', name: 'Pulse Spinner Mk+', desc: '+30% Pulse Spinner damage', cost: 500, max: 3 },
+    { key: 'seeker', name: 'SPACECOM Seeker Module', desc: 'Pulse discs home in harder on targets', cost: 550, max: 3, faction: 'spacecom', req: [0, 10, 25] },
+  ],
+  meridian: [
+    { key: 'gyro', name: 'Meridian Gyro-Edges', desc: 'Sharper ground steering on skates', cost: 450, max: 3, faction: 'meridian', req: [0, 10, 25] },
+  ],
+  kepler: [
+    { key: 'cradle', name: 'Kepler Cargo Cradle', desc: 'Cargo, tubes & tools take 30% less damage', cost: 400, max: 3, faction: 'kepler', req: [0, 10, 25] },
+  ],
+  vostok: [
+    { key: 'flak', name: 'Vostok Flak Weave', desc: '+20 max health, less blast knockback', cost: 500, max: 3, faction: 'vostok', req: [5, 15, 30] },
+  ],
+  daedalus: [
+    { key: 'overcharge', name: 'Daedalus Overcharger', desc: 'Faster Pulse Spinner fire rate', cost: 550, max: 3, faction: 'daedalus', req: [5, 15, 30] },
+  ],
+  rustmoon: [
+    { key: 'shadow', name: 'Rustmoon Shadow Rig', desc: 'Lawmen and turrets have a harder time hitting you', cost: 500, max: 3, faction: 'rustmoon', req: [0, 15, 35] },
+  ],
 };

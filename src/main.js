@@ -12,24 +12,22 @@ import { Input } from './input.js';
 import { Audio } from './audio.js';
 import { ComicPost } from './post.js';
 import { Highlights } from './highlights.js';
-import { LOCATIONS } from './locations.js';
+import { LOCATIONS, SHOPS, FACTIONS } from './locations.js';
+import { Reputation } from './reputation.js';
+import { Events } from './events.js';
+import { GlobeMap } from './mapview.js';
 import { clamp, pick, mulberry32 } from './rng.js';
 import { SUN, dirFromAngles, darkness, arcDist, tangent } from './geo.js';
 
 const SAVE_KEY = 'moonrunner-save-v1';
-const SHOP = [
-  { key: 'capacitor', name: 'Flux Capacitor', desc: '+25 thruster energy', cost: 400, max: 3 },
-  { key: 'armor', name: 'Ablative Suit Plating', desc: '+25 max health', cost: 350, max: 3 },
-  { key: 'dampers', name: 'Mag-Cushion Dampers', desc: 'Safer hard landings, less cargo jostle', cost: 450, max: 3 },
-  { key: 'spinner', name: 'Pulse Spinner Mk+', desc: '+30% Pulse Spinner damage', cost: 500, max: 3 },
-];
 const TIPS = [
   'Hold <b>SPACE</b> to engage the Quantum-Lock skates — they grip the ground and glide without friction.',
-  'Dive <b>DOWN</b> into craters with skates on, then launch off the far rim.',
-  'Hold <b>E</b> / <b>RIGHT MOUSE</b> for DIVE THRUSTERS: they shove you into downslopes for speed. <b>SHIFT</b> mag-jumps.',
-  'In the air, hold <b>Q</b> + <b>W/S</b> to flip, <b>Q</b> + <b>A/D</b> to spin, <b>SHIFT</b> for a Superman. Land upright!',
+  'On skates, <b>A/D</b> steer you along the ground: full input carves hard, <b>W+A</b> carves gently. Aim for ramps and crater rims!',
+  'Hold <b>E</b> / <b>RIGHT MOUSE</b> for thrusters (mostly forward). <b>SHIFT</b> mag-jumps.',
+  'In the air, hold <b>Q</b> + <b>W/S</b> to flip, <b>Q</b> + <b>A/D</b> to spin. Land upright! Buses and freighters make great ramps.',
+  'Press <b>M</b> for the globe map (drag to spin). Unexplored ground stays fogged until you visit.',
+  'Factions post <b>EVENTS</b> (beacons on the map). <b>J</b> opens your Reputation Log — higher standing means better pay and faction gear.',
   'The Moon is round — keep going and you\'ll reach the <b>DARK SIDE</b>. Bring your lamp (<b>L</b>). Pirates live there.',
-  'Press <b>F</b> in a hub for the Job Board. Your best action shots end up on the <b>Hall of Highlights</b> at the ILMB.',
 ];
 const CAMP_NAMES = ['Grimtooth Camp', "Vandal's Rest", 'Ashfall Hideout', 'Cutthroat Crater', 'The Junkpile'];
 
@@ -45,7 +43,7 @@ function buildLocations() {
   for (let tries = 0; tries < 400 && k < CAMP_NAMES.length; tries++) {
     const d = dirFromAngles(105 + rr() * 70, rr() * 360 - 180);
     if (locs.some((l) => arcDist(d, l.dir) < 900)) continue;
-    locs.push({ id: 'camp' + k, name: CAMP_NAMES[k], short: 'CAMP', type: 'pirate', faction: 'pirate', camp: true, r: 55, hostile: true, dark: true, dir: d, blurb: 'A pirate camp. Lights off, guns on.' });
+    locs.push({ id: 'camp' + k, name: CAMP_NAMES[k], short: 'CAMP', type: 'pirate', faction: 'rustmoon', camp: true, r: 55, hostile: true, dark: true, dir: d, blurb: 'A pirate camp. Lights off, guns on.' });
     k++;
   }
   return locs;
@@ -110,14 +108,16 @@ class Game {
     await step('Carving craters…');
     this.planet.update(this.spawnPoint, { budgetMs: 1e9 });
     await step('Waking up the pirates…');
+    this.rep = new Reputation(this);
+    this.events = new Events(this);
     this.enemies = new Enemies(this);
+    this.globe = new GlobeMap(this);
     this.post = new ComicPost(this.renderer, this.camera);
     this.highlights = new Highlights(this);
 
     this.credits = 250;
-    this.rep = {};
     this.stats = { deliveries: 0, bestTrick: 0 };
-    this.upgrades = { capacitor: 0, armor: 0, dampers: 0, spinner: 0 };
+    this.upgrades = { capacitor: 0, armor: 0, dampers: 0, spinner: 0, seeker: 0, gyro: 0, cradle: 0, flak: 0, overcharge: 0, shadow: 0 };
     this.load();
     this.player.applyUpgrades(this.upgrades);
     this.player.health = this.player.maxHealth;
@@ -178,21 +178,25 @@ class Game {
       if (this.state === 'play') this.hud.show('clickhint', true);
     });
     this.input.onKey = (code) => {
+      const esc = code === 'Escape';
       if (this.state === 'board') {
-        if (code === 'Escape' || code === 'KeyF') { this.closeBoard(code === 'Escape'); return; }
+        if (esc || code === 'KeyF') { this.closeModal(esc); return; }
         const n = parseInt(code.replace('Digit', ''), 10);
         if (n >= 1 && n <= 9) {
           const offers = this.missions.offersFor(this.boardLoc);
           if (offers[n - 1] && !this.missions.active) this.acceptOffer(offers[n - 1]);
         }
+      } else if (this.state === 'map') {
+        if (esc || code === 'KeyM') this.closeModal(esc);
+      } else if (this.state === 'log') {
+        if (esc || code === 'KeyJ') this.closeModal(esc);
+      } else if (this.state === 'dialog') {
+        if (code === 'Enter' || code === 'Digit1') this.pickDialog(0);
+        else if (esc || code === 'Digit2') this.pickDialog(this.dialogButtons.length - 1, esc);
       } else if (this.state === 'play') {
-        if (code === 'KeyM') this.toggleMap();
+        if (code === 'KeyM') this.openMap();
+        if (code === 'KeyJ') this.openLog();
         if (code === 'KeyH') document.getElementById('help').classList.toggle('hidden');
-        if (code === 'KeyT') {
-          const p = this.player.params;
-          p.thrustMode = p.thrustMode === 'down' ? 'up' : 'down';
-          this.hud.toast(p.thrustMode === 'down' ? 'THRUSTERS: DIVE (DOWNWARD)' : 'THRUSTERS: JETPACK (UPWARD)');
-        }
         if (code === 'KeyL') {
           this.lampMode = this.lampMode === 'auto' ? 'off' : this.lampMode === 'off' ? 'on' : 'auto';
           this.hud.toast(`HELMET LAMP: ${this.lampMode.toUpperCase()}`);
@@ -201,12 +205,88 @@ class Game {
     };
   }
 
-  toggleMap() {
-    this.hud.bigMap = !this.hud.bigMap;
-    const m = document.getElementById('minimap');
-    m.classList.toggle('big', this.hud.bigMap);
-    const size = this.hud.bigMap ? 560 : 210;
-    m.width = m.height = size;
+  // ---------- modal screens (board / map / log / dialog) ----------
+  openModal(kind) {
+    this.state = kind;
+    this.releasing = true;
+    this.input.unlock();
+    this.audio.click();
+  }
+
+  closeModal(viaEscape) {
+    this.hud.closeBoard();
+    this.hud.closeDialog();
+    document.getElementById('globe-wrap').classList.add('hidden');
+    document.getElementById('globe-tip').classList.add('hidden');
+    document.getElementById('replog').classList.add('hidden');
+    this.state = 'play';
+    // swallow the key that closed it so it can't immediately reopen anything
+    this.input.justPressed.clear();
+    this.boardCooldown = 0.4;
+    // Escape can't re-grab the mouse (browser rule), so show a hint instead of pausing
+    if (viaEscape) this.hud.show('clickhint', true);
+    this.input.lock();
+  }
+
+  openMap() {
+    this.openModal('map');
+    document.getElementById('globe-wrap').classList.remove('hidden');
+    this.globe.center();
+    this.globe.draw();
+  }
+
+  openLog() {
+    this.openModal('log');
+    this.hud.openRepLog(this);
+  }
+
+  dialog(title, text, buttons) {
+    this.openModal('dialog');
+    this.dialogButtons = buttons;
+    this.hud.dialog(title, text, buttons, (i) => this.pickDialog(i));
+  }
+
+  pickDialog(i, esc = false) {
+    const b = this.dialogButtons && this.dialogButtons[i];
+    this.closeModal(esc);
+    if (b && b.fn) b.fn();
+  }
+
+  // After saving the wrecked pirate: join Rustmoon?
+  wreckChoice() {
+    const swear = () => {
+      this.rep.rustmoon = 'aligned';
+      this.rep.add('rustmoon', 15, 'Saved a Rustmoon smuggler');
+      this.rep.add('spacecom', -10, 'Joined the pirates');
+      this.hud.alert('YOU RIDE WITH RUSTMOON NOW', '#7dff3a', 4);
+      for (const l of this.locations) if (l.faction === 'rustmoon' && !l.camp) this.globe.discover(l, true);
+    };
+    const decline = () => {
+      this.rep.rustmoon = 'known';
+      this.rep.add('rustmoon', 8, 'Saved a Rustmoon smuggler');
+      this.hud.toast('Rustmoon owes you one. You can swear in later at Rustmoon Hold.', 5);
+      this.globe.discover(this.locations.find((l) => l.id === 'rustmoon'), true);
+    };
+    this.dialog('RUSTMOON', '"You came back. Nobody comes back for a pirate." She coughs, grins. "Rustmoon looks after its own, Runner. Want to be one of us? Pirates won\'t touch you — but SPACECOM will notice."', [
+      { label: '1 · SWEAR IN WITH RUSTMOON', fn: swear },
+      { label: '2 · NOT TODAY', fn: decline },
+    ]);
+  }
+
+  jobsAt(loc) {
+    if (!loc) return [];
+    if (loc.type === 'pirate') return this.rep.aligned() && !loc.camp ? ['rustmoon', 'rustmoon'] : [];
+    return loc.jobs || [];
+  }
+
+  isSafe(loc) {
+    if (!loc) return false;
+    if (loc.type === 'pirate') return this.rep.aligned() && !(loc.destroyedUntil && this.time < loc.destroyedUntil);
+    return !!loc.safe && !this.rep.hostile(loc.faction);
+  }
+
+  objective() {
+    return (this.events.active && this.events.objective()) || this.missions.objective();
   }
 
   resize() {
@@ -301,10 +381,20 @@ class Game {
         if (dir.lengthSq() < 0.01) dir.copy(up);
         dir.normalize();
         // disc-jumping: blasts push you around
-        P.vel.addScaledVector(dir, knock * f * 14);
+        P.vel.addScaledVector(dir, knock * f * 14 * (owner === 'player' ? 1 : P.knockResist || 1));
         P.body.grounded = false;
         P.body.sinceContact = 1;
         this.damagePlayer(dmg, owner);
+      }
+    }
+    if (owner !== 'player') {
+      for (const o of this.events.protect) {
+        if (o.dead) continue;
+        const d = pos.distanceTo(o.center);
+        if (d < radius + o.radius) {
+          o.hp -= damage * Math.max(0.3, 1 - d / (radius + o.radius));
+          if (o.hp <= 0) { o.dead = true; this.fx.explosion(o.center, 9, true); }
+        }
       }
     }
     for (const t of this.enemies.targets()) {
@@ -339,11 +429,8 @@ class Game {
 
   // ---------- job board ----------
   openBoard(loc) {
-    this.state = 'board';
     this.boardLoc = loc;
-    this.releasing = true;
-    this.input.unlock();
-    this.audio.click();
+    this.openModal('board');
     this.refreshBoard();
   }
 
@@ -351,8 +438,11 @@ class Game {
     const loc = this.boardLoc;
     this.hud.openBoard(loc, this.missions.offersFor(loc), {
       onAccept: (o) => this.acceptOffer(o),
-      onClose: () => this.closeBoard(false),
-      shop: loc.shop ? SHOP : null,
+      onClose: () => this.closeModal(false),
+      shop: SHOPS[loc.id] || null,
+      rep: this.rep,
+      event: this.events.active,
+      onEventAbandon: () => { this.events.abandon(); this.refreshBoard(); },
       onBuy: (k) => this.buy(k),
       upgrades: this.upgrades,
       credits: this.credits,
@@ -365,15 +455,16 @@ class Game {
   acceptOffer(o) {
     if (this.missions.accept(o)) {
       this.audio.pickup();
-      this.closeBoard(false);
+      this.closeModal(false);
     }
   }
 
   buy(key) {
-    const u = SHOP.find((s) => s.key === key);
-    const lvl = this.upgrades[key];
+    const u = (SHOPS[this.boardLoc.id] || []).find((s) => s.key === key);
+    if (!u) return;
+    const lvl = this.upgrades[key] || 0;
     const cost = u.cost * (lvl + 1);
-    if (lvl >= u.max || this.credits < cost) return;
+    if (lvl >= u.max || this.credits < cost || !this.rep.canBuy(u, lvl)) return;
     this.credits -= cost;
     this.upgrades[key]++;
     this.player.applyUpgrades(this.upgrades);
@@ -382,20 +473,9 @@ class Game {
     this.refreshBoard();
   }
 
-  closeBoard(viaEscape) {
-    this.hud.closeBoard();
-    this.state = 'play';
-    // swallow the key that closed the board so it can't immediately reopen it
-    this.input.justPressed.clear();
-    this.boardCooldown = 0.4;
-    // Escape can't re-grab the mouse (browser rule), so show a hint instead of pausing
-    if (viaEscape) this.hud.show('clickhint', true);
-    this.input.lock();
-  }
-
   save() {
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ credits: this.credits, rep: this.rep, stats: this.stats, upgrades: this.upgrades }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ credits: this.credits, stats: this.stats, upgrades: this.upgrades }));
     } catch { /* storage unavailable */ }
   }
 
@@ -404,7 +484,6 @@ class Game {
       const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
       if (!d) return;
       this.credits = d.credits ?? this.credits;
-      this.rep = d.rep || {};
       this.stats = { ...this.stats, ...(d.stats || {}) };
       this.upgrades = { ...this.upgrades, ...(d.upgrades || {}) };
     } catch { /* corrupt or unavailable */ }
@@ -442,7 +521,7 @@ class Game {
     u.boost.value = P.body.thrusting ? 1 : 0;
     this.damageFlash = Math.max(0, this.damageFlash - dt * 1.5);
     u.damage.value = this.damageFlash * 0.8 + (P.health / P.maxHealth < 0.25 && !P.dead ? 0.25 : 0);
-    u.alert.value = this.enemies.bases.some((b) => b.inside && !this.missions.hasClearance(b.loc.id)) ? 1 : 0;
+    u.alert.value = this.enemies.bases.some((b) => b.inside && ((b.restricted && !b.authorized) || b.hostile)) ? 1 : 0;
 
     this.renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
     this.post.render(this.scene, this.camera);
@@ -501,6 +580,8 @@ class Game {
 
     P.update(dt, this.input, c);
     this.missions.update(dt);
+    this.events.update(dt);
+    this.globe.update(dt);
     this.enemies.update(dt, this.time);
     this.projectiles.update(dt);
 
@@ -510,7 +591,6 @@ class Game {
       if (t.t <= 0) { this.timers.splice(i, 1); t.fn(); }
     }
 
-    for (const v of this.world.vehicles) if (v.root.visible) this.trafficHit(v.pos, v.radius, v.vel);
     for (const cr of this.world.crawlers) if (cr.root.visible) this.trafficHit(cr.pos.clone().addScaledVector(cr.pos.clone().normalize(), 2), 4, cr.vel);
     const rk = this.world.rocket;
     if (rk && rk.worldPos && rk.root.visible && rk.loc.active) {
@@ -524,8 +604,11 @@ class Game {
       this.currentZone = z;
     }
     const zw = document.getElementById('zonewarn');
-    const base = this.enemies.bases.find((b) => b.inside);
-    if (base && !this.missions.hasClearance(base.loc.id)) {
+    const base = this.enemies.bases.find((b) => b.inside && (b.restricted || b.hostile));
+    if (base && !base.restricted) {
+      zw.classList.remove('hidden');
+      zw.innerHTML = `⚠ ${FACTIONS[base.faction].name.toUpperCase()} DEFENSES ARE FIRING ON YOU ⚠`;
+    } else if (base && !base.authorized) {
       zw.classList.remove('hidden');
       const left = Math.max(0, 4 - base.time);
       zw.innerHTML = base.hostile
@@ -536,9 +619,14 @@ class Game {
       zw.innerHTML = `✔ CLEARANCE ACCEPTED — ${base.loc.name.toUpperCase()}`;
     } else zw.classList.add('hidden');
 
-    if (z && z.safe && !P.dead) P.health = Math.min(P.maxHealth, P.health + (z.repair || 4) * dt);
-    if (z && z.jobs) {
-      this.hud.prompt(`<b>F</b> — ${z.short} JOB BOARD${z.shop ? ' &amp; UPGRADES' : ''}`);
+    if (this.isSafe(z) && !P.dead) P.health = Math.min(P.maxHealth, P.health + (z.repair || 6) * dt);
+    const canBoard = z && (this.jobsAt(z).length || (SHOPS[z.id] && (z.type !== 'pirate' || this.rep.aligned())));
+    const canSwear = z && z.id === 'rustmoon' && this.rep.rustmoon === 'known';
+    if (canSwear) {
+      this.hud.prompt('<b>F</b> — SWEAR IN WITH RUSTMOON');
+      if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.wreckChoice();
+    } else if (canBoard) {
+      this.hud.prompt(`<b>F</b> — ${z.short} ${z.hq ? 'HQ · ' : ''}JOB BOARD${SHOPS[z.id] ? ' &amp; GEAR' : ''}`);
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.openBoard(z);
     } else this.hud.prompt(null);
 

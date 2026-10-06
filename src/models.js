@@ -242,3 +242,45 @@ export function makeRocket({ color = 0xfff4e0, stripe = 0xff4f2e } = {}) {
   root.add(flame, core);
   return { root, flame, core };
 }
+
+// Pirate den signal pylon: destructible heart of a den.
+export function makePylon() {
+  const root = new THREE.Group();
+  root.add(part(new THREE.CylinderGeometry(2.6, 3.4, 3, 8), toon(0x3a2b4f), 0, 1.5, 0, 0.1));
+  root.add(part(new THREE.CylinderGeometry(0.6, 1.2, 10, 6), toon(0x6b5a3a), 0, 8, 0, 0.08));
+  for (const s of [-1, 1]) root.add(part(new THREE.BoxGeometry(6, 0.5, 0.5), toon(0x8a4b2a), 0, 9 + s * 2, 0, 0.04));
+  const orb = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 10), glow(0x7dff3a));
+  orb.position.y = 14;
+  root.add(orb);
+  const flag = part(new THREE.PlaneGeometry(3, 2), toon(0x111111, { side: THREE.DoubleSide }), 1.6, 11, 0, 0);
+  root.add(flag);
+  return { root, orb };
+}
+
+// Seismograph tripod for survey events.
+export function makeSeismo() {
+  const root = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const leg = part(new THREE.CylinderGeometry(0.08, 0.08, 2.6), toon(0x3a3550), Math.cos(a) * 0.7, 1.1, Math.sin(a) * 0.7, 0.03);
+    leg.rotation.set(Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35);
+    root.add(leg);
+  }
+  root.add(part(new THREE.BoxGeometry(1.2, 0.8, 1.2), toon(0x2ec4ff), 0, 2.4, 0, 0.05));
+  const light = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6), glow(0x7dff6a));
+  light.position.y = 3;
+  root.add(light);
+  return { root, light };
+}
+
+// Vacuum tube for black-lake fluid (carried on the back).
+export function makeTube() {
+  const root = new THREE.Group();
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 12), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.35 }));
+  root.add(glass);
+  const fluid = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1, 12), new THREE.MeshBasicMaterial({ color: 0x2a1f4f }));
+  root.add(fluid);
+  for (const s of [-1, 1]) root.add(part(new THREE.CylinderGeometry(0.26, 0.26, 0.14, 12), toon(0x3a3550), 0, s * 0.58, 0, 0.03));
+  root.rotation.z = Math.PI / 2;
+  return { root, fluid };
+}

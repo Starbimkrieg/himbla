@@ -3,21 +3,21 @@ import { pick } from './rng.js';
 import { arcDist } from './geo.js';
 
 const LINES = {
-  intl: [
-    (c, t) => `Priority manifest: ${c} to ${t}. Clock's ticking, Runner.`,
+  spacecom: [
+    (c, t) => `SPACECOM priority manifest: ${c} to ${t}. Clock's ticking, Runner.`,
     (c, t) => `Standard courier run. ${c}, ${t}. Try not to dent it.`,
   ],
-  accord: [(c, t) => `Sealed ${c} for ${t}. Clearance codes uploaded to your skates. Don't make us regret it.`],
-  directorate: [(c, t) => `The Directorate requires ${c} at ${t}. Your clearance is temporary. Your failure would be permanent.`],
-  civ: [
+  vostok: [(c, t) => `Sealed ${c} for ${t}. Clearance codes are on your skates. Vostok does not forgive delays.`],
+  daedalus: [(c, t) => `${c} for ${t}. You were never here. Daedalus will remember you were fast.`],
+  kepler: [
     (c, t) => `Could you take this ${c} to ${t}? The kids are waiting!`,
-    (c, t) => `${c} for ${t}, please — and mind the craters, it's precious!`,
+    (c, t) => `${c} for ${t}, please — the council needs it before the vote!`,
   ],
-  sci: [
-    (c, t) => `This ${c} is irreplaceable. Deliver to ${t}. Gently. GENTLY.`,
-    (c, t) => `Experiment window closes soon — ${c} to ${t}, stat!`,
+  meridian: [
+    (c, t) => `This ${c} is worth more than you are. Deliver to ${t}. Gently. GENTLY.`,
+    (c, t) => `Market's moving — ${c} to ${t}, stat!`,
   ],
-  equa: [(c, t) => `${c} bound for ${t}. Pirates love this stuff, so move fast.`],
+  rustmoon: [(c, t) => `Hot ${c}, no questions. Get it to ${t} before the lawmen sniff it out.`],
 };
 
 export class Missions {
@@ -43,11 +43,17 @@ export class Missions {
   makeOffer(board, faction) {
     const L = this.locs;
     let pickup = board, to, cargo, clearance = null;
-    if (faction === 'accord' || faction === 'directorate') {
-      const base = L.find((l) => l.type === 'military' && l.faction === faction);
+    if (faction === 'vostok' || faction === 'daedalus') {
+      // military logistics between this faction's own installations (clearance granted)
+      const bases = L.filter((l) => l.restricted && l.faction === faction && l !== board);
+      const base = pick(bases.length ? bases : L.filter((l) => l.restricted && l.faction === faction));
       cargo = pick(MIL_CARGO);
-      if (Math.random() < 0.65) { to = base; clearance = base.id; }
+      if (board.restricted || Math.random() < 0.65) { to = base; clearance = base.id; }
       else { pickup = base; to = board; clearance = base.id; }
+    } else if (faction === 'rustmoon') {
+      cargo = pick(CARGO.filter((c) => c.hot >= 1));
+      const dens = L.filter((l) => l.type === 'pirate' && l !== board);
+      to = Math.random() < 0.6 ? pick(dens) : pick(this.civilianDestinations(board.id));
     } else {
       cargo = pick(CARGO);
       if (Math.random() < 0.3) pickup = pick(this.civilianDestinations(board.id));
@@ -63,16 +69,32 @@ export class Missions {
     let reward = 90 + dist * 0.12 + cargo.hot * 70 + cargo.fragile * 60;
     if (dark) reward *= 1.6; // hazard pay for the dark side
     if (clearance) reward += 150;
+    if (faction === 'rustmoon') reward *= 1.4;
+    reward *= this.game.rep.payMultiplier(faction) || 1;
     reward = Math.round(reward / 5) * 5;
-    const client = pick(CLIENTS[faction] || CLIENTS.intl);
-    const text = pick(LINES[faction] || LINES.intl)(cargo.name, to.name);
+    const client = pick(CLIENTS[faction] || CLIENTS.spacecom);
+    const text = pick(LINES[faction] || LINES.spacecom)(cargo.name, to.name);
     return { id: this.nextId++, board, faction, client, cargo, pickup, to, dist, time, reward, clearance, text, dark };
   }
 
   offersFor(loc) {
-    if (!loc.jobs) return [];
+    const jobs = this.game.jobsAt(loc);
+    if (!jobs.length) return [];
     if (!this.offers[loc.id] || this.offers[loc.id].length === 0) {
-      this.offers[loc.id] = loc.jobs.map((f) => this.makeOffer(loc, f));
+      const rep = this.game.rep;
+      // factions that hate you won't hire you
+      const list = jobs.filter((f) => !rep.hostile(f)).map((f) => this.makeOffer(loc, f));
+      // well-liked runners get priority contracts: hotter cargo, bigger pay
+      const fav = jobs.find((f) => rep.get(f) >= 10);
+      if (fav) {
+        const o = this.makeOffer(loc, fav);
+        o.premium = true;
+        o.reward = Math.round((o.reward * 1.5) / 5) * 5;
+        o.cargo = { ...o.cargo, hot: Math.min(3, o.cargo.hot + 1) };
+        o.client = `★ ${o.client}`;
+        list.unshift(o);
+      }
+      this.offers[loc.id] = list;
     }
     return this.offers[loc.id];
   }
@@ -89,6 +111,8 @@ export class Missions {
     this.offers[offer.board.id] = this.offers[offer.board.id].filter((o) => o !== offer);
     const g = this.game;
     g.hud.toast(`CONTRACT ACCEPTED — ${offer.cargo.name}`);
+    g.globe.discover(offer.to, true);
+    g.globe.discover(offer.pickup, true);
     if (offer.clearance) g.hud.alert(`TEMPORARY CLEARANCE: ${offer.to.restricted ? offer.to.name : offer.pickup.name}`, '#2ec4ff', 3);
     this.checkPickup();
     return true;
@@ -132,7 +156,7 @@ export class Missions {
 
   jostle(amount, skates) {
     if (!this.active || this.cargoState !== 'held') return;
-    const loss = amount * 0.012 * this.active.cargo.fragile * (skates ? 0.6 : 1.2) * (1 - this.game.upgrades.dampers * 0.15);
+    const loss = amount * 0.012 * this.active.cargo.fragile * (skates ? 0.6 : 1.2) * (1 - this.game.upgrades.dampers * 0.15) * (1 - (this.game.upgrades.cradle || 0) * 0.3);
     if (loss <= 0) return;
     this.integrity = Math.max(0, this.integrity - loss);
     if (loss > 0.04) this.game.hud.toast(`CARGO JOLTED! ${Math.round(this.integrity * 100)}% intact`);
@@ -187,10 +211,11 @@ export class Missions {
     const style = Math.round(this.stylePool * 2);
     const total = integ + timeBonus + style;
     g.addCredits(total, null);
-    g.rep[a.faction] = (g.rep[a.faction] || 0) + 1;
+    const repGain = (a.premium ? 4 : 3) + (this.integrity > 0.8 ? 1 : 0);
+    g.rep.add(a.faction, repGain, `Delivered ${a.cargo.name}`);
     g.stats.deliveries++;
     g.audio.cash();
-    g.hud.delivered({ a, integ, timeBonus, style, total, integrity: this.integrity, faction: FACTIONS[a.faction].name });
+    g.hud.delivered({ a, integ, timeBonus, style, total, integrity: this.integrity, faction: FACTIONS[a.faction].name, repGain });
     g.actionPanel('delivered');
     this.clear();
     g.save();

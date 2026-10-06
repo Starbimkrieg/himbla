@@ -21,7 +21,7 @@ export class Projectiles {
     this.inkMat = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
   }
 
-  fire(owner, pos, vel, { damage = 20, splash = 5, color = 0x9be7ff, size = 0.45, life = 4, gravity = 0, knock = 1 } = {}) {
+  fire(owner, pos, vel, { damage = 20, splash = 5, color = 0x9be7ff, size = 0.45, life = 4, gravity = 0, knock = 1, homing = 0 } = {}) {
     const mesh = new THREE.Mesh(this.geo, new THREE.MeshBasicMaterial({ color }));
     const hull = new THREE.Mesh(this.geo, this.inkMat);
     hull.scale.setScalar(1.35);
@@ -29,7 +29,7 @@ export class Projectiles {
     mesh.scale.setScalar(size);
     mesh.position.copy(pos);
     this.game.scene.add(mesh);
-    this.list.push({ owner, mesh, pos: pos.clone(), prev: pos.clone(), vel: vel.clone(), damage, splash, life, gravity, knock, size, color });
+    this.list.push({ owner, mesh, pos: pos.clone(), prev: pos.clone(), vel: vel.clone(), damage, splash, life, gravity, knock, size, color, homing, age: 0 });
   }
 
   update(dt) {
@@ -40,6 +40,8 @@ export class Projectiles {
       p.life -= dt;
       p.prev.copy(p.pos);
       if (p.gravity) p.vel.addScaledVector(_rel.copy(p.pos).normalize(), -p.gravity * dt);
+      p.age += dt;
+      if (p.homing > 0 && p.age > 0.08) this.home(p, dt);
       p.pos.addScaledVector(p.vel, dt);
       p.mesh.position.copy(p.pos);
       // stretch along velocity for a comic smear
@@ -63,8 +65,9 @@ export class Projectiles {
           for (const t of g.enemies.targets()) {
             if (segSphere(p.prev, p.pos, t.center, t.radius + 0.4)) { hit = true; break; }
           }
-        } else if (!g.player.dead) {
-          if (segSphere(p.prev, p.pos, g.player.center, 1.3)) hit = true;
+        } else {
+          if (!g.player.dead && segSphere(p.prev, p.pos, g.player.center, 1.3)) hit = true;
+          for (const o of g.events.protect) if (!o.dead && segSphere(p.prev, p.pos, o.center, o.radius + 0.4)) { hit = true; break; }
         }
       }
       if (hit) {
@@ -74,6 +77,31 @@ export class Projectiles {
         this.list.splice(i, 1);
       }
     }
+  }
+
+  // Gentle homing: bend toward the best target inside a forward cone, keeping speed.
+  home(p, dt) {
+    const g = this.game;
+    const sp = p.vel.length();
+    const fwd = _seg.copy(p.vel).divideScalar(sp);
+    let best = null, bestScore = 0;
+    for (const t of g.enemies.targets()) {
+      if (!g.enemies.isHostileTarget(t)) continue;
+      _rel.subVectors(t.center, p.pos);
+      const d = _rel.length();
+      if (d > 280 || d < 1) continue;
+      const cos = _rel.dot(fwd) / d;
+      if (cos < 0.55) continue;
+      const score = cos / (1 + d / 120);
+      if (score > bestScore) { bestScore = score; best = t; }
+    }
+    if (!best) return;
+    _rel.subVectors(best.center, p.pos).normalize();
+    const ang = Math.acos(Math.min(1, fwd.dot(_rel)));
+    if (ang < 1e-4) return;
+    const k = Math.min(1, (p.homing * dt) / ang);
+    fwd.lerp(_rel, k).normalize();
+    p.vel.copy(fwd).multiplyScalar(sp);
   }
 
   clear() {

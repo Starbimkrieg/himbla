@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FACTIONS } from './locations.js';
-import { arcDist, anglesFromDir, darkness } from './geo.js';
+import { arcDist, darkness } from './geo.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -11,7 +11,6 @@ export class HUD {
     this.sctx = this.speedCanvas.getContext('2d');
     this.mini = $('minimap');
     this.mctx = this.mini.getContext('2d');
-    this.bigMap = false;
     this.alertT = 0;
     this.toastT = 0;
     this.grabT = 0;
@@ -74,7 +73,7 @@ export class HUD {
         <tr><td>Style</td><td>₵${info.style}</td></tr>
         <tr class="tot"><td>TOTAL</td><td>₵${info.total}</td></tr>
       </table>
-      <div class="r-rep">+1 rep with ${info.faction}</div>`;
+      <div class="r-rep">+${info.repGain} rep with ${info.faction}</div>`;
     this.resultT = 5;
   }
 
@@ -91,21 +90,25 @@ export class HUD {
   }
 
   // ---- Job board / shop ----
-  openBoard(loc, offers, { onAccept, onClose, shop, onBuy, upgrades, credits, active, onAbandon, highlights }) {
+  openBoard(loc, offers, { onAccept, onClose, shop, onBuy, upgrades, credits, active, onAbandon, highlights, rep, event, onEventAbandon }) {
     const el = $('board');
     const f = FACTIONS[loc.faction];
-    let html = `<div class="board-head" style="background:${f.color}"><span>${loc.name.toUpperCase()}</span><span class="board-right"><span class="board-credits">₵${credits}</span><button class="board-close" data-close="1">✕ CLOSE</button></span></div>`;
+    const tier = rep.tier(loc.faction);
+    let html = `<div class="board-head" style="background:${f.color}"><span>${loc.name.toUpperCase()} <small class="tierchip" style="background:${tier.color}">${f.name}: ${tier.name}</small></span><span class="board-right"><span class="board-credits">₵${credits}</span><button class="board-close" data-close="1">✕ CLOSE</button></span></div>`;
     if (active) {
       html += `<div class="board-active">ACTIVE: ${active.cargo.name} → ${active.to.name}<button data-abandon="1">ABANDON</button></div>`;
     }
+    if (event) {
+      html += `<div class="board-active">EVENT: ${event.title}<button data-evabandon="1">ABANDON</button></div>`;
+    }
     html += `<div class="board-cols">`;
     html += `<div class="board-jobs"><h3>CONTRACTS</h3>`;
-    if (!offers.length) html += `<div class="empty">No contracts right now. Check back after your next run!</div>`;
+    if (!offers.length) html += `<div class="empty">${rep.hostile(loc.faction) ? `${f.name} won't deal with you. Raise your reputation first.` : 'No contracts right now. Check back after your next run!'}</div>`;
     offers.forEach((o, i) => {
       const fc = FACTIONS[o.faction];
       const fr = '●'.repeat(Math.round(o.cargo.fragile * 3)) || '–';
       const hot = '☠'.repeat(o.cargo.hot) || '–';
-      html += `<div class="job ${active ? 'disabled' : ''}" data-i="${i}">
+      html += `<div class="job ${active ? 'disabled' : ''} ${o.premium ? 'premium' : ''}" data-i="${i}">
         <div class="job-top"><span class="job-key">${i + 1}</span><span class="job-fac" style="background:${fc.color}">${fc.name}</span><span class="job-pay">₵${o.reward}</span></div>
         <div class="job-cargo">${o.cargo.name}</div>
         <div class="job-route">${o.pickup === o.board ? 'HERE' : o.pickup.name} → <b>${o.to.name}</b> · ${(o.dist / 1000).toFixed(1)} km · ${o.time}s</div>
@@ -115,14 +118,16 @@ export class HUD {
     });
     html += `</div>`;
     if (shop) {
-      html += `<div class="board-shop"><h3>REPAIR BAY UPGRADES</h3>`;
+      html += `<div class="board-shop"><h3>${loc.id === 'ilmb' ? 'REPAIR BAY & SPACECOM GEAR' : `${f.name.toUpperCase()} GEAR`}</h3>`;
       for (const u of shop) {
-        const lvl = upgrades[u.key];
+        const lvl = upgrades[u.key] || 0;
         const maxed = lvl >= u.max;
         const cost = u.cost * (lvl + 1);
-        html += `<div class="shop-item ${maxed || credits < cost ? 'disabled' : ''}" data-buy="${u.key}">
+        const ok = rep.canBuy(u, lvl);
+        const need = u.faction && !maxed && !ok ? (u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
+        html += `<div class="shop-item ${maxed || credits < cost || !ok ? 'disabled' : ''} ${u.faction ? 'unique' : ''}" data-buy="${u.key}">
           <div class="job-top"><span>${u.name}</span><span class="job-pay">${maxed ? 'MAX' : '₵' + cost}</span></div>
-          <div class="job-route">${u.desc}</div><div class="lvl">${'■'.repeat(lvl)}${'□'.repeat(u.max - lvl)}</div></div>`;
+          <div class="job-route">${u.desc}</div>${need ? `<div class="lock">🔒 ${need}</div>` : ''}<div class="lvl">${'■'.repeat(lvl)}${'□'.repeat(u.max - lvl)}</div></div>`;
       }
       html += `</div>`;
     }
@@ -140,6 +145,7 @@ export class HUD {
       const buy = ev.target.closest('[data-buy]');
       if (ev.target.closest('[data-close]')) { onClose(); return; }
       if (ev.target.closest('[data-abandon]')) { onAbandon(); return; }
+      if (ev.target.closest('[data-evabandon]')) { onEventAbandon(); return; }
       if (job && !job.classList.contains('disabled')) onAccept(offers[+job.dataset.i]);
       else if (buy && !buy.classList.contains('disabled')) onBuy(buy.dataset.buy);
     };
@@ -231,7 +237,6 @@ export class HUD {
 
   // Heading-up local map: everything is projected onto the tangent plane around you.
   drawMinimap() {
-    if (this.bigMap) { this.drawMoonMap(); return; }
     const g = this.game;
     const P = g.player;
     const c = this.mctx;
@@ -257,7 +262,14 @@ export class HUD {
       if (d > range + cr.R) continue;
       c.beginPath(); c.arc(x, y, cr.R * s, 0, Math.PI * 2); c.stroke();
     }
+    for (const ev of g.events.list) {
+      const [x, y, d] = proj(ev.start);
+      if (d > range * 1.4) continue;
+      c.fillStyle = FACTIONS[ev.faction].color; c.strokeStyle = '#fff'; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(x, y - 8); c.lineTo(x + 7, y + 5); c.lineTo(x - 7, y + 5); c.closePath(); c.fill(); c.stroke();
+    }
     for (const l of g.locations) {
+      if (!l.discovered) continue;
       const [x, y, d] = proj(l.dir);
       if (d > range * 1.6) continue;
       if (l.zoneR) {
@@ -281,15 +293,15 @@ export class HUD {
       if (d < range) c.fillRect(x - 2, y - 2, 4, 4);
     }
     for (const e of g.enemies.list) {
-      if (e.dead || (e.faction === 'mil' && !e.base.awake)) continue;
+      if (e.dead || (e.base && !e.base.awake) || e.kind === 'core') continue;
       const [x, y, d] = proj(e.body ? e.body.pos : e.center);
       if (d > range) continue;
-      c.fillStyle = e.faction === 'pirate' ? '#7dff3a' : (e.base.hostile ? '#ff2a4a' : '#8a8aa0');
+      c.fillStyle = e.faction === 'pirate' ? (g.enemies.friendly(e) ? '#2ee6ff' : '#7dff3a') : (e.base.hostile ? '#ff2a4a' : '#8a8aa0');
       c.beginPath(); c.arc(x, y, e.carrying ? 6 : 3.5, 0, Math.PI * 2); c.fill();
       if (e.carrying) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); }
     }
     for (const d of g.enemies.drops) { const [x, y] = proj(d.pos); c.fillStyle = '#2ee6ff'; c.fillRect(x - 4, y - 4, 8, 8); }
-    const obj = g.missions.objective();
+    const obj = g.objective();
     if (obj) {
       let [x, y] = proj(obj.pos);
       x = Math.max(8, Math.min(W - 8, x)); y = Math.max(8, Math.min(H - 8, y));
@@ -300,52 +312,9 @@ export class HUD {
     c.beginPath(); c.moveTo(W / 2, H / 2 - 9); c.lineTo(W / 2 + 6, H / 2 + 7); c.lineTo(W / 2, H / 2 + 3); c.lineTo(W / 2 - 6, H / 2 + 7); c.closePath(); c.fill(); c.stroke();
   }
 
-  // Whole-moon map: centred on the sub-solar point; the outer ring is the dark side.
-  drawMoonMap() {
-    const g = this.game;
-    const c = this.mctx;
-    const W = this.mini.width, H = this.mini.height;
-    const Rm = W / 2 - 14;
-    const toXY = (d) => {
-      const { theta, phi } = anglesFromDir(this.v.copy(d).normalize());
-      const r = (theta / Math.PI) * Rm;
-      return [W / 2 + Math.cos(phi) * r, H / 2 - Math.sin(phi) * r];
-    };
-    c.fillStyle = '#05030c';
-    c.fillRect(0, 0, W, H);
-    const grad = c.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Rm);
-    grad.addColorStop(0, '#5a4f86'); grad.addColorStop(0.45, '#3b3260'); grad.addColorStop(0.55, '#15111f'); grad.addColorStop(1, '#07050d');
-    c.fillStyle = grad;
-    c.beginPath(); c.arc(W / 2, H / 2, Rm, 0, Math.PI * 2); c.fill();
-    c.strokeStyle = '#ffd23f'; c.setLineDash([6, 6]); c.lineWidth = 1.5;
-    c.beginPath(); c.arc(W / 2, H / 2, Rm / 2, 0, Math.PI * 2); c.stroke();
-    c.setLineDash([]);
-    c.font = '13px Bangers, Impact, sans-serif'; c.textAlign = 'center';
-    c.fillStyle = '#ffd23f'; c.fillText('TERMINATOR', W / 2, H / 2 - Rm / 2 - 4);
-    c.fillStyle = '#8a84a8'; c.fillText('☾ DARK SIDE ☾', W / 2, H / 2 - Rm * 0.8);
-    for (const l of g.locations) {
-      const [x, y] = toXY(l.dir);
-      c.fillStyle = FACTIONS[l.faction].color;
-      c.strokeStyle = '#120a1e'; c.lineWidth = 3;
-      c.beginPath(); c.arc(x, y, l.zoneR ? 7 : 5, 0, Math.PI * 2); c.fill(); c.stroke();
-      c.font = '13px Bangers, Impact, sans-serif';
-      c.fillStyle = '#fff';
-      c.strokeText(l.short, x, y - 9); c.fillText(l.short, x, y - 9);
-    }
-    const obj = g.missions.objective();
-    if (obj) {
-      const [x, y] = toXY(obj.pos);
-      c.strokeStyle = '#ffd23f'; c.lineWidth = 3;
-      c.beginPath(); c.arc(x, y, 11 + Math.sin(performance.now() / 150) * 2, 0, Math.PI * 2); c.stroke();
-    }
-    const [px, py] = toXY(g.player.pos);
-    c.fillStyle = '#ff4f2e'; c.strokeStyle = '#fff'; c.lineWidth = 2;
-    c.beginPath(); c.arc(px, py, 6, 0, Math.PI * 2); c.fill(); c.stroke();
-  }
-
   updateArrow() {
     const g = this.game;
-    const obj = g.missions.objective();
+    const obj = g.objective();
     const el = $('obj-arrow');
     const mk = $('obj-marker');
     if (!obj || g.player.dead) { el.classList.add('hidden'); mk.classList.add('hidden'); return; }
@@ -374,5 +343,110 @@ export class HUD {
       el.style.top = ((1 - ey * k) / 2) * 100 + '%';
       el.style.transform = `translate(-50%,-50%) rotate(${-a}rad)`;
     }
+  }
+
+  // ---- events ----
+  eventBanner(ev) {
+    this.alert(`${FACTIONS[ev.faction].name.toUpperCase()} EVENT: ${ev.title.toUpperCase()}`, FACTIONS[ev.faction].color, 3.5);
+    this.toast(ev.brief, 6);
+  }
+
+  eventResult(ev, ok, text) {
+    const el = $('result');
+    el.className = `panel result ${ok ? 'win' : 'lose'}`;
+    el.innerHTML = `<div class="r-title">${ok ? 'EVENT COMPLETE!' : 'EVENT FAILED'}</div><div class="r-sub">${ev.title}</div><div class="r-sub">${text || ''}</div>`;
+    this.resultT = 4.5;
+  }
+
+  eventPanel(ev, fluid) {
+    const el = $('eventpanel');
+    if (!ev) { el.classList.add('hidden'); $('fluid').classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    const f = FACTIONS[ev.faction];
+    const t = ev.timer !== undefined ? `<span class="m-timer ${ev.timer < 20 ? 'low' : ''}">${Math.floor(Math.max(0, ev.timer) / 60)}:${String(Math.floor(Math.max(0, ev.timer) % 60)).padStart(2, '0')}</span>` : '';
+    const html = `<div class="m-head" style="background:${f.color}">EVENT · ${f.name}</div>
+      <div class="m-cargo">${ev.title}</div>
+      <div class="m-obj">${ev.status || ''}</div>
+      <div class="m-row">${t}<div class="track ev-bar"><div class="fill" style="width:${Math.round((ev.bar ?? 0) * 100)}%;background:${f.color}"></div></div></div>`;
+    if (html !== this.lastEventHtml) { el.innerHTML = html; this.lastEventHtml = html; }
+    const fc = $('fluid');
+    if (fluid) { fc.classList.remove('hidden'); this.drawFluid(fc, fluid); } else fc.classList.add('hidden');
+  }
+
+  // Sloshing liquid in a sideways vacuum tube.
+  drawFluid(cv, f) {
+    const c = cv.getContext('2d');
+    const W = cv.width, H = cv.height;
+    c.clearRect(0, 0, W, H);
+    const x0 = 14, y0 = 14, w = W - 28, h = H - 28;
+    c.fillStyle = 'rgba(155,231,255,0.15)';
+    c.fillRect(x0, y0, w, h);
+    const tilt = f.sx * 0.9;
+    const level = Math.max(0, f.level);
+    const surfY = y0 + h * (1 - level) - f.sy * 6;
+    c.save();
+    c.beginPath(); c.rect(x0, y0, w, h); c.clip();
+    c.fillStyle = '#2a1f4f';
+    c.beginPath();
+    c.moveTo(x0, surfY - tilt * h * 0.5 + Math.sin(performance.now() / 120) * 2);
+    for (let i = 1; i <= 12; i++) {
+      const x = x0 + (w * i) / 12;
+      c.lineTo(x, surfY - tilt * h * 0.5 + tilt * h * (i / 12) + Math.sin(performance.now() / 120 + i) * 2 * (1 + Math.abs(f.vx)));
+    }
+    c.lineTo(x0 + w, y0 + h); c.lineTo(x0, y0 + h); c.closePath(); c.fill();
+    c.fillStyle = 'rgba(199,125,255,0.6)';
+    c.fillRect(x0, surfY - tilt * h * 0.5, w, 2);
+    c.restore();
+    if (f.crack > 0) {
+      c.strokeStyle = '#fff'; c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(x0 + w * 0.6, y0); c.lineTo(x0 + w * 0.55, y0 + h * 0.4 * (0.5 + f.crack)); c.lineTo(x0 + w * 0.65, y0 + h * 0.7 * (0.5 + f.crack)); c.stroke();
+    }
+    c.strokeStyle = '#120a1e'; c.lineWidth = 4;
+    c.strokeRect(x0, y0, w, h);
+    c.fillStyle = '#3a3550';
+    c.fillRect(2, y0 - 2, 12, h + 4); c.fillRect(W - 14, y0 - 2, 12, h + 4);
+    if (f.spill > 0) { c.fillStyle = '#ff2a4a'; c.font = '16px Bangers, Impact'; c.fillText('SPILLING!', x0 + 6, y0 + 16); }
+  }
+
+  dialog(title, text, buttons, onPick) {
+    const el = $('dialog');
+    el.innerHTML = `<div class="panel dlg"><div class="dlg-title">${title}</div><div class="bubble">${text}</div><div class="dlg-btns">${buttons.map((b, i) => `<button data-i="${i}">${b.label}</button>`).join('')}</div></div>`;
+    el.classList.remove('hidden');
+    el.onclick = (e) => {
+      const b = e.target.closest('button');
+      if (b) onPick(+b.dataset.i);
+    };
+  }
+
+  closeDialog() { $('dialog').classList.add('hidden'); }
+
+  // ---- reputation log ----
+  openRepLog(g) {
+    const el = $('replog');
+    const rep = g.rep;
+    let html = `<div class="board-head" style="background:#ffd23f"><span>REPUTATION LOG</span><span class="board-right"><button class="board-close" data-close="1">✕ CLOSE</button></span></div><div class="rep-list">`;
+    for (const [id, f] of Object.entries(FACTIONS)) {
+      if (!rep.visible(id)) continue;
+      const v = rep.get(id);
+      const t = rep.tier(id);
+      const nt = rep.nextTier(id);
+      const pct = Math.round(((v + 100) / 200) * 100);
+      const hq = g.locations.find((l) => l.id === f.hq);
+      let status = '';
+      if (id === 'rustmoon') status = rep.rustmoon === 'aligned' ? 'SWORN IN — pirates treat you as crew' : rep.rustmoon === 'locked' ? 'LOCKED OUT — they remember the wreck' : 'Known contact';
+      if (f.enemy) status = `At war with ${FACTIONS[f.enemy].name}${rep.cleared(id) ? ' · CLEARANCE GRANTED' : ''}`;
+      const ev = g.events.list.find((e) => e.faction === id);
+      html += `<div class="rep-row" style="border-left-color:${f.color}">
+        <div class="rep-top"><span class="rep-name" style="color:${f.color}">${f.name}</span><span class="rep-kind">${f.kind}</span><span class="tierchip" style="background:${t.color}">${t.name} (${v > 0 ? '+' : ''}${v})</span></div>
+        <div class="track rep-bar"><div class="fill" style="width:${pct}%;background:${f.color}"></div><div class="rep-zero"></div></div>
+        <div class="rep-info">${f.blurb}</div>
+        <div class="rep-meta">HQ: ${hq && hq.discovered ? hq.name : '???'} · Contract pay ×${(t.pay || 0).toFixed(2)}${nt ? ` · Next: ${nt.name} at ${nt.min}` : ''}${status ? ` · ${status}` : ''}</div>
+        ${ev ? `<div class="rep-ev">📡 ${ev.state === 'active' ? 'ACTIVE' : 'OPEN'}: ${ev.title}</div>` : ''}
+      </div>`;
+    }
+    html += `</div><div class="board-foot">Deliveries and events raise standing. Shooting a faction's people lowers it — and helping Vostok angers Daedalus (and vice versa). J / ESC to close.</div>`;
+    el.innerHTML = html;
+    el.classList.remove('hidden');
+    el.onclick = (e) => { if (e.target.closest('[data-close]')) g.closeModal(false); };
   }
 }
