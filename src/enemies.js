@@ -191,6 +191,7 @@ export class Enemies {
 
   isHostileTarget(t) {
     if (t.dead) return false;
+    if (t.faction === 'beast') return true;
     if (t.faction === 'pirate') return !this.friendly(t) && !(t.kind === 'core' && this.game.rep.aligned());
     return t.base && t.base.hostile;
   }
@@ -249,6 +250,11 @@ export class Enemies {
     const g = this.game;
     e.hp -= amount;
     e.flash = 0.15;
+    // a battered pirate skater gets dizzy for a moment (long enough to be jarred)
+    if (e.kind === 'skater' && e.faction === 'pirate' && e.hp > 0 && e.hp <= e.maxHp * 0.45) {
+      if (!(e.dazed > 0)) g.fx.pop('DAZED!', e.center.clone().addScaledVector(e.center.clone().normalize(), 3), { color: '#7dff3a', size: 40 });
+      e.dazed = 6;
+    }
     if (fromPlayer) {
       if (e.faction === 'pirate' && g.rep.aligned() && !e.rogue && !e.aggro) {
         // shooting your own crew
@@ -277,6 +283,12 @@ export class Enemies {
     g.fx.explosion(e.center, big ? 11 : 6, true);
     g.fx.pop(e.kind === 'skater' ? 'KA-POW!' : e.kind === 'core' ? 'KRA-KA-BOOOM!' : 'KA-BOOM!', e.center.clone().addScaledVector(e.center.clone().normalize(), 4), { color: '#ff4f2e', size: e.kind === 'core' ? 100 : 80 });
     g.audio.boom(true);
+    if (e.kind === 'megamite') {
+      e.model.root.removeFromParent();
+      if (byPlayer) { g.addCredits(400, 'MEGA MITE'); g.style(150, 'MITE SLAYER'); g.rep.add('meridian', 2, 'Stopped the Mega Mite'); }
+      g.hud.alert('THE MEGA MITE IS DOWN!', '#b8e986', 3);
+      return;
+    }
     if (byPlayer) {
       if (e.faction === 'pirate' && e.kind !== 'core') {
         if (g.rep.aligned() && !e.rogue) g.rep.add('rustmoon', -3, 'Killed a Rustmoon pirate');
@@ -365,13 +377,15 @@ export class Enemies {
     const dark = darkness(P.up);
     const aligned = g.rep.aligned();
     const shadow = 1 + (g.upgrades.shadow || 0) * 0.35;
+    // pirate blood (a lab mutation) makes the hunters mostly lose interest in you
+    const blood = g.alchemy && g.alchemy.mutations.includes('blood') ? 0.35 : 1;
 
     // --- spawning: hunting squads (not if you ride with Rustmoon) ---
     const carrying = ms.active && ms.cargoState === 'held';
     const inSafe = g.isSafe(g.currentZone);
     if (!P.dead && !inSafe && !aligned) {
       if (carrying) {
-        this.pirateTimer -= dt * (1 + dark);
+        this.pirateTimer -= dt * (1 + dark) * blood;
         if (this.pirateTimer <= 0) {
           const hot = ms.active.cargo.hot;
           if ((hot > 0 || Math.random() < 0.35 + dark * 0.5) && this.pirateCount() < MAX_PIRATES) this.spawnSquad(Math.min(4, 1 + Math.floor(Math.max(1, hot) * 0.8 + Math.random() + dark)));
@@ -380,7 +394,7 @@ export class Enemies {
         }
       }
       if (dark > 0.5) {
-        this.darkTimer -= dt;
+        this.darkTimer -= dt * blood;
         if (this.darkTimer <= 0) {
           if (this.pirateCount() < 4) this.spawnSquad(1 + Math.floor(Math.random() * 2));
           this.darkTimer = randRange(20, 34);
@@ -415,6 +429,7 @@ export class Enemies {
       }
       if (e.base && !e.base.awake) continue;
       if (e.kind === 'core') { this.updateCore(e, dt, time); continue; }
+      if (e.kind === 'megamite') { g.alchemy.updateBeast(e, dt); if (e.flash > 0) e.flash -= dt; continue; }
       if (e.kind === 'skater') this.updateSkater(e, dt, time);
       else if (e.kind === 'rover') this.updateRover(e, dt);
       else if (e.kind === 'milrover') this.updateMilRover(e, dt);
@@ -591,6 +606,7 @@ export class Enemies {
       // in the dark, a lamp-less runner is much harder to hit
       if (darkness(P.up) > 0.5 && P.lamp.intensity < 1) inaccuracy *= 2.4;
       inaccuracy *= 1 + (g.upgrades.shadow || 0) * 0.35;
+      if (g.alchemy && g.alchemy.mutations.includes('void')) inaccuracy *= 1.6;
     }
     const dir = this.aimLead(from, speed, inaccuracy, center, vel);
     if (obj) dmg *= 0.6;
@@ -636,7 +652,9 @@ export class Enemies {
     const climb = to.dot(up);
     const sp = b.vel.length();
     const closing = b.vel.dot(wish);
-    const ctrl = {
+    const dazed = e.dazed > 0;
+    if (dazed) e.dazed -= dt;
+    const ctrl = dazed ? { wish: wish.multiplyScalar(0), skates: false, thrust: false, jump: false, thrustDir: up } : {
       wish: friendly && dist < 10 ? wish.multiplyScalar(0) : wish,
       skates: friendly ? dist > 25 : !(dist < 20 && closing > 20) || e.state === 'flee',
       thrust: !friendly && b.energy > 25 && (sp < 22 || (climb > 8 && dist < 200) || (dist > 200 && sp < 50)),
@@ -647,7 +665,10 @@ export class Enemies {
     for (let i = 0; i < steps; i++) { stepSkater(b, ctrl, dt / steps, g.planet, g.colliders, PIRATE_SKATER, e.impacts); ctrl.jump = false; }
     e.center.copy(b.pos).addScaledVector(up, 1.3);
 
-    if (e.state === 'chase' && !friendly) {
+    if (dazed) {
+      // spin in place, seeing stars
+      e.heading.applyAxisAngle(up, dt * 6);
+    } else if (e.state === 'chase' && !friendly) {
       this.tryGrab(e, dt);
       e.fireCd -= dt;
       if (e.fireCd <= 0 && this.engageRange(e) < 240) {
@@ -658,14 +679,14 @@ export class Enemies {
 
     const m = e.model;
     const hv = tangent(b.vel, up);
-    if (hv.lengthSq() > 4) e.heading.copy(hv.normalize());
+    if (hv.lengthSq() > 4 && !dazed) e.heading.copy(hv.normalize());
     m.root.position.copy(b.pos);
     frameQuat(up, e.heading, m.root.quaternion);
     m.torso.rotation.x = b.grounded ? 0.5 : 0.1;
     m.body.position.y = m.bodyBase + (b.grounded ? -0.15 : 0);
     m.armL.rotation.z = -0.5; m.armR.rotation.z = 0.5;
     m.scarf.rotation.x = -0.4 - Math.min(1.2, sp / 30) + Math.sin(time * 9) * 0.1;
-    m.glowM.color.setHex(e.flash > 0 ? 0xffffff : friendly ? 0x2ee6ff : 0x7dff3a);
+    m.glowM.color.setHex(e.flash > 0 ? 0xffffff : dazed ? 0xffd23f : friendly ? 0x2ee6ff : 0x7dff3a);
     if (e.carrying && !m.loot) { m.loot = makeCrate(g.missions.active ? g.missions.active.cargo.color : 0xffd23f, 0.7); m.cargoSlot.add(m.loot); }
   }
 

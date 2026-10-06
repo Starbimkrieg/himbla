@@ -283,3 +283,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #05030c; col
 #jarchip .empty-slot { color: #999; }
 #jarchip i { font-family: var(--body); font-size: 12px; color: var(--violet); }
 #jarchip .buffs { font-size: 14px; color: var(--pink); }
+#jarchip .muts { font-size: 13px; color: #7dff3a; -webkit-text-stroke: 0; }
+#racepanel { position: absolute; top: 70px; left: 50%; transform: translateX(-50%) rotate(-0.6deg); width: 330px; padding: 0 0 6px; font-family: var(--body); }
+#racepanel .m-head { background: var(--pink, #ff2e88); }
+#racepanel .race-row { display: flex; gap: 8px; padding: 3px 10px; font-size: 14px; align-items: baseline; }
+#racepanel .race-row b { font-family: var(--comic); font-size: 18px; width: 18px; }
+#racepanel .race-row i { color: #ff9f1c; font-size: 12px; }
+#racepanel .race-row span { margin-left: auto; color: #888; font-size: 12px; }
+#racepanel .race-row.mine { background: rgba(125, 255, 58, 0.25); font-weight: bold; }
+@media (max-width: 600px) { #racepanel { width: calc(100% - 32px); top: 110px; } }

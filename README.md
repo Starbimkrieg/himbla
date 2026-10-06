@@ -145,6 +145,28 @@ Contract clocks are tight. If you miss one, the job still pays 50% when you deli
   credits, a pet rock, a dirt golem, statues, a love match, black rain, inverted colours, low gravity,
   super-slick skates, a springy "resonance" and, with three different things, a SINGULARITY that blows you
   through the roof.
+- **Chimeras (the Horsey-Game part):** put **two or more living things** in the reactor together
+  (people, Void-Touched people, wild **Moon Mites**, knocked-out **pirates**, whole **hover-cars**) and out
+  comes a chimera: body, legs and head are picked from the parents (car wheels, six mite legs, pirate
+  boots…), sometimes with a spare head, plus mutations from anything non-living in the mix (black water
+  → void aura "the Unholy", rock → crystal spikes, dirt/mud → mud blobs). Each gets a mashed-up name,
+  a top speed and a chaos rating. Your newest three hop after you; the rest live in a pen behind the lab.
+  Chimeras are saved.
+- **New things to scoop:** Moon Mites skitter around sunlit craters (they flee if you rush them); hover-cars
+  can be scooped straight out of traffic (two jar slots, the car is gone ~150 s); pirate skaters at ≤45 %
+  hull get **DAZED** for 6 s and can be jarred (Rustmoon −3 if you're aligned).
+- **Solo reactor results:** a lone mite becomes the **MEGA MITE** (600 HP stomping boss, ₵400 bounty), a
+  lone car goes into orbit (₵150 hush money), a lone pirate comes out reformed with a doctorate (SPACECOM +3).
+- **Splice pod** (corner of the lab, `F`): put the jar into *yourself*. Up to 3 mutations: Wheel Feet (car,
+  22 m/s running), Mite Wings (mite, 60 % gravity in the air), Extra Arms (person, fire 30 % faster),
+  Void Skin (water/void-touched, see in the dark and harder to hit), Stone Hide (rock, +40 hull, more drag),
+  Burrower Claws (dirt/mud, painless boot landings), Pirate Blood (pirate, hunting squads mostly ignore you).
+  Each shows on your runner. Dr. Zbornak cures them for ₵200 each.
+- **Chimera Derby** at the Bounce Dome Funpark: walk up to the betting booth (`F`), pick one of your chimeras,
+  bet ₵50/200/500 (or just for glory) against three rival creatures ("Glue Factory Escapee", "Hoof
+  Hearted"…). Odds depend on how your creature's speed ranks (1.8× – 6×). Two laps around the domes, with
+  chaos: stumbles, zooms, running the wrong way, giant hops, and occasionally exploding and reassembling.
+  Wins land on the Hall of Highlights.
 - **The Monolith:** touch it for 30 s of low gravity (90 s cooldown).
 - **Bounce Dome Funpark:** inflatable domes and a bouncy castle that throw you back up harder than you landed.
 
@@ -197,6 +219,9 @@ src/
   reputation.js  faction standing, tiers, unlocks, Rustmoon state
   events.js      per-faction events, fluid sloshing, escorts, the Pirate Wreck
   mapview.js     draggable fog-of-war globe map
+  alchemy.js     containment jar, reactor recipes, wild mites, followers, splice-pod mutations, Mega Mite
+  chimera.js     gene splicing + procedural chimera models
+  race.js        Chimera Derby: track, betting, chaos racing
   highlights.js  action-shot capture + Hall of Highlights board
   physics.js     collider hash + shared skater movement model (player and pirate skaters)
   player.js      input → movement, weapon, animation, style events

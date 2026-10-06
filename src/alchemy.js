@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { makeFigure } from './models.js';
 import { toon, glow, ink } from './toon.js';
-import { frameQuat, tangent, greatCircle } from './geo.js';
-import { pick } from './rng.js';
+import { frameQuat, tangent, greatCircle, SUN, arcDist } from './geo.js';
+import { pick, mulberry32 } from './rng.js';
+import { LIVING, spliceGenes, makeChimera, makeMite } from './chimera.js';
 
 // What can go in a containment jar.
 export const ITEMS = {
@@ -11,6 +12,9 @@ export const ITEMS = {
   dirt: { name: 'Moon Dirt', icon: '▲', color: '#c9b79c' },
   water: { name: 'Black Water', icon: '●', color: '#7b5cff' },
   person: { name: 'A Person', icon: '☺', color: '#ff9f1c' },
+  mite: { name: 'Moon Mite', icon: '✶', color: '#b8e986' },
+  car: { name: 'Hover-Car', icon: '▣', color: '#ff7ad9', slots: 2 },
+  pirate: { name: 'Knocked-Out Pirate', icon: '☠', color: '#7dff3a' },
   // things that happen when items sit together in a jar
   mud: { name: 'Moon Mud', icon: '≈', color: '#8a6a4a' },
   slickrock: { name: 'Slick Rock', icon: '◈', color: '#9be7ff' },
@@ -22,15 +26,30 @@ const JAR_MIXES = [
   { a: 'dirt', b: 'water', into: 'mud', text: 'The dirt and the black water turned into MOON MUD.' },
   { a: 'rock', b: 'water', into: 'slickrock', text: 'The rock sample is coated in black slime. SLICK ROCK!' },
   { a: 'person', b: 'water', into: 'voidling', text: 'Your passenger has gone… purple. VOID-TOUCHED!' },
+  { a: 'mite', b: 'person', into: null, text: 'The mite has crawled into your passenger\'s helmet. They seem… fine?' },
 ];
 const MIX_TIME = 12;
 
-const NAMES = ['Gary', 'Priya', 'Tomasz', 'Little Juno', 'Ade', 'Wen', 'Marisol', 'Big Lars', 'Fen', 'Doris'];
+// What splicing yourself in the pod does, by jar item.
+export const MUTATIONS = {
+  wheels: { name: 'WHEEL FEET', from: ['car'], desc: 'Run at 22 m/s in boots' },
+  wings: { name: 'MITE WINGS', from: ['mite'], desc: 'Fall slowly: 60% gravity while airborne' },
+  arms: { name: 'EXTRA ARMS', from: ['person'], desc: 'Fire 30% faster' },
+  void: { name: 'VOID SKIN', from: ['water', 'voidling'], desc: 'See in the dark; harder to hit' },
+  stone: { name: 'STONE HIDE', from: ['rock', 'slickrock'], desc: '+40 max hull, a bit more drag' },
+  claws: { name: 'BURROWER CLAWS', from: ['dirt', 'mud'], desc: 'Painless landings in boots' },
+  blood: { name: 'PIRATE BLOOD', from: ['pirate'], desc: 'Pirates hunt you far less' },
+};
+const MAX_MUTATIONS = 3;
+const MAX_FOLLOW = 3;
+const KEY = 'moonrunner-lab-v1';
+
+const NAMES = ['Gary', 'Priya', 'Tomasz', 'Little Juno', 'Ade', 'Wen', 'Marisol', 'Big Lars', 'Fen', 'Doris', 'Okon', 'Bea'];
 
 const _v = new THREE.Vector3();
 
-// Containment jar + Dr. Zbornak's reactor: scoop things up, let them stew, feed them to
-// the antimatter and see what happens.
+// Containment jar + Dr. Zbornak's reactor and splice pod: scoop things up, let them stew,
+// feed them to the antimatter, breed chimeras, and occasionally mutate yourself.
 export class Alchemy {
   constructor(game) {
     this.game = game;
@@ -42,18 +61,120 @@ export class Alchemy {
     this.buffs = { lowGrav: 0, slick: 0, bouncy: 0, invert: 0, rain: 0, cushion: 0 };
     this.monoCd = 0;
     this.jarMesh = null;
+    this.chimeras = [];
+    this.mutations = [];
+    this.mutMeshes = [];
+    this.pen = [];
+    this.load();
+    this.buildMites();
   }
 
   get owned() { return (this.game.upgrades.jar || 0) > 0; }
   get slots() { return 2 + (this.game.upgrades.jar || 0); }
+  get used() { return this.jar.reduce((n, i) => n + (ITEMS[i.kind].slots || 1), 0); }
+
+  load() {
+    try {
+      const d = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (!d) return;
+      this.chimeras = d.chimeras || [];
+      this.mutations = d.mutations || [];
+    } catch { /* fresh lab */ }
+  }
+
+  save() {
+    try { localStorage.setItem(KEY, JSON.stringify({ chimeras: this.chimeras, mutations: this.mutations })); } catch { /* unavailable */ }
+  }
+
+  // called once the world and player exist
+  start() {
+    this.syncChimeras();
+    this.applyMutations();
+  }
+
+  // ---------- wild Moon Mites ----------
+  buildMites() {
+    const rr = mulberry32(8080);
+    const g = this.game;
+    this.mites = [];
+    for (let tries = 0; tries < 3000 && this.mites.length < 110; tries++) {
+      const u = rr() * 2 - 1, th = rr() * Math.PI * 2, sq = Math.sqrt(1 - u * u);
+      const d = new THREE.Vector3(sq * Math.cos(th), u, sq * Math.sin(th));
+      if (d.dot(SUN) < 0.15) continue;
+      if (g.locations.some((l) => arcDist(d, l.dir) < (l.zoneR || l.r) * 1.3)) continue;
+      this.mites.push({ home: d, pos: null, dir: tangent(new THREE.Vector3(1, 0, 0), d).normalize(), model: null, gone: 0, t: rr() * 10, hop: 0, vy: 0 });
+    }
+  }
+
+  updateMites(dt) {
+    const g = this.game;
+    const P = g.player;
+    for (const m of this.mites) {
+      if (m.gone > 0) { m.gone -= dt; continue; }
+      const near = arcDist(P.pos, m.home) < 400;
+      if (!near) { if (m.model) { m.model.root.removeFromParent(); m.model = null; } continue; }
+      if (!m.model) {
+        m.model = makeMite();
+        g.scene.add(m.model.root);
+        m.pos = g.planet.ground(m.home, new THREE.Vector3());
+      }
+      m.t += dt;
+      const up = m.pos.clone().normalize();
+      const d = m.pos.distanceTo(P.pos);
+      let speed = 2.5;
+      if (d < 14 && P.speed > 6) { m.dir = tangent(m.pos.clone().sub(P.pos), up).normalize(); speed = 9; }
+      else if (Math.random() < dt * 0.5) m.dir = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+      if (arcDist(m.pos, m.home) > 35) m.dir = tangent(m.home.clone().sub(up), up).normalize();
+      const next = greatCircle(up, m.dir, speed * dt);
+      m.hop += m.vy * dt; m.vy -= 4 * dt;
+      if (m.hop <= 0) { m.hop = 0; m.vy = Math.random() < dt * 2 ? 2.5 : 0; }
+      m.pos.copy(g.planet.ground(next, new THREE.Vector3()));
+      m.model.root.position.copy(m.pos).addScaledVector(next, m.hop);
+      frameQuat(next, m.dir, m.model.root.quaternion);
+      m.model.anim(m.t, speed);
+    }
+  }
 
   // ---------- collecting ----------
   scoop() {
     const g = this.game;
     const P = g.player;
     if (!this.owned) { g.hud.toast('You need a containment jar. Dr. Zbornak sells them at the Antimatter Lab.', 3); return; }
-    if (this.jar.length >= this.slots) { g.hud.toast('Jar is full. Empty it with X (into the reactor, if you\'re brave).', 2.5); return; }
-    // people first, then crystals, then black water, then plain dirt
+    if (this.used >= this.slots) { g.hud.toast('Jar is full. Empty it with X (into the reactor, if you\'re brave).', 2.5); return; }
+    // knocked-out pirates first
+    for (const e of g.enemies.list) {
+      if (e.dead || e.kind !== 'skater' || e.faction !== 'pirate' || e.hp > e.maxHp * 0.45) continue;
+      if (e.center.distanceTo(P.center) > 7) continue;
+      e.dead = true;
+      e.model.root.removeFromParent();
+      if (e.carrying) { e.carrying = false; g.enemies.dropCargo(e.center.clone()); }
+      if (g.rep.aligned()) g.rep.add('rustmoon', -3, 'Jarred a pirate');
+      this.add('pirate', pick(['Grit', 'Sal', 'Imelda', 'Rusty', 'Knuckles']));
+      g.fx.pop('PIRATE IN A JAR!', null, { color: '#7dff3a', size: 50 });
+      return;
+    }
+    // hover-cars (they take two slots)
+    for (const v of g.world.vehicles) {
+      if (v.kind !== 'car' || v.captured > 0 || v.pos.distanceTo(P.pos) > 10) continue;
+      if (this.slots - this.used < 2) { g.hud.toast('A whole hover-car needs two free slots.', 2); return; }
+      v.captured = 150;
+      v.root.visible = false;
+      if (v.col) { g.colliders.remove(v.col); v.col = null; }
+      this.add('car');
+      g.fx.pop('IT… FIT?!', null, { color: '#ff7ad9', size: 56 });
+      return;
+    }
+    // wild mites
+    for (const m of this.mites) {
+      if (!m.model || m.gone > 0 || m.pos.distanceTo(P.pos) > 5) continue;
+      m.model.root.removeFromParent();
+      m.model = null;
+      m.gone = 120;
+      this.add('mite');
+      g.fx.pop('MITE CAUGHT!', null, { color: '#b8e986', size: 46 });
+      return;
+    }
+    // people
     let best = null, bd = 6;
     for (const f of g.world.figures) {
       if (!f.root.visible || f.captured || f.loc.restricted) continue;
@@ -68,7 +189,7 @@ export class Alchemy {
       const name = best.kind === 'figure' ? pick(NAMES) : best.w.name;
       if (best.kind === 'figure') { best.f.captured = true; best.f.root.visible = false; }
       else { best.w.root.removeFromParent(); this.wanderers = this.wanderers.filter((w) => w !== best.w); }
-      this.add('person', name);
+      this.add(best.kind === 'wanderer' && best.w.purple ? 'voidling' : 'person', name);
       g.fx.pop(`GOTCHA, ${name.toUpperCase()}!`, null, { color: '#ff9f1c', size: 46 });
       if (best.kind === 'figure') g.rep.add(best.f.loc.faction, -1, 'Jarred a resident', { silent: true });
       return;
@@ -107,7 +228,9 @@ export class Alchemy {
     const g = this.game;
     const P = g.player;
     for (const it of this.jar) {
-      if (it.kind === 'person' || it.kind === 'voidling') this.spawnWanderer(it.name, it.kind === 'voidling');
+      if (it.kind === 'person' || it.kind === 'voidling' || it.kind === 'pirate') this.spawnWanderer(it.name, it.kind === 'voidling', it.kind === 'pirate');
+      else if (it.kind === 'mite') { const m = this.mites.find((x) => x.gone > 0); if (m) { m.gone = 0; m.home = P.pos.clone().normalize(); } }
+      else if (it.kind === 'car') { const v = this.game.world.vehicles.find((x) => x.captured > 0); if (v) v.captured = 0.01; g.fx.pop('BEEP BEEP!', null, { color: '#ff7ad9', size: 40 }); }
       else if (it.kind === 'rock' || it.kind === 'slickrock') g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0x2ee6ff, size: 0.5, life: 1, gravity: 2, count: 6, spread: 3 });
       else g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(2), { color: it.kind === 'dirt' ? 0xc9b79c : 0x2a1f4f, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 });
     }
@@ -115,14 +238,14 @@ export class Alchemy {
   }
 
   // Free people wander off (and can be scooped up again).
-  spawnWanderer(name, purple) {
+  spawnWanderer(name, purple, pirate, at) {
     const g = this.game;
     const P = g.player;
-    const f = makeFigure({ suit: purple ? 0xc77dff : 0xff9f1c, visor: purple ? 0x7dff3a : 0x241a5c });
-    const pos = g.planet.ground(P.pos.clone().addScaledVector(g.cam.right, 3), new THREE.Vector3());
+    const f = makeFigure({ suit: pirate ? 0x3a2b4f : purple ? 0xc77dff : 0xff9f1c, visor: purple || pirate ? 0x7dff3a : 0x241a5c, helmet: pirate ? 0x2b2b2b : 0xfff4e0 });
+    const pos = g.planet.ground(at || P.pos.clone().addScaledVector(g.cam.right, 3), new THREE.Vector3());
     f.root.position.copy(pos);
     g.scene.add(f.root);
-    this.wanderers.push({ ...f, name: name || pick(NAMES), dir: tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), pos.clone().normalize()).normalize(), t: 0 });
+    this.wanderers.push({ ...f, purple, name: name || pick(NAMES), dir: tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), pos.clone().normalize()).normalize(), t: 0 });
     g.fx.pop(`${(name || 'THEY').toUpperCase()} IS FREE!`, null, { color: '#ff9f1c', size: 36 });
   }
 
@@ -136,13 +259,33 @@ export class Alchemy {
     r.flash = 1.5;
     g.audio.boom(false);
     g.cam.shake = Math.max(g.cam.shake, 0.6);
+    const living = this.jar.filter((i) => LIVING.includes(i.kind));
+    const mods = this.jar.length - living.length;
     const unique = new Set(kinds);
     let res;
-    if (kinds.length >= 3 && unique.size === kinds.length) res = this.singularity();
+    if (living.length >= 2 || (living.length === 1 && living[0].kind !== 'person' && living[0].kind !== 'voidling' && mods > 0)) res = this.breed(this.jar);
+    else if (kinds.length >= 3 && unique.size === kinds.length) res = this.singularity();
     else if (kinds.length >= 3 && unique.size === 1) res = this.resonance(kinds[0]);
     else res = (RECIPES[key] || RECIPES._default).call(this, names);
-    this.game.stats.experiments = (this.game.stats.experiments || 0) + 1;
+    g.stats.experiments = (g.stats.experiments || 0) + 1;
     g.dialog('DR. ZBORNAK', `<b>${res.title}</b><br>${res.text}`, [{ label: 'FOR SCIENCE!' }]);
+  }
+
+  // Two or more bodies in the reactor: out comes a chimera.
+  breed(items) {
+    const g = this.game;
+    const genes = spliceGenes(items);
+    this.chimeras.push(genes);
+    this.save();
+    this.syncChimeras();
+    if (items.some((i) => i.kind === 'person' || i.kind === 'voidling')) g.rep.add('kepler', -2, 'Spliced a resident', { silent: true });
+    g.fx.pop(`IT'S ${genes.name.toUpperCase()}!`, null, { color: '#7dff3a', size: 60 });
+    g.style(40, 'NEW CHIMERA');
+    const parts = `${genes.body} body, ${genes.legs} legs, ${genes.head} head${genes.extraHead ? `, and a spare ${genes.extraHead} head` : ''}`;
+    return {
+      title: `BEHOLD: ${genes.name.toUpperCase()}`,
+      text: `"It has a ${parts}${genes.mods.length ? `, ${genes.mods.join(' and ')}-touched` : ''}. Top speed about ${Math.round(genes.speed * 3.6)} km/h, chaos rating ${genes.chaos}. It loves you. Race it at the Bounce Dome Funpark!"`,
+    };
   }
 
   singularity() {
@@ -163,6 +306,173 @@ export class Alchemy {
   resonance(kind) {
     this.buffs.bouncy = 40;
     return { title: 'RESONANCE', text: `"Three ${ITEMS[kind].name}s, perfectly in tune. You are now… springy. Everything you land on will bounce you for a while."` };
+  }
+
+  // ---------- the MEGA MITE ----------
+  spawnMegaMite() {
+    const g = this.game;
+    const lab = g.world.lab;
+    const pos = g.planet.ground(g.world.toWorld(lab.loc, 0, 0, 60), new THREE.Vector3());
+    const m = makeChimera({ seed: 7, body: 'mite', legs: 'mite', head: 'mite', extraHead: 'mite', mods: ['void'], size: 6, tint: 0xb8e986 });
+    m.root.position.copy(pos);
+    g.scene.add(m.root);
+    const e = { kind: 'megamite', faction: 'beast', model: m, hp: 600, maxHp: 600, body: { pos: pos.clone(), vel: new THREE.Vector3() }, center: pos.clone(), radius: 7, dead: false, t: 0, hop: 0, vy: 0, dir: new THREE.Vector3(1, 0, 0), stompCd: 0 };
+    g.enemies.list.push(e);
+    g.hud.alert('MEGA MITE ON THE LOOSE!', '#b8e986', 4);
+    g.audio.alarm();
+  }
+
+  updateBeast(e, dt) {
+    const g = this.game;
+    const P = g.player;
+    e.t += dt;
+    const up = e.body.pos.clone().normalize();
+    const to = tangent(P.pos.clone().sub(e.body.pos), up);
+    const d = to.length();
+    if (d > 2) e.dir.copy(to).normalize();
+    const speed = d < 400 ? 16 : 6;
+    const next = greatCircle(up, e.dir, speed * dt);
+    e.hop += e.vy * dt; e.vy -= 8 * dt;
+    if (e.hop <= 0) {
+      if (e.vy < -6) {
+        // STOMP
+        g.fx.explosion(e.body.pos.clone().addScaledVector(up, 1), 10, true);
+        g.fx.pop('STOMP!', e.body.pos.clone().addScaledVector(up, 6), { color: '#b8e986', size: 70 });
+        if (P.pos.distanceTo(e.body.pos) < 16) { g.damagePlayer(14, 'ram'); P.vel.addScaledVector(P.up, 12); P.body.grounded = false; }
+        g.cam.shake = Math.max(g.cam.shake, P.pos.distanceTo(e.body.pos) < 120 ? 0.8 : 0);
+      }
+      e.hop = 0;
+      e.vy = 9 + Math.random() * 4;
+    }
+    const before = e.body.pos.clone();
+    e.body.pos.copy(g.planet.ground(next, new THREE.Vector3()));
+    e.body.vel.copy(e.body.pos).sub(before).divideScalar(Math.max(dt, 1e-3));
+    e.model.root.position.copy(e.body.pos).addScaledVector(next, e.hop);
+    frameQuat(next, e.dir, e.model.root.quaternion);
+    e.model.anim(e.t, speed);
+    e.center.copy(e.model.root.position).addScaledVector(next, 5);
+  }
+
+  // ---------- chimeras: followers and the lab pen ----------
+  syncChimeras() {
+    const g = this.game;
+    const lab = g.world.lab;
+    // remove existing chimera models
+    for (const f of this.followers.filter((f) => f.kind === 'chimera')) f.root.removeFromParent();
+    this.followers = this.followers.filter((f) => f.kind !== 'chimera');
+    for (const p of this.pen) p.root.removeFromParent();
+    this.pen = [];
+    const racing = g.race && g.race.entrant;
+    this.chimeras.forEach((genes, i) => {
+      if (racing === genes) return;
+      const m = makeChimera(genes);
+      const following = i >= this.chimeras.length - MAX_FOLLOW;
+      if (following) {
+        m.root.position.copy(g.player.pos);
+        g.scene.add(m.root);
+        this.followers.push({ root: m.root, anim: m.anim, kind: 'chimera', genes, vy: 0, h: 0, t: Math.random() * 5 });
+      } else if (lab) {
+        const k = this.pen.length;
+        m.root.position.set(34 + (k % 4) * 5, 0, 24 + Math.floor(k / 4) * 5);
+        lab.loc.group.add(m.root);
+        this.pen.push({ root: m.root, anim: m.anim, genes, t: Math.random() * 5 });
+      }
+    });
+  }
+
+  // ---------- splicing yourself ----------
+  spliceSelf() {
+    const g = this.game;
+    if (!this.jar.length) { g.hud.toast('The pod needs something from your jar to splice with.', 2.5); return; }
+    const got = [];
+    for (const it of this.jar) {
+      const key = Object.keys(MUTATIONS).find((k) => MUTATIONS[k].from.includes(it.kind));
+      if (!key || this.mutations.includes(key) || this.mutations.length >= MAX_MUTATIONS) continue;
+      this.mutations.push(key);
+      got.push(MUTATIONS[key].name);
+    }
+    this.jar = [];
+    this.refreshJarMesh();
+    this.save();
+    this.applyMutations();
+    g.world.reactor.flash = 2;
+    g.cam.shake = 0.8;
+    g.audio.boom(true);
+    if (got.length) {
+      g.fx.pop(got.join(' + ') + '!', null, { color: '#7dff3a', size: 54 });
+      g.style(30, 'MUTATED');
+      g.dialog('SPLICE POD', `"Fascinating. You now have: <b>${got.join(', ')}</b>. ${this.mutations.length >= MAX_MUTATIONS ? 'That is as many mutations as one body can hold. Probably.' : 'Come back for more. Or a cure. Mostly more.'}"`, [{ label: 'I FEEL… DIFFERENT' }]);
+    } else {
+      g.dialog('SPLICE POD', '"Nothing took. Either you already have that mutation, or your body is full. The jar contents were… absorbed anyway."', [{ label: 'OK' }]);
+    }
+  }
+
+  cure() {
+    this.mutations = [];
+    this.save();
+    this.applyMutations();
+  }
+
+  // Mutations change both how you play and how you look.
+  applyMutations() {
+    const g = this.game;
+    const P = g.player;
+    const has = (k) => this.mutations.includes(k);
+    P.params.runSpeed = has('wheels') ? 22 : PHYS.runSpeed;
+    P.params.runAccel = has('wheels') ? 60 : PHYS.runAccel;
+    P.params.airGravMult = has('wings') ? 0.6 : 1;
+    P.params.drag = has('stone') ? PHYS.drag * 1.4 : PHYS.drag;
+    P.params.bootSafeImpact = has('claws') ? 60 : PHYS.bootSafeImpact;
+    P.mutFire = has('arms') ? 0.7 : 1;
+    P.mutHealth = has('stone') ? 40 : 0;
+    g.player.applyUpgrades(g.upgrades);
+    for (const m of this.mutMeshes) m.removeFromParent();
+    this.mutMeshes = [];
+    const M = P.model;
+    const add = (parent, mesh) => { parent.add(mesh); this.mutMeshes.push(mesh); return mesh; };
+    if (has('wheels')) for (const leg of [M.legL, M.legR]) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.22, 12).rotateZ(Math.PI / 2), toon(0x221d33));
+      ink(w, 0.03);
+      w.position.set(0, -0.98, 0.05);
+      add(leg, w);
+    }
+    if (has('wings')) for (const s of [-1, 1]) {
+      const wing = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9), new THREE.MeshBasicMaterial({ color: 0xb8e986, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+      wing.position.set(s * 0.95, 0.85, -0.45);
+      wing.rotation.y = s * 0.5;
+      wing.userData.flap = s;
+      add(M.torso, wing);
+    }
+    if (has('arms')) for (const s of [-1, 1]) {
+      const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.42, 3, 6), toon(0xff4f2e));
+      ink(arm, 0.03);
+      arm.position.set(s * 0.48, 0.28, 0.1);
+      arm.rotation.z = s * 0.9;
+      add(M.torso, arm);
+    }
+    if (has('void')) {
+      const aura = new THREE.Mesh(new THREE.SphereGeometry(1.4, 16, 12), new THREE.MeshBasicMaterial({ color: 0x7b2ff7, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending }));
+      aura.position.y = 0.6;
+      add(M.torso, aura);
+    }
+    if (has('stone')) for (let i = 0; i < 4; i++) {
+      const sp = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), glow(0x2ee6ff));
+      sp.scale.set(0.6, 1.8, 0.6);
+      sp.position.set(-0.24 + i * 0.16, 1.0 + (i % 2) * 0.1, -0.45);
+      add(M.torso, sp);
+    }
+    if (has('claws')) for (const arm of [M.armL, M.armR]) for (let k = 0; k < 3; k++) {
+      const c = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.22, 4), toon(0xfff4e0));
+      c.position.set((k - 1) * 0.06, -0.78, 0.06);
+      c.rotation.x = Math.PI;
+      add(arm, c);
+    }
+    if (has('blood')) {
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.06, 6, 16), toon(0xd7263d));
+      band.rotation.x = Math.PI / 2;
+      band.position.y = 0.12;
+      add(M.head, band);
+    }
   }
 
   // ---------- per-frame ----------
@@ -186,6 +496,7 @@ export class Alchemy {
         for (const m of JAR_MIXES) {
           const ia = this.jar.findIndex((i) => i.kind === m.a), ib = this.jar.findIndex((i) => i.kind === m.b);
           if (ia < 0 || ib < 0) continue;
+          if (!m.into) { if (!this.jar[ib].mited) { this.jar[ib].mited = true; g.hud.toast(m.text, 3.5); } continue; }
           const keep = this.jar[m.a === 'person' ? ia : ib];
           this.jar = this.jar.filter((_, i) => i !== ia && i !== ib);
           this.jar.push({ kind: m.into, name: keep.name });
@@ -213,8 +524,15 @@ export class Alchemy {
       P.body.sinceContact = 1;
     }
     P.body.bounceReady = 0;
+    // wing flap
+    for (const m of this.mutMeshes) if (m.userData.flap) m.rotation.y = m.userData.flap * (0.5 + Math.sin(g.time * (P.body.grounded ? 3 : 18)) * 0.35);
+    // captured cars come back eventually
+    for (const v of g.world.vehicles) if (v.captured > 0) { v.captured -= dt; if (v.captured <= 0) { v.captured = 0; v.root.visible = true; } }
     this.updateFollowers(dt);
     this.updateWanderers(dt);
+    this.updateMites(dt);
+    const lab = g.world.lab;
+    if (lab && lab.loc.active) for (const p of this.pen) { p.t += dt; p.anim(p.t, 1.5); p.root.rotation.y = Math.sin(p.t * 0.3) * 2; }
   }
 
   // Pets made in the reactor hop after you.
@@ -235,23 +553,27 @@ export class Alchemy {
     }
     root.position.copy(P.pos);
     g.scene.add(root);
-    this.followers.push({ root, kind, vy: 0, h: 0 });
+    this.followers.push({ root, kind, vy: 0, h: 0, t: 0 });
   }
 
   updateFollowers(dt) {
     const P = this.game.player;
     this.followers.forEach((f, i) => {
       const up = f.root.position.clone().normalize();
-      const target = P.pos.clone().addScaledVector(this.game.cam.right, (i % 2 ? 3 : -3)).addScaledVector(P.heading, -4 - i * 2);
+      const target = P.pos.clone().addScaledVector(this.game.cam.right, (i % 2 ? 3 + i : -3 - i)).addScaledVector(P.heading, -4 - i * 2);
       const to = tangent(target.clone().sub(f.root.position), up);
       const d = to.length();
       if (d > 300) { f.root.position.copy(P.pos); return; }
-      if (d > 2) f.root.position.addScaledVector(to.normalize(), Math.min(d, (8 + d * 1.5) * dt));
+      const sp = Math.min(d, (8 + d * 1.5) * dt);
+      if (d > 2) f.root.position.addScaledVector(to.normalize(), sp);
       f.h += f.vy * dt; f.vy -= 9 * dt;
-      if (f.h <= 0) { f.h = 0; f.vy = d > 3 ? 4 : 0; }
-      const g = this.game.planet.ground(f.root.position, new THREE.Vector3());
-      f.root.position.copy(g).addScaledVector(up, f.h);
+      const hop = f.kind === 'chimera' ? f.genes.hop : 1;
+      if (f.h <= 0) { f.h = 0; f.vy = d > 3 && Math.random() < hop ? 4 * hop : 0; }
+      const gp = this.game.planet.ground(f.root.position, new THREE.Vector3());
+      f.root.position.copy(gp).addScaledVector(up, f.h);
       frameQuat(up, d > 0.5 ? to : P.heading, f.root.quaternion);
+      f.t = (f.t || 0) + dt;
+      if (f.anim) f.anim(f.t, sp / Math.max(dt, 1e-3));
     });
   }
 
@@ -278,7 +600,7 @@ export class Alchemy {
     const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.8, 12), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.3 }));
     g.add(glass);
     this.jar.forEach((it, i) => {
-      const blob = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), glow(new THREE.Color(ITEMS[it.kind].color).getHex()));
+      const blob = new THREE.Mesh(new THREE.SphereGeometry(it.kind === 'car' ? 0.24 : 0.17, 8, 6), glow(new THREE.Color(ITEMS[it.kind].color).getHex()));
       blob.position.set(Math.sin(i * 2.1) * 0.12, -0.25 + i * 0.2, Math.cos(i * 2.1) * 0.12);
       g.add(blob);
     });
@@ -291,14 +613,22 @@ export class Alchemy {
   }
 
   hudText() {
-    if (!this.owned) return '';
-    const cells = [];
-    for (let i = 0; i < this.slots; i++) {
-      const it = this.jar[i];
-      cells.push(it ? `<span style="color:${ITEMS[it.kind].color}" title="${ITEMS[it.kind].name}">${ITEMS[it.kind].icon}</span>` : '<span class="empty-slot">·</span>');
+    const parts = [];
+    if (this.owned) {
+      const cells = [];
+      let used = 0;
+      for (const it of this.jar) {
+        const n = ITEMS[it.kind].slots || 1;
+        used += n;
+        for (let k = 0; k < n; k++) cells.push(`<span style="color:${ITEMS[it.kind].color}" title="${ITEMS[it.kind].name}">${ITEMS[it.kind].icon}</span>`);
+      }
+      for (let i = used; i < this.slots; i++) cells.push('<span class="empty-slot">·</span>');
+      parts.push(`JAR ${cells.join('')}${this.jar.length >= 2 ? ' <i>stewing…</i>' : ''}`);
     }
     const buff = Object.entries(this.buffs).filter(([, v]) => v > 0).map(([k, v]) => `${BUFF_NAMES[k]} ${Math.ceil(v)}s`).join(' · ');
-    return `JAR ${cells.join('')}${this.jar.length >= 2 ? ' <i>stewing…</i>' : ''}${buff ? `<div class="buffs">${buff}</div>` : ''}`;
+    if (buff) parts.push(`<div class="buffs">${buff}</div>`);
+    if (this.mutations.length) parts.push(`<div class="muts">${this.mutations.map((k) => MUTATIONS[k].name).join(' · ')}</div>`);
+    return parts.join('');
   }
 }
 
@@ -319,6 +649,21 @@ const RECIPES = {
     g.schedule(6, () => this.spawnWanderer(n));
     return { title: 'YEET', text: `"${n} has been launched through the roof at roughly escape velocity, and also back down again. Somewhere. Kepler will be filing a complaint."` };
   },
+  mite() { this.spawnMegaMite(); return { title: 'MEGA MITE', text: '"Ah. The mite absorbed the entire antimatter flux and is now… the size of a house. It\'s outside. It seems upset. Perhaps shoot it? Science!"' }; },
+  car() {
+    const g = this.game;
+    g.fx.explosion(g.world.lab.reactor.clone().addScaledVector(g.player.up, 14), 8, true);
+    g.addCredits(150, 'Orbital car');
+    g.actionPanel('launch', null, 'THAT CAR IS IN ORBIT NOW.');
+    return { title: 'ORBITAL HOVER-CAR', text: '"The hover-car went straight up through the roof and is now orbiting the Moon. Somebody\'s commute just got a lot longer. Here, hush money."' };
+  },
+  pirate(names) {
+    const g = this.game;
+    g.rep.add('spacecom', 3, 'Reformed a pirate');
+    if (g.rep.aligned()) g.rep.add('rustmoon', -3, 'Reformed a pirate');
+    g.schedule(1, () => this.spawnWanderer(`Dr. ${names[0] || 'Grit'}`, false, false));
+    return { title: 'REFORMED', text: `"${names[0] || 'The pirate'} came out with a doctorate in applied physics and a deep sense of regret. They are walking to SPACECOM to turn themselves in."` };
+  },
   mud() { this.buffs.slick = 60; return { title: 'MOON MUD COATING', text: '"Your skates are now coated in antimatter mud. Downhills will be… extreme. One minute."' }; },
   slickrock() { this.addFollower('rock'); return { title: 'IT\'S ALIVE', text: '"The slick rock has developed opinions, eyes, and an attachment to you. It will follow you now. Name it something nice."' }; },
   voidling(names) { this.buffs.lowGrav = 45; return { title: 'VOID TWIN', text: `"${names[0] || 'Your passenger'} split into two people and one of them took most of your weight with them. Enjoy the low gravity."` }; },
@@ -330,13 +675,12 @@ const RECIPES = {
   'dirt+rock'() { this.game.addCredits(90, 'Concrete'); return { title: 'REINFORCED MOON CONCRETE', text: '"Ah, aggregate. Very construction. Ninety credits."' }; },
   'dirt+person'() { this.addFollower('dirt'); return { title: 'DIRT GOLEM', text: '"The person is fine. The DIRT, however, has stood up and decided you are its parent."' }; },
   'person+rock'(names) { this.game.rep.add('kepler', -2, 'Petrified a resident', { silent: true }); this.statue(names[0]); return { title: 'PETRIFIED', text: `"${names[0] || 'They'} turned to stone. Beautiful work. I'm putting them in the lab's gallery."` }; },
-  'person+person'(names) { this.game.rep.add('kepler', 2, 'Reactor romance'); this.game.fx.pop('♥ ♥ ♥', null, { color: '#ff2e88', size: 90 }); this.spawnWanderer(names[0]); this.spawnWanderer(names[1]); return { title: 'THEY FELL IN LOVE', text: `"${names[0]} and ${names[1]} came out holding hands. Kepler wants to invite you to the wedding."` }; },
   'water+water'() { this.buffs.invert = 40; return { title: 'DEEP BLACK', text: '"You have seen the other side of light. For the next forty seconds, so will your eyes."' }; },
   'mud+person'() { this.addFollower('dirt'); return RECIPES['dirt+person'].call(this); },
-  _default() { this.game.addCredits(15, 'Fizzle'); this.game.fx.pop('FIZZLE', null, { color: '#c9c3d9', size: 50 }); return { title: 'FIZZLE', text: '"Hm. Nothing interesting. Try mixing more chaotic things. Three different ones, for instance. No, wait—"' }; },
+  _default() { this.game.addCredits(15, 'Fizzle'); this.game.fx.pop('FIZZLE', null, { color: '#c9c3d9', size: 50 }); return { title: 'FIZZLE', text: '"Hm. Nothing interesting. Try putting two living things in at once. Or three different things. No, wait—"' }; },
 };
 
-// statue for the lab gallery (kept inside the Alchemy so it can read the game)
+// statue for the lab gallery
 Alchemy.prototype.statue = function statue(name) {
   const g = this.game;
   const lab = g.world.lab;
@@ -348,4 +692,3 @@ Alchemy.prototype.statue = function statue(name) {
   f.root.userData.name = name;
   loc.group.add(f.root);
 };
-

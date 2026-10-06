@@ -16,7 +16,8 @@ import { LOCATIONS, SHOPS, FACTIONS } from './locations.js';
 import { Reputation } from './reputation.js';
 import { Events } from './events.js';
 import { GlobeMap } from './mapview.js';
-import { Alchemy } from './alchemy.js';
+import { Alchemy, MUTATIONS } from './alchemy.js';
+import { Race } from './race.js';
 import { WEAPONS } from './weapons.js';
 import { clamp, pick, mulberry32 } from './rng.js';
 import { SUN, dirFromAngles, darkness, arcDist, tangent } from './geo.js';
@@ -122,6 +123,8 @@ class Game {
     this.stats = { deliveries: 0, bestTrick: 0 };
     this.upgrades = { capacitor: 0, armor: 0, dampers: 0, spinner: 0, seeker: 0, gyro: 0, cradle: 0, flak: 0, overcharge: 0, shadow: 0, jar: 0, scatter: 0, rail: 0, mortar: 0 };
     this.load();
+    this.race = new Race(this);
+    this.alchemy.start();
     this.player.applyUpgrades(this.upgrades);
     this.player.health = this.player.maxHealth;
 
@@ -284,10 +287,27 @@ class Game {
     const buttons = [];
     if (lvl === 0) buttons.push({ label: '1 · BUY A CONTAINMENT JAR — ₵400', fn: () => this.buyJar(400) });
     else if (lvl < 3) buttons.push({ label: `1 · BIGGER JAR (+1 SLOT) — ₵${500 * lvl}`, fn: () => this.buyJar(500 * lvl) });
-    buttons.push({ label: `${buttons.length + 1} · HOW DOES THIS WORK?`, fn: () => this.dialog('DR. ZBORNAK', '"Press <b>G</b> to scoop: rock samples (the glowing crystals on the sunny side), moon dirt (anywhere), black water (stand on a black lake), or… people. Things left together in a jar start to react. Bring the jar here and press <b>X</b> to throw everything into my reactor. Mix three different things for the best results. Don\'t mix three different things."', [{ label: 'GOT IT' }]) });
+    const muts = this.alchemy.mutations.length;
+    if (muts) buttons.push({ label: `${buttons.length + 1} · CURE MY MUTATIONS — ₵${200 * muts}`, fn: () => {
+      if (this.credits < 200 * muts) { this.hud.toast(`Not enough credits (need ₵${200 * muts}).`, 2); return; }
+      this.credits -= 200 * muts; this.audio.cash(); this.alchemy.cure(); this.save();
+      this.dialog('DR. ZBORNAK', '"There. Back to boring. I kept the extra arms in a jar, for science."', [{ label: 'THANKS…?' }]);
+    } });
+    const chims = this.alchemy.chimeras.length;
+    if (chims) buttons.push({ label: `${buttons.length + 1} · MY CHIMERAS (${chims})`, fn: () => this.dialog('YOUR CHIMERAS', this.alchemy.chimeras.slice().reverse().map((c) => `<b>${c.name}</b> — ${c.parents.join(' + ')}${c.mods.length ? ` (${c.mods.join(', ')})` : ''} · ${Math.round(c.speed * 3.6)} km/h · chaos ${c.chaos}${c.wins ? ` · 🏆${c.wins}` : ''}`).join('<br>') + '<br><br><small>The newest three follow you around; the rest live in the pen behind the lab.</small>', [{ label: 'GOOD CREATURES' }]) });
+    buttons.push({ label: `${buttons.length + 1} · HOW DOES THIS WORK?`, fn: () => this.dialog('DR. ZBORNAK', '"Press <b>G</b> to scoop: rock samples (the glowing crystals on the sunny side), moon dirt (anywhere), black water (stand on a black lake), people, wild moon mites, a dazed pirate, even a whole hover-car if it fits. Things left together in a jar start to react. Bring the jar here and press <b>X</b> to throw everything into my reactor. <b>Two living things make a CHIMERA</b> — race it at the Bounce Dome Derby! One thing alone does… other things. Three different non-living things: don\'t. And the splice pod in the corner puts the jar into <i>you</i>."', [{ label: 'GOT IT' }]) });
     buttons.push({ label: `${buttons.length + 1} · LEAVE` });
     const greet = lvl ? `"Back already? Your jar holds ${2 + lvl}. What have you brought me?"` : '"Ah, a runner! Want to help science? You will need a containment jar. Everything goes in the jar. EVERYTHING."';
     this.dialog('DR. ZBORNAK', greet, buttons);
+  }
+
+  // The splice pod: put yourself in with the jar.
+  usePod() {
+    const A = this.alchemy;
+    const list = Object.values(MUTATIONS).map((m) => `<b>${m.name}</b> ← ${m.from.join(' / ')}: ${m.desc}`).join('<br>');
+    const mine = A.mutations.length ? `<br><br>You have: <b>${A.mutations.map((k) => MUTATIONS[k].name).join(', ')}</b> (${A.mutations.length}/3)` : '';
+    const buttons = A.jar.length ? [{ label: '1 · SPLICE ME WITH THE JAR', fn: () => A.spliceSelf() }, { label: '2 · ABSOLUTELY NOT' }] : [{ label: 'OK' }];
+    this.dialog('SPLICE POD', `<small>${list}</small>${mine}`, buttons);
   }
 
   buyJar(cost) {
@@ -580,7 +600,11 @@ class Game {
     const lampOn = this.lampMode === 'on' || (this.lampMode === 'auto' && dark > 0.35);
     const k = P.dead ? 0 : lampOn ? 1 : 0;
     P.lamp.intensity += (k * 9 - P.lamp.intensity) * 0.2;
-    P.glowLight.intensity += (k * 1.2 - P.glowLight.intensity) * 0.2;
+    // void skin lets you see in the dark: a wide violet glow without giving you away with a lamp
+    const voidSight = this.alchemy.mutations.includes('void') && dark > 0.35 && !P.dead;
+    P.glowLight.distance = voidSight ? 140 : 26;
+    P.glowLight.color.setHex(voidSight ? 0xb69cff : 0x9be7ff);
+    P.glowLight.intensity += ((voidSight ? 4 : k * 1.2) - P.glowLight.intensity) * 0.2;
     const isDark = dark > 0.6;
     if (isDark !== this.wasDark && this.state === 'play') {
       this.wasDark = isDark;
@@ -611,6 +635,7 @@ class Game {
     this.events.update(dt);
     this.globe.update(dt);
     this.alchemy.update(dt);
+    this.race.update(dt);
     if (this.input.pressed('KeyG')) this.alchemy.scoop();
     if (this.input.pressed('KeyX')) this.alchemy.empty();
     this.enemies.update(dt, this.time);
@@ -656,7 +681,15 @@ class Game {
     const lab = this.world.lab;
     const nearDoc = lab && z === lab.loc && P.pos.distanceTo(lab.scientist) < 8;
     const nearReactor = lab && z === lab.loc && P.pos.distanceTo(lab.reactor) < 11;
-    if (nearDoc) {
+    const nearPod = lab && z === lab.loc && P.pos.distanceTo(lab.pod) < 4;
+    const nearBooth = this.race.near(P.pos);
+    if (nearPod) {
+      this.hud.prompt(this.alchemy.jar.length ? '<b>F</b> — STEP INTO THE SPLICE POD (with your jar)' : 'SPLICE POD — BRING A FULL JAR. (<b>F</b> to read the label)');
+      if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.usePod();
+    } else if (nearBooth) {
+      this.hud.prompt('<b>F</b> — CHIMERA DERBY: ENTER A CREATURE &amp; BET');
+      if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.race.open();
+    } else if (nearDoc) {
       this.hud.prompt('<b>F</b> — TALK TO DR. ZBORNAK');
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.talkScientist();
     } else if (nearReactor) {

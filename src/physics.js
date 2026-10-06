@@ -174,7 +174,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
   const up = _up.copy(b.pos).normalize();
   b.up.copy(up);
   b.skating = !!input.skates;
-  v.addScaledVector(up, -G * dt);
+  v.addScaledVector(up, -G * (b.grounded ? 1 : params.airGravMult ?? 1) * dt);
 
   const wish = _w.copy(input.wish);
   const n = b.groundN;

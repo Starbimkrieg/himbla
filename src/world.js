@@ -778,6 +778,8 @@ export class World {
     const tmp = _v;
     for (const s of this.vehicles) {
       s.prevPos.copy(s.pos);
+      // in somebody's jar
+      if (s.captured > 0) { s.root.visible = false; if (s.col) { this.colliders.remove(s.col); s.col = null; } s.vel.set(0, 0, 0); continue; }
       if (s.wait > 0) { s.wait -= dt; s.vel.set(0, 0, 0); this.syncDeck(s, camPos); continue; }
       s.t += s.speed * s.dir * dt;
       if (s.t >= 1 || s.t <= 0) { s.t = Math.min(1, Math.max(0, s.t)); s.dir *= -1; s.wait = s.kind === 'ship' ? 2 : 5; }
@@ -883,7 +885,20 @@ export class World {
     this.put(core, loc, rx, rz, H / 2, 0, true);
     this.reactor = { loc, core, orb, ringA, ringB, spin: 1, flash: 0, base: H / 2 };
     loc.group.updateMatrixWorld(true);
-    this.lab = { loc, reactor: this.toWorld(loc, rx, 2, rz), scientist: this.toWorld(loc, 13, 0, 3.5), half: { w: W, d: D, h: H } };
+    // the splice pod: step in with a full jar and come out… improved
+    const px = -16, pz = 1;
+    const podBase = mesh(new THREE.CylinderGeometry(2.2, 2.4, 0.8, 20), toon(0x3a3550), 0.08);
+    this.put(podBase, loc, px, pz, 0.4);
+    const podTop = mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.6, 20), toon(0x3a3550), 0.08);
+    this.put(podTop, loc, px, pz, 5.6);
+    const podGlass = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 4.6, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x7dff3a, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
+    this.put(podGlass, loc, px, pz, 3.1);
+    this.put(new THREE.Mesh(new THREE.TorusGeometry(2, 0.12, 6, 24).rotateX(Math.PI / 2), glow(0x7dff3a)), loc, px, pz, 0.9);
+    const podSign = textSprite('SPLICE POD', { color: '#7dff3a', size: 50, scale: 0.35 });
+    podSign.position.set(px, 7.4, pz);
+    loc.group.add(podSign);
+    loc.group.updateMatrixWorld(true);
+    this.lab = { loc, reactor: this.toWorld(loc, rx, 2, rz), scientist: this.toWorld(loc, 13, 0, 3.5), pod: this.toWorld(loc, px, 1, pz), half: { w: W, d: D, h: H } };
     // a permanent light in the scene (never added/removed, so shaders don't recompile)
     this.reactorLight = new THREE.PointLight(0xff2e88, 0, 60, 1.5);
     this.reactorLight.position.copy(this.toWorld(loc, rx, H / 2, rz));
@@ -1022,7 +1037,7 @@ export class World {
   updateFigures(dt) {
     for (const f of this.figures) {
       const loc = f.loc;
-      f.root.visible = loc.active && loc.camDist < 450;
+      f.root.visible = !f.captured && loc.active && loc.camDist < 450;
       if (!f.root.visible) continue;
       const p = f.root.position;
       if (f.kind === 'kid') {
