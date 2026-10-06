@@ -16,6 +16,8 @@ import { LOCATIONS, SHOPS, FACTIONS } from './locations.js';
 import { Reputation } from './reputation.js';
 import { Events } from './events.js';
 import { GlobeMap } from './mapview.js';
+import { Alchemy } from './alchemy.js';
+import { WEAPONS } from './weapons.js';
 import { clamp, pick, mulberry32 } from './rng.js';
 import { SUN, dirFromAngles, darkness, arcDist, tangent } from './geo.js';
 
@@ -112,12 +114,13 @@ class Game {
     this.events = new Events(this);
     this.enemies = new Enemies(this);
     this.globe = new GlobeMap(this);
+    this.alchemy = new Alchemy(this);
     this.post = new ComicPost(this.renderer, this.camera);
     this.highlights = new Highlights(this);
 
     this.credits = 250;
     this.stats = { deliveries: 0, bestTrick: 0 };
-    this.upgrades = { capacitor: 0, armor: 0, dampers: 0, spinner: 0, seeker: 0, gyro: 0, cradle: 0, flak: 0, overcharge: 0, shadow: 0 };
+    this.upgrades = { capacitor: 0, armor: 0, dampers: 0, spinner: 0, seeker: 0, gyro: 0, cradle: 0, flak: 0, overcharge: 0, shadow: 0, jar: 0, scatter: 0, rail: 0, mortar: 0 };
     this.load();
     this.player.applyUpgrades(this.upgrades);
     this.player.health = this.player.maxHealth;
@@ -191,8 +194,10 @@ class Game {
       } else if (this.state === 'log') {
         if (esc || code === 'KeyJ') this.closeModal(esc);
       } else if (this.state === 'dialog') {
-        if (code === 'Enter' || code === 'Digit1') this.pickDialog(0);
-        else if (esc || code === 'Digit2') this.pickDialog(this.dialogButtons.length - 1, esc);
+        const n = parseInt(code.replace('Digit', ''), 10);
+        if (code === 'Enter') this.pickDialog(0);
+        else if (n >= 1 && n <= this.dialogButtons.length) this.pickDialog(n - 1);
+        else if (esc) this.pickDialog(this.dialogButtons.length - 1, esc);
       } else if (this.state === 'play') {
         if (code === 'KeyM') this.openMap();
         if (code === 'KeyJ') this.openLog();
@@ -273,6 +278,28 @@ class Game {
     ]);
   }
 
+  // Dr. Zbornak sells jars and explains the reactor.
+  talkScientist() {
+    const lvl = this.upgrades.jar || 0;
+    const buttons = [];
+    if (lvl === 0) buttons.push({ label: '1 · BUY A CONTAINMENT JAR — ₵400', fn: () => this.buyJar(400) });
+    else if (lvl < 3) buttons.push({ label: `1 · BIGGER JAR (+1 SLOT) — ₵${500 * lvl}`, fn: () => this.buyJar(500 * lvl) });
+    buttons.push({ label: `${buttons.length + 1} · HOW DOES THIS WORK?`, fn: () => this.dialog('DR. ZBORNAK', '"Press <b>G</b> to scoop: rock samples (the glowing crystals on the sunny side), moon dirt (anywhere), black water (stand on a black lake), or… people. Things left together in a jar start to react. Bring the jar here and press <b>X</b> to throw everything into my reactor. Mix three different things for the best results. Don\'t mix three different things."', [{ label: 'GOT IT' }]) });
+    buttons.push({ label: `${buttons.length + 1} · LEAVE` });
+    const greet = lvl ? `"Back already? Your jar holds ${2 + lvl}. What have you brought me?"` : '"Ah, a runner! Want to help science? You will need a containment jar. Everything goes in the jar. EVERYTHING."';
+    this.dialog('DR. ZBORNAK', greet, buttons);
+  }
+
+  buyJar(cost) {
+    if (this.credits < cost) { this.hud.toast(`Not enough credits (need ₵${cost}).`, 2); return; }
+    this.credits -= cost;
+    this.upgrades.jar = (this.upgrades.jar || 0) + 1;
+    this.alchemy.refreshJarMesh();
+    this.audio.cash();
+    this.hud.toast(`Jar holds ${this.alchemy.slots} things now. G scoops, X empties.`, 3);
+    this.save();
+  }
+
   jobsAt(loc) {
     if (!loc) return [];
     if (loc.type === 'pirate') return this.rep.aligned() && !loc.camp ? ['rustmoon', 'rustmoon'] : [];
@@ -312,7 +339,7 @@ class Game {
 
   style(points, label) {
     if (this.missions.active) this.missions.stylePool += points;
-    else this.credits += Math.round(points * 0.5);
+    else this.credits += Math.round(points * 0.3);
     if (label) this.fx.pop(`${label}! +${points}`, null, { color: '#ff7ad9', size: 44, life: 1.3 });
   }
 
@@ -363,7 +390,7 @@ class Game {
     this.input.lock();
   }
 
-  explode(pos, radius, damage, owner, knock = 1) {
+  explode(pos, radius, damage, owner, knock = 1, spare = false) {
     const big = radius > 10;
     const up = pos.clone().normalize();
     this.fx.explosion(pos, radius * 0.7, big);
@@ -372,7 +399,7 @@ class Game {
     if (dCam < 600) this.audio.boom(big);
     if (big && dCam < 200) this.cam.shake = Math.min(1.5, this.cam.shake + (1 - dCam / 200));
     if (owner !== 'player' && Math.random() < 0.5 && dCam < 150) this.fx.pop(pick(['BLAM!', 'ZAKK!', 'FWOOM!']), pos.clone().addScaledVector(up, 2), { color: '#ff4f2e', size: 46, life: 0.7 });
-    if (!P.dead) {
+    if (!P.dead && !spare) {
       const d = pos.distanceTo(P.center);
       if (d < radius + 1) {
         const f = 1 - d / (radius + 1);
@@ -519,6 +546,7 @@ class Game {
     u.time.value = this.time;
     u.speed.value = clamp((P.speed - 28) / 60, 0, 1);
     u.boost.value = P.body.thrusting ? 1 : 0;
+    u.invert.value += ((this.alchemy && this.alchemy.buffs.invert > 0 ? 1 : 0) - u.invert.value) * 0.1;
     this.damageFlash = Math.max(0, this.damageFlash - dt * 1.5);
     u.damage.value = this.damageFlash * 0.8 + (P.health / P.maxHealth < 0.25 && !P.dead ? 0.25 : 0);
     u.alert.value = this.enemies.bases.some((b) => b.inside && ((b.restricted && !b.authorized) || b.hostile)) ? 1 : 0;
@@ -582,6 +610,9 @@ class Game {
     this.missions.update(dt);
     this.events.update(dt);
     this.globe.update(dt);
+    this.alchemy.update(dt);
+    if (this.input.pressed('KeyG')) this.alchemy.scoop();
+    if (this.input.pressed('KeyX')) this.alchemy.empty();
     this.enemies.update(dt, this.time);
     this.projectiles.update(dt);
 
@@ -622,7 +653,15 @@ class Game {
     if (this.isSafe(z) && !P.dead) P.health = Math.min(P.maxHealth, P.health + (z.repair || 6) * dt);
     const canBoard = z && (this.jobsAt(z).length || (SHOPS[z.id] && (z.type !== 'pirate' || this.rep.aligned())));
     const canSwear = z && z.id === 'rustmoon' && this.rep.rustmoon === 'known';
-    if (canSwear) {
+    const lab = this.world.lab;
+    const nearDoc = lab && z === lab.loc && P.pos.distanceTo(lab.scientist) < 8;
+    const nearReactor = lab && z === lab.loc && P.pos.distanceTo(lab.reactor) < 11;
+    if (nearDoc) {
+      this.hud.prompt('<b>F</b> — TALK TO DR. ZBORNAK');
+      if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.talkScientist();
+    } else if (nearReactor) {
+      this.hud.prompt(this.alchemy.jar.length ? '<b>X</b> — THROW THE JAR\'S CONTENTS INTO THE REACTOR' : 'THE REACTOR HUNGERS. FILL A JAR (<b>G</b>) AND BRING IT HERE.');
+    } else if (canSwear) {
       this.hud.prompt('<b>F</b> — SWEAR IN WITH RUSTMOON');
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.wreckChoice();
     } else if (canBoard) {
@@ -683,6 +722,19 @@ class Game {
     const want = target.clone().addScaledVector(c.look, -c.dist).addScaledVector(up, 0.8);
     const alt = this.planet.altitude(want);
     if (alt < 1.2) want.addScaledVector(want.clone().normalize(), 1.2 - alt);
+    // keep the camera out of walls (matters indoors)
+    const span = want.clone().sub(target);
+    const L = span.length();
+    const steps = Math.ceil(L / 0.6);
+    const probe = new THREE.Vector3(), nrm = new THREE.Vector3();
+    for (let i = 1; i <= steps; i++) {
+      probe.copy(target).addScaledVector(span, i / steps);
+      let hit = false;
+      for (const col of this.colliders.query(probe, 1)) {
+        if (!col.platform && this.colliders.contact(col, probe, 0.35, nrm) > 0) { hit = true; break; }
+      }
+      if (hit) { want.copy(target).addScaledVector(span, Math.max(0.15, (i - 1) / steps)); break; }
+    }
     if (snap) c.position.copy(want);
     else c.position.lerp(want, Math.min(1, dt * 18));
     this.camera.position.copy(c.position);

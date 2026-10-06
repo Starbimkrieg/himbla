@@ -37,7 +37,7 @@ export class Missions {
   get locs() { return this.game.locations; }
 
   civilianDestinations(exclude) {
-    return this.locs.filter((l) => !l.restricted && !l.hostile && l.id !== exclude);
+    return this.locs.filter((l) => !l.restricted && !l.hostile && !l.poi && l.id !== exclude);
   }
 
   makeOffer(board, faction) {
@@ -65,10 +65,11 @@ export class Missions {
     const d2 = arcDist(to.dir, pickup.dir);
     const dist = d1 + d2;
     const dark = !!(to.dark || pickup.dark);
-    const time = Math.ceil((dist / 30 + 35 + (dark ? 25 : 0)) / 5) * 5;
-    let reward = 90 + dist * 0.12 + cargo.hot * 70 + cargo.fragile * 60;
-    if (dark) reward *= 1.6; // hazard pay for the dark side
-    if (clearance) reward += 150;
+    // tight clocks: you need to ski well, not just survive
+    const time = Math.ceil((dist / 36 + 20 + (dark ? 15 : 0)) / 5) * 5;
+    let reward = 45 + dist * 0.05 + cargo.hot * 30 + cargo.fragile * 25;
+    if (dark) reward *= 1.4; // hazard pay for the dark side
+    if (clearance) reward += 60;
     if (faction === 'rustmoon') reward *= 1.4;
     reward *= this.game.rep.payMultiplier(faction) || 1;
     reward = Math.round(reward / 5) * 5;
@@ -105,6 +106,7 @@ export class Missions {
     if (this.active) return false;
     this.active = offer;
     this.timer = offer.time;
+    this.late = false;
     this.integrity = 1;
     this.stylePool = 0;
     this.cargoState = 'toPickup';
@@ -148,7 +150,11 @@ export class Missions {
     if (!a) return;
     const g = this.game;
     this.timer -= dt;
-    if (this.timer <= 0) { this.fail('Out of time! The client found another runner.'); return; }
+    if (this.timer <= 0 && !this.late) {
+      // missed the clock: the job still pays half when you finish it
+      this.late = true;
+      g.hud.alert('OUT OF TIME — HALF PAY ON DELIVERY', '#ff9f1c', 3);
+    }
     this.checkPickup();
     const P = g.player;
     if (this.cargoState === 'held' && arcDist(P.pos, a.to.dir) < a.to.r * 0.75) this.complete();
@@ -206,12 +212,13 @@ export class Missions {
     const g = this.game;
     const a = this.active;
     const base = a.reward;
-    const integ = Math.round(base * (0.5 + 0.5 * this.integrity));
-    const timeBonus = Math.round(base * 0.4 * Math.max(0, this.timer / a.time));
-    const style = Math.round(this.stylePool * 2);
+    const lateMult = this.late ? 0.5 : 1;
+    const integ = Math.round(base * (0.5 + 0.5 * this.integrity) * lateMult);
+    const timeBonus = this.late ? 0 : Math.round(base * 0.3 * Math.max(0, this.timer / a.time));
+    const style = Math.round(this.stylePool * 1.2);
     const total = integ + timeBonus + style;
     g.addCredits(total, null);
-    const repGain = (a.premium ? 4 : 3) + (this.integrity > 0.8 ? 1 : 0);
+    const repGain = this.late ? 1 : (a.premium ? 4 : 3) + (this.integrity > 0.8 ? 1 : 0);
     g.rep.add(a.faction, repGain, `Delivered ${a.cargo.name}`);
     g.stats.deliveries++;
     g.audio.cash();

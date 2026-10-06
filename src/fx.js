@@ -99,6 +99,18 @@ export class FX {
     this.spawn(pos, up.clone().multiplyScalar(2), { color: 0x3a3550, size: radius * 0.1, life: 1.4, gravity: 1.62, count: big ? 18 : 8, spread: radius * 2.5 });
   }
 
+  // Straight energy beam that fades out (Rail Lance).
+  beam(a, b, color) {
+    const len = a.distanceTo(b);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, len, 8, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.position.lerpVectors(a, b, 0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, len, 6, 1, true), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true }));
+    m.add(core);
+    this.scene.add(m);
+    this.rings.push({ m, inner: core, t: 0, dur: 0.3, beam: true });
+  }
+
   warningRing(pos, radius, dur) {
     const m = new THREE.Mesh(new THREE.RingGeometry(radius * 0.9, radius, 40), new THREE.MeshBasicMaterial({ color: 0xff2a4a, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
     const up = pos.clone().normalize();
@@ -174,6 +186,7 @@ export class FX {
         continue;
       }
       const k = r.t / r.dur;
+      if (r.beam) { r.m.material.opacity = 1 - k; r.inner.material.opacity = 1 - k; r.m.scale.set(1 - k * 0.8, 1, 1 - k * 0.8); continue; }
       r.m.material.opacity = 0.5 + 0.5 * Math.sin(r.t * (8 + k * 20));
       r.inner.material.opacity = 0.1 + k * 0.3;
       r.inner.scale.setScalar(k);

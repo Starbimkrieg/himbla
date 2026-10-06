@@ -73,7 +73,7 @@ export class Planet {
     this.boulderInk = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
     this.colliders = null;
     // dark backing sphere hides any sub-pixel cracks between LOD levels
-    this.core = new THREE.Mesh(new THREE.SphereGeometry(R - 90, 96, 48), new THREE.MeshBasicMaterial({ color: 0x16121f }));
+    this.core = new THREE.Mesh(new THREE.SphereGeometry(R - 330, 96, 48), new THREE.MeshBasicMaterial({ color: 0x16121f }));
     scene.add(this.core);
     this.queue = [];
     this.stats = { built: 0, visible: 0 };
@@ -441,7 +441,7 @@ export class Planet {
   // Decide per chunk what LOD to show; build missing meshes within a time budget.
   update(camPos, { budgetMs = 5, maxDist = 3200 } = {}) {
     const camLen = camPos.length();
-    const rMin = R - 160, rMax = R + 260;
+    const rMin = R - 330, rMax = R + 260;
     const horizon = Math.sqrt(Math.max(0, camLen * camLen - rMin * rMin)) + Math.sqrt(rMax * rMax - rMin * rMin);
     const limit = Math.min(maxDist, horizon);
     const now = performance.now();

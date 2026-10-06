@@ -44,12 +44,13 @@ export class Reputation {
 
   visible(f) {
     if (f === 'rustmoon') return this.rustmoon !== 'unknown';
-    return !!FACTIONS[f];
+    return !!FACTIONS[f] && !FACTIONS[f].hidden;
   }
 
   aligned() { return this.rustmoon === 'aligned'; }
   hostile(f) { return this.get(f) <= -20; }
-  cleared(f) { return this.get(f) >= 25; }
+  // FRIENDLY military factions let you into their zones (and their HQ shops)
+  cleared(f) { return this.get(f) >= 10; }
 
   // Change standing. War: helping one side of Vostok/Daedalus annoys the other.
   add(f, amount, reason, { silent = false, war = true } = {}) {

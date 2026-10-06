@@ -62,7 +62,7 @@ export class Events {
   nearestSafe(dir, { lit = false } = {}) {
     let best = null, bd = Infinity;
     for (const l of this.game.locations) {
-      if (!l.safe || l.restricted || l.type === 'pirate') continue;
+      if (!l.safe || l.restricted || l.type === 'pirate' || l.poi) continue;
       if (lit && l.dark) continue;
       const d = arcDist(dir, l.dir);
       if (d < bd) { bd = d; best = l; }
@@ -116,7 +116,7 @@ export class Events {
     ev.state = 'open';
     ev.age = 0;
     ev.props = ev.props || [];
-    ev.reward = Math.round((ev.reward || 400) * Math.max(0.85, this.game.rep.payMultiplier(faction) || 1) / 10) * 10;
+    ev.reward = Math.round(((ev.reward || 400) * 0.5 * Math.max(0.8, this.game.rep.payMultiplier(faction) || 1)) / 10) * 10;
     ev.marker = this.marker(ev.start, faction, `${ICON[type] || '!'} ${ev.short || ev.title}`);
     if (ev.needsCrawler) {
       ev.model = this.makeCrawler(ev);
@@ -171,13 +171,13 @@ export class Events {
         const lake = lakes.slice().sort((a, b) => arcDist(a.d, station.dir) - arcDist(b.d, station.dir))[0];
         const dist = arcDist(lake.d, station.dir);
         return {
-          title: 'Black lake sample', short: 'SAMPLE', station, lake, time: Math.round((dist * 2) / 28 + 100),
+          title: 'Black lake sample', short: 'SAMPLE', station, lake, time: Math.round((dist * 2) / 32 + 70),
           brief: `Take a vacuum tube from ${station.name}, fill it at the black lake and bring it back. Don't slosh it — and don't crash.`,
           start: this.depot(station), startR: 18, reward: 750 + Math.round(dist * 0.15),
         };
       }
       case 'escort': {
-        const from = pick(g.locations.filter((l) => l.safe && !l.restricted && l.type !== 'pirate'));
+        const from = pick(g.locations.filter((l) => l.safe && !l.restricted && l.type !== 'pirate' && !l.poi));
         const spot = this.site(from.dir, 900, 1700);
         return {
           title: 'Downed transit', short: 'ESCORT', spotDir: spot,
@@ -191,7 +191,7 @@ export class Events {
         const center = this.site(near.dir, 600, 1300);
         const relay = type === 'relay';
         return {
-          title: relay ? 'Relay sweep' : 'Supply drop rescue', short: relay ? 'RELAYS' : 'PODS', center, count: 4, time: 140,
+          title: relay ? 'Relay sweep' : 'Supply drop rescue', short: relay ? 'RELAYS' : 'PODS', center, count: 4, time: 115,
           brief: relay ? 'A comms storm knocked out four relay beacons. Touch all of them before SPACECOM loses the link.' : 'A supply drop scattered pods across the regolith. Grab all four before they freeze.',
           start: this.ground(center), startR: 320, reward: 550,
         };

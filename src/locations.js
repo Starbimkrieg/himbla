@@ -21,6 +21,10 @@ export const FACTIONS = {
     name: 'Daedalus', color: '#c77dff', hq: 'daedalus', kind: 'Military (Dark Side)', enemy: 'vostok',
     blurb: 'A secretive dark-side military power dug into the far side. At open war with Vostok.',
   },
+  none: {
+    name: 'Unaffiliated', color: '#c9c3d9', kind: 'Independent', hidden: true,
+    blurb: 'Nobody claims these places. Possibly for good reason.',
+  },
   rustmoon: {
     name: 'Rustmoon', color: '#7dff3a', hq: 'rustmoon', kind: 'Pirate Clans', hidden: true,
     blurb: 'The pirate clans of the dark side. They remember who helped them — and who didn\'t.',
@@ -81,7 +85,7 @@ export const LOCATIONS = [
   },
   {
     id: 'farside', name: 'Farside Listening Post', short: 'FARSIDE', type: 'research', faction: 'spacecom',
-    theta: 128, phi: 12, r: 115, jobs: ['spacecom', 'meridian'], safe: true, repair: 4, dark: true, defense: { ring: 95, turrets: 3 },
+    theta: 128, phi: 12, r: 115, jobs: ['spacecom', 'meridian', 'daedalus'], safe: true, repair: 4, dark: true, defense: { ring: 95, turrets: 3 },
     blurb: 'SPACECOM radio-quiet observatory. No Earth chatter — just pirates.',
   },
   {
@@ -98,6 +102,21 @@ export const LOCATIONS = [
     id: 'daedalus2', name: 'Daedalus Forward Post', short: 'DAED-FWD', type: 'military', faction: 'daedalus', small: true,
     theta: 118, phi: 95, r: 80, zoneR: 260, restricted: true, dark: true,
     blurb: 'Daedalus listening bunker pointed straight at Vostok.',
+  },
+  {
+    id: 'antimatter', name: 'Antimatter Research Lab', short: 'ANTIMATTER', type: 'lab', faction: 'none', poi: true,
+    theta: 40, phi: -125, r: 120, safe: true, repair: 4,
+    blurb: 'Dr. Zbornak\'s private lab. There is a very large, very unstable reactor inside. Bring him things.',
+  },
+  {
+    id: 'monolith', name: 'The Monolith', short: 'MONOLITH', type: 'monolith', faction: 'none', poi: true,
+    theta: 62, phi: -95, r: 60,
+    blurb: 'A perfectly black slab nobody admits to building. It hums when you get close.',
+  },
+  {
+    id: 'bounce', name: 'Bounce Dome Funpark', short: 'BOUNCE', type: 'funpark', faction: 'none', poi: true,
+    theta: 30, phi: 135, r: 110, safe: true, repair: 6,
+    blurb: 'Abandoned inflatable theme park. The domes still hold air. Great for tricks.',
   },
   {
     id: 'gulch', name: 'Scrapjaw Gulch', short: 'GULCH', type: 'pirate', faction: 'rustmoon',
@@ -153,35 +172,38 @@ export const CLIENTS = {
 // Reputation tiers. Contract pay scales with tier; faction gear unlocks by tier.
 export const TIERS = [
   { min: -Infinity, name: 'HOSTILE', color: '#ff2a4a', pay: 0 },
-  { min: -20, name: 'WARY', color: '#ff9f1c', pay: 0.85 },
+  { min: -20, name: 'WARY', color: '#ff9f1c', pay: 0.8 },
   { min: 0, name: 'NEUTRAL', color: '#c9c3d9', pay: 1 },
-  { min: 10, name: 'FRIENDLY', color: '#7dff6a', pay: 1.2 },
-  { min: 25, name: 'TRUSTED', color: '#2ec4ff', pay: 1.45 },
-  { min: 50, name: 'HONORED', color: '#ffd23f', pay: 1.75 },
+  { min: 10, name: 'FRIENDLY', color: '#7dff6a', pay: 1.4 },
+  { min: 25, name: 'TRUSTED', color: '#2ec4ff', pay: 1.85 },
+  { min: 50, name: 'HONORED', color: '#ffd23f', pay: 2.4 },
 ];
 
 // Faction gear sold at each headquarters; each level needs a higher reputation.
 export const SHOPS = {
   ilmb: [
-    { key: 'capacitor', name: 'Flux Capacitor', desc: '+25 thruster energy', cost: 400, max: 3 },
-    { key: 'armor', name: 'Ablative Suit Plating', desc: '+25 max health', cost: 350, max: 3 },
-    { key: 'dampers', name: 'Mag-Cushion Dampers', desc: 'Safer hard landings, less cargo jostle', cost: 450, max: 3 },
-    { key: 'spinner', name: 'Pulse Spinner Mk+', desc: '+30% Pulse Spinner damage', cost: 500, max: 3 },
-    { key: 'seeker', name: 'SPACECOM Seeker Module', desc: 'Pulse discs home in harder on targets', cost: 550, max: 3, faction: 'spacecom', req: [0, 10, 25] },
+    { key: 'capacitor', name: 'Flux Capacitor', desc: '+25 thruster energy', cost: 600, max: 3 },
+    { key: 'armor', name: 'Ablative Suit Plating', desc: '+25 max health', cost: 550, max: 3 },
+    { key: 'dampers', name: 'Mag-Cushion Dampers', desc: 'Safer hard landings, less cargo jostle', cost: 650, max: 3 },
+    { key: 'spinner', name: 'Weapon Tuning Kit', desc: '+30% damage for every weapon', cost: 750, max: 3 },
+    { key: 'seeker', name: 'SPACECOM Seeker Module', desc: 'Pulse discs home in harder on targets', cost: 800, max: 3, faction: 'spacecom', req: [0, 10, 25] },
   ],
   meridian: [
-    { key: 'gyro', name: 'Meridian Gyro-Edges', desc: 'Sharper ground steering on skates', cost: 450, max: 3, faction: 'meridian', req: [0, 10, 25] },
+    { key: 'gyro', name: 'Meridian Gyro-Edges', desc: 'Sharper ground steering on skates', cost: 700, max: 3, faction: 'meridian', req: [0, 10, 25] },
   ],
   kepler: [
-    { key: 'cradle', name: 'Kepler Cargo Cradle', desc: 'Cargo, tubes & tools take 30% less damage', cost: 400, max: 3, faction: 'kepler', req: [0, 10, 25] },
+    { key: 'cradle', name: 'Kepler Cargo Cradle', desc: 'Cargo, tubes, jars & tools take 30% less damage', cost: 600, max: 3, faction: 'kepler', req: [0, 10, 25] },
   ],
   vostok: [
-    { key: 'flak', name: 'Vostok Flak Weave', desc: '+20 max health, less blast knockback', cost: 500, max: 3, faction: 'vostok', req: [5, 15, 30] },
+    { key: 'scatter', name: 'Vostok Scattergun', desc: 'WEAPON (key 2): seven-pellet close-range blast', cost: 1400, max: 1, faction: 'vostok', req: [10], weapon: true },
+    { key: 'flak', name: 'Vostok Flak Weave', desc: '+20 max health, less blast knockback', cost: 750, max: 3, faction: 'vostok', req: [5, 15, 30] },
   ],
   daedalus: [
-    { key: 'overcharge', name: 'Daedalus Overcharger', desc: 'Faster Pulse Spinner fire rate', cost: 550, max: 3, faction: 'daedalus', req: [5, 15, 30] },
+    { key: 'rail', name: 'Daedalus Rail Lance', desc: 'WEAPON (key 3): instant piercing beam, long range', cost: 1600, max: 1, faction: 'daedalus', req: [10], weapon: true },
+    { key: 'overcharge', name: 'Daedalus Overcharger', desc: 'Faster fire rate for every weapon', cost: 800, max: 3, faction: 'daedalus', req: [5, 15, 30] },
   ],
   rustmoon: [
-    { key: 'shadow', name: 'Rustmoon Shadow Rig', desc: 'Lawmen and turrets have a harder time hitting you', cost: 500, max: 3, faction: 'rustmoon', req: [0, 15, 35] },
+    { key: 'mortar', name: 'Rustmoon Junk Mortar', desc: 'WEAPON (key 4): lobbed scrap bomb, huge blast', cost: 1200, max: 1, faction: 'rustmoon', req: [5], weapon: true },
+    { key: 'shadow', name: 'Rustmoon Shadow Rig', desc: 'Lawmen and turrets have a harder time hitting you', cost: 750, max: 3, faction: 'rustmoon', req: [0, 15, 35] },
   ],
 };

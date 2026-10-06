@@ -39,6 +39,7 @@ export class World {
     for (const loc of locations) this.buildLocation(loc);
     this.buildTraffic();
     this.buildLakes();
+    this.buildCrystals();
   }
 
   r() { return this.rand(); }
@@ -310,6 +311,9 @@ export class World {
       case 'trade': this.buildTrade(loc); break;
       case 'military': this.buildMilitary(loc); break;
       case 'pirate': loc.camp ? this.buildCamp(loc) : this.buildGulch(loc); break;
+      case 'lab': this.buildLab(loc); break;
+      case 'monolith': this.buildMonolith(loc); break;
+      case 'funpark': this.buildFunpark(loc); break;
     }
     if (loc.dark && loc.type !== 'pirate') {
       // dark-side settlements ring themselves with lamps
@@ -365,9 +369,11 @@ export class World {
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(32, 20), new THREE.MeshBasicMaterial({ map: this.highlightTex }));
     screen.position.set(0, 14, 0.85);
     hall.add(screen);
-    this.put(hall, loc, -44, 92, 0, 0);
-    this.col(loc, { type: 'box', x: -44, y: 12, z: 92, hx: 17, hy: 12, hz: 1.2 });
-    this.highlightSpot = { loc, x: -44, z: 92 };
+    // open ground between the job board and the Meridian embassy, angled toward the arrival point
+    const hx = 44, hz = 72, hyaw = Math.atan2(0 - hx, 108 - hz);
+    this.put(hall, loc, hx, hz, 0, hyaw);
+    this.col(loc, { type: 'box', x: hx, y: 12, z: hz, hx: 17, hy: 12, hz: 1.2, yaw: hyaw });
+    this.highlightSpot = { loc, x: hx, z: hz };
 
     // repair bay hangar
     const hangar = mesh(new THREE.CylinderGeometry(16, 16, 34, 20, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2), toon(0xff9f1c), 0.25);
@@ -729,6 +735,20 @@ export class World {
     }
     for (const z of this.zoneWalls) z.mat.uniforms.time.value = time;
     if (this.lakeMat) this.lakeMat.uniforms.time.value = time;
+    if (this.reactor && this.reactor.loc.active) {
+      const r = this.reactor;
+      const k = r.spin + r.flash * 6;
+      r.orb.rotation.x += dt * 9 * k; r.orb.rotation.y += dt * 13 * k;
+      r.ringA.rotation.x += dt * 17 * k; r.ringB.rotation.y += dt * 21 * k; r.ringB.rotation.z += dt * 5;
+      r.core.position.y = r.base + Math.sin(time * 37) * 0.25 * k;
+      r.core.position.x = -2 + (Math.random() - 0.5) * 0.25 * k;
+      r.orb.scale.setScalar(1 + Math.sin(time * 23) * 0.12 + r.flash * 0.8);
+      r.flash = Math.max(0, r.flash - dt * 0.8);
+      const near = camPos.distanceTo(this.lab.reactor);
+      this.reactorLight.intensity = near < 80 ? (6 + r.flash * 30) * (0.8 + Math.random() * 0.4) : 0;
+    } else if (this.reactorLight) this.reactorLight.intensity = 0;
+    if (this.monolith && this.monolith.loc.active) this.monolith.halo.material.opacity = 0.3 + 0.25 * Math.sin(time * 2);
+    if (this.crystals) for (const c of this.crystals) c.mesh.visible = !c.taken && c.pos.distanceToSquared(camPos) < 450 * 450;
 
     this.updateRocket(dt, camPos);
     this.updateTraffic(dt, camPos);
@@ -804,6 +824,147 @@ export class World {
     c.ax.set(1, 0, 0).applyQuaternion(q); c.ay.set(0, 1, 0).applyQuaternion(q); c.az.set(0, 0, 1).applyQuaternion(q);
     c.hx = s.deck[0]; c.hy = s.deck[1]; c.hz = s.deck[2];
     s.col = this.colliders.add(c);
+  }
+
+  // ---------- strange places ----------
+
+  // Dr. Zbornak's lab: a hollow building you can walk into, with a violently spinning
+  // antimatter reactor in a glass tube in the middle.
+  buildLab(loc) {
+    const W = 22, D = 16, H = 16, T = 1;
+    const wall = (x, z, w, d) => {
+      const m = mesh(new THREE.BoxGeometry(w, H, d), toon(0xe8e4f4), 0.15);
+      this.put(m, loc, x, z, H / 2);
+      this.col(loc, { type: 'box', x, y: H / 2, z, hx: w / 2, hy: H / 2, hz: d / 2 });
+    };
+    wall(0, -D, W * 2, T * 2);
+    wall(-W, 0, T * 2, D * 2);
+    wall(W, 0, T * 2, D * 2);
+    wall(-13, D, 18, T * 2);
+    wall(13, D, 18, T * 2);
+    const roof = mesh(new THREE.BoxGeometry(W * 2 + 2, 1.5, D * 2 + 2), toon(0x3a3550), 0.15);
+    this.put(roof, loc, 0, 0, H + 0.75);
+    this.col(loc, { type: 'box', x: 0, y: H + 0.75, z: 0, hx: W + 1, hy: 0.75, hz: D + 1 });
+    // hazard stripes over the door + a warning sign
+    const stripe = mesh(new THREE.BoxGeometry(8, 1.2, 0.3), toon(0xffd23f), 0.05);
+    this.put(stripe, loc, 0, D + 1.1, H - 2);
+    const sign = textSprite('☢ ANTIMATTER — KNOCK FIRST', { color: '#ffd23f', size: 60, scale: 0.55, bg: '#120a1e' });
+    sign.position.set(0, H + 5, D + 2);
+    loc.group.add(sign);
+    // interior: checker floor, glowing strip lights, shelves, the counter
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W * 2 - 2, D * 2 - 2, 1, 1), new THREE.MeshToonMaterial({ map: this.checker(), gradientMap: toon(0).gradientMap }));
+    floor.rotation.x = -Math.PI / 2;
+    this.put(floor, loc, 0, 0, 0.06);
+    for (const z of [-10, 0, 10]) this.put(new THREE.Mesh(new THREE.BoxGeometry(W * 2 - 4, 0.3, 0.6), glow(0xc77dff)), loc, 0, z, H - 0.4);
+    for (const x of [-18, -12]) {
+      const shelf = mesh(new THREE.BoxGeometry(4, 7, 2.5), toon(0x5b5870), 0.06);
+      this.put(shelf, loc, x, -13, 3.5);
+      for (let k = 0; k < 3; k++) this.put(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.2, 8), glow([0x7dff3a, 0xff2e88, 0x2ec4ff][k])), loc, x - 1.2 + k * 1.2, -12, 5.5);
+    }
+    const counter = mesh(new THREE.BoxGeometry(8, 2.2, 2.5), toon(0x2ec4ff), 0.08);
+    this.put(counter, loc, 13, 6, 1.1);
+    this.col(loc, { type: 'box', x: 13, y: 1.1, z: 6, hx: 4, hy: 1.1, hz: 1.25 });
+    const doc = makeFigure({ suit: 0xffffff, helmet: 0xfff4e0, visor: 0x7dff3a });
+    this.put(doc.root, loc, 13, 3.5, 0, 0);
+    const docSign = textSprite('DR. ZBORNAK', { color: '#7dff3a', size: 50, scale: 0.35 });
+    docSign.position.set(13, 4.5, 3.5);
+    loc.group.add(docSign);
+    // the reactor
+    const rx = -2, rz = -3;
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, H - 1, 28, 1, true), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
+    this.put(tube, loc, rx, rz, H / 2);
+    for (const y of [0.6, H - 1]) this.put(mesh(new THREE.CylinderGeometry(3.8, 3.8, 1.2, 28), toon(0x3a3550), 0.08), loc, rx, rz, y);
+    this.col(loc, { type: 'cyl', x: rx, z: rz, y0: -1, y1: H, r: 3.6 });
+    const core = new THREE.Group();
+    const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 1), glow(0xff2e88));
+    const ringA = new THREE.Mesh(new THREE.TorusGeometry(2.3, 0.18, 8, 32), glow(0x7dff3a));
+    const ringB = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.14, 8, 32), glow(0x2ee6ff));
+    core.add(orb, ringA, ringB);
+    this.put(core, loc, rx, rz, H / 2, 0, true);
+    this.reactor = { loc, core, orb, ringA, ringB, spin: 1, flash: 0, base: H / 2 };
+    loc.group.updateMatrixWorld(true);
+    this.lab = { loc, reactor: this.toWorld(loc, rx, 2, rz), scientist: this.toWorld(loc, 13, 0, 3.5), half: { w: W, d: D, h: H } };
+    // a permanent light in the scene (never added/removed, so shaders don't recompile)
+    this.reactorLight = new THREE.PointLight(0xff2e88, 0, 60, 1.5);
+    this.reactorLight.position.copy(this.toWorld(loc, rx, H / 2, rz));
+    this.scene.add(this.reactorLight);
+  }
+
+  checker() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const x = c.getContext('2d');
+    x.fillStyle = '#e8e4f4'; x.fillRect(0, 0, 64, 64);
+    x.fillStyle = '#3a3550'; x.fillRect(0, 0, 32, 32); x.fillRect(32, 32, 32, 32);
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(10, 8);
+    t.magFilter = THREE.NearestFilter;
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+
+  buildMonolith(loc) {
+    const slab = mesh(new THREE.BoxGeometry(6, 26, 1.6), new THREE.MeshBasicMaterial({ color: 0x050308 }), 0.2);
+    this.put(slab, loc, 0, 0, 13);
+    this.col(loc, { type: 'box', x: 0, y: 13, z: 0, hx: 3, hy: 13, hz: 0.8 });
+    const halo = new THREE.Mesh(new THREE.RingGeometry(16, 17, 64), new THREE.MeshBasicMaterial({ color: 0xc77dff, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
+    halo.rotation.x = -Math.PI / 2;
+    this.put(halo, loc, 0, 0, 0.2);
+    this.monolith = { loc, pos: this.toWorld(loc, 0, 2, 0), cd: 0, halo };
+  }
+
+  buildFunpark(loc) {
+    const cols = [0xff2e88, 0xffd23f, 0x2ee6ff, 0x7dff6a, 0xff9f1c, 0xc77dff];
+    const spots = [[0, 0, 26], [55, 20, 16], [-50, 30, 18], [20, -60, 20], [-40, -50, 14], [70, -40, 12], [-80, -10, 12]];
+    spots.forEach(([x, z, r], i) => {
+      const g = new THREE.Group();
+      const top = mesh(new THREE.SphereGeometry(r, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), toon(cols[i % cols.length]), 0.25);
+      g.add(top);
+      const band = mesh(new THREE.TorusGeometry(r * 0.75, r * 0.08, 6, 24), toon(cols[(i + 2) % cols.length]), 0.1);
+      band.rotation.x = Math.PI / 2;
+      band.position.y = r * 0.62;
+      g.add(band);
+      this.put(g, loc, x, z, -0.5);
+      const c = this.col(loc, { type: 'sphere', x, y: -0.5, z, r });
+      c.bouncy = true;
+    });
+    // a bouncy castle
+    const castle = mesh(new THREE.BoxGeometry(24, 6, 24), toon(0xff2e88), 0.2);
+    this.put(castle, loc, 0, 70, 3);
+    const cc = this.col(loc, { type: 'box', x: 0, y: 3, z: 70, hx: 12, hy: 3, hz: 12 });
+    cc.bouncy = true;
+    for (const [x, z] of [[-12, 58], [12, 58], [-12, 82], [12, 82]]) this.put(mesh(new THREE.CylinderGeometry(2, 2, 10, 10), toon(0xffd23f), 0.08), loc, x, z, 5);
+    this.addFigures(loc, 4, { kind: 'kid', look: (i) => ({ suit: cols[i], scale: 0.55 }) });
+  }
+
+  // Glowing crystal rock samples scattered across the sunlit side, for the jar.
+  buildCrystals() {
+    const P = this.planet;
+    const rr = mulberry32(5150);
+    this.crystals = [];
+    const geo = new THREE.OctahedronGeometry(1, 0);
+    const mats = [glow(0x2ee6ff), glow(0x7dff6a), glow(0xc77dff)];
+    for (let tries = 0; tries < 2000 && this.crystals.length < 150; tries++) {
+      const u = rr() * 2 - 1, th = rr() * Math.PI * 2, sq = Math.sqrt(1 - u * u);
+      const d = new THREE.Vector3(sq * Math.cos(th), u, sq * Math.sin(th));
+      if (d.dot(SUN) < 0.1) continue;
+      if (this.locations.some((l) => arcDist(d, l.dir) < (l.zoneR || l.r) * 1.5)) continue;
+      const p = P.ground(d, new THREE.Vector3());
+      const g = new THREE.Group();
+      for (let k = 0; k < 3; k++) {
+        const m = new THREE.Mesh(geo, mats[k % 3]);
+        m.scale.set(0.5, 1.2 + rr(), 0.5);
+        m.position.set((rr() - 0.5) * 1.6, 0.8, (rr() - 0.5) * 1.6);
+        m.rotation.set((rr() - 0.5) * 0.6, rr() * 3, (rr() - 0.5) * 0.6);
+        g.add(m);
+      }
+      g.position.copy(p);
+      frameQuat(d, new THREE.Vector3(1, 0, 0), g.quaternion);
+      g.visible = false;
+      this.scene.add(g);
+      this.crystals.push({ pos: p, mesh: g, taken: false });
+    }
   }
 
   // Black lakes: still pools of dark liquid filling crater floors, mostly on the dark side.

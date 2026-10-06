@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FACTIONS } from './locations.js';
 import { arcDist, darkness } from './geo.js';
+import { WEAPONS } from './weapons.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -54,7 +55,7 @@ export class HUD {
   banner(loc) {
     const el = $('banner');
     const f = FACTIONS[loc.faction];
-    const kind = { hub: 'INTERNATIONAL HUB', civilian: 'CIVILIAN HABITAT', research: 'RESEARCH FACILITY', military: 'MILITARY — RESTRICTED', industrial: 'INDUSTRIAL OUTPOST', pirate: 'PIRATE TERRITORY' }[loc.type];
+    const kind = { trade: 'TRADE HUB', lab: 'STRANGE PLACE — RESEARCH', monolith: 'STRANGE PLACE', funpark: 'STRANGE PLACE — FUNPARK', hub: 'INTERNATIONAL HUB', civilian: 'CIVILIAN HABITAT', research: 'RESEARCH FACILITY', military: 'MILITARY — RESTRICTED', industrial: 'INDUSTRIAL OUTPOST', pirate: 'PIRATE TERRITORY' }[loc.type];
     el.innerHTML = `<div class="b-kind" style="background:${f.color}">${kind}</div><div class="b-name">${loc.name}</div><div class="b-blurb">${loc.blurb}</div>`;
     el.classList.remove('hidden');
     el.classList.remove('slam'); void el.offsetWidth; el.classList.add('slam');
@@ -69,7 +70,7 @@ export class HUD {
       <div class="r-sub">${info.a.cargo.name} → ${info.a.to.name}</div>
       <table>
         <tr><td>Contract (${Math.round(info.integrity * 100)}% intact)</td><td>₵${info.integ}</td></tr>
-        <tr><td>Speed bonus</td><td>₵${info.timeBonus}</td></tr>
+        <tr><td>${info.timeBonus ? 'Speed bonus' : 'Late — half pay'}</td><td>₵${info.timeBonus}</td></tr>
         <tr><td>Style</td><td>₵${info.style}</td></tr>
         <tr class="tot"><td>TOTAL</td><td>₵${info.total}</td></tr>
       </table>
@@ -174,6 +175,11 @@ export class HUD {
     sk.textContent = on ? 'Q-LOCK: ENGAGED' : 'Q-LOCK: OFF (BOOTS)';
     sk.classList.toggle('on', on);
     $('credits').textContent = `₵${g.credits}`;
+    const wi = P.weapon || 0;
+    const wtxt = WEAPONS.map((w, i) => `<span class="${i === wi ? 'on' : ''} ${(!w.unlock || g.upgrades[w.unlock]) ? '' : 'locked'}">${i + 1}</span>`).join('') + ` ${WEAPONS[wi].name.toUpperCase()}`;
+    if (wtxt !== this.lastW) { $('weaponchip').innerHTML = wtxt; this.lastW = wtxt; }
+    const jt = g.alchemy ? g.alchemy.hudText() : '';
+    if (jt !== this.lastJar) { $('jarchip').innerHTML = jt; $('jarchip').classList.toggle('hidden', !jt); this.lastJar = jt; }
     $('style').textContent = ms.active ? `STYLE +${Math.round(ms.stylePool)}` : '';
 
     const mp = $('mission');
@@ -181,12 +187,12 @@ export class HUD {
       const a = ms.active;
       const obj = ms.objective();
       mp.classList.remove('hidden');
-      const t = Math.max(0, ms.timer);
+      const t = Math.abs(ms.timer);
       const dist = obj ? arcDist(obj.pos, P.pos) : 0;
       mp.innerHTML = `<div class="m-head" style="background:${FACTIONS[a.faction].color}">CONTRACT · ${a.client}</div>
         <div class="m-cargo">${a.cargo.name}</div>
         <div class="m-obj">${obj ? obj.label : ''} <span>${(dist / 1000).toFixed(2)} km</span></div>
-        <div class="m-row"><span class="m-timer ${t < 15 ? 'low' : ''}">${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}</span>
+        <div class="m-row"><span class="m-timer ${ms.late || t < 15 ? 'low' : ''}">${ms.late ? 'LATE +' : ''}${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}</span>
         <span class="m-int">CARGO ${Math.round(ms.integrity * 100)}%</span></div>`;
     } else {
       mp.classList.add('hidden');

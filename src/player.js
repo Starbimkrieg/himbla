@@ -3,6 +3,7 @@ import { PHYS } from './config.js';
 import { makeBody, stepSkater } from './physics.js';
 import { makeRunner, makeCrate } from './models.js';
 import { frameQuat } from './geo.js';
+import { WEAPONS, weaponUnlocked, fireWeapon } from './weapons.js';
 
 const SPEED_MARKS = [
   { kmh: 150, text: 'WHOOSH!' },
@@ -141,6 +142,12 @@ export class Player {
       ctrl.jump = false;
     }
     if (b.jumped) { g.audio.jump(); g.fx.dust(b.pos, b.vel, 6, up); }
+    if (b.bounced > 6) {
+      g.fx.pop(b.bounced > 25 ? 'BOOOING!' : 'BOING!', null, { color: '#ff7ad9', size: 40 + Math.min(40, b.bounced) });
+      g.audio.tone(220 + b.bounced * 8, 0.3, 'sine', 0.2, 2);
+      if (b.bounced > 20) g.style(Math.round(b.bounced / 2), null);
+    }
+    b.bounced = 0;
     // velocities on a deck are relative to it; convert when stepping on or off
     if (!plat && b.platform) { b.vel.sub(b.platform.vel); g.fx.pop('ALL ABOARD!', null, { color: '#2ee6ff', size: 44, life: 1 }); }
     else if (plat && b.platform !== plat) { b.vel.add(plat.vel); if (b.platform) b.vel.sub(b.platform.vel); }
@@ -173,16 +180,20 @@ export class Player {
       } else if (this.speedMarks[i] && kmh < m.kmh - 60) this.speedMarks[i] = false;
     });
 
-    // weapon: Pulse Spinner
+    // weapons: 1-4 to switch, left mouse to fire
+    for (let i = 0; i < WEAPONS.length; i++) {
+      if (!input.pressed('Digit' + (i + 1))) continue;
+      if (weaponUnlocked(WEAPONS[i], g.upgrades)) { this.weapon = i; g.hud.toast(WEAPONS[i].name.toUpperCase(), 1.2); }
+      else g.hud.toast(`${WEAPONS[i].name} — not unlocked yet`, 1.5);
+    }
+    const w = WEAPONS[this.weapon || 0];
     this.fireCd -= dt;
     if (input.mouse[0] && this.fireCd <= 0 && input.locked) {
-      this.fireCd = this.fireDelay || 0.55;
+      this.fireCd = w.delay * (1 - 0.15 * (g.upgrades.overcharge || 0));
       const muzzle = this.center.clone().addScaledVector(cam.right, 0.5).addScaledVector(up, 0.3);
       const aim = cam.position.clone().addScaledVector(cam.look, 350);
       const dir = aim.sub(muzzle).normalize();
-      const vel = dir.multiplyScalar(115).addScaledVector(b.vel, 0.5);
-      g.projectiles.fire('player', muzzle, vel, { damage: 34 * (this.damageMult || 1), splash: 7, color: 0x9be7ff, size: 0.45, knock: 1.6, homing: this.homing || 0.9 });
-      g.audio.shoot();
+      fireWeapon(g, w, muzzle, dir, b.vel, this.damageMult || 1, this.homing || 0.9);
     }
 
     if (b.onLake && b.grounded && !b.skating) b.vel.multiplyScalar(1 - Math.min(1, 2.5 * dt)); // wading
@@ -259,8 +270,13 @@ export class Player {
 
   onImpact(it, skates) {
     const g = this.game;
-    const safe = skates ? this.params.skateSafeImpact : this.params.bootSafeImpact;
+    const safe = (g.alchemy && g.alchemy.buffs.cushion > 0) ? 1e9 : skates ? this.params.skateSafeImpact : this.params.bootSafeImpact;
     if (it.speed > 6) g.audio.thud(it.speed);
+    if (g.alchemy && g.alchemy.buffs.bouncy > 0 && it.kind === 'ground' && it.speed > 5) {
+      this.body.bounceReady = Math.max(this.body.bounceReady || 0, it.speed);
+      g.fx.pop('BOING!', null, { color: '#ff7ad9', size: 44 });
+      return;
+    }
     if (it.speed > safe) {
       const dmg = (it.speed - safe) * this.params.impactDamage;
       g.damagePlayer(dmg, 'impact');

@@ -21,7 +21,7 @@ export class Projectiles {
     this.inkMat = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
   }
 
-  fire(owner, pos, vel, { damage = 20, splash = 5, color = 0x9be7ff, size = 0.45, life = 4, gravity = 0, knock = 1, homing = 0 } = {}) {
+  fire(owner, pos, vel, { damage = 20, splash = 5, color = 0x9be7ff, size = 0.45, life = 4, gravity = 0, knock = 1, homing = 0, spare = false } = {}) {
     const mesh = new THREE.Mesh(this.geo, new THREE.MeshBasicMaterial({ color }));
     const hull = new THREE.Mesh(this.geo, this.inkMat);
     hull.scale.setScalar(1.35);
@@ -29,7 +29,7 @@ export class Projectiles {
     mesh.scale.setScalar(size);
     mesh.position.copy(pos);
     this.game.scene.add(mesh);
-    this.list.push({ owner, mesh, pos: pos.clone(), prev: pos.clone(), vel: vel.clone(), damage, splash, life, gravity, knock, size, color, homing, age: 0 });
+    this.list.push({ owner, mesh, pos: pos.clone(), prev: pos.clone(), vel: vel.clone(), damage, splash, life, gravity, knock, size, color, homing, spare, age: 0 });
   }
 
   update(dt) {
@@ -68,10 +68,17 @@ export class Projectiles {
         } else {
           if (!g.player.dead && segSphere(p.prev, p.pos, g.player.center, 1.3)) hit = true;
           for (const o of g.events.protect) if (!o.dead && segSphere(p.prev, p.pos, o.center, o.radius + 0.4)) { hit = true; break; }
+          // defense turrets fire on pirates too
+          if (!hit && p.owner === 'mil') {
+            for (const t of g.enemies.targets()) {
+              if (t.faction !== 'pirate' || t.kind === 'core') continue;
+              if (segSphere(p.prev, p.pos, t.center, t.radius + 0.4)) { hit = true; break; }
+            }
+          }
         }
       }
       if (hit) {
-        g.explode(p.pos, p.splash, p.damage, p.owner, p.knock, p.color);
+        g.explode(p.pos, p.splash, p.damage, p.owner, p.knock, p.spare);
         g.scene.remove(p.mesh);
         p.mesh.material.dispose();
         this.list.splice(i, 1);

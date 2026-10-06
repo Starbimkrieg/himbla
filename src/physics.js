@@ -302,6 +302,14 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
       b.pos.addScaledVector(_n, pen);
       cp.addScaledVector(_n, pen);
       const vn = v.dot(_n);
+      if (vn < 0 && c.bouncy) {
+        // inflatable: always springs you back out, harder than you came in
+        v.addScaledVector(_n, -vn * 2.15 + 4);
+        b.grounded = false;
+        b.sinceContact = 1;
+        b.bounced = Math.max(b.bounced || 0, -vn);
+        continue;
+      }
       if (vn < 0) {
         if (_n.dot(up) > 0.55) {
           // walkable top surface (dome roofs, rooftops): glide over it

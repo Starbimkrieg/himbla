@@ -273,3 +273,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #05030c; col
 #globe { width: min(760px, 92vmin); height: min(760px, 92vmin); cursor: grab; border: 6px solid var(--ink); border-radius: 12px; box-shadow: 10px 10px 0 var(--ink); background: #05030c; }
 #globe-tip { position: fixed; z-index: 50; max-width: 280px; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 6px 10px; font-size: 13px; pointer-events: none; }
 #globe-tip b { font-family: var(--comic); font-size: 18px; }
+
+#weaponchip { margin-top: 6px; font-family: var(--comic); font-size: 15px; display: flex; align-items: center; gap: 3px; }
+#weaponchip span { display: inline-block; width: 18px; text-align: center; background: #3a3550; color: #c9c3d9; border: 2px solid var(--ink); }
+#weaponchip span.on { background: var(--yellow); color: var(--ink); }
+#weaponchip span.locked { opacity: 0.35; }
+#jarchip { margin-top: 5px; font-family: var(--comic); font-size: 17px; letter-spacing: 1px; }
+#jarchip span { display: inline-block; width: 22px; text-align: center; font-size: 18px; -webkit-text-stroke: 1px var(--ink); }
+#jarchip .empty-slot { color: #999; }
+#jarchip i { font-family: var(--body); font-size: 12px; color: var(--violet); }
+#jarchip .buffs { font-size: 14px; color: var(--pink); }

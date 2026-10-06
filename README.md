@@ -32,7 +32,9 @@ Click **START YOUR SHIFT!** to lock the mouse.
 | `Q` + `W`/`S` (air) | Front / back flips |
 | `Q` + `A`/`D` (air) | Spins |
 | `L` | Helmet lamp: auto / off / on |
-| Left mouse | Pulse Spinner: slightly homing discs; their splash knocks you around too, so you can disc-jump |
+| Left mouse | Fire the selected weapon (the Pulse Spinner homes slightly; its splash can disc-jump you) |
+| `1` `2` `3` `4` | Switch weapon: Pulse Spinner, Vostok Scattergun, Daedalus Rail Lance, Rustmoon Junk Mortar |
+| `G` / `X` | Scoop into your containment jar / empty it (into the antimatter reactor when you're beside it) |
 | `F` | Job board / upgrades (inside hubs and settlements) |
 | `M` | Globe map: drag to spin, scroll to zoom. Fog of war covers anywhere you haven't been |
 | `J` | Reputation Log |
@@ -99,7 +101,10 @@ Daedalus, and vice versa.
 - **Faction gear:** each HQ sells unique gear gated by reputation: SPACECOM Seeker Module (homing),
   Meridian Gyro-Edges (steering), Kepler Cargo Cradle (protects cargo and tubes), Vostok Flak Weave
   (health, knockback), Daedalus Overcharger (fire rate) and Rustmoon Shadow Rig (harder to hit).
-- **Clearance:** TRUSTED with Vostok or Daedalus grants permanent clearance in their zones.
+- **Clearance:** FRIENDLY (10+) with Vostok or Daedalus means their turrets stop shooting you and you
+  can visit their HQ shops. Each completed event for them gives +8, so two events get you there.
+- **Weapons:** the military HQs sell weapons. The Vostok Scattergun needs FRIENDLY Vostok and the
+  Daedalus Rail Lance needs FRIENDLY Daedalus. Rustmoon Hold sells the Junk Mortar to sworn members.
 - **Hostile factions:** a HOSTILE faction won't hire you, and its settlement turrets open fire.
 
 ## Events
@@ -124,6 +129,24 @@ and appear on the globe map and the Reputation Log. Ride up to a beacon to start
   - **If you save them:** you can swear in with Rustmoon. Pirates then treat you as crew, dens open their
     job boards and gear to you, and raids unlock. SPACECOM will notice.
   - **If you fail:** you're locked out of Rustmoon for good.
+
+## Economy
+
+Base pay is deliberately low and grows with reputation: ×0.8 at WARY up to ×2.4 at HONORED.
+Contract clocks are tight. If you miss one, the job still pays 50% when you deliver.
+
+## Strange places (sunlit side)
+
+- **Antimatter Research Lab:** a building you can walk into, with a violently spinning reactor in a glass
+  tube. Dr. Zbornak sells containment jars (2 slots, upgradeable to 5). Press `G` to scoop up rock
+  samples (glowing crystals), moon dirt, black water (stand on a black lake) or people. Things left in
+  a jar together for 12 s react: dirt + water make Moon Mud, rock + water make Slick Rock, and a person
+  + water becomes Void-Touched. Press `X` beside the reactor to throw everything in. Results include
+  credits, a pet rock, a dirt golem, statues, a love match, black rain, inverted colours, low gravity,
+  super-slick skates, a springy "resonance" and, with three different things, a SINGULARITY that blows you
+  through the roof.
+- **The Monolith:** touch it for 30 s of low gravity (90 s cooldown).
+- **Bounce Dome Funpark:** inflatable domes and a bouncy castle that throw you back up harder than you landed.
 
 ## Locations
 

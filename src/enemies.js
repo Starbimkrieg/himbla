@@ -282,7 +282,7 @@ export class Enemies {
         if (g.rep.aligned() && !e.rogue) g.rep.add('rustmoon', -3, 'Killed a Rustmoon pirate');
         else {
           const darkBonus = darkness(e.center.clone().normalize()) > 0.5 ? 1.5 : 1;
-          g.addCredits(Math.round((e.kind === 'skater' ? 45 : 80) * darkBonus), 'Bounty');
+          g.addCredits(Math.round((e.kind === 'skater' ? 25 : 45) * darkBonus), 'Bounty');
           this.pirateKills = (this.pirateKills || 0) + 1;
           if (this.pirateKills % 3 === 0) g.rep.add('spacecom', 1, 'Pirate bounties', { silent: true });
         }
@@ -302,7 +302,7 @@ export class Enemies {
       g.hud.alert(`${l.name.toUpperCase()} KNOCKED OUT!`, '#ffd23f', 3);
       if (byPlayer) {
         if (g.rep.aligned()) g.rep.add('rustmoon', -15, `Destroyed ${l.name}`);
-        else { g.addCredits(l.hq ? 600 : 250, 'Den destroyed'); g.rep.add('spacecom', 2, `Destroyed ${l.name}`); }
+        else { g.addCredits(l.hq ? 350 : 150, 'Den destroyed'); g.rep.add('spacecom', 2, `Destroyed ${l.name}`); }
       }
       // its guards scatter
       for (const p of this.list) if (p.home === l && p.kind !== 'core' && !p.dead) p.home = null;
@@ -741,25 +741,50 @@ export class Enemies {
     m.gun.rotation.y = Math.atan2(local.x, local.z);
   }
 
+  // Turrets fight you when their base is hostile; otherwise they shoot any pirate that
+  // wanders into range (but give up on targets that leave it).
   updateTurret(e, dt) {
     const g = this.game;
     const P = g.player;
     const base = e.base;
     const head = e.model.head;
-    const d = e.center.distanceTo(P.center);
-    if (base.hostile || (base.inside && base.time > 2)) {
+    const range = e.heavy ? 420 : base.restricted ? 360 : 300;
+    let target = null, tvel = null;
+    const dP = e.center.distanceTo(P.center);
+    if (base.hostile && !P.dead && dP < (e.heavy ? 600 : 520)) { target = P.center; tvel = P.vel; }
+    else {
+      if (e.pirateT && (e.pirateT.dead || e.pirateT.center.distanceTo(e.center) > range)) e.pirateT = null;
+      e.scanT = (e.scanT || 0) - dt;
+      if (!e.pirateT && e.scanT <= 0) {
+        e.scanT = 0.5;
+        let bd = range;
+        for (const p of this.list) {
+          if (p.faction !== 'pirate' || p.kind === 'core' || p.dead || !p.body) continue;
+          const d = p.center.distanceTo(e.center);
+          if (d < bd) { bd = d; e.pirateT = p; }
+        }
+      }
+      if (e.pirateT) { target = e.pirateT.center; tvel = e.pirateT.body.vel; }
+    }
+    const look = target || ((base.inside && base.time > 2) ? P.center : null);
+    if (look) {
       e.model.root.updateMatrixWorld();
-      const local = e.model.root.worldToLocal(P.center.clone());
+      const local = e.model.root.worldToLocal(look.clone());
       let dd = Math.atan2(local.x, local.z) - head.rotation.y;
       dd = Math.atan2(Math.sin(dd), Math.cos(dd));
       head.rotation.y += THREE.MathUtils.clamp(dd, -2.5 * dt, 2.5 * dt);
     } else head.rotation.y += dt * 0.3;
-    if (base.hostile && !P.dead && d < (e.heavy ? 600 : 520)) {
-      e.fireCd -= dt;
-      if (e.fireCd <= 0) {
-        e.fireCd = e.heavy ? 0.65 : 0.9;
-        this.shoot(e, e.center.clone().addScaledVector(e.center.clone().normalize(), 1), e.heavy ? 170 : 150, e.heavy ? 15 : 12, 0xff2a4a, 0.012);
-      }
+    if (!target) return;
+    e.fireCd -= dt;
+    if (e.fireCd > 0) return;
+    e.fireCd = e.heavy ? 0.65 : 0.9;
+    const from = e.center.clone().addScaledVector(e.center.clone().normalize(), 1);
+    if (target === P.center) {
+      this.shoot(e, from, e.heavy ? 170 : 150, e.heavy ? 15 : 12, 0xff2a4a, 0.012);
+    } else if (g.planet.visible(from, target)) {
+      const speed = e.heavy ? 170 : 150;
+      const dir = this.aimLead(from, speed, 0.01, target, tvel);
+      g.projectiles.fire('mil', from, dir.multiplyScalar(speed), { damage: e.heavy ? 34 : 26, splash: 5, color: 0xffb02e, size: 0.5, knock: 0.6, spare: true });
     }
   }
 }
