@@ -180,12 +180,15 @@ export const TIERS = [
 ];
 
 // Faction gear sold at each headquarters; each level needs a higher reputation.
+import { cosmeticShopItems } from './cosmetics.js';
+
 export const SHOPS = {
   ilmb: [
     { key: 'capacitor', name: 'Flux Capacitor', desc: '+25 thruster energy', cost: 600, max: 3 },
     { key: 'armor', name: 'Ablative Suit Plating', desc: '+25 max health', cost: 550, max: 3 },
     { key: 'dampers', name: 'Mag-Cushion Dampers', desc: 'Safer hard landings, less cargo jostle', cost: 650, max: 3 },
     { key: 'spinner', name: 'Weapon Tuning Kit', desc: '+30% damage for every weapon', cost: 750, max: 3 },
+    { key: 'scanner', name: 'Threat Scanner', desc: 'Look at pirates to mark them with a red outline; warns of inbound squads', cost: 700, max: 2 },
     { key: 'seeker', name: 'SPACECOM Seeker Module', desc: 'Pulse discs home in harder on targets', cost: 800, max: 3, faction: 'spacecom', req: [0, 10, 25] },
   ],
   meridian: [
@@ -207,3 +210,6 @@ export const SHOPS = {
     { key: 'shadow', name: 'Rustmoon Shadow Rig', desc: 'Lawmen and turrets have a harder time hitting you', cost: 750, max: 3, faction: 'rustmoon', req: [0, 15, 35] },
   ],
 };
+
+// faction outfits and skate finishes
+for (const id of Object.keys(SHOPS)) SHOPS[id].push(...cosmeticShopItems(id));

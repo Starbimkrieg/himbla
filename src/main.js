@@ -18,8 +18,10 @@ import { Events } from './events.js';
 import { GlobeMap } from './mapview.js';
 import { Alchemy, MUTATIONS } from './alchemy.js';
 import { Race } from './race.js';
+import { Cosmetics } from './cosmetics.js';
 import { WEAPONS } from './weapons.js';
 import { clamp, pick, mulberry32 } from './rng.js';
+import { inkMat } from './toon.js';
 import { SUN, dirFromAngles, darkness, arcDist, tangent } from './geo.js';
 
 const SAVE_KEY = 'moonrunner-save-v1';
@@ -36,6 +38,8 @@ const CAMP_NAMES = ['Grimtooth Camp', "Vandal's Rest", 'Ashfall Hideout', 'Cutth
 
 const sleep = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 const _v = new THREE.Vector3();
+// Threat Scanner outline: a bold red version of the comic ink shell.
+const SCAN_INK = new THREE.MeshBasicMaterial({ color: 0xff1a2e, side: THREE.BackSide });
 const _q = new THREE.Quaternion();
 
 function buildLocations() {
@@ -124,6 +128,8 @@ class Game {
     this.upgrades = { capacitor: 0, armor: 0, dampers: 0, spinner: 0, seeker: 0, gyro: 0, cradle: 0, flak: 0, overcharge: 0, shadow: 0, jar: 0, scatter: 0, rail: 0, mortar: 0 };
     this.load();
     this.race = new Race(this);
+    this.cosmetics = new Cosmetics(this);
+    this.cosmetics.apply();
     this.alchemy.start();
     this.player.applyUpgrades(this.upgrades);
     this.player.health = this.player.maxHealth;
@@ -299,6 +305,51 @@ class Game {
     buttons.push({ label: `${buttons.length + 1} · LEAVE` });
     const greet = lvl ? `"Back already? Your jar holds ${2 + lvl}. What have you brought me?"` : '"Ah, a runner! Want to help science? You will need a containment jar. Everything goes in the jar. EVERYTHING."';
     this.dialog('DR. ZBORNAK', greet, buttons);
+  }
+
+  // Threat Scanner (ILMB upgrade): pirates you look at get a red outline for a while, and the HUD
+  // counts squads closing in.
+  updateScanner(dt) {
+    const lvl = this.upgrades.scanner || 0;
+    const chip = document.getElementById('scanchip');
+    if (!lvl) { chip.classList.add('hidden'); return; }
+    const range = lvl > 1 ? 800 : 450;
+    const cone = Math.cos(lvl > 1 ? 0.3 : 0.18);
+    const hold = lvl > 1 ? 20 : 10;
+    const P = this.player;
+    const cam = this.camera.position;
+    const look = this.cam.look;
+    let inbound = 0;
+    for (const e of this.enemies.list) {
+      const threat = !e.dead && e.model && (e.kind === 'megamite' || (e.faction === 'pirate' && e.kind !== 'core' && !this.enemies.friendly(e)));
+      if (threat) {
+        const d = e.center.distanceTo(P.pos);
+        if (d < range) {
+          if (e.state === 'chase' || e.kind === 'megamite') inbound++;
+          _v.copy(e.center).sub(cam).normalize();
+          if (_v.dot(look) > cone && this.planet.visible(cam, e.center)) {
+            if (!(e.scanned > 0)) { this.fx.pop('MARKED', e.center.clone().addScaledVector(e.center.clone().normalize(), 3), { color: '#ff2a4a', size: 30, life: 0.7 }); this.audio.tone(1320, 0.06, 'square', 0.05); }
+            e.scanned = hold;
+          }
+        }
+      }
+      const on = threat && e.scanned > 0;
+      if (e.scanned > 0) e.scanned -= dt;
+      if (on !== !!e.scanOn && e.model) {
+        e.scanOn = on;
+        if (!e.inkHulls) { e.inkHulls = []; e.model.root.traverse((o) => { if (o.userData.isInk) e.inkHulls.push(o); }); }
+        for (const h of e.inkHulls) {
+          if (!h.userData.baseScale) h.userData.baseScale = h.scale.clone();
+          h.material = on ? SCAN_INK : inkMat;
+          // a fatter shell while marked so the red reads at a distance
+          const k = on ? 3 : 1; // triple the ink thickness on every part
+          const bs = h.userData.baseScale;
+          h.scale.set(1 + (bs.x - 1) * k, 1 + (bs.y - 1) * k, 1 + (bs.z - 1) * k);
+        }
+      }
+    }
+    chip.classList.toggle('hidden', !inbound);
+    if (inbound) chip.textContent = `⚠ SCANNER: ${inbound} HOSTILE${inbound > 1 ? 'S' : ''} INBOUND`;
   }
 
   // The splice pod: put yourself in with the jar.
@@ -513,8 +564,11 @@ class Game {
     const cost = u.cost * (lvl + 1);
     if (lvl >= u.max || this.credits < cost || !this.rep.canBuy(u, lvl)) return;
     this.credits -= cost;
-    this.upgrades[key]++;
+    this.upgrades[key] = lvl + 1;
     this.player.applyUpgrades(this.upgrades);
+    // new clothes go straight on
+    if (key.startsWith('outfit_')) { this.cosmetics.outfit = key.slice(7); this.cosmetics.apply(); this.hud.toast('Looking sharp. Change outfits any time with C.', 3); }
+    if (key.startsWith('skates_')) { this.cosmetics.skates = key.slice(7); this.cosmetics.apply(); this.hud.toast('New skate finish fitted. Change it any time with C.', 3); }
     this.audio.cash();
     this.save();
     this.refreshBoard();
@@ -638,6 +692,10 @@ class Game {
     this.race.update(dt);
     if (this.input.pressed('KeyG')) this.alchemy.scoop();
     if (this.input.pressed('KeyX')) this.alchemy.empty();
+    if (this.input.pressed('KeyC') && this.boardCooldown <= 0) this.cosmetics.wardrobe();
+    if (this.input.pressed('KeyN')) this.hud.toast(this.audio.toggleMusic() ? '♪ Music on' : 'Music off', 1.5);
+    this.cosmetics.update(dt);
+    this.updateScanner(dt);
     this.enemies.update(dt, this.time);
     this.projectiles.update(dt);
 

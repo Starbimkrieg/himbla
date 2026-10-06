@@ -125,10 +125,12 @@ export class HUD {
         const maxed = lvl >= u.max;
         const cost = u.cost * (lvl + 1);
         const ok = rep.canBuy(u, lvl);
-        const need = u.faction && !maxed && !ok ? (u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
+        const unlockMissing = u.unlock && (rep.game.stats[u.unlock.stat] || 0) < u.unlock.n;
+        const need = !maxed && !ok ? (unlockMissing ? `${u.unlock.text} (${rep.game.stats[u.unlock.stat] || 0}/${u.unlock.n})` : u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
+        const sw = u.swatch ? u.swatch.map((c) => `<span class="swatch" style="background:#${c.toString(16).padStart(6, '0')}"></span>`).join('') : '';
         html += `<div class="shop-item ${maxed || credits < cost || !ok ? 'disabled' : ''} ${u.faction ? 'unique' : ''}" data-buy="${u.key}">
-          <div class="job-top"><span>${u.name}</span><span class="job-pay">${maxed ? 'MAX' : '₵' + cost}</span></div>
-          <div class="job-route">${u.desc}</div>${need ? `<div class="lock">🔒 ${need}</div>` : ''}<div class="lvl">${'■'.repeat(lvl)}${'□'.repeat(u.max - lvl)}</div></div>`;
+          <div class="job-top"><span>${sw}${u.name}</span><span class="job-pay">${maxed ? (u.cosmetic ? 'OWNED' : 'MAX') : '₵' + cost}</span></div>
+          <div class="job-route">${u.desc}</div>${need ? `<div class="lock">🔒 ${need}</div>` : ''}${u.cosmetic ? '' : `<div class="lvl">${'■'.repeat(lvl)}${'□'.repeat(u.max - lvl)}</div>`}</div>`;
       }
       html += `</div>`;
     }

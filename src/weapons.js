@@ -18,7 +18,7 @@ export function weaponUnlocked(w, upgrades) {
 export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
   const P = g.player;
   if (w.key === 'pulse') {
-    g.projectiles.fire('player', muzzle, dir.clone().multiplyScalar(115).addScaledVector(inherit, 0.5), { damage: 34 * mult, splash: 7, color: 0x9be7ff, size: 0.45, knock: 1.6, homing });
+    g.projectiles.fire('player', muzzle, dir.clone().multiplyScalar(115).addScaledVector(inherit, 0.5), { damage: 34 * mult, splash: 7, color: g.cosmetics ? g.cosmetics.laserColor : 0x9be7ff, size: 0.45, knock: 1.6, homing });
     g.audio.shoot();
   } else if (w.key === 'scatter') {
     const right = _v.crossVectors(dir, P.up).normalize().clone();

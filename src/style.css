@@ -292,3 +292,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #05030c; col
 #racepanel .race-row span { margin-left: auto; color: #888; font-size: 12px; }
 #racepanel .race-row.mine { background: rgba(125, 255, 58, 0.25); font-weight: bold; }
 @media (max-width: 600px) { #racepanel { width: calc(100% - 32px); top: 110px; } }
+#scanchip.chip { background: #ff1a2e; color: #fff; font-size: 16px; white-space: nowrap; width: max-content; animation: scanpulse 0.8s ease-in-out infinite alternate; }
+@keyframes scanpulse { from { transform: rotate(-1deg) scale(1); } to { transform: rotate(-1deg) scale(1.05); } }
+.swatch { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--ink); border-radius: 50%; margin-right: 4px; vertical-align: -2px; }

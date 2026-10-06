@@ -221,6 +221,7 @@ export class Missions {
     const repGain = this.late ? 1 : (a.premium ? 4 : 3) + (this.integrity > 0.8 ? 1 : 0);
     g.rep.add(a.faction, repGain, `Delivered ${a.cargo.name}`);
     g.stats.deliveries++;
+    if (a.dark) g.stats.darkDeliveries = (g.stats.darkDeliveries || 0) + 1;
     g.audio.cash();
     g.hud.delivered({ a, integ, timeBonus, style, total, integrity: this.integrity, faction: FACTIONS[a.faction].name, repGain });
     g.actionPanel('delivered');

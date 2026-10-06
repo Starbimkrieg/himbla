@@ -22,7 +22,7 @@ const _v = new THREE.Vector3();
 export class Player {
   constructor(game, spawn) {
     this.game = game;
-    this.model = makeRunner({ suit: 0xff4f2e, accent: 0x2ee6ff, scarf: 0xffd23f });
+    this.model = makeRunner({ suit: 0xff4f2e, accent: 0x2ee6ff, scarf: 0xffd23f, own: true });
     game.scene.add(this.model.root);
     this.body = makeBody(spawn);
     this.maxHealth = 100;
@@ -347,7 +347,6 @@ export class Player {
     }
     m.scarf.rotation.x = -0.2 - Math.min(1.2, sp / 30) + Math.sin(this.anim * 3) * 0.12 * Math.min(1, sp / 10);
     m.scarf.rotation.y = Math.sin(this.anim * 2.3) * 0.15;
-    m.glowM.color.setHex(b.skating ? 0x2ee6ff : 0x3a3550);
 
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(m.root.quaternion);
     const strength = b.skating && b.grounded ? Math.min(1, sp / 30) : 0;

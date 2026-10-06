@@ -34,6 +34,8 @@ Click **START YOUR SHIFT!** to lock the mouse.
 | `L` | Helmet lamp: auto / off / on |
 | Left mouse | Fire the selected weapon (the Pulse Spinner homes slightly; its splash can disc-jump you) |
 | `1` `2` `3` `4` | Switch weapon: Pulse Spinner, Vostok Scattergun, Daedalus Rail Lance, Rustmoon Junk Mortar |
+| `C` | Wardrobe: cycle owned outfits, skate finishes and pulse-disc colours |
+| `N` | Music on / off |
 | `G` / `X` | Scoop into your containment jar / empty it (into the antimatter reactor when you're beside it) |
 | `F` | Job board / upgrades (inside hubs and settlements) |
 | `M` | Globe map: drag to spin, scroll to zoom. Fog of war covers anywhere you haven't been |
@@ -135,6 +137,30 @@ and appear on the globe map and the Reputation Log. Ride up to a beacon to start
 Base pay is deliberately low and grows with reputation: ×0.8 at WARY up to ×2.4 at HONORED.
 Contract clocks are tight. If you miss one, the job still pays 50% when you deliver.
 
+## Threat Scanner
+
+Sold at the ILMB (₵700, two levels). Look at a pirate (or the Mega Mite) and it gets a thick red comic outline
+for 10 s (20 s at level 2), out to 450 m (800 m at level 2), with a wider look cone at level 2. A red HUD chip
+counts hostiles closing in on you.
+
+## Cosmetics
+
+- **Outfits:** you start in Courier Orange. Every faction HQ sells a base outfit (FRIENDLY, ₵450) and an elite
+  one (HONORED, ₵1800) with extras like crests, shoulder pads, a halo, a pirate bandana or a cape that streams
+  with speed. SPACECOM's are at the ILMB, Rustmoon's at Rustmoon Hold (members only).
+- **Skate finishes** (Meridian Exchange): Chrome Comets, Solar Flares (flame trail), Void Gliders, Prism Drive
+  (hue-cycling, HONORED), plus deed-locked ones: Seismic Striders (complete 3 Meridian events), Derby Hooves
+  (win the Chimera Derby, comes with horseshoes) and Dark-Side Survivors (5 dark-side deliveries). Most leave
+  a coloured glide trail.
+- **Pulse-disc colours:** eight, free, cycled in the wardrobe (`C`).
+- New purchases are equipped immediately; your look is saved.
+
+## Sound
+
+A procedural synthwave groove (A minor, 96 BPM) plays under everything. It is a quiet pad and bass at rest and
+gets louder and fuller with speed: kick drum, snare, hats and an echoing arpeggio join in as you go faster.
+The wind rumble is a soft low-passed swell instead of high-frequency hiss. `N` toggles the music.
+
 ## Strange places (sunlit side)
 
 - **Antimatter Research Lab:** a building you can walk into, with a violently spinning reactor in a glass
@@ -221,6 +247,7 @@ src/
   mapview.js     draggable fog-of-war globe map
   alchemy.js     containment jar, reactor recipes, wild mites, followers, splice-pod mutations, Mega Mite
   chimera.js     gene splicing + procedural chimera models
+  cosmetics.js   outfits, skate finishes, laser colours, wardrobe
   race.js        Chimera Derby: track, betting, chaos racing
   highlights.js  action-shot capture + Hall of Highlights board
   physics.js     collider hash + shared skater movement model (player and pirate skaters)

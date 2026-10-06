@@ -12,7 +12,7 @@ function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
 // The Moon-runner (also used for pirate skaters). Pivot at the feet.
 export function makeRunner({
   suit = 0xff4f2e, accent = 0x2ee6ff, helmet = 0xfff4e0, visor = 0x241a5c,
-  scarf = 0xffd23f, scale = 1, pirate = false,
+  scarf = 0xffd23f, scale = 1, pirate = false, own = false,
 } = {}) {
   const root = new THREE.Group();
   // trick pivot sits at the centre of mass so flips rotate around the body, not the feet
@@ -22,8 +22,12 @@ export function makeRunner({
   const body = new THREE.Group();
   body.position.y = -1.2;
   trick.add(body);
-  const suitM = toon(suit), dark = toon(0x221d33), helmetM = toon(helmet), accentM = toon(accent);
+  // `own` gives this runner private materials so it can be recoloured (the player's wardrobe)
+  const mk = (c) => (own ? toon(c, {}) : toon(c));
+  const suitM = mk(suit), dark = toon(0x221d33), helmetM = mk(helmet), accentM = mk(accent);
   const glowM = glow(accent);
+  const skateM = own ? glow(accent) : glowM;
+  const visorM = mk(visor), scarfM = toon(scarf, { side: THREE.DoubleSide }), collarM = mk(scarf);
 
   const hip = 0.95;
   const legs = [];
@@ -32,7 +36,7 @@ export function makeRunner({
     leg.position.set(side * 0.2, hip, 0);
     leg.add(part(new THREE.CapsuleGeometry(0.14, 0.5, 4, 8), suitM, 0, -0.4, 0));
     leg.add(part(new THREE.BoxGeometry(0.28, 0.2, 0.44), dark, 0, -0.84, 0.05));
-    const skate = part(new THREE.BoxGeometry(0.24, 0.07, 0.68), glowM, 0, -0.96, 0.05, 0.04);
+    const skate = part(new THREE.BoxGeometry(0.24, 0.07, 0.68), skateM, 0, -0.96, 0.05, 0.04);
     leg.add(skate);
     body.add(leg);
     legs.push(leg);
@@ -51,7 +55,7 @@ export function makeRunner({
   head.position.y = 1.18;
   torso.add(head);
   head.add(part(new THREE.SphereGeometry(0.36, 18, 14), helmetM, 0, 0, 0));
-  const visorMesh = part(new THREE.SphereGeometry(0.27, 16, 12), toon(visor), 0, 0.02, 0.17, 0.02);
+  const visorMesh = part(new THREE.SphereGeometry(0.27, 16, 12), visorM, 0, 0.02, 0.17, 0.02);
   visorMesh.scale.set(1.1, 0.75, 0.75);
   head.add(visorMesh);
   head.add(part(new THREE.CylinderGeometry(0.02, 0.02, 0.4), dark, 0.22, 0.38, -0.1, 0));
@@ -76,9 +80,9 @@ export function makeRunner({
   const scarfPivot = new THREE.Group();
   scarfPivot.position.set(0, 0.98, -0.2);
   torso.add(scarfPivot);
-  const scarfMesh = part(new THREE.BoxGeometry(0.22, 0.04, 1.3), toon(scarf, { side: THREE.DoubleSide }), 0, 0, -0.62, 0.03);
+  const scarfMesh = part(new THREE.BoxGeometry(0.22, 0.04, 1.3), scarfM, 0, 0, -0.62, 0.03);
   scarfPivot.add(scarfMesh);
-  const collar = part(new THREE.TorusGeometry(0.24, 0.08, 6, 14), toon(scarf), 0, 0, 0.2, 0.03);
+  const collar = part(new THREE.TorusGeometry(0.24, 0.08, 6, 14), collarM, 0, 0, 0.2, 0.03);
   collar.rotation.x = Math.PI / 2;
   scarfPivot.add(collar);
 
@@ -87,7 +91,7 @@ export function makeRunner({
   head.add(lamp);
 
   root.scale.setScalar(scale);
-  return { root, trick, body, bodyBase: -1.2, torso, head, legL: legs[0], legR: legs[1], armL: arms[0], armR: arms[1], scarf: scarfPivot, cargoSlot, glowM, accent };
+  return { root, trick, body, bodyBase: -1.2, torso, head, legL: legs[0], legR: legs[1], armL: arms[0], armR: arms[1], scarf: scarfPivot, cargoSlot, glowM, accent, mats: { suit: suitM, accent: accentM, helmet: helmetM, visor: visorM, scarf: scarfM, collar: collarM, glow: glowM, skate: skateM } };
 }
 
 // Cheap NPC figure for ambient life.

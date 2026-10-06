@@ -276,6 +276,7 @@ export class Events {
     g.hud.eventResult(ev, true, text || `+₵${credits}`);
     g.actionPanel('delivered', null, `${ev.title.toUpperCase()} — DONE!`);
     g.stats.events = (g.stats.events || 0) + 1;
+    if (ev.faction === 'meridian') g.stats.meridianEvents = (g.stats.meridianEvents || 0) + 1;
     this.finish(ev);
     if (ev.type === 'wreck') g.wreckChoice();
   }
