@@ -10,6 +10,21 @@ The Moon is a **real sphere** (about 22.6 km around), and you can ski all the wa
 The sunlit near side holds the settlements. Past the terminator lies the **dark side**: almost
 pitch black, lit only by your helmet lamp, and full of pirate dens.
 
+## Download (desktop, no browser)
+
+Grab the latest build from the repo's **Releases** page:
+- **Windows:** `Moon-Runner-…-windows-portable.exe` — double-click to play (SmartScreen may warn because the
+  build isn't code-signed: *More info → Run anyway*). Or the `win-x64.zip` — unzip, run `Moon-Runner.exe`.
+- **Linux:** `…-linux-x86_64.AppImage` — `chmod +x`, then run it.
+- **macOS:** `…-mac-universal.zip` — unzip, right-click the app → Open (if it says "damaged", run
+  `xattr -cr Moon-Runner.app` once; the build isn't notarized).
+
+`F11` toggles fullscreen. Saves live in the app's own storage.
+
+Building it yourself: `npm run app` runs the desktop version; `npm run dist:win`, `dist:linux` or `dist:mac`
+package it into `release/`. Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds all three on
+GitHub and attaches them to a Release.
+
 ## Run it
 
 ```bash
@@ -40,7 +55,6 @@ Click **START YOUR SHIFT!** to lock the mouse.
 | `Z` · `T` | Phase Dash · Personal Teleporter (story tech) |
 | `Esc` → SETTINGS | Graphics, gameplay, camera, audio and key remapping |
 | `P` | Holding pen, anywhere (needs the remote pen link from Dr. Zbornak) |
-| `` ` `` (backtick) | Cheat / testing menu |
 | `G` / `X` | Scoop into your containment jar / empty it (into the antimatter reactor when you're beside it) |
 | `F` | Job board / upgrades (inside hubs and settlements) |
 | `M` | Globe map: drag to spin, scroll to zoom. Fog of war covers anywhere you haven't been |
@@ -211,7 +225,7 @@ master, music, effects. Controls: remap every action key (taking a key that's in
 
 ## Cheat menu (testing)
 
-Press `` ` `` (backtick) during play. Options: +₵10,000 · reveal the whole map · set reputation per faction
+Hold `=` and `` ` `` (backtick) together during play (deliberately awkward so players don't stumble into it). Options: +₵10,000 · reveal the whole map · set reputation per faction
 (±10, FRIENDLY / TRUSTED / HONORED / NEUTRAL / HOSTILE, or all factions HONORED) · teleport to any location ·
 god mode · unlock all gear, weapons and cosmetics · lab kit (big jar, items, 3 chimeras) · and under MORE: join
 Rustmoon, spawn a pirate squad or the Mega Mite, spawn an event for any faction (and teleport to it), max out

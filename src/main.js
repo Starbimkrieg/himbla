@@ -1,3 +1,6 @@
+// fonts are bundled so the desktop build works offline
+import '@fontsource/bangers/400.css';
+import '@fontsource/comic-neue/700.css';
 import * as THREE from 'three';
 import { Planet } from './planet.js';
 import { Colliders } from './physics.js';
@@ -228,7 +231,8 @@ class Game {
         if (code === 'KeyM') this.openMap();
         if (code === 'KeyJ') this.openLog();
         if (code === 'KeyH') document.getElementById('help').classList.toggle('hidden');
-        if (code === 'Backquote') this.cheats.open();
+        // hidden testing menu: hold = and ` together
+        if ((code === 'Backquote' && this.input.down('Equal')) || (code === 'Equal' && this.input.down('Backquote'))) this.cheats.open();
         if (code === 'KeyL') {
           this.lampMode = this.lampMode === 'auto' ? 'off' : this.lampMode === 'off' ? 'on' : 'auto';
           this.hud.toast(`HELMET LAMP: ${this.lampMode.toUpperCase()}`);
