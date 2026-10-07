@@ -60,7 +60,7 @@ Click **START YOUR SHIFT!** to lock the mouse.
 | `F` | Job board / upgrades (inside hubs and settlements) |
 | `M` | Globe map: drag to spin, scroll to zoom. Fog of war covers anywhere you haven't been |
 | `J` | Reputation Log |
-| `R` | Emergency recall (₵100): a shuttle flies you home (ILMB, or Rustmoon Hold if you ride with the pirates); forfeits the current contract |
+| `R` (hold 1.5 s) | Emergency recall (₵100): a shuttle flies you to your HQ (the ILMB, the HQ of the faction whose story you've committed to, or Rustmoon Hold if you ride with the pirates); forfeits the current contract |
 | `H` | Help |
 
 ## Lunar flight
@@ -71,7 +71,8 @@ builds to 2.5x over two seconds, and an extra pull cancels the "orbital lift" of
 100 m/s that used to carry you over a kilometre now lands after ~550 m. **Dive** (press Shift again in the
 air and hold) tucks you nose-down at triple gravity; within ~10 m of the ground the skates' magnetic grip
 catches you, and a skated dive landing is always safe and keeps most of your speed (hard ones score STUCK IT!).
-Looking down while thrusting drives you downward too.
+Looking down while thrusting drives you downward too. The gravity build-up only applies at speed, so hopping
+around on foot stays floaty and harmless.
 
 ## How it plays
 
@@ -261,7 +262,20 @@ a wiring rack; a twin-domed **Farm Dome** with grow lights and a sapling nursery
 a **Trading Kiosk** market plaza; a ramshackle **Scrap Shack** with a scrap press and derrick; and a
 climbable **Junk Pile** with a scavenger camp.
 
-**Raiding:** press `F` beside a **farm dome** to take a sapling (it goes in your jar, alive: it splices into
+**What each structure gives up** (press `F` at its glowing raid ring, or shoot it down; either costs 2 rep with
+the owner, and loot from a wreck is flung out onto open ground with a light pillar so you can find it):
+
+| Structure | Drop | Use |
+| --- | --- | --- |
+| Farm Dome | Sapling (alive) | Splices into chimeras; ROOT GRIP mutation (+30% grip) |
+| Supply Depot | ₵150–300 + Electrical Wiring | 3 wiring to Dr. Zbornak: skate grip tune (x3) |
+| Watchtower | Searchlight Lens | HAWK EYE mutation (outlines reach 50% farther, sharper scope); reactor flash dazes pirates |
+| Relay Mast | Signal Transponder | Reveals the map 1.4 km around you; 3 to Zbornak: event radar on the minimap |
+| Trading Kiosk | Mystery Crate | Opens on the spot: credits, Lucky Chips, or a jackpot |
+| Scrap Shack | Scrap Plating | 3 to Zbornak: +10 hull and +15% vehicle hull (x3) |
+| Junk Pile | Junk Bot (alive) | Splices into chimeras: tank treads and a screen face |
+
+**Raiding (details):** press `F` beside a **farm dome** to take a sapling (it goes in your jar, alive: it splices into
 chimeras with root legs and flower heads, or into you as the ROOT GRIP mutation, +30 % skate grip), or beside a
 **supply depot** for ₵150–300 plus a length of **electrical wiring** (into the jar). Each raid costs 2 rep with
 the owner and the structure restocks after 4 minutes. You can also just **shoot them down** (a dome takes about 4
@@ -279,9 +293,15 @@ Freighters and shuttle-buses fly real routes: they lift off vertically, cruise o
 land on a pad at the edge of each settlement (legs out, ramp down). Passengers walk off toward town, the queue
 at the shelter walks up and boards, and the doors close before it leaves; arriving passengers walk to real
 building entrances. Safe settlements are joined by a network of 12 pre-driven **dirt roads** (worn ruts,
-marker posts, stop shelters) that run through towns or round their edges. Big six-wheeled **land-trains**,
+marker posts) that merge into a big **ring road** around each town, with one stop shelter on the ring. Big six-wheeled **land-trains**,
 hover-cars and buggies each pick a destination town: some pass straight through towns, others stop to
 swap passengers and then head somewhere new. You can ride on a freighter deck or a land-train trailer.
+
+## Townspeople
+
+Residents, passengers and walkers come in many looks: colony coveralls, lab coats with clipboards, engineers
+in hard hats and tool belts, traders in jackets and ties, elderly folk with canes, bulky EVA suits with
+fishbowl helmets, hoodies, and kids in bubble helmets, with varied skin, hair, builds and headgear.
 
 ## Founded outposts
 
