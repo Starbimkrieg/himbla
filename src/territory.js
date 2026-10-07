@@ -4,6 +4,7 @@ import { toon, glow, ink } from './toon.js';
 import { arcDist, tangent, frameQuat, greatCircle, SUN } from './geo.js';
 import { mulberry32 } from './rng.js';
 import { makeRover } from './models.js';
+import { ITEMS } from './alchemy.js';
 import { outpostTemplate, SMALL_KINDS, FLAT_R } from './outpostModels.js';
 
 // Every square metre of the Moon belongs to somebody. Territory is a weighted Voronoi split
@@ -22,7 +23,19 @@ const KIND_NAMES = {
 const OUTPOST_W = 0.42; // how strongly an outpost claims ground compared with a settlement
 const BUILD_R = 900, DROP_R = 1150;
 const LOOT_CD = 240, LOOT_REP = 2; // raid/rebuild cooldown (s) and reputation cost
-const OUTPOST_HP = { farm: 160, depot: 220 };
+const OUTPOST_HP = { farm: 160, depot: 220, tower: 200, mast: 180, kiosk: 140, shack: 160, junk: 200 };
+const SAP_NAMES = ['Fern', 'Sprig', 'Basil', 'Twiggy', 'Moss', 'Clover'];
+const BOT_NAMES = ['Bolt', 'Sprocket', 'Widget', 'Tinny', 'Gizmo', 'Rivet'];
+// What each small structure gives up, raided (F at its marked spot) or shot to pieces.
+const LOOT = {
+  farm: { verb: 'TAKE A SAPLING', boom: 'DOME DOWN!', item: 'sapling', names: SAP_NAMES, pop: 'SAPLING SWIPED!' },
+  depot: { verb: 'RAID THE SUPPLY DEPOT', boom: 'DEPOT DESTROYED!', item: 'wiring', credits: [150, 300], pop: 'CREDITS + WIRING!' },
+  tower: { verb: 'SWIPE A SEARCHLIGHT LENS', boom: 'TOWER TOPPLED!', item: 'lens', pop: 'LENS LIFTED!' },
+  mast: { verb: 'PULL A SIGNAL TRANSPONDER', boom: 'MAST DOWN!', item: 'transponder', pop: 'TRANSPONDER!' },
+  kiosk: { verb: 'GRAB A MYSTERY CRATE', boom: 'KIOSK SMASHED!', crate: true },
+  shack: { verb: 'STRIP SOME SCRAP PLATING', boom: 'SHACK FLATTENED!', item: 'plating', pop: 'SCRAP PLATING!' },
+  junk: { verb: 'COAX OUT A JUNK BOT', boom: 'JUNK EVERYWHERE!', item: 'junkbot', names: BOT_NAMES, pop: 'JUNK BOT! BEEP!' },
+};
 const BUILT_R = 40, MOD_R = 26; // founded outposts: flattened radius and the module ring
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -323,6 +336,7 @@ export class Territory {
     o.hits = tpl.hits;
     o.raidPoint = tpl.raid ? root.localToWorld(tpl.raid.clone()) : null;
     o.mainC = tpl.smoke ? root.localToWorld(tpl.smoke.clone()) : root.position.clone().addScaledVector(o.dir, 2);
+    o.dropPoint = tpl.drop ? root.localToWorld(tpl.drop.clone()) : null;
   }
 
   // Modules sit on their plots, built at roughly a third of settlement scale.
@@ -366,7 +380,7 @@ export class Territory {
   onBlast(pos, radius, damage, owner) {
     if (owner !== 'player') return;
     for (const o of this.outposts) {
-      if (!o.model || o.rubble || (o.kind !== 'farm' && o.kind !== 'depot')) continue;
+      if (!o.model || o.rubble || !LOOT[o.kind]) continue;
       if (pos.distanceTo(o.model.position) > radius + 45) continue;
       // distance from the blast to the main building (the depot's warehouse, the farm's domes)
       let d;
@@ -390,16 +404,45 @@ export class Territory {
     g.fx.explosion(c.clone().addScaledVector(tangent(_w.set(1, 0, 0), o.dir).normalize(), 6), 12, false);
     g.audio.boom(true);
     g.cam.shake = Math.max(g.cam.shake, 0.8);
-    g.fx.pop(o.kind === 'farm' ? 'DOME DOWN!' : 'DEPOT DESTROYED!', c.clone().addScaledVector(o.dir, 8), { color: '#ff4f2e', size: 64, life: 1.4 });
-    // the same haul as a raid, scattered in the wreckage
-    if (o.kind === 'farm') g.alchemy.dropLoot('sapling', c, { name: ['Fern', 'Sprig', 'Basil', 'Twiggy', 'Moss', 'Clover'][Math.floor(Math.random() * 6)] });
-    else { g.alchemy.dropLoot(null, c, { credits: 150 + Math.floor(Math.random() * 151) }); g.alchemy.dropLoot('wiring', c); }
+    const L = LOOT[o.kind];
+    g.fx.pop(L.boom, c.clone().addScaledVector(o.dir, 8), { color: '#ff4f2e', size: 64, life: 1.4 });
+    // the same haul as a raid, flung out of the wreck onto open ground where you can see it
+    const spots = this.landingSpots(o, (L.credits ? 1 : 0) + 1);
+    if (L.credits) g.alchemy.dropLoot(null, c, { credits: L.credits[0] + Math.floor(Math.random() * (L.credits[1] - L.credits[0] + 1)), to: spots.pop() });
+    if (L.crate) g.alchemy.dropLoot(null, c, { crate: true, to: spots.pop() });
+    else g.alchemy.dropLoot(L.item, c, { name: L.names ? L.names[Math.floor(Math.random() * L.names.length)] : undefined, to: spots.pop() });
     g.rep.add(o.faction, -LOOT_REP, `Destroyed a ${KIND_NAMES[o.kind]}`, { war: false });
     o.hp = OUTPOST_HP[o.kind];
     o.wreckedUntil = g.time + LOOT_CD;
     o.lootAt = g.time;
     this.despawn(o);
     this.spawnRubble(o);
+  }
+
+  // Clear spots on the apron for loot to land: the template's drop point (spread a little), else a
+  // ring search around the yard for ground with nothing built on it.
+  landingSpots(o, n) {
+    const g = this.game;
+    const out = [];
+    const up = o.dir;
+    const t = tangent(_w.set(1, 0, 0), up).normalize();
+    const b = new THREE.Vector3().crossVectors(up, t);
+    const clear = (p) => !g.colliders.query(p, 4, []).some((col) => g.colliders.contact(col, p, 2.2, new THREE.Vector3()) > 0);
+    const base = o.dropPoint || null;
+    for (let i = 0; i < n; i++) {
+      let p = null;
+      if (base) {
+        const q = base.clone().addScaledVector(t, (i - (n - 1) / 2) * 3).addScaledVector(up, 1);
+        if (clear(q)) p = q;
+      }
+      for (let k = 0; k < 32 && !p; k++) {
+        const a = k * 2.4 + i, r = 14 + (k % 4) * 4;
+        const q = o.model.position.clone().addScaledVector(t, Math.cos(a) * r).addScaledVector(b, Math.sin(a) * r).addScaledVector(up, 1);
+        if (clear(q)) p = q;
+      }
+      out.push(p || o.model.position.clone().addScaledVector(t, 22).addScaledVector(up, 1));
+    }
+    return out;
   }
 
   // charred remains until it's rebuilt
@@ -563,35 +606,33 @@ export class Territory {
   }
 
   // ---------- raiding minor structures ----------
-  // Farm domes give up a sapling (it goes in your jar, alive); supply depots a bundle of credits and
-  // a length of electrical wiring. Either way the owners notice and like you a little less.
+  // Every small structure gives up something of its own (see LOOT). The owners notice and like you a
+  // little less either way.
   interact() {
     const g = this.game;
     const P = g.player;
     let o = null;
     for (const x of this.outposts) {
-      if (!x.model || x.rubble || (x.kind !== 'farm' && x.kind !== 'depot')) continue;
-      // the depot's wiring rack / the farm's sapling bench, marked with a glowing ring
-      if (x.raidPoint ? x.raidPoint.distanceTo(P.pos) < 6 : x.model.position.distanceTo(P.pos) < 12) { o = x; break; }
+      if (!x.model || x.rubble || !LOOT[x.kind]) continue;
+      // each has a marked raid spot (a glowing ring by the goods)
+      if (x.raidPoint ? x.raidPoint.distanceTo(P.pos) < 6 : x.model.position.distanceTo(P.pos) < 9) { o = x; break; }
     }
     if (!o) return false;
+    const L = LOOT[o.kind];
     const F = FACTIONS[o.faction];
     const wait = (o.lootAt || -1e9) + LOOT_CD - g.time;
-    const what = o.kind === 'farm' ? 'TAKE A SAPLING' : 'RAID THE SUPPLY DEPOT';
     if (wait > 0) { g.hud.prompt(`${KIND_NAMES[o.kind].toUpperCase()} — PICKED CLEAN. RESTOCKS IN ${Math.ceil(wait)}s`); return true; }
-    g.hud.prompt(`<b>F</b> — ${what} <span style="color:#ff2a4a">(−${LOOT_REP} ${F ? F.name.toUpperCase() : ''} REP)</span>`);
+    g.hud.prompt(`<b>F</b> — ${L.verb} <span style="color:#ff2a4a">(−${LOOT_REP} ${F ? F.name.toUpperCase() : ''} REP)</span>`);
     if (!g.input.pressed('KeyF') || g.boardCooldown > 0) return true;
     const A = g.alchemy;
-    if (o.kind === 'farm') {
-      if (!A.owned) { g.hud.toast('A sapling is alive, it needs a containment jar. Dr. Zbornak sells them.', 3); return true; }
+    if (L.crate) A.openCrate();
+    else {
+      // everything but credits rides in the jar
+      if (!A.owned) { g.hud.toast(`You need a containment jar to carry a ${ITEMS[L.item].name.toLowerCase()}. Dr. Zbornak sells them.`, 3); return true; }
       if (A.used >= A.slots) { g.hud.toast('Your jar is full.', 2); return true; }
-      A.add('sapling', ['Fern', 'Sprig', 'Basil', 'Twiggy', 'Moss', 'Clover'][Math.floor(Math.random() * 6)]);
-      g.fx.pop('SAPLING SWIPED!', null, { color: '#5fbf4a', size: 46 });
-    } else {
-      const cash = 150 + Math.floor(Math.random() * 151);
-      g.addCredits(cash, 'Depot');
-      if (A.owned && A.used < A.slots) { A.add('wiring'); g.fx.pop('CREDITS + WIRING!', null, { color: '#ffb347', size: 46 }); }
-      else { g.fx.pop(`+₵${cash}`, null, { color: '#ffd23f', size: 46 }); g.hud.toast(A.owned ? 'No room in the jar for the wiring.' : 'There was wiring too, but you have no jar to carry it in.', 2.5); }
+      if (L.credits) g.addCredits(L.credits[0] + Math.floor(Math.random() * (L.credits[1] - L.credits[0] + 1)), KIND_NAMES[o.kind]);
+      A.add(L.item, L.names ? L.names[Math.floor(Math.random() * L.names.length)] : undefined);
+      g.fx.pop(L.pop, null, { color: ITEMS[L.item].color, size: 46 });
     }
     o.lootAt = g.time;
     g.rep.add(o.faction, -LOOT_REP, `Raided a ${KIND_NAMES[o.kind]}`, { war: false });

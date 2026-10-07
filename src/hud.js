@@ -32,6 +32,20 @@ export class HUD {
     this.alertT = dur;
   }
 
+  // hold-to-recall progress (k: 0..1; 0 hides it)
+  recallHold(k, loc) {
+    if (!this.recallEl) {
+      this.recallEl = document.createElement('div');
+      this.recallEl.id = 'recallhold';
+      this.recallEl.innerHTML = '<div class="rh-label"></div><div class="rh-track"><div class="rh-fill"></div></div>';
+      document.getElementById('hud').appendChild(this.recallEl);
+    }
+    this.recallEl.classList.toggle('show', k > 0);
+    if (k <= 0) return;
+    if (loc) this.recallEl.querySelector('.rh-label').textContent = `HOLD R · RECALL TO ${loc.short || loc.name.toUpperCase()} · 100 CR`;
+    this.recallEl.querySelector('.rh-fill').style.width = `${Math.min(1, k) * 100}%`;
+  }
+
   toast(text, dur = 2.5) {
     const el = $('toast');
     el.textContent = text;
@@ -273,8 +287,16 @@ export class HUD {
       c.beginPath(); c.arc(x, y, cr.R * s, 0, Math.PI * 2); c.stroke();
     }
     for (const ev of g.events.list) {
-      const [x, y, d] = proj(ev.stage || ev.start);
-      if (d > range * 1.4) continue;
+      let [x, y, d] = proj(ev.stage || ev.start);
+      if (d > range * 1.4) {
+        // event radar (3 transponders to Dr. Zbornak): far events sit on the rim, pointing the way
+        if (!g.upgrades.radar || d > 2500) continue;
+        const ang = Math.atan2(y - H / 2, x - W / 2), rr = W / 2 - 9;
+        x = W / 2 + Math.cos(ang) * rr; y = H / 2 + Math.sin(ang) * rr;
+        c.fillStyle = FACTIONS[ev.faction].color; c.strokeStyle = '#fff'; c.lineWidth = 1.5;
+        c.beginPath(); c.arc(x, y, 5, 0, Math.PI * 2); c.fill(); c.stroke();
+        continue;
+      }
       c.fillStyle = FACTIONS[ev.faction].color; c.strokeStyle = '#fff'; c.lineWidth = 2;
       c.beginPath(); c.moveTo(x, y - 8); c.lineTo(x + 7, y + 5); c.lineTo(x - 7, y + 5); c.closePath(); c.fill(); c.stroke();
     }

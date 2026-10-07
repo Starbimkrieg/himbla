@@ -22,7 +22,7 @@ export const ACTIONS = [
   { code: 'KeyJ', label: 'Reputation log' },
   { code: 'KeyC', label: 'Wardrobe' },
   { code: 'KeyP', label: 'Holding pen' },
-  { code: 'KeyR', label: 'Emergency recall' },
+  { code: 'KeyR', label: 'Emergency recall (hold 1.5 s)' },
   { code: 'KeyN', label: 'Music on / off' },
   { code: 'KeyV', label: 'Vehicle: call / board / leave' },
   { code: 'KeyZ', label: 'Phase Dash (tech)' },

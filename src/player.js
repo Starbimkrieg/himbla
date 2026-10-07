@@ -58,7 +58,7 @@ export class Player {
     this.params.skateSafeImpact = PHYS.skateSafeImpact + up.dampers * 8;
     this.params.handling = PHYS.handling + (up.gyro || 0) * 0.55;
     this.body.maxEnergy = PHYS.maxEnergy + up.capacitor * 25;
-    this.maxHealth = 100 + up.armor * 25 + (up.flak || 0) * 20 + (this.mutHealth || 0);
+    this.maxHealth = 100 + up.armor * 25 + (up.flak || 0) * 20 + (up.plating || 0) * 10 + (this.mutHealth || 0);
     this.damageMult = 1 + up.spinner * 0.3;
     this.fireDelay = 0.55 * (1 - 0.15 * (up.overcharge || 0)) * (this.mutFire || 1);
     this.homing = 0.9 + (up.seeker || 0) * 1.3; // rad/s the disc can turn toward a target
@@ -325,7 +325,7 @@ export class Player {
     }
     if (it.speed > safe) {
       // capped so one bad landing hurts but rarely kills outright
-      const dmg = Math.min(60, (it.speed - safe) * this.params.impactDamage);
+      const dmg = Math.min(45, (it.speed - safe) * this.params.impactDamage);
       g.damagePlayer(dmg, 'impact');
       g.fx.pop(it.speed - safe > 12 ? 'KRA-KOOM!' : 'KRAK!', this.body.pos.clone().addScaledVector(this.up, 2), { color: '#ff4f2e', size: 54 });
       g.fx.dust(this.body.pos, this.body.vel, 14, this.up);

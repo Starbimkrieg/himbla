@@ -18,6 +18,10 @@ export const ITEMS = {
   sapling: { name: 'Farm Sapling', icon: '♣', color: '#5fbf4a' },
   wiring: { name: 'Electrical Wiring', icon: '≋', color: '#ffb347' },
   engine: { name: 'Salvaged Engine', icon: '⚙', color: '#ff6a2a' },
+  lens: { name: 'Searchlight Lens', icon: '◎', color: '#fff6a8' },
+  transponder: { name: 'Signal Transponder', icon: '⌁', color: '#2ec4ff' },
+  plating: { name: 'Scrap Plating', icon: '▤', color: '#9aa7bb' },
+  junkbot: { name: 'Junk Bot', icon: '☐', color: '#ffb347' },
   // things that happen when items sit together in a jar
   mud: { name: 'Moon Mud', icon: '≈', color: '#8a6a4a' },
   slickrock: { name: 'Slick Rock', icon: '◈', color: '#9be7ff' },
@@ -43,6 +47,7 @@ export const MUTATIONS = {
   claws: { name: 'BURROWER CLAWS', from: ['dirt', 'mud'], desc: 'Painless landings in boots' },
   blood: { name: 'PIRATE BLOOD', from: ['pirate'], desc: 'Pirates hunt you far less' },
   roots: { name: 'ROOT GRIP', from: ['sapling'], desc: 'Skates grip 30% harder' },
+  hawk: { name: 'HAWK EYE', from: ['lens'], desc: 'Red enemy outlines reach 50% farther; sharper scope' },
 };
 const MAX_MUTATIONS = 3;
 const MAX_FOLLOW = 3;
@@ -227,22 +232,31 @@ export class Alchemy {
   // ---------- salvage on the ground ----------
   // Something worth scooping drops out of a wreck. Skate over it to bag it (needs jar room); credits
   // are picked up whether or not you have a jar.
-  dropLoot(kind, pos, { name, credits = 0 } = {}) {
+  // to: optional landing point — the loot is flung out of the wreck along an arc and lands there,
+  // in the open where you can see it (with a beacon so it isn't lost in rubble).
+  dropLoot(kind, pos, { name, credits = 0, to = null, crate = false } = {}) {
     const g = this.game;
     const up = pos.clone().normalize();
-    const at = g.planet.ground(pos.clone().addScaledVector(tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize(), 1 + Math.random() * 2), new THREE.Vector3(), 0.9);
+    const land = to || pos.clone().addScaledVector(tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize(), 1 + Math.random() * 2);
+    const at = g.planet.ground(land, new THREE.Vector3(), 0.9);
     const root = new THREE.Group();
-    const color = credits && !kind ? 0xffd23f : new THREE.Color(ITEMS[kind].color).getHex();
-    const core = new THREE.Mesh(kind === 'engine' ? new THREE.CylinderGeometry(0.5, 0.5, 0.9, 8).rotateZ(Math.PI / 2) : new THREE.OctahedronGeometry(0.45, 0), toon(color));
+    const color = crate ? 0xff7ad9 : credits && !kind ? 0xffd23f : new THREE.Color(ITEMS[kind].color).getHex();
+    const geo = crate ? new THREE.BoxGeometry(0.9, 0.9, 0.9) : kind === 'engine' ? new THREE.CylinderGeometry(0.5, 0.5, 0.9, 8).rotateZ(Math.PI / 2) : kind === 'plating' ? new THREE.BoxGeometry(1, 0.15, 0.8) : kind === 'junkbot' ? new THREE.BoxGeometry(0.6, 0.5, 0.6) : new THREE.OctahedronGeometry(0.45, 0);
+    const core = new THREE.Mesh(geo, toon(color));
     ink(core, 0.05);
     root.add(core);
     const halo = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.06, 6, 20).rotateX(Math.PI / 2), glow(color));
     halo.position.y = -0.6;
     root.add(halo);
-    root.position.copy(at);
-    frameQuat(up, tangent(SUN.clone(), up).normalize(), root.quaternion);
+    // a thin light pillar so it's easy to spot
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.25, 9, 6, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }));
+    beam.position.y = 4;
+    root.add(beam);
+    frameQuat(at.clone().normalize(), tangent(SUN.clone(), up).normalize(), root.quaternion);
     g.scene.add(root);
-    this.loot.push({ kind, name, credits, root, core, pos: at, t: 0 });
+    const from = pos.clone().addScaledVector(up, 2);
+    root.position.copy(to ? from : at);
+    this.loot.push({ kind, name, credits, crate, root, core, pos: at, from, fly: to ? 0 : 1, flyT: 0.9 + from.distanceTo(at) / 25, t: 0 });
   }
 
   updateLoot(dt) {
@@ -251,10 +265,19 @@ export class Alchemy {
     for (let i = this.loot.length - 1; i >= 0; i--) {
       const L = this.loot[i];
       L.t += dt;
+      if (L.fly < 1) {
+        // ballistic hop from the wreck to its landing spot
+        L.fly = Math.min(1, L.fly + dt / L.flyT);
+        const k = L.fly;
+        L.root.position.lerpVectors(L.from, L.pos, k).addScaledVector(L.pos.clone().normalize(), Math.sin(k * Math.PI) * (6 + L.from.distanceTo(L.pos) * 0.25));
+        if (L.fly >= 1) { this.game.fx.dust(L.pos, new THREE.Vector3(), 6, L.pos.clone().normalize()); this.game.audio.thud(8); }
+        continue;
+      }
       L.core.rotation.y += dt * 2;
       L.core.position.y = Math.sin(L.t * 3) * 0.15;
       let take = false;
       if (!P.dead && L.pos.distanceTo(P.pos) < 3.5) {
+        if (L.crate) { this.openCrate(); take = true; }
         if (L.credits) { g.addCredits(L.credits, 'Salvage'); g.fx.pop(`+₵${L.credits}`, null, { color: '#ffd23f', size: 44 }); L.credits = 0; if (!L.kind) take = true; }
         if (L.kind) {
           if (this.owned && this.used + (ITEMS[L.kind].slots || 1) <= this.slots) {
@@ -268,7 +291,36 @@ export class Alchemy {
     }
   }
 
+  // a Trading Kiosk mystery crate: open it on the spot
+  openCrate() {
+    const g = this.game;
+    const r = Math.random();
+    g.audio.cash();
+    if (r < 0.6) {
+      const n = 120 + Math.floor(Math.random() * 331);
+      g.addCredits(n, 'Mystery crate');
+      g.fx.pop(`CRATE: +₵${n}!`, null, { color: '#ffd23f', size: 50 });
+    } else if (r < 0.92 && g.casino) {
+      const n = 8 + Math.floor(Math.random() * 18);
+      g.casino.st.chips += n;
+      g.fx.pop(`CRATE: ${n} LUCKY CHIPS!`, null, { color: '#7dff6a', size: 50 });
+      g.hud.toast('Lucky Chips spend at the Lucky Crater Casino prize counter.', 3);
+    } else {
+      // jackpot: a big wad and a style splash
+      const n = 900 + Math.floor(Math.random() * 600);
+      g.addCredits(n, 'Mystery crate');
+      g.fx.pop(`JACKPOT CRATE! +₵${n}`, null, { color: '#ff7ad9', size: 64 });
+      g.style(60, 'JACKPOT CRATE');
+    }
+    g.save();
+  }
+
   add(kind, name) {
+    if (kind === 'transponder' && this.game.globe && this.game.globe.revealAround) {
+      // it pings as you bag it: the map around you lights up
+      this.game.globe.revealAround(this.game.player.up, 1400);
+      this.game.fx.pop('SIGNAL PING: MAP REVEALED NEARBY', null, { color: '#2ec4ff', size: 34 });
+    }
     this.jar.push({ kind, name });
     this.mixT = 0;
     this.game.audio.pickup();
@@ -294,6 +346,7 @@ export class Alchemy {
       if (it.kind === 'person' || it.kind === 'voidling' || it.kind === 'pirate') this.spawnWanderer(it.name, it.kind === 'voidling', it.kind === 'pirate');
       else if (it.kind === 'mite') { const m = this.mites.find((x) => x.gone > 0); if (m) { m.gone = 0; m.home = P.pos.clone().normalize(); } }
       else if (it.kind === 'sapling') { g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(2), { color: 0x5fbf4a, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 }); g.fx.pop('REPLANTED!', null, { color: '#5fbf4a', size: 36 }); }
+      else if (it.kind === 'junkbot') { g.fx.pop(`${(it.name || 'BOT').toUpperCase()}: BEEP BOOP!`, null, { color: '#ffb347', size: 36 }); g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0xffb347, size: 0.3, life: 0.6, gravity: 2, count: 8, spread: 2 }); }
       else if (it.kind === 'engine') { this.dropLoot('engine', P.pos.clone().addScaledVector(g.cam.right, 3)); continue; }
       else if (it.kind === 'wiring') g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0xffb347, size: 0.3, life: 0.6, gravity: 2, count: 8, spread: 2 });
       else if (it.kind === 'car') { const v = this.game.world.vehicles.find((x) => x.captured > 0); if (v) v.captured = 0.01; g.fx.pop('BEEP BEEP!', null, { color: '#ff7ad9', size: 40 }); }
@@ -608,6 +661,14 @@ export class Alchemy {
       leaf.rotation.z = (k - 1) * 0.8;
       add(leg, leaf);
     }
+    if (has('hawk')) {
+      const lens = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.025, 6, 14), toon(0xffd23f));
+      lens.position.set(0.17, 0.25, 0.38);
+      add(M.head, lens);
+      const glass = new THREE.Mesh(new THREE.CircleGeometry(0.1, 14), glow(0xfff6a8));
+      glass.position.set(0.17, 0.25, 0.39);
+      add(M.head, glass);
+    }
     if (has('blood')) {
       const band = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.06, 6, 16), toon(0xd7263d));
       band.rotation.x = Math.PI / 2;
@@ -785,6 +846,21 @@ const BUFF_NAMES = { lowGrav: 'LOW-G', slick: 'MOON MUD', bouncy: 'SPRINGY', inv
 // Reactor recipes, keyed by the sorted item kinds fed in together.
 const RECIPES = {
   sapling() { this.buffs.cushion = 40; return { title: 'MOON MOSS', text: '"The sapling went into the antimatter and came out as a fine green fuzz. It has settled on your boots. Landings will be very soft for a while."' }; },
+  lens() {
+    const g = this.game;
+    let n = 0;
+    for (const e of g.enemies.list) if (!e.dead && e.kind === 'skater' && e.center && e.center.distanceTo(g.world.lab.reactor) < 400) { e.dazed = 6; n++; }
+    g.world.reactor.flash = 4;
+    return { title: 'BLINDING FLASH', text: `"The lens focused the reactor into one tremendous flash. ${n ? `${n} pirate${n > 1 ? 's' : ''} out there are now seeing stars.` : 'Nobody was outside to be blinded. A pity.'} I can still see purple."` };
+  },
+  transponder() {
+    const g = this.game;
+    if (g.globe && g.globe.revealAround) g.globe.revealAround(g.world.lab.reactor.clone().normalize(), 2600);
+    g.addCredits(40, 'Data');
+    return { title: 'BROADCAST', text: '"I wired the transponder straight into the antimatter. It screamed across half the Moon and bounced back. Your map just got a lot less foggy. Forty credits of data, too."' };
+  },
+  plating() { this.game.addCredits(60, 'Scrap'); return { title: 'SLAG', text: '"One plate melts into sixty credits of slag. Bring me THREE and I will bolt them onto you properly."' }; },
+  junkbot(names) { this.game.addCredits(30, 'Parts'); return { title: 'DISASSEMBLED', text: `"${names[0] || 'The little robot'} went into the reactor, very bravely, and came out as thirty credits of parts. It waved."` }; },
   engine() { this.buffs.lowGrav = 30; this.game.addCredits(80, 'Scrap'); return { title: 'ANTIMATTER TURBO', text: '"I bolted your engine to the reactor and it achieved, briefly, anti-gravity. Some of it is still on you: you weigh less than half for a while. Also, eighty credits of scrap."' }; },
   wiring() { this.game.addCredits(45, 'Copper'); return { title: 'MELTED COPPER', text: '"One wire alone is just scrap. Here are forty-five credits for it. Bring me THREE and I can do something useful with your skates."' }; },
   rock() { this.game.addCredits(60, 'Sample'); return { title: 'ROCK… ANALYSED', text: '"A fine rock. It is now slightly radioactive and worth sixty credits to someone."' }; },

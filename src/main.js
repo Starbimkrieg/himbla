@@ -344,6 +344,24 @@ class Game {
       this.credits -= 1200; this.upgrades.penlink = 1; this.audio.cash(); this.save();
       this.dialog('DR. ZBORNAK', '"A quantum tether to the holding pen. Press <b>P</b> anywhere and your creatures will be… relocated. Don\'t think about how. I don\'t."', [{ label: 'NEAT' }]);
     } });
+    // three of a salvage kind for a permanent upgrade
+    const trade = (kind, key, max, label, done) => {
+      const have = this.alchemy.jar.filter((i) => i.kind === kind).length;
+      const lv = this.upgrades[key] || 0;
+      if (have < 3 || lv >= max) return;
+      buttons.push({ label: `${buttons.length + 1} · ${label} (${lv + 1}/${max})`, fn: () => {
+        let n = 0;
+        this.alchemy.jar = this.alchemy.jar.filter((i) => !(i.kind === kind && n++ < 3));
+        this.alchemy.refreshJarMesh();
+        this.upgrades[key] = lv + 1;
+        this.player.applyUpgrades(this.upgrades);
+        this.audio.cash();
+        this.save();
+        this.dialog('DR. ZBORNAK', done(lv + 1), [{ label: 'NICE' }]);
+      } });
+    };
+    trade('transponder', 'radar', 1, 'HAND OVER 3 TRANSPONDERS — EVENT RADAR', () => '"I have tuned your helmet to their frequencies. Faction events up to two and a half kilometres away now show on the edge of your minimap. You are welcome."');
+    trade('plating', 'plating', 3, 'HAND OVER 3 SCRAP PLATES — BOLT-ON ARMOUR', (lv) => `"Riveted to your suit and to every vehicle you own. Ten more hull for you and fifteen percent more for your rides (armour ${lv}/3). Do not ask what holds it on."`);
     const wires = this.alchemy.jar.filter((i) => i.kind === 'wiring').length;
     const gw = this.upgrades.gripwire || 0;
     if (wires >= 3 && gw < 3) buttons.push({ label: `${buttons.length + 1} · HAND OVER 3 ELECTRICAL WIRING — SKATE GRIP TUNE (${gw + 1}/3)`, fn: () => {
@@ -373,7 +391,7 @@ class Game {
   updateScanner(dt) {
     const lvl = this.upgrades.scanner || 0;
     const chip = document.getElementById('scanchip');
-    const range = lvl > 1 ? 800 : lvl ? 520 : 380;
+    const range = (lvl > 1 ? 800 : lvl ? 520 : 380) * (this.alchemy && this.alchemy.mutations.includes('hawk') ? 1.5 : 1);
     const cone = Math.cos(lvl > 1 ? 0.3 : 0.18);
     const hold = lvl > 1 ? 20 : 10;
     const P = this.player;
@@ -473,26 +491,28 @@ class Game {
   }
 
   // Where you deploy from: the ILMB, or Rustmoon Hold once you ride with the pirates.
+  // Where you respawn and recall to: the ILMB, or the HQ of the faction whose story you've committed
+  // to (Rustmoon Hold once you've sworn in with the pirates).
   home() {
-    if (this.rep && this.rep.aligned()) {
-      const loc = this.locations.find((l) => l.id === 'rustmoon');
-      if (!this._pirateHome) {
-        // first clear patch of ground (no buildings) around the hold
-        let point = null;
-        for (let rad = loc.r * 0.45; rad < loc.r * 0.9 && !point; rad += 8) {
-          for (let k = 0; k < 16 && !point; k++) {
-            const a = Math.PI + (k % 2 ? 1 : -1) * Math.floor((k + 1) / 2) * 0.4;
-            const p = this.world.toWorld(loc, Math.sin(a) * rad, 1.2, Math.cos(a) * rad);
-            if (!this.colliders.query(p, 6, []).some((c) => this.colliders.contact(c, p, 5, _v) > 0)) point = this.world.toWorld(loc, Math.sin(a) * rad, 0.5, Math.cos(a) * rad);
-          }
+    const f = this.rep && this.rep.aligned() ? 'rustmoon' : (this.story && this.story.faction);
+    const loc = f && f !== 'spacecom' ? this.locations.find((l) => l.hq && l.faction === f) : null;
+    if (!loc) return { point: this.spawnPoint, facing: this.spawnFacing, loc: this.hub };
+    this._homes = this._homes || {};
+    if (!this._homes[loc.id]) {
+      // first clear patch of ground (no buildings) around the HQ
+      let point = null;
+      for (let rad = loc.r * 0.45; rad < loc.r * 0.9 && !point; rad += 8) {
+        for (let k = 0; k < 16 && !point; k++) {
+          const a = Math.PI + (k % 2 ? 1 : -1) * Math.floor((k + 1) / 2) * 0.4;
+          const p = this.world.toWorld(loc, Math.sin(a) * rad, 1.2, Math.cos(a) * rad);
+          if (!this.colliders.query(p, 6, []).some((c) => this.colliders.contact(c, p, 5, _v) > 0)) point = this.world.toWorld(loc, Math.sin(a) * rad, 0.5, Math.cos(a) * rad);
         }
-        point = point || this.world.toWorld(loc, 0, 0.5, loc.r * 0.55);
-        const facing = tangent(loc.pos.clone().sub(point), point.clone().normalize()).normalize();
-        this._pirateHome = { point, facing, loc };
       }
-      return this._pirateHome;
+      point = point || this.world.toWorld(loc, 0, 0.5, loc.r * 0.55);
+      const facing = tangent(loc.pos.clone().sub(point), point.clone().normalize()).normalize();
+      this._homes[loc.id] = { point, facing, loc };
     }
-    return { point: this.spawnPoint, facing: this.spawnFacing, loc: this.hub };
+    return this._homes[loc.id];
   }
 
   objective() {
@@ -968,7 +988,12 @@ class Game {
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.openBoard(z);
     } else this.hud.prompt(null);
 
-    if (this.input.pressed('KeyR')) this.recall.request();
+    // emergency recall: hold R for 1.5 s (so it can't be fat-fingered mid-run)
+    if (this.input.down('KeyR') && !this.recall.active && !this.player.dead) {
+      this.recallHold = (this.recallHold || 0) + dt;
+      this.hud.recallHold(this.recallHold / 1.5, this.home().loc);
+      if (this.recallHold >= 1.5) { this.recallHold = 0; this.hud.recallHold(0); this.recall.request(); }
+    } else if (this.recallHold) { this.recallHold = 0; this.hud.recallHold(0); }
 
     if (this.tipIndex < TIPS.length && (!this.settings || this.settings.v.tips)) { // settings
       this.tipTimer -= dt;
@@ -1048,7 +1073,7 @@ class Game {
     }
     this.camera.up.copy(up);
     this.camera.lookAt(target.addScaledVector(c.look, 30));
-    const fov = scoped ? 14 : (sv ? sv.fov : 72) + Math.min(30, Math.max(0, sp - 15) * 0.3); // settings
+    const fov = scoped ? (this.alchemy && this.alchemy.mutations.includes('hawk') ? 8 : 14) : (sv ? sv.fov : 72) + Math.min(30, Math.max(0, sp - 15) * 0.3); // settings
     c.fov += (fov - c.fov) * Math.min(1, dt * (scoped ? 12 : 3));
     if (Math.abs(this.camera.fov - c.fov) > 0.01) {
       this.camera.fov = c.fov;

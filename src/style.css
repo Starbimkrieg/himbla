@@ -924,3 +924,9 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
   .wd-grid { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
   .wd-sub { display: none; }
 }
+
+/* ---- hold-to-recall ---- */
+#recallhold { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); width: min(360px, calc(100vw - 32px)); padding: 10px 12px; background: rgba(5, 3, 12, 0.85); border: 2px solid var(--cyan, #2ee6ff); box-shadow: 4px 4px 0 rgba(0,0,0,0.5); font-family: var(--comic); font-size: 9px; line-height: 1.2; color: #fff; text-align: center; pointer-events: none; display: none; }
+#recallhold.show { display: block; }
+#recallhold .rh-track { margin-top: 8px; height: 10px; background: #120a1e; border: 2px solid #05030c; }
+#recallhold .rh-fill { height: 100%; width: 0; background: var(--cyan, #2ee6ff); }

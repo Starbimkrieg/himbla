@@ -178,10 +178,12 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
   else {
     // airborne: normal moon gravity for a moment, then it builds; plus a pull that cancels the
     // orbital lift of going fast over a tiny sphere; plus the Dive multiplier
-    const k = Math.min(1, Math.max(0, (b.airTime - (params.airGrace ?? 1)) / (params.airGravRampTime ?? 2)));
-    const ramp = 1 + (params.airGravRamp ?? 1) * k * k * (3 - 2 * k);
     const vu = v.dot(up);
     const vh2 = Math.max(0, v.lengthSq() - vu * vu);
+    // the build-up only bites at speed: hopping around on foot stays pure, floaty moon gravity
+    const k = Math.min(1, Math.max(0, (b.airTime - (params.airGrace ?? 1)) / (params.airGravRampTime ?? 2)));
+    const fast = Math.min(1, Math.max(0, (Math.sqrt(vh2) - 15) / 30));
+    const ramp = 1 + (params.airGravRamp ?? 1) * k * k * (3 - 2 * k) * fast;
     const orbit = (params.orbitComp ?? 1) * vh2 / b.pos.length();
     const dive = input.dive ? (params.diveGrav ?? 3) : 1;
     v.addScaledVector(up, -(G * (params.airGravMult ?? 1) * ramp * dive + orbit) * dt);

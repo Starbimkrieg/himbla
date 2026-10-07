@@ -82,6 +82,16 @@ export class GlobeMap {
     if (this.saveT <= 0) { this.saveT = 10; this.save(); }
   }
 
+  // Uncover the fog within radius metres of a direction (Signal Transponder pings).
+  revealAround(dir, radius) {
+    const d = dir.clone().normalize();
+    const cosR = Math.cos(radius / PLANET.radius);
+    const c = this.cells;
+    for (let k = 0; k < this.explored.length; k++) if (!this.explored[k] && c[k * 3] * d.x + c[k * 3 + 1] * d.y + c[k * 3 + 2] * d.z > cosR) this.explored[k] = 1;
+    for (const l of this.game.locations) if (!l.discovered && arcDist(d, l.dir) < radius) this.discover(l, true);
+    this.save();
+  }
+
   // Open with you in the middle, facing up.
   center() {
     const c = this.game.cam;

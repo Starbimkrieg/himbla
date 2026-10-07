@@ -32,7 +32,7 @@ export class Garage {
     document.getElementById('hud').appendChild(this.bar);
   }
 
-  maxHp(id) { return VEHICLES[id].hp; }
+  maxHp(id) { return Math.round(VEHICLES[id].hp * (1 + 0.15 * (this.game.upgrades.plating || 0))); }
   cooldown(id) { return Math.max(0, (this.wreckedUntil[id] || 0) - this.game.time); }
 
   // Damage to the vehicle you're driving. Returns how much spills through to you.
