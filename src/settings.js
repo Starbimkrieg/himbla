@@ -11,7 +11,7 @@ export const ACTIONS = [
   { code: 'KeyA', label: 'Left / carve / spin' },
   { code: 'KeyD', label: 'Right / carve / spin' },
   { code: 'Space', label: 'Quantum-Lock skates (hold)' },
-  { code: 'ShiftLeft', label: 'Mag-jump' },
+  { code: 'ShiftLeft', label: 'Mag-jump / Dive (hold in the air)' },
   { code: 'KeyE', label: 'Thrusters (hold)' },
   { code: 'KeyQ', label: 'Tricks (hold in the air)' },
   { code: 'KeyF', label: 'Interact / job board' },

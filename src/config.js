@@ -32,6 +32,16 @@ export const PHYS = {
   airControl: 5,
   drag: 0.0002,
 
+  // Airborne: the Moon is small enough that at 100+ m/s the ground curves away beneath you and
+  // you nearly orbit. These keep big air big but bring you home.
+  orbitComp: 1, // extra pull equal to the "orbital lift" of your horizontal speed (v²/R)
+  airGrace: 1.0, // seconds of normal, floaty moon gravity after leaving the ground
+  airGravRamp: 1.5, // ...then gravity ramps up by this much (to x2.5)
+  airGravRampTime: 2.0, // ...over this many seconds
+  diveGrav: 3, // holding Dive in the air
+  diveCatch: 22, // magnetic catch pulling a diving skater down in the last few metres
+  diveSafeImpact: 160, // a skated dive landing absorbs this much vertical speed safely
+
   jumpSpeed: 10,
   jumpCost: 15,
   // Thrusters push mostly forward; only a little lift or dive is allowed.

@@ -174,7 +174,20 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
   const up = _up.copy(b.pos).normalize();
   b.up.copy(up);
   b.skating = !!input.skates;
-  v.addScaledVector(up, -G * (b.grounded ? 1 : params.airGravMult ?? 1) * dt);
+  if (b.grounded) v.addScaledVector(up, -G * dt);
+  else {
+    // airborne: normal moon gravity for a moment, then it builds; plus a pull that cancels the
+    // orbital lift of going fast over a tiny sphere; plus the Dive multiplier
+    const k = Math.min(1, Math.max(0, (b.airTime - (params.airGrace ?? 1)) / (params.airGravRampTime ?? 2)));
+    const ramp = 1 + (params.airGravRamp ?? 1) * k * k * (3 - 2 * k);
+    const vu = v.dot(up);
+    const vh2 = Math.max(0, v.lengthSq() - vu * vu);
+    const orbit = (params.orbitComp ?? 1) * vh2 / b.pos.length();
+    const dive = input.dive ? (params.diveGrav ?? 3) : 1;
+    v.addScaledVector(up, -(G * (params.airGravMult ?? 1) * ramp * dive + orbit) * dt);
+    // magnetic catch: a diving skater near the ground gets pulled onto it
+    if (input.dive && input.skates && b.altitude < 10) v.addScaledVector(up, -(params.diveCatch ?? 22) * dt);
+  }
 
   const wish = _w.copy(input.wish);
   const n = b.groundN;
@@ -264,7 +277,14 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
   if (alt <= 0) {
     b.pos.multiplyScalar(sr / len);
     const vn = v.dot(_sn);
-    if (vn < 0) {
+    if (vn < 0 && !wasGrounded && input.dive && input.skates && -vn < (params.diveSafeImpact ?? 160)) {
+      // dive landing: the skates catch you and turn the fall into speed along the slope
+      const sp0 = v.length();
+      v.addScaledVector(_sn, -vn);
+      const t = v.length();
+      if (t > 0.5) v.multiplyScalar(Math.min(sp0 * 0.92, Math.max(t, sp0 * 0.75)) / t);
+      b.diveLanded = -vn;
+    } else if (vn < 0) {
       const impact = -vn;
       if (input.skates) v.addScaledVector(_sn, -vn);
       else v.addScaledVector(_sn, -vn * (1 + (impact > 7 ? 0.28 : 0)));

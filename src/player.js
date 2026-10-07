@@ -124,7 +124,9 @@ export class Player {
     // Thrusters push mostly forward (where you aim / steer); only a little lift or dive.
     const thrustDir = (wish.lengthSq() > 0 ? wish.clone() : cam.fwd.clone());
     const tv = this.params.thrustVertical;
-    thrustDir.addScaledVector(up, THREE.MathUtils.clamp(Math.sin(cam.pitch) * 0.6 + 0.06, -tv, tv)).normalize();
+    // lift stays limited, but looking down lets the thrusters drive you down hard
+    const pitchK = Math.sin(cam.pitch) * 0.6 + 0.06;
+    thrustDir.addScaledVector(up, pitchK > 0 ? Math.min(pitchK, tv) : Math.max(pitchK * 2.2, -1.2)).normalize();
 
     const ctrl = {
       wish,
@@ -132,6 +134,8 @@ export class Player {
       // with the Rail Lance out, right mouse is the scope instead of the thrusters (E still thrusts)
       thrust: input.down('KeyE') || (input.mouse[2] && WEAPONS[this.weapon || 0].key !== 'rail'),
       jump: b.grounded && (input.pressed('ShiftLeft') || input.pressed('ShiftRight')),
+      // Dive: a fresh press of the jump key while airborne, held (so the jump itself never dives)
+      dive: this.diveLatch = !b.grounded && (this.diveLatch || ((input.pressed('ShiftLeft') || input.pressed('ShiftRight')) && b.airTime > 0.15)) && (input.down('ShiftLeft') || input.down('ShiftRight')),
       thrustDir,
     };
 
@@ -184,7 +188,12 @@ export class Player {
 
     this.updateTricks(dt, input, trickHeld, landed && !wasGrounded ? airBefore : -1);
 
-    if (!wasGrounded && b.grounded && airBefore > 2.2 && !this.trickLanding) {
+    if (b.diveLanded) {
+      g.fx.dust(b.pos, b.vel, 14, up);
+      if (b.diveLanded > 20) { g.fx.pop('STUCK IT!', null, { color: '#2ee6ff', size: 46 }); g.style(Math.round(b.diveLanded / 3), 'DIVE LANDING'); }
+      b.diveLanded = 0;
+    }
+    if (!wasGrounded && b.grounded && airBefore > 1.8 && !this.trickLanding) {
       g.style(Math.round(airBefore * 15), `BIG AIR ${airBefore.toFixed(1)}s`);
     }
     this.trickLanding = false;
@@ -361,7 +370,14 @@ export class Player {
     this.anim += dt * (2 + Math.min(sp, 10) * 1.1);
     const s = Math.sin(this.anim);
     const base = m.bodyBase;
-    if (!b.grounded) {
+    if (!b.grounded && ctrl && ctrl.dive) {
+      // dive: tuck, lean hard forward, arms swept back
+      m.torso.rotation.x = 0.85;
+      m.legL.rotation.x = m.legR.rotation.x = -0.35;
+      m.armL.rotation.x = m.armR.rotation.x = 0.9;
+      m.armL.rotation.z = -0.25; m.armR.rotation.z = 0.25;
+      if (Math.random() < dt * 20) this.game.fx.spawn(b.pos.clone().addScaledVector(up, 1.2), b.vel.clone().multiplyScalar(-0.2), { color: 0x9be7ff, size: 0.3, life: 0.3, count: 1, spread: 0.6 });
+    } else if (!b.grounded) {
       m.torso.rotation.x = 0.15;
       m.legL.rotation.x = -0.5; m.legR.rotation.x = 0.3;
       m.armL.rotation.z = -1.1; m.armR.rotation.z = 1.1;

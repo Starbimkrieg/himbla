@@ -754,7 +754,7 @@ export class Alchemy {
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.12, 12), toon(0x3a3550));
     cap.position.y = 0.45;
     g.add(cap);
-    g.position.set(0.64, 0.1, -0.05); // clear of the cape and the scarf tail
+    g.position.set(0.45, 0.1, -0.05);
     P.model.cargoSlot.add(g);
     this.jarMesh = g;
   }
