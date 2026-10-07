@@ -13,6 +13,8 @@ const _v = new THREE.Vector3();
 const _n = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _near = [];
+const _sv = new THREE.Vector3();
+const _sn = new THREE.Vector3();
 
 function steerToward(heading, up, target, maxAngle) {
   const t = tangent(target, up).normalize();
@@ -103,17 +105,25 @@ export class Enemies {
       patrols = d.patrols || 0;
     }
     const heavy = loc.id === 'ilmb';
-    for (const [a, r] of spots) {
-      const w = g.world.toWorld(loc, Math.cos(a) * r, 0, Math.sin(a) * r);
-      const p = this.ground(w, -0.3);
-      const up = p.clone().normalize();
+    // world.js lays out the gun mounts (wall bastions, gate towers, pylons) in loc.turretMounts;
+    // fall back to bare ground spots on the defense ring for anything it didn't.
+    const mounts = loc.turretMounts || spots.map(([a, r]) => ({ x: Math.cos(a) * r, z: Math.sin(a) * r, y: 0, ground: true }));
+    for (const m of mounts) {
+      let p, up;
+      if (m.ground) {
+        p = this.ground(g.world.toWorld(loc, m.x, 0, m.z), -0.3);
+        up = p.clone().normalize();
+      } else {
+        p = g.world.toWorld(loc, m.x, m.y, m.z);
+        up = loc.dir.clone();
+      }
       const t = makeTurret({ color: fc });
       if (heavy) t.root.scale.setScalar(1.35);
       t.root.position.copy(p);
-      frameQuat(up, loc.dir.clone().sub(up), t.root.quaternion);
+      frameQuat(up, g.world.toWorld(loc, 0, m.y, 0).sub(p), t.root.quaternion);
       base.group.add(t.root);
       const hp = heavy ? 360 : 220;
-      const e = { kind: 'turret', faction: 'mil', base, model: t, hp, maxHp: hp, heavy, fireCd: Math.random() * 2, center: p.clone().addScaledVector(up, heavy ? 4 : 3), radius: heavy ? 3 : 2.2, dead: false, respawn: 0 };
+      const e = { kind: 'turret', faction: 'mil', base, model: t, hp, maxHp: hp, heavy, fireCd: Math.random() * 2, center: p.clone().addScaledVector(up, heavy ? 4 : 3), radius: heavy ? 3 : 2.2, dead: false, respawn: 0, up, wall: !!m.wall };
       base.turrets.push(e);
       this.list.push(e);
       g.colliders.add({ type: 'cyl', c: p.clone(), axis: up, y0: -1, y1: heavy ? 5 : 3.8, r: heavy ? 3 : 2.2 });
@@ -823,6 +833,34 @@ export class Enemies {
     m.gun.rotation.y = Math.atan2(local.x, local.z);
   }
 
+  // Where a turret's shot leaves from: along the aim line, just outside its own collider
+  // (raised wall guns shoot downward a lot, and must not clip their own base).
+  muzzle(e, target) {
+    const up = e.up || _v.copy(e.center).normalize();
+    const dir = new THREE.Vector3().subVectors(target, e.center).normalize();
+    const v = dir.dot(up), h = Math.sqrt(Math.max(1e-6, 1 - v * v));
+    const r = e.radius + 0.5, top = (e.heavy ? 1 : 0.8) + 0.5; // collider radius / height above centre
+    let k = Math.min(r / h, e.heavy ? 4.6 : 3.6);
+    if (v > 0) k = Math.min(k, top / v);
+    return dir.multiplyScalar(k + 0.3).add(e.center);
+  }
+
+  // Clear line of fire: terrain plus solid colliders (walls, bastions, buildings) along the
+  // way, sampled every couple of metres; the last stretch next to the target is ignored.
+  clearShot(from, to) {
+    const g = this.game;
+    if (!g.planet.visible(from, to)) return false;
+    const C = g.colliders;
+    const len = from.distanceTo(to);
+    const n = Math.ceil(len / 2);
+    for (let i = 0; i < n; i++) {
+      if (len * (1 - i / n) < 2.5) break;
+      _sv.lerpVectors(from, to, i / n);
+      for (const c of C.query(_sv, 0.4, _near)) if (C.contact(c, _sv, 0.3, _sn) > 0) return false;
+    }
+    return true;
+  }
+
   // Turrets fight you when their base is hostile; otherwise they shoot any pirate that
   // wanders into range (but give up on targets that leave it).
   updateTurret(e, dt) {
@@ -837,11 +875,13 @@ export class Enemies {
     else {
       if (e.pirateT && (e.pirateT.dead || e.pirateT.center.distanceTo(e.center) > range)) e.pirateT = null;
       e.scanT = (e.scanT || 0) - dt;
+      e.skipCd = (e.skipCd || 0) - dt;
       if (!e.pirateT && e.scanT <= 0) {
         e.scanT = 0.5;
         let bd = range;
         for (const p of this.list) {
           if (p.faction !== 'pirate' || p.kind === 'core' || p.dead || !p.body) continue;
+          if (p === e.skipT && e.skipCd > 0) continue; // no line of fire to it a moment ago
           const d = p.center.distanceTo(e.center);
           if (d < bd) { bd = d; e.pirateT = p; }
         }
@@ -860,10 +900,16 @@ export class Enemies {
     e.fireCd -= dt;
     if (e.fireCd > 0) return;
     e.fireCd = e.heavy ? 0.65 : 0.9;
-    const from = e.center.clone().addScaledVector(e.center.clone().normalize(), 1);
+    const from = this.muzzle(e, target);
+    if (!this.clearShot(from, target)) {
+      // walls, roofs or terrain in the way: hold fire (and look for another pirate)
+      e.fireCd = 0.3;
+      if (target !== P.center) { e.skipT = e.pirateT; e.skipCd = 3; e.pirateT = null; }
+      return;
+    }
     if (target === P.center) {
       this.shoot(e, from, e.heavy ? 170 : 150, e.heavy ? 15 : 12, 0xff2a4a, 0.012);
-    } else if (g.planet.visible(from, target)) {
+    } else {
       const speed = e.heavy ? 170 : 150;
       const dir = this.aimLead(from, speed, 0.01, target, tvel);
       g.projectiles.fire('mil', from, dir.multiplyScalar(speed), { damage: e.heavy ? 34 : 26, splash: 5, color: 0xffb02e, size: 0.5, knock: 0.6, spare: true });
