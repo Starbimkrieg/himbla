@@ -889,9 +889,7 @@ class Game {
       // satellite artifact, alien gate, shrine
     } else if (this.story.interact(P)) {
       // a leader or one of your outposts' terminals
-    } else if (this.casino.near(P.pos)) { // casino
-      this.hud.prompt('<b>F</b> — ENTER THE LUCKY CRATER CASINO');
-      if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.casino.open();
+    } else if (this.casino.interact()) { // casino: walk-in game stations
     } else if (nearPen) {
       this.hud.prompt(`<b>F</b> — HOLDING PEN (${this.alchemy.chimeras.length} chimeras)`);
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.alchemy.penMenu();
