@@ -22,6 +22,7 @@ export const ITEMS = {
   transponder: { name: 'Signal Transponder', icon: '⌁', color: '#2ec4ff' },
   plating: { name: 'Scrap Plating', icon: '▤', color: '#9aa7bb' },
   junkbot: { name: 'Junk Bot', icon: '☐', color: '#ffb347' },
+  alien: { name: 'A Vrill', icon: '♆', color: '#7dd87a' },
   // things that happen when items sit together in a jar
   mud: { name: 'Moon Mud', icon: '≈', color: '#8a6a4a' },
   slickrock: { name: 'Slick Rock', icon: '◈', color: '#9be7ff' },
@@ -47,6 +48,7 @@ export const MUTATIONS = {
   claws: { name: 'BURROWER CLAWS', from: ['dirt', 'mud'], desc: 'Painless landings in boots' },
   blood: { name: 'PIRATE BLOOD', from: ['pirate'], desc: 'Pirates hunt you far less' },
   roots: { name: 'ROOT GRIP', from: ['sapling'], desc: 'Skates grip 30% harder' },
+  psi: { name: 'PSI ANTENNAE', from: ['alien'], desc: 'Red enemy outlines show through buildings' },
   hawk: { name: 'HAWK EYE', from: ['lens'], desc: 'Red enemy outlines reach 50% farther; sharper scope' },
 };
 const MAX_MUTATIONS = 3;
@@ -56,6 +58,7 @@ export const PEN = { x0: 28, z0: 22, x1: 62, z1: 64 };
 const PEN_SHOWN = 36;
 const KEY = 'moonrunner-lab-v1';
 
+const VRILL = ['Zib', 'Qorrl', 'Nnu', 'Vex-Ah', 'Ploob', 'Ixxi', 'Thrum'];
 const NAMES = ['Gary', 'Priya', 'Tomasz', 'Little Juno', 'Ade', 'Wen', 'Marisol', 'Big Lars', 'Fen', 'Doris', 'Okon', 'Bea'];
 
 const _v = new THREE.Vector3();
@@ -209,10 +212,11 @@ export class Alchemy {
       if (d < bd) { bd = d; best = { kind: 'wanderer', w }; }
     }
     if (best) {
-      const name = best.kind === 'figure' ? pick(NAMES) : best.w.name;
+      const vrill = best.kind === 'figure' ? best.f.alien : best.w.alien;
+      const name = vrill ? pick(VRILL) : best.kind === 'figure' ? pick(NAMES) : best.w.name;
       if (best.kind === 'figure') { best.f.captured = true; best.f.root.visible = false; }
       else { best.w.root.removeFromParent(); this.wanderers = this.wanderers.filter((w) => w !== best.w); }
-      this.add(best.kind === 'wanderer' && best.w.purple ? 'voidling' : 'person', name);
+      this.add(vrill ? 'alien' : best.kind === 'wanderer' && best.w.purple ? 'voidling' : 'person', name);
       g.fx.pop(`GOTCHA, ${name.toUpperCase()}!`, null, { color: '#ff9f1c', size: 46 });
       if (best.kind === 'figure') g.rep.add(best.f.loc.faction, -1, 'Jarred a resident', { silent: true });
       return;
@@ -344,6 +348,7 @@ export class Alchemy {
     const P = g.player;
     for (const it of this.jar) {
       if (it.kind === 'person' || it.kind === 'voidling' || it.kind === 'pirate') this.spawnWanderer(it.name, it.kind === 'voidling', it.kind === 'pirate');
+      else if (it.kind === 'alien') this.spawnWanderer(it.name, false, false, null, true);
       else if (it.kind === 'mite') { const m = this.mites.find((x) => x.gone > 0); if (m) { m.gone = 0; m.home = P.pos.clone().normalize(); } }
       else if (it.kind === 'sapling') { g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(2), { color: 0x5fbf4a, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 }); g.fx.pop('REPLANTED!', null, { color: '#5fbf4a', size: 36 }); }
       else if (it.kind === 'junkbot') { g.fx.pop(`${(it.name || 'BOT').toUpperCase()}: BEEP BOOP!`, null, { color: '#ffb347', size: 36 }); g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0xffb347, size: 0.3, life: 0.6, gravity: 2, count: 8, spread: 2 }); }
@@ -360,10 +365,10 @@ export class Alchemy {
   }
 
   // Free people wander off (and can be scooped up again).
-  spawnWanderer(name, purple, pirate, at) {
+  spawnWanderer(name, purple, pirate, at, alien = false) {
     const g = this.game;
     const P = g.player;
-    const f = makeFigure({ suit: pirate ? 0x3a2b4f : purple ? 0xc77dff : 0xff9f1c, visor: purple || pirate ? 0x7dff3a : 0x241a5c, helmet: pirate ? 0x2b2b2b : 0xfff4e0 });
+    const f = alien ? makeFigure({ alien: true }) : makeFigure({ suit: pirate ? 0x3a2b4f : purple ? 0xc77dff : 0xff9f1c, visor: purple || pirate ? 0x7dff3a : 0x241a5c, helmet: pirate ? 0x2b2b2b : 0xfff4e0 });
     const pos = g.planet.ground(at || P.pos.clone().addScaledVector(g.cam.right, 3), new THREE.Vector3());
     f.root.position.copy(pos);
     g.scene.add(f.root);
@@ -660,6 +665,15 @@ export class Alchemy {
       leaf.position.set((k - 1) * 0.12, -0.35, 0.12);
       leaf.rotation.z = (k - 1) * 0.8;
       add(leg, leaf);
+    }
+    if (has('psi')) for (const s of [-1, 1]) {
+      const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.4, 5), toon(0x7dd87a));
+      ant.position.set(s * 0.12, 0.52, -0.02);
+      ant.rotation.z = -s * 0.35;
+      add(M.head, ant);
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), glow(0xfff27a));
+      tip.position.set(s * 0.19, 0.7, -0.02);
+      add(M.head, tip);
     }
     if (has('hawk')) {
       const lens = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.025, 6, 14), toon(0xffd23f));

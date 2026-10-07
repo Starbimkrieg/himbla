@@ -328,7 +328,8 @@ export class Secrets {
       this.radius[i] = high + (m + LOW_ALT - high) * w;
     }
     this.lowAt = lowAt;
-    this.clock = (this.state.satPhase || 0);
+    // a new game starts SAT-7 on the far side of the Moon from the ILMB, so it has to be found
+    this.clock = this.state.satPhase ?? ((lowAt + Math.PI) * 3750) / SAT_SPEED;
     // the model
     const root = new THREE.Group();
     const body = new THREE.Mesh(new THREE.BoxGeometry(9, 3, 15), toon(0xc9a24a));

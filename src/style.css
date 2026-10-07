@@ -930,3 +930,6 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 #recallhold.show { display: block; }
 #recallhold .rh-track { margin-top: 8px; height: 10px; background: #120a1e; border: 2px solid #05030c; }
 #recallhold .rh-fill { height: 100%; width: 0; background: var(--cyan, #2ee6ff); }
+
+/* ---- title tour fade ---- */
+#tourfade { position: fixed; inset: 0; background: #05030c; opacity: 0; pointer-events: none; }

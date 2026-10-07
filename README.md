@@ -222,7 +222,7 @@ Rustmoon.
 
 ## Secrets (spoilers)
 
-- **SAT-7 "Lantern"** circles the whole Moon on an inclined orbit (~200 km/h). Most of the lap it's 200–300 m
+- **SAT-7 "Lantern"** circles the whole Moon on an inclined orbit (~200 km/h), starting each session on the far side from the ILMB. Most of the lap it's 200–300 m
   up, but just past the ILMB it dips to about 40 m. The globe map shows its dashed orbit, the LOW PASS mark and
   where it is now. Land on its deck or solar panels by matching its speed and direction (any mismatch slides
   you off). On deck is a glowing **alien artifact**: F takes it into a sealed compartment of your jar (needs
@@ -299,6 +299,11 @@ swap passengers and then head somewhere new. You can ride on a freighter deck or
 
 ## Townspeople
 
+There's no air on the Moon, so every human outdoors wears a sealed helmet or a fishbowl (kids a bubble). The
+bare-headed folk are the **Vrill**: an antennaed people who breathe vacuum just fine. Jar one and it's a
+living jar item: it splices into chimeras (antennaed heads) or into you as the **PSI ANTENNAE** mutation (red
+enemy outlines show through buildings).
+
 Residents, passengers and walkers come in many looks: colony coveralls, lab coats with clipboards, engineers
 in hard hats and tool belts, traders in jackets and ties, elderly folk with canes, bulky EVA suits with
 fishbowl helmets, hoodies, and kids in bubble helmets, with varied skin, hair, builds and headgear.
@@ -323,6 +328,9 @@ shuttle), Daedalus Relay (big rotating dish and mast), the Power Block (cooling 
 Habitat ring.
 
 ## Main menu & saves
+
+The title screen slowly circles one sunlit place after another (the ILMB, Meridian, Kepler, the casino and
+more) to its own faster, brighter synthwave track (it starts with your first key or click).
 
 The game opens on a main menu: CONTINUE, NEW GAME, LOAD GAME, SETTINGS (and QUIT in the desktop app). There
 are three save slots, each showing credits, deliveries, story faction, play time and last played; slots can

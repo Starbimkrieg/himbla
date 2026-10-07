@@ -3,7 +3,7 @@ import { toon, glow, ink } from './toon.js';
 import { mulberry32 } from './rng.js';
 
 // Things with bodies. Two or more of these in the reactor make a Chimera.
-export const LIVING = ['person', 'voidling', 'mite', 'car', 'pirate', 'sapling', 'junkbot'];
+export const LIVING = ['person', 'voidling', 'mite', 'car', 'pirate', 'sapling', 'junkbot', 'alien'];
 // Things that only mutate whatever they get spliced into.
 export const MODIFIERS = { water: 'void', rock: 'crystal', slickrock: 'crystal', dirt: 'mud', mud: 'mud', wiring: 'spark', engine: 'turbo', lens: 'lens', transponder: 'radio', plating: 'armor' };
 
@@ -15,8 +15,9 @@ const PALETTE = {
   pirate: [0x3a2b4f, 0x5a3a5a],
   sapling: [0x5fbf4a, 0x8fd16a, 0x3f9a3a],
   junkbot: [0xffb347, 0x9aa7bb, 0x55607a],
+  alien: [0x7dd87a, 0x5fc9b8, 0xb59cff, 0xc9f27a],
 };
-const SYLL = { car: 'Vroom', mite: 'Skitter', pirate: 'Grit', sapling: 'Sprout', junkbot: 'Bolt' };
+const SYLL = { car: 'Vroom', mite: 'Skitter', pirate: 'Grit', sapling: 'Sprout', junkbot: 'Bolt', alien: 'Zorp' };
 const EPITHET = { void: 'the Unholy', crystal: 'the Crystalline', mud: 'of the Mud', spark: 'the Electric', turbo: 'the Turbocharged', lens: 'the All-Seeing', radio: 'the Broadcaster', armor: 'the Ironclad' };
 
 function part(geo, mat, x, y, z, outline = 0.04) {
@@ -45,8 +46,8 @@ export function spliceGenes(items, seed = Math.floor(Math.random() * 1e9)) {
   let name = a.replace(/^Little /, '').slice(0, Math.max(2, Math.ceil(a.length / 2))) + b.replace(/^Little /, '').slice(Math.floor(b.length / 2)).toLowerCase();
   if (living.length === 1) name = `Mutant ${a}`;
   if (mods.length) name += ' ' + EPITHET[mods[0]];
-  const legSpeed = { car: 1.0, mite: 0.9, pirate: 0.8, person: 0.72, voidling: 0.78, sapling: 0.62, junkbot: 0.95 }[legs];
-  const bodyMult = { car: 0.95, mite: 1.05, pirate: 1.05, person: 1, voidling: 1.08, sapling: 1.1, junkbot: 0.98 }[body];
+  const legSpeed = { car: 1.0, mite: 0.9, pirate: 0.8, person: 0.72, voidling: 0.78, sapling: 0.62, junkbot: 0.95, alien: 0.86 }[legs];
+  const bodyMult = { car: 0.95, mite: 1.05, pirate: 1.05, person: 1, voidling: 1.08, sapling: 1.1, junkbot: 0.98, alien: 1.0 }[body];
   const speed = 34 * legSpeed * bodyMult * (1.12 - (size - 1) * 0.25) * (0.9 + rr() * 0.2) * (mods.includes('crystal') ? 1.05 : 1) * (mods.includes('spark') ? 1.08 : 1) * (mods.includes('turbo') ? 1.15 : 1) * (mods.includes('armor') ? 0.92 : 1);
   const chaos = kinds.size + mods.length + (extraHead ? 1 : 0) + (mods.includes('void') ? 1 : 0);
   return { seed, body, legs, head, extraHead, mods, size, tint, name, speed: Math.round(speed * 10) / 10, hop: legs === 'mite' ? 1 : 0.3, chaos, parents: living.map((i) => i.kind), born: Date.now() };
@@ -110,7 +111,7 @@ export function makeChimera(genes) {
     }
   } else {
     legH = 1.0;
-    const legM = genes.legs === 'pirate' ? toon(0x3a2b4f) : genes.legs === 'voidling' ? toon(0xc77dff) : toon(PALETTE.person[Math.floor(rr() * 4)]);
+    const legM = genes.legs === 'pirate' ? toon(0x3a2b4f) : genes.legs === 'voidling' ? toon(0xc77dff) : genes.legs === 'alien' ? toon(PALETTE.alien[Math.floor(rr() * 4)]) : toon(PALETTE.person[Math.floor(rr() * 4)]);
     for (const sx of [-1, 1]) {
       const pivot = new THREE.Group();
       pivot.position.set(sx * 0.22, legH, 0);
@@ -164,6 +165,20 @@ export function makeChimera(genes) {
         const ant = part(new THREE.CylinderGeometry(0.025, 0.025, 0.9, 4), toon(0x3a3550), sx * 0.18, 0.75, 0.1, 0);
         ant.rotation.z = -sx * 0.4;
         h.add(ant);
+      }
+    } else if (kind === 'alien') {
+      const skin = toon(PALETTE.alien[Math.floor(rr() * 4)]);
+      const sk = part(new THREE.SphereGeometry(0.34, 12, 10), skin, 0, 0.25, 0, 0.04);
+      sk.scale.set(0.9, 1.25, 0.95);
+      h.add(sk);
+      for (const sx of [-1, 1]) {
+        const eye = part(new THREE.SphereGeometry(0.1, 8, 6), toon(0x05030c), sx * 0.13, 0.25, 0.27, 0);
+        eye.scale.set(1, 1.4, 0.5);
+        h.add(eye);
+        const ant = part(new THREE.CylinderGeometry(0.02, 0.025, 0.5, 5), skin, sx * 0.12, 0.8, 0, 0.015);
+        ant.rotation.z = -sx * 0.35;
+        h.add(ant);
+        h.add(part(new THREE.SphereGeometry(0.07, 8, 6), glow(0xfff27a), sx * 0.21, 1.04, 0, 0));
       }
     } else if (kind === 'junkbot') {
       // a little CRT head with a pixel face

@@ -695,6 +695,11 @@ export class Events {
       }
     }
     if (g.rep.rustmoon === 'unknown' && !this.list.some((e) => e.type === 'wreck')) {
+      // the pirate distress call first comes 10-15 minutes into the save's play time
+      if (this.wreckAt === undefined) {
+        this.wreckAt = 600 + Math.random() * 300;
+        this.wreckTimer = Math.max(30, this.wreckAt - (g.saves ? g.saves.playTime() : 0));
+      }
       this.wreckTimer -= dt;
       if (this.wreckTimer <= 0) this.spawnWreck();
     }

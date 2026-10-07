@@ -317,6 +317,8 @@ function figGeo() {
     pompom: sph(0.07, 8, 6),
     hardHat: sph(0.29, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2),
     hardBrim: new THREE.CylinderGeometry(0.35, 0.35, 0.03, 14),
+    antenna: new THREE.CylinderGeometry(0.014, 0.022, 0.34, 5),
+    antTip: sph(0.05, 6, 4),
     ridge: box(0.07, 0.05, 0.48),
     helmet: sph(0.33, 12, 9),
     visorFrame: sph(0.336, 12, 6, Math.PI / 2 - 0.95, 1.9, 0.86, 1.22),
@@ -369,6 +371,7 @@ function figMats() {
 }
 
 const PAL = {
+  alien: [0x7dd87a, 0x5fc9b8, 0xb59cff, 0x9be7ff, 0xc9f27a, 0xff9fcf],
   skin: [0xffdbac, 0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0x5c3a21, 0xffe0bd, 0xd9a07a],
   hair: [0x2b1b12, 0x4a2c17, 0x8a5a2b, 0xd9a441, 0xe8d39a, 0x1a1a1a, 0xb5482f, 0x2b1b12, 0xff7ad9, 0x2ec4ff],
   grey: [0xd8d8d8, 0xb8b8bc, 0xf0f0f0, 0x9a9a9e],
@@ -467,7 +470,7 @@ const figMat = (p = [0, 0, 0], r = [0, 0, 0], s = 1) => new THREE.Matrix4().comp
 
 // Cheap NPC townsperson for ambient life. Pivot at the feet; legL/legR pivot at the hips and
 // armL/armR at the shoulders (Bones: animate them by rotation.x).
-export function makeFigure({ suit, helmet, visor, scale = 1, seed, kind, look } = {}) {
+export function makeFigure({ suit, helmet, visor, scale = 1, seed, kind, look, alien: forceAlien = false } = {}) {
   const G = figGeo();
   const mat = figMats();
   const rnd = figRng(seed);
@@ -475,22 +478,22 @@ export function makeFigure({ suit, helmet, visor, scale = 1, seed, kind, look } 
   const chance = (p) => rnd() < p;
   const kid = kind === 'kid' || scale < 0.75;
   const arch = look || (kind === 'soldier' ? 'trooper' : kid ? 'kid' : pick(ARCH));
-  // headgear: a visor means a sealed helmet; a helmet colour alone means some kind of hat or helmet
+  // headgear: there's no air out here, so every human wears a sealed helmet or a fishbowl (kids a
+  // bubble). The only bare heads belong to the Vrill: an antennaed folk who breathe vacuum just fine.
+  const alien = forceAlien || !kid && kind !== 'soldier' && look === undefined && visor === undefined && helmet === undefined && chance(0.22);
   let headgear;
-  if (visor !== undefined) headgear = 'sealed';
+  if (alien) headgear = 'alien';
+  else if (visor !== undefined) headgear = 'sealed';
   else if (arch === 'trooper') headgear = 'sealed';
   else if (arch === 'eva') headgear = 'bowl';
-  else if (helmet !== undefined) headgear = arch === 'engineer' ? 'hardhat' : arch === 'kid' ? pick(['bubble', 'cap']) : pick(['sealed', 'sealed', 'cap', 'beanie', 'hardhat']);
-  else if (arch === 'kid') headgear = pick(['bubble', 'bubble', 'hair', 'cap']);
-  else if (arch === 'engineer') headgear = pick(['hardhat', 'hardhat', 'hair']);
-  else if (arch === 'elder') headgear = chance(0.25) ? 'beanie' : 'hair';
-  else headgear = pick(['hair', 'hair', 'hair', 'hair', 'cap', 'beanie', 'sealed']);
+  else if (arch === 'kid') headgear = 'bubble';
+  else headgear = pick(['sealed', 'sealed', 'sealed', 'bowl']);
   const sealed = headgear === 'sealed';
   const mono = suit !== undefined && suit === helmet; // statues and the like: one colour all over
 
   // palette
   const C = suit !== undefined ? suit : pick(arch === 'lab' ? PAL.coat : arch === 'trader' ? PAL.jacket : arch === 'elder' ? PAL.knit : PAL.clothes);
-  const skin = pick(PAL.skin);
+  const skin = alien ? pick(PAL.alien) : pick(PAL.skin);
   const hair = arch === 'elder' ? pick(PAL.grey) : pick(PAL.hair);
   const hairStyle = arch === 'elder' ? pick(['fringe', 'fringe', 'bun', 'short']) : pick(['short', 'short', 'bun', 'long', 'long', 'fringe']);
   const hatC = helmet !== undefined ? helmet : headgear === 'hardhat' ? pick(PAL.hard) : headgear === 'sealed' || headgear === 'bubble' ? 0xfff4e0 : pick(PAL.hat);
@@ -510,7 +513,7 @@ export function makeFigure({ suit, helmet, visor, scale = 1, seed, kind, look } 
   const stoop = arch === 'elder' ? 0.16 : 0;
   // accessories
   const acc = {
-    glasses: !sealed && headgear !== 'bowl' && headgear !== 'bubble' && (arch === 'elder' ? chance(0.7) : arch === 'lab' ? chance(0.6) : chance(0.15)),
+    glasses: !sealed && !alien && headgear !== 'bowl' && headgear !== 'bubble' && (arch === 'elder' ? chance(0.7) : arch === 'lab' ? chance(0.6) : chance(0.15)),
     bag: (arch === 'trader' || arch === 'casual') && chance(0.4),
     scarf: (arch === 'casual' || arch === 'elder' || arch === 'trader') && chance(0.3),
     hand: arch === 'lab' ? pick(['clipboard', 'tablet', 'clipboard']) : arch === 'trader' ? pick(['tablet', 'briefcase', 'none']) : arch === 'elder' ? 'cane' : arch === 'kid' ? pick(['toy', 'none']) : arch === 'casual' ? pick(['tablet', 'none', 'none']) : 'none',
@@ -600,7 +603,15 @@ export function makeFigure({ suit, helmet, visor, scale = 1, seed, kind, look } 
     if (!sealed && headgear !== 'bowl') add(G.neck, 'torso', skin, figMat([0, 0.99, 0.01], [0, 0, 0], [1 / w, 1, 1]));
     // head (in the head frame: centre of the skull)
     const bare = headgear !== 'sealed';
-    if (bare) {
+    if (alien) {
+      // a tall smooth skull, huge dark eyes, two springy antennae with glowing tips
+      add(G.head, 'head', skin, figMat([0, 0.04, 0], [0, 0, 0], [0.86, 1.22, 0.95]), 0.035);
+      for (const s of [-1, 1]) {
+        add(G.eye, 'head', 0x05030c, figMat([s * 0.09, 0.02, 0.2], [0, 0, s * 0.35], [2.4, 3.2, 1.1]));
+        add(G.antenna, 'head', skin, figMat([s * 0.09, 0.4, -0.02], [0, 0, -s * 0.35]), 0.012);
+        add(G.antTip, 'head', 0xfff27a, figMat([s * 0.15, 0.56, -0.02]), 0.012);
+      }
+    } else if (bare) {
       add(G.head, 'head', skin, figMat([0, 0, 0], [0, 0, 0], [0.92, 1.04, 0.98]), 0.035);
       for (const s of [-1, 1]) {
         add(G.eye, 'head', 0x120a1e, figMat([s * 0.085, 0.03, 0.215], [0, 0, 0], [1, 1.3, 0.6]));
@@ -706,7 +717,7 @@ export function makeFigure({ suit, helmet, visor, scale = 1, seed, kind, look } 
   bones[3].rotation.z = -0.07 * (arch === 'eva' ? 2 : 1);
   bones[4].rotation.z = 0.07 * (arch === 'eva' ? 2 : 1);
   root.scale.setScalar(scale * tall);
-  return { root, body, legL: bones[1], legR: bones[2], armL: bones[3], armR: bones[4], look: arch, swing: arch === 'elder' ? 0.15 : arch === 'eva' ? 0.3 : 0.45 };
+  return { root, body, legL: bones[1], legR: bones[2], armL: bones[3], armR: bones[4], look: arch, alien, swing: arch === 'elder' ? 0.15 : arch === 'eva' ? 0.3 : 0.45 };
 }
 
 export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, flag = 0x111111 } = {}) {

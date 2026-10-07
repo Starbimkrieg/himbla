@@ -1,6 +1,6 @@
 {
   "name": "moon-runner",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "private": true,
   "description": "Moon-Runner: a comic-book 3D momentum delivery game on the Moon",
   "type": "module",

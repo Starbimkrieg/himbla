@@ -171,6 +171,16 @@ class Game {
     this.timers = [];
     this.time = 0;
     this.state = 'title';
+    // browsers only allow audio after a gesture: the first key or click on the title starts the menu track
+    const wake = () => {
+      if (this.state !== 'title') return;
+      this.audio.init();
+      this.audio.setMenu(true);
+      window.removeEventListener('pointerdown', wake, true);
+      window.removeEventListener('keydown', wake, true);
+    };
+    window.addEventListener('pointerdown', wake, true);
+    window.addEventListener('keydown', wake, true);
     this.damageFlash = 0;
     this.currentZone = null;
     this.panel = null;
@@ -409,7 +419,8 @@ class Game {
           e.losT = (e.losT || 0) - dt;
           if (e.losT <= 0) {
             e.losT = 0.12 + Math.random() * 0.06;
-            e.los = this.planet.visible(cam, e.center) && this.clearSight(cam, e.center, e.radius || 1.5);
+            const psi = this.alchemy && this.alchemy.mutations.includes('psi');
+            e.los = this.planet.visible(cam, e.center) && (psi || this.clearSight(cam, e.center, e.radius || 1.5));
           }
           seen = !!e.los;
           if (seen && lvl) {
@@ -735,10 +746,65 @@ class Game {
 
   // ---------- save slots / main menu ----------
   // Called by the main menu (from a click or key press, so pointer lock is allowed).
+  // Behind the title screen: a slow orbit around one sunlit place after another.
+  updateTitleTour(dt) {
+    const P = this.player;
+    if (!this.tour) {
+      const want = ['ilmb', 'meridian', 'kepler', 'casino', 'tranq', 'vostok', 'shackleton', 'aldrin', 'rustmoon'];
+      const list = want.map((id) => this.locations.find((l) => l.id === id)).filter((l) => l && darkness(l.dir) < 0.35);
+      this.tour = { list: list.length ? list : [this.hub], i: -1, t: 1e9, fade: document.getElementById('tourfade') };
+      if (!this.tour.fade) {
+        const f = document.createElement('div');
+        f.id = 'tourfade';
+        const title = document.getElementById('title'); // under the menu, over the 3D view
+        title.parentNode.insertBefore(f, title);
+        this.tour.fade = f;
+      }
+    }
+    const T = this.tour;
+    const SHOT = 24;
+    T.t += dt;
+    if (T.t > SHOT) {
+      T.i = (T.i + 1) % T.list.length;
+      T.t = 0;
+      T.a0 = Math.random() * Math.PI * 2;
+      const loc = T.list[T.i];
+      // stand the (hidden) runner there so terrain, shadows and nearby life build around the shot
+      P.respawn(this.world.toWorld(loc, 0, 1, 0), null);
+      P.model.root.visible = false;
+      this.planet.update(this.world.toWorld(loc, loc.r, 60, 0), { budgetMs: 1e9 });
+    }
+    const loc = T.list[T.i];
+    const R = loc.r * 1.15 + 70, h = 38 + loc.r * 0.18;
+    const a = T.a0 + T.t * 0.045;
+    const cam = this.camera;
+    cam.position.copy(this.world.toWorld(loc, Math.cos(a) * R, h, Math.sin(a) * R));
+    cam.up.copy(loc.dir);
+    cam.lookAt(this.world.toWorld(loc, 0, 8, 0));
+    this.cam.position.copy(cam.position);
+    if (Math.abs(cam.fov - 60) > 0.01) { cam.fov = 60; cam.updateProjectionMatrix(); }
+    // dip to black between places
+    const edge = Math.min(T.t, SHOT - T.t);
+    T.fade.style.opacity = String(Math.max(0, 1 - edge / 0.9));
+  }
+
   startPlay() {
     if (this.started) return;
     this.started = true;
     this.audio.init();
+    this.audio.setMenu(false);
+    // back from the title tour: put the runner home and the camera behind them
+    if (this.tour) {
+      if (this.tour.fade) this.tour.fade.style.opacity = '0';
+      const h = this.home();
+      this.player.respawn(h.point, h.facing);
+      this.player.model.root.visible = true;
+      this.cam.fwd.copy(h.facing);
+      this.cam.pitch = -0.1;
+      this.camera.fov = 72; this.camera.updateProjectionMatrix();
+      this.updateCamera(0.016, true);
+      this.tour = null;
+    }
     document.getElementById('title').classList.add('hidden');
     this.state = 'play';
     this.input.lock();
@@ -799,7 +865,8 @@ class Game {
     }
 
     this.recall.update(dt);
-    if (this.state !== 'cutscene') this.updateCamera(dt);
+    if (this.state === 'title') this.updateTitleTour(rdt);
+    else if (this.state !== 'cutscene') this.updateCamera(dt);
     this.world.update(dt, this.time, this.camera.position);
     this.fx.update(dt);
     this.hud.update(rdt);

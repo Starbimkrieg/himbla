@@ -62,6 +62,7 @@ export class Audio {
     // dreamy echo for pads, arp and snare
     this.echoIn = ctx.createGain(); this.echoIn.gain.value = 1;
     const delay = ctx.createDelay(1); delay.delayTime.value = (60 / 96) * 0.75;
+    this.delay = delay;
     const fb = ctx.createGain(); fb.gain.value = 0.32;
     const damp = ctx.createBiquadFilter(); damp.type = 'lowpass'; damp.frequency.value = 1600;
     this.echoIn.connect(delay).connect(damp).connect(fb).connect(delay);
@@ -140,9 +141,55 @@ export class Audio {
     }
   }
 
+  // Title-screen track: the same synths, faster and brighter. Em - C - G - D, four-on-the-floor,
+  // offbeat open hats, a driving octave bass and a hooky lead.
+  menuStep(t, step) {
+    const sixteenth = 60 / this.bpm / 4;
+    const bar = Math.floor(step / 16) % 4;
+    const s = step % 16;
+    const chords = [[52, 55, 59], [48, 52, 55], [55, 59, 62], [50, 54, 57]];
+    const chord = chords[bar];
+    if (s === 0) for (const n of chord) for (const d of [-9, 9]) this.voice('sawtooth', this.mtof(n), t, sixteenth * 16 + 0.4, 0.02, { attack: 0.25, cutoff: 1900, echo: 0.3, detune: d });
+    // octave-bouncing bass on every 8th
+    if (s % 2 === 0) this.voice('sawtooth', this.mtof(chord[0] - 24 + ((s / 2) % 2 ? 12 : 0)), t, sixteenth * 1.6, 0.13, { cutoff: 700 });
+    if (s % 4 === 0) this.kick(t);
+    if (s === 4 || s === 12) this.snare(t, 0.2);
+    if (s % 4 === 2) this.hat(t, 0.05);
+    else if (s % 2 === 1) this.hat(t, 0.018);
+    // lead: a two-bar hook, answered an octave up on the second pass
+    const hook = [0, -1, 2, -1, 1, -1, 2, 0, -1, 2, -1, 1, 0, -1, 2, -1];
+    const k = hook[s];
+    if (k >= 0 && (bar % 2 === 0 || s < 12)) {
+      const n = chord[k] + 12 + (Math.floor(step / 64) % 2 ? 12 : 0);
+      this.voice('square', this.mtof(n), t, sixteenth * 1.4, 0.034, { cutoff: 3200, echo: 0.5 });
+    }
+    // sparkle arp on the last bar of each phrase
+    if (bar === 3 && s % 2 === 1) this.voice('triangle', this.mtof(chord[(s >> 1) % 3] + 24), t, sixteenth * 0.8, 0.025, { cutoff: 5000, echo: 0.4 });
+  }
+
+  setMenu(on) {
+    if (this.menu === on) return;
+    this.menu = on;
+    this.bpm = on ? 120 : 96;
+    this.step = 0;
+    if (this.delay) this.delay.delayTime.setTargetAtTime((60 / this.bpm) * 0.75, this.ctx.currentTime, 0.1);
+  }
+
   updateMusic(speed) {
     const ctx = this.ctx;
     const t = ctx.currentTime;
+    if (this.menu) {
+      this.music.gain.setTargetAtTime(this.musicOn ? 0.5 : 0, t, 0.4);
+      this.musicTone.frequency.setTargetAtTime(5200, t, 0.4);
+      const six = 60 / this.bpm / 4;
+      if (this.nextNote < t - 0.5) this.nextNote = t + 0.05;
+      while (this.nextNote < t + 0.2) {
+        if (this.musicOn) this.menuStep(this.nextNote, this.step);
+        this.nextNote += six;
+        this.step++;
+      }
+      return;
+    }
     const target = Math.min(1, speed / 110);
     this.level += (target - this.level) * (target > this.level ? 0.02 : 0.008);
     const vol = this.musicOn ? 0.05 + this.level * 0.55 : 0;
