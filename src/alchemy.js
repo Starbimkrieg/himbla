@@ -587,7 +587,9 @@ export class Alchemy {
     if (has('stone')) for (let i = 0; i < 4; i++) {
       const sp = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), glow(0x2ee6ff));
       sp.scale.set(0.6, 1.8, 0.6);
-      sp.position.set(-0.24 + i * 0.16, 1.0 + (i % 2) * 0.1, -0.45);
+      // along the flanks of the backpack, clear of the scarf, crate, jar and cape
+      sp.position.set((i < 2 ? -1 : 1) * 0.36, 0.8 - (i % 2) * 0.26, -0.28);
+      sp.rotation.z = (i < 2 ? 1 : -1) * 1.0;
       add(M.torso, sp);
     }
     if (has('claws')) for (const arm of [M.armL, M.armR]) for (let k = 0; k < 3; k++) {
@@ -752,7 +754,7 @@ export class Alchemy {
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.12, 12), toon(0x3a3550));
     cap.position.y = 0.45;
     g.add(cap);
-    g.position.set(0.45, 0.1, -0.05);
+    g.position.set(0.64, 0.1, -0.05); // clear of the cape and the scarf tail
     P.model.cargoSlot.add(g);
     this.jarMesh = g;
   }

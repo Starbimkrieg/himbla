@@ -52,6 +52,7 @@ const CAMP_NAMES = ['Grimtooth Camp', "Vandal's Rest", 'Ashfall Hideout', 'Cutth
 const sleep = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const FROZEN_STATES = new Set(['paused', 'map', 'dialog', 'board', 'log', 'wardrobe']);
 const _sightN = new THREE.Vector3();
 const _sightNear = [];
 // Threat Scanner outline: a bold red version of the comic ink shell.
@@ -762,8 +763,11 @@ class Game {
   frame() {
     const now = performance.now();
     if (this.settings && this.settings.skip(now)) return; // settings: frame-rate cap
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    const rdt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    // paused, map, menus and dialogs freeze the whole world: traffic, the satellite, particles, clocks
+    const frozen = FROZEN_STATES.has(this.state);
+    const dt = frozen ? 0 : rdt;
     this.time += dt;
 
     const playing = this.state === 'play';
@@ -778,7 +782,7 @@ class Game {
     if (this.state !== 'cutscene') this.updateCamera(dt);
     this.world.update(dt, this.time, this.camera.position);
     this.fx.update(dt);
-    this.hud.update(dt);
+    this.hud.update(rdt);
     this.updateLighting(dt);
     const P = this.player;
     this.audio.update(P.dead ? 0 : P.speed, P.body.skating, P.body.grounded, P.body.thrusting && playing);

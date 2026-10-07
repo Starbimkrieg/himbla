@@ -94,7 +94,7 @@ export function dressRunner(M, outfitId) {
       b.position.y = 0.12;
     } else if (e === 'cape') {
       const c = add(M.torso, new THREE.Mesh(EXTRA_GEO().cape, toon(o.scarf, { side: THREE.DoubleSide })), 0);
-      c.position.set(0, 0.35, -0.55);
+      c.position.set(0, 0.9, -0.56);
       c.rotation.x = 0.25;
       c.userData.cape = true;
     }
@@ -133,7 +133,7 @@ function EXTRA_GEO() {
       pad: new THREE.SphereGeometry(0.22, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2),
       halo: new THREE.TorusGeometry(0.34, 0.035, 6, 24),
       band: new THREE.TorusGeometry(0.35, 0.06, 6, 16),
-      cape: new THREE.PlaneGeometry(0.75, 1.1, 1, 4),
+      cape: new THREE.PlaneGeometry(0.58, 1.1, 1, 4).translate(0, -0.55, 0),
       shoe: new THREE.TorusGeometry(0.16, 0.04, 6, 12, Math.PI * 1.4),
     };
   }
@@ -199,7 +199,7 @@ export class Cosmetics {
       const back = P.pos.clone().addScaledVector(P.up, s.flame ? 0.3 : 0.15);
       g.fx.spawn(back, P.vel.clone().multiplyScalar(-0.15).addScaledVector(P.up, s.flame ? 2.5 : 0.5), { color: this.trailColor(g.time), size: s.flame ? 0.45 : 0.3, life: s.flame ? 0.45 : 0.7, count: 1, spread: 0.6 });
     }
-    for (const x of this.extraMeshes) if (x.userData.cape) x.rotation.x = 0.25 + Math.min(1.1, P.speed / 40) + Math.sin(g.time * 8) * 0.05;
+    for (const x of this.extraMeshes) if (x.userData.cape) { x.visible = !P.cargoMesh; x.rotation.x = 0.25 + Math.min(1.1, P.speed / 40) + Math.sin(g.time * 8) * 0.05; }
   }
 
   // C: the wardrobe screen (live preview + click-to-equip grids, see wardrobe.js).

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { makeBody, stepSkater } from './physics.js';
-import { makeRunner, makeRover, makeTurret, makeCrate, makePylon } from './models.js';
+import { makeRunner, makeRover, makeTurret, makeCrate, makePylon, scarfLift } from './models.js';
 import { randRange } from './rng.js';
 import { FACTIONS } from './locations.js';
 import { frameQuat, greatCircle, arcDist, darkness, tangent } from './geo.js';
@@ -717,7 +717,7 @@ export class Enemies {
     m.torso.rotation.x = b.grounded ? 0.5 : 0.1;
     m.body.position.y = m.bodyBase + (b.grounded ? -0.15 : 0);
     m.armL.rotation.z = -0.5; m.armR.rotation.z = 0.5;
-    m.scarf.rotation.x = -0.4 - Math.min(1.2, sp / 30) + Math.sin(time * 9) * 0.1;
+    m.scarf.rotation.x = scarfLift(m.torso.rotation.x, sp, Math.sin(time * 9) * 0.06);
     m.glowM.color.setHex(e.flash > 0 ? 0xffffff : dazed ? 0xffd23f : friendly ? 0x2ee6ff : 0x7dff3a);
     if (e.carrying && !m.loot) { m.loot = makeCrate(g.missions.active ? g.missions.active.cargo.color : 0xffd23f, 0.7); m.cargoSlot.add(m.loot); }
   }

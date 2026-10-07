@@ -20,7 +20,9 @@ const KIND_NAMES = {
 };
 const OUTPOST_W = 0.42; // how strongly an outpost claims ground compared with a settlement
 const BUILD_R = 900, DROP_R = 1150;
-const LOOT_CD = 240, LOOT_REP = 2; // raid cooldown (s) and reputation cost
+const LOOT_CD = 240, LOOT_REP = 2; // raid/rebuild cooldown (s) and reputation cost
+const OUTPOST_HP = { farm: 160, depot: 220 };
+const BUILT_R = 40, MOD_R = 26; // founded outposts: flattened radius and the module ring
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 
@@ -46,6 +48,9 @@ export class Territory {
     this.genOutposts();
     this.load();
     this.rebuild();
+    // farm domes and supply depots can be shot to pieces (same haul as a raid)
+    game.blastHooks = game.blastHooks || [];
+    game.blastHooks.push((pos, radius, damage, owner) => this.onBlast(pos, radius, damage, owner));
   }
 
   // ---------- ownership ----------
@@ -77,7 +82,11 @@ export class Territory {
       const d = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (!d) return;
       for (const [id, f] of Object.entries(d.captured || {})) { const o = this.outposts.find((x) => x.id === id); if (o) { o.faction = f; o.captured = true; } }
-      for (const b of d.built || []) this.outposts.push({ ...b, dir: new THREE.Vector3().fromArray(b.dir), model: null, cols: [], built: true });
+      for (const b of d.built || []) {
+        const o = { ...b, dir: new THREE.Vector3().fromArray(b.dir), model: null, cols: [], built: true };
+        this.outposts.push(o);
+        this.game.planet.addFlat(o.dir, BUILT_R);
+      }
     } catch { /* fresh moon */ }
   }
 
@@ -109,6 +118,7 @@ export class Territory {
   found(dir, faction, kind, name) {
     const o = { id: 'built' + Date.now().toString(36), dir: dir.clone().normalize(), faction, kind, name, modules: [], model: null, cols: [], built: true, seed: Math.floor(Math.random() * 1e6) };
     this.outposts.push(o);
+    this.game.planet.addFlat(o.dir, BUILT_R);
     this.rebuild();
     this.save();
     return o;
@@ -159,6 +169,7 @@ export class Territory {
   // ---------- outpost structures, built only near the player ----------
   spawn(o) {
     const g = this.game;
+    if (this.wrecked(o)) { this.spawnRubble(o); return; }
     const root = new THREE.Group();
     const c = hex(o.faction);
     const rr = mulberry32(o.seed);
@@ -238,14 +249,21 @@ export class Territory {
         break;
       }
       default: {
-        // player-founded outposts: a hub dome plus whatever modules have been built
-        add(new THREE.SphereGeometry(5, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon(0xfff4e0), 0, 0, 0, 0.12);
-        add(new THREE.TorusGeometry(5, 0.35, 6, 24).rotateX(Math.PI / 2), toon(c), 0, 0.4, 0, 0.04);
-        add(new THREE.BoxGeometry(1.2, 2.2, 0.8), toon(0x2ec4ff), 0, 1.1, 6.2, 0.05);
-        add(new THREE.PlaneGeometry(0.9, 0.6), glow(0x7dff3a), 0, 1.6, 6.62, 0);
-        flag(-6, 3, 10);
-        solid(4, 2.6, 4, 0, 0);
-        for (const [i, mod] of (o.modules || []).entries()) this.addModule(root, mod, i, c, add);
+        // player-founded outposts: a proper little compound on flattened ground — a big hub dome
+        // with an entry tunnel, a paved apron, and a ring of module plots around it
+        add(new THREE.CylinderGeometry(BUILT_R - 4, BUILT_R - 3, 0.3, 40), toon(0x8a8698), 0, 0.15, 0, 0.06);
+        add(new THREE.SphereGeometry(10, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), toon(0xfff4e0), 0, 0, 0, 0.14);
+        add(new THREE.TorusGeometry(10, 0.5, 6, 32).rotateX(Math.PI / 2), toon(c), 0, 0.5, 0, 0.05);
+        add(new THREE.CylinderGeometry(2.4, 2.4, 6, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2), toon(0xe8e2f4, { side: THREE.DoubleSide }), 0, 0.2, 10.5, 0.06);
+        add(new THREE.BoxGeometry(1.6, 2.6, 0.8), toon(0x2ec4ff), 0, 1.3, 13.4, 0.05);
+        add(new THREE.PlaneGeometry(1.2, 0.8), glow(0x7dff3a), 0, 2.0, 13.82, 0);
+        for (let k = 0; k < 6; k++) { // plot markers where modules go
+          const a = (k / 6) * Math.PI * 2 + 0.6;
+          add(new THREE.TorusGeometry(5.5, 0.12, 4, 24).rotateX(Math.PI / 2), glow(c), Math.cos(a) * MOD_R, 0.35, Math.sin(a) * MOD_R, 0);
+        }
+        flag(-12, 6, 16);
+        solid(8, 4.5, 8, 0, 0);
+        for (const [i, mod] of (o.modules || []).entries()) this.addModule(root, mod, i, c, add, solid);
       }
     }
     const pos = g.planet.ground(o.dir, new THREE.Vector3(), -0.2);
@@ -260,22 +278,109 @@ export class Territory {
       const cpos = root.localToWorld(new THREE.Vector3(b.x, b.hy, b.z));
       return g.colliders.add({ type: 'box', c: cpos, ax, ay, az, hx: b.hx, hy: b.hy, hz: b.hz });
     });
-    // the terminal for founded outposts sits at local (0, 0, 6.2)
-    o.terminal = root.localToWorld(new THREE.Vector3(0, 0, 6.2));
+    // the terminal for founded outposts sits at the end of the entry tunnel
+    o.terminal = root.localToWorld(new THREE.Vector3(0, 0, 14.4));
   }
 
-  addModule(root, mod, i, c, add) {
+  // Modules sit on their plots, built at roughly a third of settlement scale.
+  addModule(root, mod, i, c, add, solid) {
     const a = (i / 6) * Math.PI * 2 + 0.6;
-    const x = Math.cos(a) * 10, z = Math.sin(a) * 10;
-    if (mod === 'greenhouse') { add(new THREE.SphereGeometry(3, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshToonMaterial({ color: 0x7dff6a, transparent: true, opacity: 0.55 }), x, 0, z, 0.08); }
-    else if (mod === 'clinic') { add(new THREE.BoxGeometry(4, 3, 4), toon(0xffffff), x, 1.5, z, 0.08); add(new THREE.BoxGeometry(2.4, 0.6, 0.2), toon(0xff2a4a), x, 3.2, z + 2.05, 0); add(new THREE.BoxGeometry(0.6, 2.4, 0.2), toon(0xff2a4a), x, 3.2, z + 2.06, 0); }
-    else if (mod === 'beacon') { add(new THREE.CylinderGeometry(0.3, 0.8, 14, 6), toon(0xd8d4e8), x, 7, z, 0.05); const l = add(new THREE.OctahedronGeometry(1, 0), glow(c), x, 14.8, z, 0); l.userData.spin = true; }
-    else if (mod === 'turret') { add(new THREE.CylinderGeometry(1.4, 1.8, 2, 8), toon(0x55607a), x, 1, z, 0.06); add(new THREE.BoxGeometry(1.2, 1, 3), toon(0x3a3550), x, 2.5, z, 0.05); }
-    else if (mod === 'market') { add(new THREE.BoxGeometry(5, 2.5, 3), toon(0xffd23f), x, 1.25, z, 0.08); add(new THREE.ConeGeometry(3.2, 1.6, 4), toon(0xff2e88), x, 3.3, z, 0.06).rotation.y = Math.PI / 4; }
-    else if (mod === 'garage') { add(new THREE.BoxGeometry(7, 4, 6), toon(0x4a4f5e), x, 2, z, 0.08); add(new THREE.BoxGeometry(5, 3, 0.2), toon(c), x, 1.5, z + 3.05, 0); }
+    const x = Math.cos(a) * MOD_R, z = Math.sin(a) * MOD_R;
+    const S = 2.2;
+    const sub = (geo, mat, lx, ly, lz, outline = 0.06) => add(geo.clone().scale(S, S, S), mat, x + lx * S, ly * S, z + lz * S, outline);
+    if (mod === 'greenhouse') {
+      sub(new THREE.SphereGeometry(3, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshToonMaterial({ color: 0x7dff6a, transparent: true, opacity: 0.55 }), 0, 0, 0, 0.08);
+      for (let k = 0; k < 5; k++) sub(new THREE.ConeGeometry(0.4, 1.2, 5), toon(0x3f9a3a), -1.5 + k * 0.75, 0.6, (k % 2) - 0.5, 0.02);
+      solid(3 * S * 0.75, 1.5 * S, 3 * S * 0.75, x, z);
+    } else if (mod === 'clinic') {
+      sub(new THREE.BoxGeometry(4, 3, 4), toon(0xffffff), 0, 1.5, 0, 0.08);
+      sub(new THREE.BoxGeometry(2.4, 0.6, 0.2), toon(0xff2a4a), 0, 3.2, 2.05, 0);
+      sub(new THREE.BoxGeometry(0.6, 2.4, 0.2), toon(0xff2a4a), 0, 3.2, 2.06, 0);
+      solid(2 * S, 1.5 * S, 2 * S, x, z);
+    } else if (mod === 'beacon') {
+      sub(new THREE.CylinderGeometry(0.3, 0.8, 14, 6), toon(0xd8d4e8), 0, 7, 0, 0.05);
+      const l = sub(new THREE.OctahedronGeometry(1, 0), glow(c), 0, 14.8, 0, 0);
+      l.userData.spin = true;
+      solid(0.8 * S, 7 * S, 0.8 * S, x, z);
+    } else if (mod === 'turret') {
+      sub(new THREE.CylinderGeometry(1.4, 1.8, 2, 8), toon(0x55607a), 0, 1, 0, 0.06);
+      sub(new THREE.BoxGeometry(1.2, 1, 3), toon(0x3a3550), 0, 2.5, 0, 0.05);
+      solid(1.6 * S, 1.5 * S, 1.6 * S, x, z);
+    } else if (mod === 'market') {
+      sub(new THREE.BoxGeometry(5, 2.5, 3), toon(0xffd23f), 0, 1.25, 0, 0.08);
+      sub(new THREE.ConeGeometry(3.2, 1.6, 4), toon(0xff2e88), 0, 3.3, 0, 0.06).rotation.y = Math.PI / 4;
+      solid(2.5 * S, 1.6 * S, 1.5 * S, x, z);
+    } else if (mod === 'garage') {
+      sub(new THREE.BoxGeometry(7, 4, 6), toon(0x4a4f5e), 0, 2, 0, 0.08);
+      sub(new THREE.BoxGeometry(5, 3, 0.2), toon(c), 0, 1.5, 3.05, 0);
+      solid(3.5 * S, 2 * S, 3 * S, x, z);
+    }
+  }
+
+  // ---------- shooting them up ----------
+  wrecked(o) { return (o.wreckedUntil || 0) > this.game.time; }
+
+  onBlast(pos, radius, damage, owner) {
+    if (owner !== 'player') return;
+    for (const o of this.outposts) {
+      if (!o.model || o.rubble || (o.kind !== 'farm' && o.kind !== 'depot')) continue;
+      const c = _v.copy(o.model.position).addScaledVector(o.dir, 2.5);
+      const R = o.kind === 'farm' ? 7.5 : 6;
+      const d = pos.distanceTo(c);
+      if (d > radius + R) continue;
+      const max = OUTPOST_HP[o.kind];
+      o.hp = (o.hp ?? max) - damage * Math.max(0.4, 1 - Math.max(0, d - R) / Math.max(1, radius));
+      if (o.hp <= 0) this.destroy(o);
+      else if (Math.random() < 0.5) this.game.fx.pop(`${Math.ceil(o.hp / max * 100)}%`, c.clone().addScaledVector(o.dir, 6), { color: '#ff9f1c', size: 30, life: 0.6 });
+    }
+  }
+
+  destroy(o) {
+    const g = this.game;
+    const c = o.model.position.clone().addScaledVector(o.dir, 2);
+    g.fx.explosion(c, 14, true);
+    g.audio.boom(true);
+    g.cam.shake = Math.max(g.cam.shake, 0.8);
+    g.fx.pop(o.kind === 'farm' ? 'DOME DOWN!' : 'DEPOT DESTROYED!', c.clone().addScaledVector(o.dir, 8), { color: '#ff4f2e', size: 64, life: 1.4 });
+    // the same haul as a raid, scattered in the wreckage
+    if (o.kind === 'farm') g.alchemy.dropLoot('sapling', c, { name: ['Fern', 'Sprig', 'Basil', 'Twiggy', 'Moss', 'Clover'][Math.floor(Math.random() * 6)] });
+    else { g.alchemy.dropLoot(null, c, { credits: 150 + Math.floor(Math.random() * 151) }); g.alchemy.dropLoot('wiring', c); }
+    g.rep.add(o.faction, -LOOT_REP, `Destroyed a ${KIND_NAMES[o.kind]}`, { war: false });
+    o.hp = OUTPOST_HP[o.kind];
+    o.wreckedUntil = g.time + LOOT_CD;
+    o.lootAt = g.time;
+    this.despawn(o);
+    this.spawnRubble(o);
+  }
+
+  // charred remains until it's rebuilt
+  spawnRubble(o) {
+    const g = this.game;
+    const root = new THREE.Group();
+    const rr = mulberry32(o.seed + 7);
+    const mats = [toon(0x2a2433), toon(0x3a3550), toon(0x4a3f3a)];
+    for (let i = 0; i < 10; i++) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.8 + rr() * 2.2, 0.3 + rr() * 1.2, 0.8 + rr() * 2.2), mats[i % 3]);
+      m.position.set(-5 + rr() * 10, 0.3, -5 + rr() * 10);
+      m.rotation.set(rr() * 0.6, rr() * 3, rr() * 0.6);
+      ink(m, 0.04);
+      root.add(m);
+    }
+    if (o.kind === 'farm') {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(7, 0.3, 6, 24, Math.PI * 1.3).rotateX(Math.PI / 2), toon(0x55607a));
+      ring.position.y = 0.3;
+      root.add(ring);
+    }
+    root.position.copy(g.planet.ground(o.dir, new THREE.Vector3(), -0.2));
+    frameQuat(o.dir, tangent(SUN.clone(), o.dir).normalize(), root.quaternion);
+    g.scene.add(root);
+    o.model = root;
+    o.rubble = true;
+    o.cols = [];
   }
 
   despawn(o) {
+    o.rubble = false;
     if (o.model) { o.model.removeFromParent(); o.model = null; }
     for (const c of o.cols) this.game.colliders.remove(c);
     o.cols = [];
@@ -375,6 +480,8 @@ export class Territory {
       const d = arcDist(P.pos, o.dir);
       if (!o.model && d < BUILD_R) this.spawn(o);
       else if (o.model && d > DROP_R) this.despawn(o);
+      else if (o.rubble && !this.wrecked(o)) { this.despawn(o); this.spawn(o); } // rebuilt
+      if (o.rubble && o.model && d < 500 && Math.random() < dt * 6) g.fx.spawn(o.model.position.clone().addScaledVector(o.dir, 1.5), o.dir.clone().multiplyScalar(5), { color: 0x2a2433, size: 1.4, life: 1.6, count: 1, spread: 3 });
       if (o.model && d < 400) o.model.traverse((m) => {
         if (m.userData.spin) m.rotation.y += dt * 0.6;
         if (m.userData.blink) m.visible = Math.sin(this.t * 4 + o.seed) > -0.3;
@@ -407,7 +514,7 @@ export class Territory {
     const P = g.player;
     let o = null;
     for (const x of this.outposts) {
-      if (!x.model || (x.kind !== 'farm' && x.kind !== 'depot')) continue;
+      if (!x.model || x.rubble || (x.kind !== 'farm' && x.kind !== 'depot')) continue;
       if (x.model.position.distanceTo(P.pos) < (x.kind === 'farm' ? 12 : 11)) { o = x; break; }
     }
     if (!o) return false;

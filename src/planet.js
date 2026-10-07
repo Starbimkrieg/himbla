@@ -187,6 +187,26 @@ export class Planet {
     return rad;
   }
 
+  // Flatten ground after the fact (outposts the player founds): a plateau at the current height
+  // of the centre, blended out to ~2x the radius. Rebuilds the affected terrain chunks.
+  addFlat(dir, r) {
+    const d = dir.clone().normalize();
+    if (this.zones.some((z) => z.flatOnly && z.dir.dot(d) > 0.999999)) return;
+    const zr = this.H(d.x, d.y, d.z);
+    // zones started out as the game's location list: copy before adding anything of our own
+    if (!this.ownZones) { this.zones = this.zones.slice(); this.ownZones = true; }
+    this.zones.push({ dir: d, r, zr, cosFlat: Math.cos((r * 1.95) / R), flatOnly: true });
+    this.cache.clear();
+    const c = d.clone().multiplyScalar(R);
+    for (const ch of this.chunks) {
+      if (ch.center.distanceTo(c) > ch.radius + r * 2.2) continue;
+      for (let l = 0; l < ch.meshes.length; l++) if (ch.meshes[l]) { this.scene.remove(ch.meshes[l]); ch.meshes[l].geometry.dispose(); ch.meshes[l] = null; }
+      ch.shown = -1;
+      if (ch.boulders) { this.scene.remove(ch.boulders); ch.boulders = null; ch.boulderSpec = null; }
+      if (ch.boulderCols && this.colliders) { for (const col of ch.boulderCols) this.colliders.remove(col); ch.boulderCols = null; }
+    }
+  }
+
   vr(f, i, j) {
     const key = (f * N1 + j) * N1 + i;
     let r = this.cache.get(key);

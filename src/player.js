@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { makeBody, stepSkater } from './physics.js';
-import { makeRunner, makeCrate } from './models.js';
+import { makeRunner, makeCrate, scarfLift } from './models.js';
 import { frameQuat } from './geo.js';
 import { WEAPONS, weaponUnlocked, fireWeapon } from './weapons.js';
 
@@ -383,7 +383,7 @@ export class Player {
       m.armL.rotation.x = -s * 0.8 * run; m.armR.rotation.x = s * 0.8 * run;
       m.armL.rotation.z = -0.15; m.armR.rotation.z = 0.15;
     }
-    m.scarf.rotation.x = -0.2 - Math.min(1.2, sp / 30) + Math.sin(this.anim * 3) * 0.12 * Math.min(1, sp / 10);
+    m.scarf.rotation.x = scarfLift(m.torso.rotation.x, sp, Math.sin(this.anim * 3) * 0.08 * Math.min(1, sp / 10));
     m.scarf.rotation.y = Math.sin(this.anim * 2.3) * 0.15;
 
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(m.root.quaternion);

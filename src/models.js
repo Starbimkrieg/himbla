@@ -70,6 +70,13 @@ const LENS_M = new THREE.MeshBasicMaterial({ color: 0xfff6a8 });
 // Smooth lathed limbs and torso, rounded boots/gloves/backpack and a shelled visor, but the
 // same pivots (legL/legR at the hips, armL/armR at the shoulders, head on the torso) and
 // dimensions as always, because cosmetics, mutations, cargo and story props hang off them.
+// Scarf angle relative to the torso: streams up and back with speed, never dipping below the top
+// of the backpack/crate line (positive = tail up). torsoLean is torso.rotation.x.
+export function scarfLift(torsoLean, speed, wobble = 0) {
+  const world = 0.22 + Math.min(0.45, speed / 70) + wobble; // angle above horizontal in the body frame
+  return Math.max(0.14, Math.min(1.1, world - torsoLean * 0.6));
+}
+
 export function makeRunner({
   suit = 0xff4f2e, accent = 0x2ee6ff, helmet = 0xfff4e0, visor = 0x241a5c,
   scarf = 0xffd23f, scale = 1, pirate = false, own = false,
@@ -165,12 +172,13 @@ export function makeRunner({
     arms.push(arm);
   }
 
-  // Comic scarf streaming behind
+  // Comic scarf streaming behind. The tail leaves from the top of the backpack and is kept above
+  // everything worn on the back (pack, cargo crate, jar, cape): see scarfLift().
+  torso.add(part(G.collar, collarM, 0, 0.98, 0, 0.03));
   const scarfPivot = new THREE.Group();
-  scarfPivot.position.set(0, 0.98, -0.2);
+  scarfPivot.position.set(0, 1.0, -0.26);
   torso.add(scarfPivot);
   scarfPivot.add(part(G.scarf, scarfM, 0, 0, -0.62, 0.03));
-  scarfPivot.add(part(G.collar, collarM, 0, 0, 0.2, 0.03));
 
   // helmet lamp on the right temple (the actual light is owned by the player)
   head.add(part(G.lampHousing, dark, 0.3, 0.15, 0.17, 0.015));

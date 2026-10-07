@@ -250,13 +250,36 @@ export class GlobeMap {
       S.orbitPoint(S.lowAt, q).normalize();
       const lp = this.project(q, v);
       if (lp.z > 0) { c.fillStyle = '#ffd23f'; c.font = pixelFont(7); c.fillText('▼ LOW PASS', lp.x, lp.y - 6); }
+      // chevrons along the orbit ahead of it, showing which way it's travelling
+      const th = S.satTheta();
+      const at = (k) => this.project(S.orbitPoint(th + k, new THREE.Vector3()).normalize(), v);
+      const chevron = (x, y, ang, size, alpha) => {
+        c.save(); c.translate(x, y); c.rotate(ang); c.globalAlpha = alpha;
+        c.fillStyle = '#ffd23f'; c.strokeStyle = '#120a1e'; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(size, 0); c.lineTo(-size * 0.6, -size * 0.7); c.lineTo(-size * 0.2, 0); c.lineTo(-size * 0.6, size * 0.7); c.closePath();
+        c.stroke(); c.fill(); c.restore();
+      };
+      for (let i = 1; i <= 4; i++) {
+        const a0 = at(i * 0.07), a1 = at(i * 0.07 + 0.01);
+        if (a0.z > 0 && a1.z > 0) chevron(a0.x, a0.y, Math.atan2(a1.y - a0.y, a1.x - a0.x), 6, 1 - i * 0.18);
+      }
       const sp = this.project(q.copy(S.sat.pos).normalize(), v);
       if (sp.z > 0) {
+        const a1 = at(0.02);
+        if (a1.z > 0) {
+          // a heading arrow on the satellite itself
+          const ang = Math.atan2(a1.y - sp.y, a1.x - sp.x);
+          c.strokeStyle = '#ffd23f'; c.lineWidth = 2;
+          c.beginPath(); c.moveTo(sp.x, sp.y); c.lineTo(sp.x + Math.cos(ang) * 16, sp.y + Math.sin(ang) * 16); c.stroke();
+          chevron(sp.x + Math.cos(ang) * 18, sp.y + Math.sin(ang) * 18, ang, 7, 1);
+        }
         c.fillStyle = '#ffd23f'; c.strokeStyle = '#120a1e'; c.lineWidth = 2;
         c.beginPath(); c.rect(sp.x - 5, sp.y - 3, 10, 6); c.fill(); c.stroke();
         c.fillRect(sp.x - 11, sp.y - 1, 22, 2);
         c.font = pixelFont(8); c.lineWidth = 3; c.strokeText('SAT-7', sp.x, sp.y - 8); c.fillStyle = '#fff'; c.fillText('SAT-7', sp.x, sp.y - 8);
-        this.pins.push({ x: sp.x, y: sp.y, html: '<b>SAT-7 "Lantern"</b><br>Derelict satellite. Skims low just past the ILMB once a lap.' });
+        const toLow = ((S.lowAt - th) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+        const secs = Math.round(toLow / (Math.PI * 2) * (Math.PI * 2 * 3750 / 55));
+        this.pins.push({ x: sp.x, y: sp.y, html: `<b>SAT-7 "Lantern"</b><br>Derelict satellite, heading along the arrows. Skims low just past the ILMB once a lap: next low pass in about ${Math.floor(secs / 60)}m ${secs % 60}s.` });
       }
     }
     // outposts you've charted: small diamonds (yours get a white rim and a name)

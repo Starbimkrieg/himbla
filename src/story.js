@@ -958,7 +958,7 @@ export class Story {
         o.fireCd = (o.fireCd || 0) - dt;
         if (o.fireCd <= 0) {
           o.fireCd = 1.2;
-          const from = g.planet.ground(o.dir, new THREE.Vector3(), 4);
+          const from = g.planet.ground(o.dir, new THREE.Vector3(), 12.5); // above the hub dome
           let target = null, bd = 300;
           for (const e of g.enemies.list) {
             if (e.dead || e.faction !== 'pirate' || !e.center || e.kind === 'core' || g.enemies.friendly(e)) continue;
