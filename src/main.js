@@ -223,7 +223,13 @@ class Game {
       if (this.state === 'play' && !this.input.locked) this.input.lock();
     });
     document.addEventListener('pointerlockchange', () => {
-      if (this.input.locked) { this.hud.show('clickhint', false); return; }
+      if (this.input.locked) {
+        // a lock requested when a dialog closed can land after the next dialog opened (chained
+        // menus): hand the mouse straight back to the menu
+        if (this.state !== 'play' && this.state !== 'cutscene') { this.releasing = true; this.input.unlock(); return; }
+        this.hud.show('clickhint', false);
+        return;
+      }
       // only an Escape during gameplay pauses; menus release the mouse on purpose
       if (this.state === 'play' && !this.releasing) {
         this.state = 'paused';

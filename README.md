@@ -70,7 +70,9 @@ big but bring you home: for the first second off the ground it's normal, floaty 
 builds to 2.5x over two seconds, and an extra pull cancels the "orbital lift" of high speed. A hard launch at
 100 m/s that used to carry you over a kilometre now lands after ~550 m. **Dive** (press Shift again in the
 air and hold) tucks you nose-down at triple gravity; within ~10 m of the ground the skates' magnetic grip
-catches you, and a skated dive landing is always safe and keeps most of your speed (hard ones score STUCK IT!).
+catches you, and a skated dive landing is always safe. Locked skates keep hold through a magnetic buffer a
+little above the ground (0.6 m, growing with speed), so bumps and crests don't skip you off; only a real ramp
+or a jump breaks free. A skated dive landing is always safe and keeps most of your speed (hard ones score STUCK IT!).
 Looking down while thrusting drives you downward too. The gravity build-up only applies at speed, so hopping
 around on foot stays floaty and harmless.
 
@@ -299,6 +301,11 @@ swap passengers and then head somewhere new. You can ride on a freighter deck or
 
 ## Townspeople
 
+**Hurting people has consequences.** Residents, passengers and wanderers go down in 2–3 hits and get
+ragdolled by explosions; survivors flee with their hands up and bystanders panic. If a settlement sees you do
+it, its security goes on alert for 75 s (turrets and patrols open fire) and you lose rep (−3 per hit, −8 per
+knock-out). Pirate dens send out extra guards. Residents are replaced a few minutes later.
+
 There's no air on the Moon, so every human outdoors wears a sealed helmet or a fishbowl (kids a bubble). The
 bare-headed folk are the **Vrill**: an antennaed people who breathe vacuum just fine. Jar one and it's a
 living jar item: it splices into chimeras (antennaed heads) or into you as the **PSI ANTENNAE** mutation (red
@@ -374,7 +381,8 @@ charge at up to 66 m/s, peel off sideways after the pass and swing round for ano
   with speed. SPACECOM's are at the ILMB, Rustmoon's at Rustmoon Hold (members only).
 - **Skate finishes** (Meridian Exchange): Chrome Comets, Solar Flares (flame trail), Void Gliders, Prism Drive
   (hue-cycling, HONORED), plus deed-locked ones: Seismic Striders (complete 3 Meridian events), Derby Hooves
-  (win the Chimera Derby, comes with horseshoes) and Dark-Side Survivors (5 dark-side deliveries). Most leave
+  (win the Chimera Derby, comes with horseshoes); the casino's Lucky Felt and Jackpot Rollers leave glittery
+  smoke with poker chips or gold coins popping out, and wear boot medallions and Dark-Side Survivors (5 dark-side deliveries). Most leave
   a coloured glide trail.
 - **Pulse-disc colours:** eight, free.
 - **Wardrobe (`C`):** a full screen with a live 3D preview of your runner facing you (drag to turn). Tabs for
@@ -419,8 +427,13 @@ The wind rumble is a soft low-passed swell instead of high-frequency hiss. `N` t
   Each shows on your runner. Dr. Zbornak cures them for ₵200 each.
 - **Chimera Derby** at the Bounce Dome Funpark: walk up to the betting booth (`F`), pick one of your chimeras,
   bet ₵50/200/500 (or just for glory) against three rival creatures ("Glue Factory Escapee", "Hoof
-  Hearted"…). Odds depend on how your creature's speed ranks (1.8× – 6×). Two laps around the domes, with
-  chaos: stumbles, zooms, running the wrong way, giant hops, and occasionally exploding and reassembling.
+  Hearted"…). Every chimera has four stats (1–100) and a C/B/A/S grade, set mostly by its parts plus some
+  randomness: **SPEED** (top speed: wheels, void, crystal), **POWER** (acceleration, and recovery after a
+  stumble: mite legs, turbo, spark), **STAMINA** (tires slower late in the race: roots, treads, armour, mud)
+  and **WIT** (fewer stumbles, wrong-way runs and trips: alien and person heads, lenses, radios). The bookie
+  simulates 400 races to set fair odds; stat cards for every runner show on the pen, detail and betting
+  screens. Two laps around the domes, with chaos: stumbles, zooms, running the wrong way, giant hops, and
+  occasionally exploding and reassembling.
   Wins land on the Hall of Highlights.
 - **The Monolith:** touch it for 30 s of low gravity (90 s cooldown).
 - **Bounce Dome Funpark:** inflatable domes and a bouncy castle that throw you back up harder than you landed.
