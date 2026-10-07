@@ -757,8 +757,10 @@ export class Enemies {
         if (facing < 0 || R.t > 7 || d < 10 || e.ramCd > 0) { R.phase = 'overshoot'; R.t = 0; }
       } else if (R.phase === 'overshoot') {
         // keep going a moment, then loop back
-        aim = e.heading.clone();
-        if (R.t > 1.6 && d > 30) { R.phase = 'line'; R.t = 0; }
+        // peel off to one side, away from you, before looping back for another run
+        if (!R.side) R.side = new THREE.Vector3().crossVectors(up, e.heading).dot(toP) > 0 ? -1 : 1;
+        aim = e.heading.clone().add(new THREE.Vector3().crossVectors(up, e.heading).multiplyScalar(R.side * 0.9));
+        if ((R.t > 1.6 && d > 30) || R.t > 4) { R.phase = 'line'; R.t = 0; R.side = 0; }
       }
     } else e.ram = null;
     stepRover(e, dt, g.planet, g.colliders, aim, max, { engine, grip: 14, turn: e.ram && e.ram.phase === 'line' ? 2.8 : 2.2, radius: 3.6 });
