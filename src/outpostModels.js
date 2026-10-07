@@ -733,7 +733,7 @@ function mast(k) {
   k.hit(1.8, 20.6, 1.8, MX, MZ);
   k.hit(4, 1.9, 2.75, SX, SZ);
   k.smoke = new THREE.Vector3(MX, 2, MZ);
-  k.drop = new THREE.Vector3(-2, F, 9);
+  k.drop = new THREE.Vector3(-4, F, 10);
   // transponder rack by the shed door: the raid spot
   k.box(0.8, 2.2, 1.2, T(DARK), SX - 4.6, F, SZ + 2.8, { outline: 0.05 });
   for (let i = 0; i < 4; i++) k.box(0.05, 0.1, 0.9, G(i % 2 ? 0x2ee6ff : 0x7dff3a), SX - 5.02, F + 0.5 + i * 0.4, SZ + 2.8, { outline: 0 });
@@ -840,7 +840,7 @@ function kiosk(k) {
   k.hit(4.6, 2.0, 2.6, 0, -13);
   for (const [x, z] of [[-15, -1], [15, -1], [-11, 14]]) { k.at(x, z, Math.atan2(-x, -z)); k.hit(1.8, 1.5, 1.2, 0, 0); k.at(); }
   k.smoke = new THREE.Vector3(0, 1.5, -13);
-  k.drop = new THREE.Vector3(-8, F, 0.5);
+  k.drop = new THREE.Vector3(-9, F, 5);
   // a stack of mystery crates at the counter: the raid spot
   for (const [x, y, z, s, ry] of [[4.4, 0, -9.0, 1.1, 0.2], [5.7, 0, -9.2, 1.0, -0.3], [5.0, 1.05, -9.1, 0.9, 0.5]]) {
     crate(k, x, F + y, z, s, 0x7b2ff7, ry);
@@ -1036,7 +1036,7 @@ function junk(k) {
   }
   k.hit(8.5, 3, 8.5, -10, -9);
   k.smoke = new THREE.Vector3(-10, 3, -9);
-  k.drop = new THREE.Vector3(4, F, 0);
+  k.drop = new THREE.Vector3(6, F, 1);
   // half-buried rover
   k.cyl(2.8, 5, 1.0, 12, T(0x6b6672), 11, 0, -10, { outline: 0.04 });
   k.at(11, -10, 0.7, 0.6, 0.18, 0.38);

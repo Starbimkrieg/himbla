@@ -142,11 +142,12 @@ export class Territory {
   prebake() {
     const looks = new Map();
     for (const o of this.outposts) if (SMALL_KINDS.has(o.kind)) looks.set(`${o.kind}|${o.faction}`, o);
-    const queue = [...looks.values()];
+    // intact looks first, then their wrecks (so the first time you blow one up doesn't hitch either)
+    const queue = [...looks.values()].map((o) => [o, false]).concat([...looks.values()].map((o) => [o, true]));
     const later = (f) => (typeof requestIdleCallback === 'function' ? requestIdleCallback(f, { timeout: 3000 }) : setTimeout(f, 40));
     const run = () => {
-      const o = queue.shift();
-      if (o) outpostTemplate(o.kind, hex(o.faction), o.seed % 2, false);
+      const next = queue.shift();
+      if (next) outpostTemplate(next[0].kind, hex(next[0].faction), next[0].seed % 2, next[1]);
       if (queue.length) later(run);
     };
     later(run);
