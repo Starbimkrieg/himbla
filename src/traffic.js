@@ -25,6 +25,14 @@ const LANE = 2.4; // lane offset from the road centreline (right-hand traffic)
 const ROAD_LAT = [-5, -2.5, 0, 2.5, 5];
 const TRAIN_HP = 400, BUGGY_HP = 120;
 const _z = new THREE.Vector3(0, 0, 1);
+// ring roads round each connected town
+const RING_GAP = 32; // ring centreline this far outside the settlement radius (past buildings / plateau edge)
+const RING_PUSH = 90; // pushed out up to this much more where something is in the way
+const JOIN = 18; // junction connectors join the ring this far along it either side of a road
+const JOIN_OUT = 20; // ...and leave the road lanes this far out from the ring
+const GATE_SEP = 80; // minimum ring distance between two junctions
+const FILLET = 16; // drawn flare at each junction
+const STOP_IN = 50; // the stop is at least this far along its stretch of ring (room for a land-train)
 
 function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
   const m = new THREE.Mesh(geo, mat);
@@ -536,13 +544,16 @@ export class Traffic {
 
   // ================= road network =================
   //
-  // Settlements are nodes, roads are edges. Each road ends at a "gate" just outside the town (with a
-  // worn turning circle). Inside a town the gates are joined up: straight through the settlement
-  // where the ground is open (exact collider contact tests), otherwise round the edge on ring-road
-  // segments. Vehicles drive directed "pieces": one lane per road direction ('e'), a U-turn round
-  // each gate's circle ('t') and one lane per ordered pair of gates in a town ('x'). Every vehicle has
-  // a destination town and a route (list of pieces); it slows down through towns on the way and
-  // stops at its destination's shelter, then picks somewhere new.
+  // Settlements are nodes, roads are edges. Every connected settlement gets a two-way ring road just
+  // outside its buildings / plateau (pushed outward round pads, turret mounts and anything solid), and
+  // each road from another town runs in radially and joins that ring at a flared T (curved fillets
+  // either side, no stub, no turning loop). Vehicles drive directed "pieces": one lane per road
+  // direction ('e'), one lane per direction for each stretch of ring between two junctions ('r'), and
+  // short connectors at each junction ('j': turn onto the ring either way, carry on past, or turn off
+  // onto the road out). Every vehicle has a destination town and a route (list of pieces): traffic
+  // passing through follows the ring round to the road it needs; traffic for this town pulls in at
+  // the town's single ring-side stop, then keeps going round the ring to whichever road it wants
+  // next (so nothing ever needs a U-turn - a dead-end town is simply a lap of its ring).
 
   buildRoads() {
     const safe = this.w.locations.filter((l) => l.safe && !l.restricted && !l.poi && l.type !== 'pirate');
@@ -568,18 +579,16 @@ export class Traffic {
     this.pieces = [];
     this.gates = [];
     this.towns = new Map(); // loc -> gates
-    for (const k of [...pairs].sort()) {
+    this.rings = new Map(); // loc -> ring profile
+    const keys = [...pairs].sort();
+    for (const k of keys) for (const id of k.split('|')) if (!this.rings.has(this.L[id])) this.rings.set(this.L[id], this.ringProfile(this.L[id]));
+    for (const k of keys) {
       const [a, b] = k.split('|');
       this.buildRoad(this.L[a], this.L[b]);
     }
-    for (const [loc, gates] of this.towns) this.buildJunction(loc, gates);
+    for (const [loc, R] of this.rings) this.buildRing(loc, R);
     this.pieces.forEach((pc, i) => { pc.id = i; this.finishPiece(pc); });
-    for (const gt of this.gates) {
-      gt.in.next = [...Object.values(gt.x), gt.loop];
-      gt.loop.next = [gt.out];
-      for (const x of Object.values(gt.x)) x.next = [x.to.out];
-    }
-    for (const road of this.roads) for (const pc of road.lanes) this.roadStop(pc);
+    for (const R of this.rings.values()) this.ringStop(R);
     const G = this.roadGeo;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(G.pos, 3));
@@ -612,23 +621,102 @@ export class Traffic {
     this.roads.forEach((road, k) => this.populateRoad(road, k));
   }
 
-  // A road end: open ground just past the settlement's edge, facing the other end.
-  roadEnd(loc, other) {
+  // Can a 10 m road run over local (x,z)? Exact contact tests against colliders plus the keep-out
+  // footprints (pads, solar fields, lamps, turret spots).
+  roadClear(loc, x, z, keeps) {
+    if (keeps.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + 5)) return false;
+    const y = this.groundY(loc, x, z);
+    for (const h of [2, 5]) {
+      this.w.toWorld(loc, x, y + h, z, _c);
+      if (this.blocked(_c, 3.6)) return false;
+    }
+    return true;
+  }
+
+  // The ring's radius at M evenly spaced angles round the town: RING_GAP outside the settlement
+  // radius (just past the buildings, at the foot of the plateau), pushed outward wherever the road
+  // would touch something, with the bulges eased in and out so the ring stays a smooth curve.
+  ringProfile(loc) {
+    const TAU = Math.PI * 2;
+    const keeps = this.keepouts(loc);
+    const Rb = loc.r + RING_GAP;
+    const M = Math.max(64, Math.ceil((TAU * Rb) / 4));
+    const step = (TAU * Rb) / M;
+    const clearAt = (i, r) => { const a = (i / M) * TAU; return this.roadClear(loc, Math.cos(a) * r, Math.sin(a) * r, keeps); };
+    const need = (i, r0) => { for (let r = r0; r <= Rb + RING_PUSH; r += 3) if (clearAt(i, r)) return r; return Rb + RING_PUSH; };
+    const req = new Float64Array(M);
+    for (let i = 0; i < M; i++) req[i] = need(i, Rb);
+    let rad = req;
+    for (let it = 0; it < 5; it++) {
+      rad = Float64Array.from(req);
+      // at most ~1 m outward per 2.5 m along the ring, then rounded off
+      const slope = 0.4 * step;
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 1; i <= 2 * M; i++) { const k = i % M; rad[k] = Math.max(rad[k], rad[(k + M - 1) % M] - slope); }
+        for (let i = 2 * M - 1; i >= 0; i--) { const k = i % M; rad[k] = Math.max(rad[k], rad[(k + 1) % M] - slope); }
+      }
+      for (let pass = 0; pass < 8; pass++) {
+        const nx = new Float64Array(M);
+        for (let i = 0; i < M; i++) nx[i] = Math.max(req[i], (rad[(i + M - 1) % M] + 2 * rad[i] + rad[(i + 1) % M]) / 4);
+        rad = nx;
+      }
+      // easing a bulge in may have pushed the neighbours into something else: re-check
+      let bad = 0;
+      for (let i = 0; i < M; i++) if (rad[i] < Rb + RING_PUSH && !clearAt(i, rad[i])) { req[i] = need(i, rad[i] + 3); bad++; }
+      if (!bad) break;
+    }
+    let blocked = 0;
+    for (let i = 0; i < M; i++) if (rad[i] >= Rb + RING_PUSH && !clearAt(i, rad[i])) blocked++;
+    if (blocked) console.warn('[traffic] ring at', loc.id, 'still touches something at', blocked, 'samples');
+    let maxR = 0;
+    for (let i = 0; i < M; i++) maxR = Math.max(maxR, rad[i]);
+    return { loc, M, Rb, step, rad, maxR, kd: Math.max(3, Math.round(JOIN / step)), gates: [] };
+  }
+
+  ringLocal(R, i) {
+    i = ((i % R.M) + R.M) % R.M;
+    const a = (i / R.M) * Math.PI * 2, r = R.rad[i];
+    return { x: Math.cos(a) * r, z: Math.sin(a) * r, a, r };
+  }
+
+  // Where a road from `other` joins this town's ring: as straight toward it as possible, on an
+  // unbulged stretch with open ground outside, and well clear of the other junctions.
+  ringGate(R, other) {
+    const loc = R.loc, M = R.M, TAU = Math.PI * 2;
     const tw = this.toward(loc, other);
     const keeps = this.keepouts(loc);
-    for (const dev of [0, 0.12, -0.12, 0.25, -0.25, 0.4, -0.4, 0.6, -0.6, 0.85, -0.85, 1.1, -1.1]) {
-      const a = tw + dev;
-      for (const rr of [loc.r + 26, loc.r + 36, loc.r + 48]) {
-        const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
-        const cx = Math.cos(a) * (rr - 9), cz = Math.sin(a) * (rr - 9);
-        if (keeps.some((k) => Math.hypot(cx - k.x, cz - k.z) < 16 + k.r)) continue;
-        if (!this.clearDisc(loc, cx, cz, 15, [1.5, 4.5], this.groundY(loc, cx, cz))) continue;
-        loc.stopKeep.push({ x: cx, z: cz, r: 16 }, { x, z, r: 8 });
-        return { loc, a, x, z, rr };
-      }
+    const sep = (i) => R.gates.every((g) => { const d = Math.abs(g.i - i); return Math.min(d, M - d) * R.step >= GATE_SEP; });
+    const idx = (a) => ((Math.round((a / TAU) * M) % M) + M) % M;
+    const kink = (i) => {
+      let k = 0;
+      for (let j = -R.kd * 2; j <= R.kd * 2; j++) k = Math.max(k, Math.abs(R.rad[(i + j + M) % M] - R.rad[i]));
+      return k;
+    };
+    const outside = (i) => {
+      const p = this.ringLocal(R, i), ux = Math.cos(p.a), uz = Math.sin(p.a);
+      for (let t = 8; t <= 56; t += 4) if (!this.roadClear(loc, ux * (p.r + t), uz * (p.r + t), keeps)) return false;
+      return true;
+    };
+    let best = null;
+    for (const dev of [0, 0.06, -0.06, 0.12, -0.12, 0.2, -0.2, 0.3, -0.3, 0.42, -0.42, 0.56, -0.56, 0.72, -0.72, 0.9, -0.9, 1.1, -1.1, 1.35, -1.35]) {
+      const i = idx(tw + dev);
+      if (!sep(i) || !outside(i)) continue;
+      const bulge = R.rad[i] - R.Rb, kk = kink(i);
+      const score = Math.abs(dev) * 40 + bulge + kk * 3;
+      if (!best || score < best.score) best = { i, score };
+      if (bulge < 4 && kk < 2) break;
     }
-    const x = Math.cos(tw) * (loc.r + 40), z = Math.sin(tw) * (loc.r + 40);
-    return { loc, a: tw, x, z, rr: loc.r + 40 };
+    if (!best) {
+      // crowded: the nearest angle that keeps the junctions apart
+      for (let k = 0; k < M; k++) {
+        const i = idx(tw + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (TAU / M));
+        if (sep(i)) { best = { i }; break; }
+      }
+      console.warn('[traffic] no open ring junction at', loc.id, 'toward', other.id);
+      if (!best) best = { i: idx(tw) };
+    }
+    const p = this.ringLocal(R, best.i);
+    return { loc, R, i: best.i, a: p.a, x: p.x, z: p.z, rr: p.r };
   }
 
   // Visible track: a strip of 5 ground-hugging samples across 10 m along a ground polyline.
@@ -652,12 +740,14 @@ export class Traffic {
     }
   }
 
-  // Tangent, right-hand side and arc length along a ground polyline.
-  frames(g) {
+  // Tangent, right-hand side and arc length along a ground polyline (closed: wraps round).
+  frames(g, closed = false) {
     const N = g.length - 1, side = [], tan = [], cum = [0];
     for (let i = 0; i <= N; i++) {
       const up = _u.copy(g[i]).normalize();
-      const t = new THREE.Vector3().subVectors(g[Math.min(N, i + 1)], g[Math.max(0, i - 1)]);
+      const nx = closed ? g[(i + 1) % (N + 1)] : g[Math.min(N, i + 1)];
+      const pv = closed ? g[(i + N) % (N + 1)] : g[Math.max(0, i - 1)];
+      const t = new THREE.Vector3().subVectors(nx, pv);
       t.addScaledVector(up, -t.dot(up)).normalize();
       tan.push(t);
       side.push(new THREE.Vector3().crossVectors(t, up).normalize());
@@ -666,10 +756,10 @@ export class Traffic {
     return { side, tan, cum };
   }
 
-  drawLine(g, s0 = 0) {
+  drawLine(g, s0 = 0, vScale = 1) {
     const { side, cum } = this.frames(g);
     const base = this.roadGeo.pos.length / 3;
-    for (let i = 0; i < g.length; i++) this.stripPush(g[i], side[i], s0 + cum[i]);
+    for (let i = 0; i < g.length; i++) this.stripPush(g[i], side[i], s0 + cum[i], vScale);
     this.stripIdx(base, g.length);
   }
 
@@ -679,18 +769,37 @@ export class Traffic {
     return pc;
   }
 
+  // Cubic from p0 (heading t0) to p1 (arriving along t1), n+1 points (world; grounded later).
+  bez(p0, t0, p1, t1, n = 10, k = 0.42) {
+    const h = p0.distanceTo(p1) * k;
+    const c0 = p0.clone().addScaledVector(t0, h), c1 = p1.clone().addScaledVector(t1, -h);
+    const out = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, u = 1 - t;
+      out.push(new THREE.Vector3()
+        .addScaledVector(p0, u * u * u).addScaledVector(c0, 3 * u * u * t)
+        .addScaledVector(c1, 3 * u * t * t).addScaledVector(p1, t * t * t));
+    }
+    return out;
+  }
+
   buildRoad(A, B) {
     const P = this.P, R = P.R;
-    const eA = this.roadEnd(A, B), eB = this.roadEnd(B, A);
+    const RA = this.rings.get(A), RB = this.rings.get(B);
+    const eA = this.ringGate(RA, B);
+    RA.gates.push(eA);
+    const eB = this.ringGate(RB, A);
+    RB.gates.push(eB);
     const dirAt = (e, extra) => this.w.toWorld(e.loc, Math.cos(e.a) * (e.rr + extra), 0, Math.sin(e.a) * (e.rr + extra)).normalize();
-    const dA = dirAt(eA, 0), dA2 = dirAt(eA, 45), dB = dirAt(eB, 0), dB2 = dirAt(eB, 45);
-    // control points: leave each settlement radially, then a gently meandering great circle
+    // leave each ring radially (straight for the first ~50 m so the junction reads as a clean T)
+    const dA = dirAt(eA, 0), dA1 = dirAt(eA, 24), dA2 = dirAt(eA, 52), dB = dirAt(eB, 0), dB1 = dirAt(eB, 24), dB2 = dirAt(eB, 52);
+    // control points: then a gently meandering great circle
     const len = arcDist(dA2, dB2);
     const n = Math.max(3, Math.ceil(len / 30));
     const rr = mulberry32(Math.floor(len * 7) + A.id.length * 131 + B.id.length * 17);
     const ph1 = rr() * 6.28, ph2 = rr() * 6.28, f1 = Math.max(1, Math.round(len / 900)), f2 = Math.max(2, Math.round(len / 330));
     const axis = new THREE.Vector3().crossVectors(dA2, dB2).normalize();
-    const ctrl = [dA, dA2];
+    const ctrl = [dA, dA1, dA2];
     for (let i = 1; i < n; i++) {
       const t = i / n;
       const d = new THREE.Vector3().lerpVectors(dA2, dB2, t).normalize();
@@ -699,16 +808,18 @@ export class Traffic {
       d.addScaledVector(axis, off / R).normalize();
       ctrl.push(d);
     }
-    ctrl.push(dB2, dB);
-    // keep clear of every other settlement, military zone and black lake
+    ctrl.push(dB2, dB1, dB);
+    // keep clear of every other settlement (and its ring), military zone and black lake, and off
+    // its own two rings once it has left them
     const obs = [];
     for (const l of this.w.locations) {
-      const r0 = l === A || l === B ? l.r + 12 : (l.zoneR || l.r) + 55;
+      const ring = this.rings.get(l);
+      const r0 = l === A || l === B ? ring.maxR + 18 : Math.max((l.zoneR || l.r) + 55, ring ? ring.maxR + 40 : 0);
       obs.push({ d: l.dir, r: r0 });
     }
     for (const lk of this.w.lakes || []) obs.push({ d: lk.d, r: Math.acos(Math.min(1, lk.cos)) * R + 25 });
     for (let it = 0; it < 60; it++) {
-      for (let i = 2; i < ctrl.length - 2; i++) {
+      for (let i = 3; i < ctrl.length - 3; i++) {
         const p = ctrl[i];
         for (const o of obs) {
           const dist = arcDist(p, o.d);
@@ -720,7 +831,7 @@ export class Traffic {
           p.addScaledVector(_a, ((o.r - dist) * 0.6 + 1) / R).normalize();
         }
       }
-      for (let i = 2; i < ctrl.length - 2; i++) {
+      for (let i = 3; i < ctrl.length - 3; i++) {
         _a.copy(ctrl[i - 1]).add(ctrl[i + 1]).multiplyScalar(0.25).addScaledVector(ctrl[i], 0.5);
         ctrl[i].copy(_a.normalize());
       }
@@ -732,29 +843,13 @@ export class Traffic {
     const dirs = curve.getSpacedPoints(N).map((p) => p.normalize());
     const g = dirs.map((d) => P.ground(d, new THREE.Vector3()));
     const { side, tan, cum } = this.frames(g);
+    // the strip stops just short of each ring's centreline (the ring strip covers the join)
+    let i0 = 0, i1 = N;
+    while (i0 < N && cum[i0] < 2.5) i0++;
+    while (i1 > 0 && cum[N] - cum[i1] < 2.5) i1--;
     const base = this.roadGeo.pos.length / 3;
-    for (let i = 0; i <= N; i++) this.stripPush(g[i], side[i], cum[i]);
-    this.stripIdx(base, N + 1);
-    // turning circles at both ends (a worn ring you can see from the air)
-    const loopAt = (E, out, rightV) => {
-      const C = E.clone().addScaledVector(out, 9);
-      P.ground(C, C);
-      const up = C.clone().normalize();
-      const ex = rightV.clone().addScaledVector(up, -rightV.dot(up)).normalize();
-      const ez = new THREE.Vector3().crossVectors(up, ex).multiplyScalar(-1);
-      if (ez.dot(out) < 0) ez.negate();
-      const b0 = this.roadGeo.pos.length / 3, M = 36;
-      for (let i = 0; i <= M; i++) {
-        const th = (i / M) * Math.PI * 2;
-        const rp = _c.copy(C).addScaledVector(ex, Math.cos(th) * 9).addScaledVector(ez, Math.sin(th) * 9);
-        const sv = _d.copy(ex).multiplyScalar(Math.cos(th)).addScaledVector(ez, Math.sin(th));
-        this.stripPush(rp, sv, th * 9, 0.8);
-      }
-      this.stripIdx(b0, M + 1);
-      return { C, ex, ez };
-    };
-    const loopB = loopAt(g[N], tan[N].clone(), side[N]);
-    const loopA = loopAt(g[0], tan[0].clone().negate(), side[0].clone().negate());
+    for (let i = i0; i <= i1; i++) this.stripPush(g[i], side[i], cum[i]);
+    this.stripIdx(base, i1 - i0 + 1);
     // marker posts every ~110 m, alternating sides
     for (let s = 60, k = 0; s < cum[N] - 60; s += 110, k++) {
       let i = 0;
@@ -763,29 +858,32 @@ export class Traffic {
       P.ground(p, p);
       this.posts.push({ pos: p, q: frameQuat(dirs[i], tan[i], new THREE.Quaternion()) });
     }
-    // ---- lanes: right-hand traffic; the last few metres at each end belong to the junction pieces ----
-    const K = 2;
+    // pads and shelters stay off the first stretch out of each town
+    for (const [loc, from] of [[A, true], [B, false]]) {
+      for (let k = 0; k <= N && (from ? cum[k] : cum[N] - cum[N - k]) < 90; k += 2) {
+        const p = this.local(loc, g[from ? k : N - k], _a);
+        loc.stopKeep.push({ x: p.x, z: p.z, r: 6 });
+      }
+    }
+    // ---- lanes: right-hand traffic; the last ~20 m at each end belong to the ring junctions ----
+    const step = cum[N] / N;
+    const K = Math.max(2, Math.round(JOIN_OUT / step));
     const ab = [], ba = [];
     for (let i = 0; i <= N; i++) ab.push(g[i].clone().addScaledVector(side[i], LANE));
     for (let i = N; i >= 0; i--) ba.push(g[i].clone().addScaledVector(side[i], -LANE));
     const road = { A, B, eA, eB, len: cum[N] };
-    const gA = { loc: A, other: B, e: eA, road, x: {} }, gB = { loc: B, other: A, e: eB, road, x: {} };
+    // centreline out of each ring (for the drawn fillets), inward travel directions at the lane ends
+    const clA = g.slice(0, K * 2 + 2), clB = g.slice(N - K * 2 - 1).reverse();
+    const gA = { loc: A, other: B, e: eA, road, cl: clA }, gB = { loc: B, other: A, e: eB, road, cl: clB };
     const pAB = this.newPiece('e', ab.slice(K, N + 1 - K), { from: gA, to: gB, fromLoc: A, toLoc: B, road });
     const pBA = this.newPiece('e', ba.slice(K, N + 1 - K), { from: gB, to: gA, fromLoc: B, toLoc: A, road });
     gA.out = pAB; gA.in = pBA; gB.in = pAB; gB.out = pBA;
-    gB.inPts = ab.slice(N - K); gB.outPts = ba.slice(0, K + 1);
-    gA.inPts = ba.slice(N - K); gA.outPts = ab.slice(0, K + 1);
-    // U-turn: from the arrival lane round the far side of the circle to the departure lane
-    const loopPts = (Lp) => {
-      const out = [];
-      for (let i = 0; i <= 14; i++) {
-        const th = -0.55 + (i / 14) * (Math.PI + 1.1);
-        out.push(Lp.C.clone().addScaledVector(Lp.ex, Math.cos(th) * 9).addScaledVector(Lp.ez, Math.sin(th) * 9));
-      }
-      return out;
-    };
-    gB.loop = this.newPiece('t', [...gB.inPts, ...loopPts(loopB), ...gB.outPts], { town: B, gate: gB, vlim: 5 });
-    gA.loop = this.newPiece('t', [...gA.inPts, ...loopPts(loopA), ...gA.outPts], { town: A, gate: gA, vlim: 5 });
+    const dir = (p, q) => q.clone().sub(p).normalize();
+    gB.inEnd = ab[N - K]; gB.inDir = dir(ab[N - K - 1], ab[N - K]);
+    gA.inEnd = ba[N - K]; gA.inDir = dir(ba[N - K - 1], ba[N - K]);
+    gA.outStart = ab[K]; gA.outDir = dir(ab[K], ab[K + 1]);
+    gB.outStart = ba[K]; gB.outDir = dir(ba[K], ba[K + 1]);
+    eA.gate = gA; eB.gate = gB;
     road.lanes = [pAB, pBA];
     road.gates = [gA, gB];
     for (const gt of [gA, gB]) {
@@ -796,127 +894,84 @@ export class Traffic {
     this.roads.push(road);
   }
 
-  // Can a 10 m road run over local (x,z)? Exact contact tests against colliders plus the keep-out
-  // footprints (pads, solar fields, lamps, turret spots).
-  roadClear(loc, x, z, keeps) {
-    if (keeps.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + 5)) return false;
-    const y = this.groundY(loc, x, z);
-    for (const h of [2, 5]) {
-      this.w.toWorld(loc, x, y + h, z, _c);
-      if (this.blocked(_c, 3.6)) return false;
+  // The ring itself: one closed strip, a flared join for each road, lanes and junction connectors.
+  buildRing(loc, R) {
+    const P = this.P, M = R.M, kd = R.kd;
+    const W = [];
+    for (let i = 0; i < M; i++) { const p = this.ringLocal(R, i); W.push(P.ground(this.w.toWorld(loc, p.x, 0, p.z), new THREE.Vector3())); }
+    const { side, tan } = this.frames(W, true);
+    R.W = W; R.side = side; R.tan = tan;
+    const wrap = (i) => ((i % M) + M) % M;
+    // closed strip (the last row repeats the first)
+    {
+      const base = this.roadGeo.pos.length / 3;
+      let s = 0;
+      for (let i = 0; i <= M; i++) {
+        if (i) s += W[wrap(i)].distanceTo(W[i - 1]);
+        this.stripPush(W[wrap(i)], side[wrap(i)], s);
+      }
+      this.stripIdx(base, M + 1);
     }
-    return true;
-  }
-
-  // Straight (or one-bend) road through the settlement between two gates, if the ground is open.
-  throughLine(loc, gi, gj, keeps, bend) {
-    const A = { x: gi.e.x, z: gi.e.z }, B = { x: gj.e.x, z: gj.e.z };
-    const leg = (p, q) => {
-      const L = Math.hypot(q.x - p.x, q.z - p.z), n = Math.ceil(L / 3);
-      for (let i = 1; i < n; i++) {
-        const t = i / n, x = p.x + (q.x - p.x) * t, z = p.z + (q.z - p.z) * t;
-        if (Math.hypot(x - A.x, z - A.z) < 14 || Math.hypot(x - B.x, z - B.z) < 14) continue; // the gates' own circles
-        if (!this.roadClear(loc, x, z, keeps)) return false;
-      }
-      return true;
-    };
-    const AB = Math.hypot(B.x - A.x, B.z - A.z);
-    if (leg(A, B)) return [A, B];
-    if (!bend) return null;
-    const cands = [];
-    for (const f of [0.15, 0.3, 0.45, 0.6, 0.75]) {
-      for (let k = 0; k < 20; k++) {
-        const a = (k / 20) * Math.PI * 2, w = { x: Math.cos(a) * loc.r * f, z: Math.sin(a) * loc.r * f };
-        const L = Math.hypot(w.x - A.x, w.z - A.z) + Math.hypot(B.x - w.x, B.z - w.z);
-        if (L < AB * 1.5) cands.push({ w, L });
-      }
-    }
-    cands.sort((p, q) => p.L - q.L);
-    for (const { w } of cands.slice(0, 80)) {
-      if (!leg(A, w) || !leg(w, B)) continue;
-      const pts = chaikin([A, w, B].map((p) => new THREE.Vector3(p.x, 0, p.z)), 3);
-      return pts.map((p) => ({ x: p.x, z: p.z }));
-    }
-    return null;
-  }
-
-  // Join up all the gates of one town.
-  buildJunction(loc, gates) {
-    if (gates.length < 2) return;
-    const keeps = this.keepouts(loc, false);
-    const TAU = Math.PI * 2;
-    for (const gt of gates) gt.a = ((gt.e.a % TAU) + TAU) % TAU;
-    const ring = [...gates].sort((p, q) => p.a - q.a);
-    const n = ring.length;
-    // ring-road segments between angular neighbours (computed lazily, drawn once if used)
-    const arcs = ring.map((g0, k) => {
-      const g1 = ring[(k + 1) % n];
-      let da = g1.a - g0.a;
-      if (da <= 1e-6) da += TAU;
-      return { g0, g1, da, pts: null, used: false };
-    });
-    const arcPts = (arc) => {
-      if (arc.pts) return arc.pts;
-      const { g0, g1, da } = arc;
-      const m = Math.max(3, Math.ceil((da * (g0.e.rr + g1.e.rr) * 0.5) / 5));
-      const rad = [];
-      for (let i = 0; i <= m; i++) {
-        const t = i / m, a = g0.a + da * t;
-        const r0 = g0.e.rr + (g1.e.rr - g0.e.rr) * smooth(t);
-        let r = r0;
-        if (i > 1 && i < m - 1) {
-          for (let ext = 0; ext <= 48; ext += 4) { r = r0 + ext; if (this.roadClear(loc, Math.cos(a) * r, Math.sin(a) * r, keeps)) break; }
-        }
-        rad.push(r);
-      }
-      for (let pass = 0; pass < 4; pass++) for (let i = 1; i < m; i++) rad[i] = Math.max(rad[i], (rad[i - 1] + rad[i] * 2 + rad[i + 1]) / 4);
-      arc.pts = rad.map((r, i) => { const a = g0.a + da * (i / m); return { x: Math.cos(a) * r, z: Math.sin(a) * r }; });
-      return arc.pts;
-    };
-    const toWorldLine = (local) => {
-      // resample every ~4 m, then onto the ground
-      const out = [];
-      for (let i = 0; i < local.length - 1; i++) {
-        const p = local[i], q = local[i + 1], L = Math.hypot(q.x - p.x, q.z - p.z), k = Math.max(1, Math.round(L / 4));
-        for (let j = 0; j < k; j++) out.push({ x: p.x + (q.x - p.x) * (j / k), z: p.z + (q.z - p.z) * (j / k) });
-      }
-      out.push(local[local.length - 1]);
-      for (let i = 0; i < out.length; i += 2) loc.stopKeep.push({ x: out[i].x, z: out[i].z, r: 6 });
-      return out.map((p) => this.P.ground(this.w.toWorld(loc, p.x, 0, p.z), new THREE.Vector3()));
-    };
-    loc.junction = [];
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        const gi = ring[i], gj = ring[j];
-        let sep = Math.abs(gi.a - gj.a);
-        sep = Math.min(sep, TAU - sep);
-        let local = this.throughLine(loc, gi, gj, keeps, sep > 1.2);
-        let kind = 'through';
-        if (!local) {
-          // round the edge, whichever way is shorter
-          kind = 'ring';
-          const ccw = arcs.slice(i, j), cw = [...arcs.slice(j), ...arcs.slice(0, i)];
-          const lenOf = (list) => list.reduce((s, a) => s + a.da, 0);
-          const useCcw = lenOf(ccw) <= lenOf(cw);
-          const list = useCcw ? ccw : cw;
-          local = [];
-          for (const arc of list) {
-            arc.used = true;
-            const pts = arcPts(arc);
-            local.push(...(local.length ? pts.slice(1) : pts));
-          }
-          if (!useCcw) local.reverse(); // cw list runs gj → gi
-        }
-        const C = toWorldLine(local);
-        if (kind === 'through') this.drawLine(C);
-        loc.junction.push({ a: gi.other.id, b: gj.other.id, kind, len: Math.round(this.frames(C).cum.at(-1)) });
-        const { side } = this.frames(C);
-        const lanePts = (sgn) => C.slice(1, -1).map((p, k) => p.clone().addScaledVector(side[k + 1], sgn * LANE));
-        gi.x[gj.other.id] = this.newPiece('x', [...gi.inPts, ...lanePts(1), ...gj.outPts], { town: loc, from: gi, to: gj, vlim: kind === 'through' ? 8 : 10 });
-        gj.x[gi.other.id] = this.newPiece('x', [...gj.inPts, ...lanePts(-1).reverse(), ...gi.outPts], { town: loc, from: gj, to: gi, vlim: kind === 'through' ? 8 : 10 });
+    const lane = (d, i) => W[wrap(i)].clone().addScaledVector(side[wrap(i)], LANE * d);
+    const laneT = (d, i) => tan[wrap(i)].clone().multiplyScalar(d);
+    // which way round has the town on its right (the stop goes on that lane)
+    const c0 = this.w.toWorld(loc, 0, 0, 0);
+    R.din = side[0].dot(_a.copy(c0).sub(W[0])) > 0 ? 1 : -1;
+    const gates = R.gates.sort((p, q) => p.i - q.i);
+    const n = gates.length;
+    loc.ring = { radius: Math.round(R.Rb), max: Math.round(R.maxR), gates: n };
+    // flared joins: a curved fillet each side of the road, road centreline -> ring centreline
+    for (const e of gates) {
+      const gt = e.gate, cl = gt.cl;
+      let k = 1;
+      while (k < cl.length - 1 && cl[k].distanceTo(cl[0]) < FILLET) k++;
+      const q = cl[k], tIn = cl[k - 1].clone().sub(cl[k]).normalize();
+      const m = Math.max(2, Math.round(FILLET / R.step));
+      for (const d of [1, -1]) {
+        const j = e.i + d * m;
+        this.drawLine(this.bez(q, tIn, W[wrap(j)], laneT(d, j), 8, 0.5), 0, 0.82);
       }
     }
-    for (const arc of arcs) if (arc.used) this.drawLine(toWorldLine(arc.pts));
+    // marker posts on the outside of the ring, away from the junctions
+    const outSide = -R.din;
+    const near = (i, list, dist) => list.some((gi) => { const d = Math.abs(gi - i); return Math.min(d, M - d) * R.step < dist; });
+    const postEvery = Math.max(8, Math.round(95 / R.step));
+    for (let i = 0; i < M; i += postEvery) {
+      if (near(i, gates.map((e) => e.i), 34)) continue;
+      const p = W[i].clone().addScaledVector(side[i], 6.5 * outSide);
+      P.ground(p, p);
+      this.posts.push({ pos: p, q: frameQuat(W[i].clone().normalize(), tan[i], new THREE.Quaternion()) });
+    }
+    // pads (laid out after the roads) keep off the ring
+    for (let i = 0; i < M; i += 2) { const p = this.ringLocal(R, i); loc.stopKeep.push({ x: p.x, z: p.z, r: 6 }); }
+    if (!n) return;
+    // ---- pieces ----
+    const span = (d, from, to) => { const out = []; for (let i = from; d > 0 ? i <= to : i >= to; i += d) out.push(lane(d, i)); return out; };
+    const arcP = [], arcM = [];
+    for (let k = 0; k < n; k++) {
+      const c = gates[k].i, c1 = k + 1 < n ? gates[k + 1].i : gates[0].i + M;
+      arcP.push(this.newPiece('r', span(1, c + kd, c1 - kd), { town: loc, ring: R, dirn: 1, i0: c + kd, i1: c1 - kd, vlim: 11 }));
+      arcM.push(this.newPiece('r', span(-1, c1 - kd, c + kd), { town: loc, ring: R, dirn: -1, i0: c1 - kd, i1: c + kd, vlim: 11 }));
+    }
+    for (let k = 0; k < n; k++) {
+      const e = gates[k], gt = e.gate, c = e.i;
+      const opt = { town: loc, gate: gt, vlim: 7 };
+      const entP = this.newPiece('j', [gt.inEnd, ...this.bez(gt.inEnd, gt.inDir, lane(1, c + kd), laneT(1, c + kd)).slice(1)], opt);
+      const entM = this.newPiece('j', [gt.inEnd, ...this.bez(gt.inEnd, gt.inDir, lane(-1, c - kd), laneT(-1, c - kd)).slice(1)], opt);
+      const exP = this.newPiece('j', this.bez(lane(1, c - kd), laneT(1, c - kd), gt.outStart, gt.outDir), opt);
+      const exM = this.newPiece('j', this.bez(lane(-1, c + kd), laneT(-1, c + kd), gt.outStart, gt.outDir), opt);
+      const thP = this.newPiece('j', span(1, c - kd, c + kd), { ...opt, vlim: 11 });
+      const thM = this.newPiece('j', span(-1, c + kd, c - kd), { ...opt, vlim: 11 });
+      const prev = (k + n - 1) % n;
+      gt.in.next = [entP, entM];
+      entP.next = [arcP[k]]; thP.next = [arcP[k]];
+      entM.next = [arcM[prev]]; thM.next = [arcM[prev]];
+      exP.next = [gt.out]; exM.next = [gt.out];
+      arcP[prev].next = [thP, exP];
+      arcM[k].next = [thM, exM];
+      Object.assign(gt, { entP, entM, exP, exM, thP, thM });
+    }
+    R.arcs = { 1: arcP, [-1]: arcM };
   }
 
   // Smooth the corners (ends stay put so pieces join exactly), drop onto the ground, smoothed normals.
@@ -949,65 +1004,106 @@ export class Traffic {
     pc.raw = null;
   }
 
-  // Shelter + sign beside the arrival lane, a little before the gate.
-  roadStop(pc) {
-    const loc = pc.toLoc, path = pc.path;
-    const s = Math.max(0, path.len - 8);
-    const p = sample(path, s, new THREE.Vector3(), { i: 0, f: 0 });
-    const q = sample(path, s + 4, new THREE.Vector3(), { i: 0, f: 0 });
-    const sL = this.local(loc, p, new THREE.Vector3()), qL = this.local(loc, q, new THREE.Vector3()).sub(sL);
-    const fl = Math.hypot(qL.x, qL.z) || 1, fx = qL.x / fl, fz = qL.z / fl;
-    const rx = -fz, rz = fx; // right of travel (local y up)
-    const sx = sL.x + rx * 6.5, sz = sL.z + rz * 6.5;
+  // The town's stop: one shelter + sign on the town side of the ring, on a stretch long enough for
+  // a land-train to pull in, open ground for the shelter, and as close to the buildings as it gets.
+  ringStop(R) {
+    const loc = R.loc, M = R.M, d = R.din;
+    if (!R.arcs) return;
+    const keeps = this.keepouts(loc, false);
+    const bl = this.buildings(loc);
+    const wrap = (i) => ((i % M) + M) % M;
+    let best = null;
+    for (const pc of R.arcs[d]) {
+      const n = Math.abs(pc.i1 - pc.i0);
+      const lo = Math.ceil(STOP_IN / R.step), hi = n - Math.ceil(16 / R.step);
+      for (let j = lo; j <= hi; j += 2) {
+        const i = wrap(pc.i0 + d * j);
+        const p = this.ringLocal(R, i);
+        // shelter 9 m in from the centreline, toward the town
+        const ux = Math.cos(p.a), uz = Math.sin(p.a);
+        const sx = p.x - ux * 9, sz = p.z - uz * 9;
+        if (keeps.some((k) => Math.hypot(sx - k.x, sz - k.z) < k.r + 2.5)) continue;
+        this.w.toWorld(loc, sx, this.groundY(loc, sx, sz) + 1.5, sz, _c);
+        if (this.blocked(_c, 2.4)) continue;
+        let db = 200;
+        for (const b of bl) db = Math.min(db, Math.hypot(b.x - sx, b.z - sz) - (b.r || Math.max(b.hx, b.hz)));
+        const score = (p.r - R.Rb) * 2 + Math.max(0, db) * 0.6;
+        if (!best || score < best.score) best = { pc, i, sx, sz, score };
+      }
+    }
+    if (!best) {
+      // nowhere ideal: the middle of the longest stretch
+      const pc = R.arcs[d].reduce((p, q) => (q.len > p.len ? q : p));
+      const i = wrap(pc.i0 + d * Math.round(Math.abs(pc.i1 - pc.i0) * 0.6));
+      const p = this.ringLocal(R, i);
+      best = { pc, i, sx: p.x - Math.cos(p.a) * 9, sz: p.z - Math.sin(p.a) * 9 };
+      console.warn('[traffic] no open shelter spot on the ring at', loc.id);
+    }
+    const pc = best.pc, path = pc.path;
+    // arc length on the finished lane nearest the chosen ring sample
+    const target = R.W[best.i].clone().addScaledVector(R.side[best.i], LANE * d);
+    let bi = 0, bd = Infinity;
+    for (let k = 0; k < path.pts.length; k++) { const dd = path.pts[k].distanceToSquared(target); if (dd < bd) { bd = dd; bi = k; } }
+    const s = path.cum[bi];
+    const p = path.pts[bi].clone();
+    const sL = this.local(loc, p, new THREE.Vector3());
+    const { sx, sz } = best;
     const yaw = Math.atan2(sL.x - sx, sL.z - sz);
-    const km = (pc.road.len / 1000).toFixed(1);
-    this.shelter(loc, sx, sz, yaw, `< ${pc.fromLoc.short} ${km} km`, 0xff9f1c);
+    const names = (this.towns.get(loc) || []).map((g) => g.other.short);
+    const text = `ROADS > ${names.slice(0, 3).join(' ')}${names.length > 3 ? ' +' : ''}`;
+    this.shelter(loc, sx, sz, yaw, text, 0xff9f1c);
     loc.stopKeep.push({ x: sx, z: sz, r: 3 });
-    const ax = Math.cos(pc.to.e.a), az = Math.sin(pc.to.e.a);
     const wait = { x: sx + Math.sin(yaw) * 1.8, y: this.groundY(loc, sx, sz), z: sz + Math.cos(yaw) * 1.8, g: true };
+    const r = Math.hypot(sx, sz) || 1;
     pc.stop = {
-      loc, kind: 'road', piece: pc, s, world: p.clone(), wait, origin: wait,
-      town: this.townPoint(loc, sx - ax * 4, sz - az * 4, 80),
+      loc, kind: 'road', piece: pc, s, world: p, wait, origin: wait,
+      town: this.townPoint(loc, sx - (sx / r) * 4, sz - (sz / r) * 4, 90),
       queue: [], queued: false,
     };
+    R.stop = pc.stop;
+    loc.ringStop = pc.stop;
+    loc.ring.stop = Math.round(Math.atan2(best.sz, best.sx) * 57.3);
     this.stops.push(pc.stop);
   }
 
   // ---------- routing ----------
 
-  // Pieces to drive after `from` to arrive on a lane into `dest` (Dijkstra; U-turns cost extra).
+  // Pieces to drive after `from` to reach the stop lane of town `dest` (Dijkstra over lane lengths).
   route(from, dest) {
-    if (from.kind === 'e' && from.toLoc === dest) return [];
+    const target = dest && dest.ringStop && dest.ringStop.piece;
+    if (!target) return null;
     const N = this.pieces.length;
     const d = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1), done = new Uint8Array(N);
-    const cost = (pc) => pc.len + (pc.kind === 't' ? 500 : 0);
-    for (const nx of from.next) { d[nx.id] = cost(nx); prev[nx.id] = -2; }
+    for (const nx of from.next) { d[nx.id] = nx.len; prev[nx.id] = -2; }
     for (;;) {
       let bi = -1, bd = Infinity;
       for (let i = 0; i < N; i++) if (!done[i] && d[i] < bd) { bd = d[i]; bi = i; }
       if (bi < 0) return null;
       done[bi] = 1;
       const pc = this.pieces[bi];
-      if (pc.kind === 'e' && pc.toLoc === dest) {
+      if (pc === target) {
         const out = [];
         for (let i = bi; i >= 0; i = prev[i]) out.unshift(this.pieces[i]);
         return out;
       }
-      for (const nx of pc.next) if (bd + cost(nx) < d[nx.id]) { d[nx.id] = bd + cost(nx); prev[nx.id] = bi; }
+      for (const nx of pc.next) if (bd + nx.len < d[nx.id]) { d[nx.id] = bd + nx.len; prev[nx.id] = bi; }
     }
   }
 
   // Somewhere new to go: a neighbouring town half the time, otherwise anywhere on the network.
   pickDest(v) {
     const here = v.piece.kind === 'e' ? v.piece.toLoc : v.piece.town;
-    const towns = [...this.towns.keys()].filter((l) => l !== here);
-    const nbrs = (this.towns.get(here) || []).map((g) => g.other);
+    const towns = [...this.towns.keys()].filter((l) => l !== here && l.ringStop);
+    const nbrs = (this.towns.get(here) || []).map((g) => g.other).filter((l) => l.ringStop);
     const list = nbrs.length && this.r() < 0.5 ? nbrs : towns;
     return list[Math.floor(this.r() * list.length)] || here;
   }
 
   plan(v, dest) {
     v.dest = dest || this.pickDest(v);
+    const st = v.dest.ringStop;
+    // already on the stop lane, short of the shelter: just pull in
+    if (st && v.piece === st.piece && v.s < st.s - 1) { v.plan = []; return; }
     v.plan = this.route(v.piece, v.dest) || [];
   }
 
@@ -1384,10 +1480,13 @@ export class Traffic {
 
   // Back on the road later, somewhere the camera can't see it appear.
   respawn(v, camPos) {
-    const lanes = this.roads.flatMap((r) => r.lanes).filter((pc) => pc.stop && pc.len > 300 && pc.stop.world.distanceTo(camPos) > 1700);
+    const lanes = this.roads.flatMap((r) => r.lanes).filter((pc) => pc.len > 300);
+    const h = { i: 0, f: 0 };
     for (let tries = 0; tries < 8 && lanes.length; tries++) {
       const pc = lanes[Math.floor(this.r() * lanes.length)];
-      const s = Math.max(60, pc.stop.s - 120 - this.r() * 500);
+      const s = 60 + this.r() * (pc.len - 120);
+      h.i = 0;
+      if (sample(pc.path, s, _a, h).distanceTo(camPos) < 1700) continue;
       if (pc.vehicles.some((o) => Math.abs(o.s - s) < 90)) continue;
       v.hist = [];
       this.move(v, pc);
@@ -1557,11 +1656,16 @@ export class Traffic {
       scan(pc.vehicles, 0);
       if (nx) scan(nx.vehicles, pc.len);
       // pull in at the destination's shelter
-      if (!nx && pc.stop && pc.toLoc === v.dest) {
-        const toStop = pc.stop.s - v.s;
-        limit = Math.min(limit, 0.6 + Math.sqrt(2 * 1.2 * Math.max(0, toStop - 0.3)));
-        if (v.pax && toStop < 300) this.queueBoarders(pc.stop, v);
-        if (toStop < 0.5) { v.state = 'stop'; v.timer = v.waitT; v.cur = 0; v.exchanged = false; }
+      // pull in at the destination's ring stop (it may be a few pieces ahead yet)
+      const fin = v.plan.length ? v.plan[v.plan.length - 1] : pc, st = fin.stop;
+      if (st && st.loc === v.dest && v.plan.length <= 4) {
+        let toStop = st.s - v.s;
+        if (fin !== pc) { toStop = pc.len - v.s + st.s; for (let i = 0; i < v.plan.length - 1; i++) toStop += v.plan[i].len; }
+        if (toStop > -2) {
+          limit = Math.min(limit, 0.6 + Math.sqrt(2 * 1.2 * Math.max(0, toStop - 0.3)));
+          if (v.pax && toStop < 300) this.queueBoarders(st, v);
+          if (fin === pc && toStop < 0.5) { v.state = 'stop'; v.timer = v.waitT; v.cur = 0; v.exchanged = false; }
+        }
       }
       if (v.state === 'drive') {
         v.cur = Math.min(limit, v.cur + v.acc * dt);
@@ -1571,7 +1675,7 @@ export class Traffic {
           if (!next) { this.plan(v); next = v.plan.shift() || v.piece.next[v.piece.next.length - 1]; }
           v.s -= v.piece.len;
           v.hist.unshift(v.piece);
-          if (v.hist.length > 4) v.hist.length = 4;
+          if (v.hist.length > 6) v.hist.length = 6;
           this.move(v, next);
         }
         pc = v.piece;
