@@ -47,6 +47,12 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
         g.fx.explosion(t.center, 3, false);
       }
     }
+    // the beam also chews through anything else that can be blown up (outposts, road traffic):
+    // feed the blast hooks small hits along its length (a big target takes several)
+    if (g.blastHooks) for (let t = 6; t < len; t += 6) {
+      _v.copy(muzzle).addScaledVector(dir, t);
+      for (const fn of g.blastHooks) fn(_v.clone(), 3, 40 * mult, 'player');
+    }
     g.fx.beam(muzzle, end, 0xc77dff);
     g.fx.explosion(end, 3, false);
     g.audio.tone(1600, 0.35, 'sawtooth', 0.15, 0.2);

@@ -5,8 +5,9 @@ import { mulberry32 } from './rng.js';
 import { SUN, frameQuat, arcDist } from './geo.js';
 
 // Ambient traffic: freighters and shuttle-buses that land on real pads at the edge of each
-// settlement (passengers walk off, others board), plus dirt roads between neighbouring safe
-// outposts with land-trains, hover-cars and buggies driving them.
+// settlement (passengers walk off to the town's buildings, others come out to board), plus a
+// network of dirt roads joining the safe outposts (through or round each town) with land-trains,
+// hover-cars and buggies driving routes over it. Land-trains and buggies can be wrecked.
 //
 // Vehicle kinds in world.vehicles: 'ship' (freighter), 'bus' (shuttle), 'car' (hover-car, on
 // roads; alchemy can jar these), 'landtrain' (big six-wheeled road-train with trailers).
@@ -18,7 +19,12 @@ const _q = new THREE.Quaternion(), _m4 = new THREE.Matrix4();
 const smooth = (t) => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 const clamp01 = (t) => Math.min(1, Math.max(0, t));
 const SAFE_ROAD = 2500; // connect safe outposts closer than this (plus each one's nearest neighbour < 3 km)
+const LINK_MAX = 3000; // nearest / second-nearest links up to this long
 const PAX_RANGE = 500; // passengers only exist near the camera
+const LANE = 2.4; // lane offset from the road centreline (right-hand traffic)
+const ROAD_LAT = [-5, -2.5, 0, 2.5, 5];
+const TRAIN_HP = 400, BUGGY_HP = 120;
+const _z = new THREE.Vector3(0, 0, 1);
 
 function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
   const m = new THREE.Mesh(geo, mat);
@@ -274,8 +280,8 @@ export class Traffic {
 
   // Footprints that have no colliders but must stay free: pads, solar fields, lamps,
   // defence turret spots (enemies.js places those later), and stops we already claimed.
-  keepouts(loc) {
-    const k = [...(loc.pads || []), ...(loc.keep || []), ...loc.stopKeep];
+  keepouts(loc, withStops = true) {
+    const k = [...(loc.pads || []), ...(loc.keep || []), ...(withStops ? loc.stopKeep : [])];
     const spots = [];
     if (loc.restricted) {
       const small = !!loc.small, inner = small ? 3 : 4, outer = small ? 2 : 4;
@@ -420,6 +426,9 @@ export class Traffic {
       town: this.townPoint(loc, wx, wz, 70),
       queue: [], queued: false,
     };
+    // where people step off the pad (toward the shelter side): their walks to buildings start here
+    const ea = Math.atan2(stop.wait.z - pick.z, stop.wait.x - pick.x) + 0.5, er = spec.padR + 4;
+    stop.origin = { x: pick.x + Math.cos(ea) * er, z: pick.z + Math.sin(ea) * er };
     stop.world = this.w.toWorld(loc, pick.x, top, pick.z);
     this.stops.push(stop);
     return stop;
@@ -519,29 +528,53 @@ export class Traffic {
     for (const [a, b] of buses) if (L[a] && L[b]) this.addFlyer('bus', L[a], L[b]);
   }
 
-  // ================= roads =================
+
+  // ================= road network =================
+  //
+  // Settlements are nodes, roads are edges. Each road ends at a "gate" just outside the town (with a
+  // worn turning circle). Inside a town the gates are joined up: straight through the settlement
+  // where the ground is open (exact collider contact tests), otherwise round the edge on ring-road
+  // segments. Vehicles drive directed "pieces": one lane per road direction ('e'), a U-turn round
+  // each gate's circle ('t') and one lane per ordered pair of gates in a town ('x'). Every vehicle has
+  // a destination town and a route (list of pieces); it slows down through towns on the way and
+  // stops at its destination's shelter, then picks somewhere new.
 
   buildRoads() {
     const safe = this.w.locations.filter((l) => l.safe && !l.restricted && !l.poi && l.type !== 'pirate');
-    const pairs = new Set();
     const key = (a, b) => (a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`);
+    const pairs = new Set();
+    const has = (a, b) => pairs.has(key(a, b));
+    const dist = (a, b) => arcDist(a.dir, b.dir);
+    const near = new Map(safe.map((a) => [a, safe.filter((b) => b !== a).map((b) => ({ b, d: dist(a, b) })).sort((p, q) => p.d - q.d)]));
     for (const a of safe) {
-      let best = null, bd = Infinity;
-      for (const b of safe) {
-        if (a === b) continue;
-        const d = arcDist(a.dir, b.dir);
-        if (d < SAFE_ROAD) pairs.add(key(a, b));
-        if (d < bd) { bd = d; best = b; }
-      }
-      if (best && bd < 3000) pairs.add(key(a, best));
+      for (const { b, d } of near.get(a)) if (d < SAFE_ROAD) pairs.add(key(a, b));
+      const n0 = near.get(a)[0];
+      if (n0 && n0.d < LINK_MAX) pairs.add(key(a, n0.b));
+    }
+    // a second link where it isn't just a detour of an existing pair, so the network has loops
+    for (const a of safe) {
+      const n1 = near.get(a)[1];
+      if (!n1 || n1.d >= LINK_MAX || has(a, n1.b)) continue;
+      const detour = safe.some((x) => x !== a && x !== n1.b && has(a, x) && has(x, n1.b) && dist(a, x) + dist(x, n1.b) < 1.3 * n1.d);
+      if (!detour) pairs.add(key(a, n1.b));
     }
     this.roadGeo = { pos: [], uv: [], idx: [] };
     this.posts = [];
-    const sorted = [...pairs].sort();
-    for (const k of sorted) {
+    this.pieces = [];
+    this.gates = [];
+    this.towns = new Map(); // loc -> gates
+    for (const k of [...pairs].sort()) {
       const [a, b] = k.split('|');
       this.buildRoad(this.L[a], this.L[b]);
     }
+    for (const [loc, gates] of this.towns) this.buildJunction(loc, gates);
+    this.pieces.forEach((pc, i) => { pc.id = i; this.finishPiece(pc); });
+    for (const gt of this.gates) {
+      gt.in.next = [...Object.values(gt.x), gt.loop];
+      gt.loop.next = [gt.out];
+      for (const x of Object.values(gt.x)) x.next = [x.to.out];
+    }
+    for (const road of this.roads) for (const pc of road.lanes) this.roadStop(pc);
     const G = this.roadGeo;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(G.pos, 3));
@@ -570,7 +603,8 @@ export class Traffic {
       postM.castShadow = true;
     }
     this.posts = null;
-    for (const road of this.roads) this.populateRoad(road);
+    this.roadVehicles = [];
+    this.roads.forEach((road, k) => this.populateRoad(road, k));
   }
 
   // A road end: open ground just past the settlement's edge, facing the other end.
@@ -590,6 +624,54 @@ export class Traffic {
     }
     const x = Math.cos(tw) * (loc.r + 40), z = Math.sin(tw) * (loc.r + 40);
     return { loc, a: tw, x, z, rr: loc.r + 40 };
+  }
+
+  // Visible track: a strip of 5 ground-hugging samples across 10 m along a ground polyline.
+  stripPush(centre, sideV, s, vScale = 1) {
+    const G = this.roadGeo;
+    for (const o of ROAD_LAT) {
+      _b.copy(centre).addScaledVector(sideV, o * vScale);
+      this.P.ground(_b, _b, 0.04);
+      G.pos.push(_b.x, _b.y, _b.z);
+      G.uv.push(o / 5, s);
+    }
+  }
+
+  stripIdx(base, rows) {
+    const G = this.roadGeo, n = ROAD_LAT.length;
+    for (let i = 0; i < rows - 1; i++) {
+      for (let k = 0; k < n - 1; k++) {
+        const a = base + i * n + k, b = a + n;
+        G.idx.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+    }
+  }
+
+  // Tangent, right-hand side and arc length along a ground polyline.
+  frames(g) {
+    const N = g.length - 1, side = [], tan = [], cum = [0];
+    for (let i = 0; i <= N; i++) {
+      const up = _u.copy(g[i]).normalize();
+      const t = new THREE.Vector3().subVectors(g[Math.min(N, i + 1)], g[Math.max(0, i - 1)]);
+      t.addScaledVector(up, -t.dot(up)).normalize();
+      tan.push(t);
+      side.push(new THREE.Vector3().crossVectors(t, up).normalize());
+      if (i) cum.push(cum[i - 1] + g[i].distanceTo(g[i - 1]));
+    }
+    return { side, tan, cum };
+  }
+
+  drawLine(g, s0 = 0) {
+    const { side, cum } = this.frames(g);
+    const base = this.roadGeo.pos.length / 3;
+    for (let i = 0; i < g.length; i++) this.stripPush(g[i], side[i], s0 + cum[i]);
+    this.stripIdx(base, g.length);
+  }
+
+  newPiece(kind, raw, opts) {
+    const pc = { kind, raw, next: [], vehicles: [], vlim: Infinity, ...opts };
+    this.pieces.push(pc);
+    return pc;
   }
 
   buildRoad(A, B) {
@@ -644,38 +726,11 @@ export class Traffic {
     const N = Math.max(8, Math.ceil(total / 4));
     const dirs = curve.getSpacedPoints(N).map((p) => p.normalize());
     const g = dirs.map((d) => P.ground(d, new THREE.Vector3()));
-    const side = [], tan = [];
-    for (let i = 0; i <= N; i++) {
-      const t = new THREE.Vector3().subVectors(g[Math.min(N, i + 1)], g[Math.max(0, i - 1)]);
-      t.addScaledVector(dirs[i], -t.dot(dirs[i])).normalize();
-      tan.push(t);
-      side.push(new THREE.Vector3().crossVectors(t, dirs[i]).normalize()); // right-hand side going A→B
-    }
-    const cum = [0];
-    for (let i = 1; i <= N; i++) cum.push(cum[i - 1] + g[i].distanceTo(g[i - 1]));
-    // ---- the visible track: a strip of 5 ground-hugging samples across 10 m ----
-    const G = this.roadGeo;
-    const lat = [-5, -2.5, 0, 2.5, 5];
-    const strip = (centre, sideV, s, vScale = 1) => {
-      for (const o of lat) {
-        _b.copy(centre).addScaledVector(sideV, o * vScale);
-        P.ground(_b, _b, 0.04);
-        G.pos.push(_b.x, _b.y, _b.z);
-        G.uv.push(o / 5, s);
-      }
-    };
-    const pushIdx = (base, rows) => {
-      for (let i = 0; i < rows - 1; i++) {
-        for (let k = 0; k < lat.length - 1; k++) {
-          const a = base + i * lat.length + k, b = a + lat.length;
-          G.idx.push(a, b, a + 1, a + 1, b, b + 1);
-        }
-      }
-    };
-    let base = G.pos.length / 3;
-    for (let i = 0; i <= N; i++) strip(g[i], side[i], cum[i]);
-    pushIdx(base, N + 1);
-    // turnaround loops at both ends (a worn ring you can see from the air)
+    const { side, tan, cum } = this.frames(g);
+    const base = this.roadGeo.pos.length / 3;
+    for (let i = 0; i <= N; i++) this.stripPush(g[i], side[i], cum[i]);
+    this.stripIdx(base, N + 1);
+    // turning circles at both ends (a worn ring you can see from the air)
     const loopAt = (E, out, rightV) => {
       const C = E.clone().addScaledVector(out, 9);
       P.ground(C, C);
@@ -683,19 +738,18 @@ export class Traffic {
       const ex = rightV.clone().addScaledVector(up, -rightV.dot(up)).normalize();
       const ez = new THREE.Vector3().crossVectors(up, ex).multiplyScalar(-1);
       if (ez.dot(out) < 0) ez.negate();
-      const b0 = G.pos.length / 3, M = 36;
+      const b0 = this.roadGeo.pos.length / 3, M = 36;
       for (let i = 0; i <= M; i++) {
         const th = (i / M) * Math.PI * 2;
         const rp = _c.copy(C).addScaledVector(ex, Math.cos(th) * 9).addScaledVector(ez, Math.sin(th) * 9);
         const sv = _d.copy(ex).multiplyScalar(Math.cos(th)).addScaledVector(ez, Math.sin(th));
-        strip(rp, sv, th * 9, 0.8);
+        this.stripPush(rp, sv, th * 9, 0.8);
       }
-      pushIdx(b0, M + 1);
+      this.stripIdx(b0, M + 1);
       return { C, ex, ez };
     };
-    const outB = tan[N].clone(), outA = tan[0].clone().negate();
-    const loopB = loopAt(g[N], outB, side[N]);
-    const loopA = loopAt(g[0], outA, side[0].clone().negate());
+    const loopB = loopAt(g[N], tan[N].clone(), side[N]);
+    const loopA = loopAt(g[0], tan[0].clone().negate(), side[0].clone().negate());
     // marker posts every ~110 m, alternating sides
     for (let s = 60, k = 0; s < cum[N] - 60; s += 110, k++) {
       let i = 0;
@@ -704,84 +758,272 @@ export class Traffic {
       P.ground(p, p);
       this.posts.push({ pos: p, q: frameQuat(dirs[i], tan[i], new THREE.Quaternion()) });
     }
-    // ---- the driving circuit: right lane A→B, loop at B, right lane back, loop at A ----
-    const lane = 2.4;
-    const circ = [];
-    for (let i = 0; i <= N; i++) circ.push(g[i].clone().addScaledVector(side[i], lane));
-    const stopIdx = [];
-    const loopPts = (L) => {
-      // from the arrival lane round the far side of the ring to the departure lane
+    // ---- lanes: right-hand traffic; the last few metres at each end belong to the junction pieces ----
+    const K = 2;
+    const ab = [], ba = [];
+    for (let i = 0; i <= N; i++) ab.push(g[i].clone().addScaledVector(side[i], LANE));
+    for (let i = N; i >= 0; i--) ba.push(g[i].clone().addScaledVector(side[i], -LANE));
+    const road = { A, B, eA, eB, len: cum[N] };
+    const gA = { loc: A, other: B, e: eA, road, x: {} }, gB = { loc: B, other: A, e: eB, road, x: {} };
+    const pAB = this.newPiece('e', ab.slice(K, N + 1 - K), { from: gA, to: gB, fromLoc: A, toLoc: B, road });
+    const pBA = this.newPiece('e', ba.slice(K, N + 1 - K), { from: gB, to: gA, fromLoc: B, toLoc: A, road });
+    gA.out = pAB; gA.in = pBA; gB.in = pAB; gB.out = pBA;
+    gB.inPts = ab.slice(N - K); gB.outPts = ba.slice(0, K + 1);
+    gA.inPts = ba.slice(N - K); gA.outPts = ab.slice(0, K + 1);
+    // U-turn: from the arrival lane round the far side of the circle to the departure lane
+    const loopPts = (Lp) => {
+      const out = [];
       for (let i = 0; i <= 14; i++) {
         const th = -0.55 + (i / 14) * (Math.PI + 1.1);
-        circ.push(L.C.clone().addScaledVector(L.ex, Math.cos(th) * 9).addScaledVector(L.ez, Math.sin(th) * 9));
+        out.push(Lp.C.clone().addScaledVector(Lp.ex, Math.cos(th) * 9).addScaledVector(Lp.ez, Math.sin(th) * 9));
       }
+      return out;
     };
-    stopIdx.push(circ.length - 3); // stop B: just before the loop
-    loopPts(loopB);
-    for (let i = N; i >= 0; i--) circ.push(g[i].clone().addScaledVector(side[i], -lane));
-    stopIdx.push(circ.length - 3); // stop A
-    loopPts(loopA);
-    // smooth the joins, then drop everything back on the ground
-    let pts = circ;
-    for (let pass = 0; pass < 4; pass++) {
-      const nx = pts.map((p, i) => {
-        const a = pts[(i - 1 + pts.length) % pts.length], b = pts[(i + 1) % pts.length];
-        return p.clone().multiplyScalar(0.5).addScaledVector(a, 0.25).addScaledVector(b, 0.25);
-      });
-      pts = nx;
+    gB.loop = this.newPiece('t', [...gB.inPts, ...loopPts(loopB), ...gB.outPts], { town: B, gate: gB, vlim: 5 });
+    gA.loop = this.newPiece('t', [...gA.inPts, ...loopPts(loopA), ...gA.outPts], { town: A, gate: gA, vlim: 5 });
+    road.lanes = [pAB, pBA];
+    road.gates = [gA, gB];
+    for (const gt of [gA, gB]) {
+      if (!this.towns.has(gt.loc)) this.towns.set(gt.loc, []);
+      this.towns.get(gt.loc).push(gt);
+      this.gates.push(gt);
+    }
+    this.roads.push(road);
+  }
+
+  // Can a 10 m road run over local (x,z)? Exact contact tests against colliders plus the keep-out
+  // footprints (pads, solar fields, lamps, turret spots).
+  roadClear(loc, x, z, keeps) {
+    if (keeps.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + 5)) return false;
+    const y = this.groundY(loc, x, z);
+    for (const h of [2, 5]) {
+      this.w.toWorld(loc, x, y + h, z, _c);
+      if (this.blocked(_c, 3.6)) return false;
+    }
+    return true;
+  }
+
+  // Straight (or one-bend) road through the settlement between two gates, if the ground is open.
+  throughLine(loc, gi, gj, keeps, bend) {
+    const A = { x: gi.e.x, z: gi.e.z }, B = { x: gj.e.x, z: gj.e.z };
+    const leg = (p, q) => {
+      const L = Math.hypot(q.x - p.x, q.z - p.z), n = Math.ceil(L / 3);
+      for (let i = 1; i < n; i++) {
+        const t = i / n, x = p.x + (q.x - p.x) * t, z = p.z + (q.z - p.z) * t;
+        if (Math.hypot(x - A.x, z - A.z) < 14 || Math.hypot(x - B.x, z - B.z) < 14) continue; // the gates' own circles
+        if (!this.roadClear(loc, x, z, keeps)) return false;
+      }
+      return true;
+    };
+    const AB = Math.hypot(B.x - A.x, B.z - A.z);
+    if (leg(A, B)) return [A, B];
+    if (!bend) return null;
+    const cands = [];
+    for (const f of [0.15, 0.3, 0.45, 0.6, 0.75]) {
+      for (let k = 0; k < 20; k++) {
+        const a = (k / 20) * Math.PI * 2, w = { x: Math.cos(a) * loc.r * f, z: Math.sin(a) * loc.r * f };
+        const L = Math.hypot(w.x - A.x, w.z - A.z) + Math.hypot(B.x - w.x, B.z - w.z);
+        if (L < AB * 1.5) cands.push({ w, L });
+      }
+    }
+    cands.sort((p, q) => p.L - q.L);
+    for (const { w } of cands.slice(0, 80)) {
+      if (!leg(A, w) || !leg(w, B)) continue;
+      const pts = chaikin([A, w, B].map((p) => new THREE.Vector3(p.x, 0, p.z)), 3);
+      return pts.map((p) => ({ x: p.x, z: p.z }));
+    }
+    return null;
+  }
+
+  // Join up all the gates of one town.
+  buildJunction(loc, gates) {
+    if (gates.length < 2) return;
+    const keeps = this.keepouts(loc, false);
+    const TAU = Math.PI * 2;
+    for (const gt of gates) gt.a = ((gt.e.a % TAU) + TAU) % TAU;
+    const ring = [...gates].sort((p, q) => p.a - q.a);
+    const n = ring.length;
+    // ring-road segments between angular neighbours (computed lazily, drawn once if used)
+    const arcs = ring.map((g0, k) => {
+      const g1 = ring[(k + 1) % n];
+      let da = g1.a - g0.a;
+      if (da <= 1e-6) da += TAU;
+      return { g0, g1, da, pts: null, used: false };
+    });
+    const arcPts = (arc) => {
+      if (arc.pts) return arc.pts;
+      const { g0, g1, da } = arc;
+      const m = Math.max(3, Math.ceil((da * (g0.e.rr + g1.e.rr) * 0.5) / 5));
+      const rad = [];
+      for (let i = 0; i <= m; i++) {
+        const t = i / m, a = g0.a + da * t;
+        const r0 = g0.e.rr + (g1.e.rr - g0.e.rr) * smooth(t);
+        let r = r0;
+        if (i > 1 && i < m - 1) {
+          for (let ext = 0; ext <= 48; ext += 4) { r = r0 + ext; if (this.roadClear(loc, Math.cos(a) * r, Math.sin(a) * r, keeps)) break; }
+        }
+        rad.push(r);
+      }
+      for (let pass = 0; pass < 4; pass++) for (let i = 1; i < m; i++) rad[i] = Math.max(rad[i], (rad[i - 1] + rad[i] * 2 + rad[i + 1]) / 4);
+      arc.pts = rad.map((r, i) => { const a = g0.a + da * (i / m); return { x: Math.cos(a) * r, z: Math.sin(a) * r }; });
+      return arc.pts;
+    };
+    const toWorldLine = (local) => {
+      // resample every ~4 m, then onto the ground
+      const out = [];
+      for (let i = 0; i < local.length - 1; i++) {
+        const p = local[i], q = local[i + 1], L = Math.hypot(q.x - p.x, q.z - p.z), k = Math.max(1, Math.round(L / 4));
+        for (let j = 0; j < k; j++) out.push({ x: p.x + (q.x - p.x) * (j / k), z: p.z + (q.z - p.z) * (j / k) });
+      }
+      out.push(local[local.length - 1]);
+      for (let i = 0; i < out.length; i += 2) loc.stopKeep.push({ x: out[i].x, z: out[i].z, r: 6 });
+      return out.map((p) => this.P.ground(this.w.toWorld(loc, p.x, 0, p.z), new THREE.Vector3()));
+    };
+    loc.junction = [];
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const gi = ring[i], gj = ring[j];
+        let sep = Math.abs(gi.a - gj.a);
+        sep = Math.min(sep, TAU - sep);
+        let local = this.throughLine(loc, gi, gj, keeps, sep > 1.2);
+        let kind = 'through';
+        if (!local) {
+          // round the edge, whichever way is shorter
+          kind = 'ring';
+          const ccw = arcs.slice(i, j), cw = [...arcs.slice(j), ...arcs.slice(0, i)];
+          const lenOf = (list) => list.reduce((s, a) => s + a.da, 0);
+          const useCcw = lenOf(ccw) <= lenOf(cw);
+          const list = useCcw ? ccw : cw;
+          local = [];
+          for (const arc of list) {
+            arc.used = true;
+            const pts = arcPts(arc);
+            local.push(...(local.length ? pts.slice(1) : pts));
+          }
+          if (!useCcw) local.reverse(); // cw list runs gj → gi
+        }
+        const C = toWorldLine(local);
+        if (kind === 'through') this.drawLine(C);
+        loc.junction.push({ a: gi.other.id, b: gj.other.id, kind, len: Math.round(this.frames(C).cum.at(-1)) });
+        const { side } = this.frames(C);
+        const lanePts = (sgn) => C.slice(1, -1).map((p, k) => p.clone().addScaledVector(side[k + 1], sgn * LANE));
+        gi.x[gj.other.id] = this.newPiece('x', [...gi.inPts, ...lanePts(1), ...gj.outPts], { town: loc, from: gi, to: gj, vlim: kind === 'through' ? 8 : 10 });
+        gj.x[gi.other.id] = this.newPiece('x', [...gj.inPts, ...lanePts(-1).reverse(), ...gi.outPts], { town: loc, from: gj, to: gi, vlim: kind === 'through' ? 8 : 10 });
+      }
+    }
+    for (const arc of arcs) if (arc.used) this.drawLine(toWorldLine(arc.pts));
+  }
+
+  // Smooth the corners (ends stay put so pieces join exactly), drop onto the ground, smoothed normals.
+  finishPiece(pc) {
+    const P = this.P;
+    let pts = pc.raw;
+    if (pc.kind !== 'e') {
+      const dense = [pts[0]];
+      for (let i = 1; i < pts.length; i++) {
+        const k = Math.max(1, Math.round(pts[i].distanceTo(pts[i - 1]) / 2));
+        for (let j = 1; j <= k; j++) dense.push(pts[i - 1].clone().lerp(pts[i], j / k));
+      }
+      pts = dense;
+      for (let pass = 0; pass < 8; pass++) {
+        const nx = pts.map((p, i) => (i === 0 || i === pts.length - 1 ? p : p.clone().multiplyScalar(0.5).addScaledVector(pts[i - 1], 0.25).addScaledVector(pts[i + 1], 0.25)));
+        pts = nx;
+      }
     }
     const nor = [];
     for (const p of pts) { const nn = new THREE.Vector3(); P.ground(p, p); P.surface(p, nn); nor.push(nn); }
     // smoothed terrain normals, leaned toward radial up so vehicles don't jitter on every facet
-    const sn = nor.map((_, i) => {
+    const M = nor.length;
+    pc.normals = nor.map((_, i) => {
       const s = new THREE.Vector3();
-      for (let k = -3; k <= 3; k++) s.add(nor[(i + k + nor.length) % nor.length]);
+      for (let k = -3; k <= 3; k++) s.add(nor[Math.min(M - 1, Math.max(0, i + k))]);
       return s.normalize().lerp(pts[i].clone().normalize(), 0.3).normalize();
     });
-    const path = makePath(pts, true);
-    const normals = [...sn, sn[0]];
-    const road = { A, B, eA, eB, path, normals, stops: [], vehicles: [], len: cum[N] };
-    // stops (shelter + sign beside each arrival lane)
-    const mkStop = (e, ci, other) => {
-      const loc = e.loc;
-      const p = pts[ci];
-      const sL = this.local(loc, p, new THREE.Vector3());
-      const ax = Math.cos(e.a), az = Math.sin(e.a);
-      // lane direction in local frame at the stop, and its right-hand side
-      const q = this.local(loc, pts[(ci + 2) % pts.length], new THREE.Vector3()).sub(sL);
-      const fx = q.x / (Math.hypot(q.x, q.z) || 1), fz = q.z / (Math.hypot(q.x, q.z) || 1);
-      const rx = -fz, rz = fx; // right of travel (local y up: right = fwd × up)
-      const sx = sL.x + rx * 6.5, sz = sL.z + rz * 6.5;
-      const yaw = Math.atan2(sL.x - sx, sL.z - sz);
-      const km = (cum[N] / 1000).toFixed(1);
-      this.shelter(loc, sx, sz, yaw, `< ${other.short} ${km} km`, 0xff9f1c);
-      const stop = {
-        loc, kind: 'road', ci, s: path.cum[ci], world: p.clone(),
-        wait: { x: sx + Math.sin(yaw) * 1.8, y: this.groundY(loc, sx, sz), z: sz + Math.cos(yaw) * 1.8, g: true },
-        town: this.townPoint(loc, sx - ax * 4, sz - az * 4, 80),
-        queue: [], queued: false,
-      };
-      this.stops.push(stop);
-      return stop;
-    };
-    road.stops.push(mkStop(eB, stopIdx[0], A), mkStop(eA, stopIdx[1], B));
-    this.roads.push(road);
+    pc.path = makePath(pts);
+    pc.len = pc.path.len;
+    pc.raw = null;
   }
 
-  // Put a land-train, two hover-cars and a buggy on each road.
-  populateRoad(road) {
-    const L = road.path.len;
-    const k = this.roads.indexOf(road);
-    const add = (v, s) => {
+  // Shelter + sign beside the arrival lane, a little before the gate.
+  roadStop(pc) {
+    const loc = pc.toLoc, path = pc.path;
+    const s = Math.max(0, path.len - 8);
+    const p = sample(path, s, new THREE.Vector3(), { i: 0, f: 0 });
+    const q = sample(path, s + 4, new THREE.Vector3(), { i: 0, f: 0 });
+    const sL = this.local(loc, p, new THREE.Vector3()), qL = this.local(loc, q, new THREE.Vector3()).sub(sL);
+    const fl = Math.hypot(qL.x, qL.z) || 1, fx = qL.x / fl, fz = qL.z / fl;
+    const rx = -fz, rz = fx; // right of travel (local y up)
+    const sx = sL.x + rx * 6.5, sz = sL.z + rz * 6.5;
+    const yaw = Math.atan2(sL.x - sx, sL.z - sz);
+    const km = (pc.road.len / 1000).toFixed(1);
+    this.shelter(loc, sx, sz, yaw, `< ${pc.fromLoc.short} ${km} km`, 0xff9f1c);
+    loc.stopKeep.push({ x: sx, z: sz, r: 3 });
+    const ax = Math.cos(pc.to.e.a), az = Math.sin(pc.to.e.a);
+    const wait = { x: sx + Math.sin(yaw) * 1.8, y: this.groundY(loc, sx, sz), z: sz + Math.cos(yaw) * 1.8, g: true };
+    pc.stop = {
+      loc, kind: 'road', piece: pc, s, world: p.clone(), wait, origin: wait,
+      town: this.townPoint(loc, sx - ax * 4, sz - az * 4, 80),
+      queue: [], queued: false,
+    };
+    this.stops.push(pc.stop);
+  }
+
+  // ---------- routing ----------
+
+  // Pieces to drive after `from` to arrive on a lane into `dest` (Dijkstra; U-turns cost extra).
+  route(from, dest) {
+    if (from.kind === 'e' && from.toLoc === dest) return [];
+    const N = this.pieces.length;
+    const d = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1), done = new Uint8Array(N);
+    const cost = (pc) => pc.len + (pc.kind === 't' ? 500 : 0);
+    for (const nx of from.next) { d[nx.id] = cost(nx); prev[nx.id] = -2; }
+    for (;;) {
+      let bi = -1, bd = Infinity;
+      for (let i = 0; i < N; i++) if (!done[i] && d[i] < bd) { bd = d[i]; bi = i; }
+      if (bi < 0) return null;
+      done[bi] = 1;
+      const pc = this.pieces[bi];
+      if (pc.kind === 'e' && pc.toLoc === dest) {
+        const out = [];
+        for (let i = bi; i >= 0; i = prev[i]) out.unshift(this.pieces[i]);
+        return out;
+      }
+      for (const nx of pc.next) if (bd + cost(nx) < d[nx.id]) { d[nx.id] = bd + cost(nx); prev[nx.id] = bi; }
+    }
+  }
+
+  // Somewhere new to go: a neighbouring town half the time, otherwise anywhere on the network.
+  pickDest(v) {
+    const here = v.piece.kind === 'e' ? v.piece.toLoc : v.piece.town;
+    const towns = [...this.towns.keys()].filter((l) => l !== here);
+    const nbrs = (this.towns.get(here) || []).map((g) => g.other);
+    const list = nbrs.length && this.r() < 0.5 ? nbrs : towns;
+    return list[Math.floor(this.r() * list.length)] || here;
+  }
+
+  plan(v, dest) {
+    v.dest = dest || this.pickDest(v);
+    v.plan = this.route(v.piece, v.dest) || [];
+  }
+
+  move(v, pc) {
+    if (v.piece) { const i = v.piece.vehicles.indexOf(v); if (i >= 0) v.piece.vehicles.splice(i, 1); }
+    v.piece = pc;
+    if (pc) pc.vehicles.push(v);
+  }
+
+  // Put a land-train, two hover-cars and a buggy on each road, each with somewhere to go.
+  populateRoad(road, k) {
+    const add = (v) => {
+      const pc = road.lanes[this.r() < 0.5 ? 0 : 1];
       Object.assign(v, {
-        road, s, hint: { i: 0, f: 0 }, cur: 0, state: 'drive', timer: 0, next: 0,
+        piece: null, s: pc.len * (0.1 + this.r() * 0.8), plan: [], hist: [], dest: null, cur: 0, state: 'drive', timer: 0,
         pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(),
-        hintF: { i: 0, f: 0 }, hintR: { i: 0, f: 0 }, hover: 0,
+        hintF: { i: 0, f: 0 }, hintR: { i: 0, f: 0 }, hover: 0, smokeT: 0, roll: 0,
       });
-      // next stop ahead of s
-      const ds = road.stops.map((st) => (st.s - s + L) % L);
-      v.next = ds[0] < ds[1] ? 0 : 1;
-      road.vehicles.push(v);
+      this.move(v, pc);
+      this.plan(v);
+      this.roadVehicles.push(v);
       return v;
     };
     // land-train
@@ -790,10 +1032,10 @@ export class Traffic {
     this.w.scene.add(lt.root);
     for (const t of lt.trailers) this.w.scene.add(t.root);
     const train = add({
-      ...lt, kind: 'landtrain', vmax: 11, acc: 1.4, front: 4.6, tail: 4.4 + lt.trailers.length * 9.9, stopsAt: true, waitT: 16,
-      deck: [1.95, 2.45, 4.3], deckY: 2.45, col: null, quat: lt.root.quaternion, view: 1200, radius: 6, boarding: 0, wheelR: 1.2, dist: 0,
-      pax: [1, 3], door: null,
-    }, L * this.r());
+      ...lt, kind: 'landtrain', vmax: 11, acc: 1.4, front: 4.6, tail: 4.4 + lt.trailers.length * 9.9, waitT: 16,
+      deck: [1.95, 2.45, 4.3], deckY: 2.45, col: null, quat: lt.root.quaternion, view: 1200, radius: 6, boarding: 0, wheelR: 1.2,
+      pax: [1, 3], hp: TRAIN_HP, maxHp: TRAIN_HP, hitR: 4.8, credits: 60,
+    });
     train.trailers.forEach((t, i) => {
       t.offset = 4.3 + 1.6 + 4.0 + i * 9.9;
       t.hintF = { i: 0, f: 0 }; t.hintR = { i: 0, f: 0 };
@@ -801,12 +1043,12 @@ export class Traffic {
       this.platforms.push(t.plat);
     });
     this.vehicles.push(train);
-    // hover-cars: hop over slower traffic instead of queueing
+    // hover-cars: hop over slower traffic instead of queueing (the jar can scoop these)
     for (let i = 0; i < 2; i++) {
       const m = makeHoverCar({ color: [0xff7ad9, 0x2ec4ff, 0x7dff6a, 0xffd23f][(k + i) % 4] });
       m.root.matrixAutoUpdate = true;
       this.w.scene.add(m.root);
-      const v = add({ ...m, kind: 'car', vmax: 17 + this.r() * 6, acc: 4, front: 2, tail: 2, stopsAt: false, deck: [1.3, 1.1, 2.7], deckY: 0, col: null, quat: m.root.quaternion, view: 800, radius: 2.5, hoverH: 1.7 }, L * this.r());
+      const v = add({ ...m, kind: 'car', vmax: 17 + this.r() * 6, acc: 4, front: 2, tail: 2, waitT: 4, deck: [1.3, 1.1, 2.7], deckY: 0, col: null, quat: m.root.quaternion, view: 800, radius: 2.5, hoverH: 1.7 });
       this.vehicles.push(v);
     }
     // buggy (old-style crawler): queues behind slower traffic
@@ -814,7 +1056,7 @@ export class Traffic {
     r.gun.visible = false;
     r.root.scale.setScalar(1.3);
     this.w.scene.add(r.root);
-    const b = add({ ...r, kind: 'buggy', vmax: 12 + this.r() * 3, acc: 2.5, front: 3.4, tail: 3.4, stopsAt: false, view: 900, wheelR: 1.1, dist: 0 }, L * this.r());
+    const b = add({ ...r, kind: 'buggy', vmax: 12 + this.r() * 3, acc: 2.5, front: 3.4, tail: 3.4, waitT: 6, view: 900, wheelR: 1.1, hp: BUGGY_HP, maxHp: BUGGY_HP, hitR: 3.4, credits: 25 });
     this.crawlers.push(b);
   }
 
@@ -823,11 +1065,11 @@ export class Traffic {
   figure() {
     let f = this.pool.find((p) => !p.busy);
     if (!f) {
-      if (this.pool.length >= 28) return null;
+      if (this.pool.length >= 40) return null;
       const pal = [0xff9f1c, 0xff7ad9, 0x2ec4ff, 0xffd23f, 0x7dff6a, 0xc77dff, 0xffffff, 0xff3b5c];
       const k = this.pool.length;
       f = makeFigure({ suit: pal[k % pal.length], helmet: k % 3 ? 0xfff4e0 : 0xffd23f, scale: k % 7 === 3 ? 0.62 : 1 });
-      f.phase = Math.random() * 6;
+      f.phase = k * 1.7;
       this.pool.push(f);
     }
     f.busy = true;
@@ -855,20 +1097,126 @@ export class Traffic {
 
   stopNear(stop) { return stop.loc.active && stop.world.distanceTo(this.cam) < PAX_RANGE; }
 
-  // Boarders turn up at the shelter while the vehicle is on its way in.
+  // Buildings of a settlement as walkable targets (local frame), from its static colliders.
+  buildings(loc) {
+    if (loc._bld) return loc._bld;
+    const out = [];
+    const list = this.C.query(this.w.toWorld(loc, 0, 0, 0), loc.r * 1.15 + 10, []);
+    for (const c of list) {
+      if (c.platform) continue;
+      const cl = this.local(loc, c.c, new THREE.Vector3());
+      if (Math.hypot(cl.x, cl.z) > loc.r * 1.15) continue;
+      if (c.type === 'box') {
+        const ay = _a.copy(c.ay).transformDirection(loc._inv);
+        if (Math.abs(ay.y) < 0.9 || c.hy < 1.2 || Math.max(c.hx, c.hz) < 2 || Math.min(c.hx, c.hz) < 0.8 || cl.y - c.hy > 1.5) continue;
+        const ax = _b.copy(c.ax).transformDirection(loc._inv), az = _d.copy(c.az).transformDirection(loc._inv);
+        const lx = Math.hypot(ax.x, ax.z) || 1, lz = Math.hypot(az.x, az.z) || 1;
+        out.push({ c, type: 'box', x: cl.x, z: cl.z, ax: [ax.x / lx, ax.z / lx], az: [az.x / lz, az.z / lz], hx: c.hx, hz: c.hz });
+      } else if (c.type === 'sphere') {
+        if (c.r < 4 || cl.y > c.r * 0.5) continue;
+        out.push({ c, type: 'round', x: cl.x, z: cl.z, r: Math.sqrt(Math.max(1, c.r * c.r - cl.y * cl.y)) });
+      } else if (c.type === 'cyl') {
+        if (c.r < 2.5) continue;
+        out.push({ c, type: 'round', x: cl.x, z: cl.z, r: c.r });
+      }
+    }
+    loc._bld = out;
+    return out;
+  }
+
+  // Door on the wall of building b facing the point o (local frame).
+  door(b, o, jitter) {
+    const rx = o.x - b.x, rz = o.z - b.z;
+    if (b.type === 'round') {
+      const d = Math.hypot(rx, rz) || 1;
+      const a = Math.atan2(rz, rx) + jitter * 0.25;
+      return { x: b.x + Math.cos(a) * (b.r + 0.35), z: b.z + Math.sin(a) * (b.r + 0.35), d };
+    }
+    const da = rx * b.ax[0] + rz * b.ax[1], dz = rx * b.az[0] + rz * b.az[1];
+    const alongX = Math.abs(da) / b.hx > Math.abs(dz) / b.hz;
+    const n = alongX ? b.ax : b.az, t = alongX ? b.az : b.ax;
+    const h = alongX ? b.hx : b.hz, w = alongX ? b.hz : b.hx;
+    const sg = (alongX ? da : dz) >= 0 ? 1 : -1;
+    const lat = jitter * w * 0.45;
+    return { x: b.x + n[0] * sg * (h + 0.35) + t[0] * lat, z: b.z + n[1] * sg * (h + 0.35) + t[1] * lat };
+  }
+
+  // Is a straight walk from p to q clear of colliders (ignoring the target building)?
+  walkClear(loc, p, q, ignore) {
+    const L = Math.hypot(q.x - p.x, q.z - p.z), n = Math.ceil(L / 1.5);
+    for (let i = 1; i <= n; i++) {
+      const t = Math.min(i / n, Math.max(0, 1 - 0.6 / L));
+      const x = p.x + (q.x - p.x) * t, z = p.z + (q.z - p.z) * t;
+      this.w.toWorld(loc, x, this.groundY(loc, x, z) + 1.0, z, _c);
+      this.C.query(_c, 0.5, this._buf);
+      for (const c of this._buf) if (c !== ignore && !c.platform && this.C.contact(c, _c, 0.45, _n) > 0) return false;
+    }
+    return true;
+  }
+
+  // Straight segments from o to the door, stepping round one obstacle if needed.
+  planWalk(loc, o, d, ignore) {
+    if (this.walkClear(loc, o, d, ignore)) return [d];
+    const L = Math.hypot(d.x - o.x, d.z - o.z) || 1;
+    const px = -(d.z - o.z) / L, pz = (d.x - o.x) / L;
+    for (const f of [0.5, 0.3, 0.7]) {
+      for (const off of [5, -5, 10, -10, 16, -16, 24, -24]) {
+        const w = { x: o.x + (d.x - o.x) * f + px * off, z: o.z + (d.z - o.z) * f + pz * off };
+        if (this.walkClear(loc, o, w, null) && this.walkClear(loc, w, d, ignore)) return [w, d];
+      }
+    }
+    return null;
+  }
+
+  // Up to 8 walkable building entrances near a stop (cached; colliders are static).
+  doorsFor(stop) {
+    if (stop.doors) return stop.doors;
+    const loc = stop.loc, o = stop.origin;
+    const bl = this.buildings(loc)
+      .map((b) => ({ b, d: Math.hypot(b.x - o.x, b.z - o.z) }))
+      .filter((e) => e.d < 200)
+      .sort((p, q) => p.d - q.d)
+      .slice(0, 24);
+    const doors = [];
+    let k = 0;
+    for (const { b } of bl) {
+      if (doors.length >= 8) break;
+      const d = this.door(b, o, ((k++ * 0.618) % 1) * 2 - 1);
+      this.w.toWorld(loc, d.x, this.groundY(loc, d.x, d.z) + 1, d.z, _c);
+      this.C.query(_c, 0.6, this._buf);
+      if (this._buf.some((c) => c !== b.c && !c.platform && this.C.contact(c, _c, 0.5, _n) > 0)) continue;
+      const path = this.planWalk(loc, o, d, b.c);
+      if (path) doors.push(path.map((p) => ({ x: p.x, y: this.groundY(loc, p.x, p.z), z: p.z, g: true })));
+    }
+    stop.doors = doors;
+    return doors;
+  }
+
+  // Boarders turn up while the vehicle is on its way in: most walk out of a building, a few are
+  // already waiting at the shelter.
   queueBoarders(stop, v) {
     if (stop.queued || !this.stopNear(stop)) return;
     stop.queued = true;
+    const doors = this.doorsFor(stop);
     const n = v.pax[0] + Math.floor(Math.random() * (v.pax[1] - v.pax[0] + 1));
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2, rr = Math.random() * 1.6;
       const p = { x: stop.wait.x + Math.cos(a) * rr, y: stop.wait.y, z: stop.wait.z + Math.sin(a) * rr, g: true };
-      const wk = this.walker(stop.loc, [p], { idle: true, stop });
-      if (wk) { wk.fig.root.rotation.y = Math.random() * 6; stop.queue.push(wk); }
+      let wk;
+      if (doors.length && Math.random() < 0.75) {
+        const path = doors[Math.floor(Math.random() * doors.length)];
+        const pts = [...path].reverse().map((q) => ({ ...q }));
+        pts.push({ ...stop.origin, g: true, y: this.groundY(stop.loc, stop.origin.x, stop.origin.z) }, p);
+        wk = this.walker(stop.loc, pts, { hold: true, stop, delay: Math.random() * 3 });
+      } else {
+        wk = this.walker(stop.loc, [p], { idle: true, stop });
+        if (wk) wk.fig.root.rotation.y = Math.random() * 6;
+      }
+      if (wk) stop.queue.push(wk);
     }
   }
 
-  // Doors open: some get off and head into town, the queue walks up the ramp.
+  // Doors open: some get off and head for a building, the queue walks up the ramp.
   exchange(v, stop) {
     if (!this.stopNear(stop)) { stop.queue.forEach((wk) => this.release(wk)); stop.queue = []; stop.queued = false; return; }
     const loc = stop.loc;
@@ -892,18 +1240,21 @@ export class Traffic {
       bottom.y = stop.top; bottom.g = false;
       door = [pt(v.inside, false), pt(v.rampTop, false), bottom];
     }
-    const foot = door[door.length - 1];
-    // off the pad toward the shelter side, then into town
+    // off the pad toward the shelter side, then to a building
     let exit = null;
     if (stop.kind === 'pad') {
       const a = Math.atan2(stop.wait.z - stop.z, stop.wait.x - stop.x) + 0.5;
       exit = { x: stop.x + Math.cos(a) * (stop.padR + 1.5), y: stop.top, z: stop.z + Math.sin(a) * (stop.padR + 1.5), g: false };
     }
+    const doors = this.doorsFor(stop);
     const nOff = v.pax[0] + Math.floor(Math.random() * (v.pax[1] - v.pax[0] + 1));
     for (let i = 0; i < nOff; i++) {
-      const town = { ...stop.town, x: stop.town.x + (Math.random() - 0.5) * 6, z: stop.town.z + (Math.random() - 0.5) * 6 };
-      const via = exit ? [exit, { ...exit, y: this.groundY(loc, exit.x, exit.z), g: true }] : [{ ...stop.wait, x: stop.wait.x + (Math.random() - 0.5) * 3 }];
-      const pts = [...door.map((p) => ({ ...p })), ...via, town];
+      const via = exit ? [exit, { ...exit, y: this.groundY(loc, exit.x, exit.z), g: true }] : [];
+      via.push({ ...stop.origin, y: this.groundY(loc, stop.origin.x, stop.origin.z), g: true });
+      let dest;
+      if (doors.length) dest = doors[Math.floor(Math.random() * doors.length)].map((q) => ({ ...q }));
+      else dest = [{ ...stop.town, x: stop.town.x + (Math.random() - 0.5) * 6, z: stop.town.z + (Math.random() - 0.5) * 6 }];
+      const pts = [...door.map((p) => ({ ...p })), ...via, ...dest];
       this.walker(loc, pts, { delay: i * 1.1, owner: v });
     }
     // the queue boards after the last one is off the ramp
@@ -913,8 +1264,8 @@ export class Traffic {
       const here = { x: wk.fig.root.position.x, y: wk.fig.root.position.y, z: wk.fig.root.position.z, g: true };
       const via = exit ? [{ ...exit, y: this.groundY(loc, exit.x, exit.z), g: true }, exit] : [];
       wk.pts = [here, ...via, ...back];
-      wk.seg = 0; wk.t = 0; wk.idle = false;
-      wk.delay = nOff * 1.1 + 1.5 + i * 1.2;
+      wk.seg = 0; wk.t = 0; wk.idle = false; wk.hold = false;
+      wk.delay = Math.max(wk.delay, 0) + nOff * 1.1 + 1.5 + i * 1.2;
       wk.board = true; wk.owner = v; v.boarding++;
     });
     stop.queue = [];
@@ -922,6 +1273,7 @@ export class Traffic {
   }
 
   updateWalkers(dt) {
+    if (dt <= 0) return;
     for (let i = this.walkers.length - 1; i >= 0; i--) {
       const wk = this.walkers[i];
       if (wk.done) { this.walkers.splice(i, 1); continue; }
@@ -938,6 +1290,8 @@ export class Traffic {
       }
       const a = wk.pts[wk.seg], b = wk.pts[wk.seg + 1];
       if (!b) {
+        // queueing passengers wait at the shelter; everyone else has gone indoors
+        if (wk.hold) { wk.hold = false; wk.idle = true; wk.pts = [a]; wk.seg = 0; continue; }
         this.release(wk); this.walkers.splice(i, 1); continue;
       }
       const len = Math.hypot(b.x - a.x, b.z - a.z, (b.y - a.y) * 0.3) || 0.01;
@@ -954,18 +1308,121 @@ export class Traffic {
     }
   }
 
+  // ================= damage: land-trains and buggies can be wrecked =================
+
+  hook() {
+    const g = globalThis.game;
+    if (this.g || !g) return;
+    this.g = g;
+    g.blastHooks = g.blastHooks || [];
+    g.blastHooks.push((pos, radius, damage, owner) => this.blast(pos, radius, damage, owner));
+  }
+
+  centre(v, out) { return out.copy(v.pos).addScaledVector(_u.copy(v.pos).normalize(), v.kind === 'buggy' ? 1.8 : 2.6); }
+
+  blast(pos, radius, damage, owner) {
+    if (owner !== 'player') return;
+    for (const v of this.roadVehicles) {
+      if (!v.maxHp || v.hp <= 0 || v.state === 'dead' || !v.root.visible) continue;
+      let d = this.centre(v, _a).distanceTo(pos) - v.hitR;
+      if (v.trailers) for (const t of v.trailers) d = Math.min(d, _a.copy(t.plat.pos).addScaledVector(_u.copy(t.plat.pos).normalize(), 2.6).distanceTo(pos) - 4.6);
+      if (d > radius) continue;
+      this.damage(v, damage * Math.max(0.3, 1 - Math.max(0, d) / radius));
+    }
+  }
+
+  damage(v, amount) {
+    v.hp -= amount;
+    v.hurt = 0.2;
+    if (v.hp <= 0) this.wreck(v);
+  }
+
+  // Burnt look: swap every surface (not the ink hulls) to one charred material, and back.
+  char(v, on) {
+    const mat = toon(0x2b2530);
+    for (const r of [v.root, ...(v.trailers || []).map((t) => t.root)]) {
+      r.traverse((o) => {
+        if (!o.isMesh || o.userData.isInk) return;
+        if (on) { if (!o.userData.mat0) o.userData.mat0 = o.material; o.material = mat; }
+        else if (o.userData.mat0) { o.material = o.userData.mat0; o.userData.mat0 = null; }
+      });
+    }
+  }
+
+  wreck(v) {
+    const g = this.g;
+    v.hp = 0;
+    v.state = 'wreck';
+    v.cur = 0;
+    v.wreckT = 45;
+    v.roll = (this.r() - 0.5) * 0.35;
+    for (const wk of this.walkers) if (wk.owner === v && !wk.done) this.release(wk);
+    this.char(v, true);
+    if (v.beacon) v.beacon.visible = false;
+    if (!g) return;
+    const c = this.centre(v, new THREE.Vector3()), up = c.clone().normalize();
+    g.fx.explosion(c, v.kind === 'buggy' ? 7 : 11, true);
+    if (v.trailers) for (const t of v.trailers) g.fx.explosion(t.plat.pos.clone().addScaledVector(up, 2.5), 6, false);
+    if (g.audio) g.audio.boom(true);
+    g.fx.pop('WRECKED!', c.clone().addScaledVector(up, 4), { color: '#ff4f2e', size: 60, life: 1.2 });
+    if (g.alchemy) {
+      // thrown clear of the wreck, one to each side, so they're easy to spot and skate over
+      const sideV = _d.crossVectors(v.fwd, up).normalize();
+      g.alchemy.dropLoot('engine', v.pos.clone().addScaledVector(sideV, v.kind === 'buggy' ? 4 : 6));
+      g.alchemy.dropLoot(null, v.pos.clone().addScaledVector(sideV, v.kind === 'buggy' ? -4 : -6), { credits: v.credits || 25 });
+    }
+    // the town whose road it was isn't happy about it
+    const pc = v.piece;
+    let town = pc.kind === 'e' ? (pc.fromLoc.dir.distanceTo(up) < pc.toLoc.dir.distanceTo(up) ? pc.fromLoc : pc.toLoc) : pc.town;
+    if (town && town.faction && g.rep) g.rep.add(town.faction, -3, 'Wrecked civilian traffic');
+  }
+
+  // Back on the road later, somewhere the camera can't see it appear.
+  respawn(v, camPos) {
+    const lanes = this.roads.flatMap((r) => r.lanes).filter((pc) => pc.stop && pc.len > 300 && pc.stop.world.distanceTo(camPos) > 1700);
+    for (let tries = 0; tries < 8 && lanes.length; tries++) {
+      const pc = lanes[Math.floor(this.r() * lanes.length)];
+      const s = Math.max(60, pc.stop.s - 120 - this.r() * 500);
+      if (pc.vehicles.some((o) => Math.abs(o.s - s) < 90)) continue;
+      v.hist = [];
+      this.move(v, pc);
+      v.s = s;
+      v.state = 'drive'; v.cur = 0; v.hp = v.maxHp; v.roll = 0; v.boarding = 0;
+      this.char(v, false);
+      this.plan(v, pc.toLoc);
+      return;
+    }
+    v.respawnT = 20;
+  }
+
+  smoke(v, dt) {
+    const g = this.g;
+    if (!g || !(v.state === 'wreck' || v.hp < v.maxHp * 0.6)) return;
+    if (v.pos.distanceToSquared(this.cam) > 500 * 500) return;
+    v.smokeT -= dt;
+    if (v.smokeT > 0) return;
+    const wrecked = v.state === 'wreck';
+    v.smokeT = wrecked ? 0.12 : v.hp < v.maxHp * 0.3 ? 0.15 : 0.3;
+    const c = this.centre(v, _a), up = _u.copy(c).normalize();
+    c.addScaledVector(up, v.kind === 'buggy' ? 1.5 : 2.5);
+    g.fx.spawn(c, up.clone().multiplyScalar(2.5), { color: 0x3a3550, size: wrecked ? 1.3 : 0.9, life: 2.2, gravity: -0.2, drag: 0.3, count: 1, spread: 0.8 });
+    if (wrecked ? v.wreckT > 25 : v.hp < v.maxHp * 0.3) g.fx.spawn(c, up.clone().multiplyScalar(3), { color: this.r() < 0.5 ? 0xff4f2e : 0xffd23f, size: 0.5, life: 0.5, gravity: -0.5, count: 1, spread: 1.2 });
+  }
+
   // ================= per frame =================
 
   update(dt, camPos) {
     this.cam = camPos;
+    this.hook();
+    this.t = (this.t || 0) + dt;
     for (const v of this.vehicles) {
       v.prevPos.copy(v.pos);
       if (v.captured > 0) { v.root.visible = false; if (v.col) { this.C.remove(v.col); v.col = null; } v.vel.set(0, 0, 0); continue; }
-      if (v.road) this.updateRoadVehicle(v, dt, camPos);
+      if (v.piece) this.updateRoadVehicle(v, dt, camPos);
       else this.updateFlyer(v, dt, camPos);
     }
     for (const c of this.crawlers) {
-      if (!c.road) continue;
+      if (!c.piece) continue;
       c.prevPos.copy(c.pos);
       this.updateRoadVehicle(c, dt, camPos);
     }
@@ -1006,7 +1463,7 @@ export class Traffic {
         v.state = 'park'; v.timer = 0; v.stop = dest;
       }
       sample(path, v.s, v.pos, v.hint);
-      v.vel.copy(v.pos).sub(v.prevPos).divideScalar(Math.max(dt, 1e-3));
+      if (dt > 0) v.vel.copy(v.pos).sub(v.prevPos).divideScalar(dt);
       gearK(v.kind === 'ship' ? clamp01((70 - d) / 40) : clamp01((30 - d) / 18));
       // heading follows the route a little ahead; never swing round while still low over the pad
       if (dS > v.turnMin) {
@@ -1034,98 +1491,145 @@ export class Traffic {
     this.syncDeck(v, camPos);
   }
 
+  hide(v) {
+    v.root.visible = false;
+    if (v.col) { this.C.remove(v.col); v.col = null; }
+    if (v.trailers) for (const t of v.trailers) { t.root.visible = false; if (t.plat.col) { this.C.remove(t.plat.col); t.plat.col = null; } }
+  }
+
   updateRoadVehicle(v, dt, camPos) {
-    const road = v.road, path = road.path, L = path.len;
-    // gap to whoever is ahead on the circuit (land-trains and buggies queue; hover-cars hop over)
-    let limit = v.vmax, over = 0;
-    for (const o of road.vehicles) {
-      if (o === v || o.captured > 0) continue;
-      const gap = ((o.s - v.s) % L + L) % L;
-      if (v.kind === 'car') {
-        // anything just ahead or alongside: climb over it
-        const back = L - gap;
-        if (gap < o.tail + v.front + 12 || back < o.front + v.tail + 3) over = Math.max(over, o.kind === 'landtrain' ? 6.5 : o.kind === 'car' ? 2.6 : 4.5);
-        continue;
-      }
-      const free = gap - o.tail - v.front - 5;
-      if (gap < L * 0.5) limit = Math.min(limit, Math.max(0, free * 0.6));
+    if (v.state === 'dead') {
+      v.respawnT -= dt;
+      if (v.respawnT <= 0) this.respawn(v, camPos);
+      if (v.state === 'dead') { v.vel.set(0, 0, 0); return; }
     }
-    if (v.state === 'stop') {
+    let pc = v.piece;
+    let limit = v.vmax, over = 0;
+    if (v.state === 'wreck') {
+      v.cur = 0;
+      v.wreckT -= dt;
+      if (v.wreckT <= 0) {
+        // burnt out: gone (rubble cleared), back on the road in a few minutes
+        if (this.g && v.root.visible && v.pos.distanceTo(camPos) < 400) this.g.fx.explosion(this.centre(v, new THREE.Vector3()), 4, false);
+        this.hide(v);
+        this.move(v, null);
+        v.piece = pc; // remembered for the respawn bookkeeping, but no longer on the lane
+        v.state = 'dead';
+        v.respawnT = 180 + this.r() * 120;
+        v.vel.set(0, 0, 0);
+        return;
+      }
+    } else if (v.state === 'stop') {
       v.timer -= dt;
       v.cur = 0;
+      if (!v.exchanged && v.timer < v.waitT - 1.5) {
+        v.exchanged = true;
+        if (v.pax) this.exchange(v, pc.stop);
+      }
       // hold the doors (up to 14 s extra) while the last passengers are still walking up
-      if (v.timer <= 0 && (v.boarding <= 0 || v.timer < -14)) {
-        v.state = 'drive'; v.next = (v.next + 1) % road.stops.length; v.exchanged = false;
+      if (v.timer <= 0 && (!v.boarding || v.timer < -14)) {
+        v.state = 'drive';
         for (const wk of this.walkers) if (wk.owner === v && wk.board) this.release(wk);
+        this.plan(v);
       }
     } else {
-      const st = road.stops[v.next];
-      const toStop = ((st.s - v.s) % L + L) % L;
-      if (v.stopsAt) {
+      limit = Math.min(limit, pc.vlim);
+      const nx = v.plan[0];
+      if (nx && nx.vlim < limit) limit = Math.min(limit, nx.vlim + Math.sqrt(2 * 1.5 * Math.max(0, pc.len - v.s - v.front)));
+      // whoever is ahead on this piece or the next (land-trains and buggies queue; hover-cars hop over)
+      const scan = (list, base) => {
+        for (const o of list) {
+          if (o === v || o.captured > 0) continue;
+          const gap = base + o.s - v.s;
+          if (v.kind === 'car') {
+            if (gap > -(o.front + v.tail + 3) && gap < o.tail + v.front + 12) over = Math.max(over, o.kind === 'landtrain' ? 6.5 : o.kind === 'car' ? 2.6 : 4.5);
+            continue;
+          }
+          if (gap <= 0) continue;
+          limit = Math.min(limit, Math.max(0, (gap - o.tail - v.front - 5) * 0.6));
+        }
+      };
+      scan(pc.vehicles, 0);
+      if (nx) scan(nx.vehicles, pc.len);
+      // pull in at the destination's shelter
+      if (!nx && pc.stop && pc.toLoc === v.dest) {
+        const toStop = pc.stop.s - v.s;
         limit = Math.min(limit, 0.6 + Math.sqrt(2 * 1.2 * Math.max(0, toStop - 0.3)));
-        if (toStop < 60 && v.pax) this.queueBoarders(st, v);
+        if (v.pax && toStop < 300) this.queueBoarders(pc.stop, v);
+        if (toStop < 0.5) { v.state = 'stop'; v.timer = v.waitT; v.cur = 0; v.exchanged = false; }
       }
-      if (toStop < 0.5 || toStop > L - 0.5) {
-        if (v.stopsAt) { v.state = 'stop'; v.timer = v.waitT; v.cur = 0; }
-        else v.next = (v.next + 1) % road.stops.length;
+      if (v.state === 'drive') {
+        v.cur = Math.min(limit, v.cur + v.acc * dt);
+        v.s += v.cur * dt;
+        while (v.s > v.piece.len) {
+          let next = v.plan.shift();
+          if (!next) { this.plan(v); next = v.plan.shift() || v.piece.next[v.piece.next.length - 1]; }
+          v.s -= v.piece.len;
+          v.hist.unshift(v.piece);
+          if (v.hist.length > 4) v.hist.length = 4;
+          this.move(v, next);
+        }
+        pc = v.piece;
       }
-      v.cur = Math.min(limit, v.cur + v.acc * dt);
-      v.s = (v.s + v.cur * dt) % L;
-    }
-    if (v.state === 'stop' && !v.exchanged && v.timer < v.waitT - 1.5) {
-      v.exchanged = true;
-      if (v.pax) this.exchange(v, road.stops[v.next]);
     }
     // place it: chord between the two axles, normals smoothed along the road
-    const up = this.roadFrame(road, v.s, v.front * 0.7, Math.max(2, v.front * 0.7), v.hintF, v.hintR, v.pos, _f);
-    const hov = v.kind === 'car' ? v.hoverH : 0;
+    const up = this.roadFrame(v, v.s, v.front * 0.7, Math.max(2, v.front * 0.7), v.hintF, v.hintR, v.pos, _f);
     if (v.kind === 'car') {
       v.hover += ((over || 0) - v.hover) * Math.min(1, dt * 2.5);
-      v.pos.addScaledVector(up, hov + v.hover + Math.sin(performance.now() * 0.002 + v.s) * 0.12);
+      v.pos.addScaledVector(up, v.hoverH + v.hover + Math.sin(this.t * 2 + v.s) * 0.12);
     }
-    v.vel.copy(v.pos).sub(v.prevPos).divideScalar(Math.max(dt, 1e-3));
-    if (v.vel.lengthSq() > 3600) v.vel.set(0, 0, 0);
+    if (dt > 0) v.vel.copy(v.pos).sub(v.prevPos).divideScalar(dt);
+    if (v.vel.lengthSq() > 3600 || v.state === 'wreck') v.vel.set(0, 0, 0);
     v.fwd.copy(_f);
     const vis = v.pos.distanceToSquared(camPos) < v.view * v.view;
     v.root.visible = vis;
     if (v.trailers) for (const t of v.trailers) t.root.visible = vis;
-    if (!vis) {
-      if (v.col) { this.C.remove(v.col); v.col = null; }
-      if (v.trailers) for (const t of v.trailers) if (t.plat.col) { this.C.remove(t.plat.col); t.plat.col = null; }
-      return;
-    }
+    if (!vis) { this.hide(v); return; }
     v.root.position.copy(v.pos);
     frameQuat(up, _f, v.root.quaternion);
+    if (v.roll) { v.root.quaternion.multiply(_q.setFromAxisAngle(_z, v.roll)); v.root.position.addScaledVector(up, -0.4); }
     if (v.wheels) {
       const spin = (v.cur * dt) / (v.wheelR || 1);
       for (const w of v.wheels) w.rotation.x += spin;
     }
-    if (v.beacon) v.beacon.visible = Math.sin(performance.now() * 0.006) > -0.2;
+    if (v.beacon && v.state !== 'wreck') v.beacon.visible = Math.sin(this.t * 6) > -0.2;
     if (v.trailers) {
-      for (const t of v.trailers) {
+      v.trailers.forEach((t, i) => {
         const p = t.plat;
         p.prevPos.copy(p.pos);
-        const tu = this.roadFrame(road, v.s - t.offset, 2.7, 2.7, t.hintF, t.hintR, p.pos, _d);
+        const tu = this.roadFrame(v, v.s - t.offset, 2.7, 2.7, t.hintF, t.hintR, p.pos, _d);
         t.root.position.copy(p.pos);
         frameQuat(tu, _d, t.root.quaternion);
-        p.vel.copy(p.pos).sub(p.prevPos).divideScalar(Math.max(dt, 1e-3));
-        if (p.vel.lengthSq() > 3600) p.vel.set(0, 0, 0);
+        if (v.roll) t.root.quaternion.multiply(_q.setFromAxisAngle(_z, v.roll * (i % 2 ? -0.7 : 0.8)));
+        if (dt > 0) p.vel.copy(p.pos).sub(p.prevPos).divideScalar(dt);
+        if (p.vel.lengthSq() > 3600 || v.state === 'wreck') p.vel.set(0, 0, 0);
         for (const w of t.wheels) w.rotation.x += (v.cur * dt) / 1.0;
         this.syncDeck(p, camPos);
-      }
+      });
     }
     if (v.deck) this.syncDeck(v, camPos);
+    if (v.maxHp) this.smoke(v, dt);
+  }
+
+  // Position at arc length s along the vehicle's route: back through the pieces it just left
+  // (trailers), or on into the next one (front axle).
+  at(v, s, out, h, nOut) {
+    let p = v.piece;
+    if (s < 0) {
+      for (const q of v.hist) { p = q; s += q.len; if (s >= 0) break; }
+      if (s < 0) s = 0;
+    } else if (s > p.len && v.plan[0]) { s -= p.len; p = v.plan[0]; }
+    if (h.p !== p) { h.p = p; h.i = s > p.len * 0.5 ? p.path.pts.length - 2 : 0; }
+    sample(p.path, s, out, h);
+    return nOut.copy(p.normals[h.i]).lerp(p.normals[h.i + 1], h.f);
   }
 
   // Ground point midway between front and rear axle, travel direction and smoothed up.
-  roadFrame(road, s, front, rear, hF, hR, outPos, outFwd) {
-    const path = road.path, N = road.normals;
-    const pf = sample(path, s + front, _b, hF);
-    const nf = _n.copy(N[hF.i]).lerp(N[hF.i + 1], hF.f);
-    const pr = sample(path, s - rear, _c, hR);
-    const nr = _u.copy(N[hR.i]).lerp(N[hR.i + 1], hR.f);
-    outPos.copy(pf).add(pr).multiplyScalar(0.5);
-    outFwd.copy(pf).sub(pr);
+  roadFrame(v, s, front, rear, hF, hR, outPos, outFwd) {
+    const nf = this.at(v, s + front, _b, hF, _n);
+    const nr = this.at(v, s - rear, _c, hR, _u);
+    outPos.copy(_b).add(_c).multiplyScalar(0.5);
+    outFwd.copy(_b).sub(_c);
     if (outFwd.lengthSq() < 1e-6) outFwd.set(1, 0, 0);
     return nf.add(nr).normalize();
   }
