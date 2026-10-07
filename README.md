@@ -247,24 +247,51 @@ settlement threat radii are unchanged). Captured and founded outposts move the b
 **Raiding:** press `F` beside a **farm dome** to take a sapling (it goes in your jar, alive: it splices into
 chimeras with root legs and flower heads, or into you as the ROOT GRIP mutation, +30 % skate grip), or beside a
 **supply depot** for ₵150–300 plus a length of **electrical wiring** (into the jar). Each raid costs 2 rep with
-the owner and the structure restocks after 4 minutes. Bring **3 wiring** in your jar to Dr. Zbornak and he
+the owner and the structure restocks after 4 minutes. You can also just **shoot them down** (a dome takes about 4
+pulse hits, a depot 6): the same haul drops in the smoking wreckage, for the same rep, and they're rebuilt after
+4 minutes. Bring **3 wiring** in your jar to Dr. Zbornak and he
 rewinds your skate coils: +15 % grip and a little handling per tune, up to 3 tunes.
 
 ## Traffic & roads
 
+Wreck a land-train (about 10 blasts) or a road buggy (about 3) and it drops a **salvaged engine** (jar item:
+chimeras come out Turbocharged, the reactor gives you low gravity) plus scrap credits; it costs 3 rep with the
+nearest town, and a replacement turns up a few minutes later.
+
 Freighters and shuttle-buses fly real routes: they lift off vertically, cruise over everything, slow down and
 land on a pad at the edge of each settlement (legs out, ramp down). Passengers walk off toward town, the queue
-at the shelter walks up and boards, and the doors close before it leaves. Safe settlements are joined by 9
-pre-driven **dirt roads** (worn ruts, marker posts, a turning loop and a stop shelter at each end). Big
-six-wheeled **land-trains** with passenger and tank trailers run them, stopping to swap passengers, along
-with hover-cars and buggies. You can ride on a freighter deck or a land-train trailer.
+at the shelter walks up and boards, and the doors close before it leaves; arriving passengers walk to real
+building entrances. Safe settlements are joined by a network of 12 pre-driven **dirt roads** (worn ruts,
+marker posts, stop shelters) that run through towns or round their edges. Big six-wheeled **land-trains**,
+hover-cars and buggies each pick a destination town: some pass straight through towns, others stop to
+swap passengers and then head somewhere new. You can ride on a freighter deck or a land-train trailer.
+
+## Founded outposts
+
+Outposts you found for a faction story sit on flattened ground, with a 10 m hub dome, an entry tunnel to the
+terminal, a paved yard and six marked plots for modules, which are built at roughly a third of settlement
+scale.
+
+## Defences
+
+Walled settlements (the ILMB and the military fortresses) mount their guns on bastions built into the walls and
+on the gate towers, so they cover both the approaches and the inside with almost no blind spots. Unwalled
+settlements raise their guns on pylons. Guns hold fire when a building or the terrain is in the way.
+
+## The International Moon Base
+
+The central dome is joined by wide glass skywalks, with people walking inside, to six distinct buildings:
+Hydroponics (glass greenhouse dome), Meridian Labs (leaning observation tower), Vostok Hangar (parked
+shuttle), Daedalus Relay (big rotating dish and mast), the Power Block (cooling towers) and the Kepler
+Habitat ring.
 
 ## Main menu & saves
 
 The game opens on a main menu: CONTINUE, NEW GAME, LOAD GAME, SETTINGS (and QUIT in the desktop app). There
 are three save slots, each showing credits, deliveries, story faction, play time and last played; slots can
 be deleted (with a confirm). Progress is saved to the active slot every few seconds and on every delivery,
-purchase and K.O. Settings are shared by all slots. The pause menu has QUIT TO MAIN MENU.
+purchase and K.O. Settings are shared by all slots. The pause menu has QUIT TO MAIN MENU. Pausing (and the map,
+dialogs, job board and wardrobe) freezes the whole world: traffic, the satellite, particles and timers.
 
 ## Settings
 

@@ -283,6 +283,11 @@ export class Traffic {
   keepouts(loc, withStops = true) {
     const k = [...(loc.pads || []), ...(loc.keep || []), ...(withStops ? loc.stopKeep : [])];
     const spots = [];
+    // world.js lays out the real gun mounts (walls, bastions, pylons); use them when present
+    if (loc.turretMounts && loc.turretMounts.length) {
+      for (const m of loc.turretMounts) k.push({ x: m.x, z: m.z, r: 6 });
+      return k;
+    }
     if (loc.restricted) {
       const small = !!loc.small, inner = small ? 3 : 4, outer = small ? 2 : 4;
       for (let i = 0; i < inner; i++) spots.push([(i / inner) * Math.PI * 2 + 0.4, small ? 68 : 112]);

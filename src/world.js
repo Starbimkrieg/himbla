@@ -737,6 +737,7 @@ export class World {
       const x = 7 + this.r() * (len - 13);
       f.root.position.set(x, F, lane);
       f.root.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+      f.root.traverse((o) => { o.castShadow = false; }); // under glass: skip the shadow pass
       grp.add(f.root);
       this.walkers.push({ ...f, loc, center, x, lane, dir, min: 6.5, max: len - 3.2, F, speed: 1.1 + this.r() * 0.7, wait: this.r() * 2, phase: this.r() * 6 });
     }
@@ -799,7 +800,8 @@ export class World {
     }
     const pool = new THREE.Mesh(new THREE.CircleGeometry(R - 1, 32), this.poolMat(0x5aff7a));
     pool.rotation.x = -Math.PI / 2;
-    w.obj(pool, 0, 0, 1.45);
+    const [px, pz] = w.P(0, 0);
+    this.put(pool, loc, px, pz, 1.45);
     this.vestibule(w, -R - 1, 6.6, 0x7dff6a, 8.4, 8);
     w.sph(0, 1.4, 0, R + 0.2);
     w.cyl(0, 0, -2, 1.4, R + 2.2);
