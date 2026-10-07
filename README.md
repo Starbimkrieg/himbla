@@ -195,7 +195,9 @@ leaders stop dealing with you, so each playthrough tells one coherent story.
 - **Vehicles** (`V` calls the crane drop, boards and leaves; W/S drive, A/D steer, Shift hops, you can still
   shoot): SPACECOM Lunar Interceptor (fast), Vostok BTR-M APC (slow tank), Daedalus Phase Skimmer (hover,
   drifts), Kepler Homestead Mule, Meridian Courier Hover-Van, Rustmoon Scrapjaw War-Rig. Ramming pirates
-  at speed hurts them; vehicles soak up a share of incoming damage.
+  at speed hurts them. Vehicles have hull points (180 Skimmer to 480 APC) and soak most incoming fire; a hull
+  bar shows while you drive, and they smoke when hurt. A wrecked vehicle explodes, throws you out and takes
+  90 s to be rebuilt (other vehicles stay available). Hull repairs slowly while you're not driving it.
 
 **Riding with Rustmoon:** once you've sworn in, Rustmoon Hold is your home base: you start, redeploy
 after a K.O. and recall there.
@@ -230,7 +232,8 @@ A walk-in neon hall about 1 km from the ILMB. Walk through the front doors and p
   computed from the same race model; surges, stumbles, photo finishes.
 - **Plinko:** a real-physics board (12 rows, 13 slots from 0.2× to 50×, ~94 % return). Aim with A/D or the
   mouse, Space or click to drop; hold Space for a stream of balls.
-- The **Classic Games** cabinets open the old slots / roulette / prize wheel / high-low overlay; the prize
+- The **Classic Games** cabinets open the slots / roulette / prize wheel / high-low overlay (blackjack now
+  lives only at the 3D table); the prize
   counter (Lucky Chips cosmetics) and Rusty the loan shark are at the back. VIP tiers still raise max bets.
 
 ## Territory
@@ -240,6 +243,21 @@ No spot on the Moon is unclaimed. Territory is a weighted split around every fac
 Glowing faction-coloured pylons mark the borders, a chip shows whose land you're on, and the globe map is
 tinted by owner. Military patrols drive between their faction's outposts and shoot pirates (never you, so
 settlement threat radii are unchanged). Captured and founded outposts move the borders.
+
+**Raiding:** press `F` beside a **farm dome** to take a sapling (it goes in your jar, alive: it splices into
+chimeras with root legs and flower heads, or into you as the ROOT GRIP mutation, +30 % skate grip), or beside a
+**supply depot** for ₵150–300 plus a length of **electrical wiring** (into the jar). Each raid costs 2 rep with
+the owner and the structure restocks after 4 minutes. Bring **3 wiring** in your jar to Dr. Zbornak and he
+rewinds your skate coils: +15 % grip and a little handling per tune, up to 3 tunes.
+
+## Traffic & roads
+
+Freighters and shuttle-buses fly real routes: they lift off vertically, cruise over everything, slow down and
+land on a pad at the edge of each settlement (legs out, ramp down). Passengers walk off toward town, the queue
+at the shelter walks up and boards, and the doors close before it leaves. Safe settlements are joined by 9
+pre-driven **dirt roads** (worn ruts, marker posts, a turning loop and a stop shelter at each end). Big
+six-wheeled **land-trains** with passenger and tank trailers run them, stopping to swap passengers, along
+with hover-cars and buggies. You can ride on a freighter deck or a land-train trailer.
 
 ## Main menu & saves
 
@@ -264,11 +282,18 @@ god mode · unlock all gear, weapons and cosmetics · lab kit (big jar, items, 3
 Rustmoon, spawn a pirate squad or the Mega Mite, spawn an event for any faction (and teleport to it), max out
 the unlock counters, cure mutations, or reset all progress. Number keys pick, Esc closes.
 
-## Threat Scanner
+## Enemy outlines & Threat Scanner
 
-Sold at the ILMB (₵700, two levels). Look at a pirate (or the Mega Mite) and it gets a thick red comic outline
-for 10 s (20 s at level 2), out to 450 m (800 m at level 2), with a wider look cone at level 2. A red HUD chip
-counts hostiles closing in on you.
+Every hostile you can actually see (pirates, the Mega Mite, units of a base you've angered) gets a thick red
+outline in real time, out to 380 m, for as long as you keep line of sight; terrain and buildings both break it.
+The **Threat Scanner** (ILMB, ₵700, two levels) extends that to 520 m / 800 m, keeps anything you look at
+marked for 10 s / 20 s after it ducks out of sight, and a red HUD chip counts hostiles closing in.
+
+## Enemy tactics
+
+Pirate skaters close in, then circle you at 25–40 m, switching direction every few seconds, turning to shoot
+while they strafe (while you carry cargo about half of them still dive in to grab it). War-rigs line up a run,
+charge at up to 66 m/s, peel off sideways after the pass and swing round for another.
 
 ## Cosmetics
 
@@ -279,7 +304,10 @@ counts hostiles closing in on you.
   (hue-cycling, HONORED), plus deed-locked ones: Seismic Striders (complete 3 Meridian events), Derby Hooves
   (win the Chimera Derby, comes with horseshoes) and Dark-Side Survivors (5 dark-side deliveries). Most leave
   a coloured glide trail.
-- **Pulse-disc colours:** eight, free, cycled in the wardrobe (`C`).
+- **Pulse-disc colours:** eight, free.
+- **Wardrobe (`C`):** a full screen with a live 3D preview of your runner facing you (drag to turn). Tabs for
+  outfits, skates and lasers; hover any item (even a locked one) to try it on, click or Enter to wear it.
+  Locked items say exactly how to get them (shop, price, standing needed, casino chips, or a legendary hint).
 - New purchases are equipped immediately; your look is saved.
 
 ## Sound
@@ -389,7 +417,9 @@ src/
   player.js      input → movement, weapon, animation, style events
   enemies.js     pirates (skaters/rovers), military bases, turrets, artillery, theft/recovery
   missions.js    contract generation, pickup/delivery, integrity, payouts
-  world.js       sky, settlements, colliders, ambient life, shuttle and crawler traffic
+  world.js       sky, settlements, colliders, ambient life
+  traffic.js     landing pads, ship/bus flights and passengers, dirt roads, land-trains, cars, buggies
+  wardrobe.js    wardrobe screen with live 3D preview
   models.js      stylised characters and vehicles from primitives
   post.js        comic post-processing shader
   fx.js, hud.js, audio.js, input.js, toon.js, locations.js, rng.js

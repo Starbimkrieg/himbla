@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { toon, ink, glow, textSprite } from './toon.js';
-import { makeDish, makeFigure, makeShuttle, makeRover, makeHoverCar, makeFreighter, makeRocket } from './models.js';
+import { makeDish, makeFigure, makeRover, makeRocket } from './models.js';
 import { mulberry32 } from './rng.js';
 import { FACTIONS } from './locations.js';
 import { SUN, frameQuat, arcDist, dirFromAngles } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
+import { Traffic } from './traffic.js';
 
 function mesh(geo, mat, outline = 0.15) {
   const m = new THREE.Mesh(geo, mat);
@@ -38,9 +39,9 @@ export class World {
 
     this.buildSky();
     for (const loc of locations) this.buildLocation(loc);
-    this.buildTraffic();
     this.buildLakes();
     this.buildCrystals();
+    this.buildTraffic(); // after the lakes: roads steer around them
   }
 
   r() { return this.rand(); }
@@ -220,6 +221,7 @@ export class World {
     bar.position.y = 0.28;
     g.add(bar);
     this.put(g, loc, dx, dz, 0);
+    (loc.pads ||= []).push({ x: dx, z: dz, r }); // traffic reuses / avoids these
     return g;
   }
 
@@ -253,6 +255,7 @@ export class World {
     }
     im.castShadow = true;
     this.put(im, loc, 0, 0);
+    (loc.keep ||= []).push({ x: dx, z: dz, r: Math.hypot(cols * 6, rows * 5) / 2 + 2 });
   }
 
   // Lamp post with a fake additive light pool: cheap "lighting" that reads in the dark.
@@ -269,6 +272,7 @@ export class World {
     p.position.y = 0.15;
     g.add(p);
     this.put(g, loc, dx, dz);
+    (loc.keep ||= []).push({ x: dx, z: dz, r: 1.5 });
   }
 
   poolMat(color) {
@@ -647,67 +651,10 @@ export class World {
     this.addFigures(loc, 3, { kind: 'worker', look: () => ({ suit: 0x3a2b4f, helmet: 0x2b2b2b, visor: 0x7dff3a }) });
   }
 
-  // ---------- traffic: cars, buses and big freighters ----------
-  port(loc, out = new THREE.Vector3()) {
-    const off = loc.id === 'ilmb' ? [95, -60] : [loc.r * 0.55, -loc.r * 0.35];
-    return this.toWorld(loc, off[0], 0, off[1], out);
-  }
-
-  route(A, B, cruise, endAlt, step = 25) {
-    const a = this.port(A).normalize(), b = this.port(B).normalize();
-    const len = arcDist(a, b);
-    const steps = Math.max(2, Math.ceil(len / step));
-    const raw = [];
-    for (let i = 0; i <= steps; i++) {
-      const d = new THREE.Vector3().lerpVectors(a, b, i / steps).normalize();
-      raw.push({ d, r: this.planet.surface(d.clone().multiplyScalar(this.planet.R)) });
-    }
-    const pts = raw.map((p, i) => {
-      let rmax = -Infinity;
-      for (let k = -3; k <= 3; k++) rmax = Math.max(rmax, raw[Math.min(steps, Math.max(0, i + k))].r);
-      const fromEnd = Math.min(i, steps - i) * step;
-      const blend = Math.min(1, fromEnd / 180);
-      const alt = endAlt + (cruise - endAlt) * blend * blend * (3 - 2 * blend);
-      return p.d.clone().multiplyScalar(Math.max(rmax + Math.min(alt, 8 + blend * cruise), p.r + alt));
-    });
-    return { pts, len };
-  }
-
-  addVehicle(kind, A, B) {
-    let model, cruise, endAlt, speed, radius, view;
-    if (kind === 'car') {
-      model = makeHoverCar({ color: [0xff7ad9, 0x2ec4ff, 0x7dff6a, 0xffd23f][this.vehicles.length % 4] });
-      cruise = 6; endAlt = 2.5; speed = 34; radius = 2.5; view = 900;
-    } else if (kind === 'bus') {
-      model = makeShuttle({ stripe: [0x2ec4ff, 0xff9f1c, 0x7dff6a, 0xc77dff][this.vehicles.length % 4] });
-      cruise = 22; endAlt = 4; speed = 26; radius = 5.5; view = 1600;
-    } else {
-      model = makeFreighter({ stripe: [0xff9f1c, 0xff2e88, 0x2ec4ff][this.vehicles.length % 3] });
-      cruise = 55 + (this.vehicles.length % 3) * 25; endAlt = 30; speed = 40; radius = 20; view = 4200;
-    }
-    const { pts, len } = this.route(A, B, cruise, endAlt);
-    model.root.matrixAutoUpdate = true;
-    this.scene.add(model.root);
-    // decks you can land on: box colliders that ride along with the vehicle
-    const deck = kind === 'car' ? [1.3, 1.1, 2.7] : kind === 'bus' ? [2.6, 2.5, 7.0] : [7.2, 5.0, 23.5];
-    this.vehicles.push({ ...model, kind, pts, len, t: this.r(), dir: 1, speed: speed / len, wait: 0, radius, view, pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(), deck, col: null });
-  }
-
+  // ---------- traffic: freighters, shuttle-buses, road-trains (see traffic.js) ----------
   buildTraffic() {
-    const L = Object.fromEntries(this.locations.map((l) => [l.id, l]));
-    const cars = [['ilmb', 'tranq'], ['ilmb', 'aldrin'], ['tranq', 'kepler'], ['ilmb', 'meridian'], ['aldrin', 'shackleton'], ['shackleton', 'twilight']];
-    const buses = [['ilmb', 'tranq'], ['ilmb', 'shackleton'], ['ilmb', 'mine'], ['tranq', 'kepler'], ['aldrin', 'twilight'], ['twilight', 'farside']];
-    const ships = [['ilmb', 'farside'], ['ilmb', 'hertz'], ['mine', 'twilight'], ['twilight', 'gloom'], ['kepler', 'vostok'], ['meridian', 'aldrin']];
-    for (const [a, b] of cars) if (L[a] && L[b]) this.addVehicle('car', L[a], L[b]);
-    for (const [a, b] of buses) if (L[a] && L[b]) this.addVehicle('bus', L[a], L[b]);
-    for (const [a, b] of ships) if (L[a] && L[b]) this.addVehicle('ship', L[a], L[b]);
-    for (const [a, b] of [['ilmb', 'mine'], ['ilmb', 'tranq'], ['aldrin', 'shackleton']]) {
-      const r = makeRover({ color: 0xffd23f, trim: 0xfff4e0, pirate: false, flag: 0x2ec4ff });
-      r.root.scale.setScalar(1.3);
-      this.scene.add(r.root);
-      const A = this.port(L[a]).normalize(), B = this.port(L[b]).normalize();
-      this.crawlers.push({ ...r, A, B, t: this.r(), dir: 1, speed: 12 / arcDist(A, B), pos: new THREE.Vector3(), vel: new THREE.Vector3() });
-    }
+    this.traffic = new Traffic(this);
+    this.roads = this.traffic.roads;
   }
 
   // ---------- per-frame ----------
@@ -778,57 +725,7 @@ export class World {
   }
 
   updateTraffic(dt, camPos) {
-    const tmp = _v;
-    for (const s of this.vehicles) {
-      s.prevPos.copy(s.pos);
-      // in somebody's jar
-      if (s.captured > 0) { s.root.visible = false; if (s.col) { this.colliders.remove(s.col); s.col = null; } s.vel.set(0, 0, 0); continue; }
-      if (s.wait > 0) { s.wait -= dt; s.vel.set(0, 0, 0); this.syncDeck(s, camPos); continue; }
-      s.t += s.speed * s.dir * dt;
-      if (s.t >= 1 || s.t <= 0) { s.t = Math.min(1, Math.max(0, s.t)); s.dir *= -1; s.wait = s.kind === 'ship' ? 2 : 5; }
-      const f = s.t * (s.pts.length - 1);
-      const i = Math.min(s.pts.length - 2, Math.floor(f));
-      tmp.copy(s.pts[i]).lerp(s.pts[i + 1], f - i);
-      s.vel.copy(tmp).sub(s.pos).divideScalar(Math.max(dt, 1e-3));
-      s.pos.copy(tmp);
-      const vis = s.pos.distanceTo(camPos) < s.view;
-      s.root.visible = vis;
-      if (!vis) continue;
-      s.root.position.copy(s.pos);
-      s.fwd.copy(s.pts[i + 1]).sub(s.pts[i]).multiplyScalar(s.dir);
-      frameQuat(tmp.copy(s.pos).normalize(), s.fwd, s.root.quaternion);
-      this.syncDeck(s, camPos);
-    }
-    for (const c of this.crawlers) {
-      c.t += c.speed * c.dir * dt;
-      if (c.t >= 1 || c.t <= 0) { c.t = Math.min(1, Math.max(0, c.t)); c.dir *= -1; }
-      const d = new THREE.Vector3().lerpVectors(c.A, c.B, 0.08 + c.t * 0.84).normalize();
-      const vis = d.clone().multiplyScalar(this.planet.R).distanceTo(camPos) < 1200;
-      c.root.visible = vis;
-      if (!vis) { c.vel.set(0, 0, 0); continue; }
-      const p = this.planet.ground(d, new THREE.Vector3());
-      c.vel.copy(p).sub(c.pos).divideScalar(Math.max(dt, 1e-3));
-      if (c.vel.length() > 60) c.vel.set(0, 0, 0);
-      c.pos.copy(p);
-      c.root.position.copy(p);
-      frameQuat(d, new THREE.Vector3().subVectors(c.B, c.A).multiplyScalar(c.dir), c.root.quaternion);
-      for (const w of c.wheels) w.rotation.x += dt * 8;
-    }
-  }
-
-  // Keep a vehicle's deck collider in the spatial hash while it is near the camera.
-  syncDeck(s, camPos) {
-    const near = s.pos.distanceTo(camPos) < 350;
-    if (s.col) { this.colliders.remove(s.col); if (!near) { s.col = null; return; } }
-    if (!near) return;
-    if (s.pos.lengthSq() < 1) return;
-    const up = _v.copy(s.pos).normalize();
-    const q = frameQuat(up, s.fwd.lengthSq() > 0 ? s.fwd : new THREE.Vector3(1, 0, 0), _q);
-    const c = s.col || { type: 'box', platform: s, ax: new THREE.Vector3(), ay: new THREE.Vector3(), az: new THREE.Vector3() };
-    c.c = s.pos;
-    c.ax.set(1, 0, 0).applyQuaternion(q); c.ay.set(0, 1, 0).applyQuaternion(q); c.az.set(0, 0, 1).applyQuaternion(q);
-    c.hx = s.deck[0]; c.hy = s.deck[1]; c.hz = s.deck[2];
-    s.col = this.colliders.add(c);
+    this.traffic.update(dt, camPos);
   }
 
   // ---------- strange places ----------
