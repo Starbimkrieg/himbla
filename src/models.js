@@ -29,7 +29,7 @@ function runnerGeo() {
     leg: new THREE.LatheGeometry(v2([[0, -0.8], [0.085, -0.79], [0.105, -0.72], [0.118, -0.62], [0.122, -0.54], [0.11, -0.45], [0.124, -0.36], [0.145, -0.2], [0.155, -0.06], [0.14, 0.04], [0.09, 0.1], [0, 0.12]]), 10),
     arm: new THREE.LatheGeometry(v2([[0, -0.56], [0.075, -0.55], [0.086, -0.48], [0.096, -0.4], [0.087, -0.3], [0.1, -0.22], [0.114, -0.1], [0.12, 0], [0.1, 0.08], [0, 0.12]]), 10),
     // pelvis, hips, waist, ribs, chest, shoulders, neck (flattened front-to-back by the mesh)
-    torso: new THREE.LatheGeometry(v2([[0, -0.07], [0.19, -0.05], [0.27, 0.04], [0.29, 0.14], [0.255, 0.32], [0.29, 0.5], [0.34, 0.68], [0.335, 0.8], [0.29, 0.92], [0.2, 1.0], [0.14, 1.05], [0, 1.07]]), 16),
+    torso: new THREE.LatheGeometry(v2([[0, -0.02], [0.16, -0.01], [0.25, 0.04], [0.29, 0.14], [0.255, 0.32], [0.29, 0.5], [0.34, 0.68], [0.335, 0.8], [0.29, 0.92], [0.2, 1.0], [0.14, 1.05], [0, 1.07]]), 16),
     kneePad: new THREE.SphereGeometry(0.08, 8, 6),
     boot: new RoundedBoxGeometry(0.27, 0.19, 0.44, 2, 0.08),
     cuff: new THREE.CylinderGeometry(0.13, 0.135, 0.08, 12),
@@ -111,7 +111,7 @@ export function makeRunner({
   const torso = new THREE.Group();
   torso.position.y = hip;
   body.add(torso);
-  const trunk = part(G.torso, suitM, 0, 0, 0, 0.05);
+  const trunk = part(G.torso, suitM, 0, 0, 0, 0.04);
   trunk.scale.z = 0.78;
   torso.add(trunk);
   const belt = part(G.belt, dark, 0, 0.3, 0, 0.02);

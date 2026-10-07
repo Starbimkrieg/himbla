@@ -140,6 +140,7 @@ export class Wardrobe {
       if (b && this.hover !== +b.dataset.i) { this.hover = +b.dataset.i; this.refresh(false); }
     });
     this.gridEl.addEventListener('pointerleave', () => { if (this.hover !== null) { this.hover = null; this.refresh(false); } });
+    this.infoEl.addEventListener('animationend', () => this.infoEl.classList.remove('wd-shake'));
     this.infoEl.addEventListener('click', (e) => {
       if (e.target.closest('.wd-equip')) this.equip(this.items()[this.sel[this.tab]]);
     });
@@ -407,11 +408,12 @@ export class Wardrobe {
       T.w = w; T.h = h;
       T.renderer.setSize(w, h, false);
       T.camera.aspect = w / h;
-      // keep the whole runner (about 2.3 m with antenna and pedestal) in frame at any aspect
-      const half = Math.max(1.45, 0.95 / T.camera.aspect);
+      // keep the whole runner (2.5 m to the helmet top, 2.8 m with the antenna) and the
+      // pedestal in frame at any aspect
+      const half = Math.max(1.78, 1.12 / T.camera.aspect);
       const dist = half / Math.tan(THREE.MathUtils.degToRad(T.camera.fov / 2));
-      T.camera.position.set(0, 1.3, dist);
-      T.camera.lookAt(0, 1.0, 0);
+      T.camera.position.set(0, 1.6, dist);
+      T.camera.lookAt(0, 1.38, 0);
       T.camera.updateProjectionMatrix();
     }
     // turntable: slow spin, paused while dragging and after a change (when it turns to face you)
