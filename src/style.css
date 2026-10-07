@@ -821,3 +821,11 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 @keyframes casUp { 30% { background: var(--green); } }
 @keyframes casDown { 30% { background: #ff6b81; transform: translateX(-4px); } 60% { transform: translateX(3px); } }
 @media (max-width: 800px) { .cas-logo { font-size: 13px; } }
+
+/* ---- vehicle hull ---- */
+#vehbar { position: absolute; left: 16px; bottom: 300px; width: 270px; padding: 8px 10px 7px; background: rgba(5, 3, 12, 0.82); border: 2px solid var(--ui-edge, #3a3550); box-shadow: 4px 4px 0 rgba(0,0,0,0.5); font-family: var(--comic); font-size: 8px; line-height: 1; color: var(--ui-muted, #c9c3d9); display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; pointer-events: none; }
+#vehbar.hidden { display: none; }
+#vehbar .vb-name { grid-column: 1 / 3; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#vehbar .vb-track { height: 10px; background: #120a1e; border: 2px solid #05030c; }
+#vehbar .vb-fill { height: 100%; width: 100%; background: #2ee6ff; transition: width 0.15s steps(4); }
+@media (max-width: 720px) { #vehbar { bottom: 250px; width: 216px; } }

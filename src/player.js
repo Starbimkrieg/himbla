@@ -69,6 +69,10 @@ export class Player {
     this.params.thrustAccel = alien ? PHYS.thrustAccel * 2.2 : PHYS.thrustAccel;
     this.params.energyRegen = alien ? PHYS.energyRegen * 2 : PHYS.energyRegen;
     if (alien) this.body.maxEnergy += 50;
+    // Dr. Zbornak's rewound coils (3 depot wiring per tune), plus the Root Grip mutation
+    const gw = up.gripwire || 0;
+    this.params.grip = PHYS.grip * (1 + gw * 0.15 + (this.mutGrip || 0));
+    this.params.handling += gw * 0.3;
   }
 
   respawn(pos, facing) {

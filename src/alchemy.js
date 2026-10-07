@@ -15,6 +15,8 @@ export const ITEMS = {
   mite: { name: 'Moon Mite', icon: '✶', color: '#b8e986' },
   car: { name: 'Hover-Car', icon: '▣', color: '#ff7ad9', slots: 2 },
   pirate: { name: 'Knocked-Out Pirate', icon: '☠', color: '#7dff3a' },
+  sapling: { name: 'Farm Sapling', icon: '♣', color: '#5fbf4a' },
+  wiring: { name: 'Electrical Wiring', icon: '≋', color: '#ffb347' },
   // things that happen when items sit together in a jar
   mud: { name: 'Moon Mud', icon: '≈', color: '#8a6a4a' },
   slickrock: { name: 'Slick Rock', icon: '◈', color: '#9be7ff' },
@@ -39,6 +41,7 @@ export const MUTATIONS = {
   stone: { name: 'STONE HIDE', from: ['rock', 'slickrock'], desc: '+40 max hull, a bit more drag' },
   claws: { name: 'BURROWER CLAWS', from: ['dirt', 'mud'], desc: 'Painless landings in boots' },
   blood: { name: 'PIRATE BLOOD', from: ['pirate'], desc: 'Pirates hunt you far less' },
+  roots: { name: 'ROOT GRIP', from: ['sapling'], desc: 'Skates grip 30% harder' },
 };
 const MAX_MUTATIONS = 3;
 const MAX_FOLLOW = 3;
@@ -244,6 +247,8 @@ export class Alchemy {
     for (const it of this.jar) {
       if (it.kind === 'person' || it.kind === 'voidling' || it.kind === 'pirate') this.spawnWanderer(it.name, it.kind === 'voidling', it.kind === 'pirate');
       else if (it.kind === 'mite') { const m = this.mites.find((x) => x.gone > 0); if (m) { m.gone = 0; m.home = P.pos.clone().normalize(); } }
+      else if (it.kind === 'sapling') { g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(2), { color: 0x5fbf4a, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 }); g.fx.pop('REPLANTED!', null, { color: '#5fbf4a', size: 36 }); }
+      else if (it.kind === 'wiring') g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0xffb347, size: 0.3, life: 0.6, gravity: 2, count: 8, spread: 2 });
       else if (it.kind === 'car') { const v = this.game.world.vehicles.find((x) => x.captured > 0); if (v) v.captured = 0.01; g.fx.pop('BEEP BEEP!', null, { color: '#ff7ad9', size: 40 }); }
       else if (it.kind === 'rock' || it.kind === 'slickrock') g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0x2ee6ff, size: 0.5, life: 1, gravity: 2, count: 6, spread: 3 });
       else g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(2), { color: it.kind === 'dirt' ? 0xc9b79c : 0x2a1f4f, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 });
@@ -501,6 +506,7 @@ export class Alchemy {
     P.params.bootSafeImpact = has('claws') ? 60 : PHYS.bootSafeImpact;
     P.mutFire = has('arms') ? 0.7 : 1;
     P.mutHealth = has('stone') ? 40 : 0;
+    P.mutGrip = has('roots') ? 0.3 : 0;
     g.player.applyUpgrades(g.upgrades);
     for (const m of this.mutMeshes) m.removeFromParent();
     this.mutMeshes = [];
@@ -542,6 +548,16 @@ export class Alchemy {
       c.position.set((k - 1) * 0.06, -0.78, 0.06);
       c.rotation.x = Math.PI;
       add(arm, c);
+    }
+    if (has('roots')) for (const leg of [M.legL, M.legR]) for (let k = 0; k < 3; k++) {
+      const r = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.5, 4), toon(0x6b4a2a));
+      r.position.set((k - 1) * 0.09, -0.7, -0.1);
+      r.rotation.set(-0.5, 0, (k - 1) * 0.6);
+      add(leg, r);
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.22, 4), toon(0x5fbf4a));
+      leaf.position.set((k - 1) * 0.12, -0.35, 0.12);
+      leaf.rotation.z = (k - 1) * 0.8;
+      add(leg, leaf);
     }
     if (has('blood')) {
       const band = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.06, 6, 16), toon(0xd7263d));
@@ -718,6 +734,8 @@ const BUFF_NAMES = { lowGrav: 'LOW-G', slick: 'MOON MUD', bouncy: 'SPRINGY', inv
 
 // Reactor recipes, keyed by the sorted item kinds fed in together.
 const RECIPES = {
+  sapling() { this.buffs.cushion = 40; return { title: 'MOON MOSS', text: '"The sapling went into the antimatter and came out as a fine green fuzz. It has settled on your boots. Landings will be very soft for a while."' }; },
+  wiring() { this.game.addCredits(45, 'Copper'); return { title: 'MELTED COPPER', text: '"One wire alone is just scrap. Here are forty-five credits for it. Bring me THREE and I can do something useful with your skates."' }; },
   rock() { this.game.addCredits(60, 'Sample'); return { title: 'ROCK… ANALYSED', text: '"A fine rock. It is now slightly radioactive and worth sixty credits to someone."' }; },
   dirt() { this.game.addCredits(20, 'Glass'); return { title: 'MOON GLASS', text: '"The dirt fused into a tiny glass bead. I will treasure it. Have twenty credits."' }; },
   water() { this.buffs.rain = 45; return { title: 'BLACK RAIN', text: '"The black water went UP. It is now raining on you specifically. That will stop. Probably."' }; },

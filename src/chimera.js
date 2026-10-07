@@ -3,9 +3,9 @@ import { toon, glow, ink } from './toon.js';
 import { mulberry32 } from './rng.js';
 
 // Things with bodies. Two or more of these in the reactor make a Chimera.
-export const LIVING = ['person', 'voidling', 'mite', 'car', 'pirate'];
+export const LIVING = ['person', 'voidling', 'mite', 'car', 'pirate', 'sapling'];
 // Things that only mutate whatever they get spliced into.
-export const MODIFIERS = { water: 'void', rock: 'crystal', slickrock: 'crystal', dirt: 'mud', mud: 'mud' };
+export const MODIFIERS = { water: 'void', rock: 'crystal', slickrock: 'crystal', dirt: 'mud', mud: 'mud', wiring: 'spark' };
 
 const PALETTE = {
   person: [0xff9f1c, 0x2ec4ff, 0xffd23f, 0x7dff6a],
@@ -13,9 +13,10 @@ const PALETTE = {
   mite: [0xb8e986, 0xd8d0c4, 0x9be7ff],
   car: [0xff7ad9, 0x2ec4ff, 0x7dff6a, 0xffd23f],
   pirate: [0x3a2b4f, 0x5a3a5a],
+  sapling: [0x5fbf4a, 0x8fd16a, 0x3f9a3a],
 };
-const SYLL = { car: 'Vroom', mite: 'Skitter', pirate: 'Grit' };
-const EPITHET = { void: 'the Unholy', crystal: 'the Crystalline', mud: 'of the Mud' };
+const SYLL = { car: 'Vroom', mite: 'Skitter', pirate: 'Grit', sapling: 'Sprout' };
+const EPITHET = { void: 'the Unholy', crystal: 'the Crystalline', mud: 'of the Mud', spark: 'the Electric' };
 
 function part(geo, mat, x, y, z, outline = 0.04) {
   const m = new THREE.Mesh(geo, mat);
@@ -43,9 +44,9 @@ export function spliceGenes(items, seed = Math.floor(Math.random() * 1e9)) {
   let name = a.replace(/^Little /, '').slice(0, Math.max(2, Math.ceil(a.length / 2))) + b.replace(/^Little /, '').slice(Math.floor(b.length / 2)).toLowerCase();
   if (living.length === 1) name = `Mutant ${a}`;
   if (mods.length) name += ' ' + EPITHET[mods[0]];
-  const legSpeed = { car: 1.0, mite: 0.9, pirate: 0.8, person: 0.72, voidling: 0.78 }[legs];
-  const bodyMult = { car: 0.95, mite: 1.05, pirate: 1.05, person: 1, voidling: 1.08 }[body];
-  const speed = 34 * legSpeed * bodyMult * (1.12 - (size - 1) * 0.25) * (0.9 + rr() * 0.2) * (mods.includes('crystal') ? 1.05 : 1);
+  const legSpeed = { car: 1.0, mite: 0.9, pirate: 0.8, person: 0.72, voidling: 0.78, sapling: 0.62 }[legs];
+  const bodyMult = { car: 0.95, mite: 1.05, pirate: 1.05, person: 1, voidling: 1.08, sapling: 1.1 }[body];
+  const speed = 34 * legSpeed * bodyMult * (1.12 - (size - 1) * 0.25) * (0.9 + rr() * 0.2) * (mods.includes('crystal') ? 1.05 : 1) * (mods.includes('spark') ? 1.08 : 1);
   const chaos = kinds.size + mods.length + (extraHead ? 1 : 0) + (mods.includes('void') ? 1 : 0);
   return { seed, body, legs, head, extraHead, mods, size, tint, name, speed: Math.round(speed * 10) / 10, hop: legs === 'mite' ? 1 : 0.3, chaos, parents: living.map((i) => i.kind), born: Date.now() };
 }
@@ -80,6 +81,20 @@ export function makeChimera(genes) {
       inner.add(pivot);
       legParts.push({ m: pivot, kind: 'mite', phase: i });
     }
+  } else if (genes.legs === 'sapling') {
+    // a tangle of walking roots
+    legH = 0.75;
+    const rootM = toon(0x6b4a2a);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const pivot = new THREE.Group();
+      pivot.position.set(Math.cos(a) * 0.25, legH, Math.sin(a) * 0.25);
+      const r = part(new THREE.CylinderGeometry(0.09, 0.03, 0.95, 5), rootM, Math.cos(a) * 0.22, -0.4, Math.sin(a) * 0.22, 0.02);
+      r.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5);
+      pivot.add(r);
+      inner.add(pivot);
+      legParts.push({ m: pivot, kind: 'mite', phase: i * 1.3 });
+    }
   } else {
     legH = 1.0;
     const legM = genes.legs === 'pirate' ? toon(0x3a2b4f) : genes.legs === 'voidling' ? toon(0xc77dff) : toon(PALETTE.person[Math.floor(rr() * 4)]);
@@ -105,6 +120,14 @@ export function makeChimera(genes) {
     inner.add(abd);
     for (let i = 0; i < 3; i++) inner.add(part(new THREE.SphereGeometry(0.16, 6, 4), toon(0x5a3a5a), (rr() - 0.5) * 0.9, legH + 1.25, -0.9 + (rr() - 0.5), 0));
     top = legH + 1.1; front = 0.95;
+  } else if (genes.body === 'sapling') {
+    const trunk = part(new THREE.CylinderGeometry(0.2, 0.32, 1.1, 7), toon(0x6b4a2a), 0, legH + 0.55, 0, 0.04);
+    inner.add(trunk);
+    for (let i = 0; i < 4; i++) {
+      const leaf = part(new THREE.IcosahedronGeometry(0.42 + rr() * 0.15, 0), toon(genes.tint), (rr() - 0.5) * 0.7, legH + 1.05 + rr() * 0.3, (rr() - 0.5) * 0.7, 0.04);
+      inner.add(leaf);
+    }
+    top = legH + 1.55; front = 0.1;
   } else {
     const c = genes.body === 'pirate' ? 0x3a2b4f : genes.tint;
     inner.add(part(new THREE.CapsuleGeometry(0.36, 0.55, 4, 10), toon(c), 0, legH + 0.55, 0, 0.05));
@@ -124,6 +147,14 @@ export function makeChimera(genes) {
         ant.rotation.z = -sx * 0.4;
         h.add(ant);
       }
+    } else if (kind === 'sapling') {
+      h.add(part(new THREE.SphereGeometry(0.3, 10, 8), toon(0x8fd16a), 0, 0.15, 0, 0.04));
+      for (let i = 0; i < 5; i++) {
+        const pet = part(new THREE.SphereGeometry(0.16, 6, 4), toon(0xff7ad9), Math.cos(i * 1.257) * 0.3, 0.35, Math.sin(i * 1.257) * 0.3, 0);
+        pet.scale.set(1, 0.4, 1);
+        h.add(pet);
+      }
+      h.add(part(new THREE.SphereGeometry(0.12, 8, 6), glow(0xffd23f), 0, 0.42, 0, 0));
     } else {
       const helmet = kind === 'pirate' ? 0x2b2b2b : kind === 'voidling' ? 0x7b2ff7 : 0xfff4e0;
       h.add(part(new THREE.SphereGeometry(0.36, 12, 10), toon(helmet), 0, 0.2, 0, 0.04));
@@ -150,6 +181,14 @@ export function makeChimera(genes) {
   }
   if (genes.mods.includes('mud')) {
     for (let i = 0; i < 5; i++) inner.add(part(new THREE.SphereGeometry(0.18 + rr() * 0.15, 6, 4), toon(0x6b4a2a), (rr() - 0.5) * 1.2, legH + rr() * 1.2, (rr() - 0.5) * 1.6, 0));
+  }
+  if (genes.mods.includes('spark')) {
+    for (let i = 0; i < 3; i++) {
+      const coil = new THREE.Mesh(new THREE.TorusGeometry(0.5 + i * 0.15, 0.03, 4, 16), glow(0xffb347));
+      coil.position.y = legH + 0.4 + i * 0.35;
+      coil.rotation.set(Math.PI / 2 + (rr() - 0.5) * 0.6, 0, (rr() - 0.5) * 0.6);
+      inner.add(coil);
+    }
   }
   if (genes.mods.includes('void')) {
     const aura = new THREE.Mesh(new THREE.SphereGeometry(1.6, 16, 12), new THREE.MeshBasicMaterial({ color: 0x7b2ff7, transparent: true, opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending }));

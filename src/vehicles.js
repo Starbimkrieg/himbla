@@ -7,21 +7,62 @@ import { toon, glow, ink } from './toon.js';
 
 // Faction vehicles unlocked through the story. V calls yours in (or hops out).
 export const VEHICLES = {
-  interceptor: { name: 'SPACECOM Lunar Interceptor', faction: 'spacecom', max: 88, engine: 38, turn: 2.6, grip: 12, armor: 0.75, color: 0xfff4e0, trim: 0xffd23f, desc: 'Fast, nimble, lightly armoured.' },
-  apc: { name: 'Vostok BTR-M Moon APC', faction: 'vostok', max: 62, engine: 24, turn: 1.9, grip: 18, armor: 0.4, color: 0x6b6f78, trim: 0xff3b5c, scale: 1.35, desc: 'Slow tank of a thing. Shrugs off fire.' },
-  skimmer: { name: 'Daedalus Phase Skimmer', faction: 'daedalus', max: 100, engine: 34, turn: 2.2, grip: 4, armor: 0.85, color: 0x1a1426, trim: 0xc77dff, hover: true, desc: 'Hovers. Drifts. Terrifyingly fast.' },
-  mule: { name: 'Kepler Homestead Mule', faction: 'kepler', max: 58, engine: 26, turn: 2.2, grip: 16, armor: 0.6, color: 0x6a8f3a, trim: 0xff9f1c, scale: 1.2, cargoSafe: true, desc: 'Hauler. Cargo rides in a padded bed and takes no jostle damage.' },
-  van: { name: 'Meridian Courier Hover-Van', faction: 'meridian', max: 82, engine: 30, turn: 2.3, grip: 6, armor: 0.8, color: 0x2ec4ff, trim: 0xffd23f, hover: true, van: true, desc: 'Smooth hover ride with a little boost of style.' },
-  warrig: { name: 'Rustmoon Scrapjaw War-Rig', faction: 'rustmoon', max: 78, engine: 32, turn: 2.4, grip: 14, armor: 0.6, color: 0x7b2ff7, trim: 0x7dff3a, scale: 1.4, pirate: true, desc: 'Stolen, welded, painted green. Rams for damage.' },
+  interceptor: { hp: 220, name: 'SPACECOM Lunar Interceptor', faction: 'spacecom', max: 88, engine: 38, turn: 2.6, grip: 12, armor: 0.75, color: 0xfff4e0, trim: 0xffd23f, desc: 'Fast, nimble, lightly armoured.' },
+  apc: { hp: 480, name: 'Vostok BTR-M Moon APC', faction: 'vostok', max: 62, engine: 24, turn: 1.9, grip: 18, armor: 0.4, color: 0x6b6f78, trim: 0xff3b5c, scale: 1.35, desc: 'Slow tank of a thing. Shrugs off fire.' },
+  skimmer: { hp: 180, name: 'Daedalus Phase Skimmer', faction: 'daedalus', max: 100, engine: 34, turn: 2.2, grip: 4, armor: 0.85, color: 0x1a1426, trim: 0xc77dff, hover: true, desc: 'Hovers. Drifts. Terrifyingly fast.' },
+  mule: { hp: 300, name: 'Kepler Homestead Mule', faction: 'kepler', max: 58, engine: 26, turn: 2.2, grip: 16, armor: 0.6, color: 0x6a8f3a, trim: 0xff9f1c, scale: 1.2, cargoSafe: true, desc: 'Hauler. Cargo rides in a padded bed and takes no jostle damage.' },
+  van: { hp: 200, name: 'Meridian Courier Hover-Van', faction: 'meridian', max: 82, engine: 30, turn: 2.3, grip: 6, armor: 0.8, color: 0x2ec4ff, trim: 0xffd23f, hover: true, van: true, desc: 'Smooth hover ride with a little boost of style.' },
+  warrig: { hp: 340, name: 'Rustmoon Scrapjaw War-Rig', faction: 'rustmoon', max: 78, engine: 32, turn: 2.4, grip: 14, armor: 0.6, color: 0x7b2ff7, trim: 0x7dff3a, scale: 1.4, pirate: true, desc: 'Stolen, welded, painted green. Rams for damage.' },
 };
 
 const _v = new THREE.Vector3();
+const REBUILD = 90; // seconds the orbital crane needs to replace a wrecked vehicle
 
 export class Garage {
   constructor(game) {
     this.game = game;
     this.active = null; // { id, def, e, model }
     this.choice = null;
+    this.hp = {}; // hull left on each vehicle (repairs slowly while you're not driving it)
+    this.wreckedUntil = {}; // id -> game time it's rebuilt
+    this.bar = document.createElement('div');
+    this.bar.id = 'vehbar';
+    this.bar.className = 'hidden';
+    this.bar.innerHTML = '<span class="vb-name"></span><div class="vb-track"><div class="vb-fill"></div></div><span class="vb-num"></span>';
+    document.getElementById('hud').appendChild(this.bar);
+  }
+
+  maxHp(id) { return VEHICLES[id].hp; }
+  cooldown(id) { return Math.max(0, (this.wreckedUntil[id] || 0) - this.game.time); }
+
+  // Damage to the vehicle you're driving. Returns how much spills through to you.
+  hit(amount) {
+    const g = this.game;
+    const v = g.player.vehicle;
+    if (!v) return amount;
+    const max = this.maxHp(v.id);
+    this.hp[v.id] = (this.hp[v.id] ?? max) - amount;
+    v.flash = 0.15;
+    if (this.hp[v.id] <= 0) { this.destroy(v); return 12; }
+    return amount * v.def.armor * 0.25;
+  }
+
+  destroy(v) {
+    const g = this.game;
+    const P = g.player;
+    const pos = v.e.body.pos.clone();
+    const up = pos.clone().normalize();
+    this.exit();
+    P.body.vel.addScaledVector(up, 14);
+    v.model.root.removeFromParent();
+    if (this.active === v) this.active = null;
+    this.hp[v.id] = this.maxHp(v.id);
+    this.wreckedUntil[v.id] = g.time + REBUILD;
+    g.fx.explosion(pos, 14, true);
+    g.fx.pop('WRECKED!', pos.clone().addScaledVector(up, 6), { color: '#ff2a4a', size: 80, life: 1.6 });
+    g.audio.boom(true);
+    g.cam.shake = 1.2;
+    g.hud.toast(`${v.def.name} destroyed. The crane can drop a replacement in ${REBUILD}s.`, 3.5);
   }
 
   owned() { return Object.keys(VEHICLES).filter((k) => this.game.story && this.game.story.vehicles.includes(k)); }
@@ -61,7 +102,13 @@ export class Garage {
     const owned = this.owned();
     if (!owned.length) { g.hud.toast('No vehicles yet. Faction leaders hand them out as you rise in their story.', 3); return; }
     if (owned.length > 1 && !this.choice) { this.pick(); return; }
-    const id = this.choice || owned[0];
+    let id = this.choice || owned[0];
+    if (this.cooldown(id) > 0) {
+      const alt = owned.find((k) => this.cooldown(k) <= 0);
+      if (!alt) { g.hud.toast(`${VEHICLES[id].name} is being rebuilt: ready in ${Math.ceil(this.cooldown(id))}s.`, 2.5); return; }
+      if (owned.length > 1) { this.pick(); return; }
+      id = alt;
+    }
     // already parked nearby? hop in; otherwise it gets dropped in next to you
     if (this.active && this.active.id === id && this.active.e.body.pos.distanceTo(P.pos) < 12) { this.enter(); return; }
     this.summon(id);
@@ -72,8 +119,11 @@ export class Garage {
     const g = this.game;
     const owned = this.owned();
     g.dialog('YOUR VEHICLES', 'Which one should the orbital crane drop?', owned.map((k, i) => ({
-      label: `${i + 1} · ${VEHICLES[k].name}`,
-      fn: () => { this.choice = k; this.summon(k); this.enter(); },
+      label: `${i + 1} · ${VEHICLES[k].name}${this.cooldown(k) > 0 ? ` (REBUILDING ${Math.ceil(this.cooldown(k))}s)` : ` (${Math.ceil(this.hp[k] ?? this.maxHp(k))}/${this.maxHp(k)} HULL)`}`,
+      fn: () => {
+        if (this.cooldown(k) > 0) { g.hud.toast(`Still being rebuilt: ready in ${Math.ceil(this.cooldown(k))}s.`, 2.5); return; }
+        this.choice = k; this.summon(k); this.enter();
+      },
     })).concat([{ label: `${owned.length + 1} · CANCEL` }]));
   }
 
@@ -159,6 +209,7 @@ export class Garage {
           g.enemies.damage(en, sp * (def.pirate ? 3 : 2));
           g.fx.pop('ROADKILL!', en.center.clone(), { color: '#ffd23f', size: 60 });
           b.vel.multiplyScalar(0.8);
+          if (en.kind === 'rover') { this.hit(sp * 0.25); if (!P.vehicle) return; }
         }
       }
     }
@@ -166,6 +217,22 @@ export class Garage {
 
   // leave a parked vehicle where it is; keep it posed
   update(dt) {
+    const g = this.game;
+    // field repairs: hull creeps back while you're not behind the wheel
+    for (const id of Object.keys(this.hp)) if (!(g.player.vehicle && g.player.vehicle.id === id)) this.hp[id] = Math.min(this.maxHp(id), this.hp[id] + dt * 2);
+    const pv = g.player.vehicle;
+    this.bar.classList.toggle('hidden', !pv || g.state !== 'play');
+    if (pv) {
+      const max = this.maxHp(pv.id), hp = Math.max(0, this.hp[pv.id] ?? max);
+      const k = hp / max;
+      this.bar.querySelector('.vb-name').textContent = pv.def.name.toUpperCase();
+      const fill = this.bar.querySelector('.vb-fill');
+      fill.style.width = `${k * 100}%`;
+      fill.style.background = k > 0.5 ? '#2ee6ff' : k > 0.25 ? '#ffd23f' : '#ff2a4a';
+      this.bar.querySelector('.vb-num').textContent = `${Math.ceil(hp)}/${max}`;
+      // smoke when it's hurting
+      if (k < 0.35 && Math.random() < dt * 20) g.fx.spawn(pv.model.root.position.clone().addScaledVector(pv.e.body.pos.clone().normalize(), 3), pv.e.body.pos.clone().normalize().multiplyScalar(4), { color: k < 0.15 ? 0xff6a2a : 0x3a3550, size: 0.9, life: 0.9, count: 1, spread: 1 });
+    }
     const v = this.active;
     if (!v || this.game.player.vehicle) return;
     const b = v.e.body;

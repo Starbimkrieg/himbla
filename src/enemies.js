@@ -649,8 +649,28 @@ export class Enemies {
     const g = this.game;
     const b = e.body;
     const friendly = this.friendly(e);
-    const target = this.targetFor(e, 2.5);
+    let target = this.targetFor(e, 2.5);
     const up = b.up.copy(b.pos).normalize();
+    // gunfighters circle-strafe: once close, they orbit you at range and keep shooting instead of
+    // skating straight into you. Grabbers still dive in while you hold cargo.
+    e.orbiting = false;
+    if (e.state === 'chase' && !friendly && !(e.dazed > 0) && !this.victim(e) && !g.player.dead) {
+      const P = g.player;
+      const grabber = g.missions.cargoState === 'held' && (e.grabber ?? (e.grabber = Math.random() < 0.5));
+      const d = b.pos.distanceTo(P.pos);
+      if (!grabber && d < 110) {
+        if (!e.orbitDir || (e.orbitT = (e.orbitT || 0) - dt) <= 0) { e.orbitDir = e.orbitDir ? -e.orbitDir : (Math.random() < 0.5 ? 1 : -1); e.orbitT = randRange(5, 9); e.orbitR = randRange(26, 42); }
+        const pu = _n.copy(P.pos).normalize();
+        const r = tangent(b.pos.clone().sub(P.pos), pu);
+        if (r.lengthSq() < 1e-4) r.copy(tangent(e.heading.clone(), pu));
+        r.normalize();
+        const side = new THREE.Vector3().crossVectors(pu, r).multiplyScalar(e.orbitDir);
+        // aim for a point a little ahead on the circle, pulled in or out toward the orbit radius
+        const pull = THREE.MathUtils.clamp((d - e.orbitR) / 25, -0.8, 0.8);
+        target = P.pos.clone().addScaledVector(r, e.orbitR * (1 - pull * 0.6)).addScaledVector(side, e.orbitR * 0.8).addScaledVector(P.vel, 0.6);
+        e.orbiting = true;
+      }
+    }
     const to = target.clone().sub(b.pos);
     const wish = tangent(to, up);
     const dist = wish.length();
@@ -662,8 +682,8 @@ export class Enemies {
     if (dazed) e.dazed -= dt;
     const ctrl = dazed ? { wish: wish.multiplyScalar(0), skates: false, thrust: false, jump: false, thrustDir: up } : {
       wish: friendly && dist < 10 ? wish.multiplyScalar(0) : wish,
-      skates: friendly ? dist > 25 : !(dist < 20 && closing > 20) || e.state === 'flee',
-      thrust: !friendly && b.energy > 25 && (sp < 22 || (climb > 8 && dist < 200) || (dist > 200 && sp < 50)),
+      skates: friendly ? dist > 25 : e.orbiting || !(dist < 20 && closing > 20) || e.state === 'flee',
+      thrust: !friendly && b.energy > 25 && (e.orbiting ? sp < 26 : (sp < 22 || (climb > 8 && dist < 200) || (dist > 200 && sp < 50))),
       jump: b.grounded && Math.random() < dt * 0.15,
       thrustDir: wish.clone().addScaledVector(up, 0.2).normalize(),
     };
@@ -678,7 +698,7 @@ export class Enemies {
       this.tryGrab(e, dt);
       e.fireCd -= dt;
       if (e.fireCd <= 0 && this.engageRange(e) < 240) {
-        e.fireCd = randRange(1.6, 2.6);
+        e.fireCd = e.orbiting ? randRange(1.1, 1.8) : randRange(1.6, 2.6);
         this.shoot(e, e.center.clone().add(up), 80, 7, 0x7dff3a, 0.03);
       }
     } else if (e.state === 'flee' && e.home && arcDist(b.pos, e.home.dir) < 60) this.fence(e);
@@ -688,6 +708,12 @@ export class Enemies {
     if (hv.lengthSq() > 4 && !dazed) e.heading.copy(hv.normalize());
     m.root.position.copy(b.pos);
     frameQuat(up, e.heading, m.root.quaternion);
+    if (e.orbiting) {
+      // shoulders and gun arm swing round to track you while the skates carry them sideways
+      m.root.updateMatrixWorld();
+      const lp = m.root.worldToLocal(g.player.center.clone());
+      m.torso.rotation.y = THREE.MathUtils.clamp(Math.atan2(lp.x, lp.z), -1.3, 1.3);
+    } else m.torso.rotation.y = 0;
     m.torso.rotation.x = b.grounded ? 0.5 : 0.1;
     m.body.position.y = m.bodyBase + (b.grounded ? -0.15 : 0);
     m.armL.rotation.z = -0.5; m.armR.rotation.z = 0.5;
@@ -708,8 +734,34 @@ export class Enemies {
     const friendly = this.friendly(e);
     const target = this.targetFor(e, 2);
     if (e.ramCd > 0) e.ramCd -= dt;
-    const max = friendly ? 14 : e.state === 'flee' ? 50 : 56;
-    stepRover(e, dt, g.planet, g.colliders, target.clone().sub(b.pos), max, { engine: 22, grip: 14, turn: 2.2, radius: 3.6 });
+    let max = friendly ? 14 : e.state === 'flee' ? 50 : 56;
+    let engine = 22;
+    let aim = target.clone().sub(b.pos);
+    // ram runs: line up on you from range, floor it straight through, overshoot, swing round, repeat
+    if (e.state === 'chase' && !friendly && !this.victim(e) && !g.player.dead) {
+      const P = g.player;
+      const d = b.pos.distanceTo(P.pos);
+      const up = _n.copy(b.pos).normalize();
+      const toP = tangent(P.pos.clone().sub(b.pos), up).normalize();
+      const facing = e.heading.dot(toP);
+      if (!e.ram) e.ram = { phase: 'line', t: 0 };
+      const R = e.ram;
+      R.t += dt;
+      if (R.phase === 'line') {
+        // swing wide to get a run-up, then charge once pointed at you
+        if (d < 45 && facing < 0.6) aim = toP.clone().negate().add(new THREE.Vector3().crossVectors(up, toP).multiplyScalar(1.4));
+        if (facing > 0.85 && d > 35 && d < 260) { R.phase = 'charge'; R.t = 0; if (d < 300) g.fx.pop('RAMMING!', e.center.clone().addScaledVector(up, 5), { color: '#7dff3a', size: 40, life: 0.8 }); }
+      } else if (R.phase === 'charge') {
+        aim = P.pos.clone().addScaledVector(P.vel, Math.min(1.4, d / 70)).sub(b.pos);
+        max = 66; engine = 34;
+        if (facing < 0 || R.t > 7 || d < 10 || e.ramCd > 0) { R.phase = 'overshoot'; R.t = 0; }
+      } else if (R.phase === 'overshoot') {
+        // keep going a moment, then loop back
+        aim = e.heading.clone();
+        if (R.t > 1.6 && d > 30) { R.phase = 'line'; R.t = 0; }
+      }
+    } else e.ram = null;
+    stepRover(e, dt, g.planet, g.colliders, aim, max, { engine, grip: 14, turn: e.ram && e.ram.phase === 'line' ? 2.8 : 2.2, radius: 3.6 });
     this.poseVehicle(e, dt);
     if (e.state === 'chase' && !friendly) {
       this.tryGrab(e, dt);

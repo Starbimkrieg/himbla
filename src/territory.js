@@ -20,6 +20,7 @@ const KIND_NAMES = {
 };
 const OUTPOST_W = 0.42; // how strongly an outpost claims ground compared with a settlement
 const BUILD_R = 900, DROP_R = 1150;
+const LOOT_CD = 240, LOOT_REP = 2; // raid cooldown (s) and reputation cost
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 
@@ -396,6 +397,43 @@ export class Territory {
         if (!first && g.state === 'play') g.hud.toast(`Entering ${F.name} territory`, 2);
       }
     }
+  }
+
+  // ---------- raiding minor structures ----------
+  // Farm domes give up a sapling (it goes in your jar, alive); supply depots a bundle of credits and
+  // a length of electrical wiring. Either way the owners notice and like you a little less.
+  interact() {
+    const g = this.game;
+    const P = g.player;
+    let o = null;
+    for (const x of this.outposts) {
+      if (!x.model || (x.kind !== 'farm' && x.kind !== 'depot')) continue;
+      if (x.model.position.distanceTo(P.pos) < (x.kind === 'farm' ? 12 : 11)) { o = x; break; }
+    }
+    if (!o) return false;
+    const F = FACTIONS[o.faction];
+    const wait = (o.lootAt || -1e9) + LOOT_CD - g.time;
+    const what = o.kind === 'farm' ? 'TAKE A SAPLING' : 'RAID THE SUPPLY DEPOT';
+    if (wait > 0) { g.hud.prompt(`${KIND_NAMES[o.kind].toUpperCase()} — PICKED CLEAN. RESTOCKS IN ${Math.ceil(wait)}s`); return true; }
+    g.hud.prompt(`<b>F</b> — ${what} <span style="color:#ff2a4a">(−${LOOT_REP} ${F ? F.name.toUpperCase() : ''} REP)</span>`);
+    if (!g.input.pressed('KeyF') || g.boardCooldown > 0) return true;
+    const A = g.alchemy;
+    if (o.kind === 'farm') {
+      if (!A.owned) { g.hud.toast('A sapling is alive, it needs a containment jar. Dr. Zbornak sells them.', 3); return true; }
+      if (A.used >= A.slots) { g.hud.toast('Your jar is full.', 2); return true; }
+      A.add('sapling', ['Fern', 'Sprig', 'Basil', 'Twiggy', 'Moss', 'Clover'][Math.floor(Math.random() * 6)]);
+      g.fx.pop('SAPLING SWIPED!', null, { color: '#5fbf4a', size: 46 });
+    } else {
+      const cash = 150 + Math.floor(Math.random() * 151);
+      g.addCredits(cash, 'Depot');
+      if (A.owned && A.used < A.slots) { A.add('wiring'); g.fx.pop('CREDITS + WIRING!', null, { color: '#ffb347', size: 46 }); }
+      else { g.fx.pop(`+₵${cash}`, null, { color: '#ffd23f', size: 46 }); g.hud.toast(A.owned ? 'No room in the jar for the wiring.' : 'There was wiring too, but you have no jar to carry it in.', 2.5); }
+    }
+    o.lootAt = g.time;
+    g.rep.add(o.faction, -LOOT_REP, `Raided a ${KIND_NAMES[o.kind]}`, { war: false });
+    g.audio.pickup();
+    g.boardCooldown = 0.4;
+    return true;
   }
 
   // nearest outpost (optionally filtered)

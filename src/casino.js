@@ -26,7 +26,7 @@ const VIP = [
 ];
 const BETS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000];
 const TABS = [
-  ['slots', 'LUNAR SLOTS'], ['bj', 'BLACK HOLE BLACKJACK'], ['roulette', 'CRATER ROULETTE'], ['wheel', 'PRIZE WHEEL'],
+  ['slots', 'LUNAR SLOTS'], ['roulette', 'CRATER ROULETTE'], ['wheel', 'PRIZE WHEEL'],
   ['hilo', 'HIGH-LOW'], ['prizes', 'PRIZE COUNTER'], ['shark', 'LOAN SHARK'],
 ];
 const DEFAULTS = { wagered: 0, won: 0, biggest: 0, spins: 0, hands: 0, bjs: 0, bestStreak: 0, chips: 0, chipFrac: 0, jackpot: 2500, lastFree: 0, debt: 0, debtAt: 0, loans: 0, visits: 0, ducks: 0, plinko: 0 };

@@ -150,7 +150,7 @@ export class Cheats {
     const A = g.alchemy;
     g.upgrades.jar = Math.max(g.upgrades.jar || 0, 3);
     A.jar = [{ kind: 'person', name: 'Gary' }, { kind: 'mite' }, { kind: 'water' }];
-    const living = ['person', 'mite', 'car', 'pirate', 'voidling'];
+    const living = ['person', 'mite', 'car', 'pirate', 'voidling', 'sapling'];
     for (let i = 0; i < 3; i++) {
       const items = [{ kind: pick(living), name: pick(['Gary', 'Priya', 'Grit', 'Doris']) }, { kind: pick(living) }];
       if (Math.random() < 0.6) items.push({ kind: pick(['water', 'rock', 'dirt']) });

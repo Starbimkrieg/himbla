@@ -51,6 +51,9 @@ const CAMP_NAMES = ['Grimtooth Camp', "Vandal's Rest", 'Ashfall Hideout', 'Cutth
 
 const sleep = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 const _v = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _sightN = new THREE.Vector3();
+const _sightNear = [];
 // Threat Scanner outline: a bold red version of the comic ink shell.
 const SCAN_INK = new THREE.MeshBasicMaterial({ color: 0xff1a2e, side: THREE.BackSide });
 const _q = new THREE.Quaternion();
@@ -338,22 +341,36 @@ class Game {
       this.credits -= 1200; this.upgrades.penlink = 1; this.audio.cash(); this.save();
       this.dialog('DR. ZBORNAK', '"A quantum tether to the holding pen. Press <b>P</b> anywhere and your creatures will be… relocated. Don\'t think about how. I don\'t."', [{ label: 'NEAT' }]);
     } });
+    const wires = this.alchemy.jar.filter((i) => i.kind === 'wiring').length;
+    const gw = this.upgrades.gripwire || 0;
+    if (wires >= 3 && gw < 3) buttons.push({ label: `${buttons.length + 1} · HAND OVER 3 ELECTRICAL WIRING — SKATE GRIP TUNE (${gw + 1}/3)`, fn: () => {
+      let n = 0;
+      this.alchemy.jar = this.alchemy.jar.filter((i) => !(i.kind === 'wiring' && n++ < 3));
+      this.alchemy.refreshJarMesh();
+      this.upgrades.gripwire = gw + 1;
+      this.player.applyUpgrades(this.upgrades);
+      this.audio.cash();
+      this.save();
+      this.fx.pop('GRIP TUNED!', null, { color: '#ffd23f', size: 50 });
+      this.dialog('DR. ZBORNAK', `"Copper! Lovely, stolen copper. I have rewound the magnetic coils in your skates. They will hug the ground a little harder now (grip tune ${gw + 1}/3). ${gw + 1 < 3 ? 'Bring more wire and I can wind them tighter.' : 'Any tighter and you would be welded to the Moon.'}"`, [{ label: 'STICKY!' }]);
+    } });
+    else if (wires >= 3) buttons.push({ label: `${buttons.length + 1} · MORE WIRING?`, fn: () => this.dialog('DR. ZBORNAK', '"Your coils are already wound as tight as physics allows. Throw the wire in the reactor if you must."', [{ label: 'OK' }]) });
     const chims = this.alchemy.chimeras.length;
     if (chims) buttons.push({ label: `${buttons.length + 1} · HOLDING PEN (${chims})`, fn: () => this.alchemy.penMenu() });
-    buttons.push({ label: `${buttons.length + 1} · HEARD ANY RUMOURS?`, fn: () => this.dialog('DR. ZBORNAK', '"Rumours? Science does not deal in rumours. But… <br><br>• <b>Moon Mites</b> herd together in the sunny craters, well away from settlements. Green dots on your minimap, if you\'re close.<br>• That old satellite, <b>SAT-7 \"Lantern\"</b>, swoops low over the ground just past the ILMB once a lap. Something on its deck glows. You would have to match its speed exactly to land on it. Ha!<br>• On the twilight side there is a trench nobody dug: the <b>Whispering Fissure</b>. My instruments go strange near it. Something down there wants a key."', [{ label: 'SPOOKY' }]) });
+    buttons.push({ label: `${buttons.length + 1} · HEARD ANY RUMOURS?`, fn: () => this.dialog('DR. ZBORNAK', '"Rumours? Science does not deal in rumours. But… <br><br>• <b>Moon Mites</b> herd together in the sunny craters, well away from settlements. Green dots on your minimap, if you\'re close.<br>• That old satellite, <b>SAT-7 \"Lantern\"</b>, swoops low over the ground just past the ILMB once a lap. Something on its deck glows. You would have to match its speed exactly to land on it. Ha!<br>• Bring me <b>three lengths of electrical wiring</b> from a supply depot, in your jar, and I will rewind your skate coils for extra grip.<br>• Saplings from the farm domes are alive, technically. They splice beautifully.<br>• On the twilight side there is a trench nobody dug: the <b>Whispering Fissure</b>. My instruments go strange near it. Something down there wants a key."', [{ label: 'SPOOKY' }]) });
     buttons.push({ label: `${buttons.length + 1} · HOW DOES THIS WORK?`, fn: () => this.dialog('DR. ZBORNAK', '"Press <b>G</b> to scoop: rock samples (the glowing crystals on the sunny side), moon dirt (anywhere), black water (stand on a black lake), people, wild moon mites, a dazed pirate, even a whole hover-car if it fits. Things left together in a jar start to react. Bring the jar here and press <b>X</b> to throw everything into my reactor. <b>Two living things make a CHIMERA</b> — race it at the Bounce Dome Derby! One thing alone does… other things. Three different non-living things: don\'t. And the splice pod in the corner puts the jar into <i>you</i>."', [{ label: 'GOT IT' }]) });
     buttons.push({ label: `${buttons.length + 1} · LEAVE` });
     const greet = lvl ? `"Back already? Your jar holds ${2 + lvl}. What have you brought me?"` : '"Ah, a runner! Want to help science? You will need a containment jar. Everything goes in the jar. EVERYTHING."';
     this.dialog('DR. ZBORNAK', greet, buttons);
   }
 
-  // Threat Scanner (ILMB upgrade): pirates you look at get a red outline for a while, and the HUD
-  // counts squads closing in.
+  // Every hostile you can actually see gets a thick red outline, live, for as long as you keep line
+  // of sight (terrain and buildings both block it). The Threat Scanner (ILMB upgrade) extends the
+  // range, keeps marks for a while after they duck out of view, and counts squads closing in.
   updateScanner(dt) {
     const lvl = this.upgrades.scanner || 0;
     const chip = document.getElementById('scanchip');
-    if (!lvl) { chip.classList.add('hidden'); return; }
-    const range = lvl > 1 ? 800 : 450;
+    const range = lvl > 1 ? 800 : lvl ? 520 : 380;
     const cone = Math.cos(lvl > 1 ? 0.3 : 0.18);
     const hold = lvl > 1 ? 20 : 10;
     const P = this.player;
@@ -361,35 +378,64 @@ class Game {
     const look = this.cam.look;
     let inbound = 0;
     for (const e of this.enemies.list) {
-      const threat = !e.dead && e.model && (e.kind === 'megamite' || (e.faction === 'pirate' && e.kind !== 'core' && !this.enemies.friendly(e)));
+      const threat = !e.dead && e.model && e.center && (e.kind === 'megamite' || (e.faction === 'pirate' && e.kind !== 'core' && !this.enemies.friendly(e)) || (e.base && e.base.hostile));
+      let seen = false;
       if (threat) {
         const d = e.center.distanceTo(P.pos);
         if (d < range) {
-          if (e.state === 'chase' || e.kind === 'megamite') inbound++;
-          _v.copy(e.center).sub(cam).normalize();
-          if (_v.dot(look) > cone && this.planet.visible(cam, e.center)) {
-            if (!(e.scanned > 0)) { this.fx.pop('MARKED', e.center.clone().addScaledVector(e.center.clone().normalize(), 3), { color: '#ff2a4a', size: 30, life: 0.7 }); this.audio.tone(1320, 0.06, 'square', 0.05); }
-            e.scanned = hold;
+          if (lvl && (e.state === 'chase' || e.kind === 'megamite')) inbound++;
+          // line-of-sight checks are throttled per enemy; the outline sticks for a beat between them
+          e.losT = (e.losT || 0) - dt;
+          if (e.losT <= 0) {
+            e.losT = 0.12 + Math.random() * 0.06;
+            e.los = this.planet.visible(cam, e.center) && this.clearSight(cam, e.center, e.radius || 1.5);
           }
-        }
+          seen = !!e.los;
+          if (seen && lvl) {
+            _v.copy(e.center).sub(cam).normalize();
+            if (_v.dot(look) > cone) {
+              if (!(e.scanned > 0)) { this.fx.pop('MARKED', e.center.clone().addScaledVector(e.center.clone().normalize(), 3), { color: '#ff2a4a', size: 30, life: 0.7 }); this.audio.tone(1320, 0.06, 'square', 0.05); }
+              e.scanned = hold;
+            }
+          }
+        } else e.los = false;
       }
-      const on = threat && e.scanned > 0;
+      const on = threat && (seen || e.scanned > 0);
       if (e.scanned > 0) e.scanned -= dt;
       if (on !== !!e.scanOn && e.model) {
         e.scanOn = on;
         if (!e.inkHulls) { e.inkHulls = []; e.model.root.traverse((o) => { if (o.userData.isInk) e.inkHulls.push(o); }); }
         for (const h of e.inkHulls) {
-          if (!h.userData.baseScale) h.userData.baseScale = h.scale.clone();
+          if (!h.userData.baseScale) { h.userData.baseScale = h.scale.clone(); h.userData.basePos = h.position.clone(); }
           h.material = on ? SCAN_INK : inkMat;
-          // a fatter shell while marked so the red reads at a distance
-          const k = on ? 3 : 1; // triple the ink thickness on every part
-          const bs = h.userData.baseScale;
+          // a much fatter shell while targeted so the red reads at a distance
+          const k = on ? 4 : 1;
+          const bs = h.userData.baseScale, bp = h.userData.basePos;
           h.scale.set(1 + (bs.x - 1) * k, 1 + (bs.y - 1) * k, 1 + (bs.z - 1) * k);
+          // keep the shell centred on its mesh (ink() offsets by the bounding-box centre)
+          const f = (s, b2) => (Math.abs(1 - b2) > 1e-6 ? (1 - s) / (1 - b2) : 1);
+          h.position.set(bp.x * f(h.scale.x, bs.x), bp.y * f(h.scale.y, bs.y), bp.z * f(h.scale.z, bs.z));
         }
       }
     }
     chip.classList.toggle('hidden', !inbound);
     if (inbound) chip.textContent = `⚠ SCANNER: ${inbound} HOSTILE${inbound > 1 ? 'S' : ''} INBOUND`;
+  }
+
+  // Is the straight line from a to b free of building colliders? (terrain is checked separately)
+  clearSight(a, b, endR = 1.5) {
+    const d = a.distanceTo(b);
+    const n = Math.min(48, Math.max(2, Math.ceil(d / 5)));
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      if (t * d > d - endR - 1) break;
+      _v2.lerpVectors(a, b, t);
+      for (const c of this.colliders.query(_v2, 0.4, _sightNear)) {
+        if (c.platform) continue;
+        if (this.colliders.contact(c, _v2, 0.2, _sightN) > 0) return false;
+      }
+    }
+    return true;
   }
 
   // The splice pod: put yourself in with the jar.
@@ -481,7 +527,8 @@ class Game {
     const P = this.player;
     if (P.dead || amount <= 0 || this.cheats.god) return;
     if (this.story.absorb()) return;
-    if (P.vehicle && cause !== 'sniper') amount *= P.vehicle.def.armor;
+    // the vehicle soaks hits (and can be wrecked); a sniper round goes straight through the glass
+    if (P.vehicle && cause !== 'sniper') { amount = this.garage.hit(amount); if (amount <= 0) return; }
     P.health -= amount;
     this.damageFlash = Math.min(1, this.damageFlash + 0.25 + amount / 40);
     this.cam.shake = Math.min(1.5, this.cam.shake + amount / 25);
@@ -890,6 +937,7 @@ class Game {
     } else if (this.story.interact(P)) {
       // a leader or one of your outposts' terminals
     } else if (this.casino.interact()) { // casino: walk-in game stations
+    } else if (this.territory.interact()) { // raid a farm dome or supply depot
     } else if (nearPen) {
       this.hud.prompt(`<b>F</b> — HOLDING PEN (${this.alchemy.chimeras.length} chimeras)`);
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.alchemy.penMenu();
