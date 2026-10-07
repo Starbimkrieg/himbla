@@ -188,9 +188,9 @@ function roadMaterial() {
   return new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
     uniforms: { sunDir: { value: SUN.clone() } },
-    vertexShader: `uniform vec3 sunDir; varying vec2 vUv; varying float vLit; varying float vFade;
+    vertexShader: `uniform vec3 sunDir; attribute float fade; varying vec2 vUv; varying float vLit; varying float vFade; varying float vEnd;
       void main(){
-        vUv = uv;
+        vUv = uv; vEnd = fade;
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vec3 toCam = cameraPosition - wp.xyz; float dist = length(toCam);
         // pull toward the eye (screen position unchanged) so coarse terrain LODs never swallow the track
@@ -199,7 +199,7 @@ function roadMaterial() {
         vFade = 1.0 - smoothstep(2300.0, 2900.0, dist);
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
-    fragmentShader: `varying vec2 vUv; varying float vLit; varying float vFade;
+    fragmentShader: `varying vec2 vUv; varying float vLit; varying float vFade; varying float vEnd;
       float h1(float n){ return fract(sin(n) * 43758.5453); }
       float n1(float x){ float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(h1(i), h1(i + 1.0), f); }
       void main(){
@@ -218,7 +218,7 @@ function roadMaterial() {
         a = max(a, rut * 0.85 * band);
         a = max(a, berm * 0.35);
         col *= 0.22 + 0.85 * vLit;
-        gl_FragColor = vec4(col, a * vFade);
+        gl_FragColor = vec4(col, a * vFade * vEnd);
       }`,
   });
 }
@@ -574,7 +574,7 @@ export class Traffic {
       const detour = safe.some((x) => x !== a && x !== n1.b && has(a, x) && has(x, n1.b) && dist(a, x) + dist(x, n1.b) < 1.3 * n1.d);
       if (!detour) pairs.add(key(a, n1.b));
     }
-    this.roadGeo = { pos: [], uv: [], idx: [] };
+    this.roadGeo = { pos: [], uv: [], fade: [], idx: [] };
     this.posts = [];
     this.pieces = [];
     this.gates = [];
@@ -593,6 +593,7 @@ export class Traffic {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(G.pos, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(G.uv, 2));
+    geo.setAttribute('fade', new THREE.Float32BufferAttribute(G.fade, 1));
     geo.setIndex(G.idx);
     geo.computeBoundingSphere();
     const mesh = new THREE.Mesh(geo, roadMaterial());
@@ -720,13 +721,15 @@ export class Traffic {
   }
 
   // Visible track: a strip of 5 ground-hugging samples across 10 m along a ground polyline.
-  stripPush(centre, sideV, s, vScale = 1) {
+  // `fade` (0..1) lets a strip melt into another one it overlaps (junction flares, road ends).
+  stripPush(centre, sideV, s, vScale = 1, fade = 1) {
     const G = this.roadGeo;
     for (const o of ROAD_LAT) {
       _b.copy(centre).addScaledVector(sideV, o * vScale);
       this.P.ground(_b, _b, 0.04);
       G.pos.push(_b.x, _b.y, _b.z);
       G.uv.push(o / 5, s);
+      G.fade.push(fade);
     }
   }
 
@@ -756,10 +759,10 @@ export class Traffic {
     return { side, tan, cum };
   }
 
-  drawLine(g, s0 = 0, vScale = 1) {
+  drawLine(g, s0 = 0, vScale = 1, fadeAt = null) {
     const { side, cum } = this.frames(g);
     const base = this.roadGeo.pos.length / 3;
-    for (let i = 0; i < g.length; i++) this.stripPush(g[i], side[i], s0 + cum[i], vScale);
+    for (let i = 0; i < g.length; i++) this.stripPush(g[i], side[i], s0 + cum[i], vScale, fadeAt ? fadeAt(i / (g.length - 1)) : 1);
     this.stripIdx(base, g.length);
   }
 
@@ -848,7 +851,7 @@ export class Traffic {
     while (i0 < N && cum[i0] < 2.5) i0++;
     while (i1 > 0 && cum[N] - cum[i1] < 2.5) i1--;
     const base = this.roadGeo.pos.length / 3;
-    for (let i = i0; i <= i1; i++) this.stripPush(g[i], side[i], cum[i]);
+    for (let i = i0; i <= i1; i++) this.stripPush(g[i], side[i], cum[i], 1, smooth((Math.min(cum[i], cum[N] - cum[i]) - 2.5) / 7));
     this.stripIdx(base, i1 - i0 + 1);
     // marker posts every ~110 m, alternating sides
     for (let s = 60, k = 0; s < cum[N] - 60; s += 110, k++) {
@@ -929,7 +932,7 @@ export class Traffic {
       const m = Math.max(2, Math.round(FILLET / R.step));
       for (const d of [1, -1]) {
         const j = e.i + d * m;
-        this.drawLine(this.bez(q, tIn, W[wrap(j)], laneT(d, j), 8, 0.5), 0, 0.82);
+        this.drawLine(this.bez(q, tIn, W[wrap(j)], laneT(d, j), 10, 0.5), 0, 0.85, (t) => smooth(t / 0.3) * smooth((1 - t) / 0.3));
       }
     }
     // marker posts on the outside of the ring, away from the junctions
