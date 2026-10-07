@@ -56,8 +56,13 @@ function prep(g) {
 }
 
 class Kit {
-  constructor(c, rr) {
-    this.c = c; this.rr = rr;
+  constructor(c, seed, wreck) {
+    this.c = c;
+    // separate streams so the shared props come out the same whether or not the main building
+    // stands: rr for the yard, mr for the intact main building, wr for its wreckage
+    this.rr = mulberry32(seed); this.mr = mulberry32(seed + 1); this.wr = mulberry32(seed + 2);
+    this.wreck = wreck;
+    this.drop = null; // open apron spot where loot can be thrown to
     this.byMat = new Map();
     this.ink = [];
     this.base = new THREE.Matrix4();
@@ -191,6 +196,7 @@ class Kit {
   }
   // the raid marker: a glowing ring on the ground plus the stand point
   raidAt(x, z, color) {
+    if (this.wreck) return; // nothing left to raid
     this.ring(1.7, 0.14, G(color), x, F + 0.04, z);
     this.ring(1.1, 0.07, G(color), x, F + 0.04, z);
     this.raid = this.P(x, F, z);
@@ -219,7 +225,7 @@ class Kit {
     }
     this.byMat.clear();
     this.ink.length = 0;
-    return { root: this.root, cols: this.cols, hits: this.hits, raid: this.raid, smoke: this.smoke };
+    return { root: this.root, cols: this.cols, hits: this.hits, raid: this.raid, smoke: this.smoke, drop: this.drop };
   }
 }
 
@@ -306,64 +312,93 @@ function tower(k) {
     k.box(2.95, 0.6, 0.5, T(0xa8a4b4), x, F + 0.5, z, { ry: a, outline: 0.04 });
     if (n % 3 === 0) k.box(2.97, 0.16, 0.52, T(c), x, F + 0.85, z, { ry: a, outline: 0 });
   }
-  // the tower
-  const TX = -7, TZ = -7, H = 22;
-  const hw = (y) => 3.4 + (2.0 - 3.4) * (y / H);
-  const cn = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
-  k.box(8, 0.5, 8, T(CONC), TX, 0, TZ);
-  for (const [sx, sz] of cn) k.beam([TX + sx * 3.4, 0.4, TZ + sz * 3.4], [TX + sx * 2.0, H, TZ + sz * 2.0], 0.24, T(STEEL), { outline: 0.05, seg: 6 });
-  const lv = [0.5, 5.8, 11.1, 16.4, H];
-  for (let i = 0; i < 4; i++) {
-    const y0 = lv[i], y1 = lv[i + 1], w0 = hw(y0), w1 = hw(y1);
-    for (let f = 0; f < 4; f++) {
-      const [ax, az] = cn[f], [bx, bz] = cn[(f + 1) % 4];
-      k.beam([TX + ax * w0, y0, TZ + az * w0], [TX + bx * w1, y1, TZ + bz * w1], 0.08, T(DARK));
-      k.beam([TX + bx * w0, y0, TZ + bz * w0], [TX + ax * w1, y1, TZ + az * w1], 0.08, T(DARK));
-      if (i > 0) k.beam([TX + ax * w0, y0, TZ + az * w0], [TX + bx * w0, y0, TZ + bz * w0], 0.1, T(STEEL));
+  const TX = -7, TZ = -7, H = 22, BX = 8.5, BZ = -8;
+  if (!k.wreck) {
+    // the tower
+    const hw = (y) => 3.4 + (2.0 - 3.4) * (y / H);
+    const cn = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    k.box(8, 0.5, 8, T(CONC), TX, 0, TZ);
+    for (const [sx, sz] of cn) k.beam([TX + sx * 3.4, 0.4, TZ + sz * 3.4], [TX + sx * 2.0, H, TZ + sz * 2.0], 0.24, T(STEEL), { outline: 0.05, seg: 6 });
+    const lv = [0.5, 5.8, 11.1, 16.4, H];
+    for (let i = 0; i < 4; i++) {
+      const y0 = lv[i], y1 = lv[i + 1], w0 = hw(y0), w1 = hw(y1);
+      for (let f = 0; f < 4; f++) {
+        const [ax, az] = cn[f], [bx, bz] = cn[(f + 1) % 4];
+        k.beam([TX + ax * w0, y0, TZ + az * w0], [TX + bx * w1, y1, TZ + bz * w1], 0.08, T(DARK));
+        k.beam([TX + bx * w0, y0, TZ + bz * w0], [TX + ax * w1, y1, TZ + az * w1], 0.08, T(DARK));
+        if (i > 0) k.beam([TX + ax * w0, y0, TZ + az * w0], [TX + bx * w0, y0, TZ + bz * w0], 0.1, T(STEEL));
+      }
     }
+    // ladder up the gate-facing side
+    for (const s of [-0.5, 0.5]) k.beam([TX + s, 0.5, TZ + 3.5], [TX + s, H, TZ + 2.1], 0.05, T(DARK), { outline: 0.02 });
+    for (let y = 1.5; y < H; y += 1.2) { const zz = TZ + 3.5 - (1.4 * (y - 0.5)) / (H - 0.5); k.beam([TX - 0.5, y, zz], [TX + 0.5, y, zz], 0.04, T(DARK), { outline: 0 }); }
+    // platform, railing and the observation cab
+    k.box(7.6, 0.4, 7.6, T(DARK), TX, H, TZ);
+    for (const s of [-1, 1]) {
+      k.box(7.6, 0.12, 0.12, T(c), TX, H + 1.1, TZ + s * 3.74, { outline: 0.02 });
+      k.box(0.12, 0.12, 7.6, T(c), TX + s * 3.74, H + 1.1, TZ, { outline: 0.02 });
+      for (const t of [-1, 0, 1]) { k.box(0.1, 1.1, 0.1, T(DARK), TX + t * 3.7, H + 0.4, TZ + s * 3.74, { outline: 0 }); k.box(0.1, 1.1, 0.1, T(DARK), TX + s * 3.74, H + 0.4, TZ + t * 3.7, { outline: 0 }); }
+    }
+    k.box(5, 2.8, 5, T(STEEL), TX, H + 0.4, TZ, { outline: 0.08 });
+    k.box(5.1, 1.0, 5.1, G(0xfff0a0), TX, H + 1.5, TZ, { outline: 0 });
+    for (let i = -1; i <= 1; i++) for (const s of [-1, 1]) {
+      k.box(0.18, 1.02, 0.18, T(DARK), TX + i * 1.6, H + 1.49, TZ + s * 2.56, { outline: 0 });
+      k.box(0.18, 1.02, 0.18, T(DARK), TX + s * 2.56, H + 1.49, TZ + i * 1.6, { outline: 0 });
+    }
+    k.box(6, 0.45, 6, T(c), TX, H + 3.2, TZ, { outline: 0.06 });
+    k.cyl(0.07, 0.09, 4, 5, T(DARK), TX + 2.2, H + 3.6, TZ + 2.2, { outline: 0.02 });
+    k.blinker(TX + 2.2, H + 7.8, TZ + 2.2, 0xff2a4a, 0.35);
+    // searchlight sweeping round on the roof
+    const sl = new THREE.Group();
+    const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 0.8, 8), T(DARK)); ped.position.y = 0.4; sl.add(ped);
+    const head = new THREE.Group(); head.position.y = 1.15; head.rotation.x = 0.42; sl.add(head);
+    const hous = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.48, 1.3, 10).rotateX(Math.PI / 2), T(LIGHT));
+    hous.castShadow = true; head.add(hous);
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.06, 10).rotateX(Math.PI / 2), G(0xfffbe0)); lens.position.z = 0.66; head.add(lens);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(5, 38, 16, 1, true).rotateX(-Math.PI / 2).translate(0, 0, 19.7), BEAM(0xfff3b0, 0.13));
+    cone.renderOrder = 3; head.add(cone);
+    sl.userData.spin = true;
+    k.dyn(sl, TX, H + 3.62, TZ);
+    k.solid(3.4, 12.6, 3.4, TX, TZ);
+    // the barracks: a Quonset hut
+    k.add(new THREE.CylinderGeometry(3.4, 3.4, 11, 16).rotateX(Math.PI / 2), T(0x6f7a5a), BX, 0, BZ, { outline: 0.1 });
+    for (const dz of [-4.5, -1.5, 1.5, 4.5]) k.add(new THREE.TorusGeometry(3.44, 0.1, 4, 18, Math.PI), T(0x4f5a42), BX, 0, BZ + dz, { outline: 0 });
+    k.add(new THREE.TorusGeometry(3.46, 0.22, 4, 18, Math.PI), T(c), BX, 0, BZ + 3, { outline: 0 });
+    k.box(1.6, 2.4, 0.2, T(0x2a2540), BX, F, BZ + 5.52, { outline: 0.03 });
+    for (const s of [-1, 1]) k.add(new THREE.CylinderGeometry(0.45, 0.45, 0.1, 10).rotateX(Math.PI / 2), G(0xffe6a8), BX + s * 1.9, 1.8, BZ + 5.52, { outline: 0 });
+    k.box(0.6, 0.2, 0.3, G(0xfff3b0), BX, 2.95, BZ + 5.6, { outline: 0 });
+    k.box(2, 1.4, 1.4, T(0xc9a227), BX + 5.2, F, BZ + 1, { outline: 0.05 });
+    k.cyl(0.12, 0.12, 1.6, 6, T(DARK), BX + 5.8, F + 1.4, BZ + 1.3, { outline: 0.02 });
+    k.solid(3.4, 1.8, 5.5, BX, BZ);
+  } else {
+    const wr = k.wr;
+    // the tower snapped above the first bay and folded over towards the gate
+    k.box(8, 0.5, 8, T(CONC), TX, 0, TZ);
+    k.box(9, 0.06, 9, T(CHAR), TX, 0.5, TZ, { outline: 0 });
+    const cn = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    for (const [sx, sz] of cn) { const h = 2.5 + wr() * 3.5; k.beam([TX + sx * 3.4, 0.4, TZ + sz * 3.4], [TX + sx * 3.1 + (wr() - 0.5), h, TZ + sz * 3.1 + (wr() - 0.5)], 0.24, T(0x3e4352), { outline: 0.05, seg: 6 }); }
+    for (const sx of [-1, 1]) for (const y of [1.0, 1.9]) k.beam([TX + sx * 2.1, y, TZ + 2], [TX + sx * 2.3 + (wr() - 0.5) * 0.6, y + 0.3, TZ + 14], 0.22, T(0x3e4352), { outline: 0.05, seg: 6 });
+    for (let i = 0; i < 6; i++) { const z = TZ + 3 + i * 2; k.beam([TX - 2.2, 1.0 + (i % 2) * 0.9, z], [TX + 2.2, 1.9 - (i % 2) * 0.9, z + 2], 0.08, T(DARK)); }
+    k.box(5, 2.2, 5, T(0x4a5068), TX, F + 0.3, TZ + 16.5, { rx: 0.25, rz: 0.35, outline: 0.08 });
+    k.box(6, 0.45, 6, T(0x3a3f50), TX + 0.8, F, TZ + 19.5, { ry: 0.5, rx: 0.15, outline: 0.06 });
+    // the barracks burnt out: ribs and buckled skin
+    k.box(7.4, 0.06, 11.5, T(CHAR), BX, F, BZ, { outline: 0 });
+    for (const dz of [-4.5, -1.5, 1.5, 4.5]) if (wr() < 0.75) k.add(new THREE.TorusGeometry(3.4, 0.12, 4, 14, Math.PI * (0.35 + wr() * 0.5)), T(0x3a3f30), BX, 0, BZ + dz, { rz: wr() * 0.6, outline: 0.03 });
+    for (let i = 0; i < 4; i++) k.add(new THREE.CylinderGeometry(3.4, 3.4, 2 + wr() * 2, 8, 1, true, wr() * 6, 0.9).rotateX(Math.PI / 2), D(0x4f5a42), BX + (wr() - 0.5) * 2, 0.2, BZ - 4 + i * 2.6, { rz: (wr() - 0.5) * 0.8, outline: 0.04 });
+    scatterDebris(k, BX, BZ, 3.2, 5, 12, wr);
+    scatterDebris(k, TX, TZ, 4, 4, 8, wr);
   }
-  // ladder up the gate-facing side
-  for (const s of [-0.5, 0.5]) k.beam([TX + s, 0.5, TZ + 3.5], [TX + s, H, TZ + 2.1], 0.05, T(DARK), { outline: 0.02 });
-  for (let y = 1.5; y < H; y += 1.2) { const zz = TZ + 3.5 - (1.4 * (y - 0.5)) / (H - 0.5); k.beam([TX - 0.5, y, zz], [TX + 0.5, y, zz], 0.04, T(DARK), { outline: 0 }); }
-  // platform, railing and the observation cab
-  k.box(7.6, 0.4, 7.6, T(DARK), TX, H, TZ);
-  for (const s of [-1, 1]) {
-    k.box(7.6, 0.12, 0.12, T(c), TX, H + 1.1, TZ + s * 3.74, { outline: 0.02 });
-    k.box(0.12, 0.12, 7.6, T(c), TX + s * 3.74, H + 1.1, TZ, { outline: 0.02 });
-    for (const t of [-1, 0, 1]) { k.box(0.1, 1.1, 0.1, T(DARK), TX + t * 3.7, H + 0.4, TZ + s * 3.74, { outline: 0 }); k.box(0.1, 1.1, 0.1, T(DARK), TX + s * 3.74, H + 0.4, TZ + t * 3.7, { outline: 0 }); }
-  }
-  k.box(5, 2.8, 5, T(STEEL), TX, H + 0.4, TZ, { outline: 0.08 });
-  k.box(5.1, 1.0, 5.1, G(0xfff0a0), TX, H + 1.5, TZ, { outline: 0 });
-  for (let i = -1; i <= 1; i++) for (const s of [-1, 1]) {
-    k.box(0.18, 1.02, 0.18, T(DARK), TX + i * 1.6, H + 1.49, TZ + s * 2.56, { outline: 0 });
-    k.box(0.18, 1.02, 0.18, T(DARK), TX + s * 2.56, H + 1.49, TZ + i * 1.6, { outline: 0 });
-  }
-  k.box(6, 0.45, 6, T(c), TX, H + 3.2, TZ, { outline: 0.06 });
-  k.cyl(0.07, 0.09, 4, 5, T(DARK), TX + 2.2, H + 3.6, TZ + 2.2, { outline: 0.02 });
-  k.blinker(TX + 2.2, H + 7.8, TZ + 2.2, 0xff2a4a, 0.35);
-  // searchlight sweeping round on the roof
-  const sl = new THREE.Group();
-  const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 0.8, 8), T(DARK)); ped.position.y = 0.4; sl.add(ped);
-  const head = new THREE.Group(); head.position.y = 1.15; head.rotation.x = 0.42; sl.add(head);
-  const hous = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.48, 1.3, 10).rotateX(Math.PI / 2), T(LIGHT));
-  hous.castShadow = true; head.add(hous);
-  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.06, 10).rotateX(Math.PI / 2), G(0xfffbe0)); lens.position.z = 0.66; head.add(lens);
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(5, 38, 16, 1, true).rotateX(-Math.PI / 2).translate(0, 0, 19.7), BEAM(0xfff3b0, 0.13));
-  cone.renderOrder = 3; head.add(cone);
-  sl.userData.spin = true;
-  k.dyn(sl, TX, H + 3.62, TZ);
-  k.solid(3.4, 12.6, 3.4, TX, TZ);
-  // the barracks: a Quonset hut
-  const BX = 8.5, BZ = -8;
-  k.add(new THREE.CylinderGeometry(3.4, 3.4, 11, 16).rotateX(Math.PI / 2), T(0x6f7a5a), BX, 0, BZ, { outline: 0.1 });
-  for (const dz of [-4.5, -1.5, 1.5, 4.5]) k.add(new THREE.TorusGeometry(3.44, 0.1, 4, 18, Math.PI), T(0x4f5a42), BX, 0, BZ + dz, { outline: 0 });
-  k.add(new THREE.TorusGeometry(3.46, 0.22, 4, 18, Math.PI), T(c), BX, 0, BZ + 3, { outline: 0 });
-  k.box(1.6, 2.4, 0.2, T(0x2a2540), BX, F, BZ + 5.52, { outline: 0.03 });
-  for (const s of [-1, 1]) k.add(new THREE.CylinderGeometry(0.45, 0.45, 0.1, 10).rotateX(Math.PI / 2), G(0xffe6a8), BX + s * 1.9, 1.8, BZ + 5.52, { outline: 0 });
-  k.box(0.6, 0.2, 0.3, G(0xfff3b0), BX, 2.95, BZ + 5.6, { outline: 0 });
-  k.box(2, 1.4, 1.4, T(0xc9a227), BX + 5.2, F, BZ + 1, { outline: 0.05 });
-  k.cyl(0.12, 0.12, 1.6, 6, T(DARK), BX + 5.8, F + 1.4, BZ + 1.3, { outline: 0.02 });
-  k.solid(3.4, 1.8, 5.5, BX, BZ);
+  k.hit(3.6, 12.8, 3.6, TX, TZ);
+  k.hit(3.4, 1.8, 5.5, BX, BZ);
+  k.smoke = new THREE.Vector3(TX, 2, TZ);
+  k.drop = new THREE.Vector3(1, F, 8);
+  // ammo locker by the barracks door, with a crate of searchlight lenses: the raid spot
+  k.box(1.4, 2.0, 0.8, T(0x4f5a42), BX + 2.6, F, BZ + 6.4, { outline: 0.05 });
+  k.box(1.42, 0.25, 0.82, T(c), BX + 2.6, F + 1.5, BZ + 6.4, { outline: 0 });
+  k.box(0.9, 0.5, 0.05, T(YEL), BX + 2.6, F + 0.8, BZ + 6.82, { outline: 0 });
+  crate(k, BX + 2.6, F, BZ + 8.0, 1.0, 0x6f7a5a, 0.2);
+  for (const [dx, dz] of [[-0.22, -0.2], [0.22, 0.2]]) k.add(new THREE.CylinderGeometry(0.2, 0.2, 0.06, 10), G(0xfffbe0), BX + 2.6 + dx, F + 1.03, BZ + 8.0 + dz, { outline: 0 });
+  k.raidAt(BX, BZ + 8.3, 0xffd23f);
   // gun nest
   sandbags(k, -12, 8, 2.4, 0.6, 5.7, 2);
   for (const a of [0, 2.1, 4.2]) k.beam([-12, F + 1.1, 8], [-12 + Math.sin(a) * 0.8, F, 8 + Math.cos(a) * 0.8], 0.05, T(DARK));
@@ -421,18 +456,19 @@ function depot(k, wreck) {
   } else {
     k.box(W + 1, 0.06, Dp + 1, T(CHAR), WX, F, WZ, { outline: 0 });
     for (let x = -W / 2 + 1.25; x < W / 2; x += 2.5) for (const s of [-1, 1]) {
-      const h = 0.5 + rr() * (s < 0 ? 3.5 : 2);
-      k.box(2.45, h, 0.5, T(rr() < 0.5 ? 0x3a3540 : 0x4a4f5e), WX + x, 0, WZ + s * Dp / 2, { rz: (rr() - 0.5) * 0.1, outline: 0.05 });
+      const h = 0.5 + k.wr() * (s < 0 ? 3.5 : 2);
+      k.box(2.45, h, 0.5, T(k.wr() < 0.5 ? 0x3a3540 : 0x4a4f5e), WX + x, 0, WZ + s * Dp / 2, { rz: (k.wr() - 0.5) * 0.1, outline: 0.05 });
     }
-    for (let z = -Dp / 2 + 1.4; z < Dp / 2; z += 2.75) for (const s of [-1, 1]) k.box(0.5, 0.5 + rr() * 2.5, 2.7, T(0x3a3540), WX + s * W / 2, 0, WZ + z, { outline: 0.05 });
-    for (let i = 0; i < 3; i++) k.box(6.5, 0.3, 5.5, T(0x4a4f62), WX - 6 + i * 6, 1 + rr() * 1.2, WZ + (rr() - 0.5) * 3, { rx: (rr() - 0.5) * 0.7, rz: (rr() - 0.5) * 0.6, outline: 0.05 });
+    for (let z = -Dp / 2 + 1.4; z < Dp / 2; z += 2.75) for (const s of [-1, 1]) k.box(0.5, 0.5 + k.wr() * 2.5, 2.7, T(0x3a3540), WX + s * W / 2, 0, WZ + z, { outline: 0.05 });
+    for (let i = 0; i < 3; i++) k.box(6.5, 0.3, 5.5, T(0x4a4f62), WX - 6 + i * 6, 1 + k.wr() * 1.2, WZ + (k.wr() - 0.5) * 3, { rx: (k.wr() - 0.5) * 0.7, rz: (k.wr() - 0.5) * 0.6, outline: 0.05 });
     k.box(4.6, 0.36, 5, T(0x8a8698), WX + 6.5, F + 0.2, WZ + Dp / 2 + 3, { ry: 0.4, rx: 0.08, outline: 0.03 });
-    scatterDebris(k, WX, WZ, W / 2, Dp / 2, 22, rr);
-    for (let i = 0; i < 6; i++) k.beam([WX + (rr() - 0.5) * W, F, WZ + (rr() - 0.5) * Dp], [WX + (rr() - 0.5) * W, 2 + rr() * 3, WZ + (rr() - 0.5) * Dp], 0.12, T(DARK));
+    scatterDebris(k, WX, WZ, W / 2, Dp / 2, 22, k.wr);
+    for (let i = 0; i < 6; i++) k.beam([WX + (k.wr() - 0.5) * W, F, WZ + (k.wr() - 0.5) * Dp], [WX + (k.wr() - 0.5) * W, 2 + k.wr() * 3, WZ + (k.wr() - 0.5) * Dp], 0.12, T(DARK));
     k.box(5, 1.2, 4.5, T(0x5a5560), WX - 12.6, 0, WZ + 2, { outline: 0.05 });
   }
   k.hit(W / 2, H / 2, Dp / 2, WX, WZ);
   k.smoke = new THREE.Vector3(WX, 1.5, WZ);
+  k.drop = new THREE.Vector3(1, F, 2);
   // container yard
   const colors = [0xd9482b, 0x2b59c3, 0x3f9a3a, 0xffd23f, 0x8a8698, c];
   let top = 1;
@@ -512,8 +548,8 @@ function farm(k, wreck) {
         const half = Math.sqrt((R * 0.8) ** 2 - bz * bz);
         k.box(half * 2, 0.6, 1.2, T(0x5a3f2a), x, F, z + bz, { outline: 0.03 });
         for (let px = -half + 0.6; px < half - 0.4; px += 1.05) {
-          const t = rr(), pc = plantCols[Math.floor(rr() * 4)];
-          if (t < 0.4) k.add(new THREE.ConeGeometry(0.34, 0.9 + rr() * 0.6, 5), T(pc), x + px, F + 1.2, z + bz, { outline: 0.02 });
+          const t = k.mr(), pc = plantCols[Math.floor(k.mr() * 4)];
+          if (t < 0.4) k.add(new THREE.ConeGeometry(0.34, 0.9 + k.mr() * 0.6, 5), T(pc), x + px, F + 1.2, z + bz, { outline: 0.02 });
           else if (t < 0.75) k.add(new THREE.SphereGeometry(0.42, 6, 4), T(pc), x + px, F + 0.95, z + bz, { outline: 0.02 });
           else if (t < 0.92) k.add(new THREE.ConeGeometry(0.2, 1.8, 5), T(0x3f9a3a), x + px, F + 1.5, z + bz, { outline: 0.02 });
           else k.add(new THREE.SphereGeometry(0.3, 6, 4), T(0xff9f1c), x + px, F + 0.85, z + bz, { outline: 0.02 });
@@ -532,23 +568,24 @@ function farm(k, wreck) {
       k.sphere(R + 0.35, x, 1.1, z);
     } else {
       k.cyl(R + 0.6, R + 0.6, 0.06, 28, T(CHAR), x, F, z, { outline: 0 });
-      let th = rr();
+      let th = k.wr();
       while (th < Math.PI * 2 - 0.5) {
-        const len = 0.5 + rr() * 0.9;
-        k.add(new THREE.CylinderGeometry(R + 0.3, R + 0.4, 0.3 + rr() * 0.8, 6, 1, true, th, len), D(0x8a8698), x, 0.4, z, { outline: 0.04 });
-        th += len + 0.2 + rr() * 0.5;
+        const len = 0.5 + k.wr() * 0.9;
+        k.add(new THREE.CylinderGeometry(R + 0.3, R + 0.4, 0.3 + k.wr() * 0.8, 6, 1, true, th, len), D(0x8a8698), x, 0.4, z, { outline: 0.04 });
+        th += len + 0.2 + k.wr() * 0.5;
       }
-      for (let i = 0; i < 6; i++) k.add(new THREE.TorusGeometry(R * (0.5 + rr() * 0.5), 0.13, 4, 12, 0.8 + rr()), T(0xb8c4d8), x + (rr() - 0.5) * R, 0.5 + rr(), z + (rr() - 0.5) * R, { rx: Math.PI / 2 + (rr() - 0.5) * 0.6, ry: rr() * 6, outline: 0.03 });
-      for (let i = 0; i < 10; i++) k.add(new THREE.TetrahedronGeometry(0.5 + rr() * 0.9), GLASS(0xa8f0ff, 0.4), x + (rr() - 0.5) * R * 1.6, F + 0.2, z + (rr() - 0.5) * R * 1.6, { rx: rr() * 3, ry: rr() * 3, outline: 0 });
+      for (let i = 0; i < 6; i++) k.add(new THREE.TorusGeometry(R * (0.5 + k.wr() * 0.5), 0.13, 4, 12, 0.8 + k.wr()), T(0xb8c4d8), x + (k.wr() - 0.5) * R, 0.5 + k.wr(), z + (k.wr() - 0.5) * R, { rx: Math.PI / 2 + (k.wr() - 0.5) * 0.6, ry: k.wr() * 6, outline: 0.03 });
+      for (let i = 0; i < 10; i++) k.add(new THREE.TetrahedronGeometry(0.5 + k.wr() * 0.9), GLASS(0xa8f0ff, 0.4), x + (k.wr() - 0.5) * R * 1.6, F + 0.2, z + (k.wr() - 0.5) * R * 1.6, { rx: k.wr() * 3, ry: k.wr() * 3, outline: 0 });
       for (let bz = -R * 0.5; bz <= R * 0.5; bz += 2.4) {
-        k.box(R * 1.1, 0.4, 1.1, T(0x2e2420), x, F, z + bz, { ry: (rr() - 0.5) * 0.3, outline: 0.03 });
-        for (let j = 0; j < 4; j++) k.add(new THREE.ConeGeometry(0.25, 0.9, 5), T(0x6a5a3a), x + (rr() - 0.5) * R, F + 0.5, z + bz, { rz: 1 + rr(), ry: rr() * 6, outline: 0.02 });
+        k.box(R * 1.1, 0.4, 1.1, T(0x2e2420), x, F, z + bz, { ry: (k.wr() - 0.5) * 0.3, outline: 0.03 });
+        for (let j = 0; j < 4; j++) k.add(new THREE.ConeGeometry(0.25, 0.9, 5), T(0x6a5a3a), x + (k.wr() - 0.5) * R, F + 0.5, z + bz, { rz: 1 + k.wr(), ry: k.wr() * 6, outline: 0.02 });
       }
-      scatterDebris(k, x, z, R * 0.7, R * 0.7, 8, rr);
+      scatterDebris(k, x, z, R * 0.7, R * 0.7, 8, k.wr);
     }
     k.hit(R * 0.8, (R + 1.1) / 2, R * 0.8, x, z);
   }
   k.smoke = new THREE.Vector3(FARM_DOMES[0][0], 2, FARM_DOMES[0][1]);
+  k.drop = new THREE.Vector3(3, F, 7);
   if (!wreck) { // tube between the domes
     const [[ax, az, ar], [bx, bz, br]] = FARM_DOMES;
     const L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L;
@@ -606,59 +643,104 @@ function farm(k, wreck) {
 function mast(k) {
   const c = k.c;
   k.apron(24, 0x7a7686);
-  const MX = -3, MZ = -6, H = 40.7;
-  k.box(3.6, 0.7, 3.6, T(CONC), MX, 0, MZ, { outline: 0.05 });
-  const legs = [0, 1, 2].map((i) => { const a = (i * Math.PI * 2) / 3 + 0.3; return [MX + Math.cos(a) * 0.95, MZ + Math.sin(a) * 0.95]; });
-  for (let s = 0; s < 8; s++) for (const [lx, lz] of legs) k.beam([lx, 0.7 + s * 5, lz], [lx, 0.7 + (s + 1) * 5, lz], 0.13, T(s % 2 ? 0xff4f2e : 0xf5f5f5), { outline: 0.03 });
-  for (let l = 0; l < 16; l++) for (let f = 0; f < 3; f++) {
-    const a = legs[f], b = legs[(f + 1) % 3], y0 = 0.7 + l * 2.5, y1 = y0 + 2.5;
-    if (l % 2) k.beam([a[0], y0, a[1]], [b[0], y1, b[1]], 0.05, T(STEEL), { outline: 0 });
-    else k.beam([b[0], y0, b[1]], [a[0], y1, a[1]], 0.05, T(STEEL), { outline: 0 });
-    if (l % 2 === 0) k.beam([a[0], y0, a[1]], [b[0], y0, b[1]], 0.06, T(STEEL), { outline: 0 });
+  const MX = -3, MZ = -6, H = 40.7, SX = 10, SZ = 8;
+  if (!k.wreck) {
+    k.box(3.6, 0.7, 3.6, T(CONC), MX, 0, MZ, { outline: 0.05 });
+    const legs = [0, 1, 2].map((i) => { const a = (i * Math.PI * 2) / 3 + 0.3; return [MX + Math.cos(a) * 0.95, MZ + Math.sin(a) * 0.95]; });
+    for (let s = 0; s < 8; s++) for (const [lx, lz] of legs) k.beam([lx, 0.7 + s * 5, lz], [lx, 0.7 + (s + 1) * 5, lz], 0.13, T(s % 2 ? 0xff4f2e : 0xf5f5f5), { outline: 0.03 });
+    for (let l = 0; l < 16; l++) for (let f = 0; f < 3; f++) {
+      const a = legs[f], b = legs[(f + 1) % 3], y0 = 0.7 + l * 2.5, y1 = y0 + 2.5;
+      if (l % 2) k.beam([a[0], y0, a[1]], [b[0], y1, b[1]], 0.05, T(STEEL), { outline: 0 });
+      else k.beam([b[0], y0, b[1]], [a[0], y1, a[1]], 0.05, T(STEEL), { outline: 0 });
+      if (l % 2 === 0) k.beam([a[0], y0, a[1]], [b[0], y0, b[1]], 0.06, T(STEEL), { outline: 0 });
+    }
+    for (const y of [20.7, 32.7]) {
+      k.add(new THREE.CylinderGeometry(2.3, 2.3, 0.2, 3), T(DARK), MX, y, MZ, { ry: 0.3, outline: 0.04 });
+      k.blinker(MX + 2.0, y + 0.45, MZ, 0xff2a4a, 0.3);
+    }
+    k.cyl(0.08, 0.12, 2.6, 5, T(LIGHT), MX, H, MZ, { outline: 0.02 });
+    k.blinker(MX, H + 2.9, MZ, 0xff2a4a, 0.45);
+    for (const [h, ry, r] of [[17, 0.5, 1.6], [25, 2.6, 1.9], [28.5, 4.4, 1.4]]) {
+      k.at(MX, MZ, ry);
+      k.add(dishGeo(r), D(0xf5f5f5), 0, h, 1.2, { outline: 0.04 });
+      k.beam([0, h, 0.4], [0, h, 1.4], 0.08, T(DARK));
+      k.beam([0, h, 1.4], [0, h, 1.2 + r * 1.2], 0.04, T(DARK), { outline: 0 });
+      k.at();
+    }
+    for (let i = 0; i < 3; i++) { k.at(MX, MZ, (i * Math.PI * 2) / 3 + 1.2); k.box(0.55, 2.8, 0.2, T(LIGHT), 0, 35.6, 1.15, { outline: 0.03 }); k.at(); }
+    // the spinning dish on the top platform
+    const pv = new THREE.Group();
+    const dm = new THREE.Mesh(dishGeo(1.5), D(0xf5f5f5));
+    dm.position.set(0, 1.0, 1.6); dm.rotation.x = -0.4; dm.castShadow = true;
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 1.6), T(DARK)); arm.position.set(0, 1.0, 0.8);
+    pv.add(dm, arm);
+    pv.userData.spin = true;
+    k.dyn(pv, MX, 32.8, MZ);
+    // guy wires to three anchors
+    for (let i = 0; i < 3; i++) {
+      const a = 0.5 + (i * Math.PI * 2) / 3;
+      const ax = MX + Math.cos(a) * 17, az = MZ + Math.sin(a) * 17;
+      k.box(1.8, 1, 1.8, T(CONC), ax, 0, az, { outline: 0.04 });
+      k.box(1.0, 0.3, 1.0, T(c), ax, 1, az, { outline: 0.02 });
+      for (const h of [14, 27, 39.5]) k.beam([ax, 1.1, az], [MX + Math.cos(a) * 0.9, h, MZ + Math.sin(a) * 0.9], 0.045, T(0x2a2540), { outline: 0, seg: 3 });
+    }
+    k.column(1.6, H, MX, MZ);
+    // equipment shed
+    k.box(8, 3.4, 5.5, T(0xe8e4f0), SX, 0, SZ, { outline: 0.1 });
+    k.box(8.5, 0.35, 6, T(c), SX, 3.4, SZ, { outline: 0.04 });
+    k.box(0.2, 2.4, 1.4, T(0x2a2540), SX - 4.02, F, SZ + 0.8, { outline: 0.02 });
+    for (let i = 0; i < 3; i++) k.box(0.08, 0.18, 0.18, G([0x7dff3a, 0x7dff3a, 0xff2a4a][i]), SX - 4.06, 1.8 + i * 0.3, SZ - 0.6, { outline: 0 });
+    for (const dx of [-2, 1.2]) {
+      k.box(1.6, 1.3, 0.9, T(LIGHT), SX + dx, F, SZ + 3.2, { outline: 0.04 });
+      k.add(new THREE.CylinderGeometry(0.5, 0.5, 0.06, 12).rotateX(Math.PI / 2), T(DARK), SX + dx, F + 0.65, SZ + 3.66, { outline: 0 });
+    }
+    for (let i = 0; i < 3; i++) k.box(1.2, 1.6, 0.9, T(0x3a3f50), SX + 4.6, F, SZ - 1.8 + i * 1.3, { outline: 0.03 });
+    k.solid(4, 1.9, 2.75, SX, SZ);
+  } else {
+    const wr = k.wr;
+    // the mast buckled at the base and came down in two folded lengths
+    k.box(3.6, 0.7, 3.6, T(CONC), MX, 0, MZ, { outline: 0.05 });
+    k.box(5, 0.06, 5, T(CHAR), MX, 0.7, MZ, { outline: 0 });
+    for (let i = 0; i < 3; i++) { const a = (i * Math.PI * 2) / 3 + 0.3; k.beam([MX + Math.cos(a) * 0.95, 0.7, MZ + Math.sin(a) * 0.95], [MX + Math.cos(a) * 1.3 + (wr() - 0.5), 2.5 + wr() * 3, MZ + Math.sin(a) * 1.3 + (wr() - 0.5)], 0.13, T(i % 2 ? 0xff4f2e : 0xf5f5f5), { outline: 0.03 }); }
+    const lying = (a, b) => {
+      const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, px = -uz * 0.8, pz = ux * 0.8;
+      const legs = [[px, F + 0.2], [-px, F + 0.2], [0, F + 1.4]].map(([o, y]) => [o, y]);
+      for (let s = 0; s < Math.floor(L / 5); s++) for (const [o, y] of legs) {
+        const t0 = s * 5, t1 = Math.min(L, t0 + 5);
+        const oz = o === 0 ? 0 : (o === px ? pz : -pz);
+        k.beam([a[0] + ux * t0 + o, y, a[1] + uz * t0 + oz], [a[0] + ux * t1 + o, y, a[1] + uz * t1 + oz], 0.13, T(s % 2 ? 0xff4f2e : 0xf5f5f5), { outline: 0.03 });
+      }
+      for (let t = 0; t < L - 1; t += 2.5) k.beam([a[0] + ux * t + px, F + 0.2, a[1] + uz * t + pz], [a[0] + ux * (t + 2.5), F + 1.4, a[1] + uz * (t + 2.5)], 0.05, T(STEEL), { outline: 0 });
+    };
+    lying([MX + 1, MZ - 2], [5, -20]);
+    lying([5.5, -19], [17, -12]);
+    k.add(dishGeo(1.9), D(0xb8b4c8), -8, F + 0.6, -14, { rx: -1.3, ry: 0.7, outline: 0.04 });
+    k.add(dishGeo(1.5), D(0xb8b4c8), 9, F + 0.5, -16, { rx: 1.2, ry: 2.1, outline: 0.04 });
+    for (let i = 0; i < 3; i++) {
+      const a = 0.5 + (i * Math.PI * 2) / 3, ax = MX + Math.cos(a) * 17, az = MZ + Math.sin(a) * 17;
+      k.box(1.8, 1, 1.8, T(CONC), ax, 0, az, { outline: 0.04 });
+      k.beam([ax, 1.1, az], [ax - Math.cos(a) * 3, F, az - Math.sin(a) * 3 + 0.5], 0.045, T(0x2a2540), { outline: 0, seg: 3 });
+    }
+    scatterDebris(k, MX, MZ, 4, 4, 8, wr);
+    // the shed burnt out
+    k.box(8.6, 0.06, 6, T(CHAR), SX, F, SZ, { outline: 0 });
+    for (let x = -3.5; x <= 3.5; x += 1.75) for (const s of [-1, 1]) k.box(1.7, 0.4 + wr() * 1.8, 0.3, T(wr() < 0.5 ? 0x8a8698 : 0x4a4652), SX + x, 0, SZ + s * 2.6, { outline: 0.04 });
+    for (const s of [-1, 1]) k.box(0.3, 0.4 + wr() * 1.5, 5, T(0x4a4652), SX + s * 3.85, 0, SZ, { outline: 0.04 });
+    k.box(8, 0.3, 5, T(c), SX + 0.5, 0.9, SZ + 0.4, { rx: 0.18, rz: -0.22, outline: 0.05 });
+    k.box(1.6, 1.3, 0.9, T(LIGHT), SX - 2, F, SZ + 3.6, { rz: 1.4, outline: 0.04 });
+    scatterDebris(k, SX, SZ, 3.5, 2.5, 8, wr);
   }
-  for (const y of [20.7, 32.7]) {
-    k.add(new THREE.CylinderGeometry(2.3, 2.3, 0.2, 3), T(DARK), MX, y, MZ, { ry: 0.3, outline: 0.04 });
-    k.blinker(MX + 2.0, y + 0.45, MZ, 0xff2a4a, 0.3);
-  }
-  k.cyl(0.08, 0.12, 2.6, 5, T(LIGHT), MX, H, MZ, { outline: 0.02 });
-  k.blinker(MX, H + 2.9, MZ, 0xff2a4a, 0.45);
-  for (const [h, ry, r] of [[17, 0.5, 1.6], [25, 2.6, 1.9], [28.5, 4.4, 1.4]]) {
-    k.at(MX, MZ, ry);
-    k.add(dishGeo(r), D(0xf5f5f5), 0, h, 1.2, { outline: 0.04 });
-    k.beam([0, h, 0.4], [0, h, 1.4], 0.08, T(DARK));
-    k.beam([0, h, 1.4], [0, h, 1.2 + r * 1.2], 0.04, T(DARK), { outline: 0 });
-    k.at();
-  }
-  for (let i = 0; i < 3; i++) { k.at(MX, MZ, (i * Math.PI * 2) / 3 + 1.2); k.box(0.55, 2.8, 0.2, T(LIGHT), 0, 35.6, 1.15, { outline: 0.03 }); k.at(); }
-  // the spinning dish on the top platform
-  const pv = new THREE.Group();
-  const dm = new THREE.Mesh(dishGeo(1.5), D(0xf5f5f5));
-  dm.position.set(0, 1.0, 1.6); dm.rotation.x = -0.4; dm.castShadow = true;
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 1.6), T(DARK)); arm.position.set(0, 1.0, 0.8);
-  pv.add(dm, arm);
-  pv.userData.spin = true;
-  k.dyn(pv, MX, 32.8, MZ);
-  // guy wires to three anchors
-  for (let i = 0; i < 3; i++) {
-    const a = 0.5 + (i * Math.PI * 2) / 3;
-    const ax = MX + Math.cos(a) * 17, az = MZ + Math.sin(a) * 17;
-    k.box(1.8, 1, 1.8, T(CONC), ax, 0, az, { outline: 0.04 });
-    k.box(1.0, 0.3, 1.0, T(c), ax, 1, az, { outline: 0.02 });
-    for (const h of [14, 27, 39.5]) k.beam([ax, 1.1, az], [MX + Math.cos(a) * 0.9, h, MZ + Math.sin(a) * 0.9], 0.045, T(0x2a2540), { outline: 0, seg: 3 });
-  }
-  k.column(1.6, H, MX, MZ);
-  // equipment shed
-  const SX = 10, SZ = 8;
-  k.box(8, 3.4, 5.5, T(0xe8e4f0), SX, 0, SZ, { outline: 0.1 });
-  k.box(8.5, 0.35, 6, T(c), SX, 3.4, SZ, { outline: 0.04 });
-  k.box(0.2, 2.4, 1.4, T(0x2a2540), SX - 4.02, F, SZ + 0.8, { outline: 0.02 });
-  for (let i = 0; i < 3; i++) k.box(0.08, 0.18, 0.18, G([0x7dff3a, 0x7dff3a, 0xff2a4a][i]), SX - 4.06, 1.8 + i * 0.3, SZ - 0.6, { outline: 0 });
-  for (const dx of [-2, 1.2]) {
-    k.box(1.6, 1.3, 0.9, T(LIGHT), SX + dx, F, SZ + 3.2, { outline: 0.04 });
-    k.add(new THREE.CylinderGeometry(0.5, 0.5, 0.06, 12).rotateX(Math.PI / 2), T(DARK), SX + dx, F + 0.65, SZ + 3.66, { outline: 0 });
-  }
-  for (let i = 0; i < 3; i++) k.box(1.2, 1.6, 0.9, T(0x3a3f50), SX + 4.6, F, SZ - 1.8 + i * 1.3, { outline: 0.03 });
-  k.solid(4, 1.9, 2.75, SX, SZ);
+  k.hit(1.8, 20.6, 1.8, MX, MZ);
+  k.hit(4, 1.9, 2.75, SX, SZ);
+  k.smoke = new THREE.Vector3(MX, 2, MZ);
+  k.drop = new THREE.Vector3(-2, F, 9);
+  // transponder rack by the shed door: the raid spot
+  k.box(0.8, 2.2, 1.2, T(DARK), SX - 4.6, F, SZ + 2.8, { outline: 0.05 });
+  for (let i = 0; i < 4; i++) k.box(0.05, 0.1, 0.9, G(i % 2 ? 0x2ee6ff : 0x7dff3a), SX - 5.02, F + 0.5 + i * 0.4, SZ + 2.8, { outline: 0 });
+  k.box(0.84, 0.2, 1.24, T(c), SX - 4.6, F + 2.2, SZ + 2.8, { outline: 0 });
+  k.cyl(0.03, 0.03, 1.6, 4, T(LIGHT), SX - 4.6, F + 2.4, SZ + 3.2, { outline: 0 });
+  k.ball(0.1, G(0xff2a4a), SX - 4.6, F + 4.05, SZ + 3.2, { outline: 0 });
+  k.raidAt(SX - 6.6, SZ + 1.2, 0x2ee6ff);
   // cable tray from the shed to the mast
   const t0 = [SX - 4.2, SZ - 1.5], t1 = [MX + 1.4, MZ + 1.6];
   k.strip(t0, t1, 0.7, 0.15, T(STEEL), 1.3);
@@ -694,40 +776,77 @@ function kiosk(k) {
   k.cyl(2.2, 2.2, 0.05, 16, T(0x4a3a2a), 0, F + 0.8, 0, { outline: 0 });
   for (let i = 0; i < 6; i++) { const a = i * 1.05; k.add(new THREE.ConeGeometry(0.45, 1.4 + (i % 3) * 0.5, 5), T(i % 2 ? 0xb36bff : 0x2ec4ff), Math.sin(a) * 1.3, F + 1.5, Math.cos(a) * 1.3, { outline: 0.03 }); }
   k.column(2.6, 1.1, 0, 0);
-  // the kiosk
-  k.at(0, -13, 0);
-  k.box(9.2, 0.5, 5.2, T(c), 0, 0, 0, { outline: 0.04 });
-  k.box(9, 3.6, 5, T(CREAM), 0, 0, 0, { outline: 0.1 });
-  k.box(6.4, 1.5, 0.1, G(0xffe6a8), 0, 1.4, 2.52, { outline: 0 });
-  k.box(7.2, 0.15, 1.0, T(WOOD), 0, 1.25, 2.9, { outline: 0.03 });
-  k.box(9.8, 0.4, 5.8, T(c), 0, 3.6, 0, { outline: 0.05 });
-  for (let i = 0; i < 6; i++) k.box(1.6, 0.08, 2.6, T(i % 2 ? 0xffffff : c), -4 + i * 1.6, 3.3, 3.6, { rx: 0.32, outline: 0.02 });
-  for (let i = 0; i < 6; i++) k.add(i % 2 ? new THREE.BoxGeometry(0.4, 0.4, 0.4) : new THREE.SphereGeometry(0.22, 6, 4), T([0xff4f2e, YEL, 0x7dff3a, 0xff7ad9, 0x2ec4ff, 0xff9f1c][i]), -2.6 + i * 1.05, 1.55, 2.9, { outline: 0.02 });
-  for (const s of [-1, 1]) {
-    crate(k, s * 6.1, F, 0.4, 1.2, 0x9a6a3a, 0.2 * s);
-    crate(k, s * 6.1, F + 1.2, 0.4, 1.0, s < 0 ? 0x2b59c3 : 0xd9482b, -0.3 * s);
-    crate(k, s * 6.4, F, -1.2, 1.1, 0x9a6a3a, 0.5);
-  }
-  // billboard
-  for (const s of [-1, 1]) k.box(0.4, 12.6, 0.4, T(DARK), s * 4.5, 0, -3.75, { outline: 0.04 });
-  k.box(12.6, 5.6, 0.36, T(c), 0, 7.2, -3.25, { outline: 0.08 });
-  k.text('TRADING KIOSK', 0, 10, -3.25, 0, 11.6, { fg: '#ffd23f', bg: '#241a3a', off: 0.21 });
-  for (const x of [-4, 0, 4]) { k.beam([x, 12.6, -3.2], [x, 13.2, -2.0], 0.05, T(DARK)); k.box(0.7, 0.2, 0.3, G(0xfff3b0), x, 12.95, -1.9, { outline: 0 }); }
-  k.solid(4.6, 1.9, 2.6, 0, 0);
-  k.at();
-  // stalls facing the centre
-  const awn = [c, 0xff2e88, 0x2ec4ff];
-  [[-15, -1], [15, -1], [-11, 14]].forEach(([x, z], i) => {
-    k.at(x, z, Math.atan2(-x, -z));
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.box(0.14, 2.7, 0.14, T(WOOD), sx * 1.7, F, sz * 1.1, { outline: 0.02 });
-    k.box(3.4, 0.9, 1.6, T(WOOD), 0, F, 0.2, { outline: 0.04 });
-    k.box(3.42, 0.45, 0.05, T(awn[i]), 0, F + 0.4, 1.03, { outline: 0 });
-    k.add(new THREE.ConeGeometry(2.7, 1.1, 4).rotateY(Math.PI / 4).scale(1, 1, 0.72), T(awn[i]), 0, F + 3.25, 0, { outline: 0.05 });
-    for (let j = 0; j < 7; j++) k.add(j % 3 ? new THREE.SphereGeometry(0.18 + rr() * 0.12, 6, 4) : new THREE.BoxGeometry(0.4, 0.3, 0.4), T([0xff4f2e, YEL, 0x7dff3a, 0xff7ad9, 0xff9f1c, 0x2ec4ff][Math.floor(rr() * 6)]), -1.3 + j * 0.43, F + 1.1, 0.2 + (rr() - 0.5) * 0.8, { outline: 0.02 });
-    crate(k, 2.4, F, -0.4, 1.0, 0x9a6a3a, 0.3);
-    k.solid(1.8, 0.7, 1.2, 0, 0.1);
+  if (!k.wreck) {
+    // the kiosk
+    k.at(0, -13, 0);
+    k.box(9.2, 0.5, 5.2, T(c), 0, 0, 0, { outline: 0.04 });
+    k.box(9, 3.6, 5, T(CREAM), 0, 0, 0, { outline: 0.1 });
+    k.box(6.4, 1.5, 0.1, G(0xffe6a8), 0, 1.4, 2.52, { outline: 0 });
+    k.box(7.2, 0.15, 1.0, T(WOOD), 0, 1.25, 2.9, { outline: 0.03 });
+    k.box(9.8, 0.4, 5.8, T(c), 0, 3.6, 0, { outline: 0.05 });
+    for (let i = 0; i < 6; i++) k.box(1.6, 0.08, 2.6, T(i % 2 ? 0xffffff : c), -4 + i * 1.6, 3.3, 3.6, { rx: 0.32, outline: 0.02 });
+    for (let i = 0; i < 6; i++) k.add(i % 2 ? new THREE.BoxGeometry(0.4, 0.4, 0.4) : new THREE.SphereGeometry(0.22, 6, 4), T([0xff4f2e, YEL, 0x7dff3a, 0xff7ad9, 0x2ec4ff, 0xff9f1c][i]), -2.6 + i * 1.05, 1.55, 2.9, { outline: 0.02 });
+    for (const s of [-1, 1]) {
+      crate(k, s * 6.1, F, 0.4, 1.2, 0x9a6a3a, 0.2 * s);
+      crate(k, s * 6.1, F + 1.2, 0.4, 1.0, s < 0 ? 0x2b59c3 : 0xd9482b, -0.3 * s);
+      crate(k, s * 6.4, F, -1.2, 1.1, 0x9a6a3a, 0.5);
+    }
+    // billboard
+    for (const s of [-1, 1]) k.box(0.4, 12.6, 0.4, T(DARK), s * 4.5, 0, -3.75, { outline: 0.04 });
+    k.box(12.6, 5.6, 0.36, T(c), 0, 7.2, -3.25, { outline: 0.08 });
+    k.text('TRADING KIOSK', 0, 10, -3.25, 0, 11.6, { fg: '#ffd23f', bg: '#241a3a', off: 0.21 });
+    for (const x of [-4, 0, 4]) { k.beam([x, 12.6, -3.2], [x, 13.2, -2.0], 0.05, T(DARK)); k.box(0.7, 0.2, 0.3, G(0xfff3b0), x, 12.95, -1.9, { outline: 0 }); }
+    k.solid(4.6, 1.9, 2.6, 0, 0);
     k.at();
-  });
+    // stalls facing the centre
+    const awn = [c, 0xff2e88, 0x2ec4ff];
+    [[-15, -1], [15, -1], [-11, 14]].forEach(([x, z], i) => {
+      k.at(x, z, Math.atan2(-x, -z));
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.box(0.14, 2.7, 0.14, T(WOOD), sx * 1.7, F, sz * 1.1, { outline: 0.02 });
+      k.box(3.4, 0.9, 1.6, T(WOOD), 0, F, 0.2, { outline: 0.04 });
+      k.box(3.42, 0.45, 0.05, T(awn[i]), 0, F + 0.4, 1.03, { outline: 0 });
+      k.add(new THREE.ConeGeometry(2.7, 1.1, 4).rotateY(Math.PI / 4).scale(1, 1, 0.72), T(awn[i]), 0, F + 3.25, 0, { outline: 0.05 });
+      for (let j = 0; j < 7; j++) k.add(j % 3 ? new THREE.SphereGeometry(0.18 + k.mr() * 0.12, 6, 4) : new THREE.BoxGeometry(0.4, 0.3, 0.4), T([0xff4f2e, YEL, 0x7dff3a, 0xff7ad9, 0xff9f1c, 0x2ec4ff][Math.floor(k.mr() * 6)]), -1.3 + j * 0.43, F + 1.1, 0.2 + (k.mr() - 0.5) * 0.8, { outline: 0.02 });
+      crate(k, 2.4, F, -0.4, 1.0, 0x9a6a3a, 0.3);
+      k.solid(1.8, 0.7, 1.2, 0, 0.1);
+      k.at();
+    });
+  } else {
+    const wr = k.wr;
+    // the kiosk gutted, its billboard face-down behind it
+    k.at(0, -13, 0);
+    k.box(10, 0.06, 6, T(CHAR), 0, F, 0, { outline: 0 });
+    for (let x = -4; x <= 4; x += 2) for (const s of [-1, 1]) k.box(2, 0.4 + wr() * 2, 0.3, T(wr() < 0.5 ? 0x8a8070 : 0x4a4448), x, 0, s * 2.4, { outline: 0.04 });
+    for (const s of [-1, 1]) k.box(0.3, 0.5 + wr() * 1.6, 4.6, T(0x4a4448), s * 4.4, 0, 0, { outline: 0.04 });
+    k.box(9.4, 0.35, 5.4, T(c), 0.3, 1.2, 0.2, { rx: 0.2, rz: 0.15, outline: 0.05 });
+    for (let i = 0; i < 6; i++) k.box(1.6, 0.08, 2.6, T(i % 2 ? 0xd8d4e8 : c), -5 + wr() * 10, F + 0.05, 3.5 + wr() * 2.5, { ry: wr() * 3, outline: 0.02 });
+    for (const s of [-1, 1]) k.box(0.4, 1.5 + wr() * 2, 0.4, T(DARK), s * 4.5, 0, -3.75, { rz: (wr() - 0.5) * 0.4, outline: 0.04 });
+    k.box(12.6, 0.36, 5.6, T(c), 0, F + 0.5, -7.6, { rx: 0.12, rz: 0.05, outline: 0.06 });
+    for (const s of [-1, 1]) { crate(k, s * 6.1, F, 0.4, 1.2, 0x4a3a2a, 0.5 * s); crate(k, s * 6.8, F, -1.6, 1.0, 0x3a2a22, 0.9); }
+    scatterDebris(k, 0, 0, 4.5, 3, 12, wr);
+    k.at();
+    // the stalls knocked flat
+    const awnW = [c, 0xff2e88, 0x2ec4ff];
+    [[-15, -1], [15, -1], [-11, 14]].forEach(([x, z], i) => {
+      k.at(x, z, Math.atan2(-x, -z));
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.box(0.14, 0.4 + wr() * 1.2, 0.14, T(0x4a3a2a), sx * 1.7, F, sz * 1.1, { outline: 0.02 });
+      k.box(3.4, 0.9, 1.6, T(0x5a3a22), 0.3, F + 0.45, 0.6, { rx: 1.3, outline: 0.04 });
+      k.add(new THREE.ConeGeometry(2.7, 1.1, 4).rotateY(Math.PI / 4).scale(1, 1, 0.72), T(awnW[i]), -0.8, F + 0.9, -1.2, { rz: 0.9 + wr() * 0.4, outline: 0.05 });
+      for (let j = 0; j < 6; j++) k.add(new THREE.SphereGeometry(0.2, 6, 4), T([0xff4f2e, YEL, 0x7dff3a, 0xff7ad9][j % 4]), (wr() - 0.5) * 5, F + 0.2, 1 + wr() * 2.5, { outline: 0.02 });
+      crate(k, 2.4, F, -0.4, 1.0, 0x4a3a2a, 0.9);
+      k.at();
+    });
+  }
+  k.hit(4.6, 2.0, 2.6, 0, -13);
+  for (const [x, z] of [[-15, -1], [15, -1], [-11, 14]]) { k.at(x, z, Math.atan2(-x, -z)); k.hit(1.8, 1.5, 1.2, 0, 0); k.at(); }
+  k.smoke = new THREE.Vector3(0, 1.5, -13);
+  k.drop = new THREE.Vector3(-8, F, 0.5);
+  // a stack of mystery crates at the counter: the raid spot
+  for (const [x, y, z, s, ry] of [[4.4, 0, -9.0, 1.1, 0.2], [5.7, 0, -9.2, 1.0, -0.3], [5.0, 1.05, -9.1, 0.9, 0.5]]) {
+    crate(k, x, F + y, z, s, 0x7b2ff7, ry);
+    k.text('?', x + Math.sin(ry) * (s / 2 + 0.01), F + y + s * 0.5, z + Math.cos(ry) * (s / 2 + 0.01), ry, s * 0.62, { fg: '#ff2e88', bg: '#2a1240', back: false, off: 0.02 });
+  }
+  k.raidAt(0, -7.8, 0xff2e88);
   // hover-cart
   k.at(13, 12, 2.4);
   k.box(2.4, 0.9, 4.4, T(YEL), 0, 0.75, 0, { outline: 0.06 });
@@ -771,22 +890,41 @@ function shack(k) {
   k.apron(25, 0x6e6058, 0x4a3a32);
   for (let i = 0; i < 6; i++) { const a = rr() * 6.3, r = 5 + rr() * 15; k.cyl(0.8 + rr() * 1.4, 0.8 + rr() * 1.4, 0.04, 12, T(0x584a48), Math.sin(a) * r, F - 0.02, Math.cos(a) * r, { outline: 0 }); }
   const patchCols = [0x8a8698, 0x5a6a5a, 0xa05a2a, 0x6b5a4a, 0x4a5a7a];
-  // hut A with the name board
+  if (!k.wreck) {
+    // hut A with the name board
+    k.at(-9, -9, 0.2);
+    k.box(9, 3.8, 7, T(RUST), 0, 0, 0, { outline: 0.1 });
+    for (let i = 0; i < 6; i++) k.box(1 + k.mr() * 2, 0.8 + k.mr() * 1.4, 0.08, T(patchCols[i % 5]), -3.3 + k.mr() * 6.6, 0.5 + k.mr() * 2, 3.53, { rz: (k.mr() - 0.5) * 0.3, outline: 0.02 });
+    for (let i = 0; i < 4; i++) k.box(0.08, 0.8 + k.mr() * 1.4, 1 + k.mr() * 2, T(patchCols[(i + 2) % 5]), 4.53, 0.5 + k.mr() * 2, -2.5 + k.mr() * 5, { rx: (k.mr() - 0.5) * 0.3, outline: 0.02 });
+    k.box(9.8, 0.25, 7.8, T(0x8a7a6a), 0, 3.85, 0, { rx: 0.1, outline: 0.05 });
+    for (let i = 0; i < 9; i++) k.box(0.14, 0.12, 7.8, T(0x6a5a4a), -4.4 + i * 1.1, 4.02, 0, { rx: 0.1, outline: 0 });
+    k.cyl(0.3, 0.3, 2.6, 8, T(DARK), 3, 3.8, -2, { outline: 0.03 });
+    k.box(0.9, 0.12, 0.9, T(DARK), 3, 6.5, -2, { outline: 0.02 });
+    k.box(1.4, 2.4, 0.15, T(0x3a2a22), -1.6, F - 0.1, 3.55, { outline: 0.03 });
+    k.box(1.8, 1.0, 0.1, G(0xffa040), 2, 1.5, 3.55, { outline: 0 });
+    for (let i = 0; i < 4; i++) k.box(0.07, 1.0, 0.07, T(DARK), 1.3 + i * 0.47, 1.5, 3.62, { outline: 0 });
+    k.text('SCRAP SHACK', 0.2, 3.05, 3.55, 0, 5.2, { fg: '#ffb347', bg: '#3a2418', rz: -0.04, back: false });
+    k.box(0.5, 0.2, 0.3, G(0xff7a1a), -1.6, 2.7, 3.7, { outline: 0 });
+    k.solid(4.5, 1.9, 3.5, 0, 0);
+    k.at();
+  } else {
+    const wr = k.wr;
+    // hut A collapsed in on itself
+    k.at(-9, -9, 0.2);
+    k.box(9.6, 0.06, 7.6, T(CHAR), 0, F, 0, { outline: 0 });
+    for (let x = -3.5; x <= 3.5; x += 1.75) for (const s of [-1, 1]) k.box(1.7, 0.4 + wr() * 2.2, 0.25, T(wr() < 0.5 ? RUST : 0x3a2e2a), x, 0, s * 3.4, { rz: (wr() - 0.5) * 0.2, outline: 0.04 });
+    for (const s of [-1, 1]) k.box(0.25, 0.5 + wr() * 1.8, 6.6, T(0x3a2e2a), s * 4.4, 0, 0, { outline: 0.04 });
+    k.box(9.8, 0.25, 7.8, T(0x5a4e44), 0.4, 1.4, 0.3, { rx: 0.28, rz: -0.12, outline: 0.05 });
+    k.beam([3, F, -2], [5.5, 0.8, 1.2], 0.3, T(DARK), { outline: 0.03 });
+    for (let i = 0; i < 6; i++) k.box(1 + wr() * 2, 0.08, 0.8 + wr() * 1.4, T(patchCols[i % 5]), (wr() - 0.5) * 12, F + 0.05, (wr() - 0.5) * 10, { ry: wr() * 3, outline: 0.02 });
+    scatterDebris(k, 0, 0, 4, 3, 14, wr);
+    k.at();
+  }
   k.at(-9, -9, 0.2);
-  k.box(9, 3.8, 7, T(RUST), 0, 0, 0, { outline: 0.1 });
-  for (let i = 0; i < 6; i++) k.box(1 + rr() * 2, 0.8 + rr() * 1.4, 0.08, T(patchCols[i % 5]), -3.3 + rr() * 6.6, 0.5 + rr() * 2, 3.53, { rz: (rr() - 0.5) * 0.3, outline: 0.02 });
-  for (let i = 0; i < 4; i++) k.box(0.08, 0.8 + rr() * 1.4, 1 + rr() * 2, T(patchCols[(i + 2) % 5]), 4.53, 0.5 + rr() * 2, -2.5 + rr() * 5, { rx: (rr() - 0.5) * 0.3, outline: 0.02 });
-  k.box(9.8, 0.25, 7.8, T(0x8a7a6a), 0, 3.85, 0, { rx: 0.1, outline: 0.05 });
-  for (let i = 0; i < 9; i++) k.box(0.14, 0.12, 7.8, T(0x6a5a4a), -4.4 + i * 1.1, 4.02, 0, { rx: 0.1, outline: 0 });
-  k.cyl(0.3, 0.3, 2.6, 8, T(DARK), 3, 3.8, -2, { outline: 0.03 });
-  k.box(0.9, 0.12, 0.9, T(DARK), 3, 6.5, -2, { outline: 0.02 });
-  k.box(1.4, 2.4, 0.15, T(0x3a2a22), -1.6, F - 0.1, 3.55, { outline: 0.03 });
-  k.box(1.8, 1.0, 0.1, G(0xffa040), 2, 1.5, 3.55, { outline: 0 });
-  for (let i = 0; i < 4; i++) k.box(0.07, 1.0, 0.07, T(DARK), 1.3 + i * 0.47, 1.5, 3.62, { outline: 0 });
-  k.text('SCRAP SHACK', 0.2, 3.05, 3.55, 0, 5.2, { fg: '#ffb347', bg: '#3a2418', rz: -0.04, back: false });
-  k.box(0.5, 0.2, 0.3, G(0xff7a1a), -1.6, 2.7, 3.7, { outline: 0 });
-  k.solid(4.5, 1.9, 3.5, 0, 0);
+  k.hit(4.5, 1.9, 3.5, 0, 0);
+  k.smoke = k.P(0, 1.5, 0);
   k.at();
+  k.drop = new THREE.Vector3(-1, F, 3);
   // hut B: two storeys, a ladder and a tarp
   k.at(9, -12, -0.35);
   k.box(6, 3.4, 5, T(0x5a5f6e), 0, 0, 0, { outline: 0.1 });
@@ -822,6 +960,10 @@ function shack(k) {
   const cubeCols = [0x7a3a2a, 0x5a5f6e, 0xa05a2a, 0x4a6a5a, 0x8a8698];
   for (let i = 0; i < 6; i++) k.box(1.2, 1.2, 1.2, T(cubeCols[i % 5]), -1.6 + (i % 3) * 1.3, F + Math.floor(i / 3) * 1.2, 3.2 + (rr() - 0.5) * 0.3, { ry: (rr() - 0.5) * 0.4, outline: 0.04 });
   k.solid(2.3, 3.9, 1.7, 0, 0);
+  // a pile of pressed scrap plates beside it: the raid spot
+  for (let i = 0; i < 7; i++) k.box(1.7, 0.1, 1.15, T(i % 2 ? STEEL : 0x8a8698), -3.4 + (rr() - 0.5) * 0.2, F + 0.05 + i * 0.11, -1.4 + (rr() - 0.5) * 0.2, { ry: (rr() - 0.5) * 0.5, outline: 0.02 });
+  for (const s of [-1, 1]) k.box(1.6, 0.1, 1.1, T(0x6a6e80), -3.4 + s * 1.1, F + 0.55, -1.4, { rz: s * 1.1, outline: 0.02 });
+  k.raidAt(-0.5, -3.6, 0xff9f1c);
   k.at();
   // parts heaps
   for (const [x, z] of [[3, 16], [-2, -19], [19, -6]]) junkHeap(k, x, z, 3, 1.1, 9, rr);
@@ -864,15 +1006,37 @@ function shack(k) {
 function junk(k) {
   const c = k.c, rr = k.rr;
   k.apron(27, 0x8a8478, 0x5a5048);
-  junkHeap(k, -10, -9, 12, 6, 56, rr);
   junkHeap(k, -17, 6, 6.5, 3, 18, rr);
-  k.sphere(15, -10, -8.75, -9); // caps matching the mounds, so you can climb them
-  k.sphere(8.54, -17, -5.29, 6);
-  // rocket nose sticking out of the heap
-  k.add(new THREE.ConeGeometry(2.2, 6.5, 12), T(LIGHT), -7, 6.4, -11.5, { rx: 0.9, rz: -0.5, outline: 0.08 });
-  k.add(new THREE.TorusGeometry(2.0, 0.2, 4, 16).rotateX(Math.PI / 2), T(c), -7.9, 5.2, -13, { rx: 0.9, rz: -0.5, outline: 0 });
-  k.box(0.2, 2.6, 2.2, T(0xff4f2e), -13, 5.6, -13, { rz: 0.4, ry: 0.6, outline: 0.04 });
-  k.flag(-10, -9, 6, c, 6.1);
+  k.sphere(8.54, -17, -5.29, 6); // a cap matching the mound, so you can climb it
+  if (!k.wreck) {
+    // the big heap, a rocket nose sticking out of it, a flag on top
+    junkHeap(k, -10, -9, 12, 6, 56, k.mr);
+    k.sphere(15, -10, -8.75, -9);
+    k.add(new THREE.ConeGeometry(2.2, 6.5, 12), T(LIGHT), -7, 6.4, -11.5, { rx: 0.9, rz: -0.5, outline: 0.08 });
+    k.add(new THREE.TorusGeometry(2.0, 0.2, 4, 16).rotateX(Math.PI / 2), T(c), -7.9, 5.2, -13, { rx: 0.9, rz: -0.5, outline: 0 });
+    k.box(0.2, 2.6, 2.2, T(0xff4f2e), -13, 5.6, -13, { rz: 0.4, ry: 0.6, outline: 0.04 });
+    k.flag(-10, -9, 6, c, 6.1);
+  } else {
+    // blown flat: a scorched low mound with burnt wreckage flung about
+    const wr = k.wr;
+    k.add(new THREE.CylinderGeometry(4, 13, 2, 16, 1), T(0x3e3638), -10, F + 0.95, -9, { outline: 0.06 });
+    k.sphere(43.25, -10, -40.99, -9);
+    const burnt = [CHAR, 0x3a3540, 0x4a3f3a, 0x55505e, 0x5a3a2a];
+    for (let i = 0; i < 40; i++) {
+      const r = Math.sqrt(wr()) * 14, a = wr() * Math.PI * 2, x = -10 + Math.sin(a) * r, z = -9 + Math.cos(a) * r;
+      if (Math.hypot(x, z) > 25) continue;
+      const y = F + (r < 13 ? 2 * Math.min(1, (13 - r) / 9) : 0);
+      const rot = { rx: (wr() - 0.5) * 1.2, ry: wr() * 6.3, rz: (wr() - 0.5) * 1.2, outline: 0.04 };
+      if (i % 4 === 0) k.add(new THREE.TorusGeometry(0.85, 0.36, 6, 12), T(TYRE), x, y + 0.2, z, rot);
+      else if (i % 4 === 1) k.add(new THREE.CylinderGeometry(0.12, 0.12, 2 + wr() * 3, 5), T(DARK), x, y + 0.4, z, rot);
+      else k.add(new THREE.BoxGeometry(0.8 + wr() * 2, 0.3 + wr() * 0.8, 0.8 + wr() * 1.5), T(burnt[i % 5]), x, y + 0.2, z, rot);
+    }
+    k.add(new THREE.ConeGeometry(2.2, 6.5, 12), T(0x8a8698), -2, F + 1.6, -15, { rz: 1.45, ry: 0.4, outline: 0.08 });
+    k.beam([-10, 2.2, -9], [-12, 5.2, -10.5], 0.1, T(DARK));
+  }
+  k.hit(8.5, 3, 8.5, -10, -9);
+  k.smoke = new THREE.Vector3(-10, 3, -9);
+  k.drop = new THREE.Vector3(4, F, 0);
   // half-buried rover
   k.cyl(2.8, 5, 1.0, 12, T(0x6b6672), 11, 0, -10, { outline: 0.04 });
   k.at(11, -10, 0.7, 0.6, 0.18, 0.38);
@@ -910,6 +1074,17 @@ function junk(k) {
   for (const x of [1, 4.5]) k.beam([x, 0, -2.6], [x, 2.2, -2.6], 0.05, T(DARK), { outline: 0.02 });
   k.beam([1, 2.1, -2.6], [4.5, 2.1, -2.6], 0.02, T(DARK), { outline: 0 });
   for (let i = 0; i < 3; i++) k.box(0.7, 0.9, 0.04, T(patch(i + 2)), 1.6 + i * 1.1, 1.6, -2.6, { outline: 0 });
+  // the scavenger's junk-bot on its charging pad: the raid spot
+  k.cyl(1.0, 1.1, 0.12, 16, T(DARK), 1.6, F, 3.4, { outline: 0.03 });
+  k.ring(0.85, 0.06, G(0x2ee6ff), 1.6, F + 0.14, 3.4);
+  k.box(0.75, 0.55, 0.55, T(0xc9a227), 1.6, F + 0.42, 3.4, { outline: 0.04 });
+  for (const s of [-1, 1]) k.add(new THREE.CylinderGeometry(0.22, 0.22, 0.12, 8).rotateX(Math.PI / 2), T(TYRE), 1.6 + s * 0.3, F + 0.34, 3.4 + 0.3, { outline: 0.02 });
+  k.add(new THREE.SphereGeometry(0.26, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), T(0x8a8698), 1.6, F + 0.97, 3.4, { outline: 0.03 });
+  k.box(0.22, 0.08, 0.05, G(0x2ee6ff), 1.6, F + 1.05, 3.67, { outline: 0 });
+  k.beam([1.75, F + 1.2, 3.35], [1.85, F + 1.75, 3.3], 0.02, T(DARK), { outline: 0 });
+  k.ball(0.06, G(0xff2a4a), 1.85, F + 1.78, 3.3, { outline: 0 });
+  k.beam([1.6, F + 0.1, 2.4], [0.2, F + 0.05, 1.1], 0.04, T(0x1a1428), { outline: 0, seg: 3 });
+  k.raidAt(-1.4, 3.6, 0x2ee6ff);
   k.at();
   k.sign('JUNK PILE', 0, 24, { w: 8, rz: -0.06, fg: '#ffd23f', bg: '#4a3a2a', y: 2.8 });
   k.flag(5.5, 23, 8);
@@ -922,14 +1097,21 @@ const VARIANTS = 1; // prop scatter variants per look (each one is a separate ba
 const KIND_SEED = { tower: 11, depot: 23, farm: 37, mast: 41, kiosk: 53, shack: 67, junk: 79 };
 const templates = new Map();
 
-// A baked model for one look. Returns { root, cols, hits, raid, smoke } in the outpost's local
-// frame (y up, ground at y = 0, the yard centre at the origin kept clear). Clone root to place it.
+// A baked model for one look, in the outpost's local frame (y up, ground at y = 0, the yard centre
+// at the origin kept clear). Clone root to place it. Fields:
+//   root  - THREE.Group to clone
+//   cols  - collider specs { type: 'box'|'sphere'|'cyl', ... } (box: x, y, z, hx, hy, hz, yaw)
+//   hits  - boxes { x, y, z, hx, hy, hz, yaw } a blast must reach to damage the main building
+//   raid  - Vector3 stand point for raiding (null on a wreck)
+//   smoke - Vector3 where the wreck smoulders (the main building's centre)
+//   drop  - Vector3 open apron spot 10-16 m from the main building where loot can land
+// wreck = true gives the same compound with the main building reduced to rubble.
 export function outpostTemplate(kind, color, variant = 0, wreck = false) {
   variant %= VARIANTS;
   const key = `${kind}|${color}|${variant}|${wreck ? 1 : 0}`;
   let t = templates.get(key);
   if (!t) {
-    const k = new Kit(color, mulberry32(KIND_SEED[kind] * 977 + variant * 131 + (wreck ? 7 : 0)));
+    const k = new Kit(color, KIND_SEED[kind] * 977 + variant * 131, wreck);
     BUILD[kind](k, wreck);
     t = k.finish();
     templates.set(key, t);
