@@ -620,6 +620,8 @@ class Game {
         }
       }
     }
+    // other things that can be blown up (outposts, road traffic) register here: fn(pos, radius, damage, owner)
+    for (const fn of this.blastHooks || []) fn(pos, radius, damage, owner);
     for (const t of this.enemies.targets()) {
       if (owner === t.faction) continue;
       const d = pos.distanceTo(t.center);

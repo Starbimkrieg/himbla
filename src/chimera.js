@@ -5,7 +5,7 @@ import { mulberry32 } from './rng.js';
 // Things with bodies. Two or more of these in the reactor make a Chimera.
 export const LIVING = ['person', 'voidling', 'mite', 'car', 'pirate', 'sapling'];
 // Things that only mutate whatever they get spliced into.
-export const MODIFIERS = { water: 'void', rock: 'crystal', slickrock: 'crystal', dirt: 'mud', mud: 'mud', wiring: 'spark' };
+export const MODIFIERS = { water: 'void', rock: 'crystal', slickrock: 'crystal', dirt: 'mud', mud: 'mud', wiring: 'spark', engine: 'turbo' };
 
 const PALETTE = {
   person: [0xff9f1c, 0x2ec4ff, 0xffd23f, 0x7dff6a],
@@ -16,7 +16,7 @@ const PALETTE = {
   sapling: [0x5fbf4a, 0x8fd16a, 0x3f9a3a],
 };
 const SYLL = { car: 'Vroom', mite: 'Skitter', pirate: 'Grit', sapling: 'Sprout' };
-const EPITHET = { void: 'the Unholy', crystal: 'the Crystalline', mud: 'of the Mud', spark: 'the Electric' };
+const EPITHET = { void: 'the Unholy', crystal: 'the Crystalline', mud: 'of the Mud', spark: 'the Electric', turbo: 'the Turbocharged' };
 
 function part(geo, mat, x, y, z, outline = 0.04) {
   const m = new THREE.Mesh(geo, mat);
@@ -46,7 +46,7 @@ export function spliceGenes(items, seed = Math.floor(Math.random() * 1e9)) {
   if (mods.length) name += ' ' + EPITHET[mods[0]];
   const legSpeed = { car: 1.0, mite: 0.9, pirate: 0.8, person: 0.72, voidling: 0.78, sapling: 0.62 }[legs];
   const bodyMult = { car: 0.95, mite: 1.05, pirate: 1.05, person: 1, voidling: 1.08, sapling: 1.1 }[body];
-  const speed = 34 * legSpeed * bodyMult * (1.12 - (size - 1) * 0.25) * (0.9 + rr() * 0.2) * (mods.includes('crystal') ? 1.05 : 1) * (mods.includes('spark') ? 1.08 : 1);
+  const speed = 34 * legSpeed * bodyMult * (1.12 - (size - 1) * 0.25) * (0.9 + rr() * 0.2) * (mods.includes('crystal') ? 1.05 : 1) * (mods.includes('spark') ? 1.08 : 1) * (mods.includes('turbo') ? 1.15 : 1);
   const chaos = kinds.size + mods.length + (extraHead ? 1 : 0) + (mods.includes('void') ? 1 : 0);
   return { seed, body, legs, head, extraHead, mods, size, tint, name, speed: Math.round(speed * 10) / 10, hop: legs === 'mite' ? 1 : 0.3, chaos, parents: living.map((i) => i.kind), born: Date.now() };
 }
@@ -188,6 +188,14 @@ export function makeChimera(genes) {
       coil.position.y = legH + 0.4 + i * 0.35;
       coil.rotation.set(Math.PI / 2 + (rr() - 0.5) * 0.6, 0, (rr() - 0.5) * 0.6);
       inner.add(coil);
+    }
+  }
+  if (genes.mods.includes('turbo')) {
+    // a salvaged engine strapped on the back, exhausts glowing
+    inner.add(part(new THREE.BoxGeometry(0.7, 0.55, 0.8), toon(0x55607a), 0, legH + 0.9, -0.75, 0.04));
+    for (const sx of [-1, 1]) {
+      inner.add(part(new THREE.CylinderGeometry(0.12, 0.16, 0.5, 8).rotateX(Math.PI / 2), toon(0x3a3550), sx * 0.22, legH + 0.95, -1.25, 0.03));
+      inner.add(part(new THREE.SphereGeometry(0.11, 8, 6), glow(0xff6a2a), sx * 0.22, legH + 0.95, -1.52, 0));
     }
   }
   if (genes.mods.includes('void')) {

@@ -17,6 +17,7 @@ export const ITEMS = {
   pirate: { name: 'Knocked-Out Pirate', icon: '☠', color: '#7dff3a' },
   sapling: { name: 'Farm Sapling', icon: '♣', color: '#5fbf4a' },
   wiring: { name: 'Electrical Wiring', icon: '≋', color: '#ffb347' },
+  engine: { name: 'Salvaged Engine', icon: '⚙', color: '#ff6a2a' },
   // things that happen when items sit together in a jar
   mud: { name: 'Moon Mud', icon: '≈', color: '#8a6a4a' },
   slickrock: { name: 'Slick Rock', icon: '◈', color: '#9be7ff' },
@@ -71,6 +72,7 @@ export class Alchemy {
     this.mutations = [];
     this.mutMeshes = [];
     this.pen = [];
+    this.loot = []; // salvage lying on the ground (engines from wrecks, depot wiring, farm saplings)
     this.load();
     this.buildMites();
   }
@@ -222,6 +224,50 @@ export class Alchemy {
     g.hud.toast('Nothing to scoop up here.', 1.5);
   }
 
+  // ---------- salvage on the ground ----------
+  // Something worth scooping drops out of a wreck. Skate over it to bag it (needs jar room); credits
+  // are picked up whether or not you have a jar.
+  dropLoot(kind, pos, { name, credits = 0 } = {}) {
+    const g = this.game;
+    const up = pos.clone().normalize();
+    const at = g.planet.ground(pos.clone().addScaledVector(tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize(), 1 + Math.random() * 2), new THREE.Vector3(), 0.9);
+    const root = new THREE.Group();
+    const color = credits && !kind ? 0xffd23f : new THREE.Color(ITEMS[kind].color).getHex();
+    const core = new THREE.Mesh(kind === 'engine' ? new THREE.CylinderGeometry(0.5, 0.5, 0.9, 8).rotateZ(Math.PI / 2) : new THREE.OctahedronGeometry(0.45, 0), toon(color));
+    ink(core, 0.05);
+    root.add(core);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.06, 6, 20).rotateX(Math.PI / 2), glow(color));
+    halo.position.y = -0.6;
+    root.add(halo);
+    root.position.copy(at);
+    frameQuat(up, tangent(SUN.clone(), up).normalize(), root.quaternion);
+    g.scene.add(root);
+    this.loot.push({ kind, name, credits, root, core, pos: at, t: 0 });
+  }
+
+  updateLoot(dt) {
+    const g = this.game;
+    const P = g.player;
+    for (let i = this.loot.length - 1; i >= 0; i--) {
+      const L = this.loot[i];
+      L.t += dt;
+      L.core.rotation.y += dt * 2;
+      L.core.position.y = Math.sin(L.t * 3) * 0.15;
+      let take = false;
+      if (!P.dead && L.pos.distanceTo(P.pos) < 3.5) {
+        if (L.credits) { g.addCredits(L.credits, 'Salvage'); g.fx.pop(`+₵${L.credits}`, null, { color: '#ffd23f', size: 44 }); L.credits = 0; if (!L.kind) take = true; }
+        if (L.kind) {
+          if (this.owned && this.used + (ITEMS[L.kind].slots || 1) <= this.slots) {
+            this.add(L.kind, L.name);
+            g.fx.pop(`${ITEMS[L.kind].name.toUpperCase()}!`, null, { color: ITEMS[L.kind].color, size: 42 });
+            take = true;
+          } else if (!L.warned) { L.warned = true; g.hud.toast(this.owned ? `Jar is full: no room for the ${ITEMS[L.kind].name.toLowerCase()}.` : `A ${ITEMS[L.kind].name.toLowerCase()}! You need a containment jar to carry it.`, 2.5); }
+        }
+      } else if (L.warned && L.pos.distanceTo(P.pos) > 8) L.warned = false;
+      if (take || L.t > 240) { L.root.removeFromParent(); this.loot.splice(i, 1); }
+    }
+  }
+
   add(kind, name) {
     this.jar.push({ kind, name });
     this.mixT = 0;
@@ -248,6 +294,7 @@ export class Alchemy {
       if (it.kind === 'person' || it.kind === 'voidling' || it.kind === 'pirate') this.spawnWanderer(it.name, it.kind === 'voidling', it.kind === 'pirate');
       else if (it.kind === 'mite') { const m = this.mites.find((x) => x.gone > 0); if (m) { m.gone = 0; m.home = P.pos.clone().normalize(); } }
       else if (it.kind === 'sapling') { g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(2), { color: 0x5fbf4a, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 }); g.fx.pop('REPLANTED!', null, { color: '#5fbf4a', size: 36 }); }
+      else if (it.kind === 'engine') { this.dropLoot('engine', P.pos.clone().addScaledVector(g.cam.right, 3)); continue; }
       else if (it.kind === 'wiring') g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0xffb347, size: 0.3, life: 0.6, gravity: 2, count: 8, spread: 2 });
       else if (it.kind === 'car') { const v = this.game.world.vehicles.find((x) => x.captured > 0); if (v) v.captured = 0.01; g.fx.pop('BEEP BEEP!', null, { color: '#ff7ad9', size: 40 }); }
       else if (it.kind === 'rock' || it.kind === 'slickrock') g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0x2ee6ff, size: 0.5, life: 1, gravity: 2, count: 6, spread: 3 });
@@ -623,6 +670,7 @@ export class Alchemy {
     this.updateFollowers(dt);
     this.updateWanderers(dt);
     this.updateMites(dt);
+    this.updateLoot(dt);
     const lab = g.world.lab;
     if (lab && lab.loc.active) for (const p of this.pen) { p.t += dt; p.anim(p.t, 1.5); p.root.rotation.y = Math.sin(p.t * 0.3) * 2; }
   }
@@ -735,6 +783,7 @@ const BUFF_NAMES = { lowGrav: 'LOW-G', slick: 'MOON MUD', bouncy: 'SPRINGY', inv
 // Reactor recipes, keyed by the sorted item kinds fed in together.
 const RECIPES = {
   sapling() { this.buffs.cushion = 40; return { title: 'MOON MOSS', text: '"The sapling went into the antimatter and came out as a fine green fuzz. It has settled on your boots. Landings will be very soft for a while."' }; },
+  engine() { this.buffs.lowGrav = 30; this.game.addCredits(80, 'Scrap'); return { title: 'ANTIMATTER TURBO', text: '"I bolted your engine to the reactor and it achieved, briefly, anti-gravity. Some of it is still on you: you weigh less than half for a while. Also, eighty credits of scrap."' }; },
   wiring() { this.game.addCredits(45, 'Copper'); return { title: 'MELTED COPPER', text: '"One wire alone is just scrap. Here are forty-five credits for it. Bring me THREE and I can do something useful with your skates."' }; },
   rock() { this.game.addCredits(60, 'Sample'); return { title: 'ROCK… ANALYSED', text: '"A fine rock. It is now slightly radioactive and worth sixty credits to someone."' }; },
   dirt() { this.game.addCredits(20, 'Glass'); return { title: 'MOON GLASS', text: '"The dirt fused into a tiny glass bead. I will treasure it. Have twenty credits."' }; },
