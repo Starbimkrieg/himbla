@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { toon, glow, ink } from './toon.js';
 import { canvasTex, FONT, fitText, BJ, DUCK, PLK, CLASSIC, PRIZE } from './casinoWorld.js';
-import { PlinkoSim, MULTS, DROP_RANGE, DROP_Y, BALL_R, PEGS, slotCentre } from './plinko.js';
+import { PlinkoSim, MULTS, AIM_RANGE, DROP_Y, BALL_R, PEGS, slotCentre } from './plinko.js';
 
 // The walk-in Lucky Crater games: BLACKJACK at a real table, the DUCK DERBY and a giant PLINKO
 // board with real ball physics. Everything here is driven from the casino's per-frame update
@@ -306,7 +306,7 @@ export class CasinoGames {
   // ---------- camera ----------
   view() {
     const R = BJ.R;
-    if (this.mode === 'bj') return [[BJ.x, 4.7, BJ.z + R + 3.3], [BJ.x, 0.9, BJ.z + 1.1]];
+    if (this.mode === 'bj') return [[BJ.x, 3.9, BJ.z + R + 1.9], [BJ.x, 0.75, BJ.z + 0.7]];
     if (this.mode === 'duck') {
       const d = this.dk;
       if (d.phase === 'race' || (d.phase === 'done' && this.clock - d.doneAt < 2.5)) {
@@ -317,7 +317,8 @@ export class CasinoGames {
       }
       return [[DUCK.kiosk[0], 9, DUCK.kiosk[1] + 7.5], [DUCK.kiosk[0], 0, (DUCK.lanes[1] + DUCK.lanes[2]) / 2 - 1]];
     }
-    if (this.mode === 'plinko') return [[PLK.x, 7.6, PLK.z + 13.2], [PLK.x, 7.1, PLK.z]];
+    // framed so the whole board sits above the action bar
+    if (this.mode === 'plinko') return [[PLK.x, 6.4, PLK.z + 16.5], [PLK.x, 4.4, PLK.z]];
     return null;
   }
 
@@ -336,6 +337,7 @@ export class CasinoGames {
     const sk = g.cam.shake * (g.settings && g.settings.v ? g.settings.v.shake ?? 1 : 1);
     if (sk > 0) cam.position.add(_v.set((Math.random() - 0.5) * sk, (Math.random() - 0.5) * sk, (Math.random() - 0.5) * sk));
     cam.up.copy(cw.up);
+    g.player.model.root.visible = false; // the follow camera re-shows the runner every frame
     cam.lookAt(this.camL);
     cam.updateMatrixWorld();
   }
@@ -728,7 +730,7 @@ export class CasinoGames {
     if (close) this.audio.tone(1600, 0.08, 'square', 0.1);
     this.cheer();
     if (d.bet === w) {
-      const win = Math.floor(d.stake * d.odds[w]);
+      const win = Math.floor(d.stake * d.odds[w] + 1e-6);
       this.casino.pay(win, d.stake);
       d.msg = `#${w + 1} ${DUCKS[w].name} WINS! YOU COLLECT ₵${fmt(win)}`;
       this.msgCls = 'good';
@@ -853,7 +855,7 @@ export class CasinoGames {
     if (this.mode === 'plinko') {
       const inp = this.g.input;
       const dir = (inp.down('KeyD') ? 1 : 0) - (inp.down('KeyA') ? 1 : 0);
-      if (dir) p.aim = Math.max(-DROP_RANGE, Math.min(DROP_RANGE, p.aim + dir * dt * 1.6));
+      if (dir) p.aim = Math.max(-AIM_RANGE, Math.min(AIM_RANGE, p.aim + dir * dt * 1.6));
       if (inp.down('Space') && p.cd <= 0) this.dropBall();
     }
     cw.plinko.aim.position.x = PLK.x + p.aim;
@@ -899,7 +901,7 @@ export class CasinoGames {
     const b = this.cw.toWorld(PLK.x + 6, PLK.y + DROP_Y, PLK.z).project(cam);
     const sx = (clientX / window.innerWidth) * 2 - 1;
     const t = (sx - a.x) / (b.x - a.x || 1);
-    this.pk.aim = Math.max(-DROP_RANGE, Math.min(DROP_RANGE, (t * 2 - 1) * DROP_RANGE));
+    this.pk.aim = Math.max(-AIM_RANGE, Math.min(AIM_RANGE, (t * 2 - 1) * AIM_RANGE));
   }
 
   onMouseMove(e) {

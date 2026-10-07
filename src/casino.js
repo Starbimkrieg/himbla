@@ -467,7 +467,7 @@ export class Casino {
     const fx = this.$('[data-fx]');
     const el = document.createElement('div');
     el.className = 'cas-burst';
-    el.innerHTML = `<div class="rays"></div><span style="color:${color};font-size:${size}px">${text}</span>`;
+    el.innerHTML = `<div class="rays"></div><span style="color:${color};font-size:${Math.round(size * 0.55)}px">${text}</span>`;
     fx.appendChild(el);
     setTimeout(() => el.remove(), 1900);
     if (confetti) this.confetti(confetti);

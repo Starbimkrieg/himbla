@@ -688,3 +688,136 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 #obj-arrow .oa-dist { margin-top: 2px; font-family: var(--comic); font-size: 11px; color: #ffd23f; background: rgba(8,6,14,0.85); padding: 3px 6px; white-space: nowrap; border: 1px solid rgba(255,210,63,0.5); }
 #obj-marker { z-index: 25; }
 @keyframes oapulse { from { opacity: 0.75; } to { opacity: 1; } }
+/* ---- casino 3D ---- */
+/* walk-in games action bar (casinoGames.js) */
+#cas3d { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 35; width: min(760px, calc(100vw - 32px)); background: var(--ui-bg); color: var(--ui-text); border: 2px solid var(--ui-edge); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); padding: 8px 12px 6px; font-family: var(--body); pointer-events: auto; cursor: default; }
+#cas3d .c3-head { display: flex; align-items: center; gap: 12px; font-family: var(--comic); font-size: 11px; line-height: 1.4; border-bottom: 2px solid var(--ui-edge); padding-bottom: 6px; flex-wrap: wrap; }
+#cas3d .c3-title { color: var(--yellow); font-size: 14px; font-weight: normal; }
+#cas3d .c3-cred { margin-left: auto; color: #05030c; background: var(--yellow); padding: 3px 6px 2px; }
+#cas3d .c3-bet b { color: var(--cyan); font-weight: normal; }
+#cas3d .c3-bet small { font-family: var(--body); font-size: 13px; color: var(--ui-muted); }
+#cas3d .c3-body { margin-top: 6px; }
+#cas3d .c3-row { display: flex; gap: 18px; flex-wrap: wrap; font-family: var(--comic); font-size: 10px; color: var(--ui-muted); }
+#cas3d .c3-row b { color: var(--ui-text); font-size: 13px; font-weight: normal; }
+#cas3d .c3-row b.up { color: var(--green); }
+#cas3d .c3-row b.down { color: var(--red); }
+#cas3d .c3-msg { margin: 6px 0; min-height: 18px; font-size: 17px; color: var(--ui-text); }
+#cas3d .c3-msg.good { color: var(--green); }
+#cas3d .c3-msg.bad { color: #ff6b81; }
+#cas3d .c3-btns { display: flex; gap: 6px; flex-wrap: wrap; align-items: stretch; }
+#cas3d button { font-family: var(--comic); font-size: 10px; line-height: 1.4; background: var(--ui-bg3); color: var(--ui-text); border: 2px solid var(--ui-edge); box-shadow: 2px 2px 0 #05030c; padding: 6px 8px 5px; cursor: pointer; }
+#cas3d button:hover:not(:disabled) { border-color: var(--yellow); color: var(--yellow); }
+#cas3d button:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
+#cas3d button:disabled { opacity: 0.4; cursor: default; }
+#cas3d button.big { background: var(--yellow); color: #05030c; border-color: #05030c; flex: 1; }
+#cas3d button.big:hover:not(:disabled) { background: var(--green); color: #05030c; }
+#cas3d button.sm { padding: 6px 7px 5px; }
+#cas3d button.hint { background: transparent; box-shadow: none; opacity: 0.6; }
+#cas3d button i { font-style: normal; font-family: var(--body); font-size: 12px; color: var(--ui-muted); margin-left: 4px; }
+#cas3d button.big i { color: #3a3550; }
+#cas3d .c3-ducks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+#cas3d .c3-duck { display: flex; align-items: center; gap: 8px; text-align: left; }
+#cas3d .c3-duck.on { border-color: var(--yellow); background: #3a2d10; }
+#cas3d .c3-duck i { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; color: #05030c; font-family: var(--comic); font-size: 9px; margin: 0; }
+#cas3d .c3-duck span { flex: 1; }
+#cas3d .c3-duck b { color: var(--green); font-weight: normal; }
+#cas3d .c3-duck em { font-style: normal; color: var(--yellow); }
+#cas3d .c3-last { display: flex; gap: 4px; margin-top: 4px; min-height: 18px; flex-wrap: wrap; }
+#cas3d .c3-last i { font-style: normal; font-family: var(--comic); font-size: 9px; padding: 3px 4px 2px; background: var(--ui-bg2); color: #9be7ff; border: 2px solid var(--ui-edge); }
+#cas3d .c3-last i.ok { color: var(--green); }
+#cas3d .c3-last i.hot { color: #05030c; background: var(--yellow); }
+#cas3d .c3-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font-family: var(--comic); font-size: 8px; color: var(--ui-dim); flex-wrap: wrap; }
+@media (max-width: 600px) { #cas3d .c3-ducks { grid-template-columns: 1fr; } #cas3d .c3-row { gap: 10px; } }
+
+/* classic-games overlay: retro-arcade restyle (dark panels, 2px borders, hard pixel shadows,
+   no tilt / halftone / text-stroke; display sizes scaled for Press Start 2P) */
+#casino { background: rgba(5, 3, 12, 0.88); }
+#casino::before { display: none; }
+.cas { color: var(--ui-text); background: var(--ui-bg2); border: 2px solid var(--ui-edge); box-shadow: 0 0 0 2px #05030c, 6px 6px 0 rgba(0,0,0,0.6); border-radius: 0; font-family: var(--body); }
+.cas *, .cas *::before { -webkit-text-stroke: 0 !important; }
+.cas button { font-size: 11px; line-height: 1.4; border: 2px solid #05030c; box-shadow: 2px 2px 0 #05030c; padding: 6px 10px 5px; letter-spacing: 0; }
+.cas button:hover:not(:disabled) { transform: none; background: var(--green); }
+.cas button:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
+.cas button small { font-size: 12px; }
+.cas button.big { font-size: 14px; padding: 8px 16px 7px; color: #05030c; background: var(--yellow); }
+.cas button.big:hover:not(:disabled) { background: var(--green); }
+.cas-bulbs { height: 6px; background: repeating-linear-gradient(90deg, var(--yellow) 0 6px, transparent 6px 18px), #05030c; }
+.cas-head { background: var(--ui-bg3); border-bottom: 2px solid var(--ui-edge); }
+.cas-logo { font-size: 18px; line-height: 1.3; text-shadow: 2px 2px 0 #05030c; transform: none; }
+.cas-cred { font-size: 16px; padding: 6px 10px 4px; border: 2px solid #05030c; box-shadow: 2px 2px 0 #05030c; transform: none; color: #05030c; }
+.cas-chips { font-size: 12px; padding: 6px 8px 4px; border: 2px solid #05030c; box-shadow: 2px 2px 0 #05030c; transform: none; color: #05030c; }
+.cas-vip { color: var(--ui-text); }
+.cas-vip span { font-size: 10px; padding: 3px 6px 2px; border: 2px solid #05030c; transform: none; }
+.cas-vip small { font-size: 12px; color: var(--ui-muted); }
+.cas-prog { border: 2px solid var(--ui-edge); }
+.cas-x { font-size: 10px !important; }
+.cas-face { border: 2px solid #05030c; border-radius: 0; box-shadow: 2px 2px 0 #05030c; font-size: 36px; }
+.cas-say { background: var(--ui-bg); color: var(--ui-text); border: 2px solid var(--ui-edge); border-radius: 0; font-weight: 400; font-size: 17px; }
+.cas-say::before { border-right-color: var(--ui-edge); }
+.cas-say b { font-size: 10px; color: var(--ui-violet); }
+.cas-jp { font-size: 9px; border: 2px solid var(--yellow); transform: none; line-height: 1.6; }
+.cas-jp b { font-size: 16px; }
+.cas-tabs { border-bottom: 2px solid var(--ui-edge); }
+.cas-tabs button { font-size: 9px; background: var(--ui-bg3); color: var(--ui-muted); border: 2px solid var(--ui-edge); border-bottom: none; border-radius: 0; box-shadow: none; }
+.cas-tabs button.on { background: var(--yellow); color: #05030c; transform: none !important; }
+.cas-foot { background: #05030c; color: var(--ui-text); border-top: 2px solid var(--ui-edge); }
+.cas-bet { font-size: 11px; }
+.cas-bet b { font-size: 15px; }
+.cas-bet button { font-size: 10px; }
+.cas-stats { font-weight: 400; font-size: 15px; }
+.cas-stats b { font-size: 10px; }
+.felt { border: 2px solid #05030c; box-shadow: inset 0 0 0 2px #c9a23a, 4px 4px 0 #05030c; border-radius: 0; background: #1f6e44; }
+.cas-burst span { text-shadow: 4px 4px 0 #05030c; letter-spacing: 0; }
+.cas-burst .rays { display: none; }
+.cas-flash { font-size: 20px; border: 2px solid #05030c; box-shadow: 4px 4px 0 #05030c; padding: 8px 14px 6px; }
+.cas-float { font-size: 22px; text-shadow: 2px 2px 0 #05030c; }
+.slot-machine { border: 2px solid #05030c; border-radius: 0; box-shadow: 4px 4px 0 #05030c; background: #8a1a52; }
+.slot-top { font-size: 16px; text-shadow: 2px 2px 0 #05030c; }
+.reels, .reel { border-radius: 0; }
+.cell small { font-size: 9px; }
+.slot-win { font-size: 14px; }
+.slot-win.big { font-size: 18px; }
+.lever, .lever i { border-width: 2px; }
+.paytable { transform: none; background: var(--ui-bg); color: var(--ui-text); border: 2px solid var(--ui-edge); box-shadow: 4px 4px 0 #05030c; }
+.paytable th { font-size: 11px; }
+.paytable td { font-size: 17px; border-bottom: 2px solid var(--ui-bg3); }
+.paytable td:last-child { font-size: 11px; color: var(--ui-violet); }
+.paytable td.fine { color: var(--ui-muted); }
+.paytable tr.jp td { color: #05030c; }
+.card { border: 2px solid #05030c; border-radius: 4px; box-shadow: 3px 3px 0 #05030c; }
+.card i { font-size: 11px; line-height: 1.3; }
+.hand .card:nth-child(odd), .hand .card:nth-child(even), .prize:nth-child(odd) { transform: none; }
+.bj-rules { font-size: 9px; letter-spacing: 0; line-height: 1.6; }
+.bj-label { font-size: 11px; }
+.bj-label b { font-size: 18px; }
+.bj-msg, .hl-msg { font-size: 13px; border-radius: 0; padding: 8px 12px 6px; border: 2px solid var(--ui-edge); }
+.rl-result { font-size: 14px; }
+.rl-result.show span { font-size: 20px; }
+.rl-hist span, .rn, .ro, .pw-hub { font-size: 10px; }
+.rl-ctl { font-size: 11px; }
+.rl-info { font-weight: 400; font-size: 15px; }
+.rl-wheel canvas, .pw-wrap canvas { box-shadow: 0 0 0 2px #05030c, 4px 4px 0 2px #05030c; }
+.pw-side h3 { font-size: 18px; }
+.pw-side p { font-weight: 400; }
+.pw-res { font-size: 16px; color: var(--ui-violet); }
+.hl-top { font-size: 13px; }
+.hl-pot b { font-size: 22px; }
+.hl-cards .card i { font-size: 15px; }
+.pz-head h3 { font-size: 20px; text-shadow: 2px 2px 0 #05030c; }
+.pz-bal { font-size: 12px; }
+.prize { background: var(--ui-bg); color: var(--ui-text); border: 2px solid var(--ui-edge); box-shadow: 3px 3px 0 #05030c; }
+.prize.owned { background: #14301a; }
+.prize.locked { background: var(--ui-bg3); opacity: 0.7; }
+.pz-sw { font-size: 10px; }
+.pz-txt b { font-size: 12px; }
+.pz-txt small { font-weight: 400; font-size: 14px; color: var(--ui-muted); }
+.prize button { font-size: 10px; }
+.sh-card { border: 2px solid var(--ui-edge); box-shadow: 4px 4px 0 #05030c; transform: none; background: #1d1d24; }
+.sh-txt h3 { font-size: 18px; }
+.sh-card .bubble { font-weight: 400; }
+.sh-debt { font-size: 15px; }
+.sh-debt b { font-size: 22px; }
+.sh-debt small { font-size: 10px; }
+@keyframes casUp { 30% { background: var(--green); } }
+@keyframes casDown { 30% { background: #ff6b81; transform: translateX(-4px); } 60% { transform: translateX(3px); } }
+@media (max-width: 800px) { .cas-logo { font-size: 13px; } }

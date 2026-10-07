@@ -12,7 +12,8 @@ export const BALL_R = 0.22;
 export const GRAVITY = 20;
 export const TOP_Y = ROWS * ROW_H + 0.4; // y of the top peg row (bottom slot floor sits at y = 0)
 export const DROP_Y = TOP_Y + 1.1;
-export const DROP_RANGE = SPACING * 0.85; // the chute lets you aim within ±this of the centre
+export const DROP_RANGE = SPACING * 0.85; // chute half-width (physics)
+export const AIM_RANGE = DROP_RANGE * 0.75; // how far the player can aim off-centre
 export const SLOTS = ROWS + 1;
 const REST = 0.42; // restitution off pegs
 const WALL_REST = 0.35;
@@ -22,9 +23,9 @@ const BALL_REST = 0.6;
 export const FLOOR_Y = 0;
 export const DIVIDER_TOP = 1.1;
 
-// Calibrated headless (150k drops over five aim points): RTP ≈ 94.9% averaged over the aim
-// range — ~92.5% dead centre, ~99% hugging the chute wall. Median fall ≈ 5 s.
-export const MULTS = [50, 8, 2.9, 1.1, 0.6, 0.3, 0.2, 0.3, 0.6, 1.1, 2.9, 8, 50];
+// Calibrated headless (120k drops per aim point, see report): RTP ≈ 94% over uniformly random
+// aim, ~95.5% dead centre, ~92% half-way out, ~98% at the far edge of AIM_RANGE. Median fall ≈ 5 s.
+export const MULTS = [50, 8, 3, 1.2, 0.6, 0.3, 0.2, 0.3, 0.6, 1.2, 3, 8, 50];
 
 export const rowY = (r) => TOP_Y - r * ROW_H;
 export const pegX = (r, i) => (i - (r + 2) / 2) * SPACING;

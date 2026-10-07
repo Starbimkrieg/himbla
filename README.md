@@ -65,6 +65,14 @@ Click **START YOUR SHIFT!** to lock the mouse.
 
 ## How it plays
 
+**Events** wait for you: each posts a beacon with a start prop (orders terminal, sample tubes, convoy radio,
+supply drop…) at a safe staging point. Walk up and press F to begin. Going down during an event fails it.
+
+**Style** pays half what it used to and can at most double a contract's base reward (a ₵400 job tops out at
+₵800 before condition). The package's condition then scales the whole payout.
+
+**Rail Lance scope:** with the Rail Lance equipped, hold right mouse to scope in (E still fires thrusters).
+
 **First shift:** a new game offers Instructor Bolt's training run. Each step waits until you've actually done
 it (look, walk, glide on skates, carve, mag-jump, thrusters, open and close the map, find the job board), then
 you take a pirate-free TRAINING RUN contract and deliver it for a ₵200 bonus. You can skip it at the start.
@@ -214,19 +222,16 @@ Rustmoon.
 
 ## Lucky Crater Casino
 
-A neon strange place on the sunlit side, about 1 km from the ILMB (giant tumbling die, upright roulette wheel,
-spinning sign, slot machines and a bouncer out front). Press `F` at the door. Inside (number keys switch games,
-◀ ▶ change the bet, Esc leaves):
-1. **Lunar Slots:** 3 reels, WILD, paytable, auto ×10 and a saved progressive jackpot (~95 % return).
-2. **Black Hole Blackjack:** 6-deck shoe, dealer stands on 17, double down, blackjack pays 3:2.
-3. **Crater Roulette:** European wheel; numbers, dozens, red/black, odd/even, low/high.
-4. **Prize Wheel:** a free spin every 10 minutes, paid spins for ₵150.
-5. **High-Low:** streak game, cash out any time.
-6. **Prize Counter:** spend Lucky Chips (earned by wagering) on casino-only outfits and skates.
-7. **Loan Shark:** Rusty "Knuckles" Vasquez lends at outrageous compound interest.
-
-Total wagered raises your VIP tier (Bronze → Moon Royalty), which raises the max bet and unlocks prizes. Pit boss
-Vinnie "The Visor" has opinions about your luck.
+A walk-in neon hall about 1 km from the ILMB. Walk through the front doors and press `F` at a station
+(Esc stands you back up):
+- **Blackjack table:** real 3D cards from a 6-deck shoe, dealer stands on 17, blackjack pays 3:2.
+  ←/→ bet, Space deal, H hit, S stand, D double.
+- **Duck Derby:** pick one of four ducks at the kiosk (1–4), bet, Space to race. Odds are fair-minus-5%,
+  computed from the same race model; surges, stumbles, photo finishes.
+- **Plinko:** a real-physics board (12 rows, 13 slots from 0.2× to 50×, ~94 % return). Aim with A/D or the
+  mouse, Space or click to drop; hold Space for a stream of balls.
+- The **Classic Games** cabinets open the old slots / roulette / prize wheel / high-low overlay; the prize
+  counter (Lucky Chips cosmetics) and Rusty the loan shark are at the back. VIP tiers still raise max bets.
 
 ## Territory
 
@@ -235,6 +240,13 @@ No spot on the Moon is unclaimed. Territory is a weighted split around every fac
 Glowing faction-coloured pylons mark the borders, a chip shows whose land you're on, and the globe map is
 tinted by owner. Military patrols drive between their faction's outposts and shoot pirates (never you, so
 settlement threat radii are unchanged). Captured and founded outposts move the borders.
+
+## Main menu & saves
+
+The game opens on a main menu: CONTINUE, NEW GAME, LOAD GAME, SETTINGS (and QUIT in the desktop app). There
+are three save slots, each showing credits, deliveries, story faction, play time and last played; slots can
+be deleted (with a confirm). Progress is saved to the active slot every few seconds and on every delivery,
+purchase and K.O. Settings are shared by all slots. The pause menu has QUIT TO MAIN MENU.
 
 ## Settings
 
