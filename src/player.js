@@ -63,11 +63,18 @@ export class Player {
     this.fireDelay = 0.55 * (1 - 0.15 * (up.overcharge || 0)) * (this.mutFire || 1);
     this.homing = 0.9 + (up.seeker || 0) * 1.3; // rad/s the disc can turn toward a target
     this.knockResist = 1 - (up.flak || 0) * 0.15;
+    // legendary Xenoglide skates: unrivalled handling and an antimatter-burning jet tank
+    const alien = (up.alien || 0) > 0;
+    if (alien) this.params.handling += 4;
+    this.params.thrustAccel = alien ? PHYS.thrustAccel * 2.2 : PHYS.thrustAccel;
+    this.params.energyRegen = alien ? PHYS.energyRegen * 2 : PHYS.energyRegen;
+    if (alien) this.body.maxEnergy += 50;
   }
 
   respawn(pos, facing) {
     this.body.pos.copy(pos);
     this.body.vel.set(0, 0, 0);
+    this.body.platform = null; // never keep riding a deck (or satellite) you've been teleported off
     this.body.up.copy(pos).normalize();
     this.body.groundN.copy(this.body.up);
     this.body.energy = this.body.maxEnergy;
@@ -203,7 +210,7 @@ export class Player {
     }
     if (b.thrusting && Math.random() < dt * 40) {
       const back = this.model.cargoSlot.getWorldPosition(new THREE.Vector3());
-      g.fx.spawn(back, thrustDir.clone().multiplyScalar(-12).add(b.vel), { color: Math.random() < 0.5 ? 0x2ee6ff : 0xffffff, size: 0.35, life: 0.35, spread: 2 });
+      g.fx.spawn(back, thrustDir.clone().multiplyScalar(-12).add(b.vel), { color: (g.upgrades.alien ? [0x7dffd4, 0xc77dff] : [0x2ee6ff, 0xffffff])[Math.random() < 0.5 ? 0 : 1], size: g.upgrades.alien ? 0.5 : 0.35, life: 0.35, spread: 2 });
     }
 
     this.center.copy(b.pos).addScaledVector(up, 1.3);

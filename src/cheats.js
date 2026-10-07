@@ -54,8 +54,11 @@ export class Cheats {
       { label: '3 · SPAWN LONGSHOT KADE (ambush)', fn: () => { S.spawnKade(false); } },
       { label: '4 · ALL VEHICLES + TECH', fn: () => { S.vehicles = Object.keys(VEHICLES); S.tech = Object.keys(TECH); S.save(); this.storyMenu(); } },
       { label: '5 · RESET STORY (keeps outposts)', fn: () => { if (S.active) S.fail('Reset.'); S.faction = null; S.progress = {}; S.kade.captured = false; S.save(); this.storyMenu(); } },
-      { label: '6 · BACK', fn: () => this.moreMenu() },
-      { label: '7 · CLOSE' },
+      { label: '6 · DROP ME ON SAT-7 (matched speed)', fn: () => { const S = g.secrets; const o = S.sat; const up = o.pos.clone().normalize(); g.player.respawn(o.pos.clone().addScaledVector(up, 4)); g.player.body.vel.copy(o.vel); } },
+      { label: '7 · TELEPORT TO THE WHISPERING FISSURE', fn: () => { const L = g.secrets.loc; g.globe.discover(L, true); S.teleportTo(g.world.toWorld(L, 0, 0, -90).normalize()); } },
+      { label: '8 · GIVE ME THE ALIEN ARTIFACT', fn: () => { g.upgrades.jar = Math.max(1, g.upgrades.jar || 0); g.alchemy.artifact = true; g.secrets.state.artifactTaken = true; g.secrets.sat.artifact.visible = g.secrets.sat.aGlow.visible = false; g.secrets.save(); g.alchemy.save(); g.alchemy.refreshJarMesh(); this.storyMenu(); } },
+      { label: '9 · BACK', fn: () => this.moreMenu() },
+      { label: 'CLOSE' },
     ]);
   }
 

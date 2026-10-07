@@ -173,6 +173,6 @@ export function makeChimera(genes) {
 
 // Small wild critter of the sunlit craters.
 export function makeMite() {
-  const genes = { seed: Math.floor(Math.random() * 1e9), body: 'mite', legs: 'mite', head: 'mite', extraHead: null, mods: [], size: 0.55, tint: 0xb8e986 };
+  const genes = { seed: Math.floor(Math.random() * 1e9), body: 'mite', legs: 'mite', head: 'mite', extraHead: null, mods: [], size: 0.8, tint: 0xb8e986 };
   return makeChimera(genes);
 }

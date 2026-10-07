@@ -232,6 +232,32 @@ export class GlobeMap {
       c.strokeText(l.short, p.x, p.y - r - 4); c.fillText(l.short, p.x, p.y - r - 4);
       this.pins.push({ x: p.x, y: p.y, html: `<b>${l.name}</b><br><span style="color:${f.color}">${f.name}</span>${l.hq ? ' · HQ' : ''}${ruined ? ' · RUINED' : ''}<br>${l.blurb}` });
     }
+    // SAT-7's orbit (dashed) and where it is right now
+    if (g.secrets && g.secrets.sat) {
+      const S = g.secrets;
+      c.strokeStyle = 'rgba(255,210,63,0.55)'; c.lineWidth = 1.5; c.setLineDash([3, 6]);
+      c.beginPath();
+      let pen = false;
+      const q = new THREE.Vector3();
+      for (let i = 0; i <= 240; i++) {
+        S.orbitPoint((i / 240) * Math.PI * 2, q).normalize();
+        const pp = this.project(q, v);
+        if (pp.z > 0) { if (pen) c.lineTo(pp.x, pp.y); else c.moveTo(pp.x, pp.y); pen = true; } else pen = false;
+      }
+      c.stroke(); c.setLineDash([]);
+      // the low pass, marked
+      S.orbitPoint(S.lowAt, q).normalize();
+      const lp = this.project(q, v);
+      if (lp.z > 0) { c.fillStyle = '#ffd23f'; c.font = '11px Bangers, Impact, sans-serif'; c.fillText('▼ LOW PASS', lp.x, lp.y - 6); }
+      const sp = this.project(q.copy(S.sat.pos).normalize(), v);
+      if (sp.z > 0) {
+        c.fillStyle = '#ffd23f'; c.strokeStyle = '#120a1e'; c.lineWidth = 2;
+        c.beginPath(); c.rect(sp.x - 5, sp.y - 3, 10, 6); c.fill(); c.stroke();
+        c.fillRect(sp.x - 11, sp.y - 1, 22, 2);
+        c.font = '12px Bangers, Impact, sans-serif'; c.lineWidth = 3; c.strokeText('SAT-7', sp.x, sp.y - 8); c.fillStyle = '#fff'; c.fillText('SAT-7', sp.x, sp.y - 8);
+        this.pins.push({ x: sp.x, y: sp.y, html: '<b>SAT-7 "Lantern"</b><br>Derelict satellite. Skims low just past the ILMB once a lap.' });
+      }
+    }
     // outposts you've charted: small diamonds (yours get a white rim and a name)
     if (g.territory) {
       const mine = new Set(g.story ? g.story.founded.concat(g.story.capturedIds) : []);

@@ -74,7 +74,8 @@ export class Alchemy {
 
   get owned() { return (this.game.upgrades.jar || 0) > 0; }
   get slots() { return 2 + (this.game.upgrades.jar || 0); }
-  get used() { return this.jar.reduce((n, i) => n + (ITEMS[i.kind].slots || 1), 0); }
+  // the alien artifact rides in its own sealed compartment of the jar: it takes a slot but is never dumped or fed
+  get used() { return this.jar.reduce((n, i) => n + (ITEMS[i.kind].slots || 1), 0) + (this.artifact ? 1 : 0); }
 
   load() {
     try {
@@ -82,11 +83,12 @@ export class Alchemy {
       if (!d) return;
       this.chimeras = d.chimeras || [];
       this.mutations = d.mutations || [];
+      this.artifact = !!d.artifact;
     } catch { /* fresh lab */ }
   }
 
   save() {
-    try { localStorage.setItem(KEY, JSON.stringify({ chimeras: this.chimeras, mutations: this.mutations })); } catch { /* unavailable */ }
+    try { localStorage.setItem(KEY, JSON.stringify({ chimeras: this.chimeras, mutations: this.mutations, artifact: !!this.artifact })); } catch { /* unavailable */ }
   }
 
   // called once the world and player exist
@@ -97,15 +99,23 @@ export class Alchemy {
 
   // ---------- wild Moon Mites ----------
   buildMites() {
+    // herds of 3–6 mites around sunlit craters, well away from settlements
     const rr = mulberry32(8080);
     const g = this.game;
     this.mites = [];
-    for (let tries = 0; tries < 3000 && this.mites.length < 110; tries++) {
+    let herds = 0;
+    for (let tries = 0; tries < 4000 && herds < 34; tries++) {
       const u = rr() * 2 - 1, th = rr() * Math.PI * 2, sq = Math.sqrt(1 - u * u);
       const d = new THREE.Vector3(sq * Math.cos(th), u, sq * Math.sin(th));
       if (d.dot(SUN) < 0.15) continue;
       if (g.locations.some((l) => arcDist(d, l.dir) < (l.zoneR || l.r) * 1.3)) continue;
-      this.mites.push({ home: d, pos: null, dir: tangent(new THREE.Vector3(1, 0, 0), d).normalize(), model: null, gone: 0, t: rr() * 10, hop: 0, vy: 0 });
+      herds++;
+      const n = 3 + Math.floor(rr() * 4);
+      for (let k = 0; k < n; k++) {
+        const t = tangent(new THREE.Vector3(rr() - 0.5, rr() - 0.5, rr() - 0.5), d).normalize();
+        const home = greatCircle(d, t, rr() * 18);
+        this.mites.push({ home, pos: null, dir: tangent(new THREE.Vector3(1, 0, 0), home).normalize(), model: null, gone: 0, t: rr() * 10, hop: 0, vy: 0 });
+      }
     }
   }
 
@@ -217,11 +227,12 @@ export class Alchemy {
   }
 
   // ---------- emptying ----------
-  empty() {
+  // X: into the reactor if you're beside it, otherwise tip it out. Shift+X always tips it out.
+  empty(forceDump = false) {
     const g = this.game;
-    if (!this.jar.length) { g.hud.toast(this.owned ? 'The jar is empty. Scoop something with G.' : 'You don\'t have a jar yet.', 1.8); return; }
+    if (!this.jar.length) { g.hud.toast(this.owned ? (this.artifact ? 'Only the alien artifact is left, and its compartment is sealed.' : 'The jar is empty. Scoop something with G.') : 'You don\'t have a jar yet.', 1.8); return; }
     const lab = g.world.lab;
-    if (lab && g.player.pos.distanceTo(lab.reactor) < 11) this.feedReactor();
+    if (!forceDump && lab && g.player.pos.distanceTo(lab.reactor) < 11) this.feedReactor();
     else this.dump();
     this.jar = [];
     this.refreshJarMesh();
@@ -237,7 +248,10 @@ export class Alchemy {
       else if (it.kind === 'rock' || it.kind === 'slickrock') g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0x2ee6ff, size: 0.5, life: 1, gravity: 2, count: 6, spread: 3 });
       else g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(2), { color: it.kind === 'dirt' ? 0xc9b79c : 0x2a1f4f, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 });
     }
-    g.fx.pop('EMPTIED!', null, { color: '#c9c3d9', size: 40 });
+    const freed = this.jar.filter((i) => LIVING.includes(i.kind)).length;
+    const lost = this.jar.length - freed;
+    g.fx.pop(freed && lost ? 'DUMPED!' : freed ? 'SET FREE!' : 'DESTROYED!', null, { color: '#c9c3d9', size: 44 });
+    g.hud.toast(`Jar dumped: ${freed ? `${freed} creature${freed > 1 ? 's' : ''} popped back out` : ''}${freed && lost ? ', ' : ''}${lost ? `${lost} material${lost > 1 ? 's' : ''} destroyed` : ''}.`, 2.5);
   }
 
   // Free people wander off (and can be scooped up again).
@@ -666,6 +680,11 @@ export class Alchemy {
       blob.position.set(Math.sin(i * 2.1) * 0.12, -0.25 + i * 0.2, Math.cos(i * 2.1) * 0.12);
       g.add(blob);
     });
+    if (this.artifact) {
+      const art = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), glow(0x7dffd4));
+      art.position.set(0, 0.28, 0);
+      g.add(art);
+    }
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.12, 12), toon(0x3a3550));
     cap.position.y = 0.45;
     g.add(cap);
@@ -679,13 +698,14 @@ export class Alchemy {
     if (this.owned) {
       const cells = [];
       let used = 0;
+      if (this.artifact) { cells.push('<span class="artifact-slot" title="Alien Artifact (sealed)">✧</span>'); used++; }
       for (const it of this.jar) {
         const n = ITEMS[it.kind].slots || 1;
         used += n;
         for (let k = 0; k < n; k++) cells.push(`<span style="color:${ITEMS[it.kind].color}" title="${ITEMS[it.kind].name}">${ITEMS[it.kind].icon}</span>`);
       }
       for (let i = used; i < this.slots; i++) cells.push('<span class="empty-slot">·</span>');
-      parts.push(`JAR ${cells.join('')}${this.jar.length >= 2 ? ' <i>stewing…</i>' : ''}`);
+      parts.push(`JAR ${cells.join('')}${this.jar.length >= 2 ? ' <i>stewing…</i>' : ''}${this.jar.length ? ' <i>· X empty · ⇧X dump</i>' : ''}`);
     }
     const buff = Object.entries(this.buffs).filter(([, v]) => v > 0).map(([k, v]) => `${BUFF_NAMES[k]} ${Math.ceil(v)}s`).join(' · ');
     if (buff) parts.push(`<div class="buffs">${buff}</div>`);

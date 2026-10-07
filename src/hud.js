@@ -55,7 +55,7 @@ export class HUD {
   banner(loc) {
     const el = $('banner');
     const f = FACTIONS[loc.faction];
-    const kind = { trade: 'TRADE HUB', lab: 'STRANGE PLACE — RESEARCH', monolith: 'STRANGE PLACE', funpark: 'STRANGE PLACE — FUNPARK', casino: 'STRANGE PLACE — CASINO', hub: 'INTERNATIONAL HUB', civilian: 'CIVILIAN HABITAT', research: 'RESEARCH FACILITY', military: 'MILITARY — RESTRICTED', industrial: 'INDUSTRIAL OUTPOST', pirate: 'PIRATE TERRITORY' }[loc.type]; // casino: banner kind
+    const kind = { trade: 'TRADE HUB', lab: 'STRANGE PLACE — RESEARCH', monolith: 'STRANGE PLACE', tunnel: 'STRANGE PLACE — ???', funpark: 'STRANGE PLACE — FUNPARK', casino: 'STRANGE PLACE — CASINO', hub: 'INTERNATIONAL HUB', civilian: 'CIVILIAN HABITAT', research: 'RESEARCH FACILITY', military: 'MILITARY — RESTRICTED', industrial: 'INDUSTRIAL OUTPOST', pirate: 'PIRATE TERRITORY' }[loc.type]; // casino: banner kind
     el.innerHTML = `<div class="b-kind" style="background:${f.color}">${kind}</div><div class="b-name">${loc.name}</div><div class="b-blurb">${loc.blurb}</div>`;
     el.classList.remove('hidden');
     el.classList.remove('slam'); void el.offsetWidth; el.classList.add('slam');
@@ -294,6 +294,16 @@ export class HUD {
       c.fillStyle = '#fff';
       c.textAlign = 'center';
       c.strokeText(l.short, x, y - 10); c.fillText(l.short, x, y - 10);
+    }
+    c.fillStyle = '#9be7ff';
+    // wild moon mites show up as little green specks
+    if (g.alchemy) {
+      c.fillStyle = '#b8e986';
+      for (const m of g.alchemy.mites) {
+        if (!m.model || m.gone > 0) continue;
+        const [x, y, d] = proj(m.pos);
+        if (d < range) { c.beginPath(); c.arc(x, y, 2.2, 0, Math.PI * 2); c.fill(); }
+      }
     }
     c.fillStyle = '#9be7ff';
     for (const v of g.world.vehicles) {

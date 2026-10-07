@@ -67,6 +67,13 @@ export class Planet {
     this.attr = { floor: 0, rim: 0, ray: 0 };
     this.makeCraters(rand);
     this.initChunks();
+    // one rectangular hole can be cut in the terrain (the Whispering Fissure's entrance ramp)
+    this.holeU = {
+      uHoleOn: { value: 0 }, uHoleO: { value: new THREE.Vector3() }, uHoleX: { value: new THREE.Vector3(1, 0, 0) },
+      uHoleY: { value: new THREE.Vector3(0, 1, 0) }, uHoleZ: { value: new THREE.Vector3(0, 0, 1) },
+      uHoleMin: { value: new THREE.Vector2() }, uHoleMax: { value: new THREE.Vector2() },
+    };
+    this.tunnel = null; // set by the secrets system: overrides the floor underground
     this.material = this.makeMaterial();
     this.boulderGeo = new THREE.DodecahedronGeometry(1, 0);
     this.boulderMat = new THREE.MeshToonMaterial({ color: 0x8d8898, gradientMap: gradientMap() });
@@ -217,6 +224,10 @@ export class Planet {
     _c.normalize();
     const denom = _c.x * dx + _c.y * dy + _c.z * dz;
     const r = _c.dot(A) / Math.max(denom, 0.05);
+    if (this.tunnel) {
+      const f = this.tunnel.floor(p, len, dx, dy, dz, r, outN);
+      if (f !== null) return f;
+    }
     this.lastLake = null;
     for (let k = 0; k < this.lakes.length; k++) {
       const lk = this.lakes[k];
@@ -282,11 +293,20 @@ export class Planet {
     const mat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradientMap() });
     // Inked crater rims: a comic contour wherever the rim profile peaks.
     mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.holeU);
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute float aRim;\nvarying float vRim;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRim = aRim;');
+        .replace('#include <common>', '#include <common>\nattribute float aRim;\nvarying float vRim;\nvarying vec3 vHoleW;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRim = aRim;\nvHoleW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying float vRim;')
+        .replace('#include <common>', `#include <common>
+varying float vRim; varying vec3 vHoleW;
+uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2 uHoleMin, uHoleMax;`)
+        .replace('void main() {', `void main() {
+  if (uHoleOn > 0.5) {
+    vec3 hq = vHoleW - uHoleO;
+    float hx = dot(hq, uHoleX), hz = dot(hq, uHoleZ), hy = dot(hq, uHoleY);
+    if (hx > uHoleMin.x && hx < uHoleMax.x && hz > uHoleMin.y && hz < uHoleMax.y && hy > -45.0 && hy < 8.0) discard;
+  }`)
         .replace('#include <color_fragment>', '#include <color_fragment>\nfloat rimInk = smoothstep(0.84, 0.93, vRim);\ndiffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06, 0.03, 0.1), rimInk * 0.9);');
     };
     return mat;

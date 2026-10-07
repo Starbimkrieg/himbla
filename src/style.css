@@ -627,3 +627,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #05030c; col
 #tutorial.tut-pop { animation: tutpop 0.4s cubic-bezier(.2,1.6,.4,1); }
 @keyframes tutpop { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @media (max-width: 700px) { #tutorial { top: auto; bottom: 230px; right: 16px; left: 16px; width: auto; } }
+/* ---- recall cutscene ---- */
+#cinebars { position: absolute; inset: 0; pointer-events: none; z-index: 30; }
+#cinebars .cb-top, #cinebars .cb-bot { position: absolute; left: 0; right: 0; height: 11vh; background: #05030c; animation: cbin 0.4s ease-out; }
+#cinebars .cb-top { top: 0; } #cinebars .cb-bot { bottom: 0; }
+#cinebars .cb-cap { position: absolute; top: calc(11vh + 14px); left: 24px; background: var(--yellow); color: var(--ink); font-family: var(--comic); font-size: 24px; letter-spacing: 1px; padding: 4px 14px; border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); transform: rotate(-1.5deg); }
+#cinebars .cb-skip { position: absolute; bottom: calc(11vh + 12px); right: 24px; color: #c9c3d9; font-family: var(--comic); font-size: 14px; letter-spacing: 1px; opacity: 0.8; }
+#cinebars.cb-out { opacity: 0; transition: opacity 0.4s; }
+@keyframes cbin { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+#jarchip .artifact-slot { color: #7dffd4; text-shadow: 0 0 8px #7dffd4; }

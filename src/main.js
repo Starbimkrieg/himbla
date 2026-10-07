@@ -27,6 +27,8 @@ import { Territory } from './territory.js';
 import { Story } from './story.js';
 import { Garage } from './vehicles.js';
 import { Tutorial } from './tutorial.js';
+import { Recall } from './recall.js';
+import { Secrets } from './secrets.js';
 import { Settings } from './settings.js'; // settings
 import { Casino } from './casino.js'; // casino
 import { WEAPONS } from './weapons.js';
@@ -148,6 +150,10 @@ class Game {
     this.story = new Story(this);
     this.garage = new Garage(this);
     this.tutorial = new Tutorial(this);
+    this.recall = new Recall(this);
+    this.secrets = new Secrets(this);
+    // pirates live at Rustmoon Hold
+    if (this.rep.aligned()) { const h = this.home(); this.player.respawn(h.point, h.facing); this.cam.fwd.copy(h.facing); }
     this.slowmo = 0;
     this.alchemy.start();
     this.player.applyUpgrades(this.upgrades);
@@ -333,6 +339,7 @@ class Game {
     } });
     const chims = this.alchemy.chimeras.length;
     if (chims) buttons.push({ label: `${buttons.length + 1} · HOLDING PEN (${chims})`, fn: () => this.alchemy.penMenu() });
+    buttons.push({ label: `${buttons.length + 1} · HEARD ANY RUMOURS?`, fn: () => this.dialog('DR. ZBORNAK', '"Rumours? Science does not deal in rumours. But… <br><br>• <b>Moon Mites</b> herd together in the sunny craters, well away from settlements. Green dots on your minimap, if you\'re close.<br>• That old satellite, <b>SAT-7 \"Lantern\"</b>, swoops low over the ground just past the ILMB once a lap. Something on its deck glows. You would have to match its speed exactly to land on it. Ha!<br>• On the twilight side there is a trench nobody dug: the <b>Whispering Fissure</b>. My instruments go strange near it. Something down there wants a key."', [{ label: 'SPOOKY' }]) });
     buttons.push({ label: `${buttons.length + 1} · HOW DOES THIS WORK?`, fn: () => this.dialog('DR. ZBORNAK', '"Press <b>G</b> to scoop: rock samples (the glowing crystals on the sunny side), moon dirt (anywhere), black water (stand on a black lake), people, wild moon mites, a dazed pirate, even a whole hover-car if it fits. Things left together in a jar start to react. Bring the jar here and press <b>X</b> to throw everything into my reactor. <b>Two living things make a CHIMERA</b> — race it at the Bounce Dome Derby! One thing alone does… other things. Three different non-living things: don\'t. And the splice pod in the corner puts the jar into <i>you</i>."', [{ label: 'GOT IT' }]) });
     buttons.push({ label: `${buttons.length + 1} · LEAVE` });
     const greet = lvl ? `"Back already? Your jar holds ${2 + lvl}. What have you brought me?"` : '"Ah, a runner! Want to help science? You will need a containment jar. Everything goes in the jar. EVERYTHING."';
@@ -413,6 +420,29 @@ class Game {
     if (!loc) return false;
     if (loc.type === 'pirate') return this.rep.aligned() && !(loc.destroyedUntil && this.time < loc.destroyedUntil);
     return !!loc.safe && !this.rep.hostile(loc.faction);
+  }
+
+  // Where you deploy from: the ILMB, or Rustmoon Hold once you ride with the pirates.
+  home() {
+    if (this.rep && this.rep.aligned()) {
+      const loc = this.locations.find((l) => l.id === 'rustmoon');
+      if (!this._pirateHome) {
+        // first clear patch of ground (no buildings) around the hold
+        let point = null;
+        for (let rad = loc.r * 0.45; rad < loc.r * 0.9 && !point; rad += 8) {
+          for (let k = 0; k < 16 && !point; k++) {
+            const a = Math.PI + (k % 2 ? 1 : -1) * Math.floor((k + 1) / 2) * 0.4;
+            const p = this.world.toWorld(loc, Math.sin(a) * rad, 1.2, Math.cos(a) * rad);
+            if (!this.colliders.query(p, 6, []).some((c) => this.colliders.contact(c, p, 5, _v) > 0)) point = this.world.toWorld(loc, Math.sin(a) * rad, 0.5, Math.cos(a) * rad);
+          }
+        }
+        point = point || this.world.toWorld(loc, 0, 0.5, loc.r * 0.55);
+        const facing = tangent(loc.pos.clone().sub(point), point.clone().normalize()).normalize();
+        this._pirateHome = { point, facing, loc };
+      }
+      return this._pirateHome;
+    }
+    return { point: this.spawnPoint, facing: this.spawnFacing, loc: this.hub };
   }
 
   objective() {
@@ -497,8 +527,9 @@ class Game {
     const clinic = this.story.clinicSpawn(this.player.pos.clone().normalize());
     if (clinic) this.story.teleportTo(clinic.dir);
     else {
-      this.player.respawn(this.spawnPoint, this.spawnFacing);
-      this.cam.fwd.copy(this.spawnFacing);
+      const h = this.home();
+      this.player.respawn(h.point, h.facing);
+      this.cam.fwd.copy(h.facing);
     }
     this.state = 'play';
     this.input.lock();
@@ -653,7 +684,8 @@ class Game {
       this.projectiles.update(dt);
     }
 
-    this.updateCamera(dt);
+    this.recall.update(dt);
+    if (this.state !== 'cutscene') this.updateCamera(dt);
     this.world.update(dt, this.time, this.camera.position);
     this.fx.update(dt);
     this.hud.update(dt);
@@ -699,7 +731,7 @@ class Game {
     this.sun.position.copy(_v).addScaledVector(SUN, 600);
     this.earthLight.target.position.copy(_v);
     this.earthLight.position.copy(_v).addScaledVector(this.world.earthDir, 600);
-    const lampOn = this.lampMode === 'on' || (this.lampMode === 'auto' && dark > 0.35);
+    const lampOn = this.lampMode === 'on' || (this.lampMode === 'auto' && (dark > 0.35 || (this.secrets && this.secrets.isUnder(P.pos))));
     const k = P.dead ? 0 : lampOn ? 1 : 0;
     P.lamp.intensity += (k * 9 - P.lamp.intensity) * 0.2;
     // void skin lets you see in the dark: a wide violet glow without giving you away with a lamp
@@ -736,7 +768,9 @@ class Game {
     this.hurtCd -= dt;
     this.boardCooldown -= dt;
 
+    this.secrets.preUpdate(dt);
     P.update(dt, this.input, c);
+    this.secrets.update(dt);
     this.missions.update(dt);
     this.events.update(dt);
     if (!this.events.active) this.hud.eventPanel(this.story.panel());
@@ -749,7 +783,7 @@ class Game {
     this.alchemy.update(dt);
     this.race.update(dt);
     if (this.input.pressed('KeyG')) this.alchemy.scoop();
-    if (this.input.pressed('KeyX')) this.alchemy.empty();
+    if (this.input.pressed('KeyX')) this.alchemy.empty(this.input.down('ShiftLeft') || this.input.down('ShiftRight'));
     if (this.input.pressed('KeyC') && this.boardCooldown <= 0) this.cosmetics.wardrobe();
     if (this.input.pressed('KeyP') && this.boardCooldown <= 0) {
       if (this.upgrades.penlink) this.alchemy.penMenu();
@@ -810,7 +844,9 @@ class Game {
     const nearPod = lab && z === lab.loc && P.pos.distanceTo(lab.pod) < 4;
     const nearPen = lab && z === lab.loc && P.pos.distanceTo(lab.penTerm) < 5;
     const nearBooth = this.race.near(P.pos);
-    if (this.story.interact(P)) {
+    if (this.secrets.interact()) {
+      // satellite artifact, alien gate, shrine
+    } else if (this.story.interact(P)) {
       // a leader or one of your outposts' terminals
     } else if (this.casino.near(P.pos)) { // casino
       this.hud.prompt('<b>F</b> — ENTER THE LUCKY CRATER CASINO');
@@ -837,12 +873,7 @@ class Game {
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.openBoard(z);
     } else this.hud.prompt(null);
 
-    if (this.input.pressed('KeyR')) {
-      if (this.missions.active) this.missions.fail('Emergency recall — contract forfeited.');
-      P.respawn(this.spawnPoint, this.spawnFacing);
-      c.fwd.copy(this.spawnFacing);
-      this.fx.pop('RECALLED!', null, { color: '#2ee6ff' });
-    }
+    if (this.input.pressed('KeyR')) this.recall.request();
 
     if (this.tipIndex < TIPS.length && (!this.settings || this.settings.v.tips)) { // settings
       this.tipTimer -= dt;

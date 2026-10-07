@@ -114,6 +114,11 @@ export const LOCATIONS = [
     blurb: 'A perfectly black slab nobody admits to building. It hums when you get close.',
   },
   {
+    id: 'fissure', name: 'The Whispering Fissure', short: 'FISSURE', type: 'tunnel', faction: 'none', poi: true,
+    theta: 96, phi: -138, r: 150,
+    blurb: 'A clean-cut trench sliding into the Moon. It hums. Something down there is waiting for a key.',
+  },
+  {
     id: 'bounce', name: 'Bounce Dome Funpark', short: 'BOUNCE', type: 'funpark', faction: 'none', poi: true,
     theta: 30, phi: 135, r: 110, safe: true, repair: 6,
     blurb: 'Abandoned inflatable theme park. The domes still hold air. Great for tricks.',

@@ -55,11 +55,12 @@ Click **START YOUR SHIFT!** to lock the mouse.
 | `Z` · `T` | Phase Dash · Personal Teleporter (story tech) |
 | `Esc` → SETTINGS | Graphics, gameplay, camera, audio and key remapping |
 | `P` | Holding pen, anywhere (needs the remote pen link from Dr. Zbornak) |
+| `Shift`+`X` | Dump the jar anywhere: materials are destroyed, creatures pop back out |
 | `G` / `X` | Scoop into your containment jar / empty it (into the antimatter reactor when you're beside it) |
 | `F` | Job board / upgrades (inside hubs and settlements) |
 | `M` | Globe map: drag to spin, scroll to zoom. Fog of war covers anywhere you haven't been |
 | `J` | Reputation Log |
-| `R` | Emergency recall to the ILMB (forfeits the current contract) |
+| `R` | Emergency recall (₵100): a shuttle flies you home (ILMB, or Rustmoon Hold if you ride with the pirates); forfeits the current contract |
 | `H` | Help |
 
 ## How it plays
@@ -188,12 +189,28 @@ leaders stop dealing with you, so each playthrough tells one coherent story.
   drifts), Kepler Homestead Mule, Meridian Courier Hover-Van, Rustmoon Scrapjaw War-Rig. Ramming pirates
   at speed hurts them; vehicles soak up a share of incoming damage.
 
+**Riding with Rustmoon:** once you've sworn in, Rustmoon Hold is your home base: you start, redeploy
+after a K.O. and recall there.
+
 **Longshot Kade.** On the dark side, a regular pirate squad occasionally (8 %) brings the King of Rustmoon:
 slow-motion, a comic splash panel and a close-up. He's a sniper who keeps his distance. When the red laser
 locks on you get ~2 s of warning (LASER LOCK, rising beeps), then the dot freezes for a split second and he
 fires where you WERE: 45 damage. Keep moving sideways or break line of sight. Knock him below a third of his
 health and he escapes ("THIS AIN'T OVER, RUNNER!") for ₵500; he comes back later. Not while you ride with
 Rustmoon.
+
+## Secrets (spoilers)
+
+- **SAT-7 "Lantern"** circles the whole Moon on an inclined orbit (~200 km/h). Most of the lap it's 200–300 m
+  up, but just past the ILMB it dips to about 40 m. The globe map shows its dashed orbit, the LOW PASS mark and
+  where it is now. Land on its deck or solar panels by matching its speed and direction (any mismatch slides
+  you off). On deck is a glowing **alien artifact**: F takes it into a sealed compartment of your jar (needs
+  a jar; it takes one slot and is never dumped, fed or spliced).
+- **The Whispering Fissure** (twilight side, far from everything): a trench ramps down 34 m into the Moon,
+  through a tunnel into a glowing chamber with a sealed alien gate. Place the artifact in the socket and the
+  gate opens onto a shrine with the legendary **Xenoglide Quantum-Lock Skates**: +4 handling, and an
+  antimatter jet tank (thrust ×2.2, refills twice as fast, +50 capacity), plus a unique skate finish.
+- Dr. Zbornak's "Heard any rumours?" option hints at the mites, the satellite and the fissure.
 
 ## Lucky Crater Casino
 
@@ -277,7 +294,7 @@ The wind rumble is a soft low-passed swell instead of high-frequency hiss. `N` t
   a top speed and a chaos rating. Up to three follow you; any number more live in the **holding pen** in
   front of the lab. Use the pen terminal (or `P` anywhere once you buy Dr. Zbornak's ₵1200 remote pen link) to
   call chimeras out, send them back, or release them for good. Chimeras are saved.
-- **New things to scoop:** Moon Mites skitter around sunlit craters (they flee if you rush them); hover-cars
+- **New things to scoop:** Moon Mites roam sunlit craters in herds of 3–6, away from settlements (green dots on the minimap within ~400 m; they flee if you rush them); hover-cars
   can be scooped straight out of traffic (two jar slots, the car is gone ~150 s); pirate skaters at ≤45 %
   hull get **DAZED** for 6 s and can be jarred (Rustmoon −3 if you're aligned).
 - **Solo reactor results:** a lone mite becomes the **MEGA MITE** (600 HP stomping boss, ₵400 bounty), a
