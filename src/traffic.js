@@ -1187,6 +1187,14 @@ export class Traffic {
     wk.done = true;
   }
 
+  // civilians.js takes this passenger over (blasted or panicking): retire the walker and settle its
+  // stop/boarding bookkeeping now, but keep the pool figure busy until civilians.js frees it.
+  detach(wk) {
+    if (wk.stop) wk.stop.queue = wk.stop.queue.filter((q) => q !== wk);
+    if (wk.board && wk.owner && !wk.counted) { wk.owner.boarding = Math.max(0, wk.owner.boarding - 1); wk.counted = true; }
+    wk.done = true;
+  }
+
   walker(loc, pts, opts) {
     const fig = this.figure();
     if (!fig) return null;

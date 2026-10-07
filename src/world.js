@@ -458,12 +458,25 @@ export class World {
 
   addFigures(loc, count, opts) {
     for (let i = 0; i < count; i++) {
-      const f = makeFigure({ kind: opts.kind, ...(opts.look ? opts.look(i) : {}) });
+      const spawn = { kind: opts.kind, ...(opts.look ? opts.look(i) : {}) };
+      const f = makeFigure(spawn);
       const a = this.r() * Math.PI * 2, d = (0.3 + this.r() * 0.55) * loc.r;
       f.root.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
       loc.group.add(f.root);
-      this.figures.push({ ...f, loc, kind: opts.kind || 'worker', target: f.root.position.clone(), wait: this.r() * 3, phase: this.r() * 10, vy: 0, hop: 0 });
+      // residents are the damageable crowd (civilians.js): spawn remembers how to make a replacement
+      this.figures.push({ ...f, loc, spawn, kind: opts.kind || 'worker', target: f.root.position.clone(), wait: this.r() * 3, phase: this.r() * 10, vy: 0, hop: 0 });
     }
+  }
+
+  // A knocked-out resident was cleared away (civilians.js): a fresh one moves in.
+  respawnFigure(entry) {
+    const loc = entry.loc;
+    const f = makeFigure({ ...entry.spawn, seed: undefined });
+    const a = Math.random() * Math.PI * 2, d = (0.3 + Math.random() * 0.55) * loc.r;
+    f.root.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
+    loc.group.add(f.root);
+    Object.assign(entry, f, { target: f.root.position.clone(), wait: Math.random() * 3, vy: 0, hop: 0, hp: undefined, civ: undefined });
+    delete entry.civ;
   }
 
   buildLocation(loc) {
@@ -1247,6 +1260,7 @@ export class World {
     this.updateRocket(dt, camPos);
     this.updateTraffic(dt, camPos);
     this.updateFigures(dt);
+    if (this.civilians) this.civilians.update(dt);
     this.updateWalkers(dt, camPos);
   }
 
@@ -1539,6 +1553,7 @@ export class World {
 
   updateFigures(dt) {
     for (const f of this.figures) {
+      if (f.civ) continue; // knocked about, fleeing or cleared away: civilians.js has them
       const loc = f.loc;
       f.root.visible = !f.captured && loc.active && loc.camDist < 450;
       if (!f.root.visible) continue;

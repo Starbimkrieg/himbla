@@ -23,6 +23,7 @@ import { Race } from './race.js';
 import { Cosmetics } from './cosmetics.js';
 import { Cheats } from './cheats.js';
 import { Territory } from './territory.js';
+import { Civilians } from './civilians.js';
 import { Story } from './story.js';
 import { Garage } from './vehicles.js';
 import { Tutorial } from './tutorial.js';
@@ -143,6 +144,7 @@ class Game {
     this.enemies = new Enemies(this);
     this.globe = new GlobeMap(this);
     this.alchemy = new Alchemy(this);
+    this.civilians = this.world.civilians = new Civilians(this); // civilians can be hurt (blast hook + ragdolls)
     this.post = new ComicPost(this.renderer, this.camera);
     this.highlights = new Highlights(this);
 

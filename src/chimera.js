@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { toon, glow, ink } from './toon.js';
 import { mulberry32 } from './rng.js';
+import { ensureStats } from './chimerastats.js';
 
 // Things with bodies. Two or more of these in the reactor make a Chimera.
 export const LIVING = ['person', 'voidling', 'mite', 'car', 'pirate', 'sapling', 'junkbot', 'alien'];
@@ -46,12 +47,12 @@ export function spliceGenes(items, seed = Math.floor(Math.random() * 1e9)) {
   let name = a.replace(/^Little /, '').slice(0, Math.max(2, Math.ceil(a.length / 2))) + b.replace(/^Little /, '').slice(Math.floor(b.length / 2)).toLowerCase();
   if (living.length === 1) name = `Mutant ${a}`;
   if (mods.length) name += ' ' + EPITHET[mods[0]];
-  const legSpeed = { car: 1.0, mite: 0.9, pirate: 0.8, person: 0.72, voidling: 0.78, sapling: 0.62, junkbot: 0.95, alien: 0.86 }[legs];
-  const bodyMult = { car: 0.95, mite: 1.05, pirate: 1.05, person: 1, voidling: 1.08, sapling: 1.1, junkbot: 0.98, alien: 1.0 }[body];
-  const speed = 34 * legSpeed * bodyMult * (1.12 - (size - 1) * 0.25) * (0.9 + rr() * 0.2) * (mods.includes('crystal') ? 1.05 : 1) * (mods.includes('spark') ? 1.08 : 1) * (mods.includes('turbo') ? 1.15 : 1) * (mods.includes('armor') ? 0.92 : 1);
   const chaos = kinds.size + mods.length + (extraHead ? 1 : 0) + (mods.includes('void') ? 1 : 0);
-  return { seed, body, legs, head, extraHead, mods, size, tint, name, speed: Math.round(speed * 10) / 10, hop: legs === 'mite' ? 1 : 0.3, chaos, parents: living.map((i) => i.kind), born: Date.now() };
+  // racing stats (speed / power / stamina / wit), tier and top speed come from the parts + seed
+  return ensureStats({ seed, body, legs, head, extraHead, mods, size, tint, name, speed: 0, hop: legs === 'mite' ? 1 : 0.3, chaos, parents: living.map((i) => i.kind), born: Date.now() });
 }
+
+export { ensureStats };
 
 // Build the creature from its genes. Feet at y = 0, facing +Z.
 export function makeChimera(genes) {
