@@ -65,6 +65,8 @@ export class Projectiles {
           for (const t of g.enemies.targets()) {
             if (segSphere(p.prev, p.pos, t.center, t.radius + 0.4)) { hit = true; break; }
           }
+          // people on foot (civilians.js) stop a shot too
+          if (!hit && g.civilians && g.civilians.segHit(p.prev, p.pos)) hit = true;
         } else {
           if (!g.player.dead && segSphere(p.prev, p.pos, g.player.center, 1.3)) hit = true;
           for (const o of g.events.protect) if (!o.dead && segSphere(p.prev, p.pos, o.center, o.radius + 0.4)) { hit = true; break; }

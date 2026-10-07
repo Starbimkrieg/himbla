@@ -282,7 +282,7 @@ export class Enemies {
         } else if (!base.restricted && base.aggro <= 0 && !base.hostile) {
           g.hud.alert(`${FACTIONS[base.faction].name.toUpperCase()} DEFENSES ENGAGING!`, '#ff2a4a', 3);
         }
-        base.aggro = 25;
+        base.aggro = Math.max(base.aggro, 25); // a civilian-harm alert (civilians.js) may already be longer
       }
     }
     if (e.hp <= 0) this.kill(e, fromPlayer);

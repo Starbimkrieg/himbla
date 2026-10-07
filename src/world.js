@@ -471,11 +471,11 @@ export class World {
   // A knocked-out resident was cleared away (civilians.js): a fresh one moves in.
   respawnFigure(entry) {
     const loc = entry.loc;
-    const f = makeFigure({ ...entry.spawn, seed: undefined });
+    const f = makeFigure(entry.spawn);
     const a = Math.random() * Math.PI * 2, d = (0.3 + Math.random() * 0.55) * loc.r;
     f.root.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
     loc.group.add(f.root);
-    Object.assign(entry, f, { target: f.root.position.clone(), wait: Math.random() * 3, vy: 0, hop: 0, hp: undefined, civ: undefined });
+    Object.assign(entry, f, { target: f.root.position.clone(), wait: Math.random() * 3, vy: 0, hop: 0, hp: undefined });
     delete entry.civ;
   }
 

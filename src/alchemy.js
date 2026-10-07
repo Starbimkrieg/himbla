@@ -4,7 +4,8 @@ import { makeFigure } from './models.js';
 import { toon, glow, ink } from './toon.js';
 import { frameQuat, tangent, greatCircle, SUN, arcDist } from './geo.js';
 import { pick, mulberry32 } from './rng.js';
-import { LIVING, spliceGenes, makeChimera, makeMite } from './chimera.js';
+import { LIVING, spliceGenes, makeChimera, makeMite, ensureStats } from './chimera.js';
+import { chimeraCard, cardList } from './chimeracard.js';
 
 // What can go in a containment jar.
 export const ITEMS = {
@@ -94,7 +95,7 @@ export class Alchemy {
     try {
       const d = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (!d) return;
-      this.chimeras = d.chimeras || [];
+      this.chimeras = (d.chimeras || []).filter(Boolean).map(ensureStats); // older saves get racing stats from their genes + seed
       this.mutations = d.mutations || [];
       this.artifact = !!d.artifact;
     } catch { /* fresh lab */ }
@@ -204,10 +205,12 @@ export class Alchemy {
     let best = null, bd = 6;
     for (const f of g.world.figures) {
       if (!f.root.visible || f.captured || f.loc.restricted) continue;
+      if (f.civ && f.civ.state !== 'flee') continue; // mid-air, knocked down or cleared away (civilians.js)
       const d = f.root.getWorldPosition(_v).distanceTo(P.pos);
       if (d < bd) { bd = d; best = { kind: 'figure', f }; }
     }
     for (const w of this.wanderers) {
+      if (w.civ && w.civ.state !== 'flee') continue;
       const d = w.root.position.distanceTo(P.pos);
       if (d < bd) { bd = d; best = { kind: 'wanderer', w }; }
     }
@@ -410,9 +413,12 @@ export class Alchemy {
     g.fx.pop(`IT'S ${genes.name.toUpperCase()}!`, null, { color: '#7dff3a', size: 60 });
     g.style(40, 'NEW CHIMERA');
     const parts = `${genes.body} body, ${genes.legs} legs, ${genes.head} head${genes.extraHead ? `, and a spare ${genes.extraHead} head` : ''}`;
+    const st = genes.stats;
+    const best = ['speed', 'power', 'stamina', 'wit'].reduce((a, k) => (st[k] > st[a] ? k : a), 'speed');
+    const brag = { speed: 'Look at those legs go', power: 'It gets off the line like a slingshot', stamina: 'It could run all day. It might', wit: 'It is… alarmingly clever' }[best];
     return {
       title: `BEHOLD: ${genes.name.toUpperCase()}`,
-      text: `"It has a ${parts}${genes.mods.length ? `, ${genes.mods.join(' and ')}-touched` : ''}. Top speed about ${Math.round(genes.speed * 3.6)} km/h, chaos rating ${genes.chaos}. It loves you. ${genes.follow ? 'Race it at the Bounce Dome Funpark!' : 'Three already follow you, so it\'s gone to the holding pen behind the lab.'}"`,
+      text: `"It has a ${parts}${genes.mods.length ? `, ${genes.mods.join(' and ')}-touched` : ''}. Speed ${st.speed}, power ${st.power}, stamina ${st.stamina}, wit ${st.wit}: a grade <b>${genes.tier}</b> racer, top speed about ${Math.round(genes.speed * 3.6)} km/h, chaos rating ${genes.chaos}. ${brag}. It loves you. ${genes.follow ? 'Race it at the Bounce Dome Funpark!' : 'Three already follow you, so it\'s gone to the holding pen behind the lab.'}"${chimeraCard(g, genes, { status: genes.follow ? '★ WITH YOU' : 'IN PEN' })}`,
     };
   }
 
@@ -526,6 +532,7 @@ export class Alchemy {
   }
 
   // Holding pen menu: at the lab terminal, or anywhere with the remote pen link.
+  // Each chimera is a stat card; number keys / clicks pick one.
   penMenu(page = 0) {
     const g = this.game;
     const list = this.chimeras;
@@ -534,15 +541,19 @@ export class Alchemy {
     const pages = Math.ceil(list.length / per);
     page = Math.min(page, pages - 1);
     const slice = list.slice(page * per, page * per + per);
+    slice.forEach(ensureStats);
     const buttons = slice.map((c, i) => ({ label: `${i + 1} · ${c.follow ? '★ ' : ''}${c.name}${c.wins ? ` 🏆${c.wins}` : ''} — ${c.follow ? 'WITH YOU' : 'IN PEN'}`, fn: () => this.chimeraMenu(c, page) }));
+    const cards = slice.map((c, i) => chimeraCard(g, c, { key: i + 1, button: true, mine: c.follow, status: `${c.follow ? '★ WITH YOU' : 'IN PEN'}${c.wins ? ` · 🏆 ${c.wins} win${c.wins > 1 ? 's' : ''}` : ''}` }));
     if (pages > 1) buttons.push({ label: `${buttons.length + 1} · NEXT PAGE (${page + 1}/${pages})`, fn: () => this.penMenu((page + 1) % pages) });
     buttons.push({ label: `${buttons.length + 1} · CLOSE` });
-    g.dialog('HOLDING PEN', `<small>${list.length} chimera${list.length === 1 ? '' : 's'} · ${this.followingCount()}/${MAX_FOLLOW} following you. Pick one to call it out or send it back.</small>`, buttons);
+    g.dialog('HOLDING PEN', `<small>${list.length} chimera${list.length === 1 ? '' : 's'} · ${this.followingCount()}/${MAX_FOLLOW} following you. Pick one to call it out or send it back.</small>${cardList(cards, slice.length)}`, buttons);
   }
 
   chimeraMenu(c, page) {
     const g = this.game;
-    const info = `<b>${c.name}</b><br><small>${c.parents.join(' + ')}${c.mods.length ? ` · ${c.mods.join(', ')}` : ''} · ${Math.round(c.speed * 3.6)} km/h · chaos ${c.chaos}${c.wins ? ` · ${c.wins} Derby win${c.wins > 1 ? 's' : ''}` : ''}</small>`;
+    ensureStats(c);
+    const facts = `<small>Bred from ${c.parents.join(' + ')} · top speed ${Math.round(c.speed * 3.6)} km/h · chaos ${c.chaos}${c.wins ? ` · ${c.wins} Derby win${c.wins > 1 ? 's' : ''}` : ''}${c.born ? ` · born ${new Date(c.born).toLocaleDateString()}` : ''}</small>`;
+    const info = `${chimeraCard(g, c, { big: true, mine: c.follow, status: c.follow ? '★ FOLLOWING YOU' : 'IN THE HOLDING PEN' })}${facts}`;
     g.dialog('HOLDING PEN', info, [
       {
         label: c.follow ? '1 · SEND TO THE PEN' : '1 · BRING ALONG',
@@ -560,7 +571,7 @@ export class Alchemy {
   }
 
   confirmRelease(c, page) {
-    this.game.dialog('RELEASE?', `${c.name} will wander off into the craters forever.`, [
+    this.game.dialog('RELEASE?', `${c.name} will wander off into the craters forever.${chimeraCard(this.game, c, {})}`, [
       { label: '1 · GOODBYE, FRIEND', fn: () => { this.chimeras = this.chimeras.filter((x) => x !== c); this.syncChimeras(); this.game.fx.pop('BYE!', null, { color: '#ff9f1c', size: 40 }); this.penMenu(page); } },
       { label: '2 · NO, KEEP IT', fn: () => this.chimeraMenu(c, page) },
     ]);
@@ -796,6 +807,7 @@ export class Alchemy {
 
   updateWanderers(dt) {
     for (const w of this.wanderers) {
+      if (w.civ) continue; // knocked about or fleeing: civilians.js moves them
       const p = w.root.position;
       const up = p.clone().normalize();
       w.t += dt;

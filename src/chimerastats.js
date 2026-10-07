@@ -76,7 +76,7 @@ export function computeStats(genes) {
 export const statTotal = (st) => st.speed + st.power + st.stamina + st.wit;
 export function tierOf(st) {
   const t = statTotal(st);
-  return t >= 255 ? 'S' : t >= 228 ? 'A' : t >= 200 ? 'B' : 'C';
+  return t >= 260 ? 'S' : t >= 244 ? 'A' : t >= 220 ? 'B' : 'C';
 }
 // top speed in m/s on the Derby track
 export const topSpeedOf = (st) => Math.round((32 + st.speed * 0.1) * 10) / 10;

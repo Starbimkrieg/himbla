@@ -32,6 +32,8 @@ const _q = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 const _x = new THREE.Vector3();
 const _near = [];
+const _q2 = new THREE.Vector3();
+const _w2 = new THREE.Vector3();
 const OOF = ['OOF!', 'YIKES!', 'HEY!', 'OW!', 'EEK!'];
 
 function segDist2(a, b, c) {
@@ -47,6 +49,7 @@ export class Civilians {
     this.list = []; // people currently out of their scripted routine: { f, src, ref, ...state }
     this.gone = []; // cleared residents waiting to respawn
     this.byLoc = null;
+    this.repT = {}; // faction -> time of the last 'attacked a civilian' penalty
     game.blastHooks = game.blastHooks || [];
     game.blastHooks.push((pos, radius, damage, owner) => this.blast(pos, radius, damage, owner));
   }
@@ -138,9 +141,10 @@ export class Civilians {
       f, src, ref, state: 'flee', t: 0, hurt: false, dead: false,
       hp: f.hp ?? (f.kind === 'soldier' ? HP_SOLDIER : HP),
       vel: new THREE.Vector3(), center: new THREE.Vector3(), quat: f.root.quaternion.clone(),
-      axis: new THREE.Vector3(1, 0, 0), spin: 0, flee: 0, dir: new THREE.Vector3(), dirT: 0, s, repT: -9,
+      axis: new THREE.Vector3(1, 0, 0), spin: 0, flee: 0, dir: new THREE.Vector3(), dirT: 0, s,
     };
     c.center.set(0, STAND * s, 0).applyQuaternion(c.quat).add(f.root.position);
+    c.support = f.root.position.length(); // standing on the ground, or on a pad deck / ramp
     f.civ = c;
     this.list.push(c);
     return c;
@@ -160,7 +164,7 @@ export class Civilians {
     if (away.lengthSq() < 0.01) away.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
     away.addScaledVector(up, -away.dot(up)).normalize();
     const power = Math.min(1.6, dmg / 30);
-    c.vel.addScaledVector(away, 5 + 9 * power * Math.max(0.3, k)).addScaledVector(up, 4 + 6 * power);
+    c.vel.addScaledVector(away, 4 + 8 * power * Math.max(0.3, k)).addScaledVector(up, 3 + 4.5 * power);
     c.axis.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
     c.spin = 5 + Math.random() * 7;
     c.state = 'air'; c.t = 0;
@@ -173,10 +177,8 @@ export class Civilians {
     } else if (Math.random() < 0.7) {
       g.fx.pop(OOF[Math.floor(Math.random() * OOF.length)], c.center.clone().addScaledVector(up, 2), { color: '#fff4e0', size: 36, life: 0.8 });
     }
-    // reputation + settlement aggro (rep throttled so a rail beam's several samples count once)
-    const fresh = g.time - c.repT > 0.4;
-    if (fresh || killed) c.repT = g.time;
-    this.witnessed(c.center, fresh ? (killed ? REP_KILL : REP_HIT) : killed ? REP_KILL - REP_HIT : 0, killed);
+    // reputation + settlement aggro: every knock-out counts, plain hits once per blast
+    this.witnessed(c.center, killed ? REP_KILL : REP_HIT, killed);
     this.panic(c.center, f);
   }
 
@@ -204,9 +206,15 @@ export class Civilians {
       let sees = P.visible(_v.copy(loc.pos).addScaledVector(loc.dir, 20), at, 16);
       if (!sees && base) for (const t of base.turrets) if (!t.dead && P.visible(t.center, at, 16)) { sees = true; break; }
       if (!sees) continue;
-      if (rep && !seen.has(loc.faction)) {
+      if (!seen.has(loc.faction)) {
         seen.add(loc.faction);
-        g.rep.add(loc.faction, rep, killed ? 'Knocked out a civilian' : 'Attacked a civilian');
+        // a plain hit costs standing once per blast (several people in one splash, or a rail beam's
+        // samples, count once); every knock-out counts
+        const last = this.repT[loc.faction] ?? -9;
+        if (killed || g.time - last > 0.3) {
+          if (!killed) this.repT[loc.faction] = g.time;
+          g.rep.add(loc.faction, rep, killed ? 'Knocked out a civilian' : 'Attacked a civilian');
+        }
       }
       if (base) this.alertBase(base);
       else if (loc.type === 'pirate') this.alertDen(loc);
@@ -307,12 +315,15 @@ export class Civilians {
     c.vel.addScaledVector(up, -G * dt);
     c.center.addScaledVector(c.vel, dt);
     c.quat.premultiply(_q.setFromAxisAngle(c.axis, c.spin * dt));
-    // buildings
+    this.limbs(c, 'flail', dt);
+    let floorN = null;
+    // buildings (a roof or a pad deck facing up counts as floor)
     for (const col of g.colliders.query(c.center, 1.5, _near)) {
       if (col.platform) continue;
       const pen = g.colliders.contact(col, c.center, 0.45, _w);
       if (pen > 0) {
         c.center.addScaledVector(_w, pen);
+        if (_w.dot(up) > 0.6) { floorN = _x.copy(_w); c.support = c.center.length() - 0.45; continue; }
         const vn = c.vel.dot(_w);
         if (vn < 0) c.vel.addScaledVector(_w, -vn * 1.4);
         c.spin *= 0.7;
@@ -322,16 +333,26 @@ export class Civilians {
     const sr = g.planet.surface(c.center, _w);
     const len = c.center.length();
     const floor = sr + LIE * c.s;
-    if (len <= floor) {
-      c.center.multiplyScalar(floor / len);
-      const vn = c.vel.dot(_w);
+    if (len <= floor + 0.05) {
+      if (len < floor) c.center.multiplyScalar(floor / len);
+      floorN = _x.copy(_w);
+      c.support = sr;
+    }
+    if (floorN) {
+      const vn = c.vel.dot(floorN);
       if (vn < 0) {
-        c.vel.addScaledVector(_w, -vn * 1.35); // restitution ~0.35
-        c.vel.multiplyScalar(0.6);
-        c.spin *= 0.55;
-        if (-vn > 3 && c.t > 0.1) g.fx.dust(c.center, c.vel, 3, up);
+        const hard = -vn > 2.5;
+        c.vel.addScaledVector(floorN, -vn * (hard ? 1.35 : 1)); // restitution ~0.35 on a real impact
+        if (hard) {
+          c.vel.multiplyScalar(0.65);
+          c.spin *= 0.55;
+          if (c.t > 0.1) g.fx.dust(c.center, c.vel, 3, up);
+        }
       }
-      if (c.vel.length() < 1.6 || c.t > 6) {
+      // scraping along the ground
+      c.vel.multiplyScalar(Math.exp(-5 * dt));
+      c.spin *= Math.exp(-4 * dt);
+      if (c.vel.length() < 1.8 || c.t > 6) {
         c.state = 'down'; c.t = 0;
         c.q0 = c.quat.clone();
         c.q1 = this.lying(c, up);
@@ -339,7 +360,20 @@ export class Civilians {
       }
     }
     this.pose(c, null);
-    this.limbs(c, 'flail', dt);
+  }
+
+  // radius of whatever the person stands/lies on: the ground, or a deck/roof they landed on
+  floorAt(c, p) {
+    const g = this.g;
+    const sr = g.planet.surface(p);
+    if (!(c.support > sr + 0.05)) return sr;
+    // still over the deck? probe just under its top
+    const probe = _q2.copy(p).setLength(c.support - 0.1);
+    for (const col of g.colliders.query(probe, 1, _near)) {
+      if (!col.platform && g.colliders.contact(col, probe, 0.15, _w2) > 0) return c.support;
+    }
+    c.support = sr;
+    return sr;
   }
 
   // flat on the back (or front), head pointing wherever it was tumbling to
@@ -357,11 +391,7 @@ export class Civilians {
 
   // place the root so the body centre sits at c.center (h: snap centre to h*scale above ground)
   pose(c, h) {
-    const g = this.g;
-    if (h !== null) {
-      const sr = g.planet.surface(c.center);
-      c.center.setLength(sr + h * c.s);
-    }
+    if (h !== null) c.center.setLength(this.floorAt(c, c.center) + h * c.s);
     const r = c.f.root;
     r.quaternion.copy(c.quat);
     r.position.set(0, -STAND * c.s, 0).applyQuaternion(c.quat).add(c.center);
@@ -396,7 +426,7 @@ export class Civilians {
     }
     const sp = panicked ? (c.f.kind === 'kid' ? 5.5 : 4.8) : 1.6;
     const foot = _w.copy(c.center).addScaledVector(up, -STAND * c.s).addScaledVector(c.dir, sp * dt);
-    g.planet.ground(foot, foot);
+    foot.setLength(this.floorAt(c, foot));
     const body = _v.copy(foot).addScaledVector(up, STAND * c.s);
     for (const col of g.colliders.query(body, 1.4, _near)) {
       if (col.platform) continue;
@@ -408,8 +438,7 @@ export class Civilians {
         c.dir.addScaledVector(_u, Math.max(0, -c.dir.dot(_u)) * 1.1).normalize();
       }
     }
-    c.center.copy(body);
-    g.planet.ground(c.center, foot);
+    foot.copy(body).setLength(this.floorAt(c, body));
     const upN = _u.copy(foot).normalize();
     c.center.copy(foot).addScaledVector(upN, STAND * c.s);
     frameQuat(upN, c.dir, c.quat);

@@ -3,14 +3,15 @@ import { toon, glow, ink, textSprite } from './toon.js';
 import { frameQuat } from './geo.js';
 import { pick } from './rng.js';
 import { spliceGenes, makeChimera, LIVING } from './chimera.js';
+import { ensureStats, statTotal, newRunner, stepRunner, raceOdds, RACE_LEN } from './chimerastats.js';
+import { chimeraCard, cardList } from './chimeracard.js';
 
 // The Chimera Derby at the Bounce Dome Funpark: bet on (or race) the things you made in the lab.
 const TRACK_R = 100;
 const LANES = [91, 96, 101, 106];
 const LAPS = 2;
-const LAP = Math.PI * 2 * TRACK_R;
+const LAP = RACE_LEN / LAPS; // = 2π·TRACK_R
 const BOOTH = [-15, -32];
-const ODDS = [1.8, 2.6, 3.8, 6];
 const BETS = [50, 200, 500];
 const RIVALS = [
   'Glue Factory Escapee', 'Mare-y Poppins', 'Hoof Hearted', 'Sir Trots-a-Lot', 'Neigh Sayer', 'Seabiscuit II (Moon)',
@@ -94,8 +95,10 @@ export class Race {
       return;
     }
     const recent = [...ch.filter((c) => c.follow), ...ch.filter((c) => !c.follow).reverse()].slice(0, 8);
-    g.dialog('CHIMERA DERBY', `"Which of your… <i>creatures</i>… is running today?" <br><small>Two laps. Anything goes. Literally anything. Record: ${g.stats.raceWins || 0} wins.</small>`, recent.map((c, i) => ({
-      label: `${i + 1} · ${c.name.toUpperCase()} — ${Math.round(c.speed * 3.6)} km/h · chaos ${c.chaos}`,
+    recent.forEach(ensureStats);
+    const cards = recent.map((c, i) => chimeraCard(g, c, { key: i + 1, button: true, status: `${c.follow ? '★ WITH YOU' : 'IN PEN'}${c.wins ? ` · 🏆 ${c.wins}` : ''} · chaos ${c.chaos}` }));
+    g.dialog('CHIMERA DERBY', `"Which of your… <i>creatures</i>… is running today?" <br><small>Two laps. Anything goes. Literally anything. Record: ${g.stats.raceWins || 0} wins. Pick a runner (number key or click).</small>${cardList(cards, recent.length)}`, recent.map((c, i) => ({
+      label: `${i + 1} · ${c.name.toUpperCase()} (${c.tier})`,
       fn: () => this.chooseBet(c),
     })).concat([{ label: `${recent.length + 1} · NEVER MIND` }]));
   }
@@ -103,11 +106,12 @@ export class Race {
   chooseBet(genes) {
     const g = this.game;
     const field = [genes, ...this.makeRivals(genes)];
-    const ranked = [...field].sort((a, b) => b.speed - a.speed);
-    const odds = ODDS[ranked.indexOf(genes)];
-    const rivals = field.slice(1).map((r) => `<b>${r.name}</b> (${r.parents.join('-')}, ${Math.round(r.speed * 3.6)} km/h)`).join('<br>');
-    g.dialog('PLACE YOUR BET', `Your <b>${genes.name}</b> pays <b>${odds.toFixed(1)}×</b>.<br><br>Up against:<br>${rivals}`, BETS.map((b, i) => ({
-      label: `${i + 1} · BET ₵${b}`,
+    // the bookie runs the race a few hundred times in his head (the same model the track uses)
+    const book = raceOdds(field, 400);
+    const odds = book[0].odds;
+    const cards = field.map((r, i) => chimeraCard(g, r, { mine: i === 0, tag: i === 0 ? 'YOUR ENTRY' : `LANE ${i + 1}`, odds: book[i], status: `${r.parents.join(' + ')} · chaos ${r.chaos}` }));
+    g.dialog('PLACE YOUR BET', `Your <b>${genes.name}</b> pays <b>${odds.toFixed(1)}×</b> your bet if it wins. <small>Odds come from the bookie's simulations: speed, power, stamina and wit all count, and chaos is chaos.</small>${cardList(cards, 0, 'derby')}`, BETS.map((b, i) => ({
+      label: `${i + 1} · BET ₵${b} (PAYS ₵${Math.round(b * odds)})`,
       fn: () => { if (g.credits < b) { g.hud.toast(`Not enough credits (need ₵${b}).`, 2); return; } g.credits -= b; g.audio.cash(); this.start(field, b, odds); },
     })).concat([{ label: `${BETS.length + 1} · JUST FOR GLORY`, fn: () => this.start(field, 0, odds) }]));
   }
@@ -115,19 +119,26 @@ export class Race {
   makeRivals(mine) {
     const out = [];
     const used = new Set();
+    const myTotal = statTotal(ensureStats(mine).stats);
     for (let i = 0; i < 3; i++) {
-      const items = [];
-      const n = 2 + (Math.random() < 0.3 ? 1 : 0);
-      for (let k = 0; k < n; k++) items.push({ kind: pick(LIVING) });
-      if (Math.random() < 0.5) items.push({ kind: pick(MOD_KINDS) });
-      const gn = spliceGenes(items);
+      // breed a handful of candidates and enter the one closest to a target near your creature's class
+      const target = myTotal * (0.88 + Math.random() * 0.24);
+      let best = null;
+      for (let c = 0; c < 10; c++) {
+        const items = [];
+        const n = 2 + (Math.random() < 0.3 ? 1 : 0);
+        for (let k = 0; k < n; k++) items.push({ kind: pick(LIVING) });
+        if (Math.random() < 0.5) items.push({ kind: pick(MOD_KINDS) });
+        const gn = spliceGenes(items);
+        gn.dist = Math.abs(statTotal(gn.stats) - target);
+        if (!best || gn.dist < best.dist) best = gn;
+      }
+      delete best.dist;
       let name;
       do name = pick(RIVALS); while (used.has(name));
       used.add(name);
-      gn.name = name;
-      // keep the field roughly competitive with your creature
-      gn.speed = Math.round(mine.speed * (0.82 + Math.random() * 0.36) * 10) / 10;
-      out.push(gn);
+      best.name = name;
+      out.push(best);
     }
     return out;
   }
@@ -142,7 +153,7 @@ export class Race {
     this.racers = field.map((genes, i) => {
       const m = makeChimera(genes);
       g.scene.add(m.root);
-      return { genes, m, lane: LANES[i], s: 0, v: 0, t: Math.random() * 5, ev: null, evT: 0, hop: 0, vy: 0, done: false, place: 0, mine: i === 0 };
+      return Object.assign(newRunner(genes), { m, lane: LANES[i], hop: 0, vy: 0, mine: i === 0, tiredSaid: false });
     });
     this.state = 'countdown';
     this.timer = 3.5;
@@ -167,24 +178,20 @@ export class Race {
     r.pos = r.m.root.position;
   }
 
-  chaos(r) {
+  // the race model rolled an event for this runner: make it visible
+  chaosFx(r, ev) {
     const g = this.game;
-    const roll = Math.random();
     const at = r.m.root.position.clone().addScaledVector(r.m.root.position.clone().normalize(), 4);
-    if (roll < 0.25) { r.ev = 'stumble'; r.evT = 1.4; g.fx.pop('STUMBLE!', at, { color: '#ffd23f', size: 36 }); }
-    else if (roll < 0.5) { r.ev = 'zoom'; r.evT = 2; g.fx.pop('ZOOOM!', at, { color: '#2ee6ff', size: 40 }); }
-    else if (roll < 0.65) { r.ev = 'wrong'; r.evT = 1.2; g.fx.pop('WRONG WAY!', at, { color: '#ff4f2e', size: 36 }); }
-    else if (roll < 0.8) { r.ev = 'hop'; r.evT = 0.2; r.vy = 14; g.fx.pop('BOING!', at, { color: '#ff2e88', size: 36 }); }
-    else if (roll < 0.92) {
-      r.ev = 'boom'; r.evT = 2.2;
+    if (ev === 'stumble') g.fx.pop('STUMBLE!', at, { color: '#ffd23f', size: 36 });
+    else if (ev === 'trip') g.fx.pop(pick(['TRIPPED!', 'OOPS', 'WHICH LEG?!']), at, { color: '#ffd23f', size: 30 });
+    else if (ev === 'zoom') g.fx.pop('ZOOOM!', at, { color: '#2ee6ff', size: 40 });
+    else if (ev === 'wrong') g.fx.pop('WRONG WAY!', at, { color: '#ff4f2e', size: 36 });
+    else if (ev === 'hop') { r.vy = 14; g.fx.pop('BOING!', at, { color: '#ff2e88', size: 36 }); }
+    else if (ev === 'boom') {
       g.fx.explosion(r.m.root.position, 4, false);
       r.m.root.visible = false;
       g.fx.pop('IT EXPLODED?!', at, { color: '#ff4f2e', size: 40 });
-    } else {
-      // gets distracted by a nearby head
-      r.ev = 'stumble'; r.evT = 2.5;
-      g.fx.pop(r.genes.extraHead ? 'HEADS ARGUING' : 'EXISTENTIAL DREAD', at, { color: '#c77dff', size: 32 });
-    }
+    } else if (ev === 'dread') g.fx.pop(r.genes.extraHead ? 'HEADS ARGUING' : 'EXISTENTIAL DREAD', at, { color: '#c77dff', size: 32 });
   }
 
   update(dt) {
@@ -199,22 +206,16 @@ export class Race {
       for (const r of this.racers) { r.t += dt; r.m.anim(r.t, 0); }
     } else if (this.state === 'run') {
       for (const r of this.racers) {
-        r.t += dt;
-        if (r.done) { r.m.anim(r.t, 1); continue; }
-        if (r.evT > 0) { r.evT -= dt; if (r.evT <= 0) { if (r.ev === 'boom') { r.m.root.visible = true; g.fx.pop('REASSEMBLED!', r.pos.clone().addScaledVector(r.pos.clone().normalize(), 4), { color: '#7dff6a', size: 32 }); } r.ev = null; } }
-        else if (Math.random() < dt * (0.05 + r.genes.chaos * 0.035)) this.chaos(r);
-        const surge = 0.9 + Math.sin(r.t * 0.7 + r.genes.seed) * 0.08 + Math.random() * 0.04;
-        let target = r.genes.speed * surge;
-        if (r.ev === 'stumble' || r.ev === 'boom') target = 0;
-        else if (r.ev === 'zoom') target *= 1.8;
-        else if (r.ev === 'wrong') target = -r.genes.speed * 0.5;
-        r.v += (target - r.v) * Math.min(1, dt * 2.5);
-        r.s = Math.max(0, r.s + r.v * dt * (TRACK_R / r.lane));
+        if (r.done) { r.t += dt; r.m.anim(r.t, 1); continue; }
+        const ev = stepRunner(r, dt);
+        if (ev) this.chaosFx(r, ev);
+        if (r.ended === 'boom') { r.m.root.visible = true; g.fx.pop('REASSEMBLED!', r.pos.clone().addScaledVector(r.pos.clone().normalize(), 4), { color: '#7dff6a', size: 32 }); }
+        if (!r.tiredSaid && r.stam < 0.2) { r.tiredSaid = true; g.fx.pop(r.mine ? 'YOURS IS GASSED!' : 'RUNNING ON FUMES', r.pos.clone().addScaledVector(r.pos.clone().normalize(), 5), { color: '#ff9f1c', size: 28 }); }
         r.hop += r.vy * dt; r.vy -= 30 * dt;
         if (r.hop <= 0) { r.hop = 0; r.vy = r.genes.hop > 0.5 && Math.random() < dt * 4 ? 5 : 0; }
         this.place(r);
         r.m.anim(r.t, Math.abs(r.v));
-        if (r.s >= LAP * LAPS) {
+        if (r.s >= RACE_LEN) {
           r.done = true;
           r.place = ++this.finished;
           g.fx.pop(r.place === 1 ? `${r.genes.name.toUpperCase()} WINS!` : `#${r.place}`, r.pos.clone().addScaledVector(r.pos.clone().normalize(), 6), { color: r.mine ? '#7dff3a' : '#ffffff', size: r.place === 1 ? 70 : 40 });
@@ -228,7 +229,7 @@ export class Race {
 
   drawPanel() {
     const order = [...this.racers].sort((a, b) => (a.done && b.done ? a.place - b.place : b.s - a.s));
-    const rows = order.map((r, i) => `<div class="race-row ${r.mine ? 'mine' : ''}"><b>${r.done ? r.place : i + 1}</b> ${r.genes.name}${r.ev ? ` <i>${{ stumble: 'stumbling', zoom: 'ZOOMING', wrong: 'wrong way!', hop: 'airborne', boom: 'in pieces' }[r.ev]}</i>` : ''}<span>${Math.min(LAPS, Math.floor(r.s / LAP) + 1)}/${LAPS}</span></div>`).join('');
+    const rows = order.map((r, i) => `<div class="race-row ${r.mine ? 'mine' : ''}"><b>${r.done ? r.place : i + 1}</b> ${r.genes.name}${r.ev ? ` <i>${{ stumble: 'stumbling', trip: 'tripped', zoom: 'ZOOMING', wrong: 'wrong way!', hop: 'airborne', boom: 'in pieces', dread: 'having doubts' }[r.ev]}</i>` : !r.done && r.stam < 0.25 ? ' <i>tired</i>' : ''}<span>${Math.min(LAPS, Math.floor(r.s / LAP) + 1)}/${LAPS}</span><em class="race-stam" title="stamina"><u style="width:${Math.round(r.stam * 20) * 5}%"></u></em></div>`).join('');
     const head = this.state === 'countdown' ? `STARTING IN ${Math.ceil(this.timer)}` : 'CHIMERA DERBY';
     const html = `<div class="m-head">${head}${this.bet ? ` · ₵${this.bet} @ ${this.odds.toFixed(1)}×` : ''}</div>${rows}`;
     if (html !== this.lastHtml) { this.panel.innerHTML = html; this.lastHtml = html; }
