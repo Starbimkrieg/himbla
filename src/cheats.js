@@ -37,7 +37,7 @@ export class Cheats {
       { label: '4 · SPAWN AN EVENT…', fn: () => this.eventMenu() },
       { label: '5 · UNLOCK-STAT COUNTERS (events, deliveries, wins)', fn: () => { Object.assign(g.stats, { meridianEvents: Math.max(3, g.stats.meridianEvents || 0), darkDeliveries: Math.max(5, g.stats.darkDeliveries || 0), raceWins: Math.max(1, g.stats.raceWins || 0) }); g.save(); this.moreMenu(); } },
       { label: '6 · CURE MUTATIONS', fn: () => { g.alchemy.cure(); this.moreMenu(); } },
-      { label: '7 · RESET ALL PROGRESS (reloads)', fn: () => this.confirmReset() },
+      { label: '7 · RESET THIS SAVE SLOT (back to menu)', fn: () => this.confirmReset() },
       { label: '8 · STORY…', fn: () => this.storyMenu() },
       { label: '9 · BACK', fn: () => this.open() },
       { label: 'CLOSE' },
@@ -188,8 +188,14 @@ export class Cheats {
   }
 
   confirmReset() {
-    this.game.dialog('RESET EVERYTHING?', 'Wipes credits, upgrades, reputation, map, chimeras, outfits and highlights, then reloads.', [
-      { label: '1 · YES, WIPE IT', fn: () => { try { for (const k of Object.keys(localStorage)) if (k.startsWith('moonrunner')) localStorage.removeItem(k); } catch { /* unavailable */ } location.reload(); } },
+    const g = this.game;
+    const n = g.saves && g.saves.active;
+    g.dialog('RESET THIS SAVE?', `Wipes ${n ? `save slot ${n}` : 'this save'} (credits, upgrades, reputation, map, chimeras, outfits and highlights) and returns to the main menu. Other slots and your settings are kept.`, [
+      { label: '1 · YES, WIPE IT', fn: () => {
+        if (g.saves && n) g.saves.remove(n); // clears the slot and the live working copy
+        else { try { for (const k of Object.keys(localStorage)) if (k.startsWith('moonrunner-') && k !== 'moonrunner-settings-v1') localStorage.removeItem(k); } catch { /* unavailable */ } }
+        location.reload();
+      } },
       { label: '2 · NO', fn: () => this.moreMenu() },
     ]);
   }

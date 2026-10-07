@@ -3,7 +3,7 @@ import { FACTIONS } from './locations.js';
 import { makeSeismo, makeTube, makeCrate, makeRover, makeFreighter, makeFigure } from './models.js';
 import { frameQuat, greatCircle, arcDist, darkness, tangent, R } from './geo.js';
 import { pick, randRange } from './rng.js';
-import { textSprite } from './toon.js';
+import { textSprite, toon, glow, ink } from './toon.js';
 
 // Which kinds of events each faction posts. One open event per faction at a time.
 const TYPES = {
@@ -16,6 +16,10 @@ const TYPES = {
 };
 const ICON = { clearCamp: '☠', strike: '✸', seismic: '≋', blackLake: '⚗', escort: '⛟', pods: '✚', relay: '📡', raid: '⚔', wreck: '✖' };
 const OPEN_LIFETIME = 420;
+const START_VERB = {
+  clearCamp: 'TAKE THE ORDERS', strike: 'GRAB THE TARGET DESIGNATOR', seismic: 'BEGIN THE SURVEY', blackLake: 'COLLECT THE SAMPLE TUBES',
+  escort: 'SIGNAL THE CONVOY', pods: 'OPEN THE SUPPLY DROP', relay: 'UNPACK THE RELAY', raid: 'RAISE THE RAID BANNER', wreck: 'ANSWER THE DISTRESS CALL',
+};
 
 const _v = new THREE.Vector3();
 
@@ -86,6 +90,62 @@ export class Events {
     return g;
   }
 
+  // Where you go to begin an event: right at its start for local jobs; for jobs that used to
+  // trigger when you neared a big area (a camp, a base), a staging point on its safe side.
+  stagePoint(ev) {
+    if (ev.startR <= 60) return ev.start.clone();
+    const sd = ev.start.clone().normalize();
+    const safe = this.nearestSafe(sd);
+    const t = tangent((safe ? safe.dir : this.game.player.pos).clone().sub(sd), sd);
+    if (t.lengthSq() < 1e-10) t.copy(tangent(new THREE.Vector3(1, 0, 0), sd));
+    return this.ground(greatCircle(sd, t.normalize(), Math.min(ev.startR * 0.85, 560)));
+  }
+
+  // The thing you walk up to and press F on: different per event type.
+  startProp(ev) {
+    const col = new THREE.Color(FACTIONS[ev.faction] ? FACTIONS[ev.faction].color : '#ffffff').getHex();
+    const g = new THREE.Group();
+    const add = (geo, mat, x, y, z, outline = 0.05) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (outline) ink(m, outline); g.add(m); return m; };
+    const dark = toon(0x2a2540), fc = toon(col), glw = glow(col);
+    switch (ev.type) {
+      case 'seismic': add(new THREE.BoxGeometry(2, 1.4, 2), toon(0xffd23f), 0, 0.7, 0); add(new THREE.CylinderGeometry(0.1, 0.1, 2.4, 6), dark, 0, 2.6, 0); add(new THREE.SphereGeometry(0.6, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), toon(0xf5f5f5), 0, 3.8, 0); break;
+      case 'blackLake': for (let i = 0; i < 3; i++) add(new THREE.CylinderGeometry(0.35, 0.35, 1.8, 10), glow(0x7b5cff), -1 + i, 0.9, 0); add(new THREE.BoxGeometry(3.2, 0.3, 1), dark, 0, 0.15, 0); break;
+      case 'escort': add(new THREE.CylinderGeometry(0.15, 0.2, 5, 6), dark, 0, 2.5, 0); add(new THREE.BoxGeometry(1.4, 1, 1), fc, 0, 0.5, 0); add(new THREE.SphereGeometry(0.4, 8, 6), glw, 0, 5.2, 0, 0); break;
+      case 'pods': add(new THREE.BoxGeometry(2.2, 1.6, 2.2), toon(0xffffff), 0, 0.8, 0); add(new THREE.BoxGeometry(1.6, 0.4, 0.1), toon(0xff2a4a), 0, 1, 1.12, 0); add(new THREE.BoxGeometry(0.4, 1.4, 0.1), toon(0xff2a4a), 0, 1, 1.12, 0); break;
+      case 'relay': add(new THREE.CylinderGeometry(0.12, 0.2, 4, 6), toon(0xd8d4e8), 0, 2, 0); add(new THREE.OctahedronGeometry(0.6, 0), glw, 0, 4.4, 0, 0); add(new THREE.BoxGeometry(1.6, 0.8, 1.2), dark, 0, 0.4, 0); break;
+      case 'strike': for (const a of [0, 2.1, 4.2]) { const l = add(new THREE.CylinderGeometry(0.08, 0.08, 2.4, 5), dark, Math.cos(a) * 0.5, 1.1, Math.sin(a) * 0.5, 0.02); l.rotation.set(Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35); } add(new THREE.BoxGeometry(0.6, 0.5, 1.4), fc, 0, 2.4, 0); add(new THREE.SphereGeometry(0.14, 8, 6), glow(0xff2a4a), 0, 2.4, 0.72, 0); break;
+      case 'raid': add(new THREE.CylinderGeometry(0.1, 0.1, 6, 6), dark, 0, 3, 0); add(new THREE.PlaneGeometry(2.6, 1.6), toon(0x111111, { side: THREE.DoubleSide }), 1.35, 5, 0, 0); add(new THREE.SphereGeometry(0.4, 8, 6), toon(0xffffff), 1.35, 5, 0.02, 0); break;
+      case 'wreck': add(new THREE.CylinderGeometry(0.2, 0.3, 2, 6), dark, 0, 1, 0); add(new THREE.SphereGeometry(0.45, 8, 6), glow(0xff2a4a), 0, 2.3, 0, 0); break;
+      default: { // a comms terminal with orders on screen
+        add(new THREE.BoxGeometry(1.6, 1.8, 1), dark, 0, 0.9, 0);
+        const scr = add(new THREE.PlaneGeometry(1.2, 0.8), glw, 0, 1.5, 0.52, 0);
+        scr.rotation.x = -0.3;
+        add(new THREE.CylinderGeometry(0.04, 0.04, 1.6, 4), dark, 0.6, 2.6, 0, 0);
+      }
+    }
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(3.4, 0.15, 6, 40), glw);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.1;
+    ring.userData.pulse = true;
+    g.add(ring);
+    return g;
+  }
+
+  // F at an open event's start prop begins it (nothing starts just by passing through any more)
+  interact() {
+    const g = this.game;
+    const P = g.player;
+    if (P.dead || this.active) return false;
+    for (const ev of this.list) {
+      if (ev.state !== 'open' || !ev.stage || P.pos.distanceTo(ev.stage) > 8) continue;
+      if (ev.cool > 0) { g.hud.prompt('…'); return true; }
+      g.hud.prompt(`<b>F</b> — ${START_VERB[ev.type] || 'BEGIN'}: ${ev.title.toUpperCase()}`);
+      if (g.input.pressed('KeyF') && g.boardCooldown <= 0) this.start(ev);
+      return true;
+    }
+    return false;
+  }
+
   removeMarker(ev) {
     if (ev.marker) { this.game.scene.remove(ev.marker); ev.marker = null; }
     for (const o of ev.props || []) o.removeFromParent();
@@ -117,7 +177,9 @@ export class Events {
     ev.age = 0;
     ev.props = ev.props || [];
     ev.reward = Math.round(((ev.reward || 400) * 0.5 * Math.max(0.8, this.game.rep.payMultiplier(faction) || 1)) / 10) * 10;
-    ev.marker = this.marker(ev.start, faction, `${ICON[type] || '!'} ${ev.short || ev.title}`);
+    ev.stage = this.stagePoint(ev);
+    ev.marker = this.marker(ev.stage, faction, `${ICON[type] || '!'} ${ev.short || ev.title}`);
+    ev.marker.add(this.startProp(ev));
     if (ev.needsCrawler) {
       ev.model = this.makeCrawler(ev);
       ev.model.root.position.copy(ev.start);
@@ -244,7 +306,9 @@ export class Events {
       brief: 'A Rustmoon smuggler is pinned under a crashed ship, losing air. Get med supplies from the nearest lit outpost and get back before it runs out.',
       props: [ship.root, pirate.root],
     };
+    ev.stage = pos.clone();
     ev.marker = this.marker(pos, 'rustmoon', '✖ SOS');
+    ev.marker.add(this.startProp(ev));
     this.list.push(ev);
     g.hud.toast('📡 WEAK DISTRESS SIGNAL FROM THE DARK SIDE…', 5);
     return ev;
@@ -640,7 +704,7 @@ export class Events {
         if (ev.cool > 0) ev.cool -= dt;
         if (!ev.special && ev.age > OPEN_LIFETIME) { this.removeMarker(ev); this.list = this.list.filter((e) => e !== ev); this.cooldown[ev.faction] = 10; continue; }
         if (ev.marker) ev.marker.children[1].material.rotation = Math.sin(g.time * 2) * 0.05;
-        if (!P.dead && !(ev.cool > 0) && P.pos.distanceTo(ev.start) < ev.startR) this.start(ev);
+        if (ev.marker) ev.marker.traverse((o) => { if (o.userData.pulse) o.scale.setScalar(1 + Math.sin(g.time * 3) * 0.08); });
       } else if (ev.state === 'active') {
         ev.t += dt;
         const u = this['update_' + ev.type];

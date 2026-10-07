@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ComicPost } from './post.js';
+import { pixelFont } from './fonts.js';
 
 const KEY = 'moonrunner-highlights-v1';
 const MAX = 12;
@@ -70,9 +71,9 @@ export class Highlights {
     c.fillRect(0, 0, CW, CH);
     c.fillStyle = 'rgba(255,46,136,0.18)';
     for (let y = 0; y < CH; y += 12) for (let x = (y / 12) % 2 ? 6 : 0; x < CW; x += 12) { c.beginPath(); c.arc(x, y, 2, 0, Math.PI * 2); c.fill(); }
-    c.font = '64px Bangers, Impact, sans-serif';
+    c.font = pixelFont(40);
     c.textAlign = 'center';
-    c.lineWidth = 10; c.strokeStyle = '#120a1e'; c.lineJoin = 'round';
+    c.lineWidth = 8; c.strokeStyle = '#120a1e'; c.lineJoin = 'round';
     c.strokeText('HALL OF HIGHLIGHTS', CW / 2, 70);
     c.fillStyle = '#ffd23f';
     c.fillText('HALL OF HIGHLIGHTS', CW / 2, 70);
@@ -89,17 +90,17 @@ export class Highlights {
       if (it) {
         const im = this.image(it.url);
         if (im.complete && im.naturalWidth) c.drawImage(im, -pw / 2, -ph / 2, pw, ph);
-        c.font = '17px Bangers, Impact, sans-serif';
+        c.font = pixelFont(10);
         c.fillStyle = '#ffd23f';
         c.fillRect(-pw / 2 - 6, ph / 2 - 18, pw + 12, 24);
         c.fillStyle = '#120a1e';
         c.textAlign = 'center';
-        c.fillText(it.caption.slice(0, 30), 0, ph / 2 + 1);
+        c.fillText(it.caption.slice(0, 22), 0, ph / 2 - 1);
       } else {
         c.fillStyle = '#3a3550';
         c.fillRect(-pw / 2, -ph / 2, pw, ph);
         c.fillStyle = '#8a84a8';
-        c.font = '22px Bangers, Impact, sans-serif';
+        c.font = pixelFont(14);
         c.textAlign = 'center';
         c.fillText('YOUR MOMENT HERE', 0, 8);
       }

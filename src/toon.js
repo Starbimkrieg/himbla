@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pixelFont } from './fonts.js';
 
 let grad = null;
 export function gradientMap() {
@@ -45,11 +46,13 @@ export function glow(color) {
   return new THREE.MeshBasicMaterial({ color });
 }
 
-// Canvas text texture in the comic font, for in-world signs.
+// Canvas text texture in the pixel display font, for in-world signs. Press Start 2P is much
+// wider than the old comic face, so it is drawn at ~half the nominal size on the same canvas.
 export function textSprite(text, { color = '#ffd23f', stroke = '#120a1e', bg = null, size = 96, scale = 1 } = {}) {
   const c = document.createElement('canvas');
   const ctx = c.getContext('2d');
-  const font = `${size}px Bangers, Impact, sans-serif`;
+  const fs = size * 0.52;
+  const font = pixelFont(fs);
   ctx.font = font;
   const w = Math.ceil(ctx.measureText(text).width) + size;
   const h = Math.ceil(size * 1.5);
@@ -63,12 +66,12 @@ export function textSprite(text, { color = '#ffd23f', stroke = '#120a1e', bg = n
     ctx.fillStyle = bg;
     ctx.fillRect(8, 8, w - 16, h - 16);
   }
-  ctx.lineWidth = size * 0.16;
+  ctx.lineWidth = fs * 0.28;
   ctx.strokeStyle = stroke;
   ctx.lineJoin = 'round';
-  ctx.strokeText(text, w / 2, h / 2 + size * 0.05);
+  ctx.strokeText(text, w / 2, h / 2 + fs * 0.06);
   ctx.fillStyle = color;
-  ctx.fillText(text, w / 2, h / 2 + size * 0.05);
+  ctx.fillText(text, w / 2, h / 2 + fs * 0.06);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const mat = new THREE.SpriteMaterial({ map: tex, depthWrite: false, transparent: true });

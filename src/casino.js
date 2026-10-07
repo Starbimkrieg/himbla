@@ -1,4 +1,6 @@
 import { OUTFITS, SKATES } from './cosmetics.js';
+import { pixelFont } from './fonts.js';
+import { CasinoGames } from './casinoGames.js';
 
 // The Lucky Crater Casino: slots, blackjack, roulette, a prize wheel, high-low, a prize
 // counter and a loan shark, all in one comic overlay. State lives in game.stats.casino.
@@ -27,7 +29,7 @@ const TABS = [
   ['slots', 'LUNAR SLOTS'], ['bj', 'BLACK HOLE BLACKJACK'], ['roulette', 'CRATER ROULETTE'], ['wheel', 'PRIZE WHEEL'],
   ['hilo', 'HIGH-LOW'], ['prizes', 'PRIZE COUNTER'], ['shark', 'LOAN SHARK'],
 ];
-const DEFAULTS = { wagered: 0, won: 0, biggest: 0, spins: 0, hands: 0, bjs: 0, bestStreak: 0, chips: 0, chipFrac: 0, jackpot: 2500, lastFree: 0, debt: 0, debtAt: 0, loans: 0, visits: 0 };
+const DEFAULTS = { wagered: 0, won: 0, biggest: 0, spins: 0, hands: 0, bjs: 0, bestStreak: 0, chips: 0, chipFrac: 0, jackpot: 2500, lastFree: 0, debt: 0, debtAt: 0, loans: 0, visits: 0, ducks: 0, plinko: 0 };
 const CHIP_RATE = 50; // credits wagered per Lucky Chip
 const FREE_SPIN_MS = 10 * 60 * 1000;
 const INTEREST_MS = 10 * 60 * 1000;
@@ -155,7 +157,9 @@ export class Casino {
     this.wheelRot = 0;
     this.hl = { phase: 'idle', card: null, pot: 0, stake: 0, streak: 0 };
     this.lastSay = '';
+    this.mode = null; // a walk-in 3D game you're seated at ('bj' | 'duck' | 'plinko'), or null
     if (this.el) this.build();
+    this.games = new CasinoGames(game, this);
   }
 
   // Saved state, with defaults filled in for older saves.
@@ -171,6 +175,32 @@ export class Casino {
   near(p) {
     const c = this.game.world.casino;
     return !!c && c.loc.active && c.near(p);
+  }
+
+  // Walk-in casino: prompt + F at a game station. Returns true when it owns the prompt.
+  interact() {
+    const g = this.game;
+    if (!this.games || !this.games.ok) return false;
+    const s = this.games.stationAt(g.player.pos);
+    if (!s) return false;
+    g.hud.prompt(`<b>F</b> — ${s.label}`);
+    if (g.input.pressed('KeyF') && g.boardCooldown <= 0) {
+      if (s.id === 'classic') this.open();
+      else if (s.id === 'prizes') { this.open(); this.setTab('prizes'); } else this.sit(s.id);
+    }
+    return true;
+  }
+
+  // sit down at one of the 3D games (modal state 'casino', no overlay)
+  sit(id) {
+    const g = this.game;
+    g.openModal('casino');
+    this.mode = id;
+    const s = this.st;
+    s.visits++;
+    if (s.visits === 1) { s.chips += 10; g.fx.pop('WELCOME GIFT: 10 LUCKY CHIPS!', null, { color: '#7dff6a', size: 30, life: 2.2 }); }
+    this.clampBet();
+    this.games.enter(id);
   }
 
   // ---------- open / close / keys ----------
@@ -193,6 +223,13 @@ export class Casino {
   }
 
   close(viaEscape) {
+    if (this.mode) {
+      this.games.leave();
+      this.mode = null;
+      this.game.save();
+      this.game.closeModal(viaEscape);
+      return;
+    }
     this.auto = 0;
     clearInterval(this.clock);
     this.el.classList.add('hidden');
@@ -201,6 +238,7 @@ export class Casino {
   }
 
   onKey(code) {
+    if (this.mode) { this.games.onKey(code); return; }
     const n = parseInt(code.replace('Digit', ''), 10);
     if (code.startsWith('Digit') && n >= 1 && n <= TABS.length) { this.setTab(TABS[n - 1][0]); return; }
     if (code === 'ArrowLeft' || code === 'Minus') { this.stepBet(-1); return; }
@@ -854,7 +892,7 @@ export class Casino {
       x.beginPath(); x.moveTo(c, c); x.arc(c, c, c - 10, a0, a1); x.closePath(); x.fill();
       x.strokeStyle = '#ffd23f'; x.lineWidth = 1; x.stroke();
       x.save(); x.translate(c, c); x.rotate((a0 + a1) / 2 + Math.PI / 2);
-      x.fillStyle = '#fff4e0'; x.font = '15px Bangers, Impact, sans-serif'; x.textAlign = 'center';
+      x.fillStyle = '#fff4e0'; x.font = pixelFont(9); x.textAlign = 'center';
       x.fillText(String(v), 0, -c + 28);
       x.restore();
     }
@@ -989,7 +1027,7 @@ export class Casino {
       x.save(); x.translate(c, c); x.rotate(a + span / 2);
       x.textAlign = 'right'; x.textBaseline = 'middle';
       const fs = Math.max(12, Math.min(26, span * 90));
-      x.font = `${fs}px Bangers, Impact, sans-serif`;
+      x.font = pixelFont(fs * 0.55);
       x.lineWidth = 4; x.strokeStyle = '#120a1e'; x.strokeText(p.label, c - 24, 0);
       x.fillStyle = p.kind === 'nothing' ? '#c9c3d9' : '#fff';
       x.fillText(p.label, c - 24, 0);

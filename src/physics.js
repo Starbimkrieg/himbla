@@ -238,7 +238,8 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
   // Magnetic grip: pull into the surface while (nearly) in contact, so the skates hold
   // the line over small bumps. A real launch climbs out of range and flies free.
   if (input.skates && b.sinceContact < params.gripWindow && b.altitude < params.gripRange) {
-    v.addScaledVector(b.groundN, -params.grip * dt);
+    // a touch more glue the faster you go
+    v.addScaledVector(b.groundN, -params.grip * (1 + Math.min(1, v.length() / 80) * 0.6) * dt);
   }
 
   b.thrusting = false;
@@ -270,6 +271,16 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
       if (!wasGrounded && impact > 3) impacts.push({ speed: impact, kind: 'ground', normal: _sn.clone() });
       else if (impact > (input.skates ? params.skateSafeImpact : params.bootSafeImpact)) impacts.push({ speed: impact, kind: 'ground', normal: _sn.clone() });
     }
+    b.grounded = true;
+    b.groundN.copy(_sn);
+    b.altitude = 0;
+    b.onLake = planet.lastLake;
+  } else if (params.skateSnap !== false && input.skates && wasGrounded && alt < 0.25 + Math.min(0.3, v.length() * 0.004) && v.dot(_sn) < 1.2 + Math.min(1.6, v.length() * 0.02)) {
+    // locked skates hug smooth ground: tiny lift-offs over gentle crests snap back down,
+    // while ramps and jumps (which throw you up much harder) still launch you
+    b.pos.multiplyScalar(sr / len);
+    const vn = v.dot(_sn);
+    if (vn > 0) v.addScaledVector(_sn, -vn);
     b.grounded = true;
     b.groundN.copy(_sn);
     b.altitude = 0;

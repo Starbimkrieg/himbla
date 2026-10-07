@@ -208,22 +208,32 @@ export class Missions {
     this.fail(`Pirates fenced your cargo at ${lair ? lair.name : 'a pirate den'}.`);
   }
 
+  // credits the style pool is worth right now (capped at the contract's base reward unless raw)
+  styleValue(capped = true) {
+    const v = Math.round(this.stylePool * 0.6);
+    return capped && this.active ? Math.min(v, this.active.reward) : v;
+  }
+
   complete() {
     const g = this.game;
     const a = this.active;
     const base = a.reward;
     const lateMult = this.late ? 0.5 : 1;
-    const integ = Math.round(base * (0.5 + 0.5 * this.integrity) * lateMult);
     const timeBonus = this.late ? 0 : Math.round(base * 0.3 * Math.max(0, this.timer / a.time));
-    const style = Math.round(this.stylePool * 1.2);
-    const total = integ + timeBonus + style;
+    // style pays half what it used to and can at most double the contract (₵400 job → ₵800 tops);
+    // the package's condition then scales the whole total
+    const styleRaw = this.styleValue(false);
+    const style = Math.min(styleRaw, base);
+    const condition = 0.5 + 0.5 * this.integrity;
+    const total = Math.round((base + timeBonus + style) * condition * lateMult);
+    const integ = base;
     g.addCredits(total, null);
     const repGain = this.late ? 1 : (a.premium ? 4 : 3) + (this.integrity > 0.8 ? 1 : 0);
     g.rep.add(a.faction, repGain, `Delivered ${a.cargo.name}`);
     g.stats.deliveries++;
     if (a.dark) g.stats.darkDeliveries = (g.stats.darkDeliveries || 0) + 1;
     g.audio.cash();
-    g.hud.delivered({ a, integ, timeBonus, style, total, integrity: this.integrity, faction: FACTIONS[a.faction].name, repGain });
+    g.hud.delivered({ a, integ, timeBonus, style, styleCapped: styleRaw > base, condition, late: this.late, total, integrity: this.integrity, faction: FACTIONS[a.faction].name, repGain });
     g.actionPanel('delivered');
     this.clear();
     g.save();

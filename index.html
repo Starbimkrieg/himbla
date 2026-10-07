@@ -35,6 +35,7 @@
     </div>
 
     <div id="crosshair"></div>
+    <div id="scope" class="hidden"><div class="sc-ring"></div><div class="sc-h"></div><div class="sc-v"></div><div class="sc-label">RAIL LANCE · ×5</div></div>
     <div id="obj-arrow" class="hidden">➤</div>
     <div id="obj-marker" class="hidden"><div class="diamond"></div><span></span></div>
     <div id="alert" class="hidden"></div>
@@ -85,27 +86,23 @@
     </table>
   </div>
 
-  <div id="pause" class="overlay hidden"><div class="panel center-card"><h1>PAUSED</h1><p>Click to resume</p><button id="settings-btn-pause" class="set-open">⚙ SETTINGS</button></div></div>
+  <div id="pause" class="overlay hidden"><div class="panel center-card"><h1>PAUSED</h1><p>Click to resume</p><div class="pause-btns"><button id="settings-btn-pause" class="set-open">⚙ SETTINGS</button><button id="quit-btn-pause" class="set-open quit">QUIT TO MAIN MENU</button></div></div></div>
   <div id="settings" class="overlay hidden"></div>
   <div id="death" class="overlay hidden"><div class="panel center-card lose"><h1>K.O.!</h1><p id="death-cause"></p><p class="small">Click or press ENTER to redeploy at your home base.</p></div></div>
 
   <div id="title" class="overlay">
-    <div class="cover">
-      <div class="issue">ISSUE #1 · 25¢ · LUNAR FRONTIER COMICS</div>
-      <h1 class="logo">MOON<span>-</span>RUNNER</h1>
-      <div class="tagline">QUANTUM-LOCK DELIVERY SERVICE</div>
-      <div class="cover-panels">
-        <div class="cp"><b>DIVE</b> into craters!</div>
-        <div class="cp"><b>LAUNCH</b> off the rims!</div>
-        <div class="cp"><b>DELIVER</b> — whatever it takes!</div>
+    <div class="mm-scan"></div>
+    <div class="mm">
+      <div class="mm-brand">
+        <h1 class="logo">MOON<span>-</span>RUNNER</h1>
+        <div class="tagline">QUANTUM-LOCK DELIVERY SERVICE</div>
       </div>
-      <div class="controls-mini">
-        <span><b>SPACE</b> hold = skates</span><span><b>WASD</b> move</span><span><b>E/RMB</b> thrust</span>
-        <span><b>SHIFT</b> jump</span><span><b>Q</b>+WASD tricks</span><span><b>LMB</b> shoot</span><span><b>M</b> map</span><span><b>J</b> reputation</span><span><b>L</b> lamp</span><span><b>F</b> job board</span><span><b>C</b> wardrobe</span><span><b>H</b> help</span>
-      </div>
-      <div id="load-status">Loading…</div>
-      <button id="start-btn" class="hidden">START YOUR SHIFT!</button>
-      <button id="settings-btn-title" class="set-open">⚙ SETTINGS</button>
+      <div id="mm-body"></div>
+      <div id="load-status">LOADING…</div>
+      <div id="mm-hint" class="mm-hint"></div>
+    </div>
+    <div class="controls-mini">
+      <span><b>SPACE</b> skates</span><span><b>WASD</b> move</span><span><b>E/RMB</b> thrust</span><span><b>SHIFT</b> jump</span><span><b>Q</b>+WASD tricks</span><span><b>LMB</b> shoot</span><span><b>M</b> map</span><span><b>J</b> reputation</span><span><b>L</b> lamp</span><span><b>F</b> job board</span><span><b>C</b> wardrobe</span><span><b>H</b> help</span>
     </div>
   </div>
 

@@ -126,14 +126,15 @@ export class FX {
     return r;
   }
 
-  // Comic onomatopoeia anchored at a world position (or screen centre if pos null).
+  // Onomatopoeia anchored at a world position (or screen centre if pos null).
   pop(text, pos = null, { color = '#ffd23f', size = 64, life = 1.0, rot = null } = {}) {
     const el = document.createElement('div');
     el.className = 'pop';
     el.textContent = text;
     el.style.color = color;
-    el.style.fontSize = size + 'px';
-    el.style.setProperty('--rot', (rot ?? (Math.random() * 24 - 12)) + 'deg');
+    // pixel display font: ~0.55x the old comic sizes, and only a slight tilt (pixels hate rotation)
+    el.style.fontSize = Math.round(Math.max(10, size * 0.55)) + 'px';
+    el.style.setProperty('--rot', Math.round((rot ?? (Math.random() * 24 - 12)) * 0.25) + 'deg');
     el.style.animationDuration = life + 's';
     this.popLayer.appendChild(el);
     const item = { el, pos: pos ? pos.clone() : null, t: 0, life };

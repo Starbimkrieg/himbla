@@ -3,6 +3,7 @@ import { faceDir } from './planet.js';
 import { PLANET } from './config.js';
 import { SUN, E1, E2, arcDist } from './geo.js';
 import { FACTIONS } from './locations.js';
+import { pixelFont } from './fonts.js';
 
 const RES = 32; // exploration cells per cube-face edge (~180 m)
 const KEY = 'moonrunner-explore-v1';
@@ -227,7 +228,7 @@ export class GlobeMap {
       else c.arc(p.x, p.y, r, 0, Math.PI * 2);
       c.fill(); c.stroke();
       if (l.restricted) { c.strokeStyle = '#ff2a4a'; c.lineWidth = 1.5; c.beginPath(); c.arc(p.x, p.y, Math.max(10, (l.zoneR / PLANET.radius) * Rp), 0, Math.PI * 2); c.stroke(); }
-      c.font = `${13 + this.zoom}px Bangers, Impact, sans-serif`;
+      c.font = pixelFont(8 + this.zoom * 0.6);
       c.lineWidth = 3; c.strokeStyle = '#120a1e'; c.fillStyle = '#fff';
       c.strokeText(l.short, p.x, p.y - r - 4); c.fillText(l.short, p.x, p.y - r - 4);
       this.pins.push({ x: p.x, y: p.y, html: `<b>${l.name}</b><br><span style="color:${f.color}">${f.name}</span>${l.hq ? ' · HQ' : ''}${ruined ? ' · RUINED' : ''}<br>${l.blurb}` });
@@ -248,13 +249,13 @@ export class GlobeMap {
       // the low pass, marked
       S.orbitPoint(S.lowAt, q).normalize();
       const lp = this.project(q, v);
-      if (lp.z > 0) { c.fillStyle = '#ffd23f'; c.font = '11px Bangers, Impact, sans-serif'; c.fillText('▼ LOW PASS', lp.x, lp.y - 6); }
+      if (lp.z > 0) { c.fillStyle = '#ffd23f'; c.font = pixelFont(7); c.fillText('▼ LOW PASS', lp.x, lp.y - 6); }
       const sp = this.project(q.copy(S.sat.pos).normalize(), v);
       if (sp.z > 0) {
         c.fillStyle = '#ffd23f'; c.strokeStyle = '#120a1e'; c.lineWidth = 2;
         c.beginPath(); c.rect(sp.x - 5, sp.y - 3, 10, 6); c.fill(); c.stroke();
         c.fillRect(sp.x - 11, sp.y - 1, 22, 2);
-        c.font = '12px Bangers, Impact, sans-serif'; c.lineWidth = 3; c.strokeText('SAT-7', sp.x, sp.y - 8); c.fillStyle = '#fff'; c.fillText('SAT-7', sp.x, sp.y - 8);
+        c.font = pixelFont(8); c.lineWidth = 3; c.strokeText('SAT-7', sp.x, sp.y - 8); c.fillStyle = '#fff'; c.fillText('SAT-7', sp.x, sp.y - 8);
         this.pins.push({ x: sp.x, y: sp.y, html: '<b>SAT-7 "Lantern"</b><br>Derelict satellite. Skims low just past the ILMB once a lap.' });
       }
     }
@@ -271,17 +272,17 @@ export class GlobeMap {
         c.fillStyle = f.color; c.strokeStyle = own ? '#fff' : '#120a1e'; c.lineWidth = own ? 2 : 1.2;
         c.beginPath(); c.moveTo(p.x, p.y - s2); c.lineTo(p.x + s2, p.y); c.lineTo(p.x, p.y + s2); c.lineTo(p.x - s2, p.y); c.closePath(); c.fill(); c.stroke();
         const nm = g.territory.name(o);
-        if (own) { c.font = '12px Bangers, Impact, sans-serif'; c.lineWidth = 3; c.strokeStyle = '#120a1e'; c.fillStyle = '#fff'; c.strokeText(nm, p.x, p.y - 9); c.fillText(nm, p.x, p.y - 9); }
+        if (own) { c.font = pixelFont(8); c.lineWidth = 3; c.strokeStyle = '#120a1e'; c.fillStyle = '#fff'; c.strokeText(nm, p.x, p.y - 9); c.fillText(nm, p.x, p.y - 9); }
         this.pins.push({ x: p.x, y: p.y, html: `<b>${nm}</b><br><span style="color:${f.color}">${f.name}</span>${own ? ' · YOURS' : ''}` });
       }
     }
     for (const ev of g.events.list) {
-      const p = this.project(ev.start, v);
+      const p = this.project(ev.stage || ev.start, v);
       if (p.z <= 0) continue;
       const f = FACTIONS[ev.faction];
       c.fillStyle = f.color; c.strokeStyle = '#fff'; c.lineWidth = 2;
       c.beginPath(); c.moveTo(p.x, p.y - 11); c.lineTo(p.x + 9, p.y + 6); c.lineTo(p.x - 9, p.y + 6); c.closePath(); c.fill(); c.stroke();
-      c.fillStyle = '#120a1e'; c.font = '12px Bangers, Impact, sans-serif'; c.fillText('!', p.x, p.y + 4);
+      c.fillStyle = '#120a1e'; c.font = pixelFont(8); c.fillText('!', p.x, p.y + 4);
       this.pins.push({ x: p.x, y: p.y, html: `<b>${ev.title}</b><br><span style="color:${f.color}">${f.name} event</span><br>${ev.brief}` });
     }
     const goal = g.objective();
@@ -299,7 +300,7 @@ export class GlobeMap {
       c.restore();
     }
     const pct = Math.round((this.explored.reduce((a, b) => a + b, 0) / this.explored.length) * 100);
-    c.font = '18px Bangers, Impact, sans-serif'; c.textAlign = 'left'; c.fillStyle = '#ffd23f';
+    c.font = pixelFont(11); c.textAlign = 'left'; c.fillStyle = '#ffd23f';
     c.fillText(`CHARTED ${pct}% · ${this.discovered.size} LOCATIONS`, 14, 24);
     c.textAlign = 'right'; c.fillStyle = '#c9c3d9';
     c.fillText('DRAG TO SPIN · SCROLL TO ZOOM · M / ESC TO CLOSE', W - 14, H - 14);

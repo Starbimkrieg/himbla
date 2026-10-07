@@ -1,6 +1,5 @@
-// fonts are bundled so the desktop build works offline
-import '@fontsource/bangers/400.css';
-import '@fontsource/comic-neue/700.css';
+// fonts are bundled so the desktop build works offline (see fonts.js)
+import { loadFonts } from './fonts.js';
 import * as THREE from 'three';
 import { Planet } from './planet.js';
 import { Colliders } from './physics.js';
@@ -31,6 +30,8 @@ import { Recall } from './recall.js';
 import { Secrets } from './secrets.js';
 import { Settings } from './settings.js'; // settings
 import { Casino } from './casino.js'; // casino
+import { SaveSlots } from './saves.js'; // save slots
+import { MainMenu } from './menu.js'; // main menu
 import { WEAPONS } from './weapons.js';
 import { clamp, pick, mulberry32 } from './rng.js';
 import { inkMat } from './toon.js';
@@ -72,6 +73,10 @@ class Game {
   async init() {
     const status = document.getElementById('load-status');
     const step = async (t) => { status.textContent = t; await sleep(); };
+    // save slots first: picking a slot rewrites the live save keys every module reads below
+    this.saves = new SaveSlots();
+    this.started = false;
+    this.menu = new MainMenu(this);
     this.settings = new Settings(); // settings
     this.settings.attach(this); // settings
 
@@ -177,24 +182,20 @@ class Game {
     this.bindUI();
     window.addEventListener('resize', () => this.resize());
     this.resize();
-    status.textContent = 'Ready.';
-    document.getElementById('start-btn').classList.remove('hidden');
+    status.textContent = '';
+    status.classList.add('hidden');
+    this.menu.setReady();
+    this.bindSlots();
     this.updateCamera(0.016, true);
     this.last = performance.now();
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
   bindUI() {
-    const start = () => {
-      this.audio.init();
-      document.getElementById('title').classList.add('hidden');
-      this.state = 'play';
-      this.input.lock();
-      this.hud.banner(this.hub);
-      // brand-new runners get the guided training shift
-      if (!this.tutorial.done && !this.tutorial.active) this.schedule(1.2, () => this.tutorial.offer());
-    };
-    document.getElementById('start-btn').addEventListener('click', start);
+    document.getElementById('quit-btn-pause').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.quitToMenu();
+    });
     document.getElementById('pause').addEventListener('click', () => {
       this.hud.show('pause', false);
       this.state = 'play';
@@ -472,7 +473,7 @@ class Game {
 
   style(points, label) {
     if (this.missions.active) this.missions.stylePool += points;
-    else this.credits += Math.round(points * 0.3);
+    else this.credits += Math.round(points * 0.15);
     if (label) this.fx.pop(`${label}! +${points}`, null, { color: '#ff7ad9', size: 44, life: 1.3 });
   }
 
@@ -499,6 +500,7 @@ class Game {
     this.audio.boom(true);
     if (this.missions.active) this.missions.fail('You went down — the cargo is lost.');
     this.story.onDeath();
+    if (this.events.active) this.events.fail(this.events.active, 'You went down. Event failed.');
     if (P.vehicle) this.garage.exit();
     const fee = Math.min(this.credits, 100);
     this.credits -= fee;
@@ -656,6 +658,43 @@ class Game {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({ credits: this.credits, stats: this.stats, upgrades: this.upgrades }));
     } catch { /* storage unavailable */ }
+    if (this.started && this.saves) this.saves.snapshot(this.slotMeta()); // save slots
+  }
+
+  // ---------- save slots / main menu ----------
+  // Called by the main menu (from a click or key press, so pointer lock is allowed).
+  startPlay() {
+    if (this.started) return;
+    this.started = true;
+    this.audio.init();
+    document.getElementById('title').classList.add('hidden');
+    this.state = 'play';
+    this.input.lock();
+    this.hud.banner(this.hub);
+    // brand-new runners get the guided training shift
+    if (!this.tutorial.done && !this.tutorial.active) this.schedule(1.2, () => this.tutorial.offer());
+    this.save();
+  }
+
+  slotMeta() {
+    return { credits: this.credits, deliveries: (this.stats && this.stats.deliveries) || 0, faction: (this.story && this.story.faction) || null };
+  }
+
+  // Play-time clock and periodic snapshots of the live save keys into the active slot.
+  bindSlots() {
+    let n = 0;
+    setInterval(() => {
+      if (!this.started || this.saves.switching) return;
+      if (!document.hidden && this.state !== 'paused') this.saves.sessionPlay += 1;
+      if (++n % 10 === 0) this.save();
+    }, 1000);
+    window.addEventListener('beforeunload', () => { if (this.started && !this.saves.switching) this.save(); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden && this.started && !this.saves.switching) this.save(); });
+  }
+
+  quitToMenu() {
+    this.save();
+    this.saves.toMenu(this.slotMeta());
   }
 
   load() {
@@ -760,7 +799,7 @@ class Game {
     if (c.fwd.lengthSq() < 1e-6) c.fwd.copy(P.heading);
     c.fwd.normalize();
     const sv = this.settings ? this.settings.v : null; // settings
-    const sens = 0.0022 * (sv ? sv.sensitivity : 1); // settings
+    const sens = 0.0022 * (sv ? sv.sensitivity : 1) * (P.scoped ? 0.28 : 1); // settings; slower aim while scoped
     c.fwd.applyQuaternion(_q.setFromAxisAngle(c.up, -mx * sens));
     c.pitch = clamp(c.pitch - my * sens * (sv && sv.invertY ? -1 : 1), -1.25, 0.95);
     c.right.crossVectors(c.fwd, c.up).normalize();
@@ -844,7 +883,9 @@ class Game {
     const nearPod = lab && z === lab.loc && P.pos.distanceTo(lab.pod) < 4;
     const nearPen = lab && z === lab.loc && P.pos.distanceTo(lab.penTerm) < 5;
     const nearBooth = this.race.near(P.pos);
-    if (this.secrets.interact()) {
+    if (this.events.interact()) {
+      // an event's start prop
+    } else if (this.secrets.interact()) {
       // satellite artifact, alien gate, shrine
     } else if (this.story.interact(P)) {
       // a leader or one of your outposts' terminals
@@ -916,11 +957,16 @@ class Game {
     }
     const sp = P.speed;
     const sv = this.settings ? this.settings.v : null; // settings
-    const targetDist = (7.5 + Math.min(7, sp * 0.06)) * (sv ? sv.camDist : 1); // settings
-    c.dist += (targetDist - c.dist) * Math.min(1, dt * 3);
+    const scoped = !!P.scoped;
+    const targetDist = scoped ? 0.2 : (7.5 + Math.min(7, sp * 0.06)) * (sv ? sv.camDist : 1); // settings
+    c.dist += (targetDist - c.dist) * Math.min(1, dt * (scoped ? 14 : 3));
     const target = P.pos.clone().addScaledVector(up, 2.3);
-    const want = target.clone().addScaledVector(c.look, -c.dist).addScaledVector(up, 0.8 + (sv ? sv.camHeight : 0)); // settings
-    if (sv && sv.shoulder) want.addScaledVector(c.right, sv.shoulder); // settings
+    const want = target.clone().addScaledVector(c.look, -c.dist).addScaledVector(up, scoped ? 0 : 0.8 + (sv ? sv.camHeight : 0)); // settings
+    if (sv && sv.shoulder && !scoped) want.addScaledVector(c.right, sv.shoulder); // settings
+    // Rail Lance scope: first-person, narrow field of view, runner hidden
+    if (!P.dead && this.state !== 'cutscene') P.model.root.visible = c.dist > 1.2;
+    const scopeEl = document.getElementById('scope');
+    if (scopeEl) scopeEl.classList.toggle('hidden', !scoped || c.dist > 1.2);
     const alt = this.planet.altitude(want);
     if (alt < 1.2) want.addScaledVector(want.clone().normalize(), 1.2 - alt);
     // keep the camera out of walls (matters indoors)
@@ -948,8 +994,8 @@ class Game {
     }
     this.camera.up.copy(up);
     this.camera.lookAt(target.addScaledVector(c.look, 30));
-    const fov = (sv ? sv.fov : 72) + Math.min(30, Math.max(0, sp - 15) * 0.3); // settings
-    c.fov += (fov - c.fov) * Math.min(1, dt * 3);
+    const fov = scoped ? 14 : (sv ? sv.fov : 72) + Math.min(30, Math.max(0, sp - 15) * 0.3); // settings
+    c.fov += (fov - c.fov) * Math.min(1, dt * (scoped ? 12 : 3));
     if (Math.abs(this.camera.fov - c.fov) > 0.01) {
       this.camera.fov = c.fov;
       this.camera.updateProjectionMatrix();
@@ -1021,8 +1067,8 @@ class Game {
 
 const game = new Game();
 window.game = game;
-const ready = document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 2500))]) : Promise.resolve();
-ready.then(() => game.init()).catch((e) => {
+// canvas text (signs, maps) is drawn during init, so the pixel fonts must be loaded first
+loadFonts().then(() => game.init()).catch((e) => {
   console.error(e);
   document.getElementById('load-status').textContent = 'Failed to start: ' + e.message;
 });

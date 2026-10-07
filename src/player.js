@@ -125,7 +125,8 @@ export class Player {
     const ctrl = {
       wish,
       skates: input.down('Space'),
-      thrust: input.down('KeyE') || input.mouse[2],
+      // with the Rail Lance out, right mouse is the scope instead of the thrusters (E still thrusts)
+      thrust: input.down('KeyE') || (input.mouse[2] && WEAPONS[this.weapon || 0].key !== 'rail'),
       jump: b.grounded && (input.pressed('ShiftLeft') || input.pressed('ShiftRight')),
       thrustDir,
     };
@@ -228,6 +229,9 @@ export class Player {
     const g = this.game;
     const b = this.body;
     const up = b.up;
+    const wasScoped = this.scoped;
+    this.scoped = WEAPONS[this.weapon || 0].key === 'rail' && input.mouse[2] && input.locked && !this.dead;
+    if (this.scoped !== wasScoped) g.audio.tone(this.scoped ? 1200 : 800, 0.06, 'square', 0.06);
     for (let i = 0; i < WEAPONS.length; i++) {
       if (!input.pressed('Digit' + (i + 1))) continue;
       if (weaponUnlocked(WEAPONS[i], g.upgrades)) { this.weapon = i; g.hud.toast(WEAPONS[i].name.toUpperCase(), 1.2); }

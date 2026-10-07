@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { FACTIONS } from './locations.js';
 import { arcDist, darkness } from './geo.js';
 import { WEAPONS } from './weapons.js';
+import { pixelFont } from './fonts.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -69,9 +70,10 @@ export class HUD {
       <div class="r-title">DELIVERED!</div>
       <div class="r-sub">${info.a.cargo.name} → ${info.a.to.name}</div>
       <table>
-        <tr><td>Contract (${Math.round(info.integrity * 100)}% intact)</td><td>₵${info.integ}</td></tr>
-        <tr><td>${info.timeBonus ? 'Speed bonus' : 'Late — half pay'}</td><td>₵${info.timeBonus}</td></tr>
-        <tr><td>Style</td><td>₵${info.style}</td></tr>
+        <tr><td>Contract</td><td>₵${info.integ}</td></tr>
+        <tr><td>${info.late ? 'Late — half pay' : 'Speed bonus'}</td><td>₵${info.timeBonus}</td></tr>
+        <tr><td>Style${info.styleCapped ? ' (MAX ×2)' : ''}</td><td>₵${info.style}</td></tr>
+        <tr><td>Package condition</td><td>×${info.condition.toFixed(2)}</td></tr>
         <tr class="tot"><td>TOTAL</td><td>₵${info.total}</td></tr>
       </table>
       <div class="r-rep">+${info.repGain} rep with ${info.faction}</div>`;
@@ -182,7 +184,7 @@ export class HUD {
     if (wtxt !== this.lastW) { $('weaponchip').innerHTML = wtxt; this.lastW = wtxt; }
     const jt = g.alchemy ? g.alchemy.hudText() : '';
     if (jt !== this.lastJar) { $('jarchip').innerHTML = jt; $('jarchip').classList.toggle('hidden', !jt); this.lastJar = jt; }
-    $('style').textContent = ms.active ? `STYLE +${Math.round(ms.stylePool)}` : '';
+    $('style').textContent = ms.active ? `STYLE +₵${ms.styleValue()}${ms.styleValue(false) >= ms.active.reward ? ' MAX' : ''}` : '';
 
     const mp = $('mission');
     if (ms.active) {
@@ -271,7 +273,7 @@ export class HUD {
       c.beginPath(); c.arc(x, y, cr.R * s, 0, Math.PI * 2); c.stroke();
     }
     for (const ev of g.events.list) {
-      const [x, y, d] = proj(ev.start);
+      const [x, y, d] = proj(ev.stage || ev.start);
       if (d > range * 1.4) continue;
       c.fillStyle = FACTIONS[ev.faction].color; c.strokeStyle = '#fff'; c.lineWidth = 2;
       c.beginPath(); c.moveTo(x, y - 8); c.lineTo(x + 7, y + 5); c.lineTo(x - 7, y + 5); c.closePath(); c.fill(); c.stroke();
@@ -290,7 +292,7 @@ export class HUD {
       c.strokeStyle = '#120a1e';
       c.lineWidth = 3;
       c.beginPath(); c.arc(x, y, Math.max(5, l.r * s * 0.6), 0, Math.PI * 2); c.fill(); c.stroke();
-      c.font = '12px Bangers, Impact, sans-serif';
+      c.font = pixelFont(8);
       c.fillStyle = '#fff';
       c.textAlign = 'center';
       c.strokeText(l.short, x, y - 10); c.fillText(l.short, x, y - 10);
@@ -347,6 +349,11 @@ export class HUD {
       mk.style.top = ((1 - this.v.y) / 2) * 100 + '%';
       mk.querySelector('span').textContent = `${obj.label} · ${dist > 2000 ? (dist / 1000).toFixed(1) + 'km' : Math.round(dist) + 'm'}`;
     } else {
+      // a drawn arrow (fonts can't drop it) with the distance, on a ring clear of the HUD panels
+      if (!el.dataset.svg) {
+        el.dataset.svg = '1';
+        el.innerHTML = '<svg viewBox="0 0 64 64" width="64" height="64"><path d="M60 32 L14 8 L24 32 L14 56 Z" fill="#ffd23f" stroke="#120a1e" stroke-width="5" stroke-linejoin="round"/></svg><div class="oa-dist"></div>';
+      }
       mk.classList.add('hidden');
       el.classList.remove('hidden');
       // beyond the horizon: point along the surface toward it
@@ -354,12 +361,11 @@ export class HUD {
       const t = obj.pos.clone().normalize().addScaledVector(P.up, -obj.pos.clone().normalize().dot(P.up));
       let x = t.dot(g.cam.right), yy = t.dot(g.cam.fwd);
       const a = Math.atan2(yy, x);
-      const r = 0.82;
       const ex = Math.cos(a), ey = Math.sin(a);
-      const k = r / Math.max(Math.abs(ex), Math.abs(ey));
-      el.style.left = ((ex * k + 1) / 2) * 100 + '%';
-      el.style.top = ((1 - ey * k) / 2) * 100 + '%';
-      el.style.transform = `translate(-50%,-50%) rotate(${-a}rad)`;
+      el.style.left = ((ex * 0.62 + 1) / 2) * 100 + '%';
+      el.style.top = ((1 - ey * 0.56) / 2) * 100 + '%';
+      el.querySelector('svg').style.transform = `rotate(${-a}rad)`;
+      el.querySelector('.oa-dist').textContent = `${obj.label} · ${dist > 2000 ? (dist / 1000).toFixed(1) + 'km' : Math.round(dist) + 'm'}`;
     }
   }
 
@@ -423,7 +429,7 @@ export class HUD {
     c.strokeRect(x0, y0, w, h);
     c.fillStyle = '#3a3550';
     c.fillRect(2, y0 - 2, 12, h + 4); c.fillRect(W - 14, y0 - 2, 12, h + 4);
-    if (f.spill > 0) { c.fillStyle = '#ff2a4a'; c.font = '16px Bangers, Impact'; c.fillText('SPILLING!', x0 + 6, y0 + 16); }
+    if (f.spill > 0) { c.fillStyle = '#ff2a4a'; c.font = pixelFont(10); c.fillText('SPILLING!', x0 + 6, y0 + 18); }
   }
 
   dialog(title, text, buttons, onPick) {
