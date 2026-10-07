@@ -611,8 +611,14 @@ export class Story {
     const up = pos.clone().normalize();
     const out = [];
     for (let i = 0; i < n; i++) {
-      const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
-      const p = greatCircle(up, t, 25 + Math.random() * 50);
+      // somewhere in the open around the site (outposts are big compounds now: never inside a building)
+      let p = null;
+      for (let k = 0; k < 24 && !p; k++) {
+        const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+        const c = g.planet.ground(greatCircle(up, t, 25 + Math.random() * 50 + k * 3), new THREE.Vector3(), 2);
+        if (!g.colliders.query(c, 8, []).some((col) => g.colliders.contact(col, c, 5, new THREE.Vector3()) > 0)) p = c;
+      }
+      if (!p) p = greatCircle(up, tangent(new THREE.Vector3(1, 0, 0), up).normalize(), 90);
       const e = g.enemies.spawnPirate(i % 3 === 2 ? 'rover' : 'skater', p, null, { rogue: true, targetObj: opts.targetObj || null });
       e.storyUnit = true;
       out.push(e);

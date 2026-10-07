@@ -43,7 +43,7 @@ Click **START YOUR SHIFT!** to lock the mouse.
 | `W A S D` | Run in boots. On skates, `A`/`D` steer you along the ground: full input carves hard, `W`+`A` carves gently |
 | `SPACE` (hold) | **Quantum-Lock Skates**: near-frictionless glide. Release to brake hard in boots |
 | `E` / right mouse (hold) | Thrusters: mostly forward, with only a little lift or dive (drains JET) |
-| `SHIFT` | Mag-jump |
+| `SHIFT` | Mag-jump; in the air, press again and hold to **Dive** |
 | `Q` + `W`/`S` (air) | Front / back flips |
 | `Q` + `A`/`D` (air) | Spins |
 | `L` | Helmet lamp: auto / off / on |
@@ -62,6 +62,16 @@ Click **START YOUR SHIFT!** to lock the mouse.
 | `J` | Reputation Log |
 | `R` | Emergency recall (₵100): a shuttle flies you home (ILMB, or Rustmoon Hold if you ride with the pirates); forfeits the current contract |
 | `H` | Help |
+
+## Lunar flight
+
+The Moon is small enough that at 100+ m/s the ground curves away beneath you, so the air physics keep big air
+big but bring you home: for the first second off the ground it's normal, floaty moon gravity; after that it
+builds to 2.5x over two seconds, and an extra pull cancels the "orbital lift" of high speed. A hard launch at
+100 m/s that used to carry you over a kilometre now lands after ~550 m. **Dive** (press Shift again in the
+air and hold) tucks you nose-down at triple gravity; within ~10 m of the ground the skates' magnetic grip
+catches you, and a skated dive landing is always safe and keeps most of your speed (hard ones score STUCK IT!).
+Looking down while thrusting drives you downward too.
 
 ## How it plays
 
@@ -241,8 +251,15 @@ A walk-in neon hall about 1 km from the ILMB. Walk through the front doors and p
 No spot on the Moon is unclaimed. Territory is a weighted split around every faction's settlements and
 ~120 smaller outposts (watchtowers, supply depots, farm domes, relay masts, trading kiosks, scrap shacks).
 Glowing faction-coloured pylons mark the borders, a chip shows whose land you're on, and the globe map is
-tinted by owner. Military patrols drive between their faction's outposts and shoot pirates (never you, so
+tinted by owner. The purple line on the globe map is the terminator, the edge of the dark side (point at it
+for details); SAT-7's orbit is the yellow dashes, with chevrons showing which way it's heading. Military patrols drive between their faction's outposts and shoot pirates (never you, so
 settlement threat radii are unchanged). Captured and founded outposts move the borders.
+
+Each small outpost is a 50-odd-metre compound on its own flattened plateau: a lattice **Watchtower** with a
+sweeping searchlight and barracks; a **Supply Depot** with a warehouse, container gantry, fuel tanks, a pad and
+a wiring rack; a twin-domed **Farm Dome** with grow lights and a sapling nursery; a 41 m guyed **Relay Mast**;
+a **Trading Kiosk** market plaza; a ramshackle **Scrap Shack** with a scrap press and derrick; and a
+climbable **Junk Pile** with a scavenger camp.
 
 **Raiding:** press `F` beside a **farm dome** to take a sapling (it goes in your jar, alive: it splices into
 chimeras with root legs and flower heads, or into you as the ROOT GRIP mutation, +30 % skate grip), or beside a

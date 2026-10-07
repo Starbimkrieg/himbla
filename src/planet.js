@@ -134,6 +134,10 @@ export class Planet {
       centers.push(faceDir(f, (cx + 0.5) * CH, (cy + 0.5) * CH, new THREE.Vector3()));
     }
     const bucketR = CH * (R * Math.PI / 2 / N) * 0.85;
+    this.bucketCenters = centers;
+    this.bucketR = bucketR;
+    this.flats = []; // plateaus added later (outposts), bucketed like the craters so H stays cheap
+    this.flatBuckets = Array.from({ length: nb }, () => []);
     for (const c of list) {
       const cosLim = Math.cos((c.infl + bucketR) / R);
       for (let k = 0; k < nb; k++) if (centers[k].dot(c.d) > cosLim) this.buckets[k].push(c);
@@ -183,6 +187,16 @@ export class Planet {
       rad = zn.zr / dot + (rad - zn.zr / dot) * t;
       floorA *= t; rimA *= t; rayA *= t;
     }
+    const fb = this.flatBuckets[(_g.f * CPF + cy) * CPF + cx];
+    for (let k = 0; k < fb.length; k++) {
+      const zn = fb[k];
+      const dot = dx * zn.dir.x + dy * zn.dir.y + dz * zn.dir.z;
+      if (dot < zn.cosFlat) continue;
+      const d = R * Math.acos(Math.min(1, dot));
+      const t = smoothstep(zn.r, zn.r * 1.95, d);
+      rad = zn.zr / dot + (rad - zn.zr / dot) * t;
+      floorA *= t; rimA *= t; rayA *= t;
+    }
     this.attr.floor = floorA; this.attr.rim = rimA; this.attr.ray = rayA;
     return rad;
   }
@@ -191,11 +205,13 @@ export class Planet {
   // of the centre, blended out to ~2x the radius. Rebuilds the affected terrain chunks.
   addFlat(dir, r) {
     const d = dir.clone().normalize();
-    if (this.zones.some((z) => z.flatOnly && z.dir.dot(d) > 0.999999)) return;
+    if (this.flats.some((z) => z.dir.dot(d) > 0.999999)) return;
     const zr = this.H(d.x, d.y, d.z);
-    // zones started out as the game's location list: copy before adding anything of our own
-    if (!this.ownZones) { this.zones = this.zones.slice(); this.ownZones = true; }
-    this.zones.push({ dir: d, r, zr, cosFlat: Math.cos((r * 1.95) / R), flatOnly: true });
+    const zn = { dir: d, r, zr, cosFlat: Math.cos((r * 1.95) / R), flatOnly: true };
+    this.flats.push(zn);
+    // only the chunk buckets the plateau can reach test it in H
+    const cosB = Math.cos((r * 1.95 + this.bucketR) / R);
+    for (let k = 0; k < this.flatBuckets.length; k++) if (this.bucketCenters[k].dot(d) > cosB) this.flatBuckets[k].push(zn);
     this.cache.clear();
     const c = d.clone().multiplyScalar(R);
     for (const ch of this.chunks) {
@@ -462,6 +478,7 @@ uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2
       faceDir(ch.f, ch.cx * CH + rr() * CH, ch.cy * CH + rr() * CH, p);
       let ok = true;
       for (const zn of this.zones) if (p.dot(zn.dir) > Math.cos((zn.r * 1.5) / R)) { ok = false; break; }
+      for (const zn of this.flats) if (p.dot(zn.dir) > Math.cos((zn.r * 1.5) / R)) { ok = false; break; }
       const s = 1.2 + Math.pow(rr(), 3) * 7;
       e.set(rr() * 3, rr() * 3, rr() * 3);
       if (!ok) continue;
