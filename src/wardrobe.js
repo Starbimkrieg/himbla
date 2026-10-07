@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeRunner, scarfLift } from './models.js';
+import { makeRunner, ScarfSim } from './models.js';
 import { toon, glow } from './toon.js';
 import { OUTFITS, SKATES, LASERS, dressRunner, dressSkates } from './cosmetics.js';
 import { FACTIONS, LOCATIONS, TIERS } from './locations.js';
@@ -436,8 +436,11 @@ export class Wardrobe {
     M.armL.rotation.z = -0.14 - 0.2 * p - br * 0.02; M.armR.rotation.z = 0.14 + 0.2 * p + br * 0.02;
     M.head.rotation.y = Math.sin(T.t * 0.7) * 0.12;
     M.head.rotation.x = -0.15 * p;
-    M.scarf.rotation.x = scarfLift(M.torso.rotation.x, 30 * p, Math.sin(T.t * 3) * 0.05);
-    M.scarf.rotation.y = Math.sin(T.t * 1.7) * 0.15;
+    // the scarf hangs (or streams in the skating pose) with the same physics as in game
+    if (!this.scarfSim || this.scarfSim.m !== M) this.scarfSim = new ScarfSim(M);
+    M.root.updateMatrixWorld(true);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(M.root.getWorldQuaternion(new THREE.Quaternion()));
+    this.scarfSim.update(Math.min(0.05, dt || 1 / 60), fwd.multiplyScalar(14 * p), new THREE.Vector3(0, 1, 0));
     const s = SKATES[this.look.skates] || SKATES.stock;
     if (s.rainbow) M.mats.skate.color.setHSL((T.t * 0.4) % 1, 1, 0.6);
     for (const x of T.extras) if (x.userData.cape) x.rotation.x = 0.3 + 0.5 * p + Math.sin(T.t * 3) * 0.05;

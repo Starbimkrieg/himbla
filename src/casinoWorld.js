@@ -584,8 +584,9 @@ export function buildCasino(w, loc) {
   oddsCanvas.width = 1024; oddsCanvas.height = 384;
   const oddsTex = new THREE.CanvasTexture(oddsCanvas);
   oddsTex.colorSpace = THREE.SRGBColorSpace;
-  const oddsBoard = new THREE.Mesh(new THREE.PlaneGeometry(16, 6), new THREE.MeshBasicMaterial({ map: oddsTex }));
-  put(oddsBoard, tcx, BACK + 1.15, 8.4);
+  // sits clearly in front of its frame (it used to share the frame's front face and z-fought)
+  const oddsBoard = new THREE.Mesh(new THREE.PlaneGeometry(16, 6), new THREE.MeshBasicMaterial({ map: oddsTex, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  put(oddsBoard, tcx, BACK + 1.3, 8.4);
   put(mesh(new THREE.BoxGeometry(16.6, 6.6, 0.3), toon(0xffd23f), 0.05), tcx, BACK + 1.0, 8.4);
   // betting kiosk
   const kiosk = new THREE.Group();

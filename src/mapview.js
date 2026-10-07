@@ -124,6 +124,20 @@ export class GlobeMap {
     const sx = ((e.clientX - r.left) / r.width) * this.canvas.width, sy = ((e.clientY - r.top) / r.height) * this.canvas.height;
     let best = null, bd = 16;
     for (const p of this.pins) { const d = Math.hypot(p.x - sx, p.y - sy); if (d < bd) { bd = d; best = p; } }
+    // the terminator line, when no pin is closer
+    let onTerm = false;
+    if (!best && this.termPts) {
+      const T = this.termPts;
+      for (let i = 0; i + 1 < T.length && !onTerm; i++) {
+        if (T[i].brk) continue;
+        const ax = T[i].x, ay = T[i].y, bx = T[i + 1].x, by = T[i + 1].y;
+        const L2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+        const t = Math.max(0, Math.min(1, ((sx - ax) * (bx - ax) + (sy - ay) * (by - ay)) / L2));
+        if (Math.hypot(ax + t * (bx - ax) - sx, ay + t * (by - ay) - sy) < 9) onTerm = true;
+      }
+    }
+    if (onTerm !== !!this.termHover) { this.termHover = onTerm; this.draw(); }
+    if (onTerm) best = { html: '<b>THE TERMINATOR</b><br>Edge of the <b>dark side</b>. Past this line the sun never rises: no solar power, frozen ground, deeper shadows. Your lamp matters out there, and dark-side deliveries pay extra.' };
     if (!best) { this.tip.classList.add('hidden'); return; }
     this.tip.innerHTML = best.html;
     this.tip.style.left = e.clientX + 14 + 'px';
@@ -188,20 +202,42 @@ export class GlobeMap {
       c.beginPath(); c.ellipse(p.x, p.y, rr, rr * p.z, Math.atan2(p.y - H / 2, p.x - W / 2) + Math.PI / 2, 0, Math.PI * 2); c.fill();
       c.strokeStyle = '#7b5cff'; c.stroke();
     }
-    // terminator
-    c.strokeStyle = '#ffd23f';
-    c.setLineDash([6, 6]);
-    c.lineWidth = 1.5;
+    // terminator: the edge of the dark side, in its own colour (SAT-7's orbit is the yellow dashes).
+    // It's always drawn, fog or not, and lights up when you point at it.
+    const hot = this.termHover;
+    this.termPts = [];
+    let best = null;
+    c.strokeStyle = hot ? '#d9b8ff' : '#a070ff';
+    c.shadowColor = '#a070ff'; c.shadowBlur = hot ? 14 : 0;
+    c.setLineDash(hot ? [] : [10, 5]);
+    c.lineWidth = hot ? 4 : 2.2;
     c.beginPath();
     let pen = false;
     for (let i = 0; i <= 180; i++) {
       const t = (i / 180) * Math.PI * 2;
       tmp.copy(E1).multiplyScalar(Math.cos(t)).addScaledVector(E2, Math.sin(t));
       const p = this.project(tmp, v);
-      if (p.z > 0) { if (pen) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y); pen = true; } else pen = false;
+      if (p.z > 0) {
+        if (pen) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y);
+        pen = true;
+        this.termPts.push({ x: p.x, y: p.y, brk: false });
+        if (!best || p.z > best.z) best = { ...p, d: tmp.clone() };
+      } else { pen = false; if (this.termPts.length) this.termPts[this.termPts.length - 1].brk = true; }
     }
     c.stroke();
-    c.setLineDash([]);
+    c.setLineDash([]); c.shadowBlur = 0;
+    // label on the dark side of the line, with a little pointer into the dark
+    if (best) {
+      const q = this.project(best.d.clone().addScaledVector(SUN, -0.12), v);
+      let ax = q.x - best.x, ay = q.y - best.y;
+      const al = Math.hypot(ax, ay) || 1; ax /= al; ay /= al;
+      const lx = best.x + ax * 26, ly = best.y + ay * 26;
+      c.font = pixelFont(hot ? 10 : 8); c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.lineWidth = 4; c.strokeStyle = '#120a1e'; c.strokeText('DARK SIDE', lx, ly);
+      c.fillStyle = hot ? '#ffffff' : '#c9a8ff'; c.fillText('DARK SIDE', lx, ly);
+      c.beginPath(); c.moveTo(lx + ax * 18 - ay * 5, ly + ay * 18 + ax * 5); c.lineTo(lx + ax * 26, ly + ay * 26); c.lineTo(lx + ax * 18 + ay * 5, ly + ay * 18 - ax * 5); c.closePath();
+      c.fill();
+    }
     c.restore();
     // limb
     const grad = c.createRadialGradient(W / 2, H / 2, Rp * 0.85, W / 2, H / 2, Rp * 1.08);

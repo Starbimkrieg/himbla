@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { makeBody, stepSkater } from './physics.js';
-import { makeRunner, makeCrate, scarfLift } from './models.js';
+import { makeRunner, makeCrate, ScarfSim } from './models.js';
 import { frameQuat } from './geo.js';
 import { WEAPONS, weaponUnlocked, fireWeapon } from './weapons.js';
 
@@ -383,8 +383,10 @@ export class Player {
       m.armL.rotation.x = -s * 0.8 * run; m.armR.rotation.x = s * 0.8 * run;
       m.armL.rotation.z = -0.15; m.armR.rotation.z = 0.15;
     }
-    m.scarf.rotation.x = scarfLift(m.torso.rotation.x, sp, Math.sin(this.anim * 3) * 0.08 * Math.min(1, sp / 10));
-    m.scarf.rotation.y = Math.sin(this.anim * 2.3) * 0.15;
+    // physics scarf: hangs at rest, streams with speed, drapes over whatever is on your back
+    if (!this.scarfSim) this.scarfSim = new ScarfSim(m);
+    const cape = this.game.cosmetics && this.game.cosmetics.extraMeshes && this.game.cosmetics.extraMeshes.some((x) => x.userData.cape && x.visible);
+    this.scarfSim.update(dt, this.vehicle ? this.vehicle.e.body.vel : b.vel, up, this.cargoMesh ? { back: 1.14, top: 1.0 } : cape ? { back: 0.62, top: 0.96 } : { back: 0.55, top: 0.94 });
 
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(m.root.quaternion);
     const strength = b.skating && b.grounded ? Math.min(1, sp / 30) : 0;

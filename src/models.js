@@ -12,6 +12,7 @@ function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
 
 // ---- runner geometry: built once and shared by the player, pirate skaters and story NPCs ----
 let RUNNER_GEO = null;
+const SCARF_LINK = 0.32, SCARF_N = 4;
 const v2 = (pts) => pts.map(([x, y]) => new THREE.Vector2(x, y));
 function runnerGeo() {
   if (RUNNER_GEO) return RUNNER_GEO;
@@ -24,7 +25,13 @@ function runnerGeo() {
     sp.setY(i, sp.getY(i) + Math.sin(t * Math.PI * 1.6) * 0.05 * t);
   }
   scarf.computeVertexNormals();
+  // the scarf is a chain of links (see ScarfSim); each link a short tapered ribbon from z=0 to z=-L
+  const links = [0, 1, 2, 3].map((k) => {
+    const g = new THREE.BoxGeometry(0.22 * (1 - k * 0.1), 0.035, SCARF_LINK + 0.04, 1, 1, 2).translate(0, 0, -SCARF_LINK / 2);
+    return g;
+  });
   RUNNER_GEO = {
+    scarfLinks: links,
     // one smooth lathe per limb: hip/thigh/knee/calf/ankle, shoulder/bicep/elbow/forearm/wrist
     leg: new THREE.LatheGeometry(v2([[0, -0.8], [0.085, -0.79], [0.105, -0.72], [0.118, -0.62], [0.122, -0.54], [0.11, -0.45], [0.124, -0.36], [0.145, -0.2], [0.155, -0.06], [0.14, 0.04], [0.09, 0.1], [0, 0.12]]), 10),
     arm: new THREE.LatheGeometry(v2([[0, -0.56], [0.075, -0.55], [0.086, -0.48], [0.096, -0.4], [0.087, -0.3], [0.1, -0.22], [0.114, -0.1], [0.12, 0], [0.1, 0.08], [0, 0.12]]), 10),
@@ -70,12 +77,73 @@ const LENS_M = new THREE.MeshBasicMaterial({ color: 0xfff6a8 });
 // Smooth lathed limbs and torso, rounded boots/gloves/backpack and a shelled visor, but the
 // same pivots (legL/legR at the hips, armL/armR at the shoulders, head on the torso) and
 // dimensions as always, because cosmetics, mutations, cargo and story props hang off them.
-// Scarf angle relative to the torso: streams up and back with speed, never dipping below the top
-// of the backpack/crate line (positive = tail up). torsoLean is torso.rotation.x.
-export function scarfLift(torsoLean, speed, wobble = 0) {
-  const world = 0.22 + Math.min(0.45, speed / 70) + wobble; // angle above horizontal in the body frame
-  return Math.max(0.14, Math.min(1.1, world - torsoLean * 0.6));
+// The scarf is a little chain of links simulated in the torso's frame (side view, the y-z plane):
+// gravity pulls it down, the airflow from moving pushes it back, body acceleration makes it swing,
+// neighbouring links pull on each other, and it drapes over whatever is on your back (the pack, a
+// cargo crate, a cape) instead of passing through it. phi = angle of a link: 0 = straight back,
+// -PI/2 = hanging straight down, positive = streaming up.
+const _sq = new THREE.Quaternion(), _sg = new THREE.Vector3(), _sw = new THREE.Vector3(), _sa = new THREE.Vector3();
+export class ScarfSim {
+  constructor(model) {
+    this.m = model;
+    this.phi = new Array(SCARF_N).fill(-1.2);
+    this.w = new Array(SCARF_N).fill(0);
+    this.prevVel = null;
+    this.t = Math.random() * 10;
+  }
+
+  // vel: the body's world velocity; up: world up at the body; back: how far behind the spine the
+  // back gear reaches (pack 0.55, cape 0.62, crate 1.14), top: the height of its top edge
+  update(dt, vel, up, { back = 0.55, top = 0.96 } = {}) {
+    if (dt <= 0) return;
+    const m = this.m;
+    const links = m.scarf.userData.links;
+    if (!links) return;
+    this.t += dt;
+    m.torso.getWorldQuaternion(_sq).invert();
+    // forces in the torso frame
+    _sg.copy(up).multiplyScalar(-6).applyQuaternion(_sq); // gravity (stylised: the Moon's is too lazy to read)
+    _sw.copy(vel).negate().applyQuaternion(_sq); // relative wind
+    const ws = _sw.length();
+    _sw.multiplyScalar(0.08 * ws);
+    if (this.prevVel) _sa.copy(vel).sub(this.prevVel).divideScalar(Math.max(dt, 1e-3)).negate().multiplyScalar(0.12).applyQuaternion(_sq);
+    else _sa.set(0, 0, 0);
+    this.prevVel = (this.prevVel || new THREE.Vector3()).copy(vel);
+    const fy = _sg.y + _sw.y + _sa.y, fz = _sg.z + _sw.z + _sa.z;
+    const flutter = Math.min(1, ws / 15) * 0.25;
+    const steps = Math.min(6, Math.ceil(dt / (1 / 120)));
+    const h = dt / steps;
+    for (let s = 0; s < steps; s++) {
+      let y = 1.04, z = -0.26; // pivot in torso space
+      for (let k = 0; k < SCARF_N; k++) {
+        // the link wants to point along the net force; neighbours stiffen the chain a little
+        let target = Math.atan2(fy, -fz) + Math.sin(this.t * 9 - k * 1.3) * flutter * (k + 1) / SCARF_N;
+        const prev = k ? this.phi[k - 1] : target;
+        const acc = 70 * wrapAngle(target - this.phi[k]) + 40 * wrapAngle(prev - this.phi[k]) - 9 * this.w[k];
+        this.w[k] += acc * h;
+        this.phi[k] += this.w[k] * h;
+        // never fold over the head or through the body
+        if (this.phi[k] > 1.1) { this.phi[k] = 1.1; this.w[k] = Math.min(0, this.w[k]); }
+        if (this.phi[k] < -1.65) { this.phi[k] = -1.65; this.w[k] = Math.max(0, this.w[k]); }
+        // drape over the back gear: a link starting above its top edge or alongside it must end
+        // behind its back face
+        if (y > 0.2) {
+          const cmin = (z + back) / SCARF_LINK; // cos(phi) must be at least this
+          if (cmin >= 1) { if (this.phi[k] < 0) { this.phi[k] = 0; this.w[k] = Math.max(0, this.w[k]); } }
+          else if (cmin > -1 && Math.cos(this.phi[k]) < cmin && this.phi[k] < 0) { this.phi[k] = -Math.acos(cmin); this.w[k] = Math.max(0, this.w[k]); }
+        }
+        y += Math.sin(this.phi[k]) * SCARF_LINK;
+        z -= Math.cos(this.phi[k]) * SCARF_LINK;
+        if (y < top && z > -back) { y = top; } // (approximate: keeps later links from tunnelling)
+      }
+    }
+    // write the chain: each joint's rotation is relative to its parent link
+    let acc = 0;
+    for (let k = 0; k < SCARF_N; k++) { links[k].rotation.x = this.phi[k] - acc; acc = this.phi[k]; }
+    m.scarf.rotation.y = Math.sin(this.t * 2.3) * 0.12 * Math.min(1, ws / 10);
+  }
 }
+const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 export function makeRunner({
   suit = 0xff4f2e, accent = 0x2ee6ff, helmet = 0xfff4e0, visor = 0x241a5c,
@@ -173,12 +241,25 @@ export function makeRunner({
   }
 
   // Comic scarf streaming behind. The tail leaves from the top of the backpack and is kept above
-  // everything worn on the back (pack, cargo crate, jar, cape): see scarfLift().
+  // everything worn on the back (pack, cargo crate, jar, cape): see ScarfSim.
   torso.add(part(G.collar, collarM, 0, 0.98, 0, 0.03));
   const scarfPivot = new THREE.Group();
-  scarfPivot.position.set(0, 1.0, -0.26);
+  scarfPivot.position.set(0, 1.04, -0.26);
   torso.add(scarfPivot);
-  scarfPivot.add(part(G.scarf, scarfM, 0, 0, -0.62, 0.03));
+  // a chain of links: each joint is a child group of the previous link, rotated about x
+  const scarfLinks = [];
+  let parentLink = scarfPivot;
+  for (let k = 0; k < SCARF_N; k++) {
+    const j = new THREE.Group();
+    if (k) j.position.z = -SCARF_LINK;
+    j.add(part(G.scarfLinks[k], scarfM, 0, 0, 0, 0.025));
+    parentLink.add(j);
+    scarfLinks.push(j);
+    parentLink = j;
+  }
+  scarfPivot.userData.links = scarfLinks;
+  // resting drape (for figures nobody simulates): over the pack's top edge, then straight down
+  [-0.45, -1.05, -0.05, -0.05].forEach((r, k) => { scarfLinks[k].rotation.x = r; });
 
   // helmet lamp on the right temple (the actual light is owned by the player)
   head.add(part(G.lampHousing, dark, 0.3, 0.15, 0.17, 0.015));
