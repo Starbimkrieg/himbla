@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { toon, glow, ink } from './toon.js';
+import { Wardrobe } from './wardrobe.js';
 
 // Suits. Each faction sells a base outfit (FRIENDLY) and an elite one (HONORED).
 export const OUTFITS = {
@@ -57,6 +58,88 @@ export function cosmeticShopItems(locId) {
   return out;
 }
 
+// Dress any runner from makeRunner({ own: true }) in an outfit: recolour its private
+// materials and hang the outfit's extra parts on it. Returns the extra meshes (caller removes
+// them before re-dressing). Shared by the player and the wardrobe's preview mannequin.
+export function dressRunner(M, outfitId) {
+  const o = OUTFITS[outfitId] || OUTFITS.courier;
+  const m = M.mats;
+  m.suit.color.setHex(o.suit);
+  m.accent.color.setHex(o.accent);
+  m.helmet.color.setHex(o.helmet);
+  m.visor.color.setHex(o.visor);
+  m.scarf.color.setHex(o.scarf);
+  m.collar.color.setHex(o.scarf);
+  m.glow.color.setHex(o.accent);
+  const out = [];
+  const add = (parent, mesh, outline = 0.03) => { if (outline) ink(mesh, outline); parent.add(mesh); out.push(mesh); return mesh; };
+  for (const e of o.extras || []) {
+    if (e === 'crest') {
+      // a swept fin over the helmet: a rounded blade instead of a flat slab
+      const c = add(M.head, new THREE.Mesh(EXTRA_GEO().crest, toon(o.accent)));
+      c.position.set(0, 0.26, -0.04);
+    } else if (e === 'pads') {
+      for (const s of [-1, 1]) {
+        const p = add(M.torso, new THREE.Mesh(EXTRA_GEO().pad, toon(o.accent)));
+        p.position.set(s * 0.45, 0.88, 0);
+        p.scale.set(1.1, 0.7, 1);
+      }
+    } else if (e === 'halo') {
+      const h = add(M.head, new THREE.Mesh(EXTRA_GEO().halo, glow(o.accent)), 0);
+      h.rotation.x = Math.PI / 2;
+      h.position.y = 0.62;
+    } else if (e === 'band') {
+      const b = add(M.head, new THREE.Mesh(EXTRA_GEO().band, toon(0xd7263d)), 0.02);
+      b.rotation.x = Math.PI / 2;
+      b.position.y = 0.12;
+    } else if (e === 'cape') {
+      const c = add(M.torso, new THREE.Mesh(EXTRA_GEO().cape, toon(o.scarf, { side: THREE.DoubleSide })), 0);
+      c.position.set(0, 0.35, -0.55);
+      c.rotation.x = 0.25;
+      c.userData.cape = true;
+    }
+  }
+  return out;
+}
+
+// Skate finish: rail colour and the Derby horseshoes.
+export function dressSkates(M, skatesId) {
+  const s = SKATES[skatesId] || SKATES.stock;
+  M.mats.skate.color.setHex(s.color);
+  for (const h of M.hoofMeshes || []) h.removeFromParent();
+  M.hoofMeshes = [];
+  if (s.hooves) {
+    for (const leg of [M.legL, M.legR]) {
+      const shoe = new THREE.Mesh(EXTRA_GEO().shoe, HOOF_M);
+      shoe.rotation.set(Math.PI / 2, 0, Math.PI * 0.8);
+      shoe.position.set(0, -1.0, 0.1);
+      leg.add(shoe);
+      M.hoofMeshes.push(shoe);
+    }
+  }
+}
+
+let extraGeo = null;
+const HOOF_M = glow(0xd8d0c4);
+function EXTRA_GEO() {
+  if (!extraGeo) {
+    // crest: a bevelled fin profile extruded thin, front edge low, sweeping up and back
+    const sh = new THREE.Shape();
+    sh.moveTo(0.3, -0.06); sh.quadraticCurveTo(0.22, 0.12, 0.02, 0.2); sh.quadraticCurveTo(-0.2, 0.26, -0.34, 0.1); sh.lineTo(-0.3, -0.06); sh.closePath();
+    const crest = new THREE.ExtrudeGeometry(sh, { depth: 0.07, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 1, curveSegments: 6 });
+    crest.translate(0, 0, -0.035).rotateY(-Math.PI / 2);
+    extraGeo = {
+      crest,
+      pad: new THREE.SphereGeometry(0.22, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+      halo: new THREE.TorusGeometry(0.34, 0.035, 6, 24),
+      band: new THREE.TorusGeometry(0.35, 0.06, 6, 16),
+      cape: new THREE.PlaneGeometry(0.75, 1.1, 1, 4),
+      shoe: new THREE.TorusGeometry(0.16, 0.04, 6, 12, Math.PI * 1.4),
+    };
+  }
+  return extraGeo;
+}
+
 const KEY = 'moonrunner-style-v1';
 
 export class Cosmetics {
@@ -93,62 +176,14 @@ export class Cosmetics {
   // Recolour the runner's own materials and swap the outfit's extra parts.
   apply() {
     const M = this.game.player.model;
-    const o = OUTFITS[this.outfit] || OUTFITS.courier;
-    const m = M.mats;
-    m.suit.color.setHex(o.suit);
-    m.accent.color.setHex(o.accent);
-    m.helmet.color.setHex(o.helmet);
-    m.visor.color.setHex(o.visor);
-    m.scarf.color.setHex(o.scarf);
-    m.collar.color.setHex(o.scarf);
-    m.glow.color.setHex(o.accent);
     for (const x of this.extraMeshes) x.removeFromParent();
-    this.extraMeshes = [];
-    const add = (parent, mesh, outline = 0.03) => { if (outline) ink(mesh, outline); parent.add(mesh); this.extraMeshes.push(mesh); return mesh; };
-    for (const e of o.extras || []) {
-      if (e === 'crest') {
-        const c = add(M.head, new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.32, 0.6), toon(o.accent)));
-        c.position.set(0, 0.36, -0.05);
-      } else if (e === 'pads') {
-        for (const s of [-1, 1]) {
-          const p = add(M.torso, new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), toon(o.accent)));
-          p.position.set(s * 0.45, 0.88, 0);
-          p.scale.set(1.1, 0.7, 1);
-        }
-      } else if (e === 'halo') {
-        const h = add(M.head, new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.035, 6, 24), glow(o.accent)), 0);
-        h.rotation.x = Math.PI / 2;
-        h.position.y = 0.62;
-      } else if (e === 'band') {
-        const b = add(M.head, new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.06, 6, 16), toon(0xd7263d)), 0.02);
-        b.rotation.x = Math.PI / 2;
-        b.position.y = 0.12;
-      } else if (e === 'cape') {
-        const c = add(M.torso, new THREE.Mesh(new THREE.PlaneGeometry(0.75, 1.1), toon(o.scarf, { side: THREE.DoubleSide })), 0);
-        c.position.set(0, 0.35, -0.55);
-        c.rotation.x = 0.25;
-        c.userData.cape = true;
-      }
-    }
+    this.extraMeshes = dressRunner(M, this.outfit);
     this.applySkates();
     this.save();
   }
 
   applySkates() {
-    const M = this.game.player.model;
-    const s = this.skate;
-    M.mats.skate.color.setHex(s.color);
-    for (const h of M.hoofMeshes || []) h.removeFromParent();
-    M.hoofMeshes = [];
-    if (s.hooves) {
-      for (const leg of [M.legL, M.legR]) {
-        const shoe = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.04, 6, 12, Math.PI * 1.4), glow(0xd8d0c4));
-        shoe.rotation.set(Math.PI / 2, 0, Math.PI * 0.8);
-        shoe.position.set(0, -1.0, 0.1);
-        leg.add(shoe);
-        M.hoofMeshes.push(shoe);
-      }
-    }
+    dressSkates(this.game.player.model, this.skates);
   }
 
   // Per frame: skate glow, prism hue, trails.
@@ -167,20 +202,9 @@ export class Cosmetics {
     for (const x of this.extraMeshes) if (x.userData.cape) x.rotation.x = 0.25 + Math.min(1.1, P.speed / 40) + Math.sin(g.time * 8) * 0.05;
   }
 
-  // C: the wardrobe. Cycles through what you own.
+  // C: the wardrobe screen (live preview + click-to-equip grids, see wardrobe.js).
   wardrobe() {
-    const g = this.game;
-    const outfits = Object.keys(OUTFITS).filter((k) => this.owned('outfit', k));
-    const skates = Object.keys(SKATES).filter((k) => this.owned('skates', k));
-    const next = (list, cur) => list[(list.indexOf(cur) + 1) % list.length];
-    const sw = (c) => `<span class="swatch" style="background:#${c.toString(16).padStart(6, '0')}"></span>`;
-    const o = OUTFITS[this.outfit], s = this.skate, l = LASERS[this.laser];
-    const lockedO = Object.keys(OUTFITS).length - outfits.length, lockedS = Object.keys(SKATES).length - skates.length;
-    g.dialog('WARDROBE', `${sw(o.suit)}${sw(o.accent)}${sw(o.scarf)} <b>${o.name}</b><br>${sw(s.color)} <b>${s.name}</b><br>${sw(l.color)} <b>${l.name}</b> pulse discs<br><br><small>${lockedO} outfits and ${lockedS} skate finishes still to find: faction outfits are sold at each HQ (elite ones need HONORED standing); skate finishes at Meridian Exchange.</small>`, [
-      { label: `1 · NEXT OUTFIT (${outfits.length} owned)`, fn: () => { this.outfit = next(outfits, this.outfit); this.apply(); this.wardrobe(); } },
-      { label: `2 · NEXT SKATES (${skates.length} owned)`, fn: () => { this.skates = next(skates, this.skates); this.apply(); this.wardrobe(); } },
-      { label: '3 · NEXT LASER COLOUR', fn: () => { this.laser = (this.laser + 1) % LASERS.length; this.save(); this.wardrobe(); } },
-      { label: '4 · DONE' },
-    ]);
+    if (!this.ui) this.ui = new Wardrobe(this.game, this);
+    this.ui.open();
   }
 }

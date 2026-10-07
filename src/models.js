@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { toon, ink, glow } from './toon.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
   const m = new THREE.Mesh(geo, mat);
@@ -9,11 +10,71 @@ function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
   return m;
 }
 
-// The Moon-runner (also used for pirate skaters). Pivot at the feet.
+// ---- runner geometry: built once and shared by the player, pirate skaters and story NPCs ----
+let RUNNER_GEO = null;
+const v2 = (pts) => pts.map(([x, y]) => new THREE.Vector2(x, y));
+function runnerGeo() {
+  if (RUNNER_GEO) return RUNNER_GEO;
+  // a flat ribbon that narrows and ripples towards its tail
+  const scarf = new THREE.BoxGeometry(0.22, 0.04, 1.3, 1, 1, 8);
+  const sp = scarf.attributes.position;
+  for (let i = 0; i < sp.count; i++) {
+    const t = (0.65 - sp.getZ(i)) / 1.3;
+    sp.setX(i, sp.getX(i) * (1 - 0.4 * t));
+    sp.setY(i, sp.getY(i) + Math.sin(t * Math.PI * 1.6) * 0.05 * t);
+  }
+  scarf.computeVertexNormals();
+  RUNNER_GEO = {
+    // one smooth lathe per limb: hip/thigh/knee/calf/ankle, shoulder/bicep/elbow/forearm/wrist
+    leg: new THREE.LatheGeometry(v2([[0, -0.8], [0.085, -0.79], [0.105, -0.72], [0.118, -0.62], [0.122, -0.54], [0.11, -0.45], [0.124, -0.36], [0.145, -0.2], [0.155, -0.06], [0.14, 0.04], [0.09, 0.1], [0, 0.12]]), 10),
+    arm: new THREE.LatheGeometry(v2([[0, -0.56], [0.075, -0.55], [0.086, -0.48], [0.096, -0.4], [0.087, -0.3], [0.1, -0.22], [0.114, -0.1], [0.12, 0], [0.1, 0.08], [0, 0.12]]), 10),
+    // pelvis, hips, waist, ribs, chest, shoulders, neck (flattened front-to-back by the mesh)
+    torso: new THREE.LatheGeometry(v2([[0, -0.07], [0.19, -0.05], [0.27, 0.04], [0.29, 0.14], [0.255, 0.32], [0.29, 0.5], [0.34, 0.68], [0.335, 0.8], [0.29, 0.92], [0.2, 1.0], [0.14, 1.05], [0, 1.07]]), 16),
+    kneePad: new THREE.SphereGeometry(0.08, 8, 6),
+    boot: new RoundedBoxGeometry(0.27, 0.19, 0.44, 2, 0.08),
+    cuff: new THREE.CylinderGeometry(0.13, 0.135, 0.08, 12),
+    chassis: new RoundedBoxGeometry(0.21, 0.045, 0.6, 1, 0.02),
+    rail: new THREE.CapsuleGeometry(0.032, 0.62, 3, 8).rotateX(Math.PI / 2),
+    belt: new THREE.TorusGeometry(0.262, 0.042, 6, 20).rotateX(Math.PI / 2),
+    buckle: new RoundedBoxGeometry(0.15, 0.1, 0.05, 1, 0.02),
+    plate: new RoundedBoxGeometry(0.42, 0.28, 0.1, 2, 0.04),
+    lightDot: new THREE.CylinderGeometry(0.04, 0.04, 0.02, 10).rotateX(Math.PI / 2),
+    pack: new RoundedBoxGeometry(0.52, 0.62, 0.26, 2, 0.08),
+    packLid: new RoundedBoxGeometry(0.4, 0.06, 0.04, 1, 0.015),
+    nozzle: new THREE.CylinderGeometry(0.075, 0.1, 0.16, 10),
+    flame: new THREE.CylinderGeometry(0.065, 0.065, 0.02, 10),
+    shoulder: new THREE.SphereGeometry(0.15, 12, 8),
+    wristCuff: new THREE.CylinderGeometry(0.1, 0.095, 0.07, 10),
+    glove: new THREE.SphereGeometry(0.12, 10, 8),
+    thumb: new THREE.SphereGeometry(0.05, 6, 5),
+    helmet: new THREE.SphereGeometry(0.36, 20, 16),
+    visorFrame: new THREE.SphereGeometry(0.37, 20, 10, Math.PI / 2 - 0.95, 1.9, 0.86, 1.22),
+    visor: new THREE.SphereGeometry(0.38, 20, 10, Math.PI / 2 - 0.85, 1.7, 0.94, 1.06),
+    glint: new THREE.SphereGeometry(0.05, 8, 6),
+    pod: new THREE.CylinderGeometry(0.1, 0.1, 0.08, 14).rotateZ(Math.PI / 2),
+    rim: new THREE.TorusGeometry(0.275, 0.035, 6, 22).rotateX(Math.PI / 2),
+    antenna: new THREE.CylinderGeometry(0.02, 0.02, 0.4),
+    bead: new THREE.SphereGeometry(0.06, 8, 6),
+    lampHousing: new THREE.CylinderGeometry(0.055, 0.065, 0.1, 10).rotateX(Math.PI / 2),
+    lens: new THREE.SphereGeometry(0.05, 8, 6),
+    band: new THREE.TorusGeometry(0.34, 0.06, 6, 16).rotateX(Math.PI / 2),
+    scarf,
+    collar: new THREE.TorusGeometry(0.235, 0.07, 6, 16).rotateX(Math.PI / 2),
+  };
+  return RUNNER_GEO;
+}
+const GLINT_M = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const LENS_M = new THREE.MeshBasicMaterial({ color: 0xfff6a8 });
+
+// The Moon-runner (also used for pirate skaters and story NPCs). Pivot at the feet.
+// Smooth lathed limbs and torso, rounded boots/gloves/backpack and a shelled visor, but the
+// same pivots (legL/legR at the hips, armL/armR at the shoulders, head on the torso) and
+// dimensions as always, because cosmetics, mutations, cargo and story props hang off them.
 export function makeRunner({
   suit = 0xff4f2e, accent = 0x2ee6ff, helmet = 0xfff4e0, visor = 0x241a5c,
   scarf = 0xffd23f, scale = 1, pirate = false, own = false,
 } = {}) {
+  const G = runnerGeo();
   const root = new THREE.Group();
   // trick pivot sits at the centre of mass so flips rotate around the body, not the feet
   const trick = new THREE.Group();
@@ -24,7 +85,7 @@ export function makeRunner({
   trick.add(body);
   // `own` gives this runner private materials so it can be recoloured (the player's wardrobe)
   const mk = (c) => (own ? toon(c, {}) : toon(c));
-  const suitM = mk(suit), dark = toon(0x221d33), helmetM = mk(helmet), accentM = mk(accent);
+  const suitM = mk(suit), dark = toon(0x221d33), metal = toon(0x3a3550), helmetM = mk(helmet), accentM = mk(accent);
   const glowM = glow(accent);
   const skateM = own ? glow(accent) : glowM;
   const visorM = mk(visor), scarfM = toon(scarf, { side: THREE.DoubleSide }), collarM = mk(scarf);
@@ -34,19 +95,40 @@ export function makeRunner({
   for (const side of [-1, 1]) {
     const leg = new THREE.Group();
     leg.position.set(side * 0.2, hip, 0);
-    leg.add(part(new THREE.CapsuleGeometry(0.14, 0.5, 4, 8), suitM, 0, -0.4, 0));
-    leg.add(part(new THREE.BoxGeometry(0.28, 0.2, 0.44), dark, 0, -0.84, 0.05));
-    const skate = part(new THREE.BoxGeometry(0.24, 0.07, 0.68), skateM, 0, -0.96, 0.05, 0.04);
-    leg.add(skate);
+    leg.add(part(G.leg, suitM, 0, 0, 0, 0.045));
+    const pad = part(G.kneePad, metal, 0, -0.45, 0.095, 0.02);
+    pad.scale.set(1.15, 1, 0.6);
+    leg.add(pad);
+    leg.add(part(G.cuff, accentM, 0, -0.73, 0.01, 0.025));
+    leg.add(part(G.boot, dark, 0, -0.83, 0.07, 0.04));
+    leg.add(part(G.chassis, metal, 0, -0.935, 0.07, 0.02));
+    const rail = part(G.rail, skateM, 0, -0.972, 0.07, 0.025);
+    rail.scale.x = 1.6;
+    leg.add(rail);
     body.add(leg);
     legs.push(leg);
   }
   const torso = new THREE.Group();
   torso.position.y = hip;
   body.add(torso);
-  torso.add(part(new THREE.CapsuleGeometry(0.33, 0.42, 4, 10), suitM, 0, 0.5, 0));
-  torso.add(part(new THREE.BoxGeometry(0.46, 0.3, 0.2), accentM, 0, 0.6, 0.24, 0.03));
-  torso.add(part(new THREE.BoxGeometry(0.56, 0.66, 0.3), dark, 0, 0.58, -0.36));
+  const trunk = part(G.torso, suitM, 0, 0, 0, 0.05);
+  trunk.scale.z = 0.78;
+  torso.add(trunk);
+  const belt = part(G.belt, dark, 0, 0.3, 0, 0.02);
+  belt.scale.z = 0.8;
+  torso.add(belt);
+  torso.add(part(G.buckle, accentM, 0, 0.3, 0.215, 0.02));
+  const plate = part(G.plate, accentM, 0, 0.64, 0.235, 0.03);
+  plate.rotation.x = -0.06;
+  torso.add(plate);
+  torso.add(part(G.lightDot, glowM, 0.11, 0.67, 0.29, 0));
+  // backpack: rounded shell, a lid strip and two thruster nozzles with glowing throats
+  torso.add(part(G.pack, dark, 0, 0.6, -0.35, 0.045));
+  torso.add(part(G.packLid, accentM, 0, 0.78, -0.48, 0.015));
+  for (const side of [-1, 1]) {
+    torso.add(part(G.nozzle, metal, side * 0.14, 0.24, -0.38, 0.025));
+    torso.add(part(G.flame, glowM, side * 0.14, 0.155, -0.38, 0));
+  }
   const cargoSlot = new THREE.Group();
   cargoSlot.position.set(0, 0.62, -0.72);
   torso.add(cargoSlot);
@@ -54,24 +136,31 @@ export function makeRunner({
   const head = new THREE.Group();
   head.position.y = 1.18;
   torso.add(head);
-  head.add(part(new THREE.SphereGeometry(0.36, 18, 14), helmetM, 0, 0, 0));
-  const visorMesh = part(new THREE.SphereGeometry(0.27, 16, 12), visorM, 0, 0.02, 0.17, 0.02);
-  visorMesh.scale.set(1.1, 0.75, 0.75);
-  head.add(visorMesh);
-  head.add(part(new THREE.CylinderGeometry(0.02, 0.02, 0.4), dark, 0.22, 0.38, -0.1, 0));
-  head.add(part(new THREE.SphereGeometry(0.06, 8, 6), glowM, 0.22, 0.6, -0.1, 0));
-  if (pirate) {
-    const band = part(new THREE.TorusGeometry(0.34, 0.06, 6, 16), toon(0xd7263d), 0, 0.12, 0, 0.02);
-    band.rotation.x = Math.PI / 2;
-    head.add(band);
-  }
+  head.add(part(G.helmet, helmetM, 0, 0, 0, 0.05));
+  head.add(part(G.visorFrame, dark, 0, 0, 0, 0));
+  head.add(part(G.visor, visorM, 0, 0, 0, 0));
+  const glint = part(G.glint, GLINT_M, -0.13, 0.13, 0.33, 0);
+  glint.scale.set(1.3, 0.55, 0.35);
+  glint.rotation.set(-0.35, -0.35, 0.5);
+  glint.castShadow = false;
+  head.add(glint);
+  for (const side of [-1, 1]) head.add(part(G.pod, accentM, side * 0.352, -0.01, -0.03, 0.02));
+  head.add(part(G.rim, dark, 0, -0.215, 0, 0.02));
+  head.add(part(G.antenna, dark, 0.22, 0.38, -0.1, 0));
+  head.add(part(G.bead, glowM, 0.22, 0.6, -0.1, 0));
+  if (pirate) head.add(part(G.band, toon(0xd7263d), 0, 0.12, 0, 0.02));
 
   const arms = [];
   for (const side of [-1, 1]) {
     const arm = new THREE.Group();
     arm.position.set(side * 0.45, 0.85, 0);
-    arm.add(part(new THREE.CapsuleGeometry(0.11, 0.42, 4, 8), suitM, 0, -0.3, 0));
-    arm.add(part(new THREE.SphereGeometry(0.13, 8, 6), dark, 0, -0.62, 0, 0.03));
+    arm.add(part(G.arm, suitM, 0, 0, 0, 0.04));
+    arm.add(part(G.shoulder, helmetM, side * 0.01, 0.0, 0, 0.03));
+    arm.add(part(G.wristCuff, accentM, 0, -0.52, 0, 0.02));
+    const glove = part(G.glove, dark, 0, -0.63, 0.01, 0.03);
+    glove.scale.set(0.95, 1.15, 0.85);
+    arm.add(glove);
+    arm.add(part(G.thumb, dark, -side * 0.05, -0.6, 0.08, 0.02));
     torso.add(arm);
     arms.push(arm);
   }
@@ -80,15 +169,12 @@ export function makeRunner({
   const scarfPivot = new THREE.Group();
   scarfPivot.position.set(0, 0.98, -0.2);
   torso.add(scarfPivot);
-  const scarfMesh = part(new THREE.BoxGeometry(0.22, 0.04, 1.3), scarfM, 0, 0, -0.62, 0.03);
-  scarfPivot.add(scarfMesh);
-  const collar = part(new THREE.TorusGeometry(0.24, 0.08, 6, 14), collarM, 0, 0, 0.2, 0.03);
-  collar.rotation.x = Math.PI / 2;
-  scarfPivot.add(collar);
+  scarfPivot.add(part(G.scarf, scarfM, 0, 0, -0.62, 0.03));
+  scarfPivot.add(part(G.collar, collarM, 0, 0, 0.2, 0.03));
 
-  // helmet lamp lens (the actual light is owned by the player)
-  const lamp = part(new THREE.SphereGeometry(0.08, 8, 6), glow(0xfff6a8), 0.26, 0.12, 0.26, 0);
-  head.add(lamp);
+  // helmet lamp on the right temple (the actual light is owned by the player)
+  head.add(part(G.lampHousing, dark, 0.3, 0.15, 0.17, 0.015));
+  head.add(part(G.lens, LENS_M, 0.3, 0.15, 0.225, 0));
 
   root.scale.setScalar(scale);
   return { root, trick, body, bodyBase: -1.2, torso, head, legL: legs[0], legR: legs[1], armL: arms[0], armR: arms[1], scarf: scarfPivot, cargoSlot, glowM, accent, mats: { suit: suitM, accent: accentM, helmet: helmetM, visor: visorM, scarf: scarfM, collar: collarM, glow: glowM, skate: skateM } };

@@ -241,6 +241,8 @@ class Game {
         else if (esc) this.pickDialog(this.dialogButtons.length - 1, esc);
       } else if (this.state === 'casino') { // casino
         if (esc) this.casino.close(true); else this.casino.onKey(code);
+      } else if (this.state === 'wardrobe') { // wardrobe
+        if (esc || code === 'KeyC') this.cosmetics.ui.close(esc); else this.cosmetics.ui.onKey(code);
       } else if (this.state === 'play') {
         if (code === 'KeyM') this.openMap();
         if (code === 'KeyJ') this.openLog();
