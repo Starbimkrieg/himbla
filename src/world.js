@@ -458,7 +458,7 @@ export class World {
 
   addFigures(loc, count, opts) {
     for (let i = 0; i < count; i++) {
-      const f = makeFigure(opts.look ? opts.look(i) : {});
+      const f = makeFigure({ kind: opts.kind, ...(opts.look ? opts.look(i) : {}) });
       const a = this.r() * Math.PI * 2, d = (0.3 + this.r() * 0.55) * loc.r;
       f.root.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
       loc.group.add(f.root);
@@ -752,6 +752,7 @@ export class World {
       if (w.wait > 0) {
         w.wait -= dt;
         w.legL.rotation.x = w.legR.rotation.x = 0;
+        if (w.armL) w.armL.rotation.x = w.armR.rotation.x = 0;
         p.y = w.F;
         continue;
       }
@@ -766,6 +767,7 @@ export class World {
       w.phase += dt * 4.5 * w.speed;
       w.legL.rotation.x = Math.sin(w.phase) * 0.6;
       w.legR.rotation.x = -Math.sin(w.phase) * 0.6;
+      if (w.armL) { w.armL.rotation.x = -Math.sin(w.phase) * w.swing; w.armR.rotation.x = Math.sin(w.phase) * w.swing; }
       p.set(w.x, w.F + Math.abs(Math.sin(w.phase)) * 0.12, p.z + (w.lane - p.z) * Math.min(1, dt * 2));
     }
   }
@@ -1566,6 +1568,7 @@ export class World {
       f.phase += dt * 6;
       f.legL.rotation.x = Math.sin(f.phase) * 0.6;
       f.legR.rotation.x = -Math.sin(f.phase) * 0.6;
+      if (f.armL) { f.armL.rotation.x = -Math.sin(f.phase) * f.swing; f.armR.rotation.x = Math.sin(f.phase) * f.swing; }
       if (f.kind !== 'kid') p.y = Math.abs(Math.sin(f.phase)) * 0.15;
     }
   }

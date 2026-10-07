@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toon, ink, glow } from './toon.js';
+import { toon, ink, glow, inkMat } from './toon.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
@@ -269,22 +269,439 @@ export function makeRunner({
   return { root, trick, body, bodyBase: -1.2, torso, head, legL: legs[0], legR: legs[1], armL: arms[0], armR: arms[1], scarf: scarfPivot, cargoSlot, glowM, accent, mats: { suit: suitM, accent: accentM, helmet: helmetM, visor: visorM, scarf: scarfM, collar: collarM, glow: glowM, skate: skateM } };
 }
 
-// Cheap NPC figure for ambient life.
-export function makeFigure({ suit = 0xffffff, helmet = 0xfff4e0, visor = 0x241a5c, scale = 1 } = {}) {
+// ---- townsfolk ----
+// Civilians share the runner's finish (smooth lathed limbs and torso, rounded shoes and hands, a
+// proper head, bold ink hulls) but none of the courier kit. Each figure is ONE skinned mesh plus ONE
+// ink-hull skinned mesh (two draw calls, one shadow caster) whatever it wears: every part is baked,
+// with its colour as a vertex colour, into a single geometry weighted rigidly to five bones (root,
+// legL, legR, armL, armR). The bones are the old pivots, so callers animate legL/legR (and now
+// armL/armR) by rotation.x exactly as before. All figures share one material; baked geometries are
+// cached by look, so identical figures (soldiers, crowds) share them too.
+// Looks are random (or from opts.seed); explicit suit / helmet / visor colours always win: suit is
+// the main clothing colour, helmet the headgear, and a visor means a sealed helmet.
+let FIG_GEO = null;
+const FIG_CACHE = new Map();
+let FIG_M = null, FIG_INK = null, FIG_GLASS = null;
+function figGeo() {
+  if (FIG_GEO) return FIG_GEO;
+  const sph = (r, w, h, ps, pl, ts, tl) => new THREE.SphereGeometry(r, w, h, ps, pl, ts, tl);
+  const rb = (x, y, z, r) => new RoundedBoxGeometry(x, y, z, 1, r);
+  FIG_GEO = {
+    // hips to neck, flattened front-to-back by the part
+    torso: new THREE.LatheGeometry(v2([[0, -0.02], [0.19, -0.01], [0.255, 0.07], [0.265, 0.2], [0.245, 0.36], [0.262, 0.52], [0.295, 0.68], [0.29, 0.8], [0.225, 0.89], [0.12, 0.95], [0, 0.97]]), 10),
+    // long coat (lab coat, EVA undersuit skirt): open at the hem, flares over the thighs
+    coat: new THREE.LatheGeometry(v2([[0.3, -0.4], [0.292, -0.2], [0.278, 0.05], [0.27, 0.2], [0.252, 0.36], [0.27, 0.52], [0.302, 0.68], [0.297, 0.8], [0.232, 0.89], [0.13, 0.95], [0, 0.975]]), 10),
+    // hip to ankle; doubled rows at -0.3 (shorts) and -0.56 (boot tops) give crisp colour cuts
+    leg: new THREE.LatheGeometry(v2([[0, -0.74], [0.08, -0.735], [0.088, -0.66], [0.092, -0.565], [0.092, -0.56], [0.098, -0.45], [0.103, -0.305], [0.104, -0.3], [0.12, -0.18], [0.134, -0.06], [0.13, 0.03], [0.095, 0.09], [0, 0.11]]), 8),
+    // shoulder to wrist; doubled rows at -0.22 (short sleeves) and -0.36 (rolled sleeves)
+    arm: new THREE.LatheGeometry(v2([[0, -0.6], [0.06, -0.59], [0.066, -0.5], [0.07, -0.365], [0.07, -0.36], [0.076, -0.27], [0.083, -0.225], [0.084, -0.22], [0.09, -0.1], [0.092, 0], [0.074, 0.07], [0, 0.09]]), 8),
+    shoe: rb(0.2, 0.13, 0.34, 0.05),
+    boot: rb(0.22, 0.2, 0.36, 0.06),
+    hand: sph(0.07, 8, 6),
+    shoulder: sph(0.1, 8, 6),
+    neck: new THREE.CylinderGeometry(0.085, 0.1, 0.16, 8),
+    head: sph(0.24, 12, 10),
+    eye: sph(0.03, 6, 4),
+    nose: sph(0.04, 6, 4),
+    ear: sph(0.05, 6, 4),
+    hairTop: sph(0.258, 12, 5, 0, Math.PI * 2, 0, 0.95),
+    hairBack: sph(0.258, 10, 8, Math.PI / 2 + 0.95, Math.PI * 2 - 1.9, 0, 2.05),
+    hairFringe: sph(0.258, 10, 4, Math.PI / 2 + 1.15, Math.PI * 2 - 2.3, 1.15, 0.8),
+    bun: sph(0.1, 8, 6),
+    hairLong: rb(0.36, 0.38, 0.12, 0.05),
+    capCrown: sph(0.262, 12, 6, 0, Math.PI * 2, 0, 1.25),
+    capBrim: new THREE.CylinderGeometry(0.22, 0.22, 0.025, 10, 1, false, -Math.PI / 2, Math.PI),
+    beanie: sph(0.268, 12, 6, 0, Math.PI * 2, 0, 1.4),
+    beanieFold: new THREE.TorusGeometry(0.235, 0.04, 5, 14).rotateX(Math.PI / 2),
+    pompom: sph(0.07, 8, 6),
+    hardHat: sph(0.29, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+    hardBrim: new THREE.CylinderGeometry(0.35, 0.35, 0.03, 14),
+    ridge: rb(0.07, 0.06, 0.5, 0.025),
+    helmet: sph(0.33, 14, 10),
+    visorFrame: sph(0.336, 12, 6, Math.PI / 2 - 0.95, 1.9, 0.86, 1.22),
+    visor: sph(0.342, 12, 6, Math.PI / 2 - 0.85, 1.7, 0.94, 1.06),
+    glint: sph(0.045, 6, 4),
+    neckRing: new THREE.TorusGeometry(0.2, 0.05, 6, 14).rotateX(Math.PI / 2),
+    bowl: sph(0.4, 16, 12),
+    bowlRing: new THREE.TorusGeometry(0.27, 0.06, 6, 16).rotateX(Math.PI / 2),
+    lifePack: rb(0.44, 0.5, 0.22, 0.07),
+    tank: new THREE.CapsuleGeometry(0.07, 0.36, 2, 8),
+    chestBox: rb(0.24, 0.15, 0.08, 0.03),
+    dot: sph(0.025, 6, 4),
+    belt: new THREE.TorusGeometry(0.25, 0.035, 5, 14).rotateX(Math.PI / 2),
+    toolBelt: new THREE.TorusGeometry(0.255, 0.055, 5, 14).rotateX(Math.PI / 2),
+    pouch: rb(0.11, 0.13, 0.08, 0.025),
+    collar: new THREE.TorusGeometry(0.13, 0.04, 5, 12).rotateX(Math.PI / 2),
+    hood: new THREE.TorusGeometry(0.16, 0.07, 6, 12).rotateX(Math.PI / 2),
+    strip: rb(0.04, 0.6, 0.02, 0.01),
+    vee: rb(0.15, 0.2, 0.02, 0.01),
+    tie: rb(0.06, 0.3, 0.025, 0.01),
+    lapel: rb(0.06, 0.34, 0.03, 0.012),
+    pocket: rb(0.1, 0.1, 0.02, 0.01),
+    pen: new THREE.CylinderGeometry(0.012, 0.012, 0.1, 5),
+    stripe: new THREE.TorusGeometry(0.27, 0.025, 4, 14).rotateX(Math.PI / 2),
+    lens: new THREE.TorusGeometry(0.048, 0.012, 4, 10),
+    bridge: new THREE.CylinderGeometry(0.01, 0.01, 0.06, 4).rotateZ(Math.PI / 2),
+    strap: new THREE.TorusGeometry(0.36, 0.022, 4, 18),
+    bag: rb(0.28, 0.24, 0.1, 0.04),
+    scarf: new THREE.TorusGeometry(0.14, 0.06, 6, 12).rotateX(Math.PI / 2),
+    scarfTail: rb(0.1, 0.32, 0.04, 0.015),
+    board: rb(0.22, 0.3, 0.02, 0.008),
+    sheet: rb(0.18, 0.24, 0.006, 0.002),
+    tablet: rb(0.2, 0.27, 0.02, 0.01),
+    briefcase: rb(0.32, 0.24, 0.09, 0.03),
+    handle: new THREE.TorusGeometry(0.05, 0.012, 4, 8, Math.PI),
+    cane: new THREE.CylinderGeometry(0.022, 0.022, 1.0, 6),
+    caneTop: new THREE.TorusGeometry(0.055, 0.022, 5, 8, Math.PI),
+    schoolPack: rb(0.36, 0.4, 0.18, 0.06),
+    toy: sph(0.09, 8, 6),
+  };
+  return FIG_GEO;
+}
+function figMats() {
+  if (!FIG_M) {
+    FIG_M = new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: toon(0xffffff).gradientMap });
+    FIG_INK = inkMat;
+    FIG_GLASS = new THREE.MeshToonMaterial({ color: 0xbfefff, gradientMap: toon(0xffffff).gradientMap, transparent: true, opacity: 0.28, depthWrite: false });
+  }
+  return FIG_M;
+}
+
+const PAL = {
+  skin: [0xffdbac, 0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0x5c3a21, 0xffe0bd, 0xd9a07a],
+  hair: [0x2b1b12, 0x4a2c17, 0x8a5a2b, 0xd9a441, 0xe8d39a, 0x1a1a1a, 0xb5482f, 0x2b1b12, 0xff7ad9, 0x2ec4ff],
+  grey: [0xd8d8d8, 0xb8b8bc, 0xf0f0f0, 0x9a9a9e],
+  clothes: [0xff9f1c, 0xffd23f, 0x2ec4ff, 0xffffff, 0xff7ad9, 0x7dff6a, 0xc77dff, 0x55607a, 0x2b59c3, 0xd7263d, 0x2b8f6a],
+  pastel: [0xb8e0ff, 0xffe9a8, 0xd9f5c4, 0xf5d0e8, 0xe0e0f0, 0xfff4e0],
+  trousers: [0x3a3550, 0x2b3a5c, 0x5b5870, 0x6b5a3a, 0x221d33, 0x3b4d6b],
+  shoes: [0x221d33, 0x4a2c17, 0xfff4e0, 0x3a3550, 0x5c3a21],
+  hat: [0xff9f1c, 0x2ec4ff, 0xd7263d, 0x55607a, 0xffd23f, 0x7dff6a, 0xfff4e0],
+  hard: [0xffd23f, 0xff9f1c, 0xfff4e0, 0x2ec4ff],
+  visor: [0x241a5c, 0x2b59c3, 0x1a1a2e, 0xc9a227],
+};
+const ARCH = ['coveralls', 'coveralls', 'lab', 'engineer', 'engineer', 'trader', 'trader', 'elder', 'eva', 'casual', 'casual'];
+function figRng(seed) {
+  if (seed === undefined) return Math.random;
+  let a = (Math.floor(seed * 2654435761) ^ 0x9e3779b9) >>> 0;
+  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+// Bake parts (each: geometry, bone, colour or colour-of-local-y, bind-space matrix, ink thickness)
+// into one skinned geometry plus its ink hull geometry.
+const _fc = new THREE.Color(), _fv = new THREE.Vector3(), _fn = new THREE.Vector3(), _fm3 = new THREE.Matrix3(), _fbs = new THREE.Vector3(), _fbc = new THREE.Vector3();
+function bakeFigure(parts) {
+  let nv = 0, ni = 0, hv = 0, hi = 0;
+  for (const p of parts) {
+    const c = p.g.attributes.position.count, ic = p.g.index ? p.g.index.count : c;
+    nv += c; ni += ic;
+    if (p.ink) { hv += c; hi += ic; }
+  }
+  const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), col = new Uint16Array(nv * 3);
+  const sIdx = new Uint8Array(nv * 4), sW = new Uint8Array(nv * 4);
+  const idx = new (nv > 65535 ? Uint32Array : Uint16Array)(ni);
+  const hpos = new Float32Array(hv * 3), hsIdx = new Uint8Array(hv * 4), hsW = new Uint8Array(hv * 4);
+  const hidx = new (hv > 65535 ? Uint32Array : Uint16Array)(hi);
+  let v = 0, i = 0, h = 0, k = 0;
+  for (const p of parts) {
+    const g = p.g, P = g.attributes.position, N = g.attributes.normal, c = P.count;
+    _fm3.getNormalMatrix(p.m);
+    const fixed = typeof p.c === 'number' ? _fc.set(p.c).clone() : null;
+    let bb = null;
+    if (p.ink) {
+      if (!g.boundingBox) g.computeBoundingBox();
+      bb = g.boundingBox; bb.getSize(_fbs); bb.getCenter(_fbc);
+    }
+    for (let j = 0; j < c; j++) {
+      const ly = P.getY(j);
+      _fv.fromBufferAttribute(P, j).applyMatrix4(p.m);
+      pos[(v + j) * 3] = _fv.x; pos[(v + j) * 3 + 1] = _fv.y; pos[(v + j) * 3 + 2] = _fv.z;
+      _fn.fromBufferAttribute(N, j).applyMatrix3(_fm3).normalize();
+      nrm[(v + j) * 3] = _fn.x; nrm[(v + j) * 3 + 1] = _fn.y; nrm[(v + j) * 3 + 2] = _fn.z;
+      const cc = fixed || _fc.set(p.c(ly));
+      col[(v + j) * 3] = cc.r * 65535; col[(v + j) * 3 + 1] = cc.g * 65535; col[(v + j) * 3 + 2] = cc.b * 65535;
+      sIdx[(v + j) * 4] = p.bone; sW[(v + j) * 4] = 255;
+      if (bb) {
+        // the same inverted hull ink() makes: the part scaled about its centre by a fixed margin
+        _fv.fromBufferAttribute(P, j).sub(_fbc);
+        _fv.x *= 1 + (2 * p.ink) / Math.max(_fbs.x, 0.02); _fv.y *= 1 + (2 * p.ink) / Math.max(_fbs.y, 0.02); _fv.z *= 1 + (2 * p.ink) / Math.max(_fbs.z, 0.02);
+        _fv.add(_fbc).applyMatrix4(p.m);
+        hpos[(h + j) * 3] = _fv.x; hpos[(h + j) * 3 + 1] = _fv.y; hpos[(h + j) * 3 + 2] = _fv.z;
+        hsIdx[(h + j) * 4] = p.bone; hsW[(h + j) * 4] = 255;
+      }
+    }
+    const I = g.index, ic = I ? I.count : c;
+    for (let j = 0; j < ic; j++) {
+      const a = I ? I.getX(j) : j;
+      idx[i + j] = v + a;
+      if (bb) hidx[k + j] = h + a;
+    }
+    v += c; i += ic;
+    if (bb) { h += c; k += ic; }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3, true));
+  geo.setAttribute('skinIndex', new THREE.BufferAttribute(sIdx, 4));
+  geo.setAttribute('skinWeight', new THREE.BufferAttribute(sW, 4, true));
+  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+  const hull = new THREE.BufferGeometry();
+  hull.setAttribute('position', new THREE.BufferAttribute(hpos, 3));
+  hull.setAttribute('skinIndex', new THREE.BufferAttribute(hsIdx, 4));
+  hull.setAttribute('skinWeight', new THREE.BufferAttribute(hsW, 4, true));
+  hull.setIndex(new THREE.BufferAttribute(hidx, 1));
+  // bones only swing limbs a little: a fixed sphere round the whole figure culls correctly
+  const bs = new THREE.Sphere(new THREE.Vector3(0, 1.15, 0), 1.75);
+  geo.boundingSphere = bs; hull.boundingSphere = bs.clone();
+  return { geo, hull };
+}
+
+const _fq = new THREE.Quaternion(), _fe = new THREE.Euler(), _fp = new THREE.Vector3(), _fs = new THREE.Vector3();
+const figMat = (p = [0, 0, 0], r = [0, 0, 0], s = 1) => new THREE.Matrix4().compose(
+  _fp.set(p[0], p[1], p[2]), _fq.setFromEuler(_fe.set(r[0], r[1], r[2])), typeof s === 'number' ? _fs.setScalar(s) : _fs.set(s[0], s[1], s[2]));
+
+// Cheap NPC townsperson for ambient life. Pivot at the feet; legL/legR pivot at the hips and
+// armL/armR at the shoulders (Bones: animate them by rotation.x).
+export function makeFigure({ suit, helmet, visor, scale = 1, seed, kind, look } = {}) {
+  const G = figGeo();
+  const mat = figMats();
+  const rnd = figRng(seed);
+  const pick = (a) => a[Math.floor(rnd() * a.length) % a.length];
+  const chance = (p) => rnd() < p;
+  const kid = kind === 'kid' || scale < 0.75;
+  const arch = look || (kind === 'soldier' ? 'trooper' : kid ? 'kid' : pick(ARCH));
+  // headgear: a visor means a sealed helmet; a helmet colour alone means some kind of hat or helmet
+  let headgear;
+  if (visor !== undefined) headgear = 'sealed';
+  else if (arch === 'trooper') headgear = 'sealed';
+  else if (arch === 'eva') headgear = 'bowl';
+  else if (helmet !== undefined) headgear = arch === 'engineer' ? 'hardhat' : arch === 'kid' ? pick(['bubble', 'cap']) : pick(['sealed', 'sealed', 'cap', 'beanie', 'hardhat']);
+  else if (arch === 'kid') headgear = pick(['bubble', 'bubble', 'hair', 'cap']);
+  else if (arch === 'engineer') headgear = pick(['hardhat', 'hardhat', 'hair']);
+  else if (arch === 'elder') headgear = chance(0.25) ? 'beanie' : 'hair';
+  else headgear = pick(['hair', 'hair', 'hair', 'hair', 'cap', 'beanie', 'sealed']);
+  const sealed = headgear === 'sealed';
+  const mono = suit !== undefined && suit === helmet; // statues and the like: one colour all over
+
+  // palette
+  const C = suit !== undefined ? suit : pick(PAL.clothes);
+  const skin = pick(PAL.skin);
+  const hair = arch === 'elder' ? pick(PAL.grey) : pick(PAL.hair);
+  const hairStyle = arch === 'elder' ? pick(['fringe', 'fringe', 'bun', 'short']) : pick(['short', 'short', 'bun', 'long', 'long', 'fringe']);
+  const hatC = helmet !== undefined ? helmet : headgear === 'hardhat' ? pick(PAL.hard) : headgear === 'sealed' || headgear === 'bubble' ? 0xfff4e0 : pick(PAL.hat);
+  const visorC = visor !== undefined ? visor : pick(PAL.visor);
+  const inner = pick(PAL.pastel);
+  let pants = arch === 'coveralls' || arch === 'engineer' || arch === 'eva' || arch === 'trooper' ? C : pick(PAL.trousers);
+  const shoeC = pick(PAL.shoes);
+  const dark = 0x221d33, metal = 0x5b5870, glovesC = arch === 'eva' ? 0xfff4e0 : arch === 'engineer' ? 0xe0a040 : dark;
+  const gloved = sealed || arch === 'eva' || arch === 'engineer' || arch === 'trooper';
+  const handC = gloved ? glovesC : skin;
+  // proportions
+  const w = (arch === 'eva' ? 1.18 : arch === 'trooper' ? 1.1 : 1) * (0.92 + rnd() * 0.18);
+  const tall = kid ? 0.95 + rnd() * 0.1 : arch === 'elder' ? 0.9 + rnd() * 0.06 : 0.92 + rnd() * 0.16;
+  const limb = arch === 'eva' ? 1.35 : arch === 'trooper' ? 1.12 : 1;
+  const legLen = kid ? 0.82 : 1, torsoLen = kid ? 0.85 : 1, headS = kid ? 1.32 : 1;
+  const hip = 0.84 * legLen;
+  const stoop = arch === 'elder' ? 0.16 : 0;
+  // accessories
+  const acc = {
+    glasses: !sealed && headgear !== 'bowl' && headgear !== 'bubble' && (arch === 'elder' ? chance(0.7) : arch === 'lab' ? chance(0.6) : chance(0.15)),
+    bag: (arch === 'trader' || arch === 'casual') && chance(0.4),
+    scarf: (arch === 'casual' || arch === 'elder' || arch === 'trader') && chance(0.3),
+    hand: arch === 'lab' ? pick(['clipboard', 'tablet', 'clipboard']) : arch === 'trader' ? pick(['tablet', 'briefcase', 'none']) : arch === 'elder' ? 'cane' : arch === 'kid' ? pick(['toy', 'none']) : arch === 'casual' ? pick(['tablet', 'none', 'none']) : 'none',
+    pack: arch === 'kid' && chance(0.6),
+  };
+  const key = [arch, headgear, mono, C, skin, hair, hairStyle, hatC, visorC, inner, pants, shoeC, w.toFixed(2), JSON.stringify(acc)].join('|');
+
+  // bones: 0 root, 1 legL, 2 legR, 3 armL, 4 armR
+  const torsoM = figMat([0, hip, 0], [stoop, 0, 0], [w, torsoLen, w]);
+  const sh = 0.8 * torsoLen;
+  const shoulderAt = (side) => new THREE.Vector3(side * (0.29 * w + 0.06 * limb), sh, 0).applyMatrix4(figMat([0, hip, 0], [stoop, 0, 0]));
+  const headC = new THREE.Vector3(0, 0.97 * torsoLen + 0.06 + 0.21 * headS, 0.02).applyMatrix4(figMat([0, hip, 0], [stoop, 0, 0]));
+  const headM = figMat([headC.x, headC.y, headC.z], [stoop * 0.5, 0, 0], headS);
+  const legAt = (side) => new THREE.Vector3(side * 0.125 * w * (arch === 'eva' ? 1.1 : 1), hip, 0);
+  const pivots = [new THREE.Vector3(), legAt(-1), legAt(1), shoulderAt(-1), shoulderAt(1)];
+
+  let baked = FIG_CACHE.get(key);
+  if (!baked) {
+    const parts = [];
+    const col = (c) => (mono && typeof c === 'number' ? C : mono ? () => C : c);
+    const vis = (c) => (mono ? (c === visorC ? c : C) : c);
+    // add(part geometry, bone, colour, transform in the bone's (or the torso/head's) frame, ink)
+    const add = (g, bone, c, m, ink = 0) => {
+      const base = bone === 'torso' ? torsoM : bone === 'head' ? headM : figMat(pivots[bone].toArray());
+      parts.push({ g, bone: typeof bone === 'number' ? bone : 0, c: typeof c === 'number' ? vis(c) : col(c), m: base.clone().multiply(m), ink });
+    };
+    // torso garment (in the torso frame: y 0 = hips, 0.97 = neck base)
+    const flat = 0.74;
+    if (arch === 'lab') add(G.coat, 'torso', C, figMat([0, 0, 0], [0, 0, 0], [1, 1, flat]), 0.035);
+    else if (arch === 'eva') {
+      add(G.torso, 'torso', C, figMat([0, 0, 0], [0, 0, 0], [1.04, 1, flat * 1.08]), 0.04);
+    } else add(G.torso, 'torso', arch === 'kid' ? (y) => (y < 0.12 ? pants : C) : C, figMat([0, 0, 0], [0, 0, 0], [1, 1, flat]), 0.035);
+    const front = (y, x = 0) => [x, y, 0.2 + 0.02];
+    if (arch === 'coveralls' || arch === 'engineer') {
+      add(G.strip, 'torso', dark, figMat([0, 0.5, 0.196], [-0.03, 0, 0], [1 / w, 1, 1]));
+      add(G.pocket, 'torso', dark, figMat([-0.12, 0.66, 0.2], [-0.14, 0, 0], [1 / w, 1, 1]));
+      add(G.collar, 'torso', C, figMat([0, 0.9, 0], [0, 0, 0], [1 / w * 1.15, 1, 0.9]), 0.02);
+    }
+    if (arch === 'coveralls') add(G.belt, 'torso', dark, figMat([0, 0.15, 0], [0, 0, 0], [1, 1, 0.78]), 0.02);
+    if (arch === 'engineer') {
+      add(G.toolBelt, 'torso', 0x6b4a2a, figMat([0, 0.13, 0], [0, 0, 0], [1, 1, 0.8]), 0.025);
+      for (const x of [-0.2, 0.2, 0.06]) add(G.pouch, 'torso', 0x8a6a3a, figMat([x, 0.06, x === 0.06 ? 0.2 : 0.12], [0, x * 2.5, 0], [1 / w, 1, 1]), 0.02);
+      add(G.stripe, 'torso', 0xfff4e0, figMat([0, 0.6, 0], [0, 0, 0], [1.1, 1, 0.82]));
+    }
+    if (arch === 'trooper') {
+      add(G.lifePack, 'torso', 0x3a3f50, figMat([0, 0.58, 0.04], [0, 0, 0], [1.25 / w, 1.02, 1.22]), 0.03);
+      add(G.belt, 'torso', dark, figMat([0, 0.15, 0], [0, 0, 0], [1.02, 1, 0.8]), 0.02);
+      for (const x of [-0.16, 0.16]) add(G.pouch, 'torso', 0x3a3f50, figMat([x, 0.12, 0.19], [0, 0, 0], [1 / w, 1, 1]), 0.02);
+    }
+    if (arch === 'lab' || arch === 'trader') {
+      add(G.vee, 'torso', arch === 'lab' ? inner : 0xfff4e0, figMat(front(0.76), [-0.18, 0, 0], [1 / w, 1, 1]));
+      for (const s of [-1, 1]) add(G.lapel, 'torso', arch === 'lab' ? C : C, figMat([s * 0.085, 0.72, 0.215], [-0.15, 0, s * 0.35], [1 / w, 1, 1]), 0.012);
+      if (arch === 'trader') add(G.tie, 'torso', pick([0xd7263d, 0x2b59c3, 0xffd23f, 0x221d33]), figMat([0, 0.7, 0.215], [-0.12, 0, 0], [1 / w, 1, 1]), 0.01);
+      if (arch === 'lab') {
+        add(G.pocket, 'torso', C, figMat([-0.13, 0.62, 0.22], [-0.12, 0, 0], [1 / w, 1, 1]), 0.01);
+        add(G.pen, 'torso', 0x2b59c3, figMat([-0.11, 0.67, 0.225], [0, 0, 0], [1 / w, 1, 1]));
+        for (const y of [0.5, 0.36, 0.22]) add(G.dot, 'torso', dark, figMat([0, y, 0.215], [0, 0, 0], [1 / w, 1, 1]));
+      }
+      if (arch === 'trader') add(G.belt, 'torso', dark, figMat([0, 0.1, 0], [0, 0, 0], [1.03, 0.6, 0.8]));
+    }
+    if (arch === 'casual') {
+      add(G.hood, 'torso', C, figMat([0, 0.9, -0.05], [-0.3, 0, 0], [1.2 / w, 1, 1]), 0.025);
+      add(G.pocket, 'torso', C, figMat([0, 0.28, 0.215], [0.08, 0, 0], [2.2 / w, 1, 1]), 0.012);
+    }
+    if (arch === 'elder') {
+      for (const y of [0.62, 0.48, 0.34]) add(G.dot, 'torso', 0xfff4e0, figMat([0, y, 0.2], [0, 0, 0], [1 / w, 1, 1]));
+      add(G.strip, 'torso', 0xfff4e0, figMat([0, 0.48, 0.19], [-0.03, 0, 0], [0.4 / w, 0.75, 1]));
+    }
+    if (arch === 'eva') {
+      add(G.lifePack, 'torso', 0xfff4e0, figMat([0, 0.6, -0.3], [0, 0, 0], [1 / w, 1, 1]), 0.035);
+      for (const s of [-1, 1]) add(G.tank, 'torso', metal, figMat([s * 0.13, 0.62, -0.44], [0, 0, 0], [1 / w, 1, 1]), 0.02);
+      add(G.chestBox, 'torso', 0xfff4e0, figMat([0, 0.58, 0.24], [-0.1, 0, 0], [1 / w, 1, 1]), 0.02);
+      [0xff4f2e, 0x7dff6a, 0xffd23f].forEach((c, n) => add(G.dot, 'torso', c, figMat([-0.06 + n * 0.06, 0.6, 0.285], [0, 0, 0], [1 / w, 1, 1])));
+      add(G.belt, 'torso', 0xfff4e0, figMat([0, 0.15, 0], [0, 0, 0], [1.06, 1.4, 0.82]), 0.02);
+    }
+    if (acc.scarf) {
+      const sc = pick([0xd7263d, 0xffd23f, 0x2ec4ff, 0x7dff6a, 0xff7ad9]);
+      add(G.scarf, 'torso', sc, figMat([0, 0.92, 0.01], [0.15, 0, 0], [1.1 / w, 1, 1]), 0.02);
+      add(G.scarfTail, 'torso', sc, figMat([0.08, 0.72, 0.21], [-0.2, 0, 0.12], [1 / w, 1, 1]), 0.015);
+    }
+    if (acc.bag) {
+      const bc = pick([0x6b4a2a, 0x3a3550, 0xffd23f, 0x2b59c3]);
+      add(G.strap, 'torso', bc, figMat([0, 0.5, 0], [0, 0, 0.75], [1.02 / w, 1, 0.9]));
+      add(G.bag, 'torso', bc, figMat([0.3, 0.16, 0.06], [0, Math.PI / 2 - 0.3, 0], [1 / w, 1, 1]), 0.025);
+    }
+    if (acc.pack) add(G.schoolPack, 'torso', pick(PAL.hat), figMat([0, 0.55, -0.27], [0, 0, 0], [1 / w, 1, 1]), 0.03);
+    if (!sealed && headgear !== 'bowl') add(G.neck, 'torso', skin, figMat([0, 0.99, 0.01], [0, 0, 0], [1 / w, 1, 1]));
+    // head (in the head frame: centre of the skull)
+    const bare = headgear !== 'sealed';
+    if (bare) {
+      add(G.head, 'head', skin, figMat([0, 0, 0], [0, 0, 0], [0.92, 1.04, 0.98]), 0.035);
+      for (const s of [-1, 1]) {
+        add(G.eye, 'head', 0x120a1e, figMat([s * 0.085, 0.03, 0.215], [0, 0, 0], [1, 1.3, 0.6]));
+        add(G.ear, 'head', skin, figMat([s * 0.22, 0, 0], [0, 0, 0], [0.5, 1, 0.8]), 0.012);
+      }
+      add(G.nose, 'head', skin, figMat([0, -0.03, 0.235], [0, 0, 0], [0.9, 1.1, 1]), 0.01);
+      if (acc.glasses) {
+        for (const s of [-1, 1]) add(G.lens, 'head', dark, figMat([s * 0.085, 0.035, 0.235], [0, 0, 0], [1, 0.85, 1]));
+        add(G.bridge, 'head', dark, figMat([0, 0.045, 0.245]));
+      }
+      const hatOn = headgear === 'cap' || headgear === 'beanie' || headgear === 'hardhat';
+      // hair (under any hat, only the back shows)
+      if (!(arch === 'kid' && headgear === 'cap' && false)) {
+        if (hairStyle === 'fringe') add(G.hairFringe, 'head', hair, figMat([0, 0, -0.005]), 0.015);
+        else {
+          add(G.hairBack, 'head', hair, figMat([0, 0.012, -0.012]), 0.02);
+          if (!hatOn) add(G.hairTop, 'head', hair, figMat([0, 0.02, 0.0], [-0.12, 0, 0]), 0.02);
+        }
+        if (hairStyle === 'bun' && !hatOn) add(G.bun, 'head', hair, figMat([0, 0.2, -0.17]), 0.02);
+        if (hairStyle === 'long') add(G.hairLong, 'head', hair, figMat([0, -0.2, -0.15], [0.1, 0, 0]), 0.025);
+      }
+      if (headgear === 'cap') {
+        add(G.capCrown, 'head', hatC, figMat([0, 0.025, -0.01]), 0.025);
+        add(G.capBrim, 'head', hatC, figMat([0, 0.075, 0.13], [0.12, 0, 0], [1, 1, 1.15]), 0.015);
+      } else if (headgear === 'beanie') {
+        add(G.beanie, 'head', hatC, figMat([0, 0.035, -0.01]), 0.025);
+        add(G.beanieFold, 'head', hatC, figMat([0, 0.07, -0.01], [-0.12, 0, 0], [1.05, 1, 1.05]), 0.015);
+        add(G.pompom, 'head', 0xfff4e0, figMat([0, 0.3, -0.04]), 0.015);
+      } else if (headgear === 'hardhat') {
+        add(G.hardHat, 'head', hatC, figMat([0, 0.04, 0]), 0.025);
+        add(G.hardBrim, 'head', hatC, figMat([0, 0.05, 0.02], [0, 0, 0], [0.92, 1, 1]), 0.015);
+        add(G.ridge, 'head', hatC, figMat([0, 0.31, 0], [0, 0, 0], [1, 1, 0.9]));
+      } else if (headgear === 'bowl' || headgear === 'bubble') {
+        add(G.bowlRing, 'head', headgear === 'bowl' ? (helmet !== undefined ? hatC : metal) : hatC, figMat([0, -0.27, 0]), 0.02);
+      }
+    } else {
+      add(G.helmet, 'head', hatC, figMat([0, 0, 0]), 0.04);
+      add(G.visorFrame, 'head', dark, figMat([0, 0, 0]));
+      add(G.visor, 'head', visorC, figMat([0, 0, 0]));
+      add(G.glint, 'head', 0xffffff, figMat([-0.11, 0.12, 0.31], [-0.35, -0.35, 0.5], [1.3, 0.55, 0.35]));
+      add(G.neckRing, 'head', arch === 'trooper' ? dark : metal, figMat([0, -0.27, 0], [0, 0, 0], [0.95, 1, 0.9]), 0.02);
+    }
+    // legs (bones 1, 2: y 0 = hip)
+    const booted = arch === 'engineer' || arch === 'eva' || arch === 'trooper';
+    for (const b of [1, 2]) {
+      const legC = arch === 'kid' ? (y) => (y > -0.3025 ? pants : y > -0.5625 ? skin : 0xfff4e0) : booted ? (y) => (y > -0.5625 ? pants : 0x3a3550) : pants;
+      add(G.leg, b, legC, figMat([0, 0, 0], [0, 0, 0], [limb, legLen === 1 ? 1 : 0.84, limb]), 0.035);
+      const shoeY = -hip + 0.065 * (booted ? 1.5 : 1);
+      if (booted) add(G.boot, b, arch === 'eva' ? 0xfff4e0 : 0x3a3550, figMat([0, -hip + 0.1, 0.04], [0, 0, 0], [limb * 0.95, 1, 1.02]), 0.03);
+      else add(G.shoe, b, arch === 'kid' ? 0xfff4e0 : shoeC, figMat([0, shoeY, 0.05]), 0.03);
+    }
+    // arms (bones 3, 4: y 0 = shoulder)
+    const sleeve = arch === 'kid' ? -0.2225 : arch === 'engineer' && !sealed ? -0.3625 : -9;
+    const sleeveC = arch === 'kid' ? C : C;
+    for (const b of [3, 4]) {
+      const side = b === 3 ? -1 : 1;
+      add(G.arm, b, sleeve > -9 ? (y) => (y > sleeve ? sleeveC : skin) : sleeveC, figMat([0, 0, 0], [0, 0, 0], [limb, kid ? 0.88 : 1, limb]), 0.03);
+      add(G.shoulder, b, sleeveC, figMat([side * 0.01, 0, 0], [0, 0, 0], limb * (arch === 'trooper' ? 1.15 : 1)), 0.02);
+      const hy = kid ? -0.56 : -0.63;
+      add(G.hand, b, handC, figMat([0, hy, 0.01], [0, 0, 0], [0.9 * limb, 1.15 * limb, 0.8 * limb]), 0.02);
+      if (b !== 4) continue;
+      // held props in the right hand
+      if (acc.hand === 'clipboard') {
+        add(G.board, b, 0x8a6a3a, figMat([-0.04, hy + 0.06, 0.12], [-1.1, 0.2, 0]), 0.012);
+        add(G.sheet, b, 0xfff4e0, figMat([-0.04, hy + 0.067, 0.132], [-1.1, 0.2, 0]));
+      } else if (acc.hand === 'tablet') {
+        add(G.tablet, b, dark, figMat([-0.05, hy + 0.06, 0.13], [-1.0, 0.25, 0]), 0.012);
+        add(G.sheet, b, 0x2ee6ff, figMat([-0.05, hy + 0.068, 0.142], [-1.0, 0.25, 0], [0.95, 1, 1]));
+      } else if (acc.hand === 'briefcase') {
+        add(G.briefcase, b, pick([0x4a2c17, 0x221d33, 0x8a5a2b]), figMat([0.02, hy - 0.2, 0], [0, Math.PI / 2, 0]), 0.025);
+        add(G.handle, b, dark, figMat([0.02, hy - 0.08, 0], [0, Math.PI / 2, 0]));
+      } else if (acc.hand === 'cane') {
+        add(G.cane, b, 0x6b4a2a, figMat([0, hy - 0.5, 0.1], [0.1, 0, 0]), 0.012);
+        add(G.caneTop, b, 0x6b4a2a, figMat([0, hy + 0.02, 0.08], [0, Math.PI / 2, 0]));
+      } else if (acc.hand === 'toy') add(G.toy, b, pick([0xff4f2e, 0x2ec4ff, 0x7dff6a, 0xffd23f]), figMat([0, hy - 0.04, 0.1]), 0.015);
+    }
+    baked = bakeFigure(parts);
+    FIG_CACHE.set(key, baked);
+  }
+
+  // skeleton
   const root = new THREE.Group();
-  const suitM = toon(suit);
-  const body = part(new THREE.CapsuleGeometry(0.32, 0.6, 3, 8), suitM, 0, 1.2, 0, 0.05);
-  root.add(body);
-  root.add(part(new THREE.SphereGeometry(0.34, 12, 10), toon(helmet), 0, 2.0, 0, 0.05));
-  const v = part(new THREE.SphereGeometry(0.24, 10, 8), toon(visor), 0, 2.02, 0.16, 0);
-  v.scale.set(1.1, 0.75, 0.75);
-  root.add(v);
-  const legL = part(new THREE.BoxGeometry(0.22, 0.7, 0.24), suitM, -0.16, 0.38, 0, 0);
-  const legR = part(new THREE.BoxGeometry(0.22, 0.7, 0.24), suitM, 0.16, 0.38, 0, 0);
-  root.add(legL, legR);
-  root.add(part(new THREE.BoxGeometry(0.5, 0.55, 0.26), toon(0x3a3550), 0, 1.3, -0.36, 0));
-  root.scale.setScalar(scale);
-  return { root, legL, legR };
+  const bones = pivots.map((p) => { const b = new THREE.Bone(); b.position.copy(p); return b; });
+  for (let n = 1; n < 5; n++) bones[0].add(bones[n]);
+  root.add(bones[0]);
+  root.updateMatrixWorld(true);
+  const skeleton = new THREE.Skeleton(bones);
+  const body = new THREE.SkinnedMesh(baked.geo, mat);
+  body.castShadow = true;
+  body.bind(skeleton);
+  const hull = new THREE.SkinnedMesh(baked.hull, FIG_INK);
+  hull.userData.isInk = true;
+  hull.bind(skeleton);
+  root.add(body, hull);
+  if (headgear === 'bowl' || headgear === 'bubble') {
+    const bowl = new THREE.Mesh(G.bowl, FIG_GLASS);
+    bowl.position.copy(headC).add(_fp.set(0, 0.02, 0));
+    bowl.scale.setScalar(headS * (headgear === 'bubble' ? 0.88 : 1));
+    bowl.renderOrder = 2;
+    root.add(bowl);
+  }
+  // relaxed arms: hands hang a little away from the hips
+  bones[3].rotation.z = -0.07 * (arch === 'eva' ? 2 : 1);
+  bones[4].rotation.z = 0.07 * (arch === 'eva' ? 2 : 1);
+  root.scale.setScalar(scale * tall);
+  return { root, body, legL: bones[1], legR: bones[2], armL: bones[3], armR: bones[4], look: arch, swing: arch === 'elder' ? 0.15 : arch === 'eva' ? 0.3 : 0.45 };
 }
 
 export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, flag = 0x111111 } = {}) {
@@ -463,3 +880,4 @@ export function makeTube() {
   root.rotation.z = Math.PI / 2;
   return { root, fluid };
 }
+if (typeof window !== 'undefined') window.__makeFigure = makeFigure; // NPCTEST
