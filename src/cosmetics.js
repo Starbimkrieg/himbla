@@ -108,6 +108,23 @@ export function dressSkates(M, skatesId) {
   M.mats.skate.color.setHex(s.color);
   for (const h of M.hoofMeshes || []) h.removeFromParent();
   M.hoofMeshes = [];
+  if (s.coins) {
+    // casino bling: a big medallion on the outside of each boot and a row of studs along the rail
+    const face = s.coins === 'gold' ? COIN_GOLD : CHIP_GREEN;
+    for (const [leg, side] of [[M.legL, -1], [M.legR, 1]]) {
+      const med = new THREE.Mesh(EXTRA_GEO().coin, face);
+      med.rotation.z = Math.PI / 2;
+      med.position.set(side * 0.13, -0.86, 0.02);
+      leg.add(med);
+      M.hoofMeshes.push(med);
+      for (let k = 0; k < 3; k++) {
+        const stud = new THREE.Mesh(EXTRA_GEO().stud, s.coins === 'gold' ? COIN_RIM : CHIP_RIM);
+        stud.position.set(side * 0.09, -0.98, -0.12 + k * 0.12);
+        leg.add(stud);
+        M.hoofMeshes.push(stud);
+      }
+    }
+  }
   if (s.hooves) {
     for (const leg of [M.legL, M.legR]) {
       const shoe = new THREE.Mesh(EXTRA_GEO().shoe, HOOF_M);
@@ -121,6 +138,10 @@ export function dressSkates(M, skatesId) {
 
 let extraGeo = null;
 const HOOF_M = glow(0xd8d0c4);
+const COIN_GOLD = new THREE.MeshToonMaterial({ color: 0xffd23f, emissive: 0x6a4a00 });
+const COIN_RIM = glow(0xfff6a8);
+const CHIP_GREEN = new THREE.MeshToonMaterial({ color: 0x1f8a4a, emissive: 0x0a3a1a });
+const CHIP_RIM = glow(0xffffff);
 function EXTRA_GEO() {
   if (!extraGeo) {
     // crest: a bevelled fin profile extruded thin, front edge low, sweeping up and back
@@ -132,6 +153,9 @@ function EXTRA_GEO() {
       crest,
       pad: new THREE.SphereGeometry(0.22, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2),
       halo: new THREE.TorusGeometry(0.34, 0.035, 6, 24),
+      coin: new THREE.CylinderGeometry(0.075, 0.075, 0.02, 14),
+      stud: new THREE.SphereGeometry(0.022, 6, 4),
+      trailCoin: new THREE.CylinderGeometry(0.13, 0.13, 0.03, 12),
       band: new THREE.TorusGeometry(0.35, 0.06, 6, 16),
       cape: new THREE.PlaneGeometry(0.58, 1.1, 1, 4).translate(0, -0.55, 0),
       shoe: new THREE.TorusGeometry(0.16, 0.04, 6, 12, Math.PI * 1.4),
@@ -193,13 +217,68 @@ export class Cosmetics {
     const b = P.body;
     const s = this.skate;
     const mat = P.model.mats.skate;
+    // the glide ribbons under the skates take the finish's trail colour (cyan on the stock skates)
+    if (g.fx.trails) { const tc = s.trail ? this.trailColor(g.time) : 0x2ee6ff; for (const t of g.fx.trails) t.mat.uniforms.color.value.set(tc); }
     if (s.rainbow) mat.color.setHSL((g.time * 0.4) % 1, 1, 0.6);
     else mat.color.setHex(b.skating ? s.color : 0x3a3550);
-    if (s.trail && b.skating && b.grounded && P.speed > 12 && Math.random() < dt * (s.flame ? 60 : 35)) {
+    if (s.coins) this.updateCoins(dt, s);
+    else if (this.coins) for (const c of this.coins) if (c.on) { c.on = false; c.mesh.visible = false; }
+    else if (s.trail && b.skating && b.grounded && P.speed > 12 && Math.random() < dt * (s.flame ? 60 : 35)) {
       const back = P.pos.clone().addScaledVector(P.up, s.flame ? 0.3 : 0.15);
       g.fx.spawn(back, P.vel.clone().multiplyScalar(-0.15).addScaledVector(P.up, s.flame ? 2.5 : 0.5), { color: this.trailColor(g.time), size: s.flame ? 0.45 : 0.3, life: s.flame ? 0.45 : 0.7, count: 1, spread: 0.6 });
     }
     for (const x of this.extraMeshes) if (x.userData.cape) { x.visible = !P.cargoMesh; x.rotation.x = 0.25 + Math.min(1.1, P.speed / 40) + Math.sin(g.time * 8) * 0.05; }
+  }
+
+  // Casino skates: puffs of glittery smoke at the heels, and every so often a shiny coin (or a poker
+  // chip) pops out of the smoke, spins up, bounces and fades.
+  updateCoins(dt, s) {
+    const g = this.game;
+    const P = g.player;
+    const b = P.body;
+    const gold = s.coins === 'gold';
+    if (!this.coins) this.coins = [];
+    const going = b.skating && b.grounded && P.speed > 12;
+    if (going && Math.random() < dt * 30) {
+      g.fx.spawn(P.pos.clone().addScaledVector(P.up, 0.25), P.vel.clone().multiplyScalar(-0.12).addScaledVector(P.up, 1.2), { color: Math.random() < 0.7 ? (gold ? 0xe8dcc0 : 0xc8e8c8) : s.trail, size: 0.7, life: 0.9, count: 1, spread: 0.8 });
+    }
+    if (going && Math.random() < dt * Math.min(9, P.speed / 7)) {
+      let c = this.coins.find((x) => !x.on);
+      if (!c && this.coins.length < 28) {
+        const mesh = new THREE.Mesh(EXTRA_GEO().trailCoin, gold ? COIN_GOLD : (this.coins.length % 3 === 0 ? CHIP_RIM : CHIP_GREEN));
+        ink(mesh, 0.015);
+        g.scene.add(mesh);
+        c = { mesh, vel: new THREE.Vector3(), spin: new THREE.Vector3() };
+        this.coins.push(c);
+      }
+      if (c) {
+        const side = new THREE.Vector3().crossVectors(P.heading, P.up);
+        c.on = true; c.t = 0; c.bounced = false;
+        c.mesh.visible = true;
+        c.mesh.scale.setScalar(1);
+        c.mesh.position.copy(P.pos).addScaledVector(P.up, 0.4).addScaledVector(P.heading, -0.6);
+        c.vel.copy(P.vel).multiplyScalar(0.12).addScaledVector(P.up, 4 + Math.random() * 3).addScaledVector(side, (Math.random() - 0.5) * 5);
+        c.spin.set(Math.random() * 14, Math.random() * 8, Math.random() * 14);
+      }
+    }
+    for (const c of this.coins) {
+      if (!c.on) continue;
+      c.t += dt;
+      const up = c.mesh.position.clone().normalize();
+      c.vel.addScaledVector(up, -6 * dt);
+      c.mesh.position.addScaledVector(c.vel, dt);
+      c.mesh.rotation.x += c.spin.x * dt; c.mesh.rotation.y += c.spin.y * dt; c.mesh.rotation.z += c.spin.z * dt;
+      const sr = g.planet.surface(c.mesh.position);
+      if (c.mesh.position.length() < sr + 0.05) {
+        c.mesh.position.setLength(sr + 0.05);
+        const vn = c.vel.dot(up);
+        if (vn < 0) c.vel.addScaledVector(up, -vn * (c.bounced ? 1 : 1.55));
+        c.vel.multiplyScalar(0.6);
+        if (!c.bounced) { c.bounced = true; if (Math.random() < 0.3 && P.pos.distanceTo(c.mesh.position) < 40) g.audio.tone(gold ? 2400 + Math.random() * 600 : 1600, 0.05, 'triangle', 0.03); }
+      }
+      if (c.t > 1.1) c.mesh.scale.setScalar(Math.max(0.01, 1 - (c.t - 1.1) / 0.4));
+      if (c.t > 1.5) { c.on = false; c.mesh.visible = false; }
+    }
   }
 
   // C: the wardrobe screen (live preview + click-to-equip grids, see wardrobe.js).

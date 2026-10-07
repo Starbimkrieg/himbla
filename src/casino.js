@@ -13,8 +13,8 @@ Object.assign(OUTFITS, {
   moonroyal: { name: 'Moon Royalty Regalia', casino: true, suit: 0x5a1a8f, accent: 0xffd23f, helmet: 0xffd23f, visor: 0x2ee6ff, scarf: 0xffffff, extras: ['crest', 'pads', 'cape'] },
 });
 Object.assign(SKATES, {
-  felt: { name: 'Lucky Felt Rollers', casino: true, color: 0x1f8a4a, trail: 0x7dff6a },
-  jackpot: { name: 'Jackpot Rollers', casino: true, color: 0xffd23f, trail: 0xfff6a8, flame: true },
+  felt: { name: 'Lucky Felt Rollers', casino: true, color: 0x1f8a4a, trail: 0x7dff6a, coins: 'chips' },
+  jackpot: { name: 'Jackpot Rollers', casino: true, color: 0xffd23f, trail: 0xfff6a8, coins: 'gold' },
 });
 
 const VIP = [

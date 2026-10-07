@@ -26,9 +26,11 @@ export const PHYS = {
   slopeAssist: 0.35, // extra downhill pull: the magnetic cushion "harvests" slope energy
   // Magnetic grip: while the skates are in contact (or just left it) they pull toward the
   // surface, so small bumps don't skip you off. Big launches still break free.
-  grip: 10,
-  gripWindow: 0.3, // seconds after losing contact that grip still pulls
-  gripRange: 2.5, // metres above the surface where grip still pulls
+  grip: 13,
+  skateBuffer: 0.6, // metres above the ground the locked skates still hold you (+2% of speed, up to +1.6 m)
+  skateLaunch: 3, // upward m/s (+10% of speed, up to +9) it takes to break free of that buffer: a real ramp
+  gripWindow: 0.45, // seconds after losing contact that grip still pulls
+  gripRange: 3.5, // metres above the surface where grip still pulls
   airControl: 5,
   drag: 0.0002,
 

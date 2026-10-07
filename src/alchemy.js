@@ -829,7 +829,9 @@ export class Alchemy {
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.12, 12), toon(0x3a3550));
     cap.position.y = 0.45;
     g.add(cap);
-    g.position.set(0.45, 0.1, -0.05);
+    // tucked against the right side of the backpack, a bit smaller
+    g.position.set(0.5, -0.12, 0.22);
+    g.scale.setScalar(0.78);
     P.model.cargoSlot.add(g);
     this.jarMesh = g;
   }

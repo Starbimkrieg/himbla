@@ -297,9 +297,10 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
     b.groundN.copy(_sn);
     b.altitude = 0;
     b.onLake = planet.lastLake;
-  } else if (params.skateSnap !== false && input.skates && wasGrounded && alt < 0.25 + Math.min(0.3, v.length() * 0.004) && v.dot(_sn) < 1.2 + Math.min(1.6, v.length() * 0.02)) {
-    // locked skates hug smooth ground: tiny lift-offs over gentle crests snap back down,
-    // while ramps and jumps (which throw you up much harder) still launch you
+  } else if (params.skateSnap !== false && input.skates && wasGrounded && alt < (params.skateBuffer ?? 0.6) + Math.min(1.6, v.length() * 0.02) && v.dot(_sn) < (params.skateLaunch ?? 3) + Math.min(9, v.length() * 0.1)) {
+    // locked skates keep working a little above the ground (a magnetic buffer): lift-offs over crests
+    // and bumps snap back down, even at speed. Only a real ramp (a hard upward kick relative to your
+    // speed) or a jump throws you clear of the buffer
     b.pos.multiplyScalar(sr / len);
     const vn = v.dot(_sn);
     if (vn > 0) v.addScaledVector(_sn, -vn);

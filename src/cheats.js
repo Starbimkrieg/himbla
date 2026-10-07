@@ -136,13 +136,15 @@ export class Cheats {
     const g = this.game;
     for (const items of Object.values(SHOPS)) for (const u of items) g.upgrades[u.key] = Math.max(g.upgrades[u.key] || 0, u.max);
     g.upgrades.jar = Math.max(g.upgrades.jar || 0, 3);
+    // the ones you earn rather than buy: Zbornak's trade-ins, the pen link, the legendary Xenoglide skates
+    Object.assign(g.upgrades, { gripwire: 3, plating: 3, radar: 1, penlink: 1, alien: 1 });
     for (const id of Object.keys(OUTFITS)) if (id !== 'courier') g.upgrades['outfit_' + id] = 1;
     for (const id of Object.keys(SKATES)) if (id !== 'stock') g.upgrades['skates_' + id] = 1;
     g.player.applyUpgrades(g.upgrades);
     g.player.health = g.player.maxHealth;
     g.alchemy.refreshJarMesh();
     g.save();
-    g.hud.toast('Everything unlocked. Weapons on 1-4, wardrobe on C.', 3);
+    g.hud.toast('Everything unlocked (incl. grip tunes, plating, event radar, pen link, Xenoglide skates). Weapons on 1-4, wardrobe on C.', 4);
   }
 
   labKit() {
