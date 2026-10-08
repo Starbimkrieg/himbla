@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { faceDir } from './planet.js';
 import { PLANET } from './config.js';
 import { SUN, E1, E2, arcDist } from './geo.js';
-import { FACTIONS } from './locations.js';
+import { FACTIONS, SHOPS } from './locations.js';
 import { pixelFont } from './fonts.js';
 
 const RES = 32; // exploration cells per cube-face edge (~180 m)
@@ -277,7 +277,8 @@ export class GlobeMap {
       c.font = pixelFont(8 + this.zoom * 0.6);
       c.lineWidth = 3; c.strokeStyle = '#120a1e'; c.fillStyle = '#fff';
       c.strokeText(l.short, p.x, p.y - r - 4); c.fillText(l.short, p.x, p.y - r - 4);
-      this.pins.push({ x: p.x, y: p.y, html: `<b>${l.name}</b><br><span style="color:${f.color}">${f.name}</span>${l.hq ? ' · HQ' : ''}${ruined ? ' · RUINED' : ''}<br>${l.blurb}` });
+      const feats = services(l);
+      this.pins.push({ x: p.x, y: p.y, html: `<b>${l.name}</b><br><span style="color:${f.color}">${f.name}</span>${l.hq ? ' · HQ' : ''}${ruined ? ' · RUINED' : ''}<br>${l.blurb}${feats ? `<br><small style="color:#9be7ff">${feats}</small>` : ''}` });
     }
     // SAT-7's orbit (dashed) and where it is right now
     if (g.secrets && g.secrets.sat) {
@@ -387,4 +388,24 @@ export class GlobeMap {
     const j = Math.min(RES - 1, Math.floor((Math.atan(b) / (Math.PI / 4) + 1) * 0.5 * RES));
     return (f * RES + j) * RES + i;
   }
+}
+
+// What a place offers, for the map tooltip.
+const SPECIAL = {
+  ilmb: 'Repair-bay upgrades · Hall of Highlights',
+  meridian: 'Skate finishes',
+  antimatter: 'Containment jars · reactor · splice pod · holding pen',
+  bounce: 'Chimera Derby · skate park · trampolines',
+  casino: 'Blackjack · Duck Derby · Plinko · prize counter',
+  monolith: 'Touch it',
+};
+function services(l) {
+  const out = [];
+  if (l.jobs) out.push('Job board');
+  if (l.repair) out.push('Repairs');
+  if (SHOPS[l.id] || l.hq) out.push(l.faction === 'rustmoon' ? 'Gear (members only)' : 'Faction gear');
+  if (SPECIAL[l.id]) out.push(SPECIAL[l.id]);
+  if (l.restricted) out.push('Restricted zone');
+  if (l.dark && l.type !== 'pirate') out.push('Dark side: hazard pay');
+  return out.join(' · ');
 }

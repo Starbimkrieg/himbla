@@ -8,6 +8,10 @@ import { frameQuat, greatCircle, arcDist, darkness, tangent } from './geo.js';
 
 const PIRATE_SKATER = { ...PHYS, skatePushMax: 34, thrustAccel: 13, maxEnergy: 120, handling: 2.2 };
 const MAX_PIRATES = 6;
+// roaming hunters (squads, not den guards or event raiders) are capped per kind, and give up once
+// you're further than THREAT_RANGE away (a clean escape at speed loses them)
+const MAX_HUNTERS = { skater: 4, rover: 2 };
+const THREAT_RANGE = 700;
 const DEN_RESPAWN = 300; // seconds until a destroyed pirate den repopulates
 const _v = new THREE.Vector3();
 const _n = new THREE.Vector3();
@@ -24,11 +28,15 @@ function steerToward(heading, up, target, maxAngle) {
 }
 
 // Wheeled vehicle on the sphere: engine along heading, strong lateral grip and downforce.
-export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engine = 16, grip = 0, turn = 1.8, radius = 2.4 } = {}) {
+// stick: hold the ground over crests and bumps (pirate and military rovers). It's the speed above
+// which a real crest may throw the rig clear (a pirate ram run at full tilt); below it the rig
+// snaps back down over crests, and once airborne it's pulled down hard
+export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engine = 16, grip = 0, turn = 1.8, radius = 2.4, stick = false } = {}) {
   const b = e.body;
   const up = b.up.copy(b.pos).normalize();
   steerToward(e.heading, up, targetDir, (turn / (1 + b.vel.length() / 60)) * dt);
-  b.vel.addScaledVector(up, -PHYS.gravity * dt);
+  const launchy = stick && b.vel.length() > stick;
+  b.vel.addScaledVector(up, -PHYS.gravity * (stick && !b.grounded ? (launchy ? 2.2 : 5) : 1) * dt);
   const n = b.groundN;
   if (b.grounded) {
     const fwd = _v.copy(e.heading).addScaledVector(n, -e.heading.dot(n)).normalize();
@@ -40,6 +48,7 @@ export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engin
   }
   // downforce keeps the heavy pirate rigs planted over crests
   if (grip && (b.grounded || b.altitude < 3)) b.vel.addScaledVector(n, -grip * dt);
+  const sp = b.vel.length();
   b.pos.addScaledVector(b.vel, dt);
   const sr = planet.surface(b.pos, _n);
   const len = b.pos.length();
@@ -50,7 +59,15 @@ export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engin
     if (vn < 0) b.vel.addScaledVector(_n, -vn);
     b.grounded = true;
     b.groundN.lerp(_n, 0.3).normalize();
+  } else if (stick && b.wasGround && len - sr < 1.5 + sp * 0.06 && (!launchy || b.vel.dot(_n) < 3 + sp * 0.06)) {
+    b.pos.multiplyScalar(sr / len);
+    const vn = b.vel.dot(_n);
+    if (vn > 0) b.vel.addScaledVector(_n, -vn);
+    b.grounded = true;
+    b.altitude = 0;
+    b.groundN.lerp(_n, 0.3).normalize();
   } else b.grounded = len - sr < 0.4;
+  b.wasGround = b.grounded;
   if (colliders) {
     const cp = b.pos.clone().addScaledVector(up, radius * 0.7);
     for (const c of colliders.query(cp, radius + 3, _near)) {
@@ -138,7 +155,7 @@ export class Enemies {
     const a = i * ((Math.PI * 2) / 3) + Math.random();
     const R = (loc.zoneR || loc.r) * 0.55;
     const p = this.ground(this.game.world.toWorld(loc, Math.cos(a) * R, 0, Math.sin(a) * R));
-    const m = makeRover({ color: 0x55607a, trim: fc, pirate: false, flag: fc });
+    const m = makeRover({ color: 0x55607a, trim: fc, pirate: false, flag: fc, style: 'military' });
     m.root.scale.setScalar(1.15);
     base.group.add(m.root);
     const e = {
@@ -208,6 +225,15 @@ export class Enemies {
 
   pirateCount() { return this.list.filter((e) => e.faction === 'pirate' && e.kind !== 'core' && !e.dead).length; }
 
+  // roaming hunters of a kind (not den guards, not event raiders)
+  hunters(kind) { return this.list.filter((e) => e.faction === 'pirate' && !e.dead && !e.home && !e.targetObj && (!kind || e.kind === kind)).length; }
+
+  // what the next hunter should be: a coin flip between whatever is still under its cap
+  huntKind() {
+    const open = ['skater', 'rover'].filter((k) => this.hunters(k) < MAX_HUNTERS[k]);
+    return open.length ? open[Math.floor(Math.random() * open.length)] : null;
+  }
+
   spawnSquad(n, opts = {}) {
     const g = this.game;
     const P = g.player;
@@ -221,7 +247,9 @@ export class Enemies {
       const t = dir.clone().applyAxisAngle(up, (Math.random() - 0.5) * 2.2);
       const d = greatCircle(up, t, randRange(320, 520));
       if (g.zoneAt(d, 1.4)) continue;
-      this.spawnPirate(Math.random() < 0.5 ? 'skater' : 'rover', d, null, opts);
+      const kind = this.huntKind();
+      if (!kind) break;
+      this.spawnPirate(kind, d, null, opts);
       spawned++;
     }
     if (spawned) {
@@ -409,7 +437,7 @@ export class Enemies {
       if (dark > 0.5) {
         this.darkTimer -= dt * blood;
         if (this.darkTimer <= 0) {
-          if (this.pirateCount() < 4) this.spawnSquad(1 + Math.floor(Math.random() * 2));
+          if (this.hunters() < 3) this.spawnSquad(1 + Math.floor(Math.random() * 2));
           this.darkTimer = randRange(20, 34);
           this.pirateTimer = Math.max(this.pirateTimer, 14);
         }
@@ -432,6 +460,7 @@ export class Enemies {
 
     for (const base of this.bases) this.updateBase(base, dt);
 
+    let lost = 0;
     for (const e of this.list) {
       if (e.dead) {
         if (e.respawn > 0) {
@@ -450,10 +479,17 @@ export class Enemies {
       else if (e.kind === 'turret') this.updateTurret(e, dt, shadow);
       if (e.flash > 0) e.flash -= dt;
 
-      if (e.faction === 'pirate' && !e.carrying && e.body.pos.distanceTo(P.pos) > 1300 && !(e.targetObj && !e.targetObj.dead)) {
-        e.dead = true;
-        e.model.root.removeFromParent();
-        continue;
+      // out of the threat range: hunters give up after a moment (den guards wander back home and
+      // only vanish much further out; cargo thieves and event raiders never give up)
+      if (e.faction === 'pirate' && !e.carrying && !(e.targetObj && !e.targetObj.dead)) {
+        const far = e.body.pos.distanceTo(P.pos) > (e.home ? 1300 : THREAT_RANGE);
+        e.lost = far ? (e.lost || 0) + dt : 0;
+        if (e.lost > 2.5) {
+          e.dead = true;
+          e.model.root.removeFromParent();
+          if (!e.home && !this.friendly(e)) lost++;
+          continue;
+        }
       }
 
       // collisions with the player: you can smash them, and their war-rigs can smash you
@@ -486,6 +522,15 @@ export class Enemies {
       }
     }
     this.list = this.list.filter((e) => !e.dead || e.respawn > 0);
+    if (lost && !P.dead) {
+      // you shook them: say so, and give a breather before the next squad
+      if (!this.hunters()) {
+        g.fx.pop('LOST THEM!', P.pos.clone().addScaledVector(P.up, 4), { color: '#7dff3a', size: 52 });
+        g.hud.toast('Pirates lost your trail.', 2);
+      }
+      this.darkTimer = Math.max(this.darkTimer, 30);
+      this.pirateTimer = Math.max(this.pirateTimer, 25);
+    }
 
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const d = this.drops[i];
@@ -774,7 +819,7 @@ export class Enemies {
         if ((R.t > 1.6 && d > 30) || R.t > 4) { R.phase = 'line'; R.t = 0; R.side = 0; }
       }
     } else e.ram = null;
-    stepRover(e, dt, g.planet, g.colliders, aim, max, { engine, grip: 14, turn: e.ram && e.ram.phase === 'line' ? 2.8 : 2.2, radius: 3.6 });
+    stepRover(e, dt, g.planet, g.colliders, aim, max, { engine, grip: 14, turn: e.ram && e.ram.phase === 'line' ? 2.8 : 2.2, radius: 3.6, stick: 62 });
     this.poseVehicle(e, dt);
     if (e.state === 'chase' && !friendly) {
       this.tryGrab(e, dt);
@@ -808,7 +853,7 @@ export class Enemies {
       target = g.world.toWorld(loc, Math.cos(a) * e.patrolR, 0, Math.sin(a) * e.patrolR);
       maxSp = 16;
     }
-    stepRover(e, dt, g.planet, g.colliders, target.sub(b.pos), maxSp, { engine: 16, grip: 8, turn: 2 });
+    stepRover(e, dt, g.planet, g.colliders, target.sub(b.pos), maxSp, { engine: 16, grip: 8, turn: 2, stick: Infinity });
     this.poseVehicle(e, dt);
     if (base.hostile) {
       e.fireCd -= dt;

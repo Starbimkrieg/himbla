@@ -23,6 +23,56 @@ export class HUD {
 
   show(id, on = true) { $(id).classList.toggle('hidden', !on); }
 
+  // Distress log: every open event (and the one you're running) as a small stack above the speed
+  // tracker, newest on top, each with an arrow pointing where it is relative to your view.
+  distressLog(dt) {
+    const g = this.game;
+    if (!g.events) return;
+    if (!this.logEl) {
+      this.logEl = document.createElement('div');
+      this.logEl.id = 'distresslog';
+      $('hud').appendChild(this.logEl);
+      this.logRows = new Map();
+      this.logT = 0;
+    }
+    this.logT -= dt;
+    if (this.logT > 0) return;
+    this.logT = 0.1;
+    const P = g.player, up = P.up, cam = g.cam;
+    const evs = g.events.list.filter((e) => e.state === 'open' || e.state === 'active');
+    // keep it above the speed tracker whatever its scale
+    const sp = $('speedo').getBoundingClientRect();
+    this.logEl.style.bottom = `${Math.round(window.innerHeight - sp.top + 8)}px`;
+    this.logEl.style.left = `${Math.round(sp.left)}px`;
+    this.logEl.classList.toggle('hidden', !evs.length || g.state === 'title');
+    const seen = new Set();
+    for (const ev of evs) {
+      seen.add(ev.id);
+      let row = this.logRows.get(ev.id);
+      if (!row) {
+        row = document.createElement('div');
+        row.className = 'dl-row dl-new';
+        row.innerHTML = '<svg class="dl-arrow" viewBox="-10 -10 20 20"><path class="dl-shaft" d="M0 8V-1"/><path class="dl-tip" d="M0 -9.5L6.5 0H-6.5Z"/></svg><span class="dl-name"></span><span class="dl-dist"></span>';
+        this.logEl.prepend(row);
+        this.logRows.set(ev.id, row);
+        setTimeout(() => row.classList.remove('dl-new'), 1200);
+      }
+      const col = (FACTIONS[ev.faction] && FACTIONS[ev.faction].color) || '#ffffff';
+      const obj = ev.state === 'active' && g.events.objective();
+      const target = obj ? obj.pos : ev.stage || ev.start;
+      const v = this.v.copy(target).sub(P.pos);
+      const dist = v.length();
+      v.addScaledVector(up, -v.dot(up));
+      const ang = Math.atan2(v.dot(cam.right), v.dot(cam.fwd));
+      row.style.setProperty('--c', col);
+      row.classList.toggle('dl-active', ev.state === 'active');
+      row.querySelector('.dl-arrow').style.transform = `rotate(${ang.toFixed(2)}rad)`;
+      row.querySelector('.dl-name').textContent = `${ev.icon || ''}${ev.short || ev.title}`.toUpperCase();
+      row.querySelector('.dl-dist').textContent = dist > 999 ? `${(dist / 1000).toFixed(1)}KM` : `${Math.round(dist / 10) * 10}M`;
+    }
+    for (const [id, row] of this.logRows) if (!seen.has(id)) { row.remove(); this.logRows.delete(id); }
+  }
+
   alert(text, color = '#ff2a4a', dur = 2.5) {
     const el = $('alert');
     el.textContent = text;
@@ -111,15 +161,22 @@ export class HUD {
     const el = $('board');
     const f = FACTIONS[loc.faction];
     const tier = rep.tier(loc.faction);
-    let html = `<div class="board-head" style="background:${f.color}"><span>${loc.name.toUpperCase()} <small class="tierchip" style="background:${tier.color}">${f.name}: ${tier.name}</small></span><span class="board-right"><span class="board-credits">₵${credits}</span><button class="board-close" data-close="1">✕ CLOSE</button></span></div>`;
+    // a terminal: a title bar, a strip of little status screens, then one bezelled screen per section
+    const node = `${loc.short || loc.id}`.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    let html = `<div class="board-head" style="--fc:${f.color}"><span class="term-title">◢ ${loc.name.toUpperCase()} <span class="term-dim">// JOB TERMINAL · NODE ${node}-${String(loc.r).padStart(3, '0')}</span><span class="term-cursor">█</span></span><span class="board-right"><button class="board-close" data-close="1">✕ LOG OFF</button></span></div>`;
+    html += `<div class="term-status">
+      <div class="term-mini"><label>CREDITS</label><b class="board-credits">₵${credits}</b></div>
+      <div class="term-mini"><label>${f.name.toUpperCase()} STANDING</label><b><span class="tierchip" style="background:${tier.color}">${tier.name}</span></b></div>
+      <div class="term-mini"><label>UPLINK</label><b class="term-ok">● SECURE</b><span class="term-dim">${offers.length} CONTRACT${offers.length === 1 ? '' : 'S'} POSTED</span></div>
+    </div>`;
     if (active) {
-      html += `<div class="board-active">ACTIVE: ${active.cargo.name} → ${active.to.name}<button data-abandon="1">ABANDON</button></div>`;
+      html += `<div class="board-active"><span><span class="term-dim">ACTIVE CONTRACT ›</span> ${active.cargo.name} → ${active.to.name}</span><button data-abandon="1">ABANDON</button></div>`;
     }
     if (event) {
-      html += `<div class="board-active">EVENT: ${event.title}<button data-evabandon="1">ABANDON</button></div>`;
+      html += `<div class="board-active"><span><span class="term-dim">ACTIVE EVENT ›</span> ${event.title}</span><button data-evabandon="1">ABANDON</button></div>`;
     }
     html += `<div class="board-cols">`;
-    html += `<div class="board-jobs"><h3>CONTRACTS</h3>`;
+    html += `<div class="board-jobs screen"><h3><span>SCR-01 · CONTRACTS</span><span class="term-dim">${offers.length ? 'SELECT 1-' + offers.length : 'NO DATA'}</span></h3>`;
     if (!offers.length) html += `<div class="empty">${rep.hostile(loc.faction) ? `${f.name} won't deal with you. Raise your reputation first.` : 'No contracts right now. Check back after your next run!'}</div>`;
     offers.forEach((o, i) => {
       const fc = FACTIONS[o.faction];
@@ -135,7 +192,7 @@ export class HUD {
     });
     html += `</div>`;
     if (shop) {
-      html += `<div class="board-shop"><h3>${loc.id === 'ilmb' ? 'REPAIR BAY & SPACECOM GEAR' : `${f.name.toUpperCase()} GEAR`}</h3>`;
+      html += `<div class="board-shop screen"><h3><span>SCR-02 · ${loc.id === 'ilmb' ? 'REPAIR BAY & SPACECOM GEAR' : `${f.name.toUpperCase()} GEAR`}</span></h3>`;
       for (const u of shop) {
         const lvl = upgrades[u.key] || 0;
         const maxed = lvl >= u.max;
@@ -152,12 +209,14 @@ export class HUD {
     }
     html += `</div>`;
     if (highlights && highlights.length) {
-      html += `<div class="board-hl"><h3>HALL OF HIGHLIGHTS</h3><div class="hl-strip">`;
+      html += `<div class="board-hl screen"><h3><span>SCR-03 · HALL OF HIGHLIGHTS</span><span class="term-dim">${highlights.length} FRAME${highlights.length === 1 ? '' : 'S'}</span></h3><div class="hl-strip">`;
       for (const h of highlights) html += `<figure><img src="${h.url}" alt=""><figcaption>${h.caption}</figcaption></figure>`;
       html += `</div></div>`;
     }
-    html += `<div class="board-foot">Click a contract or press 1-${Math.max(1, offers.length)} · F / ESC / ✕ to close</div>`;
+    html += `<div class="board-foot">&gt; Click a contract or press 1-${Math.max(1, offers.length)} · F / ESC to log off<span class="term-cursor">_</span></div>`;
     el.innerHTML = html;
+    el.classList.add('term');
+    el.style.setProperty('--fc', f.color);
     el.classList.remove('hidden');
     el.onclick = (ev) => {
       const job = ev.target.closest('.job');
@@ -186,6 +245,7 @@ export class HUD {
     if (this.resultT > 0) { $('result').classList.remove('hidden'); if ((this.resultT -= dt) <= 0) $('result').classList.add('hidden'); }
 
     this.drawSpeedo(P.speed * 3.6);
+    this.distressLog(dt);
     $('hp-fill').style.width = (P.health / P.maxHealth) * 100 + '%';
     $('en-fill').style.width = (P.body.energy / P.body.maxEnergy) * 100 + '%';
     const sk = $('skates');

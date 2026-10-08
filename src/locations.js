@@ -41,37 +41,37 @@ export const LOCATIONS = [
   {
     id: 'tranq', name: 'Tranquility Commons', short: 'TRANQ', type: 'civilian', faction: 'kepler',
     theta: 33, phi: 48, r: 130, jobs: ['kepler', 'kepler'], safe: true, repair: 8, defense: { ring: 100, turrets: 2 },
-    blurb: 'Family habitat domes. Kids, gardens, and the best noodle bar on the Moon.',
+    blurb: 'Family habitat domes joined by tunnels: a playground, greenhouses, and the best noodle bar on the Moon.',
   },
   {
     id: 'aldrin', name: 'Aldrin Heights', short: 'ALDRIN', type: 'civilian', faction: 'kepler',
     theta: 63, phi: -32, r: 115, jobs: ['kepler', 'meridian'], safe: true, repair: 8, defense: { ring: 95, turrets: 2 },
-    blurb: 'Hillside settlement for observatory crews and their families.',
+    blurb: 'Domes and cabins for observatory crews and their families, under a water tower you can see for miles.',
   },
   {
     id: 'shackleton', name: 'Shackleton Radar Array', short: 'SHACK', type: 'research', faction: 'meridian',
     theta: 76, phi: 34, r: 140, jobs: ['meridian', 'meridian'], safe: true, repair: 4, defense: { ring: 110, turrets: 2 },
-    blurb: 'Meridian deep-space radar dishes on the edge of the light.',
+    blurb: 'Meridian deep-space radar dishes and a turning observatory, on the edge of the light.',
   },
   {
     id: 'kepler', name: 'Kepler Civic Center', short: 'KEPLER', type: 'civilian', faction: 'kepler', hq: true,
     theta: 24, phi: -75, r: 140, jobs: ['kepler', 'kepler', 'spacecom'], safe: true, repair: 10, defense: { ring: 115, turrets: 4 },
-    blurb: 'Seat of the Kepler councils: town hall, greenhouses and a very long queue.',
+    blurb: 'Seat of the Kepler councils: the gold council dome, the clock-tower town hall and a very long queue.',
   },
   {
     id: 'mine', name: 'Helium-3 Exchange', short: 'HE3', type: 'industrial', faction: 'meridian',
     theta: 56, phi: 82, r: 110, jobs: ['meridian'], safe: true, repair: 4, defense: { ring: 95, turrets: 2 },
-    blurb: 'Meridian strip-mine and commodity exchange. Volatile canisters, volatile prices.',
+    blurb: 'Meridian strip-mine: a bucket-wheel excavator, a pumping derrick and a He-3 tank farm. Volatile canisters, volatile prices.',
   },
   {
     id: 'meridian', name: 'Meridian Exchange', short: 'MERIDIAN', type: 'trade', faction: 'meridian', hq: true,
     theta: 18, phi: 25, r: 150, jobs: ['meridian', 'meridian', 'kepler'], safe: true, repair: 8, defense: { ring: 125, turrets: 4 },
-    blurb: 'Meridian headquarters: warehouses, cranes, labs and a trading floor that never sleeps.',
+    blurb: 'Meridian headquarters: a glass trading tower whose ticker never sleeps, warehouses, a container port and cranes.',
   },
   {
     id: 'vostok', name: 'Bastion Vostok-9', short: 'VOSTOK-9', type: 'military', faction: 'vostok', hq: true,
     theta: 72, phi: 125, r: 140, zoneR: 380, restricted: true, jobs: ['vostok', 'vostok'],
-    blurb: 'Vostok command bastion. Do not linger without clearance.',
+    blurb: 'Vostok command bastion: gun walls, a radar bunker and searchlights. Do not linger without clearance.',
   },
   {
     id: 'vostok4', name: 'Vostok-4 Outpost', short: 'VOSTOK-4', type: 'military', faction: 'vostok', small: true,
@@ -96,7 +96,7 @@ export const LOCATIONS = [
   {
     id: 'daedalus', name: 'Daedalus Citadel', short: 'DAEDALUS', type: 'military', faction: 'daedalus', hq: true,
     theta: 155, phi: 105, r: 140, zoneR: 380, restricted: true, dark: true, jobs: ['daedalus', 'daedalus'],
-    blurb: 'Daedalus command citadel, buried in the deepest dark.',
+    blurb: 'Daedalus command citadel behind gun walls, buried in the deepest dark.',
   },
   {
     id: 'daedalus2', name: 'Daedalus Forward Post', short: 'DAED-FWD', type: 'military', faction: 'daedalus', small: true,
@@ -111,7 +111,7 @@ export const LOCATIONS = [
   {
     id: 'monolith', name: 'The Monolith', short: 'MONOLITH', type: 'monolith', faction: 'none', poi: true,
     theta: 62, phi: -95, r: 60,
-    blurb: 'A perfectly black slab nobody admits to building. It hums when you get close.',
+    blurb: 'A perfectly black slab nobody admits to building, ringed by an abandoned survey dig. It hums when you get close.',
   },
   {
     id: 'fissure', name: 'The Whispering Fissure', short: 'FISSURE', type: 'tunnel', faction: 'none', poi: true,
@@ -120,8 +120,8 @@ export const LOCATIONS = [
   },
   {
     id: 'bounce', name: 'Bounce Dome Funpark', short: 'BOUNCE', type: 'funpark', faction: 'none', poi: true,
-    theta: 30, phi: 135, r: 110, safe: true, repair: 6,
-    blurb: 'Abandoned inflatable theme park. The domes still hold air. Great for tricks.',
+    theta: 30, phi: 135, r: 180, safe: true, repair: 6,
+    blurb: 'Inflatable theme park, back in business: bounce domes, a ferris wheel, the Chimera Derby, and a skate park out past the track.',
   },
   { // casino
     id: 'casino', name: 'Lucky Crater Casino', short: 'CASINO', type: 'casino', faction: 'none', poi: true,
@@ -136,12 +136,12 @@ export const LOCATIONS = [
   {
     id: 'blackrock', name: 'Blackrock Den', short: 'BLACKROCK', type: 'pirate', faction: 'rustmoon',
     theta: 152, phi: -140, r: 110, hostile: true, dark: true,
-    blurb: 'Pirate warren carved into a crater wall.',
+    blurb: 'Pirate den of shanties and gutted wrecks. Lights off, guns on.',
   },
   {
     id: 'gloom', name: 'Gloom Harbor', short: 'GLOOM', type: 'pirate', faction: 'rustmoon',
     theta: 165, phi: 30, r: 110, hostile: true, dark: true,
-    blurb: 'Smugglers\' landing field at the darkest point on the Moon.',
+    blurb: 'Smugglers\' den at the darkest point on the Moon, under a searchlight that never stops turning.',
   },
   {
     id: 'rustmoon', name: 'Rustmoon Hold', short: 'RUSTMOON', type: 'pirate', faction: 'rustmoon', hq: true,

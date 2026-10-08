@@ -80,6 +80,9 @@ around on foot stays floaty and harmless.
 
 **Events** wait for you: each posts a beacon with a start prop (orders terminal, sample tubes, convoy radio,
 supply drop…) at a safe staging point. Walk up and press F to begin. Going down during an event fails it.
+New postings are spaced out (the first comes about 40 s in, then at least 45–75 s apart). The **distress log**
+above the speed tracker lists every open signal, newest on top, each in its faction's colour with its distance and
+an arrow showing which way it lies from where you're looking; the event you're running is highlighted.
 
 **Style** pays half what it used to and can at most double a contract's base reward (a ₵400 job tops out at
 ₵800 before condition). The package's condition then scales the whole payout.
@@ -98,8 +101,10 @@ you take a pirate-free TRAINING RUN contract and deliver it for a ₵200 bonus. 
   crooked and you **WIPE OUT**: you take damage, lose speed and the cargo gets jostled. Without
   an active contract, style pays out half its value in credits straight away.
 - **Hall of Highlights:** big launches, trick landings, thefts and deliveries are snapped by the
-  action-panel camera, run through the comic post-process, and pinned to the 12-frame board
-  next to the ILMB job board. They also appear on the ILMB board screen and are saved in `localStorage`.
+  action-panel camera, run through the comic post-process, and shown on the bottom screen of the ILMB job
+  terminal. They're saved in `localStorage`.
+- **Job boards** are terminals: status screens (credits, standing, uplink), then a contracts screen and a gear
+  screen. At the ILMB the board stands in the plaza as a kiosk of screens under a canopy.
 - **Skiing physics:** gravity pulls toward the Moon's centre and along the slope you're on. With the skates on, friction
   is almost zero and the cushion turns some extra downhill pull into speed, so diving into
   a crater and climbing out the other side *gains* momentum. Chain craters to go faster.
@@ -114,7 +119,9 @@ you take a pirate-free TRAINING RUN contract and deliver it for a ₵200 bonus. 
 - **Moon Pirates:** "hot" cargo draws Scrapjaw pirates on skates and armed Moon-Rovers. If one
   stays close for about a second, they **steal the cargo** and run for Scrapjaw Gulch. Blast
   or ram them (on skates, above roughly 80 km/h) so they drop it, then grab it back before
-  they get home.
+  they get home. Roaming hunters are capped (at most 4 skaters and 2 rovers at once) and only chase within a
+  **threat range** of about 700 m: outrun them and they give up and vanish ("LOST THEM!"), with a breather
+  before the next squad. Thieves carrying your cargo and event raiders never give up.
 - **Military zones:** Fort Meridian (Atlantic Accord) and Bastion Vostok-9 (Pan-Pacific
   Directorate) sit inside red striped walls. If you enter without a contract that grants
   clearance, you get a 4-second warning. After that, turrets and patrol rovers open fire,
@@ -372,7 +379,8 @@ marked for 10 s / 20 s after it ducks out of sight, and a red HUD chip counts ho
 
 Pirate skaters close in, then circle you at 25–40 m, switching direction every few seconds, turning to shoot
 while they strafe (while you carry cargo about half of them still dive in to grab it). War-rigs line up a run,
-charge at up to 66 m/s, peel off sideways after the pass and swing round for another.
+charge at up to 66 m/s, peel off sideways after the pass and swing round for another. Rovers grip the ground
+over crests; only a rig at full ramming speed gets thrown into the air.
 
 ## Cosmetics
 
@@ -436,14 +444,17 @@ The wind rumble is a soft low-passed swell instead of high-frequency hiss. `N` t
   occasionally exploding and reassembling.
   Wins land on the Hall of Highlights.
 - **The Monolith:** touch it for 30 s of low gravity (90 s cooldown).
-- **Bounce Dome Funpark:** inflatable domes and a bouncy castle that throw you back up harder than you landed.
+- **Bounce Dome Funpark:** inflatable domes, a turreted bouncy castle and a row of trampolines that throw you back
+  up harder than you landed, plus a **skate park**: a volcano bowl (ride up the outside and drop in, or hit it fast and
+  fly clean over), a kicker line with a big launch off the plateau edge, a quarter-pipe wall and a pyramid funbox, out
+  past the Derby track on the east side. A ferris wheel and a carousel turn, and a banner arch spans the track.
 
 ## Locations
 
 | Location | Type | Notes |
 | --- | --- | --- |
 | International Moon Base (ILMB) | SPACECOM HQ | Fortress walls, turrets, artillery, embassies, job board, repair bay, launch pad, Hall of Highlights |
-| Meridian Exchange · Shackleton Radar Array · Helium-3 Exchange | Meridian | Trade hub, radar research, volatile canisters |
+| Meridian Exchange · Shackleton Radar Array · Helium-3 Exchange | Meridian | Trade hub (trading tower with a price ticker, warehouses, a container gantry and tower cranes at work), radar research (an observatory with a turning cupola), and a working strip-mine (bucket-wheel excavator, ore conveyor, pumping derrick, Horton-sphere tank farm) |
 | Kepler Civic Center · Tranquility Commons · Aldrin Heights · Twilight Waystation · Hertzsprung Refuge | Kepler | Towns, safe rest and repair |
 | Farside Listening Post | SPACECOM (dark side) | Hazard-pay destination |
 | Bastion Vostok-9 · Vostok-4 Outpost | Vostok | Restricted zones: turrets, patrols, artillery |
@@ -497,15 +508,24 @@ src/
   casino.js      Lucky Crater Casino games, VIP, prizes, loan shark (casinoWorld.js: the building)
   cosmetics.js   outfits, skate finishes, laser colours, wardrobe
   race.js        Chimera Derby: track, betting, chaos racing
-  highlights.js  action-shot capture + Hall of Highlights board
+  highlights.js  action-shot capture (shown on the ILMB job terminal)
   physics.js     collider hash + shared skater movement model (player and pirate skaters)
   player.js      input → movement, weapon, animation, style events
   enemies.js     pirates (skaters/rovers), military bases, turrets, artillery, theft/recovery
   missions.js    contract generation, pickup/delivery, integrity, payouts
-  world.js       sky, settlements, colliders, ambient life
+  world.js       sky, settlement layout, colliders, ambient life
+  settlements.js detailed settlements, HQs and landmarks built with the outpost kit (moving parts, skate park)
   traffic.js     landing pads, ship/bus flights and passengers, dirt roads, land-trains, cars, buggies
   wardrobe.js    wardrobe screen with live 3D preview
-  models.js      stylised characters and vehicles from primitives
+  models.js      stylised characters and vehicles from primitives; loads the Blender runner
   post.js        comic post-processing shader
   fx.js, hud.js, audio.js, input.js, toon.js, locations.js, rng.js
+  assets/runner.glb  the Moon-runner model (player, pirate skaters, story leaders)
+tools/
+  blender/build_runner.py  builds the runner in Blender and exports src/assets/runner.glb
 ```
+
+**Editing the runner:** run `tools/blender/build_runner.py` in Blender (Scripting tab, or
+`exec(open(r"<repo>/tools/blender/build_runner.py").read())`); it rebuilds the model and re-exports
+`src/assets/runner.glb`. Each part's material name is a colour slot (suit, accent, helmet, visor, scarf…)
+that outfits recolour, and the scarf stays a 4-link chain driven by `ScarfSim`.

@@ -35,6 +35,8 @@ export class Events {
     this.fluid = null;
     this.carry = null;
     this.wreckTimer = 45;
+    // a global gap between new postings, so they don't all land the moment the game loads
+    this.gap = 40 + Math.random() * 20;
   }
 
   // ---------- helpers ----------
@@ -178,6 +180,7 @@ export class Events {
     ev.props = ev.props || [];
     ev.reward = Math.round(((ev.reward || 400) * 0.5 * Math.max(0.8, this.game.rep.payMultiplier(faction) || 1)) / 10) * 10;
     ev.stage = this.stagePoint(ev);
+    ev.icon = `${ICON[type] || '!'} `;
     ev.marker = this.marker(ev.stage, faction, `${ICON[type] || '!'} ${ev.short || ev.title}`);
     ev.marker.add(this.startProp(ev));
     if (ev.needsCrawler) {
@@ -307,6 +310,7 @@ export class Events {
       props: [ship.root, pirate.root],
     };
     ev.stage = pos.clone();
+    ev.icon = '✖ SOS · ';
     ev.marker = this.marker(pos, 'rustmoon', '✖ SOS');
     ev.marker.add(this.startProp(ev));
     this.list.push(ev);
@@ -685,13 +689,15 @@ export class Events {
   update(dt) {
     const g = this.game;
     const P = g.player;
-    // post new events: one per faction
+    // post new events: one per faction, with at least ~a minute between any two new postings
+    this.gap -= dt;
     for (const f of Object.keys(TYPES)) {
       if (f === 'rustmoon' && !g.rep.aligned()) continue;
       if (this.list.some((e) => e.faction === f && !e.special)) continue;
       this.cooldown[f] -= dt;
-      if (this.cooldown[f] <= 0) {
+      if (this.cooldown[f] <= 0 && this.gap <= 0) {
         if (!this.create(f)) this.cooldown[f] = 20;
+        else this.gap = 45 + Math.random() * 30;
       }
     }
     if (g.rep.rustmoon === 'unknown' && !this.list.some((e) => e.type === 'wreck')) {

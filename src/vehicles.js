@@ -75,7 +75,7 @@ export class Garage {
       c.root.scale.setScalar(1.8);
       m = { root: c.root, chassis: c.root, wheels: [], gun: new THREE.Group() };
     } else {
-      m = makeRover({ color: def.color, trim: def.trim, pirate: !!def.pirate, flag: def.trim });
+      m = makeRover({ color: def.color, trim: def.trim, pirate: !!def.pirate, flag: def.trim, style: def.pirate ? 'pirate' : def.id === 'mule' || def.cargoSafe ? 'civil' : 'military' });
       if (def.hover) {
         for (const w of m.wheels) w.visible = false;
         for (const s of [-1, 1]) {

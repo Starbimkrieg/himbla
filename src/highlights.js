@@ -6,8 +6,9 @@ const KEY = 'moonrunner-highlights-v1';
 const MAX = 12;
 const W = 400, H = 250;
 
-// Captures comic-styled snapshots from the action-panel camera and pins them up on the
-// Hall of Highlights board at the International Moon Base.
+// Captures comic-styled snapshots from the action-panel camera.
+// Hall of Highlights: action shots shown on the ILMB job terminal (the old 3D board is gone, so the
+// in-world canvas below only draws if a world provides one).
 export class Highlights {
   constructor(game) {
     this.game = game;
