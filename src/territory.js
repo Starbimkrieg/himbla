@@ -94,7 +94,8 @@ export class Territory {
     for (let tries = 0; tries < 6000 && this.outposts.length < 120; tries++) {
       const u = rr() * 2 - 1, th = rr() * Math.PI * 2, sq = Math.sqrt(1 - u * u);
       const d = new THREE.Vector3(sq * Math.cos(th), u, sq * Math.sin(th));
-      if (g.locations.some((l) => arcDist(d, l.dir) < (l.zoneR || l.r) * 1.6 + 120)) continue;
+      // late locations stay out of this pass so ids don't shift; clearSites nudges clashing outposts
+      if (g.locations.some((l) => !l.late && arcDist(d, l.dir) < (l.zoneR || l.r) * 1.6 + 120)) continue;
       if (this.outposts.some((o) => arcDist(d, o.dir) < 420)) continue;
       const faction = this.owner(d, this.baseAnchors);
       const kinds = KINDS[faction] || KINDS.kepler;

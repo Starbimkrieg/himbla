@@ -303,6 +303,7 @@ export class Enemies {
       }
       if (e.base) {
         const base = e.base;
+        base.grace = false;
         if (base.restricted && !base.hostile) {
           base.hostile = true;
           base.time = Math.max(base.time, 6);
@@ -578,7 +579,9 @@ export class Enemies {
     if (base.aggro > 0) base.aggro -= dt;
     if (base.restricted) {
       const inside = !P.dead && d < loc.zoneR;
-      const authorized = !hostileRep && (g.missions.hasClearance(loc.id) || rep.cleared(base.faction) || g.events.hasClearance(loc.id));
+      // a delivery you just made here keeps you cleared until you leave (or start shooting)
+      if (!inside) base.grace = false;
+      const authorized = base.grace || (!hostileRep && (g.missions.hasClearance(loc.id) || rep.cleared(base.faction) || g.events.hasClearance(loc.id)));
       base.inside = inside;
       base.authorized = authorized;
       if (inside && !authorized) {
@@ -603,6 +606,16 @@ export class Enemies {
       base.hostile = !P.dead && (hostileRep || base.aggro > 0 || raid) && d < loc.defense.ring + 500;
       if (loc.id === 'ilmb' && base.hostile && base.inside) this.artillery(base, dt);
     }
+  }
+
+  // You just delivered to (or picked up from) this restricted base: its guns hold until you're out.
+  grantGrace(loc) {
+    const base = this.bases.find((b) => b.loc === loc && b.restricted);
+    if (!base) return;
+    base.grace = true;
+    base.time = 0;
+    if (base.aggro <= 0) base.hostile = false;
+    if (base.inside) this.game.hud.toast(`${base.loc.name}: delivery signed for. Your clearance holds until you leave the zone. Don't shoot anything.`, 4);
   }
 
   artillery(base, dt) {

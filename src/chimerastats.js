@@ -95,12 +95,20 @@ export function ensureStats(genes) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The Derby race model.
-export const RACE_LEN = 2 * Math.PI * 100 * 2; // two laps of the 100 m (centre-line) track
+// The Derby race model. Races at Chimera Downs run anywhere from a 450 m sprint to a 3.6 km
+// marathon, so stamina decides the long ones; the going (track condition) nudges the rest.
+export const RACE_LEN = 1400; // default distance (tests, old callers)
+export const CONDITIONS = {
+  fast: { name: 'FAST', speed: 1.05, drain: 0.95, chaos: 0.85, blurb: 'hard-packed regolith: speed tells' },
+  dusty: { name: 'DUSTY', speed: 1, drain: 1, chaos: 1, blurb: 'ordinary lunar going' },
+  heavy: { name: 'HEAVY', speed: 0.93, drain: 1.3, chaos: 1, blurb: 'deep dust: tiring, stamina tells' },
+  lowg: { name: 'LOW-G', speed: 1.02, drain: 1, chaos: 1.45, blurb: 'gravity hiccups: bouncy and chaotic' },
+};
+const NO_COND = CONDITIONS.dusty;
 
 export function newRunner(genes, rnd = Math.random) {
   ensureStats(genes);
-  return { genes, st: genes.stats, s: 0, v: 0, stam: 1, t: rnd() * 5, ev: null, evT: 0, done: false, place: 0, time: 0 };
+  return { genes, st: genes.stats, s: 0, v: 0, stam: 1, t: rnd() * 5, ev: null, evT: 0, done: false, place: 0, time: 0, boost: 0 };
 }
 
 // Event weights. "Bad" ones are scaled by low wit.
@@ -111,9 +119,10 @@ const EV_T = { stumble: 1.4, zoom: 2, wrong: 1.2, hop: 0.2, boom: 2.2, dread: 2.
 
 // Advance one runner by dt. Returns the name of an event that just started (or null);
 // r.ended is set to the event that just finished this step (or null).
-export function stepRunner(r, dt, rnd = Math.random) {
+// cond: one of CONDITIONS. r.boost > 0 is a crowd-cheered burst (the player's, never simulated).
+export function stepRunner(r, dt, rnd = Math.random, cond = NO_COND) {
   const st = r.st;
-  const top = r.genes.speed;
+  const top = r.genes.speed * cond.speed;
   const wit = st.wit / 100;
   const recov = 1.3 - st.wit * 0.006; // wit 100 -> 0.7x as long stuck, wit 0 -> 1.3x
   let fired = null;
@@ -123,7 +132,7 @@ export function stepRunner(r, dt, rnd = Math.random) {
   if (r.evT > 0) {
     r.evT -= dt;
     if (r.evT <= 0) { r.ended = r.ev; r.ev = null; }
-  } else if (rnd() < dt * (0.05 + (r.genes.chaos || 2) * 0.035)) {
+  } else if (rnd() < dt * (0.05 + (r.genes.chaos || 2) * 0.035) * cond.chaos) {
     const bad = 1.45 - wit * 0.95;
     let tot = 0;
     for (const [, w, b] of EVENTS) tot += b ? w * bad : w;
@@ -142,33 +151,35 @@ export function stepRunner(r, dt, rnd = Math.random) {
   if (r.ev === 'stumble' || r.ev === 'boom' || r.ev === 'dread' || r.ev === 'trip') target = 0;
   else if (r.ev === 'zoom') target *= 1.6;
   else if (r.ev === 'wrong') target = -top * 0.5;
+  if (r.boost > 0) { r.boost -= dt; if (target > 0) target *= 1.3; }
   if (target > r.v && r.v >= 0) r.v = Math.min(target, r.v + (3 + st.power * 0.14) * dt); // power: m/s² of pickup
   else r.v += (target - r.v) * Math.min(1, dt * 3.5); // everyone brakes (or gets flung backwards) alike
-  const drain = (0.01 + (100 - st.stamina) * 0.00035) * (Math.abs(r.v) / top) * (r.ev === 'zoom' ? 2.5 : 1);
+  const drain = (0.01 + (100 - st.stamina) * 0.00035) * (Math.abs(r.v) / top) * (r.ev === 'zoom' ? 2.5 : 1) * (r.boost > 0 ? 2.2 : 1) * cond.drain;
   r.stam = Math.max(0, Math.min(1, r.stam - drain * dt + (target === 0 ? 0.01 * dt : 0)));
   r.s = Math.max(0, r.s + r.v * dt);
   return fired;
 }
 
 // Run the model to the finish line; returns runners sorted by finish.
-export function simulateRace(field, rnd = Math.random, dt = 1 / 15) {
+export function simulateRace(field, rnd = Math.random, dt = 1 / 15, len = RACE_LEN, cond = NO_COND) {
   const rs = field.map((g) => newRunner(g, rnd));
   let finished = 0;
-  for (let step = 0; step < 6000 && finished < rs.length; step++) {
+  for (let step = 0; step < 12000 && finished < rs.length; step++) {
     for (const r of rs) {
       if (r.done) continue;
-      stepRunner(r, dt, rnd);
-      if (r.s >= RACE_LEN) { r.done = true; r.place = ++finished; }
+      stepRunner(r, dt, rnd, cond);
+      if (r.s >= len) { r.done = true; r.place = ++finished; }
     }
   }
   return rs;
 }
 
 // Monte-Carlo win chances for each runner, and fair-ish odds with a small house edge.
-export function raceOdds(field, n = 400, rnd = Math.random) {
+export function raceOdds(field, n = 400, rnd = Math.random, len = RACE_LEN, cond = NO_COND) {
   const wins = field.map(() => 0);
+  const dt = len > 2000 ? 1 / 10 : 1 / 15; // long races: coarser steps keep the bookie quick
   for (let i = 0; i < n; i++) {
-    const rs = simulateRace(field, rnd);
+    const rs = simulateRace(field, rnd, dt, len, cond);
     const w = rs.findIndex((r) => r.place === 1);
     if (w >= 0) wins[w]++;
   }

@@ -7,7 +7,8 @@ import { FACTIONS } from './locations.js';
 import { SUN, frameQuat, arcDist, dirFromAngles } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
 import { Traffic } from './traffic.js';
-import { buildHelium, buildMeridian, buildFunpark, dressLab, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, buildDen, buildPirateCamp, jobTerminal } from './settlements.js';
+import { buildHelium, buildMeridian, buildFunpark, dressLab, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, buildDen, buildPirateCamp, jobTerminal, part as kitPart } from './settlements.js';
+import { T as KT, G as KG } from './outpostModels.js';
 
 function mesh(geo, mat, outline = 0.15) {
   const m = new THREE.Mesh(geo, mat);
@@ -102,6 +103,7 @@ export class World {
     this.zoneWalls = [];
     this.walkers = []; // foot traffic inside the ILMB skywalks
     this.anims = []; // moving parts of kit-built settlements (settlements.js): { loc, list, seed }
+    this.rides = []; // rideable funpark rides (rides.js): { loc, name, seats: [{ obj, local, face }], camDist, exitDir(p, out) }
     this._mats = new Map();
     this.rand = mulberry32(42);
 
@@ -214,6 +216,11 @@ export class World {
     }
     if (spec.type === 'cyl') {
       return this.colliders.add({ type: 'cyl', c: this.toWorld(loc, spec.x, 0, spec.z), axis: loc.dir.clone(), y0: spec.y0, y1: spec.y1, r: spec.r });
+    }
+    if (spec.type === 'hcyl') {
+      // a horizontal cylinder (axis along local (sin yaw, 0, cos yaw)), so arched roofs are round to bump into
+      const axis = new THREE.Vector3(Math.sin(spec.yaw || 0), 0, Math.cos(spec.yaw || 0)).applyQuaternion(g.quaternion);
+      return this.colliders.add({ type: 'cyl', c: this.toWorld(loc, spec.x, spec.y, spec.z), axis, y0: -spec.len / 2, y1: spec.len / 2, r: spec.r, caps: true });
     }
     // yaw, then an optional pitch about the box's own x (ramps and bowl walls tilt their top face)
     _q.setFromEuler(_e.set(spec.pitch || 0, spec.yaw || 0, spec.roll || 0, 'YXZ')).premultiply(g.quaternion);
@@ -411,7 +418,7 @@ export class World {
     const m = mesh(new THREE.CylinderGeometry(r, r, len, 12).rotateZ(Math.PI / 2), toon(color), 0.12);
     const yaw = -Math.atan2(bz - az, bx - ax);
     this.put(m, loc, (ax + bx) / 2, (az + bz) / 2, r * 0.8, yaw);
-    this.col(loc, { type: 'box', x: (ax + bx) / 2, y: r * 0.8, z: (az + bz) / 2, hx: len / 2, hy: r, hz: r, yaw });
+    this.col(loc, { type: 'hcyl', x: (ax + bx) / 2, y: r * 0.8, z: (az + bz) / 2, r, len, yaw: yaw + Math.PI / 2 });
   }
 
   tower(loc, dx, dz, h, r, color, beacon = 0xff2e88) {
@@ -462,20 +469,40 @@ export class World {
     return g;
   }
 
+  // A solar farm: rows of tilted panels on posts and concrete footings, a torque tube along each
+  // row, a gravel bed with a curb, and an inverter cabinet with conduit at the end of each row.
   solarField(loc, dx, dz, rows, cols, yaw = 0) {
-    const geo = new THREE.BoxGeometry(5, 0.2, 3);
-    const im = new THREE.InstancedMesh(geo, toon(0x2b3a8f), rows * cols);
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5, yaw, 0, 'YXZ'));
-    let k = 0;
-    const cos = Math.cos(yaw), sin = Math.sin(yaw);
-    for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
-      const lx = (j - cols / 2) * 6, lz = (i - rows / 2) * 5;
-      m4.compose(new THREE.Vector3(dx + lx * cos + lz * sin, 1.8, dz - lx * sin + lz * cos), q, new THREE.Vector3(1, 1, 1));
-      im.setMatrixAt(k++, m4);
-    }
-    im.castShadow = true;
-    this.put(im, loc, 0, 0);
-    (loc.keep ||= []).push({ x: dx, z: dz, r: Math.hypot(cols * 6, rows * 5) / 2 + 2 });
+    const TILT = -0.5, PD = 3, H = 1.35; // panel depth and centre height
+    const W = cols * 6, D = rows * 5;
+    const g = kitPart(0x2b3a8f, (k) => {
+      k.box(W + 3, 0.12, D + 2, KT(0x8a8698), -3, 0, -2.5, { outline: 0.04 });
+      for (const s of [-1, 1]) {
+        k.box(W + 3.2, 0.3, 0.3, KT(0x5b5870), -3, 0, -2.5 + s * (D / 2 + 1), { outline: 0.02 });
+        k.box(0.3, 0.3, D + 2.2, KT(0x5b5870), -3 + s * (W / 2 + 1.5), 0, -2.5, { outline: 0.02 });
+      }
+      for (let i = 0; i < rows; i++) {
+        const lz = (i - rows / 2) * 5;
+        for (let j = 0; j < cols; j++) {
+          const lx = (j - cols / 2) * 6;
+          k.add(new THREE.BoxGeometry(5, 0.14, PD), KT(0x2b3a8f), lx, H, lz, { rx: TILT, outline: 0.05 });
+          for (let c = -1; c <= 1; c++) k.add(new THREE.BoxGeometry(0.06, 0.16, PD - 0.1), KT(0xd8d4e8), lx + c * 1.65, H + 0.01, lz, { rx: TILT, outline: 0 });
+          k.add(new THREE.BoxGeometry(5.04, 0.16, 0.08), KT(0xd8d4e8), lx, H + 0.01, lz, { rx: TILT, outline: 0 });
+          // two posts (the back one taller) on footings, under the panel's frame
+          for (const sz of [-1, 1]) {
+            const pz = sz * PD * 0.32, top = H + pz * Math.tan(-TILT) - 0.1;
+            k.box(0.7, 0.25, 0.7, KT(0x8a8698), lx, 0, lz + pz, { outline: 0.02 });
+            k.box(0.16, top, 0.16, KT(0x55607a), lx, 0, lz + pz, { outline: 0.02 });
+          }
+        }
+        // torque tube along the row, and an inverter box with conduit at the row's end
+        k.beam([-W / 2 - 3, H - 0.25, lz], [W / 2 - 3, H - 0.25, lz], 0.08, KT(0x55607a), { outline: 0.015 });
+        k.box(1.1, 1.4, 0.8, KT(0xd8d4e8), -W / 2 - 4.3, 0, lz, { outline: 0.04 });
+        k.box(0.5, 0.18, 0.06, KG(0x7dff6a), -W / 2 - 4.3, 1.0, lz + 0.42, { outline: 0 });
+        k.box(W - 1, 0.12, 0.25, KT(0x3a3550), -3, 0.12, lz + 1.2, { outline: 0 });
+      }
+    });
+    this.put(g, loc, dx, dz, 0, yaw);
+    (loc.keep ||= []).push({ x: dx, z: dz, r: Math.hypot(W + 4, D + 2) / 2 + 2 });
   }
 
   // Lamp post with a fake additive light pool: cheap "lighting" that reads in the dark.
@@ -756,7 +783,9 @@ export class World {
       if (!end) B.add(new THREE.SphereGeometry(0.2, 6, 4), this.glowM(0xfff6a8), x, top - 0.25, 0, { outline: 0 });
     });
     const cm = r0 + mid;
-    this.col(loc, { type: 'box', x: Math.cos(a) * cm, y: top / 2, z: Math.sin(a) * cm, hx: mid, hy: top / 2 + 0.1, hz: R + 0.4, yaw });
+    // straight glass walls, then a round vault on top (a box here made the roof's shoulders square)
+    this.col(loc, { type: 'box', x: Math.cos(a) * cm, y: (F + wallH) / 2, z: Math.sin(a) * cm, hx: mid, hy: (F + wallH) / 2, hz: R + 0.4, yaw });
+    this.col(loc, { type: 'hcyl', x: Math.cos(a) * cm, y: F + wallH, z: Math.sin(a) * cm, r: R + 0.3, len, yaw: yaw + Math.PI / 2 });
 
     // foot traffic: a few people pacing between the dome and the wing, seen through the glass
     const grp = new THREE.Group();
@@ -1180,6 +1209,12 @@ export class World {
   buildTraffic() {
     this.traffic = new Traffic(this);
     this.roads = this.traffic.roads;
+    // keep the planet's big shaped rocks (rocks.js) off the road network
+    const tr = this.traffic, pts = [];
+    const rp = tr.roadMesh && tr.roadMesh.geometry.attributes.position;
+    if (rp) for (let i = 0; i < rp.count; i += 6) pts.push(new THREE.Vector3().fromBufferAttribute(rp, i).normalize());
+    for (const pc of tr.pieces || []) { const P = (pc.path && pc.path.pts) || pc.raw || []; for (let i = 0; i < P.length; i += 2) pts.push(P[i].clone().normalize()); }
+    this.planet.keepClear(pts, 26);
   }
 
   // ---------- per-frame ----------
@@ -1429,7 +1464,7 @@ export class World {
   // Black lakes: still pools of dark liquid filling crater floors, mostly on the dark side.
   buildLakes() {
     const P = this.planet;
-    const picks = P.craters.filter((c) => c.R > 65 && c.R < 190 && SUN.dot(c.d) < 0.15)
+    const picks = P.craters.filter((c) => c.R > 65 && c.R < 190 && SUN.dot(c.d) < 0.15 && !c.peak) // (a central peak would make an island)
       .filter((c) => this.locations.every((l) => arcDist(c.d, l.dir) > (l.zoneR || l.r) * 2 + c.R));
     const rr = mulberry32(31);
     const chosen = [];

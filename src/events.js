@@ -293,6 +293,7 @@ export class Events {
     const up = dir.clone();
     const ship = makeFreighter({ color: 0x3a2b4f, stripe: 0x7dff3a });
     ship.root.scale.setScalar(0.45);
+    ship.setGear(0.15); // bay doors hanging open, legs jammed in the bays
     ship.root.position.copy(pos).addScaledVector(up, 2);
     frameQuat(up, tangent(new THREE.Vector3(1, 0, 0), up), ship.root.quaternion);
     ship.root.rotateZ(0.35);

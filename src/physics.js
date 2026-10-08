@@ -93,8 +93,10 @@ export class Colliders {
       const rad = Math.sqrt(rx * rx + ry * ry + rz * rz);
       const inR = rad < c.r;
       if (inR && h >= c.y0 && h <= c.y1) {
-        const side = c.r - rad, top = c.y1 - h;
-        if (top < side) { n.copy(a); return top + r; }
+        const side = c.r - rad, top = c.y1 - h, bot = h - c.y0;
+        if (top < side && top <= bot) { n.copy(a); return top + r; }
+        // (lying-down cylinders have a second cap you can hit; upright ones bury it)
+        if (c.caps && bot < side && bot < top) { n.copy(a).negate(); return bot + r; }
         if (rad < 1e-5) n.copy(a); else n.set(rx / rad, ry / rad, rz / rad);
         return side + r;
       }
@@ -291,10 +293,12 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
       b.diveLanded = -vn;
     } else if (vn < 0) {
       const impact = -vn;
+      // speed along the ground at touchdown: a glancing, fast landing is gentler than a drop
+      const glide = Math.sqrt(Math.max(0, v.lengthSq() - vn * vn));
       if (input.skates) v.addScaledVector(_sn, -vn);
       else v.addScaledVector(_sn, -vn * (1 + (impact > 7 ? 0.28 : 0)));
-      if (!wasGrounded && impact > 3) impacts.push({ speed: impact, kind: 'ground', normal: _sn.clone() });
-      else if (impact > (input.skates ? params.skateSafeImpact : params.bootSafeImpact)) impacts.push({ speed: impact, kind: 'ground', normal: _sn.clone() });
+      if (!wasGrounded && impact > 3) impacts.push({ speed: impact, glide, kind: 'ground', normal: _sn.clone() });
+      else if (impact > (input.skates ? params.skateSafeImpact : params.bootSafeImpact)) impacts.push({ speed: impact, glide, kind: 'ground', normal: _sn.clone() });
     }
     b.grounded = true;
     b.groundN.copy(_sn);

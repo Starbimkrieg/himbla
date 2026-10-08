@@ -18,6 +18,7 @@ const NUMS = ['', '', 'DOUBLE ', 'TRIPLE ', 'QUAD ', 'QUINT '];
 
 const _q = new THREE.Quaternion();
 const _v = new THREE.Vector3();
+const _sp = new THREE.Vector3(), _sf = new THREE.Vector3();
 
 export class Player {
   constructor(game, spawn) {
@@ -79,6 +80,8 @@ export class Player {
     this.body.pos.copy(pos);
     this.body.vel.set(0, 0, 0);
     this.body.platform = null; // never keep riding a deck (or satellite) you've been teleported off
+    this.seat = null; // ...or a ship or funpark ride (rides.js lets go too)
+    if (this.game.grind) this.game.grind.active = null; // ...or a grind rail
     this.body.up.copy(pos).normalize();
     this.body.groundN.copy(this.body.up);
     this.body.energy = this.body.maxEnergy;
@@ -110,6 +113,37 @@ export class Player {
     const b = this.body;
     if (this.dead) return;
     const up = b.up;
+
+    // grinding a snake rock's crest (rails.js): the rail carries you
+    if (g.grind && g.grind.update(this, dt, input)) return;
+
+    // riding something (a transit ship, a carousel horse, a ferris-wheel gondola: rides.js): the
+    // seat carries you, no physics; the ride decides where you get off
+    if (this.seat) {
+      const s = this.seat;
+      s.obj.updateMatrixWorld(true);
+      const p = s.obj.localToWorld(_sp.copy(s.local));
+      if (dt > 0) b.vel.copy(p).sub(b.pos).divideScalar(dt);
+      if (b.vel.lengthSq() > 1e4) b.vel.set(0, 0, 0); // (first frame aboard)
+      b.pos.copy(p);
+      b.up.copy(p).normalize();
+      b.grounded = true;
+      b.airTime = 0;
+      if (s.face) {
+        const f = s.obj.localToWorld(_sf.copy(s.local).add(s.face)).sub(p);
+        f.addScaledVector(b.up, -f.dot(b.up));
+        if (f.lengthSq() > 1e-6) this.heading.copy(f.normalize());
+      }
+      this.center.copy(b.pos).addScaledVector(b.up, 1.0);
+      const m = this.model;
+      m.root.visible = !s.hidden;
+      m.root.position.copy(b.pos);
+      frameQuat(b.up, this.heading, m.root.quaternion);
+      m.legL.rotation.x = m.legR.rotation.x = -1.4;
+      m.body.position.y = m.bodyBase - 0.55;
+      this.upSmooth.copy(b.up);
+      return;
+    }
 
     const wish = new THREE.Vector3();
     const trickHeld = input.down('KeyQ') && !b.grounded && b.airTime > 0.12;
@@ -324,8 +358,10 @@ export class Player {
       return;
     }
     if (it.speed > safe) {
-      // capped so one bad landing hurts but rarely kills outright
-      const dmg = Math.min(45, (it.speed - safe) * this.params.impactDamage);
+      // half what it used to be, capped so one bad landing rarely kills outright; and a landing with
+      // lots of speed along the ground is a glancing blow (30 m/s of glide halves it again)
+      const glancing = it.kind === 'ground' ? 1 / (1 + (it.glide || 0) / 30) : 1;
+      const dmg = Math.min(22, (it.speed - safe) * this.params.impactDamage * 0.5 * glancing);
       g.damagePlayer(dmg, 'impact');
       g.fx.pop(it.speed - safe > 12 ? 'KRA-KOOM!' : 'KRAK!', this.body.pos.clone().addScaledVector(this.up, 2), { color: '#ff4f2e', size: 54 });
       g.fx.dust(this.body.pos, this.body.vel, 14, this.up);

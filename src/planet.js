@@ -3,6 +3,7 @@ import { PLANET } from './config.js';
 import { mulberry32, createNoise3D, smoothstep, clamp } from './rng.js';
 import { gradientMap } from './toon.js';
 import { SUN, darkness } from './geo.js';
+import { shapedRocks } from './rocks.js';
 
 const N = PLANET.faceCells;
 const CH = PLANET.chunkCells;
@@ -64,7 +65,7 @@ export class Planet {
       z.cosFlat = Math.cos((z.r * 1.95) / R);
     }
     this.cache = new Map();
-    this.attr = { floor: 0, rim: 0, ray: 0 };
+    this.attr = { floor: 0, rim: 0, ray: 0, rock: 0, rille: 0 };
     this.makeCraters(rand);
     this.initChunks();
     // one rectangular hole can be cut in the terrain (the Whispering Fissure's entrance ramp)
@@ -112,6 +113,7 @@ export class Planet {
           const Rc = rMin + (rMax - rMin) * rand();
           let ok = true;
           for (const zn of this.zones) {
+            if (zn.late) continue; // added after the craters were laid out (see locations.js)
             const arc = R * Math.acos(clamp(d.dot(zn.dir), -1, 1));
             if (arc < (zn.zoneR ? zn.r * 1.3 : zn.r * 1.6) + Rc * 1.3) { ok = false; break; }
           }
@@ -120,7 +122,9 @@ export class Planet {
           const e2 = new THREE.Vector3().crossVectors(d, e1);
           const rays = Rc > 150 ? rand() * Math.PI * 2 : -1;
           const infl = Rc * (rays >= 0 ? 4.2 : 2.3);
-          list.push({ d: d.clone(), e1, e2, R: Rc, depth: Rc * (Rc > 150 ? 0.17 : 0.25), rim: Rc * 0.075, rays, cosInfl: Math.cos(infl / R), infl });
+          const cr = { d: d.clone(), e1, e2, R: Rc, depth: Rc * (Rc > 150 ? 0.17 : 0.25), rim: Rc * 0.075, rays, cosInfl: Math.cos(infl / R), infl };
+          this.craterType(cr, list.length);
+          list.push(cr);
           break;
         }
       }
@@ -144,13 +148,92 @@ export class Planet {
     }
   }
 
+  // Give a crater its character, from a generator of its own (seeded by its index), so the crater
+  // layout - and the lakes, roads and outposts laid out around it - doesn't move:
+  //   bowl      the classic: a smooth rim
+  //   rampart   a tall, firm rim that stands up off the plain, with a steep inner wall
+  //   jagged    a crown of rim peaks
+  //   ghost     old and worn almost flat
+  //   terraced  big ones only: stepped inner walls and a central peak
+  craterType(c, i) {
+    const rr = mulberry32((i + 1) * 2654435761 ^ 0x51ed);
+    const x = rr();
+    c.inW = 0.22; c.outW = 0.45; c.jag = 0; c.terr = 0; c.peak = 0;
+    c.rim *= 0.75 + rr() * 0.5;
+    if (c.R > 80 && x < 0.2) {
+      c.type = 'terraced';
+      c.terr = 3 + Math.floor(rr() * 2);
+      c.peak = c.depth * (0.4 + rr() * 0.25);
+      c.rim *= 1.3;
+    } else if (x < 0.45) {
+      c.type = 'rampart';
+      c.rim *= 1.9 + rr() * 0.6;
+      c.inW = 0.15; c.outW = 0.36;
+      c.depth *= 1.12;
+    } else if (x < 0.6) {
+      // (named for the old spiky version: now a rim that swells and dips in broad lobes)
+      c.type = 'jagged';
+      c.rim *= 1.6 + rr() * 0.4;
+      c.jag = 0.3 + rr() * 0.15;
+      c.jf = 3 + Math.floor(rr() * 4);
+      c.jp = rr() * 6.28;
+      c.outW = 0.4;
+    } else if (x < 0.72) {
+      c.type = 'ghost';
+      c.depth *= 0.35; c.rim *= 0.35; c.outW = 0.7;
+    } else c.type = 'bowl';
+    // never narrower than the terrain grid can draw (~9 m cells): thin walls became saw-teeth
+    c.inW = Math.max(c.inW, 10 / c.R);
+    c.outW = Math.max(c.outW, 16 / c.R);
+    if (c.jf) c.jf = Math.max(2, Math.min(c.jf, Math.floor((2 * Math.PI * c.R) / 70)));
+  }
+
+  // Regional landforms on top of the base terrain. Each kind lives in its own patches (a very
+  // low-frequency mask), so most of the Moon stays the smooth, cratered plain:
+  //   ridged highlands: sharp, jagged crests       scarps: stepped ledges (lunar lobate scarps)
+  //   rilles: winding channels                     hills: long rolling slopes
+  // Writes this.attr.rock (for the rocky tint and extra boulders) and this.attr.rille.
+  features(x, y, z) {
+    const A = this.nA, B = this.nB, C = this.nC;
+    let h = 0, rock = 0, rille = 0;
+    const mRidge = smoothstep(0.22, 0.52, C(x * 0.00032 + 40, y * 0.00032, z * 0.00032 - 12));
+    if (mRidge > 0) {
+      // long, rounded ridges (a softened ridged noise: the crest is a curve, not a knife edge)
+      const nv = A(x * 0.0026 + 3, y * 0.0026, z * 0.0026);
+      const n1 = 1 - Math.sqrt(nv * nv + 0.03) + 0.173;
+      h += mRidge * (n1 * n1 * 26 + B(x * 0.006, y * 0.006 + 9, z * 0.006) * 4 - 8);
+      rock = mRidge * smoothstep(0.6, 0.9, n1);
+    }
+    const mScarp = smoothstep(0.28, 0.58, C(x * 0.0004 - 21, y * 0.0004 + 6, z * 0.0004));
+    if (mScarp > 0) {
+      const sv = A(x * 0.0011 - 8, y * 0.0011, z * 0.0011 + 15) + 0.25 * B(x * 0.004, y * 0.004, z * 0.004);
+      h += mScarp * 13 * (smoothstep(-0.09, 0.09, sv) + smoothstep(0.28, 0.44, sv));
+      rock = Math.max(rock, mScarp * (1 - Math.min(1, Math.abs(sv) / 0.09)) * 0.6);
+    }
+    const mRille = smoothstep(0.32, 0.58, C(x * 0.00038 + 77, y * 0.00038 - 3, z * 0.00038 + 31));
+    if (mRille > 0) {
+      // a wide, U-shaped channel (a smooth gaussian across it: no crease at the bottom, no lips)
+      const sv = B(x * 0.0014 + 5, y * 0.0014 - 5, z * 0.0014) / 0.1;
+      rille = mRille * Math.exp(-sv * sv);
+      h -= rille * 13;
+    }
+    const mHills = smoothstep(0.2, 0.5, B(x * 0.0003 - 50, y * 0.0003 + 20, z * 0.0003));
+    if (mHills > 0) h += mHills * A(x * 0.0021, y * 0.0021 + 33, z * 0.0021) * 26;
+    this.attr.rock = rock;
+    this.attr.rille = rille;
+    return h;
+  }
+
   // Surface radius for a unit direction. Also writes crater attributes to this.attr.
   H(dx, dy, dz) {
     const x = dx * R, y = dy * R, z = dz * R;
     const sunDot = dx * SUN.x + dy * SUN.y + dz * SUN.z;
     let far = clamp((0.12 - sunDot) / 0.4, 0, 1);
     far = far * far * (3 - 2 * far);
-    let h = this.base(x, y, z, far);
+    let h = this.base(x, y, z, far) + this.features(x, y, z);
+    // rille floors are smooth: cancel the base terrain's small bumps inside the channel
+    const rl = this.attr.rille;
+    if (rl > 0.01) h -= rl * (this.nB(x * 0.005, y * 0.005, z * 0.005) * 6 * (1 + far * 0.6) + this.nA(x * 0.02, y * 0.02, z * 0.02) * 1.1);
     dirToGrid(dx, dy, dz, _g);
     const cx = Math.min(CPF - 1, Math.floor(_g.i / CH)), cy = Math.min(CPF - 1, Math.floor(_g.j / CH));
     const bucket = this.buckets[(_g.f * CPF + cy) * CPF + cx];
@@ -162,12 +245,26 @@ export class Planet {
       const r = (R * Math.acos(Math.min(1, dot))) / c.R;
       if (r < 2.3) {
         if (r < 1) {
-          h += Math.max((r * r - 1) * c.depth, -c.depth * 0.82);
+          let rb = r;
+          if (c.terr) {
+            // stepped inner walls: the radius quantised into soft stairs
+            const t = r * c.terr, fl = Math.floor(t);
+            rb = (fl + smoothstep(0.25, 0.75, t - fl)) / c.terr;
+          }
+          h += Math.max((rb * rb - 1) * c.depth, -c.depth * 0.82);
+          if (c.peak) { const pq = r / 0.2; h += c.peak * Math.exp(-pq * pq); }
           floorA = Math.max(floorA, smoothstep(1.0, 0.35, r));
         }
-        const q = (r - 1) / (r < 1 ? 0.22 : 0.45);
+        let rimH = c.rim;
+        if (c.jag) {
+          // a crown: rim height swings round the circle, with sharp peaks
+          const ang = Math.atan2(dx * c.e2.x + dy * c.e2.y + dz * c.e2.z, dx * c.e1.x + dy * c.e1.y + dz * c.e1.z);
+          const w = 0.5 + 0.5 * Math.sin(ang * c.jf + c.jp);
+          rimH *= 1 - c.jag + c.jag * 2 * w;
+        }
+        const q = (r - 1) / (r < 1 ? c.inW : c.outW);
         const rimT = Math.exp(-q * q);
-        h += c.rim * rimT;
+        h += rimH * rimT;
         if (rimT > rimA) rimA = rimT;
       }
       if (c.rays >= 0 && r > 1.05 && r < 4.2) {
@@ -185,7 +282,7 @@ export class Planet {
       // plateau is a true plane in the settlement's local frame
       const t = smoothstep(zn.r, zn.r * 1.95, d);
       rad = zn.zr / dot + (rad - zn.zr / dot) * t;
-      floorA *= t; rimA *= t; rayA *= t;
+      floorA *= t; rimA *= t; rayA *= t; this.attr.rock *= t; this.attr.rille *= t;
     }
     const fb = this.flatBuckets[(_g.f * CPF + cy) * CPF + cx];
     for (let k = 0; k < fb.length; k++) {
@@ -195,7 +292,7 @@ export class Planet {
       const d = R * Math.acos(Math.min(1, dot));
       const t = smoothstep(zn.r, zn.r * 1.95, d);
       rad = zn.zr / dot + (rad - zn.zr / dot) * t;
-      floorA *= t; rimA *= t; rayA *= t;
+      floorA *= t; rimA *= t; rayA *= t; this.attr.rock *= t; this.attr.rille *= t;
     }
     this.attr.floor = floorA; this.attr.rim = rimA; this.attr.ray = rayA;
     return rad;
@@ -369,6 +466,8 @@ uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2
     const rimC = new THREE.Color(1.0, 0.95, 0.84);
     const rayC = new THREE.Color(1.0, 0.98, 0.92);
     const darkTint = new THREE.Color(0.55, 0.58, 0.75);
+    const rockC = new THREE.Color(0.6, 0.56, 0.6);
+    const rilleC = new THREE.Color(0.38, 0.36, 0.52);
     // sample a (vn+2)^2 grid including a one-step border for normals
     for (let b = -1; b <= vn; b++) {
       for (let a = -1; a <= vn; a++) {
@@ -388,6 +487,8 @@ uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2
           c.lerp(floorC, this.attr.floor * 0.7);
           c.lerp(rimC, this.attr.rim * 0.6);
           c.lerp(rayC, this.attr.ray * 0.7);
+          c.lerp(rockC, this.attr.rock * 0.55);
+          c.lerp(rilleC, this.attr.rille * 0.5);
           c.lerp(darkTint, darkness(_d) * 0.35);
           const speck = this.nC(x * 0.08, y * 0.08, z * 0.08) * 0.05;
           col[li * 3] = c.r * (1 + speck); col[li * 3 + 1] = c.g * (1 + speck); col[li * 3 + 2] = c.b * (1 + speck);
@@ -466,21 +567,56 @@ uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2
     this.stats.built++;
   }
 
+  // Is this spot free for a big rock? (no settlement or plateau, black lake or road)
+  spotFree(p) {
+    const d = _e.copy(p).normalize();
+    for (const zn of this.zones) if (d.dot(zn.dir) > Math.cos((zn.r * 1.6 + 30) / R)) return false;
+    for (const zn of this.flats) if (d.dot(zn.dir) > Math.cos((zn.r * 1.6 + 20) / R)) return false;
+    for (const lk of this.lakes) if (d.dot(lk.d) > lk.cos - 0.002) return false;
+    if (this.clearDirs) { const cs = this.clearCos; for (const c of this.clearDirs) if (d.dot(c) > cs) return false; }
+    return true;
+  }
+
+  // Grind rails (the crests of snake rocks): polyline, arc lengths and a bounding sphere.
+  addRail(r) {
+    const pts = r.pts;
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1]));
+    const c = new THREE.Vector3();
+    for (const p of pts) c.add(p);
+    c.divideScalar(pts.length);
+    let rad = 0;
+    for (const p of pts) rad = Math.max(rad, p.distanceTo(c));
+    (this.rails ||= []).push({ pts, cum, len: cum[cum.length - 1], c, rad });
+  }
+
+  // Keep big rocks off these directions (the road network): set by the world once roads exist.
+  keepClear(dirs, r) {
+    this.clearDirs = dirs;
+    this.clearCos = Math.cos(r / R);
+  }
+
   buildBoulders(ch) {
     const rr = mulberry32((ch.f * 7919 + ch.cy * 131 + ch.cx) * 2654435761);
     const count = 4 + Math.floor(rr() * 6);
-    const im = new THREE.InstancedMesh(this.boulderGeo, this.boulderMat, count);
-    const hull = new THREE.InstancedMesh(this.boulderGeo, this.boulderInk, count);
+    // rocky country (ridged highlands, scarps) gets extra boulders, from a generator of their own
+    this.H(ch.dir.x, ch.dir.y, ch.dir.z);
+    const rock = this.attr.rock;
+    const extra = Math.floor(rock * 12);
+    const rx = mulberry32((ch.f * 7919 + ch.cy * 131 + ch.cx) * 2246822519 ^ 0x7ee);
+    const im = new THREE.InstancedMesh(this.boulderGeo, this.boulderMat, count + extra);
+    const hull = new THREE.InstancedMesh(this.boulderGeo, this.boulderInk, count + extra);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
     const cols = [];
     let n = 0;
-    for (let t = 0; t < count; t++) {
-      faceDir(ch.f, ch.cx * CH + rr() * CH, ch.cy * CH + rr() * CH, p);
+    for (let t = 0; t < count + extra; t++) {
+      const g0 = t < count ? rr : rx; // (the original boulders keep their own sequence)
+      faceDir(ch.f, ch.cx * CH + g0() * CH, ch.cy * CH + g0() * CH, p);
       let ok = true;
       for (const zn of this.zones) if (p.dot(zn.dir) > Math.cos((zn.r * 1.5) / R)) { ok = false; break; }
       for (const zn of this.flats) if (p.dot(zn.dir) > Math.cos((zn.r * 1.5) / R)) { ok = false; break; }
-      const s = 1.2 + Math.pow(rr(), 3) * 7;
-      e.set(rr() * 3, rr() * 3, rr() * 3);
+      const s = 1.2 + Math.pow(g0(), 3) * 7;
+      e.set(g0() * 3, g0() * 3, g0() * 3);
       if (!ok) continue;
       const r = this.surface(p);
       p.multiplyScalar(r + s * 0.3);
@@ -497,6 +633,16 @@ uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2
     im.frustumCulled = hull.frustumCulled = false;
     const g = new THREE.Group();
     g.add(im, hull);
+    // shaped rocks: ramps, arches, hoodoos, mesas, wave walls (rocks.js)
+    const sr = shapedRocks(this, ch, (u, v, out) => faceDir(ch.f, ch.cx * CH + (0.1 + 0.8 * u) * CH, ch.cy * CH + (0.1 + 0.8 * v) * CH, out), (pt) => this.spotFree(pt), rock);
+    for (const m of sr.meshes) {
+      g.add(m);
+      m.updateMatrix();
+      m.traverse((o) => { o.updateMatrix(); o.matrixAutoUpdate = false; });
+    }
+    g.updateMatrixWorld(true);
+    cols.push(...sr.cols);
+    for (const r of sr.rails) this.addRail(r);
     g.matrixAutoUpdate = false;
     g.visible = false;
     this.scene.add(g);

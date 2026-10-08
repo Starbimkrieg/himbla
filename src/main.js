@@ -5,7 +5,7 @@ import { Planet } from './planet.js';
 import { Colliders } from './physics.js';
 import { World } from './world.js';
 import { Player } from './player.js';
-import { loadRunnerParts } from './models.js';
+import { loadRunnerParts, loadShipParts } from './models.js';
 import { Enemies } from './enemies.js';
 import { Projectiles } from './projectiles.js';
 import { Missions } from './missions.js';
@@ -21,6 +21,9 @@ import { Events } from './events.js';
 import { GlobeMap } from './mapview.js';
 import { Alchemy, MUTATIONS } from './alchemy.js';
 import { Race } from './race.js';
+import { Rides } from './rides.js';
+import { Meteors } from './meteors.js';
+import { Grinder } from './rails.js';
 import { Cosmetics } from './cosmetics.js';
 import { Cheats } from './cheats.js';
 import { Territory } from './territory.js';
@@ -154,6 +157,9 @@ class Game {
     this.upgrades = { capacitor: 0, armor: 0, dampers: 0, spinner: 0, seeker: 0, gyro: 0, cradle: 0, flak: 0, overcharge: 0, shadow: 0, jar: 0, scatter: 0, rail: 0, mortar: 0 };
     this.load();
     this.race = new Race(this);
+    this.rides = new Rides(this);
+    this.meteors = new Meteors(this);
+    this.grind = new Grinder(this);
     this.cosmetics = new Cosmetics(this);
     this.cosmetics.apply();
     this.cheats = new Cheats(this);
@@ -215,24 +221,26 @@ class Game {
     });
     document.getElementById('pause').addEventListener('click', () => {
       this.hud.show('pause', false);
-      this.state = 'play';
+      this.state = this.resumeState || 'play';
+      this.resumeState = null;
       this.input.lock();
     });
     document.getElementById('death').addEventListener('click', () => this.respawn());
     // clicking the game while mouse-look is released just recaptures it
     this.renderer.domElement.addEventListener('click', () => {
-      if (this.state === 'play' && !this.input.locked) this.input.lock();
+      if ((this.state === 'play' || this.state === 'derby') && !this.input.locked) this.input.lock();
     });
     document.addEventListener('pointerlockchange', () => {
       if (this.input.locked) {
         // a lock requested when a dialog closed can land after the next dialog opened (chained
         // menus): hand the mouse straight back to the menu
-        if (this.state !== 'play' && this.state !== 'cutscene') { this.releasing = true; this.input.unlock(); return; }
+        if (this.state !== 'play' && this.state !== 'cutscene' && this.state !== 'derby') { this.releasing = true; this.input.unlock(); return; }
         this.hud.show('clickhint', false);
         return;
       }
       // only an Escape during gameplay pauses; menus release the mouse on purpose
-      if (this.state === 'play' && !this.releasing) {
+      if ((this.state === 'play' || this.state === 'derby') && !this.releasing) {
+        this.resumeState = this.state;
         this.state = 'paused';
         this.hud.show('pause', true);
       }
@@ -259,6 +267,8 @@ class Game {
         if (code === 'Enter') this.pickDialog(0);
         else if (n >= 1 && n <= this.dialogButtons.length) this.pickDialog(n - 1);
         else if (esc) this.pickDialog(this.dialogButtons.length - 1, esc);
+      } else if (this.state === 'derby') {
+        this.race.onKey(code);
       } else if (this.state === 'casino') { // casino
         if (esc) this.casino.close(true); else this.casino.onKey(code);
       } else if (this.state === 'wardrobe') { // wardrobe
@@ -398,7 +408,7 @@ class Game {
     const chims = this.alchemy.chimeras.length;
     if (chims) buttons.push({ label: `${buttons.length + 1} · HOLDING PEN (${chims})`, fn: () => this.alchemy.penMenu() });
     buttons.push({ label: `${buttons.length + 1} · HEARD ANY RUMOURS?`, fn: () => this.dialog('DR. ZBORNAK', '"Rumours? Science does not deal in rumours. But… <br><br>• <b>Moon Mites</b> herd together in the sunny craters, well away from settlements. Green dots on your minimap, if you\'re close.<br>• That old satellite, <b>SAT-7 \"Lantern\"</b>, swoops low over the ground just past the ILMB once a lap. Something on its deck glows. You would have to match its speed exactly to land on it. Ha!<br>• Bring me <b>three lengths of electrical wiring</b> from a supply depot, in your jar, and I will rewind your skate coils for extra grip.<br>• Saplings from the farm domes are alive, technically. They splice beautifully.<br>• On the twilight side there is a trench nobody dug: the <b>Whispering Fissure</b>. My instruments go strange near it. Something down there wants a key."', [{ label: 'SPOOKY' }]) });
-    buttons.push({ label: `${buttons.length + 1} · HOW DOES THIS WORK?`, fn: () => this.dialog('DR. ZBORNAK', '"Press <b>G</b> to scoop: rock samples (the glowing crystals on the sunny side), moon dirt (anywhere), black water (stand on a black lake), people, wild moon mites, a dazed pirate, even a whole hover-car if it fits. Things left together in a jar start to react. Bring the jar here and press <b>X</b> to throw everything into my reactor. <b>Two living things make a CHIMERA</b> — race it at the Bounce Dome Derby! One thing alone does… other things. Three different non-living things: don\'t. And the splice pod in the corner puts the jar into <i>you</i>."', [{ label: 'GOT IT' }]) });
+    buttons.push({ label: `${buttons.length + 1} · HOW DOES THIS WORK?`, fn: () => this.dialog('DR. ZBORNAK', '"Press <b>G</b> to scoop: rock samples (the glowing crystals on the sunny side), moon dirt (anywhere), black water (stand on a black lake), people, wild moon mites, a dazed pirate, even a whole hover-car if it fits. Things left together in a jar start to react. Bring the jar here and press <b>X</b> to throw everything into my reactor. <b>Two living things make a CHIMERA</b> — race it at Chimera Downs! One thing alone does… other things. Three different non-living things: don\'t. And the splice pod in the corner puts the jar into <i>you</i>."', [{ label: 'GOT IT' }]) });
     buttons.push({ label: `${buttons.length + 1} · LEAVE` });
     const greet = lvl ? `"Back already? Your jar holds ${2 + lvl}. What have you brought me?"` : '"Ah, a runner! Want to help science? You will need a containment jar. Everything goes in the jar. EVERYTHING."';
     this.dialog('DR. ZBORNAK', greet, buttons);
@@ -604,6 +614,7 @@ class Game {
       player: 'Your own Pulse Spinner. Classic.',
       sniper: 'Longshot Kade. You never even saw him. Well, you saw the red dot.',
       anomaly: 'Vaporised by a phase anomaly. For science.',
+      meteor: 'Flattened by a meteor. The sky literally fell on you.',
     };
     this.hud.death(`${causes[cause] || 'Knocked out.'} Med-evac fee: ₵${fee}`);
     this.state = 'dead';
@@ -761,7 +772,7 @@ class Game {
   updateTitleTour(dt) {
     const P = this.player;
     if (!this.tour) {
-      const want = ['ilmb', 'meridian', 'kepler', 'casino', 'tranq', 'vostok', 'shackleton', 'aldrin', 'rustmoon'];
+      const want = ['ilmb', 'meridian', 'kepler', 'casino', 'downs', 'tranq', 'vostok', 'shackleton', 'aldrin', 'rustmoon'];
       const list = want.map((id) => this.locations.find((l) => l.id === id)).filter((l) => l && darkness(l.dir) < 0.35);
       this.tour = { list: list.length ? list : [this.hub], i: -1, t: 1e9, fade: document.getElementById('tourfade') };
       if (!this.tour.fade) {
@@ -869,6 +880,7 @@ class Game {
 
     const playing = this.state === 'play';
     if (playing) this.updatePlay(dt);
+    else if (this.state === 'derby') this.race.watch(dt); // watching your chimera race: the race drives the camera
     else this.input.consumeMouse();
     if (this.state === 'dead') {
       this.enemies.update(dt, this.time);
@@ -877,12 +889,13 @@ class Game {
 
     this.recall.update(dt);
     if (this.state === 'title') this.updateTitleTour(rdt);
-    else if (this.state !== 'cutscene') this.updateCamera(dt);
+    else if (this.state !== 'cutscene' && this.state !== 'derby') this.updateCamera(dt);
     this.world.update(dt, this.time, this.camera.position);
     this.fx.update(dt);
     this.hud.update(rdt);
     this.updateLighting(dt);
     const P = this.player;
+    this.audio.setZone(this.musicZone());
     this.audio.update(P.dead ? 0 : P.speed, P.body.skating, P.body.grounded, P.body.thrusting && playing);
 
     const dark = darkness(P.up);
@@ -901,6 +914,19 @@ class Game {
     this.post.render(this.scene, this.camera);
     this.renderPanel(dt);
     this.input.endFrame();
+  }
+
+  // Which music track fits where you are: the casino, Chimera Downs and Dr. Zbornak's lab have
+  // their own; the dark side has its own; everywhere else the speed-driven roaming groove.
+  musicZone() {
+    if (this.state === 'derby') return 'downs';
+    if (this.state === 'casino') return 'casino';
+    const P = this.player;
+    this._musicLocs ||= ['casino', 'downs', 'antimatter'].map((id) => this.locations.find((l) => l.id === id)).filter(Boolean);
+    for (const l of this._musicLocs) {
+      if (arcDist(P.pos, l.dir) < l.r * 1.5) return l.id === 'antimatter' ? 'lab' : l.id;
+    }
+    return darkness(P.up) > 0.6 ? 'dark' : 'free';
   }
 
   // Sun, sky fill and the helmet lamp all depend on where you stand on the sphere.
@@ -974,6 +1000,8 @@ class Game {
     document.getElementById('techchip').innerHTML = this.story.hudTech();
     this.alchemy.update(dt);
     this.race.update(dt);
+    this.rides.update();
+    this.meteors.update(dt);
     if (this.input.pressed('KeyG')) this.alchemy.scoop();
     if (this.input.pressed('KeyX')) this.alchemy.empty(this.input.down('ShiftLeft') || this.input.down('ShiftRight'));
     if (this.input.pressed('KeyC') && this.boardCooldown <= 0) this.cosmetics.wardrobe();
@@ -981,7 +1009,7 @@ class Game {
       if (this.upgrades.penlink) this.alchemy.penMenu();
       else this.hud.toast('No pen link. Dr. Zbornak sells a remote holding-pen link at the Antimatter Lab.', 3);
     }
-    if (this.input.pressed('KeyV') && this.boardCooldown <= 0) this.garage.toggle();
+    if (this.input.pressed('KeyV') && this.boardCooldown <= 0 && !this.rides.ride) this.garage.toggle();
     if (this.input.pressed('KeyZ')) this.story.useTech('dash');
     if (this.input.pressed('KeyT') && this.boardCooldown <= 0) this.story.useTech('teleport');
     if (this.input.pressed('KeyN')) this.hud.toast(this.audio.toggleMusic() ? '♪ Music on' : 'Music off', 1.5);
@@ -1021,7 +1049,7 @@ class Game {
         : `⚠ RESTRICTED ZONE — ${base.loc.name.toUpperCase()} — LEAVE IN ${left.toFixed(1)}s ⚠`;
     } else if (base) {
       zw.classList.remove('hidden');
-      zw.innerHTML = `✔ CLEARANCE ACCEPTED — ${base.loc.name.toUpperCase()}`;
+      zw.innerHTML = base.grace ? `✔ DELIVERY SIGNED — ${base.loc.name.toUpperCase()} · CLEARED UNTIL YOU LEAVE` : `✔ CLEARANCE ACCEPTED — ${base.loc.name.toUpperCase()}`;
     } else zw.classList.add('hidden');
 
     // settlements patch you up, unless their defences are currently shooting at you
@@ -1036,7 +1064,9 @@ class Game {
     const nearPod = lab && z === lab.loc && P.pos.distanceTo(lab.pod) < 4;
     const nearPen = lab && z === lab.loc && P.pos.distanceTo(lab.penTerm) < 5;
     const nearBooth = this.race.near(P.pos);
-    if (this.events.interact()) {
+    if (this.rides.interact()) {
+      // aboard a ship or a funpark ride (or next to one you could hop on)
+    } else if (this.events.interact()) {
       // an event's start prop
     } else if (this.secrets.interact()) {
       // satellite artifact, alien gate, shrine
@@ -1051,7 +1081,7 @@ class Game {
       this.hud.prompt(this.alchemy.jar.length ? '<b>F</b> — STEP INTO THE SPLICE POD (with your jar)' : 'SPLICE POD — BRING A FULL JAR. (<b>F</b> to read the label)');
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.usePod();
     } else if (nearBooth) {
-      this.hud.prompt('<b>F</b> — CHIMERA DERBY: ENTER A CREATURE &amp; BET');
+      this.hud.prompt('<b>F</b> — CHIMERA DOWNS: RACE CARD &amp; BETS');
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.race.open();
     } else if (nearDoc) {
       this.hud.prompt('<b>F</b> — TALK TO DR. ZBORNAK');
@@ -1115,13 +1145,13 @@ class Game {
     const sp = P.speed;
     const sv = this.settings ? this.settings.v : null; // settings
     const scoped = !!P.scoped;
-    const targetDist = scoped ? 0.2 : (7.5 + Math.min(7, sp * 0.06)) * (sv ? sv.camDist : 1); // settings
+    const targetDist = scoped ? 0.2 : P.seat && P.seat.camDist ? P.seat.camDist : (7.5 + Math.min(7, sp * 0.06)) * (sv ? sv.camDist : 1); // settings
     c.dist += (targetDist - c.dist) * Math.min(1, dt * (scoped ? 14 : 3));
     const target = P.pos.clone().addScaledVector(up, 2.3);
     const want = target.clone().addScaledVector(c.look, -c.dist).addScaledVector(up, scoped ? 0 : 0.8 + (sv ? sv.camHeight : 0)); // settings
     if (sv && sv.shoulder && !scoped) want.addScaledVector(c.right, sv.shoulder); // settings
     // Rail Lance scope: first-person, narrow field of view, runner hidden
-    if (!P.dead && this.state !== 'cutscene') P.model.root.visible = c.dist > 1.2;
+    if (!P.dead && this.state !== 'cutscene') P.model.root.visible = c.dist > 1.2 && !(P.seat && P.seat.hidden);
     const scopeEl = document.getElementById('scope');
     if (scopeEl) scopeEl.classList.toggle('hidden', !scoped || c.dist > 1.2);
     const alt = this.planet.altitude(want);
@@ -1225,7 +1255,7 @@ class Game {
 const game = new Game();
 window.game = game;
 // canvas text (signs, maps) is drawn during init, so the pixel fonts must be loaded first
-Promise.all([loadFonts(), loadRunnerParts()]).then(() => game.init()).catch((e) => {
+Promise.all([loadFonts(), loadRunnerParts(), loadShipParts()]).then(() => game.init()).catch((e) => {
   console.error(e);
   document.getElementById('load-status').textContent = 'Failed to start: ' + e.message;
 });

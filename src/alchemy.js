@@ -113,12 +113,13 @@ export class Alchemy {
 
   // ---------- wild Moon Mites ----------
   buildMites() {
-    // herds of 3–6 mites around sunlit craters, well away from settlements
+    // herds of 3–6 mites across the sunlit side (about one herd per square kilometre), well away
+    // from settlements
     const rr = mulberry32(8080);
     const g = this.game;
     this.mites = [];
     let herds = 0;
-    for (let tries = 0; tries < 4000 && herds < 34; tries++) {
+    for (let tries = 0; tries < 6000 && herds < 90; tries++) {
       const u = rr() * 2 - 1, th = rr() * Math.PI * 2, sq = Math.sqrt(1 - u * u);
       const d = new THREE.Vector3(sq * Math.cos(th), u, sq * Math.sin(th));
       if (d.dot(SUN) < 0.15) continue;
@@ -149,7 +150,8 @@ export class Alchemy {
       const up = m.pos.clone().normalize();
       const d = m.pos.distanceTo(P.pos);
       let speed = 2.5;
-      if (d < 14 && P.speed > 6) { m.dir = tangent(m.pos.clone().sub(P.pos), up).normalize(); speed = 9; }
+      if (m.flee > 0) m.flee -= dt;
+      if ((d < 14 && P.speed > 6) || (m.flee > 0 && d < 30)) { m.dir = tangent(m.pos.clone().sub(P.pos), up).normalize(); speed = 9; }
       else if (Math.random() < dt * 0.5) m.dir = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
       if (arcDist(m.pos, m.home) > 35) m.dir = tangent(m.home.clone().sub(up), up).normalize();
       const next = greatCircle(up, m.dir, speed * dt);
@@ -352,12 +354,34 @@ export class Alchemy {
     for (const it of this.jar) {
       if (it.kind === 'person' || it.kind === 'voidling' || it.kind === 'pirate') this.spawnWanderer(it.name, it.kind === 'voidling', it.kind === 'pirate');
       else if (it.kind === 'alien') this.spawnWanderer(it.name, false, false, null, true);
-      else if (it.kind === 'mite') { const m = this.mites.find((x) => x.gone > 0); if (m) { m.gone = 0; m.home = P.pos.clone().normalize(); } }
+      else if (it.kind === 'mite') {
+        // tipped out right here, and it scarpers (this spot becomes its new patch)
+        const m = this.mites.find((x) => x.gone > 0);
+        if (m) {
+          const at = P.pos.clone().addScaledVector(g.cam.right, 2 + Math.random() * 2).addScaledVector(g.cam.fwd, Math.random() * 2);
+          m.gone = 0;
+          m.home = at.clone().normalize();
+          if (m.model) { m.model.root.removeFromParent(); m.model = null; }
+          m.model = makeMite();
+          g.scene.add(m.model.root);
+          m.pos = g.planet.ground(at, new THREE.Vector3());
+          m.flee = 3.5;
+        }
+      }
       else if (it.kind === 'sapling') { g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(2), { color: 0x5fbf4a, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 }); g.fx.pop('REPLANTED!', null, { color: '#5fbf4a', size: 36 }); }
       else if (it.kind === 'junkbot') { g.fx.pop(`${(it.name || 'BOT').toUpperCase()}: BEEP BOOP!`, null, { color: '#ffb347', size: 36 }); g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0xffb347, size: 0.3, life: 0.6, gravity: 2, count: 8, spread: 2 }); }
       else if (it.kind === 'engine') { this.dropLoot('engine', P.pos.clone().addScaledVector(g.cam.right, 3)); continue; }
       else if (it.kind === 'wiring') g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0xffb347, size: 0.3, life: 0.6, gravity: 2, count: 8, spread: 2 });
-      else if (it.kind === 'car') { const v = this.game.world.vehicles.find((x) => x.captured > 0); if (v) v.captured = 0.01; g.fx.pop('BEEP BEEP!', null, { color: '#ff7ad9', size: 40 }); }
+      else if (it.kind === 'car') {
+        // out it pops beside you, and it hovers off to find the nearest road
+        const v = this.game.world.vehicles.find((x) => x.captured > 0 && x.kind === 'car');
+        if (v) {
+          v.captured = 0;
+          v.root.visible = true;
+          g.world.traffic.sendHome(v, g.planet.ground(P.pos.clone().addScaledVector(g.cam.right, 4), new THREE.Vector3(), 0));
+        }
+        g.fx.pop('BEEP BEEP!', null, { color: '#ff7ad9', size: 40 });
+      }
       else if (it.kind === 'rock' || it.kind === 'slickrock') g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0x2ee6ff, size: 0.5, life: 1, gravity: 2, count: 6, spread: 3 });
       else g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(2), { color: it.kind === 'dirt' ? 0xc9b79c : 0x2a1f4f, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 });
     }

@@ -4,6 +4,8 @@ import { spliceGenes } from './chimera.js';
 import { pick } from './rng.js';
 import { VEHICLES } from './vehicles.js';
 import { TECH } from './story.js';
+import * as THREE from 'three';
+import { greatCircle } from './geo.js';
 
 // Testing menu on the ` (backtick) key. Everything goes through the normal dialog, so number
 // keys pick options and Esc closes.
@@ -34,7 +36,7 @@ export class Cheats {
       { label: '1 · JOIN RUSTMOON (skip the Pirate Wreck)', fn: () => { this.joinRustmoon(); this.moreMenu(); } },
       { label: '2 · SPAWN PIRATE SQUAD', fn: () => { g.enemies.spawnSquad(3); } },
       { label: '3 · SPAWN MEGA MITE', fn: () => { g.alchemy.spawnMegaMite(); } },
-      { label: '4 · SPAWN AN EVENT…', fn: () => this.eventMenu() },
+      { label: '4 · SPAWN AN EVENT… (or a meteor shower)', fn: () => this.eventMenu() },
       { label: '5 · UNLOCK-STAT COUNTERS (events, deliveries, wins)', fn: () => { Object.assign(g.stats, { meridianEvents: Math.max(3, g.stats.meridianEvents || 0), darkDeliveries: Math.max(5, g.stats.darkDeliveries || 0), raceWins: Math.max(1, g.stats.raceWins || 0) }); g.save(); this.moreMenu(); } },
       { label: '6 · CURE MUTATIONS', fn: () => { g.alchemy.cure(); this.moreMenu(); } },
       { label: '7 · RESET THIS SAVE SLOT (back to menu)', fn: () => this.confirmReset() },
@@ -186,7 +188,20 @@ export class Cheats {
         g.planet.update(ev.start, { budgetMs: 1e9 });
         g.player.respawn(g.planet.ground(ev.start.clone().addScaledVector(g.cam.right, 6), ev.start.clone(), 1.5));
       },
-    })).concat([{ label: '7 · BACK', fn: () => this.moreMenu() }]));
+    })).concat([
+      { label: '7 · METEOR SHOWER (teleports you to its edge)', fn: () => {
+        const M = g.meteors;
+        if (M.zone) M.end();
+        M.begin();
+        if (!M.zone) { g.hud.toast('No open ground nearby for a shower; try again.', 2); return; }
+        const up = g.player.pos.clone().normalize();
+        const t = M.zone.dir.clone().sub(up);
+        const edge = greatCircle(M.zone.dir, t.lengthSq() > 1e-8 ? t.negate() : g.cam.right, M.zone.r + 60, new THREE.Vector3());
+        g.planet.update(edge, { budgetMs: 1e9 });
+        g.player.respawn(g.planet.ground(edge, new THREE.Vector3(), 1.5));
+      } },
+      { label: '8 · BACK', fn: () => this.moreMenu() },
+    ]));
   }
 
   confirmReset() {

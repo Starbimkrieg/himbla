@@ -45,65 +45,6 @@ function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
 
 // ---------------- models ----------------
 
-// Landing legs + a belly ramp for the big freighter (origin = hull centre, belly at y=-5).
-function freighterGear(m) {
-  const metal = toon(0x8a87a0), dark = toon(0x2a2540);
-  const legs = [];
-  for (const [x, z] of [[-5.2, 13], [5.2, 13], [-5.2, -15], [5.2, -15]]) {
-    const g = new THREE.Group();
-    g.position.set(x, -10, z);
-    g.add(part(new THREE.CylinderGeometry(0.45, 0.6, 5.4, 8), metal, 0, 2.7, 0, 0.05));
-    g.add(part(new THREE.CylinderGeometry(1.4, 1.6, 0.3, 12), dark, 0, 0.15, 0, 0.05));
-    m.root.add(g);
-    legs.push(g);
-  }
-  const hatch = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 10.6).rotateX(Math.PI / 2), glow(0xfff1b0));
-  hatch.position.set(0, -4.98, -11.3);
-  hatch.visible = false;
-  m.root.add(hatch);
-  const ramp = new THREE.Group();
-  ramp.position.set(0, -5, -6);
-  ramp.add(part(new THREE.BoxGeometry(4.6, 0.3, 11).translate(0, -0.15, -5.5), toon(0x5b5870), 0, 0, 0, 0.06));
-  for (const sx of [-1, 1]) ramp.add(part(new THREE.BoxGeometry(0.25, 0.12, 10.6).translate(0, 0.06, -5.5), glow(0xffd23f), sx * 2.1, 0, 0, 0));
-  m.root.add(ramp);
-  const L = 11, drop = 5;
-  const ang = Math.asin(drop / L);
-  return {
-    legs, ramp, hatch, gearH: 10, legLo: -10, legHi: -5, rampAng: ang,
-    inside: new THREE.Vector3(0, -5, -1.5), rampTop: new THREE.Vector3(0, -5, -6.4),
-    rampBottom: new THREE.Vector3(0, -5 - L * Math.sin(ang), -6 - L * Math.cos(ang) - 0.6),
-  };
-}
-
-// Three landing legs + a little rear ramp for the shuttle-bus (capsule radius 2.4).
-function shuttleGear(m) {
-  const metal = toon(0x8a87a0), dark = toon(0x2a2540);
-  const legs = [];
-  for (const [x, z] of [[-1.6, -3], [1.6, -3], [0, 3.6]]) {
-    const g = new THREE.Group();
-    g.position.set(x, -3.8, z);
-    g.add(part(new THREE.CylinderGeometry(0.16, 0.2, 2.0, 6), metal, 0, 1.0, 0, 0.03));
-    g.add(part(new THREE.CylinderGeometry(0.5, 0.6, 0.16, 10), dark, 0, 0.08, 0, 0.03));
-    m.root.add(g);
-    legs.push(g);
-  }
-  const hatch = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 3.2).rotateX(Math.PI / 2), glow(0xfff1b0));
-  hatch.position.set(0, -2.12, -5.6);
-  hatch.visible = false;
-  m.root.add(hatch);
-  const ramp = new THREE.Group();
-  ramp.position.set(0, -2.2, -4.0);
-  ramp.add(part(new THREE.BoxGeometry(1.8, 0.16, 3.4).translate(0, -0.08, -1.7), toon(0x5b5870), 0, 0, 0, 0.04));
-  m.root.add(ramp);
-  const L = 3.4, drop = 1.6;
-  const ang = Math.asin(drop / L);
-  return {
-    legs, ramp, hatch, gearH: 3.8, legLo: -3.8, legHi: -2.2, rampAng: ang,
-    inside: new THREE.Vector3(0, -2.3, -1.5), rampTop: new THREE.Vector3(0, -2.2, -4.2),
-    rampBottom: new THREE.Vector3(0, -2.2 - L * Math.sin(ang), -4 - L * Math.cos(ang) - 0.4),
-  };
-}
-
 // Big balloon-tyred road-train: a six-wheeled tractor pulling passenger and cargo trailers.
 // Every unit has its origin on the ground, +Z forward.
 function makeLandTrain({ color = 0xff9f1c, trim = 0xfff4e0, cars = ['pax', 'cargo', 'pax'] } = {}) {
@@ -525,25 +466,24 @@ export class Traffic {
   addFlyer(kind, A, B) {
     const ship = kind === 'ship';
     const n = this.vehicles.length;
+    // the rig (models.js) knows its own gear height, deck box, ramp path and pad size
     const model = ship ? makeFreighter({ stripe: [0xff9f1c, 0xff2e88, 0x2ec4ff][n % 3] }) : makeShuttle({ stripe: [0x2ec4ff, 0xff9f1c, 0x7dff6a, 0xc77dff][n % 4] });
-    const gear = ship ? freighterGear(model) : shuttleGear(model);
     const spec = ship
-      ? { padR: 20, clearR: 30, heights: [3, 10, 20, 32], climb: 34 }
-      : { padR: 8.5, clearR: 10, heights: [2, 6, 12], climb: 16 };
-    const cruise = ship ? 55 + (n % 3) * 25 : 22;
-    const radius = ship ? 24 : 7;
+      ? { padR: model.padR, clearR: 31, heights: [3, 10, 20, 32], climb: 36 }
+      : { padR: model.padR, clearR: 13, heights: [2, 7, 14], climb: 18 };
+    const cruise = ship ? 55 + (n % 3) * 25 : 24;
     const sA = this.makePadStop(A, B, spec, kind), sB = this.makePadStop(B, A, spec, kind);
-    const path = this.flightPath(sA, sB, gear.gearH, spec.climb, cruise, radius);
+    const path = this.flightPath(sA, sB, model.gearH, spec.climb, cruise, model.radius);
     model.root.matrixAutoUpdate = true;
     this.w.scene.add(model.root);
-    const deck = ship ? [7.2, 5.0, 23.5] : [2.6, 2.5, 7.0];
     const v = {
-      ...model, ...gear, kind, path, hint: { i: 0, f: 0 }, ahint: { i: 0, f: 0 },
-      stops: [sA, sB], dir: 1, s: 0, state: 'park', timer: 0, open: 0, gearK: 1,
+      ...model, model, kind, path, hint: { i: 0, f: 0 }, ahint: { i: 0, f: 0 },
+      stops: [sA, sB], dir: 1, s: 0, state: 'park', timer: 0, open: 0, gearK: 1, clock: this.r() * 10,
       vmax: ship ? 40 : 26, acc: ship ? 2.2 : 3.2, turn: ship ? 0.45 : 1.0, turnMin: ship ? 22 : 8,
       minWait: ship ? 16 : 10, maxWait: ship ? 50 : 32, pax: ship ? [3, 5] : [1, 3],
-      radius, view: ship ? 4200 : 1600, deck, col: null, quat: model.root.quaternion, boarding: 0, heading: new THREE.Vector3(),
+      view: ship ? 4200 : 1600, quat: model.root.quaternion, boarding: 0, heading: new THREE.Vector3(),
       pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(),
+      col: null,
     };
     // spread them out: some parked at either end, most somewhere along the route
     const r = this.r();
@@ -1567,7 +1507,7 @@ export class Traffic {
     for (const v of this.vehicles) {
       v.prevPos.copy(v.pos);
       if (v.captured > 0) { v.root.visible = false; if (v.col) { this.C.remove(v.col); v.col = null; } v.vel.set(0, 0, 0); continue; }
-      if (v.piece) this.updateRoadVehicle(v, dt, camPos);
+      if (v.piece || v.offroad) this.updateRoadVehicle(v, dt, camPos);
       else this.updateFlyer(v, dt, camPos);
     }
     for (const c of this.crawlers) {
@@ -1579,12 +1519,9 @@ export class Traffic {
   }
 
   updateFlyer(v, dt, camPos) {
-    const path = v.path, L = path.len;
-    const gearK = (k) => {
-      v.gearK = k;
-      const y = v.legHi + (v.legLo - v.legHi) * k;
-      for (const g of v.legs) g.position.y = y;
-    };
+    const path = v.path, L = path.len, M = v.model;
+    v.clock += dt;
+    let main = 0, lift = 0;
     if (v.state === 'park') {
       v.timer += dt;
       const dur = 2.4;
@@ -1595,11 +1532,15 @@ export class Traffic {
       } else {
         v.open = 1 - clamp01((v.timer - v.closeAt) / dur);
         if (v.boarding > 0) for (const wk of this.walkers) if (wk.owner === v && wk.board) this.release(wk);
+        // spool the lift jets up for the last moments on the pad
+        lift = clamp01((v.timer - v.closeAt - dur + 0.6) / 1.2);
         if (v.timer > v.closeAt + dur + 0.8) {
           v.state = 'fly'; v.dir = v.s <= 0 ? 1 : -1; v.timer = 0; v.exchanged = false; v.closing = false; v.open = 0; v.stop = null;
         }
       }
       v.vel.set(0, 0, 0);
+      sample(path, v.s, v.pos, v.hint);
+      if (M.gearK < 1) M.setGear(1);
     } else {
       const dS = v.dir > 0 ? v.s : L - v.s, dE = v.dir > 0 ? L - v.s : v.s;
       const d = Math.min(dS, dE);
@@ -1613,7 +1554,12 @@ export class Traffic {
       }
       sample(path, v.s, v.pos, v.hint);
       if (dt > 0) v.vel.copy(v.pos).sub(v.prevPos).divideScalar(dt);
-      gearK(v.kind === 'ship' ? clamp01((70 - d) / 40) : clamp01((30 - d) / 18));
+      // gear: stowed in the bays on the cruise, down and locked over the pad
+      M.setGear(v.kind === 'ship' ? clamp01((70 - d) / 40) : clamp01((30 - d) / 18));
+      // thrusters pulse while it moves; the belly jets carry it on the vertical legs over the pads
+      const near = v.kind === 'ship' ? 90 : 40;
+      lift = v.state === 'park' ? 0 : clamp01(1.25 - d / near);
+      main = v.state === 'park' ? 0 : 0.25 + 0.75 * clamp01(sp / v.vmax);
       // heading follows the route a little ahead; never swing round while still low over the pad
       if (dS > v.turnMin) {
         sample(path, v.s + v.dir * 30, _a, v.ahint);
@@ -1623,10 +1569,6 @@ export class Traffic {
         if (_a.lengthSq() > 9) v.heading.copy(_a).normalize();
       }
     }
-    if (v.state === 'park') {
-      sample(path, v.s, v.pos, v.hint);
-      if (v.gearK < 1) gearK(1);
-    }
     const vis = v.pos.distanceTo(camPos) < v.view;
     v.root.visible = vis;
     if (!vis) { if (v.col) { this.C.remove(v.col); v.col = null; } return; }
@@ -1635,8 +1577,8 @@ export class Traffic {
     frameQuat(up, v.heading, _q);
     v.root.quaternion.rotateTowards(_q, v.turn * dt);
     v.fwd.set(0, 0, 1).applyQuaternion(v.root.quaternion);
-    v.ramp.rotation.x = -v.rampAng * v.open;
-    v.hatch.visible = v.open > 0.02;
+    M.setRamp(v.open);
+    M.setThrust(main, lift, v.clock);
     this.syncDeck(v, camPos);
   }
 
@@ -1646,7 +1588,57 @@ export class Traffic {
     if (v.trailers) for (const t of v.trailers) { t.root.visible = false; if (t.plat.col) { this.C.remove(t.plat.col); t.plat.col = null; } }
   }
 
+  // A hover-car tipped out of a jar at `from`: it drives cross-country to the nearest point on
+  // the road network, then rejoins traffic there with a fresh destination.
+  sendHome(v, from) {
+    let best = null, bd = Infinity;
+    const q = new THREE.Vector3();
+    for (const pc of this.pieces) {
+      if (!pc.path || (pc.kind !== 'e' && pc.kind !== 'r')) continue;
+      const P = pc.path.pts;
+      for (let i = 0; i < P.length; i += 2) {
+        const d = P[i].distanceToSquared(from);
+        if (d < bd) { bd = d; best = { pc, s: pc.path.cum[i] }; }
+      }
+    }
+    if (!best) return;
+    sample(best.pc.path, best.s, q, { i: 0, f: 0 });
+    v.offroad = { target: q.clone(), pc: best.pc, s: best.s };
+    v.pos.copy(from);
+    v.prevPos.copy(from);
+    v.state = 'drive';
+    v.cur = 0;
+  }
+
+  // the cross-country leg of sendHome: hover over the ground straight at the road, then join it
+  driveHome(v, dt, camPos) {
+    const o = v.offroad, P = this.P;
+    const up = _u.copy(v.pos).normalize();
+    _f.copy(o.target).sub(v.pos);
+    _f.addScaledVector(up, -_f.dot(up));
+    const d = _f.length();
+    if (d < 2.5) {
+      v.offroad = null;
+      this.move(v, o.pc);
+      v.s = o.s;
+      v.hist = [];
+      v.hintF = { i: 0, f: 0 }; v.hintR = { i: 0, f: 0 };
+      this.plan(v);
+      return;
+    }
+    _f.divideScalar(d);
+    v.cur = Math.min(v.vmax * 0.5, v.cur + v.acc * dt);
+    v.pos.addScaledVector(_f, Math.min(d, v.cur * dt));
+    P.ground(v.pos, v.pos, v.hoverH + 0.3 + Math.sin(this.t * 2) * 0.12);
+    if (dt > 0) v.vel.copy(v.pos).sub(v.prevPos).divideScalar(dt);
+    v.fwd.copy(_f);
+    v.root.visible = v.pos.distanceToSquared(camPos) < v.view * v.view;
+    v.root.position.copy(v.pos);
+    frameQuat(_u.copy(v.pos).normalize(), _f, v.root.quaternion);
+  }
+
   updateRoadVehicle(v, dt, camPos) {
+    if (v.offroad) { this.driveHome(v, dt, camPos); return; }
     if (v.state === 'dead') {
       v.respawnT -= dt;
       if (v.respawnT <= 0) this.respawn(v, camPos);
@@ -1796,7 +1788,7 @@ export class Traffic {
     const q = s.quat;
     const c = s.col || { type: 'box', platform: s, c: new THREE.Vector3(), ax: new THREE.Vector3(), ay: new THREE.Vector3(), az: new THREE.Vector3() };
     c.ax.set(1, 0, 0).applyQuaternion(q); c.ay.set(0, 1, 0).applyQuaternion(q); c.az.set(0, 0, 1).applyQuaternion(q);
-    c.c.copy(s.pos).addScaledVector(c.ay, s.deckY || 0);
+    c.c.copy(s.pos).addScaledVector(c.ay, s.deckY || 0).addScaledVector(c.az, s.deckZ || 0);
     c.hx = s.deck[0]; c.hy = s.deck[1]; c.hz = s.deck[2];
     s.col = this.C.add(c);
   }

@@ -121,7 +121,7 @@ export const LOCATIONS = [
   {
     id: 'bounce', name: 'Bounce Dome Funpark', short: 'BOUNCE', type: 'funpark', faction: 'none', poi: true,
     theta: 30, phi: 135, r: 180, safe: true, repair: 6,
-    blurb: 'Inflatable theme park, back in business: bounce domes, a ferris wheel, the Chimera Derby, and a skate park out past the track.',
+    blurb: 'Inflatable theme park, back in business: bounce domes, a ferris wheel, trampolines and a skate park. The chimera races moved to Chimera Downs, just down the road.',
   },
   { // casino
     id: 'casino', name: 'Lucky Crater Casino', short: 'CASINO', type: 'casino', faction: 'none', poi: true,
@@ -147,6 +147,13 @@ export const LOCATIONS = [
     id: 'rustmoon', name: 'Rustmoon Hold', short: 'RUSTMOON', type: 'pirate', faction: 'rustmoon', hq: true,
     theta: 122, phi: 168, r: 130, hostile: true, dark: true, jobs: ['rustmoon', 'rustmoon'],
     blurb: 'Seat of the Rustmoon clans. A ring of wrecked ships and bad intentions.',
+  },
+  // late: added after the Moon's craters and outposts were laid out, so it stays out of their
+  // generation (old saves keep the same terrain and outpost ids); its plateau flattens what's there
+  {
+    id: 'downs', name: 'Chimera Downs', short: 'DOWNS', type: 'derby', faction: 'none', poi: true, late: true,
+    theta: 22, phi: 160, r: 190, safe: true, repair: 6,
+    blurb: "A proper racecourse for the things that crawl out of Dr. Zbornak's reactor: a grandstand, a jumbotron and a race card that never sleeps.",
   },
 ];
 

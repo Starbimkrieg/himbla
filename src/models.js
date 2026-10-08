@@ -5,6 +5,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // inlined (a data URI) so the desktop build, which runs from file://, can load it without fetch
 import runnerGlb from './assets/runner.glb?inline';
+import shipsGlb from './assets/ships.glb?inline';
 import { Kit, T as KT, G as KG, D as KD, crate } from './outpostModels.js';
 
 function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
@@ -178,6 +179,12 @@ function shellAt(base, k) {
   g.setIndex(base.index);
   g.computeBoundingSphere();
   return g;
+}
+
+// An outline shell for any indexed geometry (pushed out along smoothed normals, so it hugs bent
+// tubes and squashed spheres that ink()'s bounding-box scaling can't). Used by the chimeras.
+export function inkShell(geo, t) {
+  return shellAt(inkShellGeo(geo, t), 1);
 }
 
 // Hang a baked pivot's parts (and its one outline shell) on a group.
@@ -987,27 +994,182 @@ export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, fl
   return { root, chassis, gun, wheels };
 }
 
-// Shuttle-bus: a capsule hull (radius 2.4, the landing gear in traffic.js fits it) with a glazed
-// cockpit, a row of lit cabin windows, stub wings with engine pods and a tail fin.
-export function makeShuttle({ color = 0xfff4e0, stripe = 0x2ec4ff } = {}) {
-  const root = new THREE.Group();
-  root.add(baked(`shuttle|${color}|${stripe}`, (k) => {
-    k.add(new THREE.CapsuleGeometry(2.4, 9, 6, 16).rotateX(Math.PI / 2), KT(color), 0, 0, 0, { outline: 0.12 });
-    for (const z of [-3.2, 1, 4.6]) k.add(new THREE.CylinderGeometry(2.46, 2.46, z === 1 ? 1.2 : 0.3, 16).rotateX(Math.PI / 2), KT(z === 1 ? stripe : 0xd8d4e8), 0, 0, z, { outline: 0 });
-    k.add(new THREE.SphereGeometry(2.42, 16, 8, -Math.PI / 2 + 0.2, Math.PI - 0.4, 0.25, 0.9), KG(0x9be7ff), 0, 0.2, 4.4, { rx: -0.25, outline: 0 });
-    for (const sx of [-1, 1]) for (let i = 0; i < 6; i++) k.add(new THREE.BoxGeometry(0.2, 0.7, 0.9), KG(0xfff6a8), sx * 2.36, 0.6, -3.6 + i * 1.3, { rz: sx * 0.3, outline: 0 });
-    for (const sx of [-1, 1]) {
-      k.add(new THREE.BoxGeometry(4.2, 0.35, 2.6), KT(stripe), sx * 3.6, -0.7, -2, { rz: sx * -0.08, outline: 0.06 });
-      k.add(new THREE.CylinderGeometry(0.8, 0.95, 3.4, 12).rotateX(Math.PI / 2), KT(0xd8d4e8), sx * 5.4, -0.9, -2.4, { outline: 0.05 });
-      k.add(new THREE.CylinderGeometry(0.75, 0.75, 0.1, 12).rotateX(Math.PI / 2), KG(0xff9f1c), sx * 5.4, -0.9, -4.15, { outline: 0 });
-      k.ball(0.2, KG(sx < 0 ? 0xff2a4a : 0x7dff6a), sx * 5.8, -0.6, -1, { outline: 0 });
-      k.cyl(0.6, 0.9, 1.6, 10, KG(0xff9f1c), sx * 5.2, -2.2, -2, { outline: 0 });
+// ---- transit ships: tools/blender/build_ships.py exports src/assets/ships.glb ----
+// Two flyers, "shuttle" (the 19 m shuttle-bus) and "freighter" (the ~70 m hauler). Each is a tree of
+// pivot empties with a role (hull, leg, foot, door, ramp, hatch, plume, lift); every mesh hangs off
+// one, has one slot material and an "ink" extra, exactly like the runner. At load the meshes are
+// baked into their pivot's frame and merged per pivot and slot, with one outline shell per pivot.
+// makeShuttle / makeFreighter rebuild the pivot tree and hand back a little rig: setGear(k)
+// folds the legs out of their bays (k = 1 down and locked), setRamp(k) lowers the ramp, and
+// setThrust(main, lift, t) drives the pulsing flames. The ship's numbers (gear height, walkable
+// deck box, ramp path for passengers...) come from the root's custom properties.
+let SHIP_PARTS = null;
+const SHIP_GLOW = { glass: 0x9be7ff, window: 0xfff6a8, cabin: 0xfff1b0, red: 0xff2a4a, green: 0x7dff6a, white: 0xffffff, sign: 0xffd23f, bay: 0x0c0915 };
+const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55607a, deck: 0x5b5870, hazard: 0xffd23f, cargo0: 0xffd23f, cargo1: 0x2ec4ff, cargo2: 0xff3b5c, cargo3: 0x7dff6a };
+const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core']); // per-ship materials (they pulse)
+const FLAMES = new Set(['plume', 'plumeCore', 'lift']);
+export async function loadShipParts() {
+  const gltf = await new GLTFLoader().loadAsync(shipsGlb);
+  SHIP_PARTS = {};
+  for (const name of ['shuttle', 'freighter']) {
+    const root = gltf.scene.getObjectByName(name);
+    if (!root) throw new Error('ships.glb has no ' + name);
+    SHIP_PARTS[name] = bakeShip(root);
+  }
+}
+
+function bakeShip(root) {
+  root.updateMatrixWorld(true);
+  const rel = new THREE.Matrix4();
+  // a pivot: the root itself or any empty with a role
+  const isPivot = (o) => o === root || (!o.isMesh && o.userData.role);
+  const bake = (pivot, parentWorldInv) => {
+    const inv = new THREE.Matrix4().copy(pivot.matrixWorld).invert();
+    const slots = new Map(), inks = [], kids = [];
+    const visit = (o) => {
+      for (const c of o.children) {
+        if (c.isMesh) {
+          const slot = c.material.name;
+          rel.multiplyMatrices(inv, c.matrixWorld);
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', c.geometry.attributes.position.clone());
+          geo.setAttribute('normal', c.geometry.attributes.normal.clone());
+          geo.setIndex(c.geometry.index.clone());
+          geo.applyMatrix4(rel);
+          if (!slots.has(slot)) slots.set(slot, []);
+          slots.get(slot).push(geo);
+          const t = c.userData.ink || 0;
+          if (t > 0) inks.push(inkShellGeo(geo, t));
+          visit(c);
+        } else if (isPivot(c)) kids.push(bake(c, inv));
+        else visit(c);
+      }
+    };
+    visit(pivot);
+    const pos = new THREE.Vector3(), quat = new THREE.Quaternion(), scl = new THREE.Vector3();
+    rel.multiplyMatrices(parentWorldInv, pivot.matrixWorld).decompose(pos, quat, scl);
+    return {
+      name: pivot.name, role: pivot === root ? 'root' : pivot.userData.role, data: pivot.userData, pos, quat,
+      parts: [...slots].map(([slot, geos]) => ({ slot, geo: mergeGeometries(geos) })),
+      ink: inks.length ? shellAt(mergeGeometries(inks), 1) : null, kids,
+    };
+  };
+  return bake(root, new THREE.Matrix4().copy(root.matrixWorld).invert());
+}
+
+const _shipHot = new THREE.Color();
+function makeShip(kind, { color, stripe }) {
+  const B = SHIP_PARTS[kind];
+  const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
+  const fx = {
+    plume: new THREE.MeshBasicMaterial({ color: 0xff8a2a, opacity: 0.7, ...add }),
+    plumeCore: new THREE.MeshBasicMaterial({ color: 0xfff1c0, opacity: 0.9, ...add }),
+    lift: new THREE.MeshBasicMaterial({ color: 0x8fd8ff, opacity: 0.6, ...add }),
+    engine: new THREE.MeshBasicMaterial({ color: 0xff9f1c }),
+    core: new THREE.MeshBasicMaterial({ color: 0xfff3c0 }),
+  };
+  const matFor = (slot) => {
+    if (SHIP_FX.has(slot)) return fx[slot];
+    if (slot === 'body') return toon(color);
+    if (slot === 'stripe') return toon(stripe);
+    if (SHIP_GLOW[slot] !== undefined) return glow(SHIP_GLOW[slot]);
+    return toon(SHIP_TOON[slot] ?? 0xff00ff);
+  };
+  const rig = { legs: [], doors: [], ramps: [], hatches: [], plumes: [], lifts: [] };
+  const build = (node) => {
+    const g = new THREE.Group();
+    g.name = node.name;
+    g.position.copy(node.pos);
+    g.quaternion.copy(node.quat);
+    for (const { slot, geo } of node.parts) {
+      const m = new THREE.Mesh(geo, matFor(slot));
+      m.castShadow = !SHIP_FX.has(slot) && SHIP_GLOW[slot] === undefined;
+      if (FLAMES.has(slot)) m.renderOrder = 2;
+      g.add(m);
     }
-    k.add(new THREE.BoxGeometry(0.3, 2.4, 2.6), KT(stripe), 0, 2.6, -4.6, { rx: -0.3, outline: 0.05 });
-    k.cyl(0.05, 0.05, 1.4, 4, KT(VDARK), 0.8, 2.3, 1.5, { outline: 0 });
-    k.box(1.6, 0.35, 3, KT(0xd8d4e8), 0, 2.35, -0.8, { outline: 0.03 });
-  }));
-  return { root };
+    if (node.ink) {
+      const h = new THREE.Mesh(node.ink, inkMat);
+      h.castShadow = false;
+      h.userData.isInk = true;
+      g.add(h);
+    }
+    const d = node.data;
+    let leg = null;
+    if (node.role === 'leg') rig.legs.push(leg = { g, fold: d.fold, foot: null });
+    else if (node.role === 'door') rig.doors.push({ g, open: d.open });
+    else if (node.role === 'ramp') rig.ramps.push({ g, closed: d.closed, opened: d.opened });
+    else if (node.role === 'hatch') rig.hatches.push(g);
+    else if (node.role === 'plume') rig.plumes.push({ g, phase: rig.plumes.length * 1.7 });
+    else if (node.role === 'lift') rig.lifts.push({ g, phase: rig.lifts.length * 2.3 });
+    for (const k of node.kids) {
+      const c = build(k);
+      g.add(c);
+      if (leg && k.role === 'foot') leg.foot = c;
+    }
+    return g;
+  };
+  const root = build(B);
+  root.position.set(0, 0, 0);
+  root.quaternion.identity();
+  const d = B.data;
+  const v3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+  const ship = {
+    root, kind, size: kind === 'freighter' ? 30 : 10,
+    gearH: d.gearH, deck: [...d.deck], deckY: d.deckY, deckZ: d.deckZ, radius: d.radius, padR: d.padR,
+    inside: v3(d.inside), rampTop: v3(d.rampTop), rampBottom: v3(d.rampBottom),
+    gearK: 1, rampK: 0,
+    // 0 = stowed in the bays, 1 = down and locked: the doors swing open first, then the legs
+    // swing down (and the reverse on the way up)
+    setGear(k) {
+      this.gearK = k;
+      const doors = Math.min(1, k * 4), legs = THREE.MathUtils.smoothstep(k, 0.2, 1);
+      for (const L of rig.legs) {
+        L.g.rotation.x = L.fold * (1 - legs);
+        if (L.foot) L.foot.rotation.x = -L.g.rotation.x;
+        L.g.visible = k > 0.02;
+      }
+      for (const D of rig.doors) D.g.rotation.z = D.open * doors;
+    },
+    setRamp(k) {
+      this.rampK = k;
+      for (const R of rig.ramps) R.g.rotation.x = R.closed + (R.opened - R.closed) * k;
+      for (const h of rig.hatches) h.visible = k > 0.02;
+    },
+    // main: 0..1 cruise thrust, lift: 0..1 belly jets, t: a clock for the pulse
+    setThrust(main, lift, t) {
+      const pulse = (ph, f) => 1 + 0.17 * Math.sin(t * f + ph) + 0.07 * Math.sin(t * f * 2.7 + ph * 1.3);
+      for (const P of rig.plumes) {
+        P.g.visible = main > 0.02;
+        if (!P.g.visible) continue;
+        const s = main * pulse(P.phase, 15), w = 0.8 + 0.2 * Math.min(1.2, s);
+        P.g.scale.set(w, w, Math.max(0.05, s));
+      }
+      for (const P of rig.lifts) {
+        P.g.visible = lift > 0.02;
+        if (!P.g.visible) continue;
+        const s = lift * pulse(P.phase, 19), w = 0.85 + 0.15 * s;
+        P.g.scale.set(w, Math.max(0.05, s), w);
+      }
+      const p = pulse(0, 15);
+      fx.plume.opacity = 0.42 + 0.22 * Math.min(1, main) * p;
+      fx.plumeCore.opacity = 0.6 + 0.3 * Math.min(1, main);
+      fx.lift.opacity = 0.35 + 0.25 * lift * pulse(1, 19);
+      const heat = Math.min(1, Math.max(main, lift) * p);
+      fx.engine.color.setHex(0x6a3a22).lerp(_shipHot.setHex(0xffb347), heat);
+      fx.core.color.setHex(0x8a6a4a).lerp(_shipHot.setHex(0xfffbe8), heat);
+    },
+  };
+  ship.setGear(1);
+  ship.setRamp(0);
+  ship.setThrust(0, 0, 0);
+  return ship;
+}
+
+// Shuttle-bus: a fat lifting-body hopper with a wraparound windscreen, porthole windows, two
+// ducted lift-fans on pylons, a V-tail, a lit route board on the roof, three folding legs and a
+// rear door that drops into a ramp.
+export function makeShuttle({ color = 0xfff4e0, stripe = 0x2ec4ff } = {}) {
+  return makeShip('shuttle', { color, stripe });
 }
 
 // Hover-car: a rounded body, a bubble canopy, side nacelles glowing underneath, tail fins and
@@ -1031,41 +1193,11 @@ export function makeHoverCar({ color = 0xff7ad9, trim = 0xfff4e0 } = {}) {
   return { root, size: 3 };
 }
 
-// Freighter: the 14 x 10 x 46 hull (traffic.js lands it on legs and rides its deck), ribbed and
-// panelled, with a nose cone and bridge, cargo pods down both flanks, radiator fins, big
-// engines with glowing nozzles and nav lights.
+// Freighter: a deep-haul hammerhead: a long flat deck you can ride, a raked bridge tower at the
+// bow, container racks down both flanks, swept radiator wings, a four-bell engine cluster, four
+// folding legs and a belly ramp.
 export function makeFreighter({ color = 0xb8b4c8, stripe = 0xff9f1c } = {}) {
-  const root = new THREE.Group();
-  root.add(baked(`freighter|${color}|${stripe}`, (k) => {
-    k.box(14, 10, 46, KT(color), 0, -5, 0, { outline: 0.3 });
-    for (let z = -20; z <= 20; z += 6) k.box(14.3, 10.3, 0.6, KT(0x8a87a0), 0, -5.15, z, { outline: 0 });
-    k.box(14.4, 2, 46.4, KT(stripe), 0, -2, 0, { outline: 0 });
-    k.add(new THREE.CylinderGeometry(6, 8, 12, 14).rotateX(Math.PI / 2), KT(color), 0, 1, 28, { outline: 0.3 });
-    k.add(new THREE.SphereGeometry(6, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2), KT(color), 0, 1, 34, { outline: 0.2 });
-    k.box(8, 4, 8, KT(0xd8d4e8), 0, 2, 26, { outline: 0.15 });
-    k.box(8.1, 1.4, 8.1, KG(0x9be7ff), 0, 3.6, 26, { outline: 0 });
-    k.cyl(0.15, 0.2, 4, 6, KT(VDARK), 2.5, 6, 25, { outline: 0.03 });
-    k.add(new THREE.SphereGeometry(1.4, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), KT(0xd8d4e8), -2.5, 6, 26, { outline: 0.05 });
-    // cargo pods
-    for (let i = 0; i < 4; i++) for (const sx of [-1, 1]) {
-      k.box(5, 5, 7, KT([0xffd23f, 0x2ec4ff, 0xff3b5c, 0x7dff6a][i]), sx * 10, -4.5, -14 + i * 9, { outline: 0.15 });
-      k.box(5.1, 0.3, 7.1, KT(0x3a3550), sx * 10, -2.2, -14 + i * 9, { outline: 0 });
-      k.box(0.6, 0.6, 7.2, KT(VSTEEL), sx * 7.3, -2.3, -14 + i * 9, { outline: 0 });
-    }
-    // radiator fins and engines
-    for (const sx of [-1, 1]) {
-      k.box(14, 1.2, 10, KT(0x2a2540), sx * 13, 2.4, -10, { outline: 0.15 });
-      for (let i = 0; i < 5; i++) k.box(12, 0.15, 0.25, KT(stripe), sx * 13, 3.05, -14 + i * 2, { outline: 0 });
-      k.add(new THREE.CylinderGeometry(3, 3.6, 7, 14).rotateX(Math.PI / 2), KT(0x2a2540), sx * 6, 0, -26, { outline: 0.2 });
-      k.add(new THREE.TorusGeometry(3.3, 0.3, 6, 16), KT(stripe), sx * 6, 0, -24, { outline: 0 });
-      k.add(new THREE.CylinderGeometry(2.4, 2.4, 1, 14).rotateX(Math.PI / 2), KG(0xff9f1c), sx * 6, 0, -30, { outline: 0 });
-      k.add(new THREE.CylinderGeometry(1.4, 1.4, 1.1, 14).rotateX(Math.PI / 2), KG(0xfff3c0), sx * 6, 0, -30.1, { outline: 0 });
-    }
-    k.ball(0.8, KG(0xff2a4a), -20, 3, -10, { outline: 0 });
-    k.ball(0.8, KG(0x7dff6a), 20, 3, -10, { outline: 0 });
-    k.ball(0.6, KG(0xffffff), 0, 5.3, -22, { outline: 0 });
-  }));
-  return { root, size: 30 };
+  return makeShip('freighter', { color, stripe });
 }
 
 // Defence turret: an armoured octagonal base with a glowing collar, and a head (yawed by

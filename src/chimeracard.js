@@ -62,7 +62,7 @@ export function portrait(renderer, genes) {
       scene.remove(m.root);
       m.root.traverse((o) => {
         if (!o.isMesh) return;
-        o.geometry.dispose();
+        if (!o.geometry.userData.shared) o.geometry.dispose(); // part geometry is cached and shared
         if (o.material !== inkMat && o.material.isMeshBasicMaterial) o.material.dispose();
       });
       const img = ctx.createImageData(PS, PS);

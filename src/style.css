@@ -1003,6 +1003,13 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 #racepanel .race-row { flex-wrap: wrap; }
 #racepanel .race-stam { flex: 0 0 100%; height: 3px; margin: 1px 0 1px 26px; background: #0b0814; }
 #racepanel .race-stam u { display: block; height: 100%; background: var(--green); }
+#racepanel .race-info { padding: 4px 10px 2px; font-size: 13px; color: var(--ui-muted); }
+#racepanel .race-keys { margin-top: 4px; padding: 4px 10px 0; border-top: 1px solid #2a2540; font-size: 12px; color: var(--ui-muted); }
+#racepanel .race-keys b { font-family: var(--comic); font-size: 9px; color: var(--yellow); }
+#dialog .race-card { margin: 8px 0; padding: 6px 8px; background: rgba(255, 46, 136, 0.1); border-left: 3px solid #ff2e88; }
+#dialog .race-result .race-row { display: flex; gap: 8px; padding: 2px 6px; }
+#dialog .race-result .race-row span { margin-left: auto; }
+#dialog .race-result .race-row.mine { background: rgba(125, 255, 58, 0.18); font-weight: bold; }
 @media (max-width: 640px) {
   .cc-list, .cc-list.derby { grid-template-columns: minmax(0, 1fr); margin-left: -6px; }
   #dialog .bubble > .cc, #dialog .bubble > b + br + .cc { margin-left: -6px; }

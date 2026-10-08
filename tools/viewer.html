@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Model Viewer</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #05030c; color: #fff4e0; font: 12px monospace; overflow: hidden; }
+    #ui { position: fixed; left: 8px; top: 8px; background: #120a1ecc; padding: 6px 8px; border: 2px solid #ff2e88; }
+    #ui label { display: block; margin: 2px 0; }
+  </style>
+</head>
+<body>
+  <!-- Dev-only model viewer (npm run dev, then /tools/viewer.html). Not part of the build.
+       Query: ?m=shuttle|freighter|chimera|mite|hovercar  &gear=0..1 &ramp=0..1 &thrust=0..1 &lift=0..1
+       &seed=N (chimera) &parts=body,legs,head[,extraHead] &mods=a,b &size=1.1 &yaw=deg &pitch=deg &dist=m &spin=0|1 -->
+  <div id="ui"></div>
+  <script type="module" src="./viewer.js"></script>
+</body>
+</html>

@@ -7,7 +7,20 @@ into craters, launch off the far rims and chain momentum Tribes-style, while pir
 try to steal your cargo and military bases defend their airspace.
 
 The Moon is a **real sphere** (about 22.6 km around), and you can ski all the way round it.
-The sunlit near side holds the settlements. Past the terminator lies the **dark side**: almost
+The sunlit near side holds the settlements.
+
+The terrain is mostly smooth, cratered plain, broken up by patches of other country: rounded ridged highlands,
+stepped scarps you can launch off, wide, smooth-floored rilles (channels you can race along) and long rolling hills. Craters come in several kinds:
+plain bowls, ramparts with tall, firm rims that stand up off the plain, crowns whose rims swell and dip in broad lobes,
+worn-down ghosts, and big terraced ones with a central peak. Besides the ordinary lumpy boulders (thicker in the
+highlands), shaped rocks dot the plains: rough ramp slabs that kick you into the air, natural arches to skate through,
+hoodoo spires with cap rocks, and **snake rocks**: 35–50 m ridges that wind gently over the ground with a thin crest
+whose ends slope down to the ground. Land on a crest (or just skate straight into one of the tips) and you **grind** it, standing sideways and
+carried along by your speed (downhill speeds you up); jump (`Shift`) to pop off, or you pop off by yourself near the
+end. Grinds pay style by the second.
+
+**Landings:** hard landings hurt half as much as they used to (the cargo still takes the full jolt), and a landing
+with plenty of speed along the ground is a glancing blow: at 30 m/s of glide it hurts half as much again. Past the terminator lies the **dark side**: almost
 pitch black, lit only by your helmet lamp, and full of pirate dens.
 
 ## Download (desktop, no browser)
@@ -122,6 +135,13 @@ you take a pirate-free TRAINING RUN contract and deliver it for a ₵200 bonus. 
   they get home. Roaming hunters are capped (at most 4 skaters and 2 rovers at once) and only chase within a
   **threat range** of about 700 m: outrun them and they give up and vanish ("LOST THEM!"), with a breather
   before the next squad. Thieves carrying your cargo and event raiders never give up.
+- **Meteor showers:** rarely (the first after about 7–12 minutes, then every 15–25), a shower hits a big patch of open
+  ground, never a settlement or outpost. The rocks are huge (6–13 m) and glide in slow and shallow, nearly sideways,
+from about 280 m up, so you can see one coming for half a minute and plan a jump onto it. Only one at a time; the patch shows as a pulsing red zone on the globe map and
+  the minimap while it lasts (about 2–3 minutes). Rocks only fall when you're near: each streaks in on the shower's slant
+  with a red warning ring where it will land. They're real colliders on the way down: land on one for a METEOR
+  BOUNCE (style), get hit from above and it hurts. On impact they explode into tumbling chunks and leave a smouldering
+  scorch mark; everything fades away afterwards.
 - **Military zones:** Fort Meridian (Atlantic Accord) and Bastion Vostok-9 (Pan-Pacific
   Directorate) sit inside red striped walls. If you enter without a contract that grants
   clearance, you get a 4-second warning. After that, turrets and patrol rovers open fire,
@@ -146,6 +166,9 @@ you take a pirate-free TRAINING RUN contract and deliver it for a ₵200 bonus. 
 | **Kepler Settlements** | Civilian governments | Kepler Civic Center |
 | **Daedalus** | Dark-side military. At war with Vostok | Daedalus Citadel (plus a Forward Post) |
 | **Rustmoon** | Pirate clans. Hidden in the Reputation Log until you meet them | Rustmoon Hold |
+
+Deliveries to (or pickups from) a restricted base come with temporary clearance. Finishing the contract there no longer
+starts the base's countdown: your clearance holds until you leave the zone, or until you shoot something inside it.
 
 Standing goes from HOSTILE through WARY, NEUTRAL, FRIENDLY and TRUSTED up to HONORED. You earn it
 with deliveries and events, and lose it by shooting a faction's people. Helping Vostok angers
@@ -298,8 +321,16 @@ Wreck a land-train (about 10 blasts) or a road buggy (about 3) and it drops a **
 chimeras come out Turbocharged, the reactor gives you low gravity) plus scrap credits; it costs 3 rep with the
 nearest town, and a replacement turns up a few minutes later.
 
-Freighters and shuttle-buses fly real routes: they lift off vertically, cruise over everything, slow down and
-land on a pad at the edge of each settlement (legs out, ramp down). Passengers walk off toward town, the queue
+Freighters and shuttle-buses fly real routes: they lift off vertically on their belly jets, cruise over everything
+with their main thrusters pulsing, slow down and land on a pad at the edge of each settlement. The landing legs fold
+out of their bays (doors first, then the legs) on the way down and tuck away again after take-off; the shuttle-bus's
+rear door drops into a ramp, the freighter lowers a belly ramp. The **shuttle-bus** is a 19 m lifting-body hopper
+with a wraparound windscreen, porthole windows, two ducted lift-fans and a lit route board on the roof; the
+**freighter** is a ~70 m hauler with a rideable flat deck (landing circle and all), a bridge tower at the bow,
+container racks down both flanks, swept radiator wings and a four-bell engine cluster.
+**Hitch a ride for free:** walk up to a landed shuttle-bus or freighter and press `F` to hop in (the prompt says where
+it's headed). You ride inside while the camera hangs back to watch the ship; press `F` again to hop out down the ramp,
+or bail out mid-flight through the side hatch (keeping the ship's speed, with a little style for the nerve). Passengers walk off toward town, the queue
 at the shelter walks up and boards, and the doors close before it leaves; arriving passengers walk to real
 building entrances. Safe settlements are joined by a network of 12 pre-driven **dirt roads** (worn ruts,
 marker posts) that merge into a big **ring road** around each town, with one stop shelter on the ring. Big six-wheeled **land-trains**,
@@ -342,6 +373,11 @@ shuttle), Daedalus Relay (big rotating dish and mast), the Power Block (cooling 
 Habitat ring.
 
 ## Main menu & saves
+
+**Music** is all synthesised live. Roaming has a speed-driven synthwave groove whose layers build as you go faster;
+the Lucky Crater Casino plays a swung, jazzy lounge track; Chimera Downs a space-western (galloping rhythm, twangy
+guitar, a lonesome whistle); Dr. Zbornak's lab something clinical and slightly wrong (whole-tone pings, bubbling
+glassware, a theremin); and the dark side an aggressive darksynth. Tracks crossfade as you move between them.
 
 The title screen slowly circles one sunlit place after another (the ILMB, Meridian, Kepler, the casino and
 more) to its own faster, brighter synthwave track (it starts with your first key or click).
@@ -389,7 +425,7 @@ over crests; only a rig at full ramming speed gets thrown into the air.
   with speed. SPACECOM's are at the ILMB, Rustmoon's at Rustmoon Hold (members only).
 - **Skate finishes** (Meridian Exchange): Chrome Comets, Solar Flares (flame trail), Void Gliders, Prism Drive
   (hue-cycling, HONORED), plus deed-locked ones: Seismic Striders (complete 3 Meridian events), Derby Hooves
-  (win the Chimera Derby, comes with horseshoes); the casino's Lucky Felt and Jackpot Rollers leave glittery
+  (win a race at Chimera Downs, comes with horseshoes); the casino's Lucky Felt and Jackpot Rollers leave glittery
   smoke with poker chips or gold coins popping out, and wear boot medallions and Dark-Side Survivors (5 dark-side deliveries). Most leave
   a coloured glide trail.
 - **Pulse-disc colours:** eight, free.
@@ -433,21 +469,30 @@ The wind rumble is a soft low-passed swell instead of high-frequency hiss. `N` t
   Void Skin (water/void-touched, see in the dark and harder to hit), Stone Hide (rock, +40 hull, more drag),
   Burrower Claws (dirt/mud, painless boot landings), Pirate Blood (pirate, hunting squads mostly ignore you).
   Each shows on your runner. Dr. Zbornak cures them for ₵200 each.
-- **Chimera Derby** at the Bounce Dome Funpark: walk up to the betting booth (`F`), pick one of your chimeras,
-  bet ₵50/200/500 (or just for glory) against three rival creatures ("Glue Factory Escapee", "Hoof
-  Hearted"…). Every chimera has four stats (1–100) and a C/B/A/S grade, set mostly by its parts plus some
-  randomness: **SPEED** (top speed: wheels, void, crystal), **POWER** (acceleration, and recovery after a
-  stumble: mite legs, turbo, spark), **STAMINA** (tires slower late in the race: roots, treads, armour, mud)
-  and **WIT** (fewer stumbles, wrong-way runs and trips: alien and person heads, lenses, radios). The bookie
-  simulates 400 races to set fair odds; stat cards for every runner show on the pen, detail and betting
-  screens. Two laps around the domes, with chaos: stumbles, zooms, running the wrong way, giant hops, and
-  occasionally exploding and reassembling.
-  Wins land on the Hall of Highlights.
+- **Chimera Downs** (the racecourse, a short hop from the Funpark): a four-lane dirt oval with a grandstand full of
+  cheering fans, a jumbotron with live standings, a finish gantry, distance poles, a winner's circle and a golden
+  chimera statue. The **race office** window (`F`) posts races over time, **up to three on the card**, each with
+  its own **distance** (450 m sprints, miles, 2–2.8 km stakes and 3–3.6 km marathons), **class** (C, B, A or S
+  and under, or open), **going** (FAST, DUSTY, HEAVY: tiring, LOW-G: bouncy and chaotic), purse (60/25/15 % to the
+  top three), entry fee and a pre-drawn field of three rivals ("Glue Factory Escapee", "Hoof Hearted"…). Races close
+  after a few minutes and new ones post every minute or so. Pick a race, pick a chimera (grade must fit the class),
+  then enter alone or with a ₵50/200/500 bet.
+  Every chimera has four stats (1–100) and a C/B/A/S grade, set mostly by its parts plus some randomness:
+  **SPEED** (top speed: wheels, void, crystal), **POWER** (acceleration, and recovery after a stumble: mite legs,
+  turbo, spark), **STAMINA** (how long before it tires: roots, treads, armour, mud; it decides the long races) and
+  **WIT** (fewer stumbles, wrong-way runs and trips: alien and person heads, lenses, radios). The bookie simulates
+  the exact race (distance and going included) a few hundred times to set the odds.
+  **While your chimera races, the camera locks onto it:** `1`–`5` (or `C`) switch between chase, infield rail,
+  leader, grandstand and blimp cameras, the mouse orbits the chase cam, and `SPACE` spends one of three **crowd
+  cheers** for a short surge that burns stamina (a dim creature may get spooked instead). Chaos as ever: stumbles,
+  zooms, wrong-way runs, giant hops, and the occasional explosion and reassembly. Wins land on the Hall of Highlights.
 - **The Monolith:** touch it for 30 s of low gravity (90 s cooldown).
 - **Bounce Dome Funpark:** inflatable domes, a turreted bouncy castle and a row of trampolines that throw you back
   up harder than you landed, plus a **skate park**: a volcano bowl (ride up the outside and drop in, or hit it fast and
   fly clean over), a kicker line with a big launch off the plateau edge, a quarter-pipe wall and a pyramid funbox, out
-  past the Derby track on the east side. A ferris wheel and a carousel turn, and a banner arch spans the track.
+  on the east side. The big ferris wheel (twelve open gondolas, ~50 m tall) and the carousel are **rideable**: `F`
+  beside one pops you into the nearest gondola or onto the nearest horse, `F` hops you off (from the top of the
+  wheel, too, if you're brave). (The chimera races moved to Chimera Downs.)
 
 ## Locations
 
@@ -460,6 +505,7 @@ The wind rumble is a soft low-passed swell instead of high-frequency hiss. `N` t
 | Bastion Vostok-9 · Vostok-4 Outpost | Vostok | Restricted zones: turrets, patrols, artillery |
 | Daedalus Citadel · Daedalus Forward Post | Daedalus (dark side) | Restricted zones: turrets, patrols, artillery |
 | Rustmoon Hold · Scrapjaw Gulch · Blackrock Den · Gloom Harbor + scattered camps | Rustmoon (dark side) | Stolen cargo is fenced at the nearest working den |
+| Chimera Downs | Racecourse | Grandstand, jumbotron, race office with a rotating race card; chimera racing and betting |
 
 ## Keeping it light on the GPU
 
@@ -507,7 +553,12 @@ src/
   settings.js    settings menu + key remapping
   casino.js      Lucky Crater Casino games, VIP, prizes, loan shark (casinoWorld.js: the building)
   cosmetics.js   outfits, skate finishes, laser colours, wardrobe
-  race.js        Chimera Derby: track, betting, chaos racing
+  race.js        Chimera Downs: racecourse, race card, betting, locked race camera, chaos racing
+  rides.js       hop-in rides: free transit-ship rides and the Funpark's ferris wheel and carousel
+  rocks.js       shaped rocks (ramps, arches, hoodoos, snake rails) and their colliders
+  rails.js       grinding the snake rocks' crests
+  meteors.js     meteor showers: the warning zone, falling rocks (colliders), chunks and scorch marks
+  chimerastats.js chimera racing stats and the race model (distance, going, cheers) the bookie simulates
   highlights.js  action-shot capture (shown on the ILMB job terminal)
   physics.js     collider hash + shared skater movement model (player and pirate skaters)
   player.js      input → movement, weapon, animation, style events
@@ -517,12 +568,15 @@ src/
   settlements.js detailed settlements, HQs and landmarks built with the outpost kit (moving parts, skate park)
   traffic.js     landing pads, ship/bus flights and passengers, dirt roads, land-trains, cars, buggies
   wardrobe.js    wardrobe screen with live 3D preview
-  models.js      stylised characters and vehicles from primitives; loads the Blender runner
+  models.js      stylised characters and vehicles from primitives; loads the Blender runner and ships
   post.js        comic post-processing shader
   fx.js, hud.js, audio.js, input.js, toon.js, locations.js, rng.js
   assets/runner.glb  the Moon-runner model (player, pirate skaters, story leaders)
+  assets/ships.glb   the shuttle-bus and freighter, with folding gear, ramps and thruster flames
 tools/
   blender/build_runner.py  builds the runner in Blender and exports src/assets/runner.glb
+  blender/build_ships.py   builds both transit ships in Blender and exports src/assets/ships.glb
+  viewer.html              dev-only model viewer (npm run dev, then /tools/viewer.html?m=shuttle|freighter|mite|lineup…)
 ```
 
 **Editing the runner:** run `tools/blender/build_runner.py` in Blender (Scripting tab, or

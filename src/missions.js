@@ -235,6 +235,8 @@ export class Missions {
     g.audio.cash();
     g.hud.delivered({ a, integ, timeBonus, style, styleCapped: styleRaw > base, condition, late: this.late, total, integrity: this.integrity, faction: FACTIONS[a.faction].name, repGain });
     g.actionPanel('delivered');
+    // the contract's clearance ends with it: don't let the base you're standing in open up on you
+    if (a.clearance) { const L = this.game.locations.find((l) => l.id === a.clearance); if (L) g.enemies.grantGrace(L); }
     this.clear();
     g.save();
   }

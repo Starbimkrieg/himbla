@@ -205,7 +205,9 @@ class Kit {
   // colliders / blast boxes, given in the current frame
   solid(hx, hy, hz, x, z, ry = 0, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'box', hx, hy, hz, x: p.x, y: y0 + hy, z: p.z, yaw: this.yaw + ry }); }
   sphere(r, x, y, z) { const p = this.P(x, y, z); this.cols.push({ type: 'sphere', r, x: p.x, y: p.y, z: p.z }); }
-  column(r, h, x, z) { const p = this.P(x, 0, z); this.cols.push({ type: 'cyl', r, y0: 0, y1: h, x: p.x, z: p.z }); }
+  column(r, h, x, z, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'cyl', r, y0, y1: h, x: p.x, z: p.z }); }
+  // a lying-down cylinder (quonset huts, hangars, pipes): axis along local z (turned by ry), centre at height y
+  hcyl(r, len, x, z, ry = 0, y = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'hcyl', r, len, x: p.x, y, z: p.z, yaw: this.yaw + ry }); }
   hit(hx, hy, hz, x, z, ry = 0) { const p = this.P(x, 0, z); this.hits.push({ hx, hy, hz, x: p.x, y: hy, z: p.z, yaw: this.yaw + ry }); }
 
   finish() {
@@ -476,8 +478,9 @@ function depot(k, wreck) {
     const n = 1 + Math.floor(rr() * 3);
     top = Math.max(top, n);
     for (let s = 0; s < n; s++) container(k, -21 + col * 2.8, s * 2.62, z, colors[Math.floor(rr() * colors.length)]);
+    // each stack its own height (one box at the tallest made invisible walls over the short ones)
+    k.solid(1.3, n * 1.31, 3.1, -21 + col * 2.8, z);
   }
-  k.solid(4.2, top * 1.31, 6.6, -18.2, 1.5);
   // gantry crane over it
   for (const xe of [-24, -12.4]) {
     k.beam([xe, 0.3, -4], [xe, 11, 1.5], 0.3, T(YEL), { outline: 0.05, seg: 6 });

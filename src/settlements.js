@@ -108,7 +108,17 @@ export function cabin(k, x, z, w, d, h, color, yaw = 0, { roof = ROOF, trim = YE
   k.box(0.5, 0.18, 0.18, G(WARM), 0, 2.7, d / 2 + 0.5, { outline: 0 });
   // roof kit
   if (solar) {
-    for (let i = 0; i < Math.max(1, Math.floor(w / 4)); i++) k.box(3.2, 0.12, Math.min(d - 1.5, 3), T(0x2b3a8f), -w / 2 + 2.4 + i * 3.8, h + 1.2, 0, { rx: -0.35, outline: 0.03 });
+    // tilted panels on little rack legs standing on the roof (top of the trim: h + 1.03)
+    const pd = Math.min(d - 1.5, 3), pc = h + 1.03 + (pd / 2) * Math.sin(0.35) + 0.12, rz = (pd / 2) * 0.75;
+    for (let i = 0; i < Math.max(1, Math.floor(w / 4)); i++) {
+      const px = -w / 2 + 2.4 + i * 3.8;
+      k.add(new THREE.BoxGeometry(3.2, 0.12, pd), T(0x2b3a8f), px, pc, 0, { rx: -0.35, outline: 0.03 });
+      k.add(new THREE.BoxGeometry(3.24, 0.05, 0.06), T(LIGHT), px, pc + 0.07, 0, { rx: -0.35, outline: 0 });
+      for (const sz of [-1, 1]) {
+        const top = pc + sz * rz * Math.tan(0.35) - 0.08;
+        for (const sx of [-1.3, 1.3]) k.box(0.12, top - (h + 1.03), 0.12, T(STEEL), px + sx, h + 1.03, sz * rz, { outline: 0 });
+      }
+    }
   } else {
     k.box(1.8, 1.0, 1.4, T(LIGHT), -w / 4, h + 0.9, -d / 6, { outline: 0.04 });
     k.add(new THREE.CylinderGeometry(0.5, 0.5, 0.1, 12), T(DARK), -w / 4, h + 1.95, -d / 6, { outline: 0 });
@@ -761,36 +771,41 @@ export function buildFunpark(world, loc) {
     k.at();
 
     // ---- rides ----
-    // ferris wheel: an A-frame, a turning wheel with lit rims, gondolas that hang level
-    const wx = -40, wz = 62, hub = 18, R = 14;
+    // ferris wheel: an A-frame, a big turning wheel with lit rims, open gondolas that hang level
+    // (rideable: rides.js seats you in the nearest gondola)
+    const wx = -40, wz = 62, hub = 27, R = 22; // (bottom gondola just clears the platform)
     k.at(wx, wz);
-    k.box(12, 0.8, 8, T(CONC), 0, 0, 0, { outline: 0.06 });
-    for (const s of [-1, 1]) for (const t of [-1, 1]) k.beam([t * 5, 0.8, s * 2.6], [0, hub, s * 1.2], 0.45, T(WHITE), { outline: 0.06 });
-    k.beam([0, hub, -1.6], [0, hub, 1.6], 0.5, T(DARK), { outline: 0.04 });
-    k.box(3, 2.6, 2.4, T(0xff2e88), 4.5, 0.8, 3.5, { outline: 0.05 });
+    k.box(16, 0.8, 10, T(CONC), 0, 0, 0, { outline: 0.06 });
+    for (const s of [-1, 1]) for (const t of [-1, 1]) k.beam([t * 7, 0.8, s * 3.4], [0, hub, s * 1.4], 0.6, T(WHITE), { outline: 0.06 });
+    for (const s of [-1, 1]) k.beam([-3.5, hub * 0.5, s * 2.4], [3.5, hub * 0.5, s * 2.4], 0.3, T(WHITE), { outline: 0.04 });
+    k.beam([0, hub, -1.9], [0, hub, 1.9], 0.6, T(DARK), { outline: 0.04 });
+    k.box(3, 2.6, 2.4, T(0xff2e88), 6, 0.8, 4.2, { outline: 0.05 });
     k.at();
-    world.col(loc, { type: 'box', x: wx, y: 0.6, z: wz, hx: 6, hy: 0.6, hz: 4 });
-    for (const t of [-1, 1]) world.col(loc, { type: 'cyl', x: wx + t * 4, z: wz, y0: -2, y1: 6, r: 1 });
+    world.col(loc, { type: 'box', x: wx, y: 0.6, z: wz, hx: 8, hy: 0.6, hz: 5 });
+    for (const t of [-1, 1]) world.col(loc, { type: 'cyl', x: wx + t * 5.5, z: wz, y0: -2, y1: 8, r: 1.1 });
     const wheel = part(0xff2e88, (q) => {
       for (const s of [-1, 1]) {
         q.add(new THREE.TorusGeometry(R, 0.3, 6, 40), T(0xff2e88), 0, 0, s * 1.0, { outline: 0.04 });
         q.add(new THREE.TorusGeometry(R * 0.55, 0.18, 4, 28), T(YEL), 0, 0, s * 1.0, { outline: 0 });
-        for (let i = 0; i < 16; i++) {
-          const a = (i / 16) * TAU;
-          q.beam([0, 0, s * 1.0], [Math.cos(a) * R, Math.sin(a) * R, s * 1.0], 0.08, T(WHITE), { outline: 0 });
-          q.ball(0.25, G(cols[i % 6]), Math.cos(a) * R, Math.sin(a) * R, s * 1.35, { outline: 0 });
+        for (let i = 0; i < 24; i++) {
+          const a = (i / 24) * TAU;
+          q.beam([0, 0, s * 1.0], [Math.cos(a) * R, Math.sin(a) * R, s * 1.0], 0.1, T(WHITE), { outline: 0 });
+          q.ball(0.32, G(cols[i % 6]), Math.cos(a) * R, Math.sin(a) * R, s * 1.4, { outline: 0 });
         }
       }
-      q.add(new THREE.CylinderGeometry(1.2, 1.2, 2.6, 12).rotateX(Math.PI / 2), T(YEL), 0, 0, 0, { outline: 0.04 });
+      q.add(new THREE.CylinderGeometry(1.6, 1.6, 3.2, 14).rotateX(Math.PI / 2), T(YEL), 0, 0, 0, { outline: 0.05 });
     });
     const gondolas = [];
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * TAU;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * TAU;
       const g = part(cols[i % 6], (q) => {
-        q.beam([0, 0, 0], [0, -1.6, 0], 0.05, T(DARK), { outline: 0 });
-        q.add(new THREE.CylinderGeometry(1.1, 0.9, 1.4, 10, 1, true), D(cols[i % 6]), 0, -2.4, 0, { outline: 0.04 });
-        q.add(new THREE.SphereGeometry(1.2, 10, 5, 0, TAU, 0, Math.PI / 2), T(WHITE), 0, -1.65, 0, { outline: 0.03 });
-        q.cyl(0.95, 0.9, 0.2, 10, T(DARK), 0, -3.1, 0, { outline: 0 });
+        // an open basket under a little canopy on posts, so you can see who's riding
+        q.beam([0, 0, 0], [0, -1.4, 0], 0.06, T(DARK), { outline: 0 });
+        q.add(new THREE.CylinderGeometry(1.15, 0.95, 0.9, 12, 1, true), D(cols[i % 6]), 0, -3.0, 0, { outline: 0.04 });
+        q.cyl(1.0, 0.95, 0.2, 12, T(DARK), 0, -3.55, 0, { outline: 0 });
+        q.add(new THREE.TorusGeometry(1.15, 0.08, 4, 16).rotateX(Math.PI / 2), T(YEL), 0, -2.55, 0, { outline: 0 });
+        for (let p = 0; p < 3; p++) { const b = (p / 3) * TAU; q.beam([Math.cos(b) * 1.05, -2.55, Math.sin(b) * 1.05], [Math.cos(b) * 1.05, -1.5, Math.sin(b) * 1.05], 0.05, T(WHITE), { outline: 0 }); }
+        q.add(new THREE.ConeGeometry(1.35, 0.8, 12), T(WHITE), 0, -1.1, 0, { outline: 0.03 });
       });
       g.position.set(Math.cos(a) * R, Math.sin(a) * R, 0);
       wheel.add(g);
@@ -801,6 +816,13 @@ export function buildFunpark(world, loc) {
       for (const g of gondolas) g.rotation.z = -o.rotation.z;
     };
     k.dyn(wheel, wx, hub, wz);
+    const P0 = new THREE.Vector3(), P1 = new THREE.Vector3();
+    world.rides.push({
+      loc, name: 'FERRIS WHEEL', camDist: 16,
+      seats: gondolas.map((g) => ({ obj: g, local: new THREE.Vector3(0, -3.35, 0), face: new THREE.Vector3(0, 0, 1) })),
+      // step off sideways, out of the wheel's plane
+      exitDir: (p, out) => { wheel.updateMatrixWorld(true); wheel.localToWorld(P0.set(0, 0, 0)); wheel.localToWorld(P1.set(0, 0, 1)); return out.subVectors(P1, P0).normalize(); },
+    });
     // carousel: striped canopy, rotating deck, horses bobbing on poles
     const cx = -58, cz = -22;
     k.at(cx, cz);
@@ -838,6 +860,19 @@ export function buildFunpark(world, loc) {
       horses.forEach((h, i) => { h.position.y = 1.6 + Math.sin(t * 2 + i * 1.3) * 0.5; });
     };
     k.dyn(carousel, cx, 0.7, cz);
+    const C0 = new THREE.Vector3();
+    world.rides.push({
+      loc, name: 'CAROUSEL', camDist: 9,
+      seats: horses.map((h) => ({ obj: h, local: new THREE.Vector3(-0.1, -0.05, 0), face: new THREE.Vector3(1, 0, 0) })),
+      // hop off outward, away from the centre pole
+      exitDir: (p, out) => {
+        carousel.updateMatrixWorld(true);
+        carousel.localToWorld(C0.set(0, 0, 0));
+        const up = p.clone().normalize();
+        out.subVectors(p, C0);
+        return out.addScaledVector(up, -out.dot(up)).normalize();
+      },
+    });
 
     // ---- entrance: a banner arch spanning the Derby track, ticket booth, strings of lights ----
     k.at(Math.cos(Math.PI / 4) * 99, Math.sin(Math.PI / 4) * 99, Math.PI / 4);
@@ -991,7 +1026,12 @@ export function dressLab(world, loc, { W, D, H }) {
     });
     blob.userData.tick = (o, dt, t) => { o.position.y = 4.1 + Math.sin(t * 1.3) * 0.6; o.rotation.y += dt * 0.4; };
     k.dyn(blob, jx, 4.1, jz);
-    k.text('SPECIMEN #1: DO NOT TAP GLASS', jx, 0.8, jz + 2.5, 0, 4.4, { fg: '#7dff3a', back: false, off: 0.05 });
+    // the label: a flat brass-rimmed plaque standing proud of the round plinth, so the text can't
+    // sink into the curve
+    k.box(4.6, 1.3, 0.3, T(DARK), jx, 0.2, jz + 2.95, { outline: 0.05 });
+    k.box(4.8, 0.14, 0.36, T(0xd8a060), jx, 1.5, jz + 2.95, { outline: 0 });
+    k.text('SPECIMEN #1', jx, 1.12, jz + 3.1, 0, 2.6, { fg: '#7dff3a', bg: '#10241a', back: false, off: 0.02 });
+    k.text('DO NOT TAP GLASS', jx, 0.62, jz + 3.1, 0, 3.6, { fg: '#ffd23f', bg: '#10241a', back: false, off: 0.02 });
     // holding-pen yard: a gravel pad, a feeding trough, a floodlight on each corner
     k.box(36, 0.12, 44, T(0x8a7a6a), 45, 0, 43, { outline: 0 });
     k.box(8, 1, 1.6, T(0x8a5a3a), 54, 0, 60, { outline: 0.04 });
@@ -1322,7 +1362,8 @@ export function quonset(k, x, z, r, len, color, yaw, trim) {
   k.box(r * 0.8, r * 0.75, 0.2, T(0x2a2540), 0, 0.4, len / 2 + 0.05, { outline: 0.02 });
   for (const s of [-1, 1]) k.add(new THREE.CylinderGeometry(0.35, 0.35, 0.1, 10).rotateX(Math.PI / 2), G(WARM), s * r * 0.6, r * 0.6, len / 2 + 0.06, { outline: 0 });
   k.box(0.6, 0.25, 0.3, G(WARM), 0, r * 0.75 + 0.6, len / 2 + 0.2, { outline: 0 });
-  k.solid(r, r / 2 + 0.2, len / 2, 0, 0);
+  k.solid(r + 0.5, 0.2, len / 2 + 0.5, 0, 0); // the concrete pad
+  k.hcyl(r + 0.1, len, 0, 0, 0, 0.4); // a round roof you can roll over, not a box
   k.at();
 }
 
@@ -1376,7 +1417,7 @@ export function dressIlmb(world, loc) {
     k.at(-168, -98, 1.05);
     k.box(36, 0.5, 36, T(CONC), 0, 0, 0, { outline: 0.05 });
     k.add(new THREE.CylinderGeometry(16, 16, 34, 24, 1, true, Math.PI / 2, Math.PI).rotateX(Math.PI / 2), D(0xff9f1c), 0, 0.5, 0, { outline: 0.25 });
-    k.solid(16, 8, 17, 0, 0);
+    k.hcyl(16.2, 34, 0, 0, 0, 0.5);
     for (let t = -15; t <= 15; t += 5) k.add(new THREE.TorusGeometry(16.1, 0.4, 4, 24, Math.PI), T(0xd8d4e8), 0, 0.5, t, { outline: 0 });
     k.add(new THREE.CircleGeometry(16, 24, 0, Math.PI), T(0xd8d4e8), 0, 0.5, -17, { ry: Math.PI, outline: 0 });
     k.add(new THREE.CircleGeometry(16, 24, 0, Math.PI), T(0x1d1a29), 0, 0.5, 16.95, { outline: 0 });
@@ -1441,7 +1482,10 @@ export function dressBase(world, loc) {
     k.box(4, 3, 0.2, T(0x1d1a29), 0, 0, R * 0.95 + 1.55, { outline: 0 });
     k.box(4.4, 0.3, 0.3, G(fc), 0, 3.2, R * 0.95 + 1.6, { outline: 0 });
     k.at();
-    k.column(R, H + 3, 0, 0);
+    // the bunker's walls slope in (R at the foot, 0.82R at the eaves), then a stepped roof:
+    // stacked columns follow the slope instead of one full-width cylinder
+    for (let i = 0; i < 4; i++) k.column(R * (1 - 0.18 * (i + 0.5) / 4) + 0.2, (H * (i + 1)) / 4, 0, 0, (H * i) / 4);
+    k.column(R * 0.72, H + 3, 0, 0, H);
     if (!small) {
       quonset(k, 40, -30, 6, 26, 0x5b5870, 0.2 + Math.PI / 2, fc);
       quonset(k, -35, 35, 7, 22, 0x5b5870, -0.4, fc);

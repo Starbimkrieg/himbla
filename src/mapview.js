@@ -280,6 +280,32 @@ export class GlobeMap {
       const feats = services(l);
       this.pins.push({ x: p.x, y: p.y, html: `<b>${l.name}</b><br><span style="color:${f.color}">${f.name}</span>${l.hq ? ' · HQ' : ''}${ruined ? ' · RUINED' : ''}<br>${l.blurb}${feats ? `<br><small style="color:#9be7ff">${feats}</small>` : ''}` });
     }
+    // an active meteor shower: a pulsing red zone (shown through the fog: it's a public warning)
+    const mw = g.meteors && g.meteors.warning;
+    if (mw) {
+      const e1 = new THREE.Vector3().crossVectors(mw.dir, Math.abs(mw.dir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)).normalize();
+      const e2 = new THREE.Vector3().crossVectors(mw.dir, e1);
+      const a = Math.max(mw.r, 120) / PLANET.radius, q = new THREE.Vector3();
+      c.beginPath();
+      let pen = false, vis = false;
+      for (let i = 0; i <= 48; i++) {
+        const t = (i / 48) * Math.PI * 2;
+        q.copy(mw.dir).multiplyScalar(Math.cos(a)).addScaledVector(e1, Math.sin(a) * Math.cos(t)).addScaledVector(e2, Math.sin(a) * Math.sin(t));
+        const pp = this.project(q, v);
+        if (pp.z > 0) { if (pen) c.lineTo(pp.x, pp.y); else c.moveTo(pp.x, pp.y); pen = true; vis = true; } else pen = false;
+      }
+      c.closePath();
+      if (vis) {
+        c.fillStyle = `rgba(255,79,46,${0.28 + 0.12 * Math.sin(performance.now() / 220)})`; c.fill();
+        c.strokeStyle = '#ff4f2e'; c.lineWidth = 2; c.stroke();
+        const p = this.project(mw.dir, v);
+        if (p.z > 0) {
+          c.font = pixelFont(8 + this.zoom * 0.5); c.lineWidth = 3; c.strokeStyle = '#120a1e'; c.fillStyle = '#ff9f1c';
+          c.strokeText('☄ METEORS', p.x, p.y - 10); c.fillText('☄ METEORS', p.x, p.y - 10);
+          this.pins.push({ x: p.x, y: p.y, html: `<b style="color:#ff4f2e">☄ METEOR SHOWER</b><br>Rocks are falling over a ${(mw.r * 2 / 1000).toFixed(1)} km patch for about ${Math.max(1, Math.round(mw.left / 60))} more min. Stay clear, or go bounce off them for style.` });
+        }
+      }
+    }
     // SAT-7's orbit (dashed) and where it is right now
     if (g.secrets && g.secrets.sat) {
       const S = g.secrets;
@@ -395,7 +421,8 @@ const SPECIAL = {
   ilmb: 'Repair-bay upgrades · Hall of Highlights',
   meridian: 'Skate finishes',
   antimatter: 'Containment jars · reactor · splice pod · holding pen',
-  bounce: 'Chimera Derby · skate park · trampolines',
+  bounce: 'Skate park · trampolines · bounce domes',
+  downs: 'Chimera races · betting · race card',
   casino: 'Blackjack · Duck Derby · Plinko · prize counter',
   monolith: 'Touch it',
 };

@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { makeShuttle } from './models.js';
-import { toon, ink } from './toon.js';
 import { frameQuat, tangent } from './geo.js';
 
 // Emergency recall: ₵100, and a little cutscene. A transport shuttle drops out of the sky at your
 // home base, lands, drops its ramp, and you stroll out.
 export const RECALL_COST = 100;
 
+const SCALE = 0.85;
+const SET_BACK = 15; // shuttle centre this far behind your stand point
 const ease = (k) => 1 - Math.pow(1 - Math.min(1, Math.max(0, k)), 3);
 const _v = new THREE.Vector3();
 
@@ -26,6 +27,7 @@ export class Recall {
     const g = this.game;
     if (this.active) return;
     if (g.player.vehicle) g.garage.exit();
+    if (g.rides.ride) g.rides.exit();
     if (g.credits < RECALL_COST) { g.hud.toast(`Emergency recall costs ₵${RECALL_COST}. You can't afford the shuttle.`, 2.5); return; }
     g.credits -= RECALL_COST;
     g.audio.cash();
@@ -50,28 +52,17 @@ export class Recall {
     const fwd = home.facing.clone();
     const right = new THREE.Vector3().crossVectors(fwd, up).normalize();
     g.planet.update(home.point, { budgetMs: 1e9 });
-    this.land = g.planet.ground(home.point.clone().addScaledVector(fwd, -10), new THREE.Vector3());
+    this.land = g.planet.ground(home.point.clone().addScaledVector(fwd, -SET_BACK), new THREE.Vector3());
     this.up = this.land.clone().normalize();
     this.fwd = tangent(fwd.clone(), this.up).normalize();
     this.right = right;
-    // the shuttle (nose pointing the way you'll walk out, ramp at the back)
+    // the shuttle sits behind where you'll stand, nose away, so its rear door drops toward you
     const s = makeShuttle({ color: 0xfff4e0, stripe: g.rep.aligned() ? 0x7dff3a : 0x2ec4ff });
-    const ramp = new THREE.Group();
-    ramp.position.set(0, -2.2, -6.6);
-    const plank = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.25, 4), toon(0x3a3550));
-    ink(plank, 0.04);
-    plank.position.set(0, 0, -2);
-    ramp.add(plank);
-    ramp.rotation.x = -1.4; // closed
-    s.root.add(ramp);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.25, 2.2, 6), toon(0x3a3550));
-      leg.position.set(sx * 1.8, -2.6, sz * 3.5);
-      s.root.add(leg);
-    }
-    s.root.scale.setScalar(0.85);
+    s.root.scale.setScalar(SCALE);
+    s.setGear(0);
+    s.setRamp(0);
     g.scene.add(s.root);
-    this.shuttle = { ...s, ramp };
+    this.shuttle = s;
     this.pose(140);
     // you're aboard, out of sight
     P.respawn(home.point, home.facing);
@@ -86,8 +77,8 @@ export class Recall {
 
   pose(alt, tilt = 0) {
     const s = this.shuttle;
-    s.root.position.copy(this.land).addScaledVector(this.up, 2.4 + alt);
-    frameQuat(this.up, this.fwd, s.root.quaternion);
+    s.root.position.copy(this.land).addScaledVector(this.up, s.gearH * SCALE + alt);
+    frameQuat(this.up, _v.copy(this.fwd).negate(), s.root.quaternion);
     if (tilt) s.root.rotateX(tilt);
   }
 
@@ -96,7 +87,7 @@ export class Recall {
     const g = this.game;
     const cam = g.camera;
     const focus = this.land.clone().addScaledVector(this.up, 2.5 + Math.max(0, this.shuttleAlt || 0) * 0.6);
-    cam.position.copy(this.land).addScaledVector(this.right, 17).addScaledVector(this.fwd, 9).addScaledVector(this.up, 5);
+    cam.position.copy(this.land).addScaledVector(this.right, 22).addScaledVector(this.fwd, 13).addScaledVector(this.up, 6);
     cam.up.copy(this.up);
     cam.lookAt(focus);
     g.cam.position.copy(cam.position);
@@ -115,10 +106,14 @@ export class Recall {
     if (t < 2.4) {
       this.shuttleAlt = 140 * (1 - ease(t / 2.4));
       this.pose(this.shuttleAlt, Math.sin(t * 3) * 0.04);
-      if (Math.random() < dt * 40) g.fx.spawn(s.root.position.clone().addScaledVector(this.up, -2.5), this.up.clone().multiplyScalar(-18), { color: Math.random() < 0.5 ? 0xff9f1c : 0xffd23f, size: 0.6, life: 0.4, count: 2, spread: 2 });
+      s.setGear(Math.min(1, Math.max(0, 1 - (this.shuttleAlt - 4) / 30)));
+      s.setThrust(0.3, 1, t);
+      if (Math.random() < dt * 40) g.fx.spawn(s.root.position.clone().addScaledVector(this.up, -3), this.up.clone().multiplyScalar(-18), { color: Math.random() < 0.5 ? 0xff9f1c : 0xffd23f, size: 0.6, life: 0.4, count: 2, spread: 2 });
     } else {
       this.shuttleAlt = 0;
       this.pose(0);
+      s.setGear(1);
+      s.setThrust(0, Math.max(0, 1 - (t - 2.4) * 2), t);
       if (!this.landed) {
         this.landed = true;
         g.fx.dust(this.land, new THREE.Vector3(), 30, this.up);
@@ -127,14 +122,16 @@ export class Recall {
         g.fx.pop('TOUCHDOWN!', this.land.clone().addScaledVector(this.up, 7), { color: '#2ee6ff', size: 52 });
       }
     }
-    // 2.8–3.4 s: ramp drops
-    if (t > 2.8) s.ramp.rotation.x = -1.4 + 1.15 * ease((t - 2.8) / 0.6);
-    // 3.4–4.6 s: you walk down the ramp
+    // 2.8–3.4 s: the rear door drops into a ramp
+    if (t > 2.8) s.setRamp(ease((t - 2.8) / 0.6));
+    // 3.4–4.6 s: you walk out of the hold, down the ramp and over to your spot
     if (t > 3.4) {
-      const k = ease((t - 3.4) / 1.2);
-      const from = this.land.clone().addScaledVector(this.fwd, -7.5).addScaledVector(this.up, 0.6);
+      const k = Math.min(1, (t - 3.4) / 1.2);
+      s.root.updateMatrixWorld(true);
+      const a = s.root.localToWorld(s.inside.clone()), b = s.root.localToWorld(s.rampBottom.clone());
       const to = this.home.point.clone();
-      P.body.pos.lerpVectors(from, to, k);
+      if (k < 0.55) P.body.pos.lerpVectors(a, b, ease(k / 0.55));
+      else P.body.pos.lerpVectors(b, to, ease((k - 0.55) / 0.45));
       P.body.vel.set(0, 0, 0);
       P.model.root.visible = true;
       P.model.root.position.copy(P.body.pos);
@@ -170,8 +167,15 @@ export class Recall {
     if (L.t > 0.6) {
       L.vel += dt * 30;
       L.root.position.addScaledVector(this.up, L.vel * dt);
-      this.shuttle.ramp.rotation.x = Math.max(-1.4, this.shuttle.ramp.rotation.x - dt * 3);
-      if (Math.random() < dt * 30) this.game.fx.spawn(L.root.position.clone().addScaledVector(this.up, -2.5), this.up.clone().multiplyScalar(-14), { color: 0xff9f1c, size: 0.5, life: 0.4, count: 1, spread: 1.5 });
+      const s = this.shuttle;
+      s.setRamp(Math.max(0, s.rampK - dt * 2));
+      s.setGear(Math.max(0, s.gearK - dt * 0.6));
+      s.setThrust(Math.min(1, (L.t - 0.6) * 0.5), 1, L.t);
+      if (Math.random() < dt * 30) this.game.fx.spawn(L.root.position.clone().addScaledVector(this.up, -3), this.up.clone().multiplyScalar(-14), { color: 0xff9f1c, size: 0.5, life: 0.4, count: 1, spread: 1.5 });
+    } else {
+      const s = this.shuttle;
+      s.setRamp(Math.max(0, s.rampK - dt * 2));
+      s.setThrust(0, L.t / 0.6, L.t);
     }
     if (L.t > 8) { L.root.removeFromParent(); this.leaving = null; }
   }
