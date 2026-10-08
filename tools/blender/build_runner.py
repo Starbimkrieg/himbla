@@ -21,8 +21,25 @@
 import bpy, bmesh, math, os
 from mathutils import Vector, Matrix, Euler
 
-REPO = os.environ.get("MOONRUNNER_REPO", r"C:\Users\starb\himbla")
+def find_repo():
+    """MOONRUNNER_REPO, else the repo this file sits in (Scripting tab "Run Script"), else the
+    default checkout. exec(open(...).read()) leaves no __file__, hence the fallback."""
+    env = os.environ.get("MOONRUNNER_REPO")
+    if env:
+        return env
+    here = globals().get("__file__", "")
+    if here and os.path.isfile(here):
+        root = os.path.abspath(os.path.join(os.path.dirname(here), "..", ".."))
+        if os.path.isfile(os.path.join(root, "tools", "blender", "build_runner.py")):
+            return root
+    return r"C:\Users\starb\projects\himbla"
+
+
+REPO = find_repo()
 OUT = os.path.join(REPO, "src", "assets", "runner.glb")
+if not os.path.isdir(os.path.dirname(OUT)):
+    raise RuntimeError(f"No src/assets in {REPO}; set MOONRUNNER_REPO to the himbla checkout")
+print("Moon-runner export ->", OUT)
 COLL = "MoonRunner"
 
 SLOT_COLORS = {
