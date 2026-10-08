@@ -2,5 +2,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   base: './',
-  build: { chunkSizeWarningLimit: 1200 },
+  // the runner model (src/assets/runner.glb, exported from Blender) is imported with ?inline
+  assetsInclude: ['**/*.glb'],
+  build: { chunkSizeWarningLimit: 2000 },
 });

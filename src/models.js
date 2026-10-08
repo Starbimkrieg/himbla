@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { toon, ink, glow, inkMat } from './toon.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+// inlined (a data URI) so the desktop build, which runs from file://, can load it without fetch
+import runnerGlb from './assets/runner.glb?inline';
 
 function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
   const m = new THREE.Mesh(geo, mat);
@@ -74,6 +78,126 @@ const GLINT_M = new THREE.MeshBasicMaterial({ color: 0xffffff });
 const LENS_M = new THREE.MeshBasicMaterial({ color: 0xfff6a8 });
 
 // The Moon-runner (also used for pirate skaters and story NPCs). Pivot at the feet.
+// ---- the Blender runner: tools/blender/build_runner.py exports src/assets/runner.glb ----
+// Each mesh in the file hangs off a pivot empty (legL, legR, torso, head, armL, armR, scarfLinks),
+// has one material named after a colour slot (suit, accent, helmet, visor, dark, metal, glow, skate,
+// scarf, collar, lens, glint) and an "ink" extra (outline thickness). At load the parts are baked
+// into their pivot's frame and merged per pivot and slot, and every inked part grows a shell along
+// its smoothed normals (hugs the shape far better than ink()'s bounding-box scaling); the shells of
+// a pivot merge into one mesh. A runner is then ~40 draw calls however detailed the model is, and
+// each slot still gets the runner's own material, so outfits recolour it exactly as before.
+// If the file can't be loaded, makeRunner falls back to the primitive build below.
+let RUNNER_PARTS = null;
+const PIVOTS = ['legL', 'legR', 'torso', 'head', 'armL', 'armR'];
+const NO_SHADOW = new Set(['glow', 'lens', 'glint']);
+export async function loadRunnerParts() {
+  try {
+    const gltf = await new GLTFLoader().loadAsync(runnerGlb);
+    RUNNER_PARTS = bakeRunnerParts(gltf.scene);
+  } catch (e) {
+    console.warn('runner.glb unavailable, using the primitive runner', e);
+  }
+}
+
+function bakeRunnerParts(scene) {
+  scene.updateMatrixWorld(true);
+  const groups = new Map(); // key -> { slots: Map(slot -> [geo]), ink: [geo] }
+  const group = (key) => {
+    if (!groups.has(key)) groups.set(key, { slots: new Map(), ink: [] });
+    return groups.get(key);
+  };
+  const inv = new THREE.Matrix4(), rel = new THREE.Matrix4();
+  for (const name of [...PIVOTS, 'scarfLinks']) {
+    const pivot = scene.getObjectByName(name);
+    if (!pivot) throw new Error('runner.glb has no pivot ' + name);
+    inv.copy(pivot.matrixWorld).invert();
+    for (const o of pivot.children) {
+      if (!o.isMesh) continue;
+      // scarf parts belong to the chain link their name starts with (scarf3_tassel0 -> link 3)
+      const key = name === 'scarfLinks' ? 'scarf' + (/^scarf(\d)/.exec(o.name) || [0, 0])[1] : name;
+      const slot = o.material.name;
+      rel.multiplyMatrices(inv, o.matrixWorld);
+      const src = o.geometry; // (the glTF exporter always writes indexed triangles)
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', src.attributes.position.clone());
+      geo.setAttribute('normal', src.attributes.normal.clone());
+      geo.setIndex(src.index.clone());
+      geo.applyMatrix4(rel);
+      const g = group(key);
+      if (!g.slots.has(slot)) g.slots.set(slot, []);
+      g.slots.get(slot).push(geo);
+      const t = o.userData.ink || 0;
+      if (t > 0) g.ink.push(inkShellGeo(geo, t));
+    }
+  }
+  const out = {};
+  for (const [key, g] of groups) {
+    const parts = [...g.slots].map(([slot, geos]) => ({ slot, geo: mergeGeometries(geos) }));
+    let ink = null;
+    if (g.ink.length) {
+      const base = mergeGeometries(g.ink);
+      ink = { thin: shellAt(base, 1), fat: shellAt(base, 4) };
+    }
+    out[key] = { parts, ink };
+  }
+  return out;
+}
+
+// A part's outline shell: its triangles with an `off` attribute = smoothed normal * thickness.
+// Normals are averaged over vertices that share a position, so seams don't crack open.
+function inkShellGeo(geo, t) {
+  const pos = geo.attributes.position, nor = geo.attributes.normal;
+  const sum = new Map();
+  const keyOf = (i) => `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
+  for (let i = 0; i < pos.count; i++) {
+    const k = keyOf(i);
+    const s = sum.get(k) || [0, 0, 0];
+    s[0] += nor.getX(i); s[1] += nor.getY(i); s[2] += nor.getZ(i);
+    sum.set(k, s);
+  }
+  const off = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const s = sum.get(keyOf(i));
+    const l = Math.hypot(s[0], s[1], s[2]) || 1;
+    off[i * 3] = (s[0] / l) * t; off[i * 3 + 1] = (s[1] / l) * t; off[i * 3 + 2] = (s[2] / l) * t;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', pos.clone());
+  g.setAttribute('off', new THREE.BufferAttribute(off, 3));
+  g.setIndex(geo.index.clone());
+  return g;
+}
+
+// the shell pushed out k times its thickness (k = 4 is the fat red outline of a marked enemy)
+function shellAt(base, k) {
+  const p = base.attributes.position.array, o = base.attributes.off.array;
+  const a = new Float32Array(p.length);
+  for (let i = 0; i < p.length; i++) a[i] = p[i] + o[i] * k;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(a, 3));
+  g.setIndex(base.index);
+  g.computeBoundingSphere();
+  return g;
+}
+
+// Hang a baked pivot's parts (and its one outline shell) on a group.
+function addBaked(target, key, mats) {
+  const B = RUNNER_PARTS[key];
+  for (const { slot, geo } of B.parts) {
+    const m = new THREE.Mesh(geo, mats[slot]);
+    m.castShadow = !NO_SHADOW.has(slot);
+    target.add(m);
+  }
+  if (B.ink) {
+    const h = new THREE.Mesh(B.ink.thin, inkMat);
+    h.castShadow = false;
+    h.userData.isInk = true;
+    // the threat scanner swaps in the fat shell instead of scaling this one (see main.js)
+    h.userData.inkGeo = B.ink;
+    target.add(h);
+  }
+}
+
 // Smooth lathed limbs and torso, rounded boots/gloves/backpack and a shelled visor, but the
 // same pivots (legL/legR at the hips, armL/armR at the shoulders, head on the torso) and
 // dimensions as always, because cosmetics, mutations, cargo and story props hang off them.
@@ -165,12 +289,17 @@ export function makeRunner({
   const skateM = own ? glow(accent) : glowM;
   const visorM = mk(visor), scarfM = toon(scarf, { side: THREE.DoubleSide }), collarM = mk(scarf);
 
+  const baked = RUNNER_PARTS;
+  const mats = { suit: suitM, accent: accentM, helmet: helmetM, visor: visorM, dark, metal, glow: glowM, skate: skateM, scarf: scarfM, collar: collarM, lens: LENS_M, glint: GLINT_M };
   const hip = 0.95;
   const legs = [];
   for (const side of [-1, 1]) {
     const leg = new THREE.Group();
     leg.position.set(side * 0.2, hip, 0);
     leg.add(part(G.leg, suitM, 0, 0, 0, 0.045));
+    body.add(leg);
+    legs.push(leg);
+    if (baked) { addBaked(leg, side < 0 ? 'legL' : 'legR', mats); continue; }
     const pad = part(G.kneePad, metal, 0, -0.45, 0.095, 0.02);
     pad.scale.set(1.15, 1, 0.6);
     leg.add(pad);
@@ -180,49 +309,52 @@ export function makeRunner({
     const rail = part(G.rail, skateM, 0, -0.972, 0.07, 0.025);
     rail.scale.x = 1.6;
     leg.add(rail);
-    body.add(leg);
-    legs.push(leg);
   }
   const torso = new THREE.Group();
   torso.position.y = hip;
   body.add(torso);
-  const trunk = part(G.torso, suitM, 0, 0, 0, 0.04);
-  trunk.scale.z = 0.78;
-  torso.add(trunk);
-  const belt = part(G.belt, dark, 0, 0.3, 0, 0.02);
-  belt.scale.z = 0.8;
-  torso.add(belt);
-  torso.add(part(G.buckle, accentM, 0, 0.3, 0.215, 0.02));
-  const plate = part(G.plate, accentM, 0, 0.64, 0.235, 0.03);
-  plate.rotation.x = -0.06;
-  torso.add(plate);
-  torso.add(part(G.lightDot, glowM, 0.11, 0.67, 0.29, 0));
-  // backpack: rounded shell, a lid strip and two thruster nozzles with glowing throats
-  torso.add(part(G.pack, dark, 0, 0.6, -0.35, 0.045));
-  torso.add(part(G.packLid, accentM, 0, 0.78, -0.48, 0.015));
-  for (const side of [-1, 1]) {
-    torso.add(part(G.nozzle, metal, side * 0.14, 0.24, -0.38, 0.025));
-    torso.add(part(G.flame, glowM, side * 0.14, 0.155, -0.38, 0));
-  }
   const cargoSlot = new THREE.Group();
   cargoSlot.position.set(0, 0.62, -0.72);
   torso.add(cargoSlot);
-
   const head = new THREE.Group();
   head.position.y = 1.18;
   torso.add(head);
-  head.add(part(G.helmet, helmetM, 0, 0, 0, 0.05));
-  head.add(part(G.visorFrame, dark, 0, 0, 0, 0));
-  head.add(part(G.visor, visorM, 0, 0, 0, 0));
-  const glint = part(G.glint, GLINT_M, -0.13, 0.13, 0.33, 0);
-  glint.scale.set(1.3, 0.55, 0.35);
-  glint.rotation.set(-0.35, -0.35, 0.5);
-  glint.castShadow = false;
-  head.add(glint);
-  for (const side of [-1, 1]) head.add(part(G.pod, accentM, side * 0.352, -0.01, -0.03, 0.02));
-  head.add(part(G.rim, dark, 0, -0.215, 0, 0.02));
-  head.add(part(G.antenna, dark, 0.22, 0.38, -0.1, 0));
-  head.add(part(G.bead, glowM, 0.22, 0.6, -0.1, 0));
+  if (!baked) {
+    // primitive fallback (only if runner.glb failed to load)
+    const trunk = part(G.torso, suitM, 0, 0, 0, 0.04);
+    trunk.scale.z = 0.78;
+    torso.add(trunk);
+    const belt = part(G.belt, dark, 0, 0.3, 0, 0.02);
+    belt.scale.z = 0.8;
+    torso.add(belt);
+    torso.add(part(G.buckle, accentM, 0, 0.3, 0.215, 0.02));
+    const plate = part(G.plate, accentM, 0, 0.64, 0.235, 0.03);
+    plate.rotation.x = -0.06;
+    torso.add(plate);
+    torso.add(part(G.lightDot, glowM, 0.11, 0.67, 0.29, 0));
+    // backpack: rounded shell, a lid strip and two thruster nozzles with glowing throats
+    torso.add(part(G.pack, dark, 0, 0.6, -0.35, 0.045));
+    torso.add(part(G.packLid, accentM, 0, 0.78, -0.48, 0.015));
+    for (const side of [-1, 1]) {
+      torso.add(part(G.nozzle, metal, side * 0.14, 0.24, -0.38, 0.025));
+      torso.add(part(G.flame, glowM, side * 0.14, 0.155, -0.38, 0));
+    }
+    head.add(part(G.helmet, helmetM, 0, 0, 0, 0.05));
+    head.add(part(G.visorFrame, dark, 0, 0, 0, 0));
+    head.add(part(G.visor, visorM, 0, 0, 0, 0));
+    const glint = part(G.glint, GLINT_M, -0.13, 0.13, 0.33, 0);
+    glint.scale.set(1.3, 0.55, 0.35);
+    glint.rotation.set(-0.35, -0.35, 0.5);
+    glint.castShadow = false;
+    head.add(glint);
+    for (const side of [-1, 1]) head.add(part(G.pod, accentM, side * 0.352, -0.01, -0.03, 0.02));
+    head.add(part(G.rim, dark, 0, -0.215, 0, 0.02));
+    head.add(part(G.antenna, dark, 0.22, 0.38, -0.1, 0));
+    head.add(part(G.bead, glowM, 0.22, 0.6, -0.1, 0));
+  } else {
+    addBaked(torso, 'torso', mats);
+    addBaked(head, 'head', mats);
+  }
   if (pirate) head.add(part(G.band, toon(0xd7263d), 0, 0.12, 0, 0.02));
 
   const arms = [];
@@ -230,19 +362,20 @@ export function makeRunner({
     const arm = new THREE.Group();
     arm.position.set(side * 0.45, 0.85, 0);
     arm.add(part(G.arm, suitM, 0, 0, 0, 0.04));
+    torso.add(arm);
+    arms.push(arm);
+    if (baked) { addBaked(arm, side < 0 ? 'armL' : 'armR', mats); continue; }
     arm.add(part(G.shoulder, helmetM, side * 0.01, 0.0, 0, 0.03));
     arm.add(part(G.wristCuff, accentM, 0, -0.52, 0, 0.02));
     const glove = part(G.glove, dark, 0, -0.63, 0.01, 0.03);
     glove.scale.set(0.95, 1.15, 0.85);
     arm.add(glove);
     arm.add(part(G.thumb, dark, -side * 0.05, -0.6, 0.08, 0.02));
-    torso.add(arm);
-    arms.push(arm);
   }
 
   // Comic scarf streaming behind. The tail leaves from the top of the backpack and is kept above
   // everything worn on the back (pack, cargo crate, jar, cape): see ScarfSim.
-  torso.add(part(G.collar, collarM, 0, 0.98, 0, 0.03));
+  if (!baked) torso.add(part(G.collar, collarM, 0, 0.98, 0, 0.03));
   const scarfPivot = new THREE.Group();
   scarfPivot.position.set(0, 1.04, -0.26);
   torso.add(scarfPivot);
@@ -252,7 +385,8 @@ export function makeRunner({
   for (let k = 0; k < SCARF_N; k++) {
     const j = new THREE.Group();
     if (k) j.position.z = -SCARF_LINK;
-    j.add(part(G.scarfLinks[k], scarfM, 0, 0, 0, 0.025));
+    if (baked) addBaked(j, 'scarf' + k, mats);
+    else j.add(part(G.scarfLinks[k], scarfM, 0, 0, 0, 0.025));
     parentLink.add(j);
     scarfLinks.push(j);
     parentLink = j;
@@ -262,8 +396,10 @@ export function makeRunner({
   [-0.45, -1.05, -0.05, -0.05].forEach((r, k) => { scarfLinks[k].rotation.x = r; });
 
   // helmet lamp on the right temple (the actual light is owned by the player)
-  head.add(part(G.lampHousing, dark, 0.3, 0.15, 0.17, 0.015));
-  head.add(part(G.lens, LENS_M, 0.3, 0.15, 0.225, 0));
+  if (!baked) {
+    head.add(part(G.lampHousing, dark, 0.3, 0.15, 0.17, 0.015));
+    head.add(part(G.lens, LENS_M, 0.3, 0.15, 0.225, 0));
+  }
 
   root.scale.setScalar(scale);
   return { root, trick, body, bodyBase: -1.2, torso, head, legL: legs[0], legR: legs[1], armL: arms[0], armR: arms[1], scarf: scarfPivot, cargoSlot, glowM, accent, mats: { suit: suitM, accent: accentM, helmet: helmetM, visor: visorM, scarf: scarfM, collar: collarM, glow: glowM, skate: skateM } };

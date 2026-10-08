@@ -5,6 +5,7 @@ import { Planet } from './planet.js';
 import { Colliders } from './physics.js';
 import { World } from './world.js';
 import { Player } from './player.js';
+import { loadRunnerParts } from './models.js';
 import { Enemies } from './enemies.js';
 import { Projectiles } from './projectiles.js';
 import { Missions } from './missions.js';
@@ -446,6 +447,8 @@ class Game {
         e.scanOn = on;
         if (!e.inkHulls) { e.inkHulls = []; e.model.root.traverse((o) => { if (o.userData.isInk) e.inkHulls.push(o); }); }
         for (const h of e.inkHulls) {
+          // the Blender runner's shells are prebuilt thin and fat; everything else gets scaled
+          if (h.userData.inkGeo) { h.material = on ? SCAN_INK : inkMat; h.geometry = on ? h.userData.inkGeo.fat : h.userData.inkGeo.thin; continue; }
           if (!h.userData.baseScale) { h.userData.baseScale = h.scale.clone(); h.userData.basePos = h.position.clone(); }
           h.material = on ? SCAN_INK : inkMat;
           // a much fatter shell while targeted so the red reads at a distance
@@ -1222,7 +1225,7 @@ class Game {
 const game = new Game();
 window.game = game;
 // canvas text (signs, maps) is drawn during init, so the pixel fonts must be loaded first
-loadFonts().then(() => game.init()).catch((e) => {
+Promise.all([loadFonts(), loadRunnerParts()]).then(() => game.init()).catch((e) => {
   console.error(e);
   document.getElementById('load-status').textContent = 'Failed to start: ' + e.message;
 });
