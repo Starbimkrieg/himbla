@@ -1118,3 +1118,7 @@ export function outpostTemplate(kind, color, variant = 0, wreck = false) {
   }
   return t;
 }
+
+// The kit and its shared props also build the bigger settlements (settlements.js).
+export { Kit, T, G, D, GLASS, BEAM, prism, dishGeo, sandbags, crate, container, tank, junkHeap, lightString, scatterDebris };
+export const PALETTE = { STEEL, DARK, LIGHT, CREAM, CONC, YEL, WOOD, RUST, TYRE, CHAR };

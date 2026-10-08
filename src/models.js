@@ -5,6 +5,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // inlined (a data URI) so the desktop build, which runs from file://, can load it without fetch
 import runnerGlb from './assets/runner.glb?inline';
+import { Kit, T as KT, G as KG, D as KD, crate } from './outpostModels.js';
 
 function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
   const m = new THREE.Mesh(geo, mat);
@@ -77,7 +78,6 @@ function runnerGeo() {
 const GLINT_M = new THREE.MeshBasicMaterial({ color: 0xffffff });
 const LENS_M = new THREE.MeshBasicMaterial({ color: 0xfff6a8 });
 
-// The Moon-runner (also used for pirate skaters and story NPCs). Pivot at the feet.
 // ---- the Blender runner: tools/blender/build_runner.py exports src/assets/runner.glb ----
 // Each mesh in the file hangs off a pivot empty (legL, legR, torso, head, armL, armR, scarfLinks),
 // has one material named after a colour slot (suit, accent, helmet, visor, dark, metal, glow, skate,
@@ -198,6 +198,7 @@ function addBaked(target, key, mats) {
   }
 }
 
+// The Moon-runner (also used for pirate skaters and story NPCs). Pivot at the feet.
 // Smooth lathed limbs and torso, rounded boots/gloves/backpack and a shelled visor, but the
 // same pivots (legL/legR at the hips, armL/armR at the shoulders, head on the torso) and
 // dimensions as always, because cosmetics, mutations, cargo and story props hang off them.
@@ -288,18 +289,18 @@ export function makeRunner({
   const glowM = glow(accent);
   const skateM = own ? glow(accent) : glowM;
   const visorM = mk(visor), scarfM = toon(scarf, { side: THREE.DoubleSide }), collarM = mk(scarf);
-
   const baked = RUNNER_PARTS;
   const mats = { suit: suitM, accent: accentM, helmet: helmetM, visor: visorM, dark, metal, glow: glowM, skate: skateM, scarf: scarfM, collar: collarM, lens: LENS_M, glint: GLINT_M };
+
   const hip = 0.95;
   const legs = [];
   for (const side of [-1, 1]) {
     const leg = new THREE.Group();
     leg.position.set(side * 0.2, hip, 0);
-    leg.add(part(G.leg, suitM, 0, 0, 0, 0.045));
     body.add(leg);
     legs.push(leg);
     if (baked) { addBaked(leg, side < 0 ? 'legL' : 'legR', mats); continue; }
+    leg.add(part(G.leg, suitM, 0, 0, 0, 0.045));
     const pad = part(G.kneePad, metal, 0, -0.45, 0.095, 0.02);
     pad.scale.set(1.15, 1, 0.6);
     leg.add(pad);
@@ -361,10 +362,10 @@ export function makeRunner({
   for (const side of [-1, 1]) {
     const arm = new THREE.Group();
     arm.position.set(side * 0.45, 0.85, 0);
-    arm.add(part(G.arm, suitM, 0, 0, 0, 0.04));
     torso.add(arm);
     arms.push(arm);
     if (baked) { addBaked(arm, side < 0 ? 'armL' : 'armR', mats); continue; }
+    arm.add(part(G.arm, suitM, 0, 0, 0, 0.04));
     arm.add(part(G.shoulder, helmetM, side * 0.01, 0.0, 0, 0.03));
     arm.add(part(G.wristCuff, accentM, 0, -0.52, 0, 0.02));
     const glove = part(G.glove, dark, 0, -0.63, 0.01, 0.03);
@@ -856,59 +857,270 @@ export function makeFigure({ suit, helmet, visor, scale = 1, seed, kind, look, a
   return { root, body, legL: bones[1], legR: bones[2], armL: bones[3], armR: bones[4], look: arch, alien, swing: arch === 'elder' ? 0.15 : arch === 'eva' ? 0.3 : 0.45 };
 }
 
-export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, flag = 0x111111 } = {}) {
+
+
+// ---- vehicles: baked with the outpost Kit (a few merged meshes each), cached per look ----
+const VCACHE = new Map();
+function baked(key, fn) {
+  let r = VCACHE.get(key);
+  if (!r) {
+    const k = new Kit(0xffd23f, 3, false);
+    fn(k);
+    r = k.finish().root;
+    VCACHE.set(key, r);
+  }
+  return r.clone();
+}
+const VDARK = 0x1d1a29, VSTEEL = 0x55607a, VMETAL = 0x8a87a0;
+
+// a tyre with a hub, rim and tread blocks, centred on its axle (x) so it spins with rotation.x
+function rWheel(r, w, hub = VMETAL) {
+  return baked(`wheel|${r}|${w}|${hub}`, (k) => {
+    k.add(new THREE.CylinderGeometry(r, r, w, 16).rotateZ(Math.PI / 2), KT(VDARK), 0, 0, 0, { outline: 0.05 });
+    k.add(new THREE.CylinderGeometry(r * 0.55, r * 0.55, w * 1.06, 10).rotateZ(Math.PI / 2), KT(hub), 0, 0, 0, { outline: 0 });
+    k.add(new THREE.CylinderGeometry(r * 0.2, r * 0.2, w * 1.14, 8).rotateZ(Math.PI / 2), KT(VDARK), 0, 0, 0, { outline: 0 });
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      k.add(new THREE.BoxGeometry(w * 1.02, r * 0.16, r * 0.3), KT(0x2a2540), 0, Math.cos(a) * r, Math.sin(a) * r, { rx: a, outline: 0 });
+    }
+  });
+}
+
+// Rovers: pirate war-rigs, military patrol cars and civilian buggies share one layout (body 3.2
+// x 5.2, wheels at (±1.85, 0.85, ±1.8), gun mount at (0, 3, 0.8), loot slot on the chassis) so the
+// AI, traffic and faction-vehicle code drive them all the same way. style: pirate | military | civil.
+export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, flag = 0x111111, style = null } = {}) {
+  style = style || (pirate ? 'pirate' : 'civil');
   const root = new THREE.Group();
-  const bodyM = toon(color), trimM = toon(trim), dark = toon(0x1d1a29);
   const chassis = new THREE.Group();
   root.add(chassis);
-  chassis.add(part(new THREE.BoxGeometry(3.2, 1.0, 5.2), bodyM, 0, 1.4, 0, 0.08));
-  chassis.add(part(new THREE.BoxGeometry(2.4, 1.0, 2.0), trimM, 0, 2.3, -0.6, 0.08));
-  chassis.add(part(new THREE.BoxGeometry(2.0, 0.5, 0.6), glow(0xfff6a8), 0, 1.5, 2.65, 0.04));
-  // roll cage
-  for (const sx of [-1, 1]) chassis.add(part(new THREE.CylinderGeometry(0.08, 0.08, 1.8), dark, sx * 1.1, 3.0, 0.6, 0.03));
+  chassis.add(baked(`rover|${style}|${color}|${trim}`, (k) => {
+    // common frame: skid plate, axles, fenders, lights
+    k.box(3.0, 0.5, 5.4, KT(VDARK), 0, 0.7, 0, { outline: 0.06 });
+    for (const sz of [-1.8, 1.8]) k.add(new THREE.CylinderGeometry(0.18, 0.18, 3.5, 8).rotateZ(Math.PI / 2), KT(VSTEEL), 0, 0.85, sz, { outline: 0 });
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.add(new THREE.CylinderGeometry(1.08, 1.08, 0.9, 12, 1, true, -Math.PI / 2, Math.PI).rotateZ(Math.PI / 2), KD(style === 'military' ? VSTEEL : color), sx * 1.85, 0.85, sz * 1.8, { outline: 0.04 });
+    for (const sx of [-0.9, 0.9]) k.box(0.55, 0.3, 0.12, KG(0xfff6a8), sx, 1.45, 2.68, { outline: 0 });
+    for (const sx of [-1.2, 1.2]) k.box(0.4, 0.22, 0.12, KG(0xff2a4a), sx, 1.5, -2.68, { outline: 0 });
+    if (style === 'pirate') {
+      // welded war-rig: slab hull, scrap armour, a spiked ram plate, a cage cab and exhaust stacks
+      k.box(3.2, 1.1, 5.2, KT(color), 0, 0.9, 0, { outline: 0.08 });
+      k.add(new THREE.BoxGeometry(3.4, 1.4, 0.4), KT(VSTEEL), 0, 1.4, 2.85, { rx: -0.35, outline: 0.05 });
+      for (let i = 0; i < 4; i++) k.add(new THREE.ConeGeometry(0.18, 0.8, 5).rotateX(Math.PI / 2), KT(0xd8d4e8), -1.2 + i * 0.8, 1.2, 3.25, { outline: 0.02 });
+      for (const [x, y, z, h, c] of [[1.64, 1.2, 0.05, 0.8, 0x7a4a32], [-1.64, 1.15, -0.1, 0.9, 0x6b5a3a]]) k.box(0.12, h, 1.2, KT(c), x, y, z, { rz: 0.05, outline: 0.02 });
+      k.box(1.8, 0.7, 0.12, KT(0x5a5f6e), 0.3, 1.2, -2.65, { rz: 0.06, outline: 0.02 });
+      k.box(2.4, 1.0, 2.0, KT(trim), 0, 2.0, -0.6, { outline: 0.06 });
+      k.box(2.42, 0.4, 1.0, KG(0xcfefff), 0, 2.45, 0.1, { outline: 0 });
+      for (const sx of [-1, 1]) {
+        k.beam([sx * 1.15, 2.0, 0.5], [sx * 1.1, 3.6, 0.4], 0.08, KT(VDARK), { outline: 0.02 });
+        k.beam([sx * 1.15, 2.0, -1.6], [sx * 1.1, 3.6, -1.2], 0.08, KT(VDARK), { outline: 0.02 });
+        k.cyl(0.18, 0.22, 2.4, 8, KT(VSTEEL), sx * 1.35, 1.6, -2.3, { outline: 0.03 });
+        k.cyl(0.2, 0.2, 0.2, 8, KG(0xff9f1c), sx * 1.35, 4.0, -2.3, { outline: 0 });
+      }
+      k.beam([-1.1, 3.6, 0.4], [1.1, 3.6, 0.4], 0.08, KT(VDARK), { outline: 0 });
+      k.beam([-1.1, 3.6, -1.2], [1.1, 3.6, -1.2], 0.08, KT(VDARK), { outline: 0 });
+      for (const sx of [-1, 1]) k.box(0.1, 0.18, 1.3, KG(trim), sx * 1.63, 1.05, 0, { outline: 0 });
+    } else if (style === 'military') {
+      // armoured patrol car: a sloped hull with skirts, faction stripes, smoke launchers, antennas
+      k.add(new THREE.CylinderGeometry(1.45 * Math.SQRT2, 1.7 * Math.SQRT2, 1.3, 4, 1).rotateY(Math.PI / 4).scale(1, 1, 1.65), KT(color), 0, 1.6, 0, { outline: 0.1 });
+      k.add(new THREE.BoxGeometry(3.0, 0.7, 1.2), KT(color), 0, 1.35, 2.45, { rx: 0.5, outline: 0.05 });
+      for (const sx of [-1, 1]) {
+        // skirt plate between the wheel wells, the faction stripe up on the hull above the arches
+        k.box(0.25, 0.75, 1.3, KT(VSTEEL), sx * 1.72, 1.15, 0, { outline: 0.04 });
+        k.box(0.27, 0.12, 1.3, KT(trim), sx * 1.74, 1.47, 0, { outline: 0 });
+        k.box(0.08, 0.18, 4.2, KT(trim), sx * 1.5, 2.1, 0, { rz: sx * 0.19, outline: 0 });
+        for (let i = 0; i < 3; i++) k.add(new THREE.CylinderGeometry(0.1, 0.1, 0.45, 6).rotateX(-0.6), KT(VDARK), sx * (0.8 + i * 0.18), 2.35, 1.4, { outline: 0 });
+      }
+      k.cyl(0.95, 1.05, 0.35, 12, KT(VSTEEL), 0, 2.25, 0.8, { outline: 0.03 });
+      k.box(2.0, 0.5, 0.9, KG(0xcfefff), 0, 1.95, 1.75, { rx: 0.5, outline: 0 });
+      k.cyl(0.03, 0.05, 2.6, 4, KT(VDARK), -1.1, 2.2, -2.0, { outline: 0 });
+      k.cyl(0.03, 0.05, 1.8, 4, KT(VDARK), -0.8, 2.2, -2.2, { outline: 0 });
+      k.box(1.6, 0.6, 1.0, KT(VSTEEL), 0, 2.2, -1.9, { outline: 0.03 });
+    } else {
+      // civilian buggy: open tub, roll cage, seats, cargo bed with crates, a light bar
+      k.box(3.0, 0.7, 5.0, KT(color), 0, 0.9, 0, { outline: 0.08 });
+      k.add(new THREE.BoxGeometry(2.8, 0.5, 1.0), KT(color), 0, 1.3, 2.3, { rx: 0.4, outline: 0.04 });
+      k.box(2.8, 0.15, 1.4, KT(trim), 0, 1.6, -1.6, { outline: 0 });
+      for (const sx of [-0.6, 0.6]) { k.box(0.8, 0.5, 0.8, KT(VDARK), sx, 1.6, 0.4, { outline: 0.02 }); k.box(0.8, 0.9, 0.2, KT(VDARK), sx, 1.6, 0.0, { outline: 0.02 }); }
+      for (const sx of [-1, 1]) {
+        k.beam([sx * 1.3, 1.6, 1.4], [sx * 1.1, 3.4, 0.8], 0.09, KT(VSTEEL), { outline: 0.02 });
+        k.beam([sx * 1.3, 1.6, -0.6], [sx * 1.1, 3.4, -0.4], 0.09, KT(VSTEEL), { outline: 0.02 });
+        k.beam([sx * 1.1, 3.4, 0.8], [sx * 1.1, 3.4, -0.4], 0.09, KT(VSTEEL), { outline: 0 });
+      }
+      k.beam([-1.1, 3.4, 0.8], [1.1, 3.4, 0.8], 0.09, KT(VSTEEL), { outline: 0 });
+      k.box(1.8, 0.25, 0.3, KG(0xfff6a8), 0, 3.5, 0.85, { outline: 0 });
+      crate(k, -0.6, 1.75, -1.7, 0.9, 0x9a6a3a, 0.2);
+      crate(k, 0.6, 1.75, -1.5, 0.8, 0x4f5a42, -0.3);
+    }
+  }));
+  // gun (yawed by the AI): a pintle twin-gun, a small turret, or a searchlight on the civil buggy
   const gun = new THREE.Group();
   gun.position.set(0, 3.0, 0.8);
-  gun.add(part(new THREE.BoxGeometry(0.8, 0.6, 0.8), dark, 0, 0, 0, 0.05));
-  gun.add(part(new THREE.CylinderGeometry(0.12, 0.12, 2.0).rotateX(Math.PI / 2), dark, 0, 0.05, 1.1, 0.04));
+  gun.add(baked(`gun|${style}|${trim}`, (k) => {
+    if (style === 'military') {
+      k.box(1.3, 0.6, 1.4, KT(VSTEEL), 0, -0.6, 0, { outline: 0.04 });
+      k.box(1.32, 0.15, 1.42, KT(trim), 0, -0.1, 0, { outline: 0 });
+      k.add(new THREE.CylinderGeometry(0.1, 0.12, 2.2, 8).rotateX(Math.PI / 2), KT(VDARK), 0, -0.3, 1.6, { outline: 0.03 });
+    } else if (style === 'pirate') {
+      k.cyl(0.12, 0.12, 0.7, 6, KT(VDARK), 0, -0.7, 0, { outline: 0.02 });
+      k.box(0.8, 0.5, 0.9, KT(VDARK), 0, 0, 0, { outline: 0.04 });
+      for (const sx of [-0.18, 0.18]) k.add(new THREE.CylinderGeometry(0.08, 0.1, 2.0, 6).rotateX(Math.PI / 2), KT(VDARK), sx, 0.25, 1.2, { outline: 0.02 });
+      k.box(0.9, 0.6, 0.1, KT(trim), 0, 0.2, 0.5, { outline: 0 });
+    } else {
+      k.cyl(0.1, 0.12, 0.6, 6, KT(VDARK), 0, -0.5, 0, { outline: 0.02 });
+      k.add(new THREE.CylinderGeometry(0.35, 0.3, 0.6, 10).rotateX(Math.PI / 2), KT(0xd8d4e8), 0, 0, 0, { outline: 0.03 });
+      k.add(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 10).rotateX(Math.PI / 2), KG(0xfffbe0), 0, 0, 0.32, { outline: 0 });
+    }
+  }));
   chassis.add(gun);
-  const pole = part(new THREE.CylinderGeometry(0.05, 0.05, 3), dark, -1.2, 3.6, -2.2, 0.02);
-  chassis.add(pole);
+  // flag on a whip pole at the back
   const flagM = toon(flag, { side: THREE.DoubleSide });
+  chassis.add(part(new THREE.CylinderGeometry(0.05, 0.05, 3), toon(VDARK), -1.2, 3.6, -2.2, 0.02));
   chassis.add(part(new THREE.PlaneGeometry(1.4, 0.9), flagM, -1.9, 4.6, -2.2, 0));
-  if (pirate) chassis.add(part(new THREE.SphereGeometry(0.22, 8, 6), toon(0xffffff), -1.9, 4.65, -2.17, 0));
+  if (style === 'pirate') chassis.add(part(new THREE.SphereGeometry(0.22, 8, 6), toon(0xffffff), -1.9, 4.65, -2.17, 0));
   const wheels = [];
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const w = part(new THREE.CylinderGeometry(0.85, 0.85, 0.7, 12).rotateZ(Math.PI / 2), dark, sx * 1.85, 0.85, sz * 1.8, 0.05);
+    const w = rWheel(0.85, 0.7);
+    w.position.set(sx * 1.85, 0.85, sz * 1.8);
     root.add(w);
     wheels.push(w);
   }
   return { root, chassis, gun, wheels };
 }
 
+// Shuttle-bus: a capsule hull (radius 2.4, the landing gear in traffic.js fits it) with a glazed
+// cockpit, a row of lit cabin windows, stub wings with engine pods and a tail fin.
 export function makeShuttle({ color = 0xfff4e0, stripe = 0x2ec4ff } = {}) {
   const root = new THREE.Group();
-  const hull = part(new THREE.CapsuleGeometry(2.4, 9, 6, 14).rotateX(Math.PI / 2), toon(color), 0, 0, 0, 0.12);
-  root.add(hull);
-  const band = part(new THREE.CylinderGeometry(2.48, 2.48, 1.2, 14).rotateX(Math.PI / 2), toon(stripe), 0, 0, 1, 0);
-  root.add(band);
-  root.add(part(new THREE.BoxGeometry(3.6, 0.8, 5).translate(0, 0.9, 3), glow(0x9be7ff), 0, 0, 0, 0.06));
-  for (const sx of [-1, 1]) {
-    root.add(part(new THREE.BoxGeometry(4, 0.4, 2.4), toon(stripe), sx * 3.6, -0.6, -2, 0.08));
-    root.add(part(new THREE.CylinderGeometry(0.7, 0.9, 1.6, 10), glow(0xff9f1c), sx * 5.2, -1.4, -2, 0.05));
-  }
+  root.add(baked(`shuttle|${color}|${stripe}`, (k) => {
+    k.add(new THREE.CapsuleGeometry(2.4, 9, 6, 16).rotateX(Math.PI / 2), KT(color), 0, 0, 0, { outline: 0.12 });
+    for (const z of [-3.2, 1, 4.6]) k.add(new THREE.CylinderGeometry(2.46, 2.46, z === 1 ? 1.2 : 0.3, 16).rotateX(Math.PI / 2), KT(z === 1 ? stripe : 0xd8d4e8), 0, 0, z, { outline: 0 });
+    k.add(new THREE.SphereGeometry(2.42, 16, 8, -Math.PI / 2 + 0.2, Math.PI - 0.4, 0.25, 0.9), KG(0x9be7ff), 0, 0.2, 4.4, { rx: -0.25, outline: 0 });
+    for (const sx of [-1, 1]) for (let i = 0; i < 6; i++) k.add(new THREE.BoxGeometry(0.2, 0.7, 0.9), KG(0xfff6a8), sx * 2.36, 0.6, -3.6 + i * 1.3, { rz: sx * 0.3, outline: 0 });
+    for (const sx of [-1, 1]) {
+      k.add(new THREE.BoxGeometry(4.2, 0.35, 2.6), KT(stripe), sx * 3.6, -0.7, -2, { rz: sx * -0.08, outline: 0.06 });
+      k.add(new THREE.CylinderGeometry(0.8, 0.95, 3.4, 12).rotateX(Math.PI / 2), KT(0xd8d4e8), sx * 5.4, -0.9, -2.4, { outline: 0.05 });
+      k.add(new THREE.CylinderGeometry(0.75, 0.75, 0.1, 12).rotateX(Math.PI / 2), KG(0xff9f1c), sx * 5.4, -0.9, -4.15, { outline: 0 });
+      k.ball(0.2, KG(sx < 0 ? 0xff2a4a : 0x7dff6a), sx * 5.8, -0.6, -1, { outline: 0 });
+      k.cyl(0.6, 0.9, 1.6, 10, KG(0xff9f1c), sx * 5.2, -2.2, -2, { outline: 0 });
+    }
+    k.add(new THREE.BoxGeometry(0.3, 2.4, 2.6), KT(stripe), 0, 2.6, -4.6, { rx: -0.3, outline: 0.05 });
+    k.cyl(0.05, 0.05, 1.4, 4, KT(VDARK), 0.8, 2.3, 1.5, { outline: 0 });
+    k.box(1.6, 0.35, 3, KT(0xd8d4e8), 0, 2.35, -0.8, { outline: 0.03 });
+  }));
   return { root };
 }
 
-export function makeTurret({ color = 0x2b59c3 } = {}) {
+// Hover-car: a rounded body, a bubble canopy, side nacelles glowing underneath, tail fins and
+// lights. Same size (capsule 1.1 x 4.8 long) and deck height as before.
+export function makeHoverCar({ color = 0xff7ad9, trim = 0xfff4e0 } = {}) {
   const root = new THREE.Group();
-  root.add(part(new THREE.CylinderGeometry(1.6, 2.2, 2.4, 10), toon(0x4a4660), 0, 1.2, 0, 0.08));
+  root.add(baked(`car|${color}|${trim}`, (k) => {
+    k.add(new THREE.CapsuleGeometry(1.1, 2.6, 6, 12).rotateX(Math.PI / 2), KT(color), 0, 0, 0, { outline: 0.08 });
+    k.add(new THREE.BoxGeometry(2.3, 0.3, 4.2), KT(trim), 0, -0.25, 0, { outline: 0.03 });
+    k.add(new THREE.SphereGeometry(1.0, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), KG(0x9be7ff), 0, 0.45, 0.35, { outline: 0.05 });
+    k.add(new THREE.TorusGeometry(1.0, 0.08, 4, 18), KT(trim), 0, 0.47, 0.35, { rx: Math.PI / 2, outline: 0 });
+    for (const sx of [-1, 1]) {
+      k.add(new THREE.CapsuleGeometry(0.42, 1.8, 4, 8).rotateX(Math.PI / 2), KT(trim), sx * 1.3, -0.55, -0.2, { outline: 0.04 });
+      k.cyl(0.45, 0.6, 0.35, 12, KG(0x2ee6ff), sx * 1.3, -1.1, -0.2, { outline: 0 });
+      k.add(new THREE.BoxGeometry(0.12, 0.8, 0.9), KT(color), sx * 0.7, 0.75, -2.1, { rz: sx * -0.4, rx: -0.4, outline: 0.03 });
+      k.box(0.45, 0.18, 0.1, KG(0xfff6a8), sx * 0.55, -0.05, 2.35, { outline: 0 });
+      k.box(0.45, 0.18, 0.1, KG(0xff2a4a), sx * 0.6, 0.05, -2.36, { outline: 0 });
+    }
+    k.box(2.6, 0.2, 0.6, KT(trim), 0, -0.3, -1.8, { outline: 0.03 });
+  }));
+  return { root, size: 3 };
+}
+
+// Freighter: the 14 x 10 x 46 hull (traffic.js lands it on legs and rides its deck), ribbed and
+// panelled, with a nose cone and bridge, cargo pods down both flanks, radiator fins, big
+// engines with glowing nozzles and nav lights.
+export function makeFreighter({ color = 0xb8b4c8, stripe = 0xff9f1c } = {}) {
+  const root = new THREE.Group();
+  root.add(baked(`freighter|${color}|${stripe}`, (k) => {
+    k.box(14, 10, 46, KT(color), 0, -5, 0, { outline: 0.3 });
+    for (let z = -20; z <= 20; z += 6) k.box(14.3, 10.3, 0.6, KT(0x8a87a0), 0, -5.15, z, { outline: 0 });
+    k.box(14.4, 2, 46.4, KT(stripe), 0, -2, 0, { outline: 0 });
+    k.add(new THREE.CylinderGeometry(6, 8, 12, 14).rotateX(Math.PI / 2), KT(color), 0, 1, 28, { outline: 0.3 });
+    k.add(new THREE.SphereGeometry(6, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2), KT(color), 0, 1, 34, { outline: 0.2 });
+    k.box(8, 4, 8, KT(0xd8d4e8), 0, 2, 26, { outline: 0.15 });
+    k.box(8.1, 1.4, 8.1, KG(0x9be7ff), 0, 3.6, 26, { outline: 0 });
+    k.cyl(0.15, 0.2, 4, 6, KT(VDARK), 2.5, 6, 25, { outline: 0.03 });
+    k.add(new THREE.SphereGeometry(1.4, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), KT(0xd8d4e8), -2.5, 6, 26, { outline: 0.05 });
+    // cargo pods
+    for (let i = 0; i < 4; i++) for (const sx of [-1, 1]) {
+      k.box(5, 5, 7, KT([0xffd23f, 0x2ec4ff, 0xff3b5c, 0x7dff6a][i]), sx * 10, -4.5, -14 + i * 9, { outline: 0.15 });
+      k.box(5.1, 0.3, 7.1, KT(0x3a3550), sx * 10, -2.2, -14 + i * 9, { outline: 0 });
+      k.box(0.6, 0.6, 7.2, KT(VSTEEL), sx * 7.3, -2.3, -14 + i * 9, { outline: 0 });
+    }
+    // radiator fins and engines
+    for (const sx of [-1, 1]) {
+      k.box(14, 1.2, 10, KT(0x2a2540), sx * 13, 2.4, -10, { outline: 0.15 });
+      for (let i = 0; i < 5; i++) k.box(12, 0.15, 0.25, KT(stripe), sx * 13, 3.05, -14 + i * 2, { outline: 0 });
+      k.add(new THREE.CylinderGeometry(3, 3.6, 7, 14).rotateX(Math.PI / 2), KT(0x2a2540), sx * 6, 0, -26, { outline: 0.2 });
+      k.add(new THREE.TorusGeometry(3.3, 0.3, 6, 16), KT(stripe), sx * 6, 0, -24, { outline: 0 });
+      k.add(new THREE.CylinderGeometry(2.4, 2.4, 1, 14).rotateX(Math.PI / 2), KG(0xff9f1c), sx * 6, 0, -30, { outline: 0 });
+      k.add(new THREE.CylinderGeometry(1.4, 1.4, 1.1, 14).rotateX(Math.PI / 2), KG(0xfff3c0), sx * 6, 0, -30.1, { outline: 0 });
+    }
+    k.ball(0.8, KG(0xff2a4a), -20, 3, -10, { outline: 0 });
+    k.ball(0.8, KG(0x7dff6a), 20, 3, -10, { outline: 0 });
+    k.ball(0.6, KG(0xffffff), 0, 5.3, -22, { outline: 0 });
+  }));
+  return { root, size: 30 };
+}
+
+// Defence turret: an armoured octagonal base with a glowing collar, and a head (yawed by
+// enemies.updateTurret around its pivot at y 3.1, barrels along +z) with a sloped cupola, twin
+// barrels with muzzle brakes, cooling fins, ammo pods and a sensor eye. Baked per faction colour
+// with the outpost Kit (a few merged meshes), cloned for every turret.
+const TURRET_PARTS = new Map();
+function turretParts(color) {
+  let t = TURRET_PARTS.get(color);
+  if (t) return t;
+  const dark = 0x3a3550, steel = 0x55607a, ink = 0x1d1a29;
+  const base = new Kit(color, 7, false);
+  base.cyl(2.3, 2.6, 0.6, 8, KT(dark), 0, 0, 0, { outline: 0.06 });
+  base.cyl(1.7, 2.2, 1.8, 8, KT(0x4a4660), 0, 0.6, 0, { outline: 0.08 });
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    base.add(new THREE.BoxGeometry(0.5, 1.6, 0.25), KT(steel), Math.sin(a) * 1.95, 1.4, Math.cos(a) * 1.95, { ry: a, rx: 0.25, outline: 0 });
+  }
+  base.cyl(1.85, 1.75, 0.5, 16, KT(color), 0, 2.4, 0, { outline: 0.05 });
+  base.ring(1.86, 0.1, KG(0xff2a4a), 0, 2.2, 0);
+  base.box(0.9, 1.1, 0.12, KT(ink), 0, 0.8, 2.05, { rx: 0.2, outline: 0 });
+  base.box(0.5, 0.12, 0.12, KG(0xffd23f), 0, 2.05, 2.0, { outline: 0 });
+  const head = new Kit(color, 9, false);
+  // cupola: an octagonal frustum, a faction band and a flat armoured roof
+  head.cyl(1.25, 1.55, 1.3, 8, KT(color), 0, -0.65, -0.1, { outline: 0.08 });
+  head.cyl(1.58, 1.58, 0.25, 8, KT(dark), 0, -0.2, -0.1, { outline: 0 });
+  head.cyl(1.05, 1.25, 0.35, 8, KT(0x4a4660), 0, 0.65, -0.1, { outline: 0.05 });
+  // mantlet and twin barrels with muzzle brakes and fins
+  head.box(1.7, 1.0, 0.7, KT(dark), 0, -0.55, 1.2, { outline: 0.05 });
+  for (const sx of [-0.42, 0.42]) {
+    head.add(new THREE.CylinderGeometry(0.17, 0.2, 2.8, 10).rotateX(Math.PI / 2), KT(ink), sx, -0.1, 2.5, { outline: 0.03 });
+    head.add(new THREE.CylinderGeometry(0.27, 0.27, 0.5, 8).rotateX(Math.PI / 2), KT(steel), sx, -0.1, 3.8, { outline: 0.02 });
+    for (let i = 0; i < 3; i++) head.add(new THREE.CylinderGeometry(0.25, 0.25, 0.06, 10).rotateX(Math.PI / 2), KT(steel), sx, -0.1, 1.9 + i * 0.25, { outline: 0 });
+  }
+  // ammo pods on the flanks, sensor eye, antenna
+  for (const s of [-1, 1]) {
+    head.box(0.5, 0.9, 1.5, KT(steel), s * 1.55, -0.6, -0.2, { outline: 0.04 });
+    head.box(0.52, 0.12, 1.2, KT(color), s * 1.55, -0.1, -0.2, { outline: 0 });
+  }
+  head.ball(0.3, KG(0xff2a4a), 0.75, 0.3, 0.95, { outline: 0 });
+  head.cyl(0.32, 0.32, 0.3, 10, KT(dark), 0.75, 0.15, 0.85, { outline: 0.02 });
+  head.cyl(0.04, 0.05, 1.6, 5, KT(ink), -0.7, 0.9, -0.8, { outline: 0 });
+  head.ball(0.1, KG(color), -0.7, 2.55, -0.8, { outline: 0 });
+  t = { base: base.finish().root, head: head.finish().root };
+  TURRET_PARTS.set(color, t);
+  return t;
+}
+export function makeTurret({ color = 0x2b59c3 } = {}) {
+  const P = turretParts(color);
+  const root = new THREE.Group();
+  root.add(P.base.clone());
   const head = new THREE.Group();
   head.position.y = 3.1;
+  head.add(P.head.clone());
   root.add(head);
-  head.add(part(new THREE.BoxGeometry(2.4, 1.4, 2.4), toon(color), 0, 0, 0, 0.08));
-  const lens = part(new THREE.SphereGeometry(0.35, 8, 6), glow(0xff2a4a), 0, 0.2, 1.2, 0);
-  head.add(lens);
-  for (const sx of [-0.5, 0.5]) head.add(part(new THREE.CylinderGeometry(0.16, 0.16, 2.6).rotateX(Math.PI / 2), toon(0x1d1a29), sx, -0.1, 1.8, 0.04));
   return { root, head };
 }
 
@@ -939,34 +1151,7 @@ export function makeDish(size = 10, color = 0xf5f5f5) {
 
 // --- traffic of all sizes ---
 
-export function makeHoverCar({ color = 0xff7ad9, trim = 0xfff4e0 } = {}) {
-  const root = new THREE.Group();
-  root.add(part(new THREE.CapsuleGeometry(1.1, 2.6, 4, 10).rotateX(Math.PI / 2), toon(color), 0, 0, 0, 0.08));
-  root.add(part(new THREE.SphereGeometry(1.0, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), toon(0x9be7ff), 0, 0.5, 0.2, 0.05));
-  for (const sx of [-1, 1]) root.add(part(new THREE.CylinderGeometry(0.45, 0.6, 0.4, 10), glow(0x2ee6ff), sx * 1.1, -0.9, 0, 0.04));
-  root.add(part(new THREE.BoxGeometry(2.6, 0.2, 0.6), toon(trim), 0, -0.2, -1.8, 0.04));
-  return { root, size: 3 };
-}
 
-export function makeFreighter({ color = 0xb8b4c8, stripe = 0xff9f1c } = {}) {
-  const root = new THREE.Group();
-  const hullM = toon(color), stripeM = toon(stripe), dark = toon(0x2a2540);
-  root.add(part(new THREE.BoxGeometry(14, 10, 46), hullM, 0, 0, 0, 0.3));
-  root.add(part(new THREE.CylinderGeometry(6, 8, 12, 12).rotateX(Math.PI / 2), hullM, 0, 1, 28, 0.3));
-  root.add(part(new THREE.BoxGeometry(8, 4, 8), toon(0x9be7ff), 0, 4, 30, 0.15));
-  root.add(part(new THREE.BoxGeometry(14.4, 2, 46.4), stripeM, 0, -1, 0, 0));
-  // cargo pods
-  for (let i = 0; i < 4; i++) for (const sx of [-1, 1]) root.add(part(new THREE.BoxGeometry(5, 5, 7), toon([0xffd23f, 0x2ec4ff, 0xff3b5c, 0x7dff6a][i]), sx * 10, -2, -14 + i * 9, 0.15));
-  for (const sx of [-1, 1]) {
-    root.add(part(new THREE.BoxGeometry(14, 1.2, 10), dark, sx * 13, 3, -10, 0.15));
-    root.add(part(new THREE.CylinderGeometry(3, 3.6, 7, 12).rotateX(Math.PI / 2), dark, sx * 6, 0, -26, 0.2));
-    root.add(part(new THREE.CylinderGeometry(2.4, 2.4, 1, 12).rotateX(Math.PI / 2), glow(0xff9f1c), sx * 6, 0, -30, 0));
-  }
-  // nav lights so they read in the dark
-  root.add(part(new THREE.SphereGeometry(0.8, 8, 6), glow(0xff2a4a), -20, 3, -10, 0));
-  root.add(part(new THREE.SphereGeometry(0.8, 8, 6), glow(0x7dff6a), 20, 3, -10, 0));
-  return { root, size: 30 };
-}
 
 export function makeRocket({ color = 0xfff4e0, stripe = 0xff4f2e } = {}) {
   const root = new THREE.Group();

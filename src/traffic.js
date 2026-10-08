@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { toon, ink, glow, textSprite } from './toon.js';
 import { makeFigure, makeShuttle, makeRover, makeHoverCar, makeFreighter } from './models.js';
+import { Kit, T as KT, G as KG } from './outpostModels.js';
 import { mulberry32 } from './rng.js';
 import { SUN, frameQuat, arcDist } from './geo.js';
 
@@ -115,32 +116,65 @@ function makeLandTrain({ color = 0xff9f1c, trim = 0xfff4e0, cars = ['pax', 'carg
   };
   const root = new THREE.Group();
   const wheels = [];
-  root.add(part(new THREE.BoxGeometry(3.2, 1.0, 8.6), dark, 0, 1.75, 0, 0.08));
-  root.add(part(new THREE.BoxGeometry(3.9, 2.9, 3.4), bodyM, 0, 3.6, 2.3, 0.14));
-  root.add(part(new THREE.BoxGeometry(3.96, 0.9, 2.2), glow(0x9be7ff), 0, 4.25, 2.9, 0.04));
-  root.add(part(new THREE.BoxGeometry(3.4, 1.9, 4.4), trimM, 0, 3.15, -2.1, 0.1));
-  root.add(part(new THREE.BoxGeometry(3.5, 0.5, 4.5), bodyM, 0, 4.3, -2.1, 0.06));
-  for (const sx of [-1, 1]) root.add(part(new THREE.BoxGeometry(0.7, 0.45, 0.2), glow(0xfff6a8), sx * 1.3, 2.55, 4.05, 0.03));
+  // tractor: frame, a cab with a wraparound windscreen, a grille and bumper, a sleeper/engine
+  // box behind, exhaust stacks, side tanks, mirrors and a roof light bar (baked in one Kit)
+  const tk = new Kit(color, 21, false);
+  tk.box(3.2, 1.0, 8.6, KT(0x1d1a29), 0, 1.25, 0, { outline: 0.08 });
+  tk.box(3.9, 2.9, 3.4, KT(color), 0, 2.15, 2.3, { outline: 0.14 });
+  tk.add(new THREE.BoxGeometry(3.96, 1.0, 1.6), KG(0x9be7ff), 0, 4.0, 3.55, { rx: -0.35, outline: 0 });
+  for (const sx of [-1, 1]) tk.box(0.06, 0.9, 1.8, KG(0x9be7ff), sx * 1.98, 3.55, 2.6, { outline: 0 });
+  tk.box(3.4, 1.0, 0.25, KT(0x2a2540), 0, 2.2, 4.06, { outline: 0.03 });
+  for (let i = 0; i < 6; i++) tk.box(3.2, 0.08, 0.3, KT(0x8a87a0), 0, 2.32 + i * 0.15, 4.08, { outline: 0 });
+  tk.box(4.1, 0.5, 0.5, KT(0x8a87a0), 0, 1.6, 4.3, { outline: 0.04 });
+  for (const sx of [-1, 1]) tk.box(0.7, 0.45, 0.2, KG(0xfff6a8), sx * 1.3, 2.3, 4.12, { outline: 0 });
+  tk.box(3.4, 1.9, 4.4, KT(trim), 0, 2.2, -2.1, { outline: 0.1 });
+  tk.box(3.5, 0.5, 4.5, KT(color), 0, 4.05, -2.1, { outline: 0.06 });
+  for (const sx of [-1, 1]) {
+    tk.cyl(0.18, 0.2, 3.4, 8, KT(0x8a87a0), sx * 1.7, 2.3, 0.4, { outline: 0.03 });
+    tk.cyl(0.22, 0.22, 0.25, 8, KT(0x1d1a29), sx * 1.7, 5.7, 0.4, { outline: 0 });
+    tk.add(new THREE.CylinderGeometry(0.45, 0.45, 1.8, 10).rotateX(Math.PI / 2), KT(0xd8d4e8), sx * 1.75, 1.6, -1.2, { outline: 0.03 });
+    tk.box(0.1, 0.6, 0.4, KT(0x1d1a29), sx * 2.2, 3.6, 3.6, { outline: 0.02 });
+    tk.beam([sx * 1.95, 3.4, 3.5], [sx * 2.2, 3.5, 3.6], 0.04, KT(0x1d1a29), { outline: 0 });
+  }
+  tk.box(3.2, 0.25, 0.4, KT(0x1d1a29), 0, 5.05, 3.2, { outline: 0.02 });
+  for (const sx of [-1.2, -0.4, 0.4, 1.2]) tk.box(0.5, 0.18, 0.12, KG(0xfff6a8), sx, 5.08, 3.42, { outline: 0 });
+  tk.cyl(0.05, 0.05, 2.2, 4, KT(0x1d1a29), -1.5, 5.0, 1.0, { outline: 0 });
+  root.add(tk.finish().root);
   const beacon = part(new THREE.SphereGeometry(0.32, 8, 6), glow(0xff9f1c), 0, 5.25, 2.0, 0.03);
   root.add(beacon);
-  root.add(part(new THREE.CylinderGeometry(0.05, 0.05, 2.2), dark, -1.5, 6.1, 1.0, 0.02));
   for (const z of [2.9, 0, -2.9]) for (const sx of [-1, 1]) tyre(root, sx * 2.15, z, 1.2, 1.05, wheels);
   const trailers = [];
   for (const kind of cars) {
     const tr = new THREE.Group();
     const tw = [];
-    tr.add(part(new THREE.BoxGeometry(3.0, 0.6, 8.0), dark, 0, 1.55, 0, 0.06));
-    tr.add(part(new THREE.BoxGeometry(0.35, 0.35, 1.9), dark, 0, 1.5, 4.8, 0.03));
+    const q = new Kit(color, 22, false);
+    q.box(3.0, 0.6, 8.0, KT(0x1d1a29), 0, 1.25, 0, { outline: 0.06 });
+    q.box(0.35, 0.35, 1.9, KT(0x1d1a29), 0, 1.32, 4.8, { outline: 0.03 });
     if (kind === 'pax') {
-      tr.add(part(new THREE.BoxGeometry(3.6, 2.7, 7.6), trimM, 0, 3.2, 0, 0.12));
-      tr.add(part(new THREE.BoxGeometry(3.66, 0.7, 6.8), glow(0xfff6a8), 0, 3.6, 0, 0.03));
-      tr.add(part(new THREE.BoxGeometry(3.8, 0.45, 7.8), bodyM, 0, 4.75, 0, 0.06));
-      tr.add(part(new THREE.BoxGeometry(0.12, 2.1, 1.5), bodyM, -1.82, 2.9, 0, 0)); // door on the right (-x)
+      // passenger car: a windowed cabin with pillars, a door on the right, roof units
+      q.box(3.6, 2.7, 7.6, KT(trim), 0, 1.85, 0, { outline: 0.12 });
+      for (let i = 0; i < 5; i++) for (const sx of [-1, 1]) {
+        const z = -3 + i * 1.5;
+        if (sx < 0 && i === 2) continue;
+        q.box(0.06, 0.9, 1.1, KG(0xfff6a8), sx * 1.81, 3.2, z, { outline: 0 });
+      }
+      for (const sx of [-1, 1]) q.box(0.08, 0.25, 7.4, KT(color), sx * 1.82, 2.55, 0, { outline: 0 });
+      q.box(3.8, 0.45, 7.8, KT(color), 0, 4.55, 0, { outline: 0.06 });
+      q.box(1.6, 0.5, 2.2, KT(0xd8d4e8), 0, 5.0, -1.8, { outline: 0.03 });
+      q.box(0.12, 2.1, 1.5, KT(color), -1.82, 1.85, 0, { outline: 0 }); // door on the right (-x)
+      q.box(0.14, 0.3, 1.0, KG(0x7dff6a), -1.84, 4.1, 0, { outline: 0 });
     } else {
-      tr.add(part(new THREE.BoxGeometry(3.4, 0.4, 7.8), bodyM, 0, 2.05, 0, 0.06));
-      tr.add(part(new THREE.CylinderGeometry(1.35, 1.35, 6.6, 14).rotateX(Math.PI / 2), toon(0x9be7ff), 0, 3.6, 0, 0.1));
-      for (const z of [-2.2, 0, 2.2]) tr.add(part(new THREE.TorusGeometry(1.4, 0.12, 6, 16), bodyM, 0, 3.6, z, 0));
+      // cargo car: a ribbed pressure tank on a cradle with a catwalk
+      q.box(3.4, 0.4, 7.8, KT(color), 0, 1.85, 0, { outline: 0.06 });
+      q.add(new THREE.CylinderGeometry(1.35, 1.35, 6.6, 16).rotateX(Math.PI / 2), KT(0x9be7ff), 0, 3.6, 0, { outline: 0.1 });
+      q.add(new THREE.SphereGeometry(1.35, 14, 8), KT(0x9be7ff), 0, 3.6, 3.3, { outline: 0 });
+      q.add(new THREE.SphereGeometry(1.35, 14, 8), KT(0x9be7ff), 0, 3.6, -3.3, { outline: 0 });
+      for (const z of [-2.2, 0, 2.2]) q.add(new THREE.TorusGeometry(1.4, 0.12, 6, 16), KT(color), 0, 3.6, z, { outline: 0 });
+      for (const z of [-2.6, 2.6]) q.box(2.6, 0.9, 0.5, KT(0x1d1a29), 0, 2.25, z, { outline: 0.02 });
+      q.box(0.8, 0.1, 6, KT(0x8a87a0), 0, 5.0, 0, { outline: 0.02 });
+      q.ring(0.5, 0.08, KG(0x7dff6a), 0, 5.06, 1.5);
     }
+    tr.add(q.finish().root);
     for (const z of [2.7, -2.7]) for (const sx of [-1, 1]) tyre(tr, sx * 1.95, z, 1.0, 0.9, tw);
     trailers.push({ root: tr, wheels: tw, kind });
   }

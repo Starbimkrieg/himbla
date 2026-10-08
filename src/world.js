@@ -7,6 +7,7 @@ import { FACTIONS } from './locations.js';
 import { SUN, frameQuat, arcDist, dirFromAngles } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
 import { Traffic } from './traffic.js';
+import { buildHelium, buildMeridian, buildFunpark, dressLab, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, buildDen, buildPirateCamp, jobTerminal } from './settlements.js';
 
 function mesh(geo, mat, outline = 0.15) {
   const m = new THREE.Mesh(geo, mat);
@@ -18,6 +19,7 @@ function mesh(geo, mat, outline = 0.15) {
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
+const _e = new THREE.Euler();
 const ACTIVE_DIST = 2600;
 
 // Static-geometry batcher: parts are baked into one merged mesh per material plus a single
@@ -99,6 +101,7 @@ export class World {
     this.crawlers = [];
     this.zoneWalls = [];
     this.walkers = []; // foot traffic inside the ILMB skywalks
+    this.anims = []; // moving parts of kit-built settlements (settlements.js): { loc, list, seed }
     this._mats = new Map();
     this.rand = mulberry32(42);
 
@@ -212,8 +215,8 @@ export class World {
     if (spec.type === 'cyl') {
       return this.colliders.add({ type: 'cyl', c: this.toWorld(loc, spec.x, 0, spec.z), axis: loc.dir.clone(), y0: spec.y0, y1: spec.y1, r: spec.r });
     }
-    const yaw = spec.yaw || 0;
-    _q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw).premultiply(g.quaternion);
+    // yaw, then an optional pitch about the box's own x (ramps and bowl walls tilt their top face)
+    _q.setFromEuler(_e.set(spec.pitch || 0, spec.yaw || 0, spec.roll || 0, 'YXZ')).premultiply(g.quaternion);
     return this.colliders.add({
       type: 'box', c: this.toWorld(loc, spec.x, spec.y, spec.z),
       ax: new THREE.Vector3(1, 0, 0).applyQuaternion(_q), ay: new THREE.Vector3(0, 1, 0).applyQuaternion(_q), az: new THREE.Vector3(0, 0, 1).applyQuaternion(_q),
@@ -273,6 +276,54 @@ export class World {
     this.col(loc, { type: 'box', x: dx, y: h / 2 + 0.3, z: dz, hx: w / 2 + 0.2, hy: h / 2 + 0.3, hz: d / 2 + 0.2, yaw });
   }
 
+  // Fortress wall segment (local x along the wall, +z = outside): a battered plinth, buttresses and
+  // crenellations on the outer face, a capped walkway, panel seams, an inner light strip and wall
+  // lamps outside. Same collider as the old block wall.
+  wallB(B, loc, dx, dz, len, h, t, color, yaw, trim) {
+    B.at(dx, dz, yaw);
+    const dark = toon(0x3a3550), seam = toon(0x46415c);
+    B.add(new THREE.BoxGeometry(len, h, t), toon(color), 0, h / 2, 0, { outline: 0.2 });
+    B.add(new THREE.BoxGeometry(len, 1.8, t + 1.6), toon(0x4a4660), 0, 0.9, 0.3, { outline: 0.1 });
+    B.add(new THREE.BoxGeometry(len + 0.2, 0.25, t + 1.7), toon(trim), 0, 1.85, 0.3, { outline: 0 });
+    for (let x = -len / 2 + 3.5; x < len / 2 - 1; x += 7) B.add(new THREE.BoxGeometry(1.4, h * 0.82, 1.2), toon(0x4a4660), x, h * 0.41, t / 2 + 0.6, { rx: -0.08, outline: 0.06 });
+    for (let x = -len / 2 + 1.75; x < len / 2; x += 3.5) for (const sz of [-1, 1]) B.add(new THREE.BoxGeometry(0.12, h * 0.8, 0.12), seam, x, h * 0.5, sz * (t / 2 + 0.03), { outline: 0 });
+    B.add(new THREE.BoxGeometry(len * 1.01, 0.5, t + 0.9), toon(trim), 0, h + 0.25, 0, { outline: 0.1 });
+    B.add(new THREE.BoxGeometry(len, 0.15, t - 0.6), dark, 0, h + 0.55, -0.2, { outline: 0 });
+    const n = Math.max(2, Math.round(len / 2.6));
+    for (let i = 0; i < n; i++) B.add(new THREE.BoxGeometry((len / n) * 0.55, 1.3, 0.8), toon(color), -len / 2 + (len / n) * (i + 0.5), h + 1.15, t / 2 + 0.05, { outline: 0.05 });
+    B.add(new THREE.BoxGeometry(len * 0.96, 0.35, 0.1), this.glowM(0xfff6a8), 0, h * 0.65, -t / 2 - 0.06, { outline: 0 });
+    for (let x = -len / 2 + 7; x < len / 2 - 3; x += 14) {
+      B.add(new THREE.BoxGeometry(0.8, 0.5, 0.5), dark, x, h * 0.72, t / 2 + 0.3, { outline: 0.02 });
+      B.add(new THREE.BoxGeometry(0.6, 0.15, 0.3), this.glowM(0xff2a4a), x, h * 0.72 - 0.3, t / 2 + 0.45, { outline: 0 });
+    }
+    this.col(loc, { type: 'box', x: dx, y: h / 2 + 0.3, z: dz, hx: len / 2 + 0.2, hy: h / 2 + 0.3, hz: t / 2 + 0.2, yaw });
+  }
+
+  // Gate tower: a tapered keep with bands, slit windows, a crenellated top and an emblem panel
+  // facing out (+z). Collider as the old 8x16x8 block.
+  gateTowerB(B, loc, dx, dz, w, h, color, yaw, trim) {
+    B.at(dx, dz, yaw);
+    const half = w / 2;
+    B.add(new THREE.CylinderGeometry(half * 0.82 * Math.SQRT2, half * 1.05 * Math.SQRT2, h, 4, 1).rotateY(Math.PI / 4), toon(color), 0, h / 2, 0, { outline: 0.2 });
+    B.add(new THREE.BoxGeometry(w * 1.12, 1.6, w * 1.12), toon(0x4a4660), 0, 0.8, 0, { outline: 0.1 });
+    for (const y of [h * 0.35, h * 0.7]) B.add(new THREE.BoxGeometry(w * (1.02 - (y / h) * 0.2), 0.5, w * (1.02 - (y / h) * 0.2)), toon(trim), 0, y, 0, { outline: 0 });
+    for (const [sx, sz, ry] of [[0, 1, 0], [0, -1, 0], [1, 0, Math.PI / 2], [-1, 0, Math.PI / 2]]) {
+      for (const y of [h * 0.5, h * 0.82]) {
+        const r = half * (1.05 - (y / h) * 0.23) + 0.05;
+        B.add(new THREE.BoxGeometry(0.5, 1.4, 0.12), this.glowM(0xfff6a8), sx * r, y, sz * r, { ry, outline: 0 });
+      }
+    }
+    B.add(new THREE.BoxGeometry(w * 0.9, 0.6, w * 0.9), toon(trim), 0, h + 0.3, 0, { outline: 0.08 });
+    for (let i = 0; i < 4; i++) for (const s of [-1, 1]) {
+      const a = (i * Math.PI) / 2;
+      const ex = Math.sin(a) * half * 0.8 + Math.cos(a) * s * half * 0.45, ez = Math.cos(a) * half * 0.8 - Math.sin(a) * s * half * 0.45;
+      B.add(new THREE.BoxGeometry(1.2, 1.2, 1.2), toon(color), ex, h + 1.2, ez, { outline: 0.05 });
+    }
+    B.add(new THREE.BoxGeometry(w * 0.5, w * 0.5, 0.3), toon(0x2a2540), 0, h * 0.58, half * 0.93 + 0.1, { rx: -0.03, outline: 0.04 });
+    B.add(new THREE.TorusGeometry(w * 0.16, 0.18, 4, 16), this.glowM(color === 0xffd23f ? 0x2ee6ff : 0xffd23f), 0, h * 0.58, half * 0.93 + 0.3, { outline: 0 });
+    this.col(loc, { type: 'box', x: dx, y: h / 2 + 0.3, z: dz, hx: w / 2 + 0.2, hy: h / 2 + 0.3, hz: w / 2 + 0.2, yaw });
+  }
+
   // Defense turret mount, read by enemies.setupBase: settlement-local position of the
   // turret base. `ground` mounts are snapped to the terrain instead (outside the plateau).
   mount(loc, x, z, y, extra = {}) {
@@ -287,6 +338,13 @@ export class World {
     const deck = h + 1.1;
     B.at(x, z, -a);
     B.add(new THREE.CylinderGeometry(r, r * 1.12, h, 8), toon(color), 0, h / 2, 0, { outline: 0.2 });
+    B.add(new THREE.CylinderGeometry(r * 1.2, r * 1.32, 1.8, 8), toon(0x3a3550), 0, 0.9, 0, { outline: 0.1 });
+    for (let i = 0; i < 8; i++) {
+      const t = (i / 8) * Math.PI * 2, rr = r * 1.06;
+      B.add(new THREE.BoxGeometry(0.7, h * 0.85, 0.7), toon(0x5b5870), Math.cos(t) * rr, h * 0.45, Math.sin(t) * rr, { ry: -t, rz: 0, outline: 0.04 });
+      const ts = t + Math.PI / 8;
+      B.add(new THREE.BoxGeometry(0.4, 1.6, 0.12), this.glowM(0xfff6a8), Math.cos(ts) * r * 1.0, h * 0.8, Math.sin(ts) * r * 1.0, { ry: -ts + Math.PI / 2, outline: 0 });
+    }
     B.add(new THREE.CylinderGeometry(r * 1.1, r * 0.98, 1.1, 8), toon(trim), 0, h + 0.55, 0, { outline: 0.1 });
     B.add(new THREE.CylinderGeometry(r * 1.07, r * 1.1, 0.5, 8, 1, true), this.glowM(0xff2a4a), 0, h * 0.62, 0, { outline: 0 });
     for (let i = 0; i < 8; i++) {
@@ -297,6 +355,7 @@ export class World {
     // along the wall's outer face to the next bastion
     B.add(new THREE.CylinderGeometry(heavy ? 1.7 : 1.3, heavy ? 2.3 : 1.8, ped, 10), toon(0x3a3550), tx, deck + ped / 2, 0, { outline: 0.08 });
     B.add(new THREE.TorusGeometry(heavy ? 2.4 : 1.9, 0.18, 6, 16), this.glowM(0xffd23f), tx, deck + 0.15, 0, { rx: Math.PI / 2, outline: 0 });
+    B.add(new THREE.CylinderGeometry(heavy ? 2.0 : 1.6, heavy ? 2.0 : 1.6, 0.4, 10), toon(trim), tx, deck + ped - 0.2, 0, { outline: 0.04 });
     if (beacon) {
       B.add(new THREE.CylinderGeometry(0.15, 0.15, 4, 6), toon(0x3a3550), -r * 0.7, deck + 2, 0, { outline: 0.04 });
       B.add(new THREE.SphereGeometry(0.7, 10, 8), beacon, -r * 0.7, deck + 4.4, 0, { outline: 0 });
@@ -328,20 +387,20 @@ export class World {
           if (free(tx, tz)) { x = tx; z = tz; break search; }
         }
       }
-      const g = new THREE.Group();
-      const col = mesh(new THREE.CylinderGeometry(0.9, 1.3, h, 8), toon(0x5b5870), 0.08);
-      col.position.y = h / 2;
-      g.add(col);
-      const foot = mesh(new THREE.CylinderGeometry(2.4, 2.8, 0.8, 8), toon(0x3a3550), 0.08);
-      foot.position.y = 0.4;
-      g.add(foot);
-      const deck = mesh(new THREE.CylinderGeometry(2.6, 2.2, 0.7, 10), toon(0x3a3550), 0.08);
-      deck.position.y = h - 0.35;
-      g.add(deck);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.14, 6, 16).rotateX(Math.PI / 2), this.glowM(new THREE.Color(FACTIONS[loc.faction].color).getHex()));
-      ring.position.y = h - 0.35;
-      g.add(ring);
-      this.put(g, loc, x, z);
+      // an armoured pylon: octagonal column with bands and a ladder, a railed deck, faction ring
+      const fcol = new THREE.Color(FACTIONS[loc.faction].color).getHex();
+      const B = new Batch();
+      B.at(x, z, Math.atan2(-x, -z));
+      B.add(new THREE.CylinderGeometry(2.4, 2.9, 0.9, 8), toon(0x3a3550), 0, 0.45, 0, { outline: 0.08 });
+      B.add(new THREE.CylinderGeometry(0.95, 1.35, h, 8), toon(0x5b5870), 0, h / 2, 0, { outline: 0.1 });
+      for (const y of [h * 0.3, h * 0.62]) B.add(new THREE.CylinderGeometry(1.25 - y * 0.03, 1.3 - y * 0.03, 0.35, 8), toon(fcol), 0, y, 0, { outline: 0 });
+      for (const sx of [-0.35, 0.35]) B.add(new THREE.BoxGeometry(0.08, h - 1, 0.08), toon(0x1d1a29), sx, h / 2, 1.35, { outline: 0 });
+      for (let y = 1.2; y < h - 0.8; y += 0.8) B.add(new THREE.BoxGeometry(0.75, 0.06, 0.06), toon(0x1d1a29), 0, y, 1.35, { outline: 0 });
+      B.add(new THREE.CylinderGeometry(2.7, 2.1, 0.7, 10), toon(0x3a3550), 0, h - 0.35, 0, { outline: 0.08 });
+      for (let i = 0; i < 10; i++) { const t = (i / 10) * Math.PI * 2; B.add(new THREE.BoxGeometry(0.1, 0.9, 0.1), toon(0x55607a), Math.cos(t) * 2.55, h + 0.45, Math.sin(t) * 2.55, { outline: 0 }); }
+      B.add(new THREE.TorusGeometry(2.55, 0.08, 4, 20).rotateX(Math.PI / 2), toon(fcol), 0, h + 0.9, 0, { outline: 0 });
+      B.add(new THREE.TorusGeometry(2.7, 0.14, 6, 16).rotateX(Math.PI / 2), this.glowM(fcol), 0, h - 0.35, 0, { outline: 0 });
+      B.build(this, loc);
       this.col(loc, { type: 'cyl', x, z, y0: -2, y1: h, r: 1.4 });
       this.mount(loc, x, z, h);
     }
@@ -484,7 +543,7 @@ export class World {
     const fc = FACTIONS[loc.faction].color;
     switch (loc.type) {
       case 'hub': this.buildHub(loc); break;
-      case 'civilian': this.buildCivilian(loc); if (loc.id === 'kepler') this.buildCivic(loc); break;
+      case 'civilian': this.buildCivilian(loc); break;
       case 'research': this.buildArray(loc); break;
       case 'industrial': this.buildMine(loc); break;
       case 'trade': this.buildTrade(loc); break;
@@ -518,52 +577,23 @@ export class World {
   }
 
   buildHub(loc) {
-    this.dome(loc, 0, 0, 58, 0x9be7ff, 0.35);
-    this.tower(loc, 0, 0, 82, 4, 0xfff4e0, 0xffd23f);
+    dressIlmb(this, loc); // dome, spire, repair hangar, gantry, fuel spheres, outer domes, barracks
     const B = new Batch();
     this.buildIlmbWings(loc, B);
-    const board = this.block(loc, 0, 76, 16, 9, 3, 0xffd23f, 0, 0xff3b5c);
+    // the job terminal: a kiosk of screens facing the arrival point (settlements.jobTerminal); the
+    // Hall of Highlights now lives on the board's own screen (hud.openBoard)
+    jobTerminal(this, loc, 0, 76, 0, 0xffd23f);
     const bs = textSprite('JOB BOARD', { color: '#ffffff', size: 80, scale: 0.6 });
-    bs.position.set(0, 14, 0);
-    board.add(bs);
-    bs.updateMatrix();
+    bs.position.set(0, 21, 76);
+    loc.group.add(bs);
 
-    // Hall of Highlights: your best action shots, pinned up for the whole base to see
-    const hall = new THREE.Group();
-    const frameM = mesh(new THREE.BoxGeometry(34, 22, 1.6), toon(0xff2e88), 0.25);
-    frameM.position.y = 14;
-    hall.add(frameM);
-    for (const sx of [-1, 1]) {
-      const leg = mesh(new THREE.BoxGeometry(1.4, 6, 1.4), toon(0x3a3550), 0.08);
-      leg.position.set(sx * 14, 2, 0);
-      hall.add(leg);
-    }
-    this.highlightCanvas = document.createElement('canvas');
-    this.highlightCanvas.width = 1024; this.highlightCanvas.height = 640;
-    this.highlightTex = new THREE.CanvasTexture(this.highlightCanvas);
-    this.highlightTex.colorSpace = THREE.SRGBColorSpace;
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(32, 20), new THREE.MeshBasicMaterial({ map: this.highlightTex }));
-    screen.position.set(0, 14, 0.85);
-    hall.add(screen);
-    // open ground between the job board and the Meridian embassy, angled toward the arrival point
-    const hx = 44, hz = 72, hyaw = Math.atan2(0 - hx, 108 - hz);
-    this.put(hall, loc, hx, hz, 0, hyaw);
-    this.col(loc, { type: 'box', x: hx, y: 12, z: hz, hx: 17, hy: 12, hz: 1.2, yaw: hyaw });
-    this.highlightSpot = { loc, x: hx, z: hz };
-
-    // repair bay hangar (out past the Daedalus relay, clear of the wings)
-    const hangar = mesh(new THREE.CylinderGeometry(16, 16, 34, 20, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2), toon(0xff9f1c), 0.25);
-    this.put(hangar, loc, -168, -98, 0, 1.05);
-    this.col(loc, { type: 'box', x: -168, y: 7, z: -98, hx: 17, hy: 8, hz: 16, yaw: 1.05 });
+    // repair bay hangar (out past the Daedalus relay, clear of the wings; built in settlements.js)
     const rs = textSprite('REPAIR BAY', { color: '#ff9f1c', size: 70, scale: 0.6 });
     rs.position.set(-168, 24, -98);
     loc.group.add(rs);
     this.pad(loc, 95, -60, 16);
     this.pad(loc, -120, 40, 16, 0x2ec4ff);
-    this.dome(loc, 70, 140, 16, 0xff7ad9);
-    this.dome(loc, -60, 145, 14, 0xffd23f);
     this.solarField(loc, 150, 60, 4, 6, 0.4);
-    this.tower(loc, 140, -120, 30, 1.5, 0xe0e0e0);
     const dish = makeDish(14);
     this.put(dish.root, loc, -150, -40, 0, 0, true);
     this.dishes.push({ ...dish, speed: 0.2, loc });
@@ -572,22 +602,7 @@ export class World {
     // Launch complex: where most new arrivals touch down on the Moon
     const lp = { x: 20, z: -185 };
     this.pad(loc, lp.x, lp.z, 30, 0xff4f2e);
-    const gantry = new THREE.Group();
-    for (let i = 0; i < 6; i++) {
-      const seg = mesh(new THREE.BoxGeometry(5, 9, 5), toon(i % 2 ? 0xff4f2e : 0xfff4e0), 0.12);
-      seg.position.y = 4.5 + i * 9;
-      gantry.add(seg);
-    }
-    const arm = mesh(new THREE.BoxGeometry(14, 1.5, 2), toon(0x3a3550), 0.08);
-    arm.position.set(-8, 40, 0);
-    gantry.add(arm);
-    this.put(gantry, loc, lp.x + 40, lp.z, 0);
-    this.col(loc, { type: 'box', x: lp.x + 40, y: 27, z: lp.z, hx: 2.8, hy: 27, hz: 2.8 });
-    for (const [tx, tz] of [[lp.x - 40, lp.z + 12], [lp.x - 40, lp.z - 12]]) {
-      const t = mesh(new THREE.SphereGeometry(7, 16, 12), toon(0xfff4e0), 0.15);
-      this.put(t, loc, tx, tz, 7);
-      this.col(loc, { type: 'sphere', x: tx, y: 7, z: tz, r: 7 });
-    }
+    // (the gantry and fuel spheres are in settlements.dressIlmb)
     const ls = textSprite('ARRIVALS', { color: '#ff4f2e', size: 70, scale: 0.6 });
     ls.position.set(lp.x, 30, lp.z + 20);
     loc.group.add(ls);
@@ -611,7 +626,7 @@ export class World {
       const a = (i / segs) * Math.PI * 2;
       if (gates.some((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g))) < 0.1)) continue;
       const len = ((2 * Math.PI * R) / segs) * 0.96;
-      this.blockB(B, loc, Math.cos(a) * R, Math.sin(a) * R, len, 9, 4, 0x5b5870, -a + Math.PI / 2, 0xffd23f);
+      this.wallB(B, loc, Math.cos(a) * R, Math.sin(a) * R, len, 9, 4, 0x5b5870, -a + Math.PI / 2, 0xffd23f);
     }
     const beacon = new THREE.MeshBasicMaterial({ color: 0xff2a4a });
     this.blinkers.push({ mat: beacon, base: new THREE.Color(0xff2a4a), phase: 0, loc });
@@ -625,7 +640,7 @@ export class World {
       for (const s of [-1, 1]) {
         const a = g + s * 0.14;
         const x = Math.cos(a) * R, z = Math.sin(a) * R;
-        this.blockB(B, loc, x, z, 8, 16, 8, 0xffd23f, -a + Math.PI / 2, 0x2a2540);
+        this.gateTowerB(B, loc, x, z, 8, 16, 0xffd23f, -a + Math.PI / 2, 0x2a2540);
         // gun ring on the tower roof, corbelled out over the outer face
         B.at(x, z, -a);
         B.add(new THREE.CylinderGeometry(2.6, 2.2, 1.6, 10), toon(0x3a3550), 1.6, 17.4, 0, { outline: 0.08 });
@@ -634,16 +649,21 @@ export class World {
         this.col(loc, { type: 'cyl', x: gx, z: gz, y0: 16, y1: 18.2, r: 2.6 });
         this.mount(loc, gx, gz, 18.2, { wall: true });
       }
+      // a lit gantry spanning the gate between its two towers, high enough to ride (or fly) under
+      const gr = R * Math.cos(0.14), half = R * Math.sin(0.14) - 4.5;
+      B.at(Math.cos(g) * gr, Math.sin(g) * gr, -g + Math.PI / 2);
+      B.add(new THREE.BoxGeometry(half * 2, 1.8, 2.6), toon(0x3a3550), 0, 15, 0, { outline: 0.12 });
+      B.add(new THREE.BoxGeometry(half * 2, 0.5, 2.8), toon(0xffd23f), 0, 16.1, 0, { outline: 0 });
+      for (let x = -half + 4; x < half - 2; x += 6) B.add(new THREE.BoxGeometry(1.6, 0.25, 0.8), this.glowM(0xfff6a8), x, 14, 0, { outline: 0 });
+      for (const sz of [-1, 1]) B.add(new THREE.BoxGeometry(half * 2, 0.3, 0.2), this.glowM(0x2ee6ff), 0, 15, sz * 1.4, { outline: 0 });
+      this.col(loc, { type: 'box', x: Math.cos(g) * gr, y: 15.3, z: Math.sin(g) * gr, hx: half, hy: 1.1, hz: 1.4, yaw: -g + Math.PI / 2 });
     }
     // inner ring guns on pylons, clear of the wings
     const d = loc.defense;
     const inner = [];
     for (let i = 0; i < (d.inner || 0); i++) inner.push([(i / d.inner) * Math.PI * 2 + 0.8, d.ring * 0.55]);
     this.defensePylons(loc, inner, 7);
-    // barracks, vehicle depot, command bunker
-    this.block(loc, 175, 120, 34, 10, 16, 0x5b5870, -0.6, 0xffd23f);
-    this.block(loc, -175, 125, 34, 10, 16, 0x5b5870, 0.6, 0xffd23f);
-    this.block(loc, 190, -40, 26, 12, 26, 0x4a4660, 0.3, 0x2a2540);
+    // (barracks and the vehicle depot are in settlements.dressIlmb)
     for (let i = 0; i < 3; i++) {
       const r = makeRover({ color: 0x55607a, trim: 0xffd23f, pirate: false, flag: 0xffd23f });
       r.root.scale.setScalar(1.15);
@@ -974,101 +994,81 @@ export class World {
     return 12.6;
   }
 
-  // Kepler habitat: a windowed torus on struts around a garden, with a central hub tower.
+  // Kepler habitat: a big two-deck ring (a tall oval tube with two rows of windows) on struts,
+  // six lit spokes to a central hub tower with an observation crown, and a park inside the ring.
   wingHabitat(loc, w) {
-    const orange = 0xff9f1c, cream = 0xfff4e0, RR = 14, tr = 4, hy = 6;
-    w.add(new THREE.TorusGeometry(RR, tr, 14, 40), toon(cream), 0, hy, 0, { rx: Math.PI / 2, outline: 0.15 });
-    w.add(new THREE.TorusGeometry(RR + tr - 0.05, 0.35, 6, 48), toon(orange), 0, hy, 0, { rx: Math.PI / 2, outline: 0.04 });
-    for (let k = 0; k < 32; k++) {
-      const t = (k / 32) * Math.PI * 2;
-      w.add(new THREE.BoxGeometry(0.4, 1.1, 1.5), this.glowM(0xfff6a8), Math.cos(t) * (RR + 3.75), hy + 1.4, Math.sin(t) * (RR + 3.75), { ry: -t, outline: 0 });
+    const orange = 0xff9f1c, cream = 0xfff4e0, dark = 0x3a3550, RR = 22, tr = 5, sy = 1.25, hy = 8;
+    // the ring: an oval-section torus (tall enough for two floors), banded and windowed
+    w.add(new THREE.TorusGeometry(RR, tr, 14, 64), toon(cream), 0, hy, 0, { rx: Math.PI / 2, sz: sy, outline: 0.18 });
+    for (const y of [hy - tr * sy * 0.92, hy + tr * sy * 0.92]) w.add(new THREE.TorusGeometry(RR, 0.45, 6, 64), toon(orange), 0, y, 0, { rx: Math.PI / 2, outline: 0.04 });
+    w.add(new THREE.TorusGeometry(RR + tr - 0.15, 0.3, 6, 64), toon(orange), 0, hy, 0, { rx: Math.PI / 2, outline: 0 });
+    const n = 44;
+    for (let k = 0; k < n; k++) {
+      const t = (k / n) * Math.PI * 2;
+      for (const dy of [-2.2, 2.2]) {
+        const rr = RR + Math.sqrt(Math.max(0, 1 - (dy / (tr * sy)) ** 2)) * tr - 0.12;
+        w.add(new THREE.BoxGeometry(0.35, 1.5, 1.7), this.glowM(0xfff6a8), Math.cos(t) * rr, hy + dy, Math.sin(t) * rr, { ry: -t, outline: 0 });
+      }
+      if (k % 2 === 0) w.add(new THREE.BoxGeometry(0.35, 1.2, 1.6), this.glowM(0xfff6a8), Math.cos(t) * (RR - tr + 0.15), hy, Math.sin(t) * (RR - tr + 0.15), { ry: -t, outline: 0 });
     }
-    for (let k = 0; k < 12; k++) {
-      const t = (k / 12) * Math.PI * 2;
-      w.add(new THREE.CylinderGeometry(0.5, 0.7, 2.4, 6), toon(0x3a3550), Math.cos(t) * RR, 1.2, Math.sin(t) * RR, { outline: 0.04 });
+    // struts and footings
+    for (let k = 0; k < 16; k++) {
+      const t = (k / 16) * Math.PI * 2;
+      w.add(new THREE.CylinderGeometry(0.6, 0.9, hy - tr * sy + 0.6, 8), toon(dark), Math.cos(t) * RR, (hy - tr * sy) / 2, Math.sin(t) * RR, { outline: 0.04 });
+      w.add(new THREE.CylinderGeometry(1.4, 1.6, 0.5, 8), toon(0x5b5870), Math.cos(t) * RR, 0.25, Math.sin(t) * RR, { outline: 0.03 });
     }
-    for (let k = 0; k < 4; k++) {
-      const t = (k / 4) * Math.PI * 2 + Math.PI / 4;
-      w.add(new THREE.CylinderGeometry(0.9, 0.9, RR - 5, 8), toon(cream), Math.cos(t) * (RR + 5) / 2, hy, -Math.sin(t) * (RR + 5) / 2, { rz: Math.PI / 2, ry: t, order: 'YXZ', outline: 0.05 });
-    }
-    w.add(new THREE.CylinderGeometry(4.5, 5, 13, 16), toon(orange), 0, 6.5, 0, { outline: 0.15 });
-    w.add(new THREE.SphereGeometry(4.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), toon(cream), 0, 13, 0, { outline: 0.1 });
-    w.add(new THREE.CylinderGeometry(4.6, 4.6, 0.8, 16), this.glowM(0xfff6a8), 0, 10, 0, { outline: 0 });
-    w.add(new THREE.CylinderGeometry(0.15, 0.15, 5, 6), toon(0x3a3550), 0, 19, 0, { outline: 0.03 });
-    w.add(new THREE.CylinderGeometry(9.6, 9.6, 0.3, 32), toon(0x3ad15a), 0, 0.15, 0, { outline: 0 });
+    // spokes out from the hub, with a lit strip along each
     for (let k = 0; k < 6; k++) {
-      const t = (k / 6) * Math.PI * 2 + 0.3;
-      w.add(new THREE.ConeGeometry(1.1, 3.4, 6), toon(0x1f8a3a), Math.cos(t) * 7.4, 2, Math.sin(t) * 7.4, { outline: 0.05 });
+      const t = (k / 6) * Math.PI * 2 + Math.PI / 6, len = RR - tr - 7.5, mid = 7.5 + len / 2;
+      w.add(new THREE.CylinderGeometry(1.5, 1.5, len, 10), toon(cream), Math.cos(t) * mid, hy + 2, -Math.sin(t) * mid, { rz: Math.PI / 2, ry: t, order: 'YXZ', outline: 0.06 });
+      w.add(new THREE.BoxGeometry(len, 0.35, 0.2), this.glowM(0xfff6a8), Math.cos(t) * mid, hy + 2.6, -Math.sin(t) * mid, { ry: t, outline: 0 });
     }
+    // hub tower: drum, banded shaft, observation crown and a mast
+    w.add(new THREE.CylinderGeometry(8, 8.6, 4, 24), toon(0x5b5870), 0, 2, 0, { outline: 0.1 });
+    w.add(new THREE.CylinderGeometry(6.5, 7.5, 20, 24), toon(orange), 0, 14, 0, { outline: 0.15 });
+    for (const y of [9, 15, 21]) w.add(new THREE.CylinderGeometry(6.65 + (24 - y) * 0.05, 6.65 + (24 - y) * 0.05, 1.1, 24), this.glowM(0xfff6a8), 0, y, 0, { outline: 0 });
+    w.add(new THREE.CylinderGeometry(9, 6.5, 2, 24), toon(cream), 0, 25, 0, { outline: 0.1 });
+    w.add(new THREE.CylinderGeometry(9, 9, 3, 24, 1, true), this.glassM(0x9be7ff, 0.3), 0, 27.5, 0, { outline: 0 });
+    w.add(new THREE.SphereGeometry(9, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon(cream), 0, 29, 0, { outline: 0.12 });
+    w.add(new THREE.CylinderGeometry(0.2, 0.3, 8, 6), toon(dark), 0, 41, 0, { outline: 0.03 });
+    w.add(new THREE.SphereGeometry(0.6, 8, 6), this.glowM(0xff9f1c), 0, 45.3, 0, { outline: 0 });
+    // the park inside the ring: lawn, paths, trees, a pond and benches
+    w.add(new THREE.CylinderGeometry(RR - tr - 0.5, RR - tr - 0.5, 0.3, 48), toon(0x3ad15a), 0, 0.15, 0, { outline: 0 });
+    for (let k = 0; k < 6; k++) { const t = (k / 6) * Math.PI * 2; w.add(new THREE.BoxGeometry(RR - tr - 9, 0.05, 1.6), toon(0xd8c9a8), Math.cos(t) * (RR - tr + 8) / 2, 0.32, -Math.sin(t) * (RR - tr + 8) / 2, { ry: t, outline: 0 }); }
+    const rr = mulberry32(31);
     for (let k = 0; k < 14; k++) {
-      const t = (k / 14) * Math.PI * 2;
-      w.sph(Math.cos(t) * RR, hy, Math.sin(t) * RR, tr + 0.3);
+      const t = rr() * Math.PI * 2, d = 10 + rr() * 5.5;
+      const tx = Math.cos(t) * d, tz = Math.sin(t) * d;
+      w.add(new THREE.CylinderGeometry(0.2, 0.3, 1.6, 6), toon(0x6b4a2a), tx, 1.1, tz, { outline: 0.02 });
+      w.add(rr() < 0.5 ? new THREE.ConeGeometry(1.3, 3.4, 7) : new THREE.SphereGeometry(1.4, 8, 6), toon(rr() < 0.5 ? 0x1f8a3a : 0x3ad15a), tx, 3.3, tz, { outline: 0.04 });
     }
-    w.cyl(0, 0, -2, 15, 5.2);
-    this.vestibule(w, -(RR + tr) + 1, 7.2, orange, 8.4, 6);
-    w.flag(6, RR + tr + 3, [0xff9f1c, 0xffffff]);
-    w.sign('KEPLER HABITAT', '#ff9f1c', 0, 25, 0);
+    w.add(new THREE.CylinderGeometry(3, 3, 0.1, 20), this.glowM(0x5ad8ff), 11, 0.36, -9, { outline: 0 });
+    w.add(new THREE.TorusGeometry(3, 0.3, 4, 20), toon(0xb8b2cc), 11, 0.36, -9, { rx: Math.PI / 2, outline: 0 });
+    for (let k = 0; k < 4; k++) { const t = (k / 4) * Math.PI * 2 + 0.4; w.add(new THREE.BoxGeometry(2.4, 0.5, 0.7), toon(0x8a5a3a), Math.cos(t) * 11, 0.6, Math.sin(t) * 11, { ry: -t + Math.PI / 2, outline: 0.02 }); }
+    // colliders: the ring as a chain of spheres, the hub as a column
+    for (let k = 0; k < 24; k++) {
+      const t = (k / 24) * Math.PI * 2;
+      w.sph(Math.cos(t) * RR, hy, Math.sin(t) * RR, tr * sy * 0.95);
+    }
+    w.cyl(0, 0, -2, 29, 8.6);
+    this.vestibule(w, -(RR + tr) + 1, 8.6, orange, 9, 6);
+    w.flag(8, RR + tr + 4, [0xff9f1c, 0xffffff]);
+    w.sign('KEPLER HABITAT', '#ff9f1c', 0, 50, 0);
     return RR + tr + 2;
   }
 
-  buildCivic(loc) {
-    this.dome(loc, 0, 0, 30, 0xffd23f, 0.3);
-    this.block(loc, 0, 36, 30, 14, 10, 0xfff4e0, 0, 0xff9f1c);
-    this.flag(loc, -20, 46, [0xff9f1c, 0xffffff, 0xff9f1c], 18);
-    this.flag(loc, 20, 46, [0xff9f1c, 0xffffff, 0xff9f1c], 18);
-  }
-
-  // Meridian Exchange: warehouses, container stacks, cranes and a lab dome.
+  // Meridian Exchange (settlements.js): trading tower, warehouses, container gantry, cranes.
   buildTrade(loc) {
+    buildMeridian(this, loc);
     const cols = [0x2ec4ff, 0xff9f1c, 0x7dff6a, 0xff3b5c, 0xffd23f, 0xc77dff];
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2 + 0.4;
-      this.block(loc, Math.cos(a) * 70, Math.sin(a) * 70, 34, 12, 18, 0xd8d4e8, -a, 0x2ec4ff);
-    }
-    for (let i = 0; i < 18; i++) {
-      const x = -30 + (i % 6) * 10, z = -100 + Math.floor(i / 6) * 6;
-      const h = 1 + Math.floor((i * 7) % 3);
-      this.block(loc, x, z, 8, h * 3.6 - 0.6, 4.5, cols[i % cols.length], 0, cols[(i + 1) % cols.length]);
-    }
-    for (const [x, z] of [[-60, 10], [60, -10]]) {
-      this.tower(loc, x, z, 34, 1.4, 0xffd23f, 0x2ec4ff);
-      const arm = mesh(new THREE.BoxGeometry(30, 1.6, 1.6), toon(0xffd23f), 0.08);
-      this.put(arm, loc, x + 13, z, 33);
-    }
-    this.dome(loc, 0, 40, 24, 0x9be7ff, 0.3);
-    this.pad(loc, 100, 60, 16, 0x2ec4ff);
-    this.pad(loc, -100, -60, 16, 0x2ec4ff);
-    this.flag(loc, 0, 110, [0x2ec4ff, 0xffffff, 0x2ec4ff], 20);
     this.addFigures(loc, 12, { kind: 'worker', look: (i) => ({ suit: cols[i % cols.length] }) });
   }
 
+  // Kepler towns (settlements.js): hab domes and tunnels, cabins, playground, greenhouse, water
+  // tower; Kepler Civic Center adds the council dome and the clock-tower town hall.
   buildCivilian(loc) {
+    buildTown(this, loc, { civic: loc.id === 'kepler' });
     const palette = [0xff9f1c, 0xff7ad9, 0x2ec4ff, 0xffd23f, 0x7dff6a, 0xc77dff];
-    const domes = [];
-    const n = loc.id === 'tranq' ? 8 : 6;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2 + this.r() * 0.3;
-      const d = 40 + this.r() * 35;
-      const r = 11 + this.r() * 9;
-      const dx = Math.cos(a) * d, dz = Math.sin(a) * d;
-      this.dome(loc, dx, dz, r, palette[i % palette.length]);
-      domes.push([dx, dz, r]);
-    }
-    this.dome(loc, 0, 0, 22, 0xb8ffb0, 0.3);
-    for (const [dx, dz, r] of domes) {
-      const k = 22 / Math.hypot(dx, dz);
-      const k2 = 1 - r / Math.hypot(dx, dz);
-      this.tube(loc, dx * k, dz * k, dx * k2, dz * k2, 1.6, 0xfff4e0);
-    }
-    for (let i = 0; i < 5; i++) {
-      const a = this.r() * Math.PI * 2, d = 90 + this.r() * 15;
-      this.block(loc, Math.cos(a) * Math.min(d, loc.r * 0.85), Math.sin(a) * Math.min(d, loc.r * 0.85), 10, 6, 8, palette[(i + 2) % palette.length], a);
-    }
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      this.tower(loc, 55 + Math.cos(a) * 10, -60 + Math.sin(a) * 10, 3, 0.4, 0xfff4e0, palette[i]);
-    }
-    this.pad(loc, -65, 55, 13);
     this.addFigures(loc, 8, { kind: 'worker', look: (i) => ({ suit: palette[i % palette.length] }) });
     this.addFigures(loc, 7, { kind: 'kid', look: (i) => ({ suit: palette[(i + 3) % palette.length], scale: 0.55 }) });
   }
@@ -1081,10 +1081,7 @@ export class World {
       this.dishes.push({ ...d, speed: 0.05 + this.r() * 0.1, loc });
       this.col(loc, { type: 'cyl', x: dx, z: dz, y0: -2, y1: s * 0.95, r: s * 0.2 + 0.5 });
     }
-    this.dome(loc, 70, 50, 20, 0xe0e0f0);
-    this.block(loc, -10, -80, 30, 10, 16, 0x7dff6a, 0.2);
-    this.block(loc, 30, -95, 14, 8, 12, 0xfff4e0, -0.3);
-    this.tower(loc, 100, -20, 40, 2, 0xe0e0e0, 0x7dff6a);
+    dressArray(this, loc); // observatory, labs, control centre, mast, cable runs
     this.pad(loc, -100, -20, 13, 0x7dff6a);
     this.solarField(loc, 0, 120, 3, 8, 0);
     this.addFigures(loc, 8, { kind: 'worker', look: () => ({ suit: 0xffffff, visor: 0x2b8f4a }) });
@@ -1108,21 +1105,9 @@ export class World {
     this.addFigures(loc, 6, { kind: 'worker', look: () => ({ suit: 0xffffff, visor: 0x2b8f4a }) });
   }
 
+  // Helium-3 Exchange (settlements.js): excavator, conveyor, derrick, tank farm, ticker hall.
   buildMine(loc) {
-    const rig = mesh(new THREE.CylinderGeometry(3, 6, 45, 8), toon(0xffd23f), 0.2);
-    this.put(rig, loc, 0, 0, 22.5);
-    this.col(loc, { type: 'cyl', x: 0, z: 0, y0: -2, y1: 45, r: 6 });
-    const arm = mesh(new THREE.BoxGeometry(60, 3, 3), toon(0xff9f1c), 0.12);
-    this.put(arm, loc, 0, 0, 40, 0, true);
-    this.spinners.push({ obj: arm, axis: 'y', speed: 0.15, loc });
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2;
-      const t = mesh(new THREE.CylinderGeometry(7, 7, 14, 14), toon(i % 2 ? 0x7dff6a : 0xc77dff), 0.15);
-      this.put(t, loc, Math.cos(a) * 60, Math.sin(a) * 60, 7);
-      this.col(loc, { type: 'cyl', x: Math.cos(a) * 60, z: Math.sin(a) * 60, y0: -2, y1: 14, r: 7.2 });
-    }
-    this.block(loc, -40, 70, 24, 9, 12, 0x8a8aa0, 0.3);
-    this.pad(loc, 70, 50, 12);
+    buildHelium(this, loc);
     this.addFigures(loc, 9, { kind: 'worker', look: () => ({ suit: 0xff9f1c, helmet: 0xffd23f }) });
   }
 
@@ -1134,7 +1119,7 @@ export class World {
     for (let i = 1; i < segs; i++) {
       const a = (i / segs) * Math.PI * 2;
       const len = (2 * Math.PI * wallR) / segs * 0.92;
-      this.blockB(B, loc, Math.cos(a) * wallR, Math.sin(a) * wallR, len, 7, 3, 0x5b5870, -a + Math.PI / 2, fc);
+      this.wallB(B, loc, Math.cos(a) * wallR, Math.sin(a) * wallR, len, 7, 3, 0x5b5870, -a + Math.PI / 2, fc);
     }
     // gun bastions spaced evenly round the wall (the gate at angle 0 sits between two),
     // plus the outer perimeter guns out in the restricted zone
@@ -1146,12 +1131,7 @@ export class World {
       const a = (i / outer) * Math.PI * 2 + 1.2, r = small ? 180 : 290;
       this.mount(loc, Math.cos(a) * r, Math.sin(a) * r, 0, { ground: true });
     }
-    this.block(loc, 0, 0, small ? 18 : 30, small ? 9 : 12, small ? 18 : 30, 0x4a4660, 0.785, fc);
-    if (!small) {
-      this.block(loc, 40, -30, 26, 8, 14, 0x5b5870, 0.2, 0x2a2540);
-      this.block(loc, -35, 35, 20, 10, 20, 0x5b5870, -0.4, 0x2a2540);
-    }
-    this.tower(loc, -30, -30, small ? 30 : 50, 2.2, 0x5b5870, 0xff2a4a);
+    dressBase(this, loc); // command bunker, barracks, searchlight tower, traps, fuel
     const dish = makeDish(small ? 8 : 12, 0xb0b0c0);
     this.put(dish.root, loc, 30, 30, 0, 0, true);
     this.dishes.push({ ...dish, speed: 0.6, loc });
@@ -1174,18 +1154,10 @@ export class World {
     this.zoneWalls.push({ loc, mat });
   }
 
+  // Pirate dens (settlements.js): shanties, wrecks, junk heaps, lookout tower, green lights.
   buildGulch(loc) {
-    const rust = [0x8a4b2a, 0x6b5a3a, 0x9a9a9a, 0x5a3a5a];
-    for (let i = 0; i < 14; i++) {
-      const a = this.r() * Math.PI * 2, d = 20 + this.r() * 80;
-      const w = 4 + this.r() * 10, h = 3 + this.r() * 8;
-      this.block(loc, Math.cos(a) * d, Math.sin(a) * d, w, h, 4 + this.r() * 8, rust[i % 4], this.r() * 3, 0x2a2a2a);
-    }
-    const hull = mesh(new THREE.CapsuleGeometry(9, 40, 6, 12).rotateZ(Math.PI / 2 - 0.2), toon(0x6b6880), 0.3);
-    this.put(hull, loc, 0, -40, 6, 0.5);
-    this.col(loc, { type: 'box', x: 0, y: 6, z: -40, hx: 28, hy: 9, hz: 9, yaw: 0.5 });
+    buildDen(this, loc);
     this.flag(loc, 20, 20, [0x111111, 0x111111], 18);
-    this.tower(loc, -30, 30, 18, 1.2, 0x3a3a3a, 0xff9f1c);
     // heat lamps: sickly orange pools in the dark
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2 + 0.3;
@@ -1195,11 +1167,7 @@ export class World {
   }
 
   buildCamp(loc) {
-    const rust = [0x8a4b2a, 0x6b5a3a, 0x5a3a5a];
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2 + this.r();
-      this.block(loc, Math.cos(a) * 28, Math.sin(a) * 28, 6 + this.r() * 5, 4, 6, rust[i % 3], a, 0x2a2a2a);
-    }
+    buildPirateCamp(this, loc);
     this.flag(loc, 0, 0, [0x111111, 0x7dff3a, 0x111111], 12);
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2;
@@ -1230,6 +1198,16 @@ export class World {
       }
     }
     for (const s of this.spinners) if (s.loc.active) s.obj.rotation[s.axis] += s.speed * dt;
+    for (const a of this.anims) {
+      if (!a.loc.active) continue;
+      for (const o of a.list) {
+        const u = o.userData;
+        if (u.tick) u.tick(o, dt, time);
+        else if (u.spin) o.rotation.y += dt * (u.spin === true ? 0.6 : u.spin);
+        else if (u.blink) o.visible = Math.sin(time * 4 + a.seed) > -0.3;
+        else if (u.flag) o.rotation.y = Math.sin(time * 2 + a.seed) * 0.25;
+      }
+    }
     for (const d of this.dishes) {
       if (!d.loc.active) continue;
       d.yaw.rotation.y += d.speed * dt;
@@ -1383,6 +1361,7 @@ export class World {
     this.reactorLight = new THREE.PointLight(0xff2e88, 0, 60, 1.5);
     this.reactorLight.position.copy(this.toWorld(loc, rx, H / 2, rz));
     this.scene.add(this.reactorLight);
+    dressLab(this, loc, { W, D, H });
   }
 
   checker() {
@@ -1407,30 +1386,15 @@ export class World {
     halo.rotation.x = -Math.PI / 2;
     this.put(halo, loc, 0, 0, 0.2);
     this.monolith = { loc, pos: this.toWorld(loc, 0, 2, 0), cd: 0, halo };
+    dressMonolith(this, loc);
   }
 
+  // Bounce Dome Funpark (settlements.js): inflatables, skate park, rides.
   buildFunpark(loc) {
+    buildFunpark(this, loc);
     const cols = [0xff2e88, 0xffd23f, 0x2ee6ff, 0x7dff6a, 0xff9f1c, 0xc77dff];
-    const spots = [[0, 0, 26], [55, 20, 16], [-50, 30, 18], [20, -60, 20], [-40, -50, 14], [70, -40, 12], [-80, -10, 12]];
-    spots.forEach(([x, z, r], i) => {
-      const g = new THREE.Group();
-      const top = mesh(new THREE.SphereGeometry(r, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), toon(cols[i % cols.length]), 0.25);
-      g.add(top);
-      const band = mesh(new THREE.TorusGeometry(r * 0.75, r * 0.08, 6, 24), toon(cols[(i + 2) % cols.length]), 0.1);
-      band.rotation.x = Math.PI / 2;
-      band.position.y = r * 0.62;
-      g.add(band);
-      this.put(g, loc, x, z, -0.5);
-      const c = this.col(loc, { type: 'sphere', x, y: -0.5, z, r });
-      c.bouncy = true;
-    });
-    // a bouncy castle
-    const castle = mesh(new THREE.BoxGeometry(24, 6, 24), toon(0xff2e88), 0.2);
-    this.put(castle, loc, 0, 70, 3);
-    const cc = this.col(loc, { type: 'box', x: 0, y: 3, z: 70, hx: 12, hy: 3, hz: 12 });
-    cc.bouncy = true;
-    for (const [x, z] of [[-12, 58], [12, 58], [-12, 82], [12, 82]]) this.put(mesh(new THREE.CylinderGeometry(2, 2, 10, 10), toon(0xffd23f), 0.08), loc, x, z, 5);
-    this.addFigures(loc, 4, { kind: 'kid', look: (i) => ({ suit: cols[i], scale: 0.55 }) });
+    this.addFigures(loc, 8, { kind: 'kid', look: (i) => ({ suit: cols[i % cols.length], scale: 0.55 }) });
+    this.addFigures(loc, 3, { kind: 'worker', look: (i) => ({ suit: cols[(i + 3) % cols.length] }) });
   }
 
   // Glowing crystal rock samples scattered across the sunlit side, for the jar.

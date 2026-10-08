@@ -276,6 +276,9 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
   const len = b.pos.length();
   const alt = len - sr;
   const wasGrounded = b.grounded;
+  // riding on top of a structure (a ramp, a rooftop) last step: the ground snaps below must not
+  // drag you down through it, or every low ramp would grind you to a halt
+  const onStruct = b.onStruct;
   if (alt <= 0) {
     b.pos.multiplyScalar(sr / len);
     const vn = v.dot(_sn);
@@ -297,7 +300,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
     b.groundN.copy(_sn);
     b.altitude = 0;
     b.onLake = planet.lastLake;
-  } else if (params.skateSnap !== false && input.skates && wasGrounded && alt < (params.skateBuffer ?? 0.6) + Math.min(1.6, v.length() * 0.02) && v.dot(_sn) < (params.skateLaunch ?? 3) + Math.min(9, v.length() * 0.1)) {
+  } else if (params.skateSnap !== false && input.skates && wasGrounded && !onStruct && alt < (params.skateBuffer ?? 0.6) + Math.min(1.6, v.length() * 0.02) && v.dot(_sn) < (params.skateLaunch ?? 3) + Math.min(9, v.length() * 0.1)) {
     // locked skates keep working a little above the ground (a magnetic buffer): lift-offs over crests
     // and bumps snap back down, even at speed. Only a real ramp (a hard upward kick relative to your
     // speed) or a jump throws you clear of the buffer
@@ -308,7 +311,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
     b.groundN.copy(_sn);
     b.altitude = 0;
     b.onLake = planet.lastLake;
-  } else if (alt < 0.3 && wasGrounded && !input.skates && v.dot(_sn) < 1.5) {
+  } else if (alt < 0.3 && wasGrounded && !onStruct && !input.skates && v.dot(_sn) < 1.5) {
     // boots stick to the ground when walking
     b.pos.multiplyScalar(sr / len);
     const vn = v.dot(_sn);
@@ -326,6 +329,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
   // obstacles
   const prevPlat = b.platform;
   b.platform = null;
+  b.onStruct = false;
   if (colliders) {
     const r = params.radius;
     const cp = _cp.copy(b.pos).addScaledVector(up, r);
@@ -351,6 +355,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
           b.grounded = true;
           b.groundN.copy(_n);
           b.altitude = 0;
+          b.onStruct = true;
           if (c.platform) b.platform = c.platform;
           if (-vn > (input.skates ? params.skateSafeImpact : params.bootSafeImpact)) impacts.push({ speed: -vn, kind: 'obstacle', normal: _n.clone() });
         } else {
