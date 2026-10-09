@@ -6,6 +6,7 @@ import { toon, glow, ink, textSprite } from './toon.js';
 import { arcDist, tangent, frameQuat, greatCircle, darkness } from './geo.js';
 import { pick } from './rng.js';
 import { VEHICLES } from './vehicles.js';
+import { spawnKadeTruck, updateKadeTruck, kadeDefeated, updateMortarDrop } from './kade.js';
 
 // Faction stories. Every faction has a leader who offers a four-chapter storyline once you're
 // FRIENDLY with them. Finishing the first chapter of one story commits you to it (the other
@@ -1024,36 +1025,14 @@ export class Story {
   maybeKade() {
     const g = this.game;
     if (this.kade.captured || g.rep.aligned() || this.faction === 'rustmoon' || g.time < this.kade.nextAt) return;
-    if (darkness(g.player.up) < 0.5 || g.enemies.list.some((e) => e.kind === 'sniper' && !e.dead)) return;
+    if (darkness(g.player.up) < 0.5 || g.enemies.list.some((e) => e.kind === 'kade' && !e.dead)) return;
     if (Math.random() > 0.08) return;
     this.spawnKade(false);
   }
 
   spawnKade(final) {
     const g = this.game;
-    const P = g.player;
-    // pick a perch in front of you with a clear line of sight (he's a sniper, he plans these things)
-    let pos = null;
-    const base = tangent(g.cam.fwd.clone(), P.up).normalize();
-    for (let i = 0; i < 24 && !pos; i++) {
-      const dir = base.clone().applyAxisAngle(P.up, (i % 2 ? 1 : -1) * Math.floor(i / 2) * 0.35);
-      const p = g.planet.ground(greatCircle(P.pos.clone().normalize(), dir, 170 + (i % 4) * 30), new THREE.Vector3(), 0.5);
-      if (g.planet.visible(p.clone().addScaledVector(p.clone().normalize(), 2), P.center)) pos = p;
-    }
-    if (!pos) pos = g.planet.ground(greatCircle(P.pos.clone().normalize(), base, 140), new THREE.Vector3(), 0.5);
-    const m = makeRunner({ ...LEADERS.rustmoon.look, pirate: true });
-    this.addRifle(m, false);
-    m.root.scale.setScalar(1.2);
-    g.scene.add(m.root);
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1, 6, 1, true), new THREE.MeshBasicMaterial({ color: 0xff1a2e, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
-    beam.visible = false;
-    g.scene.add(beam);
-    const e = {
-      kind: 'sniper', faction: 'pirate', model: m, hp: 480, maxHp: 480, body: makeBody(pos), radius: 1.5, center: pos.clone(), dead: false, impacts: [],
-      heading: tangent(P.pos.clone().sub(pos), pos.clone().normalize()).normalize(), state: 'reposition', phase: 'move', phaseT: 2.5, beam, final, aim: new THREE.Vector3(),
-      rogue: false, aggro: true, fireCd: 99, carrying: false, grab: 0, home: null, bossName: 'LONGSHOT KADE',
-    };
-    g.enemies.list.push(e);
+    const e = spawnKadeTruck(this, final);
     this.kade.met++;
     this.save();
     this.splash();
@@ -1065,7 +1044,7 @@ export class Story {
   splash() {
     const el = this.splashEl;
     const L = LEADERS.rustmoon;
-    el.innerHTML = `<div class="sp-burst"></div><div class="sp-name">CAPTAIN VEX "LONGSHOT" KADE</div><div class="sp-title">${L.title}</div><div class="sp-quote">${pick(['"Smile for the scope, Runner."', '"You\'ve got a lot of nerve, skating on MY side of the Moon."', '"Three hundred metres. Moving target. Easy."', '"Run. It\'s more fun when they run."'])}</div>`;
+    el.innerHTML = `<div class="sp-burst"></div><div class="sp-name">CAPTAIN VEX "LONGSHOT" KADE</div><div class="sp-title">${L.title}</div><div class="sp-quote">${pick(['"Smile for the scope, Runner."', '"You\'ve got a lot of nerve, skating on MY side of the Moon."', '"Hope you like the new ride."', '"Run. It\'s more fun when they run."'])}</div>`;
     el.classList.remove('hidden', 'sp-out');
     void el.offsetWidth;
     el.classList.add('sp-in');
@@ -1075,108 +1054,10 @@ export class Story {
     this.game.audio.boom(true);
   }
 
-  updateSniper(e, dt) {
-    const g = this.game;
-    const P = g.player;
-    const b = e.body;
-    const up = b.up.copy(b.pos).normalize();
-    const toP = P.center.clone().sub(e.center);
-    const dist = toP.length();
-    // keep a sniper's distance: back off if you close in, creep in if you run
-    const flat = tangent(toP.clone(), up);
-    const seen = g.planet.visible(e.center, P.center);
-    // creep closer to find a line of sight, otherwise keep a sniper's distance
-    const want = dist < 120 ? -1 : !seen || dist > 280 ? 1 : dist < 150 ? -1 : 0;
-    const ctrl = { wish: flat.lengthSq() > 0 ? flat.normalize().multiplyScalar(want) : flat, skates: false, thrust: want !== 0 && b.energy > 30 && (want < 0 || !seen), jump: false, thrustDir: flat.clone().multiplyScalar(want).addScaledVector(up, 0.2).normalize() };
-    if (e.phase !== 'move') { ctrl.wish.set(0, 0, 0); ctrl.skates = false; ctrl.thrust = false; }
-    const steps = Math.ceil(dt / (1 / 60));
-    for (let i = 0; i < steps; i++) stepSkater(b, ctrl, dt / steps, g.planet, g.colliders, undefined, e.impacts);
-    e.center.copy(b.pos).addScaledVector(up, 1.5);
-    if (flat.lengthSq() > 0) e.heading.copy(tangent(toP.clone(), up).normalize());
-    const m = e.model;
-    m.root.position.copy(b.pos);
-    frameQuat(up, e.heading, m.root.quaternion);
-    m.armR.rotation.x = e.phase === 'move' ? -0.3 : -1.5;
-    m.glowM.color.setHex(e.flash > 0 ? 0xffffff : 0xff2a3a);
-    if (e.flash > 0) e.flash -= dt;
-    m.root.updateMatrixWorld(true);
-    const muzzle = m.armR.localToWorld(new THREE.Vector3(0, -0.55, 1.9));
-    const eye = e.center.clone().addScaledVector(up, 0.4);
-    const los = g.planet.visible(eye, P.center) && !P.dead;
-    e.phaseT -= dt;
-    const warn = this.lockEl;
-    if (e.phase === 'move') {
-      e.beam.visible = false;
-      if (e.phaseT <= 0 && los && dist < 420) { e.phase = 'lock'; e.phaseT = 2.0; e.beep = 0; }
-      else if (e.phaseT <= 0) e.phaseT = 0.5;
-    } else if (e.phase === 'lock') {
-      if (!los) { e.phase = 'move'; e.phaseT = 2; g.fx.pop('"TCH. LOST YOU."', e.center.clone().addScaledVector(up, 3), { color: '#ff2a3a', size: 32 }); }
-      e.aim.copy(P.center);
-      e.beep -= dt;
-      if (e.beep <= 0) { e.beep = 0.08 + e.phaseT * 0.18; g.audio.tone(1200 + (2 - e.phaseT) * 600, 0.05, 'square', 0.08); }
-      if (e.phaseT <= 0) { e.phase = 'commit'; e.phaseT = 0.38; }
-    } else if (e.phase === 'commit') {
-      if (e.phaseT <= 0) {
-        // FIRE: hits where you were when the dot froze
-        const dir = e.aim.clone().sub(muzzle).normalize();
-        const end = muzzle.clone().addScaledVector(dir, 600);
-        const closest = muzzle.clone().addScaledVector(dir, Math.max(0, P.center.clone().sub(muzzle).dot(dir)));
-        const hit = closest.distanceTo(P.center) < 1.9 && g.planet.visible(eye, P.center) && !P.dead;
-        g.fx.beam(muzzle, hit ? P.center.clone() : end, 0xff1a2e);
-        g.audio.boom(false);
-        g.audio.tone(2400, 0.25, 'sawtooth', 0.2, 0.1);
-        if (hit) {
-          g.damagePlayer(P.vehicle ? 45 * P.vehicle.def.armor : 45, 'sniper');
-          P.vel.addScaledVector(dir, 10);
-          g.fx.pop('CRACK!', null, { color: '#ff2a3a', size: 80 });
-          g.cam.shake = Math.max(g.cam.shake, 0.8);
-        } else g.fx.pop('MISSED!', null, { color: '#7dff3a', size: 50, life: 0.7 });
-        e.phase = 'move';
-        e.phaseT = 2 + Math.random() * 2;
-      }
-    }
-    // the laser sight
-    if (e.phase === 'lock' || e.phase === 'commit') {
-      const target = e.phase === 'lock' ? P.center : e.aim;
-      const len = muzzle.distanceTo(target);
-      e.beam.visible = true;
-      e.beam.position.lerpVectors(muzzle, target, 0.5);
-      e.beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), target.clone().sub(muzzle).normalize());
-      e.beam.scale.set(e.phase === 'commit' ? 3 : 1 + Math.sin(g.time * 40) * 0.3, len, e.phase === 'commit' ? 3 : 1);
-      e.beam.material.color.setHex(e.phase === 'commit' ? 0xffffff : 0xff1a2e);
-    }
-    warn.classList.toggle('hidden', !(e.phase === 'lock' || e.phase === 'commit'));
-    if (e.phase === 'commit') warn.textContent = '⚠ MOVE! ⚠';
-    else if (e.phase === 'lock') warn.textContent = `⚠ LASER LOCK ${'▮'.repeat(Math.ceil(e.phaseT * 3))}`;
-    // he bails out when hurt (unless this is the showdown)
-    if (!e.final && e.hp < e.maxHp * 0.35) {
-      e.dead = true;
-      e.beam.removeFromParent();
-      m.root.removeFromParent();
-      warn.classList.add('hidden');
-      g.fx.explosion(e.center, 6, false);
-      g.fx.pop('"THIS AIN\'T OVER, RUNNER!"', e.center.clone().addScaledVector(up, 4), { color: '#ff2a3a', size: 44, life: 2 });
-      g.addCredits(500, 'Drove off Kade');
-      g.style(100, 'KADE ESCAPED');
-      g.rep.add('spacecom', 4, 'Drove off Longshot Kade');
-      this.kade.beaten++;
-      this.kade.nextAt = g.time + 900;
-      this.save();
-    }
-    if (P.pos.distanceTo(b.pos) > 1200 && !e.final) { e.dead = true; e.beam.removeFromParent(); m.root.removeFromParent(); warn.classList.add('hidden'); this.kade.nextAt = g.time + 300; }
-  }
+  updateKade(e, dt) { updateKadeTruck(this, e, dt); }
 
   onKill(e) {
-    if (e.kind !== 'sniper') return;
-    const g = this.game;
-    e.beam.removeFromParent();
-    this.lockEl.classList.add('hidden');
-    if (e.final) {
-      this.kade.captured = true;
-      g.hud.alert('LONGSHOT KADE IS IN CUFFS!', '#ffd23f', 4);
-    }
-    g.addCredits(800, 'Kade bounty');
-    this.save();
+    if (e.kind === 'kade') kadeDefeated(this, e);
   }
 
   // ---------- UI ----------
@@ -1194,6 +1075,7 @@ export class Story {
 
   // ---------- per frame ----------
   update(dt) {
+    updateMortarDrop(this);
     for (const k of Object.keys(this.techCd)) this.techCd[k] = Math.max(0, this.techCd[k] - dt);
     for (const L of Object.values(this.leaders)) {
       if (!L.loc.active) continue;

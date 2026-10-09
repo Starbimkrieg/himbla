@@ -24,6 +24,7 @@ import { Race } from './race.js';
 import { Rides } from './rides.js';
 import { Meteors } from './meteors.js';
 import { Grinder } from './rails.js';
+import { DILATE_RATE } from './monolith.js';
 import { Cosmetics } from './cosmetics.js';
 import { Cheats } from './cheats.js';
 import { Territory } from './territory.js';
@@ -173,6 +174,7 @@ class Game {
     // pirates live at Rustmoon Hold
     if (this.rep.aligned()) { const h = this.home(); this.player.respawn(h.point, h.facing); this.cam.fwd.copy(h.facing); }
     this.slowmo = 0;
+    this.decoys = []; // the Monolith's echo holograms (monolith.js)
     this.alchemy.start();
     this.player.applyUpgrades(this.upgrades);
     this.player.health = this.player.maxHealth;
@@ -612,7 +614,7 @@ class Game {
       pirate: 'Scrapjaw pirates blasted you off your skates.',
       mil: 'Military defences turned you into a crater.',
       player: 'Your own Pulse Spinner. Classic.',
-      sniper: 'Longshot Kade. You never even saw him. Well, you saw the red dot.',
+      kade: "Shredded by Longshot Kade's gun truck. Should've stayed low.",
       anomaly: 'Vaporised by a phase anomaly. For science.',
       meteor: 'Flattened by a meteor. The sky literally fell on you.',
     };
@@ -890,8 +892,10 @@ class Game {
     this.recall.update(dt);
     if (this.state === 'title') this.updateTitleTour(rdt);
     else if (this.state !== 'cutscene' && this.state !== 'derby') this.updateCamera(dt);
-    this.world.update(dt, this.time, this.camera.position);
-    this.fx.update(dt);
+    // the Monolith's time dilation: the world crawls, you don't
+    const wdt = playing && this.alchemy.buffs.dilate > 0 ? dt * DILATE_RATE : dt;
+    this.world.update(wdt, this.time, this.camera.position);
+    this.fx.update(wdt);
     this.hud.update(rdt);
     this.updateLighting(dt);
     const P = this.player;
@@ -1001,7 +1005,8 @@ class Game {
     this.alchemy.update(dt);
     this.race.update(dt);
     this.rides.update();
-    this.meteors.update(dt);
+    const wdt = this.alchemy.buffs.dilate > 0 ? dt * DILATE_RATE : dt; // the Monolith's time dilation
+    this.meteors.update(wdt);
     if (this.input.pressed('KeyG')) this.alchemy.scoop();
     if (this.input.pressed('KeyX')) this.alchemy.empty(this.input.down('ShiftLeft') || this.input.down('ShiftRight'));
     if (this.input.pressed('KeyC') && this.boardCooldown <= 0) this.cosmetics.wardrobe();
@@ -1015,8 +1020,8 @@ class Game {
     if (this.input.pressed('KeyN')) this.hud.toast(this.audio.toggleMusic() ? '♪ Music on' : 'Music off', 1.5);
     this.cosmetics.update(dt);
     this.updateScanner(dt);
-    this.enemies.update(dt, this.time);
-    this.projectiles.update(dt);
+    this.enemies.update(wdt, this.time);
+    this.projectiles.update(dt, wdt);
 
     for (let i = this.timers.length - 1; i >= 0; i--) {
       const t = this.timers[i];

@@ -225,6 +225,17 @@ export class Enemies {
 
   pirateCount() { return this.list.filter((e) => e.faction === 'pirate' && e.kind !== 'core' && !e.dead).length; }
 
+  // The friendly settlement whose zone you're inside, if any (pirate squads don't spawn on you there).
+  shelterAt(pos) {
+    const g = this.game;
+    for (const l of g.locations) {
+      if (l.type === 'pirate' || g.rep.hostile(l.faction)) continue;
+      if (arcDist(pos, l.dir) > (l.zoneR || l.r * 1.2)) continue;
+      if (l.safe || g.rep.cleared(l.faction) || (g.story && g.story.faction === l.faction)) return l;
+    }
+    return null;
+  }
+
   // roaming hunters of a kind (not den guards, not event raiders)
   hunters(kind) { return this.list.filter((e) => e.faction === 'pirate' && !e.dead && !e.home && !e.targetObj && (!kind || e.kind === kind)).length; }
 
@@ -425,7 +436,11 @@ export class Enemies {
     // --- spawning: hunting squads (not if you ride with Rustmoon) ---
     const carrying = ms.active && ms.cargoState === 'held';
     const inSafe = g.isSafe(g.currentZone);
-    if (!P.dead && !inSafe && !aligned && !(g.tutorial && g.tutorial.quiet())) {
+    // no new squads while you're sheltered: inside a friendly settlement's zone (a safe town, or a
+    // military base that's cleared you or whose story you're on), or riding a transit ship
+    const riding = g.rides && g.rides.ride && g.rides.ride.kind === 'ship';
+    const home = this.shelterAt(P.pos);
+    if (!P.dead && !inSafe && !riding && !home && !aligned && !(g.tutorial && g.tutorial.quiet())) {
       if (carrying) {
         this.pirateTimer -= dt * (1 + dark) * blood;
         if (this.pirateTimer <= 0) {
@@ -473,7 +488,7 @@ export class Enemies {
       if (e.base && !e.base.awake) continue;
       if (e.kind === 'core') { this.updateCore(e, dt, time); continue; }
       if (e.kind === 'megamite') { g.alchemy.updateBeast(e, dt); if (e.flash > 0) e.flash -= dt; continue; }
-      if (e.kind === 'sniper') { g.story.updateSniper(e, dt); if (e.dead) continue; }
+      if (e.kind === 'kade') { g.story.updateKade(e, dt); if (e.dead) continue; }
       if (e.kind === 'skater') this.updateSkater(e, dt, time);
       else if (e.kind === 'rover') this.updateRover(e, dt);
       else if (e.kind === 'milrover') this.updateMilRover(e, dt);
@@ -482,12 +497,13 @@ export class Enemies {
 
       // out of the threat range: hunters give up after a moment (den guards wander back home and
       // only vanish much further out; cargo thieves and event raiders never give up)
-      if (e.faction === 'pirate' && !e.carrying && !(e.targetObj && !e.targetObj.dead)) {
+      if (e.faction === 'pirate' && !e.carrying && !e.final && !(e.targetObj && !e.targetObj.dead)) {
         const far = e.body.pos.distanceTo(P.pos) > (e.home ? 1300 : THREAT_RANGE);
         e.lost = far ? (e.lost || 0) + dt : 0;
         if (e.lost > 2.5) {
           e.dead = true;
           e.model.root.removeFromParent();
+          if (e.kind === 'kade') { g.story.lockEl.classList.add('hidden'); g.story.kade.nextAt = g.time + 300; }
           if (!e.home && !this.friendly(e)) lost++;
           continue;
         }
@@ -640,6 +656,16 @@ export class Enemies {
   victim(e) {
     const o = e.targetObj;
     if (o && !o.dead && e.center.distanceTo(o.center) < 600) return o;
+    // the Monolith's echo holograms: anyone after you picks one of the four of you at random,
+    // every few seconds
+    const D = this.game.decoys;
+    if (D.length && this.isHostileTarget(e)) {
+      if (!(e.decoyT > this.game.time) || (e.decoy && e.decoy.dead)) {
+        e.decoyT = this.game.time + 2 + Math.random() * 2;
+        e.decoy = Math.random() < D.length / (D.length + 1) ? D[Math.floor(Math.random() * D.length)] : null;
+      }
+      if (e.decoy && !e.decoy.dead) return e.decoy;
+    }
     return null;
   }
 
@@ -930,7 +956,8 @@ export class Enemies {
     const range = e.heavy ? 420 : base.restricted ? 360 : 300;
     let target = null, tvel = null;
     const dP = e.center.distanceTo(P.center);
-    if (base.hostile && !P.dead && dP < (e.heavy ? 600 : 520)) { target = P.center; tvel = P.vel; }
+    const dc = base.hostile ? this.victim(e) : null; // an echo hologram it's fooled by
+    if (base.hostile && !P.dead && dP < (e.heavy ? 600 : 520)) { target = dc ? dc.center : P.center; tvel = dc ? dc.vel : P.vel; }
     else {
       if (e.pirateT && (e.pirateT.dead || e.pirateT.center.distanceTo(e.center) > range)) e.pirateT = null;
       e.scanT = (e.scanT || 0) - dt;
@@ -966,7 +993,7 @@ export class Enemies {
       if (target !== P.center) { e.skipT = e.pirateT; e.skipCd = 3; e.pirateT = null; }
       return;
     }
-    if (target === P.center) {
+    if (target === P.center || (dc && target === dc.center)) {
       this.shoot(e, from, e.heavy ? 170 : 150, e.heavy ? 15 : 12, 0xff2a4a, 0.012);
     } else {
       const speed = e.heavy ? 170 : 150;

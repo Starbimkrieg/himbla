@@ -6,6 +6,7 @@ import { frameQuat, tangent, greatCircle, SUN, arcDist } from './geo.js';
 import { pick, mulberry32 } from './rng.js';
 import { LIVING, spliceGenes, makeChimera, makeMite, ensureStats } from './chimera.js';
 import { chimeraCard, cardList } from './chimeracard.js';
+import { monolithTouch, updateEchoes } from './monolith.js';
 
 // What can go in a containment jar.
 export const ITEMS = {
@@ -74,7 +75,7 @@ export class Alchemy {
     this.followers = [];
     this.wanderers = [];
     this.statues = 0;
-    this.buffs = { lowGrav: 0, slick: 0, bouncy: 0, invert: 0, rain: 0, cushion: 0 };
+    this.buffs = { lowGrav: 0, slick: 0, bouncy: 0, invert: 0, rain: 0, cushion: 0, dilate: 0, echo: 0 };
     this.monoCd = 0;
     this.jarMesh = null;
     this.chimeras = [];
@@ -763,11 +764,10 @@ export class Alchemy {
     this.monoCd -= dt;
     if (mono && this.monoCd <= 0 && P.pos.distanceTo(mono.pos) < 9) {
       this.monoCd = 90;
-      this.buffs.lowGrav = 30;
-      g.audio.tone(55, 2.5, 'sine', 0.35, 1);
-      g.fx.pop('THE MONOLITH HUMS…', null, { color: '#c77dff', size: 56 });
-      g.hud.toast('Gravity feels… optional. (Low gravity for 30 s)', 4);
+      monolithTouch(this);
     }
+    updateEchoes(this, dt);
+    document.getElementById('dilate').classList.toggle('hidden', !(this.buffs.dilate > 0));
     // bouncy buff: landings spring you back up
     if (this.buffs.bouncy > 0 && P.body.bounceReady && P.body.grounded) {
       P.vel.addScaledVector(P.body.groundN, P.body.bounceReady * 0.85);
@@ -893,7 +893,7 @@ export class Alchemy {
   }
 }
 
-const BUFF_NAMES = { lowGrav: 'LOW-G', slick: 'MOON MUD', bouncy: 'SPRINGY', invert: 'NEGATIVE', rain: 'BLACK RAIN', cushion: 'SOFT LANDING' };
+const BUFF_NAMES = { lowGrav: 'LOW-G', slick: 'MOON MUD', bouncy: 'SPRINGY', invert: 'NEGATIVE', rain: 'BLACK RAIN', cushion: 'SOFT LANDING', dilate: 'TIME DILATION', echo: 'ECHO DECOYS' };
 
 // Reactor recipes, keyed by the sorted item kinds fed in together.
 const RECIPES = {

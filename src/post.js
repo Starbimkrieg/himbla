@@ -46,7 +46,9 @@ export class ComicPost {
           float r = lin(vUv + vec2(px.x * th, 0.0));
           float u = lin(vUv + vec2(0.0, px.y * th));
           float d = lin(vUv - vec2(0.0, px.y * th));
-          float lap = abs(l + r + u + d - 4.0 * c) / c;
+          // creases: the Laplacian of 1/depth, which is exactly linear across any flat surface at any
+          // angle (plain depth curves at grazing angles, which inked false lines across distant slopes)
+          float lap = abs(c / l + c / r + c / u + c / d - 4.0);
           float jump = max(max(abs(l - c), abs(r - c)), max(abs(u - c), abs(d - c))) / c;
           float edge = max(smoothstep(0.03, 0.09, lap), smoothstep(0.12, 0.3, jump));
           edge *= 1.0 - smoothstep(1400.0, 3200.0, c);

@@ -1,8 +1,8 @@
 // Global tuning knobs. World units are metres, time is seconds.
 export const PLANET = {
   radius: 3600, // a small, fully traversable moon (~22.6 km around)
-  faceCells: 640, // finest terrain grid cells per cube-sphere face edge (~8.8 m)
-  chunkCells: 40, // cells per terrain chunk edge (16 x 16 chunks per face)
+  faceCells: 1280, // finest terrain grid cells per cube-sphere face edge (~4.4 m)
+  chunkCells: 80, // cells per terrain chunk edge (16 x 16 chunks per face)
   seed: 1969,
 };
 

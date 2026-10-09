@@ -11,7 +11,7 @@ const CPF = N / CH;
 const QP = Math.PI / 4;
 const N1 = N + 1;
 const R = PLANET.radius;
-const MAX_LOD = 3;
+const MAX_LOD = 4; // level 0 is the ~4.4 m grid, near you; each level up halves it
 
 // ---- cube-sphere mapping (tangent-warped for near-uniform cells) ----
 export function faceDir(f, i, j, out) {
@@ -43,6 +43,9 @@ function dirToGrid(x, y, z, o) {
 }
 
 const _g = { f: 0, i: 0, j: 0 };
+// the ink line along crater crests: how many rims the terrain shader takes, and how far out
+const RIM_INK_MAX = 64, RIM_INK_REACH = 1500, RIM_INK_BIG = 120; // (no ink on rims bigger than that)
+const _rv = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _e = new THREE.Vector3();
 const _p00 = new THREE.Vector3(), _p10 = new THREE.Vector3(), _p01 = new THREE.Vector3(), _p11 = new THREE.Vector3();
@@ -73,9 +76,13 @@ export class Planet {
       uHoleOn: { value: 0 }, uHoleO: { value: new THREE.Vector3() }, uHoleX: { value: new THREE.Vector3(1, 0, 0) },
       uHoleY: { value: new THREE.Vector3(0, 1, 0) }, uHoleZ: { value: new THREE.Vector3(0, 0, 1) },
       uHoleMin: { value: new THREE.Vector2() }, uHoleMax: { value: new THREE.Vector2() },
+      // crater rims near the camera, for the ink line along their crests (updateRimInk)
+      uRimC: { value: Array.from({ length: RIM_INK_MAX }, () => new THREE.Vector4()) }, uRimN: { value: 0 },
     };
+    this.rimInkAt = new THREE.Vector3(1e9, 0, 0);
     this.tunnel = null; // set by the secrets system: overrides the floor underground
     this.material = this.makeMaterial();
+    this.material.shadowSide = THREE.BackSide;
     this.boulderGeo = new THREE.DodecahedronGeometry(1, 0);
     this.boulderMat = new THREE.MeshToonMaterial({ color: 0x8d8898, gradientMap: gradientMap() });
     this.boulderInk = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
@@ -182,46 +189,69 @@ export class Planet {
       c.type = 'ghost';
       c.depth *= 0.35; c.rim *= 0.35; c.outW = 0.7;
     } else c.type = 'bowl';
-    // never narrower than the terrain grid can draw (~9 m cells): thin walls became saw-teeth
-    c.inW = Math.max(c.inW, 10 / c.R);
+    // a firm lip and a proper dip on every crater that isn't worn away
+    if (c.type !== 'ghost') { c.rim *= 1.85; c.depth *= 1.15; }
+    // never narrower than the terrain grid can draw smoothly (~4.4 m cells): a crest sharper than
+    // that creases along the triangle edges, and the comic pass inks the creases as saw-teeth
+    c.inW = Math.max(c.inW, 12 / c.R);
     c.outW = Math.max(c.outW, 16 / c.R);
+    // how far the crest is rounded off: the taller the lip, the rounder its top, so it never curves
+    // tighter than the ~4.4 m terrain grid can draw (any tighter and the crest comes out a saw-tooth)
+    const peak = c.rim * (1 + c.jag);
+    c.kIn = Math.max(5, (2 * peak) / (0.1 * c.inW * c.R));
+    c.kOut = Math.max(5, (2 * peak) / (0.1 * c.outW * c.R));
     if (c.jf) c.jf = Math.max(2, Math.min(c.jf, Math.floor((2 * Math.PI * c.R) / 70)));
   }
 
   // Regional landforms on top of the base terrain. Each kind lives in its own patches (a very
-  // low-frequency mask), so most of the Moon stays the smooth, cratered plain:
+  // low-frequency mask: ~12% of the Moon each, rilles ~18%), so over half the Moon stays the
+  // smooth, cratered plain:
   //   ridged highlands: sharp, jagged crests       scarps: stepped ledges (lunar lobate scarps)
   //   rilles: winding channels                     hills: long rolling slopes
   // Writes this.attr.rock (for the rocky tint and extra boulders) and this.attr.rille.
   features(x, y, z) {
     const A = this.nA, B = this.nB, C = this.nC;
     let h = 0, rock = 0, rille = 0;
-    const mRidge = smoothstep(0.22, 0.52, C(x * 0.00032 + 40, y * 0.00032, z * 0.00032 - 12));
+    const mRidge = smoothstep(0.49, 0.69, C(x * 0.00032 + 40, y * 0.00032, z * 0.00032 - 12));
     if (mRidge > 0) {
-      // long, rounded ridges (a softened ridged noise: the crest is a curve, not a knife edge)
+      // long ridges with crisp (but still rounded) crests: a softened ridged noise
       const nv = A(x * 0.0026 + 3, y * 0.0026, z * 0.0026);
-      const n1 = 1 - Math.sqrt(nv * nv + 0.03) + 0.173;
-      h += mRidge * (n1 * n1 * 26 + B(x * 0.006, y * 0.006 + 9, z * 0.006) * 4 - 8);
+      const n1 = 1 - Math.sqrt(nv * nv + 0.012) + 0.11;
+      h += mRidge * (n1 * n1 * 40 + B(x * 0.006, y * 0.006 + 9, z * 0.006) * 5 - 12);
       rock = mRidge * smoothstep(0.6, 0.9, n1);
     }
-    const mScarp = smoothstep(0.28, 0.58, C(x * 0.0004 - 21, y * 0.0004 + 6, z * 0.0004));
+    const mScarp = smoothstep(0.46, 0.66, C(x * 0.0004 - 21, y * 0.0004 + 6, z * 0.0004));
     if (mScarp > 0) {
+      // stepped ledges to drop off (lunar lobate scarps)
       const sv = A(x * 0.0011 - 8, y * 0.0011, z * 0.0011 + 15) + 0.25 * B(x * 0.004, y * 0.004, z * 0.004);
-      h += mScarp * 13 * (smoothstep(-0.09, 0.09, sv) + smoothstep(0.28, 0.44, sv));
-      rock = Math.max(rock, mScarp * (1 - Math.min(1, Math.abs(sv) / 0.09)) * 0.6);
+      h += mScarp * 20 * (smoothstep(-0.035, 0.035, sv) + smoothstep(0.31, 0.39, sv));
+      rock = Math.max(rock, mScarp * (1 - Math.min(1, Math.abs(sv) / 0.05)) * 0.6);
     }
-    const mRille = smoothstep(0.32, 0.58, C(x * 0.00038 + 77, y * 0.00038 - 3, z * 0.00038 + 31));
+    const mRille = smoothstep(0.32, 0.52, C(x * 0.00038 + 77, y * 0.00038 - 3, z * 0.00038 + 31));
     if (mRille > 0) {
-      // a wide, U-shaped channel (a smooth gaussian across it: no crease at the bottom, no lips)
-      const sv = B(x * 0.0014 + 5, y * 0.0014 - 5, z * 0.0014) / 0.1;
+      // a wide, deep U-shaped channel (a smooth gaussian across it: no crease at the bottom, no
+      // lips). H() carves it last, after the craters, so it runs unbroken through everything.
+      const sv = B(x * 0.0014 + 5, y * 0.0014 - 5, z * 0.0014) / 0.13;
       rille = mRille * Math.exp(-sv * sv);
-      h -= rille * 13;
     }
-    const mHills = smoothstep(0.2, 0.5, B(x * 0.0003 - 50, y * 0.0003 + 20, z * 0.0003));
-    if (mHills > 0) h += mHills * A(x * 0.0021, y * 0.0021 + 33, z * 0.0021) * 26;
+    const mHills = smoothstep(0.51, 0.71, B(x * 0.0003 - 50, y * 0.0003 + 20, z * 0.0003));
+    if (mHills > 0) h += mHills * A(x * 0.0021, y * 0.0021 + 33, z * 0.0021) * 34;
     this.attr.rock = rock;
     this.attr.rille = rille;
     return h;
+  }
+
+  // The base terrain height at a crater's middle (for its level apron). It mustn't disturb the
+  // attributes of the point H() is in the middle of working out.
+  craterBase(c) {
+    const rock = this.attr.rock, rille = this.attr.rille;
+    const x = c.d.x * R, y = c.d.y * R, z = c.d.z * R;
+    let far = clamp((0.12 - (c.d.x * SUN.x + c.d.y * SUN.y + c.d.z * SUN.z)) / 0.4, 0, 1);
+    far = far * far * (3 - 2 * far);
+    c.hf = this.features(x, y, z);
+    const hb = this.base(x, y, z, far);
+    this.attr.rock = rock; this.attr.rille = rille;
+    return hb;
   }
 
   // Surface radius for a unit direction. Also writes crater attributes to this.attr.
@@ -230,7 +260,9 @@ export class Planet {
     const sunDot = dx * SUN.x + dy * SUN.y + dz * SUN.z;
     let far = clamp((0.12 - sunDot) / 0.4, 0, 1);
     far = far * far * (3 - 2 * far);
-    let h = this.base(x, y, z, far) + this.features(x, y, z);
+    const hB = this.base(x, y, z, far), hF = this.features(x, y, z);
+    let h = hB + hF;
+    const rilleCut = this.attr.rille * 18;
     // rille floors are smooth: cancel the base terrain's small bumps inside the channel
     const rl = this.attr.rille;
     if (rl > 0.01) h -= rl * (this.nB(x * 0.005, y * 0.005, z * 0.005) * 6 * (1 + far * 0.6) + this.nA(x * 0.02, y * 0.02, z * 0.02) * 1.1);
@@ -243,6 +275,14 @@ export class Planet {
       const dot = dx * c.d.x + dy * c.d.y + dz * c.d.z;
       if (dot < c.cosInfl) continue;
       const r = (R * Math.acos(Math.min(1, dot))) / c.R;
+      // each crater sits on its own level apron (the plain's small bumps round it eased toward the
+      // height at its middle), so its lip curves up clearly; the bigger landforms (hills, ridges,
+      // scarps) are only eased a little, so they keep their shape round craters
+      if (r < 2.2 && c.type !== 'ghost') {
+        if (c.hb === undefined) c.hb = this.craterBase(c);
+        const w = 1 - smoothstep(1.15, 2.2, r);
+        h += (c.hb - hB) * 0.85 * w + (c.hf - hF) * 0.35 * w;
+      }
       if (r < 2.3) {
         if (r < 1) {
           let rb = r;
@@ -251,7 +291,10 @@ export class Planet {
             const t = r * c.terr, fl = Math.floor(t);
             rb = (fl + smoothstep(0.25, 0.75, t - fl)) / c.terr;
           }
-          h += Math.max((rb * rb - 1) * c.depth, -c.depth * 0.82);
+          // the bowl's wall eases flat as it meets the rim (a plain (r^2 - 1) wall left a kink on the
+          // crest, which the terrain grid drew as a saw-tooth), and bottoms out in a flat floor
+          const bw = 1 - rb * rb;
+          h -= c.depth * Math.min(0.82, 1.6 * bw * bw);
           if (c.peak) { const pq = r / 0.2; h += c.peak * Math.exp(-pq * pq); }
           floorA = Math.max(floorA, smoothstep(1.0, 0.35, r));
         }
@@ -264,7 +307,11 @@ export class Planet {
         }
         const q = (r - 1) / (r < 1 ? c.inW : c.outW);
         const rimT = Math.exp(-q * q);
-        h += rimH * rimT;
+        // the lip: a quarter-pipe on both sides - it curves up ever steeper to the crest, like a
+        // kicker (the crest is the grind rail) - with the top rounded off (craterType's kIn/kOut)
+        const dm = (r - 1) * c.R, k = r < 1 ? c.kIn : c.kOut, e = Math.sqrt(dm * dm + k * k) - k;
+        const x = Math.min(1, e / ((r < 1 ? c.inW : c.outW) * c.R));
+        h += rimH * (1 - x) * (1 - x);
         if (rimT > rimA) rimA = rimT;
       }
       if (c.rays >= 0 && r > 1.05 && r < 4.2) {
@@ -273,6 +320,7 @@ export class Planet {
         rayA = Math.max(rayA, ray * (0.6 + 0.4 * this.nC(x * 0.01, y * 0.01, z * 0.01)));
       }
     }
+    h -= rilleCut; // rilles carve through everything, crater rims included
     let rad = R + h;
     for (let k = 0; k < this.zones.length; k++) {
       const zn = this.zones[k];
@@ -415,7 +463,7 @@ export class Planet {
           f, cx, cy, flip, dir,
           center: dir.clone().multiplyScalar(R),
           radius: corner.multiplyScalar(R).distanceTo(dir.clone().multiplyScalar(R)) + 40,
-          meshes: [null, null, null, null],
+          meshes: [null, null, null, null, null],
           shown: -1, want: -1, queued: false, boulders: null, boulderCols: null, lastWanted: 0,
         });
       }
@@ -423,8 +471,19 @@ export class Planet {
   }
 
   makeMaterial() {
-    const mat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradientMap() });
-    // Inked crater rims: a comic contour wherever the rim profile peaks.
+    // the same three toon tones as everything else, but with short soft blends between them: a hard
+    // step follows the terrain triangles round steep, curved walls (crater bowls) in a saw-tooth
+    const W = 64, ramp = new Uint8Array(W * 4);
+    for (let i = 0; i < W; i++) {
+      const x = (i + 0.5) / W;
+      const v = 60 + 90 * smoothstep(0.27, 0.4, x) + 105 * smoothstep(0.6, 0.73, x);
+      ramp.set([v, v, v, 255], i * 4);
+    }
+    const soft = new THREE.DataTexture(ramp, W, 1, THREE.RGBAFormat);
+    soft.minFilter = soft.magFilter = THREE.LinearFilter;
+    soft.needsUpdate = true;
+    const mat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: soft });
+    // Inked crater rims: a crisp black line along each crest (updateRimInk), over a soft darker band.
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.holeU);
       sh.vertexShader = sh.vertexShader
@@ -433,14 +492,58 @@ export class Planet {
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
 varying float vRim; varying vec3 vHoleW;
-uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2 uHoleMin, uHoleMax;`)
+uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2 uHoleMin, uHoleMax;
+uniform vec4 uRimC[${RIM_INK_MAX}]; uniform int uRimN;
+float rimHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float rimNoise(vec3 x) {
+  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(rimHash(i), rimHash(i + vec3(1, 0, 0)), f.x), mix(rimHash(i + vec3(0, 1, 0)), rimHash(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(rimHash(i + vec3(0, 0, 1)), rimHash(i + vec3(1, 0, 1)), f.x), mix(rimHash(i + vec3(0, 1, 1)), rimHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}`)
         .replace('void main() {', `void main() {
   if (uHoleOn > 0.5) {
     vec3 hq = vHoleW - uHoleO;
     float hx = dot(hq, uHoleX), hz = dot(hq, uHoleZ), hy = dot(hq, uHoleY);
     if (hx > uHoleMin.x && hx < uHoleMax.x && hz > uHoleMin.y && hz < uHoleMax.y && hy > -45.0 && hy < 8.0) discard;
   }`)
-        .replace('#include <color_fragment>', '#include <color_fragment>\nfloat rimInk = smoothstep(0.84, 0.93, vRim);\ndiffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06, 0.03, 0.1), rimInk * 0.9);');
+        // a soft shade over the rim, and a crisp black ink line along each crest: a circle round the
+        // crater, measured per pixel on the sphere (so it's smooth whatever the triangles do). It
+        // fades out where the rim itself does (worn away, or flattened under a settlement), and
+        // with distance
+        .replace('#include <color_fragment>', `#include <color_fragment>
+float rimShade = smoothstep(0.55, 1.0, vRim);
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.32, 0.27, 0.42), rimShade * 0.3);
+vec3 rimP = normalize(vHoleW) * ${R.toFixed(1)};
+// The ink runs along the crest of each grindable lip (rimOf): overlapping craters share one
+// outline, the edge of the union of their discs; craters sitting wholly on a much bigger one's
+// floor (negative radius) get their own. It wavers a little, swells and thins, but stays on the
+// crest, where you grind.
+float rimU = 1e6, rimOwn = 1e6;
+for (int i = 0; i < ${RIM_INK_MAX}; i++) {
+  if (i >= uRimN) break;
+  vec4 c = uRimC[i];
+  float sd = distance(rimP, c.xyz) - abs(c.w);
+  if (c.w > 0.0) rimU = min(rimU, sd); else if (abs(sd) < abs(rimOwn)) rimOwn = sd;
+}
+float rimWob = (rimNoise(rimP * 0.05) - 0.5) * 1.0 + (rimNoise(rimP * 0.17 + 4.0) - 0.5) * 0.4;
+float rimEdge = min(abs(rimU + rimWob), abs(rimOwn + rimWob));
+float rimPx = max(fwidth(rimEdge), 1e-3); // metres per pixel across the band
+float rimFar = 1.0 - smoothstep(${(RIM_INK_REACH * 0.7).toFixed(1)}, ${RIM_INK_REACH.toFixed(1)}, distance(vHoleW, cameraPosition));
+// Not ink: a band of shattered regolith along the crest. An uneven rocky core whose edges break up
+// into patches, a soft scuffed halo round it, and rubble through it - dark pebbles and bright
+// chips of fresh rock (the grit fades out with distance before it can shimmer)
+float rimRag = (rimNoise(rimP * 0.21 + 1.7) - 0.5) * 2.2 + (rimNoise(rimP * 0.55 - 6.0) - 0.5) * 1.0;
+float rimHw = max(1.3 + 1.9 * rimNoise(rimP * 0.03 + 9.0), rimPx * 1.2);
+float rimCore = 1.0 - smoothstep(rimHw * 0.55, rimHw * 1.35 + rimPx, rimEdge + rimRag);
+float rimHalo = (1.0 - smoothstep(rimHw, rimHw * 3.2, rimEdge + rimRag * 1.5)) * 0.35;
+float rimGritK = 1.0 - smoothstep(0.08, 0.35, rimPx);
+float rimPeb = smoothstep(0.62, 0.72, rimNoise(rimP * 1.3 + 11.0)) * rimGritK;
+float rimChip = smoothstep(0.8, 0.86, rimNoise(rimP * 1.9 - 4.0)) * rimGritK;
+float rimLine = max(rimCore * (0.62 + 0.25 * rimNoise(rimP * 0.09 - 3.0)), rimHalo) * rimFar;
+vec3 rimRock = vec3(0.24, 0.21, 0.29);
+diffuseColor.rgb = mix(diffuseColor.rgb, rimRock, rimLine);
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.1, 0.085, 0.14), rimPeb * max(rimCore, rimHalo * 1.6) * 0.85 * rimFar);
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.86), rimChip * rimCore * 0.6 * rimFar);`);
     };
     return mat;
   }
@@ -512,7 +615,8 @@ uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2
         nor[li * 3] = _e.x; nor[li * 3 + 1] = _e.y; nor[li * 3 + 2] = _e.z;
         // slope shading baked into colour
         const ny = _e.dot(_a.normalize());
-        const k2 = clamp(1 - (1 - ny) * 0.9, 0.45, 1.1);
+        // (gentle: hard darkening on steep walls tipped into the halftone in saw-toothed patches)
+        const k2 = clamp(1 - (1 - ny) * 0.5, 0.68, 1.1);
         col[li * 3] *= k2; col[li * 3 + 1] *= k2; col[li * 3 + 2] *= k2;
       }
     }
@@ -559,7 +663,10 @@ uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2
     geo.computeBoundingSphere();
     const mesh = new THREE.Mesh(geo, this.material);
     mesh.receiveShadow = true;
-    mesh.castShadow = lod <= 1;
+    // hills block the sun again (without it, a rock's shadow fell straight through the hill and
+    // landed a second time beyond it); only their far sides cast (material.shadowSide), so a
+    // sunlit slope can't shadow itself into jagged blotches
+    mesh.castShadow = true;
     mesh.matrixAutoUpdate = false;
     mesh.visible = false;
     this.scene.add(mesh);
@@ -588,6 +695,121 @@ uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2
     let rad = 0;
     for (const p of pts) rad = Math.max(rad, p.distanceTo(c));
     (this.rails ||= []).push({ pts, cum, len: cum[cum.length - 1], c, rad });
+  }
+
+  // Crater lips: the ink line and the grind rail are the same thing. A crater's lip counts if it
+  // stands up as a firm ridge most of the way round (not flattened under a settlement, swallowed
+  // by a neighbour, worn away, or a giant); its crest - where it peaks - is where the ink is drawn
+  // and where you grind. Overlapping craters share one outline: each lip only runs where it
+  // isn't inside a neighbour, so the cluster has one rim round it, inked and grindable. A crater
+  // lying wholly on the floor of one at least twice its size keeps its whole lip.
+  rimOf(c) {
+    this.rimInfo ||= new Map();
+    let I = this.rimInfo.get(c);
+    if (I) return I;
+    I = { ok: false, rpk: 1, rc: c.R, pts: null, nested: false, nb: null };
+    this.rimInfo.set(c, I);
+    if (c.type === 'ghost' || c.R < 24 || c.R > RIM_INK_BIG) return I;
+    const v = new THREE.Vector3(), w = new THREE.Vector3();
+    const at = (rr, th, out) => {
+      const a = (rr * c.R) / R;
+      out.copy(c.e1).multiplyScalar(Math.cos(th)).addScaledVector(c.e2, Math.sin(th)).multiplyScalar(Math.sin(a)).addScaledVector(c.d, Math.cos(a)).normalize();
+      return this.surface(out);
+    };
+    // the crest sits a touch outside r = 1 (the bowl drags the inner side down): find it
+    let rpk = 1, best = -1e9;
+    for (let rr = 0.88; rr <= 1.3; rr += 0.01) {
+      let h = 0;
+      for (let k = 0; k < 6; k++) h += at(rr, k * 1.047 + 0.3, v);
+      if (h > best) { best = h; rpk = rr; }
+    }
+    const n = Math.max(24, Math.ceil((2 * Math.PI * c.R * rpk) / 4));
+    const pts = [];
+    let firm = 0;
+    for (let i = 0; i < n; i++) {
+      const th = (i / n) * Math.PI * 2;
+      const top = at(rpk, th, v);
+      // the rail hugs the ground you see (smoothed below, so it doesn't bob over every grid cell)
+      pts.push(v.clone().multiplyScalar(top));
+      // a firm lip stands up off the line between the bowl and the ground outside (which can be
+      // higher than it, on a slope)
+      if (top - (at(rpk - 0.3, th, w) + at(rpk + 0.35, th, w)) / 2 > 1.5) firm++;
+    }
+    // ease out the small bumps of the ground underneath, so the grind runs smooth
+    // (and the steps where a scarp or ridge crosses the lip)
+    let rad = pts.map((q) => q.length());
+    for (let pass = 0; pass < 1; pass++) {
+      rad = rad.map((_, i) => (rad[(i + n - 2) % n] + 2 * rad[(i + n - 1) % n] + 3 * rad[i] + 2 * rad[(i + 1) % n] + rad[(i + 2) % n]) / 9);
+    }
+    for (let i = 0; i < n; i++) pts[i].setLength(rad[i] + 0.1);
+    I.ok = firm >= n * 0.8;
+    I.rpk = rpk; I.rc = c.R * rpk; I.pts = pts;
+    return I;
+  }
+
+  // the inked, grindable craters overlapping this one
+  rimNeighbours(c) {
+    const I = this.rimOf(c);
+    if (I.nb) return I.nb;
+    I.nb = [];
+    for (const o of this.craters) {
+      if (o === c || o.type === 'ghost' || o.R > RIM_INK_BIG) continue;
+      const d = R * Math.acos(Math.min(1, c.d.dot(o.d)));
+      if (d > (c.R + o.R) * 1.4) continue;
+      const J = this.rimOf(o);
+      if (!J.ok) continue;
+      I.nb.push({ o, J, d });
+      if (o.R >= c.R * 2 && d + I.rc < J.rc * 0.95) I.nested = true;
+    }
+    return I.nb;
+  }
+
+  // the grind rails along a crater's lip: one closed loop, or the open stretches of it that make up
+  // part of a cluster's shared outline
+  rimRailsOf(c) {
+    const I = this.rimOf(c);
+    if (!I.ok) return [];
+    const nb = this.rimNeighbours(c);
+    const pts = I.pts, n = pts.length;
+    const keep = pts.map((p) => {
+      if (I.nested) return true;
+      for (const { o, J } of nb) {
+        if (this.rimNeighbours(o) && J.nested) continue; // (nested ones don't cut the shared outline)
+        if (R * Math.acos(Math.min(1, _rv.copy(p).normalize().dot(o.d))) < J.rc - 1) return false;
+      }
+      return true;
+    });
+    const rail = (list, loop) => {
+      const cum = [0];
+      for (let i = 1; i < list.length; i++) cum.push(cum[i - 1] + list[i].distanceTo(list[i - 1]));
+      const cen = new THREE.Vector3();
+      for (const q of list) cen.add(q);
+      cen.divideScalar(list.length);
+      let rad = 0;
+      for (const q of list) rad = Math.max(rad, q.distanceTo(cen));
+      return { pts: list, cum, len: cum[cum.length - 1], c: cen, rad, loop, rimOf: c };
+    };
+    if (keep.every(Boolean)) return [rail([...pts, pts[0].clone()], true)];
+    const out = [];
+    const start = keep.indexOf(false);
+    let run = [];
+    for (let k = 1; k <= n; k++) {
+      const i = (start + k) % n;
+      if (keep[i]) run.push(pts[i]);
+      if (!keep[i] || k === n) { if (run.length >= 3) out.push(rail(run, false)); run = []; }
+    }
+    return out;
+  }
+
+  // Build the rim rails round you as you go (the Grinder calls this every half second).
+  rimRailsNear(p) {
+    this.rimRails ||= new Map();
+    const d = _rv.copy(p).normalize();
+    for (const c of this.craters) {
+      if (this.rimRails.has(c) || c.type === 'ghost' || c.R > RIM_INK_BIG) continue;
+      if (Math.abs(R * Math.acos(Math.min(1, d.dot(c.d))) - c.R) > 220) continue;
+      this.rimRails.set(c, this.rimRailsOf(c));
+    }
   }
 
   // Keep big rocks off these directions (the road network): set by the world once roads exist.
@@ -651,7 +873,39 @@ uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2
   }
 
   // Decide per chunk what LOD to show; build missing meshes within a time budget.
+  // Pick the crater crests within reach of the camera for the terrain shader's ink line: each one
+  // is drawn exactly, per pixel, as a circle round its crater (worked out from vertex data it
+  // followed the terrain triangles, and broke up wherever craters overlap).
+  updateRimInk(camPos) {
+    if (camPos.distanceToSquared(this.rimInkAt) < 40 * 40) return;
+    const cd = _rv.copy(camPos).normalize();
+    const near = [];
+    for (const c of this.craters) {
+      if (c.type === 'ghost' || c.R > RIM_INK_BIG || c.R < 24) continue;
+      const gap = Math.abs(R * Math.acos(Math.min(1, cd.dot(c.d))) - c.R);
+      if (gap < RIM_INK_REACH) near.push({ c, gap });
+    }
+    near.sort((a, b) => a.gap - b.gap);
+    // measuring a lip takes about a millisecond: a few dozen at most per frame, nearest first
+    // (the rest come in over the next frames, out at the far end of the ink's reach)
+    const t0 = performance.now();
+    let done = true;
+    const U = this.holeU.uRimC.value;
+    let n = 0;
+    for (const { c } of near) {
+      if (n >= RIM_INK_MAX) break;
+      if (!this.rimInfo?.has(c) && performance.now() - t0 > 6) { done = false; continue; }
+      const I = this.rimOf(c);
+      if (!I.ok) continue;
+      this.rimNeighbours(c);
+      U[n++].set(c.d.x * R, c.d.y * R, c.d.z * R, I.nested ? -I.rc : I.rc);
+    }
+    this.holeU.uRimN.value = n;
+    if (done) this.rimInkAt.copy(camPos);
+  }
+
   update(camPos, { budgetMs = 5, maxDist = 3200 } = {}) {
+    this.updateRimInk(camPos);
     const camLen = camPos.length();
     const rMin = R - 330, rMax = R + 260;
     const horizon = Math.sqrt(Math.max(0, camLen * camLen - rMin * rMin)) + Math.sqrt(rMax * rMax - rMin * rMin);
@@ -663,7 +917,7 @@ uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2
       const d = camPos.distanceTo(ch.center) - ch.radius;
       let want = -1;
       const dl = d / (this.lodScale || 1); // settings: terrain detail
-      if (d < limit) want = dl < 260 ? 0 : dl < 800 ? 1 : dl < 1700 ? 2 : 3;
+      if (d < limit) want = dl < 130 ? 0 : dl < 260 ? 1 : dl < 800 ? 2 : dl < 1700 ? 3 : 4;
       ch.want = want;
       if (want >= 0) ch.lastWanted = now;
       let show = -1;
@@ -682,14 +936,14 @@ uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2
       }
       if (show >= 0) visible++;
       // boulders: drawn for near chunks; colliders only where you can actually hit them
-      const near = want >= 0 && want <= 1;
+      const near = want >= 0 && want <= 2;
       if (near && !ch.boulders) this.buildBoulders(ch);
       if (ch.boulders) ch.boulders.visible = near;
-      const active = want === 0;
+      const active = want >= 0 && want <= 1;
       if (active && !ch.boulderCols && this.colliders) ch.boulderCols = ch.boulderSpec.map((c) => this.colliders.add(c));
       if (!active && ch.boulderCols) { for (const c of ch.boulderCols) this.colliders.remove(c); ch.boulderCols = null; }
       // free detailed meshes that are no longer needed
-      for (let l = 0; l < 2; l++) {
+      for (let l = 0; l < 3; l++) {
         const m = ch.meshes[l];
         if (!m || ch.shown === l) continue;
         if (want < 0 ? now - ch.lastWanted > 8000 : want > l + 1) {

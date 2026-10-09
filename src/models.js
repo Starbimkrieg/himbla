@@ -1200,6 +1200,110 @@ export function makeFreighter({ color = 0xb8b4c8, stripe = 0xff9f1c } = {}) {
   return makeShip('freighter', { color, stripe });
 }
 
+// Longshot Kade's gun truck: a mad-max monster truck on huge tyres. Kade drives (open cab, roll
+// cage); a lackey works a turret on the bed with a six-barrel gatling and a fat flak cannon.
+// Origin on the ground, +Z forward. turret (yaw) > pitch (elevation) > gatSpin (barrels).
+export function makeKadeTruck() {
+  const root = new THREE.Group();
+  const chassis = new THREE.Group();
+  root.add(chassis);
+  const BODY = 0x3a1f2a, RED = 0xd7263d, RUST = 0x7a4a32, IRON = 0x55607a, BLK = 0x1d1a29;
+  chassis.add(baked('kadetruck', (k) => {
+    // ladder frame and axles high over the tyres
+    k.box(5.4, 0.7, 11.6, KT(BLK), 0, 2.4, 0, { outline: 0.08 });
+    for (const z of [-4.4, 4.4]) k.add(new THREE.CylinderGeometry(0.3, 0.3, 7.6, 8).rotateZ(Math.PI / 2), KT(IRON), 0, 2.2, z, { outline: 0.03 });
+    // the body: armoured tub, cab up front, a raised bed behind
+    k.box(6.2, 1.8, 11, KT(BODY), 0, 3.1, 0, { outline: 0.12 });
+    k.box(6.3, 0.3, 11.1, KT(RED), 0, 4.0, 0, { outline: 0 });
+    k.add(new THREE.BoxGeometry(5.6, 1.4, 3.2), KT(BODY), 0, 5.2, 2.6, { rx: -0.25, outline: 0.08 }); // hood, raked
+    k.box(4.6, 1.6, 2.6, KT(BODY), 0, 4.9, 0.4, { outline: 0.08 }); // cab sides
+    k.box(4.4, 0.9, 0.15, KG(0xff4f2e), 0, 5.5, 1.75, { outline: 0 }); // glowing slit windscreen
+    // roll cage over the open cab
+    for (const sx of [-1, 1]) {
+      k.beam([sx * 2.1, 6.4, 1.6], [sx * 2.0, 8.0, 0.6], 0.14, KT(IRON), { outline: 0.03 });
+      k.beam([sx * 2.1, 6.4, -0.9], [sx * 2.0, 8.0, -0.4], 0.14, KT(IRON), { outline: 0.03 });
+      k.beam([sx * 2.0, 8.0, 0.6], [sx * 2.0, 8.0, -0.4], 0.14, KT(IRON), { outline: 0 });
+    }
+    k.beam([-2.0, 8.0, 0.6], [2.0, 8.0, 0.6], 0.14, KT(IRON), { outline: 0 });
+    // bull bar with spikes, and a skull on the grille
+    k.box(6.6, 1.2, 0.5, KT(IRON), 0, 3.0, 5.9, { outline: 0.06 });
+    for (let i = 0; i < 6; i++) k.add(new THREE.ConeGeometry(0.22, 1.1, 6).rotateX(Math.PI / 2), KT(0xd8d4e8), -2.75 + i * 1.1, 3.6, 6.4, { outline: 0.02 });
+    k.ball(0.55, KT(0xfff4e0), 0, 4.3, 5.85, { outline: 0.04 });
+    for (const sx of [-1, 1]) k.ball(0.15, KG(RED), sx * 0.22, 4.4, 6.35, { outline: 0 });
+    // scrap plates welded down the flanks, exhaust stacks belching flame
+    for (const [x, z, c] of [[3.15, 2.5, RUST], [3.15, -2.0, IRON], [-3.15, 1.0, RUST], [-3.15, -3.0, 0x6b5a3a]]) k.box(0.15, 1.3, 2.6, KT(c), x, 2.8, z, { rz: Math.sign(x) * 0.06, outline: 0.03 });
+    for (const sx of [-1, 1]) {
+      k.cyl(0.3, 0.35, 4.2, 8, KT(IRON), sx * 2.6, 4.0, -0.9, { outline: 0.03 });
+      k.cyl(0.32, 0.32, 0.3, 8, KG(0xff9f1c), sx * 2.6, 8.2, -0.9, { outline: 0 });
+    }
+    // the turret ring on the bed
+    k.cyl(1.9, 2.1, 0.8, 16, KT(IRON), 0, 4.0, -3.3, { outline: 0.05 });
+    k.ring(1.95, 0.12, KT(RED), 0, 4.8, -3.3);
+    // rear: armoured tailgate, tail lights, a Rustmoon flag pole
+    k.box(6.0, 1.6, 0.4, KT(RUST), 0, 3.0, -5.7, { outline: 0.05 });
+    for (const sx of [-1, 1]) k.box(0.7, 0.3, 0.12, KG(0xff2a4a), sx * 2.4, 4.0, -5.92, { outline: 0 });
+    k.cyl(0.06, 0.08, 5, 5, KT(BLK), -2.8, 4.0, -5.2, { outline: 0 });
+  }));
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.5), toon(0x111111, { side: THREE.DoubleSide }));
+  flag.position.set(-4.0, 8.4, -5.2);
+  chassis.add(flag);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), toon(0xffffff));
+  skull.position.set(-4.0, 8.45, -5.17);
+  chassis.add(skull);
+  // the man himself, behind the wheel
+  const kade = makeRunner({ suit: 0x1a1a1a, accent: 0xff2a3a, helmet: 0x2b2b2b, visor: 0xff2a3a, scarf: 0xd7263d, pirate: true });
+  kade.root.position.set(-0.9, 4.0, 0.2);
+  kade.legL.rotation.x = kade.legR.rotation.x = -1.4;
+  if (kade.armL) kade.armL.rotation.x = -1.2;
+  if (kade.armR) kade.armR.rotation.x = -1.2;
+  chassis.add(kade.root);
+  // turret: a yawing mount, an elevating cradle with both guns, the gunner standing behind it
+  const turret = new THREE.Group();
+  turret.position.set(0, 4.8, -3.3);
+  chassis.add(turret);
+  turret.add(baked('kadeturret', (k) => {
+    k.cyl(1.4, 1.6, 0.9, 12, KT(BODY), 0, 0, 0, { outline: 0.05 });
+    k.box(2.8, 1.4, 0.3, KT(IRON), 0, 0.9, 1.1, { outline: 0.04 }); // gun shield
+    k.box(2.9, 0.2, 0.32, KT(RED), 0, 2.2, 1.1, { outline: 0 });
+  }));
+  const gunner = makeRunner({ suit: 0x3a2b4f, accent: 0x7dff3a, helmet: 0x2b2b2b, visor: 0x7dff3a, scarf: 0xd7263d, pirate: true });
+  gunner.root.position.set(0, 0.6, -1.2);
+  if (gunner.armL) gunner.armL.rotation.x = -1.3;
+  if (gunner.armR) gunner.armR.rotation.x = -1.3;
+  turret.add(gunner.root);
+  const pitch = new THREE.Group();
+  pitch.position.set(0, 1.6, 0.4);
+  turret.add(pitch);
+  pitch.add(baked('kadeguns', (k) => {
+    k.box(2.4, 0.9, 1.6, KT(BLK), 0, -0.45, 0, { outline: 0.04 });
+    // flak cannon on the right: a fat barrel with a muzzle brake
+    k.add(new THREE.CylinderGeometry(0.42, 0.5, 3.6, 12).rotateX(Math.PI / 2), KT(IRON), 0.85, 0, 2.2, { outline: 0.04 });
+    k.add(new THREE.CylinderGeometry(0.6, 0.6, 0.6, 12).rotateX(Math.PI / 2), KT(BLK), 0.85, 0, 4.0, { outline: 0.03 });
+  }));
+  // the gatling on the left spins
+  const gatSpin = new THREE.Group();
+  gatSpin.position.set(-0.85, 0, 1.0);
+  pitch.add(gatSpin);
+  gatSpin.add(baked('kadegat', (k) => {
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      k.add(new THREE.CylinderGeometry(0.1, 0.1, 3.2, 6).rotateX(Math.PI / 2), KT(IRON), Math.cos(a) * 0.28, Math.sin(a) * 0.28, 1.6, { outline: 0.01 });
+    }
+    k.add(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 10).rotateX(Math.PI / 2), KT(BLK), 0, 0, 2.9, { outline: 0.02 });
+    k.add(new THREE.CylinderGeometry(0.48, 0.48, 0.9, 10).rotateX(Math.PI / 2), KT(BLK), 0, 0, 0.2, { outline: 0.03 });
+  }));
+  const gatMuzzle = new THREE.Object3D(); gatMuzzle.position.set(-0.85, 0, 4.4); pitch.add(gatMuzzle);
+  const flakMuzzle = new THREE.Object3D(); flakMuzzle.position.set(0.85, 0, 4.5); pitch.add(flakMuzzle);
+  const wheels = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const w = rWheel(2.1, 1.7);
+    w.position.set(sx * 3.9, 2.1, sz * 4.4);
+    root.add(w);
+    wheels.push(w);
+  }
+  return { root, chassis, wheels, turret, pitch, gatSpin, gatMuzzle, flakMuzzle, flag, kade, gunner };
+}
+
 // Defence turret: an armoured octagonal base with a glowing collar, and a head (yawed by
 // enemies.updateTurret around its pivot at y 3.1, barrels along +z) with a sloped cupola, twin
 // barrels with muzzle brakes, cooling fins, ammo pods and a sensor eye. Baked per faction colour

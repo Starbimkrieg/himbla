@@ -238,19 +238,27 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
         v.add(diff);
       }
     }
-    if (input.jump && b.energy >= params.jumpCost) {
-      v.addScaledVector(n, params.jumpSpeed * 0.4);
-      v.addScaledVector(up, params.jumpSpeed);
-      b.energy -= params.jumpCost;
-      b.grounded = false;
-      b.sinceContact = params.gripWindow + 1; // a jump breaks the magnetic grip
-      b.jumped = true;
-    }
   } else {
     wish.addScaledVector(up, -wish.dot(up));
     v.addScaledVector(wish, params.airControl * dt);
   }
   b.lastLat = lat;
+
+  // Jump: on the ground, or skimming just above it (a thruster pushing you along the flat lifts you
+  // a hair off it, and so do bumps) - within the floor buffer, as long as you haven't jumped since
+  // you last touched down. It takes jet energy, but never needs it: a long thruster run that has
+  // drained the tank mustn't leave you unable to hop
+  if (input.jump && (b.grounded || (b.altitude < (params.jumpBuffer ?? 1.2) && !b.jumpLock))) {
+    const vu = v.dot(up);
+    if (vu < 0) v.addScaledVector(up, -vu); // a drift down doesn't eat the jump
+    v.addScaledVector(b.grounded ? n : up, params.jumpSpeed * 0.4);
+    v.addScaledVector(up, params.jumpSpeed);
+    b.energy = Math.max(0, b.energy - params.jumpCost);
+    b.grounded = false;
+    b.sinceContact = params.gripWindow + 1; // a jump breaks the magnetic grip
+    b.jumped = true;
+    b.jumpLock = true;
+  }
 
   // Magnetic grip: pull into the surface while (nearly) in contact, so the skates hold
   // the line over small bumps. A real launch climbs out of range and flies free.
@@ -372,6 +380,6 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
 
   // stay "on deck" through tiny separations so riding a vehicle doesn't flicker
   if (!b.platform && prevPlat && alt > 0 && b.sinceContact < 0.15 && b.pos.distanceTo(prevPlat.pos) < 40) b.platform = prevPlat;
-  if (b.grounded) { b.airTime = 0; b.sinceContact = 0; } else { b.airTime += dt; b.sinceContact += dt; }
+  if (b.grounded) { b.airTime = 0; b.sinceContact = 0; if (!b.jumped) b.jumpLock = false; } else { b.airTime += dt; b.sinceContact += dt; }
   return impacts;
 }

@@ -9,15 +9,24 @@ try to steal your cargo and military bases defend their airspace.
 The Moon is a **real sphere** (about 22.6 km around), and you can ski all the way round it.
 The sunlit near side holds the settlements.
 
-The terrain is mostly smooth, cratered plain, broken up by patches of other country: rounded ridged highlands,
-stepped scarps you can launch off, wide, smooth-floored rilles (channels you can race along) and long rolling hills. Craters come in several kinds:
+The terrain is mostly smooth, cratered plain (a little over half the Moon), broken up by patches of other
+country, each about an eighth of the Moon: ridged highlands with crisp crests, stepped scarps with 20 m ledges you can
+launch off, rolling hills, and rille country, where wide, deep, smooth-floored channels wind for kilometres (you can
+race along them, and they cut straight through crater rims). Craters keep these landforms round them, levelling only
+the plain's small bumps. Craters come in several kinds:
 plain bowls, ramparts with tall, firm rims that stand up off the plain, crowns whose rims swell and dip in broad lobes,
 worn-down ghosts, and big terraced ones with a central peak. Besides the ordinary lumpy boulders (thicker in the
 highlands), shaped rocks dot the plains: rough ramp slabs that kick you into the air, natural arches to skate through,
 hoodoo spires with cap rocks, and **snake rocks**: 35–50 m ridges that wind gently over the ground with a thin crest
 whose ends slope down to the ground. Land on a crest (or just skate straight into one of the tips) and you **grind** it, standing sideways and
 carried along by your speed (downhill speeds you up); jump (`Shift`) to pop off, or you pop off by yourself near the
-end. Grinds pay style by the second.
+end. On the rail you drop into a low, sideways slide, leaning back with your arms out for balance, while sparks
+spray off your skates (more of them, and further, the faster you go). Grinds pay style by the second. Crater lips grind too, and the rock tells you which: every rocky band
+round a rim runs along the peak of a firm lip, and that's the rail. Each crater sits on its own level apron and
+its lip curves up out of it like a kicker, so riding up onto the lip at up to ~60 degrees off its line
+(or landing on it from a hop) throws you onto the crest; just crossing one square-on won't catch you.
+Once on, you lock on and ride it round, lap after lap, until you jump
+off. Where craters overlap, the shared outline is the rail, and you pop off where it meets a neighbour.
 
 **Landings:** hard landings hurt half as much as they used to (the cargo still takes the full jolt), and a landing
 with plenty of speed along the ground is a glancing blow: at 30 m/s of glide it hurts half as much again. Past the terminator lies the **dark side**: almost
@@ -147,7 +156,8 @@ from about 280 m up, so you can see one coming for half a minute and plan a jump
   clearance, you get a 4-second warning. After that, turrets and patrol rovers open fire,
   and after 9 seconds artillery starts landing on predicted positions marked by red rings.
 - **The dark side:** your helmet lamp switches on automatically. Pirate squads hunt you even
-  without cargo, and pirate dens and camps are guarded. Contracts that start or end there pay
+  without cargo, and pirate dens and camps are guarded. They don't spawn while you're inside an allied
+  settlement's zone (Farside, or Daedalus once you're in their good books) or riding a transit ship. Contracts that start or end there pay
   1.6× hazard pay. Switching your lamp off (`L`) makes you much harder to hit, but you'll be skiing blind. Twilight Waystation on the terminator is the last safe stop before the dark.
 - **Living world:** traffic comes in three sizes: hover-cars, passenger buses, and 50 m cargo
   freighters cruising high overhead. A rocket regularly lands on and launches from the ILMB
@@ -246,11 +256,13 @@ leaders stop dealing with you, so each playthrough tells one coherent story.
 after a K.O. and recall there.
 
 **Longshot Kade.** On the dark side, a regular pirate squad occasionally (8 %) brings the King of Rustmoon:
-slow-motion, a comic splash panel and a close-up. He's a sniper who keeps his distance. When the red laser
-locks on you get ~2 s of warning (LASER LOCK, rising beeps), then the dot freezes for a split second and he
-fires where you WERE: 45 damage. Keep moving sideways or break line of sight. Knock him below a third of his
-health and he escapes ("THIS AIN'T OVER, RUNNER!") for ₵500; he comes back later. Not while you ride with
-Rustmoon.
+slow-motion, a comic splash panel and a close-up. He rolls in on a mad-max monster truck that never leaves the
+ground and never rams: it skirts round you at 45-80 m, swapping direction, while a lackey works the roof
+turret. On the ground the turret is a **gatling** (fast bursts of small rounds). Get well off the ground
+and it switches to **flak** (FLAK! GET LOW): shells that burst in mid-air around you, stinging and nudging
+you (bleeding your speed and pulling you down) rather than blasting you clear. Wreck the truck for a
+₵800 bounty; the first time, his **Rustmoon Junk Mortar** tumbles out in a green-beamed crate (it's also
+yours if you swear in with Rustmoon). Lose him by getting 1.5 km away. Not while you ride with Rustmoon.
 
 ## Secrets (spoilers)
 
@@ -486,7 +498,7 @@ The wind rumble is a soft low-passed swell instead of high-frequency hiss. `N` t
   leader, grandstand and blimp cameras, the mouse orbits the chase cam, and `SPACE` spends one of three **crowd
   cheers** for a short surge that burns stamina (a dim creature may get spooked instead). Chaos as ever: stumbles,
   zooms, wrong-way runs, giant hops, and the occasional explosion and reassembly. Wins land on the Hall of Highlights.
-- **The Monolith:** touch it for 30 s of low gravity (90 s cooldown).
+- **The Monolith:** touch it (90 s cooldown) and it casts one of three spells, never the same twice running: **Low-G** (30 s at under half gravity), **Time Dilation** (20 s with pirates, their shots, traffic and meteors at 40 % speed while you keep full speed) or **Echo Decoys** (30 s with three holograms of you skating alongside; anyone shooting at you picks one of the four at random, and a hologram shatters when hit).
 - **Bounce Dome Funpark:** inflatable domes, a turreted bouncy castle and a row of trampolines that throw you back
   up harder than you landed, plus a **skate park**: a volcano bowl (ride up the outside and drop in, or hit it fast and
   fly clean over), a kicker line with a big launch off the plateau edge, a quarter-pipe wall and a pyramid funbox, out
@@ -510,7 +522,8 @@ The wind rumble is a soft low-passed swell instead of high-frequency hiss. `N` t
 ## Keeping it light on the GPU
 
 - **Terrain LOD streaming:** the cube-sphere is split into 1,536 chunks. Each frame the game
-  picks a detail level per chunk (4 levels, by distance), skips chunks past the horizon, builds
+  picks a detail level per chunk (5 levels by distance, from a ~4.4 m grid within ~130 m of you
+  up to ~70 m cells far off), skips chunks past the horizon, builds
   missing meshes within a 4 ms budget, and frees detailed meshes nobody needs anymore. Skirts
   hide the seams between detail levels.
 - **Exact physics without meshes:** collisions sample the finest-level triangles directly from
@@ -529,7 +542,7 @@ The wind rumble is a soft low-passed swell instead of high-frequency hiss. `N` t
 - Inverted-hull outlines on characters, vehicles and buildings
 - A post pass (`src/post.js`) that draws ink lines from the depth buffer, halftone dots in
   shadow, radial **speed lines** that scale with velocity, and damage and alert vignettes
-- Inked crater rims baked into the terrain shader
+- Shattered crater rims: a band of broken regolith along the peak of every grindable lip (an uneven rocky core breaking up into patches, a scuffed halo, dark pebbles and bright chips of fresh rock that fade out with distance), worked out per pixel from the ~64 nearest craters so it never follows the terrain triangles. The rocky band and the grind rail come from the same measurement (planet.rimOf): only firm lips get either. Overlapping craters share one outline round the whole cluster (a crater on the floor of one at least twice its size keeps its own); the giants (over 120 m) get neither. The terrain's toon ramp has soft steps, so lighting bands don't saw-tooth round steep walls
 - Onomatopoeia pop-ups (WHOOSH!, KRAK!, KA-BOOM!, YOINK!) and inset **action panels** with
   captions for big launches, thefts and deliveries
 
@@ -548,6 +561,8 @@ src/
   chimera.js     gene splicing + procedural chimera models
   cheats.js      testing menu (backtick)
   story.js       faction leaders, chapters, outposts you found, tech, Longshot Kade
+  kade.js        Longshot Kade's gun truck: orbit driving, gatling and flak turret, Junk Mortar drop
+  monolith.js    the Monolith's spells: low-G, time dilation, echo decoys
   territory.js   faction territory, border pylons, small outposts, patrols
   vehicles.js    drivable faction vehicles
   settings.js    settings menu + key remapping
@@ -556,7 +571,7 @@ src/
   race.js        Chimera Downs: racecourse, race card, betting, locked race camera, chaos racing
   rides.js       hop-in rides: free transit-ship rides and the Funpark's ferris wheel and carousel
   rocks.js       shaped rocks (ramps, arches, hoodoos, snake rails) and their colliders
-  rails.js       grinding the snake rocks' crests
+  rails.js       grinding the snake rocks' crests and crater rims
   meteors.js     meteor showers: the warning zone, falling rocks (colliders), chunks and scorch marks
   chimerastats.js chimera racing stats and the race model (distance, going, cheers) the bookie simulates
   highlights.js  action-shot capture (shown on the ILMB job terminal)

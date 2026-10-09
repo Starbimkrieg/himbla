@@ -162,14 +162,21 @@ export class Player {
     const pitchK = Math.sin(cam.pitch) * 0.6 + 0.06;
     thrustDir.addScaledVector(up, pitchK > 0 ? Math.min(pitchK, tv) : Math.max(pitchK * 2.2, -1.2)).normalize();
 
+    // jump presses are held for a moment (pressed just before touching down still jumps), and
+    // count within the floor buffer (see stepSkater)
+    const jumpKey = input.pressed('ShiftLeft') || input.pressed('ShiftRight');
+    this.jumpBuf = jumpKey ? 0.15 : Math.max(0, (this.jumpBuf || 0) - dt);
+    const nearFloor = b.grounded || ((b.altitude ?? 0) < (this.params.jumpBuffer ?? 1.2) && !b.jumpLock);
+    const jumpNow = nearFloor && this.jumpBuf > 0;
+    if (jumpNow) this.jumpBuf = 0;
     const ctrl = {
       wish,
       skates: input.down('Space'),
       // with the Rail Lance out, right mouse is the scope instead of the thrusters (E still thrusts)
       thrust: input.down('KeyE') || (input.mouse[2] && WEAPONS[this.weapon || 0].key !== 'rail'),
-      jump: b.grounded && (input.pressed('ShiftLeft') || input.pressed('ShiftRight')),
+      jump: jumpNow,
       // Dive: a fresh press of the jump key while airborne, held (so the jump itself never dives)
-      dive: this.diveLatch = !b.grounded && (this.diveLatch || ((input.pressed('ShiftLeft') || input.pressed('ShiftRight')) && b.airTime > 0.15)) && (input.down('ShiftLeft') || input.down('ShiftRight')),
+      dive: this.diveLatch = !b.grounded && !jumpNow && (this.diveLatch || (jumpKey && b.airTime > 0.15)) && (input.down('ShiftLeft') || input.down('ShiftRight')),
       thrustDir,
     };
 

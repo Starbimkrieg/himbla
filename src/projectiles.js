@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { shatterEcho } from './monolith.js';
 
 const _seg = new THREE.Vector3();
 const _rel = new THREE.Vector3();
@@ -21,7 +22,9 @@ export class Projectiles {
     this.inkMat = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
   }
 
-  fire(owner, pos, vel, { damage = 20, splash = 5, color = 0x9be7ff, size = 0.45, life = 4, gravity = 0, knock = 1, homing = 0, spare = false } = {}) {
+  // fuse: burst after this many seconds; proxy: burst within this distance of the player;
+  // burst(pos): a custom detonation instead of the usual explosion (Kade's flak)
+  fire(owner, pos, vel, { damage = 20, splash = 5, color = 0x9be7ff, size = 0.45, life = 4, gravity = 0, knock = 1, homing = 0, spare = false, fuse = 0, proxy = 0, burst = null } = {}) {
     const mesh = new THREE.Mesh(this.geo, new THREE.MeshBasicMaterial({ color }));
     const hull = new THREE.Mesh(this.geo, this.inkMat);
     hull.scale.setScalar(1.35);
@@ -29,20 +32,21 @@ export class Projectiles {
     mesh.scale.setScalar(size);
     mesh.position.copy(pos);
     this.game.scene.add(mesh);
-    this.list.push({ owner, mesh, pos: pos.clone(), prev: pos.clone(), vel: vel.clone(), damage, splash, life, gravity, knock, size, color, homing, spare, age: 0 });
+    this.list.push({ owner, mesh, pos: pos.clone(), prev: pos.clone(), vel: vel.clone(), damage, splash, life, gravity, knock, size, color, homing, spare, age: 0, fuse, proxy, burst });
   }
 
-  update(dt) {
+  update(dt, wdt = dt) {
     const g = this.game;
     const planet = g.planet;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const p = this.list[i];
-      p.life -= dt;
+      const pdt = p.owner === 'player' ? dt : wdt; // the Monolith's time dilation slows everyone's shots but yours
+      p.life -= pdt;
       p.prev.copy(p.pos);
-      if (p.gravity) p.vel.addScaledVector(_rel.copy(p.pos).normalize(), -p.gravity * dt);
-      p.age += dt;
-      if (p.homing > 0 && p.age > 0.08) this.home(p, dt);
-      p.pos.addScaledVector(p.vel, dt);
+      if (p.gravity) p.vel.addScaledVector(_rel.copy(p.pos).normalize(), -p.gravity * pdt);
+      p.age += pdt;
+      if (p.homing > 0 && p.age > 0.08) this.home(p, pdt);
+      p.pos.addScaledVector(p.vel, pdt);
       p.mesh.position.copy(p.pos);
       // stretch along velocity for a comic smear
       const sp = p.vel.length();
@@ -50,7 +54,7 @@ export class Projectiles {
       p.mesh.lookAt(_rel.copy(p.pos).add(p.vel));
       p.mesh.scale.set(p.size, p.size, p.size * (1 + Math.min(4, sp / 40)));
 
-      let hit = p.life <= 0;
+      let hit = p.life <= 0 || (p.fuse > 0 && p.age >= p.fuse) || (p.proxy > 0 && !g.player.dead && p.pos.distanceTo(g.player.center) < p.proxy);
       if (!hit) {
         const sr = planet.surface(p.pos);
         if (p.pos.length() <= sr) { hit = true; p.pos.setLength(sr + 0.3); }
@@ -69,6 +73,8 @@ export class Projectiles {
           if (!hit && g.civilians && g.civilians.segHit(p.prev, p.pos)) hit = true;
         } else {
           if (!g.player.dead && segSphere(p.prev, p.pos, g.player.center, 1.3)) hit = true;
+          // the Monolith's echo holograms soak up a shot each
+          for (const d of g.decoys) if (segSphere(p.prev, p.pos, d.center, d.radius)) { hit = true; shatterEcho(g, d); p.burst = () => {}; break; }
           for (const o of g.events.protect) if (!o.dead && segSphere(p.prev, p.pos, o.center, o.radius + 0.4)) { hit = true; break; }
           // defense turrets fire on pirates too
           if (!hit && p.owner === 'mil') {
@@ -80,7 +86,8 @@ export class Projectiles {
         }
       }
       if (hit) {
-        g.explode(p.pos, p.splash, p.damage, p.owner, p.knock, p.spare);
+        if (p.burst) p.burst(p.pos.clone());
+        else g.explode(p.pos, p.splash, p.damage, p.owner, p.knock, p.spare);
         g.scene.remove(p.mesh);
         p.mesh.material.dispose();
         this.list.splice(i, 1);
