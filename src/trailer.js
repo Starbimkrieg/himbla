@@ -1,4 +1,4 @@
-// Trailer director mode (?trailer). Plays the official ~45 s trailer from in-game footage: a list
+// Trailer director mode (?trailer). Plays the official ~90 s trailer from in-game footage: a list
 // of shots, each with a setup (teleport, spawn, stage), per-frame direction (held keys, steering)
 // and a camera, joined by transitions (whip-pans, flashes, ink wipes) with comic title cards on top.
 //

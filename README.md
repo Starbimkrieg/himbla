@@ -44,8 +44,10 @@ Grab the latest build from the repo's **Releases** page:
 `F11` toggles fullscreen. Saves live in the app's own storage.
 
 Building it yourself: `npm run app` runs the desktop version; `npm run dist:win`, `dist:linux` or `dist:mac`
-package it into `release/`. Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds all three on
-GitHub and attaches them to a Release.
+package it into `release/`. Pushing a `v*` tag, or a commit whose message contains `[release]` (the usual way: bump
+`package.json`'s version, commit `Release x.y.z [release]`, push), runs `.github/workflows/release.yml`, which
+builds all three on GitHub and attaches them to a Release named after the version. What changed in each
+version is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Run it
 
@@ -56,6 +58,25 @@ npm run build      # static build in dist/ (relative paths, host anywhere)
 ```
 
 Click **START YOUR SHIFT!** to lock the mouse.
+
+## Trailer mode
+
+`src/trailer.js` plays the official ~90 s trailer live in the engine: 21 scripted shots (teleport, staging,
+held keys, a camera per shot) joined by whip-pans, flashes and ink wipes, with comic title cards and a
+zone-music medley. The plan and running order are in [docs/trailer-brief.md](docs/trailer-brief.md); the
+final render is kept outside git in `trailer-out/`.
+
+```
+http://localhost:5173/?trailer         warm-up pass under a cover, then click to roll
+  &auto     roll straight after the warm-up (for an OBS browser source at 1920x1080)
+  &nowarm   skip the warm-up    &shot=N  start at shot N    &only  loop just that shot
+  &fixed    fixed 1/60 s timestep    &pump  hidden/headless page: drive it with window.step(n), seek(n, t)
+```
+
+It never touches your saves (storage is swapped for in-memory stores in this mode). Recording: OBS records
+the browser source; the trailer starts at the first bright frame after the warm-up, and the cut is
+`ffmpeg -ss <start> -t 92 … -af loudnorm=I=-14:TP=-1.5:LRA=11`. Don't save source files mid-recording:
+Vite's hot reload restarts the page.
 
 ## Controls
 
@@ -260,7 +281,8 @@ slow-motion, a comic splash panel and a close-up. He rolls in on a mad-max monst
 ground and never rams: it skirts round you at 45-80 m, swapping direction, while a lackey works the roof
 turret. On the ground the turret is a **gatling** (fast bursts of small rounds). Get well off the ground
 and it switches to **flak** (FLAK! GET LOW): shells that burst in mid-air around you, stinging and nudging
-you (bleeding your speed and pulling you down) rather than blasting you clear. Wreck the truck for a
+you (bleeding your speed and pulling you down) rather than blasting you clear; each burst leaves a
+cloud of white-hot phosphor embers that hangs and drifts for a moment before burning out. Wreck the truck for a
 ₵800 bounty; the first time, his **Rustmoon Junk Mortar** tumbles out in a green-beamed crate (it's also
 yours if you swear in with Rustmoon). Lose him by getting 1.5 km away. Not while you ride with Rustmoon.
 
@@ -451,6 +473,8 @@ over crests; only a rig at full ramming speed gets thrown into the air.
 A procedural synthwave groove (A minor, 96 BPM) plays under everything. It is a quiet pad and bass at rest and
 gets louder and fuller with speed: kick drum, snare, hats and an echoing arpeggio join in as you go faster.
 The wind rumble is a soft low-passed swell instead of high-frequency hiss. `N` toggles the music.
+Zones have their own tracks (casino, Chimera Downs, the lab, the dark side) with crossfades. The Downs has no
+crowd-noise bed for now (the cheering is due a rework), and the race countdown beeps sit well under the music.
 
 ## Strange places (sunlit side)
 
@@ -464,10 +488,12 @@ The wind rumble is a soft low-passed swell instead of high-frequency hiss. `N` t
   through the roof.
 - **Chimeras (the Horsey-Game part):** put **two or more living things** in the reactor together
   (people, Void-Touched people, wild **Moon Mites**, knocked-out **pirates**, whole **hover-cars**) and out
-  comes a chimera: body, legs and head are picked from the parents (car wheels, six mite legs, pirate
+  comes a chimera, which climbs out of the reactor tube, leaps clear and lands beside you before its
+  result card shows. Body, legs and head are picked from the parents (car wheels, six mite legs, pirate
   boots…), sometimes with a spare head, plus mutations from anything non-living in the mix (black water
   → void aura "the Unholy", rock → crystal spikes, dirt/mud → mud blobs). Each gets a mashed-up name,
-  a top speed and a chaos rating. Up to three follow you; any number more live in the **holding pen** in
+  a top speed and a chaos rating. Wheel and tread legs sit on a chassis base, so they never
+  hang off thin air. Up to three follow you; any number more live in the **holding pen** in
   front of the lab. Use the pen terminal (or `P` anywhere once you buy Dr. Zbornak's ₵1200 remote pen link) to
   call chimeras out, send them back, or release them for good. Chimeras are saved.
 - **New things to scoop:** Moon Mites roam sunlit craters in herds of 3–6, away from settlements (green dots on the minimap within ~400 m; they flee if you rush them); hover-cars
@@ -583,14 +609,20 @@ src/
   settlements.js detailed settlements, HQs and landmarks built with the outpost kit (moving parts, skate park)
   traffic.js     landing pads, ship/bus flights and passengers, dirt roads, land-trains, cars, buggies
   wardrobe.js    wardrobe screen with live 3D preview
+  trailer.js     trailer director mode (?trailer): the official trailer, shot by shot, from live gameplay
   models.js      stylised characters and vehicles from primitives; loads the Blender runner and ships
   post.js        comic post-processing shader
   fx.js, hud.js, audio.js, input.js, toon.js, locations.js, rng.js
   assets/runner.glb  the Moon-runner model (player, pirate skaters, story leaders)
   assets/ships.glb   the shuttle-bus and freighter, with folding gear, ramps and thruster flames
+  assets/skimmer.glb the Daedalus Phase Skimmer (hover-racer with spinning phase coils)
+  assets/warrig.glb  the Rustmoon pirate war-rig (patchwork mad-max rover with a spiked ram plow)
 tools/
   blender/build_runner.py  builds the runner in Blender and exports src/assets/runner.glb
   blender/build_ships.py   builds both transit ships in Blender and exports src/assets/ships.glb
+  blender/build_skimmer.py builds the Daedalus skimmer -> src/assets/skimmer.glb
+  blender/build_warrig.py  builds the pirate war-rig -> src/assets/warrig.glb
+  blender/kit.py           shared geometry/material/export helpers the skimmer and war-rig builders exec
   viewer.html              dev-only model viewer (npm run dev, then /tools/viewer.html?m=shuttle|freighter|mite|lineup…)
 ```
 
