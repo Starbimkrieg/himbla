@@ -206,7 +206,8 @@ function waterTex() {
   return t;
 }
 
-// A slot-machine cabinet (outside along the carpet, and the Classic Games corner inside).
+// A slot-machine cabinet (the carousels outside, and the Classic Games corner inside). Its pull arm
+// and a "playing" light are exposed in userData so a patron can work it.
 function slotCabinet(color, face) {
   const g = new THREE.Group();
   const body = mesh(new THREE.BoxGeometry(3, 4.4, 2.2), toon(color), 0.08);
@@ -220,8 +221,28 @@ function slotCabinet(color, face) {
   const arm = mesh(new THREE.CylinderGeometry(0.1, 0.1, 2, 6), toon(0xc9c3d9), 0.03);
   arm.position.set(1.7, 3.4, 0);
   const knob = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), glow(0xff2a4a));
-  knob.position.set(1.7, 4.45, 0);
-  g.add(body, top, scr, tray, arm, knob);
+  knob.position.set(0, 1.05, 0);
+  // the pull arm pivots at its base, so it can be yanked down
+  const pull = new THREE.Group();
+  pull.position.set(1.7, 2.35, 0);
+  arm.position.set(0, 1.05, 0);
+  pull.add(arm, knob);
+  // light strips down the cabinet's edges, a glowing coin tray and a lamp on top that flashes
+  // while someone's playing
+  const strip = glow(color);
+  for (const sx of [-1, 1]) {
+    const st = new THREE.Mesh(new THREE.BoxGeometry(0.12, 4.2, 0.12), strip);
+    st.position.set(sx * 1.52, 2.2, 1.12);
+    g.add(st);
+  }
+  const trayGlow = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.08, 0.5), glow(0xffd23f));
+  trayGlow.position.set(0, 1.62, 1.3);
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), new THREE.MeshBasicMaterial({ color: 0x5a2a1a }));
+  lamp.position.set(0, 6.0, 0);
+  const lampPost = mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.5, 6), toon(0x3a3550), 0);
+  lampPost.position.set(0, 5.65, 0);
+  g.add(body, top, scr, tray, trayGlow, pull, lampPost, lamp);
+  g.userData = { pull, lamp, scr, playing: 0, pullT: 0 };
   return g;
 }
 
@@ -330,6 +351,9 @@ export function buildCasino(w, loc) {
   const bulbGeo = new THREE.SphereGeometry(0.28, 8, 6);
   let k = 0;
   const bulb = (x, z, y) => put(new THREE.Mesh(bulbGeo, bulbMats[k++ % 3]), x, z, y);
+  const bulbAt = bulb;
+  const edgeM = toon(0xffd23f);
+  const slotsSignM = new THREE.MeshBasicMaterial({ map: neonTex('SLOTS', { w: 512, h: 160, color: '#ffd23f', edge: '#ff2e88' }) });
   for (let i = 0; i <= 18; i++) bulb(-7 + i * (14 / 18), D + 8.05, 9.2);
   for (const sx of [-1, 1]) for (let i = 1; i <= 8; i++) bulb(sx * 7.05, D + 8 - i * (7 / 8), 9.2);
   for (let i = 0; i <= 40; i++) bulb(-W + i * (W * 2 / 40), D + 1.5, H + 2.1);
@@ -379,19 +403,61 @@ export function buildCasino(w, loc) {
   put(pointer, 36, 20.9, 22.6);
   col({ type: 'box', x: 36, y: 12.5, z: 20, hx: 9.5, hy: 9.5, hz: 1 });
 
-  // slot machines lining the carpet outside, with gamblers glued to them
+  // slot carousels either side of the carpet: six cabinets facing out round a glowing pillar with a
+  // spinning SLOTS topper, under a canopy ringed with chasing bulbs, a stool at every machine
   const cols = [0xff2e88, 0x2ee6ff, 0x7dff6a, 0xff9f1c, 0xc77dff, 0xffd23f];
   const faces = ['777', 'BAR', '$$$', 'JKP', '7♦7', 'WIN'];
+  const cabinets = [], toppers = [], yardSpots = [];
+  const CAR_R = 4.4, STAND_R = 7.1;
   let n = 0;
-  for (const sx of [-1, 1]) for (const z of [D + 10, D + 18, D + 26]) {
-    const x = sx * 9, yaw = -sx * Math.PI / 2;
-    put(slotCabinet(cols[n % cols.length], faces[n % faces.length]), x, z, 0, yaw);
-    col({ type: 'box', x, y: 2.5, z, hx: 1.2, hy: 2.5, hz: 1.6 });
-    if (n % 2 === 0 || n === 3) {
-      const f = makeFigure({ suit: [0x16121f, 0xffc83a, 0xff7ad9, 0x2ee6ff][n % 4], helmet: 0xfff4e0, visor: 0xff2e88 });
-      put(f.root, x - sx * 2.4, z, 0, yaw + Math.PI);
+  for (const sx of [-1, 1]) {
+    const cx = sx * 15, cz = D + 19;
+    put(mesh(new THREE.CylinderGeometry(7.4, 7.6, 0.3, 32), toon(0x2a1450), 0.06), cx, cz, 0.15);
+    put(new THREE.Mesh(new THREE.TorusGeometry(7.3, 0.12, 6, 40).rotateX(Math.PI / 2), glow(sx < 0 ? 0xff2e88 : 0x2ee6ff)), cx, cz, 0.33);
+    put(mesh(new THREE.CylinderGeometry(1.4, 1.6, 7.5, 16), toon(0x5a1a8f), 0.08), cx, cz, 3.75);
+    for (const y of [1.5, 3.5, 5.5]) put(new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.1, 6, 20).rotateX(Math.PI / 2), glow(0xffd23f)), cx, cz, y);
+    // the canopy (a ring roof on the pillar) with its chase bulbs
+    const canopy = mesh(new THREE.CylinderGeometry(6.6, 6.9, 0.6, 32), toon(0xff2e88), 0.08);
+    put(canopy, cx, cz, 7.6);
+    for (let i = 0; i < 28; i++) { const a = (i / 28) * Math.PI * 2; bulbAt(cx + Math.cos(a) * 6.95, cz + Math.sin(a) * 6.95, 7.6); }
+    const topper = new THREE.Mesh(new THREE.BoxGeometry(5.2, 1.6, 0.3), [edgeM, edgeM, edgeM, edgeM, slotsSignM, slotsSignM]);
+    ink(topper, 0.06);
+    put(topper, cx, cz, 9.4, 0, true);
+    toppers.push(topper);
+    col({ type: 'cyl', x: cx, z: cz, y0: -1, y1: 8, r: CAR_R + 1.2 });
+    for (let k2 = 0; k2 < 6; k2++) {
+      const a = (k2 / 6) * Math.PI * 2 + (sx < 0 ? 0.3 : 0);
+      const ox = Math.cos(a), oz = Math.sin(a);
+      const yaw = Math.atan2(ox, oz); // the cabinet's front (+z) faces out from the pillar
+      const cab = slotCabinet(cols[n % cols.length], faces[n % faces.length]);
+      put(cab, cx + ox * CAR_R, cz + oz * CAR_R, 0, yaw, true);
+      cabinets.push(cab);
+      put(mesh(new THREE.CylinderGeometry(0.45, 0.3, 0.9, 10), toon(0xd7263d), 0.04), cx + ox * (CAR_R + 1.75), cz + oz * (CAR_R + 1.75), 0.45);
+      // where a patron stands to play it, and a clear point further out to walk via
+      yardSpots.push({ kind: 'slot', cab, x: cx + ox * STAND_R, z: cz + oz * STAND_R, yaw: yaw + Math.PI, ax: cx + ox * (STAND_R + 2.4), az: cz + oz * (STAND_R + 2.4), busy: false });
+      n++;
     }
-    n++;
+  }
+  // places to stand and gawp: round the giant die, in front of the roulette wheel, by the chip
+  // towers, and chatting by the doors
+  for (let i = 0; i < 3; i++) { const a = 0.5 + i * 0.55; yardSpots.push({ kind: 'watch', x: -36 + Math.cos(a) * 8, z: 22 + Math.sin(a) * 8, look: [-36, 22], busy: false }); }
+  for (let i = 0; i < 3; i++) yardSpots.push({ kind: 'watch', x: 32 + i * 4, z: 27, look: [36, 20], busy: false });
+  for (const [x, z] of [[-24, D + 4], [24, D + 4], [-27, D + 32], [27, D + 34]]) yardSpots.push({ kind: 'watch', x: x * 0.85, z: z + 3, look: [x, z], busy: false });
+  for (const [x, z] of [[-4.6, D + 6], [4.6, D + 8], [-4.6, D + 24], [4.6, D + 26]]) yardSpots.push({ kind: 'chat', x, z, look: [0, z], busy: false });
+  for (const sp of yardSpots) if (sp.ax === undefined) { sp.ax = sp.x; sp.az = sp.z; }
+  if (yardSpots.some((sp) => sp.look)) for (const sp of yardSpots) if (sp.look) sp.yaw = Math.atan2(sp.look[0] - sp.x, sp.look[1] - sp.z);
+  // the patrons: wander from game to game
+  const patrons = [];
+  const suitCols = [0x16121f, 0xffc83a, 0xff7ad9, 0x2ee6ff, 0x7dff6a, 0xc77dff, 0xff9f1c, 0xfff4e0];
+  for (let i = 0; i < 12; i++) {
+    const f = makeFigure({ suit: suitCols[i % suitCols.length], helmet: 0xfff4e0, visor: [0xff2e88, 0x2ee6ff, 0xffd23f][i % 3], seed: 900 + i });
+    const free = yardSpots.filter((sp) => !sp.busy);
+    const sp = free[(i * 7) % free.length];
+    sp.busy = true;
+    f.root.position.set(sp.x, 0, sp.z);
+    f.root.rotation.y = sp.yaw;
+    loc.group.add(f.root);
+    patrons.push({ ...f, spot: sp, path: [], stay: 3 + ((i * 1.7) % 9), phase: i, pull: 0 });
   }
   // bouncer in a tux by the door
   const bouncer = makeFigure({ suit: 0x16121f, helmet: 0x16121f, visor: 0xffd23f, scale: 1.35 });
@@ -400,7 +466,7 @@ export function buildCasino(w, loc) {
 
   // chip stacks out front
   const chipCols = [0xff2a4a, 0x2ee6ff, 0x111111, 0x7dff6a, 0xffd23f];
-  [[-17, D + 13], [17, D + 13], [-24, D + 26], [24, D + 28]].forEach(([x, z], i) => {
+  [[-24, D + 4], [24, D + 4], [-27, D + 32], [27, D + 34]].forEach(([x, z], i) => {
     const hgt = 4 + (i % 2) * 3;
     for (let s = 0; s < hgt; s++) {
       const c = mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.6, 16), toon(chipCols[(s + i) % chipCols.length]), 0.05);
@@ -731,6 +797,65 @@ export function buildCasino(w, loc) {
   const up = new THREE.Vector3(0, 1, 0).applyQuaternion(loc.group.quaternion);
 
   let chase = 0;
+  // Patrons walk from spot to spot via the spots' clear approach points; at a slot machine they
+  // stand and yank the handle every few seconds (the cabinet's lamp flashes, the screen jitters),
+  // anywhere else they look at the attraction and shift about
+  function pickSpot(pt) {
+    const free = yardSpots.filter((sp) => !sp.busy && sp !== pt.spot);
+    const sp = free[Math.floor(Math.random() * free.length)];
+    if (!sp) return;
+    pt.spot.busy = false;
+    pt.path = [{ x: pt.spot.ax, z: pt.spot.az }, { x: sp.ax, z: sp.az }, { x: sp.x, z: sp.z }];
+    sp.busy = true;
+    pt.spot = sp;
+    pt.stay = sp.kind === 'slot' ? 8 + Math.random() * 14 : 4 + Math.random() * 8;
+  }
+  function updatePatrons(dt, time) {
+    for (const c of cabinets) {
+      const u = c.userData;
+      u.playing = Math.max(0, u.playing - dt);
+      u.lamp.material.color.setHex(u.playing > 0 && Math.sin(time * 18) > 0 ? 0xffd23f : 0x5a2a1a);
+      u.pull.rotation.x += ((u.pullT > 0 ? 1.1 : 0) - u.pull.rotation.x) * Math.min(1, dt * 14);
+      u.pullT = Math.max(0, u.pullT - dt);
+      u.scr.position.y = 3.1 + (u.playing > 0 ? Math.sin(time * 40) * 0.01 : 0);
+    }
+    for (const pt of patrons) {
+      const p = pt.root.position;
+      const tgt = pt.path[0];
+      if (tgt) {
+        const dx = tgt.x - p.x, dz = tgt.z - p.z, d = Math.hypot(dx, dz);
+        if (d < 0.4) { pt.path.shift(); continue; }
+        const k = Math.min(d, 1.5 * dt) / d;
+        p.x += dx * k; p.z += dz * k;
+        pt.root.rotation.y = Math.atan2(dx, dz);
+        pt.phase += dt * 6;
+        pt.legL.rotation.x = Math.sin(pt.phase) * 0.6;
+        pt.legR.rotation.x = -Math.sin(pt.phase) * 0.6;
+        if (pt.armL) { pt.armL.rotation.x = -Math.sin(pt.phase) * pt.swing; pt.armR.rotation.x = Math.sin(pt.phase) * pt.swing; }
+        p.y = Math.abs(Math.sin(pt.phase)) * 0.12;
+        continue;
+      }
+      // arrived: face the attraction
+      const sp = pt.spot;
+      let dy = sp.yaw - pt.root.rotation.y;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      pt.root.rotation.y += dy * Math.min(1, dt * 5);
+      pt.legL.rotation.x = pt.legR.rotation.x = 0;
+      p.y = 0;
+      if (sp.kind === 'slot') {
+        // yank the handle every few seconds
+        pt.pull -= dt;
+        if (pt.pull <= 0) { pt.pull = 2.5 + Math.random() * 3; sp.cab.userData.pullT = 0.35; sp.cab.userData.playing = 1.6; }
+        if (pt.armR) pt.armR.rotation.x = sp.cab.userData.pullT > 0 ? -2.0 : -0.9;
+        if (pt.armL) pt.armL.rotation.x = -0.3;
+      } else {
+        if (pt.armL) { pt.armL.rotation.x = Math.sin(time * 1.3 + pt.phase) * 0.1; pt.armR.rotation.x = sp.kind === 'chat' ? -0.6 + Math.sin(time * 4 + pt.phase) * 0.4 : 0; }
+      }
+      pt.stay -= dt;
+      if (pt.stay <= 0) pickSpot(pt);
+    }
+  }
+
   return {
     loc,
     up,
@@ -758,6 +883,8 @@ export function buildCasino(w, loc) {
       bandMats[0].color.setRGB(1 * pulse, 0.18 * pulse, 0.53 * pulse);
       bandMats[1].color.setRGB(0.18 * (1.75 - pulse), 0.9 * (1.75 - pulse), 1 * (1.75 - pulse));
       water.offset.x -= dt * 0.25;
+      for (const t of toppers) t.rotation.y += dt * 0.6;
+      updatePatrons(dt, time);
       for (const c of crowd) {
         c.cheer = Math.max(0, c.cheer - dt);
         c.root.position.y = c.cheer > 0 ? Math.abs(Math.sin(time * 9 + c.phase)) * 0.5 : Math.abs(Math.sin(time * 2 + c.phase)) * 0.05;

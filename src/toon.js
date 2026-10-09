@@ -79,3 +79,12 @@ export function textSprite(text, { color = '#ffd23f', stroke = '#120a1e', bg = n
   s.scale.set((w / h) * 10 * scale, 10 * scale, 1);
   return s;
 }
+
+// Switch a set of objects' drawing off/on through their layer masks (restoring what they had), for
+// distance culling: unlike .visible, game code toggling visibility never fights it.
+export function setMask(list, on) {
+  for (const o of list) {
+    if (on) { if (o.userData._lm !== undefined) { o.layers.mask = o.userData._lm; delete o.userData._lm; } }
+    else if (o.userData._lm === undefined) { o.userData._lm = o.layers.mask; o.layers.mask = 0; }
+  }
+}

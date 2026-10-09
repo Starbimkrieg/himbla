@@ -148,10 +148,13 @@ export class Recall {
     const g = this.game;
     const P = g.player;
     this.active = false;
-    P.respawn(this.home.point, this.home.facing);
+    // you come out facing the shuttle (the camera sits behind you, clear of it - facing away put
+    // the camera inside the hull) and watch it close up and lift off
+    const toShip = this.home.facing.clone().negate();
+    P.respawn(this.home.point, toShip);
     P.model.root.visible = true;
-    g.cam.fwd.copy(this.home.facing);
-    g.cam.pitch = -0.1;
+    g.cam.fwd.copy(toShip);
+    g.cam.pitch = 0.12;
     g.updateCamera(0.016, true);
     this.bars.classList.add('cb-out');
     setTimeout(() => this.bars.classList.add('hidden'), 400);

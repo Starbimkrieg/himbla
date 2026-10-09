@@ -82,8 +82,9 @@ export class HUD {
     this.alertT = dur;
   }
 
-  // hold-to-recall progress (k: 0..1; 0 hides it)
-  recallHold(k, loc) {
+  // hold-to-act progress bar (k: 0..1; 0 hides it): the recall shuttle, or `label` for anything else
+  // held (emptying the jar)
+  recallHold(k, loc, label) {
     if (!this.recallEl) {
       this.recallEl = document.createElement('div');
       this.recallEl.id = 'recallhold';
@@ -92,7 +93,8 @@ export class HUD {
     }
     this.recallEl.classList.toggle('show', k > 0);
     if (k <= 0) return;
-    if (loc) this.recallEl.querySelector('.rh-label').textContent = `HOLD R · RECALL TO ${loc.short || loc.name.toUpperCase()} · 100 CR`;
+    if (label) this.recallEl.querySelector('.rh-label').textContent = label;
+    else if (loc) this.recallEl.querySelector('.rh-label').textContent = `HOLD R · RECALL TO ${loc.short || loc.name.toUpperCase()} · 100 CR`;
     this.recallEl.querySelector('.rh-fill').style.width = `${Math.min(1, k) * 100}%`;
   }
 

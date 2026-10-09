@@ -42,8 +42,10 @@ export function part(color, fn, seed = 1) {
 // shared structures (each sets its own frame with k.at and leaves k at the origin)
 // ---------------------------------------------------------------------------------------------
 
-// Hab dome: plinth, ribbed shell, latitude bands, a ring of lit windows, an airlock tunnel with a
-// door and lamp (facing local yaw `door`), and a roof cupola with an antenna.
+// Hab dome: plinth, ribbed shell, latitude bands, a ring of lit windows (curved panes laid on the
+// shell between the ribs), a ribbed tunnel out to an airlock (housing, hazard-striped frame, split
+// doors with portholes, cycle lights, keypad and a step; facing local yaw `door`), and a roof cupola
+// with an antenna.
 export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows = true, cupola = true, glass = false } = {}) {
   k.at(x, z, door);
   const seg = Math.max(20, Math.min(40, Math.round(r * 2)));
@@ -56,12 +58,20 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
   for (let i = 0; i < 4; i++) k.add(new THREE.TorusGeometry(r + ribT * 0.4, ribT, 4, seg, Math.PI), T(WHITE), 0, 1.0, 0, { ry: (i * Math.PI) / 4, outline: 0 });
   for (const phi of [0.42, 0.85]) k.ring(r * Math.cos(phi) + ribT * 0.3, ribT * 0.9, T(WHITE), 0, 1.0 + r * Math.sin(phi), 0);
   if (windows) {
-    const phi = 0.2, wr = r * Math.cos(phi) + 0.05, wy = 1.0 + r * Math.sin(phi);
-    const n = Math.max(8, Math.round((TAU * wr) / 3.4));
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * TAU;
-      if (Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < 0.35) continue; // the airlock side
-      k.add(new THREE.BoxGeometry(1.4, 0.9, 0.3), G(WARM), Math.sin(a) * wr, wy, Math.cos(a) * wr, { ry: a, outline: 0 });
+    // curved panes on the shell itself (a flat box stood proud of it and cut through the ribs): in
+    // each 45-degree bay between two ribs, a few panes with a dark frame, clear of the rib either side
+    const el = 0.2; // elevation above the equator
+    const pr = r + 0.06, fr = r + 0.03;
+    const dTheta = Math.min(0.32, 1.0 / r), dTh2 = dTheta * 1.35;
+    const per = Math.max(1, Math.round(((TAU / 8) * r * Math.cos(el)) / 3.6));
+    const gap = (ribT * 2.5 + 0.5) / (r * Math.cos(el)); // keep this far off each rib (radians)
+    const bay = TAU / 8, wA = Math.min((bay - 2 * gap) / per * 0.62, 1.5 / (r * Math.cos(el)));
+    for (let b = 0; b < 8; b++) for (let j = 0; j < per; j++) {
+      const a = b * bay + gap + ((j + 0.5) / per) * (bay - 2 * gap);
+      if (Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < 0.4) continue; // the airlock side
+      const phi0 = a + Math.PI / 2; // SphereGeometry azimuth for direction (sin a, cos a)
+      k.add(new THREE.SphereGeometry(fr, 4, 2, phi0 - wA * 0.62, wA * 1.24, Math.PI / 2 - el - dTh2 / 2, dTh2), T(DARK), 0, 1.0, 0, { outline: 0 });
+      k.add(new THREE.SphereGeometry(pr, 4, 2, phi0 - wA / 2, wA, Math.PI / 2 - el - dTheta / 2, dTheta), G(WARM), 0, 1.0, 0, { outline: 0 });
     }
   }
   if (cupola && r > 9) {
@@ -71,14 +81,45 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
     k.cyl(0.1, 0.14, r * 0.35, 5, T(DARK), r * 0.08, top, 0, { outline: 0.03 });
     k.blinker(r * 0.08, top + r * 0.35 + 0.3, 0, 0xff2a4a, 0.3);
   }
-  // airlock tunnel out to +z with a door, a frame and a lamp
-  const ar = Math.min(2.6, 1.4 + r * 0.06), L = Math.min(5, 2 + r * 0.12);
-  k.add(new THREE.CylinderGeometry(ar, ar, L + 1, 14).rotateX(Math.PI / 2), T(WHITE), 0, ar + 0.2, r - 0.6 + L / 2, { outline: 0.06 });
-  for (const dz of [r + 0.2, r + L - 0.3]) k.add(new THREE.TorusGeometry(ar + 0.05, 0.16, 4, 14), T(trim), 0, ar + 0.2, dz, { outline: 0 });
-  k.box(ar * 1.1, ar * 1.5, 0.2, T(0x2a2540), 0, 0.3, r - 0.1 + L, { outline: 0.03 });
-  k.box(ar * 1.1, 0.2, 0.3, G(WARM), 0, 0.3 + ar * 1.5 + 0.15, r - 0.05 + L, { outline: 0 });
+  // airlock: a ribbed tunnel out to +z, flared where it meets the dome, ending in an airlock housing
+  const ar = Math.min(2.6, 1.4 + r * 0.06), L = Math.min(5, 2 + r * 0.12), ay = ar + 0.2;
+  k.add(new THREE.CylinderGeometry(ar, ar, L + 1, 16).rotateX(Math.PI / 2), T(WHITE), 0, ay, r - 0.6 + L / 2, { outline: 0.06 });
+  // where it meets the dome: a solid collar flaring into the shell, a docking ring and a row of bolts
+  k.add(new THREE.CylinderGeometry(ar + 0.3, ar + 1.0, 1.6, 18).rotateX(Math.PI / 2), T(PANEL), 0, ay, r - 0.55, { outline: 0.05 });
+  k.add(new THREE.TorusGeometry(ar + 0.34, 0.24, 6, 18), T(trim), 0, ay, r + 0.27, { outline: 0 });
+  for (let i = 0; i < 10; i++) { const t = (i / 10) * TAU; k.add(new THREE.SphereGeometry(0.11, 6, 4), T(LIGHT), Math.cos(t) * (ar + 0.62), ay + Math.sin(t) * (ar + 0.62), r - 0.05, { outline: 0 }); }
+  for (let i = 1; i <= 3; i++) k.add(new THREE.TorusGeometry(ar + 0.06, 0.13, 4, 16), T(i === 2 ? trim : PANEL), 0, ay, r - 0.4 + (L * i) / 4, { outline: 0 });
+  // the housing: a squared-off lock chamber the tunnel plugs into
+  const hw = ar * 1.35, hh = ar * 2.3, hz = r + L - 0.4, hd = 1.8;
+  k.box(hw * 2, hh, hd, T(WHITE), 0, 0, hz, { outline: 0.08 });
+  k.box(hw * 2 + 0.2, 0.35, hd + 0.2, T(trim), 0, hh, hz, { outline: 0.03 });
+  k.box(hw * 2 + 0.1, 0.3, hd + 0.1, T(PANEL), 0, 0, hz, { outline: 0 });
+  // the doorway: a recessed dark frame ringed with hazard stripes, split doors with portholes
+  const dw = ar * 1.0, dh = ar * 1.65, fz = hz + hd / 2;
+  k.box(dw * 2 + 0.5, dh + 0.5, 0.12, T(DARK), 0, 0.35, fz + 0.02, { outline: 0 });
+  const nStripe = 7;
+  for (let i = 0; i < nStripe; i++) {
+    const m = T(i % 2 ? DARK : YEL);
+    k.box((dw * 2 + 0.5) / nStripe, 0.22, 0.1, m, -dw - 0.25 + (i + 0.5) * ((dw * 2 + 0.5) / nStripe), dh + 0.62, fz + 0.06, { outline: 0 });
+  }
+  for (const sx of [-1, 1]) {
+    k.box(dw - 0.06, dh, 0.14, T(0x3a3550), sx * (dw / 2 + 0.03), 0.35, fz + 0.08, { outline: 0.02 });
+    k.add(new THREE.CylinderGeometry(0.28, 0.28, 0.06, 12).rotateX(Math.PI / 2), G(0x9be7ff), sx * (dw / 2 + 0.03), 0.35 + dh * 0.68, fz + 0.17, { outline: 0 });
+    k.add(new THREE.TorusGeometry(0.3, 0.05, 4, 12), T(LIGHT), sx * (dw / 2 + 0.03), 0.35 + dh * 0.68, fz + 0.18, { outline: 0 });
+    for (let j = 0; j < 3; j++) k.box(dw - 0.3, 0.1, 0.05, T(j % 2 ? DARK : YEL), sx * (dw / 2 + 0.03), 0.45 + j * 0.12, fz + 0.16, { outline: 0 });
+  }
+  k.box(0.05, dh, 0.16, T(DARK), 0, 0.35, fz + 0.1, { outline: 0 }); // the seam between the doors
+  // status lamp over the door, cycle lights either side (green: outer door, red: inner), a keypad
+  k.box(dw * 1.4, 0.22, 0.25, G(WARM), 0, dh + 0.9, fz + 0.05, { outline: 0 });
+  k.add(new THREE.SphereGeometry(0.16, 8, 6), G(0x7dff6a), -dw - 0.55, 0.35 + dh * 0.85, fz + 0.1, { outline: 0 });
+  k.add(new THREE.SphereGeometry(0.16, 8, 6), G(0xff2a4a), dw + 0.55, 0.35 + dh * 0.85, fz + 0.1, { outline: 0 });
+  k.box(0.4, 0.55, 0.12, T(DARK), dw + 0.55, 0.35 + dh * 0.4, fz + 0.06, { outline: 0.02 });
+  k.box(0.28, 0.2, 0.05, G(0x2ee6ff), dw + 0.55, 0.35 + dh * 0.4 + 0.25, fz + 0.13, { outline: 0 });
+  // a step plate in front
+  k.box(dw * 2 + 1, 0.22, 1.6, T(CONC), 0, 0, fz + 0.8, { outline: 0.03 });
   k.sphere(r, 0, 0.6, 0);
   k.solid(ar + 0.2, ar + 0.2, L / 2 + 0.3, 0, r + L / 2 - 0.4);
+  k.solid(hw, hh / 2, hd / 2, 0, hz);
   k.at();
 }
 
@@ -668,8 +709,7 @@ function bounceDome(world, loc, k, x, z, r, c1, c2) {
 
 // =============================================================================================
 // Bounce Dome Funpark: the inflatables, now joined by a skate park (a volcano bowl you drop into,
-// a kicker line ending in a big launch off the plateau, a quarter-pipe wall and a pyramid
-// funbox), a ferris wheel, a carousel, trampolines and an entrance arch strung with lights.
+// a kicker line ending in a big launch off the plateau, a big half-pipe and a pyramid funbox), a ferris wheel, a carousel, trampolines and an entrance arch strung with lights.
 // =============================================================================================
 export function buildFunpark(world, loc) {
   const cols = [0xff2e88, 0xffd23f, 0x2ee6ff, 0x7dff6a, 0xff9f1c, 0xc77dff];
@@ -708,7 +748,7 @@ export function buildFunpark(world, loc) {
 
     // ---- skate park ----
     // volcano bowl: ride up the outside, over the deck and drop in
-    const bx = 148, bz = 8, r0 = 5, r1 = 11, r2 = 14, r3 = 26, H = 4.2;
+    const bx = 148, bz = -4, r0 = 5, r1 = 11, r2 = 14, r3 = 26, H = 4.2;
     k.at(bx, bz);
     const lathe = (pts, c, o) => k.add(new THREE.LatheGeometry(pts.map(([a, b]) => new THREE.Vector2(a, b)), 48), D(c), 0, 0, 0, { outline: o });
     lathe([[r3, 0], [r2, H]], 0x6d78c8, 0.15);
@@ -736,27 +776,52 @@ export function buildFunpark(world, loc) {
     kicker(world, loc, k, 134, -52, Math.PI / 2, 9, 2.8, 6, 0xff9f1c);
     kicker(world, loc, k, 151, -52, Math.PI / 2, 14, 5, 7, 0xff2e88);
     for (const x of [120, 136, 153]) k.lamp(x, -60, 7, 0xff7ad9);
-    // quarter-pipe wall along the north-east (rises towards +z), with a deck and railing on top
-    const qx0 = 120, qx1 = 160, qz = 44, qw = qx1 - qx0, qm = (qx0 + qx1) / 2;
-    const prof = [[0, 0], [2.2, 0.3], [4, 1.1], [5.4, 2.3], [6.3, 3.7], [6.8, 5.2]];
-    k.at(qm, qz);
-    const shape = new THREE.Shape([...prof.map(([zz, y]) => new THREE.Vector2(zz, y)), new THREE.Vector2(9.5, 5.2), new THREE.Vector2(9.5, 0)]);
-    k.add(new THREE.ExtrudeGeometry(shape, { depth: qw, bevelEnabled: false }).translate(0, 0, -qw / 2).rotateY(-Math.PI / 2), T(0x9be7ff), 0, 0, 0, { outline: 0.12 });
-    k.add(new THREE.CylinderGeometry(0.2, 0.2, qw, 8).rotateZ(Math.PI / 2), T(LIGHT), 0, 5.25, 6.85, { outline: 0.03 });
-    for (let x = -18, i = 0; x <= 18; x += 6, i++) {
-      k.box(0.12, 1.1, 0.12, T(DARK), x, 5.2, 9.3, { outline: 0 });
-      k.box(1.2, 0.06, 2.5, T(cols[i % 6]), x, 5.21, 8, { outline: 0 });
-    }
-    k.box(qw, 0.12, 0.12, T(YEL), 0, 6.3, 9.3, { outline: 0.02 });
+    // half-pipe along the north-east: two matching walls facing each other across a flat bottom
+    // (each a big quarter-pipe, ~7 m to the coping), with a deck, coloured tiles and a railing on top
+    const hx0 = 106, hx1 = 152, hw = hx1 - hx0, hm = (hx0 + hx1) / 2, S = 1.35;
+    const prof = [[0, 0], [2.2, 0.3], [4, 1.1], [5.4, 2.3], [6.3, 3.7], [6.8, 5.2]].map(([zz, y]) => [zz * S, y * S]);
+    const topY = prof[prof.length - 1][1], lipZ = prof[prof.length - 1][0], deckZ = 9.5 * S;
+    const flatZ0 = 46, flatZ1 = 60; // the flat bottom between the walls
+    k.at(hm, (flatZ0 + flatZ1) / 2);
+    k.box(hw, 0.06, flatZ1 - flatZ0 + 1, T(0x8a87c8), 0, 0, 0, { outline: 0 });
+    for (let x = -hw / 2 + 4; x < hw / 2; x += 8) k.box(0.4, 0.07, flatZ1 - flatZ0 - 2, T(YEL), x, 0, 0, { outline: 0 });
     k.at();
-    for (let i = 0; i < prof.length - 1; i++) {
-      const [z0, y0] = prof[i], [z1, y1] = prof[i + 1];
-      slope(world, loc, [qm, y0, qz + z0 - (i ? 0 : 0.8)], [qm, y1, qz + z1], qw);
+    const wall = (z0, dir, color) => {
+      // dir +1: the wall rises towards +z from z0; -1: towards -z (the local frame is turned round)
+      k.at(hm, z0, dir > 0 ? 0 : Math.PI);
+      const shape = new THREE.Shape([...prof.map(([zz, y]) => new THREE.Vector2(zz, y)), new THREE.Vector2(deckZ, topY), new THREE.Vector2(deckZ, 0)]);
+      k.add(new THREE.ExtrudeGeometry(shape, { depth: hw, bevelEnabled: false }).translate(0, 0, -hw / 2).rotateY(-Math.PI / 2), T(color), 0, 0, 0, { outline: 0.12 });
+      k.add(new THREE.CylinderGeometry(0.24, 0.24, hw, 8).rotateZ(Math.PI / 2), T(LIGHT), 0, topY + 0.05, lipZ + 0.05, { outline: 0.03 });
+      for (let x = -hw / 2 + 3, i = 0; x <= hw / 2 - 3; x += 6, i++) {
+        k.box(0.12, 1.2, 0.12, T(DARK), x, topY, deckZ - 0.2, { outline: 0 });
+        k.box(1.3, 0.06, 3.2, T(cols[(i + (dir > 0 ? 0 : 3)) % 6]), x, topY + 0.01, (lipZ + deckZ) / 2, { outline: 0 });
+      }
+      k.box(hw, 0.12, 0.12, T(YEL), 0, topY + 1.2, deckZ - 0.2, { outline: 0.02 });
+      // a glowing strip along the transition, so the line reads at night
+      k.box(hw, 0.05, 0.25, G(dir > 0 ? 0x2ee6ff : 0xff2e88), 0, 0.32, 2.4, { rx: -0.2, outline: 0 });
+      k.at();
+      for (let i = 0; i < prof.length - 1; i++) {
+        const [za, ya] = prof[i], [zb, yb] = prof[i + 1];
+        slope(world, loc, [hm, ya, z0 + dir * (za - (i ? 0 : 0.8))], [hm, yb, z0 + dir * zb], hw);
+      }
+      slope(world, loc, [hm, topY, z0 + dir * lipZ], [hm, topY, z0 + dir * deckZ], hw);
+      world.col(loc, { type: 'box', x: hm, y: topY / 2, z: z0 + dir * (deckZ - 1.2), hx: hw / 2, hy: topY / 2, hz: 1.2 });
+    };
+    wall(flatZ1, 1, 0x9be7ff);
+    wall(flatZ0, -1, 0xc8b6ff);
+    // stairs up to each deck at the west end
+    for (const [z0, dir] of [[flatZ1, 1], [flatZ0, -1]]) {
+      const zc = z0 + dir * (lipZ + deckZ) / 2;
+      for (let i = 0; i < 6; i++) {
+        const h = ((i + 1) / 6) * topY;
+        k.at(hx0 - 1.2 - (6 - i) * 0.9, zc);
+        k.box(0.9, h, 3, T(CONC), 0, 0, 0, { outline: 0.03 });
+        k.at();
+        world.col(loc, { type: 'box', x: hx0 - 1.2 - (6 - i) * 0.9, y: h / 2, z: zc, hx: 0.45, hy: h / 2, hz: 1.5 });
+      }
     }
-    slope(world, loc, [qm, 5.2, qz + 6.8], [qm, 5.2, qz + 9.5], qw);
-    world.col(loc, { type: 'box', x: qm, y: 2.6, z: qz + 8.2, hx: qw / 2, hy: 2.6, hz: 1.2 });
     // pyramid funbox: four ramps up to a flat top
-    const fx = 126, fz = -26, top = 2.6, half = 3.5, run = 7;
+    const fx = 100, fz = -32, top = 2.6, half = 3.5, run = 7;
     k.at(fx, fz);
     k.add(new THREE.CylinderGeometry(half * Math.SQRT2, (half + run) * Math.SQRT2, top, 4, 1).rotateY(Math.PI / 4), T(0xffd23f), 0, top / 2, 0, { outline: 0.12 });
     k.box(half * 2 + 0.1, 0.08, half * 2 + 0.1, T(0xff2e88), 0, top, 0, { outline: 0 });
@@ -766,7 +831,7 @@ export function buildFunpark(world, loc) {
       slope(world, loc, [fx + sa * (half + run + 0.6), 0, fz + ca * (half + run + 0.6)], [fx + sa * half, top, fz + ca * half], half * 2 + 1);
     }
     world.col(loc, { type: 'box', x: fx, y: top - 0.5, z: fz, hx: half, hy: 0.5, hz: half });
-    k.at(118, 30, -Math.PI / 2);
+    k.at(96, 30, -Math.PI / 2);
     k.sign('SKATE ZONE', 0, 0, { w: 9, y: 4.4, fg: '#ff2e88' });
     k.at();
 
@@ -895,7 +960,7 @@ export function buildFunpark(world, loc) {
     lightString(k, [[-31, 6, 50], [-4, 6, 55], [14, 6, 52]], cols, 10, 1.2);
     lightString(k, [[118, 6, -40], [140, 6, -40], [162, 6, -38]], cols, 10, 1.2);
     for (const [x, z] of [[-31, 50], [-4, 55], [14, 52], [118, -40], [140, -40], [162, -38]]) k.cyl(0.15, 0.2, 6, 6, T(DARK), x, 0, z, { outline: 0.03 });
-    for (const [x, z] of [[-20, -20], [30, 20], [-4, 36], [40, -30], [-62, 48], [-66, 10], [116, 0], [132, 40]]) k.lamp(x, z, 7, 0xff7ad9);
+    for (const [x, z] of [[-20, -20], [30, 20], [-4, 36], [40, -30], [-62, 48], [-66, 10], [116, 0], [96, 53]]) k.lamp(x, z, 7, 0xff7ad9);
   });
 }
 
@@ -1555,14 +1620,52 @@ export function dressArray(world, loc) {
     });
     cup.userData.tick = (o, dt, t) => { o.rotation.y = Math.sin(t * 0.05) * 2.5; };
     k.dyn(cup, ox, 8, oz);
-    // labs and the control centre with a big status screen
-    cabin(k, -10, -80, 30, 16, 9, 0x7dff6a, 0.2 + Math.PI, { trim: WHITE, solar: true });
+    // the array's control centre: a two-tier block with a raked, glazed front, a radome and antennas
+    // on the roof, a canopy over the door and its name on the upper tier; its solar field stands on
+    // the ground beside it, and the status display on its own frame by the entrance
     cabin(k, 30, -95, 14, 12, 7, WHITE, -0.3 + Math.PI, { trim: green });
     k.at(-10, -80, 0.2 + Math.PI);
-    k.box(12, 6, 0.4, T(DARK), 0, 10, 0, { outline: 0.05 });
-    k.box(11, 5, 0.1, G(0x2ee6ff), 0, 10.5, 0.25, { outline: 0 });
-    for (let i = 0; i < 5; i++) k.box(1.4, 0.5 + i * 0.7, 0.05, G(green), -4 + i * 2, 11, 0.32, { outline: 0 });
-    for (const s of [-1, 1]) k.beam([s * 5, 9, 0], [s * 5, 16, 0], 0.15, T(DARK), { outline: 0 });
+    k.box(34, 0.6, 20, T(CONC), 0, 0, 1, { outline: 0.05 });
+    k.box(28, 8, 14, T(0xe0e0f0), 0, 0.6, 0, { outline: 0.15 });
+    k.add(new THREE.BoxGeometry(28.2, 0.4, 3.6), T(PANEL), 0, 8.5, 7.6, { rx: -0.42, outline: 0.04 });   // raked eave
+    k.box(28.1, 2.6, 0.2, G(0x9be7ff), 0, 4.2, 7.02, { outline: 0 });                                      // glazed band
+    for (let i = 0; i < 8; i++) k.box(0.25, 2.8, 0.3, T(PANEL), -12.25 + i * 3.5, 4.1, 7.1, { outline: 0 }); // mullions
+    k.box(28.4, 0.5, 14.4, T(green), 0, 8.6, 0, { outline: 0.04 });
+    k.box(16, 5, 9, T(PANEL), -3, 9.1, -1.5, { outline: 0.12 });
+    k.box(16.1, 1.0, 9.1, G(WARM), -3, 11.2, -1.5, { outline: 0 });
+    k.box(16.4, 0.4, 9.4, T(green), -3, 14.1, -1.5, { outline: 0.03 });
+    k.text('SHACKLETON ARRAY', -3, 12.4, 3.12, 0, 12, { fg: '#7dff6a', bg: '#10241a', back: false, off: 0.04 });
+    // radome and antennas on the lower roof
+    k.cyl(2.2, 2.6, 1.6, 14, T(DARK), 8, 9.1, -2.5, { outline: 0.04 });
+    k.add(new THREE.SphereGeometry(3.2, 18, 12), T(WHITE), 8, 13.2, -2.5, { outline: 0.08 });
+    k.ring(3.25, 0.12, G(green), 8, 13.2, -2.5);
+    k.beam([-9, 14.5, -4], [-9, 23, -4], 0.12, T(DARK), { outline: 0.02 });
+    k.beam([-6, 14.5, -5], [-6, 19.5, -5], 0.08, T(DARK), { outline: 0.02 });
+    k.blinker(-9, 23.3, -4, 0xff2a4a, 0.35);
+    // the entrance: a door under a canopy, a lamp
+    k.box(4, 4, 0.3, T(DARK), 0, 0.6, 7.1, { outline: 0.02 });
+    k.box(6.5, 0.35, 2.8, T(green), 0, 4.9, 8.4, { outline: 0.04 });
+    for (const sx of [-1, 1]) k.beam([sx * 3, 0.6, 9.6], [sx * 3, 4.9, 9.6], 0.1, T(DARK), { outline: 0 });
+    k.box(1.4, 0.25, 0.3, G(WARM), 0, 4.6, 7.3, { outline: 0 });
+    k.solid(14, 4.3, 7, 0, 0);
+    k.solid(8, 2.5, 4.5, -3, -1.5, 0, 9.1);
+    k.solid(3.2, 1.6, 1.6, 8, -2.5, 0, 11.6);
+    // the status display, out front on its own frame (waveform bars and a sweep)
+    k.box(11, 6, 0.4, T(DARK), 19, 2.6, 9, { ry: -0.35, outline: 0.05 });
+    k.box(10, 5, 0.1, G(0x2ee6ff), 19 + Math.sin(-0.35) * 0.25, 3.1, 9 + Math.cos(-0.35) * 0.25, { ry: -0.35, outline: 0 });
+    for (let i = 0; i < 6; i++) {
+      const u = -3.75 + i * 1.5, h = 0.6 + ((i * 7) % 5) * 0.75;
+      k.box(1.0, h, 0.05, G(green), 19 + Math.cos(-0.35) * u + Math.sin(-0.35) * 0.32, 3.4, 9 - Math.sin(-0.35) * u + Math.cos(-0.35) * 0.32, { ry: -0.35, outline: 0 });
+    }
+    for (const sx of [-1, 1]) k.beam([19 + Math.cos(-0.35) * sx * 4.5, 0, 9 - Math.sin(-0.35) * sx * 4.5], [19 + Math.cos(-0.35) * sx * 4.5, 2.6, 9 - Math.sin(-0.35) * sx * 4.5], 0.15, T(DARK), { outline: 0 });
+    k.solid(5.5, 4.3, 0.5, 19, 9, -0.35);
+    // the solar field beside it: three rows of tilted panels on posts
+    for (let row = 0; row < 3; row++) for (let i = 0; i < 5; i++) {
+      const x = 23 + row * 5, z = -13 + i * 4;
+      k.add(new THREE.BoxGeometry(4.2, 0.12, 3.2), T(0x2d4fc4), x, 2.0, z, { rz: -0.5, outline: 0.03 });
+      k.add(new THREE.BoxGeometry(4.25, 0.14, 0.12), T(LIGHT), x, 2.02, z, { rz: -0.5, outline: 0 });
+      k.cyl(0.1, 0.12, 2.0, 6, T(DARK), x, 0, z, { outline: 0 });
+    }
     k.at();
     commsMast(world, loc, k, 100, -20, 40, green);
     // cable runs from each dish to the control centre

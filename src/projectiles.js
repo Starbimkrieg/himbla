@@ -69,8 +69,11 @@ export class Projectiles {
           for (const t of g.enemies.targets()) {
             if (segSphere(p.prev, p.pos, t.center, t.radius + 0.4)) { hit = true; break; }
           }
-          // people on foot (civilians.js) stop a shot too
+          // people on foot (civilians.js) stop a shot too, and so do road vehicles (land-train
+          // trailers included) and Moon Mites
           if (!hit && g.civilians && g.civilians.segHit(p.prev, p.pos)) hit = true;
+          if (!hit && g.world.traffic && g.world.traffic.segHit(p.prev, p.pos)) hit = true;
+          if (!hit && g.alchemy && g.alchemy.segHitMite(p.prev, p.pos)) hit = true;
         } else {
           if (!g.player.dead && segSphere(p.prev, p.pos, g.player.center, 1.3)) hit = true;
           // the Monolith's echo holograms soak up a shot each

@@ -3,7 +3,95 @@
 What changed in each release. Releases are built by `.github/workflows/release.yml` when a commit message
 contains `[release]` (see the README's Download section). Newest first.
 
-## Unreleased
+## 0.9.95 — 2026-10-09
+
+**Performance**
+- Settlements hidden behind a hill or the moon's curve stop drawing (a terrain line-of-sight test to
+  each one's top), and so does road and air traffic; inside a settlement, small props in 60 m cells
+  further than ~260 m away stop drawing, and a vehicle's small parts past ~220 m. Draw calls fall by
+  10-45% depending on where you stand (e.g. Meridian Exchange 2270 -> 1230, Aldrin Heights 1009 -> 548).
+- Every shader is compiled while loading ("Warming up shaders...", ~0.3 s) instead of the first time a
+  material comes into view, which hitched a frame each time (28 of them across the map).
+- Loading no longer stalls in a background tab (it waited on animation frames, which hidden tabs stop).
+
+**Tutorial**
+- BOLT, a courier-school drone, now runs the tutorial: it hovers at your shoulder, teaches the same controls,
+  and chips in as you ride (big air, a landing that dings the parcel, top speed, grinds, getting hurt). It
+  rides along for two contracts: the ILMB to the nearest Kepler town, then a cleared Vostok run from there,
+  explaining the factions and restricted zones on the way (turrets fire without clearance). After the
+  second delivery it offers a free recovery shuttle back to the ILMB.
+
+**Fixes**
+- Going down resets every base's and den's alert: the ILMB's guns (or anyone else you'd provoked) no
+  longer keep firing when you respawn. A faction whose reputation makes it hostile still is.
+- Pirate squads spawn everywhere again (friendly territory included); they hold off only while you're
+  within a non-hostile settlement's own range, or riding a transit ship.
+- The recovery shuttle no longer clips through your view as the cutscene ends: you come out facing it.
+
+**Destructibility**
+- Hover-cars can be wrecked; land-trains take hits on any trailer (shots used to pass through their
+  cabins); Moon Mites can be squashed. Wrecking traffic or hurting people always costs standing with their
+  faction (or the nearest settlement's), seen or not.
+- Defence turret heads are tankier (420 / 650 hp) and come back after a minute.
+- Your vehicle rams: turrets, patrols, pirates, road traffic, people and mites all take damage at speed.
+
+**Models**
+- The Vostok Hangar's parked plane is now a real shuttle-bus (gear down, ramp lowered).
+- The Xenoglide skates on the shrine pedestal are rebuilt as real skates (the runner's newer build at
+  display size): rounded alien-alloy boots with toe caps, high cuffs with glowing collars and seams, swept
+  crystal heel fins, chassis plates and hover rails ringed by emitters, with shards orbiting the pair.
+- Freighter: the bridge's glass band and livery stripe (and the hull belts on the freighter and
+  shuttle-bus) are cut exactly to their edges, so they no longer come out with sawtooth splotches.
+- Shuttle-bus: a level livery belt (the swept one made ragged splotches at the tail) and swept, hull-coloured
+  V-tail fins with livery caps (`tools/blender/build_ships.py` -> `ships.glb`).
+- The Whispering Fissure's way in is rough rock with outcrops along the rim and a heap over the mouth,
+  leading to a worn, half-buried portal; the gate wall is one slab with a round hole (no open corners).
+- The rock over the Fissure's mouth reaches down to the portal (it used to hang in the air), and the
+  boulders round it are bedded deeper.
+- Hab domes: curved window panes on the shell between the ribs, and a ribbed tunnel to a proper airlock
+  (housing, hazard-striped doorway, split doors with portholes, cycle lights, keypad, step), meeting the
+  dome in a solid flared collar with a docking ring and bolts.
+- ILMB skywalks end in a faintly glowing doorway with a lit rim at each end; the roof rails stop at the end
+  rings instead of poking out into the dome.
+- ILMB: Meridian Labs, the Vostok Hangar and the Daedalus Relay are bigger (about 1.25-1.3x). Meridian's
+  leaning tower is taller and stands in a plinth on the roof (its foot no longer leaves a gap).
+- Shackleton Radar Array: a new control centre (two tiers, a raked glazed front, a radome and antennas on
+  the roof, a canopy over the door) with its name on the upper tier; the status display stands out front
+  on its own frame and the solar panels moved off the roof into a field beside it.
+
+**Places**
+- Lucky Crater Casino: the outside slots are now two slot carousels (six upgraded cabinets with light strips,
+  a flashing lamp and a pull arm, round a glowing pillar with a spinning SLOTS topper, under a canopy of chase
+  bulbs, with stools). A dozen punters walk between real spots: they play the slots, watch the die and the
+  roulette wheel, admire the chip towers and chat by the doors. The casino joins the road network, so it
+  gets a ring road and links to its neighbours (`traffic.js`).
+- Bounce Dome skate park: the quarter-pipe is now a proper half-pipe, two matching walls (1.35x bigger, ~7 m)
+  facing each other across a flat bottom, with decks, railings and stairs. The bowl and the funbox moved to
+  give everything room.
+- ILMB: the Vostok Hangar collides as a round quonset instead of a box; the Daedalus Relay's roof dishes get
+  their receivers (a feed spoke and struts to the glowing bead at the focus); the Kepler Habitat is rebuilt
+  as a round ring on A-frame legs, high enough to skate under, with a collider that follows the tube (you
+  could clip into the old one from below).
+- The Monolith plays the lab's track.
+- SAT-7 "Lantern" is 1.5x bigger and far more detailed (foil bus, landing deck with a hazard border and a
+  glowing landing ring, framed solar wings, thrusters, antennas), with blinking wingtip strobes, deck beacons
+  and a mast strobe. Its landing colliders scale with it.
+
+**Vehicles**
+- The Meridian vehicle is now the Courier Light-Bike, shown at 1.2x: its nose and tail are the curved fairings
+  over its hubless glowing wheels, with glowing arcs tracing each well, raised side panels, vents and seams,
+  and a light trail that fades over a second. You ride it tucked low like a motorcycle (id stays `van`).
+- Riders are locked to their vehicle: you sit in the vehicle's own frame (its tilt and hover bob), so you no
+  longer jostle round it in the air or on bumps.
+- Rover fenders stop above the axle (their ends hung down like fins under the wheels), and head/tail lights
+  sit on each body's own faces (they floated in front of the Mule and the Interceptor).
+- Vehicles grip: the wheeled ones get downforce and sideways traction, and every vehicle snaps back to the
+  ground over crests at speed (only a real ramp throws it clear). The hover ones keep a little drift.
+
+**Controls**
+- The controls panel (`H`) only lists what you've unlocked, in sections; more appears as you get gear and tech.
+- `X` empties the jar on a 1 s hold (like the recall shuttle, but free), so a stray tap can't waste a jar.
+- The helmet lamp toggle is gone: the lamp comes on by itself in the dark (the trailer can still force it).
 
 - Docs: this changelog; README sections for trailer mode, the reactor hatch, phosphor flak, the new
   Blender models and the zone-music notes.

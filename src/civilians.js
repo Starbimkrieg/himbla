@@ -178,7 +178,7 @@ export class Civilians {
       g.fx.pop(OOF[Math.floor(Math.random() * OOF.length)], c.center.clone().addScaledVector(up, 2), { color: '#fff4e0', size: 36, life: 0.8 });
     }
     // reputation + settlement aggro: every knock-out counts, plain hits once per blast
-    this.witnessed(c.center, killed ? REP_KILL : REP_HIT, killed);
+    this.witnessed(c.center, killed ? REP_KILL : REP_HIT, killed, f.loc);
     this.panic(c.center, f);
   }
 
@@ -193,7 +193,7 @@ export class Civilians {
   }
 
   // Settlements (and pirate dens) that can see `at` get alerted, and their faction remembers.
-  witnessed(at, rep, killed) {
+  witnessed(at, rep, killed, home = null) {
     const g = this.g;
     const P = g.planet;
     const seen = new Set();
@@ -218,6 +218,26 @@ export class Civilians {
       }
       if (base) this.alertBase(base);
       else if (loc.type === 'pirate') this.alertDen(loc);
+    }
+    // nobody saw it: it still costs you with the faction they belong to (their own settlement's, or
+    // the nearest real settlement's, for passengers and wanderers out on the road)
+    if (!seen.size) {
+      let owner = home && home.faction && home.faction !== 'none' && home.type !== 'pirate' ? home : null;
+      if (!owner) {
+        let best = Infinity;
+        for (const loc of g.locations) {
+          if (!loc.faction || loc.faction === 'none' || loc.type === 'pirate' || !loc.pos) continue;
+          const d = loc.pos.distanceToSquared(at);
+          if (d < best) { best = d; owner = loc; }
+        }
+      }
+      if (owner) {
+        const last = this.repT[owner.faction] ?? -9;
+        if (killed || g.time - last > 0.3) {
+          if (!killed) this.repT[owner.faction] = g.time;
+          g.rep.add(owner.faction, rep, killed ? 'Knocked out a civilian' : 'Attacked a civilian');
+        }
+      }
     }
   }
 

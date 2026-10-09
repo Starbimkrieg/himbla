@@ -1108,3 +1108,8 @@ body.trailer #tutorial, body.trailer #racepanel, body.trailer #vehbar, body.trai
 @keyframes trEnd { 0% { opacity: 0; } 100% { opacity: 1; } }
 @keyframes trWhisper { 0% { opacity: 0; } 20% { opacity: 0.6; } 25% { opacity: 0.1; } 40% { opacity: 0.9; } 45% { opacity: 0.3; } 60%, 100% { opacity: 1; } }
 .tr-caption .tr-sub { display: block; margin-top: 0.5vw; font-size: 1.05vw; }
+/* the controls panel: section headers, and the note about what unlocks later */
+#help tr.hsec td { padding-top: 8px; font-family: var(--comic); font-size: 8px; color: var(--yellow); letter-spacing: 1px; }
+#help .help-more { margin: 10px 0 0; font-size: 12px; color: var(--ui-text); opacity: 0.7; max-width: 340px; }
+/* BOLT's passing remarks under the current training step */
+#tutorial .tut-say { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--ui-edge); font-family: var(--body); font-size: 15px; line-height: 1.3; color: var(--cyan); }

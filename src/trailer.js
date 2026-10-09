@@ -267,7 +267,7 @@ export class Trailer {
     if (g.player) g.player.body.thrusting = false;
     if (g.player) g.player.weapon = 0;
     this.anchor = null;
-    g.lampMode = 'auto';
+    g.lampForce = null; // the lamp back on automatic
     if (g.settings) g.settings.v.panels = 'off';
   }
 
@@ -310,7 +310,7 @@ export class Trailer {
       if (f.lengthSq() > 1e-6) g.cam.fwd.copy(f.normalize());
       g.cam.pitch = this.pitch ?? -0.1;
     }
-    if (this.lampOn != null) g.lampMode = this.lampOn ? 'on' : 'off';
+    g.lampForce = this.lampOn ?? null; // a shot can force the helmet lamp on or off
     return dt;
   }
 

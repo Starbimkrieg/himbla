@@ -908,16 +908,15 @@ export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, fl
     // common frame: skid plate, axles, fenders, lights
     k.box(3.0, 0.5, 5.4, KT(VDARK), 0, 0.7, 0, { outline: 0.06 });
     for (const sz of [-1.8, 1.8]) k.add(new THREE.CylinderGeometry(0.18, 0.18, 3.5, 8).rotateZ(Math.PI / 2), KT(VSTEEL), 0, 0.85, sz, { outline: 0 });
-    // wheel arches over the top of each wheel (the arc runs from a little below the axle at the
-    // front, over the top, to a little below it at the back); the military hulls get heavier ones
-    // with a lip
+    // fenders over the top of each wheel: the arc stops a little above the axle at the front and
+    // back (ends dipping below it hung down like fins under the wheels); the military hulls get
+    // heavier ones with a lip
     const mil = style === 'military';
+    const a0 = 0.32, al = Math.PI - 2 * a0; // the arc, measured from the front of the wheel
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      k.add(new THREE.CylinderGeometry(mil ? 1.16 : 1.08, mil ? 1.16 : 1.08, mil ? 1.0 : 0.9, 14, 1, true, -0.3, Math.PI + 0.6).rotateZ(Math.PI / 2), KD(mil ? VSTEEL : color), sx * 1.85, 0.85, sz * 1.8, { outline: 0.04 });
-      if (mil) k.add(new THREE.TorusGeometry(1.18, 0.07, 6, 16, Math.PI + 0.6).rotateZ(-0.3).rotateY(Math.PI / 2), KT(VDARK), sx * 2.36, 0.85, sz * 1.8, { outline: 0 });
+      k.add(new THREE.CylinderGeometry(mil ? 1.14 : 1.06, mil ? 1.14 : 1.06, mil ? 0.95 : 0.85, 14, 1, true, a0, al).rotateZ(Math.PI / 2), KD(mil ? VSTEEL : color), sx * 1.85, 0.85, sz * 1.8, { outline: 0.04 });
+      if (mil) k.add(new THREE.TorusGeometry(1.16, 0.07, 6, 16, al).rotateZ(a0).rotateY(Math.PI / 2), KT(VDARK), sx * 2.32, 0.85, sz * 1.8, { outline: 0 });
     }
-    for (const sx of [-0.9, 0.9]) k.box(0.55, 0.3, 0.12, KG(0xfff6a8), sx, 1.45, 2.68, { outline: 0 });
-    for (const sx of [-1.2, 1.2]) k.box(0.4, 0.22, 0.12, KG(0xff2a4a), sx, 1.5, -2.68, { outline: 0 });
     if (style === 'pirate') {
       // welded war-rig: slab hull, scrap armour, a spiked ram plate, a cage cab and exhaust stacks
       k.box(3.2, 1.1, 5.2, KT(color), 0, 0.9, 0, { outline: 0.08 });
@@ -925,6 +924,8 @@ export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, fl
       for (let i = 0; i < 4; i++) k.add(new THREE.ConeGeometry(0.18, 0.8, 5).rotateX(Math.PI / 2), KT(0xd8d4e8), -1.2 + i * 0.8, 1.2, 3.25, { outline: 0.02 });
       for (const [x, y, z, h, c] of [[1.64, 1.2, 0.05, 0.8, 0x7a4a32], [-1.64, 1.15, -0.1, 0.9, 0x6b5a3a]]) k.box(0.12, h, 1.2, KT(c), x, y, z, { rz: 0.05, outline: 0.02 });
       k.box(1.8, 0.7, 0.12, KT(0x5a5f6e), 0.3, 1.2, -2.65, { rz: 0.06, outline: 0.02 });
+      for (const sx of [-0.9, 0.9]) k.box(0.55, 0.3, 0.12, KG(0xfff6a8), sx, 1.0, 2.62, { outline: 0 });
+      for (const sx of [-1.2, 1.2]) k.box(0.4, 0.22, 0.12, KG(0xff2a4a), sx, 0.95, -2.62, { outline: 0 });
       k.box(2.4, 1.0, 2.0, KT(trim), 0, 2.0, -0.6, { outline: 0.06 });
       k.box(2.42, 0.4, 1.0, KG(0xcfefff), 0, 2.45, 0.1, { outline: 0 });
       for (const sx of [-1, 1]) {
@@ -940,6 +941,10 @@ export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, fl
       // armoured patrol car: a sloped hull with skirts, faction stripes, smoke launchers, antennas
       k.add(new THREE.CylinderGeometry(1.45 * Math.SQRT2, 1.7 * Math.SQRT2, 1.3, 4, 1).rotateY(Math.PI / 4).scale(1, 1, 1.65), KT(color), 0, 1.6, 0, { outline: 0.1 });
       k.add(new THREE.BoxGeometry(3.0, 0.7, 1.2), KT(color), 0, 1.35, 2.45, { rx: 0.5, outline: 0.05 });
+      // headlights on the nose plate's front face (it's tilted 0.5 rad: the face sits at
+      // (0, 1.06, 2.98) facing forward and a little down), tail lights on the sloped rear of the hull
+      for (const sx of [-0.9, 0.9]) k.box(0.55, 0.26, 0.1, KG(0xfff6a8), sx, 1.05, 3.0, { rx: 0.5, outline: 0 });
+      for (const sx of [-1.2, 1.2]) k.box(0.4, 0.22, 0.1, KG(0xff2a4a), sx, 1.5, -2.66, { rx: 0.3, outline: 0 });
       for (const sx of [-1, 1]) {
         // skirt plate between the wheel wells, the faction stripe up on the hull above the arches
         k.box(0.25, 0.75, 1.3, KT(VSTEEL), sx * 1.72, 1.15, 0, { outline: 0.04 });
@@ -956,6 +961,10 @@ export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, fl
       // civilian buggy: open tub, roll cage, seats, cargo bed with crates, a light bar
       k.box(3.0, 0.7, 5.0, KT(color), 0, 0.9, 0, { outline: 0.08 });
       k.add(new THREE.BoxGeometry(2.8, 0.5, 1.0), KT(color), 0, 1.3, 2.3, { rx: 0.4, outline: 0.04 });
+      // headlights on the nose plate's front face (tilted 0.4 rad: the face sits at (0, 1.1, 2.76)),
+      // tail lights set into the tub's back face (z = -2.5)
+      for (const sx of [-0.9, 0.9]) k.box(0.55, 0.24, 0.1, KG(0xfff6a8), sx, 1.0, 2.79, { rx: 0.4, outline: 0 });
+      for (const sx of [-1.2, 1.2]) k.box(0.4, 0.22, 0.1, KG(0xff2a4a), sx, 0.95, -2.53, { outline: 0 });
       k.box(2.8, 0.15, 1.4, KT(trim), 0, 1.6, -1.6, { outline: 0 });
       for (const sx of [-0.6, 0.6]) { k.box(0.8, 0.5, 0.8, KT(VDARK), sx, 1.6, 0.4, { outline: 0.02 }); k.box(0.8, 0.9, 0.2, KT(VDARK), sx, 1.6, 0.0, { outline: 0.02 }); }
       for (const sx of [-1, 1]) {
@@ -1294,6 +1303,132 @@ export function makeWarRig({ color = 0x7b2ff7, trim = 0x7dff3a } = {}) {
 // rear door that drops into a ramp.
 export function makeShuttle({ color = 0xfff4e0, stripe = 0x2ec4ff } = {}) {
   return makeShip('shuttle', { color, stripe });
+}
+
+// Meridian Courier Light-Bike: a sleek shell whose nose and tail ARE the curved fairings over its two
+// hubless wheels (the wells sweep round the top of each wheel, down to the axle), with a hump for the
+// rider between them. The flanks carry raised side panels, vents, glowing arcs tracing each well and a
+// seam down the length; a tinted canopy, a seat, clip-ons and pegs. Built 1:1, shown at 1.2x. Forward
+// is +z. Returns { root, chassis, wheels, gun, trailFrom, trailColor } (trailFrom: where the light trail
+// streams from, in the bike's own frame).
+export function makeLightBike({ color = 0x2ec4ff, trim = 0xffd23f } = {}) {
+  const root = new THREE.Group();
+  root.scale.setScalar(1.2);
+  const chassis = new THREE.Group();
+  root.add(chassis);
+  const W = 0.5, WZ = 1.6, WY = 0.75, RO = 0.98, RI = 0.84; // shell width, wheel spots, fairing radii
+  chassis.add(baked(`bike2|${color}|${trim}`, (k) => {
+    // side profile (z, y): outer edge over the front wheel, the rider's hump, over the rear wheel,
+    // then back along the insides of the wells and the belly between them
+    const arc = (cz, r, a0, a1, n = 10) => Array.from({ length: n + 1 }, (_, i) => { const a = a0 + ((a1 - a0) * i) / n; return [cz + Math.cos(a) * r, WY + Math.sin(a) * r]; });
+    const outline = [
+      ...arc(WZ, RO, 0, 2.55),                    // nose: over the front wheel
+      [0.55, 1.5], [0.05, 1.58], [-0.35, 1.32], [-0.75, 1.22], // tank hump, then the seat dip
+      [-1.05, 1.42],                              // tail rise
+      ...arc(-WZ, RO, 0.6, Math.PI),              // tail: over the rear wheel
+      ...arc(-WZ, RI, Math.PI, 0),                // back along the inside of the rear well
+      [-0.6, 0.48], [0.6, 0.48],                  // the belly
+      ...arc(WZ, RI, Math.PI, 0),                 // the inside of the front well
+    ];
+    const shape = new THREE.Shape(outline.map(([z, y]) => new THREE.Vector2(z, y)));
+    const shell = new THREE.ExtrudeGeometry(shape, { depth: W, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.06, bevelSegments: 2, steps: 1, curveSegments: 4 });
+    shell.rotateY(-Math.PI / 2).translate(W / 2, 0, 0); // shape x -> +z, extrusion -> x, centred
+    k.add(shell, KT(0x0d1428), 0, 0, 0, { outline: 0.06 });
+    const side = W / 2 + 0.085; // the flank's outer face
+    const glowA = KG(color), glowB = KG(trim), panel = KT(0x1a2440), dark = KT(0x070a14);
+    for (const sx of [-1, 1]) {
+      // glowing arcs tracing each wheel well, and a seam down the length between them
+      for (const cz of [WZ, -WZ]) {
+        const span = cz > 0 ? 2.5 : Math.PI - 0.6, start = cz > 0 ? 0.05 : 0.6;
+        k.add(new THREE.TorusGeometry((RO + RI) / 2, 0.028, 4, 24, span).rotateZ(start).rotateY(-Math.PI / 2), glowA, sx * (side + 0.01), WY, cz, { outline: 0 });
+      }
+      k.add(new THREE.BoxGeometry(0.03, 0.06, 2.0), glowA, sx * (side + 0.01), 0.95, 0, { outline: 0 });
+      // a raised side panel over the hump, with a gold pin-stripe along its top
+      const ps = new THREE.Shape([[0.65, 0.98], [0.25, 1.38], [-0.3, 1.18], [-0.85, 1.12], [-0.9, 0.98]].map(([z, y]) => new THREE.Vector2(z, y)));
+      const pg = new THREE.ExtrudeGeometry(ps, { depth: 0.06, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 1 }).rotateY(-Math.PI / 2);
+      k.add(pg, panel, sx * (side + (sx > 0 ? 0.06 : 0)), 0, 0, { outline: 0.02 });
+      k.add(new THREE.BoxGeometry(0.03, 0.035, 1.05), glowB, sx * (side + 0.07), 1.2, -0.3, { rx: 0.08, outline: 0 });
+      // intake vents behind the front fairing
+      for (let i = 0; i < 3; i++) k.add(new THREE.BoxGeometry(0.03, 0.22, 0.06), dark, sx * (side + 0.02), 0.82, 0.62 - i * 0.12, { rx: -0.35, outline: 0 });
+      // a little Meridian chevron on the tail fairing
+      k.add(new THREE.BoxGeometry(0.03, 0.05, 0.28), glowB, sx * (side + 0.02), 1.32, -1.55, { rx: 0.5, outline: 0 });
+      k.add(new THREE.BoxGeometry(0.03, 0.05, 0.28), glowB, sx * (side + 0.02), 1.22, -1.55, { rx: -0.5, outline: 0 });
+      // footpegs
+      k.add(new THREE.CylinderGeometry(0.035, 0.035, 0.35, 6).rotateZ(Math.PI / 2), KT(0x5b5870), sx * 0.42, 0.66, -0.55, { outline: 0 });
+    }
+    // spine stripe, seat, canopy over the tank, headlight in the nose, light bar on the tail
+    k.add(new THREE.BoxGeometry(0.12, 0.04, 1.0), glowA, 0, 1.6, 0.25, { rx: -0.05, outline: 0 });
+    k.add(new THREE.BoxGeometry(W - 0.02, 0.1, 0.65), KT(0x2a2540), 0, 1.27, -0.6, { rx: 0.05, outline: 0.02 });
+    k.add(new THREE.SphereGeometry(0.5, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.72, 0.55, 1.45), KG(0x9be7ff), 0, 1.46, 0.55, { rx: -0.36, outline: 0.03 });
+    k.add(new THREE.BoxGeometry(0.34, 0.08, 0.1), KG(0xfff6a8), 0, 1.5, 2.36, { rx: -0.9, outline: 0 });
+    k.add(new THREE.BoxGeometry(W + 0.1, 0.08, 0.08), glowA, 0, 1.58, -2.12, { rx: 0.7, outline: 0 });
+    // clip-on bars
+    k.add(new THREE.CylinderGeometry(0.04, 0.04, 0.95, 6).rotateZ(Math.PI / 2), KT(0x3a3550), 0, 1.5, 0.75, { outline: 0.02 });
+    for (const sx of [-1, 1]) k.add(new THREE.CylinderGeometry(0.06, 0.06, 0.18, 6).rotateZ(Math.PI / 2), KT(0x5b5870), sx * 0.48, 1.5, 0.75, { outline: 0 });
+  }));
+  // hubless wheels: a dark tyre with a glowing rim on each face (spun about x by the garage)
+  const wheels = [];
+  for (const z of [-WZ, WZ]) {
+    const w = new THREE.Group();
+    w.position.set(0, WY, z);
+    w.add(baked(`bikewheel2|${color}`, (k) => {
+      k.add(new THREE.TorusGeometry(0.62, 0.15, 8, 28).rotateY(Math.PI / 2), KT(0x0b0912), 0, 0, 0, { outline: 0.03 });
+      k.add(new THREE.CylinderGeometry(0.62, 0.62, 0.34, 28, 1, true).rotateZ(Math.PI / 2), KT(0x0b0912), 0, 0, 0, { outline: 0 });
+      for (const sx of [-1, 1]) k.add(new THREE.TorusGeometry(0.5, 0.045, 6, 28).rotateY(Math.PI / 2), KG(color), sx * 0.18, 0, 0, { outline: 0 });
+      for (let i = 0; i < 3; i++) k.add(new THREE.BoxGeometry(0.03, 0.06, 0.95), KG(color), 0, 0, 0, { rx: (i / 3) * Math.PI, outline: 0 });
+    }));
+    root.add(w);
+    wheels.push(w);
+  }
+  return { root, chassis, wheels, gun: new THREE.Group(), trailFrom: new THREE.Vector3(0, 0.15, -WZ), trailColor: color };
+}
+
+// A light trail: a glowing ribbon that streams out behind something and fades over `life` seconds.
+// Feed it a world point (where it streams from) and the local up each frame; it lives in world space.
+export class LightTrail {
+  constructor(scene, color, { life = 1, height = 1.0, max = 64 } = {}) {
+    this.life = life; this.height = height; this.max = max;
+    this.pts = []; // { p, up, t }
+    this.t = 0;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(max * 2 * 3), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(max * 2 * 4), 4));
+    const idx = [];
+    for (let i = 0; i < max - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    geo.setIndex(idx);
+    this.mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 2;
+    scene.add(this.mesh);
+  }
+
+  // p: world point at the ribbon's foot, up: world up there, emit: false lets it fade out
+  update(dt, p, up, emit = true) {
+    this.t += dt;
+    const last = this.pts[this.pts.length - 1];
+    if (emit && p && (!last || last.p.distanceToSquared(p) > 0.09)) {
+      this.pts.push({ p: p.clone(), up: up.clone(), t: this.t });
+      if (this.pts.length > this.max) this.pts.shift();
+    } else if (emit && p && last) { last.p.copy(p); last.up.copy(up); last.t = this.t; } // the head follows the bike
+    while (this.pts.length && this.t - this.pts[0].t > this.life) this.pts.shift();
+    const pos = this.mesh.geometry.attributes.position, col = this.mesh.geometry.attributes.color;
+    const n = this.pts.length;
+    for (let i = 0; i < this.max; i++) {
+      const q = this.pts[Math.min(i, Math.max(0, n - 1))];
+      const k = !q || i >= n ? 0 : Math.max(0, 1 - (this.t - q.t) / this.life);
+      const a = k * k; // eases away
+      if (q) {
+        pos.setXYZ(i * 2, q.p.x, q.p.y, q.p.z);
+        pos.setXYZ(i * 2 + 1, q.p.x + q.up.x * this.height * (0.4 + 0.6 * k), q.p.y + q.up.y * this.height * (0.4 + 0.6 * k), q.p.z + q.up.z * this.height * (0.4 + 0.6 * k));
+      }
+      col.setXYZW(i * 2, a, a, a, a);
+      col.setXYZW(i * 2 + 1, a * 0.4, a * 0.4, a * 0.4, a * 0.25);
+    }
+    pos.needsUpdate = col.needsUpdate = true;
+    this.mesh.visible = n > 1;
+  }
+
+  dispose() { this.mesh.removeFromParent(); this.mesh.geometry.dispose(); this.mesh.material.dispose(); }
 }
 
 // Hover-car: a rounded body, a bubble canopy, side nacelles glowing underneath, tail fins and

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { toon, ink, glow, textSprite } from './toon.js';
+import { toon, ink, glow, textSprite, setMask } from './toon.js';
+const VEH_DETAIL = 220; // past this, a vehicle's small parts stop drawing
 import { makeFigure, makeShuttle, makeRover, makeHoverCar, makeFreighter } from './models.js';
 import { Kit, T as KT, G as KG } from './outpostModels.js';
 import { mulberry32 } from './rng.js';
@@ -24,7 +25,15 @@ const LINK_MAX = 3000; // nearest / second-nearest links up to this long
 const PAX_RANGE = 500; // passengers only exist near the camera
 const LANE = 2.4; // lane offset from the road centreline (right-hand traffic)
 const ROAD_LAT = [-5, -2.5, 0, 2.5, 5];
-const TRAIN_HP = 400, BUGGY_HP = 120;
+// squared distance from point c to the segment a-b
+function segDist2(a, b, c) {
+  const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
+  const l2 = abx * abx + aby * aby + abz * abz || 1e-9;
+  const t = Math.max(0, Math.min(1, ((c.x - a.x) * abx + (c.y - a.y) * aby + (c.z - a.z) * abz) / l2));
+  const dx = a.x + abx * t - c.x, dy = a.y + aby * t - c.y, dz = a.z + abz * t - c.z;
+  return dx * dx + dy * dy + dz * dz;
+}
+const TRAIN_HP = 400, BUGGY_HP = 120, CAR_HP = 90;
 const _z = new THREE.Vector3(0, 0, 1);
 // ring roads round each connected town
 const RING_GAP = 32; // ring centreline this far outside the settlement radius (past buildings / plateau edge)
@@ -530,7 +539,8 @@ export class Traffic {
   // next (so nothing ever needs a U-turn - a dead-end town is simply a lap of its ring).
 
   buildRoads() {
-    const safe = this.w.locations.filter((l) => l.safe && !l.restricted && !l.poi && l.type !== 'pirate');
+    // (the casino joins in like a town: a ring road round its grounds and traffic dropping punters off)
+    const safe = this.w.locations.filter((l) => l.safe && !l.restricted && (!l.poi || l.type === 'casino') && l.type !== 'pirate');
     const key = (a, b) => (a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`);
     const pairs = new Set();
     const has = (a, b) => pairs.has(key(a, b));
@@ -1126,7 +1136,7 @@ export class Traffic {
       const m = makeHoverCar({ color: [0xff7ad9, 0x2ec4ff, 0x7dff6a, 0xffd23f][(k + i) % 4] });
       m.root.matrixAutoUpdate = true;
       this.w.scene.add(m.root);
-      const v = add({ ...m, kind: 'car', vmax: 17 + this.r() * 6, acc: 4, front: 2, tail: 2, waitT: 4, deck: [1.3, 1.1, 2.7], deckY: 0, col: null, quat: m.root.quaternion, view: 800, radius: 2.5, hoverH: 1.7 });
+      const v = add({ ...m, kind: 'car', vmax: 17 + this.r() * 6, acc: 4, front: 2, tail: 2, waitT: 4, deck: [1.3, 1.1, 2.7], deckY: 0, col: null, quat: m.root.quaternion, view: 800, radius: 2.5, hoverH: 1.7, hp: CAR_HP, maxHp: CAR_HP, hitR: 2.6, credits: 30 });
       this.vehicles.push(v);
     }
     // buggy (old-style crawler): queues behind slower traffic
@@ -1404,7 +1414,39 @@ export class Traffic {
     g.blastHooks.push((pos, radius, damage, owner) => this.blast(pos, radius, damage, owner));
   }
 
-  centre(v, out) { return out.copy(v.pos).addScaledVector(_u.copy(v.pos).normalize(), v.kind === 'buggy' ? 1.8 : 2.6); }
+  centre(v, out) { return out.copy(v.pos).addScaledVector(_u.copy(v.pos).normalize(), v.kind === 'buggy' ? 1.8 : v.kind === 'car' ? 0.4 : 2.6); }
+
+  // Does a shot's segment (a -> b) hit any road vehicle, a land-train's trailers included? (A trailer
+  // only has a thin deck collider, so shots used to pass straight through its cabin.) Returns the
+  // vehicle so the caller can explode right there.
+  segHit(a, b) {
+    for (const v of this.roadVehicles || []) {
+      if (!v.maxHp || v.hp <= 0 || v.state === 'dead' || !v.root.visible) continue;
+      const c = this.centre(v, _c);
+      if (c.distanceToSquared(a) > 3600) continue;
+      if (segDist2(a, b, c) < v.hitR * v.hitR) return v;
+      if (v.trailers) for (const t of v.trailers) {
+        _c.copy(t.plat.pos).addScaledVector(_u.copy(t.plat.pos).normalize(), 2.6);
+        if (segDist2(a, b, _c) < 4.2 * 4.2) return v;
+      }
+    }
+    return null;
+  }
+
+  // Rammed by a vehicle at sp m/s (pos: the rammer's centre, r: its reach); a short cooldown per target
+  ram(pos, r, sp) {
+    let hit = null;
+    for (const v of this.roadVehicles || []) {
+      if (!v.maxHp || v.hp <= 0 || v.state === 'dead' || !v.root.visible || (v.ramT || 0) > this.t) continue;
+      let d = this.centre(v, _c).distanceTo(pos) - v.hitR;
+      if (v.trailers) for (const t of v.trailers) d = Math.min(d, _c.copy(t.plat.pos).addScaledVector(_u.copy(t.plat.pos).normalize(), 2.6).distanceTo(pos) - 4.2);
+      if (d > r) continue;
+      v.ramT = this.t + 0.6;
+      this.damage(v, sp * 2.2);
+      hit = v;
+    }
+    return hit;
+  }
 
   blast(pos, radius, damage, owner) {
     if (owner !== 'player') return;
@@ -1500,7 +1542,31 @@ export class Traffic {
 
   // ================= per frame =================
 
+  // Drawn (and simulated in full) only within its view distance and with the terrain not in the way
+  // (a line-of-sight test, rechecked every quarter second per vehicle).
+  // Past VEH_DETAIL its small parts (and their ink) stop drawing too.
+  seen(v, camPos) {
+    const d2 = v.pos.distanceToSquared(camPos);
+    if (d2 > v.view * v.view) return false;
+    if (!v.detail) {
+      v.detail = [];
+      for (const r of [v.root, ...(v.trailers || []).map((t) => t.root)]) r.traverse((o) => {
+        if (!o.isMesh || (o.userData && o.userData.isInk)) return;
+        if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+        if (o.geometry.boundingSphere.radius * o.scale.x * r.scale.x < 0.9) o.traverse((c) => v.detail.push(c));
+      });
+      v.detailOn = true;
+    }
+    if (v.detailOn && d2 > (VEH_DETAIL + 20) ** 2) { v.detailOn = false; setMask(v.detail, false); }
+    else if (!v.detailOn && d2 < VEH_DETAIL * VEH_DETAIL) { v.detailOn = true; setMask(v.detail, true); }
+    if (d2 < 260 * 260) { v.occ = false; return true; }
+    v.occT = (v.occT ?? Math.random() * 0.25) - this.dt;
+    if (v.occT <= 0) { v.occT = 0.25; v.occ = !this.w.lineOfSight(camPos, v.pos, (v.radius || 4) + 3); }
+    return !v.occ;
+  }
+
   update(dt, camPos) {
+    this.dt = dt;
     this.cam = camPos;
     this.hook();
     this.t = (this.t || 0) + dt;
@@ -1569,7 +1635,7 @@ export class Traffic {
         if (_a.lengthSq() > 9) v.heading.copy(_a).normalize();
       }
     }
-    const vis = v.pos.distanceTo(camPos) < v.view;
+    const vis = this.seen(v, camPos);
     v.root.visible = vis;
     if (!vis) { if (v.col) { this.C.remove(v.col); v.col = null; } return; }
     v.root.position.copy(v.pos);
@@ -1632,7 +1698,7 @@ export class Traffic {
     P.ground(v.pos, v.pos, v.hoverH + 0.3 + Math.sin(this.t * 2) * 0.12);
     if (dt > 0) v.vel.copy(v.pos).sub(v.prevPos).divideScalar(dt);
     v.fwd.copy(_f);
-    v.root.visible = v.pos.distanceToSquared(camPos) < v.view * v.view;
+    v.root.visible = this.seen(v, camPos);
     v.root.position.copy(v.pos);
     frameQuat(_u.copy(v.pos).normalize(), _f, v.root.quaternion);
   }
@@ -1722,12 +1788,15 @@ export class Traffic {
     const up = this.roadFrame(v, v.s, v.front * 0.7, Math.max(2, v.front * 0.7), v.hintF, v.hintR, v.pos, _f);
     if (v.kind === 'car') {
       v.hover += ((over || 0) - v.hover) * Math.min(1, dt * 2.5);
-      v.pos.addScaledVector(up, v.hoverH + v.hover + Math.sin(this.t * 2 + v.s) * 0.12);
+      // (a wreck has lost its lift: it sits on the road)
+      if (v.state === 'wreck') v.dropH = Math.max(0, (v.dropH ?? v.hoverH) - dt * 6);
+      else v.dropH = v.hoverH;
+      v.pos.addScaledVector(up, v.dropH + (v.state === 'wreck' ? 0.3 : v.hover + Math.sin(this.t * 2 + v.s) * 0.12));
     }
     if (dt > 0) v.vel.copy(v.pos).sub(v.prevPos).divideScalar(dt);
     if (v.vel.lengthSq() > 3600 || v.state === 'wreck') v.vel.set(0, 0, 0);
     v.fwd.copy(_f);
-    const vis = v.pos.distanceToSquared(camPos) < v.view * v.view;
+    const vis = this.seen(v, camPos);
     v.root.visible = vis;
     if (v.trailers) for (const t of v.trailers) t.root.visible = vis;
     if (!vis) { this.hide(v); return; }

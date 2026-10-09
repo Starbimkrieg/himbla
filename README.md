@@ -89,7 +89,6 @@ Vite's hot reload restarts the page.
 | `SHIFT` | Mag-jump; in the air, press again and hold to **Dive** |
 | `Q` + `W`/`S` (air) | Front / back flips |
 | `Q` + `A`/`D` (air) | Spins |
-| `L` | Helmet lamp: auto / off / on |
 | Left mouse | Fire the selected weapon (the Pulse Spinner homes slightly; its splash can disc-jump you) |
 | `1` `2` `3` `4` | Switch weapon: Pulse Spinner, Vostok Scattergun, Daedalus Rail Lance, Rustmoon Junk Mortar |
 | `C` | Wardrobe: cycle owned outfits, skate finishes and pulse-disc colours |
@@ -98,8 +97,8 @@ Vite's hot reload restarts the page.
 | `Z` · `T` | Phase Dash · Personal Teleporter (story tech) |
 | `Esc` → SETTINGS | Graphics, gameplay, camera, audio and key remapping |
 | `P` | Holding pen, anywhere (needs the remote pen link from Dr. Zbornak) |
-| `Shift`+`X` | Dump the jar anywhere: materials are destroyed, creatures pop back out |
-| `G` / `X` | Scoop into your containment jar / empty it (into the antimatter reactor when you're beside it) |
+| `Shift`+`X` (hold) | Dump the jar anywhere: materials are destroyed, creatures pop back out |
+| `G` / `X` (hold) | Scoop into your containment jar / hold to empty it (into the antimatter reactor when you're beside it) |
 | `F` | Job board / upgrades (inside hubs and settlements) |
 | `M` | Globe map: drag to spin, scroll to zoom. Fog of war covers anywhere you haven't been |
 | `J` | Reputation Log |
@@ -132,9 +131,12 @@ an arrow showing which way it lies from where you're looking; the event you're r
 
 **Rail Lance scope:** with the Rail Lance equipped, hold right mouse to scope in (E still fires thrusters).
 
-**First shift:** a new game offers Instructor Bolt's training run. Each step waits until you've actually done
-it (look, walk, glide on skates, carve, mag-jump, thrusters, open and close the map, find the job board), then
-you take a pirate-free TRAINING RUN contract and deliver it for a ₵200 bonus. You can skip it at the start.
+**First shift:** a new game offers to send **BOLT**, a courier-school drone, along with you. It hovers at your
+shoulder and teaches the controls (each step waits until you've actually done it), chipping in as you ride: big
+air, a landing that dings the parcel, top speed, grinds. Then it rides along for two pirate-free training runs:
+the ILMB to the nearest Kepler town, then a cleared Vostok delivery from there, explaining the factions and how
+restricted military zones work (their turrets open fire without clearance). After the second delivery it pays a
+₵200 bonus and offers a free recovery shuttle back to the ILMB. You can skip it at the start.
 
 - **Magnetic grip:** while the skates are touching the ground (or just left it), they pull you
   toward the surface. You hold contact over small bumps instead of skipping off, but a real
@@ -176,10 +178,10 @@ from about 280 m up, so you can see one coming for half a minute and plan a jump
   Directorate) sit inside red striped walls. If you enter without a contract that grants
   clearance, you get a 4-second warning. After that, turrets and patrol rovers open fire,
   and after 9 seconds artillery starts landing on predicted positions marked by red rings.
-- **The dark side:** your helmet lamp switches on automatically. Pirate squads hunt you even
+- **The dark side:** your helmet lamp switches on by itself (and off again in the sun). Pirate squads hunt you even
   without cargo, and pirate dens and camps are guarded. They don't spawn while you're inside an allied
   settlement's zone (Farside, or Daedalus once you're in their good books) or riding a transit ship. Contracts that start or end there pay
-  1.6× hazard pay. Switching your lamp off (`L`) makes you much harder to hit, but you'll be skiing blind. Twilight Waystation on the terminator is the last safe stop before the dark.
+  1.6× hazard pay. Twilight Waystation on the terminator is the last safe stop before the dark.
 - **Living world:** traffic comes in three sizes: hover-cars, passenger buses, and 50 m cargo
   freighters cruising high overhead. A rocket regularly lands on and launches from the ILMB
   **Arrivals** pad. Cargo crawlers drive the roads, workers and soldiers walk their routes, kids bounce around in low gravity, and
@@ -268,7 +270,9 @@ leaders stop dealing with you, so each playthrough tells one coherent story.
   Score: run a Meridian vault cube home while every gun on the Moon chases you.
 - **Vehicles** (`V` calls the crane drop, boards and leaves; W/S drive, A/D steer, Shift hops, you can still
   shoot): SPACECOM Lunar Interceptor (fast), Vostok BTR-M APC (slow tank), Daedalus Phase Skimmer (hover,
-  drifts), Kepler Homestead Mule, Meridian Courier Hover-Van, Rustmoon Scrapjaw War-Rig. Ramming pirates
+  drifts), Kepler Homestead Mule, Meridian Courier Light-Bike (a sleek light-bike you ride tucked low, leaving a
+  glowing trail that fades over a second), Rustmoon Scrapjaw War-Rig. They hug the ground at speed: the wheeled
+  ones have real downforce and tyres that bite sideways, and only a proper ramp throws one clear. Ramming pirates
   at speed hurts them. Vehicles have hull points (180 Skimmer to 480 APC) and soak most incoming fire; a hull
   bar shows while you drive, and they smoke when hurt. A wrecked vehicle explodes, throws you out and takes
   90 s to be rebuilt (other vehicles stay available). Hull repairs slowly while you're not driving it.
@@ -288,7 +292,7 @@ yours if you swear in with Rustmoon). Lose him by getting 1.5 km away. Not while
 
 ## Secrets (spoilers)
 
-- **SAT-7 "Lantern"** circles the whole Moon on an inclined orbit (~200 km/h), starting each session on the far side from the ILMB. Most of the lap it's 200–300 m
+- **SAT-7 "Lantern"** circles the whole Moon on an inclined orbit (~200 km/h), starting each session on the far side from the ILMB. It's a big gold-foil satellite with a landing deck (hazard border, a glowing ring to aim for) and blinking lights that catch your eye: red and green wingtip strobes, amber deck beacons and a white strobe on its mast. Most of the lap it's 200–300 m
   up, but just past the ILMB it dips to about 40 m. The globe map shows its dashed orbit, the LOW PASS mark and
   where it is now. Land on its deck or solar panels by matching its speed and direction (any mismatch slides
   you off). On deck is a glowing **alien artifact**: F takes it into a sealed compartment of your jar (needs
@@ -301,7 +305,11 @@ yours if you swear in with Rustmoon). Lose him by getting 1.5 km away. Not while
 
 ## Lucky Crater Casino
 
-A walk-in neon hall about 1 km from the ILMB. Walk through the front doors and press `F` at a station
+A walk-in neon hall about 1 km from the ILMB, with a ring road round its grounds like a town's. Out front,
+two slot carousels (six cabinets round a glowing pillar under a bulb-lit canopy) flank the red carpet, and
+punters wander from game to game: playing the slots (yanking the handle while the cabinet lights up), gawping
+at the giant die and the roulette wheel, admiring the chip towers, chatting by the doors. Walk through the
+front doors and press `F` at a station
 (Esc stands you back up):
 - **Blackjack table:** real 3D cards from a 6-deck shoe, dealer stands on 17, blackjack pays 3:2.
   ←/→ bet, Space deal, H hit, S stand, D double.
@@ -402,16 +410,17 @@ settlements raise their guns on pylons. Guns hold fire when a building or the te
 ## The International Moon Base
 
 The central dome is joined by wide glass skywalks, with people walking inside, to six distinct buildings:
-Hydroponics (glass greenhouse dome), Meridian Labs (leaning observation tower), Vostok Hangar (parked
-shuttle), Daedalus Relay (big rotating dish and mast), the Power Block (cooling towers) and the Kepler
-Habitat ring.
+Hydroponics (glass greenhouse dome), Meridian Labs (leaning observation tower), Vostok Hangar (a ribbed quonset
+with a parked shuttle, round to bump into), Daedalus Relay (big rotating dish and mast, roof dishes with their
+receivers), the Power Block (cooling towers) and the Kepler Habitat (a big ring on A-frame legs, high enough to
+skate under, with a park inside and a hub tower in the middle).
 
 ## Main menu & saves
 
 **Music** is all synthesised live. Roaming has a speed-driven synthwave groove whose layers build as you go faster;
 the Lucky Crater Casino plays a swung, jazzy lounge track; Chimera Downs a space-western (galloping rhythm, twangy
-guitar, a lonesome whistle); Dr. Zbornak's lab something clinical and slightly wrong (whole-tone pings, bubbling
-glassware, a theremin); and the dark side an aggressive darksynth. Tracks crossfade as you move between them.
+guitar, a lonesome whistle); Dr. Zbornak's lab, and the Monolith, something clinical and slightly wrong (whole-tone
+pings, bubbling glassware, a theremin); and the dark side an aggressive darksynth. Tracks crossfade as you move between them.
 
 The title screen slowly circles one sunlit place after another (the ILMB, Meridian, Kepler, the casino and
 more) to its own faster, brighter synthwave track (it starts with your first key or click).
@@ -427,7 +436,7 @@ dialogs, job board and wardrobe) freezes the whole world: traffic, the satellite
 `Esc` → SETTINGS (or the button on the title screen). Graphics: render scale, FOV, view distance, terrain
 detail, shadows and their resolution, halftone, speed lines, ink strength, particles, screen shake, damage
 flash, frame cap. Gameplay: mouse sensitivity, invert Y, camera distance/height/shoulder/smoothing, comic
-panels and highlight-photo frequency, tips, default lamp mode, minimap, HUD scale, km/h or m/s. Audio:
+panels and highlight-photo frequency, tips, minimap, HUD scale, km/h or m/s. Audio:
 master, music, effects. Controls: remap every action key (taking a key that's in use swaps the two).
 
 ## Cheat menu (testing)
@@ -527,8 +536,8 @@ crowd-noise bed for now (the cheering is due a rework), and the race countdown b
 - **The Monolith:** touch it (90 s cooldown) and it casts one of three spells, never the same twice running: **Low-G** (30 s at under half gravity), **Time Dilation** (20 s with pirates, their shots, traffic and meteors at 40 % speed while you keep full speed) or **Echo Decoys** (30 s with three holograms of you skating alongside; anyone shooting at you picks one of the four at random, and a hologram shatters when hit).
 - **Bounce Dome Funpark:** inflatable domes, a turreted bouncy castle and a row of trampolines that throw you back
   up harder than you landed, plus a **skate park**: a volcano bowl (ride up the outside and drop in, or hit it fast and
-  fly clean over), a kicker line with a big launch off the plateau edge, a quarter-pipe wall and a pyramid funbox, out
-  on the east side. The big ferris wheel (twelve open gondolas, ~50 m tall) and the carousel are **rideable**: `F`
+  fly clean over), a kicker line with a big launch off the plateau edge, a big **half-pipe** (two matching ~7 m walls
+  facing each other across a flat bottom, with decks and stairs) and a pyramid funbox, spread out on the east side. The big ferris wheel (twelve open gondolas, ~50 m tall) and the carousel are **rideable**: `F`
   beside one pops you into the nearest gondola or onto the nearest horse, `F` hops you off (from the top of the
   wheel, too, if you're brave). (The chimera races moved to Chimera Downs.)
 

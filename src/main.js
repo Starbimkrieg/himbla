@@ -53,13 +53,21 @@ const TIPS = [
   'In the air, hold <b>Q</b> + <b>W/S</b> to flip, <b>Q</b> + <b>A/D</b> to spin. Land upright! Buses and freighters make great ramps.',
   'Press <b>M</b> for the globe map (drag to spin). Unexplored ground stays fogged until you visit.',
   'Factions post <b>EVENTS</b> (beacons on the map). <b>J</b> opens your Reputation Log — higher standing means better pay and faction gear.',
-  'The Moon is round — keep going and you\'ll reach the <b>DARK SIDE</b>. Bring your lamp (<b>L</b>). Pirates live there.',
+  'The Moon is round — keep going and you\'ll reach the <b>DARK SIDE</b>. Your helmet lamp comes on by itself. Pirates live there.',
 ];
 const CAMP_NAMES = ['Grimtooth Camp', "Vandal's Rest", 'Ashfall Hideout', 'Cutthroat Crater', 'The Junkpile'];
 
-const sleep = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+// yield to the browser between loading steps (so the status line paints); the timer covers a hidden
+// tab, where animation frames stop and loading used to stall until you came back to it
+const sleep = () => new Promise((r) => {
+  let done = false;
+  const go = () => { if (!done) { done = true; setTimeout(r, 0); } };
+  requestAnimationFrame(go);
+  setTimeout(go, 50);
+});
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const JAR_HOLD = 1; // seconds to hold X to empty the jar
 const FROZEN_STATES = new Set(['paused', 'map', 'dialog', 'board', 'log', 'wardrobe']);
 const _sightN = new THREE.Vector3();
 const _sightNear = [];
@@ -181,6 +189,17 @@ class Game {
     this.player.applyUpgrades(this.upgrades);
     this.player.health = this.player.maxHealth;
 
+    // compile every shader the world will need now (every settlement, hidden props included), not
+    // the first time each comes into view mid-ride: that used to hitch for a frame per new material
+    await step('Warming up shaders…');
+    {
+      const added = [], forced = [];
+      for (const l of this.locations) if (l.group && !l.group.parent) { this.scene.add(l.group); added.push(l); }
+      this.scene.traverse((o) => { if (!o.visible) { o.visible = true; forced.push(o); } });
+      try { await this.renderer.compileAsync(this.scene, this.camera); } catch (e) { console.warn('[shaders] precompile failed', e); }
+      for (const o of forced) o.visible = false;
+      for (const l of added) if (!l.shown) this.scene.remove(l.group); // (unless it came into view meanwhile)
+    }
     this.timers = [];
     this.time = 0;
     this.state = 'title';
@@ -201,7 +220,6 @@ class Game {
     this.tipTimer = 2;
     this.hurtCd = 0;
     this.boardCooldown = 0;
-    this.lampMode = 'auto';
     this.lastCapture = -999;
     this.wasDark = false;
 
@@ -281,13 +299,9 @@ class Game {
       } else if (this.state === 'play') {
         if (code === 'KeyM') this.openMap();
         if (code === 'KeyJ') this.openLog();
-        if (code === 'KeyH') document.getElementById('help').classList.toggle('hidden');
+        if (code === 'KeyH') { this.refreshHelp(); document.getElementById('help').classList.toggle('hidden'); }
         // hidden testing menu: hold = and ` together
         if ((code === 'Backquote' && this.input.down('Equal')) || (code === 'Equal' && this.input.down('Backquote'))) this.cheats.open();
-        if (code === 'KeyL') {
-          this.lampMode = this.lampMode === 'auto' ? 'off' : this.lampMode === 'off' ? 'on' : 'auto';
-          this.hud.toast(`HELMET LAMP: ${this.lampMode.toUpperCase()}`);
-        }
       } else if (this.state === 'dead' && code === 'Enter') this.respawn();
     };
   }
@@ -632,6 +646,7 @@ class Game {
     if (this.state !== 'dead') return;
     this.hud.show('death', false);
     this.enemies.clearPirates();
+    this.enemies.forgive();
     this.projectiles.clear();
     // redeploy at your nearest clinic outpost if you have one, otherwise the ILMB
     const clinic = this.story.clinicSpawn(this.player.pos.clone().normalize());
@@ -928,14 +943,37 @@ class Game {
 
   // Which music track fits where you are: the casino, Chimera Downs and Dr. Zbornak's lab have
   // their own; the dark side has its own; everywhere else the speed-driven roaming groove.
+  // The controls panel (H) only lists what you can actually do yet: rows tagged data-req appear as
+  // you unlock their feature
+  refreshHelp() {
+    const st = this.story, up = this.upgrades || {};
+    const has = {
+      weapons: WEAPONS.some((w) => w.unlock && (up[w.unlock] || 0) > 0),
+      vehicle: !!(st && st.vehicles && st.vehicles.length),
+      dash: !!(st && st.tech && st.tech.includes('dash')),
+      teleport: !!(st && st.tech && st.tech.includes('teleport')),
+      pen: !!up.penlink,
+      jar: !!(this.alchemy && this.alchemy.owned),
+    };
+    let hidden = 0;
+    for (const tr of document.querySelectorAll('#help tr[data-req]')) {
+      const on = !!has[tr.dataset.req];
+      tr.style.display = on ? '' : 'none';
+      if (!on) hidden++;
+    }
+    const more = document.getElementById('help-more');
+    if (more) more.style.display = hidden ? '' : 'none';
+  }
+
   musicZone() {
     if (this.trailer && this.trailer.zone) return this.trailer.zone; // trailer: the shot picks the track
     if (this.state === 'derby') return 'downs';
     if (this.state === 'casino') return 'casino';
     const P = this.player;
-    this._musicLocs ||= ['casino', 'downs', 'antimatter'].map((id) => this.locations.find((l) => l.id === id)).filter(Boolean);
+    // the Monolith shares the lab's clinical-strange track: the same weird, humming vibe
+    this._musicLocs ||= ['casino', 'downs', 'antimatter', 'monolith'].map((id) => this.locations.find((l) => l.id === id)).filter(Boolean);
     for (const l of this._musicLocs) {
-      if (arcDist(P.pos, l.dir) < l.r * 1.5) return l.id === 'antimatter' ? 'lab' : l.id;
+      if (arcDist(P.pos, l.dir) < l.r * 1.5) return l.id === 'antimatter' || l.id === 'monolith' ? 'lab' : l.id;
     }
     return darkness(P.up) > 0.6 ? 'dark' : 'free';
   }
@@ -960,7 +998,9 @@ class Game {
     this.sun.position.copy(_v).addScaledVector(SUN, 600);
     this.earthLight.target.position.copy(_v);
     this.earthLight.position.copy(_v).addScaledVector(this.world.earthDir, 600);
-    const lampOn = this.lampMode === 'on' || (this.lampMode === 'auto' && (dark > 0.35 || (this.secrets && this.secrets.isUnder(P.pos))));
+    // the helmet lamp looks after itself: on in the dark (and underground), off in the sun
+    // (the trailer director can force it either way: lampForce)
+    const lampOn = this.lampForce != null ? this.lampForce : dark > 0.35 || (this.secrets && this.secrets.isUnder(P.pos));
     const k = P.dead ? 0 : lampOn ? 1 : 0;
     P.lamp.intensity += (k * 9 - P.lamp.intensity) * 0.2;
     // void skin lets you see in the dark: a wide violet glow without giving you away with a lamp
@@ -1015,7 +1055,19 @@ class Game {
     const wdt = this.alchemy.buffs.dilate > 0 ? dt * DILATE_RATE : dt; // the Monolith's time dilation
     this.meteors.update(wdt);
     if (this.input.pressed('KeyG')) this.alchemy.scoop();
-    if (this.input.pressed('KeyX')) this.alchemy.empty(this.input.down('ShiftLeft') || this.input.down('ShiftRight'));
+    // X is a hold (like the recall shuttle, but free), so a stray tap never throws away a jar
+    // you've been stewing; a tap with nothing in it still says so
+    const A = this.alchemy;
+    if (this.input.down('KeyX') && A.jar.length && !this.player.dead && !this.jarHoldDone) {
+      const force = this.input.down('ShiftLeft') || this.input.down('ShiftRight');
+      const lab = this.world.lab;
+      const feed = !force && lab && this.player.pos.distanceTo(lab.reactor) < 11;
+      this.jarHold = (this.jarHold || 0) + dt;
+      this.hud.recallHold(this.jarHold / JAR_HOLD, null, `HOLD ${this.settings ? this.settings.label('KeyX') : 'X'} · ${feed ? 'FEED THE JAR TO THE REACTOR' : 'DUMP THE JAR'}`);
+      if (this.jarHold >= JAR_HOLD) { this.jarHold = 0; this.jarHoldDone = true; this.hud.recallHold(0); A.empty(force); }
+    } else if (this.jarHold) { this.jarHold = 0; this.hud.recallHold(0); }
+    if (!this.input.down('KeyX')) this.jarHoldDone = false;
+    if (this.input.pressed('KeyX') && !A.jar.length) A.empty();
     if (this.input.pressed('KeyC') && this.boardCooldown <= 0) this.cosmetics.wardrobe();
     if (this.input.pressed('KeyP') && this.boardCooldown <= 0) {
       if (this.upgrades.penlink) this.alchemy.penMenu();

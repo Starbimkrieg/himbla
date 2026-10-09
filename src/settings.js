@@ -17,7 +17,6 @@ export const ACTIONS = [
   { code: 'KeyF', label: 'Interact / job board' },
   { code: 'KeyG', label: 'Scoop into jar' },
   { code: 'KeyX', label: 'Empty jar' },
-  { code: 'KeyL', label: 'Helmet lamp mode' },
   { code: 'KeyM', label: 'Globe map' },
   { code: 'KeyJ', label: 'Reputation log' },
   { code: 'KeyC', label: 'Wardrobe' },
@@ -63,7 +62,6 @@ export const SCHEMA = {
     { key: 'panels', label: 'Action panel pop-ups', type: 'choice', def: 'normal', options: LEVELS.slice(0, 3), hint: 'The comic picture-in-picture panels' },
     { key: 'photos', label: 'Highlight photo frequency', type: 'choice', def: 'normal', options: LEVELS, hint: 'Snapshots pinned to the Hall of Highlights' },
     { key: 'tips', label: 'Show tips', type: 'toggle', def: true },
-    { key: 'lampDefault', label: 'Helmet lamp at start', type: 'choice', def: 'auto', options: [['auto', 'AUTO'], ['on', 'ON'], ['off', 'OFF']] },
     { key: 'minimap', label: 'Minimap', type: 'toggle', def: true },
     { key: 'hudScale', label: 'HUD scale', type: 'range', min: 0.6, max: 1.4, step: 0.05, def: 1, fmt: pct },
     { key: 'units', label: 'Speed units', type: 'choice', def: 'kmh', options: [['kmh', 'KM/H'], ['ms', 'M/S']] },
@@ -99,14 +97,14 @@ const HELP_ROWS = {
   'E / Right mouse': (k) => `${k('KeyE')} / Right mouse`,
   SHIFT: (k) => (k('ShiftLeft') === 'L-SHIFT' ? 'SHIFT' : k('ShiftLeft')),
   'Q + W/S · Q + A/D': (k) => `${k('KeyQ')} + ${k('KeyW')}/${k('KeyS')} · ${k('KeyQ')} + ${k('KeyA')}/${k('KeyD')}`,
-  L: (k) => k('KeyL'), J: (k) => k('KeyJ'), C: (k) => k('KeyC'), N: (k) => k('KeyN'), P: (k) => k('KeyP'),
-  'G · X': (k) => `${k('KeyG')} · ${k('KeyX')}`,
+  J: (k) => k('KeyJ'), C: (k) => k('KeyC'), N: (k) => k('KeyN'), P: (k) => k('KeyP'), V: (k) => k('KeyV'), Z: (k) => k('KeyZ'), T: (k) => k('KeyT'),
+  'X (hold)': (k) => `${k('KeyX')} (hold)`, G: (k) => k('KeyG'),
   F: (k) => k('KeyF'), M: (k) => k('KeyM'), R: (k) => k('KeyR'), H: (k) => k('KeyH'),
   '` (backtick)': (k) => (k('Backquote') === '`' ? '` (backtick)' : k('Backquote')),
 };
 const MINI_ROWS = {
   SPACE: (k) => k('Space'), WASD: (k) => `${k('KeyW')}${k('KeyA')}${k('KeyS')}${k('KeyD')}`, 'E/RMB': (k) => `${k('KeyE')}/RMB`,
-  SHIFT: (k) => (k('ShiftLeft') === 'L-SHIFT' ? 'SHIFT' : k('ShiftLeft')), Q: (k) => k('KeyQ'), M: (k) => k('KeyM'), J: (k) => k('KeyJ'), L: (k) => k('KeyL'),
+  SHIFT: (k) => (k('ShiftLeft') === 'L-SHIFT' ? 'SHIFT' : k('ShiftLeft')), Q: (k) => k('KeyQ'), M: (k) => k('KeyM'), J: (k) => k('KeyJ'),
   F: (k) => k('KeyF'), C: (k) => k('KeyC'), H: (k) => k('KeyH'),
 };
 
@@ -193,7 +191,6 @@ export class Settings {
     }
     if (g.audio && g.audio.setVolumes) g.audio.setVolumes(v.master, v.music, v.sfx);
     if (g.input && g.input.setBindings) g.input.setBindings(v.binds);
-    if (initial && g.lampMode !== undefined) g.lampMode = v.lampDefault;
     const mm = document.getElementById('minimap');
     if (mm) mm.style.display = v.minimap ? '' : 'none';
     for (const id of ['topleft', 'minimap', 'speedo']) {

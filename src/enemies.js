@@ -31,7 +31,7 @@ function steerToward(heading, up, target, maxAngle) {
 // stick: hold the ground over crests and bumps (pirate and military rovers). It's the speed above
 // which a real crest may throw the rig clear (a pirate ram run at full tilt); below it the rig
 // snaps back down over crests, and once airborne it's pulled down hard
-export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engine = 16, grip = 0, turn = 1.8, radius = 2.4, stick = false } = {}) {
+export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engine = 16, grip = 0, turn = 1.8, radius = 2.4, stick = false, traction = 0 } = {}) {
   const b = e.body;
   const up = b.up.copy(b.pos).normalize();
   steerToward(e.heading, up, targetDir, (turn / (1 + b.vel.length() / 60)) * dt);
@@ -44,7 +44,7 @@ export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engin
     b.vel.addScaledVector(fwd, along < maxSpeed ? engine * dt : -engine * 0.5 * dt);
     const vn = b.vel.dot(n);
     const lat = b.vel.clone().addScaledVector(fwd, -b.vel.dot(fwd)).addScaledVector(n, -vn);
-    b.vel.addScaledVector(lat, -Math.min(1, (grip ? 9 : 5) * dt));
+    b.vel.addScaledVector(lat, -Math.min(1, (traction || (grip ? 9 : 5)) * dt)); // how hard the tyres resist sliding sideways
   }
   // downforce keeps the heavy pirate rigs planted over crests
   if (grip && (b.grounded || b.altitude < 3)) b.vel.addScaledVector(n, -grip * dt);
@@ -139,7 +139,7 @@ export class Enemies {
       t.root.position.copy(p);
       frameQuat(up, g.world.toWorld(loc, 0, m.y, 0).sub(p), t.root.quaternion);
       base.group.add(t.root);
-      const hp = heavy ? 360 : 220;
+      const hp = heavy ? 650 : 420; // tanky: the head is what you knock out
       const e = { kind: 'turret', faction: 'mil', base, model: t, hp, maxHp: hp, heavy, fireCd: Math.random() * 2, center: p.clone().addScaledVector(up, heavy ? 4 : 3), radius: heavy ? 3 : 2.2, dead: false, respawn: 0, up, wall: !!m.wall };
       base.turrets.push(e);
       this.list.push(e);
@@ -225,15 +225,14 @@ export class Enemies {
 
   pirateCount() { return this.list.filter((e) => e.faction === 'pirate' && e.kind !== 'core' && !e.dead).length; }
 
-  // The friendly settlement whose zone you're inside, if any (pirate squads don't spawn on you there).
+  // The settlement you're standing in, within job-board range (its own radius, not its faction's
+  // territory), if it isn't hostile to you: pirate squads don't spawn on you there. Everywhere else
+  // they hunt as normal, friendly territory included.
   shelterAt(pos) {
     const g = this.game;
-    for (const l of g.locations) {
-      if (l.type === 'pirate' || g.rep.hostile(l.faction)) continue;
-      if (arcDist(pos, l.dir) > (l.zoneR || l.r * 1.2)) continue;
-      if (l.safe || g.rep.cleared(l.faction) || (g.story && g.story.faction === l.faction)) return l;
-    }
-    return null;
+    const l = g.zoneAt(pos);
+    if (!l || l.type === 'pirate' || g.rep.hostile(l.faction)) return null;
+    return l;
   }
 
   // roaming hunters of a kind (not den guards, not event raiders)
@@ -377,7 +376,7 @@ export class Enemies {
     }
     if (e.kind === 'turret') {
       e.model.head.visible = false;
-      e.respawn = e.base.restricted ? 90 : 120;
+      e.respawn = 60;
     } else if (e.kind !== 'core') {
       e.model.root.removeFromParent();
       if (e.kind === 'milrover') e.respawn = 60;
@@ -436,8 +435,8 @@ export class Enemies {
     // --- spawning: hunting squads (not if you ride with Rustmoon) ---
     const carrying = ms.active && ms.cargoState === 'held';
     const inSafe = g.isSafe(g.currentZone);
-    // no new squads while you're sheltered: inside a friendly settlement's zone (a safe town, or a
-    // military base that's cleared you or whose story you're on), or riding a transit ship
+    // no new squads while you're sheltered: in a settlement that isn't hostile to you (within its
+    // job-board range), or riding a transit ship
     const riding = g.rides && g.rides.ride && g.rides.ride.kind === 'ship';
     const home = this.shelterAt(P.pos);
     if (!P.dead && !inSafe && !riding && !home && !aligned && !(g.tutorial && g.tutorial.quiet())) {
@@ -622,6 +621,14 @@ export class Enemies {
       base.hostile = !P.dead && (hostileRep || base.aggro > 0 || raid) && d < loc.defense.ring + 500;
       if (loc.id === 'ilmb' && base.hostile && base.inside) this.artillery(base, dt);
     }
+  }
+
+  // You went down: every base and den you'd set off stands down (your reputation still counts: a
+  // faction that hates you stays hostile).
+  forgive() {
+    for (const base of this.bases) Object.assign(base, { aggro: 0, hostile: false, time: 0, outside: 0, artyCd: 0 });
+    for (const l of this.game.locations) if (l.civAlert) l.civAlert = 0;
+    for (const e of this.list) if (e.kind !== 'kade' && !e.rogue) e.aggro = false;
   }
 
   // You just delivered to (or picked up from) this restricted base: its guns hold until you're out.

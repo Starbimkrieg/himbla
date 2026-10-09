@@ -8,6 +8,8 @@ import { LIVING, spliceGenes, makeChimera, makeMite, ensureStats } from './chime
 import { chimeraCard, cardList } from './chimeracard.js';
 import { monolithTouch, updateEchoes } from './monolith.js';
 
+const _seg = new THREE.Vector3(), _seg2 = new THREE.Vector3();
+
 const HATCH_WAIT = 0.35, HATCH_GROW = 0.55, HATCH_LEAP = 0.75, HATCH_T = HATCH_WAIT + HATCH_GROW + HATCH_LEAP; // a new chimera's climb out of the reactor
 
 // What can go in a containment jar.
@@ -137,9 +139,38 @@ export class Alchemy {
     }
   }
 
+  // Moon Mites can be squashed: by a blast, a shot or a ram. They come back to their patch later.
+  blastMites(pos, radius, damage, owner) {
+    if (owner !== 'player' || !(damage > 0)) return;
+    for (const m of this.mites) if (m.model && !(m.gone > 0) && m.pos.distanceTo(pos) < radius + 0.8) this.squashMite(m);
+  }
+
+  squashMite(m) {
+    const g = this.game;
+    const up = m.pos.clone().normalize();
+    g.fx.spawn(m.pos.clone().addScaledVector(up, 0.4), up.clone().multiplyScalar(3), { color: 0xb8e986, size: 0.35, life: 0.8, gravity: 4, count: 12, spread: 4 });
+    g.fx.pop('SPLAT!', m.pos.clone().addScaledVector(up, 2), { color: '#b8e986', size: 40, life: 0.8 });
+    m.model.root.removeFromParent();
+    m.model = null;
+    m.gone = 150;
+  }
+
+  // the mite (if any) a shot's segment passes through
+  segHitMite(a, b) {
+    for (const m of this.mites) {
+      if (!m.model || m.gone > 0 || m.pos.distanceToSquared(a) > 2500) continue;
+      _seg.subVectors(b, a);
+      const l2 = _seg.lengthSq() || 1e-9;
+      const t = Math.max(0, Math.min(1, _seg2.subVectors(m.pos, a).dot(_seg) / l2));
+      if (_seg2.copy(a).addScaledVector(_seg, t).distanceToSquared(m.pos) < 1.0) return m;
+    }
+    return null;
+  }
+
   updateMites(dt) {
     const g = this.game;
     const P = g.player;
+    if (!this.mitesHooked) { this.mitesHooked = true; (g.blastHooks ||= []).push((pos, r, dmg, owner) => this.blastMites(pos, r, dmg, owner)); }
     for (const m of this.mites) {
       if (m.gone > 0) { m.gone -= dt; continue; }
       const near = arcDist(P.pos, m.home) < 400;

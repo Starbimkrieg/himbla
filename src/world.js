@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { toon, ink, inkMat, glow, textSprite } from './toon.js';
-import { makeDish, makeFigure, makeRover, makeRocket } from './models.js';
+import { toon, ink, inkMat, glow, textSprite, setMask } from './toon.js';
+import { makeDish, makeFigure, makeRover, makeRocket, makeShuttle } from './models.js';
 import { mulberry32 } from './rng.js';
 import { FACTIONS } from './locations.js';
 import { SUN, frameQuat, arcDist, dirFromAngles } from './geo.js';
@@ -22,6 +22,16 @@ const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const ACTIVE_DIST = 2600;
+// Culling (all cheap, all per frame): a settlement within ACTIVE_DIST still leaves the scene while a
+// hill or the moon's curve hides it from the camera (terrain line of sight to its top); within one
+// that is drawn, small static props (ink and all) are binned into 60 m cells and a cell's props stop
+// drawing beyond DETAIL_DIST of the camera. Hidden props are switched off through their layer mask
+// (setMask), so game code toggling .visible never fights it.
+const SHOW_NEAR = 300;   // closer than loc.r + this: always drawn
+const DETAIL_DIST = 260; // a detail cell further than this: its props off
+const DETAIL_CELL = 60;
+const DETAIL_R = 1.8;    // "small": bounding radius under this (metres)
+const _los = new THREE.Vector3(), _lp = new THREE.Vector3();
 
 // Static-geometry batcher: parts are baked into one merged mesh per material plus a single
 // merged ink (outline) shell, so a whole compound costs a handful of draw calls.
@@ -112,7 +122,57 @@ export class World {
     this.buildLakes();
     this.buildCrystals();
     this.buildTraffic(); // after the lakes: roads steer around them
+    for (const loc of locations) this.prepCulling(loc);
   }
+
+  // Each settlement's height (for the line-of-sight test) and its small props (for detail culling).
+  prepCulling(loc) {
+    const G = loc.group;
+    G.updateMatrixWorld(true);
+    const base = loc.pos.length();
+    let top = 20;
+    const seen = new Set();
+    loc.detail = [];
+    const cells = new Map();
+    G.traverse((o) => {
+      if (!o.geometry || seen.has(o)) return;
+      const gg = o.geometry;
+      if (!gg.boundingSphere) gg.computeBoundingSphere();
+      if (!gg.boundingSphere || !isFinite(gg.boundingSphere.radius)) return;
+      const r = gg.boundingSphere.radius * o.matrixWorld.getMaxScaleOnAxis();
+      _lp.copy(gg.boundingSphere.center).applyMatrix4(o.matrixWorld);
+      if (r < 400) top = Math.max(top, _lp.length() + r - base);
+      // (only frozen static props: anything that moves, animates or gets reparented stays out)
+      if (o.isMesh && !o.isInstancedMesh && !o.matrixAutoUpdate && !(o.userData && o.userData.isInk) && r < DETAIL_R) {
+        const key = `${Math.round(_lp.x / DETAIL_CELL)},${Math.round(_lp.y / DETAIL_CELL)},${Math.round(_lp.z / DETAIL_CELL)}`;
+        if (!cells.has(key)) cells.set(key, { c: new THREE.Vector3(), n: 0, objs: [], on: true });
+        const cell = cells.get(key);
+        cell.c.add(_lp);
+        cell.n++;
+        o.traverse((c) => { if (!seen.has(c)) { seen.add(c); loc.detail.push(c); cell.objs.push(c); } });
+      }
+    });
+    loc.cells = [...cells.values()];
+    for (const c of loc.cells) c.c.divideScalar(c.n);
+    loc.topH = Math.min(top, 400);
+    loc.shown = false; // (the group joins the scene on the first update in range)
+    loc.occluded = false;
+  }
+
+  // Terrain-only line of sight from the camera to point p raised by `lift` (a dip of a few metres
+  // under the ground along the way blocks it; ridges thinner than a sample step can slip through,
+  // which only ever errs towards drawing).
+  lineOfSight(cam, p, lift = 0) {
+    _los.copy(p).normalize().multiplyScalar(p.length() + lift);
+    const steps = Math.min(40, Math.max(8, Math.ceil(cam.distanceTo(_los) / 50)));
+    for (let i = 1; i < steps; i++) {
+      _lp.lerpVectors(cam, _los, i / steps);
+      if (this.planet.altitude(_lp) < -3) return false;
+    }
+    return true;
+  }
+
+
 
   r() { return this.rand(); }
 
@@ -705,38 +765,48 @@ export class World {
   buildIlmbWings(loc, B) {
     const wings = [
       { a: 0.0, d: 116, walkers: 2, build: (w) => this.wingHydroponics(loc, w) },
-      { a: 0.62, d: 118, walkers: 3, build: (w) => this.wingLabs(loc, w) },
-      { a: 2.2, d: 118, walkers: 3, build: (w) => this.wingHangar(loc, w) },
-      { a: 3.8, d: 114, walkers: 2, build: (w) => this.wingRelay(loc, w) },
+      { a: 0.62, d: 122, walkers: 3, S: 1.3, build: (w) => this.wingLabs(loc, w) },
+      { a: 2.2, d: 124, walkers: 3, S: 1.25, build: (w) => this.wingHangar(loc, w) },
+      { a: 3.8, d: 120, walkers: 2, S: 1.3, build: (w) => this.wingRelay(loc, w) },
       { a: 4.5, d: 110, walkers: 2, build: (w) => this.wingPower(loc, w) },
       { a: 5.2, d: 120, walkers: 3, build: (w) => this.wingHabitat(loc, w) },
     ];
     for (const s of wings) {
-      const w = this.wing(loc, B, s.a, s.d);
-      const E = s.build(w); // distance from the wing's centre to the face its skywalk docks into
+      const w = this.wing(loc, B, s.a, s.d, s.S || 1);
+      const E = s.build(w) * (s.S || 1); // distance from the wing's centre to the face its skywalk docks into
       this.skywalk(loc, B, s.a, 53, s.d - E + 1.2, s.walkers);
     }
   }
 
   // Local frame of one wing: +X points away from the hub, -X faces the skywalk.
-  wing(loc, B, a, d) {
+  // A wing's local frame. S scales the whole wing up (geometry, colliders, props, signs): builders
+  // keep working in their own units.
+  wing(loc, B, a, d, S = 1) {
     const yaw = -a, c = Math.cos(yaw), s = Math.sin(yaw);
     const cx = Math.cos(a) * d, cz = Math.sin(a) * d;
-    const P = (lx, lz) => [cx + lx * c + lz * s, cz - lx * s + lz * c];
+    const P = (lx, lz) => [cx + (lx * c + lz * s) * S, cz + (-lx * s + lz * c) * S];
     return {
-      a, d, yaw, P,
-      add: (geo, mat, x, y, z, o) => { B.at(cx, cz, yaw); B.add(geo, mat, x, y, z, o); },
-      box: (lx, ly, lz, hx, hy, hz, ry = 0) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'box', x, y: ly, z, hx, hy, hz, yaw: yaw + ry }); },
-      cyl: (lx, lz, y0, y1, r) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'cyl', x, z, y0, y1, r }); },
-      sph: (lx, ly, lz, r) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'sphere', x, y: ly, z, r }); },
+      a, d, yaw, P, S,
+      add: (geo, mat, x, y, z, o = {}) => { B.at(cx, cz, yaw); B.add(geo, mat, x * S, y * S, z * S, { ...o, sx: (o.sx ?? 1) * S, sy: (o.sy ?? 1) * S, sz: (o.sz ?? 1) * S }); },
+      box: (lx, ly, lz, hx, hy, hz, ry = 0) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'box', x, y: ly * S, z, hx: hx * S, hy: hy * S, hz: hz * S, yaw: yaw + ry }); },
+      cyl: (lx, lz, y0, y1, r) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'cyl', x, z, y0: y0 * S, y1: y1 * S, r: r * S }); },
+      sph: (lx, ly, lz, r) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'sphere', x, y: ly * S, z, r: r * S }); },
+      // a horizontal cylinder along the wing's local x (arched roofs: round to bump into, not a box)
+      hcyl: (lx, ly, lz, r, len) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'hcyl', x, y: ly * S, z, r: r * S, len: len * S, yaw: yaw + Math.PI / 2 }); },
+      // the same along any wing-local direction (dx, dz)
+      hcylDir: (lx, ly, lz, r, len, dx, dz) => {
+        const [x, z] = P(lx, lz);
+        const ex = dx * c + dz * s, ez = -dx * s + dz * c;
+        return this.col(loc, { type: 'hcyl', x, y: ly * S, z, r: r * S, len: len * S, yaw: Math.atan2(ex, ez) });
+      },
       sign: (text, color, lx, y, lz, scale = 0.55) => {
         const sp = textSprite(text, { color, size: 64, scale });
         const [x, z] = P(lx, lz);
-        sp.position.set(x, y, z);
+        sp.position.set(x, y * S, z);
         loc.group.add(sp);
       },
       flag: (lx, lz, colors, h) => { const [x, z] = P(lx, lz); this.flag(loc, x, z, colors, h); },
-      obj: (o, lx, lz, y = 0, ry = 0, dynamic = false) => { const [x, z] = P(lx, lz); return this.put(o, loc, x, z, y, yaw + ry, dynamic); },
+      obj: (o, lx, lz, y = 0, ry = 0, dynamic = false) => { const [x, z] = P(lx, lz); o.scale.multiplyScalar(S); return this.put(o, loc, x, z, y * S, yaw + ry, dynamic); },
     };
   }
 
@@ -769,8 +839,10 @@ export class World {
     for (const sz of [-1, 1]) B.add(new THREE.PlaneGeometry(len, wallH), glass, mid, F + wallH / 2, sz * R, { outline: 0 });
     B.add(new THREE.CylinderGeometry(R, R, len, 18, 1, true, 0, Math.PI).rotateZ(Math.PI / 2), glass, mid, F + wallH, 0, { outline: 0 });
     // structure: spine and eave rails, ribs, yellow portals where it meets the dome and the wing
-    B.add(new THREE.BoxGeometry(len, 0.22, 0.22), rib, mid, top, 0, { outline: 0.05 });
-    for (const sz of [-1, 1]) B.add(new THREE.BoxGeometry(len, 0.26, 0.26), rib, mid, F + wallH, sz * R, { outline: 0.05 });
+    // (the spine and eave rails stop at the end rings: running on through, one poked out into the dome)
+    const rs = 5.2, re = len - 1.3;
+    B.add(new THREE.BoxGeometry(re - rs, 0.22, 0.22), rib, (rs + re) / 2, top, 0, { outline: 0.05 });
+    for (const sz of [-1, 1]) B.add(new THREE.BoxGeometry(re - rs, 0.26, 0.26), rib, (rs + re) / 2, F + wallH, sz * R, { outline: 0.05 });
     const ribs = [5.2];
     const n = Math.max(2, Math.round((len - 7) / 5));
     for (let i = 1; i < n; i++) ribs.push(5.2 + ((len - 6.5) * i) / n);
@@ -782,6 +854,26 @@ export class World {
       for (const sz of [-1, 1]) B.add(new THREE.BoxGeometry(t * 2, wallH, t * 2), m, x, F + wallH / 2, sz * R, { outline: 0.06 });
       if (!end) B.add(new THREE.SphereGeometry(0.2, 6, 4), this.glowM(0xfff6a8), x, top - 0.25, 0, { outline: 0 });
     });
+    // each end opens onto a faintly glowing doorway (the arch of the walkway's own section), not a
+    // flat wall
+    const arch = new THREE.Shape();
+    arch.moveTo(-R + 0.35, F);
+    arch.lineTo(R - 0.35, F);
+    arch.lineTo(R - 0.35, F + wallH);
+    arch.absarc(0, F + wallH, R - 0.35, 0, Math.PI, false);
+    arch.lineTo(-R + 0.35, F);
+    const archGeo = new THREE.ShapeGeometry(arch, 12).rotateY(Math.PI / 2);
+    const portal = new THREE.MeshBasicMaterial({ color: 0xbfefff, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    // (just inside the end rings: right at the very ends they were buried in the dome and the wing)
+    // and a lit rim round each doorway's edge, so it reads from both sides
+    const archP = (e) => { const p = new THREE.Path(); p.moveTo(-e, F); p.lineTo(e, F); p.lineTo(e, F + wallH); p.absarc(0, F + wallH, e, 0, Math.PI, false); p.lineTo(-e, F); return p; };
+    const rim = new THREE.Shape(archP(R - 0.3).getPoints(24));
+    rim.holes.push(new THREE.Path(archP(R - 0.62).getPoints(24)));
+    const rimGeo = new THREE.ShapeGeometry(rim).rotateY(Math.PI / 2);
+    for (const x of [5.55, len - 1.65]) {
+      B.add(archGeo.clone(), portal, x, 0, 0, { outline: 0 });
+      B.add(rimGeo.clone(), this.glowM(0x9fe8ff), x, 0, 0, { outline: 0 });
+    }
     const cm = r0 + mid;
     // straight glass walls, then a round vault on top (a box here made the roof's shoulders square)
     this.col(loc, { type: 'box', x: Math.cos(a) * cm, y: (F + wallH) / 2, z: Math.sin(a) * cm, hx: mid, hy: (F + wallH) / 2, hz: R + 0.4, yaw });
@@ -885,8 +977,12 @@ export class World {
     w.add(new THREE.BoxGeometry(12.1, 1.0, 11.1), this.glowM(pane), -3, 14.6, -3.5, { outline: 0 });
     w.add(new THREE.SphereGeometry(3.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), toon(0xe0e0f0), -6, 17.4, -5, { outline: 0.1 });
     w.add(new THREE.BoxGeometry(0.8, 0.8, 4.6), toon(0x3a3550), -6, 19.6, -5, { rx: 0.5, outline: 0.04 });
-    // the leaning tower
-    const lean = 0.2, th = 34, bx = 5, bz = 5, by = 10.8, ux = Math.sin(lean), uy = Math.cos(lean);
+    // the leaning tower, seated in a plinth on the roof (a tilted box's foot lifts off a flat roof at one
+    // corner: the plinth swallows it)
+    const lean = 0.2, th = 40, bx = 5, bz = 5, by = 10.2, ux = Math.sin(lean), uy = Math.cos(lean);
+    w.add(new THREE.BoxGeometry(9.5, 2.8, 9.5), toon(cream), bx, 10.8 + 1.4, bz, { outline: 0.1 });
+    w.add(new THREE.BoxGeometry(9.8, 0.5, 9.8), toon(blue), bx, 10.8 + 2.85, bz, { outline: 0.04 });
+    w.box(bx, 12.2, bz, 4.75, 1.4, 4.75);
     w.add(new THREE.BoxGeometry(6, th, 6), toon(blue), bx + (ux * th) / 2, by + (uy * th) / 2, bz, { rz: -lean, outline: 0.15 });
     w.add(new THREE.BoxGeometry(6.2, th * 0.84, 1.4), this.glowM(pane), bx + (ux * th) / 2, by + (uy * th) / 2, bz, { rz: -lean, outline: 0 });
     for (const t of [0.22, 0.5, 0.78]) w.add(new THREE.BoxGeometry(6.4, 0.9, 6.4), toon(cream), bx + ux * th * t, by + uy * th * t, bz, { rz: -lean, outline: 0.06 });
@@ -906,11 +1002,11 @@ export class World {
     for (const t of [1 / 6, 0.5, 5 / 6]) w.box(bx + ux * th * t, by + uy * th * t, bz, 4.2, (th / 6) * uy + 0.4, 3.2);
     w.cyl(tx, bz, ty - 0.8, ty + 5.8, 8.8);
     w.flag(-9, 13, [0x2ec4ff, 0xffffff, 0x1b3a8f]);
-    w.sign('MERIDIAN LABS', '#2ec4ff', -6, 25, -4);
+    w.sign('MERIDIAN LABS', '#2ec4ff', -6, 27, -4);
     return 11;
   }
 
-  // Vostok hangar: ribbed quonset with a half-open door and a shuttle parked on the apron.
+  // Vostok hangar: ribbed quonset with a half-open door and a shuttle-bus parked on the apron.
   wingHangar(loc, w) {
     const red = 0xff3b5c, R = 13, L = 30, dark = 0x3a3550;
     w.add(new THREE.CylinderGeometry(R, R, L, 24, 1, false, 0, Math.PI).rotateZ(Math.PI / 2), toon(0x5b5870), 0, 0, 0, { outline: 0.2 });
@@ -927,23 +1023,19 @@ export class World {
     w.add(new THREE.BoxGeometry(1.4, 1.2, 19), toon(red), dx + 0.6, 10, 0, { outline: 0.1 });
     w.add(new THREE.BoxGeometry(18, 0.15, 20), toon(0x4a4660), dx + 9, 0.08, 0, { outline: 0 });
     for (let k = 0; k < 4; k++) w.add(new THREE.BoxGeometry(0.9, 0.06, 18), toon(0xffd23f), dx + 2 + k * 4.5, 0.18, 0, { outline: 0 });
-    // the shuttle
-    const cx = dx + 12;
-    w.add(new THREE.CapsuleGeometry(2.0, 8, 6, 12), toon(0xfff4e0), cx, 3.6, 0, { rz: Math.PI / 2, outline: 0.1 });
-    w.add(new THREE.BoxGeometry(6, 0.45, 0.3), toon(red), cx, 3.8, 2.05, { outline: 0 });
-    w.add(new THREE.BoxGeometry(6, 0.45, 0.3), toon(red), cx, 3.8, -2.05, { outline: 0 });
-    w.add(new THREE.SphereGeometry(1.4, 12, 8), toon(0x241a5c), cx + 4.4, 4.7, 0, { sx: 1.5, outline: 0.06 });
-    w.add(new THREE.BoxGeometry(5, 0.4, 15), toon(red), cx - 1, 3.0, 0, { outline: 0.08 });
-    w.add(new THREE.BoxGeometry(3.4, 3.4, 0.4), toon(red), cx - 4.6, 6.2, 0, { rz: -0.35, outline: 0.06 });
-    for (const s of [-1, 1]) {
-      w.add(new THREE.CylinderGeometry(0.9, 1.1, 2.6, 10), toon(dark), cx - 6.4, 3.4, s * 1.3, { rz: Math.PI / 2, outline: 0.06 });
-      w.add(new THREE.CylinderGeometry(0.75, 0.75, 0.1, 10), this.glowM(0xff9f1c), cx - 7.75, 3.4, s * 1.3, { rz: Math.PI / 2, outline: 0 });
-      w.add(new THREE.CylinderGeometry(0.15, 0.15, 2.4, 6), toon(dark), cx - 1, 1.2, s * 4, { outline: 0.03 });
-      w.add(new THREE.CylinderGeometry(0.6, 0.6, 0.2, 8), toon(dark), cx - 1, 0.1, s * 4, { outline: 0 });
-      w.add(new THREE.SphereGeometry(0.3, 6, 4), this.glowM(s > 0 ? 0x7dff6a : 0xff2a4a), cx - 1, 3.1, s * 7.6, { outline: 0 });
-    }
-    w.add(new THREE.CylinderGeometry(0.15, 0.15, 2.4, 6), toon(dark), cx + 3.5, 1.2, 0, { outline: 0.03 });
-    w.box(cx, 3.6, 0, 6.5, 3.4, 7.6);
+    // a real shuttle-bus (the same ship that flies the routes), in Vostok red, parked nose-out on the
+    // apron with its gear down and its ramp lowered
+    const cx = dx + 10.5, SS = 0.72;
+    const sh = makeShuttle({ color: 0xfff4e0, stripe: red });
+    sh.root.scale.setScalar(SS);
+    sh.setGear(1);
+    sh.setRamp(1);
+    sh.setThrust(0, 0, 0);
+    sh.root.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(sh.root), bs = bb.getSize(new THREE.Vector3()), bc = bb.getCenter(new THREE.Vector3());
+    w.obj(sh.root, cx, 0, sh.gearH * SS, Math.PI / 2);
+    // (turned a quarter: its length runs along the apron's x)
+    w.box(cx + bc.z, sh.gearH * SS + bc.y, -bc.x, bs.z / 2 * 0.92, bs.y / 2, bs.x / 2 * 0.9);
     // control office on the flank
     w.add(new THREE.BoxGeometry(9, 6, 6), toon(0xfff4e0), -3, 3, R + 2, { outline: 0.15 });
     w.add(new THREE.BoxGeometry(9.4, 0.6, 6.4), toon(red), -3, 6.3, R + 2, { outline: 0.08 });
@@ -951,7 +1043,7 @@ export class World {
     w.add(new THREE.CylinderGeometry(0.12, 0.12, 6, 6), toon(dark), 0, 9.6, R + 3, { outline: 0.03 });
     w.box(-3, 3.3, R + 2, 4.7, 3.3, 3.2);
     this.vestibule(w, -L / 2 - 1.6, 6.6, red);
-    w.box(0, 6.6, 0, L / 2, 6.6, R);
+    w.hcyl(0, 0, 0, R + 0.2, L); // the quonset is round to bump into (a box made its shoulders square)
     w.flag(6, -(R + 4), [0xff3b5c, 0xffd23f]);
     w.sign('VOSTOK HANGAR', '#ff3b5c', 0, R + 7, 0);
     return L / 2 + 3.6;
@@ -965,8 +1057,25 @@ export class World {
     w.add(new THREE.CylinderGeometry(11.95, 12.15, 0.8, 8, 1, true), this.glowM(purple), 0, 4.2, 0, { ry: Math.PI / 8, outline: 0 });
     for (const [x, z, s] of [[-4, -5, 2.6], [-4, 5, 2.6], [4, -1, 3.4]]) {
       w.add(new THREE.CylinderGeometry(0.3, 0.4, 2, 6), toon(0x3a3550), x, deck + 1, z, { outline: 0.04 });
-      w.add(new THREE.SphereGeometry(s, 14, 6, 0, Math.PI * 2, 0, 1.0), this.matDS(0xd8d4e8), x, deck + 2 + s, z, { rx: Math.PI + 0.5, outline: 0 });
-      w.add(new THREE.SphereGeometry(0.3, 6, 4), this.glowM(purple), x, deck + 2.4 + s * 0.5, z, { outline: 0 });
+      const cy = deck + 2 + s;
+      w.add(new THREE.SphereGeometry(s, 14, 6, 0, Math.PI * 2, 0, 1.0), this.matDS(0xd8d4e8), x, cy, z, { rx: Math.PI + 0.5, outline: 0 });
+      // the receiver: a feed spoke from the middle of the bowl out along its axis (tilted 0.5 rad
+      // like the dish) to the glowing bead at the focus, braced by three thin struts from the rim
+      const ay = Math.cos(0.5), az = Math.sin(0.5); // the bowl's axis (it opens this way)
+      const vy = cy - s * ay, vz = z - s * az; // middle of the bowl
+      const fy = cy + s * 0.15 * ay, fz = z + s * 0.15 * az; // the focus, just above the rim plane
+      const len = s * 1.15;
+      w.add(new THREE.CylinderGeometry(0.09, 0.12, len, 6), toon(0x3a3550), x, (vy + fy) / 2, (vz + fz) / 2, { rx: 0.5, outline: 0.02 });
+      w.add(new THREE.SphereGeometry(0.34, 8, 6), this.glowM(purple), x, fy, fz, { outline: 0 });
+      const rimR = s * Math.sin(1.0), rimO = s * Math.cos(1.0); // rim circle radius, and how far it sits along the axis from the sphere's centre
+      for (let k = 0; k < 3; k++) {
+        const t = (k / 3) * Math.PI * 2 + 0.4;
+        // rim point: centre - axis * rimO + perpendicular offsets (x, and the axis-perpendicular in y/z)
+        const px = x + Math.cos(t) * rimR, py = cy - ay * rimO - az * Math.sin(t) * rimR, pz = z - az * rimO + ay * Math.sin(t) * rimR;
+        const dx = x - px, dy = fy - py, dz = fz - pz, sl = Math.hypot(dx, dy, dz);
+        const sg = new THREE.CylinderGeometry(0.04, 0.04, sl, 4).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx / sl, dy / sl, dz / sl)));
+        w.add(sg, toon(0x3a3550), (px + x) / 2, (py + fy) / 2, (pz + fz) / 2, { outline: 0 });
+      }
     }
     // lattice mast
     const mh = 30, mx = 5, mz = 6;
@@ -1023,67 +1132,106 @@ export class World {
     return 12.6;
   }
 
-  // Kepler habitat: a big two-deck ring (a tall oval tube with two rows of windows) on struts,
-  // six lit spokes to a central hub tower with an observation crown, and a park inside the ring.
+  // Kepler habitat: a big ring on A-frame legs, high enough to skate under, with two glowing window
+  // decks, six spokes into a central hub tower with an observation crown, and a park inside the
+  // ring. The ring is a round tube, and its collider is a chain of short tubes that follow it.
   wingHabitat(loc, w) {
-    const orange = 0xff9f1c, cream = 0xfff4e0, dark = 0x3a3550, RR = 22, tr = 5, sy = 1.25, hy = 8;
-    // the ring: an oval-section torus (tall enough for two floors), banded and windowed
-    w.add(new THREE.TorusGeometry(RR, tr, 14, 64), toon(cream), 0, hy, 0, { rx: Math.PI / 2, sz: sy, outline: 0.18 });
-    for (const y of [hy - tr * sy * 0.92, hy + tr * sy * 0.92]) w.add(new THREE.TorusGeometry(RR, 0.45, 6, 64), toon(orange), 0, y, 0, { rx: Math.PI / 2, outline: 0.04 });
-    w.add(new THREE.TorusGeometry(RR + tr - 0.15, 0.3, 6, 64), toon(orange), 0, hy, 0, { rx: Math.PI / 2, outline: 0 });
-    const n = 44;
-    for (let k = 0; k < n; k++) {
-      const t = (k / n) * Math.PI * 2;
-      for (const dy of [-2.2, 2.2]) {
-        const rr = RR + Math.sqrt(Math.max(0, 1 - (dy / (tr * sy)) ** 2)) * tr - 0.12;
-        w.add(new THREE.BoxGeometry(0.35, 1.5, 1.7), this.glowM(0xfff6a8), Math.cos(t) * rr, hy + dy, Math.sin(t) * rr, { ry: -t, outline: 0 });
+    const orange = 0xff9f1c, cream = 0xfff4e0, dark = 0x3a3550, RR = 22, tr = 5.4, hy = 11.5;
+    const at = (t, r) => [Math.cos(t) * r, Math.sin(t) * r];
+    const Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
+    // the ring: a round tube, banded top and bottom, with two continuous window decks on the outside
+    // and one on the inside (a band at angle phi round the tube sits at radius RR + tr cos(phi))
+    w.add(new THREE.TorusGeometry(RR, tr, 18, 72), toon(cream), 0, hy, 0, { rx: Math.PI / 2, outline: 0.18 });
+    const band = (phi, tube, mat) => w.add(new THREE.TorusGeometry(RR + tr * Math.cos(phi), tube, 6, 72), mat, 0, hy + tr * Math.sin(phi), 0, { rx: Math.PI / 2, outline: 0 });
+    band(1.15, 0.42, toon(orange));
+    band(-1.15, 0.42, toon(orange));
+    band(0.42, 0.62, this.glowM(0xfff6a8));
+    band(-0.3, 0.62, this.glowM(0xfff6a8));
+    band(0.06, 0.2, toon(dark));
+    band(Math.PI, 0.55, this.glowM(0xfff6a8)); // the inner side, facing the park
+    // window mullions across the outer decks
+    for (let k = 0; k < 36; k++) {
+      const t = (k / 36) * Math.PI * 2;
+      const [mx, mz] = at(t, RR + tr * Math.cos(0.06) + 0.05);
+      w.add(new THREE.BoxGeometry(0.3, tr * 1.05, 0.3), toon(dark), mx, hy + 0.3, mz, { ry: -t, outline: 0 });
+    }
+    // A-frame legs: pairs splayed out from under the ring to footings on the ground
+    const legs = 10, yTop = hy - tr + 0.6;
+    for (let k = 0; k < legs; k++) {
+      const t = (k / legs) * Math.PI * 2 + 0.31;
+      for (const off of [-1.8, 1.8]) {
+        const [tx, tz] = at(t, RR + off * 0.3);
+        const [bx, bz] = at(t, RR + off * 1.6);
+        const dx = tx - bx, dy = yTop, dz = tz - bz, ln = Math.hypot(dx, dy, dz);
+        const lg = new THREE.CylinderGeometry(0.45, 0.65, ln, 8).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y, new THREE.Vector3(dx / ln, dy / ln, dz / ln)));
+        w.add(lg, toon(dark), (tx + bx) / 2, yTop / 2, (tz + bz) / 2, { outline: 0.04 });
+        w.add(new THREE.CylinderGeometry(1.1, 1.3, 0.5, 8), toon(0x5b5870), bx, 0.25, bz, { outline: 0.03 });
+        w.cyl(bx * 0.6 + tx * 0.4, bz * 0.6 + tz * 0.4, -1, yTop, 0.7);
       }
-      if (k % 2 === 0) w.add(new THREE.BoxGeometry(0.35, 1.2, 1.6), this.glowM(0xfff6a8), Math.cos(t) * (RR - tr + 0.15), hy, Math.sin(t) * (RR - tr + 0.15), { ry: -t, outline: 0 });
+      const [sx, sz] = at(t, RR);
+      w.add(new THREE.BoxGeometry(3.2, 0.7, 1.6), toon(orange), sx, hy - tr + 0.2, sz, { ry: -t, outline: 0.04 }); // saddle under the tube
     }
-    // struts and footings
-    for (let k = 0; k < 16; k++) {
-      const t = (k / 16) * Math.PI * 2;
-      w.add(new THREE.CylinderGeometry(0.6, 0.9, hy - tr * sy + 0.6, 8), toon(dark), Math.cos(t) * RR, (hy - tr * sy) / 2, Math.sin(t) * RR, { outline: 0.04 });
-      w.add(new THREE.CylinderGeometry(1.4, 1.6, 0.5, 8), toon(0x5b5870), Math.cos(t) * RR, 0.25, Math.sin(t) * RR, { outline: 0.03 });
-    }
-    // spokes out from the hub, with a lit strip along each
+    // spokes from the hub to the ring's inner wall, each with a lit strip
+    const hubR = 7.2;
     for (let k = 0; k < 6; k++) {
-      const t = (k / 6) * Math.PI * 2 + Math.PI / 6, len = RR - tr - 7.5, mid = 7.5 + len / 2;
-      w.add(new THREE.CylinderGeometry(1.5, 1.5, len, 10), toon(cream), Math.cos(t) * mid, hy + 2, -Math.sin(t) * mid, { rz: Math.PI / 2, ry: t, order: 'YXZ', outline: 0.06 });
-      w.add(new THREE.BoxGeometry(len, 0.35, 0.2), this.glowM(0xfff6a8), Math.cos(t) * mid, hy + 2.6, -Math.sin(t) * mid, { ry: t, outline: 0 });
+      const t = (k / 6) * Math.PI * 2 + Math.PI / 6;
+      const r0 = hubR - 0.6, r1 = RR - tr + 0.8, len = r1 - r0, mid = (r0 + r1) / 2;
+      const dir = new THREE.Vector3(Math.cos(t), 0, Math.sin(t));
+      const q = new THREE.Quaternion().setFromUnitVectors(Y, dir);
+      const [px, pz] = at(t, mid);
+      const [cx2, cz2] = at(t, r1 - 0.6);
+      w.add(new THREE.CylinderGeometry(1.4, 1.4, len, 12).applyQuaternion(q), toon(cream), px, hy + 1.5, pz, { outline: 0.06 });
+      w.add(new THREE.CylinderGeometry(1.5, 1.5, 0.5, 12).applyQuaternion(q), toon(orange), cx2, hy + 1.5, cz2, { outline: 0.03 });
+      w.add(new THREE.BoxGeometry(0.22, 0.3, len).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Z, dir)), this.glowM(0xfff6a8), px, hy + 2.85, pz, { outline: 0 });
+      w.hcylDir(px, hy + 1.5, pz, 1.5, len, dir.x, dir.z);
     }
     // hub tower: drum, banded shaft, observation crown and a mast
-    w.add(new THREE.CylinderGeometry(8, 8.6, 4, 24), toon(0x5b5870), 0, 2, 0, { outline: 0.1 });
-    w.add(new THREE.CylinderGeometry(6.5, 7.5, 20, 24), toon(orange), 0, 14, 0, { outline: 0.15 });
-    for (const y of [9, 15, 21]) w.add(new THREE.CylinderGeometry(6.65 + (24 - y) * 0.05, 6.65 + (24 - y) * 0.05, 1.1, 24), this.glowM(0xfff6a8), 0, y, 0, { outline: 0 });
-    w.add(new THREE.CylinderGeometry(9, 6.5, 2, 24), toon(cream), 0, 25, 0, { outline: 0.1 });
-    w.add(new THREE.CylinderGeometry(9, 9, 3, 24, 1, true), this.glassM(0x9be7ff, 0.3), 0, 27.5, 0, { outline: 0 });
-    w.add(new THREE.SphereGeometry(9, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon(cream), 0, 29, 0, { outline: 0.12 });
-    w.add(new THREE.CylinderGeometry(0.2, 0.3, 8, 6), toon(dark), 0, 41, 0, { outline: 0.03 });
-    w.add(new THREE.SphereGeometry(0.6, 8, 6), this.glowM(0xff9f1c), 0, 45.3, 0, { outline: 0 });
+    w.add(new THREE.CylinderGeometry(8.4, 9, 4, 28), toon(0x5b5870), 0, 2, 0, { outline: 0.1 });
+    w.add(new THREE.CylinderGeometry(hubR - 0.6, hubR, 24, 28), toon(orange), 0, 16, 0, { outline: 0.15 });
+    for (const y of [10, 17, 24]) {
+      const r = hubR - 0.42 - (y - 4) * 0.025;
+      w.add(new THREE.CylinderGeometry(r, r, 1.1, 28), this.glowM(0xfff6a8), 0, y, 0, { outline: 0 });
+    }
+    w.add(new THREE.CylinderGeometry(9.5, hubR - 0.6, 2, 28), toon(cream), 0, 29, 0, { outline: 0.1 });
+    w.add(new THREE.CylinderGeometry(9.5, 9.5, 3.2, 28, 1, true), this.glassM(0x9be7ff, 0.3), 0, 31.6, 0, { outline: 0 });
+    for (let k = 0; k < 12; k++) { const [px, pz] = at((k / 12) * Math.PI * 2, 9.5); w.add(new THREE.BoxGeometry(0.3, 3.2, 0.3), toon(cream), px, 31.6, pz, { outline: 0 }); }
+    w.add(new THREE.SphereGeometry(9.5, 28, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon(cream), 0, 33.2, 0, { outline: 0.12 });
+    w.add(new THREE.TorusGeometry(9.6, 0.35, 6, 40), toon(orange), 0, 33.2, 0, { rx: Math.PI / 2, outline: 0 });
+    w.add(new THREE.CylinderGeometry(0.2, 0.3, 8, 6), toon(dark), 0, 46, 0, { outline: 0.03 });
+    w.add(new THREE.SphereGeometry(0.6, 8, 6), this.glowM(0xff9f1c), 0, 50.3, 0, { outline: 0 });
     // the park inside the ring: lawn, paths, trees, a pond and benches
-    w.add(new THREE.CylinderGeometry(RR - tr - 0.5, RR - tr - 0.5, 0.3, 48), toon(0x3ad15a), 0, 0.15, 0, { outline: 0 });
-    for (let k = 0; k < 6; k++) { const t = (k / 6) * Math.PI * 2; w.add(new THREE.BoxGeometry(RR - tr - 9, 0.05, 1.6), toon(0xd8c9a8), Math.cos(t) * (RR - tr + 8) / 2, 0.32, -Math.sin(t) * (RR - tr + 8) / 2, { ry: t, outline: 0 }); }
+    const lawnR = RR - tr - 1;
+    w.add(new THREE.CylinderGeometry(lawnR, lawnR, 0.3, 48), toon(0x3ad15a), 0, 0.15, 0, { outline: 0 });
+    for (let k = 0; k < 6; k++) {
+      const t = (k / 6) * Math.PI * 2 + Math.PI / 6;
+      const [px, pz] = at(t, (hubR + 1 + lawnR) / 2);
+      w.add(new THREE.BoxGeometry(lawnR - hubR - 1.5, 0.05, 1.6), toon(0xd8c9a8), px, 0.32, pz, { ry: -t, outline: 0 });
+    }
     const rr = mulberry32(31);
-    for (let k = 0; k < 14; k++) {
-      const t = rr() * Math.PI * 2, d = 10 + rr() * 5.5;
-      const tx = Math.cos(t) * d, tz = Math.sin(t) * d;
+    for (let k = 0; k < 12; k++) {
+      const t = rr() * Math.PI * 2, d = hubR + 2.5 + rr() * (lawnR - hubR - 4);
+      const [tx, tz] = at(t, d);
       w.add(new THREE.CylinderGeometry(0.2, 0.3, 1.6, 6), toon(0x6b4a2a), tx, 1.1, tz, { outline: 0.02 });
       w.add(rr() < 0.5 ? new THREE.ConeGeometry(1.3, 3.4, 7) : new THREE.SphereGeometry(1.4, 8, 6), toon(rr() < 0.5 ? 0x1f8a3a : 0x3ad15a), tx, 3.3, tz, { outline: 0.04 });
     }
-    w.add(new THREE.CylinderGeometry(3, 3, 0.1, 20), this.glowM(0x5ad8ff), 11, 0.36, -9, { outline: 0 });
-    w.add(new THREE.TorusGeometry(3, 0.3, 4, 20), toon(0xb8b2cc), 11, 0.36, -9, { rx: Math.PI / 2, outline: 0 });
-    for (let k = 0; k < 4; k++) { const t = (k / 4) * Math.PI * 2 + 0.4; w.add(new THREE.BoxGeometry(2.4, 0.5, 0.7), toon(0x8a5a3a), Math.cos(t) * 11, 0.6, Math.sin(t) * 11, { ry: -t + Math.PI / 2, outline: 0.02 }); }
-    // colliders: the ring as a chain of spheres, the hub as a column
-    for (let k = 0; k < 24; k++) {
-      const t = (k / 24) * Math.PI * 2;
-      w.sph(Math.cos(t) * RR, hy, Math.sin(t) * RR, tr * sy * 0.95);
+    w.add(new THREE.CylinderGeometry(2.6, 2.6, 0.1, 20), this.glowM(0x5ad8ff), 11.5, 0.36, -2, { outline: 0 });
+    w.add(new THREE.TorusGeometry(2.6, 0.3, 4, 20), toon(0xb8b2cc), 11.5, 0.36, -2, { rx: Math.PI / 2, outline: 0 });
+    for (let k = 0; k < 4; k++) { const t = (k / 4) * Math.PI * 2 + 0.4; const [bx, bz] = at(t, 12.5); w.add(new THREE.BoxGeometry(2.4, 0.5, 0.7), toon(0x8a5a3a), bx, 0.6, bz, { ry: -t + Math.PI / 2, outline: 0.02 }); }
+    // colliders: the ring as a chain of short tubes along it, the hub as a column
+    const segs = 28;
+    for (let k = 0; k < segs; k++) {
+      const t = ((k + 0.5) / segs) * Math.PI * 2;
+      const [px, pz] = at(t, RR);
+      w.hcylDir(px, hy, pz, tr + 0.1, ((2 * Math.PI * RR) / segs) * 1.08, -Math.sin(t), Math.cos(t));
     }
-    w.cyl(0, 0, -2, 29, 8.6);
-    this.vestibule(w, -(RR + tr) + 1, 8.6, orange, 9, 6);
+    w.cyl(0, 0, -2, 33, 9.6);
+    // entrance: a lobby block under the ring where the skywalk docks, with a lift shaft up into it
+    const ex = -(RR + tr) + 2.5;
+    this.vestibule(w, ex, 8.6, orange, 9, 6);
+    w.add(new THREE.CylinderGeometry(2.6, 2.6, hy - 8.6, 12), toon(cream), ex + 1, 8.6 + (hy - 8.6) / 2, 0, { outline: 0.06 });
     w.flag(8, RR + tr + 4, [0xff9f1c, 0xffffff]);
-    w.sign('KEPLER HABITAT', '#ff9f1c', 0, 50, 0);
-    return RR + tr + 2;
+    w.sign('KEPLER HABITAT', '#ff9f1c', 0, 55, 0);
+    return -ex + 3 + 1; // the lobby's outer face (it is 6 deep), plus the metre the skywalk tucks into it
   }
 
   // Meridian Exchange (settlements.js): trading tower, warehouses, container gantry, cranes.
@@ -1227,9 +1375,20 @@ export class World {
     for (const loc of this.locations) {
       loc.camDist = this.planet.R * Math.acos(Math.min(1, Math.max(-1, camDir.dot(loc.dir))));
       const want = loc.camDist < ACTIVE_DIST;
-      if (want !== loc.active) {
-        loc.active = want;
-        if (want) this.scene.add(loc.group); else this.scene.remove(loc.group);
+      loc.active = want;
+      // drawn while in range and not behind the terrain
+      if (want && loc.detail) loc.occluded = loc.camDist > loc.r + SHOW_NEAR && !this.lineOfSight(camPos, loc.pos, loc.topH + 2);
+      const show = want && !loc.occluded;
+      if (show !== loc.shown) {
+        loc.shown = show;
+        if (show) this.scene.add(loc.group); else this.scene.remove(loc.group);
+      }
+      if (show && loc.cells) {
+        for (const c of loc.cells) {
+          const d = c.c.distanceTo(camPos);
+          if (c.on && d > DETAIL_DIST + 30) { c.on = false; setMask(c.objs, false); }
+          else if (!c.on && d < DETAIL_DIST) { c.on = true; setMask(c.objs, true); }
+        }
       }
     }
     for (const s of this.spinners) if (s.loc.active) s.obj.rotation[s.axis] += s.speed * dt;

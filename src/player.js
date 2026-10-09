@@ -17,6 +17,7 @@ const SPIN_RATE = 12;
 const NUMS = ['', '', 'DOUBLE ', 'TRIPLE ', 'QUAD ', 'QUINT '];
 
 const _q = new THREE.Quaternion();
+const _Z = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3();
 const _sp = new THREE.Vector3(), _sf = new THREE.Vector3();
 
@@ -187,15 +188,31 @@ export class Player {
       this.updateWeapons(dt, input, cam);
       const m = this.model;
       m.root.position.copy(b.pos);
-      frameQuat(b.up, this.heading, m.root.quaternion);
-      m.legL.rotation.x = m.legR.rotation.x = -1.3;
-      m.body.position.y = m.bodyBase - 0.5;
+      // the vehicle's own orientation (set by the garage this frame), so you never wobble on it
+      if (this.vehicle.riderQuat) m.root.quaternion.copy(this.vehicle.riderQuat);
+      else frameQuat(b.up, this.heading, m.root.quaternion);
       // hands forward on the controls, leaning into the turn
       const steer = (input.down('KeyA') ? 1 : 0) - (input.down('KeyD') ? 1 : 0);
       this.steerLean = (this.steerLean || 0) + (steer - (this.steerLean || 0)) * Math.min(1, dt * 6);
-      if (m.armL && m.armR) {
-        m.armL.rotation.x = -1.15 + 0.15 * this.steerLean; m.armR.rotation.x = -1.15 - 0.15 * this.steerLean;
-        m.armL.rotation.z = -0.12; m.armR.rotation.z = 0.12;
+      if (this.vehicle.def.bike) {
+        // a motorcycle crouch: tucked low over the tank, knees in, arms reaching to the clip-ons,
+        // leaning into the turn
+        m.root.quaternion.multiply(_q.setFromAxisAngle(_Z, -this.steerLean * 0.28));
+        m.torso.rotation.x = 0.95;
+        m.legL.rotation.x = m.legR.rotation.x = -1.05;
+        m.body.position.y = m.bodyBase - 0.62;
+        if (m.armL && m.armR) {
+          m.armL.rotation.x = m.armR.rotation.x = -0.75;
+          m.armL.rotation.z = -0.22; m.armR.rotation.z = 0.22;
+        }
+      } else {
+        m.torso.rotation.x = 0;
+        m.legL.rotation.x = m.legR.rotation.x = -1.3;
+        m.body.position.y = m.bodyBase - 0.5;
+        if (m.armL && m.armR) {
+          m.armL.rotation.x = -1.15 + 0.15 * this.steerLean; m.armR.rotation.x = -1.15 - 0.15 * this.steerLean;
+          m.armL.rotation.z = -0.12; m.armR.rotation.z = 0.12;
+        }
       }
       this.upSmooth.copy(b.up);
       return;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { toon, glow, ink, textSprite } from './toon.js';
 import { frameQuat, tangent, arcDist, darkness } from './geo.js';
 import { SKATES } from './cosmetics.js';
@@ -27,6 +28,7 @@ const GATE_Z = 110;
 // Satellite orbit
 const SAT_SPEED = 55; // m/s along its path
 const LOW_ALT = 34; // metres above the (smoothed) ground at the low point of each lap
+const SAT_SCALE = 1.5; // the model is built 1:1 and scaled up (a bigger target to land on)
 const N_ORBIT = 1440;
 
 const _v = new THREE.Vector3();
@@ -83,17 +85,90 @@ export class Secrets {
       const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.15, x1 - x0), 0.25, Math.max(0.15, z1 - z0)), glow(color));
       W.put(m, loc, (x0 + x1) / 2, (z0 + z1) / 2, y);
     };
-    // ramp trench walls + sloped floor
-    box(-RAMP.x - 1, -RAMP.x, FLOOR - 2, -0.3, RAMP.z0, RAMP.z1);
-    box(RAMP.x, RAMP.x + 1, FLOOR - 2, -0.3, RAMP.z0, RAMP.z1);
+    // ---- the way in: a trench of raw, sunlit rock, broken at the rim, sliding down to the mouth of
+    // something old and half buried (rough meshes are visual; the colliders stay simple boxes) ----
+    const rockT = toon(0x4f4866), rockT2 = toon(0x3b3550), relic = toon(0x2a2440);
+    // smooth wobble from position, so shared box vertices move together (no cracks)
+    const wob = (x, y, z) => Math.sin(x * 0.9 + y * 1.7) * Math.cos(z * 0.55 - y * 0.8) + 0.5 * Math.sin(z * 1.9 + x * 2.3);
+    const rough = (x0, x1, y0, y1, z0, z1, mat, amp = 0.7) => {
+      const w = x1 - x0, h = y1 - y0, d = z1 - z0;
+      const geo = new THREE.BoxGeometry(w, h, d, Math.max(1, Math.ceil(w / 2)), Math.max(1, Math.ceil(h / 2)), Math.max(1, Math.ceil(d / 2)));
+      const pa = geo.attributes.position;
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
+      for (let i = 0; i < pa.count; i++) {
+        const x = pa.getX(i) + cx, y = pa.getY(i) + cy, z = pa.getZ(i) + cz;
+        pa.setXYZ(i, pa.getX(i) + wob(x, y, z) * amp, pa.getY(i) + wob(z, x, y) * amp * 0.6, pa.getZ(i) + wob(y, z, x) * amp);
+      }
+      geo.computeVertexNormals();
+      const m = new THREE.Mesh(geo, mat);
+      ink(m, 0.08);
+      W.put(m, loc, cx, cz, cy);
+      return m;
+    };
+    const boulder = (x, y, z, r, sx = 1, sy = 0.7, sz = 1, ry = 0, mat = rockT) => {
+      const b = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), mat);
+      b.scale.set(sx, sy, sz);
+      b.rotation.set(0.3 * Math.sin(x), ry, 0.25 * Math.cos(z));
+      ink(b, 0.08);
+      W.put(b, loc, x, z, y, ry);
+      b.rotation.set(0.3 * Math.sin(x), ry, 0.25 * Math.cos(z)); b.updateMatrix();
+      return b;
+    };
+    // trench walls (collision) and their rough faces, standing a little proud of the ground as a lip
+    W.col(loc, { type: 'box', x: -RAMP.x - 0.5, y: FLOOR / 2 - 1, z: (RAMP.z0 + RAMP.z1) / 2, hx: 0.5, hy: -FLOOR / 2 + 0.7, hz: (RAMP.z1 - RAMP.z0) / 2 });
+    W.col(loc, { type: 'box', x: RAMP.x + 0.5, y: FLOOR / 2 - 1, z: (RAMP.z0 + RAMP.z1) / 2, hx: 0.5, hy: -FLOOR / 2 + 0.7, hz: (RAMP.z1 - RAMP.z0) / 2 });
+    rough(-RAMP.x - 2.4, -RAMP.x + 0.1, FLOOR - 2, 0.9, RAMP.z0, RAMP.z1, rockT, 0.65);
+    rough(RAMP.x - 0.1, RAMP.x + 2.4, FLOOR - 2, 0.9, RAMP.z0, RAMP.z1, rockT, 0.65);
+    // outcrops along the rim (they break up the cut's straight edges), heaped up over the mouth
+    for (let i = 0; i < 9; i++) {
+      const z = RAMP.z0 + 6 + i * ((RAMP.z1 - RAMP.z0 - 10) / 8);
+      for (const sx of [-1, 1]) {
+        const r = 1.6 + ((i * 7 + (sx > 0 ? 3 : 0)) % 5) * 0.45;
+        boulder(sx * (RAMP.x + 2.2 + (i % 3) * 0.9), 0.2 + r * 0.25, z + sx * 2.5, r, 1.3, 0.75, 1.0, i * 1.3 + sx);
+        if (i % 2 === 0) W.col(loc, { type: 'sphere', x: sx * (RAMP.x + 2.2 + (i % 3) * 0.9), y: 0.2, z: z + sx * 2.5, r: r * 0.85 });
+      }
+    }
+    for (const [x, y, z, r, sx, sy, sz] of [[-7, 1.2, 24, 5, 1.4, 0.8, 1.1], [6, 1.6, 26, 5.5, 1.2, 0.9, 1.2], [0, 3.0, 30, 6, 1.6, 0.8, 1.2], [-11, 0.2, 18, 3, 1.2, 0.7, 1.4], [11, 0.3, 20, 3.4, 1.1, 0.7, 1.3], [0, 0.9, 22.5, 3.2, 2.2, 0.55, 0.9]]) {
+      boulder(x, y, z, r, sx, sy, sz, x * 0.4 + z, rockT2);
+      W.col(loc, { type: 'sphere', x, y, z, r: r * 0.8 });
+    }
+    // a rock lip overhanging the top of the mouth
+    // (it reaches all the way down to the portal's lintel, so it's bedded in, not hanging in the air)
+    rough(-RAMP.x - 1.5, RAMP.x + 1.5, -20.5, 1.4, RAMP.z1 - 2.6, RAMP.z1 + 1.6, rockT2, 0.8);
+    // the portal: two leaning pillars, a cracked lintel slipped at one end, worn rune strips, rubble
+    const ph = ROOMS[0].ceil - FLOOR + 2;
+    for (const sx of [-1, 1]) {
+      const pil = new THREE.Mesh(new THREE.BoxGeometry(2.2, ph, 2.6), relic);
+      ink(pil, 0.1);
+      W.put(pil, loc, sx * (RAMP.x - 0.6), RAMP.z1 - 0.8, FLOOR + ph / 2);
+      pil.rotation.z = -sx * 0.06; pil.updateMatrix();
+      W.col(loc, { type: 'box', x: sx * (RAMP.x - 0.6), y: FLOOR + ph / 2, z: RAMP.z1 - 0.8, hx: 1.1, hy: ph / 2, hz: 1.3 });
+      // rune strips, broken into worn segments
+      for (let k = 0; k < 5; k++) {
+        if ((k + (sx > 0 ? 1 : 0)) % 3 === 2) continue; // a missing chunk
+        const rune = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.1, 0.12), glow(0x7dffd4));
+        W.put(rune, loc, sx * (RAMP.x - 1.8), RAMP.z1 - 2.15, FLOOR + 1.6 + k * 1.6);
+      }
+    }
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(RAMP.x * 2 + 1, 2.4, 3), relic);
+    ink(lintel, 0.1);
+    W.put(lintel, loc, 0.4, RAMP.z1 - 0.8, FLOOR + ph + 0.6);
+    lintel.rotation.z = 0.05; lintel.updateMatrix();
+    const chip = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.8, 2.4), relic); // the piece that broke off
+    ink(chip, 0.08);
+    W.put(chip, loc, -3.2, RAMP.z1 - 6, FLOOR + 1.6, 0.5);
+    chip.rotation.set(0.3, 0.5, 0.4); chip.updateMatrix();
+    W.col(loc, { type: 'box', x: -3.2, y: FLOOR + 1.2, z: RAMP.z1 - 6, hx: 1.3, hy: 1.1, hz: 1.2, yaw: 0.5 });
+    for (let k = 0; k < 8; k++) boulder(-4.5 + k * 1.3 + Math.sin(k) * 0.4, FLOOR + 0.4, RAMP.z1 - 3 - (k % 3) * 1.2, 0.5 + (k % 3) * 0.25, 1.2, 0.6, 1.1, k, rockT2);
     const rampLen = Math.hypot(RAMP.z1 - RAMP.z0, -FLOOR);
     const rf = new THREE.Mesh(new THREE.BoxGeometry(RAMP.x * 2, 0.4, rampLen), floorM);
     rf.rotation.x = Math.atan2(-FLOOR, RAMP.z1 - RAMP.z0);
     W.put(rf, loc, 0, (RAMP.z0 + RAMP.z1) / 2, FLOOR / 2 - 0.25, 0);
     rf.rotation.x = Math.atan2(-FLOOR, RAMP.z1 - RAMP.z0);
     rf.updateMatrix();
-    // the cliff face over the tunnel mouth
-    box(-RAMP.x - 1, RAMP.x + 1, ROOMS[0].ceil, -0.3, RAMP.z1, RAMP.z1 + 1, rock2);
+    // the cliff face over the tunnel mouth (rough rock, with its collider behind it)
+    W.col(loc, { type: 'box', x: 0, y: (ROOMS[0].ceil - 0.3) / 2, z: RAMP.z1 + 0.5, hx: RAMP.x + 1, hy: (-0.3 - ROOMS[0].ceil) / 2, hz: 0.5 });
+    rough(-RAMP.x - 1, RAMP.x + 1, ROOMS[0].ceil, -0.3, RAMP.z1 - 0.2, RAMP.z1 + 1.4, rockT2, 0.55);
     // rooms: walls, ceilings, floors
     for (const [i, rm] of ROOMS.entries()) {
       box(rm.x0 - 1, rm.x0, FLOOR - 2, rm.ceil, rm.z0, rm.z1);
@@ -111,10 +186,21 @@ export class Secrets {
     box(-22, -6, FLOOR, ROOMS[1].ceil, 59, 60, rock2);
     box(6, 22, FLOOR, ROOMS[1].ceil, 59, 60, rock2);
     box(-6, 6, ROOMS[0].ceil, ROOMS[1].ceil, 59, 60, rock2);
-    // gate wall with a 14 m opening, and the shrine's back wall
-    box(-22, -7, FLOOR, ROOMS[1].ceil, GATE_Z - 0.5, GATE_Z + 0.5, rock2);
-    box(7, 22, FLOOR, ROOMS[1].ceil, GATE_Z - 0.5, GATE_Z + 0.5, rock2);
-    box(-7, 7, FLOOR + 13, ROOMS[1].ceil, GATE_Z - 0.5, GATE_Z + 0.5, rock2);
+    // gate wall: one slab with a round hole cut to fit the gate's ring (a square opening left open
+    // corners round it), and its colliders, the corners filled
+    {
+      const wallH = ROOMS[1].ceil - FLOOR;
+      const sh = new THREE.Shape([new THREE.Vector2(-22, 0), new THREE.Vector2(22, 0), new THREE.Vector2(22, wallH), new THREE.Vector2(-22, wallH)]);
+      const hole = new THREE.Path();
+      hole.absarc(0, 6.4, 6.6, 0, Math.PI * 2, true);
+      sh.holes.push(hole);
+      const gw = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 1, bevelEnabled: false, curveSegments: 40 }).translate(0, 0, -0.5), rock2);
+      W.put(gw, loc, 0, GATE_Z, FLOOR);
+      W.col(loc, { type: 'box', x: -14.5, y: FLOOR + wallH / 2, z: GATE_Z, hx: 7.5, hy: wallH / 2, hz: 0.5 });
+      W.col(loc, { type: 'box', x: 14.5, y: FLOOR + wallH / 2, z: GATE_Z, hx: 7.5, hy: wallH / 2, hz: 0.5 });
+      W.col(loc, { type: 'box', x: 0, y: FLOOR + 13 + (wallH - 13) / 2, z: GATE_Z, hx: 7, hy: (wallH - 13) / 2, hz: 0.5 });
+      for (const sx of [-1, 1]) for (const top of [0, 1]) W.col(loc, { type: 'box', x: sx * 6, y: top ? FLOOR + 11.4 : FLOOR + 1.4, z: GATE_Z, hx: 1, hy: 1.4, hz: 0.5 });
+    }
     box(-12, 12, FLOOR, ROOMS[2].ceil, 142, 143, rock2);
     // alien glyph panels on the chamber walls
     const glyphTex = this.glyphTexture();
@@ -171,18 +257,9 @@ export class Secrets {
     ink(ped, 0.06);
     W.put(ped, loc, 0, 132, FLOOR + 0.8);
     W.col(loc, { type: 'cyl', x: 0, z: 132, y0: FLOOR - 1, y1: FLOOR + 1.6, r: 2.4 });
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.2, 16, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x7dffd4, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.2, 16, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x7dffd4, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     W.put(beam, loc, 0, 132, FLOOR + 8, 0, true);
-    const skates = new THREE.Group();
-    for (const s of [-1, 1]) {
-      const sk = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, 1.5), glow(0x7dffd4));
-      ink(sk, 0.05);
-      sk.position.set(s * 0.45, 0, 0);
-      const fin = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.7, 4), glow(0xc77dff));
-      fin.rotation.x = -Math.PI / 2;
-      fin.position.set(s * 0.45, 0.2, -0.85);
-      skates.add(sk, fin);
-    }
+    const skates = makeXenoSkates();
     W.put(skates, loc, 0, 132, FLOOR + 3.2, 0, true);
     skates.visible = !this.state.skatesTaken;
     this.shrine = { skates, beam, t: 0 };
@@ -330,62 +407,106 @@ export class Secrets {
     this.lowAt = lowAt;
     // a new game starts SAT-7 on the far side of the Moon from the ILMB, so it has to be found
     this.clock = this.state.satPhase ?? ((lowAt + Math.PI) * 3750) / SAT_SPEED;
-    // the model
+    // the model: built at 1:1 and scaled up by SAT_SCALE (its colliders scale to match). A foil-wrapped
+    // bus under a landing deck you can read from the air (hazard border, glowing landing ring, edge
+    // lights), framed solar wings, a dish with its feed, thrusters, antennas, and lights that blink
+    // to catch your eye: red/green wingtip strobes, amber deck beacons and a white strobe on a mast.
     const root = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(9, 3, 15), toon(0xc9a24a));
-    ink(body, 0.12);
-    root.add(body);
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(9.4, 0.3, 15.4), toon(0x3a3550));
-    deck.position.y = 1.6;
-    root.add(deck);
-    for (const s of [-1, 1]) {
-      const arm = new THREE.Mesh(new THREE.BoxGeometry(4, 0.4, 0.4), toon(0x8a8f99));
-      arm.position.set(s * 6.5, 0, 0);
-      root.add(arm);
-      const panel = new THREE.Mesh(new THREE.BoxGeometry(12, 0.3, 7), toon(0x2b59c3));
-      ink(panel, 0.06);
-      panel.position.set(s * 14.5, 0, 0);
-      root.add(panel);
-      for (let k = 0; k < 4; k++) {
-        const line = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.32, 7), toon(0x9be7ff));
-        line.position.set(s * (9.5 + k * 3), 0, 0);
-        root.add(line);
-      }
+    const inner = new THREE.Group();
+    inner.scale.setScalar(SAT_SCALE);
+    root.add(inner);
+    const add = (geo, mat, x, y, z, { rx = 0, ry = 0, rz = 0, outline = 0 } = {}) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z);
+      m.rotation.set(rx, ry, rz);
+      if (outline) ink(m, outline);
+      inner.add(m);
+      return m;
+    };
+    const gold = toon(0xc9a24a), foil = toon(0xe0b85a), dark = toon(0x3a3550), steel = toon(0x8a8f99), white = toon(0xf5f5f5);
+    // the bus: a gold-foil box with crinkled foil patches and a dark truss frame on its edges
+    add(new THREE.BoxGeometry(9, 3, 15), gold, 0, 0, 0, { outline: 0.12 });
+    for (const [x, y, z, w, h, d] of [[4.52, -0.2, -3, 0.06, 2.2, 5.5], [-4.52, 0.2, 2.5, 0.06, 2.0, 6], [4.52, 0.3, 4.2, 0.06, 1.6, 3], [0, -1.52, 2, 7, 0.06, 6]]) add(new THREE.BoxGeometry(w, h, d), foil, x, y, z);
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) add(new THREE.BoxGeometry(0.3, 0.3, 15.2), dark, sx * 4.5, sy * 1.5, 0);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.BoxGeometry(0.3, 3.2, 0.3), dark, sx * 4.5, 0, sz * 7.5);
+    // the landing deck: a dark plate with a yellow/black hazard border and a glowing ring to aim for
+    add(new THREE.BoxGeometry(9.4, 0.3, 15.4), dark, 0, 1.6, 0, { outline: 0.06 });
+    const hz1 = toon(0xffd23f), hz2 = toon(0x1d1a29);
+    for (let k = 0; k < 14; k++) {
+      const m = k % 2 ? hz2 : hz1;
+      add(new THREE.BoxGeometry(0.4, 0.06, 1.1), m, 4.45, 1.78, -7.15 + k * 1.1);
+      add(new THREE.BoxGeometry(0.4, 0.06, 1.1), m, -4.45, 1.78, -7.15 + k * 1.1);
     }
-    const dish = new THREE.Mesh(new THREE.SphereGeometry(2.4, 14, 8, 0, Math.PI * 2, 0, Math.PI / 3), toon(0xf5f5f5, { side: THREE.DoubleSide }));
-    dish.position.set(0, -1.6, -5);
-    dish.rotation.x = Math.PI;
-    root.add(dish);
+    for (let k = 0; k < 8; k++) {
+      const m = k % 2 ? hz2 : hz1;
+      add(new THREE.BoxGeometry(1.1, 0.06, 0.4), m, -3.85 + k * 1.1, 1.78, 7.45);
+      add(new THREE.BoxGeometry(1.1, 0.06, 0.4), m, -3.85 + k * 1.1, 1.78, -7.45);
+    }
+    add(new THREE.TorusGeometry(3.2, 0.16, 6, 36), glow(0x2ee6ff), 0, 1.8, -1.5, { rx: Math.PI / 2 });
+    add(new THREE.TorusGeometry(1.4, 0.1, 6, 24), glow(0x2ee6ff), 0, 1.8, -1.5, { rx: Math.PI / 2 });
+    for (const [x, z] of [[-3.5, -6.5], [3.5, -6.5], [-3.5, 6.5], [3.5, 6.5], [-3.5, 0], [3.5, 0]]) add(new THREE.CylinderGeometry(0.16, 0.2, 0.15, 8), glow(0xfff6a8), x, 1.82, z);
+    // solar wings: arms with a hinge, framed panels with a proper grid of cells
+    for (const s2 of [-1, 1]) {
+      add(new THREE.BoxGeometry(4, 0.4, 0.4), steel, s2 * 6.5, 0, 0, { outline: 0.03 });
+      add(new THREE.CylinderGeometry(0.45, 0.45, 0.9, 10), dark, s2 * 8.3, 0, 0, { rx: Math.PI / 2, outline: 0.03 });
+      add(new THREE.BoxGeometry(12, 0.3, 7), toon(0x2b59c3), s2 * 14.5, 0, 0, { outline: 0.06 });
+      add(new THREE.BoxGeometry(12.3, 0.36, 0.25), steel, s2 * 14.5, 0, 3.55);
+      add(new THREE.BoxGeometry(12.3, 0.36, 0.25), steel, s2 * 14.5, 0, -3.55);
+      for (let k = 0; k <= 6; k++) add(new THREE.BoxGeometry(0.12, 0.34, 7), toon(0x9be7ff), s2 * (8.5 + k * 2), 0, 0);
+      for (const z of [-1.75, 0, 1.75]) add(new THREE.BoxGeometry(12, 0.34, 0.1), toon(0x9be7ff), s2 * 14.5, 0, z);
+    }
+    // the dish under the bus, with its feed spoke and receiver
+    add(new THREE.SphereGeometry(2.4, 16, 8, 0, Math.PI * 2, 0, Math.PI / 3), toon(0xf5f5f5, { side: THREE.DoubleSide }), 0, -1.6, -5, { rx: Math.PI });
+    add(new THREE.CylinderGeometry(0.08, 0.1, 2.6, 6), dark, 0, -2.9, -5);
+    add(new THREE.SphereGeometry(0.3, 8, 6), glow(0xff9f1c), 0, -4.2, -5);
+    // thrusters at the stern, attitude jets on the corners, antennas and a star tracker
+    for (const sx of [-2, 2]) {
+      add(new THREE.CylinderGeometry(0.9, 1.4, 1.8, 12, 1, true), toon(0x5b5870, { side: THREE.DoubleSide }), sx, -0.2, -8.4, { rx: Math.PI / 2, outline: 0.04 });
+      add(new THREE.CylinderGeometry(0.85, 0.85, 0.1, 12), glow(0x4fb8ff), sx, -0.2, -7.6, { rx: Math.PI / 2 });
+    }
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) for (const ax of [0, 1]) add(new THREE.ConeGeometry(0.18, 0.5, 6), steel, sx * 4.8 + (ax ? sx * 0.25 : 0), -1.2, sz * 7.3 + (ax ? 0 : sz * 0.3), { rx: ax ? 0 : sz * Math.PI / 2, rz: ax ? -sx * Math.PI / 2 : 0 });
+    add(new THREE.CylinderGeometry(0.05, 0.08, 6, 5), dark, -3.6, 1.6 + 3, 6.6);
+    add(new THREE.CylinderGeometry(0.04, 0.06, 4, 5), dark, 3.8, 1.6 + 2, 6.8, { rz: -0.3 });
+    add(new THREE.BoxGeometry(0.9, 0.9, 1.2), white, 3.2, -1.95, 5.5, { outline: 0.03 });
+    add(new THREE.CylinderGeometry(0.3, 0.3, 0.3, 10), toon(0x1d1a29), 3.2, -1.95, 6.15, { rx: Math.PI / 2 });
+    // the strobe mast at the bow
+    add(new THREE.CylinderGeometry(0.12, 0.18, 3.6, 6), dark, 0, 1.6 + 1.8, 6.8);
+    // lights: { mesh, period, duty, phase } (blinked in update)
+    const lights = [];
+    const lamp = (x, y, z, c, r, period, duty, phase) => {
+      const m = add(new THREE.SphereGeometry(r, 10, 8), glow(c), x, y, z);
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(r * 3.2, 10, 8), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+      m.add(halo);
+      lights.push({ mesh: m, period, duty, phase });
+    };
+    lamp(-20.6, 0.3, 0, 0xff2a3a, 0.45, 1.4, 0.18, 0);
+    lamp(20.6, 0.3, 0, 0x7dff3a, 0.45, 1.4, 0.18, 0);
+    for (const [x, z, ph] of [[-4.4, 7.4, 0], [4.4, 7.4, 0.45], [4.4, -7.4, 0.9], [-4.4, -7.4, 1.35]]) lamp(x, 1.95, z, 0xffa21f, 0.32, 1.8, 0.5, ph);
+    lamp(0, 1.6 + 3.8, 6.8, 0xffffff, 0.55, 1.1, 0.08, 0.3);
+    lamp(0, -1.7, -7.6, 0xff2a3a, 0.3, 2.2, 0.5, 1.1);
     const nameSign = textSprite('SAT-7 "LANTERN"', { color: '#ffd23f', size: 60, scale: 0.3, bg: '#120a1e' });
     nameSign.position.set(0, 12, -4);
-    root.add(nameSign);
-    const lights = [];
-    for (const [x, z, c] of [[-4.4, 7.4, 0xff2a3a], [4.4, 7.4, 0x7dff3a], [0, -7.4, 0xffffff]]) {
-      const l = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), glow(c));
-      l.position.set(x, 1.9, z);
-      root.add(l);
-      lights.push(l);
-    }
-    // a big soft beacon so you can spot it in the sky
+    inner.add(nameSign);
+    // a big soft beacon so you can spot it in the sky (it swells with the mast strobe)
     const halo = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
-    root.add(halo);
+    inner.add(halo);
     // the artifact cradle on deck
     const cradle = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.18, 8, 20), toon(0x2a2440));
     cradle.rotation.x = Math.PI / 2;
     cradle.position.set(0, 2.0, 2);
-    root.add(cradle);
+    inner.add(cradle);
     const artifact = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), glow(0x7dffd4));
     artifact.position.set(0, 2.9, 2);
     artifact.visible = !this.state.artifactTaken;
-    root.add(artifact);
+    inner.add(artifact);
     const aGlow = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 8), new THREE.MeshBasicMaterial({ color: 0x7dffd4, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }));
     aGlow.position.copy(artifact.position);
     aGlow.visible = artifact.visible;
-    root.add(aGlow);
+    inner.add(aGlow);
     root.frustumCulled = false;
     g.scene.add(root);
     // it behaves like a moving platform you can land on (body + both solar panels)
-    this.sat = { root, nameSign, artifact, aGlow, lights, pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(), cols: [], passAlert: 0 };
+    this.sat = { root, nameSign, artifact, aGlow, lights, halo, pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(), cols: [], passAlert: 0 };
     this.placeSat(0);
     this.sat.prevPos.copy(this.sat.pos);
   }
@@ -427,8 +548,8 @@ export class Secrets {
     const q = S.root.quaternion;
     const ax = new THREE.Vector3(1, 0, 0).applyQuaternion(q), ay = new THREE.Vector3(0, 1, 0).applyQuaternion(q), az = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
     for (const [x, hx, hy, hz] of [[0, 4.7, 1.75, 7.7], [-14.5, 6, 0.3, 3.5], [14.5, 6, 0.3, 3.5]]) {
-      const c = S.root.localToWorld(new THREE.Vector3(x, 0, 0));
-      S.cols.push(g.colliders.add({ type: 'box', c, ax: ax.clone(), ay: ay.clone(), az: az.clone(), hx, hy, hz, platform: S }));
+      const c = S.root.localToWorld(new THREE.Vector3(x * SAT_SCALE, 0, 0));
+      S.cols.push(g.colliders.add({ type: 'box', c, ax: ax.clone(), ay: ay.clone(), az: az.clone(), hx: hx * SAT_SCALE, hy: hy * SAT_SCALE, hz: hz * SAT_SCALE, platform: S }));
     }
   }
 
@@ -445,7 +566,8 @@ export class Secrets {
     const S = this.sat;
     // decoration
     S.t = (S.t || 0) + dt;
-    S.lights.forEach((l, i) => { l.visible = Math.sin(S.t * 3 + i * 2) > 0; });
+    for (const l of S.lights) l.mesh.visible = ((S.t + l.phase) % l.period) < l.period * l.duty;
+    S.halo.scale.setScalar(S.lights[6].mesh.visible ? 1.35 : 1); // the beacon swells with the mast strobe
     S.artifact.rotation.y += dt * 1.5;
     S.nameSign.visible = S.pos.distanceTo(P.pos) > 45; // don't fill the screen while you're aboard
     S.aGlow.scale.setScalar(1 + Math.sin(S.t * 4) * 0.15);
@@ -472,6 +594,8 @@ export class Secrets {
     }
     G.runes.rotation.z += dt * (G.open || G.opening > 0 ? 1.4 : 0.15);
     this.shrine.skates.rotation.y += dt;
+    const sh = this.shrine.skates.userData.shards;
+    if (sh) { sh.rotation.y -= dt * 2.2; for (const c of sh.children) c.rotation.x += dt * 3; }
     this.shrine.skates.position.y = FLOOR + 3.2 + Math.sin(S.t * 2) * 0.25;
   }
 
@@ -523,4 +647,69 @@ export class Secrets {
 
   // is the satellite pin worth drawing on the globe map
   mapInfo() { return { pos: this.sat.pos, orbit: this.orbit, radius: this.radius, theta: this.satTheta() }; }
+}
+
+// The Xenoglide skates on the shrine's pedestal: the same build as a runner's skates (shell boot,
+// cuff, chassis, hover rail) at display size, in dark shaded alien alloy with glowing seams, a swept
+// crystal heel fin, emitter rings round the rail and a ring of shards orbiting the pair.
+function makeXenoSkates() {
+  const shell = toon(0x2e2652), plate = toon(0x8f86c8), alloy = toon(0x5ef0c8);
+  const seam = glow(0x7dffd4), violet = glow(0xc77dff);
+  const add = (parent, geo, mat, x, y, z, t = 0.02, rot) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    if (rot) m.rotation.set(...rot);
+    if (t) ink(m, t);
+    parent.add(m);
+    return m;
+  };
+  const fin = new THREE.Shape();
+  fin.moveTo(0, 0);
+  fin.quadraticCurveTo(-0.05, 0.22, -0.26, 0.36);
+  fin.quadraticCurveTo(-0.12, 0.2, -0.16, 0.0);
+  fin.lineTo(0, 0);
+  const finGeo = new THREE.ExtrudeGeometry(fin, { depth: 0.025, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 1 }).translate(0, 0, -0.0125).rotateY(Math.PI / 2);
+  const pair = new THREE.Group();
+  for (const side of [-1, 1]) {
+    const sk = new THREE.Group();
+    // boot: a rounded shell, a raised toe cap, a high cuff with a glowing collar
+    add(sk, new RoundedBoxGeometry(0.3, 0.2, 0.5, 3, 0.09), shell, 0, 0.12, 0.02, 0.025);
+    const toe = add(sk, new THREE.SphereGeometry(0.13, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), alloy, 0, 0.1, 0.17, 0.02);
+    toe.scale.set(1.12, 0.9, 0.9);
+    add(sk, new THREE.CylinderGeometry(0.135, 0.16, 0.28, 16), shell, 0, 0.33, -0.08, 0.025);
+    add(sk, new THREE.TorusGeometry(0.138, 0.022, 6, 18).rotateX(Math.PI / 2), seam, 0, 0.47, -0.08, 0);
+    add(sk, new THREE.TorusGeometry(0.15, 0.016, 6, 18).rotateX(Math.PI / 2), plate, 0, 0.27, -0.08, 0);
+    // glowing seams down each side and over the instep, a crystal stud on the outside of the cuff
+    for (const sx of [-1, 1]) add(sk, new THREE.BoxGeometry(0.012, 0.03, 0.42), seam, sx * 0.152, 0.11, 0.02, 0);
+    add(sk, new THREE.BoxGeometry(0.2, 0.025, 0.03), seam, 0, 0.225, 0.08, 0, [0.5, 0, 0]);
+    const stud = add(sk, new THREE.OctahedronGeometry(0.055, 0), violet, side * 0.16, 0.34, -0.08, 0.015);
+    stud.scale.set(0.5, 1.3, 1);
+    // the swept crystal fin off the heel
+    add(sk, finGeo, violet, 0, 0.26, -0.21, 0.015);
+    // chassis plate, struts and the hover rail with its emitter rings
+    add(sk, new RoundedBoxGeometry(0.22, 0.045, 0.62, 1, 0.02), plate, 0, -0.005, 0.03, 0.02);
+    for (const z of [-0.18, 0.22]) add(sk, new THREE.BoxGeometry(0.06, 0.06, 0.05), shell, 0, -0.05, z, 0.01);
+    const rail = add(sk, new THREE.CapsuleGeometry(0.035, 0.66, 3, 10).rotateX(Math.PI / 2), seam, 0, -0.095, 0.03, 0.02);
+    rail.scale.x = 1.5;
+    for (const z of [-0.2, 0.06, 0.3]) add(sk, new THREE.TorusGeometry(0.065, 0.014, 6, 14), violet, 0, -0.095, z, 0);
+    sk.position.set(side * 0.24, 0, 0);
+    sk.rotation.y = side * 0.12; // toes out a touch
+    pair.add(sk);
+  }
+  pair.scale.setScalar(2.6);
+  pair.position.y = -0.3;
+  const root = new THREE.Group();
+  root.add(pair);
+  // shards orbiting the pair (spun the other way in update)
+  const shards = new THREE.Group();
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), i % 2 ? violet : seam);
+    c.scale.set(0.6, 1.4, 0.6);
+    c.position.set(Math.cos(a) * 1.5, 0.3 + Math.sin(a * 2) * 0.25, Math.sin(a) * 1.5);
+    shards.add(c);
+  }
+  root.add(shards);
+  root.userData.shards = shards;
+  return root;
 }

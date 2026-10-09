@@ -141,6 +141,43 @@ def band(sections, d, pred, n=220, step=0.14):
     return keep(loft(grow(densify(sections, step), d), n, False, False), pred)
 
 
+def clip(geo, axis, lo, hi):
+    """Every face cut exactly to lo <= coord[axis] <= hi (Sutherland-Hodgman against both planes).
+    keep() drops or keeps whole faces, so a band cut across the hull's quads at a slant came out
+    with a sawtooth edge; this one is ruler-straight. (Shared cut vertices are welded in mesh().)"""
+    verts, faces = geo
+    out_v, out_f = [], []
+
+    def cut(poly, inside, t_of):
+        res = []
+        for i, a in enumerate(poly):
+            b = poly[(i + 1) % len(poly)]
+            ia, ib = inside(a), inside(b)
+            if ia:
+                res.append(a)
+            if ia != ib:
+                t = t_of(a, b)
+                res.append(tuple(a[k] + (b[k] - a[k]) * t for k in range(3)))
+        return res
+
+    for f in faces:
+        poly = [tuple(verts[i]) for i in f]
+        poly = cut(poly, lambda v: v[axis] >= lo, lambda a, b: (lo - a[axis]) / (b[axis] - a[axis]))
+        if len(poly) >= 3:
+            poly = cut(poly, lambda v: v[axis] <= hi, lambda a, b: (hi - a[axis]) / (b[axis] - a[axis]))
+        if len(poly) >= 3:
+            o = len(out_v)
+            out_v += poly
+            out_f.append(tuple(range(o, o + len(poly))))
+    return out_v, out_f
+
+
+def cband(sections, d, ylo, yhi, zlo=-1e9, zhi=1e9, n=220, step=0.14):
+    """A level band laid over the hull between two heights (and optionally two stations), with
+    clean, straight edges."""
+    return clip(clip(loft(grow(densify(sections, step), d), n, False, False), 1, ylo, yhi), 2, zlo, zhi)
+
+
 def grow(sections, d):
     """The same hull pushed out by d (for bands and glazing laid over it)."""
     return [{**s, "w": s["w"] + d, "t": s["t"] + d, "b": s["b"] + d} for s in sections]
@@ -456,10 +493,10 @@ mesh("s_hull", hull_geo, "body", SH, 0.13)
 # (the screen sweeps back along the flanks a little, lower edge dipping toward the nose)
 mesh("s_windscreen", band(SHUTTLE_SECS, 0.035, lambda c: c[2] > 5.4 and 0.1 - (c[2] - 5.4) * 0.12 < c[1] < 2.0 and (c[2] > 6.9 or abs(c[0]) > 2.2)), "glass", SH, 0)
 mesh("s_windFrame", band(SHUTTLE_SECS, 0.05, lambda c: c[2] > 5.2 and (1.98 < c[1] < 2.22 or (c[2] < 5.6 and 0.0 < c[1] < 2.2 and abs(c[0]) > 2.0))), "dark", SH, 0)
-# livery: a broad belt that sweeps up toward the tail, and a pinstripe
-sweep = lambda z: max(0.0, (-z - 2.0) * 0.16)
-mesh("s_belt", band(SHUTTLE_SECS, 0.03, lambda c: -1.35 + sweep(c[2]) < c[1] < -0.6 + sweep(c[2]) and c[2] < 9.0), "stripe", SH, 0)
-mesh("s_pin", band(SHUTTLE_SECS, 0.032, lambda c: -0.38 + sweep(c[2]) < c[1] < -0.22 + sweep(c[2]) and c[2] < 8.6), "trim", SH, 0)
+# livery: a broad level belt and a pinstripe, stopping short of the flat tail cap (a belt that swept
+# up toward the tail cut diagonally across the hull's faces and came out as ragged splotches)
+mesh("s_belt", cband(SHUTTLE_SECS, 0.03, -1.35, -0.6, -9.2, 9.0), "stripe", SH, 0)
+mesh("s_pin", cband(SHUTTLE_SECS, 0.032, -0.38, -0.22, -9.2, 8.6), "trim", SH, 0)
 # porthole windows down both flanks
 for i in range(7):
     z = -5.6 + i * 1.55
@@ -479,12 +516,16 @@ mesh("s_boardLit", xf(rbox(1.45, 0.3, 0.17, 0.12), (0, 3.55, 0.8)), "sign", SH, 
 mesh("s_blister", xf(superquad(0.55, 0.32, 0.55, 0.6, 0.6, 12, 6), (0, 2.82, 4.6)), "trim", SH, 0.03)
 mesh("s_whip", beam((0.9, 2.7, -2.4), (1.05, 4.4, -2.9), 0.04, 5), "dark", SH, 0)
 mesh("s_whipTip", xf(superquad(0.1, 0.1, 0.1, 1, 1, 8, 5), (1.05, 4.45, -2.9)), "red", SH, 0)
-# V-tail: two canted fins at the back, light on each tip
-fin = [(-0.2, 0), (1.9, 0), (1.2, 2.3), (0.25, 2.5), (-0.9, 1.0)]
+# V-tail: two canted, swept fins at the back (hull-coloured, thin, raked back), each capped in the
+# livery colour with a light on the tip
+fin = [(1.4, 0), (-0.3, 0), (-1.55, 2.35), (-1.0, 2.6), (0.25, 2.6)]          # (z, y): root to swept tip
+cap = [(0.5, 2.05), (-1.39, 2.05), (-1.57, 2.36), (-1.01, 2.62), (0.26, 2.62)]  # the top of the fin, chord-wide
 for side in (-1, 1):
-    fg = xf(extrude([(z, y) for z, y in [(-a, b) for a, b in fin]], 0.28, "x"), (side * 1.2, 2.15, -6.2), (0, 0, -side * 0.6))
-    mesh(f"s_fin{side}", fg, "stripe", SH, 0.05)
-    tip = Vector((0, 2.4, -0.6))
+    fg = xf(extrude(fin, 0.2, "x"), (side * 1.2, 2.15, -6.2), (0, 0, -side * 0.6))
+    mesh(f"s_fin{side}", fg, "body", SH, 0.04)
+    cg = xf(extrude(cap, 0.24, "x"), (side * 1.2, 2.15, -6.2), (0, 0, -side * 0.6))
+    mesh(f"s_finCap{side}", cg, "stripe", SH, 0)
+    tip = Vector((0, 2.62, -1.3))
     tip.rotate(Euler((0, 0, -side * 0.6)))
     mesh(f"s_finTip{side}", xf(superquad(0.13, 0.13, 0.13, 1, 1, 8, 5), (side * 1.2 + tip.x, 2.15 + tip.y, -6.2 + tip.z)), "green" if side > 0 else "red", SH, 0)
 # ducted lift-fans on swept pylons
@@ -586,7 +627,7 @@ mesh("f_padH", merge(xf(rbox(0.25, 0.05, 1.6, 0.3, 6, 4), (-1.0, 5.14, -8)), xf(
 for k in range(3):
     mesh(f"f_chevron{k}", xf(extrude([(0, 0), (1.4, -1.2), (1.4, -1.9), (0, -0.7), (-1.4, -1.9), (-1.4, -1.2)], 0.1, "y"), (0, 5.15, -19.5 - k * 1.6)), "hazard", FH, 0)
 # livery belt down the flanks, and rib bands
-mesh("f_belt", band(FREIGHT_SECS, 0.05, lambda c: 0.6 < c[1] < 2.4 and c[2] < 27, step=0.5, n=160), "stripe", FH, 0)
+mesh("f_belt", cband(FREIGHT_SECS, 0.05, 0.6, 2.4, zhi=27, step=0.5, n=160), "stripe", FH, 0)
 for k, z in enumerate(range(-22, 21, 6)):
     sec = lerp_sec(FREIGHT_SECS, z)
     mesh(f"f_rib{k}", keep(loft(grow([{**sec, "z": z - 0.35}, {**sec, "z": z + 0.35}], 0.09), 44, False, False), lambda c: c[1] < 4.6), "trim", FH, 0.05)
@@ -601,8 +642,8 @@ BRIDGE = [
     {"z": 28.6, "w": 3.0, "t": 0.6, "b": 0.6, "eT": 2.2, "eB": 6, "yc": 4.6},
 ]
 mesh("f_bridge", loft(BRIDGE, 36), "trim", FH, 0.2)
-mesh("f_bridgeGlass", band(BRIDGE, 0.06, lambda c: 7.6 < c[1] < 9.0 and c[2] > 14.0, step=0.2, n=180), "glass", FH, 0)
-mesh("f_bridgeStripe", band(BRIDGE, 0.05, lambda c: 6.4 < c[1] < 7.0, step=0.3, n=180), "stripe", FH, 0)
+mesh("f_bridgeGlass", cband(BRIDGE, 0.06, 7.6, 9.0, zlo=14.0, step=0.2, n=180), "glass", FH, 0)
+mesh("f_bridgeStripe", cband(BRIDGE, 0.05, 6.4, 7.0, step=0.3, n=180), "stripe", FH, 0)
 mesh("f_bridgeRoof", xf(rbox(3.2, 0.3, 4.0, 0.2), (0, 10.25, 19.5)), "dark", FH, 0.06)
 mesh("f_mast", beam((1.6, 10.4, 17.5), (1.6, 15.5, 17.0), 0.14), "dark", FH, 0.03)
 mesh("f_mastLight", xf(superquad(0.3, 0.3, 0.3, 1, 1, 10, 6), (1.6, 15.6, 17.0)), "white", FH, 0)
