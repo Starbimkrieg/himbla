@@ -6,6 +6,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // inlined (a data URI) so the desktop build, which runs from file://, can load it without fetch
 import runnerGlb from './assets/runner.glb?inline';
 import shipsGlb from './assets/ships.glb?inline';
+import skimmerGlb from './assets/skimmer.glb?inline';
+import warrigGlb from './assets/warrig.glb?inline';
 import { Kit, T as KT, G as KG, D as KD, crate } from './outpostModels.js';
 
 function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
@@ -898,6 +900,7 @@ function rWheel(r, w, hub = VMETAL) {
 // AI, traffic and faction-vehicle code drive them all the same way. style: pirate | military | civil.
 export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, flag = 0x111111, style = null } = {}) {
   style = style || (pirate ? 'pirate' : 'civil');
+  if (style === 'pirate') return makeWarRig({ color, trim });
   const root = new THREE.Group();
   const chassis = new THREE.Group();
   root.add(chassis);
@@ -905,7 +908,14 @@ export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, fl
     // common frame: skid plate, axles, fenders, lights
     k.box(3.0, 0.5, 5.4, KT(VDARK), 0, 0.7, 0, { outline: 0.06 });
     for (const sz of [-1.8, 1.8]) k.add(new THREE.CylinderGeometry(0.18, 0.18, 3.5, 8).rotateZ(Math.PI / 2), KT(VSTEEL), 0, 0.85, sz, { outline: 0 });
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.add(new THREE.CylinderGeometry(1.08, 1.08, 0.9, 12, 1, true, -Math.PI / 2, Math.PI).rotateZ(Math.PI / 2), KD(style === 'military' ? VSTEEL : color), sx * 1.85, 0.85, sz * 1.8, { outline: 0.04 });
+    // wheel arches over the top of each wheel (the arc runs from a little below the axle at the
+    // front, over the top, to a little below it at the back); the military hulls get heavier ones
+    // with a lip
+    const mil = style === 'military';
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      k.add(new THREE.CylinderGeometry(mil ? 1.16 : 1.08, mil ? 1.16 : 1.08, mil ? 1.0 : 0.9, 14, 1, true, -0.3, Math.PI + 0.6).rotateZ(Math.PI / 2), KD(mil ? VSTEEL : color), sx * 1.85, 0.85, sz * 1.8, { outline: 0.04 });
+      if (mil) k.add(new THREE.TorusGeometry(1.18, 0.07, 6, 16, Math.PI + 0.6).rotateZ(-0.3).rotateY(Math.PI / 2), KT(VDARK), sx * 2.36, 0.85, sz * 1.8, { outline: 0 });
+    }
     for (const sx of [-0.9, 0.9]) k.box(0.55, 0.3, 0.12, KG(0xfff6a8), sx, 1.45, 2.68, { outline: 0 });
     for (const sx of [-1.2, 1.2]) k.box(0.4, 0.22, 0.12, KG(0xff2a4a), sx, 1.5, -2.68, { outline: 0 });
     if (style === 'pirate') {
@@ -1009,13 +1019,22 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift']);
 export async function loadShipParts() {
-  const gltf = await new GLTFLoader().loadAsync(shipsGlb);
+  const loader = new GLTFLoader();
+  const [gltf, sk, wr] = await Promise.all([loader.loadAsync(shipsGlb), loader.loadAsync(skimmerGlb), loader.loadAsync(warrigGlb)]);
   SHIP_PARTS = {};
   for (const name of ['shuttle', 'freighter']) {
     const root = gltf.scene.getObjectByName(name);
     if (!root) throw new Error('ships.glb has no ' + name);
     SHIP_PARTS[name] = bakeShip(root);
   }
+  // the Daedalus Phase Skimmer (tools/blender/build_skimmer.py): baked the same way
+  const root = sk.scene.getObjectByName('skimmer');
+  if (!root) throw new Error('skimmer.glb has no skimmer');
+  SHIP_PARTS.skimmer = bakeShip(root);
+  // the Rustmoon pirate war-rig (tools/blender/build_warrig.py)
+  const rig = wr.scene.getObjectByName('warrig');
+  if (!rig) throw new Error('warrig.glb has no warrig');
+  SHIP_PARTS.warrig = bakeShip(rig);
 }
 
 function bakeShip(root) {
@@ -1165,6 +1184,111 @@ function makeShip(kind, { color, stripe }) {
   return ship;
 }
 
+// Daedalus Phase Skimmer: a wheel-less hover-racer (built in Blender, see build_skimmer.py). Body
+// and stripe take the vehicle's livery; the phase-coil rings round its nacelles spin, and the
+// thrusters and hover emitters glow with speed. Call anim(t, speed) every frame.
+export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff } = {}) {
+  const B = SHIP_PARTS.skimmer;
+  const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
+  const fx = {
+    plume: new THREE.MeshBasicMaterial({ color: trim, opacity: 0.6, ...add }),
+    plumeCore: new THREE.MeshBasicMaterial({ color: 0xfff4ff, opacity: 0.85, ...add }),
+    lift: new THREE.MeshBasicMaterial({ color: trim, opacity: 0.45, ...add }),
+    engine: new THREE.MeshBasicMaterial({ color: 0xff9f1c }),
+  };
+  const matFor = (slot) => {
+    if (fx[slot]) return fx[slot];
+    if (slot === 'body') return toon(color);
+    if (slot === 'stripe') return toon(trim);
+    if (slot === 'glow') return glow(trim);
+    if (slot === 'seat') return toon(0x221d33);
+    if (SHIP_GLOW[slot] !== undefined) return glow(SHIP_GLOW[slot]);
+    return toon(SHIP_TOON[slot] ?? 0xff00ff);
+  };
+  const coils = [], plumes = [], lifts = [];
+  const build = (node) => {
+    const g = new THREE.Group();
+    g.position.copy(node.pos);
+    g.quaternion.copy(node.quat);
+    for (const { slot, geo } of node.parts) {
+      const m = new THREE.Mesh(geo, matFor(slot));
+      m.castShadow = !FLAMES.has(slot) && slot !== 'glow';
+      if (FLAMES.has(slot)) m.renderOrder = 2;
+      g.add(m);
+    }
+    if (node.ink) {
+      const h = new THREE.Mesh(node.ink, inkMat);
+      h.castShadow = false;
+      h.userData.isInk = true;
+      g.add(h);
+    }
+    if (node.role === 'coil') coils.push({ g, spin: node.data.spin || 2 });
+    else if (node.role === 'plume') plumes.push({ g, phase: plumes.length * 1.7 });
+    else if (node.role === 'lift') lifts.push({ g, phase: lifts.length * 2.3 });
+    for (const k of node.kids) g.add(build(k));
+    return g;
+  };
+  const root = build(B);
+  root.position.set(0, 0, 0);
+  root.quaternion.identity();
+  return {
+    root, chassis: root, wheels: [], gun: new THREE.Group(), size: 4,
+    anim(t, speed = 0) {
+      const k = Math.min(1, speed / 60);
+      for (const c of coils) c.g.rotation.z = t * c.spin * (1 + 2.5 * k);
+      const pulse = (ph, f) => 1 + 0.15 * Math.sin(t * f + ph) + 0.06 * Math.sin(t * f * 2.7 + ph);
+      for (const P of plumes) { const s = (0.35 + 0.9 * k) * pulse(P.phase, 17); P.g.scale.set(0.85 + 0.15 * s, 0.85 + 0.15 * s, s); }
+      for (const P of lifts) { const s = 0.8 * pulse(P.phase, 9); P.g.scale.set(1, s, 1); }
+      fx.plume.opacity = 0.35 + 0.35 * k;
+      fx.lift.opacity = 0.3 + 0.12 * Math.sin(t * 6);
+    },
+  };
+}
+
+// Rustmoon pirate war-rig (built in Blender, see build_warrig.py): a patched-up scrap buggy with a
+// spiked ram plow, the same layout as makeRover (wheels at (+-1.85, 0.85, +-1.8), gun mount at
+// (0, 3, 0.8)) so the AI and the vehicle code drive it the same way. Body and stripe take the
+// colours; the patches, rust and bone spikes are fixed scrap colours.
+const RIG_TOON = { rust: 0x7a4a32, primer: 0x6b6f78, olive: 0x5a6a3a, scrap: 0x3a5a7a, dark: 0x2a2540, steel: 0x55607a, tire: 0x1d1a29, bone: 0xe8e0c8, seat: 0x3a2a22, red: 0xd7263d, flag: 0x1a1a1a };
+const RIG_GLOW = { lamp: 0xfff6a8, hot: 0xff9f1c };
+export function makeWarRig({ color = 0x7b2ff7, trim = 0x7dff3a } = {}) {
+  const B = SHIP_PARTS.warrig;
+  const mats = new Map();
+  const matFor = (slot) => {
+    if (!mats.has(slot)) {
+      mats.set(slot, slot === 'body' ? toon(color) : slot === 'stripe' ? toon(trim) : RIG_GLOW[slot] !== undefined ? glow(RIG_GLOW[slot])
+        : toon(RIG_TOON[slot] ?? 0xff00ff, slot === 'flag' ? { side: THREE.DoubleSide } : undefined));
+    }
+    return mats.get(slot);
+  };
+  const out = { chassis: null, gun: null, wheels: [] };
+  const build = (node) => {
+    const g = new THREE.Group();
+    g.position.copy(node.pos);
+    g.quaternion.copy(node.quat);
+    for (const { slot, geo } of node.parts) {
+      const m = new THREE.Mesh(geo, matFor(slot));
+      m.castShadow = RIG_GLOW[slot] === undefined;
+      g.add(m);
+    }
+    if (node.ink) {
+      const h = new THREE.Mesh(node.ink, inkMat);
+      h.castShadow = false;
+      h.userData.isInk = true;
+      g.add(h);
+    }
+    if (node.role === 'chassis') out.chassis = g;
+    else if (node.role === 'gun') out.gun = g;
+    else if (node.role === 'wheel') out.wheels.push(g);
+    for (const k of node.kids) g.add(build(k));
+    return g;
+  };
+  const root = build(B);
+  root.position.set(0, 0, 0);
+  root.quaternion.identity();
+  return { root, chassis: out.chassis, gun: out.gun, wheels: out.wheels };
+}
+
 // Shuttle-bus: a fat lifting-body hopper with a wraparound windscreen, porthole windows, two
 // ducted lift-fans on pylons, a V-tail, a lit route board on the roof, three folding legs and a
 // rear door that drops into a ramp.
@@ -1200,7 +1324,7 @@ export function makeFreighter({ color = 0xb8b4c8, stripe = 0xff9f1c } = {}) {
   return makeShip('freighter', { color, stripe });
 }
 
-// Longshot Kade's gun truck: a mad-max monster truck on huge tyres. Kade drives (open cab, roll
+// Captain Kade's gun truck: a mad-max monster truck on huge tyres. Kade drives (open cab, roll
 // cage); a lackey works a turret on the bed with a six-barrel gatling and a fat flak cannon.
 // Origin on the ground, +Z forward. turret (yaw) > pitch (elevation) > gatSpin (barrels).
 export function makeKadeTruck() {

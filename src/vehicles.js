@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeRover, makeHoverCar } from './models.js';
+import { makeRover, makeHoverCar, makeSkimmer } from './models.js';
 import { makeBody } from './physics.js';
 import { stepRover } from './enemies.js';
 import { frameQuat, tangent } from './geo.js';
@@ -12,7 +12,7 @@ export const VEHICLES = {
   skimmer: { hp: 180, name: 'Daedalus Phase Skimmer', faction: 'daedalus', max: 100, engine: 34, turn: 2.2, grip: 4, armor: 0.85, color: 0x1a1426, trim: 0xc77dff, hover: true, desc: 'Hovers. Drifts. Terrifyingly fast.' },
   mule: { hp: 300, name: 'Kepler Homestead Mule', faction: 'kepler', max: 58, engine: 26, turn: 2.2, grip: 16, armor: 0.6, color: 0x6a8f3a, trim: 0xff9f1c, scale: 1.2, cargoSafe: true, desc: 'Hauler. Cargo rides in a padded bed and takes no jostle damage.' },
   van: { hp: 200, name: 'Meridian Courier Hover-Van', faction: 'meridian', max: 82, engine: 30, turn: 2.3, grip: 6, armor: 0.8, color: 0x2ec4ff, trim: 0xffd23f, hover: true, van: true, desc: 'Smooth hover ride with a little boost of style.' },
-  warrig: { hp: 340, name: 'Rustmoon Scrapjaw War-Rig', faction: 'rustmoon', max: 78, engine: 32, turn: 2.4, grip: 14, armor: 0.6, color: 0x7b2ff7, trim: 0x7dff3a, scale: 1.4, pirate: true, desc: 'Stolen, welded, painted green. Rams for damage.' },
+  warrig: { hp: 340, name: 'Rustmoon Scrapjaw War-Rig', faction: 'rustmoon', max: 78, engine: 32, turn: 2.4, grip: 14, armor: 0.6, color: 0x7b2ff7, trim: 0x7dff3a, scale: 1.35, pirate: true, desc: 'Stolen, welded, painted green. Rams for damage.' },
 };
 
 const _v = new THREE.Vector3();
@@ -70,6 +70,11 @@ export class Garage {
   build(id) {
     const def = VEHICLES[id];
     let m;
+    if (id === 'skimmer') {
+      // its own hover-racer model (it has a seat of its own, too)
+      m = makeSkimmer({ color: def.color, trim: def.trim });
+      return m;
+    }
     if (def.van) {
       const c = makeHoverCar({ color: def.color, trim: def.trim });
       c.root.scale.setScalar(1.8);
@@ -192,6 +197,7 @@ export class Garage {
     model.root.quaternion.slerp(q, Math.min(1, dt * 8));
     const sp = b.vel.length();
     for (const w of model.wheels) w.rotation.x += (along >= 0 ? 1 : -1) * sp * dt / 0.85;
+    if (model.anim) model.anim(g.time, sp);
     // the runner sits in the seat
     P.body.pos.copy(b.pos).addScaledVector(up, 1.6 * (def.scale || 1));
     P.body.vel.copy(b.vel);
@@ -199,6 +205,7 @@ export class Garage {
     P.body.groundN.copy(b.groundN);
     P.body.grounded = true;
     P.body.skating = false;
+    P.body.thrusting = false; // (the jet hiss would otherwise stay on from before you got in)
     P.heading.copy(e.heading);
     model.root.updateMatrixWorld();
     // ramming pirates
@@ -235,6 +242,7 @@ export class Garage {
     }
     const v = this.active;
     if (!v || this.game.player.vehicle) return;
+    if (v.model.anim) v.model.anim(g.time, 0);
     const b = v.e.body;
     if (b.vel.lengthSq() > 0.01) {
       stepRover(v.e, dt, this.game.planet, this.game.colliders, v.e.heading, 0, { engine: 10, grip: v.def.grip, turn: 0, radius: 3 });

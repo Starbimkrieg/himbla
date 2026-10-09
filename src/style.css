@@ -1072,3 +1072,39 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
   animation: dilate-pulse 2.4s ease-in-out infinite;
 }
 @keyframes dilate-pulse { 50% { opacity: 0.75; } }
+/* ---- trailer director (?trailer, trailer.js): no HUD, just the comic layer and the cards ---- */
+body.trailer #hud > *:not(#popups):not(#action-panel):not(#splash):not(#dilate) { display: none !important; }
+body.trailer #tutorial, body.trailer #racepanel, body.trailer #vehbar, body.trailer #tip { display: none !important; }
+#trailer { position: fixed; inset: 0; pointer-events: none; z-index: 100; overflow: hidden; }
+#trailer .tr-flash { position: absolute; inset: 0; background: #fffbe6; opacity: 0; }
+#trailer .tr-black { position: absolute; inset: 0; background: #05030c; opacity: 0; }
+#trailer .tr-cover { position: absolute; inset: 0; background: #05030c; display: flex; align-items: center; justify-content: center; pointer-events: auto; }
+#trailer .tr-cover.hidden { display: none; }
+#trailer .tr-cover-text { font-family: var(--comic); font-size: 14px; color: var(--ui-muted, #8a80a8); animation: blink 1s steps(2) infinite; }
+#trailer .tr-wipe { position: absolute; top: -20%; bottom: -20%; left: -10%; width: 120%; background: #05030c; display: none; }
+#trailer .tr-wipe-edge { position: absolute; top: 0; bottom: 0; right: -18px; width: 18px; background: var(--yellow); box-shadow: 18px 0 0 var(--pink); }
+#trailer .tr-cards { position: absolute; inset: 0; }
+.tr-card { position: absolute; font-family: var(--comic); line-height: 1.25; white-space: nowrap; animation: trIn 0.32s steps(5) both; }
+.tr-card.out { animation: trOut 0.24s steps(4) both; }
+/* narration caption: the yellow box in the corner of a comic panel */
+.tr-caption { left: 5.5%; top: 9%; padding: 0.8vw 1.2vw 0.6vw; font-size: 1.55vw; color: var(--ink); background: var(--yellow); border: 0.28vw solid var(--ink); box-shadow: 0.5vw 0.5vw 0 var(--ink); transform: rotate(-1.5deg); }
+.tr-caption.low { top: auto; bottom: 11%; }
+.tr-caption.right { left: auto; right: 5.5%; }
+/* a shout across the middle of the frame */
+.tr-shout { left: 50%; top: 44%; transform: translate(-50%, -50%) rotate(-3deg); font-size: 4.6vw; color: var(--yellow); text-shadow: 0.3vw 0.3vw 0 var(--pink), 0.6vw 0.6vw 0 var(--ink), -0.15vw -0.15vw 0 var(--ink), 0.15vw -0.15vw 0 var(--ink), -0.15vw 0.15vw 0 var(--ink); }
+.tr-shout.pink { color: var(--pink); text-shadow: 0.3vw 0.3vw 0 var(--yellow), 0.6vw 0.6vw 0 var(--ink), -0.15vw -0.15vw 0 var(--ink), 0.15vw -0.15vw 0 var(--ink), -0.15vw 0.15vw 0 var(--ink); }
+/* the Fissure tease: quiet mint text that flickers */
+.tr-whisper { left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 2.1vw; color: #7dffd4; letter-spacing: 0.2vw; text-shadow: 0 0 1.2vw rgba(125, 255, 212, 0.7), 0.25vw 0.25vw 0 #05030c; animation: trWhisper 1.4s steps(12) both; }
+.tr-whisper.out { animation: trOut 0.3s steps(3) both; }
+/* end card */
+.tr-end { left: 0; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(5, 3, 12, 0.35), rgba(5, 3, 12, 0.92) 70%); animation: trEnd 0.5s steps(6) both; }
+.tr-logo { font-size: 6.4vw; line-height: 1.1; color: var(--yellow); text-shadow: 0.45vw 0.45vw 0 var(--pink), 0.9vw 0.9vw 0 #05030c; animation: trSlam 0.45s cubic-bezier(.2, 1.4, .4, 1) both; }
+.tr-logo span { color: var(--cyan); }
+.tr-tagline { margin-top: 2vw; font-size: 1.25vw; color: var(--cyan); letter-spacing: 0.12vw; border-top: 0.22vw solid var(--cyan); padding-top: 0.9vw; animation: trIn 0.4s 0.35s steps(5) both; }
+.tr-cta { margin-top: 3.2vw; font-size: 1.9vw; color: var(--ink); background: var(--yellow); padding: 0.9vw 1.6vw 0.7vw; border: 0.28vw solid #05030c; box-shadow: 0.5vw 0.5vw 0 var(--pink); transform: rotate(-2deg); animation: trSlam 0.4s 1.1s cubic-bezier(.2, 1.4, .4, 1) both; }
+@keyframes trIn { 0% { opacity: 0; translate: 0 1.2vw; scale: 1.3; } 100% { opacity: 1; translate: 0 0; scale: 1; } }
+@keyframes trOut { 0% { opacity: 1; } 100% { opacity: 0; scale: 0.92; } }
+@keyframes trSlam { 0% { opacity: 0; scale: 1.8; } 100% { opacity: 1; scale: 1; } }
+@keyframes trEnd { 0% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes trWhisper { 0% { opacity: 0; } 20% { opacity: 0.6; } 25% { opacity: 0.1; } 40% { opacity: 0.9; } 45% { opacity: 0.3; } 60%, 100% { opacity: 1; } }
+.tr-caption .tr-sub { display: block; margin-top: 0.5vw; font-size: 1.05vw; }

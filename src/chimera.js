@@ -236,10 +236,19 @@ function wheelLegs(inner) {
     spin.add(part(cyl(0.22, 0.22, 0.36, 12), hubM, 0, 0, 0, 0.015, { rz: Math.PI / 2 }));
     for (let k = 0; k < 3; k++) spin.add(part(rbox(0.38, 0.06, 0.08, 0.02), toon(GUN), 0, 0, 0, 0, { rx: (k * Math.PI) / 3 }));
     w.add(spin);
-    w.add(part(cyl(0.05, 0.05, 0.5, 6), toon(GUN), -sx * 0.25, 0.08, 0, 0.012, { rz: Math.PI / 2 }));
     inner.add(w);
     parts.push({ m: spin, kind: 'wheel', r: 0.46 });
   }
+  // the chassis the wheels hang off, so a narrow body (a person's hips, a mite's thorax) rides on
+  // something instead of floating between four loose wheels: axles from wheel to wheel, a deck
+  // plate along them, and a padded saddle mount in the middle where the body sits
+  for (const sz of [-1, 1]) {
+    inner.add(part(cyl(0.07, 0.07, 1.64, 8), toon(GUN), 0, 0.46, sz * 0.85, 0.015, { rz: Math.PI / 2 }));
+    for (const sx of [-1, 1]) inner.add(part(cyl(0.12, 0.12, 0.1, 10), hubM, sx * 0.58, 0.46, sz * 0.85, 0.012, { rz: Math.PI / 2 }));
+  }
+  inner.add(part(rbox(0.9, 0.14, 2.0, 0.05), toon(GUN), 0, 0.5, 0, 0.03));
+  inner.add(part(rbox(0.94, 0.04, 2.04, 0.02), toon(0xffd23f), 0, 0.44, 0, 0));
+  inner.add(part(ell(0.34, 0.12, 0.4, 14, 8), toon(DARKM), 0, 0.6, 0, 0.02));
   return { legH, parts };
 }
 
@@ -263,6 +272,10 @@ function treadLegs(inner) {
     for (let k = 0; k < 7; k++) g.add(part(rbox(0.36, 0.05, 0.1, 0.02), toon(GUN), 0, 0.3, -0.6 + k * 0.2, 0));
     inner.add(g);
   }
+  // a belly pan bridging the two tracks, with a saddle mount for whatever body sits on it
+  inner.add(part(rbox(0.74, 0.24, 1.4, 0.06), toon(GUN), 0, 0.38, 0, 0.03));
+  inner.add(part(rbox(0.78, 0.05, 1.44, 0.02), toon(0xffd23f), 0, 0.52, 0, 0));
+  inner.add(part(ell(0.3, 0.1, 0.36, 14, 8), toon(DARKM), 0, 0.58, 0, 0.02));
   return { legH, parts };
 }
 

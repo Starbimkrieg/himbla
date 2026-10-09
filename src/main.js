@@ -1,3 +1,5 @@
+// the trailer director (?trailer) goes first: it sandboxes storage before any module reads a save
+import { Trailer, TRAILER } from './trailer.js';
 // fonts are bundled so the desktop build works offline (see fonts.js)
 import { loadFonts } from './fonts.js';
 import * as THREE from 'three';
@@ -214,6 +216,7 @@ class Game {
     this.updateCamera(0.016, true);
     this.last = performance.now();
     this.renderer.setAnimationLoop(() => this.frame());
+    if (TRAILER) { this.trailer = new Trailer(this); this.trailer.begin(); }
   }
 
   bindUI() {
@@ -614,7 +617,7 @@ class Game {
       pirate: 'Scrapjaw pirates blasted you off your skates.',
       mil: 'Military defences turned you into a crater.',
       player: 'Your own Pulse Spinner. Classic.',
-      kade: "Shredded by Longshot Kade's gun truck. Should've stayed low.",
+      kade: "Shredded by Captain Kade's gun truck. Should've stayed low.",
       anomaly: 'Vaporised by a phase anomaly. For science.',
       meteor: 'Flattened by a meteor. The sky literally fell on you.',
     };
@@ -873,8 +876,9 @@ class Game {
   frame() {
     const now = performance.now();
     if (this.settings && this.settings.skip(now)) return; // settings: frame-rate cap
-    const rdt = Math.min(0.05, (now - this.last) / 1000);
+    let rdt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    if (this.trailer) rdt = this.trailer.pre(rdt); // trailer: shot clock, staged input
     // paused, map, menus and dialogs freeze the whole world: traffic, the satellite, particles, clocks
     const frozen = FROZEN_STATES.has(this.state);
     const dt = frozen ? 0 : rdt;
@@ -892,6 +896,7 @@ class Game {
     this.recall.update(dt);
     if (this.state === 'title') this.updateTitleTour(rdt);
     else if (this.state !== 'cutscene' && this.state !== 'derby') this.updateCamera(dt);
+    if (this.trailer) this.trailer.camera(rdt); // trailer: the shot owns the camera
     // the Monolith's time dilation: the world crawls, you don't
     const wdt = playing && this.alchemy.buffs.dilate > 0 ? dt * DILATE_RATE : dt;
     this.world.update(wdt, this.time, this.camera.position);
@@ -914,6 +919,7 @@ class Game {
     u.damage.value = (this.damageFlash * 0.8 + (P.health / P.maxHealth < 0.25 && !P.dead ? 0.25 : 0)) * (this.settings ? this.settings.v.damageFlash : 1); // settings
     u.alert.value = this.enemies.bases.some((b) => b.inside && ((b.restricted && !b.authorized) || b.hostile)) ? 1 : 0;
 
+    if (this.trailer) this.trailer.post(u);
     this.renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
     this.post.render(this.scene, this.camera);
     this.renderPanel(dt);
@@ -923,6 +929,7 @@ class Game {
   // Which music track fits where you are: the casino, Chimera Downs and Dr. Zbornak's lab have
   // their own; the dark side has its own; everywhere else the speed-driven roaming groove.
   musicZone() {
+    if (this.trailer && this.trailer.zone) return this.trailer.zone; // trailer: the shot picks the track
     if (this.state === 'derby') return 'downs';
     if (this.state === 'casino') return 'casino';
     const P = this.player;

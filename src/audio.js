@@ -3,6 +3,8 @@ export class Audio {
   constructor() {
     this.ctx = null;
     this.enabled = true;
+    this.mix = { hum: 1, wind: 1 }; // per-layer level trims for the ambient loops (the trailer lowers them)
+    this.levelFloor = 0; // the roaming groove never drops below this (the trailer keeps it up)
   }
 
   init() {
@@ -49,17 +51,8 @@ export class Audio {
     src2.connect(this.jetF).connect(this.jetG).connect(this.master);
     src2.start();
 
-    // the racecourse crowd: noise through two "voice" bands, swelling with excitement
-    const src3 = ctx.createBufferSource();
-    src3.buffer = this.noise; src3.loop = true;
-    this.crowdG = ctx.createGain(); this.crowdG.gain.value = 0;
-    for (const [f, q, v] of [[650, 0.9, 1], [1700, 1.4, 0.55], [3200, 2, 0.2]]) {
-      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q;
-      const g = ctx.createGain(); g.gain.value = v;
-      src3.connect(bp).connect(g).connect(this.crowdG);
-    }
-    this.crowdG.connect(this.master);
-    src3.start(0, 0.7);
+    // the racecourse crowd: the noise bed is out (it read as static) until the cheering is redone;
+    // setCrowd() still records the level, and roar() still adds its whoops
     this.crowdLevel = 0;
     this.crowdBoost = 0;
 
@@ -403,7 +396,7 @@ export class Audio {
       }
       return;
     }
-    const target = Math.min(1, speed / 110);
+    const target = Math.max(this.levelFloor || 0, Math.min(1, speed / 110));
     this.level += (target - this.level) * (target > this.level ? 0.02 : 0.008);
     const vol = this.musicOn ? (0.05 + this.level * 0.55) * this.fade : 0;
     this.music.gain.setTargetAtTime(vol, t, 0.4);
@@ -437,15 +430,12 @@ export class Audio {
     const t = this.ctx.currentTime;
     const s = Math.min(1, speed / 90);
     // rumble swells with speed but stays low and soft (no high-frequency hiss at top speed)
-    this.windG.gain.setTargetAtTime(Math.min(0.5, s) * 0.16 * (grounded ? 1 : 0.6), t, 0.15);
+    this.windG.gain.setTargetAtTime(Math.min(0.5, s) * 0.16 * (grounded ? 1 : 0.6) * this.mix.wind, t, 0.15);
     this.windF.frequency.setTargetAtTime(140 + Math.min(1, s) * 380, t, 0.15);
-    this.humG.gain.setTargetAtTime(skating && grounded ? 0.05 + s * 0.06 : 0, t, 0.05);
+    this.humG.gain.setTargetAtTime(skating && grounded ? (0.05 + s * 0.06) * this.mix.hum : 0, t, 0.05);
     this.hum.frequency.setTargetAtTime(55 + s * 120, t, 0.1);
     this.jetG.gain.setTargetAtTime(thrusting ? 0.16 : 0, t, 0.05);
-    // the crowd breathes: slow swells on top of the level, plus any recent roar
     this.crowdBoost = Math.max(0, this.crowdBoost - 0.006);
-    const sw = 0.8 + 0.12 * Math.sin(t * 0.9) + 0.08 * Math.sin(t * 2.3 + 1);
-    this.crowdG.gain.setTargetAtTime((this.crowdLevel + this.crowdBoost * 0.6) * sw * 0.32, t, 0.25);
     this.updateMusic(speed);
   }
 

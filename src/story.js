@@ -20,7 +20,7 @@ export const LEADERS = {
   meridian: { name: 'Chairwoman Lucinda Vane', title: 'Chief Executive, Meridian Exchange', look: { suit: 0xffc83a, accent: 0xffffff, helmet: 0xffe27a, visor: 0x1a1030, scarf: 0x2ec4ff } },
   kepler: { name: 'Mayor Hettie "Gran" Pike', title: 'Elected Mayor, Kepler Settlements', look: { suit: 0x7a4a2a, accent: 0x7dff6a, helmet: 0xfff4e0, visor: 0x2b8f4a, scarf: 0xff9f1c } },
   daedalus: { name: 'Director Ilsa Moreau', title: 'Director of Applied Sciences, Daedalus', look: { suit: 0x1a1426, accent: 0xff2e88, helmet: 0xeeeaf8, visor: 0xc77dff, scarf: 0xc77dff } },
-  rustmoon: { name: 'Captain Vex "Longshot" Kade', title: 'King of Rustmoon · Deadliest Shot on the Moon', look: { suit: 0x1a1a1a, accent: 0xff2a3a, helmet: 0x2b2b2b, visor: 0xff2a3a, scarf: 0xd7263d } },
+  rustmoon: { name: 'Captain Kade', title: 'King of the Rustmoon Pirates · Deadliest Shot on the Moon', look: { suit: 0x1a1a1a, accent: 0xff2a3a, helmet: 0x2b2b2b, visor: 0xff2a3a, scarf: 0xd7263d } },
 };
 
 // Tech unlocked by the research-minded stories.
@@ -68,11 +68,11 @@ const CHAPTERS = {
       outro: '"Relay\'s up. R&D sent you a gift: a Deflector Shield. It\'ll eat one hit every few seconds. Try not to need it."',
     },
     {
-      title: 'Longshot',
-      brief: '"Vex Kade. The King of Rustmoon. He\'s put more of my people in the dirt than the vacuum has. Intel says he\'s near Gloom Harbor. Bring him in. Watch for the red dot, Runner. When you see it, MOVE."',
+      title: 'Captain Kade',
+      brief: '"Captain Kade. The King of the Rustmoon Pirates. He\'s put more of my people in the dirt than the vacuum has. Intel says he\'s near Gloom Harbor. Bring him in. Watch for the red dot, Runner. When you see it, MOVE."',
       steps: [
         { t: 'goto', at: { site: 'gloom', min: 350, max: 550 }, r: 60, label: 'Find Kade near Gloom Harbor' },
-        { t: 'kade', label: 'Defeat Longshot Kade' },
+        { t: 'kade', label: 'Defeat Captain Kade' },
       ],
       reward: { credits: 2000, outfit: 'spacecom2', rep: 12 },
       outro: '"Kade\'s in a cell. The Moon\'s a little quieter tonight. Admiral\'s Whites are yours, Runner. Wear them like you mean it."',
@@ -839,7 +839,7 @@ export class Story {
       case 'carry': return `${s.phase === 'fetch' ? `Pick up the ${s.cargo.toLowerCase()} at ${s.fromLoc.name}` : `Deliver it. Don't crack it!`} · ${dist(this.stepTarget(s))}`;
       case 'defend': return `${s.label} · ${Math.ceil(Math.max(0, s.timer))} s${this.active.obj ? ` · ${Math.round((this.active.obj.hp / this.active.obj.maxHp) * 100)}% integrity` : ''}`;
       case 'experiment': return `${s.label} · ${Math.ceil(Math.max(0, s.timer))} s${P.pos.distanceTo(s.pos) > 40 ? ' · GET INSIDE THE RING' : ''}`;
-      case 'kade': return 'Defeat Longshot Kade';
+      case 'kade': return 'Defeat Captain Kade';
       default: return `${s.label} · ${dist(s.pos)}`;
     }
   }
@@ -1044,7 +1044,7 @@ export class Story {
   splash() {
     const el = this.splashEl;
     const L = LEADERS.rustmoon;
-    el.innerHTML = `<div class="sp-burst"></div><div class="sp-name">CAPTAIN VEX "LONGSHOT" KADE</div><div class="sp-title">${L.title}</div><div class="sp-quote">${pick(['"Smile for the scope, Runner."', '"You\'ve got a lot of nerve, skating on MY side of the Moon."', '"Hope you like the new ride."', '"Run. It\'s more fun when they run."'])}</div>`;
+    el.innerHTML = `<div class="sp-burst"></div><div class="sp-name">CAPTAIN KADE</div><div class="sp-title">${L.title}</div><div class="sp-quote">${pick(['"Smile for the scope, Runner."', '"You\'ve got a lot of nerve, skating on MY side of the Moon."', '"Hope you like the new ride."', '"Run. It\'s more fun when they run."'])}</div>`;
     el.classList.remove('hidden', 'sp-out');
     void el.offsetWidth;
     el.classList.add('sp-in');

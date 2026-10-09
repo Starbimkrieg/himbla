@@ -8,6 +8,8 @@ import { LIVING, spliceGenes, makeChimera, makeMite, ensureStats } from './chime
 import { chimeraCard, cardList } from './chimeracard.js';
 import { monolithTouch, updateEchoes } from './monolith.js';
 
+const HATCH_WAIT = 0.35, HATCH_GROW = 0.55, HATCH_LEAP = 0.75, HATCH_T = HATCH_WAIT + HATCH_GROW + HATCH_LEAP; // a new chimera's climb out of the reactor
+
 // What can go in a containment jar.
 export const ITEMS = {
   rock: { name: 'Rock Sample', icon: '◆', color: '#2ee6ff' },
@@ -423,7 +425,9 @@ export class Alchemy {
     else if (kinds.length >= 3 && unique.size === 1) res = this.resonance(kinds[0]);
     else res = (RECIPES[key] || RECIPES._default).call(this, names);
     g.stats.experiments = (g.stats.experiments || 0) + 1;
-    g.dialog('DR. ZBORNAK', `<b>${res.title}</b><br>${res.text}`, [{ label: 'FOR SCIENCE!' }]);
+    const show = () => g.dialog('DR. ZBORNAK', `<b>${res.title}</b><br>${res.text}`, [{ label: 'FOR SCIENCE!' }]);
+    // a new chimera climbs out of the reactor first: Dr. Zbornak has his say once it has landed
+    if (res.delay) g.schedule(res.delay, show); else show();
   }
 
   // Two or more bodies in the reactor: out comes a chimera.
@@ -434,14 +438,19 @@ export class Alchemy {
     this.chimeras.push(genes);
     this.save();
     this.syncChimeras();
+    // it climbs out of the reactor (a follower: bursts through the glass and comes to you)
+    const born = this.followers.find((f) => f.genes === genes);
+    const hatching = born && g.world.reactor && this.hatch(born);
     if (items.some((i) => i.kind === 'person' || i.kind === 'voidling')) g.rep.add('kepler', -2, 'Spliced a resident', { silent: true });
-    g.fx.pop(`IT'S ${genes.name.toUpperCase()}!`, null, { color: '#7dff3a', size: 60 });
+    if (hatching) g.schedule(HATCH_T, () => g.fx.pop(`IT'S ${genes.name.toUpperCase()}!`, null, { color: '#7dff3a', size: 60 }));
+    else g.fx.pop(`IT'S ${genes.name.toUpperCase()}!`, null, { color: '#7dff3a', size: 60 });
     g.style(40, 'NEW CHIMERA');
     const parts = `${genes.body} body, ${genes.legs} legs, ${genes.head} head${genes.extraHead ? `, and a spare ${genes.extraHead} head` : ''}`;
     const st = genes.stats;
     const best = ['speed', 'power', 'stamina', 'wit'].reduce((a, k) => (st[k] > st[a] ? k : a), 'speed');
     const brag = { speed: 'Look at those legs go', power: 'It gets off the line like a slingshot', stamina: 'It could run all day. It might', wit: 'It is… alarmingly clever' }[best];
     return {
+      delay: hatching ? HATCH_T + 0.5 : 0,
       title: `BEHOLD: ${genes.name.toUpperCase()}`,
       text: `"It has a ${parts}${genes.mods.length ? `, ${genes.mods.join(' and ')}-touched` : ''}. Speed ${st.speed}, power ${st.power}, stamina ${st.stamina}, wit ${st.wit}: a grade <b>${genes.tier}</b> racer, top speed about ${Math.round(genes.speed * 3.6)} km/h, chaos rating ${genes.chaos}. ${brag}. It loves you. ${genes.follow ? 'Race it at the Bounce Dome Funpark!' : 'Three already follow you, so it\'s gone to the holding pen behind the lab.'}"${chimeraCard(g, genes, { status: genes.follow ? '★ WITH YOU' : 'IN PEN' })}`,
     };
@@ -808,9 +817,64 @@ export class Alchemy {
     this.followers.push({ root, kind, vy: 0, h: 0, t: 0 });
   }
 
+  // A new chimera hatching out of the reactor: it swells out of the core, bursts out through the
+  // glass in a leap and lands a few metres off toward you, then falls in behind you like any pet.
+  hatch(f) {
+    const g = this.game, P = g.player;
+    const core = g.world.reactor.orb.getWorldPosition(new THREE.Vector3());
+    const up = core.clone().normalize();
+    let out = tangent(P.pos.clone().sub(core), up);
+    if (out.lengthSq() < 1) out = tangent(P.heading.clone().negate(), up);
+    out.normalize();
+    // it forms on the near face of the core, just inside the glass (where the flash doesn't hide it)
+    const from = core.clone().addScaledVector(out, 3.0).addScaledVector(up, -1.5);
+    const to = g.planet.ground(core.clone().addScaledVector(out, 7.5), new THREE.Vector3());
+    f.birth = { t: -HATCH_WAIT, from, to, out, burst: false };
+    f.root.position.copy(from);
+    f.root.scale.setScalar(0.01);
+    return true;
+  }
+
+  updateHatch(f, dt) {
+    const g = this.game, B = f.birth;
+    B.t += dt;
+    const up = B.from.clone().normalize();
+    if (B.t < 0) { f.root.scale.setScalar(0.01); return; } // the flash dies down first
+    if (B.t < HATCH_GROW) {
+      // swelling out of the core, turning, wrapped in sparks
+      const k = B.t / HATCH_GROW;
+      f.root.position.copy(B.from);
+      f.root.scale.setScalar(0.05 + 0.95 * k * k);
+      f.root.rotateOnWorldAxis(up, dt * 9);
+      if (Math.random() < dt * 30) g.fx.spawn(B.from, up.clone().multiplyScalar(2), { color: Math.random() < 0.5 ? 0xff2e88 : 0x7dff3a, size: 0.35, life: 0.5, spread: 5 });
+    } else {
+      // the leap: an arc from the core out through the glass to the floor
+      const k = Math.min(1, (B.t - HATCH_GROW) / HATCH_LEAP);
+      f.root.scale.setScalar(1);
+      f.root.position.lerpVectors(B.from, B.to, k).addScaledVector(up, Math.sin(k * Math.PI) * 3);
+      frameQuat(up, B.out, f.root.quaternion);
+      if (!B.burst && k > 0.05) {
+        // through the tube wall: a shower of glass
+        B.burst = true;
+        g.fx.spawn(f.root.position, B.out.clone().multiplyScalar(6), { color: 0x9be7ff, size: 0.3, life: 0.9, gravity: 6, count: 16, spread: 6 });
+        g.fx.pop('KSSHHH!', f.root.position.clone(), { color: '#9be7ff', size: 40, life: 0.7 });
+        g.audio.burst(0.3, 3200, 0.3);
+      }
+      if (k >= 1) {
+        f.birth = null;
+        f.h = 0; f.vy = 4; // a happy bounce
+        g.fx.dust(B.to, new THREE.Vector3(), 10, up);
+        g.fx.pop('BLOOP!', B.to.clone().addScaledVector(up, 3), { color: '#7dff3a', size: 56 });
+        g.audio.thud(18);
+      }
+    }
+    if (f.anim) f.anim(B.t, 6);
+  }
+
   updateFollowers(dt) {
     const P = this.game.player;
     this.followers.forEach((f, i) => {
+      if (f.birth) { this.updateHatch(f, dt); return; }
       const up = f.root.position.clone().normalize();
       const target = P.pos.clone().addScaledVector(this.game.cam.right, (i % 2 ? 3 + i : -3 - i)).addScaledVector(P.heading, -4 - i * 2);
       const to = tangent(target.clone().sub(f.root.position), up);

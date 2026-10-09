@@ -942,8 +942,8 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.86), rimChip * rimCor
       const active = want >= 0 && want <= 1;
       if (active && !ch.boulderCols && this.colliders) ch.boulderCols = ch.boulderSpec.map((c) => this.colliders.add(c));
       if (!active && ch.boulderCols) { for (const c of ch.boulderCols) this.colliders.remove(c); ch.boulderCols = null; }
-      // free detailed meshes that are no longer needed
-      for (let l = 0; l < 3; l++) {
+      // free detailed meshes that are no longer needed (the trailer keeps them all: no rebuilds at its cuts)
+      for (let l = 0; l < 3 && !this.keep; l++) {
         const m = ch.meshes[l];
         if (!m || ch.shown === l) continue;
         if (want < 0 ? now - ch.lastWanted > 8000 : want > l + 1) {

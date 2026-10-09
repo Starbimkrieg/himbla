@@ -6,7 +6,7 @@ import { tangent, frameQuat, greatCircle } from './geo.js';
 import { pick } from './rng.js';
 import { shatterEcho } from './monolith.js';
 
-// Captain Vex "Longshot" Kade rides a mad-max monster truck now. He never rams: he skirts around
+// Captain Kade rides a mad-max monster truck now. He never rams: he skirts around
 // you at 45-80 m, swapping direction now and then, glued to the ground, while his gunner works a
 // turret with two modes:
 //   GATLING  on the ground: fast bursts of small rounds
@@ -31,7 +31,7 @@ export function spawnKadeTruck(story, final) {
   const e = {
     kind: 'kade', faction: 'pirate', model: m, hp, maxHp: hp, body: makeBody(pos), radius: 6, center: pos.clone(), dead: false, impacts: [],
     heading: tangent(P.pos.clone().sub(pos), up).normalize(), final, rogue: false, aggro: true, carrying: false, grab: 0, home: null,
-    bossName: 'LONGSHOT KADE', state: 'chase', circle: Math.random() < 0.5 ? 1 : -1, circleT: 5, mode: 'gatling', gunCd: 1.5, burst: 0, flakCd: 1, t: 0,
+    bossName: 'CAPTAIN KADE', state: 'chase', circle: Math.random() < 0.5 ? 1 : -1, circleT: 5, mode: 'gatling', gunCd: 1.5, burst: 0, flakCd: 1, t: 0,
   };
   g.enemies.list.push(e);
   return e;
@@ -121,6 +121,8 @@ function flakBurst(g, pos) {
   const P = g.player;
   g.fx.explosion(pos, 3.5, false);
   g.fx.spawn(pos, new THREE.Vector3(), { color: 0x2a2433, size: 1.6, life: 1.2, count: 6, spread: 3 });
+  // white phosphorus: burning fragments that rain down trailing smoke and hang about a moment
+  g.fx.phosphor(pos, 10);
   g.audio.burst(0.35, 900, 0.35);
   for (const d of g.decoys.slice()) if (pos.distanceTo(d.center) < 6) shatterEcho(g, d);
   if (P.dead) return;
@@ -149,7 +151,7 @@ export function kadeDefeated(story, e) {
   const up = e.center.clone().normalize();
   if (e.final) {
     story.kade.captured = true;
-    g.hud.alert('LONGSHOT KADE IS IN CUFFS!', '#ffd23f', 4);
+    g.hud.alert('CAPTAIN KADE IS IN CUFFS!', '#ffd23f', 4);
   } else {
     g.fx.pop(pick(['"MY TRUCK!"', '"THIS AIN\'T OVER, RUNNER!"', '"YOU\'LL PAY FOR THE PAINT JOB!"']), e.center.clone().addScaledVector(up, 6), { color: '#ff2a3a', size: 44, life: 2.2 });
     story.kade.beaten++;
@@ -157,7 +159,7 @@ export function kadeDefeated(story, e) {
   }
   g.addCredits(800, 'Kade bounty');
   g.style(150, 'GUN TRUCK DOWN');
-  g.rep.add('spacecom', 4, 'Wrecked Longshot Kade\'s gun truck');
+  g.rep.add('spacecom', 4, 'Wrecked Captain Kade\'s gun truck');
   // the first time, his Junk Mortar tumbles out of the wreck
   if (!g.upgrades.mortar && !story.mortarDrop) {
     const crate = makeCrate(0x7dff3a, 1.6);

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { glow, toon } from './toon.js';
 
-const MAX_P = 500;
+const MAX_P = 1200;
 
 // Particles, explosions, warning rings, skate trails and comic onomatopoeia.
 export class FX {
@@ -24,6 +24,7 @@ export class FX {
 
     this.booms = [];
     this.rings = [];
+    this.embers = []; // burning phosphor fragments (phosphor): each one trails smoke as it falls
     this.popLayer = document.getElementById('popups');
 
     // skate trails (two ribbons)
@@ -101,6 +102,39 @@ export class FX {
     this.spawn(pos, up.clone().multiplyScalar(2), { color: 0x3a3550, size: radius * 0.1, life: 1.4, gravity: 1.62, count: big ? 18 : 8, spread: radius * 2.5 });
   }
 
+  // White phosphorus: burning fragments thrown out of a burst that arc down trailing white smoke,
+  // flickering white-hot, and a smoke cloud that hangs where it went off. Burns out over ~2 s.
+  phosphor(pos, n = 9, power = 1) {
+    const up = pos.clone().normalize();
+    for (let i = 0; i < n; i++) {
+      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      dir.addScaledVector(up, 0.35).normalize(); // mostly outward, a little up
+      this.embers.push({ pos: pos.clone(), vel: dir.multiplyScalar((7 + Math.random() * 7) * power), life: 1.4 + Math.random() * 0.9, max: 2.3, smoke: 0 });
+    }
+    // the hanging cloud, and a white-hot flash at its heart
+    this.spawn(pos, up.clone().multiplyScalar(0.6), { color: 0xe9e4f2, size: 2.2 * power, life: 2.2, drag: 2.2, count: 7, spread: 3 });
+    this.spawn(pos, up.clone(), { color: 0xfffbe6, size: 1.6 * power, life: 0.35, drag: 3, count: 4, spread: 1.5 });
+  }
+
+  updateEmbers(dt) {
+    for (let i = this.embers.length - 1; i >= 0; i--) {
+      const e = this.embers[i];
+      e.life -= dt;
+      if (e.life <= 0) { this.embers.splice(i, 1); continue; }
+      e.vel.addScaledVector(this.v.copy(e.pos).normalize(), -4 * dt).multiplyScalar(1 - 0.7 * dt);
+      e.pos.addScaledVector(e.vel, dt);
+      const k = e.life / e.max;
+      // the burning core: flickers between white-hot and pale yellow, shrinking as it burns out
+      this.spawn(e.pos, this.v.set(0, 0, 0), { color: Math.random() < 0.5 ? 0xfffbe6 : 0xfff1a8, size: 0.6 + 0.7 * k, life: 0.08, drag: 0, count: 1, spread: 0 });
+      // and its smoke trail, hanging behind it
+      e.smoke -= dt;
+      if (e.smoke <= 0) {
+        e.smoke = 0.055;
+        this.spawn(e.pos, this.v.copy(e.pos).normalize().multiplyScalar(0.4), { color: k > 0.5 ? 0xf2eef8 : 0xc9c3d6, size: 0.8 + 0.9 * (1 - k), life: 1.2 + Math.random() * 0.6, drag: 2.5, count: 1, spread: 0.3 });
+      }
+    }
+  }
+
   // Straight energy beam that fades out (Rail Lance).
   beam(a, b, color) {
     const len = a.distanceTo(b);
@@ -143,6 +177,7 @@ export class FX {
   }
 
   update(dt) {
+    this.updateEmbers(dt);
     // particles
     let n = 0;
     for (let i = this.particles.length - 1; i >= 0; i--) {

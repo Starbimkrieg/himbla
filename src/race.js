@@ -653,13 +653,13 @@ export class Race {
       this.timer -= dt;
       const now = Math.ceil(this.timer);
       const r0 = this.racers[0];
-      if (now !== before && now > 0 && now <= 3) { g.fx.pop(String(now), r0.pos.clone().addScaledVector(r0.pos.clone().normalize(), 6), { color: '#ffd23f', size: 80 }); g.audio.tone(440, 0.2, 'square', 0.2); }
+      if (now !== before && now > 0 && now <= 3) { g.fx.pop(String(now), r0.pos.clone().addScaledVector(r0.pos.clone().normalize(), 6), { color: '#ffd23f', size: 80 }); g.audio.tone(440, 0.2, 'square', 0.08); }
       if (this.timer <= 0) {
         this.state = 'run';
         this.excite = 1;
         g.fx.pop('AND THEY\'RE OFF!', null, { color: '#ff2e88', size: 70 });
         g.audio.roar(1);
-        g.audio.tone(880, 0.4, 'square', 0.25);
+        g.audio.tone(880, 0.4, 'square', 0.1);
       }
       for (const r of this.racers) { r.t += dt; r.m.anim(r.t, 0); this.place(r); }
     } else if (this.state === 'run') {

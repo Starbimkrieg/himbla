@@ -190,6 +190,13 @@ export class Player {
       frameQuat(b.up, this.heading, m.root.quaternion);
       m.legL.rotation.x = m.legR.rotation.x = -1.3;
       m.body.position.y = m.bodyBase - 0.5;
+      // hands forward on the controls, leaning into the turn
+      const steer = (input.down('KeyA') ? 1 : 0) - (input.down('KeyD') ? 1 : 0);
+      this.steerLean = (this.steerLean || 0) + (steer - (this.steerLean || 0)) * Math.min(1, dt * 6);
+      if (m.armL && m.armR) {
+        m.armL.rotation.x = -1.15 + 0.15 * this.steerLean; m.armR.rotation.x = -1.15 - 0.15 * this.steerLean;
+        m.armL.rotation.z = -0.12; m.armR.rotation.z = 0.12;
+      }
       this.upSmooth.copy(b.up);
       return;
     }

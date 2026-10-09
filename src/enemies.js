@@ -199,9 +199,9 @@ export class Enemies {
     } else {
       // pirate war-rigs: big, heavy, planted and fast
       const m = makeRover({ color: 0x7b2ff7, trim: 0x7dff3a, pirate: true });
-      m.root.scale.setScalar(1.55);
+      m.root.scale.setScalar(1.35); // (Captain Kade's truck is the big one)
       g.scene.add(m.root);
-      e = { kind: 'rover', model: m, hp: 210, maxHp: 210, body: makeBody(pos), radius: 4.6 };
+      e = { kind: 'rover', model: m, hp: 210, maxHp: 210, body: makeBody(pos), radius: 4.0 };
     }
     const toP = tangent(g.player.pos.clone().sub(pos), up);
     if (toP.lengthSq() < 1e-4) toP.copy(tangent(new THREE.Vector3(1, 0, 0), up));

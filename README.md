@@ -226,7 +226,7 @@ Contract clocks are tight. If you miss one, the job still pays 50% when you deli
 
 Every faction has a leader standing on a podium at their HQ: **Admiral Ada Okonkwo** (SPACECOM, ILMB),
 **General Yuri Volkov** (Vostok), **Chairwoman Lucinda Vane** (Meridian), **Mayor Hettie "Gran" Pike**
-(Kepler), **Director Ilsa Moreau** (Daedalus) and **Captain Vex "Longshot" Kade** (Rustmoon, at Rustmoon
+(Kepler), **Director Ilsa Moreau** (Daedalus) and **Captain Kade** (Rustmoon, at Rustmoon
 Hold once you're FRIENDLY with the pirates). Each offers a four-chapter story, starting at FRIENDLY (10 rep);
 later chapters need 15, 25 and 35. **Finishing the first chapter of any story commits you to it**: the other
 leaders stop dealing with you, so each playthrough tells one coherent story.
@@ -255,7 +255,7 @@ leaders stop dealing with you, so each playthrough tells one coherent story.
 **Riding with Rustmoon:** once you've sworn in, Rustmoon Hold is your home base: you start, redeploy
 after a K.O. and recall there.
 
-**Longshot Kade.** On the dark side, a regular pirate squad occasionally (8 %) brings the King of Rustmoon:
+**Captain Kade.** On the dark side, a regular pirate squad occasionally (8 %) brings the King of Rustmoon:
 slow-motion, a comic splash panel and a close-up. He rolls in on a mad-max monster truck that never leaves the
 ground and never rams: it skirts round you at 45-80 m, swapping direction, while a lackey works the roof
 turret. On the ground the turret is a **gatling** (fast bursts of small rounds). Get well off the ground
@@ -560,8 +560,8 @@ src/
   alchemy.js     containment jar, reactor recipes, wild mites, followers, splice-pod mutations, Mega Mite
   chimera.js     gene splicing + procedural chimera models
   cheats.js      testing menu (backtick)
-  story.js       faction leaders, chapters, outposts you found, tech, Longshot Kade
-  kade.js        Longshot Kade's gun truck: orbit driving, gatling and flak turret, Junk Mortar drop
+  story.js       faction leaders, chapters, outposts you found, tech, Captain Kade
+  kade.js        Captain Kade's gun truck: orbit driving, gatling and flak turret, Junk Mortar drop
   monolith.js    the Monolith's spells: low-G, time dilation, echo decoys
   territory.js   faction territory, border pylons, small outposts, patrols
   vehicles.js    drivable faction vehicles

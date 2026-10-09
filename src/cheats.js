@@ -53,7 +53,7 @@ export class Cheats {
     g.dialog('CHEAT MENU · STORY', `<small>Committed to: <b>${S.faction ? FACTIONS[S.faction].name : 'nobody yet'}</b>${A ? ` · active: ${A.def.title} (step ${A.si + 1}/${A.steps.length})` : ''}<br>Vehicles: ${S.vehicles.join(', ') || 'none'} · Tech: ${S.tech.join(', ') || 'none'}</small>`, [
       { label: '1 · SKIP CURRENT STEP', fn: () => { if (S.active) S.next(); this.storyMenu(); } },
       { label: '2 · TELEPORT TO CURRENT OBJECTIVE', fn: () => { const o = S.objective(); if (o) { S.teleportTo(o.pos.clone().normalize()); } } },
-      { label: '3 · SPAWN LONGSHOT KADE (ambush)', fn: () => { S.spawnKade(false); } },
+      { label: '3 · SPAWN CAPTAIN KADE (ambush)', fn: () => { S.spawnKade(false); } },
       { label: '4 · ALL VEHICLES + TECH', fn: () => { S.vehicles = Object.keys(VEHICLES); S.tech = Object.keys(TECH); S.save(); this.storyMenu(); } },
       { label: '5 · RESET STORY (keeps outposts)', fn: () => { if (S.active) S.fail('Reset.'); S.faction = null; S.progress = {}; S.kade.captured = false; S.save(); this.storyMenu(); } },
       { label: '6 · DROP ME ON SAT-7 (matched speed)', fn: () => { const S = g.secrets; const o = S.sat; const up = o.pos.clone().normalize(); g.player.respawn(o.pos.clone().addScaledVector(up, 4)); g.player.body.vel.copy(o.vel); } },
