@@ -6,6 +6,7 @@ import { loadWorldState, applyWorldState, saveWorldState } from './worldstate.js
 // fonts are bundled so the desktop build works offline (see fonts.js)
 import { loadFonts } from './fonts.js';
 import * as THREE from 'three';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Planet } from './planet.js';
 import { Colliders } from './physics.js';
 import { World } from './world.js';
@@ -29,6 +30,7 @@ import { Race } from './race.js';
 import { Rides } from './rides.js';
 import { Meteors } from './meteors.js';
 import { Grinder } from './rails.js';
+import { Gamepad } from './gamepad.js';
 import { DILATE_RATE } from './monolith.js';
 import { Cosmetics } from './cosmetics.js';
 import { Cheats } from './cheats.js';
@@ -76,8 +78,37 @@ const JAR_HOLD = 1; // seconds to hold X to empty the jar
 const FROZEN_STATES = new Set(['paused', 'map', 'dialog', 'board', 'log', 'wardrobe', 'dawn']);
 const _sightN = new THREE.Vector3();
 const _sightNear = [];
-// Threat Scanner outline: a bold red version of the comic ink shell.
-const SCAN_INK = new THREE.MeshBasicMaterial({ color: 0xff1a2e, side: THREE.BackSide });
+// The threat outline: each enemy's ink shells redrawn in bold red, pushed out a fixed number of
+// SCREEN pixels (not metres), so the outline is just as thick at 200 m as at 5 m, and on merged
+// models as on single parts. The shells get smooth normals (corners welded) so it stays unbroken
+// round box corners; it pulses a little.
+const SCAN_INK = new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  uniforms: { px: { value: 5 }, res: { value: new THREE.Vector2(1920, 1080) }, color: { value: new THREE.Color(0xff1a2e) } },
+  vertexShader: `uniform float px; uniform vec2 res;
+    void main() {
+      vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      vec3 n = normalize(normalMatrix * normal);
+      vec2 d = (projectionMatrix * vec4(n, 0.0)).xy;
+      float l = length(d);
+      if (l > 1e-5) p.xy += (d / l) * px * 2.0 / res * p.w;
+      gl_Position = p;
+    }`,
+  fragmentShader: 'uniform vec3 color; void main() { gl_FragColor = vec4(color, 1.0); }',
+});
+const SCAN_GEO = new WeakMap();
+function scanGeo(g0) {
+  let g = SCAN_GEO.get(g0);
+  if (!g) {
+    g = new THREE.BufferGeometry();
+    g.setAttribute('position', g0.attributes.position.clone());
+    if (g0.index) g.setIndex(g0.index.clone());
+    g = mergeVertices(g, 1e-3);
+    g.computeVertexNormals();
+    SCAN_GEO.set(g0, g);
+  }
+  return g;
+}
 const _q = new THREE.Quaternion();
 
 function buildLocations() {
@@ -181,6 +212,7 @@ class Game {
     this.rides = new Rides(this);
     this.meteors = new Meteors(this);
     this.grind = new Grinder(this);
+    this.pad = new Gamepad(this); // controller support
     this.cosmetics = new Cosmetics(this);
     this.cosmetics.apply();
     this.cheats = new Cheats(this);
@@ -268,7 +300,7 @@ class Game {
       if ((this.state === 'play' || this.state === 'derby') && !this.input.locked) this.input.lock();
     });
     document.addEventListener('pointerlockchange', () => {
-      if (this.input.locked) {
+      if (this.input.ptrLocked) {
         // a lock requested when a dialog closed can land after the next dialog opened (chained
         // menus): hand the mouse straight back to the menu
         if (this.state !== 'play' && this.state !== 'cutscene' && this.state !== 'derby') { this.releasing = true; this.input.unlock(); return; }
@@ -284,7 +316,7 @@ class Game {
       this.releasing = false;
     });
     document.addEventListener('pointerlockerror', () => {
-      if (this.state === 'play') this.hud.show('clickhint', true);
+      if (this.state === 'play' && !this.input.padActive) this.hud.show('clickhint', true);
     });
     this.input.onKey = (code) => {
       const esc = code === 'Escape';
@@ -339,7 +371,7 @@ class Game {
     this.input.justPressed.clear();
     this.boardCooldown = 0.4;
     // Escape can't re-grab the mouse (browser rule), so show a hint instead of pausing
-    if (viaEscape) this.hud.show('clickhint', true);
+    if (viaEscape && !this.input.padActive) this.hud.show('clickhint', true);
     this.input.lock();
   }
 
@@ -395,7 +427,8 @@ class Game {
   talkScientist() {
     const lvl = this.upgrades.jar || 0;
     const buttons = [];
-    if (lvl === 0) buttons.push({ label: '1 · BUY A CONTAINMENT JAR — ₵400', fn: () => this.buyJar(400) });
+    const back = () => this.talkScientist(); // (his answers lead back to the rest of the conversation)
+    if (lvl === 0) buttons.push({ label: '1 · GIVE ME A JAR — ₵400', fn: () => this.buyJar(400, back) });
     else if (lvl < 3) buttons.push({ label: `1 · BIGGER JAR (+1 SLOT) — ₵${500 * lvl}`, fn: () => this.buyJar(500 * lvl) });
     const muts = this.alchemy.mutations.length;
     if (muts) buttons.push({ label: `${buttons.length + 1} · CURE MY MUTATIONS — ₵${200 * muts}`, fn: () => {
@@ -442,8 +475,8 @@ class Game {
     else if (wires >= 3) buttons.push({ label: `${buttons.length + 1} · MORE WIRING?`, fn: () => this.dialog('DR. ZBORNAK', '"Your coils are already wound as tight as physics allows. Throw the wire in the reactor if you must."', [{ label: 'OK' }]) });
     const chims = this.alchemy.chimeras.length;
     if (chims) buttons.push({ label: `${buttons.length + 1} · HOLDING PEN (${chims})`, fn: () => this.alchemy.penMenu() });
-    buttons.push({ label: `${buttons.length + 1} · HEARD ANY RUMOURS?`, fn: () => this.dialog('DR. ZBORNAK', '"Rumours? Science does not deal in rumours. But… <br><br>• <b>Moon Mites</b> herd together in the sunny craters, well away from settlements. Green dots on your minimap, if you\'re close.<br>• That old satellite, <b>SAT-7 \"Lantern\"</b>, swoops low over the ground just past the ILMB once a lap. Something on its deck glows. You would have to match its speed exactly to land on it. Ha!<br>• Bring me <b>three lengths of electrical wiring</b> from a supply depot, in your jar, and I will rewind your skate coils for extra grip.<br>• Saplings from the farm domes are alive, technically. They splice beautifully.<br>• On the twilight side there is a trench nobody dug: the <b>Whispering Fissure</b>. My instruments go strange near it. Something down there wants a key."', [{ label: 'SPOOKY' }]) });
-    buttons.push({ label: `${buttons.length + 1} · HOW DOES THIS WORK?`, fn: () => this.dialog('DR. ZBORNAK', '"Press <b>G</b> to scoop: rock samples (the glowing crystals on the sunny side), moon dirt (anywhere), black water (stand on a black lake), people, wild moon mites, a dazed pirate, even a whole hover-car if it fits. Things left together in a jar start to react. Bring the jar here and press <b>X</b> to throw everything into my reactor. <b>Two living things make a CHIMERA</b> — race it at Chimera Downs! One thing alone does… other things. Three different non-living things: don\'t. And the splice pod in the corner puts the jar into <i>you</i>."', [{ label: 'GOT IT' }]) });
+    buttons.push({ label: `${buttons.length + 1} · HEARD ANY RUMOURS?`, fn: () => this.dialog('DR. ZBORNAK', '"Rumours? Science does not deal in rumours. But… <br><br>• <b>Moon Mites</b> herd together in the sunny craters, well away from settlements. Green dots on your minimap, if you\'re close.<br>• That old satellite, <b>SAT-7 \"Lantern\"</b>, swoops low over the ground just past the ILMB once a lap. Something on its deck glows. You would have to match its speed exactly to land on it. Ha!<br>• Bring me <b>three lengths of electrical wiring</b> from a supply depot, in your jar, and I will rewind your skate coils for extra grip.<br>• Saplings from the farm domes are alive, technically. They splice beautifully.<br>• On the twilight side there is a trench nobody dug: the <b>Whispering Fissure</b>. My instruments go strange near it. Something down there wants a key."', [{ label: 'SPOOKY', fn: back }]) });
+    buttons.push({ label: `${buttons.length + 1} · HOW DOES THIS WORK?`, fn: () => this.dialog('DR. ZBORNAK', `"Press <b>G</b> to scoop: rock samples (the glowing crystals on the sunny side), moon dirt (anywhere), black water (stand on a black lake), people, wild moon mites, a dazed pirate, even a whole hover-car if it fits. Things left together in a jar start to react. Bring the jar here and press <b>X</b> to throw everything into my reactor. <b>Two living things make a CHIMERA</b> — race it at Chimera Downs! One thing alone does… other things. Three different non-living things: don\'t. And the splice pod in the corner puts the jar into <i>you</i>."${lvl ? '' : '<br><br>"You don\'t have a jar yet, I notice. I happen to sell them."'}`, lvl ? [{ label: 'GOT IT', fn: back }] : [{ label: '1 · GIVE ME A JAR — ₵400', fn: () => this.buyJar(400, back) }, { label: '2 · GOT IT', fn: back }]) });
     buttons.push({ label: `${buttons.length + 1} · LEAVE` });
     const greet = lvl ? `"Back already? Your jar holds ${2 + lvl}. What have you brought me?"` : '"Ah, a runner! Want to help science? You will need a containment jar. Everything goes in the jar. EVERYTHING."';
     this.dialog('DR. ZBORNAK', greet, buttons);
@@ -492,20 +525,21 @@ class Game {
         e.scanOn = on;
         if (!e.inkHulls) { e.inkHulls = []; e.model.root.traverse((o) => { if (o.userData.isInk) e.inkHulls.push(o); }); }
         for (const h of e.inkHulls) {
-          // the Blender runner's shells are prebuilt thin and fat; everything else gets scaled
-          if (h.userData.inkGeo) { h.material = on ? SCAN_INK : inkMat; h.geometry = on ? h.userData.inkGeo.fat : h.userData.inkGeo.thin; continue; }
-          if (!h.userData.baseScale) { h.userData.baseScale = h.scale.clone(); h.userData.basePos = h.position.clone(); }
-          h.material = on ? SCAN_INK : inkMat;
-          // a much fatter shell while targeted so the red reads at a distance
-          const k = on ? 4 : 1;
-          const bs = h.userData.baseScale, bp = h.userData.basePos;
-          h.scale.set(1 + (bs.x - 1) * k, 1 + (bs.y - 1) * k, 1 + (bs.z - 1) * k);
-          // keep the shell centred on its mesh (ink() offsets by the bounding-box centre)
-          const f = (s, b2) => (Math.abs(1 - b2) > 1e-6 ? (1 - s) / (1 - b2) : 1);
-          h.position.set(bp.x * f(h.scale.x, bs.x), bp.y * f(h.scale.y, bs.y), bp.z * f(h.scale.z, bs.z));
+          if (on) {
+            if (!h.userData.geo0) h.userData.geo0 = h.geometry;
+            h.geometry = scanGeo(h.userData.inkGeo ? h.userData.inkGeo.thin : h.userData.geo0);
+            h.material = SCAN_INK;
+          } else {
+            h.geometry = h.userData.inkGeo ? h.userData.inkGeo.thin : h.userData.geo0 || h.geometry;
+            h.material = inkMat;
+          }
         }
       }
     }
+    // (the outline's thickness in pixels: scaled to the screen, with a slow pulse)
+    const H = this.renderer.domElement.height;
+    SCAN_INK.uniforms.res.value.set(this.renderer.domElement.width, H);
+    SCAN_INK.uniforms.px.value = (H / 1080) * (5.5 + Math.sin(this.time * 6) * 1.2);
     chip.classList.toggle('hidden', !inbound);
     if (inbound) chip.textContent = `⚠ SCANNER: ${inbound} HOSTILE${inbound > 1 ? 'S' : ''} INBOUND`;
   }
@@ -535,14 +569,18 @@ class Game {
     this.dialog('SPLICE POD', `A humming glass pod, warm to the touch. The label reads: <i>"INSERT JAR. INSERT SELF. RESULTS NOT GUARANTEED, REVERSIBLE, OR EXPLAINED."</i>${mine}`, buttons);
   }
 
-  buyJar(cost) {
+  buyJar(cost, then) {
     if (this.credits < cost) { this.hud.toast(`Not enough credits (need ₵${cost}).`, 2); return; }
     this.credits -= cost;
+    const first = !(this.upgrades.jar || 0);
     this.upgrades.jar = (this.upgrades.jar || 0) + 1;
     this.alchemy.refreshJarMesh();
     this.audio.cash();
-    this.hud.toast(`Jar holds ${this.alchemy.slots} things now. G scoops, X empties.`, 3);
     this.save();
+    // (he clips it to your pack: it's there on your back from now on)
+    this.dialog('DR. ZBORNAK', first
+      ? `"One containment jar, clipped to your pack. See? Right there. It holds ${this.alchemy.slots}. Press <b>G</b> to scoop something, <b>X</b> here to feed it to my reactor."`
+      : `"A bigger jar. It holds ${this.alchemy.slots} now. Same rules: <b>G</b> scoops, <b>X</b> feeds the reactor."`, [{ label: 'THANKS, DOC', fn: then }]);
   }
 
   jobsAt(loc) {
@@ -996,11 +1034,13 @@ class Game {
     this.last = now;
     if (this.trailer) rdt = this.trailer.pre(rdt); // trailer: shot clock, staged input
     // paused, map, menus and dialogs freeze the whole world: traffic, the satellite, particles, clocks
+    if (this.pad) this.pad.update(rdt); // (before anything reads input this frame)
     const frozen = FROZEN_STATES.has(this.state);
     const dt = frozen ? 0 : rdt;
     this.time += dt;
 
     const playing = this.state === 'play';
+    if (playing && !this.world.mergeDone) this.world.finishMerges(); // (static geometry: see world.mergeLocation)
     if (playing) this.updatePlay(dt);
     else if (this.state === 'derby') this.race.watch(dt); // watching your chimera race: the race drives the camera
     else this.input.consumeMouse();
@@ -1070,6 +1110,7 @@ class Game {
     if (this.trailer && this.trailer.zone) return this.trailer.zone; // trailer: the shot picks the track
     if (this.state === 'derby') return 'downs';
     if (this.state === 'casino') return 'casino';
+    if (this.spindle && this.spindle.active) return 'dark'; // (Meridian's finale, out on the Spindle)
     const P = this.player;
     // the Monolith shares the lab's clinical-strange track: the same weird, humming vibe
     this._musicLocs ||= ['casino', 'downs', 'antimatter', 'monolith'].map((id) => this.locations.find((l) => l.id === id)).filter(Boolean);
@@ -1108,9 +1149,19 @@ class Game {
     this.earthLight.intensity = 0.3 * THREE.MathUtils.smoothstep(up.dot(this.world.earthDir), -0.1, 0.3);
     // shadows only matter where the sun is up
     this.renderer.shadowMap.autoUpdate = day > 0.01;
+    // The shadow box follows you, moved in whole shadow-map texels along the light's own axes (the
+    // ones the shadow camera's lookAt builds: z toward the sun, x = worldUp x z, y = z x x), so the
+    // texel grid never slides across the ground and shadows hold still as you move. (Snapping on the
+    // world axes still left sub-texel slips along the tilted light axes: a constant shimmer.)
     const snap = 320 / 2048;
     const p = P.pos;
-    _v.set(Math.round(p.x / snap) * snap, Math.round(p.y / snap) * snap, Math.round(p.z / snap) * snap);
+    if (!this._lx) {
+      this._lz = SUN.clone().normalize();
+      this._lx = new THREE.Vector3(0, 1, 0).cross(this._lz).normalize();
+      this._ly = this._lz.clone().cross(this._lx);
+    }
+    const lx = Math.round(p.dot(this._lx) / snap) * snap, ly = Math.round(p.dot(this._ly) / snap) * snap, lz = p.dot(this._lz);
+    _v.copy(this._lx).multiplyScalar(lx).addScaledVector(this._ly, ly).addScaledVector(this._lz, lz);
     this.sun.target.position.copy(_v);
     this.sun.position.copy(_v).addScaledVector(SUN, 600);
     this.earthLight.target.position.copy(_v);

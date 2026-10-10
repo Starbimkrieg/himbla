@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toon, ink, glow, textSprite } from './toon.js';
+import { toon, ink, glow, textSprite, nameTag } from './toon.js';
 import { makeFigure } from './models.js';
 import { pixelFont } from './fonts.js';
 import { PEGS, SEGS, SLOTS, MULTS, SPACING, DROP_Y, DIVIDER_TOP, slotEdge, slotCentre } from './plinko.js';
@@ -764,7 +764,7 @@ export function buildCasino(w, loc) {
   put(clSign, W - 1.15, CLASSIC.zs[1], 8.2, -Math.PI / 2);
   const vinnie = makeFigure({ suit: 0x1f8a4a, helmet: 0x7dff6a, visor: 0xffd23f, scale: 1.1 });
   put(vinnie.root, CLASSIC.x - 2.5, CLASSIC.zs[0] - 3, 0, -Math.PI / 2 - 0.5);
-  const vin = textSprite('VINNIE "THE VISOR" · PIT BOSS', { color: '#7dff6a', size: 44, scale: 0.22, bg: '#120a1e' });
+  const vin = nameTag(textSprite('VINNIE "THE VISOR" · PIT BOSS', { color: '#7dff6a', size: 44, scale: 0.22, bg: '#120a1e' }), 'VINNIE "THE VISOR" · PIT BOSS', '#7dff6a');
   vin.position.set(CLASSIC.x - 2.5, 3.4, CLASSIC.zs[0] - 3);
   loc.group.add(vin);
   // prize counter booth

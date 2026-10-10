@@ -252,9 +252,10 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
     }
   } else {
     wish.addScaledVector(up, -wish.dot(up));
-    v.addScaledVector(wish, params.airControl * dt);
     // Quantum Slipstream Vanes (Meridian's finale): the skates keep a share of their carve in the
-    // air, so A/D turns your flight the way it turns you on the ground (speed is kept)
+    // air, so A/D turns your flight the way it turns you on the ground. The turn takes over from the
+    // sideways air push (which would otherwise stack speed on every carve), and a hard carve bleeds
+    // a little speed, so you can still scrub off pace and come down where you meant to
     b.airCarve = 0;
     if (params.airHandling > 0) {
       const hv = _tmp.copy(v).addScaledVector(up, -v.dot(up));
@@ -267,9 +268,14 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
           const side = Math.sign(_gt.crossVectors(hv, _lat).dot(up)) || 1;
           v.applyAxisAngle(up, side * params.handling * params.airHandling * (1 + 8 / (hs + 4)) * la * dt);
           b.airCarve = side * la;
+          wish.addScaledVector(_lat, -0.75);
+          const bleed = Math.max(0, 1 - 0.12 * la * dt);
+          const vu = v.dot(up);
+          v.addScaledVector(up, -vu).multiplyScalar(bleed).addScaledVector(up, vu);
         }
       }
     }
+    v.addScaledVector(wish, params.airControl * dt);
   }
   b.lastLat = lat;
 

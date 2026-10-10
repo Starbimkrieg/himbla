@@ -110,7 +110,7 @@ export const LOCATIONS = [
   },
   {
     id: 'monolith', name: 'The Monolith', short: 'MONOLITH', type: 'monolith', faction: 'none', poi: true,
-    theta: 62, phi: -95, r: 60,
+    theta: 62, phi: -95, r: 80,
     blurb: 'A perfectly black slab nobody admits to building, ringed by an abandoned survey dig. It hums when you get close.',
   },
   {
@@ -152,7 +152,7 @@ export const LOCATIONS = [
   // generation (old saves keep the same terrain and outpost ids); its plateau flattens what's there
   {
     id: 'downs', name: 'Chimera Downs', short: 'DOWNS', type: 'derby', faction: 'none', poi: true, late: true,
-    theta: 22, phi: 160, r: 190, safe: true, repair: 6,
+    theta: 22, phi: 160, r: 215, safe: true, repair: 6,
     blurb: "A proper racecourse for the things that crawl out of Dr. Zbornak's reactor: a grandstand, a jumbotron and a race card that never sleeps.",
   },
 ];

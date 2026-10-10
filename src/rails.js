@@ -59,9 +59,12 @@ export class Grinder {
       if (this.cool > 0 || P.seat || P.vehicle || P.dead) return false;
       // look where you are and where you'll be in a moment, so a fast approach can't tunnel past
       // a tip before the check sees it
+      // (and halfway, so a fast approach can't step over a tip between the two looks)
       let n = this.nearest(b.pos);
-      const ahead = this.nearest(_a.copy(b.pos).addScaledVector(b.vel, Math.min(0.2, dt * 5)));
-      if (ahead && (!n || ahead.d < n.d)) n = ahead;
+      for (const k of [0.5, 1]) {
+        const ahead = this.nearest(_a.copy(b.pos).addScaledVector(b.vel, Math.min(0.2, dt * 5) * k));
+        if (ahead && (!n || ahead.d < n.d)) n = ahead;
+      }
       if (!n) return false;
       railAt(n.r, n.s, _p, _t);
       _u.copy(n.p).normalize();
@@ -75,11 +78,16 @@ export class Grinder {
       const lined = hsp > 4 && Math.abs(along) / hsp > (rim ? 0.5 : 0.75);
       const tip = !n.r.loop && !rim && (n.s < 6 || n.s > n.r.len - 6);
       const reach = tip && lined ? 4 : lined ? (rim ? 3.4 : 2.8) : 1.8;
-      if (n.d > reach) return false;
       // a crater rim only takes you if you're heading along it (crossing one square-on mustn't snag you)
       if (rim && !lined) return false;
       const above = _b.subVectors(b.pos, n.p).dot(_u);
-      if (above < -1.6 || above > (rim ? 3 : 2.2) || b.vel.dot(_u) > 6) return false;
+      // a snake rock: measured across the ground, not through it. Skate into its side at speed and
+      // you're hopped up onto the crest (a ridge you hit square-on still catches you)
+      const flat = Math.sqrt(Math.max(0, n.d * n.d - above * above));
+      const toward = -_b.dot(b.vel) + above * b.vel.dot(_u); // (closing in on the crest line, across the ground)
+      const sideOn = !rim && hsp > 7 && above > -3.6 && above < 0 && flat < 2.5 && toward > 2 * Math.max(flat, 0.5);
+      if (n.d > reach && !sideOn) return false;
+      if (above < (sideOn ? -3.6 : -1.6) || above > (rim ? 3 : 2.2) || b.vel.dot(_u) > 6 + 0.25 * hsp) return false; // (rising a little is just the slope you're on, at speed)
       // which way: at a tip, always inward (into the rail); elsewhere, the way you're moving
       let dir;
       if (tip) dir = n.s < n.r.len / 2 ? 1 : -1;

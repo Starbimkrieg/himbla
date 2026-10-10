@@ -10,6 +10,13 @@ import { mulberry32 } from './rng.js';
 
 export const STATS_V = 1;
 export const STAT_KEYS = ['speed', 'power', 'stamina', 'wit'];
+// (the hover tips on the chimera cards: chimeracard.js)
+export const STAT_TIPS = {
+  speed: 'SPEED: top speed on the straights. Mostly from the legs, some from the body. Big chimeras are a little slower.',
+  power: 'POWER: acceleration off the start, and how fast it gets going again after a stumble. Legs and body.',
+  stamina: 'STAMINA: how slowly it tires. A tired racer loses top speed late in a race, so it decides the long ones. Mostly the body.',
+  wit: 'WIT: fewer stumbles, wrong-way runs and existential moments, and a quicker recovery. Mostly the head.',
+};
 export const STAT_INFO = {
   speed: { short: 'SPD', name: 'SPEED', blurb: 'top speed' },
   power: { short: 'POW', name: 'POWER', blurb: 'acceleration' },
@@ -19,7 +26,7 @@ export const STAT_INFO = {
 
 // What each part brings to the table (0-100 per stat).
 // Legs drive speed and power, the body stamina and power, the head wit.
-const LEGS = {
+export const LEGS = {
   car: { speed: 86, power: 55, stamina: 50, wit: 38 }, // wheels: fast, mid pickup
   mite: { speed: 60, power: 88, stamina: 36, wit: 45 }, // six legs: explosive starts, gasses out
   sapling: { speed: 28, power: 40, stamina: 90, wit: 52 }, // walking roots: slow, never tires
@@ -29,7 +36,7 @@ const LEGS = {
   pirate: { speed: 52, power: 74, stamina: 72, wit: 44 }, // stompy boots
   voidling: { speed: 74, power: 50, stamina: 44, wit: 70 }, // glides
 };
-const BODY = {
+export const BODY = {
   car: { speed: 66, power: 62, stamina: 55, wit: 40 },
   mite: { speed: 55, power: 66, stamina: 44, wit: 45 },
   sapling: { speed: 34, power: 40, stamina: 86, wit: 50 },
@@ -39,8 +46,8 @@ const BODY = {
   pirate: { speed: 50, power: 72, stamina: 72, wit: 46 },
   voidling: { speed: 66, power: 50, stamina: 46, wit: 66 },
 };
-const HEAD_WIT = { alien: 92, person: 76, junkbot: 72, voidling: 64, pirate: 54, sapling: 50, mite: 30, car: 26 };
-const MOD_FX = {
+export const HEAD_WIT = { alien: 92, person: 76, junkbot: 72, voidling: 64, pirate: 54, sapling: 50, mite: 30, car: 26 };
+export const MOD_FX = {
   turbo: { power: 12, speed: 4, stamina: -4 },
   crystal: { speed: 8 },
   armor: { stamina: 12, speed: -8 },

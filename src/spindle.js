@@ -16,7 +16,7 @@ import { toon, glow, ink } from './toon.js';
 import { makeProp } from './storyAssets.js';
 import { mulberry32 } from './rng.js';
 import { SUN, tangent, GRAV } from './geo.js';
-import { makeShuttle } from './models.js';
+import { makeShuttle, makePlanets } from './models.js';
 
 const RC = 420;         // the rock's girth (radius round its long axis)
 const L = 5400;         // its length along the axis (x)
@@ -62,44 +62,123 @@ const KEEP = [[CHECK[0] - 40, 0, 130], [CORE_S, 0, 120], [PAD_S, 0, 150]];
 const CRATERS = (() => {
   const rr = mulberry32(91);
   const out = [];
-  for (let tries = 0; tries < 3000 && out.length < 95; tries++) {
-    const big = rr() < 0.2;
-    const r = big ? 50 + rr() * 60 : 11 + rr() * 30;
+  for (let tries = 0; tries < 5000 && out.length < 150; tries++) {
+    const big = rr() < 0.24;
+    const r = big ? 45 + rr() * 70 : 9 + rr() * 30;
     const c = { s: 380 + rr() * (L - 760), w: (rr() - 0.5) * CIRC, r };
     if (KEEP.some(([ks, kw, kr]) => Math.hypot(c.s - ks, wrapW(c.w - kw)) < kr + r)) continue;
-    if (out.some((o) => Math.hypot(o.s - c.s, wrapW(o.w - c.w)) < (o.r + r) * 0.75)) continue;
-    c.kind = big ? (rr() < 0.6 ? 'complex' : 'terraced') : rr() < 0.18 ? 'ray' : 'bowl';
-    c.d = r * (big ? 0.2 : 0.27);
+    if (out.some((o) => Math.hypot(o.s - c.s, wrapW(o.w - c.w)) < (o.r + r) * 0.7)) continue;
+    c.kind = big ? (rr() < 0.6 ? 'complex' : 'terraced') : rr() < 0.22 ? 'ray' : 'bowl';
+    c.d = r * (big ? 0.24 : 0.32);
     c.rays = rr() * 6;
     out.push(c);
   }
+  // (a chain of small pits along a line here and there: secondary impacts)
+  for (let k = 0; k < 6; k++) {
+    let cs = 500 + rr() * (L - 1000), cw = (rr() - 0.5) * CIRC;
+    const a = rr() * Math.PI;
+    for (let i = 0; i < 7; i++) {
+      const c = { s: cs, w: cw, r: 6 + rr() * 5, kind: 'bowl', rays: 0 };
+      c.d = c.r * 0.35;
+      if (!KEEP.some(([ks, kw, kr]) => Math.hypot(c.s - ks, wrapW(c.w - kw)) < kr + c.r)) out.push(c);
+      cs += Math.cos(a) * 15; cw += Math.sin(a) * 15;
+    }
+  }
   return out;
 })();
+// (each height sample only looks at the craters that can reach it: binned along the axis)
+const CBIN = 100;
+const CRATER_BINS = (() => {
+  const bins = [];
+  for (const c of CRATERS) {
+    const a = Math.floor((c.s - c.r * 4) / CBIN), b = Math.floor((c.s + c.r * 4) / CBIN);
+    for (let k = a; k <= b; k++) (bins[k] ||= []).push(c);
+  }
+  return bins;
+})();
+// massifs: big rugged mountain blocks standing out of the highlands (kept off the sites and the line in)
+const MASSIFS = (() => {
+  const rr = mulberry32(57);
+  const out = [];
+  for (let tries = 0; tries < 400 && out.length < 9; tries++) {
+    const m = { s: 600 + rr() * (L - 1200), w: (rr() - 0.5) * CIRC, r: 55 + rr() * 50, h: 18 + rr() * 22, ph: rr() * 6 };
+    if (Math.abs(wrapW(m.w)) < m.r + 40) continue; // (not across the straight line down the top)
+    if (KEEP.some(([ks, kw, kr]) => Math.hypot(m.s - ks, wrapW(m.w - kw)) < kr + m.r * 1.6)) continue;
+    if (out.some((o) => Math.hypot(o.s - m.s, wrapW(o.w - m.w)) < o.r + m.r + 60)) continue;
+    out.push(m);
+  }
+  return out;
+})();
+// rilles: sinuous collapsed lava channels, each its own stretch of the rock, with low levees
+// (most run long-ways, down the rock toward the core, a few of them close either side of the line in)
+const RILLES = [
+  { s0: 500, s1: 4600, base: 170, amp: 80, per: 720, wob: 22, wd: 14, dep: 9 },
+  { s0: 700, s1: 3900, base: -230, amp: 100, per: 650, wob: 28, wd: 12, dep: 8 },
+  { s0: 1200, s1: 4900, base: 430, amp: 110, per: 820, wob: 30, wd: 16, dep: 10 },
+  { s0: 400, s1: 3000, base: -500, amp: 95, per: 560, wob: 24, wd: 11, dep: 7 },
+  { s0: 2200, s1: 4800, base: -820, amp: 120, per: 700, wob: 35, wd: 13, dep: 8 },
+  { s0: 900, s1: 2600, base: 750, amp: 160, per: 480, wob: 45, wd: 13, dep: 7 },
+  { s0: 1900, s1: 4000, base: -1100, amp: 200, per: 540, wob: 60, wd: 11, dep: 6 },
+  { s0: 3000, s1: 4700, base: 1150, amp: 150, per: 420, wob: 40, wd: 15, dep: 8 },
+];
+// scarps: long curving cliffs where the crust thrust up over itself (a step of a few metres)
+const SCARPS = [
+  { s: 1450, w: -300, r: 260, hh: 6, a0: -0.9, a1: 0.9 },
+  { s: 2800, w: 400, r: 320, hh: 7, a0: 2.2, a1: 3.9 },
+  { s: 3900, w: -900, r: 240, hh: 5, a0: -0.4, a1: 1.4 },
+];
 // levelled sites: the start, the shrine, the launch pad
 const FLATS = [{ s: CHECK[0] - 40, w: 0, r: 38 }, { s: CORE_S, w: 0, r: 30 }, { s: PAD_S, w: 0, r: 42 }];
 
 // what the last heightAt call found there (for the colouring)
-const TA = { mare: 0, ray: 0, floor: 0 };
+const TA = { mare: 0, ray: 0, floor: 0, wall: 0, rim: 0, rille: 0 };
 
 function rawHeight(s, w) {
   const ph = w / RC;
   // (every term round the girth has a whole number of waves, so it meets itself all the way round)
-  // maria: broad, low, smooth dark plains; highlands: rougher, ridged, lighter
-  const mare = smooth(0.15, 0.55, Math.sin(s / 820 + 1.3) * Math.cos(ph * 2 + s / 1500) + 0.2 * Math.sin(ph * 3 - s / 600));
-  const high = 1 - mare;
-  let h = (5 * Math.sin(s / 83) * Math.cos(ph * 7) + 3.5 * Math.sin(s / 29 + ph * 11)) * (0.35 + 0.65 * high) + 1.2 * Math.cos(s / 11 - ph * 23) * high;
+  // all highlands: rough, ridged, rolling; no smooth maria out here
+  let h = 5 * Math.sin(s / 83) * Math.cos(ph * 7) + 1.8 * Math.sin(s / 29 + ph * 11) + 0.6 * Math.cos(s / 11 - ph * 23); // (small bumps kept small: big ones read, small ones mottle)
   h += 14 * Math.cos(ph * 2 + s / 700) + 6 * Math.sin(ph * 3 - s / 450); // the rock is lumpy, not round
-  const ridge = 1 - Math.abs(Math.sin(s / 61 + ph * 5) * Math.cos(s / 97 - ph * 9));
-  h += high * ridge * ridge * 7 - mare * 5;
-  // a sinuous rille winding down the middle stretch
-  if (s > 1100 && s < 3900) {
-    const wr = 240 * Math.sin(s / 520) + 900 + 60 * Math.sin(s / 170);
-    const dd = Math.abs(wrapW(w - wr));
-    const fade = smooth(1100, 1300, s) * (1 - smooth(3700, 3900, s));
-    if (dd < 12) h -= 5 * (1 - (dd / 12) ** 2) * fade;
+  // ridges running long-ways down the rock (gently wandering), not a product of two waves: that made a
+  // diamond checkerboard of humps that read as patches across the ground
+  const ridge = 1 - Math.abs(Math.sin(ph * 7 + 0.8 * Math.sin(s / 260) + 0.3 * Math.sin(s / 90)));
+  const ridge2 = 1 - Math.abs(Math.sin(ph * 17 + 1.5 * Math.sin(s / 170) + 1.7));
+  h += ridge ** 3 * 9 + ridge2 ** 3 * 2.5;
+  // massifs
+  for (const m of MASSIFS) {
+    const ds = s - m.s;
+    if (Math.abs(ds) > m.r) continue;
+    const d = Math.hypot(ds, wrapW(w - m.w)) / m.r;
+    if (d >= 1) continue;
+    const k = (1 - d * d) ** 2;
+    const crag = 1 - Math.abs(Math.sin(ds / 9 + m.ph) * Math.cos(wrapW(w - m.w) / 13 - m.ph));
+    h += m.h * k * (0.7 + 0.3 * crag * crag);
   }
-  let ray = 0, floor = 0;
-  for (const c of CRATERS) {
+  // rilles (with a low levee each side)
+  TA.rille = 0;
+  for (const r of RILLES) {
+    if (s < r.s0 - 100 || s > r.s1 + 100) continue;
+    const wr = r.base + r.amp * Math.sin(s / r.per) + r.wob * Math.sin(s / (r.per * 0.33) + 1.1);
+    const dd = Math.abs(wrapW(w - wr));
+    if (dd > r.wd * 2) continue;
+    const fade = smooth(r.s0 - 100, r.s0 + 100, s) * (1 - smooth(r.s1 - 100, r.s1 + 100, s));
+    if (dd < r.wd) { h -= r.dep * (1 - (dd / r.wd) ** 2) * fade; TA.rille = Math.max(TA.rille, (1 - (dd / r.wd) ** 2) * fade); }
+    else h += r.dep * 0.2 * Math.sin((Math.PI * (dd - r.wd)) / r.wd) * fade;
+  }
+  // scarps: a curving step, high on the inside of the arc
+  for (const c of SCARPS) {
+    const ds = s - c.s, dw = wrapW(w - c.w);
+    const d = Math.hypot(ds, dw);
+    if (Math.abs(d - c.r) > 30) continue;
+    let a = Math.atan2(dw, ds);
+    if (a < c.a0) a += Math.PI * 2;
+    if (a > c.a1) continue;
+    const edge = Math.min(a - c.a0, c.a1 - a) * c.r; // (the step dies away at the ends of the arc)
+    // (high side +hh/2, low side -hh/2, easing back to nothing 30 m off the cliff so there's no seam)
+    h += c.hh * (0.5 - smooth(c.r - 3, c.r + 3, d)) * smooth(0, 60, edge) * (1 - smooth(12, 30, Math.abs(d - c.r)));
+  }
+  let ray = 0, floor = 0, wall = 0, rim = 0;
+  for (const c of CRATER_BINS[Math.floor(s / CBIN)] || []) {
     const ds = s - c.s;
     if (Math.abs(ds) > c.r * 4) continue;
     const dw = wrapW(w - c.w);
@@ -118,11 +197,12 @@ function rawHeight(s, w) {
       } else dep = 1 - x * x;
       h -= c.d * dep;
       floor = Math.max(floor, 1 - x);
-    } else if (x < 1.35) h += c.d * 0.38 * (1 - Math.abs(x - 1.17) / 0.18); // the rim
-    if (x >= 1 && x < 2) h += c.d * 0.12 * (2 - x); // ejecta
+      if (x > 0.55) wall = Math.max(wall, smooth(0.55, 0.85, x));
+    } else if (x < 1.35) { h += c.d * 0.42 * (1 - Math.abs(x - 1.17) / 0.18); rim = Math.max(rim, 1 - Math.abs(x - 1.15) / 0.2); } // the rim
+    if (x >= 1 && x < 2) h += c.d * 0.14 * (2 - x); // ejecta
     if (c.kind === 'ray' && x < 4) ray = Math.max(ray, Math.pow(Math.abs(Math.sin(Math.atan2(dw, ds) * 6 + c.rays)), 16) * (1 - smooth(1.1, 4, x)));
   }
-  TA.mare = mare; TA.ray = ray; TA.floor = floor;
+  TA.mare = 0; TA.ray = ray; TA.floor = floor; TA.wall = wall; TA.rim = Math.max(0, rim);
   // the ends: they taper to blunt tips, then fall away into open space
   const toEnd = Math.min(s, L - s);
   if (toEnd < 300) h -= Math.pow(1 - Math.max(0, toEnd) / 300, 2) * 90;
@@ -324,7 +404,7 @@ export class Spindle {
     const ns = Math.ceil((S1 - S0) / ds) + 1, nw = Math.round(CIRC / dw);
     const pos = new Float32Array(ns * nw * 3), col = new Float32Array(ns * nw * 3);
     const c0 = new THREE.Color(0xb0a8c4), c1 = new THREE.Color(0x8a82a2), c2 = new THREE.Color(0x3e3656), cc = new THREE.Color();
-    const cMare = new THREE.Color(0x5e5878), cRay = new THREE.Color(0xe6e2f4), cFloor = new THREE.Color(0x6d6688);
+    const cMare = new THREE.Color(0x5e5878), cRay = new THREE.Color(0xe6e2f4), cFloor = new THREE.Color(0x6d6688), cWall = new THREE.Color(0x4a4366), cRim = new THREE.Color(0xd8d2ec);
     const rr = mulberry32(5);
     const pt = new THREE.Vector3();
     for (let i = 0; i < ns; i++) for (let j = 0; j < nw; j++) {
@@ -336,6 +416,8 @@ export class Spindle {
       if (h < -40) cc.copy(c2); else cc.copy(c1).lerp(c0, Math.min(1, Math.max(0, (h + 4) / 18)));
       // (TA: what heightAt just found here) dark maria, darker crater floors, bright rays
       cc.lerp(cMare, TA.mare * 0.75).lerp(cFloor, TA.floor * 0.45).lerp(cRay, TA.ray * 0.7);
+      // (crater walls a shade darker, rims a shade brighter: the craters read as craters in any light)
+      cc.lerp(cWall, Math.max(TA.wall * 0.5, TA.rille * 0.55)).lerp(cRim, TA.rim * 0.55);
       cc.offsetHSL(0, 0, (rr() - 0.5) * 0.04);
       col[k] = cc.r; col[k + 1] = cc.g; col[k + 2] = cc.b;
     }
@@ -348,9 +430,18 @@ export class Spindle {
     geo.setIndex(idx);
     geo.computeVertexNormals();
     // (both faces: from any angle the rock is rock, never a window onto the stars)
-    const rock = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: toon(0).gradientMap, side: THREE.DoubleSide }));
+    // (the toon bands with softened edges: hard ones, on vertices 7 m apart under a low sun, traced the
+    // mesh's triangles as pale polygons; a fully smooth ramp turned every bump into a soft stain)
+    const RAMP = [55, 55, 55, 115, 115, 115, 255, 255, 255]; // (three toon bands, their edges just softened)
+    const ramp = new THREE.DataTexture(new Uint8Array(RAMP.flatMap((v) => [v, v, v, 255])), RAMP.length, 1, THREE.RGBAFormat);
+    ramp.minFilter = ramp.magFilter = THREE.LinearFilter;
+    ramp.needsUpdate = true;
+    const rock = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: ramp, side: THREE.DoubleSide }));
     rock.receiveShadow = true;
-    rock.castShadow = true;
+    // (it doesn't throw its own shadow: double-sided and coarse, at the low sun angles of the roll its
+    // self-shadow broke into hard pale patches and soft dark blotches. The ship, drones, props and
+    // you still shadow it; the toon shading does the day and night)
+    rock.castShadow = false;
     root.add(rock);
     // the blunt tips, capped
     for (const [sx, dir] of [[S0, -1], [S1, 1]]) {
@@ -425,6 +516,7 @@ export class Spindle {
     sun.position.copy(SUN).multiplyScalar(7000);
     sun.lookAt(0, 0, 0);
     sky.add(sun);
+    sky.add(makePlanets(SUN, 7100));
     root.add(sky);
     // the mothership and the extraction pod
     this.ship = makeMothership();
@@ -557,12 +649,19 @@ export class Spindle {
     const sunDir = SUN.clone().applyQuaternion(q);
     const up = P.up;
     const day = THREE.MathUtils.smoothstep(up.dot(sunDir), -0.15, 0.2);
-    g.sun.intensity = 0.55 + 1.15 * day;
+    // (no sun at all on the night turn: it used to keep shining up through the rock at half strength,
+    // so the rock's own shadow smeared soft dark blotches over the ground; the Moon's glow lights it)
+    g.sun.intensity = 1.7 * day;
     g.hemi.position.copy(up);
     g.hemi.intensity = 0.95; // (moonlight off the Moon below keeps the rock readable on its night turn)
     g.earthLight.intensity = 0.25;
-    g.sun.target.position.copy(P.pos);
-    g.sun.position.copy(P.pos).addScaledVector(sunDir, 600);
+    // the shadow box follows you in whole shadow-map texels along the light's axes (see main.js
+    // updateLighting), so shadows don't shimmer as you move
+    const lz = sunDir.clone().normalize(), lx = new THREE.Vector3(0, 1, 0).cross(lz).normalize(), ly = lz.clone().cross(lx);
+    const snap = 320 / 2048;
+    const sp = lx.multiplyScalar(Math.round(P.pos.dot(lx) / snap) * snap).addScaledVector(ly, Math.round(P.pos.dot(ly) / snap) * snap).addScaledVector(lz, P.pos.dot(lz));
+    g.sun.target.position.copy(sp);
+    g.sun.position.copy(sp).addScaledVector(sunDir, 600);
     g.earthLight.target.position.copy(P.pos);
     g.earthLight.position.copy(P.pos).addScaledVector(new THREE.Vector3(0, -1, 0).applyQuaternion(q), 600); // moonlight from below
     g.renderer.shadowMap.autoUpdate = true;
@@ -659,7 +758,11 @@ export class Spindle {
       if (live.length) {
         const kind = live[this.attackN++ % live.length];
         if (kind === 0) this.barrage();
-        else if (kind === 1) this.sweep(s, w);
+        else if (kind === 1) {
+          // past halfway down the rock: two beams at once, one from each side, sweeping toward
+          // each other on tracks either side of your line
+          if (s > L / 2) { this.sweep(s, w, -5.5, 1); this.sweep(s, w, 5.5, -1); } else this.sweep(s, w);
+        }
         else this.mines(s, w);
       }
     }
@@ -675,14 +778,15 @@ export class Spindle {
   barrage() {
     const g = this.game;
     const P = g.player;
-    for (let i = 0; i < 14; i++) g.schedule(i * 0.07, () => {
+    // (a quarter faster than it used to fire, both the aimed stream and the spray)
+    for (let i = 0; i < 14; i++) g.schedule(i * 0.056, () => {
       if (!this.active || P.dead) return;
       const from = this.shipBelly();
       const aim = P.center.clone().addScaledVector(P.vel, from.distanceTo(P.center) / 120).add(new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4));
       g.projectiles.fire('alien', from, aim.sub(from).normalize().multiplyScalar(120), { damage: 7, splash: 2.5, color: PINK, size: 0.6, knock: 0.5 });
     });
     const side = new THREE.Vector3().crossVectors(AX, P.up);
-    for (let i = 0; i < 26; i++) g.schedule(0.2 + Math.random() * 1.1, () => {
+    for (let i = 0; i < 26; i++) g.schedule(0.16 + Math.random() * 0.88, () => {
       if (!this.active || P.dead) return;
       const from = this.shipBelly();
       const spot = P.center.clone().addScaledVector(P.vel, 0.6 + Math.random() * 0.8).addScaledVector(side, (Math.random() - 0.5) * 80).addScaledVector(AX, (Math.random() - 0.3) * 60);
@@ -694,16 +798,16 @@ export class Spindle {
 
   // 2: a beam that sweeps round the rock. Its track is painted on the ground first (pulsing hazard
   // stripes, like the strike warnings), then the beam burns along it, leaving a glowing scorch.
-  sweep(s, w) {
+  sweep(s, w, ds = 0, dir = 1) {
     const g = this.game;
-    const s0 = s + 30 + Math.max(0, g.player.vel.dot(AX)) * 1.3;
+    const s0 = s + 30 + Math.max(0, g.player.vel.dot(AX)) * 1.3 + ds;
     const W = 170; // (an arc either side of you, round the girth)
     const HW = 4.5; // half the track's width
     const P = [], U = [], V = [], idx = [];
     const n = Math.ceil((W * 2) / 3);
     for (let i = 0; i <= n; i++) {
       const ww = w - W + (i / n) * W * 2;
-      for (const side of [-1, 1]) { const q = bandPoint(s0 + side * HW, ww, 0.2); P.push(q.x, q.y, q.z); U.push(i / n); V.push(side); }
+      for (const side of [-1, 1]) { const q = bandPoint(s0 + side * HW, ww, 0.2); P.push(q.x, q.y, q.z); U.push(dir > 0 ? i / n : 1 - i / n); V.push(side); }
       if (i < n) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     }
     const geo = new THREE.BufferGeometry();
@@ -737,19 +841,33 @@ export class Spindle {
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 3.4, 1, 12, 1, true), BEAM(PINK, 0.7));
     beam.visible = false;
     this.root.add(beam);
-    this.hazards.push({ type: 'sweep', s: s0, w0: w, W, t: 0, line, beam, mesh: line, hitCd: 0 });
+    this.hazards.push({ type: 'sweep', s: s0, w0: w, W, dir, twin: ds !== 0, t: 0, line, beam, mesh: line, hitCd: 0 });
   }
 
-  // 3: mines: rings scattered ahead of you, each bursting a beat later
+  // 3: mines: rings dropped where you're going to be when they burst (your velocity, all of it,
+  // played forward), a tight cluster on the spot itself and a wider scatter round it
   mines(s, w) {
     const g = this.game;
     const P = g.player;
-    const ahead = Math.max(0, P.vel.dot(AX)) * 1.3; // (where you'll be when they burst)
-    for (let i = 0; i < 9; i++) {
-      const ms = s + ahead + (Math.random() - 0.3) * 50, mw = w + (Math.random() - 0.5) * 50;
+    const T = 1.8; // (the fuse: time enough to read them and pick a gap)
+    const side = new THREE.Vector3().crossVectors(AX, radial(P.pos)).normalize(); // (the +w way round)
+    const vs = P.vel.dot(AX), vw = P.vel.dot(side);
+    const ps = s + vs * T, pw = w + vw * T;
+    const R = 10; // (bigger rings, and never stacked on each other)
+    const placed = [];
+    for (let i = 0; i < 14; i++) {
+      // (a few on your line, the rest spread wide: a field to thread, not a carpet)
+      const tight = i < 4;
+      const spread = tight ? 26 : 110;
+      let ms = 0, mw = 0;
+      for (let k = 0; k < 8; k++) {
+        ms = ps + (Math.random() - (tight ? 0.5 : 0.35)) * spread; mw = pw + (Math.random() - 0.5) * spread;
+        if (placed.every(([a, b]) => Math.hypot(a - ms, b - mw) > R * 1.9)) break;
+      }
+      placed.push([ms, mw]);
       const p = bandPoint(ms, mw, 0.3);
-      g.fx.warningRing(p, 7, 1.3);
-      g.schedule(1.3, () => { if (this.active) g.explode(p.clone().addScaledVector(radial(p), 1), 7, 26, 'alien', 1.4); });
+      g.fx.warningRing(p, R, T);
+      g.schedule(T, () => { if (this.active) g.explode(p.clone().addScaledVector(radial(p), 1), R, 26, 'alien', 1.4); });
     }
   }
 
@@ -767,9 +885,11 @@ export class Spindle {
         U.prog.value = Math.min(1, k);
         // the scorch cools and fades for a couple of seconds after the beam's gone
         if (k > 1) { h.beam.visible = false; U.fade.value = Math.max(0, 1 - (k - 1) * 1.1); if (k > 2) { h.line.removeFromParent(); h.beam.removeFromParent(); this.hazards.splice(i, 1); } continue; }
-        const gw = h.w0 - h.W + k * h.W * 2;
+        const gw = h.w0 - h.dir * h.W + h.dir * k * h.W * 2;
         const gp = bandPoint(h.s, gw, 0);
         const from = this.shipBelly();
+        // (a twin beam leaves from its own side of the hull)
+        if (h.twin) from.addScaledVector(new THREE.Vector3().crossVectors(radial(from), AX).normalize(), -h.dir * 22);
         h.beam.visible = true;
         h.beam.position.lerpVectors(from, gp, 0.5);
         h.beam.scale.set(1, from.distanceTo(gp), 1);
@@ -839,8 +959,10 @@ export class Spindle {
         d.fireCd = 1.1 + Math.random() * 0.8;
         for (let i = 0; i < 3; i++) g.schedule(i * 0.09, () => {
           if (d.dead || !this.active || P.dead) return;
-          const aim = P.center.clone().addScaledVector(P.vel, d.center.distanceTo(P.center) / 105).add(new THREE.Vector3((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5));
-          g.projectiles.fire('alien', d.center.clone(), aim.sub(d.center).normalize().multiplyScalar(105), { damage: 3, splash: 0, color: PINK, size: 0.28, knock: 0.15 });
+          // (faster bolts, led onto where you'll be, with a little splash: a runner on the move still
+          // gets clipped now and then)
+          const aim = P.center.clone().addScaledVector(P.vel, d.center.distanceTo(P.center) / 150).add(new THREE.Vector3((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5));
+          g.projectiles.fire('alien', d.center.clone(), aim.sub(d.center).normalize().multiplyScalar(150), { damage: 5, splash: 1.4, color: PINK, size: 0.3, knock: 0.2 });
         });
         if (dist < 90) g.audio.tone(1300, 0.06, 'square', 0.04, 0.6);
       }

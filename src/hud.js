@@ -1,10 +1,17 @@
 import * as THREE from 'three';
+import { NAME_TAGS } from './toon.js';
 import { FACTIONS } from './locations.js';
 import { arcDist, darkness, upAt } from './geo.js';
 import { WEAPONS } from './weapons.js';
 import { pixelFont } from './fonts.js';
 
 const $ = (id) => document.getElementById(id);
+
+// With a controller in hand, the key names in prompts become its buttons (gamepad.js)
+const PAD_GLYPH = { F: 'X', G: 'R3', X: '↓', V: 'Y', Z: 'RB', M: 'VIEW', R: 'HOLD VIEW', E: 'L3', Q: 'B', SPACE: 'LB', SHIFT: 'A', ESC: 'B', MOUSE: 'R-STICK', 'W A S D': 'L-STICK', ENTER: 'A' };
+export function padGlyphs(html) {
+  return html.replace(/<b>([A-Z0-9 +]{1,8})<\/b>/g, (m, k) => (PAD_GLYPH[k] ? `<b class="pg">${PAD_GLYPH[k]}</b>` : m));
+}
 
 export class HUD {
   constructor(game) {
@@ -108,7 +115,7 @@ export class HUD {
   prompt(text) {
     const el = $('prompt');
     if (!text) { el.classList.add('hidden'); return; }
-    el.innerHTML = text;
+    el.innerHTML = this.game.input.padActive ? padGlyphs(text) : text;
     el.classList.remove('hidden');
   }
 
@@ -236,7 +243,53 @@ export class HUD {
   closeBoard() { $('board').classList.add('hidden'); }
 
   // ---- per-frame ----
+  // NPC name tags (toon.js nameTag): a solid label over each named NPC you can see, smaller the
+  // closer you are, faded out with distance, hidden behind the camera, hills and walls
+  updateTags(dt) {
+    const g = this.game;
+    const cam = g.camera;
+    cam.updateMatrixWorld(); // (this frame's camera, not last frame's)
+    let box = this.tagBox;
+    if (!box) { box = this.tagBox = document.createElement('div'); box.id = 'nametags'; document.getElementById('hud').appendChild(box); }
+    const W = window.innerWidth, H = window.innerHeight;
+    const playing = g.state === 'play';
+    for (let n = NAME_TAGS.length - 1; n >= 0; n--) {
+      const t = NAME_TAGS[n];
+      // taken off its place (a rebuilt place): drop it. A place out of range isn't in the scene: hide it
+      if (!t.sprite.parent) { if (t.el) t.el.remove(); NAME_TAGS.splice(n, 1); continue; }
+      let o = t.sprite, shown = true;
+      while (o.parent) { if (!o.visible) shown = false; o = o.parent; }
+      if (o !== g.scene) shown = false;
+      if (!t.el) {
+        t.el = document.createElement('div');
+        t.el.className = 'nametag';
+        t.el.textContent = t.text;
+        t.el.style.setProperty('--tc', t.color);
+        box.appendChild(t.el);
+      }
+      const p = t.sprite.getWorldPosition(this.v);
+      const d = p.distanceTo(cam.position);
+      let on = playing && shown && d < 150;
+      if (on) {
+        // (line of sight: a few times a second is plenty)
+        t.losT -= dt;
+        if (t.losT <= 0) { t.losT = 0.25; t.seen = g.enemies.clearShot(cam.position, p); } // (terrain and walls)
+        on = t.seen;
+      }
+      if (on) {
+        p.project(cam);
+        if (p.z > 1 || Math.abs(p.x) > 1.05 || Math.abs(p.y) > 1.05) on = false;
+      }
+      if (!on) { if (!t.el.classList.contains('off')) t.el.classList.add('off'); continue; }
+      t.el.classList.remove('off');
+      const s = Math.max(0.6, Math.min(1, 0.6 + (d - 4) / 36 * 0.4)); // (smaller up close)
+      t.el.style.transform = `translate(${((p.x * 0.5 + 0.5) * W).toFixed(1)}px, ${((-p.y * 0.5 + 0.5) * H).toFixed(1)}px) translate(-50%, -100%) scale(${s.toFixed(3)})`;
+      t.el.style.opacity = d > 110 ? Math.max(0, 1 - (d - 110) / 40).toFixed(2) : '1';
+    }
+  }
+
   update(dt) {
+    this.updateTags(dt);
     const g = this.game;
     const P = g.player;
     const ms = g.missions;

@@ -3,6 +3,149 @@
 What changed in each release. Releases are built by `.github/workflows/release.yml` when a commit message
 contains `[release]` (see the README's Download section). Newest first.
 
+## 0.9.98 — 2026-10-10
+
+**Models**
+- **Hover-car:** 15% bigger and smoother: a flattened capsule hull with a rub-strip round the waist,
+  lights set flush into the nose and tail, slim side pods with intakes and warm vents (no more bright blue
+  thrusters underneath), a roof hoop, mirrors, door seams, a brake light, a plate and a whip antenna.
+- **Land-train hitches:** every trailer now has a real drawbar, re-aimed each frame from its yoke to the
+  coupling pin of the car in front, so the train stays joined over crests and dips.
+- **Vostok and Daedalus bases:** the command bunker's slits, bands and armour now sit square on every
+  face (they were tilted along the wrong axis), and the bunker is bigger. The barracks are bigger Quonset
+  huts spread round the yard, their doors facing the bunker.
+- **The Monolith:** a bigger slab, and a camp half as wide again: a wider berm, more floodlights, a second
+  tent, a site cabin, survey stakes and tape, a taller scaffold. The transit pad now sits out past the berm,
+  clear of where Meridian builds its launch complex, and the launch complex sits flush on its plateau
+  (it was floating at one edge).
+- **Pirate outposts:** the Scrap Shack's huts are bigger and visibly shot up (a blast hole with bent-out
+  metal and hot edges, half the roof peeled back, scorch marks, bullet holes, a shored-up corner, a torn
+  tarp). The Junk Pile gets a bigger, ripped tent and a half-collapsed lean-to.
+- **Dr. Zbornak's lab:** lab gear along every inner wall: a fume hood, a glassware bench under a
+  chalkboard of sums, specimen tanks, a cryo freezer, a pipe manifold, a server bank, gas bottles,
+  lockers, an eyewash station and cable trays. Zbornak now stands on his own dais behind a waist-high
+  workbench with a console bank behind him. The holding-pen terminal is a small kiosk with a screen.
+
+**Your runner**
+- **The scarf** is a smooth physics ribbon now. It leaves the collar a little to the right, so it hangs
+  down the side of a cargo crate (or the Kepler twin stack) instead of over it, and streams and flutters as
+  you move. Each outfit has its own scarf: length, width, and one tail or two.
+- **Capes are gone.** The outfits that had one now wear a long twin-tailed scarf.
+- **Wardrobe tiles** show rendered portraits: every outfit in three-quarter view with its scarf, and every
+  skate finish close up on the boots and rails.
+
+**Interface**
+- **NPC name tags** (the faction leaders, Dr. Zbornak, Vinnie) are solid labels drawn over the scene,
+  so busy scenery can't swallow them. They shrink as you walk up, fade with distance, and hide behind
+  hills and walls.
+- **Holding pen:** chimera names take their grade's colour (S yellow, A pink, B cyan, C grey), the page
+  is wider with three cards a row, and hovering any stat, part, trait or grade explains what it means.
+- **Dr. Zbornak:** "Give me a jar" is offered right after "How does this work?", and his answers ("Got
+  it", the rumours) lead back to his other options. A jar you own now shows on your pack from the start
+  (it used to appear only once you scooped something).
+
+**World**
+- **Hover-cars** are faster and outpace the town speed limit, so a car that hops over a land-train
+  actually gets past it instead of shadowing it.
+- **Spare landing pads** that no transit line uses are gone (Hertzsprung, Farside, Twilight, Kepler):
+  they sat empty, sometimes under a lamp post.
+- **The holding pen:** its terminal faces the pen again, and the chimeras in the pen roam the yard
+  (wander, stop and look round, wander on) instead of standing in rows.
+- **Music:** the dark-side track plays out on the Spindle during Meridian's finale.
+- **The containment jar** clips to the right of your pack; the scarf hangs down the left.
+
+**Performance**
+- **Merged static geometry.** Every place's buildings, props and outlines that never move are folded
+  into a few merged meshes, chunked by area so off-screen chunks are still skipped and small props
+  still drop out at range. Plain colours share one vertex-coloured material, so a chunk is one draw
+  call however many colours it has. Anything that moves, animates, blinks, gets hidden, is swapped by
+  the story, or uses glass or a texture stays as it was. Places merge in idle time on the title
+  screen (the rest on the first frame of play), and a place the story rebuilds merges again.
+- Every kit-built model (outposts, turrets, rovers, traffic, settlement parts) bakes its plain colours
+  the same way: a turret is 6 meshes instead of 16.
+- At the ILMB, from about 2,300 meshes drawn to about 1,700. The places themselves went from ~3,500
+  static meshes to ~1,200 chunks across the Moon.
+
+**Lighting**
+- **No more shadow streaks and blotches on buildings.** Every settlement sits square to the sun, so its
+  east and west walls are lit exactly edge-on, where the shadow map breaks into diagonal streaks; and
+  curved undersides (the Meridian Labs deck) were blotched by their own back faces. Faces the sun
+  skims now ease smoothly from lit to dark, and faces turned away from it are simply unlit. Cast
+  shadows on sunlit faces are unchanged, and the ground keeps its long dusk shadows.
+- **Shadows hold still as you move.** The shadow map follows you in whole texels along the sun's own
+  axes (it used to snap on the world axes, which still let it slip by part of a texel every step).
+
+**Sky**
+- **The planets:** Venus near the sun, then Mars, banded Jupiter and ringed Saturn round the ecliptic:
+  small, far and quiet, each lit by the real sun so it shows its phase (on the Moon and on the Spindle).
+
+**The Spindle**
+- **Terrain:** no smooth maria any more: all rough highlands, with half again as many craters (deeper,
+  plus chains of small pits), three long sinuous rilles with low levees, rugged massifs, curving
+  scarps and sharper ridges.
+- **Long-ways terrain:** eight rilles now, most running down the rock toward the core (a couple close
+  either side of the line in), darker in their beds; the ridges run long-ways too. The old ridges were
+  two waves multiplied, a diamond checkerboard of humps that read as patches across the ground.
+  Crater walls are shaded and rims picked out in the colouring, and the small bumps are calmer, so the
+  ground reads as terrain rather than mottling.
+- **Ground mines** spread wide (a few on your line, the rest a field to thread, never stacked),
+  bigger (10 m) and with a longer fuse (1.8 s).
+- **The rock's shading:** the pale polygons and dark blotches across the ground are gone. It wasn't
+  intended: hard toon bands on a coarse mesh at low sun angles, plus the sun still shining up through
+  the rock on the night turn. The rock now shades smoothly and goes properly dark at night; shadows
+  hold still as you move there too.
+- **Drones** hit harder (5, with a little splash) and their bolts are faster, so dodging is still the
+  answer but a stray one now stings.
+- **The plasma barrage** fires a quarter faster. **The ground mines** come in fourteens, aimed off
+  where you're actually heading (your full velocity, played forward to the fuse).
+- **Past halfway**, the beam attack fires **two beams at once**, one from each side of the ship,
+  sweeping toward each other on tracks either side of your line.
+
+**Snake rocks**
+- **Their tips are solid now** (a slab under the sloping crest, so you can't run through them, but you
+  still roll straight up onto the rail).
+- **Catching the grind is more reliable:** skating into a ridge's side at speed hops you up onto the
+  crest; a fast approach is checked along its whole path so it can't step over a tip; and running up
+  a slope into one no longer counts as flying past it.
+
+**Controller support**
+- **Play with a gamepad** (Xbox, PlayStation, Switch Pro: any standard controller). Analog movement on
+  the left stick, look on the right, triggers to fire and thrust, the shoulders for skates and powers,
+  the d-pad for weapons, powers and the jar; `View` is the map (hold it to recall), `Start` pauses. It
+  takes over the moment you pick it up and steps aside when you touch the mouse or keyboard; key
+  rebinding doesn't get in its way.
+- **Every screen works with it:** a highlight moves over whatever's on screen (dialogs, the job board,
+  shops, the wardrobe, the casino, the holding pen, settings, pause): `A` presses, `B` backs out,
+  `LB`/`RB` switch tabs, the right stick scrolls, sliders slide. The title menu takes the d-pad too.
+- **Prompts show pad buttons** while it's in use (`X — TALK TO DR. ZBORNAK`).
+- **The quick slot (d-pad down)** covers everything without a button of its own: tap it to use it,
+  hold it to pick what it is (left/right, or keep holding to step): empty the jar, wardrobe,
+  reputation log, pen link, Teleporter, help, music. A chip under the power chip shows which.
+
+**Enemy outline**
+- **Thick, inky red outlines** on marked enemies: pushed out a fixed number of screen pixels (about 5 at
+  1080p, pulsing slightly) so they read as boldly at 200 m as at 5 m. The old outline was a fattened
+  ink shell in metres, which went hair-thin at range and barely changed at all on rovers and other
+  merged models.
+
+**Chimera Downs**
+- **A proper racecourse look:** racing green and cream with brass, navy steel and a deep red (the pink
+  funfair colours are gone), on the stands, the office, the gate, the gantry and the screens.
+- **A bigger grandstand:** eleven tiers of individual seats (green and cream rows, red in the members'
+  enclosure), aisle stairs with brass handrails, a glazed row of members' boxes, a trussed roof with a
+  clock and pennants, and a lit concourse face with posters. **A second, open stand** across the
+  course on the back straight.
+- **The crowd** is drawn as outlined figures (bodies, heads, hair or hats, arms they throw up when it
+  gets exciting) instead of flat coloured pegs, in both stands.
+- **A concourse** behind the grandstand: food stalls with striped awnings (Moon Dogs, Crater Fries, He-3
+  Fizz, Chimera Chow, Rock Candy, the Tote), picnic tables under umbrellas, festoon lights, and
+  **racegoers wandering** it, the apron, the way in and behind the far stand.
+
+**Handling**
+- **Quantum Slipstream Vanes:** the turn in the air is unchanged, but a carve no longer adds forward speed
+  (the turn replaces the sideways air push), and a hard carve bleeds a little speed, so you can still slow
+  down and land where you meant to.
+
 ## 0.9.96 — 2026-10-10
 
 **Faction stories: finales that change the Moon**

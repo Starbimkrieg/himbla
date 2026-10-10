@@ -83,6 +83,7 @@ export class Planet {
     this.tunnel = null; // set by the secrets system: overrides the floor underground
     this.material = this.makeMaterial();
     this.material.shadowSide = THREE.BackSide;
+    this.material.defines = { ...(this.material.defines || {}), KEEP_GRAZE_SHADOW: '' }; // (toon.js: the ground keeps its long dusk shadows)
     this.boulderGeo = new THREE.DodecahedronGeometry(1, 0);
     this.boulderMat = new THREE.MeshToonMaterial({ color: 0x8d8898, gradientMap: gradientMap() });
     this.boulderInk = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });

@@ -155,7 +155,11 @@ export class Player {
 
     const wish = new THREE.Vector3();
     const trickHeld = input.down('KeyQ') && !b.grounded && b.airTime > 0.12;
-    if (!trickHeld) {
+    if (!trickHeld && input.padMove && input.padMove.on) {
+      // a controller's left stick: analog (a gentle push, a gentle carve)
+      wish.addScaledVector(cam.fwd, -input.padMove.y).addScaledVector(cam.right, input.padMove.x);
+      if (wish.lengthSq() > 1) wish.normalize();
+    } else if (!trickHeld) {
       if (input.down('KeyW')) wish.add(cam.fwd);
       if (input.down('KeyS')) wish.sub(cam.fwd);
       if (input.down('KeyD')) wish.add(cam.right);
@@ -491,8 +495,9 @@ export class Player {
     }
     // physics scarf: hangs at rest, streams with speed, drapes over whatever is on your back
     if (!this.scarfSim) this.scarfSim = new ScarfSim(m);
-    const cape = this.game.cosmetics && this.game.cosmetics.extraMeshes && this.game.cosmetics.extraMeshes.some((x) => x.userData.cape && x.visible);
-    this.scarfSim.update(dt, this.vehicle ? this.vehicle.e.body.vel : b.vel, up, this.cargoMesh ? { back: 1.14, top: 1.0 } : cape ? { back: 0.62, top: 0.96 } : { back: 0.55, top: 0.94 });
+    // (a crate on your back, or the Kepler twin stack, is taller and wider than the pack)
+    const twin = this.cargoMesh && this.cargoMesh.children.length > 3;
+    this.scarfSim.update(dt, this.vehicle ? this.vehicle.e.body.vel : b.vel, up, this.cargoMesh ? { back: 1.14, top: twin ? 1.5 : 1.0, hw: 0.42 } : { back: 0.55, top: 0.94 });
 
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(m.root.quaternion);
     const strength = b.skating && b.grounded ? Math.min(1, sp / 30) : this.vaneCarve ? 0.55 + 0.45 * Math.abs(this.vaneCarve) : 0; // (the Vanes leave ribbons in the air)

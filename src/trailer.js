@@ -310,7 +310,7 @@ export class Trailer {
     for (const k of this.tap) { I.keys.add(k); I.justPressed.add(k); }
     this.tap.clear();
     I.mouse = [this.fire, false, false];
-    I.locked = true; // (the game only fires with the mouse captured)
+    I.ptrLocked = true; // (the game only fires with the mouse captured)
     I.dx = I.dy = 0;
     if (this.steer) {
       const up = g.player.pos.clone().normalize();

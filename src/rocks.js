@@ -209,8 +209,21 @@ function build(kind, rr, p, q, planet, dims = null) {
     mat = rr() < 0.5 ? M.grey : M.basalt;
     // colliders: a box per segment around the body (below the crest), and the crest line as a rail
     for (let i = 0; i < n - 1; i++) {
-      // no body colliders on the sloping tips, so nothing stops you sliding up onto them
-      if (taper(i) < 1 || taper(i + 1) < 1) continue;
+      // the sloping tips: a thin slab under the crest line itself, its top exactly on the slope, so
+      // they're solid (you can't run through them) but you roll straight up them onto the rail
+      if (taper(i) < 1 || taper(i + 1) < 1) {
+        const a = railPts[i], b2 = railPts[i + 1];
+        const t = b2.clone().sub(a), sl = t.length();
+        t.normalize();
+        const up0 = ups[i].clone().add(ups[i + 1]).normalize();
+        const sd = new THREE.Vector3().crossVectors(t, up0).normalize();
+        const ay = new THREE.Vector3().crossVectors(sd, t).normalize(); // (square to the slope, upward)
+        const k = 0.3 + 0.7 * Math.min(taper(i), taper(i + 1));
+        const th = 0.35;
+        const c = a.clone().add(b2).multiplyScalar(0.5).addScaledVector(ay, -th);
+        cols.push({ type: 'box', c, ax: sd, ay, az: t, hx: w * k, hy: th, hz: sl / 2 + 0.05 });
+        continue;
+      }
       const t = base[i + 1].clone().sub(base[i]), sl = t.length();
       t.normalize();
       const up = ups[i].clone().add(ups[i + 1]).normalize();

@@ -8,9 +8,9 @@ import { CasinoGames } from './casinoGames.js';
 // Casino-exclusive cosmetics: no `shop`/`cost`, so faction shops skip them, but the
 // wardrobe (C) picks them up once owned via game.upgrades['outfit_<id>' / 'skates_<id>'].
 Object.assign(OUTFITS, {
-  loungelizard: { name: 'Lounge Lizard Tux', casino: true, suit: 0x16121f, accent: 0xffd23f, helmet: 0xf4f1ff, visor: 0xff2e88, scarf: 0xd7263d },
-  highroller: { name: 'High Roller Gold Lamé', casino: true, suit: 0xffc83a, accent: 0xff2e88, helmet: 0xffe27a, visor: 0x120a1e, scarf: 0xff2e88, extras: ['halo', 'cape'] },
-  moonroyal: { name: 'Moon Royalty Regalia', casino: true, suit: 0x5a1a8f, accent: 0xffd23f, helmet: 0xffd23f, visor: 0x2ee6ff, scarf: 0xffffff, extras: ['crest', 'pads', 'cape'] },
+  loungelizard: { name: 'Lounge Lizard Tux', casino: true, suit: 0x16121f, accent: 0xffd23f, helmet: 0xf4f1ff, visor: 0xff2e88, scarf: 0xd7263d, sc: [0.7, 0.28, 2] },
+  highroller: { name: 'High Roller Gold Lamé', casino: true, suit: 0xffc83a, accent: 0xff2e88, helmet: 0xffe27a, visor: 0x120a1e, scarf: 0xff2e88, sc: [1.9, 0.34, 2], extras: ['halo'] },
+  moonroyal: { name: 'Moon Royalty Regalia', casino: true, suit: 0x5a1a8f, accent: 0xffd23f, helmet: 0xffd23f, visor: 0x2ee6ff, scarf: 0xffffff, sc: [2.1, 0.4, 2], extras: ['crest', 'pads'] },
 });
 Object.assign(SKATES, {
   felt: { name: 'Lucky Felt Rollers', casino: true, color: 0x1f8a4a, trail: 0x7dff6a, coins: 'chips' },
@@ -108,7 +108,7 @@ const SHOP = [
   { key: 'skates_felt', kind: 'skates', id: 'felt', chips: 40, tier: 0, desc: 'Green-felt skates with a lucky lime trail.' },
   { key: 'outfit_loungelizard', kind: 'outfit', id: 'loungelizard', chips: 75, tier: 1, desc: 'Black tux, gold trim, red bow-scarf. Smooth.' },
   { key: 'skates_jackpot', kind: 'skates', id: 'jackpot', chips: 150, tier: 2, desc: 'Solid gold. Sprays sparks like a paying machine.' },
-  { key: 'outfit_highroller', kind: 'outfit', id: 'highroller', chips: 250, tier: 2, desc: 'Gold lamé suit, halo and cape. Subtle it is not.' },
+  { key: 'outfit_highroller', kind: 'outfit', id: 'highroller', chips: 250, tier: 2, desc: 'Gold lamé suit, a halo and a long twin-tailed scarf. Subtle it is not.' },
   { key: 'outfit_moonroyal', kind: 'outfit', id: 'moonroyal', chips: 500, tier: 4, desc: 'Purple and gold regalia for Moon Royalty only.' },
 ];
 const EXCHANGE = { chips: 10, credits: 150 };

@@ -19,7 +19,7 @@ const TABS = [
 const CASINO = {
   felt: [40, 'BRONZE'], loungelizard: [75, 'SILVER'], jackpot: [150, 'GOLD'], highroller: [250, 'GOLD'], moonroyal: [500, 'MOON ROYALTY'],
 };
-const EXTRA_NAMES = { crest: 'helmet crest', pads: 'shoulder pads', halo: 'halo', band: 'bandana', cape: 'cape' };
+const EXTRA_NAMES = { crest: 'helmet crest', pads: 'shoulder pads', halo: 'halo', band: 'bandana' };
 
 const hex = (c) => '#' + (c >>> 0).toString(16).padStart(6, '0').slice(-6);
 const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
@@ -180,6 +180,65 @@ export class Wardrobe {
     this.refresh(true);
     this.last = performance.now();
     this.three.renderer.setAnimationLoop(() => this.tick());
+    if (!this.thumbs) setTimeout(() => { this.bakeThumbs(); if (this.game.state === 'wardrobe') this.renderGrid(); }, 30);
+  }
+
+  // Tile portraits: every outfit (three-quarter view, scarf streaming) and every skate finish (the
+  // boot and rail, lit) rendered once on a small throwaway renderer and kept as images.
+  bakeThumbs() {
+    const S = 168;
+    const thumbs = new Map();
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    } catch { this.thumbs = thumbs; return; }
+    renderer.setPixelRatio(1);
+    renderer.setSize(S, S, false);
+    renderer.setClearColor(0x000000, 0);
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xe6e2ff, 0x3a2c5a, 1.2));
+    const key = new THREE.DirectionalLight(0xfff1d6, 2.0);
+    key.position.set(3, 4, 5);
+    const rim = new THREE.DirectionalLight(0x7fd8ff, 1.5);
+    rim.position.set(-3.5, 2.5, -4);
+    scene.add(key, rim);
+    const M = makeRunner({ own: true });
+    scene.add(M.root);
+    const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 40);
+    const snap = () => { renderer.render(scene, cam); return renderer.domElement.toDataURL('image/png'); };
+    // outfits: standing, turned three-quarters, the scarf blown out behind
+    const sim = new ScarfSim(M);
+    M.root.rotation.y = -0.65;
+    cam.position.set(0, 1.5, 5.3);
+    cam.lookAt(0, 1.28, 0);
+    let extras = [];
+    for (const it of this.items('outfit')) {
+      for (const x of extras) x.removeFromParent();
+      extras = dressRunner(M, it.id);
+      M.root.updateMatrixWorld(true);
+      const wind = new THREE.Vector3(0.35, 0, 1).applyQuaternion(M.root.quaternion).multiplyScalar(9);
+      for (let i = 0; i < 90; i++) sim.update(1 / 60, wind, new THREE.Vector3(0, 1, 0));
+      thumbs.set(`outfit|${it.id}`, snap());
+    }
+    for (const x of extras) x.removeFromParent();
+    dressRunner(M, 'courier');
+    // skates: a crouch, seen low from the side, close on the boots and rails
+    M.torso.rotation.x = 0.3;
+    M.legL.rotation.x = 0.35; M.legR.rotation.x = -0.25;
+    M.root.rotation.y = Math.PI / 2 - 0.35;
+    M.root.updateMatrixWorld(true);
+    cam.fov = 26;
+    cam.position.set(0.45, 0.5, 2.5);
+    cam.lookAt(0, 0.3, 0);
+    cam.updateProjectionMatrix();
+    for (const it of this.items('skates')) {
+      dressSkates(M, it.id);
+      if (it.d.rainbow) M.mats.skate.color.setHex(0xff2e88);
+      thumbs.set(`skates|${it.id}`, snap());
+    }
+    renderer.dispose();
+    renderer.forceContextLoss();
+    this.thumbs = thumbs;
   }
 
   close(viaEscape) {
@@ -271,6 +330,9 @@ export class Wardrobe {
 
   tileArt(it) {
     const d = it.d;
+    // a rendered portrait of the real thing once the thumbnails are baked (the flat CSS art until then)
+    const shot = this.thumbs && this.thumbs.get(`${it.kind}|${it.id}`);
+    if (shot) return `<img class="wd-thumb ${it.kind}${d.rainbow ? ' rainbow' : ''}" src="${shot}" alt="">`;
     if (it.kind === 'outfit') {
       return `<span class="wd-fig" style="--s:${hex(d.suit)};--a:${hex(d.accent)};--h:${hex(d.helmet)};--v:${hex(d.visor)};--c:${hex(d.scarf)}"><i class="fh"></i><i class="fb"></i></span>`;
     }
@@ -443,7 +505,6 @@ export class Wardrobe {
     this.scarfSim.update(Math.min(0.05, dt || 1 / 60), fwd.multiplyScalar(14 * p), new THREE.Vector3(0, 1, 0));
     const s = SKATES[this.look.skates] || SKATES.stock;
     if (s.rainbow) M.mats.skate.color.setHSL((T.t * 0.4) % 1, 1, 0.6);
-    for (const x of T.extras) if (x.userData.cape) x.rotation.x = 0.3 + 0.5 * p + Math.sin(T.t * 3) * 0.05;
     for (const x of T.clones) if (x.userData.flap) x.rotation.y = x.userData.flap * (0.5 + Math.sin(T.t * 3) * 0.3);
     // pulse disc spins and bobs; bigger on the laser tab
     const ds = this.tab === 'laser' ? 1.5 : 0.85;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { toon, glow, inkMat, textSprite } from './toon.js';
+import { toon, glow, inkMat, textSprite, vcMaterial, vcable, paintVertices } from './toon.js';
 import { mulberry32 } from './rng.js';
 
 // The small faction structures that dot the countryside (watchtowers, depots, farm domes, relay
@@ -18,9 +18,10 @@ const F = 0.3; // apron top: small props stand on this
 // ---------- shared materials ----------
 const mats = new Map();
 const memo = (k, make) => { let m = mats.get(k); if (!m) mats.set(k, (m = make())); return m; };
-const G = (c) => memo('g' + c, () => glow(c));
+const shared = (m) => { m.userData.shared = true; return m; }; // (see toon.js)
+const G = (c) => memo('g' + c, () => shared(glow(c)));
 const T = (c) => toon(c);
-const D = (c) => memo('d' + c, () => toon(c, { side: THREE.DoubleSide }));
+const D = (c) => memo('d' + c, () => shared(toon(c, { side: THREE.DoubleSide })));
 const GLASS = (c, op) => memo(`x${c}/${op}`, () => new THREE.MeshToonMaterial({ color: c, gradientMap: toon(0).gradientMap, transparent: true, opacity: op, depthWrite: false, side: THREE.DoubleSide }));
 const BEAM = (c, op) => memo(`b${c}/${op}`, () => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
 function textMat(text, fg, bg, stroke) {
@@ -211,17 +212,29 @@ class Kit {
   hit(hx, hy, hz, x, z, ry = 0) { const p = this.P(x, 0, z); this.hits.push({ hx, hy, hz, x: p.x, y: hy, z: p.z, yaw: this.yaw + ry }); }
 
   finish() {
+    // the shared plain colours all go in one vertex-coloured mesh per kind (toon / glow) and side
+    const vc = new Map();
+    for (const [mat, list] of [...this.byMat]) {
+      if (!vcable(mat)) continue;
+      const v = vcMaterial(mat);
+      if (!vc.has(v)) vc.set(v, []);
+      for (const g of list) vc.get(v).push(paintVertices(g, mat.color));
+      this.byMat.delete(mat);
+    }
+    for (const [v, list] of vc) this.byMat.set(v, list);
     for (const [mat, list] of this.byMat) {
       const m = new THREE.Mesh(mergeGeometries(list), mat);
       const lit = mat.isMeshToonMaterial && !mat.transparent;
       m.castShadow = m.receiveShadow = lit;
       if (mat.transparent) m.renderOrder = 2;
+      m.userData.kitMesh = true; // (fixed in its kit's frame: world.mergeLocation may fold it in)
       this.root.add(m);
       for (const g of list) g.dispose();
     }
     if (this.ink.length) {
       const h = new THREE.Mesh(mergeGeometries(this.ink), inkMat);
       h.userData.isInk = true;
+      h.userData.kitMesh = true;
       this.root.add(h);
       for (const g of this.ink) g.dispose();
     }
@@ -278,6 +291,35 @@ function junkHeap(k, cx, cz, R, H, n, rr) {
     }
   }
 }
+// Battle damage on a wall face of the current frame: face = 'z' (the +z face at `at`, spanning x)
+// or 'x' (the +x face, spanning z). A ragged blast hole with its sheet metal bent outward, a scorch
+// around it and a scatter of bullet pocks.
+const HOLE = 0x140e10;
+function damage(k, face, at, u, v, r, rr, { scorch = true, pocks = 8 } = {}) {
+  const put = (du, dv, w, h, mat, o, rot = {}) => face === 'z'
+    ? k.box(w, h, 0.06, mat, u + du, v + dv - h / 2, at + o, { outline: 0, ...rot })
+    : k.box(0.06, h, w, mat, at + o, v + dv - h / 2, u + du, { outline: 0, ...rot });
+  if (scorch) {
+    put(0, -0.1, r * 3.2, r * 2.6, T(CHAR), 0.02);
+    put(r * 0.5, r * 0.9, r * 1.6, r * 1.4, T(0x241c1c), 0.025);
+  }
+  // the hole: overlapping dark shards
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + rr();
+    put(Math.cos(a) * r * 0.35, Math.sin(a) * r * 0.35, r * (0.7 + rr() * 0.5), r * (0.6 + rr() * 0.5), T(HOLE), 0.04, face === 'z' ? { rz: rr() * 3 } : { rx: rr() * 3 });
+  }
+  // the lips: torn sheets bent out from the rim
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + rr() * 0.6;
+    const du = Math.cos(a) * r * 0.75, dv = Math.sin(a) * r * 0.75;
+    if (face === 'z') k.box(r * 0.5, r * 0.45, 0.05, T(i % 2 ? 0xb8a890 : 0x9a8a7a), u + du, v + dv - r * 0.22, at + 0.18, { rz: a, rx: 0.5 * Math.sin(a), ry: -0.5 * Math.cos(a), outline: 0.015 });
+    else k.box(0.05, r * 0.45, r * 0.5, T(i % 2 ? 0xb8a890 : 0x9a8a7a), at + 0.18, v + dv - r * 0.22, u + du, { rx: a, rz: -0.5 * Math.sin(a), ry: 0.5 * Math.cos(a), outline: 0.015 });
+  }
+  // still-hot edges
+  for (let i = 0; i < 4; i++) { const a = rr() * Math.PI * 2; put(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, 0.22, 0.12, G(i % 2 ? 0xff7a1a : 0xffb347), 0.05); }
+  for (let i = 0; i < pocks; i++) put((rr() - 0.5) * r * 6, (rr() - 0.5) * r * 3, 0.16, 0.16, T(HOLE), 0.035);
+}
+
 // string of party / pirate lights sagging between posts
 function lightString(k, pts, colors, n = 8, sag = 1.1) {
   for (let i = 0; i < pts.length - 1; i++) {
@@ -894,21 +936,38 @@ function shack(k) {
   for (let i = 0; i < 6; i++) { const a = rr() * 6.3, r = 5 + rr() * 15; k.cyl(0.8 + rr() * 1.4, 0.8 + rr() * 1.4, 0.04, 12, T(0x584a48), Math.sin(a) * r, F - 0.02, Math.cos(a) * r, { outline: 0 }); }
   const patchCols = [0x8a8698, 0x5a6a5a, 0xa05a2a, 0x6b5a4a, 0x4a5a7a];
   if (!k.wreck) {
-    // hut A with the name board
-    k.at(-9, -9, 0.2);
-    k.box(9, 3.8, 7, T(RUST), 0, 0, 0, { outline: 0.1 });
-    for (let i = 0; i < 6; i++) k.box(1 + k.mr() * 2, 0.8 + k.mr() * 1.4, 0.08, T(patchCols[i % 5]), -3.3 + k.mr() * 6.6, 0.5 + k.mr() * 2, 3.53, { rz: (k.mr() - 0.5) * 0.3, outline: 0.02 });
-    for (let i = 0; i < 4; i++) k.box(0.08, 0.8 + k.mr() * 1.4, 1 + k.mr() * 2, T(patchCols[(i + 2) % 5]), 4.53, 0.5 + k.mr() * 2, -2.5 + k.mr() * 5, { rx: (k.mr() - 0.5) * 0.3, outline: 0.02 });
-    k.box(9.8, 0.25, 7.8, T(0x8a7a6a), 0, 3.85, 0, { rx: 0.1, outline: 0.05 });
-    for (let i = 0; i < 9; i++) k.box(0.14, 0.12, 7.8, T(0x6a5a4a), -4.4 + i * 1.1, 4.02, 0, { rx: 0.1, outline: 0 });
-    k.cyl(0.3, 0.3, 2.6, 8, T(DARK), 3, 3.8, -2, { outline: 0.03 });
-    k.box(0.9, 0.12, 0.9, T(DARK), 3, 6.5, -2, { outline: 0.02 });
-    k.box(1.4, 2.4, 0.15, T(0x3a2a22), -1.6, F - 0.1, 3.55, { outline: 0.03 });
-    k.box(1.8, 1.0, 0.1, G(0xffa040), 2, 1.5, 3.55, { outline: 0 });
-    for (let i = 0; i < 4; i++) k.box(0.07, 1.0, 0.07, T(DARK), 1.3 + i * 0.47, 1.5, 3.62, { outline: 0 });
-    k.text('SCRAP SHACK', 0.2, 3.05, 3.55, 0, 5.2, { fg: '#ffb347', bg: '#3a2418', rz: -0.04, back: false });
-    k.box(0.5, 0.2, 0.3, G(0xff7a1a), -1.6, 2.7, 3.7, { outline: 0 });
-    k.solid(4.5, 1.9, 3.5, 0, 0);
+    // hut A with the name board: bigger now, and it has been shot at. A blast hole in the front,
+    // half the roof peeled back, scorch up the side, and a timber shoring up the sagging corner
+    const mr = k.mr;
+    k.at(-9.5, -9.5, 0.2);
+    k.box(11, 4.6, 8.4, T(RUST), 0, 0, 0, { outline: 0.1 });
+    for (let i = 0; i < 7; i++) k.box(1 + mr() * 2.2, 0.8 + mr() * 1.6, 0.08, T(patchCols[i % 5]), -4.2 + mr() * 8.4, 0.5 + mr() * 2.6, 4.23, { rz: (mr() - 0.5) * 0.3, outline: 0.02 });
+    for (let i = 0; i < 5; i++) k.box(0.08, 0.8 + mr() * 1.6, 1 + mr() * 2.2, T(patchCols[(i + 2) % 5]), 5.53, 0.5 + mr() * 2.6, -3.2 + mr() * 6.4, { rx: (mr() - 0.5) * 0.3, outline: 0.02 });
+    // the roof: the back half still on, the front-right quarter torn up and folded back
+    k.box(11.8, 0.25, 4.6, T(0x8a7a6a), 0, 4.65, -2.3, { rx: 0.08, outline: 0.05 });
+    k.box(6.2, 0.25, 4.6, T(0x8a7a6a), -2.8, 4.6, 2.3, { rx: 0.08, outline: 0.05 });
+    for (let i = 0; i < 11; i++) k.box(0.14, 0.12, 4.6, T(0x6a5a4a), -5.4 + i * 1.08, 4.85, -2.3, { rx: 0.08, outline: 0 });
+    for (let i = 0; i < 6; i++) k.box(0.14, 0.12, 4.6, T(0x6a5a4a), -5.4 + i * 1.08, 4.8, 2.3, { rx: 0.08, outline: 0 });
+    k.box(5.4, 0.04, 4.0, T(HOLE), 3.1, 4.55, 2.2, { outline: 0 }); // (the dark inside, seen through the gap)
+    k.box(5.6, 0.2, 4.4, T(0x7a6a5a), 3.0, 5.1, -0.4, { rx: -1.15, outline: 0.04 }); // the torn sheet, folded up and back
+    k.beam([0.3, 4.75, 0.2], [0.3, 4.75, 4.2], 0.06, T(DARK), { outline: 0 }); // a bare rafter
+    k.beam([3.0, 4.75, 0.2], [3.4, 4.6, 4.2], 0.06, T(DARK), { outline: 0 });
+    k.cyl(0.3, 0.3, 2.6, 8, T(DARK), -3.4, 4.7, -2.4, { outline: 0.03 });
+    k.box(0.9, 0.12, 0.9, T(DARK), -3.4, 7.3, -2.4, { outline: 0.02 });
+    // the door hanging off one hinge, a boarded-up window beside the lit one
+    k.box(1.6, 2.8, 0.15, T(0x3a2a22), -2.2, F - 0.1, 4.28, { rz: 0.1, outline: 0.03 });
+    k.box(2.1, 1.2, 0.1, G(0xffa040), 2.4, 1.8, 4.24, { outline: 0 });
+    for (let i = 0; i < 4; i++) k.box(0.07, 1.2, 0.07, T(DARK), 1.6 + i * 0.55, 1.8, 4.32, { rz: i === 2 ? 0.35 : 0, outline: 0 });
+    for (let i = 0; i < 3; i++) k.box(1.8, 0.25, 0.08, T(WOOD), -4.3, 1.6 + i * 0.4, 4.3, { rz: (i - 1) * 0.15, outline: 0.02 });
+    k.text('SCRAP SHACK', 0.4, 3.75, 4.25, 0, 6.2, { fg: '#ffb347', bg: '#3a2418', rz: -0.07, back: false });
+    k.box(0.5, 0.2, 0.3, G(0xff7a1a), -2.2, 3.2, 4.4, { outline: 0 });
+    damage(k, 'z', 4.2, 4.4, 2.2, 0.95, mr);
+    damage(k, 'x', 5.5, 1.4, 2.4, 0.6, mr, { pocks: 10 });
+    // shoring: a timber propping the corner that buckled, and plates that fell off at its foot
+    k.beam([6.6, 0, 5.2], [5.5, 4.4, 4.2], 0.13, T(WOOD), { outline: 0.03 });
+    k.box(1.6, 0.1, 1.1, T(WOOD), 6.6, 0, 5.2, { ry: 0.6, outline: 0.02 });
+    for (let i = 0; i < 3; i++) k.box(1.3 + mr(), 1.0 + mr() * 0.6, 0.08, T(patchCols[(i + 1) % 5]), 6.3 + i * 0.4, 0, -1.5 + i * 1.3, { ry: 1.4, rz: -0.6 - mr() * 0.4, outline: 0.02 });
+    k.solid(5.5, 2.3, 4.2, 0, 0);
     k.at();
   } else {
     const wr = k.wr;
@@ -923,30 +982,37 @@ function shack(k) {
     scatterDebris(k, 0, 0, 4, 3, 14, wr);
     k.at();
   }
-  k.at(-9, -9, 0.2);
-  k.hit(4.5, 1.9, 3.5, 0, 0);
+  k.at(-9.5, -9.5, 0.2);
+  k.hit(5.5, 2.3, 4.2, 0, 0);
   k.smoke = k.P(0, 1.5, 0);
   k.at();
   k.drop = new THREE.Vector3(-1, F, 3);
-  // hut B: two storeys, a ladder and a tarp
-  k.at(9, -12, -0.35);
-  k.box(6, 3.4, 5, T(0x5a5f6e), 0, 0, 0, { outline: 0.1 });
-  k.box(4, 2.4, 3.6, T(0x8a4a2a), -0.6, 3.4, -0.3, { outline: 0.08 });
-  k.box(4.6, 0.2, 4.2, T(0x7a6a5a), -0.6, 5.8, -0.3, { rz: -0.12, outline: 0.04 });
-  k.box(6.4, 0.2, 5.4, T(0x7a6a5a), 0, 3.4, 0, { outline: 0.04 });
-  k.box(1.2, 0.8, 0.1, G(0x7dff6a), -0.6, 4.5, 1.52, { outline: 0 });
-  k.box(1.2, 2.2, 0.12, T(0x2a2422), 1.6, F - 0.1, 2.55, { outline: 0.02 });
-  for (const s of [-0.35, 0.35]) k.beam([3.1, 0, 1 + s], [3.1, 5.4, 0.6 + s], 0.05, T(DARK), { outline: 0.02 });
-  for (let y = 0.6; y < 5.2; y += 0.6) k.beam([3.1, y, 0.65 + 0.4 * (1 - y / 5.4)], [3.1, y, 1.35 + 0.4 * (1 - y / 5.4)], 0.035, T(DARK), { outline: 0 });
-  k.box(3.6, 0.06, 2.4, T(c), -1, 2.8, 3.6, { rx: 0.25, outline: 0.03 });
-  for (const s of [-1, 1]) k.cyl(0.06, 0.06, 2.4, 4, T(DARK), -1 + s * 1.6, 0, 4.7, { outline: 0 });
-  k.solid(3, 2.9, 2.5, 0, 0);
+  // hut B: two storeys, a ladder and a tarp (bigger; the top storey has lost a corner to a rocket)
+  k.at(9.5, -12.5, -0.35);
+  k.box(7.2, 4, 6, T(0x5a5f6e), 0, 0, 0, { outline: 0.1 });
+  k.box(4.8, 2.8, 4.3, T(0x8a4a2a), -0.7, 4, -0.4, { outline: 0.08 });
+  k.box(5.4, 0.2, 4.9, T(0x7a6a5a), -1.0, 6.9, -0.4, { rz: -0.22, rx: 0.06, outline: 0.04 }); // (sagging where the corner went)
+  k.box(7.6, 0.2, 6.4, T(0x7a6a5a), 0, 4, 0, { outline: 0.04 });
+  k.box(1.4, 0.9, 0.1, G(0x7dff6a), -1.4, 5.3, 1.78, { outline: 0 });
+  k.box(1.4, 2.6, 0.12, T(0x2a2422), 1.9, F - 0.1, 3.05, { outline: 0.02 });
+  damage(k, 'z', 1.75, 1.0, 6.0, 0.75, k.rr, { pocks: 6 });
+  damage(k, 'z', 3.0, -2.2, 2.6, 0.5, k.rr, { scorch: false, pocks: 12 });
+  for (let i = 0; i < 4; i++) k.box(0.5 + k.rr() * 0.7, 0.08, 0.4 + k.rr() * 0.5, T(i % 2 ? 0x8a4a2a : HOLE), 2.6 + k.rr() * 2, F + 0.05, 1.5 + k.rr() * 2.5, { ry: k.rr() * 3, outline: 0.02 }); // rubble that came down
+  for (const s2 of [-0.4, 0.4]) k.beam([3.7, 0, 1.2 + s2], [3.7, 6.3, 0.7 + s2], 0.05, T(DARK), { outline: 0.02 });
+  for (let y = 0.6; y < 6.1; y += 0.6) k.beam([3.7, y, 0.75 + 0.45 * (1 - y / 6.3)], [3.7, y, 1.6 + 0.45 * (1 - y / 6.3)], 0.035, T(DARK), { outline: 0 });
+  // the tarp awning, torn: one half still up, the other hanging down off its pole
+  k.box(2.2, 0.06, 2.9, T(c), -2.2, 3.3, 4.3, { rx: 0.25, outline: 0.03 });
+  k.box(2.0, 0.06, 2.4, T(c), 0.0, 2.2, 4.6, { rx: 1.05, rz: 0.2, outline: 0.03 });
+  for (const s2 of [-1, 1]) k.cyl(0.06, 0.06, 2.9, 4, T(DARK), -1.2 + s2 * 1.9, 0, 5.6, { rz: s2 > 0 ? 0.25 : 0, outline: 0 });
+  k.solid(3.6, 3.4, 3, 0, 0);
   k.at();
   // a container turned into a hut
   k.at(15, 5, 1.3);
   container(k, 0, 0, 0, 0x2b59c3, Math.PI / 2);
   for (let i = 0; i < 4; i++) k.box(0.8 + rr(), 0.6 + rr(), 0.06, T(0x8a4a2a), -2 + rr() * 4, 0.4 + rr() * 1.5, 1.27, { outline: 0 });
   k.box(1.4, 0.8, 0.08, G(0xffa040), 1.2, 1.2, 1.28, { outline: 0 });
+  damage(k, 'z', 1.25, -1.6, 1.6, 0.45, rr, { pocks: 9 });
+  k.box(0.08, 2.3, 1.2, T(0x2b59c3), 3.3, 0.1, 1.85, { ry: 0.7, rz: 0.06, outline: 0.03 }); // a door hanging open
   k.solid(3.1, 1.3, 1.3, 0, 0);
   k.at();
   // scrap press with crushed cubes
@@ -1058,11 +1124,14 @@ function junk(k) {
   k.column(1.2, 3.8, 17, 4);
   // the scavenger's tent and camp
   k.at(9, 11, Math.atan2(-11, 9));
-  k.add(prism(4.5, 3.6, 2.6), T(c), 0, F, 0, { outline: 0.06 });
-  k.add(prism(0.06, 2.2, 1.7), T(0x1a1428), -2.27, F, 0, { outline: 0 });
-  for (let i = 0; i < 3; i++) k.box(0.9, 0.7, 0.05, T(patch(i)), -1 + i * 0.9, F + 0.9 + (i % 2) * 0.3, 0.98 - (i % 2) * 0.3, { rx: -0.62, outline: 0 });
-  for (const s of [-1, 1]) k.beam([-2.25, F + 2.6, 0], [-3.4, F, s * 1.6], 0.025, T(0xd8c8b0), { outline: 0 });
-  k.solid(2.3, 1.4, 1.9, 0, 0);
+  k.add(prism(5.8, 4.6, 3.3), T(c), 0, F, 0, { outline: 0.06 });
+  k.add(prism(0.06, 2.8, 2.2), T(0x1a1428), -2.92, F, 0, { outline: 0 });
+  for (let i = 0; i < 3; i++) k.box(1.1, 0.9, 0.05, T(patch(i)), -1.3 + i * 1.15, F + 1.1 + (i % 2) * 0.4, 1.25 - (i % 2) * 0.4, { rx: -0.62, outline: 0 });
+  // rips: dark gashes through the canvas, a flap hanging loose
+  for (const [x, y, r] of [[1.4, 1.9, 0.5], [-0.4, 0.9, -0.4], [2.2, 0.8, 0.2]]) k.box(0.9, 0.12, 0.05, T(HOLE), x, F + y, 1.62 - y * 0.5, { rx: -0.62, rz: r, outline: 0 });
+  k.box(0.9, 0.8, 0.04, T(c), 1.4, F + 1.2, 1.95, { rx: -0.2, rz: 0.3, outline: 0.02 });
+  for (const s of [-1, 1]) k.beam([-2.9, F + 3.3, 0], [-4.3, F, s * 2.0], 0.025, T(0xd8c8b0), { outline: 0 });
+  k.solid(2.9, 1.8, 2.4, 0, 0);
   // campfire
   for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; k.add(new THREE.DodecahedronGeometry(0.3, 0), T(0x7a7686), -4.8 + Math.cos(a) * 0.85, F + 0.15, 0.6 + Math.sin(a) * 0.85, { outline: 0.02 }); }
   for (const a of [0.4, 2.0]) k.add(new THREE.CylinderGeometry(0.12, 0.12, 1.3, 5), T(0x5a3a22), -4.8, F + 0.2, 0.6, { rx: Math.PI / 2, ry: a, outline: 0.02 });
@@ -1088,6 +1157,15 @@ function junk(k) {
   k.ball(0.06, G(0xff2a4a), 1.85, F + 1.78, 3.3, { outline: 0 });
   k.beam([1.6, F + 0.1, 2.4], [0.2, F + 0.05, 1.1], 0.04, T(0x1a1428), { outline: 0, seg: 3 });
   k.raidAt(-1.4, 3.6, 0x2ee6ff);
+  k.at();
+  // a lean-to of corrugated sheets against the heap: one sheet's fallen in, a hole punched in another
+  k.at(-3, 6, 0.3);
+  for (const x of [-2.6, 2.6]) for (const z of [-1.6, 1.6]) k.beam([x, 0, z], [x, z < 0 ? 3.6 : 2.6, z], 0.09, T(DARK), { outline: 0.02 });
+  k.box(2.7, 0.08, 3.6, T(0x8a8698), -1.35, 3.1, 0, { rx: 0.27, outline: 0.03 });
+  k.box(2.7, 0.08, 3.6, T(0x6b5a4a), 1.6, 1.6, 0.5, { rx: 0.27, rz: 0.75, outline: 0.03 }); // (fallen in)
+  for (const x of [-1.95, -0.65, 0.65, 1.95]) k.box(1.25, 2.6 + (x > 0 ? -0.6 : 0), 0.06, T(patch(Math.round(x * 3))), x, 0, -1.65, { rz: x > 1 ? 0.12 : 0, outline: 0.02 });
+  damage(k, 'z', -1.6, -0.9, 1.9, 0.5, rr, { scorch: true, pocks: 6 });
+  k.solid(2.7, 1.6, 1.8, 0, 0);
   k.at();
   k.sign('JUNK PILE', 0, 24, { w: 8, rz: -0.06, fg: '#ffd23f', bg: '#4a3a2a', y: 2.8 });
   k.flag(5.5, 23, 8);

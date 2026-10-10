@@ -24,6 +24,7 @@ export function settle(world, loc, seed, fn) {
   k.at();
   const t = k.finish();
   world.put(t.root, loc, 0, 0, 0, 0, true);
+  t.root.userData.kitRoot = true; // (it never moves; only its tagged moving parts do)
   for (const c of t.cols) world.col(loc, c);
   const list = [];
   t.root.traverse((o) => { const u = o.userData; if (u.tick || u.spin || u.blink || u.flag) list.push(o); });
@@ -692,8 +693,8 @@ export function buildMeridian(world, loc) {
     k.sign('MERIDIAN EXCHANGE', 0, 120, { w: 18, y: 6, fg: '#2ec4ff', ry: Math.PI });
     k.lamp(14, 16, 8); k.lamp(-14, 16, 8); k.lamp(16, -4, 8); k.lamp(-16, -4, 8);
     floodMast(k, 30, -84, 14); floodMast(k, -40, -84, 14);
-    world.pad(loc, 100, 60, 16, 0x2ec4ff);
-    world.pad(loc, -100, -60, 16, 0x2ec4ff);
+    world.pad(loc, 100, 60, 16, 0x2ec4ff, true);
+    world.pad(loc, -100, -60, 16, 0x2ec4ff, true);
     world.flag(loc, 0, 110, [0x2ec4ff, 0xffffff, 0x2ec4ff], 20);
   });
 }
@@ -1155,6 +1156,8 @@ export function dressLab(world, loc, { W, D, H }) {
     k.box(4.8, 0.14, 0.36, T(0xd8a060), jx, 1.5, jz + 2.95, { outline: 0 });
     k.text('SPECIMEN #1', jx, 1.12, jz + 3.1, 0, 2.6, { fg: '#7dff3a', bg: '#10241a', back: false, off: 0.02 });
     k.text('DO NOT TAP GLASS', jx, 0.62, jz + 3.1, 0, 3.6, { fg: '#ffd23f', bg: '#10241a', back: false, off: 0.02 });
+    // the pen terminal at the gate
+    penTerminal(k, 26, 20, 0); // (facing the pen, the way the old terminal box did)
     // holding-pen yard: a gravel pad, a feeding trough, a floodlight on each corner
     k.box(36, 0.12, 44, T(0x8a7a6a), 45, 0, 43, { outline: 0 });
     k.box(8, 1, 1.6, T(0x8a5a3a), 54, 0, 60, { outline: 0.04 });
@@ -1168,6 +1171,156 @@ export function dressLab(world, loc, { W, D, H }) {
 }
 
 // =============================================================================================
+// Dr. Zbornak's lab, inside: lab gear along every wall (a fume hood, a glassware bench under a
+// chalkboard of sums, specimen tanks with things floating in them, a cryo freezer, a server bank,
+// gas bottles, lockers, an eyewash station, cable trays), and the doctor's own station: a dais,
+// a waist-high workbench in front of him with his instruments on it and a console bank behind.
+// And out at the holding pen's gate, its terminal: a small kiosk with a sloped desk and a screen.
+// =============================================================================================
+export function dressLabInside(world, loc, { W, D, H, docX, docZ }) {
+  settle(world, loc, 6611, (k) => {
+    const lime = 0x7dff3a, pink = 0xff2e88, cyan = 0x2ec4ff, vio = 0xc77dff;
+    const IW = W - 1, ID = D - 1; // inner faces of the walls
+    const liquid = [lime, pink, cyan, 0xffd23f, vio];
+    // flasks and beakers on a surface at height y
+    const glassware = (x0, x1, y, z, n, rr) => {
+      for (let i = 0; i < n; i++) {
+        const x = x0 + ((i + 0.5) / n) * (x1 - x0), c = liquid[i % 5];
+        if (i % 3 === 0) { k.cyl(0.18, 0.18, 0.55, 8, GLASS(0x9be7ff, 0.35), x, y, z, { outline: 0 }); k.cyl(0.16, 0.16, 0.3, 8, G(c), x, y, z, { outline: 0 }); }
+        else if (i % 3 === 1) { k.ball(0.3, G(c), x, y + 0.3, z, { outline: 0.02 }); k.cyl(0.07, 0.07, 0.45, 6, GLASS(0x9be7ff, 0.4), x, y + 0.55, z, { outline: 0 }); }
+        else { k.cyl(0.08, 0.3, 0.6, 8, G(c), x, y, z, { outline: 0.02 }); k.cyl(0.06, 0.06, 0.25, 6, T(DARK), x, y + 0.6, z, { outline: 0 }); }
+      }
+    };
+    // --- back wall (z = -ID) ---
+    // fume hood: a cabinet, a glass sash and a duct up into the roof
+    k.box(5, 1.1, 2.2, T(LIGHT), -6.5, 0, -ID + 1.1, { outline: 0.05 });
+    k.box(5, 2.6, 2.2, T(0xc9c4d8), -6.5, 1.1, -ID + 1.1, { outline: 0.05 });
+    k.box(4.4, 1.6, 0.08, GLASS(0x9be7ff, 0.35), -6.5, 1.4, -ID + 2.22, { outline: 0 });
+    k.box(4.6, 0.12, 0.2, T(DARK), -6.5, 3.0, -ID + 2.25, { outline: 0 });
+    glassware(-8.4, -4.6, 1.12, -ID + 1.3, 5);
+    k.cyl(0.7, 0.7, H - 3.7, 10, T(STEEL), -6.5, 3.7, -ID + 1.0, { outline: 0.03 });
+    k.solid(2.5, 1.85, 1.1, -6.5, -ID + 1.1);
+    // the glassware bench and a chalkboard of sums above it
+    k.box(8, 1.0, 2, T(0x5b5870), 4, 0, -ID + 1, { outline: 0.05 });
+    k.box(8.3, 0.15, 2.2, T(0x2a2540), 4, 1.0, -ID + 1, { outline: 0.03 });
+    glassware(0.6, 7.4, 1.15, -ID + 1.2, 8);
+    k.box(0.5, 0.9, 0.5, T(DARK), 6.8, 1.15, -ID + 0.6, { outline: 0.03 }); // microscope
+    k.cyl(0.08, 0.08, 0.6, 6, T(STEEL), 6.8, 2.05, -ID + 0.75, { rx: 0.4, outline: 0 });
+    k.box(8.4, 3.6, 0.15, T(0x1d2a22), 4, 3.4, -ID + 0.08, { outline: 0.05 });
+    k.box(8.6, 0.2, 0.3, T(0x8a5a3a), 4, 3.3, -ID + 0.15, { outline: 0 });
+    for (let i = 0; i < 9; i++) k.box(1.2 + (i * 37 % 5) * 0.4, 0.08, 0.04, T(0xe8f0e0), 0.6 + (i % 3) * 2.6 + (i * 13 % 4) * 0.2, 3.9 + Math.floor(i / 3) * 0.95, -ID + 0.17, { rz: ((i * 7) % 5 - 2) * 0.05, outline: 0 });
+    k.add(new THREE.TorusGeometry(0.45, 0.05, 4, 16), T(0xe8f0e0), 6.6, 5.6, -ID + 0.17, { outline: 0 }); // (a circled answer)
+    k.solid(4, 0.6, 1, 4, -ID + 1);
+    // pipe manifold with valve wheels and gauges, over in the corner
+    for (const y of [2.2, 3.4, 4.6]) k.add(new THREE.CylinderGeometry(0.16, 0.16, 6, 8).rotateZ(Math.PI / 2), T(y === 3.4 ? 0xb87333 : STEEL), 14, y, -ID + 0.3, { outline: 0.02 });
+    for (const x of [12, 14, 16]) {
+      k.add(new THREE.TorusGeometry(0.35, 0.07, 4, 12), T(0xff2a4a), x, 3.4, -ID + 0.62, { outline: 0 });
+      k.cyl(0.25, 0.25, 0.12, 12, T(WHITE), x + 0.8, 4.6, -ID + 0.5, { rx: Math.PI / 2, outline: 0.02 });
+    }
+    // cryo freezer: a tall white cabinet with a frosted window and a cold glow at its seals
+    k.box(2.6, 4.2, 1.8, T(WHITE), 19, 0, -ID + 0.95, { outline: 0.06 });
+    k.box(1.6, 1.8, 0.08, GLASS(0xd8f4ff, 0.55), 19, 2, -ID + 1.88, { outline: 0 });
+    k.box(2.62, 0.1, 1.82, G(0x9be7ff), 19, 3.9, -ID + 0.95, { outline: 0 });
+    k.box(0.15, 0.9, 0.2, T(STEEL), 18, 1.6, -ID + 1.95, { outline: 0 });
+    k.solid(1.3, 2.1, 0.9, 19, -ID + 0.95);
+    // --- left wall (x = -IW): specimen tanks with things floating in them ---
+    for (const [z, c] of [[-8.5, lime], [-5.5, pink], [7.5, cyan], [11, vio]]) {
+      k.cyl(1.2, 1.3, 0.6, 14, T(DARK), -IW + 1.4, 0, z, { outline: 0.04 });
+      k.cyl(1.05, 1.05, 4.2, 16, GLASS(c, 0.22), -IW + 1.4, 0.6, z, { outline: 0 });
+      k.cyl(1.15, 1.15, 0.4, 14, T(STEEL), -IW + 1.4, 4.8, z, { outline: 0.03 });
+      k.add(new THREE.IcosahedronGeometry(0.55, 0), G(c), -IW + 1.4, 2.6, z, { rx: z, ry: z * 2, outline: 0 });
+      for (let i = 0; i < 3; i++) k.ball(0.1, G(0xffffff), -IW + 1.4 + Math.sin(i * 2 + z) * 0.4, 1.4 + i * 1.0, z + Math.cos(i * 2 + z) * 0.4, { outline: 0 });
+      k.beam([-IW + 1.4, 5.2, z], [-IW + 0.2, H - 1, z], 0.08, T(DARK), { outline: 0 });
+      k.column(1.3, 5.2, -IW + 1.4, z);
+    }
+    // a cable tray along the left wall, high up
+    k.box(0.6, 0.2, ID * 2 - 2, T(STEEL), -IW + 0.4, 7.5, 0, { outline: 0.02 });
+    for (let i = 0; i < 4; i++) k.box(0.1, 0.12, ID * 2 - 2.4, T([0xff2a4a, lime, cyan, YEL][i]), -IW + 0.2 + i * 0.13, 7.7, 0, { outline: 0 });
+    // --- right wall (x = +IW): the server bank, gas bottles ---
+    for (const z of [-11, -8.4]) {
+      k.box(1.6, 5, 2.4, T(0x2a2540), IW - 0.9, 0, z, { outline: 0.05 });
+      for (let i = 0; i < 9; i++) k.box(0.05, 0.12, 1.8, G(i % 3 === 0 ? 0xff2a4a : i % 2 ? lime : cyan), IW - 1.72, 0.6 + i * 0.48, z + ((i * 5) % 3 - 1) * 0.2, { outline: 0 });
+      k.solid(0.8, 2.5, 1.2, IW - 0.9, z);
+    }
+    k.box(1, 0.3, 4.4, T(YEL), IW - 0.6, 2.2, 12, { outline: 0.02 });
+    for (let i = 0; i < 4; i++) {
+      k.cyl(0.36, 0.36, 2.6, 10, T([lime, pink, cyan, YEL][i]), IW - 0.7, 0, 10.4 + i * 1.05, { outline: 0.03 });
+      k.ball(0.3, T(STEEL), IW - 0.7, 2.7, 10.4 + i * 1.05, { outline: 0 });
+    }
+    k.solid(0.6, 1.4, 2.3, IW - 0.7, 12);
+    // --- front wall (z = +ID), either side of the door ---
+    // lockers, a coat hook with a spare lab coat, and an eyewash station
+    for (let i = 0; i < 5; i++) {
+      k.box(1.1, 3.6, 1.2, T(i % 2 ? 0x5b5870 : 0x6b6880), -16 + i * 1.15, 0, ID - 0.65, { outline: 0.03 });
+      k.box(0.5, 0.06, 0.04, T(DARK), -16 + i * 1.15, 3.0, ID - 1.27, { outline: 0 });
+    }
+    k.solid(2.9, 1.8, 0.6, -13.7, ID - 0.65);
+    k.box(1.2, 2.2, 0.15, T(WHITE), -9.5, 1.8, ID - 0.2, { rz: 0.05, outline: 0.03 });
+    k.box(0.12, 0.12, 0.4, T(DARK), -9.5, 4.0, ID - 0.25, { outline: 0 });
+    k.box(1.6, 1.6, 0.4, T(0x3a8a4a), 7.5, 1.2, ID - 0.25, { outline: 0.03 });
+    k.box(1.1, 0.12, 0.1, T(WHITE), 7.5, 2.0, ID - 0.48, { outline: 0 });
+    k.box(0.12, 1.1, 0.1, T(WHITE), 7.5, 1.5, ID - 0.48, { outline: 0 });
+    k.text('EYEWASH', 7.5, 3.2, ID - 0.05, Math.PI, 1.6, { fg: '#7dff3a', bg: '#10241a', back: false, off: 0.02 });
+    k.text('EMPLOYEE OF THE MONTH: ZBORNAK', 14, 5.2, ID - 0.05, Math.PI, 7, { fg: '#ffd23f', bg: '#241a3a', back: false, off: 0.02 });
+    // --- the doctor's station ---
+    k.box(10, 0.3, 8, T(0x3a3550), docX, 0, docZ - 0.6, { outline: 0.04 });
+    k.box(10.2, 0.08, 8.2, G(lime), docX, 0.3, docZ - 0.6, { outline: 0 });
+    // the workbench he stands behind (+z of him), waist high, with a short return on his left
+    k.box(6.4, 1.15, 1.5, T(cyan), docX, 0, docZ + 2.1, { outline: 0.06 });
+    k.box(6.7, 0.14, 1.8, T(0x2a2540), docX, 1.15, docZ + 2.1, { outline: 0.03 });
+    k.box(1.5, 1.15, 3.4, T(cyan), docX - 3.95, 0, docZ + 0.35, { outline: 0.06 });
+    k.box(1.8, 0.14, 3.7, T(0x2a2540), docX - 3.95, 1.15, docZ + 0.35, { outline: 0.03 });
+    k.box(6, 0.4, 0.06, G(lime), docX, 0.6, docZ + 2.86, { outline: 0 });
+    // on it: a bubbling retort, a microscope, a tablet, a stack of papers, a coffee mug
+    k.ball(0.35, G(pink), docX - 2, 1.65, docZ + 2.1, { outline: 0.02 });
+    k.beam([docX - 2, 1.9, docZ + 2.1], [docX - 1.2, 2.3, docZ + 2.3], 0.06, GLASS(0x9be7ff, 0.5), { outline: 0 });
+    k.box(0.5, 0.8, 0.5, T(DARK), docX + 1.8, 1.29, docZ + 1.9, { outline: 0.03 });
+    k.cyl(0.08, 0.08, 0.5, 6, T(STEEL), docX + 1.8, 2.05, docZ + 2.05, { rx: 0.45, outline: 0 });
+    k.box(0.9, 0.06, 0.6, G(cyan), docX + 0.3, 1.3, docZ + 2.2, { ry: 0.2, outline: 0.02 });
+    k.box(0.8, 0.25, 0.6, T(WHITE), docX - 0.8, 1.29, docZ + 1.8, { ry: -0.15, outline: 0.02 });
+    k.cyl(0.13, 0.13, 0.25, 8, T(0xff7a1a), docX + 2.7, 1.29, docZ + 2.4, { outline: 0.02 });
+    k.solid(3.2, 0.65, 0.75, docX, docZ + 2.1);
+    k.solid(0.75, 0.65, 1.7, docX - 3.95, docZ + 0.35);
+    // the console bank behind him: three screens on a desk, a tall rack of dials at the end
+    k.box(7, 1.1, 1.4, T(0x2a2540), docX, 0.3, docZ - 3.4, { outline: 0.05 });
+    for (const [dx, c, ry] of [[-2.3, lime, 0.25], [0, cyan, 0], [2.3, pink, -0.25]]) {
+      k.box(2, 1.3, 0.2, T(DARK), docX + dx, 1.5, docZ - 3.8, { ry, outline: 0.04 });
+      k.box(1.7, 1.0, 0.05, G(c), docX + dx, 1.65, docZ - 3.68, { ry, outline: 0 });
+    }
+    k.box(1.4, 4.2, 1.4, T(0x5b5870), docX + 4.6, 0.3, docZ - 3.4, { outline: 0.05 });
+    for (let i = 0; i < 6; i++) k.cyl(0.18, 0.18, 0.08, 10, T(WHITE), docX + 4.6 + ((i % 2) - 0.5) * 0.6, 1.4 + Math.floor(i / 2) * 0.9, docZ - 2.68, { rx: Math.PI / 2, outline: 0.02 });
+    k.solid(3.5, 0.7, 0.7, docX, docZ - 3.4);
+    k.solid(0.7, 2.25, 0.7, docX + 4.6, docZ - 3.4);
+  });
+}
+
+// The holding pen's terminal: a small kiosk at the gate. A concrete step, a console with a sloped
+// keypad desk and a screen, a card slot, a little canopy with a light strip and a turning holo ring.
+function penTerminal(k, x, z, yaw) {
+  const lime = 0x7dff3a;
+  k.at(x, z, yaw);
+  k.box(3.6, 0.3, 2.8, T(CONC), 0, 0, 0.2, { outline: 0.04 });
+  k.box(2.4, 2.6, 1.0, T(0x2a2540), 0, 0.3, -0.4, { outline: 0.07 });
+  k.add(new THREE.BoxGeometry(2.4, 0.3, 1.0), T(0x2ec4ff), 0, 1.35, 0.45, { rx: 0.4, outline: 0.04 });
+  for (let i = 0; i < 6; i++) k.box(0.22, 0.06, 0.18, G([lime, 0x2ee6ff, 0xffd23f][i % 3]), -0.7 + (i % 3) * 0.7, 1.52, 0.35 + Math.floor(i / 3) * 0.28, { rx: 0.4, outline: 0 });
+  k.box(2.6, 0.25, 1.2, T(lime), 0, 2.9, -0.4, { outline: 0.03 });
+  k.box(0.08, 0.5, 0.3, T(DARK), 1.22, 1.6, 0.0, { outline: 0 }); // card slot
+  k.box(0.04, 0.3, 0.2, G(0xff2a4a), 1.27, 1.7, 0.0, { outline: 0 });
+  for (const s of [-1, 1]) k.beam([s * 1.6, 0.3, 1.2], [s * 1.6, 3.9, 1.2], 0.07, T(STEEL), { outline: 0.02 });
+  k.box(3.8, 0.2, 2.4, T(0x3a3550), 0, 3.9, 0.3, { outline: 0.04 });
+  k.box(3.4, 0.08, 0.2, G(0xfff6a8), 0, 3.85, 1.3, { outline: 0 });
+  k.solid(1.2, 1.5, 0.7, 0, -0.2);
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.1), new THREE.MeshBasicMaterial({ map: screenTex(['> CHIMERA HOLDING PEN', '  RESIDENTS: SEE LIST', '', '* F  OPEN THE PEN', '! DO NOT FEED AFTER', '  MIDNIGHT (ANY)'], { head: 'PEN-TERM', hc: '#7dff3a' }) }));
+  k.dyn(scr, 0, 2.25, 0.11);
+  const holo = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.05, 6, 24), glow(lime));
+  holo.add(ring);
+  holo.userData.tick = (o, dt, t) => { ring.rotation.y += dt * 1.5; o.position.y = 4.6 + Math.sin(t * 2) * 0.1; };
+  k.dyn(holo, 0, 4.6, 0.3);
+  k.at();
+}
+
+// =============================================================================================
 // The Monolith: the slab itself stays in world.buildMonolith; around it now, a survey dig:
 // a trampled berm, floodlight tripods aimed at it, a scaffold, the researchers' tent and
 // generator, a laser theodolite, glyph lines in the dust, and black shards circling it.
@@ -1176,69 +1329,90 @@ export function dressMonolith(world, loc) {
   settle(world, loc, 7703, (k) => {
     const vio = 0xc77dff;
     // a low ring berm of dug-out regolith (open on the approach side)
-    for (let i = 0; i < 26; i++) {
-      const a = (i / 30) * TAU + 0.5;
-      k.add(new THREE.SphereGeometry(2.6, 8, 5, 0, TAU, 0, Math.PI / 2), T(0x9a92a8), Math.cos(a) * 24, -0.6, Math.sin(a) * 24, { outline: 0.06 });
-      k.sphere(2.6, Math.cos(a) * 24, -0.6, Math.sin(a) * 24);
+    for (let i = 0; i < 38; i++) {
+      const a = (i / 44) * TAU + 0.5;
+      k.add(new THREE.SphereGeometry(3.2, 8, 5, 0, TAU, 0, Math.PI / 2), T(0x9a92a8), Math.cos(a) * 36, -0.7, Math.sin(a) * 36, { outline: 0.06 });
+      k.sphere(3.2, Math.cos(a) * 36, -0.7, Math.sin(a) * 36);
     }
-    // glyph lines radiating through the dust, and a carved ring
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * TAU + 0.13;
-      k.box(0.25, 0.04, 9 + (i % 3) * 3, G(vio), Math.cos(a) * 9, 0.03, Math.sin(a) * 9, { ry: -a + Math.PI / 2, outline: 0 });
+    // glyph lines radiating through the dust, and two carved rings
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * TAU + 0.13;
+      k.box(0.3, 0.04, 12 + (i % 3) * 4, G(vio), Math.cos(a) * 13, 0.03, Math.sin(a) * 13, { ry: -a + Math.PI / 2, outline: 0 });
     }
-    k.ring(6, 0.12, G(vio), 0, 0.05, 0);
+    k.ring(8.5, 0.15, G(vio), 0, 0.05, 0);
+    k.ring(14, 0.1, G(vio), 0, 0.05, 0);
     // floodlight tripods aimed at the slab
-    for (const a of [0.6, 2.3, 4.0, 5.3]) {
-      const x = Math.cos(a) * 15, z = Math.sin(a) * 15;
+    for (const a of [0.6, 1.9, 3.1, 4.2, 5.3]) {
+      const x = Math.cos(a) * 22, z = Math.sin(a) * 22;
       k.at(x, z, Math.atan2(-x, -z));
-      for (let j = 0; j < 3; j++) { const b = (j / 3) * TAU; k.beam([Math.sin(b) * 1.4, 0, Math.cos(b) * 1.4], [0, 5, 0], 0.07, T(DARK), { outline: 0.02 }); }
-      k.box(1.4, 1, 0.9, T(LIGHT), 0, 5, 0, { rx: -0.25, outline: 0.04 });
-      k.box(1.2, 0.8, 0.1, G(0xfffbe0), 0, 5.12, 0.47, { rx: -0.25, outline: 0 });
+      for (let j = 0; j < 3; j++) { const b = (j / 3) * TAU; k.beam([Math.sin(b) * 1.8, 0, Math.cos(b) * 1.8], [0, 7, 0], 0.08, T(DARK), { outline: 0.02 }); }
+      k.box(1.8, 1.2, 1.1, T(LIGHT), 0, 7, 0, { rx: -0.3, outline: 0.04 });
+      k.box(1.6, 1.0, 0.1, G(0xfffbe0), 0, 7.15, 0.57, { rx: -0.3, outline: 0 });
       k.at();
     }
-    // scaffold tower on one side of the slab, with a platform level with its top
-    k.at(5.5, -2.5);
-    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.beam([sx * 1.5, 0, sz * 1.5], [sx * 1.5, 24, sz * 1.5], 0.1, T(YEL), { outline: 0.02 });
-    for (let y = 4; y <= 24; y += 4) {
-      for (const [a, b] of [[[-1.5, -1.5], [1.5, -1.5]], [[1.5, -1.5], [1.5, 1.5]], [[1.5, 1.5], [-1.5, 1.5]], [[-1.5, 1.5], [-1.5, -1.5]]]) k.beam([a[0], y, a[1]], [b[0], y, b[1]], 0.07, T(YEL), { outline: 0 });
-      k.beam([-1.5, y - 4, -1.5], [1.5, y, -1.5], 0.05, T(DARK), { outline: 0 });
+    // scaffold tower on one side of the slab, with platforms halfway up and level with its top
+    k.at(7.6, -3.4);
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.beam([sx * 1.7, 0, sz * 1.7], [sx * 1.7, 36, sz * 1.7], 0.11, T(YEL), { outline: 0.02 });
+    for (let y = 4; y <= 36; y += 4) {
+      for (const [a, b] of [[[-1.7, -1.7], [1.7, -1.7]], [[1.7, -1.7], [1.7, 1.7]], [[1.7, 1.7], [-1.7, 1.7]], [[-1.7, 1.7], [-1.7, -1.7]]]) k.beam([a[0], y, a[1]], [b[0], y, b[1]], 0.07, T(YEL), { outline: 0 });
+      k.beam([-1.7, y - 4, -1.7], [1.7, y, -1.7], 0.05, T(DARK), { outline: 0 });
     }
-    k.box(3.4, 0.2, 3.4, T(0x8a5a3a), 0, 24, 0, { outline: 0.03 });
-    k.box(3.4, 0.2, 3.4, T(0x8a5a3a), 0, 12, 0, { outline: 0.03 });
-    k.solid(1.7, 12.2, 1.7, 0, 0);
+    k.box(3.8, 0.2, 3.8, T(0x8a5a3a), 0, 36, 0, { outline: 0.03 });
+    k.box(3.8, 0.2, 3.8, T(0x8a5a3a), 0, 18, 0, { outline: 0.03 });
+    k.solid(1.9, 18.2, 1.9, 0, 0);
     k.at();
-    // researchers' tent, generator, crates and a laser theodolite with its beam on the slab
-    k.at(-16, 9, 0.8);
-    k.add(prism(7, 5, 3.6), T(0xff9f1c), 0, 0, 0, { outline: 0.08 });
-    k.box(0.1, 2.4, 1.8, T(0x2a2540), 3.55, 0, 0, { outline: 0 });
-    k.box(0.4, 0.2, 0.1, G(WARM), 3.56, 2.6, 0, { outline: 0 });
-    k.solid(3.5, 1.8, 2.5, 0, 0);
+    // the researchers' camp: two tents, a site cabin, a generator, crates, and a laser theodolite
+    // with its beam on the slab
+    for (const [x, z, yaw, c] of [[-24, 13, 0.8, 0xff9f1c], [14, 27, 2.6, 0x2ec4ff]]) {
+      k.at(x, z, yaw);
+      k.add(prism(7, 5, 3.6), T(c), 0, 0, 0, { outline: 0.08 });
+      k.box(0.1, 2.4, 1.8, T(0x2a2540), 3.55, 0, 0, { outline: 0 });
+      k.box(0.4, 0.2, 0.1, G(WARM), 3.56, 2.6, 0, { outline: 0 });
+      k.solid(3.5, 1.8, 2.5, 0, 0);
+      k.at();
+    }
+    // site cabin: a little prefab with a lit window, an antenna and a bench of instruments outside
+    k.at(-26, -14, 0.5 + Math.PI / 2);
+    k.box(8, 3.2, 5, T(0xd8d4e8), 0, 0, 0, { outline: 0.08 });
+    k.box(8.4, 0.3, 5.4, T(vio), 0, 3.2, 0, { outline: 0.03 });
+    k.box(2.6, 1.0, 0.1, G(WARM), -1.5, 1.6, 2.52, { outline: 0 });
+    k.box(1.1, 2.3, 0.1, T(0x2a2540), 2.2, 0, 2.52, { outline: 0 });
+    k.beam([3, 3.5, -1.5], [3, 7.5, -1.5], 0.06, T(DARK), { outline: 0 });
+    k.box(3.2, 0.9, 1.0, T(0x5b5870), -1.5, 0, 3.6, { outline: 0.03 });
+    for (let j = 0; j < 3; j++) k.box(0.6, 0.5, 0.5, G([0x2ee6ff, vio, 0x7dff6a][j]), -2.6 + j * 1.1, 0.9, 3.6, { outline: 0 });
+    k.solid(4, 1.6, 2.5, 0, 0);
     k.at();
-    for (const [x, z, c] of [[-10, 15, 0x9a6a3a], [-9, 13.4, 0x4f5a42], [-11.4, 14, 0x9a6a3a]]) crate(k, x, 0, z, 1.1, c, x);
-    k.at(-17, -6, 0.4);
+    for (const [x, z, c] of [[-15, 22, 0x9a6a3a], [-13.6, 20.2, 0x4f5a42], [-16.6, 20.6, 0x9a6a3a], [16, -22, 0x4f5a42], [17.4, -20.5, 0x9a6a3a]]) crate(k, x, 0, z, 1.1, c, x);
+    k.at(-29, -3, 0.4);
     k.box(2.4, 1.6, 1.4, T(YEL), 0, 0, 0, { outline: 0.05 });
     k.cyl(0.15, 0.2, 1, 6, T(DARK), 0.7, 1.6, 0, { outline: 0.02 });
     k.solid(1.2, 0.8, 0.7, 0, 0);
     k.at();
-    k.at(12, 10);
+    // survey stakes and tape round the dig
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * TAU + 0.2, b = ((i + 1) / 10) * TAU + 0.2, r = 18;
+      k.cyl(0.08, 0.08, 1.2, 4, T(0xff9f1c), Math.cos(a) * r, 0, Math.sin(a) * r, { outline: 0.02 });
+      if (i % 3 !== 2) k.beam([Math.cos(a) * r, 1.0, Math.sin(a) * r], [Math.cos(b) * r, 1.0, Math.sin(b) * r], 0.03, T(YEL), { outline: 0, seg: 3 });
+    }
+    k.at(18, 15);
     for (let j = 0; j < 3; j++) { const b = (j / 3) * TAU; k.beam([Math.sin(b) * 0.8, 0, Math.cos(b) * 0.8], [0, 1.6, 0], 0.05, T(DARK), { outline: 0 }); }
     k.box(0.6, 0.5, 0.8, T(0xff9f1c), 0, 1.6, 0, { outline: 0.03 });
     k.at();
-    const beamLen = Math.hypot(12, 10) - 1.2;
-    k.add(new THREE.CylinderGeometry(0.04, 0.04, beamLen, 4).rotateZ(Math.PI / 2), G(0xff2a4a), 6, 1.85, 5, { ry: Math.atan2(10, -12) + Math.PI, outline: 0 });
-    k.at(-4, 22, Math.PI);
+    const beamLen = Math.hypot(18, 15) - 1.6;
+    k.add(new THREE.CylinderGeometry(0.04, 0.04, beamLen, 4).rotateZ(Math.PI / 2), G(0xff2a4a), 9, 1.85, 7.5, { ry: Math.atan2(15, -18) + Math.PI, outline: 0 });
+    k.at(-5, 33, Math.PI);
     k.sign('DO NOT TOUCH. SERIOUSLY.', 0, 0, { w: 10, y: 3, fg: '#c77dff' });
     k.at();
     // black shards circling the slab, each with a violet edge, at different heights and speeds
     for (let i = 0; i < 9; i++) {
       const shard = new THREE.Group();
-      const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.5 + (i % 3) * 0.3, 0), new THREE.MeshBasicMaterial({ color: 0x050308 }));
+      const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.7 + (i % 3) * 0.4, 0), new THREE.MeshBasicMaterial({ color: 0x050308 }));
       s.scale.set(0.6, 1.8, 0.6);
       const edge = new THREE.Mesh(s.geometry, new THREE.MeshBasicMaterial({ color: vio, side: THREE.BackSide }));
       edge.scale.setScalar(1.15);
       s.add(edge);
       shard.add(s);
-      const r = 6 + (i % 4) * 1.6, h = 4 + i * 2.3, w = (i % 2 ? 1 : -1) * (0.15 + (i % 3) * 0.08), ph = i * 0.7;
+      const r = 8.5 + (i % 4) * 2.2, h = 5 + i * 3.3, w = (i % 2 ? 1 : -1) * (0.15 + (i % 3) * 0.08), ph = i * 0.7;
       shard.userData.tick = (o, dt, t) => {
         const a = ph + t * w;
         s.position.set(Math.cos(a) * r, h + Math.sin(t * 0.8 + i) * 0.8, Math.sin(a) * r);
@@ -1426,7 +1600,7 @@ export function buildTown(world, loc, { civic = false } = {}) {
     k.at();
     if (civic) townHall(world, loc, k);
   });
-  world.pad(loc, -65, 55, 13);
+  world.pad(loc, -65, 55, 13, 0xffd23f, true);
 }
 
 // Kepler town hall: a colonnaded civic block under a pediment, steps, and a clock tower whose
@@ -1586,8 +1760,8 @@ export function dressBase(world, loc) {
     // command bunker: an armoured octagonal frustum. Everything on it (firing slits, the faction
     // band, armour plates) sits flush on its own face and leans with the wall, so it reads square
     // from every side; a glazed command deck and a ring of masts on top; a recessed blast door
-    const R = small ? 11 : 18, H = small ? 8 : 11;
-    const tilt = Math.atan((R * 0.18) / H);                 // the walls' lean
+    const R = small ? 13 : 21, H = small ? 9 : 12.5;
+    const tilt = Math.atan((R * 0.18 * Math.cos(Math.PI / 8)) / H); // the faces' lean (measured across the face)
     const face = (j) => (j + 0.5) * (TAU / 8);              // face centres (cylinder vertices sit at j*45deg)
     const ap = (h) => (R - R * 0.18 * (h / H)) * Math.cos(Math.PI / 8); // apothem at height h
     k.at(0, 0, -Math.PI / 8); // (turned so face 0 looks straight down the approach, +z: the door's face)
@@ -1596,7 +1770,10 @@ export function dressBase(world, loc) {
     for (let j = 0; j < 8; j++) {
       const a = face(j);
       const at = (h, out) => [Math.sin(a) * (ap(h) + out), 0.8 + h, Math.cos(a) * (ap(h) + out)];
-      const plate = (w, hh, d, h, out, mat) => { const [x, y, z] = at(h, out); k.add(new THREE.BoxGeometry(w, hh, d), mat, x, y, z, { ry: a, rx: -tilt, outline: 0.03 }); };
+      // (turned to the face first, then leaned back with it: yaw-then-pitch, so every face's plates
+      // sit square and level on it, not skewed by a world-axis tilt)
+      const fq = new THREE.Quaternion().setFromEuler(new THREE.Euler(-tilt, a, 0, 'YXZ'));
+      const plate = (w, hh, d, h, out, mat) => { const [x, y, z] = at(h, out); k.add(new THREE.BoxGeometry(w, hh, d), mat, x, y, z, { q: fq, outline: 0.03 }); };
       const side = 2 * ap(0.62 * H) * Math.tan(Math.PI / 8) * 0.86;
       if (j !== 0) plate(side * 0.7, 0.55, 0.2, H * 0.55, 0.06, T(0x1d1a29));   // firing slit
       if (j !== 0) plate(side * 0.6, 0.18, 0.14, H * 0.55 - 0.42, 0.1, G(fc)); // its glow
@@ -1630,9 +1807,11 @@ export function dressBase(world, loc) {
     // stacked columns follow the slope instead of one full-width cylinder
     for (let i = 0; i < 4; i++) k.column(R * (1 - 0.18 * (i + 0.5) / 4) + 0.2, (H * (i + 1)) / 4, 0, 0, (H * i) / 4);
     k.column(R * 0.72, H + 3, 0, 0, H);
+    // barracks: big Quonset huts spread round the yard, each with its door end turned in toward
+    // the command bunker (clear of the gate lane at +x, the dish, the searchlight tower and the fuel)
+    const hut = (a, d, r, len) => { const x = Math.cos(a) * d, z = Math.sin(a) * d; quonset(k, x, z, r, len, 0x5b5870, Math.atan2(-x, -z), fc); };
     if (!small) {
-      quonset(k, 40, -30, 6, 26, 0x5b5870, 0.2 + Math.PI / 2, fc);
-      quonset(k, -35, 35, 7, 22, 0x5b5870, -0.4, fc);
+      for (const [a, d] of [[1.25, 62], [2.2, 60], [-2.05, 61], [-1.05, 62]]) hut(a, d, 8, 30);
       // fuel tanks and an ammo dump
       k.at(-48, -20);
       tank(k, 0, 0, 3, 7, 0x6b6f78, fc);
@@ -1641,7 +1820,7 @@ export function dressBase(world, loc) {
       k.at();
       for (let i = 0; i < 6; i++) crate(k, 48 + (i % 3) * 1.6, 0, 22 + Math.floor(i / 3) * 1.6, 1.4, 0x4f5a42, 0.1);
     } else {
-      quonset(k, 22, -20, 5, 16, 0x5b5870, 0.4, fc);
+      for (const [a, d] of [[2.1, 38], [-1.9, 37]]) hut(a, d, 5.5, 18);
     }
     // searchlight tower (replaces the old pole)
     const tx = -30, tz = -30, th = small ? 24 : 34;
@@ -1664,8 +1843,9 @@ export function dressBase(world, loc) {
       for (const r of [[0, 0, 0.7], [0.7, 0, -0.7], [0, 0.7, 0.7]]) k.add(new THREE.BoxGeometry(0.35, 2.4, 0.35), T(0x55505e), 0, 0.9, 0, { rx: r[0] + 0.3, ry: r[1], rz: r[2], outline: 0.03 });
       k.at();
     }
-    sandbags(k, 18, 18, 3.2, 0.3, 4.2, 2);
-    sandbags(k, -16, 22, 2.6, 2.2, 6.0, 2);
+    // sandbag nests either side of the gate lane (clear of the bigger bunker)
+    sandbags(k, wallR * 0.42, wallR * 0.3, 3.2, 0.3, 4.2, 2);
+    sandbags(k, wallR * 0.42, -wallR * 0.3, 2.6, 2.2, 6.0, 2);
     floodMast(k, wallR * 0.65, -wallR * 0.6, 12); floodMast(k, -wallR * 0.6, wallR * 0.45, 12);
   });
 }

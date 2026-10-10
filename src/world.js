@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { toon, ink, inkMat, glow, textSprite, setMask } from './toon.js';
-import { makeDish, makeFigure, makeRover, makeRocket, makeShuttle } from './models.js';
+import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices } from './toon.js';
+import { makeDish, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets } from './models.js';
 import { mulberry32 } from './rng.js';
 import { FACTIONS } from './locations.js';
 import { SUN, frameQuat, arcDist, dirFromAngles, tangent } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
 import { Traffic } from './traffic.js';
-import { buildHelium, buildMeridian, buildFunpark, dressLab, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart } from './settlements.js';
+import { buildHelium, buildMeridian, buildFunpark, dressLab, dressLabInside, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart } from './settlements.js';
 import { makeProp } from './storyAssets.js';
 import { buildHomeTown } from './hometown.js';
 import { spindleGeometry } from './spindle.js';
@@ -32,6 +32,11 @@ const ACTIVE_DIST = 2600;
 // (setMask), so game code toggling .visible never fights it.
 const SHOW_NEAR = 300;   // closer than loc.r + this: always drawn
 const DETAIL_DIST = 260; // a detail cell further than this: its props off
+let NO_MERGE = false; try { NO_MERGE = localStorage.getItem('mr-nomerge') === '1'; } catch { /* unavailable */ } // (debug: compare with the originals)
+const MERGE_CELL = 80;   // merged static geometry is chunked on this grid (so frustum culling still bites)
+const MERGE_BIG = 36;    // pieces wider than this go in the place's one "big" chunk per material
+const MERGE_MATS = new Set(['MeshToonMaterial', 'MeshBasicMaterial', 'MeshLambertMaterial', 'MeshStandardMaterial', 'MeshPhongMaterial']);
+const _mm = new THREE.Matrix4(), _ms = new THREE.Sphere();
 const DETAIL_CELL = 60;
 const DETAIL_R = 1.8;    // "small": bounding radius under this (metres)
 const _los = new THREE.Vector3(), _lp = new THREE.Vector3();
@@ -126,6 +131,7 @@ export class World {
     this.buildCrystals();
     this.buildTraffic(); // after the lakes: roads steer around them
     for (const loc of locations) this.prepCulling(loc);
+    this.mergeAllIdle(); // (static geometry folded into a few meshes per place, in idle time)
   }
 
   // Each settlement's height (for the line-of-sight test) and its small props (for detail culling).
@@ -146,7 +152,7 @@ export class World {
       _lp.copy(gg.boundingSphere.center).applyMatrix4(o.matrixWorld);
       if (r < 400) top = Math.max(top, _lp.length() + r - base);
       // (only frozen static props: anything that moves, animates or gets reparented stays out)
-      if (o.isMesh && !o.isInstancedMesh && !o.matrixAutoUpdate && !(o.userData && o.userData.isInk) && r < DETAIL_R) {
+      if (o.isMesh && !o.isInstancedMesh && !o.matrixAutoUpdate && (o.userData.mergedDetail || (!(o.userData && o.userData.isInk) && r < DETAIL_R))) {
         const key = `${Math.round(_lp.x / DETAIL_CELL)},${Math.round(_lp.y / DETAIL_CELL)},${Math.round(_lp.z / DETAIL_CELL)}`;
         if (!cells.has(key)) cells.set(key, { c: new THREE.Vector3(), n: 0, objs: [], on: true });
         const cell = cells.get(key);
@@ -160,6 +166,139 @@ export class World {
     loc.topH = Math.min(top, 400);
     loc.shown = false; // (the group joins the scene on the first update in range)
     loc.occluded = false;
+  }
+
+  // ---- static merging ----
+  // Every piece of a place that never moves, hides or changes is folded into a few merged meshes:
+  // one per material per chunk of the place (MERGE_CELL grid; small props in their own chunks so the
+  // detail culling still drops them at range), with all their ink outlines merged the same way.
+  // A place goes from hundreds of draw calls to a few dozen. Left alone: anything that animates or
+  // is moved (spinners, dishes, figures, walkers, rides, tick/spin/blink/flag parts, anything put
+  // dynamic), anything the game hides or swaps later (story props marked keep, named objects,
+  // sprites), transparent and textured-shader materials, and a mesh with an unmergeable child.
+  // Colliders are separate and untouched. Runs once per place: in idle time after boot, or on the
+  // spot the first time the place is drawn; a rebuilt place merges again.
+  mergeLocation(loc) {
+    if (loc.merged) return;
+    loc.merged = true;
+    if (NO_MERGE) return;
+    const t0 = performance.now();
+    const G = loc.group;
+    // (any detail cell switched off: back on first, so nothing is merged with its mask off)
+    if (loc.cells) for (const c of loc.cells) if (!c.on) { c.on = true; setMask(c.objs, true); }
+    G.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(G.matrixWorld).invert();
+    const skip = new Set();
+    const mark = (o) => { if (o && o.traverse) o.traverse((c) => skip.add(c)); };
+    for (const s of this.spinners) if (s.loc === loc) mark(s.obj);
+    for (const d of this.dishes) if (d.loc === loc) mark(d.root);
+    for (const a of this.anims) if (a.loc === loc) a.list.forEach(mark);
+    for (const k of ['figures', 'walkers', 'rides']) for (const f of this[k]) if (f.loc === loc) mark(f.root);
+    const flagged = (o) => { const u = o.userData; return u.keep || u.tick || u.spin || u.blink || u.flag || u.noMerge || u.inkGeo; };
+    const ok = (o) => {
+      if (o.isSprite || o.isInstancedMesh || o.isSkinnedMesh || o.isPoints || o.isLine || !o.visible || o.name || skip.has(o) || flagged(o)) return false;
+      if (!o.isMesh) return true;
+      const m = o.material;
+      if (!m || Array.isArray(m) || m.transparent || !(MERGE_MATS.has(m.type) || m === inkMat) || o.layers.mask !== 1) return false;
+      const a = o.geometry && o.geometry.attributes;
+      if (!a || !a.position || (m.map && !a.uv) || (m.vertexColors && !a.color) || o.geometry.morphAttributes.position) return false;
+      return true;
+    };
+    // walk down: a mesh can merge if it and every ancestor up to the place is fixed in place
+    // (frozen by world.put, or a kit's merged mesh under its never-moving root)
+    const take = [];
+    const walk = (o, fixed) => {
+      for (const c of o.children) {
+        const cf = fixed && ok(c) && (!c.matrixAutoUpdate || c.userData.kitRoot || c.userData.kitMesh);
+        walk(c, cf);
+        if (cf && c.isMesh) take.push(c);
+      }
+    };
+    walk(G, true);
+    // a mesh with a child that stays: it stays too (its child hangs off it)
+    const taking = new Set(take);
+    const stays = (o) => o.children.some((c) => !taking.has(c) || stays(c));
+    for (let i = take.length - 1; i >= 0; i--) if (stays(take[i])) { taking.delete(take[i]); }
+    // (a parent kept for its child keeps its own ink child as well)
+    for (const m of [...taking]) if (m.parent && m.parent.isMesh && !taking.has(m.parent)) taking.delete(m);
+    const groups = new Map();
+    for (const o of taking) {
+      const geo = o.geometry;
+      if (!geo.boundingSphere) geo.computeBoundingSphere();
+      _mm.multiplyMatrices(inv, o.matrixWorld);
+      _ms.copy(geo.boundingSphere).applyMatrix4(_mm);
+      const ink = o.material === inkMat;
+      // (an ink hull goes with whatever it outlines: size it by its parent)
+      const size = ink && o.parent && o.parent.isMesh && o.parent.geometry.boundingSphere ? o.parent.geometry.boundingSphere.radius * o.parent.matrixWorld.getMaxScaleOnAxis() : _ms.radius;
+      const small = size < DETAIL_R;
+      const big = !small && size > MERGE_BIG;
+      const cs = small ? DETAIL_CELL : MERGE_CELL;
+      const cell = big ? 'big' : `${Math.round(_ms.center.x / cs)},${Math.round(_ms.center.y / cs)},${Math.round(_ms.center.z / cs)}`;
+      // a shared plain colour (most of them) joins every other one of its kind in a vertex-coloured
+      // mesh; anything else (animated, textured, one-off) merges only with its own material
+      const mt = o.material;
+      const vc = vcable(mt);
+      const mk = vc ? `m${vcMaterial(mt).id}` : `m${mt.id}`; // (lands with the kits' own vertex-coloured meshes)
+      const key = `${mk}|${o.castShadow ? 1 : 0}${o.receiveShadow ? 1 : 0}|${o.renderOrder}|${small ? 's' : 'n'}|${cell}`;
+      let gr = groups.get(key);
+      if (!gr) groups.set(key, (gr = { mat: vc ? vcMaterial(mt) : mt, vc, cast: o.castShadow, recv: o.receiveShadow, order: o.renderOrder, small, list: [], objs: [] }));
+      gr.objs.push(o);
+      const keepUv = !!o.material.map, keepCol = !!o.material.vertexColors && !vc;
+      const g = geo.index ? geo.toNonIndexed() : geo.clone();
+      for (const k of Object.keys(g.attributes)) if (!(k === 'position' || k === 'normal' || (k === 'uv' && keepUv) || (k === 'color' && keepCol))) g.deleteAttribute(k);
+      g.morphAttributes = {};
+      g.clearGroups();
+      if (!g.attributes.normal) g.computeVertexNormals();
+      if (vc) paintVertices(g, mt.color);
+      gr.list.push(g.applyMatrix4(_mm));
+    }
+    // swap: the merged chunks in, the originals out
+    const root = new THREE.Group();
+    root.name = 'merged';
+    let made = 0;
+    for (const gr of groups.values()) {
+      if (!gr.list.length) continue;
+      const geo = gr.list.length === 1 ? gr.list[0] : mergeGeometries(gr.list);
+      if (!geo) continue; // (incompatible pieces: leave those in place)
+      if (gr.list.length > 1) for (const g of gr.list) g.dispose();
+      const m = new THREE.Mesh(geo, gr.mat);
+      m.castShadow = gr.cast; m.receiveShadow = gr.recv; m.renderOrder = gr.order;
+      if (gr.mat === inkMat) { m.userData.isInk = true; m.castShadow = m.receiveShadow = false; }
+      if (gr.small) m.userData.mergedDetail = true;
+      m.matrixAutoUpdate = false;
+      root.add(m);
+      made++;
+      gr.done = true;
+    }
+    // only take out what made it into a merged mesh
+    let removed = 0;
+    for (const gr of groups.values()) if (gr.done) for (const o of gr.objs) { if (o.parent && !(o.parent.isMesh && !taking.has(o.parent))) { o.parent.remove(o); removed++; } }
+    root.matrixAutoUpdate = false;
+    G.add(root);
+    root.updateMatrixWorld(true);
+    loc.mergeStats = { removed, made, ms: Math.round(performance.now() - t0) };
+    this.prepCulling(loc);
+  }
+
+  // Whatever idle time hasn't merged yet, merged now (main.js: the first frame of play, so no merge
+  // ever lands mid-run).
+  finishMerges() { this.mergeDone = true; for (const l of this.locations) if (!l.merged) this.mergeLocation(l); }
+
+  // Merge every place in idle time, one at a time, while the title screen is up.
+  mergeAllIdle() {
+    const queue = this.locations.filter((l) => !l.merged);
+    const later = (f) => (typeof requestIdleCallback === 'function' ? requestIdleCallback(f, { timeout: 2000 }) : setTimeout(f, 30));
+    const run = (dl) => {
+      const t0 = performance.now();
+      while (queue.length && (performance.now() - t0 < 12 || (dl && dl.didTimeout))) {
+        const l = queue.shift();
+        if (!l.merged) this.mergeLocation(l);
+        if (dl && dl.didTimeout) break;
+        if (this.mergeDone) return;
+      }
+      if (queue.length) later(run);
+    };
+    later(run);
   }
 
   // Terrain-only line of sight from the camera to point p raised by `lift` (a dip of a few metres
@@ -182,7 +321,7 @@ export class World {
   // Shared materials for batched geometry (a batch merges per material object).
   glowM(color) {
     const k = 'g' + color;
-    if (!this._mats.has(k)) this._mats.set(k, glow(color));
+    if (!this._mats.has(k)) { const m = glow(color); m.userData.shared = true; this._mats.set(k, m); }
     return this._mats.get(k);
   }
 
@@ -248,6 +387,7 @@ export class World {
     sun.position.copy(SUN).multiplyScalar(6200);
     sun.lookAt(0, 0, 0);
     sky.add(sun);
+    sky.add(makePlanets(SUN)); // (Venus, Mars, Jupiter, Saturn: small and far, along the ecliptic)
     const burst = new THREE.Mesh(new THREE.RingGeometry(170, 260, 32), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.5 }));
     burst.position.copy(sun.position);
     burst.lookAt(0, 0, 0);
@@ -521,7 +661,9 @@ export class World {
     return g;
   }
 
-  pad(loc, dx, dz, r, color = 0xffd23f) {
+  // spare: a decorative pad that only stays if transit ends up using it (traffic.js dropSparePads)
+  pad(loc, dx, dz, r, color = 0xffd23f, spare = false) {
+    if (spare && (loc.droppedPads || []).some((p) => Math.hypot(p.x - dx, p.z - dz) < 1)) return null;
     const g = new THREE.Group();
     g.add(mesh(new THREE.CylinderGeometry(r, r * 1.05, 0.5, 32), toon(0x4a4660), 0.08));
     const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.65, r * 0.8, 32), toon(color));
@@ -533,7 +675,7 @@ export class World {
     bar.position.y = 0.28;
     g.add(bar);
     this.put(g, loc, dx, dz, 0);
-    (loc.pads ||= []).push({ x: dx, z: dz, r }); // traffic reuses / avoids these
+    (loc.pads ||= []).push({ x: dx, z: dz, r, spare, mesh: g }); // traffic reuses / avoids these
     return g;
   }
 
@@ -631,11 +773,13 @@ export class World {
     for (let i = 0; i < count; i++) {
       const spawn = { kind: opts.kind, ...(opts.look ? opts.look(i) : {}) };
       const f = makeFigure(spawn);
-      const a = this.r() * Math.PI * 2, d = (0.3 + this.r() * 0.55) * loc.r;
-      f.root.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
+      // (opts.area(out): where in the place they may be; otherwise anywhere across it)
+      const ent = {};
+      if (opts.area) opts.area(f.root.position, ent);
+      else { const a = this.r() * Math.PI * 2, d = (0.3 + this.r() * 0.55) * loc.r; f.root.position.set(Math.cos(a) * d, 0, Math.sin(a) * d); }
       loc.group.add(f.root);
       // residents are the damageable crowd (civilians.js): spawn remembers how to make a replacement
-      this.figures.push({ ...f, loc, spawn, kind: opts.kind || 'worker', target: f.root.position.clone(), wait: this.r() * 3, phase: this.r() * 10, vy: 0, hop: 0 });
+      this.figures.push({ ...ent, ...f, loc, spawn, area: opts.area, kind: spawn.kind || opts.kind || 'worker', target: f.root.position.clone(), wait: this.r() * 3, phase: this.r() * 10, vy: 0, hop: 0 });
     }
   }
 
@@ -643,8 +787,8 @@ export class World {
   respawnFigure(entry) {
     const loc = entry.loc;
     const f = makeFigure(entry.spawn);
-    const a = Math.random() * Math.PI * 2, d = (0.3 + Math.random() * 0.55) * loc.r;
-    f.root.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
+    if (entry.area) entry.area(f.root.position, entry);
+    else { const a = Math.random() * Math.PI * 2, d = (0.3 + Math.random() * 0.55) * loc.r; f.root.position.set(Math.cos(a) * d, 0, Math.sin(a) * d); }
     loc.group.add(f.root);
     Object.assign(entry, f, { target: f.root.position.clone(), wait: Math.random() * 3, vy: 0, hop: 0, hp: undefined });
     delete entry.civ;
@@ -703,6 +847,7 @@ export class World {
     const mine = (x) => x.loc !== loc;
     for (const k of ['spinners', 'blinkers', 'dishes', 'figures', 'zoneWalls', 'walkers', 'rides', 'anims']) this[k] = this[k].filter(mine);
     const pads = loc.pads; // (traffic already routes to these)
+    loc.merged = false; // (the rebuilt place merges again, the next time it's drawn)
     for (const k of ['turretMounts', 'keep', 'pads', 'sign', 'launchBuilt']) delete loc[k];
     this.buildLocation(loc);
     if (pads) loc.pads = pads;
@@ -723,9 +868,14 @@ export class World {
       const x = loc.r * 1.25, z = 0;
       const at = this.toWorld(loc, x, 0, z);
       this.planet.addFlat(at.clone().normalize(), 28);
-      const dy = this.planet.surface(at) - loc.pos.length();
+      // the plateau is flat square to the Moon's up there, which leans away from the camp's up by
+      // x / R: tilt the complex to match and seat it on the plateau's middle (no edge in the air)
+      const seat = loc.group.worldToLocal(at.clone().setLength(this.planet.surface(at)));
+      const dy = seat.y;
       const lc = makeProp('launch');
-      this.put(lc, loc, x, z, dy - 0.2, -Math.PI / 2, false);
+      lc.rotation.order = 'ZYX';
+      lc.rotation.z = -Math.asin(Math.min(1, Math.hypot(x, z) / loc.pos.length()));
+      this.put(lc, loc, seat.x, seat.z, dy - 0.25, -Math.PI / 2, false);
       for (const c of lc.userData.cols || []) {
         const cc = c.type === 'sphere' ? { ...c, x: x + c.z * -1, z: z + c.x, y: c.y + dy } : { ...c, x: x - c.z, z: z + c.x, y0: (c.y0 || 0) + dy, y1: (c.y1 || 0) + dy };
         this.col(loc, cc);
@@ -1337,7 +1487,7 @@ export class World {
       this.col(loc, { type: 'cyl', x: dx, z: dz, y0: -2, y1: s * 0.95, r: s * 0.2 + 0.5 });
     }
     dressArray(this, loc); // observatory, labs, control centre, mast, cable runs
-    this.pad(loc, -100, -20, 13, 0x7dff6a);
+    this.pad(loc, -100, -20, 13, 0x7dff6a, true);
     this.solarField(loc, 0, 120, 3, 8, 0);
     this.addFigures(loc, 8, { kind: 'worker', look: () => ({ suit: 0xffffff, visor: 0x2b8f4a }) });
   }
@@ -1356,7 +1506,7 @@ export class World {
     }
     this.block(loc, 0, 0, 22, 12, 22, 0xfff4e0, 0.785, 0x2edfa0);
     this.tower(loc, 0, 0, 30, 1.6, 0xe0e0e0, 0x6aff9e);
-    this.pad(loc, 80, -40, 12, 0x6aff9e);
+    this.pad(loc, 80, -40, 12, 0x6aff9e, true);
     this.addFigures(loc, 6, { kind: 'worker', look: () => ({ suit: 0xffffff, visor: 0x2b8f4a }) });
   }
 
@@ -1459,6 +1609,7 @@ export class World {
       // drawn while in range and not behind the terrain
       if (want && loc.detail) loc.occluded = loc.camDist > loc.r + SHOW_NEAR && !this.lineOfSight(camPos, loc.pos, loc.topH + 2);
       const show = want && !loc.occluded;
+      if (show && !loc.merged) this.mergeLocation(loc);
       if (show !== loc.shown) {
         loc.shown = show;
         if (show) this.scene.add(loc.group); else this.scene.remove(loc.group);
@@ -1574,13 +1725,13 @@ export class World {
       this.put(shelf, loc, x, -13, 3.5);
       for (let k = 0; k < 3; k++) this.put(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.2, 8), glow([0x7dff3a, 0xff2e88, 0x2ec4ff][k])), loc, x - 1.2 + k * 1.2, -12, 5.5);
     }
-    const counter = mesh(new THREE.BoxGeometry(8, 2.2, 2.5), toon(0x2ec4ff), 0.08);
-    this.put(counter, loc, 13, 6, 1.1);
-    this.col(loc, { type: 'box', x: 13, y: 1.1, z: 6, hx: 4, hy: 1.1, hz: 1.25 });
+    // Dr. Zbornak's station (dressed in settlements.js dressLabInside): on a low dais on the right of
+    // the hall, behind his own waist-high workbench, facing the door
+    const docX = 15.5, docZ = 1.6;
     const doc = makeFigure({ suit: 0xffffff, helmet: 0xfff4e0, visor: 0x7dff3a });
-    this.put(doc.root, loc, 13, 3.5, 0, 0);
-    const docSign = textSprite('DR. ZBORNAK', { color: '#7dff3a', size: 50, scale: 0.35 });
-    docSign.position.set(13, 4.5, 3.5);
+    this.put(doc.root, loc, docX, docZ, 0.3, 0);
+    const docSign = nameTag(textSprite('DR. ZBORNAK', { color: '#7dff3a', size: 50, scale: 0.35 }), 'DR. ZBORNAK', '#7dff3a');
+    docSign.position.set(docX, 3.1, docZ);
     loc.group.add(docSign);
     // the reactor
     const rx = -2, rz = -3;
@@ -1623,19 +1774,18 @@ export class World {
     fence(pen.x1, pen.z0, pen.x1, pen.z1);
     fence(pen.x0, pen.z0 + 8, pen.x0, pen.z1);
     fence(pen.x0 + 8, pen.z0, pen.x1, pen.z0);
-    const term = mesh(new THREE.BoxGeometry(1.6, 2.4, 1), toon(0x2ec4ff), 0.06);
-    this.put(term, loc, pen.x0 - 2, pen.z0 - 2, 1.2);
-    this.put(new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.8), glow(0x7dff3a)), loc, pen.x0 - 2, pen.z0 - 1.48, 1.8);
+    // (the terminal at its gate is a little kiosk: settlements.js penTerminal)
     const penSign = textSprite('HOLDING PEN', { color: '#7dff3a', size: 50, scale: 0.35 });
-    penSign.position.set(pen.x0 - 2, 4, pen.z0 - 2);
+    penSign.position.set(pen.x0 - 2, 5.6, pen.z0 - 2);
     loc.group.add(penSign);
     loc.group.updateMatrixWorld(true);
-    this.lab = { loc, reactor: this.toWorld(loc, rx, 2, rz), scientist: this.toWorld(loc, 13, 0, 3.5), pod: this.toWorld(loc, px, 1, pz), penTerm: this.toWorld(loc, pen.x0 - 2, 0, pen.z0 - 2), half: { w: W, d: D, h: H } };
+    this.lab = { loc, reactor: this.toWorld(loc, rx, 2, rz), scientist: this.toWorld(loc, docX, 0, docZ + 4.5), pod: this.toWorld(loc, px, 1, pz), penTerm: this.toWorld(loc, pen.x0 - 2, 0, pen.z0 - 2), half: { w: W, d: D, h: H } };
     // a permanent light in the scene (never added/removed, so shaders don't recompile)
     this.reactorLight = new THREE.PointLight(0xff2e88, 0, 60, 1.5);
     this.reactorLight.position.copy(this.toWorld(loc, rx, H / 2, rz));
     this.scene.add(this.reactorLight);
     dressLab(this, loc, { W, D, H });
+    dressLabInside(this, loc, { W, D, H, docX, docZ });
   }
 
   checker() {
@@ -1653,14 +1803,16 @@ export class World {
   }
 
   buildMonolith(loc) {
-    const slab = mesh(new THREE.BoxGeometry(6, 26, 1.6), new THREE.MeshBasicMaterial({ color: 0x050308 }), 0.2);
-    this.put(slab, loc, 0, 0, 13);
-    this.col(loc, { type: 'box', x: 0, y: 13, z: 0, hx: 3, hy: 13, hz: 0.8 });
-    const halo = new THREE.Mesh(new THREE.RingGeometry(16, 17, 64), new THREE.MeshBasicMaterial({ color: 0xc77dff, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
+    const slab = mesh(new THREE.BoxGeometry(8.4, 36, 2.2), new THREE.MeshBasicMaterial({ color: 0x050308 }), 0.25);
+    this.put(slab, loc, 0, 0, 18);
+    this.col(loc, { type: 'box', x: 0, y: 18, z: 0, hx: 4.2, hy: 18, hz: 1.1 });
+    const halo = new THREE.Mesh(new THREE.RingGeometry(22, 23.5, 72), new THREE.MeshBasicMaterial({ color: 0xc77dff, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
     halo.rotation.x = -Math.PI / 2;
     this.put(halo, loc, 0, 0, 0.2);
     this.monolith = { loc, pos: this.toWorld(loc, 0, 2, 0), cd: 0, halo };
     dressMonolith(this, loc);
+    // the transit pad goes out past the dig's berm, and clear of where Meridian builds its launch complex
+    (loc.keep ||= []).push({ x: 0, z: 0, r: 42 }, { x: loc.r * 1.25, z: 0, r: 34 });
   }
 
   // Bounce Dome Funpark (settlements.js): inflatables, skate park, rides.
@@ -1809,8 +1961,12 @@ export class World {
       const dx = f.target.x - p.x, dz = f.target.z - p.z;
       const d = Math.hypot(dx, dz);
       if (d < 1) {
-        const a = Math.random() * Math.PI * 2, rr = (0.25 + Math.random() * 0.6) * loc.r;
-        f.target.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+        if (f.area) {
+          f.area(f.target, f); // (somewhere else in its own patch)
+        } else {
+          const a = Math.random() * Math.PI * 2, rr = (0.25 + Math.random() * 0.6) * loc.r;
+          f.target.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+        }
         f.wait = f.kind === 'soldier' ? 0.5 : 1 + Math.random() * 4;
         continue;
       }

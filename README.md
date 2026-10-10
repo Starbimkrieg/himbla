@@ -105,6 +105,28 @@ Vite's hot reload restarts the page.
 | `R` (hold 1.5 s) | Emergency recall (₵100): a shuttle flies you to your HQ (the ILMB, the HQ of the faction whose story you've committed to, or Rustmoon Hold if you ride with the pirates); forfeits the current contract |
 | `H` | Help |
 
+### Controller
+
+Plug in any controller the browser (or the desktop app) sees as a standard gamepad: Xbox,
+PlayStation or Switch Pro. Pick it up and it takes over; touch the mouse or keyboard and they take
+back. Prompts show the pad's buttons while it's in use.
+
+| Button | In play |
+|---|---|
+| Left stick · right stick | Move / steer / carve (analog) · look |
+| `A` · `B` | Mag-jump / dive · tricks (hold in the air) |
+| `X` · `Y` | Interact · vehicle |
+| `LB` (hold) · `RB` | Quantum-Lock skates · power (hold for the winch) |
+| `LT` · `RT` | Thrusters (Rail Lance: scope) · fire |
+| `L3` · `R3` | Thrusters · scoop into the jar |
+| D-pad ← → · ↑ | Previous / next weapon · next power |
+| D-pad ↓ (tap · hold) | Use the quick slot · pick what it is (← → or keep holding): empty jar, wardrobe, reputation log, pen link, Teleporter, help, music |
+| `View` (tap · hold) · `Start` | Globe map · emergency recall · pause |
+
+In menus, dialogs, the board, the wardrobe and the casino, the d-pad (or left stick) moves a
+highlight, `A` presses, `B` backs out, `LB`/`RB` switch tabs and the right stick scrolls. Watching
+a Derby race: `A` cheers, `Y` switches camera, the right stick orbits.
+
 ## Lunar flight
 
 The Moon is small enough that at 100+ m/s the ground curves away beneath you, so the air physics keep big air

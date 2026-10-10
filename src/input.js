@@ -14,7 +14,9 @@ export class Input {
     this.wheelAcc = 0; // scroll since the last notch (a mouse wheel notch, or a trackpad's worth of swipe)
     this.wheelSteps = 0;
     this.wheelT = 0;
-    this.locked = false;
+    this.ptrLocked = false; // the mouse is captured
+    this.padActive = false; // a controller is in use (gamepad.js): counts as "in control" too
+    this.padMove = { x: 0, y: 0, on: false };
     this.onKey = null;
     this.binds = new Map(); // default code -> physical code (only entries that differ)
     this.rev = new Map(); // physical code -> default code
@@ -28,11 +30,11 @@ export class Input {
     });
     window.addEventListener('keyup', (e) => this.keys.delete(this.translate(e.code)));
     window.addEventListener('blur', () => { this.keys.clear(); this.mouse = [false, false, false]; });
-    window.addEventListener('mousedown', (e) => { if (this.locked) this.mouse[e.button] = true; });
+    window.addEventListener('mousedown', (e) => { if (this.ptrLocked) this.mouse[e.button] = true; });
     window.addEventListener('mouseup', (e) => { this.mouse[e.button] = false; });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('wheel', (e) => {
-      if (!this.locked) return;
+      if (!this.ptrLocked) return;
       this.wheelAcc += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
       // one step per notch; a trackpad's stream of tiny deltas adds up to steps, at most ~6 a second
       const now = performance.now();
@@ -43,13 +45,13 @@ export class Input {
       }
     }, { passive: true });
     window.addEventListener('mousemove', (e) => {
-      if (!this.locked) return;
+      if (!this.ptrLocked) return;
       this.dx += e.movementX;
       this.dy += e.movementY;
     });
     document.addEventListener('pointerlockchange', () => {
-      this.locked = document.pointerLockElement === this.canvas;
-      if (!this.locked) this.mouse = [false, false, false];
+      this.ptrLocked = document.pointerLockElement === this.canvas;
+      if (!this.ptrLocked && !this.padActive) this.mouse = [false, false, false];
     });
   }
 
@@ -76,8 +78,11 @@ export class Input {
     return code;
   }
 
+  // in control: the mouse captured, or a controller in hand
+  get locked() { return this.ptrLocked || this.padActive; }
+
   lock() {
-    if (this.locked) return;
+    if (this.ptrLocked || this.padActive) return; // (a controller needs no capture)
     try {
       const p = this.canvas.requestPointerLock();
       if (p && p.catch) p.catch(() => {});

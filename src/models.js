@@ -211,73 +211,176 @@ function addBaked(target, key, mats) {
 // Smooth lathed limbs and torso, rounded boots/gloves/backpack and a shelled visor, but the
 // same pivots (legL/legR at the hips, armL/armR at the shoulders, head on the torso) and
 // dimensions as always, because cosmetics, mutations, cargo and story props hang off them.
-// The scarf is a little chain of links simulated in the torso's frame (side view, the y-z plane):
-// gravity pulls it down, the airflow from moving pushes it back, body acceleration makes it swing,
-// neighbouring links pull on each other, and it drapes over whatever is on your back (the pack, a
-// cargo crate, a cape) instead of passing through it. phi = angle of a link: 0 = straight back,
-// -PI/2 = hanging straight down, positive = streaming up.
+// The scarf: a smooth ribbon (a rope of 12 points, verlet-simulated in the torso's frame) that
+// leaves the collar a little off to the right, so it trails down the side of whatever's on your
+// back rather than over the top of it. Gravity pulls it down, the airflow from moving streams it
+// back, body acceleration swings it, and a flutter runs down it at speed. It's kept behind your
+// back and pushed out of the gear on it (pack, cargo crates). The look comes from the outfit
+// (model.scarfStyle, set by dressRunner): length, width and one or two tails. The baked link
+// chain stays on runners nobody simulates (distant figures); a simulated one hides it.
+export const SCARF_STYLE = { len: 1.3, w: 0.22, tails: 1 };
 const _sq = new THREE.Quaternion(), _sg = new THREE.Vector3(), _sw = new THREE.Vector3(), _sa = new THREE.Vector3();
+const _st = new THREE.Vector3(), _ss = new THREE.Vector3(), _sn = new THREE.Vector3(), _sx = new THREE.Vector3(1, 0, 0), _sy = new THREE.Vector3(0, 1, 0);
+const SCARF_PTS = 12;
+
+// one tail: a strip of box sections (4 verts a point), and the same again for its ink shell
+function scarfStrip(n) {
+  const idx = [];
+  for (let i = 0; i < n - 1; i++) {
+    const a = i * 4, b = a + 4;
+    for (const [p, q] of [[0, 1], [1, 3], [3, 2], [2, 0]]) idx.push(a + p, b + p, b + q, a + p, b + q, a + q);
+  }
+  const e = (n - 1) * 4;
+  idx.push(0, 2, 3, 0, 3, 1, e, e + 1, e + 3, e, e + 3, e + 2); // end caps
+  const mk = () => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 12), 3));
+    g.setIndex(idx);
+    return g;
+  };
+  return { geo: mk(), ink: mk() };
+}
+
 export class ScarfSim {
   constructor(model) {
     this.m = model;
-    this.phi = new Array(SCARF_N).fill(-1.2);
-    this.w = new Array(SCARF_N).fill(0);
     this.prevVel = null;
     this.t = Math.random() * 10;
+    this.tails = null;
+    this.key = '';
   }
 
-  // vel: the body's world velocity; up: world up at the body; back: how far behind the spine the
-  // back gear reaches (pack 0.55, cape 0.62, crate 1.14), top: the height of its top edge
-  update(dt, vel, up, { back = 0.55, top = 0.96 } = {}) {
+  build() {
+    const m = this.m;
+    const st = m.scarfStyle || SCARF_STYLE;
+    this.key = JSON.stringify(st);
+    if (this.tails) for (const t of this.tails) { t.mesh.removeFromParent(); t.mesh.geometry.dispose(); t.inkMesh.geometry.dispose(); }
+    const links = m.scarf.userData.links;
+    if (links && links[0]) links[0].visible = false;
+    const piv = m.scarf.position;
+    const mat = m.mats ? m.mats.scarf : toon(0xffd23f, { side: THREE.DoubleSide });
+    this.tails = [];
+    for (let k = 0; k < (st.tails || 1); k++) {
+      const len = st.len * (k ? 0.8 : 1);
+      const { geo, ink: ig } = scarfStrip(SCARF_PTS);
+      const mesh = new THREE.Mesh(geo, mat);
+      const inkMesh = new THREE.Mesh(ig, inkMat);
+      inkMesh.userData.isInk = true;
+      inkMesh.castShadow = false;
+      mesh.add(inkMesh);
+      mesh.frustumCulled = inkMesh.frustumCulled = false;
+      mesh.castShadow = true;
+      m.torso.add(mesh);
+      // the root: off to the right of the collar (a second tail a little further in)
+      const root = new THREE.Vector3(0.2 - k * 0.12, piv.y, piv.z + 0.02);
+      const seg = len / (SCARF_PTS - 1);
+      const p = [], o = [];
+      for (let i = 0; i < SCARF_PTS; i++) {
+        const v = new THREE.Vector3(root.x + i * 0.02, root.y - i * seg * 0.7, root.z - 0.3 - i * seg * 0.7);
+        p.push(v); o.push(v.clone());
+      }
+      this.tails.push({ mesh, inkMesh, root, seg, w: st.w * (k ? 0.85 : 1), p, o, phase: k * 1.7 });
+    }
+  }
+
+  // vel: the body's world velocity; up: world up at the body. The gear on your back: back = how
+  // far behind the spine it reaches, top = its top edge, hw = its half-width (pack 0.55/0.94,
+  // one crate 1.14/1.0, the Kepler twin stack 1.14/1.48)
+  update(dt, vel, up, { back = 0.55, top = 0.94, hw } = {}) {
     if (dt <= 0) return;
     const m = this.m;
-    const links = m.scarf.userData.links;
-    if (!links) return;
+    if (!this.tails || this.key !== JSON.stringify(m.scarfStyle || SCARF_STYLE)) this.build();
     this.t += dt;
     m.torso.getWorldQuaternion(_sq).invert();
-    // forces in the torso frame
     _sg.copy(up).multiplyScalar(-6).applyQuaternion(_sq); // gravity (stylised: the Moon's is too lazy to read)
     _sw.copy(vel).negate().applyQuaternion(_sq); // relative wind
     const ws = _sw.length();
     _sw.multiplyScalar(0.08 * ws);
     if (this.prevVel) _sa.copy(vel).sub(this.prevVel).divideScalar(Math.max(dt, 1e-3)).negate().multiplyScalar(0.12).applyQuaternion(_sq);
     else _sa.set(0, 0, 0);
+    if (_sa.length() > 60) _sa.setLength(60); // (a respawn or a teleport isn't a swing)
     this.prevVel = (this.prevVel || new THREE.Vector3()).copy(vel);
-    const fy = _sg.y + _sw.y + _sa.y, fz = _sg.z + _sw.z + _sa.z;
-    const flutter = Math.min(1, ws / 15) * 0.25;
-    const steps = Math.min(6, Math.ceil(dt / (1 / 120)));
-    const h = dt / steps;
-    for (let s = 0; s < steps; s++) {
-      let y = 1.04, z = -0.26; // pivot in torso space
-      for (let k = 0; k < SCARF_N; k++) {
-        // the link wants to point along the net force; neighbours stiffen the chain a little
-        let target = Math.atan2(fy, -fz) + Math.sin(this.t * 9 - k * 1.3) * flutter * (k + 1) / SCARF_N;
-        const prev = k ? this.phi[k - 1] : target;
-        const acc = 70 * wrapAngle(target - this.phi[k]) + 40 * wrapAngle(prev - this.phi[k]) - 9 * this.w[k];
-        this.w[k] += acc * h;
-        this.phi[k] += this.w[k] * h;
-        // never fold over the head or through the body
-        if (this.phi[k] > 1.1) { this.phi[k] = 1.1; this.w[k] = Math.min(0, this.w[k]); }
-        if (this.phi[k] < -1.65) { this.phi[k] = -1.65; this.w[k] = Math.max(0, this.w[k]); }
-        // drape over the back gear: a link starting above its top edge or alongside it must end
-        // behind its back face
-        if (y > 0.2) {
-          const cmin = (z + back) / SCARF_LINK; // cos(phi) must be at least this
-          if (cmin >= 1) { if (this.phi[k] < 0) { this.phi[k] = 0; this.w[k] = Math.max(0, this.w[k]); } }
-          else if (cmin > -1 && Math.cos(this.phi[k]) < cmin && this.phi[k] < 0) { this.phi[k] = -Math.acos(cmin); this.w[k] = Math.max(0, this.w[k]); }
+    // (a light breeze to the right keeps it off the middle of your back)
+    const fx = _sg.x + _sw.x + _sa.x + 1.2, fy = _sg.y + _sw.y + _sa.y, fz = _sg.z + _sw.z + _sa.z;
+    const flut = Math.min(1, ws / 14);
+    const halfW = hw ?? (back > 1 ? 0.42 : 0.3);
+    const steps = Math.min(4, Math.ceil(dt / (1 / 120)));
+    const h2 = (dt / steps) ** 2;
+    for (const T of this.tails) {
+      const { p, o, seg } = T;
+      for (let s = 0; s < steps; s++) {
+        p[0].copy(T.root); o[0].copy(T.root);
+        for (let i = 1; i < SCARF_PTS; i++) {
+          const u = i / (SCARF_PTS - 1);
+          // a ripple travelling down the tail, bigger toward the end and with speed
+          const ax = fx + Math.sin(this.t * 11 - i * 0.75 + T.phase) * flut * 22 * u;
+          const ay = fy + Math.cos(this.t * 8.3 - i * 0.6 + T.phase) * flut * 16 * u;
+          const q = p[i];
+          const vx = (q.x - o[i].x) * 0.96, vy = (q.y - o[i].y) * 0.96, vz = (q.z - o[i].z) * 0.96;
+          o[i].copy(q);
+          q.x += vx + ax * h2; q.y += vy + ay * h2; q.z += vz + fz * h2;
         }
-        y += Math.sin(this.phi[k]) * SCARF_LINK;
-        z -= Math.cos(this.phi[k]) * SCARF_LINK;
-        if (y < top && z > -back) { y = top; } // (approximate: keeps later links from tunnelling)
+        for (let it = 0; it < 3; it++) {
+          for (let i = 1; i < SCARF_PTS; i++) {
+            const a = p[i - 1], b = p[i];
+            _st.subVectors(b, a);
+            const d = _st.length() || 1e-6;
+            const f = (d - seg) / d;
+            if (i === 1) b.addScaledVector(_st, -f);
+            else { a.addScaledVector(_st, f * 0.5); b.addScaledVector(_st, -f * 0.5); }
+            // a little bending stiffness: two-apart points can't fold together
+            if (i >= 2) {
+              const c = p[i - 2];
+              _st.subVectors(b, c);
+              const d2 = _st.length() || 1e-6;
+              if (d2 < seg * 1.4) { const f2 = ((d2 - seg * 1.4) / d2) * 0.25; if (i > 2) c.addScaledVector(_st, f2); b.addScaledVector(_st, -f2); }
+            }
+          }
+          for (let i = 1; i < SCARF_PTS; i++) {
+            const q = p[i];
+            // stay behind your back, and out of the gear on it (out through whichever face is nearest)
+            if (q.z > -0.18) q.z = -0.18;
+            if (q.y < top && q.y > 0.2 && q.z > -back && Math.abs(q.x) < halfW) {
+              const dTop = top - q.y, dBack = q.z + back, dSide = halfW - Math.abs(q.x);
+              if (dTop <= dBack && dTop <= dSide) q.y = top;
+              else if (dSide <= dBack) q.x = Math.sign(q.x || 1) * halfW;
+              else q.z = -back;
+            }
+          }
+        }
+      }
+      this.draw(T);
+    }
+  }
+
+  draw(T) {
+    const { p, w } = T;
+    const pa = T.mesh.geometry.attributes.position, ia = T.inkMesh.geometry.attributes.position;
+    const th = 0.018, e = 0.018;
+    for (let i = 0; i < SCARF_PTS; i++) {
+      const u = i / (SCARF_PTS - 1);
+      _st.subVectors(p[Math.min(SCARF_PTS - 1, i + 1)], p[Math.max(0, i - 1)]).normalize();
+      // the ribbon's width runs along the torso's x, squared off to the tail's direction
+      _ss.copy(_sx).addScaledVector(_st, -_sx.dot(_st));
+      if (_ss.lengthSq() < 0.01) _ss.copy(_sy).addScaledVector(_st, -_sy.dot(_st));
+      _ss.normalize();
+      _sn.crossVectors(_st, _ss);
+      const hw = (w * (1 - 0.3 * u) + (u > 0.95 ? 0.025 : 0)) / 2;
+      const c = p[i];
+      const endK = i === 0 ? -e : i === SCARF_PTS - 1 ? e : 0;
+      for (let v = 0; v < 4; v++) {
+        const sx = v & 1 ? 1 : -1, sy = v & 2 ? -1 : 1;
+        pa.setXYZ(i * 4 + v, c.x + _ss.x * sx * hw + _sn.x * sy * th, c.y + _ss.y * sx * hw + _sn.y * sy * th, c.z + _ss.z * sx * hw + _sn.z * sy * th);
+        ia.setXYZ(i * 4 + v,
+          c.x + _ss.x * sx * (hw + e) + _sn.x * sy * (th + e) + _st.x * endK,
+          c.y + _ss.y * sx * (hw + e) + _sn.y * sy * (th + e) + _st.y * endK,
+          c.z + _ss.z * sx * (hw + e) + _sn.z * sy * (th + e) + _st.z * endK);
       }
     }
-    // write the chain: each joint's rotation is relative to its parent link
-    let acc = 0;
-    for (let k = 0; k < SCARF_N; k++) { links[k].rotation.x = this.phi[k] - acc; acc = this.phi[k]; }
-    m.scarf.rotation.y = Math.sin(this.t * 2.3) * 0.12 * Math.min(1, ws / 10);
+    pa.needsUpdate = ia.needsUpdate = true;
+    T.mesh.geometry.computeVertexNormals();
   }
 }
-const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 export function makeRunner({
   suit = 0xff4f2e, accent = 0x2ee6ff, helmet = 0xfff4e0, visor = 0x241a5c,
@@ -384,7 +487,7 @@ export function makeRunner({
   }
 
   // Comic scarf streaming behind. The tail leaves from the top of the backpack and is kept above
-  // everything worn on the back (pack, cargo crate, jar, cape): see ScarfSim.
+  // everything worn on the back (pack, cargo crates, jar): see ScarfSim.
   if (!baked) torso.add(part(G.collar, collarM, 0, 0.98, 0, 0.03));
   const scarfPivot = new THREE.Group();
   scarfPivot.position.set(0, 1.04, -0.26);
@@ -1431,25 +1534,55 @@ export class LightTrail {
   dispose() { this.mesh.removeFromParent(); this.mesh.geometry.dispose(); this.mesh.material.dispose(); }
 }
 
-// Hover-car: a rounded body, a bubble canopy, side nacelles glowing underneath, tail fins and
-// lights. Same size (capsule 1.1 x 4.8 long) and deck height as before.
+// Hover-car: a smooth flattened capsule with a bubble canopy, a rub-strip round the waist, slim
+// side pods, swept fins and lights set into the skin. Built at the old size (4.8 long) and scaled
+// up 1.15 (traffic.js sizes its deck and hit radius to match).
+export const CAR_SCALE = 1.15;
 export function makeHoverCar({ color = 0xff7ad9, trim = 0xfff4e0 } = {}) {
   const root = new THREE.Group();
-  root.add(baked(`car|${color}|${trim}`, (k) => {
-    k.add(new THREE.CapsuleGeometry(1.1, 2.6, 6, 12).rotateX(Math.PI / 2), KT(color), 0, 0, 0, { outline: 0.08 });
-    k.add(new THREE.BoxGeometry(2.3, 0.3, 4.2), KT(trim), 0, -0.25, 0, { outline: 0.03 });
-    k.add(new THREE.SphereGeometry(1.0, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), KG(0x9be7ff), 0, 0.45, 0.35, { outline: 0.05 });
-    k.add(new THREE.TorusGeometry(1.0, 0.08, 4, 18), KT(trim), 0, 0.47, 0.35, { rx: Math.PI / 2, outline: 0 });
+  const body = baked(`car2|${color}|${trim}`, (k) => {
+    const DK = KT(0x1d1a29);
+    // the hull: a capsule squashed a little top to bottom
+    k.add(new THREE.CapsuleGeometry(1.1, 2.6, 8, 16).rotateX(Math.PI / 2).scale(1, 0.82, 1), KT(color), 0, 0, 0, { outline: 0.08 });
+    // the waist: a thin rub-strip that follows the hull round, and a darker belly pan under it
+    k.add(new THREE.CapsuleGeometry(1.14, 2.6, 6, 16).rotateX(Math.PI / 2).scale(1, 0.1, 1), KT(trim), 0, -0.12, 0, { outline: 0 });
+    k.add(new THREE.CapsuleGeometry(0.9, 2.4, 6, 12).rotateX(Math.PI / 2).scale(1, 0.32, 1), DK, 0, -0.62, 0, { outline: 0 });
+    // canopy: a glass bubble on a trim collar, with a roof spine
+    k.add(new THREE.SphereGeometry(0.95, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.9, 1.25), KG(0x9be7ff), 0, 0.42, 0.2, { outline: 0.05 });
+    k.add(new THREE.TorusGeometry(0.95, 0.07, 4, 20).scale(1, 1.25, 1), KT(trim), 0, 0.44, 0.2, { rx: Math.PI / 2, outline: 0 });
+    k.add(new THREE.TorusGeometry(1.0, 0.05, 4, 16, Math.PI).scale(1.22, 0.88, 1), KT(trim), 0, 0.42, 0.2, { ry: Math.PI / 2, outline: 0 }); // (a roof hoop over the bubble)
+    // hood: two vent slots and a little badge
+    for (const sx of [-1, 1]) k.add(new THREE.BoxGeometry(0.1, 0.04, 0.7), DK, sx * 0.32, 0.62, 1.75, { rx: 0.35, outline: 0 });
+    k.add(new THREE.CylinderGeometry(0.12, 0.12, 0.04, 10), KG(trim), 0, 0.55, 2.1, { rx: 0.9, outline: 0 });
+    // lights: lenses sunk into the nose and tail so only their faces show
     for (const sx of [-1, 1]) {
-      k.add(new THREE.CapsuleGeometry(0.42, 1.8, 4, 8).rotateX(Math.PI / 2), KT(trim), sx * 1.3, -0.55, -0.2, { outline: 0.04 });
-      k.cyl(0.45, 0.6, 0.35, 12, KG(0x2ee6ff), sx * 1.3, -1.1, -0.2, { outline: 0 });
-      k.add(new THREE.BoxGeometry(0.12, 0.8, 0.9), KT(color), sx * 0.7, 0.75, -2.1, { rz: sx * -0.4, rx: -0.4, outline: 0.03 });
-      k.box(0.45, 0.18, 0.1, KG(0xfff6a8), sx * 0.55, -0.05, 2.35, { outline: 0 });
-      k.box(0.45, 0.18, 0.1, KG(0xff2a4a), sx * 0.6, 0.05, -2.36, { outline: 0 });
+      k.add(new THREE.SphereGeometry(0.2, 10, 6).scale(1.5, 0.55, 0.6), KG(0xfff6a8), sx * 0.55, 0.05, 2.2, { outline: 0 });
+      k.add(new THREE.SphereGeometry(0.2, 10, 6).scale(1.4, 0.5, 0.6), KG(0xff2a4a), sx * 0.55, 0.08, -2.2, { outline: 0 });
     }
-    k.box(2.6, 0.2, 0.6, KT(trim), 0, -0.3, -1.8, { outline: 0.03 });
-  }));
-  return { root, size: 3 };
+    k.add(new THREE.BoxGeometry(0.7, 0.05, 0.08), KG(0xff2a4a), 0, 0.3, -2.13, { rx: -0.5, outline: 0 }); // brake bar
+    k.add(new THREE.BoxGeometry(0.5, 0.22, 0.05), KT(0xfff4e0), 0, -0.3, -2.22, { rx: 0.25, outline: 0.02 }); // plate
+    for (const sx of [-1, 1]) {
+      // side pods: slim capsules tucked against the hull, an intake ring up front, a warm vent at the back
+      k.add(new THREE.CapsuleGeometry(0.34, 1.9, 4, 10).rotateX(Math.PI / 2), KT(trim), sx * 1.12, -0.45, -0.25, { outline: 0.04 });
+      k.add(new THREE.TorusGeometry(0.3, 0.07, 4, 12), DK, sx * 1.12, -0.45, 1.0, { outline: 0 });
+      k.add(new THREE.CylinderGeometry(0.22, 0.26, 0.12, 10).rotateX(Math.PI / 2), KG(0xff9f1c), sx * 1.12, -0.45, -1.55, { outline: 0 });
+      // door seam and a handle
+      k.add(new THREE.BoxGeometry(0.03, 0.55, 0.04), DK, sx * 1.07, 0.1, 0.9, { rz: sx * 0.25, outline: 0 });
+      k.add(new THREE.BoxGeometry(0.04, 0.06, 0.28), KT(trim), sx * 1.06, 0.25, 0.4, { rz: sx * 0.3, outline: 0 });
+      // mirrors on stalks
+      k.beam([sx * 0.85, 0.5, 0.95], [sx * 1.15, 0.62, 1.0], 0.03, DK, { outline: 0 });
+      k.add(new THREE.SphereGeometry(0.13, 8, 6).scale(1, 0.7, 0.5), KT(color), sx * 1.2, 0.64, 1.0, { outline: 0.02 });
+      // swept tail fins
+      k.add(new THREE.BoxGeometry(0.08, 0.7, 0.8), KT(color), sx * 0.55, 0.75, -1.9, { rz: sx * -0.45, rx: -0.5, outline: 0.03 });
+      k.add(new THREE.BoxGeometry(0.09, 0.12, 0.5), KT(trim), sx * 0.7, 1.02, -2.05, { rz: sx * -0.45, rx: -0.5, outline: 0 });
+    }
+    // a whip antenna with a tip light
+    k.beam([-0.5, 0.6, -1.5], [-0.62, 1.7, -1.75], 0.02, DK, { outline: 0 });
+    k.ball(0.06, KG(0xff2a4a), -0.62, 1.72, -1.75, { outline: 0 });
+  });
+  body.scale.setScalar(CAR_SCALE);
+  root.add(body);
+  return { root, size: 3 * CAR_SCALE };
 }
 
 // Freighter: a deep-haul hammerhead: a long flat deck you can ride, a raked bridge tower at the
@@ -1712,3 +1845,104 @@ export function makeTube() {
   root.rotation.z = Math.PI / 2;
   return { root, fluid };
 }
+
+// ---- the far planets: a few small, quiet bodies strung along the ecliptic (Venus near the sun,
+// then Mars, Jupiter and ringed Saturn round the sky), lit by the sun so each shows its phase.
+// Small on purpose: sky features to notice, not to stare at. sunDir is the direction to the sun;
+// R how far out they sit (inside the star sphere).
+function planetTexture(draw, w = 256, h = 128) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+export function makePlanets(sunDir, R = 6700) {
+  const root = new THREE.Group();
+  const rr = mulberry32Local(4242);
+  const n = new THREE.Vector3().crossVectors(sunDir, new THREE.Vector3(0, 1, 0)).normalize(); // the ecliptic's pole
+  const e2 = new THREE.Vector3().crossVectors(n, sunDir).normalize();
+  const along = (deg, tilt) => {
+    const a = THREE.MathUtils.degToRad(deg);
+    return sunDir.clone().multiplyScalar(Math.cos(a)).addScaledVector(e2, Math.sin(a)).addScaledVector(n, Math.sin(THREE.MathUtils.degToRad(tilt))).normalize();
+  };
+  const bands = (cols, wob = 0) => planetTexture((g, w, h) => {
+    let y = 0;
+    while (y < h) {
+      const bh = 4 + rr() * 14;
+      g.fillStyle = cols[Math.floor(rr() * cols.length)];
+      g.beginPath();
+      g.moveTo(0, y);
+      for (let x = 0; x <= w; x += 16) g.lineTo(x, y + Math.sin(x / 23 + y) * wob);
+      g.lineTo(w, y + bh); g.lineTo(0, y + bh);
+      g.fill();
+      y += bh;
+    }
+  });
+  // (their own sun, not the scene's: the light switches off on the Moon's night side, but Jupiter
+  // doesn't. Three toon steps of phase, from the real sun direction in the sky's frame)
+  const lit = (map) => new THREE.ShaderMaterial({
+    uniforms: { map: { value: map }, sun: { value: sunDir.clone() } },
+    vertexShader: 'varying vec2 vUv; varying vec3 vN; void main(){ vUv = uv; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform sampler2D map; uniform vec3 sun; varying vec2 vUv; varying vec3 vN;
+      void main(){
+        float d = dot(normalize(vN), normalize(sun));
+        float k = d > 0.35 ? 1.0 : d > 0.0 ? 0.62 : 0.14;
+        gl_FragColor = vec4(texture2D(map, vUv).rgb * k, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const body = (dir, r, map) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 18), lit(map));
+    // (the sky can turn: the Spindle's rolls, sun and all; keep the sun's direction in step)
+    m.onBeforeRender = () => { root.getWorldQuaternion(_pq); m.material.uniforms.sun.value.copy(sunDir).applyQuaternion(_pq); };
+    m.position.copy(dir).multiplyScalar(R);
+    m.rotation.set(0.3, rr() * 6, 0.2);
+    const hull = new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide }));
+    hull.scale.setScalar(1.06);
+    m.add(hull);
+    root.add(m);
+    return m;
+  };
+  // Venus: the bright one, close to the sun, pale cloud-tops
+  body(along(38, 2), 30, bands(['#fff1c8', '#f3e1aa', '#fbe9bd'], 2));
+  // Mars: small and rusty, a white cap
+  body(along(118, -3), 20, planetTexture((g, w, h) => {
+    g.fillStyle = '#c4532d'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#8f3a22';
+    for (let i = 0; i < 14; i++) { g.beginPath(); g.ellipse(rr() * w, 20 + rr() * (h - 40), 8 + rr() * 26, 4 + rr() * 10, rr() * 3, 0, Math.PI * 2); g.fill(); }
+    g.fillStyle = '#fff6ee'; g.fillRect(0, 0, w, 9);
+  }));
+  // Jupiter: the big banded one, with its red spot
+  body(along(162, 4), 64, planetTexture((g, w, h) => {
+    const cols = ['#e9d2ad', '#c98e5b', '#f3e6cc', '#b5764a', '#ead9b9'];
+    let y = 0, k = 0;
+    while (y < h) { const bh = 6 + rr() * 12; g.fillStyle = cols[k++ % cols.length]; g.fillRect(0, y, w, bh); y += bh; }
+    g.fillStyle = '#c24a32'; g.beginPath(); g.ellipse(w * 0.62, h * 0.64, 16, 7, 0, 0, Math.PI * 2); g.fill();
+  }));
+  // Saturn: pale bands and its rings, tipped toward you
+  const sat = body(along(236, -5), 46, bands(['#f0dfae', '#e3c98d', '#f6e9c6']));
+  const ringTex = planetTexture((g, w) => {
+    for (let x = 0; x < w; x++) {
+      const t = x / w, a = t < 0.08 ? 0 : 0.35 + 0.55 * Math.abs(Math.sin(t * 19)) * (t > 0.62 && t < 0.7 ? 0.15 : 1);
+      g.fillStyle = `rgba(235, 214, 170, ${a.toFixed(2)})`;
+      g.fillRect(x, 0, 1, 8);
+    }
+  }, 256, 8);
+  const ringGeo = new THREE.RingGeometry(46 * 1.35, 46 * 2.3, 64, 1);
+  // (map the ring texture across the radius)
+  const pos = ringGeo.attributes.position, uv = ringGeo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) { const r = Math.hypot(pos.getX(i), pos.getY(i)); uv.setXY(i, (r - 46 * 1.35) / (46 * 0.95), 0.5); }
+  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ map: ringTex, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = Math.PI / 2 - 0.45;
+  sat.add(ring);
+  return root;
+}
+const _pq = new THREE.Quaternion();
+const mulberry32Local = (a) => () => {
+  a |= 0; a = (a + 0x6d2b79f5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};

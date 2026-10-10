@@ -5,7 +5,7 @@ import { toon, glow, ink } from './toon.js';
 import { frameQuat, tangent, greatCircle, SUN, arcDist } from './geo.js';
 import { pick, mulberry32 } from './rng.js';
 import { LIVING, spliceGenes, makeChimera, makeMite, ensureStats } from './chimera.js';
-import { chimeraCard, cardList } from './chimeracard.js';
+import { chimeraCard, cardList, installTips } from './chimeracard.js';
 import { monolithTouch, updateEchoes } from './monolith.js';
 
 const _seg = new THREE.Vector3(), _seg2 = new THREE.Vector3();
@@ -88,6 +88,7 @@ export class Alchemy {
     this.pen = [];
     this.loot = []; // salvage lying on the ground (engines from wrecks, depot wiring, farm saplings)
     this.load();
+    installTips(); // (hover tips on the chimera cards)
     this.buildMites();
   }
 
@@ -590,7 +591,7 @@ export class Alchemy {
         const k = this.pen.length;
         m.root.position.set(PEN.x0 + 3 + (k % 6) * 5, 0, PEN.z0 + 3 + Math.floor(k / 6) * 5);
         lab.loc.group.add(m.root);
-        this.pen.push({ root: m.root, anim: m.anim, genes, t: Math.random() * 5 });
+        this.pen.push({ root: m.root, anim: m.anim, genes, t: Math.random() * 5, idle: Math.random() * 4, goal: null });
       }
     }
     this.save();
@@ -611,7 +612,7 @@ export class Alchemy {
     const cards = slice.map((c, i) => chimeraCard(g, c, { key: i + 1, button: true, mine: c.follow, status: `${c.follow ? '★ WITH YOU' : 'IN PEN'}${c.wins ? ` · 🏆 ${c.wins} win${c.wins > 1 ? 's' : ''}` : ''}` }));
     if (pages > 1) buttons.push({ label: `${buttons.length + 1} · NEXT PAGE (${page + 1}/${pages})`, fn: () => this.penMenu((page + 1) % pages) });
     buttons.push({ label: `${buttons.length + 1} · CLOSE` });
-    g.dialog('HOLDING PEN', `<small>${list.length} chimera${list.length === 1 ? '' : 's'} · ${this.followingCount()}/${MAX_FOLLOW} following you. Pick one to call it out or send it back.</small>${cardList(cards, slice.length)}`, buttons);
+    g.dialog('HOLDING PEN', `<small>${list.length} chimera${list.length === 1 ? '' : 's'} · ${this.followingCount()}/${MAX_FOLLOW} following you. Pick one to call it out or send it back. <span class="cc-hint">Hover a stat, part or grade to see what it means.</span></small>${cardList(cards, slice.length, 'pen')}`, buttons);
   }
 
   chimeraMenu(c, page) {
@@ -721,7 +722,7 @@ export class Alchemy {
     if (has('stone')) for (let i = 0; i < 4; i++) {
       const sp = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), glow(0x2ee6ff));
       sp.scale.set(0.6, 1.8, 0.6);
-      // along the flanks of the backpack, clear of the scarf, crate, jar and cape
+      // along the flanks of the backpack, clear of the scarf, crate and jar
       sp.position.set((i < 2 ? -1 : 1) * 0.36, 0.8 - (i % 2) * 0.26, -0.28);
       sp.rotation.z = (i < 2 ? 1 : -1) * 1.0;
       add(M.torso, sp);
@@ -799,10 +800,11 @@ export class Alchemy {
         }
       }
     }
+    if (this.owned && (!this.jarMesh || !this.jarMesh.parent)) this.refreshJarMesh();
     // the Monolith
     const mono = g.world.monolith;
     this.monoCd -= dt;
-    if (mono && this.monoCd <= 0 && P.pos.distanceTo(mono.pos) < 9) {
+    if (mono && this.monoCd <= 0 && P.pos.distanceTo(mono.pos) < 10) {
       this.monoCd = 90;
       monolithTouch(this);
     }
@@ -824,7 +826,31 @@ export class Alchemy {
     this.updateMites(dt);
     this.updateLoot(dt);
     const lab = g.world.lab;
-    if (lab && lab.loc.active) for (const p of this.pen) { p.t += dt; p.anim(p.t, 1.5); p.root.rotation.y = Math.sin(p.t * 0.3) * 2; }
+    // pen residents roam the yard: wander to a spot, mill about there a while, wander on
+    if (lab && lab.loc.active) for (const p of this.pen) {
+      p.t += dt;
+      const r = p.root.position;
+      if (p.idle > 0) {
+        // milling about where it got to: a look round, then off again
+        p.idle -= dt;
+        p.anim(p.t * 0.3, 0.4);
+        p.root.rotation.y += Math.sin(p.t * 0.7) * dt * 0.6;
+        continue;
+      }
+      if (!p.goal) {
+        p.goal = new THREE.Vector3(PEN.x0 + 3 + Math.random() * (PEN.x1 - PEN.x0 - 6), 0, PEN.z0 + 3 + Math.random() * (PEN.z1 - PEN.z0 - 6));
+        p.spd = 1.6 + (p.genes.stats ? p.genes.stats.speed / 40 : 1.2);
+        p.walkT = 30;
+      }
+      const dx = p.goal.x - r.x, dz = p.goal.z - r.z, d = Math.hypot(dx, dz);
+      p.walkT -= dt;
+      if (d < 0.4 || p.walkT <= 0) { p.goal = null; p.idle = 2 + Math.random() * 6; continue; }
+      const step = Math.min(d, p.spd * dt);
+      r.x += (dx / d) * step; r.z += (dz / d) * step;
+      const yaw = Math.atan2(dx, dz);
+      p.root.rotation.y += Math.atan2(Math.sin(yaw - p.root.rotation.y), Math.cos(yaw - p.root.rotation.y)) * Math.min(1, dt * 6);
+      p.anim(p.t, 1.5);
+    }
   }
 
   // Pets made in the reactor hop after you.
@@ -961,7 +987,7 @@ export class Alchemy {
     cap.position.y = 0.45;
     g.add(cap);
     // tucked against the right side of the backpack, a bit smaller
-    g.position.set(0.5, -0.12, 0.22);
+    g.position.set(-0.5, -0.12, 0.22); // (on the right: the scarf hangs down the left)
     g.scale.setScalar(0.78);
     P.model.cargoSlot.add(g);
     this.jarMesh = g;

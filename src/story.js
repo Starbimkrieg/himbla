@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FACTIONS } from './locations.js';
 import { makeRunner, makeCrate } from './models.js';
 import { makeBody, stepSkater } from './physics.js';
-import { toon, glow, ink, textSprite } from './toon.js';
+import { toon, glow, ink, textSprite, nameTag } from './toon.js';
 import { arcDist, tangent, frameQuat, greatCircle, darkness } from './geo.js';
 import { pick } from './rng.js';
 import { VEHICLES } from './vehicles.js';
@@ -373,8 +373,8 @@ export class Story {
       ink(pod, 0.05);
       g.world.put(pod, loc, spot.x, spot.z, 0.2);
       m.root.position.y = 0.4;
-      const sign = textSprite(L.name.toUpperCase(), { color: FACTIONS[f].color, size: 52, scale: 0.5, bg: '#120a1e' });
-      sign.position.set(spot.x, 5.4, spot.z);
+      const sign = nameTag(textSprite(L.name.toUpperCase(), { color: FACTIONS[f].color, size: 52, scale: 0.5, bg: '#120a1e' }), L.name.toUpperCase(), FACTIONS[f].color);
+      sign.position.set(spot.x, 4.0, spot.z);
       loc.group.add(sign);
       // faction-coloured beacon: a glowing ring on the ground and a soft light column you can spot from afar
       const fc = new THREE.Color(FACTIONS[f].color).getHex();

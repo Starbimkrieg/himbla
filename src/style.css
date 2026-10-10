@@ -895,6 +895,12 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 .wd-fig .fb::after { content: ''; position: absolute; left: 8px; right: 8px; top: -2px; height: 6px; border-radius: 3px; background: var(--c); border: 2px solid #05030c; z-index: 3; }
 /* skate tile: boot on a glowing rail */
 .wd-skate { position: relative; width: 64px; height: 50px; flex-shrink: 0; }
+/* the rendered tile portraits (wardrobe.js bakeThumbs) */
+.wd-thumb { width: 96px; height: 96px; flex-shrink: 0; image-rendering: auto; margin: -10px 0 -8px; filter: drop-shadow(2px 2px 0 #05030c); pointer-events: none; }
+.wd-thumb.skates { width: 92px; height: 92px; margin: -6px 0 -4px; }
+.wd-thumb.rainbow { filter: drop-shadow(2px 2px 0 #05030c) hue-rotate(0deg); animation: wdHue 2.4s linear infinite; }
+@keyframes wdHue { to { filter: drop-shadow(2px 2px 0 #05030c) hue-rotate(360deg); } }
+.wd-tile:hover .wd-thumb, .wd-tile.sel .wd-thumb { transform: scale(1.06); }
 .wd-skate .sb { position: absolute; left: 10px; top: 8px; width: 44px; height: 26px; border-radius: 12px 14px 6px 6px; background: #221d33; border: 2px solid #05030c; }
 .wd-skate .sb::before { content: ''; position: absolute; left: 4px; top: -2px; width: 14px; height: 8px; background: #3a3550; border: 2px solid #05030c; border-top: none; }
 .wd-skate .sr { position: absolute; left: 4px; right: 4px; top: 36px; height: 7px; border-radius: 4px; background: var(--k); border: 2px solid #05030c; box-shadow: 0 0 10px 2px var(--k); }
@@ -945,6 +951,24 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 
 /* ---- chimera cards ---- */
 #dialog .dlg:has(.cc-list), #dialog .dlg:has(.cc.big) { width: min(780px, calc(100vw - 32px)); }
+/* the holding pen: a wider page, three cards a row, and a bit more of everything */
+#dialog .dlg:has(.cc-list.pen) { width: min(1080px, calc(100vw - 32px)); }
+.cc-list.pen { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 860px) { .cc-list.pen { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.cc-list.pen .cc-por { flex-basis: 88px; width: 88px; height: 88px; }
+.cc-list.pen .cc-name { font-size: 10px; }
+.cc-list.pen .cc-bar { height: 11px; }
+.cc-hint { color: var(--ui-dim); }
+/* NPC name tags (hud.js updateTags) */
+#nametags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
+.nametag { position: absolute; left: 0; top: 0; transform-origin: 50% 100%; white-space: nowrap; font-family: var(--comic); font-size: 10px; line-height: 1; padding: 5px 7px 4px; color: var(--tc); background: #120a1e; border: 2px solid #05030c; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--tc) 55%, transparent), 2px 2px 0 #05030c; }
+.nametag::after { content: ''; position: absolute; left: 50%; bottom: -7px; margin-left: -5px; border: 5px solid transparent; border-top-color: #05030c; border-bottom: 0; }
+.nametag.off { display: none; }
+/* the hover tips (chimeracard.js installTips) */
+[data-tip] { cursor: help; }
+.cc-part[data-tip]:hover, .cc-lbl[data-tip]:hover, .cc-grade[data-tip]:hover { filter: brightness(1.35); }
+#cctip { position: fixed; z-index: 9999; max-width: 280px; padding: 7px 9px 6px; font-family: var(--body); font-size: 14px; line-height: 1.25; color: var(--ui-text); background: #0b0814; border: 2px solid var(--yellow); box-shadow: 3px 3px 0 #05030c; pointer-events: none; }
+#cctip.hidden { display: none; }
 .cc-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0 -12px; }
 .cc-list.derby { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 16px; padding-top: 6px; }
 #dialog .bubble > .cc, #dialog .bubble > b + br + .cc { margin: 12px 0 4px -12px; }
@@ -971,6 +995,11 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 .cc-grade.g-A { background: var(--pink); }
 .cc-grade.g-B { background: var(--cyan); }
 .cc-grade.g-C { background: var(--ui-muted); }
+/* names in their grade's colour */
+.cc-name.t-S { color: var(--yellow); }
+.cc-name.t-A { color: var(--pink); }
+.cc-name.t-B { color: var(--cyan); }
+.cc-name.t-C { color: var(--ui-muted); }
 .cc-parts { display: flex; flex-wrap: wrap; gap: 3px; }
 .cc-part { font-size: 12px; line-height: 1; padding: 2px 4px 2px; background: var(--ui-bg3); border: 1px solid var(--ui-edge); color: var(--ui-text); white-space: nowrap; }
 .cc-part em { font-style: normal; color: var(--ui-dim); margin-right: 3px; }
@@ -1164,3 +1193,16 @@ body.trailer #tutorial, body.trailer #racepanel, body.trailer #vehbar, body.trai
 #powerchip .pc-cd { color: #ff7a8a; }
 #powerchip.swap b { background: #ffd23f; box-shadow: 0 0 10px #ffd23f; } /* (just swapped) */
 #powerchip small { color: var(--ui-dim); font-size: 8px; margin-left: 4px; }
+
+/* controller (gamepad.js): the menu highlight, and pad buttons in prompts */
+.pad-focus { outline: 3px solid #ffd23f !important; outline-offset: 2px; box-shadow: 0 0 0 5px rgba(255, 210, 63, 0.28), 0 0 14px rgba(255, 210, 63, 0.45) !important; position: relative; z-index: 2; }
+b.pg { display: inline-block; padding: 1px 5px 0; border-radius: 9px; background: #ffd23f; color: #05030c; font-weight: normal; }
+body.pad-on #clickhint { display: none !important; }
+
+/* the controller's quick slot (gamepad.js): only while a controller is in use */
+#padquick { display: none; margin-top: 4px; font-family: var(--comic); font-size: 9px; line-height: 1.5; color: var(--ui-text); max-width: 360px; }
+body.pad-on #padquick { display: block; }
+#padquick b { display: inline-block; padding: 3px 5px 2px; background: #ffd23f; color: #05030c; margin-right: 4px; }
+#padquick small { color: var(--ui-dim); font-size: 8px; margin-left: 4px; }
+#padquick.picking span { color: var(--ui-dim); margin-right: 6px; }
+#padquick.picking span.pq-on { color: #05030c; background: #ffd23f; padding: 1px 4px; }

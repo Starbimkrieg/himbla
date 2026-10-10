@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { inkMat } from './toon.js';
 import { makeChimera } from './chimera.js';
-import { ensureStats, STAT_KEYS, STAT_INFO } from './chimerastats.js';
+import { ensureStats, STAT_KEYS, STAT_INFO, STAT_TIPS, LEGS, BODY, HEAD_WIT, MOD_FX } from './chimerastats.js';
 
 // Pixel "trading card" HTML for chimeras: portrait, parts, the four racing stats as segmented
 // bars, and a grade. Rendered inside g.dialog bubbles (pen, detail, Derby entry/betting, breeding).
@@ -81,17 +81,40 @@ export function statBars(st, big = false) {
     const on = Math.max(1, Math.round(v / 10));
     let seg = '';
     for (let i = 0; i < 10; i++) seg += `<i${i < on ? ' class="on"' : ''}></i>`;
-    return `<div class="cc-stat s-${k}"><span class="cc-lbl">${big ? STAT_INFO[k].name : STAT_INFO[k].short}</span><span class="cc-bar">${seg}</span><span class="cc-num">${v}</span>${big ? `<span class="cc-blurb">${STAT_INFO[k].blurb}</span>` : ''}</div>`;
+    const tip = ` data-tip="${esc(STAT_TIPS[k])}"`;
+    return `<div class="cc-stat s-${k}"><span class="cc-lbl"${tip}>${big ? STAT_INFO[k].name : STAT_INFO[k].short}</span><span class="cc-bar"${tip}>${seg}</span><span class="cc-num">${v}</span>${big ? `<span class="cc-blurb">${STAT_INFO[k].blurb}</span>` : ''}</div>`;
   }).join('')}</div>`;
 }
 
+// What a part gives: the slot's job, then this part's leanings
+const SLOT_TIP = {
+  BODY: 'BODY: the trunk it grew. Mostly stamina, some power.',
+  LEGS: 'LEGS: what it runs on. Mostly speed and power.',
+  HEAD: 'HEAD: what it thinks with. Mostly wit.',
+  '+HEAD': 'EXTRA HEAD: a second opinion. A smart one adds a little wit; a dumb one argues with the first and costs some.',
+};
+const lean = (o) => `SPD ${o.speed} · POW ${o.power} · STA ${o.stamina} · WIT ${o.wit}`;
+function partTip(lbl, kind) {
+  const name = PART_NAME[kind] || String(kind).toUpperCase();
+  if (lbl === 'LEGS' && LEGS[kind]) return `${SLOT_TIP.LEGS} ${name} legs lean ${lean(LEGS[kind])}.`;
+  if (lbl === 'BODY' && BODY[kind]) return `${SLOT_TIP.BODY} A ${name} body leans ${lean(BODY[kind])}.`;
+  if (HEAD_WIT[kind] != null) return `${SLOT_TIP[lbl]} A ${name} head is worth ${HEAD_WIT[kind]} wit.`;
+  return SLOT_TIP[lbl] || name;
+}
+function modTip(m) {
+  const fx = Object.entries(MOD_FX[m] || {}).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${STAT_INFO[k].short}`).join(', ');
+  return `${MOD_NAME[m] || m.toUpperCase()} TOUCH: a trait picked up in the reactor${fx ? ` (${fx})` : ''}.`;
+}
+
 export function partsLine(genes) {
-  const p = (lbl, kind) => `<span class="cc-part"><em>${lbl}</em>${PART_NAME[kind] || String(kind).toUpperCase()}</span>`;
+  const p = (lbl, kind) => `<span class="cc-part" data-tip="${esc(partTip(lbl, kind))}"><em>${lbl}</em>${PART_NAME[kind] || String(kind).toUpperCase()}</span>`;
   let s = p('BODY', genes.body) + p('LEGS', genes.legs) + p('HEAD', genes.head);
   if (genes.extraHead) s += p('+HEAD', genes.extraHead);
-  for (const m of genes.mods || []) s += `<span class="cc-part mod">${MOD_NAME[m] || m.toUpperCase()}</span>`;
+  for (const m of genes.mods || []) s += `<span class="cc-part mod" data-tip="${esc(modTip(m))}">${MOD_NAME[m] || m.toUpperCase()}</span>`;
   return `<div class="cc-parts">${s}</div>`;
 }
+
+const GRADE_TIP = 'GRADE: its racing class from all four stats together. S (yellow) is the best, then A (pink), B (cyan) and C (grey).';
 
 // opts: key (number badge), button (clickable, data-i = key - 1), mine, status (html), odds {p, odds}, big, tag (ribbon text)
 export function chimeraCard(g, genes, opts = {}) {
@@ -104,10 +127,41 @@ export function chimeraCard(g, genes, opts = {}) {
   const attrs = opts.button ? ` data-i="${opts.key - 1}" type="button"` : '';
   const por = `<div class="cc-por" style="--tint:${tint}">${url ? `<img src="${url}" alt="">` : '<span class="cc-blob"></span>'}${opts.key ? `<span class="cc-key">${opts.key}</span>` : ''}</div>`;
   const odds = opts.odds ? `<div class="cc-odds"><span>WIN ${Math.round(opts.odds.p * 100)}%</span><b>PAYS ${opts.odds.odds.toFixed(1)}x</b></div>` : '';
-  const top = `<div class="cc-top"><span class="cc-name">${esc(genes.name)}</span><span class="cc-grade g-${genes.tier}" title="grade">${genes.tier}</span></div>`;
+  const top = `<div class="cc-top"><span class="cc-name t-${genes.tier}">${esc(genes.name)}</span><span class="cc-grade g-${genes.tier}" data-tip="${GRADE_TIP}">${genes.tier}</span></div>`;
   const foot = opts.status ? `<div class="cc-foot">${opts.status}</div>` : '';
   const ribbon = opts.tag ? `<span class="cc-ribbon">${opts.tag}</span>` : '';
   return `<${tag} class="${cls}"${attrs}>${ribbon}${por}<div class="cc-main">${top}${partsLine(genes)}${statBars(st, opts.big)}${odds}${foot}</div></${tag}>`;
+}
+
+// Hover tips for anything with a data-tip (the card stats, parts and grade): one floating box that
+// follows the pointer, so it's never clipped by the dialog's scrolling.
+let tipEl = null;
+export function installTips() {
+  if (tipEl) return;
+  tipEl = document.createElement('div');
+  tipEl.id = 'cctip';
+  tipEl.className = 'hidden';
+  document.body.appendChild(tipEl);
+  let cur = null;
+  const place = (e) => {
+    const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    let x = e.clientX + 14, y = e.clientY + 18;
+    if (x + w > window.innerWidth - 8) x = e.clientX - w - 14;
+    if (y + h > window.innerHeight - 8) y = e.clientY - h - 12;
+    tipEl.style.left = `${Math.max(8, x)}px`;
+    tipEl.style.top = `${Math.max(8, y)}px`;
+  };
+  document.addEventListener('mouseover', (e) => {
+    const t = e.target.closest && e.target.closest('[data-tip]');
+    if (t === cur) return;
+    cur = t;
+    if (!t) { tipEl.classList.add('hidden'); return; }
+    tipEl.textContent = t.dataset.tip;
+    tipEl.classList.remove('hidden');
+    place(e);
+  });
+  document.addEventListener('mousemove', (e) => { if (cur) { if (!cur.isConnected) { cur = null; tipEl.classList.add('hidden'); } else place(e); } });
+  document.addEventListener('mousedown', () => { cur = null; tipEl.classList.add('hidden'); });
 }
 
 // Wrap cards in a grid. `hide` = how many leading dialog buttons the cards stand in for.
