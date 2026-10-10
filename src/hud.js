@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FACTIONS } from './locations.js';
-import { arcDist, darkness } from './geo.js';
+import { arcDist, darkness, upAt } from './geo.js';
 import { WEAPONS } from './weapons.js';
 import { pixelFont } from './fonts.js';
 
@@ -159,7 +159,7 @@ export class HUD {
   }
 
   // ---- Job board / shop ----
-  openBoard(loc, offers, { onAccept, onClose, shop, onBuy, upgrades, credits, active, onAbandon, highlights, rep, event, onEventAbandon }) {
+  openBoard(loc, offers, { onAccept, onClose, shop, onBuy, upgrades, credits, active, extra, canTake, onAbandon, highlights, rep, event, onEventAbandon }) {
     const el = $('board');
     const f = FACTIONS[loc.faction];
     const tier = rep.tier(loc.faction);
@@ -172,7 +172,8 @@ export class HUD {
       <div class="term-mini"><label>UPLINK</label><b class="term-ok">● SECURE</b><span class="term-dim">${offers.length} CONTRACT${offers.length === 1 ? '' : 'S'} POSTED</span></div>
     </div>`;
     if (active) {
-      html += `<div class="board-active"><span><span class="term-dim">ACTIVE CONTRACT ›</span> ${active.cargo.name} → ${active.to.name}</span><button data-abandon="1">ABANDON</button></div>`;
+      html += `<div class="board-active"><span><span class="term-dim">ACTIVE CONTRACT ›</span> ${active.cargo.name} → ${active.to.name}${extra ? ` <span class="term-dim">+ ON TOP ›</span> ${extra.cargo.name} → ${extra.to.name}` : ''}</span><button data-abandon="1">ABANDON</button></div>`;
+      if (canTake) html += `<div class="board-active"><span><span class="term-dim">TWIN CRADLE ›</span> room for one more contract on top</span></div>`;
     }
     if (event) {
       html += `<div class="board-active"><span><span class="term-dim">ACTIVE EVENT ›</span> ${event.title}</span><button data-evabandon="1">ABANDON</button></div>`;
@@ -184,12 +185,12 @@ export class HUD {
       const fc = FACTIONS[o.faction];
       const fr = '●'.repeat(Math.round(o.cargo.fragile * 3)) || '–';
       const hot = '☠'.repeat(o.cargo.hot) || '–';
-      html += `<div class="job ${active ? 'disabled' : ''} ${o.premium ? 'premium' : ''}" data-i="${i}">
+      html += `<div class="job ${canTake === false || (canTake == null && active) ? 'disabled' : ''} ${o.premium ? 'premium' : ''}" data-i="${i}">
         <div class="job-top"><span class="job-key">${i + 1}</span><span class="job-fac" style="background:${fc.color}">${fc.name}</span><span class="job-pay">₵${o.reward}</span></div>
         <div class="job-cargo">${o.cargo.name}</div>
         <div class="job-route">${o.pickup === o.board ? 'HERE' : o.pickup.name} → <b>${o.to.name}</b> · ${(o.dist / 1000).toFixed(1)} km · ${o.time}s</div>
         <div class="bubble"><b>${o.client}:</b> “${o.text}”</div>
-        <div class="job-tags">Fragile ${fr} &nbsp; Pirate risk ${hot}${o.clearance ? ' &nbsp; <span class="clr">MILITARY CLEARANCE</span>' : ''}${o.dark ? ' &nbsp; <span class="darktag">☾ DARK SIDE · HAZARD PAY</span>' : ''}</div>
+        <div class="job-tags">Fragile ${fr} &nbsp; Pirate risk ${hot}${o.clearance ? ' &nbsp; <span class="clr">MILITARY CLEARANCE</span>' : ''}${o.dark ? ' &nbsp; <span class="darktag">☾ DARK SIDE · HAZARD PAY</span>' : ''}${o.payload ? ` &nbsp; <span class="paytag">☠ PAYLOAD: ${o.payload.name.toUpperCase()}</span>` : ''}</div>
       </div>`;
     });
     html += `</div>`;
@@ -200,8 +201,8 @@ export class HUD {
         const maxed = lvl >= u.max;
         const cost = u.cost * (lvl + 1);
         const ok = rep.canBuy(u, lvl);
-        const unlockMissing = u.unlock && (rep.game.stats[u.unlock.stat] || 0) < u.unlock.n;
-        const need = !maxed && !ok ? (unlockMissing ? `${u.unlock.text} (${rep.game.stats[u.unlock.stat] || 0}/${u.unlock.n})` : u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
+        const unlockMissing = u.unlock && u.unlock.smuggle && !(rep.game.stats.blackMarket || []).includes(u.key);
+        const need = !maxed && !ok ? (unlockMissing ? 'Comes in on a smuggling run: watch the boards for a PAYLOAD tag' : u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
         const sw = u.swatch ? u.swatch.map((c) => `<span class="swatch" style="background:#${c.toString(16).padStart(6, '0')}"></span>`).join('') : '';
         html += `<div class="shop-item ${maxed || credits < cost || !ok ? 'disabled' : ''} ${u.faction ? 'unique' : ''}" data-buy="${u.key}">
           <div class="job-top"><span>${sw}${u.name}</span><span class="job-pay">${maxed ? (u.cosmetic ? 'OWNED' : 'MAX') : '₵' + cost}</span></div>
@@ -274,6 +275,17 @@ export class HUD {
         <div class="m-obj">${obj ? obj.label : ''} <span>${(dist / 1000).toFixed(2)} km</span></div>
         <div class="m-row"><span class="m-timer ${ms.late || t < 15 ? 'low' : ''}">${ms.late ? 'LATE +' : ''}${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}</span>
         <span class="m-int">CARGO ${Math.round(ms.integrity * 100)}%</span></div>`;
+      // the Twin Cradle's second contract, under the first
+      const x = ms.extra;
+      if (x) {
+        const o2 = ms.objective2();
+        const t2 = Math.abs(x.timer);
+        mp.innerHTML += `<div class="m-head m-second" style="background:${FACTIONS[x.a.faction].color}">ON TOP · ${x.a.client}</div>
+        <div class="m-cargo">${x.a.cargo.name}</div>
+        <div class="m-obj">${o2 ? o2.label : ''} <span>${o2 ? (arcDist(o2.pos, P.pos) / 1000).toFixed(2) : '0.00'} km</span></div>
+        <div class="m-row"><span class="m-timer ${x.late || t2 < 15 ? 'low' : ''}">${x.late ? 'LATE +' : ''}${Math.floor(t2 / 60)}:${String(Math.floor(t2 % 60)).padStart(2, '0')}</span>
+        <span class="m-int">CARGO ${Math.round(x.integrity * 100)}%</span></div>`;
+      }
     } else {
       mp.classList.add('hidden');
     }
@@ -416,10 +428,12 @@ export class HUD {
     }
     for (const d of g.enemies.drops) { const [x, y] = proj(d.pos); c.fillStyle = '#2ee6ff'; c.fillRect(x - 4, y - 4, 8, 8); }
     const obj = g.objective();
-    if (obj) {
-      let [x, y] = proj(obj.pos);
+    const obj2 = g.missions.objective2();
+    for (const [o, col] of [[obj, '#ffd23f'], [obj2, '#7dff6a']]) {
+      if (!o) continue;
+      let [x, y] = proj(o.pos);
       x = Math.max(8, Math.min(W - 8, x)); y = Math.max(8, Math.min(H - 8, y));
-      c.strokeStyle = '#ffd23f'; c.lineWidth = 3;
+      c.strokeStyle = col; c.lineWidth = 3;
       c.beginPath(); c.arc(x, y, 9 + Math.sin(performance.now() / 150) * 2, 0, Math.PI * 2); c.stroke();
     }
     c.fillStyle = '#ff4f2e'; c.strokeStyle = '#fff'; c.lineWidth = 2;
@@ -428,14 +442,24 @@ export class HUD {
 
   updateArrow() {
     const g = this.game;
-    const obj = g.objective();
-    const el = $('obj-arrow');
-    const mk = $('obj-marker');
+    this.placeArrow(g.objective(), $('obj-arrow'), $('obj-marker'));
+    // the Twin Cradle's second contract gets a waypoint of its own (green)
+    if (!this.arrow2) {
+      this.arrow2 = $('obj-arrow').cloneNode(false); this.arrow2.id = 'obj-arrow2'; this.arrow2.removeAttribute('data-svg');
+      this.marker2 = $('obj-marker').cloneNode(true); this.marker2.id = 'obj-marker2';
+      $('obj-arrow').after(this.arrow2, this.marker2);
+    }
+    this.placeArrow(g.missions.objective2(), this.arrow2, this.marker2, '#7dff6a');
+  }
+
+  placeArrow(obj, el, mk, color = '#ffd23f') {
+    const g = this.game;
     if (!obj || g.player.dead) { el.classList.add('hidden'); mk.classList.add('hidden'); return; }
-    const up = obj.pos.clone().normalize();
-    this.v.copy(g.planet.ground(up)).addScaledVector(up, 25).project(g.camera);
+    const up = upAt(obj.pos);
+    const away = g.spindle && g.spindle.active;
+    this.v.copy(g.planet.ground(obj.pos)).addScaledVector(up, away ? 6 : 25).project(g.camera);
     const onScreen = this.v.z < 1 && Math.abs(this.v.x) < 0.95 && Math.abs(this.v.y) < 0.92;
-    const dist = arcDist(obj.pos, g.player.pos);
+    const dist = away ? obj.pos.distanceTo(g.player.pos) : arcDist(obj.pos, g.player.pos);
     if (onScreen) {
       el.classList.add('hidden');
       mk.classList.remove('hidden');
@@ -446,13 +470,14 @@ export class HUD {
       // a drawn arrow (fonts can't drop it) with the distance, on a ring clear of the HUD panels
       if (!el.dataset.svg) {
         el.dataset.svg = '1';
-        el.innerHTML = '<svg viewBox="0 0 64 64" width="64" height="64"><path d="M60 32 L14 8 L24 32 L14 56 Z" fill="#ffd23f" stroke="#120a1e" stroke-width="5" stroke-linejoin="round"/></svg><div class="oa-dist"></div>';
+        el.innerHTML = `<svg viewBox="0 0 64 64" width="64" height="64"><path d="M60 32 L14 8 L24 32 L14 56 Z" fill="${color}" stroke="#120a1e" stroke-width="5" stroke-linejoin="round"/></svg><div class="oa-dist"></div>`;
       }
       mk.classList.add('hidden');
       el.classList.remove('hidden');
       // beyond the horizon: point along the surface toward it
       const P = g.player;
-      const t = obj.pos.clone().normalize().addScaledVector(P.up, -obj.pos.clone().normalize().dot(P.up));
+      const t = obj.pos.clone().sub(P.pos); // (along the ground toward it)
+      t.addScaledVector(P.up, -t.dot(P.up));
       let x = t.dot(g.cam.right), yy = t.dot(g.cam.fwd);
       const a = Math.atan2(yy, x);
       const ex = Math.cos(a), ey = Math.sin(a);

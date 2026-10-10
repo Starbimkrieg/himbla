@@ -22,6 +22,34 @@ export function anglesFromDir(d) {
   return { theta, phi };
 }
 
+// Which way is up. On the Moon: away from its centre. On the Spindle (spindle.js): away from the
+// asteroid's long axis, so you can run all the way round it. Physics, the camera, shots and effects
+// ask here instead of normalising a position.
+export const GRAV = { axis: null };
+export function upAt(p, out = new THREE.Vector3()) {
+  const a = GRAV.axis;
+  if (!a) return out.copy(p).normalize();
+  const k = p.dot(a);
+  out.copy(p).addScaledVector(a, -k);
+  if (out.lengthSq() < 1e-8) out.set(0, 1, 0);
+  return out.normalize();
+}
+// distance from the centre (or the axis)
+export function radOf(p) {
+  const a = GRAV.axis;
+  if (!a) return p.length();
+  const k = p.dot(a);
+  return Math.sqrt(Math.max(0, p.lengthSq() - k * k));
+}
+// move p straight up or down until it's r from the centre (or the axis)
+export function setRad(p, r) {
+  const a = GRAV.axis;
+  if (!a) return p.setLength(r);
+  const k = p.dot(a);
+  p.addScaledVector(a, -k).setLength(r);
+  return p.addScaledVector(a, k);
+}
+
 // 0 on the lit side, 1 deep on the dark side.
 export function darkness(dir) {
   const e = dir.dot(SUN);

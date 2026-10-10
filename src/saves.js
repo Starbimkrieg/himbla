@@ -128,6 +128,17 @@ export class SaveSlots {
     return this.write(this.active, { v: 1, data, meta: { ...base, ...meta, playTime: Math.round(this.playTime()), savedAt: Date.now() } });
   }
 
+  // Save and reload straight back into play (a story finale reshapes the Moon: the world is
+  // rebuilt from the new state on load).
+  reloadIntoPlay(meta) {
+    if (!this.active) { location.reload(); return; }
+    this.snapshot(meta);
+    this.switching = true;
+    const S = ss();
+    if (S) S.setItem(AUTOSTART_KEY, '1');
+    location.reload();
+  }
+
   // Switch to slot n (fresh = start a new game there) and reload into play.
   activate(n, fresh, beforeMeta) {
     const L = ls();

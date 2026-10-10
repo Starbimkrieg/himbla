@@ -693,7 +693,7 @@ export class Events {
     // post new events: one per faction, with at least ~a minute between any two new postings
     this.gap -= dt;
     for (const f of Object.keys(TYPES)) {
-      if (f === 'rustmoon' && !g.rep.aligned()) continue;
+      if (f === 'rustmoon' && (!g.rep.aligned() || FACTIONS.rustmoon.gone)) continue;
       if (this.list.some((e) => e.faction === f && !e.special)) continue;
       this.cooldown[f] -= dt;
       if (this.cooldown[f] <= 0 && this.gap <= 0) {
@@ -701,7 +701,7 @@ export class Events {
         else this.gap = 45 + Math.random() * 30;
       }
     }
-    if (g.rep.rustmoon === 'unknown' && !this.list.some((e) => e.type === 'wreck')) {
+    if (g.rep.rustmoon === 'unknown' && !FACTIONS.rustmoon.gone && !this.list.some((e) => e.type === 'wreck')) {
       // the pirate distress call first comes 10-15 minutes into the save's play time
       if (this.wreckAt === undefined) {
         this.wreckAt = 600 + Math.random() * 300;

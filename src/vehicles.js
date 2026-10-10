@@ -108,17 +108,71 @@ export class Garage {
     if (P.vehicle) { this.exit(); return; }
     const owned = this.owned();
     if (!owned.length) { g.hud.toast('No vehicles yet. Faction leaders hand them out as you rise in their story.', 3); return; }
-    if (owned.length > 1 && !this.choice) { this.pick(); return; }
-    let id = this.choice || owned[0];
+    // a tap calls the last one you picked (hold V for the radial picker)
+    let id = this.choice && owned.includes(this.choice) ? this.choice : owned[0];
     if (this.cooldown(id) > 0) {
       const alt = owned.find((k) => this.cooldown(k) <= 0);
       if (!alt) { g.hud.toast(`${VEHICLES[id].name} is being rebuilt: ready in ${Math.ceil(this.cooldown(id))}s.`, 2.5); return; }
-      if (owned.length > 1) { this.pick(); return; }
+      g.hud.toast(`${VEHICLES[id].name} is being rebuilt: calling the ${VEHICLES[alt].name}. (Hold V to choose.)`, 2.5);
       id = alt;
     }
     // already parked nearby? hop in; otherwise it gets dropped in next to you
     if (this.active && this.active.id === id && this.active.e.body.pos.distanceTo(P.pos) < 12) { this.enter(); return; }
     this.summon(id);
+    this.enter();
+  }
+
+  // ---- hold V: a radial picker (mouse movement chooses a wedge, releasing V calls it) ----
+  openRadial() {
+    const owned = this.owned();
+    if (!this.radialEl) {
+      this.radialEl = document.createElement('div');
+      this.radialEl.id = 'vradial';
+      document.getElementById('hud').appendChild(this.radialEl);
+    }
+    this.radial = { ax: 0, ay: 0, sel: -1, items: owned };
+    const n = owned.length;
+    this.radialEl.innerHTML = `<div class="vr-ring"></div><div class="vr-hub">HOLD V<br><small>move to pick · release to call</small></div>` + owned.map((k, i) => {
+      const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+      const cd = this.cooldown(k);
+      const hull = `${Math.ceil(this.hp[k] ?? this.maxHp(k))}/${this.maxHp(k)}`;
+      return `<div class="vr-item${cd > 0 ? ' cd' : ''}" data-i="${i}" style="left:${50 + Math.cos(a) * 36}%;top:${50 + Math.sin(a) * 36}%">` +
+        `<b>${VEHICLES[k].name}</b><small>${cd > 0 ? `REBUILDING ${Math.ceil(cd)}s` : `HULL ${hull}`}</small></div>`;
+    }).join('');
+    this.radialEl.classList.remove('hidden');
+    this.game.audio.tone(520, 0.08, 'triangle', 0.12);
+  }
+
+  radialMove(dx, dy) {
+    const R = this.radial;
+    if (!R) return;
+    R.ax += dx; R.ay += dy;
+    const len = Math.hypot(R.ax, R.ay);
+    if (len > 140) { R.ax *= 140 / len; R.ay *= 140 / len; }
+    let sel = -1;
+    if (len > 28) {
+      const n = R.items.length;
+      const a = Math.atan2(R.ay, R.ax) + Math.PI / 2; // 0 at the top, clockwise
+      sel = ((Math.round((a / (Math.PI * 2)) * n) % n) + n) % n;
+    }
+    if (sel !== R.sel) {
+      R.sel = sel;
+      for (const el of this.radialEl.querySelectorAll('.vr-item')) el.classList.toggle('on', +el.dataset.i === sel);
+      if (sel >= 0) this.game.audio.tone(700 + sel * 60, 0.04, 'square', 0.05);
+    }
+  }
+
+  closeRadial(commit) {
+    const g = this.game;
+    const R = this.radial;
+    this.radial = null;
+    if (this.radialEl) this.radialEl.classList.add('hidden');
+    if (!commit || !R || R.sel < 0) return;
+    const k = R.items[R.sel];
+    if (this.cooldown(k) > 0) { g.hud.toast(`${VEHICLES[k].name} is being rebuilt: ready in ${Math.ceil(this.cooldown(k))}s.`, 2.5); return; }
+    this.choice = k;
+    if (this.active && this.active.id === k && this.active.e.body.pos.distanceTo(g.player.pos) < 12) { this.enter(); return; }
+    this.summon(k);
     this.enter();
   }
 
@@ -196,7 +250,7 @@ export class Garage {
     const tune = def.hover
       ? { grip: Math.max(def.grip, 10), stick: 70, traction: 7 }
       : { grip: Math.max(def.grip * 1.6, 24), stick: 55, traction: 15 };
-    for (let i = 0; i < steps; i++) stepRover(e, dt / steps, g.planet, g.colliders, target, max, { engine: fwdIn || back ? def.engine : 0, turn: def.turn, radius: def.radius || 3.2 * (def.scale || 1), ...tune });
+    for (let i = 0; i < steps; i++) stepRover(e, dt / steps, g.planet, g.colliders, target, max, { engine: fwdIn || back ? def.engine : 0, turn: def.turn, radius: def.radius || 3.2 * (def.scale || 1), weight: def.hover ? 1.5 : 1.7, ...tune });
     if (def.hover) b.vel.multiplyScalar(1 - 0.15 * dt);
     if (b.grounded && (input.pressed('ShiftLeft') || input.pressed('ShiftRight'))) { b.vel.addScaledVector(up, 9); b.grounded = false; b.wasGround = false; g.audio.jump(); } // (wasGround off: the ground snap mustn't swallow the hop)
     // pose

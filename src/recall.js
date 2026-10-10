@@ -31,7 +31,7 @@ export class Recall {
     if (g.credits < RECALL_COST) { g.hud.toast(`Emergency recall costs ₵${RECALL_COST}. You can't afford the shuttle.`, 2.5); return; }
     g.credits -= RECALL_COST;
     g.audio.cash();
-    if (g.missions.active) g.missions.fail('Emergency recall — contract forfeited.');
+    if (g.missions.active) g.missions.failAll('Emergency recall — contract forfeited.');
     this.start();
   }
 

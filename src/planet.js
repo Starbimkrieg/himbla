@@ -222,10 +222,11 @@ export class Planet {
     }
     const mScarp = smoothstep(0.46, 0.66, C(x * 0.0004 - 21, y * 0.0004 + 6, z * 0.0004));
     if (mScarp > 0) {
-      // stepped ledges to drop off (lunar lobate scarps)
+      // stepped ledges to drop off (lunar lobate scarps): ramps you can ride up, not walls (a step
+      // over a narrow band of the noise made sheer, jagged cliffs you ran into)
       const sv = A(x * 0.0011 - 8, y * 0.0011, z * 0.0011 + 15) + 0.25 * B(x * 0.004, y * 0.004, z * 0.004);
-      h += mScarp * 20 * (smoothstep(-0.035, 0.035, sv) + smoothstep(0.31, 0.39, sv));
-      rock = Math.max(rock, mScarp * (1 - Math.min(1, Math.abs(sv) / 0.05)) * 0.6);
+      h += mScarp * 20 * (smoothstep(-0.09, 0.09, sv) + smoothstep(0.26, 0.44, sv));
+      rock = Math.max(rock, mScarp * (1 - Math.min(1, Math.abs(sv) / 0.09)) * 0.45);
     }
     const mRille = smoothstep(0.32, 0.52, C(x * 0.00038 + 77, y * 0.00038 - 3, z * 0.00038 + 31));
     if (mRille > 0) {
@@ -357,6 +358,19 @@ export class Planet {
     // only the chunk buckets the plateau can reach test it in H
     const cosB = Math.cos((r * 1.95 + this.bucketR) / R);
     for (let k = 0; k < this.flatBuckets.length; k++) if (this.bucketCenters[k].dot(d) > cosB) this.flatBuckets[k].push(zn);
+    this.redo(d, r);
+  }
+
+  // A settlement founded mid-game (main.js applyWorldLive): a plateau like the ones built at boot.
+  addZone(z) {
+    z.zr = R + this.base(z.dir.x * R, z.dir.y * R, z.dir.z * R, darkness(z.dir));
+    z.cosFlat = Math.cos((z.r * 1.95) / R);
+    if (!this.zones.includes(z)) this.zones.push(z);
+    this.redo(z.dir, z.r);
+  }
+
+  // Drop the terrain chunks (and their boulders) round a plateau so they rebuild with it.
+  redo(d, r) {
     this.cache.clear();
     const c = d.clone().multiplyScalar(R);
     for (const ch of this.chunks) {
@@ -816,6 +830,18 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.86), rimChip * rimCor
   keepClear(dirs, r) {
     this.clearDirs = dirs;
     this.clearCos = Math.cos(r / R);
+  }
+
+  // One more spot rocks stay off (a story gate): the chunks round it re-roll their boulders.
+  clearSpot(d) {
+    (this.clearDirs ||= []).push(d.clone().normalize());
+    this.clearCos ??= Math.cos(26 / R);
+    const c = d.clone().normalize().multiplyScalar(R);
+    for (const ch of this.chunks) {
+      if (ch.center.distanceTo(c) > ch.radius + 30) continue;
+      if (ch.boulders) { this.scene.remove(ch.boulders); ch.boulders = null; ch.boulderSpec = null; }
+      if (ch.boulderCols && this.colliders) { for (const col of ch.boulderCols) this.colliders.remove(col); ch.boulderCols = null; }
+    }
   }
 
   buildBoulders(ch) {

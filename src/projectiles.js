@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { upAt, radOf, setRad } from './geo.js';
 import { shatterEcho } from './monolith.js';
 
 const _seg = new THREE.Vector3();
@@ -43,21 +44,21 @@ export class Projectiles {
       const pdt = p.owner === 'player' ? dt : wdt; // the Monolith's time dilation slows everyone's shots but yours
       p.life -= pdt;
       p.prev.copy(p.pos);
-      if (p.gravity) p.vel.addScaledVector(_rel.copy(p.pos).normalize(), -p.gravity * pdt);
+      if (p.gravity) p.vel.addScaledVector(upAt(p.pos, _rel), -p.gravity * pdt);
       p.age += pdt;
       if (p.homing > 0 && p.age > 0.08) this.home(p, pdt);
       p.pos.addScaledVector(p.vel, pdt);
       p.mesh.position.copy(p.pos);
       // stretch along velocity for a comic smear
       const sp = p.vel.length();
-      p.mesh.up.copy(p.pos).normalize();
+      upAt(p.pos, p.mesh.up);
       p.mesh.lookAt(_rel.copy(p.pos).add(p.vel));
       p.mesh.scale.set(p.size, p.size, p.size * (1 + Math.min(4, sp / 40)));
 
       let hit = p.life <= 0 || (p.fuse > 0 && p.age >= p.fuse) || (p.proxy > 0 && !g.player.dead && p.pos.distanceTo(g.player.center) < p.proxy);
       if (!hit) {
         const sr = planet.surface(p.pos);
-        if (p.pos.length() <= sr) { hit = true; p.pos.setLength(sr + 0.3); }
+        if (radOf(p.pos) <= sr) { hit = true; setRad(p.pos, sr + 0.3); }
       }
       if (!hit) {
         for (const c of g.colliders.query(p.pos, 2, _near)) {
@@ -67,6 +68,7 @@ export class Projectiles {
       if (!hit) {
         if (p.owner === 'player') {
           for (const t of g.enemies.targets()) {
+            if (t.faction === 'ally') continue; // your shots pass your backup by
             if (segSphere(p.prev, p.pos, t.center, t.radius + 0.4)) { hit = true; break; }
           }
           // people on foot (civilians.js) stop a shot too, and so do road vehicles (land-train
@@ -74,8 +76,15 @@ export class Projectiles {
           if (!hit && g.civilians && g.civilians.segHit(p.prev, p.pos)) hit = true;
           if (!hit && g.world.traffic && g.world.traffic.segHit(p.prev, p.pos)) hit = true;
           if (!hit && g.alchemy && g.alchemy.segHitMite(p.prev, p.pos)) hit = true;
+        } else if (p.owner === 'ally') {
+          // your backup's shots: only the chapter's hostiles (and a stormed base's guns) stop them
+          for (const t of g.enemies.targets()) {
+            if (g.enemies.allyTarget(t) && segSphere(p.prev, p.pos, t.center, t.radius + 0.4)) { hit = true; break; }
+          }
         } else {
           if (!g.player.dead && segSphere(p.prev, p.pos, g.player.center, 1.3)) hit = true;
+          // ...and the backup soaks up hostile fire too
+          if (!hit) for (const t of g.enemies.list) if (t.faction === 'ally' && !t.dead && segSphere(p.prev, p.pos, t.center, t.radius + 0.4)) { hit = true; break; }
           // the Monolith's echo holograms soak up a shot each
           for (const d of g.decoys) if (segSphere(p.prev, p.pos, d.center, d.radius)) { hit = true; shatterEcho(g, d); p.burst = () => {}; break; }
           for (const o of g.events.protect) if (!o.dead && segSphere(p.prev, p.pos, o.center, o.radius + 0.4)) { hit = true; break; }

@@ -51,7 +51,7 @@ export class Cheats {
     const S = g.story;
     const A = S.active;
     g.dialog('CHEAT MENU · STORY', `<small>Committed to: <b>${S.faction ? FACTIONS[S.faction].name : 'nobody yet'}</b>${A ? ` · active: ${A.def.title} (step ${A.si + 1}/${A.steps.length})` : ''}<br>Vehicles: ${S.vehicles.join(', ') || 'none'} · Tech: ${S.tech.join(', ') || 'none'}</small>`, [
-      { label: '1 · SKIP CURRENT STEP', fn: () => { if (S.active) S.next(); this.storyMenu(); } },
+      { label: '1 · SKIP CURRENT STEP', fn: () => { if (S.active) S.skipStep(); this.storyMenu(); } },
       { label: '2 · TELEPORT TO CURRENT OBJECTIVE', fn: () => { const o = S.objective(); if (o) { S.teleportTo(o.pos.clone().normalize()); } } },
       { label: '3 · SPAWN CAPTAIN KADE (ambush)', fn: () => { S.spawnKade(false); } },
       { label: '4 · ALL VEHICLES + TECH', fn: () => { S.vehicles = Object.keys(VEHICLES); S.tech = Object.keys(TECH); S.save(); this.storyMenu(); } },
@@ -59,7 +59,8 @@ export class Cheats {
       { label: '6 · DROP ME ON SAT-7 (matched speed)', fn: () => { const S = g.secrets; const o = S.sat; const up = o.pos.clone().normalize(); g.player.respawn(o.pos.clone().addScaledVector(up, 4)); g.player.body.vel.copy(o.vel); } },
       { label: '7 · TELEPORT TO THE WHISPERING FISSURE', fn: () => { const L = g.secrets.loc; g.globe.discover(L, true); S.teleportTo(g.world.toWorld(L, 0, 0, -90).normalize()); } },
       { label: '8 · GIVE ME THE ALIEN ARTIFACT', fn: () => { g.upgrades.jar = Math.max(1, g.upgrades.jar || 0); g.alchemy.artifact = true; g.secrets.state.artifactTaken = true; g.secrets.sat.artifact.visible = g.secrets.sat.aGlow.visible = false; g.secrets.save(); g.alchemy.save(); g.alchemy.refreshJarMesh(); this.storyMenu(); } },
-      { label: '9 · BACK', fn: () => this.moreMenu() },
+      { label: '9 · LAUNCH TO THE SPINDLE (Meridian finale)', fn: () => this.toSpindle() },
+      { label: 'BACK', fn: () => this.moreMenu() },
       { label: 'CLOSE' },
     ]);
   }
@@ -165,6 +166,17 @@ export class Cheats {
     A.refreshJarMesh();
     g.save();
     g.hud.toast('Jar filled (person, mite, black water) and 3 chimeras added.', 3);
+  }
+
+  // Straight onto the Spindle to test it: drops whatever chapter is running, starts Meridian's
+  // finale and skips the trip to the launch complex (finishing it counts, like any chapter).
+  toSpindle() {
+    const g = this.game;
+    const S = g.story;
+    if (g.spindle.active) return;
+    if (S.active) S.fail('Dropped for a test launch.');
+    S.start('meridian', 4);
+    S.skipStep();
   }
 
   joinRustmoon() {

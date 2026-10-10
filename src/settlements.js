@@ -291,16 +291,27 @@ export function hortonSphere(k, x, z, r, color, band) {
 
 // Price ticker: a drum of scrolling text (canvas texture offset each frame) between two rings.
 export function ticker(k, x, y, z, r, h, text, { fg = '#7dff6a', bg = '#0d0a1a', ring = YEL, speed = 0.03 } = {}) {
+  // the canvas is exactly one pass of the text (whole passes repeat round the drum), so the wrap
+  // never cuts an item in half (a fixed-width canvas used to: "HMERIDIAN")
   const c = document.createElement('canvas');
-  c.width = 2048; c.height = 128;
+  const parts = text.split('|').map((s) => s.trim() + '   ');
+  const g0 = c.getContext('2d');
+  let fs = 64;
+  g0.font = pixelFont(fs);
+  let W = parts.reduce((a, s) => a + g0.measureText(s).width, 0);
+  // a small drum: smaller lettering, so one pass fits round it instead of being squeezed
+  const nat = (h * W) / 128;
+  if (nat > TAU * r * 1.25) fs = Math.max(28, Math.floor((fs * TAU * r) / nat));
+  if ((W * fs) / 64 > 8000) fs = Math.floor((fs * 8000 * 64) / (W * fs));
+  g0.font = pixelFont(fs);
+  W = parts.reduce((a, s) => a + g0.measureText(s).width, 0);
+  c.width = Math.ceil(W); c.height = 128;
   const g = c.getContext('2d');
   g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
-  g.font = pixelFont(64);
+  g.font = pixelFont(fs);
   g.textBaseline = 'middle';
-  const parts = text.split('|');
-  let px = 20;
-  for (let i = 0; px < c.width; i++) {
-    const s = parts[i % parts.length].trim() + '   ';
+  let px = 0;
+  for (const s of parts) {
     g.fillStyle = s.includes('▼') ? '#ff3b5c' : fg;
     g.fillText(s, px, 68);
     px += g.measureText(s).width;
@@ -308,7 +319,8 @@ export function ticker(k, x, y, z, r, h, text, { fg = '#7dff6a', bg = '#0d0a1a',
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
-  tex.repeat.set(Math.max(1, Math.round((TAU * r) / (h * 12))), 1);
+  // whole passes round the drum, each about the text's natural aspect
+  tex.repeat.set(Math.max(1, Math.round((TAU * r) / ((h * c.width) / c.height))), 1);
   const drum = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 40, 1, true), new THREE.MeshBasicMaterial({ map: tex }));
   drum.userData.tick = (o, dt) => { tex.offset.x = (tex.offset.x + dt * speed) % 1; };
   k.dyn(drum, x, y + h / 2, z);
@@ -542,25 +554,70 @@ export function buildMeridian(world, loc) {
     const blue = 0x2ec4ff, cols = [0x2ec4ff, 0xff9f1c, 0x7dff6a, 0xff3b5c, 0xffd23f, 0xc77dff];
     // layout: plaza at the centre, the trading tower south of it, the lab dome north, warehouses
     // out on the four corners (docks along the ring, not at each other), cranes in the gaps
-    const TZ = -34;
-    // the trading tower: three stepped octagonal tiers of glass and white bands
+    const TZ = -42;
+    // the trading tower: three stepped octagonal tiers of glass and white bands (1.5x the old one,
+    // set further back off the plaza)
     k.at(0, TZ, Math.PI / 8);
-    k.cyl(15, 16, 1.2, 8, T(CONC), 0, 0, 0, { outline: 0.1 });
-    const tiers = [[12, 10], [9.5, 9], [7, 9]];
-    let y = 1.2;
+    k.cyl(22.5, 24, 1.6, 8, T(CONC), 0, 0, 0, { outline: 0.12 });
+    const tiers = [[18, 15], [14, 13.5], [10.5, 13.5]];
+    let y = 1.6;
+    const tierTop = [];
     for (const [r, h] of tiers) {
-      k.cyl(r, r, h, 8, T(WHITE), 0, y, 0, { outline: 0.14 });
-      for (let j = 0; j < 3; j++) k.cyl(r + 0.05, r + 0.05, 1.2, 8, G(0xbfe9ff), 0, y + 1.5 + j * (h / 3), 0, { outline: 0 });
-      k.cyl(r + 0.6, r + 0.6, 0.6, 8, T(blue), 0, y + h, 0, { outline: 0.06 });
-      y += h + 0.6;
+      k.cyl(r, r, h, 8, T(WHITE), 0, y, 0, { outline: 0.16 });
+      for (let j = 0; j < 3; j++) k.cyl(r + 0.05, r + 0.05, 1.8, 8, G(0xbfe9ff), 0, y + 2.2 + j * (h / 3), 0, { outline: 0 });
+      if (tierTop.length) k.cyl(r + 0.9, r + 0.9, 0.9, 8, T(blue), 0, y + h, 0, { outline: 0.06 });
+      tierTop.push(y + h);
+      y += h + 0.9;
     }
-    k.cyl(3, 5, 6, 8, T(blue), 0, y, 0, { outline: 0.08 });
-    k.cyl(0.25, 0.4, 12, 6, T(DARK), 0, y + 6, 0, { outline: 0.03 });
-    k.blinker(0, y + 18.4, 0, 0xff2a4a, 0.5);
-    k.column(12, 1.2 + 10, 0, 0);
-    k.column(9.6, y, 0, 0);
+    k.cyl(4.5, 7.5, 9, 8, T(blue), 0, y, 0, { outline: 0.1 });
+    k.cyl(0.35, 0.6, 18, 6, T(DARK), 0, y + 9, 0, { outline: 0.04 });
+    k.blinker(0, y + 27.6, 0, 0xff2a4a, 0.7);
+    k.column(18, tierTop[0] + 0.9, 0, 0);
+    k.column(14.4, y, 0, 0);
     k.at();
-    ticker(k, 0, 11.4, TZ, 12.3, 1.6, 'MERIDIAN COMPOSITE ▲ 1,204.5 | HE-3 ▲ 412.70 | WATER ICE ▲ 19.95 | KEPLER BONDS ▼ 98.10 | VOSTOK SCRAP ▼ 12.40 | DAEDALUS PHASE-TECH ▲ 777.00', { fg: '#ffd23f', speed: 0.02 });
+    // the ticker rides on a round collar wider than the tier below it (the old drum hugged an
+    // octagon whose corners poked through it), under a canopy back to the second tier
+    const TY = tierTop[0];
+    k.at(0, TZ);
+    k.cyl(19.6, 19.6, 0.9, 48, T(blue), 0, TY, 0, { outline: 0.06 });
+    k.add(new THREE.RingGeometry(13.9, 20.0, 48, 1).rotateX(-Math.PI / 2), T(blue), 0, TY + 3.75, 0, { outline: 0 });
+    k.add(new THREE.RingGeometry(13.9, 20.0, 48, 1).rotateX(Math.PI / 2), T(0x1b3a8f), 0, TY + 3.7, 0, { outline: 0 });
+    k.at();
+    ticker(k, 0, TY + 1.0, TZ, 19.8, 2.6, 'MERIDIAN COMPOSITE ▲ 1,204.5 | HE-3 ▲ 412.70 | WATER ICE ▲ 19.95 | KEPLER BONDS ▼ 98.10 | VOSTOK SCRAP ▼ 12.40 | DAEDALUS PHASE-TECH ▲ 777.00', { fg: '#ffd23f', speed: 0.014 });
+    // the entrance: a columned portico on the plaza side, steps up to it, glass doors and the
+    // exchange's name over them, banners either side
+    {
+      const fz = 16.6; // the front face of the bottom tier (an octagon's flat side faces the plaza)
+      k.at(0, TZ);
+      k.box(19, 1.6, 7, T(CONC), 0, 0, fz + 3.3, { outline: 0.06 });
+      for (let i = 0; i < 3; i++) k.box(19, 1.2 - i * 0.4, 1.0, T(0xd8d4e8), 0, 0, fz + 7.3 + i, { outline: 0.03 });
+      for (let i = 0; i < 6; i++) {
+        const x = -7.5 + i * 3;
+        k.cyl(0.62, 0.72, 9.4, 14, T(WHITE), x, 1.6, fz + 5.2, { outline: 0.05 });
+        k.box(1.7, 0.4, 1.7, T(0xd8d4e8), x, 1.6, fz + 5.2, { outline: 0.02 });
+        k.box(1.7, 0.4, 1.7, T(0xd8d4e8), x, 10.6, fz + 5.2, { outline: 0.02 });
+        k.column(0.75, 11, x, fz + 5.2);
+      }
+      k.box(19.4, 1.8, 6.4, T(WHITE), 0, 11.0, fz + 3.2, { outline: 0.08 });
+      k.box(19.6, 0.35, 6.6, T(blue), 0, 12.8, fz + 3.2, { outline: 0.03 });
+      // pediment
+      const ped = new THREE.Shape([new THREE.Vector2(-9.8, 0), new THREE.Vector2(9.8, 0), new THREE.Vector2(0, 3.2)]);
+      k.add(new THREE.ExtrudeGeometry(ped, { depth: 6.2, bevelEnabled: false }).translate(0, 0, -3.1), T(WHITE), 0, 13.15, fz + 3.2, { outline: 0.08 });
+      k.text('MERIDIAN EXCHANGE', 0, 11.9, fz + 6.42, 0, 15, { fg: '#2ec4ff', bg: '#0d1a33', back: false, off: 0.03 });
+      // the doors: a bronze frame, four glass leaves, a lit transom
+      k.box(9.5, 7.4, 0.4, T(0x8a5a3a), 0, 1.6, fz + 0.15, { outline: 0.04 });
+      for (let i = 0; i < 4; i++) k.box(2.0, 5.6, 0.2, G(0xbfe9ff), -3.3 + i * 2.2, 1.9, fz + 0.4, { outline: 0 });
+      for (let i = 0; i < 5; i++) k.box(0.18, 5.8, 0.25, T(0x8a5a3a), -4.4 + i * 2.2, 1.8, fz + 0.45, { outline: 0 });
+      k.box(9.0, 1.0, 0.2, G(WARM), 0, 7.7, fz + 0.4, { outline: 0 });
+      // banners on poles, and a pair of lamps at the foot of the steps
+      for (const sx of [-1, 1]) {
+        k.cyl(0.12, 0.14, 12, 6, T(DARK), sx * 11.5, 0, fz + 6, { outline: 0.02 });
+        k.box(2.2, 6, 0.1, T(blue), sx * 11.5 + sx * 1.15, 5.4, fz + 6, { outline: 0.03 });
+        k.box(2.2, 0.6, 0.12, T(YEL), sx * 11.5 + sx * 1.15, 6.4, fz + 6, { outline: 0 });
+      }
+      k.at();
+      k.lamp(-11, TZ + fz + 10.5, 6); k.lamp(11, TZ + fz + 10.5, 6);
+    }
     const crown = part(blue, (q) => {
       for (let i = 0; i < 4; i++) {
         const a = (i / 4) * TAU;
@@ -569,7 +626,8 @@ export function buildMeridian(world, loc) {
       }
     });
     crown.userData.spin = 0.4;
-    k.dyn(crown, 0, y + 2.4, TZ);
+    crown.scale.setScalar(1.5);
+    k.dyn(crown, 0, y + 3.6, TZ);
     // four warehouses on the corners, docks facing along the ring
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * TAU + Math.PI / 4;
@@ -1372,10 +1430,11 @@ export function buildTown(world, loc, { civic = false } = {}) {
 }
 
 // Kepler town hall: a colonnaded civic block under a pediment, steps, and a clock tower whose
-// hands go round.
+// hands go round. Its colonnade faces out of town, towards the way you ride in (it used to face the
+// hub dome, so arriving you saw a blank back wall).
 function townHall(world, loc, k) {
   const x = 0, z = 52, orange = 0xff9f1c;
-  k.at(x, z);
+  k.at(x, z, Math.PI);
   k.box(32, 1.2, 14, T(CONC), 0, 0, 0, { outline: 0.06 });
   for (let i = 0; i < 3; i++) k.box(14 - i * 1.2, 0.4, 2, T(LIGHT), 0, 0.4 * i, -7 - 1 + i * 0.6, { outline: 0.02 });
   k.box(30, 11, 11, T(WHITE), 0, 1.2, 0.8, { outline: 0.15 });
@@ -1398,7 +1457,7 @@ function townHall(world, loc, k) {
   k.solid(3, 10, 3, 0, 2, 0, 13.4);
   k.at();
   for (const s of [-1, 1]) {
-    k.at(x, z + 2 + s * 3.05, s > 0 ? 0 : Math.PI);
+    k.at(x, z - 2 + s * 3.05, s > 0 ? 0 : Math.PI);
     k.add(new THREE.CylinderGeometry(2.2, 2.2, 0.2, 24).rotateX(Math.PI / 2), T(0xfffaf0), 0, 22.5, 0, { outline: 0.04 });
     k.add(new THREE.TorusGeometry(2.25, 0.18, 4, 24), T(orange), 0, 22.5, 0.05, { outline: 0 });
     for (let h = 0; h < 12; h++) { const a = (h / 12) * TAU; k.box(0.12, 0.35, 0.05, T(DARK), Math.sin(a) * 1.85, 22.5 + Math.cos(a) * 1.85, 0.13, { rz: -a, outline: 0 }); }
@@ -1524,28 +1583,48 @@ export function dressBase(world, loc) {
   const small = !!loc.small;
   settle(world, loc, 9901 + loc.id.length * 17, (k, ctx) => {
     const fc = ctx.fc;
-    // command bunker: an armoured octagonal frustum with a stepped roof
+    // command bunker: an armoured octagonal frustum. Everything on it (firing slits, the faction
+    // band, armour plates) sits flush on its own face and leans with the wall, so it reads square
+    // from every side; a glazed command deck and a ring of masts on top; a recessed blast door
     const R = small ? 11 : 18, H = small ? 8 : 11;
-    k.at(0, 0, Math.PI / 8);
-    k.cyl(R * 0.82, R, H, 8, T(0x4a4660), 0, 0, 0, { outline: 0.18 });
-    k.cyl(R * 1.02, R * 1.06, 1.2, 8, T(0x3a3550), 0, 0, 0, { outline: 0.06 });
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * TAU + Math.PI / 8, rr = R * 0.92;
-      k.box(R * 0.42, 0.5, 0.3, G(fc), Math.sin(a) * rr, H * 0.62, Math.cos(a) * rr, { ry: a, rx: -0.18, outline: 0 });
+    const tilt = Math.atan((R * 0.18) / H);                 // the walls' lean
+    const face = (j) => (j + 0.5) * (TAU / 8);              // face centres (cylinder vertices sit at j*45deg)
+    const ap = (h) => (R - R * 0.18 * (h / H)) * Math.cos(Math.PI / 8); // apothem at height h
+    k.at(0, 0, -Math.PI / 8); // (turned so face 0 looks straight down the approach, +z: the door's face)
+    k.cyl(R * 1.12, R * 1.16, 0.8, 8, T(CONC), 0, 0, 0, { outline: 0.06 });
+    k.cyl(R * 0.82, R, H, 8, T(0x4a4660), 0, 0.8, 0, { outline: 0.18 });
+    for (let j = 0; j < 8; j++) {
+      const a = face(j);
+      const at = (h, out) => [Math.sin(a) * (ap(h) + out), 0.8 + h, Math.cos(a) * (ap(h) + out)];
+      const plate = (w, hh, d, h, out, mat) => { const [x, y, z] = at(h, out); k.add(new THREE.BoxGeometry(w, hh, d), mat, x, y, z, { ry: a, rx: -tilt, outline: 0.03 }); };
+      const side = 2 * ap(0.62 * H) * Math.tan(Math.PI / 8) * 0.86;
+      if (j !== 0) plate(side * 0.7, 0.55, 0.2, H * 0.55, 0.06, T(0x1d1a29));   // firing slit
+      if (j !== 0) plate(side * 0.6, 0.18, 0.14, H * 0.55 - 0.42, 0.1, G(fc)); // its glow
+      plate(side, 0.4, 0.16, H * 0.86, 0.08, T(fc));                           // the faction band
+      plate(side * 0.92, H * 0.28, 0.25, H * 0.18, 0.1, T(0x3a3550));          // armour skirt
     }
-    k.cyl(R * 0.6, R * 0.8, 3, 8, T(0x5b5870), 0, H, 0, { outline: 0.1 });
-    k.cyl(R * 0.62, R * 0.62, 0.6, 8, T(fc), 0, H + 3, 0, { outline: 0.04 });
-    k.at();
+    // the eaves, the command deck (glass all round) and its cap
+    k.cyl(R * 0.86, R * 0.86, 0.8, 8, T(0x3a3550), 0, H + 0.8, 0, { outline: 0.06 });
+    k.cyl(R * 0.52, R * 0.6, 2.6, 8, T(0x5b5870), 0, H + 1.6, 0, { outline: 0.1 });
+    k.cyl(R * 0.53, R * 0.58, 0.9, 8, G(0x9be7ff), 0, H + 2.4, 0, { outline: 0 });
+    k.cyl(R * 0.62, R * 0.62, 0.5, 8, T(fc), 0, H + 4.2, 0, { outline: 0.04 });
+    // four masts at the corners, the same height, a beacon on each
     for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * TAU + 0.4, rr = R * 0.45;
-      k.cyl(0.08, 0.12, 6 + i * 2, 5, T(DARK), Math.cos(a) * rr, H + 3, Math.sin(a) * rr, { outline: 0.02 });
-      k.ball(0.25, G(i % 2 ? 0xff2a4a : fc), Math.cos(a) * rr, H + 9.2 + i * 2, Math.sin(a) * rr, { outline: 0 });
+      const a = (i / 4) * TAU + TAU / 8, rr = R * 0.5;
+      k.cyl(0.08, 0.12, 6, 5, T(DARK), Math.sin(a) * rr, H + 4.7, Math.cos(a) * rr, { outline: 0.02 });
+      k.ball(0.25, G(i % 2 ? 0xff2a4a : fc), Math.sin(a) * rr, H + 10.9, Math.cos(a) * rr, { outline: 0 });
     }
-    radar(k, 0, H + 3.6, 0, small ? 4 : 6, fc, 0.9);
-    k.at(0, 0);
-    k.box(6, 4, 3, T(0x3a3550), 0, 0, R * 0.95, { outline: 0.06 });
-    k.box(4, 3, 0.2, T(0x1d1a29), 0, 0, R * 0.95 + 1.55, { outline: 0 });
-    k.box(4.4, 0.3, 0.3, G(fc), 0, 3.2, R * 0.95 + 1.6, { outline: 0 });
+    radar(k, 0, H + 4.7, 0, small ? 4 : 6, fc, 0.9);
+    // the blast door, recessed into the front face (+z), hazard-striped, a lamp each side
+    {
+      k.at(0, 0, 0);
+      k.box(6.4, 5, 2.2, T(0x3a3550), 0, 0.8, R * 0.98, { outline: 0.06 });
+      k.box(4.6, 3.8, 0.2, T(0x1d1a29), 0, 0.8, R * 0.98 + 1.12, { outline: 0 });
+      k.box(0.08, 3.8, 0.24, T(DARK), 0, 0.8, R * 0.98 + 1.14, { outline: 0 });
+      for (let i = 0; i < 7; i++) k.box(0.66, 0.4, 0.22, T(i % 2 ? DARK : YEL), -2.0 + i * 0.66, 4.7, R * 0.98 + 1.13, { outline: 0 });
+      for (const sx of [-1, 1]) { k.box(0.5, 0.5, 0.3, G(WARM), sx * 2.8, 3.6, R * 0.98 + 1.15, { outline: 0 }); }
+      k.box(5.2, 0.3, 2.6, T(CONC), 0, 0, R * 0.98 + 2.4, { outline: 0.03 });
+    }
     k.at();
     // the bunker's walls slope in (R at the foot, 0.82R at the eaves), then a stepped roof:
     // stacked columns follow the slope instead of one full-width cylinder
@@ -1634,7 +1713,7 @@ export function dressArray(world, loc) {
     k.box(16, 5, 9, T(PANEL), -3, 9.1, -1.5, { outline: 0.12 });
     k.box(16.1, 1.0, 9.1, G(WARM), -3, 11.2, -1.5, { outline: 0 });
     k.box(16.4, 0.4, 9.4, T(green), -3, 14.1, -1.5, { outline: 0.03 });
-    k.text('SHACKLETON ARRAY', -3, 12.4, 3.12, 0, 12, { fg: '#7dff6a', bg: '#10241a', back: false, off: 0.04 });
+    k.text(loc.name.toUpperCase(), -3, 12.4, 3.12, 0, 12, { fg: '#7dff6a', bg: '#10241a', back: false, off: 0.04 });
     // radome and antennas on the lower roof
     k.cyl(2.2, 2.6, 1.6, 14, T(DARK), 8, 9.1, -2.5, { outline: 0.04 });
     k.add(new THREE.SphereGeometry(3.2, 18, 12), T(WHITE), 8, 13.2, -2.5, { outline: 0.08 });
@@ -1713,6 +1792,73 @@ function wreckHull(k, x, z, yaw, len, color, tilt = 0.12) {
   k.solid(len * 0.45, r * 0.75, r, -len * 0.22, 0);
   k.at();
 }
+// The ILMB after the clans took it: junk barricades across the approaches, a wreck dragged in for
+// a trophy, scrap heaps, crates and green clan lamps round the plaza and the outer ring.
+export function dressScrap(world, loc) {
+  settle(world, loc, 6601, (k) => {
+    const rr = world.rand;
+    const R = loc.r;
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * TAU + 0.2 + rr() * 0.3, d = R * (0.55 + rr() * 0.3);
+      junkHeap(k, Math.cos(a) * d, Math.sin(a) * d, 4 + rr() * 3, 1.6 + rr() * 1.4, 12, rr);
+    }
+    // barricades: tipped containers and sheet metal across the plaza approach
+    for (let i = 0; i < 6; i++) {
+      const x = -30 + i * 12 + (rr() - 0.5) * 4, z = 82 + (rr() - 0.5) * 6;
+      container(k, x, 0, z, [0x6b4a32, 0x55607a, 0x3a3550][i % 3], rr() * 0.6 - 0.3 + Math.PI / 2);
+      k.add(new THREE.BoxGeometry(4, 0.15, 2.5), T(RUST), x + 3, 1.2, z + 2, { rx: 0.5, ry: rr(), outline: 0.03 });
+    }
+    wreckHull(k, -R * 0.62, R * 0.35, 1.1, 18, 0x6b4a32, 0.3);
+    for (let i = 0; i < 18; i++) { const a = rr() * TAU, d = R * (0.3 + rr() * 0.6); crate(k, Math.cos(a) * d, 0, Math.sin(a) * d, 1.2 + rr() * 0.6, [0x7a4a32, 0x2a2433, 0x4f5a42][i % 3], rr() * TAU); }
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU + 0.1, d = R * 0.5;
+      k.cyl(0.12, 0.16, 6, 5, T(DARK), Math.cos(a) * d, 0, Math.sin(a) * d, { outline: 0.02 });
+      k.ball(0.45, G(0x7dff3a), Math.cos(a) * d, 6.3, Math.sin(a) * d, { outline: 0 });
+    }
+  });
+}
+
+// A demolished den: Rustmoon Hold after SPACECOM's finale (scorched ground, its wreck-ships broken
+// open, scrap, a SPACECOM field post and a memorial), or an abandoned camp (just the wreckage).
+export function buildRuin(world, loc) {
+  settle(world, loc, 7301 + loc.id.length * 13, (k) => {
+    const rr = world.rand, R = loc.r;
+    const hold = !loc.small;
+    k.at();
+    k.cyl(R * 0.75, R * 0.8, 0.18, 40, T(0x2a2433), 0, 0, 0, { outline: 0 });
+    const n = hold ? 6 : 2;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + rr() * 0.6, d = R * (0.4 + rr() * 0.3);
+      wreckHull(k, Math.cos(a) * d, Math.sin(a) * d, rr() * TAU, 9 + rr() * 10, [0x6b4a32, 0x4a4f5e, 0x3a3550][i % 3], 0.3 + rr() * 0.25);
+    }
+    // scrap: tipped containers, sheet metal, barrels, scorch-blackened crates
+    for (let i = 0; i < (hold ? 26 : 8); i++) {
+      const a = rr() * TAU, d = R * (0.15 + rr() * 0.6);
+      const x = Math.cos(a) * d, z = Math.sin(a) * d;
+      const r = rr();
+      if (r < 0.3) container(k, x, 0, z, [0x6b4a32, 0x55607a, 0x3a3550][i % 3], rr() * TAU);
+      else if (r < 0.6) k.add(new THREE.BoxGeometry(2 + rr() * 3, 0.15, 1.5 + rr() * 2), T(RUST), x, 0.3 + rr() * 0.6, z, { rx: rr() - 0.5, ry: rr() * TAU, rz: rr() - 0.5, outline: 0.03 });
+      else if (r < 0.8) k.cyl(0.55, 0.55, 1.3, 8, T([0xa05a2a, 0x3a3550][i % 2]), x, 0, z, { rx: rr() < 0.4 ? Math.PI / 2 : 0, outline: 0.03 });
+      else crate(k, x, 0, z, 1.2, 0x2a2433, rr() * TAU);
+    }
+    k.at();
+    if (hold) {
+      // the SPACECOM field post on the cleared ground, and a memorial plinth with the clans' end
+      quonset(k, -26, -18, 5, 12, 0xeeecf6, 0.6, YEL);
+      quonset(k, -12, -30, 5, 12, 0xeeecf6, 0.6, YEL);
+      k.at(0, 10);
+      k.box(8, 1.4, 4, T(CONC), 0, 0, 0, { outline: 0.06 });
+      k.box(6, 2.6, 1.2, T(0xd8d4e8), 0, 1.4, 0, { outline: 0.06 });
+      k.text('RUSTMOON HOLD', 0, 3.2, 0.62, 0, 5.4, { fg: '#ffd23f', bg: '#241a3a', back: false, off: 0.02 });
+      k.text('DECOMMISSIONED BY SPACECOM', 0, 2.3, 0.62, 0, 5.4, { fg: '#d8d4e8', bg: '#241a3a', back: false, off: 0.02 });
+      k.solid(4, 2, 2, 0, 0);
+      k.flag(-5, 0, 13, YEL); k.flag(5, 0, 13, 0x2ec4ff);
+      k.at();
+      floodMast(k, 30, 20, 14); floodMast(k, -30, 24, 14);
+    }
+  });
+}
+
 export function buildDen(world, loc) {
   const rust = [0x8a4b2a, 0x6b5a3a, 0x9a9a9a, 0x5a3a5a];
   const hold = loc.id === 'rustmoon';

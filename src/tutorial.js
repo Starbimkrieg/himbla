@@ -32,9 +32,7 @@ function makeDrone() {
   const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 12), toon(0xfff4e0));
   ink(body, 0.04);
   root.add(body);
-  const band = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.06, 6, 24), toon(0x2ec4ff));
-  band.rotation.x = Math.PI / 2;
-  root.add(band);
+
   const visor = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.06, 16).rotateX(Math.PI / 2), toon(0x1d1a29));
   visor.position.set(0, 0.04, 0.37);
   root.add(visor);
@@ -233,8 +231,9 @@ export class Tutorial {
   }
 
   quip(kind) {
-    if (this.quipT > 0) return;
-    this.quipT = 7;
+    // (he's a companion, not a commentator: a long gap between remarks, and he lets most moments pass)
+    if (this.quipT > 0 || Math.random() < 0.55) { if (!(this.quipT > 0)) this.quipT = 6; return; }
+    this.quipT = 22;
     const list = QUIPS[kind];
     this.talk(list[Math.floor(Math.random() * list.length)], 2.8);
   }

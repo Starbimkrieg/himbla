@@ -25,11 +25,12 @@ export function spawnKadeTruck(story, final) {
   const base = tangent(g.cam.fwd.clone(), P.up).normalize();
   const pos = g.planet.ground(greatCircle(P.pos.clone().normalize(), base.applyAxisAngle(P.up, (Math.random() - 0.5) * 1.2), 230), new THREE.Vector3(), 0.3);
   const m = makeKadeTruck();
+  m.root.scale.setScalar(1.25); // (a boss: bigger than anything else on the road)
   g.scene.add(m.root);
   const hp = final ? 1500 : 1100;
   const up = pos.clone().normalize();
   const e = {
-    kind: 'kade', faction: 'pirate', model: m, hp, maxHp: hp, body: makeBody(pos), radius: 6, center: pos.clone(), dead: false, impacts: [],
+    kind: 'kade', faction: 'pirate', model: m, hp, maxHp: hp, body: makeBody(pos), radius: 7.5, center: pos.clone(), dead: false, impacts: [],
     heading: tangent(P.pos.clone().sub(pos), up).normalize(), final, rogue: false, aggro: true, carrying: false, grab: 0, home: null,
     bossName: 'CAPTAIN KADE', state: 'chase', circle: Math.random() < 0.5 ? 1 : -1, circleT: 5, mode: 'gatling', gunCd: 1.5, burst: 0, flakCd: 1, t: 0,
   };
@@ -61,7 +62,7 @@ export function updateKadeTruck(story, e, dt) {
   for (const w of m.wheels) w.rotation.x += (sp * dt) / 2.1;
   m.chassis.position.y = Math.sin(e.t * 9) * 0.06 * Math.min(1, sp / 20);
   m.flag.rotation.y = Math.sin(e.t * 5) * 0.4;
-  e.center.copy(b.pos).addScaledVector(up, 3.5);
+  e.center.copy(b.pos).addScaledVector(up, 4.4);
   // --- the turret: track you, pick a mode by how high you are ---
   m.root.updateMatrixWorld(true);
   const alt = P.dead ? 0 : g.planet.altitude(P.pos);
@@ -104,14 +105,16 @@ function fireFlak(g, e, dt, T) {
   const m = e.model;
   e.flakCd -= dt;
   if (e.flakCd > 0) return;
-  e.flakCd = 0.85;
+  e.flakCd = 0.6;
   const from = m.flakMuzzle.getWorldPosition(new THREE.Vector3());
-  const speed = 120;
-  // aim at where you'll be, and set the fuse to burst there (or as soon as it's close to you)
-  const t = T.center.distanceTo(from) / speed;
-  const at = T.center.clone().addScaledVector(T.vel, t).add(_c.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(6));
+  const speed = 210;
+  // aim at where you'll be (the lead solved over a few passes, so a fast runner is properly led),
+  // and set the fuse to burst there, or as soon as it's close to you
+  let t = T.center.distanceTo(from) / speed;
+  for (let i = 0; i < 3; i++) t = T.center.clone().addScaledVector(T.vel, t).distanceTo(from) / speed;
+  const at = T.center.clone().addScaledVector(T.vel, t).add(_c.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(3));
   const dir = at.clone().sub(from).normalize();
-  g.projectiles.fire('kade', from, dir.multiplyScalar(speed), { color: 0xff4f2e, size: 0.5, life: t + 0.4, fuse: t, proxy: 5, burst: (pos) => flakBurst(g, pos) });
+  g.projectiles.fire('kade', from, dir.multiplyScalar(speed), { color: 0xff4f2e, size: 0.6, life: t + 0.4, fuse: t, proxy: 7, burst: (pos) => flakBurst(g, pos) });
   g.audio.tone(90, 0.25, 'sawtooth', 0.2, 0.5);
 }
 
@@ -129,7 +132,7 @@ function flakBurst(g, pos) {
   const dist = pos.distanceTo(P.center);
   if (dist > 11) return;
   const f = 1 - dist / 11;
-  g.damagePlayer(2 + 7 * f, 'kade');
+  g.damagePlayer(4 + 12 * f, 'kade');
   const up = _b.copy(P.pos).normalize();
   const vUp = P.vel.dot(up);
   P.vel.addScaledVector(up, -vUp).multiplyScalar(1 - 0.18 * f).addScaledVector(up, vUp - 3.5 * f);

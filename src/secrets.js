@@ -442,8 +442,8 @@ export class Secrets {
       add(new THREE.BoxGeometry(1.1, 0.06, 0.4), m, -3.85 + k * 1.1, 1.78, 7.45);
       add(new THREE.BoxGeometry(1.1, 0.06, 0.4), m, -3.85 + k * 1.1, 1.78, -7.45);
     }
-    add(new THREE.TorusGeometry(3.2, 0.16, 6, 36), glow(0x2ee6ff), 0, 1.8, -1.5, { rx: Math.PI / 2 });
-    add(new THREE.TorusGeometry(1.4, 0.1, 6, 24), glow(0x2ee6ff), 0, 1.8, -1.5, { rx: Math.PI / 2 });
+    add(new THREE.TorusGeometry(3.2, 0.16, 6, 36), glow(0x2ee6ff), 0, 1.8, 2, { rx: Math.PI / 2 }); // (centred on the artifact's cradle)
+    add(new THREE.TorusGeometry(1.4, 0.1, 6, 24), glow(0x2ee6ff), 0, 1.8, 2, { rx: Math.PI / 2 });
     for (const [x, z] of [[-3.5, -6.5], [3.5, -6.5], [-3.5, 6.5], [3.5, 6.5], [-3.5, 0], [3.5, 0]]) add(new THREE.CylinderGeometry(0.16, 0.2, 0.15, 8), glow(0xfff6a8), x, 1.82, z);
     // solar wings: arms with a hinge, framed panels with a proper grid of cells
     for (const s2 of [-1, 1]) {

@@ -24,7 +24,7 @@ export const ACTIONS = [
   { code: 'KeyR', label: 'Emergency recall (hold 1.5 s)' },
   { code: 'KeyN', label: 'Music on / off' },
   { code: 'KeyV', label: 'Vehicle: call / board / leave' },
-  { code: 'KeyZ', label: 'Phase Dash (tech)' },
+  { code: 'KeyZ', label: 'Power (mouse wheel: pick one)' },
   { code: 'KeyT', label: 'Personal Teleporter (tech)' },
   { code: 'KeyH', label: 'Help panel' },
 ];

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PHYS } from './config.js';
+import { upAt, radOf, setRad, GRAV } from './geo.js';
 
 const CELL = 64;
 const OFF = 512;
@@ -145,6 +146,17 @@ const _tgt = new THREE.Vector3();
 const _cp = new THREE.Vector3();
 const _near = [];
 
+// the speed that curves over the world (all of it on a sphere; only the part round the girth on
+// the Spindle's cylinder: running along its axis is straight)
+function orbitV2(v, up, vh2) {
+  const a = GRAV.axis;
+  if (!a) return vh2;
+  const g = _tmp2.crossVectors(a, up);
+  const vg = v.dot(g);
+  return vg * vg;
+}
+const _tmp2 = new THREE.Vector3();
+
 export function makeBody(pos) {
   return {
     pos: pos.clone(),
@@ -173,7 +185,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
   impacts.length = 0;
   const v = b.vel;
   const G = params.gravity;
-  const up = _up.copy(b.pos).normalize();
+  const up = upAt(b.pos, _up);
   b.up.copy(up);
   b.skating = !!input.skates;
   if (b.grounded) v.addScaledVector(up, -G * dt);
@@ -186,7 +198,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
     const k = Math.min(1, Math.max(0, (b.airTime - (params.airGrace ?? 1)) / (params.airGravRampTime ?? 2)));
     const fast = Math.min(1, Math.max(0, (Math.sqrt(vh2) - 15) / 30));
     const ramp = 1 + (params.airGravRamp ?? 1) * k * k * (3 - 2 * k) * fast;
-    const orbit = (params.orbitComp ?? 1) * vh2 / b.pos.length();
+    const orbit = (params.orbitComp ?? 1) * orbitV2(v, up, vh2) / radOf(b.pos);
     const dive = input.dive ? (params.diveGrav ?? 3) : 1;
     v.addScaledVector(up, -(G * (params.airGravMult ?? 1) * ramp * dive + orbit) * dt);
     // magnetic catch: a diving skater near the ground gets pulled onto it
@@ -241,6 +253,23 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
   } else {
     wish.addScaledVector(up, -wish.dot(up));
     v.addScaledVector(wish, params.airControl * dt);
+    // Quantum Slipstream Vanes (Meridian's finale): the skates keep a share of their carve in the
+    // air, so A/D turns your flight the way it turns you on the ground (speed is kept)
+    b.airCarve = 0;
+    if (params.airHandling > 0) {
+      const hv = _tmp.copy(v).addScaledVector(up, -v.dot(up));
+      const hs = hv.length();
+      if (hs > 4) {
+        hv.divideScalar(hs);
+        _lat.copy(wish).addScaledVector(hv, -wish.dot(hv));
+        const la = Math.min(1, _lat.length());
+        if (la > 0.05) {
+          const side = Math.sign(_gt.crossVectors(hv, _lat).dot(up)) || 1;
+          v.applyAxisAngle(up, side * params.handling * params.airHandling * (1 + 8 / (hs + 4)) * la * dt);
+          b.airCarve = side * la;
+        }
+      }
+    }
   }
   b.lastLat = lat;
 
@@ -283,14 +312,13 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
 
   // terrain contact
   const sr = planet.surface(b.pos, _sn);
-  const len = b.pos.length();
-  const alt = len - sr;
+  const alt = radOf(b.pos) - sr;
   const wasGrounded = b.grounded;
   // riding on top of a structure (a ramp, a rooftop) last step: the ground snaps below must not
   // drag you down through it, or every low ramp would grind you to a halt
   const onStruct = b.onStruct;
   if (alt <= 0) {
-    b.pos.multiplyScalar(sr / len);
+    setRad(b.pos, sr);
     const vn = v.dot(_sn);
     if (vn < 0 && !wasGrounded && input.dive && input.skates && -vn < (params.diveSafeImpact ?? 160)) {
       // dive landing: the skates catch you and turn the fall into speed along the slope
@@ -316,7 +344,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
     // locked skates keep working a little above the ground (a magnetic buffer): lift-offs over crests
     // and bumps snap back down, even at speed. Only a real ramp (a hard upward kick relative to your
     // speed) or a jump throws you clear of the buffer
-    b.pos.multiplyScalar(sr / len);
+    setRad(b.pos, sr);
     const vn = v.dot(_sn);
     if (vn > 0) v.addScaledVector(_sn, -vn);
     b.grounded = true;
@@ -325,7 +353,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
     b.onLake = planet.lastLake;
   } else if (alt < 0.3 && wasGrounded && !onStruct && !input.skates && v.dot(_sn) < 1.5) {
     // boots stick to the ground when walking
-    b.pos.multiplyScalar(sr / len);
+    setRad(b.pos, sr);
     const vn = v.dot(_sn);
     if (vn > 0) v.addScaledVector(_sn, -vn);
     b.grounded = true;

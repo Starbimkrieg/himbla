@@ -28,7 +28,10 @@ export class Reputation {
     try { localStorage.setItem(KEY, JSON.stringify({ values: this.values, rustmoon: this.rustmoon, history: this.history.slice(-30) })); } catch { /* unavailable */ }
   }
 
-  get(f) { return this.values[f] ?? 0; }
+  // a faction conquered in a story finale answers to its conqueror now (its shops, clearance and
+  // standing are the winner's: worldstate.js)
+  real(f) { return (FACTIONS[f] && FACTIONS[f].absorbedBy) || f; }
+  get(f) { return this.values[this.real(f)] ?? 0; }
 
   tier(f) {
     const v = this.get(f);
@@ -43,17 +46,25 @@ export class Reputation {
   }
 
   visible(f) {
+    if (FACTIONS[f] && (FACTIONS[f].absorbedBy || FACTIONS[f].gone)) return false;
     if (f === 'rustmoon') return this.rustmoon !== 'unknown';
     return !!FACTIONS[f] && !FACTIONS[f].hidden;
   }
 
   aligned() { return this.rustmoon === 'aligned'; }
+  // Sworn in with Rustmoon: every upright faction counts you an outlaw (their towns and patrols shoot
+  // on sight, like they would any pirate)
+  outlaw() {
+    for (const f of ['spacecom', 'vostok', 'daedalus', 'meridian', 'kepler']) this.values[f] = Math.min(this.get(f), -25);
+    this.save();
+  }
   hostile(f) { return this.get(f) <= -20; }
   // FRIENDLY military factions let you into their zones (and their HQ shops)
   cleared(f) { return this.get(f) >= 10; }
 
   // Change standing. War: helping one side of Vostok/Daedalus annoys the other.
   add(f, amount, reason, { silent = false, war = true } = {}) {
+    f = this.real(f);
     if (!FACTIONS[f] || !amount) return;
     if (f === 'rustmoon' && this.rustmoon === 'locked') return;
     const before = this.tier(f).name;
@@ -74,7 +85,7 @@ export class Reputation {
 
   // Does the player meet the reputation needed for the next level of a shop item?
   canBuy(item, level) {
-    if (item.unlock && (this.game.stats[item.unlock.stat] || 0) < item.unlock.n) return false;
+    if (item.unlock && item.unlock.smuggle && !(this.game.stats.blackMarket || []).includes(item.key)) return false;
     if (!item.faction) return true;
     if (item.faction === 'rustmoon' && !this.aligned()) return false;
     return this.get(item.faction) >= (item.req ? item.req[Math.min(level, item.req.length - 1)] : 0);

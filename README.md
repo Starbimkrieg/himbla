@@ -93,8 +93,8 @@ Vite's hot reload restarts the page.
 | `1` `2` `3` `4` | Switch weapon: Pulse Spinner, Vostok Scattergun, Daedalus Rail Lance, Rustmoon Junk Mortar |
 | `C` | Wardrobe: cycle owned outfits, skate finishes and pulse-disc colours |
 | `N` | Music on / off |
-| `V` | Call / board / leave your faction vehicle (story unlock) |
-| `Z` · `T` | Phase Dash · Personal Teleporter (story tech) |
+| `V` (hold: radial) | Call / board / leave your faction vehicle; hold to pick one (story unlock) |
+| `Z` · mouse wheel | Use your selected **power** · step through your powers. Powers: Phase Dash, the Teleporter (`T` too), the Kepler Hitch-Line Winch (hold) and the pen link (`P` too) |
 | `Esc` → SETTINGS | Graphics, gameplay, camera, audio and key remapping |
 | `P` | Holding pen, anywhere (needs the remote pen link from Dr. Zbornak) |
 | `Shift`+`X` (hold) | Dump the jar anywhere: materials are destroyed, creatures pop back out |
@@ -209,8 +209,11 @@ Daedalus, and vice versa.
 
 - **Pay:** contract pay scales with your tier, from ×0.85 up to ×1.75. FRIENDLY factions also offer ★ PRIORITY contracts.
 - **Faction gear:** each HQ sells unique gear gated by reputation: SPACECOM Seeker Module (homing),
-  Meridian Gyro-Edges (steering), Kepler Cargo Cradle (protects cargo and tubes), Vostok Flak Weave
-  (health, knockback), Daedalus Overcharger (fire rate) and Rustmoon Shadow Rig (harder to hit).
+  Meridian Gyro-Edges (steering) and Market Uplink (pay), the Kepler Twin Cradle (carry two contracts at
+  once, crates stacked; both waypoints on the HUD), Vostok Flak Weave (health, knockback), Daedalus
+  Overcharger (fire rate) and Rustmoon Shadow Rig (harder to hit). Kepler also sells the **Hitch-Line Winch**: hold `Z` to cable onto a vehicle within 85 m and ride its pull for up to 10 s, swinging under flying transits or trailing behind rovers and land-trains (they're heavy; drag one off its route and it eases back on). Rustmoon's black market at the Hold
+  stocks the ILMB kit and other factions' upgrades, weapons, tech and vehicles, each one brought in by a
+  smuggling run that carries it as a payload (named on the job board).
 - **Clearance:** FRIENDLY (10+) with Vostok or Daedalus means their turrets stop shooting you and you
   can visit their HQ shops. Each completed event for them gives +8, so two events get you there.
 - **Weapons:** the military HQs sell weapons. The Vostok Scattergun needs FRIENDLY Vostok and the
@@ -250,26 +253,49 @@ Contract clocks are tight. If you miss one, the job still pays 50% when you deli
 Every faction has a leader standing on a podium at their HQ: **Admiral Ada Okonkwo** (SPACECOM, ILMB),
 **General Yuri Volkov** (Vostok), **Chairwoman Lucinda Vane** (Meridian), **Mayor Hettie "Gran" Pike**
 (Kepler), **Director Ilsa Moreau** (Daedalus) and **Captain Kade** (Rustmoon, at Rustmoon
-Hold once you're FRIENDLY with the pirates). Each offers a four-chapter story, starting at FRIENDLY (10 rep);
-later chapters need 15, 25 and 35. **Finishing the first chapter of any story commits you to it**: the other
+Hold once you're FRIENDLY with the pirates). Each offers a story, starting at FRIENDLY (10 rep); later
+chapters need 15, 25, 35 and 45. **Finishing the first chapter of any story commits you to it**: the other
 leaders stop dealing with you, so each playthrough tells one coherent story.
 
-- **Military (SPACECOM, Vostok, Daedalus):** clear ambushes, then **capture outposts**: kill the guards and
-  hold the ground while reinforcements arrive; the outpost flips to your faction and the territory border
-  moves. Captures unlock **vehicles**. Vostok and Daedalus fight each other (captures cost the rival rep).
-  SPACECOM's finale is hunting down Kade himself.
+Big fights bring **backup**: allied cars and troopers in your faction's colours that fight what you fight.
+Chapters field the right side's **troops** (SPACECOM, Vostok, Daedalus, Meridian or pirates), and three
+faction **war machines** stand in as bosses: the SPACECOM armoured convoy, the Daedalus Warden (hovers,
+blinks sideways) and the Vostok Hammer (rams, shells).
+
+**Finales change the Moon for good** (a "one week later" card, then the changed places are rebuilt in-game and you wake up at home):
+SPACECOM storms Rustmoon Hold and dismantles the clans (the Hold a ruin, the dens resettled as towns, no more
+pirates); Vostok and Daedalus each storm the other's HQ and absorb it (flags, shops and clearance pass to the
+winner; you get the loser's vehicle and weapon); Rustmoon storms the ILMB and the Moon goes lawless (SPACECOM's
+guns silent, its outposts the clans'). Kepler founds **your own town** (a real settlement with eight plots
+and the Moon Council's hall), and Meridian sends you to **the Spindle**, the long asteroid rolling overhead,
+for its Quantum Core, with an alien mothership hunting you across it. The Spindle is a real cylinder: you can
+run all the way round its girth (gravity points at its axis) on the way to the core at the far end. The prize
+is the **Quantum Slipstream Vanes**: your skates keep a share of their handling in the air, so you can steer
+mid-flight.
+
+**The Moon Council** (once you have your town): call votes from the hall. Each member faction votes with you
+more readily the better its standing with you; a carried motion (a Vostok–Daedalus ceasefire, Open Skies, Free
+Trade, a Militia Pact) reshapes the Moon and puts other factions' vehicles, weapons and tech on sale.
+
+- **Military (SPACECOM, Vostok, Daedalus):** clear ambushes, then **capture outposts** with your backup:
+  kill the guards and hold the ground; the outpost flips to your faction and the territory border moves.
+  Daedalus rewrites posts with a phase jammer instead. Captures unlock **vehicles**. Vostok and Daedalus
+  fight each other (captures cost the rival rep). SPACECOM hunts down Kade, then storms his Hold.
 - **Civilian (Kepler):** haul prefab parts (crack them with a hard landing and you go back for more) to
   **found homesteads** you own. Each outpost terminal builds up to 6 modules: Greenhouse (heals nearby),
   Clinic (you redeploy there after a K.O.), Beacon (charts 1.5 km and links beacons for fast travel),
   Militia Turret (shoots pirates), Market (₵40/min to collect) and Garage (hauler vehicle).
 - **Research (Meridian, plus Daedalus):** plant sensor relays, survive **phase-field experiments**
   (anomalies strike where the warning rings appear), carry unstable antimatter without cracking it, and
-  build a research station. Rewards are **tech**: Phase Dash (`Z`, blink ~30 m), Deflector Shield (absorbs a
-  hit every 12 s) and a Personal Teleporter (`T`, any discovered location or your outposts).
-- **Rustmoon (Kade):** take a SPACECOM depot, crack an armoured convoy, sabotage relay masts, then the Big
-  Score: run a Meridian vault cube home while every gun on the Moon chases you.
-- **Vehicles** (`V` calls the crane drop, boards and leaves; W/S drive, A/D steer, Shift hops, you can still
-  shoot): SPACECOM Lunar Interceptor (fast), Vostok BTR-M APC (slow tank), Daedalus Phase Skimmer (hover,
+  build a research station. Rewards are **tech**: Phase Dash (`Z`, swings all your momentum to where you
+  look) and a Personal Teleporter (`T`, any discovered location or your outposts). The **Deflector Shield**
+  (an invisible field that absorbs a hit every 12 s, and shows itself when it does) comes with SPACECOM's,
+  Vostok's and Rustmoon's third chapters.
+- **Rustmoon (Kade):** take a SPACECOM depot, crack an armoured convoy, blow up three SPACECOM outposts
+  (rebuilt as yours), run a Meridian vault cube home while every gun on the Moon chases you, then storm the
+  ILMB.
+- **Vehicles** (`V` calls the crane drop, boards and leaves; hold `V` for a radial picker if you own more
+  than one; W/S drive, A/D steer, Shift hops, you can still shoot): SPACECOM Lunar Interceptor (fast), Vostok BTR-M APC (slow tank), Daedalus Phase Skimmer (hover,
   drifts), Kepler Homestead Mule, Meridian Courier Light-Bike (a sleek light-bike you ride tucked low, leaving a
   glowing trail that fades over a second), Rustmoon Scrapjaw War-Rig. They hug the ground at speed: the wheeled
   ones have real downforce and tyres that bite sideways, and only a proper ramp throws one clear. Ramming pirates
@@ -397,9 +423,10 @@ fishbowl helmets, hoodies, and kids in bubble helmets, with varied skin, hair, b
 
 ## Founded outposts
 
-Outposts you found for a faction story sit on flattened ground, with a 10 m hub dome, an entry tunnel to the
-terminal, a paved yard and six marked plots for modules, which are built at roughly a third of settlement
-scale.
+Outposts you found for a faction story sit on flattened ground: a hab dome with an airlock (or a research
+block with a dish and an observatory for a lab), a paved apron, the terminal at the end of the path, and six
+plots round it. Each module is a proper building: a glass greenhouse with planting rows, a clinic cabin, a
+beacon lattice tower, a manned turret behind sandbags, a market stall and a garage quonset.
 
 ## Defences
 
@@ -596,6 +623,10 @@ src/
   chimera.js     gene splicing + procedural chimera models
   cheats.js      testing menu (backtick)
   story.js       faction leaders, chapters, outposts you found, tech, Captain Kade
+  storyAssets.js faction troops, boss war machines, mission props, founded-outpost compounds
+  hometown.js    your town (Kepler finale): its plots and buildings, the Moon Council and its votes
+  spindle.js     the Spindle (Meridian finale): the asteroid world, its sky, the mothership
+  worldstate.js  what the story finales changed for good, applied before the world is built
   kade.js        Captain Kade's gun truck: orbit driving, gatling and flak turret, Junk Mortar drop
   monolith.js    the Monolith's spells: low-G, time dilation, echo decoys
   territory.js   faction territory, border pylons, small outposts, patrols

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { makeBody, stepSkater } from './physics.js';
 import { makeRunner, makeCrate, ScarfSim } from './models.js';
-import { frameQuat } from './geo.js';
+import { frameQuat, upAt } from './geo.js';
 import { WEAPONS, weaponUnlocked, fireWeapon } from './weapons.js';
 
 const SPEED_MARKS = [
@@ -83,7 +83,7 @@ export class Player {
     this.body.platform = null; // never keep riding a deck (or satellite) you've been teleported off
     this.seat = null; // ...or a ship or funpark ride (rides.js lets go too)
     if (this.game.grind) this.game.grind.active = null; // ...or a grind rail
-    this.body.up.copy(pos).normalize();
+    upAt(pos, this.body.up);
     this.body.groundN.copy(this.body.up);
     this.body.energy = this.body.maxEnergy;
     this.health = this.maxHealth;
@@ -94,10 +94,17 @@ export class Player {
     this.resetTrick();
   }
 
-  setCargo(color) {
+  // color2: a second crate stacked on top (the Twin Cradle)
+  setCargo(color, color2 = null) {
     if (this.cargoMesh) { this.model.cargoSlot.remove(this.cargoMesh); this.cargoMesh = null; }
     if (color != null) {
       this.cargoMesh = makeCrate(color, 0.7);
+      if (color2 != null) {
+        const top = makeCrate(color2, 0.62);
+        top.position.y = 0.55;
+        top.rotation.y = 0.25;
+        this.cargoMesh.add(top);
+      }
       this.model.cargoSlot.add(this.cargoMesh);
     }
   }
@@ -127,7 +134,7 @@ export class Player {
       if (dt > 0) b.vel.copy(p).sub(b.pos).divideScalar(dt);
       if (b.vel.lengthSq() > 1e4) b.vel.set(0, 0, 0); // (first frame aboard)
       b.pos.copy(p);
-      b.up.copy(p).normalize();
+      upAt(p, b.up);
       b.grounded = true;
       b.airTime = 0;
       if (s.face) {
@@ -226,6 +233,9 @@ export class Player {
     if (plat) b.pos.add(_v.subVectors(plat.pos, plat.prevPos));
     this.prevVel = (this.prevVel || new THREE.Vector3()).copy(b.vel);
     if (plat) this.prevVel.add(plat.vel);
+    // Quantum Slipstream Vanes: a share of your ground handling in the air
+    const vanes = !!(g.story && g.story.tech.includes('vanes'));
+    this.params.airHandling = vanes ? 0.42 : 0;
     const steps = Math.ceil(dt / (1 / 120));
     const h = dt / steps;
     let landed = false;
@@ -237,6 +247,19 @@ export class Player {
       ctrl.jump = false;
     }
     if (b.jumped) { g.audio.jump(); g.fx.dust(b.pos, b.vel, 6, up); }
+    // the Vanes at work: teal and violet sparks shed off the skates and a rising shimmer
+    this.vaneCarve = vanes && !b.grounded ? b.airCarve || 0 : 0;
+    if (this.vaneCarve) {
+      const k = Math.abs(this.vaneCarve);
+      g.fx.spawn(b.pos.clone().addScaledVector(up, 0.15), b.vel.clone().multiplyScalar(0.25), { color: Math.random() < 0.5 ? 0x7dffd4 : 0xc77dff, size: 0.16 + 0.12 * k, life: 0.45, count: 2, spread: 1.4, drag: 3 });
+      this.vaneT = (this.vaneT || 0) - dt;
+      if (this.vaneT <= 0) {
+        this.vaneT = 0.085;
+        this.vaneN = ((this.vaneN || 0) + 1) % 4;
+        // (a little arpeggio that climbs while you hold the carve)
+        g.audio.tone([880, 1175, 1480, 1760][this.vaneN] * (0.9 + 0.2 * k), 0.12, 'triangle', 0.035 + 0.03 * k, 1.12);
+      }
+    } else this.vaneN = 0;
     if (b.bounced > 6) {
       g.fx.pop(b.bounced > 25 ? 'BOOOING!' : 'BOING!', null, { color: '#ff7ad9', size: 40 + Math.min(40, b.bounced) });
       g.audio.tone(220 + b.bounced * 8, 0.3, 'sine', 0.2, 2);
@@ -472,7 +495,7 @@ export class Player {
     this.scarfSim.update(dt, this.vehicle ? this.vehicle.e.body.vel : b.vel, up, this.cargoMesh ? { back: 1.14, top: 1.0 } : cape ? { back: 0.62, top: 0.96 } : { back: 0.55, top: 0.94 });
 
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(m.root.quaternion);
-    const strength = b.skating && b.grounded ? Math.min(1, sp / 30) : 0;
+    const strength = b.skating && b.grounded ? Math.min(1, sp / 30) : this.vaneCarve ? 0.55 + 0.45 * Math.abs(this.vaneCarve) : 0; // (the Vanes leave ribbons in the air)
     const g = this.game;
     g.fx.updateTrail(0, b.pos.clone().addScaledVector(right, -0.2), right, strength, up);
     g.fx.updateTrail(1, b.pos.clone().addScaledVector(right, 0.2), right, strength, up);

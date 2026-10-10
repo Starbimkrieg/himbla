@@ -159,6 +159,7 @@ button { font-family: var(--comic); }
 .board-close { font-family: var(--comic); font-size: 10px; line-height: 1; background: #05030c; color: #fff; border: 2px solid #05030c; padding: 6px 8px 5px; cursor: pointer; }
 .board-close:hover { background: var(--red); }
 .darktag { background: #2a1f4f; color: #c9b8ff; padding: 1px 6px; border: 1px solid #8f7bff; }
+.paytag { background: #13240c; color: #7dff3a; padding: 1px 6px; border: 1px solid #7dff3a; font-weight: bold; }
 .board-hl { padding: 0 14px 6px; }
 .board-hl h3 { font-family: var(--comic); font-size: 12px; margin: 0 0 8px; color: var(--yellow); }
 .hl-strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
@@ -687,6 +688,14 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 #obj-arrow svg { display: block; margin: 0 auto; animation: oapulse 0.9s ease-in-out infinite alternate; }
 #obj-arrow .oa-dist { margin-top: 2px; font-family: var(--comic); font-size: 11px; color: #ffd23f; background: rgba(8,6,14,0.85); padding: 3px 6px; white-space: nowrap; border: 1px solid rgba(255,210,63,0.5); }
 #obj-marker { z-index: 25; }
+/* the Twin Cradle's second waypoint: the same marker and arrow, in green */
+#obj-marker2 { position: absolute; transform: translate(-50%, -100%); text-align: center; z-index: 25; }
+#obj-marker2 .diamond { width: 20px; height: 20px; margin: 0 auto 4px; background: #7dff6a; border: 4px solid var(--ink); transform: rotate(45deg); animation: bob 0.8s ease-in-out infinite alternate; }
+#obj-marker2 span { font-family: var(--comic); font-size: 10px; line-height: 1; background: rgba(8, 6, 14, 0.88); color: #7dff6a; padding: 4px 6px 3px; border: 1px solid rgba(125, 255, 106, 0.5); white-space: nowrap; }
+#obj-arrow2 { position: absolute; transform: translate(-50%, -50%); z-index: 25; pointer-events: none; text-align: center; font-size: 0; filter: drop-shadow(0 0 6px rgba(125,255,106,0.6)); }
+#obj-arrow2 svg { display: block; margin: 0 auto; animation: oapulse 0.9s ease-in-out infinite alternate; }
+#obj-arrow2 .oa-dist { margin-top: 2px; font-family: var(--comic); font-size: 11px; color: #7dff6a; background: rgba(8,6,14,0.85); padding: 3px 6px; white-space: nowrap; border: 1px solid rgba(125,255,106,0.5); }
+#mission .m-second { margin-top: 6px; }
 @keyframes oapulse { from { opacity: 0.75; } to { opacity: 1; } }
 /* ---- casino 3D ---- */
 /* walk-in games action bar (casinoGames.js) */
@@ -1113,3 +1122,45 @@ body.trailer #tutorial, body.trailer #racepanel, body.trailer #vehbar, body.trai
 #help .help-more { margin: 10px 0 0; font-size: 12px; color: var(--ui-text); opacity: 0.7; max-width: 340px; }
 /* BOLT's passing remarks under the current training step */
 #tutorial .tut-say { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--ui-edge); font-family: var(--body); font-size: 15px; line-height: 1.3; color: var(--cyan); }
+
+/* hold-V vehicle radial */
+#vradial { position: fixed; left: 50%; top: 50%; width: 380px; height: 380px; margin: -190px 0 0 -190px; pointer-events: none; z-index: 40; }
+#vradial.hidden { display: none; }
+#vradial .vr-ring { position: absolute; inset: 40px; border-radius: 50%; border: 3px solid #2ee6ff; background: radial-gradient(circle, rgba(18,10,30,.25) 0 30%, rgba(18,10,30,.72) 31% 100%); box-shadow: 0 0 24px rgba(46,230,255,.35); }
+#vradial .vr-hub { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; color: #2ee6ff; font: 14px/1.2 var(--comic); }
+#vradial .vr-hub small { color: #9be7ff; font-size: 10px; }
+#vradial .vr-item { position: absolute; transform: translate(-50%, -50%); width: 138px; padding: 6px 8px; text-align: center; color: #fff; background: #241a3a; border: 2px solid #5b5870; border-radius: 6px; font: 12px/1.25 var(--comic); transition: transform .08s, border-color .08s; }
+#vradial .vr-item small { display: block; color: #9be7ff; font-size: 10px; }
+#vradial .vr-item.on { border-color: #ffd23f; background: #3a2b10; transform: translate(-50%, -50%) scale(1.12); }
+#vradial .vr-item.cd { opacity: .55; }
+#vradial .vr-item.cd small { color: #ff7a8a; }
+
+/* story finale time-skip card */
+#dawn { position: fixed; inset: 0; z-index: 200; background: #05030c; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; animation: dawn-in 1.2s ease-out both; }
+#dawn .dw-t { font-family: var(--comic); font-size: 34px; color: #ffd23f; text-align: center; text-shadow: 4px 4px 0 #ff2e88; padding: 0 16px; }
+#dawn .dw-s { font-family: var(--comic); font-size: 14px; color: #9be7ff; letter-spacing: 3px; animation: dawn-in 1.2s 1s ease-out both; }
+@keyframes dawn-in { from { opacity: 0; } to { opacity: 1; } }
+#dawn.out { animation: dawn-out 1.1s ease-in both; }
+@keyframes dawn-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* story hold meter: centre-low, in the faction's colour */
+#storymeter { position: fixed; left: 50%; top: 63%; transform: translateX(-50%); width: 340px; pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 30; text-align: center; }
+#storymeter.on { opacity: 1; }
+#storymeter .sm-label { font-family: var(--comic); font-size: 12px; color: var(--col, #2ec4ff); text-shadow: 2px 2px 0 #05030c; margin-bottom: 5px; letter-spacing: 1px; }
+#storymeter .sm-track { height: 14px; background: rgba(5,3,12,.75); border: 2px solid var(--col, #2ec4ff); border-radius: 3px; overflow: hidden; box-shadow: 0 0 12px rgba(0,0,0,.4); }
+#storymeter .sm-fill { height: 100%; width: 0; background: var(--col, #2ec4ff); transition: width .08s linear; }
+
+/* boss health bar, upper-centre */
+#bossbar { position: fixed; left: 50%; top: 96px; transform: translateX(-50%); width: 420px; pointer-events: none; opacity: 0; transition: opacity .2s; z-index: 30; text-align: center; }
+#bossbar.on { opacity: 1; }
+#bossbar .bb-name { font-family: var(--comic); font-size: 15px; color: #ff2a4a; text-shadow: 2px 2px 0 #05030c; letter-spacing: 2px; margin-bottom: 5px; }
+#bossbar .bb-track { height: 16px; background: rgba(5,3,12,.8); border: 3px solid #05030c; outline: 2px solid #ff2a4a; border-radius: 2px; overflow: hidden; }
+#bossbar .bb-fill { height: 100%; width: 100%; background: linear-gradient(#ff5a6e, #d7263d); transition: width .12s; }
+
+/* the selected power (Z) */
+#powerchip { margin-top: 6px; font-family: var(--comic); font-size: 9px; line-height: 1; color: var(--ui-text); }
+#powerchip b { display: inline-block; padding: 3px 5px 2px; background: #ff9f1c; color: #05030c; margin-right: 4px; }
+#powerchip .pc-ok { color: #7dff6a; }
+#powerchip .pc-cd { color: #ff7a8a; }
+#powerchip.swap b { background: #ffd23f; box-shadow: 0 0 10px #ffd23f; } /* (just swapped) */
+#powerchip small { color: var(--ui-dim); font-size: 8px; margin-left: 4px; }

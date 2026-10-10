@@ -6,6 +6,7 @@ import { mulberry32 } from './rng.js';
 import { makeRover } from './models.js';
 import { ITEMS } from './alchemy.js';
 import { outpostTemplate, SMALL_KINDS, FLAT_R } from './outpostModels.js';
+import { foundedTemplate, TERMINAL_Z } from './storyAssets.js';
 
 // Every square metre of the Moon belongs to somebody. Territory is a weighted Voronoi split
 // around each faction's settlements and outposts; borders are marked with glowing pylons,
@@ -36,7 +37,7 @@ const LOOT = {
   shack: { verb: 'STRIP SOME SCRAP PLATING', boom: 'SHACK FLATTENED!', item: 'plating', pop: 'SCRAP PLATING!' },
   junk: { verb: 'COAX OUT A JUNK BOT', boom: 'JUNK EVERYWHERE!', item: 'junkbot', names: BOT_NAMES, pop: 'JUNK BOT! BEEP!' },
 };
-const BUILT_R = 40, MOD_R = 26; // founded outposts: flattened radius and the module ring
+const BUILT_R = 40; // founded outposts: flattened radius (the compound itself: storyAssets.js)
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _w = new THREE.Vector3();
@@ -54,11 +55,7 @@ const hex = (f) => new THREE.Color(FACTIONS[f] ? FACTIONS[f].color : '#c9c3d9').
 export class Territory {
   constructor(game) {
     this.game = game;
-    this.anchors = [];
-    for (const l of game.locations) {
-      if (l.poi || l.camp || !FACTIONS[l.faction] || l.faction === 'none') continue;
-      this.anchors.push({ dir: l.dir, faction: l.faction, w: l.hq ? 1.5 : 1, loc: l });
-    }
+    this.anchors = this.locAnchors();
     this.baseAnchors = this.anchors.slice();
     this.outposts = [];
     this.patrols = [];
@@ -78,6 +75,37 @@ export class Territory {
     game.blastHooks.push((pos, radius, damage, owner) => this.onBlast(pos, radius, damage, owner));
   }
 
+  locAnchors() {
+    const out = [];
+    for (const l of this.game.locations) {
+      if (l.poi || l.camp || !FACTIONS[l.faction] || l.faction === 'none') continue;
+      out.push({ dir: l.dir, faction: l.faction, w: l.hq ? 1.5 : 1, loc: l });
+    }
+    return out;
+  }
+
+  // A finale moved the borders (main.js applyWorldLive): re-deal the outposts exactly as a fresh
+  // boot would (same ids, same rolls), keeping captures, your builds and story changes.
+  refreshWorld() {
+    this.baseAnchors = this.locAnchors();
+    const live = this.outposts;
+    this.outposts = [];
+    this.genOutposts(false);
+    const fresh = this.outposts;
+    this.outposts = live;
+    for (const f of fresh) {
+      const o = live.find((x) => x.id === f.id);
+      if (!o || o.built || o.captured || o.kindChanged) continue;
+      if (o.faction !== f.faction || o.kind !== f.kind) { o.faction = f.faction; o.kind = f.kind; if (o.model) this.despawn(o); }
+    }
+    const ws = this.game.ws;
+    const gone = this.outposts.find((o) => o.built && ws.town && ws.town.replaces === o.id);
+    if (gone) { if (gone.model) this.despawn(gone); this.outposts.splice(this.outposts.indexOf(gone), 1); }
+    this.applyWs(true);
+    this.rebuild();
+    this.save();
+  }
+
   // ---------- ownership ----------
   owner(dir, anchors = this.anchors) {
     let best = null, bd = Infinity;
@@ -88,20 +116,20 @@ export class Territory {
     return best ? best.faction : 'spacecom';
   }
 
-  genOutposts() {
+  genOutposts(clear = true) {
     const g = this.game;
     const rr = mulberry32(4242);
     for (let tries = 0; tries < 6000 && this.outposts.length < 120; tries++) {
       const u = rr() * 2 - 1, th = rr() * Math.PI * 2, sq = Math.sqrt(1 - u * u);
       const d = new THREE.Vector3(sq * Math.cos(th), u, sq * Math.sin(th));
       // late locations stay out of this pass so ids don't shift; clearSites nudges clashing outposts
-      if (g.locations.some((l) => !l.late && arcDist(d, l.dir) < (l.zoneR || l.r) * 1.6 + 120)) continue;
+      if (g.locations.some((l) => !l.late && arcDist(d, l.dir) < (l.genR || l.zoneR || l.r) * 1.6 + 120)) continue;
       if (this.outposts.some((o) => arcDist(d, o.dir) < 420)) continue;
       const faction = this.owner(d, this.baseAnchors);
       const kinds = KINDS[faction] || KINDS.kepler;
       this.outposts.push({ id: 'op' + this.outposts.length, dir: d, faction, kind: kinds[Math.floor(rr() * kinds.length)], model: null, cols: [], seed: Math.floor(rr() * 1e6) });
     }
-    this.clearSites();
+    if (clear) this.clearSites();
   }
 
   // The structures stand on ~60 m flattened plateaus (blending out to ~2x): keep them off the
@@ -179,19 +207,37 @@ export class Territory {
       const d = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (!d) return;
       for (const [id, f] of Object.entries(d.captured || {})) { const o = this.outposts.find((x) => x.id === id); if (o) { o.faction = f; o.captured = true; } }
+      for (const [id, k] of Object.entries(d.kinds || {})) { const o = this.outposts.find((x) => x.id === id); if (o) { o.kind = k; o.kindChanged = true; } }
       for (const b of d.built || []) {
+        if (this.game.ws && this.game.ws.town && this.game.ws.town.replaces === b.id) continue; // (it grew into your town)
         const o = { ...b, dir: new THREE.Vector3().fromArray(b.dir), model: null, cols: [], built: true };
         this.outposts.push(o);
         this.game.planet.addFlat(o.dir, BUILT_R);
       }
     } catch { /* fresh moon */ }
+    this.applyWs();
+  }
+
+  applyWs(live = false) {
+    const ws = this.game.ws;
+    if (!ws) return;
+    for (const id of ws.razed || []) { const o = this.outposts.find((x) => x.id === id); if (o) o.razed = true; }
+    // the ILMB fell: SPACECOM's outposts belong to the clans now
+    if (ws.lawless) {
+      for (const o of this.outposts) {
+        if (o.faction !== 'spacecom' || o.built) continue;
+        o.faction = 'rustmoon'; o.kind = o.kind === 'depot' ? 'junk' : 'shack';
+        if (live && o.model) this.despawn(o);
+      }
+    }
   }
 
   save() {
     const captured = {};
-    for (const o of this.outposts) if (o.captured) captured[o.id] = o.faction;
+    const kinds = {};
+    for (const o of this.outposts) { if (o.captured) captured[o.id] = o.faction; if (o.kindChanged) kinds[o.id] = o.kind; }
     const built = this.outposts.filter((o) => o.built).map((o) => ({ id: o.id, dir: o.dir.toArray(), faction: o.faction, kind: o.kind, name: o.name, modules: o.modules || [], seed: o.seed }));
-    try { localStorage.setItem(KEY, JSON.stringify({ captured, built })); } catch { /* unavailable */ }
+    try { localStorage.setItem(KEY, JSON.stringify({ captured, built, kinds })); } catch { /* unavailable */ }
   }
 
   // Outposts claim a little ground of their own (so captures move the borders).
@@ -269,50 +315,10 @@ export class Territory {
     if (this.wrecked(o)) { this.spawnRubble(o); return; }
     const c = hex(o.faction);
     if (SMALL_KINDS.has(o.kind)) { this.place(o, outpostTemplate(o.kind, c, o.seed % 2, false)); return; }
-    const root = new THREE.Group();
-    const rr = mulberry32(o.seed);
-    const add = (geo, mat, x, y, z, outline = 0.06) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; if (outline) ink(m, outline); root.add(m); return m; };
-    const flag = (x, z, h = 9) => {
-      add(new THREE.CylinderGeometry(0.1, 0.1, h, 5), toon(0x3a3550), x, h / 2, z, 0.03);
-      const f = add(new THREE.PlaneGeometry(2.4, 1.4), toon(c, { side: THREE.DoubleSide }), x + 1.25, h - 0.8, z, 0);
-      f.userData.flag = true;
-    };
-    const boxes = [];
-    const solid = (hx, hy, hz, x, z) => boxes.push({ hx, hy, hz, x, z });
-    switch (o.kind) {
-      // (the seven small kinds are baked in outpostModels.js)
-      default: {
-        // player-founded outposts: a proper little compound on flattened ground — a big hub dome
-        // with an entry tunnel, a paved apron, and a ring of module plots around it
-        add(new THREE.CylinderGeometry(BUILT_R - 4, BUILT_R - 3, 0.3, 40), toon(0x8a8698), 0, 0.15, 0, 0.06);
-        add(new THREE.SphereGeometry(10, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), toon(0xfff4e0), 0, 0, 0, 0.14);
-        add(new THREE.TorusGeometry(10, 0.5, 6, 32).rotateX(Math.PI / 2), toon(c), 0, 0.5, 0, 0.05);
-        add(new THREE.CylinderGeometry(2.4, 2.4, 6, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2), toon(0xe8e2f4, { side: THREE.DoubleSide }), 0, 0.2, 10.5, 0.06);
-        add(new THREE.BoxGeometry(1.6, 2.6, 0.8), toon(0x2ec4ff), 0, 1.3, 13.4, 0.05);
-        add(new THREE.PlaneGeometry(1.2, 0.8), glow(0x7dff3a), 0, 2.0, 13.82, 0);
-        for (let k = 0; k < 6; k++) { // plot markers where modules go
-          const a = (k / 6) * Math.PI * 2 + 0.6;
-          add(new THREE.TorusGeometry(5.5, 0.12, 4, 24).rotateX(Math.PI / 2), glow(c), Math.cos(a) * MOD_R, 0.35, Math.sin(a) * MOD_R, 0);
-        }
-        flag(-12, 6, 16);
-        solid(8, 4.5, 8, 0, 0);
-        for (const [i, mod] of (o.modules || []).entries()) this.addModule(root, mod, i, c, add, solid);
-      }
-    }
-    const pos = g.planet.ground(o.dir, new THREE.Vector3(), -0.2);
-    root.position.copy(pos);
-    frameQuat(o.dir, tangent(SUN.clone(), o.dir).normalize(), root.quaternion);
-    root.rotateY(rr() * Math.PI * 2);
-    g.scene.add(root);
-    root.updateMatrixWorld(true);
-    o.model = root;
-    o.cols = boxes.map((b) => {
-      const ax = new THREE.Vector3(1, 0, 0).applyQuaternion(root.quaternion), ay = new THREE.Vector3(0, 1, 0).applyQuaternion(root.quaternion), az = new THREE.Vector3(0, 0, 1).applyQuaternion(root.quaternion);
-      const cpos = root.localToWorld(new THREE.Vector3(b.x, b.hy, b.z));
-      return g.colliders.add({ type: 'box', c: cpos, ax, ay, az, hx: b.hx, hy: b.hy, hz: b.hz });
-    });
-    // the terminal for founded outposts sits at the end of the entry tunnel
-    o.terminal = root.localToWorld(new THREE.Vector3(0, 0, 14.4));
+    // player-founded outposts: a kit-built compound (storyAssets.js): a hab dome or research block,
+    // a paved apron and the modules you've built on their plots round it
+    this.place(o, foundedTemplate(o.kind, c, o.modules || []));
+    o.terminal = o.model.localToWorld(new THREE.Vector3(0, 0, TERMINAL_Z));
   }
 
   // Put a baked outpost model (or its wreck) on the ground: same yaw every time for this outpost.
@@ -341,43 +347,8 @@ export class Territory {
     o.dropPoint = tpl.drop ? root.localToWorld(tpl.drop.clone()) : null;
   }
 
-  // Modules sit on their plots, built at roughly a third of settlement scale.
-  addModule(root, mod, i, c, add, solid) {
-    const a = (i / 6) * Math.PI * 2 + 0.6;
-    const x = Math.cos(a) * MOD_R, z = Math.sin(a) * MOD_R;
-    const S = 2.2;
-    const sub = (geo, mat, lx, ly, lz, outline = 0.06) => add(geo.clone().scale(S, S, S), mat, x + lx * S, ly * S, z + lz * S, outline);
-    if (mod === 'greenhouse') {
-      sub(new THREE.SphereGeometry(3, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshToonMaterial({ color: 0x7dff6a, transparent: true, opacity: 0.55 }), 0, 0, 0, 0.08);
-      for (let k = 0; k < 5; k++) sub(new THREE.ConeGeometry(0.4, 1.2, 5), toon(0x3f9a3a), -1.5 + k * 0.75, 0.6, (k % 2) - 0.5, 0.02);
-      solid(3 * S * 0.75, 1.5 * S, 3 * S * 0.75, x, z);
-    } else if (mod === 'clinic') {
-      sub(new THREE.BoxGeometry(4, 3, 4), toon(0xffffff), 0, 1.5, 0, 0.08);
-      sub(new THREE.BoxGeometry(2.4, 0.6, 0.2), toon(0xff2a4a), 0, 3.2, 2.05, 0);
-      sub(new THREE.BoxGeometry(0.6, 2.4, 0.2), toon(0xff2a4a), 0, 3.2, 2.06, 0);
-      solid(2 * S, 1.5 * S, 2 * S, x, z);
-    } else if (mod === 'beacon') {
-      sub(new THREE.CylinderGeometry(0.3, 0.8, 14, 6), toon(0xd8d4e8), 0, 7, 0, 0.05);
-      const l = sub(new THREE.OctahedronGeometry(1, 0), glow(c), 0, 14.8, 0, 0);
-      l.userData.spin = true;
-      solid(0.8 * S, 7 * S, 0.8 * S, x, z);
-    } else if (mod === 'turret') {
-      sub(new THREE.CylinderGeometry(1.4, 1.8, 2, 8), toon(0x55607a), 0, 1, 0, 0.06);
-      sub(new THREE.BoxGeometry(1.2, 1, 3), toon(0x3a3550), 0, 2.5, 0, 0.05);
-      solid(1.6 * S, 1.5 * S, 1.6 * S, x, z);
-    } else if (mod === 'market') {
-      sub(new THREE.BoxGeometry(5, 2.5, 3), toon(0xffd23f), 0, 1.25, 0, 0.08);
-      sub(new THREE.ConeGeometry(3.2, 1.6, 4), toon(0xff2e88), 0, 3.3, 0, 0.06).rotation.y = Math.PI / 4;
-      solid(2.5 * S, 1.6 * S, 1.5 * S, x, z);
-    } else if (mod === 'garage') {
-      sub(new THREE.BoxGeometry(7, 4, 6), toon(0x4a4f5e), 0, 2, 0, 0.08);
-      sub(new THREE.BoxGeometry(5, 3, 0.2), toon(c), 0, 1.5, 3.05, 0);
-      solid(3.5 * S, 2 * S, 3 * S, x, z);
-    }
-  }
-
   // ---------- shooting them up ----------
-  wrecked(o) { return (o.wreckedUntil || 0) > this.game.time; }
+  wrecked(o) { return !!o.razed || (o.wreckedUntil || 0) > this.game.time; }
 
   onBlast(pos, radius, damage, owner) {
     if (owner !== 'player') return;
@@ -563,9 +534,15 @@ export class Territory {
           const dd = e.center.distanceTo(from);
           if (dd < bd && g.planet.visible(from, e.center)) { bd = dd; target = e; }
         }
+        // ...and you, if their faction counts you an enemy (an outlaw riding with Rustmoon)
+        const fac = u.faction || (u.route && u.route.faction);
+        if (fac && g.rep.hostile(fac) && !g.player.dead) {
+          const dd = g.player.center.distanceTo(from);
+          if (dd < bd && g.planet.visible(from, g.player.center)) { bd = dd; target = { center: g.player.center, player: true }; }
+        }
         if (target) {
           const dir = target.center.clone().sub(from).normalize();
-          g.projectiles.fire('mil', from, dir.multiplyScalar(130), { damage: 22, splash: 4, color: 0xffb02e, size: 0.45, knock: 0.5, spare: true });
+          g.projectiles.fire('mil', from, dir.multiplyScalar(130), { damage: target.player ? 10 : 22, splash: 4, color: 0xffb02e, size: 0.45, knock: 0.5, spare: !target.player });
           m.gun.lookAt(target.center);
         }
       }

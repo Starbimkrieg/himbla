@@ -489,7 +489,7 @@ export class Traffic {
       ...model, model, kind, path, hint: { i: 0, f: 0 }, ahint: { i: 0, f: 0 },
       stops: [sA, sB], dir: 1, s: 0, state: 'park', timer: 0, open: 0, gearK: 1, clock: this.r() * 10,
       vmax: ship ? 40 : 26, acc: ship ? 2.2 : 3.2, turn: ship ? 0.45 : 1.0, turnMin: ship ? 22 : 8,
-      minWait: ship ? 16 : 10, maxWait: ship ? 50 : 32, pax: ship ? [3, 5] : [1, 3],
+      minWait: ship ? 12 : 6, maxWait: ship ? 34 : 18, pax: ship ? [3, 5] : [1, 3],
       view: ship ? 4200 : 1600, quat: model.root.quaternion, boarding: 0, heading: new THREE.Vector3(),
       pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(),
       col: null,
@@ -517,7 +517,9 @@ export class Traffic {
 
   buildFlights() {
     const L = this.L;
-    const buses = [['ilmb', 'tranq'], ['ilmb', 'shackleton'], ['ilmb', 'mine'], ['tranq', 'kepler'], ['aldrin', 'twilight'], ['twilight', 'farside']];
+    const buses = [['ilmb', 'tranq'], ['ilmb', 'shackleton'], ['ilmb', 'mine'], ['tranq', 'kepler'], ['aldrin', 'twilight'], ['twilight', 'farside'],
+      // (more of them: the Kepler winch's favourite thing to hang off)
+      ['ilmb', 'aldrin'], ['kepler', 'hertz'], ['shackleton', 'meridian'], ['meridian', 'monolith'], ['tranq', 'mine'], ['aldrin', 'kepler']];
     const ships = [['ilmb', 'farside'], ['ilmb', 'hertz'], ['mine', 'twilight'], ['twilight', 'gloom'], ['kepler', 'vostok'], ['meridian', 'aldrin']];
     // ships first: they need the biggest open spots
     for (const [a, b] of ships) if (L[a] && L[b]) this.addFlyer('ship', L[a], L[b]);
@@ -1143,6 +1145,21 @@ export class Traffic {
     const r = makeRover({ color: [0xffd23f, 0xff9f1c, 0x7dff6a][k % 3], trim: 0xfff4e0, pirate: false, flag: 0x2ec4ff });
     r.gun.visible = false;
     r.root.scale.setScalar(1.3);
+    // a driver in the left seat, legs out under the nose and hands on a little steering wheel
+    const drv = makeFigure({ seed: 4100 + k });
+    drv.root.position.set(0.6, 1.3, 0.25);
+    drv.legL.rotation.x = drv.legR.rotation.x = -1.45;
+    drv.armL.rotation.x = drv.armR.rotation.x = -1.0;
+    r.chassis.add(drv.root);
+    const wheelM = toon(0x221d33);
+    const sw = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.045, 6, 18), wheelM);
+    sw.position.set(0.6, 2.62, 0.98);
+    sw.rotation.x = -0.55;
+    ink(sw, 0.02);
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.75, 6), wheelM);
+    col.position.set(0.6, 2.38, 1.22);
+    col.rotation.x = 1.0;
+    r.chassis.add(sw, col);
     this.w.scene.add(r.root);
     const b = add({ ...r, kind: 'buggy', vmax: 12 + this.r() * 3, acc: 2.5, front: 3.4, tail: 3.4, waitT: 6, view: 900, wheelR: 1.1, hp: BUGGY_HP, maxHp: BUGGY_HP, hitR: 3.4, credits: 25 });
     this.crawlers.push(b);
@@ -1584,6 +1601,25 @@ export class Traffic {
     this.updateWalkers(dt);
   }
 
+  // The Kepler winch (winch.js) pulls on a vehicle: an offset off its route (tug) with a velocity of its
+  // own, sprung and damped back to nothing, so it eases back onto its path when you let go.
+  applyTug(v, dt) {
+    if (!v.tug) return;
+    // (how hard it steers back to its route: a hover-car drifts a long way and wanders back; a
+    // freighter snaps back to its lane)
+    const k = { car: 0.18, buggy: 0.3, landtrain: 0.6, bus: 0.55, ship: 0.9 }[v.kind] ?? 0.5;
+    v.tugVel.addScaledVector(v.tug, -k * dt).multiplyScalar(Math.max(0, 1 - 1.4 * dt));
+    v.tug.addScaledVector(v.tugVel, dt);
+    if (v.tug.length() > 70) v.tug.setLength(70);
+    if (v.tug.lengthSq() < 1e-3 && v.tugVel.lengthSq() < 1e-3) { v.tug = null; v.tugVel = null; return; }
+    if (v.piece) {
+      // a road vehicle keeps its height over the ground wherever it's dragged
+      const h = this.P.altitude(v.pos);
+      v.pos.add(v.tug);
+      this.P.ground(v.pos, v.pos, Math.max(0, h));
+    } else v.pos.add(v.tug);
+  }
+
   updateFlyer(v, dt, camPos) {
     const path = v.path, L = path.len, M = v.model;
     v.clock += dt;
@@ -1606,6 +1642,7 @@ export class Traffic {
       }
       v.vel.set(0, 0, 0);
       sample(path, v.s, v.pos, v.hint);
+      this.applyTug(v, dt);
       if (M.gearK < 1) M.setGear(1);
     } else {
       const dS = v.dir > 0 ? v.s : L - v.s, dE = v.dir > 0 ? L - v.s : v.s;
@@ -1619,6 +1656,7 @@ export class Traffic {
         v.state = 'park'; v.timer = 0; v.stop = dest;
       }
       sample(path, v.s, v.pos, v.hint);
+      this.applyTug(v, dt);
       if (dt > 0) v.vel.copy(v.pos).sub(v.prevPos).divideScalar(dt);
       // gear: stowed in the bays on the cruise, down and locked over the pad
       M.setGear(v.kind === 'ship' ? clamp01((70 - d) / 40) : clamp01((30 - d) / 18));
@@ -1793,6 +1831,7 @@ export class Traffic {
       else v.dropH = v.hoverH;
       v.pos.addScaledVector(up, v.dropH + (v.state === 'wreck' ? 0.3 : v.hover + Math.sin(this.t * 2 + v.s) * 0.12));
     }
+    this.applyTug(v, dt);
     if (dt > 0) v.vel.copy(v.pos).sub(v.prevPos).divideScalar(dt);
     if (v.vel.lengthSq() > 3600 || v.state === 'wreck') v.vel.set(0, 0, 0);
     v.fwd.copy(_f);
@@ -1813,6 +1852,7 @@ export class Traffic {
         const p = t.plat;
         p.prevPos.copy(p.pos);
         const tu = this.roadFrame(v, v.s - t.offset, 2.7, 2.7, t.hintF, t.hintR, p.pos, _d);
+        if (v.tug) p.pos.add(v.tug); // (dragged along with the engine by the winch)
         t.root.position.copy(p.pos);
         frameQuat(tu, _d, t.root.quaternion);
         if (v.roll) t.root.quaternion.multiply(_q.setFromAxisAngle(_z, v.roll * (i % 2 ? -0.7 : 0.8)));

@@ -883,7 +883,7 @@ function baked(key, fn) {
 const VDARK = 0x1d1a29, VSTEEL = 0x55607a, VMETAL = 0x8a87a0;
 
 // a tyre with a hub, rim and tread blocks, centred on its axle (x) so it spins with rotation.x
-function rWheel(r, w, hub = VMETAL) {
+export function rWheel(r, w, hub = VMETAL) {
   return baked(`wheel|${r}|${w}|${hub}`, (k) => {
     k.add(new THREE.CylinderGeometry(r, r, w, 16).rotateZ(Math.PI / 2), KT(VDARK), 0, 0, 0, { outline: 0.05 });
     k.add(new THREE.CylinderGeometry(r * 0.55, r * 0.55, w * 1.06, 10).rotateZ(Math.PI / 2), KT(hub), 0, 0, 0, { outline: 0 });

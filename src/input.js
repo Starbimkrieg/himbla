@@ -11,6 +11,9 @@ export class Input {
     this.mouse = [false, false, false];
     this.dx = 0;
     this.dy = 0;
+    this.wheelAcc = 0; // scroll since the last notch (a mouse wheel notch, or a trackpad's worth of swipe)
+    this.wheelSteps = 0;
+    this.wheelT = 0;
     this.locked = false;
     this.onKey = null;
     this.binds = new Map(); // default code -> physical code (only entries that differ)
@@ -28,6 +31,17 @@ export class Input {
     window.addEventListener('mousedown', (e) => { if (this.locked) this.mouse[e.button] = true; });
     window.addEventListener('mouseup', (e) => { this.mouse[e.button] = false; });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
+    window.addEventListener('wheel', (e) => {
+      if (!this.locked) return;
+      this.wheelAcc += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+      // one step per notch; a trackpad's stream of tiny deltas adds up to steps, at most ~6 a second
+      const now = performance.now();
+      if (Math.abs(this.wheelAcc) >= 50 && now - this.wheelT > 160) {
+        this.wheelSteps += Math.sign(this.wheelAcc);
+        this.wheelAcc = 0;
+        this.wheelT = now;
+      }
+    }, { passive: true });
     window.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
       this.dx += e.movementX;
@@ -74,6 +88,12 @@ export class Input {
 
   down(code) { return this.keys.has(code); }
   pressed(code) { return this.justPressed.has(code); }
+
+  consumeWheel() {
+    const s = this.wheelSteps;
+    this.wheelSteps = 0;
+    return s;
+  }
 
   consumeMouse() {
     const d = [this.dx, this.dy];

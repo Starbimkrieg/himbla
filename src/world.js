@@ -4,10 +4,13 @@ import { toon, ink, inkMat, glow, textSprite, setMask } from './toon.js';
 import { makeDish, makeFigure, makeRover, makeRocket, makeShuttle } from './models.js';
 import { mulberry32 } from './rng.js';
 import { FACTIONS } from './locations.js';
-import { SUN, frameQuat, arcDist, dirFromAngles } from './geo.js';
+import { SUN, frameQuat, arcDist, dirFromAngles, tangent } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
 import { Traffic } from './traffic.js';
-import { buildHelium, buildMeridian, buildFunpark, dressLab, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, buildDen, buildPirateCamp, jobTerminal, part as kitPart } from './settlements.js';
+import { buildHelium, buildMeridian, buildFunpark, dressLab, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart } from './settlements.js';
+import { makeProp } from './storyAssets.js';
+import { buildHomeTown } from './hometown.js';
+import { spindleGeometry } from './spindle.js';
 import { T as KT, G as KG } from './outpostModels.js';
 
 function mesh(geo, mat, outline = 0.15) {
@@ -249,6 +252,22 @@ export class World {
     burst.position.copy(sun.position);
     burst.lookAt(0, 0, 0);
     sky.add(burst);
+    // the Spindle: a long asteroid tumbling overhead, rolling on its long axis, high above the
+    // Monolith (Meridian's finale goes there). Once Meridian has its core, a station blinks on it.
+    const mono = this.locations.find((l) => l.id === 'monolith');
+    if (mono) {
+      const sp = new THREE.Group();
+      // (it's always in sunlight up there, even over the Moon's night side: a little self-light)
+      const rock = new THREE.Mesh(spindleGeometry(2000, 260, 3), new THREE.MeshToonMaterial({ color: 0x9a92ac, emissive: 0x3a3450, gradientMap: toon(0).gradientMap }));
+      ink(rock, 6);
+      sp.add(rock);
+      sp.position.copy(mono.dir).multiplyScalar(5200);
+      // its long axis across the sky, square to the Monolith's up
+      sp.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent(new THREE.Vector3(0, 0, 1), mono.dir).normalize());
+      if (FACTIONS.meridian.quantum) { const b = new THREE.Mesh(new THREE.SphereGeometry(18, 8, 6), glow(0x2ec4ff)); b.position.set(150, 500, 0); rock.add(b); }
+      sky.add(sp);
+      this.spindle = rock;
+    }
     this.scene.add(sky);
   }
 
@@ -270,6 +289,12 @@ export class World {
   }
 
   col(loc, spec) {
+    const c = this.colAdd(loc, spec);
+    (loc._cols ||= []).push(c); // (so a rebuild can take them down again)
+    return c;
+  }
+
+  colAdd(loc, spec) {
     const g = loc.group;
     if (spec.type === 'sphere') {
       return this.colliders.add({ type: 'sphere', c: this.toWorld(loc, spec.x, spec.y, spec.z), r: spec.r });
@@ -640,7 +665,10 @@ export class World {
       case 'monolith': this.buildMonolith(loc); break;
       case 'funpark': this.buildFunpark(loc); break;
       case 'casino': this.casino = buildCasino(this, loc); break; // casino
+      case 'ruin': buildRuin(this, loc); break;
+      case 'hometown': buildHomeTown(this, loc); this.addFigures(loc, 10, { kind: 'worker', look: (i) => ({ suit: [0xff9f1c, 0x7dff6a, 0x2ec4ff, 0xff7ad9][i % 4] }) }); break;
     }
+    this.storyMarks(loc);
     if (loc.dark && loc.type !== 'pirate') {
       // dark-side settlements ring themselves with lamps
       for (let i = 0; i < 10; i++) {
@@ -655,12 +683,62 @@ export class World {
       for (let i = 0; i < (d.inner || 0); i++) spots.push([(i / d.inner) * Math.PI * 2 + 0.8, d.ring * 0.55]);
       this.defensePylons(loc, spots);
     }
-    if (loc.hq) {
-      const hq = textSprite(`★ ${FACTIONS[loc.faction].name.toUpperCase()} HQ ★`, { color: '#ffffff', size: 60, scale: 0.8 });
+    if (loc.hq && loc.type !== 'ruin') {
+      const hq = textSprite(loc.conqueredFrom ? `★ TAKEN BY ${FACTIONS[loc.faction].name.toUpperCase()} ★` : loc.lawless ? '★ HELD BY THE RUSTMOON CLANS ★' : `★ ${FACTIONS[loc.faction].name.toUpperCase()} HQ ★`, { color: '#ffffff', size: 60, scale: 0.8 });
       hq.position.set(0, loc.type === 'hub' ? 110 : 62, 0);
       loc.group.add(hq);
     }
     this.sign(loc, loc.name.toUpperCase(), fc, loc.type === 'hub' ? 95 : loc.camp ? 26 : 50);
+  }
+
+  // A story finale changed what a place is (main.js applyWorldLive): tear its group, colliders and
+  // moving parts down and build it again from the remapped location. Anything other systems hung
+  // on the group (userData.keep: the story leaders) moves across to the new one.
+  rebuildLocation(loc) {
+    const old = loc.group;
+    const keep = old.children.filter((o) => o.userData.keep);
+    old.removeFromParent();
+    for (const c of loc._cols || []) this.colliders.remove(c);
+    loc._cols = [];
+    const mine = (x) => x.loc !== loc;
+    for (const k of ['spinners', 'blinkers', 'dishes', 'figures', 'zoneWalls', 'walkers', 'rides', 'anims']) this[k] = this[k].filter(mine);
+    const pads = loc.pads; // (traffic already routes to these)
+    for (const k of ['turretMounts', 'keep', 'pads', 'sign', 'launchBuilt']) delete loc[k];
+    this.buildLocation(loc);
+    if (pads) loc.pads = pads;
+    for (const o of keep) loc.group.add(o);
+    this.prepCulling(loc);
+  }
+
+  // What the story left on a place (worldstate.js): the conqueror's banners over a taken
+  // settlement, the clans' black-and-green over a fallen ILMB, the Black Sun by the Forward Post.
+  storyMarks(loc) {
+    const ring = (n, r, colors, h) => { for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + 0.4; this.flag(loc, Math.cos(a) * r, Math.sin(a) * r, colors, h); } };
+    if (loc.conqueredFrom) { const c = new THREE.Color(FACTIONS[loc.faction].color).getHex(); ring(4, loc.r * 0.55, [c, 0xffffff, c], 22); }
+    if (loc.lawless) ring(loc.type === 'hub' ? 6 : 3, loc.r * (loc.type === 'hub' ? 0.45 : 0.6), [0x1a1a1a, 0x7dff3a, 0x1a1a1a], 20);
+    if (loc.lawless && loc.type === 'hub') dressScrap(this, loc);
+    if (loc.launchPad && !loc.launchBuilt) {
+      // the Meridian launch complex, on ground flattened for it just outside the dig
+      loc.launchBuilt = true;
+      const x = loc.r * 1.25, z = 0;
+      const at = this.toWorld(loc, x, 0, z);
+      this.planet.addFlat(at.clone().normalize(), 28);
+      const dy = this.planet.surface(at) - loc.pos.length();
+      const lc = makeProp('launch');
+      this.put(lc, loc, x, z, dy - 0.2, -Math.PI / 2, false);
+      for (const c of lc.userData.cols || []) {
+        const cc = c.type === 'sphere' ? { ...c, x: x + c.z * -1, z: z + c.x, y: c.y + dy } : { ...c, x: x - c.z, z: z + c.x, y0: (c.y0 || 0) + dy, y1: (c.y1 || 0) + dy };
+        this.col(loc, cc);
+      }
+    }
+    if (loc.blackSun) {
+      const R = makeProp('reactor');
+      this.put(R, loc, -loc.r * 0.4, 0, 0, 0, true);
+      this.col(loc, { type: 'cyl', x: -loc.r * 0.4, z: 0, y0: -1, y1: 3, r: 8 });
+      this.col(loc, { type: 'sphere', x: -loc.r * 0.4, y: 5.4, z: 0, r: 2.6 });
+      const list = []; R.traverse((o) => { if (o.userData.spin) list.push(o); });
+      this.anims.push({ loc, list, seed: 3 });
+    }
   }
 
   buildHub(loc) {
@@ -756,7 +834,7 @@ export class World {
       r.root.scale.setScalar(1.15);
       this.put(r.root, loc, 150 + i * 12, -95 + i * 6, 0, 1.2);
     }
-    const sc = textSprite('SPACECOM', { color: '#ffd23f', size: 90, scale: 1.1 });
+    const sc = loc.lawless ? textSprite('RUSTMOON', { color: '#7dff3a', size: 90, scale: 1.1 }) : textSprite('SPACECOM', { color: '#ffd23f', size: 90, scale: 1.1 });
     sc.position.set(0, 132, 0);
     loc.group.add(sc);
   }
@@ -1316,6 +1394,7 @@ export class World {
     this.flag(loc, 0, small ? 40 : 70, loc.faction === 'vostok' ? [0xff3b5c, 0xffd23f, 0xff3b5c] : [0xc77dff, 0x111111, 0xc77dff], 20);
     this.addFigures(loc, small ? 4 : 8, { kind: 'soldier', look: () => ({ suit: 0x55607a, helmet: fc, visor: 0x111111 }) });
 
+    if (!loc.restricted) return; // (the Moon Council's ceasefire stood the zone down: no wall)
     const mat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, side: THREE.DoubleSide,
       uniforms: { time: { value: 0 }, color: { value: new THREE.Color(0xff2a4a) }, alert: { value: 0 } },
@@ -1368,6 +1447,7 @@ export class World {
   // ---------- per-frame ----------
   update(dt, time, camPos) {
     this.sky.position.copy(camPos);
+    if (this.spindle) this.spindle.rotation.y += dt * 0.05; // the roll
     this.earth.rotation.y += dt * 0.01;
 
     // activate settlements near the camera, drop far ones from the scene graph

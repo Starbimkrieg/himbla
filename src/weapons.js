@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // Weapon roster. The Pulse Spinner is standard issue; the rest are bought at faction HQs.
 export const WEAPONS = [
   { key: 'pulse', name: 'Pulse Spinner', unlock: null, delay: 0.55, desc: 'Homing splash disc' },
-  { key: 'scatter', name: 'Vostok Scattergun', unlock: 'scatter', delay: 0.85, desc: 'Seven-pellet blast, short range' },
+  { key: 'scatter', name: 'Vostok Scattergun', unlock: 'scatter', delay: 0.85, desc: 'Seven-pellet blast, mid range' },
   { key: 'rail', name: 'Daedalus Rail Lance', unlock: 'rail', delay: 1.6, desc: 'Instant piercing beam, long range' },
   { key: 'mortar', name: 'Rustmoon Junk Mortar', unlock: 'mortar', delay: 1.2, desc: 'Lobbed scrap bomb, huge blast' },
 ];
@@ -24,8 +24,9 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
     const right = _v.crossVectors(dir, P.up).normalize().clone();
     const up = new THREE.Vector3().crossVectors(right, dir).normalize();
     for (let i = 0; i < 7; i++) {
-      const d = dir.clone().addScaledVector(right, (Math.random() - 0.5) * 0.16).addScaledVector(up, (Math.random() - 0.5) * 0.1).normalize();
-      g.projectiles.fire('player', muzzle, d.multiplyScalar(150).addScaledVector(inherit, 0.6), { damage: 12 * mult, splash: 2.5, color: 0xffb02e, size: 0.25, knock: 0.5, life: 0.85 });
+      const d = dir.clone().addScaledVector(right, (Math.random() - 0.5) * 0.13).addScaledVector(up, (Math.random() - 0.5) * 0.08).normalize();
+      // (~200 m of reach; 7 x 17 up close)
+      g.projectiles.fire('player', muzzle, d.multiplyScalar(175).addScaledVector(inherit, 0.6), { damage: 17 * mult, splash: 3, color: 0xffb02e, size: 0.27, knock: 0.6, life: 1.15 });
     }
     g.audio.burst(0.25, 2400, 0.4);
     g.cam.shake = Math.max(g.cam.shake, 0.25);
@@ -59,7 +60,7 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
     g.cam.shake = Math.max(g.cam.shake, 0.35);
   } else if (w.key === 'mortar') {
     const d = dir.clone().addScaledVector(P.up, 0.28).normalize();
-    g.projectiles.fire('player', muzzle, d.multiplyScalar(78).addScaledVector(inherit, 0.5), { damage: 70 * mult, splash: 13, color: 0x7dff3a, size: 0.8, knock: 2.2, gravity: 14, life: 6 });
+    g.projectiles.fire('player', muzzle, d.multiplyScalar(100).addScaledVector(inherit, 0.5), { damage: 70 * mult, splash: 13, color: 0x7dff3a, size: 0.8, knock: 2.2, gravity: 20, life: 6 });
     g.audio.tone(140, 0.3, 'square', 0.25, 0.5);
   }
 }

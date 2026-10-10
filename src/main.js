@@ -1,5 +1,8 @@
 // the trailer director (?trailer) goes first: it sandboxes storage before any module reads a save
 import { Trailer, TRAILER } from './trailer.js';
+import { HomeTown } from './hometown.js';
+import { Spindle } from './spindle.js';
+import { loadWorldState, applyWorldState, saveWorldState } from './worldstate.js';
 // fonts are bundled so the desktop build works offline (see fonts.js)
 import { loadFonts } from './fonts.js';
 import * as THREE from 'three';
@@ -33,6 +36,8 @@ import { Territory } from './territory.js';
 import { Civilians } from './civilians.js';
 import { Story } from './story.js';
 import { Garage } from './vehicles.js';
+import { Winch } from './winch.js';
+import { Powers } from './powers.js';
 import { Tutorial } from './tutorial.js';
 import { Recall } from './recall.js';
 import { Secrets } from './secrets.js';
@@ -43,7 +48,7 @@ import { MainMenu } from './menu.js'; // main menu
 import { WEAPONS } from './weapons.js';
 import { clamp, pick, mulberry32 } from './rng.js';
 import { inkMat } from './toon.js';
-import { SUN, dirFromAngles, darkness, arcDist, tangent } from './geo.js';
+import { SUN, dirFromAngles, darkness, arcDist, tangent, upAt } from './geo.js';
 
 const SAVE_KEY = 'moonrunner-save-v1';
 const TIPS = [
@@ -68,7 +73,7 @@ const sleep = () => new Promise((r) => {
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const JAR_HOLD = 1; // seconds to hold X to empty the jar
-const FROZEN_STATES = new Set(['paused', 'map', 'dialog', 'board', 'log', 'wardrobe']);
+const FROZEN_STATES = new Set(['paused', 'map', 'dialog', 'board', 'log', 'wardrobe', 'dawn']);
 const _sightN = new THREE.Vector3();
 const _sightNear = [];
 // Threat Scanner outline: a bold red version of the comic ink shell.
@@ -126,6 +131,9 @@ class Game {
     this.scene.add(this.earthLight, this.earthLight.target);
 
     this.locations = buildLocations();
+    // what the story finales changed for good (a conquered HQ, the pirates gone, the ILMB fallen)
+    this.ws = loadWorldState();
+    applyWorldState(this.ws, this.locations);
     await step('Pouring regolith…');
     this.planet = new Planet(this.scene, this.locations);
     this.colliders = new Colliders();
@@ -137,6 +145,7 @@ class Game {
     this.input = new Input(this.renderer.domElement);
     this.audio = new Audio();
     this.fx = new FX(this.scene, this.camera);
+    this.fx.ground = (p, out, lift) => this.planet.ground(p, out, lift); // (whichever world you're on)
     this.hud = new HUD(this);
 
     const hub = this.locations[0];
@@ -155,6 +164,7 @@ class Game {
     this.planet.update(this.spawnPoint, { budgetMs: 1e9 });
     await step('Waking up the pirates…');
     this.rep = new Reputation(this);
+    if (this.rep.aligned()) this.rep.outlaw(); // (riding with Rustmoon: the upright factions want you dead)
     this.events = new Events(this);
     this.enemies = new Enemies(this);
     this.globe = new GlobeMap(this);
@@ -165,7 +175,7 @@ class Game {
 
     this.credits = 250;
     this.stats = { deliveries: 0, bestTrick: 0 };
-    this.upgrades = { capacitor: 0, armor: 0, dampers: 0, spinner: 0, seeker: 0, gyro: 0, cradle: 0, flak: 0, overcharge: 0, shadow: 0, jar: 0, scatter: 0, rail: 0, mortar: 0 };
+    this.upgrades = { capacitor: 0, armor: 0, dampers: 0, spinner: 0, seeker: 0, gyro: 0, cradle: 0, flak: 0, overcharge: 0, shadow: 0, jar: 0, scatter: 0, rail: 0, mortar: 0, uplink: 0, twin: 0, winch: 0 };
     this.load();
     this.race = new Race(this);
     this.rides = new Rides(this);
@@ -177,7 +187,11 @@ class Game {
     this.casino = new Casino(this); // casino
     this.territory = new Territory(this);
     this.story = new Story(this);
+    this.town = new HomeTown(this); // your town and the Moon Council (Kepler story)
+    this.spindle = new Spindle(this); // Meridian's finale: the asteroid (the Moon is frozen while you're there)
     this.garage = new Garage(this);
+    this.winch = new Winch(this); // Kepler Hitch-Line Winch
+    this.powers = new Powers(this); // Z: the selected power; the mouse wheel picks
     this.tutorial = new Tutorial(this);
     this.recall = new Recall(this);
     this.secrets = new Secrets(this);
@@ -279,7 +293,7 @@ class Game {
         const n = parseInt(code.replace('Digit', ''), 10);
         if (n >= 1 && n <= 9) {
           const offers = this.missions.offersFor(this.boardLoc);
-          if (offers[n - 1] && !this.missions.active) this.acceptOffer(offers[n - 1]);
+          if (offers[n - 1] && this.missions.canTake()) this.acceptOffer(offers[n - 1]);
         }
       } else if (this.state === 'map') {
         if (esc || code === 'KeyM') this.closeModal(esc);
@@ -360,6 +374,8 @@ class Game {
       this.rep.rustmoon = 'aligned';
       this.rep.add('rustmoon', 15, 'Saved a Rustmoon smuggler');
       this.rep.add('spacecom', -10, 'Joined the pirates');
+      this.rep.outlaw();
+      this.hud.toast('The upright factions want you dead now: their towns and patrols shoot on sight. Rustmoon jobs (and smuggling runs) are yours.', 6);
       this.hud.alert('YOU RIDE WITH RUSTMOON NOW', '#7dff3a', 4);
       for (const l of this.locations) if (l.faction === 'rustmoon' && !l.camp) this.globe.discover(l, true);
     };
@@ -546,7 +562,10 @@ class Game {
   // to (Rustmoon Hold once you've sworn in with the pirates).
   home() {
     const f = this.rep && this.rep.aligned() ? 'rustmoon' : (this.story && this.story.faction);
-    const loc = f && f !== 'spacecom' ? this.locations.find((l) => l.hq && l.faction === f) : null;
+    // your own town is home once it has a shuttle pad (or always, if you're Kepler's Councillor)
+    const town = this.locations.find((l) => l.id === 'hometown');
+    const loc = town && (f === 'kepler' || (this.town && this.town.has('pad'))) ? town
+      : f && f !== 'spacecom' ? this.locations.find((l) => l.hq && l.faction === f) : null;
     if (!loc) return { point: this.spawnPoint, facing: this.spawnFacing, loc: this.hub };
     this._homes = this._homes || {};
     if (!this._homes[loc.id]) {
@@ -597,10 +616,10 @@ class Game {
     if (label) this.fx.pop(`${label}! +${points}`, null, { color: '#ff7ad9', size: 44, life: 1.3 });
   }
 
-  damagePlayer(amount, cause) {
+  damagePlayer(amount, cause, from = null) {
     const P = this.player;
     if (P.dead || amount <= 0 || this.cheats.god) return;
-    if (this.story.absorb()) return;
+    if (this.story.absorb(from)) return;
     // the vehicle soaks hits (and can be wrecked); a sniper round goes straight through the glass
     if (P.vehicle && cause !== 'sniper') { amount = this.garage.hit(amount); if (amount <= 0) return; }
     P.health -= amount;
@@ -619,7 +638,7 @@ class Game {
     this.fx.explosion(P.center, 8, true);
     this.fx.pop('K.O.!', P.center.clone().addScaledVector(P.up, 3), { color: '#ff2a4a', size: 110, life: 2 });
     this.audio.boom(true);
-    if (this.missions.active) this.missions.fail('You went down — the cargo is lost.');
+    if (this.missions.active) this.missions.failAll('You went down — the cargo is lost.');
     this.story.onDeath();
     if (this.events.active) this.events.fail(this.events.active, 'You went down. Event failed.');
     if (P.vehicle) this.garage.exit();
@@ -634,6 +653,8 @@ class Game {
       kade: "Shredded by Captain Kade's gun truck. Should've stayed low.",
       anomaly: 'Vaporised by a phase anomaly. For science.',
       meteor: 'Flattened by a meteor. The sky literally fell on you.',
+      alien: 'Vaporised by the mothership. It does not want you to have that core.',
+      void: 'You fell off the Spindle into the dark.',
     };
     this.hud.death(`${causes[cause] || 'Knocked out.'} Med-evac fee: ₵${fee}`);
     this.state = 'dead';
@@ -644,6 +665,15 @@ class Game {
 
   respawn() {
     if (this.state !== 'dead') return;
+    if (this.spindle && this.spindle.active) {
+      // on the Spindle you're back at the last beacon you reached
+      this.hud.show('death', false);
+      this.projectiles.clear();
+      this.spindle.respawn();
+      this.state = 'play';
+      this.input.lock();
+      return;
+    }
     this.hud.show('death', false);
     this.enemies.clearPirates();
     this.enemies.forgive();
@@ -662,7 +692,7 @@ class Game {
 
   explode(pos, radius, damage, owner, knock = 1, spare = false) {
     const big = radius > 10;
-    const up = pos.clone().normalize();
+    const up = upAt(pos);
     this.fx.explosion(pos, radius * 0.7, big);
     const P = this.player;
     const dCam = pos.distanceTo(this.camera.position);
@@ -684,7 +714,7 @@ class Game {
         this.damagePlayer(dmg, owner);
       }
     }
-    if (owner !== 'player') {
+    if (owner !== 'player' && owner !== 'ally') {
       for (const o of this.events.protect) {
         if (o.dead) continue;
         const d = pos.distanceTo(o.center);
@@ -698,6 +728,12 @@ class Game {
     for (const fn of this.blastHooks || []) fn(pos, radius, damage, owner);
     for (const t of this.enemies.targets()) {
       if (owner === t.faction) continue;
+      // your backup takes no harm from you; its own blasts only hurt what it's fighting; a base's
+      // guns don't shell the troops defending it
+      if (t.faction === 'ally' && owner === 'player') continue;
+      if (owner === 'ally' && !this.enemies.allyTarget(t)) continue;
+      if (owner === 'mil' && t.foe && t.foe !== 'rustmoon') continue;
+      if (owner === 'alien' && t.faction === 'beast') continue;
       const d = pos.distanceTo(t.center);
       if (d < radius + t.radius) {
         const f = 1 - Math.max(0, d - t.radius) / radius;
@@ -750,6 +786,8 @@ class Game {
       upgrades: this.upgrades,
       credits: this.credits,
       active: this.missions.active,
+      extra: this.missions.extra && this.missions.extra.a,
+      canTake: this.missions.canTake(),
       onAbandon: () => { this.missions.abandon(); this.refreshBoard(); },
       highlights: loc.id === 'ilmb' ? this.highlights.items : null,
     });
@@ -771,6 +809,9 @@ class Game {
     this.credits -= cost;
     this.upgrades[key] = lvl + 1;
     this.player.applyUpgrades(this.upgrades);
+    // what the Moon Council put on sale: vehicles and story tech
+    if (u.vehicle && !this.story.vehicles.includes(u.vehicle)) { this.story.vehicles.push(u.vehicle); this.story.save(); this.hud.toast(`${u.name} is yours. Press V (hold V to choose).`, 3); }
+    if (u.tech && !this.story.tech.includes(u.tech)) { this.story.tech.push(u.tech); this.story.save(); this.hud.toast(`${u.name} fitted.`, 3); }
     // new clothes go straight on
     if (key.startsWith('outfit_')) { this.cosmetics.outfit = key.slice(7); this.cosmetics.apply(); this.hud.toast('Looking sharp. Change outfits any time with C.', 3); }
     if (key.startsWith('skates_')) { this.cosmetics.skates = key.slice(7); this.cosmetics.apply(); this.hud.toast('New skate finish fitted. Change it any time with C.', 3); }
@@ -830,6 +871,58 @@ class Game {
     T.fade.style.opacity = String(Math.max(0, 1 - edge / 0.9));
   }
 
+  // A story finale reshaped the Moon: cut to a title card, rebuild what changed behind it, and come
+  // back up a week later at home (no reload; the bulletin explains what changed).
+  newDawn(title, bulletin) {
+    this.ws.bulletin = null; // (shown right here, not on the next load)
+    saveWorldState(this.ws);
+    const el = document.createElement('div');
+    el.id = 'dawn';
+    el.innerHTML = `<div class="dw-t">${title}</div><div class="dw-s">ONE WEEK LATER…</div>`;
+    document.body.appendChild(el);
+    this.state = 'dawn';
+    this.audio.boom(true);
+    // once the card is fully black: rebuild, go home
+    setTimeout(() => {
+      try { this.applyWorldLive(); } catch (e) { console.error(e); }
+      if (this.player.vehicle) this.garage.exit();
+      this.enemies.clearPirates();
+      this.projectiles.clear();
+      const h = this.home();
+      this.player.respawn(h.point, h.facing);
+      this.cam.fwd.copy(h.facing);
+      this.cam.pitch = -0.1;
+      this.updateCamera(0.016, true);
+      this.story.save();
+      this.save();
+    }, 1400);
+    setTimeout(() => {
+      el.classList.add('out');
+      this.state = 'play';
+      setTimeout(() => { el.remove(); this.dialog('MOON NEWS BULLETIN', bulletin, [{ label: 'WHOA' }]); }, 1100);
+    }, 4200);
+  }
+
+  // Re-apply the world state to the live Moon and rebuild every place it changed.
+  applyWorldLive() {
+    const sig = (l) => JSON.stringify([l.type, l.faction, !!l.hostile, !!l.lawless, l.conqueredFrom || '', !!l.restricted, l.defense || null, !!l.launchPad, !!l.blackSun, l.r, l.name]);
+    const before = new Map(this.locations.map((l) => [l, sig(l)]));
+    applyWorldState(this.ws, this.locations);
+    const added = this.locations.filter((l) => !before.has(l));
+    const changed = this.locations.filter((l) => before.has(l) && before.get(l) !== sig(l));
+    for (const l of added) { this.planet.addZone(l); this.world.buildLocation(l); this.world.prepCulling(l); }
+    for (const l of changed) this.world.rebuildLocation(l);
+    const all = [...changed, ...added];
+    for (const l of all) delete this.missions.offers[l.id];
+    this.enemies.refreshLocations(all);
+    this.territory.refreshWorld();
+    if (added.some((l) => l.id === 'hometown')) {
+      this.town = new HomeTown(this);
+      this.globe.discover(this.town.loc, true);
+    }
+    this._homes = {};
+  }
+
   startPlay() {
     if (this.started) return;
     this.started = true;
@@ -851,6 +944,13 @@ class Game {
     this.state = 'play';
     this.input.lock();
     this.hud.banner(this.hub);
+    // the first load after a story finale: what changed on the Moon
+    if (this.ws.bulletin) {
+      const news = this.ws.bulletin;
+      this.ws.bulletin = null;
+      saveWorldState(this.ws);
+      this.schedule(1.5, () => this.dialog('MOON NEWS BULLETIN', news, [{ label: 'WHOA' }]));
+    }
     // brand-new runners get the guided training shift
     if (!this.tutorial.done && !this.tutorial.active) this.schedule(1.2, () => this.tutorial.offer());
     this.save();
@@ -883,6 +983,7 @@ class Game {
       if (!d) return;
       this.credits = d.credits ?? this.credits;
       this.stats = { ...this.stats, ...(d.stats || {}) };
+      if (this.stats.smuggled && !this.stats.blackMarket) this.stats.blackMarket = (SHOPS.rustmoon || []).filter((u) => u.unlock && u.unlock.smuggle && u.unlock.n <= this.stats.smuggled).map((u) => u.key);
       this.upgrades = { ...this.upgrades, ...(d.upgrades || {}) };
     } catch { /* corrupt or unavailable */ }
   }
@@ -914,10 +1015,10 @@ class Game {
     if (this.trailer) this.trailer.camera(rdt); // trailer: the shot owns the camera
     // the Monolith's time dilation: the world crawls, you don't
     const wdt = playing && this.alchemy.buffs.dilate > 0 ? dt * DILATE_RATE : dt;
-    this.world.update(wdt, this.time, this.camera.position);
+    if (!this.spindle.active) this.world.update(wdt, this.time, this.camera.position);
     this.fx.update(wdt);
     this.hud.update(rdt);
-    this.updateLighting(dt);
+    if (!this.spindle.active) this.updateLighting(dt);
     const P = this.player;
     this.audio.setZone(this.musicZone());
     this.audio.update(P.dead ? 0 : P.speed, P.body.skating, P.body.grounded, P.body.thrusting && playing);
@@ -927,7 +1028,7 @@ class Game {
 
     const u = this.post.material.uniforms;
     u.time.value = this.time;
-    u.speed.value = clamp((P.speed - 28) / 60, 0, 1);
+    u.speed.value = clamp((P.speed - 38) / 90, 0, 1) * 0.55; // (speed lines: subtler, and only once you're really moving)
     u.boost.value = P.body.thrusting ? 1 : 0;
     u.invert.value += ((this.alchemy && this.alchemy.buffs.invert > 0 ? 1 : 0) - u.invert.value) * 0.1;
     this.damageFlash = Math.max(0, this.damageFlash - dt * 1.5);
@@ -979,6 +1080,22 @@ class Game {
   }
 
   // Sun, sky fill and the helmet lamp all depend on where you stand on the sphere.
+  // On the Spindle: you, your shots, the story step and the asteroid; the Moon waits.
+  updateAway(dt, c) {
+    const P = this.player;
+    P.update(dt, this.input, c);
+    this.story.update(dt);
+    this.spindle.update(dt);
+    this.hud.eventPanel(this.story.panel());
+    this.powers.update(dt);
+    this.projectiles.update(dt, dt);
+    for (let i = this.timers.length - 1; i >= 0; i--) {
+      const t = this.timers[i];
+      t.t -= dt;
+      if (t.t <= 0) { this.timers.splice(i, 1); t.fn(); }
+    }
+  }
+
   updateLighting() {
     const P = this.player;
     const up = P.up;
@@ -1020,24 +1137,27 @@ class Game {
   updatePlay(dt) {
     // dramatic slow-motion (villain entrances)
     if (this.slowmo > 0) { this.slowmo -= dt; dt *= 0.3; }
-    const [mx, my] = this.input.consumeMouse();
+    let [mx, my] = this.input.consumeMouse();
+    // the vehicle radial (hold V) takes the mouse while it's open
+    if (this.garage && this.garage.radial) { this.garage.radialMove(mx, my); mx = my = 0; }
     const c = this.cam;
     const P = this.player;
     // parallel-transport the camera heading as you move around the sphere
-    c.up.copy(P.pos).normalize();
+    upAt(P.pos, c.up);
     c.fwd.addScaledVector(c.up, -c.fwd.dot(c.up));
     if (c.fwd.lengthSq() < 1e-6) c.fwd.copy(P.heading);
     c.fwd.normalize();
     const sv = this.settings ? this.settings.v : null; // settings
     const sens = 0.0022 * (sv ? sv.sensitivity : 1) * (P.scoped ? 0.28 : 1); // settings; slower aim while scoped
     c.fwd.applyQuaternion(_q.setFromAxisAngle(c.up, -mx * sens));
-    c.pitch = clamp(c.pitch - my * sens * (sv && sv.invertY ? -1 : 1), -1.25, 0.95);
+    c.pitch = clamp(c.pitch - my * sens * (sv && sv.invertY ? -1 : 1), -1.25, 1.48); // (nearly straight up: enough to shoot what hangs overhead)
     c.right.crossVectors(c.fwd, c.up).normalize();
     c.look.copy(c.fwd).multiplyScalar(Math.cos(c.pitch)).addScaledVector(c.up, Math.sin(c.pitch));
     this.hurtCd -= dt;
     this.boardCooldown -= dt;
 
     this.secrets.preUpdate(dt);
+    if (this.spindle.active) { this.updateAway(dt, c); return; }
     P.update(dt, this.input, c);
     this.secrets.update(dt);
     this.missions.update(dt);
@@ -1046,6 +1166,7 @@ class Game {
     this.globe.update(dt);
     this.territory.update(dt);
     this.story.update(dt);
+    this.town.update(dt);
     this.tutorial.update(dt);
     this.garage.update(dt);
     document.getElementById('techchip').innerHTML = this.story.hudTech();
@@ -1073,8 +1194,18 @@ class Game {
       if (this.upgrades.penlink) this.alchemy.penMenu();
       else this.hud.toast('No pen link. Dr. Zbornak sells a remote holding-pen link at the Antimatter Lab.', 3);
     }
-    if (this.input.pressed('KeyV') && this.boardCooldown <= 0 && !this.rides.ride) this.garage.toggle();
-    if (this.input.pressed('KeyZ')) this.story.useTech('dash');
+    // V: tap to call / board / leave; hold (with more than one vehicle) for the radial picker
+    if (this.input.pressed('KeyV') && this.boardCooldown <= 0 && !this.rides.ride) this.vHold = 1e-4;
+    if (this.vHold) {
+      if (this.input.down('KeyV')) {
+        this.vHold += dt;
+        if (this.vHold > 0.22 && !this.garage.radial && !this.player.vehicle && this.garage.owned().length > 1) this.garage.openRadial();
+      } else {
+        if (this.garage.radial) this.garage.closeRadial(true); else this.garage.toggle();
+        this.vHold = 0;
+      }
+    }
+    this.powers.update(dt);
     if (this.input.pressed('KeyT') && this.boardCooldown <= 0) this.story.useTech('teleport');
     if (this.input.pressed('KeyN')) this.hud.toast(this.audio.toggleMusic() ? '♪ Music on' : 'Music off', 1.5);
     this.cosmetics.update(dt);
@@ -1121,7 +1252,7 @@ class Game {
     const engaged = zBase && (zBase.hostile || zBase.aggro > 0);
     if (this.isSafe(z) && !P.dead && !engaged) P.health = Math.min(P.maxHealth, P.health + (z.repair || 6) * dt);
     const canBoard = z && (this.jobsAt(z).length || (SHOPS[z.id] && (z.type !== 'pirate' || this.rep.aligned())));
-    const canSwear = z && z.id === 'rustmoon' && this.rep.rustmoon === 'known';
+    const canSwear = z && z.id === 'rustmoon' && z.type === 'pirate' && this.rep.rustmoon === 'known' && !FACTIONS.rustmoon.gone && !(this.story && this.story.kade.captured);
     const lab = this.world.lab;
     const nearDoc = lab && z === lab.loc && P.pos.distanceTo(lab.scientist) < 8;
     const nearReactor = lab && z === lab.loc && P.pos.distanceTo(lab.reactor) < 11;
@@ -1136,6 +1267,8 @@ class Game {
       // satellite artifact, alien gate, shrine
     } else if (this.story.interact(P)) {
       // a leader or one of your outposts' terminals
+    } else if (this.town.interact(P)) {
+      // your town's council hall
     } else if (this.casino.interact()) { // casino: walk-in game stations
     } else if (this.territory.interact()) { // raid a farm dome or supply depot
     } else if (nearPen) {
@@ -1201,7 +1334,7 @@ class Game {
   updateCamera(dt, snap = false) {
     const P = this.player;
     const c = this.cam;
-    const up = c.up.copy(P.pos).normalize();
+    const up = upAt(P.pos, c.up);
     if (snap) {
       c.right.crossVectors(c.fwd, up).normalize();
       c.look.copy(c.fwd).multiplyScalar(Math.cos(c.pitch)).addScaledVector(up, Math.sin(c.pitch));
@@ -1212,14 +1345,18 @@ class Game {
     const targetDist = scoped ? 0.2 : P.seat && P.seat.camDist ? P.seat.camDist : (7.5 + Math.min(7, sp * 0.06)) * (sv ? sv.camDist : 1); // settings
     c.dist += (targetDist - c.dist) * Math.min(1, dt * (scoped ? 14 : 3));
     const target = P.pos.clone().addScaledVector(up, 2.3);
-    const want = target.clone().addScaledVector(c.look, -c.dist).addScaledVector(up, scoped ? 0 : 0.8 + (sv ? sv.camHeight : 0)); // settings
+    // (looking up past ~30°, the camera stops swinging lower: it stays behind your shoulders and just
+    // tilts, so you can aim nearly straight up without it burying itself in the ground)
+    const pp = Math.min(c.pitch, 0.55);
+    const place = scoped || pp === c.pitch ? c.look : _v2.copy(c.fwd).multiplyScalar(Math.cos(pp)).addScaledVector(up, Math.sin(pp));
+    const want = target.clone().addScaledVector(place, -c.dist).addScaledVector(up, scoped ? 0 : 0.8 + (sv ? sv.camHeight : 0)); // settings
     if (sv && sv.shoulder && !scoped) want.addScaledVector(c.right, sv.shoulder); // settings
     // Rail Lance scope: first-person, narrow field of view, runner hidden
     if (!P.dead && this.state !== 'cutscene') P.model.root.visible = c.dist > 1.2 && !(P.seat && P.seat.hidden);
     const scopeEl = document.getElementById('scope');
     if (scopeEl) scopeEl.classList.toggle('hidden', !scoped || c.dist > 1.2);
     const alt = this.planet.altitude(want);
-    if (alt < 1.2) want.addScaledVector(want.clone().normalize(), 1.2 - alt);
+    if (alt < 1.2) want.addScaledVector(upAt(want), 1.2 - alt);
     // keep the camera out of walls (matters indoors)
     const span = want.clone().sub(target);
     const L = span.length();
@@ -1289,7 +1426,7 @@ class Game {
       from = focus.clone().addScaledVector(hv, 10).addScaledVector(up, -5).addScaledVector(side(hv), 5);
     }
     const alt = this.planet.altitude(from);
-    if (alt < 0.8) from.addScaledVector(from.clone().normalize(), 0.8 - alt);
+    if (alt < 0.8) from.addScaledVector(upAt(from), 0.8 - alt);
     this.panelCam.position.copy(from);
     this.panelCam.up.copy(up);
     this.panelCam.lookAt(focus);
