@@ -1,3 +1,7 @@
 node_modules
 dist
 .DS_Store
+release
+
+# trailer renders (trailer.js director mode)
+trailer-out/
