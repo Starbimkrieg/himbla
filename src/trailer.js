@@ -1,4 +1,4 @@
-// Trailer director mode (?trailer). Plays the official ~90 s trailer from in-game footage: a list
+// Trailer director mode (?trailer). Plays the official ~77 s trailer from in-game footage: a list
 // of shots, each with a setup (teleport, spawn, stage), per-frame direction (held keys, steering)
 // and a camera, joined by transitions (whip-pans, flashes, ink wipes) with comic title cards on top.
 //
@@ -99,7 +99,7 @@ const HUM = 0.2; // the Quantum-Lock hum's level in the trailer (it sits well un
 const CRATE = 0xffd23f; // the courier's cargo, carried from the job board to the last shot
 const WHIP = 0.2; // seconds each side of a whip-pan cut
 const WIPE = 0.38; // the ink wipe's full sweep
-const CUT = 2.6; // the lab shot's cut from outside to inside
+const MORE = (at = 0, dur = 99) => ({ key: 'more', at, dur, html: 'AND MORE.' }); // the montage's one header, held across its cuts
 
 export class Trailer {
   constructor(game) {
@@ -154,6 +154,14 @@ export class Trailer {
     g.fx.pop = (text, ...rest) => (this.popMute && this.popMute.test(text) ? undefined : pop(text, ...rest)); // shots can mute pops
     if (g.secrets.shrine) g.secrets.shrine.skates.visible = false; // the Xenoglide skates stay a secret: only their glow shows
     g.planet.keep = true; // keep every terrain mesh the shots build (no rebuild hitch at the cuts)
+    // no boulders or big shaped rocks on Kade's stretch of the terminator (his truck swings wide
+    // round the runner and once ploughed into a boulder mid-shot): kept bare before that ground is built
+    const bare = [];
+    for (let th = 86.6; th <= 90.4; th += 0.35) for (let ph = 29; ph <= 34.5; ph += 0.35) bare.push(dirFromAngles(th, ph));
+    g.planet.clearDirs = [...(g.planet.clearDirs || []), ...bare];
+    if (!g.planet.clearCos) g.planet.clearCos = Math.cos(26 / g.planet.R);
+    g.planet.noBoulders = bare;
+    g.planet.noBouldersCos = Math.cos(26 / g.planet.R);
     for (const c of g.alchemy.chimeras) c.follow = false;
     g.alchemy.syncChimeras();
     g.audio.init();
@@ -1129,40 +1137,24 @@ const SHOTS = [
     cards: [{ key: 'festive', at: 0, dur: 2.2, html: 'JOIN THE LOCAL FESTIVITIES.<br><span class="tr-sub">PLACE YOUR BETS. LET IT RIDE.</span>' }],
   },
 
-  // 13 · The Antimatter Lab: a slow pan across the front as the courier skates up to the door, then
-  // a cut inside: into the reactor goes the jar. FLASH. Something with too many legs climbs out.
-  // Dr. Zbornak's caption holds across the cut; "SHENANIGANS." lands on the flash.
+  // 13 · The Antimatter Lab (montage): beside the reactor, into it goes the jar. FLASH. Something
+  // with too many legs climbs out of the core and lands on the floor.
   {
     name: 'lab',
-    dur: 6.2,
-    out: { type: 'black', len: 0.35 },
+    dur: 3.0,
     setup(T) {
-      T.music('lab');
+      T.music('casino'); // (the montage keeps one groove)
       const g = T.g;
-      const from = T.at('antimatter', 9, 0, 44);
-      T.place(from, T.at('antimatter', 0, 0, 18).sub(from), 7);
+      T.place(T.at('antimatter', 3, 0, 4), T.at('antimatter', -2, 0, -3).sub(T.at('antimatter', 3, 0, 4)));
       g.player.setCargo(CRATE);
       T.fed = false;
-      T.inside = false;
     },
     update(T, t) {
       const g = T.g;
-      if (t < CUT) {
-        T.hold = new Set(['Space', 'KeyW']);
-        T.steer = T.at('antimatter', 0, 0, 18).sub(g.player.pos);
-        T.keepSpeed(7, 0.3);
-        return;
-      }
-      if (!T.inside) {
-        // the hard cut: inside, by the reactor with the jar
-        T.inside = true;
-        T.place(T.at('antimatter', 3, 0, 4), T.at('antimatter', -2, 0, -3).sub(T.at('antimatter', 3, 0, 4)));
-        g.player.setCargo(CRATE);
-        T.hold = new Set();
-      }
-      if (t > CUT + 0.7 && !T.fed) {
+      T.hold = new Set();
+      if (t > 0.3 && !T.fed) {
         // into the reactor go the finds: a mite and a settler make a chimera, which hatches out
-        // of the core and bursts through the glass (alchemy.js breed / hatch)
+        // of the core and leaps clear (alchemy.js breed / hatch)
         T.fed = true;
         g.world.reactor.flash = 2.2;
         g.audio.boom(true);
@@ -1174,35 +1166,23 @@ const SHOTS = [
         g.alchemy.jar = [];
         g.alchemy.refreshJarMesh();
       }
-      if (t > CUT + 1.1) T.shake = Math.max(0, T.shake - 0.02);
+      if (t > 0.7) T.shake = Math.max(0, T.shake - 0.02);
     },
     cam(T, t) {
-      if (t < CUT) {
-        // outside: a slow lateral pan along the front, the door and the holding pen
-        const k = ease(t / CUT);
-        T.at('antimatter', lerp(34, 10, k), lerp(6, 7.5, k), lerp(56, 50, k), T.eye);
-        T.at('antimatter', lerp(4, -2, k), 6, 4, T.look);
-        T.roll = 0;
-        T.fov = 52;
-        return;
-      }
-      // inside: over Dr. Zbornak's counter, pushing in on the reactor through the flash
-      const j = ease((t - CUT) / (6.2 - CUT));
-      T.at('antimatter', lerp(17, 13, j), lerp(6.2, 5.6, j), lerp(9.5, 7.5, j), T.eye);
-      T.at('antimatter', lerp(1, -1, j), 2.6, lerp(0, -2, j), T.look);
+      // over Dr. Zbornak's counter, pushing in on the reactor through the flash
+      const j = ease(t / 3.0);
+      T.at('antimatter', lerp(16, 13, j), lerp(6, 5.6, j), lerp(9, 7.5, j), T.eye);
+      T.at('antimatter', lerp(0.5, -1, j), 2.6, lerp(-0.5, -2, j), T.look);
       T.roll = 0.05;
       T.fov = 60;
     },
-    cards: [
-      { at: 0.4, dur: 3.6, html: "DR. ZBORNAK.<br><span class='tr-sub'>HE'LL THROW ANYTHING YOU FIND INTO THE REACTOR.</span>" },
-      { at: 4.4, dur: 1.75, kind: 'shout pink', html: 'SHENANIGANS.' },
-    ],
+    cards: [MORE()],
   },
 
   // 14 · Lucky Crater Casino: skating up the slot-machine carpet into the neon...
   {
     name: 'casino',
-    dur: 2.2,
+    dur: 1.7,
     setup(T) {
       T.music('casino');
       T.place(T.at('casino', 1.5, 0, 52), T.at('casino', 0, 0, 0).sub(T.at('casino', 0, 0, 52)), 16);
@@ -1216,17 +1196,18 @@ const SHOTS = [
     },
     cam(T, t) {
       // a low dolly up the carpet behind the runner, the hall's neon filling the frame
-      T.at('casino', -2.5, 1.2, lerp(64, 48, t / 2.2), T.eye);
+      T.at('casino', -2.5, 1.2, lerp(62, 49, t / 1.7), T.eye);
       T.at('casino', 0, 7.5, 10, T.look);
       T.fov = 62;
     },
+    cards: [MORE(0.2)],
   },
 
   // 14b · ...through the doors into the hall: Plinko, the duck derby, a carpet you could lose a
   // week on
   {
     name: 'casino hall',
-    dur: 2.4,
+    dur: 1.7,
     setup(T) {
       T.music('casino');
       const from = T.at('casino', 1, 0, 9);
@@ -1247,13 +1228,13 @@ const SHOTS = [
       T.chase(eye, look, dt, 20, 8);
       T.fov = 66;
     },
+    cards: [MORE()],
   },
 
   // 15 · ...and round the Bounce Dome Funpark's ferris wheel, Earth hanging over the top.
   {
     name: 'ferris wheel',
-    dur: 2.2,
-    out: { type: 'black', len: 0.25 },
+    dur: 1.7,
     setup(T) {
       T.music('casino');
       const g = T.g;
@@ -1272,19 +1253,19 @@ const SHOTS = [
     },
     cam(T, t) {
       // from the ground under the wheel, looking up past it to Earth and the sun
-      T.at('bounce', lerp(-29, -30.5, t / 2.2), lerp(2.5, 3.2, t / 2.2), lerp(24, 30, t / 2.2), T.eye);
+      T.at('bounce', lerp(-29, -30.5, t / 1.7), lerp(2.5, 3.2, t / 1.7), lerp(24, 30, t / 1.7), T.eye);
       T.at('bounce', -43, 32, 62, T.look);
       T.fov = 66;
     },
+    cards: [MORE()],
   },
 ];
 
 // 17 · The tease: down the ramp into the Whispering Fissure, along the corridor and into the
-// chamber, the runner slowing as they come up on the sealed alien gate, a mint glow behind it.
-// "SOMETHING IS DOWN THERE." Hold. Black.
+// chamber toward the sealed alien gate's mint glow: the montage's last beat, then black.
 const FISSURE = {
   name: 'fissure',
-  dur: 6.4,
+  dur: 3.6,
   out: { type: 'black', len: 0.7, in: 0.6 },
   setup(T) {
     T.music('dark');
@@ -1316,11 +1297,11 @@ const FISSURE = {
     T.chase(eye, T.at('fissure', 0, -27, 110), dt, 6, 10);
     T.fov = lerp(60, 46, ease(t / 5));
   },
-  cards: [{ at: 3.7, dur: 2.7, kind: 'whisper', html: 'SOMETHING IS DOWN THERE.' }],
+  cards: [MORE(0, 2.8)],
 };
 
 // 18 · Hero shot and end card: at sunset on the terminator the courier grinds a crater lip, crate
-// on their back, and slides off into the dark. MOON-RUNNER.
+// on their back, and pops off straight out into the dark (never curling back into frame). MOON-RUNNER.
 const HERO = {
   name: 'hero',
   dur: 7.6,
@@ -1344,8 +1325,19 @@ const HERO = {
   },
   update(T, t) {
     T.hold = new Set(['Space']);
-    if (t > 2.9 && !T.popped && T.g.grind.active) { T.popped = true; T.tap.add('ShiftLeft'); }
-    if (T.popped) T.hold = new Set(['Space', 'KeyW']);
+    const P = T.g.player;
+    if (t > 2.9 && !T.popped && T.g.grind.active) {
+      T.popped = true;
+      T.tap.add('ShiftLeft');
+      T.away = tangent(P.body.vel, P.pos.clone().normalize(), V()).normalize(); // the line they leave on
+    }
+    if (T.popped) {
+      // hold that line straight out into the night (no curling back round the crater into frame),
+      // and once they're a speck past the logo, they're gone
+      T.hold = new Set(['Space', 'KeyW']);
+      T.steer = T.away;
+      if (t > 5.4 && P.pos.distanceTo(T.eye) > 45) T.hidePlayer = true;
+    }
   },
   cam(T, t, dt) {
     const P = T.g.player;
@@ -1365,15 +1357,14 @@ const HERO = {
   cards: [{ at: 4.1, dur: 99, kind: 'end', html: LOGO }],
 };
 
-// 15b · Out collecting: three quick beats (a glowing rock crystal, a wild moon mite, an unlucky
-// settler), each skated up to and scooped into the jar on the courier's back. "Collect interesting
-// things around the Moon."
-const SCOOP_BEAT = 3.0;
+// 15b · Out collecting (montage): two quick beats, a glowing rock crystal and a wild moon mite, each
+// skated up to and scooped into the jar on the courier's back.
+const SCOOP_BEAT = 1.8;
 const SCOOP = {
   name: 'scoop',
-  dur: SCOOP_BEAT * 3,
+  dur: SCOOP_BEAT * 2,
   setup(T) {
-    T.music('free');
+    T.music('casino'); // (the montage keeps one groove)
     const g = T.g, A = g.alchemy;
     g.audio.mix.hum = HUM * 0.4;
     A.jar = [];
@@ -1390,25 +1381,25 @@ const SCOOP = {
   },
   update(T, t) {
     const g = T.g, P = g.player, S = T.scoop;
-    const b = Math.min(2, Math.floor(t / SCOOP_BEAT)), bt = t - b * SCOOP_BEAT;
+    const b = Math.min(1, Math.floor(t / SCOOP_BEAT)), bt = t - b * SCOOP_BEAT;
     const target = () => (b === 0 ? S.rock.pos.clone() : b === 1 ? (S.mite.model ? S.mite.model.root.position.clone() : g.planet.ground(S.mite.home, V())) : S.person.root.getWorldPosition(V()));
     if (b !== S.beat) {
-      // a hard cut to the next find: the courier rolls in from 11 m out, slow enough not to spook it
+      // a hard cut to the next find: the courier rolls in from 6 m out, slow enough not to spook it
       S.beat = b;
       S.scooped = false;
       T.chased = false;
       const tp = target();
       const up = tp.clone().normalize();
-      const from = tp.clone().addScaledVector(T.heading(tp, 0.6 + b * 1.7), -11);
-      T.place(from, tp.clone().sub(from), 5);
+      const from = tp.clone().addScaledVector(T.heading(tp, 0.6 + b * 1.7), -6);
+      T.place(from, tp.clone().sub(from), 5.5);
       S.side = V().crossVectors(tangent(tp.clone().sub(from), up, V()).normalize(), up).normalize();
     }
     const tp = target();
     const d = tp.distanceTo(P.pos);
     T.steer = tp.clone().sub(P.pos);
-    if (d > 2.6 && !S.scooped) { T.hold = new Set(['Space', 'KeyW']); T.keepSpeed(5, 0.3); }
+    if (d > 2.6 && !S.scooped) { T.hold = new Set(['Space', 'KeyW']); T.keepSpeed(5.5, 0.3); } // (a mite bolts from anything over 6 m/s)
     else { T.hold = new Set(); P.body.vel.multiplyScalar(0.85); }
-    if (bt > 1.8 && !S.scooped) { S.scooped = true; T.tap.add('KeyG'); }
+    if (bt > 0.8 && !S.scooped) { S.scooped = true; T.tap.add('KeyG'); }
   },
   cam(T, t, dt) {
     const S = T.scoop, P = T.g.player;
@@ -1423,7 +1414,7 @@ const SCOOP = {
     T.chase(eye, mid.addScaledVector(up, 1.1), dt, 20, 20);
     T.fov = 50;
   },
-  cards: [{ at: 0.4, dur: SCOOP_BEAT * 3 - 0.6, html: 'COLLECT INTERESTING THINGS<br><span class="tr-sub">FROM ALL OVER THE MOON.</span>' }],
+  cards: [MORE()],
 };
 
 // height of a world point in a location's frame

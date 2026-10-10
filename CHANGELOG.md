@@ -3,6 +3,20 @@
 What changed in each release. Releases are built by `.github/workflows/release.yml` when a commit message
 contains `[release]` (see the README's Download section). Newest first.
 
+## Unreleased
+
+**Trailer (recut, 1:17)**
+- Everything from the casino onwards is now one quick "AND MORE." montage (about 15 s, down from 28),
+  under a single held header and the casino track: casino, casino hall, ferris wheel, two quick
+  pick-ups (rock crystal, mite), the reactor hatching a chimera (no lab exterior), and the run down
+  the Fissure ramp toward the alien gate. The scoop, lab, "SHENANIGANS." and "SOMETHING IS DOWN
+  THERE." cards are gone. The final render is `trailer-out/Moon-Runner-Trailer.mp4` (77.5 s).
+- Hero shot: the runner pops off the crater lip and holds a straight line into the dark, then is
+  hidden once they're a speck, so they never drift back into frame under the logo.
+- Kade shot: his truck no longer stops dead on a boulder. In trailer mode only, boulders and big
+  shaped rocks are kept off his stretch of the terminator (`planet.noBoulders`, plus `clearDirs`).
+  Normal play is unchanged.
+
 ## 0.9.95 — 2026-10-09
 
 **Performance**

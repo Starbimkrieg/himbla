@@ -61,7 +61,7 @@ Click **START YOUR SHIFT!** to lock the mouse.
 
 ## Trailer mode
 
-`src/trailer.js` plays the official ~90 s trailer live in the engine: 21 scripted shots (teleport, staging,
+`src/trailer.js` plays the official ~77 s trailer live in the engine: 21 scripted shots (teleport, staging,
 held keys, a camera per shot) joined by whip-pans, flashes and ink wipes, with comic title cards and a
 zone-music medley. The plan and running order are in [docs/trailer-brief.md](docs/trailer-brief.md); the
 final render is kept outside git in `trailer-out/`.
@@ -75,7 +75,7 @@ http://localhost:5173/?trailer         warm-up pass under a cover, then click to
 
 It never touches your saves (storage is swapped for in-memory stores in this mode). Recording: OBS records
 the browser source; the trailer starts at the first bright frame after the warm-up, and the cut is
-`ffmpeg -ss <start> -t 92 … -af loudnorm=I=-14:TP=-1.5:LRA=11`. Don't save source files mid-recording:
+`ffmpeg -ss <start> -t 77.5 … -af loudnorm=I=-14:TP=-1.5:LRA=11`. Don't save source files mid-recording:
 Vite's hot reload restarts the page.
 
 ## Controls
