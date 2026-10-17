@@ -690,6 +690,9 @@ tools/
   blender/build_warrig.py  builds the pirate war-rig -> src/assets/warrig.glb
   blender/kit.py           shared geometry/material/export helpers the skimmer and war-rig builders exec
   viewer.html              dev-only model viewer (npm run dev, then /tools/viewer.html?m=shuttle|freighter|mite|lineup…)
+docs/
+  trailer-brief.md         the official trailer: plan and running order
+  multiplayer-coop.md      co-op investigation: architecture, refactor inventory, solo vs co-op balance, phased plan
 ```
 
 **Editing the runner:** run `tools/blender/build_runner.py` in Blender (Scripting tab, or
