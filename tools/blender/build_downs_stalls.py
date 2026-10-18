@@ -53,7 +53,7 @@ def base(name, label, shelf="jars"):
     SPR, CRN, HC = 4.0, 5.6, 4.3                                                        # the arch: spring, crown, half-chord
     RR = (HC ** 2 + (CRN - SPR) ** 2) / (2 * (CRN - SPR))
     YC = CRN - RR
-    P["mint2"].box(-4.98, 4.98, FL + 0.02, FL + 0.2, ZS - 0.1, ZB - 0.02)                 # a raised floor (clear of the bay's floor, side walls and back wall)
+    P["mint2"].box(-4.9, 4.9, FL + 0.02, FL + 0.2, ZS - 0.1, ZB - 0.02)                 # a raised floor (clear of the bay's floor and back wall, under the side walls)
     # the screen wall: Mint with an arched opening, piers, a gold band round the opening and a keystone, a Black name plate with raised letters
     pts = [(-5.0, SPR)]
     n = 28
@@ -78,12 +78,12 @@ def base(name, label, shelf="jars"):
     P["gold"].letters(label, 0, 6.8, ZS - 0.1, pix_for(label, 8.8), 0.07, ry=math.pi)
     # the alcove: side walls and a roof, a lit tiled niche on the back wall
     for sx in (-1, 1):
-        x0, x1 = (4.8, 5.0) if sx > 0 else (-5.0, -4.8)
+        x0, x1 = (4.7, 4.9) if sx > 0 else (-4.9, -4.7)          # (10 cm inside the screen wall's ends: a step, not a flush joint whose outline would show as a seam)
         P["mint"].box(x0, x1, FL + 0.2, 7.7, ZT, ZB)
     P["mint2"].box(-4.98, 4.98, 7.64, 7.84, ZS - 0.04, ZB - 0.02)                                   # the roof over it all
     P["gold"].box(-5.06, 5.06, 7.84, 7.96, ZS - 0.08, ZB)
-    P["money2"].box(-4.8, 4.8, FL + 0.2, 1.9, ZB - 0.1, ZB)                             # tiles up the back wall
-    P["gold"].box(-4.8, 4.8, 1.9, 2.0, ZB - 0.14, ZB)
+    P["money2"].box(-4.7, 4.7, FL + 0.2, 1.9, ZB - 0.1, ZB)                             # tiles up the back wall
+    P["gold"].box(-4.7, 4.7, 1.9, 2.0, ZB - 0.14, ZB)
     P["black"].box(-4.4, 4.4, 2.2, 5.6, ZB - 0.05, ZB)
     P["glasswarm"].box(-4.28, 4.28, 2.32, 5.48, ZB - 0.09, ZB - 0.05)
     if shelf != "none":

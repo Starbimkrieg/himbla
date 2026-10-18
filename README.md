@@ -750,7 +750,7 @@ src/
   race.js        Chimera Downs: race card, betting, locked race camera, chaos racing, the live screens, the crowd, the podium finish
   downsPlan.js   Chimera Downs' plan: the oval, the stands, the arcades and their stalls, the forecourt, the drum, the podiums, the annex (no three.js)
   downsWorld.js  Chimera Downs' scenery, built from the Blender kits (the Downs kit baked into one settlement kit)
-  downsKit.js    what the Downs builders share: the palette, text widths, `bake` (a Blender kit part into a settlement kit), `fountain` (the forecourt's, with the casino's water shaders and a turning derby cup)
+  downsKit.js    what the Downs builders share: the palette, text widths, `bake` (a Blender kit part into a settlement kit), `fountain` (the forecourt's, with the casino's water shaders and a turning derby cup), `arcadeShell` (the parts of an arcade that run on from bay to bay, one seamless piece per run, with `sheet` and `inkShell` for a solid of joined polygons and its outline)
   curve.js       a `curved` place's bend: flat local coordinates onto the sphere (point, frame, geometry cut into short pieces); the Downs plateau is a cap of the Moon, not a plane, so nothing on it leans
   downsFair.js   the fairground's ferris wheel and carousel, from the Blender fair kit, with their rideable seats
   rides.js       hop-in rides: free transit-ship rides, and the fairground's ferris wheel and carousel at Chimera Downs (built by `downsFair.js`; `F` beside one pops you into the nearest gondola or onto the nearest horse)
