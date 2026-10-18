@@ -1246,6 +1246,63 @@ function makeWaveFlag({ w, h, mat, ragged = false }) {
   return { mesh, update };
 }
 
+// A baked pivot tree (bakeShip) as Groups, placed and named like its pivots, each with its parts and one outline shell;
+// the root comes back at the origin. matFor(slot) paints a part (null leaves it out), shadow(slot, node) says whether it
+// casts one, keep(node) can refuse a pivot and everything under it, and onPivot(node, g) sees each Group before its
+// children so the factory can pick out the ones it drives. flames: plume slots draw after the hull (renderOrder 2).
+function buildPivots(B, { matFor, shadow, keep = () => true, onPivot = () => {}, flames = false }) {
+  const build = (node) => {
+    if (!keep(node)) return null;
+    const g = new THREE.Group();
+    g.name = node.name;
+    g.position.copy(node.pos);
+    g.quaternion.copy(node.quat);
+    for (const { slot, geo } of node.parts) {
+      const mat = matFor(slot);
+      if (!mat) continue;
+      const m = new THREE.Mesh(geo, mat);
+      m.castShadow = shadow(slot, node);
+      if (flames && FLAMES.has(slot)) m.renderOrder = 2;
+      g.add(m);
+    }
+    if (node.ink) {
+      const h = new THREE.Mesh(node.ink, inkMat);
+      h.castShadow = false;
+      h.userData.isInk = true;
+      g.add(h);
+    }
+    onPivot(node, g);
+    for (const k of node.kids) {
+      const c = build(k);
+      if (c) g.add(c);
+    }
+    return g;
+  };
+  const root = build(B);
+  root.position.set(0, 0, 0);
+  root.quaternion.identity();
+  return root;
+}
+
+// Whip antennas that lie back with speed: a damped spring on each, so they lag, overshoot a little when you floor it and
+// flutter flat out. step(t, k, lay, flutter): k is the drive (1 flat out, negative leans them forward), lay the tip's
+// angle back at k = 1, flutter its shake. (+z is forward: a negative turn about x lays a tip back.)
+function whipSprings(antennas) {
+  const whips = antennas.map((g, i) => ({ g, a: 0, v: 0, ph: i * 2.1 }));
+  let lastT = null;
+  return (t, k, lay, flutter) => {
+    const dt = lastT == null ? 0 : Math.min(0.05, Math.max(0, t - lastT));
+    lastT = t;
+    if (!dt) return;
+    for (const w of whips) {
+      const target = -lay * k - flutter * Math.abs(k) * Math.sin(t * 17 + w.ph);
+      w.v += (90 * (target - w.a) - 9 * w.v) * dt;
+      w.a += w.v * dt;
+      w.g.rotation.x = w.a;
+    }
+  };
+}
+
 // Rovers: pirate war-rig, military patrol car, civilian buggy share one layout (body 3.2 x 5.2, wheels at
 // (±1.85, 0.85, ±1.8), gun mount (0, 3, 0.8), loot slot on the chassis) so AI, traffic and faction code drive them alike.
 // style: pirate | military | civil. Blender: war-rig build_warrig.py, buggy and patrol car build_rover.py (rover.glb).
@@ -1269,51 +1326,24 @@ export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, fl
   if (style === 'pirate') return makeWarRig({ color, trim });
   const B = SHIP_PARTS[style === 'military' ? 'rover_military' : 'rover_civil'];
   const out = { chassis: null, gun: null, wheels: [], antennas: [], cloth: null };
-  const build = (node) => {
-    const g = new THREE.Group();
-    g.name = node.name;
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, roverMat(slot, color, trim));
-      m.castShadow = ROVER_GLOW[slot] === undefined && slot !== 'lens';
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'flag') {
-      // cloth from the pole tip; vehicle code drives it via anim
-      out.cloth = makeWaveFlag({ w: 1.4, h: 0.9, mat: toon(flag, { side: THREE.DoubleSide }) });
-      g.add(out.cloth.mesh);
-    } else if (node.role === 'wheel') out.wheels.push(g);
-    else if (node.role === 'antenna') out.antennas.push(g);
-    else if (node.role === 'chassis') out.chassis = g;
-    else if (node.role === 'gun') out.gun = g;
-    for (const k of node.kids) g.add(build(k));
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
-  // whips follow speed as a damped spring, fluttering flat out
-  const whips = out.antennas.map((g, i) => ({ g, a: 0, v: 0, ph: i * 2.1 }));
-  let lastT = null;
+  const root = buildPivots(B, {
+    matFor: (slot) => roverMat(slot, color, trim),
+    shadow: (slot) => ROVER_GLOW[slot] === undefined && slot !== 'lens',
+    onPivot(node, g) {
+      if (node.role === 'flag') {
+        // cloth from the pole tip; vehicle code drives it via anim
+        out.cloth = makeWaveFlag({ w: 1.4, h: 0.9, mat: toon(flag, { side: THREE.DoubleSide }) });
+        g.add(out.cloth.mesh);
+      } else if (node.role === 'wheel') out.wheels.push(g);
+      else if (node.role === 'antenna') out.antennas.push(g);
+      else if (node.role === 'chassis') out.chassis = g;
+      else if (node.role === 'gun') out.gun = g;
+    },
+  });
+  const whips = whipSprings(out.antennas);
   const anim = (t, sp = 0) => {
     out.cloth.update(t, sp);
-    const dt = lastT == null ? 0 : Math.min(0.05, Math.max(0, t - lastT));
-    lastT = t;
-    if (!dt) return;
-    const k = Math.min(1, Math.abs(sp) / 40);
-    for (const w of whips) {
-      const target = -0.5 * k - 0.03 * k * Math.sin(t * 17 + w.ph);
-      w.v += (90 * (target - w.a) - 9 * w.v) * dt;
-      w.a += w.v * dt;
-      w.g.rotation.x = w.a; // (+z forward: negative x turn lays the tip back)
-    }
+    whips(t, Math.min(1, Math.abs(sp) / 40), 0.5, 0.03);
   };
   return { root, chassis: out.chassis, gun: out.gun, wheels: out.wheels, antennas: out.antennas, anim, ownSeat: style === 'civil' };
 }
@@ -1339,38 +1369,21 @@ export function makeInterceptor({ color = 0xfff4e0, trim = 0xffd23f, flag = trim
     return mats.get(slot);
   };
   const out = { chassis: null, wheels: [], antennas: [], plumes: [], cloth: null };
-  const build = (node) => {
-    const g = new THREE.Group();
-    g.name = node.name;
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = !FLAMES.has(slot) && INTERCEPTOR_GLOW[slot] === undefined;
-      if (FLAMES.has(slot)) m.renderOrder = 2;
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'flag') {
-      out.cloth = makeWaveFlag({ w: 1.4, h: 0.9, mat: toon(flag, { side: THREE.DoubleSide }) });
-      g.add(out.cloth.mesh);
-    } else if (node.role === 'wheel') out.wheels.push(g);
-    else if (node.role === 'antenna') out.antennas.push(g);
-    else if (node.role === 'plume') out.plumes.push({ g, phase: out.plumes.length * 1.7 });
-    else if (node.role === 'chassis') out.chassis = g;
-    for (const k of node.kids) g.add(build(k));
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
-  const whips = out.antennas.map((g, i) => ({ g, a: 0, v: 0, ph: i * 2.1 }));
-  let lastT = null;
+  const root = buildPivots(B, {
+    matFor,
+    shadow: (slot) => !FLAMES.has(slot) && INTERCEPTOR_GLOW[slot] === undefined,
+    flames: true,
+    onPivot(node, g) {
+      if (node.role === 'flag') {
+        out.cloth = makeWaveFlag({ w: 1.4, h: 0.9, mat: toon(flag, { side: THREE.DoubleSide }) });
+        g.add(out.cloth.mesh);
+      } else if (node.role === 'wheel') out.wheels.push(g);
+      else if (node.role === 'antenna') out.antennas.push(g);
+      else if (node.role === 'plume') out.plumes.push({ g, phase: out.plumes.length * 1.7 });
+      else if (node.role === 'chassis') out.chassis = g;
+    },
+  });
+  const whips = whipSprings(out.antennas);
   const anim = (t, sp = 0) => {
     out.cloth.update(t, sp);
     // flames: short at idle, full length flat out, flickering
@@ -1380,16 +1393,7 @@ export function makeInterceptor({ color = 0xfff4e0, trim = 0xffd23f, flag = trim
       P.g.scale.set(0.85 + 0.15 * s, 0.85 + 0.15 * s, s);
     }
     fx.plume.opacity = 0.35 + 0.35 * k;
-    const dt = lastT == null ? 0 : Math.min(0.05, Math.max(0, t - lastT));
-    lastT = t;
-    if (!dt) return;
-    const kw = Math.min(1, Math.abs(sp) / 40);
-    for (const w of whips) {
-      const target = -0.5 * kw - 0.03 * kw * Math.sin(t * 17 + w.ph);
-      w.v += (90 * (target - w.a) - 9 * w.v) * dt;
-      w.a += w.v * dt;
-      w.g.rotation.x = w.a; // (+z forward: negative x turn lays the tip back)
-    }
+    whips(t, Math.min(1, Math.abs(sp) / 40), 0.5, 0.03);
   };
   return { root, chassis: out.chassis, gun: new THREE.Group(), wheels: out.wheels, antennas: out.antennas, anim, ownSeat: true };
 }
@@ -1850,31 +1854,16 @@ export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff, style = skimmer
     return toon(SHIP_TOON[slot] ?? 0xff00ff);
   };
   const coils = [], plumes = [], lifts = [];
-  const build = (node) => {
-    const g = new THREE.Group();
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = !FLAMES.has(slot) && slot !== 'glow' && slot !== 'accent';
-      if (FLAMES.has(slot)) m.renderOrder = 2;
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'coil') coils.push({ g, spin: node.data.spin || 2 });
-    else if (node.role === 'plume') plumes.push({ g, phase: plumes.length * 1.7 });
-    else if (node.role === 'lift') lifts.push({ g, phase: lifts.length * 2.3 });
-    for (const k of node.kids) g.add(build(k));
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
+  const root = buildPivots(B, {
+    matFor,
+    shadow: (slot) => !FLAMES.has(slot) && slot !== 'glow' && slot !== 'accent',
+    flames: true,
+    onPivot(node, g) {
+      if (node.role === 'coil') coils.push({ g, spin: node.data.spin || 2 });
+      else if (node.role === 'plume') plumes.push({ g, phase: plumes.length * 1.7 });
+      else if (node.role === 'lift') lifts.push({ g, phase: lifts.length * 2.3 });
+    },
+  });
   // redesigns give dust spots (x, z pairs) and hide_rider (runner rides inside)
   const dust = B.data.dust;
   const dustSpots = dust ? Array.from({ length: dust.length / 2 }, (_, i) => [dust[i * 2], dust[i * 2 + 1]]) : null;
@@ -1907,37 +1896,20 @@ export function makeWarRig({ color = 0x7b2ff7, trim = 0x7dff3a } = {}) {
     return mats.get(slot);
   };
   const out = { chassis: null, gun: null, wheels: [] };
-  const build = (node) => {
-    const g = new THREE.Group();
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      if (slot === 'flag') continue; // (the rag is cloth: below)
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = RIG_GLOW[slot] === undefined;
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'chassis') {
-      // tattered rag on its whip pole
-      out.cloth = makeWaveFlag({ w: 1.3, h: 0.9, mat: matFor('flag'), ragged: true });
-      out.cloth.mesh.position.set(-1.2, 4.55, -2.25);
-      g.add(out.cloth.mesh);
-    }
-    if (node.role === 'chassis') out.chassis = g;
-    else if (node.role === 'gun') out.gun = g;
-    else if (node.role === 'wheel') out.wheels.push(g);
-    for (const k of node.kids) g.add(build(k));
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
+  const root = buildPivots(B, {
+    matFor: (slot) => (slot === 'flag' ? null : matFor(slot)), // (the rag is cloth: below)
+    shadow: (slot) => RIG_GLOW[slot] === undefined,
+    onPivot(node, g) {
+      if (node.role === 'chassis') {
+        // tattered rag on its whip pole
+        out.cloth = makeWaveFlag({ w: 1.3, h: 0.9, mat: matFor('flag'), ragged: true });
+        out.cloth.mesh.position.set(-1.2, 4.55, -2.25);
+        g.add(out.cloth.mesh);
+        out.chassis = g;
+      } else if (node.role === 'gun') out.gun = g;
+      else if (node.role === 'wheel') out.wheels.push(g);
+    },
+  });
   return { root, chassis: out.chassis, gun: out.gun, wheels: out.wheels, anim: out.cloth.update };
 }
 
@@ -1956,52 +1928,25 @@ export function makeApc({ color = 0x6b6f78, trim = 0xff3b5c } = {}) {
     return mats.get(slot);
   };
   const out = { chassis: null, turret: null, barrel: null, muzzle: null, exhaust: null, wheels: [], antennas: [] };
-  const build = (node) => {
-    const g = new THREE.Group();
-    g.name = node.name;
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = APC_GLOW[slot] === undefined;
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'wheel') out.wheels.push(g);
-    else if (node.role === 'antenna') out.antennas.push(g);
-    else if (node.role && node.role in out) out[node.role] = g;
-    for (const k of node.kids) g.add(build(k));
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
+  const root = buildPivots(B, {
+    matFor,
+    shadow: (slot) => APC_GLOW[slot] === undefined,
+    onPivot(node, g) {
+      if (node.role === 'wheel') out.wheels.push(g);
+      else if (node.role === 'antenna') out.antennas.push(g);
+      else if (node.role && node.role in out) out[node.role] = g;
+    },
+  });
   out.barrelRest = out.barrel.position.clone(); // (recoil slides back from here)
   // dust from the four corners, not all eight wheels
   const dustSpots = [[-1.72, 2.15], [1.72, 2.15], [-1.72, -2.15], [1.72, -2.15]];
-  // whip antennas lie back with speed: a damped spring each, driven by speed along the hull (vehicles.js sets `along`
-  // before anim; reversing leans them forward)
-  const whips = out.antennas.map((g, i) => ({ g, a: 0, v: 0, ph: i * 2.1 }));
-  let lastT = null;
+  // the whips are driven by the speed along the hull (vehicles.js sets `along` before anim; reversing leans them forward)
+  const whips = whipSprings(out.antennas);
   const model = {
     root, chassis: out.chassis, gun: out.turret, turret: out.turret, barrel: out.barrel, barrelRest: out.barrelRest, muzzle: out.muzzle, exhaust: out.exhaust,
     wheels: out.wheels, wheelR: 0.62, dustSpots, antennas: out.antennas, along: 0,
     anim(t, sp) {
-      const dt = lastT == null ? 0 : Math.min(0.05, Math.max(0, t - lastT));
-      lastT = t;
-      if (!dt) return;
-      const k = sp < 0.5 ? 0 : Math.max(-0.3, Math.min(1, model.along / 60)); // (1 = flat out)
-      for (const w of whips) {
-        const target = -(0.45 * k) - 0.02 * Math.abs(k) * Math.sin(t * 17 + w.ph); // (flutter at speed)
-        w.v += (90 * (target - w.a) - 9 * w.v) * dt; // spring + damping: lag, small overshoot when floored
-        w.a += w.v * dt;
-        w.g.rotation.x = w.a; // (+z forward: negative x turn lays the tip back)
-      }
+      whips(t, sp < 0.5 ? 0 : Math.max(-0.3, Math.min(1, model.along / 60)), 0.45, 0.02);
     },
   };
   return model;
@@ -2040,34 +1985,15 @@ function ltUnit(name, pal, faction) {
     return mats.get(slot);
   };
   const out = { wheels: [], beacon: null, bar: null, rod: null, eye: null };
-  const build = (node) => {
-    if (node.role === 'livery' && node.data.faction !== faction) return null; // (other factions' marks aren't built)
-    const g = new THREE.Group();
-    g.name = node.name;
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = LT_GLOW[slot] === undefined && node.role !== 'livery';
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'wheel') out.wheels.push(g);
-    else if (node.role && node.role in out) out[node.role] = g;
-    for (const k of node.kids) {
-      const c = build(k);
-      if (c) g.add(c);
-    }
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
+  const root = buildPivots(B, {
+    matFor,
+    shadow: (slot, node) => LT_GLOW[slot] === undefined && node.role !== 'livery',
+    keep: (node) => node.role !== 'livery' || node.data.faction === faction, // (other factions' marks aren't built)
+    onPivot(node, g) {
+      if (node.role === 'wheel') out.wheels.push(g);
+      else if (node.role && node.role in out) out[node.role] = g;
+    },
+  });
   // standable solid boxes: (hx, hy, hz, y, z) groups in the unit frame
   const flat = B.data.decks || [];
   const decks = [];
@@ -2951,33 +2877,14 @@ export function makeHoverCar({ faction = null, paint = 0 } = {}) {
     return mats.get(slot);
   };
   const beacons = [];
-  const build = (node) => {
-    if (node.role === 'livery' && node.data.faction !== faction) return null; // (only livery part: SPACECOM's light bar)
-    const g = new THREE.Group();
-    g.name = node.name;
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = !(slot === 'lift' || slot in CAR_GLOW);
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'beacon') { g.userData.phase = node.data.phase || 0; beacons.push(g); }
-    for (const k of node.kids) {
-      const c = build(k);
-      if (c) g.add(c);
-    }
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
+  const root = buildPivots(B, {
+    matFor,
+    shadow: (slot) => !(slot === 'lift' || slot in CAR_GLOW),
+    keep: (node) => node.role !== 'livery' || node.data.faction === faction, // (only livery part: SPACECOM's light bar)
+    onPivot(node, g) {
+      if (node.role === 'beacon') { g.userData.phase = node.data.phase || 0; beacons.push(g); }
+    },
+  });
   return { root, size: 3 * 1.15 * 1.18, beacons };
 }
 
