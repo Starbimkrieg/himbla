@@ -64,13 +64,13 @@ def dress_preview():
         c = (*[min(1, v) for v in m.diffuse_color[:3]],)
         if n == "bag":
             toon(m, c, 0.5)
-        elif n in ("glow", "gold", "lamp", "tail"):
-            light_material(m, c, {"glow": 7.0, "gold": 5.0, "lamp": 9.0, "tail": 7.0}[n])
+        elif n in ("stripe", "trim", "lamp", "tail"):
+            light_material(m, c, {"stripe": 7.0, "trim": 5.0, "lamp": 9.0, "tail": 7.0}[n])
         elif n == "glass":
             toon(m, c, 0.05, 0.4)
             m.blend_method = "BLEND" if hasattr(m, "blend_method") else None
-        elif n in ("body", "panel", "dark", "metal", "seat", "tire"):
-            toon(m, c, 0.28 if n in ("body", "panel") else 0.55, 1.0, 0.2 if n == "metal" else 0.0)
+        elif n in ("navy", "panel", "dark", "metal", "seat", "tire"):
+            toon(m, c, 0.28 if n in ("navy", "panel") else 0.55, 1.0, 0.2 if n == "metal" else 0.0)
 
 
 def scene_setup():
@@ -195,7 +195,7 @@ def add_rider(sc, variant, seat):
     for o in new:
         if o.type == "MESH":
             for m in o.data.materials:
-                if m and m.name.split(".")[0] in ("glow", "skate"):
+                if m and m.name.split(".")[0] in ("stripe", "skate"):
                     pass
     return root
 

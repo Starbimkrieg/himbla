@@ -13,10 +13,18 @@
 #   b  "Parcel Runner": rounder and friendlier. A wrap-around visor, square flapped panniers slung low
 #                       either side of the seat, a relaxed upright seat.
 #
-# Same conventions as the other builders: authored in three.js axes (x right, y up, +z forward) with the
-# origin on the ground in the middle; one root empty "courier"; pivots with a `role` (chassis, wheel: spun
-# about x, trail: where the light trail streams from); one material per mesh, named after a slot the game
-# swaps its own toon / glow materials into; custom property "ink" = outline thickness in metres.
+# Frame (as makeLightBike in src/models.js, so the Garage drives it unchanged): three.js axes (x right, y up,
+# +z forward), origin on the ground in the middle; wheels at z +-1.62, height 0.78, radius 0.78; built 1:1
+# (the game shows the bike at 1.2x). Root empty "courier" (extras: radius, proposal, seat = the rider's hip in
+# the bike's frame). Pivots (empties with a `role`):
+#   chassis  everything that is not a wheel
+#   wheel    two (wheel_front, wheel_rear), at the axle, spun about x: tyre, glowing rim rings, spokes, hub caps
+#   trail    where the light trail streams from (replaces makeLightBike's `trailFrom`)
+# Slots (one material a mesh; the game swaps its own in): LIVERY GLOW `stripe` (the bike's colour: rims, spokes,
+# shoulder / belly lines, spine, well arcs) and `trim` (the gold: pin-stripe, straps, clasps, headlamp ring);
+# FIXED TOON `navy` (the shell), `panel`, `dark`, `metal`, `seat`, `tire`, and `bag` (NEW: the saddle bags, the
+# trim colour as a flat toon); GLOW `glass` (screen), `lamp`, `tail`. `bag` needs a game entry (style.md).
+# Ink (outline thickness, metres) follows style.md; ink-0 details lie within ~6 mm of the surface they are on.
 
 import bpy, math, os
 from mathutils import Vector
@@ -41,13 +49,16 @@ OUT = os.path.join(REPO, "docs", "courier-proposals", f"courier_{V}.glb")
 COLL = f"CourierBike{V.upper()}"
 print("Courier proposal", V, "->", OUT)
 
-# preview colours (the Meridian livery: navy shell, cyan light, gold trim): the game replaces every slot
-SLOT_COLORS = {
-    "body": (0.005, 0.008, 0.026), "panel": (0.01, 0.018, 0.06), "dark": (0.003, 0.004, 0.012),
-    "metal": (0.1, 0.095, 0.15), "seat": (0.02, 0.016, 0.05), "tire": (0.004, 0.003, 0.008),
-    "glow": (0.027, 0.55, 1.0), "gold": (1.0, 0.64, 0.05), "glass": (0.33, 0.8, 1.0),
-    "lamp": (1.0, 0.92, 0.45), "tail": (1.0, 0.04, 0.07), "bag": (0.38, 0.17, 0.01),
-}
+def hexlin(h):
+    """sRGB hex -> the linear floats Blender's materials take"""
+    return tuple(((c / 255 + 0.055) / 1.055) ** 2.4 if c / 255 > 0.04045 else c / 255 / 12.92 for c in ((h >> 16) & 255, (h >> 8) & 255, h & 255))
+
+
+# preview colours, the game's: the bike's 0x2ec4ff and gold 0xffd23f for the glow slots (preview only)
+SLOT_COLORS = {slot: hexlin(h) for slot, h in {
+    "navy": 0x0d1428, "panel": 0x1a2440, "dark": 0x2a2540, "metal": 0x5b5870, "seat": 0x2a2540, "tire": 0x1d1a29,
+    "stripe": 0x2ec4ff, "trim": 0xffd23f, "glass": 0x9be7ff, "lamp": 0xfff6a8, "tail": 0xff2a4a, "bag": 0xb8741a,
+}.items()}
 
 exec(open(os.path.join(REPO, "tools", "blender", "kit.py"), encoding="utf-8").read(), globals())
 
@@ -89,9 +100,9 @@ def ring_xy(s, th):
     return s["w"] * spe(c, 2 / e), s.get("yc", 0.0) + h * spe(sn, 2 / e)
 
 
-def band(secs, th0, th1, side, off=0.012, z0=-9, z1=9, m=6):
+def band(secs, th0, th1, side, off=0.012, z0=-9, z1=9, m=3, stride=2):
     """A patch of the body's skin between two ring angles and two z's on one flank, floating `off` outside it."""
-    cols = [s for s in secs if z0 <= s["z"] <= z1]
+    cols = [s for s in secs if z0 <= s["z"] <= z1][::stride]
     verts, faces = [], []
     for s in cols:
         for j in range(m + 1):
@@ -104,8 +115,17 @@ def band(secs, th0, th1, side, off=0.012, z0=-9, z1=9, m=6):
     return verts, faces
 
 
-def line(secs, th, side, off=0.014, z0=-9, z1=9):
-    return [(side * (ring_xy(s, th)[0] + off), ring_xy(s, th)[1], s["z"]) for s in secs if z0 <= s["z"] <= z1]
+def line(secs, th, side, off=0.014, z0=-9, z1=9, stride=2):
+    return [(side * (ring_xy(s, th)[0] + off), ring_xy(s, th)[1], s["z"]) for s in secs if z0 <= s["z"] <= z1][::stride]
+
+
+PROUD = 0.006   # how far an ink-0 detail may stand off the skin: more and its colour is drawn across the outline
+
+
+def skin_line(secs, th, side, r, z0=-9, z1=9, stride=2):
+    """A glowing line of radius r laid in the flank, standing PROUD proud of it."""
+    path = line(secs, th, side, PROUD - r, z0, z1, stride)
+    return tube(path, [r] * len(path), 4, False)
 
 
 def skin_x(secs, z, y):
@@ -117,7 +137,7 @@ def skin_x(secs, z, y):
     return best[1]
 
 
-def well_arc(secs, zc, side, r, off=0.014, n=48):
+def well_arc(secs, zc, side, r, off=0.014, n=24):
     """A line on the flank hugging the scoop round the wheel at zc (radius r), where the shell is there."""
     dz = 1 if zc < 0 else -1   # the shell lies ahead of the rear wheel and behind the front one
     pts = []
@@ -265,25 +285,25 @@ SPEC = {
     ),
 }[V]
 
-SECS = smooth_keys(SPEC["body"], 6)
+SECS = smooth_keys(SPEC["body"], 4)
 
 # ---- the shell: one smooth loft, scooped round the wheels ----
-body = mesh("shell", loft(SECS, 36), "body", CH, 0.06, sharp=0)
+body = mesh("shell", loft(SECS, 24), "navy", CH, 0.06, sharp=0)
 cut_wheel_wells(body)
-mesh("belly", clear_of_wheels(band(SECS, -math.pi * 0.5 + 0.35, -math.pi * 0.5 + 0.12, 1, 0.0, -1.0, 1.0)), "dark", CH, 0, sharp=0)
 
 # ---- the wheels: chunky hubless tyres with a glowing rim ring on each face, spun about x ----
 HW = SPEC["tire_hw"]
 for name, z in (("rear", -WZ), ("front", WZ)):
     W = pivot(f"wheel_{name}", (0, WY, z), CH, role="wheel")
-    mesh(f"tyre_{name}", revolve_x(squircle(0.0, 0.56, HW, 0.22, SPEC["tire_e"], 18), 32), "tire", W, 0.035)
+    mesh(f"tyre_{name}", revolve_x(squircle(0.0, 0.56, HW, 0.22, SPEC["tire_e"], 12), 24), "tire", W, 0.05)
     for sx in (-1, 1):
-        mesh(f"rim_{name}_{'LR'[sx > 0]}", revolve_x(squircle(sx * (HW + 0.004), 0.47, 0.012, 0.035, 2.0, 8), 40), "glow", W, 0)
-        mesh(f"hubcap_{name}_{'LR'[sx > 0]}", revolve_x(squircle(sx * 0.31, 0.0, 0.04, 0.12, 2.4, 10), 20), "glow", W, 0)
+        mesh(f"rim_{name}_{'LR'[sx > 0]}", revolve_x(squircle(sx * (HW - 0.004), 0.47, 0.012, 0.03, 2.0, 4), 28), "stripe", W, 0)
+        mesh(f"hubcap_{name}_{'LR'[sx > 0]}", revolve_x(squircle(sx * 0.31, 0.0, 0.04, 0.12, 2.4, 8), 14), "stripe", W, 0)
     mesh(f"axle_{name}", revolve_x([(-0.31, 0.07), (0.31, 0.07), (0.31, 0.0), (-0.31, 0.0)], 10), "metal", W, 0.02)
-    for i in range(6):
+    for i in range(6):   # radial: hub to the rim ring, in the tyre's mid plane
         a = i * math.pi / 3
-        mesh(f"spoke_{name}{i}", xf(rbox(0.018, 0.23, 0.028, 0.3, 8, 4), (0, math.cos(a) * 0.33, math.sin(a) * 0.33), (a, 0, 0)), "glow", W, 0)
+        spoke = extrude([(-0.17, -0.014), (0.17, -0.014), (0.17, 0.014), (-0.17, 0.014)], 0.03, "x")
+        mesh(f"spoke_{name}{i}", xf(spoke, (0, math.cos(a) * 0.28, math.sin(a) * 0.28), (a - math.pi / 2, 0, 0)), "stripe", W, 0)
 
 # ---- the forks and the swingarm: slim blades that carry the wheels beside the tyres ----
 for sx in (-1, 1):
@@ -292,7 +312,7 @@ for sx in (-1, 1):
     mesh(f"fork{t}", limb((X * 0.95, 1.30, 0.93), (X, WY, WZ), 0.04, 0.06), "metal", CH, 0.03)
     mesh(f"forkCap{t}", xf(rbox(0.05, 0.05, 0.05, 0.4, 8, 4), (X, WY, WZ)), "dark", CH, 0.02)
     mesh(f"swing{t}", limb((X * 0.8, 0.86, -0.62), (X, WY, -WZ), 0.05, 0.085), "panel", CH, 0.03)
-    mesh(f"swingStripe{t}", limb((X * 0.8 + sx * 0.04, 0.9, -0.7), (X + sx * 0.04, WY + 0.06, -WZ + 0.12), 0.008, 0.012), "glow", CH, 0)
+    mesh(f"swingStripe{t}", limb((X * 0.8 + sx * 0.04, 0.9, -0.7), (X + sx * 0.04, WY + 0.06, -WZ + 0.12), 0.008, 0.012), "stripe", CH, 0)
     mesh(f"peg{t}", xf(rbox(0.1, 0.03, 0.03, 0.4, 6, 4), (sx * 0.42, 0.62, -0.25 if V == "a" else 0.1)), "metal", CH, 0)
 
 # ---- the rider's place: seat pad, bars, tail ----
@@ -306,20 +326,18 @@ for sx in (-1, 1):
 # ---- flank detail: a glowing shoulder line, a gold pin-stripe, a dark side panel ----
 for sx in (-1, 1):
     t = "LR"[sx > 0]
-    mesh(f"shoulder{t}", tube(line(SECS, 0.5, sx, 0.016, -0.8, 0.8), [0.02] * len(line(SECS, 0.5, sx, 0.016, -0.8, 0.8)), 5, False), "glow", CH, 0)
-    pin = line(SECS, 0.12, sx, 0.016, -0.75, 0.6)
-    mesh(f"pin{t}", tube(pin, [0.013] * len(pin), 4, False), "gold", CH, 0)
-    belly = line(SECS, -0.5, sx, 0.016, -0.7, 0.75)
-    mesh(f"bellyLine{t}", tube(belly, [0.02] * len(belly), 5, False), "glow", CH, 0)
-    mesh(f"sidePanel{t}", clear_of_wheels(band(SECS, -0.5, 0.1, sx, 0.008, -0.8, 0.75)), "panel", CH, 0.012, sharp=0)
+    mesh(f"shoulder{t}", skin_line(SECS, 0.5, sx, 0.02, -0.8, 0.8), "stripe", CH, 0)
+    mesh(f"pin{t}", skin_line(SECS, 0.12, sx, 0.013, -0.75, 0.6), "trim", CH, 0)
+    mesh(f"bellyLine{t}", skin_line(SECS, -0.5, sx, 0.02, -0.7, 0.75), "stripe", CH, 0)
+    mesh(f"sidePanel{t}", clear_of_wheels(band(SECS, -0.5, 0.1, sx, 0.006, -0.8, 0.75)), "panel", CH, 0.012, sharp=0)
     for i in range(3):   # intake slats ahead of the knee
-        mesh(f"vent{t}{i}", xf(rbox(0.012, 0.075, 0.015, 0.4, 6, 4), (sx * (SECS[18]["w"] + 0.018), 0.82, 0.58 + i * 0.075), (-0.25, 0, 0)), "dark", CH, 0)
+        mesh(f"vent{t}{i}", xf(rbox(0.012, 0.075, 0.015, 0.4, 6, 4), (sx * (SECS[12]["w"] + 0.018), 0.82, 0.58 + i * 0.075), (-0.25, 0, 0)), "dark", CH, 0)
 
 for sx in (-1, 1):
     for nm, zc in (("rear", -WZ), ("front", WZ)):
-        arc = well_arc(SECS, zc, sx, CUT_R + 0.016, 0.02)
+        arc = well_arc(SECS, zc, sx, CUT_R + 0.02, PROUD - 0.02)
         if len(arc) > 3:
-            mesh(f"wellArc_{nm}{'LR'[sx > 0]}", tube(arc, [0.024] * len(arc), 5, False), "glow", CH, 0)
+            mesh(f"wellArc_{nm}{'LR'[sx > 0]}", tube(arc, [0.02] * len(arc), 4, False), "stripe", CH, 0)
 
 if V == "a":
     # =========================================================================================
@@ -331,26 +349,25 @@ if V == "a":
         h = v * (1 - 0.22 * uu * uu)
         hw = 0.36 - 0.09 * v - 0.07 * v ** 4
         return (uu * hw, 1.42 + 0.7 * h - 0.07 * uu * uu, 1.02 - 0.48 * h - 0.2 * uu * uu)
-    mesh("windscreen", sheet(screen, 14, 10, 0.012), "glass", CH, 0.015, sharp=0)
-    rim = edge_path(screen, "top", 28) + edge_path(screen, "right", 12)[1:]
-    mesh("screenRim", tube(rim, [0.016] * len(rim), 4, False), "glow", CH, 0)
-    rimL = edge_path(screen, "left", 12)[::-1]
-    mesh("screenRimL", tube(rimL, [0.016] * len(rimL), 4, False), "glow", CH, 0)
-    foot = edge_path(screen, "bottom", 14)
+    mesh("windscreen", sheet(screen, 10, 6, 0.012), "glass", CH, 0.015, sharp=0)
+    rim = edge_path(screen, "top", 14) + edge_path(screen, "right", 6)[1:]
+    mesh("screenRim", tube(rim, [0.016] * len(rim), 4, False), "stripe", CH, 0)
+    rimL = edge_path(screen, "left", 6)[::-1]
+    mesh("screenRimL", tube(rimL, [0.016] * len(rimL), 4, False), "stripe", CH, 0)
+    foot = edge_path(screen, "bottom", 8)
     mesh("screenFoot", tube([(x, y - 0.012, z + 0.01) for x, y, z in foot], [0.026] * len(foot), 5, False), "metal", CH, 0.015)
     mesh("cowl", xf(rbox(0.2, 0.06, 0.2, 0.3, 14, 6), (0, 1.38, 0.95), (-0.15, 0, 0)), "panel", CH, 0.02)
     mesh("headlamp", xf(rbox(0.12, 0.028, 0.05, 0.4, 10, 4), (0, 1.395, 1.07), (-0.55, 0, 0)), "lamp", CH, 0)
     # tall teardrop saddle bags hugging the rear wheel: a flat bottom, a lid seam, a gold strap and clasp
     BAGS = smooth_keys([(-1.64, 0.92, 1.12, 0.06, 2.8, 3.2), (-1.55, 0.86, 1.18, 0.11, 2.8, 3.2), (-1.3, 0.83, 1.22, 0.13, 2.8, 3.2),
-                        (-1.02, 0.83, 1.2, 0.13, 2.8, 3.2), (-0.92, 0.88, 1.15, 0.09, 2.8, 3.2), (-0.86, 0.93, 1.1, 0.045, 2.8, 3.2)], 4)
+                        (-1.02, 0.83, 1.2, 0.13, 2.8, 3.2), (-0.92, 0.88, 1.15, 0.09, 2.8, 3.2), (-0.86, 0.93, 1.1, 0.045, 2.8, 3.2)], 3)
     for sx in (-1, 1):
         t = "LR"[sx > 0]
         bx = sx * 0.45
-        mesh(f"bag{t}", xf(loft(BAGS, 24), (bx, 0, 0)), "bag", CH, 0.04, sharp=0)
-        seam = line(BAGS, 0.62, sx, 0.012, -1.6, -0.92)
-        mesh(f"bagSeam{t}", xf(tube(seam, [0.01] * len(seam), 4, False), (bx, 0, 0)), "glow", CH, 0)
-        mesh(f"bagStrap{t}", xf(keep(loft([{**q, "w": q["w"] + 0.012, "t": q["t"] + 0.012, "b": q["b"] + 0.012} for q in BAGS], 24, False, False), lambda c: -1.22 <= c[2] <= -1.14), (bx, 0, 0)), "gold", CH, 0)
-        mesh(f"bagClasp{t}", xf(rbox(0.02, 0.055, 0.04, 0.4, 6, 4), (bx + sx * 0.142, 1.0, -1.18)), "gold", CH, 0.012)
+        mesh(f"bag{t}", xf(loft(BAGS, 16), (bx, 0, 0)), "bag", CH, 0.04, sharp=0)
+        mesh(f"bagSeam{t}", xf(skin_line(BAGS, 0.62, sx, 0.012, -1.6, -0.92, 1), (bx, 0, 0)), "stripe", CH, 0)
+        mesh(f"bagStrap{t}", xf(keep(loft([{**q, "w": q["w"] + 0.012, "t": q["t"] + 0.012, "b": q["b"] + 0.012} for q in BAGS], 16, False, False), lambda c: -1.26 <= c[2] <= -1.12), (bx, 0, 0)), "trim", CH, 0.008)
+        mesh(f"bagClasp{t}", xf(rbox(0.02, 0.055, 0.04, 0.4, 6, 4), (bx + sx * 0.142, 1.0, -1.18)), "trim", CH, 0.012)
         mesh(f"bagTail{t}", xf(rbox(0.045, 0.028, 0.02, 0.5, 8, 4), (bx, 1.02, -1.66)), "tail", CH, 0)
         mesh(f"bagBracket{t}", limb((sx * 0.18, 1.04, -1.0), (sx * 0.34, 1.04, -1.0), 0.03, 0.05), "metal", CH, 0.015)
 else:
@@ -362,37 +379,43 @@ else:
         ph = (u * 2 - 1) * 1.45
         th = v * 1.15
         return (0.38 * math.sin(ph) * math.cos(th), 1.38 + 0.58 * math.sin(th) - 0.1 * (1 - math.cos(ph)), 0.95 + 0.4 * math.cos(ph) * math.cos(th) - 0.3)
-    mesh("visor", sheet(visor, 18, 8, 0.012), "glass", CH, 0.015, sharp=0)
-    rim = edge_path(visor, "top", 30)
-    mesh("visorRim", tube(rim, [0.018] * len(rim), 4, False), "gold", CH, 0)
-    foot = edge_path(visor, "bottom", 18)
+    mesh("visor", sheet(visor, 12, 6, 0.012), "glass", CH, 0.015, sharp=0)
+    rim = edge_path(visor, "top", 16)
+    mesh("visorRim", tube(rim, [0.018] * len(rim), 4, False), "trim", CH, 0)
+    foot = edge_path(visor, "bottom", 10)
     mesh("visorFoot", tube([(x, y - 0.015, z) for x, y, z in foot], [0.03] * len(foot), 5, False), "panel", CH, 0.015)
     # a round headlamp set into the nose cowl
     mesh("cowl", xf(rbox(0.24, 0.075, 0.24, 0.28, 14, 6), (0, 1.3, 0.96), (-0.1, 0, 0)), "panel", CH, 0.02)
     mesh("headlamp", xf(lathe([(0, 0), (0.1, 0), (0.1, 0.03), (0, 0.04)], 20), (0, 1.27, 1.12), (1.2, 0, 0)), "lamp", CH, 0)
-    mesh("headlampRing", xf(torus(0.105, 0.016, 20, 4), (0, 1.27, 1.12), (1.2, 0, 0)), "gold", CH, 0)
+    mesh("headlampRing", xf(torus(0.105, 0.016, 20, 4), (0, 1.27, 1.12), (1.2, 0, 0)), "trim", CH, 0)
     # square flapped panniers slung low either side of the seat: a strap, a buckle and a tail lamp
     for sx in (-1, 1):
         t = "LR"[sx > 0]
         bx = sx * 0.5
         mesh(f"bag{t}", xf(rbox(0.12, 0.16, 0.4, 0.26, 14, 8), (bx, 0.9, -0.62)), "bag", CH, 0.04, sharp=0)
-        mesh(f"bagFlap{t}", xf(rbox(0.128, 0.085, 0.415, 0.22, 14, 6), (bx, 1.03, -0.62), (0, 0, sx * -0.12)), "body", CH, 0.03, sharp=0)
-        mesh(f"bagStrap{t}", xf(rbox(0.135, 0.15, 0.03, 0.3, 10, 6), (bx, 0.98, -0.5)), "gold", CH, 0.012)
+        mesh(f"bagFlap{t}", xf(rbox(0.128, 0.085, 0.415, 0.22, 14, 6), (bx, 1.03, -0.62), (0, 0, sx * -0.12)), "navy", CH, 0.03, sharp=0)
+        mesh(f"bagStrap{t}", xf(rbox(0.135, 0.15, 0.03, 0.3, 10, 6), (bx, 0.98, -0.5)), "trim", CH, 0.012)
         mesh(f"bagBuckle{t}", xf(rbox(0.022, 0.042, 0.03, 0.4, 6, 4), (bx + sx * 0.128, 0.93, -0.5)), "metal", CH, 0.012)
-        mesh(f"bagLine{t}", tube([(bx + sx * 0.122, 0.84, z) for z in (-0.95, -0.8, -0.5, -0.3)], [0.01] * 4, 4, False), "glow", CH, 0)
+        mesh(f"bagLine{t}", tube([(bx + sx * (0.12 + PROUD - 0.01), 0.84, z) for z in (-0.95, -0.8, -0.5, -0.3)], [0.01] * 4, 4, False), "stripe", CH, 0)
         mesh(f"bagTail{t}", xf(rbox(0.05, 0.035, 0.02, 0.5, 8, 4), (bx, 0.98, -1.045)), "tail", CH, 0)
         mesh(f"bagBracket{t}", limb((sx * 0.3, 0.9, -0.62), (sx * 0.4, 0.9, -0.62), 0.03, 0.06), "metal", CH, 0.015)
 
 # a brake-light bar across the tail, either way
 mesh("tailBar", xf(rbox(0.12, 0.022, 0.025, 0.5, 8, 4), (0, SPEC["body"][0][2] - 0.02, SPEC["body"][0][0] + 0.05), (0.4, 0, 0)), "tail", CH, 0)
-mesh("spine", tube(line(SECS, math.pi / 2, 1, 0.0, -0.45, 0.45), [0.018] * len(line(SECS, math.pi / 2, 1, 0.0, -0.45, 0.45)), 4, False), "glow", CH, 0)
+mesh("spine", tube([(0.0, ring_xy(q, math.pi / 2)[1] + PROUD - 0.014, q["z"]) for q in SECS if -0.45 <= q["z"] <= 0.45], [0.014] * len([q for q in SECS if -0.45 <= q["z"] <= 0.45]), 4, False), "stripe", CH, 0)
 
+ALLOW = []   # (name fragment, name fragment) pairs the coplanar audit may let through
 pivot("courier_trail", (0, 0.2, -WZ - 0.25), ROOT, role="trail")
 ROOT["radius"] = 2.1
 ROOT["proposal"] = SPEC["name"]
 # a seat (hip) for the rider, in the bike's own frame: the preview and the game both read it
 ROOT["seat"] = [0.0, SY + 0.1, SZ]
-print("built", len(C.objects), "objects,", sum(len(o.data.polygons) for o in C.objects if o.type == "MESH"), "faces")
+audit_coplanar(C.objects, allow=ALLOW)
+_dg = bpy.context.evaluated_depsgraph_get()
+_tris = [(o.evaluated_get(_dg).to_mesh(), o["ink"]) for o in C.objects if o.type == "MESH"]
+for m, _ in _tris:
+    m.calc_loop_triangles()
+print("built", len(C.objects), "objects,", sum(len(m.loop_triangles) for m, _ in _tris), "triangles (+", sum(len(m.loop_triangles) for m, k in _tris if k > 0), "for the outline)")
 
 if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
     export(OUT, C.objects)

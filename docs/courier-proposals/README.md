@@ -18,9 +18,13 @@ below is wired in until one is chosen. `tools/blender/preview_courier.py` rebuil
   with thin lines laid on its skin: a cyan shoulder line, a gold pin-stripe and a cyan belly line, over a flush dark side
   panel. A spine light on top.
 - **Saddle bags,** a pair, one each side, in their own `bag` slot (the trim colour as a flat toon, not a glow) so they read
-  as luggage against the dark shell.
+  as luggage against the dark shell. `bag` is the one slot the game has no entry for yet.
 - **A proper windscreen,** mounted on the nose cowl in front of the bars (the old canopy sat over them and looked wonky).
-- 8,500 faces (A) / 7,900 (B) before the outline pass. Not compared with the old bike's count.
+- **8.3k triangles (A) / 8.1k (B)**, plus 5.3k / 5.1k drawn again for the outline: inside the house budget of about 11k for a
+  vehicle (`style.md`). 298 / 292 KB as exported, 118 / 121 KB compressed (`npm run optimize:glb`; the files here are plain so any
+  viewer opens them). Both pass `audit_coplanar` (no surfaces that would z-fight). Ink-0 details (the glow lines, rim rings,
+  spokes) stand at most 6 mm off the surface they lie on, as the outline rules ask; the straps stand 12 mm off and have ink of
+  their own.
 
 ## A: Slipstream
 
@@ -38,12 +42,17 @@ the renders use these numbers.)
 
 ## If one is picked: wiring it in
 
-Same pattern as the skimmer and APC: a `loadLightBikeParts` in `src/models.js` reading the GLB (run `npm run optimize:glb`
-on it), and `makeLightBike` returning `{ root, chassis, wheels, gun, trailFrom, trailColor }` as now. The GLB carries
-what that needs: pivots with a `role` (`chassis`; two `wheel`, spun about x; `trail`, the empty the light trail streams
-from, replacing `trailFrom`), one material per mesh named for a slot (`body panel dark metal seat tire glass` toon,
-`glow gold lamp tail` glowing, `bag` the trim colour as toon), an `ink` outline thickness on every mesh, and the
-rider's hip in the root's `seat` extra, in the bike's own frame. The glow slots take the bike's colour and trim.
+Same pattern as the skimmer and APC: build to `src/assets/lightbike.glb`, run `npm run optimize:glb` on it, load it in
+`src/models.js`, and have `makeLightBike` return `{ root, chassis, wheels, gun, trailFrom, trailColor }` as now. Then update
+the Asset Row's light-bike item (`src/assetRowItems/vehicles.js`), as `.claude/skills/blender/SKILL.md` asks of any model change.
+The GLB already carries what the game reads:
+
+- **Pivots** (empties with a `role`): `chassis`; two `wheel`, spun about x; `trail`, the empty the light trail streams from
+  (it replaces `trailFrom`). The rider's hip is in the root's `seat` extra, in the bike's own frame.
+- **One material a mesh, named for its slot.** Fixed toon: `navy panel dark metal seat tire`. Glow: `glass lamp tail`, and the
+  two livery glows `stripe` (the bike's colour) and `trim` (the gold), which are the old bike's `glowA` and `glowB`. New:
+  `bag` (the saddle bags, the trim colour as a flat toon) needs an entry in the factory's slot map, or it draws magenta.
+- **`ink`** on every mesh, by part size as `style.md` lists.
 
 ## The light trail (changed in the game now, whichever bike is picked)
 
