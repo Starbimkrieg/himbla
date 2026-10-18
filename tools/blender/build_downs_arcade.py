@@ -5,8 +5,11 @@
 #
 # Authored in three.js axes (x right, y up, +z front), each model standing on y = 0 with its origin on the ground. One material per mesh named after a slot (DOWNS_TOON / DOWNS_GLOW in src/models.js).
 #   dn_arcade     one 6.3 degree wedge of an arcade round a turn, as a bay of a market hall: its inner chord is at z = 0 (84 m from the turn's centre) and its outer wall at z = 15.98 (100 m);
-#                 x is tangential, the bay's middle at x = 0. A timber floor, a Mint colonnade column at its left corner, a Mint architrave, a raked Barn Red roof with Mint ribs and a gold-lipped
-#                 fascia with pennants, a back wall with lit windows, two pendant lamps. Neighbouring wedges meet on the radial lines, so a run of them closes without a gap
+#                 x is tangential, the bay's middle at x = 0. The bay's own fittings: a timber floor, a Mint colonnade column at its left corner, Mint ribs on the roof, pennants under the
+#                 fascia, lit windows on the back wall's inner face (z = 15.28), a rafter under the ceiling, two pendant lamps. The parts that run on from bay to bay (the back wall and its
+#                 trim, the architrave, the fascia, the roof and its ceiling) are built per run by the game, as single pieces with no seams between bays (arcadeShell in src/downsKit.js);
+#                 the roof's underside rises from 7.15 m at z = -0.8 to 8.38 m at z = 16.08, resting on the back wall's cornice (ROOF there and RB below). Neighbouring wedges meet on the
+#                 radial lines, so a run of them closes without a gap
 #   dn_gate_hall  a gate hall, 32 m across (x) and 22 m deep (z = -11 to 11), +z outward: two Mint blocks with Barn Red hip roofs either side of a 12 m passage under a gabled Barn Red lintel hall,
 #                 Black name boards (on both faces, 4.4 m by 2 m, centre 9.3 m up) and lit slits
 #   dn_gate_main  the forecourt's gate, 28 m between the outer faces of its pylons (x) and 3 m deep: two Mint pylons 12 m tall with gold bands and lanterns, and a Barn Red segmental arch between
@@ -37,47 +40,33 @@ def trap(z0, z1, shrink=0.0):
 
 
 root = pivot("dn_arcade", (0, 0, 0))
-P = parts(root, "dn_arcade", {"saddle2": 0.0, "gold": 0.012, "mint": 0.03, "mint2": 0.012, "money2": 0.0, "black": 0.02, "barn": 0.025, "glasswarm": 0.0, "glowgold": 0.0, "gold2": 0.0})
-YF, YB = 6.6, 8.6                      # the roof's front edge (at z = -0.8) and back edge (at z = D + 0.2)
+P = parts(root, "dn_arcade", {"saddle2": 0.0, "gold": 0.012, "mint": 0.03, "mint2": 0.012, "black": 0.02, "barn": 0.025, "glasswarm": 0.0, "glowgold": 0.0})
+YF = 6.6                                                                                # the fascia's middle height (the fascia is the game's, at z -0.92 to -0.68)
+RB = lambda z: 7.15 + (z + 0.8) * (8.38 - 7.15) / (D + 0.9)                             # the roof's underside (src/downsKit.js ROOF); the ceiling hangs 7 cm under it
+z0, z1 = -0.8, D + 0.2
 # floor
 P["saddle2"].polyy(trap(0.0, D), 0.0, 0.14)
-P["gold"].box(-WI, WI, 0.14, 0.17, 0.0, 0.35)                                           # a gold inlay along the walk's edge
-# back wall
-WH = 8.3
-P["mint"].box(-WO, WO, 0.14, WH, D - 0.7, D)
-P["money2"].box(-WO + 0.01, WO - 0.01, 0.14, 2.4, D - 0.84, D - 0.7)                    # the wainscot
-P["money2"].box(-WO + 0.01, WO - 0.01, 4.4, 4.75, D - 0.78, D - 0.7)                    # a string course
-for x in (-2.6, 2.6):                                                                   # two lit windows, frames behind the panes
+for x in (-2.6, 2.6):                                                                   # two lit windows on the back wall's inner face (D - 0.7), frames behind the panes
     P["black"].box(x - 1.3, x + 1.3, 5.1, 7.7, D - 0.74, D - 0.7)
     P["glasswarm"].box(x - 1.15, x + 1.15, 5.25, 7.55, D - 0.78, D - 0.74)
     P["black"].box(x - 0.04, x + 0.04, 5.25, 7.55, D - 0.82, D - 0.78)
     P["gold"].box(x - 1.4, x + 1.4, 7.7, 7.88, D - 0.84, D - 0.7)
-P["gold"].box(-WO + 0.01, WO - 0.01, WH - 0.2, WH + 0.1, D - 1.0, D + 0.1)             # cornice
-# the column at the left corner, an architrave along the inner edge
+# the column at the left corner, up into the architrave (6.5 to 7.1)
 cx = -WI + 0.55
 P["mint2"].cylc(cx, 0.31, 0.55, 0.52, 0.3, 14)
 P["mint"].cylc(cx, 0.46 + 3.1, 0.55, 0.36, 6.2, 14, rt=0.3)
 P["gold"].cylc(cx, 6.5, 0.55, 0.5, 0.22, 14)
-P["mint2"].box(-WI - 0.2, WI + 0.2, 6.5, 7.1, 0.1, 1.0)                                 # the architrave over the colonnade
-P["gold"].box(-WI - 0.21, WI + 0.21, 6.44, 6.58, 0.08, 1.06)
-# the roof: a deck raked up toward the back, tilted about x; its plan is the wedge, extended to z = -0.8 and D + 0.2
-z0, z1 = -0.8, D + 0.2
+# standing seams on the roof's top (its underside RB, 0.32 thick), tilted with it
 zm = (z0 + z1) / 2
-ang = -math.atan2(YB - YF, z1 - z0)
-ym = (YF + YB) / 2 + 0.55
-shift = lambda pts: [(x, z - zm) for x, z in pts]
-P["barn"].polyy(shift(trap(z0, z1)), 0.0, 0.32, t=(0, ym, zm), rot=(ang, 0, 0))
-P["mint2"].polyy(shift(trap(z0 + 0.1, z1 - 0.1, 0.1)), -0.07, 0.0, t=(0, ym - 0.0, zm), rot=(ang, 0, 0))
-for x in (-2.6, 0.0, 2.6):                                                              # standing seams
-    P["mint"].boxc(x, ym + 0.38, zm, 0.14, 0.12, z1 - z0 - 0.4, rot=(ang, 0, 0))
-P["mint"].box(-hw(z0) + 0.02, hw(z0) - 0.02, YF - 0.45, YF + 0.5, z0 - 0.12, z0 + 0.12)  # the fascia
-P["gold"].box(-hw(z0) + 0.02, hw(z0) - 0.02, YF - 0.55, YF - 0.45, z0 - 0.18, z0 + 0.18)
-for i, x in enumerate((-2.2, 2.2)):                                                     # pennants
+ang = -math.atan(RB(1.0) - RB(0.0))
+for x in (-2.6, 0.0, 2.6):
+    P["mint"].boxc(x, RB(zm) + 0.32 + 0.04, zm, 0.14, 0.12, z1 - z0 - 0.4, rot=(ang, 0, 0))
+for i, x in enumerate((-2.2, 2.2)):                                                     # pennants under the fascia's gold lip
     (P["barn"] if i == 0 else P["gold"]).poly([(-0.4, 0), (0.4, 0), (0, -1.0)], z0 - 0.04, z0 + 0.04, t=(x, YF - 0.57, 0))
-P["black"].bm((-WI + 0.4, 6.55, 0.6), (-WO + 0.5, YB - 0.7, D - 0.8), 0.1)               # a rafter from the column to the wall
-# pendant lamps: a cord, a gold cap, a lit globe
+P["black"].bm((-WI + 0.4, RB(0.6) - 0.15, 0.6), (-WO + 0.5, RB(D - 0.8) - 0.15, D - 0.8), 0.1)   # a rafter from the column to the wall, just under the ceiling
+# pendant lamps: a cord from the ceiling, a gold cap, a lit globe
 for z in (3.0, 10.0):
-    yroof = YF + (z - z0) * (YB - YF) / (z1 - z0) - 0.1
+    yroof = RB(z) - 0.07
     P["black"].bm((0, yroof, z), (0, yroof - 0.9, z), 0.025)
     P["gold"].cylc(0, yroof - 0.95, z, 0.14, 0.12, 10)
     P["glowgold"].add(sphere(0.26, 12, 8), t=(0, yroof - 1.2, z))

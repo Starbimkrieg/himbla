@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { makeDownsPart, makeDownsFountain } from '../models.js';
 import { lineUp } from './common.js';
+import { arcadeBayShell } from '../downsKit.js';
 
 // Asset Row catalogue group: Chimera Downs' Blender kits (tools/blender/build_downs_*.py; docs/downs-layouts.md), each file's parts side by side as one item. The two rides (wheel and
 // carousel) are shown with the settlement parts (buildings.js); the whole course is the place at the end of the row (places.js).
@@ -14,6 +15,8 @@ const P = (name, w, { d = 0, dz = 0, tint, y = 0, ry = 0 } = {}) => {
   g.add(o);
   return { root: g, w, d };
 };
+// An arcade bay: the Blender wedge and the pieces the game runs on from bay to bay (downsKit.js arcadeShell), one bay's worth, its middle in the middle of its item
+const bayPart = () => { const p = P('dn_arcade', 11, { d: 16, dz: -8 }), s = arcadeBayShell(); s.position.z -= 8; p.root.add(s); return p; };
 // The fountain with its water running and its cup turning: a part of a line-up whose row item has an `update` hook (below).
 const fountainPart = (list) => { const f = makeDownsFountain(); list.push(f); return { root: f.root, w: 25, d: 25 }; };
 const item = (id, label, w, d, make, extra = {}) => ({ id, label, w, d, make: () => make(), ...extra });
@@ -51,7 +54,7 @@ const downs = {
       const accents = [0x8b4044, 0xcfb352, 0x7b9a6e, 0xb07c57, 0x8b4044, 0x3b393a, 0x7b9a6e, 0xb07c57, 0x8b4044, 0xcfb352, 0x7b9a6e, 0x3b393a];
       return row(accents.map((c, i) => {
         const g = new THREE.Group();
-        g.add(makeDownsPart('dn_arcade'));
+        g.add(makeDownsPart('dn_arcade'), arcadeBayShell());
         g.add(makeDownsPart(`dn_stall_${i}`, { accent: c }));
         return { root: g, w: 11, d: 16 };
       }), 0.3);
@@ -59,7 +62,7 @@ const downs = {
     item('downs.arcade', 'DOWNS ARCADE BAY · GATE HALL · FORECOURT GATE · FOUNTAIN · VALET BAY · BENCH · PLANTER · FESTOON', 154, 27, () => {
       const fs = [];
       const L = row([
-        P('dn_arcade', 11, { d: 16, dz: -8 }), P('dn_gate_hall', 32, { d: 22 }), P('dn_gate_main', 30, { d: 4 }), fountainPart(fs),
+        bayPart(), P('dn_gate_hall', 32, { d: 22 }), P('dn_gate_main', 30, { d: 4 }), fountainPart(fs),
         P('dn_bay', 3, { d: 6, dz: -2.8 }), P('dn_bench', 2.4, { d: 1 }), P('dn_planter', 2.6, { d: 1 }), P('dn_festoon', 30, { d: 1, y: 10 }),
       ], 2);
       return { root: L.root, update: (dt, t) => { for (const f of fs) f.update(t, dt); } };

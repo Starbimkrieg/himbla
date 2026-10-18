@@ -18,6 +18,21 @@ Models are built from code by `tools/blender/build_*.py` and exported to `src/as
 missing, run that script. Use the `blender` skill (`.claude/skills/blender/SKILL.md`) for conventions and the
 build, compress and check workflow.
 
+## Screenshots in dev sessions
+
+When you look at something in the running game (a dev server in the browser pane), turn on the free cam and hide
+the HUD first, so screenshots show the world and nothing over it. From the page, once `game.state` is `'play'`:
+
+```js
+const fc = game.cheats.freeCam;
+fc.start(); fc.setHud(true); // fly cam on; hides #hud (panels, speedometer, prompts, popups)
+for (const id of ['free-cam', 'gitchip']) { const el = document.getElementById(id); if (el) el.style.visibility = 'hidden'; } // the cam's hint and the git chip stay up otherwise
+fc.pos.set(x, y, z); fc.fwd.set(dx, dy, dz); fc.pitch = -0.3; fc.level(); // place and aim it
+```
+
+Then let a frame or two run before the screenshot. Leave the F3 overlay off. `fc.stop()` brings the HUD back (the
+hint and the git chip stay hidden until a reload). `src/freecam.js` has the controls.
+
 ## Conventions
 
 - Don't open a PR unless asked. Dev changes go on the branch the session names.
