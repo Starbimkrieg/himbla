@@ -20,11 +20,13 @@ const WALL_REST = 0.35;
 const FRICTION = 0.08; // fraction of tangential speed lost per hit
 const JITTER = 0.32; // random tangential kick (m/s) per peg hit: keeps it lively and unpredictable
 const BALL_REST = 0.6;
+const REAL_HIT = 0.8; // m/s into a peg: faster is a hit, slower is resting or rolling contact
 export const FLOOR_Y = 0;
 export const DIVIDER_TOP = 1.1;
 
-// Calibrated headless (120k drops per aim point, see report): RTP ≈ 94% over uniformly random
-// aim, ~95.5% dead centre, ~92% half-way out, ~98% at the far edge of AIM_RANGE. Median fall ≈ 5 s.
+// Measured headless (20k drops per aim point): RTP about 97% at the centre and half-way out either way and about 94% over
+// uniformly random aim (the 50x slots alone are about 0.35-0.4% of drops, so a few thousand drops swing the figure by a
+// few points). The two 50x outer slots are hit about once in 250 drops. Median fall about 6.7 s (p95 7.5 s).
 export const MULTS = [50, 8, 3, 1.2, 0.6, 0.3, 0.2, 0.3, 0.6, 1.2, 3, 8, 50];
 
 export const rowY = (r) => TOP_Y - r * ROW_H;
@@ -112,12 +114,21 @@ export class PlinkoSim {
           b.x += nx * (rr - d); b.y += ny * (rr - d);
           const vn = b.vx * nx + b.vy * ny;
           if (vn < 0) {
-            const tx = -ny, ty = nx;
-            let vt = b.vx * tx + b.vy * ty;
-            vt = vt * (1 - FRICTION) + (R() - 0.5) * 2 * JITTER;
-            const vnn = -vn * REST;
-            b.vx = nx * vnn + tx * vt; b.vy = ny * vnn + ty * vt;
-            if (this.onPeg && -vn > 0.8) this.onPeg(p, b, -vn);
+            if (-vn > REAL_HIT) {
+              // a real hit: it bounces, loses a little sliding speed and gets a random kick
+              const tx = -ny, ty = nx;
+              let vt = b.vx * tx + b.vy * ty;
+              vt = vt * (1 - FRICTION) + (R() - 0.5) * 2 * JITTER;
+              const vnn = -vn * REST;
+              b.vx = nx * vnn + tx * vt; b.vy = ny * vnn + ty * vt;
+              if (this.onPeg) this.onPeg(p, b, -vn);
+            } else {
+              // resting or rolling on the peg: lose the push into it and keep the sliding speed. (Friction and a kick on every
+              // 1/240 s sub-step of contact held a ball on a peg for a second at a crawl: the "sticking".) A ball balanced
+              // dead on the crown is tipped off, as a real one would be by the least draught.
+              b.vx -= vn * nx; b.vy -= vn * ny;
+              if (ny > 0.985 && Math.abs(b.vx) < 0.6) b.vx += (R() < 0.5 ? -1 : 1) * (0.35 + R() * 0.3);
+            }
           }
         }
       }

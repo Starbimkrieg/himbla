@@ -16,7 +16,7 @@ const STEPS = [
   { id: 'skate', title: 'QUANTUM-LOCK SKATES', text: 'Now the good stuff: hold <b>SPACE</b> to lock your skates and <b>glide</b>. Push off with <b>W</b> and keep holding SPACE.', hold: true },
   { id: 'carve', title: 'CARVE', text: 'While you glide, steer with <b>A</b> and <b>D</b>.', hold: true },
   { id: 'jump', title: 'MAG-JUMP', text: '<b>SHIFT</b> mag-jumps you. Give it a go!' },
-  { id: 'thrust', title: 'THRUSTERS', text: 'Hold <b>E</b> (or the <b>right mouse button</b>) for thrusters. They burn JET, which tops itself back up.', hold: true },
+  { id: 'thrust', title: 'THRUSTERS', text: 'Hold the <b>right mouse button</b> for thrusters. They burn JET, which tops itself back up.', hold: true },
   { id: 'map', title: 'THE GLOBE MAP', text: 'Press <b>M</b> for the globe map. Drag to spin it, then <b>M</b> again to close it.' },
   { id: 'board', title: 'THE JOB BOARD', text: 'Follow the arrow to the yellow <b>JOB BOARD</b> and press <b>F</b>.' },
   { id: 'accept', title: 'TAKE A CONTRACT', text: 'Take the <b>TRAINING RUN</b> to {town} (click it, or press <b>1</b>).' },
@@ -27,7 +27,7 @@ const STEPS = [
 ];
 
 // BOLT himself: a round courier drone with a big glowing eye, two rotor pods and an antenna
-function makeDrone() {
+export function makeDrone() {
   const root = new THREE.Group();
   const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 12), toon(0xfff4e0));
   ink(body, 0.04);
@@ -118,7 +118,6 @@ export class Tutorial {
     this.prog = 0;
     this.lastFwd = null;
     this.lastPos = g.player.pos.clone();
-    g.tipIndex = 1e9; // the old tips stay quiet while BOLT teaches
     this.pickRoute();
     if (!this.drone) {
       this.drone = makeDrone();

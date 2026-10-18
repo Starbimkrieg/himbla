@@ -1,30 +1,36 @@
 import * as THREE from 'three';
 import { toon, ink, glow, textSprite, setMask } from './toon.js';
 const VEH_DETAIL = 220; // past this, a vehicle's small parts stop drawing
-import { makeFigure, makeShuttle, makeRover, makeHoverCar, makeFreighter } from './models.js';
-import { Kit, T as KT, G as KG } from './outpostModels.js';
+import { makeFigure, makeShuttle, makeRover, makeHoverCar, makeFreighter, makeLandTrain, LAND_TRAIN_FACTIONS, GARAGE_HALL, GARAGE_BAYS, GARAGE_FLOOR } from './models.js';
 import { mulberry32 } from './rng.js';
 import { SUN, frameQuat, arcDist } from './geo.js';
+import { planRoad, roadQuality } from './roadplan.js';
 
 // Ambient traffic: freighters and shuttle-buses that land on real pads at the edge of each
 // settlement (passengers walk off to the town's buildings, others come out to board), plus a
-// network of dirt roads joining the safe outposts (through or round each town) with land-trains,
+// network of roads joining the safe outposts (through or round each town) with land-trains,
 // hover-cars and buggies driving routes over it. Land-trains and buggies can be wrecked.
 //
 // Vehicle kinds in world.vehicles: 'ship' (freighter), 'bus' (shuttle), 'car' (hover-car, on
-// roads; alchemy can jar these), 'landtrain' (big six-wheeled road-train with trailers).
+// roads; alchemy can jar these), 'landtrain' (the Moonliner passenger express or the Prospector freight rig, with trailers).
 // Ground buggies live in world.crawlers (main.js bumps the player with those).
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
 const _n = new THREE.Vector3(), _u = new THREE.Vector3(), _f = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _m4 = new THREE.Matrix4();
+const _fp = new THREE.Vector3(), _rp = new THREE.Vector3(); // (the lane's ground points under a unit's front and rear axles)
+const _g0 = new THREE.Vector3(), _g1 = new THREE.Vector3(), _g2 = new THREE.Vector3(), _g3 = new THREE.Vector3();
+const _gx = new THREE.Vector3(), _gy = new THREE.Vector3(), _gz = new THREE.Vector3(), _gt = new THREE.Vector3();
 const smooth = (t) => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 const clamp01 = (t) => Math.min(1, Math.max(0, t));
 const SAFE_ROAD = 2500; // connect safe outposts closer than this (plus each one's nearest neighbour < 3 km)
 const LINK_MAX = 3000; // nearest / second-nearest links up to this long
 const PAX_RANGE = 500; // passengers only exist near the camera
-const LANE = 2.4; // lane offset from the road centreline (right-hand traffic)
-const ROAD_LAT = [-5, -2.5, 0, 2.5, 5];
+// A land-train is 5.4 m across the tyres (2.7 each side of its centreline), so two pass with 2.2 m between them:
+// lane centres 3.8 m off the centreline, a graded bed out to 7.4, then the cut and a berm of pushed-up dust to 9.
+const LANE = 3.8; // lane offset from the road centreline (right-hand traffic)
+const ROAD_HALF = 9; // half the drawn strip, metres
+const ROAD_LAT = [-9, -7.4, -3.8, 0, 3.8, 7.4, 9]; // (the strip is sampled onto the ground at these offsets)
 // squared distance from point c to the segment a-b
 function segDist2(a, b, c) {
   const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
@@ -33,16 +39,36 @@ function segDist2(a, b, c) {
   const dx = a.x + abx * t - c.x, dy = a.y + aby * t - c.y, dz = a.z + abz * t - c.z;
   return dx * dx + dy * dy + dz * dz;
 }
+// what a Prospector can pull: Helium-3 tankers, plain containers and the explosives magazine (always last)
+const FREIGHT = [['tank', 'cargo', 'blast'], ['cargo', 'tank', 'blast'], ['tank', 'tank', 'blast'], ['tank', 'cargo', 'cargo']];
 const TRAIN_HP = 400, BUGGY_HP = 120, CAR_HP = 90;
 const _z = new THREE.Vector3(0, 0, 1);
+const _eu = new THREE.Euler();
 // ring roads round each connected town
 const RING_GAP = 32; // ring centreline this far outside the settlement radius (past buildings / plateau edge)
 const RING_PUSH = 90; // pushed out up to this much more where something is in the way
-const JOIN = 18; // junction connectors join the ring this far along it either side of a road
-const JOIN_OUT = 20; // ...and leave the road lanes this far out from the ring
-const GATE_SEP = 80; // minimum ring distance between two junctions
-const FILLET = 16; // drawn flare at each junction
+const JOIN = 24; // junction connectors join the ring this far along it either side of a road
+const JOIN_OUT = 26; // ...and leave the road lanes this far out from the ring
+const GATE_SEP = 90; // minimum ring distance between two junctions
+const GATE_NEAR = GATE_SEP * 0.6; // ...and the least a junction laid late (addTownRoads, on a ring that is already built) may be from one that stands: their flares (24 m a side) clear each other
+const PAD_APART = 26; // clear ground kept between the swept discs of two flights' pads, where the town has room (makePadStop)
+// how high your town's shuttle rises off its plot before it turns: the council hall's spire stands 26.6 m, the hull is 9 m round and a shuttle
+// leaves with its gear down (5.4 m), so a plot's flight clears the hall on any heading, with 3 m to spare and then some (the hall has no
+// collider that tall for flightPath to lift over)
+const TOWN_CLIMB = 40;
+const FILLET = 24; // drawn flare at each junction
+// Roads that were cut, and roads that end in a T on another road instead (buildSpur): the ILMB's
+// three roads east to Meridian, south-east to Tranquility and west to Aldrin became one road that
+// meets the Meridian-Tranquility road side-on, and traffic splits there.
+const CUT_ROADS = [['ilmb', 'aldrin'], ['ilmb', 'meridian'], ['ilmb', 'tranq']];
+const TEES = [{ from: 'ilmb', on: ['meridian', 'tranq'] }];
+// Roads laid by hand to places the network above leaves out: the Vostok supply road, from the Helium-3 exchange
+// into the restricted zone round Bastion Vostok-9 (the only road that reaches a restricted base)
+const EXTRA_ROADS = [['mine', 'vostok']];
+const UNSUITABLE_STEEP = 0.2, UNSUITABLE_OFF = 0.35; // (roadCentreline)
+const T_ARM = 30; // metres from a T's centre where the lanes stop and the turning connectors take over
 const STOP_IN = 50; // the stop is at least this far along its stretch of ring (room for a land-train)
+const pairKey = (a, b) => (a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`); // (the name of the road between two settlements)
 
 function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
   const m = new THREE.Mesh(geo, mat);
@@ -53,96 +79,6 @@ function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
 }
 
 // ---------------- models ----------------
-
-// Big balloon-tyred road-train: a six-wheeled tractor pulling passenger and cargo trailers.
-// Every unit has its origin on the ground, +Z forward.
-function makeLandTrain({ color = 0xff9f1c, trim = 0xfff4e0, cars = ['pax', 'cargo', 'pax'] } = {}) {
-  const bodyM = toon(color), trimM = toon(trim), dark = toon(0x1d1a29), hubM = toon(0x8a87a0);
-  const tyre = (parent, x, z, r, w, list) => {
-    const t = part(new THREE.CylinderGeometry(r, r, w, 14).rotateZ(Math.PI / 2), dark, x, r, z, 0.06);
-    t.add(part(new THREE.CylinderGeometry(r * 0.45, r * 0.45, w * 1.04, 8).rotateZ(Math.PI / 2), hubM, 0, 0, 0, 0));
-    parent.add(t);
-    list.push(t);
-  };
-  const root = new THREE.Group();
-  const wheels = [];
-  // tractor: frame, a cab with a wraparound windscreen, a grille and bumper, a sleeper/engine
-  // box behind, exhaust stacks, side tanks, mirrors and a roof light bar (baked in one Kit)
-  const tk = new Kit(color, 21, false);
-  tk.box(3.2, 1.0, 8.6, KT(0x1d1a29), 0, 1.25, 0, { outline: 0.08 });
-  tk.box(3.9, 2.9, 3.4, KT(color), 0, 2.15, 2.3, { outline: 0.14 });
-  tk.add(new THREE.BoxGeometry(3.96, 1.0, 1.6), KG(0x9be7ff), 0, 4.0, 3.55, { rx: -0.35, outline: 0 });
-  for (const sx of [-1, 1]) tk.box(0.06, 0.9, 1.8, KG(0x9be7ff), sx * 1.98, 3.55, 2.6, { outline: 0 });
-  tk.box(3.4, 1.0, 0.25, KT(0x2a2540), 0, 2.2, 4.06, { outline: 0.03 });
-  for (let i = 0; i < 6; i++) tk.box(3.2, 0.08, 0.3, KT(0x8a87a0), 0, 2.32 + i * 0.15, 4.08, { outline: 0 });
-  tk.box(4.1, 0.5, 0.5, KT(0x8a87a0), 0, 1.6, 4.3, { outline: 0.04 });
-  for (const sx of [-1, 1]) tk.box(0.7, 0.45, 0.2, KG(0xfff6a8), sx * 1.3, 2.3, 4.12, { outline: 0 });
-  tk.box(3.4, 1.9, 4.4, KT(trim), 0, 2.2, -2.1, { outline: 0.1 });
-  tk.box(3.5, 0.5, 4.5, KT(color), 0, 4.05, -2.1, { outline: 0.06 });
-  for (const sx of [-1, 1]) {
-    tk.cyl(0.18, 0.2, 3.4, 8, KT(0x8a87a0), sx * 1.7, 2.3, 0.4, { outline: 0.03 });
-    tk.cyl(0.22, 0.22, 0.25, 8, KT(0x1d1a29), sx * 1.7, 5.7, 0.4, { outline: 0 });
-    tk.add(new THREE.CylinderGeometry(0.45, 0.45, 1.8, 10).rotateX(Math.PI / 2), KT(0xd8d4e8), sx * 1.75, 1.6, -1.2, { outline: 0.03 });
-    tk.box(0.1, 0.6, 0.4, KT(0x1d1a29), sx * 2.2, 3.6, 3.6, { outline: 0.02 });
-    tk.beam([sx * 1.95, 3.4, 3.5], [sx * 2.2, 3.5, 3.6], 0.04, KT(0x1d1a29), { outline: 0 });
-  }
-  tk.box(3.2, 0.25, 0.4, KT(0x1d1a29), 0, 5.05, 3.2, { outline: 0.02 });
-  for (const sx of [-1.2, -0.4, 0.4, 1.2]) tk.box(0.5, 0.18, 0.12, KG(0xfff6a8), sx, 5.08, 3.42, { outline: 0 });
-  tk.cyl(0.05, 0.05, 2.2, 4, KT(0x1d1a29), -1.5, 5.0, 1.0, { outline: 0 });
-  // the hitch: a coupling block and pin at the back of the frame
-  tk.box(0.9, 0.6, 0.5, KT(0x2a2540), 0, 1.1, -4.5, { outline: 0.03 });
-  tk.cyl(0.16, 0.16, 0.8, 8, KT(0x8a87a0), 0, 1.0, -4.55, { outline: 0 });
-  root.add(tk.finish().root);
-  const beacon = part(new THREE.SphereGeometry(0.32, 8, 6), glow(0xff9f1c), 0, 5.25, 2.0, 0.03);
-  root.add(beacon);
-  for (const z of [2.9, 0, -2.9]) for (const sx of [-1, 1]) tyre(root, sx * 2.15, z, 1.2, 1.05, wheels);
-  const trailers = [];
-  for (const kind of cars) {
-    const tr = new THREE.Group();
-    const tw = [];
-    const q = new Kit(color, 22, false);
-    q.box(3.0, 0.6, 8.0, KT(0x1d1a29), 0, 1.25, 0, { outline: 0.06 });
-    q.box(0.9, 0.6, 0.5, KT(0x2a2540), 0, 1.1, -4.2, { outline: 0.03 }); // (rear coupling, for the next car)
-    q.cyl(0.16, 0.16, 0.8, 8, KT(0x8a87a0), 0, 1.0, -4.25, { outline: 0 });
-    q.box(1.2, 0.5, 0.4, KT(0x2a2540), 0, 1.15, 4.05, { outline: 0.03 }); // (the drawbar's yoke)
-    if (kind === 'pax') {
-      // passenger car: a windowed cabin with pillars, a door on the right, roof units
-      q.box(3.6, 2.7, 7.6, KT(trim), 0, 1.85, 0, { outline: 0.12 });
-      for (let i = 0; i < 5; i++) for (const sx of [-1, 1]) {
-        const z = -3 + i * 1.5;
-        if (sx < 0 && i === 2) continue;
-        q.box(0.06, 0.9, 1.1, KG(0xfff6a8), sx * 1.81, 3.2, z, { outline: 0 });
-      }
-      for (const sx of [-1, 1]) q.box(0.08, 0.25, 7.4, KT(color), sx * 1.82, 2.55, 0, { outline: 0 });
-      q.box(3.8, 0.45, 7.8, KT(color), 0, 4.55, 0, { outline: 0.06 });
-      q.box(1.6, 0.5, 2.2, KT(0xd8d4e8), 0, 5.0, -1.8, { outline: 0.03 });
-      q.box(0.12, 2.1, 1.5, KT(color), -1.82, 1.85, 0, { outline: 0 }); // door on the right (-x)
-      q.box(0.14, 0.3, 1.0, KG(0x7dff6a), -1.84, 4.1, 0, { outline: 0 });
-    } else {
-      // cargo car: a ribbed pressure tank on a cradle with a catwalk
-      q.box(3.4, 0.4, 7.8, KT(color), 0, 1.85, 0, { outline: 0.06 });
-      q.add(new THREE.CylinderGeometry(1.35, 1.35, 6.6, 16).rotateX(Math.PI / 2), KT(0x9be7ff), 0, 3.6, 0, { outline: 0.1 });
-      q.add(new THREE.SphereGeometry(1.35, 14, 8), KT(0x9be7ff), 0, 3.6, 3.3, { outline: 0 });
-      q.add(new THREE.SphereGeometry(1.35, 14, 8), KT(0x9be7ff), 0, 3.6, -3.3, { outline: 0 });
-      for (const z of [-2.2, 0, 2.2]) q.add(new THREE.TorusGeometry(1.4, 0.12, 6, 16), KT(color), 0, 3.6, z, { outline: 0 });
-      for (const z of [-2.6, 2.6]) q.box(2.6, 0.9, 0.5, KT(0x1d1a29), 0, 2.25, z, { outline: 0.02 });
-      q.box(0.8, 0.1, 6, KT(0x8a87a0), 0, 5.0, 0, { outline: 0.02 });
-      q.ring(0.5, 0.08, KG(0x7dff6a), 0, 5.06, 1.5);
-    }
-    tr.add(q.finish().root);
-    // the drawbar: a real link from this car's yoke to the coupling of the car in front, re-aimed
-    // every frame (traffic.js linkBar) so the train stays joined over crests and dips
-    const bar = new THREE.Group();
-    bar.position.set(0, 1.4, 4.3);
-    const rod = part(new THREE.BoxGeometry(0.32, 0.32, 1).translate(0, 0, 0.5), dark, 0, 0, 0, 0.03);
-    const eye = part(new THREE.TorusGeometry(0.22, 0.08, 4, 10).rotateY(Math.PI / 2), hubM, 0, 0, 1, 0);
-    bar.add(rod, eye);
-    tr.add(bar);
-    for (const z of [2.7, -2.7]) for (const sx of [-1, 1]) tyre(tr, sx * 1.95, z, 1.0, 0.9, tw);
-    trailers.push({ root: tr, wheels: tw, kind, bar, rod, eye });
-  }
-  return { root, wheels, trailers, beacon };
-}
 
 // ---------------- path helpers ----------------
 
@@ -183,12 +119,27 @@ function chaikin(pts, passes) {
 
 function roadMaterial() {
   return new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, side: THREE.DoubleSide,
-    uniforms: { sunDir: { value: SUN.clone() } },
-    vertexShader: `uniform vec3 sunDir; attribute float fade; varying vec2 vUv; varying float vLit; varying float vFade; varying float vEnd;
+    // A ground decal: blended like a transparent surface, but kept in the opaque queue and drawn right after the terrain
+    // (the terrain is renderOrder -1, the road -0.5, everything else 0). A transparent road was drawn after every opaque
+    // object, and its plane (4 cm over the ground) covered whatever sank below it: the soles of the player's boots, rocks'
+    // feet. Drawn this way it only has to beat the terrain, and whatever is drawn after it simply goes over it.
+    transparent: false, depthWrite: false, side: THREE.DoubleSide,
+    blending: THREE.CustomBlending, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+    // (lights: the sun's shadow map is bound to it: the road takes the shadows of the posts, vehicles and ridges that fall on it,
+    // which the translucent bed would otherwise hide under its own flat colour)
+    lights: true,
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.lights, { sunDir: { value: SUN.clone() } }]),
+    vertexShader: `#include <common>
+      #include <shadowmap_pars_vertex>
+      uniform vec3 sunDir; attribute float fade; attribute float mark; attribute float berm; attribute float soft; attribute float wid; varying vec2 vUv; varying float vLit; varying float vFade; varying float vEnd; varying float vMark; varying float vBerm; varying float vSoft; varying float vWid;
       void main(){
-        vUv = uv; vEnd = fade;
+        vUv = uv; vEnd = fade; vMark = mark; vBerm = berm; vSoft = soft; vWid = wid;
         vec4 wp = modelMatrix * vec4(position, 1.0);
+        #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+          // (the shadow lookup is made from the true ground point, nudged up along the local vertical: the eye-ward pull below is for the depth test only)
+          vDirectionalShadowCoord[ 0 ] = directionalShadowMatrix[ 0 ] * ( wp + vec4( normalize( wp.xyz ) * directionalLightShadows[ 0 ].shadowNormalBias, 0.0 ) );
+        #endif
         vec3 toCam = cameraPosition - wp.xyz; float dist = length(toCam);
         // pull toward the eye (screen position unchanged) so coarse terrain LODs never swallow the track
         wp.xyz += toCam / max(dist, 1e-3) * min(dist * 0.5, 0.25 + dist * 0.012);
@@ -196,31 +147,86 @@ function roadMaterial() {
         vFade = 1.0 - smoothstep(2300.0, 2900.0, dist);
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
-    fragmentShader: `varying vec2 vUv; varying float vLit; varying float vFade; varying float vEnd;
+    fragmentShader: `#include <common>
+      #include <packing>
+      #include <lights_pars_begin>
+      #include <shadowmap_pars_fragment>
+      varying vec2 vUv; varying float vLit; varying float vFade; varying float vEnd; varying float vMark; varying float vBerm; varying float vSoft; varying float vWid;
       float h1(float n){ return fract(sin(n) * 43758.5453); }
       float n1(float x){ float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(h1(i), h1(i + 1.0), f); }
+      float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n2(vec2 p){
+        vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
+      }
+      // A track cut into the regolith: a graded bed of churned, compacted soil (scraped in long streaks where the dozer
+      // blade ran, worn into a pair of ruts under each lane's tyres), with a dark cut line along each edge and a smooth
+      // ridge of pale pushed-up dust outside it, which melts into the surface. It is drawn translucent, so the craters and
+      // the colour of the ground show through. Metres across (X) and along (s) the road.
       void main(){
-        float X = vUv.x * 5.0, s = vUv.y, ax = abs(X);
-        float n = n1(s * 0.11) * 0.6 + n1(s * 0.53 + 17.0) * 0.4;
-        float ne = n1(s * 0.31 + sign(X) * 41.0);
-        float wob = (n1(s * 0.07 + 3.0) - 0.5) * 0.5;
-        float band = 1.0 - smoothstep(2.6 + ne * 1.8, 4.9, ax);
-        float xr = abs(X + wob);
-        float rd = min(abs(xr - 1.15), abs(xr - 3.7));
-        float rut = (1.0 - smoothstep(0.08, 0.4, rd)) * (0.55 + 0.45 * n1(s * 0.8 + X * 3.0));
-        float berm = smoothstep(3.6 + ne, 4.3 + ne * 0.5, ax) * (1.0 - smoothstep(4.5, 5.0, ax));
-        vec3 col = mix(vec3(0.13, 0.115, 0.125), vec3(0.035, 0.03, 0.045), rut);
-        col = mix(col, vec3(0.75, 0.7, 0.62), berm * 0.6);
-        float a = band * (0.5 + 0.25 * n);
-        a = max(a, rut * 0.85 * band);
-        a = max(a, berm * 0.35);
-        col *= 0.22 + 0.85 * vLit;
-        gl_FragColor = vec4(col, a * vFade * vEnd);
+        float X = vUv.x * ${ROAD_HALF.toFixed(1)}, s = vUv.y, ax = abs(X), sg = sign(X);
+        // (vWid: how many metres one unit across is, for a bed much wider than a road: its texture and its edge keep their size)
+        float XR = X * vWid;
+        float ne = n1(s * 0.29 + sg * 41.0);
+        // churned soil: broad mottling, finer clods, and the blade's streaks running along the road
+        float mot = n2(vec2(XR * 0.8, s * 0.2)) * 0.5 + n2(vec2(XR * 2.3, s * 0.9)) * 0.3 + n2(vec2(XR * 6.0, s * 2.6)) * 0.2;
+        float scr = n2(vec2(XR * 5.5 + n1(s * 0.04) * 9.0, s * 0.045));
+        float scr2 = n2(vec2(XR * 15.0 + n1(s * 0.07 + 9.0) * 6.0, s * 0.14));
+        float edgeR = 7.3 + (ne - 0.5) * 0.15;
+        float dE = (ax - edgeR) * vWid; // metres beyond the bed's edge
+        // (a junction flare keeps the road's crisp edge and berm on the outside of its curve, and a soft, bermless edge on the
+        // inside, where it melts into the neighbouring flare and the ring)
+        float es = vSoft * (1.0 - vBerm);
+        float bed = 1.0 - smoothstep(-0.3 - es * 1.2, 0.1 + es * 0.6, dE);
+        vec3 soil = mix(vec3(0.09, 0.085, 0.115), vec3(0.25, 0.24, 0.28), mot);
+        soil *= (0.88 + 0.28 * (scr - 0.5) + 0.12 * (scr2 - 0.5)) * (1.0 - 0.14 * vSoft);
+        // dust that has drifted back over the bed, and the crown between the lanes where nothing runs
+        float drift = smoothstep(0.6, 0.9, n2(vec2(XR * 0.35, s * 0.04 + 3.0)));
+        float crown = (1.0 - smoothstep(0.5, 1.5, ax)) / (1.0 + (vWid - 1.0) * 4.0);
+        soil = mix(soil, vec3(0.42, 0.4, 0.46), drift * 0.3 + crown * 0.1);
+        // wheel ruts: a worn groove with a lip of pushed-up dust beside it (tyres run 1.75 and 5.85 m from the centre)
+        float rd = min(abs(ax - 1.75), abs(ax - 5.85));
+        float rutN = 0.6 + 0.4 * n1(s * 0.9 + ax * 3.0);
+        float groove = (1.0 - smoothstep(0.1, 0.45, rd)) * rutN * vMark;
+        float lip = smoothstep(0.4, 0.6, rd) * (1.0 - smoothstep(0.6, 1.0, rd)) * vMark;
+        soil = mix(soil, vec3(0.03, 0.028, 0.045), groove * 0.9);
+        soil = mix(soil, vec3(0.5, 0.48, 0.54), lip * 0.32 * (0.5 + 0.5 * n1(s * 0.5 + 7.0)));
+        // the cut: a dark line where the bed drops away, then a smooth berm of pushed-up regolith, palest at the crest
+        float cut = smoothstep(-0.2, 0.25, dE) * (1.0 - smoothstep(0.4, 1.1, dE)) * vBerm;
+        float crest = smoothstep(0.3, 1.1, dE) * (1.0 - smoothstep(1.1, 9.0 - edgeR, dE)) * vBerm;
+        vec3 col = soil;
+        col = mix(col, vec3(0.03, 0.028, 0.045), cut * 0.92);
+        col = mix(col, vec3(0.82, 0.79, 0.85) * (0.94 + 0.06 * n1(s * 0.05 + sg * 11.0)), crest * 0.9);
+        // translucent, so the ground shows through, and soft where it melts into the surface
+        float bedA = max(bed * mix(0.84, 0.96, vSoft), groove * 0.9);
+        float a = max(bedA * vEnd, max(cut * 0.9, crest * 0.8)); // (the end fade is the bed's: a berm only stops where its strip says)
+        a *= 1.0 - smoothstep(8.3 - edgeR, 9.0 - edgeR, dE);
+        float sh = 1.0;
+        #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+          DirectionalLightShadow dls = directionalLightShadows[ 0 ];
+          if ( receiveShadow ) sh = getShadow( directionalShadowMap[ 0 ], dls.shadowMapSize, dls.shadowIntensity, dls.shadowBias, dls.shadowRadius, vDirectionalShadowCoord[ 0 ] );
+        #endif
+        col *= 0.22 + 0.85 * vLit * sh;
+        gl_FragColor = vec4(col, a * vFade);
       }`,
   });
 }
 
 // ---------------- traffic ----------------
+
+// A road buggy's model (a rover with a driver at the wheel); k picks its colour and driver. (Pure: the Asset Row builds it too.)
+export function buildBuggyRig(k) {
+  const r = makeRover({ color: [0xffd23f, 0xff9f1c, 0x7dff6a][k % 3], trim: 0xfff4e0, pirate: false, flag: 0x2ec4ff });
+  r.gun.visible = false;
+  r.root.scale.setScalar(1.3);
+  // a driver on the left of the bench, legs out under the dash and hands on the buggy's steering wheel
+  const drv = makeFigure({ seed: 4100 + k });
+  drv.root.position.set(0.6, 1.12, -0.32);
+  drv.legL.rotation.x = drv.legR.rotation.x = -1.45;
+  drv.armL.rotation.x = drv.armR.rotation.x = -1.0;
+  r.chassis.add(drv.root);
+  return r;
+}
 
 export class Traffic {
   constructor(world) {
@@ -236,14 +242,44 @@ export class Traffic {
     this.pool = [];
     this.platforms = []; // trailer decks
     this._buf = [];
-    this.L = Object.fromEntries(world.locations.map((l) => [l.id, l]));
-    for (const loc of world.locations) {
-      loc._inv = loc.group.matrixWorld.clone().invert();
-      loc.stopKeep = [];
-    }
+    this.L = {};
+    for (const loc of world.locations) this.registerLocation(loc);
     this.buildRoads();
     this.buildFlights();
     this.dropSparePads();
+  }
+
+  // Let traffic know a place: the constructor does it for every settlement that exists at boot, and the town a finale founds mid-game (main.js
+  // applyWorldLive) comes through here, so a flyer or a road can be laid to it live. Idempotent.
+  registerLocation(loc) {
+    if (this.L[loc.id] === loc) return;
+    this.L[loc.id] = loc;
+    loc._inv = loc.group.matrixWorld.clone().invert();
+    loc.stopKeep = [];
+  }
+
+  // A place that is rebuilt in place (world.rebuildLocation, when a Council motion changes it) loses what traffic hung on its old group, and the
+  // doors its passengers had learnt. This puts the waiting shelters of its pad stops back and forgets the stale buildings. (Only your town
+  // asks: its pad and the pad's lights are part of its own kit, which the rebuild bakes again; hometown.js buildHomeTown.)
+  redress(loc) {
+    delete loc._bld;
+    for (const s of this.stops) {
+      if (s.loc !== loc) continue;
+      delete s.doors;
+      if (s.shelterAt) this.shelter(loc, s.shelterAt.x, s.shelterAt.z, s.shelterAt.yaw, s.shelterAt.text, s.shelterAt.color);
+    }
+  }
+
+  // The settlement nearest to `loc` that a shuttle may fly to: open to anyone (safe, not a restricted base), a real town rather than a point of
+  // interest (the casino, the Monolith) and not a den, camp or ruin
+  nearestPort(loc) {
+    let best = null, bd = Infinity;
+    for (const l of this.w.locations) {
+      if (l === loc || l.type === 'pirate' || l.type === 'ruin' || l.camp || l.hostile || !l.safe || l.restricted || l.poi) continue;
+      const d = arcDist(loc.dir, l.dir);
+      if (d < bd) { bd = d; best = l; }
+    }
+    return best;
   }
 
   // Settlements lay down a landing pad or two of their own; any that no transit line ended up using
@@ -251,12 +287,11 @@ export class Traffic {
   dropSparePads() {
     for (const loc of this.w.locations) {
       if (!loc.pads) continue;
-      loc.pads = loc.pads.filter((p) => {
-        if (!p.spare || p.used) return true;
-        if (p.mesh) p.mesh.removeFromParent();
+      for (const p of loc.pads.slice()) {
+        if (!p.spare || p.used) continue;
+        this.w.dropPad(loc, p); // (its deck, legs, railing and stairs, and their colliders)
         (loc.droppedPads ||= []).push({ x: p.x, z: p.z });
-        return false;
-      });
+      }
     }
   }
 
@@ -367,13 +402,11 @@ export class Traffic {
 
   // ================= flights: pads, arcs, landings =================
 
-  // Pick (or reuse) a landing pad in open ground at the settlement's edge, facing `other`.
-  makePadStop(loc, other, spec, kind) {
-    const tw = this.toward(loc, other);
-    const keeps = this.keepouts(loc);
+  // The search half of makePadStop: the best open spot (or a registered pad) at the settlement's edge, toward heading `tw`.
+  padSpot(loc, tw, keeps, spec, kind) {
     const cands = [];
     for (const p of loc.pads || []) {
-      if (p.r >= 25 || p.used) continue;
+      if (p.r >= 25 || p.used || p.flat) continue;
       cands.push({ x: p.x, z: p.z, existing: p });
     }
     for (let fr = 0.4; fr <= 1.16; fr += 0.07) {
@@ -389,22 +422,27 @@ export class Traffic {
     }
     cands.sort((p, q) => q.score - p.score);
     let pick = null;
-    for (const c of cands) {
-      if (keeps.some((k) => k !== c.existing && Math.hypot(c.x - k.x, c.z - k.z) < spec.clearR * 0.85 + k.r)) continue;
-      // beyond the plateau the ground may slope: only accept gentle spots (pad is raised to the top)
-      let lo = 0, hi = 0;
-      if (c.d + spec.padR > loc.r * 0.98) {
-        lo = Infinity; hi = -Infinity;
-        for (let i = 0; i <= 8; i++) {
-          const a = (i / 8) * Math.PI * 2, rr = i === 8 ? 0 : spec.padR;
-          const y = this.groundY(loc, c.x + Math.cos(a) * rr, c.z + Math.sin(a) * rr);
-          lo = Math.min(lo, y); hi = Math.max(hi, y);
+    // (the pads of two flights keep PAD_APART metres of clear ground between their swept discs, where there is room: a freighter's
+    // wings and a shuttle's tail fins should not crowd each other. A town with no room for that takes the closer spot after all.)
+    for (const apart of [PAD_APART, 0]) {
+      for (const c of cands) {
+        if (keeps.some((k) => k !== c.existing && Math.hypot(c.x - k.x, c.z - k.z) < spec.clearR * 0.85 + k.r + (k.flyPad ? apart : 0))) continue;
+        // beyond the plateau the ground may slope: only accept gentle spots (pad is raised to the top)
+        let lo = 0, hi = 0;
+        if (c.d + spec.padR > loc.r * 0.98) {
+          lo = Infinity; hi = -Infinity;
+          for (let i = 0; i <= 8; i++) {
+            const a = (i / 8) * Math.PI * 2, rr = i === 8 ? 0 : spec.padR;
+            const y = this.groundY(loc, c.x + Math.cos(a) * rr, c.z + Math.sin(a) * rr);
+            lo = Math.min(lo, y); hi = Math.max(hi, y);
+          }
+          if (hi - lo > 3.5) continue;
         }
-        if (hi - lo > 3.5) continue;
+        if (!this.clearDisc(loc, c.x, c.z, spec.clearR, spec.heights, hi)) continue;
+        pick = { ...c, lo, hi };
+        break;
       }
-      if (!this.clearDisc(loc, c.x, c.z, spec.clearR, spec.heights, hi)) continue;
-      pick = { ...c, lo, hi };
-      break;
+      if (pick) break;
     }
     if (!pick) {
       // nothing fits: a raised pad well outside the settlement, toward the other end
@@ -413,69 +451,113 @@ export class Traffic {
       pick.lo = pick.hi = this.groundY(loc, pick.x, pick.z);
       console.warn('[traffic] no open pad spot at', loc.id, 'for', kind);
     }
+    return pick;
+  }
+
+  // Pick (or reuse) a landing pad in open ground at the settlement's edge, facing `other`. `pin` is a pad that is already built and
+  // reserved (your town's shuttle pad, on its plot): that one is used as it is, with no search. Pads are landingPad.js's: a deck up on
+  // legs with a railing, and stairs down on one side, which the passengers use (exchange).
+  makePadStop(loc, other, spec, kind, pin = null) {
+    const tw = this.toward(loc, other);
+    const keeps = this.keepouts(loc);
+    const pick = pin ? { x: pin.x, z: pin.z, lo: 0, hi: 0, existing: pin } : this.padSpot(loc, tw, keeps, spec, kind);
     const color = kind === 'ship' ? 0xff9f1c : 0x2ec4ff;
-    let top = 0.27;
-    if (pick.existing && pick.existing.r >= spec.padR * 0.8) {
-      pick.existing.used = true;
-    } else {
-      if (pick.existing) pick.existing.used = true;
-      const raised = pick.hi - pick.lo > 0.3 || Math.abs(pick.hi) > 0.3;
-      const base = raised ? pick.hi + 0.3 : (pick.existing ? -0.12 : 0);
-      const pad = this.w.pad(loc, pick.x, pick.z, spec.padR, color);
-      if (loc.pads && loc.pads.length) loc.pads[loc.pads.length - 1].used = true;
-      pad.position.y = base;
-      pad.updateMatrix();
-      if (raised) {
-        const sk = part(new THREE.CylinderGeometry(spec.padR * 1.02, spec.padR * 1.1, base - pick.lo + 1.5, 24), toon(0x5b5870), 0, 0, 0, 0.1);
-        this.w.put(sk, loc, pick.x, pick.z, (base + pick.lo - 1.5) / 2 - 0.25);
-        this.w.col(loc, { type: 'cyl', x: pick.x, z: pick.z, y0: pick.lo - 1.5, y1: base + 0.27, r: spec.padR * 1.05 });
-      }
-      top = Math.max(top, base + 0.27);
-      // rim lights so the pad reads at night
-      const lights = new THREE.Group();
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2;
-        lights.add(part(new THREE.SphereGeometry(spec.padR > 12 ? 0.5 : 0.3, 6, 4), glow(color), Math.cos(a) * spec.padR * 0.92, 0.3, Math.sin(a) * spec.padR * 0.92, 0));
-      }
-      this.w.put(lights, loc, pick.x, pick.z, base);
+    let rec = pick.existing || null;
+    // a pad laid with the settlement is used as it is if it is big enough for this rig's deck (its ramp has to come down on it);
+    // a smaller one gives way to one that is
+    if (rec && !pin && !(rec.stairs && rec.r >= spec.padR - 0.5)) { this.w.dropPad(loc, rec); rec = null; }
+    if (!rec) {
+      const face = this.stairFace(loc, pick, spec.padR, keeps.filter((k) => k !== pick.existing));
+      rec = this.w.pad(loc, pick.x, pick.z, spec.padR, color, false, { face });
     }
-    loc.stopKeep.push({ x: pick.x, z: pick.z, r: spec.clearR });
-    // waiting shelter at the pad edge on the town side
-    const dc = Math.hypot(pick.x, pick.z) || 1;
-    const base = Math.atan2(-pick.z, -pick.x);
-    let wx = pick.x - (pick.x / dc) * (spec.padR + 4), wz = pick.z - (pick.z / dc) * (spec.padR + 4);
-    for (const off of [0, 0.4, -0.4, 0.8, -0.8, 1.3, -1.3]) {
-      const a = base + off;
-      const x = pick.x + Math.cos(a) * (spec.padR + 4.5), z = pick.z + Math.sin(a) * (spec.padR + 4.5);
-      if (keeps.some((k) => k !== pick.existing && Math.hypot(x - k.x, z - k.z) < k.r + 2.5)) continue;
+    rec.used = true;
+    const top = rec.top, st = rec.stairs;
+    loc.stopKeep.push({ x: pick.x, z: pick.z, r: spec.clearR, flyPad: true });
+    // the waiting shelter: on the ground beside the stairs' foot, facing them
+    const fx = st.foot.x, fz = st.foot.z, ox = Math.cos(st.face), oz = Math.sin(st.face), sx = -oz, sz = ox;
+    let wx = st.out.x + ox * 3, wz = st.out.z + oz * 3;
+    for (const [side, along] of [[1, -0.6], [-1, -0.6], [1, 1.5], [-1, 1.5], [1, 3.5], [-1, 3.5]]) {
+      const lat = st.w / 2 + 3.6;
+      const x = fx + sx * side * lat + ox * along, z = fz + sz * side * lat + oz * along;
+      if (keeps.some((k) => k !== pick.existing && k !== rec.keep && Math.hypot(x - k.x, z - k.z) < k.r + 2.5)) continue;
       this.w.toWorld(loc, x, this.groundY(loc, x, z) + 1.5, z, _c);
       if (this.blocked(_c, 2.4)) continue;
       wx = x; wz = z;
       break;
     }
-    const yaw = Math.atan2(pick.x - wx, pick.z - wz);
-    this.shelter(loc, wx, wz, yaw, `${kind === 'ship' ? 'FREIGHT' : 'SHUTTLE'} > ${other.short}`, color);
+    const yaw = Math.atan2(fx - wx, fz - wz);
+    const shelterAt = { x: wx, z: wz, yaw, text: `${kind === 'ship' ? 'FREIGHT' : 'SHUTTLE'} > ${other.short}`, color };
+    this.shelter(loc, wx, wz, yaw, shelterAt.text, color);
     loc.stopKeep.push({ x: wx, z: wz, r: 3 });
     const stop = {
-      loc, kind: 'pad', x: pick.x, z: pick.z, top, padR: spec.padR,
+      loc, kind: 'pad', x: pick.x, z: pick.z, top, padR: rec.r, shelterAt, stairs: st,
       wait: { x: wx + Math.sin(yaw) * 1.8, y: this.groundY(loc, wx, wz), z: wz + Math.cos(yaw) * 1.8, g: true },
       town: this.townPoint(loc, wx, wz, 70),
       queue: [], queued: false,
     };
-    // where people step off the pad (toward the shelter side): their walks to buildings start here
-    const ea = Math.atan2(stop.wait.z - pick.z, stop.wait.x - pick.x) + 0.5, er = spec.padR + 4;
-    stop.origin = { x: pick.x + Math.cos(ea) * er, z: pick.z + Math.sin(ea) * er };
+    // where people step off the stairs: their walks to buildings start here
+    stop.origin = { x: st.out.x, z: st.out.z };
     stop.world = this.w.toWorld(loc, pick.x, top, pick.z);
+    // the way a flyer faces once it is down: nose away from the stairs, so its ramp (at the tail) comes down toward them
+    const head = this.w.toWorld(loc, st.head.x, top, st.head.z), up = stop.world.clone().normalize();
+    stop.land = stop.world.clone().sub(head);
+    stop.land.addScaledVector(up, -stop.land.dot(up)).normalize();
     this.stops.push(stop);
     return stop;
   }
 
-  // Climb vertically off pad A, arc up to cruise, come down over pad B and settle vertically.
+  // Which way a new pad's stairs run out (an angle as Math.atan2(z, x)): toward the middle of the settlement if that ground is clear,
+  // else the nearest way round that is (nothing solid and nothing kept clear where the flight and its foot would stand).
+  stairFace(loc, pick, r, keeps) {
+    const base = Math.atan2(-pick.z, -pick.x);
+    const clear = [];
+    for (const off of [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 2.0, -2.0, 2.6, -2.6, Math.PI]) {
+      const a = base + off, ca = Math.cos(a), sa = Math.sin(a);
+      let ok = true;
+      for (const d of [r + 1.5, r + 4, r + 7]) {
+        const x = pick.x + ca * d, z = pick.z + sa * d;
+        if (keeps.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + 1)) { ok = false; break; }
+        this.w.toWorld(loc, x, this.groundY(loc, x, z) + 1.4, z, _c);
+        if (this.blocked(_c, 1.7)) { ok = false; break; }
+      }
+      if (ok) clear.push({ a, y: this.groundY(loc, pick.x + ca * (r + 4), pick.z + sa * (r + 4)) });
+    }
+    if (!clear.length) return base;
+    // on a slope the stairs come down on the high side (a shorter flight); on the level, toward the middle (the first clear way)
+    const hi = Math.max(...clear.map((c) => c.y));
+    return (hi - clear[0].y > 1.5 ? clear.find((c) => c.y === hi) : clear[0]).a;
+  }
+
+  // The walk across the deck from where a flyer's ramp comes down to the head of the pad's stairs, round the ship's side rather than
+  // under its belly: out to the side the stairs are on, along the hull, then over to them. Points in the settlement's frame, on the deck.
+  deckRoute(v, stop) {
+    const loc = stop.loc, S = stop.stairs, M = v.model || v;
+    v.root.updateMatrixWorld(true);
+    const toLoc = (x, z) => {
+      const p = this.local(loc, v.root.localToWorld(_a.set(x, M.rampBottom.y, z)), new THREE.Vector3());
+      // (kept on the deck, inside the railing)
+      const dx = p.x - stop.x, dz = p.z - stop.z, d = Math.hypot(dx, dz), max = stop.padR - 1.3;
+      if (d > max) { p.x = stop.x + (dx / d) * max; p.z = stop.z + (dz / d) * max; }
+      return { x: p.x, y: stop.top, z: p.z, g: false };
+    };
+    const e = v.root.worldToLocal(this.w.toWorld(loc, S.edge.x, S.edge.y, S.edge.z, _b));
+    const side = e.x >= 0 ? 1 : -1, W = (M.deck ? M.deck[0] : 3) + 2.4, zb = M.rampBottom.z;
+    // (landed the way it should, the ramp comes down toward the stairs: straight there, nothing to walk round)
+    if (e.z < zb + 1 && Math.abs(e.x) < 3) return [];
+    const pts = [toLoc(side * W, zb * 0.85)];
+    // along the hull to level with the stairs (if they are forward of the ramp: they usually are, the ramp faces out)
+    if (e.z > zb * 0.85 + 2) pts.push(toLoc(side * W, Math.min(e.z, -zb * 0.6)));
+    return pts;
+  }
+
+  // Climb vertically off pad A, arc up to cruise, come down over pad B and settle vertically. climb: how high the vertical legs go, one number
+  // or [at A, at B].
   flightPath(sA, sB, gearH, climb, cruise, radius) {
     const P = this.P;
+    const [climbA, climbB] = Array.isArray(climb) ? climb : [climb, climb];
     const uA = sA.world.clone().normalize(), uB = sB.world.clone().normalize();
-    const start = sA.world.clone().addScaledVector(uA, gearH), topA = sA.world.clone().addScaledVector(uA, gearH + climb);
-    const end = sB.world.clone().addScaledVector(uB, gearH), topB = sB.world.clone().addScaledVector(uB, gearH + climb);
+    const start = sA.world.clone().addScaledVector(uA, gearH), topA = sA.world.clone().addScaledVector(uA, gearH + climbA);
+    const end = sB.world.clone().addScaledVector(uB, gearH), topB = sB.world.clone().addScaledVector(uB, gearH + climbB);
     const len = arcDist(uA, uB);
     const step = 20, steps = Math.max(4, Math.ceil(len / step));
     const raw = [];
@@ -511,17 +593,24 @@ export class Traffic {
     return makePath(pts);
   }
 
-  addFlyer(kind, A, B) {
+  // A transit line between two settlements. opts.pinA: the pad it uses at A (makePadStop); opts.startAtB: begin parked at B, so the first
+  // thing it does is fly in to A (a service that has just opened)
+  addFlyer(kind, A, B, opts = {}) {
     const ship = kind === 'ship';
     const n = this.vehicles.length;
     // the rig (models.js) knows its own gear height, deck box, ramp path and pad size
-    const model = ship ? makeFreighter({ stripe: [0xff9f1c, 0xff2e88, 0x2ec4ff][n % 3] }) : makeShuttle({ stripe: [0x2ec4ff, 0xff9f1c, 0x7dff6a, 0xc77dff][n % 4] });
+    // (a freighter's cargo wears the livery of a faction whose town it serves, as the land-trains do)
+    const owners = [A, B].map((l) => l.faction).filter((f) => LAND_TRAIN_FACTIONS[f]);
+    const model = ship ? makeFreighter({ stripe: [0xff9f1c, 0xff2e88, 0x2ec4ff][n % 3], faction: owners.length ? owners[n % owners.length] : 'kepler' }) : makeShuttle({ stripe: [0x2ec4ff, 0xff9f1c, 0x7dff6a, 0xc77dff][n % 4] });
+    // (the deck is at least as big as the rig asks, and big enough that the ramp comes down on it, inside the railing: a shuttle's
+    // ramp reaches 13.3 m from its middle, past its 11 m pad)
+    const deckR = Math.max(model.padR, Math.hypot(model.rampBottom.x, model.rampBottom.z) + 0.9);
     const spec = ship
-      ? { padR: model.padR, clearR: 31, heights: [3, 10, 20, 32], climb: 36 }
-      : { padR: model.padR, clearR: 13, heights: [2, 7, 14], climb: 18 };
+      ? { padR: deckR, clearR: Math.max(31, deckR + 2), heights: [3, 10, 20, 32], climb: 36 }
+      : { padR: deckR, clearR: Math.max(13, deckR + 1.5), heights: [2, 7, 14], climb: 18 };
     const cruise = ship ? 55 + (n % 3) * 25 : 24;
-    const sA = this.makePadStop(A, B, spec, kind), sB = this.makePadStop(B, A, spec, kind);
-    const path = this.flightPath(sA, sB, model.gearH, spec.climb, cruise, model.radius);
+    const sA = this.makePadStop(A, B, spec, kind, opts.pinA), sB = this.makePadStop(B, A, spec, kind);
+    const path = this.flightPath(sA, sB, model.gearH, [opts.pinA ? TOWN_CLIMB : spec.climb, spec.climb], cruise, model.radius);
     model.root.matrixAutoUpdate = true;
     this.w.scene.add(model.root);
     const v = {
@@ -531,12 +620,12 @@ export class Traffic {
       minWait: ship ? 12 : 6, maxWait: ship ? 34 : 18, pax: ship ? [3, 5] : [1, 3],
       view: ship ? 4200 : 1600, quat: model.root.quaternion, boarding: 0, heading: new THREE.Vector3(),
       pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(),
-      col: null,
     };
     // spread them out: some parked at either end, most somewhere along the route
     const r = this.r();
     if (r < 0.3) { v.state = 'park'; v.dir = this.r() < 0.5 ? 1 : -1; v.s = v.dir > 0 ? 0 : path.len; v.timer = this.r() * 6; }
     else { v.state = 'fly'; v.dir = this.r() < 0.5 ? 1 : -1; v.s = path.len * (0.15 + this.r() * 0.7); }
+    if (opts.startAtB) { v.state = 'park'; v.dir = -1; v.s = path.len; v.timer = 0; }
     v.stop = v.state === 'park' ? (v.s <= 0 ? sA : sB) : null;
     sample(path, v.s, v.pos, v.hint);
     v.prevPos.copy(v.pos);
@@ -547,6 +636,7 @@ export class Traffic {
     v.heading.addScaledVector(up, -v.heading.dot(up));
     if (v.heading.lengthSq() < 1e-6) v.heading.set(1, 0, 0);
     v.heading.normalize();
+    if (v.stop && v.stop.land) v.heading.copy(v.stop.land); // (parked: as it would have landed, ramp toward the stairs)
     frameQuat(up, v.heading, model.root.quaternion);
     model.root.position.copy(v.pos);
     v.fwd.copy(v.heading);
@@ -563,6 +653,17 @@ export class Traffic {
     // ships first: they need the biggest open spots
     for (const [a, b] of ships) if (L[a] && L[b]) this.addFlyer('ship', L[a], L[b]);
     for (const [a, b] of buses) if (L[a] && L[b]) this.addFlyer('bus', L[a], L[b]);
+    // last, so none of the lines above change: your town's shuttle, once it has built the Shuttle Pad
+    if (L.hometown && (L.hometown.slots || []).includes('pad')) this.addTownShuttle(L.hometown);
+  }
+
+  // Your town's shuttle: a bus from the pad on the Shuttle Pad plot to the nearest settlement it may fly to (opts as addFlyer). One at most;
+  // null when there is no pad, no such settlement, or the line already runs
+  addTownShuttle(loc, opts = {}) {
+    const pin = (loc.pads || []).find((p) => p.plot !== undefined);
+    const port = pin && this.nearestPort(loc);
+    if (!port || this.vehicles.some((v) => v.stops && v.stops[0].loc === loc)) return null;
+    return this.addFlyer('bus', loc, port, { ...opts, pinA: pin });
   }
 
 
@@ -579,10 +680,17 @@ export class Traffic {
   // the town's single ring-side stop, then keeps going round the ring to whichever road it wants
   // next (so nothing ever needs a U-turn - a dead-end town is simply a lap of its ring).
 
-  buildRoads() {
-    // (the casino joins in like a town: a ring road round its grounds and traffic dropping punters off)
-    const safe = this.w.locations.filter((l) => l.safe && !l.restricted && (!l.poi || l.type === 'casino') && l.type !== 'pirate');
-    const key = (a, b) => (a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`);
+  // The towns that get roads. The casino joins in like a town (a ring road round its grounds and traffic
+  // dropping punters off); your own town only once it has built Roads (or is the one being given them).
+  townsOnRoads(extra = null) {
+    return this.w.locations.filter((l) => l.safe && !l.restricted && (!l.poi || l.type === 'casino') && l.type !== 'pirate'
+      && (l.type !== 'hometown' || l === extra || (l.slots || []).includes('roads')));
+  }
+
+  // Which of those towns are joined by a road (a set of 'idA|idB' keys): everything within SAFE_ROAD, each town's
+  // nearest neighbour, a few second links, then the hand-made cuts and extras.
+  linkPairs(safe) {
+    const key = pairKey;
     const pairs = new Set();
     const has = (a, b) => pairs.has(key(a, b));
     const dist = (a, b) => arcDist(a.dir, b.dir);
@@ -599,62 +707,218 @@ export class Traffic {
       const detour = safe.some((x) => x !== a && x !== n1.b && has(a, x) && has(x, n1.b) && dist(a, x) + dist(x, n1.b) < 1.3 * n1.d);
       if (!detour) pairs.add(key(a, n1.b));
     }
-    this.roadGeo = { pos: [], uv: [], fade: [], idx: [] };
+    for (const [a, b] of CUT_ROADS) if (this.L[a] && this.L[b]) pairs.delete(key(this.L[a], this.L[b]));
+    for (const [a, b] of EXTRA_ROADS) if (this.L[a] && this.L[b]) pairs.add(key(this.L[a], this.L[b]));
+    return pairs;
+  }
+
+  buildRoads() {
+    const pairs = this.linkPairs(this.townsOnRoads());
+    this.roadGeo = { pos: [], uv: [], fade: [], mark: [], berm: [], soft: [], wid: [], idx: [] };
     this.posts = [];
     this.pieces = [];
+    this.mapLines = []; // every road and town ring as a thin polyline of unit directions, for the maps
     this.gates = [];
     this.towns = new Map(); // loc -> gates
     this.rings = new Map(); // loc -> ring profile
     const keys = [...pairs].sort();
     for (const k of keys) for (const id of k.split('|')) if (!this.rings.has(this.L[id])) this.rings.set(this.L[id], this.ringProfile(this.L[id]));
+    // (how many roads each town has: a link is only left out where the terrain allows no road if both towns keep another)
+    this.linkCount = new Map();
+    for (const k of keys) for (const id of k.split('|')) this.linkCount.set(this.L[id], (this.linkCount.get(this.L[id]) || 0) + 1);
     for (const k of keys) {
       const [a, b] = k.split('|');
       this.buildRoad(this.L[a], this.L[b]);
     }
+    this.linkCount = null;
+    for (const t of TEES) {
+      const [m, n] = t.on.map((id) => this.L[id]);
+      const main = this.roads.find((r) => (r.A === m && r.B === n) || (r.A === n && r.B === m));
+      if (this.L[t.from] && main) this.buildSpur(this.L[t.from], main);
+      else console.warn('[traffic] no road to put a T on for', t.from);
+    }
     for (const [loc, R] of this.rings) this.buildRing(loc, R);
+    for (const loc of this.w.locations) for (const s of loc.paved || []) this.pavedStrip(loc, s);
     this.pieces.forEach((pc, i) => { pc.id = i; this.finishPiece(pc); });
     for (const R of this.rings.values()) this.ringStop(R);
+    for (const R of this.rings.values()) this.garageLink(R);
+    this.flushRoadBatch();
+    this.roadVehicles = [];
+    let civil = 0; // (the Vostok road is numbered -1 so the other roads keep their services)
+    for (const road of this.roads) this.populateRoad(road, road.A.restricted || (road.B && road.B.restricted) ? -1 : civil++);
+    this.populateGarage();
+  }
+
+  // The settlements a road from `loc` joins under the standard rules (the pairs a load would lay for it), in the order a load lays the roads.
+  linkPartners(loc) {
+    const safe = this.townsOnRoads(loc), pairs = this.linkPairs(safe);
+    return safe.filter((b) => b !== loc && pairs.has(pairKey(loc, b))).sort((p, q) => (pairKey(loc, p) < pairKey(loc, q) ? -1 : 1));
+  }
+
+  // Lay your town's ring road and its links the moment it builds Roads (hometown.js layRoads): the ring a load would make (ringProfile) and the
+  // roads a load would lay for it (linkPartners, in a load's order and way round), added to the running network. A settlement that nothing
+  // joined at boot (Hertzsprung, out on its own) gets its ring in the same pass, so the road reaches it like any other. It is not quite what a
+  // load makes. The rings that were laid at boot have no junction for the new road, so at their end each link turns round in a U-turn connector
+  // (and traffic on those rings never turns into it), and a road with a U-turn has no land-trains: they would fold in it. The next load lays the
+  // whole two-way network. Returns { ring, links, roads }, or null when the town already has its ring. It is all or nothing: a failure part-way
+  // puts every piece, mesh and vehicle back and throws (but for the tidying that comes last, see the end).
+  addTownRoads(loc) {
+    if (this.rings.has(loc)) return null;
+    this.registerLocation(loc);
+    const partners = this.linkPartners(loc);
+    if (!partners.length) return { ring: null, links: [], roads: [] };
+    const fresh = partners.filter((b) => !this.rings.has(b));
+    // what to put back if it fails: the network's lengths, and what the new roads add to each settlement they touch (fences, gates, its group)
+    const was = {
+      pieces: this.pieces.length, roads: this.roads.length, gates: this.gates.length, stops: this.stops.length, lines: this.mapLines.length,
+      vehicles: this.vehicles.length, crawlers: this.crawlers.length, drivers: this.roadVehicles.length, decks: this.platforms.length, scene: new Set(this.w.scene.children),
+      ends: [loc, ...partners].map((l) => ({
+        l, towns: this.towns.has(l) ? this.towns.get(l).length : -1, keep: l.stopKeep.length, gates: this.rings.has(l) ? this.rings.get(l).gates.length : -1,
+        kids: l.group.children.length, cols: (l._cols || []).length, ring: l.ring, ringStop: l.ringStop,
+      })),
+    };
+    let rings = [], roads = [];
+    try {
+      for (const l of [loc, ...fresh]) delete l._bld; // (the colliders that stand now, not those the last passenger saw)
+      this.roadGeo = { pos: [], uv: [], fade: [], mark: [], berm: [], soft: [], wid: [], idx: [] };
+      this.posts = [];
+      rings = [loc, ...fresh].map((l) => { const R = this.ringProfile(l); this.rings.set(l, R); return R; });
+      for (const k of partners.map((b) => pairKey(loc, b)).sort()) {
+        const [a, b] = k.split('|'), P = this.L[a === loc.id ? b : a], RP = this.rings.get(P), all = RP.gates;
+        // (a load lays this road in its turn, when the partner's ring has only the junctions of the roads named before it and of no T: it puts
+        // this road's end where it now chooses. A junction that stands now, of a road named after this one, may be in the way (a load would have
+        // laid that one round this): then the end goes to the nearest spot that keeps GATE_NEAR from every junction that stands)
+        let near = null;
+        if (!fresh.includes(P)) {
+          RP.gates = all.filter((e) => e.gate.road.eB && pairKey(e.gate.road.A, e.gate.road.B) < k);
+          const at = this.ringGate(RP, loc);
+          if (all.some((e) => Math.min(Math.abs(e.i - at.i), RP.M - Math.abs(e.i - at.i)) * RP.step < GATE_NEAR)) { RP.gates = all; near = { loc: P, apart: GATE_NEAR }; }
+        }
+        const own = RP.gates, m = own.length;
+        try { this.buildRoad(this.L[a], this.L[b], near); } finally { RP.gates = all; }
+        if (own !== all && own.length > m) all.push(own[m]);
+      }
+      for (const R of rings) this.buildRing(R.loc, R);
+      roads = this.roads.slice(was.roads);
+      for (const road of roads) {
+        const g = road.A === loc ? road.gates[1] : road.gates[0]; // (the partner's end)
+        if (fresh.includes(g.loc)) continue; // (its ring has the junction)
+        road.uturn = true;
+        const u = this.newPiece('j', this.bez(g.inEnd, g.inDir, g.outStart, g.outDir), { town: g.loc, vlim: 6, uturn: true });
+        g.in.next = [u];
+        u.next = [g.out];
+        this.drawJoin(this.rings.get(g.loc), g.e); // (a plain T would do for the cars, not for the eye)
+      }
+      for (let i = was.pieces; i < this.pieces.length; i++) { const pc = this.pieces[i]; pc.id = i; this.finishPiece(pc); }
+      for (const R of rings) this.ringStop(R);
+      this.flushRoadBatch();
+      roads.forEach((road) => this.populateRoad(road, this.roads.indexOf(road), !road.uturn));
+      this._chunks = null; // (the maps' road lines)
+    } catch (e) {
+      this.pieces.length = was.pieces; this.roads.length = was.roads; this.gates.length = was.gates; this.stops.length = was.stops; this.mapLines.length = was.lines;
+      this.vehicles.length = was.vehicles; this.crawlers.length = was.crawlers; this.roadVehicles.length = was.drivers; this.platforms.length = was.decks;
+      for (const o of this.w.scene.children.slice()) if (!was.scene.has(o)) o.removeFromParent(); // (the road meshes and posts, the vehicles and their trailers)
+      for (const w of was.ends) {
+        w.l.stopKeep.length = w.keep;
+        if (w.towns < 0) this.towns.delete(w.l); else this.towns.get(w.l).length = w.towns;
+        if (w.gates < 0) this.rings.delete(w.l); else this.rings.get(w.l).gates.length = w.gates;
+        for (const o of w.l.group.children.slice(w.kids)) o.removeFromParent();
+        for (const c of (w.l._cols || []).splice(w.cols)) this.C.remove(c);
+        w.l.ring = w.ring; w.l.ringStop = w.ringStop;
+      }
+      this.roadGeo = null; this.posts = null;
+      throw e;
+    }
+    // The roads stand and are driven now. What is left only tidies up round them, and a fault in it is no reason to take them down again:
+    // it is logged and the crews are done (a rock left on a road, a berm left closed at the other end of a link).
+    for (const road of roads) {
+      if (!road.uturn) continue;
+      const g = road.A === loc ? road.gates[1] : road.gates[0];
+      try { this.openJoin(this.rings.get(g.loc), g.e); } catch (e) { console.warn('[traffic] could not open the ring of', g.loc.id, 'for the road from', loc.id, e); }
+    }
+    try {
+      for (const pc of this.pieces.slice(was.pieces)) for (let i = 0; i < pc.path.pts.length; i += 10) this.P.clearSpot(pc.path.pts[i]); // (rocks keep off the new roads)
+    } catch (e) { console.warn('[traffic] could not clear the rocks off the new roads', e); }
+    return { ring: rings[0], links: partners, roads };
+  }
+
+  // Make what the road builders have laid so far (this.roadGeo, this.posts) into drawn meshes: one road mesh, and the delineator posts (a white
+  // post with a dark band, an amber reflector looking up and down the road and a lit cap, set clear of the shoulder, one every ~110 m: three
+  // instanced draw calls for the lot). A load flushes once, for the whole network (this.roadMesh); a road laid live (addTownRoads) flushes a
+  // batch of its own, which shares the first mesh's material.
+  flushRoadBatch() {
     const G = this.roadGeo;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(G.pos, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(G.uv, 2));
     geo.setAttribute('fade', new THREE.Float32BufferAttribute(G.fade, 1));
+    geo.setAttribute('mark', new THREE.Float32BufferAttribute(G.mark, 1));
+    geo.setAttribute('berm', new THREE.Float32BufferAttribute(G.berm, 1));
+    geo.setAttribute('soft', new THREE.Float32BufferAttribute(G.soft, 1));
+    geo.setAttribute('wid', new THREE.Float32BufferAttribute(G.wid, 1));
     geo.setIndex(G.idx);
     geo.computeBoundingSphere();
-    const mesh = new THREE.Mesh(geo, roadMaterial());
+    const mesh = new THREE.Mesh(geo, this.roadMesh ? this.roadMesh.material : roadMaterial());
     mesh.matrixAutoUpdate = false;
     mesh.frustumCulled = false;
-    mesh.renderOrder = 1;
+    mesh.receiveShadow = true;
+    mesh.renderOrder = -0.5; // (after the terrain, before everything else: see roadMaterial)
     this.w.scene.add(mesh);
-    this.roadMesh = mesh;
-    this.roadGeo = null;
-    // marker posts with reflective tips: two instanced draw calls for every road
+    if (!this.roadMesh) this.roadMesh = mesh;
     const n = this.posts.length;
     if (n) {
-      const postM = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.16, 1.6, 6).translate(0, 0.8, 0), toon(0xe8e4f4), n);
-      const tipM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.35, 0.3).translate(0, 1.7, 0), glow(0xff9f1c), n);
+      const postM = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.11, 0.15, 1.8, 6).translate(0, 0.9, 0), toon(0xe8e4f4), n);
+      const bandM = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.16, 0.34, 6).translate(0, 1.4, 0), toon(0x2a2540), n);
+      const lensM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.2, 0.24, 0.46).translate(0, 1.4, 0), glow(0xff9f1c), n);
+      const capM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.2, 0.12, 0.2).translate(0, 1.86, 0), glow(0xfff6a8), n);
       const one = new THREE.Vector3(1, 1, 1);
       this.posts.forEach((p, i) => {
         _m4.compose(p.pos, p.q, one);
-        postM.setMatrixAt(i, _m4);
-        tipM.setMatrixAt(i, _m4);
+        for (const m of [postM, bandM, lensM, capM]) m.setMatrixAt(i, _m4);
       });
-      for (const m of [postM, tipM]) { m.frustumCulled = false; m.matrixAutoUpdate = false; this.w.scene.add(m); }
+      for (const m of [postM, bandM, lensM, capM]) { m.frustumCulled = false; m.matrixAutoUpdate = false; this.w.scene.add(m); }
       postM.castShadow = true;
     }
+    this.roadGeo = null;
     this.posts = null;
-    this.roadVehicles = [];
-    this.roads.forEach((road, k) => this.populateRoad(road, k));
   }
 
-  // Can a 10 m road run over local (x,z)? Exact contact tests against colliders plus the keep-out
-  // footprints (pads, solar fields, lamps, turret spots).
+  // Every k-th point of a world-space polyline as a unit direction (the last point always stays).
+  thin(pts, k) {
+    const out = [];
+    for (let i = 0; i < pts.length; i += k) out.push(pts[i].clone().normalize());
+    if ((pts.length - 1) % k) out.push(pts[pts.length - 1].clone().normalize());
+    return out;
+  }
+
+  // The road network for the globe map and the minimap: short runs of the polylines above, each with
+  // a bounding cap (c: unit direction, r: metres) so the maps can cull them and test them against
+  // the fog. Built on first use.
+  mapChunks() {
+    if (this._chunks) return this._chunks;
+    const out = [], N = 12, R = this.P.R;
+    for (const line of this.mapLines) {
+      for (let i = 0; i < line.length - 1; i += N) {
+        const pts = line.slice(i, Math.min(line.length, i + N + 1));
+        const c = new THREE.Vector3();
+        for (const p of pts) c.add(p);
+        c.normalize();
+        let r = 0;
+        for (const p of pts) r = Math.max(r, Math.acos(Math.min(1, c.dot(p))));
+        out.push({ pts, c, r: r * R });
+      }
+    }
+    return (this._chunks = out);
+  }
+
+  // Can an 18 m road (the bed and its berms) run over local (x,z)? Exact contact tests against
+  // colliders plus the keep-out footprints (pads, solar fields, lamps, turret spots).
   roadClear(loc, x, z, keeps) {
-    if (keeps.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + 5)) return false;
+    if (keeps.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + 8)) return false;
     const y = this.groundY(loc, x, z);
     for (const h of [2, 5]) {
       this.w.toWorld(loc, x, y + h, z, _c);
-      if (this.blocked(_c, 3.6)) return false;
+      if (this.blocked(_c, 5.5)) return false;
     }
     return true;
   }
@@ -707,11 +971,12 @@ export class Traffic {
 
   // Where a road from `other` joins this town's ring: as straight toward it as possible, on an
   // unbulged stretch with open ground outside, and well clear of the other junctions.
-  ringGate(R, other) {
+  ringGate(R, other, apart = GATE_SEP) {
     const loc = R.loc, M = R.M, TAU = Math.PI * 2;
     const tw = this.toward(loc, other);
-    const keeps = this.keepouts(loc);
-    const sep = (i) => R.gates.every((g) => { const d = Math.abs(g.i - i); return Math.min(d, M - d) * R.step >= GATE_SEP; });
+    // (not the ring's own fences: a road that comes to a ring laid earlier, addTownRoads at a settlement's old ring, would find every spot taken)
+    const keeps = this.keepouts(loc).filter((k) => !k.ring);
+    const sep = (i) => R.gates.every((g) => { const d = Math.abs(g.i - i); return Math.min(d, M - d) * R.step >= apart; });
     const idx = (a) => ((Math.round((a / TAU) * M) % M) + M) % M;
     const kink = (i) => {
       let k = 0;
@@ -723,14 +988,28 @@ export class Traffic {
       for (let t = 8; t <= 56; t += 4) if (!this.roadClear(loc, ux * (p.r + t), uz * (p.r + t), keeps)) return false;
       return true;
     };
+    // the ground a road leaving here would cross in its first 200 m (the foot of the plateau and beyond): how steep it climbs, and how much of it
+    // is crater, rock or rille (roadplan.js)
+    const lay = (i) => {
+      const p = this.ringLocal(R, i), ux = Math.cos(p.a), uz = Math.sin(p.a);
+      let h0 = null, climb = 0, bad = 0;
+      for (let t = 0; t <= 200; t += 10) {
+        this.w.toWorld(loc, ux * (p.r + t), 0, uz * (p.r + t), _c).normalize();
+        const h = this.P.H(_c.x, _c.y, _c.z), a = this.P.attr;
+        bad += 10 * a.floor + 6 * a.rim + 3 * a.rock + 2 * a.crest + 8 * a.rille;
+        if (h0 !== null) climb += 10 * Math.max(0, Math.abs(h - h0) / 10 - 0.1);
+        h0 = h;
+      }
+      return 40 * climb + bad;
+    };
     let best = null;
     for (const dev of [0, 0.06, -0.06, 0.12, -0.12, 0.2, -0.2, 0.3, -0.3, 0.42, -0.42, 0.56, -0.56, 0.72, -0.72, 0.9, -0.9, 1.1, -1.1, 1.35, -1.35]) {
       const i = idx(tw + dev);
       if (!sep(i) || !outside(i)) continue;
-      const bulge = R.rad[i] - R.Rb, kk = kink(i);
-      const score = Math.abs(dev) * 40 + bulge + kk * 3;
+      const bulge = R.rad[i] - R.Rb, kk = kink(i), ground = lay(i);
+      const score = Math.abs(dev) * 120 + bulge + kk * 3 + Math.min(150, ground * 0.4);
       if (!best || score < best.score) best = { i, score };
-      if (bulge < 4 && kk < 2) break;
+      if (bulge < 4 && kk < 2 && ground < 12) break;
     }
     if (!best) {
       // crowded: the nearest angle that keeps the junctions apart
@@ -747,14 +1026,21 @@ export class Traffic {
 
   // Visible track: a strip of 5 ground-hugging samples across 10 m along a ground polyline.
   // `fade` (0..1) lets a strip melt into another one it overlaps (junction flares, road ends).
-  stripPush(centre, sideV, s, vScale = 1, fade = 1) {
+  // `mark` (0..1) is how much of the wheel ruts show (none on junction flares and where roads meet rings).
+  // `bermL` / `bermR` (0..1) is how much of the cut line and berm shows on the strip's left (-) and right (+) edge, and
+  // `soft` (1 on a junction flare) widens the fade of its edge: where strips overlap, only the one that owns the edge shows a berm.
+  stripPush(centre, sideV, s, vScale = 1, fade = 1, mark = 1, bermL = 1, bermR = 1, soft = 0, wid = 1) {
     const G = this.roadGeo;
     for (const o of ROAD_LAT) {
       _b.copy(centre).addScaledVector(sideV, o * vScale);
       this.P.ground(_b, _b, 0.04);
       G.pos.push(_b.x, _b.y, _b.z);
-      G.uv.push(o / 5, s);
+      G.uv.push(o / ROAD_HALF, s);
       G.fade.push(fade);
+      G.mark.push(mark);
+      G.berm.push(o < 0 ? bermL : o > 0 ? bermR : Math.min(bermL, bermR));
+      G.soft.push(soft);
+      G.wid.push(wid);
     }
   }
 
@@ -784,10 +1070,20 @@ export class Traffic {
     return { side, tan, cum };
   }
 
-  drawLine(g, s0 = 0, vScale = 1, fadeAt = null) {
+  // `flare`: a junction sweep from a road into a ring or another road. It is as wide as the road, so its edges meet the road's
+  // and the ring's, and its berm runs along the outside of its curve (round from the road's edge to the ring's outer edge)
+  // while the inside of the curve, facing the next sweep, stays bare.
+  drawLine(g, s0 = 0, vScale = 1, fadeAt = null, flare = false) {
     const { side, cum } = this.frames(g);
     const base = this.roadGeo.pos.length / 3;
-    for (let i = 0; i < g.length; i++) this.stripPush(g[i], side[i], s0 + cum[i], vScale, fadeAt ? fadeAt(i / (g.length - 1)) : 1);
+    let bL = 0, bR = 0;
+    if (flare) {
+      const n = g.length - 1, up = new THREE.Vector3().copy(g[n >> 1]).normalize();
+      const t0 = new THREE.Vector3().subVectors(g[1], g[0]), t1 = new THREE.Vector3().subVectors(g[n], g[n - 1]);
+      // (the berm goes on the side the curve turns toward: a left turn bends round its left edge, a right turn its right)
+      if (new THREE.Vector3().crossVectors(t0, t1).dot(up) > 0) bL = 1; else bR = 1;
+    }
+    for (let i = 0; i < g.length; i++) this.stripPush(g[i], side[i], s0 + cum[i], vScale, fadeAt ? fadeAt(i / (g.length - 1)) : 1, 0, bL, bR, flare ? 1 : 0);
     this.stripIdx(base, g.length);
   }
 
@@ -811,20 +1107,48 @@ export class Traffic {
     return out;
   }
 
-  buildRoad(A, B) {
+  // Where a ring gate's road leaves the ring: `extra` metres further out along the gate's radial.
+  ringExit(e, extra) {
+    return this.w.toWorld(e.loc, Math.cos(e.a) * (e.rr + extra), 0, Math.sin(e.a) * (e.rr + extra)).normalize();
+  }
+
+  // The dense ground centreline of a road, a point every ~4 m: it leaves the first ring radially,
+  // meanders along a great circle (steering round every settlement ring, military zone and black lake
+  // except its own ends) and arrives along dB2 -> dB1 -> dB. B is null for a road that ends on another
+  // road (a T). Returns { g, dirs, N, side, tan, cum }.
+  roadCentreline(A, B, [dA, dA1, dA2], [dB, dB1, dB2]) {
     const P = this.P, R = P.R;
-    const RA = this.rings.get(A), RB = this.rings.get(B);
-    const eA = this.ringGate(RA, B);
-    RA.gates.push(eA);
-    const eB = this.ringGate(RB, A);
-    RB.gates.push(eB);
-    const dirAt = (e, extra) => this.w.toWorld(e.loc, Math.cos(e.a) * (e.rr + extra), 0, Math.sin(e.a) * (e.rr + extra)).normalize();
-    // leave each ring radially (straight for the first ~50 m so the junction reads as a clean T)
-    const dA = dirAt(eA, 0), dA1 = dirAt(eA, 24), dA2 = dirAt(eA, 52), dB = dirAt(eB, 0), dB1 = dirAt(eB, 24), dB2 = dirAt(eB, 52);
+    // keep clear of every other settlement (and its ring), military zone and black lake, and off its own two rings once it has left them
+    const obs = [];
+    for (const l of this.w.locations) {
+      const ring = this.rings.get(l);
+      const r0 = l === A || l === B ? ring.maxR + 18 : Math.max((l.zoneR || l.r) + 55, ring ? ring.maxR + 40 : 0);
+      obs.push({ d: l.dir, r: r0 });
+    }
+    for (const lk of this.w.lakes || []) obs.push({ d: lk.d, r: Math.acos(Math.min(1, lk.cos)) * R + 25 });
+    // the line itself is found on the real terrain (roadplan.js): round craters, rims, rocky ground and rilles, and along the gentlest slopes.
+    // (the older meander below is only the way out where that finds no way through)
+    const laid = [];
+    for (const r of this.roads) if (r.geo && r.geo.dirs) laid.push(r.geo.dirs.filter((_, i) => i % 3 === 0));
+    const mid = dA2.clone().add(dB2).normalize(), reach = Math.cos((arcDist(dA2, dB2) / 2 + 700) / R);
+    const plan = planRoad(P, dA2, dB2, obs, laid.map((l) => l.filter((q) => q.dot(mid) > reach)).filter((l) => l.length));
+    if (plan) {
+      const ctrl = [dA, dA1, ...plan.dirs, dB1, dB];
+      const curve = new THREE.CatmullRomCurve3(ctrl.map((d) => d.clone().multiplyScalar(R)), false, 'centripetal');
+      const total = curve.getLength();
+      const N = Math.max(8, Math.ceil(total / 4));
+      const dirs = curve.getSpacedPoints(N).map((p) => p.normalize());
+      const g = dirs.map((d) => P.ground(d, new THREE.Vector3()));
+      const { side, tan, cum } = this.frames(g);
+      // (a line that still runs a fifth of its length up grades over ~14 degrees, or over a third on rock, rille or crater floor, is one the
+      // terrain does not let through: buildRoad may leave that link out)
+      const q = roadQuality(P, dirs, cum);
+      return { g, dirs, N, side, tan, cum, planned: plan, quality: q, unsuitable: q.steep > UNSUITABLE_STEEP || q.off > UNSUITABLE_OFF };
+    }
     // control points: then a gently meandering great circle
     const len = arcDist(dA2, dB2);
     const n = Math.max(3, Math.ceil(len / 30));
-    const rr = mulberry32(Math.floor(len * 7) + A.id.length * 131 + B.id.length * 17);
+    const rr = mulberry32(Math.floor(len * 7) + A.id.length * 131 + (B ? B.id.length * 17 : 53));
     const ph1 = rr() * 6.28, ph2 = rr() * 6.28, f1 = Math.max(1, Math.round(len / 900)), f2 = Math.max(2, Math.round(len / 330));
     const axis = new THREE.Vector3().crossVectors(dA2, dB2).normalize();
     const ctrl = [dA, dA1, dA2];
@@ -837,15 +1161,6 @@ export class Traffic {
       ctrl.push(d);
     }
     ctrl.push(dB2, dB1, dB);
-    // keep clear of every other settlement (and its ring), military zone and black lake, and off
-    // its own two rings once it has left them
-    const obs = [];
-    for (const l of this.w.locations) {
-      const ring = this.rings.get(l);
-      const r0 = l === A || l === B ? ring.maxR + 18 : Math.max((l.zoneR || l.r) + 55, ring ? ring.maxR + 40 : 0);
-      obs.push({ d: l.dir, r: r0 });
-    }
-    for (const lk of this.w.lakes || []) obs.push({ d: lk.d, r: Math.acos(Math.min(1, lk.cos)) * R + 25 });
     for (let it = 0; it < 60; it++) {
       for (let i = 3; i < ctrl.length - 3; i++) {
         const p = ctrl[i];
@@ -871,28 +1186,64 @@ export class Traffic {
     const dirs = curve.getSpacedPoints(N).map((p) => p.normalize());
     const g = dirs.map((d) => P.ground(d, new THREE.Vector3()));
     const { side, tan, cum } = this.frames(g);
+    return { g, dirs, N, side, tan, cum };
+  }
+
+  // The visible strip, marker posts and keep-out footprints of a road centreline. `ends` lists the
+  // towns it starts / ends at ([loc, atStart]): their pads and shelters stay off the first stretch out.
+  layRoad(line, ends) {
+    const { g, dirs, N, side, tan, cum } = line;
+    const P = this.P;
+    this.mapLines.push(this.thin(g, 5));
     // the strip stops just short of each ring's centreline (the ring strip covers the join)
     let i0 = 0, i1 = N;
     while (i0 < N && cum[i0] < 2.5) i0++;
     while (i1 > 0 && cum[N] - cum[i1] < 2.5) i1--;
     const base = this.roadGeo.pos.length / 3;
-    for (let i = i0; i <= i1; i++) this.stripPush(g[i], side[i], cum[i], 1, smooth((Math.min(cum[i], cum[N] - cum[i]) - 2.5) / 7));
+    for (let i = i0; i <= i1; i++) {
+      const e = Math.min(cum[i], cum[N] - cum[i]);
+      const b = smooth((e - 22) / 4); // (the berms run on to where the sweeps start, 24 m out, and the sweeps carry them)
+      this.stripPush(g[i], side[i], cum[i], 1, smooth((e - 2.5) / 7), smooth((e - 12) / 16), b, b);
+    }
     this.stripIdx(base, i1 - i0 + 1);
-    // marker posts every ~110 m, alternating sides
+    line.strip = { base, i0, i1 };
+    // delineator posts every ~110 m, alternating sides
     for (let s = 60, k = 0; s < cum[N] - 60; s += 110, k++) {
       let i = 0;
       while (i < N && cum[i] < s) i++;
-      const p = g[i].clone().addScaledVector(side[i], k % 2 ? 6.5 : -6.5);
+      const p = g[i].clone().addScaledVector(side[i], k % 2 ? 10 : -10);
       P.ground(p, p);
       this.posts.push({ pos: p, q: frameQuat(dirs[i], tan[i], new THREE.Quaternion()) });
     }
     // pads and shelters stay off the first stretch out of each town
-    for (const [loc, from] of [[A, true], [B, false]]) {
+    for (const [loc, from] of ends) {
       for (let k = 0; k <= N && (from ? cum[k] : cum[N] - cum[N - k]) < 90; k += 2) {
         const p = this.local(loc, g[from ? k : N - k], _a);
-        loc.stopKeep.push({ x: p.x, z: p.z, r: 6 });
+        loc.stopKeep.push({ x: p.x, z: p.z, r: 10 });
       }
     }
+  }
+
+  buildRoad(A, B, near = null) {
+    const RA = this.rings.get(A), RB = this.rings.get(B);
+    const eA = this.ringGate(RA, B, near && near.loc === A ? near.apart : GATE_SEP);
+    RA.gates.push(eA);
+    const eB = this.ringGate(RB, A, near && near.loc === B ? near.apart : GATE_SEP);
+    RB.gates.push(eB);
+    const dA = this.ringExit(eA, 0), dA1 = this.ringExit(eA, 24), dA2 = this.ringExit(eA, 52), dB = this.ringExit(eB, 0), dB1 = this.ringExit(eB, 24), dB2 = this.ringExit(eB, 52);
+    const line = this.roadCentreline(A, B, [dA, dA1, dA2], [dB, dB1, dB2]);
+    // a link the terrain will not let through (a rocky ridge or a wall of crater between the two towns, nothing to be gained by going round)
+    // is left out, so long as both towns keep another road
+    const lc = this.linkCount;
+    if (line.unsuitable && lc && lc.get(A) > 1 && lc.get(B) > 1) {
+      RA.gates.pop(); RB.gates.pop();
+      lc.set(A, lc.get(A) - 1); lc.set(B, lc.get(B) - 1);
+      (this.droppedLinks ||= []).push([A.id, B.id, line.quality]);
+      console.info('[traffic] no way for a road from', A.id, 'to', B.id, '(', Math.round(line.quality.steep * 100), '% steep,', Math.round(line.quality.off * 100), '% rock or crater ): left out');
+      return null;
+    }
+    this.layRoad(line, [[A, true], [B, false]]);
+    const { g, N, side, cum } = line;
     // ---- lanes: right-hand traffic; the last ~20 m at each end belong to the ring junctions ----
     const step = cum[N] / N;
     const K = Math.max(2, Math.round(JOIN_OUT / step));
@@ -914,12 +1265,323 @@ export class Traffic {
     eA.gate = gA; eB.gate = gB;
     road.lanes = [pAB, pBA];
     road.gates = [gA, gB];
+    road.geo = { ...line, step, K, ab, ba, pAB, pBA, gA, gB };
     for (const gt of [gA, gB]) {
       if (!this.towns.has(gt.loc)) this.towns.set(gt.loc, []);
       this.towns.get(gt.loc).push(gt);
       this.gates.push(gt);
     }
     this.roads.push(road);
+  }
+
+  // A road from town A that ends in a T on `main`, another road's lane pair. It meets it at the point
+  // of `main` nearest the town, side-on. The main road's two lane pieces are cut in two there (the
+  // far halves keep the ring gates), and short connectors carry the turns: each main lane goes
+  // straight on or turns off down the spur, and the spur's lane turns either way onto the main road.
+  // Routing is by piece links, so traffic simply splits at the T.
+  buildSpur(A, main) {
+    const R = this.P.R, G = main.geo, N0 = G.N;
+    if (!this.rings.has(A)) this.rings.set(A, this.ringProfile(A));
+    const RA = this.rings.get(A);
+    // where it meets the road: nearest to the town, well clear of both ends
+    _b.copy(A.dir).multiplyScalar(R);
+    let jx = -1, bd = Infinity;
+    for (let i = 0; i <= N0; i++) {
+      if (G.cum[i] < 200 || G.cum[N0] - G.cum[i] < 200) continue;
+      const d = G.g[i].distanceToSquared(_b);
+      if (d < bd) { bd = d; jx = i; }
+    }
+    if (jx < 0) { console.warn('[traffic] no room for a T on the road to', A.id); return; }
+    const X = G.g[jx];
+    // it arrives from the town's side of the road
+    const perp = G.side[jx].clone();
+    if (perp.dot(_a.copy(_b).sub(X)) < 0) perp.negate();
+    const at = (d) => X.clone().addScaledVector(perp, d).normalize();
+    const dirX = X.clone().normalize();
+    const eA = this.ringGate(RA, { id: 'T', dir: dirX });
+    RA.gates.push(eA);
+    const line = this.roadCentreline(A, null, [this.ringExit(eA, 0), this.ringExit(eA, 24), this.ringExit(eA, 52)], [dirX, at(24), at(52)]);
+    this.layRoad(line, [[A, true]]);
+    // the main road's berm on the side the spur joins would run across the spur's mouth: it stops where the sweeps meet it (24 m
+    // either side of the T) and they carry it round into the spur
+    {
+      const st = G.strip, GG = this.roadGeo, n = ROAD_LAT.length, spurSide = perp.dot(G.side[jx]) > 0 ? 1 : -1;
+      for (let i = st.i0; i <= st.i1; i++) {
+        const b = smooth((Math.abs(G.cum[i] - G.cum[jx]) - 12) / 10);
+        if (b >= 1) continue;
+        for (let k = 0; k < n; k++) {
+          if (Math.sign(ROAD_LAT[k]) !== spurSide) continue;
+          const at = st.base + (i - st.i0) * n + k;
+          GG.berm[at] = Math.min(GG.berm[at], b);
+        }
+      }
+    }
+    const { g, N, side, cum } = line;
+    const step = cum[N] / N;
+    const K = Math.max(2, Math.round(JOIN_OUT / step));
+    const Ke = Math.max(3, Math.ceil(T_ARM / step)); // (the lanes stop this far short of the T)
+    const ab = g.map((p, i) => p.clone().addScaledVector(side[i], LANE)); // town -> T
+    const ba = []; // T -> town
+    for (let i = N; i >= 0; i--) ba.push(g[i].clone().addScaledVector(side[i], -LANE));
+    const dir = (p, q) => q.clone().sub(p).normalize();
+    const road = { A, B: main.A, eA, eB: null, len: cum[N] };
+    const gA = { loc: A, other: main.A, e: eA, road, cl: g.slice(0, K * 2 + 2) };
+    const pIn = this.newPiece('e', ab.slice(K, N + 1 - Ke), { from: gA, to: null, fromLoc: A, toLoc: A, road });
+    const pOut = this.newPiece('e', ba.slice(Ke, N + 1 - K), { from: null, to: gA, fromLoc: A, toLoc: A, road });
+    gA.out = pIn; gA.in = pOut;
+    gA.inEnd = ba[N - K]; gA.inDir = dir(ba[N - K - 1], ba[N - K]);
+    gA.outStart = ab[K]; gA.outDir = dir(ab[K], ab[K + 1]);
+    eA.gate = gA;
+    road.lanes = [pIn, pOut];
+    road.gates = [gA];
+    if (!this.towns.has(A)) this.towns.set(A, []);
+    this.towns.get(A).push(gA);
+    this.gates.push(gA);
+    this.roads.push(road);
+
+    // ---- the main road, cut at the T (m steps either side of the centre) ----
+    const m = Math.max(3, Math.ceil(T_ARM / G.step));
+    const kb = N0 - jx - m, ka = N0 - jx + m; // (indices into ba, which runs the other way)
+    const opts = (p) => ({ from: p.from, to: p.to, fromLoc: p.fromLoc, toLoc: p.toLoc, road: main });
+    const pAB2 = this.newPiece('e', G.ab.slice(jx + m, N0 + 1 - G.K), opts(G.pAB));
+    const pBA2 = this.newPiece('e', G.ba.slice(ka, N0 + 1 - G.K), opts(G.pBA));
+    G.pAB.raw = G.ab.slice(G.K, jx - m + 1);
+    G.pBA.raw = G.ba.slice(G.K, kb + 1);
+    G.gA.in = pBA2; G.gB.in = pAB2; // (the ends that arrive at the rings are the far halves now)
+    main.lanes = [G.pAB, pAB2, G.pBA, pBA2];
+    // straight through, and the four turns
+    const thAB = this.newPiece('j', G.ab.slice(jx - m, jx + m + 1), { vlim: 11 });
+    const thBA = this.newPiece('j', G.ba.slice(kb, ka + 1), { vlim: 11 });
+    const ein = ab[N - Ke], din = dir(ab[N - Ke - 1], ab[N - Ke]); // spur lane arriving
+    const eout = ba[Ke], dout = dir(ba[Ke], ba[Ke + 1]); // spur lane leaving
+    const turn = (p0, t0, p1, t1) => this.newPiece('j', this.bez(p0, t0, p1, t1), { vlim: 7 });
+    const abEnd = G.ab[jx - m], baEnd = G.ba[kb], abStart = G.ab[jx + m], baStart = G.ba[ka];
+    const abEndT = dir(G.ab[jx - m - 1], abEnd), baEndT = dir(G.ba[kb - 1], baEnd);
+    const abStartT = dir(abStart, G.ab[jx + m + 1]), baStartT = dir(baStart, G.ba[ka + 1]);
+    const offAB = turn(abEnd, abEndT, eout, dout), offBA = turn(baEnd, baEndT, eout, dout);
+    const onAB = turn(ein, din, abStart, abStartT), onBA = turn(ein, din, baStart, baStartT);
+    G.pAB.next = [thAB, offAB]; G.pBA.next = [thBA, offBA];
+    thAB.next = [pAB2]; thBA.next = [pBA2];
+    offAB.next = [pOut]; offBA.next = [pOut];
+    pIn.next = [onAB, onBA];
+    onAB.next = [pAB2]; onBA.next = [pBA2];
+    // the drawn flares where the spur meets the road, either side
+    const cl = g.slice(N - K * 2 - 1).reverse();
+    let k = 1;
+    while (k < cl.length - 1 && cl[k].distanceTo(cl[0]) < FILLET) k++;
+    const q = cl[k], tIn = cl[k - 1].clone().sub(cl[k]).normalize();
+    const mf = Math.max(2, Math.round(FILLET / G.step));
+    for (const d of [1, -1]) {
+      const j = jx + d * mf;
+      this.drawLine(this.bez(q, tIn, G.g[j], G.tan[j].clone().multiplyScalar(d), 10, 0.5), 0, 1, (t) => smooth(t / 0.3) * smooth((1 - t) / 0.3), true);
+    }
+  }
+
+  // The Meridian Exchange's garage road. The main garage (settlements.js garage(), `loc.garage`) stands inside the ring with its bays
+  // facing the ring road. There is no apron: a forecourt of carved regolith runs right up to the garage's plinth across its whole
+  // front (hall and office), flaring out into the ring road like a bell-mouth, its berms along the outer edges. A rover comes out
+  // of one bay (the open one with nothing in its way), drives straight out and turns right onto the ring's inner lane
+  // (the lane whose traffic has the town on its right), where it is just another road buggy. This lays the strips and works out the
+  // rover's path and where it meets the ring; buildRing calls it before the ring is drawn, so the ring's inner berm can make way, and
+  // the piece itself is made at the end of buildRing.
+  garageRoad(loc, R, W, side, tan) {
+    const G = loc.garage, H = GARAGE_HALL.main, bx = GARAGE_BAYS.main[G.bay], M = R.M, step = R.step, din = R.din;
+    const c = Math.cos(G.yaw), sn = Math.sin(G.yaw);
+    const L2W = (lx, lz) => this.P.ground(this.w.toWorld(loc, G.x + lx * c + lz * sn, 0, G.z - lx * sn + lz * c), new THREE.Vector3());
+    const wrap = (i) => ((i % M) + M) % M;
+    const lane = (i) => W[wrap(i)].clone().addScaledVector(side[wrap(i)], LANE * din);
+    const LZ0 = H.hz + 0.6;                                                       // the plinth's front edge: the road meets it
+    const S0 = L2W(bx, LZ0), u = L2W(bx, LZ0 + 1).sub(S0).normalize();            // (and the way out)
+    // where the line of the road meets the ring's inner lane
+    let i0 = 0, best = Infinity, tLane = 0;
+    for (let i = 0; i < M; i++) {
+      const q = lane(i).sub(S0), t = q.dot(u);
+      if (t <= 0) continue;
+      const lat = q.addScaledVector(u, -t).length();
+      if (lat < best) { best = lat; i0 = i; tLane = t; }
+    }
+    // the road merges onto the lane `m` steps further along it, like an on-ramp: at least 40 m, and well clear of any junction (the
+    // arcs between them start `kd` steps out). The road itself stays inside the ring, so a road leaving the ring there is no obstacle.
+    const gi = R.gates.map((e) => e.i);
+    const clear = (i) => gi.every((g) => { const d = Math.abs(g - wrap(i)); return Math.min(d, M - d) >= R.kd + Math.ceil(14 / step); });
+    let m = Math.max(2, Math.round(40 / step));
+    while (m * step < 120 && !clear(i0 + din * m)) m++;
+    if (!clear(i0 + din * m)) console.warn('[traffic] the garage road meets the ring at a junction');
+    const j = i0 + din * m, Q = lane(j), T = tan[wrap(j)].clone().multiplyScalar(din);
+    const RAD = 22; // the curve's reach in from the ring
+    const S1 = S0.clone().addScaledVector(u, Math.max(2, tLane - RAD));
+    // the rover's path (its right-hand lane): from inside the bay, out of the door, along the road, round the curve to the ring
+    const A = L2W(bx, -5), D0 = L2W(bx, H.hz - 0.4);
+    const dense = (a, b, out, gap = 2.5) => { const n = Math.max(1, Math.ceil(a.distanceTo(b) / gap)); for (let k = 1; k <= n; k++) out.push(a.clone().lerp(b, k / n)); };
+    const raw = [A];
+    dense(A, D0, raw); dense(D0, S0, raw);
+    const iS0 = raw.length - 1;                      // (the road proper starts at S0: the plinth before it)
+    dense(S0, S1, raw);
+    const iS1 = raw.length - 1;
+    for (const p of this.bez(S1, u, Q, T, 14, 0.55).slice(1)) raw.push(p);
+    const lenOf = (pts, a, b) => { let L = 0; for (let k = a + 1; k <= b; k++) L += pts[k].distanceTo(pts[k - 1]); return L; };
+
+    // ---- the forecourt: a wide bed across the whole front, from under the plinth to the ring's inner lane ----
+    // (x across the garage's front, z out from it; its edges run straight out from the compound's front corners, then bend away
+    // along the ring's inner edge: a quarter-ellipse each side. The bed is as wide as a road is long, so the shader is told the width)
+    const FX0 = -27.6, FX1 = 33.2;                   // its edges at the garage are the compound's (build_garage.py): out past the pump island on the left, the side lane's railing on the right
+    const TIP0 = -47, TIP1 = 44;                     // and where they have swung out to by the ring (the right stops short of the casino road's junction)
+    const zA = H.hz + 0.2, zEnd = LZ0 + tLane - 1;   // (it begins under the plinth; it ends in the ring's bed, which melts it in)
+    const sideAt = (z) => L2W(1, z).sub(L2W(0, z)).normalize();
+    const N = 18;
+    const fc = { x0: TIP0, x1: TIP1 };               // (across its widest, where it meets the ring)
+    const baseF = this.roadGeo.pos.length / 3;
+    for (let k = 0; k <= N; k++) {
+      const th = (k / N) * Math.PI / 2, z = zA + (zEnd - zA) * Math.sin(th), e = 1 - Math.cos(th);
+      const xl = FX0 + (TIP0 - FX0) * e, xr = FX1 + (TIP1 - FX1) * e;
+      const centre = L2W((xl + xr) / 2, z), sv = sideAt(z), h = (xr - xl) / 2;
+      const fade = smooth((zEnd - z) / 5);
+      const berm = smooth((zEnd - 3.5 - z) / 3);
+      this.stripPush(centre, sv, z - zA, h / 7.3, fade, 0, berm, berm, 0, h / 7.3);
+    }
+    this.stripIdx(baseF, N + 1);
+
+    // ---- the compound's yard (build_garage.py): the same bed, without ruts, behind the hall (the back yard and its rover park) and down
+    // the side lane past the office from the forecourt to it. The back yard's edge along the hall has no berm (it runs under the
+    // plinth, the bund and the power compound's slab, and across the lane, which it meets there) ----
+    this.bedStrip(L2W(-22.6, -19.3), L2W(33.8, -19.3), 8.7, { bR: 0 });           // (x -22 to 33, z -28 to -10.6: its right is the hall's side)
+    this.bedStrip(L2W(30.3, H.hz + 1.0), L2W(30.3, -H.hz - 2.0), 2.9);           // (x 27.4 to 33.2, from inside the forecourt into the back yard)
+
+    // ---- the rover's road: the same line as a sweep, melting in from the forecourt and out into the ring ----
+    // the strip: its centre RIGHT-lane-width to the left of the line, so the rover keeps to the right of the road
+    const path = raw.slice(iS0).map((p) => this.P.ground(p.clone(), new THREE.Vector3()));
+    const { side: ps, cum } = this.frames(path);
+    const total = cum[path.length - 1], straight = cum[iS1 - iS0];
+    const base = this.roadGeo.pos.length / 3;
+    for (let k = 0; k < path.length; k++) {
+      const centre = path[k].clone().addScaledVector(ps[k], -LANE);
+      const s = cum[k];
+      const fade = smooth(s / 22) * smooth((total - s) / 10);
+      const soft = smooth((s - straight * 0.8) / (total - straight * 0.8 + 1e-3));
+      this.stripPush(centre, ps[k], s, 1, fade, smooth((s - 8) / 12) * smooth((total - s - 8) / 10), 0, 0, Math.max(0.7, soft));
+    }
+    this.stripIdx(base, path.length);
+    // keep the forecourt free of pads and shelters
+    for (let lx = fc.x0; lx <= fc.x1; lx += 12) {
+      for (let lz = zA; lz <= zEnd; lz += 12) {
+        const p = this.local(loc, L2W(lx, lz), _a);
+        loc.stopKeep.push({ x: p.x, z: p.z, r: 8 });
+      }
+    }
+    for (let k = 0; k < path.length; k += 2) { const p = this.local(loc, path[k], _a); loc.stopKeep.push({ x: p.x, z: p.z, r: 10 }); }
+    // (the ring's own berm makes way where the forecourt flares into it: a ring point's place in the garage's frame)
+    const toGarage = (wp) => { const q = this.local(loc, wp, _a), dx = q.x - G.x, dz = q.z - G.z; return { lx: dx * c - dz * sn, lz: dx * sn + dz * c }; };
+    return { i0, j, Q, raw, fc, toGarage, lead: Math.ceil(11 / step), trail: m + Math.ceil(14 / step), polyLen: lenOf(raw, 0, raw.length - 1), hallLen: lenOf(raw, 0, 0) + A.distanceTo(L2W(bx, H.hz)), plinthAt: A.distanceTo(L2W(bx, LZ0)), piece: null };
+  }
+
+  // A wide bed of the road's soil along a straight line on the ground (world points a, b), `hw` metres either side of it, without
+  // ruts (a yard, a lot), fading in and out over `fadeIn` / `fadeOut` metres at its ends; `bL` / `bR` how much berm shows on its left
+  // and right edge (0 where it runs under something or meets another bed).
+  bedStrip(a, b, hw, { fadeIn = 1.5, fadeOut = 1.5, bL = 1, bR = 1 } = {}) {
+    const n = Math.max(2, Math.ceil(a.distanceTo(b) / 4)), g = [];
+    for (let i = 0; i <= n; i++) g.push(this.P.ground(a.clone().lerp(b, i / n), new THREE.Vector3()));
+    const { side, cum } = this.frames(g), total = cum[n], k = hw / 7.3, base = this.roadGeo.pos.length / 3;
+    for (let i = 0; i <= n; i++) this.stripPush(g[i], side[i], cum[i], k, smooth(cum[i] / fadeIn) * smooth((total - cum[i]) / fadeOut), 0, bL, bR, 0, k);
+    this.stripIdx(base, n + 1);
+  }
+
+  // A straight road a settlement asked for inside its own grounds (`loc.paved`: { x0, z0, x1, z1 } in the settlement's frame; the
+  // Meridian Exchange's avenue, from its plaza to its gate arch): the road's own bed, ruts and berms, melting into the ground at both
+  // ends. Laid with the network, after the rings; nothing drives on it.
+  pavedStrip(loc, spec) {
+    let { x0, z0, x1, z1 } = spec;
+    // a road that runs out to the ring runs on a little past where the flared join's sweeps start (inletFor), at full strength
+    const e = spec.ring ? (this.rings.get(loc)?.inlets || []).find((q) => q.spec === spec) : null;
+    if (e) { x1 = x0 + e.ux * (e.tq + 8); z1 = z0 + e.uz * (e.tq + 8); }   // (8 m past where the sweeps start, with its berms fading, so no bare ground shows between them)
+    const n = Math.max(2, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 4));
+    const g = [];
+    for (let i = 0; i <= n; i++) g.push(this.P.ground(this.w.toWorld(loc, x0 + ((x1 - x0) * i) / n, 0, z0 + ((z1 - z0) * i) / n), new THREE.Vector3()));
+    const { side, cum } = this.frames(g), total = cum[n];
+    const base = this.roadGeo.pos.length / 3;
+    for (let i = 0; i <= n; i++) {
+      const s = cum[i];
+      const bf = e ? 1 - smooth((s - e.tq) / 4) : 1;
+      this.stripPush(g[i], side[i], s, 1, smooth(s / 8) * (e ? 1 : smooth((total - s) / 8)), smooth((s - 6) / 10) * (e ? Math.min(1, smooth((e.tq - s) / 6 + 0.5)) : smooth((total - s - 6) / 10)), bf, bf, 0);
+    }
+    this.stripIdx(base, n + 1);
+  }
+
+  // Where a paved road (`spec`, in the settlement's frame, a straight line out from its start toward (x1, z1)) meets the settlement's ring R, as a gate for drawJoin: `i` the ring's point, `gate.cl` the
+  // road's centreline from the ring back along the road in 4 m steps, `tq` how far along the road the flared join's sweeps start (FILLET short of the ring), `ux, uz` its direction.
+  inletFor(loc, R, spec) {
+    const dx = spec.x1 - spec.x0, dz = spec.z1 - spec.z0, len = Math.hypot(dx, dz), ux = dx / len, uz = dz / len;
+    let bi = -1, bd = Infinity;
+    for (let i = 0; i < R.M; i++) {
+      const p = this.ringLocal(R, i);
+      if ((p.x - spec.x0) * ux + (p.z - spec.z0) * uz < len * 0.3) continue;       // (the ring's far side of the settlement, not the near one)
+      const d = Math.abs((p.x - spec.x0) * uz - (p.z - spec.z0) * ux);
+      if (d < bd) { bd = d; bi = i; }
+    }
+    const T = this.ringLocal(R, bi), t0 = (T.x - spec.x0) * ux + (T.z - spec.z0) * uz;
+    const pt = (t) => this.P.ground(this.w.toWorld(loc, spec.x0 + ux * t, 0, spec.z0 + uz * t), new THREE.Vector3());
+    const cl = [];
+    for (let k = 0; k <= 14; k++) cl.push(pt(t0 - 4 * k));
+    let kq = 1;
+    while (kq < cl.length - 1 && cl[kq].distanceTo(cl[0]) < FILLET) kq++;
+    return { i: bi, gate: { cl }, spec, ux, uz, tq: t0 - 4 * kq };
+  }
+
+  // After the ring's pieces are finished: link the garage piece onto the lane arc it meets, and set the rover's height over the garage
+  // floor (the hall's floor stands a hand's breadth up on its plinth, and the road meets the plinth's edge).
+  garageLink(R) {
+    const gj = R.garageJoin;
+    if (!gj || !gj.piece || !gj.piece.path) return;
+    const M = R.M, dirn = R.din, jw = ((gj.j % M) + M) % M;
+    const host = (R.arcs[dirn] || []).find((pc) => {
+      const n = Math.abs(pc.i1 - pc.i0), off = dirn > 0 ? (((jw - pc.i0) % M) + M) % M : (((pc.i0 - jw) % M) + M) % M;
+      return off <= n && pc.path;
+    });
+    if (!host) { console.warn('[traffic] the garage road found no ring lane to join'); gj.piece = null; return; }
+    let bi = 0, bd = Infinity;
+    host.path.pts.forEach((p, k) => { const d = p.distanceToSquared(gj.Q); if (d < bd) { bd = d; bi = k; } });
+    const gp = gj.piece;
+    gp.next = [host];
+    gp.joinTo = host;
+    gp.joinS = host.path.cum[bi];
+    // the floor: up inside the hall and over the plinth's lip, then down to the road
+    const k = gp.len / Math.max(1, gj.polyLen);
+    const sR0 = gj.plinthAt * k, sR1 = sR0 + 1.5 * k;
+    gp.path.pts.forEach((p, n) => {
+      const s = gp.path.cum[n];
+      const lift = s <= sR0 ? GARAGE_FLOOR : s <= sR1 ? GARAGE_FLOOR * (1 - (s - sR0) / (sR1 - sR0)) : 0;
+      if (lift > 0) p.addScaledVector(_u.copy(p).normalize(), lift);
+    });
+  }
+
+  // The flared join of a road's end `e` (a gate of ring R) with the ring: a curved fillet each side of the road, road centreline -> ring centreline.
+  drawJoin(R, e) {
+    const M = R.M, cl = e.gate.cl, wrap = (i) => ((i % M) + M) % M;
+    let k = 1;
+    while (k < cl.length - 1 && cl[k].distanceTo(cl[0]) < FILLET) k++;
+    const q = cl[k], tIn = cl[k - 1].clone().sub(cl[k]).normalize();
+    const m = Math.max(2, Math.round(FILLET / R.step));
+    for (const d of [1, -1]) {
+      const j = e.i + d * m;
+      this.drawLine(this.bez(q, tIn, R.W[wrap(j)], R.tan[wrap(j)].clone().multiplyScalar(d), 10, 0.5), 0, 1, (t) => smooth(t / 0.3) * smooth((1 - t) / 0.3), true);
+    }
+  }
+
+  // A road that reaches a ring after the ring was drawn (addTownRoads, at the other settlement's end): the ring's outer berm and its ruts make
+  // way for the junction, as buildRing makes them for the junctions it knows of (the same fall-offs, never raising what is there). The ring's
+  // strip is in the first road mesh, a load drew it.
+  openJoin(R, e) {
+    const A = this.roadMesh.geometry.attributes, n = ROAD_LAT.length, M = R.M, outer = R.din > 0 ? -1 : 1;
+    for (let i = 0; i <= M; i++) {
+      const d = Math.abs(e.i - (i % M)), dg = Math.min(d, M - d) * R.step;
+      if (dg >= 38) continue;
+      const b = smooth((dg - 12) / 10), mk = smooth((dg - 24) / 14);
+      for (let k = 0; k < n; k++) {
+        const at = R.stripBase + i * n + k;
+        A.mark.array[at] = Math.min(A.mark.array[at], mk);
+        if (ROAD_LAT[k] === 0 || Math.sign(ROAD_LAT[k]) === outer) A.berm.array[at] = Math.min(A.berm.array[at], b);
+      }
+    }
+    A.mark.needsUpdate = A.berm.needsUpdate = true;
   }
 
   // The ring itself: one closed strip, a flared join for each road, lanes and junction connectors.
@@ -929,49 +1591,67 @@ export class Traffic {
     for (let i = 0; i < M; i++) { const p = this.ringLocal(R, i); W.push(P.ground(this.w.toWorld(loc, p.x, 0, p.z), new THREE.Vector3())); }
     const { side, tan } = this.frames(W, true);
     R.W = W; R.side = side; R.tan = tan;
+    this.mapLines.push(this.thin([...W, W[0]], Math.max(1, Math.round(20 / (R.step || 10)))));
     const wrap = (i) => ((i % M) + M) % M;
+    // which way round has the town on its right (the stop goes on that lane); the road joins on the other, outer edge
+    const c0 = this.w.toWorld(loc, 0, 0, 0);
+    R.din = side[0].dot(_a.copy(c0).sub(W[0])) > 0 ? 1 : -1;
+    // a settlement's own paved road that runs out to the ring (`loc.paved` with `ring`: the casino's two roads from its car park): where it meets the ring, and the curved sweeps it joins with
+    R.inlets = (loc.paved || []).filter((s) => s.ring).map((s) => this.inletFor(loc, R, s));
+    // the Meridian Exchange's garage road: laid before the ring so that the ring's inner berm can stop where the road comes in
+    const gj = loc.garage ? this.garageRoad(loc, R, W, side, tan) : null;
+    R.garageJoin = gj;
     // closed strip (the last row repeats the first)
     {
       const base = this.roadGeo.pos.length / 3;
+      R.stripBase = base; // (openJoin finds the strip's rows by it)
       let s = 0;
       for (let i = 0; i <= M; i++) {
         if (i) s += W[wrap(i)].distanceTo(W[i - 1]);
-        this.stripPush(W[wrap(i)], side[wrap(i)], s);
+        // (no ruts for ~30 m either side of a junction, where the road's sweeps take over, and the outer berm, which
+        // they replace, picks up again from 12 m out, overlapping the sweeps' last stretch)
+        let dg = Infinity;
+        for (const e of R.gates) { const d = Math.abs(e.i - wrap(i)); dg = Math.min(dg, Math.min(d, M - d) * R.step); }
+        const b = smooth((dg - 12) / 10);
+        let bi = 1, mk = smooth((dg - 24) / 14); // (the inner berm and the ruts, where the garage road comes in)
+        if (gj) {
+          let k = R.din * (wrap(i) - gj.i0);
+          k = ((k + M * 1.5) % M) - M * 0.5; // (steps along the lane from where the road's line meets the ring: ahead is positive)
+          const gd = Math.max(-gj.lead - k, k - gj.trail, 0) * R.step;
+          bi = smooth((gd - 3) / 8);
+          mk = Math.min(mk, smooth((gd - 6) / 10));
+          // (and the forecourt's own berms take over its flared edges: the ring's stops short of them)
+          const q = gj.toGarage(W[wrap(i)]);
+          if (q.lz > 0) bi = Math.min(bi, 1 - smooth(Math.min(q.lx - gj.fc.x0 - 2, gj.fc.x1 - 2 - q.lx) / 6));
+        }
+        let di = Infinity;
+        for (const e of R.inlets) { const d = Math.abs(e.i - wrap(i)); di = Math.min(di, Math.min(d, M - d) * R.step); }
+        bi = Math.min(bi, smooth((di - 12) / 10));
+        mk = Math.min(mk, smooth((di - 24) / 14));
+        this.stripPush(W[wrap(i)], side[wrap(i)], s, 1, 1, mk, R.din > 0 ? b : bi, R.din > 0 ? bi : b);
       }
       this.stripIdx(base, M + 1);
     }
     const lane = (d, i) => W[wrap(i)].clone().addScaledVector(side[wrap(i)], LANE * d);
     const laneT = (d, i) => tan[wrap(i)].clone().multiplyScalar(d);
-    // which way round has the town on its right (the stop goes on that lane)
-    const c0 = this.w.toWorld(loc, 0, 0, 0);
-    R.din = side[0].dot(_a.copy(c0).sub(W[0])) > 0 ? 1 : -1;
     const gates = R.gates.sort((p, q) => p.i - q.i);
     const n = gates.length;
     loc.ring = { radius: Math.round(R.Rb), max: Math.round(R.maxR), gates: n };
-    // flared joins: a curved fillet each side of the road, road centreline -> ring centreline
-    for (const e of gates) {
-      const gt = e.gate, cl = gt.cl;
-      let k = 1;
-      while (k < cl.length - 1 && cl[k].distanceTo(cl[0]) < FILLET) k++;
-      const q = cl[k], tIn = cl[k - 1].clone().sub(cl[k]).normalize();
-      const m = Math.max(2, Math.round(FILLET / R.step));
-      for (const d of [1, -1]) {
-        const j = e.i + d * m;
-        this.drawLine(this.bez(q, tIn, W[wrap(j)], laneT(d, j), 10, 0.5), 0, 0.85, (t) => smooth(t / 0.3) * smooth((1 - t) / 0.3));
-      }
-    }
-    // marker posts on the outside of the ring, away from the junctions
+    // flared joins
+    for (const e of gates) this.drawJoin(R, e);
+    for (const e of R.inlets) this.drawJoin(R, e);
+    // delineator posts on the outside of the ring, away from the junctions
     const outSide = -R.din;
     const near = (i, list, dist) => list.some((gi) => { const d = Math.abs(gi - i); return Math.min(d, M - d) * R.step < dist; });
     const postEvery = Math.max(8, Math.round(95 / R.step));
     for (let i = 0; i < M; i += postEvery) {
       if (near(i, gates.map((e) => e.i), 34)) continue;
-      const p = W[i].clone().addScaledVector(side[i], 6.5 * outSide);
+      const p = W[i].clone().addScaledVector(side[i], 10 * outSide);
       P.ground(p, p);
       this.posts.push({ pos: p, q: frameQuat(W[i].clone().normalize(), tan[i], new THREE.Quaternion()) });
     }
-    // pads (laid out after the roads) keep off the ring
-    for (let i = 0; i < M; i += 2) { const p = this.ringLocal(R, i); loc.stopKeep.push({ x: p.x, z: p.z, r: 6 }); }
+    // pads (laid out after the roads) keep off the ring (tagged: ringGate leaves them out, see there)
+    for (let i = 0; i < M; i += 2) { const p = this.ringLocal(R, i); loc.stopKeep.push({ x: p.x, z: p.z, r: 10, ring: true }); }
     if (!n) return;
     // ---- pieces ----
     const span = (d, from, to) => { const out = []; for (let i = from; d > 0 ? i <= to : i >= to; i += d) out.push(lane(d, i)); return out; };
@@ -1000,6 +1680,7 @@ export class Traffic {
       Object.assign(gt, { entP, entM, exP, exM, thP, thM });
     }
     R.arcs = { 1: arcP, [-1]: arcM };
+    if (gj) gj.piece = this.newPiece('j', gj.raw, { town: loc, vlim: 9, garage: true });
   }
 
   // Smooth the corners (ends stay put so pieces join exactly), drop onto the ground, smoothed normals.
@@ -1037,7 +1718,7 @@ export class Traffic {
   ringStop(R) {
     const loc = R.loc, M = R.M, d = R.din;
     if (!R.arcs) return;
-    const keeps = this.keepouts(loc, false);
+    const keeps = [...this.keepouts(loc, false), ...loc.stopKeep.filter((k) => k.flyPad)]; // (a ring laid late goes round the pads that landed before it)
     const bl = this.buildings(loc);
     const wrap = (i) => ((i % M) + M) % M;
     let best = null;
@@ -1046,10 +1727,15 @@ export class Traffic {
       const lo = Math.ceil(STOP_IN / R.step), hi = n - Math.ceil(16 / R.step);
       for (let j = lo; j <= hi; j += 2) {
         const i = wrap(pc.i0 + d * j);
+        if (R.garageJoin) { // (not where the garage road comes in)
+          let kk = R.din * (i - R.garageJoin.i0);
+          kk = ((kk + M * 1.5) % M) - M * 0.5;
+          if (kk > -R.garageJoin.lead - Math.ceil(24 / R.step) && kk < R.garageJoin.trail + Math.ceil(24 / R.step)) continue;
+        }
         const p = this.ringLocal(R, i);
-        // shelter 9 m in from the centreline, toward the town
+        // shelter 12 m in from the centreline, toward the town (clear of a land-train in the stop lane, 6.5 m out)
         const ux = Math.cos(p.a), uz = Math.sin(p.a);
-        const sx = p.x - ux * 9, sz = p.z - uz * 9;
+        const sx = p.x - ux * 12, sz = p.z - uz * 12;
         if (keeps.some((k) => Math.hypot(sx - k.x, sz - k.z) < k.r + 2.5)) continue;
         this.w.toWorld(loc, sx, this.groundY(loc, sx, sz) + 1.5, sz, _c);
         if (this.blocked(_c, 2.4)) continue;
@@ -1064,7 +1750,7 @@ export class Traffic {
       const pc = R.arcs[d].reduce((p, q) => (q.len > p.len ? q : p));
       const i = wrap(pc.i0 + d * Math.round(Math.abs(pc.i1 - pc.i0) * 0.6));
       const p = this.ringLocal(R, i);
-      best = { pc, i, sx: p.x - Math.cos(p.a) * 9, sz: p.z - Math.sin(p.a) * 9 };
+      best = { pc, i, sx: p.x - Math.cos(p.a) * 12, sz: p.z - Math.sin(p.a) * 12 };
       console.warn('[traffic] no open shelter spot on the ring at', loc.id);
     }
     const pc = best.pc, path = pc.path;
@@ -1079,12 +1765,13 @@ export class Traffic {
     const yaw = Math.atan2(sL.x - sx, sL.z - sz);
     const names = (this.towns.get(loc) || []).map((g) => g.other.short);
     const text = `ROADS > ${names.slice(0, 3).join(' ')}${names.length > 3 ? ' +' : ''}`;
-    this.shelter(loc, sx, sz, yaw, text, 0xff9f1c);
+    const shelterAt = { x: sx, z: sz, yaw, text, color: 0xff9f1c }; // (redress hangs it up again after the town is rebuilt in place)
+    this.shelter(loc, sx, sz, yaw, text, shelterAt.color);
     loc.stopKeep.push({ x: sx, z: sz, r: 3 });
     const wait = { x: sx + Math.sin(yaw) * 1.8, y: this.groundY(loc, sx, sz), z: sz + Math.cos(yaw) * 1.8, g: true };
     const r = Math.hypot(sx, sz) || 1;
     pc.stop = {
-      loc, kind: 'road', piece: pc, s, world: p, wait, origin: wait,
+      loc, kind: 'road', piece: pc, s, world: p, wait, origin: wait, shelterAt,
       town: this.townPoint(loc, sx - (sx / r) * 4, sz - (sz / r) * 4, 90),
       queue: [], queued: false,
     };
@@ -1121,8 +1808,11 @@ export class Traffic {
   // Somewhere new to go: a neighbouring town half the time, otherwise anywhere on the network.
   pickDest(v) {
     const here = v.piece.kind === 'e' ? v.piece.toLoc : v.piece.town;
-    const towns = [...this.towns.keys()].filter((l) => l !== here && l.ringStop);
-    const nbrs = (this.towns.get(here) || []).map((g) => g.other).filter((l) => l.ringStop);
+    // the Vostok supply trains only ever work their own road, end to end
+    if (v.shuttle) return v.piece.kind === 'e' && v.shuttle.includes(here) ? here : v.shuttle.find((l) => l !== here) || v.shuttle[0];
+    // (and nobody else drives into a restricted zone)
+    const towns = [...this.towns.keys()].filter((l) => l !== here && l.ringStop && !l.restricted);
+    const nbrs = (this.towns.get(here) || []).map((g) => g.other).filter((l) => l.ringStop && !l.restricted);
     const list = nbrs.length && this.r() < 0.5 ? nbrs : towns;
     return list[Math.floor(this.r() * list.length)] || here;
   }
@@ -1141,10 +1831,26 @@ export class Traffic {
     if (pc) pc.vehicles.push(v);
   }
 
-  // Put a land-train, two hover-cars and a buggy on each road, each with somewhere to go.
-  populateRoad(road, k) {
-    const add = (v) => {
-      const pc = road.lanes[this.r() < 0.5 ? 0 : 1];
+  // Which service runs a road, and in whose colours: the livery of whichever of the four factions' towns it
+  // joins (taking turns where two meet; Kepler's orange where neither is). The freight Prospector runs roads to
+  // the Helium-3 exchange and half of the rest; the passenger Moonliner takes the others. (The Vostok road has
+  // its own pair, below.)
+  trainSpec(road, k) {
+    const ends = [road.A, road.B].filter(Boolean);
+    const owners = ends.map((l) => l.faction).filter((f) => LAND_TRAIN_FACTIONS[f]);
+    const faction = owners.length ? owners[(k >> 1) % owners.length] : 'kepler';
+    const type = ends.some((l) => l.type === 'industrial') || (k >> 1) % 2 ? 'prospector' : 'moonliner';
+    const cars = type === 'moonliner' ? ['pax', 'pax', 'pax'] : FREIGHT[(k >> 1) % FREIGHT.length];
+    return { faction, type, cars };
+  }
+
+  // Put a land-train, two hover-cars and a buggy on each road, each with somewhere to go. The road into a
+  // restricted base (Vostok-9) carries only that faction's own pair of trains, a Moonliner and a Prospector
+  // running from the Helium-3 exchange to the bastion and back, one on each lane.
+  populateRoad(road, k, trains = true) {
+    const military = k < 0;
+    const add = (v, lane) => {
+      const pc = road.lanes[lane === undefined ? Math.floor(this.r() * road.lanes.length) : lane];
       Object.assign(v, {
         piece: null, s: pc.len * (0.1 + this.r() * 0.8), plan: [], hist: [], dest: null, cur: 0, state: 'drive', timer: 0,
         pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(),
@@ -1155,53 +1861,97 @@ export class Traffic {
       this.roadVehicles.push(v);
       return v;
     };
-    // land-train
-    const cars = k % 2 ? ['pax', 'cargo', 'cargo'] : ['pax', 'pax', 'cargo'];
-    const lt = makeLandTrain({ color: [0xff9f1c, 0x2ec4ff, 0x7dff6a, 0xffd23f, 0xff7ad9][k % 5], cars });
-    this.w.scene.add(lt.root);
-    for (const t of lt.trailers) this.w.scene.add(t.root);
-    const train = add({
-      ...lt, kind: 'landtrain', vmax: 11, acc: 1.4, front: 4.6, tail: 4.4 + lt.trailers.length * 9.9, waitT: 16,
-      deck: [1.95, 2.45, 4.3], deckY: 2.45, col: null, quat: lt.root.quaternion, view: 1200, radius: 6, boarding: 0, wheelR: 1.2,
-      pax: [1, 3], hp: TRAIN_HP, maxHp: TRAIN_HP, hitR: 4.8, credits: 60,
+    // land-trains: the Moonliner passenger express or the Prospector freight rig, in the colours of the
+    // faction whose towns it joins
+    const base = [road.A, road.B].find((l) => l && l.restricted);
+    const specs = military
+      ? [{ faction: base.faction, type: 'moonliner', cars: ['pax', 'pax', 'pax'] }, { faction: base.faction, type: 'prospector', cars: FREIGHT[0] }]
+      : [this.trainSpec(road, k)];
+    (trains ? specs : []).forEach((spec, n) => {
+      const lt = makeLandTrain(spec);
+      this.w.scene.add(lt.root);
+      for (const t of lt.trailers) this.w.scene.add(t.root);
+      const train = add({
+        ...lt, kind: 'landtrain', vmax: 11, acc: 1.4, front: 4.6, tail: 4.4 + lt.trailers.length * 9.9, waitT: spec.type === 'moonliner' ? 16 : 12,
+        quat: lt.root.quaternion, view: 1200, radius: 6, boarding: 0, wheelR: 1.2, shuttle: military ? [road.A, road.B] : null,
+        pax: spec.type === 'moonliner' ? [1, 3] : null, hp: TRAIN_HP, maxHp: TRAIN_HP, hitR: 4.8, credits: 60,
+      }, military ? n : undefined);
+      train.trailers.forEach((t, i) => {
+        t.offset = 4.3 + 1.6 + 4.0 + i * 9.9;
+        t.hintF = { i: 0, f: 0 }; t.hintR = { i: 0, f: 0 };
+        t.plat = { pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), decks: t.decks, quat: t.root.quaternion };
+        this.platforms.push(t.plat);
+      });
+      this.vehicles.push(train);
     });
-    train.trailers.forEach((t, i) => {
-      t.offset = 4.3 + 1.6 + 4.0 + i * 9.9;
-      t.hintF = { i: 0, f: 0 }; t.hintR = { i: 0, f: 0 };
-      t.plat = { pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), deck: [1.9, 2.4, 4.2], deckY: 2.4, quat: t.root.quaternion, col: null };
-      this.platforms.push(t.plat);
-    });
-    this.vehicles.push(train);
+    if (military) return;
     // hover-cars: hop over slower traffic instead of queueing (the jar can scoop these)
+    // (one is a faction car in the livery of the road's faction, the other a civilian car in one of the civilian paints)
+    const carFaction = this.trainSpec(road, k).faction;
     for (let i = 0; i < 2; i++) {
-      const m = makeHoverCar({ color: [0xff7ad9, 0x2ec4ff, 0x7dff6a, 0xffd23f][(k + i) % 4] });
+      const m = makeHoverCar(i === 0 ? { faction: carFaction } : { paint: k });
       m.root.matrixAutoUpdate = true;
       this.w.scene.add(m.root);
-      const v = add({ ...m, kind: 'car', vmax: 22 + this.r() * 6, acc: 4, front: 2, tail: 2, waitT: 4, deck: [1.45, 1.1, 3.1], deckY: 0, col: null, quat: m.root.quaternion, view: 800, radius: 2.8, hoverH: 1.8, hp: CAR_HP, maxHp: CAR_HP, hitR: 3.0, credits: 30 });
+      const v = add({ ...m, kind: 'car', vmax: 22 + this.r() * 6, acc: 4, front: 2.4, tail: 2.4, waitT: 4, deck: [1.7, 1.3, 3.6], deckY: 0, quat: m.root.quaternion, view: 800, radius: 3.3, hoverH: 1.9, hp: CAR_HP, maxHp: CAR_HP, hitR: 3.5, credits: 30, bobPh: this.r() * 6.28 });
       this.vehicles.push(v);
     }
     // buggy (old-style crawler): queues behind slower traffic
-    const r = makeRover({ color: [0xffd23f, 0xff9f1c, 0x7dff6a][k % 3], trim: 0xfff4e0, pirate: false, flag: 0x2ec4ff });
-    r.gun.visible = false;
-    r.root.scale.setScalar(1.3);
-    // a driver in the left seat, legs out under the nose and hands on a little steering wheel
-    const drv = makeFigure({ seed: 4100 + k });
-    drv.root.position.set(0.6, 1.3, 0.25);
-    drv.legL.rotation.x = drv.legR.rotation.x = -1.45;
-    drv.armL.rotation.x = drv.armR.rotation.x = -1.0;
-    r.chassis.add(drv.root);
-    const wheelM = toon(0x221d33);
-    const sw = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.045, 6, 18), wheelM);
-    sw.position.set(0.6, 2.62, 0.98);
-    sw.rotation.x = -0.55;
-    ink(sw, 0.02);
-    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.75, 6), wheelM);
-    col.position.set(0.6, 2.38, 1.22);
-    col.rotation.x = 1.0;
-    r.chassis.add(sw, col);
-    this.w.scene.add(r.root);
-    const b = add({ ...r, kind: 'buggy', vmax: 12 + this.r() * 3, acc: 2.5, front: 3.4, tail: 3.4, waitT: 6, view: 900, wheelR: 1.1, hp: BUGGY_HP, maxHp: BUGGY_HP, hitR: 3.4, credits: 25 });
+    const b = add({ ...this.makeBuggyRig(k), kind: 'buggy', vmax: 12 + this.r() * 3, acc: 2.5, front: 3.4, tail: 3.4, waitT: 6, view: 900, wheelR: 1.1, hp: BUGGY_HP, maxHp: BUGGY_HP, hitR: 3.4, credits: 25 });
     this.crawlers.push(b);
+  }
+
+  // A road buggy's model, already in the scene; k picks its colour and driver.
+  makeBuggyRig(k) {
+    const r = buildBuggyRig(k);
+    this.w.scene.add(r.root);
+    return r;
+  }
+
+  // The garage's rovers (see garageRoad): two buggies that take turns to come out of the main garage's open bay, drive out along its road
+  // and onto the ring, where they are ordinary road buggies. After a while, once nobody can see them, they go home and wait their turn.
+  populateGarage() {
+    const R = [...this.rings.values()].find((q) => q.garageJoin && q.garageJoin.piece && q.garageJoin.piece.joinTo);
+    if (!R) return;
+    const loc = R.loc;
+    this.garage = { loc, piece: R.garageJoin.piece, rovers: [] };
+    for (let i = 0; i < 2; i++) {
+      const rig = this.makeBuggyRig(90 + i);
+      rig.root.visible = false;
+      const v = Object.assign(rig, {
+        kind: 'buggy', vmax: 12 + this.r() * 3, acc: 2.5, front: 3.4, tail: 3.4, waitT: 6, view: 900, wheelR: 1.1, hp: BUGGY_HP, maxHp: BUGGY_HP, hitR: 3.4, credits: 25,
+        piece: null, s: 0, plan: [], hist: [], dest: null, cur: 0, state: 'bay', timer: 0,
+        pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(),
+        hintF: { i: 0, f: 0 }, hintR: { i: 0, f: 0 }, hover: 0, smokeT: 0, roll: 0,
+        garage: true, spawnT: 6 + i * 22, retireT: 0,
+      });
+      this.garage.rovers.push(v);
+      this.roadVehicles.push(v);
+      this.crawlers.push(v);
+    }
+  }
+
+  // Each frame: a waiting rover rolls out when the Exchange is in play and the road is clear; one that has been out a while and is
+  // out of everyone's sight goes back to wait.
+  updateGarage(dt) {
+    const G = this.garage;
+    if (!G) return;
+    for (const v of G.rovers) {
+      if (v.state === 'bay') {
+        v.spawnT -= dt;
+        if (v.spawnT > 0 || !G.loc.active || G.piece.vehicles.length) continue;
+        this.move(v, G.piece);
+        v.s = 3; v.hist = []; v.plan = []; v.cur = 1; v.state = 'drive'; v.roll = 0; v.hp = v.maxHp; v.wreckT = 0;
+        v.retireT = 70 + this.r() * 60;
+        this.char(v, false);
+        this.plan(v);
+      } else if (v.state === 'drive' && v.piece && v.piece !== G.piece) {
+        v.retireT -= dt;
+        if (v.retireT <= 0 && !v.root.visible) {
+          this.move(v, null);
+          v.state = 'bay'; v.cur = 0; v.spawnT = 15 + this.r() * 25; v.root.visible = false;
+        }
+      }
+    }
   }
 
   // ================= passengers =================
@@ -1392,16 +2142,19 @@ export class Traffic {
       bottom.y = stop.top; bottom.g = false;
       door = [pt(v.inside, false), pt(v.rampTop, false), bottom];
     }
-    // off the pad toward the shelter side, then to a building
-    let exit = null;
-    if (stop.kind === 'pad') {
-      const a = Math.atan2(stop.wait.z - stop.z, stop.wait.x - stop.x) + 0.5;
-      exit = { x: stop.x + Math.cos(a) * (stop.padR + 1.5), y: stop.top, z: stop.z + Math.sin(a) * (stop.padR + 1.5), g: false };
+    // off a pad: round the ship to the stairs' head, down the flight, onto the ground at its foot (stop.origin); then to a building
+    let down = [];
+    if (stop.kind === 'pad' && stop.stairs) {
+      const S = stop.stairs;
+      const around = this.deckRoute(v, stop);
+      // (the deck-edge point only if it lies between the ramp's foot and the stairs, not behind the foot)
+      const bottom = door[door.length - 1], past = Math.hypot(bottom.x - stop.x, bottom.z - stop.z) > stop.padR - 1.6;
+      down = [...around, ...(around.length || !past ? [{ ...S.edge, g: false }] : []), { ...S.head, g: false }, { ...S.foot, g: false }];
     }
     const doors = this.doorsFor(stop);
     const nOff = v.pax[0] + Math.floor(Math.random() * (v.pax[1] - v.pax[0] + 1));
     for (let i = 0; i < nOff; i++) {
-      const via = exit ? [exit, { ...exit, y: this.groundY(loc, exit.x, exit.z), g: true }] : [];
+      const via = down.map((p) => ({ ...p }));
       via.push({ ...stop.origin, y: this.groundY(loc, stop.origin.x, stop.origin.z), g: true });
       let dest;
       if (doors.length) dest = doors[Math.floor(Math.random() * doors.length)].map((q) => ({ ...q }));
@@ -1414,7 +2167,7 @@ export class Traffic {
     stop.queue.forEach((wk, i) => {
       if (wk.done) return;
       const here = { x: wk.fig.root.position.x, y: wk.fig.root.position.y, z: wk.fig.root.position.z, g: true };
-      const via = exit ? [{ ...exit, y: this.groundY(loc, exit.x, exit.z), g: true }, exit] : [];
+      const via = down.length ? [{ ...stop.origin, y: this.groundY(loc, stop.origin.x, stop.origin.z), g: true }, ...[...down].reverse().map((p) => ({ ...p }))] : [];
       wk.pts = [here, ...via, ...back];
       wk.seg = 0; wk.t = 0; wk.idle = false; wk.hold = false;
       wk.delay = Math.max(wk.delay, 0) + nOff * 1.1 + 1.5 + i * 1.2;
@@ -1470,6 +2223,13 @@ export class Traffic {
     g.blastHooks.push((pos, radius, damage, owner) => this.blast(pos, radius, damage, owner));
   }
 
+  // How far a hover-car bobs on its lift: slow and shallow (about a 0.05 m swell at 0.15 Hz and a finer ripple), each car on its own
+  // phase. (It used to ride the distance along the road, so at speed it bounced several times a second.)
+  carBob(v) {
+    const ph = v.bobPh || 0;
+    return Math.sin(this.t * 0.9 + ph) * 0.05 + Math.sin(this.t * 1.7 + ph * 1.7) * 0.02;
+  }
+
   centre(v, out) { return out.copy(v.pos).addScaledVector(_u.copy(v.pos).normalize(), v.kind === 'buggy' ? 1.8 : v.kind === 'car' ? 0.4 : 2.6); }
 
   // Does a shot's segment (a -> b) hit any road vehicle, a land-train's trailers included? (A trailer
@@ -1515,10 +2275,22 @@ export class Traffic {
     }
   }
 
-  damage(v, amount) {
+  damage(v, amount, blame = true) {
     v.hp -= amount;
     v.hurt = 0.2;
-    if (v.hp <= 0) this.wreck(v);
+    if (v.hp <= 0) this.wreck(v, blame);
+  }
+
+  // A meteor lands (meteors.js): whatever is under it is wrecked, whatever is near is battered by the blast
+  // (less the further out), and nobody is blamed for it.
+  meteorBlast(pos, core, reach) {
+    for (const v of this.roadVehicles || []) {
+      if (!v.maxHp || v.hp <= 0 || v.state === 'dead' || !v.root.visible) continue;
+      let d = this.centre(v, _a).distanceTo(pos) - v.hitR;
+      if (v.trailers) for (const t of v.trailers) d = Math.min(d, _a.copy(t.plat.pos).addScaledVector(_u.copy(t.plat.pos).normalize(), 2.6).distanceTo(pos) - 4.6);
+      if (d > reach) continue;
+      this.damage(v, d <= core ? v.maxHp * 2 : v.maxHp * 0.9 * (1 - (d - core) / (reach - core)), false);
+    }
   }
 
   // Burnt look: swap every surface (not the ink hulls) to one charred material, and back.
@@ -1533,7 +2305,7 @@ export class Traffic {
     }
   }
 
-  wreck(v) {
+  wreck(v, blame = true) {
     const g = this.g;
     v.hp = 0;
     v.state = 'wreck';
@@ -1543,6 +2315,7 @@ export class Traffic {
     for (const wk of this.walkers) if (wk.owner === v && !wk.done) this.release(wk);
     this.char(v, true);
     if (v.beacon) v.beacon.visible = false;
+    if (v.beacons) for (const b of v.beacons) b.visible = false;
     if (!g) return;
     const c = this.centre(v, new THREE.Vector3()), up = c.clone().normalize();
     g.fx.explosion(c, v.kind === 'buggy' ? 7 : 11, true);
@@ -1558,12 +2331,13 @@ export class Traffic {
     // the town whose road it was isn't happy about it
     const pc = v.piece;
     let town = pc.kind === 'e' ? (pc.fromLoc.dir.distanceTo(up) < pc.toLoc.dir.distanceTo(up) ? pc.fromLoc : pc.toLoc) : pc.town;
-    if (town && town.faction && g.rep) g.rep.add(town.faction, -3, 'Wrecked civilian traffic');
+    if (blame && town && town.faction && g.rep) g.rep.add(town.faction, -3, 'Wrecked civilian traffic');
   }
 
   // Back on the road later, somewhere the camera can't see it appear.
   respawn(v, camPos) {
-    const lanes = this.roads.flatMap((r) => r.lanes).filter((pc) => pc.len > 300);
+    // (the Vostok supply trains come back on their own road, and nothing else is put on it)
+    const lanes = this.roads.filter((r) => !!(r.A.restricted || (r.B && r.B.restricted)) === !!v.shuttle && !(r.uturn && v.kind === 'landtrain')).flatMap((r) => r.lanes).filter((pc) => pc.len > 300);
     const h = { i: 0, f: 0 };
     for (let tries = 0; tries < 8 && lanes.length; tries++) {
       const pc = lanes[Math.floor(this.r() * lanes.length)];
@@ -1628,7 +2402,7 @@ export class Traffic {
     this.t = (this.t || 0) + dt;
     for (const v of this.vehicles) {
       v.prevPos.copy(v.pos);
-      if (v.captured > 0) { v.root.visible = false; if (v.col) { this.C.remove(v.col); v.col = null; } v.vel.set(0, 0, 0); continue; }
+      if (v.captured > 0) { v.root.visible = false; this.dropDeck(v); v.vel.set(0, 0, 0); continue; }
       if (v.piece || v.offroad) this.updateRoadVehicle(v, dt, camPos);
       else this.updateFlyer(v, dt, camPos);
     }
@@ -1637,6 +2411,7 @@ export class Traffic {
       c.prevPos.copy(c.pos);
       this.updateRoadVehicle(c, dt, camPos);
     }
+    this.updateGarage(dt);
     this.updateWalkers(dt);
   }
 
@@ -1703,8 +2478,10 @@ export class Traffic {
       const near = v.kind === 'ship' ? 90 : 40;
       lift = v.state === 'park' ? 0 : clamp01(1.25 - d / near);
       main = v.state === 'park' ? 0 : 0.25 + 0.75 * clamp01(sp / v.vmax);
-      // heading follows the route a little ahead; never swing round while still low over the pad
-      if (dS > v.turnMin) {
+      // heading follows the route a little ahead; never swing round while still low over the pad it left. On the way down onto a pad it
+      // swings round to land with its ramp toward the pad's stairs (stop.land)
+      if (dE < (v.kind === 'ship' ? 150 : 70) && dest.land) v.heading.copy(dest.land);
+      else if (dS > v.turnMin) {
         sample(path, v.s + v.dir * 30, _a, v.ahint);
         _a.sub(v.pos);
         const up = _u.copy(v.pos).normalize();
@@ -1714,7 +2491,9 @@ export class Traffic {
     }
     const vis = this.seen(v, camPos);
     v.root.visible = vis;
-    if (!vis) { if (v.col) { this.C.remove(v.col); v.col = null; } return; }
+    if (!vis) { this.dropDeck(v); return; }
+    // the route board (a shuttle's destination sign) names where it is bound: the far end while it flies, the other end while it waits
+    M.setSign((v.state === 'park' ? (v.stop === v.stops[0] ? v.stops[1] : v.stops[0]) : (v.dir > 0 ? v.stops[1] : v.stops[0])).loc.short);
     v.root.position.copy(v.pos);
     const up = _u.copy(v.pos).normalize();
     frameQuat(up, v.heading, _q);
@@ -1722,13 +2501,21 @@ export class Traffic {
     v.fwd.set(0, 0, 1).applyQuaternion(v.root.quaternion);
     M.setRamp(v.open);
     M.setThrust(main, lift, v.clock);
+    if (M.setCrane) {
+      // the freighter's gantry cranes work the bays while it stands on its pad (the spreaders go down only over their own bay, and are hoisted
+      // again before it lifts off)
+      const down = v.state === 'park' && !v.closing;
+      v.craneW = (v.craneW || 0) + ((down && v.timer > 2 ? 1 : 0) - (v.craneW || 0)) * Math.min(1, dt * 0.7);
+      v.craneL = (v.craneL || 0) + ((down ? 1 : 0) - (v.craneL || 0)) * Math.min(1, dt * 1.2);
+      M.setCrane(v.craneW, v.clock, v.craneL);
+    }
     this.syncDeck(v, camPos);
   }
 
   hide(v) {
     v.root.visible = false;
-    if (v.col) { this.C.remove(v.col); v.col = null; }
-    if (v.trailers) for (const t of v.trailers) { t.root.visible = false; if (t.plat.col) { this.C.remove(t.plat.col); t.plat.col = null; } }
+    this.dropDeck(v);
+    if (v.trailers) for (const t of v.trailers) { t.root.visible = false; this.dropDeck(t.plat); }
   }
 
   // A hover-car tipped out of a jar at `from`: it drives cross-country to the nearest point on
@@ -1772,7 +2559,7 @@ export class Traffic {
     _f.divideScalar(d);
     v.cur = Math.min(v.vmax * 0.5, v.cur + v.acc * dt);
     v.pos.addScaledVector(_f, Math.min(d, v.cur * dt));
-    P.ground(v.pos, v.pos, v.hoverH + 0.3 + Math.sin(this.t * 2) * 0.12);
+    P.ground(v.pos, v.pos, v.hoverH + 0.3 + this.carBob(v));
     if (dt > 0) v.vel.copy(v.pos).sub(v.prevPos).divideScalar(dt);
     v.fwd.copy(_f);
     v.root.visible = this.seen(v, camPos);
@@ -1821,9 +2608,9 @@ export class Traffic {
       const nx = v.plan[0];
       if (nx && nx.vlim < limit) limit = Math.min(limit, nx.vlim + Math.sqrt(2 * 1.5 * Math.max(0, pc.len - v.s - v.front)));
       // whoever is ahead on this piece or the next (land-trains and buggies queue; hover-cars hop over)
-      const scan = (list, base) => {
+      const scan = (list, base, from = 0) => {
         for (const o of list) {
-          if (o === v || o.captured > 0) continue;
+          if (o === v || o.captured > 0 || o.s < from) continue;
           const gap = base + o.s - v.s;
           if (v.kind === 'car') {
             if (gap > -(o.front + v.tail + 3) && gap < o.tail + v.front + 12) over = Math.max(over, o.kind === 'landtrain' ? 6.5 : o.kind === 'car' ? 2.6 : 4.5);
@@ -1834,13 +2621,13 @@ export class Traffic {
         }
       };
       scan(pc.vehicles, 0);
-      if (nx) scan(nx.vehicles, pc.len);
+      if (nx) scan(nx.vehicles, pc.len - (pc.joinTo === nx ? pc.joinS : 0), pc.joinTo === nx ? pc.joinS - 2 : 0); // (a road merging part-way sees only what is past the merge)
       // pull in at the destination's shelter
       // pull in at the destination's ring stop (it may be a few pieces ahead yet)
       const fin = v.plan.length ? v.plan[v.plan.length - 1] : pc, st = fin.stop;
       if (st && st.loc === v.dest && v.plan.length <= 4) {
         let toStop = st.s - v.s;
-        if (fin !== pc) { toStop = pc.len - v.s + st.s; for (let i = 0; i < v.plan.length - 1; i++) toStop += v.plan[i].len; }
+        if (fin !== pc) { toStop = pc.len - v.s + st.s - (pc.joinTo === v.plan[0] ? pc.joinS : 0); for (let i = 0; i < v.plan.length - 1; i++) toStop += v.plan[i].len; }
         if (toStop > -2) {
           limit = Math.min(limit, 0.6 + Math.sqrt(2 * 1.2 * Math.max(0, toStop - 0.3)));
           if (v.pax && toStop < 300) this.queueBoarders(st, v);
@@ -1854,6 +2641,7 @@ export class Traffic {
           let next = v.plan.shift();
           if (!next) { this.plan(v); next = v.plan.shift() || v.piece.next[v.piece.next.length - 1]; }
           v.s -= v.piece.len;
+          if (v.piece.joinTo === next) v.s += v.piece.joinS; // (the garage road merges onto the ring part-way along an arc)
           v.hist.unshift(v.piece);
           if (v.hist.length > 6) v.hist.length = 6;
           this.move(v, next);
@@ -1861,14 +2649,15 @@ export class Traffic {
         pc = v.piece;
       }
     }
-    // place it: chord between the two axles, normals smoothed along the road
-    const up = this.roadFrame(v, v.s, v.front * 0.7, Math.max(2, v.front * 0.7), v.hintF, v.hintR, v.pos, _f);
+    // place it: chord between the two axles, normals smoothed along the road (a land-train's outer axles are 2.9 m out)
+    const lt = v.kind === 'landtrain';
+    const up = this.roadFrame(v, v.s, lt ? 2.9 : v.front * 0.7, lt ? 2.9 : Math.max(2, v.front * 0.7), v.hintF, v.hintR, v.pos, _f, _fp, _rp);
     if (v.kind === 'car') {
-      v.hover += ((over || 0) - v.hover) * Math.min(1, dt * 2.5);
+      v.hover += ((over || 0) - v.hover) * Math.min(1, dt * 1.4);
       // (a wreck has lost its lift: it sits on the road)
       if (v.state === 'wreck') v.dropH = Math.max(0, (v.dropH ?? v.hoverH) - dt * 6);
       else v.dropH = v.hoverH;
-      v.pos.addScaledVector(up, v.dropH + (v.state === 'wreck' ? 0.3 : v.hover + Math.sin(this.t * 2 + v.s) * 0.12));
+      v.pos.addScaledVector(up, v.dropH + (v.state === 'wreck' ? 0.3 : v.hover + this.carBob(v)));
     }
     this.applyTug(v, dt);
     if (dt > 0) v.vel.copy(v.pos).sub(v.prevPos).divideScalar(dt);
@@ -1878,22 +2667,36 @@ export class Traffic {
     v.root.visible = vis;
     if (v.trailers) for (const t of v.trailers) t.root.visible = vis;
     if (!vis) { this.hide(v); return; }
-    v.root.position.copy(v.pos);
-    frameQuat(up, _f, v.root.quaternion);
+    if (lt) {
+      // (clamped to the ground under its six tyres: and, as it has moved a little from the lane, its speed again)
+      if (v.tug) { _fp.add(v.tug); _rp.add(v.tug); }
+      this.groundPose(_fp, _rp, up, 2.15, v.pos, v.root.quaternion);
+      if (dt > 0) v.vel.copy(v.pos).sub(v.prevPos).divideScalar(dt);
+      if (v.vel.lengthSq() > 3600 || v.state === 'wreck') v.vel.set(0, 0, 0);
+      v.root.position.copy(v.pos);
+    } else {
+      v.root.position.copy(v.pos);
+      frameQuat(up, _f, v.root.quaternion);
+      if (v.kind === 'car' && v.state !== 'wreck') { // (a hover-car wallows gently on its lift: about a degree of roll and pitch, slow)
+        const ph = v.bobPh || 0;
+        v.root.quaternion.multiply(_q.setFromEuler(_eu.set(Math.sin(this.t * 0.6 + ph * 1.3) * 0.012, 0, Math.sin(this.t * 0.8 + ph) * 0.018)));
+      }
+    }
     if (v.roll) { v.root.quaternion.multiply(_q.setFromAxisAngle(_z, v.roll)); v.root.position.addScaledVector(up, -0.4); }
     if (v.wheels) {
       const spin = (v.cur * dt) / (v.wheelR || 1);
       for (const w of v.wheels) w.rotation.x += spin;
     }
     if (v.beacon && v.state !== 'wreck') v.beacon.visible = Math.sin(this.t * 6) > -0.2;
+    if (v.beacons && v.state !== 'wreck') for (const b of v.beacons) b.visible = Math.sin(this.t * 7 + b.userData.phase * Math.PI) > 0; // (SPACECOM's light bar: the two lamps take turns)
     if (v.trailers) {
       v.trailers.forEach((t, i) => {
         const p = t.plat;
         p.prevPos.copy(p.pos);
-        const tu = this.roadFrame(v, v.s - t.offset, 2.7, 2.7, t.hintF, t.hintR, p.pos, _d);
-        if (v.tug) p.pos.add(v.tug); // (dragged along with the engine by the winch)
+        const tu = this.roadFrame(v, v.s - t.offset, 2.7, 2.7, t.hintF, t.hintR, p.pos, _d, _fp, _rp);
+        if (v.tug) { _fp.add(v.tug); _rp.add(v.tug); } // (dragged along with the engine by the winch)
+        this.groundPose(_fp, _rp, tu, 1.95, p.pos, t.root.quaternion);
         t.root.position.copy(p.pos);
-        frameQuat(tu, _d, t.root.quaternion);
         if (v.roll) t.root.quaternion.multiply(_q.setFromAxisAngle(_z, v.roll * (i % 2 ? -0.7 : 0.8)));
         if (dt > 0) p.vel.copy(p.pos).sub(p.prevPos).divideScalar(dt);
         if (p.vel.lengthSq() > 3600 || v.state === 'wreck') p.vel.set(0, 0, 0);
@@ -1902,7 +2705,7 @@ export class Traffic {
         this.linkBar(t, i ? v.trailers[i - 1].root : v.root, i ? -4.25 : -4.55);
       });
     }
-    if (v.deck) this.syncDeck(v, camPos);
+    if (v.deck || v.decks) this.syncDeck(v, camPos);
     if (v.maxHp) this.smoke(v, dt);
   }
 
@@ -1922,35 +2725,87 @@ export class Traffic {
   // (trailers), or on into the next one (front axle).
   at(v, s, out, h, nOut) {
     let p = v.piece;
-    if (s < 0) {
-      for (const q of v.hist) { p = q; s += q.len; if (s >= 0) break; }
-      if (s < 0) s = 0;
-    } else if (s > p.len && v.plan[0]) { s -= p.len; p = v.plan[0]; }
+    // (a road that merges onto a piece part-way, like the garage road onto the ring, meets it `joinS` along: behind that point
+    // is the road the vehicle came by, and beyond the road's end is the piece from `joinS`, not from its start)
+    let back = 0;
+    for (;;) {
+      const q = v.hist[back];
+      const from = q && q.joinTo === p ? q.joinS : 0;
+      if (s >= from || !q) break;
+      s = q.len - (from - s); p = q; back++;
+    }
+    if (s < 0) s = 0;
+    if (!back && s > p.len && v.plan[0]) { s -= p.len; if (p.joinTo === v.plan[0]) s += p.joinS; p = v.plan[0]; }
     if (h.p !== p) { h.p = p; h.i = s > p.len * 0.5 ? p.path.pts.length - 2 : 0; }
     sample(p.path, s, out, h);
     return nOut.copy(p.normals[h.i]).lerp(p.normals[h.i + 1], h.f);
   }
 
   // Ground point midway between front and rear axle, travel direction and smoothed up.
-  roadFrame(v, s, front, rear, hF, hR, outPos, outFwd) {
+  // (outF / outR, when given, get the two ground points themselves)
+  roadFrame(v, s, front, rear, hF, hR, outPos, outFwd, outF = null, outR = null) {
     const nf = this.at(v, s + front, _b, hF, _n);
     const nr = this.at(v, s - rear, _c, hR, _u);
     outPos.copy(_b).add(_c).multiplyScalar(0.5);
     outFwd.copy(_b).sub(_c);
+    if (outF) outF.copy(_b);
+    if (outR) outR.copy(_c);
     if (outFwd.lengthSq() < 1e-6) outFwd.set(1, 0, 0);
     return nf.add(nr).normalize();
   }
 
-  // Keep a vehicle's deck collider in the spatial hash while it is near the camera.
+  // Lay a land-train unit on the ground: `fp` / `rp` are the lane's ground points under its front and rear axles, `up` the
+  // smoothed ground normal there, `half` its half track. The ground is sampled under all four tyres (the two axles, `half`
+  // either side of the lane) and the unit sits on the plane through those points: pitched along the chord between the
+  // axles, rolled across any camber, its origin the middle of the four, so every wheel touches the ground on slopes,
+  // crests and dips instead of the smoothed normal leaving one axle in the air.
+  groundPose(fp, rp, up, half, outPos, outQuat) {
+    const P = this.P;
+    _gz.subVectors(fp, rp).normalize();
+    _gt.crossVectors(_gz, up).normalize(); // (the right-hand side, level with the ground)
+    const lf = P.ground(_g0.copy(fp).addScaledVector(_gt, -half), _g0);
+    const rf = P.ground(_g1.copy(fp).addScaledVector(_gt, half), _g1);
+    const lr = P.ground(_g2.copy(rp).addScaledVector(_gt, -half), _g2);
+    const rr = P.ground(_g3.copy(rp).addScaledVector(_gt, half), _g3);
+    outPos.copy(lf).add(rf).add(lr).add(rr).multiplyScalar(0.25);
+    _gz.copy(lf).add(rf).sub(lr).sub(rr).normalize(); // along: the front pair over the rear pair
+    _gx.copy(lf).add(lr).sub(rf).sub(rr); // across: left over right (the model's +x is its left)
+    _gx.addScaledVector(_gz, -_gx.dot(_gz)).normalize();
+    _gy.crossVectors(_gz, _gx);
+    return outQuat.setFromRotationMatrix(_m4.makeBasis(_gx, _gy, _gz));
+  }
+
+  // Take a vehicle's deck colliders out of the spatial hash.
+  dropDeck(s) {
+    if (!s.deckLive) return;
+    for (const c of s.deckCols) this.C.remove(c);
+    s.deckLive = false;
+  }
+
+  // Keep a vehicle's deck colliders in the spatial hash while it is near the camera: one box for a
+  // flyer or hover-car (deck / deckY / deckZ), or the list of boxes in the model's own frame for a
+  // land-train unit or the freighter (decks: hx, hy, hz, y, z each, and x for a box off the middle line).
   syncDeck(s, camPos) {
     const near = s.pos.distanceToSquared(camPos) < 350 * 350;
-    if (s.col) { this.C.remove(s.col); if (!near) { s.col = null; return; } }
+    this.dropDeck(s);
     if (!near || s.pos.lengthSq() < 1) return;
+    const boxes = s.decks || (s.deckOne = s.deckOne || [{ hx: s.deck[0], hy: s.deck[1], hz: s.deck[2], y: s.deckY || 0, z: s.deckZ || 0 }]);
+    if (!s.deckCols) s.deckCols = boxes.map(() => ({ type: 'box', platform: s, c: new THREE.Vector3(), ax: new THREE.Vector3(), ay: new THREE.Vector3(), az: new THREE.Vector3() }));
     const q = s.quat;
-    const c = s.col || { type: 'box', platform: s, c: new THREE.Vector3(), ax: new THREE.Vector3(), ay: new THREE.Vector3(), az: new THREE.Vector3() };
-    c.ax.set(1, 0, 0).applyQuaternion(q); c.ay.set(0, 1, 0).applyQuaternion(q); c.az.set(0, 0, 1).applyQuaternion(q);
-    c.c.copy(s.pos).addScaledVector(c.ay, s.deckY || 0).addScaledVector(c.az, s.deckZ || 0);
-    c.hx = s.deck[0]; c.hy = s.deck[1]; c.hz = s.deck[2];
-    s.col = this.C.add(c);
+    _a.set(1, 0, 0).applyQuaternion(q); _b.set(0, 1, 0).applyQuaternion(q); _c.set(0, 0, 1).applyQuaternion(q);
+    boxes.forEach((d, i) => {
+      const c = s.deckCols[i];
+      if (d.roll) {
+        // (a slab tipped about the ship's z axis: a wing on its dihedral)
+        const cs = Math.cos(d.roll), sn = Math.sin(d.roll);
+        c.ax.copy(_a).multiplyScalar(cs).addScaledVector(_b, sn);
+        c.ay.copy(_b).multiplyScalar(cs).addScaledVector(_a, -sn);
+      } else { c.ax.copy(_a); c.ay.copy(_b); }
+      c.az.copy(_c);
+      c.c.copy(s.pos).addScaledVector(_a, d.x || 0).addScaledVector(_b, d.y).addScaledVector(_c, d.z);
+      c.hx = d.hx; c.hy = d.hy; c.hz = d.hz;
+      this.C.add(c);
+    });
+    s.deckLive = true;
   }
 }

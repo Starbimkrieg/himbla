@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { makeRunner, ScarfSim } from './models.js';
 import { toon, glow } from './toon.js';
-import { OUTFITS, SKATES, LASERS, dressRunner, dressSkates } from './cosmetics.js';
+import { OUTFITS, SKATES, LASERS, dressRunner, dressSkates, updateHalo } from './cosmetics.js';
+import { makeJarMesh } from './alchemy.js';
 import { FACTIONS, LOCATIONS, TIERS } from './locations.js';
 
 // The wardrobe screen (C): a live turntable preview of the runner on the left, click-to-equip
@@ -105,6 +106,7 @@ export class Wardrobe {
           <div class="wd-stage">
             <canvas class="wd-canvas"></canvas>
             <div class="wd-tag"></div>
+            <button class="wd-jar-toggle hidden" type="button"></button>
             <div class="wd-drag">DRAG TO ROTATE</div>
           </div>
           <div class="wd-side">
@@ -113,7 +115,7 @@ export class Wardrobe {
             <div class="wd-info"></div>
           </div>
         </div>
-        <div class="wd-foot">CLICK: EQUIP · HOVER: TRY ON · Q/E or 1-3: TABS · ARROWS + ENTER · C/ESC: CLOSE</div>
+        <div class="wd-foot">CLICK: EQUIP · HOVER: TRY ON · J: JAR ON / OFF · Q/E or 1-3: TABS · ARROWS + ENTER · C/ESC: CLOSE</div>
       </div>`;
     document.body.appendChild(el);
     this.el = el;
@@ -122,6 +124,8 @@ export class Wardrobe {
     this.gridEl = el.querySelector('.wd-grid');
     this.infoEl = el.querySelector('.wd-info');
     this.tagEl = el.querySelector('.wd-tag');
+    this.jarBtn = el.querySelector('.wd-jar-toggle');
+    this.jarBtn.addEventListener('click', () => this.toggleJar());
     el.querySelector('.wd-close').addEventListener('click', () => this.close(false));
     el.addEventListener('click', (e) => { if (e.target === el) this.close(false); });
     this.tabsEl.addEventListener('click', (e) => {
@@ -270,6 +274,26 @@ export class Wardrobe {
     this.refresh(true);
   }
 
+  // the jar on the pack: shown or hidden (only offered once you own one). The preview turns to show
+  // the back, where it hangs
+  toggleJar() {
+    const c = this.cos;
+    if (!c.hasJar) return;
+    c.setJarShown(!c.jarShown);
+    this.game.audio.click();
+    this.faceFront = true;
+    this.faceOff = Math.PI;
+    this.spinHold = 2.5;
+    this.refresh(false);
+  }
+
+  renderJarBtn() {
+    const c = this.cos;
+    this.jarBtn.classList.toggle('hidden', !c.hasJar);
+    this.jarBtn.classList.toggle('on', c.jarShown);
+    this.jarBtn.innerHTML = `<span class="wd-key">J</span>JAR <b>${c.jarShown ? 'ON' : 'OFF'}</b>`;
+  }
+
   flashLocked() {
     this.infoEl.classList.remove('wd-shake');
     void this.infoEl.offsetWidth;
@@ -283,7 +307,8 @@ export class Wardrobe {
     let i = this.sel[this.tab];
     const cols = Math.max(1, getComputedStyle(this.gridEl).gridTemplateColumns.split(' ').length);
     const tabIdx = TABS.findIndex((t) => t.id === this.tab);
-    if (code === 'KeyQ') this.setTab(TABS[(tabIdx + TABS.length - 1) % TABS.length].id);
+    if (code === 'KeyJ') this.toggleJar();
+    else if (code === 'KeyQ') this.setTab(TABS[(tabIdx + TABS.length - 1) % TABS.length].id);
     else if (code === 'KeyE' || code === 'Tab') this.setTab(TABS[(tabIdx + 1) % TABS.length].id);
     else if (code === 'Digit1' || code === 'Digit2' || code === 'Digit3') this.setTab(TABS[+code.slice(5) - 1].id);
     else if (code === 'Enter' || code === 'Space') this.equip(list[i]);
@@ -314,8 +339,9 @@ export class Wardrobe {
     } else for (const t of this.gridEl.querySelectorAll('.wd-tile')) t.classList.toggle('sel', +t.dataset.i === this.sel[this.tab]);
     const it = this.focus();
     this.renderInfo(it);
+    this.renderJarBtn();
     const c = this.cos;
-    const look = { outfit: c.outfit, skates: c.skates, laser: c.laser };
+    const look = { outfit: c.outfit, skates: c.skates, laser: c.laser, jar: c.jarShown };
     look[it.kind] = it.id;
     this.setLook(look);
   }
@@ -417,7 +443,7 @@ export class Wardrobe {
     disc.add(torus, core, halo);
     disc.position.set(0.95, 1.05, 0.25);
     model.root.add(disc);
-    this.three = { renderer, scene, camera, model, extras: [], clones: [], ringM, disc, discM, halo, w: 0, h: 0, t: 0, pose: 0 };
+    this.three = { renderer, scene, camera, model, extras: [], clones: [], jar: null, ringM, disc, discM, halo, w: 0, h: 0, t: 0, pose: 0 };
   }
 
   // copy the player's mutation parts and whatever hangs in the cargo slot (jar, crate) onto the mannequin
@@ -427,9 +453,13 @@ export class Wardrobe {
     T.clones = [];
     const P = g.player.model, M = T.model;
     const muts = new Set((g.alchemy && g.alchemy.mutMeshes) || []);
-    for (const k of ['legL', 'legR', 'torso', 'armL', 'armR', 'head', 'cargoSlot']) {
+    // the pack's jar is rebuilt here so the toggle can show or hide it on the preview straight away
+    if (T.jar) T.jar.removeFromParent();
+    T.jar = makeJarMesh(g.alchemy ? g.alchemy.jar : [], g.alchemy && g.alchemy.artifact);
+    M.cargoSlot.add(T.jar);
+    for (const k of ['legL', 'legR', 'torso', 'armL', 'armR', 'foreL', 'foreR', 'head', 'cargoSlot']) {
       for (const c of P[k].children) {
-        if (!(muts.has(c) || k === 'cargoSlot')) continue;
+        if (!(muts.has(c) || k === 'cargoSlot') || c === (g.alchemy && g.alchemy.jarMesh)) continue;
         const cl = c.clone();
         cl.visible = true;
         M[k].add(cl);
@@ -443,6 +473,7 @@ export class Wardrobe {
     if (!T) return;
     const prev = this.look;
     this.look = look;
+    if (T.jar) T.jar.visible = !!look.jar;
     if (!prev || prev.outfit !== look.outfit) {
       for (const x of T.extras) x.removeFromParent();
       T.extras = dressRunner(T.model, look.outfit);
@@ -453,7 +484,7 @@ export class Wardrobe {
     T.discM.color.setHex(l.color);
     T.halo.material.color.setHex(l.color);
     // swing round to face the camera whenever the item being shown changes
-    if (prev && (prev.outfit !== look.outfit || prev.skates !== look.skates || prev.laser !== look.laser)) { this.faceFront = true; this.spinHold = 2.5; }
+    if (prev && (prev.outfit !== look.outfit || prev.skates !== look.skates || prev.laser !== look.laser)) { this.faceFront = true; this.faceOff = 0; this.spinHold = 2.5; }
   }
 
   tick() {
@@ -480,7 +511,8 @@ export class Wardrobe {
     }
     // turntable: slow spin, paused while dragging and after a change (when it turns to face you)
     if (this.dragging) { /* the pointer drives the yaw */ } else if (this.faceFront) {
-      const target = Math.round(this.yaw / (Math.PI * 2)) * Math.PI * 2;
+      const off = this.faceOff || 0;
+      const target = Math.round((this.yaw - off) / (Math.PI * 2)) * Math.PI * 2 + off;
       this.yaw += (target - this.yaw) * Math.min(1, dt * 6);
       if (Math.abs(target - this.yaw) < 0.01) this.faceFront = false;
     } else if (this.spinHold > 0) this.spinHold -= dt;
@@ -503,6 +535,7 @@ export class Wardrobe {
     M.root.updateMatrixWorld(true);
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(M.root.getWorldQuaternion(new THREE.Quaternion()));
     this.scarfSim.update(Math.min(0.05, dt || 1 / 60), fwd.multiplyScalar(14 * p), new THREE.Vector3(0, 1, 0));
+    updateHalo(M, dt || 1 / 60);
     const s = SKATES[this.look.skates] || SKATES.stock;
     if (s.rainbow) M.mats.skate.color.setHSL((T.t * 0.4) % 1, 1, 0.6);
     for (const x of T.clones) if (x.userData.flap) x.rotation.y = x.userData.flap * (0.5 + Math.sin(T.t * 3) * 0.3);

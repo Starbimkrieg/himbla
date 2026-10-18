@@ -1,4 +1,10 @@
 // Procedural WebAudio: wind/glide noise, skate hum, thruster, and punchy SFX.
+
+// The music's own clock (startMusicClock): how often it looks for steps to queue, and how far ahead of the audio
+// clock it keeps them queued (a frame, or a wake-up of the clock, can be late by about that much before the music gaps)
+const MUSIC_TICK_MS = 30;
+const MUSIC_AHEAD = 0.4;
+
 export class Audio {
   constructor() {
     this.ctx = null;
@@ -6,6 +12,9 @@ export class Audio {
     this.mix = { hum: 1, wind: 1 }; // per-layer level trims for the ambient loops (the trailer lowers them)
     this.levelFloor = 0; // the roaming groove never drops below this (the trailer keeps it up)
     this.skateTone = 'hum'; // which skate voice sings (cosmetics: each pair of skates has one)
+    this.skateVoice = null; // ...and the one that is built and running (only that one: setSkateTone)
+    this.skatePitch = { f0: 55, s: 0 }; // the pitch it was last told (a new voice starts there)
+    this.onSfx = null; // heard a pickup or a payout: told to the controller's rumble too (main.js)
   }
 
   init() {
@@ -19,7 +28,7 @@ export class Audio {
     const ctx = this.ctx;
     this.master = ctx.createGain();
     this.master.gain.value = 0.5 * (this.vol ? this.vol.sfx : 1); // settings: master = effects bus
-    this.out = ctx.createGain(); this.out.gain.value = this.vol ? this.vol.master : 1; // settings
+    this.out = ctx.createGain(); this.out.gain.value = this.vol ? (this.vol.mute ? 0 : this.vol.master) : 1; // settings (the one node wired to the speakers: muting it silences everything)
     this.musicBus = ctx.createGain(); this.musicBus.gain.value = 0.5 * (this.vol ? this.vol.music : 1); // settings
     this.master.connect(this.out); this.musicBus.connect(this.out); this.out.connect(ctx.destination); // settings
 
@@ -37,11 +46,10 @@ export class Audio {
     src.connect(this.windF).connect(this.windG).connect(this.master);
     src.start();
 
-    // skate hum: one shared level (humG, rising with speed), and under it four voices, one per kind of
-    // skate (setSkateTone). All of them stay low and soft: something you stop hearing after a while.
+    // skate hum: one shared level (humG, rising with speed), and under it the voice of the skates you wear, one of four
+    // (setSkateTone). All of them stay low and soft: something you stop hearing after a while.
     this.humG = ctx.createGain(); this.humG.gain.value = 0;
     this.humG.connect(this.master);
-    this.skateVoices = this.makeSkateVoices(ctx);
     this.setSkateTone(this.skateTone);
 
     // thruster
@@ -114,6 +122,26 @@ export class Audio {
     this.fade = 1;
     this.bpm = this.trackInfo(this.track).bpm;
     delay.delayTime.value = (60 / this.bpm) * 0.75;
+    this.stepFns = { free: this.playStep, menu: this.menuStep, casino: this.casinoStep, downs: this.downsStep, lab: this.labStep, dark: this.darkStep };
+    this.startMusicClock();
+  }
+
+  // The music's own clock: queues the next steps on a timer of its own rather than from the game's frame, so a long
+  // frame (a level load, a shader compile, a dragged window, a debugger) or a page with no animation frames (a hidden
+  // tab, the trailer's &pump mode) can't leave a gap in the groove. A worker keeps the time (a page's own timers are
+  // throttled in the background); setInterval stands in where workers can't be had.
+  startMusicClock() {
+    if (this.clock) return;
+    const tick = () => this.scheduleMusic();
+    const interval = () => { this.clock = setInterval(tick, MUSIC_TICK_MS); };
+    try {
+      const url = URL.createObjectURL(new Blob([`setInterval(() => postMessage(0), ${MUSIC_TICK_MS});`], { type: 'text/javascript' }));
+      const w = new Worker(url);
+      URL.revokeObjectURL(url);
+      w.onmessage = tick;
+      w.onerror = () => { w.terminate(); interval(); };
+      this.clock = w;
+    } catch { interval(); }
   }
 
   // Which track should be playing: 'free' | 'casino' | 'downs' | 'lab' | 'dark' (the menu: setMenu).
@@ -375,9 +403,10 @@ export class Audio {
     if (this.delay) this.delay.delayTime.setTargetAtTime((60 / this.bpm) * 0.75, this.ctx.currentTime, 0.1);
   }
 
+  // Every frame: the music's loudness and tone (from the zone's track, or from your speed on the free-roam groove) and
+  // the crossfade from one track to the next. The notes are queued by scheduleMusic, on the music clock.
   updateMusic(speed) {
-    const ctx = this.ctx;
-    const t = ctx.currentTime;
+    const t = this.ctx.currentTime;
     // crossfade: fade the current track out, switch, fade the new one in
     if (this.want !== this.track) {
       this.fade = Math.max(0, this.fade - 0.02);
@@ -385,78 +414,78 @@ export class Audio {
     } else this.fade = Math.min(1, this.fade + 0.015);
     if (this.track !== 'free') {
       const info = this.trackInfo(this.track);
-      this.music.gain.setTargetAtTime(this.musicOn ? info.vol * this.fade : 0, t, 0.3);
+      this.music.gain.setTargetAtTime(this.musicPlays ? info.vol * this.fade : 0, t, 0.3);
       this.musicTone.frequency.setTargetAtTime(info.tone, t, 0.4);
-      const fn = { menu: this.menuStep, casino: this.casinoStep, downs: this.downsStep, lab: this.labStep, dark: this.darkStep }[this.track];
-      const six = 60 / this.bpm / 4;
-      if (this.nextNote < t - 0.5) this.nextNote = t + 0.05;
-      while (this.nextNote < t + 0.2) {
-        if (this.musicOn && this.fade > 0.02) fn.call(this, this.nextNote, this.step);
-        this.nextNote += six;
-        this.step++;
-      }
-      return;
+    } else {
+      const target = Math.max(this.levelFloor || 0, Math.min(1, speed / 110));
+      this.level += (target - this.level) * (target > this.level ? 0.02 : 0.008);
+      const vol = this.musicPlays ? (0.05 + this.level * 0.55) * this.fade : 0;
+      this.music.gain.setTargetAtTime(vol, t, 0.4);
+      this.musicTone.frequency.setTargetAtTime(700 + this.level * 3300, t, 0.4);
     }
-    const target = Math.max(this.levelFloor || 0, Math.min(1, speed / 110));
-    this.level += (target - this.level) * (target > this.level ? 0.02 : 0.008);
-    const vol = this.musicOn ? (0.05 + this.level * 0.55) * this.fade : 0;
-    this.music.gain.setTargetAtTime(vol, t, 0.4);
-    this.musicTone.frequency.setTargetAtTime(700 + this.level * 3300, t, 0.4);
-    const sixteenth = 60 / this.bpm / 4;
-    if (this.nextNote < t - 0.5) this.nextNote = t + 0.05; // tab was asleep: don't burst-fire
-    while (this.nextNote < t + 0.2) {
-      if (this.musicOn && this.fade > 0.02) this.playStep(this.nextNote, this.step, this.level);
-      this.nextNote += sixteenth;
+    // (the clock has queued the steps by now, so this is a no-op; it is a backstop for a page whose timers are starved
+    // while frames still come, such as the trailer's &pump mode driven by window.step)
+    this.scheduleMusic();
+  }
+
+  // Queue every 16th-note step that falls within MUSIC_AHEAD of the audio clock, for the track that is playing now.
+  scheduleMusic() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const fn = this.stepFns[this.track];
+    if (this.nextNote < t - 0.5) this.nextNote = t + 0.05; // asleep (a stall, a hidden tab): don't burst-fire
+    while (this.nextNote < t + MUSIC_AHEAD) {
+      if (this.musicPlays && this.fade > 0.02) fn.call(this, this.nextNote, this.step, this.level);
+      this.nextNote += 60 / this.bpm / 4;
       this.step++;
     }
   }
 
-  // settings: master / music / effects volume (0..1); safe to call before init()
-  setVolumes(master, music, sfx) {
-    this.vol = { master, music, sfx };
+  // settings: master / music / effects volume (0..1) and the mute switch; safe to call before init()
+  setVolumes(master, music, sfx, mute = false) {
+    this.vol = { master, music, sfx, mute };
     if (!this.ctx || !this.out) return;
     const t = this.ctx.currentTime;
-    this.out.gain.setTargetAtTime(master, t, 0.03);
+    this.out.gain.setTargetAtTime(mute ? 0 : master, t, 0.03);
     this.musicBus.gain.setTargetAtTime(0.5 * music, t, 0.03);
     this.master.gain.setTargetAtTime(0.5 * sfx, t, 0.03);
   }
 
-  // The four skate voices (each a little graph into its own gain, all into humG):
+  // The four skate voices (each a little graph into its own gain, into humG). Only the pair of skates you wear sings, so
+  // only its voice is built and running (setSkateTone); the others are built when they are chosen:
   //   hum      the classic: a sawtooth drone through a low-pass (Q-Lock Standard and the plain ones)
   //   glide    smooth and airy: two soft triangles a hair apart, slowly beating, a breath of hiss
   //   rumble   low and mechanical: a filtered square an octave down, with a gentle wheel-throb
   //   jackpot  the gold rollers: a warm hum with a soft shimmer of fifths and octaves riding on it
-  makeSkateVoices(ctx) {
+  // A voice is { g (its gain), level, pitch(f0, t, s, k), stop(when) }: pitch scales its glide times by k (0 = jump
+  // straight there, for a voice that has only just started), stop ends its oscillators and unhooks it.
+  makeSkateVoice(kind) {
+    const ctx = this.ctx;
+    const srcs = []; // every oscillator and noise source in the voice: they stop together
     const voice = (level) => { const g = ctx.createGain(); g.gain.value = 0; g.connect(this.humG); return { g, level }; };
-    const osc = (type, out, f = 60) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.connect(out); o.start(); return o; };
+    const osc = (type, out, f = 60) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.connect(out); o.start(); srcs.push(o); return o; };
     const lp = (f, q = 0.7) => { const b = ctx.createBiquadFilter(); b.type = 'lowpass'; b.frequency.value = f; b.Q.value = q; return b; };
-    const V = {};
-    // hum
-    {
-      const v = voice(1);
-      const f = lp(400); f.connect(v.g);
-      const o = osc('sawtooth', f);
-      v.pitch = (f0, t) => o.frequency.setTargetAtTime(f0, t, 0.1);
-      V.hum = v;
-    }
-    // glide
-    {
+    const done = (v) => {
+      v.id = kind;
+      v.stop = (when) => { for (const o of srcs) o.stop(when); srcs[0].onended = () => v.g.disconnect(); };
+      return v;
+    };
+    if (kind === 'glide') {
       const v = voice(0.55); // (levels matched to the classic hum's loudness; the brighter voices a touch under it)
       const f = lp(700, 0.4); f.connect(v.g);
       const a = osc('triangle', f), b = osc('triangle', f);
       const air = ctx.createBufferSource(); air.buffer = this.noise; air.loop = true;
       const af = ctx.createBiquadFilter(); af.type = 'bandpass'; af.frequency.value = 1400; af.Q.value = 0.8;
       const ag = ctx.createGain(); ag.gain.value = 0.05;
-      air.connect(af).connect(ag).connect(v.g); air.start();
-      v.pitch = (f0, t, s) => {
-        a.frequency.setTargetAtTime(f0 * 1.5, t, 0.12);
-        b.frequency.setTargetAtTime(f0 * 1.5 * 1.006, t, 0.12); // (a slow, soft beat between the two)
-        af.frequency.setTargetAtTime(1100 + s * 900, t, 0.2);
+      air.connect(af).connect(ag).connect(v.g); air.start(); srcs.push(air);
+      v.pitch = (f0, t, s, k = 1) => {
+        a.frequency.setTargetAtTime(f0 * 1.5, t, 0.12 * k);
+        b.frequency.setTargetAtTime(f0 * 1.5 * 1.006, t, 0.12 * k); // (a slow, soft beat between the two)
+        af.frequency.setTargetAtTime(1100 + s * 900, t, 0.2 * k);
       };
-      V.glide = v;
+      return done(v);
     }
-    // rumble
-    {
+    if (kind === 'rumble') {
       const v = voice(0.62);
       const f = lp(260, 1.1);
       const throb = ctx.createGain(); throb.gain.value = 1;
@@ -466,15 +495,14 @@ export class Audio {
       const lfo = osc('sine', ctx.createGain(), 5);
       const depth = ctx.createGain(); depth.gain.value = 0.22;
       lfo.disconnect(); lfo.connect(depth).connect(throb.gain);
-      v.pitch = (f0, t, s) => {
-        o.frequency.setTargetAtTime(f0 * 0.5, t, 0.1);
-        lfo.frequency.setTargetAtTime(4 + s * 9, t, 0.2);
-        f.frequency.setTargetAtTime(220 + s * 160, t, 0.15);
+      v.pitch = (f0, t, s, k = 1) => {
+        o.frequency.setTargetAtTime(f0 * 0.5, t, 0.1 * k);
+        lfo.frequency.setTargetAtTime(4 + s * 9, t, 0.2 * k);
+        f.frequency.setTargetAtTime(220 + s * 160, t, 0.15 * k);
       };
-      V.rumble = v;
+      return done(v);
     }
-    // jackpot
-    {
+    if (kind === 'jackpot') {
       const v = voice(0.5);
       const f = lp(1600, 0.5); f.connect(v.g);
       const base = osc('triangle', f);
@@ -495,27 +523,41 @@ export class Audio {
       const spin = osc('sine', ctx.createGain(), 1.6);
       const spinDepth = ctx.createGain(); spinDepth.gain.value = 0.18;
       spin.disconnect(); spin.connect(spinDepth).connect(ringOut.gain);
-      v.pitch = (f0, t, s) => {
-        base.frequency.setTargetAtTime(f0 * 2, t, 0.1);
-        fifth.frequency.setTargetAtTime(f0 * 3, t, 0.1);
-        oct.frequency.setTargetAtTime(f0 * 4.003, t, 0.1);
-        oct2.frequency.setTargetAtTime(f0 * 8.01, t, 0.1);
-        carrier.frequency.setTargetAtTime(f0 * 5.4, t, 0.1);
-        mod.frequency.setTargetAtTime(f0 * 5.4 * 1.414, t, 0.1);
-        ringBp.frequency.setTargetAtTime(f0 * 7, t, 0.1);
-        spin.frequency.setTargetAtTime(1.2 + s * 3.5, t, 0.3); // (the coin spins faster as you do)
+      v.pitch = (f0, t, s, k = 1) => {
+        base.frequency.setTargetAtTime(f0 * 2, t, 0.1 * k);
+        fifth.frequency.setTargetAtTime(f0 * 3, t, 0.1 * k);
+        oct.frequency.setTargetAtTime(f0 * 4.003, t, 0.1 * k);
+        oct2.frequency.setTargetAtTime(f0 * 8.01, t, 0.1 * k);
+        carrier.frequency.setTargetAtTime(f0 * 5.4, t, 0.1 * k);
+        mod.frequency.setTargetAtTime(f0 * 5.4 * 1.414, t, 0.1 * k);
+        ringBp.frequency.setTargetAtTime(f0 * 7, t, 0.1 * k);
+        spin.frequency.setTargetAtTime(1.2 + s * 3.5, t, 0.3 * k); // (the coin spins faster as you do)
       };
-      V.jackpot = v;
+      return done(v);
     }
-    return V;
+    // hum
+    const v = voice(1);
+    const f = lp(400); f.connect(v.g);
+    const o = osc('sawtooth', f);
+    v.pitch = (f0, t, s, k = 1) => o.frequency.setTargetAtTime(f0, t, 0.1 * k);
+    return done(v);
   }
 
-  // Which skate voice to use ('hum' | 'glide' | 'rumble' | 'jackpot'): a short crossfade.
+  // Which skate voice to use ('hum' | 'glide' | 'rumble' | 'jackpot'): a short crossfade. The new voice is built and
+  // started where the old pitch is, and the old one, once it has faded out, is stopped and unhooked.
   setSkateTone(id) {
     this.skateTone = id in { hum: 1, glide: 1, rumble: 1, jackpot: 1 } ? id : 'hum';
-    if (!this.ctx || !this.skateVoices) return;
+    if (!this.ctx || !this.humG) return;
+    const old = this.skateVoice;
+    if (old && old.id === this.skateTone) return;
     const t = this.ctx.currentTime;
-    for (const [k, v] of Object.entries(this.skateVoices)) v.g.gain.setTargetAtTime(k === this.skateTone ? v.level : 0, t, 0.08);
+    if (old) {
+      old.g.gain.setTargetAtTime(0, t, 0.08);
+      old.stop(t + 0.8); // (ten time constants on: nothing of it left to hear)
+    }
+    const v = this.skateVoice = this.makeSkateVoice(this.skateTone);
+    v.pitch(this.skatePitch.f0, t, this.skatePitch.s, 0);
+    v.g.gain.setTargetAtTime(v.level, t, 0.08);
   }
 
   toggleMusic() {
@@ -523,17 +565,28 @@ export class Audio {
     return this.musicOn;
   }
 
-  update(speed, skating, grounded, thrusting) {
+  // settings → Audio → Mute all audio
+  get muted() { return !!(this.vol && this.vol.mute); }
+
+  // (the groove isn't played into a muted or switched-off bus: no point synthesising what nobody hears)
+  get musicPlays() { return this.musicOn && !this.muted; }
+
+  // Every frame. `quiet`: the world is frozen (a pause, the map, a dialog...): the looping effects (wind, skate hum,
+  // thrusters) fade out rather than droning on at the level they had. The music, and the menus' own clicks and blips,
+  // carry on.
+  update(speed, skating, grounded, thrusting, quiet = false) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     const s = Math.min(1, speed / 90);
+    const k = quiet ? 0 : 1;
     // rumble swells with speed but stays low and soft (no high-frequency hiss at top speed)
-    this.windG.gain.setTargetAtTime(Math.min(0.5, s) * 0.16 * (grounded ? 1 : 0.6) * this.mix.wind, t, 0.15);
+    this.windG.gain.setTargetAtTime(Math.min(0.5, s) * 0.16 * (grounded ? 1 : 0.6) * this.mix.wind * k, t, 0.15);
     this.windF.frequency.setTargetAtTime(140 + Math.min(1, s) * 380, t, 0.15);
-    this.humG.gain.setTargetAtTime(skating && grounded ? (0.05 + s * 0.06) * this.mix.hum : 0, t, 0.05);
+    this.humG.gain.setTargetAtTime(skating && grounded ? (0.05 + s * 0.06) * this.mix.hum * k : 0, t, 0.05);
     const f0 = 55 + s * 120;
-    for (const v of Object.values(this.skateVoices)) v.pitch(f0, t, s);
-    this.jetG.gain.setTargetAtTime(thrusting ? 0.16 : 0, t, 0.05);
+    this.skatePitch.f0 = f0; this.skatePitch.s = s;
+    if (this.skateVoice) this.skateVoice.pitch(f0, t, s);
+    this.jetG.gain.setTargetAtTime(thrusting && !quiet ? 0.16 : 0, t, 0.05);
     this.crowdBoost = Math.max(0, this.crowdBoost - 0.006);
     this.updateMusic(speed);
   }
@@ -571,8 +624,8 @@ export class Audio {
   enemyShot() { this.tone(420, 0.15, 'sawtooth', 0.06, 0.5); }
   boom(big) { this.burst(big ? 1.2 : 0.6, big ? 1800 : 1200, big ? 0.8 : 0.5); }
   thud(v) { this.burst(0.25, 300 + v * 10, Math.min(0.6, v / 40)); }
-  pickup() { this.tone(660, 0.1, 'triangle', 0.2); setTimeout(() => this.tone(990, 0.15, 'triangle', 0.2), 90); }
-  cash() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.tone(f, 0.18, 'triangle', 0.18), i * 80)); }
+  pickup() { if (this.onSfx) this.onSfx('pickup'); this.tone(660, 0.1, 'triangle', 0.2); setTimeout(() => this.tone(990, 0.15, 'triangle', 0.2), 90); }
+  cash() { if (this.onSfx) this.onSfx('cash'); [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.tone(f, 0.18, 'triangle', 0.18), i * 80)); }
   alarm() { this.tone(740, 0.2, 'square', 0.1); setTimeout(() => this.tone(520, 0.2, 'square', 0.1), 200); }
   hurt() { this.tone(160, 0.25, 'sawtooth', 0.2, 0.5); }
   jump() { this.tone(300, 0.15, 'sine', 0.15, 2.2); }

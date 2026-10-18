@@ -14,7 +14,7 @@ the real look of the game: toon shading, ink outlines, halftone, comic pop text,
   cut, an object wiping the frame). It shouldn't feel like a slideshow.
 - **Show:** vehicles, action (pirates, Kade's gun truck, turrets), tricks, grinds (snake rocks and
   crater rims, with sparks), unique places (Chimera Downs derby, Antimatter Research Lab, casino,
-  funpark, Monolith), meteor showers, transit ships.
+  Monolith), meteor showers, transit ships.
 - **Don't explain everything.** Secrets stay secret. The **Xenoglide legendary skates** get a
   *tease only*: a glimpse of the alien gate in the Whispering Fissure, a mint-green glow (0x7dffd4)
   behind it, a "???" or "SOMETHING IS DOWN THERE" card. Never show what they do. Same spirit for the
@@ -53,7 +53,7 @@ Times are rough; tune them to the music. ▸ marks how each shot hands off to th
 | 2 | 3–6 | **Courier at the job board**, grabs a crate, skates off the base onto the plain. | Card: *"QUANTUM-LOCK DELIVERY SERVICE"* ▸ follow-cam keeps moving |
 | 3 | 6–9 | **Low chase cam at speed** across the plain, carving between craters; Earth on the horizon. | Music kicks in ▸ hit a crater lip |
 | 4 | 9–11 | **Rim grind:** catches a crater lip, slide pose, sparks spraying, quick orbit round the player. | ▸ pops off the end into the air |
-| 5 | 11–13 | **Trick in the air:** flip plus spin over a rille, stuck landing, "BIG AIR" pop text. | Card: *"…MOSTLY."* ▸ |
+| 5 | 11–13 | **Trick in the air:** flip plus spin over a rille, stuck landing, "STUCK IT!" and the trick-name pop text. | Card: *"…MOSTLY."* ▸ |
 | 6 | 13–16 | **Pirates:** a squad drops in on the dark side, lamp on, shots fly, cargo grab attempt. | ▸ whip-pan |
 | 7 | 16–19 | **Captain Kade's gun truck** skirting round, gatling bursts, then flak as the player jets up. | Slow-mo splash panel on his entrance (`story.spawnKade`) ▸ explosion flash cut |
 | 8 | 19–21 | **Vehicles:** the Daedalus Phase Skimmer drifting hard, then the Vostok APC ploughing through. | ▸ match cut on a skid |
@@ -61,7 +61,7 @@ Times are rough; tune them to the music. ▸ marks how each shot hands off to th
 | 10 | 24–27 | **Transit ship:** hop aboard, landing gear retracts, ship lifts off over a settlement. | ▸ the ship flies into the next shot |
 | 11 | 27–30 | **Chimera Downs:** gates spring, chimeras race, crowd roars; cut to a close-up of the leader. | Downs space-western music sting |
 | 12 | 30–33 | **Antimatter Lab:** the reactor flashes, Dr. Zbornak, jar bloops, a mutation pops. | Clinical-strange music sting. Card: *"SHENANIGANS."* |
-| 13 | 33–35 | **Casino / Funpark** quick double cut: slots, then the rideable ferris wheel or carousel at night. | Jazzy synthwave sting |
+| 13 | 33–35 | **Casino** quick double cut: slots, then the Duck Derby or Plinko lit up at night. (The funpark and its ferris wheel shot are gone; the wheel now stands in Chimera Downs' fairground annex and could be a shot there.) | Jazzy synthwave sting |
 | 14 | 35–37 | **The Monolith:** touch it; time dilation (violet screen edge) or echo decoys pull pirate fire. | |
 | 15 | 37–40 | **Tease:** descend into the Whispering Fissure; the alien gate; a mint-green glow behind it. Hold, cut to black. | Card: *"SOMETHING IS DOWN THERE."* Don't show the skates. |
 | 16 | 40–45 | **Hero shot plus end card:** the courier crests a rim at sunset with the cargo, grinding off into the dark; logo. | Last beat lands on the logo |
@@ -70,7 +70,7 @@ Times are rough; tune them to the music. ▸ marks how each shot hands off to th
 
 **Location ids** (`src/locations.js`; teleport with the cheats menu or `g.cheats.teleport(loc)`):
 `ilmb` (International Moon Base, hub), `meridian` (trade), `antimatter` (Antimatter Research Lab),
-`downs` (Chimera Downs derby), `casino` (Lucky Crater Casino), `bounce` (Bounce Dome Funpark),
+`downs` (Chimera Downs derby), `casino` (Lucky Crater Casino),
 `monolith`, `fissure` (Whispering Fissure, Xenoglide shrine), `rustmoon` / `gulch` / `blackrock` /
 `gloom` (pirate dens, dark side), `daedalus` (military citadel), `farside`, `twilight`
 (terminator waystation), plus the civilian towns `tranq`, `aldrin`, `kepler`, `hertz`.
@@ -91,7 +91,8 @@ Times are rough; tune them to the music. ▸ marks how each shot hands off to th
   game state is `'derby'` and the race drives the camera.
 - Monolith: `src/monolith.js` (`monolithTouch(g.alchemy)`; buffs are in `g.alchemy.buffs`).
 - Secrets / Xenoglide: `src/secrets.js` (the Fissure layout, the gate, and the shrine at the back).
-- Comic pop text: `g.fx.pop(text, pos, { color, size })`. Toasts and alerts: `g.hud.toast` /
+- Comic pop text: `g.fx.pop(text, pos, { color, size, life, prio })`. Only two show at once, the rest queue
+  (`g.fx.clearPops()` empties the screen and the queue between shots). Toasts and alerts: `g.hud.toast` /
   `g.hud.alert`. Slow motion: `g.slowmo = seconds`.
 - Music: `g.audio.setZone(...)` picks the track (menu, casino, downs, lab, dark side, …), from
   `musicZone()` in `main.js`. Crowd: `g.audio.setCrowd` / `roar`.

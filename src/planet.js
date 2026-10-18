@@ -2,9 +2,12 @@ import * as THREE from 'three';
 import { PLANET } from './config.js';
 import { mulberry32, smoothstep, clamp } from './rng.js';
 import { gradientMap } from './toon.js';
-import { SUN, darkness } from './geo.js';
 import { shapedRocks } from './rocks.js';
+import { railOf } from './rails.js';
+import { rayCollider } from './physics.js';
 import { TerrainField, faceDir, dirToGrid, N, CH, CPF, N1, R, MAX_LOD } from './terrainField.js';
+import { skinUniforms, patchRockMaterial, SKIN_COMMON, SKIN_NORMAL, SKIN_COLOR, SKIN_LIGHT } from './moonSkins.js';
+import { makeBoulderShapes, makeBoulderInk, BOULDER_COLLIDER_K } from './boulders.js';
 
 export { faceDir };
 const _g = { f: 0, i: 0, j: 0 };
@@ -14,12 +17,13 @@ const _g = { f: 0, i: 0, j: 0 };
 // them busy, few enough that what they're making is still what's wanted)
 const WORKERS = Math.max(2, Math.min(4, ((typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 4) - 2)), IN_FLIGHT = 4;
 // a plateau as a worker needs it (the zone objects are whole locations: just the numbers)
-function zoneMsg(z) { return { dir: [z.dir.x, z.dir.y, z.dir.z], r: z.r, late: !!z.late, zoneR: z.zoneR || 0 }; }
+// (a fitted town sends its plane as zrSet, which the worker takes as it is rather than fitting again)
+function zoneMsg(z) { return { dir: [z.dir.x, z.dir.y, z.dir.z], r: z.r, late: !!z.late, zoneR: z.zoneR || 0, flatR: z.flatR, fit: !!z.fit, curved: !!z.curved, zrSet: z.zrSet }; }
 const AHEAD_LOD = 1; // build-ahead: chunks round where you'll be soon, up to this level of detail
 // the ink line along crater crests: how many rims the terrain shader takes, and how far out
+const ROAD_KEEP = 14; // m a boulder's centre stays from the nearest sample of a road, beyond its own radius
 const RIM_INK_MAX = 64, RIM_INK_REACH = 1500, RIM_INK_BIG = 120; // (no ink on rims bigger than that)
 const _rv = new THREE.Vector3();
-const _d = new THREE.Vector3();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _e = new THREE.Vector3();
 const _p00 = new THREE.Vector3(), _p10 = new THREE.Vector3(), _p01 = new THREE.Vector3(), _p11 = new THREE.Vector3();
 
@@ -43,15 +47,16 @@ export class Planet extends TerrainField {
       uHoleMin: { value: new THREE.Vector2() }, uHoleMax: { value: new THREE.Vector2() },
       // crater rims near the camera, for the ink line along their crests (updateRimInk)
       uRimC: { value: Array.from({ length: RIM_INK_MAX }, () => new THREE.Vector4()) }, uRimN: { value: 0 },
+      ...skinUniforms(), // (moonSkins.js: candidate ground textures, off unless ?moonskin=N)
     };
     this.rimInkAt = new THREE.Vector3(1e9, 0, 0);
     this.tunnel = null; // set by the secrets system: overrides the floor underground
     this.material = this.makeMaterial();
     this.material.shadowSide = THREE.BackSide;
     this.material.defines = { ...(this.material.defines || {}), KEEP_GRAZE_SHADOW: '' }; // (toon.js: the ground keeps its long dusk shadows)
-    this.boulderGeo = new THREE.DodecahedronGeometry(1, 0);
-    this.boulderMat = new THREE.MeshToonMaterial({ color: 0x8d8898, gradientMap: gradientMap() });
-    this.boulderInk = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
+    this.boulderShapes = makeBoulderShapes(); // (boulders.js: a few lumpy shapes, one per chunk, set to unit RMS radius)
+    this.boulderMat = patchRockMaterial(new THREE.MeshToonMaterial({ color: 0x8d8898, gradientMap: gradientMap() })); // (moonSkins.js: grain and dust when ?moonskin=1)
+    this.boulderInk = makeBoulderInk();
     this.colliders = null;
     // dark backing sphere hides any sub-pixel cracks between LOD levels
     this.core = new THREE.Mesh(new THREE.SphereGeometry(R - 330, 96, 48), new THREE.MeshBasicMaterial({ color: 0x16121f }));
@@ -73,10 +78,23 @@ export class Planet extends TerrainField {
   }
 
   // A settlement founded mid-game (main.js applyWorldLive): a plateau like the ones built at boot.
-  addZone(z) {
-    this.addZoneData(z);
+  // `swallow` lists the directions of founding-outpost plateaus the settlement grows over: they come
+  // out first (else a 40 m flat at the old ground outlasts the town as a pit under its hall), and
+  // their chunks are redone along with the town's.
+  addZone(z, swallow = []) {
+    for (const d of swallow) {
+      const u = d.clone().normalize();
+      const flat = this.flats.find((f) => f.dir.dot(u) > 0.999999);
+      if (!flat) continue;
+      const r = flat.r;
+      this.removeFlatData(u);
+      this.tellWorkers({ type: 'unflat', dir: u.toArray() });
+      this.redo(u, r);
+    }
+    this.addZoneData(z); // (fits the plane here, once)
     this.tellWorkers({ type: 'zone', zone: zoneMsg(z) });
-    this.redo(z.dir, z.r);
+    this.redo(z.dir, z.fr);
+    this.rimInfo = null; this.rimRails = null; // (crater lips and grind rails worked out for ground that is now flat)
   }
 
   // Drop the terrain chunks (and their boulders) round a plateau so they rebuild with it.
@@ -126,24 +144,6 @@ export class Planet extends TerrainField {
   }
 
   tellWorkers(msg) { for (const wk of this.workers) wk.postMessage(msg); }
-
-  // The mineral tints on or off (config.js PLANET.painted; kept for testing): every chunk rebuilds.
-  setPainted(on) {
-    on = !!on;
-    if (on === this.painted) return;
-    this.painted = on;
-    this.tellWorkers({ type: 'style', painted: on });
-    this.ready.length = 0;
-    for (const ch of this.chunks) {
-      for (let l = 0; l < ch.meshes.length; l++) if (ch.meshes[l]) { this.scene.remove(ch.meshes[l]); ch.meshes[l].geometry.dispose(); ch.meshes[l] = null; }
-      ch.shown = -1;
-      if (ch.boulders) { this.scene.remove(ch.boulders); ch.boulders = null; ch.boulderSpec = null; }
-      if (ch.boulderCols && this.colliders) { for (const col of ch.boulderCols) this.colliders.remove(col); ch.boulderCols = null; }
-      ch.ver++;
-      ch.pending = 0;
-    }
-    this.rebuildNow = true; // (the next update builds what's in view straight away, then the workers carry on)
-  }
 
   // ask a worker for a chunk at a level (the least busy one)
   request(ch, lod) {
@@ -296,19 +296,27 @@ float rimNoise(vec3 x) {
   vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(mix(rimHash(i), rimHash(i + vec3(1, 0, 0)), f.x), mix(rimHash(i + vec3(0, 1, 0)), rimHash(i + vec3(1, 1, 0)), f.x), f.y),
              mix(mix(rimHash(i + vec3(0, 0, 1)), rimHash(i + vec3(1, 0, 1)), f.x), mix(rimHash(i + vec3(0, 1, 1)), rimHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
-}`)
+}
+${SKIN_COMMON}`)
         .replace('void main() {', `void main() {
   if (uHoleOn > 0.5) {
     vec3 hq = vHoleW - uHoleO;
     float hx = dot(hq, uHoleX), hz = dot(hq, uHoleZ), hy = dot(hq, uHoleY);
     if (hx > uHoleMin.x && hx < uHoleMax.x && hz > uHoleMin.y && hz < uHoleMax.y && hy > -45.0 && hy < 8.0) discard;
-  }`)
+  }
+  float skPx = length(fwidth(vHoleW)); // (metres per pixel on the ground: the surface textures fade out with it)
+  float skHeight = 0.0; // (the regolith's relief in metres, worked out in the colour and read again by the normal)`)
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${SKIN_NORMAL}`)
+        .replace('#include <opaque_fragment>', `${SKIN_LIGHT}\n#include <opaque_fragment>`)
         // a soft shade over the rim, and a crisp black ink line along each crest: a circle round the
         // crater, measured per pixel on the sphere (so it's smooth whatever the triangles do). It
         // fades out where the rim itself does (worn away, or flattened under a settlement), and
         // with distance
         .replace('#include <color_fragment>', `#include <color_fragment>
-float rimShade = smoothstep(0.55, 1.0, vRim);
+float rimOld = (uSkin > 0.5 && uSkin < 1.5) ? 0.0 : 1.0; // (the regolith look draws its own rims: moonSkins.js skRim)
+// the soft shade over the rim zone stays in the regolith look too, but only from a distance: it fades in as a pixel grows past 3 cm
+// and is full from 30 cm (about 100 m up), where the rim's blocks have faded out. Close to, the rock is the rim
+float rimShade = smoothstep(0.55, 1.0, vRim) * mix(smoothstep(0.03, 0.3, skPx), 1.0, rimOld);
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.32, 0.27, 0.42), rimShade * 0.3);
 vec3 rimP = normalize(vHoleW) * ${R.toFixed(1)};
 // The ink runs along the crest of each grindable lip (rimOf): overlapping craters share one
@@ -316,16 +324,24 @@ vec3 rimP = normalize(vHoleW) * ${R.toFixed(1)};
 // floor (negative radius) get their own. It wavers a little, swells and thins, but stays on the
 // crest, where you grind.
 float rimU = 1e6, rimOwn = 1e6;
+vec3 rimCenU = vec3(0.0), rimCenO = vec3(0.0); // (the centre of the crater each distance is to: the regolith rims run their streaks along its radii)
 for (int i = 0; i < ${RIM_INK_MAX}; i++) {
   if (i >= uRimN) break;
   vec4 c = uRimC[i];
   float sd = distance(rimP, c.xyz) - abs(c.w);
-  if (c.w > 0.0) rimU = min(rimU, sd); else if (abs(sd) < abs(rimOwn)) rimOwn = sd;
+  if (c.w > 0.0) { if (sd < rimU) { rimU = sd; rimCenU = c.xyz; } } else if (abs(sd) < abs(rimOwn)) { rimOwn = sd; rimCenO = c.xyz; }
 }
 float rimWob = (rimNoise(rimP * 0.05) - 0.5) * 1.0 + (rimNoise(rimP * 0.17 + 4.0) - 0.5) * 0.4;
 float rimEdge = min(abs(rimU + rimWob), abs(rimOwn + rimWob));
 float rimPx = max(fwidth(rimEdge), 1e-3); // metres per pixel across the band
 float rimFar = 1.0 - smoothstep(${(RIM_INK_REACH * 0.7).toFixed(1)}, ${RIM_INK_REACH.toFixed(1)}, distance(vHoleW, cameraPosition));
+// Everything below is zero (so nothing changes) unless the pixel is within reach of a rim: past
+// RIM_INK_REACH rimFar is 0, and the halo (the widest term) is 0 once rimEdge + 1.5 * rimRag >= 3.2 * rimHw,
+// with rimRag >= -1.6 (so 2.4 at worst) and rimHw <= max(3.2, 1.2 * rimPx) (the noise term is at most 1.9);
+// the core and the pebbles and chips lie inside that. The test uses only rimEdge and rimPx (a screen-space
+// derivative, worked out above so nothing derivative-dependent sits inside the branch), with a little to
+// spare, and it skips six of the block's eight noise lookups on nearly every pixel: same result, less work.
+if (rimOld > 0.5 && rimFar > 0.0 && rimEdge < 3.2 * max(3.2, 1.2 * rimPx) + 2.5) {
 // Not ink: a band of shattered regolith along the crest. An uneven rocky core whose edges break up
 // into patches, a soft scuffed halo round it, and rubble through it - dark pebbles and bright
 // chips of fresh rock (the grit fades out with distance before it can shimmer)
@@ -341,6 +357,7 @@ vec3 rimRock = vec3(0.24, 0.21, 0.29);
 diffuseColor.rgb = mix(diffuseColor.rgb, rimRock, rimLine);
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.1, 0.085, 0.14), rimPeb * max(rimCore, rimHalo * 1.6) * 0.85 * rimFar);
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.86), rimChip * rimCore * 0.6 * rimFar);
+}
 // mineral colour boost: the tint (what the mineral hues added, brightness-neutral) pushed further,
 // warm ones (tan, buff, rust) and cool ones (blue-grey) by their own amounts, and more the higher up
 // you are: modest under your feet, richer from orbit. The classic tones underneath are left alone.
@@ -349,7 +366,8 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.86), rimChip * rimCor
   float alt = 1.0 + uAltK * smoothstep(40.0, 600.0, uCamAlt);
   float k = mix(uCoolK, uWarmK, smoothstep(-0.004, 0.004, warmth)) * alt;
   diffuseColor.rgb = max(diffuseColor.rgb + vTint * (k - 1.0), 0.0);
-}`);
+}
+${SKIN_COLOR}`);
     };
     return mat;
   }
@@ -382,6 +400,7 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.86), rimChip * rimCor
     geo.computeBoundingSphere();
     const mesh = new THREE.Mesh(geo, this.material);
     mesh.receiveShadow = true;
+    mesh.renderOrder = -1; // (the road decal, renderOrder -0.5 in traffic.js, draws right after the terrain and before everything else)
     // hills block the sun again (without it, a rock's shadow fell straight through the hill and
     // landed a second time beyond it); only their far sides cast (material.shadowSide), so a
     // sunlit slope can't shadow itself into jagged blotches. Only the two detailed levels cast: a
@@ -407,15 +426,7 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.86), rimChip * rimCor
 
   // Grind rails (the crests of snake rocks): polyline, arc lengths and a bounding sphere.
   addRail(r) {
-    const pts = r.pts;
-    const cum = [0];
-    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1]));
-    const c = new THREE.Vector3();
-    for (const p of pts) c.add(p);
-    c.divideScalar(pts.length);
-    let rad = 0;
-    for (const p of pts) rad = Math.max(rad, p.distanceTo(c));
-    (this.rails ||= []).push({ pts, cum, len: cum[cum.length - 1], c, rad });
+    (this.rails ||= []).push(railOf(r.pts));
   }
 
   // Crater lips: the ink line and the grind rail are the same thing. A crater's lip counts if it
@@ -551,6 +562,20 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.86), rimChip * rimCor
     }
   }
 
+  // How far along the ray o + t*d (d unit) the first rock stands, or Infinity: every boulder and shaped
+  // rock that is drawn (not just the ones near enough to have colliders), for hitscan beams.
+  rockRay(o, d, tmax) {
+    let best = Infinity;
+    for (const ch of this.chunks) {
+      if (!ch.boulderSpec || !ch.boulders || !ch.boulders.visible) continue;
+      for (const c of ch.boulderSpec) {
+        const t = rayCollider(c, o, d, Math.min(tmax, best));
+        if (t < best) best = t;
+      }
+    }
+    return best;
+  }
+
   buildBoulders(ch) {
     const rr = mulberry32((ch.f * 7919 + ch.cy * 131 + ch.cx) * 2654435761);
     const count = 4 + Math.floor(rr() * 6);
@@ -559,8 +584,13 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.86), rimChip * rimCor
     const rock = this.attr.rock;
     const extra = Math.floor(rock * 12);
     const rx = mulberry32((ch.f * 7919 + ch.cy * 131 + ch.cx) * 2246822519 ^ 0x7ee);
-    const im = new THREE.InstancedMesh(this.boulderGeo, this.boulderMat, count + extra);
-    const hull = new THREE.InstancedMesh(this.boulderGeo, this.boulderInk, count + extra);
+    // one lumpy shape for the whole chunk, and each boulder stretched a little its own way (from a sequence of its own: the
+    // places, sizes and turns above come from rr and rx, and stay as they were)
+    const seed = ch.f * 7919 + ch.cy * 131 + ch.cx;
+    const shape = this.boulderShapes[((seed * 2654435761) >>> 0) % this.boulderShapes.length];
+    const rv = mulberry32(seed * 40503 ^ 0x6b0d1e);
+    const im = new THREE.InstancedMesh(shape, this.boulderMat, count + extra);
+    const hull = new THREE.InstancedMesh(shape, this.boulderInk, count + extra);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
     const cols = [];
     let n = 0;
@@ -573,20 +603,28 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.86), rimChip * rimCor
       if (ok && this.noBoulders) for (const c of this.noBoulders) if (p.dot(c) > this.noBouldersCos) { ok = false; break; } // (spots kept bare: the trailer)
       const s = 1.2 + Math.pow(g0(), 3) * 7;
       e.set(g0() * 3, g0() * 3, g0() * 3);
+      const sx = 0.85 + rv() * 0.35, sy = 0.85 + rv() * 0.35, sz = 0.85 + rv() * 0.35; // (drawn for every spot, taken or not, so that one being refused moves none of the others)
+      // (nor on a road: clear of the strip and its berm, whatever the boulder's size; clearDirs are samples of the road network, its edges included)
+      if (ok && this.clearDirs) { const cr = Math.cos((ROAD_KEEP + s) / R); for (const c of this.clearDirs) if (p.dot(c) > cr) { ok = false; break; } }
+      // (nor in a black lake, or at its edge: the liquid would swallow it or stand it on the surface)
+      if (ok) for (const lk of this.lakes) if (p.dot(lk.d) > lk.cos - (s + 6) / R) { ok = false; break; }
       if (!ok) continue;
       const r = this.surface(p);
       p.multiplyScalar(r + s * 0.3);
       q.setFromEuler(e);
-      m4.compose(p, q, sc.set(s, s * 0.8, s));
+      m4.compose(p, q, sc.set(s * sx, s * 0.8 * sy, s * sz));
       im.setMatrixAt(n, m4);
-      m4.compose(p, q, sc.set(s + 0.15, s * 0.8 + 0.15, s + 0.15));
-      hull.setMatrixAt(n, m4);
-      cols.push({ type: 'sphere', c: p.clone().addScaledVector(p.clone().normalize(), -s * 0.1), r: s * 0.85 });
+      hull.setMatrixAt(n, m4); // (the ink is the same shell, pushed out along its normals in its shader: boulders.js)
+      // the collision sphere: its radius is the boulder's RMS radius (the shapes have unit RMS before they are scaled by
+      // sx, 0.8 sy and sz) times BOULDER_COLLIDER_K, which for an unstretched boulder is the 0.85 s it always was
+      cols.push({ type: 'sphere', c: p.clone().addScaledVector(p.clone().normalize(), -s * 0.1), r: s * BOULDER_COLLIDER_K * Math.sqrt((sx * sx + 0.64 * sy * sy + sz * sz) / 3) });
       n++;
     }
     im.count = hull.count = n;
     im.castShadow = true;
     im.frustumCulled = hull.frustumCulled = false;
+    im.updateMatrix(); hull.updateMatrix();
+    im.matrixAutoUpdate = hull.matrixAutoUpdate = false; // (never moved: the shadow cache can take them at once)
     const g = new THREE.Group();
     g.add(im, hull);
     // shaped rocks: ramps, arches, hoodoos, mesas, wave walls (rocks.js)
@@ -602,6 +640,7 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.86), rimChip * rimCor
     g.matrixAutoUpdate = false;
     g.visible = false;
     this.scene.add(g);
+    for (const c of cols) c.rock = true; // (the Rail Lance's beam stops at these: rockRay)
     ch.boulders = g;
     ch.boulderSpec = cols;
   }
@@ -656,7 +695,6 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.86), rimChip * rimCor
     const horizon = Math.sqrt(Math.max(0, camLen * camLen - rMin * rMin)) + Math.sqrt(rMax * rMax - rMin * rMin);
     const limit = Math.min(maxDist, horizon);
     const now = performance.now();
-    if (this.rebuildNow) { this.rebuildNow = false; budgetMs = 1e9; }
     const sync = budgetMs >= 1e8 || !this.workers.length;
     const t0 = performance.now();
     // finished chunks from the workers become meshes (a millisecond or two each): the ones filling a

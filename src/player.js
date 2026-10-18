@@ -4,6 +4,8 @@ import { makeBody, stepSkater } from './physics.js';
 import { makeRunner, makeCrate, ScarfSim } from './models.js';
 import { frameQuat, upAt } from './geo.js';
 import { Ragdoll } from './ragdoll.js';
+import { Idle } from './idles.js';
+import { updateHalo } from './cosmetics.js';
 import { WEAPONS, weaponUnlocked, fireWeapon } from './weapons.js';
 
 const SPEED_MARKS = [
@@ -16,6 +18,8 @@ const TAU = Math.PI * 2;
 const FLIP_RATE = 11; // rad/s ≈ 1.75 rotations per second
 const SPIN_RATE = 12;
 const NUMS = ['', '', 'DOUBLE ', 'TRIPLE ', 'QUAD ', 'QUINT '];
+const BIG_AIR_MIN = 5; // s in the air before BIG AIR! is called out (shorter hops still pay their style points, quietly)
+const SKY_HIGH_GAIN = 40; // m climbed (distance from the Moon's centre) above where a jump began before SKY-HIGH! is called out
 
 const _q = new THREE.Quaternion();
 const _Z = new THREE.Vector3(0, 0, 1);
@@ -38,11 +42,14 @@ export class Player {
     this.cargoMesh = null;
     this.speedMarks = SPEED_MARKS.map(() => false);
     this.launchCheck = -1;
+    this.airBase = null; // distance from the Moon's centre where this spell in the air began (SKY-HIGH! counts the climb from it)
+    this.skyHigh = false; // ...and whether this jump has had its SKY-HIGH! yet
     this.anim = 0;
     this.upSmooth = spawn.clone().normalize();
     this.impacts = [];
     this.params = { ...PHYS };
-    this.trick = { flip: 0, spin: 0, active: false };
+    this.trick = { flip: 0, spin: 0, active: false, tucked: false };
+    this.idle = new Idle(); // (the breath and the occasional idles once you've stopped: idles.js)
 
     // helmet lamp + a faint suit glow; intensities are driven by how dark it is
     this.lamp = new THREE.SpotLight(0xfff2c8, 0, 170, 0.5, 0.55, 1.2);
@@ -62,7 +69,7 @@ export class Player {
     this.params.handling = PHYS.handling + (up.gyro || 0) * 0.55;
     this.body.maxEnergy = PHYS.maxEnergy + up.capacitor * 25;
     this.maxHealth = 100 + up.armor * 25 + (up.flak || 0) * 20 + (up.plating || 0) * 10 + (this.mutHealth || 0);
-    this.damageMult = 1 + up.spinner * 0.3;
+    this.damageMult = 1 + up.spinner * 0.2;
     this.fireDelay = 0.55 * (1 - 0.15 * (up.overcharge || 0)) * (this.mutFire || 1);
     this.homing = 0.9 + (up.seeker || 0) * 1.3; // rad/s the disc can turn toward a target
     this.knockResist = 1 - (up.flak || 0) * 0.15;
@@ -78,11 +85,40 @@ export class Player {
     this.params.handling += gw * 0.3;
   }
 
+  // Ride the deck you stand on: called once the world has moved it this frame (main.js), so that you, your model and the camera move with the
+  // deck's move of THIS frame. (Carried before the physics step with the move of the last frame, as this was, you and the camera lagged the ship's
+  // mesh by one frame's move, the more so the faster it flew, and as frame times vary that is a wobble in every frame.) The deck's turn since the
+  // last frame is applied too: a ship following its route (it yaws and pitches with the curve of the Moon) would otherwise swing everything
+  // round its middle from under your feet, the further out you stand (the wings, the cargo bays) the more.
+  rideCarry() {
+    const b = this.body, plat = b.platform;
+    if (!plat) { this.platOn = null; return;  }
+    const d = _v.subVectors(plat.pos, plat.prevPos);
+    const pq = this.platQ || (this.platQ = new THREE.Quaternion());
+    let rot = false;
+    if (plat.quat) {
+      if (this.platOn === plat) {
+        _q.copy(pq).invert().premultiply(plat.quat);
+        // (however small the turn: w = cos(angle/2) is 1 to the last digit for a turn under a milliradian, so the size of the turn is read from the vector part;
+        // a rotation skipped as too small slid you a millimetre a frame, the further out the more, and a millimetre is the gap you fall across to lose the deck)
+        rot = _q.w > 0.9 && Math.abs(_q.x) + Math.abs(_q.y) + Math.abs(_q.z) > 1e-13;
+      }
+      pq.copy(plat.quat);
+      this.platOn = plat;
+    } else this.platOn = null;
+    const g = this.game, m = this.model.root;
+    const move = (p) => { p.add(d); if (rot) p.sub(plat.pos).applyQuaternion(_q).add(plat.pos); };
+    move(b.pos); move(m.position); move(this.center);
+    if (rot) b.vel.applyQuaternion(_q);
+    move(g.cam.position); move(g.camera.position);
+  }
+
   respawn(pos, facing) {
     this.body.pos.copy(pos);
     this.body.vel.set(0, 0, 0);
     this.body.platform = null; // never keep riding a deck (or satellite) you've been teleported off
-    this.seat = null; // ...or a ship or funpark ride (rides.js lets go too)
+    this.body.velFrame = null;
+    this.seat = null; // ...or a ship or fairground ride (rides.js lets go too)
     if (this.game.grind) this.game.grind.active = null; // ...or a grind rail
     upAt(pos, this.body.up);
     this.body.groundN.copy(this.body.up);
@@ -93,6 +129,8 @@ export class Player {
     this.upSmooth.copy(this.body.up);
     if (facing) this.heading.copy(facing);
     this.resetTrick();
+    this.airBase = null;
+    this.skyHigh = false;
   }
 
   // color2: a second crate stacked on top (the Twin Cradle)
@@ -110,25 +148,33 @@ export class Player {
     }
   }
 
-  resetTrick() {
+  // the trick state and the model's trick pivot back to rest (nothing else)
+  clearTrick() {
     const t = this.trick;
     t.flip = t.spin = 0;
-    t.active = false;
+    t.active = t.tucked = false;
     this.model.trick.rotation.set(0, 0, 0);
     this.model.trick.position.y = 1.2;
+  }
+
+  resetTrick() {
+    this.clearTrick();
     if (this.rag) { this.rag.release(); this.rag = null; }
   }
 
   // A wipeout or a hard crash: the runner goes limp and falls as a physics ragdoll (ragdoll.js).
   // Only the model's pose: you keep your momentum and your controls. sign: +1 tumbles forward, -1 back.
   startRagdoll(sign = 1) {
-    if (this.rag || this.vehicle || this.dead) return;
+    if (this.rag || this.vehicle || this.dead || this.game.indoors) return; // (no tumbling inside the casino or Dr. Zbornak's lab)
+    if (this.game.cheats && !this.game.cheats.ragdoll) return; // (the dev menu's RAGDOLL switch)
     this.rag = new Ragdoll(this.game, this.model, this.body, sign);
   }
 
+  // (the dev overlay's stage detail: laps at the end of each part. Every path out of step() ends in the animation lap below)
   update(dt, input, cam) {
     this.step(dt, input, cam);
     this.updateLamp(cam);
+    this.game.devOverlay.lap('animate');
   }
 
   // helmet lamp follows your gaze (every frame, whichever way you're moving: skating, grinding, riding)
@@ -147,12 +193,17 @@ export class Player {
     const up = b.up;
 
     // grinding a snake rock's crest (rails.js): the rail carries you
-    if (g.grind && g.grind.update(this, dt, input)) return;
+    const grinding = g.grind && g.grind.update(this, dt, input);
+    g.devOverlay.lap('rail');
+    if (grinding) { this.idle.cancel(this.model); if (this.trick.active) this.clearTrick(); return; } // (a half-done trick doesn't wait on the rail to flip you when you pop off)
 
     // riding something (a transit ship, a carousel horse, a ferris-wheel gondola: rides.js): the
     // seat carries you, no physics; the ride decides where you get off
     if (this.seat) {
       const s = this.seat;
+      this.idle.cancel(this.model);
+      if (this.trick.active) this.clearTrick();
+      if (this.rag) { this.rag.release(); this.rag = null; } // (a ragdoll that was still tumbling when you hopped on: its camera focus would stay behind, and it only updates in the physics step below)
       s.obj.updateMatrixWorld(true);
       const p = s.obj.localToWorld(_sp.copy(s.local));
       if (dt > 0) b.vel.copy(p).sub(b.pos).divideScalar(dt);
@@ -178,7 +229,10 @@ export class Player {
     }
 
     const wish = new THREE.Vector3();
-    const trickHeld = input.down('KeyQ') && !b.grounded && b.airTime > 0.12 && !this.rag;
+    // (no tricks on the end of the Hitch-Line: it has you by the harness)
+    const hitched = !!(g.winch && g.winch.on);
+    if (hitched && this.trick.active) this.clearTrick();
+    const trickHeld = input.down('KeyQ') && !b.grounded && b.airTime > 0.12 && !this.rag && !hitched;
     if (!trickHeld && input.padMove && input.padMove.on) {
       // a controller's left stick: analog (a gentle push, a gentle carve)
       wish.addScaledVector(cam.fwd, -input.padMove.y).addScaledVector(cam.right, input.padMove.x);
@@ -208,8 +262,8 @@ export class Player {
     const ctrl = {
       wish,
       skates: input.down('Space'),
-      // with the Rail Lance out, right mouse is the scope instead of the thrusters (E still thrusts)
-      thrust: input.down('KeyE') || (input.mouse[2] && WEAPONS[this.weapon || 0].key !== 'rail'),
+      // with the Rail Lance out, right mouse is the scope instead of the thrusters (L3 on a pad still thrusts)
+      thrust: input.down('Thrust') || (input.mouse[2] && WEAPONS[this.weapon || 0].key !== 'rail'),
       jump: jumpNow,
       // Dive: a fresh press of the jump key while airborne, held (so the jump itself never dives)
       dive: this.diveLatch = !b.grounded && !jumpNow && (this.diveLatch || (jumpKey && b.airTime > 0.15)) && (input.down('ShiftLeft') || input.down('ShiftRight')),
@@ -224,9 +278,12 @@ export class Player {
 
     // driving a faction vehicle: the garage does the physics, you can still shoot
     if (this.vehicle) {
+      this.idle.cancel(this.model);
       g.garage.drive(dt, input, cam);
+      g.devOverlay.lap('physics');
       this.center.copy(b.pos).addScaledVector(b.up, 1.3);
       this.updateWeapons(dt, input, cam);
+      g.devOverlay.lap('weapons');
       const m = this.model;
       m.root.position.copy(b.pos);
       // the vehicle's own orientation (set by the garage this frame), so you never wobble on it
@@ -239,20 +296,27 @@ export class Player {
         // a motorcycle crouch: tucked low over the tank, knees in, arms reaching to the clip-ons,
         // leaning into the turn
         m.root.quaternion.multiply(_q.setFromAxisAngle(_Z, -this.steerLean * 0.28));
-        m.torso.rotation.x = 0.95;
-        m.legL.rotation.x = m.legR.rotation.x = -1.05;
+        // (a Blender bike carries its own pose, solved so the hands meet the grips and the legs clear the shell: model.pose)
+        const bp = this.vehicle.model.pose;
+        m.torso.rotation.x = bp ? bp.lean : 0.95;
+        m.legL.rotation.x = m.legR.rotation.x = bp ? bp.thigh : -1.05;
+        m.legL.rotation.z = bp ? -bp.spread : 0; m.legR.rotation.z = bp ? bp.spread : 0; // (knees out round the tank)
         m.body.position.y = m.bodyBase - 0.62;
         if (m.armL && m.armR) {
-          m.armL.rotation.x = m.armR.rotation.x = -0.75;
-          m.armL.rotation.z = -0.22; m.armR.rotation.z = 0.22;
+          m.armL.rotation.x = m.armR.rotation.x = bp ? bp.armX : -0.75;
+          m.armL.rotation.z = bp ? -bp.armZ : -0.22; m.armR.rotation.z = bp ? bp.armZ : 0.22;
+          const el = bp ? bp.elbow : -0.55, lean = bp ? 0.12 : 0.2; // (elbows in, a bend into the turn; less on a bike whose hands are on the grips)
+          m.foreL.rotation.x = el + lean * this.steerLean; m.foreR.rotation.x = el - lean * this.steerLean;
         }
       } else {
         m.torso.rotation.x = 0;
         m.legL.rotation.x = m.legR.rotation.x = -1.3;
+        m.legL.rotation.z = m.legR.rotation.z = 0;
         m.body.position.y = m.bodyBase - 0.5;
         if (m.armL && m.armR) {
           m.armL.rotation.x = -1.15 + 0.15 * this.steerLean; m.armR.rotation.x = -1.15 - 0.15 * this.steerLean;
           m.armL.rotation.z = -0.12; m.armR.rotation.z = 0.12;
+          m.foreL.rotation.x = -0.35 + 0.25 * this.steerLean; m.foreR.rotation.x = -0.35 - 0.25 * this.steerLean; // (the wheel hand pulls in)
         }
       }
       this.upSmooth.copy(b.up);
@@ -261,11 +325,21 @@ export class Player {
 
     // ragdolling: the ragdoll (ragdoll.js) carries your body until it comes to rest; no skater physics
     if (this.rag) {
+      if (this.trick.active) this.clearTrick(); // (limp: no trick left to finish; updateTricks doesn't run in here)
       b.jumped = false;
+      // the tank refills while you're limp too (stepSkater's regen doesn't run in here), and a drained one
+      // unlocks the thrusters again on the same terms
+      b.thrusting = false;
+      b.energy = Math.min(b.maxEnergy, b.energy + this.params.energyRegen * dt);
+      if (b.jetLocked && b.energy >= b.maxEnergy * 0.25) b.jetLocked = false;
+      g.devOverlay.lap('physics');
       this.updateWeapons(dt, input, cam);
+      g.devOverlay.lap('weapons');
       this.center.copy(b.pos).addScaledVector(b.up, 1.3);
       this.animate(dt, cam, ctrl);
+      g.devOverlay.lap('animate');
       if (this.rag) this.rag.sync(dt);
+      g.devOverlay.lap('ragdoll');
       return;
     }
 
@@ -274,11 +348,11 @@ export class Player {
     b.jumped = false;
     // ride moving vehicles: carry along with the deck you're standing on
     const plat = b.platform;
-    if (plat) b.pos.add(_v.subVectors(plat.pos, plat.prevPos));
+    // (carried along with the deck you stand on, and turned with it, once the world has moved it: rideCarry)
     this.prevVel = (this.prevVel || new THREE.Vector3()).copy(b.vel);
     if (plat) this.prevVel.add(plat.vel);
-    // Quantum Slipstream Vanes: a share of your ground handling in the air
-    const vanes = !!(g.story && g.story.tech.includes('vanes'));
+    // Quantum Slipstream Vanes (a power: on for a few seconds when used): a share of your ground handling in the air
+    const vanes = !!(g.story && g.story.vanesActive());
     this.params.airHandling = vanes ? 0.42 : 0;
     const steps = Math.ceil(dt / (1 / 120));
     const h = dt / steps;
@@ -290,11 +364,20 @@ export class Player {
     for (let i = 0; i < steps; i++) {
       const before = b.grounded;
       const imp = stepSkater(b, ctrl, h, g.planet, g.colliders, pr, this.impacts);
+      // velocities on a deck are relative to it: convert at once when stepping on or off or from one to another (b.velFrame is the deck b.vel
+      // is in; stepSkater meets any other deck at the speed it closes). At the end of the frame, as this was, a landing on a deck that was
+      // dropping gave you its speed upward, and a hop off it the same: on a ship going down the rider kept popping off the deck.
+      if (b.platform !== (b.velFrame || null)) {
+        if (b.velFrame) b.vel.add(b.velFrame.vel);
+        if (b.platform) b.vel.sub(b.platform.vel);
+        b.velFrame = b.platform || null;
+      }
       if (!before && b.grounded) landed = true;
       for (const it of imp) this.onImpact(it, ctrl.skates);
       ctrl.jump = false;
     }
-    if (b.jumped) { g.audio.jump(); g.fx.dust(b.pos, b.vel, 6, up); }
+    g.devOverlay.lap('physics');
+    if (b.jumped) { g.audio.jump(); g.haptics.play('jump'); g.fx.dust(b.pos, b.vel, 6, up); }
     // the Vanes at work: teal and violet sparks shed off the skates and a rising shimmer
     this.vaneCarve = vanes && !b.grounded ? b.airCarve || 0 : 0;
     if (this.vaneCarve) {
@@ -309,14 +392,13 @@ export class Player {
       }
     } else this.vaneN = 0;
     if (b.bounced > 6) {
-      g.fx.pop(b.bounced > 25 ? 'BOOOING!' : 'BOING!', null, { color: '#ff7ad9', size: 40 + Math.min(40, b.bounced) });
+      g.fx.pop(b.bounced > 25 ? 'BOOOING!' : 'BOING!', null, { color: '#ff7ad9', size: 40 + Math.min(40, b.bounced), prio: 1 });
       g.audio.tone(220 + b.bounced * 8, 0.3, 'sine', 0.2, 2);
       if (b.bounced > 20) g.style(Math.round(b.bounced / 2), null);
     }
     b.bounced = 0;
     // velocities on a deck are relative to it; convert when stepping on or off
-    if (!plat && b.platform) { b.vel.sub(b.platform.vel); g.fx.pop('ALL ABOARD!', null, { color: '#2ee6ff', size: 44, life: 1 }); }
-    else if (plat && b.platform !== plat) { b.vel.add(plat.vel); if (b.platform) b.vel.sub(b.platform.vel); }
+    if (!plat && b.platform) g.fx.pop('ALL ABOARD!', null, { color: '#2ee6ff', size: 44, life: 1, prio: 1 });
     // world-space acceleration (for sloshing fluids)
     const worldVel = _v.copy(b.vel);
     if (b.platform) worldVel.add(b.platform.vel);
@@ -326,18 +408,27 @@ export class Player {
 
     if (b.diveLanded) {
       g.fx.dust(b.pos, b.vel, 14, up);
-      if (b.diveLanded > 20) { g.fx.pop('STUCK IT!', null, { color: '#2ee6ff', size: 46 }); g.style(Math.round(b.diveLanded / 3), 'DIVE LANDING'); }
+      if (b.diveLanded > 20) { g.fx.pop('STUCK IT!', null, { color: '#2ee6ff', size: 46, prio: 1 }); g.style(Math.round(b.diveLanded / 3), 'DIVE LANDING'); }
       b.diveLanded = 0;
     }
     if (!wasGrounded && b.grounded && airBefore > 1.8 && !this.trickLanding) {
-      g.style(Math.round(airBefore * 15), `BIG AIR ${airBefore.toFixed(1)}s`);
+      g.style(Math.round(airBefore * 15), airBefore >= BIG_AIR_MIN ? `BIG AIR ${airBefore.toFixed(1)}s` : null);
     }
     this.trickLanding = false;
     if (wasGrounded && !b.grounded && this.speed > 40 && b.vel.dot(up) > 6) this.launchCheck = 0.6;
     if (this.launchCheck > 0) {
       this.launchCheck -= dt;
       if (this.launchCheck <= 0 && !b.grounded && b.vel.dot(up) > 0) {
-        g.fx.pop(this.speed > 70 ? 'SKY-HIGH!' : 'LAUNCH!', null, { color: '#2ee6ff', size: 72 });
+        g.fx.pop('LAUNCH!', null, { color: '#2ee6ff', size: 72, prio: 1 });
+      }
+    }
+    // SKY-HIGH!: once a jump has climbed SKY_HIGH_GAIN m above where it began (not for falling off a cliff or a ride)
+    if (b.grounded) { this.airBase = null; this.skyHigh = false; }
+    else {
+      this.airBase ??= b.pos.length(); // (not b.altitude: that's the height over the ground below, which jumps when the ground drops away at a rim or a cliff)
+      if (!this.skyHigh && b.pos.length() - this.airBase >= SKY_HIGH_GAIN && b.vel.dot(up) > 0) {
+        this.skyHigh = true;
+        g.fx.pop('SKY-HIGH!', null, { color: '#2ee6ff', size: 72, prio: 1 });
       }
     }
 
@@ -345,12 +436,14 @@ export class Player {
     SPEED_MARKS.forEach((m, i) => {
       if (!this.speedMarks[i] && kmh > m.kmh) {
         this.speedMarks[i] = true;
-        g.fx.pop(m.text, null, { color: i > 1 ? '#ff2e88' : '#ffd23f', size: 60 + i * 12 });
+        g.fx.pop(m.text, null, { color: i > 1 ? '#ff2e88' : '#ffd23f', size: 60 + i * 12, prio: 1 });
         g.style(10 + i * 10, null);
       } else if (this.speedMarks[i] && kmh < m.kmh - 60) this.speedMarks[i] = false;
     });
 
+    g.devOverlay.lap('tricks');
     this.updateWeapons(dt, input, cam);
+    g.devOverlay.lap('weapons');
 
     if (b.onLake && b.grounded && !b.skating) b.vel.multiplyScalar(1 - Math.min(1, 2.5 * dt)); // wading
     if (b.onLake && b.grounded && this.speed > 8 && Math.random() < dt * 20) g.fx.spawn(b.pos, up.clone().multiplyScalar(3), { color: 0x2a1f4f, size: 0.4, life: 0.6, gravity: 2, count: 2, spread: 3 });
@@ -371,8 +464,15 @@ export class Player {
     const g = this.game;
     const b = this.body;
     const up = b.up;
+    // the APC (vehicles.js): its turret cannon replaces the runner's own weapons while you drive it
+    if (this.vehicle && this.vehicle.def.turret) {
+      if (this.scoped) { this.scoped = false; g.audio.tone(800, 0.06, 'square', 0.06); }
+      g.garage.turretFire(dt, input);
+      return;
+    }
     const wasScoped = this.scoped;
-    this.scoped = WEAPONS[this.weapon || 0].key === 'rail' && input.mouse[2] && input.locked && !this.dead;
+    // (limp in a ragdoll: no scope, no shooting)
+    this.scoped = WEAPONS[this.weapon || 0].key === 'rail' && input.mouse[2] && input.locked && !this.dead && !this.rag;
     if (this.scoped !== wasScoped) g.audio.tone(this.scoped ? 1200 : 800, 0.06, 'square', 0.06);
     for (let i = 0; i < WEAPONS.length; i++) {
       if (!input.pressed('Digit' + (i + 1))) continue;
@@ -381,7 +481,7 @@ export class Player {
     }
     const w = WEAPONS[this.weapon || 0];
     this.fireCd -= dt;
-    if (input.mouse[0] && this.fireCd <= 0 && input.locked) {
+    if (input.mouse[0] && this.fireCd <= 0 && input.locked && !this.rag) {
       this.fireCd = w.delay * (1 - 0.15 * (g.upgrades.overcharge || 0)) * (this.mutFire || 1);
       const muzzle = this.center.clone().addScaledVector(cam.right, 0.5).addScaledVector(up, 0.3);
       const aim = cam.position.clone().addScaledVector(cam.look, 350);
@@ -408,6 +508,11 @@ export class Player {
         t.flip += (tf - t.flip) * Math.min(1, dt * 5);
         t.spin += (ts - t.spin) * Math.min(1, dt * 5);
       }
+      // the tuck pose lasts while you hold the trick button, then until the model has levelled back out.
+      // (It used to test flip || spin for non-zero, which never goes back to exactly 0 once you've
+      // flipped, so the tuck stayed on for the rest of the air time after you let go.)
+      const lf = Math.abs(t.flip - Math.round(t.flip / TAU) * TAU), ls = Math.abs(t.spin - Math.round(t.spin / TAU) * TAU);
+      t.tucked = t.active && (held || lf > 0.2 || ls > 0.2);
       this.model.trick.rotation.set(t.flip, t.spin, 0, 'YXZ');
     }
     let wiped = false;
@@ -426,33 +531,39 @@ export class Player {
         pts += Math.round(landedAfter * 5);
         const name = parts.join(' + ');
         g.style(pts, name);
-        g.fx.pop('STUCK IT!', null, { color: '#7dff6a', size: 70, rot: 6 });
+        g.haptics.play('stick');
+        g.fx.pop('STUCK IT!', null, { color: '#7dff6a', size: 70, rot: 6, prio: 1 });
         this.trickLanding = true;
         g.stats.bestTrick = Math.max(g.stats.bestTrick || 0, pts);
       } else if (!clean) {
-        g.fx.pop('WIPEOUT!', null, { color: '#ff2a4a', size: 84, rot: -8 });
+        g.fx.pop('WIPEOUT!', null, { color: '#ff2a4a', size: 84, rot: -8, prio: 1 });
         g.damagePlayer(8, 'impact');
         b.vel.multiplyScalar(0.55);
         g.missions.jostle(18, true);
         g.audio.thud(30);
+        g.haptics.play('wipeout');
         this.trickLanding = true;
         wiped = true;
       }
       const ragFlip = t.flip;
       this.resetTrick();
       if (wiped) this.startRagdoll(ragFlip < 0 ? -1 : 1);
-    } else if (b.grounded && !t.active) {
-      this.model.trick.rotation.set(0, 0, 0);
+    } else if (b.grounded) {
+      // on the ground with a trick still marked active (a landing updateTricks never saw): nothing left to score
+      if (t.active || t.flip || t.spin) this.clearTrick();
+      else this.model.trick.rotation.set(0, 0, 0);
     }
   }
 
   onImpact(it, skates) {
     const g = this.game;
-    const safe = (g.alchemy && g.alchemy.buffs.cushion > 0) ? 1e9 : skates ? this.params.skateSafeImpact * (g.cheats ? g.cheats.speed : 1) : this.params.bootSafeImpact * (g.cheats ? g.cheats.speed : 1);
-    if (it.speed > 6) g.audio.thud(it.speed);
+    let safe = (g.alchemy && g.alchemy.buffs.cushion > 0) ? 1e9 : skates ? this.params.skateSafeImpact * (g.cheats ? g.cheats.speed : 1) : this.params.bootSafeImpact * (g.cheats ? g.cheats.speed : 1);
+    if (g.winch && g.winch.on) safe += 14; // (the winch's own pull is controlled: fetching up against a wall or a ship's tower at its pace is a bump, not a crash)
+    if (it.speed > 6) { g.audio.thud(it.speed); g.haptics.land(it.speed); }
+    if (it.speed > 4 && this.model.halo) this.model.halo.kick(Math.min(1, it.speed / 25)); // (a bump rings the halo)
     if (g.alchemy && g.alchemy.buffs.bouncy > 0 && it.kind === 'ground' && it.speed > 5) {
       this.body.bounceReady = Math.max(this.body.bounceReady || 0, it.speed);
-      g.fx.pop('BOING!', null, { color: '#ff7ad9', size: 44 });
+      g.fx.pop('BOING!', null, { color: '#ff7ad9', size: 44, prio: 1 });
       return;
     }
     if (it.speed > safe) {
@@ -463,7 +574,7 @@ export class Player {
       const glancing = it.kind === 'ground' ? 1 / (1 + (it.glide || 0) / 30) : 1;
       const dmg = 0.5 * this.maxHealth * (1 - Math.exp(-(it.speed - safe) / 60)) * (this.params.impactDamage / 1.3) * glancing;
       g.damagePlayer(dmg, 'impact');
-      g.fx.pop(it.speed - safe > 12 ? 'KRA-KOOM!' : 'KRAK!', this.body.pos.clone().addScaledVector(this.up, 2), { color: '#ff4f2e', size: 54 });
+      g.fx.pop(it.speed - safe > 12 ? 'KRA-KOOM!' : 'KRAK!', this.body.pos.clone().addScaledVector(this.up, 2), { color: '#ff4f2e', size: 54, prio: 1 });
       g.fx.dust(this.body.pos, this.body.vel, 14, this.up);
       this.startRagdoll(it.kind === 'ground' ? 1 : -1); // (a wall throws you back-first)
     } else if (it.speed > 9) {
@@ -471,6 +582,34 @@ export class Player {
     }
     if (it.speed > 14) g.missions.jostle(it.speed - 14, skates);
     if (it.speed > 6) { g.events.onImpact(it.speed); g.story.onImpact(it.speed); }
+  }
+
+  // physics scarf: hangs at rest, streams with speed, drapes over whatever is on your back
+  updateScarf(dt) {
+    const b = this.body;
+    if (!this.scarfSim) this.scarfSim = new ScarfSim(this.model);
+    // (a crate on your back, or the Twin Cradle's two, is something for the scarf to ride over)
+    const cargo = this.cargoMesh ? (this.cargoMesh.children.length > 3 ? 2 : 1) : 0;
+    this.scarfSim.update(dt, this.vehicle ? this.vehicle.e.body.vel : b.vel, b.up, { cargo });
+  }
+
+  // Standing at rest: upright, limbs level, no bob or roll, the scarf hanging. animate() poses the model
+  // only while you play, so a cutscene that takes over (the recall shuttle, the Spindle med-evac) calls this
+  // first, or you come out of it frozen in whatever pose you were in, scarf streaming, as if still moving.
+  restPose() {
+    const m = this.model;
+    this.idle.cancel(m);
+    m.torso.rotation.set(0, 0, 0);
+    m.legL.rotation.set(0, 0, 0); m.legR.rotation.set(0, 0, 0);
+    m.foreL.rotation.set(0, 0, 0); m.foreR.rotation.set(0, 0, 0);
+    m.armL.rotation.set(0, 0, -0.15); m.armR.rotation.set(0, 0, 0.15); // (arms a little out from the sides: the idle pose in animate)
+    m.body.position.y = m.bodyBase;
+    this.roll = 0;
+    this.steerLean = 0;
+    this.anim = 0;
+    this.clearTrick();
+    if (!this.scarfSim) this.scarfSim = new ScarfSim(m);
+    this.scarfSim.settle();
   }
 
   animate(dt, cam, ctrl) {
@@ -507,20 +646,24 @@ export class Player {
     this.anim += dt * (2 + Math.min(sp, 10) * 1.1);
     const s = Math.sin(this.anim);
     const base = m.bodyBase;
+    this.idle.begin(m); // (last frame's idle off the figure: the poses below only set the angles they use)
+    m.legL.rotation.z = m.legR.rotation.z = 0; // (a bike's knees-out spread must not follow you off it)
     if (!b.grounded && ctrl && ctrl.dive) {
       // dive: tuck, lean hard forward, arms swept back
       m.torso.rotation.x = 0.85;
       m.legL.rotation.x = m.legR.rotation.x = -0.35;
       m.armL.rotation.x = m.armR.rotation.x = 0.9;
       m.armL.rotation.z = -0.25; m.armR.rotation.z = 0.25;
+      m.foreL.rotation.x = m.foreR.rotation.x = -0.2; // (hands streamlined, a hint of bend)
       if (Math.random() < dt * 20) this.game.fx.spawn(b.pos.clone().addScaledVector(up, 1.2), b.vel.clone().multiplyScalar(-0.2), { color: 0x9be7ff, size: 0.3, life: 0.3, count: 1, spread: 0.6 });
     } else if (!b.grounded) {
       m.torso.rotation.x = 0.15;
       m.legL.rotation.x = -0.5; m.legR.rotation.x = 0.3;
       m.armL.rotation.z = -1.1; m.armR.rotation.z = 1.1;
       m.armL.rotation.x = m.armR.rotation.x = 0;
+      m.foreL.rotation.x = m.foreR.rotation.x = -0.35 + 0.1 * Math.sin(this.anim * 0.5); // (loose elbows, balancing)
       m.body.position.y = base;
-      if (this.trick.active && (this.trick.flip || this.trick.spin)) { m.legL.rotation.x = m.legR.rotation.x = -1.2; m.torso.rotation.x = 0.6; }
+      if (this.trick.tucked) { m.legL.rotation.x = m.legR.rotation.x = -1.2; m.torso.rotation.x = 0.6; }
     } else if (b.skating) {
       const crouch = Math.min(1, sp / 40);
       m.body.position.y = base - 0.18 * crouch;
@@ -528,6 +671,12 @@ export class Player {
       m.legL.rotation.x = 0.35 * crouch; m.legR.rotation.x = -0.35 * crouch;
       m.armL.rotation.x = m.armR.rotation.x = -0.9 * crouch;
       m.armL.rotation.z = -0.3; m.armR.rotation.z = 0.3;
+      // elbows bent, hands out in front; leaning into a turn the inside arm tucks and the outside one reaches
+      const bank = THREE.MathUtils.clamp(this.roll / 0.5, -1, 1);
+      // (leaned right over at full speed the hands are already forward, so the bend halves: 0.85 -> 0.43)
+      const bend = (0.3 + 0.55 * crouch) * (1 - 0.5 * crouch);
+      m.foreL.rotation.x = -bend + 0.25 * bank * (1 - 0.5 * crouch);
+      m.foreR.rotation.x = -bend - 0.25 * bank * (1 - 0.5 * crouch);
     } else {
       const run = Math.min(1, sp / 6);
       m.body.position.y = base + Math.abs(s) * 0.12 * run;
@@ -535,20 +684,26 @@ export class Player {
       m.legL.rotation.x = s * 0.9 * run; m.legR.rotation.x = -s * 0.9 * run;
       m.armL.rotation.x = -s * 0.8 * run; m.armR.rotation.x = s * 0.8 * run;
       m.armL.rotation.z = -0.15; m.armR.rotation.z = 0.15;
+      // elbows pump: bent most as the hand comes forward
+      m.foreL.rotation.x = -run * (0.45 + 0.55 * Math.max(0, s)); m.foreR.rotation.x = -run * (0.45 + 0.55 * Math.max(0, -s));
     }
+    // stopped: the breath, and now and then another idle (idles.js), laid over the rest pose
+    this.idle.apply(m, dt, b.grounded && !b.skating && !this.rag && !!ctrl && ctrl.wish.lengthSq() === 0, sp, !b.grounded || !!this.rag);
     if (this.rag) {
+      this.game.devOverlay.lap('animate');
       if (!this.rag.update(dt)) { this.rag.release(); this.rag = null; }
+      this.game.devOverlay.lap('ragdoll');
     }
-    // physics scarf: hangs at rest, streams with speed, drapes over whatever is on your back
-    if (!this.scarfSim) this.scarfSim = new ScarfSim(m);
-    // (a crate on your back, or the Kepler twin stack, is taller and wider than the pack)
-    const twin = this.cargoMesh && this.cargoMesh.children.length > 3;
-    this.scarfSim.update(dt, this.vehicle ? this.vehicle.e.body.vel : b.vel, up, this.cargoMesh ? { back: 1.14, top: twin ? 1.5 : 1.0, hw: 0.42 } : { back: 0.55, top: 0.94 });
+    this.updateScarf(dt);
+    updateHalo(m, dt);
 
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(m.root.quaternion);
     const strength = b.skating && b.grounded ? Math.min(1, sp / 30) : this.vaneCarve ? 0.55 + 0.45 * Math.abs(this.vaneCarve) : 0; // (the Vanes leave ribbons in the air)
     const g = this.game;
-    g.fx.updateTrail(0, b.pos.clone().addScaledVector(right, -0.2), right, strength, up);
-    g.fx.updateTrail(1, b.pos.clone().addScaledVector(right, 0.2), right, strength, up);
+    // (laid on the ground you can see: the Spindle's rock is a 5 m mesh that stands above the height you skate on
+    // in a hollow, which used to bury the ribbon there)
+    const foot = b.pos.clone().addScaledVector(up, g.planet.meshLift ? g.planet.meshLift(b.pos) : 0);
+    g.fx.updateTrail(0, foot.clone().addScaledVector(right, -0.2), right, strength, up, dt);
+    g.fx.updateTrail(1, foot.clone().addScaledVector(right, 0.2), right, strength, up, dt);
   }
 }

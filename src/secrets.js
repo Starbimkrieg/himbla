@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { toon, glow, ink, textSprite } from './toon.js';
-import { frameQuat, tangent, arcDist, darkness } from './geo.js';
+import { frameQuat, tangent, arcDist } from './geo.js';
 import { SKATES } from './cosmetics.js';
 
 // The Moon's two big secrets.
@@ -33,7 +33,108 @@ const N_ORBIT = 1440;
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
-const _q = new THREE.Quaternion();
+
+// SAT-7 "Lantern" itself, as a pure model (buildSatellite below flies it; the Asset Row shows it at rest): { root, inner, nameSign, artifact,
+// aGlow, lights, halo }. root holds `inner`, which carries the SAT_SCALE; withArtifact: the alien artifact still sits on its deck.
+export function makeSat7(withArtifact = true) {
+  // the model: built at 1:1 and scaled up by SAT_SCALE (its colliders scale to match). A foil-wrapped
+  // bus under a landing deck you can read from the air (hazard border, glowing landing ring, edge
+  // lights), framed solar wings, a dish with its feed, thrusters, antennas, and lights that blink
+  // to catch your eye: red/green wingtip strobes, amber deck beacons and a white strobe on a mast.
+  const root = new THREE.Group();
+  const inner = new THREE.Group();
+  inner.scale.setScalar(SAT_SCALE);
+  root.add(inner);
+  const add = (geo, mat, x, y, z, { rx = 0, ry = 0, rz = 0, outline = 0 } = {}) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.rotation.set(rx, ry, rz);
+    if (outline) ink(m, outline);
+    inner.add(m);
+    return m;
+  };
+  const gold = toon(0xc9a24a), foil = toon(0xe0b85a), dark = toon(0x3a3550), steel = toon(0x8a8f99), white = toon(0xf5f5f5);
+  // the bus: a gold-foil box with crinkled foil patches and a dark truss frame on its edges
+  add(new THREE.BoxGeometry(9, 3, 15), gold, 0, 0, 0, { outline: 0.12 });
+  for (const [x, y, z, w, h, d] of [[4.52, -0.2, -3, 0.06, 2.2, 5.5], [-4.52, 0.2, 2.5, 0.06, 2.0, 6], [4.52, 0.3, 4.2, 0.06, 1.6, 3], [0, -1.52, 2, 7, 0.06, 6]]) add(new THREE.BoxGeometry(w, h, d), foil, x, y, z);
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) add(new THREE.BoxGeometry(0.3, 0.3, 15.2), dark, sx * 4.5, sy * 1.5, 0);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.BoxGeometry(0.3, 3.2, 0.3), dark, sx * 4.5, 0, sz * 7.5);
+  // the landing deck: a dark plate with a yellow/black hazard border and a glowing ring to aim for
+  add(new THREE.BoxGeometry(9.4, 0.3, 15.4), dark, 0, 1.6, 0, { outline: 0.06 });
+  const hz1 = toon(0xffd23f), hz2 = toon(0x1d1a29);
+  for (let k = 0; k < 14; k++) {
+    const m = k % 2 ? hz2 : hz1;
+    add(new THREE.BoxGeometry(0.4, 0.06, 1.1), m, 4.45, 1.78, -7.15 + k * 1.1);
+    add(new THREE.BoxGeometry(0.4, 0.06, 1.1), m, -4.45, 1.78, -7.15 + k * 1.1);
+  }
+  for (let k = 0; k < 8; k++) {
+    const m = k % 2 ? hz2 : hz1;
+    add(new THREE.BoxGeometry(1.1, 0.06, 0.4), m, -3.85 + k * 1.1, 1.78, 7.45);
+    add(new THREE.BoxGeometry(1.1, 0.06, 0.4), m, -3.85 + k * 1.1, 1.78, -7.45);
+  }
+  add(new THREE.TorusGeometry(3.2, 0.16, 6, 36), glow(0x2ee6ff), 0, 1.8, 2, { rx: Math.PI / 2 }); // (centred on the artifact's cradle)
+  add(new THREE.TorusGeometry(1.4, 0.1, 6, 24), glow(0x2ee6ff), 0, 1.8, 2, { rx: Math.PI / 2 });
+  for (const [x, z] of [[-3.5, -6.5], [3.5, -6.5], [-3.5, 6.5], [3.5, 6.5], [-3.5, 0], [3.5, 0]]) add(new THREE.CylinderGeometry(0.16, 0.2, 0.15, 8), glow(0xfff6a8), x, 1.82, z);
+  // solar wings: arms with a hinge, framed panels with a proper grid of cells
+  for (const s2 of [-1, 1]) {
+    add(new THREE.BoxGeometry(4, 0.4, 0.4), steel, s2 * 6.5, 0, 0, { outline: 0.03 });
+    add(new THREE.CylinderGeometry(0.45, 0.45, 0.9, 10), dark, s2 * 8.3, 0, 0, { rx: Math.PI / 2, outline: 0.03 });
+    add(new THREE.BoxGeometry(12, 0.3, 7), toon(0x2b59c3), s2 * 14.5, 0, 0, { outline: 0.06 });
+    add(new THREE.BoxGeometry(12.3, 0.36, 0.25), steel, s2 * 14.5, 0, 3.55);
+    add(new THREE.BoxGeometry(12.3, 0.36, 0.25), steel, s2 * 14.5, 0, -3.55);
+    for (let k = 0; k <= 6; k++) add(new THREE.BoxGeometry(0.12, 0.34, 7), toon(0x9be7ff), s2 * (8.5 + k * 2), 0, 0);
+    for (const z of [-1.75, 0, 1.75]) add(new THREE.BoxGeometry(12, 0.34, 0.1), toon(0x9be7ff), s2 * 14.5, 0, z);
+  }
+  // the dish under the bus, with its feed spoke and receiver
+  add(new THREE.SphereGeometry(2.4, 16, 8, 0, Math.PI * 2, 0, Math.PI / 3), toon(0xf5f5f5, { side: THREE.DoubleSide }), 0, -1.6, -5, { rx: Math.PI });
+  add(new THREE.CylinderGeometry(0.08, 0.1, 2.6, 6), dark, 0, -2.9, -5);
+  add(new THREE.SphereGeometry(0.3, 8, 6), glow(0xff9f1c), 0, -4.2, -5);
+  // thrusters at the stern, attitude jets on the corners, antennas and a star tracker
+  for (const sx of [-2, 2]) {
+    add(new THREE.CylinderGeometry(0.9, 1.4, 1.8, 12, 1, true), toon(0x5b5870, { side: THREE.DoubleSide }), sx, -0.2, -8.4, { rx: Math.PI / 2, outline: 0.04 });
+    add(new THREE.CylinderGeometry(0.85, 0.85, 0.1, 12), glow(0x4fb8ff), sx, -0.2, -7.6, { rx: Math.PI / 2 });
+  }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) for (const ax of [0, 1]) add(new THREE.ConeGeometry(0.18, 0.5, 6), steel, sx * 4.8 + (ax ? sx * 0.25 : 0), -1.2, sz * 7.3 + (ax ? 0 : sz * 0.3), { rx: ax ? 0 : sz * Math.PI / 2, rz: ax ? -sx * Math.PI / 2 : 0 });
+  add(new THREE.CylinderGeometry(0.05, 0.08, 6, 5), dark, -3.6, 1.6 + 3, 6.6);
+  add(new THREE.CylinderGeometry(0.04, 0.06, 4, 5), dark, 3.8, 1.6 + 2, 6.8, { rz: -0.3 });
+  add(new THREE.BoxGeometry(0.9, 0.9, 1.2), white, 3.2, -1.95, 5.5, { outline: 0.03 });
+  add(new THREE.CylinderGeometry(0.3, 0.3, 0.3, 10), toon(0x1d1a29), 3.2, -1.95, 6.15, { rx: Math.PI / 2 });
+  // the strobe mast at the bow
+  add(new THREE.CylinderGeometry(0.12, 0.18, 3.6, 6), dark, 0, 1.6 + 1.8, 6.8);
+  // lights: { mesh, period, duty, phase } (blinked in update)
+  const lights = [];
+  const lamp = (x, y, z, c, r, period, duty, phase) => {
+    const m = add(new THREE.SphereGeometry(r, 10, 8), glow(c), x, y, z);
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(r * 3.2, 10, 8), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.add(halo);
+    lights.push({ mesh: m, period, duty, phase });
+  };
+  lamp(-20.6, 0.3, 0, 0xff2a3a, 0.45, 1.4, 0.18, 0);
+  lamp(20.6, 0.3, 0, 0x7dff3a, 0.45, 1.4, 0.18, 0);
+  for (const [x, z, ph] of [[-4.4, 7.4, 0], [4.4, 7.4, 0.45], [4.4, -7.4, 0.9], [-4.4, -7.4, 1.35]]) lamp(x, 1.95, z, 0xffa21f, 0.32, 1.8, 0.5, ph);
+  lamp(0, 1.6 + 3.8, 6.8, 0xffffff, 0.55, 1.1, 0.08, 0.3);
+  lamp(0, -1.7, -7.6, 0xff2a3a, 0.3, 2.2, 0.5, 1.1);
+  const nameSign = textSprite('SAT-7 "LANTERN"', { color: '#ffd23f', size: 60, scale: 0.3, bg: '#120a1e' });
+  nameSign.position.set(0, 12, -4);
+  inner.add(nameSign);
+  // a big soft beacon so you can spot it in the sky (it swells with the mast strobe)
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
+  inner.add(halo);
+  // the artifact cradle on deck
+  const cradle = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.18, 8, 20), toon(0x2a2440));
+  cradle.rotation.x = Math.PI / 2;
+  cradle.position.set(0, 2.0, 2);
+  inner.add(cradle);
+  const artifact = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), glow(0x7dffd4));
+  artifact.position.set(0, 2.9, 2);
+  artifact.visible = withArtifact;
+  inner.add(artifact);
+  const aGlow = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 8), new THREE.MeshBasicMaterial({ color: 0x7dffd4, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }));
+  aGlow.position.copy(artifact.position);
+  aGlow.visible = artifact.visible;
+  inner.add(aGlow);
+  return { root, inner, nameSign, artifact, aGlow, lights, halo };
+}
 
 export class Secrets {
   constructor(game) {
@@ -407,106 +508,11 @@ export class Secrets {
     this.lowAt = lowAt;
     // a new game starts SAT-7 on the far side of the Moon from the ILMB, so it has to be found
     this.clock = this.state.satPhase ?? ((lowAt + Math.PI) * 3750) / SAT_SPEED;
-    // the model: built at 1:1 and scaled up by SAT_SCALE (its colliders scale to match). A foil-wrapped
-    // bus under a landing deck you can read from the air (hazard border, glowing landing ring, edge
-    // lights), framed solar wings, a dish with its feed, thrusters, antennas, and lights that blink
-    // to catch your eye: red/green wingtip strobes, amber deck beacons and a white strobe on a mast.
-    const root = new THREE.Group();
-    const inner = new THREE.Group();
-    inner.scale.setScalar(SAT_SCALE);
-    root.add(inner);
-    const add = (geo, mat, x, y, z, { rx = 0, ry = 0, rz = 0, outline = 0 } = {}) => {
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(x, y, z);
-      m.rotation.set(rx, ry, rz);
-      if (outline) ink(m, outline);
-      inner.add(m);
-      return m;
-    };
-    const gold = toon(0xc9a24a), foil = toon(0xe0b85a), dark = toon(0x3a3550), steel = toon(0x8a8f99), white = toon(0xf5f5f5);
-    // the bus: a gold-foil box with crinkled foil patches and a dark truss frame on its edges
-    add(new THREE.BoxGeometry(9, 3, 15), gold, 0, 0, 0, { outline: 0.12 });
-    for (const [x, y, z, w, h, d] of [[4.52, -0.2, -3, 0.06, 2.2, 5.5], [-4.52, 0.2, 2.5, 0.06, 2.0, 6], [4.52, 0.3, 4.2, 0.06, 1.6, 3], [0, -1.52, 2, 7, 0.06, 6]]) add(new THREE.BoxGeometry(w, h, d), foil, x, y, z);
-    for (const sx of [-1, 1]) for (const sy of [-1, 1]) add(new THREE.BoxGeometry(0.3, 0.3, 15.2), dark, sx * 4.5, sy * 1.5, 0);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.BoxGeometry(0.3, 3.2, 0.3), dark, sx * 4.5, 0, sz * 7.5);
-    // the landing deck: a dark plate with a yellow/black hazard border and a glowing ring to aim for
-    add(new THREE.BoxGeometry(9.4, 0.3, 15.4), dark, 0, 1.6, 0, { outline: 0.06 });
-    const hz1 = toon(0xffd23f), hz2 = toon(0x1d1a29);
-    for (let k = 0; k < 14; k++) {
-      const m = k % 2 ? hz2 : hz1;
-      add(new THREE.BoxGeometry(0.4, 0.06, 1.1), m, 4.45, 1.78, -7.15 + k * 1.1);
-      add(new THREE.BoxGeometry(0.4, 0.06, 1.1), m, -4.45, 1.78, -7.15 + k * 1.1);
-    }
-    for (let k = 0; k < 8; k++) {
-      const m = k % 2 ? hz2 : hz1;
-      add(new THREE.BoxGeometry(1.1, 0.06, 0.4), m, -3.85 + k * 1.1, 1.78, 7.45);
-      add(new THREE.BoxGeometry(1.1, 0.06, 0.4), m, -3.85 + k * 1.1, 1.78, -7.45);
-    }
-    add(new THREE.TorusGeometry(3.2, 0.16, 6, 36), glow(0x2ee6ff), 0, 1.8, 2, { rx: Math.PI / 2 }); // (centred on the artifact's cradle)
-    add(new THREE.TorusGeometry(1.4, 0.1, 6, 24), glow(0x2ee6ff), 0, 1.8, 2, { rx: Math.PI / 2 });
-    for (const [x, z] of [[-3.5, -6.5], [3.5, -6.5], [-3.5, 6.5], [3.5, 6.5], [-3.5, 0], [3.5, 0]]) add(new THREE.CylinderGeometry(0.16, 0.2, 0.15, 8), glow(0xfff6a8), x, 1.82, z);
-    // solar wings: arms with a hinge, framed panels with a proper grid of cells
-    for (const s2 of [-1, 1]) {
-      add(new THREE.BoxGeometry(4, 0.4, 0.4), steel, s2 * 6.5, 0, 0, { outline: 0.03 });
-      add(new THREE.CylinderGeometry(0.45, 0.45, 0.9, 10), dark, s2 * 8.3, 0, 0, { rx: Math.PI / 2, outline: 0.03 });
-      add(new THREE.BoxGeometry(12, 0.3, 7), toon(0x2b59c3), s2 * 14.5, 0, 0, { outline: 0.06 });
-      add(new THREE.BoxGeometry(12.3, 0.36, 0.25), steel, s2 * 14.5, 0, 3.55);
-      add(new THREE.BoxGeometry(12.3, 0.36, 0.25), steel, s2 * 14.5, 0, -3.55);
-      for (let k = 0; k <= 6; k++) add(new THREE.BoxGeometry(0.12, 0.34, 7), toon(0x9be7ff), s2 * (8.5 + k * 2), 0, 0);
-      for (const z of [-1.75, 0, 1.75]) add(new THREE.BoxGeometry(12, 0.34, 0.1), toon(0x9be7ff), s2 * 14.5, 0, z);
-    }
-    // the dish under the bus, with its feed spoke and receiver
-    add(new THREE.SphereGeometry(2.4, 16, 8, 0, Math.PI * 2, 0, Math.PI / 3), toon(0xf5f5f5, { side: THREE.DoubleSide }), 0, -1.6, -5, { rx: Math.PI });
-    add(new THREE.CylinderGeometry(0.08, 0.1, 2.6, 6), dark, 0, -2.9, -5);
-    add(new THREE.SphereGeometry(0.3, 8, 6), glow(0xff9f1c), 0, -4.2, -5);
-    // thrusters at the stern, attitude jets on the corners, antennas and a star tracker
-    for (const sx of [-2, 2]) {
-      add(new THREE.CylinderGeometry(0.9, 1.4, 1.8, 12, 1, true), toon(0x5b5870, { side: THREE.DoubleSide }), sx, -0.2, -8.4, { rx: Math.PI / 2, outline: 0.04 });
-      add(new THREE.CylinderGeometry(0.85, 0.85, 0.1, 12), glow(0x4fb8ff), sx, -0.2, -7.6, { rx: Math.PI / 2 });
-    }
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) for (const ax of [0, 1]) add(new THREE.ConeGeometry(0.18, 0.5, 6), steel, sx * 4.8 + (ax ? sx * 0.25 : 0), -1.2, sz * 7.3 + (ax ? 0 : sz * 0.3), { rx: ax ? 0 : sz * Math.PI / 2, rz: ax ? -sx * Math.PI / 2 : 0 });
-    add(new THREE.CylinderGeometry(0.05, 0.08, 6, 5), dark, -3.6, 1.6 + 3, 6.6);
-    add(new THREE.CylinderGeometry(0.04, 0.06, 4, 5), dark, 3.8, 1.6 + 2, 6.8, { rz: -0.3 });
-    add(new THREE.BoxGeometry(0.9, 0.9, 1.2), white, 3.2, -1.95, 5.5, { outline: 0.03 });
-    add(new THREE.CylinderGeometry(0.3, 0.3, 0.3, 10), toon(0x1d1a29), 3.2, -1.95, 6.15, { rx: Math.PI / 2 });
-    // the strobe mast at the bow
-    add(new THREE.CylinderGeometry(0.12, 0.18, 3.6, 6), dark, 0, 1.6 + 1.8, 6.8);
-    // lights: { mesh, period, duty, phase } (blinked in update)
-    const lights = [];
-    const lamp = (x, y, z, c, r, period, duty, phase) => {
-      const m = add(new THREE.SphereGeometry(r, 10, 8), glow(c), x, y, z);
-      const halo = new THREE.Mesh(new THREE.SphereGeometry(r * 3.2, 10, 8), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
-      m.add(halo);
-      lights.push({ mesh: m, period, duty, phase });
-    };
-    lamp(-20.6, 0.3, 0, 0xff2a3a, 0.45, 1.4, 0.18, 0);
-    lamp(20.6, 0.3, 0, 0x7dff3a, 0.45, 1.4, 0.18, 0);
-    for (const [x, z, ph] of [[-4.4, 7.4, 0], [4.4, 7.4, 0.45], [4.4, -7.4, 0.9], [-4.4, -7.4, 1.35]]) lamp(x, 1.95, z, 0xffa21f, 0.32, 1.8, 0.5, ph);
-    lamp(0, 1.6 + 3.8, 6.8, 0xffffff, 0.55, 1.1, 0.08, 0.3);
-    lamp(0, -1.7, -7.6, 0xff2a3a, 0.3, 2.2, 0.5, 1.1);
-    const nameSign = textSprite('SAT-7 "LANTERN"', { color: '#ffd23f', size: 60, scale: 0.3, bg: '#120a1e' });
-    nameSign.position.set(0, 12, -4);
-    inner.add(nameSign);
-    // a big soft beacon so you can spot it in the sky (it swells with the mast strobe)
-    const halo = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
-    inner.add(halo);
-    // the artifact cradle on deck
-    const cradle = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.18, 8, 20), toon(0x2a2440));
-    cradle.rotation.x = Math.PI / 2;
-    cradle.position.set(0, 2.0, 2);
-    inner.add(cradle);
-    const artifact = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), glow(0x7dffd4));
-    artifact.position.set(0, 2.9, 2);
-    artifact.visible = !this.state.artifactTaken;
-    inner.add(artifact);
-    const aGlow = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 8), new THREE.MeshBasicMaterial({ color: 0x7dffd4, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }));
-    aGlow.position.copy(artifact.position);
-    aGlow.visible = artifact.visible;
-    inner.add(aGlow);
+    const { root, nameSign, artifact, aGlow, lights, halo } = makeSat7(!this.state.artifactTaken);
     root.frustumCulled = false;
     g.scene.add(root);
     // it behaves like a moving platform you can land on (body + both solar panels)
-    this.sat = { root, nameSign, artifact, aGlow, lights, halo, pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(), cols: [], passAlert: 0 };
+    this.sat = { root, nameSign, artifact, aGlow, lights, halo, pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(), cols: [] };
     this.placeSat(0);
     this.sat.prevPos.copy(this.sat.pos);
   }
@@ -571,13 +577,6 @@ export class Secrets {
     S.artifact.rotation.y += dt * 1.5;
     S.nameSign.visible = S.pos.distanceTo(P.pos) > 45; // don't fill the screen while you're aboard
     S.aGlow.scale.setScalar(1 + Math.sin(S.t * 4) * 0.15);
-    // heads-up when it's coming in low near you
-    const d = S.pos.distanceTo(P.pos);
-    S.passAlert -= dt;
-    if (d < 1600 && S.passAlert <= 0 && g.planet.visible(P.center, S.pos)) {
-      S.passAlert = 90;
-      g.hud.toast(`📡 SAT-7 "LANTERN" passing ${Math.round(S.pos.length() - g.planet.surface(S.pos))} m up${this.state.artifactTaken ? '' : ' (something on its deck is glowing)'}`, 4);
-    }
     if (P.body.platform === S && !S.landedOnce) {
       S.landedOnce = true;
       g.style(200, 'ORBITAL LANDING');
@@ -643,15 +642,12 @@ export class Secrets {
     g.fx.pop('ALIEN ARTIFACT ACQUIRED!', null, { color: '#7dffd4', size: 64, life: 2 });
     g.hud.toast('It sealed itself into a compartment of your jar. It hums louder when you face the twilight side…', 5);
   }
-
-  // is the satellite pin worth drawing on the globe map
-  mapInfo() { return { pos: this.sat.pos, orbit: this.orbit, radius: this.radius, theta: this.satTheta() }; }
 }
 
 // The Xenoglide skates on the shrine's pedestal: the same build as a runner's skates (shell boot,
 // cuff, chassis, hover rail) at display size, in dark shaded alien alloy with glowing seams, a swept
 // crystal heel fin, emitter rings round the rail and a ring of shards orbiting the pair.
-function makeXenoSkates() {
+export function makeXenoSkates() {
   const shell = toon(0x2e2652), plate = toon(0x8f86c8), alloy = toon(0x5ef0c8);
   const seam = glow(0x7dffd4), violet = glow(0xc77dff);
   const add = (parent, geo, mat, x, y, z, t = 0.02, rot) => {

@@ -8,6 +8,10 @@ export const WEAPONS = [
   { key: 'mortar', name: 'Rustmoon Junk Mortar', unlock: 'mortar', delay: 1.2, desc: 'Lobbed scrap bomb, huge blast' },
 ];
 
+// The Vostok BTR-M's turret cannon (vehicles.js turretFire): while you drive the APC, left mouse fires this
+// from the barrel, wherever the camera points, instead of the runner's own weapons.
+export const APC_CANNON = { key: 'apccannon', name: 'BTR-M 30 mm Cannon', delay: 0.5, desc: 'Heavy high-explosive shell from the turret' };
+
 const _v = new THREE.Vector3();
 
 export function weaponUnlocked(w, upgrades) {
@@ -20,6 +24,7 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
   if (w.key === 'pulse') {
     g.projectiles.fire('player', muzzle, dir.clone().multiplyScalar(115).addScaledVector(inherit, 0.5), { damage: 34 * mult, splash: 7, color: g.cosmetics ? g.cosmetics.laserColor : 0x9be7ff, size: 0.45, knock: 1.6, homing });
     g.audio.shoot();
+    g.haptics.play('pulse');
   } else if (w.key === 'scatter') {
     const right = _v.crossVectors(dir, P.up).normalize().clone();
     const up = new THREE.Vector3().crossVectors(right, dir).normalize();
@@ -29,15 +34,24 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
       g.projectiles.fire('player', muzzle, d.multiplyScalar(175).addScaledVector(inherit, 0.6), { damage: 17 * mult, splash: 3, color: 0xffb02e, size: 0.27, knock: 0.6, life: 1.15 });
     }
     g.audio.burst(0.25, 2400, 0.4);
+    g.haptics.play('scatter');
     g.cam.shake = Math.max(g.cam.shake, 0.25);
   } else if (w.key === 'rail') {
-    // hitscan: stops at the ground, pierces everything in between
+    // hitscan: it pierces targets, buildings and traffic, but the ground and any rock stop it
+    // (and so nothing behind them is hit). The ground is marched in 4 m steps then narrowed down.
     let len = 650;
-    for (let i = 1; i <= 80; i++) {
-      const t = (i / 80) * 650;
-      _v.copy(muzzle).addScaledVector(dir, t);
-      if (g.planet.altitude(_v) < 0) { len = t; break; }
+    for (let t = 4; t <= 650; t += 4) {
+      if (g.planet.altitude(_v.copy(muzzle).addScaledVector(dir, t)) >= 0) continue;
+      let lo = t - 4, hi = t;
+      for (let i = 0; i < 7; i++) {
+        const mid = (lo + hi) / 2;
+        if (g.planet.altitude(_v.copy(muzzle).addScaledVector(dir, mid)) < 0) hi = mid; else lo = mid;
+      }
+      len = lo;
+      break;
     }
+    const rock = g.planet.rockRay(muzzle, dir, len);
+    if (rock < len) len = Math.max(0, rock - 0.05);
     const end = muzzle.clone().addScaledVector(dir, len);
     for (const t of g.enemies.targets()) {
       const rel = t.center.clone().sub(muzzle);
@@ -57,10 +71,27 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
     g.fx.beam(muzzle, end, 0xc77dff);
     g.fx.explosion(end, 3, false);
     g.audio.tone(1600, 0.35, 'sawtooth', 0.15, 0.2);
+    g.haptics.play('rail');
     g.cam.shake = Math.max(g.cam.shake, 0.35);
   } else if (w.key === 'mortar') {
     const d = dir.clone().addScaledVector(P.up, 0.28).normalize();
     g.projectiles.fire('player', muzzle, d.multiplyScalar(100).addScaledVector(inherit, 0.5), { damage: 70 * mult, splash: 13, color: 0x7dff3a, size: 0.8, knock: 2.2, gravity: 20, life: 6 });
     g.audio.tone(140, 0.3, 'square', 0.25, 0.5);
+    g.haptics.play('mortar');
   }
+}
+
+// One round from the APC cannon: a heavy tracer shell (projectiles.js type 'shell') with a flash at the muzzle.
+// `muzzle` is the barrel's mouth, `dir` the way the barrel points, `inherit` the vehicle's velocity.
+export function fireCannon(g, muzzle, dir, inherit, mult = 1) {
+  g.projectiles.fire('player', muzzle, dir.clone().multiplyScalar(170).addScaledVector(inherit, 0.6), {
+    type: 'shell', damage: 55 * mult, splash: 9, color: 0xff8a2a, size: 0.5, knock: 2, gravity: 3, life: 3.2, spare: true,
+  });
+  const up = g.player.up;
+  g.fx.spawn(muzzle, dir.clone().multiplyScalar(14).add(inherit), { color: 0xffe08a, size: 0.8, life: 0.18, count: 5, spread: 3, drag: 4 });
+  g.fx.spawn(muzzle, dir.clone().multiplyScalar(5).addScaledVector(up, 1), { color: 0x4a4560, size: 1.0, life: 0.8, count: 4, spread: 2.5, drag: 1.5 });
+  g.audio.tone(95, 0.3, 'square', 0.3, 0.35);
+  g.audio.burst(0.3, 1600, 0.45);
+  g.haptics.play('cannon');
+  g.cam.shake = Math.max(g.cam.shake, 0.3);
 }

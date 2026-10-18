@@ -1,17 +1,27 @@
-// Powers: the actives you've earned, all on one key. Z uses the selected one; the mouse wheel steps
-// through them. A chip by the weapon readout shows which power Z will use and whether it's ready.
+// Powers: the actives you've earned, all on one key. E uses the selected one; the mouse wheel steps
+// through them. A chip by the weapon readout shows which power E will use and whether it's ready.
 //
 //   dash      Daedalus Phase Dash (story tech)
 //   teleport  Meridian Personal Teleporter (story tech; T still works)
-//   winch     Kepler Hitch-Line Winch (hold Z: winch.js)
+//   vanes     Meridian Quantum Slipstream Vanes (story tech: steer in the air for 10 s, story.js)
+//   winch     Kepler Hitch-Line Winch (E toggles it: winch.js)
 //   pen       Dr. Zbornak's holding-pen link (P still works)
+//   meteor    dev: drops a meteor on you (granted the first time the dev menu's SPAWN A METEOR ON ME is used: cheats.js)
+//
+// On a controller, d-pad ↓ opens the radial menu and its POWERS wedge opens the power wheel (below): the
+// right stick picks one, A equips it (what a notch of the mouse wheel does), and RB / E then uses it.
+
+import { glyphHtml } from './glyphs.js';
+import { DEV_TOOLS } from './devtools.js';
 
 const KEY = 'mr-power';
 const POWERS = {
   dash: { name: 'Phase Dash', has: (g) => g.story.tech.includes('dash'), cd: (g) => g.story.techCd.dash || 0 },
   teleport: { name: 'Teleporter', has: (g) => g.story.tech.includes('teleport'), cd: (g) => g.story.techCd.teleport || 0 },
-  winch: { name: 'Hitch-Line Winch', has: (g) => (g.upgrades.winch || 0) > 0, cd: (g) => (g.winch.on ? 0 : g.winch.cd) },
+  vanes: { name: 'Slipstream Vanes', has: (g) => g.story.tech.includes('vanes'), cd: (g) => (g.story.vanesActive() ? 0 : g.story.techCd.vanes || 0), status: (g) => (g.story.vanesActive() ? `ON ${Math.ceil(g.story.vanesT)} s` : null) },
+  winch: { name: 'Hitch-Line Winch', has: (g) => (g.upgrades.winch || 0) > 0, cd: (g) => (g.winch.on ? 0 : g.winch.cd), status: (g) => g.winch.status() },
   pen: { name: 'Pen Link', has: (g) => (g.upgrades.penlink || 0) > 0, cd: () => 0 },
+  ...(DEV_TOOLS ? { meteor: { name: 'Meteor Spawn (dev)', has: (g) => !!(g.cheats && g.cheats.meteorPower), cd: () => 0 } } : {}),
 };
 
 export class Powers {
@@ -20,6 +30,8 @@ export class Powers {
     try { this.sel = localStorage.getItem(KEY) || null; } catch { this.sel = null; }
     this.chipT = 0;
     this.flash = 0;
+    this.radial = null; // the open power wheel: { sel, items, hub, t } (null while closed)
+    this.radialEl = null;
   }
 
   owned() { return Object.keys(POWERS).filter((k) => POWERS[k].has(this.game)); }
@@ -47,11 +59,101 @@ export class Powers {
     this.game.audio.tone(dir > 0 ? 760 : 640, 0.05, 'square', 0.05);
   }
 
+  // what a power's readout says: what it's doing right now (the winch's cable, the Vanes being on), else READY or how long until it is
+  status(k) {
+    const g = this.game, P = POWERS[k], cd = P.cd(g);
+    return (P.status && P.status(g)) || (cd > 0 ? `${Math.ceil(cd)} s` : 'READY');
+  }
+
+  // ---- the power wheel (the same wheel as the controller's menu and the vehicles': gamepad.js) ----
+  // Opened from the menu's POWERS wedge and sticky: the right stick picks (the pick stays until you pick another),
+  // A equips it, d-pad ↓ equips the pick or closes the wheel if none is picked, B / Start cancels. The equipped
+  // power has an orange edge. Every power you own is on the wheel, so a wheel of one is just a look at it.
+  openRadial() {
+    const items = this.owned();
+    if (!items.length) return;
+    if (!this.radialEl) {
+      this.radialEl = document.createElement('div');
+      this.radialEl.id = 'powradial';
+      document.getElementById('hud').appendChild(this.radialEl);
+    }
+    this.radial = { sel: -1, items, hub: '', t: 0 };
+    const n = items.length;
+    this.radialEl.innerHTML = '<div class="pr-ring"></div><div class="pr-hub"></div>' + items.map((k, i) => {
+      const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+      return `<div class="pr-item" data-i="${i}" style="left:${50 + Math.cos(a) * 38}%;top:${50 + Math.sin(a) * 38}%"><b>${POWERS[k].name}</b><small></small></div>`;
+    }).join('');
+    this.radialEl.classList.remove('hidden');
+    this.radialDraw();
+    this.game.audio.tone(520, 0.08, 'triangle', 0.12);
+  }
+
+  // the wedges' readouts and which one is equipped (a few times a second: the winch's reads its target)
+  radialDraw() {
+    const R = this.radial;
+    if (!R) return;
+    const cur = this.current();
+    this.radialEl.querySelectorAll('.pr-item').forEach((it) => {
+      const k = R.items[+it.dataset.i];
+      const cd = POWERS[k].cd(this.game) > 0;
+      const s = it.querySelector('small'), t = this.status(k);
+      if (s.textContent !== t) s.textContent = t;
+      it.classList.toggle('cd', cd);
+      it.classList.toggle('cur', k === cur);
+    });
+    this.radialHub();
+  }
+
+  // the middle of the wheel: the picked power (or the title) and what the buttons do
+  radialHub() {
+    const R = this.radial;
+    if (!R) return;
+    const k = R.sel >= 0 ? R.items[R.sel] : null;
+    const hub = `<b>${k ? POWERS[k].name : 'POWERS'}</b><small><span>${glyphHtml(['RS'])} pick</span><span>${glyphHtml(['A'])} equip</span><span>${glyphHtml(['B'])} cancel</span></small>`;
+    if (R.hub !== hub) { R.hub = hub; this.radialEl.querySelector('.pr-hub').innerHTML = hub; }
+  }
+
+  // the wheel's highlight: -1 for none
+  radialSelect(sel) {
+    const R = this.radial;
+    if (!R || sel === R.sel) return;
+    R.sel = sel;
+    for (const el of this.radialEl.querySelectorAll('.pr-item')) el.classList.toggle('on', +el.dataset.i === sel);
+    if (sel >= 0) this.game.audio.tone(700 + sel * 60, 0.04, 'square', 0.05);
+    this.radialHub();
+  }
+
+  // the right stick: pushing it picks a wedge, and the pick stays until you push to another
+  radialStick(rx, ry) {
+    const R = this.radial;
+    if (!R || Math.hypot(rx, ry) <= 0.55) return;
+    const n = R.items.length;
+    const a = Math.atan2(rx, -ry); // 0 at the top, clockwise
+    this.radialSelect(((Math.round((a / (Math.PI * 2)) * n) % n) + n) % n);
+  }
+
+  // the picked power, or null for none
+  radialPick() {
+    const R = this.radial;
+    return R && R.sel >= 0 ? R.items[R.sel] : null;
+  }
+
+  // (not while the cable's on: swapping mid-swing would drop you, the same as the mouse wheel)
+  pickable(k) { return !k || k === this.current() || !this.game.winch.on; }
+
+  closeRadial(commit) {
+    const k = commit ? this.radialPick() : null;
+    this.radial = null;
+    if (this.radialEl) this.radialEl.classList.add('hidden');
+    if (k && k !== this.current() && this.pickable(k)) { this.select(k); this.game.audio.tone(760, 0.05, 'square', 0.05); }
+  }
+
   use(k) {
     const g = this.game;
-    if (k === 'dash' || k === 'teleport') g.story.useTech(k);
-    else if (k === 'winch') g.winch.fire();
+    if (k === 'dash' || k === 'teleport' || k === 'vanes') g.story.useTech(k);
+    else if (k === 'winch') { if (g.winch.on) g.winch.release(); else g.winch.fire(); } // (E again lets go)
     else if (k === 'pen') g.alchemy.penMenu();
+    else if (k === 'meteor') g.cheats.spawnMeteor(false);
   }
 
   // each frame in play (input is the game's)
@@ -61,14 +163,16 @@ export class Powers {
     // (not while the cable's on: swapping mid-swing would drop you)
     const steps = I.consumeWheel();
     if (steps && !g.winch.on) this.cycle(steps > 0 ? 1 : -1);
-    if (I.pressed('KeyZ')) {
+    const limp = !!g.player.rag; // (a ragdoll can't use powers)
+    if (I.pressed('KeyE') && !limp) {
       const k = this.current();
       if (k) this.use(k);
-      else g.hud.toast('No powers yet. Phase Dash, the Teleporter, the Kepler winch and the pen link all go on Z.', 2.5);
+      else g.hud.toast('No powers yet. Phase Dash, the Teleporter, the Kepler winch and the pen link all go on E.', 2.5);
     }
-    // the winch holds while Z does
-    g.winch.update(dt, I.down('KeyZ') && this.current() === 'winch');
+    // the winch stays on until E is pressed again (or it runs out, snaps or slips)
+    g.winch.update(dt, this.current() === 'winch' && !limp);
     if (this.flash > 0) this.flash -= dt;
+    if (this.radial && (this.radial.t -= dt) <= 0) { this.radial.t = 0.1; this.radialDraw(); }
     this.chipT -= dt;
     if (this.chipT <= 0) { this.chipT = 0.2; this.drawChip(); }
   }
@@ -87,9 +191,9 @@ export class Powers {
     if (!k) { el.classList.add('hidden'); return; }
     el.classList.remove('hidden');
     const cd = POWERS[k].cd(g);
-    const extra = k === 'winch' ? g.winch.status() : cd > 0 ? `${Math.ceil(cd)} s` : 'READY';
+    const extra = this.status(k);
     const many = this.owned().length > 1;
     el.classList.toggle('swap', this.flash > 0);
-    el.innerHTML = `<b>Z</b> ${POWERS[k].name.toUpperCase()} <span class="${cd > 0 ? 'pc-cd' : 'pc-ok'}">${extra}</span>${many ? ` <small>WHEEL: ${this.owned().indexOf(k) + 1}/${this.owned().length}</small>` : ''}`;
+    el.innerHTML = `<b>E</b> ${POWERS[k].name.toUpperCase()} <span class="${cd > 0 ? 'pc-cd' : 'pc-ok'}">${extra}</span>${many ? ` <small>WHEEL: ${this.owned().indexOf(k) + 1}/${this.owned().length}</small>` : ''}`;
   }
 }

@@ -3,7 +3,7 @@
 // reactor, charges, sensor pylons, ballot stands, phase emitters) and the outposts you found.
 // Everything is kit-built (outpostModels.js) like the settlements, so it reads as the same world.
 import * as THREE from 'three';
-import { Kit, T, G, D, GLASS, BEAM, crate, sandbags } from './outpostModels.js';
+import { Kit, T, G, GLASS, BEAM, crate, sandbags } from './outpostModels.js';
 import { rWheel, makeTurret } from './models.js';
 import { habDome, cabin, lattice, quonset } from './settlements.js';
 
@@ -186,7 +186,8 @@ const PROPS = {
     k.at(0, 0, 0, 2.2); // the mast stands on the container's roof
     lattice(k, -0.6, 0, 11, 0.8, 0.3, 4, T(LT), T(DK), { r: 0.12 });
     k.at();
-    k.add(new THREE.SphereGeometry(1.4, 14, 6, 0, Math.PI * 2, 0, 0.8).rotateX(-Math.PI / 2 + 0.3), T(CREAM), -0.6, 10.2, 0.6, { outline: 0.05 });
+    k.beam([-0.6, 9.4, 0.2], [-0.6, 9.4, 0.7], 0.08, T(DK));
+    k.dishHead(-0.6, 9.4, 0.7, 1.0, 'spacecom', { az: Math.PI, el: -1.2 });
     k.ball(0.3, G(0x2ec4ff), -0.6, 13.4, 0, { outline: 0 });
     k.ball(0.2, G(0xff2a4a), 1.8, 2.6, 1.0, { outline: 0 });
   },
@@ -331,11 +332,18 @@ export function makeProp(kind) {
 // or a research block with a dish (labs), on a paved apron, with the modules you build standing on
 // their plots round it. Returns a kit template ({ root, cols, ... }) for territory.place().
 // ---------------------------------------------------------------------------------------------
-export const BUILT_R = 40, MOD_R = 26, TERMINAL_Z = 16.4;
-const MODS_ORDER = ['greenhouse', 'clinic', 'beacon', 'turret', 'market', 'garage'];
+export const BUILT_R = 40, MOD_R = 26, TERMINAL_Z = 16.4, PLOTS = 6, TURRET_H = 8;
+// one set of numbers for the gun logic (territory.js), the terminal page (story.js) and the barrel tip
+// (head-local: the twin barrels sit at x +-0.42 and end about z 4.1, see models.js turretParts)
+export const OUTPOST_GUN = { range: 300, turn: 2.5, pitchTurn: 1.5, interval: 0.9, speed: 150, damage: 26, splash: 5, cone: 0.2, pitchCone: 0.25, tip: [0.42, -0.1, 4.1] };
+// modules with a stand of their own that are not one of the six plots (they never count against PLOTS)
+const T2_A = 0.6 + Math.PI / 6, T2_R = 30;
+export const EXTRA_MODS = { turret2: { as: 'turret', x: Math.cos(T2_A) * T2_R, z: Math.sin(T2_A) * T2_R } };
 
 export function foundedTemplate(kind, color, modules) {
-  const key = `founded|${kind}|${color}|${modules.join(',')}`;
+  const plots = modules.filter((m) => !EXTRA_MODS[m]); // plot i <- the i-th ordinary module
+  const extras = Object.keys(EXTRA_MODS).filter((m) => modules.includes(m));
+  const key = `founded|${kind}|${color}|${plots.join(',')}|${extras.join(',')}`;
   return bake(key, (k) => {
     k.at();
     k.cyl(BUILT_R - 4, BUILT_R - 3, 0.3, 48, T(0x8a8698), 0, 0, 0, { outline: 0.06 });
@@ -347,7 +355,7 @@ export function foundedTemplate(kind, color, modules) {
       cabin(k, 0, 0, 16, 10, 6, 0xeeecf6, 0, { trim: color });
       k.at();
       k.cyl(1.2, 1.5, 1.4, 10, T(DK), -4, 6.9, -1, { outline: 0.03 });
-      k.add(new THREE.SphereGeometry(3, 16, 6, 0, Math.PI * 2, 0, 0.8).rotateX(-0.9), T(CREAM), -4, 9.4, -1, { outline: 0.05 });
+      k.dishHead(-4, 8.3, -1, 2.1, color, { az: Math.PI, el: -0.8 });
       k.add(new THREE.SphereGeometry(2.4, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), GLASS(0x9be7ff, 0.35), 4.5, 7.0, -1.5, { outline: 0 });
       k.box(10, 0.8, 0.12, G(WARM), 0, 3.4, 5.06, { outline: 0 });
       k.solid(8, 3.5, 5, 0, 0);
@@ -360,13 +368,19 @@ export function foundedTemplate(kind, color, modules) {
     k.box(1.1, 0.7, 0.06, G(color), 0, 1.2, TERMINAL_Z + 0.42, { outline: 0 });
     k.flag(-12, 9, 14, color);
     // module plots: built ones get their building, the rest a glowing marker ring
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 + 0.6;
+    for (let i = 0; i < PLOTS; i++) {
+      const a = (i / PLOTS) * Math.PI * 2 + 0.6;
       const x = Math.cos(a) * MOD_R, z = Math.sin(a) * MOD_R;
       const face = Math.atan2(-x, -z); // doors towards the hub
-      const mod = modules[i];
+      const mod = plots[i];
       if (!mod) { k.at(); k.ring(5.5, 0.12, G(color), x, 0.35, z); continue; }
       buildModule(k, mod, x, z, face, color);
+      k.at();
+    }
+    // the extras: their own stand beside the gate, a marker ring once what they need is built
+    for (const [id, E] of Object.entries(EXTRA_MODS)) {
+      if (modules.includes(id)) buildModule(k, E.as, E.x, E.z, Math.atan2(-E.x, -E.z), color);
+      else if (modules.includes(E.as)) { k.at(); k.ring(3.4, 0.12, G(color), E.x, 0.35, E.z); }
       k.at();
     }
   }, color);
@@ -398,11 +412,7 @@ function buildModule(k, mod, x, z, face, color) {
     k.ball(0.75, G(color), 0, 17.2, 0, { outline: 0 });
     k.column(1.5, 16, 0, 0);
   } else if (mod === 'turret') {
-    k.at(x, z, face);
-    k.cyl(3.4, 3.8, 0.6, 14, T(CONC), 0, 0, 0, { outline: 0.04 });
-    sandbags(k, 0, 0, 3.6, -2.4, 2.4, 2);
-    k.dyn(makeTurret({ color }).root, 0, 0.6, 0);
-    k.column(2.4, 4, 0, 0);
+    turretStand(k, x, z, face, color);
   } else if (mod === 'market') {
     k.at(x, z, face);
     k.box(9, 0.3, 6, T(CONC), 0, 0, 0, { outline: 0.03 });
@@ -417,4 +427,28 @@ function buildModule(k, mod, x, z, face, color) {
   }
 }
 
-export { MODS_ORDER };
+// A militia gun on an armoured stand like the ones in the larger settlements (world.js defensePylons):
+// an octagonal column with faction bands and a ladder up the hub side, a railed deck, sandbags round the
+// outer foot. The stand is baked into the kit's merged meshes (no extra draw calls); only the turret
+// itself is a live object, and its head carries the tag territory.findGuns looks for.
+function turretStand(k, x, z, face, color) {
+  k.at(x, z, face);
+  const h = TURRET_H; // deck height; the head pivot (h + 3.1) clears the hub dome's 11 m apex
+  k.add(new THREE.CylinderGeometry(2.4, 2.9, 0.9, 8), T(0x3a3550), 0, 0.45, 0, { outline: 0.08 }); // foot flare
+  k.add(new THREE.CylinderGeometry(0.95, 1.35, h, 8), T(0x5b5870), 0, h / 2, 0, { outline: 0.1 }); // column
+  for (const y of [h * 0.3, h * 0.62]) k.add(new THREE.CylinderGeometry(1.25 - y * 0.03, 1.3 - y * 0.03, 0.35, 8), T(color), 0, y, 0, { outline: 0 }); // faction bands
+  // ladder rails and rungs on the hub side (+z); z 1.2 so the rungs meet the tapering column
+  for (const sx of [-0.35, 0.35]) k.add(new THREE.BoxGeometry(0.08, h - 1, 0.08), T(DK), sx, h / 2, 1.2, { outline: 0 });
+  for (let y = 1.2; y < h - 0.8; y += 0.8) k.add(new THREE.BoxGeometry(0.75, 0.06, 0.06), T(DK), 0, y, 1.2, { outline: 0 });
+  k.add(new THREE.CylinderGeometry(2.7, 2.1, 0.7, 10), T(0x3a3550), 0, h - 0.35, 0, { outline: 0.08 }); // deck
+  for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; k.add(new THREE.BoxGeometry(0.1, 0.9, 0.1), T(ST), Math.cos(a) * 2.65, h + 0.45, Math.sin(a) * 2.65, { outline: 0 }); } // rail posts
+  k.add(new THREE.TorusGeometry(2.65, 0.08, 4, 20).rotateX(Math.PI / 2), T(color), 0, h + 0.9, 0, { outline: 0 });
+  k.add(new THREE.TorusGeometry(2.7, 0.14, 6, 16).rotateX(Math.PI / 2), G(color), 0, h - 0.35, 0, { outline: 0 }); // glow ring
+  sandbags(k, 0, 0, 3.8, 0.74, 5.54, 2); // the outer arc; the gap round +z is the ladder side
+  const t = makeTurret({ color });
+  t.head.userData.outpostGun = true; // plain data only: Object3D.clone() copies userData as JSON
+  k.dyn(t.root, 0, h, 0);
+  k.column(1.6, h, 0, 0); // the stand
+  k.column(2.2, h + 3.8, 0, 0, h); // the gun body (as enemies.setupBase)
+}
+

@@ -4,6 +4,7 @@ import { PLANET } from './config.js';
 import { SUN, E1, E2, arcDist } from './geo.js';
 import { FACTIONS, SHOPS } from './locations.js';
 import { pixelFont } from './fonts.js';
+import { SWEEP } from './radio.js';
 
 const RES = 32; // exploration cells per cube-face edge (~180 m)
 const KEY = 'moonrunner-explore-v1';
@@ -34,10 +35,17 @@ export class GlobeMap {
     this.zoom = 1;
     this.revealT = 0;
     this.saveT = 0;
+    this.laySig = null; // what the ground layer was last drawn for (see draw())
+    this.mode = null; // 'radio': opened from the Radio Tower, where a click in the fog sends a sweep (setMode)
+    this.aim = null; // radio mode: the point under the pointer, and the cell it is in
+    this.aimCell = -1;
+    this.aimOk = false;
+    this.radioMsg = ''; // what the tower last said to a pick it refused
     this.load();
     for (const l of game.locations) l.discovered = this.discovered.has(l.id);
     this.bindDrag();
     this.buildLegend();
+    this.buildRadioPanel();
   }
 
   // The key beside the map: every symbol drawn just as the map draws it, and the faction colours.
@@ -65,6 +73,7 @@ export class GlobeMap {
         [icon((c) => dot(c, '#7dff3a', 4.5)), 'Pirate camp'],
         [icon((c) => { dot(c, '#ff3b5c', 4); c.strokeStyle = '#ff2a4a'; c.lineWidth = 1.5; c.beginPath(); c.arc(0, 0, 9.5, 0, Math.PI * 2); c.stroke(); }), 'Restricted airspace'],
         [icon((c) => { diamond(c, '#ff9f1c', ink, 4.5); }), 'Outpost'],
+        [icon((c) => { c.lineCap = 'round'; c.beginPath(); c.moveTo(-12, 3); c.quadraticCurveTo(0, -7, 12, 3); c.strokeStyle = 'rgba(18,10,30,0.8)'; c.lineWidth = 5; c.stroke(); c.strokeStyle = '#e9cf94'; c.lineWidth = 2.4; c.stroke(); }), 'Road'],
       ]],
       ['MARKERS', [
         [icon((c) => { c.rotate(Math.PI / 4); c.fillStyle = '#ff4f2e'; c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.moveTo(0, -9); c.lineTo(7, 7); c.lineTo(0, 3); c.lineTo(-7, 7); c.closePath(); c.fill(); c.stroke(); }), 'You'],
@@ -96,6 +105,23 @@ export class GlobeMap {
     el.classList.toggle('folded', folded);
     el.querySelector('.lg-fold').addEventListener('click', (e) => { e.stopPropagation(); set(true); });
     el.querySelector('.lg-tab').addEventListener('click', (e) => { e.stopPropagation(); set(false); });
+  }
+
+  // The Radio Tower's panel beside the map (radio mode only): what the sweep is doing and has found, and its stop / resume button.
+  buildRadioPanel() {
+    const row = document.querySelector('.globe-row');
+    if (!row) return;
+    const el = this.radioEl = document.createElement('aside');
+    el.id = 'globe-radio';
+    el.className = 'hidden';
+    el.innerHTML = '<div class="gr-head">RADIO TOWER</div><div class="gr-body"><div class="gr-name"></div>'
+      + '<div class="gr-row"><label>STATUS</label><b class="gr-status"></b></div><div class="gr-row"><label>RADIUS</label><b class="gr-r cr"></b></div>'
+      + `<div class="otm-meter"><div class="otm-bar"><i class="gr-bar"></i></div><span>MAX ${SWEEP.max.toLocaleString('en-US')} m</span></div><div class="gr-row"><label>NEW GROUND</label><b class="gr-cells cr"></b></div>`
+      + '<div class="gr-found"></div><div class="gr-msg"></div><button class="gr-btn"></button><div class="gr-help"></div></div>';
+    row.appendChild(el);
+    this.gr = {};
+    for (const k of ['name', 'status', 'r', 'bar', 'cells', 'found', 'msg', 'btn', 'help']) this.gr[k] = el.querySelector('.gr-' + k);
+    this.gr.btn.addEventListener('click', (e) => { e.stopPropagation(); this.gr.btn.blur(); this.radioToggle(); });
   }
 
   load() {
@@ -158,6 +184,7 @@ export class GlobeMap {
     this.Q.setFromRotationMatrix(m).invert();
     this.zoom = 1;
     this.cursor = null;
+    this.laySig = null; // (a fresh look: the territory may have changed since the map was last open)
   }
 
   // Turn the globe as if dragged by (dx, dy) screen pixels.
@@ -171,14 +198,14 @@ export class GlobeMap {
     let drag = null;
     const cv = this.canvas;
     // (redrawn on the press: back on the mouse, the controller's cursor goes)
-    cv.addEventListener('mousedown', (e) => { drag = { x: e.clientX, y: e.clientY, moved: 0 }; cv.style.cursor = 'grabbing'; this.draw(); });
+    cv.addEventListener('mousedown', (e) => { drag = { x: e.clientX, y: e.clientY, moved: 0 }; cv.style.cursor = 'grabbing'; this.aim = null; this.aimCell = -1; this.draw(); });
     window.addEventListener('mouseup', (e) => {
-      // (a press that never turned the globe is a click: the dev menu's map teleport takes it)
-      if (drag && drag.moved < 4 && e.target === cv) {
+      // (a press that never turned the globe is a click: the Radio Tower's pick, or the dev menu's map teleport)
+      if (drag && drag.moved < 4 && e.target === cv && e.button === 0) {
         const r = cv.getBoundingClientRect();
         this.clickAt(((e.clientX - r.left) / r.width) * cv.width, ((e.clientY - r.top) / r.height) * cv.height);
       }
-      drag = null; cv.style.cursor = 'grab';
+      drag = null; cv.style.cursor = this.mode === 'radio' ? 'crosshair' : 'grab';
     });
     window.addEventListener('mousemove', (e) => {
       if (!drag) { this.hover(e); return; }
@@ -219,8 +246,28 @@ export class GlobeMap {
     this.draw();
   }
 
-  // Dev menu's map teleport: a click (or A on the controller cursor) on a location's pin takes you there.
+  // The unit direction under a canvas point, or null off the globe (project() the other way round).
+  dirAt(sx, sy) {
+    const W = this.canvas.width, H = this.canvas.height, Rp = (Math.min(W, H) / 2 - 24) * this.zoom;
+    const x = (sx - W / 2) / Rp, y = -(sy - H / 2) / Rp, r2 = x * x + y * y;
+    if (r2 >= 1) return null;
+    return new THREE.Vector3(x, y, Math.sqrt(1 - r2)).applyQuaternion(this.Q.clone().normalize().invert());
+  }
+
+  // 'radio': the map opened from the Radio Tower (main.openMap), where a click in the fog sends a sweep; null: the plain map
+  setMode(mode) {
+    this.mode = mode;
+    this.aim = null; this.aimCell = -1;
+    this.radioMsg = '';
+    document.getElementById('globe-wrap').classList.toggle('radio', mode === 'radio');
+    if (this.radioEl) this.radioEl.classList.toggle('hidden', mode !== 'radio');
+    this.canvas.style.cursor = mode === 'radio' ? 'crosshair' : 'grab';
+  }
+
+  // A click (or A on the controller cursor): the Radio Tower sends a sweep from that point. Otherwise the dev menu's map
+  // teleport: a click on a location's pin takes you there.
   clickAt(sx, sy) {
+    if (this.mode === 'radio') return this.radioPick(sx, sy);
     const g = this.game;
     if (!g.cheats.mapTeleport || !this.pins) return false;
     let best = null, bd = 16;
@@ -229,6 +276,25 @@ export class GlobeMap {
     g.closeModal(false);
     g.cheats.teleport(best.loc);
     return true;
+  }
+
+  radioPick(sx, sy) {
+    const g = this.game, S = g.town && g.town.radio, d = this.dirAt(sx, sy);
+    if (!S || !d) return false;
+    const why = S.start(d);
+    this.radioMsg = why;
+    if (why) g.audio.tone(180, 0.08, 'square', 0.05); else g.audio.click();
+    this.aim = null; this.aimCell = -1;
+    this.draw();
+    return true;
+  }
+
+  // stop the sweep, or carry on with a stopped one (the panel's button, X)
+  radioToggle() {
+    const S = this.game.town && this.game.town.radio;
+    if (!S) return;
+    if (S.on) S.stop(); else S.resume();
+    this.draw();
   }
 
   padClick() { return this.cursor ? this.clickAt(this.cursor.x, this.cursor.y) : false; }
@@ -244,6 +310,11 @@ export class GlobeMap {
     if (!this.pins || this.canvas.offsetParent === null) { if (this.tip) this.tip.classList.add('hidden'); return; }
     const r = this.canvas.getBoundingClientRect();
     const sx = ((e.clientX - r.left) / r.width) * this.canvas.width, sy = ((e.clientY - r.top) / r.height) * this.canvas.height;
+    // radio mode: where a click would send a sweep. Redrawn only when the pointer moves into another cell (about every 155 m)
+    if (this.mode === 'radio') {
+      const d = this.dirAt(sx, sy), cell = d ? this.cellOf(d) : -1;
+      if (cell !== this.aimCell) { this.aimCell = cell; this.aim = d; this.aimOk = !!d && !this.explored[cell]; this.draw(); }
+    }
     let best = null, bd = 16;
     for (const p of this.pins) { const d = Math.hypot(p.x - sx, p.y - sy); if (d < bd) { bd = d; best = p; } }
     // the terminator line, when no pin is closer
@@ -284,28 +355,56 @@ export class GlobeMap {
     c.strokeStyle = 'rgba(120,100,170,0.12)';
     c.lineWidth = 1;
     for (let x = -H; x < W; x += 10) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x + H, H); c.stroke(); }
-    // explored ground, lit by the sun
+    // explored ground, lit by the sun, drawn to its own layer so the territory tint can be applied
+    // per pixel (exact borders) rather than per ~180 m cell (which stepped along every border)
     const cell = ((Math.PI / 2) / RES) * Rp * 1.35;
     const cells = this.cells;
     const tmp = new THREE.Vector3();
-    for (let k = 0; k < this.explored.length; k++) {
-      if (!this.explored[k]) continue;
-      tmp.set(cells[k * 3], cells[k * 3 + 1], cells[k * 3 + 2]);
-      const p = this.project(tmp, v);
-      if (p.z <= 0) continue;
-      const lit = THREE.MathUtils.clamp(tmp.dot(SUN) * 1.3 + 0.12, 0, 1);
-      let r = 28 + lit * 170, gg = 22 + lit * 160, b = 48 + lit * 160;
-      // territory: every cell is tinted by the faction that holds it
-      if (g.territory) {
-        const tc = g.territory.cellColor(k, tmp.x, tmp.y, tmp.z);
-        r = r * 0.62 + tc.r * 255 * 0.38; gg = gg * 0.62 + tc.g * 255 * 0.38; b = b * 0.62 + tc.b * 255 * 0.38;
+    const lay = this.layer || (this.layer = document.createElement('canvas'));
+    if (lay.width !== W || lay.height !== H) { lay.width = W; lay.height = H; this.layerCtx = null; this.laySig = null; }
+    const lc = this.layerCtx || (this.layerCtx = lay.getContext('2d', { willReadFrequently: true }));
+    // (the layer only changes when a cell is charted or the globe is turned or zoomed: a redraw for anything else, such as the pointer, a
+    // sweep's rim or a pin, keeps it. The per-pixel tint is most of what a draw costs)
+    const sum = this.explored.reduce((a, b) => a + b, 0);
+    const sig = `${sum}|${W}|${this.zoom}|${this.Q.toArray()}`;
+    if (sig !== this.laySig) {
+      this.laySig = sig;
+      lc.clearRect(0, 0, W, H);
+      for (let k = 0; k < this.explored.length; k++) {
+        if (!this.explored[k]) continue;
+        tmp.set(cells[k * 3], cells[k * 3 + 1], cells[k * 3 + 2]);
+        const p = this.project(tmp, v);
+        if (p.z <= 0) continue;
+        const lit = THREE.MathUtils.clamp(tmp.dot(SUN) * 1.3 + 0.12, 0, 1);
+        lc.fillStyle = `rgb(${Math.round(28 + lit * 170)},${Math.round(22 + lit * 160)},${Math.round(48 + lit * 160)})`;
+        const s = cell * (0.55 + 0.45 * p.z);
+        lc.fillRect(p.x - s / 2, p.y - s / 2, s, s);
       }
-      c.fillStyle = `rgb(${Math.round(r)},${Math.round(gg)},${Math.round(b)})`;
-      const s = cell * (0.55 + 0.45 * p.z);
-      c.fillRect(p.x - s / 2, p.y - s / 2, s, s);
+      if (g.territory) this.tintTerritory(lc, W, H, Rp);
     }
+    c.drawImage(lay, 0, 0);
     // craters & black lakes you've seen
     const seen = (d) => this.explored[this.cellOf(d)];
+    // the road network over ground you've charted (a dark casing under a pale line, so it reads on
+    // lit and shadowed ground alike)
+    const tr = g.world.traffic;
+    if (tr && tr.mapChunks) {
+      const road = new Path2D();
+      for (const ch of tr.mapChunks()) {
+        if (!seen(ch.c)) continue;
+        let pen = false;
+        for (const d of ch.pts) {
+          const p = this.project(d, v);
+          if (p.z <= 0) { pen = false; continue; }
+          if (pen) road.lineTo(p.x, p.y); else road.moveTo(p.x, p.y);
+          pen = true;
+        }
+      }
+      c.lineJoin = c.lineCap = 'round';
+      c.strokeStyle = 'rgba(18,10,30,0.8)'; c.lineWidth = 2.6 + this.zoom * 0.5; c.stroke(road);
+      c.strokeStyle = '#e9cf94'; c.lineWidth = 1.2 + this.zoom * 0.4; c.stroke(road);
+      c.lineJoin = 'miter'; c.lineCap = 'butt';
+    }
     c.strokeStyle = 'rgba(20,10,30,0.55)';
     c.lineWidth = 1.2;
     for (const cr of g.planet.craters) {
@@ -324,29 +423,30 @@ export class GlobeMap {
       c.beginPath(); c.ellipse(p.x, p.y, rr, rr * p.z, Math.atan2(p.y - H / 2, p.x - W / 2) + Math.PI / 2, 0, Math.PI * 2); c.fill();
       c.strokeStyle = '#7b5cff'; c.stroke();
     }
-    // terminator: the edge of the dark side, in its own colour (SAT-7's orbit is the yellow dashes).
+    // terminator: the edge of the dark side, in its own colour (SAT-7's orbit is the green dashes).
     // It's always drawn, fog or not, and lights up when you point at it.
     const hot = this.termHover;
     this.termPts = [];
     let best = null;
-    c.strokeStyle = hot ? '#d9b8ff' : '#a070ff';
-    c.shadowColor = '#a070ff'; c.shadowBlur = hot ? 14 : 0;
     c.setLineDash(hot ? [] : [10, 5]);
-    c.lineWidth = hot ? 4 : 2.2;
-    c.beginPath();
+    const term = new Path2D();
     let pen = false;
     for (let i = 0; i <= 180; i++) {
       const t = (i / 180) * Math.PI * 2;
       tmp.copy(E1).multiplyScalar(Math.cos(t)).addScaledVector(E2, Math.sin(t));
       const p = this.project(tmp, v);
       if (p.z > 0) {
-        if (pen) c.lineTo(p.x, p.y); else c.moveTo(p.x, p.y);
+        if (pen) term.lineTo(p.x, p.y); else term.moveTo(p.x, p.y);
         pen = true;
         this.termPts.push({ x: p.x, y: p.y, brk: false });
         if (!best || p.z > best.z) best = { ...p, d: tmp.clone() };
       } else { pen = false; if (this.termPts.length) this.termPts[this.termPts.length - 1].brk = true; }
     }
-    c.stroke();
+    // a deep indigo casing under the violet line, so it holds up on lit ground as well as in the fog
+    c.strokeStyle = '#180c33'; c.lineWidth = hot ? 7 : 5; c.stroke(term);
+    c.strokeStyle = hot ? '#d9b8ff' : '#a070ff'; c.lineWidth = hot ? 4 : 2.2;
+    c.shadowColor = '#a070ff'; c.shadowBlur = hot ? 14 : 0;
+    c.stroke(term);
     c.setLineDash([]); c.shadowBlur = 0;
     // label on the dark side of the line, with a little pointer into the dark
     if (best) {
@@ -369,6 +469,7 @@ export class GlobeMap {
     c.strokeStyle = '#120a1e'; c.lineWidth = 5;
     c.beginPath(); c.arc(W / 2, H / 2, Rp, 0, Math.PI * 2); c.stroke();
 
+    this.drawSweep(c, v);
     // pins
     this.pins = [];
     c.textAlign = 'center';
@@ -421,16 +522,20 @@ export class GlobeMap {
     // SAT-7's orbit (dashed) and where it is right now
     if (g.secrets && g.secrets.sat) {
       const S = g.secrets;
-      c.strokeStyle = 'rgba(255,210,63,0.55)'; c.lineWidth = 1.5; c.setLineDash([3, 6]);
-      c.beginPath();
+      // spring green is the one hue no faction uses, and a dark casing under it (like the roads) keeps
+      // it readable on lit ground as well as in the fog
+      c.setLineDash([6, 5]);
+      const orbit = new Path2D();
       let pen = false;
       const q = new THREE.Vector3();
       for (let i = 0; i <= 240; i++) {
         S.orbitPoint((i / 240) * Math.PI * 2, q).normalize();
         const pp = this.project(q, v);
-        if (pp.z > 0) { if (pen) c.lineTo(pp.x, pp.y); else c.moveTo(pp.x, pp.y); pen = true; } else pen = false;
+        if (pp.z > 0) { if (pen) orbit.lineTo(pp.x, pp.y); else orbit.moveTo(pp.x, pp.y); pen = true; } else pen = false;
       }
-      c.stroke(); c.setLineDash([]);
+      c.strokeStyle = '#120a1e'; c.lineWidth = 4.5; c.stroke(orbit);
+      c.strokeStyle = '#00ffa8'; c.lineWidth = 2.5; c.stroke(orbit);
+      c.setLineDash([]);
       // the low pass, marked
       S.orbitPoint(S.lowAt, q).normalize();
       const lp = this.project(q, v);
@@ -507,12 +612,17 @@ export class GlobeMap {
       c.beginPath(); c.moveTo(0, -11); c.lineTo(8, 9); c.lineTo(0, 4); c.lineTo(-8, 9); c.closePath(); c.fill(); c.stroke();
       c.restore();
     }
-    const pct = Math.round((this.explored.reduce((a, b) => a + b, 0) / this.explored.length) * 100);
+    const pct = Math.round((sum / this.explored.length) * 100);
     c.font = pixelFont(11); c.textAlign = 'left'; c.fillStyle = '#ffd23f';
-    c.fillText(`CHARTED ${pct}% · ${this.discovered.size} LOCATIONS`, 14, 24);
+    c.fillText(`CHARTED ${pct}% · ${this.game.locations.filter((l) => l.discovered).length} LOCATIONS`, 14, 24);
+    const sweep = g.town && g.town.radio;
+    if (sweep && sweep.on) { c.fillStyle = '#7dffd4'; c.fillText(`RADIO SWEEP ${Math.round(sweep.frac * 100)}%`, 14, 42); }
     c.textAlign = 'right'; c.fillStyle = '#c9c3d9';
     const cur = g.input.padActive && this.cursor;
-    c.fillText(cur ? 'L-STICK MOVE · RT GRAB · LB/RB TURN · R-STICK ZOOM · B CLOSE' : 'DRAG TO SPIN · SCROLL TO ZOOM · M / ESC TO CLOSE', W - 14, H - 14);
+    const radio = this.mode === 'radio';
+    // (radio mode keeps the hint short: on a narrow window the panel lies over the left of it, and says the rest itself)
+    c.fillText(cur ? (radio ? 'A SWEEP · X STOP · RT GRAB · B CLOSE' : 'L-STICK MOVE · RT GRAB · LB/RB TURN · R-STICK ZOOM · B CLOSE')
+      : (radio ? 'CLICK THE FOG TO SWEEP · M / ESC TO CLOSE' : 'DRAG TO SPIN · SCROLL TO ZOOM · M / ESC TO CLOSE'), W - 14, H - 14);
     // the controller's cursor: an open ring with a dot, closed up while it has hold of the globe
     this.cursorDrawn = !!cur;
     if (cur) {
@@ -527,6 +637,108 @@ export class GlobeMap {
       c.fillStyle = cur.grab ? '#ffd23f' : '#fff';
       c.beginPath(); c.arc(cur.x, cur.y, cur.grab ? rr - 1 : 2, 0, Math.PI * 2); c.fill();
     }
+    if (radio) this.radioPanel();
+  }
+
+  // A ring of radius metres round a point of the Moon as a Path2D, its far side left out (whole: none of it is round the back).
+  ringPath(dir, metres, steps = 72) {
+    const e1 = new THREE.Vector3().crossVectors(dir, Math.abs(dir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)).normalize();
+    const e2 = new THREE.Vector3().crossVectors(dir, e1);
+    const a = metres / PLANET.radius, q = new THREE.Vector3(), v = new THREE.Vector3(), path = new Path2D();
+    let pen = false, whole = true;
+    for (let i = 0; i <= steps; i++) {
+      const t = (i / steps) * Math.PI * 2;
+      q.copy(dir).multiplyScalar(Math.cos(a)).addScaledVector(e1, Math.sin(a) * Math.cos(t)).addScaledVector(e2, Math.sin(a) * Math.sin(t));
+      const p = this.project(q, v);
+      if (p.z > 0) { if (pen) path.lineTo(p.x, p.y); else path.moveTo(p.x, p.y); pen = true; } else { pen = false; whole = false; }
+    }
+    return { path, whole };
+  }
+
+  // The Radio Tower's sweep: the most it can reach (dashed), its rim as it grows, the point it started from, and in radio mode the
+  // ring a click under the pointer would send (green over fog, red over ground you have already charted). The plain map shows the
+  // sweep too.
+  drawSweep(c, v) {
+    const T = this.game.town, S = T && T.radio, s = S && S.s, aim = this.mode === 'radio' && this.aim;
+    if (!s && !aim) return;
+    c.save();
+    c.lineJoin = c.lineCap = 'round';
+    if (aim) {
+      const { path } = this.ringPath(aim, SWEEP.max);
+      c.setLineDash([8, 6]); c.strokeStyle = 'rgba(18,10,30,0.8)'; c.lineWidth = 4.5; c.stroke(path);
+      c.strokeStyle = this.aimOk ? '#7dffd4' : '#ff7a8a'; c.lineWidth = 2; c.stroke(path);
+      c.setLineDash([]);
+    }
+    if (s) {
+      const col = s.on ? '#7dffd4' : '#9aa6ff';
+      const max = this.ringPath(s.dir, SWEEP.max).path;
+      c.setLineDash([3, 7]); c.strokeStyle = 'rgba(18,10,30,0.7)'; c.lineWidth = 3.5; c.stroke(max);
+      c.strokeStyle = col; c.globalAlpha = 0.55; c.lineWidth = 1.5; c.stroke(max);
+      c.setLineDash([]); c.globalAlpha = 1;
+      if (s.r > 1) {
+        const rim = this.ringPath(s.dir, s.r);
+        if (rim.whole) { c.fillStyle = s.on ? 'rgba(125,255,212,0.10)' : 'rgba(154,166,255,0.07)'; c.fill(rim.path); }
+        c.strokeStyle = 'rgba(18,10,30,0.85)'; c.lineWidth = 5; c.stroke(rim.path);
+        c.strokeStyle = col; c.lineWidth = 2.5; c.shadowColor = col; c.shadowBlur = s.on ? 10 : 0; c.stroke(rim.path); c.shadowBlur = 0;
+      }
+      const p = this.project(s.dir, v);
+      if (p.z > 0) {
+        c.strokeStyle = '#120a1e'; c.lineWidth = 4;
+        c.beginPath(); c.moveTo(p.x - 7, p.y); c.lineTo(p.x + 7, p.y); c.moveTo(p.x, p.y - 7); c.lineTo(p.x, p.y + 7); c.stroke();
+        c.strokeStyle = col; c.lineWidth = 2; c.stroke();
+      }
+    }
+    c.restore();
+  }
+
+  // the panel's lines (radio mode: the end of every draw). Figures are set in the display face (the body face draws a 5 like an S)
+  radioPanel() {
+    const g = this.game, T = g.town, S = T && T.radio, el = this.gr;
+    if (!el || !S) return;
+    const s = S.s, max = SWEEP.max, n = (x) => Math.round(x).toLocaleString('en-US');
+    const status = !s ? 'IDLE' : s.on ? 'SWEEPING' : s.r >= max ? 'MAX RANGE' : 'STOPPED';
+    el.name.textContent = T.state ? T.state.name.toUpperCase() : '';
+    el.status.textContent = status;
+    el.status.className = 'gr-status' + (status === 'IDLE' || status === 'STOPPED' ? ' off' : status === 'MAX RANGE' ? ' done' : '');
+    el.r.textContent = `${n(s ? s.r : 0)} m`;
+    el.bar.style.width = `${Math.round(S.frac * 100)}%`;
+    el.cells.textContent = `${s ? n(s.cells) : 0} cells`;
+    const names = s ? s.found.map((id) => g.locations.find((l) => l.id === id)).filter(Boolean).map((l) => l.name) : [];
+    el.found.textContent = names.length ? `Found: ${names.slice(-3).join(', ')}${names.length > 3 ? ` +${names.length - 3}` : ''}` : '';
+    el.msg.textContent = this.radioMsg;
+    el.btn.disabled = !s || (!s.on && s.r >= max);
+    el.btn.textContent = !s || (!s.on && s.r >= max) ? 'PICK A SPOT IN THE FOG' : s.on ? 'STOP SWEEP (X)' : 'RESUME SWEEP (X)';
+    el.help.textContent = `${g.input.padActive ? 'Move the cursor into the fog and press A' : 'Click the fog'} to send a sweep. It grows to ${max / 1000} km, then you must pick a new spot.`;
+  }
+
+  // Tint every explored pixel of the layer by the faction holding the ground under it. Each pixel
+  // is turned back into a point on the globe and given a whole faction's colour, never a blend, so
+  // a border is a single sharp line.
+  tintTerritory(lc, W, H, Rp) {
+    const t = this.game.territory;
+    const img = lc.getImageData(0, 0, W, H), px = img.data;
+    // project() applies Q as is, so a Q that isn't exactly unit length scales the globe: undo that scale
+    // (s) and rotate back with the normalised Q, so every pixel maps to a true unit direction
+    const s = this.Q.lengthSq() || 1;
+    const e = new THREE.Matrix4().makeRotationFromQuaternion(this.Q.clone().normalize().invert()).elements;
+    const cx = W / 2, cy = H / 2, k = 1 / (Rp * s);
+    for (let y = 0; y < H; y++) {
+      const sy = -(y + 0.5 - cy) * k;
+      for (let x = 0; x < W; x++) {
+        const o = (y * W + x) * 4;
+        if (!px[o + 3]) continue;
+        const sx = (x + 0.5 - cx) * k;
+        const r2 = sx * sx + sy * sy;
+        const sz = r2 < 1 ? Math.sqrt(1 - r2) : 0;
+        const dx = e[0] * sx + e[4] * sy + e[8] * sz, dy = e[1] * sx + e[5] * sy + e[9] * sz, dz = e[2] * sx + e[6] * sy + e[10] * sz;
+        const il = 1 / (Math.sqrt(dx * dx + dy * dy + dz * dz) || 1); // (a rim pixel past the limb is not on the unit sphere)
+        const tc = t.mapColor(dx * il, dy * il, dz * il);
+        px[o] = px[o] * 0.62 + tc[0] * 0.38;
+        px[o + 1] = px[o + 1] * 0.62 + tc[1] * 0.38;
+        px[o + 2] = px[o + 2] * 0.62 + tc[2] * 0.38;
+      }
+    }
+    lc.putImageData(img, 0, 0);
   }
 
   cellOf(d) {
@@ -548,7 +760,6 @@ const SPECIAL = {
   ilmb: 'Repair-bay upgrades',
   meridian: 'Skate finishes',
   antimatter: 'Containment jars · reactor · splice pod · holding pen',
-  bounce: 'Skate park · trampolines · bounce domes',
   downs: 'Chimera races · betting · race card',
   casino: 'Blackjack · Duck Derby · Plinko · prize counter',
   monolith: 'Touch it',

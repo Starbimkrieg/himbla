@@ -1,18 +1,18 @@
 import * as THREE from 'three';
 import { FACTIONS } from './locations.js';
-import { toon, glow, ink } from './toon.js';
-import { arcDist, tangent, frameQuat, greatCircle, SUN } from './geo.js';
+import { toon, ink } from './toon.js';
+import { arcDist, tangent, frameQuat, greatCircle, SUN, R as PLANET_R, collectNodes } from './geo.js';
 import { mulberry32 } from './rng.js';
-import { makeRover } from './models.js';
 import { ITEMS } from './alchemy.js';
 import { outpostTemplate, SMALL_KINDS, FLAT_R } from './outpostModels.js';
-import { foundedTemplate, TERMINAL_Z } from './storyAssets.js';
+import { foundedTemplate, TERMINAL_Z, OUTPOST_GUN as GUN } from './storyAssets.js';
 
 // Every square metre of the Moon belongs to somebody. Territory is a weighted Voronoi split
-// around each faction's settlements and outposts; borders are marked with glowing pylons,
-// small faction structures dot the countryside, and military patrols run between them.
+// around each faction's settlements and outposts; small faction structures dot the countryside,
+// and military patrols run between them.
 const KEY = 'moonrunner-territory-v1';
 const MILITARY = ['spacecom', 'vostok', 'daedalus'];
+const LOOP_ARC = 0.024; // the radius (radians of the Moon) of the little loop a patrol drives round a lone outpost: about 86 m
 const KINDS = {
   spacecom: ['tower', 'depot'], vostok: ['tower', 'depot'], daedalus: ['tower', 'depot'],
   kepler: ['farm', 'mast'], meridian: ['kiosk', 'mast'], rustmoon: ['shack', 'junk'],
@@ -37,10 +37,14 @@ const LOOT = {
   shack: { verb: 'STRIP SOME SCRAP PLATING', boom: 'SHACK FLATTENED!', item: 'plating', pop: 'SCRAP PLATING!' },
   junk: { verb: 'COAX OUT A JUNK BOT', boom: 'JUNK EVERYWHERE!', item: 'junkbot', names: BOT_NAMES, pop: 'JUNK BOT! BEEP!' },
 };
+const MAP_GRID = 96; // owner cells per cube-face edge for the globe map's territory lookup
 const BUILT_R = 40; // founded outposts: flattened radius (the compound itself: storyAssets.js)
+const TOWN_R = 120; // your town's flat radius (worldstate.js); its blend reaches 1.95x that
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _w = new THREE.Vector3();
+const _gp = new THREE.Vector3(), _gt = new THREE.Vector3(), _gl = new THREE.Vector3(), _gf = new THREE.Vector3();
+const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 // distance from a point (outpost frame) to a yawed box { x, y, z, hx, hy, hz, yaw }
 function boxDist(p, h) {
@@ -48,6 +52,55 @@ function boxDist(p, h) {
   const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
   const qx = Math.max(0, Math.abs(lx) - h.hx), qy = Math.max(0, Math.abs(p.y - h.y) - h.hy), qz = Math.max(0, Math.abs(lz) - h.hz);
   return Math.sqrt(qx * qx + qy * qy + qz * qz);
+}
+
+// The charred heap left of a wrecked founded outpost (and, for a farm, its dome ring): a pure builder, so the Asset Row can show it.
+export function rubbleModel(kind, seed) {
+  const root = new THREE.Group();
+  const rr = mulberry32(seed + 7);
+  const mats = [toon(0x2a2433), toon(0x3a3550), toon(0x4a3f3a)];
+  for (let i = 0; i < 10; i++) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.8 + rr() * 2.2, 0.3 + rr() * 1.2, 0.8 + rr() * 2.2), mats[i % 3]);
+    m.position.set(-5 + rr() * 10, 0.3, -5 + rr() * 10);
+    m.rotation.set(rr() * 0.6, rr() * 3, rr() * 0.6);
+    ink(m, 0.04);
+    root.add(m);
+  }
+  if (kind === 'farm') {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(7, 0.3, 6, 24, Math.PI * 1.3).rotateX(Math.PI / 2), toon(0x55607a));
+    ring.position.y = 0.3;
+    root.add(ring);
+  }
+  return root;
+}
+
+// The ground each settlement claims, before any outposts: one anchor per faction location (HQs claim
+// more). Pirate camps and neutral places of interest hold no ground of their own.
+export function locationAnchors(locations) {
+  const out = [];
+  for (const l of locations) {
+    if (l.poi || l.camp || !FACTIONS[l.faction] || l.faction === 'none') continue;
+    out.push({ dir: l.dir, faction: l.faction, w: l.hq ? 1.5 : 1, loc: l });
+  }
+  return out;
+}
+
+// Who holds the ground at dir, and how safely: the ratio of the nearest rival faction's weighted
+// distance to the holder's (1 is right on a border, bigger is deeper inside).
+export function holderOf(dir, anchors) {
+  let best = null, bd = Infinity;
+  for (const a of anchors) {
+    const d = arcDist(dir, a.dir) / a.w;
+    if (d < bd) { bd = d; best = a; }
+  }
+  if (!best) return { faction: 'spacecom', depth: 1 };
+  let rival = Infinity;
+  for (const a of anchors) {
+    if (a.faction === best.faction) continue;
+    const d = arcDist(dir, a.dir) / a.w;
+    if (d < rival) rival = d;
+  }
+  return { faction: best.faction, depth: rival / Math.max(bd, 1e-6) };
 }
 
 const hex = (f) => new THREE.Color(FACTIONS[f] ? FACTIONS[f].color : '#c9c3d9').getHex();
@@ -60,10 +113,17 @@ export class Territory {
     this.outposts = [];
     this.patrols = [];
     this.current = null;
+    this.placeName = null; // the settlement you're standing in (its name goes under the territory line in the chip)
     this.chip = document.createElement('div');
     this.chip.id = 'terrchip';
     this.chip.className = 'chip terr hidden';
     document.getElementById('undermap').appendChild(this.chip); // (the territory chip sits under the minimap)
+    this.t = 0; // play time (the chip doesn't flash while it settles in at the start of a session)
+    // the flash class comes off when its animation is over, or was cut off (the HUD hiding mid-flash fires 'animationcancel'; a restart
+    // does too, but then a new animation is already running, and that one's left alone)
+    const flashDone = () => { if (!this.chip.getAnimations().length) this.chip.classList.remove('flash'); };
+    this.chip.addEventListener('animationend', flashDone);
+    this.chip.addEventListener('animationcancel', flashDone);
     this.genOutposts();
     this.flatten();
     this.prebake();
@@ -75,12 +135,7 @@ export class Territory {
   }
 
   locAnchors() {
-    const out = [];
-    for (const l of this.game.locations) {
-      if (l.poi || l.camp || !FACTIONS[l.faction] || l.faction === 'none') continue;
-      out.push({ dir: l.dir, faction: l.faction, w: l.hq ? 1.5 : 1, loc: l });
-    }
-    return out;
+    return locationAnchors(this.game.locations);
   }
 
   // A finale moved the borders (main.js applyWorldLive): re-deal the outposts exactly as a fresh
@@ -131,23 +186,52 @@ export class Territory {
     if (clear) this.clearSites();
   }
 
+  // Every road point as unit directions in one flat array (x, y, z, x, y, z...): the mesh's vertices (every other one) and the
+  // traffic pieces' paths. Built once and kept; it is rebuilt when the network's size changes under it.
+  roadDirs() {
+    const tr = this.game.world.traffic;
+    const rp = tr && tr.roadMesh && tr.roadMesh.geometry.attributes.position;
+    const pieces = (tr && tr.pieces) || [];
+    const c = this._roads;
+    if (c && c.mesh === (rp || null) && c.verts === (rp ? rp.count : 0) && c.pieces === pieces.length) return c.a;
+    const a = [];
+    const push = (v) => { v.normalize(); a.push(v.x, v.y, v.z); };
+    if (rp) for (let i = 0; i < rp.count; i += 2) push(_w.fromBufferAttribute(rp, i));
+    for (const pc of pieces) for (const p of (pc.path && pc.path.pts) || pc.raw || []) push(_w.copy(p));
+    this._roads = { mesh: rp || null, verts: rp ? rp.count : 0, pieces: pieces.length, a: Float64Array.from(a) };
+    return this._roads.a;
+  }
+
+  // Is any road within dist metres of unit direction d?
+  nearRoad(d, dist) {
+    const road = this.roadDirs(), cos = Math.cos(dist / this.game.planet.R);
+    for (let i = 0; i < road.length; i += 3) if (road[i] * d.x + road[i + 1] * d.y + road[i + 2] * d.z > cos) return true;
+    return false;
+  }
+
+  // Would a town founded at unit direction d crowd what is already laid down? Its 120 m plateau blends out to 234 m, and an
+  // outpost's own flat is applied after the zones (so it would overlay the blend ring); roads and lakes are baked into the ground
+  // as it was. The gaps are the ones clearSites keeps round a late settlement: 312 m to an outpost that is not built yet, 306 m to a
+  // road (the blend plus an outpost's 72 m), and a lake's whole reach plus 250 m (clear of the 240 m ring townScore reads).
+  siteClash(d) {
+    const g = this.game, R = g.planet.R;
+    const reach = TOWN_R * 1.95 + FLAT_R * 2 + 12;
+    for (const o of this.outposts) if (!o.built && arcDist(d, o.dir) < Math.max(TOWN_R * 1.6 + 120, reach)) return true;
+    for (const lk of g.world.lakes || []) if (arcDist(d, lk.d) < Math.acos(Math.min(1, lk.cos)) * R + 250) return true;
+    return this.nearRoad(d, reach);
+  }
+
   // The structures stand on ~60 m flattened plateaus (blending out to ~2x): keep them off the
   // roads, black lakes and settlement plateaus that were laid down before us. A clashing outpost
   // is nudged to the nearest clear spot, or dropped (ids stay stable for saves either way).
   clearSites() {
     const g = this.game, R = g.planet.R;
     const blend = FLAT_R * 2 + 12;
-    const road = [];
-    const tr = g.world.traffic;
-    const rp = tr && tr.roadMesh && tr.roadMesh.geometry.attributes.position;
-    if (rp) for (let i = 0; i < rp.count; i += 2) road.push(new THREE.Vector3().fromBufferAttribute(rp, i).normalize());
-    for (const pc of (tr && tr.pieces) || []) for (const p of (pc.path && pc.path.pts) || pc.raw || []) road.push(p.clone().normalize());
-    const cosRoad = Math.cos(blend / R);
     const lakes = (g.world.lakes || []).map((lk) => ({ d: lk.d, r: Math.acos(Math.min(1, lk.cos)) * R + blend }));
     const bad = (d, self) => {
       for (const l of g.locations) if (arcDist(d, l.dir) < Math.max((l.zoneR || l.r) * 1.6 + 120, l.r * 1.95 + blend)) return true;
       for (const lk of lakes) if (arcDist(d, lk.d) < lk.r) return true;
-      for (const p of road) if (p.dot(d) > cosRoad) return true;
+      if (this.nearRoad(d, blend)) return true;
       return this.outposts.some((o) => o !== self && !o.gone && arcDist(d, o.dir) < 420);
     };
     const rr = mulberry32(777);
@@ -208,7 +292,9 @@ export class Territory {
       for (const [id, f] of Object.entries(d.captured || {})) { const o = this.outposts.find((x) => x.id === id); if (o) { o.faction = f; o.captured = true; } }
       for (const [id, k] of Object.entries(d.kinds || {})) { const o = this.outposts.find((x) => x.id === id); if (o) { o.kind = k; o.kindChanged = true; } }
       for (const b of d.built || []) {
-        if (this.game.ws && this.game.ws.town && this.game.ws.town.replaces === b.id) continue; // (it grew into your town)
+        // (it grew into your town: no outpost and no 40 m flat of its own; the live finale takes that flat
+        // out too, in applyWorldLive, so a reload shows the same ground)
+        if (this.game.ws && this.game.ws.town && this.game.ws.town.replaces === b.id) continue;
         const o = { ...b, dir: new THREE.Vector3().fromArray(b.dir), model: null, cols: [], built: true };
         this.outposts.push(o);
         this.game.planet.addFlat(o.dir, BUILT_R);
@@ -242,8 +328,7 @@ export class Territory {
   // Outposts claim a little ground of their own (so captures move the borders).
   rebuild() {
     this.anchors = this.baseAnchors.concat(this.outposts.map((o) => ({ dir: o.dir, faction: o.faction, w: o.built ? 0.6 : OUTPOST_W })));
-    this.buildBorders();
-    this.mapCache = null;
+    this.mapG = null;
     this.buildRoutes();
   }
 
@@ -268,46 +353,6 @@ export class Territory {
 
   name(o) { return o.name || `${FACTIONS[o.faction] ? FACTIONS[o.faction].name : ''} ${KIND_NAMES[o.kind] || 'Outpost'}`; }
 
-  // ---------- border pylons (one instanced mesh for the whole Moon) ----------
-  buildBorders() {
-    const g = this.game;
-    if (this.borders) { g.scene.remove(this.borders.shaft, this.borders.cap); this.borders.shaft.dispose(); this.borders.cap.dispose(); }
-    const N = 9000, pts = [];
-    const ga = Math.PI * (3 - Math.sqrt(5));
-    const d = new THREE.Vector3(), t = new THREE.Vector3(), s = new THREE.Vector3(), o = new THREE.Vector3();
-    for (let i = 0; i < N; i++) {
-      const y = 1 - (2 * (i + 0.5)) / N, r = Math.sqrt(1 - y * y), th = ga * i;
-      d.set(r * Math.cos(th), y, r * Math.sin(th));
-      const f = this.owner(d);
-      tangent(t.set(1, 0, 0), d, t);
-      if (t.lengthSq() < 1e-4) tangent(t.set(0, 0, 1), d, t);
-      t.normalize();
-      s.crossVectors(d, t);
-      let edge = false;
-      for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        o.copy(d).addScaledVector(t, a * 0.02).addScaledVector(s, b * 0.02).normalize();
-        if (this.owner(o) !== f) { edge = true; break; }
-      }
-      if (edge && !g.locations.some((l) => arcDist(d, l.dir) < (l.zoneR || l.r) + 40)) pts.push({ dir: d.clone(), f });
-    }
-    const shaftGeo = new THREE.CylinderGeometry(0.25, 0.35, 7, 6).translate(0, 3.5, 0);
-    const capGeo = new THREE.OctahedronGeometry(0.9, 0).translate(0, 7.8, 0);
-    const shaft = new THREE.InstancedMesh(shaftGeo, toon(0x2a2540), pts.length);
-    const cap = new THREE.InstancedMesh(capGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), pts.length);
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), col = new THREE.Color();
-    pts.forEach((b, i) => {
-      g.planet.ground(b.dir, p, -0.3);
-      q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.dir);
-      m.compose(p, q, sc);
-      shaft.setMatrixAt(i, m);
-      cap.setMatrixAt(i, m);
-      cap.setColorAt(i, col.set(FACTIONS[b.f].color));
-    });
-    for (const im of [shaft, cap]) { im.frustumCulled = false; im.instanceMatrix.needsUpdate = true; g.scene.add(im); }
-    if (cap.instanceColor) cap.instanceColor.needsUpdate = true;
-    this.borders = { shaft, cap, count: pts.length };
-  }
-
   // ---------- outpost structures, built only near the player ----------
   spawn(o) {
     const g = this.game;
@@ -318,6 +363,70 @@ export class Territory {
     // a paved apron and the modules you've built on their plots round it
     this.place(o, foundedTemplate(o.kind, c, o.modules || []));
     o.terminal = o.model.localToWorld(new THREE.Vector3(0, 0, TERMINAL_Z));
+    this.findGuns(o);
+  }
+
+  // The militia turrets you built: place() clones the baked template, so the live heads are found again by
+  // their tag every time the compound spawns (clone() copies only the plain userData, never a reference).
+  findGuns(o) {
+    o.guns = [];
+    o.model.updateMatrixWorld(true);
+    o.model.traverse((m) => {
+      if (!m.userData.outpostGun) return;
+      m.rotation.order = 'YXZ'; // clone() does not copy the Euler order: pitch about the head's own x, then yaw
+      o.guns.push({ head: m, root: m.parent, cd: 0.5 + 0.45 * o.guns.length, scanT: 0, target: null, skips: new WeakMap(), side: 1 });
+    });
+  }
+
+  // Each gun turns its head (yaw and pitch) onto the lead point of the nearest raider and fires from a barrel
+  // tip, alternating the twin barrels, like the settlement turrets (enemies.updateTurret) but with the
+  // aim-lead and line-of-fire checks they use. It never parks: an idle head keeps sweeping, so the shadow
+  // cache does not see a still object.
+  updateGuns(o, dt) {
+    const g = this.game, E = g.enemies;
+    for (const gun of o.guns) {
+      const head = gun.head;
+      head.updateWorldMatrix(true, false);
+      head.getWorldPosition(_gp);
+      let tg = gun.target;
+      if (tg && (tg.dead || tg.center.distanceTo(_gp) > GUN.range * 1.05)) tg = gun.target = null;
+      gun.scanT -= dt; gun.cd = Math.max(-1, gun.cd - dt);
+      if (!tg && gun.scanT <= 0) {
+        gun.scanT = 0.4;
+        let bd = GUN.range;
+        for (const e of E.list) {
+          if (!E.gunTarget(e) || gun.skips.get(e) > g.time) continue; // (no line of fire to it a moment ago)
+          let d = e.center.distanceTo(_gp);
+          if (o.guns.some((x) => x !== gun && x.target === e)) d += 80; // a second gun prefers another raider
+          if (d < bd) { bd = d; tg = e; }
+        }
+        gun.target = tg;
+      }
+      let yawErr = 0, pitchErr = 0;
+      if (tg) { // track the lead point so the barrel points where the shell will go
+        _gl.copy(tg.center).addScaledVector(tg.body.vel, _gp.distanceTo(tg.center) / GUN.speed);
+        gun.root.worldToLocal(_gl).sub(head.position); // (never read root.rotation.y: clone() re-decomposes it)
+        yawErr = wrapPi(Math.atan2(_gl.x, _gl.z) - head.rotation.y);
+        // (the pitch is clamped to the mount's limits, -0.5..0.6 rad: the lower stop keeps the barrel clear of the deck rail. A raider inside ~10 m of
+        // the stand, or well above it, is still engaged: its shell leaves the tip along the aim-lead line rather than exactly along the barrel)
+        pitchErr = THREE.MathUtils.clamp(Math.atan2(-_gl.y, Math.hypot(_gl.x, _gl.z)), -0.5, 0.6) - head.rotation.x; // (+rotation.x = barrel down)
+        head.rotation.y += THREE.MathUtils.clamp(yawErr, -GUN.turn * dt, GUN.turn * dt);
+        head.rotation.x += THREE.MathUtils.clamp(pitchErr, -GUN.pitchTurn * dt, GUN.pitchTurn * dt);
+      } else {
+        head.rotation.y = wrapPi(head.rotation.y + dt * 0.3);
+        head.rotation.x -= THREE.MathUtils.clamp(head.rotation.x, -dt, dt);
+      }
+      if (!tg || gun.cd > 0 || Math.abs(yawErr) > GUN.cone || Math.abs(pitchErr) > GUN.pitchCone) continue;
+      head.updateWorldMatrix(false, false); // (the rotation just changed: the muzzle must not be a frame stale)
+      gun.side = -gun.side;
+      head.localToWorld(_gt.set(gun.side * GUN.tip[0], GUN.tip[1], GUN.tip[2]));
+      gun.cd = GUN.interval;
+      if (!E.clearShot(_gt, tg.center)) { gun.cd = 0.3; gun.skips.set(tg, g.time + 3); gun.target = null; continue; }
+      const dir = E.aimLead(_gt, GUN.speed, 0.01, tg.center, tg.body.vel);
+      g.projectiles.fire('mil', _gt, dir.multiplyScalar(GUN.speed), { damage: GUN.damage, splash: GUN.splash, color: 0xffb02e, size: 0.5, knock: 0.6, spare: true });
+      g.fx.spawn(_gt, _gf.set(0, 0, 1).transformDirection(head.matrixWorld).multiplyScalar(5), { color: 0xffe08a, size: 0.9, life: 0.12, count: 3, spread: 1.5, drag: 3 });
+      if (_gt.distanceTo(g.player.center) < 300) g.audio.tone(300, 0.1, 'square', 0.07, 0.4);
+    }
   }
 
   // Put a baked outpost model (or its wreck) on the ground: same yaw every time for this outpost.
@@ -377,7 +486,7 @@ export class Territory {
     g.audio.boom(true);
     g.cam.shake = Math.max(g.cam.shake, 0.8);
     const L = LOOT[o.kind];
-    g.fx.pop(L.boom, c.clone().addScaledVector(o.dir, 8), { color: '#ff4f2e', size: 64, life: 1.4 });
+    g.fx.pop(L.boom, c.clone().addScaledVector(o.dir, 8), { color: '#ff4f2e', size: 64, life: 2.4 });
     // the same haul as a raid, flung out of the wreck onto open ground where you can see it
     const spots = this.landingSpots(o, (L.credits ? 1 : 0) + 1);
     if (L.credits) g.alchemy.dropLoot(null, c, { credits: L.credits[0] + Math.floor(Math.random() * (L.credits[1] - L.credits[0] + 1)), to: spots.pop() });
@@ -426,21 +535,7 @@ export class Territory {
       o.raidPoint = null;
       return;
     }
-    const root = new THREE.Group();
-    const rr = mulberry32(o.seed + 7);
-    const mats = [toon(0x2a2433), toon(0x3a3550), toon(0x4a3f3a)];
-    for (let i = 0; i < 10; i++) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(0.8 + rr() * 2.2, 0.3 + rr() * 1.2, 0.8 + rr() * 2.2), mats[i % 3]);
-      m.position.set(-5 + rr() * 10, 0.3, -5 + rr() * 10);
-      m.rotation.set(rr() * 0.6, rr() * 3, rr() * 0.6);
-      ink(m, 0.04);
-      root.add(m);
-    }
-    if (o.kind === 'farm') {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(7, 0.3, 6, 24, Math.PI * 1.3).rotateX(Math.PI / 2), toon(0x55607a));
-      ring.position.y = 0.3;
-      root.add(ring);
-    }
+    const root = rubbleModel(o.kind, o.seed);
     root.position.copy(g.planet.ground(o.dir, new THREE.Vector3(), -0.2));
     frameQuat(o.dir, tangent(SUN.clone(), o.dir).normalize(), root.quaternion);
     g.scene.add(root);
@@ -452,6 +547,7 @@ export class Territory {
   despawn(o) {
     o.rubble = false;
     o.raidPoint = null;
+    o.guns = [];
     if (o.model) { o.model.removeFromParent(); o.model = null; }
     for (const c of o.cols) this.game.colliders.remove(c);
     o.cols = [];
@@ -470,21 +566,25 @@ export class Territory {
       }
       if (best && !this.routes.some((r) => (r.a === best && r.b === a))) this.routes.push({ a, b: best, faction: a.faction, len: bd, unit: null });
       // lone outposts still get a little loop of their own
-      else if (!best) this.routes.push({ a, b: null, faction: a.faction, len: 300, unit: null });
+      else if (!best) this.routes.push({ a, b: null, faction: a.faction, len: Math.round(Math.PI * 2 * LOOP_ARC * PLANET_R), unit: null });
     }
-    for (const p of this.patrols) p.model.root.removeFromParent();
+    for (const p of this.patrols) this.game.enemies.removeRoamer(p);
     this.patrols = [];
   }
 
+  // (the patrols themselves are real armoured cars in enemies.js: spawnRoamer)
   spawnPatrol(r) {
     const g = this.game;
-    const fc = hex(r.faction);
-    const m = makeRover({ color: 0x55607a, trim: fc, pirate: false, flag: fc });
-    m.root.scale.setScalar(1.15);
-    g.scene.add(m.root);
-    const unit = { route: r, model: m, t: Math.random(), dir: 1, pos: new THREE.Vector3(), heading: new THREE.Vector3(), fireCd: 1 + Math.random() * 2, speed: 16 };
-    r.unit = unit;
-    this.patrols.push(unit);
+    const P = g.player;
+    // start somewhere along the route out of sight of the player
+    let t = Math.random();
+    for (let i = 0; i < 8; i++) {
+      const c = Math.random();
+      const d = this.routePoint(r, c, new THREE.Vector3());
+      t = c;
+      if (arcDist(d, P.pos) > 450) break;
+    }
+    r.unit = g.enemies.spawnRoamer(r, t, Math.random() < 0.5 ? 1 : -1);
   }
 
   routePoint(r, t, out) {
@@ -493,58 +593,22 @@ export class Territory {
     const a = t * Math.PI * 2;
     const tA = tangent(_v.set(1, 0, 0), r.a.dir).normalize();
     const tB = new THREE.Vector3().crossVectors(r.a.dir, tA);
-    return out.copy(r.a.dir).addScaledVector(tA, Math.cos(a) * 0.024).addScaledVector(tB, Math.sin(a) * 0.024).normalize();
+    return out.copy(r.a.dir).addScaledVector(tA, Math.cos(a) * LOOP_ARC).addScaledVector(tB, Math.sin(a) * LOOP_ARC).normalize();
   }
 
+  // A route gets one patrol car while you're about. It is an ordinary enemy entity (solid, shootable,
+  // rammable) that drives itself; here we only send it out, call it off once you've left it far
+  // behind, and give a wrecked route a breather before the next car.
   updatePatrols(dt) {
     const g = this.game;
     const P = g.player;
+    this.patrols = [];
     for (const r of this.routes) {
+      if (r.unit && r.unit.dead) { r.unit = null; r.cool = g.time + 150; }
       const near = arcDist(P.pos, r.a.dir) < 1000;
-      if (near && !r.unit && this.patrols.length < 4) this.spawnPatrol(r);
-      else if (!near && r.unit) { r.unit.model.root.removeFromParent(); this.patrols = this.patrols.filter((u) => u !== r.unit); r.unit = null; }
-    }
-    for (const u of this.patrols) {
-      const r = u.route;
-      u.t += (u.dir * u.speed * dt) / Math.max(50, r.len);
-      if (r.b) { if (u.t > 1 || u.t < 0) { u.t = Math.min(1, Math.max(0, u.t)); u.dir *= -1; } }
-      else u.t = (u.t + 1) % 1;
-      const d = this.routePoint(r, u.t, new THREE.Vector3());
-      const ahead = this.routePoint(r, Math.min(1, Math.max(0, u.t + u.dir * 0.01)), new THREE.Vector3());
-      const prev = u.pos.clone();
-      g.planet.ground(d, u.pos);
-      const fwd = tangent(ahead.sub(d), d);
-      if (fwd.lengthSq() > 1e-10) u.heading.copy(fwd.normalize());
-      const m = u.model;
-      m.root.position.copy(u.pos);
-      frameQuat(d, u.heading, _q);
-      m.root.quaternion.slerp(_q, Math.min(1, dt * 5));
-      const sp = prev.lengthSq() ? prev.distanceTo(u.pos) / Math.max(dt, 1e-3) : 0;
-      for (const w of m.wheels) w.rotation.x += sp * dt / 0.85;
-      // they keep the roads clear of pirates
-      u.fireCd -= dt;
-      if (u.fireCd <= 0) {
-        u.fireCd = 1.6;
-        const from = u.pos.clone().addScaledVector(d, 4);
-        let target = null, bd = 260;
-        for (const e of g.enemies.list) {
-          if (e.dead || e.faction !== 'pirate' || e.kind === 'core' || !e.center) continue;
-          if (g.enemies.friendly(e)) continue;
-          const dd = e.center.distanceTo(from);
-          if (dd < bd && g.planet.visible(from, e.center)) { bd = dd; target = e; }
-        }
-        // ...and you, if their faction counts you an enemy (an outlaw riding with Rustmoon)
-        const fac = u.faction || (u.route && u.route.faction);
-        if (fac && g.rep.hostile(fac) && !g.player.dead) {
-          const dd = g.player.center.distanceTo(from);
-          if (dd < bd && g.planet.visible(from, g.player.center)) { bd = dd; target = { center: g.player.center, player: true }; }
-        }
-        if (target) {
-          const dir = target.center.clone().sub(from).normalize();
-          g.projectiles.fire('mil', from, dir.multiplyScalar(130), { damage: target.player ? 10 : 22, splash: 4, color: 0xffb02e, size: 0.45, knock: 0.5, spare: !target.player });
-          m.gun.lookAt(target.center);
-        }
-      }
+      if (near && !r.unit && !(r.cool > g.time) && g.enemies.list.filter((e) => e.roam && !e.dead).length < 4) this.spawnPatrol(r);
+      else if (r.unit && r.unit.body.pos.distanceTo(P.pos) > 1500 && arcDist(P.pos, r.a.dir) > 1000) { g.enemies.removeRoamer(r.unit); r.unit = null; }
+      if (r.unit) this.patrols.push(r.unit);
     }
   }
 
@@ -552,18 +616,22 @@ export class Territory {
   update(dt) {
     const g = this.game;
     const P = g.player;
-    this.t = (this.t || 0) + dt;
+    this.t += dt;
     for (const o of this.outposts) {
       const d = arcDist(P.pos, o.dir);
       if (!o.model && d < BUILD_R) this.spawn(o);
       else if (o.model && d > DROP_R) this.despawn(o);
       else if (o.rubble && !this.wrecked(o)) { this.despawn(o); this.spawn(o); } // rebuilt
+      if (o.guns && o.guns.length && o.model && !o.rubble) this.updateGuns(o, dt);
       if (o.rubble && o.model && d < 500 && Math.random() < dt * 6) g.fx.spawn((o.mainC || o.model.position).clone().addScaledVector(o.dir, 1.5), o.dir.clone().multiplyScalar(5), { color: 0x2a2433, size: 1.4, life: 1.6, count: 1, spread: 3 });
-      if (o.model && d < 400) o.model.traverse((m) => {
-        if (m.userData.spin) m.rotation.y += dt * 0.6;
-        if (m.userData.blink) m.visible = Math.sin(this.t * 4 + o.seed) > -0.3;
-        if (m.userData.flag) m.rotation.y = Math.sin(this.t * 2 + o.seed) * 0.25;
-      });
+      if (o.model && d < 400) {
+        const movers = o.model.userData.movers || (o.model.userData.movers = collectNodes(o.model, (m) => m.userData.spin || m.userData.blink || m.userData.flag));
+        for (const m of movers) {
+          if (m.userData.spin) m.rotation.y += dt * 0.6;
+          if (m.userData.blink) m.visible = Math.sin(this.t * 4 + o.seed) > -0.3;
+          if (m.userData.flag) m.rotation.y = Math.sin(this.t * 2 + o.seed) * 0.25;
+        }
+      }
     }
     this.updatePatrols(dt);
     // which territory am I in?
@@ -572,15 +640,39 @@ export class Territory {
       this.checkT = 0.5;
       const f = this.owner(P.pos.clone().normalize());
       if (f !== this.current) {
-        const first = this.current === null;
         this.current = f;
         const F = FACTIONS[f];
-        this.chip.textContent = `◆ ${F.name.toUpperCase()} TERRITORY`;
         this.chip.style.background = F.color;
+        this.chip.style.setProperty('--glow', F.color);
+        this.drawChip();
         this.chip.classList.remove('hidden');
-        if (!first && g.state === 'play') g.hud.toast(`Entering ${F.name} territory`, 2);
+        this.flashChip(); // (no "Entering X territory" popup: the chip under the minimap says it, and flashes)
       }
     }
+  }
+
+  // a glowing flash in the owner's colour, restarted each time the chip's text changes
+  flashChip() {
+    if (this.t < 1) return;
+    const el = this.chip;
+    el.classList.remove('flash');
+    void el.offsetWidth;
+    el.classList.add('flash');
+  }
+
+  // the chip: the territory line, and under it (centred, same box) the settlement you're in
+  drawChip() {
+    const F = FACTIONS[this.current];
+    if (!F) return;
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    this.chip.innerHTML = `◆ ${esc(F.name.toUpperCase())} TERRITORY${this.placeName ? `<div class="terr-place">${esc(this.placeName.toUpperCase())}</div>` : ''}`;
+  }
+
+  setPlace(name) {
+    if (name === this.placeName) return;
+    this.placeName = name;
+    this.drawChip();
+    this.flashChip();
   }
 
   // ---------- raiding minor structures ----------
@@ -599,18 +691,19 @@ export class Territory {
     const L = LOOT[o.kind];
     const F = FACTIONS[o.faction];
     const wait = (o.lootAt || -1e9) + LOOT_CD - g.time;
-    if (wait > 0) { g.hud.prompt(`${KIND_NAMES[o.kind].toUpperCase()} — PICKED CLEAN. RESTOCKS IN ${Math.ceil(wait)}s`); return true; }
+    // it does restock, but the player isn't told when
+    if (wait > 0) { g.hud.prompt(`${KIND_NAMES[o.kind].toUpperCase()} — PICKED CLEAN`); return true; }
     g.hud.prompt(`<b>F</b> — ${L.verb} <span style="color:#ff2a4a">(−${LOOT_REP} ${F ? F.name.toUpperCase() : ''} REP)</span>`);
     if (!g.input.pressed('KeyF') || g.boardCooldown > 0) return true;
     const A = g.alchemy;
     if (L.crate) A.openCrate();
     else {
       // everything but credits rides in the jar
-      if (!A.owned) { g.hud.toast(`You need a containment jar to carry a ${ITEMS[L.item].name.toLowerCase()}. Dr. Zbornak sells them.`, 3); return true; }
-      if (A.used >= A.slots) { g.hud.toast('Your jar is full.', 2); return true; }
+      if (!A.owned) { g.hud.toast(`You need a containment jar to carry a ${ITEMS[L.item].name.toLowerCase()}. Dr. Zbornak sells them.`, 5); return true; }
+      if (A.used >= A.slots) { g.hud.toast('Your jar is full.', 3.5); return true; }
       if (L.credits) g.addCredits(L.credits[0] + Math.floor(Math.random() * (L.credits[1] - L.credits[0] + 1)), KIND_NAMES[o.kind]);
       A.add(L.item, L.names ? L.names[Math.floor(Math.random() * L.names.length)] : undefined);
-      g.fx.pop(L.pop, null, { color: ITEMS[L.item].color, size: 46 });
+      g.fx.pop(L.pop, null, { color: ITEMS[L.item].color, size: 46, life: 2.4 });
     }
     o.lootAt = g.time;
     g.rep.add(o.faction, -LOOT_REP, `Raided a ${KIND_NAMES[o.kind]}`, { war: false });
@@ -630,17 +723,80 @@ export class Territory {
     return best;
   }
 
-  // territory colour for a globe-map cell (cached per cell)
-  cellColor(k, x, y, z) {
-    if (!this.mapCache) this.mapCache = new Map();
-    let c = this.mapCache.get(k);
-    if (!c) {
-      const f = this.owner(_v.set(x, y, z));
-      c = new THREE.Color(FACTIONS[f].color);
-      this.mapCache.set(k, c);
+  // ---------- globe map ----------
+  // The map colours every screen pixel by the exact owner of the ground under it, so borders are
+  // crisp lines rather than steps along the exploration cells. Asking owner() (a loop over every
+  // anchor) for every pixel of every redraw would be far too slow, so a coarse cube-face grid
+  // answers wherever a cell and its neighbours all belong to one faction. A cell touching a border
+  // keeps the short list of anchors that claim it or its neighbours, and only those compete for its
+  // pixels. The grid is rebuilt lazily after any border change.
+  mapGrid() {
+    if (this.mapG) return this.mapG;
+    const T = MAP_GRID, S = T + 2; // (one spare ring of cells round each face, so rims need no special case)
+    const names = Object.keys(FACTIONS), fi = {};
+    names.forEach((n, i) => { fi[n] = i; });
+    const A = this.anchors, n = A.length;
+    const ad = new Float32Array(n * 3), aw = new Float32Array(n), af = new Uint8Array(n);
+    A.forEach((a, i) => { const l = a.dir.length() || 1; ad[i * 3] = a.dir.x / l; ad[i * 3 + 1] = a.dir.y / l; ad[i * 3 + 2] = a.dir.z / l; aw[i] = a.w; af[i] = fi[a.faction] || 0; }); // (owner() normalises too)
+    const own = new Uint16Array(6 * S * S), d = new THREE.Vector3();
+    let k = 0;
+    for (let f = 0; f < 6; f++) for (let j = -1; j <= T; j++) for (let i = -1; i <= T; i++) {
+      const a = ((i + 0.5) / T) * 2 - 1, b = ((j + 0.5) / T) * 2 - 1;
+      switch (f) {
+        case 0: d.set(1, b, -a); break;
+        case 1: d.set(-1, b, a); break;
+        case 2: d.set(a, 1, -b); break;
+        case 3: d.set(a, -1, b); break;
+        case 4: d.set(a, b, 1); break;
+        default: d.set(-a, b, -1);
+      }
+      d.normalize();
+      let best = 0, bd = Infinity;
+      for (let q = 0; q < n; q++) {
+        const dd = Math.acos(Math.min(1, ad[q * 3] * d.x + ad[q * 3 + 1] * d.y + ad[q * 3 + 2] * d.z)) / aw[q];
+        if (dd < bd) { bd = dd; best = q; }
+      }
+      own[k++] = best;
     }
-    return c;
+    // per cell: a lone faction (colour straight from the grid) or, at a border, the anchors in play
+    const col = new Uint8Array(T * T * 6), edge = new Int32Array(T * T * 6).fill(-1), cand = [];
+    for (let f = 0; f < 6; f++) for (let j = 0; j < T; j++) for (let i = 0; i < T; i++) {
+      const c = (f * T + j) * T + i, base = (f * S + (j + 1)) * S + (i + 1);
+      const ids = [];
+      let mixed = false;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const q = own[base + dj * S + di];
+        if (!ids.includes(q)) ids.push(q);
+        if (af[q] !== af[own[base]]) mixed = true;
+      }
+      col[c] = af[own[base]];
+      if (mixed) { edge[c] = cand.length; cand.push(ids.length, ...ids); }
+    }
+    const rgb = names.map((nm) => { const c = new THREE.Color(FACTIONS[nm].color); return [c.r * 255, c.g * 255, c.b * 255]; });
+    return (this.mapG = { T, col, edge, cand: Uint16Array.from(cand), ad, aw, af, rgb });
+  }
+
+  // colour [r, g, b] (0-255) of the territory holding the unit direction (x, y, z)
+  mapColor(x, y, z) {
+    const G = this.mapGrid(), T = G.T;
+    const ax = x < 0 ? -x : x, ay = y < 0 ? -y : y, az = z < 0 ? -z : z;
+    let f, a, b;
+    if (ax >= ay && ax >= az) { if (x > 0) { f = 0; a = -z / x; b = y / x; } else { f = 1; a = z / -x; b = y / -x; } }
+    else if (ay >= az) { if (y > 0) { f = 2; a = x / y; b = -z / y; } else { f = 3; a = x / -y; b = z / -y; } }
+    else if (z > 0) { f = 4; a = x / z; b = y / z; } else { f = 5; a = x / z; b = y / -z; }
+    const i = Math.min(T - 1, Math.max(0, ((a + 1) * 0.5 * T) | 0)), j = Math.min(T - 1, Math.max(0, ((b + 1) * 0.5 * T) | 0));
+    const c = (f * T + j) * T + i, e = G.edge[c];
+    if (e < 0) return G.rgb[G.col[c]];
+    // at a border: whichever nearby anchor is closest (by the same weighted distance owner() uses)
+    const { cand, ad, aw } = G;
+    let best = 0, bd = Infinity;
+    for (let q = 1; q <= cand[e]; q++) {
+      const m = cand[e + q];
+      const dd = Math.acos(Math.min(1, ad[m * 3] * x + ad[m * 3 + 1] * y + ad[m * 3 + 2] * z)) / aw[m];
+      if (dd < bd) { bd = dd; best = m; }
+    }
+    return G.rgb[G.af[best]];
   }
 }
 
-export { KIND_NAMES, MILITARY };
+export { KIND_NAMES, MILITARY, SAP_NAMES };

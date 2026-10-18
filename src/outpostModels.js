@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { toon, glow, inkMat, textSprite, vcMaterial, vcable, paintVertices } from './toon.js';
+import { toon, glow, inkMat, textSprite, vcMaterial, vcable, paintVertices, dropFloorFaces } from './toon.js';
 import { mulberry32 } from './rng.js';
+import { bakeStatic } from './staticBake.js';
+import { outpostAsset } from './outpostGlb.js';
+import { bendPoint, bendQuat, bendGeometry } from './curve.js';
 
 // The small faction structures that dot the countryside (watchtowers, depots, farm domes, relay
 // masts, kiosks, scrap shacks, junk piles). Each is a ~50 m compound on its own flattened plateau.
@@ -40,8 +43,6 @@ function prism(len, width, height) {
   return new THREE.CylinderGeometry(1, 1, len, 3, 1, false, -Math.PI / 2).rotateZ(-Math.PI / 2)
     .scale(1, height / 1.5, width / 1.732).translate(0, height / 3, 0);
 }
-// a shallow dish facing local +z
-const dishGeo = (r) => new THREE.SphereGeometry(r, 14, 6, 0, Math.PI * 2, 0, 0.75).rotateX(-Math.PI / 2).translate(0, 0, r * 0.85);
 
 // ---------- static-geometry kit ----------
 const _m = new THREE.Matrix4(), _h = new THREE.Matrix4(), _t = new THREE.Matrix4(), _r = new THREE.Matrix4();
@@ -56,13 +57,34 @@ function prep(g) {
   return g;
 }
 
+// Dev audit (tools: the Downs z-fight audit): with `Kit.tags = []` every piece a kit bakes carries a `tag` attribute, an index into that list, naming the builder and
+// part it came from (`k.tag`). Off (null) in the game; the attribute is merged and bent along with the rest.
 class Kit {
+  static tags = globalThis.__kitTags ? (globalThis.__kitTagNames = []) : null;
+  tag = '';
+  instN = 0;
+  // (and the box each piece fills, in the kit's frame, for the near-miss audit: globalThis.__kitBoxes)
+  boxOf(g, inst) {
+    if (!Kit.tags || !this.tag) return;
+    g.computeBoundingBox();
+    const b = g.boundingBox;
+    (globalThis.__kitBoxes ||= []).push({ i: inst, t: this.tag, a: [b.min.x, b.min.y, b.min.z], b: [b.max.x, b.max.y, b.max.z] });
+  }
+  tagGeo(g) {
+    if (!Kit.tags) return g;
+    let id = Kit.tags.indexOf(this.tag);
+    if (id < 0) id = Kit.tags.push(this.tag) - 1;
+    g.setAttribute('tag', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count).fill(id), 1));
+    return g;
+  }
   constructor(c, seed, wreck) {
     this.c = c;
     // separate streams so the shared props come out the same whether or not the main building
     // stands: rr for the yard, mr for the intact main building, wr for its wreckage
     this.rr = mulberry32(seed); this.mr = mulberry32(seed + 1); this.wr = mulberry32(seed + 2);
     this.wreck = wreck;
+    this.curveR = 0; // a curved place's plateau radius (curve.js): the kit is drawn flat and bent onto the sphere at finish(), its moving parts and text planes as they are placed
+    this.onGround = false; // a settlement's kit (y = 0 is the ground): the undersides of what stands on it are never seen, and are left out (toon.dropFloorFaces)
     this.drop = null; // open apron spot where loot can be thrown to
     this.byMat = new Map();
     this.ink = [];
@@ -100,9 +122,37 @@ class Kit {
       const hg = new THREE.BufferGeometry();
       hg.setAttribute('position', geo.attributes.position.clone());
       hg.setIndex(geo.index);
-      this.ink.push(hg.applyMatrix4(_h));
+      hg.applyMatrix4(_h);
+      this.ink.push(this.onGround ? dropFloorFaces(hg) : hg);
     }
-    list.push(geo.applyMatrix4(_m));
+    geo.applyMatrix4(_m);
+    this.tagGeo(geo);
+    this.boxOf(geo, ++this.instN);
+    list.push(mat.side === THREE.FrontSide && this.onGround ? dropFloorFaces(geo) : geo);
+    return this;
+  }
+
+  // A Blender-built part (models.js bakeShip: its geometry per material slot, and its outline hull, in the part's own frame)
+  // baked into the kit in the current frame, placed by the matrix `m` (the part's frame -> the kit frame: scale, turn, offset).
+  // `mat(slot)` picks the kit material for a slot. Only that node's own meshes go in, not its child pivots.
+  baked(node, mat, m) {
+    this.instN++;
+    const w = new THREE.Matrix4().multiplyMatrices(this.base, m);
+    for (const { slot, geo } of node.parts) {
+      const km = mat(slot);
+      let list = this.byMat.get(km);
+      if (!list) this.byMat.set(km, (list = []));
+      const g = this.tagGeo(prep(geo.clone()).applyMatrix4(w));
+      this.boxOf(g, this.instN);
+      list.push(km.side === THREE.FrontSide && this.onGround ? dropFloorFaces(g) : g);
+    }
+    if (node.ink) {
+      const hg = new THREE.BufferGeometry();
+      hg.setAttribute('position', node.ink.attributes.position.clone());
+      hg.setIndex(node.ink.index.clone());
+      hg.applyMatrix4(w);
+      this.ink.push(this.onGround ? dropFloorFaces(hg) : hg);
+    }
     return this;
   }
 
@@ -126,6 +176,14 @@ class Kit {
 
   // separate (animated or textured) objects
   dyn(obj, x, y, z, ry = 0) {
+    if (this.curveR) { // (on a holder that stands on the sphere, so a moving part keeps turning in its own frame)
+      const p = this.P(x, y, z), h = new THREE.Group();
+      bendPoint(this.curveR, p.x, p.y, p.z, h.position);
+      h.quaternion.setFromAxisAngle(UP, this.yaw + ry).premultiply(bendQuat(this.curveR, p.x, p.z, _q));
+      h.add(obj);
+      this.root.add(h);
+      return obj;
+    }
     obj.position.copy(this.P(x, y, z));
     obj.rotation.y += this.yaw + ry;
     this.root.add(obj);
@@ -151,10 +209,18 @@ class Kit {
   text(str, x, y, z, ry, w, { fg = '#ffd23f', bg = '#241a3a', stroke = '#120a1e', rz = 0, back = true, off = 0.17 } = {}) {
     const mat = textMat(str, fg, bg, stroke);
     const h = w / mat.userData.aspect;
-    const geo = new THREE.PlaneGeometry(w, h);
+    const geo = new THREE.PlaneGeometry(w, h, this.curveR ? Math.ceil(w / 5) : 1, 1);
     for (const side of back ? [0, 1] : [0]) {
-      const m = new THREE.Mesh(geo, mat);
       const lz = side ? -1 : 1;
+      if (this.curveR) { // (cut into short strips and bent with the wall behind it)
+        const g = geo.clone();
+        _m.compose(_p.copy(this.P(x, y, z)).add(_d.set(Math.sin(this.yaw + ry), 0, Math.cos(this.yaw + ry)).multiplyScalar(off * lz)),
+          _q.setFromEuler(_e.set(0, this.yaw + ry + (side ? Math.PI : 0), side ? -rz : rz)), _s);
+        const m = new THREE.Mesh(bendGeometry(g.applyMatrix4(_m), this.curveR), mat);
+        this.root.add(m);
+        continue;
+      }
+      const m = new THREE.Mesh(geo, mat);
       m.position.copy(this.P(x, y, z)).add(_d.set(Math.sin(this.yaw + ry), 0, Math.cos(this.yaw + ry)).multiplyScalar(off * lz));
       m.rotation.set(0, this.yaw + ry + (side ? Math.PI : 0), side ? -rz : rz);
       this.root.add(m);
@@ -205,14 +271,18 @@ class Kit {
   }
 
   // colliders / blast boxes, given in the current frame
-  solid(hx, hy, hz, x, z, ry = 0, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'box', hx, hy, hz, x: p.x, y: y0 + hy, z: p.z, yaw: this.yaw + ry }); }
-  sphere(r, x, y, z) { const p = this.P(x, y, z); this.cols.push({ type: 'sphere', r, x: p.x, y: p.y, z: p.z }); }
-  column(r, h, x, z, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'cyl', r, y0, y1: h, x: p.x, z: p.z }); }
+  solid(hx, hy, hz, x, z, ry = 0, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'box', hx, hy, hz, x: p.x, y: y0 + hy, z: p.z, yaw: this.yaw + ry, tag: this.tag }); }
+  sphere(r, x, y, z) { const p = this.P(x, y, z); this.cols.push({ type: 'sphere', r, x: p.x, y: p.y, z: p.z, tag: this.tag }); }
+  column(r, h, x, z, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'cyl', r, y0, y1: h, x: p.x, z: p.z, tag: this.tag }); }
   // a lying-down cylinder (quonset huts, hangars, pipes): axis along local z (turned by ry), centre at height y
   hcyl(r, len, x, z, ry = 0, y = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'hcyl', r, len, x: p.x, y, z: p.z, yaw: this.yaw + ry }); }
   hit(hx, hy, hz, x, z, ry = 0) { const p = this.P(x, 0, z); this.hits.push({ hx, hy, hz, x: p.x, y: hy, z: p.z, yaw: this.yaw + ry }); }
 
   finish() {
+    if (this.curveR) { // (long pieces cut every 8 m so they curve: curve.js)
+      for (const list of this.byMat.values()) for (let i = 0; i < list.length; i++) list[i] = bendGeometry(list[i], this.curveR, 8);
+      for (let i = 0; i < this.ink.length; i++) this.ink[i] = bendGeometry(this.ink[i], this.curveR, 8);
+    }
     // the shared plain colours all go in one vertex-coloured mesh per kind (toon / glow) and side
     const vc = new Map();
     for (const [mat, list] of [...this.byMat]) {
@@ -716,22 +786,15 @@ function mast(k) {
     }
     k.cyl(0.08, 0.12, 2.6, 5, T(LIGHT), MX, H, MZ, { outline: 0.02 });
     k.blinker(MX, H + 2.9, MZ, 0xff2a4a, 0.45);
-    for (const [h, ry, r] of [[17, 0.5, 1.6], [25, 2.6, 1.9], [28.5, 4.4, 1.4]]) {
+    for (const [h, ry, rim] of [[17, 0.5, 1.1], [25, 2.6, 1.3], [28.5, 4.4, 0.95]]) { // (a dish head on an arm, in the outpost's faction paint: models.js)
       k.at(MX, MZ, ry);
-      k.add(dishGeo(r), D(0xf5f5f5), 0, h, 1.2, { outline: 0.04 });
-      k.beam([0, h, 0.4], [0, h, 1.4], 0.08, T(DARK));
-      k.beam([0, h, 1.4], [0, h, 1.2 + r * 1.2], 0.04, T(DARK), { outline: 0 });
+      k.beam([0, h - 0.7, 0.4], [0, h - 0.7, 1.5], 0.08, T(DARK));
+      k.dishHead(0, h - 0.7, 1.5, rim, c, { az: Math.PI, el: -1.35 });
       k.at();
     }
     for (let i = 0; i < 3; i++) { k.at(MX, MZ, (i * Math.PI * 2) / 3 + 1.2); k.box(0.55, 2.8, 0.2, T(LIGHT), 0, 35.6, 1.15, { outline: 0.03 }); k.at(); }
     // the spinning dish on the top platform
-    const pv = new THREE.Group();
-    const dm = new THREE.Mesh(dishGeo(1.5), D(0xf5f5f5));
-    dm.position.set(0, 1.0, 1.6); dm.rotation.x = -0.4; dm.castShadow = true;
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 1.6), T(DARK)); arm.position.set(0, 1.0, 0.8);
-    pv.add(dm, arm);
-    pv.userData.spin = true;
-    k.dyn(pv, MX, 32.8, MZ);
+    k.dishHead(MX, 32.8, MZ, 1.0, c, { az: Math.PI, el: -0.7, spin: 0.6, arm: 1.6 });
     // guy wires to three anchors
     for (let i = 0; i < 3; i++) {
       const a = 0.5 + (i * Math.PI * 2) / 3;
@@ -770,8 +833,11 @@ function mast(k) {
     };
     lying([MX + 1, MZ - 2], [5, -20]);
     lying([5.5, -19], [17, -12]);
-    k.add(dishGeo(1.9), D(0xb8b4c8), -8, F + 0.6, -14, { rx: -1.3, ry: 0.7, outline: 0.04 });
-    k.add(dishGeo(1.5), D(0xb8b4c8), 9, F + 0.5, -16, { rx: 1.2, ry: 2.1, outline: 0.04 });
+    k.at(-8, -14, 0.7, F + 0.5, -0.9, 0.3); // (two heads thrown off the mast, on their sides)
+    k.dishHead(0, 0, 0, 1.3, 'none', { el: -0.3 });
+    k.at(9, -16, 2.1, F + 0.4, 0.8, -0.4);
+    k.dishHead(0, 0, 0, 1.0, 'none', { el: -0.6 });
+    k.at();
     for (let i = 0; i < 3; i++) {
       const a = 0.5 + (i * Math.PI * 2) / 3, ax = MX + Math.cos(a) * 17, az = MZ + Math.sin(a) * 17;
       k.box(1.8, 1, 1.8, T(CONC), ax, 0, az, { outline: 0.04 });
@@ -806,8 +872,7 @@ function mast(k) {
   k.at(-13, 10, 2.4);
   k.cyl(0.6, 0.9, 2.4, 8, T(LIGHT), 0, 0, 0, { outline: 0.05 });
   k.box(1.4, 0.8, 1.0, T(DARK), 0, 2.2, 0, { outline: 0.03 });
-  k.add(dishGeo(3.2), D(0xf5f5f5), 0, 3.2, -0.4, { rx: -0.8, outline: 0.05 });
-  k.beam([0, 3.2, 0.3], [0, 5.2, 2.2], 0.06, T(DARK), { outline: 0 });
+  k.dishHead(0, 3.0, 0, 2.2, c, { az: Math.PI, el: -0.7 });
   k.column(1.2, 3, 0, 0);
   k.at();
   // name board, flags, perimeter, lights
@@ -1182,7 +1247,7 @@ function junk(k) {
   k.flag(5.5, 23, 8);
   k.lamp(-20, 12, 6, 0xffd27a); k.lamp(20, -12, 6, 0xffd27a);
 }
-const patch = (i) => [0xa05a2a, 0x4a6a5a, 0xc9a227, 0x2b59c3, 0xff7ad9][i % 5];
+const patch = (i) => [0xa05a2a, 0x4a6a5a, 0xc9a227, 0x2b59c3, 0xff7ad9][((i % 5) + 5) % 5]; // (i may be negative: the junk shack's left sheets)
 
 const BUILD = { tower, depot, farm, mast, kiosk, shack, junk };
 const VARIANTS = 1; // prop scatter variants per look (each one is a separate bake)
@@ -1198,12 +1263,28 @@ const templates = new Map();
 //   smoke - Vector3 where the wreck smoulders (the main building's centre)
 //   drop  - Vector3 open apron spot 10-16 m from the main building where loot can land
 // wreck = true gives the same compound with the main building reduced to rubble.
-export function outpostTemplate(kind, color, variant = 0, wreck = false) {
+// src: 'auto' (a Blender-authored GLB if one is switched on, loaded and has this kind: outpostGlb.js;
+// otherwise the Kit build), 'kit', or 'glb' (any kind in the file, switched on or not; throws if there isn't one:
+// for the viewer).
+export function outpostTemplate(kind, color, variant = 0, wreck = false, src = 'auto') {
   variant %= VARIANTS;
-  const key = `${kind}|${color}|${variant}|${wreck ? 1 : 0}`;
+  const asset = src === 'kit' ? null : outpostAsset(kind, wreck, src === 'glb');
+  if (src === 'glb' && !asset) throw new Error(`no GLB outpost for ${kind}${wreck ? ' wreck' : ''}`);
+  const key = `${kind}|${color}|${variant}|${wreck ? 1 : 0}|${asset ? 'glb' : 'kit'}`;
   let t = templates.get(key);
+  if (!t && asset) {
+    try {
+      t = bakeStatic(asset, { color, textMat });
+    } catch (e) {
+      if (src === 'glb') throw e;
+      console.warn(`GLB ${kind}${wreck ? ' wreck' : ''} failed to bake, using the Kit-built one`, e);
+      t = outpostTemplate(kind, color, variant, wreck, 'kit');
+    }
+    templates.set(key, t);
+  }
   if (!t) {
     const k = new Kit(color, KIND_SEED[kind] * 977 + variant * 131, wreck);
+    k.onGround = true;
     BUILD[kind](k, wreck);
     t = k.finish();
     templates.set(key, t);
@@ -1212,5 +1293,5 @@ export function outpostTemplate(kind, color, variant = 0, wreck = false) {
 }
 
 // The kit and its shared props also build the bigger settlements (settlements.js).
-export { Kit, T, G, D, GLASS, BEAM, prism, dishGeo, sandbags, crate, container, tank, junkHeap, lightString, scatterDebris };
+export { Kit, T, G, D, GLASS, BEAM, prism, sandbags, crate, container, tank, junkHeap, lightString, scatterDebris };
 export const PALETTE = { STEEL, DARK, LIGHT, CREAM, CONC, YEL, WOOD, RUST, TYRE, CHAR };

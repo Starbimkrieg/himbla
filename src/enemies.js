@@ -1,12 +1,16 @@
 import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { makeBody, stepSkater } from './physics.js';
+import { Ragdoll } from './ragdoll.js';
 import { makeRunner, makeRover, makeTurret, makeCrate, makePylon, ScarfSim } from './models.js';
 import { randRange } from './rng.js';
 import { FACTIONS } from './locations.js';
 import { frameQuat, greatCircle, arcDist, darkness, tangent } from './geo.js';
 import { FOES, BOSS_MODELS } from './storyAssets.js';
 
+// m/s a rover can hit a wall, a building or a deck at without being hurt: the same for the vehicles you drive
+// (vehicles.js) and the ones that hunt you (crashRover)
+export const CRASH_SAFE = 18;
 const PIRATE_SKATER = { ...PHYS, skatePushMax: 34, thrustAccel: 13, maxEnergy: 120, handling: 2.2 };
 // two separate pirate pools: roaming hunters (squads that chase you) and den guards (which keep to
 // their lair). Event raiders (spawnWave) belong to neither. Each pool always has a rover in it.
@@ -35,7 +39,12 @@ function steerToward(heading, up, target, maxAngle) {
 // stick: hold the ground over crests and bumps (pirate and military rovers). It's the speed above
 // which a real crest may throw the rig clear (a pirate ram run at full tilt); below it the rig
 // snaps back down over crests, and once airborne it's pulled down hard
-export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engine = 16, grip = 0, turn = 1.8, radius = 2.4, stick = false, traction = 0, weight = 1 } = {}) {
+// solidPlatforms: moving decks (land-train cars, hover-cars, the satellite) are solid too. They're
+// skipped by default, since the pirate and military rovers have always driven through them; a
+// vehicle you drive hits them.
+// crash: { speed } filled in with the hardest head-on hit this step (m/s closing on a wall, a
+// building or a deck). Ramps and roofs you can drive up, and bouncy inflatables, don't count.
+export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engine = 16, grip = 0, turn = 1.8, radius = 2.4, stick = false, traction = 0, weight = 1, solidPlatforms = false, crash = null } = {}) {
   const b = e.body;
   const up = b.up.copy(b.pos).normalize();
   steerToward(e.heading, up, targetDir, (turn / (1 + b.vel.length() / 60)) * dt);
@@ -76,13 +85,17 @@ export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engin
   if (colliders) {
     const cp = b.pos.clone().addScaledVector(up, radius * 0.7);
     for (const c of colliders.query(cp, radius + 3, _near)) {
-      if (c.platform) continue;
+      if (c.platform && !solidPlatforms) continue;
       const pen = colliders.contact(c, cp, radius, _n);
       if (pen > 0) {
         b.pos.addScaledVector(_n, pen);
         cp.addScaledVector(_n, pen);
-        const vn = b.vel.dot(_n);
-        if (vn < 0) b.vel.addScaledVector(_n, -vn * 1.3);
+        // (a moving deck is hit at the speed you close on it, not your speed over the ground)
+        const vn = b.vel.dot(_n) - (c.platform && c.platform.vel ? c.platform.vel.dot(_n) : 0);
+        if (vn < 0) {
+          if (crash && !c.bouncy && _n.dot(up) < 0.55) crash.speed = Math.max(crash.speed, -vn);
+          b.vel.addScaledVector(_n, -vn * 1.3);
+        }
       }
     }
   }
@@ -212,6 +225,99 @@ export class Enemies {
     base.patrols.push(e);
     this.list.push(e);
     return e;
+  }
+
+  // A patrol on the open road between two outposts (territory.js routes): the same armoured car as a
+  // base patrol, but it belongs to no base. It keeps its faction's roads clear of pirates, shoots
+  // you only while that faction counts you an enemy (or you've shot it), and is a real, solid
+  // vehicle: it can be rammed, shot, hooked and wrecked. Territory owns spawning and despawning.
+  spawnRoamer(route, t, dir = 1) {
+    const g = this.game;
+    const fc = new THREE.Color(FACTIONS[route.faction].color).getHex();
+    const dirAt = g.territory.routePoint(route, t, new THREE.Vector3());
+    const p = this.ground(dirAt);
+    const ahead = g.territory.routePoint(route, Math.min(1, Math.max(0, t + dir * 0.01)), new THREE.Vector3());
+    const up = p.clone().normalize();
+    const heading = tangent(ahead.sub(dirAt), up);
+    if (heading.lengthSq() < 1e-10) heading.copy(tangent(new THREE.Vector3(1, 0, 0), up));
+    heading.normalize();
+    const m = makeRover({ color: 0x55607a, trim: fc, pirate: false, flag: fc, style: 'military' });
+    m.root.scale.setScalar(1.15);
+    g.scene.add(m.root);
+    const e = {
+      kind: 'milrover', faction: 'mil', model: m, hp: 160, maxHp: 160, fireCd: 1 + Math.random() * 2,
+      heading, body: makeBody(p), center: p.clone().addScaledVector(up, 1.8), radius: 3.2, dead: false,
+      roam: { route, faction: route.faction, t, dir, stuck: 0, lastPos: p.clone(), provoked: 0 },
+    };
+    this.list.push(e);
+    return e;
+  }
+
+  removeRoamer(e) {
+    e.dead = true;
+    e.respawn = 0;
+    e.model.root.removeFromParent();
+  }
+
+  updateRoamRover(e, dt) {
+    const g = this.game;
+    const P = g.player;
+    const b = e.body;
+    const R = e.roam;
+    const r = R.route;
+    const T = g.territory;
+    // follow the route: aim at a waypoint 70 m along it; once the car is within 40 m of it (or has chased it for too long) the
+    // waypoint moves on, and at either end of the route the car turns round. (It turns in about 8 m at speed, so a waypoint
+    // 40 m wide can always be arrived at: the car can never circle one it cannot reach, which is what it did when the marker
+    // it was waiting for sat behind it after the turn at an end.)
+    const step = 70 / Math.max(50, r.len);
+    const here = _sv.copy(b.pos).normalize();
+    const wp = T.routePoint(r, R.t, _sn);
+    R.wpT = (R.wpT || 0) + dt;
+    if (here.distanceTo(wp) * b.pos.length() < 40 || R.wpT > 20) {
+      R.wpT = 0;
+      if (r.b && (R.dir > 0 ? R.t >= 1 : R.t <= 0)) R.dir *= -1; // (it has reached the waypoint at the end)
+      R.t += R.dir * step;
+      R.t = r.b ? Math.min(1, Math.max(0, R.t)) : ((R.t % 1) + 1) % 1;
+    }
+    R.stuck = b.pos.distanceToSquared(R.lastPos) < 0.25 * dt ? R.stuck + dt : 0;
+    R.lastPos.copy(b.pos);
+    if (R.stuck > 5) { // (wedged against something: back the other way)
+      R.stuck = 0; R.dir *= -1; R.wpT = 0; b.vel.multiplyScalar(0);
+      R.t += R.dir * 2 * step;
+      R.t = r.b ? Math.min(1, Math.max(0, R.t)) : ((R.t % 1) + 1) % 1;
+    }
+    const goal = this.ground(T.routePoint(r, R.t, new THREE.Vector3()));
+    this.dbgGoal(e, goal);
+    const crash = { speed: 0 };
+    stepRover(e, dt, g.planet, g.colliders, goal.sub(b.pos), 16, { engine: 16, grip: 8, turn: 2, stick: Infinity, crash });
+    this.crashRover(e, crash);
+    if (e.dead) return;
+    this.poseVehicle(e, dt);
+    // keep the roads clear of pirates, and shoot you if their faction counts you an enemy
+    if (R.provoked > 0) R.provoked -= dt;
+    e.fireCd -= dt;
+    if (e.fireCd <= 0) {
+      e.fireCd = 1.6;
+      const from = e.center.clone().addScaledVector(b.up, 2.5);
+      let target = null, bd = 260;
+      for (const x of this.list) {
+        if (x.dead || x.faction !== 'pirate' || x.kind === 'core' || !x.center || this.friendly(x)) continue;
+        const dd = x.center.distanceTo(from);
+        if (dd < bd && g.planet.visible(from, x.center)) { bd = dd; target = x; }
+      }
+      if (this.isHostileTarget(e) && !P.dead) {
+        const dd = P.center.distanceTo(from);
+        if (dd < bd && g.planet.visible(from, P.center)) { bd = dd; target = { center: P.center, player: true }; }
+      }
+      if (target) {
+        const dir = target.center.clone().sub(from).normalize();
+        g.projectiles.fire('mil', from, dir.multiplyScalar(130), { damage: target.player ? 10 : 22, splash: 4, color: 0xffb02e, size: 0.45, knock: 0.5, spare: !target.player });
+        e.model.root.updateMatrixWorld();
+        const local = e.model.root.worldToLocal(target.center.clone());
+        e.model.gun.rotation.y = Math.atan2(local.x, local.z);
+      }
+    }
   }
 
   // Every pirate den has a signal pylon: destroy it to shut the den down for a while.
@@ -414,8 +520,9 @@ export class Enemies {
   }
 
   removeAllies() {
-    for (const e of this.list) if (e.faction === 'ally') { e.dead = true; e.model.root.removeFromParent(); }
-    this.list = this.list.filter((e) => e.faction !== 'ally');
+    // (keep: the town's militia rovers, hometown.js, aren't a chapter's backup: its end doesn't stand them down)
+    for (const e of this.list) if (e.faction === 'ally' && !e.keep) { e.dead = true; e.model.root.removeFromParent(); }
+    this.list = this.list.filter((e) => e.faction !== 'ally' || e.keep);
   }
 
   // Rustmoon pirates leave you alone once you've joined them — unless you start it.
@@ -427,6 +534,7 @@ export class Enemies {
     if (t.dead) return false;
     if (t.faction === 'beast') return true;
     if (t.faction === 'pirate') return !this.friendly(t) && !(t.kind === 'core' && this.game.rep.aligned());
+    if (t.roam) return t.roam.provoked > 0 || this.game.rep.hostile(t.roam.faction);
     return t.base && t.base.hostile;
   }
 
@@ -553,6 +661,11 @@ export class Enemies {
         e.aggro = true;
         if (e.kind !== 'core') g.rep.add('rustmoon', -2, 'Shot a Rustmoon pirate');
       }
+      if (e.roam) {
+        // shooting a patrol makes it (and only it) fight back for a while
+        if (!(e.roam.provoked > 0)) g.hud.alert(`${FACTIONS[e.roam.faction].name.toUpperCase()} PATROL ENGAGING!`, '#ff2a4a', 2);
+        e.roam.provoked = 30;
+      }
       if (e.base) {
         const base = e.base;
         base.grace = false;
@@ -569,9 +682,31 @@ export class Enemies {
     if (e.hp <= 0) this.kill(e, fromPlayer);
   }
 
+  // A meteor lands (meteors.js): whatever is under the rock (core: its footprint) is crushed, and the blast beyond
+  // that, out to `reach`, hurts less the further it goes and flings runners and rovers clear. Pirates, troops,
+  // patrols and guns all take it; bosses, lair cores, the Mega Mite and your backup are left to their stories.
+  meteorBlast(pos, core, reach, r) {
+    for (const t of this.targets()) {
+      if (t.kind === 'core' || t.kind === 'megamite' || t.bossName || t.faction === 'ally') continue;
+      const d = t.center.distanceTo(pos) - (t.radius || 1);
+      if (d > reach) continue;
+      const crushed = d <= core;
+      const f = crushed ? 1 : 1 - (d - core) / (reach - core);
+      this.damage(t, crushed ? 150 + r * 12 : (60 + 8 * r) * f, false);
+      if (!t.dead && t.body) {
+        const away = t.center.clone().sub(pos);
+        away.addScaledVector(t.body.up, -away.dot(t.body.up));
+        if (away.lengthSq() < 0.01) away.copy(tangent(new THREE.Vector3(1, 0, 0), t.body.up));
+        t.body.vel.addScaledVector(away.normalize(), 10 + 22 * f).addScaledVector(t.body.up, 4 + 6 * f);
+        t.body.grounded = false;
+      }
+    }
+  }
+
   kill(e, byPlayer = true) {
     const g = this.game;
     e.dead = true;
+    if (e.rag) { e.rag.release(); e.rag = null; }
     const big = e.kind !== 'skater';
     g.fx.explosion(e.center, big ? 11 : 6, true);
     g.fx.pop(e.kind === 'skater' ? 'KA-POW!' : e.kind === 'core' ? 'KRA-KA-BOOOM!' : 'KA-BOOM!', e.center.clone().addScaledVector(e.center.clone().normalize(), 4), { color: '#ff4f2e', size: e.kind === 'core' ? 100 : 80 });
@@ -591,6 +726,11 @@ export class Enemies {
           this.pirateKills = (this.pirateKills || 0) + 1;
           if (this.pirateKills % 3 === 0) g.rep.add('spacecom', 1, 'Pirate bounties', { silent: true });
         }
+      }
+      if (e.roam) {
+        g.rep.add(e.roam.faction, -2, `Destroyed a ${FACTIONS[e.roam.faction].name} patrol`);
+        const enemy = FACTIONS[e.roam.faction].enemy;
+        if (enemy) g.rep.add(enemy, 1, `Hit ${FACTIONS[e.roam.faction].name}`, { silent: true, war: false });
       }
       if (e.base) {
         const ordered = g.events.active && g.events.active.target === e.base.loc;
@@ -621,7 +761,7 @@ export class Enemies {
       e.respawn = 60;
     } else if (e.kind !== 'core') {
       e.model.root.removeFromParent();
-      if (e.kind === 'milrover') e.respawn = 60;
+      if (e.kind === 'milrover' && e.base) e.respawn = 60; // (road patrols are not re-manned: territory.js sends a new one later)
     }
     g.events.onKill(e, byPlayer);
     g.story.onKill(e);
@@ -702,7 +842,9 @@ export class Enemies {
           const nh = this.hunters(), skip = nh >= 3;
           const got = skip ? 1 : this.spawnSquad(1 + Math.floor(Math.random() * 2));
           this.dbgDarkTry = { at: g.time, n: (this.dbgDarkTry ? this.dbgDarkTry.n : 0) + 1, skip, got, hunters: nh }; // (dev overlay)
-          this.darkTimer = got ? randRange(20, 34) : 4; // (a failed attempt tries again soon)
+          // (Daedalus Dark-Side Cloak: +5 s per level between checks, doubled on Daedalus ground)
+          const cloak = (g.upgrades.cloak || 0) * 5 * (g.territory && g.territory.current === 'daedalus' ? 2 : 1);
+          this.darkTimer = got ? randRange(20, 34) + cloak : 4; // (a failed attempt tries again soon)
           this.pirateTimer = Math.max(this.pirateTimer, 14);
         }
       }
@@ -741,7 +883,7 @@ export class Enemies {
       if (e.kind === 'kade') { g.story.updateKade(e, dt); if (e.dead) continue; }
       if (e.kind === 'skater') this.updateSkater(e, dt, time);
       else if (e.kind === 'rover') this.updateRover(e, dt);
-      else if (e.kind === 'milrover') this.updateMilRover(e, dt);
+      else if (e.kind === 'milrover') { if (e.roam) this.updateRoamRover(e, dt); else this.updateMilRover(e, dt); }
       else if (e.kind === 'ally') this.updateAlly(e, dt);
       else if (e.kind === 'turret') this.updateTurret(e, dt, shadow);
       if (e.flash > 0) e.flash -= dt;
@@ -874,7 +1016,9 @@ export class Enemies {
       const inside = !P.dead && d < loc.zoneR;
       // a delivery you just made here keeps you cleared until you leave (or start shooting)
       if (!inside) base.grace = false;
-      const authorized = base.grace || (!hostileRep && (g.missions.hasClearance(loc.id) || rep.cleared(base.faction) || g.events.hasClearance(loc.id)));
+      // (a story pass, like a fresh delivery's grace, lets you in even if the faction counts you an enemy: otherwise a player who is
+      // hostile with Daedalus for taking Vostok's side could never finish the Charter)
+      const authorized = base.grace || (g.story && g.story.hasClearance(loc.id)) || (!hostileRep && (g.missions.hasClearance(loc.id) || rep.cleared(base.faction) || g.events.hasClearance(loc.id)));
       base.inside = inside;
       base.authorized = authorized;
       if (inside && !authorized) {
@@ -911,13 +1055,14 @@ export class Enemies {
   }
 
   // You just delivered to (or picked up from) this restricted base: its guns hold until you're out.
-  grantGrace(loc) {
+  grantGrace(loc, why = 'delivery signed for') {
     const base = this.bases.find((b) => b.loc === loc && b.restricted);
     if (!base) return;
     base.grace = true;
+    base.graceWhy = why; // (the zone banner says it too)
     base.time = 0;
     if (base.aggro <= 0) base.hostile = false;
-    if (base.inside) this.game.hud.toast(`${base.loc.name}: delivery signed for. Your clearance holds until you leave the zone. Don't shoot anything.`, 4);
+    if (base.inside) this.game.hud.toast(`${base.loc.name}: ${why}. Your clearance holds until you leave the zone. Don't shoot anything.`, 4);
   }
 
   artillery(base, dt) {
@@ -1042,6 +1187,7 @@ export class Enemies {
   updateSkater(e, dt, time) {
     const g = this.game;
     const b = e.body;
+    if (e.rag) { this.updateRag(e, dt); return; } // (limp after a hard landing: the ragdoll carries the body)
     const friendly = this.friendly(e);
     let target = this.targetFor(e, 2.5);
     const up = b.up.copy(b.pos).normalize();
@@ -1083,8 +1229,11 @@ export class Enemies {
       thrustDir: wish.clone().addScaledVector(up, 0.2).normalize(),
     };
     const steps = Math.ceil(dt / (1 / 60));
-    for (let i = 0; i < steps; i++) { stepSkater(b, ctrl, dt / steps, g.planet, g.colliders, PIRATE_SKATER, e.impacts); ctrl.jump = false; }
+    // (stepSkater clears its impact list every step: gather the frame's from each)
+    const hits = [];
+    for (let i = 0; i < steps; i++) { stepSkater(b, ctrl, dt / steps, g.planet, g.colliders, PIRATE_SKATER, e.impacts); for (const it of e.impacts) hits.push(it); ctrl.jump = false; }
     e.center.copy(b.pos).addScaledVector(up, 1.3);
+    const skating = ctrl.skates;
 
     if (dazed) {
       // spin in place, seeing stars
@@ -1113,15 +1262,68 @@ export class Enemies {
     m.body.position.y = m.bodyBase + (b.grounded ? -0.15 : 0);
     m.armL.rotation.z = -0.5; m.armR.rotation.z = 0.5;
     if (!e.scarfSim) e.scarfSim = new ScarfSim(m);
-    e.scarfSim.update(dt, b.vel, up, e.carrying ? { back: 1.14, top: 1.0 } : undefined);
+    e.scarfSim.update(dt, b.vel, up, e.carrying ? { cargo: 1 } : undefined);
     m.glowM.color.setHex(e.flash > 0 ? 0xffffff : dazed ? 0xffd23f : friendly ? 0x2ee6ff : e.glowColor || 0x7dff3a);
     if (e.carrying && !m.loot) { m.loot = makeCrate(g.missions.active ? g.missions.active.cargo.color : 0xffd23f, 0.7); m.cargoSlot.add(m.loot); }
+    this.impactSkater(e, skating, hits); // (last, once the runner is posed: a ragdoll starts from that pose)
+  }
+
+  // A runner in a ragdoll: posed standing first (what it gets back up into), then the ragdoll takes over
+  // the model and carries the body until it has come to rest and stood up.
+  updateRag(e, dt) {
+    const b = e.body, m = e.model;
+    const up = b.up.copy(b.pos).normalize();
+    m.root.position.copy(b.pos);
+    frameQuat(up, e.heading, m.root.quaternion);
+    m.torso.rotation.set(0.5, 0, 0);
+    m.armL.rotation.z = -0.5; m.armR.rotation.z = 0.5;
+    m.body.position.y = m.bodyBase - 0.15;
+    if (!e.rag.update(dt)) { e.rag.release(); e.rag = null; } else e.rag.sync(dt);
+    e.center.copy(b.pos).addScaledVector(up, 1.3);
+    if (!e.scarfSim) e.scarfSim = new ScarfSim(m);
+    e.scarfSim.update(dt, b.vel, up);
+    m.glowM.color.setHex(e.flash > 0 ? 0xffffff : this.friendly(e) ? 0x2ee6ff : e.glowColor || 0x7dff3a);
   }
 
   fence(e) {
     e.dead = true;
     e.model.root.removeFromParent();
     this.game.missions.onFenced(e.home);
+  }
+
+  // A rover (not a boss or your backup) that hits a wall, a building or a deck hard enough is hurt the same
+  // way the vehicles you drive are (vehicles.js): damage from the closing speed over CRASH_SAFE, at most half
+  // its health at a time, at most once every 0.4 s.
+  crashRover(e, crash) {
+    const g = this.game;
+    if (crash.speed <= CRASH_SAFE || e.dead || e.boss || e.faction === 'ally' || (e.crashT || 0) > g.time) return;
+    e.crashT = g.time + 0.4;
+    if (e.center.distanceTo(g.player.pos) < 300) {
+      g.audio.thud(crash.speed);
+      g.fx.pop('CRASH!', e.center.clone().addScaledVector(e.body.up, 4), { color: '#ff4f2e', size: 46, life: 0.7 });
+    }
+    this.damage(e, Math.min((crash.speed - CRASH_SAFE) * 2.5, e.maxHp * 0.5), false);
+  }
+
+  // A runner's hard landing or crash (the player's onImpact, on the runner's own health): over the safe speed
+  // it hurts, on the same soft-capped curve (up to half its health), and the runner goes limp in a ragdoll
+  // (ragdoll.js) until it has tumbled to rest and got back up.
+  impactSkater(e, skates, hits) {
+    const g = this.game;
+    const safe = skates ? PIRATE_SKATER.skateSafeImpact : PIRATE_SKATER.bootSafeImpact;
+    let worst = null;
+    for (const it of hits) if (it.speed > safe && (!worst || it.speed > worst.speed)) worst = it;
+    if (!worst || e.dead || e.rag) return;
+    const glancing = worst.kind === 'ground' ? 1 / (1 + (worst.glide || 0) / 30) : 1;
+    const dmg = 0.5 * e.maxHp * (1 - Math.exp(-(worst.speed - safe) / 60)) * (PIRATE_SKATER.impactDamage / 1.3) * glancing;
+    const near = e.center.distanceTo(g.player.pos) < 300;
+    if (near) {
+      g.audio.thud(worst.speed);
+      g.fx.pop(worst.speed - safe > 12 ? 'KRA-KOOM!' : 'KRAK!', e.center.clone().addScaledVector(e.body.up, 2), { color: '#ff4f2e', size: 44, life: 0.7 });
+    }
+    this.damage(e, dmg, false);
+    // (the tumble only where you can see it: a runner far off just takes the damage)
+    if (!e.dead && e.kind === 'skater' && e.center.distanceTo(g.camera.position) < 400) e.rag = new Ragdoll(g, e.model, e.body, worst.kind === 'ground' ? 1 : -1);
   }
 
   updateRover(e, dt) {
@@ -1165,7 +1367,10 @@ export class Enemies {
       }
     } else e.ram = null;
     this.dbgGoal(e, aim, b.pos);
-    stepRover(e, dt, g.planet, g.colliders, aim, max, { engine, grip: 14, turn: e.ram && e.ram.phase === 'line' ? 2.8 : 2.2, radius: 3.6, stick: 62 });
+    const crash = { speed: 0 };
+    stepRover(e, dt, g.planet, g.colliders, aim, max, { engine, grip: 14, turn: e.ram && e.ram.phase === 'line' ? 2.8 : 2.2, radius: 3.6, stick: 62, crash });
+    this.crashRover(e, crash);
+    if (e.dead) return;
     this.poseVehicle(e, dt);
     if (e.state === 'chase' && !friendly) {
       this.tryGrab(e, dt);
@@ -1253,7 +1458,10 @@ export class Enemies {
       maxSp = 16;
     }
     this.dbgGoal(e, target);
-    stepRover(e, dt, g.planet, g.colliders, target.sub(b.pos), maxSp, { engine: 16, grip: 8, turn: 2, stick: Infinity });
+    const crash = { speed: 0 };
+    stepRover(e, dt, g.planet, g.colliders, target.sub(b.pos), maxSp, { engine: 16, grip: 8, turn: 2, stick: Infinity, crash });
+    this.crashRover(e, crash);
+    if (e.dead) return;
     this.poseVehicle(e, dt);
     if (base.hostile) {
       e.fireCd -= dt;
@@ -1291,9 +1499,14 @@ export class Enemies {
     return dir.multiplyScalar(k + 0.3).add(e.center);
   }
 
+  // Who a friendly gun (an outpost turret, territory.updateGuns) may fire at: raiders. Not den cores, not the
+  // troops of other factions (main.explode deals no 'mil' damage to a foe other than rustmoon's), not a
+  // pirate that is friendly to an aligned player.
+  gunTarget(e) { return e.faction === 'pirate' && !e.dead && e.kind !== 'core' && !!e.center && !!e.body && !(e.foe && e.foe !== 'rustmoon') && !this.friendly(e); }
+
   // Clear line of fire: terrain plus solid colliders (walls, bastions, buildings) along the
   // way, sampled every couple of metres; the last stretch next to the target is ignored.
-  clearShot(from, to) {
+  clearShot(from, to, ignore = null) {
     const g = this.game;
     if (!g.planet.visible(from, to)) return false;
     const C = g.colliders;
@@ -1302,7 +1515,7 @@ export class Enemies {
     for (let i = 0; i < n; i++) {
       if (len * (1 - i / n) < 2.5) break;
       _sv.lerpVectors(from, to, i / n);
-      for (const c of C.query(_sv, 0.4, _near)) if (C.contact(c, _sv, 0.3, _sn) > 0) return false;
+      for (const c of C.query(_sv, 0.4, _near)) if (!(ignore && c.platform === ignore) && C.contact(c, _sv, 0.3, _sn) > 0) return false;
     }
     return true;
   }

@@ -61,6 +61,23 @@ export function toon(color, opts) {
 
 export const inkMat = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
 
+// The same outline for shells that carry their offset in an `off` attribute apart from the surface they wrap (`position` is the
+// surface, `off` how far out the line goes at full thickness: models.js shellOff, for the Blender-built runner). The line stays that
+// thick, in metres, out to INK_FULL from the camera (the game's follow camera is 7.5 m or more away, so play looks as it always did)
+// and is no thicker on screen than it is there when you come closer, down to INK_MIN of full thickness: a 3 cm shell is a 6 px
+// line at 8 m but 40 px at 1 m, which in the wardrobe, a cutscene or a close camera swallowed the model's small details.
+// (A separate material from inkMat so that shells without `off` never run this program: a missing attribute reads whatever the
+// last program left in that attribute slot.)
+export const INK_FULL = 7, INK_MIN = 0.3;
+export const inkMatNear = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
+inkMatNear.onBeforeCompile = (sh) => {
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', `#include <common>\nattribute vec3 off;\nconst float INK_FULL = ${INK_FULL.toFixed(1)}; const float INK_MIN = ${INK_MIN.toFixed(2)};`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+      transformed += off * clamp(-(modelViewMatrix * vec4(position, 1.0)).z / INK_FULL, INK_MIN, 1.0);`);
+};
+inkMatNear.customProgramCacheKey = () => 'inkNear';
+
 // Inverted-hull outline: a slightly larger black back-face shell for bold silhouettes.
 export function ink(mesh, t = 0.06) {
   const g = mesh.geometry;
@@ -101,8 +118,50 @@ export function paintVertices(g, color) {
   return g;
 }
 
+// Triangles lying flat on the ground and facing down (the undersides of boxes, cylinder caps, aprons)
+// can never be seen from above the ground, and their ink shells' undersides sit below it: they're
+// dropped from a piece baked into a settlement (`g`: already placed in the place's frame, y up from
+// the ground at 0; indexed or not). Works on the position data alone. Returns g.
+export function dropFloorFaces(g, maxY = 0.05) {
+  const pos = g.attributes.position.array, idx = g.index ? g.index.array : null;
+  const tris = (idx ? idx.length : g.attributes.position.count) / 3;
+  const keep = new Uint8Array(tris);
+  let kept = 0;
+  for (let t = 0; t < tris; t++) {
+    const a = (idx ? idx[t * 3] : t * 3) * 3, b = (idx ? idx[t * 3 + 1] : t * 3 + 1) * 3, c = (idx ? idx[t * 3 + 2] : t * 3 + 2) * 3;
+    if (pos[a + 1] <= maxY && pos[b + 1] <= maxY && pos[c + 1] <= maxY) {
+      const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2];
+      const vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      const len = Math.hypot(nx, ny, nz);
+      if (len > 1e-9 && ny / len < -0.98) continue; // (a floor: dropped)
+    }
+    keep[t] = 1; kept++;
+  }
+  if (kept === tris) return g;
+  if (idx) {
+    const out = new idx.constructor(kept * 3);
+    for (let t = 0, o = 0; t < tris; t++) if (keep[t]) { out[o++] = idx[t * 3]; out[o++] = idx[t * 3 + 1]; out[o++] = idx[t * 3 + 2]; }
+    g.setIndex(new THREE.BufferAttribute(out, 1));
+    return g;
+  }
+  for (const k of Object.keys(g.attributes)) {
+    const at = g.attributes[k], s = at.itemSize, out = new at.array.constructor(kept * 3 * s);
+    for (let t = 0, o = 0; t < tris; t++) if (keep[t]) { out.set(at.array.subarray(t * 3 * s, t * 3 * s + 3 * s), o); o += 3 * s; }
+    g.setAttribute(k, new THREE.BufferAttribute(out, s));
+  }
+  return g;
+}
+
 export function glow(color) {
   return new THREE.MeshBasicMaterial({ color });
+}
+// A glow material shared by colour: pieces that glow the same colour then merge into one draw call (the world's static merge).
+const sharedGlows = new Map();
+export function glowShared(color) {
+  let m = sharedGlows.get(color);
+  if (!m) sharedGlows.set(color, m = glow(color));
+  return m;
 }
 
 // Canvas text texture in the pixel display font, for in-world signs. Press Start 2P is much

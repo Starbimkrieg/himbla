@@ -8,10 +8,14 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "check:outposts": "node tools/check-outposts.mjs",
+    "optimize:glb": "node tools/optimize-glb.mjs",
+    "check:dev-strip": "node tools/check-dev-strip.mjs",
+    "build:release": "vite build --mode release",
     "app": "vite build && electron .",
-    "dist:win": "vite build && electron-builder --win",
-    "dist:linux": "vite build && electron-builder --linux",
-    "dist:mac": "vite build && electron-builder --mac"
+    "dist:win": "vite build --mode release && electron-builder --win",
+    "dist:linux": "vite build --mode release && electron-builder --linux",
+    "dist:mac": "vite build --mode release && electron-builder --mac"
   },
   "devDependencies": {
     "@fontsource/pixelify-sans": "^5.3.0",

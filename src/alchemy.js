@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PHYS } from './config.js';
-import { makeFigure } from './models.js';
+import { makeFigure, engineModel, caseModel } from './models.js';
 import { toon, glow, ink } from './toon.js';
 import { frameQuat, tangent, greatCircle, SUN, arcDist } from './geo.js';
 import { pick, mulberry32 } from './rng.js';
@@ -68,6 +68,28 @@ const VRILL = ['Zib', 'Qorrl', 'Nnu', 'Vex-Ah', 'Ploob', 'Ixxi', 'Thrum'];
 const NAMES = ['Gary', 'Priya', 'Tomasz', 'Little Juno', 'Ade', 'Wen', 'Marisol', 'Big Lars', 'Fen', 'Doris', 'Okon', 'Bea'];
 
 const _v = new THREE.Vector3();
+
+// What a pickup looks like on the ground (dropLoot below; the Asset Row shows them too): a core in the item's colour (an octahedron;
+// a plating slab, a junk-bot box, or a pink crate), a halo ring and a thin light pillar. A salvaged engine and a credits briefcase are
+// Blender-built models (models.js engineModel / caseModel, once the models have loaded) and get no halo or pillar. Returns { root, core }.
+export function makeLoot(kind, { credits = 0, crate = false } = {}) {
+  const root = new THREE.Group();
+  const color = crate ? 0xff7ad9 : credits && !kind ? 0xffd23f : new THREE.Color(ITEMS[kind].color).getHex();
+  const model = crate ? null : kind === 'engine' ? engineModel() : credits && !kind ? caseModel() : null;
+  const geo = crate ? new THREE.BoxGeometry(0.9, 0.9, 0.9) : kind === 'engine' ? new THREE.CylinderGeometry(0.5, 0.5, 0.9, 8).rotateZ(Math.PI / 2) : kind === 'plating' ? new THREE.BoxGeometry(1, 0.15, 0.8) : kind === 'junkbot' ? new THREE.BoxGeometry(0.6, 0.5, 0.6) : new THREE.OctahedronGeometry(0.45, 0);
+  const core = model || new THREE.Mesh(geo, toon(color));
+  if (!model) ink(core, 0.05);
+  root.add(core);
+  if (model) return { root, core };
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.06, 6, 20).rotateX(Math.PI / 2), glow(color));
+  halo.position.y = -0.6;
+  root.add(halo);
+  // a thin light pillar so it's easy to spot
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.25, 9, 6, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }));
+  beam.position.y = 4;
+  root.add(beam);
+  return { root, core };
+}
 
 // Containment jar + Dr. Zbornak's reactor and splice pod: scoop things up, let them stew,
 // feed them to the antimatter, breed chimeras, and occasionally mutate yourself.
@@ -205,6 +227,15 @@ export class Alchemy {
     const P = g.player;
     if (!this.owned) { g.hud.toast('You need a containment jar. Dr. Zbornak sells them at the Antimatter Lab.', 3); return; }
     if (this.used >= this.slots) { g.hud.toast('Jar is full. Empty it with X (into the reactor, if you\'re brave).', 2.5); return; }
+    // a salvaged engine lying at rest
+    const eng = this.restingEngine();
+    if (eng) {
+      eng.root.removeFromParent();
+      this.loot.splice(this.loot.indexOf(eng), 1);
+      this.add('engine', eng.name);
+      g.fx.pop('SALVAGED ENGINE!', null, { color: ITEMS.engine.color, size: 42 });
+      return;
+    }
     // knocked-out pirates first
     for (const e of g.enemies.list) {
       if (e.dead || e.kind !== 'skater' || e.faction !== 'pirate' || e.hp > e.maxHp * 0.45) continue;
@@ -283,21 +314,18 @@ export class Alchemy {
     const up = pos.clone().normalize();
     const land = to || pos.clone().addScaledVector(tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize(), 1 + Math.random() * 2);
     const at = g.planet.ground(land, new THREE.Vector3(), 0.9);
-    const root = new THREE.Group();
-    const color = crate ? 0xff7ad9 : credits && !kind ? 0xffd23f : new THREE.Color(ITEMS[kind].color).getHex();
-    const geo = crate ? new THREE.BoxGeometry(0.9, 0.9, 0.9) : kind === 'engine' ? new THREE.CylinderGeometry(0.5, 0.5, 0.9, 8).rotateZ(Math.PI / 2) : kind === 'plating' ? new THREE.BoxGeometry(1, 0.15, 0.8) : kind === 'junkbot' ? new THREE.BoxGeometry(0.6, 0.5, 0.6) : new THREE.OctahedronGeometry(0.45, 0);
-    const core = new THREE.Mesh(geo, toon(color));
-    ink(core, 0.05);
-    root.add(core);
-    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.06, 6, 20).rotateX(Math.PI / 2), glow(color));
-    halo.position.y = -0.6;
-    root.add(halo);
-    // a thin light pillar so it's easy to spot
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.25, 9, 6, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }));
-    beam.position.y = 4;
-    root.add(beam);
+    const { root, core } = makeLoot(kind, { credits, crate });
     frameQuat(at.clone().normalize(), tangent(SUN.clone(), up).normalize(), root.quaternion);
     g.scene.add(root);
+    if (kind === 'engine' && !to) {
+      // a salvaged engine is a heavy lump: it pops out in a random direction, thuds, skids and settles
+      // (updateEngine), and only then can it be scooped with G.
+      const dir = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+      const p0 = pos.clone().addScaledVector(up, 1.5);
+      root.position.copy(p0);
+      this.loot.push({ kind, name, credits, crate, root, core, pos: p0, phys: true, rest: false, vel: dir.multiplyScalar(4 + Math.random() * 3).addScaledVector(up, 5 + Math.random() * 2), spin: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(9), smokeT: 0, t: 0 });
+      return;
+    }
     const from = pos.clone().addScaledVector(up, 2);
     root.position.copy(to ? from : at);
     this.loot.push({ kind, name, credits, crate, root, core, pos: at, from, fly: to ? 0 : 1, flyT: 0.9 + from.distanceTo(at) / 25, t: 0 });
@@ -309,6 +337,7 @@ export class Alchemy {
     for (let i = this.loot.length - 1; i >= 0; i--) {
       const L = this.loot[i];
       L.t += dt;
+      if (L.phys) { this.updateEngine(L, dt); if (L.t > 240) { L.root.removeFromParent(); this.loot.splice(i, 1); } continue; }
       if (L.fly < 1) {
         // ballistic hop from the wreck to its landing spot
         L.fly = Math.min(1, L.fly + dt / L.flyT);
@@ -333,6 +362,60 @@ export class Alchemy {
       } else if (L.warned && L.pos.distanceTo(P.pos) > 8) L.warned = false;
       if (take || L.t > 240) { L.root.removeFromParent(); this.loot.splice(i, 1); }
     }
+  }
+
+  // Rigid-body step for a dropped engine: heavy gravity, a dull bounce, hard ground friction, so it
+  // lands near the wreck instead of skipping off. Once it stops it smokes and waits for the scoop.
+  updateEngine(L, dt) {
+    const g = this.game;
+    const sub = Math.ceil(dt / 0.02);
+    const h = dt / sub;
+    for (let k = 0; k < sub && !L.rest; k++) {
+      const up = L.pos.clone().normalize();
+      L.vel.addScaledVector(up, -16 * h);
+      L.pos.addScaledVector(L.vel, h);
+      L.root.rotateX(L.spin.x * h); L.root.rotateY(L.spin.y * h); L.root.rotateZ(L.spin.z * h);
+      const floor = g.planet.surface(L.pos) + 0.45;
+      if (L.pos.length() <= floor) {
+        L.pos.setLength(floor);
+        const vr = L.vel.dot(up);
+        if (vr < 0) {
+          const hit = -vr;
+          L.vel.addScaledVector(up, -vr * (1 + (hit > 3 ? 0.12 : 0))); // (barely bounces; a soft landing just stops)
+          L.vel.multiplyScalar(Math.max(0, 1 - 6 * h)); // (grinding along the dirt)
+          L.spin.multiplyScalar(0.45);
+          if (hit > 2) { g.audio.thud(Math.min(14, hit * 2.5)); g.fx.dust(L.pos, L.vel, 4, up); }
+        } else L.vel.multiplyScalar(Math.max(0, 1 - 6 * h));
+        if (L.vel.length() < 0.6 && L.spin.length() < 1.2) {
+          L.rest = true;
+          L.vel.set(0, 0, 0);
+          L.pos.setLength(g.planet.surface(L.pos) + 0.45);
+          // lie flat on the ground, whichever way it ended up facing
+          frameQuat(L.pos.clone().normalize(), tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), L.pos.clone().normalize()).normalize(), L.root.quaternion);
+        }
+      }
+    }
+    L.root.position.copy(L.pos);
+    if (!L.rest) return;
+    // resting: a thin wisp of smoke from the casing
+    L.smokeT -= dt;
+    if (L.smokeT <= 0) {
+      L.smokeT = 0.35 + Math.random() * 0.25;
+      const up = L.pos.clone().normalize();
+      g.fx.spawn(L.pos.clone().addScaledVector(up, 0.5), up.multiplyScalar(0.9), { color: 0x8a8594, size: 0.55, life: 1.6, drag: 1.5, count: 1, spread: 0.25 });
+    }
+  }
+
+  // Nearest resting engine within reach (a still-tumbling one can't be scooped yet)
+  restingEngine() {
+    const P = this.game.player;
+    let best = null, bd = 7;
+    for (const L of this.loot) {
+      if (!L.phys || !L.rest) continue;
+      const d = L.pos.distanceTo(P.pos);
+      if (d < bd) { bd = d; best = L; }
+    }
+    return best;
   }
 
   // a Trading Kiosk mystery crate: open it on the spot
@@ -484,7 +567,7 @@ export class Alchemy {
     return {
       delay: hatching ? HATCH_T + 0.5 : 0,
       title: `BEHOLD: ${genes.name.toUpperCase()}`,
-      text: `"It has a ${parts}${genes.mods.length ? `, ${genes.mods.join(' and ')}-touched` : ''}. Speed ${st.speed}, power ${st.power}, stamina ${st.stamina}, wit ${st.wit}: a grade <b>${genes.tier}</b> racer, top speed about ${Math.round(genes.speed * 3.6)} km/h, chaos rating ${genes.chaos}. ${brag}. It loves you. ${genes.follow ? 'Race it at the Bounce Dome Funpark!' : 'Three already follow you, so it\'s gone to the holding pen behind the lab.'}"${chimeraCard(g, genes, { status: genes.follow ? '★ WITH YOU' : 'IN PEN' })}`,
+      text: `"It has a ${parts}${genes.mods.length ? `, ${genes.mods.join(' and ')}-touched` : ''}. Speed ${st.speed}, power ${st.power}, stamina ${st.stamina}, wit ${st.wit}: a grade <b>${genes.tier}</b> racer, top speed about ${Math.round(genes.speed * 3.6)} km/h, chaos rating ${genes.chaos}. ${brag}. It loves you. ${genes.follow ? 'Race it at Chimera Downs!' : 'Three already follow you, so it\'s gone to the holding pen behind the lab.'}"${chimeraCard(g, genes, { status: genes.follow ? '★ WITH YOU' : 'IN PEN' })}`,
     };
   }
 
@@ -693,78 +776,7 @@ export class Alchemy {
     this.mutMeshes = [];
     const M = P.model;
     const add = (parent, mesh) => { parent.add(mesh); this.mutMeshes.push(mesh); return mesh; };
-    if (has('wheels')) for (const leg of [M.legL, M.legR]) {
-      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.22, 12).rotateZ(Math.PI / 2), toon(0x221d33));
-      ink(w, 0.03);
-      w.position.set(0, -0.98, 0.05);
-      add(leg, w);
-    }
-    if (has('wings')) for (const s of [-1, 1]) {
-      const wing = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9), new THREE.MeshBasicMaterial({ color: 0xb8e986, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
-      wing.position.set(s * 0.95, 0.85, -0.45);
-      wing.rotation.y = s * 0.5;
-      wing.userData.flap = s;
-      add(M.torso, wing);
-    }
-    if (has('arms')) for (const s of [-1, 1]) {
-      const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.42, 3, 6), toon(0xff4f2e));
-      ink(arm, 0.03);
-      arm.position.set(s * 0.48, 0.28, 0.1);
-      arm.rotation.z = s * 0.9;
-      add(M.torso, arm);
-    }
-    if (has('void')) {
-      const aura = new THREE.Mesh(new THREE.SphereGeometry(1.4, 16, 12), new THREE.MeshBasicMaterial({ color: 0x7b2ff7, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending }));
-      aura.position.y = 0.6;
-      add(M.torso, aura);
-    }
-    if (has('stone')) for (let i = 0; i < 4; i++) {
-      const sp = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), glow(0x2ee6ff));
-      sp.scale.set(0.6, 1.8, 0.6);
-      // along the flanks of the backpack, clear of the scarf, crate and jar
-      sp.position.set((i < 2 ? -1 : 1) * 0.36, 0.8 - (i % 2) * 0.26, -0.28);
-      sp.rotation.z = (i < 2 ? 1 : -1) * 1.0;
-      add(M.torso, sp);
-    }
-    if (has('claws')) for (const arm of [M.armL, M.armR]) for (let k = 0; k < 3; k++) {
-      const c = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.22, 4), toon(0xfff4e0));
-      c.position.set((k - 1) * 0.06, -0.78, 0.06);
-      c.rotation.x = Math.PI;
-      add(arm, c);
-    }
-    if (has('roots')) for (const leg of [M.legL, M.legR]) for (let k = 0; k < 3; k++) {
-      const r = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.5, 4), toon(0x6b4a2a));
-      r.position.set((k - 1) * 0.09, -0.7, -0.1);
-      r.rotation.set(-0.5, 0, (k - 1) * 0.6);
-      add(leg, r);
-      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.22, 4), toon(0x5fbf4a));
-      leaf.position.set((k - 1) * 0.12, -0.35, 0.12);
-      leaf.rotation.z = (k - 1) * 0.8;
-      add(leg, leaf);
-    }
-    if (has('psi')) for (const s of [-1, 1]) {
-      const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.4, 5), toon(0x7dd87a));
-      ant.position.set(s * 0.12, 0.52, -0.02);
-      ant.rotation.z = -s * 0.35;
-      add(M.head, ant);
-      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), glow(0xfff27a));
-      tip.position.set(s * 0.19, 0.7, -0.02);
-      add(M.head, tip);
-    }
-    if (has('hawk')) {
-      const lens = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.025, 6, 14), toon(0xffd23f));
-      lens.position.set(0.17, 0.25, 0.38);
-      add(M.head, lens);
-      const glass = new THREE.Mesh(new THREE.CircleGeometry(0.1, 14), glow(0xfff6a8));
-      glass.position.set(0.17, 0.25, 0.39);
-      add(M.head, glass);
-    }
-    if (has('blood')) {
-      const band = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.06, 6, 16), toon(0xd7263d));
-      band.rotation.x = Math.PI / 2;
-      band.position.y = 0.12;
-      add(M.head, band);
-    }
+    buildMutationMeshes(M, has, add);
   }
 
   // ---------- per-frame ----------
@@ -799,7 +811,7 @@ export class Alchemy {
         }
       }
     }
-    if (this.owned && (!this.jarMesh || !this.jarMesh.parent)) this.refreshJarMesh();
+    if (this.jarVisible && (!this.jarMesh || !this.jarMesh.parent)) this.refreshJarMesh();
     // the Monolith
     const mono = g.world.monolith;
     this.monoCd -= dt;
@@ -856,18 +868,7 @@ export class Alchemy {
   addFollower(kind) {
     const g = this.game;
     const P = g.player;
-    let root;
-    if (kind === 'rock') {
-      root = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), toon(0x8d8898));
-      ink(body, 0.08);
-      body.position.y = 1;
-      root.add(body);
-      for (const s of [-1, 1]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 4), glow(0x2ee6ff)); eye.position.set(s * 0.35, 1.3, 0.85); root.add(eye); }
-    } else {
-      const f = makeFigure({ suit: 0x8a6a4a, helmet: 0x6b5a3a, visor: 0xffd23f, scale: 0.7 });
-      root = f.root;
-    }
+    const root = makeFollowerModel(kind);
     root.position.copy(P.pos);
     g.scene.add(root);
     this.followers.push({ root, kind, vy: 0, h: 0, t: 0 });
@@ -963,33 +964,17 @@ export class Alchemy {
     }
   }
 
+  // Worn only if you own one and haven't hidden it in the wardrobe (Accessories tab).
+  get jarVisible() { return this.owned && this.game.cosmetics?.jarShown !== false; }
+
   // The jar rides on your back and shows what's inside.
   refreshJarMesh() {
     const P = this.game.player;
     if (this.jarMesh) this.jarMesh.removeFromParent();
     this.jarMesh = null;
-    if (!this.owned) return;
-    const g = new THREE.Group();
-    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.8, 12), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.3 }));
-    g.add(glass);
-    this.jar.forEach((it, i) => {
-      const blob = new THREE.Mesh(new THREE.SphereGeometry(it.kind === 'car' ? 0.24 : 0.17, 8, 6), glow(new THREE.Color(ITEMS[it.kind].color).getHex()));
-      blob.position.set(Math.sin(i * 2.1) * 0.12, -0.25 + i * 0.2, Math.cos(i * 2.1) * 0.12);
-      g.add(blob);
-    });
-    if (this.artifact) {
-      const art = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), glow(0x7dffd4));
-      art.position.set(0, 0.28, 0);
-      g.add(art);
-    }
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.12, 12), toon(0x3a3550));
-    cap.position.y = 0.45;
-    g.add(cap);
-    // tucked against the right side of the backpack, a bit smaller
-    g.position.set(-0.5, -0.12, 0.22); // (on the right: the scarf hangs down the left)
-    g.scale.setScalar(0.78);
-    P.model.cargoSlot.add(g);
-    this.jarMesh = g;
+    if (!this.jarVisible) return;
+    this.jarMesh = makeJarMesh(this.jar, this.artifact);
+    P.model.cargoSlot.add(this.jarMesh);
   }
 
   hudText() {
@@ -1006,14 +991,133 @@ export class Alchemy {
       for (let i = used; i < this.slots; i++) cells.push('<span class="empty-slot">·</span>');
       parts.push(`JAR ${cells.join('')}${this.jar.length >= 2 ? ' <i>stewing…</i>' : ''}${this.jar.length ? ' <i>· X empty · ⇧X dump</i>' : ''}`);
     }
-    const buff = Object.entries(this.buffs).filter(([, v]) => v > 0).map(([k, v]) => `${BUFF_NAMES[k]} ${Math.ceil(v)}s`).join(' · ');
+    const buff = Object.entries(this.buffs).filter(([, v]) => v > 0).map(([k, v]) => `${BUFF_NAMES[k]} ${v >= 120 ? `${Math.floor(Math.ceil(v) / 60)}:${String(Math.ceil(v) % 60).padStart(2, '0')}` : `${Math.ceil(v)}s`}`).join(' · '); // (the long ones as m:ss)
     if (buff) parts.push(`<div class="buffs">${buff}</div>`);
     if (this.mutations.length) parts.push(`<div class="muts">${this.mutations.map((k) => MUTATIONS[k].name).join(' · ')}</div>`);
     return parts.join('');
   }
 }
 
-const BUFF_NAMES = { lowGrav: 'LOW-G', slick: 'MOON MUD', bouncy: 'SPRINGY', invert: 'NEGATIVE', rain: 'BLACK RAIN', cushion: 'SOFT LANDING', dilate: 'TIME DILATION', echo: 'ECHO DECOYS' };
+// A pet from the reactor: 'rock' = the slick rock with eyes, anything else the dirt golem.
+// (Alchemy.addFollower calls it; the Asset Row shows both without a game.)
+export function makeFollowerModel(kind) {
+  let root;
+  if (kind === 'rock') {
+    root = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), toon(0x8d8898));
+    ink(body, 0.08);
+    body.position.y = 1;
+    root.add(body);
+    for (const s of [-1, 1]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 4), glow(0x2ee6ff)); eye.position.set(s * 0.35, 1.3, 0.85); root.add(eye); }
+  } else {
+    const f = makeFigure({ suit: 0x8a6a4a, helmet: 0x6b5a3a, visor: 0xffd23f, scale: 0.7 });
+    root = f.root;
+  }
+  return root;
+}
+
+// The look of the mutations: builds each owned mutation's meshes on the runner model M through add(parent, mesh).
+// (Alchemy.applyMutations calls it; the Asset Row shows each one without a game.)
+export function buildMutationMeshes(M, has, add) {
+  if (has('wheels')) for (const leg of [M.legL, M.legR]) {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.22, 12).rotateZ(Math.PI / 2), toon(0x221d33));
+    ink(w, 0.03);
+    w.position.set(0, -0.98, 0.05);
+    add(leg, w);
+  }
+  if (has('wings')) for (const s of [-1, 1]) {
+    const wing = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.9), new THREE.MeshBasicMaterial({ color: 0xb8e986, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+    wing.position.set(s * 0.95, 0.85, -0.45);
+    wing.rotation.y = s * 0.5;
+    wing.userData.flap = s;
+    add(M.torso, wing);
+  }
+  if (has('arms')) for (const s of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.42, 3, 6), toon(0xff4f2e));
+    ink(arm, 0.03);
+    arm.position.set(s * 0.48, 0.28, 0.1);
+    arm.rotation.z = s * 0.9;
+    add(M.torso, arm);
+  }
+  if (has('void')) {
+    const aura = new THREE.Mesh(new THREE.SphereGeometry(1.4, 16, 12), new THREE.MeshBasicMaterial({ color: 0x7b2ff7, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending }));
+    aura.position.y = 0.6;
+    add(M.torso, aura);
+  }
+  if (has('stone')) for (let i = 0; i < 4; i++) {
+    const sp = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), glow(0x2ee6ff));
+    sp.scale.set(0.6, 1.8, 0.6);
+    // along the flanks of the backpack, clear of the scarf, crate and jar
+    sp.position.set((i < 2 ? -1 : 1) * 0.36, 0.8 - (i % 2) * 0.26, -0.28);
+    sp.rotation.z = (i < 2 ? 1 : -1) * 1.0;
+    add(M.torso, sp);
+  }
+  if (has('claws')) for (const arm of [M.foreL, M.foreR]) for (let k = 0; k < 3; k++) { // (on the forearms, so they follow the hands)
+    const c = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.22, 4), toon(0xfff4e0));
+    c.position.set((k - 1) * 0.06, -0.47, 0.06);
+    c.rotation.x = Math.PI;
+    add(arm, c);
+  }
+  if (has('roots')) for (const leg of [M.legL, M.legR]) for (let k = 0; k < 3; k++) {
+    const r = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.5, 4), toon(0x6b4a2a));
+    r.position.set((k - 1) * 0.09, -0.7, -0.1);
+    r.rotation.set(-0.5, 0, (k - 1) * 0.6);
+    add(leg, r);
+    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.22, 4), toon(0x5fbf4a));
+    leaf.position.set((k - 1) * 0.12, -0.35, 0.12);
+    leaf.rotation.z = (k - 1) * 0.8;
+    add(leg, leaf);
+  }
+  if (has('psi')) for (const s of [-1, 1]) {
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.02, 0.4, 5), toon(0x7dd87a));
+    ant.position.set(s * 0.12, 0.52, -0.02);
+    ant.rotation.z = -s * 0.35;
+    add(M.head, ant);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), glow(0xfff27a));
+    tip.position.set(s * 0.19, 0.7, -0.02);
+    add(M.head, tip);
+  }
+  if (has('hawk')) {
+    const lens = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.025, 6, 14), toon(0xffd23f));
+    lens.position.set(0.17, 0.25, 0.38);
+    add(M.head, lens);
+    const glass = new THREE.Mesh(new THREE.CircleGeometry(0.1, 14), glow(0xfff6a8));
+    glass.position.set(0.17, 0.25, 0.39);
+    add(M.head, glass);
+  }
+  if (has('blood')) {
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.06, 6, 16), toon(0xd7263d));
+    band.rotation.x = Math.PI / 2;
+    band.position.y = 0.12;
+    add(M.head, band);
+  }
+}
+
+// The jar as it hangs on the pack (also the wardrobe's preview): glass, what's inside, the cap.
+export function makeJarMesh(jar = [], artifact = false) {
+  const g = new THREE.Group();
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.8, 12), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.3 }));
+  g.add(glass);
+  jar.forEach((it, i) => {
+    const blob = new THREE.Mesh(new THREE.SphereGeometry(it.kind === 'car' ? 0.24 : 0.17, 8, 6), glow(new THREE.Color(ITEMS[it.kind].color).getHex()));
+    blob.position.set(Math.sin(i * 2.1) * 0.12, -0.25 + i * 0.2, Math.cos(i * 2.1) * 0.12);
+    g.add(blob);
+  });
+  if (artifact) {
+    const art = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), glow(0x7dffd4));
+    art.position.set(0, 0.28, 0);
+    g.add(art);
+  }
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.12, 12), toon(0x3a3550));
+  cap.position.y = 0.45;
+  g.add(cap);
+  // tucked against the right side of the backpack, a bit smaller
+  g.position.set(-0.5, -0.12, 0.22); // (on the right: the scarf hangs down the left)
+  g.scale.setScalar(0.78);
+  return g;
+}
+
+const BUFF_NAMES = { lowGrav: 'LOW-G', slick: 'MOON MUD', bouncy: 'SPRINGY', invert: 'NEGATIVE', rain: 'BLACK RAIN', cushion: 'SOFT LANDING', dilate: 'TIME DILATION', echo: 'ECHO FOLLOWERS' };
 
 // Reactor recipes, keyed by the sorted item kinds fed in together.
 const RECIPES = {

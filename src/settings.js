@@ -4,8 +4,23 @@
 
 import { glyphHtml, glyphState, tokensFor } from './glyphs.js';
 import { gyroSupported } from './gyro.js';
+import { DEV_TOOLS } from './devtools.js';
+import { SKIN_FROM_URL } from './moonSkins.js';
 
 const KEY = 'moonrunner-settings-v1';
+const BINDS_V = 2; // 2: thrusters left the keyboard (right mouse only) and the power moved from Z to E
+
+// Binds saved before v2: the thruster key is gone, and whatever the power (Z) was moved to now belongs to E.
+function migrateBinds(old) {
+  const out = {};
+  for (const [def, phys] of Object.entries(old)) {
+    if (def === 'KeyE') continue;
+    out[def === 'KeyZ' ? 'KeyE' : def] = phys;
+  }
+  // another action sitting on the physical E (the thruster's old key) trades places with the power
+  if (!out.KeyE) for (const def of Object.keys(out)) if (out[def] === 'KeyE') out[def] = 'KeyZ';
+  return out;
+}
 
 // Remappable actions: the game always checks the DEFAULT code; Input translates.
 export const ACTIONS = [
@@ -15,7 +30,6 @@ export const ACTIONS = [
   { code: 'KeyD', label: 'Right / carve / spin' },
   { code: 'Space', label: 'Quantum-Lock skates (hold)' },
   { code: 'ShiftLeft', label: 'Mag-jump / Dive (hold in the air)' },
-  { code: 'KeyE', label: 'Thrusters (hold)' },
   { code: 'KeyQ', label: 'Tricks (hold in the air)' },
   { code: 'KeyF', label: 'Interact / job board' },
   { code: 'KeyG', label: 'Scoop into jar' },
@@ -27,20 +41,22 @@ export const ACTIONS = [
   { code: 'KeyR', label: 'Emergency recall (hold 1.5 s)' },
   { code: 'KeyN', label: 'Music on / off' },
   { code: 'KeyV', label: 'Vehicle: call / board / leave' },
-  { code: 'KeyZ', label: 'Power (mouse wheel: pick one)' },
+  { code: 'KeyE', label: 'Power (mouse wheel: pick one)' },
   { code: 'KeyT', label: 'Personal Teleporter (tech)' },
-  { code: 'KeyH', label: 'Help panel' },
+  { code: 'KeyH', label: 'Blackjack: hit' }, // (H used to be the help panel: that's the pause card's HELP now, but the casino still reads the code)
 ];
 // keys the game hard-wires for menus and weapon slots
 const RESERVED = ['Escape', 'Enter', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
 
-const LEVELS = [['off', 'OFF'], ['rare', 'RARE'], ['normal', 'NORMAL'], ['often', 'OFTEN']];
 
 // Quality presets: picking one sets these; changing any of them by hand makes it CUSTOM.
+// (Ground detail is for the regolith ground texture, moonSkins.js, which dev builds can switch on with the Regolith ground texture setting or ?moonskin=1: a release
+// build has neither, so its presets leave Ground detail out.)
+const gd = (n) => (DEV_TOOLS ? { groundDetail: n } : {});
 const PRESETS = {
-  low: { renderScale: 0.75, viewDist: 0.7, terrainDetail: 0.75, shadows: true, shadowRes: 1024, particles: 0.6 },
-  medium: { renderScale: 1, viewDist: 1, terrainDetail: 1, shadows: true, shadowRes: 2048, particles: 1 },
-  high: { renderScale: 1, viewDist: 1.3, terrainDetail: 1.3, shadows: true, shadowRes: 4096, particles: 1.3 },
+  low: { renderScale: 0.75, viewDist: 0.7, terrainDetail: 0.75, shadows: true, shadowRes: 1024, particles: 0.6, ...gd(0) },
+  medium: { renderScale: 1, viewDist: 1, terrainDetail: 1, shadows: true, shadowRes: 2048, particles: 1, ...gd(1) },
+  high: { renderScale: 1, viewDist: 1.3, terrainDetail: 1.3, shadows: true, shadowRes: 4096, particles: 1.3, ...gd(2) },
 };
 const PRESET_KEYS = Object.keys(PRESETS.medium);
 const PRESET_NAME = { low: 'LOW', medium: 'MEDIUM', high: 'HIGH' };
@@ -57,6 +73,11 @@ export const SCHEMA = {
     { key: 'terrainDetail', label: 'Terrain detail', type: 'range', min: 0.6, max: 1.6, step: 0.05, def: 1, fmt: pct, hint: 'How far the detailed ground reaches' },
     { key: 'shadows', label: 'Shadows', type: 'toggle', def: true },
     { key: 'shadowRes', label: 'Shadow quality', type: 'choice', def: 2048, options: [[1024, 'LOW'], [2048, 'MEDIUM'], [4096, 'HIGH']] },
+    // (the regolith ground texture, moonSkins.js: dev builds only for now, and off unless chosen)
+    ...(DEV_TOOLS ? [
+      { key: 'regolith', label: 'Regolith ground texture', type: 'toggle', def: false, hint: 'Lunar dust, pebbles and craters on the ground, and grain and dust on the rocks' },
+      { key: 'groundDetail', label: 'Ground detail', type: 'choice', def: 1, options: [[0, 'LOW'], [1, 'MEDIUM'], [2, 'HIGH']], hint: 'How much of the regolith texture is drawn: lower is faster' },
+    ] : []),
     { key: 'halftone', label: 'Comic halftone dots', type: 'toggle', def: true },
     { key: 'speedLines', label: 'Speed lines', type: 'toggle', def: true },
     { key: 'ink', label: 'Ink outline strength', type: 'range', min: 0, max: 2, step: 0.1, def: 1, fmt: pct },
@@ -72,7 +93,6 @@ export const SCHEMA = {
     { key: 'camHeight', label: 'Camera height', type: 'range', min: -1, max: 4, step: 0.1, def: 0, fmt: (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)} m` },
     { key: 'shoulder', label: 'Shoulder offset', type: 'range', min: -2.5, max: 2.5, step: 0.1, def: 0, fmt: (v) => (Math.abs(v) < 0.05 ? 'CENTRE' : `${Math.abs(v).toFixed(1)} m ${v < 0 ? 'LEFT' : 'RIGHT'}`) },
     { key: 'camSmooth', label: 'Camera smoothing', type: 'range', min: 0, max: 3, step: 0.1, def: 1, fmt: (v) => (v < 0.05 ? 'OFF' : mult(v)) },
-    { key: 'tips', label: 'Show tips', type: 'toggle', def: true },
     { key: 'minimap', label: 'Minimap', type: 'toggle', def: true },
     { key: 'hudScale', label: 'HUD scale', type: 'range', min: 0.6, max: 1.4, step: 0.05, def: 1, fmt: pct },
     { key: 'units', label: 'Speed units', type: 'choice', def: 'kmh', options: [['kmh', 'KM/H'], ['ms', 'M/S']] },
@@ -80,8 +100,13 @@ export const SCHEMA = {
     { key: 'gyroRange', label: 'Gyro: tilt for a full push', type: 'range', min: 15, max: 60, step: 5, def: 30, fmt: (v) => `${v}°`, hint: 'Smaller = more sensitive' },
     { key: 'gyroInvX', label: 'Gyro: flip left / right', type: 'toggle', def: false },
     { key: 'gyroInvY', label: 'Gyro: flip forward / back', type: 'toggle', def: false },
+    { key: 'rumble', label: 'Controller vibration', type: 'toggle', def: true, hint: 'Jumps, landings, hits, blasts and weapons, and a hum from the skates, thrusters and rails' },
+    { key: 'rumbleLevel', label: 'Vibration strength', type: 'range', min: 0.2, max: 1.5, step: 0.1, def: 1, fmt: pct },
+    { key: 'padLight', label: 'Controller lightbar', type: 'toggle', def: true, hint: 'PlayStation pads, through the link below: your skates\' colour, red when hurt, and the player lights count your health' },
+    { key: 'padTriggers', label: 'Adaptive triggers', type: 'toggle', def: true, hint: 'DualSense, through the link below: the weapon\'s click, the thrusters\' spring and buzz' },
   ],
   audio: [
+    { key: 'mute', label: 'Mute all audio', type: 'toggle', def: false, hint: 'Silences everything: music, effects, wind, skates and thrusters' },
     { key: 'master', label: 'Master volume', type: 'range', min: 0, max: 1, step: 0.05, def: 1, fmt: pct },
     { key: 'music', label: 'Music volume', type: 'range', min: 0, max: 1, step: 0.05, def: 1, fmt: pct },
     { key: 'sfx', label: 'Effects volume', type: 'range', min: 0, max: 1, step: 0.05, def: 1, fmt: pct },
@@ -116,7 +141,7 @@ const PAD_ROWS = [
   ['Interact / job board', ['X']],
   ['Scoop into jar', ['R3']],
   ['Vehicle: call / board / leave', ['Y']],
-  ['Power (hold for the winch)', ['RB']],
+  ['Power (again to let go of the winch)', ['RB']],
   ['Next power', ['DU']],
   ['Fire', ['RT']],
   ['Previous / next weapon', ['DL', 'DR']],
@@ -132,27 +157,29 @@ const PAD_ROWS = [
 
 // Help-table rows whose key names aren't a single key (the rest go through tokensFor)
 const HELP_PAD = {
-  Mouse: ['RS'], 'Left mouse': ['RT'], 'SPACE (hold)': ['LB'], 'A / D on skates': ['LS'], 'E / Right mouse': ['LT'],
+  Mouse: ['RS'], 'Left mouse': ['RT'], 'SPACE (hold)': ['LB'], 'A / D on skates': ['LS'], 'Right mouse': ['LT'],
   'Q + W/S · Q + A/D': ['B', '#+', 'LS'], '1 2 3 4': ['DL', 'DR'], 'X (hold)': ['DD'], 'R (hold)': ['VIEW', '#hold'], M: ['VIEW', '#tap'],
 };
+
+// Help-table rows with no pad button at all (music is under Settings → Audio): left out while a pad is in use
+const HELP_PAD_HIDE = ['N'];
 
 // Help-table / title-card labels rebuilt from the current bindings (k = code -> label).
 const HELP_ROWS = {
   'W A S D': (k) => `${k('KeyW')} ${k('KeyA')} ${k('KeyS')} ${k('KeyD')}`,
   'SPACE (hold)': (k) => `${k('Space')} (hold)`,
   'A / D on skates': (k) => `${k('KeyA')} / ${k('KeyD')} on skates`,
-  'E / Right mouse': (k) => `${k('KeyE')} / Right mouse`,
   SHIFT: (k) => (k('ShiftLeft') === 'L-SHIFT' ? 'SHIFT' : k('ShiftLeft')),
   'Q + W/S · Q + A/D': (k) => `${k('KeyQ')} + ${k('KeyW')}/${k('KeyS')} · ${k('KeyQ')} + ${k('KeyA')}/${k('KeyD')}`,
-  J: (k) => k('KeyJ'), C: (k) => k('KeyC'), N: (k) => k('KeyN'), P: (k) => k('KeyP'), V: (k) => k('KeyV'), Z: (k) => k('KeyZ'), T: (k) => k('KeyT'),
+  J: (k) => k('KeyJ'), C: (k) => k('KeyC'), N: (k) => k('KeyN'), P: (k) => k('KeyP'), V: (k) => k('KeyV'), E: (k) => k('KeyE'), T: (k) => k('KeyT'),
   'X (hold)': (k) => `${k('KeyX')} (hold)`, G: (k) => k('KeyG'),
-  F: (k) => k('KeyF'), M: (k) => k('KeyM'), R: (k) => k('KeyR'), H: (k) => k('KeyH'),
+  F: (k) => k('KeyF'), M: (k) => k('KeyM'), R: (k) => k('KeyR'),
   '` (backtick)': (k) => (k('Backquote') === '`' ? '` (backtick)' : k('Backquote')),
 };
 const MINI_ROWS = {
-  SPACE: (k) => k('Space'), WASD: (k) => `${k('KeyW')}${k('KeyA')}${k('KeyS')}${k('KeyD')}`, 'E/RMB': (k) => `${k('KeyE')}/RMB`,
+  SPACE: (k) => k('Space'), WASD: (k) => `${k('KeyW')}${k('KeyA')}${k('KeyS')}${k('KeyD')}`,
   SHIFT: (k) => (k('ShiftLeft') === 'L-SHIFT' ? 'SHIFT' : k('ShiftLeft')), Q: (k) => k('KeyQ'), M: (k) => k('KeyM'), J: (k) => k('KeyJ'),
-  F: (k) => k('KeyF'), C: (k) => k('KeyC'), H: (k) => k('KeyH'),
+  F: (k) => k('KeyF'), C: (k) => k('KeyC'),
 };
 
 export class Settings {
@@ -182,9 +209,11 @@ export class Settings {
       for (const tab of Object.values(SCHEMA)) {
         for (const s of tab) if (d[s.key] !== undefined && typeof d[s.key] === typeof s.def) this.v[s.key] = d[s.key];
       }
-      if (d.binds && typeof d.binds === 'object') this.v.binds = { ...d.binds };
+      if (d.binds && typeof d.binds === 'object') this.v.binds = d.bindsV >= 2 ? { ...d.binds } : migrateBinds(d.binds);
       if (typeof d.autoTuned === 'boolean') this.v.autoTuned = d.autoTuned;
       if (d.preset === undefined) this.v.preset = this.matchPreset(); // (settings saved before presets existed)
+      // (saved before Ground detail existed: it follows the preset they were on, so a LOW preset does not get HIGH detail)
+      else if (d.groundDetail === undefined && PRESETS[d.preset] && PRESETS[d.preset].groundDetail !== undefined) this.v.groundDetail = PRESETS[d.preset].groundDetail;
       this.stored = true;
     } catch { /* corrupt or unavailable */ }
   }
@@ -248,7 +277,7 @@ export class Settings {
   }
 
   save() {
-    try { localStorage.setItem(KEY, JSON.stringify(this.v)); } catch { /* storage unavailable */ }
+    try { localStorage.setItem(KEY, JSON.stringify({ ...this.v, bindsV: BINDS_V })); } catch { /* storage unavailable */ }
   }
 
   // physical key currently bound to an action's default code
@@ -285,7 +314,18 @@ export class Settings {
         if (sh.map) { sh.map.dispose(); sh.map = null; }
       }
     }
-    if (g.planet) g.planet.lodScale = v.terrainDetail;
+    if (g.planet) {
+      g.planet.lodScale = v.terrainDetail;
+      if (DEV_TOOLS && g.planet.holeU.uSkinQ) {
+        g.planet.holeU.uSkinQ.value = v.groundDetail;
+        // the regolith toggle picks look 1 or the classic 0. ?moonskin=N (the other looks, for trying) wins until the toggle is
+        // first changed, so opening the Settings menu does not undo it.
+        const sk = g.planet.holeU.uSkin;
+        if (this.regolithOn === undefined) { if (!SKIN_FROM_URL) sk.value = v.regolith ? 1 : 0; }
+        else if (this.regolithOn !== v.regolith) sk.value = v.regolith ? 1 : 0;
+        this.regolithOn = v.regolith;
+      }
+    }
     if (g.fx) g.fx.density = v.particles;
     for (const post of [g.post]) {
       if (!post) continue;
@@ -294,7 +334,8 @@ export class Settings {
       if (u.lines) u.lines.value = v.speedLines ? 1 : 0;
       if (u.inkK) u.inkK.value = v.ink;
     }
-    if (g.audio && g.audio.setVolumes) g.audio.setVolumes(v.master, v.music, v.sfx);
+    if (g.haptics) g.haptics.configure(v.rumble, v.rumbleLevel, v.padLight, v.padTriggers);
+    if (g.audio && g.audio.setVolumes) g.audio.setVolumes(v.master, v.music, v.sfx, v.mute);
     if (g.input && g.input.setBindings) g.input.setBindings(v.binds);
     const mm = document.getElementById('minimap');
     if (mm) mm.style.display = v.minimap ? '' : 'none';
@@ -305,7 +346,6 @@ export class Settings {
     const unit = document.querySelector('#speedo .unit');
     if (unit) unit.textContent = v.units === 'ms' ? 'M/S' : 'KM/H';
     if (g.hud) g.hud.lastSpeedTxt = '';
-    if (!v.tips) { const t = document.getElementById('tip'); if (t) t.classList.add('hidden'); }
     this.updateHelp();
   }
 
@@ -314,6 +354,7 @@ export class Settings {
     const pad = !!(this.game && this.game.input && this.game.input.padActive);
     for (const td of document.querySelectorAll('#help td:first-child')) {
       if (!td.dataset.orig) td.dataset.orig = td.textContent;
+      if (HELP_PAD_HIDE.includes(td.dataset.orig)) td.parentElement.style.display = pad ? 'none' : '';
       const toks = pad && (HELP_PAD[td.dataset.orig] || tokensFor(td.dataset.orig));
       if (toks) { td.innerHTML = glyphHtml(toks); continue; }
       const f = HELP_ROWS[td.dataset.orig];
@@ -470,6 +511,8 @@ export class Settings {
     } else if (act === 'bind') {
       this.rebinding = this.rebinding === t.dataset.code ? null : t.dataset.code;
       this.render();
+    } else if (act === 'fx-test') {
+      if (g && g.haptics) { g.haptics.test(); this.render(); }
     } else if (act === 'gyro-connect') {
       const gy = g && g.pad && g.pad.gyro;
       if (gy) gy.request().then(() => this.render());
@@ -511,7 +554,9 @@ export class Settings {
       if (this.tab === 'gameplay') {
         // the gyro is read straight from the pad (WebHID): it may need a one-time CONNECT
         const gy = this.game && this.game.pad && this.game.pad.gyro;
+        const g_ = this.game && this.game.haptics;
         const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        if (g_) body += `<div class="set-row"><span class="set-label">Controller feedback<small>${esc(g_.status)}</small></span><span class="set-ctl"><button class="set-btn" data-act="fx-test">TEST</button></span></div>`;
         if (gy) body += `<div class="set-row"><span class="set-label">PlayStation controller link<small>${esc(gy.status)}</small></span><span class="set-ctl">${gyroSupported() ? '<button class="set-btn" data-act="gyro-connect">CONNECT</button>' : ''}</span></div>`;
       }
     }

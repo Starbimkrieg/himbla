@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { frameQuat } from './geo.js';
+import { frameQuat, upAt } from './geo.js';
 
 // Grinding the crests of snake rocks (rocks.js; the planet keeps their crest lines in planet.rails).
 // Land on (or drop onto) a crest and you lock to it, standing sideways to the line, carried along
@@ -9,6 +9,10 @@ import { frameQuat } from './geo.js';
 const GRAV = 6;
 const _p = new THREE.Vector3(), _t = new THREE.Vector3(), _u = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _z = new THREE.Vector3(0, 0, 1), _r = new THREE.Vector3(), _v = new THREE.Vector3();
+const _hp = new THREE.Vector3(), _ht = new THREE.Vector3(), _hu = new THREE.Vector3(), _hn = new THREE.Vector3(), _ts = new THREE.Vector3(), _tf = new THREE.Vector3();
+const _near = [];
+const BODY = 0.45, BODY_UP = 0.5; // the rider's shins and waist, as a ball: what a rock on the crest has to clear
+const TRAIL_LIFE = 2; // s: how long a grind's skate trail streams behind before it's gone
 
 // point and unit tangent at arc length s along a rail (crater rims are closed loops)
 function railAt(r, s, outP, outT) {
@@ -20,6 +24,19 @@ function railAt(r, s, outP, outT) {
   outP.copy(r.pts[i]).lerp(r.pts[i + 1], f);
   outT.copy(r.pts[i + 1]).sub(r.pts[i]).normalize();
   return outP;
+}
+
+// A rail from its crest line (a polyline of points): with the arc length at each point and a bounding sphere, which is what
+// nearest() looks at first. planet.js addRail keeps these for the Moon; the Asset Row's flat world makes its own.
+export function railOf(pts) {
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1]));
+  const c = new THREE.Vector3();
+  for (const p of pts) c.add(p);
+  c.divideScalar(pts.length);
+  let rad = 0;
+  for (const p of pts) rad = Math.max(rad, p.distanceTo(c));
+  return { pts, cum, len: cum[cum.length - 1], c, rad };
 }
 
 export class Grinder {
@@ -50,11 +67,31 @@ export class Grinder {
     return best;
   }
 
+  // The first solid thing the rider runs into between here and ds further along the rail (a boulder
+  // or rock sitting on the crest): the push-out normal, or null. The rail's own rock doesn't count.
+  hit(A, ds) {
+    const cols = this.game.colliders;
+    if (!cols) return null;
+    const steps = Math.max(1, Math.ceil(Math.abs(ds) / 0.5));
+    for (let i = 1; i <= steps; i++) {
+      railAt(A.r, A.s + ds * (i / steps), _hp, _ht);
+      upAt(_hp, _hu);
+      _hp.addScaledVector(_hu, BODY_UP);
+      for (const c of cols.query(_hp, BODY + 2, _near)) {
+        if (c.platform || c.rail === A.r.pts) continue;
+        if (cols.contact(c, _hp, BODY, _hn) > 0) return _hn;
+      }
+    }
+    return null;
+  }
+
   // Called at the top of Player.update. Returns true while grinding (the player skips its physics).
   update(P, dt, input) {
     const g = this.game, b = P.body;
     if (this.cool > 0) this.cool -= dt;
     if ((this.rimT -= dt) <= 0) { this.rimT = 0.5; g.planet.rimRailsNear(b.pos); }
+    // a ragdoll is limp: it never grabs a rail (and lets go of one it was on)
+    if (P.rag) { this.active = null; return false; }
     if (!this.active) {
       if (this.cool > 0 || P.seat || P.vehicle || P.dead) return false;
       // look where you are and where you'll be in a moment, so a fast approach can't tunnel past
@@ -67,7 +104,7 @@ export class Grinder {
       }
       if (!n) return false;
       railAt(n.r, n.s, _p, _t);
-      _u.copy(n.p).normalize();
+      upAt(n.p, _u);
       const along = b.vel.dot(_t);
       const hsp = Math.sqrt(Math.max(0, b.vel.lengthSq() - b.vel.dot(_u) ** 2));
       // heading along the line (within ~40 degrees) pulls you on from further away; the tips
@@ -77,7 +114,10 @@ export class Grinder {
       const rim = !!n.r.rimOf;
       const lined = hsp > 4 && Math.abs(along) / hsp > (rim ? 0.5 : 0.75);
       const tip = !n.r.loop && !rim && (n.s < 6 || n.s > n.r.len - 6);
-      const reach = tip && lined ? 4 : lined ? (rim ? 3.4 : 2.8) : 1.8;
+      // crossing a crest at an angle only grabs you if you're dropping onto it; skating or flying
+      // over it doesn't (heading along it, a tip, or hitting it side-on at speed still do)
+      const dropping = b.vel.dot(_u) < -3;
+      const reach = tip && lined ? 4 : lined ? (rim ? 3.4 : 2.8) : tip ? 1.8 : 1.5;
       // a crater rim only takes you if you're heading along it (crossing one square-on mustn't snag you)
       if (rim && !lined) return false;
       const above = _b.subVectors(b.pos, n.p).dot(_u);
@@ -87,6 +127,7 @@ export class Grinder {
       const toward = -_b.dot(b.vel) + above * b.vel.dot(_u); // (closing in on the crest line, across the ground)
       const sideOn = !rim && hsp > 7 && above > -3.6 && above < 0 && flat < 2.5 && toward > 2 * Math.max(flat, 0.5);
       if (n.d > reach && !sideOn) return false;
+      if (!lined && !tip && !sideOn && !dropping) return false;
       if (above < (sideOn ? -3.6 : -1.6) || above > (rim ? 3 : 2.2) || b.vel.dot(_u) > 6 + 0.25 * hsp) return false; // (rising a little is just the slope you're on, at speed)
       // which way: at a tip, always inward (into the rail); elsewhere, the way you're moving
       let dir;
@@ -95,18 +136,26 @@ export class Grinder {
       this.active = { r: n.r, s: n.s, dir, speed: Math.max(Math.abs(along), hsp * 0.85, 9), t: 0, spark: 0 };
       g.fx.pop('GRIND!', null, { color: '#ffd23f', size: 44 });
       g.audio.tone(1400, 0.08, 'square', 0.08);
+      g.haptics.play('grind');
     }
     const A = this.active, r = A.r;
     railAt(r, A.s, _p, _t);
-    _u.copy(_p).normalize();
+    upAt(_p, _u);
     // gravity along the rail, and a little friction
     A.speed += -GRAV * _t.dot(_u) * A.dir * dt;
     A.speed = Math.max(3, Math.min(85, A.speed - 0.5 * dt));
+    // a rock on the crest: you hit it and you're thrown off
+    const bump = this.hit(A, A.dir * A.speed * dt);
+    if (bump) { this.knockOff(P, bump); return true; }
     A.s += A.dir * A.speed * dt;
     if (r.loop) A.s = ((A.s % r.len) + r.len) % r.len;
     A.t += dt;
+    // the player's physics (where the tank refills) is skipped while grinding, so recharge here
+    b.thrusting = false;
+    b.energy = Math.min(b.maxEnergy, b.energy + P.params.energyRegen * dt);
+    if (b.jetLocked && b.energy >= b.maxEnergy * 0.25) b.jetLocked = false;
     railAt(r, A.s, _p, _t);
-    _u.copy(_p).normalize();
+    upAt(_p, _u);
     const left = r.loop ? Infinity : A.dir > 0 ? r.len - A.s : A.s;
     const jump = input.pressed('ShiftLeft') || input.pressed('ShiftRight');
     if (jump || left < 1.2 || P.dead) { this.pop(P, jump); return true; }
@@ -138,6 +187,11 @@ export class Grinder {
     if (m.armL) { m.armL.rotation.z = -1.2 + 0.18 * w2 + 0.1 * fast; m.armL.rotation.x = 0.25 * w3 - 0.2 * fast; }
     if (m.armR) { m.armR.rotation.z = 1.2 + 0.18 * w1 - 0.1 * fast; m.armR.rotation.x = -0.25 * w3 - 0.2 * fast; }
     P.upSmooth.copy(_u);
+    // the skate trail keeps streaming from the skates along the rail (it fades out over a couple of seconds)
+    _ts.crossVectors(_u, _t).normalize();
+    const tr = b.skating ? Math.min(1, A.speed / 30) : 0;
+    g.fx.updateTrail(0, _tf.copy(b.pos).addScaledVector(_ts, -0.2), _ts, tr, _u, dt, TRAIL_LIFE);
+    g.fx.updateTrail(1, _tf.copy(b.pos).addScaledVector(_ts, 0.2), _ts, tr, _u, dt, TRAIL_LIFE);
     // sparks: sprayed back off the skates (against the slide), white-hot to orange, more and
     // further the faster you go, with a hot flash where steel meets rock and the odd big burst
     A.spark -= dt;
@@ -176,7 +230,7 @@ export class Grinder {
   pop(P, jumped, knocked = false) {
     const g = this.game, b = P.body, A = this.active;
     railAt(A.r, A.s, _p, _t);
-    _u.copy(_p).normalize();
+    upAt(_p, _u);
     b.pos.copy(_p).addScaledVector(_u, 0.4);
     b.vel.copy(_t).multiplyScalar(A.dir * A.speed).addScaledVector(_u, jumped ? 12 : 9);
     b.grounded = false;
@@ -189,9 +243,8 @@ export class Grinder {
     if (!knocked) {
       const pts = Math.round(15 + A.t * 30);
       g.style(pts, 'GRIND');
-      g.fx.pop(`GRIND +${pts}`, null, { color: '#ffd23f', size: 40 });
     }
-    if (jumped) g.audio.jump();
+    if (jumped) { g.audio.jump(); g.haptics.play('jump'); }
     this.active = null;
     this.cool = 0.6;
   }

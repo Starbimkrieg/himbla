@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import { FACTIONS } from './locations.js';
 import { makeRunner, makeCrate } from './models.js';
-import { makeBody, stepSkater } from './physics.js';
 import { toon, glow, ink, textSprite, nameTag } from './toon.js';
-import { arcDist, tangent, frameQuat, greatCircle, darkness } from './geo.js';
+import { arcDist, tangent, greatCircle, darkness, collectNodes } from './geo.js';
 import { pick } from './rng.js';
 import { VEHICLES } from './vehicles.js';
 import { spawnKadeTruck, updateKadeTruck, kadeDefeated, updateMortarDrop } from './kade.js';
-import { FOES, makeProp } from './storyAssets.js';
+import { FOES, makeProp, EXTRA_MODS, PLOTS, OUTPOST_GUN } from './storyAssets.js';
 import { saveWorldState } from './worldstate.js';
+import { terminalPage, wireTerminal, stepSel, keepScroll } from './terminalUI.js';
+import { glyphHtml } from './glyphs.js';
 
 // Faction stories. Every faction has a leader who offers a four-chapter storyline once you're
 // FRIENDLY with them. Finishing the first chapter of one story commits you to it (the other
@@ -27,27 +28,35 @@ export const LEADERS = {
 
 // Tech unlocked by the research-minded stories.
 export const TECH = {
-  dash: { name: 'Phase Dash', key: 'Z', desc: 'Swing all your momentum (plus a kick) towards wherever you are looking: a mid-air turn, climb or dive. 4 s cooldown.' },
+  dash: { name: 'Phase Dash', key: 'E', desc: 'Swing all your momentum (plus a kick) towards wherever you are looking: a mid-air turn, climb or dive, leaving a violet ghost trail of you along the way. 4 s cooldown.' },
   shield: { name: 'Deflector Shield', key: '—', desc: 'An invisible field that absorbs one hit or hard knock every 12 s (you see it when it takes one).' },
-  vanes: { name: 'Quantum Slipstream Vanes', key: '—', desc: 'Your skates keep a share of their grip on the air: steer while you fly.' },
+  vanes: { name: 'Quantum Slipstream Vanes', key: 'E', desc: 'Switch on to let your skates keep a share of their grip on the air for 10 s: steer while you fly. 30 s cooldown.' },
   teleport: { name: 'Personal Teleporter', key: 'T', desc: 'Jump to any discovered settlement or your outposts. 90 s cooldown.' },
 };
 
 // Modules for outposts you found (the base-builder part).
 export const MODULES = {
-  greenhouse: { name: 'Greenhouse', cost: 600, desc: 'Heals you while you are nearby, and grows a little income.' },
-  clinic: { name: 'Clinic', cost: 800, desc: 'You redeploy here after a K.O. (nearest clinic wins).' },
-  beacon: { name: 'Beacon Tower', cost: 700, desc: 'Charts 1.5 km of map around it and links to your other beacons for fast travel.' },
-  turret: { name: 'Militia Turret', cost: 900, desc: 'Shoots pirates within 300 m.' },
-  market: { name: 'Market Stall', cost: 1200, desc: 'Earns ₵40 a minute (up to ₵800) to collect at the terminal.' },
-  garage: { name: 'Garage', cost: 1500, desc: 'Unlocks your faction hauler and lets you summon it anywhere.' },
+  greenhouse: { name: 'Greenhouse', cost: 600, icon: 'greenhouse', tint: '#7dff6a', feature: 'Heals you within 60 m', desc: 'Heals you while you are nearby.' },
+  clinic: { name: 'Clinic', cost: 800, icon: 'clinic', tint: '#ff2a4a', feature: 'K.O. respawn point', desc: 'You redeploy here after a K.O. (nearest clinic wins), unless you have set a charted headquarters as your respawn point (at your town\'s clinic).' },
+  beacon: { name: 'Beacon Tower', cost: 700, icon: 'beacon', tint: '#2ee6ff', feature: 'Charts the map · fast travel', desc: 'Charts a wide circle of map around it and links to your other beacons for fast travel.' },
+  turret: { name: 'Militia Turret', cost: 900, icon: 'turret', tint: '#ff9f1c', feature: 'Shoots pirates within 300 m', desc: 'A manned gun on a tall stand. Shoots pirates within 300 m.' },
+  turret2: { name: 'Second Militia Turret', cost: 900, needs: 'turret', icon: 'turret2', tint: '#ff9f1c', feature: 'A second gun by the gate', desc: 'A second gun on a stand of its own beside the gate. Shoots pirates within 300 m.' },
+  market: { name: 'Market Stall', cost: 1200, icon: 'market', tint: '#ff2e88', feature: '₵40 a minute, up to ₵800', desc: 'Earns ₵40 a minute (up to ₵800) to collect at the terminal.' },
+  garage: { name: 'Garage', cost: 1500, icon: 'garage', tint: '#ffd23f', feature: 'Your faction hauler (V)', desc: 'Unlocks your faction hauler and lets you summon it anywhere.' },
 };
+// a free module goes into the first empty slot of its line; plotsOf counts the six plots (the extras have a stand of their own)
+const MODULE_LINES = { turret: ['turret', 'turret2'] };
+const HOMESTEAD = 'Pike\'s Hope';
+const BANK_CAP = 800, MARKET_RATE = 40; // the market stall: ₵ a minute, and the most it holds
+const plotsOf = (o) => o.modules.filter((k) => !EXTRA_MODS[k]).length;
 
 // Chapter scripts. Step types: goto, relays, clear, capture, build, defend, experiment, carry, boss,
 // kade, jam (plant a phase jammer and keep it alive while it converts a post), assault (storm a
 // settlement: break its guns or its command pylon, then hold its centre). foe: whose troops a step
 // throws at you (storyAssets FOES); backup: how many allied cars and troopers roll in with you;
-// prop: what the step plants. A finale's reward.world reshapes the Moon (worldstate.js).
+// prop: what the step plants. A relays step may take its sites from the factions instead (hqs: every faction HQ but those in skip,
+// in HQ_ROUTE order, a vote at each; pass: a story clearance through the restricted ones while it runs: hasClearance). A finale's
+// reward.world reshapes the Moon (worldstate.js).
 const CHAPTERS = {
   spacecom: [
     {
@@ -159,7 +168,7 @@ const CHAPTERS = {
         { t: 'experiment', at: { prev: true }, secs: 75, nodes: 5, label: 'Fly through the calibration nodes' },
       ],
       reward: { credits: 780, tech: 'dash', vehicle: 'skimmer' },
-      outro: '"Calibrated. The field rewrote a little of you: point yourself anywhere and press Z, and your momentum will follow. And take a Phase Skimmer (V). It hovers. It drifts. Do not do either into a wall."',
+      outro: '"Calibrated. The field rewrote a little of you: point yourself anywhere and press E, and your momentum will follow. And take a Phase Skimmer (V). It hovers. It drifts. Do not do either into a wall."',
     },
     {
       title: 'The Black Sun',
@@ -184,8 +193,8 @@ const CHAPTERS = {
   kepler: [
     {
       title: 'Room to Grow',
-      brief: '"Kepler\'s bursting at the seams, dear. I\'ve found a lovely flat spot for a homestead. Haul the prefab parts out there and we\'ll have a new home by supper."',
-      steps: [{ t: 'build', from: 'kepler', site: { site: 'kepler', min: 600, max: 900 }, trips: 3, found: { kind: 'homestead', name: 'Pike\'s Hope' }, label: 'Haul prefab parts to the homestead site' }],
+      brief: '"Kepler\'s bursting at the seams, dear. I\'ve found a lovely flat spot for a homestead. Haul two loads of prefab parts out there and we\'ll have a new home by supper."',
+      steps: [{ t: 'build', from: 'kepler', site: { site: 'kepler', min: 600, max: 900 }, trips: 2, found: { kind: 'homestead', name: 'Pike\'s Hope' }, label: 'Haul two loads of prefab parts to the homestead site' }],
       reward: { credits: 420, outfit: 'kepler' },
       outro: '"Pike\'s Hope! Oh, it\'s perfect. It\'s yours to run, love: use the terminal there to add a greenhouse, a clinic, a market… Kepler\'s proud to call you family."',
     },
@@ -193,7 +202,7 @@ const CHAPTERS = {
       title: 'Raiders at the Gate',
       brief: '"Pirates are sniffing around Pike\'s Hope. The settlers are frightened. Keep the generator running, dear: the militia is on its way, and they\'ll get there if you buy them the time."',
       steps: [
-        { t: 'goto', at: { founded: true }, r: 30, label: 'Get to Pike\'s Hope' },
+        { t: 'goto', at: { foundedIdx: 0 }, r: 30, label: 'Get to Pike\'s Hope' },
         { t: 'defend', at: { prev: true }, secs: 70, hp: 800, prop: 'homegen', foe: 'rustmoon', garrisonAt: 30, label: 'Keep the generator running' },
       ],
       reward: { credits: 660, module: 'turret', upgrade: ['dampers', 1] },
@@ -203,10 +212,10 @@ const CHAPTERS = {
       title: 'The Survey',
       brief: '"A homestead is lovely. But the Moon needs a proper town of ours, a real one, and the councils want YOU to choose where. I\'ve three spots in mind. Go and see each one, then tell me."',
       steps: [{ t: 'survey', sites: [
-        { site: 'hertz', min: 700, max: 1000, clear: 320, kind: 'ice', name: 'Shadow Crater', note: 'Water ice under the dark: the town\'s bank fills faster. But the dark side is pirate country.' },
-        { site: 'aldrin', min: 800, max: 1100, clear: 320, kind: 'plain', name: 'Sunlit Plain', note: 'Flat, bright and right by the traffic lanes: a busy, easy place to live.' },
-        { site: 'kepler', min: 900, max: 1200, clear: 320, kind: 'ridge', name: 'High Ridge', note: 'You can see half the Moon from up there: the town\'s guns and radio reach further.' },
-      ], hold: 3, label: 'Survey the three sites' }],
+        { site: 'hertz', min: 700, max: 1000, clear: 320, town: true, kind: 'ice', name: 'Shadow Crater', note: 'Water ice under the dark: the town\'s bank fills faster. But the dark side is pirate country.' },
+        { site: 'aldrin', min: 800, max: 1100, clear: 320, town: true, kind: 'plain', name: 'Sunlit Plain', note: 'Flat, bright and right by the traffic lanes: a busy, easy place to live.' },
+        { site: 'kepler', min: 900, max: 1200, clear: 320, town: true, kind: 'ridge', name: 'High Ridge', note: 'You can see half the Moon from up there: the town\'s guns and radio reach further.' },
+      ], hold: 3, r: 40, label: 'Survey the three sites' }],
       reward: { credits: 780, vehicle: 'mule' },
       outro: '"A fine choice. I\'ve sent you a Homestead Mule for the hauling to come. Press V. Now: the town core."',
     },
@@ -218,17 +227,17 @@ const CHAPTERS = {
         { t: 'defend', at: { prev: true }, secs: 60, hp: 900, prop: 'ballot', foe: 'rustmoon', garrisonAt: 20, label: 'Keep the founding ceremony safe' },
       ],
       reward: { credits: 1200 },
-      outro: '"The stone is laid! Now it needs the Charter: every Kepler town signs, and then it\'s a town, and you\'re its Councillor."',
+      outro: '"The stone is laid! Now it needs the Charter: every seat on the Moon Council signs, and then it\'s a town, and you\'re its Councillor."',
     },
     {
       title: 'The Charter',
-      brief: '"Ride round the towns and collect their signatures, then come home for the signing. When the ink\'s dry, the Moon Council will meet in YOUR hall. Mind you, they\'ll expect you to lead it."',
+      brief: '"The Charter needs a vote from every seat on the Moon Council, dear: Kepler, SPACECOM, Meridian, Vostok and Daedalus. Ride to each headquarters and put it in front of their leader. Not the pirates: they don\'t get a seat. Vostok and Daedalus don\'t let just anyone through the gate, so I\'ve written you a letter of introduction: it\'ll get you in, not make you friends. Mine\'s signed already. Then come home for the signing, and when the ink\'s dry the Moon Council will meet in YOUR hall. Mind you, they\'ll expect you to lead it."',
       steps: [
-        { t: 'relays', sites: [{ locOpen: 'tranq' }, { locOpen: 'aldrin' }, { locOpen: 'twilight' }, { locOpen: 'hertz' }], hold: 3, prop: 'ballot', label: 'Collect the towns\' signatures' },
+        { t: 'relays', hqs: true, skip: ['rustmoon'], pass: true, hold: 3, prop: 'ballot', label: 'Collect the votes' },
         { t: 'goto', at: { chosen: true }, r: 40, label: 'Ride home for the signing' },
       ],
       reward: { credits: 1800, outfit: 'kepler2', rep: 15, world: 'hometown' },
-      outro: '"Signed, sealed and yours. Councillor. Oh, I like the sound of that. Take Gran\'s best coat, dear: you\'ll be on the news."',
+      outro: '"Five votes, and not one of them a pirate. Signed, sealed and yours. Councillor. Oh, I like the sound of that. Take Gran\'s best coat, dear: you\'ll be on the news."',
       final: true,
     },
   ],
@@ -272,7 +281,7 @@ const CHAPTERS = {
         { t: 'spindle', label: 'Cross the Spindle and bring back its core' },
       ],
       reward: { credits: 3600, tech: 'vanes', outfit: 'meridian2', rep: 15, world: 'quantum' },
-      outro: '"The core is in the vault and the board is ecstatic. We tuned a sliver of its field into your skates: Quantum Slipstream Vanes. They keep a grip on the air itself, Runner, so you can steer mid-flight. And the Gilded Executive. You\'ve made us very, very rich."',
+      outro: '"The core is in the vault and the board is ecstatic. We tuned a sliver of its field into your skates: Quantum Slipstream Vanes. They keep a grip on the air itself, Runner: switch them on from your powers and you can steer mid-flight for ten seconds at a time. And the Gilded Executive. You\'ve made us very, very rich."',
       final: true,
     },
   ],
@@ -320,8 +329,27 @@ const CHAPTERS = {
 
 const _v = new THREE.Vector3();
 
+// Phase Dash: your speed (at least 30 m/s) times DASH_BOOST plus DASH_KICK, up to DASH_MAX: about 15-18% harder than the old
+// +12 m/s (cap 95) from 30 m/s up, 4 s cooldown
+const DASH_BOOST = 1.12, DASH_KICK = 16, DASH_MAX = 112;
+const VANES_ON = 10; // seconds the Slipstream Vanes stay on once used
+const VANES_CD = 30; // seconds from using them until they can be used again (so 20 s once they've gone off)
 const KADE_BASE = 0.08; // chance Kade rides along with a squad
 const KADE_STEP = 0.04; // added after each squad that doesn't bring him, until you reach the light
+const SURVEY_R = 40; // m: how close you must be to a survey point for its hold (was 18); the chapter data says it too (r), this is the fallback
+// The Charter's tour (a relays step with `hqs`): every faction HQ but Rustmoon's, in a riding order (you start at Kepler's, then
+// round the near side and out to the two military zones)
+const HQ_ROUTE = ['kepler', 'spacecom', 'meridian', 'vostok', 'daedalus'];
+// Prefab parts (the 'build' steps' loads): impacts up to PARTS_SAFE m/s cost nothing, then PARTS_RATE % of their condition
+// per m/s over, so a fresh load is smashed at 39 m/s (140 km/h): and at 44 with the Kepler Dampers I, 50 with II, 60 with III.
+// That is about 5.5 x as fragile as the most fragile contract cargo on skates (0.72 % per m/s over 14: missions.jostle; about 3 x
+// on boots), and a light bump (a cruise-speed 18 m/s knock is a 16% dent) leaves it dented but whole. (The 'carry' steps keep
+// their own per-step damage numbers.)
+const PARTS_SAFE = 14;
+const PARTS_RATE = 4;
+const PARTS_LOW = 35; // % condition below which the readout goes red, and a warning is shown once
+// a condition for display: a dented load never reads 100%, a living one never 0%
+const condPct = (hp) => (hp == null || hp >= 100 ? 100 : Math.min(99, Math.max(1, Math.round(hp))));
 
 export class Story {
   constructor(game) {
@@ -336,7 +364,8 @@ export class Story {
     this.kade = { met: 0, beaten: 0, captured: false, nextAt: 0 };
     this.active = null;
     this.leaders = {};
-    this.techCd = { dash: 0, shield: 0, teleport: 0 };
+    this.techCd = { dash: 0, shield: 0, teleport: 0, vanes: 0 };
+    this.vanesT = 0; // seconds of Slipstream Vanes left (player.js steers the air while it runs)
     this.load();
     this.buildLeaders();
     this.buildUI();
@@ -368,8 +397,11 @@ export class Story {
       if (!loc) continue;
       const m = makeRunner({ ...L.look, pirate: f === 'rustmoon' });
       if (f === 'rustmoon') this.addRifle(m, true);
-      const spot = this.findSpot(loc);
-      g.world.put(m.root, loc, spot.x, spot.z, 0, Math.atan2(-spot.x, -spot.z), true);
+      // where they stand: the spot the HQ's builder pinned (loc.leaderSpot: x, z and the yaw they face; Meridian's chairwoman at the
+      // foot of the exchange's steps), else an open spot found here, facing the HQ's middle
+      const spot = loc.leaderSpot || this.findSpot(loc);
+      const yaw = spot.yaw ?? Math.atan2(-spot.x, -spot.z);
+      g.world.put(m.root, loc, spot.x, spot.z, 0, yaw, true);
       m.root.scale.setScalar(1.15);
       // a little podium + name plate
       const pod = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.9, 0.4, 16), toon(new THREE.Color(FACTIONS[f].color).getHex()));
@@ -388,7 +420,7 @@ export class Story {
       g.world.put(beam, loc, spot.x, spot.z, 0, 0, true);
       loc.group.updateMatrixWorld(true);
       for (const o of [m.root, sign, pod, ring, beam]) o.userData.keep = true; // (world.rebuildLocation)
-      this.leaders[f] = { f, loc, model: m, sign, pod, ring, beam, pos: g.world.toWorld(loc, spot.x, 1, spot.z), t: Math.random() * 5 };
+      this.leaders[f] = { f, loc, model: m, sign, pod, ring, beam, pos: g.world.toWorld(loc, spot.x, 1, spot.z), front: g.world.toWorld(loc, spot.x + Math.sin(yaw) * 2, 1, spot.z + Math.cos(yaw) * 2), t: Math.random() * 5 };
       // a leader whose faction the story has ended (conquered, dismantled, fallen) isn't there at all
       m.root.visible = sign.visible = ring.visible = beam.visible = pod.visible = this.leaderVisible(f);
     }
@@ -530,6 +562,13 @@ export class Story {
       const d = new THREE.Vector3().fromArray(this.townSite.dir);
       return { pos: g.planet.ground(d, new THREE.Vector3()) };
     }
+    if (sel.leader) {
+      // a stand 5.5 m in front of a faction's leader, the way they face (towards the middle of their HQ, unless the HQ's builder
+      // turned them): clear of the podium (1.9 m) and ring (3.2 m)
+      const Ld = this.leaders[sel.leader];
+      if (Ld) return { pos: g.planet.ground(greatCircle(Ld.pos.clone().normalize(), Ld.front.clone().sub(Ld.pos), 5.5), new THREE.Vector3()), loc: Ld.loc };
+      return this.resolve({ locOpen: FACTIONS[sel.leader].hq }, step);
+    }
     if (sel.locOpen) { const l = locOf(sel.locOpen); const sp = this.findSpot(l); return { pos: g.planet.ground(g.world.toWorld(l, sp.x, 0, sp.z), new THREE.Vector3()), loc: l }; }
     if (sel.loc && sel.off) { const l = locOf(sel.loc); return { pos: g.planet.ground(g.world.toWorld(l, l.r * sel.off[0], 0, l.r * sel.off[1]), new THREE.Vector3()), loc: l }; }
     if (sel.loc) { const l = locOf(sel.loc); return { pos: l.pos.clone(), loc: l }; }
@@ -561,10 +600,11 @@ export class Story {
       return { pos: g.planet.ground(o.dir, new THREE.Vector3()), outpost: o };
     }
     if (sel.site) {
-      // the flattest of a dozen candidates: fights on a crater's rim or a slope were clunky
+      // the flattest of a dozen candidates: fights on a crater's rim or a slope were clunky. A town site is judged by the ground
+      // under the whole town instead (townScore), and must keep off roads, unbuilt outposts and lakes (the plateau would cut them).
       const l = locOf(sel.site);
       const clear = sel.clear || 150;
-      let best = null, bestScore = Infinity;
+      let best = null, bestScore = Infinity, spare = null, spareScore = Infinity;
       for (let tries = 0, ok = 0; tries < 90 && ok < 12; tries++) {
         const dist = sel.min + Math.random() * (sel.max - sel.min);
         const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), l.dir).normalize();
@@ -572,11 +612,16 @@ export class Story {
         if (g.locations.some((x) => arcDist(d, x.dir) < (x.zoneR || x.r) + clear)) continue;
         if (T.outposts.some((o) => arcDist(d, o.dir) < 120)) continue;
         if (g.world.lakes.some((lk) => arcDist(d, lk.d) < lk.rad + 30)) continue;
+        if (sel.town && T.siteClash(d)) {
+          // (kept only if nothing clear turns up: a candidate that crowds a road is better than the fixed fallback below)
+          if (!best) { const sc = this.townScore(d); if (sc < spareScore) { spareScore = sc; spare = d; } }
+          continue;
+        }
         ok++;
-        const sc = this.roughness(d);
+        const sc = sel.town ? this.townScore(d) : this.roughness(d);
         if (sc < bestScore) { bestScore = sc; best = d; }
       }
-      if (best) return { pos: g.planet.ground(best, new THREE.Vector3()) };
+      if (best || spare) return { pos: g.planet.ground(best || spare, new THREE.Vector3()) };
       return { pos: g.planet.ground(greatCircle(l.dir, tangent(new THREE.Vector3(1, 0, 0), l.dir).normalize(), sel.min), new THREE.Vector3()) };
     }
     return null;
@@ -585,6 +630,14 @@ export class Story {
   next() {
     const g = this.game;
     const A = this.active;
+    // a story pass ends with its step (the last vote cast, or the step skipped): whoever is still inside a restricted HQ they were let
+    // into stays cleared until they leave, or its guns would open up the instant the pass lapses. Only here, not in clearStep(): a
+    // chapter that is FAILED (a recall, a K.O., abandoning it) is no signing, and a grace left on a base that then falls asleep
+    // would be a free pass for a later teleport. Only for a base you are inside right now, for the same reason.
+    const cs = A.steps[A.si];
+    if (cs && cs.t === 'relays' && cs.pass && cs.locs) {
+      for (const l of cs.locs) { const b = l && g.enemies.bases.find((x) => x.loc === l && x.restricted); if (b && b.inside) g.enemies.grantGrace(l, 'the Charter is signed'); }
+    }
     this.clearStep();
     A.si++;
     if (A.si >= A.steps.length) { this.complete(); return; }
@@ -594,9 +647,22 @@ export class Story {
     s.timer = s.secs || 0;
     if (s.at) { const r = this.resolve(s.at, s); if (r) { s.pos = r.pos; s.outpost = r.outpost; A.lastAt = r; } }
     if (s.site) { const r = this.resolve(s.site, s); s.pos = r.pos; A.lastAt = r; }
-    if (s.t === 'relays') { const rs = s.sites.map((x) => this.resolve(x, s)); s.list = rs.map((r) => r.pos); s.outs = rs.map((r) => r.outpost || null); s.locs = rs.map((r) => r.loc || null); s.guarded = []; s.k = 0; s.pos = s.list[0]; }
+    if (s.t === 'relays') {
+      if (s.hqs) s.sites = this.hqSites(s);
+      const rs = s.sites.map((x) => this.resolve(x, s)); s.list = rs.map((r) => r.pos); s.outs = rs.map((r) => r.outpost || null); s.locs = rs.map((r) => r.loc || null); s.guarded = []; s.k = 0; s.pos = s.list[0];
+      if (s.hqs) {
+        if (!s.list.length) { this.next(); return; } // (nobody left to vote: every seat is gone)
+        s.names = s.locs.map((l) => l.short);
+        s.facs = s.sites.map((x) => x.leader);
+        // the military HQs need a pass unless you're already cleared with them (FRIENDLY): shown beside them in the list
+        s.gate = s.locs.map((l) => !!l.restricted && !g.rep.cleared(l.faction));
+        for (const l of s.locs) g.globe.discover(l, true);
+        const gated = s.locs.filter((l, i) => s.gate[i]).map((l) => l.name);
+        if (gated.length) g.hud.toast(`Gran's letter of introduction clears you through the ${gated.join(' and ')} gates until the Charter is signed. Don't shoot anything.`, 6);
+      }
+    }
     if (s.t === 'gates') { s.fromLoc = g.locations.find((l) => l.id === s.from); s.toLoc = g.locations.find((l) => l.id === s.to); s.phase = 'fetch'; }
-    if (s.t === 'survey') { s.list = s.sites.map((x) => this.resolve(x, s).pos); s.k = 0; s.pos = s.list[0]; }
+    if (s.t === 'survey') { s.list = s.sites.map((x) => this.resolve(x, s).pos); s.k = 0; s.pos = s.list[0]; this.placeSurveyRing(s); }
     if (s.t === 'assault') { s.locRef = g.locations.find((l) => l.id === s.loc); s.phase = 'go'; s.prog = 0; }
     if (s.t === 'experiment' && s.nodes) { s.got = 0; }
     if (s.t === 'build' || s.t === 'carry') { s.fromLoc = g.locations.find((l) => l.id === s.from); s.phase = 'fetch'; s.trip = 0; }
@@ -634,7 +700,7 @@ export class Story {
     const g = this.game;
     const A = this.active;
     if (!A) return;
-    for (const p of A.props) p.removeFromParent();
+    for (const p of A.props) { p.removeFromParent(); if (p.userData.ring) { p.geometry.dispose(); p.material.dispose(); } }
     A.props = [];
     if (A.obj) { g.events.protect = g.events.protect.filter((o) => o !== A.obj); A.obj = null; }
     if (A.carrying) { g.player.setCargo(null); A.carrying = false; }
@@ -667,8 +733,8 @@ export class Story {
     if (r.vehicle && !this.vehicles.includes(r.vehicle)) { this.vehicles.push(r.vehicle); unlocks.push(`Vehicle: ${VEHICLES[r.vehicle].name} (V)`); }
     if (r.tech && !this.tech.includes(r.tech)) { this.tech.push(r.tech); unlocks.push(`Tech: ${TECH[r.tech].name}${TECH[r.tech].key !== '—' ? ` (${TECH[r.tech].key})` : ''}`); }
     if (r.outfit) { g.upgrades['outfit_' + r.outfit] = 1; unlocks.push('Outfit added to your wardrobe (C)'); }
-    if (r.module) { for (const o of this.myOutposts().slice(-1)) if (!o.modules.includes(r.module)) o.modules.push(r.module); unlocks.push(`Free ${MODULES[r.module].name} at your newest outpost`); this.refreshOutposts(); }
-    if (r.everyModule) { for (const o of this.myOutposts()) if (!o.modules.includes(r.everyModule)) o.modules.push(r.everyModule); this.refreshOutposts(); unlocks.push(`A ${MODULES[r.everyModule].name} at every homestead`); }
+    if (r.module) this.rewardModule(r.module, unlocks);
+    if (r.everyModule) { for (const o of this.myOutposts()) this.grantModule(o, r.everyModule); this.refreshOutposts(); unlocks.push(`A ${MODULES[r.everyModule].name} at every homestead`); }
     const WNAME = { rail: 'Daedalus Rail Lance (key 3)', scatter: 'Vostok Scattergun (key 2)', mortar: 'Rustmoon Junk Mortar (key 4)' };
     if (r.weapon && !g.upgrades[r.weapon]) { g.upgrades[r.weapon] = 1; g.player.applyUpgrades(g.upgrades); unlocks.push(`Weapon: ${WNAME[r.weapon] || r.weapon}`); }
     if (r.upgrade) {
@@ -740,7 +806,7 @@ export class Story {
       this.founded = this.founded.filter((id) => id !== t.outpost);
       this.save();
       title = `${t.name.toUpperCase()} IS FOUNDED`;
-      news = `<b>THE MOON HAS A NEW TOWN, AND A COUNCIL.</b> ${t.name} has its charter, and you are its Councillor. The Moon Council (SPACECOM, Vostok, Daedalus, Meridian and Kepler) now sits in ${t.name}'s hall.<br><br><small>Fill your town's eight plots from the hall's terminal. Call council votes there too: every member votes with you more readily the better its standing with you, and a motion that carries changes the Moon.</small>`;
+      news = `<b>THE MOON HAS A NEW TOWN, AND A COUNCIL.</b> ${t.name} has its charter, and you are its Councillor. The Moon Council (SPACECOM, Vostok, Daedalus, Meridian and Kepler) now sits in ${t.name}'s hall.<br><br><small>Fill your town's eight plots from the hall's terminal or from the COUNCIL HALL tab of the town's job board (F, then E). Call council votes there too: every member votes with you more readily the better its standing with you, and a motion that carries changes the Moon.</small>`;
     } else if (r.world === 'quantum') {
       ws.quantum = true; // (the core is home: it glows in the Spindle up in the sky)
       saveWorldState(ws);
@@ -939,9 +1005,39 @@ export class Story {
     return sum / 8 + rim;
   }
 
+  // How badly the ground round a point suits a town (lower is better): the heights along the point's up, every 20 m out to 240 m,
+  // 16 to a ring. The plateau is cut to the mean ground under the footprint (r <= 80, by area), so 'dev' is the worst cut or
+  // fill inside it (r <= 90: the hall, the eight plots and the aprons), and 'skirt' is the worst on the blend ring (r >= 200),
+  // where a crater wall would be a cliff at the plateau's edge. The skirt counts a quarter as much: it is only a slope.
+  townScore(dir) {
+    const P = this.game.planet;
+    const d = dir.clone().normalize();
+    const t1 = tangent(new THREE.Vector3(1, 0, 0), d).normalize(), t2 = new THREE.Vector3().crossVectors(d, t1);
+    const p = new THREE.Vector3(), hs = [];
+    let sum = 0, area = 0;
+    for (let r = 0; r <= 240; r += 20) {
+      const n = r ? 16 : 1;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        p.copy(d).multiplyScalar(P.R).addScaledVector(t1, Math.cos(a) * r).addScaledVector(t2, Math.sin(a) * r).normalize();
+        const h = P.surface(p) * p.dot(d);
+        hs.push(r, h);
+        if (r <= 80) { const w = r || 1; sum += h * w; area += w; }
+      }
+    }
+    const mean = sum / area;
+    let dev = 0, skirt = 0;
+    for (let i = 0; i < hs.length; i += 2) {
+      const e = Math.abs(hs[i + 1] - mean);
+      if (hs[i] <= 90) dev = Math.max(dev, e);
+      if (hs[i] >= 200) skirt = Math.max(skirt, e);
+    }
+    return dev + 0.25 * skirt;
+  }
+
   // A town site when the survey was skipped (cheats): the first candidate that's well clear.
   defaultTownSite() {
-    const r = this.resolve({ site: 'aldrin', min: 800, max: 1100, clear: 320 });
+    const r = this.resolve({ site: 'aldrin', min: 800, max: 1100, clear: 320, town: true });
     this.townSite = { dir: r.pos.clone().normalize().toArray(), kind: 'plain', name: 'Pike\'s Landing', outpost: null };
     this.save();
   }
@@ -1011,7 +1107,7 @@ export class Story {
     const P = g.player;
     const A = this.active;
     if (s.choosing) return;
-    if (P.pos.distanceTo(s.pos) < 18) {
+    if (P.pos.distanceTo(s.pos) < (s.r || SURVEY_R)) {
       s.prog += dt;
       if (s.prog < (s.hold || 3)) return;
       s.prog = 0;
@@ -1021,9 +1117,10 @@ export class Story {
       g.hud.toast(`${site.name}: ${site.note}`, 5);
       g.audio.pickup();
       s.k++;
-      if (s.k < s.list.length) { s.pos = s.list[s.k]; this.setMarker(s.pos); return; }
+      if (s.k < s.list.length) { s.pos = s.list[s.k]; this.setMarker(s.pos); this.placeSurveyRing(s); return; }
       s.choosing = true;
       this.setMarker(null);
+      this.placeSurveyRing(s, false);
       const pickName = (i) => {
         const names = { ice: ['Coldwater', 'Pike\'s Hollow', 'Icefall'], plain: ['Brightfield', 'Pike\'s Landing', 'New Tranquility'], ridge: ['Highwatch', 'Runner\'s Rest', 'Skyline'] }[s.sites[i].kind];
         g.dialog('NAME YOUR TOWN', `<small>${s.sites[i].name}. What will the Moon call it?</small>`, names.map((n, j) => ({
@@ -1099,7 +1196,8 @@ export class Story {
     }
   }
 
-  fail(reason) {
+  // quiet: the caller has its own message for it (an emergency recall lists everything it failed in one panel)
+  fail(reason, quiet = false) {
     const g = this.game;
     if (!this.active) return;
     this.clearStep();
@@ -1108,6 +1206,7 @@ export class Story {
     const f = this.active.f;
     for (const u of this.active.units) if (!u.dead && u.model) { u.dead = true; u.model.root.removeFromParent(); }
     this.active = null;
+    if (quiet) return;
     g.hud.alert('CHAPTER FAILED', '#ff2a4a', 3);
     g.hud.toast(`${reason} (${LEADERS[f].name} will give you another go.)`, 4);
   }
@@ -1121,14 +1220,29 @@ export class Story {
     if (s.t !== 'carry' && s.t !== 'build') return;
     const g = this.game;
     // everything you haul has durability: small knocks chip it, a bad landing takes a lot. Mag-Cushion
-    // Dampers soften the hit, a Kepler Cargo Cradle shrugs off a share of it
-    const soft = (s.t === 'carry' ? s.fragile : 30) * 0.45;
-    if (speed < soft) return;
+    // Dampers soften the hit, a Kepler Cargo Cradle (an older upgrade some saves still have) shrugs off a share of it
     const up = g.upgrades;
-    const dmg = (speed - soft) * (s.t === 'carry' ? 7 : 5) * (1 - (up.dampers || 0) * 0.15) * (1 - (up.cradle || 0) * 0.2);
+    const shield = (1 - (up.dampers || 0) * 0.15) * (1 - (up.cradle || 0) * 0.2);
+    let dmg;
+    if (s.t === 'build') {
+      // (the dev speed multiplier inflates every impact speed: undone here so the parts stay playable; `!(v > …)` so NaN is nothing)
+      const v = speed / (g.cheats ? g.cheats.speed : 1);
+      if (!(v > PARTS_SAFE)) return;
+      dmg = (v - PARTS_SAFE) * PARTS_RATE * shield;
+    } else {
+      const soft = s.fragile * 0.45;
+      if (speed < soft) return;
+      dmg = (speed - soft) * 7 * shield;
+    }
+    const was = condPct(A.cargoHp);
     A.cargoHp = (A.cargoHp ?? 100) - dmg;
     if (A.cargoHp > 0) {
-      g.fx.pop(`${s.t === 'carry' ? 'CAREFUL!' : 'DENTED!'} ${Math.max(0, Math.round(A.cargoHp))}%`, null, { color: '#ff9f1c', size: 40, life: 0.8 });
+      const c = condPct(A.cargoHp); // (what's shown: the labels and the warning go by the same number the chip reads)
+      if (s.t === 'carry') g.fx.pop(`CAREFUL! ${c}%`, null, { color: '#ff9f1c', size: 40, life: 0.8 });
+      else {
+        g.fx.pop(`${c < PARTS_LOW ? 'FALLING APART!' : c < 60 ? 'CRACKING!' : 'DENTED!'} ${c}%`, null, { color: c < PARTS_LOW ? '#ff2a4a' : c < 60 ? '#ff6a1c' : '#ff9f1c', size: c < PARTS_LOW ? 46 : 40, life: 0.8 });
+        if (was >= PARTS_LOW && c < PARTS_LOW) g.hud.toast('The parts are barely holding together. Take it easy.', 2.5);
+      }
       return;
     }
     A.carrying = false;
@@ -1139,6 +1253,17 @@ export class Story {
     g.hud.toast(`Go back to ${s.fromLoc.name} for another ${s.t === 'carry' ? 'one' : 'load'}.`, 3);
     s.phase = 'fetch';
     this.setMarker(this.stepTarget(s));
+  }
+
+  // 'condition 63%' for the status line
+  condText() { return `condition ${condPct(this.active.cargoHp)}%`; }
+
+  // a hauled load that's in a bad way: the event chip goes red (panel().warn; the status line is a flex row, so the colour goes on
+  // the whole line, not on a span inside it)
+  loadLow() {
+    const A = this.active;
+    const s = A && A.steps[A.si];
+    return !!(s && A.carrying && (s.t === 'build' || s.t === 'carry') && condPct(A.cargoHp) < PARTS_LOW);
   }
 
   // spawn enemies around a point
@@ -1212,7 +1337,8 @@ export class Story {
             s.prog = 0;
             const prop = this.relayProp(s.pos, s.prop || (s.charge ? 'charge' : 'sensor'));
             A.props.push(prop);
-            g.fx.pop(s.charge ? 'CHARGE SET!' : 'DONE!', null, { color: FACTIONS[A.f].color, size: 54 });
+            g.fx.pop(s.charge ? 'CHARGE SET!' : s.facs ? `${FACTIONS[s.facs[s.k]].name.toUpperCase()}: AYE!` : 'DONE!', null, { color: s.facs ? FACTIONS[s.facs[s.k]].color : FACTIONS[A.f].color, size: 54 });
+            if (s.facs) g.hud.toast(`${LEADERS[s.facs[s.k]].name} puts ${FACTIONS[s.facs[s.k]].name} down as an aye.`, 4);
             g.audio.pickup();
             s.k++;
             if (s.rouse && s.locs[s.k - 1]) { const b = g.enemies.bases.find((x) => x.loc === s.locs[s.k - 1]); if (b) { b.aggro = Math.max(b.aggro, 60); g.hud.alert(`${b.loc.name.toUpperCase()} DEFENCES ENGAGING!`, '#ff2a4a', 3); } }
@@ -1423,6 +1549,79 @@ export class Story {
     }
   }
 
+    // The Charter's stops: every faction HQ except those `skip`ped (Rustmoon's), as leader selectors, in HQ_ROUTE order. A faction
+  // the story has ended (conquered, dismantled, fallen), or an HQ that is only a ruin now, has nobody left to vote.
+  hqSites(s) {
+    const g = this.game;
+    const out = [];
+    for (const [f, F] of Object.entries(FACTIONS)) {
+      if (!F.hq || (s.skip && s.skip.includes(f)) || F.absorbedBy || F.gone || F.fallen) continue;
+      const loc = g.locations.find((l) => l.id === F.hq);
+      if (!loc || loc.type === 'ruin') continue;
+      out.push({ leader: f });
+    }
+    const rank = (x) => { const i = HQ_ROUTE.indexOf(x.leader); return i < 0 ? 99 : i; };
+    return out.sort((a, b) => rank(a) - rank(b));
+  }
+
+  // The military clearance of a story pass (a relays step with `pass`): its restricted HQs let you in whatever you stand at
+  // with them while the step runs (enemies.updateBase ORs it in beside rep.cleared). Only the tour's own HQs, not the
+  // faction's other bases.
+  hasClearance(locId) {
+    const A = this.active;
+    const s = A && A.steps[A.si];
+    return !!(s && s.t === 'relays' && s.pass && s.locs && s.locs.some((l) => l && l.restricted && l.id === locId));
+  }
+
+  // The ground ring of a survey site: a faction-coloured strip draped over the terrain at the step's radius, so the zone
+  // you have to be inside can be seen. (The hold tests the straight-line distance to the site's centre, so on a slope
+  // its true edge is a metre or two off the ring.) Built once per site, not per frame: it costs a ground lookup per vertex.
+  siteRing(pos, r) {
+    const g = this.game;
+    const up = pos.clone().normalize();
+    const t1 = tangent(new THREE.Vector3(1, 0, 0), up).normalize();
+    const t2 = new THREE.Vector3().crossVectors(up, t1);
+    const N = 96, HW = 1.25; // segments round, half the strip's width
+    const P = [], idx = [];
+    const q = new THREE.Vector3(), o = new THREE.Vector3();
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      for (const rr of [r - HW, r + HW]) {
+        q.copy(pos).addScaledVector(t1, Math.cos(a) * rr).addScaledVector(t2, Math.sin(a) * rr);
+        g.planet.ground(q, o, 0.5);
+        P.push(o.x, o.y, o.z);
+      }
+    }
+    for (let i = 0; i < N; i++) {
+      const a0 = i * 2, a1 = ((i + 1) % N) * 2;
+      idx.push(a0, a0 + 1, a1, a1, a0 + 1, a1 + 1);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: FACTIONS[this.active.f].color, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    mesh.renderOrder = 3;
+    mesh.frustumCulled = false;
+    mesh.userData.ring = true; // (clearStep frees its geometry and material)
+    g.scene.add(mesh);
+    return mesh;
+  }
+
+  // (re)put the survey step's ring on its current site, or take it away (visible = false)
+  placeSurveyRing(s, visible = true) {
+    const A = this.active;
+    if (s.ring) {
+      s.ring.removeFromParent();
+      s.ring.geometry.dispose();
+      s.ring.material.dispose();
+      A.props = A.props.filter((p) => p !== s.ring);
+      s.ring = null;
+    }
+    if (!visible || !s.pos) return;
+    s.ring = this.siteRing(s.pos, s.r || SURVEY_R);
+    A.props.push(s.ring);
+  }
+
   // a planted prop (storyAssets): a sensor pylon, a ballot stand, a demolition charge...
   relayProp(pos, kind) {
     const g = this.game;
@@ -1452,17 +1651,17 @@ export class Story {
     const P = this.game.player;
     const dist = (p) => (p ? `${(P.pos.distanceTo(p) / 1000).toFixed(1)} km` : '');
     switch (s.t) {
-      case 'relays': return `${s.label} (${s.k}/${s.list.length}) · ${dist(s.pos)}${s.prog > 0 ? ` · ${Math.round((s.prog / (s.hold || 3)) * 100)}%` : ''}`;
+      case 'relays': return `${s.label} (${s.k}/${s.list.length}) · ${s.names ? `next: ${s.names[s.k]} · ` : ''}${dist(s.pos)}${s.prog > 0 ? ` · ${Math.round((s.prog / (s.hold || 3)) * 100)}%` : ''}`;
       case 'clear': return `${s.label}${s.units ? ` · ${s.units.filter((e) => !e.dead).length} left` : ''} · ${dist(s.pos)}`;
       case 'boss': return `${s.label}${s.units && s.units[0] && !s.units[0].dead ? ` · ${Math.max(0, Math.round(s.units[0].hp))} HP` : ''} · ${dist(s.pos)}`;
       case 'capture': return s.phase === 'hold' ? `Hold the outpost: ${Math.round((s.prog / s.hold) * 100)}%` : `${s.label} · ${dist(s.pos)}`;
-      case 'build': return `${s.phase === 'fetch' ? `Pick up parts at ${s.fromLoc.name}` : `Haul the parts to the site · condition ${Math.max(0, Math.round(this.active.cargoHp ?? 100))}%`} (${s.trip}/${s.trips}) · ${dist(this.stepTarget(s))}`;
-      case 'carry': return `${s.phase === 'fetch' ? `Pick up the ${s.cargo.toLowerCase()} at ${s.fromLoc.name}` : `Deliver it · condition ${Math.max(0, Math.round(this.active.cargoHp ?? 100))}%`} · ${dist(this.stepTarget(s))}`;
+      case 'build': return `${s.phase === 'fetch' ? `Pick up parts at ${s.fromLoc.name}` : `Haul the parts to the site · ${this.condText()}`} (${s.trip}/${s.trips}) · ${dist(this.stepTarget(s))}`;
+      case 'carry': return `${s.phase === 'fetch' ? `Pick up the ${s.cargo.toLowerCase()} at ${s.fromLoc.name}` : `Deliver it · ${this.condText()}`} · ${dist(this.stepTarget(s))}`;
       case 'defend': return `${s.label} · ${Math.ceil(Math.max(0, s.timer))} s${this.active.obj ? ` · ${Math.round((this.active.obj.hp / this.active.obj.maxHp) * 100)}% integrity` : ''}`;
       case 'experiment': return s.nodes ? `${s.label} (${s.got}/${s.nodes}) · ${Math.ceil(Math.max(0, s.timer))} s` : `${s.label} · ${Math.ceil(Math.max(0, s.timer))} s${P.pos.distanceTo(s.pos) > 40 ? ' · GET INSIDE THE RING' : ''}`;
       case 'gates': return s.phase === 'fetch' ? `Pick up the data spike at ${s.fromLoc.name} · ${dist(s.fromLoc.pos)}` : `${s.k < s.gateList.length ? `Gate ${s.k + 1}/${s.gateList.length}` : 'Into the Exchange'} · ${Math.ceil(Math.max(0, s.timer))} s · ${dist(this.stepTarget(s))}`;
       case 'spindle': return this.game.spindle.status();
-      case 'survey': return `${s.label} (${s.k}/${s.list.length}) · ${dist(s.pos)}${s.prog > 0 ? ` · ${Math.round((s.prog / (s.hold || 3)) * 100)}%` : ''}`;
+      case 'survey': return `${s.label} (${s.k}/${s.list.length}) · ${dist(s.pos)}${s.prog > 0 ? ` · ${Math.round((s.prog / (s.hold || 3)) * 100)}%` : s.choosing || P.pos.distanceTo(s.pos) < (s.r || SURVEY_R) || P.pos.distanceTo(s.pos) > 250 ? '' : ' · GET INSIDE THE RING'}`;
       case 'jam': return s.phase === 'jam' ? `Keep the jammer alive · ${Math.ceil(Math.max(0, s.timer))} s${this.active.obj ? ` · ${Math.round((this.active.obj.hp / this.active.obj.maxHp) * 100)}%` : ''}` : `${s.label} · ${dist(s.pos)}`;
       case 'assault': return s.phase === 'go' ? `${s.label} · ${dist(s.pos)}` : s.phase === 'break' ? (s.core ? `Destroy the command pylon${s.coreE ? ` · ${Math.max(0, Math.round(s.coreE.hp))} HP` : ''}` : `Silence the guns (${this.gunsDown(s)}/${s.need})`) : `Take the centre: ${Math.round((s.prog / s.hold) * 100)}%${P.pos.distanceTo(s.holdAt || s.pos) > 60 ? ' · GET TO THE CENTRE' : ''}`;
       case 'kade': return 'Defeat Captain Kade';
@@ -1475,6 +1674,9 @@ export class Story {
     const A = this.active;
     if (!A) return null;
     const s = A.steps[A.si];
+    // just carried off the Spindle: no chip while you walk back to the launch complex (you're set down beside it, and the
+    // arrival note and the marker say the rest). It's back when the Spindle step starts again
+    if (A.recovered && s && s.t === 'goto') return null;
     let bar = 0;
     if (s) {
       if (s.t === 'capture' && s.phase === 'hold') bar = s.prog / s.hold;
@@ -1484,11 +1686,13 @@ export class Story {
       else if (s.t === 'spindle') bar = this.game.spindle.active ? this.game.spindle.progress() : 0;
       else if (s.t === 'jam' && s.phase === 'jam') bar = 1 - Math.max(0, s.timer) / s.secs;
       else if (s.t === 'assault') bar = s.phase === 'hold' ? s.prog / s.hold : s.phase === 'break' ? (s.core ? 1 - (s.coreE ? s.coreE.hp / s.coreE.maxHp : 1) : this.gunsDown(s) / s.need) : 0;
-      else if (s.t === 'relays') bar = s.k / s.list.length;
+      else if (s.t === 'relays' || s.t === 'survey') bar = s.k / s.list.length;
       else if (s.t === 'build') bar = s.trip / s.trips;
       else bar = A.si / A.steps.length;
     }
-    return { faction: A.f, title: `★ CH.${A.idx + 1} · ${A.def.title}`, status: this.status(), bar };
+    // the Charter's tour lists every HQ with its vote (static notes, so the chip only repaints when something changes)
+    const list = s && s.t === 'relays' && s.names ? s.names.map((n, i) => ({ state: i < s.k ? 'done' : i === s.k ? 'next' : 'todo', label: n, note: i < s.k ? 'AYE' : s.gate[i] ? 'PASS' : '' })) : null;
+    return { faction: A.f, title: `★ CH.${A.idx + 1} · ${A.def.title}`, status: this.status(), bar, list, warn: this.loadLow() };
   }
 
   objective() {
@@ -1503,44 +1707,151 @@ export class Story {
   // ---------- outposts you founded: modules, income, healing ----------
   myOutposts() { return this.founded.map((id) => this.game.territory.outposts.find((o) => o.id === id)).filter(Boolean); }
 
+  // Pike's Hope: the homestead the first Kepler chapter founds (what the chapter rewards are for)
+  homestead() { const mine = this.myOutposts(); return mine.find((o) => o.name === HOMESTEAD) || mine[0] || null; }
+
+  // Put a module on an outpost, into the first empty slot of its line (a second turret goes in the second slot).
+  // Returns the module id that was added, or null if every slot was already built.
+  grantModule(o, k) {
+    for (const id of MODULE_LINES[k] || [k]) if (!o.modules.includes(id)) { o.modules.push(id); return id; }
+    return null;
+  }
+
+  // A chapter's free module: built at Pike's Hope, and if every slot of that line is already built, its price in credits.
+  rewardModule(k, unlocks) {
+    const o = this.homestead();
+    if (!o) return;
+    const at = this.game.territory.name(o);
+    const id = this.grantModule(o, k);
+    if (id) unlocks.push(`Free ${MODULES[id].name} at ${at}`);
+    else {
+      const m = MODULES[k];
+      this.game.addCredits(m.cost, `${m.name} refund`);
+      unlocks.push(`${(MODULE_LINES[k] || []).length > 1 ? `Both ${m.name} slots` : `The ${m.name}`} at ${at} ${(MODULE_LINES[k] || []).length > 1 ? 'were' : 'was'} already built: ₵${m.cost} instead`);
+    }
+    this.refreshOutposts();
+  }
+
   refreshOutposts() {
     const T = this.game.territory;
     for (const o of this.myOutposts()) if (o.model) T.despawn(o);
     T.save();
   }
 
-  outpostMenu(o) {
-    const g = this.game;
-    const T = g.territory;
-    o.bank = o.bank || 0;
-    const mods = Object.entries(MODULES);
-    const buttons = [];
-    if (o.modules.includes('market') && o.bank >= 1) buttons.push({ label: `${buttons.length + 1} · COLLECT MARKET TAKINGS — ₵${Math.floor(o.bank)}`, fn: () => { g.addCredits(Math.floor(o.bank), 'Market'); o.bank = 0; this.outpostMenu(o); } });
-    if (o.modules.includes('clinic')) buttons.push({ label: `${buttons.length + 1} · PATCH ME UP (free)`, fn: () => { g.player.health = g.player.maxHealth; g.fx.pop('GOOD AS NEW!', null, { color: '#7dff6a', size: 50 }); } });
-    if (o.modules.includes('beacon')) buttons.push({ label: `${buttons.length + 1} · BEACON TRAVEL…`, fn: () => this.beaconMenu(o) });
-    for (const [k, m] of mods) {
-      if (o.modules.includes(k)) continue;
-      if (o.modules.length >= 6) break;
-      buttons.push({
-        label: `${buttons.length + 1} · BUILD ${m.name.toUpperCase()} — ₵${m.cost}`,
-        fn: () => {
-          if (g.credits < m.cost) { g.hud.toast(`Not enough credits (need ₵${m.cost}).`, 2); return; }
-          g.credits -= m.cost;
-          o.modules.push(k);
-          if (k === 'garage') { const v = o.faction === 'meridian' ? 'van' : 'mule'; if (!this.vehicles.includes(v)) { this.vehicles.push(v); g.hud.toast(`${VEHICLES[v].name} unlocked! Press V.`, 3); } }
-          if (k === 'beacon') this.revealAround(o);
-          g.audio.cash();
-          this.refreshOutposts();
-          this.save();
-          g.save();
-          this.outpostMenu(o);
-        },
-      });
+  // Live numbers for the selected building on the terminal page: { rows: [[label, value, tone?]], meter?, note? }
+  moduleStatus(o, k) {
+    const P = this.game.player;
+    const has = (m) => o.modules.includes(m);
+    if (k === 'greenhouse') return { rows: [['EFFECT', 'Heals 4 hull / s'], ['RANGE', '60 m round the hub'], ['STATUS', 'ACTIVE']], note: 'Nothing to press: it works while you stand near it.' };
+    if (k === 'clinic') {
+      const near = this.clinicSpawn(P.pos.clone().normalize()), plan = this.game.respawnPt.plan(P.pos.clone().normalize());
+      return { rows: [['EFFECT', 'You redeploy here after a K.O.'], ['REDEPLOY AT', plan.name, plan.kind === 'hq' ? 'gold' : ''], ['NEAREST CLINIC', near === o ? 'THIS ONE (to you)' : 'Another is nearer to you', near === o ? '' : 'dim']] };
     }
-    buttons.push({ label: `${buttons.length + 1} · CLOSE` });
-    const built = o.modules.length ? o.modules.map((k) => MODULES[k].name).join(', ') : 'nothing yet';
-    const info = mods.filter(([k]) => !o.modules.includes(k)).map(([, m]) => `<b>${m.name}</b>: ${m.desc}`).join('<br>');
-    g.dialog(T.name(o).toUpperCase(), `Built: <b>${built}</b> (${o.modules.length}/6)<br><br><small>${info}</small>`, buttons);
+    if (k === 'beacon') {
+      const linked = this.myOutposts().filter((x) => x !== o && x.modules.includes('beacon')).length;
+      return { rows: [['MAP CHARTED', '1.5 km round the outpost'], ['LINKED BEACONS', linked ? `${linked} other${linked === 1 ? '' : 's'}` : 'none yet', linked ? '' : 'dim']] };
+    }
+    if (k === 'turret' || k === 'turret2') {
+      const G = OUTPOST_GUN, n = (has('turret') ? 1 : 0) + (has('turret2') ? 1 : 0);
+      return { rows: [['GUNS HERE', `${n} of 2`], ['RANGE', `${G.range} m`], ['FIRE', `${G.damage} dmg + splash, every ${G.interval} s each`], ['TARGETS', 'Pirates, not faction troops']], note: 'Nothing to press: each gun turns, aims and fires by itself.' };
+    }
+    if (k === 'market') {
+      const bank = Math.floor(o.bank || 0), left = BANK_CAP - (o.bank || 0);
+      return { rows: [['INCOME', `₵${MARKET_RATE} a minute`], ['CAP', `₵${BANK_CAP}`]], meter: { v: (o.bank || 0) / BANK_CAP, text: `₵${bank} / ₵${BANK_CAP}${left > 1 ? ` · FULL IN ${Math.ceil(left / (MARKET_RATE / 60) / 60)} MIN` : ' · FULL'}` }, note: bank < 1 ? 'Nothing to collect yet.' : '' };
+    }
+    if (k === 'garage') {
+      const v = o.faction === 'meridian' ? 'van' : 'mule';
+      return { rows: [['VEHICLE', VEHICLES[v].name], ['SUMMON', 'Press V anywhere'], ['STATUS', this.vehicles.includes(v) ? 'UNLOCKED' : 'NOT UNLOCKED']], note: 'Nothing to press: call it with V.' };
+    }
+    return { rows: [] };
+  }
+
+  // BUILD on the terminal page: checks again (a stale click, a held key, a pad) before it charges anything; the page
+  // stays open and answers in place
+  buildOutpostModule(o, k) {
+    const g = this.game, m = MODULES[k];
+    if (!m || o.modules.includes(k) || (m.needs && !o.modules.includes(m.needs)) || (!EXTRA_MODS[k] && plotsOf(o) >= PLOTS)) { this.outpostMenu(o, k); return; }
+    if (g.credits < m.cost) { g.audio.tone(180, 0.08, 'square', 0.05); this.outpostMenu(o, k, `NOT ENOUGH CREDITS: ₵${Math.ceil(m.cost - g.credits)} SHORT`, 'bad'); return; }
+    g.credits -= m.cost;
+    o.modules.push(k);
+    let msg = `${m.name.toUpperCase()} BUILT`;
+    if (k === 'garage') { const v = o.faction === 'meridian' ? 'van' : 'mule'; if (!this.vehicles.includes(v)) { this.vehicles.push(v); g.hud.toast(`${VEHICLES[v].name} unlocked! Press V.`, 3); msg += ` · ${VEHICLES[v].name.toUpperCase()} UNLOCKED`; } }
+    if (k === 'beacon') this.revealAround(o);
+    g.audio.cash();
+    this.refreshOutposts();
+    this.save();
+    g.save();
+    this.outpostMenu(o, k, msg);
+  }
+
+  // F at an outpost's terminal: an interactive page (terminalUI.js) with a tile for every building. Click or arrow to a
+  // tile for what it does; its button (or the number on it) collects, patches, travels or builds. The numbered choices
+  // are the old menu's buttons in the same order, so the number keys and Escape (= the last, CLOSE) work as before.
+  outpostMenu(o, sel = null, msg = '', msgTone = 'ok') {
+    const g = this.game, T = g.territory, P = g.player;
+    o.bank = o.bank || 0;
+    const has = (k) => o.modules.includes(k);
+    const plots = plotsOf(o);
+    const locked = (k) => { const n = MODULES[k].needs; return !!n && !has(n) && !has(k); };
+    const slotFull = (k) => !EXTRA_MODS[k] && plots >= PLOTS;
+    const buildable = (k) => !has(k) && !locked(k) && !slotFull(k);
+    const bank = Math.floor(o.bank);
+    const credits = Math.floor(g.credits);
+    const acts = [];
+    const act = (id, tile, label, short, tone, fn, keep = true) => acts.push({ id, tile, label, short, tone, fn, keep });
+    if (has('market') && o.bank >= 1) act('collect', 'market', `COLLECT MARKET TAKINGS — ₵${bank}`, `COLLECT ₵${bank}`, 'go', () => { const n = Math.floor(o.bank); g.addCredits(n, 'Market'); o.bank = 0; this.outpostMenu(o, 'market', `₵${n} COLLECTED`); });
+    if (has('clinic')) act('patch', 'clinic', 'PATCH ME UP (free)', 'PATCH ME UP (FREE)', 'go', () => { P.health = P.maxHealth; g.fx.pop('GOOD AS NEW!', null, { color: '#7dff6a', size: 50 }); }, false); // (closes, as before: the pop shows in the world)
+    if (has('beacon')) act('beacon', 'beacon', 'BEACON TRAVEL…', 'BEACON TRAVEL…', 'go', () => {
+      if (!this.myOutposts().some((x) => x !== o && x.modules.includes('beacon'))) { g.audio.tone(180, 0.08, 'square', 0.05); this.outpostMenu(o, 'beacon', 'BUILD A BEACON AT ANOTHER OUTPOST TO LINK THEM.', 'bad'); return; }
+      this.beaconMenu(o);
+    });
+    for (const [k, m] of Object.entries(MODULES)) if (buildable(k)) act('build:' + k, k, `BUILD ${m.name.toUpperCase()} — ₵${m.cost}`, `BUILD ₵${m.cost}`, 'build', () => this.buildOutpostModule(o, k));
+    const buttons = acts.map((a, i) => ({ label: `${i + 1} · ${a.label}`, fn: a.fn, keep: a.keep })).concat([{ label: `${acts.length + 1} · CLOSE` }]);
+
+    const stateOf = (k) => (has(k) ? 'built' : locked(k) ? 'locked' : slotFull(k) ? 'full' : 'open');
+    const tiles = Object.entries(MODULES).map(([k, m]) => {
+      const a = acts.find((x) => x.tile === k), state = stateOf(k);
+      return { id: k, name: m.name, icon: m.icon, tint: m.tint, state, feature: m.feature, key: a ? acts.indexOf(a) + 1 : '', chip: { built: 'BUILT', locked: 'LOCKED', full: 'NO PLOT' }[state] || `₵${m.cost}`, chipTone: state === 'open' && g.credits < m.cost ? 'short' : '' };
+    });
+    if (!MODULES[sel]) sel = acts.length ? acts[0].tile : tiles[0].id;
+    const m = MODULES[sel], state = stateOf(sel), a = acts.find((x) => x.tile === sel);
+    let st;
+    if (state === 'built') st = this.moduleStatus(o, sel);
+    else if (state === 'locked') st = { rows: [['REQUIRES', MODULES[m.needs].name, 'bad'], ['PRICE', `₵${m.cost}`, 'gold']], note: `Build a ${MODULES[m.needs].name} first.` };
+    else st = { rows: [['PRICE', `₵${m.cost}`, 'gold'], ['YOUR CREDITS', `₵${credits}`, g.credits < m.cost ? 'bad' : ''], g.credits < m.cost ? ['SHORT BY', `₵${Math.ceil(m.cost - g.credits)}`, 'bad'] : ['AFTER BUILDING', `₵${credits - m.cost}`]], note: state === 'full' ? 'Every plot is built on.' : '' };
+    const detail = {
+      id: sel, name: m.name, icon: m.icon, tint: m.tint, state, stateText: { built: 'BUILT', locked: 'LOCKED', full: 'NO PLOT FREE', open: 'NOT BUILT' }[state],
+      desc: m.desc, rows: st.rows, meter: st.meter, note: st.note,
+      action: a ? { id: a.id, label: a.short, key: acts.indexOf(a) + 1, tone: a.tone + (state === 'open' && g.credits < m.cost ? ' short' : '') } : null,
+      msg, msgTone,
+    };
+    const fac = FACTIONS[o.faction];
+    const spec = {
+      accent: fac ? fac.color : undefined,
+      title: T.name(o).toUpperCase(),
+      sub: `OUTPOST TERMINAL // ${fac ? fac.name.toUpperCase() : ''} ${String(o.kind).toUpperCase()}`,
+      stats: [{ k: 'CREDITS', v: `₵${credits}`, tone: 'gold' }, { k: 'PLOTS BUILT', v: `${plots} / ${PLOTS}` }, { k: 'MARKET BANK', v: has('market') ? `₵${bank} / ₵${BANK_CAP}` : '—' }],
+      tiles, sel, detail,
+      closeKey: acts.length + 1,
+      foot: { kb: `Click a building · 1-${acts.length || 1} do it · Arrows pick · Enter acts · Esc closes`, pad: `${glyphHtml(['A'])} do what the highlighted building offers · ${glyphHtml(['B'])} close` },
+    };
+    const settle = keepScroll();
+    g.dialog(spec.title, terminalPage(spec), buttons, {
+      raw: true, cls: 'otm-dlg', stay: true, quiet: msg ? 400 : 0, // (quiet: the second click of a double-click on BUILD must not press whatever the repaint put under it)
+      onKey: (code) => {
+        const root = document.querySelector('#dialog .otm');
+        if (!root) return false;
+        const next = stepSel(root, sel, code);
+        if (next) { if (next !== sel) { g.audio.click(); this.outpostMenu(o, next); } return true; }
+        if (code === 'Enter' || code === 'Space') { if (a) g.pickDialog(acts.indexOf(a)); else g.audio.click(); return true; }
+        return false;
+      },
+    });
+    settle();
+    wireTerminal(document.querySelector('#dialog .otm'), {
+      onSelect: (id) => { g.audio.click(); this.outpostMenu(o, id); },
+      onAct: (id) => g.pickDialog(id === 'close' ? acts.length : acts.findIndex((x) => x.id === id)),
+    });
   }
 
   beaconMenu(from) {
@@ -1548,7 +1859,7 @@ export class Story {
     const T = g.territory;
     const others = this.myOutposts().filter((o) => o !== from && o.modules.includes('beacon'));
     if (!others.length) { g.hud.toast('Build a beacon at another outpost to link them.', 2.5); return; }
-    g.dialog('BEACON TRAVEL', 'Where to?', others.map((o, i) => ({ label: `${i + 1} · ${T.name(o)}`, fn: () => this.teleportTo(o.dir) })).concat([{ label: `${others.length + 1} · CANCEL` }]));
+    g.dialog('BEACON TRAVEL', 'Where to?', others.map((o, i) => ({ label: `${i + 1} · ${T.name(o)}`, fn: () => this.teleportTo(o.dir) })).concat([{ label: `${others.length + 1} · CANCEL` }]), { stay: true }); // (stay: it replaces the terminal page that is already open, no second unlock)
   }
 
   revealAround(o) {
@@ -1559,9 +1870,10 @@ export class Story {
     G.save();
   }
 
-  teleportTo(dir) {
+  teleportTo(dir, quiet = false) {
     const g = this.game;
     const P = g.player;
+    if (g.assetRow && g.assetRow.active) g.assetRow.exit(true); // (the dev Asset Row: back on the Moon first; this moves you on from there)
     if (P.vehicle) g.garage.exit();
     const t = tangent(new THREE.Vector3(1, 0, 0), dir).normalize();
     const d = greatCircle(dir.clone().normalize(), t, 18);
@@ -1570,16 +1882,31 @@ export class Story {
     const fwd = tangent(dir.clone().sub(d), d).normalize();
     P.respawn(pos, fwd);
     g.cam.fwd.copy(fwd);
+    if (quiet) return; // (arrived some other way: a recovery shuttle)
     g.fx.explosion(pos, 4, false);
     g.fx.pop('*VWORP*', null, { color: '#c77dff', size: 56 });
     g.audio.tone(200, 0.5, 'sine', 0.25, 4);
+  }
+
+  // You were carried off the Spindle (a K.O.: spindle.recover): the chapter isn't failed, but the Spindle
+  // has to be done again, so it steps back to the step before it ("get to the launch complex").
+  retrySpindle() {
+    const A = this.active;
+    if (!A) return;
+    const i = A.steps.findIndex((st) => st.t === 'spindle');
+    if (i < 0) return;
+    delete A.steps[i].started;
+    delete A.steps[i].done;
+    A.recovered = true; // (panel(): no event chip on the walk back to the launch complex)
+    A.si = Math.max(-1, i - 2); // (next() steps on from here)
+    this.next();
   }
 
   // nearest clinic for redeploying after a K.O.
   clinicSpawn(from) {
     let best = null, bd = Infinity;
     const T = this.game.town;
-    if (T && T.has('clinic')) { const p = T.slotWorld('clinic'); if (p) { best = { dir: p.clone().normalize() }; bd = arcDist(from, best.dir); } }
+    if (T && T.has('clinic')) { const p = T.slotWorld('clinic'); if (p) { best = { dir: p.clone().normalize(), name: `${T.state.name} clinic` }; bd = arcDist(from, best.dir); } }
     for (const o of this.myOutposts()) {
       if (!o.modules.includes('clinic')) continue;
       const d = arcDist(from, o.dir);
@@ -1592,23 +1919,10 @@ export class Story {
     const g = this.game;
     const P = g.player;
     for (const o of this.myOutposts()) {
-      if (o.modules.includes('market')) o.bank = Math.min(800, (o.bank || 0) + (40 / 60) * dt);
+      if (o.modules.includes('market')) o.bank = Math.min(BANK_CAP, (o.bank || 0) + (MARKET_RATE / 60) * dt);
       const d = P.pos.distanceTo(g.planet.ground(o.dir, _v));
-      if (o.modules.includes('greenhouse') && d < 60 && !P.dead) { P.health = Math.min(P.maxHealth, P.health + 4 * dt); o.bank = (o.bank || 0) + (o.modules.includes('market') ? 0 : 0); }
-      if (o.modules.includes('turret') && d < 900) {
-        o.fireCd = (o.fireCd || 0) - dt;
-        if (o.fireCd <= 0) {
-          o.fireCd = 1.2;
-          const from = g.planet.ground(o.dir, new THREE.Vector3(), 12.5); // above the hub dome
-          let target = null, bd = 300;
-          for (const e of g.enemies.list) {
-            if (e.dead || e.faction !== 'pirate' || !e.center || e.kind === 'core' || g.enemies.friendly(e)) continue;
-            const dd = e.center.distanceTo(from);
-            if (dd < bd) { bd = dd; target = e; }
-          }
-          if (target) g.projectiles.fire('mil', from, target.center.clone().sub(from).normalize().multiplyScalar(140), { damage: 26, splash: 4, color: 0xff9f1c, size: 0.45, knock: 0.5, spare: true });
-        }
-      }
+      if (o.modules.includes('greenhouse') && d < 60 && !P.dead) P.health = Math.min(P.maxHealth, P.health + 4 * dt);
+      // (the militia turrets are driven by territory.updateGuns: they turn and fire from their own barrels)
     }
   }
 
@@ -1616,7 +1930,9 @@ export class Story {
   useTech(k) {
     const g = this.game;
     const P = g.player;
+    if (P.rag) return; // (limp in a ragdoll: no dash, no teleport)
     if (!this.tech.includes(k)) { g.hud.toast(`${TECH[k].name} isn't yours yet.`, 1.5); return; }
+    if (k === 'vanes' && this.vanesT > 0) { g.hud.toast(`${TECH[k].name}: on for ${Math.ceil(this.vanesT)} s more`, 1); return; }
     if (this.techCd[k] > 0) { g.hud.toast(`${TECH[k].name}: ${Math.ceil(this.techCd[k])} s`, 1); return; }
     if (k === 'dash') {
       // a momentum redirect, not a blink: every bit of your speed (and a kick more) swings round to
@@ -1625,9 +1941,10 @@ export class Story {
       const dir = g.cam.look.clone().normalize();
       // on the ground, aiming down would only grind you into it
       if (P.body.grounded && dir.dot(P.up) < 0.08) dir.addScaledVector(P.up, 0.08 - dir.dot(P.up)).normalize();
-      const sp = Math.min(Math.max(P.vel.length(), 30) + 12, 95);
+      const sp = Math.min(Math.max(P.vel.length(), 30) * DASH_BOOST + DASH_KICK, DASH_MAX);
       const from = P.center.clone();
       P.vel.copy(dir).multiplyScalar(sp);
+      g.fx.startGhosts(P.model, 0.6); // (a purple afterimage of you every few metres along the path)
       if (dir.dot(P.up) > 0.05) { P.body.grounded = false; P.body.sinceContact = 1; }
       g.fx.beam(from.addScaledVector(dir, -6), P.center.clone(), 0xc77dff);
       g.fx.pop('*PHASE*', null, { color: '#c77dff', size: 44, life: 0.6 });
@@ -1643,8 +1960,18 @@ export class Story {
           .concat([{ label: 'CANCEL' }]));
       };
       page(0);
+    } else if (k === 'vanes') {
+      // the skates' grip reaches the air for a while (player.js reads vanesActive()): steer your flight
+      if (P.vehicle) { g.hud.toast('The Vanes work through your skates: not from a vehicle.', 1.5); return; }
+      this.vanesT = VANES_ON;
+      this.techCd.vanes = VANES_CD;
+      g.fx.pop('*VANES*', null, { color: '#7dffd4', size: 44, life: 0.6 });
+      g.audio.tone(520, 0.25, 'sine', 0.18, 1.8);
     }
   }
+
+  // the Slipstream Vanes are on: used a moment ago (and still yours)
+  vanesActive() { return this.vanesT > 0 && this.tech.includes('vanes'); }
 
   // Deflector Shield: called from damagePlayer; returns true if the hit was absorbed.
   absorb(from = null) {
@@ -1726,19 +2053,19 @@ export class Story {
   }
 
   // ---------- per frame ----------
-  // the hold meter, centre-low on screen (see meter())
+  // the hold meter, in the stack of progress bars at the bottom of the screen (see meter())
   renderMeter() {
     if (!this.meterEl) {
       this.meterEl = document.createElement('div');
       this.meterEl.id = 'storymeter';
-      this.meterEl.innerHTML = '<div class="sm-label"></div><div class="sm-track"><div class="sm-fill"></div></div>';
-      document.getElementById('hud').appendChild(this.meterEl);
+      this.meterEl.innerHTML = '<div class="hb-label"></div><div class="hb-track"><div class="hb-fill"></div></div>';
+      document.getElementById('holdbars').appendChild(this.meterEl);
     }
     const m = this.meter();
     this.meterEl.classList.toggle('on', !!m);
     if (!m) return;
-    this.meterEl.querySelector('.sm-label').textContent = m.label;
-    const f = this.meterEl.querySelector('.sm-fill');
+    this.meterEl.querySelector('.hb-label').textContent = m.label;
+    const f = this.meterEl.querySelector('.hb-fill');
     f.style.width = `${Math.round(Math.min(1, Math.max(0, m.k)) * 100)}%`;
     f.style.background = m.col;
     this.meterEl.style.setProperty('--col', m.col);
@@ -1750,6 +2077,7 @@ export class Story {
     if (this.pendingDawn && this.game.state === 'play') { const f = this.pendingDawn; this.pendingDawn = null; f(); }
     updateMortarDrop(this);
     for (const k of Object.keys(this.techCd)) this.techCd[k] = Math.max(0, this.techCd[k] - dt);
+    if (this.vanesT > 0 && (this.vanesT -= dt) <= 0) { this.vanesT = 0; this.game.audio.tone(380, 0.25, 'sine', 0.12, 0.5); } // (spent: a falling blip)
     for (const L of Object.values(this.leaders)) {
       if (!L.loc.active) continue;
       L.t += dt;
@@ -1766,7 +2094,10 @@ export class Story {
         const s = this.active.steps[this.active.si];
         const tgt = this.stepTarget(s);
         if (tgt && this.marker) this.marker.position.copy(tgt);
-        for (const p of this.active.props) p.traverse((o) => { if (o.userData.spin) o.rotation.y += dt * 2; });
+        for (const p of this.active.props) {
+          const spinners = p.userData.spinners || (p.userData.spinners = collectNodes(p, (o) => o.userData.spin));
+          for (const o of spinners) o.rotation.y += dt * 2;
+        }
       }
     }
     this.updateOutposts(dt);
@@ -1775,9 +2106,10 @@ export class Story {
   hudTech() {
     if (!this.tech.length) return '';
     return this.tech.map((k) => {
-      const cd = this.techCd[k];
+      const on = k === 'vanes' && this.vanesActive();
+      const cd = on ? 0 : this.techCd[k];
       const key = TECH[k].key !== '—' ? `[${TECH[k].key}] ` : '';
-      return `<span class="${cd > 0 ? 'cd' : 'ready'}">${key}${TECH[k].name}${cd > 0 ? ` ${Math.ceil(cd)}s` : ''}</span>`;
+      return `<span class="${cd > 0 ? 'cd' : 'ready'}">${key}${TECH[k].name}${on ? ` ON ${Math.ceil(this.vanesT)}s` : cd > 0 ? ` ${Math.ceil(cd)}s` : ''}</span>`;
     }).join(' · ');
   }
 }

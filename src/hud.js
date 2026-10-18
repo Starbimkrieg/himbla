@@ -1,13 +1,19 @@
 import * as THREE from 'three';
 import { glyphHtml } from './glyphs.js';
+import { keepScroll } from './terminalUI.js';
 import { NAME_TAGS } from './toon.js';
 import { FACTIONS } from './locations.js';
-import { arcDist, darkness, upAt } from './geo.js';
-import { WEAPONS } from './weapons.js';
-import { EVENT_RANGE } from './config.js';
+import { arcDist, darkness, upAt, E1, E2 } from './geo.js';
+import { WEAPONS, APC_CANNON } from './weapons.js';
+import { EVENT_RANGE, PLANET } from './config.js';
 import { pixelFont } from './fonts.js';
+import { mulberry32 } from './rng.js';
 
 const $ = (id) => document.getElementById(id);
+// (the frame's lookups: the HUD elements are static page nodes, so each is found once)
+const $els = {};
+const $c = (id) => $els[id] || ($els[id] = document.getElementById(id));
+const MM_CURVE_N = 720; // samples round each great circle drawn on the minimap (~30 m apart)
 const MM_RANGE = 700; // metres from the centre to the edge of the minimap when standing still
 
 export class HUD {
@@ -23,6 +29,115 @@ export class HUD {
     this.bannerT = 0;
     this.v = new THREE.Vector3();
     this.lastSpeedTxt = '';
+    this.buildCracks();
+  }
+
+  // Cracked visor: glass cracks spread over the screen (in front of the rest of the HUD) as hull drops.
+  // Five impact points, each a star of jagged rays with a few branches; an impact wakes up at its hull
+  // level and its rays then grow out over the next 10% or so, so the damage creeps in. The geometry is
+  // built once; the cracks are painted onto one canvas, and only repainted when the hull moves by a
+  // whole percent (a canvas the browser just composites costs nothing per frame, unlike a few hundred
+  // live SVG paths under a CSS filter, which it redrew over the whole game every frame).
+  buildCracks() {
+    const W = 1280, H = 720, K = W / 160; // (the canvas is 16:9 and cover-fitted to the screen; points are in a 160 x 90 box)
+    const cv = document.createElement('canvas');
+    cv.id = 'cracks';
+    cv.width = W; cv.height = H;
+    const rnd = mulberry32(7731);
+    const IMPACTS = [[128, 22, 0.72], [24, 70, 0.58], [100, 78, 0.44], [34, 20, 0.3], [80, 46, 0.16]]; // x, y, hull fraction it starts at
+    this.cracks = [];
+    const mk = (pts, w, thr) => {
+      const cum = [0];
+      for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+      this.cracks.push({ pts, cum, total: cum[cum.length - 1], w, thr });
+    };
+    // a jagged line from (x, y) heading `a`, `n` segments long; returns its points
+    const walk = (x, y, a, n, seg) => {
+      const pts = [[x, y]];
+      for (let i = 0; i < n; i++) {
+        a += (rnd() - 0.5) * 0.7;
+        const s = seg * (0.6 + rnd() * 0.8);
+        x += Math.cos(a) * s; y += Math.sin(a) * s;
+        pts.push([x, y]);
+      }
+      return pts;
+    };
+    for (const [cx, cy, thr] of IMPACTS) {
+      const rays = 6 + Math.floor(rnd() * 3);
+      const a0 = rnd() * Math.PI * 2;
+      for (let r = 0; r < rays; r++) {
+        const a = a0 + (r / rays) * Math.PI * 2 + (rnd() - 0.5) * 0.5;
+        const pts = walk(cx, cy, a, 5 + Math.floor(rnd() * 4), 5 + rnd() * 3);
+        const t = thr - rnd() * 0.05; // (rays of one impact don't all start together)
+        mk(pts, 0.3, t);
+        // a branch or two off the middle of the ray
+        for (let b = 0; b < 2; b++) {
+          if (rnd() < 0.35) continue;
+          const i = 1 + Math.floor(rnd() * (pts.length - 2));
+          const from = pts[i];
+          const ba = a + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.6);
+          mk(walk(from[0], from[1], ba, 2 + Math.floor(rnd() * 3), 3 + rnd() * 2), 0.17, t - 0.03);
+        }
+      }
+      // a few short rings of hairline cracks round the impact point
+      for (let k = 0; k < 2; k++) {
+        const rad = 3.5 + k * 4.5;
+        const pts = [];
+        const n = 7 + k * 3;
+        for (let i = 0; i <= n; i++) {
+          const a = a0 + (i / n) * Math.PI * 1.7 + k;
+          const rr = rad * (0.85 + rnd() * 0.3);
+          pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
+        }
+        mk(pts, 0.14, thr - 0.04 - k * 0.03);
+      }
+    }
+    this.crackCtx = cv.getContext('2d');
+    this.crackK = K;
+    cv.style.display = 'none';
+    $('hud').appendChild(cv);
+    this.crackEl = cv;
+    this.crackKey = -1;
+  }
+
+  // paint the cracks for a hull fraction (0-1): each crack grows from nothing to full length over the 10% of hull after its threshold
+  paintCracks(frac) {
+    const ctx = this.crackCtx, K = this.crackK;
+    ctx.clearRect(0, 0, 1280, 720);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const strokes = [];
+    for (const c of this.cracks) {
+      const p = Math.max(0, Math.min(1, (c.thr - frac) / 0.1));
+      if (p > 0) strokes.push([c, p * c.total]);
+    }
+    const trace = (c, len) => {
+      ctx.beginPath();
+      ctx.moveTo(c.pts[0][0] * K, c.pts[0][1] * K);
+      for (let i = 1; i < c.pts.length; i++) {
+        if (c.cum[i] <= len) { ctx.lineTo(c.pts[i][0] * K, c.pts[i][1] * K); continue; }
+        const f = (len - c.cum[i - 1]) / (c.cum[i] - c.cum[i - 1]); // (the segment the crack has reached: partway along it)
+        ctx.lineTo((c.pts[i - 1][0] + (c.pts[i][0] - c.pts[i - 1][0]) * f) * K, (c.pts[i - 1][1] + (c.pts[i][1] - c.pts[i - 1][1]) * f) * K);
+        break;
+      }
+    };
+    // a dark under-stroke for body, then the bright glass line on top (instead of a blurred shadow)
+    ctx.strokeStyle = 'rgba(5, 3, 12, 0.7)';
+    for (const [c, len] of strokes) { ctx.lineWidth = c.w * K + 2; trace(c, len); ctx.stroke(); }
+    ctx.strokeStyle = '#e8f4ff';
+    for (const [c, len] of strokes) { ctx.lineWidth = c.w * K; trace(c, len); ctx.stroke(); }
+    return strokes.length > 0;
+  }
+
+  // hull fraction 0-1
+  updateCracks(frac) {
+    const off = this.game.cheats && !this.game.cheats.crackedVisor; // (dev menu: DISPLAY & DEBUG)
+    const key = off ? -2 : Math.round(frac * 100); // (repainted at most once per percent of hull)
+    if (key === this.crackKey) return;
+    this.crackKey = key;
+    if (off) { this.crackEl.style.display = 'none'; return; }
+    const any = this.paintCracks(frac);
+    this.crackEl.style.display = any ? '' : 'none'; // (nothing to composite while the hull is healthy)
+    this.crackEl.style.opacity = String(0.6 + 0.4 * (1 - frac));
   }
 
   show(id, on = true) { $(id).classList.toggle('hidden', !on); }
@@ -65,6 +180,8 @@ export class HUD {
         const col = (FACTIONS[ev.faction] && FACTIONS[ev.faction].color) || '#ffffff';
         row.style.setProperty('--c', col);
         row.classList.toggle('dl-active', ev.state === 'active');
+        const left = g.events.timeLeft(ev);
+        row.classList.toggle('dl-expiring', left !== null && left <= 30); // about to be withdrawn: flash slowly
         row.querySelector('.dl-name').textContent = `${ev.icon || ''}${ev.short || ev.title}`.toUpperCase();
         const dist = this.logTarget(ev).distanceTo(P.pos);
         row.querySelector('.dl-dist').textContent = dist > 999 ? `${(dist / 1000).toFixed(1)}KM` : `${Math.round(dist / 10) * 10}M`;
@@ -101,19 +218,19 @@ export class HUD {
     if (!this.recallEl) {
       this.recallEl = document.createElement('div');
       this.recallEl.id = 'recallhold';
-      this.recallEl.innerHTML = '<div class="rh-label"></div><div class="rh-track"><div class="rh-fill"></div></div>';
-      document.getElementById('hud').appendChild(this.recallEl);
+      this.recallEl.innerHTML = '<div class="hb-label"></div><div class="hb-track"><div class="hb-fill"></div></div>';
+      document.getElementById('holdbars').appendChild(this.recallEl); // (the stack of progress bars in the bottom centre)
     }
     this.recallEl.classList.toggle('show', k > 0);
     if (k <= 0) return;
-    if (label) this.recallEl.querySelector('.rh-label').textContent = label;
-    else if (loc) this.recallEl.querySelector('.rh-label').textContent = `HOLD R · RECALL TO ${loc.short || loc.name.toUpperCase()} · 100 CR`;
-    this.recallEl.querySelector('.rh-fill').style.width = `${Math.min(1, k) * 100}%`;
+    if (label) this.recallEl.querySelector('.hb-label').textContent = label;
+    else if (loc) this.recallEl.querySelector('.hb-label').textContent = `HOLD R · RECALL TO ${loc.short || loc.name.toUpperCase()} · 100 CR`;
+    this.recallEl.querySelector('.hb-fill').style.width = `${Math.min(1, k) * 100}%`;
   }
 
-  toast(text, dur = 2.5) {
+  toast(text, dur = 2.5, html = false) {
     const el = $('toast');
-    el.textContent = text;
+    if (html) el.innerHTML = text; else el.textContent = text; // (html: the caller has escaped it, or built it from glyphHtml)
     el.classList.remove('hidden');
     this.toastT = dur;
   }
@@ -135,7 +252,7 @@ export class HUD {
   banner(loc) {
     const el = $('banner');
     const f = FACTIONS[loc.faction];
-    const kind = { trade: 'TRADE HUB', lab: 'STRANGE PLACE — RESEARCH', monolith: 'STRANGE PLACE', tunnel: 'STRANGE PLACE — ???', funpark: 'STRANGE PLACE — FUNPARK', derby: 'STRANGE PLACE — RACECOURSE', casino: 'STRANGE PLACE — CASINO', hub: 'INTERNATIONAL HUB', civilian: 'CIVILIAN HABITAT', research: 'RESEARCH FACILITY', military: 'MILITARY — RESTRICTED', industrial: 'INDUSTRIAL OUTPOST', pirate: 'PIRATE TERRITORY' }[loc.type]; // casino: banner kind
+    const kind = { trade: 'TRADE HUB', lab: 'STRANGE PLACE — RESEARCH', monolith: 'STRANGE PLACE', tunnel: 'STRANGE PLACE — ???', derby: 'STRANGE PLACE — RACECOURSE', casino: 'STRANGE PLACE — CASINO', hub: 'INTERNATIONAL HUB', civilian: 'CIVILIAN HABITAT', research: 'RESEARCH FACILITY', military: 'MILITARY — RESTRICTED', industrial: 'INDUSTRIAL OUTPOST', pirate: 'PIRATE TERRITORY', hometown: 'YOUR TOWN', ruin: 'RUINS' }[loc.type]; // casino: banner kind; hometown + ruin used to print "undefined" in the chip
     el.innerHTML = `<div class="b-kind" style="background:${f.color}">${kind}</div><div class="b-name">${loc.name}</div><div class="b-blurb">${loc.blurb}</div>`;
     el.classList.remove('hidden');
     el.classList.remove('slam'); void el.offsetWidth; el.classList.add('slam');
@@ -192,73 +309,114 @@ export class HUD {
     this.resultT = 4;
   }
 
-  death(cause) {
+  // One panel listing everything that was failed at once (an emergency recall), held for `dur` seconds so it
+  // stays up through the cutscene. Rows are built as text: they carry names, not markup.
+  failedList(title, lines, dur = 8) {
+    const el = $('result');
+    el.className = 'panel result lose';
+    el.replaceChildren();
+    const t = document.createElement('div');
+    t.className = 'r-title';
+    t.textContent = title;
+    el.appendChild(t);
+    for (const l of lines) {
+      const r = document.createElement('div');
+      r.className = 'r-sub r-fail';
+      r.textContent = `✖ ${l}`;
+      el.appendChild(r);
+    }
+    this.resultT = dur;
+  }
+
+  // (resultT has to go to zero as well as the class: update() shows the panel every frame while it's above it)
+  hideResult() {
+    this.resultT = 0;
+    $('result').classList.add('hidden');
+  }
+
+  death(cause, hint = null) {
     $('death-cause').textContent = cause;
+    $('death-hint').textContent = hint || 'Click or press ENTER to redeploy at your home base.';
     this.show('death', true);
   }
 
   // ---- Job board / shop ----
-  openBoard(loc, offers, { onAccept, onClose, shop, onBuy, upgrades, credits, active, extra, canTake, onAbandon, rep, event, onEventAbandon }) {
+  // tabs: [{ id, label }] puts a tab bar under the title (tab: the one showing, onTab(id): a click on another); pane: { html, foot: { kb, pad }, wire(root) }
+  // is what that tab shows in place of the contracts and the shop (the town's COUNCIL HALL page)
+  openBoard(loc, offers, { onAccept, onClose, shop, onBuy, upgrades, credits, active, extra, canTake, onAbandon, rep, event, onEventAbandon, tabs, tab, onTab, pane }) {
     const el = $('board');
     const f = FACTIONS[loc.faction];
     const tier = rep.tier(loc.faction);
     // a terminal: a title bar, a strip of little status screens, then one bezelled screen per section
     const node = `${loc.short || loc.id}`.toUpperCase().replace(/[^A-Z0-9]/g, '');
     let html = `<div class="board-head" style="--fc:${f.color}"><span class="term-title">◢ ${loc.name.toUpperCase()} <span class="term-dim">// JOB TERMINAL · NODE ${node}-${String(loc.r).padStart(3, '0')}</span><span class="term-cursor">█</span></span><span class="board-right"><button class="board-close" data-close="1">✕ LOG OFF</button></span></div>`;
+    if (tabs) html += `<nav class="board-tabs" role="tablist">${tabs.map((t) => `<button type="button" role="tab" data-tab="${t.id}" class="${t.id === tab ? 'on' : ''}" aria-selected="${t.id === tab}">${t.label}</button>`).join('')}<span class="bt-hint"><span class="foot-kb">Q · E</span><span class="foot-pad">${glyphHtml(['LB'])} ${glyphHtml(['RB'])}</span></span></nav>`;
     html += `<div class="board-scroll">`; // (only this part scrolls, so the scroll bar stays between the header and the footer)
-    html += `<div class="term-status">
-      <div class="term-mini"><label>CREDITS</label><b class="board-credits">₵${credits}</b></div>
-      <div class="term-mini"><label>${f.name.toUpperCase()} STANDING</label><b><span class="tierchip" style="background:${tier.color}">${tier.name}</span></b></div>
-      <div class="term-mini"><label>UPLINK</label><b class="term-ok">● SECURE</b><span class="term-dim">${offers.length} CONTRACT${offers.length === 1 ? '' : 'S'} POSTED</span></div>
-    </div>`;
-    if (active) {
-      html += `<div class="board-active"><span><span class="term-dim">ACTIVE CONTRACT ›</span> ${active.cargo.name} → ${active.to.name}${extra ? ` <span class="term-dim">+ ON TOP ›</span> ${extra.cargo.name} → ${extra.to.name}` : ''}</span><button data-abandon="1">ABANDON</button></div>`;
-      if (canTake) html += `<div class="board-active"><span><span class="term-dim">TWIN CRADLE ›</span> room for one more contract on top</span></div>`;
-    }
-    if (event) {
-      html += `<div class="board-active"><span><span class="term-dim">ACTIVE EVENT ›</span> ${event.title}</span><button data-evabandon="1">ABANDON</button></div>`;
-    }
-    html += `<div class="board-cols">`;
-    html += `<div class="board-jobs screen"><h3><span>SCR-01 · CONTRACTS</span><span class="term-dim">${offers.length ? 'SELECT 1-' + offers.length : 'NO DATA'}</span></h3>`;
-    if (!offers.length) html += `<div class="empty">${rep.hostile(loc.faction) ? `${f.name} won't deal with you. Raise your reputation first.` : 'No contracts right now. Check back after your next run!'}</div>`;
-    offers.forEach((o, i) => {
-      const fc = FACTIONS[o.faction];
-      const fr = '●'.repeat(Math.round(o.cargo.fragile * 3)) || '–';
-      const hot = '☠'.repeat(o.cargo.hot) || '–';
-      html += `<div class="job ${canTake === false || (canTake == null && active) ? 'disabled' : ''} ${o.premium ? 'premium' : ''}" data-i="${i}">
-        <div class="job-top"><span class="job-key">${i + 1}</span><span class="job-fac" style="background:${fc.color}">${fc.name}</span><span class="job-pay">₵${o.reward}</span></div>
-        <div class="job-cargo">${o.cargo.name}</div>
-        <div class="job-route">${o.pickup === o.board ? 'HERE' : o.pickup.name} → <b>${o.to.name}</b> · ${(o.dist / 1000).toFixed(1)} km · ${o.time}s</div>
-        <div class="bubble"><b>${o.client}:</b> “${o.text}”</div>
-        <div class="job-tags">Fragile ${fr} &nbsp; Pirate risk ${hot}${o.clearance ? ' &nbsp; <span class="clr">MILITARY CLEARANCE</span>' : ''}${o.dark ? ' &nbsp; <span class="darktag">☾ DARK SIDE · HAZARD PAY</span>' : ''}${o.payload ? ` &nbsp; <span class="paytag">☠ PAYLOAD: ${o.payload.name.toUpperCase()}</span>` : ''}</div>
+    if (pane) html += pane.html;
+    else {
+      html += `<div class="term-status">
+        <div class="term-mini"><label>CREDITS</label><b class="board-credits">₵${credits}</b></div>
+        <div class="term-mini"><label>${f.name.toUpperCase()} STANDING</label><b><span class="tierchip" style="background:${tier.color}">${tier.name}</span></b></div>
+        <div class="term-mini"><label>UPLINK</label><b class="term-ok">● SECURE</b><span class="term-dim">${offers.length} CONTRACT${offers.length === 1 ? '' : 'S'} POSTED</span></div>
       </div>`;
-    });
-    html += `</div>`;
-    if (shop) {
-      html += `<div class="board-shop screen"><h3><span>SCR-02 · ${loc.id === 'ilmb' ? 'REPAIR BAY & SPACECOM GEAR' : `${f.name.toUpperCase()} GEAR`}</span></h3>`;
-      for (const u of shop) {
-        const lvl = upgrades[u.key] || 0;
-        const maxed = lvl >= u.max;
-        const cost = u.cost * (lvl + 1);
-        const ok = rep.canBuy(u, lvl);
-        const unlockMissing = u.unlock && u.unlock.smuggle && !(rep.game.stats.blackMarket || []).includes(u.key);
-        const need = !maxed && !ok ? (unlockMissing ? 'Comes in on a smuggling run: watch the boards for a PAYLOAD tag' : u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
-        const sw = u.swatch ? u.swatch.map((c) => `<span class="swatch" style="background:#${c.toString(16).padStart(6, '0')}"></span>`).join('') : '';
-        html += `<div class="shop-item ${maxed || credits < cost || !ok ? 'disabled' : ''} ${u.faction ? 'unique' : ''}" data-buy="${u.key}">
-          <div class="job-top"><span>${sw}${u.name}</span><span class="job-pay">${maxed ? (u.cosmetic ? 'OWNED' : 'MAX') : '₵' + cost}</span></div>
-          <div class="job-route">${u.desc}</div>${need ? `<div class="lock">🔒 ${need}</div>` : ''}${u.cosmetic ? '' : `<div class="lvl">${'■'.repeat(lvl)}${'□'.repeat(u.max - lvl)}</div>`}</div>`;
+      if (active) {
+        html += `<div class="board-active"><span><span class="term-dim">ACTIVE CONTRACT ›</span> ${active.cargo.name} → ${active.to.name}${extra ? ` <span class="term-dim">+ ON TOP ›</span> ${extra.cargo.name} → ${extra.to.name}` : ''}</span><button data-abandon="1">ABANDON</button></div>`;
+        if (canTake) html += `<div class="board-active"><span><span class="term-dim">TWIN CRADLE ›</span> room for one more contract on top</span></div>`;
+      }
+      if (event) {
+        html += `<div class="board-active"><span><span class="term-dim">ACTIVE EVENT ›</span> ${event.title}</span><button data-evabandon="1">ABANDON</button></div>`;
+      }
+      html += `<div class="board-cols">`;
+      html += `<div class="board-jobs screen"><h3><span>SCR-01 · CONTRACTS</span><span class="term-dim">${offers.length ? 'SELECT 1-' + offers.length : 'NO DATA'}</span></h3>`;
+      if (!offers.length) html += `<div class="empty">${rep.hostile(loc.faction) ? `${f.name} won't deal with you. Raise your reputation first.` : 'No contracts right now. Check back after your next run!'}</div>`;
+      offers.forEach((o, i) => {
+        const fc = FACTIONS[o.faction];
+        const fr = '●'.repeat(Math.round(o.cargo.fragile * 3)) || '–';
+        const hot = '☠'.repeat(o.cargo.hot) || '–';
+        html += `<div class="job ${canTake === false || (canTake == null && active) ? 'disabled' : ''} ${o.premium ? 'premium' : ''}" data-i="${i}">
+          <div class="job-top"><span class="job-key">${i + 1}</span><span class="job-fac" style="background:${fc.color}">${fc.name}</span><span class="job-pay">₵${o.reward}</span></div>
+          <div class="job-cargo">${o.cargo.name}</div>
+          <div class="job-route">${o.pickup === o.board ? 'HERE' : o.pickup.name} → <b>${o.to.name}</b> · ${(o.dist / 1000).toFixed(1)} km · ${o.time}s</div>
+          <div class="bubble"><b>${o.client}:</b> “${o.text}”</div>
+          <div class="job-tags">Fragile ${fr} &nbsp; Pirate risk ${hot}${o.clearance ? ' &nbsp; <span class="clr">MILITARY CLEARANCE</span>' : ''}${o.dark ? ' &nbsp; <span class="darktag">☾ DARK SIDE · HAZARD PAY</span>' : ''}${o.payload ? ` &nbsp; <span class="paytag">☠ PAYLOAD: ${o.payload.name.toUpperCase()}</span>` : ''}</div>
+        </div>`;
+      });
+      html += `</div>`;
+      if (shop) {
+        html += `<div class="board-shop screen"><h3><span>SCR-02 · ${loc.id === 'ilmb' ? 'REPAIR BAY & SPACECOM GEAR' : `${f.name.toUpperCase()} GEAR`}</span></h3>`;
+        for (const u of shop) {
+          const lvl = upgrades[u.key] || 0;
+          const maxed = lvl >= u.max;
+          const cost = u.cost * (lvl + 1);
+          const ok = rep.canBuy(u, lvl);
+          const unlockMissing = u.unlock && u.unlock.smuggle && !(rep.game.stats.blackMarket || []).includes(u.key);
+          const need = !maxed && !ok ? (unlockMissing ? 'Comes in on a smuggling run: watch the boards for a PAYLOAD tag' : u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
+          const sw = u.swatch ? u.swatch.map((c) => `<span class="swatch" style="background:#${c.toString(16).padStart(6, '0')}"></span>`).join('') : '';
+          html += `<div class="shop-item ${maxed || credits < cost || !ok ? 'disabled' : ''} ${u.faction ? 'unique' : ''}" data-buy="${u.key}">
+            <div class="job-top"><span>${sw}${u.name}</span><span class="job-pay">${maxed ? (u.cosmetic ? 'OWNED' : 'MAX') : '₵' + cost}</span></div>
+            <div class="job-route">${u.desc}</div>${need ? `<div class="lock">🔒 ${need}</div>` : ''}${u.cosmetic ? '' : `<div class="lvl">${'■'.repeat(lvl)}${'□'.repeat(u.max - lvl)}</div>`}</div>`;
+        }
+        html += `</div>`;
       }
       html += `</div>`;
     }
     html += `</div>`;
-    html += `</div>`;
     // (the footer stays on screen while the board scrolls; with a controller in use it names the pad's buttons)
-    html += `<div class="board-foot"><span class="foot-kb">&gt; Click a contract or press 1-${Math.max(1, offers.length)} · F / ESC to log off</span><span class="foot-pad">&gt; Press ${glyphHtml(['A'])} on a contract · ${glyphHtml(['B'])} to log off</span><span class="term-cursor">_</span></div>`;
+    const other = tabs && tabs.find((t) => t.id !== tab);
+    html += pane
+      ? `<div class="board-foot"><span class="foot-kb">&gt; ${pane.foot.kb}</span><span class="foot-pad">&gt; ${pane.foot.pad}</span><span class="term-cursor">_</span></div>`
+      : `<div class="board-foot"><span class="foot-kb">&gt; Click a contract or press 1-${Math.max(1, offers.length)}${other ? ` · Q / E: ${other.label}` : ''} · F / ESC to log off</span><span class="foot-pad">&gt; Press ${glyphHtml(['A'])} on a contract or an upgrade${other ? ` · ${glyphHtml(['LB'])} ${glyphHtml(['RB'])} ${other.label}` : ''} · ${glyphHtml(['B'])} to log off</span><span class="term-cursor">_</span></div>`;
+    const settle = pane ? keepScroll('#board') : null; // (before the markup is replaced: the page's tile list keeps its scroll)
     el.innerHTML = html;
     el.classList.add('term');
+    el.classList.toggle('tab-town', !!pane);
     el.style.setProperty('--fc', f.color);
     el.classList.remove('hidden');
+    if (pane) { pane.wire(el.querySelector('.otm')); settle(); }
+    else if (tabs) { const j = el.querySelector('.job:not(.disabled)'); if (j) j.classList.add('pad-default'); } // (the tab bar comes first: a controller's highlight starts on the first contract, not on a tab)
     el.onclick = (ev) => {
+      const tb = ev.target.closest('[data-tab]');
+      if (tb) { if (!tb.classList.contains('on')) onTab(tb.dataset.tab); return; }
       const job = ev.target.closest('.job');
       const buy = ev.target.closest('[data-buy]');
       if (ev.target.closest('[data-close]')) { onClose(); return; }
@@ -270,7 +428,7 @@ export class HUD {
     this.boardClose = onClose;
   }
 
-  closeBoard() { $('board').classList.add('hidden'); }
+  closeBoard() { const b = $('board'); b.classList.add('hidden'); b.innerHTML = ''; } // (emptied: a hidden page left in the DOM is found first by anything that looks for one)
 
   // ---- per-frame ----
   // NPC name tags (toon.js nameTag): a solid label over each named NPC you can see, smaller the
@@ -324,24 +482,25 @@ export class HUD {
     const P = g.player;
     const ms = g.missions;
 
-    if (this.alertT > 0 && (this.alertT -= dt) <= 0) $('alert').classList.add('hidden');
-    if (this.toastT > 0 && (this.toastT -= dt) <= 0) $('toast').classList.add('hidden');
-    if (this.grabT > 0 && (this.grabT -= dt) <= 0) $('grab').classList.add('hidden');
-    if (this.bannerT > 0 && (this.bannerT -= dt) <= 0) $('banner').classList.add('hidden');
+    if (this.alertT > 0 && (this.alertT -= dt) <= 0) $c('alert').classList.add('hidden');
+    if (this.toastT > 0 && (this.toastT -= dt) <= 0) $c('toast').classList.add('hidden');
+    if (this.grabT > 0 && (this.grabT -= dt) <= 0) $c('grab').classList.add('hidden');
+    if (this.bannerT > 0 && (this.bannerT -= dt) <= 0) $c('banner').classList.add('hidden');
     this.updateEventPopup(dt);
-    if (this.resultT > 0) { $('result').classList.remove('hidden'); if ((this.resultT -= dt) <= 0) $('result').classList.add('hidden'); }
+    if (this.resultT > 0) { $c('result').classList.remove('hidden'); if ((this.resultT -= dt) <= 0) $c('result').classList.add('hidden'); }
 
     this.drawSpeedo(P.speed * 3.6);
     this.distressLog(dt);
-    $('hp-fill').style.width = (P.health / P.maxHealth) * 100 + '%';
-    $('en-fill').style.width = (P.body.energy / P.body.maxEnergy) * 100 + '%';
-    $('en-fill').style.opacity = P.body.jetLocked ? 0.45 : ''; // dimmed while the thrusters are locked out
-    const sk = $('skates');
+    $c('hp-fill').style.width = (P.health / P.maxHealth) * 100 + '%';
+    this.updateCracks(Math.max(0, P.health / P.maxHealth));
+    $c('en-fill').style.width = (P.body.energy / P.body.maxEnergy) * 100 + '%';
+    $c('en-fill').style.opacity = P.body.jetLocked ? 0.45 : ''; // dimmed while the thrusters are locked out
+    const sk = $c('skates');
     const on = P.body.skating;
     sk.textContent = on ? 'Q-LOCK: ENGAGED' : 'Q-LOCK: OFF (BOOTS)';
     sk.classList.toggle('on', on);
     // the cash chip appears for five seconds whenever credits change, with a green + (earned) or a red − (spent)
-    const crEl = $('credits');
+    const crEl = $c('credits');
     crEl.querySelector('.cr-amt').textContent = `₵${g.credits}`;
     if (this.lastCr === undefined) this.lastCr = g.credits;
     else if (g.credits !== this.lastCr) {
@@ -360,13 +519,14 @@ export class HUD {
     else if (this.crT > 0) this.crT -= dt;
     crEl.classList.toggle('cr-show', this.crT > 0 || g.state === 'board');
     const wi = P.weapon || 0;
-    const wtxt = WEAPONS.map((w, i) => `<span class="${i === wi ? 'on' : ''} ${(!w.unlock || g.upgrades[w.unlock]) ? '' : 'locked'}">${i + 1}</span>`).join('') + ` ${WEAPONS[wi].name.toUpperCase()}`;
-    if (wtxt !== this.lastW) { $('weaponchip').innerHTML = wtxt; this.lastW = wtxt; }
+    const wtxt = P.vehicle && P.vehicle.def.turret ? `<span class="on">1</span> ${(P.vehicle.def.cannon || APC_CANNON.name).toUpperCase()}` : WEAPONS.map((w, i) => `<span class="${i === wi ? 'on' : ''} ${(!w.unlock || g.upgrades[w.unlock]) ? '' : 'locked'}">${i + 1}</span>`).join('') + ` ${WEAPONS[wi].name.toUpperCase()}`;
+    if (wtxt !== this.lastW) { $c('weaponchip').innerHTML = wtxt; this.lastW = wtxt; }
     const jt = g.alchemy ? g.alchemy.hudText() : '';
-    if (jt !== this.lastJar) { $('jarchip').innerHTML = jt; $('jarchip').classList.toggle('hidden', !jt); this.lastJar = jt; }
-    $('style').textContent = ms.active ? `STYLE +₵${ms.styleValue()}${ms.styleValue(false) >= ms.active.reward ? ' MAX' : ''}` : '';
+    if (jt !== this.lastJar) { $c('jarchip').innerHTML = jt; $c('jarchip').classList.toggle('hidden', !jt); this.lastJar = jt; }
+    const styleTxt = ms.active ? `STYLE +₵${ms.styleValue()}${ms.styleValue(false) >= ms.active.reward ? ' MAX' : ''}` : '';
+    if (styleTxt !== this.lastStyle) { $c('style').textContent = styleTxt; this.lastStyle = styleTxt; }
 
-    const mp = $('mission');
+    const mp = $c('mission');
     if (ms.active) {
       const a = ms.active;
       const obj = ms.objective();
@@ -462,6 +622,29 @@ export class HUD {
     const dark = darkness(up);
     c.fillStyle = dark > 0.5 ? '#0e0b18' : '#2a2440';
     c.fillRect(0, 0, W, H);
+    // the road network, under everything: only the stretches of ground you've charted (the same fog
+    // as the globe map), and it stays when the rest drops away at speed
+    const tr = g.world.traffic, gl = g.globe;
+    if (tr && tr.mapChunks && gl) {
+      c.save();
+      c.strokeStyle = dark > 0.5 ? 'rgba(196,172,255,0.55)' : 'rgba(233,207,148,0.7)';
+      c.lineWidth = 3; c.lineJoin = c.lineCap = 'round';
+      c.beginPath();
+      for (const ch of tr.mapChunks()) {
+        if (arcDist(ch.c, up) - ch.r > range * 1.1 || !gl.explored[gl.cellOf(ch.c)]) continue;
+        ch.pts.forEach((p, i) => { const [x, y] = proj(p); if (i) c.lineTo(x, y); else c.moveTo(x, y); });
+      }
+      c.stroke();
+      c.restore();
+    }
+    // the terminator and SAT-7's orbit, in the globe map's colours, under the markers. Like the roads
+    // they stay however far out it looks
+    const cv = this.mmCurves();
+    c.save();
+    c.lineJoin = c.lineCap = 'round';
+    this.mmLine(c, proj, up, range, cv.term, [8, 5], '#180c33', '#a070ff');
+    if (g.secrets && g.secrets.sat) this.mmLine(c, proj, up, range, this.mmOrbit(g.secrets), [6, 5], '#120a1e', '#00ffa8');
+    c.restore();
     c.globalAlpha = fade;
     c.strokeStyle = 'rgba(255,255,255,0.12)';
     c.lineWidth = 1;
@@ -535,7 +718,7 @@ export class HUD {
       if (e.dead || (e.base && !e.base.awake) || e.kind === 'core') continue;
       const [x, y, d] = proj(e.body ? e.body.pos : e.center);
       if (d > range) continue;
-      c.fillStyle = e.faction === 'pirate' ? (g.enemies.friendly(e) ? '#2ee6ff' : '#7dff3a') : e.kind === 'megamite' ? '#b8e986' : (e.base && e.base.hostile ? '#ff2a4a' : '#8a8aa0');
+      c.fillStyle = e.faction === 'pirate' ? (g.enemies.friendly(e) ? '#2ee6ff' : '#7dff3a') : e.kind === 'megamite' ? '#b8e986' : ((e.base && e.base.hostile) || (e.roam && g.enemies.isHostileTarget(e)) ? '#ff2a4a' : '#8a8aa0');
       c.beginPath(); c.arc(x, y, e.kind === 'megamite' ? 8 : e.carrying ? 6 : 3.5, 0, Math.PI * 2); c.fill();
       if (e.carrying) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); }
     }
@@ -552,6 +735,45 @@ export class HUD {
     }
     c.fillStyle = '#ff4f2e'; c.strokeStyle = '#fff'; c.lineWidth = 2;
     c.beginPath(); c.moveTo(W / 2, H / 2 - 9); c.lineTo(W / 2 + 6, H / 2 + 7); c.lineTo(W / 2, H / 2 + 3); c.lineTo(W / 2 - 6, H / 2 + 7); c.closePath(); c.fill(); c.stroke();
+  }
+
+  // The two fixed great circles drawn on the minimap, sampled once as unit directions: the terminator
+  // (the edge of the dark side) and, once there is one, SAT-7's orbit.
+  mmCurves() {
+    if (this.mmCv) return this.mmCv;
+    const term = [], N = MM_CURVE_N;
+    for (let i = 0; i <= N; i++) {
+      const t = (i / N) * Math.PI * 2;
+      term.push(new THREE.Vector3().copy(E1).multiplyScalar(Math.cos(t)).addScaledVector(E2, Math.sin(t)));
+    }
+    return (this.mmCv = { term });
+  }
+
+  mmOrbit(S) {
+    if (this.mmOrbitOf === S) return this.mmOrb;
+    const pts = [];
+    for (let i = 0; i <= MM_CURVE_N; i++) pts.push(S.orbitPoint((i / MM_CURVE_N) * Math.PI * 2, new THREE.Vector3()).normalize());
+    this.mmOrbitOf = S;
+    return (this.mmOrb = pts);
+  }
+
+  // Stroke the stretches of a sampled curve that lie within the minimap's reach: a dark casing under
+  // a dashed coloured line, so it reads on lit ground and in the dark alike.
+  mmLine(c, proj, up, range, pts, dash, casing, color) {
+    const cosLim = Math.cos((range * 1.8) / PLANET.radius);
+    const path = new Path2D();
+    let pen = false, any = false;
+    for (const p of pts) {
+      if (p.dot(up) < cosLim) { pen = false; continue; }
+      const [x, y] = proj(p);
+      if (pen) path.lineTo(x, y); else path.moveTo(x, y);
+      pen = any = true;
+    }
+    if (!any) return;
+    c.setLineDash(dash);
+    c.strokeStyle = casing; c.lineWidth = 4.5; c.stroke(path);
+    c.strokeStyle = color; c.lineWidth = 2; c.stroke(path);
+    c.setLineDash([]);
   }
 
   updateArrow() {
@@ -623,7 +845,7 @@ export class HUD {
     const t = ev.timer !== undefined ? `<span class="m-timer ${ev.timer < 20 ? 'low' : ''}">${Math.floor(Math.max(0, ev.timer) / 60)}:${String(Math.floor(Math.max(0, ev.timer) % 60)).padStart(2, '0')}</span>` : '';
     const html = `<div class="m-head" style="background:${f.color}">EVENT · ${f.name}</div>
       <div class="m-cargo">${ev.title}</div>
-      <div class="m-obj">${ev.status || ''}</div>
+      <div class="m-obj${ev.warn ? ' warn' : ''}">${ev.status || ''}</div>${(ev.list || []).map((r) => `<div class="ev-row ${r.state}"><b>${r.state === 'done' ? '✔' : r.state === 'next' ? '►' : '○'}</b>${r.label}<span>${r.note || ''}</span></div>`).join('')}
       <div class="m-row">${t}<div class="track ev-bar"><div class="fill" style="width:${Math.round((ev.bar ?? 0) * 100)}%;background:${f.color}"></div></div></div>`;
     if (html !== this.lastEventHtml) { el.innerHTML = html; this.lastEventHtml = html; }
     const fc = $('fluid');
@@ -665,13 +887,16 @@ export class HUD {
     if (f.spill > 0) { c.fillStyle = '#ff2a4a'; c.font = pixelFont(10); c.fillText('SPILLING!', x0 + 6, y0 + 18); }
   }
 
-  dialog(title, text, buttons, onPick) {
+  // opts.raw: `text` is a whole page that draws its own title, choices and close (terminalUI.js); opts.cls: an extra class on the panel
+  dialog(title, text, buttons, onPick, opts = {}) {
     const el = $('dialog');
-    el.innerHTML = `<div class="panel dlg"><div class="dlg-title">${title}</div><div class="bubble">${text}</div><div class="dlg-btns">${buttons.map((b, i) => `<button data-i="${i}">${b.label}</button>`).join('')}</div></div>`;
+    el.innerHTML = opts.raw
+      ? `<div class="panel dlg ${opts.cls || ''}">${text}</div>`
+      : `<div class="panel dlg ${opts.cls || ''}"><div class="dlg-title">${title}</div><div class="bubble">${text}</div><div class="dlg-btns">${buttons.map((b, i) => `<button data-i="${i}">${b.label}</button>`).join('')}</div></div>`;
     el.classList.remove('hidden');
     el.onclick = (e) => {
       const b = e.target.closest('button');
-      if (b) onPick(+b.dataset.i);
+      if (b && b.dataset.i !== undefined) onPick(+b.dataset.i); // (a button that isn't a dialog choice used to read as choice NaN and just close the dialog)
     };
   }
 

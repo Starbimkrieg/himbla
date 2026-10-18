@@ -14,9 +14,17 @@
 //   pirateTowns [location ids]     Lights Out: the towns the clans blew up and took (pirate dens now)
 //   blackSun    true               Daedalus chapter 4: the reactor at the Forward Post stays
 //   town        {dir,name,kind,    Kepler finale: your town (hometown.js), a settlement on the map
-//               slots,bank}
+//               slots,bank,radio,  (slots: eight building keys or null; School & Playground became Roads,
+//               sapNext,defNext}   so an old save's 'school' is read as 'roads' at load; radio: the Radio Tower's
+//                                  sweep of the world map, { d: [x,y,z], r metres, on, n cells, f: [location ids] },
+//                                  radio.js; sapNext: when the Greenhouse Farm's nursery bench has its next sapling, and
+//                                  defNext: when the Motor Pool can send its militia rovers out again (both ms since 1970,
+//                                  real time, like council.next))
 //   council     {passed,next}      the Moon Council's carried motions (and when it sits next)
-//   bulletin    string|null        news to show once, on the first load after a finale
+//   respawnAt   string|null        the headquarters (location id) you set at your town's clinic to redeploy at after a
+//                                  K.O. (respawn.js); null = your nearest clinic, else home
+//   bulletin    string|null        news to show once, on the first load after a finale (a carried council vote sets it
+//                                  too, until its new dawn has played)
 import * as THREE from 'three';
 import { FACTIONS, SHOPS } from './locations.js';
 import { darkness, arcDist, tangent, greatCircle } from './geo.js';
@@ -26,7 +34,7 @@ const KEY = 'moonrunner-world-v1';
 export function loadWorldState() {
   let d = null;
   try { d = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { /* fresh */ }
-  return { conquered: {}, piratesGone: false, lawless: false, razed: [], town: null, council: null, bulletin: null, ...(d || {}) };
+  return { conquered: {}, piratesGone: false, lawless: false, razed: [], town: null, council: null, respawnAt: null, bulletin: null, ...(d || {}) };
 }
 
 export function saveWorldState(ws) {
@@ -88,6 +96,8 @@ export function applyWorldState(ws, locations) {
   // your town (late: it stays out of the crater and outpost generation, like Chimera Downs)
   if (ws.town && !locations.some((l) => l.id === 'hometown')) {
     const t = ws.town;
+    // School & Playground is gone: its plot is Roads now, free (in place: the location's slots and ws.town.slots are one array)
+    t.slots.forEach((s, i) => { if (s === 'school') t.slots[i] = 'roads'; });
     let dir = new THREE.Vector3().fromArray(t.dir).normalize();
     // never on top of another settlement (an old save could put it inside Kepler Civic Center):
     // nudge it out along the ground until it's clear
@@ -99,8 +109,9 @@ export function applyWorldState(ws, locations) {
       dir = greatCircle(dir, away.normalize(), 60);
     }
     t.dir = dir.toArray();
+    // (fit: the plateau is levelled to the real ground under the town, not to the smooth base noise: terrainField.fitZone)
     locations.push({
-      id: 'hometown', name: t.name, short: t.name.toUpperCase().slice(0, 12), type: 'hometown', faction: 'kepler', r: 120, dir, late: true,
+      id: 'hometown', name: t.name, short: t.name.toUpperCase().slice(0, 12), type: 'hometown', faction: 'kepler', r: 120, dir, late: true, fit: true,
       jobs: ['kepler', 'meridian', 'spacecom'], safe: true, repair: 10, defense: { ring: 100, turrets: 2 }, dark: darkness(dir) > 0.5,
       slots: t.slots, blurb: `${t.name}: your town, and the seat of the Moon Council.`,
     });
@@ -121,7 +132,7 @@ function applyCouncil(ws, locations) {
     }
     sell('vostok', { key: 'v_apc', name: 'Vostok BTR-M APC', desc: 'VEHICLE: the Moon APC, yours to call with V', cost: 4000, max: 1, vehicle: 'apc' });
     sell('daedalus', { key: 'v_skimmer', name: 'Daedalus Phase Skimmer', desc: 'VEHICLE: the hover skimmer, yours to call with V', cost: 4000, max: 1, vehicle: 'skimmer' });
-    sell('daedalus', { key: 't_dash', name: 'Daedalus Phase Dash Rig', desc: 'TECH (Z): swing all your momentum to wherever you look', cost: 3500, max: 1, tech: 'dash' });
+    sell('daedalus', { key: 't_dash', name: 'Daedalus Phase Dash Rig', desc: 'TECH (E): swing all your momentum to wherever you look', cost: 3500, max: 1, tech: 'dash' });
     open('vostok', 'scatter'); open('daedalus', 'rail');
   }
   if (passed.includes('openSkies')) {
@@ -135,6 +146,7 @@ function applyCouncil(ws, locations) {
   }
   if (passed.includes('militiaPact')) {
     for (const l of locations) if (l.faction === 'kepler' && l.defense && !l.militia) { l.militia = true; l.defense = { ...l.defense, turrets: (l.defense.turrets || 0) + 2 }; }
-    sell('kepler', { key: 'v_mule', name: 'Kepler Homestead Mule', desc: 'VEHICLE: the soft-riding hauler, yours to call with V', cost: 2500, max: 1, vehicle: 'mule' });
+    // (not the Mule: the Kepler story already gives it to the only players who can call a vote)
+    sell('kepler', { key: 'v_carrier', name: 'Kepler Militia Carrier', desc: 'VEHICLE: the militia\'s armoured hauler with a turret cannon, yours to call with V', cost: 3500, max: 1, vehicle: 'carrier' });
   }
 }

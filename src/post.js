@@ -26,6 +26,7 @@ export class ComicPost {
         alert: { value: 0 },
         boost: { value: 0 },
         invert: { value: 0 },
+        fade: { value: 0 }, // the whole picture's dip to black (the council chamber's cutscene: chamber.js)
         halftone: { value: 1 }, lines: { value: 1 }, inkK: { value: 1 }, // settings
       },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
@@ -33,7 +34,7 @@ export class ComicPost {
         #include <packing>
         uniform sampler2D tColor; uniform sampler2D tDepth;
         uniform vec2 res; uniform float near; uniform float far; uniform float time;
-        uniform float speed; uniform float damage; uniform float alert; uniform float boost; uniform float invert;
+        uniform float speed; uniform float damage; uniform float alert; uniform float boost; uniform float invert; uniform float fade;
         uniform float halftone; uniform float lines; uniform float inkK; // settings
         varying vec2 vUv;
         float lin(vec2 uv){ float d = texture2D(tDepth, uv).x; return -perspectiveDepthToViewZ(d, near, far); }
@@ -73,6 +74,7 @@ export class ComicPost {
           // speed lines
           vec2 p = vUv - 0.5; p.x *= res.x / res.y;
           float rad = length(p);
+          if (speed != 0.0 || boost != 0.0) { // (both lines are weighted by speed / boost: with neither there is nothing to draw, so skip the maths)
           float a = atan(p.y, p.x) / 6.2831853 * 90.0;
           float id = floor(a);
           float fr = fract(a);
@@ -83,6 +85,7 @@ export class ComicPost {
           col = mix(col, vec3(1.0, 0.98, 0.9), line * mask * 0.75);
           // thrust: cyan streaks
           col = mix(col, vec3(0.2, 0.9, 1.0), line * boost * lines * smoothstep(0.35, 0.8, rad) * 0.35); // settings
+          }
 
           // vignettes
           col *= 1.0 - smoothstep(0.55, 1.05, rad) * 0.45;
@@ -90,6 +93,7 @@ export class ComicPost {
           col = mix(col, vec3(1.0, 0.1, 0.15), alert * (0.5 + 0.5 * sin(time * 10.0)) * smoothstep(0.45, 0.9, rad) * 0.5);
 
           col = mix(col, vec3(0.9, 0.85, 1.0) - col * 0.9, invert);
+          col = mix(col, vec3(0.0), fade);
           gl_FragColor = vec4(col, 1.0);
           #include <colorspace_fragment>
         }`,

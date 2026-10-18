@@ -49,10 +49,7 @@ SLOT_COLORS = {
     "collar": (1.0, 0.82, 0.25), "lens": (1.0, 0.96, 0.66), "glint": (1.0, 1.0, 1.0),
 }
 
-
-def tb(p):
-    """three.js axes -> Blender axes"""
-    return (p[0], -p[2], p[1])
+exec(open(os.path.join(REPO, "tools", "blender", "kit.py"), encoding="utf-8").read(), globals())
 
 
 # ---------------- geometry helpers (three.js axes, return (verts, faces)) ----------------
@@ -84,10 +81,6 @@ def lathe(profile, segs=16, sx=1.0, sz=1.0, phase=0.0):
             for i in range(segs):
                 faces.append((a[i], a[(i + 1) % segs], b[(i + 1) % segs], b[i]))
     return verts, faces
-
-
-def spe(v, e):
-    return math.copysign(abs(v) ** e, v)
 
 
 def superquad(sx, sy, sz, e1=0.35, e2=0.35, nu=16, nv=10):
@@ -210,30 +203,7 @@ def keep(geo, pred):
     return [verts[i] for i in used], [tuple(remap[i] for i in f) for f in out]
 
 
-def merge(*geos):
-    verts, faces = [], []
-    for v, f in geos:
-        o = len(verts)
-        verts += v
-        faces += [tuple(i + o for i in face) for face in f]
-    return verts, faces
-
-
 # ---------------- scene plumbing ----------------
-
-def material(slot):
-    m = bpy.data.materials.get(slot)
-    if not m:
-        m = bpy.data.materials.new(slot)
-        m.use_nodes = True
-    c = SLOT_COLORS[slot]
-    m.diffuse_color = (*c, 1)
-    bsdf = next((n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
-    if bsdf:
-        bsdf.inputs["Base Color"].default_value = (*c, 1)
-        bsdf.inputs["Roughness"].default_value = 0.6
-    return m
-
 
 def coll():
     c = bpy.data.collections.get(COLL)
@@ -396,8 +366,10 @@ mesh("torso_plate", xf(superquad(0.215, 0.145, 0.035, 0.3, 0.3, 16, 8), (0, 0.65
 mesh("torso_plateInset", xf(superquad(0.17, 0.1, 0.012, 0.3, 0.3, 14, 6), (0, 0.655, 0), (-0.06, 0, 0), fn=cwrap(0.355, 0.315)), "helmet", T, 0)
 chev = extrude([(-0.11, 0.03), (0.0, -0.05), (0.11, 0.03), (0.11, 0.075), (0.0, -0.005), (-0.11, 0.075)], 0.016, "z")
 mesh("torso_chevron", xf(chev, (0, 0.635, 0), (-0.06, 0, 0), fn=cwrap(0.366, 0.326)), "accent", T, 0)
-mesh("torso_light", xf(superquad(0.03, 0.03, 0.012, 1, 1, 10, 6), (0.135, 0.73, 0), (-0.06, 0, 0), fn=cwrap(0.36, 0.322)), "glow", T, 0)
-mesh("torso_light2", xf(superquad(0.02, 0.02, 0.01, 1, 1, 8, 6), (-0.135, 0.73, 0), (-0.06, 0, 0), fn=cwrap(0.358, 0.32)), "glow", T, 0)
+# (the dots: their x offset is in the geometry, so the wrap curves them round the plate with the chevron; a translation
+# applied after the wrap left them flat, 2.5 cm proud of the curved plate)
+mesh("torso_light", xf(xf(superquad(0.02, 0.02, 0.008, 1, 1, 8, 6), (0.135, 0, 0)), (0, 0.73, 0), (-0.06, 0, 0), fn=cwrap(0.366, 0.326)), "glow", T, 0)
+mesh("torso_light2", xf(xf(superquad(0.02, 0.02, 0.008, 1, 1, 8, 6), (-0.135, 0, 0)), (0, 0.73, 0), (-0.06, 0, 0), fn=cwrap(0.366, 0.326)), "glow", T, 0)
 # utility belt with a buckle and side pouches
 mesh("torso_belt", xf(torus(0.262, 0.042, 20, 5, 1.1), (0, 0.3, 0), s=(1, 1, 0.8)), "dark", T, 0.02)
 mesh("torso_buckle", xf(superquad(0.075, 0.05, 0.025, 0.25, 0.25, 12, 6), (0, 0.3, 0.215)), "accent", T, 0.02)
@@ -419,21 +391,37 @@ for s in (-1, 1):
     # shoulder straps over the front
     path = [(s * 0.18, 0.95, -0.2), (s * 0.2, 0.99, -0.02), (s * 0.2, 0.93, 0.17), (s * 0.19, 0.82, 0.25)]
     mesh(f"torso_strap{'L' if s < 0 else 'R'}", tube(path, [0.03, 0.03, 0.03, 0.028], 6), "dark", T, 0.012)
-# knitted collar (the scarf's wrap around the neck): a fat ring with ribs
-def knit(v):
-    x, y, z = v
-    a = math.atan2(x, z)
-    r = 1 + 0.05 * math.cos(a * 9)
-    return (x * r, y, z * r)
-mesh("torso_collar", xf(torus(0.235, 0.075, 27, 6, 1.15), (0, 0.97, 0), fn=knit), "collar", T, 0.03)
+# neck collar (the scarf's wrap around the neck): a smooth fat ring that sits under the helmet's rim ring
+# (head_rim, at y 0.985), so the two never cross: a rib pattern here cut through the helmet and the rim at
+# the same height and the outline shells of the three read as splotches all the way round
+mesh("torso_collar", xf(torus(0.215, 0.062, 24, 6, 1.1), (0, 0.9, 0)), "collar", T, 0.03)
+# the knot where the scarf tails leave the collar, on its left-back (50 degrees round from straight back; ScarfSim roots them here)
+mesh("torso_scarfKnot", xf(superquad(0.085, 0.055, 0.05, 0.6, 0.6, 12, 6), (0.222, 0.93, -0.186), (0.1, -0.873, 0.0)), "collar", T, 0.03)
 
 # ---- head ----
 H = pivot("head", (0, 1.18, 0), T)
 mesh("head_helmet", lathe([(0, -0.36), (0.19, -0.31), (0.29, -0.22), (0.35, -0.09), (0.36, 0.0), (0.35, 0.09), (0.31, 0.2), (0.24, 0.29), (0.13, 0.345), (0, 0.36)], 24), "helmet", H, 0.05)
 # centre stripe over the crown in the accent colour
 # polar angle from the crown: +40 deg sits just above the visor frame, -125 deg is low on the back
-stripe = [(0, 0.367 * math.cos(math.radians(d)), 0.367 * math.sin(math.radians(d))) for d in range(40, -126, -15)]
-mesh("head_stripe", tube(stripe, [0.03] * len(stripe), 6), "accent", H, 0)
+stripe = [(0, 0.367 * math.cos(math.radians(d)), 0.367 * math.sin(math.radians(d))) for d in range(40, -126, -5)]  # (every 5 degrees: a chord that long dips under the helmet's ring creases and punches holes in a flat band)
+def band(path, hw, top, bot):
+    """A flat band laid along a path on the helmet (a sphere about the origin): a rectangular section, the sideways direction always x, the
+    other radial, so it cannot twist (a round tube's frame flips where the path passes straight up, which was invisible on a tube and
+    tears a flattened one in half). `top` and `bot` are the radii of its outer and inner faces."""
+    verts, faces = [], []
+    for p in path:
+        r = Vector(p).normalized()
+        for sx, level in ((-1, top), (1, top), (1, bot), (-1, bot)):
+            verts.append(tuple(r * level + Vector((sx * hw, 0, 0))))
+    n = len(path)
+    for i in range(n - 1):
+        for k in range(4):
+            k2 = (k + 1) % 4
+            faces.append((i * 4 + k, i * 4 + k2, (i + 1) * 4 + k2, (i + 1) * 4 + k))
+    faces.append((3, 2, 1, 0))
+    faces.append(tuple((n - 1) * 4 + k for k in range(4)))
+    return verts, faces
+mesh("head_stripe", band(stripe, 0.03, 0.375, 0.345), "accent", H, 0)
 # visor frame and glass: shells over the face
 def shell(r, phi0, phi1, th0, th1, nu=20, nv=10, thick=0.0):
     verts, faces = [], []
@@ -447,14 +435,15 @@ def shell(r, phi0, phi1, th0, th1, nu=20, nv=10, thick=0.0):
             a = j * (nu + 1) + i
             faces.append((a, a + 1, a + nu + 2, a + nu + 1))
     if thick:
-        n = len(verts)
-        inner = [tuple(c * (1 - thick / r) for c in v) for v in verts]
-        verts += inner
-        faces += [tuple(reversed([i + n for i in f])) for f in faces[: nu * nv]]
+        # a skirt round the edge only: the inner surface faces into the helmet, where nobody sees it
         rim = [j * (nu + 1) for j in range(nv + 1)] + [nv * (nu + 1) + i for i in range(1, nu + 1)] + \
               [j * (nu + 1) + nu for j in range(nv - 1, -1, -1)] + [i for i in range(nu - 1, 0, -1)]
-        for a, b in zip(rim, rim[1:] + rim[:1]):
-            faces.append((b, a, a + n, b + n))
+        base = len(verts)
+        for i in rim:
+            verts.append(tuple(c * (1 - thick / r) for c in verts[i]))
+        m = len(rim)
+        for k in range(m):
+            faces.append((rim[(k + 1) % m], rim[k], base + k, base + (k + 1) % m))
     return verts, faces
 mesh("head_visorFrame", shell(0.372, -1.0, 1.0, 0.84, 2.1, 16, 7, 0.03), "dark", H, 0)
 mesh("head_visor", shell(0.382, -0.88, 0.88, 0.93, 2.0, 16, 7, 0.012), "visor", H, 0)
@@ -467,29 +456,109 @@ for s in (-1, 1):
     mesh(f"head_podRing{tag}", xf(torus(0.06, 0.012, 16, 4), (s * 0.4, -0.01, -0.03), (0, 0, math.pi / 2)), "glow", H, 0)
 mesh("head_rim", xf(torus(0.282, 0.036, 20, 5), (0, -0.195, 0)), "dark", H, 0.02)
 # antenna with a glowing bead, and the helmet lamp on the right temple
-mesh("head_antennaBase", xf(lathe([(0, 0), (0.04, 0), (0.035, 0.04), (0.015, 0.06), (0, 0.06)], 10), (0.22, 0.27, -0.1), (0, 0, -0.05)), "dark", H, 0.01)
-mesh("head_antenna", tube([(0.22, 0.3, -0.1), (0.222, 0.45, -0.11), (0.226, 0.57, -0.12)], [0.014, 0.012, 0.01], 6), "dark", H, 0)
-mesh("head_bead", xf(superquad(0.055, 0.055, 0.055, 1, 1, 10, 6), (0.226, 0.6, -0.12)), "glow", H, 0)
+# (on a pivot of its own, so an outfit with a halo can leave it off)
+AN = pivot("antenna", (0, 0, 0), H)
+mesh("head_antennaBase", xf(lathe([(0, 0), (0.04, 0), (0.035, 0.04), (0.015, 0.06), (0, 0.06)], 10), (0.22, 0.27, -0.1), (0, 0, -0.05)), "dark", AN, 0.01)
+mesh("head_antenna", tube([(0.22, 0.3, -0.1), (0.222, 0.45, -0.11), (0.226, 0.57, -0.12)], [0.014, 0.012, 0.01], 6), "dark", AN, 0)
+mesh("head_bead", xf(superquad(0.055, 0.055, 0.055, 1, 1, 10, 6), (0.226, 0.6, -0.12)), "glow", AN, 0)
 mesh("head_lamp", xf(lathe([(0, -0.05), (0.06, -0.05), (0.07, 0.03), (0.062, 0.05), (0, 0.05)], 12), (0.3, 0.15, 0.17), (math.pi / 2, 0, 0)), "dark", H, 0.015)
 mesh("head_lens", xf(superquad(0.05, 0.05, 0.03, 1, 1, 12, 6), (0.3, 0.15, 0.225)), "lens", H, 0)
 
-# ---- arms ----
-ARM = [(0, -0.56), (0.072, -0.55), (0.084, -0.49), (0.093, -0.42), (0.088, -0.33), (0.094, -0.27), (0.108, -0.17), (0.118, -0.06), (0.12, 0.02), (0.1, 0.08), (0, 0.12)]
+# ---- arms: an upper arm on the shoulder pivot (armL / armR) and a forearm on an elbow pivot (foreL / foreR) ----
+# The elbow sits 0.31 below the shoulder. A suit-coloured ball covers the seam, so the joint stays round
+# at any bend; the elbow cup, cuff, glove and thumb are on the forearm and turn with it.
+# Rest pose is straight (forearm rotation 0), so everything that poses only the arms still looks as it did.
+EL = 0.31
+ARM_UP = [(0, -EL), (0.091, -EL), (0.094, -0.27), (0.108, -0.17), (0.118, -0.06), (0.12, 0.02), (0.1, 0.08), (0, 0.12)]
+FORE = [(0, -0.25), (0.072, -0.24), (0.084, -0.18), (0.093, -0.11), (0.088, -0.02), (0.091, 0.02), (0.085, 0.05), (0, 0.07)]
 for side, name in ((-1, "armL"), (1, "armR")):
     A = pivot(name, (side * 0.45, 0.85, 0), T)
-    mesh(name + "_arm", lathe(ARM, 14), "suit", A, 0.04)
-    path = [(side * 0.118, -0.04, 0), (side * 0.11, -0.17, 0), (side * 0.092, -0.3, 0), (side * 0.09, -0.44, 0)]
-    mesh(name + "_stripe", tube(path, [0.015] * 4, 6), "accent", A, 0)
+    mesh(name + "_arm", lathe(ARM_UP, 14), "suit", A, 0.04)
+    mesh(name + "_elbowBall", xf(superquad(0.094, 0.094, 0.094, 1, 1, 12, 6), (0, -EL, 0)), "suit", A, 0.012)
+    path = [(side * 0.118, -0.04, 0), (side * 0.11, -0.17, 0), (side * 0.092, -0.3, 0)]
+    mesh(name + "_stripe", tube(path, [0.015] * 3, 6), "accent", A, 0)
     # layered shoulder pauldron in the helmet colour
     mesh(name + "_shoulder", xf(superquad(0.15, 0.125, 0.145, 0.55, 0.7, 14, 8), (side * 0.02, 0.01, 0), fn=lambda v: (v[0], max(v[1], -0.06), v[2])), "helmet", A, 0.03)
     mesh(name + "_shoulderTrim", xf(torus(0.145, 0.018, 16, 4), (side * 0.02, -0.055, 0), s=(1.05, 1, 1)), "accent", A, 0.01)
-    mesh(name + "_elbow", xf(superquad(0.06, 0.07, 0.045, 0.6, 0.6, 12, 6), (0, -0.31, -0.08)), "metal", A, 0.015)
-    mesh(name + "_cuff", xf(lathe([(0.098, -0.04), (0.104, -0.03), (0.104, 0.03), (0.096, 0.04)], 14), (0, -0.51, 0)), "accent", A, 0.02)
-    mesh(name + "_cuffLight", xf(superquad(0.025, 0.012, 0.01, 0.5, 0.5, 8, 4), (0, -0.51, 0.104)), "glow", A, 0)
+    F = pivot("fore" + name[-1], (0, -EL, 0), A)
+    mesh(name + "_fore", lathe(FORE, 14), "suit", F, 0.04)
+    fp = [(side * 0.092, 0.0, 0), (side * 0.09, -0.13, 0)]
+    mesh(name + "_foreStripe", tube(fp, [0.015] * 2, 6), "accent", F, 0)
+    mesh(name + "_elbowRing", xf(lathe([(0.0945, 0.046), (0.0955, 0.042), (0.0955, 0.03), (0.0935, 0.024)], 14)), "accent", F, 0)
+    mesh(name + "_elbow", xf(superquad(0.06, 0.07, 0.045, 0.6, 0.6, 12, 6), (0, 0.0, -0.08), (0.1, 0, 0)), "metal", F, 0.015)
+    mesh(name + "_cuff", xf(lathe([(0.098, -0.04), (0.104, -0.03), (0.104, 0.03), (0.096, 0.04)], 14), (0, -0.2, 0)), "accent", F, 0.02)
+    mesh(name + "_cuffLight", xf(superquad(0.025, 0.012, 0.01, 0.5, 0.5, 8, 4), (0, -0.2, 0.104)), "glow", F, 0)
     # gauntlet glove: mitten body, knuckle plate, thumb
-    mesh(name + "_glove", xf(superquad(0.105, 0.13, 0.09, 0.55, 0.65, 12, 8), (0, -0.635, 0.01)), "dark", A, 0.03)
-    mesh(name + "_knuckle", xf(superquad(0.08, 0.035, 0.03, 0.4, 0.4, 10, 4), (0, -0.66, 0.085), (-0.15, 0, 0)), "metal", A, 0.01)
-    mesh(name + "_thumb", xf(superquad(0.04, 0.065, 0.04, 0.8, 0.8, 8, 6), (-side * 0.06, -0.6, 0.08), (0.4, 0, side * 0.4)), "dark", A, 0.02)
+    mesh(name + "_glove", xf(superquad(0.105, 0.13, 0.09, 0.55, 0.65, 12, 8), (0, -0.325, 0.01)), "dark", F, 0.03)
+    mesh(name + "_knuckle", xf(superquad(0.08, 0.035, 0.03, 0.4, 0.4, 10, 4), (0, -0.35, 0.085), (-0.15, 0, 0)), "metal", F, 0.01)
+    mesh(name + "_thumb", xf(superquad(0.04, 0.065, 0.04, 0.8, 0.8, 8, 6), (-side * 0.06, -0.29, 0.08), (0.4, 0, side * 0.4)), "dark", F, 0.02)
+
+# ---- outfit extras the game hangs on the runner only when an outfit asks for them (cosmetics.js) ----
+# Each sits on a pivot of its own (padL/padR on the shoulder pivots, band on the head), so the baker keeps it
+# apart from the always-worn parts. Colour slots: the pad's plates are `accent`, its trim `helmet`, its hardware
+# `metal`; the headband is `accent` (the outfit paints it red) with `dark` stitching.
+
+# shoulder pads: one terraced dome over the pauldron (it is one surface of revolution, so nothing intersects and the outline
+# is one clean line), three tiers stepping down and out, a trim ring on each tier's lip and a stud and ring on the crown. It
+# is a little bigger than the pauldron under it (0.15 x 0.125 x 0.145) and tipped outward and down with the shoulder.
+PAD = [(0, 0.150), (0.07, 0.148), (0.115, 0.136), (0.143, 0.108), (0.15, 0.082), (0.148, 0.068),                  # top tier
+       (0.1485, 0.0645), (0.1525, 0.061), (0.159, 0.0595),                                                         # (the inside corner under it is rounded: a sharp one folds the
+       (0.172, 0.055), (0.186, 0.04), (0.192, 0.014), (0.19, 0.0),                                                 #  outline shell over itself in hairline arcs)
+       (0.1905, -0.003), (0.196, -0.0055), (0.205, -0.0075), (0.218, -0.026), (0.218, -0.05), (0.213, -0.058),       # lowest tier
+       (0.195, -0.064), (0, -0.064)]
+# trim: a thin sleeve over each tier's lip, cut from the dome's own profile and raised 2.5 mm, so it lies flush. (It used to be a ring on the
+# edge, which stuck out 7 mm past the dome: the outline is a shell 3 cm thick round each part, so anything proud of its part by more than a
+# few mm has its colour drawn across the black band.) (first, last) index into PAD of the lip's stretch of wall:
+PAD_BANDS = [(4, 5), (11, 12), (16, 18)]
+def offset_profile(prof, i0, i1, d):
+    """prof[i0..i1] moved d outward along the profile's 2D normal (central differences, so a band follows a curved wall)."""
+    out = []
+    for i in range(i0, i1 + 1):
+        (ra, ya), (rb, yb) = prof[max(i - 1, 0)], prof[min(i + 1, len(prof) - 1)]
+        tr, ty = rb - ra, yb - ya
+        n = math.hypot(tr, ty) or 1.0
+        out.append((prof[i][0] - d * ty / n, prof[i][1] + d * tr / n))   # (the profile runs top to bottom, so outward, +r on a wall, is the tangent turned a quarter to its left)
+    return out
+for side, tag in ((-1, "L"), (1, "R")):
+    A = bpy.data.objects["arm" + tag]
+    P = pivot("pad" + tag, (0, 0, 0), A)
+    tilt = (0, 0, -side * 0.22)  # outer side down
+    at = (side * 0.035, 0.036, 0)
+    k = 1.0                      # overall size (about two thirds the reach of the first cut, which stuck out 0.34 from the shoulder)
+    mesh("pad" + tag + "_dome", xf(lathe([(r * k, y * k) for r, y in PAD], 28, 1.0, 0.92), at, tilt), "accent", P, 0.03)
+    for i, (i0, i1) in enumerate(PAD_BANDS):
+        band = offset_profile(PAD, i0, i1, 0.0025)
+        # (a lathe wants its profile bottom to top, and rows with r > 0: these are open sleeves, no caps)
+        mesh(f"pad{tag}_trim{i}", xf(lathe([(r * k, y * k) for r, y in reversed(band)], 28, 1.0, 0.92), at, tilt), "helmet", P, 0)
+    # a low stud on the crown (3 mm proud: it is on the top silhouette) and a ring round it
+    mesh("pad" + tag + "_crownRing", xf(xf(lathe([(0.052, 0.1488), (0.056, 0.1486), (0.056, 0.1476), (0.052, 0.1472)], 20, 1.0, 0.92)), at, tilt), "metal", P, 0)
+    mesh("pad" + tag + "_stud", xf(xf(superquad(0.02, 0.006, 0.02, 0.8, 0.8, 10, 4), (0, 0.1485, 0)), at, tilt), "metal", P, 0)
+
+# helmet crest (SPACECOM admiral, Vostok hero, Daedalus prototype): a swept fin over the crown, the profile and size of the old code-built
+# one (cosmetics.js) but with its base carried down INTO the helmet all along its length. The old one stopped at y 0.20 on the head, which
+# at the back is 8 cm above the helmet's surface, so its outline shell showed under it as a second arc and cut across the crown stripe.
+# Its outline is a 1.2 cm shell (the rest of the courier uses 3 to 5 cm: a fin that thin and that tall needs a finer line), and the game
+# thins every shell of the courier further as the camera comes in (toon.js inkMatNear).
+def quad(p0, c, p1, n):
+    return [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * c[0] + t * t * p1[0], (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * c[1] + t * t * p1[1]) for t in [i / n for i in range(1, n + 1)]]
+CREST_Y, CREST_Z = 0.26, -0.04   # where the old one sat on the head
+crest_pts = [(0.3, -0.2), (0.3, -0.06)] + quad((0.3, -0.06), (0.22, 0.12), (0.02, 0.2), 10) + quad((0.02, 0.2), (-0.2, 0.26), (-0.34, 0.1), 10) + [(-0.3, -0.06), (-0.3, -0.2)]
+Cp = pivot("crest", (0, 0, 0), H)
+cr = mesh("crest_fin", xf(extrude([(p[0] + CREST_Z, p[1] + CREST_Y) for p in crest_pts], 0.07, "x")), "accent", Cp, 0.012, smooth=False)
+bev = cr.modifiers.new("bevel", "BEVEL")
+bev.width = 0.012; bev.segments = 2; bev.limit_method = "ANGLE"; bev.angle_limit = math.radians(40)
+
+# headband: a strip that hugs the helmet (radius 0.34 at its height), thicker at the front, a knot behind the
+# left ear with two tails and a loose end, and a stitched line along the lower edge
+Bp = pivot("band", (0, 0, 0), H)
+mesh("band_strip", xf(lathe([(0.336, 0.075), (0.352, 0.088), (0.356, 0.108), (0.352, 0.14), (0.336, 0.15)], 24)), "accent", Bp, 0.02)
+mesh("band_stitch", xf(torus(0.356, 0.005, 24, 3), (0, 0.082, 0)), "dark", Bp, 0)
+knot_c = (-0.13, 0.115, -0.335)
+mesh("band_knot", xf(superquad(0.045, 0.04, 0.035, 0.7, 0.7, 10, 6), knot_c, (0, 0.4, 0)), "accent", Bp, 0.02)
+for k, (dx, dz, ang) in enumerate(((-0.03, -0.03, 0.45), (0.04, -0.015, -0.3))):
+    pts = [(knot_c[0], knot_c[1], knot_c[2] - 0.01), (knot_c[0] + dx, knot_c[1] - 0.07, knot_c[2] - 0.045 + dz),
+           (knot_c[0] + dx * 2.2, knot_c[1] - 0.17, knot_c[2] - 0.075 + dz * 2)]
+    mesh(f"band_tail{k}", tube(pts, [0.02, 0.019, 0.012], 6), "accent", Bp, 0.015)
 
 # ---- scarf links (ScarfSim chain): each from z=0 back to z=-0.32, tapering ----
 SL = 0.32
@@ -533,6 +602,40 @@ for b, z in enumerate((-0.17, -0.24)):
 for i in range(5):
     x = -0.06 + i * 0.03
     mesh(f"scarf3_tassel{i}", tube([(x, -0.01, -SL + 0.01), (x * 1.1, -0.015, -SL - 0.05), (x * 1.15, -0.018, -SL - 0.09)], [0.012, 0.011, 0.008], 5), "scarf", S, 0)
+
+# ---- flush the painted-on stripes: sink what sticks out of the body into its surface ----
+# The stripes and seams (ink 0: they carry no outline of their own) were tubes laid along a body part, standing 1 to 4 cm proud of it. The
+# body part's outline is a black shell 3 to 5 cm thick round it, so wherever a stripe crossed its silhouette (the head stripe over the
+# crown, a seam down the side of the torso) the stripe's colour was drawn across the black band, the "colour through the outline" look.
+# Each vertex of a stripe that is outside its body part by more than MAX_PROUD (and within the shell) is moved to MAX_PROUD above the
+# surface, so the tube's outer half becomes a flat ribbon that lies on the body and stays inside its line. (tools/blender/audit_outline.py
+# lists what is still proud.)
+from mathutils.bvhtree import BVHTree
+MAX_PROUD = 0.006   # (the bodies are low-poly lathes: a 24-sided helmet sags 3 to 4 mm between its vertices, so a ribbon any closer to the
+                    #  nearest vertex-surface dips under the facets and breaks up)
+FLUSH = [("head_stripe", "head_helmet", 0.008), ("torso_seamL", "torso_trunk"), ("torso_seamR", "torso_trunk")]
+for tag in "LR":
+    FLUSH += [(f"leg{tag}_stripe", f"leg{tag}_leg"), (f"arm{tag}_stripe", f"arm{tag}_arm"), (f"arm{tag}_foreStripe", f"arm{tag}_fore")]
+_dg = bpy.context.evaluated_depsgraph_get()
+def flush(pname, bname, proud=MAX_PROUD):
+    P, B = bpy.data.objects[pname], bpy.data.objects[bname]
+    bme = B.evaluated_get(_dg).to_mesh()
+    bw = B.matrix_world
+    tree = BVHTree.FromPolygons([bw @ v.co for v in bme.vertices], [tuple(p.vertices) for p in bme.polygons])
+    reach = float(B["ink"])
+    pw, inv = P.matrix_world, P.matrix_world.inverted()
+    moved = 0
+    for v in P.data.vertices:
+        co = pw @ v.co
+        loc, n, idx, d = tree.find_nearest(co, reach)
+        if loc is None or (co - loc).dot(n) <= 0 or d <= proud:
+            continue
+        v.co = inv @ (loc + n * proud)
+        moved += 1
+    P.data.update()
+    return moved
+for pn, bn, *pr in FLUSH:
+    flush(pn, bn, *pr)
 
 print("built", len(C.objects), "objects")
 

@@ -1,8 +1,19 @@
 import * as THREE from 'three';
 import { upAt } from './geo.js';
-import { glow, toon } from './toon.js';
 
 const MAX_P = 1200;
+// skate trail ribbons: a point every 1/60 s, the usual tail 40 points (2/3 s) long, up to 2 s while grinding
+const TRAIL_STEP = 1 / 60, TRAIL_LIFE = 40 * TRAIL_STEP, TRAIL_MAX = 2, TRAIL_N = Math.ceil(TRAIL_MAX / TRAIL_STEP) + 10;
+
+// Phase Dash afterimages: one every GHOST_GAP metres along the path, each fading out over GHOST_LIFE seconds
+const GHOST_GAP = 3, GHOST_LIFE = 0.55, GHOST_ALPHA = 0.55;
+const GHOST_NEW = new THREE.Color(0xc77dff), GHOST_OLD = new THREE.Color(0x5b3bff); // (the dash's violet, deepening as it fades)
+
+// Comic popups: at most POP_MAX are on screen at once and the rest queue behind them, each running its full time once it
+// starts. A popup pinned to a spot in the world that waits too long is dropped rather than shown late at a spot you've left
+// (POP_WAIT_WORLD; the runner's own, prio 1, wait longer; prio 2, the K.O., never goes stale), and one pinned to somewhere you
+// can't see isn't shown at all. A backed-up queue sheds its oldest lowest-rank popups past POP_QUEUE_MAX.
+const POP_MAX = 2, POP_QUEUE_MAX = 8, POP_WAIT_WORLD = 1.2, POP_WAIT_WORLD_PRIO = 3;
 
 // Particles, explosions, warning rings, skate trails and comic onomatopoeia.
 export class FX {
@@ -16,6 +27,7 @@ export class FX {
     this.pMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_P * 3), 3);
     this.pMesh.frustumCulled = false;
     this.pMesh.count = 0;
+    this.pMesh.userData.persist = true; // (the Spindle hides the Moon's scene, not this)
     scene.add(this.pMesh);
     this.m4 = new THREE.Matrix4();
     this.q = new THREE.Quaternion();
@@ -26,18 +38,22 @@ export class FX {
     this.booms = [];
     this.rings = [];
     this.embers = []; // burning phosphor fragments (phosphor): each one trails smoke as it falls
+    this.ghosts = []; // Phase Dash afterimages in flight
+    this.ghostRun = null; // the dash laying them: { model, left, last }
     this.popLayer = document.getElementById('popups');
+    this.pops = []; // the popups on screen
+    this.popQueue = []; // ...and the ones waiting for a free slot
+    this.popSeq = 0;
 
     // skate trails (two ribbons)
     this.trails = [this.makeTrail(0x2ee6ff), this.makeTrail(0x2ee6ff)];
   }
 
   makeTrail(color) {
-    const N = 40;
+    const N = TRAIL_N;
     const geo = new THREE.BufferGeometry();
     const pos = new Float32Array(N * 2 * 3);
     const alpha = new Float32Array(N * 2);
-    for (let i = 0; i < N; i++) { alpha[i * 2] = alpha[i * 2 + 1] = 1 - i / N; }
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('alpha', new THREE.BufferAttribute(alpha, 1));
     const idx = [];
@@ -51,23 +67,32 @@ export class FX {
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.frustumCulled = false;
+    mesh.userData.persist = true; // (the Spindle hides the Moon's scene, not this)
     this.scene.add(mesh);
-    return { mesh, pts: [], N, mat };
+    return { mesh, pts: [], N, mat, life: TRAIL_LIFE };
   }
 
-  updateTrail(i, footPos, side, strength, up) {
+  // The ribbon is a history of the foot (the last 2 s of it), aged in seconds: each stretch fades out
+  // over `life` and is invisible after that. A grind asks for a longer life so the tail streams
+  // further behind; the life eases between the two, so the tail grows and shrinks without popping.
+  updateTrail(i, footPos, side, strength, up, dt = TRAIL_STEP, life = TRAIL_LIFE) {
     const t = this.trails[i];
-    t.pts.unshift(footPos.clone().addScaledVector(up, 0.05), side.clone());
-    if (t.pts.length > t.N * 2) t.pts.length = t.N * 2;
-    const pos = t.mesh.geometry.attributes.position.array;
+    t.life += Math.max(-dt, Math.min(2 * dt, life - t.life));
+    for (const q of t.pts) q.age += dt;
+    const head = t.pts[0];
+    if (head && head.age < TRAIL_STEP) { head.p.copy(footPos).addScaledVector(up, 0.05); head.s.copy(side); } // (a fast frame rate: the newest point just follows the foot)
+    else t.pts.unshift({ p: footPos.clone().addScaledVector(up, 0.05), s: side.clone(), age: 0 });
+    while (t.pts.length > t.N || (t.pts.length > 1 && t.pts[t.pts.length - 1].age > TRAIL_MAX)) t.pts.pop();
+    const pos = t.mesh.geometry.attributes.position.array, alpha = t.mesh.geometry.attributes.alpha.array;
     for (let k = 0; k < t.N; k++) {
-      const j = Math.min(k, t.pts.length / 2 - 1) * 2;
-      const p = t.pts[j], s = t.pts[j + 1];
+      const q = t.pts[Math.min(k, t.pts.length - 1)];
       const w = 0.18;
-      pos[k * 6] = p.x - s.x * w; pos[k * 6 + 1] = p.y - s.y * w; pos[k * 6 + 2] = p.z - s.z * w;
-      pos[k * 6 + 3] = p.x + s.x * w; pos[k * 6 + 4] = p.y + s.y * w; pos[k * 6 + 5] = p.z + s.z * w;
+      pos[k * 6] = q.p.x - q.s.x * w; pos[k * 6 + 1] = q.p.y - q.s.y * w; pos[k * 6 + 2] = q.p.z - q.s.z * w;
+      pos[k * 6 + 3] = q.p.x + q.s.x * w; pos[k * 6 + 4] = q.p.y + q.s.y * w; pos[k * 6 + 5] = q.p.z + q.s.z * w;
+      alpha[k * 2] = alpha[k * 2 + 1] = Math.max(0, 1 - q.age / t.life);
     }
     t.mesh.geometry.attributes.position.needsUpdate = true;
+    t.mesh.geometry.attributes.alpha.needsUpdate = true;
     t.mat.uniforms.strength.value += (strength - t.mat.uniforms.strength.value) * 0.2;
   }
 
@@ -83,8 +108,8 @@ export class FX {
     }
   }
 
-  dust(pos, vel, amount = 4, up = upAt(pos), color = 0xd8d0c4) {
-    this.spawn(pos, vel.clone().multiplyScalar(0.25).addScaledVector(up, 2), { color, size: 0.5, life: 1.2, gravity: 1.62, drag: 0.6, count: amount, spread: 4 });
+  dust(pos, vel, amount = 4, up = upAt(pos), color = 0xd8d0c4, size = 0.5) {
+    this.spawn(pos, vel.clone().multiplyScalar(0.25).addScaledVector(up, 2), { color, size, life: 1.2, gravity: 1.62, drag: 0.6, count: amount, spread: 4 });
   }
 
   explosion(pos, radius = 6, big = false) {
@@ -146,6 +171,53 @@ export class FX {
     m.add(core);
     this.scene.add(m);
     this.rings.push({ m, inner: core, t: 0, dur: 0.3, beam: true });
+  }
+
+  // Phase Dash: for `secs`, leave a purplish ghost of the runner's model every few metres along the path. Each is a flat
+  // copy of the model's pose at that moment (its meshes, sharing the model's geometry, frozen in world space: nothing
+  // animates), so only the ghost's own material is ever disposed.
+  startGhosts(model, secs = 0.6) { this.ghostRun = { model, left: secs, last: null }; }
+
+  spawnGhost(model) {
+    const root = model.root;
+    root.updateWorldMatrix(true, true);
+    const mat = new THREE.MeshBasicMaterial({ color: GHOST_NEW, transparent: true, opacity: GHOST_ALPHA, depthWrite: false });
+    const g = new THREE.Group();
+    g.userData.persist = true; // (the Spindle hides the Moon's scene, not this)
+    const skip = [model.scarf, model.cargoSlot]; // (live geometry: a ghost's scarf would keep moving; the cargo isn't the runner)
+    const walk = (o) => {
+      if (!o.visible || skip.includes(o)) return;
+      if (o.isMesh && o.material && o.material.side !== THREE.BackSide) { // (not the ink outline shells)
+        const c = new THREE.Mesh(o.geometry, mat);
+        c.matrixAutoUpdate = false;
+        c.matrix.copy(o.matrixWorld);
+        g.add(c);
+      }
+      for (const ch of o.children) walk(ch);
+    };
+    walk(root);
+    this.scene.add(g);
+    this.ghosts.push({ g, mat, t: 0, pos: root.getWorldPosition(new THREE.Vector3()) });
+  }
+
+  updateGhosts(dt) {
+    const run = this.ghostRun;
+    if (run) {
+      run.left -= dt;
+      const p = run.model.root.getWorldPosition(this.v);
+      if (!run.last || p.distanceTo(run.last) >= GHOST_GAP) { this.spawnGhost(run.model); run.last = (run.last || new THREE.Vector3()).copy(p); }
+      if (run.left <= 0) this.ghostRun = null;
+    }
+    for (let i = this.ghosts.length - 1; i >= 0; i--) {
+      const gh = this.ghosts[i];
+      gh.t += dt;
+      const k = gh.t / GHOST_LIFE;
+      if (k >= 1) { gh.g.removeFromParent(); gh.mat.dispose(); this.ghosts.splice(i, 1); continue; }
+      // (they fade out as they go, and away from the camera too: they're left behind you, between it and you)
+      const near = Math.min(1, Math.max(0, (this.camera.position.distanceTo(gh.pos) - 3) / 8));
+      gh.mat.opacity = GHOST_ALPHA * Math.pow(1 - k, 1.5) * near;
+      gh.mat.color.lerpColors(GHOST_NEW, GHOST_OLD, k);
+    }
   }
 
   // Deflector Shield hit: the invisible field shows itself for a moment, a faceted shell that
@@ -236,25 +308,87 @@ export class FX {
     return r;
   }
 
-  // Onomatopoeia anchored at a world position (or screen centre if pos null).
-  pop(text, pos = null, { color = '#ffd23f', size = 64, life = 1.0, rot = null } = {}) {
-    const el = document.createElement('div');
-    el.className = 'pop';
-    el.textContent = text;
-    el.style.color = color;
-    // pixel display font: ~0.55x the old comic sizes, and only a slight tilt (pixels hate rotation)
-    el.style.fontSize = Math.round(Math.max(10, size * 0.55)) + 'px';
-    el.style.setProperty('--rot', Math.round((rot ?? (Math.random() * 24 - 12)) * 0.25) + 'deg');
-    el.style.animationDuration = life + 's';
-    this.popLayer.appendChild(el);
-    const item = { el, pos: pos ? pos.clone() : null, t: 0, life };
-    if (!pos) { el.style.left = 50 + (Math.random() * 20 - 10) + '%'; el.style.top = 32 + Math.random() * 10 + '%'; }
-    (this.pops ||= []).push(item);
+  // Onomatopoeia anchored at a world position (or screen centre if pos null). Only POP_MAX show at a time; the rest wait
+  // their turn (prio 1, the runner's own feedback, jumps ahead of ordinary chatter; prio 2 is the K.O.).
+  pop(text, pos = null, { color = '#ffd23f', size = 64, life = 1.0, rot = null, prio = 0 } = {}) {
+    const q = this.popQueue;
+    let i = q.length;
+    while (i > 0 && q[i - 1].prio < prio) i--; // (behind everything of its own rank or higher)
+    q.splice(i, 0, { text, pos: pos ? pos.clone() : null, color, size, life: Math.max(0.2, life), rot, prio, wait: 0 });
+    if (q.length > POP_QUEUE_MAX) q.splice(q.findIndex((e) => e.prio === q[q.length - 1].prio), 1); // (the oldest of the lowest rank)
+    this.pumpPops();
   }
 
-  update(dt) {
+  // starts queued popups while there's room: each one's run time counts from here, not from when it was asked for
+  // (one pinned to somewhere off screen is dropped, not started: it would hold a slot for nothing)
+  pumpPops() {
+    while (this.pops.length < POP_MAX && this.popQueue.length) this.startPop(this.popQueue.shift());
+  }
+
+  startPop(e) {
+    const el = document.createElement('div');
+    el.className = 'pop';
+    el.textContent = e.text;
+    el.style.color = e.color;
+    // pixel display font: ~0.55x the old comic sizes, and only a slight tilt (pixels hate rotation)
+    el.style.fontSize = Math.round(Math.max(10, e.size * 0.55)) + 'px';
+    el.style.setProperty('--rot', Math.round((e.rot ?? (Math.random() * 24 - 12)) * 0.25) + 'deg');
+    el.style.animationDuration = e.life + 's';
+    const p = { el, pos: e.pos, t: 0, life: e.life, lp: 50, tp: 36, w: 0, h: 0, nudge: 0, fresh: true, done: false };
+    if (!e.pos) { p.lp = 50 + (Math.random() * 20 - 10); p.tp = 32 + Math.random() * 10; }
+    if (!this.placePop(p)) return;
+    this.popLayer.appendChild(el);
+    p.w = el.offsetWidth; p.h = el.offsetHeight;
+    el.addEventListener('animationend', () => { p.done = true; }); // (the CSS animation runs on the wall clock: when it's over the slot is free, however slow the frames)
+    this.pops.push(p);
+  }
+
+  // a world-anchored popup follows its spot on screen; a screen one stays where it was dropped. False: the spot is off screen
+  placePop(p) {
+    if (p.pos) {
+      this.camera.updateMatrixWorld();
+      this.v.copy(p.pos).project(this.camera);
+      if (this.v.z > 1 || Math.abs(this.v.x) > 1.2 || Math.abs(this.v.y) > 1.2) return false;
+      p.lp = ((this.v.x + 1) / 2) * 100;
+      p.tp = ((1 - this.v.y) / 2) * 100;
+    }
+    p.el.style.left = p.lp + '%';
+    p.el.style.top = p.tp + '%';
+    return true;
+  }
+
+  // Two popups never sit on top of each other: if the newer one would overlap the older, it's nudged up or down clear of it.
+  // (Sizes are read once when a popup starts; the nudge eases so a moving anchor doesn't make it jitter.)
+  separatePops(dt) {
+    const [a, b] = this.pops, W = window.innerWidth, H = window.innerHeight;
+    if (a && !b) { a.nudge += -a.nudge * Math.min(1, dt * 4); a.el.style.marginTop = a.nudge.toFixed(1) + 'px'; return; } // (alone again: settle back)
+    if (!b) return;
+    const ay = (a.tp / 100) * H + a.nudge, by = (b.tp / 100) * H;
+    const needY = ((a.h + b.h) / 2) * 1.35 + 8; // (headroom for the pop's overshoot and its drift upward)
+    let target = 0;
+    if (Math.abs((a.lp - b.lp) / 100 * W) < ((a.w + b.w) / 2) * 1.1 && Math.abs(by - ay) < needY) {
+      const dir = by >= ay ? 1 : -1; // (it keeps to the side of the older one it's already on, unless that runs off the screen)
+      target = ay + dir * needY - by;
+      const y = by + target;
+      if (y > H - b.h || y < b.h) target = ay - dir * needY - by;
+    }
+    b.nudge = b.fresh ? target : b.nudge + (target - b.nudge) * Math.min(1, dt * 14);
+    b.fresh = false;
+    b.el.style.marginTop = b.nudge.toFixed(1) + 'px';
+  }
+
+  clearPops() {
+    for (const p of this.pops) p.el.remove();
+    this.pops.length = 0;
+    this.popQueue.length = 0;
+  }
+
+  // popDt: the clock the popups run on, real time (their CSS animation does too): a pause or the Monolith's time dilation
+  // mustn't freeze or stretch them, or a held-up queue would never drain
+  update(dt, popDt = dt) {
     this.updateEmbers(dt);
     this.updateShells(dt);
+    this.updateGhosts(dt);
     // particles
     let n = 0;
     for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -308,19 +442,19 @@ export class FX {
       r.inner.scale.setScalar(k);
     }
 
-    if (this.pops) {
-      for (let i = this.pops.length - 1; i >= 0; i--) {
-        const p = this.pops[i];
-        p.t += dt;
-        if (p.t >= p.life) { p.el.remove(); this.pops.splice(i, 1); continue; }
-        if (p.pos) {
-          this.v.copy(p.pos).project(this.camera);
-          if (this.v.z > 1) { p.el.style.display = 'none'; continue; }
-          p.el.style.display = '';
-          p.el.style.left = ((this.v.x + 1) / 2) * 100 + '%';
-          p.el.style.top = ((1 - this.v.y) / 2) * 100 + '%';
-        }
-      }
+    const q = this.popQueue;
+    for (let i = q.length - 1; i >= 0; i--) {
+      const e = q[i];
+      e.wait += popDt;
+      if (e.pos && e.prio < 2 && e.wait > (e.prio ? POP_WAIT_WORLD_PRIO : POP_WAIT_WORLD)) q.splice(i, 1);
     }
+    for (let i = this.pops.length - 1; i >= 0; i--) {
+      const p = this.pops[i];
+      p.t += popDt;
+      if (p.t >= p.life || p.done) { p.el.remove(); this.pops.splice(i, 1); }
+      else if (p.pos && !this.placePop(p)) { p.el.remove(); this.pops.splice(i, 1); } // (its spot has left the screen)
+    }
+    this.pumpPops();
+    this.separatePops(popDt);
   }
 }

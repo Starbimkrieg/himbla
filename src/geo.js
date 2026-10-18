@@ -16,17 +16,13 @@ export function dirFromAngles(thetaDeg, phiDeg, out = new THREE.Vector3()) {
     .addScaledVector(E2, Math.sin(t) * Math.sin(p)).normalize();
 }
 
-export function anglesFromDir(d) {
-  const theta = Math.acos(THREE.MathUtils.clamp(d.dot(SUN), -1, 1));
-  const phi = Math.atan2(d.dot(E2), d.dot(E1));
-  return { theta, phi };
-}
-
 // Which way is up. On the Moon: away from its centre. On the Spindle (spindle.js): away from the
-// asteroid's long axis, so you can run all the way round it. Physics, the camera, shots and effects
+// asteroid's long axis, so you can run all the way round it. In the Asset Row (assetRow.js, a dev tool): one fixed
+// direction everywhere (GRAV.flat), "height" being the distance along it. Physics, the camera, shots and effects
 // ask here instead of normalising a position.
-export const GRAV = { axis: null };
+export const GRAV = { axis: null, flat: null };
 export function upAt(p, out = new THREE.Vector3()) {
+  if (GRAV.flat) return out.copy(GRAV.flat);
   const a = GRAV.axis;
   if (!a) return out.copy(p).normalize();
   const k = p.dot(a);
@@ -36,6 +32,7 @@ export function upAt(p, out = new THREE.Vector3()) {
 }
 // distance from the centre (or the axis)
 export function radOf(p) {
+  if (GRAV.flat) return p.dot(GRAV.flat);
   const a = GRAV.axis;
   if (!a) return p.length();
   const k = p.dot(a);
@@ -43,6 +40,7 @@ export function radOf(p) {
 }
 // move p straight up or down until it's r from the centre (or the axis)
 export function setRad(p, r) {
+  if (GRAV.flat) return p.addScaledVector(GRAV.flat, r - p.dot(GRAV.flat));
   const a = GRAV.axis;
   if (!a) return p.setLength(r);
   const k = p.dot(a);
@@ -83,4 +81,12 @@ export function greatCircle(dir, t, dist, out = new THREE.Vector3()) {
   const a = dist / R;
   const tn = _x.copy(t).addScaledVector(dir, -t.dot(dir)).normalize();
   return out.copy(dir).multiplyScalar(Math.cos(a)).addScaledVector(tn, Math.sin(a)).normalize();
+}
+
+// The nodes under root that pass test, collected once. Per-frame code (a spinning sign, a blinking light)
+// keeps the list on the root rather than walking the whole tree every frame.
+export function collectNodes(root, test) {
+  const out = [];
+  root.traverse((o) => { if (test(o)) out.push(o); });
+  return out;
 }

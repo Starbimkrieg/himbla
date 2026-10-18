@@ -118,9 +118,12 @@ function fireFlak(g, e, dt, T) {
   g.audio.tone(90, 0.25, 'sawtooth', 0.2, 0.5);
 }
 
-// A flak burst: a black puff and some fragments. Close enough and it stings and nudges you: you
-// lose some speed and get pulled down, but you aren't thrown clear.
-function flakBurst(g, pos) {
+// A flak burst: a black puff and some fragments. Close enough and it stings and shoves you: a blast
+// knock away from the burst (FLAK_PUSH m/s at point-blank, fading to nothing at 11 m, softened by the
+// Flak Weave like any blast), plus you lose some speed and get pulled down. A hard shove, not a launch:
+// one burst can't move you more than FLAK_PUSH, and they come at most every 0.6 s.
+const FLAK_PUSH = 20;
+export function flakBurst(g, pos) {
   const P = g.player;
   g.fx.explosion(pos, 3.5, false);
   g.fx.spawn(pos, new THREE.Vector3(), { color: 0x2a2433, size: 1.6, life: 1.2, count: 6, spread: 3 });
@@ -137,6 +140,11 @@ function flakBurst(g, pos) {
   const vUp = P.vel.dot(up);
   P.vel.addScaledVector(up, -vUp).multiplyScalar(1 - 0.18 * f).addScaledVector(up, vUp - 3.5 * f);
   P.vel.add(_c.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(2.5 * f));
+  const away = _c.copy(P.center).sub(pos);
+  if (away.lengthSq() < 0.01) away.copy(up);
+  P.vel.addScaledVector(away.normalize(), FLAK_PUSH * f * (P.knockResist || 1));
+  P.body.grounded = false; // (so the shove isn't ironed out by the skates)
+  P.body.sinceContact = 1;
   g.cam.shake = Math.max(g.cam.shake, 0.3 * f);
   if (Math.random() < 0.4) g.fx.pop('FLAK!', pos.clone(), { color: '#ff9f1c', size: 34, life: 0.6 });
 }

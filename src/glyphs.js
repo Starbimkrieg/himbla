@@ -65,8 +65,8 @@ export function glyphHtml(tokens, kind = glyphState.kind) {
 // What a key name in the UI means on the pad (null: no equivalent, left as it is)
 const WORDS = {
   SPACE: ['LB'], SHIFT: ['A'], ENTER: ['A'], MOUSE: ['RS'], 'RIGHT MOUSE': ['LT'], RMB: ['LT'], 'E/RMB': ['LT'], LMB: ['RT'],
-  E: ['LT'], Q: ['B'], F: ['X'], G: ['R3'], V: ['Y'], Z: ['RB'], M: ['VIEW'], R: ['VIEW', '#hold'],
-  X: ['DD'], C: ['DD'], J: ['DD'], P: ['DD'], T: ['DD'], H: ['DD'], N: ['DD'],
+  E: ['RB'], Q: ['B'], F: ['X'], G: ['R3'], V: ['Y'], M: ['VIEW'], R: ['VIEW', '#hold'],
+  X: ['DD'], C: ['DD'], J: ['DD'], P: ['DD'], T: ['DD'], // (the radial menu's wedges; N has no button: music is under Settings → Audio)
 };
 export function tokensFor(text) {
   const t = text.trim();
@@ -75,7 +75,7 @@ export function tokensFor(text) {
   return null;
 }
 
-const SKIP = '#settings, #help, .controls-mini, #padradial, .pgx, script, style, textarea, input, select, canvas';
+const SKIP = '#settings, #help, .controls-mini, #padradial, #vradial, #powradial, .pgx, script, style, textarea, input, select, canvas';
 const KEY_IN_TEXT = /\b(Press|press|PRESS|Hold|hold|HOLD) (ENTER|SPACE|SHIFT|[A-Z])(?![A-Za-z0-9'’])/g;
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 

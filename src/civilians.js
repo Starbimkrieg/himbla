@@ -126,6 +126,17 @@ export class Civilians {
     }
   }
 
+  // A meteor lands (meteors.js): whoever is under it is killed, and the blast beyond hurts less the further it
+  // reaches. Nobody is blamed for it.
+  meteorBlast(pos, core, reach) {
+    const hits = [];
+    this.each(pos, reach, (f, src, ref, c) => hits.push({ f, src, ref, d: c.distanceTo(pos) }));
+    for (const h of hits) {
+      const f = h.d <= core ? 1 : 1 - (h.d - core) / (reach - core);
+      this.hurt(h.f, h.src, h.ref, h.d <= core ? 400 : 40 + 90 * f, pos, f, false);
+    }
+  }
+
   // Take a person out of their scripted routine; returns the controller.
   grab(f, src, ref) {
     if (f.civ) return f.civ;
@@ -150,7 +161,7 @@ export class Civilians {
     return c;
   }
 
-  hurt(f, src, ref, dmg, from, k) {
+  hurt(f, src, ref, dmg, from, k, blame = true) {
     const g = this.g;
     if (f.civ && f.civ.dead) return;
     const c = this.grab(f, src, ref);
@@ -178,7 +189,7 @@ export class Civilians {
       g.fx.pop(OOF[Math.floor(Math.random() * OOF.length)], c.center.clone().addScaledVector(up, 2), { color: '#fff4e0', size: 36, life: 0.8 });
     }
     // reputation + settlement aggro: every knock-out counts, plain hits once per blast
-    this.witnessed(c.center, killed ? REP_KILL : REP_HIT, killed, f.loc);
+    if (blame) this.witnessed(c.center, killed ? REP_KILL : REP_HIT, killed, f.loc); // (not a meteor's doing)
     this.panic(c.center, f);
   }
 
@@ -546,15 +557,20 @@ export class Civilians {
     }
     if (f.captured) { loc.group.add(f.root); f.root.visible = false; return; }
     loc.group.attach(f.root);
+    W.reseatFigure(f); // (a curved place's residents walk on flat coordinates, and are posed from them again below: world.js)
     const p = f.root.position;
     const fwd = _v.set(0, 0, 1).applyQuaternion(f.root.quaternion);
     f.root.rotation.set(0, Math.atan2(fwd.x, fwd.z), 0);
     p.y = 0;
     f.vy = 0;
     // amble back into town
-    const a = Math.random() * Math.PI * 2, rr = (0.25 + Math.random() * 0.5) * loc.r;
-    f.target.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+    if (f.area) f.area(f.target, f); // (back to its own patch: a vendor's post)
+    else {
+      const a = Math.random() * Math.PI * 2, rr = (0.25 + Math.random() * 0.5) * loc.r;
+      f.target.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+    }
     f.wait = 0.5 + Math.random() * 2;
+    if (W.curveR(loc)) W.poseFigure(f);
     if (f.hp !== undefined && f.hp > 0) f.hp = Math.min(f.kind === 'soldier' ? HP_SOLDIER : HP, f.hp + 20); // patched up a bit
   }
 

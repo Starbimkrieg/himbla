@@ -2,8 +2,9 @@ import * as THREE from 'three';
 
 // Things you can sit in and be carried by: the transit ships (free: hop into a landed shuttle-bus or
 // freighter with F, ride it wherever it goes, hop out with F any time, on the pad or mid-flight)
-// and the Funpark's carousel and ferris wheel (pop onto the nearest horse or gondola).
-// While seated, player.js lets the seat carry you (player.seat) and skips the physics.
+// and the fairground's carousel and ferris wheel (pop onto the nearest horse or gondola; settlements.js keeps both for Chimera Downs' rework).
+// While seated, player.js lets the seat carry you (player.seat) and skips the physics. A fairground ride's
+// seats are for sightseeing, so the HUD steps aside while you sit in one (style.css body.on-ride).
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 
@@ -11,6 +12,7 @@ export class Rides {
   constructor(game) {
     this.game = game;
     this.ride = null; // what you're on: { kind: 'ship' | 'fun', v?, ride?, seat }
+    this.hudOff = false; // (body.on-ride is on: syncHud)
   }
 
   // the nearest seat you could take from p, or null
@@ -78,6 +80,7 @@ export class Rides {
     }
     this.ride = n;
     P.seat = n.seat;
+    this.syncHud();
     P.body.vel.set(0, 0, 0);
     g.boardCooldown = 0.4;
     g.audio.tone(660, 0.1, 'triangle', 0.12);
@@ -89,6 +92,7 @@ export class Rides {
     if (!r) return;
     this.ride = null;
     P.seat = null;
+    this.syncHud();
     P.model.root.visible = true;
     const up = _c;
     if (r.kind === 'ship') {
@@ -125,8 +129,15 @@ export class Rides {
     g.audio.tone(440, 0.1, 'triangle', 0.1);
   }
 
+  // no HUD on the carousel and the ferris wheel (the hop-off prompt and the pop-ups stay: style.css body.on-ride); the shuttles and freighters keep it
+  syncHud() {
+    const off = !!(this.ride && this.ride.kind === 'fun');
+    if (off !== this.hudOff) { this.hudOff = off; document.body.classList.toggle('on-ride', off); }
+  }
+
   update() {
     const P = this.game.player;
     if (this.ride && (P.dead || !P.seat)) { this.ride = null; P.seat = null; }
+    this.syncHud();
   }
 }

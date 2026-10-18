@@ -1,6 +1,8 @@
-# Shared geometry and scene helpers for the Blender build scripts (build_skimmer.py,
-# build_warrig.py). Load with  exec(open(<repo>/tools/blender/kit.py).read(), globals())  after
-# setting COLL (the collection to rebuild) and SLOT_COLORS (preview colour per material slot).
+# Shared geometry and scene helpers for the Blender build scripts. Load with
+# exec(open(<repo>/tools/blender/kit.py).read(), globals())  after setting COLL (the collection
+# to rebuild) and SLOT_COLORS (preview colour per material slot). A script that needs a variant
+# (build_runner.py's lathe and mesh, build_ships.py's ring_pts and mesh) defines its own after
+# the exec, which replaces the kit's of that name for everything in the script.
 #
 # Everything is authored in three.js axes (x right, y up, +z forward) and converted to Blender's
 # (x, -z, y) on the way in, which the glTF exporter's +Y-up option converts back.
@@ -186,6 +188,25 @@ def keep(geo, pred):
     return [verts[i] for i in used], [tuple(remap[i] for i in f) for f in out]
 
 
+def join(geos):
+    verts, faces = [], []
+    for v, f in geos:
+        o = len(verts)
+        verts.extend(v)
+        faces.extend([tuple(i + o for i in fc) for fc in f])
+    return verts, faces
+
+
+def merge(*geos):
+    """join() with the geometries as arguments"""
+    return join(geos)
+
+
+def B(a, b, r, seg=4, cap=False):
+    """One strut between two points (open ends by default: they sit inside the members they join)."""
+    return tube([a, b], [r, r], seg, cap)
+
+
 def beam(a, b, r, seg=6):
     return tube([a, b], [r, r], seg)
 
@@ -285,3 +306,262 @@ def export(out, objects):
     props = bpy.ops.export_scene.gltf.get_rna_type().properties.keys()
     bpy.ops.export_scene.gltf(**{k: v for k, v in kw.items() if k in props})
     print("exported", out, os.path.getsize(out), "bytes")
+
+
+# ---------------- three.js-style primitives and smooth-shaded meshes (additive; build_outposts.py) ----------------
+# Same vertex layout as THREE.BoxGeometry / CylinderGeometry / SphereGeometry / TorusGeometry / PlaneGeometry, so a
+# port lines up with a build made from those in the game. Each returns (verts, faces, smooth) in three.js axes:
+# faces counter-clockwise seen from outside, and one smoothing group per face (0 = flat; n > 0 = faces of group n
+# share normals across their common edges; edges between different groups stay hard, like three.js's split caps).
+# Place one with place(), build it with mesh_smooth().
+
+from mathutils import Matrix
+
+
+def place(geo, m):
+    """Apply a 4x4 matrix (three.js axes) to a primitive."""
+    verts, faces, smooth = geo
+    return [tuple(m @ Vector(v)) for v in verts], faces, smooth
+
+
+def cuboid(w, h, d):
+    x, y, z = w / 2, h / 2, d / 2
+    v = [(-x, -y, -z), (x, -y, -z), (x, y, -z), (-x, y, -z), (-x, -y, z), (x, -y, z), (x, y, z), (-x, y, z)]
+    return v, [(4, 5, 6, 7), (1, 0, 3, 2), (5, 1, 2, 6), (0, 4, 7, 3), (3, 7, 6, 2), (0, 1, 5, 4)], [0] * 6
+
+
+def plane(w, h):
+    """A single quad in the xy plane facing +z."""
+    x, y = w / 2, h / 2
+    return [(-x, -y, 0.0), (x, -y, 0.0), (x, y, 0.0), (-x, y, 0.0)], [(0, 1, 2, 3)], [0]
+
+
+def cylinder(rt, rb, h, seg, open_ended=False):
+    """Axis y, centred; the first vertex of a ring is at +z and angles run towards +x (like THREE.CylinderGeometry)."""
+    verts = []
+
+    def ring(r, y):
+        if r <= 1e-9:  # a cone's apex
+            verts.append((0.0, y, 0.0))
+            return [len(verts) - 1] * seg
+        idx = []
+        for i in range(seg):
+            a = 2 * math.pi * i / seg
+            idx.append(len(verts))
+            verts.append((math.sin(a) * r, y, math.cos(a) * r))
+        return idx
+
+    top, bot = ring(rt, h / 2), ring(rb, -h / 2)
+    faces, smooth = [], []
+    for i in range(seg):
+        j = (i + 1) % seg
+        f = tuple(dict.fromkeys((bot[i], bot[j], top[j], top[i])))  # (drops the repeated apex index)
+        faces.append(f)
+        smooth.append(1)
+    if not open_ended:
+        if rt > 1e-9:
+            faces.append(tuple(top)); smooth.append(0)
+        if rb > 1e-9:
+            faces.append(tuple(reversed(bot))); smooth.append(0)
+    return verts, faces, smooth
+
+
+def sphere(r, wseg, hseg, theta_len=math.pi):
+    """Pole at +y, a cap when theta_len < pi (like THREE.SphereGeometry with phi = 2 pi, theta from 0)."""
+    verts, grid = [], []
+    for iy in range(hseg + 1):
+        th = theta_len * iy / hseg
+        rr, y = r * math.sin(th), r * math.cos(th)
+        if rr <= 1e-9:
+            verts.append((0.0, y, 0.0))
+            grid.append([len(verts) - 1] * wseg)
+            continue
+        row = []
+        for ix in range(wseg):
+            ph = 2 * math.pi * ix / wseg
+            row.append(len(verts))
+            verts.append((-rr * math.cos(ph), y, rr * math.sin(ph)))
+        grid.append(row)
+    faces = []
+    for iy in range(hseg):
+        for ix in range(wseg):
+            i2 = (ix + 1) % wseg
+            faces.append(tuple(dict.fromkeys((grid[iy][i2], grid[iy][ix], grid[iy + 1][ix], grid[iy + 1][i2]))))
+    return verts, faces, [1] * len(faces)
+
+
+def torus_arc(R, r, tubular, radial):
+    """A full ring lying in the x-z plane (axis y), like THREE.TorusGeometry(R, r, radial, tubular).rotateX(pi / 2)."""
+    verts, faces = [], []
+    for i in range(tubular):
+        u = 2 * math.pi * i / tubular
+        for k in range(radial):
+            v = 2 * math.pi * k / radial
+            rr = R + r * math.cos(v)
+            verts.append((rr * math.cos(u), -r * math.sin(v), rr * math.sin(u)))
+    for i in range(tubular):
+        i2 = (i + 1) % tubular
+        for k in range(radial):
+            k2 = (k + 1) % radial
+            faces.append((i * radial + k, i2 * radial + k, i2 * radial + k2, i * radial + k2))
+    return verts, faces, [1] * len(faces)
+
+
+def mesh_smooth(name, geo, slot, parent, ink=0.04):
+    """Like mesh(), for a primitive above: faces keep their winding (no recalculation) and edges are smooth only
+    inside a smoothing group, so cylinders are round with hard caps and boxes stay crisp."""
+    verts, faces, smooth = geo
+    bm = bmesh.new()
+    vs = [bm.verts.new(tb(v)) for v in verts]
+    for f, g in zip(faces, smooth):
+        bm.faces.new([vs[i] for i in f]).smooth = g > 0
+    bm.faces.index_update()
+    for e in bm.edges:
+        lf = e.link_faces
+        e.smooth = len(lf) < 2 or (smooth[lf[0].index] > 0 and smooth[lf[0].index] == smooth[lf[1].index])
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    C.objects.link(o)
+    o.parent = parent
+    me.materials.append(material(slot))
+    o["ink"] = float(ink)
+    o["slot"] = slot
+    return o
+
+
+def cylinder_arc(rt, rb, h, seg, theta_start=0.0, theta_len=2 * math.pi):
+    """An OPEN cylinder shell over an arc: THREE.CylinderGeometry(rt, rb, h, seg, 1, true, thetaStart, thetaLength).
+    Axis y, centred; angle t is at (sin t, cos t) like cylinder(), so t = 0 is +z and t runs towards +x. A partial arc
+    has seg + 1 columns and open ends; a full turn wraps. No caps. Pair it with a double-sided material."""
+    full = theta_len >= 2 * math.pi - 1e-9
+    cols = seg if full else seg + 1
+    verts, top, bot = [], [], []
+    for i in range(cols):
+        t = theta_start + theta_len * i / seg
+        top.append(len(verts))
+        verts.append((math.sin(t) * rt, h / 2, math.cos(t) * rt))
+        bot.append(len(verts))
+        verts.append((math.sin(t) * rb, -h / 2, math.cos(t) * rb))
+    faces = [(bot[i], bot[(i + 1) % cols], top[(i + 1) % cols], top[i]) for i in range(seg)]
+    return verts, faces, [1] * len(faces)
+
+
+def torus_partial(R, r, radial, tubular, arc=math.pi):
+    """THREE.TorusGeometry(R, r, radial, tubular, arc) as built: a tube round an arc of a circle in the x-y plane,
+    starting on +x and turning counter-clockwise (towards +y) through `arc`; open at both ends when arc < 2 pi.
+    (torus_arc() above is the full ring already lying flat.)"""
+    full = arc >= 2 * math.pi - 1e-9
+    cols = tubular if full else tubular + 1
+    verts = []
+    for i in range(cols):
+        u = arc * i / tubular
+        for k in range(radial):
+            v = 2 * math.pi * k / radial
+            rr = R + r * math.cos(v)
+            verts.append((rr * math.cos(u), rr * math.sin(u), r * math.sin(v)))
+    faces = []
+    for i in range(tubular):
+        i2 = (i + 1) % cols
+        for k in range(radial):
+            k2 = (k + 1) % radial
+            faces.append((i * radial + k, i2 * radial + k, i2 * radial + k2, i * radial + k2))
+    return verts, faces, [1] * len(faces)
+
+
+# ---------------- build-time check: surfaces that would z-fight ----------------
+
+def audit_coplanar(objects=None, eps=0.003, min_area=1e-4, allow=()):
+    """Raise if two different mesh objects have triangles that face the same way, lie on one plane (within eps metres) and overlap by more than min_area m2: the game's depth
+    buffer cannot tell such surfaces apart, and they flicker as the camera moves. (tools/casino-zfight.mjs runs the same test on the live scene.) `allow` is a list of
+    (name fragment, name fragment) pairs that are known and intended. Run after every mesh is built, before export."""
+    dg = bpy.context.evaluated_depsgraph_get()
+    tris = []
+    for oi, o in enumerate(objects if objects is not None else C.objects):
+        if o.type != "MESH":
+            continue
+        top = o
+        while top.parent:
+            top = top.parent
+        e = o.evaluated_get(dg)
+        me = e.to_mesh()
+        me.calc_loop_triangles()
+        mw = e.matrix_world
+        for lt in me.loop_triangles:
+            ps = []
+            for vi in lt.vertices:
+                w = mw @ me.vertices[vi].co
+                ps.append((w.x, w.z, -w.y))                      # (back to three.js axes)
+            a, b, c = ps
+            ux, uy, uz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
+            vx, vy, vz = c[0] - a[0], c[1] - a[1], c[2] - a[2]
+            nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
+            ln = math.sqrt(nx * nx + ny * ny + nz * nz)
+            if ln < 2e-4:
+                continue
+            nx, ny, nz = nx / ln, ny / ln, nz / ln
+            tris.append((oi, o.name, (nx, ny, nz), nx * a[0] + ny * a[1] + nz * a[2], ps, top.name))
+    buckets = {}
+    for i, t in enumerate(tris):
+        n = t[2]
+        buckets.setdefault((round(n[0] * 200), round(n[1] * 200), round(n[2] * 200), math.floor(t[3] / 0.02)), []).append(i)
+
+    def area2(P):
+        return sum(P[i][0] * P[(i + 1) % len(P)][1] - P[(i + 1) % len(P)][0] * P[i][1] for i in range(len(P))) / 2
+
+    def clip(subject, tri):
+        out = subject
+        for i in range(3):
+            A, Bp = tri[i], tri[(i + 1) % 3]
+            inp, out = out, []
+            if not inp:
+                break
+            side = lambda P: (Bp[0] - A[0]) * (P[1] - A[1]) - (Bp[1] - A[1]) * (P[0] - A[0])
+            for j in range(len(inp)):
+                P, Q = inp[j], inp[(j + 1) % len(inp)]
+                sp, sq = side(P), side(Q)
+                if sp >= 0:
+                    out.append(P)
+                if (sp >= 0) != (sq >= 0):
+                    t = sp / (sp - sq)
+                    out.append((P[0] + (Q[0] - P[0]) * t, P[1] + (Q[1] - P[1]) * t))
+        return out
+
+    found = {}
+
+    def test(i, j):
+        A, Bt = tris[i], tris[j]
+        if A[0] == Bt[0] or A[5] != Bt[5]:       # (one mesh, or two different models that merely share the origin)
+            return
+        if A[2][0] * Bt[2][0] + A[2][1] * Bt[2][1] + A[2][2] * Bt[2][2] < 0.9999 or abs(A[3] - Bt[3]) > eps:
+            return
+        if any((f in A[1] and g in Bt[1]) or (g in A[1] and f in Bt[1]) for f, g in allow):
+            return
+        n = A[2]
+        ax = 0 if abs(n[0]) > abs(n[1]) and abs(n[0]) > abs(n[2]) else 1 if abs(n[1]) > abs(n[2]) else 2
+        u, v = (ax + 1) % 3, (ax + 2) % 3
+        ta, tb = [(p[u], p[v]) for p in A[4]], [(p[u], p[v]) for p in Bt[4]]
+        if area2(ta) < 0:
+            ta = [ta[0], ta[2], ta[1]]
+        if area2(tb) < 0:
+            tb = [tb[0], tb[2], tb[1]]
+        ov = abs(area2(clip(ta, tb)))
+        if ov < 1e-9:
+            return
+        k = (min(A[1], Bt[1]), max(A[1], Bt[1]), round(A[3] * 50))
+        f = found.setdefault(k, [0.0, A[4][0]])
+        f[0] += ov
+
+    for key, lst in buckets.items():
+        nb = buckets.get((key[0], key[1], key[2], key[3] + 1), [])
+        for xi in range(len(lst)):
+            for yi in range(xi + 1, len(lst)):
+                test(lst[xi], lst[yi])
+            for yi in nb:
+                test(lst[xi], yi)
+    bad = {k: v for k, v in found.items() if v[0] >= min_area}
+    if bad:
+        lines = [f"{v[0]:.4f} m2  {k[0]} / {k[1]}  at ({v[1][0]:.2f}, {v[1][1]:.2f}, {v[1][2]:.2f})" for k, v in sorted(bad.items(), key=lambda kv: -kv[1][0])[:12]]
+        raise RuntimeError("coplanar overlaps (these would z-fight):\n  " + "\n  ".join(lines))
+    print(f"AUDIT coplanar ok: {len(tris)} triangles, no overlap above {min_area} m2 within {eps * 1000:.0f} mm")

@@ -135,6 +135,58 @@ export class Colliders {
   }
 }
 
+// Distance t along the ray o + t*d (d a unit vector) to the first surface of collider c, or Infinity
+// when it misses within tmax. A ray that starts inside c passes out through it (it is not stopped at
+// the origin). For hitscan beams (the Rail Lance), which can't use contact()'s fat-sphere test.
+export function rayCollider(c, o, d, tmax) {
+  const ox = o.x - c.c.x, oy = o.y - c.c.y, oz = o.z - c.c.z;
+  if (c.type === 'sphere') {
+    const b = ox * d.x + oy * d.y + oz * d.z;
+    const disc = b * b - (ox * ox + oy * oy + oz * oz - c.r * c.r);
+    if (disc < 0) return Infinity;
+    const t = -b - Math.sqrt(disc);
+    return t >= 0 && t <= tmax ? t : Infinity;
+  }
+  if (c.type === 'cyl') {
+    const a = c.axis;
+    const oh = ox * a.x + oy * a.y + oz * a.z, dh = d.x * a.x + d.y * a.y + d.z * a.z;
+    const rx = ox - a.x * oh, ry = oy - a.y * oh, rz = oz - a.z * oh;
+    const ux = d.x - a.x * dh, uy = d.y - a.y * dh, uz = d.z - a.z * dh;
+    const A = ux * ux + uy * uy + uz * uz, B = rx * ux + ry * uy + rz * uz, C = rx * rx + ry * ry + rz * rz - c.r * c.r;
+    let best = Infinity;
+    if (A > 1e-12) {
+      const disc = B * B - A * C;
+      if (disc >= 0) {
+        const t = (-B - Math.sqrt(disc)) / A, h = oh + t * dh;
+        if (t >= 0 && h >= c.y0 && h <= c.y1) best = t;
+      }
+    }
+    if (Math.abs(dh) > 1e-9) {
+      for (const y of [c.y0, c.y1]) {
+        const t = (y - oh) / dh;
+        if (t < 0 || t >= best) continue;
+        const px = rx + ux * t, py = ry + uy * t, pz = rz + uz * t;
+        if (px * px + py * py + pz * pz <= c.r * c.r) best = t;
+      }
+    }
+    return best <= tmax ? best : Infinity;
+  }
+  // oriented box: the slab test in its own frame
+  const lo = [ox * c.ax.x + oy * c.ax.y + oz * c.ax.z, ox * c.ay.x + oy * c.ay.y + oz * c.ay.z, ox * c.az.x + oy * c.az.y + oz * c.az.z];
+  const ld = [d.x * c.ax.x + d.y * c.ax.y + d.z * c.ax.z, d.x * c.ay.x + d.y * c.ay.y + d.z * c.ay.z, d.x * c.az.x + d.y * c.az.y + d.z * c.az.z];
+  const h = [c.hx, c.hy, c.hz];
+  let t0 = 0, t1 = Infinity, entered = false;
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(ld[i]) < 1e-9) { if (Math.abs(lo[i]) > h[i]) return Infinity; continue; }
+    let a = (-h[i] - lo[i]) / ld[i], b = (h[i] - lo[i]) / ld[i];
+    if (a > b) { const x = a; a = b; b = x; }
+    if (a > t0) { t0 = a; entered = true; }
+    if (b < t1) t1 = b;
+    if (t0 > t1) return Infinity;
+  }
+  return entered && t0 <= tmax ? t0 : Infinity;
+}
+
 const _n = new THREE.Vector3();
 const _sn = new THREE.Vector3();
 const _tmp = new THREE.Vector3();
@@ -149,6 +201,7 @@ const _near = [];
 // the speed that curves over the world (all of it on a sphere; only the part round the girth on
 // the Spindle's cylinder: running along its axis is straight)
 function orbitV2(v, up, vh2) {
+  if (GRAV.flat) return 0; // (a flat world: nothing curves away beneath you)
   const a = GRAV.axis;
   if (!a) return vh2;
   const g = _tmp2.crossVectors(a, up);
@@ -199,7 +252,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
     const k = Math.min(1, Math.max(0, (b.airTime - (params.airGrace ?? 1)) / (params.airGravRampTime ?? 2)));
     const fast = Math.min(1, Math.max(0, (Math.sqrt(vh2) - 15) / 30));
     const ramp = 1 + (params.airGravRamp ?? 1) * k * k * (3 - 2 * k) * fast;
-    const orbit = (params.orbitComp ?? 1) * orbitV2(v, up, vh2) / radOf(b.pos);
+    const orbit = GRAV.flat ? 0 : (params.orbitComp ?? 1) * orbitV2(v, up, vh2) / radOf(b.pos); // (flat: radOf is the height, 0 on the floor: no orbital term, and no 0/0)
     const dive = input.dive ? (params.diveGrav ?? 3) : 1;
     v.addScaledVector(up, -(G * (params.airGravMult ?? 1) * ramp * dive + orbit) * dt);
     // magnetic catch: a diving skater near the ground gets pulled onto it
@@ -380,6 +433,8 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
   const prevPlat = b.platform;
   b.platform = null;
   b.onStruct = false;
+  const wasStuck = b.stuck;
+  b.stuck = false;
   if (colliders) {
     const r = params.radius;
     const cp = _cp.copy(b.pos).addScaledVector(up, r);
@@ -387,9 +442,12 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
     for (const c of near) {
       const pen = colliders.contact(c, cp, r, _n);
       if (pen <= 0) continue;
+      if (c.stick && _n.dot(up) > 0.55) b.stuck = true;
       b.pos.addScaledVector(_n, pen);
       cp.addScaledVector(_n, pen);
-      const vn = v.dot(_n);
+      // (the velocity of a body riding a deck is the deck's frame, b.velFrame; any other deck is moving under it: it is hit at the speed it closes)
+      const pv = c.platform && c.platform.vel && b.velFrame !== c.platform ? c.platform.vel : null;
+      const vn = pv ? v.dot(_n) - pv.dot(_n) : v.dot(_n);
       if (vn < 0 && c.bouncy) {
         // inflatable: always springs you back out, harder than you came in
         v.addScaledVector(_n, -vn * 2.15 + 4);
@@ -412,6 +470,29 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
           v.addScaledVector(_n, -vn * 1.35);
           if (-vn > 4) impacts.push({ speed: -vn, kind: 'obstacle', normal: _n.clone() });
         }
+      }
+    }
+  }
+
+  // Walking on a landing pad (landingPad.js marks its deck and its stairs `stick`): over the stairs' head, onto the flight or off it
+  // onto the deck, your boots keep you on them, as they keep you on the ground, instead of the Moon's gravity floating you off the
+  // edge (up the flight at a run you would otherwise sail 4 m over the deck). Not on skates, and not after a jump; ramps that are
+  // not marked still throw you, which is what they are for.
+  if (colliders && wasStuck && !b.stuck && !b.grounded && !b.jumpLock && !input.skates) {
+    const r = params.radius;
+    for (let d = 0.15; d <= 1.2; d += 0.15) {
+      const cp = _cp.copy(b.pos).addScaledVector(up, r - d);
+      let hp = 0;
+      for (const c of colliders.query(cp, r + 2, _near)) {
+        if (!c.stick) continue;
+        const pen = colliders.contact(c, cp, r, _n);
+        if (pen > hp && _n.dot(up) > 0.55) { hp = pen; _tmp.copy(_n); }
+      }
+      if (hp > 0) {
+        b.pos.addScaledVector(up, -d + hp / _tmp.dot(up)); // (straight down onto it: no sliding back down a flight)
+        v.addScaledVector(_tmp, -v.dot(_tmp));
+        b.grounded = true; b.groundN.copy(_tmp); b.altitude = 0; b.onStruct = true; b.stuck = true;
+        break;
       }
     }
   }

@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { toon, glow, ink } from './toon.js';
-import { canvasTex, FONT, fitText, BJ, DUCK, PLK, CLASSIC, PRIZE } from './casinoWorld.js';
+import { canvasTex, FONT, fitText, BJ, bjPt, BJ_RACK, DUCK, PLK, CLASSIC, PRIZE, CLAW } from './casinoWorld.js';
+import { ClawGame } from './clawGame.js';
+import { CLAW_COST } from './clawSim.js';
+import { makeChipStack } from './models.js';
 import { PlinkoSim, MULTS, AIM_RANGE, DROP_Y, BALL_R, PEGS, slotCentre } from './plinko.js';
 import { glyphHtml } from './glyphs.js';
 
@@ -75,9 +78,8 @@ function cardBack() {
 const cardFrontGeo = new THREE.PlaneGeometry(CARD_W, CARD_H).rotateX(-Math.PI / 2).translate(0, 0.003, 0);
 const cardBackGeo = new THREE.PlaneGeometry(CARD_W, CARD_H).rotateX(Math.PI / 2).translate(0, -0.003, 0);
 
-const CHIP_GEO = new THREE.CylinderGeometry(0.16, 0.16, 0.07, 14);
 const CHIP_TIERS = [[5000, 0xffd23f], [1000, 0xc77dff], [250, 0x16121f], [100, 0x7dff6a], [25, 0x2ee6ff], [10, 0xff2a4a], [0, 0xfff4e0]];
-const chipMat = (v) => toon(CHIP_TIERS.find(([min]) => v >= min)[1]);
+const chipColor = (v) => CHIP_TIERS.find(([min]) => v >= min)[1];
 const chipCount = (v) => Math.max(1, Math.min(14, 1 + Math.floor(Math.log2(Math.max(1, v / 10)))));
 
 // ---------- duck derby ----------
@@ -139,11 +141,12 @@ function duckOdds(forms, n = 2500) {
 
 // ---------- interaction spots (casino-local x/z) ----------
 export const STATIONS = [
-  { id: 'bj', x: BJ.x, z: BJ.z + BJ.R + 1.4, r: 2.8, label: 'SIT AT THE BLACKJACK TABLE' },
+  { id: 'bj', x: bjPt(0, 0, BJ.R + 1.4)[0], z: bjPt(0, 0, BJ.R + 1.4)[2], r: 2.8, label: 'SIT AT THE BLACKJACK TABLE' },
   { id: 'duck', x: DUCK.kiosk[0], z: DUCK.kiosk[1] + 2, r: 2.8, label: 'DUCK DERBY — PICK A DUCK &amp; BET' },
   { id: 'plinko', x: PLK.x, z: PLK.z + 7.8, r: 3.2, label: 'PLAY PLINKO' },
-  { id: 'classic', x: CLASSIC.x - 3.2, z: CLASSIC.zs[1], r: 4.2, label: 'CLASSIC GAMES (SLOTS · ROULETTE · WHEEL · HIGH-LOW)' },
-  { id: 'prizes', x: PRIZE.x - 2.8, z: PRIZE.z, r: 3.8, label: 'PRIZE COUNTER &amp; RUSTY THE LOAN SHARK' },
+  { id: 'claw', x: CLAW.x, z: CLAW.z - 6.3, r: 3.3, label: `ZERO-G CLAW — ₵${CLAW_COST} A ROUND` },
+  { id: 'classic', x: CLASSIC.station[0], z: CLASSIC.station[1], r: 5.4, label: 'CLASSIC GAMES (SLOTS · ROULETTE · WHEEL · HIGH-LOW)' },
+  { id: 'prizes', x: PRIZE.x - 2.8, z: PRIZE.z, r: 3.8, label: 'PRIZE COUNTER' },
 ];
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _l = new THREE.Vector3();
@@ -175,6 +178,8 @@ export class CasinoGames {
     this.sim.onPeg = (p, b, sp) => this.pegHit(p, b, sp);
     this.sim.onLand = (b, s) => this.plinkoLand(b, s);
     this.pk = { aim: 0, cd: 0, dropped: 0, net: 0, tick: 0, msg: 'AIM AND DROP!', last: [] };
+    // the zero-g claw
+    this.claw = new ClawGame(this);
     this.slotGlow = new Array(MULTS.length).fill(0);
     this.ballGeo = new THREE.SphereGeometry(BALL_R, 14, 10);
     this.ballMats = [0xffd23f, 0xff7ad9, 0x2ee6ff, 0x7dff6a, 0xfff4e0].map((c) => toon(c));
@@ -211,6 +216,7 @@ export class CasinoGames {
     this.audio.tone(660, 0.08, 'triangle', 0.12);
     if (id === 'bj') { this.bj.auto = false; if (this.bj.phase === 'done') this.bj.msg = 'ANOTHER HAND?'; }
     if (id === 'duck' && this.dk.phase === 'done') this.newRace();
+    if (id === 'claw') this.claw.enter();
     this.render();
   }
 
@@ -221,6 +227,7 @@ export class CasinoGames {
       this.bj.auto = true;
       if (this.bj.phase === 'play') this.stand();
     }
+    if (this.mode === 'claw') this.claw.leave();
     this.mode = null;
     this.ui.classList.add('hidden');
     document.body.classList.remove('seated');
@@ -230,6 +237,7 @@ export class CasinoGames {
   get audio() { return this.g.audio; }
 
   onKey(code) {
+    if (this.mode === 'claw' && this.claw.onKey(code)) return;
     if (code === 'ArrowLeft' || code === 'Minus') { this.betStep(-1); return; }
     if (code === 'ArrowRight' || code === 'Equal') { this.betStep(1); return; }
     const go = code === 'Space' || code === 'Enter';
@@ -259,7 +267,7 @@ export class CasinoGames {
     if (this.g.credits >= n) return true;
     this.g.fx.pop('NOT ENOUGH CREDITS!', where || null, { color: '#ff2a4a', size: 44, life: 1.4 });
     this.audio.tone(140, 0.25, 'square', 0.12);
-    this.say(this.casino.debt() > 0 ? 'Broke AND in debt? Bold.' : 'Broke? Rusty the loan shark is at the prize counter…', 'bad');
+    this.say('Out of credits? Deliver a few packages and come back.', 'bad');
     return false;
   }
 
@@ -267,6 +275,7 @@ export class CasinoGames {
     if (this.mode === 'bj') this.bj.msg = text;
     else if (this.mode === 'duck') this.dk.msg = text;
     else if (this.mode === 'plinko') this.pk.msg = text;
+    else if (this.mode === 'claw') this.claw.setMsg(text, 4);
     this.msgCls = cls;
     this.render();
   }
@@ -302,9 +311,10 @@ export class CasinoGames {
     this.updateDealer(dt, time);
     this.updateDucks(dt, time);
     this.updatePlinko(dt, time);
+    this.claw.update(dt, time);
     if (this.mode) this.updateCam(dt);
     this.uiTick = (this.uiTick || 0) - dt;
-    if (this.mode && this.uiTick <= 0) { this.uiTick = 0.25; this.renderHead(); }
+    if (this.mode && this.uiTick <= 0) { this.uiTick = 0.25; this.renderHead(); if (this.mode === 'claw') { this.$('.c3-body').innerHTML = this.claw.bodyHtml(); this.$('.c3-msg').textContent = this.claw.msg || this.$('.c3-msg').textContent; } }
     // (picking the controller up or putting it down swaps the hints on the bar)
     if (this.mode && !!this.g.input.padActive !== this.padShown) this.render();
   }
@@ -313,7 +323,7 @@ export class CasinoGames {
   view() {
     const R = BJ.R;
     // (zoomed: leaning in over the felt, both hands of cards above the action bar)
-    if (this.mode === 'bj') return this.bj.zoom ? [[BJ.x, 3.7, BJ.z + 3.3], [BJ.x, BJ.top, BJ.z + 1.9]] : [[BJ.x, 3.9, BJ.z + R + 1.9], [BJ.x, 0.75, BJ.z + 0.7]];
+    if (this.mode === 'bj') return this.bj.zoom ? [bjPt(0, 3.7, 3.3), bjPt(0, BJ.top, 1.9)] : [bjPt(0, 3.9, R + 1.9), bjPt(0, 0.75, 0.7)];
     if (this.mode === 'duck') {
       const d = this.dk;
       if (d.phase === 'race' || (d.phase === 'done' && this.clock - d.doneAt < 2.5)) {
@@ -326,6 +336,7 @@ export class CasinoGames {
     }
     // framed so the whole board sits above the action bar
     if (this.mode === 'plinko') return [[PLK.x, 6.4, PLK.z + 16.5], [PLK.x, 4.4, PLK.z]];
+    if (this.mode === 'claw') return this.claw.camView();
     return null;
   }
 
@@ -370,7 +381,7 @@ export class CasinoGames {
     const m = win / Math.max(1, stake);
     const [x, y, z] = at;
     if (m >= 10) {
-      this.popAt(pick(['KA-CHING!!', 'MOONSHOT!!', 'KA-BLAMMO!!', 'JACKPOT!!']), x, y + 1.5, z, { color: '#ffd23f', size: 96, life: 2 });
+      this.popAt(pick(['KA-CHING!!', 'MOONSHOT!!', 'KA-BLAMMO!!', 'JACKPOT!!']), x, y + 1.5, z, { color: '#ffd23f', size: 96, life: 2, prio: 1 });
       this.confetti(x, y, z, 160, 10);
       this.g.cam.shake = Math.max(this.g.cam.shake, 0.9);
       this.fanfare();
@@ -392,7 +403,7 @@ export class CasinoGames {
       this.shoe = [];
       for (let d = 0; d < 6; d++) for (const s of SUITS) for (const r of RANKS) this.shoe.push({ r, s });
       for (let i = this.shoe.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [this.shoe[i], this.shoe[j]] = [this.shoe[j], this.shoe[i]]; }
-      this.popAt('SHUFFLING THE SHOE…', BJ.x, 2.8, BJ.z + 1, { color: '#fff4e0', size: 36 });
+      this.popAt('SHUFFLING THE SHOE…', ...bjPt(0, 2.8, 1), { color: '#fff4e0', size: 36 });
     }
     return this.shoe.pop();
   }
@@ -417,7 +428,7 @@ export class CasinoGames {
       const list = this.bj.cards.filter((k) => k.who === who && !k.gone);
       const n = list.length;
       const z = who === 'p' ? 1.75 : 0.62;
-      const sp = n > 5 ? 0.36 : 0.47;
+      const sp = n > 5 ? Math.min(0.36, 2.9 / (n - 1)) : 0.47;
       list.forEach((k, i) => {
         const to = new THREE.Vector3((i - (n - 1) / 2) * sp, BJ.top + 0.012 + i * 0.006, z + (who === 'p' ? i * 0.02 : 0));
         if (k === fresh) this.tween(k.obj, to, 0.38, { arc: 0.5, rotTo: k.up ? 0 : Math.PI });
@@ -449,15 +460,7 @@ export class CasinoGames {
 
   chipStack(value, at, from = null) {
     const n = chipCount(value);
-    const mat = chipMat(value / Math.max(1, n) * 3);
-    const group = new THREE.Group();
-    for (let i = 0; i < n; i++) {
-      const ch = new THREE.Mesh(CHIP_GEO, mat);
-      ch.position.set(Math.sin(i * 2.3) * 0.015, 0.035 + i * 0.072, Math.cos(i * 1.7) * 0.015);
-      ch.rotation.y = i;
-      group.add(ch);
-    }
-    ink(group.children[0], 0.015);
+    const group = makeChipStack(chipColor(value / Math.max(1, n) * 3), n);
     this.cw.bj.group.add(group);
     group.position.copy(from || at);
     if (from) this.tween(group, at, 0.45, { arc: 0.5 });
@@ -470,7 +473,7 @@ export class CasinoGames {
     const b = this.bj;
     if (b.phase !== 'bet' && b.phase !== 'done') return;
     const bet = this.casino.bet;
-    if (!this.afford(bet, this.cw.toWorld(BJ.x, 2, BJ.z + 2))) return;
+    if (!this.afford(bet, this.cw.toWorld(...bjPt(0, 2, 2)))) return;
     this.clearTable();
     this.casino.take(bet);
     Object.assign(b, { phase: 'dealing', player: [], dealer: [], stake: bet, doubled: false, msg: 'DEALING…' });
@@ -524,12 +527,12 @@ export class CasinoGames {
   double() {
     const b = this.bj;
     if (b.phase !== 'play' || b.player.length !== 2 || b.doubled) return;
-    if (!this.afford(b.stake, this.cw.toWorld(BJ.x, 2, BJ.z + 2))) return;
+    if (!this.afford(b.stake, this.cw.toWorld(...bjPt(0, 2, 2)))) return;
     this.casino.take(b.stake);
     b.doubled = true;
     this.chipStack(b.stake, new THREE.Vector3(0.36, BJ.top, 2.72), new THREE.Vector3(0.3, BJ.top + 0.6, BJ.R + 0.5));
     b.stake *= 2;
-    this.popAt('DOUBLE DOWN!', BJ.x, 2.4, BJ.z + 2, { color: '#ffd23f', size: 54 });
+    this.popAt('DOUBLE DOWN!', ...bjPt(0, 2.4, 2), { color: '#ffd23f', size: 54 });
     const c = this.draw();
     b.player.push(c);
     this.spawnCard(c, 'p', true);
@@ -572,7 +575,7 @@ export class CasinoGames {
     const b = this.bj;
     b.phase = 'done';
     const stake = b.stake;
-    const where = [BJ.x, 1.6, BJ.z + 2.4];
+    const where = bjPt(0, 1.6, 2.4);
     let win = 0;
     if (kind === 'bj') { win = Math.floor(stake * 2.5); this.st.bjs++; } else if (kind === 'win') win = stake * 2;
     else if (kind === 'push') win = stake;
@@ -582,23 +585,23 @@ export class CasinoGames {
     this.msgCls = pay > 0 ? 'good' : kind === 'push' ? '' : 'bad';
     b.last = { kind, pay };
     if (kind === 'bj') {
-      this.popAt('BLACKJACK!!', BJ.x, 2.6, BJ.z + 2, { color: '#ffd23f', size: 92, life: 2 });
-      this.confetti(BJ.x, 1.6, BJ.z + 2, 120, 8);
+      this.popAt('BLACKJACK!!', ...bjPt(0, 2.6, 2), { color: '#ffd23f', size: 92, life: 2, prio: 1 });
+      this.confetti(...bjPt(0, 1.6, 2), 120, 8);
       this.g.cam.shake = Math.max(this.g.cam.shake, 0.6);
       this.fanfare();
       this.cheer(4);
     } else if (kind === 'win') this.celebrate(win, stake, where);
-    else if (kind === 'push') this.popAt('PUSH', BJ.x, 2.2, BJ.z + 2, { color: '#2ee6ff', size: 54 });
+    else if (kind === 'push') this.popAt('PUSH', ...bjPt(0, 2.2, 2), { color: '#2ee6ff', size: 54 });
     else {
-      this.popAt(kind === 'bust' ? 'BUST!' : pick(['NOPE!', 'OOF!', 'WHIFF!']), BJ.x, 2.4, BJ.z + 2, { color: '#ff2a4a', size: 80 });
+      this.popAt(kind === 'bust' ? 'BUST!' : pick(['NOPE!', 'OOF!', 'WHIFF!']), ...bjPt(0, 2.4, 2), { color: '#ff2a4a', size: 80 });
       if (kind === 'bust') this.casino.sadTrombone(); else this.audio.tone(220, 0.25, 'sawtooth', 0.08, 0.6);
     }
     // chips: winnings slide out of the dealer's tray, then everything slides to you (or to the house)
-    if (pay > 0) this.chipStack(pay, new THREE.Vector3(-0.42, BJ.top, 2.72), new THREE.Vector3(-0.4, BJ.top + 0.1, 0.3));
+    if (pay > 0) this.chipStack(pay, new THREE.Vector3(-0.42, BJ.top, 2.72), BJ_RACK.clone());
     const chips = b.chips.slice();
     this.after(1.1, () => {
       for (const c of chips) {
-        const to = win > 0 ? new THREE.Vector3(c.position.x, BJ.top + 0.4, BJ.R + 0.8) : new THREE.Vector3(-0.4, BJ.top + 0.1, 0.3);
+        const to = win > 0 ? new THREE.Vector3(c.position.x, BJ.top + 0.4, BJ.R + 0.8) : BJ_RACK.clone();
         this.tween(c, to, 0.45, { arc: 0.3, onDone: () => { if (c.parent) c.parent.remove(c); } });
       }
       b.chips = b.chips.filter((c) => !chips.includes(c));
@@ -630,9 +633,13 @@ export class CasinoGames {
     d.acc = 0;
     d.msg = 'PICK A DUCK (1–4), SET YOUR BET, RACE!';
     this.cw.duck.gate.position.y = 1.35;
+    this.derbyLamps(0);
     this.cw.duck.ducks.forEach((q, i) => { q.root.position.set(DUCK.x0, DUCK.water - 0.25, DUCK.lanes[i]); q.root.rotation.set(0, 0, 0); });
     this.drawOddsBoard();
   }
+
+  // the start gate's three lamps: the first n are lit (red, amber, green)
+  derbyLamps(n) { this.cw.duck.lamps.forEach((l, k) => l.mat.color.copy(l.color).multiplyScalar(k < n ? 1 : 0.22)); }
 
   pickDuck(i) {
     if (this.dk.phase === 'race') return;
@@ -659,7 +666,7 @@ export class CasinoGames {
     d.phase = 'count';
     d.msg = `₵${fmt(bet)} ON #${d.pick + 1} ${DUCKS[d.pick].name} AT ×${d.odds[d.pick]}`;
     const cx = (DUCK.x0 + DUCK.x1) / 2;
-    ['3', '2', '1'].forEach((t, i) => this.after(i * 0.6, () => { this.popAt(t, DUCK.x0 + 3, 3.2, DUCK.lanes[1], { color: '#fff4e0', size: 90, life: 0.6 }); this.audio.tone(440, 0.15, 'square', 0.12); }));
+    ['3', '2', '1'].forEach((t, i) => this.after(i * 0.6, () => { this.derbyLamps(i + 1); this.popAt(t, DUCK.x0 + 3, 3.2, DUCK.lanes[1], { color: '#fff4e0', size: 90, life: 0.6, prio: 1 }); this.audio.tone(440, 0.15, 'square', 0.12); }));
     this.after(1.8, () => {
       d.phase = 'race';
       d.t = 0;
@@ -732,7 +739,7 @@ export class CasinoGames {
     d.history.length = Math.min(d.history.length, 8);
     const close = d.ds.filter((q, i) => i !== w).some((q) => RACE_L - q.x < 0.45);
     const lx = DUCK.x1;
-    this.popAt(close ? `PHOTO FINISH — #${w + 1}!` : `#${w + 1} ${DUCKS[w].name} WINS!`, lx, 4.2, DUCK.lanes[1], { color: hex(DUCKS[w].color), size: 70, life: 2.2 });
+    this.popAt(close ? `PHOTO FINISH — #${w + 1}!` : `#${w + 1} ${DUCKS[w].name} WINS!`, lx, 4.2, DUCK.lanes[1], { color: hex(DUCKS[w].color), size: 70, life: 2.2, prio: 1 });
     this.confetti(lx, 4.5, (DUCK.lanes[0] + DUCK.lanes[3]) / 2, 140, 9);
     if (close) this.audio.tone(1600, 0.08, 'square', 0.1);
     this.cheer();
@@ -742,7 +749,7 @@ export class CasinoGames {
       d.msg = `#${w + 1} ${DUCKS[w].name} WINS! YOU COLLECT ₵${fmt(win)}`;
       this.msgCls = 'good';
       this.celebrate(win, d.stake, [lx - 1, 2.5, DUCK.lanes[w]]);
-      this.popAt(`+₵${fmt(win)}`, lx - 2, 3, DUCK.lanes[w], { color: '#7dff6a', size: 60, life: 1.8 });
+      this.popAt(`+₵${fmt(win)}`, lx - 2, 3, DUCK.lanes[w], { color: '#7dff6a', size: 60, life: 1.8, prio: 1 });
       this.g.cam.shake = Math.max(this.g.cam.shake, 0.4);
     } else {
       d.msg = `#${w + 1} ${DUCKS[w].name} WINS. YOUR DUCK #${d.bet + 1} WAS ${['', '2ND', '3RD', '4TH'][Math.max(1, this.placeOf(d.bet))] || 'SLOW'}.`;
@@ -847,7 +854,7 @@ export class CasinoGames {
       this.msgCls = 'good';
       if (m >= 50) {
         this.g.cam.shake = Math.max(this.g.cam.shake, 1.4);
-        this.popAt('MEGA PLINKO!!!', PLK.x, PLK.y + 6, PLK.z + 1, { color: '#ffd23f', size: 110, life: 2.6 });
+        this.popAt('MEGA PLINKO!!!', PLK.x, PLK.y + 6, PLK.z + 1, { color: '#ffd23f', size: 110, life: 2.6, prio: 1 });
         this.confetti(PLK.x, PLK.y + 10, PLK.z + 1, 250, 14);
       }
     } else if (m >= 2) { this.audio.cash(); this.confetti(lx, ly, PLK.z + 0.6, 30, 4); p.msg = `${m}× — +₵${fmt(win)}`; this.msgCls = 'good'; } else if (m >= 1) this.audio.tone(990, 0.1, 'triangle', 0.1);
@@ -865,8 +872,14 @@ export class CasinoGames {
       if (dir) p.aim = Math.max(-AIM_RANGE, Math.min(AIM_RANGE, p.aim + dir * dt * 1.6));
       if (inp.down('Space') && p.cd <= 0) this.dropBall();
     }
-    cw.plinko.aim.position.x = PLK.x + p.aim;
-    cw.plinko.aim.children[1].position.y = 0.7 + Math.sin(time * 6) * 0.12;
+    // the aim marker (the ball and arrow over the chute) is only there while somebody is playing: stood at the board without sitting down, it
+    // floated over the chute for nothing
+    const aiming = this.mode === 'plinko';
+    cw.plinko.aim.visible = aiming;
+    if (aiming) {
+      cw.plinko.aim.position.x = PLK.x + p.aim;
+      cw.plinko.aim.children[1].position.y = 0.7 + Math.sin(time * 6) * 0.12;
+    }
     if (this.sim.balls.length) {
       this.sim.step(Math.min(dt, 1 / 20));
       for (const b of this.sim.balls) b.mesh.position.set(PLK.x + b.x, PLK.y + b.y, PLK.z + 0.12);
@@ -953,7 +966,7 @@ export class CasinoGames {
   renderHead() {
     const c = this.casino;
     this.$('.c3-cred').textContent = `₵${fmt(this.g.credits)}`;
-    this.$('.c3-bet').innerHTML = `BET <b>₵${fmt(c.bet)}</b> <small>MAX ₵${fmt(c.maxBet)} · VIP ${c.tier.name}</small>`;
+    this.$('.c3-bet').innerHTML = this.mode === 'claw' ? `ENTRY <b>₵${fmt(CLAW_COST)}</b> <small>BEST ₵${fmt(this.st.clawBest || 0)} · VIP ${c.tier.name}</small>` : `BET <b>₵${fmt(c.bet)}</b> <small>MAX ₵${fmt(c.maxBet)} · VIP ${c.tier.name}</small>`;
   }
 
   render() {
@@ -996,6 +1009,10 @@ export class CasinoGames {
       msg = p.msg;
       if (pad) btns = betBtns(false) + btn(`DROP ₵${fmt(this.casino.bet)} ${gl('A')}`, 'Space', { cls: 'big' }) + btn(`◀ AIM ▶ ${gl('LS')}`, 'x', { dis: true, cls: 'hint' });
       else btns = betBtns(false) + btn('◀ AIM <i>A</i>', 'x', { dis: true, cls: 'hint' }) + btn(`DROP ₵${fmt(this.casino.bet)} <i>SPACE</i>`, 'Space', { cls: 'big' }) + btn('AIM ▶ <i>D</i>', 'x', { dis: true, cls: 'hint' });
+    } else if (this.mode === 'claw') {
+      const u = this.claw.ui({ btn, key, gl, pad });
+      title = u.title; body = u.body; msg = u.msg; btns = u.btns;
+      this.clawFoot = u.foot;
     }
     this.$('.c3-title').textContent = title;
     this.$('.c3-body').innerHTML = body;
@@ -1008,6 +1025,7 @@ export class CasinoGames {
     foot.lastChild.innerHTML = pk ? `${gl('B')} STAND UP` : 'ESC · STAND UP';
     if (pk) foot.firstChild.innerHTML = (this.mode === 'plinko' ? `${gl('LS')} AIM · ${gl('A')} / ${gl('RT')} DROP, HOLD TO POUR` : this.mode === 'duck' ? `${gl('LS')} PICK A DUCK · ${gl('A')} RACE` : `${gl('A')} DEAL / HIT · ${gl('X')} STAND · ${gl('Y')} DOUBLE · ${gl('R3')} ZOOM`) + ` · ${gl('LB')} ${gl('RB')} BET`;
     else foot.firstChild.textContent = this.mode === 'plinko' ? 'MOUSE / A · D AIM · CLICK OR HOLD SPACE TO DROP · ◀ ▶ BET' : this.mode === 'duck' ? '1–4 PICK A DUCK · ◀ ▶ BET' : 'H HIT · S STAND · D DOUBLE · Z ZOOM · ◀ ▶ BET';
+    if (this.mode === 'claw') { if (pk) foot.firstChild.innerHTML = this.clawFoot; else foot.firstChild.textContent = this.clawFoot; }
     this.renderHead();
   }
 }

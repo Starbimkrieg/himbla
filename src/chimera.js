@@ -10,7 +10,7 @@ export const LIVING = ['person', 'voidling', 'mite', 'car', 'pirate', 'sapling',
 // Things that only mutate whatever they get spliced into.
 export const MODIFIERS = { water: 'void', rock: 'crystal', slickrock: 'crystal', dirt: 'mud', mud: 'mud', wiring: 'spark', engine: 'turbo', lens: 'lens', transponder: 'radio', plating: 'armor' };
 
-const PALETTE = {
+export const PALETTE = {
   person: [0xff9f1c, 0x2ec4ff, 0xffd23f, 0x7dff6a],
   voidling: [0xc77dff, 0x7b2ff7],
   mite: [0xb8e986, 0xd8d0c4, 0x9be7ff],

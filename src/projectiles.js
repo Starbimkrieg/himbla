@@ -21,19 +21,30 @@ export class Projectiles {
     this.list = [];
     this.geo = new THREE.SphereGeometry(1, 10, 8);
     this.inkMat = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
+    // the APC cannon's shell: a capsule along z with a hot additive halo (one geometry and halo for all of them)
+    this.shellGeo = new THREE.CapsuleGeometry(0.42, 1.5, 4, 8).rotateX(Math.PI / 2);
+    this.shellGlow = new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
   }
 
   // fuse: burst after this many seconds; proxy: burst within this distance of the player;
   // burst(pos): a custom detonation instead of the usual explosion (Kade's flak)
-  fire(owner, pos, vel, { damage = 20, splash = 5, color = 0x9be7ff, size = 0.45, life = 4, gravity = 0, knock = 1, homing = 0, spare = false, fuse = 0, proxy = 0, burst = null } = {}) {
-    const mesh = new THREE.Mesh(this.geo, new THREE.MeshBasicMaterial({ color }));
-    const hull = new THREE.Mesh(this.geo, this.inkMat);
-    hull.scale.setScalar(1.35);
+  // type: 'bolt' (the usual glowing ball, stretched along its flight) or 'shell' (the APC cannon's tracer shell:
+  // a bright capsule with a halo, a fixed length, trailing sparks and smoke)
+  fire(owner, pos, vel, { damage = 20, splash = 5, color = 0x9be7ff, size = 0.45, life = 4, gravity = 0, knock = 1, homing = 0, spare = false, fuse = 0, proxy = 0, burst = null, type = 'bolt' } = {}) {
+    const shell = type === 'shell';
+    const mesh = new THREE.Mesh(shell ? this.shellGeo : this.geo, new THREE.MeshBasicMaterial({ color: shell ? 0xfff1c0 : color }));
+    const hull = new THREE.Mesh(shell ? this.shellGeo : this.geo, this.inkMat);
+    hull.scale.setScalar(shell ? 1.3 : 1.35);
     mesh.add(hull);
+    if (shell) {
+      const halo = new THREE.Mesh(this.shellGeo, this.shellGlow);
+      halo.scale.set(1.9, 1.9, 1.4);
+      mesh.add(halo);
+    }
     mesh.scale.setScalar(size);
     mesh.position.copy(pos);
     this.game.scene.add(mesh);
-    this.list.push({ owner, mesh, pos: pos.clone(), prev: pos.clone(), vel: vel.clone(), damage, splash, life, gravity, knock, size, color, homing, spare, age: 0, fuse, proxy, burst });
+    this.list.push({ owner, mesh, pos: pos.clone(), prev: pos.clone(), vel: vel.clone(), damage, splash, life, gravity, knock, size, color, homing, spare, age: 0, fuse, proxy, burst, type });
   }
 
   update(dt, wdt = dt) {
@@ -53,7 +64,12 @@ export class Projectiles {
       const sp = p.vel.length();
       upAt(p.pos, p.mesh.up);
       p.mesh.lookAt(_rel.copy(p.pos).add(p.vel));
-      p.mesh.scale.set(p.size, p.size, p.size * (1 + Math.min(4, sp / 40)));
+      if (p.type === 'shell') {
+        p.mesh.scale.setScalar(p.size);
+        // a spark trail and a thin smoke line behind it
+        g.fx.spawn(p.pos, _rel.copy(p.vel).multiplyScalar(-0.04), { color: p.color, size: 0.5, life: 0.35, count: 1, spread: 0.5, drag: 2 });
+        g.fx.spawn(p.pos, _rel.set(0, 0, 0), { color: 0x4a4560, size: 0.75, life: 0.9, count: 1, spread: 0.7, drag: 1 });
+      } else p.mesh.scale.set(p.size, p.size, p.size * (1 + Math.min(4, sp / 40)));
 
       let hit = p.life <= 0 || (p.fuse > 0 && p.age >= p.fuse) || (p.proxy > 0 && !g.player.dead && p.pos.distanceTo(g.player.center) < p.proxy);
       if (!hit) {

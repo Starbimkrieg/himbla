@@ -12,7 +12,6 @@ export const BODY = '"Pixelify Sans", "Press Start 2P", sans-serif';
 // Canvas font string in the display face. Press Start 2P is wide, so callers pass the size
 // they want (roughly 0.6x what the old Bangers text used).
 export const pixelFont = (px) => `${Math.round(px)}px ${DISPLAY}`;
-export const bodyFont = (px, weight = 400) => `${weight} ${Math.round(px)}px ${BODY}`;
 
 // Canvas text only uses a web font once it has loaded, so wait for the faces before any
 // textSprite / board canvas is drawn. Never blocks for more than a couple of seconds.

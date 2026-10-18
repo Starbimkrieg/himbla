@@ -11,13 +11,14 @@
 // The trailer never touches your saves: in this mode localStorage and sessionStorage are swapped
 // for in-memory stores before any game module reads them, so every run starts from a fresh game.
 import * as THREE from 'three';
-import { tangent, greatCircle, darkness, frameQuat, dirFromAngles } from './geo.js';
+import { tangent, frameQuat, dirFromAngles } from './geo.js';
 import { mulberry32 } from './rng.js';
 import { spliceGenes } from './chimera.js';
 import { clearEchoes } from './monolith.js';
+import { DEV_TOOLS } from './devtools.js';
 
 const Q = new URLSearchParams(location.search);
-export const TRAILER = Q.has('trailer');
+export const TRAILER = DEV_TOOLS && Q.has('trailer'); // (a director mode for making the trailer: a dev tool, so off in a release build)
 
 if (TRAILER) {
   const mem = () => {
@@ -143,12 +144,11 @@ export class Trailer {
     g.player.applyUpgrades(g.upgrades);
     g.story.vehicles = ['interceptor', 'apc', 'skimmer'];
     g.tutorial.done = true;
-    if (g.settings) Object.assign(g.settings.v, { tips: false, panels: 'off' });
+    if (g.settings) Object.assign(g.settings.v, { panels: 'off' });
     g.enemies.pirateTimer = g.enemies.darkTimer = 1e9;
     g.meteors.next = 1e9;
     g.race.postT = 1e9;
     g.story.kade.nextAt = 1e9;
-    g.tipIndex = 99;
     g.updateScanner = () => {}; // no red threat-scanner ink: the shots show the models as they are
     const pop = g.fx.pop.bind(g.fx);
     g.fx.pop = (text, ...rest) => (this.popMute && this.popMute.test(text) ? undefined : pop(text, ...rest)); // shots can mute pops
@@ -248,8 +248,7 @@ export class Trailer {
     clearEchoes(g);
     g.slowmo = 0;
     g.cam.shake = 0;
-    document.getElementById('popups').innerHTML = '';
-    if (g.fx.pops) g.fx.pops.length = 0;
+    g.fx.clearPops();
     P.setCargo(null);
     P.resetTrick();
     P.body.airTime = 0; // (or the next shot's first touchdown scores the last shot's jump)
@@ -505,8 +504,7 @@ export class Trailer {
     frameQuat(F.up, F.fwd, v.model.root.quaternion);
     v.model.root.position.copy(v.e.body.pos);
     g.garage.enter();
-    document.getElementById('popups').innerHTML = ''; // (no VEHICLE DROP! pop: it's already here)
-    if (g.fx.pops) g.fx.pops.length = 0;
+    g.fx.clearPops(); // (no VEHICLE DROP! pop: it's already here)
     return { v, F };
   }
   music(z, hard = true, fadeIn = 0.15) {
@@ -528,7 +526,7 @@ export class Trailer {
     G.setValueAtTime(G.value, now);
     G.linearRampToValueAtTime(to, now + Math.max(0.02, secs)); // (a straight ramp: a fade from silence stays quiet at the start)
   }
-  pop(text, color = '#ffd23f', size = 64, rot = 0) { this.g.fx.pop(text, null, { color, size, rot, life: 1.1 }); }
+  pop(text, color = '#ffd23f', size = 64, rot = 0) { this.g.fx.pop(text, null, { color, size, rot, life: 1.1, prio: 1 }); }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -618,7 +616,7 @@ const SHOTS = [
         // spin round and kick off (a shove for the first stride, then skates and thrusters)
         if (!T.kicked) { T.kicked = true; P.body.vel.copy(T.out).setLength(7); P.heading.copy(T.out).normalize(); g.audio.jump(); }
         T.steer = T.out;
-        T.hold = new Set(['Space', 'KeyW', 'KeyE']);
+        T.hold = new Set(['Space', 'KeyW', 'Thrust']);
       }
     },
     cam(T, t) {
@@ -834,7 +832,7 @@ const SHOTS = [
       const g = T.g, P = g.player;
       // skate, then let go of the ground, mag-jump and jet up out of the gatling stream: straight
       // into his flak (and its burning phosphor)
-      T.hold = new Set(t < 1.7 ? ['Space', 'KeyW'] : ['KeyW', 'KeyE']);
+      T.hold = new Set(t < 1.7 ? ['Space', 'KeyW'] : ['KeyW', 'Thrust']);
       if (t >= 1.7 && !T.jumped) { T.jumped = true; T.tap.add('ShiftLeft'); }
       T.steer = T.F0.fwd;
       T.keepSpeed(30, 0.15);
@@ -930,7 +928,7 @@ const SHOTS = [
       const P = T.g.player, A = T.air;
       const r = tangent(P.pos.clone().sub(A.cen), A.cen.clone().normalize(), V()).length();
       if (!A.launched) {
-        T.hold = new Set(['Space', 'KeyW', 'KeyE']);
+        T.hold = new Set(['Space', 'KeyW', 'Thrust']);
         T.steer = T.dir;
         T.keepSpeed(52, 0.2);
         if (r < 134) {
@@ -1066,8 +1064,8 @@ const SHOTS = [
     },
   },
 
-  // 12a · Chimera Downs from above: a slow crane along the packed grandstand, the dirt oval and the
-  // finish gantry, before the race
+  // 12a · Chimera Downs from the infield: a slow crane along the packed grandstand under its red roof, the dirt oval and the
+  // finish arch, before the race
   {
     name: 'downs pan',
     dur: 3.0,
@@ -1078,8 +1076,8 @@ const SHOTS = [
     },
     cam(T, t) {
       const k = ease(t / 3);
-      T.at('downs', lerp(-75, 15, k), lerp(26, 21, k), lerp(18, 10, k), T.eye);
-      T.at('downs', lerp(-15, 45, k), 6, lerp(72, 62, k), T.look);
+      T.at('downs', lerp(-90, 25, k), lerp(32, 25, k), lerp(22, 12, k), T.eye);
+      T.at('downs', lerp(-20, 55, k), 9, lerp(84, 70, k), T.look);
       T.fov = 56;
     },
     cards: [{ key: 'festive', at: 0.4, dur: 99, html: 'JOIN THE LOCAL FESTIVITIES.<br><span class="tr-sub">PLACE YOUR BETS. LET IT RIDE.</span>' }],
@@ -1223,35 +1221,6 @@ const SHOTS = [
       const eye = T.at('casino', lerp(15, 12, k), lerp(4.8, 4, k), lerp(5, -4, k));
       const look = T.g.player.pos.clone().addScaledVector(T.g.player.pos.clone().normalize(), 1.5).lerp(T.at('casino', 6, 5, -24), 0.3);
       T.chase(eye, look, dt, 20, 8);
-      T.fov = 66;
-    },
-    cards: [MORE()],
-  },
-
-  // 15 · ...and round the Bounce Dome Funpark's ferris wheel, Earth hanging over the top.
-  {
-    name: 'ferris wheel',
-    dur: 1.7,
-    setup(T) {
-      T.music('casino');
-      const g = T.g;
-      const r = g.world.rides.find((x) => x.name === 'FERRIS WHEEL');
-      T.place(T.at('bounce', -10, 0, 70), T.at('bounce', 0, 0, 1).sub(T.at('bounce', 0, 0, 0)));
-      // the gondola nearest the top
-      let best = null, by = -1e9;
-      for (const st of r.seats) {
-        st.obj.updateMatrixWorld(true);
-        const p = st.obj.localToWorld(st.local.clone());
-        const y = loc_y(T, 'bounce', p);
-        if (y > by) { by = y; best = st; }
-      }
-      g.rides.board({ kind: 'fun', ride: r, seat: best });
-      g.player.setCargo(CRATE);
-    },
-    cam(T, t) {
-      // from the ground under the wheel, looking up past it to Earth and the sun
-      T.at('bounce', lerp(-29, -30.5, t / 1.7), lerp(2.5, 3.2, t / 1.7), lerp(24, 30, t / 1.7), T.eye);
-      T.at('bounce', -43, 32, 62, T.look);
       T.fov = 66;
     },
     cards: [MORE()],
@@ -1415,7 +1384,6 @@ const SCOOP = {
 };
 
 // height of a world point in a location's frame
-function loc_y(T, id, p) { return p.clone().applyMatrix4(T.loc(id).group.matrixWorld.clone().invert()).y; }
 
 // a pirate, already riding alongside: kind, offset (right, forward) from the runner's frame F
 function pirate(T, F, kind, x, z, fireIn = 0.5) {
@@ -1489,6 +1457,6 @@ function railPoint(r, s) {
 export { SHOTS };
 
 SHOTS.push(FISSURE, HERO);
-// running order tweak: the casino and the funpark follow the Downs, then Dr. Zbornak's lab
+// running order tweak: the casino follows the Downs, then Dr. Zbornak's lab
 const LAB = SHOTS.splice(SHOTS.findIndex((x) => x.name === 'lab'), 1)[0];
-SHOTS.splice(SHOTS.findIndex((x) => x.name === 'ferris wheel') + 1, 0, SCOOP, LAB);
+SHOTS.splice(SHOTS.findIndex((x) => x.name === 'casino hall') + 1, 0, SCOOP, LAB);

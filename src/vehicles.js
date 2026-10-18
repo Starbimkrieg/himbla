@@ -1,23 +1,79 @@
 import * as THREE from 'three';
-import { makeRover, makeHoverCar, makeSkimmer, makeLightBike, LightTrail } from './models.js';
+import { makeRover, makeInterceptor, makeApc, makeSkimmer, makeLightBike, LightTrail } from './models.js';
+import { fireCannon } from './weapons.js';
 import { makeBody } from './physics.js';
-import { stepRover } from './enemies.js';
+import { stepRover, CRASH_SAFE } from './enemies.js';
 import { frameQuat, tangent } from './geo.js';
 import { toon, glow, ink } from './toon.js';
+import { glyphHtml } from './glyphs.js';
 
 // Faction vehicles unlocked through the story. V calls yours in (or hops out).
 export const VEHICLES = {
   interceptor: { hp: 220, name: 'SPACECOM Lunar Interceptor', faction: 'spacecom', max: 88, engine: 38, turn: 2.6, grip: 12, armor: 0.75, color: 0xfff4e0, trim: 0xffd23f, desc: 'Fast, nimble, lightly armoured.' },
-  apc: { hp: 480, name: 'Vostok BTR-M Moon APC', faction: 'vostok', max: 62, engine: 24, turn: 1.9, grip: 18, armor: 0.4, color: 0x6b6f78, trim: 0xff3b5c, scale: 1.35, hideRider: true, desc: 'Slow tank of a thing. Shrugs off fire.' },
+  apc: { hp: 480, name: 'Vostok BTR-M Moon APC', faction: 'vostok', max: 62, engine: 24, turn: 1.9, grip: 18, armor: 0.4, color: 0x6b6f78, trim: 0xff3b5c, scale: 1.35, hideRider: true, turret: true, desc: 'Slow tank of a thing. Shrugs off fire. The turret follows where you look and fires on left mouse.' },
   skimmer: { hp: 180, name: 'Daedalus Phase Skimmer', faction: 'daedalus', max: 100, engine: 34, turn: 2.2, grip: 4, armor: 0.85, color: 0x1a1426, trim: 0xc77dff, hover: true, desc: 'Hovers. Drifts. Terrifyingly fast.' },
   mule: { hp: 300, name: 'Kepler Homestead Mule', faction: 'kepler', max: 58, engine: 26, turn: 2.2, grip: 16, armor: 0.6, color: 0x6a8f3a, trim: 0xff9f1c, scale: 1.2, cargoSafe: true, desc: 'Hauler. Cargo rides in a padded bed and takes no jostle damage.' },
+  // (the Moon Council's Militia Pact puts it on sale at Kepler Civic Center: the APC's hull and cannon in militia paint, with the Mule's padded bed)
+  carrier: { hp: 380, name: 'Kepler Militia Carrier', faction: 'kepler', max: 66, engine: 28, turn: 2.1, grip: 18, armor: 0.5, color: 0x5c8a2e, trim: 0xff9f1c, scale: 1.15, hideRider: true, turret: true, apcHull: true, cargoSafe: true, cannon: 'Militia 30 mm Cannon', desc: 'The Mule\'s big brother: a padded cargo bay, field armour and a turret cannon that follows where you look.' },
   // (id stays 'van' so existing saves keep it: it's a light-bike now)
   van: { hp: 190, name: 'Meridian Courier Light-Bike', faction: 'meridian', max: 96, engine: 34, turn: 2.7, grip: 10, armor: 0.8, color: 0x2ec4ff, trim: 0xffd23f, bike: true, seat: 1.42, seatZ: -0.88, radius: 2.1, desc: 'A sleek light-bike that leaves a glowing trail. Fast, sharp, and very stylish.' },
   warrig: { hp: 340, name: 'Rustmoon Scrapjaw War-Rig', faction: 'rustmoon', max: 78, engine: 32, turn: 2.4, grip: 14, armor: 0.6, color: 0x7b2ff7, trim: 0x7dff3a, scale: 1.35, pirate: true, desc: 'Stolen, welded, painted green. Rams for damage.' },
 };
 
 const _v = new THREE.Vector3(), _mu = new THREE.Vector3(), _mf = new THREE.Vector3();
+const _ap = new THREE.Vector3(), _am = new THREE.Vector3(), _ad = new THREE.Vector3(), _aq = new THREE.Quaternion();
+const _ex = new THREE.Vector3(), _exv = new THREE.Vector3();
+const RIDE_LIFT = 0.2; // the wheeled ones ride a touch above the physics ground: the tyres (and their ink outlines) reach below the model's origin, and sank into the terrain on slopes
 const REBUILD = 90; // seconds the orbital crane needs to replace a wrecked vehicle
+const TURRET_YAW_RATE = 2.6; // rad/s the turret can swing
+const TURRET_PITCH_RATE = 1.7; // rad/s the barrel can elevate
+const TURRET_DOWN = -0.12, TURRET_UP = 0.75; // barrel travel (rad): a little depression, ~43 degrees up
+const AIM_RANGE = 300; // m the aim ray is followed for the spot the turret converges on
+const SUMMON_MAX_SPEED = 2; // m/s: the fastest the runner can be moving and still call a vehicle
+
+// A faction vehicle's model, as the Garage drives it (all but the light-bike's trail, which needs the live scene). Pure:
+// the Asset Row builds the same models with it.
+export function buildVehicleModel(id) {
+  const def = VEHICLES[id];
+  let m;
+  if (id === 'interceptor') {
+    // its own pursuit-car model, with a seat back of its own
+    m = makeInterceptor({ color: def.color, trim: def.trim });
+    return m;
+  }
+  if (id === 'skimmer') {
+    // its own hover-racer model (it has a seat of its own, too)
+    m = makeSkimmer({ color: def.color, trim: def.trim });
+    return m;
+  }
+  if (id === 'apc' || def.apcHull) {
+    m = makeApc({ color: def.color, trim: def.trim });
+    m.root.scale.setScalar(def.scale);
+    return m; // (no seat-back: the runner is buttoned up inside)
+  }
+  if (def.bike) {
+    m = makeLightBike({ color: def.color, trim: def.trim });
+    return m; // (no seat-back: you ride it like a motorcycle)
+  } else {
+    m = makeRover({ color: def.color, trim: def.trim, pirate: !!def.pirate, flag: def.trim, style: def.pirate ? 'pirate' : def.id === 'mule' || def.cargoSafe ? 'civil' : 'military' });
+    if (def.hover) {
+      for (const w of m.wheels) w.visible = false;
+      for (const s of [-1, 1]) {
+        const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 0.4, 12), glow(def.trim));
+        pad.position.set(s * 1.7, 0.5, 0);
+        m.root.add(pad);
+      }
+    }
+    if (def.scale) m.root.scale.setScalar(def.scale);
+  }
+  // a seat-back so the runner looks like they're driving (the civil buggy has a bench of its own)
+  if (m.ownSeat) return m;
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(1, 1.2, 0.3), toon(0x221d33));
+  ink(seat, 0.04);
+  seat.position.set(0, 2.4, -0.6);
+  if (!def.hideRider) m.root.add(seat);
+  return m;
+}
 
 export class Garage {
   constructor(game) {
@@ -51,6 +107,13 @@ export class Garage {
     this.hp[v.id] = (this.hp[v.id] ?? max) - amount;
     v.flash = 0.15;
     if (this.hp[v.id] <= 0) { this.destroy(v); return 12; }
+    // every hit that gets through bursts on the hull: a puff for a scrape, a fireball for a hard one
+    if (amount >= 4 && (v.boomT || 0) < g.time) {
+      v.boomT = g.time + 0.3;
+      const pos = v.model.root.position.clone().addScaledVector(v.e.body.pos.clone().normalize(), 1.5);
+      g.fx.explosion(pos, Math.min(6, 1.5 + amount * 0.06), amount > 40);
+      g.audio.boom(amount > 40);
+    }
     return amount * v.def.armor * 0.25;
   }
 
@@ -76,34 +139,9 @@ export class Garage {
   owned() { return Object.keys(VEHICLES).filter((k) => this.game.story && this.game.story.vehicles.includes(k)); }
 
   build(id) {
+    const m = buildVehicleModel(id);
     const def = VEHICLES[id];
-    let m;
-    if (id === 'skimmer') {
-      // its own hover-racer model (it has a seat of its own, too)
-      m = makeSkimmer({ color: def.color, trim: def.trim });
-      return m;
-    }
-    if (def.bike) {
-      m = makeLightBike({ color: def.color, trim: def.trim });
-      m.trail = new LightTrail(this.game.scene, def.color, { life: 1, height: 1.0 });
-      return m; // (no seat-back: you ride it like a motorcycle)
-    } else {
-      m = makeRover({ color: def.color, trim: def.trim, pirate: !!def.pirate, flag: def.trim, style: def.pirate ? 'pirate' : def.id === 'mule' || def.cargoSafe ? 'civil' : 'military' });
-      if (def.hover) {
-        for (const w of m.wheels) w.visible = false;
-        for (const s of [-1, 1]) {
-          const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 0.4, 12), glow(def.trim));
-          pad.position.set(s * 1.7, 0.5, 0);
-          m.root.add(pad);
-        }
-      }
-      if (def.scale) m.root.scale.setScalar(def.scale);
-    }
-    // a seat-back so the runner looks like they're driving
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(1, 1.2, 0.3), toon(0x221d33));
-    ink(seat, 0.04);
-    seat.position.set(0, 2.4, -0.6);
-    if (!def.hideRider) m.root.add(seat);
+    if (def.bike) m.trail = new LightTrail(this.game.scene, def.color);
     return m;
   }
 
@@ -111,6 +149,8 @@ export class Garage {
   toggle() {
     const g = this.game;
     const P = g.player;
+    if (P.rag) return; // (limp in a ragdoll: nothing to call)
+    if (g.winch.on) return; // (on the Hitch-Line)
     if (P.vehicle) { this.exit(); return; }
     const owned = this.owned();
     if (!owned.length) { g.hud.toast('No vehicles yet. Faction leaders hand them out as you rise in their story.', 3); return; }
@@ -124,48 +164,109 @@ export class Garage {
     }
     // already parked nearby? hop in; otherwise it gets dropped in next to you
     if (this.active && this.active.id === id && this.active.e.body.pos.distanceTo(P.pos) < 12) { this.enter(); return; }
+    if (!this.canSummon()) return;
     this.summon(id);
     this.enter();
   }
 
-  // ---- hold V: a radial picker (mouse movement chooses a wedge, releasing V calls it) ----
-  openRadial() {
+  // a drop needs the runner on the ground and nearly still (hopping into one already parked beside you is fine)
+  canSummon() {
+    const P = this.game.player;
+    if (!P.body.grounded) { this.game.hud.toast("Can't call a vehicle while airborne.", 2); return false; }
+    if (P.speed > SUMMON_MAX_SPEED) { this.game.hud.toast(`Slow down to call a vehicle (under ${SUMMON_MAX_SPEED} m/s).`, 2); return false; }
+    return true;
+  }
+
+  // ---- the vehicle wheel (the same wheel as the controller's menu: gamepad.js) ----
+  // Hold V and move the mouse (or push the right stick) to a vehicle, release V to call it. From the
+  // controller's wheel it stays up instead (sticky): the right stick picks, A calls, B cancels.
+  openRadial(sticky = false) {
     const owned = this.owned();
+    if (!owned.length || this.game.player.rag) return;
     if (!this.radialEl) {
       this.radialEl = document.createElement('div');
       this.radialEl.id = 'vradial';
       document.getElementById('hud').appendChild(this.radialEl);
     }
-    this.radial = { ax: 0, ay: 0, sel: -1, items: owned };
+    this.radial = { ax: 0, ay: 0, sel: -1, items: owned, sticky, hub: '' };
     const n = owned.length;
-    this.radialEl.innerHTML = `<div class="vr-ring"></div><div class="vr-hub">HOLD V<br><small>move to pick · release to call</small></div>` + owned.map((k, i) => {
+    this.radialEl.innerHTML = '<div class="pr-ring"></div><div class="pr-hub"></div>' + owned.map((k, i) => {
       const a = (i / n) * Math.PI * 2 - Math.PI / 2;
       const cd = this.cooldown(k);
       const hull = `${Math.ceil(this.hp[k] ?? this.maxHp(k))}/${this.maxHp(k)}`;
-      return `<div class="vr-item${cd > 0 ? ' cd' : ''}" data-i="${i}" style="left:${50 + Math.cos(a) * 36}%;top:${50 + Math.sin(a) * 36}%">` +
+      return `<div class="pr-item${cd > 0 ? ' locked cd' : ''}" data-i="${i}" style="left:${50 + Math.cos(a) * 38}%;top:${50 + Math.sin(a) * 38}%">` +
         `<b>${VEHICLES[k].name}</b><small>${cd > 0 ? `REBUILDING ${Math.ceil(cd)}s` : `HULL ${hull}`}</small></div>`;
     }).join('');
     this.radialEl.classList.remove('hidden');
+    this.radialHub();
     this.game.audio.tone(520, 0.08, 'triangle', 0.12);
   }
 
-  radialMove(dx, dy) {
+  // the middle of the wheel: the picked vehicle (or the title) and what the buttons do
+  radialHub() {
     const R = this.radial;
     if (!R) return;
+    const pad = this.game.input.padActive;
+    const k = R.sel >= 0 ? R.items[R.sel] : null;
+    const hint = pad
+      ? `<span>${glyphHtml(['RS'])} pick</span><span>${R.sticky ? glyphHtml(['A']) + ' call' : 'release ' + glyphHtml(['Y']) + ' call'}</span><span>${glyphHtml(['B'])} cancel</span>`
+      : '<span>move to pick</span><span>release V to call</span>';
+    const hub = `<b>${k ? VEHICLES[k].name : 'VEHICLES'}</b><small>${hint}</small>`;
+    if (R.hub !== hub) { R.hub = hub; this.radialEl.querySelector('.pr-hub').innerHTML = hub; }
+  }
+
+  // the labels follow the game while the wheel is up (a rebuild finishing, hull mending, a pad picked up or put down)
+  radialRefresh() {
+    const R = this.radial;
+    if (!R) return;
+    const els = this.radialEl.querySelectorAll('.pr-item');
+    R.items.forEach((k, i) => {
+      const el = els[i];
+      if (!el) return;
+      const cd = this.cooldown(k);
+      const txt = cd > 0 ? `REBUILDING ${Math.ceil(cd)}s` : `HULL ${Math.ceil(this.hp[k] ?? this.maxHp(k))}/${this.maxHp(k)}`;
+      el.classList.toggle('locked', cd > 0);
+      el.classList.toggle('cd', cd > 0);
+      const s = el.querySelector('small');
+      if (s && s.textContent !== txt) s.textContent = txt;
+    });
+    this.radialHub();
+  }
+
+  // the wheel's highlight: -1 for none
+  radialSelect(sel) {
+    const R = this.radial;
+    if (!R || sel === R.sel) return;
+    R.sel = sel;
+    for (const el of this.radialEl.querySelectorAll('.pr-item')) el.classList.toggle('on', +el.dataset.i === sel);
+    const au = this.game.audio;
+    if (sel >= 0 && au && au.tone) au.tone(700 + sel * 40, 0.04, 'square', 0.04);
+    this.radialHub();
+  }
+
+  // the mouse (pushed round while V is held). Called every frame the wheel is up, with nothing when the mouse is
+  // still: that must leave the pick alone, or it would wipe the one the right stick just made. While a pad is the
+  // device in use the mouse is ignored altogether (the pointer can still be captured and a bump would clear the pick).
+  radialMove(dx, dy) {
+    const R = this.radial;
+    if (!R || (!dx && !dy) || this.game.input.padActive) return;
     R.ax += dx; R.ay += dy;
     const len = Math.hypot(R.ax, R.ay);
     if (len > 140) { R.ax *= 140 / len; R.ay *= 140 / len; }
-    let sel = -1;
-    if (len > 28) {
-      const n = R.items.length;
-      const a = Math.atan2(R.ay, R.ax) + Math.PI / 2; // 0 at the top, clockwise
-      sel = ((Math.round((a / (Math.PI * 2)) * n) % n) + n) % n;
-    }
-    if (sel !== R.sel) {
-      R.sel = sel;
-      for (const el of this.radialEl.querySelectorAll('.vr-item')) el.classList.toggle('on', +el.dataset.i === sel);
-      if (sel >= 0) this.game.audio.tone(700 + sel * 60, 0.04, 'square', 0.05);
-    }
+    if (len > 28) this.radialSelect(this.wedge(Math.atan2(R.ay, R.ax) + Math.PI / 2));
+    else this.radialSelect(-1);
+  }
+
+  // the right stick: pushing it picks a wedge, and the pick stays until you push to another
+  radialStick(rx, ry) {
+    if (!this.radial || Math.hypot(rx, ry) <= 0.55) return;
+    this.radialSelect(this.wedge(Math.atan2(rx, -ry)));
+  }
+
+  // the wedge at an angle (0 at the top, clockwise)
+  wedge(a) {
+    const n = this.radial.items.length;
+    return ((Math.round((a / (Math.PI * 2)) * n) % n) + n) % n;
   }
 
   closeRadial(commit) {
@@ -175,34 +276,25 @@ export class Garage {
     if (this.radialEl) this.radialEl.classList.add('hidden');
     if (!commit || !R || R.sel < 0) return;
     const k = R.items[R.sel];
+    if (g.rides.ride || g.player.dead || g.player.vehicle || g.winch.on) return; // (a transit ride started, or you died or boarded something while it was up: nothing to call)
     if (this.cooldown(k) > 0) { g.hud.toast(`${VEHICLES[k].name} is being rebuilt: ready in ${Math.ceil(this.cooldown(k))}s.`, 2.5); return; }
     this.choice = k;
     if (this.active && this.active.id === k && this.active.e.body.pos.distanceTo(g.player.pos) < 12) { this.enter(); return; }
+    if (!this.canSummon()) return;
     this.summon(k);
     this.enter();
   }
 
-  pick() {
-    const g = this.game;
-    const owned = this.owned();
-    g.dialog('YOUR VEHICLES', 'Which one should the orbital crane drop?', owned.map((k, i) => ({
-      label: `${i + 1} · ${VEHICLES[k].name}${this.cooldown(k) > 0 ? ` (REBUILDING ${Math.ceil(this.cooldown(k))}s)` : ` (${Math.ceil(this.hp[k] ?? this.maxHp(k))}/${this.maxHp(k)} HULL)`}`,
-      fn: () => {
-        if (this.cooldown(k) > 0) { g.hud.toast(`Still being rebuilt: ready in ${Math.ceil(this.cooldown(k))}s.`, 2.5); return; }
-        this.choice = k; this.summon(k); this.enter();
-      },
-    })).concat([{ label: `${owned.length + 1} · CANCEL` }]));
-  }
-
-  summon(id) {
+  // at / face: set it down there with its nose along `face` (the town's motor pool) instead of beside you, facing where you look
+  summon(id, at = null, face = null) {
     const g = this.game;
     const P = g.player;
     if (this.active) { this.active.model.root.removeFromParent(); if (this.active.model.trail) this.active.model.trail.dispose(); }
     const def = VEHICLES[id];
     const model = this.build(id);
-    const pos = g.planet.ground(P.pos.clone().addScaledVector(g.cam.right, 5), new THREE.Vector3(), 0.5);
-    const e = { body: makeBody(pos), heading: tangent(g.cam.fwd.clone(), pos.clone().normalize()).normalize() };
-    model.root.position.copy(pos);
+    const pos = g.planet.ground(at ? at.clone() : P.pos.clone().addScaledVector(g.cam.right, 5), new THREE.Vector3(), 0.5);
+    const e = { body: makeBody(pos), heading: tangent((face || g.cam.fwd).clone(), pos.clone().normalize()).normalize() };
+    model.root.position.copy(pos).addScaledVector(pos.clone().normalize(), def.hover ? 0.35 : RIDE_LIFT);
     g.scene.add(model.root);
     this.active = { id, def, e, model };
     g.fx.explosion(pos, 5, false);
@@ -216,7 +308,14 @@ export class Garage {
     if (!this.active) return;
     P.vehicle = this.active;
     P.resetTrick();
-    g.hud.toast(`${this.active.def.name}: W/S drive · A/D steer · SHIFT hop · V to get out`, 3.5);
+    // the controls, as the pad's own buttons when one is in use (left stick drives and steers, A hops, Y gets out)
+    const name = this.active.def.name.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    g.hud.toast(g.input.padActive
+      ? `${name}: ${glyphHtml(['LS'])} drive / steer · ${glyphHtml(['A'])} hop · ${glyphHtml(['Y'])} get out`
+      : `${name}: W/S drive · A/D steer · SHIFT hop · V to get out`, 3.5, g.input.padActive);
+    if (this.active.def.turret) g.hud.toast(g.input.padActive
+      ? `The turret follows where you look: ${glyphHtml(['RT'])} fires the cannon`
+      : 'The turret follows where you look: left mouse fires the cannon', 3.5, g.input.padActive);
   }
 
   exit() {
@@ -256,15 +355,25 @@ export class Garage {
     const tune = def.hover
       ? { grip: Math.max(def.grip, 10), stick: 70, traction: 7 }
       : { grip: Math.max(def.grip * 1.6, 24), stick: 55, traction: 15 };
-    for (let i = 0; i < steps; i++) stepRover(e, dt / steps, g.planet, g.colliders, target, max, { engine: fwdIn || back ? def.engine : 0, turn: def.turn, radius: def.radius || 3.2 * (def.scale || 1), weight: def.hover ? 1.5 : 1.7, ...tune });
+    const crash = { speed: 0 };
+    for (let i = 0; i < steps; i++) stepRover(e, dt / steps, g.planet, g.colliders, target, max, { engine: fwdIn || back ? def.engine : 0, turn: def.turn, radius: def.radius || 3.2 * (def.scale || 1), weight: def.hover ? 1.5 : 1.7, solidPlatforms: true, crash, ...tune });
+    // crashes: a hard hit on a wall, a building or road traffic hurts the vehicle (and bursts on it: hit())
+    if (crash.speed > CRASH_SAFE && (this.crashT || 0) < g.time) {
+      this.crashT = g.time + 0.4;
+      g.audio.thud(crash.speed);
+      g.fx.pop('CRASH!', b.pos.clone().addScaledVector(up, 4), { color: '#ff4f2e', size: 54 });
+      g.damagePlayer(Math.min((crash.speed - CRASH_SAFE) * 2.5, this.maxHp(v.id) * 0.5), 'crash');
+      if (!P.vehicle) return; // (wrecked: destroy() has already got you out)
+    }
     if (def.hover) b.vel.multiplyScalar(1 - 0.15 * dt);
     if (b.grounded && (input.pressed('ShiftLeft') || input.pressed('ShiftRight'))) { b.vel.addScaledVector(up, 9); b.grounded = false; b.wasGround = false; g.audio.jump(); } // (wasGround off: the ground snap mustn't swallow the hop)
     // pose
-    model.root.position.copy(b.pos).addScaledVector(up, def.hover ? 0.8 + Math.sin(g.time * 3) * 0.15 : 0);
+    model.root.position.copy(b.pos).addScaledVector(up, def.hover ? 0.8 + Math.sin(g.time * 3) * 0.15 : RIDE_LIFT);
     const q = frameQuat(b.groundN, e.heading, new THREE.Quaternion());
     model.root.quaternion.slerp(q, Math.min(1, dt * 8));
     const sp = b.vel.length();
-    for (const w of model.wheels) w.rotation.x += (along >= 0 ? 1 : -1) * sp * dt / 0.85;
+    for (const w of model.wheels) w.rotation.x += (along >= 0 ? 1 : -1) * sp * dt / (model.wheelR || 0.85);
+    model.along = along;
     if (model.anim) model.anim(g.time, sp);
     this.trail(model, dt, true);
     // the runner sits in the seat, in the model's own frame (its tilt, its hover bob), so rider and
@@ -272,10 +381,14 @@ export class Garage {
     // whenever it tilted in the air or bobbed. (Seat heights are measured from the ground; a hover
     // model already floats 0.8 above it.)
     const mq = model.root.quaternion;
-    const seatUp = (def.seat ?? 1.6 * (def.scale || 1)) - (def.hover ? 0.8 : 0);
+    // (a Blender bike says where the rider's hip goes; the hip is 0.33 above the runner's own origin when sat)
+    const seatUp = model.seat ? model.seat.y - 0.33 : (def.seat ?? 1.6 * (def.scale || 1)) - (def.hover ? 0.8 : 0);
     P.body.pos.copy(model.root.position).addScaledVector(_mu.set(0, 1, 0).applyQuaternion(mq), seatUp);
-    if (def.seatZ) P.body.pos.addScaledVector(_mf.set(0, 0, 1).applyQuaternion(mq), def.seatZ);
+    const seatZ = model.seat ? model.seat.z : def.seatZ;
+    if (seatZ) P.body.pos.addScaledVector(_mf.set(0, 0, 1).applyQuaternion(mq), seatZ);
     v.riderQuat = mq;
+    if (model.turret) this.aimTurret(v, dt, cam);
+    if (model.exhaust) this.exhaustSmoke(v, dt, fwdIn ? 1 : 0, up);
     P.body.vel.copy(b.vel);
     P.body.up.copy(up);
     P.body.groundN.copy(b.groundN);
@@ -284,6 +397,7 @@ export class Garage {
     P.body.thrusting = false; // (the jet hiss would otherwise stay on from before you got in)
     P.heading.copy(e.heading);
     model.root.updateMatrixWorld();
+    this.kickDust(v, dt, sp, up);
     // ramming: at speed your vehicle hurts whatever it hits - pirates, defence turrets and patrols
     // (that's an attack on their base), road traffic, people and Moon Mites
     if (sp > 14) {
@@ -306,6 +420,101 @@ export class Garage {
     }
   }
 
+  // dust kicked up by the wheels (the same puff as the skate's, which kicks in at 25 m/s) once you're
+  // moving fast over the ground. The rear wheels throw the most: bigger puffs and more of them the
+  // faster you go. The front wheels kick up a steady lighter puff. The hover ones scatter it from
+  // under their pads, the rear of it right behind the end of the engine plumes.
+  kickDust(v, dt, sp, up) {
+    if (sp < 18 || !v.e.body.grounded) return;
+    const { def, model } = v;
+    const sc = def.scale || 1;
+    const k = Math.min(1, (sp - 18) / 60); // 0 at the dust threshold, 1 at 78 m/s
+    let spots;
+    if (model.dustSpots) spots = model.dustSpots.map(([x, z]) => [x * sc, z * sc]);
+    else if (model.wheels.length) spots = model.wheels.map((w) => [w.position.x * sc, w.position.z * sc]);
+    else {
+      // (the skimmer's plumes: pivots at x = +-1.78, z = -3.06, 2.2 long at full scale, which model.anim
+      // stretches from 0.35 to 1.25 with speed)
+      const tail = -3.06 - 2.2 * (0.35 + 0.9 * Math.min(1, sp / 60)) - 0.4;
+      spots = [[-1.78, tail], [1.78, tail], [-1.1, 1.6], [1.1, 1.6]];
+    }
+    const back = _mf.copy(v.e.body.vel).multiplyScalar(-0.2);
+    for (const [x, z] of spots) {
+      const rear = z < 0;
+      const rate = rear ? dt * 30 * (1 + 3 * k) : dt * 30 * Math.min(2, sp / 40); // puffs this frame
+      const n = Math.floor(rate + Math.random());
+      if (!n) continue;
+      // (dropped onto the ground plane under the body: a hover vehicle floats, a tilted one would
+      // otherwise puff from its wheel hubs)
+      const p = model.root.localToWorld(_mu.set(x, 0, z));
+      p.addScaledVector(up, -p.clone().sub(v.e.body.pos).dot(up));
+      const size = def.hover ? (rear ? 0.5 + 1.1 * k : 0.5) : (rear ? 0.5 + 0.7 * k : 0.7); // (ground vehicles top out at 1.2)
+      this.game.fx.dust(p, back, n, up, 0xe8e2d8, size);
+    }
+  }
+
+  // The APC's turret follows the camera: it swings about the hull's up axis to face where you look, and the
+  // barrel elevates to match, both at a limited rate. The point it converges on is where the aim ray meets the
+  // ground (or AIM_RANGE out), so a shell lands on the crosshair rather than parallel to it.
+  aimTurret(v, dt, cam) {
+    const g = this.game;
+    const m = v.model;
+    const a = v.aim || (v.aim = { yaw: 0, pitch: 0, recoil: 0, cd: 0 });
+    m.root.updateMatrixWorld(true);
+    // the spot on the aim ray: step along it until it goes below the ground
+    const end = _ap.copy(cam.position).addScaledVector(cam.look, AIM_RANGE);
+    for (let t = 12; t <= AIM_RANGE; t += 12) {
+      _am.copy(cam.position).addScaledVector(cam.look, t);
+      if (g.planet.altitude(_am) < 0) { end.copy(_am); break; }
+    }
+    // into the hull's frame: the turret yaws about its y, the barrel pitches about its x
+    const pivot = m.barrel.getWorldPosition(_am);
+    const d = _ad.copy(end).sub(pivot).applyQuaternion(_aq.copy(m.root.quaternion).invert());
+    const yawT = Math.atan2(d.x, d.z);
+    const pitchT = Math.max(TURRET_DOWN, Math.min(TURRET_UP, Math.atan2(d.y, Math.hypot(d.x, d.z))));
+    let dy = yawT - a.yaw;
+    dy -= Math.PI * 2 * Math.round(dy / (Math.PI * 2));
+    a.yaw += Math.max(-TURRET_YAW_RATE * dt, Math.min(TURRET_YAW_RATE * dt, dy));
+    a.pitch += Math.max(-TURRET_PITCH_RATE * dt, Math.min(TURRET_PITCH_RATE * dt, pitchT - a.pitch));
+    a.recoil = Math.max(0, a.recoil - dt * 3.2);
+    m.turret.rotation.y = a.yaw;
+    m.barrel.rotation.x = -a.pitch; // (+z is forward, so raising the barrel is a negative turn about x)
+    m.barrel.position.copy(m.barrelRest).z -= 0.35 * a.recoil * a.recoil; // (the cannon kicks back, then runs out)
+    m.root.updateMatrixWorld(true);
+  }
+
+  // Black smoke from the APC's exhaust stack: a thin trickle at idle, a plume while you're on the power, each
+  // puff shrinking away within about a quarter of a second. It leaves rising and carried along with the vehicle, then
+  // the drag leaves it hanging behind as you move off.
+  exhaustSmoke(v, dt, thr, up) {
+    const m = v.model;
+    m.root.updateMatrixWorld(true);
+    const n = Math.floor((thr ? 30 : 8) * dt + Math.random());
+    if (!n) return;
+    m.exhaust.getWorldPosition(_ex);
+    _exv.copy(up).multiplyScalar(2.2 + 2.2 * thr).addScaledVector(v.e.body.vel, 0.85);
+    this.game.fx.spawn(_ex, _exv, { color: 0x0b0910, size: 0.3 + 0.22 * thr, life: 0.225 + 0.1 * thr, drag: 2.4, count: n, spread: 1.4 });
+  }
+
+  // Left mouse while driving the APC: a shell from the barrel, the way the barrel points (it may still be
+  // swinging round to your aim). Called from Player.updateWeapons instead of the runner's own weapons.
+  turretFire(dt, input) {
+    const g = this.game;
+    const P = g.player;
+    const v = P.vehicle;
+    if (!v || !v.aim) return;
+    const a = v.aim;
+    a.cd -= dt;
+    if (!input.mouse[0] || a.cd > 0 || !input.locked || P.dead || P.rag) return;
+    a.cd = 0.5;
+    a.recoil = 1;
+    const m = v.model;
+    m.root.updateMatrixWorld(true);
+    const muzzle = m.muzzle.getWorldPosition(new THREE.Vector3());
+    const dir = _am.set(0, 0, 1).applyQuaternion(m.muzzle.getWorldQuaternion(_aq)).clone();
+    fireCannon(g, muzzle, dir, v.e.body.vel, P.damageMult || 1);
+  }
+
   // leave a parked vehicle where it is; keep it posed
   // the light-bike's trail streams from its rear wheel while it moves, and fades out when it stops
   trail(model, dt, moving) {
@@ -316,6 +525,7 @@ export class Garage {
   }
 
   update(dt) {
+    if (this.radial) this.radialRefresh();
     const g = this.game;
     // field repairs: hull creeps back while you're not behind the wheel
     for (const id of Object.keys(this.hp)) if (!(g.player.vehicle && g.player.vehicle.id === id)) this.hp[id] = Math.min(this.maxHp(id), this.hp[id] + dt * 2);
@@ -344,9 +554,8 @@ export class Garage {
     if (v.model.anim) v.model.anim(g.time, 0);
     this.trail(v.model, dt, false);
     const b = v.e.body;
-    if (b.vel.lengthSq() > 0.01) {
-      stepRover(v.e, dt, this.game.planet, this.game.colliders, v.e.heading, 0, { engine: 10, grip: v.def.grip, turn: 0, radius: 3 });
-      v.model.root.position.copy(b.pos);
-    }
+    if (b.vel.lengthSq() > 0.01) stepRover(v.e, dt, this.game.planet, this.game.colliders, v.e.heading, 0, { engine: 10, grip: v.def.grip, turn: 0, radius: 3, solidPlatforms: true });
+    // (parked, a hover car settles on the ground rather than floating: its hull reaches 0.24 below its origin)
+    v.model.root.position.copy(b.pos).addScaledVector(_v.copy(b.pos).normalize(), v.def.hover ? 0.35 : RIDE_LIFT);
   }
 }
