@@ -215,14 +215,16 @@ else:
     mesh("bridgeCollar", skin_patch(BR, -0.05, math.pi + 0.05, 0.03, -0.95, 1.1, 1, 4), "plate", H, 0.02)
     for sx in (-1, 1):
         mesh(f"slit{'LR'[sx > 0]}", xf(rbox(0.38, 0.045, 0.015, 0.4, 8, 4), (sx * 0.3, 2.12, 0.62), (0.7, sx * 0.5, 0)), "accent", H, 0)
-    eye(SECS, 2.0, 0.4, H, "Nose")
+    eye(BR, 0.2, 0.3, H, "Dome")   # centred on the dome's crest, on the collar
     for sx in (-1, 1):
         for k, cz in enumerate((-1.5, -1.05, -0.6)):
             chevron(SECS, sx, cz, 0.15, 0.22, H, f"{'LR'[sx > 0]}{k}", 0.0)
     # ---- the nacelles: long armoured hover pods with a plate cap, nose cannons, phase coils, hover pads and tail thrusters ----
     NX, NY = 2.0, 0.85
+    # the nose stays full and ends in a flat face at z 2.55 that carries the gun mount
     NAC = [(-2.8, 0.45, 1.25, 0.45, 2.4, 2.6), (-2.2, 0.38, 1.40, 0.60, 2.4, 2.6), (0.9, 0.38, 1.40, 0.60, 2.4, 2.6),
-           (2.1, 0.50, 1.20, 0.40, 2.4, 2.6), (2.8, 0.74, 1.00, 0.10, 2.4, 2.6)]
+           (2.1, 0.42, 1.32, 0.52, 2.4, 2.6), (2.55, 0.50, 1.22, 0.46, 2.4, 2.6)]
+    GZ = 2.55
     NSECS = smooth_keys(NAC, 4)
     for sx in (-1, 1):
         t = "LR"[sx > 0]
@@ -231,15 +233,20 @@ else:
         # armoured wing root: a broad flat plate sweeping from the fuselage flank out to the nacelle
         wing = [(0.75, -1.9), (1.7, -2.5), (1.75, 1.2), (0.95, 0.4)]
         mesh(f"wing{t}", xf(extrude([(sx * x, z) for x, z in wing], 0.12, "y"), (0, 1.0, 0)), "plate", H, 0.04)
-        # twin cannons in the nacelle's nose, a mint ring at each muzzle
+        # the gun mount on the nose face: an armoured mantlet between two trunnion caps, a collar where each barrel leaves it
+        gx = sx * NX
+        mesh(f"mantlet{t}", xf(rbox(0.3, 0.3, 0.26, 0.3, 12, 8), (gx, NY + 0.01, GZ + 0.16)), "plate", H, 0.03)
+        for cx in (-1, 1):
+            mesh(f"trunnion{t}{'LR'[cx > 0]}", xf(lathe([(0.0, -0.06), (0.13, -0.06), (0.13, 0.06), (0.0, 0.06)], 14), (gx + cx * 0.33, NY + 0.01, GZ + 0.16), (0, 0, math.pi / 2)), "dark", H, 0.02)
+        # twin cannons out of the mantlet, a mint ring at each muzzle
         for k, gy in enumerate((NY + 0.14, NY - 0.12)):
-            gx = sx * (NX + (0.0))
-            tubez(gx, gy, 2.2, 3.7, 0.06, "metal", f"barrel{t}{k}", H, 0.012)
+            tubez(gx, gy, GZ + 0.36, GZ + 0.56, 0.095, "dark", f"collar{t}{k}", H, 0.015)
+            tubez(gx, gy, GZ + 0.1, 3.7, 0.06, "metal", f"barrel{t}{k}", H, 0.012)
             mesh(f"muzzle{t}{k}", xf(zlathe([(0.095, 0), (0.095, 0.14), (0.07, 0.14)], 12), (gx, gy, 3.55)), "dark", H, 0.012)
             mesh(f"muzzleGlow{t}{k}", xf(zlathe([(0.095, 0), (0.095, 0.02), (0.068, 0.02), (0.068, 0)], 12), (gx, gy, 3.71)), "accent", H, 0)
         mesh(f"nacChine{t}", tube([(sx * NX + sx * (ring_xy(q, -0.5)[0] + 0.025), ring_xy(q, -0.5)[1], q["z"]) for q in NSECS if -2.3 <= q["z"] <= 1.9][::2], [0.022] * len([q for q in NSECS if -2.3 <= q["z"] <= 1.9][::2]), 4, False), "accent", H, 0)
-        # a mint intake rim round the nacelle's nose
-        mesh(f"rim{t}", xf(torus(0.4, 0.035, 20, 6), (sx * NX, NY, 1.85), (math.pi / 2, 0, 0), (1, 1, 0.9)), "accent", H, 0.01)
+        # a mint rim framing the nose face round the mount
+        mesh(f"rim{t}", xf(torus(0.4, 0.035, 20, 6), (sx * NX, NY, GZ), (math.pi / 2, 0, 0), (1.02, 0.84, 1)), "accent", H, 0.01)
         # phase coils round the pod
         for k, cz in enumerate((-1.5, -0.4, 0.7)):
             coil(f"{t}{k}", sx * NX, NY, cz, 0.7, sx * (2.4 + k * 0.7), 3)
@@ -251,7 +258,7 @@ else:
         fin = [(-2.7, 0.0), (-1.3, 0.0), (-2.1, 1.0), (-2.8, 1.0)]
         mesh(f"fin{t}", xf(extrude(fin, 0.07, "x"), (sx * NX, NY + 0.7, 0), (0, 0, -sx * 0.14)), "body", H, 0.03)
         mesh(f"finTip{t}", xf(rbox(0.05, 0.05, 0.32, 0.4, 8, 6), (sx * (NX - 0.14), NY + 1.7, -2.5)), "accent", H, 0.008)
-        mesh(f"head{t}", xf(rbox(0.12, 0.06, 0.05, 0.4, 8, 6), (sx * NX, NY + 0.4, 2.5), (-0.2, 0, 0)), "white", H, 0)
+        mesh(f"head{t}", xf(rbox(0.12, 0.06, 0.05, 0.4, 8, 6), (sx * NX, NY + 0.42, 2.25), (-0.2, 0, 0)), "white", H, 0)
         mesh(f"tail{t}", xf(rbox(0.12, 0.04, 0.03, 0.4, 8, 4), (sx * NX, NY + 0.45, -2.78)), "red", H, 0)
         mesh(f"seam{t}", tube([(sx * (ring_xy(q, 0.5)[0] + 0.012), ring_xy(q, 0.5)[1], q["z"]) for q in SECS if -2.2 <= q["z"] <= 2.0][::2], [0.014] * len([q for q in SECS if -2.2 <= q["z"] <= 2.0][::2]), 4, False), "glow", H, 0)
     DUST = [-2.0, -5.2, 2.0, -5.2, -1.2, 1.6, 1.2, 1.6]
