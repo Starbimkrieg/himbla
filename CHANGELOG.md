@@ -1,9 +1,12 @@
 # Changelog
 
 What changed in each release. Releases are built by `.github/workflows/release.yml` when a commit message
-contains `[release]` (see the README's Download section). Newest first.
+contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
+
+
+- **Docs: the README is just the pitch and the downloads:** building, controls, the feature list and the source map moved to `docs/reference.md`, rewritten shorter. `CLAUDE.md`, the blender skill and the docs that pointed at the README now point there.
 
 - **No more dark lines along the terrain chunk seams (`src/planet.js makeChunkMesh`):** a thin dark line ran across open ground along the edge of every terrain chunk, a grid of them wherever you looked (seen at Chimera Downs and the Meridian Exchange), sharpest at HIGH shadow quality and fainter, but never gone, at LOW. Each chunk hangs a 12 m skirt down from its border to hide cracks between levels of detail, and the skirt cast shadows: drawn double-sided, its top edge sat in the sun's shadow map at ground level and the soft shadow filter smeared it onto the ground beside it. The skirt is now left out of the shadow pass (the chunk draws only its grid triangles there, through `onBeforeShadow`/`onAfterShadow`); it is underground, so there is nothing for it to shade. Hills still cast their shadows. Checked in the running game at HIGH, at a chunk corner, with and without the static shadow cache.
 - **Phase Skimmer B (Bulwark): eye on the dome, gun mounts on the nacelles:** the Daedalus eye moves from the fuselage nose to the crest of the bridge dome, centred on its collar plate. The nacelle noses no longer taper to a point with the barrels poking out of it: each keeps a full nose that ends in a flat face carrying a gun mount (an armoured mantlet between two trunnion caps, a collar where each barrel leaves it), framed by the mint rim; the white head lamps sit a little further back to clear it.

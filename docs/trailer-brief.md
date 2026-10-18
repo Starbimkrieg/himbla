@@ -1,7 +1,7 @@
 # Moon-Runner: official trailer brief
 
-Handoff for a fresh session. Read this first, then `README.md` (features and the module map at the
-bottom) before touching code. Current release: **0.9.8**.
+Handoff for a fresh session. Read this first, then `docs/reference.md` (features and the source map
+at the bottom) before touching code. Current release: **0.9.8**.
 
 ## The goal
 
