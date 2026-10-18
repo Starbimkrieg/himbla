@@ -1,12 +1,10 @@
 import * as THREE from 'three';
 import { pixelFont } from './fonts.js';
 
-// Grazing sunlight: a face the sun skims along (dot(N, L) near 0) picks up the shadow map's
-// self-shadowing noise as streaks and blotches (every settlement's east and west walls are exactly
-// edge-on to the sun). On those faces the shadow map gives way to a smooth ramp from lit (sunny side)
-// to dark (far side), so they read as one flat toon tone; and a face turned away from the sun is
-// simply unlit rather than self-shadowed through the shadow map (which blotched curved undersides). Terrain opts out
-// (KEEP_GRAZE_SHADOW: planet.js), so hills still throw long shadows across the ground at dusk.
+// Grazing sunlight: faces edge-on to the sun (dot(N, L) near 0; every settlement's east and west walls)
+// pick up shadow-map self-shadowing noise as streaks. There the shadow map gives way to a smooth lit-to-dark
+// ramp, one flat toon tone; faces turned away are simply unlit, not self-shadowed (which blotches curved
+// undersides). Terrain opts out (KEEP_GRAZE_SHADOW: planet.js) so hills still cast long dusk shadows.
 {
   const SHADOW_LINE = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
   const chunk = THREE.ShaderChunk.lights_fragment_begin;
@@ -51,7 +49,7 @@ export function toon(color, opts) {
     const key = typeof color === 'number' ? color : String(color);
     if (!cache.has(key)) {
       const m = new THREE.MeshToonMaterial({ color, gradientMap: gradientMap() });
-      m.userData.shared = true; // (a cached colour nobody animates: world.mergeLocation may bake it into vertex colours)
+      m.userData.shared = true; // (cached, never animated: world.mergeLocation may bake it to vertex colours)
       cache.set(key, m);
     }
     return cache.get(key);
@@ -61,13 +59,11 @@ export function toon(color, opts) {
 
 export const inkMat = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
 
-// The same outline for shells that carry their offset in an `off` attribute apart from the surface they wrap (`position` is the
-// surface, `off` how far out the line goes at full thickness: models.js shellOff, for the Blender-built runner). The line stays that
-// thick, in metres, out to INK_FULL from the camera (the game's follow camera is 7.5 m or more away, so play looks as it always did)
-// and is no thicker on screen than it is there when you come closer, down to INK_MIN of full thickness: a 3 cm shell is a 6 px
-// line at 8 m but 40 px at 1 m, which in the wardrobe, a cutscene or a close camera swallowed the model's small details.
-// (A separate material from inkMat so that shells without `off` never run this program: a missing attribute reads whatever the
-// last program left in that attribute slot.)
+// Outline for shells carrying their offset in an `off` attribute (`position` is the surface, `off` the full-thickness push:
+// models.js shellOff, for the Blender-built runner). Full thickness in metres beyond INK_FULL from the camera (the follow cam
+// is 7.5 m+ away); closer in it thins to keep its on-screen width, down to INK_MIN of full (a 3 cm shell is 6 px at 8 m but
+// 40 px at 1 m, swallowing small details in the wardrobe, cutscenes and close cameras).
+// (Separate from inkMat so shells without `off` never run it: a missing attribute reads the last program's slot.)
 export const INK_FULL = 7, INK_MIN = 0.3;
 export const inkMatNear = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
 inkMatNear.onBeforeCompile = (sh) => {
@@ -95,9 +91,9 @@ export function ink(mesh, t = 0.06) {
   return mesh;
 }
 
-// One vertex-coloured stand-in per kind (toon or glow) and side: merged geometry built from many
-// shared plain colours carries each piece's colour in its vertices and draws in one call
-// (outpostModels Kit.finish, world.mergeLocation). Only for colours nobody animates (userData.shared).
+// One vertex-coloured stand-in per kind (toon or glow) and side: merged geometry from many shared plain
+// colours keeps each colour in its vertices and draws in one call (outpostModels Kit.finish,
+// world.mergeLocation). Only for never-animated colours (userData.shared).
 const vcCache = new Map();
 export function vcMaterial(m) {
   const k = `${m.type}-${m.side}`;
@@ -118,10 +114,9 @@ export function paintVertices(g, color) {
   return g;
 }
 
-// Triangles lying flat on the ground and facing down (the undersides of boxes, cylinder caps, aprons)
-// can never be seen from above the ground, and their ink shells' undersides sit below it: they're
-// dropped from a piece baked into a settlement (`g`: already placed in the place's frame, y up from
-// the ground at 0; indexed or not). Works on the position data alone. Returns g.
+// Drops downward-facing triangles lying on the ground (box undersides, cylinder caps, aprons): never seen
+// from above, and their ink shells sit below ground. For pieces baked into a settlement (`g` in the place's
+// frame, ground at y = 0; indexed or not). Uses positions only. Returns g.
 export function dropFloorFaces(g, maxY = 0.05) {
   const pos = g.attributes.position.array, idx = g.index ? g.index.array : null;
   const tris = (idx ? idx.length : g.attributes.position.count) / 3;
@@ -134,7 +129,7 @@ export function dropFloorFaces(g, maxY = 0.05) {
       const vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
       const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
       const len = Math.hypot(nx, ny, nz);
-      if (len > 1e-9 && ny / len < -0.98) continue; // (a floor: dropped)
+      if (len > 1e-9 && ny / len < -0.98) continue; // (floor: drop)
     }
     keep[t] = 1; kept++;
   }
@@ -156,7 +151,7 @@ export function dropFloorFaces(g, maxY = 0.05) {
 export function glow(color) {
   return new THREE.MeshBasicMaterial({ color });
 }
-// A glow material shared by colour: pieces that glow the same colour then merge into one draw call (the world's static merge).
+// Glow material shared by colour, so same-colour glows merge into one draw call (the world's static merge).
 const sharedGlows = new Map();
 export function glowShared(color) {
   let m = sharedGlows.get(color);
@@ -164,8 +159,8 @@ export function glowShared(color) {
   return m;
 }
 
-// Canvas text texture in the pixel display font, for in-world signs. Press Start 2P is much
-// wider than the old comic face, so it is drawn at ~half the nominal size on the same canvas.
+// Canvas text sprite in the pixel display font for in-world signs. Press Start 2P is wide, so it is
+// drawn at ~half the nominal size.
 export function textSprite(text, { color = '#ffd23f', stroke = '#120a1e', bg = null, size = 96, scale = 1 } = {}) {
   const c = document.createElement('canvas');
   const ctx = c.getContext('2d');
@@ -198,10 +193,8 @@ export function textSprite(text, { color = '#ffd23f', stroke = '#120a1e', bg = n
   return s;
 }
 
-// Named NPCs wear an HTML name tag (hud.js updateTags) instead of a floating sign in the world: it
-// stays crisp and solid over busy scenery, and shrinks as you walk up so it never fills the screen.
-// The sprite stays as the anchor (its position, and whether it and its parents are visible), but
-// never draws.
+// Named NPCs get an HTML name tag (hud.js updateTags), not a world sign: crisp over busy scenery, and it
+// shrinks as you approach. The sprite stays as the anchor (position and visibility) but never draws.
 export const NAME_TAGS = [];
 export function nameTag(sprite, text, color = '#ffd23f') {
   sprite.material.visible = false;
@@ -209,8 +202,8 @@ export function nameTag(sprite, text, color = '#ffd23f') {
   return sprite;
 }
 
-// Switch a set of objects' drawing off/on through their layer masks (restoring what they had), for
-// distance culling: unlike .visible, game code toggling visibility never fights it.
+// Distance culling via layer masks (restoring the old mask): unlike .visible, it never fights game code
+// toggling visibility.
 export function setMask(list, on) {
   for (const o of list) {
     if (on) { if (o.userData._lm !== undefined) { o.layers.mask = o.userData._lm; delete o.userData._lm; } }

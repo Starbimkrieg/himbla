@@ -6,7 +6,7 @@ import { pick, randRange } from './rng.js';
 import { EVENT_RANGE } from './config.js';
 import { textSprite, toon, glow, ink } from './toon.js';
 
-// Which kinds of events each faction posts. One open event per faction at a time.
+// event types each faction posts; one open event per faction at a time
 const TYPES = {
   spacecom: ['clearCamp', 'blackLake', 'relay'],
   vostok: ['strike', 'clearCamp'],
@@ -36,7 +36,7 @@ export class Events {
     this.fluid = null;
     this.carry = null;
     this.wreckTimer = 45;
-    // a global gap between new postings, so they don't all land the moment the game loads
+    // global gap between postings, so they don't all land at load
     this.gap = 40 + Math.random() * 20;
   }
 
@@ -45,7 +45,7 @@ export class Events {
 
   ground(dir, lift = 0) { return this.game.planet.ground(dir, new THREE.Vector3(), lift); }
 
-  // Random open ground at a given arc distance from a direction, away from settlements.
+  // random open ground minD-maxD (arc) from a direction, clear of settlements
   site(fromDir, minD, maxD, wantDark = null) {
     const g = this.game;
     const up = fromDir.clone().normalize();
@@ -59,7 +59,7 @@ export class Events {
     return greatCircle(up, tangent(new THREE.Vector3(1, 0, 0), up).normalize(), minD);
   }
 
-  // A pickup spot inside a settlement (so events don't start just by arriving).
+  // pickup spot inside a settlement
   depot(loc) {
     const a = loc.id === 'ilmb' ? -2.3 : 0.9;
     const r = loc.id === 'ilmb' ? 160 : loc.r * 0.5;
@@ -93,8 +93,7 @@ export class Events {
     return g;
   }
 
-  // Where you go to begin an event: right at its start for local jobs; for jobs that used to
-  // trigger when you neared a big area (a camp, a base), a staging point on its safe side.
+  // where an event begins: its start for local jobs; for big areas (a camp, a base), a staging point on the safe side
   stagePoint(ev) {
     if (ev.startR <= 60) return ev.start.clone();
     const sd = ev.start.clone().normalize();
@@ -104,7 +103,7 @@ export class Events {
     return this.ground(greatCircle(sd, t.normalize(), Math.min(ev.startR * 0.85, 560)));
   }
 
-  // The thing you walk up to and press F on: different per event type.
+  // the per-type prop you press F on
   startProp(ev) {
     const col = new THREE.Color(FACTIONS[ev.faction] ? FACTIONS[ev.faction].color : '#ffffff').getHex();
     const g = new THREE.Group();
@@ -134,7 +133,7 @@ export class Events {
     return g;
   }
 
-  // F at an open event's start prop begins it (nothing starts just by passing through any more)
+  // F at an open event's start prop begins it
   interact() {
     const g = this.game;
     const P = g.player;
@@ -149,7 +148,7 @@ export class Events {
     return false;
   }
 
-  // Seconds until an open event is withdrawn (null for ones that never time out)
+  // s until an open event is withdrawn (null: never)
   timeLeft(ev) {
     return ev.state === 'open' && !ev.special ? OPEN_LIFETIME - ev.age : null;
   }
@@ -197,7 +196,7 @@ export class Events {
     }
     this.list.push(ev);
     const g = this.game;
-    if (ev.stage.distanceTo(g.player.pos) <= EVENT_RANGE) g.hud.eventPopup(`📡 ${FACTIONS[faction].name.toUpperCase()}: ${ev.title}`, FACTIONS[faction].color); // (a far-off one starts quietly)
+    if (ev.stage.distanceTo(g.player.pos) <= EVENT_RANGE) g.hud.eventPopup(`📡 ${FACTIONS[faction].name.toUpperCase()}: ${ev.title}`, FACTIONS[faction].color); // far-off ones post quietly
     return ev;
   }
 
@@ -290,7 +289,7 @@ export class Events {
     return null;
   }
 
-  // The Pirate Wreck: a one-time chance to earn Rustmoon's trust.
+  // Pirate Wreck: a one-time chance to earn Rustmoon's trust
   spawnWreck() {
     const g = this.game;
     const near = g.locations.find((l) => l.id === 'twilight') || g.locations[0];
@@ -299,7 +298,7 @@ export class Events {
     const up = dir.clone();
     const ship = makeFreighter({ color: 0x3a2b4f, stripe: 0x7dff3a });
     ship.root.scale.setScalar(0.45);
-    ship.setGear(0.15); // bay doors hanging open, legs jammed in the bays
+    ship.setGear(0.15); // bay doors ajar, legs jammed
     ship.root.position.copy(pos).addScaledVector(up, 2);
     frameQuat(up, tangent(new THREE.Vector3(1, 0, 0), up), ship.root.quaternion);
     ship.root.rotateZ(0.35);
@@ -355,7 +354,7 @@ export class Events {
     if (ev.type === 'wreck') g.wreckChoice();
   }
 
-  // quiet: the caller has its own message for it (an emergency recall lists everything it failed in one panel)
+  // quiet: the caller reports it (an emergency recall lists all its failures in one panel)
   fail(ev, reason, quiet = false) {
     const g = this.game;
     if (!quiet) { g.hud.eventResult(ev, false, reason); g.audio.hurt(); }
@@ -511,8 +510,7 @@ export class Events {
     }
   }
 
-  // Fluid in a vacuum tube: a damped spring driven by your acceleration. Jerk it around and
-  // it sloshes past the seal and spills; hard knocks crack the glass and it leaks.
+  // tube fluid: a damped spring driven by your acceleration; past amplitude 1 it spills, cracks leak
   slosh(f, dt) {
     const P = this.game.player;
     const a = P.accel || _v.set(0, 0, 0);
@@ -535,7 +533,7 @@ export class Events {
     if (f.crack > 0) f.level -= f.crack * 0.02 * dt;
   }
 
-  // Called by the player on hard impacts: splash the fluid and maybe crack the tube.
+  // player hard impact: splash the fluid, maybe crack the tube
   onImpact(speed) {
     const f = this.fluid;
     if (!f) return;
@@ -695,7 +693,7 @@ export class Events {
   update(dt) {
     const g = this.game;
     const P = g.player;
-    // post new events: one per faction, with at least ~a minute between any two new postings
+    // post: one per faction, ~a minute or more between postings
     this.gap -= dt;
     for (const f of Object.keys(TYPES)) {
       if (f === 'rustmoon' && (!g.rep.aligned() || FACTIONS.rustmoon.gone)) continue;
@@ -707,7 +705,7 @@ export class Events {
       }
     }
     if (g.rep.rustmoon === 'unknown' && !FACTIONS.rustmoon.gone && !this.list.some((e) => e.type === 'wreck')) {
-      // the pirate distress call first comes 10-15 minutes into the save's play time
+      // distress call comes 10-15 min into the save's play time
       if (this.wreckAt === undefined) {
         this.wreckAt = 600 + Math.random() * 300;
         this.wreckTimer = Math.max(30, this.wreckAt - (g.saves ? g.saves.playTime() : 0));

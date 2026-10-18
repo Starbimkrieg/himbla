@@ -3,11 +3,10 @@ import { PLANET } from './config.js';
 import { mulberry32, createNoise3D, smoothstep, clamp } from './rng.js';
 import { SUN, darkness } from './geo.js';
 
-// The Moon's terrain as pure maths: the height field (base noise, regional landforms, craters,
-// rilles, flattened plateaus) and each chunk's mesh data as plain arrays. No scene, no DOM, so the
-// same code runs in the terrain workers (terrainWorker.js) and on the main thread (Planet, which
-// extends this for physics, the chunks you see, boulders and rims). Same seed and the same plateaus
-// in, the same heights out, to the last bit: the worker's chunks and the main thread's physics agree.
+// The Moon's terrain as pure maths: the height field (base noise, landforms, craters, rilles, plateaus)
+// and chunk mesh data as plain arrays. No scene or DOM, so it runs in the terrain workers (terrainWorker.js)
+// and on the main thread (Planet extends it for physics, chunks, boulders, rims). Same seed and plateaus
+// give bit-identical heights, so worker chunks and main-thread physics agree.
 
 export const N = PLANET.faceCells;
 export const CH = PLANET.chunkCells;
@@ -15,7 +14,7 @@ export const CPF = N / CH;
 const QP = Math.PI / 4;
 export const N1 = N + 1;
 export const R = PLANET.radius;
-export const MAX_LOD = 4; // level 0 is the ~4.4 m grid, near you; each level up halves it
+export const MAX_LOD = 4; // level 0: the ~4.4 m grid near you; each level halves the resolution
 
 // ---- cube-sphere mapping (tangent-warped for near-uniform cells) ----
 export function faceDir(f, i, j, out) {
@@ -49,9 +48,9 @@ export function dirToGrid(x, y, z, o) {
 const _g = { f: 0, i: 0, j: 0 };
 const _d = new THREE.Vector3();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _e = new THREE.Vector3();
-const NO_FLATS = []; // (stands in for every flat bucket while a town's native ground is measured)
+const NO_FLATS = []; // (stands in for every flat bucket while fitZone measures native ground)
 
-// Hue tints for the painted Moon: multipliers on r, g, b (the brightness is put back afterwards)
+// Hue tints for the painted Moon: r, g, b multipliers (brightness restored afterwards)
 const TINT_COOL = [0.9, 0.96, 1.16]; // maria: blue-grey
 const TINT_TAN = [1.13, 0.99, 0.83]; // iron-bearing plains: tan
 const TINT_BUFF = [1.1, 0.99, 0.86]; // ridges and scarps: buff
@@ -70,19 +69,18 @@ export class TerrainField {
     this.nC = createNoise3D(rand);
     this.zones = zones;
     for (const z of zones) {
-      // (a plane the main thread already fitted comes in as zrSet: workers never refit, so they can't disagree)
+      // (a plane fitted on the main thread arrives as zrSet: workers never refit, so can't disagree)
       z.zr = z.zrSet ?? R + this.base(z.dir.x * R, z.dir.y * R, z.dir.z * R, darkness(z.dir));
-      // (how far the plateau is flat: a place can ask for more than r with flatR; none does yet, and
-      // the rock keep-outs in planet.js still read r)
+      // (flat radius: flatR can exceed r; none does yet, and planet.js rock keep-outs still read r)
       z.fr = z.flatR || z.r;
       z.cosFlat = Math.cos((z.fr * 1.95) / R);
     }
     this.cache = new Map();
     this.attr = { floor: 0, rim: 0, ray: 0, rock: 0, rille: 0, crest: 0, ejecta: 0, old: 0 };
-    // the painted look (maria, white crests, gravel blankets): PLANET.painted, and the settings toggle
+    // painted look (maria, white crests, gravel blankets): PLANET.painted and the settings toggle
     this.painted = PLANET.painted !== false;
     this.makeCraters(rand);
-    for (const z of zones) if (z.fit && z.zrSet === undefined) this.fitZone(z); // (needs the craters and the flat buckets)
+    for (const z of zones) if (z.fit && z.zrSet === undefined) this.fitZone(z); // (needs craters and flat buckets)
   }
 
   base(x, y, z, far) {
@@ -104,12 +102,12 @@ export class TerrainField {
         for (let tries = 0; tries < 10; tries++) {
           const u = rand() * 2 - 1, th = rand() * Math.PI * 2, s = Math.sqrt(1 - u * u);
           d.set(s * Math.cos(th), u, s * Math.sin(th));
-          // the far side is more heavily cratered
+          // far side more heavily cratered
           if (rand() > 0.55 + 0.45 * darkness(d)) continue;
           const Rc = rMin + (rMax - rMin) * rand();
           let ok = true;
           for (const zn of this.zones) {
-            if (zn.late) continue; // added after the craters were laid out (see locations.js)
+            if (zn.late) continue; // added after crater layout (see locations.js)
             const arc = R * Math.acos(clamp(d.dot(zn.dir), -1, 1));
             if (arc < (zn.zoneR ? zn.r * 1.3 : zn.r * 1.6) + Rc * 1.3) { ok = false; break; }
           }
@@ -126,7 +124,7 @@ export class TerrainField {
       }
     }
     this.craters = list;
-    // bucket craters by chunk so each height sample only checks nearby craters
+    // bucket craters by chunk so each sample checks only nearby ones
     const nb = 6 * CPF * CPF;
     this.buckets = Array.from({ length: nb }, () => []);
     const centers = [];
@@ -136,7 +134,7 @@ export class TerrainField {
     const bucketR = CH * (R * Math.PI / 2 / N) * 0.85;
     this.bucketCenters = centers;
     this.bucketR = bucketR;
-    this.flats = []; // plateaus added later (outposts), bucketed like the craters so H stays cheap
+    this.flats = []; // later plateaus (outposts), bucketed like craters so H stays cheap
     this.flatBuckets = Array.from({ length: nb }, () => []);
     for (const c of list) {
       const cosLim = Math.cos((c.infl + bucketR) / R);
@@ -144,13 +142,13 @@ export class TerrainField {
     }
   }
 
-  // Give a crater its character, from a generator of its own (seeded by its index), so the crater
-  // layout - and the lakes, roads and outposts laid out around it - doesn't move:
-  //   bowl      the classic: a smooth rim
-  //   rampart   a tall, firm rim that stands up off the plain, with a steep inner wall
-  //   jagged    a crown of rim peaks
-  //   ghost     old and worn almost flat
-  //   terraced  big ones only: stepped inner walls and a central peak
+  // A crater's character, from its own index-seeded generator so the layout (and the lakes, roads and
+  // outposts placed around it) doesn't move:
+  //   bowl      classic smooth rim
+  //   rampart   tall firm rim standing off the plain, steep inner wall
+  //   jagged    rim swelling and dipping in broad lobes
+  //   ghost     old, worn almost flat
+  //   terraced  big ones only: stepped inner walls, central peak
   craterType(c, i) {
     const rr = mulberry32((i + 1) * 2654435761 ^ 0x51ed);
     const x = rr();
@@ -167,7 +165,7 @@ export class TerrainField {
       c.inW = 0.15; c.outW = 0.36;
       c.depth *= 1.12;
     } else if (x < 0.6) {
-      // (named for the old spiky version: now a rim that swells and dips in broad lobes)
+      // (broad lobes, not spikes, despite the name)
       c.type = 'jagged';
       c.rim *= 1.6 + rr() * 0.4;
       c.jag = 0.3 + rr() * 0.15;
@@ -178,54 +176,51 @@ export class TerrainField {
       c.type = 'ghost';
       c.depth *= 0.35; c.rim *= 0.35; c.outW = 0.7;
     } else c.type = 'bowl';
-    // a firm lip and a proper dip on every crater that isn't worn away
+    // firm lip and proper dip on every crater not worn away
     if (c.type !== 'ghost') { c.rim *= 1.85; c.depth *= 1.15; }
-    // never narrower than the terrain grid can draw smoothly (~4.4 m cells): a crest sharper than
-    // that creases along the triangle edges, and the comic pass inks the creases as saw-teeth
+    // no narrower than the ~4.4 m grid draws smoothly: sharper crests crease along triangle edges and
+    // the comic pass inks them as saw-teeth
     c.inW = Math.max(c.inW, 12 / c.R);
     c.outW = Math.max(c.outW, 16 / c.R);
-    // how far the crest is rounded off: the taller the lip, the rounder its top, so it never curves
-    // tighter than the ~4.4 m terrain grid can draw (any tighter and the crest comes out a saw-tooth)
+    // crest rounding: taller lips get rounder tops so they never curve tighter than the grid can draw
+    // (a sharp crest zigzags along the grid, and a low sun casts it as saw-teeth down the inner wall)
     const peak = c.rim * (1 + c.jag);
-    // (rounder crests: a sharp one zigzagged along the terrain grid, and under a low sun its shadow
-    // fell down the inside wall as a band of saw-teeth)
     c.kIn = Math.max(18, (5 * peak) / (0.1 * c.inW * c.R));
     c.kOut = Math.max(18, (5 * peak) / (0.1 * c.outW * c.R));
     if (c.jf) c.jf = Math.max(2, Math.min(c.jf, Math.floor((2 * Math.PI * c.R) / 70)));
   }
 
-  // Regional landforms on top of the base terrain. Each kind lives in its own patches (a very
-  // low-frequency mask: ~12% of the Moon each, rilles ~18%), so over half the Moon stays the
-  // smooth, cratered plain:
-  //   ridged highlands: sharp, jagged crests       scarps: stepped ledges (lunar lobate scarps)
+  // Regional landforms over the base terrain, each in its own patches (very low-frequency mask: ~12% of
+  // the Moon each, rilles ~18%), so over half stays smooth cratered plain:
+  //   ridged highlands: sharp crests               scarps: stepped ledges (lunar lobate scarps)
   //   rilles: winding channels                     hills: long rolling slopes
-  // Writes this.attr.rock (for the rocky tint and extra boulders) and this.attr.rille.
+  // Writes this.attr.rock (rocky tint, extra boulders), this.attr.rille and this.attr.crest.
   features(x, y, z) {
     const A = this.nA, B = this.nB, C = this.nC;
     let h = 0, rock = 0, rille = 0, crest = 0;
     const mRidge = smoothstep(0.49, 0.69, C(x * 0.00032 + 40, y * 0.00032, z * 0.00032 - 12));
     if (mRidge > 0) {
-      // long ridges with crisp (but still rounded) crests: a softened ridged noise
+      // long ridges with crisp but rounded crests: softened ridged noise
       const nv = A(x * 0.0026 + 3, y * 0.0026, z * 0.0026);
       const n1 = 1 - Math.sqrt(nv * nv + 0.012) + 0.11;
       h += mRidge * (n1 * n1 * 40 + B(x * 0.006, y * 0.006 + 9, z * 0.006) * 5 - 12);
       rock = mRidge * smoothstep(0.6, 0.9, n1);
-      crest = mRidge * smoothstep(0.95, 0.995, n1); // (the very top of the ridge)
+      crest = mRidge * smoothstep(0.95, 0.995, n1); // (ridge top)
     }
     const mScarp = smoothstep(0.46, 0.66, C(x * 0.0004 - 21, y * 0.0004 + 6, z * 0.0004));
     if (mScarp > 0) {
-      // stepped ledges to drop off (lunar lobate scarps): ramps you can ride up, not walls (a step
-      // over a narrow band of the noise made sheer, jagged cliffs you ran into)
+      // stepped ledges (lunar lobate scarps): rideable ramps, not walls (a narrow noise band would
+      // make sheer jagged cliffs)
       const sv = A(x * 0.0011 - 8, y * 0.0011, z * 0.0011 + 15) + 0.25 * B(x * 0.004, y * 0.004, z * 0.004);
       h += mScarp * 20 * (smoothstep(-0.09, 0.09, sv) + smoothstep(0.26, 0.44, sv));
       rock = Math.max(rock, mScarp * (1 - Math.min(1, Math.abs(sv) / 0.09)) * 0.45);
-      // (the lip at the top of each step)
+      // (lip at each step's top)
       crest = Math.max(crest, mScarp * Math.max(1 - Math.abs(sv - 0.09) / 0.035, 1 - Math.abs(sv - 0.44) / 0.035, 0) * 0.8);
     }
     const mRille = smoothstep(0.32, 0.52, C(x * 0.00038 + 77, y * 0.00038 - 3, z * 0.00038 + 31));
     if (mRille > 0) {
-      // a wide, deep U-shaped channel (a smooth gaussian across it: no crease at the bottom, no
-      // lips). H() carves it last, after the craters, so it runs unbroken through everything.
+      // wide deep U channel (gaussian profile: no bottom crease, no lips). H() carves it last, after
+      // the craters, so it runs unbroken through everything.
       const sv = B(x * 0.0014 + 5, y * 0.0014 - 5, z * 0.0014) / 0.13;
       rille = mRille * Math.exp(-sv * sv);
     }
@@ -237,8 +232,8 @@ export class TerrainField {
     return h;
   }
 
-  // The base terrain height at a crater's middle (for its level apron). It mustn't disturb the
-  // attributes of the point H() is in the middle of working out.
+  // Base height at a crater's middle (for its level apron). Must not disturb the attributes of the
+  // point H() is mid-way through.
   craterBase(c) {
     const rock = this.attr.rock, rille = this.attr.rille, crest = this.attr.crest;
     const x = c.d.x * R, y = c.d.y * R, z = c.d.z * R;
@@ -259,10 +254,9 @@ export class TerrainField {
     const hB = this.base(x, y, z, far), hF = this.features(x, y, z);
     let h = hB + hF;
     const rilleCut = this.attr.rille * 18;
-    // rille floors are smooth: cancel the base terrain's small bumps inside the channel
+    // smooth rille floors: cancel the base's small bumps in the channel
     const rl = this.attr.rille;
-    // (the channel floor undulates, but no fine rubble: under a low sun its little bumps each threw a
-    // speck of shadow, a rough stippled streak down the rille)
+    // (the floor undulates but has no fine rubble: under a low sun each bump casts a speck, stippling the rille)
     if (rl > 0.01) h -= rl * (this.nB(x * 0.005, y * 0.005, z * 0.005) * 6 * (1 + far * 0.6) + this.nA(x * 0.02, y * 0.02, z * 0.02) * 0.25);
     dirToGrid(dx, dy, dz, _g);
     const cx = Math.min(CPF - 1, Math.floor(_g.i / CH)), cy = Math.min(CPF - 1, Math.floor(_g.j / CH));
@@ -273,9 +267,8 @@ export class TerrainField {
       const dot = dx * c.d.x + dy * c.d.y + dz * c.d.z;
       if (dot < c.cosInfl) continue;
       const r = (R * Math.acos(Math.min(1, dot))) / c.R;
-      // each crater sits on its own level apron (the plain's small bumps round it eased toward the
-      // height at its middle), so its lip curves up clearly; the bigger landforms (hills, ridges,
-      // scarps) are only eased a little, so they keep their shape round craters
+      // each crater sits on a level apron (nearby small bumps eased toward its centre height) so its
+      // lip reads clearly; big landforms (hills, ridges, scarps) are eased only a little, keeping their shape
       if (r < 2.2 && c.type !== 'ghost') {
         if (c.hb === undefined) c.hb = this.craterBase(c);
         const w = 1 - smoothstep(1.15, 2.2, r);
@@ -285,12 +278,12 @@ export class TerrainField {
         if (r < 1) {
           let rb = r;
           if (c.terr) {
-            // stepped inner walls: the radius quantised into soft stairs
+            // stepped inner walls: radius quantised into soft stairs
             const t = r * c.terr, fl = Math.floor(t);
             rb = (fl + smoothstep(0.25, 0.75, t - fl)) / c.terr;
           }
-          // the bowl's wall eases flat as it meets the rim (a plain (r^2 - 1) wall left a kink on the
-          // crest, which the terrain grid drew as a saw-tooth), and bottoms out in a flat floor
+          // bowl wall eases flat into the rim (a plain (r^2 - 1) wall kinks the crest into a grid saw-tooth)
+          // and bottoms out in a flat floor
           const bw = 1 - rb * rb;
           h -= c.depth * Math.min(0.82, 1.6 * bw * bw);
           if (c.peak) { const pq = r / 0.2; h += c.peak * Math.exp(-pq * pq); }
@@ -298,43 +291,42 @@ export class TerrainField {
         }
         let rimH = c.rim;
         if (c.jag) {
-          // a crown: rim height swings round the circle, with sharp peaks
+          // rim height swings round the circle
           const ang = Math.atan2(dx * c.e2.x + dy * c.e2.y + dz * c.e2.z, dx * c.e1.x + dy * c.e1.y + dz * c.e1.z);
           const w = 0.5 + 0.5 * Math.sin(ang * c.jf + c.jp);
           rimH *= 1 - c.jag + c.jag * 2 * w;
         }
         const q = (r - 1) / (r < 1 ? c.inW : c.outW);
         const rimT = Math.exp(-q * q);
-        // the lip: a quarter-pipe on both sides - it curves up ever steeper to the crest, like a
-        // kicker (the crest is the grind rail) - with the top rounded off (craterType's kIn/kOut)
+        // lip: a quarter-pipe both sides, steepening to the crest like a kicker (the crest is the grind
+        // rail), top rounded off (craterType's kIn/kOut)
         const dm = (r - 1) * c.R, k = r < 1 ? c.kIn : c.kOut, e = Math.sqrt(dm * dm + k * k) - k;
         const x = Math.min(1, e / ((r < 1 ? c.inW : c.outW) * c.R));
         h += rimH * (1 - x) * (1 - x);
         if (rimT > rimA) rimA = rimT;
       }
-      if (c.type === 'ghost' && r < 1.5) oldA = Math.max(oldA, 1 - smoothstep(0.9, 1.5, r)); // (a worn old crater, and just round it)
-      // the ejecta blanket: a ring of gravel just outside the rim, with a ragged outer edge
+      if (c.type === 'ghost' && r < 1.5) oldA = Math.max(oldA, 1 - smoothstep(0.9, 1.5, r)); // (worn old crater and just round it)
+      // ejecta blanket: gravel ring just outside the rim, ragged outer edge
       if (r > 0.95 && r < 2.3 && c.type !== 'ghost' && c.R > 30) {
         const edge = 1.5 + 0.32 * this.nC(x * 0.011 + c.R, y * 0.011, z * 0.011) + (c.R > 150 ? 0.15 : 0);
         ejA = Math.max(ejA, smoothstep(0.98, 1.12, r) * (1 - smoothstep(edge - 0.12, edge + 0.04, r)));
       }
       if (c.rays >= 0 && r > 1.05 && r < 4.2) {
         const ang = Math.atan2(dx * c.e2.x + dy * c.e2.y + dz * c.e2.z, dx * c.e1.x + dy * c.e1.y + dz * c.e1.z);
-        // (five broad soft streaks: a dozen hairlines broke, on the coarser far terrain grids, into a web
-        // of pale spokes round every big crater, seen from above)
+        // (five broad soft streaks: thin hairlines break up into a web of pale spokes on coarse far LODs)
         const ray = Math.pow(Math.abs(Math.sin(ang * 2.5 + c.rays)), 4) * smoothstep(1.05, 1.5, r) * (1 - smoothstep(1.7, 4.2, r)) * 0.8;
         rayA = Math.max(rayA, ray * (0.6 + 0.4 * this.nC(x * 0.01, y * 0.01, z * 0.01)));
       }
     }
-    h -= rilleCut; // rilles carve through everything, crater rims included
+    h -= rilleCut; // rilles carve through everything, rims included
     let rad = R + h;
     for (let k = 0; k < this.zones.length; k++) {
       const zn = this.zones[k];
       const dot = dx * zn.dir.x + dy * zn.dir.y + dz * zn.dir.z;
       if (dot < zn.cosFlat) continue;
       const d = R * Math.acos(Math.min(1, dot));
-      // plateau is a true plane in the settlement's local frame (or, for a `curved` place, a cap of the sphere at the plane's height, so
-      // nothing built on it leans away from the local up; see downsKit.js makeBend)
+      // plateau: a true plane in the settlement's frame (a `curved` place gets a sphere cap at that height,
+      // so nothing on it leans off the local up; see downsKit.js makeBend)
       const t = smoothstep(zn.fr, zn.fr * 1.95, d);
       const pl = zn.curved ? zn.zr : zn.zr / dot;
       rad = pl + (rad - pl) * t;
@@ -354,18 +346,18 @@ export class TerrainField {
     return rad;
   }
 
-  // (the plateau records only: Planet.addFlat / addZone also rebuild the chunks)
+  // (plateau records only: Planet.addFlat / addZone also rebuild chunks)
   addFlatData(d, r, zr) {
     if (this.flats.some((z) => z.dir.dot(d) > 0.999999)) return null;
     const zn = { dir: d, r, zr, cosFlat: Math.cos((r * 1.95) / R), flatOnly: true };
     this.flats.push(zn);
-    // only the chunk buckets the plateau can reach test it in H
+    // only buckets the plateau can reach test it in H
     const cosB = Math.cos((r * 1.95 + this.bucketR) / R);
     for (let k = 0; k < this.flatBuckets.length; k++) if (this.bucketCenters[k].dot(d) > cosB) this.flatBuckets[k].push(zn);
     return zn;
   }
 
-  // (the opposite of addFlatData: a founded outpost's plateau goes when the town grows over it)
+  // (inverse of addFlatData: an outpost's plateau goes when a town grows over it)
   removeFlatData(d) {
     const k = this.flats.findIndex((z) => z.dir.dot(d) > 0.999999);
     if (k < 0) return false;
@@ -384,12 +376,11 @@ export class TerrainField {
     this.cache.clear();
   }
 
-  // A town's plane is the mean height of the NATIVE ground under its footprint (craters and landforms
-  // only: no plateaus, no flats), not the smooth base() noise, which knows nothing of either. So the
-  // plateau cuts where the ground is high and fills where it is low, and the hall never hangs over a
-  // crater bowl or sinks into a hill. Rings every 10 m out to rFit (the plots reach 77.5 m), each
-  // sample weighted by the ground it stands for. Worked out once, on the main thread; the workers are
-  // sent the answer (zrSet) and never fit again, so they can't disagree with the physics.
+  // A town's plane = mean height of the NATIVE ground under its footprint (craters and landforms; no
+  // plateaus or flats), not base() noise, which ignores both. So the plateau cuts high ground and fills
+  // low, and the hall never hangs over a bowl or sinks into a hill. Rings every 10 m to rFit (plots
+  // reach 77.5 m), samples area-weighted. Fitted once on the main thread; workers get zrSet and never
+  // refit, so they can't disagree with physics.
   fitZone(z, rFit = 80) {
     const zones = this.zones, fb = this.flatBuckets;
     this.zones = [];
@@ -403,9 +394,8 @@ export class TerrainField {
       let sum = 0, w = 0;
       for (let r = 0; r <= rFit; r += 10) {
         const n = r ? Math.max(8, Math.round(2 * Math.PI * r / 10)) : 1;
-        // (each ring stands for the 10 m band round it, so it weighs its radius, shared out over its samples; the
-        // centre stands for a 5 m disc and the outer ring only for the 5 m inside rFit: counted whole it pulled the
-        // plane towards what lies just outside the footprint, and the mean missed 0.5 m on 1 site in 12)
+        // (each ring weighs its 10 m band's area, shared over its samples; the centre stands for a 5 m disc
+        // and the outer ring only for the 5 m inside rFit, so ground just outside the footprint doesn't pull the plane)
         const hi = Math.min(r + 5, rFit), lo = r - 5;
         const ww = r ? (hi * hi - lo * lo) / (20 * n) : 1.25;
         for (let i = 0; i < n; i++) {
@@ -431,9 +421,8 @@ export class TerrainField {
     return r;
   }
 
-  // One terrain chunk's mesh data at a level of detail: plain arrays, so a worker can make it
-  // (terrainWorker.js) and the main thread only uploads it. `inside` holds the grid's exact radii
-  // (for the physics cache: Planet.fillCache).
+  // One chunk's mesh data at a LOD as plain arrays, so a worker builds it (terrainWorker.js) and the
+  // main thread only uploads. `inside`: the grid's exact radii (physics cache: Planet.fillCache).
   computeChunk(f, cx, cy, flip, lod) {
     const s = 1 << lod;
     const m = CH / s;
@@ -444,9 +433,9 @@ export class TerrainField {
     const nor = new Float32Array((nGrid + nSkirt) * 3);
     const col = new Float32Array((nGrid + nSkirt) * 3);
     const rim = new Float32Array(nGrid + nSkirt);
-    const tintA = new Float32Array((nGrid + nSkirt) * 3); // (the mineral tint alone: the shader can strengthen it)
+    const tintA = new Float32Array((nGrid + nSkirt) * 3); // (mineral tint alone: the shader can strengthen it)
     const i0 = cx * CH, j0 = cy * CH;
-    const radiiIn = new Float32Array(vn * vn); // (the grid's exact radii, for the physics cache)
+    const radiiIn = new Float32Array(vn * vn); // (exact grid radii, for the physics cache)
     const radii = new Float32Array((vn + 2) * (vn + 2));
     const dirs = new Float32Array((vn + 2) * (vn + 2) * 3);
     const c = new THREE.Color();
@@ -473,7 +462,7 @@ export class TerrainField {
           rim[li] = this.attr.rim;
           const x = _d.x * R, y = _d.y * R, z = _d.z * R;
           const mm = smoothstep(-0.25, 0.35, this.nB(x * 0.0007 + 11, y * 0.0007, z * 0.0007 - 5));
-          // the classic colours first, the same in both looks
+          // classic colours first, same in both looks
           c.copy(highland).lerp(mare, mm);
           c.lerp(floorC, this.attr.floor * 0.7);
           c.lerp(rimC, this.attr.rim * 0.6);
@@ -481,23 +470,22 @@ export class TerrainField {
           c.lerp(rockC, this.attr.rock * 0.55);
           c.lerp(rilleC, this.attr.rille * 0.5);
           if (this.painted) {
-            // the mineral tints: hue only, the brightness left as it is (so a tint never reads as a
-            // shadow, and the shadows keep all their contrast)
+            // mineral tints: hue only, brightness kept (a tint never reads as shadow; shadows keep contrast)
             const lum0 = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
             const c0r = c.r, c0g = c.g, c0b = c.b;
-            // (A) broad regions a touch cooler (blue-grey, the maria) or warmer (tan, iron-bearing)
+            // (A) broad regions a touch cooler (blue-grey maria) or warmer (tan, iron-bearing)
             const reg = this.nC(x * 0.00042 - 31, y * 0.00042 + 7, z * 0.00042 + 19) + 0.35 * this.nA(x * 0.0016 + 5, y * 0.0016, z * 0.0016 - 9);
             const cool = smoothstep(0.12, 0.45, reg), warm = smoothstep(0.12, 0.45, -reg);
             tint(c, TINT_COOL, cool * 0.75);
             tint(c, TINT_TAN, warm * 0.8);
-            // (C) by what the ground is: buff on ridges and scarp steps, rust in the rilles, a cleaner
-            // grey on fresh rims and their gravel, dull brown in old worn craters
+            // (C) by ground type: buff ridges and scarp steps, rusty rilles, cleaner grey on fresh rims and
+            // gravel, dull brown in old craters
             tint(c, TINT_BUFF, this.attr.rock * 0.9);
             tint(c, TINT_RUST, this.attr.rille * 0.9);
             tint(c, TINT_OLD, this.attr.old * 0.85);
             const fresh = Math.max(this.attr.rim * 0.7, this.attr.ejecta * 0.45);
             if (fresh > 0) { const g = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722; c.r += (g - c.r) * fresh; c.g += (g - c.g) * fresh; c.b += (g - c.b) * fresh; }
-            // put the brightness back exactly
+            // restore brightness exactly
             const lum1 = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
             if (lum1 > 1e-4) c.multiplyScalar(lum0 / lum1);
             tintA[li * 3] = c.r - c0r; tintA[li * 3 + 1] = c.g - c0g; tintA[li * 3 + 2] = c.b - c0b;
@@ -525,7 +513,7 @@ export class TerrainField {
         nor[li * 3] = _e.x; nor[li * 3 + 1] = _e.y; nor[li * 3 + 2] = _e.z;
         // slope shading baked into colour
         const ny = _e.dot(_a.normalize());
-        // (gentle: hard darkening on steep walls tipped into the halftone in saw-toothed patches)
+        // (gentle: hard darkening on steep walls tips into the halftone as saw-toothed patches)
         const k2 = clamp(1 - (1 - ny) * 0.5, 0.68, 1.1);
         col[li * 3] *= k2; col[li * 3 + 1] *= k2; col[li * 3 + 2] *= k2;
       }
@@ -551,9 +539,8 @@ export class TerrainField {
     for (let b = 0; b < m; b++) {
       for (let a = 0; a < m; a++) {
         const p00 = b * vn + a, p10 = p00 + 1, p01 = p00 + vn, p11 = p01 + 1;
-        // must match the diagonal split used by surface(): along whichever diagonal follows the ground
-        // (always the same one zigzagged every crater crest that crossed the grid at a slant, and a low
-        // sun stretched that zigzag into a row of teeth along the rim's shadow)
+        // must match surface()'s split: along whichever diagonal follows the ground (a fixed diagonal
+        // zigzags slanted crater crests, which a low sun stretches into teeth along the rim shadow)
         const q = (b + 1) * (vn + 2) + (a + 1);
         const d0 = Math.abs(radii[q] - radii[q + vn + 3]), d1 = Math.abs(radii[q + 1] - radii[q + vn + 2]);
         if (d0 <= d1) {

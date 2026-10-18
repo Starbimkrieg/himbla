@@ -1,14 +1,14 @@
 // Dev-only audit of Chimera Downs' build (docs/downs-layouts.md, "Audit"). Not part of the build.
 //   npx vite --port 5199 --host 127.0.0.1                       (in one shell)
 //   node tools/downs-audit.mjs [zfight|colliders|text|gaps|all]  (Playwright from PLAYWRIGHT, default /opt/node-tools/node_modules/playwright/index.mjs; the game from GAME_URL)
-//   SEP=0.0008 sets the plane distance under which two surfaces count as one (zfight). Under 1 mm a surface is only safe on the reversed-Z depth buffer (main.js); 2 cm apart is safe on any.
-// Everything is looked at in the place's FLAT design frame (the frame its builders write; src/curve.js bends it onto the Moon), with the places' static merge off (localStorage
-// mr-nomerge) and the kit's dev tags on (globalThis.__kitTags: outpostModels.js Kit.tags), so a finding names the builder and the Blender part it came from.
-//   zfight     every pair of triangles that lie on one plane (within SEP), face the same way, overlap, and are different colours: they would shimmer. Listed by builder > part.
-//   colliders  the collider footprints that stand in each other (a mast through a stable, a column through a wall): depth over 25 cm and 0.5 m of shared height.
-//   text       every text plane (signs, numbers, name boards): backed by a wall within 1.5 m behind it and clear for 1.5 m in front, so none faces into a wall or hangs in air.
-//   gaps       thin strips of bare ground (under 0.7 m wide) between ground slabs, or between a slab and a wall's foot: a seam of terrain showing.
-// The Blender side has its own: build_downs_*.py run audit_coplanar (z-fight inside one model) and audit_flips (primitives built inside out) on every build.
+//   SEP=0.0008: plane distance under which two surfaces count as one (zfight). Under 1 mm is safe only on the reversed-Z depth buffer (main.js); 2 cm is safe on any.
+// All checks run in the place's FLAT design frame (its builders' frame; src/curve.js bends it onto the Moon), with the static merge off (localStorage mr-nomerge)
+// and kit dev tags on (globalThis.__kitTags: outpostModels.js Kit.tags), so findings name the builder and Blender part.
+//   zfight     triangle pairs on one plane (within SEP), facing the same way, overlapping, in different colours: they shimmer. Listed by builder > part.
+//   colliders  collider footprints inside each other (a mast through a stable, a column through a wall): over 25 cm deep with 0.5 m of shared height.
+//   text       every text plane (signs, numbers, name boards) needs a wall within 1.5 m behind and 1.5 m clear in front: none faces a wall or hangs in air.
+//   gaps       bare-ground strips under 0.7 m wide between ground slabs, or between a slab and a wall's foot: a terrain seam showing.
+// Blender side: build_downs_*.py run audit_coplanar (z-fight within a model) and audit_flips (inside-out primitives) on every build.
 const { chromium } = await import(process.env.PLAYWRIGHT || '/opt/node-tools/node_modules/playwright/index.mjs');
 const MODE = process.argv[2] || 'all';
 const SEP = Number(process.env.SEP || 0.0008);
@@ -25,7 +25,7 @@ await pg.keyboard.press('Enter'); await pg.waitForTimeout(4000);
 for (let i = 0; i < 14; i++) { let st = null; try { st = await pg.evaluate('window.game.state'); } catch (e) { await pg.waitForTimeout(2500); continue; } if (st === 'play') break; await pg.keyboard.press('Enter'); await pg.waitForTimeout(1500); }
 await pg.waitForTimeout(3000);
 
-// The Downs' triangles in its flat frame: { P: [x,y,z ×3 per triangle], C: colour per triangle (vertex colour or material), T: tag id, text: [text planes' triangles] }
+// The Downs' triangles in its flat frame: { P: [x,y,z ×3 per triangle], C: per-triangle colour (vertex or material), T: tag id, text: [text plane triangles] }
 await pg.evaluate(async () => {
   const { unbendPoint } = await import('/src/curve.js');
   const g = window.game, loc = g.locations.find((l) => l.id === 'downs'), R = g.world.curveR(loc);
@@ -69,7 +69,7 @@ if (run('zfight')) {
     const CELL = 12, bucket = new Map();
     const nk = (i) => ((Math.round(nx[i] * 100) + 101) * 203 + (Math.round(ny[i] * 100) + 101)) * 203 + Math.round(nz[i] * 100) + 101;
     const key = (k, ob, cx, cy, cz) => ((((k * 4096 + ob + 2048) * 128 + cx + 64) * 128 + cy + 64) * 128 + cz + 64);
-    const grids = (i) => [Math.floor(dd[i] / SEP), Math.floor(dd[i] / SEP + 0.5) + 1000];   // (two grids half a step apart: a pair under SEP shares a cell in one of them)
+    const grids = (i) => [Math.floor(dd[i] / SEP), Math.floor(dd[i] / SEP + 0.5) + 1000];   // (two grids half a step apart: a pair under SEP shares a cell in one)
     for (let i = 0; i < N; i++) {
       if (!ok[i]) continue;
       const k = nk(i), cx = Math.floor(cen[3 * i] / CELL), cy = Math.floor(cen[3 * i + 1] / CELL), cz = Math.floor(cen[3 * i + 2] / CELL);
@@ -92,7 +92,7 @@ if (run('zfight')) {
       const sep = Math.abs(nx[i] * (cen[3 * j] - cen[3 * i]) + ny[i] * (cen[3 * j + 1] - cen[3 * i + 1]) + nz[i] * (cen[3 * j + 2] - cen[3 * i + 2]));
       if (sep > SEP) return;
       const pk = Math.min(i, j) * 4194304 + Math.max(i, j); if (seen.has(pk)) return;
-      if (overlaps(i, j)) { seen.add(pk); found.push({ i, j, sep }); }      // (only the pairs that do overlap are remembered: the two grids and the neighbouring cells test a pair more than once)
+      if (overlaps(i, j)) { seen.add(pk); found.push({ i, j, sep }); }      // (remember overlapping pairs only: the two grids and neighbour cells test a pair more than once)
     };
     for (const list of bucket.values()) for (let a = 0; a < list.length; a++) for (let c = a + 1; c < list.length; c++) test(list[a], list[c]);
     const fwd = []; for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) if (x > 0 || (x === 0 && y > 0) || (x === 0 && y === 0 && z > 0)) fwd.push([x, y, z]);
@@ -186,7 +186,7 @@ if (run('gaps')) {
       if (Math.min(a[1], b2[1], c[1]) > 0.45) continue;
       const ux = b2[0] - a[0], uy = b2[1] - a[1], uz = b2[2] - a[2], wx = c[0] - a[0], wy = c[1] - a[1], wz = c[2] - a[2];
       const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx, l = Math.hypot(nx, ny, nz) || 1;
-      if (Math.abs(ny) / l > 0.3) fill(a, b2, c); else { line(a[0], a[2], b2[0], b2[2]); line(b2[0], b2[2], c[0], c[2]); line(c[0], c[2], a[0], a[2]); }   // (a floor or a roof's footprint / a wall's foot)
+      if (Math.abs(ny) / l > 0.3) fill(a, b2, c); else { line(a[0], a[2], b2[0], b2[2]); line(b2[0], b2[2], c[0], c[2]); line(c[0], c[2], a[0], a[2]); }   // (floor or roof footprint / wall foot)
     }
     const sl = new Uint8Array(NX * NZ);
     for (let j = 0; j < NZ; j++) { let i = 0; while (i < NX) { if (grid[j * NX + i]) { i++; continue; } let e = i; while (e < NX && !grid[j * NX + e]) e++; if (i > 0 && e < NX && e - i <= 7 && !(grid[j * NX + i - 1] === 2 && grid[j * NX + e] === 2)) for (let k = i; k < e; k++) sl[j * NX + k] = 1; i = e; } }

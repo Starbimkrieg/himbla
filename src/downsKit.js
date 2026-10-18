@@ -6,18 +6,18 @@ import { part } from './settlements.js';
 import { ARCADE, WEDGE } from './downsPlan.js';
 import { inkMat } from './toon.js';
 
-// What Chimera Downs' builders share: the palette, the text widths and the way a Blender kit part is baked into a settlement's kit (docs/downs-layouts.md).
-// The palette: Gold Gleam, Saddle Brown, Black, Money, Barn Red, Touch of Mint (a darker tint of each for shading).
+// Shared by Chimera Downs' builders: palette, text widths, baking a Blender kit part into a settlement kit (docs/downs-layouts.md).
+// Palette: Gold Gleam, Saddle Brown, Black, Money, Barn Red, Touch of Mint (darker tints for shading).
 export const PAL = { gold: 0xcfb352, saddle: 0xb07c57, black: 0x3b393a, money: 0x7b9a6e, barn: 0x8b4044, mint: 0xf8fff8 };
 export const MINT2 = 0xdfe8dd, MONEY2 = 0x5b7a52, SADDLE2 = 0x8c5f3f, BLACK2 = 0x5a5760, CONC = 0xc6d1c4, CONC2 = 0xb2bfb0;
 export const FG = { gold: '#cfb352', mint: '#f8fff8' }, BG = { black: '#3b393a', money: '#5b7a52', barn: '#6a2e33' };
-// width of a Kit.text sign for a given letter height (the pixel font is ~square per character)
+// Kit.text sign width for a letter height (pixel font is ~square per character)
 export const tw = (str, h) => h * (0.347 * str.length + 0.667);
 
 const _M = new THREE.Matrix4(), _P = new THREE.Vector3(), _Q = new THREE.Quaternion(), _S = new THREE.Vector3(), _Y = new THREE.Vector3(0, 1, 0);
 const matFor = (slot, over) => { const c = downsSlot(slot, over); return c.glow ? G(c.color) : T(c.color); };
 
-// Bake a kit part into `k` in its current frame: at (x, y, z) turned `ry` about y, scaled (sx, sy, sz); `over` maps a slot to the colour it should wear instead.
+// Bake a kit part into `k`'s current frame at (x, y, z), turned `ry` about y, scaled (sx, sy, sz); `over` maps slot to replacement colour.
 export function bake(k, name, x = 0, y = 0, z = 0, { ry = 0, sx = 1, sy = 1, sz = 1, over } = {}) {
   _M.compose(_P.set(x, y, z), _Q.setFromAxisAngle(_Y, ry), _S.set(sx, sy, sz));
   const tag = k.tag;
@@ -26,11 +26,11 @@ export function bake(k, name, x = 0, y = 0, z = 0, { ry = 0, sx = 1, sy = 1, sz 
   k.tag = tag;
 }
 
-// The forecourt's fountain (dn_fountain, tools/blender/build_downs_arcade.py) at (x, z) of the kit's frame: the basin, pedestal, bowl and stem are baked in; the derby cup on top turns, and the two tiers'
-// ripples, the curtain over the bowl's lip and the jets run on the shaders the casino's fountain uses (fountainFx.js). Colliders for the basin, the pedestal and the stem.
+// Forecourt fountain (dn_fountain, tools/blender/build_downs_arcade.py) at (x, z) of the kit frame: basin, pedestal, bowl, stem baked;
+// the derby cup turns; ripples, lip curtain and jets use the casino fountain's shaders (fountainFx.js). Colliders: basin, pedestal, stem.
 export function fountain(k, x, z, y = 0) {
   const F = downsNode('dn_fountain'), I = new THREE.Matrix4();
-  k.at(x, z, 0, y);                                                               // (y: what it stands on, the forecourt's avenue)
+  k.at(x, z, 0, y);                                                               // y: ground it stands on (the forecourt avenue)
   bake(k, 'dn_fountain');
   for (const n of F.kids) {
     if (n.role === 'spin') {
@@ -45,16 +45,16 @@ export function fountain(k, x, z, y = 0) {
   k.column(1.7, 9.2 + y, x, z, 4.7 + y);
 }
 
-// ---- the arcades' continuous parts ----
-// A closed solid from convex polygons that share edges: polys [{ pts: [[x, z]...], yb(x, z), yt?(x, z) }], each from its own yb up to yt (or h above yb). An edge that two
-// polygons share gets no side faces, so the pieces join into one surface with no seam where they meet (shared edges must have the same ends, and the same heights from both sides).
+// ---- arcade continuous parts ----
+// Closed solid from edge-sharing convex polygons: polys [{ pts: [[x, z]...], yb(x, z), yt?(x, z) }], each from yb up to yt (or h above yb).
+// Shared edges get no side faces, so pieces join seamlessly (shared edges need the same ends and the same heights on both sides).
 export function sheet(polys, h = 0) {
   const K = (p) => `${Math.round(p[0] * 1000)},${Math.round(p[1] * 1000)}`;
   const ek = (p, q) => { const a = K(p), b = K(q); return a < b ? `${a}|${b}` : `${b}|${a}`; };
   const uses = new Map();
   const rings = polys.map(({ pts, yb, yt }) => {
     const area = pts.reduce((a, p, i) => { const q = pts[(i + 1) % pts.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0);
-    const ring = area > 0 ? [...pts].reverse() : pts;                         // (clockwise on the x-right, z-up plan: the top faces up, the sides face out)
+    const ring = area > 0 ? [...pts].reverse() : pts;                         // clockwise on the x-right, z-up plan: top faces up, sides out
     ring.forEach((p, i) => { const e = ek(p, ring[(i + 1) % ring.length]); uses.set(e, (uses.get(e) || 0) + 1); });
     return { ring, yb, yt };
   });
@@ -78,8 +78,8 @@ export function sheet(polys, h = 0) {
   return g;
 }
 
-// The outline shell of a solid made of flat faces (a sheet): each corner pushed out to where the planes of the faces round it, moved out by `ink`, meet. The kit's own
-// outline (Kit.add) scales a part about its middle, which only suits compact parts: a long curved one needs its shell offset face by face.
+// Outline shell of a flat-faced solid (a sheet): each corner moves to where its surrounding face planes, offset by `ink`, meet.
+// Kit.add's outline scales about the middle, fine for compact parts; long curved ones need a per-face offset.
 export function inkShell(geo, ink) {
   const p = geo.attributes.position.array, key = (i) => `${Math.round(p[i] * 1e3)},${Math.round(p[i + 1] * 1e3)},${Math.round(p[i + 2] * 1e3)}`;
   const planes = new Map();
@@ -96,7 +96,7 @@ export function inkShell(geo, ink) {
     }
   }
   const off = new Map();
-  for (const [k, list] of planes) {                                             // least squares for o . n = ink over the corner's planes (a little damped, for planes almost alike)
+  for (const [k, list] of planes) {                                             // least squares for o . n = ink over the corner's planes (damped for near-equal planes)
     const a = [1e-4, 0, 0, 0, 1e-4, 0, 0, 0, 1e-4], b = [0, 0, 0];
     for (const n of list) for (let r = 0; r < 3; r++) { b[r] += ink * n[r]; for (let c = 0; c < 3; c++) a[r * 3 + c] += n[r] * n[c]; }
     const o = new THREE.Vector3(...b).applyMatrix3(new THREE.Matrix3().set(...a).invert());
@@ -107,24 +107,24 @@ export function inkShell(geo, ink) {
   for (let i = 0; i < p.length; i += 3) { const o = off.get(key(i)) || _P.set(0, 0, 0); q[i] = p[i] + o.x; q[i + 1] = p[i + 1] + o.y; q[i + 2] = p[i + 2] + o.z; }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(q, 3));
-  g.setIndex(Array.from({ length: q.length / 3 }, (_, i) => i));                // (the kit's shells are indexed: curve.js bends them by their index)
+  g.setIndex(Array.from({ length: q.length / 3 }, (_, i) => i));                // kit shells are indexed: curve.js bends them by index
   return g;
 }
 
-// Where arcadeShell puts its pieces: into a kit (in its plain frame: k.at() first), with the shell as the piece's outline.
+// arcadeShell sink into a kit (plain frame: k.at() first), with inkShell as the outline.
 export const kitSink = (k) => (geo, color, ink) => {
   if (ink) k.ink.push(inkShell(geo, ink));
   k.add(geo, T(color), 0, 0, 0, { outline: 0 });
 };
 
-// The parts of an arcade that run on from bay to bay, built as one piece per run so no seam shows where two bays meet: the back wall with its wainscot, string course and
-// cornice, the architrave over the colonnade with its gold band, the gold inlay along the walk's edge, the fascia and its gold lip, and the roof with its Mint ceiling. The
-// bays' own fittings (floor, column, windows, lamps, rafter, roof ribs, pennants) are the Blender wedge, dn_arcade, which is authored to these measures.
-// `edges`: the run's radial edges, in degrees round the turn's centre (cx, 0) (the west arcade's way round; `mir` -1 mirrors it for the east one). `stand`: the run's end at a
-// stand ({ atStart, wallU, rearZ }, as joiner in downsWorld.js): the run goes on past its last edge to the stand's end wall, along the chords of its back and front circles
-// from that edge to the wall, every piece ending inside the wall (behind the far stand, the back wall ends on the diagonal it shares with the return). A wedge's local z
-// runs outward from its inner chord, so a radial edge's point at local z is at radius ri + z / cos(half the step).
-// The roof's underside rises from 7.15 m at its front edge (local z -0.8) to 8.38 m just past the back wall's outer face (z = d + 0.1), so it rests on the cornice (8.1 to 8.4).
+// Arcade parts that run across bays, one piece per run so bays show no seam: back wall (wainscot, string course, cornice), architrave
+// with gold band, walk-edge gold inlay, fascia with gold lip, roof with Mint ceiling. Per-bay fittings are the Blender wedge dn_arcade,
+// authored to these measures.
+// `edges`: radial edges in degrees round the turn centre (cx, 0), west arcade's way round (`mir` -1 mirrors for the east).
+// `stand`: the run's stand end ({ atStart, wallU, rearZ }, as joiner in downsWorld.js): the run continues past its last edge along the
+// back/front circle chords into the stand's end wall, every piece ending inside it (behind the far stand the back wall ends on the
+// diagonal shared with the return). Wedge local z runs outward from the inner chord: radius ri + z / cos(half step).
+// Roof underside rises 7.15 m at the front (z -0.8) to 8.38 m just past the back wall (z = d + 0.1), resting on the cornice (8.1 to 8.4).
 export const ROOF = { y0: 7.15, k: (8.38 - 7.15) / (WEDGE.d + 0.9) };
 export function arcadeShell(sink, { mir = 1, cx = ARCADE.cx, edges, stand = null }) {
   const R = Math.PI / 180, ca = Math.cos(WEDGE.a2), D = WEDGE.d;
@@ -135,14 +135,14 @@ export function arcadeShell(sink, { mir = 1, cx = ARCADE.cx, edges, stand = null
   if (stand) {
     const { atStart, wallU, rearZ } = stand, south = rearZ !== null && rearZ !== undefined;
     const te = atStart ? edges[0] : edges[edges.length - 1];
-    const onWall = (r) => { const t = Math.acos((wallU + cx) / r) / R; return south ? 360 - t : t; };   // (the angle at which circle r meets the wall)
+    const onWall = (r) => { const t = Math.acos((wallU + cx) / r) / R; return south ? 360 - t : t; };   // angle where circle r meets the wall
     const chord = (p0, p1) => {
       const l = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), u = [(p1[0] - p0[0]) / l, (p1[1] - p0[1]) / l];
       let n = [-u[1], u[0]];
-      if (n[0] * (p0[0] - Oc[0]) + n[1] * (p0[1] - Oc[1]) < 0) n = [-n[0], -n[1]];                    // (outward, away from the turn's centre)
+      if (n[0] * (p0[0] - Oc[0]) + n[1] * (p0[1] - Oc[1]) < 0) n = [-n[0], -n[1]];                    // outward, away from the turn centre
       return { p0, u, n };
     };
-    const at = (c, off, [Q, m]) => {                                                                    // the chord's line moved `off` outward, where it crosses plane [Q, m]
+    const at = (c, off, [Q, m]) => {                                                                    // chord line offset `off` outward, crossing plane [Q, m]
       const ox = c.p0[0] + c.n[0] * off, oz = c.p0[1] + c.n[1] * off, s = ((Q[0] - ox) * m[0] + (Q[1] - oz) * m[1]) / (c.u[0] * m[0] + c.u[1] * m[1]);
       return [ox + c.u[0] * s, oz + c.u[1] * s];
     };
@@ -152,10 +152,10 @@ export function arcadeShell(sink, { mir = 1, cx = ARCADE.cx, edges, stand = null
     const K1 = at(back, 0, outFace), Jin = at(back, -0.7, xPlane(wallU));
     J = { te, tm: te + (atStart ? 1 : -1) * ARCADE.step / 2, south, rearZ, wallU, back, front, at, xPlane, outFace, diag: [K1, [-(Jin[1] - K1[1]), Jin[0] - K1[0]]] };
   }
-  // Every piece ends buried: in the gate hall's block at the run's open end (its last radial edge is inside the block), in the stand's end wall at the other. They end on planes of their
-  // own, `ov` metres apart (into the block, along the edge's tangent; into the wall, from its middle, wallU + 0.4), so no two pieces' end faces lie on one plane (they would z-fight).
+  // Every piece ends buried: in the gate hall block at the open end, in the stand's end wall at the other. Each ends on its own plane,
+  // `ov` m apart (along the edge tangent into the block; from wallU + 0.4 into the wall), so no two end faces z-fight.
   const gi = !stand ? -1 : stand.atStart ? edges.length - 1 : 0, gs = gi < 0 ? 0 : Math.sign(edges[gi] - edges[gi ? gi - 1 : 1]);
-  const Pe = (i, z, ov) => {                                                                      // the point at local z on edge i, the gate end's moved ov out of the run
+  const Pe = (i, z, ov) => {                                                                      // point at local z on edge i; the gate end's moved ov out of the run
     const p = Pz(edges[i], z);
     if (i !== gi || !ov) return p;
     const t = edges[i] * R, d = gs * ov;
@@ -171,17 +171,17 @@ export function arcadeShell(sink, { mir = 1, cx = ARCADE.cx, edges, stand = null
     }
     sink(sheet(polys, y1 - y0), color, ink);
   };
-  band(D - 0.7, D, -0.05, 8.3, PAL.mint, 0.03, 'back', 0, J && J.south);                      // the back wall, from under the ground (the bays' floors end inside it, so no floor edge shows under its outer face and its outline's foot is buried; behind the far stand it ends on the diagonal it shares with the return)
-  band(D - 0.84, D - 0.7, 0.14, 2.4, MONEY2, 0, 'back', 0.02);                                 // its wainscot
-  band(D - 0.78, D - 0.7, 4.4, 4.75, MONEY2, 0, 'back', 0.04);                                 // the string course
-  band(D - 1.0, D + 0.1, 8.1, 8.4, PAL.gold, 0.012, 'back', 0.06);                             // the cornice
-  band(0, 0.35, 0.14, 0.17, PAL.gold, 0, 'front', 0.08);                                       // the inlay along the walk's edge
-  band(0.1, 1.0, 6.5, 7.1, MINT2, 0.012, 'front', 0.1);                                        // the architrave over the colonnade
+  band(D - 0.7, D, -0.05, 8.3, PAL.mint, 0.03, 'back', 0, J && J.south);                      // back wall from below ground (bay floors end inside it, burying floor edges and the outline foot; behind the far stand it ends on the return diagonal)
+  band(D - 0.84, D - 0.7, 0.14, 2.4, MONEY2, 0, 'back', 0.02);                                 // wainscot
+  band(D - 0.78, D - 0.7, 4.4, 4.75, MONEY2, 0, 'back', 0.04);                                 // string course
+  band(D - 1.0, D + 0.1, 8.1, 8.4, PAL.gold, 0.012, 'back', 0.06);                             // cornice
+  band(0, 0.35, 0.14, 0.17, PAL.gold, 0, 'front', 0.08);                                       // walk-edge inlay
+  band(0.1, 1.0, 6.5, 7.1, MINT2, 0.012, 'front', 0.1);                                        // architrave over the colonnade
   band(0.08, 1.06, 6.44, 6.58, PAL.gold, 0.012, 'front', 0.12);                                // its gold band
-  band(-0.92, -0.68, 6.15, 7.2, PAL.mint, 0.03, 'front', 0.14);                                // the fascia, up into the roof
+  band(-0.92, -0.68, 6.15, 7.2, PAL.mint, 0.03, 'front', 0.14);                                // fascia, up into the roof
   band(-0.98, -0.62, 6.05, 6.15, PAL.gold, 0.012, 'front', 0.16);                              // its gold lip
-  // the roof: each bay's deck a plane raked along its own middle radius (so two bays' decks meet on their shared edge), and the bay at the stand on its neighbour's plane. Behind the far
-  // stand the deck runs on over the return, and past its outer face as an eave (18 cm, over the return's gold cornice): its edge is not in that face's plane
+  // roof: each bay's deck is a plane raked along its middle radius (neighbours meet on the shared edge); the stand bay uses its
+  // neighbour's plane. Behind the far stand the deck runs over the return and 18 cm past its outer face as an eave (off that face's plane)
   const yOn = (tm, dy) => { const c = Math.cos(tm * R), s = Math.sin(tm * R); return (x, z) => ROOF.y0 + ((mir * x + cx) * c + z * s - WEDGE.r0 + 0.8) * ROOF.k + dy; };
   const roof = (zf, zb, dy, ov, overReturn) => {
     const polys = [];
@@ -194,12 +194,12 @@ export function arcadeShell(sink, { mir = 1, cx = ARCADE.cx, edges, stand = null
     return polys;
   };
   sink(sheet(roof(-0.8, D + 0.2, 0, 0.18, true), 0.32), PAL.barn, 0.025);
-  // the ceiling, one piece under the whole run: from inside the fascia to inside the cornice (its back edge buried there, not in the cornice's outer face), and at the stands into the
-  // end wall and the return (not out to the return's outer face)
+  // ceiling, one piece under the run: from inside the fascia to inside the cornice (back edge buried), at the stands into the end wall
+  // and the return (not out to its outer face)
   sink(sheet(roof(-0.7, D - 0.3, -0.07, 0.2, false), 0.07), MINT2, 0);
 }
 
-// One bay's run pieces as plain meshes in the wedge's own frame (dn_arcade's: the inner chord's middle at the origin, +z outward), for the Asset Row, which shows the wedge alone.
+// One bay's run pieces as plain meshes in dn_arcade's frame (inner chord middle at origin, +z outward), for the Asset Row's lone wedge.
 export function arcadeBayShell() {
   const g = new THREE.Group(), s2 = ARCADE.step / 2;
   arcadeShell((geo, color, ink) => {

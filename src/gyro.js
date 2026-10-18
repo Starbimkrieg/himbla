@@ -1,24 +1,23 @@
 // PlayStation motion sensors over WebHID.
 //
-// The browser Gamepad API never exposes a DualShock 4 / DualSense gyroscope, so it is read straight from
-// the pad's HID input reports (WebHID: Chrome, Edge and the desktop app; Firefox and Safari have none).
-// While Circle is held, how far the pad has been turned since Circle went down stands in for the left
-// stick (gamepad.js), which drives ground movement and, in the air, flips and spins.
+// The Gamepad API never exposes the DS4 / DualSense gyro, so it's read from HID input reports (WebHID: Chrome,
+// Edge, desktop app; not Firefox or Safari). While Circle is held, the pad's turn since Circle went down stands
+// in for the left stick (gamepad.js): ground movement, and flips and spins in the air.
 //
-// Report layouts below were checked against the open-source dualsense-ts, jsdualsense and webhid-ds4
-// packages. WebHID's `event.data` has the report-id byte stripped, so every offset is from after it:
+// Layouts checked against dualsense-ts, jsdualsense and webhid-ds4. `event.data` has the report-id byte stripped,
+// so offsets are from after it:
 //   DualSense   USB   report 0x01   gyro X/Y/Z (int16 LE) at 15
-//               BT    report 0x31   gyro at 16    (the pad only sends 0x31 after feature report 0x05 is read)
+//               BT    report 0x31   gyro at 16    (only sent after feature report 0x05 is read)
 //   DualShock 4 USB   report 0x01   gyro at 12
 //               BT    report 0x11   gyro at 14    (needs feature report 0x02 read first)
-// Gyro axes are the controller's own: X is pitch, Y is yaw, Z is roll (steering-wheel turn).
+// Axes are the pad's: X pitch, Y yaw, Z roll (steering-wheel turn).
 
 const SONY = 0x054c;
 const DS5 = new Set([0x0ce6, 0x0df2]); // DualSense, DualSense Edge
 const DS4 = new Set([0x05c4, 0x09cc, 0x0ba0]); // DualShock 4 v1, v2, USB wireless adaptor
 const FILTERS = [...DS5, ...DS4].map((productId) => ({ vendorId: SONY, productId }));
-const LSB = 32767 / 2000; // raw counts per deg/s (the sensor's +-2000 deg/s full scale)
-const STALE = 0.25; // seconds without a report before the gyro counts as gone
+const LSB = 32767 / 2000; // raw counts per deg/s (+-2000 deg/s full scale)
+const STALE = 0.25; // s without a report before the gyro counts as gone
 
 export const gyroSupported = () => typeof navigator !== 'undefined' && !!navigator.hid;
 
@@ -26,16 +25,16 @@ export class GyroPad {
   constructor() {
     this.dev = null;
     this.model = null; // 'ds5' | 'ds4'
-    this.transport = ''; // 'USB' | 'Bluetooth' (from the report id that arrives)
+    this.transport = ''; // 'USB' | 'Bluetooth' (from the arriving report id)
     this.bias = [0, 0, 0]; // raw counts
     this.scale = [1, 1, 1]; // per-axis trim from the DualSense calibration report
     this.rate = [0, 0, 0]; // deg/s: pitch, yaw, roll
-    this.theta = { x: 0, z: 0 }; // degrees turned about the pad's X (pitch) and Z (roll) axes since begin()
-    this.on = false; // Circle is held: integrate
-    this.lastT = 0; // performance.now() of the last motion report
-    this.still = 0; // seconds the pad has been still (re-learns the gyro's zero offset)
+    this.theta = { x: 0, z: 0 }; // degrees turned about X (pitch) and Z (roll) since begin()
+    this.on = false; // Circle held: integrate
+    this.lastT = 0; // timestamp of the last motion report
+    this.still = 0; // s held still (re-learns the zero offset)
     this.status = gyroSupported() ? 'Not connected' : (typeof window !== 'undefined' && window.isSecureContext === false ? 'Needs a secure page (https:// or localhost)' : 'Not supported in this browser (needs Chrome, Edge or the desktop app)');
-    this.onStatus = null; // set by the settings screen to refresh itself
+    this.onStatus = null; // settings screen's refresh hook
     this._report = (e) => this.report(e);
     if (gyroSupported()) {
       navigator.hid.addEventListener('connect', (e) => { if (this.isPad(e.device)) this.attach(e.device); });
@@ -47,8 +46,7 @@ export class GyroPad {
 
   setStatus(s) { this.status = s; if (this.onStatus) this.onStatus(); }
 
-  // pads this page already has permission for (the desktop app grants them up front; a browser after the first
-  // CONNECT click). No user gesture needed.
+  // pads already permitted (desktop app: up front; browser: after the first CONNECT). No gesture needed.
   async init() {
     if (!gyroSupported()) return;
     try {
@@ -58,7 +56,7 @@ export class GyroPad {
     }
   }
 
-  // the CONNECT button: the browser's own picker (needs a real click, not a controller press)
+  // CONNECT button: the browser's picker (needs a real click, not a controller press)
   async request() {
     if (!gyroSupported()) return this.status;
     try {
@@ -84,8 +82,8 @@ export class GyroPad {
       this.model = DS5.has(d.productId) ? 'ds5' : 'ds4';
       this.transport = '';
       this.bias = [0, 0, 0]; this.scale = [1, 1, 1]; this.rate = [0, 0, 0]; this.still = 0; this.lastT = 0; this.prev = null;
-      // Over Bluetooth the pad stays on a short report with no motion until one of its feature reports is read
-      // (DualSense 0x05, which also holds the gyro calibration; DualShock 4 0x02). Harmless over USB.
+      // over Bluetooth the pad sends short reports with no motion until a feature report is read (DualSense 0x05,
+      // which also holds the calibration; DS4 0x02). Harmless over USB.
       try {
         if (this.model === 'ds5') this.calibrate(await d.receiveFeatureReport(0x05));
         else await d.receiveFeatureReport(0x02);
@@ -106,8 +104,8 @@ export class GyroPad {
     this.setStatus(why);
   }
 
-  // DualSense feature report 0x05 (id stripped): gyro bias int16 LE at 0,2,4; plus / minus at 6,8 (pitch),
-  // 10,12 (yaw), 14,16 (roll). Used for the zero offset and to even the three axes out.
+  // DualSense feature report 0x05 (id stripped): bias int16 LE at 0,2,4; plus / minus at 6,8 (pitch), 10,12 (yaw),
+  // 14,16 (roll). Gives the zero offset and evens the axes out.
   calibrate(dv) {
     if (!dv || dv.byteLength < 17) return;
     const o = dv.byteLength === 41 ? 1 : 0;
@@ -115,7 +113,7 @@ export class GyroPad {
     const bias = [i16(0), i16(2), i16(4)];
     const range = [i16(6) - i16(8), i16(10) - i16(12), i16(14) - i16(16)].map(Math.abs);
     const maxR = Math.max(...range);
-    if (!bias.every((b) => Math.abs(b) < 8000) || !range.every((r) => r > 1000) || !(maxR > 0)) return; // (nonsense: keep the defaults)
+    if (!bias.every((b) => Math.abs(b) < 8000) || !range.every((r) => r > 1000) || !(maxR > 0)) return; // nonsense: keep defaults
     this.bias = bias;
     this.scale = range.map((r) => maxR / r);
   }
@@ -125,8 +123,8 @@ export class GyroPad {
     let off = -1;
     if (this.model === 'ds5') off = id === 0x31 ? 16 : id === 0x01 ? 15 : -1;
     else off = id === 0x11 ? 14 : id === 0x01 ? 12 : -1;
-    if (off < 0 || d.byteLength < off + 6 || (id === 0x01 && d.byteLength < 24)) return; // (short Bluetooth report: no motion)
-    // (the time the browser received it, not when this handler got to run: reports queued behind a stalled frame still count)
+    if (off < 0 || d.byteLength < off + 6 || (id === 0x01 && d.byteLength < 24)) return; // short Bluetooth report: no motion
+    // receive time, not handler time, so reports queued behind a stalled frame still count
     const t = typeof e.timeStamp === 'number' && e.timeStamp > 0 ? e.timeStamp : performance.now();
     const dt = this.lastT ? Math.min(STALE, Math.max(0, (t - this.lastT) / 1000)) : 0;
     this.lastT = t;
@@ -136,12 +134,12 @@ export class GyroPad {
     let calm = true;
     for (let i = 0; i < 3; i++) {
       this.rate[i] = ((raw[i] - this.bias[i]) / LSB) * this.scale[i];
-      // (calm: barely different from the last report, and near zero once the learned offset is taken off)
+      // calm: barely changed since the last report, and near zero after the offset
       if (Math.abs(this.rate[i]) > 6 || (this.prev && Math.abs(raw[i] - this.prev[i]) > LSB)) calm = false;
     }
     this.prev = raw;
-    // held still for a moment: that reading is the gyro's zero, so slow drift can't build up. (Not while Circle is
-    // held: a slow, steady tilt must not be learned away.)
+    // held still a moment: that reading is the zero, so drift can't build up. Not while Circle is held (a slow
+    // steady tilt must not be learned away).
     this.still = calm && !this.on ? this.still + dt : 0;
     if (this.still > 0.4) for (let i = 0; i < 3; i++) this.bias[i] += (raw[i] - this.bias[i]) * Math.min(1, dt * 2);
     if (this.on && dt) {
@@ -150,15 +148,14 @@ export class GyroPad {
     }
   }
 
-  live() { return !!this.dev && this.lastT > 0 && (performance.now() - this.lastT) / 1000 < STALE; } // (lastT is an event timestamp: the same clock as performance.now())
+  live() { return !!this.dev && this.lastT > 0 && (performance.now() - this.lastT) / 1000 < STALE; } // lastT is an event timestamp, same clock as performance.now()
 
-  // Circle went down: how the pad is held now is neutral
+  // Circle went down: the current hold is neutral
   begin() { this.theta.x = 0; this.theta.z = 0; this.on = true; }
   end() { this.on = false; this.theta.x = 0; this.theta.z = 0; }
 
-  // the virtual left stick, x right and y down like the Gamepad API's axes (so y < 0 is forward):
-  // pitching the top edge away from you pushes it forward, turning the pad like a steering wheel steers.
-  // fullDeg: turn that is a full push; deadDeg: turn that is ignored. invX / invY flip an axis.
+  // virtual left stick, x right / y down like Gamepad API axes (y < 0 forward). Tipping the top edge away pushes
+  // forward; turning it like a wheel steers. fullDeg: full push; deadDeg: ignored. invX / invY flip an axis.
   stick(fullDeg, deadDeg, invX, invY) {
     const ramp = (a) => {
       const m = Math.max(0, Math.abs(a) - deadDeg) / Math.max(1, fullDeg - deadDeg);

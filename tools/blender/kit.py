@@ -1,11 +1,10 @@
 # Shared geometry and scene helpers for the Blender build scripts. Load with
-# exec(open(<repo>/tools/blender/kit.py).read(), globals())  after setting COLL (the collection
-# to rebuild) and SLOT_COLORS (preview colour per material slot). A script that needs a variant
-# (build_runner.py's lathe and mesh, build_ships.py's ring_pts and mesh) defines its own after
-# the exec, which replaces the kit's of that name for everything in the script.
+# exec(open(<repo>/tools/blender/kit.py).read(), globals())  after setting COLL (the collection to rebuild) and
+# SLOT_COLORS (preview colour per material slot). A script needing a variant (build_runner.py's lathe and mesh,
+# build_ships.py's ring_pts and mesh) defines its own after the exec, replacing the kit's.
 #
-# Everything is authored in three.js axes (x right, y up, +z forward) and converted to Blender's
-# (x, -z, y) on the way in, which the glTF exporter's +Y-up option converts back.
+# Authored in three.js axes (x right, y up, +z forward), converted to Blender's (x, -z, y) on the way in; the glTF
+# exporter's +Y-up option converts back.
 
 import bpy, bmesh, math, os
 from mathutils import Vector, Euler
@@ -203,7 +202,7 @@ def merge(*geos):
 
 
 def B(a, b, r, seg=4, cap=False):
-    """One strut between two points (open ends by default: they sit inside the members they join)."""
+    """A strut between two points (open ends by default: they sit inside the members they join)."""
     return tube([a, b], [r, r], seg, cap)
 
 
@@ -308,12 +307,11 @@ def export(out, objects):
     print("exported", out, os.path.getsize(out), "bytes")
 
 
-# ---------------- three.js-style primitives and smooth-shaded meshes (additive; build_outposts.py) ----------------
-# Same vertex layout as THREE.BoxGeometry / CylinderGeometry / SphereGeometry / TorusGeometry / PlaneGeometry, so a
-# port lines up with a build made from those in the game. Each returns (verts, faces, smooth) in three.js axes:
-# faces counter-clockwise seen from outside, and one smoothing group per face (0 = flat; n > 0 = faces of group n
-# share normals across their common edges; edges between different groups stay hard, like three.js's split caps).
-# Place one with place(), build it with mesh_smooth().
+# ---------------- three.js-style primitives and smooth-shaded meshes (build_outposts.py) ----------------
+# Same vertex layout as THREE.BoxGeometry / CylinderGeometry / SphereGeometry / TorusGeometry / PlaneGeometry, so a port
+# lines up with the game's. Each returns (verts, faces, smooth) in three.js axes: faces counter-clockwise from outside,
+# one smoothing group per face (0 = flat; faces of group n > 0 share normals; edges between groups stay hard, like
+# three.js's split caps). Place with place(), build with mesh_smooth().
 
 from mathutils import Matrix
 
@@ -355,7 +353,7 @@ def cylinder(rt, rb, h, seg, open_ended=False):
     faces, smooth = [], []
     for i in range(seg):
         j = (i + 1) % seg
-        f = tuple(dict.fromkeys((bot[i], bot[j], top[j], top[i])))  # (drops the repeated apex index)
+        f = tuple(dict.fromkeys((bot[i], bot[j], top[j], top[i])))  # drops the repeated apex index
         faces.append(f)
         smooth.append(1)
     if not open_ended:
@@ -408,8 +406,8 @@ def torus_arc(R, r, tubular, radial):
 
 
 def mesh_smooth(name, geo, slot, parent, ink=0.04):
-    """Like mesh(), for a primitive above: faces keep their winding (no recalculation) and edges are smooth only
-    inside a smoothing group, so cylinders are round with hard caps and boxes stay crisp."""
+    """mesh() for the primitives above: winding kept (no recalculation), edges smooth only inside a smoothing group, so
+    cylinders are round with hard caps and boxes stay crisp."""
     verts, faces, smooth = geo
     bm = bmesh.new()
     vs = [bm.verts.new(tb(v)) for v in verts]
@@ -433,8 +431,8 @@ def mesh_smooth(name, geo, slot, parent, ink=0.04):
 
 def cylinder_arc(rt, rb, h, seg, theta_start=0.0, theta_len=2 * math.pi):
     """An OPEN cylinder shell over an arc: THREE.CylinderGeometry(rt, rb, h, seg, 1, true, thetaStart, thetaLength).
-    Axis y, centred; angle t is at (sin t, cos t) like cylinder(), so t = 0 is +z and t runs towards +x. A partial arc
-    has seg + 1 columns and open ends; a full turn wraps. No caps. Pair it with a double-sided material."""
+    Axis y, centred; angle t at (sin t, cos t) like cylinder() (t = 0 is +z, runs towards +x). A partial arc has seg + 1
+    columns and open ends; a full turn wraps. No caps: pair with a double-sided material."""
     full = theta_len >= 2 * math.pi - 1e-9
     cols = seg if full else seg + 1
     verts, top, bot = [], [], []
@@ -449,9 +447,8 @@ def cylinder_arc(rt, rb, h, seg, theta_start=0.0, theta_len=2 * math.pi):
 
 
 def torus_partial(R, r, radial, tubular, arc=math.pi):
-    """THREE.TorusGeometry(R, r, radial, tubular, arc) as built: a tube round an arc of a circle in the x-y plane,
-    starting on +x and turning counter-clockwise (towards +y) through `arc`; open at both ends when arc < 2 pi.
-    (torus_arc() above is the full ring already lying flat.)"""
+    """THREE.TorusGeometry(R, r, radial, tubular, arc) as built: a tube round an arc in the x-y plane from +x,
+    counter-clockwise (towards +y) through `arc`; open ends when arc < 2 pi. (torus_arc() is the full ring lying flat.)"""
     full = arc >= 2 * math.pi - 1e-9
     cols = tubular if full else tubular + 1
     verts = []
@@ -470,12 +467,12 @@ def torus_partial(R, r, radial, tubular, arc=math.pi):
     return verts, faces, [1] * len(faces)
 
 
-# ---------------- build-time check: surfaces that would z-fight ----------------
+# ---------------- build-time check: z-fighting surfaces ----------------
 
 def audit_coplanar(objects=None, eps=0.003, min_area=1e-4, allow=()):
-    """Raise if two different mesh objects have triangles that face the same way, lie on one plane (within eps metres) and overlap by more than min_area m2: the game's depth
-    buffer cannot tell such surfaces apart, and they flicker as the camera moves. (tools/casino-zfight.mjs runs the same test on the live scene.) `allow` is a list of
-    (name fragment, name fragment) pairs that are known and intended. Run after every mesh is built, before export."""
+    """Raise if two mesh objects have same-facing triangles on one plane (within eps m) overlapping by more than
+    min_area m2: the depth buffer can't separate them and they flicker. (tools/casino-zfight.mjs runs the same test on
+    the live scene.) `allow`: (name fragment, name fragment) pairs known and intended. Run after building, before export."""
     dg = bpy.context.evaluated_depsgraph_get()
     tris = []
     for oi, o in enumerate(objects if objects is not None else C.objects):
@@ -492,7 +489,7 @@ def audit_coplanar(objects=None, eps=0.003, min_area=1e-4, allow=()):
             ps = []
             for vi in lt.vertices:
                 w = mw @ me.vertices[vi].co
-                ps.append((w.x, w.z, -w.y))                      # (back to three.js axes)
+                ps.append((w.x, w.z, -w.y))                      # back to three.js axes
             a, b, c = ps
             ux, uy, uz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
             vx, vy, vz = c[0] - a[0], c[1] - a[1], c[2] - a[2]
@@ -532,7 +529,7 @@ def audit_coplanar(objects=None, eps=0.003, min_area=1e-4, allow=()):
 
     def test(i, j):
         A, Bt = tris[i], tris[j]
-        if A[0] == Bt[0] or A[5] != Bt[5]:       # (one mesh, or two different models that merely share the origin)
+        if A[0] == Bt[0] or A[5] != Bt[5]:       # same mesh, or different models that merely share the origin
             return
         if A[2][0] * Bt[2][0] + A[2][1] * Bt[2][1] + A[2][2] * Bt[2][2] < 0.9999 or abs(A[3] - Bt[3]) > eps:
             return

@@ -1,7 +1,7 @@
 // Procedural WebAudio: wind/glide noise, skate hum, thruster, and punchy SFX.
 
-// The music's own clock (startMusicClock): how often it looks for steps to queue, and how far ahead of the audio
-// clock it keeps them queued (a frame, or a wake-up of the clock, can be late by about that much before the music gaps)
+// Music clock (startMusicClock): tick rate, and how far ahead of the audio clock steps are queued (a frame or clock
+// wake-up can be this late before the music gaps)
 const MUSIC_TICK_MS = 30;
 const MUSIC_AHEAD = 0.4;
 
@@ -9,12 +9,12 @@ export class Audio {
   constructor() {
     this.ctx = null;
     this.enabled = true;
-    this.mix = { hum: 1, wind: 1 }; // per-layer level trims for the ambient loops (the trailer lowers them)
-    this.levelFloor = 0; // the roaming groove never drops below this (the trailer keeps it up)
-    this.skateTone = 'hum'; // which skate voice sings (cosmetics: each pair of skates has one)
-    this.skateVoice = null; // ...and the one that is built and running (only that one: setSkateTone)
-    this.skatePitch = { f0: 55, s: 0 }; // the pitch it was last told (a new voice starts there)
-    this.onSfx = null; // heard a pickup or a payout: told to the controller's rumble too (main.js)
+    this.mix = { hum: 1, wind: 1 }; // ambient loop level trims (the trailer lowers them)
+    this.levelFloor = 0; // floor for the roaming groove's level (the trailer raises it)
+    this.skateTone = 'hum'; // skate voice (cosmetics: one per pair of skates)
+    this.skateVoice = null; // the one built and running (setSkateTone)
+    this.skatePitch = { f0: 55, s: 0 }; // last pitch set (a new voice starts there)
+    this.onSfx = null; // pickup / payout hook for controller rumble (main.js)
   }
 
   init() {
@@ -28,7 +28,7 @@ export class Audio {
     const ctx = this.ctx;
     this.master = ctx.createGain();
     this.master.gain.value = 0.5 * (this.vol ? this.vol.sfx : 1); // settings: master = effects bus
-    this.out = ctx.createGain(); this.out.gain.value = this.vol ? (this.vol.mute ? 0 : this.vol.master) : 1; // settings (the one node wired to the speakers: muting it silences everything)
+    this.out = ctx.createGain(); this.out.gain.value = this.vol ? (this.vol.mute ? 0 : this.vol.master) : 1; // settings (the only node to the speakers: mute silences all)
     this.musicBus = ctx.createGain(); this.musicBus.gain.value = 0.5 * (this.vol ? this.vol.music : 1); // settings
     this.master.connect(this.out); this.musicBus.connect(this.out); this.out.connect(ctx.destination); // settings
 
@@ -40,14 +40,13 @@ export class Audio {
     // glide noise (suit-transmitted rumble)
     const src = ctx.createBufferSource();
     src.buffer = this.noise; src.loop = true;
-    // a soft low rumble rather than hiss: lowpassed, and it never opens up into static
+    // lowpassed: a soft rumble, never static
     this.windF = ctx.createBiquadFilter(); this.windF.type = 'lowpass'; this.windF.Q.value = 0.3;
     this.windG = ctx.createGain(); this.windG.gain.value = 0;
     src.connect(this.windF).connect(this.windG).connect(this.master);
     src.start();
 
-    // skate hum: one shared level (humG, rising with speed), and under it the voice of the skates you wear, one of four
-    // (setSkateTone). All of them stay low and soft: something you stop hearing after a while.
+    // skate hum: a shared level (humG, rises with speed) over the worn skates' voice (setSkateTone). Kept low and soft.
     this.humG = ctx.createGain(); this.humG.gain.value = 0;
     this.humG.connect(this.master);
     this.setSkateTone(this.skateTone);
@@ -60,8 +59,7 @@ export class Audio {
     src2.connect(this.jetF).connect(this.jetG).connect(this.master);
     src2.start();
 
-    // the racecourse crowd: the noise bed is out (it read as static) until the cheering is redone;
-    // setCrowd() still records the level, and roar() still adds its whoops
+    // racecourse crowd: no noise bed (it read as static); setCrowd() records the level, roar() adds whoops
     this.crowdLevel = 0;
     this.crowdBoost = 0;
 
@@ -88,7 +86,7 @@ export class Audio {
     }
   }
 
-  // ---------- synthwave: a slow A-minor groove whose layers and volume follow your speed ----------
+  // ---------- synthwave: A-minor groove, layers follow speed ----------
   initMusic() {
     const ctx = this.ctx;
     this.musicOn = this.musicOn ?? true;
@@ -116,8 +114,7 @@ export class Audio {
     this.drive.curve = curve;
     this.drive.oversample = '2x';
     this.drive.connect(this.music);
-    // zone tracks: the game says where you are (setZone) and the music crossfades to that place's
-    // track. 'free' is the speed-driven roaming groove, 'menu' the title screen.
+    // zone tracks: setZone crossfades to the place's track. 'free' = speed-driven groove, 'menu' = title screen.
     this.track = this.want = this.menu ? 'menu' : 'free';
     this.fade = 1;
     this.bpm = this.trackInfo(this.track).bpm;
@@ -126,10 +123,8 @@ export class Audio {
     this.startMusicClock();
   }
 
-  // The music's own clock: queues the next steps on a timer of its own rather than from the game's frame, so a long
-  // frame (a level load, a shader compile, a dragged window, a debugger) or a page with no animation frames (a hidden
-  // tab, the trailer's &pump mode) can't leave a gap in the groove. A worker keeps the time (a page's own timers are
-  // throttled in the background); setInterval stands in where workers can't be had.
+  // Queues steps on its own timer, not the game's frame, so long frames or no frames (hidden tab, trailer &pump) don't
+  // gap the groove. A worker keeps time (page timers throttle in the background); setInterval if workers fail.
   startMusicClock() {
     if (this.clock) return;
     const tick = () => this.scheduleMusic();
@@ -149,8 +144,8 @@ export class Audio {
 
   mtof(n) { return 440 * Math.pow(2, (n - 69) / 12); }
 
-  // One synth note. Extras: q (filter resonance), filter (type), vib (vibrato depth in cents) at
-  // vibRate Hz, from (glide in from this frequency), sweep (cutoff multiplier over the note), dest.
+  // One synth note. q: resonance; filter: type; vib: vibrato cents at vibRate Hz; from: glide-in Hz;
+  // sweep: cutoff multiplier over the note; dest: output node.
   voice(type, freq, t, dur, vol, { attack = 0.01, cutoff = 2000, echo = 0, detune = 0, q = 0.7, filter = 'lowpass', vib = 0, vibRate = 5.5, from = 0, sweep = 0, dest = null } = {}) {
     const ctx = this.ctx;
     const o = ctx.createOscillator(); o.type = type; o.detune.value = detune;
@@ -171,13 +166,13 @@ export class Audio {
     o.start(t); o.stop(t + dur + 0.05);
   }
 
-  // a rhodes-ish electric piano: a soft sine body with a bell an octave up that dies fast
+  // rhodes-ish e-piano: sine body plus a fast-dying bell an octave up
   epiano(t, n, dur, vol) {
     this.voice('sine', this.mtof(n), t, dur, vol, { attack: 0.005, cutoff: 3000, echo: 0.2 });
     this.voice('triangle', this.mtof(n + 12), t, dur * 0.35, vol * 0.35, { attack: 0.003, cutoff: 5000 });
   }
 
-  // a twangy plucked string (the western guitar): sawtooth through a resonant bandpass, slapback echo
+  // twangy western guitar: saw through a resonant bandpass, slapback echo
   pluck(t, n, vol, echo = 0.5) {
     this.voice('sawtooth', this.mtof(n), t, 0.32, vol, { attack: 0.002, cutoff: this.mtof(n) * 3, q: 3, filter: 'bandpass', sweep: 0.5, echo });
   }
@@ -245,8 +240,7 @@ export class Audio {
     }
   }
 
-  // Title-screen track: the same synths, faster and brighter. Em - C - G - D, four-on-the-floor,
-  // offbeat open hats, a driving octave bass and a hooky lead.
+  // Title track: faster, brighter. Em, C, G, D; four-on-the-floor, offbeat hats, octave bass, hooky lead.
   menuStep(t, step) {
     const sixteenth = 60 / this.bpm / 4;
     const bar = Math.floor(step / 16) % 4;
@@ -260,7 +254,7 @@ export class Audio {
     if (s === 4 || s === 12) this.snare(t, 0.2);
     if (s % 4 === 2) this.hat(t, 0.05);
     else if (s % 2 === 1) this.hat(t, 0.018);
-    // lead: a two-bar hook, answered an octave up on the second pass
+    // lead: two-bar hook, an octave up on the second pass
     const hook = [0, -1, 2, -1, 1, -1, 2, 0, -1, 2, -1, 1, 0, -1, 2, -1];
     const k = hook[s];
     if (k >= 0 && (bar % 2 === 0 || s < 12)) {
@@ -273,9 +267,8 @@ export class Audio {
 
   // ---------- zone tracks ----------
 
-  // CASINO: late-night lounge synthwave. A ii-V-I-vi in F with 9ths and 13ths, a walking bass,
-  // swung brush hats, electric-piano comping, and a muted, vibrato-laden lead that noodles in
-  // and out every other phrase.
+  // CASINO: lounge synthwave. ii-V-I-vi in F with 9ths and 13ths, walking bass, swung brushes, e-piano comping,
+  // a muted vibrato lead every other phrase.
   casinoStep(t, step) {
     const six = 60 / this.bpm / 4;
     const bar = Math.floor(step / 16) % 4, s = step % 16, phrase = Math.floor(step / 64);
@@ -283,17 +276,17 @@ export class Audio {
     const ch = chords[bar];
     const swing = (s % 4 === 2) ? six * 0.33 : 0; // swung 8ths
     if (s === 0) for (const n of ch.slice(1)) this.voice('sawtooth', this.mtof(n), t, six * 16 + 0.5, 0.009, { attack: 0.6, cutoff: 1100, echo: 0.3, detune: n % 2 ? 6 : -6 });
-    // walking bass: root, third, fifth, then a chromatic step into the next root
+    // walking bass: root, third, fifth, chromatic step into the next root
     const next = chords[(bar + 1) % 4][0];
     const walk = [ch[0], ch[0] + (ch[1] - ch[0] > 3 ? 4 : 3), ch[0] + 7, next + 1];
     if (s % 4 === 0) this.voice('triangle', this.mtof(walk[s / 4] - 24), t, six * 3.4, 0.2, { attack: 0.01, cutoff: 900 });
-    // brushes and a ride, swung; a soft kick on 1 and 3
+    // swung brushes; soft kick on 1 and 3
     if (s % 2 === 0) this.hat(t + swing, s % 4 === 0 ? 0.022 : 0.034);
     if (s === 4 || s === 12) this.snare(t, 0.06);
     if (s === 0 || s === 8) this.kick(t);
     // e-piano comping: the "and" of 2 and beat 4
     if (s === 6 || s === 12) for (const n of ch.slice(1, 4)) this.epiano(t + (s === 6 ? swing : 0), n + 12, six * 3, 0.035);
-    // the muted lead, every other phrase
+    // muted lead, every other phrase
     if (phrase % 2 === 1) {
       const lick = [[9, -1, 7, -1, 4, -1, 2, 4, -1, -1, 7, -1, 5, 4, 2, -1], [0, -1, 2, 4, 5, -1, 4, 2, -1, 0, -1, -2, 0, -1, -1, -1]][bar % 2];
       const k = lick[s];
@@ -301,27 +294,26 @@ export class Audio {
     }
   }
 
-  // DOWNS: space-western. A minor with a harmonic-minor E7, a galloping kick-and-shaker rhythm,
-  // a twangy guitar rolling through the chords, a lonesome whistle lead with long slides, and a
-  // sci-fi zap on the turnaround.
+  // DOWNS: space-western. A minor with a harmonic-minor E7, galloping kick and shaker, rolling twangy guitar,
+  // a sliding whistle lead, a sci-fi zap on the turnaround.
   downsStep(t, step) {
     const six = 60 / this.bpm / 4;
     const bar = Math.floor(step / 16) % 4, s = step % 16, phrase = Math.floor(step / 64);
     const chords = [[45, 52, 57, 60, 64], [50, 57, 62, 65, 69], [52, 56, 59, 62, 64], [45, 52, 57, 60, 64]];
     const ch = chords[bar];
-    // the gallop: kick on the beat, then a ta-ta on the shaker
+    // gallop: kick on the beat, ta-ta on the shaker
     if (s % 4 === 0) this.kick(t);
     if (s % 4 === 2 || s % 4 === 3) this.hat(t, 0.03);
     if (s === 12) this.snare(t, 0.08);
     // boom-chicka bass: root and fifth
     if (s % 8 === 0) this.voice('sawtooth', this.mtof(ch[0] - 12), t, six * 3, 0.14, { cutoff: 420 });
     if (s % 8 === 4) this.voice('sawtooth', this.mtof(ch[1] - 12), t, six * 3, 0.1, { cutoff: 420 });
-    // the twangy guitar
+    // guitar
     const roll = [0, 2, 1, 3, 2, 4, 3, 2];
     if (s % 2 === 0) this.pluck(t, ch[roll[(s / 2) % 8]] + 12, 0.07);
-    // a thin pad, like wind over a mesa
+    // thin pad
     if (s === 0) this.voice('triangle', this.mtof(ch[2] + 12), t, six * 16, 0.012, { attack: 1.2, cutoff: 1400, echo: 0.4 });
-    // the whistle: long notes that slide in, every other phrase
+    // whistle: long sliding notes, every other phrase
     if (phrase % 2 === 0) {
       const tune = [[76, 0, 0, 0, 0, 0, 74, 0, 72, 0, 0, 0, 71, 0, 0, 0], [74, 0, 0, 0, 0, 0, 0, 0, 77, 0, 76, 0, 74, 0, 0, 0], [71, 0, 0, 0, 0, 0, 74, 0, 76, 0, 0, 0, 0, 0, 0, 0], [69, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]][bar];
       const n = tune[s];
@@ -331,13 +323,12 @@ export class Audio {
         this.voice('sine', this.mtof(n), t, six * Math.max(2, len) * 0.95, 0.06, { attack: 0.06, cutoff: 4000, echo: 0.5, vib: 22, vibRate: 6, from: this.mtof(n - 2) });
       }
     }
-    // a laser-zap twang on the turnaround
+    // zap on the turnaround
     if (bar === 3 && s === 14) this.voice('sawtooth', 1800, t, 0.4, 0.04, { from: 300, cutoff: 3000, echo: 0.5 });
   }
 
-  // LAB: clinical, sterile and slightly wrong. Whole-tone and #11 harmony that never resolves,
-  // glassy sine pings in odd groupings, bubbling resonant bloops, instrument clicks, a slow sub
-  // pulse like a heartbeat in the machine room, and a theremin that wanders in on alternate phrases.
+  // LAB: sterile and slightly wrong. Unresolved whole-tone and #11 harmony, glassy pings in odd groupings, bloops,
+  // clicks, a slow sub pulse, a theremin on alternate phrases.
   labStep(t, step) {
     const six = 60 / this.bpm / 4;
     const bar = Math.floor(step / 16) % 4, s = step % 16, phrase = Math.floor(step / 64);
@@ -345,7 +336,7 @@ export class Audio {
     const ch = chords[bar];
     if (s === 0) for (const n of ch) this.voice('sine', this.mtof(n), t, six * 16 + 0.8, 0.018, { attack: 1.4, cutoff: 1800, echo: 0.3, detune: ((n % 3) - 1) * 9 });
     if (s === 0 || s === 7) this.voice('sine', this.mtof(ch[0] - 24), t, six * 3, 0.2, { cutoff: 300 });
-    // pings in sevens and elevens against the four-beat bar
+    // pings in 7s and 11s against the 4-beat bar
     if (step % 7 === 0 || step % 11 === 5) this.voice('sine', this.mtof(ch[(step >> 1) % ch.length] + 24), t, 0.5, 0.035, { attack: 0.002, cutoff: 8000, echo: 0.6 });
     if (s % 4 === 3) this.hat(t, 0.02);
     if (s === 10) this.voice('square', 2400, t, 0.02, 0.02, { cutoff: 6000 });
@@ -356,8 +347,8 @@ export class Audio {
     }
   }
 
-  // DARK SIDE: aggressive darksynth. D phrygian, a driven 16th-note bass, four-on-the-floor with a
-  // big echoing snare, gated pad stabs, and a growling saw riff on alternate phrases.
+  // DARK SIDE: darksynth. D phrygian, driven 16th bass, four-on-the-floor, big echoing snare, gated pad stabs,
+  // a growling saw riff on alternate phrases.
   darkStep(t, step) {
     const six = 60 / this.bpm / 4;
     const bar = Math.floor(step / 16) % 4, s = step % 16, phrase = Math.floor(step / 64);
@@ -377,7 +368,7 @@ export class Audio {
     if (bar === 3 && s === 0 && phrase % 2 === 0) this.voice('sawtooth', this.mtof(74), t, six * 16, 0.02, { attack: 1.5, from: this.mtof(62), cutoff: 2400, echo: 0.4 });
   }
 
-  // tempo, loudness and brightness per track (the free-roam track follows your speed instead)
+  // tempo, loudness, brightness per track ('free' follows speed instead)
   trackInfo(id) {
     return {
       free: { bpm: 96 },
@@ -403,11 +394,11 @@ export class Audio {
     if (this.delay) this.delay.delayTime.setTargetAtTime((60 / this.bpm) * 0.75, this.ctx.currentTime, 0.1);
   }
 
-  // Every frame: the music's loudness and tone (from the zone's track, or from your speed on the free-roam groove) and
-  // the crossfade from one track to the next. The notes are queued by scheduleMusic, on the music clock.
+  // Per frame: loudness and tone (per track, or from speed on 'free') and the crossfade. Notes are queued by
+  // scheduleMusic on the music clock.
   updateMusic(speed) {
     const t = this.ctx.currentTime;
-    // crossfade: fade the current track out, switch, fade the new one in
+    // crossfade: fade out, switch, fade in
     if (this.want !== this.track) {
       this.fade = Math.max(0, this.fade - 0.02);
       if (this.fade <= 0) this.switchTrack(this.want);
@@ -423,17 +414,16 @@ export class Audio {
       this.music.gain.setTargetAtTime(vol, t, 0.4);
       this.musicTone.frequency.setTargetAtTime(700 + this.level * 3300, t, 0.4);
     }
-    // (the clock has queued the steps by now, so this is a no-op; it is a backstop for a page whose timers are starved
-    // while frames still come, such as the trailer's &pump mode driven by window.step)
+    // usually a no-op; backstop for starved timers with frames still coming (trailer &pump via window.step)
     this.scheduleMusic();
   }
 
-  // Queue every 16th-note step that falls within MUSIC_AHEAD of the audio clock, for the track that is playing now.
+  // Queue every 16th step within MUSIC_AHEAD of the audio clock, for the current track.
   scheduleMusic() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     const fn = this.stepFns[this.track];
-    if (this.nextNote < t - 0.5) this.nextNote = t + 0.05; // asleep (a stall, a hidden tab): don't burst-fire
+    if (this.nextNote < t - 0.5) this.nextNote = t + 0.05; // after a stall or hidden tab: don't burst-fire
     while (this.nextNote < t + MUSIC_AHEAD) {
       if (this.musicPlays && this.fade > 0.02) fn.call(this, this.nextNote, this.step, this.level);
       this.nextNote += 60 / this.bpm / 4;
@@ -441,7 +431,7 @@ export class Audio {
     }
   }
 
-  // settings: master / music / effects volume (0..1) and the mute switch; safe to call before init()
+  // settings: master / music / effects (0..1) and mute; safe before init()
   setVolumes(master, music, sfx, mute = false) {
     this.vol = { master, music, sfx, mute };
     if (!this.ctx || !this.out) return;
@@ -451,17 +441,16 @@ export class Audio {
     this.master.gain.setTargetAtTime(0.5 * sfx, t, 0.03);
   }
 
-  // The four skate voices (each a little graph into its own gain, into humG). Only the pair of skates you wear sings, so
-  // only its voice is built and running (setSkateTone); the others are built when they are chosen:
-  //   hum      the classic: a sawtooth drone through a low-pass (Q-Lock Standard and the plain ones)
-  //   glide    smooth and airy: two soft triangles a hair apart, slowly beating, a breath of hiss
-  //   rumble   low and mechanical: a filtered square an octave down, with a gentle wheel-throb
-  //   jackpot  the gold rollers: a warm hum with a soft shimmer of fifths and octaves riding on it
-  // A voice is { g (its gain), level, pitch(f0, t, s, k), stop(when) }: pitch scales its glide times by k (0 = jump
-  // straight there, for a voice that has only just started), stop ends its oscillators and unhooks it.
+  // Skate voices (each a small graph into its own gain, into humG). Only the worn pair's voice is built (setSkateTone):
+  //   hum      sawtooth drone through a low-pass (Q-Lock Standard and the plain ones)
+  //   glide    two soft triangles a hair apart, slowly beating, a breath of hiss
+  //   rumble   filtered square an octave down, with a wheel-throb
+  //   jackpot  gold rollers: warm hum with a shimmer of fifths and octaves
+  // A voice is { g, level, pitch(f0, t, s, k), stop(when) }: k scales glide times (0 = jump, for a fresh voice);
+  // stop ends its oscillators and unhooks it.
   makeSkateVoice(kind) {
     const ctx = this.ctx;
-    const srcs = []; // every oscillator and noise source in the voice: they stop together
+    const srcs = []; // all sources in the voice: they stop together
     const voice = (level) => { const g = ctx.createGain(); g.gain.value = 0; g.connect(this.humG); return { g, level }; };
     const osc = (type, out, f = 60) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.connect(out); o.start(); srcs.push(o); return o; };
     const lp = (f, q = 0.7) => { const b = ctx.createBiquadFilter(); b.type = 'lowpass'; b.frequency.value = f; b.Q.value = q; return b; };
@@ -471,7 +460,7 @@ export class Audio {
       return v;
     };
     if (kind === 'glide') {
-      const v = voice(0.55); // (levels matched to the classic hum's loudness; the brighter voices a touch under it)
+      const v = voice(0.55); // levels matched to the hum's loudness; brighter voices a touch under
       const f = lp(700, 0.4); f.connect(v.g);
       const a = osc('triangle', f), b = osc('triangle', f);
       const air = ctx.createBufferSource(); air.buffer = this.noise; air.loop = true;
@@ -480,7 +469,7 @@ export class Audio {
       air.connect(af).connect(ag).connect(v.g); air.start(); srcs.push(air);
       v.pitch = (f0, t, s, k = 1) => {
         a.frequency.setTargetAtTime(f0 * 1.5, t, 0.12 * k);
-        b.frequency.setTargetAtTime(f0 * 1.5 * 1.006, t, 0.12 * k); // (a slow, soft beat between the two)
+        b.frequency.setTargetAtTime(f0 * 1.5 * 1.006, t, 0.12 * k); // slow beat between the two
         af.frequency.setTargetAtTime(1100 + s * 900, t, 0.2 * k);
       };
       return done(v);
@@ -491,7 +480,7 @@ export class Audio {
       const throb = ctx.createGain(); throb.gain.value = 1;
       f.connect(throb).connect(v.g);
       const o = osc('square', f);
-      // the wheel-throb: a slow, shallow tremolo that quickens with speed
+      // wheel-throb: shallow tremolo, quicker with speed
       const lfo = osc('sine', ctx.createGain(), 5);
       const depth = ctx.createGain(); depth.gain.value = 0.22;
       lfo.disconnect(); lfo.connect(depth).connect(throb.gain);
@@ -508,13 +497,12 @@ export class Audio {
       const base = osc('triangle', f);
       const shimmer = ctx.createGain(); shimmer.gain.value = 0.35; shimmer.connect(f);
       const fifth = osc('sine', shimmer), oct = osc('sine', shimmer), oct2 = osc('sine', shimmer);
-      // the shimmer breathes in and out slowly, so it glints rather than whines
+      // shimmer breathes slowly so it glints rather than whines
       const lfo = osc('sine', ctx.createGain(), 0.35);
       const depth = ctx.createGain(); depth.gain.value = 0.25;
       lfo.disconnect(); lfo.connect(depth).connect(shimmer.gain);
-      // the metal: a ring-modulated layer (a tone multiplied by another at a bell's odd ratio) gives a
-      // coin-like, inharmonic ring; it swells and fades in a slow spin, like a coin rolling on its edge
-      const ring = ctx.createGain(); ring.gain.value = 0; // (its gain is driven by the modulator)
+      // metal: ring modulation at a bell's odd ratio gives an inharmonic coin ring, swelling in a slow spin
+      const ring = ctx.createGain(); ring.gain.value = 0; // gain driven by the modulator
       const ringOut = ctx.createGain(); ringOut.gain.value = 0.28;
       const ringBp = ctx.createBiquadFilter(); ringBp.type = 'bandpass'; ringBp.Q.value = 2.2;
       ring.connect(ringBp).connect(ringOut).connect(v.g);
@@ -531,7 +519,7 @@ export class Audio {
         carrier.frequency.setTargetAtTime(f0 * 5.4, t, 0.1 * k);
         mod.frequency.setTargetAtTime(f0 * 5.4 * 1.414, t, 0.1 * k);
         ringBp.frequency.setTargetAtTime(f0 * 7, t, 0.1 * k);
-        spin.frequency.setTargetAtTime(1.2 + s * 3.5, t, 0.3 * k); // (the coin spins faster as you do)
+        spin.frequency.setTargetAtTime(1.2 + s * 3.5, t, 0.3 * k); // spins faster with speed
       };
       return done(v);
     }
@@ -543,8 +531,8 @@ export class Audio {
     return done(v);
   }
 
-  // Which skate voice to use ('hum' | 'glide' | 'rumble' | 'jackpot'): a short crossfade. The new voice is built and
-  // started where the old pitch is, and the old one, once it has faded out, is stopped and unhooked.
+  // Skate voice ('hum' | 'glide' | 'rumble' | 'jackpot'), short crossfade. The new one starts at the old pitch; the old
+  // one is stopped and unhooked once faded.
   setSkateTone(id) {
     this.skateTone = id in { hum: 1, glide: 1, rumble: 1, jackpot: 1 } ? id : 'hum';
     if (!this.ctx || !this.humG) return;
@@ -553,7 +541,7 @@ export class Audio {
     const t = this.ctx.currentTime;
     if (old) {
       old.g.gain.setTargetAtTime(0, t, 0.08);
-      old.stop(t + 0.8); // (ten time constants on: nothing of it left to hear)
+      old.stop(t + 0.8); // ten time constants: inaudible
     }
     const v = this.skateVoice = this.makeSkateVoice(this.skateTone);
     v.pitch(this.skatePitch.f0, t, this.skatePitch.s, 0);
@@ -568,18 +556,17 @@ export class Audio {
   // settings → Audio → Mute all audio
   get muted() { return !!(this.vol && this.vol.mute); }
 
-  // (the groove isn't played into a muted or switched-off bus: no point synthesising what nobody hears)
+  // don't synthesise music into a muted or switched-off bus
   get musicPlays() { return this.musicOn && !this.muted; }
 
-  // Every frame. `quiet`: the world is frozen (a pause, the map, a dialog...): the looping effects (wind, skate hum,
-  // thrusters) fade out rather than droning on at the level they had. The music, and the menus' own clicks and blips,
-  // carry on.
+  // Per frame. `quiet`: world frozen (pause, map, dialog): the loops (wind, hum, thrusters) fade out; music and menu
+  // blips carry on.
   update(speed, skating, grounded, thrusting, quiet = false) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     const s = Math.min(1, speed / 90);
     const k = quiet ? 0 : 1;
-    // rumble swells with speed but stays low and soft (no high-frequency hiss at top speed)
+    // rumble swells with speed but stays low (no hiss at top speed)
     this.windG.gain.setTargetAtTime(Math.min(0.5, s) * 0.16 * (grounded ? 1 : 0.6) * this.mix.wind * k, t, 0.15);
     this.windF.frequency.setTargetAtTime(140 + Math.min(1, s) * 380, t, 0.15);
     this.humG.gain.setTargetAtTime(skating && grounded ? (0.05 + s * 0.06) * this.mix.hum * k : 0, t, 0.05);

@@ -7,12 +7,11 @@ import { ITEMS } from './alchemy.js';
 import { outpostTemplate, SMALL_KINDS, FLAT_R } from './outpostModels.js';
 import { foundedTemplate, TERMINAL_Z, OUTPOST_GUN as GUN } from './storyAssets.js';
 
-// Every square metre of the Moon belongs to somebody. Territory is a weighted Voronoi split
-// around each faction's settlements and outposts; small faction structures dot the countryside,
-// and military patrols run between them.
+// Every square metre of the Moon belongs to somebody: a weighted Voronoi split round faction settlements and outposts.
+// Small faction structures dot the countryside, with military patrols between them.
 const KEY = 'moonrunner-territory-v1';
 const MILITARY = ['spacecom', 'vostok', 'daedalus'];
-const LOOP_ARC = 0.024; // the radius (radians of the Moon) of the little loop a patrol drives round a lone outpost: about 86 m
+const LOOP_ARC = 0.024; // rad: radius of a patrol's loop round a lone outpost (~86 m)
 const KINDS = {
   spacecom: ['tower', 'depot'], vostok: ['tower', 'depot'], daedalus: ['tower', 'depot'],
   kepler: ['farm', 'mast'], meridian: ['kiosk', 'mast'], rustmoon: ['shack', 'junk'],
@@ -21,13 +20,13 @@ const KIND_NAMES = {
   tower: 'Watchtower', depot: 'Supply Depot', farm: 'Farm Dome', mast: 'Relay Mast', kiosk: 'Trading Kiosk',
   shack: 'Scrap Shack', junk: 'Junk Pile', homestead: 'Homestead', lab: 'Field Lab',
 };
-const OUTPOST_W = 0.42; // how strongly an outpost claims ground compared with a settlement
+const OUTPOST_W = 0.42; // outpost claim weight relative to a settlement
 const BUILD_R = 900, DROP_R = 1150;
 const LOOT_CD = 240, LOOT_REP = 2; // raid/rebuild cooldown (s) and reputation cost
 const OUTPOST_HP = { farm: 160, depot: 220, tower: 200, mast: 180, kiosk: 140, shack: 160, junk: 200 };
 const SAP_NAMES = ['Fern', 'Sprig', 'Basil', 'Twiggy', 'Moss', 'Clover'];
 const BOT_NAMES = ['Bolt', 'Sprocket', 'Widget', 'Tinny', 'Gizmo', 'Rivet'];
-// What each small structure gives up, raided (F at its marked spot) or shot to pieces.
+// Loot per small structure, raided (F at its marked spot) or destroyed.
 const LOOT = {
   farm: { verb: 'TAKE A SAPLING', boom: 'DOME DOWN!', item: 'sapling', names: SAP_NAMES, pop: 'SAPLING SWIPED!' },
   depot: { verb: 'RAID THE SUPPLY DEPOT', boom: 'DEPOT DESTROYED!', item: 'wiring', credits: [150, 300], pop: 'CREDITS + WIRING!' },
@@ -38,8 +37,8 @@ const LOOT = {
   junk: { verb: 'COAX OUT A JUNK BOT', boom: 'JUNK EVERYWHERE!', item: 'junkbot', names: BOT_NAMES, pop: 'JUNK BOT! BEEP!' },
 };
 const MAP_GRID = 96; // owner cells per cube-face edge for the globe map's territory lookup
-const BUILT_R = 40; // founded outposts: flattened radius (the compound itself: storyAssets.js)
-const TOWN_R = 120; // your town's flat radius (worldstate.js); its blend reaches 1.95x that
+const BUILT_R = 40; // founded outposts: flat radius (compound: storyAssets.js)
+const TOWN_R = 120; // your town's flat radius (worldstate.js); blend reaches 1.95x
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _w = new THREE.Vector3();
@@ -54,7 +53,7 @@ function boxDist(p, h) {
   return Math.sqrt(qx * qx + qy * qy + qz * qz);
 }
 
-// The charred heap left of a wrecked founded outpost (and, for a farm, its dome ring): a pure builder, so the Asset Row can show it.
+// Charred heap of a wrecked founded outpost (a farm also gets its dome ring); a pure builder so the Asset Row can show it.
 export function rubbleModel(kind, seed) {
   const root = new THREE.Group();
   const rr = mulberry32(seed + 7);
@@ -74,8 +73,7 @@ export function rubbleModel(kind, seed) {
   return root;
 }
 
-// The ground each settlement claims, before any outposts: one anchor per faction location (HQs claim
-// more). Pirate camps and neutral places of interest hold no ground of their own.
+// Settlement claims before outposts: one anchor per faction location (HQs claim more). Pirate camps and neutral POIs hold none.
 export function locationAnchors(locations) {
   const out = [];
   for (const l of locations) {
@@ -85,8 +83,7 @@ export function locationAnchors(locations) {
   return out;
 }
 
-// Who holds the ground at dir, and how safely: the ratio of the nearest rival faction's weighted
-// distance to the holder's (1 is right on a border, bigger is deeper inside).
+// Who holds dir, and how safely: nearest rival's weighted distance over the holder's (1 = on a border, bigger = deeper in).
 export function holderOf(dir, anchors) {
   let best = null, bd = Infinity;
   for (const a of anchors) {
@@ -113,14 +110,14 @@ export class Territory {
     this.outposts = [];
     this.patrols = [];
     this.current = null;
-    this.placeName = null; // the settlement you're standing in (its name goes under the territory line in the chip)
+    this.placeName = null; // settlement you're in (shown under the territory line in the chip)
     this.chip = document.createElement('div');
     this.chip.id = 'terrchip';
     this.chip.className = 'chip terr hidden';
-    document.getElementById('undermap').appendChild(this.chip); // (the territory chip sits under the minimap)
-    this.t = 0; // play time (the chip doesn't flash while it settles in at the start of a session)
-    // the flash class comes off when its animation is over, or was cut off (the HUD hiding mid-flash fires 'animationcancel'; a restart
-    // does too, but then a new animation is already running, and that one's left alone)
+    document.getElementById('undermap').appendChild(this.chip); // territory chip sits under the minimap
+    this.t = 0; // play time (no chip flash while settling in at session start)
+    // drop the flash class when its animation ends or is cancelled (HUD hidden mid-flash); a restart also cancels, but leaves
+    // the new animation running, so only remove when none remain
     const flashDone = () => { if (!this.chip.getAnimations().length) this.chip.classList.remove('flash'); };
     this.chip.addEventListener('animationend', flashDone);
     this.chip.addEventListener('animationcancel', flashDone);
@@ -129,7 +126,7 @@ export class Territory {
     this.prebake();
     this.load();
     this.rebuild();
-    // farm domes and supply depots can be shot to pieces (same haul as a raid)
+    // farm domes and supply depots can be destroyed (same haul as a raid)
     game.blastHooks = game.blastHooks || [];
     game.blastHooks.push((pos, radius, damage, owner) => this.onBlast(pos, radius, damage, owner));
   }
@@ -138,8 +135,8 @@ export class Territory {
     return locationAnchors(this.game.locations);
   }
 
-  // A finale moved the borders (main.js applyWorldLive): re-deal the outposts exactly as a fresh
-  // boot would (same ids, same rolls), keeping captures, your builds and story changes.
+  // After a finale moves borders (main.js applyWorldLive): re-deal outposts as a fresh boot would (same ids, rolls),
+  // keeping captures, your builds and story changes.
   refreshWorld() {
     this.baseAnchors = this.locAnchors();
     const live = this.outposts;
@@ -186,8 +183,8 @@ export class Territory {
     if (clear) this.clearSites();
   }
 
-  // Every road point as unit directions in one flat array (x, y, z, x, y, z...): the mesh's vertices (every other one) and the
-  // traffic pieces' paths. Built once and kept; it is rebuilt when the network's size changes under it.
+  // All road points as unit directions in one flat xyz array (every other mesh vertex, plus traffic paths).
+  // Cached; rebuilt when the network's size changes.
   roadDirs() {
     const tr = this.game.world.traffic;
     const rp = tr && tr.roadMesh && tr.roadMesh.geometry.attributes.position;
@@ -209,10 +206,10 @@ export class Territory {
     return false;
   }
 
-  // Would a town founded at unit direction d crowd what is already laid down? Its 120 m plateau blends out to 234 m, and an
-  // outpost's own flat is applied after the zones (so it would overlay the blend ring); roads and lakes are baked into the ground
-  // as it was. The gaps are the ones clearSites keeps round a late settlement: 312 m to an outpost that is not built yet, 306 m to a
-  // road (the blend plus an outpost's 72 m), and a lake's whole reach plus 250 m (clear of the 240 m ring townScore reads).
+  // Would a town founded at d crowd what's laid down? Its 120 m plateau blends to 234 m; an outpost's flat is applied after the
+  // zones (overlaying the blend ring), roads and lakes are baked into the old ground. Gaps match clearSites round a late
+  // settlement: 312 m to an unbuilt outpost, 306 m to a road (blend + an outpost's 72 m), a lake's reach + 250 m (clear of
+  // townScore's 240 m ring).
   siteClash(d) {
     const g = this.game, R = g.planet.R;
     const reach = TOWN_R * 1.95 + FLAT_R * 2 + 12;
@@ -221,9 +218,8 @@ export class Territory {
     return this.nearRoad(d, reach);
   }
 
-  // The structures stand on ~60 m flattened plateaus (blending out to ~2x): keep them off the
-  // roads, black lakes and settlement plateaus that were laid down before us. A clashing outpost
-  // is nudged to the nearest clear spot, or dropped (ids stay stable for saves either way).
+  // Structures sit on ~60 m plateaus (blending to ~2x): keep them off earlier roads, black lakes and settlement plateaus.
+  // A clash is nudged to the nearest clear spot or dropped (ids stay stable for saves).
   clearSites() {
     const g = this.game, R = g.planet.R;
     const blend = FLAT_R * 2 + 12;
@@ -249,12 +245,12 @@ export class Territory {
     this.outposts = this.outposts.filter((o) => !o.gone);
   }
 
-  // Bake each outpost look (kind x faction, ~10-35 ms apiece) in idle time - mostly while the title
-  // screen is up - so meeting a new one doesn't hitch. Anything not baked yet is baked on spawn.
+  // Bake each outpost look (kind x faction, ~10-35 ms each) in idle time (mostly on the title screen) so a new one doesn't
+  // hitch. Anything unbaked bakes on spawn.
   prebake() {
     const looks = new Map();
     for (const o of this.outposts) if (SMALL_KINDS.has(o.kind)) looks.set(`${o.kind}|${o.faction}`, o);
-    // intact looks first, then their wrecks (so the first time you blow one up doesn't hitch either)
+    // intact looks first, then wrecks (so the first kill doesn't hitch either)
     const queue = [...looks.values()].map((o) => [o, false]).concat([...looks.values()].map((o) => [o, true]));
     const later = (f) => (typeof requestIdleCallback === 'function' ? requestIdleCallback(f, { timeout: 3000 }) : setTimeout(f, 40));
     const run = () => {
@@ -265,8 +261,7 @@ export class Territory {
     later(run);
   }
 
-  // Register every structure's plateau before the near terrain is (re)built, so nothing pops.
-  // Crystals already sitting in the blend ring are moved onto the new ground.
+  // Register every plateau before near terrain is (re)built, so nothing pops. Crystals in the blend ring move onto the new ground.
   flatten() {
     const g = this.game, P = g.planet;
     const t0 = performance.now();
@@ -292,8 +287,7 @@ export class Territory {
       for (const [id, f] of Object.entries(d.captured || {})) { const o = this.outposts.find((x) => x.id === id); if (o) { o.faction = f; o.captured = true; } }
       for (const [id, k] of Object.entries(d.kinds || {})) { const o = this.outposts.find((x) => x.id === id); if (o) { o.kind = k; o.kindChanged = true; } }
       for (const b of d.built || []) {
-        // (it grew into your town: no outpost and no 40 m flat of its own; the live finale takes that flat
-        // out too, in applyWorldLive, so a reload shows the same ground)
+        // grew into your town: no outpost, no 40 m flat (applyWorldLive removes it live too, so a reload matches)
         if (this.game.ws && this.game.ws.town && this.game.ws.town.replaces === b.id) continue;
         const o = { ...b, dir: new THREE.Vector3().fromArray(b.dir), model: null, cols: [], built: true };
         this.outposts.push(o);
@@ -307,7 +301,7 @@ export class Territory {
     const ws = this.game.ws;
     if (!ws) return;
     for (const id of ws.razed || []) { const o = this.outposts.find((x) => x.id === id); if (o) o.razed = true; }
-    // the ILMB fell: SPACECOM's outposts belong to the clans now
+    // ILMB fell: SPACECOM's outposts go to the clans
     if (ws.lawless) {
       for (const o of this.outposts) {
         if (o.faction !== 'spacecom' || o.built) continue;
@@ -325,7 +319,7 @@ export class Territory {
     try { localStorage.setItem(KEY, JSON.stringify({ captured, built, kinds })); } catch { /* unavailable */ }
   }
 
-  // Outposts claim a little ground of their own (so captures move the borders).
+  // Outposts claim a little ground (so captures move borders).
   rebuild() {
     this.anchors = this.baseAnchors.concat(this.outposts.map((o) => ({ dir: o.dir, faction: o.faction, w: o.built ? 0.6 : OUTPOST_W })));
     this.mapG = null;
@@ -353,35 +347,32 @@ export class Territory {
 
   name(o) { return o.name || `${FACTIONS[o.faction] ? FACTIONS[o.faction].name : ''} ${KIND_NAMES[o.kind] || 'Outpost'}`; }
 
-  // ---------- outpost structures, built only near the player ----------
+  // ---------- outpost structures (built only near the player) ----------
   spawn(o) {
     const g = this.game;
     if (this.wrecked(o)) { this.spawnRubble(o); return; }
     const c = hex(o.faction);
     if (SMALL_KINDS.has(o.kind)) { this.place(o, outpostTemplate(o.kind, c, o.seed % 2, false)); return; }
-    // player-founded outposts: a kit-built compound (storyAssets.js): a hab dome or research block,
-    // a paved apron and the modules you've built on their plots round it
+    // player-founded outposts: kit-built compound (storyAssets.js): hab dome or research block, paved apron, built modules
     this.place(o, foundedTemplate(o.kind, c, o.modules || []));
     o.terminal = o.model.localToWorld(new THREE.Vector3(0, 0, TERMINAL_Z));
     this.findGuns(o);
   }
 
-  // The militia turrets you built: place() clones the baked template, so the live heads are found again by
-  // their tag every time the compound spawns (clone() copies only the plain userData, never a reference).
+  // Your militia turrets: place() clones the template, so live heads are re-found by tag on each spawn
+  // (clone() copies plain userData only, never references).
   findGuns(o) {
     o.guns = [];
     o.model.updateMatrixWorld(true);
     o.model.traverse((m) => {
       if (!m.userData.outpostGun) return;
-      m.rotation.order = 'YXZ'; // clone() does not copy the Euler order: pitch about the head's own x, then yaw
+      m.rotation.order = 'YXZ'; // clone() drops Euler order: pitch about the head's x, then yaw
       o.guns.push({ head: m, root: m.parent, cd: 0.5 + 0.45 * o.guns.length, scanT: 0, target: null, skips: new WeakMap(), side: 1 });
     });
   }
 
-  // Each gun turns its head (yaw and pitch) onto the lead point of the nearest raider and fires from a barrel
-  // tip, alternating the twin barrels, like the settlement turrets (enemies.updateTurret) but with the
-  // aim-lead and line-of-fire checks they use. It never parks: an idle head keeps sweeping, so the shadow
-  // cache does not see a still object.
+  // Each gun yaws and pitches onto the nearest raider's lead point and fires alternating twin barrels, with the same
+  // aim-lead and line-of-fire checks as enemies.updateTurret. Idle heads keep sweeping so the shadow cache never caches them.
   updateGuns(o, dt) {
     const g = this.game, E = g.enemies;
     for (const gun of o.guns) {
@@ -395,7 +386,7 @@ export class Territory {
         gun.scanT = 0.4;
         let bd = GUN.range;
         for (const e of E.list) {
-          if (!E.gunTarget(e) || gun.skips.get(e) > g.time) continue; // (no line of fire to it a moment ago)
+          if (!E.gunTarget(e) || gun.skips.get(e) > g.time) continue; // no line of fire a moment ago
           let d = e.center.distanceTo(_gp);
           if (o.guns.some((x) => x !== gun && x.target === e)) d += 80; // a second gun prefers another raider
           if (d < bd) { bd = d; tg = e; }
@@ -403,13 +394,13 @@ export class Territory {
         gun.target = tg;
       }
       let yawErr = 0, pitchErr = 0;
-      if (tg) { // track the lead point so the barrel points where the shell will go
+      if (tg) { // track the lead point
         _gl.copy(tg.center).addScaledVector(tg.body.vel, _gp.distanceTo(tg.center) / GUN.speed);
-        gun.root.worldToLocal(_gl).sub(head.position); // (never read root.rotation.y: clone() re-decomposes it)
+        gun.root.worldToLocal(_gl).sub(head.position); // never read root.rotation.y: clone() re-decomposes it
         yawErr = wrapPi(Math.atan2(_gl.x, _gl.z) - head.rotation.y);
-        // (the pitch is clamped to the mount's limits, -0.5..0.6 rad: the lower stop keeps the barrel clear of the deck rail. A raider inside ~10 m of
-        // the stand, or well above it, is still engaged: its shell leaves the tip along the aim-lead line rather than exactly along the barrel)
-        pitchErr = THREE.MathUtils.clamp(Math.atan2(-_gl.y, Math.hypot(_gl.x, _gl.z)), -0.5, 0.6) - head.rotation.x; // (+rotation.x = barrel down)
+        // pitch clamped to the mount, -0.5..0.6 rad (lower stop clears the deck rail). Raiders within ~10 m or well above are still
+        // engaged: the shell leaves along the aim-lead line, not exactly the barrel
+        pitchErr = THREE.MathUtils.clamp(Math.atan2(-_gl.y, Math.hypot(_gl.x, _gl.z)), -0.5, 0.6) - head.rotation.x; // +rotation.x = barrel down
         head.rotation.y += THREE.MathUtils.clamp(yawErr, -GUN.turn * dt, GUN.turn * dt);
         head.rotation.x += THREE.MathUtils.clamp(pitchErr, -GUN.pitchTurn * dt, GUN.pitchTurn * dt);
       } else {
@@ -417,7 +408,7 @@ export class Territory {
         head.rotation.x -= THREE.MathUtils.clamp(head.rotation.x, -dt, dt);
       }
       if (!tg || gun.cd > 0 || Math.abs(yawErr) > GUN.cone || Math.abs(pitchErr) > GUN.pitchCone) continue;
-      head.updateWorldMatrix(false, false); // (the rotation just changed: the muzzle must not be a frame stale)
+      head.updateWorldMatrix(false, false); // rotation just changed: keep the muzzle current
       gun.side = -gun.side;
       head.localToWorld(_gt.set(gun.side * GUN.tip[0], GUN.tip[1], GUN.tip[2]));
       gun.cd = GUN.interval;
@@ -429,7 +420,7 @@ export class Territory {
     }
   }
 
-  // Put a baked outpost model (or its wreck) on the ground: same yaw every time for this outpost.
+  // Place a baked outpost model (or wreck); same yaw every time per outpost.
   place(o, tpl) {
     const g = this.game;
     const root = tpl.root.clone();
@@ -463,7 +454,7 @@ export class Territory {
     for (const o of this.outposts) {
       if (!o.model || o.rubble || !LOOT[o.kind]) continue;
       if (pos.distanceTo(o.model.position) > radius + 45) continue;
-      // distance from the blast to the main building (the depot's warehouse, the farm's domes)
+      // blast distance to the main building (depot warehouse, farm domes)
       let d;
       if (o.hits && o.hits.length) {
         const lp = o.model.worldToLocal(_w.copy(pos));
@@ -487,7 +478,7 @@ export class Territory {
     g.cam.shake = Math.max(g.cam.shake, 0.8);
     const L = LOOT[o.kind];
     g.fx.pop(L.boom, c.clone().addScaledVector(o.dir, 8), { color: '#ff4f2e', size: 64, life: 2.4 });
-    // the same haul as a raid, flung out of the wreck onto open ground where you can see it
+    // raid haul, flung onto open ground where you can see it
     const spots = this.landingSpots(o, (L.credits ? 1 : 0) + 1);
     if (L.credits) g.alchemy.dropLoot(null, c, { credits: L.credits[0] + Math.floor(Math.random() * (L.credits[1] - L.credits[0] + 1)), to: spots.pop() });
     if (L.crate) g.alchemy.dropLoot(null, c, { crate: true, to: spots.pop() });
@@ -500,8 +491,7 @@ export class Territory {
     this.spawnRubble(o);
   }
 
-  // Clear spots on the apron for loot to land: the template's drop point (spread a little), else a
-  // ring search around the yard for ground with nothing built on it.
+  // Clear loot spots: the template's drop point (spread a little), else a ring search for unbuilt ground round the yard.
   landingSpots(o, n) {
     const g = this.game;
     const out = [];
@@ -572,11 +562,11 @@ export class Territory {
     this.patrols = [];
   }
 
-  // (the patrols themselves are real armoured cars in enemies.js: spawnRoamer)
+  // patrol cars themselves: enemies.js spawnRoamer
   spawnPatrol(r) {
     const g = this.game;
     const P = g.player;
-    // start somewhere along the route out of sight of the player
+    // start out of the player's sight along the route
     let t = Math.random();
     for (let i = 0; i < 8; i++) {
       const c = Math.random();
@@ -596,9 +586,8 @@ export class Territory {
     return out.copy(r.a.dir).addScaledVector(tA, Math.cos(a) * LOOP_ARC).addScaledVector(tB, Math.sin(a) * LOOP_ARC).normalize();
   }
 
-  // A route gets one patrol car while you're about. It is an ordinary enemy entity (solid, shootable,
-  // rammable) that drives itself; here we only send it out, call it off once you've left it far
-  // behind, and give a wrecked route a breather before the next car.
+  // One patrol car per route while you're near (an ordinary self-driving enemy entity). Here we only send it out, recall it
+  // once you're far away, and give a wrecked route a breather before the next.
   updatePatrols(dt) {
     const g = this.game;
     const P = g.player;
@@ -646,12 +635,12 @@ export class Territory {
         this.chip.style.setProperty('--glow', F.color);
         this.drawChip();
         this.chip.classList.remove('hidden');
-        this.flashChip(); // (no "Entering X territory" popup: the chip under the minimap says it, and flashes)
+        this.flashChip(); // no "Entering X territory" popup: the chip says it and flashes
       }
     }
   }
 
-  // a glowing flash in the owner's colour, restarted each time the chip's text changes
+  // glow flash in the owner's colour, restarted whenever the chip text changes
   flashChip() {
     if (this.t < 1) return;
     const el = this.chip;
@@ -660,7 +649,7 @@ export class Territory {
     el.classList.add('flash');
   }
 
-  // the chip: the territory line, and under it (centred, same box) the settlement you're in
+  // chip: territory line, and under it (centred, same box) the settlement you're in
   drawChip() {
     const F = FACTIONS[this.current];
     if (!F) return;
@@ -676,22 +665,21 @@ export class Territory {
   }
 
   // ---------- raiding minor structures ----------
-  // Every small structure gives up something of its own (see LOOT). The owners notice and like you a
-  // little less either way.
+  // Each small structure gives its own loot (LOOT); the owners like you a little less either way.
   interact() {
     const g = this.game;
     const P = g.player;
     let o = null;
     for (const x of this.outposts) {
       if (!x.model || x.rubble || !LOOT[x.kind]) continue;
-      // each has a marked raid spot (a glowing ring by the goods)
+      // marked raid spot: a glowing ring by the goods
       if (x.raidPoint ? x.raidPoint.distanceTo(P.pos) < 6 : x.model.position.distanceTo(P.pos) < 9) { o = x; break; }
     }
     if (!o) return false;
     const L = LOOT[o.kind];
     const F = FACTIONS[o.faction];
     const wait = (o.lootAt || -1e9) + LOOT_CD - g.time;
-    // it does restock, but the player isn't told when
+    // restocks, but the player isn't told when
     if (wait > 0) { g.hud.prompt(`${KIND_NAMES[o.kind].toUpperCase()} — PICKED CLEAN`); return true; }
     g.hud.prompt(`<b>F</b> — ${L.verb} <span style="color:#ff2a4a">(−${LOOT_REP} ${F ? F.name.toUpperCase() : ''} REP)</span>`);
     if (!g.input.pressed('KeyF') || g.boardCooldown > 0) return true;
@@ -724,20 +712,17 @@ export class Territory {
   }
 
   // ---------- globe map ----------
-  // The map colours every screen pixel by the exact owner of the ground under it, so borders are
-  // crisp lines rather than steps along the exploration cells. Asking owner() (a loop over every
-  // anchor) for every pixel of every redraw would be far too slow, so a coarse cube-face grid
-  // answers wherever a cell and its neighbours all belong to one faction. A cell touching a border
-  // keeps the short list of anchors that claim it or its neighbours, and only those compete for its
-  // pixels. The grid is rebuilt lazily after any border change.
+  // The map colours each pixel by the exact owner below it, so borders are crisp. owner() per pixel (a loop over every
+  // anchor) is too slow, so a coarse cube-face grid answers where a cell and its neighbours share one faction; border cells
+  // keep the few anchors claiming them or their neighbours, and only those compete. Rebuilt lazily after border changes.
   mapGrid() {
     if (this.mapG) return this.mapG;
-    const T = MAP_GRID, S = T + 2; // (one spare ring of cells round each face, so rims need no special case)
+    const T = MAP_GRID, S = T + 2; // one spare cell ring per face, so rims need no special case
     const names = Object.keys(FACTIONS), fi = {};
     names.forEach((n, i) => { fi[n] = i; });
     const A = this.anchors, n = A.length;
     const ad = new Float32Array(n * 3), aw = new Float32Array(n), af = new Uint8Array(n);
-    A.forEach((a, i) => { const l = a.dir.length() || 1; ad[i * 3] = a.dir.x / l; ad[i * 3 + 1] = a.dir.y / l; ad[i * 3 + 2] = a.dir.z / l; aw[i] = a.w; af[i] = fi[a.faction] || 0; }); // (owner() normalises too)
+    A.forEach((a, i) => { const l = a.dir.length() || 1; ad[i * 3] = a.dir.x / l; ad[i * 3 + 1] = a.dir.y / l; ad[i * 3 + 2] = a.dir.z / l; aw[i] = a.w; af[i] = fi[a.faction] || 0; }); // owner() normalises too
     const own = new Uint16Array(6 * S * S), d = new THREE.Vector3();
     let k = 0;
     for (let f = 0; f < 6; f++) for (let j = -1; j <= T; j++) for (let i = -1; i <= T; i++) {
@@ -758,7 +743,7 @@ export class Territory {
       }
       own[k++] = best;
     }
-    // per cell: a lone faction (colour straight from the grid) or, at a border, the anchors in play
+    // per cell: a lone faction (colour from the grid) or, at a border, the anchors in play
     const col = new Uint8Array(T * T * 6), edge = new Int32Array(T * T * 6).fill(-1), cand = [];
     for (let f = 0; f < 6; f++) for (let j = 0; j < T; j++) for (let i = 0; i < T; i++) {
       const c = (f * T + j) * T + i, base = (f * S + (j + 1)) * S + (i + 1);
@@ -787,7 +772,7 @@ export class Territory {
     const i = Math.min(T - 1, Math.max(0, ((a + 1) * 0.5 * T) | 0)), j = Math.min(T - 1, Math.max(0, ((b + 1) * 0.5 * T) | 0));
     const c = (f * T + j) * T + i, e = G.edge[c];
     if (e < 0) return G.rgb[G.col[c]];
-    // at a border: whichever nearby anchor is closest (by the same weighted distance owner() uses)
+    // at a border: closest nearby anchor (owner()'s weighted distance)
     const { cand, ad, aw } = G;
     let best = 0, bd = Infinity;
     for (let q = 1; q <= cand[e]; q++) {

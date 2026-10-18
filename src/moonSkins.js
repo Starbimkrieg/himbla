@@ -2,35 +2,33 @@ import { SUN } from './geo.js';
 import { R } from './terrainField.js';
 import { DEV_TOOLS } from './devtools.js';
 
-// EXPERIMENT: three candidate surface treatments for the Moon's ground, all drawn in the terrain
-// fragment shader from world position alone (no texture files, nothing baked into the chunks), and
-// all fading out by the size of a pixel so that distant ground keeps the classic painted look.
+// EXPERIMENT: candidate ground looks, drawn in the terrain fragment shader from world position alone (no textures,
+// nothing baked), each fading out by pixel size so distant ground keeps the classic look.
 //   0  current   the vertex-painted Moon, untouched
-//   1  regolith  fine grain, pebbles and micro-craters, lit by bump-mapping the toon ramp
-//   2  etching   pen hatching that thickens with shadow, pebbles with a drop shadow, inked in the post pass's colours
-//   3  survey    a hypsometric chart: altitude bands, glowing contour lines, a world grid with crossing marks
-// Pick one with ?moonskin=N or, in the console, game.planet.holeU.uSkin.value = N (planet.js; dev builds only).
+//   1  regolith  fine grain, pebbles and micro-craters, bump-lit on the toon ramp
+//   2  etching   pen hatching thickening with shadow, drop-shadowed pebbles, in the post pass's ink colours
+//   3  survey    hypsometric chart: altitude bands, glowing contours, a world grid with crossing marks
+// Pick with ?moonskin=N or game.planet.holeU.uSkin.value = N (planet.js; dev builds only).
 
 export const SKIN_COUNT = 4;
 
-// One set of uniforms for the whole game: the terrain material and the rock materials (patchRockMaterial) hold the same
-// objects, so one switch (or one quality setting) moves them all.
-const q = DEV_TOOLS && typeof location !== 'undefined' ? new URLSearchParams(location.search).get('moonskin') : null; // (a dev switch: a release build always draws the classic ground)
+// One uniform set shared by the terrain and rock materials (patchRockMaterial), so one switch or quality setting moves all.
+const q = DEV_TOOLS && typeof location !== 'undefined' ? new URLSearchParams(location.search).get('moonskin') : null; // dev only: release always draws the classic ground
 const SKIN_U = {
   uSkin: { value: q ? Math.max(0, Math.min(SKIN_COUNT - 1, +q || 0)) : 0 },
   uSunW: { value: SUN.clone() },
-  uSkinLit: { value: 0.6 }, // (how bright full sun is, against the unlit colour: what etching's "shade" is measured from)
-  uSkinBump: { value: 1.5 }, // (regolith: how far its relief tips the lit normal)
-  uSkinShade: { value: 0.8 }, // (regolith: how strongly the sun's side of the relief is lit and the far side shaded in the paint)
-  // regolith's quality, set by the Ground detail setting (settings.js): 2 everything, 1 without the chips, the 0.3-0.7 m craters
-  // and the finest grain, 0 as well without the cobbles, the 0.9-2.3 m craters and the fine grain (the rocks' grain follows the same cuts)
+  uSkinLit: { value: 0.6 }, // full-sun brightness over unlit colour (etching's "shade" is measured from it)
+  uSkinBump: { value: 1.5 }, // regolith: how far relief tips the lit normal
+  uSkinShade: { value: 0.8 }, // regolith: strength of the relief's sun/shade in the paint
+  // regolith quality from the Ground detail setting (settings.js): 2 all; 1 drops chips, 0.3-0.7 m craters and finest grain;
+  // 0 also drops cobbles, 0.9-2.3 m craters and fine grain (rock grain follows the same cuts)
   uSkinQ: { value: 2 },
 };
 export function skinUniforms() { return SKIN_U; }
-// true when the address asked for a look (?moonskin=N): then the Settings toggle leaves the look alone until it is first used
+// set by ?moonskin=N: the Settings toggle leaves the look alone until first used
 export const SKIN_FROM_URL = q !== null;
 
-// The value noise the terrain shader carries (planet.js), for the rocks' shaders.
+// the terrain shader's value noise (planet.js), for the rock shaders
 const SK_NOISE = /* glsl */`
 float rimHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float rimNoise(vec3 x) {
@@ -40,7 +38,7 @@ float rimNoise(vec3 x) {
 }
 `;
 
-// Shared helpers (these sit after rimHash/rimNoise in the fragment shader's common block).
+// shared helpers (placed after rimHash/rimNoise in the fragment common block)
 export const SKIN_COMMON = /* glsl */`
 uniform float uSkin, uSkinLit, uSkinBump, uSkinShade, uSkinQ; uniform vec3 uSunW;
 
@@ -338,16 +336,15 @@ vec3 skPerturb(vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDirection, flo
 }
 `;
 
-// Normal: 1 regolith tips the lit ground by its relief. The slope is capped near 22 degrees (0.4): the ground's
-// grazing-shadow rule (toon.js) switches the sun off on a face tipped that far from it, and a steeper bump turns into a
-// hard dark blotch. The steep parts of the relief are carried by the paint instead (the hillshade, below).
+// Normal: regolith tips the lit ground by its relief, capped near 22 degrees (0.4) because toon.js's grazing-shadow rule
+// turns the sun off beyond that and steeper bumps become dark blotches. Steeper relief is carried by the paint's hillshade.
 export const SKIN_NORMAL = /* glsl */`
 if (uSkin > 0.5 && uSkin < 1.5) {
   normal = skPerturb(-vViewPosition, normal, vec2(dFdx(skHeight), dFdy(skHeight)) * uSkinBump, faceDirection, 0.4);
 }
 `;
 
-// Colour, before the lighting: what the ground is painted.
+// colour, before lighting
 export const SKIN_COLOR = /* glsl */`
 if (uSkin > 0.5 && uSkin < 1.5) {
   // regolith: worked out once here (skHeight is read again by the normal), then the relief lit by the real sun in the paint
@@ -382,7 +379,7 @@ if (uSkin > 0.5 && uSkin < 1.5) {
 }
 `;
 
-// After the lighting: ink and glow that the shadows must not darken.
+// after lighting: ink and glow that shadows must not darken
 export const SKIN_LIGHT = /* glsl */`
 if (uSkin > 1.5 && uSkin < 2.5) {
   // etching: how much ink this spot wants is how dark it came out, plus how steep it is
@@ -472,11 +469,9 @@ if (uSkin > 1.5 && uSkin < 2.5) {
 `;
 
 // ---- rocks ----
-// The game's rocks (the instanced boulders in planet.js, the shaped rocks in rocks.js) take regolith's look when the
-// switch is on 1: the same grain, flecks and strata (and no craters: those belong to the ground), dust on the tops and banked round the foot, a tone of their
-// own each, and the relief lit by the real sun in the paint. The normal is left alone: a rock's flat faces often sit right
-// at the sun's grazing line, where a tilted normal turns patches of the face to hard unlit blotches. Off, or on another
-// look, they are drawn as they always were.
+// Rocks (planet.js instanced boulders, rocks.js shaped rocks) on skin 1: grain, flecks and strata (no craters), dust on top
+// and round the foot, a tone each, relief lit in the paint. The normal is untouched: flat faces often sit at the sun's
+// grazing line, where a tilted normal makes hard unlit blotches. Other skins draw them unchanged.
 const ROCK_VARY = 'varying vec3 vSkW; varying vec3 vSkC; varying float vSkS;';
 
 const ROCK_COLOR = /* glsl */`
@@ -529,11 +524,9 @@ vSkW = (modelMatrix * skWp).xyz; vSkC = (modelMatrix * skCp).xyz; vSkS = skSz;`)
 }
 
 // ---- berms ----
-// The regolith banked round the hab domes (settlements.js habDome) takes the ground's look when the switch is on 1: the
-// same dust grain and mottling, and stones, more of them than on open ground (it is dug-up spoil heaped by a loader), a few
-// of them blocks the size of a fist or two; no craters (nothing has hit it since it was piled). The relief is lit by the real
-// sun in the paint, the normal left alone as the rocks' is (the berm's slopes are steep enough already for a tilted normal to
-// turn whole patches dark). Off, or on another look, it is its plain colour.
+// Hab-dome berms (settlements.js habDome) on skin 1: the ground's grain and mottling with more stones (heaped spoil),
+// some fist-sized blocks, no craters. Relief lit in the paint, normal untouched as for rocks (the slopes are steep enough
+// that a tilted normal darkens whole patches). Other skins draw its plain colour.
 const BERM_FN = /* glsl */`
 float skBerm(vec3 p, float px, out float lum, out float warm) {
   float h = 0.0;

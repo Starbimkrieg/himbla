@@ -3,8 +3,8 @@ import { toon, glowShared, inkMat } from './toon.js';
 import { clawKindParts, clawNode, makeClawHead } from './models.js';
 import { KINDS, TANK, CLAW_HOME } from './clawSim.js';
 
-// Draws the Zero-G claw's tank (clawSim.js): every kind of thing as InstancedMeshes (a few draw calls for forty things), the claw on its hose, its beam, the chains, the
-// blasts and the shuffle jets. `group` is in the machine's frame (the casino stands it on the front wall, turned round); the sim's coordinates are that frame.
+// Draws the Zero-G claw's tank (clawSim.js): each kind as InstancedMeshes, the claw, hose, beam, chains, blasts and shuffle
+// jets. `group` is in the machine's frame, which is also the sim's coordinate frame.
 
 const CAP = { crate: 18, canister: 12, gear: 14, girder: 6, mine: 8, magnet: 4, tyre: 10, hullplate: 10, lockbox: 8, gem: 28, engine: 3, case: 8, chip: 3 };
 const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _c = new THREE.Color(), _a = new THREE.Quaternion(), _v = new THREE.Vector3();
@@ -41,13 +41,13 @@ export class ClawView {
     this.hose = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1, 6), toon(0x2a2540));
     this.carriage = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.14, 0.5), toon(0xd8aa2e));
     this.group.add(this.claw, this.hose, this.carriage);
-    // the beam, the depth guide (a ring on the floor under the claw and a line down to it) and the energy light
+    // beam, and the depth guide (floor ring under the claw, line down to it)
     this.beam = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 24, 1, true).translate(0, -0.5, 0), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     this.beam.visible = false;
     this.ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.035, 5, 28).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x2ee6ff, transparent: true, opacity: 0.8 }));
     this.line = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1, 4), new THREE.MeshBasicMaterial({ color: 0x2ee6ff, transparent: true, opacity: 0.35, depthWrite: false }));
     this.group.add(this.beam, this.ring, this.line);
-    // blasts: a pool of fireballs
+    // fireball pool
     this.booms = [];
     for (let i = 0; i < 5; i++) {
       const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffb21f, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -64,13 +64,13 @@ export class ClawView {
       this.group.add(m);
       return m;
     });
-    this.ghosts = [];   // what the last tank held, on its way out through the ceiling
+    this.ghosts = [];   // last tank's items, flying out through the roof
     this.shuffleT = 0;
     this.spin = new Map();
     this.t = 0;
   }
 
-  // the old tank: its things are drawn flying up into the nearest jet and shrinking
+  // old tank's items fly up into the nearest jet, shrinking
   retire(items) {
     const jets = this.spots.jets;
     for (const it of items) {

@@ -1,17 +1,16 @@
-// Chimera Downs layout study (docs/downs-layouts.md): the course as it is today and two proposals for the overhaul, as plans in the
-// Downs' own frame (metres, +x right, +z DOWN the page: the plans are drawn looking down, the main grandstand at the bottom). Dev-only,
-// not part of the build.
+// Chimera Downs layout study (docs/downs-layouts.md): today's course and two overhaul proposals, as plans in the Downs' frame
+// (metres, +x right, +z DOWN the page, main grandstand at the bottom). Dev-only, not part of the build.
 //   node tools/downs-layouts.mjs          checks both proposals and prints the tightest gaps
 //   node tools/downs-layouts.mjs docs     also draws docs/downs-layout-{current,a,b}.svg
-// The racing oval is NOT moved by either proposal (race lengths, lanes and the finish line stay as race.js has them); everything else is.
-// What is checked:
+// Neither proposal moves the racing oval (race.js lengths, lanes and finish line); everything else moves.
+// Checks:
 //   - every solid footprint lies inside the plateau (RMAX from the origin)
-//   - 'in' footprints sit inside the infield, 'out' ones outside the outer rail, each with a margin (rail-side things 1.5 m, the rest 2.5 m)
-//   - two solid footprints of different groups keep GAP between them (a group is a thing built as one: a stand and its stairs, an arcade and its stalls)
+//   - 'in' footprints inside the infield, 'out' ones outside the outer rail, with a margin (rail-side 1.5 m, others 2.5 m)
+//   - solids of different groups keep GAP apart (a group is built as one: a stand and its stairs, an arcade and its stalls)
 import { writeFileSync } from 'node:fs';
 
 const GAP = 2.4;
-const RMAX = 272;                 // proposed plateau r 280, less 8 m of margin for the plateau's blend ring
+const RMAX = 272;                 // proposed plateau r 280, less 8 m for the blend ring
 const HALF = 90, R_IN = 45, R_OUT = 64.4, LANE_IN = 44.6, LANE_OUT = 64.8; // race.js: STRAIGHT/2, RAIL_IN, RAIL_OUT, dirt from 44.6 to 64.8
 const TAU = Math.PI * 2, D2R = Math.PI / 180;
 const PAL = { gold: '#cfb352', saddle: '#b07c57', black: '#3b393a', money: '#7b9a6e', barn: '#8b4044', mint: '#f8fff8' };
@@ -20,8 +19,8 @@ const PAL = { gold: '#cfb352', saddle: '#b07c57', black: '#3b393a', money: '#7b9
 const R = (x0, x1, z0, z1) => ({ k: 'r', x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1) });
 const C = (x, z, r) => ({ k: 'c', x, z, r });
 const E = (x, z, rx, rz) => ({ k: 'e', x, z, rx, rz });
-const A = (x, z, r0, r1, a0, a1) => ({ k: 'a', x, z, r0, r1, a0, a1 });     // an annular band, angles in degrees (x = cx + r cos a, z = cz + r sin a)
-const stad = (x, z) => Math.hypot(Math.max(Math.abs(x) - HALF, 0), z);      // distance from the oval's centre line (the track is 44.6 to 64.8 of it)
+const A = (x, z, r0, r1, a0, a1) => ({ k: 'a', x, z, r0, r1, a0, a1 });     // annular band, angles in degrees (x = cx + r cos a, z = cz + r sin a)
+const stad = (x, z) => Math.hypot(Math.max(Math.abs(x) - HALF, 0), z);      // distance from the oval's centre line (track: 44.6 to 64.8)
 const inside = (s, x, z) => {
   if (s.k === 'r') return x >= s.x0 - 1e-6 && x <= s.x1 + 1e-6 && z >= s.z0 - 1e-6 && z <= s.z1 + 1e-6;
   if (s.k === 'c') return Math.hypot(x - s.x, z - s.z) <= s.r + 1e-6;
@@ -42,7 +41,7 @@ const boundary = (s) => {
   }
   return out;
 };
-const distTo = (s, x, z) => {          // 0 when inside; otherwise (about) the distance to the shape
+const distTo = (s, x, z) => {          // 0 inside, else approx. distance to the shape
   if (inside(s, x, z)) return 0;
   if (s.k === 'r') return Math.hypot(x - Math.max(s.x0, Math.min(x, s.x1)), z - Math.max(s.z0, Math.min(z, s.z1)));
   if (s.k === 'c') return Math.hypot(x - s.x, z - s.z) - s.r;
@@ -50,7 +49,7 @@ const distTo = (s, x, z) => {          // 0 when inside; otherwise (about) the d
   for (const [bx, bz] of boundary(s)) best = Math.min(best, Math.hypot(x - bx, z - bz));
   return best;
 };
-const gap = (a, b) => {                // negative when they overlap
+const gap = (a, b) => {                // negative on overlap
   let g = 1e9;
   for (const [x, z] of boundary(a)) { const d = distTo(b, x, z); if (d === 0) return -1; g = Math.min(g, d); }
   for (const [x, z] of boundary(b)) { const d = distTo(a, x, z); if (d === 0) return -1; g = Math.min(g, d); }
@@ -58,14 +57,14 @@ const gap = (a, b) => {                // negative when they overlap
 };
 
 // ---------- element helpers ----------
-// cls: 'solid' (checked), 'free' (paving, lawn, queues: drawn, never blocks), 'over' (a screen or deck overhead: drawn dashed, not checked)
+// cls: 'solid' (checked), 'free' (paving, lawn, queues: drawn, never blocks), 'over' (overhead screen or deck: dashed, unchecked)
 const el = (id, label, s, o = {}) => ({ id, label, s, cls: 'solid', fill: PAL.mint, line: PAL.gold, zone: 'any', margin: 2.5, ...o });
 const free = (id, s, o = {}) => el(id, '', s, { cls: 'free', fill: PAL.saddle, op: 0.35, line: PAL.saddle, ...o });
 const over = (id, label, s, o = {}) => el(id, label, s, { cls: 'over', fill: PAL.black, line: PAL.mint, op: 0.55, ...o });
 const stall = (id, s, o = {}) => el(id, '', s, { fill: PAL.barn, line: PAL.mint, ...o });
 const mirrorX = (s) => (s.k === 'r' ? R(-s.x1, -s.x0, s.z0, s.z1) : s.k === 'c' ? C(-s.x, s.z, s.r) : s.k === 'e' ? E(-s.x, s.z, s.rx, s.z) : A(-s.x, s.z, s.r0, s.r1, 180 - s.a1, 180 - s.a0));
 
-// ---------- the course as it is today (race.js; drawn for comparison, not checked) ----------
+// ---------- today's course (race.js; drawn for comparison, unchecked) ----------
 const current = {
   name: 'Today', sub: 'one stand, one back stand, the concourse and the stalls behind the stand',
   note: [[0, 118, 'CONCESSIONS BEHIND THE STAND'], [20, -22, 'jumbotron 25 x 12.5'], [-40, 22, 'golden statue'], [30, 34, "winner's circle"], [-176, 14, 'way in'], [-118, 70, 'race office'], [0, 86, 'GRANDSTAND (11 tiers)'], [0, -78, 'back stand (5 tiers)']],
@@ -83,9 +82,9 @@ const current = {
   ],
 };
 
-// ---------- the parts both proposals share ----------
-// The stands: the front moves back 5.5 m (an 11.6 m apron for the photo-finish tower, the bridge landings and the camera crews), the main stand grows
-// to 14 tiers and 228 m, the far stand to 8 tiers and 184 m; both roofed. The clubhouse tower stands behind the main stand's centre.
+// ---------- shared by both proposals ----------
+// Stands: fronts move back 5.5 m (an 11.6 m apron for the photo tower, bridge landings, camera crews); main stand 14 tiers and 228 m,
+// far stand 8 tiers and 184 m, both roofed. The clubhouse tower stands behind the main stand's centre.
 const shared = () => [
   el('stand', 'MAIN GRANDSTAND', R(-114, 114, 76, 115), { zone: 'out', g: 'stands' }),
   el('far', 'FAR TURN STAND', R(-92, 92, -97, -76), { zone: 'out', g: 'stands' }),
@@ -112,30 +111,30 @@ const layoutA = {
     el('club', '', R(-22, 22, 115, 137), { zone: 'out', g: 'stands' }),
     free('plaza', R(-70, 70, 139, 178), { zone: 'out' }),
     el('gateS', '', R(-10, 10, 178, 181), { zone: 'out' }),
-    // the west end: gate, boulevard, tote hall and stables, then the bridge over the turn
+    // west end: gate, boulevard, tote hall, stables, then the bridge over the turn
     el('gateW', '', R(-232, -226, -11, 11), { zone: 'out' }),
     free('blvd', R(-226, -174, -10, 10)),
     el('tote', '', R(-216, -180, 14, 38), { zone: 'out' }),
     el('stables', '', R(-216, -180, -38, -14), { zone: 'out' }),
     el('wst1', '', R(-174, -162, -5, 5), { zone: 'out', g: 'wb' }), over('wdeck', '', R(-162, -128, -5, 5), { g: 'wb' }), el('wst2', '', R(-128, -116, -5, 5), { zone: 'in', g: 'wb' }),
     el('est2', '', R(116, 128, -5, 5), { zone: 'in', g: 'eb' }), over('edeck', '', R(128, 162, -5, 5), { g: 'eb' }), el('est1', '', R(162, 174, -5, 5), { zone: 'out', g: 'eb' }),
-    // the cross-street: a bridge from each stand, straight over the track, down into the Midway
+    // cross-street: a bridge from each stand over the track into the Midway
     over('sdeck', '', R(-64, -56, 38, 66), { g: 'sb' }), el('sst0', '', R(-64, -56, 28, 38), { zone: 'in', g: 'sb' }),
     el('sst1', '', R(-86, -64, 66.8, 70.4), { zone: 'out', margin: 1.5, g: 'sb' }), el('sst2', '', R(-56, -34, 66.8, 70.4), { zone: 'out', margin: 1.5, g: 'sb' }),
     over('ndeck', '', R(-64, -56, -66, -38), { g: 'nb' }), el('nst0', '', R(-64, -56, -38, -28), { zone: 'in', g: 'nb' }),
     el('nst1', '', R(-86, -64, -70.4, -66.8), { zone: 'out', margin: 1.5, g: 'nb' }), el('nst2', '', R(-56, -34, -70.4, -66.8), { zone: 'out', margin: 1.5, g: 'nb' }),
-    // the Midway: a promenade down the infield with a row of stalls each side, picnic lawns behind them
+    // the Midway: infield promenade, stalls each side, picnic lawns behind
     free('prom', R(-126, -4, -10, 10), { fill: PAL.gold }),
     free('lawnS', R(-110, -6, 22, 36), { fill: PAL.money, line: PAL.money }), free('lawnN', R(-110, -6, -36, -22), { fill: PAL.money, line: PAL.money }),
     ...stallsA(),
-    // the heart: twin-faced screen on two pylons straddling the promenade, a podium set at the foot of each face
+    // the heart: twin-faced screen on two pylons over the promenade, a podium set below each face
     free('wplaza', E(30, 0, 32, 31), { fill: PAL.gold, op: 0.28, line: PAL.gold }),
     el('pyl1', '', R(6, 10, -3, 3), { zone: 'in', g: 'screen', fill: PAL.black, line: PAL.mint }), el('pyl2', '', R(50, 54, -3, 3), { zone: 'in', g: 'screen', fill: PAL.black, line: PAL.mint }),
     over('screen', 'SCREEN 48 x 22.5 (two faces)', R(6, 54, -2.4, 2.4), { g: 'screen' }),
     el('podS', '', R(20, 40, 15, 21), { zone: 'in', fill: PAL.gold, line: PAL.black }), el('podN', '', R(20, 40, -21, -15), { zone: 'in', fill: PAL.gold, line: PAL.black }),
-    // the paddock end of the axis
+    // paddock end of the axis
     el('ring', '', E(92, 0, 20, 16), { zone: 'in', fill: PAL.money, line: PAL.mint }), el('pavil', '', R(80, 96, 24, 34), { zone: 'in' }),
-    // the fairground annex, offset to the north-east behind the far stand's east end
+    // fairground annex, north-east behind the far stand's east end
     free('annex', R(100, 204, -168, -100), { fill: PAL.money, op: 0.3, line: PAL.money }),
     el('wheel', 'FERRIS WHEEL', R(150, 200, -160, -148), { zone: 'out', fill: PAL.gold, line: PAL.black }), el('carou', 'CAROUSEL', C(122, -146, 11), { zone: 'out', fill: PAL.barn, line: PAL.gold }),
     el('ticket', '', R(140, 162, -118, -108), { zone: 'out' }), stall('fk1', R(104, 112, -124, -116), { zone: 'out' }), stall('fk2', R(190, 198, -124, -116), { zone: 'out' }),
@@ -166,22 +165,22 @@ const layoutB = {
     el('club', '', R(-30, 30, 115, 142), { zone: 'out', g: 'stands' }),
     free('forecourt', R(-70, 70, 144, 190), { zone: 'out' }),
     el('gateS', '', R(-14, 14, 191, 195), { zone: 'out' }),
-    // the horseshoe: an arcade round each turn, joined to both stands, with a gate hall at its centre
+    // horseshoe: an arcade round each turn joining both stands, a gate hall at its centre
     free('arcW', A(-90, 0, 84, 100, 105, 270), { fill: PAL.mint, op: 0.3, line: PAL.gold, g: 'arc' }), free('arcE', mirrorX(A(-90, 0, 84, 100, 105, 270)), { fill: PAL.mint, op: 0.3, line: PAL.gold, g: 'arc' }),
     el('hallW', '', A(-90, 0, 82, 104, 172, 188), { zone: 'out', g: 'arc' }), el('hallE', '', mirrorX(A(-90, 0, 82, 104, 172, 188)), { zone: 'out', g: 'arc' }),
     ...arcStalls(),
-    // the infield: the screen drum on one core, a row of three podium sets, the parade ring, a lawn
+    // infield: screen drum on one core, three podium sets, parade ring, lawn
     over('drum', 'SCREEN DRUM 40 x 20 + 14 x 20 ends', R(-20, 20, -7, 7), { g: 'drum' }), el('core', '', R(-5, 5, -5, 5), { zone: 'in', fill: PAL.black, line: PAL.mint, g: 'drum' }),
     ...[-30, 0, 30].map((x) => el(`pod${x}`, '', R(x - 9.65, x + 9.65, 15.85, 21.05), { zone: 'in', fill: PAL.gold, line: PAL.black })),
     free('winplaza', R(-44, 44, 10, 28), { fill: PAL.gold, op: 0.25, line: PAL.gold }),
     el('ring', '', E(-96, 0, 26, 18), { zone: 'in', fill: PAL.money, line: PAL.mint }), el('weigh', '', R(-65.2, -52, -9.2, 9.2), { zone: 'in' }),
     free('lawn', C(100, 0, 28), { fill: PAL.money, op: 0.4, line: PAL.money }),
-    // at-grade crossings with barrier arms, four of them
+    // four at-grade crossings with barrier arms
     ...[[-70, 1], [70, 1], [-70, -1], [70, -1]].map(([x, s]) => free(`x${x}${s}`, R(x - 4, x + 4, s > 0 ? LANE_IN : -LANE_OUT, s > 0 ? LANE_OUT : -LANE_IN), { fill: PAL.mint, op: 0.5, line: PAL.mint })),
     // stables behind the far stand
     ...[[-36, -135.2, -123.6], [36, -135.2, -123.6], [-36, -116.4, -104.8], [36, -116.4, -104.8]].map(([x, z0, z1], i) => el(`stable${i}`, '', R(x - 15.3, x + 15.3, z0, z1), { zone: 'out' })),
     el('barn', '', R(-12.2, 12.2, -140.2, -126), { zone: 'out' }),
-    // the fairground annex, offset to the south-east behind the main stand's east end
+    // fairground annex, south-east behind the main stand's east end
     free('annex', R(124, 206, 106, 168), { fill: PAL.money, op: 0.3, line: PAL.money }),
     el('wheel', 'FERRIS WHEEL', R(150, 200, 150, 162), { zone: 'out', fill: PAL.gold, line: PAL.black }), el('carou', 'CAROUSEL', C(142, 134, 10.5), { zone: 'out', fill: PAL.barn, line: PAL.gold }),
     el('ticket', '', R(160, 182, 110, 118), { zone: 'out' }), stall('fk1', R(165.6, 174.4, 125.8, 134), { zone: 'out' }), stall('fk2', R(189.6, 198.4, 125.8, 134), { zone: 'out' }),
@@ -242,7 +241,7 @@ function svg(L, key) {
   out.push(`<text x="${PAD}" y="19" class="t">${L.name}</text><text x="${PAD}" y="33" class="k">${L.sub}</text>`);
   out.push(`<circle cx="${px(0)}" cy="${pz(0)}" r="${sc(L.plateau)}" fill="none" stroke="#7b9a6e" stroke-width="1" stroke-dasharray="7 5"/>`);
   out.push(`<text x="${px(0)}" y="${pz(-L.plateau) - -10}" text-anchor="middle" class="k">plateau r ${L.plateau}${key ? ' (proposed; today 215)' : ''}</text>`);
-  // the oval: turf infield, dirt band, rails, finish line
+  // oval: turf infield, dirt band, rails, finish line
   out.push(`<path d="${stadium(LANE_IN)}" fill="${PAL.money}" fill-opacity="0.55"/>`);
   out.push(`<path d="${stadium((LANE_IN + LANE_OUT) / 2)}" fill="none" stroke="${PAL.saddle}" stroke-width="${sc(LANE_OUT - LANE_IN)}"/>`);
   out.push(`<path d="${stadium(R_IN)}" fill="none" stroke="${PAL.mint}" stroke-width="0.8"/><path d="${stadium(R_OUT)}" fill="none" stroke="${PAL.mint}" stroke-width="0.8"/>`);

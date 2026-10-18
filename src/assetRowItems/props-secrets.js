@@ -7,18 +7,16 @@ import { makeSat7, Secrets } from '../secrets.js';
 import { spire, obelisk, lander, shrine, extract, makeMothership, makeDrone } from '../spindle.js';
 import { World } from '../world.js';
 
-// 12 · SECRETS & THE SPINDLE'S PROPS. (The Spindle itself, a 5.4 km rock with its own world, is not row material: see the SKIPPED note
-// at the bottom.)
+// 12 · SECRETS & THE SPINDLE'S PROPS (the Spindle rock itself is skipped: see the note at the bottom).
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const TEAL = 0x7dffd4;
 
-// ---- SAT-7 "Lantern" (secrets.js makeSat7, extracted from buildSatellite) -------------------------------------------
-// In the game it orbits 34-300 m up; here it rests on four posts with its dish just clear of the floor. The blinking lights, the
-// swelling beacon and the spinning artifact are the ones Secrets.update runs.
+// ---- SAT-7 "Lantern" (secrets.js makeSat7) ---------------------------------------------------------------------------
+// Orbits 34 to 300 m up in the game; here on four posts, dish just clear of the floor. Animation mirrors Secrets.update.
 function sat7() {
   const s = makeSat7(true);
-  s.nameSign.visible = false; // (the board says it)
+  s.nameSign.visible = false; // the board says it
   const LIFT = 7.2;
   const root = new THREE.Group();
   s.root.position.y = LIFT;
@@ -32,7 +30,7 @@ function sat7() {
   }
   const S = 1.5; // SAT_SCALE
   const cols = [
-    { type: 'box', x: 0, y: LIFT, z: 0, hx: 4.7 * S, hy: 1.75 * S, hz: 7.7 * S, yaw: 0 }, // (secrets.js syncSatCols: the body and both wings)
+    { type: 'box', x: 0, y: LIFT, z: 0, hx: 4.7 * S, hy: 1.75 * S, hz: 7.7 * S, yaw: 0 }, // body and both wings (secrets.js syncSatCols)
     { type: 'box', x: -14.5 * S, y: LIFT, z: 0, hx: 6 * S, hy: 0.3 * S, hz: 3.5 * S, yaw: 0 },
     { type: 'box', x: 14.5 * S, y: LIFT, z: 0, hx: 6 * S, hy: 0.3 * S, hz: 3.5 * S, yaw: 0 },
   ];
@@ -48,7 +46,7 @@ function sat7() {
   };
 }
 
-// The alien artifact (secrets.js makeSat7: the cradle, the octahedron and its glow; the same stone sits in the jar). On a small stand.
+// The alien artifact (secrets.js makeSat7: cradle, octahedron, glow; same stone as in the jar), on a stand.
 function artifact() {
   const root = new THREE.Group();
   const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 0.6, 12), toon(0x3a3550));
@@ -72,11 +70,10 @@ function artifact() {
 }
 
 // ---- the Whispering Fissure ------------------------------------------------------------------------------------------
-// Secrets.buildFissure builds the trench, the tunnel, the gate chamber and the shrine in a settlement-like local frame (y up, the
-// ground at y = 0, the rooms 34 m below) and cuts a hole in the Moon's terrain for it. It is run here, as it is, on a stand-in
-// `this`: a bare group for the location, the real World.put / toWorld, a col() that records the colliders, and a dummy planet
-// whose hole uniforms soak up the cut. Below the Row's floor nothing could be seen, so the whole thing is lifted 34 m (the rooms'
-// floor on the Row's), turned to run along the row, and its roofs are taken off so the rooms can be seen into.
+// Secrets.buildFissure (trench, tunnel, gate chamber, shrine; local frame y up, ground y = 0, rooms 34 m below) runs here
+// unchanged on a stand-in `this`: bare location group, real World.put / toWorld, a col() that records colliders, and a
+// dummy planet whose hole uniforms soak up the terrain cut. Lifted 34 m (rooms on the Row floor), turned along the row,
+// roofs hidden.
 function fissure() {
   const FLOOR = -34, LIFT = 34, TURN = Math.PI / 2;
   const W = World.prototype;
@@ -92,7 +89,7 @@ function fissure() {
   };
   Secrets.prototype.buildFissure.call(self);
   const inner = loc.group;
-  // the roofs: the boxes 1.2 m thick (buildFissure's `box(..., rm.ceil, rm.ceil + 1.2, ...)`)
+  // roofs: the 1.2 m thick boxes (buildFissure's `box(..., rm.ceil, rm.ceil + 1.2, ...)`)
   inner.traverse((o) => { if (o.isMesh && o.geometry.type === 'BoxGeometry' && Math.abs(o.geometry.parameters.height - 1.2) < 1e-6) o.visible = false; });
   inner.rotation.y = TURN;
   inner.position.y = LIFT;
@@ -109,7 +106,7 @@ function fissure() {
   return {
     root,
     cols,
-    update: (dt, t) => { // (Secrets.update)
+    update: (dt, t) => { // as Secrets.update
       G.runes.rotation.z += dt * 0.15;
       S.skates.rotation.y += dt;
       const sh = S.skates.userData.shards;
@@ -119,7 +116,7 @@ function fissure() {
   };
 }
 
-// ---- the Spindle's props (spindle.js: Kit pieces; the game bakes and clones them) -----------------------------------
+// ---- the Spindle's props (spindle.js Kit pieces) ---------------------------------------------------------------------
 const kit = (fn) => { const k = new Kit(TEAL, 5, false); fn(k); return k.finish().root; };
 
 function landerItem() {
@@ -136,7 +133,7 @@ function obeliskItem() {
 function shrineItem() {
   const root = new THREE.Group();
   root.add(kit(shrine));
-  // the Quantum Core on its pedestal (spindle.js:330): an octahedron in a soft sphere, 4.2 m up, turning
+  // the Quantum Core on its pedestal as spindle.js places it (core 4.2 m up, shrine sunk 0.2): octahedron in a soft sphere, turning
   const core = new THREE.Mesh(new THREE.OctahedronGeometry(1.6, 0), glow(TEAL));
   core.add(new THREE.Mesh(new THREE.SphereGeometry(3, 16, 10), BEAM(TEAL, 0.22)));
   core.position.y = 4.4;
@@ -148,7 +145,7 @@ function extractionPad() {
 }
 function mothership() {
   const m = makeMothership();
-  const p = seat(m.root, { y: 14 }); // (hovering: in the game it holds station 92 m up)
+  const p = seat(m.root, { y: 14 }); // hovering (92 m up in the game)
   return {
     root: p.root,
     update: (dt, t) => { m.eyes.forEach((e, i) => e.scale.setScalar(1 + Math.sin(t * 3 + i * 2.1) * 0.12)); },
@@ -156,7 +153,7 @@ function mothership() {
 }
 function drones() {
   const lit = makeDrone(), dark = makeDrone();
-  dark.userData.core.material = dark.userData.core.userData.dark; // (spindle.js updateDrones: dark while stunned)
+  dark.userData.core.material = dark.userData.core.userData.dark; // dark = stunned (spindle.js updateDrones)
   lit.position.y = dark.position.y = 1.5;
   const parts = [seat(lit, { lift: false }), seat(dark, { lift: false })];
   const root = lineUp(parts, 3).root;
@@ -181,13 +178,12 @@ export default {
 };
 
 /*
-SKIPPED (not in the Row, and why):
-- The Spindle rock itself (spindle.rock): a 5.4 km asteroid with its own world (its own gravity axis, terrain worker and sky); the Row
-  already is one such world. Only its props are here.
-- The Spindle in the Moon's sky (spindle.sky-asteroid, world.js buildSky: spindleGeometry(2000, 260, 3) 5200 m above the Monolith): an
-  overhead sky object, 2 km long; it is the same shape the Spindle is made from.
-- The far planets, the Earth and the sun (sky.planets-earth-sun, models.js makePlanets, world.js buildSky): a backdrop strung on a
-  6-7 km dome round the camera, not an object that can stand in a line. The Row has its own star dome (assetRow.js).
-- The Xenoglide skates (secrets.js makeXenoSkates) appear as built, on their pedestal in the Fissure; their own showcase is the
-  characters group's runner.xenoskates.
+SKIPPED:
+- The Spindle rock (spindle.rock): a 5.4 km asteroid with its own world (gravity axis, terrain worker, sky); the Row is
+  already one such world. Only its props are here.
+- The Spindle in the Moon's sky (spindle.sky-asteroid, world.js buildSky: spindleGeometry(2000, 260, 3), 5200 m above the
+  Monolith): a 2 km overhead sky object of the same shape.
+- Far planets, Earth and sun (sky.planets-earth-sun, models.js makePlanets, world.js buildSky): a backdrop on a 6-7 km
+  dome round the camera. The Row has its own star dome (assetRow.js).
+- The Xenoglide skates (secrets.js makeXenoSkates) sit on their Fissure pedestal; their showcase is runner.xenoskates.
 */

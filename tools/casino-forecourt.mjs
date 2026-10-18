@@ -1,12 +1,12 @@
-// Dev-only: the Lucky Crater Casino's forecourt (the boulevard, the car parks, the plaza), today and as proposed in docs/casino-forecourt.md.
+// Dev-only: the Lucky Crater Casino forecourt (boulevard, car parks, plaza), current and as proposed in docs/casino-forecourt.md.
 //   node tools/casino-forecourt.mjs docs     writes docs/casino-forecourt-current.svg and docs/casino-forecourt-proposed.svg
-//   node tools/casino-forecourt.mjs json     prints both layouts as json (the page that shows them reads this)
-// Nothing here is read by the game: the "current" plan copies the numbers of settlements.js (dressCasinoLot) and casinoWorld.js, the "proposed" one is the study.
-// The frame is the casino's: x across, z out from the doors' wall (the doors' outer face is z 16.4); the boulevard runs along +z to the fountain plaza.
+//   node tools/casino-forecourt.mjs json     prints both layouts as json (read by the page that shows them)
+// The game reads none of this: "current" copies numbers from settlements.js (dressCasinoLot) and casinoWorld.js; "proposed" is the study.
+// Casino frame: x across, z out from the doors' wall (doors' outer face at z 16.4); the boulevard runs along +z to the fountain plaza.
 import { writeFileSync } from 'node:fs';
 import { FRONT_OUT, HALL } from '../src/casinoPlan.js';
 
-const FZ = 98, PR = 17;                                   // the plaza: its centre and radius
+const FZ = 98, PR = 17;                                   // plaza centre and radius
 const rect = (id, x0, x1, z0, z1, cls, extra = {}) => ({ id, s: { k: 'r', x0, x1, z0, z1 }, cls, ...extra });
 const circ = (id, x, z, r, cls, extra = {}) => ({ id, s: { k: 'c', x, z, r }, cls, ...extra });
 
@@ -39,7 +39,7 @@ const proposed = () => {
   const L = { name: 'The Valet Court', asphalt: [], paving: [], items: [], lamps: [], bays: [], barrier: [], bollards: [], roads: [], notes: [] };
   const AV = 8.6, W0 = 38.4, W1 = 58.4, MID = (W0 + W1) / 2, MOD = 2.4, NMOD = 14, XA = AV + 0.36, XB = XA + 0.72 + NMOD * MOD;
   const BX0 = 11, BAYW = 5.2, NB = 6, BAYD = 6.2;
-  const bayZ = [W0 + 1.0 + BAYD / 2, W1 - 1.0 - BAYD / 2];  // the two rows' middles
+  const bayZ = [W0 + 1.0 + BAYD / 2, W1 - 1.0 - BAYD / 2];  // row middles
   L.asphalt.push({ k: 'poly', pts: [[-AV, FRONT_OUT], [AV, FRONT_OUT], [AV, W1], [-AV, W1]] });
   for (const s of [-1, 1]) {
     L.asphalt.push({ k: 'r', x0: Math.min(s * AV, s * (XB + 0.36)), x1: Math.max(s * AV, s * (XB + 0.36)), z0: W0, z1: W1 });
@@ -47,7 +47,7 @@ const proposed = () => {
     for (const [row, rz] of bayZ.entries()) for (let i = 0; i < NB; i++) {
       L.bays.push({ x: s * (BX0 + (i + 0.5) * BAYW), z: rz, w: BAYW, d: BAYD, taken: (i * 5 + (row === 0 ? 1 : 3) + (s > 0 ? 2 : 0)) % 4 !== 0 });
     }
-    // the card wall: the north and south runs between their posts, the outer end's two stubs either side of the aisle's mouth (the posts are 0.72 m square, the wall 0.6 thick)
+    // card wall: north and south runs between posts, two outer-end stubs either side of the aisle mouth (posts 0.72 m square, wall 0.6 thick)
     const run = (x0, x1, z0, z1) => ({ k: 'r', x0: Math.min(s * x0, s * x1), x1: Math.max(s * x0, s * x1), z0, z1 });
     L.barrier.push(run(XA - 0.36, XB + 0.36, W0, W0 + 0.6), run(XA - 0.36, XB + 0.36, W1 - 0.6, W1));
     const stub = W0 + 0.3 + 0.36 + 2 * MOD + 0.72;
@@ -58,7 +58,7 @@ const proposed = () => {
     L.items.push(circ('Slot carousel', s * 19.5, FRONT_OUT + 11.6, 7.6, 'ext'));
     L.items.push(circ('Chip stack', s * 11, FRONT_OUT + 4.2, 1.7, 'ext'), circ('Chip stack', s * 49, 64, 1.7, 'ext'));
   }
-  // the walkway: from the court's edge to the plaza, paved, the carpet running on down its middle
+  // paved walkway from the court edge to the plaza, carpet down its middle
   L.paving.push({ k: 'r', x0: -5.2, x1: 5.2, z0: W1, z1: FZ - PR + 1 }, { k: 'c', x: 0, z: FZ, r: PR });
   L.crossing = { x0: -AV, x1: AV, z0: W1 - 2, z1: W1 };
   for (const s of [-1, 1]) for (let z = W1 + 2; z < FZ - PR; z += 3) L.bollards.push({ x: s * 5.6, z });
@@ -77,7 +77,7 @@ const proposed = () => {
 
 // ---- checks (the proposal only) ----
 const shapeBox = (s) => (s.k === 'r' ? s : { x0: s.x - s.r, x1: s.x + s.r, z0: s.z - s.r, z1: s.z + s.r });
-const gap = (a, b) => {                                    // distance between two shapes (negative: they overlap)
+const gap = (a, b) => {                                    // distance between shapes (negative: overlap)
   if (a.k === 'c' && b.k === 'c') return Math.hypot(a.x - b.x, a.z - b.z) - a.r - b.r;
   if (a.k === 'c' || b.k === 'c') {
     const c = a.k === 'c' ? a : b, r = a.k === 'c' ? b : a;
@@ -98,9 +98,9 @@ export function check(L) {
   for (let i = 0; i < solids.length; i++) for (let j = i + 1; j < solids.length; j++) {
     const a = solids[i], b = solids[j];
     if (a.bay && b.bay) continue;
-    if ((a.wall && b.wall) || (a.id === 'Lamp post' && b.wall) || (b.id === 'Lamp post' && a.wall)) continue;   // (lamps stand in the wall's line, in place of a card)
+    if ((a.wall && b.wall) || (a.id === 'Lamp post' && b.wall) || (b.id === 'Lamp post' && a.wall)) continue;   // (lamps stand in the wall line, replacing a card)
     const g = gap(a.s, b.s);
-    const need = a.id === 'Bay' || b.id === 'Bay' ? 0.3 : 1.5;   // (a bay is paint: the cars in it stand a hand's breadth inside)
+    const need = a.id === 'Bay' || b.id === 'Bay' ? 0.3 : 1.5;   // (a bay is paint; its car stands a hand's breadth inside)
     if (g < need) issues.push(`${a.id} / ${b.id}: ${g.toFixed(2)} m (needs ${need})`);
     else if (g < tight) { tight = g; tightPair = `${a.id} / ${b.id}`; }
   }
@@ -118,7 +118,7 @@ export function svg(L, proposed) {
   const o = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W * PXM} ${H * PXM}" font-family="ui-monospace,Menlo,monospace">`, `<rect width="100%" height="100%" fill="${C.ground}"/>`];
   for (let x = -80; x <= 80; x += 10) o.push(`<line x1="${px(x)}" y1="0" x2="${px(x)}" y2="${H * PXM}" stroke="${C.gridl}" stroke-width="${x === 0 ? 1.4 : 0.6}"/>`);
   for (let z = 0; z <= 124; z += 10) o.push(`<line x1="0" y1="${pz(z)}" x2="${W * PXM}" y2="${pz(z)}" stroke="${C.gridl}" stroke-width="0.6"/><text x="6" y="${(+pz(z) - 3).toFixed(1)}" fill="#8c84b0" font-size="11">z ${z}</text>`);
-  // the casino's front: the hall's wings behind the doors' wall
+  // casino front: hall wings behind the doors' wall
   o.push(sh({ k: 'r', x0: -HALL.WING.x1 - 2.4, x1: HALL.WING.x1 + 2.4, z0: -2, z1: 0 }, 'none'));
   o.push(sh({ k: 'r', x0: -57.4, x1: 57.4, z0: 0, z1: 16.4 }, C.hall, 'opacity="0.55"'));
   o.push(sh({ k: 'r', x0: -9, x1: 9, z0: 0, z1: 16.4 }, C.wall, 'opacity="0.9"'));

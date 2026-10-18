@@ -3,21 +3,19 @@ import { makeRunner } from './models.js';
 import { tangent, arcDist, greatCircle } from './geo.js';
 import { pick } from './rng.js';
 
-// What the Monolith does when you touch it: one of three spells, never the same one twice running.
-//   TIME DILATION    20 s with the world at 40 % speed (pirates, their shots, traffic, meteors);
-//                 you, and your own shots, keep full speed
-//   ECHO FOLLOWERS   one or two holograms of you that shadow your every move, mid-air jumps and all, for up to ten
-//                 minutes or until one takes a shot for you; anyone shooting at you picks one of you at random
-//   TELEPORT         a random spot on the Moon (flat, safe ground), launched at 0 km/h one time in four and
-//                 otherwise at a random 1-300 km/h
+// Touching the Monolith casts one of three spells, never the same twice running.
+//   TIME DILATION    20 s of the world at 40 % speed (pirates, shots, traffic, meteors); you and your shots stay full speed
+//   ECHO FOLLOWERS   one or two holograms shadow your moves (mid-air jumps too) for up to ten minutes or until one takes
+//                 a shot for you; shooters pick one of you at random
+//   TELEPORT         a random flat, safe spot; launched at 0 km/h one time in four, else 1-300 km/h
 export const DILATE_RATE = 0.4;
-const ECHO_SECS = 600; // up to ten minutes
-const ECHO_DELAY = [0.3, 0.62]; // seconds behind you, per follower: they retrace your own path
-const ECHO_SIDE = [-2.4, 2.4]; // metres to each side of it, so they don't stand in you when you stop
-const ECHO_KEEP = 2.5; // seconds of your path kept
-const TELE_STILL = 0.25; // the share of teleports that arrive at a standstill
-const TELE_KMH = 300; // the fastest launch (the rest are 1 to this)
-const TELE_CUSHION = 8; // seconds of SOFT LANDING after a launch: a 300 km/h arrival on foot would otherwise be a wipe-out
+const ECHO_SECS = 600; // ten minutes
+const ECHO_DELAY = [0.3, 0.62]; // s behind you per follower, retracing your path
+const ECHO_SIDE = [-2.4, 2.4]; // m to the side, so they don't stand in you
+const ECHO_KEEP = 2.5; // s of path kept
+const TELE_STILL = 0.25; // share of teleports arriving at rest
+const TELE_KMH = 300; // fastest launch (others 1 to this)
+const TELE_CUSHION = 8; // s of SOFT LANDING after a launch (else a 300 km/h arrival on foot is a wipe-out)
 
 export function monolithTouch(alch) {
   const g = alch.game;
@@ -41,8 +39,8 @@ export function monolithTouch(alch) {
 
 // ---------- teleport ----------
 
-// A random direction on the Moon that's safe to land on: clear of settlements, plateaus, black lakes, roads, camps and
-// outposts, on level ground (no crater rim or cliff under you), and a real trip from where you are. Null if there isn't one.
+// A random safe landing direction: clear of settlements, plateaus, black lakes, roads, camps and outposts, on level
+// ground, and a real trip away. Null if none found.
 export function pickTeleportSpot(g, tries = 400) {
   const P = g.player, planet = g.planet;
   const from = P.pos.clone().normalize();
@@ -54,7 +52,7 @@ export function pickTeleportSpot(g, tries = 400) {
     if (!planet.spotFree(dir)) continue;
     if (g.locations.some((l) => arcDist(dir, l.dir) < Math.max(l.zoneR || 0, l.r * 1.9) + 150)) continue;
     if (g.territory && g.territory.outposts.some((o) => !o.gone && arcDist(dir, o.dir) < 200)) continue;
-    // level: the ground under it and on rings 14 m and 24 m out all faces up and sits at about the same height
+    // level: ground here and on rings 14 m and 24 m out faces up at about the same height
     const c = planet.ground(dir, new THREE.Vector3());
     const hc = c.length();
     const t = tangent(new THREE.Vector3(0.3, 0.9, 0.2), dir).normalize();
@@ -70,15 +68,15 @@ export function pickTeleportSpot(g, tries = 400) {
   return null;
 }
 
-// The Monolith's teleport: a random safe spot, a random heading, and a launch (`kmh` overrides the roll: for tests).
-// You keep your health and fuel (a respawn would refill both).
+// Teleport: random safe spot and heading, and a launch (`kmh` overrides the roll, for tests).
+// Health and fuel are kept (respawn would refill them).
 export function monolithTeleport(g, kmh = null) {
   const P = g.player;
   const dir = pickTeleportSpot(g);
   if (!dir) { g.hud.toast('The Monolith hums, and for a moment you almost went somewhere. (Nowhere safe to land)', 4); return null; }
   if (P.vehicle) g.garage.exit();
   const from = P.pos.clone();
-  g.fx.explosion(from.clone().addScaledVector(from.clone().normalize(), 1.5), 4, false); // (where you were)
+  g.fx.explosion(from.clone().addScaledVector(from.clone().normalize(), 1.5), 4, false); // where you were
   const hp = P.health, en = P.body.energy;
   g.planet.update(g.planet.ground(dir, new THREE.Vector3()), { budgetMs: 1e9 });
   const pos = g.planet.ground(dir, new THREE.Vector3(), 1.5);
@@ -88,7 +86,7 @@ export function monolithTeleport(g, kmh = null) {
   g.cam.fwd.copy(fwd);
   const speed = kmh ?? (Math.random() < TELE_STILL ? 0 : 1 + Math.random() * (TELE_KMH - 1)); // km/h
   P.body.vel.copy(fwd).multiplyScalar(speed / 3.6);
-  if (speed > 0.5) g.alchemy.buffs.cushion = Math.max(g.alchemy.buffs.cushion, TELE_CUSHION); // (a launch on foot must not be a wipe-out)
+  if (speed > 0.5) g.alchemy.buffs.cushion = Math.max(g.alchemy.buffs.cushion, TELE_CUSHION); // no wipe-out on a launch on foot
   g.updateCamera(0.016, true);
   g.fx.explosion(pos, 4, false);
   g.fx.pop('*VWORP*', null, { color: '#c77dff', size: 56 });
@@ -101,11 +99,11 @@ export function monolithTeleport(g, kmh = null) {
 // ---------- echo followers ----------
 
 export function holoMaterial() {
-  // (ordinary alpha blending: added on top of the pale ground a cyan hologram just burns out to white)
+  // alpha blending: additive would burn out to white over the pale ground
   return new THREE.MeshBasicMaterial({ color: 0x3fd8ff, transparent: true, opacity: 0.5, depthWrite: false });
 }
 
-// One or two holograms of you (returns how many). Each retraces your own path a moment late, to one side.
+// One or two holograms (returns the count), each retracing your path a moment late, to one side.
 export function spawnEchoes(g) {
   clearEchoes(g);
   const P = g.player;
@@ -115,13 +113,13 @@ export function spawnEchoes(g) {
     const mat = holoMaterial();
     m.root.traverse((o) => {
       if (!o.isMesh) return;
-      // the ink shells would turn into a solid cyan blob: holograms go without them
+      // hide ink shells (they'd make a solid cyan blob)
       if (o.material && o.material.side === THREE.BackSide) { o.visible = false; return; }
       o.material = mat;
       o.castShadow = false;
     });
     g.scene.add(m.root);
-    // the first trails you on your left, the second (if there is one) a little further back on your right
+    // first on your left, second further back on your right
     g.decoys.push({
       model: m, mat, delay: ECHO_DELAY[i], lat: ECHO_SIDE[i], phase: Math.random() * 6.28,
       pos: P.pos.clone(), center: P.center.clone(), vel: P.vel.clone(), radius: 1.2, dead: false, decoy: true,
@@ -143,16 +141,14 @@ export function shatterEcho(g, d) {
   d.model.root.removeFromParent();
   d.mat.dispose();
   g.decoys.splice(g.decoys.indexOf(d), 1);
-  if (!g.decoys.length && g.alchemy) g.alchemy.buffs.echo = 0; // (the last one took its shot: the spell is spent)
+  if (!g.decoys.length && g.alchemy) g.alchemy.buffs.echo = 0; // last one gone: spell spent
   g.fx.spawn(d.center.clone(), new THREE.Vector3(), { color: 0x7df9ff, size: 0.35, life: 0.7, count: 18, spread: 5 });
   g.fx.pop('GLITCH!', d.center.clone(), { color: '#7df9ff', size: 36, life: 0.7 });
   g.audio.tone(1800, 0.25, 'square', 0.08, 0.2);
 }
 
-// The followers retrace your own path, `delay` seconds late and a couple of metres to one side, so they take every
-// bump, hop and jump the way you did (mid-air included) and stay on the ground wherever the ground is: each is put
-// at the height above the ground that you had, over the ground at its own spot. A jump in your path (a teleport) is
-// followed at once rather than streaked across.
+// Followers retrace your path `delay` s late, a couple of metres aside, taking every bump and jump as you did. Each sits
+// at your height above ground, over the ground at its own spot. A path jump (teleport) is followed at once, not streaked.
 export function updateEchoes(alch, dt) {
   const g = alch.game, P = g.player;
   if (!g.decoys.length) { if (g.echoTrack) g.echoTrack.samples.length = 0; return; }
@@ -162,7 +158,7 @@ export function updateEchoes(alch, dt) {
   const S = tr.samples;
   const pm = P.model;
   const last = S[S.length - 1];
-  if (last && last.pos.distanceTo(P.pos) > 40) S.length = 0; // (a teleport, a recall: start the path again)
+  if (last && last.pos.distanceTo(P.pos) > 40) S.length = 0; // teleport or recall: restart the path
   S.push({
     t: tr.t, pos: P.pos.clone(), quat: pm.root.quaternion.clone(), alt: Math.max(0, g.planet.altitude(P.pos)),
     bodyY: pm.body ? pm.body.position.y : 0, limbs: ['legL', 'legR', 'armL', 'armR'].map((k) => (pm[k] ? pm[k].rotation.clone() : null)),
@@ -172,7 +168,7 @@ export function updateEchoes(alch, dt) {
   const tmpQ = new THREE.Quaternion(), fwd = new THREE.Vector3(), side = new THREE.Vector3(), want = new THREE.Vector3();
   for (const d of g.decoys) {
     d.phase += dt;
-    // the two samples either side of "delay ago"
+    // samples either side of "delay ago"
     const tt = tr.t - d.delay;
     let k = S.length - 1;
     while (k > 0 && S[k - 1].t >= tt) k--;
@@ -185,7 +181,7 @@ export function updateEchoes(alch, dt) {
     fwd.addScaledVector(dirUp, -fwd.dot(dirUp)).normalize();
     side.crossVectors(dirUp, fwd);
     const alt = a.alt + (b.alt - a.alt) * f;
-    // over the ground at its own spot, as high above it as you were
+    // its own ground, at your altitude
     g.planet.ground(pos.addScaledVector(side, d.lat), want, alt);
     const prev = d.pos.clone();
     d.pos.copy(want);
@@ -199,7 +195,7 @@ export function updateEchoes(alch, dt) {
       if (m[key] && la && lb) { m[key].rotation.x = la.x + (lb.x - la.x) * f; m[key].rotation.y = la.y + (lb.y - la.y) * f; m[key].rotation.z = la.z + (lb.z - la.z) * f; }
     }
     if (m.body) m.body.position.y = a.bodyY + (b.bodyY - a.bodyY) * f;
-    // a faint flicker (a fast one in the last 3 s), and they fade out close to the camera: they trail you, between it and you
+    // faint flicker (fast in the last 3 s); fade near the camera (they trail between it and you)
     const near = Math.min(1, Math.max(0, (g.camera.position.distanceTo(d.pos) - 2.5) / 4.5));
     d.mat.opacity = Math.max(0, 0.46 + 0.1 * Math.sin(d.phase * 9) + (alch.buffs.echo < 3 && Math.sin(d.phase * 30) > 0 ? -0.3 : 0)) * near;
   }

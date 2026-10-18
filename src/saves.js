@@ -1,17 +1,15 @@
 // Save slots.
 //
-// Every game module persists itself under its own 'moonrunner-*' localStorage key (the "live"
-// working copy) and reads it back in its constructor. A slot is a single JSON blob ('mr-slot-N')
-// holding a copy of every live per-slot key plus a little metadata for the menu cards.
+// Each module persists under its own 'moonrunner-*' localStorage key (the live copy) and reads it in its constructor.
+// A slot is one JSON blob ('mr-slot-N'): a copy of every live per-slot key plus menu-card metadata.
 //
-//   choosing a slot   -> clear live keys, copy the slot's keys back in, reload the page
+//   choosing a slot   -> clear live keys, copy the slot's keys in, reload
 //   while playing     -> snapshot live keys into the active slot (timer, deliveries, unload…)
 //
 // Settings ('moonrunner-settings-v1') are global and never touched here.
 //
-// Safety: the first time a slot is written in a session, what it held before is kept as that slot's
-// backup ('mr-slot-N-bak': the save as it was when you last stopped playing). A slot that won't
-// read (damaged) can be restored from it, and any slot can be exported to a file and imported back.
+// The first write to a slot each session keeps its previous contents as 'mr-slot-N-bak', so a damaged slot can be
+// restored. Slots can also be exported to a file and imported.
 
 export const SLOT_COUNT = 3;
 const PREFIX = 'moonrunner-';
@@ -19,7 +17,7 @@ const GLOBAL_KEYS = new Set(['moonrunner-settings-v1']);
 const MAIN_KEY = 'moonrunner-save-v1';
 const ACTIVE_KEY = 'mr-active-slot';
 const INIT_KEY = 'mr-slots-init';
-const AUTOSTART_KEY = 'mr-autostart'; // sessionStorage: drop straight into play after a reload
+const AUTOSTART_KEY = 'mr-autostart'; // sessionStorage: straight into play after reload
 const slotKey = (n) => `mr-slot-${n}`;
 const bakKey = (n) => `mr-slot-${n}-bak`;
 const FILE_FORMAT = 'moon-runner-save';
@@ -30,14 +28,14 @@ const ss = () => { try { return window.sessionStorage; } catch { return null; } 
 export class SaveSlots {
   constructor() {
     const L = ls();
-    this.switching = false; // set while we rewrite live keys + reload: suppresses unload snapshots
+    this.switching = false; // rewriting live keys + reloading: suppresses unload snapshots
     this.sessionPlay = 0; // seconds played this page load
-    this.backedUp = new Set(); // slots whose old save was kept as the backup this session
+    this.backedUp = new Set(); // slots backed up this session
     this.migrate();
     const a = L ? parseInt(L.getItem(ACTIVE_KEY), 10) : NaN;
     this.active = a >= 1 && a <= SLOT_COUNT && this.read(a) ? a : null;
     if (!this.active) {
-      // no slot in use: the menu's background world starts from a clean slate
+      // no slot in use: the menu's background world starts clean
       if (L) L.removeItem(ACTIVE_KEY);
       this.clearLive();
     }
@@ -46,7 +44,7 @@ export class SaveSlots {
     if (S) S.removeItem(AUTOSTART_KEY);
     const m = this.active ? this.read(this.active).meta || {} : {};
     this.playBase = m.playTime || 0;
-    this.fresh = !!m.fresh; // a brand-new game that hasn't been played yet
+    this.fresh = !!m.fresh; // new game, not yet played
   }
 
   liveKeys() {
@@ -77,16 +75,16 @@ export class SaveSlots {
     } catch { return null; }
   }
 
-  // the slot's backup (the save as it was before this session wrote it), or null
+  // the slot's backup (as before this session wrote it), or null
   backup(n) { return this.readKey(bakKey(n)); }
 
-  // something is stored in the slot but it won't read
+  // stored but unreadable
   damaged(n) {
     const L = ls();
     return !!(L && L.getItem(slotKey(n)) && !this.read(n));
   }
 
-  // Put the backup back in the slot (the slot in use reloads into it).
+  // Restore the backup (the active slot reloads into it).
   restore(n) {
     const b = this.backup(n);
     if (!b) return false;
@@ -102,11 +100,11 @@ export class SaveSlots {
     return JSON.stringify({ format: FILE_FORMAT, v: 1, exportedAt: Date.now(), save: d });
   }
 
-  // A save file into slot n. Returns an error message, or null on success (the slot in use reloads).
+  // Import a save file into slot n. Returns an error message, or null on success (the active slot reloads).
   importText(n, text) {
     let f;
     try { f = JSON.parse(text); } catch { return 'That file isn\'t a Moon-Runner save.'; }
-    const d = f && f.format === FILE_FORMAT ? f.save : f && f.data ? f : null; // (a bare slot blob works too)
+    const d = f && f.format === FILE_FORMAT ? f.save : f && f.data ? f : null; // a bare slot blob works too
     if (!d || typeof d.data !== 'object') return 'That file isn\'t a Moon-Runner save.';
     for (const [k, v] of Object.entries(d.data)) if (!k.startsWith(PREFIX) || typeof v !== 'string') return 'That save file is damaged.';
     if (!this.write(n, { v: d.v || 1, data: d.data, meta: { ...(d.meta || {}), savedAt: Date.now() } }, { forceBackup: true })) return 'There isn\'t room to store that save.';
@@ -131,7 +129,7 @@ export class SaveSlots {
     return best ? best.n : null;
   }
 
-  // Existing players (live keys but no slots yet) get their progress adopted into slot 1. Runs once.
+  // Live keys but no slots yet: adopt that progress into slot 1. Runs once.
   migrate() {
     const L = ls();
     if (!L || L.getItem(INIT_KEY)) return;
@@ -151,7 +149,7 @@ export class SaveSlots {
   write(n, blob, { noBackup = false, forceBackup = false } = {}) {
     const L = ls();
     if (!L) return false;
-    // the first write to a slot this session keeps what it held (if it read) as the backup
+    // first write this session: keep the old contents (if readable) as the backup
     if (!noBackup && (forceBackup || !this.backedUp.has(n))) {
       this.backedUp.add(n);
       const old = L.getItem(slotKey(n));
@@ -192,7 +190,7 @@ export class SaveSlots {
     location.reload();
   }
 
-  // Delete slot n. Deleting the slot in use also wipes the live copy (returns true: reload needed).
+  // Delete slot n. Deleting the active slot also wipes the live copy (returns true: reload needed).
   remove(n) {
     const L = ls();
     if (!L) return false;
@@ -216,7 +214,7 @@ export class SaveSlots {
   }
 }
 
-// Card metadata derived from the saved keys themselves (used when the game isn't running).
+// Card metadata from the saved keys (when the game isn't running).
 function liveMeta(data) {
   const j = (k) => { try { return JSON.parse(data[k] || 'null'); } catch { return null; } };
   const main = j(MAIN_KEY) || {};

@@ -1,6 +1,6 @@
-# Generic hull and fitting geometry shared by the vehicle redesign builders (build_courier.py, build_skimmer_redesign.py): a loft
-# through smoothed keyframes, skin-hugging lines and bands, tubes, revolved wheel profiles, rounded bars and thin curved panels.
-# exec'd after kit.py (it builds nothing itself). Everything is in three.js axes, like kit.py.
+# Hull and fitting geometry shared by the vehicle redesign builders (build_courier.py, build_skimmer_redesign.py): loft through
+# smoothed keyframes, skin-hugging lines and bands, tubes, revolved wheel profiles, rounded bars, thin curved panels.
+# exec'd after kit.py; builds nothing itself. three.js axes, like kit.py.
 
 import math
 from mathutils import Vector
@@ -33,7 +33,7 @@ def smooth_keys(keys, k=6):
 
 
 def ring_xy(s, th):
-    """The point of a loft section at ring angle th (0 = flank at mid height, pi/2 = the top), as loft() puts it."""
+    """Point of a loft section at ring angle th (0 = flank at mid height, pi/2 = top), as loft() places it."""
     c, sn = math.cos(th), math.sin(th)
     e = s.get("eT", 2.5) if sn >= 0 else s.get("eB", 2.5)
     h = s["t"] if sn >= 0 else s["b"]
@@ -41,7 +41,7 @@ def ring_xy(s, th):
 
 
 def band(secs, th0, th1, side, off=0.012, z0=-9, z1=9, m=3, stride=2):
-    """A patch of the body's skin between two ring angles and two z's on one flank, floating `off` outside it."""
+    """Patch of body skin between two ring angles and two z's on one flank, `off` outside it."""
     cols = [s for s in secs if z0 <= s["z"] <= z1][::stride]
     verts, faces = [], []
     for s in cols:
@@ -59,7 +59,7 @@ def line(secs, th, side, off=0.014, z0=-9, z1=9, stride=2):
     return [(side * (ring_xy(s, th)[0] + off), ring_xy(s, th)[1], s["z"]) for s in secs if z0 <= s["z"] <= z1][::stride]
 
 
-PROUD = 0.006   # how far an ink-0 detail may stand off the skin: more and its colour is drawn across the outline
+PROUD = 0.006   # max standoff of an ink-0 detail; more and its colour draws across the outline
 
 
 def skin_line(secs, th, side, r, z0=-9, z1=9, stride=2):
@@ -141,9 +141,8 @@ def edge_path(fn, which, n=24):
 
 
 def skin_patch(secs, th0, th1, off=0.03, z0=-9, z1=9, side=1, m=3, stride=1):
-    """A plate lying on a loft's skin from ring angle th0 to th1 (0 = the flank at mid height, pi/2 = the top) between two z's, standing
-    `off` proud of it along the surface's own direction (band() only offsets sideways, which lifts nothing on the roof). side -1 mirrors it
-    to the left flank."""
+    """Plate on a loft's skin from ring angle th0 to th1 (0 = flank at mid height, pi/2 = top) between two z's, `off` proud along
+    the surface direction (band() only offsets sideways, lifting nothing on the roof). side -1 mirrors it to the left flank."""
     cols = [s for s in secs if z0 <= s["z"] <= z1][::stride]
     verts, faces = [], []
     for s in cols:

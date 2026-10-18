@@ -17,35 +17,34 @@ const METEOR_KEY = 'mr-dev-meteor-power';
 const GITCHIP_KEY = 'mr-dev-git-chip';
 const BIKE_NAMES = { b: 'B · PARCEL RUNNER', a: 'A · SLIPSTREAM', classic: 'CLASSIC' };
 const SKIMMER_NAMES = { a: 'A · AEGIS', b: 'B · BULWARK', classic: 'CLASSIC' };
-const GIT_POLL = 90; // seconds between looks at the upstream while the upstream chip is on
+const GIT_POLL = 90; // s between upstream checks while the upstream chip is on
 
-// Testing menu on the ` (backtick) key. Everything goes through the normal dialog, so number
-// keys pick options and Esc closes.
+// Testing menu on ` (backtick). Uses the normal dialog: number keys pick, Esc closes.
 export class Cheats {
   constructor(game) {
     this.game = game;
     this.god = false; // unlimited health
     this.infJet = false; // unlimited jet (thruster energy)
-    this.mapTeleport = false; // click a location (or press A with the controller cursor on it) in the full map to go there
-    this.debugView = null; // 'poly' (every polygon outlined) | 'draw' (every draw call its own flat colour): the scene drawn bare, without the comic post pass
-    this.ragdoll = true; // wipeouts and hard crashes turn the runner limp (player.js startRagdoll); off: you stay on your feet
-    this.crackedVisor = true; // the cracks that spread over the screen as hull drops (hud.js)
+    this.mapTeleport = false; // click a location in the full map (or A on it with the pad cursor) to go there
+    this.debugView = null; // 'poly' (polygons outlined) | 'draw' (each draw call a flat colour), drawn without the post pass
+    this.ragdoll = true; // wipeouts and hard crashes go limp (player.js startRagdoll); off: you stay on your feet
+    this.crackedVisor = true; // screen cracks as hull drops (hud.js)
     this.speed = 1; // player speed multiplier, 1 to 10 (player.js)
-    // once the dev menu has been opened (F8 / controller combo) it gets a button on the pause card, remembered across launches
+    // once the dev menu is opened (F8 / pad combo) it gets a pause-card button, remembered across launches
     try { this.unlocked = localStorage.getItem(DEV_KEY) === '1'; } catch { this.unlocked = false; }
-    // the first time the dev menu's SPAWN A METEOR ON ME is used it becomes a power (powers.js), remembered across launches too
+    // first use of SPAWN A METEOR ON ME makes it a power (powers.js), remembered across launches
     try { this.meteorPower = localStorage.getItem(METEOR_KEY) === '1'; } catch { this.meteorPower = false; }
-    this.overlay = new DevOverlay(game, this); // (F3: every on-screen readout in one panel: devoverlay.js)
-    this.freeCam = new FreeCam(game); // (Dev menu → Debug overlay → Free cam: the camera flies on its own: freecam.js)
+    this.overlay = new DevOverlay(game, this); // F3 readouts panel (devoverlay.js)
+    this.freeCam = new FreeCam(game); // Dev menu → Debug overlay → Free cam (freecam.js)
     this.showPauseButton();
-    // the chip at the top left that counts the commits the upstream has and this checkout does not (GIT menu, dev server only)
+    // top-left chip counting commits upstream has and this checkout lacks (GIT menu, dev server only)
     try { this.gitChip = localStorage.getItem(GITCHIP_KEY) === '1'; } catch { this.gitChip = false; }
-    this.gitState = null; // the last answer from the dev server's git status
+    this.gitState = null; // last git status from the dev server
     this.gitTimer = 0;
     this.gitChipSync();
   }
 
-  // (read by enemies.js: whether to record each AI's steering goal for the AI paths drawing)
+  // enemies.js: whether to record AI steering goals for the AI paths drawing
   get aiPaths() { return this.overlay.shows('paths'); }
 
   showPauseButton() {
@@ -53,8 +52,8 @@ export class Cheats {
     if (b) b.classList.toggle('hidden', !this.unlocked);
   }
 
-  // In the Asset Row (assetRow.js)? Then the Moon-only entries (spawns, events, the story, vehicles, ...) would run against
-  // the wrong world: they say so instead.
+  // In the Asset Row (assetRow.js)? Moon-only entries (spawns, events, story, vehicles, ...) would hit the wrong world, so
+  // they say so instead.
   inRow() { const a = this.game.assetRow; return !!(a && a.active); }
   notInRow() {
     if (!this.inRow()) return true;
@@ -86,8 +85,8 @@ export class Cheats {
     g.dialogButtons.dev = true;
   }
 
-  // Cycles which Courier light-bike gets built (models.js makeLightBike): B and A are the Blender redesigns (docs/courier-proposals).
-  // Remembered across launches; it applies to the next bike you call (V), so a bike already out keeps the model it was built with.
+  // Cycles the Courier light-bike model (models.js makeLightBike): B and A are the Blender redesigns (docs/courier-proposals).
+  // Remembered across launches; applies to the next bike called (V).
   bikeModel() {
     const next = BIKE_STYLES[(BIKE_STYLES.indexOf(getBikeStyle()) + 1) % BIKE_STYLES.length];
     setBikeStyle(next);
@@ -95,8 +94,8 @@ export class Cheats {
     this.dev();
   }
 
-  // Cycles which Phase Skimmer gets built (models.js makeSkimmer): A and B are the Blender redesigns (docs/skimmer-proposals), which carry
-  // the runner inside. Remembered across launches; it applies to the next skimmer you call (V).
+  // Cycles the Phase Skimmer model (models.js makeSkimmer): A and B are the Blender redesigns (docs/skimmer-proposals), runner
+  // inside. Remembered across launches; applies to the next skimmer called (V).
   skimmerModel() {
     const next = SKIMMER_STYLES[(SKIMMER_STYLES.indexOf(getSkimmerStyle()) + 1) % SKIMMER_STYLES.length];
     setSkimmerStyle(next);
@@ -104,8 +103,7 @@ export class Cheats {
     this.dev();
   }
 
-  // ---- git: the dev server runs it for us (tools/devGit.mjs: a fetch, and a fast-forward pull only), so all of this works from
-  // `npm run dev` and nowhere else ----
+  // ---- git: run by the dev server (tools/devGit.mjs: fetch and fast-forward pull only), so `npm run dev` only ----
   async gitCall(act) {
     try {
       const r = await fetch(`/__dev/git/${act}`, { method: 'POST', headers: { 'X-Dev-Git': '1' } });
@@ -113,8 +111,8 @@ export class Cheats {
     } catch (e) { return { ok: false, err: String((e && e.message) || e) }; }
   }
 
-  // The upstream chip (top left of the HUD): how many commits the upstream has that this checkout does not. While it is on, the
-  // upstream is fetched every GIT_POLL seconds (and whenever the GIT menu looks); the toggle is in the GIT menu, kept across launches.
+  // The upstream chip (HUD top left): commits upstream has that this checkout lacks. While on, fetches every GIT_POLL s (and
+  // when the GIT menu looks); toggled in the GIT menu, kept across launches.
   gitChipSync() {
     const on = this.gitChip && import.meta.env.DEV;
     clearInterval(this.gitTimer);
@@ -146,13 +144,13 @@ export class Cheats {
     el.classList.toggle('unknown', n === null);
   }
 
-  // Fetch and pull this checkout's upstream without leaving the game. The dev server notices the pulled files and reloads the page.
+  // Fetch and pull the upstream from in game. The dev server sees the pulled files and reloads the page.
   async gitMenu() {
     const g = this.game;
     const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
     const dev = import.meta.env.DEV;
     const show = (text, buttons, again = null) => {
-      // (the chip's switch sits just before BACK on every screen that can come back to itself)
+      // the chip's switch goes just before BACK on every screen that can redraw itself
       const sw = dev && again ? [{
         label: `UPSTREAM CHIP: ${this.gitChip ? 'ON' : 'OFF'}`,
         fn: () => { this.gitChip = !this.gitChip; try { localStorage.setItem(GITCHIP_KEY, this.gitChip ? '1' : '0'); } catch { /* unavailable */ } this.gitChipSync(); again(); },
@@ -164,7 +162,7 @@ export class Cheats {
     if (!dev) { show('<small>Only available when the game runs from the dev server (npm run dev).</small>', []); return; }
     const mine = show('<small>Fetching…</small>', []);
     const st = await this.gitCall('status');
-    if (g.dialogButtons !== mine) return; // (closed or changed while it was working)
+    if (g.dialogButtons !== mine) return; // closed or changed meanwhile
     this.gitSeen(st);
     const note = (msg) => { const again = () => note(msg); show(`<small>${msg}</small>`, [{ label: 'TRY AGAIN', fn: () => this.gitMenu() }], again); };
     if (!st.ok) { note(esc(st.err || 'The dev server did not answer.')); return; }
@@ -199,7 +197,7 @@ export class Cheats {
     show(`<small>${lines.join('<br>')}</small>`, [{ label: 'RELOAD NOW', fn: () => location.reload() }]);
   }
 
-  // Unlimited jet and health, and the speed multiplier
+  // unlimited jet and health, speed multiplier
   boostMenu() {
     const g = this.game;
     const on = (v) => (v ? 'ON' : 'OFF');
@@ -210,7 +208,7 @@ export class Cheats {
       { label: '4 · BACK', fn: () => this.dev() },
       { label: 'CLOSE' },
     ]);
-    // the speed row adjusts in place: click / A = +1 (wraps), left / right on a controller (d-pad or stick) = -1 / +1
+    // the speed row adjusts in place: click / A = +1 (wraps), pad left / right = -1 / +1
     const row = document.querySelector('#dialog [data-i="2"]');
     if (row) {
       row.dataset.adj = '1';
@@ -220,16 +218,15 @@ export class Cheats {
     }
   }
 
-  // Ragdoll on / off. Off, a wipeout or a hard crash still costs you the same health and speed but you stay on your feet;
-  // turning it off mid-tumble stands you straight back up.
+  // Ragdoll on / off. Off, wipeouts still cost the same health and speed but you stay up; turning it off mid-tumble
+  // stands you back up.
   toggleRagdoll() {
     const P = this.game.player;
     this.ragdoll = !this.ragdoll;
     if (!this.ragdoll && P.rag) { P.rag.release(); P.rag = null; }
   }
 
-  // The dev menu's meteor button. The first time it also becomes a power (the power wheel's METEOR SPAWN, equipped straight
-  // away), so from then on E / RB drops one on you without the menu.
+  // The dev menu's meteor button. First use also makes it a power (METEOR SPAWN, equipped), so E / RB drops one after that.
   meteorFromMenu() {
     const g = this.game;
     const first = !this.meteorPower;
@@ -242,8 +239,8 @@ export class Cheats {
     if (first) g.hud.toast(`${ok ? 'Meteor inbound. ' : ''}Meteor Spawn is now one of your powers, and equipped: E / RB drops another on you.`, 5);
   }
 
-  // A rock that comes down on the spot you're standing on (meteors.js spawnOnPlayer): a few seconds' warning from the ring.
-  // (`long`: the full note; the power's repeat uses show a short one.) False when there's no place for one (the Spindle).
+  // A rock that lands where you stand (meteors.js spawnOnPlayer) after a few seconds' warning ring. `long`: the full note
+  // (power repeats show a short one). False where there's no place for one (the Spindle).
   spawnMeteor(long = true) {
     const g = this.game;
     if (g.spindle && g.spindle.active) { g.hud.toast('No meteors out on the Spindle.', 2); return false; }
@@ -254,8 +251,7 @@ export class Cheats {
     return true;
   }
 
-  // The display tests: effects and render modes you switch on to look at something (the on-screen readouts
-  // are in the debug overlay)
+  // display tests: effects and render modes to look at (readouts are in the debug overlay)
   displayMenu() {
     const g = this.game;
     const on = (v) => (v ? 'ON' : 'OFF');
@@ -269,11 +265,9 @@ export class Cheats {
     ]);
   }
 
-  // Debug views. The scene is drawn bare (no comic post pass) with one flat-colour material standing in
-  // for every material (scene.overrideMaterial): 'draw' fills each draw call with a colour of its own
-  // (stable per object, so batching shows: a merged chunk is one colour, a pile of loose props a
-  // confetti), 'poly' fills dark and draws every triangle's edges on top. The colour is set per draw call
-  // by wrapping renderBufferDirect, which three calls once per draw.
+  // Debug views: the scene drawn bare (no post pass) with one flat-colour override material. 'draw' gives each draw call
+  // its own colour (stable per object, so batching shows: a merged chunk is one colour, loose props confetti); 'poly'
+  // fills dark with triangle edges on top. The colour is set per draw by wrapping renderBufferDirect.
   setDebugView(mode) {
     const r = this.game.renderer;
     this.debugView = mode;
@@ -307,7 +301,7 @@ export class Cheats {
         side: THREE.DoubleSide,
         ...extra,
       });
-      // (the fill sits a touch behind, so the outlines drawn over it aren't z-fought away)
+      // fill sits a touch behind so the outlines over it don't z-fight
       this.dbg = { fill: make({ polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }), wire: make({ wireframe: true }) };
     }
     r.setRenderTarget(null);
@@ -327,7 +321,7 @@ export class Cheats {
 
   setSpeed(v) { this.speed = Math.max(1, Math.min(10, Math.round(v))); }
 
-  // every frame while playing: keeps the tank and health topped up
+  // per frame in play: keeps jet and health topped up
   tick() {
     const P = this.game.player;
     if (this.infJet) P.body.energy = P.body.maxEnergy;
@@ -335,11 +329,10 @@ export class Cheats {
     this.overlay.tick();
   }
 
-  // (enemies.js: the Kade roll note under the squad alert, shown with the overlay's pirate spawns section)
+  // enemies.js: the Kade roll note under the squad alert (overlay's pirate spawns section)
   alertNote(text, secs) { this.overlay.alertNote(text, secs); }
 
-  // Dev menu → Debug overlay: the master switch (F3 does the same in play), the free cam, and which sections are in the overlay.
-  // Each toggle re-opens the menu, like the other submenus.
+  // Dev menu → Debug overlay: master switch (F3 in play), free cam, and the overlay's sections. Each toggle re-opens the menu.
   overlayMenu() {
     const g = this.game, o = this.overlay, f = this.freeCam;
     const on = (v) => (v ? 'ON' : 'OFF');
@@ -347,7 +340,7 @@ export class Cheats {
       { label: `1 · OVERLAY: ${on(o.on)}`, fn: () => { o.toggle(); this.overlayMenu(); } },
       { label: `2 · FREE CAM: ${on(f.on)}`, fn: () => { f.toggle(); this.overlayMenu(); } },
       ...SECTIONS.map((s, i) => ({ label: `${i + 3} · ${s.name}: ${on(o.sec[s.key])}`, fn: () => { o.setSection(s.key, !o.sec[s.key]); this.overlayMenu(); } })),
-      { label: 'BACK', fn: () => this.dev() }, // (rows past the ninth are mouse / pad: the number keys stop at 9; Esc closes)
+      { label: 'BACK', fn: () => this.dev() }, // rows past the ninth are mouse / pad only (number keys stop at 9)
       { label: 'CLOSE' },
     ]);
   }
@@ -368,8 +361,7 @@ export class Cheats {
     ]);
   }
 
-  // Drops any faction vehicle next to you and puts you in it (owned or not; doesn't unlock it, so V
-  // still only calls the ones the story has given you)
+  // Drops any faction vehicle beside you and boards it (owned or not; doesn't unlock it for V)
   vehicleMenu() {
     if (!this.notInRow()) return;
     const g = this.game;
@@ -378,7 +370,7 @@ export class Cheats {
       label: `${i + 1} · ${VEHICLES[k].name}`,
       fn: () => {
         if (g.player.vehicle) g.garage.exit();
-        g.garage.hp[k] = g.garage.maxHp(k); // (fresh hull, and not stuck in a rebuild)
+        g.garage.hp[k] = g.garage.maxHp(k); // fresh hull, not stuck in a rebuild
         g.garage.wreckedUntil[k] = 0;
         g.garage.choice = k;
         g.garage.summon(k);
@@ -403,8 +395,7 @@ export class Cheats {
     ]);
   }
 
-  // Every splice-pod mutation as a toggle (ignores the pod's 3-mutation cap), plus a reset that
-  // cures them all. Paged because the dialog only has number keys 1-9.
+  // Each splice-pod mutation as a toggle (ignores the 3-mutation cap), plus a cure-all. Paged: number keys stop at 9.
   spliceMenu(page) {
     const g = this.game;
     const A = g.alchemy;
@@ -494,7 +485,7 @@ export class Cheats {
 
   teleportMenu(page) {
     const g = this.game;
-    // the Asset Row (assetRow.js: a flat showroom of every asset, not a place on the Moon) is always option 1, the settlements follow it
+    // option 1 is always the Asset Row (assetRow.js: flat showroom of every asset); settlements follow
     const items = [
       { name: this.inRow() ? 'LEAVE ASSET ROW' : 'ASSET ROW', fn: () => this.assetRow(!this.inRow()) },
       ...g.locations.filter((l) => !l.camp).map((l) => ({ name: l.name, fn: () => this.teleport(l) })),
@@ -508,7 +499,7 @@ export class Cheats {
     g.dialog('TELEPORT', '<small>Drops you at the edge of the settlement. Option 1 is the Asset Row: every asset in the game, side by side.</small>', buttons);
   }
 
-  // into the Asset Row, or out of it to where you were
+  // into the Asset Row, or back out to where you were
   assetRow(enter) {
     const g = this.game;
     if (enter) (g.assetRow ||= new AssetRow(g)).start();
@@ -518,7 +509,7 @@ export class Cheats {
   teleport(l) {
     const g = this.game;
     const P = g.player;
-    if (this.inRow()) g.assetRow.exit(); // (back on the Moon first: the Row has its own flat ground)
+    if (this.inRow()) g.assetRow.exit(); // back to the Moon first (the Row has its own flat ground)
     const p = g.world.toWorld(l, 0, 0, Math.min(l.r * 0.8, 120));
     const pos = g.planet.ground(p, p.clone(), 1.5);
     g.planet.update(pos, { budgetMs: 1e9 });
@@ -536,7 +527,7 @@ export class Cheats {
     const g = this.game;
     for (const items of Object.values(SHOPS)) for (const u of items) g.upgrades[u.key] = Math.max(g.upgrades[u.key] || 0, u.max);
     g.upgrades.jar = Math.max(g.upgrades.jar || 0, 3);
-    // the ones you earn rather than buy: Zbornak's trade-ins, the pen link, the legendary Xenoglide skates
+    // earned, not bought: Zbornak's trade-ins, pen link, Xenoglide skates
     Object.assign(g.upgrades, { gripwire: 3, plating: 3, radar: 1, penlink: 1, alien: 1 });
     for (const id of Object.keys(OUTFITS)) if (id !== 'courier') g.upgrades['outfit_' + id] = 1;
     for (const id of Object.keys(SKATES)) if (id !== 'stock') g.upgrades['skates_' + id] = 1;
@@ -565,8 +556,8 @@ export class Cheats {
     g.hud.toast('Jar filled (person, mite, black water) and 3 chimeras added.', 3);
   }
 
-  // Straight onto the Spindle to test it: drops whatever chapter is running, starts Meridian's
-  // finale and skips the trip to the launch complex (finishing it counts, like any chapter).
+  // Straight onto the Spindle: drops the running chapter, starts Meridian's finale and skips the trip to the launch
+  // complex (finishing it counts).
   toSpindle() {
     const g = this.game;
     const S = g.story;
@@ -585,7 +576,7 @@ export class Cheats {
     g.hud.toast('You ride with Rustmoon now.', 2.5);
   }
 
-  // Spawn a fresh event for a faction and drop you at its start marker.
+  // spawn a fresh faction event and drop you at its start marker
   eventMenu() {
     if (!this.notInRow()) return;
     const g = this.game;
@@ -601,7 +592,7 @@ export class Cheats {
     })).concat([
       { label: '7 · METEOR SHOWER (teleports you to its edge)', fn: () => {
         const M = g.meteors;
-        if (M.zone) M.zone = null; // (not end(): its 'has passed' toast would sit under the new shower's banner)
+        if (M.zone) M.zone = null; // not end(): its 'has passed' toast would sit under the new banner
         M.begin();
         if (!M.zone) { g.hud.toast('No open ground nearby for a shower; try again.', 2); return; }
         const up = g.player.pos.clone().normalize();

@@ -1,25 +1,25 @@
-# Slot-machine cabinet builder for Blender (4.2+ / 5.x): the casino's pixel-arcade video slot, exported to src/assets/slots.glb.
+# Slot-machine cabinet builder for Blender (4.2+ / 5.x): the casino's pixel-arcade video slot, exported to
+# src/assets/slots.glb.
 #
 # In Blender's Python console or via MCP:   exec(open(r"<repo>/tools/blender/build_slots.py").read())
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 build_slots.py
 #
-# One cabinet (root `slot`), about 2.2 m wide, 1.6 m deep and 4.3 m tall: a sloped arcade body with a tilted screen under a deep
-# marquee box, speaker slits and LED chases on the header, arcade buttons and a SPIN ring on the control deck, a ticket printer, a coin
-# cup and a lever on the right side. Authored in three.js axes (x right, y up, +z front); the origin is on the floor in the middle.
-# The casino stands 4 of them in the Classic Games corner and 7 in each of the two carousels outside (src/casinoWorld.js).
+# One cabinet (root `slot`), ~2.2 m wide, 1.6 m deep, 4.3 m tall: sloped body, tilted screen under a marquee box, LED
+# chases, arcade buttons and a SPIN ring, ticket printer, coin cup, lever on the right. Three.js axes (x right, y up, +z
+# front), origin on the floor in the middle. The casino stands 4 in the Classic Games corner and 7 in each of the two
+# outdoor carousels (src/casinoWorld.js).
 #
-# The root's own meshes are the static cabinet. Pivots (empties with a `role`) carry what the game moves, textures or recolours:
-#   pull     the lever, at its hinge: the game turns it about x (a pull swings the orb toward +z). Holds the arm and the orb
-#   lamp     the roof lamp bar, at its centre; one mesh in the `lamp` slot, which the game flashes while somebody plays
-#   screen   the marquee: a plane w by h that the game paints with the cabinet's name (extra `tilt`: lean back about x, in radians)
-#   display  the pixel-reel screen: a plane w by h that the game redraws while the reels spin (extra `tilt` as above)
-#   decal    a pixel sprite on the cabinet's side (extras `side` -1 or +1, `w`, `h`, `id`): a plane the game faces out of the side
-# The `body` and `shade` slots are the cabinet's paint and `neon` its glow, which the game takes from the cabinet's colour; the
-# other slots are fixed (see SLOT_TOON / SLOT_GLOW in src/models.js). Each mesh has ONE material named after a slot, and its `ink`
-# property says how far its outline shell stands off (0: none).
+# Root meshes are the static cabinet. Pivots (empties with a `role`) carry what the game moves, textures or recolours:
+#   pull     the lever at its hinge: turned about x (a pull swings the orb toward +z). Holds the arm and orb
+#   lamp     the roof lamp bar at its centre; one mesh in slot `lamp`, flashed while someone plays
+#   screen   marquee: a w x h plane painted with the cabinet's name (extra `tilt`: lean back about x, radians)
+#   display  pixel-reel screen: a w x h plane redrawn while the reels spin (extra `tilt` as above)
+#   decal    side pixel sprite (extras `side` -1 or +1, `w`, `h`, `id`): a plane facing out of the side
+# Slots `body` and `shade` (paint) and `neon` (glow) take the cabinet's colour; the rest are fixed (SLOT_TOON / SLOT_GLOW
+# in src/models.js). Each mesh has ONE material named after a slot; its `ink` property is the outline offset (0: none).
 #
-# The side plaques (`sidePlaque`), their neon frames and the decals are kept inside the cabinet's side silhouette (PROFILE) and the
-# decals inside their plaques, with margins; the build checks that at the end and stops if one is out (see audit()).
+# Side plaques (`sidePlaque`), their neon frames and decals must sit inside the side silhouette (PROFILE), and decals
+# inside their plaques, with margins; audit() stops the build otherwise.
 
 import bpy, math, os
 
@@ -60,7 +60,7 @@ PI = math.pi
 
 
 class Acc:
-    """Boxes, cylinders and tubes that share a material slot and a parent, merged into one mesh when flushed."""
+    """Primitives sharing a slot and parent, merged into one mesh on flush."""
     all = []
 
     def __init__(self, name, slot, parent, ink=0.03):
@@ -76,7 +76,7 @@ class Acc:
         self.geos.append(xf(cuboid(w, h, d)[:2], (cx, y0 + h / 2, cz))); return self
 
     def cylc(self, cx, cy, cz, r, h, seg=12, axis="y", rt=None):
-        """A cylinder about its centre, its axis along x, y or z (`rt` the radius of the far end)."""
+        """A cylinder about its centre, axis x, y or z (`rt`: far-end radius)."""
         g = cylinder(r if rt is None else rt, r, h, seg)[:2]
         rot = {"y": (0, 0, 0), "z": (PI / 2, 0, 0), "x": (0, 0, PI / 2)}[axis]
         self.geos.append(xf(g, (cx, cy, cz), rot)); return self
@@ -103,21 +103,21 @@ def flush_all():
 
 
 def on_plane(y0, z0, tilt, ly, lz):
-    """A point on a plate that leans back by `tilt` (rotated about x at (y0, z0)): `ly` up the plate, `lz` out of it -> (y, z)."""
+    """Point on a plate leaning back by `tilt` about x at (y0, z0): `ly` up it, `lz` out of it -> (y, z)."""
     return y0 + ly * math.cos(tilt) + lz * math.sin(tilt), z0 - ly * math.sin(tilt) + lz * math.cos(tilt)
 
 
 root = pivot("slot", (0, 0, 0), None)
-HW = 1.0   # half the body's width
+HW = 1.0   # half body width
 
-# ---- the shell: the cabinet's side profile (z, y) extruded across its width, in the colour the casino paints it ----
-# front up to the deck ledge, the leaning screen housing, the chin under the header, the header (leaning back), the roof and the back
+# ---- shell: side profile (z, y) extruded across the width, in the casino's paint ----
+# front to the deck ledge, leaning screen housing, chin, header (leaning back), roof, back
 PROFILE = [(0.64, 0.16), (0.64, 1.08), (0.9, 1.24), (0.9, 1.34), (0.52, 1.52), (0.44, 1.66), (0.3, 3.1), (0.62, 3.2), (0.55, 4.0), (0.2, 4.26),
            (-0.7, 4.0), (-0.7, 0.16)]
 A = Acc("shell", "body", root, 0.04)
 A.add(extrude(PROFILE, 2 * HW, "x"))
 A.flush()
-# the plinth and a glowing strip under the cabinet
+# plinth and underglow strip
 A = Acc("plinth", "dark", root, 0.03)
 A.box(0, 0, 0.1, 2 * HW + 0.16, 0.16, 1.62)
 A.flush()
@@ -126,9 +126,9 @@ A.box(0, 0.05, 0.93, 2 * HW + 0.04, 0.03, 0.03)
 A.flush()
 
 
-# ---- the sides: two inset dark plaques (the game paints a pixel sprite on each) with a neon frame inset along the cabinet's front edge ----
+# ---- sides: two dark plaques (each gets a pixel sprite) and a neon line inset along the front edge ----
 def inset_path(pts, d):
-    """The open polyline `pts` (the front of PROFILE, bottom to top, so the inside is on the left) moved `d` inward (mitred at the corners)."""
+    """Open polyline `pts` (PROFILE's front, bottom to top, inside on the left) moved `d` inward, mitred."""
     def left(a, b):
         dz, dy = b[0] - a[0], b[1] - a[1]
         n = math.hypot(dz, dy)
@@ -144,22 +144,22 @@ def inset_path(pts, d):
             n = (n0[0] + n1[0], n0[1] + n1[1])
             m = math.hypot(*n)
             n = (n[0] / m, n[1] / m)
-            k = 1.0 / max(0.5, n[0] * n0[0] + n[1] * n0[1])   # (the mitre: the corner moves farther than d)
+            k = 1.0 / max(0.5, n[0] * n0[0] + n[1] * n0[1])   # mitre: corners move farther than d
         out.append((p[0] + n[0] * d * k, p[1] + n[1] * d * k))
     return out
 
 
-# the two plaques, as (z, y) outlines on the side face, and where each decal (a pixel sprite) sits on them
+# plaques as (z, y) outlines on the side, and each decal's place on them
 PLAQUES = {
     "low": [(0.5, 0.42), (0.5, 0.98), (0.3, 1.14), (-0.5, 1.14), (-0.5, 0.42)],
     "up": [(0.19, 2.0), (0.16, 2.74), (-0.48, 2.74), (-0.48, 2.0)],
 }
-DECALS = {"low": (-0.03, 0.78, 0.6), "up": (-0.15, 2.37, 0.52)}   # (z, y, size) of the square sprite on its plaque
-NEON_PATH = inset_path([(0.64, 0.24)] + PROFILE[1:8] + [(0.5588, 3.9)], 0.05)   # (up the front to just short of the header's top corner)
+DECALS = {"low": (-0.03, 0.78, 0.6), "up": (-0.15, 2.37, 0.52)}   # (z, y, size) of each square sprite
+NEON_PATH = inset_path([(0.64, 0.24)] + PROFILE[1:8] + [(0.5588, 3.9)], 0.05)   # up the front to just short of the header's top corner
 for sx in (-1, 1):
     A = Acc(f"sidePlaque{sx}", "panel", root, 0.0)
     for outline in PLAQUES.values():
-        A.add(extrude(outline, 0.03, "x"), (sx * (HW + 0.008), 0, 0))   # (stands 0.023 proud of the side)
+        A.add(extrude(outline, 0.03, "x"), (sx * (HW + 0.008), 0, 0))   # 0.023 proud of the side
     A.flush()
     A = Acc(f"sideNeon{sx}", "neon", root, 0.0)
     for (z0, y0), (z1, y1) in zip(NEON_PATH, NEON_PATH[1:]):
@@ -168,10 +168,10 @@ for sx in (-1, 1):
     for name, (dz, dy, size) in DECALS.items():
         pivot(f"decal_{name}{sx}", (sx * (HW + 0.03), dy, dz), root, role="decal", side=sx, id=name, w=size, h=size)
 
-# ---- the screen housing: a dark bezel leaning back with the profile, the pixel-reel display and neon corner brackets ----
-TILT = math.atan2(0.44 - 0.3, 3.1 - 1.66)   # the lean of the housing's front (the profile's slope there)
+# ---- screen housing: leaning bezel, pixel-reel display, neon corner brackets ----
+TILT = math.atan2(0.44 - 0.3, 3.1 - 1.66)   # lean of the housing front (the profile's slope there)
 SCR_Y = 2.38
-BZ = 0.38 - (SCR_Y - 1.66) * 0.098          # the bezel's centre in z: its front sits on the profile
+BZ = 0.38 - (SCR_Y - 1.66) * 0.098          # bezel centre z: its front sits on the profile
 A = Acc("bezel", "bezel", root, 0.03)
 A.boxc(0, SCR_Y, BZ, 1.86, 1.42, 0.12, rot=(-TILT, 0, 0))
 A.flush()
@@ -180,7 +180,7 @@ for ly in (0.74, -0.74):
     y, z = on_plane(SCR_Y, BZ, TILT, ly, 0.02)
     A.boxc(0, y, z, 1.96, 0.05, 0.14, rot=(-TILT, 0, 0))
 A.flush()
-A = Acc("displayBack", "display", root, 0.0)   # (the dark glass under the display; the game's plane sits a few mm in front)
+A = Acc("displayBack", "display", root, 0.0)   # dark glass; the game's plane sits a few mm in front
 y, z = on_plane(SCR_Y, BZ, TILT, 0, 0.062)
 A.boxc(0, y, z, 1.7, 1.28, 0.01, rot=(-TILT, 0, 0))
 A.flush()
@@ -194,8 +194,8 @@ for sx in (-1, 1):
             A.boxc(lx, y, z, w, h, 0.02, rot=(-TILT, 0, 0))
 A.flush()
 
-# ---- the header: a deep marquee box over the screen with a name panel, speaker slits at its ends and LED chases along its top and bottom ----
-HT, HY, HZ = 0.09, 3.6, 0.575             # the header face leans back by HT about (HY, HZ)
+# ---- header: marquee box with name panel, speakers at the ends, LED chases top and bottom ----
+HT, HY, HZ = 0.09, 3.6, 0.575             # header face leans back by HT about (HY, HZ)
 A = Acc("headerFace", "bezel", root, 0.03)
 A.boxc(0, HY, HZ, 1.9, 0.72, 0.05, rot=(-HT, 0, 0))
 A.flush()
@@ -214,7 +214,7 @@ for name, slot, off in (("chaseR", "ledr", 0), ("chaseG", "ledg", 1), ("chaseB",
             y, z = on_plane(HY, HZ, HT, ly, 0.0)
             A.boxc(x, y, z, 0.06, 0.05, 0.05, rot=(-HT, 0, 0))
     A.flush()
-# the speakers: a dark plate with three chrome slits on the header face either side of the marquee panel
+# speakers: dark plates with three chrome slits either side of the marquee
 A = Acc("speakers", "panel", root, 0.0)
 for sx in (-1, 1):
     y, z = on_plane(HY, HZ, HT, 0, 0.03)
@@ -227,7 +227,7 @@ for sx in (-1, 1):
         A.boxc(sx * 0.855 + k * 0.04, y, z, 0.02, 0.4, 0.008, rot=(-HT, 0, 0))
 A.flush()
 
-# ---- the control deck: lit arcade buttons, a big SPIN with a glow ring, card readers ----
+# ---- control deck: arcade buttons, SPIN with glow ring, card readers ----
 A = Acc("deckPlate", "panel", root, 0.02)
 A.boxc(0, 1.375, 0.74, 1.9, 0.05, 0.62, rot=(0.3, 0, 0))
 A.flush()
@@ -257,7 +257,7 @@ A = Acc("readerGlow", "ledb", root, 0.0)
 A.boxc(-0.88, 1.485, 0.67, 0.2, 0.012, 0.03, rot=(0.3, 0, 0)); A.boxc(0.88, 1.485, 0.67, 0.2, 0.012, 0.03, rot=(0.3, 0, 0))
 A.flush()
 
-# ---- the lower front: a vent grille, a ticket printer with a ticket out, a coin cup and a kick strip ----
+# ---- lower front: vent, ticket printer, coin cup, kick strip ----
 A = Acc("vent", "dark", root, 0.0)
 for k in range(6):
     A.boxc(-0.55, 0.5 + k * 0.08, 0.645, 0.7, 0.03, 0.02)
@@ -282,7 +282,7 @@ A = Acc("kick", "shade", root, 0.0)
 A.boxc(0, 0.2, 0.655, 1.9, 0.07, 0.02)
 A.flush()
 
-# ---- the roof: a lamp bar the game flashes while somebody plays (its own pivot), and two corner beacons ----
+# ---- roof: lamp bar (own pivot, flashed during play) and two corner beacons ----
 LAMP = (0, 4.2, 0.28)
 pivot("lamp", LAMP, root, role="lamp")
 A = Acc("lampBar", "lamp", bpy.data.objects["lamp"], 0.0)
@@ -293,7 +293,7 @@ for sx in (-1, 1):
     A.ball(sx * 0.96, 4.12, 0.3, 0.05)
 A.flush()
 
-# ---- the lever: a chrome arm on a small mount on the right side, in the band between the two plaques, with a red orb ----
+# ---- lever: chrome arm and red orb on the right side, between the plaques ----
 LEVER = (HW + 0.24, 1.5, 0.32)
 A = Acc("leverBracket", "chrome", root, 0.03)
 A.boxc(HW + 0.06, 1.42, 0.26, 0.08, 0.3, 0.22)
@@ -311,10 +311,10 @@ flush_all()
 
 
 # ---------------------------------------------------------------------------------------------------------------
-# the check: what is on the sides stays inside the cabinet, and nothing sits on anything else
+# check: side parts stay inside the cabinet, and nothing overlaps
 # ---------------------------------------------------------------------------------------------------------------
 def inside_margin(poly, p):
-    """How far inside the closed outline `poly` the point `p` is (negative: outside)."""
+    """Distance of `p` inside the closed outline `poly` (negative: outside)."""
     n, inside, best = len(poly), False, 1e9
     for i in range(n):
         (az, ay), (bz, by) = poly[i], poly[(i + 1) % n]
@@ -330,7 +330,7 @@ def audit():
     dg = bpy.context.evaluated_depsgraph_get()
     bad = []
 
-    def verts(o):   # the object's vertices as (z, y) in three.js axes
+    def verts(o):   # vertices as (z, y) in three.js axes
         e = o.evaluated_get(dg)
         mw = e.matrix_world
         return [(-(mw @ v.co).y, (mw @ v.co).z) for v in e.to_mesh().vertices]
@@ -350,7 +350,7 @@ def audit():
         print(f"  decal {name}: {worst * 100:.1f} cm inside its plaque")
         if worst < 0.04:
             bad.append(f"decal {name} is only {worst * 100:.1f} cm inside its plaque (needs 4)")
-    # the lever (on the +x side): its bracket and its whole swing's arm stay clear of both decals, and the bracket stays within the body
+    # lever (+x side): bracket and arm stay clear of both decals; the bracket stays within the body
     lever = [(o.name, verts(o)) for o in C.objects if o.type == "MESH" and o.name.startswith("lever")]
     for lname, vs in lever:
         zs, ys = [v[0] for v in vs], [v[1] for v in vs]

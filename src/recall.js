@@ -3,29 +3,26 @@ import { makeShuttle } from './models.js';
 import { frameQuat, tangent } from './geo.js';
 import { FACTIONS } from './locations.js';
 
-// Emergency recall: ₵100, and a little cutscene. A transport shuttle drops out of the sky at your
-// home base, lands, drops its ramp, and you stroll out.
+// Emergency recall: ₵100 and a cutscene. A shuttle lands at your home base, drops its ramp, and you stroll out.
 export const RECALL_COST = 100;
 
 const SCALE = 0.85;
-const SET_BACK = 15; // shuttle centre this far behind your stand point
+const SET_BACK = 15; // m, shuttle centre behind your stand point
 const ease = (k) => 1 - Math.pow(1 - Math.min(1, Math.max(0, k)), 3);
 const _v = new THREE.Vector3();
 
-// Where it comes down. Beside your stand point is the plan (SET_BACK behind it), but settlements are full of
-// lamp posts, crates and walls, so site() looks for a patch the shuttle really fits: it tries the usual spot,
-// then swings round you in 30° steps at SET_BACKS, and takes the first with nothing in the way.
+// Landing site: settlements are cluttered, so site() tries the usual spot, then swings round you in 30° steps at each
+// of SET_BACKS, and takes the first clear one.
 const SET_BACKS = [SET_BACK, 18, 21, 24];
 const SWINGS = [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6]; // × 30°
-// the shuttle's footprint at SCALE (off the model): 13.4 m wide, the ramp's foot (RAMP_FOOT) 11.4 m ahead of its
-// middle (toward you) and its nose 8.7 m behind. It's probed with 1 m balls, so these are where their centres run:
-// that far in from each edge, plus half a metre of room
+// footprint at SCALE: 13.4 m wide, ramp foot 11.4 m ahead of centre (toward you), nose 8.7 m behind. Values are probe-ball
+// centre lines: that far in from each edge, plus 0.5 m of room
 const HALF_W = 6.2, AHEAD = 10.9, BEHIND = 8.2, RAMP_FOOT = 11.4;
-const BALL = 1, GAP = 2; // m: the probe ball, and the most between probes (they touch: only something under a metre across could slip between)
-const FLAT = 1; // the ground under it may rise or fall this far from where it touches down
-const COL_H = [1.2, 3.2, 5.2, 7.2, 9.2, 11.2, 13.2, 16, 20, 25, 31, 38, 46, 56, 68, 82, 100]; // heights probed up the column it descends and leaves by
-const CAM_SIDE = 22, CAM_AHEAD = 13, CAM_UP = 6; // the cinematic camera, off the shuttle's flank
-const LEG_A = 0.66; // s: from the hold down to the ramp's foot
+const BALL = 1, GAP = 2; // m: probe ball radius, max probe spacing (balls touch, so only sub-metre things slip through)
+const FLAT = 1; // m the ground may rise or fall from the touchdown point
+const COL_H = [1.2, 3.2, 5.2, 7.2, 9.2, 11.2, 13.2, 16, 20, 25, 31, 38, 46, 56, 68, 82, 100]; // heights probed up the descent column
+const CAM_SIDE = 22, CAM_AHEAD = 13, CAM_UP = 6; // cinematic camera, off the shuttle's flank
+const LEG_A = 0.66; // s from the hold to the ramp's foot
 const WALK_SPEED = 6.5; // m/s from the ramp's foot to your spot
 const _near = [], _n = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 
@@ -33,8 +30,8 @@ export class Recall {
   constructor(game) {
     this.game = game;
     this.active = false;
-    this.failed = []; // what this recall failed ([{ line, short }]): listed for the whole scene, then again in a toast
-    this.leaving = null; // the shuttle flying off after the scene ends
+    this.failed = []; // [{ line, short }] failed by this recall: listed during the scene, then in a toast
+    this.leaving = null; // shuttle flying off after the scene
     this.bars = document.createElement('div');
     this.bars.id = 'cinebars';
     this.bars.className = 'hidden';
@@ -53,9 +50,8 @@ export class Recall {
     this.start();
   }
 
-  // What taking the shuttle fails: your contracts (both, on a Twin Cradle), the timed event you're in the middle of and
-  // the faction story chapter you're on. One entry each: `line` for the list panel, `short` for the toast after.
-  // (The Spindle's chapter is left alone: it has its own retry, and the recall can't be called up there anyway.)
+  // What the recall fails: contracts (both on a Twin Cradle), the active event, the current story chapter.
+  // `line` for the list panel, `short` for the toast. The Spindle's chapter is exempt (own retry; no recall there).
   activeWork() {
     const g = this.game;
     const M = g.missions, E = g.events, S = g.story;
@@ -73,10 +69,8 @@ export class Recall {
     return rows;
   }
 
-  // Fails all of it, quietly (the list is the message), and clears the story chip and its hold meter, which only a
-  // frame of play would otherwise refresh. Returns what it failed. Called first in start(), so the work is already
-  // gone when the scene begins: the shuttle has taken time, and nothing ticks while it plays (a contract or event
-  // clock would otherwise be frozen mid-run).
+  // Fails it all quietly (the list is the message) and clears the story chip and hold meter, which only a play frame
+  // would refresh. Returns what failed. Called first in start(), since nothing ticks during the scene (clocks would freeze).
   failActiveWork() {
     const g = this.game;
     const rows = this.activeWork();
@@ -85,7 +79,7 @@ export class Recall {
     M.failAll('Emergency recall: contract forfeited.', true);
     if (E.active) E.fail(E.active, 'Emergency recall: event failed.', true);
     if (S.active && !(g.spindle && g.spindle.active)) S.fail('Emergency recall: chapter failed.', true);
-    g.hud.eventPanel(S.panel()); // (null now: hides the story/event chip and the fluid canvas)
+    g.hud.eventPanel(S.panel()); // null now: hides the story/event chip and fluid canvas
     S.renderMeter();
     g.audio.hurt();
     return rows;
@@ -94,7 +88,7 @@ export class Recall {
   start() {
     const g = this.game;
     const P = g.player;
-    this.failed = this.failActiveWork(); // (the tutorial's free shuttle comes through here too)
+    this.failed = this.failActiveWork(); // the tutorial's free shuttle comes through here too
     const home = g.home();
     this.home = home;
     this.active = true;
@@ -104,19 +98,19 @@ export class Recall {
     this.walked = false;
     g.state = 'cutscene';
     if (this.leaving) { this.leaving.root.removeFromParent(); this.leaving = null; }
-    // the landing spot: a little beside where you'll stand, and clear of anything it would clip
+    // landing spot near your stand point, clear of clutter
     g.planet.update(home.point, { budgetMs: 1e9 });
     const site = this.site(home);
     this.land = site.land;
     this.up = this.land.clone().normalize();
-    this.fwd = site.dir; // (from the shuttle toward your stand point: its ramp end)
+    this.fwd = site.dir; // shuttle toward your stand point (ramp end)
     this.right = site.right;
-    this.side = site.side; // (which flank the camera takes)
-    // (the stroll from the ramp's foot to your spot takes as long as that distance needs, a jog or so)
+    this.side = site.side; // camera's flank
+    // stroll time from the ramp's foot scales with the distance
     this.walkT = LEG_A + Math.max(0.54, Math.min(3, Math.max(0, this.land.distanceTo(home.point) - RAMP_FOOT) / WALK_SPEED));
     this.endAt = 3.4 + this.walkT + 0.6;
-    if (this.failed.length) g.hud.failedList('SHUTTLE RECALL: WORK FAILED', this.failed.map((r) => r.line), this.endAt + 0.5); // (up for the whole scene)
-    // the shuttle sits behind where you'll stand, nose away, so its rear door drops toward you
+    if (this.failed.length) g.hud.failedList('SHUTTLE RECALL: WORK FAILED', this.failed.map((r) => r.line), this.endAt + 0.5); // up for the whole scene
+    // shuttle behind your stand point, nose away, so the rear door drops toward you
     const s = makeShuttle({ color: 0xfff4e0, stripe: g.rep.aligned() ? 0x7dff3a : 0x2ec4ff });
     s.setSign('RECALL');
     s.root.scale.setScalar(SCALE);
@@ -125,8 +119,7 @@ export class Recall {
     g.scene.add(s.root);
     this.shuttle = s;
     this.pose(140);
-    // you're aboard, out of sight (and standing easy: the cutscene never runs the skating pose, so whatever you were
-    // doing when you held R, the lean, the arms, the streaming scarf, would otherwise be what steps off the ramp)
+    // aboard and hidden, reset to rest pose (the cutscene never runs the skating pose, so the lean and scarf would stick)
     P.respawn(home.point, home.facing);
     P.restPose();
     P.model.root.visible = false;
@@ -138,17 +131,15 @@ export class Recall {
     g.audio.tone(70, 2.6, 'sawtooth', 0.12, 0.6);
   }
 
-  // Is a ball of radius r at p inside a building or prop? (decks that move, like the satellite's, aren't ground)
+  // is a ball of radius r at p inside a building or prop? (moving decks, like the satellite's, don't count)
   solid(p, r) {
     const C = this.game.colliders;
     for (const c of C.query(p, r, _near)) if (!c.platform && C.contact(c, p, r, _n) > 0) return true;
     return false;
   }
 
-  // How much is in the shuttle's way if it comes down at `land` with its ramp toward `dir`: the columns of its
-  // footprint with something in them (or ground that isn't level enough), and the spots on your walk from the
-  // ramp's foot to `stand` that are blocked. 0 = clear all the way up, down and out. It stops counting at `limit`
-  // (a site that can't beat the best so far isn't worth finishing).
+  // Clutter count for landing at `land`, ramp toward `dir`: blocked or unlevel footprint columns plus blocked spots on
+  // the walk to `stand`. 0 = clear. Stops at `limit` (can't beat the best so far).
   clutter(land, dir, stand, limit = Infinity) {
     const g = this.game;
     const up = _a.copy(land).normalize();
@@ -166,7 +157,7 @@ export class Recall {
       }
       if (n >= limit) return n;
     }
-    // the walk: from the ramp's foot to where you'll stand, at about hip height
+    // the walk from the ramp's foot, at hip height
     const foot = _c.copy(land).addScaledVector(dir, RAMP_FOOT);
     const len = foot.distanceTo(stand);
     for (let i = 0, k = Math.ceil(len / 0.8); i <= k; i++) {
@@ -176,13 +167,12 @@ export class Recall {
     return n;
   }
 
-  // Where the shuttle comes down for this home: the usual spot behind your stand point, or the nearest patch
-  // round it that is clear (the least cluttered, if there's no such patch). Also which flank the camera takes.
+  // landing site: the usual spot, else the nearest clear one (or least cluttered); also the camera's flank
   site(home) {
     const g = this.game;
     const stand = home.point;
     const standUp = stand.clone().normalize();
-    const back = tangent(home.facing.clone().negate(), standUp).normalize(); // (away from where you face)
+    const back = tangent(home.facing.clone().negate(), standUp).normalize(); // away from where you face
     let best = null;
     search: for (const d of SET_BACKS) for (const k of SWINGS) {
       const at = back.clone().applyAxisAngle(standUp, k * Math.PI / 6);
@@ -194,7 +184,7 @@ export class Recall {
       if (n === 0) break search;
     }
     best.right = new THREE.Vector3().crossVectors(best.dir, best.up).normalize();
-    // the camera stands off to one side: the side with no wall between it and the shuttle
+    // camera on the side with a clear view of the shuttle
     const focus = best.land.clone().addScaledVector(best.up, 2.5);
     best.side = 1;
     for (const side of [1, -1]) {
@@ -257,7 +247,7 @@ export class Recall {
     }
     // 2.8–3.4 s: the rear door drops into a ramp
     if (t > 2.8) s.setRamp(ease((t - 2.8) / 0.6));
-    // 3.4 s on: you walk out of the hold, down the ramp and over to your spot
+    // 3.4 s on: walk out of the hold, down the ramp, to your spot
     if (t > 3.4) {
       const wt = t - 3.4;
       const k = Math.min(1, wt / this.walkT);
@@ -271,12 +261,12 @@ export class Recall {
       P.model.root.position.copy(P.body.pos);
       P.heading.copy(this.fwd).negate();
       frameQuat(this.up, P.heading, P.model.root.quaternion);
-      // a walking swing that dies away as you arrive: legs, and arms opposite them
+      // walk swing, fading as you arrive
       const w = Math.sin(t * 10) * 0.6 * (1 - k);
       P.model.legL.rotation.x = w; P.model.legR.rotation.x = -w;
       P.model.armL.rotation.x = -w * 0.9; P.model.armR.rotation.x = w * 0.9;
     }
-    P.updateScarf(dt); // (it hangs and settles: nothing else steps it in here)
+    P.updateScarf(dt); // nothing else steps it during the scene
     this.camera();
     if (t >= this.endAt) this.end();
   }
@@ -285,8 +275,7 @@ export class Recall {
     const g = this.game;
     const P = g.player;
     this.active = false;
-    // you come out facing the shuttle (the camera sits behind you, clear of it - facing away put
-    // the camera inside the hull) and watch it close up and lift off
+    // face the shuttle (facing away would put the camera inside the hull) and watch it lift off
     const toShip = this.fwd.clone().negate();
     P.respawn(this.home.point, toShip);
     P.restPose();
@@ -298,8 +287,7 @@ export class Recall {
     setTimeout(() => this.bars.classList.add('hidden'), 400);
     g.state = 'play';
     if (this.failed.length) {
-      // (the list sits where the arrival banner is about to appear: it goes, and a toast carries the reminder, which also
-      // covers a scene that was skipped a moment after it started)
+      // the list is where the arrival banner goes, so swap it for a toast (also covers a scene skipped at once)
       g.hud.hideResult();
       g.hud.toast(`Recall: failed ${[...new Set(this.failed.map((r) => r.short).filter(Boolean))].join(' · ')}`, 6);
       this.failed = [];
@@ -308,7 +296,7 @@ export class Recall {
     this.leaving = { root: this.shuttle.root, t: 0, vel: 0 };
   }
 
-  // after the scene: the shuttle closes up and climbs away
+  // after the scene: close up and climb away
   flyAway(dt) {
     const L = this.leaving;
     L.t += dt;

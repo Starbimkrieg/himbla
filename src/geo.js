@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { PLANET } from './config.js';
 
-// Spherical helpers. The sun direction is fixed: the hemisphere around SUN is the lit near
-// side, the opposite hemisphere is the pitch-black dark side.
+// Spherical helpers. The sun is fixed: the hemisphere round SUN is lit, the other pitch black.
 export const SUN = new THREE.Vector3(0.35, 0.25, 0.9).normalize();
 export const E1 = new THREE.Vector3().crossVectors(SUN, new THREE.Vector3(0, 1, 0)).normalize();
 export const E2 = new THREE.Vector3().crossVectors(SUN, E1).normalize();
@@ -16,10 +15,9 @@ export function dirFromAngles(thetaDeg, phiDeg, out = new THREE.Vector3()) {
     .addScaledVector(E2, Math.sin(t) * Math.sin(p)).normalize();
 }
 
-// Which way is up. On the Moon: away from its centre. On the Spindle (spindle.js): away from the
-// asteroid's long axis, so you can run all the way round it. In the Asset Row (assetRow.js, a dev tool): one fixed
-// direction everywhere (GRAV.flat), "height" being the distance along it. Physics, the camera, shots and effects
-// ask here instead of normalising a position.
+// Which way is up: away from the Moon's centre; on the Spindle (spindle.js) away from its long axis (GRAV.axis); in the
+// Asset Row one fixed direction (GRAV.flat), height being distance along it. Physics, camera, shots and effects ask here
+// instead of normalising a position.
 export const GRAV = { axis: null, flat: null };
 export function upAt(p, out = new THREE.Vector3()) {
   if (GRAV.flat) return out.copy(GRAV.flat);
@@ -83,8 +81,7 @@ export function greatCircle(dir, t, dist, out = new THREE.Vector3()) {
   return out.copy(dir).multiplyScalar(Math.cos(a)).addScaledVector(tn, Math.sin(a)).normalize();
 }
 
-// The nodes under root that pass test, collected once. Per-frame code (a spinning sign, a blinking light)
-// keeps the list on the root rather than walking the whole tree every frame.
+// Nodes under root that pass test, collected once so per-frame code (spinners, blinkers) needn't walk the tree.
 export function collectNodes(root, test) {
   const out = [];
   root.traverse((o) => { if (test(o)) out.push(o); });

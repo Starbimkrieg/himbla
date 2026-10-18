@@ -1,18 +1,16 @@
-# Outline audit for the Moon-runner: which parts stick out of another part and have no outline of their own to show for it.
+# Outline audit for the Moon-runner: parts that stick out of another part with no outline of their own.
 #
-# Every inked part is drawn with a black shell round it (the "ink" custom property is how far out, in metres). A raised detail that has its
-# own ink (a pauldron, a pack panel, a knee guard) brings its own line with it, so it reads as armour. A part with ink 0 (a stripe, a glow
-# dot, a trim ring) has none: where it sticks out of an inked part B by more than a few millimetres, its colour is drawn across B's black
-# band, which is the "colour through the outline" look (the courier's head stripe, side seams and boot piping were all this). This lists
-# every ink-0 part P and the parts B it sticks out of: how many of P's vertices lie outside B by more than the tolerance but inside B's
-# shell zone ("proud"), and how far out the worst one is. The fix is to make P flush (sink it so it sits within a couple of millimetres
-# of B's surface) or to give it an ink of its own; which one is a matter of taste, so this only reports.
+# Inked parts get a black shell (custom property "ink": its offset in metres). A raised detail with its own ink (pauldron, pack
+# panel, knee guard) brings its own line. An ink-0 part (stripe, glow dot, trim ring) has none: where it sticks out of an inked
+# part B by more than a few mm, its colour crosses B's black band ("colour through the outline"). For every ink-0 part P and each
+# B it sticks out of, this counts P's vertices outside B by more than the tolerance but within B's shell ("proud") and the worst
+# distance. Fix by sinking P flush (within a couple of mm of B) or giving it ink; that's taste, so this only reports.
 #
-# Run it headless from the repo root (it builds the runner without exporting anything):
-#   python3 tools/blender/audit_outline.py                 the top 25 rows
-#   python3 tools/blender/audit_outline.py 60              the top 60
-#   TOL_MM=1.5 python3 tools/blender/audit_outline.py      a stricter tolerance (default 3 mm)
-# Then look at the part in tools/viewer.html?m=runner (a close view of the silhouette) before and after changing it.
+# Run headless from the repo root (builds the runner, exports nothing):
+#   python3 tools/blender/audit_outline.py                 top 25 rows
+#   python3 tools/blender/audit_outline.py 60              top 60
+#   TOL_MM=1.5 python3 tools/blender/audit_outline.py      stricter tolerance (default 3 mm)
+# Check the part in tools/viewer.html?m=runner (close silhouette view) before and after.
 
 import os, sys, math
 
@@ -53,8 +51,8 @@ for B in parts:
         continue                         # no shell, no band to cross
     for P in parts:
         if P is B or P["ink"] > 0:
-            continue                     # (a part with an ink of its own brings its own line)
-        # (cheap reject: P's box must reach B's box grown by the shell)
+            continue                     # (inked parts bring their own line)
+        # (cheap reject: P's box must reach B's shell-grown box)
         if any(P["lo"][i] > B["hi"][i] + t or P["hi"][i] < B["lo"][i] - t for i in range(3)):
             continue
         proud = buried = 0
@@ -62,7 +60,7 @@ for B in parts:
         for co in P["v"]:
             loc, n, idx, d = bvh(B).find_nearest(co, t * 1.001)
             if loc is None:
-                continue                 # farther than the shell: clear of B
+                continue                 # beyond the shell: clear of B
             if (co - loc).dot(n) >= 0:   # outside B, inside its shell zone
                 if d > TOL:
                     proud += 1

@@ -1,7 +1,7 @@
 # Winch hand-off: the cable and structures (Lucky Crater Casino sign post)
 
 For a fresh session picking up the Hitch-Line winch (`src/winch.js`). Read `CLAUDE.md` first (conventions: CHANGELOG entry with every
-commit, README source map in step, no PRs unless asked, commit and push to the branch the session names, which was
+commit, the source map in docs/reference.md in step, no PRs unless asked, commit and push to the branch the session names, which was
 `claude/magical-brown-8csbeq`). This note says what the users reported, what was found and changed, what they decided, what is still open,
 and how to test.
 

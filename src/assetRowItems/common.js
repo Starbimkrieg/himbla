@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 
-// Helpers the catalogue groups share (see index.js for what an item is).
+// Helpers the catalogue groups share (index.js says what an item is).
 
-// The Kit marks a model's moving parts in userData (spin / blink / flag, or a `tick` function) and the game animates them from
-// whatever owns the model (territory.js for outposts, world.js for settlements); this does the same for the row. Returns
-// the item's update(dt, t).
+// The Kit marks moving parts in userData (spin / blink / flag, or a `tick` function); the game animates them from the
+// owner (territory.js for outposts, world.js for settlements). Same for the row. Returns the item's update(dt, t).
 export function animate(root, seed = 3) {
   const movers = [];
   root.traverse((o) => { const u = o.userData; if (u.spin || u.blink || u.flag || u.tick) movers.push(o); });
@@ -26,8 +25,8 @@ export function together(...fns) {
   return list.length ? (dt, t) => { for (const f of list) f(dt, t); } : undefined;
 }
 
-// Variants side by side as ONE item: `parts` = [{ root, w }] (w: the width each takes along the row, m). Returns
-// { root, w, d } with the parts centred on the group's origin and their feet on y = 0, ready for an item's make().
+// Variants side by side as ONE item: `parts` = [{ root, w }] (w: width along the row, m). Returns { root, w, d },
+// centred on the origin with feet on y = 0, ready for make().
 export function lineUp(parts, gap = 2) {
   const root = new THREE.Group();
   const total = parts.reduce((s, p) => s + p.w, 0) + gap * (parts.length - 1);

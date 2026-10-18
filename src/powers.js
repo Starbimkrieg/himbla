@@ -1,15 +1,15 @@
-// Powers: the actives you've earned, all on one key. E uses the selected one; the mouse wheel steps
-// through them. A chip by the weapon readout shows which power E will use and whether it's ready.
+// Powers: earned actives on one key. E uses the selected one; the mouse wheel cycles them. A chip by the weapon
+// readout shows the selected power and whether it's ready.
 //
 //   dash      Daedalus Phase Dash (story tech)
 //   teleport  Meridian Personal Teleporter (story tech; T still works)
 //   vanes     Meridian Quantum Slipstream Vanes (story tech: steer in the air for 10 s, story.js)
 //   winch     Kepler Hitch-Line Winch (E toggles it: winch.js)
 //   pen       Dr. Zbornak's holding-pen link (P still works)
-//   meteor    dev: drops a meteor on you (granted the first time the dev menu's SPAWN A METEOR ON ME is used: cheats.js)
+//   meteor    dev: drops a meteor on you (granted on first use of the dev menu's SPAWN A METEOR ON ME: cheats.js)
 //
-// On a controller, d-pad ↓ opens the radial menu and its POWERS wedge opens the power wheel (below): the
-// right stick picks one, A equips it (what a notch of the mouse wheel does), and RB / E then uses it.
+// Controller: d-pad ↓ opens the radial menu, whose POWERS wedge opens the power wheel (below): right stick picks,
+// A equips (like a mouse-wheel notch), RB / E uses.
 
 import { glyphHtml } from './glyphs.js';
 import { DEV_TOOLS } from './devtools.js';
@@ -30,7 +30,7 @@ export class Powers {
     try { this.sel = localStorage.getItem(KEY) || null; } catch { this.sel = null; }
     this.chipT = 0;
     this.flash = 0;
-    this.radial = null; // the open power wheel: { sel, items, hub, t } (null while closed)
+    this.radial = null; // open power wheel { sel, items, hub, t }, null when closed
     this.radialEl = null;
   }
 
@@ -50,7 +50,7 @@ export class Powers {
     this.chipT = 0;
   }
 
-  // the wheel: one notch, one power along (wrapping round)
+  // mouse wheel: one notch, one power (wraps)
   cycle(dir) {
     const own = this.owned();
     if (own.length < 2) return;
@@ -59,16 +59,15 @@ export class Powers {
     this.game.audio.tone(dir > 0 ? 760 : 640, 0.05, 'square', 0.05);
   }
 
-  // what a power's readout says: what it's doing right now (the winch's cable, the Vanes being on), else READY or how long until it is
+  // readout: live status (winch cable, Vanes on), else READY or the cooldown
   status(k) {
     const g = this.game, P = POWERS[k], cd = P.cd(g);
     return (P.status && P.status(g)) || (cd > 0 ? `${Math.ceil(cd)} s` : 'READY');
   }
 
-  // ---- the power wheel (the same wheel as the controller's menu and the vehicles': gamepad.js) ----
-  // Opened from the menu's POWERS wedge and sticky: the right stick picks (the pick stays until you pick another),
-  // A equips it, d-pad ↓ equips the pick or closes the wheel if none is picked, B / Start cancels. The equipped
-  // power has an orange edge. Every power you own is on the wheel, so a wheel of one is just a look at it.
+  // ---- power wheel (same wheel as the controller menu and vehicles': gamepad.js) ----
+  // Opened from the POWERS wedge. Right stick picks (sticky), A equips, d-pad ↓ equips the pick or closes if none,
+  // B / Start cancels. The equipped power has an orange edge. Every owned power is on it.
   openRadial() {
     const items = this.owned();
     if (!items.length) return;
@@ -88,7 +87,7 @@ export class Powers {
     this.game.audio.tone(520, 0.08, 'triangle', 0.12);
   }
 
-  // the wedges' readouts and which one is equipped (a few times a second: the winch's reads its target)
+  // wedge readouts and the equipped mark (a few times a second: the winch's reads its target)
   radialDraw() {
     const R = this.radial;
     if (!R) return;
@@ -104,7 +103,7 @@ export class Powers {
     this.radialHub();
   }
 
-  // the middle of the wheel: the picked power (or the title) and what the buttons do
+  // wheel hub: the picked power (or the title) and button hints
   radialHub() {
     const R = this.radial;
     if (!R) return;
@@ -113,7 +112,7 @@ export class Powers {
     if (R.hub !== hub) { R.hub = hub; this.radialEl.querySelector('.pr-hub').innerHTML = hub; }
   }
 
-  // the wheel's highlight: -1 for none
+  // highlight: -1 for none
   radialSelect(sel) {
     const R = this.radial;
     if (!R || sel === R.sel) return;
@@ -123,7 +122,7 @@ export class Powers {
     this.radialHub();
   }
 
-  // the right stick: pushing it picks a wedge, and the pick stays until you push to another
+  // right stick picks a wedge; the pick stays until you push to another
   radialStick(rx, ry) {
     const R = this.radial;
     if (!R || Math.hypot(rx, ry) <= 0.55) return;
@@ -138,7 +137,7 @@ export class Powers {
     return R && R.sel >= 0 ? R.items[R.sel] : null;
   }
 
-  // (not while the cable's on: swapping mid-swing would drop you, the same as the mouse wheel)
+  // not while the cable's on: swapping mid-swing would drop you (as with the mouse wheel)
   pickable(k) { return !k || k === this.current() || !this.game.winch.on; }
 
   closeRadial(commit) {
@@ -151,7 +150,7 @@ export class Powers {
   use(k) {
     const g = this.game;
     if (k === 'dash' || k === 'teleport' || k === 'vanes') g.story.useTech(k);
-    else if (k === 'winch') { if (g.winch.on) g.winch.release(); else g.winch.fire(); } // (E again lets go)
+    else if (k === 'winch') { if (g.winch.on) g.winch.release(); else g.winch.fire(); } // E again lets go
     else if (k === 'pen') g.alchemy.penMenu();
     else if (k === 'meteor') g.cheats.spawnMeteor(false);
   }
@@ -160,16 +159,16 @@ export class Powers {
   update(dt) {
     const g = this.game;
     const I = g.input;
-    // (not while the cable's on: swapping mid-swing would drop you)
+    // not while the cable's on: swapping mid-swing would drop you
     const steps = I.consumeWheel();
     if (steps && !g.winch.on) this.cycle(steps > 0 ? 1 : -1);
-    const limp = !!g.player.rag; // (a ragdoll can't use powers)
+    const limp = !!g.player.rag; // no powers while ragdolled
     if (I.pressed('KeyE') && !limp) {
       const k = this.current();
       if (k) this.use(k);
       else g.hud.toast('No powers yet. Phase Dash, the Teleporter, the Kepler winch and the pen link all go on E.', 2.5);
     }
-    // the winch stays on until E is pressed again (or it runs out, snaps or slips)
+    // winch stays on until E again (or it runs out, snaps or slips)
     g.winch.update(dt, this.current() === 'winch' && !limp);
     if (this.flash > 0) this.flash -= dt;
     if (this.radial && (this.radial.t -= dt) <= 0) { this.radial.t = 0.1; this.radialDraw(); }

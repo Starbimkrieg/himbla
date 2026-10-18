@@ -1,17 +1,16 @@
-// The Meridian Exchange's market: a handful of made-up lunar stocks whose prices wander on a short
-// random walk and refresh every REFRESH seconds of game time (the board on the trading tower and
-// its scrolling ticker both read from here, so they always agree). No three.js in here.
+// Meridian Exchange market: made-up lunar stocks on a random walk, refreshed every REFRESH s of game time.
+// The trading-tower board and its ticker both read from here, so they agree. No three.js.
 //
-//   price     the latest price
-//   hist      the last HIST closes, oldest first (the sparkline); `open` is its first entry
-//   high/low  the highest and lowest close in that window
-//   change    price - open, and pct the same as a percentage; `tick` is the move since the last refresh
-//   volume    shares traded over the window (each refresh adds a lump), shown as 412K / 1.2M
+//   price     latest price
+//   hist      last HIST closes, oldest first (sparkline); `open` is its first entry
+//   high/low  highest / lowest close in that window
+//   change    price - open; pct as a percentage; `tick` is the move since the last refresh
+//   volume    shares traded over the window, shown as 412K / 1.2M
 //
-// The Composite is an index of the other stocks rather than a walk of its own.
+// The Composite is an index of the others, not a walk of its own.
 
-export const REFRESH = 15;   // seconds of game time between price updates
-export const HIST = 48;      // refreshes kept (48 x 15 s = a 12-minute session)
+export const REFRESH = 15;   // s of game time between price updates
+export const HIST = 48;      // refreshes kept (48 x 15 s = 12-minute session)
 
 // [symbol, name, start price, volatility per refresh, typical volume per refresh]
 const SEED = [
@@ -24,7 +23,7 @@ const SEED = [
   ['SLN', 'SELENE SOLAR', 64.3, 0.009, 205000],
   ['RGL', 'REGOLITH FUTURES', 8.75, 0.016, 880000],
 ];
-const PULL = 0.04;   // the walk is tugged back towards the start price, so nothing runs off for ever
+const PULL = 0.04;   // tug back towards the start price so nothing runs away
 const SHOCK = 0.035; // chance per refresh, per stock, of a news jump
 const gauss = (rng) => Math.sqrt(-2 * Math.log(1 - rng())) * Math.cos(2 * Math.PI * rng());
 
@@ -36,8 +35,7 @@ export function createMarket(rng = Math.random) {
   const comp = stocks[0];
   const m = {
     stocks, version: 0, nextAt: null,
-    // the move since the last refresh drives the next one a little (momentum), the pull to the
-    // start price a little the other way, noise and the odd news jump do the rest
+    // a bit of momentum from the last move, pull to start price, noise, and the odd news jump
     step() {
       for (const s of parts) {
         let r = gauss(rng) * s.vol + s.last * 0.25 + ((s.p0 - s.price) / s.p0) * PULL;
@@ -48,7 +46,7 @@ export function createMarket(rng = Math.random) {
         s.price = Math.max(0.05, s.price * (1 + r));
         s.vols.push(Math.round(s.v0 * (0.55 + rng() * 0.9) * (1 + Math.abs(r) * 40)));
       }
-      // the index: the average of the others' price against their start price
+      // index: mean of the others' price relative to start
       let rel = 0, vsum = 0;
       for (const s of parts) rel += s.price / s.p0;
       const prev = comp.price;
@@ -69,8 +67,8 @@ export function createMarket(rng = Math.random) {
       }
       m.version++;
     },
-    // advance to game time `t` (seconds): one step per whole REFRESH that has gone by. The first
-    // call pins the clock; a long absence only replays what the history can hold.
+    // advance to game time `t` (s): one step per elapsed REFRESH. First call pins the clock;
+    // a long absence replays at most HIST steps.
     update(t) {
       if (m.nextAt === null) { m.nextAt = t + REFRESH; return false; }
       if (t < m.nextAt) return false;
@@ -81,13 +79,13 @@ export function createMarket(rng = Math.random) {
     },
     // seconds until the next refresh, as of game time t
     countdown(t) { return m.nextAt === null ? REFRESH : Math.max(0, m.nextAt - t); },
-    // [gainer, loser] by change over the window (the index is left out of it)
+    // [gainer, loser] over the window (index excluded)
     movers() {
       const a = parts.slice().sort((x, y) => y.pct - x.pct);
       return [a[0], a[a.length - 1]];
     },
   };
-  // a session already under way when the player first looks: a full window of history
+  // start with a full window of history
   for (let i = 0; i < HIST; i++) m.step();
   m.version = 0;
   return m;
@@ -97,5 +95,5 @@ export const market = createMarket();
 
 // Number formats shared by the board and the ticker.
 export const fmtPrice = (p) => p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-// the scrolling ticker's line: one entry per stock, an arrow for the session move
+// ticker line: one entry per stock, arrow for the session move
 export const tickerText = (m = market) => m.stocks.map((s) => `${s.name} ${s.change >= 0 ? '▲' : '▼'} ${fmtPrice(s.price)}`).join(' | ');

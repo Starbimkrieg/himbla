@@ -6,14 +6,14 @@ import { LEADERS, Story } from '../story.js';
 import { FOES } from '../storyAssets.js';
 import { span, cell, line, restRunner, tag } from './characters-util.js';
 
-// 02 · PEOPLE: the townsfolk (makeFigure), Dr. Zbornak, the casino staff, the six faction leaders and the six troop liveries.
+// 02 · PEOPLE: townsfolk (makeFigure), Dr. Zbornak, casino staff, the six faction leaders and six troop liveries.
 
-const FW = 2.4; // a townsperson's cell along the row (m)
+const FW = 2.4; // townsperson cell along the row (m)
 const FD = 2.2;
 
 const LOOKS = ['coveralls', 'lab', 'engineer', 'trader', 'elder', 'eva', 'casual', 'kid', 'trooper'];
 
-// ---- the nine townsfolk archetypes (a look picks the outfit shape; the colours, hair and hats come from the seed)
+// ---- nine townsfolk looks (look = outfit shape; seed = colours, hair, hats)
 function archetypesItem() {
   return {
     id: 'people.archetypes', label: 'TOWNSFOLK (9 LOOKS)', w: span(LOOKS.length, FW), d: FD,
@@ -24,7 +24,7 @@ function archetypesItem() {
   };
 }
 
-// ---- the special figures: Vrill, soldier, kid, statue, the people the reactor lets out, the medic
+// ---- special figures: Vrill, soldier, kid, statue, the reactor's freed people, medic
 function specialItem() {
   const specs = [
     ['VRILL', () => makeFigure({ alien: true })],
@@ -56,7 +56,7 @@ function zbornakItem() {
   };
 }
 
-// ---- the casino's staff (casinoWorld.js buildCasino)
+// ---- casino staff (casinoWorld.js buildCasino)
 function casinoItem() {
   const staff = [
     ['PATRON', () => makeFigure({ suit: 0xffc83a, helmet: 0xfff4e0, visor: 0xff2e88, seed: 900 }).root],
@@ -81,7 +81,7 @@ function casinoItem() {
   };
 }
 
-// ---- the six faction leaders on their podiums (story.js buildLeaders): the runner x1.15 on a podium, a glowing ring and a light column
+// ---- the six faction leaders (story.js buildLeaders): runner x1.15 on a podium, glowing ring, light column
 function leadersItem() {
   const ids = Object.keys(LEADERS);
   const PW = 7.6;
@@ -93,7 +93,7 @@ function leadersItem() {
         const L = LEADERS[f];
         const g = new THREE.Group();
         const m = makeRunner({ ...L.look, pirate: f === 'rustmoon' });
-        if (f === 'rustmoon') Story.prototype.addRifle.call({}, m, true); // (Captain Kade: slung rifle and a long coat)
+        if (f === 'rustmoon') Story.prototype.addRifle.call({}, m, true); // Captain Kade: slung rifle, long coat
         m.root.scale.setScalar(1.15);
         m.root.position.y = 0.4;
         g.add(m.root);
@@ -115,12 +115,12 @@ function leadersItem() {
         return cell(g, null, PW, 7);
       });
       const L = line(cells);
-      // (solid: the podiums only; the rings and the light columns are walked through)
+      // only the podiums are solid
       const cols = cells.map((c) => ({ type: 'cyl', x: c.root.position.x, z: 0, y0: 0, y1: 0.4, r: 1.9 }));
       return {
         root: L.root,
         cols,
-        // (their idle: the head turning, the left arm swaying, the ring and the column pulsing: story.update)
+        // idle as in story.update: head turns, left arm sways, ring and column pulse
         update: (dt, t) => {
           for (const s of swayers) {
             const T = t + s.phase;
@@ -135,7 +135,7 @@ function leadersItem() {
   };
 }
 
-// ---- the six troop liveries (storyAssets.js FOES, enemies.js spawnPirate): pirates and each faction's soldiers on skates
+// ---- six troop liveries (storyAssets.js FOES, enemies.js spawnPirate): pirates and faction soldiers on skates
 function troopsItem() {
   const ids = Object.keys(FOES);
   const RW = 2.6;

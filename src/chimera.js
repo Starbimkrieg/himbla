@@ -5,9 +5,9 @@ import { inkShell } from './models.js';
 import { mulberry32 } from './rng.js';
 import { ensureStats } from './chimerastats.js';
 
-// Things with bodies. Two or more of these in the reactor make a Chimera.
+// things with bodies: two or more in the reactor make a Chimera
 export const LIVING = ['person', 'voidling', 'mite', 'car', 'pirate', 'sapling', 'junkbot', 'alien'];
-// Things that only mutate whatever they get spliced into.
+// things that only mutate what they're spliced into
 export const MODIFIERS = { water: 'void', rock: 'crystal', slickrock: 'crystal', dirt: 'mud', mud: 'mud', wiring: 'spark', engine: 'turbo', lens: 'lens', transponder: 'radio', plating: 'armor' };
 
 export const PALETTE = {
@@ -23,7 +23,7 @@ export const PALETTE = {
 const SYLL = { car: 'Vroom', mite: 'Skitter', pirate: 'Grit', sapling: 'Sprout', junkbot: 'Bolt', alien: 'Zorp' };
 const EPITHET = { void: 'the Unholy', crystal: 'the Crystalline', mud: 'of the Mud', spark: 'the Electric', turbo: 'the Turbocharged', lens: 'the All-Seeing', radio: 'the Broadcaster', armor: 'the Ironclad' };
 
-// Mix the parents into a gene sheet: which body, legs and head; mutations; stats; a name.
+// parents -> gene sheet: body, legs, head, mutations, stats, name
 export function spliceGenes(items, seed = Math.floor(Math.random() * 1e9)) {
   const rr = mulberry32(seed);
   const living = items.filter((i) => LIVING.includes(i.kind));
@@ -42,15 +42,15 @@ export function spliceGenes(items, seed = Math.floor(Math.random() * 1e9)) {
   if (living.length === 1) name = `Mutant ${a}`;
   if (mods.length) name += ' ' + EPITHET[mods[0]];
   const chaos = kinds.size + mods.length + (extraHead ? 1 : 0) + (mods.includes('void') ? 1 : 0);
-  // racing stats (speed / power / stamina / wit), tier and top speed come from the parts + seed
+  // racing stats (speed / power / stamina / wit), tier and top speed: from parts + seed
   return ensureStats({ seed, body, legs, head, extraHead, mods, size, tint, name, speed: 0, hop: legs === 'mite' ? 1 : 0.3, chaos, parents: living.map((i) => i.kind), born: Date.now() });
 }
 
 export { ensureStats };
 
 // =============================================================================================
-// Part geometry. Every shape is built once and shared (geometry.userData.shared), and every
-// inked part gets a real outline shell pushed out along its smoothed normals.
+// Part geometry: each shape built once and shared (userData.shared); inked parts get an outline
+// shell pushed out along smoothed normals.
 // =============================================================================================
 const GEO = new Map();
 function cached(key, fn) {
@@ -89,8 +89,7 @@ const cone = (r, h, seg = 10) => cached(`cone|${r}|${h}|${seg}`, () => new THREE
 const octa = (r) => cached(`octa|${r}`, () => new THREE.OctahedronGeometry(r, 0).scale(0.55, 1.7, 0.55));
 const ico = (r) => cached(`ico|${r}`, () => new THREE.IcosahedronGeometry(r, 0));
 
-// A smooth tube through points (a Catmull-Rom curve) whose radius tapers from r0 to r1, with
-// rounded ends: limbs, roots, antennae, mandibles.
+// Catmull-Rom tube tapering r0 -> r1 with rounded ends: limbs, roots, antennae, mandibles.
 function taper(pts, r0, r1, tub = 14, rad = 8) {
   return cached(`taper|${pts.map((p) => p.join(',')).join(';')}|${r0}|${r1}|${tub}|${rad}`, () => {
     const curve = new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)));
@@ -151,8 +150,8 @@ const shade = (c, k) => new THREE.Color(c).multiplyScalar(k).getHex();
 const CHITIN = 0x2e2a45, DARKM = 0x221d33, BARK = 0x6b4a2a, STEEL = 0x9aa7bb, GUN = 0x55607a, CREAM = 0xfff4e0;
 
 // =============================================================================================
-// LEGS. Each builder adds its pivots to `inner` and returns { legH (hip height), parts (animated
-// pivots) }. Feet stand on y = 0; the creature faces +z.
+// LEGS. Each adds pivots to `inner`, returns { legH (hip height), parts (animated pivots) }.
+// Feet on y = 0, facing +z.
 // =============================================================================================
 function bipedLegs(inner, kind, rr) {
   const legH = 1.0;
@@ -186,7 +185,7 @@ function bipedLegs(inner, kind, rr) {
 }
 
 function miteLegs(inner, tint) {
-  // six jointed legs: up and out to a knee, then down to a pointed foot. Tripod gait.
+  // six legs: up and out to a knee, down to a pointed foot. Tripod gait.
   const legH = 0.72;
   const parts = [];
   const legM = toon(CHITIN), jointM = toon(shade(tint, 0.6));
@@ -239,9 +238,7 @@ function wheelLegs(inner) {
     inner.add(w);
     parts.push({ m: spin, kind: 'wheel', r: 0.46 });
   }
-  // the chassis the wheels hang off, so a narrow body (a person's hips, a mite's thorax) rides on
-  // something instead of floating between four loose wheels: axles from wheel to wheel, a deck
-  // plate along them, and a padded saddle mount in the middle where the body sits
+  // chassis so a narrow body doesn't float between four loose wheels: axles, deck plate, saddle mount
   for (const sz of [-1, 1]) {
     inner.add(part(cyl(0.07, 0.07, 1.64, 8), toon(GUN), 0, 0.46, sz * 0.85, 0.015, { rz: Math.PI / 2 }));
     for (const sx of [-1, 1]) inner.add(part(cyl(0.12, 0.12, 0.1, 10), hubM, sx * 0.58, 0.46, sz * 0.85, 0.012, { rz: Math.PI / 2 }));
@@ -272,7 +269,7 @@ function treadLegs(inner) {
     for (let k = 0; k < 7; k++) g.add(part(rbox(0.36, 0.05, 0.1, 0.02), toon(GUN), 0, 0.3, -0.6 + k * 0.2, 0));
     inner.add(g);
   }
-  // a belly pan bridging the two tracks, with a saddle mount for whatever body sits on it
+  // belly pan bridging the tracks, with a saddle mount
   inner.add(part(rbox(0.74, 0.24, 1.4, 0.06), toon(GUN), 0, 0.38, 0, 0.03));
   inner.add(part(rbox(0.78, 0.05, 1.44, 0.02), toon(0xffd23f), 0, 0.52, 0, 0));
   inner.add(part(ell(0.3, 0.1, 0.36, 14, 8), toon(DARKM), 0, 0.58, 0, 0.02));
@@ -280,8 +277,8 @@ function treadLegs(inner) {
 }
 
 // =============================================================================================
-// BODIES. Each sits on the hips at legH and returns its anchors: head (where the neck is),
-// back (where strapped-on mutations mount, and whether that surface faces 'up' or 'rear'), top and half-width.
+// BODIES. Sit on the hips at legH; return anchors: head (neck point), back (mutation mount, facing
+// 'up' or 'rear'), top and half-width.
 // =============================================================================================
 function bipedBody(inner, kind, tint, legH, rr, arms) {
   const c = kind === 'pirate' ? 0x3a2b4f : tint;
@@ -323,21 +320,21 @@ function bipedBody(inner, kind, tint, legH, rr, arms) {
 function miteBody(inner, tint, legH, rr) {
   const bodyM = toon(tint), darkM = toon(shade(tint, 0.62));
   const y = legH + 0.2;
-  // thorax, waist, and a big segmented abdomen riding up behind
+  // thorax, waist, big segmented abdomen behind
   inner.add(part(ell(0.42, 0.36, 0.46), bodyM, 0, y + 0.22, 0.18, 0.035));
   inner.add(part(ell(0.18, 0.18, 0.2, 12, 10), darkM, 0, y + 0.3, -0.3, 0.02));
   const abd = new THREE.Group();
   abd.position.set(0, y + 0.46, -0.95);
   abd.rotation.x = -0.25;
   abd.add(part(ell(0.62, 0.52, 0.78), bodyM, 0, 0, 0, 0.04));
-  // segment bands: thin slices of the abdomen, a hair proud of it
+  // segment bands, slightly proud of the abdomen
   for (const dz of [0.32, 0.0, -0.32]) {
     const f = Math.sqrt(1 - (dz / 0.78) ** 2);
     abd.add(part(ell(+(0.62 * f + 0.025).toFixed(3), +(0.52 * f + 0.025).toFixed(3), 0.07, 20, 8), darkM, 0, 0, dz, 0));
   }
   inner.add(abd);
   for (let i = 0; i < 4; i++) inner.add(part(ell(0.11, 0.05, 0.11, 10, 6), darkM, (i % 2 ? 1 : -1) * (0.18 + rr() * 0.1), y + 0.9 - i * 0.03, -0.75 - i * 0.18, 0));
-  // a little dorsal ridge on the thorax
+  // dorsal ridge
   inner.add(part(ell(0.12, 0.08, 0.3, 10, 8), darkM, 0, y + 0.56, 0.12, 0.015));
   return { head: [y + 0.2, 0.62], back: [y + 1.0, -0.85, 'up'], top: y + 1.0, w: 0.6 };
 }
@@ -384,7 +381,7 @@ function saplingBody(inner, tint, legH, rr) {
 }
 
 // =============================================================================================
-// HEADS: built round the neck point (y = 0 at the chin), facing +z.
+// HEADS: round the neck point (y = 0 at the chin), facing +z.
 // =============================================================================================
 function makeHead(kind, rr) {
   const h = new THREE.Group();
@@ -392,7 +389,7 @@ function makeHead(kind, rr) {
     const skin = toon(0xb8e986), dark = toon(CHITIN);
     h.add(part(ell(0.36, 0.32, 0.34), skin, 0, 0.26, 0.05, 0.03));
     for (const sx of [-1, 1]) {
-      // big compound eyes with a glint, curling antennae, little mandibles
+      // compound eyes with a glint, curling antennae, mandibles
       h.add(part(ell(0.17, 0.2, 0.15, 12, 10), glow(0xff2e88), sx * 0.2, 0.36, 0.25, 0.02));
       h.add(part(ell(0.05, 0.05, 0.03, 8, 6), glow(0xffffff), sx * 0.24, 0.44, 0.38, 0));
       h.add(part(taper([[0, 0, 0], [sx * 0.08, 0.3, 0.06], [sx * 0.24, 0.55, -0.02], [sx * 0.38, 0.62, -0.14]], 0.025, 0.018, 12, 5), dark, sx * 0.1, 0.5, 0.12, 0.012));
@@ -400,7 +397,7 @@ function makeHead(kind, rr) {
       h.add(part(taper([[0, 0, 0], [sx * 0.04, -0.06, 0.12], [-sx * 0.04, -0.1, 0.2]], 0.045, 0.02, 8, 5), dark, sx * 0.12, 0.08, 0.3, 0.012));
     }
   } else if (kind === 'car') {
-    // a bubble cab with headlight eyes and a grille grin
+    // bubble cab, headlight eyes, grille grin
     h.add(part(lathe([[0.42, 0], [0.46, 0.08], [0.44, 0.16], [0, 0.16]], 18), toon(0xff7ad9), 0, 0, 0, 0.025));
     h.add(part(ell(0.4, 0.36, 0.4, 16, 10), glow(0x9be7ff), 0, 0.16, 0, 0.025));
     for (const sx of [-1, 1]) {
@@ -418,7 +415,7 @@ function makeHead(kind, rr) {
       h.add(part(ell(0.07, 0.07, 0.07, 8, 6), glow(0xfff27a), sx * 0.28, 1.08, -0.04, 0.012));
     }
   } else if (kind === 'junkbot') {
-    // a little CRT head with a pixel face, an antenna and ear bolts
+    // CRT head: pixel face, antenna, ear bolts
     h.add(part(rbox(0.62, 0.48, 0.5, 0.08), toon(STEEL), 0, 0.24, 0, 0.03));
     h.add(part(rbox(0.5, 0.36, 0.04, 0.05), glow(0x123a3a), 0, 0.25, 0.25, 0));
     for (const sx of [-1, 1]) {
@@ -486,7 +483,7 @@ export function makeChimera(genes) {
   const [hy, hz] = bodyA.head;
   const [by, bz, bdir] = bodyA.back;
   const up = bdir === 'up';
-  // heads sit on the neck; a second one shares it, both leaning apart
+  // heads on the neck; a second shares it, both leaning apart
   const heads = [];
   const addHead = (kind, x, lean) => {
     const h = makeHead(kind, rr);
@@ -501,7 +498,7 @@ export function makeChimera(genes) {
   if (M.includes('crystal')) {
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * Math.PI * 2;
-      // a cluster bursting out of the back: upward on a flat back, raked backward on an upright one
+      // cluster out of the back: upward on a flat back, raked back on an upright one
       const ox = Math.cos(a) * halfW * 0.45, oz = Math.sin(a) * 0.22;
       inner.add(part(octa(0.22 + rr() * 0.1), glow(0x2ee6ff), ox, by + (up ? 0.1 : oz) + rr() * 0.1, bz + (up ? oz : -0.12), 0.02, up ? { rx: Math.sin(a) * 0.5, rz: -Math.cos(a) * 0.5 } : { rx: -1.0 + Math.sin(a) * 0.4, rz: -Math.cos(a) * 0.5 }));
     }
@@ -530,7 +527,7 @@ export function makeChimera(genes) {
     inner.add(part(rbox(0.6, 0.1, 0.5, 0.04), toon(STEEL), 0, top + 0.02, bz * 0.6, 0.025));
   }
   if (M.includes('turbo')) {
-    // a salvaged engine strapped on the back, exhausts glowing
+    // salvaged engine on the back, glowing exhausts
     const eg = new THREE.Group();
     eg.position.set(0, up ? by + 0.2 : by, up ? bz : bz - 0.32);
     eg.add(part(rbox(0.6, 0.45, 0.6, 0.08), toon(GUN), 0, 0, 0, 0.03));
@@ -575,7 +572,7 @@ export function makeChimera(genes) {
   return { root, anim, height: (top + 0.8) * genes.size };
 }
 
-// Small wild critter of the sunlit craters.
+// small wild critter of the sunlit craters
 export function makeMite() {
   const genes = { seed: Math.floor(Math.random() * 1e9), body: 'mite', legs: 'mite', head: 'mite', extraHead: null, mods: [], size: 0.8, tint: 0xb8e986 };
   return makeChimera(genes);

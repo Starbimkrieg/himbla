@@ -3,20 +3,20 @@ import { textSprite } from '../toon.js';
 import { ScarfSim } from '../models.js';
 import { lineUp } from './common.js';
 
-// Helpers shared by the characters files (characters.js): a variant with its name tag, a line of them, a runner's rest pose.
+// Helpers for characters.js: a tagged variant, a line of them, a runner's rest pose.
 
 export const UP = new THREE.Vector3(0, 1, 0);
 const ZERO = new THREE.Vector3();
 
-// the width a line of n cells takes (cell width pw, gap between them), for an item's declared footprint
+// width of a line of n cells (cell width pw), for an item's declared footprint
 export const span = (n, pw, gap = 0.6) => n * pw + (n - 1) * gap;
 
-// a small name tag (the game's pixel-font sign as a sprite), h metres tall
+// pixel-font name tag sprite, h metres tall
 export function tag(text, color = '#ffd23f', h = 0.7) {
   return textSprite(text, { color, scale: h / 10 });
 }
 
-// One variant: the model with its name tag in front of its feet. w, d: its cell (m).
+// one variant, its name tag in front of its feet. w, d: its cell (m)
 export function cell(obj, label, w, d, { color = '#ffd23f', h = 0.7, z = d / 2 + 0.5 } = {}) {
   const root = new THREE.Group();
   root.add(obj);
@@ -28,13 +28,12 @@ export function cell(obj, label, w, d, { color = '#ffd23f', h = 0.7, z = d / 2 +
   return { root, w, d };
 }
 
-// a line of cells as one item's root; returns { root, w, d } (see common.js lineUp)
+// a line of cells as one item's { root, w, d } (common.js lineUp)
 export function line(cells, gap = 0.6) {
   return lineUp(cells, gap);
 }
 
-// A runner standing at rest, as the player does when nobody is steering: arms a little out from the sides, and the
-// scarf (the outfit's own style: models.js ScarfSim) let to hang. gear: what is on its back (the sim keeps the scarf clear of it).
+// A runner at idle rest: arms slightly out, scarf (models.js ScarfSim) settled. gear: what's on its back (the scarf clears it).
 export function restRunner(M, gear) {
   M.armL.rotation.z = -0.15;
   M.armR.rotation.z = 0.15;

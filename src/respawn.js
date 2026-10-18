@@ -6,43 +6,41 @@ import { saveWorldState } from './worldstate.js';
 const NEUTRAL = TIERS.find((t) => t.name === 'NEUTRAL').min; // 0: "at least neutral" is this tier or better
 const GATE = 45; // m outside a restricted zone's wall
 
-// Where a K.O. puts you. Three kinds, tried in this order:
-//   hq      the headquarters you set at your town's clinic (ws.respawnAt = its location id), if it still lets you in
-//   clinic  your nearest clinic: the town's or an outpost's (story.clinicSpawn, as it always was)
+// Where a K.O. puts you, tried in order:
+//   hq      the HQ picked at your town's clinic (ws.respawnAt = its location id), if it still lets you in
+//   clinic  your nearest clinic, town's or outpost's (story.clinicSpawn)
 //   home    game.home(): the ILMB, your story faction's HQ, your town once it has a Shuttle Pad
-// A choice that stops being valid (standing dropped, the HQ fell) is kept, not cleared: it is only ignored, with a note on the K.O. card,
-// until it works again.
+// A choice that stops being valid (standing dropped, HQ fell) is kept but ignored, with a note on the K.O. card, until it works again.
 export class Respawn {
   constructor(game) { this.game = game; }
 
   get id() { return this.game.ws.respawnAt || null; }
 
-  // '' if this HQ would take you in right now, else the short reason it won't
+  // '' if this HQ takes you in now, else the short reason
   why(l) {
     const g = this.game;
     if (!l.hq || l.type === 'ruin') return 'GONE'; // (a razed Rustmoon Hold keeps hq: true)
     if (!l.discovered) return 'NOT CHARTED YET';
-    if (l.type === 'pirate') return g.rep.aligned() ? '' : 'CREW ONLY'; // (the den's standing starts at 0, which would read as neutral)
+    if (l.type === 'pirate') return g.rep.aligned() ? '' : 'CREW ONLY'; // (the den's standing starts at 0, which reads as neutral)
     if (g.rep.get(l.faction) < NEUTRAL) return `STANDING ${g.rep.tier(l.faction).name}`;
     return '';
   }
 
-  // every HQ of a faction you know of: [{ l, why }] (why '' = you can pick it)
+  // every HQ of a known faction: [{ l, why }] (why '' = pickable)
   options() {
     const g = this.game;
     return g.locations.filter((l) => l.hq && l.type !== 'ruin' && g.rep.visible(l.faction)).map((l) => ({ l, why: this.why(l) }));
   }
 
-  // where you stand when you redeploy at HQ l: the usual clear patch inside, or, at a military HQ that hasn't cleared you, its gate
+  // where you redeploy at HQ l: a clear patch inside, or the gate of a military HQ that hasn't cleared you
   spot(l) {
     const g = this.game;
-    if (l === g.hub) return { point: g.spawnPoint, facing: g.spawnFacing, loc: l, note: '' }; // (the ILMB: the spot home() uses)
+    if (l === g.hub) return { point: g.spawnPoint, facing: g.spawnFacing, loc: l, note: '' }; // (the ILMB: home()'s spot)
     if (l.restricted && !g.rep.cleared(l.faction)) return this.gate(l);
     return { ...g.spotNear(l), note: '' };
   }
 
-  // just outside the zone wall, on the side facing the ILMB (else the nearest clear side, in 30° steps): inside, an uncleared runner is
-  // shot at within seconds
+  // just outside the zone wall, ILMB side (else the nearest clear side, in 30° steps); inside, an uncleared runner gets shot
   gate(l) {
     const g = this.game, V = THREE.Vector3;
     const toward = tangent(g.hub.dir.clone().sub(l.dir), l.dir);
@@ -58,7 +56,7 @@ export class Respawn {
     return { ...g.spotNear(l), note: '' };
   }
 
-  // what a K.O. at `from` (a unit direction) does: { kind, name, note, ...where } (hq and home: point, facing, loc; clinic: dir)
+  // a K.O. at `from` (unit direction): { kind, name, note, ...where } (hq/home: point, facing, loc; clinic: dir)
   plan(from) {
     const g = this.game;
     let note = '';
@@ -69,12 +67,11 @@ export class Respawn {
       note = `${l ? l.name : 'Your respawn point'} will not take you in (${why.toLowerCase()}): redeploying ${g.story.clinicSpawn(from) ? 'at your clinic' : 'at home'} instead.`;
     }
     const c = g.story.clinicSpawn(from);
-    if (c) return { kind: 'clinic', name: c.modules ? `${g.territory.name(c)} clinic` : c.name, dir: c.dir, note }; // (an outpost is the outpost itself; the town's entry has a name)
+    if (c) return { kind: 'clinic', name: c.modules ? `${g.territory.name(c)} clinic` : c.name, dir: c.dir, note }; // (an outpost has modules; the town's entry has a name)
     const h = g.home();
     return { kind: 'home', name: h.loc.name, point: h.point, facing: h.facing, loc: h.loc, note };
   }
 
-  // the clinic and home branches make the very calls they always made
   deploy(p) {
     const g = this.game;
     if (p.kind === 'clinic') g.story.teleportTo(p.dir);
@@ -82,7 +79,7 @@ export class Respawn {
     if (p.note) g.hud.toast(p.note, 5);
   }
 
-  // null = back to the default; false if that HQ will not take you in
+  // null = default; false if that HQ won't take you in
   set(id) {
     const g = this.game, l = id && g.locations.find((x) => x.id === id);
     if (id && (!l || this.why(l))) return false;
@@ -91,9 +88,8 @@ export class Respawn {
     return true;
   }
 
-  // The picker: a dialog in the town menu's style (numbered buttons, a tick on the one in force, Escape = BACK). It is a screen of its own:
-  // the page that opened it has been left, and back(msg?, tone?) takes you on from it, with what was chosen as the message to show (the
-  // page answers in place, the clinic's door has no page: it toasts).
+  // The picker: a town-menu-style dialog (numbered buttons, tick on the current one, Escape = BACK). A screen of its own;
+  // back(msg?, tone?) returns to the caller with the result message (a page shows it in place; the clinic door toasts it).
   menu(back) {
     const g = this.game, cur = this.id, rows = this.options();
     const ok = rows.filter((r) => !r.why), no = rows.filter((r) => r.why);

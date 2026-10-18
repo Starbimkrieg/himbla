@@ -1,39 +1,37 @@
-# Shared geometry for the dish builders (build_dish.py makes the stations and the field dish with it, build_outposts.py the mast's dishes):
-# the reflector (a paraboloid of rim 14.1 m, depth 6.8) and its parts, the trunnion mount, and the light dish head. Load it with
+# Shared dish geometry (build_dish.py: stations and field dish; build_outposts.py: the mast's dishes): the reflector
+# (paraboloid, rim 14.1 m, depth 6.8) and its parts, the trunnion mount, and the light dish head. Load with
 #     exec(open(os.path.join(REPO, "tools", "blender", "dishkit.py"), encoding="utf-8").read(), globals())
-# after kit.py (it uses lathe, tube, torus, xf, rbox, B and join, and `math`). Everything here returns geometry, (vertices, faces) in three.js
-# axes, never a scene object: the caller names it, gives it a material and hangs it on a pivot. The frame is the dish stations' (the models are
-# built for a 30 m mount; the game scales them): the tilt pivot at height YP, the reflector's axis along +y in the tilt frame, its apex
-# APEX above the pivot.
+# after kit.py (uses lathe, tube, torus, xf, rbox, B, join and `math`). Returns geometry only, (vertices, faces) in three.js axes;
+# the caller names it, assigns a material and parents it. Frame: the 30 m dish-station mount (the game scales it), tilt pivot
+# at height YP, reflector axis +y in the tilt frame, apex APEX above the pivot.
 #
-# head_pieces() is the light dish head as a list of (name, geometry, slot, ink, part), part "yaw" (the geometry in the yaw pivot's frame, the
-# pivot at YP) or "tilt" (a child of yaw, turned about x). Slots: body and stripe (the faction's livery), steel, dark, white, dish, hazard, green.
-# A consumer turns the slots into its own materials and the ink (metres, at this size) into its own scale; ink under 0.04 is left out
-# (an outline under 4 cm is lost at this size).
+# head_pieces(): the light dish head as (name, geometry, slot, ink, part) entries, part "yaw" (yaw pivot frame, pivot at YP)
+# or "tilt" (child of yaw, turned about x). Slots: body and stripe (faction livery), steel, dark, white, dish, hazard, green.
+# Consumers map slots to their materials and scale the ink (metres at this size); ink under 0.04 is dropped (doesn't read).
 
 PI = math.pi
-YP = 28.5                       # the tilt pivot's height
-RIM, DEEP = 14.1, 6.8           # the reflector's rim radius and depth (the old dish's cap)
-FOC = RIM * RIM / (4 * DEEP)    # a paraboloid through the same rim and depth: a focal length of 7.3 m
-SHELL = 0.45                    # thickness of the reflector's body
-APEX = 2.4                      # the reflector's apex above the tilt pivot, along the dish axis
-NECK = 21.2                     # the foot of the light head's turning neck: what carries the head stands at this height
+YP = 28.5                       # tilt pivot height
+RIM, DEEP = 14.1, 6.8           # reflector rim radius and depth
+FOC = RIM * RIM / (4 * DEEP)    # paraboloid focal length through that rim and depth (7.3 m)
+SHELL = 0.45                    # reflector body thickness
+APEX = 2.4                      # reflector apex above the tilt pivot, along the axis
+NECK = 21.2                     # light head's neck foot: its carrier's top sits here
 
 
 def par(r):
-    """Height of the reflector's face above its apex at radius r."""
+    """Reflector face height above the apex at radius r."""
     return r * r / (4 * FOC)
 
 
 # ---------------- pieces (geometry returns) ----------------
 def cube(hx, hy, hz, pos=(0, 0, 0), rot=(0, 0, 0)):
-    """A plain box (half extents): 12 triangles, for the small parts."""
+    """Plain 12-triangle box (half extents) for small parts."""
     v = [(-hx, -hy, -hz), (hx, -hy, -hz), (hx, hy, -hz), (-hx, hy, -hz), (-hx, -hy, hz), (hx, -hy, hz), (hx, hy, hz), (-hx, hy, hz)]
     return xf((v, [(4, 5, 6, 7), (1, 0, 3, 2), (5, 1, 2, 6), (0, 4, 7, 3), (3, 7, 6, 2), (0, 1, 5, 4)]), pos, rot)
 
 
 def turn(geo, a):
-    """Yaw a piece about the y axis."""
+    """Yaw a piece about y."""
     return xf(geo, r=(0, a, 0))
 
 
@@ -42,12 +40,12 @@ def circ(r, y, n, close=True):
 
 
 def hoop(r, y, tr, n=48, seg=4):
-    """A hoop in the x-z plane round the y axis."""
+    """Hoop in the x-z plane round y."""
     return tube(circ(r, y, n), [tr] * (n + 1), seg, True)
 
 
 def hoops(rs, y, tr, n=48, seg=4):
-    """Rings of the same tube radius at several radii (y: a number, or a function of r)."""
+    """Hoops at several radii (y: a number or a function of r)."""
     return join([hoop(r, y(r) if callable(y) else y, tr, n, seg) for r in rs])
 
 
@@ -60,13 +58,13 @@ def arc_pts(r, y, a0, a1, n):
 
 
 def Y(geo):
-    """Geometry authored at world heights, hung on the yaw pivot (which sits at y = YP)."""
+    """Geometry authored at world heights, moved into the yaw pivot's frame (pivot at y = YP)."""
     return xf(geo, t=(0, -YP, 0))
 
 
-# ---------------- the dish itself (tilt frame; y0 lifts the apex above the pivot) ----------------
+# ---------------- the dish (tilt frame; y0 lifts the apex above the pivot) ----------------
 def bowl(y0, thick, lift, N=11, segs=36):
-    """A closed, thick paraboloid: its underside at par(r) + lift - thick, its face at par(r) + lift."""
+    """Closed thick paraboloid: face at par(r) + lift, underside `thick` below."""
     rs = [RIM * i / N for i in range(N + 1)]
     prof = [(0.0, y0 + lift - thick)] + [(r, y0 + par(r) + lift - thick) for r in rs[1:]]
     prof.append((RIM, y0 + par(RIM) + lift))
@@ -76,7 +74,7 @@ def bowl(y0, thick, lift, N=11, segs=36):
 
 
 def face_seams(y0, n_rad=16, rings=(4.7, 9.4), r_in=1.5, tr=0.085):
-    """Panel seams on the face: radial ridges and ring ridges, thin raised tubes."""
+    """Face panel seams: radial and ring ridges as thin tubes."""
     out = []
     n = 7
     for k in range(n_rad):
@@ -95,13 +93,13 @@ def rim_collar(y0, up=0.45, down=1.0, out=0.5):
 
 
 def rib_bottom(y0, r, r0=5.0, depth0=1.0, depth1=1.35):
-    """The height of the trusses' bottom chord at radius r."""
+    """Truss bottom chord height at radius r."""
     ya, yb = y0 + par(r0) - SHELL - depth0, y0 + par(RIM - 0.3) - SHELL - depth1
     return ya + (yb - ya) * (r - r0) / (RIM - 0.3 - r0)
 
 
 def hub_cone(y0, r_bot=2.3, y_bot=0.0, r_top=5.1):
-    """A solid cone from the trunnion drum up to the reflector's underside, capped just under it."""
+    """Solid cone from the trunnion drum up to just under the reflector."""
     yb = lambda r: y0 + par(r) - SHELL - 0.06
     prof = [(0.0, y_bot), (r_bot, y_bot), (r_bot + 0.25, y_bot + 0.3), (r_top, yb(r_top))]
     prof += [(r_top * f, yb(r_top * f)) for f in (0.66, 0.33)] + [(0.0, yb(0.0))]
@@ -109,7 +107,7 @@ def hub_cone(y0, r_bot=2.3, y_bot=0.0, r_top=5.1):
 
 
 def drum(hl=3.0, r=2.2):
-    """The trunnion drum along x, centred on the pivot."""
+    """Trunnion drum along x, centred on the pivot."""
     prof = [(0.0, -hl), (r - 0.2, -hl), (r, -hl + 0.2), (r, hl - 0.2), (r - 0.2, hl), (0.0, hl)]
     return xf(lathe(prof, 18), r=(0, 0, PI / 2))
 
@@ -124,8 +122,7 @@ def quadpod(y0, top_y, r_top, n, tr, seg=6):
 
 
 def mount_pieces(neck_y0, neck_y1, neck_r, neck_slot="steel"):
-    """What every station shares at the top, as (name, geometry, slot, ink, part): the turning neck, the head block and its two ears (all on yaw),
-    the trunnion drum (tilt)."""
+    """Shared top as (name, geometry, slot, ink, part): neck, head block and ears (yaw), trunnion drum (tilt)."""
     out = [
         ("neck", Y(tube([(0, neck_y0, 0), (0, neck_y1, 0)], [neck_r, neck_r], 14)), neck_slot, 0.08, "yaw"),
         ("headBlock", cube(3.5, 0.5, 2.4, (0, 25.1 - YP, 0)), "dark", 0.1, "yaw"),
@@ -144,8 +141,8 @@ def mount_pieces(neck_y0, neck_y1, neck_r, neck_slot="steel"):
 
 
 def head_pieces():
-    """The light dish head: the mount at the neck's usual place (foot at y = NECK), a thin paraboloid shell and face, a collar with stripe-and-body
-    blocks, six trusses behind, a quadpod, a feed cabin with a band, a subreflector, a stem and a green lens. About 3.3k triangles."""
+    """Light dish head (~3.3k triangles): mount (neck foot at y = NECK), thin shell and face, stripe/body collar blocks,
+    six trusses, quadpod, banded feed cabin, subreflector, stem, green lens."""
     out = mount_pieces(NECK, 25.4, 1.75)
     out += [
         ("hub", hub_cone(APEX), "steel", 0.12, "tilt"),

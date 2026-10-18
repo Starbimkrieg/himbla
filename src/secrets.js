@@ -5,12 +5,10 @@ import { frameQuat, tangent, arcDist } from './geo.js';
 import { SKATES } from './cosmetics.js';
 
 // The Moon's two big secrets.
-// 1. SAT-7 "Lantern": a derelict satellite on a low, inclined orbit around the whole Moon. It
-//    skims close to the ground near the ILMB once per lap; match its speed and land on it to
-//    take the alien artifact on board (it rides in a sealed compartment of your jar).
-// 2. The Whispering Fissure: a trench sliding into the Moon on the twilight side, leading to an
-//    alien gate. Bring the artifact and the gate opens onto a shrine holding the legendary
-//    Xenoglide Quantum-Lock Skates.
+// 1. SAT-7 "Lantern": a derelict satellite on a low inclined orbit, skimming the ground near the ILMB once per lap.
+//    Match speed, land on it and take the alien artifact (it rides in a sealed compartment of your jar).
+// 2. The Whispering Fissure: a twilight-side trench down to an alien gate. The artifact opens it onto a shrine
+//    holding the Xenoglide Quantum-Lock Skates.
 const KEY = 'moonrunner-secrets-v1';
 
 SKATES.alien = { name: 'Xenoglide (Legendary)', color: 0x7dffd4, trail: 0x7dffd4, alien: true };
@@ -27,20 +25,19 @@ const GATE_Z = 110;
 
 // Satellite orbit
 const SAT_SPEED = 55; // m/s along its path
-const LOW_ALT = 34; // metres above the (smoothed) ground at the low point of each lap
-const SAT_SCALE = 1.5; // the model is built 1:1 and scaled up (a bigger target to land on)
+const LOW_ALT = 34; // m above the (smoothed) ground at each lap's low point
+const SAT_SCALE = 1.5; // built 1:1, scaled up for a bigger landing target
 const N_ORBIT = 1440;
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 
-// SAT-7 "Lantern" itself, as a pure model (buildSatellite below flies it; the Asset Row shows it at rest): { root, inner, nameSign, artifact,
-// aGlow, lights, halo }. root holds `inner`, which carries the SAT_SCALE; withArtifact: the alien artifact still sits on its deck.
+// SAT-7 "Lantern" as a pure model (buildSatellite flies it; the Asset Row shows it at rest): { root, inner, nameSign,
+// artifact, aGlow, lights, halo }. `inner` carries SAT_SCALE; withArtifact: the artifact still sits on the deck.
 export function makeSat7(withArtifact = true) {
-  // the model: built at 1:1 and scaled up by SAT_SCALE (its colliders scale to match). A foil-wrapped
-  // bus under a landing deck you can read from the air (hazard border, glowing landing ring, edge
-  // lights), framed solar wings, a dish with its feed, thrusters, antennas, and lights that blink
-  // to catch your eye: red/green wingtip strobes, amber deck beacons and a white strobe on a mast.
+  // 1:1, scaled by SAT_SCALE (colliders match). Foil-wrapped bus under a deck readable from the air (hazard border,
+  // landing ring, edge lights), framed solar wings, dish, thrusters, antennas, and blinking lights: red/green wingtip
+  // strobes, amber deck beacons, white mast strobe.
   const root = new THREE.Group();
   const inner = new THREE.Group();
   inner.scale.setScalar(SAT_SCALE);
@@ -54,12 +51,12 @@ export function makeSat7(withArtifact = true) {
     return m;
   };
   const gold = toon(0xc9a24a), foil = toon(0xe0b85a), dark = toon(0x3a3550), steel = toon(0x8a8f99), white = toon(0xf5f5f5);
-  // the bus: a gold-foil box with crinkled foil patches and a dark truss frame on its edges
+  // bus: gold-foil box, crinkled patches, dark truss edges
   add(new THREE.BoxGeometry(9, 3, 15), gold, 0, 0, 0, { outline: 0.12 });
   for (const [x, y, z, w, h, d] of [[4.52, -0.2, -3, 0.06, 2.2, 5.5], [-4.52, 0.2, 2.5, 0.06, 2.0, 6], [4.52, 0.3, 4.2, 0.06, 1.6, 3], [0, -1.52, 2, 7, 0.06, 6]]) add(new THREE.BoxGeometry(w, h, d), foil, x, y, z);
   for (const sx of [-1, 1]) for (const sy of [-1, 1]) add(new THREE.BoxGeometry(0.3, 0.3, 15.2), dark, sx * 4.5, sy * 1.5, 0);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.BoxGeometry(0.3, 3.2, 0.3), dark, sx * 4.5, 0, sz * 7.5);
-  // the landing deck: a dark plate with a yellow/black hazard border and a glowing ring to aim for
+  // landing deck: dark plate, yellow/black hazard border, glowing ring to aim for
   add(new THREE.BoxGeometry(9.4, 0.3, 15.4), dark, 0, 1.6, 0, { outline: 0.06 });
   const hz1 = toon(0xffd23f), hz2 = toon(0x1d1a29);
   for (let k = 0; k < 14; k++) {
@@ -72,10 +69,10 @@ export function makeSat7(withArtifact = true) {
     add(new THREE.BoxGeometry(1.1, 0.06, 0.4), m, -3.85 + k * 1.1, 1.78, 7.45);
     add(new THREE.BoxGeometry(1.1, 0.06, 0.4), m, -3.85 + k * 1.1, 1.78, -7.45);
   }
-  add(new THREE.TorusGeometry(3.2, 0.16, 6, 36), glow(0x2ee6ff), 0, 1.8, 2, { rx: Math.PI / 2 }); // (centred on the artifact's cradle)
+  add(new THREE.TorusGeometry(3.2, 0.16, 6, 36), glow(0x2ee6ff), 0, 1.8, 2, { rx: Math.PI / 2 }); // centred on the artifact cradle
   add(new THREE.TorusGeometry(1.4, 0.1, 6, 24), glow(0x2ee6ff), 0, 1.8, 2, { rx: Math.PI / 2 });
   for (const [x, z] of [[-3.5, -6.5], [3.5, -6.5], [-3.5, 6.5], [3.5, 6.5], [-3.5, 0], [3.5, 0]]) add(new THREE.CylinderGeometry(0.16, 0.2, 0.15, 8), glow(0xfff6a8), x, 1.82, z);
-  // solar wings: arms with a hinge, framed panels with a proper grid of cells
+  // solar wings: hinged arms, framed panels with a cell grid
   for (const s2 of [-1, 1]) {
     add(new THREE.BoxGeometry(4, 0.4, 0.4), steel, s2 * 6.5, 0, 0, { outline: 0.03 });
     add(new THREE.CylinderGeometry(0.45, 0.45, 0.9, 10), dark, s2 * 8.3, 0, 0, { rx: Math.PI / 2, outline: 0.03 });
@@ -85,11 +82,11 @@ export function makeSat7(withArtifact = true) {
     for (let k = 0; k <= 6; k++) add(new THREE.BoxGeometry(0.12, 0.34, 7), toon(0x9be7ff), s2 * (8.5 + k * 2), 0, 0);
     for (const z of [-1.75, 0, 1.75]) add(new THREE.BoxGeometry(12, 0.34, 0.1), toon(0x9be7ff), s2 * 14.5, 0, z);
   }
-  // the dish under the bus, with its feed spoke and receiver
+  // dish under the bus with feed spoke and receiver
   add(new THREE.SphereGeometry(2.4, 16, 8, 0, Math.PI * 2, 0, Math.PI / 3), toon(0xf5f5f5, { side: THREE.DoubleSide }), 0, -1.6, -5, { rx: Math.PI });
   add(new THREE.CylinderGeometry(0.08, 0.1, 2.6, 6), dark, 0, -2.9, -5);
   add(new THREE.SphereGeometry(0.3, 8, 6), glow(0xff9f1c), 0, -4.2, -5);
-  // thrusters at the stern, attitude jets on the corners, antennas and a star tracker
+  // stern thrusters, corner attitude jets, antennas, star tracker
   for (const sx of [-2, 2]) {
     add(new THREE.CylinderGeometry(0.9, 1.4, 1.8, 12, 1, true), toon(0x5b5870, { side: THREE.DoubleSide }), sx, -0.2, -8.4, { rx: Math.PI / 2, outline: 0.04 });
     add(new THREE.CylinderGeometry(0.85, 0.85, 0.1, 12), glow(0x4fb8ff), sx, -0.2, -7.6, { rx: Math.PI / 2 });
@@ -117,7 +114,7 @@ export function makeSat7(withArtifact = true) {
   const nameSign = textSprite('SAT-7 "LANTERN"', { color: '#ffd23f', size: 60, scale: 0.3, bg: '#120a1e' });
   nameSign.position.set(0, 12, -4);
   inner.add(nameSign);
-  // a big soft beacon so you can spot it in the sky (it swells with the mast strobe)
+  // big soft beacon to spot it in the sky (swells with the mast strobe)
   const halo = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
   inner.add(halo);
   // the artifact cradle on deck
@@ -186,8 +183,8 @@ export class Secrets {
       const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.15, x1 - x0), 0.25, Math.max(0.15, z1 - z0)), glow(color));
       W.put(m, loc, (x0 + x1) / 2, (z0 + z1) / 2, y);
     };
-    // ---- the way in: a trench of raw, sunlit rock, broken at the rim, sliding down to the mouth of
-    // something old and half buried (rough meshes are visual; the colliders stay simple boxes) ----
+    // ---- the way in: a raw rock trench down to something old and half buried (rough meshes are visual;
+    // colliders stay simple boxes) ----
     const rockT = toon(0x4f4866), rockT2 = toon(0x3b3550), relic = toon(0x2a2440);
     // smooth wobble from position, so shared box vertices move together (no cracks)
     const wob = (x, y, z) => Math.sin(x * 0.9 + y * 1.7) * Math.cos(z * 0.55 - y * 0.8) + 0.5 * Math.sin(z * 1.9 + x * 2.3);
@@ -215,12 +212,12 @@ export class Secrets {
       b.rotation.set(0.3 * Math.sin(x), ry, 0.25 * Math.cos(z)); b.updateMatrix();
       return b;
     };
-    // trench walls (collision) and their rough faces, standing a little proud of the ground as a lip
+    // trench wall colliders and rough faces, a little proud of the ground as a lip
     W.col(loc, { type: 'box', x: -RAMP.x - 0.5, y: FLOOR / 2 - 1, z: (RAMP.z0 + RAMP.z1) / 2, hx: 0.5, hy: -FLOOR / 2 + 0.7, hz: (RAMP.z1 - RAMP.z0) / 2 });
     W.col(loc, { type: 'box', x: RAMP.x + 0.5, y: FLOOR / 2 - 1, z: (RAMP.z0 + RAMP.z1) / 2, hx: 0.5, hy: -FLOOR / 2 + 0.7, hz: (RAMP.z1 - RAMP.z0) / 2 });
     rough(-RAMP.x - 2.4, -RAMP.x + 0.1, FLOOR - 2, 0.9, RAMP.z0, RAMP.z1, rockT, 0.65);
     rough(RAMP.x - 0.1, RAMP.x + 2.4, FLOOR - 2, 0.9, RAMP.z0, RAMP.z1, rockT, 0.65);
-    // outcrops along the rim (they break up the cut's straight edges), heaped up over the mouth
+    // rim outcrops (break up the straight edges), heaped over the mouth
     for (let i = 0; i < 9; i++) {
       const z = RAMP.z0 + 6 + i * ((RAMP.z1 - RAMP.z0 - 10) / 8);
       for (const sx of [-1, 1]) {
@@ -233,10 +230,9 @@ export class Secrets {
       boulder(x, y, z, r, sx, sy, sz, x * 0.4 + z, rockT2);
       W.col(loc, { type: 'sphere', x, y, z, r: r * 0.8 });
     }
-    // a rock lip overhanging the top of the mouth
-    // (it reaches all the way down to the portal's lintel, so it's bedded in, not hanging in the air)
+    // rock lip over the mouth, reaching down to the lintel so it's bedded in
     rough(-RAMP.x - 1.5, RAMP.x + 1.5, -20.5, 1.4, RAMP.z1 - 2.6, RAMP.z1 + 1.6, rockT2, 0.8);
-    // the portal: two leaning pillars, a cracked lintel slipped at one end, worn rune strips, rubble
+    // portal: leaning pillars, slipped cracked lintel, worn rune strips, rubble
     const ph = ROOMS[0].ceil - FLOOR + 2;
     for (const sx of [-1, 1]) {
       const pil = new THREE.Mesh(new THREE.BoxGeometry(2.2, ph, 2.6), relic);
@@ -244,7 +240,7 @@ export class Secrets {
       W.put(pil, loc, sx * (RAMP.x - 0.6), RAMP.z1 - 0.8, FLOOR + ph / 2);
       pil.rotation.z = -sx * 0.06; pil.updateMatrix();
       W.col(loc, { type: 'box', x: sx * (RAMP.x - 0.6), y: FLOOR + ph / 2, z: RAMP.z1 - 0.8, hx: 1.1, hy: ph / 2, hz: 1.3 });
-      // rune strips, broken into worn segments
+      // rune strips in worn segments
       for (let k = 0; k < 5; k++) {
         if ((k + (sx > 0 ? 1 : 0)) % 3 === 2) continue; // a missing chunk
         const rune = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.1, 0.12), glow(0x7dffd4));
@@ -267,7 +263,7 @@ export class Secrets {
     W.put(rf, loc, 0, (RAMP.z0 + RAMP.z1) / 2, FLOOR / 2 - 0.25, 0);
     rf.rotation.x = Math.atan2(-FLOOR, RAMP.z1 - RAMP.z0);
     rf.updateMatrix();
-    // the cliff face over the tunnel mouth (rough rock, with its collider behind it)
+    // cliff face over the tunnel mouth (rough rock, collider behind)
     W.col(loc, { type: 'box', x: 0, y: (ROOMS[0].ceil - 0.3) / 2, z: RAMP.z1 + 0.5, hx: RAMP.x + 1, hy: (-0.3 - ROOMS[0].ceil) / 2, hz: 0.5 });
     rough(-RAMP.x - 1, RAMP.x + 1, ROOMS[0].ceil, -0.3, RAMP.z1 - 0.2, RAMP.z1 + 1.4, rockT2, 0.55);
     // rooms: walls, ceilings, floors
@@ -287,8 +283,7 @@ export class Secrets {
     box(-22, -6, FLOOR, ROOMS[1].ceil, 59, 60, rock2);
     box(6, 22, FLOOR, ROOMS[1].ceil, 59, 60, rock2);
     box(-6, 6, ROOMS[0].ceil, ROOMS[1].ceil, 59, 60, rock2);
-    // gate wall: one slab with a round hole cut to fit the gate's ring (a square opening left open
-    // corners round it), and its colliders, the corners filled
+    // gate wall: one slab with a round hole for the ring (a square opening left open corners); colliders fill the corners
     {
       const wallH = ROOMS[1].ceil - FLOOR;
       const sh = new THREE.Shape([new THREE.Vector2(-22, 0), new THREE.Vector2(22, 0), new THREE.Vector2(22, wallH), new THREE.Vector2(-22, wallH)]);
@@ -372,12 +367,12 @@ export class Secrets {
     };
   }
 
-  // Floor override: the ramp is always the floor inside its slot; underground rooms are the
-  // floor only for things already down there (so walking over them on the surface is unchanged).
+  // Floor override: the ramp is always the floor in its slot; underground rooms only for things already down
+  // there (walking over them on the surface is unchanged).
   floor(p, len, dx, dy, dz, r, outN) {
     const ld = this.loc.dir;
     if (dx * ld.x + dy * ld.y + dz * ld.z < this.cosNear) return null;
-    // local coordinates (directions are lifted onto the ground plane first)
+    // local coordinates (directions lifted onto the ground plane first)
     if (len < 100) _v.set(dx, dy, dz).multiplyScalar(this.groundR / Math.max(0.5, dx * ld.x + dy * ld.y + dz * ld.z));
     else _v.copy(p);
     _v.applyMatrix4(this.inv);
@@ -485,7 +480,7 @@ export class Secrets {
     const n = new THREE.Vector3().crossVectors(a, tilt).normalize();
     const b = new THREE.Vector3().crossVectors(n, a).normalize();
     this.orbit = { a, b, n };
-    // altitude profile: high everywhere, dipping low over the ground once per lap near the ILMB
+    // altitude: high everywhere, dipping low once per lap near the ILMB
     const ground = new Float32Array(N_ORBIT);
     for (let i = 0; i < N_ORBIT; i++) {
       const th = (i / N_ORBIT) * Math.PI * 2;
@@ -497,7 +492,7 @@ export class Secrets {
     const lowAt = 0.32; // radians past the ILMB
     this.radius = new Float32Array(N_ORBIT);
     for (let i = 0; i < N_ORBIT; i++) {
-      // smoothed (max over a window) ground, so it never clips a hill
+      // windowed max of the ground, so it never clips a hill
       let m = 0;
       for (let k = -12; k <= 12; k++) m = Math.max(m, ground[(i + k + N_ORBIT) % N_ORBIT]);
       const th = (i / N_ORBIT) * Math.PI * 2;
@@ -506,12 +501,12 @@ export class Secrets {
       this.radius[i] = high + (m + LOW_ALT - high) * w;
     }
     this.lowAt = lowAt;
-    // a new game starts SAT-7 on the far side of the Moon from the ILMB, so it has to be found
+    // a new game starts SAT-7 opposite the ILMB, so it has to be found
     this.clock = this.state.satPhase ?? ((lowAt + Math.PI) * 3750) / SAT_SPEED;
     const { root, nameSign, artifact, aGlow, lights, halo } = makeSat7(!this.state.artifactTaken);
     root.frustumCulled = false;
     g.scene.add(root);
-    // it behaves like a moving platform you can land on (body + both solar panels)
+    // a moving platform to land on (body + both solar panels)
     this.sat = { root, nameSign, artifact, aGlow, lights, halo, pos: new THREE.Vector3(), prevPos: new THREE.Vector3(), vel: new THREE.Vector3(), fwd: new THREE.Vector3(), cols: [] };
     this.placeSat(0);
     this.sat.prevPos.copy(this.sat.pos);
@@ -535,7 +530,7 @@ export class Secrets {
     this.orbitPoint(th, S.pos);
     const ahead = this.orbitPoint(th + 0.002, new THREE.Vector3());
     const up = S.pos.clone().normalize();
-    // velocity straight from the orbit (so a time skip can never fling you off the deck)
+    // velocity from the orbit, so a time skip can't fling you off the deck
     S.vel.copy(ahead).sub(S.pos).multiplyScalar(SAT_SPEED / 3750 / 0.002);
     S.fwd.copy(tangent(ahead.sub(S.pos), up)).normalize();
     if (dt <= 0 || S.prevPos.distanceTo(S.pos) > SAT_SPEED * dt * 3 + 1) S.prevPos.copy(S.pos);
@@ -544,7 +539,7 @@ export class Secrets {
     S.root.updateMatrixWorld(true);
   }
 
-  // re-register the satellite's deck colliders where it is now (only when you're close)
+  // re-register the deck colliders at the current spot (only when you're close)
   syncSatCols() {
     const g = this.game;
     const S = this.sat;
@@ -573,9 +568,9 @@ export class Secrets {
     // decoration
     S.t = (S.t || 0) + dt;
     for (const l of S.lights) l.mesh.visible = ((S.t + l.phase) % l.period) < l.period * l.duty;
-    S.halo.scale.setScalar(S.lights[6].mesh.visible ? 1.35 : 1); // the beacon swells with the mast strobe
+    S.halo.scale.setScalar(S.lights[6].mesh.visible ? 1.35 : 1); // beacon swells with the mast strobe
     S.artifact.rotation.y += dt * 1.5;
-    S.nameSign.visible = S.pos.distanceTo(P.pos) > 45; // don't fill the screen while you're aboard
+    S.nameSign.visible = S.pos.distanceTo(P.pos) > 45; // hidden while aboard
     S.aGlow.scale.setScalar(1 + Math.sin(S.t * 4) * 0.15);
     if (P.body.platform === S && !S.landedOnce) {
       S.landedOnce = true;
@@ -644,9 +639,8 @@ export class Secrets {
   }
 }
 
-// The Xenoglide skates on the shrine's pedestal: the same build as a runner's skates (shell boot,
-// cuff, chassis, hover rail) at display size, in dark shaded alien alloy with glowing seams, a swept
-// crystal heel fin, emitter rings round the rail and a ring of shards orbiting the pair.
+// The Xenoglide skates on the shrine pedestal: a runner's skate build (shell boot, cuff, chassis, hover rail) at display
+// size, in dark alien alloy with glowing seams, crystal heel fin, rail emitter rings and orbiting shards.
 export function makeXenoSkates() {
   const shell = toon(0x2e2652), plate = toon(0x8f86c8), alloy = toon(0x5ef0c8);
   const seam = glow(0x7dffd4), violet = glow(0xc77dff);
@@ -667,21 +661,21 @@ export function makeXenoSkates() {
   const pair = new THREE.Group();
   for (const side of [-1, 1]) {
     const sk = new THREE.Group();
-    // boot: a rounded shell, a raised toe cap, a high cuff with a glowing collar
+    // boot: rounded shell, toe cap, high cuff with glowing collar
     add(sk, new RoundedBoxGeometry(0.3, 0.2, 0.5, 3, 0.09), shell, 0, 0.12, 0.02, 0.025);
     const toe = add(sk, new THREE.SphereGeometry(0.13, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), alloy, 0, 0.1, 0.17, 0.02);
     toe.scale.set(1.12, 0.9, 0.9);
     add(sk, new THREE.CylinderGeometry(0.135, 0.16, 0.28, 16), shell, 0, 0.33, -0.08, 0.025);
     add(sk, new THREE.TorusGeometry(0.138, 0.022, 6, 18).rotateX(Math.PI / 2), seam, 0, 0.47, -0.08, 0);
     add(sk, new THREE.TorusGeometry(0.15, 0.016, 6, 18).rotateX(Math.PI / 2), plate, 0, 0.27, -0.08, 0);
-    // glowing seams down each side and over the instep, a crystal stud on the outside of the cuff
+    // glowing side and instep seams, crystal stud on the cuff's outside
     for (const sx of [-1, 1]) add(sk, new THREE.BoxGeometry(0.012, 0.03, 0.42), seam, sx * 0.152, 0.11, 0.02, 0);
     add(sk, new THREE.BoxGeometry(0.2, 0.025, 0.03), seam, 0, 0.225, 0.08, 0, [0.5, 0, 0]);
     const stud = add(sk, new THREE.OctahedronGeometry(0.055, 0), violet, side * 0.16, 0.34, -0.08, 0.015);
     stud.scale.set(0.5, 1.3, 1);
-    // the swept crystal fin off the heel
+    // crystal heel fin
     add(sk, finGeo, violet, 0, 0.26, -0.21, 0.015);
-    // chassis plate, struts and the hover rail with its emitter rings
+    // chassis plate, struts, hover rail with emitter rings
     add(sk, new RoundedBoxGeometry(0.22, 0.045, 0.62, 1, 0.02), plate, 0, -0.005, 0.03, 0.02);
     for (const z of [-0.18, 0.22]) add(sk, new THREE.BoxGeometry(0.06, 0.06, 0.05), shell, 0, -0.05, z, 0.01);
     const rail = add(sk, new THREE.CapsuleGeometry(0.035, 0.66, 3, 10).rotateX(Math.PI / 2), seam, 0, -0.095, 0.03, 0.02);

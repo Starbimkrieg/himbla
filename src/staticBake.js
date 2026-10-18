@@ -3,33 +3,30 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { inkMat, vcMaterial, paintVertices, dropFloorFaces } from './toon.js';
 import { slotOf, roleOf, animOf, SHAPES } from './staticContract.js';
 
-// Static GLBs (outposts.glb): a Blender-authored structure turned into what the Kit (outpostModels.js)
-// makes: { root, cols, hits, raid, smoke, drop } in the structure's own frame. The contract is written
-// up for artists in docs/outpost-glb.md; the rules both sides share are in staticContract.js.
+// Static GLBs (outposts.glb): a Blender structure -> what the Kit (outpostModels.js) makes: { root, cols, hits, raid,
+// smoke, drop } in the structure's frame. Artist contract: docs/outpost-glb.md; shared rules: staticContract.js.
 //
-// Two steps, so a structure that is met in several faction colours is only parsed once:
-//   parseStaticGlb(scene)         the loaded glTF scene -> one neutral `asset` per root node
-//   bakeStatic(asset, { color })  an asset -> the template for one faction colour
+// Two steps, so a structure used in several faction colours is parsed once:
+//   parseStaticGlb(scene)         loaded glTF scene -> one neutral `asset` per root node
+//   bakeStatic(asset, { color })  asset -> template for one faction colour
 //
-// Like the runner and ship bakes (models.js) only geometry is read: positions, normals, the index,
-// each mesh's material name, flat base colour (and alpha, for a light beam) and double-sided flag, and the `ink`
-// extra. The game's own toon material does the shading. Unlike them the result is vertex-coloured, so a structure
-// of hundreds of Blender objects bakes to a handful of meshes (lit and unlit, one outline hull, the beams, and a
-// few of their own per moving part), as Kit.finish does.
+// As in models.js only geometry is read: positions, normals, index, material name, flat base colour (and alpha for a
+// beam), double-sided flag, and the `ink` extra; the toon material shades. The result is vertex-coloured, so hundreds
+// of Blender objects bake to a few meshes (lit, unlit, one outline hull, beams, a few per moving part), like Kit.finish.
 
 const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _z = new THREE.Vector3();
 const ZAXIS = new THREE.Vector3(0, 0, 1), YAXIS = new THREE.Vector3(0, 1, 0);
 
 const IDENTITY = new THREE.Matrix4(), XAXIS = new THREE.Vector3(1, 0, 0);
 
-// a rotation's turn about +y (the direction its +z axis points in the ground plane)
+// a rotation's yaw about +y (where its +z points in the ground plane)
 const yawOf = (q) => { _z.copy(ZAXIS).applyQuaternion(q); return Math.atan2(_z.x, _z.z); };
 
-// GLTFLoader turns a node whose mesh has several materials into a Group of one Mesh per material, all at the
-// node's own transform. That is a mesh (whatever its name), not a gameplay empty or a moving part.
+// GLTFLoader makes a multi-material mesh node a Group of one Mesh per material at the node's transform. That's a
+// mesh (whatever its name), not a gameplay empty or moving part.
 const isPrimitiveGroup = (o) => !o.isMesh && o.children.length > 0 && !('role' in o.userData) && !('anim' in o.userData) && o.children.every((c) => c.isMesh && c.matrix.equals(IDENTITY));
 
-// can a position / turn / scale hold this matrix? (not if a rotated node sits under a non-uniformly scaled parent)
+// is this matrix plain TRS? (not if a rotated node sits under a non-uniformly scaled parent)
 function isPlainTRS(m) {
   m.decompose(_p, _q, _s);
   const r = new THREE.Matrix4().compose(_p, _q, _s);
@@ -45,7 +42,7 @@ export function parseStaticGlb(scene, { warn = console.warn } = {}) {
     if (!root.name) continue;
     const warnRoot = (m) => warn(`${root.name}: ${m}`);
     const asset = parseRoot(root, warnRoot);
-    asset.empty = asset.groups.every((g) => !g.parts.length); // (nothing to draw: the loader leaves such a root out)
+    asset.empty = asset.groups.every((g) => !g.parts.length); // nothing to draw: the loader skips it
     assets.set(root.name, asset);
   }
   return assets;
@@ -54,7 +51,7 @@ export function parseStaticGlb(scene, { warn = console.warn } = {}) {
 function parseRoot(root, warn) {
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const asset = { name: root.name, groups: [], cols: [], hits: [], raid: null, smoke: null, drop: null, texts: [] };
-  // groups[0] is the static body (frame: the root). Each animated node adds a group in its own frame.
+  // groups[0]: static body (root frame). Each animated node adds a group in its own frame.
   const body = { anim: null, matrix: null, parts: [] };
   asset.groups.push(body);
   const walk = (o, group, groupInv) => {
@@ -74,7 +71,7 @@ function parseRoot(root, warn) {
         continue;
       }
       const role = meshNode ? null : roleOf(c.name, c.userData);
-      if (role) { gameplay(asset, role, c, inv, warn); walk(c, group, groupInv); continue; } // (meshes parented to it are ordinary geometry)
+      if (role) { gameplay(asset, role, c, inv, warn); walk(c, group, groupInv); continue; } // its child meshes are ordinary geometry
       if (c.isMesh) addPart(group, c, groupInv, warn);
       walk(c, group, groupInv);
     }
@@ -99,7 +96,7 @@ function addPart(group, mesh, groupInv, warn) {
   }
   const rel = new THREE.Matrix4().multiplyMatrices(groupInv, mesh.matrixWorld);
   geo.applyMatrix4(rel);
-  if (rel.determinant() < 0) { // (a mirrored node: baking it into the vertices turns its faces inside out)
+  if (rel.determinant() < 0) { // mirrored node: baking it in flips the faces, so re-wind
     const ix = geo.index.array;
     for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; }
   }
@@ -109,12 +106,12 @@ function addPart(group, mesh, groupInv, warn) {
     slot: slotOf(mat.name),
     side: mat.side === THREE.DoubleSide ? THREE.DoubleSide : THREE.FrontSide,
     color: mat.color ? mat.color.clone() : new THREE.Color(0xffffff),
-    opacity: mat.transparent ? mat.opacity : 1, // (only an `additive…` material uses it)
+    opacity: mat.transparent ? mat.opacity : 1, // used by `additive…` materials only
     ink: ink > 0 ? ink : 0,
   });
 }
 
-// An empty with a role: collider, blast box, a point, or a sign face. Frame: the root's.
+// an empty with a role: collider, blast box, point or sign face (root frame)
 function gameplay(asset, role, node, inv, warn) {
   const m = new THREE.Matrix4().multiplyMatrices(inv, node.matrixWorld);
   m.decompose(_p, _q, _s);
@@ -137,7 +134,7 @@ function gameplay(asset, role, node, inv, warn) {
     asset[role] = _p.clone();
   } else if (role === 'text') {
     if (typeof u.str !== 'string' || !(Number(u.w) > 0)) { warn(`text "${node.name}" needs str and w: skipped`); return; }
-    // the face keeps the node's turn (yaw) and its roll about its own +z; a lean (pitch) is dropped
+    // keeps the node's yaw and roll about its +z; pitch is dropped
     if (Math.abs(_z.copy(ZAXIS).applyQuaternion(_q).y) > 0.02) warn(`text "${node.name}" leans (pitch): only its turn and roll are kept`);
     asset.texts.push({
       str: u.str, w: Number(u.w), fg: u.fg, bg: u.bg, stroke: u.stroke,
@@ -149,11 +146,9 @@ function gameplay(asset, role, node, inv, warn) {
 }
 
 // ---------------------------------------------------------------- bake
-// The shell of an outline: a copy of the geometry pushed out along its smoothed normals (normals are
-// averaged over the vertices that share a position, so seams stay closed), as models.js does for the runner.
-// A hard edge or corner (a box's) is pushed out further (mitred, at most twice) so that each face moves out by
-// the full `t`, as the Kit's outline hull does; along the plain average they would only move t/sqrt(3) (a corner)
-// or t/sqrt(2) (an edge), and the line would come out thinner than the Kit's.
+// Outline shell: the geometry pushed out along normals averaged per shared position (seams stay closed), as models.js
+// does for the runner. Hard edges and corners are mitred (at most 2x) so each face moves the full `t` like the Kit's
+// hull; the plain average would move only t/sqrt(3) (corner) or t/sqrt(2) (edge), giving a thinner line.
 const MITRE_MIN = 0.5;
 function inkShell(geo, t) {
   const pos = geo.attributes.position, nor = geo.attributes.normal, n = pos.count;
@@ -161,7 +156,7 @@ function inkShell(geo, t) {
   const sum = new Map();
   for (let i = 0; i < n; i++) {
     const k = key(i);
-    const s = sum.get(k) || [0, 0, 0, 1, 1]; // (x, y, z, the least dot of the average with a face normal, the average's length)
+    const s = sum.get(k) || [0, 0, 0, 1, 1]; // x, y, z, least dot of the average with a face normal, average's length
     s[0] += nor.getX(i); s[1] += nor.getY(i); s[2] += nor.getZ(i);
     sum.set(k, s);
   }
@@ -181,7 +176,7 @@ function inkShell(geo, t) {
   return g;
 }
 
-// stand-ins vcMaterial() derives its shared vertex-coloured materials from (it reads type and side only)
+// stand-ins vcMaterial() derives its shared materials from (reads type and side only)
 const PROTO = new Map();
 const proto = (kind, side) => {
   const k = `${kind}|${side}`;
@@ -189,8 +184,7 @@ const proto = (kind, side) => {
   return PROTO.get(k);
 };
 
-// A light beam (an `additive…` material): see-through, additive, unlit and not written to depth, like the Kit's
-// BEAM. One shared material per colour and opacity.
+// light beam (`additive…` material): additive, unlit, no depth write, like the Kit's BEAM; one per colour and opacity
 const ADDITIVE = new Map();
 function additiveMaterial(color, opacity) {
   const k = `${color.getHexString()}|${opacity.toFixed(3)}`;
@@ -199,12 +193,12 @@ function additiveMaterial(color, opacity) {
 }
 
 // parts -> merged meshes: one vertex-coloured mesh per (lit | unlit, side), plus one outline hull.
-// `fixed` is the static body, standing on the ground (y = 0): like a Kit built onGround, the downward-facing
-// faces lying on it (and their outline shells') can never be seen, so they are left out (toon.dropFloorFaces).
+// `fixed`: the static body on the ground (y = 0); as with a Kit built onGround, unseen down-facing faces on it
+// (and their shells) are dropped (toon.dropFloorFaces).
 function bakeParts(parts, faction, fixed) {
   const buckets = new Map(), beams = new Map(), shells = [], out = [];
   for (const p of parts) {
-    if (p.slot.kind === 'additive') { // (a beam: its own material, no vertex colours, no outline)
+    if (p.slot.kind === 'additive') { // beam: own material, no vertex colours, no outline
       const mat = additiveMaterial(p.color, p.opacity);
       if (!beams.has(mat)) beams.set(mat, []);
       beams.get(mat).push(p.geo.clone());
@@ -219,17 +213,16 @@ function bakeParts(parts, faction, fixed) {
   }
   for (const b of buckets.values()) {
     const m = new THREE.Mesh(mergeGeometries(b.list), vcMaterial(proto(b.kind, b.side)));
-    // (a moving part only casts: like the Kit's flags and dishes, a thin double-sided cloth that also received
-    // shadow would speckle with its own)
+    // moving parts only cast (like the Kit's flags and dishes): thin double-sided cloth receiving would self-speckle
     m.castShadow = b.kind === 'toon';
     m.receiveShadow = fixed && b.kind === 'toon';
-    if (fixed) m.userData.kitMesh = true; // (fixed in its structure's frame: world.mergeLocation may fold it in)
+    if (fixed) m.userData.kitMesh = true; // fixed in the structure frame: world.mergeLocation may fold it in
     for (const g of b.list) g.dispose();
     out.push(m);
   }
   for (const [mat, list] of beams) {
     const m = new THREE.Mesh(mergeGeometries(list), mat);
-    m.renderOrder = 3; // (after the lit scenery, as the Kit's beams are)
+    m.renderOrder = 3; // after lit scenery, like the Kit's beams
     m.castShadow = m.receiveShadow = false;
     for (const g of list) g.dispose();
     out.push(m);
@@ -245,15 +238,15 @@ function bakeParts(parts, faction, fixed) {
   return out;
 }
 
-// asset -> template. `textMat(str, fg, bg, stroke)` makes the canvas-textured material of a sign face
-// (outpostModels.js owns those, so signs are drawn the same way as the Kit's).
+// asset -> template. `textMat(str, fg, bg, stroke)` makes a sign face's canvas material (outpostModels.js owns it,
+// so signs match the Kit's).
 export function bakeStatic(asset, { color, textMat }) {
   const faction = new THREE.Color(color);
   const root = new THREE.Group();
   root.name = `static:${asset.name}`;
   for (const g of asset.groups) {
     if (!g.anim) { for (const m of bakeParts(g.parts, faction, true)) root.add(m); continue; }
-    // holder (placed, turned) > pivot (what territory.js swings / spins / blinks) > the part's meshes
+    // holder (placed, turned) > pivot (territory.js swings / spins / blinks it) > meshes
     const holder = new THREE.Group(), pivot = new THREE.Group();
     g.matrix.decompose(holder.position, holder.quaternion, holder.scale);
     pivot.userData[g.anim] = true;

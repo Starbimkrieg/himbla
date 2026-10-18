@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 
-// Dev overlay: draws where every AI is headed. Pirates, allies, base patrols and bosses get a line to
-// their current steering goal (enemies.js records it in e.dbgGoal while this is on); road vehicles
-// and transit craft get the route they will drive (rest of this piece plus the planned pieces);
-// walkers get the rest of their walk. Toggled from the dev menu (cheats.js).
+// Dev overlay (dev menu, cheats.js): where every AI is headed. Enemies, allies, patrols and bosses: a line to their
+// steering goal (enemies.js sets e.dbgGoal while on). Road vehicles and transit craft: their route (rest of this piece
+// plus planned pieces). Walkers: the rest of their walk.
 
 const MAX_VERTS = 40000;
 const RANGE = 1800; // only AI within this distance of the camera
@@ -38,7 +37,7 @@ export class AIPaths {
   seg(a, b, color) {
     if (this.n + 2 > MAX_VERTS) return;
     const i = this.n * 3, c = this._c.setHex(color), u = this._u;
-    // (lifted a little off the ground so the line doesn't z-fight; depth test is off anyway)
+    // lifted a little off the ground against z-fighting
     u.copy(a).normalize().multiplyScalar(0.8);
     this.pos[i] = a.x + u.x; this.pos[i + 1] = a.y + u.y; this.pos[i + 2] = a.z + u.z;
     u.copy(b).normalize().multiplyScalar(0.8);
@@ -108,8 +107,8 @@ export class AIPaths {
   }
 }
 
-// Dev overlay: a ring around every live enemy and a tall beacon line above it, visible through
-// terrain. Colour says which spawn pool it belongs to. Shown with the pirate spawn debug (cheats.js).
+// Dev overlay: a ring and beacon line on every live enemy, seen through terrain. Colour = spawn pool.
+// Shown with the pirate spawn debug (cheats.js).
 const MARK_VERTS = 16000;
 const RING = 24;
 const MARK_COLORS = { roaming: 0xff3b3b, den: 0xff9f1c, raider: 0xff2e88, core: 0xffffff, other: 0xffd23f, ally: 0x2ee6ff };
@@ -161,7 +160,7 @@ export class EnemyMarkers {
       a.normalize();
       b.crossVectors(up, a);
       const r = Math.max(e.radius || 2, 2) * 1.4;
-      // ring round the enemy, then a beacon straight up (taller the further away, so it reads at range)
+      // ring, then a beacon straight up (taller with distance so it reads at range)
       for (let i = 0; i < RING; i++) {
         const t0 = (i / RING) * Math.PI * 2, t1 = ((i + 1) / RING) * Math.PI * 2;
         p.copy(c0).addScaledVector(a, Math.cos(t0) * r).addScaledVector(b, Math.sin(t0) * r);

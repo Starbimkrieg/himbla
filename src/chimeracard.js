@@ -3,10 +3,8 @@ import { inkMat } from './toon.js';
 import { makeChimera } from './chimera.js';
 import { ensureStats, STAT_KEYS, STAT_INFO, STAT_TIPS, LEGS, BODY, HEAD_WIT, MOD_FX } from './chimerastats.js';
 
-// Pixel "trading card" HTML for chimeras: portrait, parts, the four racing stats as segmented
-// bars, and a grade. Rendered inside g.dialog bubbles (pen, detail, Derby entry/betting, breeding).
-// A card rendered as <button data-i="n"> is clickable through the dialog's own button handler,
-// and wrapping the cards in cardList(.., hide) hides the duplicate plain dialog buttons.
+// Pixel "trading card" HTML for chimeras (portrait, parts, four stat bars, grade), shown in g.dialog bubbles.
+// A <button data-i="n"> card clicks through the dialog's button handler; cardList(.., hide) hides the duplicate plain buttons.
 
 const PS = 72; // portrait render size (shown scaled up, pixelated)
 const cache = new Map();
@@ -17,7 +15,7 @@ const MOD_NAME = { void: 'VOID', crystal: 'CRYSTAL', mud: 'MUD', spark: 'SPARK',
 const hex = (c) => '#' + (c >>> 0).toString(16).padStart(6, '0').slice(-6);
 const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
-// A small 3D snapshot of the creature, rendered once per chimera and cached as a data URL.
+// 3D snapshot of the creature, rendered once per chimera, cached as a data URL.
 export function portrait(renderer, genes) {
   const key = `${genes.seed}|${genes.body}|${genes.legs}|${genes.head}|${genes.extraHead}|${(genes.mods || []).join()}|${genes.tint}|${genes.size}`;
   if (cache.has(key)) return cache.get(key);
@@ -133,8 +131,7 @@ export function chimeraCard(g, genes, opts = {}) {
   return `<${tag} class="${cls}"${attrs}>${ribbon}${por}<div class="cc-main">${top}${partsLine(genes)}${statBars(st, opts.big)}${odds}${foot}</div></${tag}>`;
 }
 
-// Hover tips for anything with a data-tip (the card stats, parts and grade): one floating box that
-// follows the pointer, so it's never clipped by the dialog's scrolling.
+// Hover tips for any [data-tip]: one floating box following the pointer, so dialog scrolling never clips it.
 let tipEl = null;
 export function installTips() {
   if (tipEl) return;

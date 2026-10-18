@@ -4,29 +4,28 @@ import { frameQuat } from './geo.js';
 import { toon, glow, ink } from './toon.js';
 import { L, START_S, CORE_S, PAD_S, wrapW } from './spindleTerrain.js';
 
-// The Spindle's med-evac (spindle.recover): knocked out up on the rock, a Meridian recovery craft comes
-// down beside where you fell, two medics rush out with a stretcher, lift you onto it, run back aboard and
-// the craft lifts off with you. Then the screen fades and spindle.finishRecovery sets you down at the
-// Monolith. Everything is a function of the scene clock (this.t), so SPACE can skip straight to the fade.
+// The Spindle's med-evac (spindle.recover): KO'd on the rock, a Meridian craft lands beside you, two medics
+// stretcher you aboard and it lifts off; then a fade and spindle.finishRecovery sets you at the Monolith.
+// Everything is a function of the scene clock (this.t), so SPACE can skip straight to the fade.
 const AX = new THREE.Vector3(1, 0, 0);
 const NEG_AX = new THREE.Vector3(-1, 0, 0);
 const X = new THREE.Vector3(1, 0, 0);
 const TEAL = 0x7dffd4;
 
-const SCALE = 0.85; // the craft (same as the Moon recall shuttle)
-const SET_BACK = 20; // its centre this far behind you along the rock, rear ramp toward you
-const LAT = 1.2; // the stretcher goes down this far beside you
-const SP = 1.6; // each medic stands this far from the stretcher's middle
-const CARRY_H = 0.95, REST_H = 0.34; // the stretcher's height off the ground, carried and set down
-const CROUCH = 0.42; // how far the medics sink to set it down
-const HIP = 0.84; // a figure's hip height (models.js makeFigure)
+const SCALE = 0.85; // craft scale (as the Moon recall shuttle)
+const SET_BACK = 20; // craft centre this far behind you along the rock, rear ramp toward you
+const LAT = 1.2; // stretcher set down this far beside you
+const SP = 1.6; // each medic's distance from the stretcher's middle
+const CARRY_H = 0.95, REST_H = 0.34; // stretcher height carried / set down
+const CROUCH = 0.42; // medics' sink to set it down
+const HIP = 0.84; // figure hip height (models.js makeFigure)
 
 // scene clock (s)
 const T = {};
 T.hold = 0.9; // you lie there a moment
 T.land = T.hold + 2.3; // touchdown
-T.ramp0 = T.land + 0.3; // the ramp drops
-T.out0 = T.ramp0 + 0.4; // the medics burst out...
+T.ramp0 = T.land + 0.3; // ramp drops
+T.out0 = T.ramp0 + 0.4; // medics burst out...
 T.out1 = T.out0 + 1.9; // ...and reach you
 T.down1 = T.out1 + 0.55; // stretcher down
 T.load1 = T.down1 + 1.0; // you're on it
@@ -37,7 +36,7 @@ T.lift0 = T.back1 + 0.7; // ramp up, engines spooling
 T.fade0 = T.lift0 + 2.6;
 T.end = T.fade0 + 1.1;
 
-// places a med-evac can't land: the pad, the shrine and the lander (a clear patch of rock round each)
+// no-landing spots: pad, shrine, lander (clear rock round each)
 const KEEP_OUT = [PAD_S, CORE_S, START_S];
 
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _m = new THREE.Matrix4();
@@ -47,7 +46,7 @@ const smooth01 = (k) => { k = clamp01(k); return k * k * (3 - 2 * k); };
 const easeOut = (k, p = 3) => 1 - Math.pow(1 - clamp01(k), p);
 const ease2 = (k) => 0.5 - 0.5 * Math.cos(Math.PI * clamp01(k));
 const radial = (p, out = new THREE.Vector3()) => { out.set(0, p.y, p.z); if (out.lengthSq() < 1e-8) out.set(0, 1, 0); return out.normalize(); };
-// a frame with y = up and z = fwd, tilting with fwd (frameQuat levels it, this follows a ramp)
+// frame with y = up, z = fwd, tilting with fwd (frameQuat levels; this follows a ramp)
 function basisQuat(up, fwd, out = new THREE.Quaternion()) {
   _z.copy(fwd).normalize();
   _x.crossVectors(up, _z);
@@ -57,8 +56,8 @@ function basisQuat(up, fwd, out = new THREE.Quaternion()) {
   return out.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
 }
 
-// Meridian's stretcher: pale frame, teal mattress, a glowing rail each side, handles at both ends and
-// legs that unfold when it's set down. +z is the feet end.
+// Meridian's stretcher: pale frame, teal mattress, glowing side rails, handles both ends, legs that unfold
+// when set down. +z is the feet end.
 export function makeStretcher() {
   const root = new THREE.Group();
   const part = (w, h, d, mat, x, y, z, t = 0.02) => {
@@ -93,7 +92,7 @@ export function makeStretcher() {
 }
 
 export class Medevac {
-  // spindle: the Spindle (its drawn-rock ground, sky and the player's fall site); the scene starts at once
+  // spindle: the Spindle (ground, sky, fall site); the scene starts at once
   constructor(game, spindle) {
     this.game = game;
     const g = game;
@@ -108,7 +107,7 @@ export class Medevac {
     const ground = (s, w, lift = 0) => spindle.groundAt(s, w, lift);
     if (P.rag) { P.rag.release(); P.rag = null; }
 
-    // where you lie: on the rock, clear of the ends and of the pad, shrine and lander
+    // where you lie: clear of the ends and the KEEP_OUT spots
     let [s, w] = g.planet.sw(P.pos);
     s = Math.min(L - 80, Math.max(80, s));
     w = wrapW(w);
@@ -117,7 +116,7 @@ export class Medevac {
     this.upB = radial(this.bodyC);
     this.stand = ground(s, w + LAT);
 
-    // the craft, behind you, nose away so its rear ramp drops toward you
+    // craft behind you, nose away, so its rear ramp drops toward you
     const ship = makeShuttle({ color: 0xeeecf6, stripe: 0x2ec4ff });
     ship.setSign('MEDEVAC');
     ship.root.scale.setScalar(SCALE);
@@ -128,7 +127,7 @@ export class Medevac {
     this.land = ground(s - SET_BACK, w + LAT);
     this.up = radial(this.land);
     this.pose(this.alt);
-    // the run from the hold to the stretcher's spot: inside, ramp top, ramp foot, and you
+    // run from hold to stretcher spot: inside, ramp top, ramp foot, you
     ship.setGear(1);
     ship.setRamp(1);
     this.pose(0);
@@ -144,7 +143,7 @@ export class Medevac {
     ship.setRamp(0);
     this.pose(this.alt);
 
-    // the medics and the stretcher
+    // medics and stretcher
     const medic = (seed, visor) => {
       const f = makeFigure({ suit: 0x1fa89a, helmet: 0xfff4e0, visor, look: 'eva', seed });
       f.root.visible = false;
@@ -159,17 +158,17 @@ export class Medevac {
 
     // you: out cold on your back
     P.model.root.visible = true;
-    P.restPose(); // (the torso's lean, the bob and the scarf are as they were when you went down)
+    P.restPose(); // (otherwise lean, bob and scarf stay as when you went down)
     const m = P.model;
     m.armL.rotation.set(0.08, 0, -0.2); m.armR.rotation.set(0.08, 0, 0.2);
     this.putBody(this.groundPose());
 
-    // the wide shot, the close shot
+    // wide and close shots
     this.camWide = ground(s - 6, w - 26, 6);
     this.camClose = ground(s + 3, w - 7, 2.5);
     this.focusWide = ground(s - 9, w + LAT, 2);
 
-    // cinema bars; just the picture and its caption
+    // cinema bars: just picture and caption
     this.bars = g.recall.bars;
     this.bars.classList.remove('hidden', 'cb-out');
     document.body.classList.add('medevac');
@@ -191,7 +190,7 @@ export class Medevac {
     if (tilt) s.root.rotateX(tilt);
   }
 
-  // a point on the run, u metres from the hold (past either end it carries straight on)
+  // point on the run u metres from the hold (extrapolates straight past either end)
   pathAt(u, out) {
     const p = this.pts, c = this.cum;
     if (u <= 0) return out.copy(p[0]).addScaledVector(this.tan0, u);
@@ -201,7 +200,7 @@ export class Medevac {
     return out.lerpVectors(p[i - 1], p[i], (u - c[i - 1]) / (c[i] - c[i - 1]));
   }
 
-  // you on the ground on your back, feet along +x, head toward the craft; the stretcher goes down beside you
+  // you on your back, feet along +x, head toward the craft; stretcher set beside you
   groundPose() {
     const pos = this.bodyC.clone().addScaledVector(AX, 0.9).addScaledVector(this.upB, 0.2);
     return { pos, quat: basisQuat(this.upB, AX).multiply(Q_LIE) };
@@ -253,7 +252,7 @@ export class Medevac {
         g.audio.thud(30);
         g.fx.pop('TOUCHDOWN!', this.land.clone().addScaledVector(this.up, 7), { color: '#2ee6ff', size: 52 });
       }
-      // the ramp drops, and goes up again once they're aboard
+      // ramp drops, rises once they're aboard
       const open = ease2((t - T.ramp0) / 0.6), shut = 1 - ease2((t - (T.back1 - 0.1)) / 0.65);
       s.setRamp(Math.min(open, shut));
     } else {
@@ -282,9 +281,9 @@ export class Medevac {
     const g = this.game;
     const P = g.player;
     const len = this.len;
-    const out = t < T.up1; // (before the turn: the feet-end medic is the one in front)
+    const out = t < T.up1; // (before the turn the feet-end medic leads)
     const turning = t >= T.up1 && t < T.turn1;
-    // the party's middle along the run
+    // party's middle along the run
     let uC;
     if (t < T.out0) uC = SP;
     else if (t < T.out1) uC = SP + (len - SP) * easeOut((t - T.out0) / (T.out1 - T.out0), 2);
@@ -295,7 +294,7 @@ export class Medevac {
     const crouch = CROUCH * ck;
     const h = CARRY_H + (REST_H - CARRY_H) * ck;
 
-    // feet: the feet-end medic (A) and the head-end medic (B)
+    // feet: feet-end medic (A), head-end medic (B)
     const A = new THREE.Vector3(), B = new THREE.Vector3();
     if (out) { this.pathAt(uC + SP, A); this.pathAt(uC - SP, B); }
     else if (turning) {
@@ -308,7 +307,7 @@ export class Medevac {
     const uA = out ? uC + SP : turning ? len : uC - SP, uB = out ? uC - SP : turning ? len : uC + SP;
     const shown = t >= T.ramp0 + 0.25;
 
-    // the stretcher: between them, tilting with the ramp
+    // stretcher between them, tilting with the ramp
     const M = A.clone().add(B).multiplyScalar(0.5);
     const upM = radial(M);
     const hS = A.clone().sub(B);
@@ -332,14 +331,14 @@ export class Medevac {
       const sw = swing * (1 - ck);
       med.legL.rotation.x = sw + lunge * ck;
       med.legR.rotation.x = -sw - lunge * ck;
-      // hands on the handles: behind the lead medic's back, out in front of the trailing one
+      // hands on handles: behind the leader's back, in front of the trailer
       const arm = (lead ? 0.6 + 0.12 * ck : -0.6 - 0.1 * ck);
       med.armL.rotation.set(arm, 0, 0.08);
       med.armR.rotation.set(arm, 0, -0.08);
       med.root.visible = shown && u > 0.3;
     }
 
-    // you: where you fell, then lifted across onto the stretcher, then carried
+    // you: where you fell, lifted onto the stretcher, carried
     const onStr = { pos: str.root.localToWorld(new THREE.Vector3(0, 0.33, 0.9)), quat: str.root.quaternion.clone().multiply(Q_LIE) };
     const gp = this.groundPose();
     if (t < T.down1) this.putBody(gp);
@@ -364,7 +363,7 @@ export class Medevac {
   updateCamera(t) {
     const g = this.game;
     const cam = g.camera;
-    // pulls in while the medics work, back out as they run for the craft
+    // in while the medics work, out as they run for the craft
     const m = smooth01((t - (T.out1 - 0.9)) / 0.9) * (1 - smooth01((t - T.up1) / (T.turn1 + 0.4 - T.up1)));
     const pos = this.camWide.clone().lerp(this.camClose, m);
     const wide = this.focusWide.clone().addScaledVector(this.up, this.alt * 0.45);
@@ -377,7 +376,7 @@ export class Medevac {
     g.cam.position.copy(pos);
   }
 
-  // takes the scene down (spindle.finishRecovery / endRecovery)
+  // tear down (spindle.finishRecovery / endRecovery)
   dispose() {
     const P = this.game.player;
     for (const o of [this.ship.root, this.str.root, this.medA.root, this.medB.root]) o.removeFromParent();

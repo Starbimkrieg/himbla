@@ -1,18 +1,20 @@
-// Lucky Crater Casino layout study (docs/casino-layouts.md): each layout is a floor plan (a union of rectangles and circles), a list of
-// footprints and the clear space the seated games need, all in the casino's own frame (metres, +x right, +z toward the doors: the plans
-// are drawn looking down, the doors at the bottom). Dev-only, not part of the build.
-//   node tools/casino-layouts.mjs          checks every layout and prints the tightest gaps
-//   node tools/casino-layouts.mjs docs     also draws docs/casino-layout-{current,a,b}.svg
-// What is checked (see the doc's "Rules the checker holds every layout to"):
-//   - every footprint lies on the floor, and a free-standing one keeps AISLE from the walls
-//   - two footprints of different groups keep AISLE between them (a group is a thing built as one: a counter and its cage, a slot row)
-//   - a game's trigger zone (the station circle, from casinoGames.js STATIONS) touches no other footprint and no other station
-//   - the seated camera's corridor (casinoGames.js view(): where the lens flies) holds nothing taller than the lens
+// Lucky Crater Casino layout study (docs/casino-layouts.md). Each layout: a floor plan (union of rectangles and circles),
+// footprints, and the clear space the seated games need, in the casino frame (metres, +x right, +z toward the doors; plans
+// drawn looking down, doors at the bottom). Dev-only, not in the build.
+//   node tools/casino-layouts.mjs          check every layout, print the tightest gaps
+//   node tools/casino-layouts.mjs docs     also draw docs/casino-layout-{current,a,b}.svg
+//   node tools/casino-layouts.mjs dump     also list A and B's footprints, stations and lens corridors
+//   node tools/casino-layouts.mjs json     also print the layouts as JSON
+// Checks (the doc's "Rules the checker holds every layout to"):
+//   - every footprint is on the floor; free-standing ones keep AISLE from the walls
+//   - footprints of different groups keep AISLE apart (a group is built as one: counter and cage, a slot row)
+//   - a game's trigger zone (station circle, casinoGames.js STATIONS) touches no other footprint or station
+//   - the seated camera's corridor (casinoGames.js view(): the lens path) holds nothing taller than the lens
 import { writeFileSync } from 'node:fs';
 import { HALL, WALL, BJ, CLAW, DUCK, PLK, CLASSIC, PRIZE, floorShapes, hallPolygon, wallEdges, wallBoxes, inBox, inHall } from '../src/casinoPlan.js';
 
-const AISLE = 2.4;            // the narrowest gap that is left to walk through between two things
-const WALL_T = 2.4;           // wall thickness drawn in the plans
+const AISLE = 2.4;            // narrowest walkable gap, m
+const WALL_T = 2.4;           // wall thickness drawn in the plans, m
 const TAU = Math.PI * 2;
 
 // ---------- shapes: rect {x0,x1,z0,z1}, circle {x,z,r} ----------
@@ -24,7 +26,7 @@ const dist = (a, b) => {
   if (a.k === 'c' && b.k === 'c') return Math.hypot(a.x - b.x, a.z - b.z) - a.r - b.r;
   if (a.k === 'r' && b.k === 'r') {
     const gx = Math.max(a.x0 - b.x1, b.x0 - a.x1), gz = Math.max(a.z0 - b.z1, b.z0 - a.z1);
-    return gx < 0 && gz < 0 ? Math.max(gx, gz) : Math.hypot(Math.max(0, gx), Math.max(0, gz));   // (negative when they overlap: how far in)
+    return gx < 0 && gz < 0 ? Math.max(gx, gz) : Math.hypot(Math.max(0, gx), Math.max(0, gz));   // negative when overlapping: how far in
   }
   const [c, r] = a.k === 'c' ? [a, b] : [b, a];
   return Math.hypot(c.x - Math.max(r.x0, Math.min(c.x, r.x1)), c.z - Math.max(r.z0, Math.min(c.z, r.z1))) - c.r;
@@ -40,17 +42,18 @@ const samples = (s, grow = 0) => {
 };
 const onFloorShape = (L, s, grow = 0) => samples(s, grow).every(([x, z]) => onFloor(L, x, z));
 
-// ---------- the games, as the code and the models make them (casinoWorld.js, casinoGames.js, tools/blender/build_*.py) ----------
-// Each helper returns { items, stations, corridors } for one game placed at a wall.
-//   claw     machine 16.4 wide x 5.2 deep x 8.4 tall, the glass faces away from its wall; station 6.3 m out (r 3.3); the lens hangs 6.6 m (16:9) to 9.2 m (4:3)
-//            beyond the glass at 3.95 m up, so the corridor runs 14.5 m from the wall
+// ---------- the games, as built (casinoWorld.js, casinoGames.js, tools/blender/build_*.py) ----------
+// Each helper returns { items, stations, corridors } for one game at a wall.
+//   claw     16.4 wide x 5.2 deep x 8.4 tall, glass facing away from the wall; station 6.3 m out (r 3.3); lens 6.6 m (16:9) to
+//            9.2 m (4:3) beyond the glass at 3.95 m up, so the corridor runs 14.5 m from the wall
 const claw = (wallZ, cx) => ({
   items: [{ id: 'Zero-G claw', s: R(cx - 8.2, cx + 8.2, wallZ - 5.2, wallZ), h: 8.4, cls: 'game' }],
   stations: [{ of: 'Zero-G claw', s: C(cx, wallZ - 6.3, 3.3), cls: 'game' }],
   corridors: [{ of: 'Zero-G claw', s: R(cx - 8.6, cx + 8.6, wallZ - 14.5, wallZ - 5.2), y: 3.95, label: 'claw lens' }],
 });
-//   plinko   (the lens's view is a cone, 16 m wide at the board and nothing at the lens: the corridor is its mean width, 13 m; a pier at the cone's edge frames the board)
-//            frame 15.9 wide x 14.4 tall, 2.7 deep, its back on the wall; board plane 2.0 m out; the booth 6.0 m out (3.6 x 1.4); station 7.8 m out (r 3.2); lens 16.5 m out at 6.4 m up
+//   plinko   frame 15.9 wide x 14.4 tall x 2.7 deep, back on the wall; board plane 2.0 m out; booth 6.0 m out (3.6 x 1.4);
+//            station 7.8 m out (r 3.2); lens 16.5 m out, 6.4 m up. Its view cone is 16 m wide at the board, 0 at the lens:
+//            the corridor uses the mean width, 13 m (a pier at the cone's edge frames the board)
 const plinko = (wallZ, cx) => {
   const pz = wallZ + 2.0;
   return {
@@ -59,7 +62,8 @@ const plinko = (wallZ, cx) => {
     corridors: [{ of: 'Plinko frame', s: R(cx - 6.5, cx + 6.5, wallZ + 2.7, pz + 17.2), y: 6.4, label: 'plinko lens' }],
   };
 };
-//   blackjack  table-local x across (+-3.8 with the rail), z toward the player: counter at -2.0 (against the wall), stool at 4.7; station 4.8 out (r 2.8). yaw as bjPt: 0 faces +z, PI/2 faces +x, -PI/2 faces -x
+//   blackjack  table-local x across (+-3.8 with the rail), z toward the player: counter at -2.0 (on the wall), stool at 4.7;
+//              station 4.8 out (r 2.8). yaw as bjPt: 0 faces +z, PI/2 +x, -PI/2 -x
 const blackjack = (x0, z0, yaw) => {
   const c = Math.cos(yaw), s = Math.sin(yaw), P = (lx, lz) => [x0 + lx * c + lz * s, z0 - lx * s + lz * c];
   const pts = [[-3.8, -2], [3.8, -2], [-3.8, 4.7], [3.8, 4.7]].map(([a, b]) => P(a, b));
@@ -70,15 +74,16 @@ const blackjack = (x0, z0, yaw) => {
     corridors: [],
   };
 };
-//   duck derby  the basin 28.4 long x 7.8 over its rails, rails at +-0.55 beyond the lane edges; the lanes 1.6 apart, lane 0 nearest the viewers; the kiosk 3.0 x 1.7 stands 5.4 m (was 4.1)
-//            off lane 0 at the middle, its station 2.0 m further out (r 2.8); the arches (gate, finish) are 1.2 thick and 6.5 tall. The odds board (17.2 x 6.8, y 5 to 11.8) hangs on the wall behind.
-//            Two lenses: the kiosk's (9 m up, 7.5 m out) and the race's (6.2 m up, 7.5 m off lane 0, following the lead along the whole track)
-//            `f(u, v)` maps track coordinates (u along, v toward the viewers from the far wall) to the hall's (x, z).
-const duck = (f, u0, farRail, ko = 5.4, pillars = false) => {   // pillars: the gate's and the arch's piers stand 1 m in from the wall's face (centre) and are 0.8 wide, 9.6 m apart
+//   duck derby  basin 28.4 long x 7.8 over its rails (rails 0.55 beyond the lane edges); lanes 1.6 apart, lane 0 nearest the
+//            viewers; kiosk 3.0 x 1.7, 5.4 m off lane 0 at mid-track, station 2.0 m further (r 2.8); gate and finish arches
+//            1.2 thick, 6.5 tall; odds board (17.2 x 6.8, y 5 to 11.8) on the wall behind. Two lenses: kiosk (9 m up, 7.5 m
+//            out) and race (6.2 m up, 7.5 m off lane 0, following the lead down the track).
+//            `f(u, v)` maps track coordinates (u along, v from the far wall toward the viewers) to hall (x, z).
+const duck = (f, u0, farRail, ko = 5.4, pillars = false) => {   // pillars: gate and arch piers 1 m in from the wall face (centre), 0.8 wide, 9.6 m apart
   const lane0 = farRail + 6.3, mid = u0 + 14.2;
   const box = (ua, ub, va, vb) => { const a = f(ua, va), b = f(ub, vb); return R(a[0], b[0], a[1], b[1]); };
   const k = f(mid, lane0 + ko), ks = f(mid, lane0 + ko + 2);
-  const along = f(1, 0)[0] !== f(0, 0)[0];  // true when u runs along x
+  const along = f(1, 0)[0] !== f(0, 0)[0];  // u runs along x
   const kw = along ? 3.0 : 1.7, kd = along ? 1.7 : 3.0;
   return {
     items: [
@@ -94,9 +99,11 @@ const duck = (f, u0, farRail, ko = 5.4, pillars = false) => {   // pillars: the 
     ],
   };
 };
-//   prize counter  8.2 long x 4.6 deep from its wall (the dais and header included); station 5.8 m out from the wall (r 3.8). Cage: the chip cage, 3.6 x 4, a sibling of the counter
-//   classic games  four slot cabinets 3.2 m apart (12.2 long with the end cabinets), 1.7 deep, standing 1.75 m off the wall; station 3.2 m out from the cabinets' line (r 5.4)
-const prizeAt = (wall, pos, face) => { // face: 'N' (the wall is the south one, counter faces -z), 'W' (wall at x, counter faces -x), 'E' (counter faces +x)
+//   prize counter  8.2 long x 4.6 deep from its wall (dais and header included); station 5.8 m out (r 3.8). Chip cage 3.6 x 4,
+//                  same group as the counter
+//   classic games  four slot cabinets 3.2 m apart (12.2 long overall), 1.7 deep, 1.75 m off the wall; station 3.2 m out from
+//                  the cabinet line (r 5.4)
+const prizeAt = (wall, pos, face) => { // face: 'N' (south wall, counter faces -z), 'W' (wall at x, faces -x), 'E' (faces +x)
   const [x, z] = pos;
   const s = face === 'N' ? R(x - 4.1, x + 4.1, wall - 4.6, wall) : face === 'W' ? R(wall - 4.6, wall, z - 4.1, z + 4.1) : R(wall, wall + 4.6, z - 4.1, z + 4.1);
   const st = face === 'N' ? C(x, wall - 5.8, 3.8) : face === 'W' ? C(wall - 5.8, z, 3.8) : C(wall + 5.8, z, 3.8);
@@ -114,7 +121,7 @@ const merge = (...parts) => ({ items: parts.flatMap((p) => p.items), stations: p
 const prop = (id, s, h, cls, o = {}) => ({ id, s, h, cls, ...o });
 
 // =====================================================================================================================================
-// CURRENT: casinoWorld.js as it stands (HALL W 26 FRONT 12 BACK -34: the inner faces are x +-25, z -33 .. 11; the doors 5 m either side of x 0)
+// CURRENT: the box hall casinoWorld.js built before layout B, kept for contrast (HALL W 26 FRONT 12 BACK -34: inner faces x +-25, z -33 .. 11; doors 5 m either side of x 0)
 // =====================================================================================================================================
 const current = (() => {
   const g = merge(
@@ -139,12 +146,12 @@ const current = (() => {
 })();
 
 // =====================================================================================================================================
-// A: THE GILDED NAVE. One axial hall, 50 x 49 m inside. A nave runs from the doors to the Plinko cabinet, which closes it; arcades of gold piers
-// open it into two wings (Duck Derby on the left, Blackjack and the Classic Games on the right); the claw and the prize pavilion flank the doors.
+// A: THE GILDED NAVE. One axial hall, 50 x 49 m inside: a nave from the doors to the Plinko cabinet, gold-pier arcades opening
+// into two wings (Duck Derby left, Blackjack and Classic Games right); claw and prize pavilion flank the doors.
 // =====================================================================================================================================
 const nave = (() => {
   const W = 25, ZB = -37, ZF = 12, PIER = 8.0;
-  const wingDuck = duck((u, v) => [-W + v, u], -33.45, 0.9);       // along z on the left wall, viewers to +x; the start gate at the far (back) end
+  const wingDuck = duck((u, v) => [-W + v, u], -33.45, 0.9);       // along z on the left wall, viewers to +x; start gate at the back
   const g = merge(
     claw(ZF, -16.2),
     prizeAt(ZF, [16.2, 0], 'N'),
@@ -172,11 +179,11 @@ const nave = (() => {
 })();
 
 // =====================================================================================================================================
-// B: THE CRATER CROSS. A cruciform building round a domed rotunda: a foyer to the south, the Plinko arm to the north, a wing east and west. Every
-// game gets a room of its own. Wings 22 wide, 42 long; frontage 110 m.
+// B: THE CRATER CROSS. Cruciform round a domed rotunda: foyer south, Plinko arm north, wings east and west; every game has its
+// own room. Wings 22 wide, 42 long; frontage 110 m.
 // =====================================================================================================================================
 const cross = (() => {
-  // everything below comes from src/casinoPlan.js, the numbers the game builds from: a layout that drifts from the game fails here
+  // numbers from src/casinoPlan.js (what the game builds), so drift from the game fails here
   const { C, WING } = HALL, CZ = C[1];
   const floor = floorShapes();
   const eDuck = duck((u, v) => [u, DUCK.wallZ + v], DUCK.x0 - 2.2, 1.9, 5.4, true);
@@ -239,17 +246,17 @@ function check(L) {
     }
     if (!onFloorShape(L, cr.s)) bad.push(`${cr.label}: runs off the floor`);
   }
-  if (L.planWalls) {      // the wall colliders (casinoPlan.js wallBoxes) tile the outline's band, and leave the floor and the doors free
+  if (L.planWalls) {      // wall colliders (casinoPlan.js wallBoxes) must tile the outline band and leave floor and doors free
     const boxes = wallBoxes(), E = wallEdges();
     let blocked = 0, gaps = 0;
     for (let x = -60; x <= 60; x += 0.5) for (let z = -50; z <= 22; z += 0.5) {
       const hit = boxes.some((bx) => inBox(bx, x, z));
-      if (hit && inHall(x, z, 0.05)) blocked++;                                   // (a collider standing on the floor)
-      if (hit && Math.abs(x) < HALL.DOOR - 0.3 && z > HALL.FRONT && z < HALL.FRONT + WALL) blocked++;   // (or in the doors)
+      if (hit && inHall(x, z, 0.05)) blocked++;                                   // collider on the floor
+      if (hit && Math.abs(x) < HALL.DOOR - 0.3 && z > HALL.FRONT && z < HALL.FRONT + WALL) blocked++;   // or in the doors
     }
     for (const e of E) for (let f = 0.05; f <= 0.951; f += 0.1) for (const d of [0.15, WALL / 2, WALL - 0.15]) {
       const x = e.p[0] + (e.q[0] - e.p[0]) * f + e.nx * d, z = e.p[1] + (e.q[1] - e.p[1]) * f + e.nz * d;
-      if (!boxes.some((bx) => inBox(bx, x, z, 0.02))) gaps++;                    // (a hole in the wall's band)
+      if (!boxes.some((bx) => inBox(bx, x, z, 0.02))) gaps++;                    // hole in the wall band
     }
     if (blocked) bad.push(`wall colliders stand on ${blocked} sampled points of the floor or the doors`);
     if (gaps) bad.push(`the wall colliders leave ${gaps} sampled points of the wall's band open`);

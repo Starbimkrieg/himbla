@@ -1,15 +1,12 @@
-// The Spindle (Meridian finale): a 7 km asteroid tumbling round the Moon, rolling on its long axis,
-// tied somehow to the Monolith. Meridian's rocket drops you at one end; its Quantum Core sits at the
-// other; an alien mothership turns up as soon as you set off and hunts you all the way across, then
-// throws everything at the extraction pad while Meridian's pod comes down for you.
+// The Spindle (Meridian finale): a 7 km asteroid rolling on its long axis round the Moon, tied to the Monolith.
+// Meridian's rocket drops you at one end, the Quantum Core is at the other; an alien mothership hunts you across, then
+// throws everything at the extraction pad while Meridian's pod comes down.
 //
-// How it runs: the Spindle is a real cylinder of rock laid along the x axis, and you can run all the
-// way round it. While you're there "up" points away from that axis instead of away from the Moon's
-// centre (geo.js GRAV: physics, the camera, shots and effects all ask upAt), so its girth is a loop
-// you can circle and its length a straight run to the core; its blunt ends drop into open space. The
-// Moon is hidden and frozen while you're away, g.planet points at this world, and the sky (the Moon
-// huge overhead, the Earth, the stars and the sun) wheels round the axis: the asteroid's roll.
-// From the Moon you see the real thing: a long, spinning rock overhead (spindleGeometry, in the sky).
+// A real rock cylinder along x that you can run all the way round: while here "up" points away from that axis
+// (geo.js GRAV; physics, camera, shots and effects all ask upAt), so the girth is a loop and the length a straight
+// run; the blunt ends drop into space. The Moon is hidden and frozen, g.planet points at this world, and the sky
+// (Moon, Earth, stars, sun) wheels round the axis for the roll. From the Moon it's a spinning rock in the sky
+// (spindleGeometry).
 import * as THREE from 'three';
 import { Kit, T, G, GLASS, BEAM } from './outpostModels.js';
 import { toon, glow, ink } from './toon.js';
@@ -22,7 +19,7 @@ import { RC, L, CIRC, START_S, CORE_S, PAD_S, wrapW, pointAt, smooth, heightAt, 
 const AX = new THREE.Vector3(1, 0, 0);
 const TEAL = 0x7dffd4, PINK = 0xff2e88, VIO = 0xc77dff;
 
-// ---------- the shape (also used for the asteroid in the Moon's sky) ----------
+// ---------- the shape (also the asteroid in the Moon's sky) ----------
 export function spindleGeometry(len = 1000, rad = 120, seed = 3) {
   const g = new THREE.CylinderGeometry(rad, rad, len, 28, 60, false);
   const p = g.attributes.position;
@@ -42,28 +39,26 @@ export function spindleGeometry(len = 1000, rad = 120, seed = 3) {
 }
 
 // ---------- the rock ----------
-// (s, w): metres along the axis, and metres round the girth (w wraps every CIRC; w = 0 is the top, +y)
+// (s, w): m along the axis, m round the girth (w wraps every CIRC; w = 0 is the top, +y)
 const _d = new THREE.Vector3();
 function radial(p, out = new THREE.Vector3()) { out.set(0, p.y, p.z); if (out.lengthSq() < 1e-8) out.set(0, 1, 0); return out.normalize(); }
 function rad(p) { return Math.hypot(p.y, p.z); }
 
-const PAD_DECK = 2.4; // the launch pad stands this high on its plinth
+const PAD_DECK = 2.4; // launch pad deck height on its plinth (m)
 
-// The mothership's station. It hovers SHIP_LIFT up, climbs to stay SHIP_OVER above you if you go higher than
-// that (jets, a bounce), and swings in on arrival from round the far side of the rock.
+// Mothership station: hovers SHIP_LIFT up, climbs to stay SHIP_OVER above you if you go higher (jets, a bounce), and
+// swings in on arrival from round the far side.
 const SHIP_LIFT = 92, SHIP_OVER = 70, SHIP_LIFT_MAX = 420; // m above the rock
-const SHIP_ENTER = 5; // s: its swing in from behind the rock
-const SHIP_HIDE = Math.PI / 3; // how far round the girth it starts: 60°, below the horizon from where you stand
-// Higher than this above the ground, the beam (a track painted on the rock) and the mines (rings on it, 10 m
-// across and a little above) can't touch you: it falls back on the bullet barrage, and spams it.
+const SHIP_ENTER = 5; // s: swing in from behind the rock
+const SHIP_HIDE = Math.PI / 3; // start angle round the girth: 60°, below your horizon
+// Above this altitude the beam and mines (both on the ground) can't reach you, so it spams the barrage.
 const AIR_ALT = 14;
 const DRONE_REBOOT = 10; // s a shot-down drone stays powered down
 
-// The planet interface the physics, camera and effects use (planet.js has the Moon's). Heights are
-// measured from the axis, not a centre.
+// The planet interface physics, camera and effects use (planet.js has the Moon's). Heights are from the axis.
 class SpindleWorld {
   constructor() { this.colliders = null; this.lastLake = null; this.R = RC; this.craters = []; this.rails = []; }
-  rimRailsNear() { return []; } // (no grind rails up here)
+  rimRailsNear() { return []; } // no grind rails here
   sw(p) { return [p.x, Math.atan2(p.z, p.y) * RC]; }
   surface(p, outN) {
     const [s, w] = this.sw(p);
@@ -73,7 +68,7 @@ class SpindleWorld {
       const hs = (heightAt(s + e, w) - heightAt(s - e, w)) / (2 * e);
       const hw = (heightAt(s, w + e) - heightAt(s, w - e)) / (2 * e);
       const up = radial(p, _d);
-      const tw = new THREE.Vector3().crossVectors(AX, up); // round the girth, toward +w
+      const tw = new THREE.Vector3().crossVectors(AX, up); // toward +w
       outN.copy(up).addScaledVector(AX, -hs).addScaledVector(tw, -hw).normalize();
     }
     return RC + h;
@@ -84,8 +79,8 @@ class SpindleWorld {
     return out.set(v.x, up.y * r, up.z * r);
   }
   altitude(p) { return rad(p) - this.surface(p); }
-  // How far the drawn rock stands above the ground you skate on at p (never below it): the mesh is a 5 m
-  // grid of straight triangles over heightAt, so in a hollow it hides anything laid on the true surface.
+  // How far the drawn rock stands above the true ground at p (>= 0): the mesh is a 5 m grid of flat triangles over
+  // heightAt, so in hollows it hides anything laid on the true surface.
   meshLift(p) {
     const [s, w] = this.sw(p);
     return Math.max(0, meshHeightAt(s, w) - heightAt(s, w));
@@ -95,7 +90,7 @@ class SpindleWorld {
   update() {}
 }
 
-// a point on the rock, and a frame there (up = away from the axis, forward = along it)
+// a point on the rock, and a frame there (up away from the axis, forward along it)
 function bandPoint(s, w, lift = 0) { return pointAt(s, w, RC + heightAt(s, w) + lift); }
 function bandFrame(s, w, obj, lift = 0) {
   const p = bandPoint(s, w, lift);
@@ -105,7 +100,7 @@ function bandFrame(s, w, obj, lift = 0) {
   obj.quaternion.setFromRotationMatrix(m);
   return obj;
 }
-// a glowing line on the rock, through (s, w) points
+// a glowing tube through points on the rock
 function groundLine(pts, r, color, closed = false) {
   const curve = new THREE.CatmullRomCurve3(pts, closed);
   return new THREE.Mesh(new THREE.TubeGeometry(curve, pts.length * 2, r, 4, closed), glow(color));
@@ -127,7 +122,7 @@ export const obelisk = (k) => { k.box(2.2, 11, 0.9, T(0x0d0a14), 0, 0, 0, { outl
 export const lander = (k) => {
   k.cyl(12, 12.5, 0.6, 28, T(0x5b5870), 0, 0, 0, { outline: 0.05 });
   k.ring(11.6, 0.2, G(0x2ec4ff), 0, 0.62, 0);
-  // the Meridian rocket that brought you, standing on its fins
+  // the Meridian rocket that brought you, on its fins
   k.cyl(2.4, 2.6, 18, 18, T(0xeeecf6), 0, 1.8, 0, { outline: 0.1 });
   k.cyl(2.45, 2.45, 2.2, 18, T(0x2ec4ff), 0, 10, 0, { outline: 0 });
   k.cyl(2.45, 2.45, 0.8, 18, T(0xffc83a), 0, 13, 0, { outline: 0 });
@@ -143,20 +138,20 @@ export const shrine = (k) => {
   k.cyl(2.2, 2.8, 2.2, 8, T(0x0d0a14), 0, 0.6, 0, { outline: 0.06 });
   k.ring(2.3, 0.12, G(TEAL), 0, 2.8, 0);
 };
-// the extraction pad: a proper launch pad, a 32 m deck on a plinth with four ramps up to it
+// the extraction pad: a 32 m deck on a plinth with four ramps
 const PAD_R = 16, RAMP_L = 12;
 export const extract = (k) => {
   const D = PAD_DECK;
   k.cyl(PAD_R + 1.5, PAD_R + 2.2, 1.2, 36, T(0x3a3550), 0, -0.6, 0, { outline: 0.06 }); // footing
-  k.cyl(PAD_R, PAD_R + 0.6, D, 36, T(0x5b5870), 0, 0, 0, { outline: 0.06 }); // the plinth
-  k.cyl(PAD_R + 0.2, PAD_R + 0.2, 0.3, 36, T(0x7a7690), 0, D - 0.3, 0, { outline: 0.04 }); // the deck
+  k.cyl(PAD_R, PAD_R + 0.6, D, 36, T(0x5b5870), 0, 0, 0, { outline: 0.06 }); // plinth
+  k.cyl(PAD_R + 0.2, PAD_R + 0.2, 0.3, 36, T(0x7a7690), 0, D - 0.3, 0, { outline: 0.04 }); // deck
   k.ring(PAD_R - 1.2, 0.3, G(0xffc83a), 0, D + 0.02, 0);
   k.ring(PAD_R * 0.45, 0.25, G(0x2ec4ff), 0, D + 0.02, 0);
   k.box(1.6, 0.06, PAD_R * 1.4, T(0xffc83a), 0, D + 0.02, 0, { outline: 0 });
   k.box(PAD_R * 1.4, 0.06, 1.6, T(0xffc83a), 0, D + 0.02, 0, { outline: 0 });
   for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; k.ball(0.35, G(0x2ec4ff), Math.cos(a) * (PAD_R - 0.4), D + 0.3, Math.sin(a) * (PAD_R - 0.4), { outline: 0 }); }
-  // ramps (between the corners: N, E, S, W) and lamp masts on the corners between them
-  // a wedge: from the deck's edge (deck height) down to the ground RAMP_L out; width 7
+  // ramps at N, E, S, W with lamp masts between them
+  // wedge: from the deck edge (deck height) down to the ground RAMP_L out; 7 wide
   const wedge = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(RAMP_L, 0), new THREE.Vector2(0, D)]);
   const wg = new THREE.ExtrudeGeometry(wedge, { depth: 7, bevelEnabled: false }).translate(0, 0, -3.5);
   const stripe = new THREE.BoxGeometry(Math.hypot(D, RAMP_L) * 0.92, 0.05, 0.5).rotateZ(-Math.atan2(D, RAMP_L)).translate(RAMP_L / 2, D / 2 + 0.04, 0);
@@ -171,7 +166,7 @@ export const extract = (k) => {
   }
 };
 
-// the mothership: a dark, wide, ribbed saucer with a teal rim, a glass dome and three weapon eyes
+// the mothership: dark ribbed saucer, teal rim, glass dome, three weapon eyes
 export function makeMothership() {
   const root = new THREE.Group();
   root.add(bake('mother', (k) => {
@@ -218,14 +213,14 @@ export function makeDrone() {
   return g;
 }
 
-// the Moon, huge in the asteroid's sky (craters drawn on a canvas)
+// the Moon in the asteroid's sky (canvas craters)
 function moonTexture() {
   const c = document.createElement('canvas'); c.width = 512; c.height = 256;
   const x = c.getContext('2d');
   x.fillStyle = '#b7b0c8'; x.fillRect(0, 0, 512, 256);
   const rr = mulberry32(4);
   for (let i = 0; i < 90; i++) { x.fillStyle = rr() < 0.5 ? 'rgba(90,82,110,0.55)' : 'rgba(220,214,235,0.5)'; x.beginPath(); x.ellipse(rr() * 512, rr() * 256, 4 + rr() * 26, 3 + rr() * 16, 0, 0, Math.PI * 2); x.fill(); }
-  x.fillStyle = 'rgba(40,30,60,0.55)'; x.fillRect(300, 0, 212, 256); // the dark side
+  x.fillStyle = 'rgba(40,30,60,0.55)'; x.fillRect(300, 0, 212, 256); // dark side
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
@@ -237,11 +232,11 @@ export class Spindle {
     this.world = new SpindleWorld();
   }
 
-  // Start making the rock in a worker (story.js calls this once the mission that ends here is under
-  // way), so the mission starts without a ~2 s freeze. If it isn't ready in time, build() makes it.
+  // Builds the rock in a worker (story.js calls this once the mission is under way) to avoid a ~2 s freeze at the
+  // start. If it isn't ready in time, build() makes it.
   prefetch() {
     if (this.root || this.rockTried || typeof Worker === 'undefined') return;
-    this.rockTried = true; // (once: if the worker fails, build() just makes it when the mission starts)
+    this.rockTried = true; // once: if the worker fails, build() makes it
     try {
       const wk = new Worker(new URL('./spindleWorker.js', import.meta.url), { type: 'module' });
       wk.onmessage = (e) => { if (!this.root) this.rockData = e.data; wk.terminate(); };
@@ -250,13 +245,12 @@ export class Spindle {
     } catch { /* no workers here */ }
   }
 
-  // Build the place the first time it's needed (it's a lot of geometry to keep around otherwise).
+  // Built on first need (a lot of geometry to keep around otherwise).
   build() {
     if (this.root) return;
     const root = new THREE.Group();
     this.root = root;
-    // the rock: a grid over (s, w) all the way round (spindleTerrain.js; usually made ahead of time by
-    // a worker while the mission's earlier steps play out: prefetch)
+    // the rock: a grid over (s, w) all the way round (spindleTerrain.js; usually prebuilt by prefetch's worker)
     const R = this.rockData || buildRockArrays();
     this.rockData = null;
     const geo = new THREE.BufferGeometry();
@@ -266,24 +260,21 @@ export class Spindle {
     geo.setIndex(new THREE.BufferAttribute(R.idx, 1));
     geo.computeBoundingSphere();
     const S0 = ROCK_S0, S1 = ROCK_S1;
-    // (both faces: from any angle the rock is rock, never a window onto the stars)
-    // (the toon bands with softened edges: hard ones, on vertices 7 m apart under a low sun, traced the
-    // mesh's triangles as pale polygons; a fully smooth ramp turned every bump into a soft stain)
-    // (a dark band, then one gentle rise to full sun: a mid-to-bright step lit every crater's outer
-    // slope as a pale smudge round it, from above)
+    // double-sided: the rock is never a window onto the stars
+    // toon bands with softened edges: hard ones traced the 7 m triangles as pale polygons under a low sun, a fully
+    // smooth ramp made every bump a soft stain. A dark band then one gentle rise to full sun: a mid-to-bright step
+    // lit every crater's outer slope as a pale smudge.
     const RAMP = [55, 55, 70, 125, 160, 195, 230, 255, 255];
     const ramp = new THREE.DataTexture(new Uint8Array(RAMP.flatMap((v) => [v, v, v, 255])), RAMP.length, 1, THREE.RGBAFormat);
     ramp.minFilter = ramp.magFilter = THREE.LinearFilter;
     ramp.needsUpdate = true;
     const rock = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: ramp, side: THREE.DoubleSide }));
-    // lit like the Moon's ground (toon.js KEEP_GRAZE_SHADOW): a crisp turn into shade where a slope faces
-    // away from the sun. Without it the rock got the props' rule, a wide fade that darkened every slope
-    // within ~12 degrees of edge-on, and under the roll's low sun that smeared soft dark patches everywhere
+    // lit like the Moon's ground (toon.js KEEP_GRAZE_SHADOW): a crisp turn into shade facing away from the sun. The
+    // props' wide fade darkens slopes within ~12° of edge-on, which under the roll's low sun smears dark patches.
     rock.material.defines = { KEEP_GRAZE_SHADOW: '' };
     rock.receiveShadow = true;
-    // (it doesn't throw its own shadow: double-sided and coarse, at the low sun angles of the roll its
-    // self-shadow broke into hard pale patches and soft dark blotches. The ship, drones, props and
-    // you still shadow it; the toon shading does the day and night)
+    // no self-shadow: double-sided and coarse, it breaks into patches and blotches at the roll's low sun angles.
+    // Ship, drones, props and you still shadow it; toon shading does day and night.
     rock.castShadow = false;
     root.add(rock);
     // the blunt tips, capped
@@ -293,13 +284,13 @@ export class Spindle {
       cap.rotation.y = dir * Math.PI / 2;
       root.add(cap);
     }
-    // the Monolith's veins: two glowing threads spiralling the length of the rock
+    // the Monolith's veins: two glowing threads spiralling along the rock
     for (const off of [0, CIRC / 2]) {
       const vp = [];
       for (let s = 30; s < L - 30; s += 12) vp.push(bandPoint(s, off + (s / L) * CIRC * 1.5 + Math.sin(s / 97) * 18, 0.25));
       root.add(groundLine(vp, 0.35, TEAL));
     }
-    // props: the lander, crystal spires, the shrine, the extraction pad
+    // props: lander, crystal spires, shrine, extraction pad
     this.cols = [];
     const C = this.game.colliders;
     const place = (obj, s, w, lift = 0, colR = 0, colH = 0) => {
@@ -310,7 +301,7 @@ export class Spindle {
     };
     place(bake('lander', lander), START_S, 0, -0.2, 3, 24);
     const sr = mulberry32(29);
-    // crystal spires and obelisks all the way round (clear of the start line down the top)
+    // spires and obelisks all round (clear of the start line along the top)
     for (let i = 0; i < 220; i++) {
       const s = 420 + sr() * (L - 1000);
       let w = (sr() - 0.5) * CIRC;
@@ -332,7 +323,7 @@ export class Spindle {
     place(this.core, CORE_S, 0, 4.2);
     this.corePos = this.core.position.clone();
     this.padPos = bandPoint(PAD_S, 0, PAD_DECK + 0.6);
-    // the sky: stars, the Moon filling a quarter of it, a small Earth, the sun
+    // sky: stars, the Moon filling a quarter of it, a small Earth, the sun
     const sky = new THREE.Group();
     this.sky = sky;
     const N = 2500, sp = new Float32Array(N * 3);
@@ -352,10 +343,9 @@ export class Spindle {
     sky.add(sun);
     sky.add(makePlanets(SUN, 7100));
     root.add(sky);
-    // the mothership and the extraction pod
+    // mothership and extraction pod
     this.ship = makeMothership();
-    // (no shadow from it: 90 m up and ahead of you under the roll's low sun, its shadow lay across the
-    // rock as huge soft dark smudges that crawled along with it)
+    // no shadow: 90 m up under the roll's low sun it lays huge crawling smudges across the rock
     this.ship.root.traverse((o) => { o.castShadow = false; });
     root.add(this.ship.root);
     const pod = makeShuttle({ color: 0xeeecf6, stripe: 0x2ec4ff });
@@ -376,7 +366,7 @@ export class Spindle {
     this.onDone = onDone;
     this.active = true;
     this.phase = 'cross';
-    this.rec = null; // a recovery transit in progress (recover())
+    this.rec = null; // recovery transit in progress (recover())
     this.attackT = 6;
     this.attackN = 0;
     this.droneT = 14;
@@ -387,23 +377,22 @@ export class Spindle {
     this.podCalled = false;
     this.spin = 0;
     // hide (and freeze) the Moon; this world takes over
-    // (anything marked userData.persist - the particles and skate ribbons - belongs to every world and stays)
+    // (userData.persist objects, e.g. particles and skate ribbons, belong to every world and stay)
     this.hidden = g.scene.children.filter((o) => o.visible && o !== this.root && o !== g.player.model.root && !o.isLight && !o.userData.persist && o !== g.sun.target && o !== g.earthLight.target);
     for (const o of this.hidden) o.visible = false;
     this.root.visible = true;
     this.savedPlanet = g.planet;
     g.planet = this.world;
-    // the sky fill nearly even all round: it's most of the light on the night turn, and the Moon's
-    // bright-above / dark-below split turned every tilt of the ground (and the rock curving away from
-    // you) into soft dark smudges. About as bright overall, just not keyed to which way is up.
+    // sky fill nearly even all round: it's most of the night-turn light, and the Moon's bright-above / dark-below split
+    // turns every tilt of the curving ground into dark smudges. Similar overall brightness.
     this.savedHemi = [g.hemi.color.getHex(), g.hemi.groundColor.getHex()];
     g.hemi.color.setHex(0x8578d8);
     g.hemi.groundColor.setHex(0x6457ac);
-    GRAV.axis = AX; // up is away from the rock's axis now
+    GRAV.axis = AX; // up is away from the rock's axis
     this.world.colliders = g.colliders;
     if (g.player.vehicle) g.garage.exit();
     if (g.garage.active) { g.garage.active.model.root.visible = false; }
-    // the mothership's eyes are targets (each one powers an attack: knock it out, and that attack stops)
+    // the mothership's eyes are targets (each powers an attack; knock one out to stop it)
     this.eyes = this.ship.eyes.map((m, i) => ({ kind: 'alieneye', faction: 'beast', model: { root: m }, hp: 380, maxHp: 380, center: new THREE.Vector3(), radius: 4, dead: false, eye: i }));
     for (const e of this.eyes) g.enemies.list.push(e);
     this.ship.root.visible = true;
@@ -412,11 +401,11 @@ export class Spindle {
     this.pod.root.visible = false;
     this.core.visible = true;
     this.respawnAt(0);
-    document.getElementById('minimap').style.visibility = 'hidden'; // (it maps the Moon)
+    document.getElementById('minimap').style.visibility = 'hidden'; // it maps the Moon
     g.audio.boom(true);
     g.hud.alert('THE SPINDLE', '#7dffd4', 3);
     g.hud.toast('Cross the asteroid to the Quantum Core at the far end. It\'s round: run all the way round it if you like. Don\'t fall off the ends.', 6);
-    this.shipArrive = 9; // the mothership turns up a few seconds in
+    this.shipArrive = 9; // s until the mothership turns up
     this.shipLift = SHIP_LIFT;
     this.shipEnter = 1;
     this.shipSide = 1;
@@ -433,11 +422,10 @@ export class Spindle {
     g.cam.fwd.copy(fwd);
     g.cam.up.copy(up);
     g.cam.pitch = -0.1;
-    g.updateCamera(0.016, true); // snap behind you (it used to swing in from the Moon, through the rock)
+    g.updateCamera(0.016, true); // snap behind you (else it swings in from the Moon, through the rock)
   }
 
-  // you fell off the rock (a K.O. gets a recovery transit instead: recover()): back at the start, or at the
-  // pad once you've the core
+  // fell off the rock (a K.O. gets recover() instead): back to the start, or the pad once you've the core
   respawn() { const g = this.game; this.respawnAt(this.gotCore ? -1 : 0); g.player.model.root.visible = true; g.player.dead = false; this.clearHazards(); }
 
   exit(quiet = false) {
@@ -451,7 +439,7 @@ export class Spindle {
     this.root.visible = false;
     g.planet = this.savedPlanet;
     if (this.savedHemi) { g.hemi.color.setHex(this.savedHemi[0]); g.hemi.groundColor.setHex(this.savedHemi[1]); this.savedHemi = null; }
-    GRAV.axis = null; // (back to the Moon's centre)
+    GRAV.axis = null; // back to the Moon's centre
     for (const c of this.cols || []) g.colliders.remove(c);
     this.cols = null;
     for (const e of [...(this.eyes || []), ...(this.drones || [])]) { e.dead = true; if (e.model.root.parent && e.kind === 'drone') e.model.root.removeFromParent(); }
@@ -461,31 +449,29 @@ export class Spindle {
     // back on the Moon, beside the launch complex
     const ml = g.locations.find((l) => l.id === 'monolith');
     if (ml) g.story.teleportTo(g.world.toWorld(ml, ml.r * 1.25 + 26, 0, 12).normalize(), quiet);
-    // the props were placed with the colliders: rebuild them next time
+    // props were placed with the colliders: rebuild next time
     g.scene.remove(this.root);
     this.root = null;
   }
 
   // ---- recovery transit ----
-  // A K.O. on the rock: a Meridian recovery craft drops out of the sky beside where you fell, two medics rush
-  // out with a stretcher, load you on and run back aboard, and it lifts off and carries you home (the scene is
-  // medevac.js). You come down at the Monolith's launch complex (exit()) and the mission starts over from
-  // there (story.retrySpindle). It runs as a cutscene: the game's state is 'cutscene', the scene drives its
-  // own camera, and main.js calls updateRecovery every frame.
+  // A K.O. on the rock: a Meridian recovery craft lands beside you, medics stretcher you aboard and it flies you home
+  // (medevac.js). You land at the Monolith's launch complex (exit()) and the mission restarts there
+  // (story.retrySpindle). A cutscene: state 'cutscene', the scene drives its camera, main.js calls updateRecovery.
   recover() {
     const g = this.game;
-    this.clearHazards(); // (the mothership's beams hang frozen over the rock while it runs)
-    // hide the mothership (its eyes ride on it) and the drones too: they would hang frozen in frame
+    this.clearHazards(); // the beams would hang frozen over the rock
+    // hide the mothership (eyes ride on it) and the drones: they'd hang frozen in frame
     this.recHidden = [this.ship.root, ...this.drones.map((d) => d.model.root)].filter((o) => o.visible);
     for (const o of this.recHidden) o.visible = false;
     this.rec = new Medevac(g, this);
     g.state = 'cutscene';
   }
 
-  // the ground at (s, w) as drawn (the mesh stands a little above heightAt in hollows), `lift` metres up
+  // the ground at (s, w) as drawn (above heightAt in hollows), `lift` m up
   groundAt(s, w, lift = 0) { return bandPoint(s, w, this.world.meshLift(bandPoint(s, w)) + lift); }
 
-  // the roll: the sky (and the sun with it) turns round the rock's axis
+  // the roll: the sky (and sun) turns round the rock's axis
   rollSky(dt) {
     this.spin += dt;
     this.sky.quaternion.setFromAxisAngle(AX, this.spin * ((Math.PI * 2) / 140));
@@ -496,21 +482,20 @@ export class Spindle {
     const r = this.rec;
     if (!r) return;
     const g = this.game;
-    if (g.state !== 'cutscene') { this.endRecovery(); return; } // (the game moved on under it: quit to the menu)
+    if (g.state !== 'cutscene') { this.endRecovery(); return; } // the game moved on (quit to menu)
     r.update(dt);
     this.rollSky(dt);
     if (r.done) this.finishRecovery();
   }
 
-  // the transit has landed you at the Monolith: the Spindle is over, and the mission starts again from the
-  // launch complex
+  // landed at the Monolith: the Spindle is over, the mission restarts from the launch complex
   finishRecovery() {
     const g = this.game, r = this.rec;
     this.rec = null;
     r.dispose();
-    this.exit(true); // (quiet: no teleport flash, you came by shuttle)
+    this.exit(true); // quiet: no teleport flash, you came by shuttle
     g.story.retrySpindle();
-    g.hud.eventPanel(g.story.panel()); // (the chip stays hidden now: don't let the stale Spindle one show for a frame as the HUD comes back)
+    g.hud.eventPanel(g.story.panel()); // else the stale Spindle chip shows for a frame as the HUD returns
     g.state = 'play';
     g.updateCamera(0.016, true);
     const bars = g.recall.bars;
@@ -520,12 +505,12 @@ export class Spindle {
     g.hud.toast('Meridian\'s transit set you down at the launch complex. Head for the rocket to try again.', 5);
   }
 
-  // the game left the cutscene under it (quit to the menu): tidy up without going anywhere
+  // the game left the cutscene (quit to menu): tidy up, go nowhere
   endRecovery() {
     const r = this.rec;
     this.rec = null;
     r.dispose();
-    for (const o of this.recHidden || []) o.visible = true; // (the Spindle carries on)
+    for (const o of this.recHidden || []) o.visible = true; // the Spindle carries on
     const bars = this.game.recall.bars;
     bars.classList.add('hidden');
     if (r.dawn) r.dawn.remove();
@@ -533,9 +518,9 @@ export class Spindle {
 
   clearHazards() { for (const h of this.hazards || []) if (h.mesh) h.mesh.removeFromParent(); this.hazards = []; }
 
-  // the HUD waypoint (it's easy to lose which way is which on a rock you can run round)
+  // HUD waypoint (easy to get lost on a rock you can run round)
   objective() {
-    if (!this.active || this.rec) return null; // (nothing to chase while a recovery transit has you)
+    if (!this.active || this.rec) return null; // nothing to chase during a recovery
     if (this.phase === 'cross' && !this.gotCore) return { pos: this.corePos, label: 'THE PACKAGE' };
     if (this.phase === 'extract') return { pos: this.padPos, label: this.podCalled ? 'EXTRACTION PAD · POD INBOUND' : 'EXTRACTION PAD' };
     return null;
@@ -558,21 +543,19 @@ export class Spindle {
     const P = g.player;
     const [s, w] = this.world.sw(P.pos);
     this.spin += dt;
-    // the roll: the sky (and the sun with it) turns round the rock's axis
+    // the roll: the sky (and sun) turns round the rock's axis
     const q = new THREE.Quaternion().setFromAxisAngle(AX, this.spin * ((Math.PI * 2) / 140));
     this.sky.quaternion.copy(q);
     this.sky.position.copy(g.camera.position);
     const sunDir = SUN.clone().applyQuaternion(q);
     const up = P.up;
     const day = THREE.MathUtils.smoothstep(up.dot(sunDir), -0.15, 0.2);
-    // (no sun at all on the night turn: it used to keep shining up through the rock at half strength,
-    // so the rock's own shadow smeared soft dark blotches over the ground; the Moon's glow lights it)
+    // no sun on the night turn (shining through the rock smears shadow blotches); the Moon's glow lights it
     g.sun.intensity = 1.7 * day;
     g.hemi.position.copy(up);
-    g.hemi.intensity = 0.95; // (moonlight off the Moon below keeps the rock readable on its night turn)
+    g.hemi.intensity = 0.95; // moonlight from below keeps the night turn readable
     g.earthLight.intensity = 0.25;
-    // the shadow box follows you in whole shadow-map texels along the light's axes (see main.js
-    // updateLighting), so shadows don't shimmer as you move
+    // shadow box follows you in whole shadow-map texels along the light's axes (main.js updateLighting): no shimmer
     const lz = sunDir.clone().normalize(), lx = new THREE.Vector3(0, 1, 0).cross(lz).normalize(), ly = lz.clone().cross(lx);
     const snap = 320 / 2048;
     const sp = lx.multiplyScalar(Math.round(P.pos.dot(lx) / snap) * snap).addScaledVector(ly, Math.round(P.pos.dot(ly) / snap) * snap).addScaledVector(lz, P.pos.dot(lz));
@@ -581,7 +564,7 @@ export class Spindle {
     g.earthLight.target.position.copy(P.pos);
     g.earthLight.position.copy(P.pos).addScaledVector(new THREE.Vector3(0, -1, 0).applyQuaternion(q), 600); // moonlight from below
     g.renderer.shadowMap.autoUpdate = true;
-    // off either end: lost to the void, back to the start (or the pad, once you've the core)
+    // off either end: lost to the void, back to the start (or the pad, with the core)
     if (s < -30 || s > L + 30 || rad(P.pos) < RC - 150) {
       g.fx.pop('LOST TO THE VOID', null, { color: '#ff2e88', size: 60 });
       g.damagePlayer(20, 'void');
@@ -601,14 +584,14 @@ export class Spindle {
       this.pod.root.visible = true;
     }
     if (this.phase === 'extract') {
-      // reach the pad and the pod's on its way; after that it's coming whatever you do
+      // reaching the pad calls the pod; it comes whatever you do after
       if (!this.podCalled && P.pos.distanceTo(this.padPos) < 70) {
         this.podCalled = true;
         g.hud.alert('POD INBOUND — SURVIVE!', '#7dffd4', 3);
         g.audio.tone(660, 0.5, 'triangle', 0.15, 1.5);
       }
       if (this.podCalled) this.extractT -= dt;
-      // the pod comes down out of the sky over the pad
+      // pod descends over the pad
       const t = Math.max(0, this.extractT / 35);
       const up2 = radial(this.padPos);
       this.pod.root.position.copy(this.padPos).addScaledVector(up2, 2 + t * 420);
@@ -623,24 +606,22 @@ export class Spindle {
   updateShip(dt, s, w) {
     const g = this.game;
     const P = g.player;
-    // it gets AHEAD of you: it reads your speed along the rock and parks over where you're going,
-    // and it follows you round the girth (the short way)
+    // it gets AHEAD: parks over where your speed along the rock takes you, and follows round the girth (the short way)
     const along = P.vel.dot(AX);
-    // (but never out past the rock's tapered ends: it holds station over the terrain at either end)
+    // never past the tapered ends: holds station over the terrain there
     const want = Math.min(L - 260, Math.max(260, s + 60 + Math.max(0, along) * 2.2));
     if (this.shipArrive > 0) {
       this.shipArrive -= dt;
       if (this.shipArrive <= 0) {
-        // it turns up already ahead of you, on one flank of the rock and out of sight round the curve, as if it
-        // had been lying in wait behind it, and swings up over the top onto its station (it used to appear a few
-        // hundred metres behind you and have to catch up, which at running speed took the best part of ten seconds)
+        // appears ahead of you on one flank, out of sight round the curve as if lying in wait, then swings up over the
+        // top onto station
         this.ship.root.visible = true;
         this.shipS = want;
         this.shipSide = Math.random() < 0.5 ? -1 : 1;
         this.shipW = wrapW(w + this.shipSide * SHIP_HIDE * RC);
         this.shipLift = SHIP_LIFT;
         this.shipEnter = 0;
-        this.attackT = Math.max(this.attackT, SHIP_ENTER * 0.7); // (no shots from behind the rock: it opens fire as it clears the horizon)
+        this.attackT = Math.max(this.attackT, SHIP_ENTER * 0.7); // no shots from behind the rock: fires as it clears the horizon
         g.hud.alert('SOMETHING IS RISING AHEAD', '#ff2e88', 4);
         g.audio.tone(70, 1.4, 'sawtooth', 0.3, 0.4);
         g.cam.shake = 1;
@@ -649,13 +630,12 @@ export class Spindle {
     }
     this.shipS += Math.max(-140, Math.min(140, (want - this.shipS) * 1.4)) * dt;
     this.shipS = Math.min(L - 260, Math.max(200, this.shipS));
-    // (while it swings in its station is round the girth, and that comes in to nothing)
+    // while swinging in, its station is offset round the girth, easing to zero
     this.shipEnter = Math.min(1, this.shipEnter + dt / SHIP_ENTER);
     const hide = this.shipSide * SHIP_HIDE * RC * (1 - smooth(0, 1, this.shipEnter));
     const round = P.vel.dot(new THREE.Vector3().crossVectors(AX, P.up));
     this.shipW = wrapW(this.shipW + wrapW(w + round * 1.2 + hide - this.shipW) * Math.min(1, dt * 1.2));
-    // it tracks your height too: up where you are, not where the rock is. SHIP_LIFT over the rock under it, or
-    // SHIP_OVER above you if you've climbed past that. It rises fast to keep you in range and settles slowly.
+    // tracks your height too: SHIP_LIFT over the rock below it, or SHIP_OVER above you if higher. Rises fast, settles slowly.
     const need = THREE.MathUtils.clamp(rad(P.pos) + SHIP_OVER - (RC + heightAt(this.shipS, this.shipW)), SHIP_LIFT, SHIP_LIFT_MAX);
     this.shipLift += THREE.MathUtils.clamp((need - this.shipLift) * 2, -35, 90) * dt;
     bandFrame(this.shipS, this.shipW, this.ship.root, this.shipLift);
@@ -664,7 +644,7 @@ export class Spindle {
       if (e.dead) {
         e.downT = (e.downT ?? 15) - dt;
         if (e.downT <= 0) {
-          // re-armed: back on the hull, back in the fight
+          // re-armed: back on the hull
           e.dead = false; e.hp = e.maxHp; e.downT = undefined;
           this.ship.root.add(e.model.root);
           g.fx.pop('WEAPON RE-ARMED', e.center.clone(), { color: '#ff2e88', size: 44 });
@@ -673,8 +653,8 @@ export class Spindle {
       e.model.root.getWorldPosition(e.center);
       e.model.root.visible = !e.dead;
     }
-    // attacks: each live eye powers one (barrage, beam, mines); after the core, faster. Up out of the beam's and
-    // the mines' reach (AIR_ALT) only the barrage can touch you, so that's all it throws, one after another
+    // attacks: each live eye powers one (barrage, beam, mines), faster after the core. Above AIR_ALT only the barrage
+    // reaches you, so it throws only that
     this.attackT -= dt;
     if (this.attackT <= 0) {
       const live = this.eyes.filter((e) => !e.dead).map((e) => e.eye);
@@ -684,26 +664,23 @@ export class Spindle {
         const kind = air ? (live.includes(0) ? 0 : -1) : live[this.attackN++ % live.length];
         if (kind === 0) this.barrage();
         else if (kind === 1) {
-          // past halfway down the rock: two beams at once, one from each side, sweeping toward
-          // each other on tracks either side of your line
+          // past halfway: two beams from opposite sides, sweeping toward each other either side of your line
           if (s > L / 2) { this.sweep(s, w, -5.5, 1); this.sweep(s, w, 5.5, -1); } else this.sweep(s, w);
         }
         else if (kind === 2) this.mines(s, w);
       }
     }
     this.droneT -= dt;
-    // three drones at most (a shot-down one powers back up rather than being replaced)
+    // at most three drones (shot-down ones reboot rather than being replaced)
     if (this.droneT <= 0) { this.droneT = this.gotCore ? 5 : 7; if (this.drones.length < 3) this.spawnDrone(); }
   }
 
   shipBelly() { return this.ship.root.localToWorld(new THREE.Vector3(0, -12, 0)); }
 
-  // 1: a plasma barrage: a stream of aimed bolts walked onto you (leading you), and under it a wide
-  // spray raining over everywhere you might swerve to
+  // 1: plasma barrage: a stream of leading bolts walked onto you, plus a wide spray over wherever you might swerve
   barrage() {
     const g = this.game;
     const P = g.player;
-    // (a quarter faster than it used to fire, both the aimed stream and the spray)
     for (let i = 0; i < 14; i++) g.schedule(i * 0.056, () => {
       if (!this.active || P.dead) return;
       const from = this.shipBelly();
@@ -721,13 +698,13 @@ export class Spindle {
     g.audio.tone(90, 0.8, 'sawtooth', 0.1, 0.5);
   }
 
-  // 2: a beam that sweeps round the rock. Its track is painted on the ground first (pulsing hazard
-  // stripes, like the strike warnings), then the beam burns along it, leaving a glowing scorch.
+  // 2: a beam sweeping round the rock. Its track shows first (pulsing hazard stripes), then it burns along it,
+  // leaving a glowing scorch.
   sweep(s, w, ds = 0, dir = 1) {
     const g = this.game;
     const s0 = s + 30 + Math.max(0, g.player.vel.dot(AX)) * 1.3 + ds;
-    const W = 170; // (an arc either side of you, round the girth)
-    const HW = 4.5; // half the track's width
+    const W = 170; // arc either side of you round the girth (m)
+    const HW = 4.5; // track half width (m)
     const P = [], U = [], V = [], idx = [];
     const n = Math.ceil((W * 2) / 3);
     for (let i = 0; i <= n; i++) {
@@ -769,19 +746,18 @@ export class Spindle {
     this.hazards.push({ type: 'sweep', s: s0, w0: w, W, dir, twin: ds !== 0, t: 0, line, beam, mesh: line, hitCd: 0 });
   }
 
-  // 3: mines: rings dropped where you're going to be when they burst (your velocity, all of it,
-  // played forward), a tight cluster on the spot itself and a wider scatter round it
+  // 3: mines where your velocity puts you when they burst: a tight cluster there and a wider scatter round it
   mines(s, w) {
     const g = this.game;
     const P = g.player;
-    const T = 1.8; // (the fuse: time enough to read them and pick a gap)
-    const side = new THREE.Vector3().crossVectors(AX, radial(P.pos)).normalize(); // (the +w way round)
+    const T = 1.8; // fuse (s): time to read them and pick a gap
+    const side = new THREE.Vector3().crossVectors(AX, radial(P.pos)).normalize(); // +w
     const vs = P.vel.dot(AX), vw = P.vel.dot(side);
     const ps = s + vs * T, pw = w + vw * T;
-    const R = 10; // (bigger rings, and never stacked on each other)
+    const R = 10; // ring radius (m); rings never stack
     const placed = [];
     for (let i = 0; i < 14; i++) {
-      // (a few on your line, the rest spread wide: a field to thread, not a carpet)
+      // a few on your line, the rest wide: a field to thread, not a carpet
       const tight = i < 4;
       const spread = tight ? 26 : 110;
       let ms = 0, mw = 0;
@@ -808,12 +784,12 @@ export class Spindle {
         if (h.t < 1.1) continue;
         const k = (h.t - 1.1) / 2.2;
         U.prog.value = Math.min(1, k);
-        // the scorch cools and fades for a couple of seconds after the beam's gone
+        // scorch fades for a couple of seconds after the beam
         if (k > 1) { h.beam.visible = false; U.fade.value = Math.max(0, 1 - (k - 1) * 1.1); if (k > 2) { h.line.removeFromParent(); h.beam.removeFromParent(); this.hazards.splice(i, 1); } continue; }
         const gw = h.w0 - h.dir * h.W + h.dir * k * h.W * 2;
         const gp = bandPoint(h.s, gw, 0);
         const from = this.shipBelly();
-        // (a twin beam leaves from its own side of the hull)
+        // a twin beam leaves from its own side of the hull
         if (h.twin) from.addScaledVector(new THREE.Vector3().crossVectors(radial(from), AX).normalize(), -h.dir * 22);
         h.beam.visible = true;
         h.beam.position.lerpVectors(from, gp, 0.5);
@@ -826,9 +802,8 @@ export class Spindle {
     }
   }
 
-  // 4: drones: little spiked gunships. They pace you off your flanks (one each side, a little ahead)
-  // and spit short bursts of bolts at you; they keep their distance. They can be shot down: one goes dark,
-  // can't fire, and powers back up after DRONE_REBOOT seconds, keeping its place off your flank meanwhile.
+  // 4: drones: spiked gunships pacing you off each flank, a little ahead, firing short bursts. Shot down, one goes dark
+  // and can't fire for DRONE_REBOOT s, keeping its place meanwhile.
   spawnDrone() {
     const g = this.game;
     const m = makeDrone();
@@ -845,18 +820,17 @@ export class Spindle {
     const g = this.game;
     const P = g.player;
     const up = P.up;
-    // which way you're heading along the rock (or along the axis, standing still)
+    // your heading on the rock (the axis when standing still)
     const fwd = P.vel.clone().addScaledVector(up, -P.vel.dot(up));
     const sp = fwd.length();
     if (sp > 3) fwd.divideScalar(sp); else fwd.copy(AX);
     const right = new THREE.Vector3().crossVectors(fwd, up).normalize();
     for (const d of this.drones) {
-      // shot down: it goes dark and silent for DRONE_REBOOT seconds, then reboots (and all the while it keeps
-      // station off your flank like the live ones; only its guns and its light are off)
+      // shot down: dark and silent for DRONE_REBOOT s but still keeping station
       if (d.dead && !(d.downT > 0)) {
         d.downT = DRONE_REBOOT;
         d.model.root.userData.core.material = d.model.root.userData.core.userData.dark;
-        this.root.add(d.model.root); // (the kill took it out of the scene)
+        this.root.add(d.model.root); // the kill removed it from the scene
       }
       if (d.downT > 0) {
         d.downT -= dt;
@@ -879,15 +853,14 @@ export class Spindle {
       d.model.root.position.copy(d.center);
       d.model.root.rotation.y += dt * (down ? 0.6 : 4);
       if (down) continue;
-      // short bursts, leading you a little
+      // short bursts, leading you
       d.fireCd -= dt;
       const dist = d.center.distanceTo(P.center);
       if (d.fireCd <= 0 && dist < 160 && !P.dead) {
         d.fireCd = 1.1 + Math.random() * 0.8;
         for (let i = 0; i < 3; i++) g.schedule(i * 0.09, () => {
           if (d.dead || !this.active || P.dead) return;
-          // (faster bolts, led onto where you'll be, with a little splash: a runner on the move still
-          // gets clipped now and then)
+          // fast leading bolts with a little splash, so a moving runner still gets clipped
           const aim = P.center.clone().addScaledVector(P.vel, d.center.distanceTo(P.center) / 150).add(new THREE.Vector3((Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5));
           g.projectiles.fire('alien', d.center.clone(), aim.sub(d.center).normalize().multiplyScalar(150), { damage: 5, splash: 1.4, color: PINK, size: 0.3, knock: 0.2 });
         });
@@ -896,7 +869,7 @@ export class Spindle {
     }
   }
 
-  // the launch pad's plinth and ramps, as colliders (you skate up a ramp and stand on the deck)
+  // launch pad plinth and ramps as colliders
   padColliders() {
     const C = this.game.colliders;
     const p = bandPoint(PAD_S, 0, 0);
@@ -907,13 +880,13 @@ export class Spindle {
     const slope = Math.atan2(PAD_DECK, RAMP_L), hyp = Math.hypot(PAD_DECK, RAMP_L);
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2;
-      // the ramp's run (outward from the deck) and its surface normal
+      // ramp run (outward) and surface normal
       const out = fwd.clone().multiplyScalar(Math.cos(a)).addScaledVector(right, Math.sin(a));
       const along = out.clone().multiplyScalar(Math.cos(slope)).addScaledVector(up, -Math.sin(slope)); // down the ramp
       const n = new THREE.Vector3().crossVectors(along, new THREE.Vector3().crossVectors(up, out)).normalize();
       if (n.dot(up) < 0) n.negate();
       const side = new THREE.Vector3().crossVectors(n, along).normalize();
-      // (its top face is the wedge's: from the deck's edge at deck height to the ground)
+      // top face matches the wedge: deck edge at deck height down to the ground
       const c = p.clone().addScaledVector(out, PAD_R + RAMP_L / 2).addScaledVector(up, PAD_DECK / 2).addScaledVector(n, -0.3);
       this.cols.push(C.add({ type: 'box', c, ax: side, ay: n, az: along, hx: 3.5, hy: 0.3, hz: hyp / 2 }));
     }

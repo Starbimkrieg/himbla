@@ -6,24 +6,21 @@ import { NAME_TAGS, setMask } from '../toon.js';
 import { Race } from '../race.js';
 import { Colliders } from '../physics.js';
 
-// Builds one of the game's settlements / headquarters / landmarks standalone, for the Asset Row (assetRowItems/places.js).
+// Builds one settlement / HQ / landmark standalone for the Asset Row (assetRowItems/places.js).
 //
-// The game builds a place by calling World.buildLocation(loc) on its one World; that sets singletons on the World (lab, reactor,
-// rocket, casino, rides ...), registers colliders and adds a PointLight to the scene. So a place here is built on a PRIVATE
-// stub World (Object.create(World.prototype) with its own fields: only the builders' put / col / rand / pad / flag / anims /
-// rides ... are used, never the constructor, never g.world), into a group of its own at the item's origin, on a flat ground at
-// y = 0. Nothing is shared with the live game except module-level caches (toon materials, baked kits) which are harmless, and
-// the NAME_TAGS list, which is cleaned up in dispose().
+// World.buildLocation(loc) sets World singletons (lab, reactor, rocket, casino, rides ...), registers colliders and adds a
+// PointLight, so here it runs on a PRIVATE stub World (Object.create(World.prototype), own fields, no constructor, never
+// g.world), into its own group on flat ground at y = 0. Shared with the live game: only module caches (toon materials, baked
+// kits; harmless) and NAME_TAGS, which dispose() cleans up.
 
-// The Moon's planet interface as far as the builders use it (flat stand-in; the launch complex's tilt is not shown here)
+// the planet interface the builders use, flat (no launch-complex tilt)
 const FLAT = { R: 3600, addFlat() {}, keepClear() {}, surface: () => 0, altitude: () => 10, ground: (p, o) => (o || new THREE.Vector3()).set(p.x, 0, p.z), visible: () => true };
 
 const UP = new THREE.Vector3(0, 1, 0);
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
 
-// A world-space collider the builders registered (as the game's Colliders takes it) -> a spec in the row's format
-// (box with a yaw only, vertical cylinders, spheres). A horizontal cylinder (an arched roof) becomes the box round it, and a
-// tilted box (a ramp) the upright box round its tilted shape.
+// A game collider (world space) -> a row spec (yawed box, vertical cylinder, sphere). A horizontal cylinder (arched roof)
+// becomes its bounding box; a tilted box (ramp) the upright box round it.
 function toSpec(c) {
   if (c.type === 'sphere') return { type: 'sphere', x: c.c.x, y: c.c.y, z: c.c.z, r: c.r };
   if (c.type === 'cyl') {
@@ -38,11 +35,11 @@ function toSpec(c) {
   return { type: 'box', x: c.c.x, y: c.c.y, z: c.c.z, hx, hy, hz, yaw };
 }
 
-// The stub World a place is built on. `scene` is private (the antimatter lab adds its reactor light to it: the live game's
-// light count must not change).
+// The stub World. `scene` is private: the antimatter lab adds its reactor light to it, and the live game's light count must
+// not change.
 function stubWorld(colList) {
   const w = Object.create(World.prototype);
-  const colliders = new Colliders(); // (a private one: the pylons look for free ground in it; it also records every collider for the row)
+  const colliders = new Colliders(); // (private: pylons look for free ground in it; also records every collider for the row)
   const add = colliders.add.bind(colliders);
   colliders.add = (c) => { colList.push(c); return add(c); };
   Object.assign(w, {
@@ -55,7 +52,7 @@ function stubWorld(colList) {
 
 // spec: { loc: id of a LOCATIONS entry (or a whole loc object in `base`), over: fields to change, race: true for Chimera Downs,
 //         yaw: turn the place about its centre, lamp: false ... }
-// ctx is the shell's { game, moon } (read only: the camera, for the distance switches).
+// ctx is the shell's { game, moon } (read only: the camera, for distance switches).
 export function buildPlace(ctx, spec) {
   const base = spec.base || LOCATIONS.find((l) => l.id === spec.loc);
   const tags0 = NAME_TAGS.length;
@@ -63,7 +60,7 @@ export function buildPlace(ctx, spec) {
   const w = stubWorld(colList);
   const stage = new THREE.Group();
   stage.name = `place:${base.id}`;
-  w.frame = (loc) => { // (the game's frame() points local +z sunward on the Moon: here, along the row's +z unless turned)
+  w.frame = (loc) => { // (the game's frame() points local +z sunward; here the row's +z unless turned)
     const g = new THREE.Group();
     g.rotation.y = spec.yaw || 0;
     stage.add(g);
@@ -75,8 +72,7 @@ export function buildPlace(ctx, spec) {
   w.locations.push(loc);
   w.buildLocation(loc);
   if (spec.race) {
-    // Chimera Downs: the course is built by the Race (race.js build()), on a fake Race with just what build() and the two
-    // canvas boards use; the racing state and panel are untouched
+    // Chimera Downs: race.js build() makes the course, on a fake Race with just what build() and the boards use
     const fake = Object.create(Race.prototype);
     Object.assign(fake, { game: { world: w }, loc, crowd: [], panel: null, state: 'idle', card: [], postT: 60, excite: 0, racers: [] });
     fake.build();
@@ -85,14 +81,14 @@ export function buildPlace(ctx, spec) {
     w.race = fake;
   }
   if (spec.after) spec.after(w, loc);
-  // the reactor's light belongs to the game's scene: not here (it would change the live game's shaders)
+  // drop the reactor light (an extra light would change the live game's shaders)
   if (w.reactorLight) { w.reactorLight.removeFromParent(); w.reactorLight.dispose && w.reactorLight.dispose(); w.reactorLight = { intensity: 0 }; }
-  if (w.rocket) { w.rocket.t = 22; World.prototype.updateRocket.call(w, 0); } // (parked on its pad for the next while, then its cycle runs: landing, lift-off)
+  if (w.rocket) { w.rocket.t = 22; World.prototype.updateRocket.call(w, 0); } // (parked on its pad a while, then its landing / lift-off cycle runs)
   w.prepCulling(loc);
-  w.mergeLocation(loc); // (static geometry folded to a few meshes, as the game does the first time a place is drawn)
+  w.mergeLocation(loc); // (static geometry merged, as the game does on first draw)
   stage.updateMatrixWorld(true);
 
-  // my NAME_TAGS (Dr. Zbornak ...): taken off again in dispose()
+  // this place's NAME_TAGS (Dr. Zbornak ...), removed in dispose()
   const tags = NAME_TAGS.slice(tags0);
 
   const cam = ctx.game.camera.position, camL = new THREE.Vector3(), here = new THREE.Vector3();
@@ -101,7 +97,7 @@ export function buildPlace(ctx, spec) {
     stage.getWorldPosition(here);
     loc.camDist = here.distanceTo(cam);
     camL.copy(cam); stage.worldToLocal(camL);
-    // (World.update, the part that moves things in a place: world.js update())
+    // (the place-animating part of world.js update())
     for (const s of w.spinners) s.obj.rotation[s.axis] += s.speed * dt;
     for (const a of w.anims) for (const o of a.list) {
       const u = o.userData;
@@ -129,7 +125,7 @@ export function buildPlace(ctx, spec) {
     World.prototype.updateFigures.call(w, dt);
     World.prototype.updateWalkers.call(w, dt, camL);
     if (w.race) w.race.updateCrowd(t);
-    // (the game's distance switches: ink outlines past ~130 m, small props past ~290 m; in the row they keep the draw count down)
+    // (the game's distance switches, to keep draw count down: ink outlines off past ~130 m, small props past ~290 m)
     cullT -= dt;
     if (cullT <= 0) {
       cullT = 0.25;
@@ -147,8 +143,8 @@ export function buildPlace(ctx, spec) {
   };
 
   const dispose = () => {
-    // what the shell's geometry/material sweep does not reach: a skinned figure's bone texture (residents, patrons: ~30 a place)
-    // and instanced meshes' own buffers (the Downs crowd)
+    // what the shell's geometry/material sweep misses: skinned figures' bone textures (~30 a place) and instanced meshes'
+    // buffers (the Downs crowd)
     stage.traverse((o) => {
       if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose();
       if (o.isInstancedMesh) o.dispose();
@@ -163,7 +159,7 @@ export function buildPlace(ctx, spec) {
   return { root: stage, cols: colList.map(toSpec), update, dispose };
 }
 
-// The red zone wall round a restricted military post (world.js buildMilitary): a 170 m tall striped cylinder, no colliders.
+// The red zone wall round a military post (world.js buildMilitary): 170 m striped cylinder, no colliders.
 export function buildZoneWall(R) {
   const mat = zoneWallMaterial();
   const wall = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 170, 96, 1, true), mat);

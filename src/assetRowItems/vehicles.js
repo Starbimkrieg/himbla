@@ -1,8 +1,8 @@
 // Asset Row catalogue: 06 GROUND VEHICLES and 07 SHIPS (see index.js for the item format).
 //
-// Every vehicle is a STATIC display standing on y = 0 (the game's vehicle physics assume a round planet and are not wired up
-// here): wheels as built, landing gear down, ramps up, no thrust. Only cheap cosmetic updates run (flag cloth, spinning gatling,
-// phase coils, a land-train's beacon). Everything is built with the pure model factories, never through Garage, Traffic or Enemies.
+// Every vehicle is a STATIC display on y = 0 (vehicle physics assume a round planet): wheels as built, gear down, ramps up,
+// no thrust. Only cheap cosmetic updates run (flag cloth, gatling, phase coils, land-train beacon). Built with the pure
+// model factories, never through Garage, Traffic or Enemies.
 import * as THREE from 'three';
 import {
   makeLightBike, makeSkimmer, makeRover, makeHoverCar, makeKadeTruck, makeTurret, makeLandTrain, makeShuttle, makeFreighter, makeRocket,
@@ -20,15 +20,15 @@ const FACTION_COLOR = { spacecom: 0xffd23f, vostok: 0xff3b5c, meridian: 0x2ec4ff
 // helpers
 // ---------------------------------------------------------------------------------------------------------------------------
 
-// a model turned to `yaw` about y (its nose, +z, then points along (sin yaw, 0, cos yaw)); lift: its lowest point is put there.
-// Returns a group with an identity transform (what an item's root must be) holding the turned model.
+// A model turned to `yaw` about y (nose +z then points along (sin yaw, 0, cos yaw)); lift: where its lowest point goes.
+// Returns an identity-transform group (as an item root must be) holding it.
 function pose(obj, yaw = 0, lift = null) {
   const g = new THREE.Group();
   g.add(obj);
   g.rotation.y = yaw;
   if (lift !== null) {
     g.updateMatrixWorld(true);
-    const b = new THREE.Box3().setFromObject(g, true); // (precise: a tilted part's loose box would float the model)
+    const b = new THREE.Box3().setFromObject(g, true); // (precise: a tilted part's loose box would float it)
     g.position.y = lift - b.min.y;
   }
   const outer = new THREE.Group();
@@ -36,8 +36,7 @@ function pose(obj, yaw = 0, lift = null) {
   return outer;
 }
 
-// Invisible parts (a ship's folded-away thrust plumes, its stowed gear) take no room: take them out of the tree, so that what
-// is measured (and centred, and boxed) is what is seen.
+// Removes invisible parts (folded thrust plumes, stowed gear) so what is measured, centred and boxed is what is seen.
 function pruneHidden(root) {
   const gone = [];
   root.traverse((o) => { if (!o.visible && o !== root) gone.push(o); });
@@ -45,11 +44,11 @@ function pruneHidden(root) {
   return root;
 }
 
-// a sub-row part for lineUp(): a root with the room it takes
+// a lineUp() part: root plus the room it takes
 const part = (root, w, d) => ({ root, w, d });
 
-// Variants in two staggered rows (the first `nFront` in front, the rest behind, in the gaps between): every one can be seen from the
-// walking side. `pitch` = the spacing along the row, `dz` = between the rows.
+// Variants in two staggered rows (first `nFront` in front, the rest behind in the gaps), all visible from the walk.
+// `pitch` = spacing along the row, `dz` = between rows.
 function brick(parts, pitch, dz, nFront = Math.ceil(parts.length / 2)) {
   const root = new THREE.Group();
   const back = parts.length - nFront;
@@ -66,7 +65,7 @@ const flagUpdate = (m) => (m.anim ? (dt, t) => m.anim(t, 0) : undefined);
 
 const rover = (o) => makeRover({ pirate: false, ...o });
 
-// a faction's armoured patrol car, as enemies.js spawns it on base patrol (x1.15)
+// faction armoured patrol car, as enemies.js spawns it (x1.15)
 function patrolRover(faction) {
   const fc = FACTION_COLOR[faction];
   const m = rover({ color: 0x55607a, trim: fc, flag: fc, style: 'military' });
@@ -74,7 +73,7 @@ function patrolRover(faction) {
   return m;
 }
 
-// a faction's troops' car (x1.3, from storyAssets FOES)
+// faction troop car (x1.3, storyAssets FOES)
 function troopRover(faction) {
   const F = FOES[faction].rover;
   const m = rover({ color: F.color, trim: F.trim, flag: F.flag, style: F.civil ? 'civil' : 'military' });
@@ -82,8 +81,8 @@ function troopRover(faction) {
   return m;
 }
 
-// The land-trains: tractor and cars in a row along z (the tractor's nose +z, the cars behind it at the spacings traffic.js
-// drives them at), the drawbars pointed at each coupling pin, then the whole train turned to run along the row (+x).
+// Land-trains: tractor (nose +z) and cars behind it along z at traffic.js spacings, drawbars aimed at each coupling pin,
+// then the whole train turned to run along the row (+x).
 const _z = new THREE.Vector3(0, 0, 1), _b = new THREE.Vector3();
 function linkBar(t, ahead, pinZ) {
   ahead.updateMatrixWorld();
@@ -113,8 +112,8 @@ const trainItem = (type, faction, cars, label, w, d) => ({
 // ---------------------------------------------------------------------------------------------------------------------------
 // 06 GROUND VEHICLES
 // ---------------------------------------------------------------------------------------------------------------------------
-const YAW = 1.0; // a three-quarter view: the nose points along the row and a little toward the walker
-const YAW_ROW = 1.3; // the same, nearer a side view: for the sub-rows, where it takes less room
+const YAW = 1.0; // three-quarter view: nose along the row, a little toward the walker
+const YAW_ROW = 1.3; // nearer a side view, for sub-rows (takes less room)
 
 const ground = {
   id: 'vehicles.ground',
@@ -129,7 +128,7 @@ const ground = {
       make: () => { const m = buildVehicleModel('apc'); return { root: pose(m.root, YAW) }; },
     },
     {
-      // the classic Skimmer and the two Blender redesigns (A Aegis, B Bulwark) side by side, as built (the runner rides inside)
+      // classic Skimmer and the two Blender redesigns (A Aegis, B Bulwark), as built (the runner rides inside)
       id: 'veh.skimmer', label: 'DAEDALUS PHASE SKIMMER · CLASSIC, A, B', w: 28, d: 9,
       make: () => {
         const { color, trim } = VEHICLES.skimmer;
@@ -138,7 +137,7 @@ const ground = {
       },
     },
     {
-      // the Mule, and the Kepler hometown motor pool's own (a lighter green, no scale-up)
+      // the Mule, and the Kepler hometown motor pool's rover (lighter green, no scale-up)
       id: 'veh.mule', label: 'KEPLER MULE · HOMETOWN ROVER', w: 17, d: 8,
       make: () => {
         const mule = buildVehicleModel('mule');
@@ -152,7 +151,7 @@ const ground = {
       make: () => { const m = buildVehicleModel('carrier'); return { root: pose(m.root, YAW) }; },
     },
     {
-      // the classic bike and the two Blender redesigns (A Slipstream, B Parcel Runner) side by side, as built (no rider)
+      // classic bike and the two Blender redesigns (A Slipstream, B Parcel Runner), as built (no rider)
       id: 'veh.lightbike', label: 'MERIDIAN COURIER LIGHT-BIKE · CLASSIC, A, B', w: 22, d: 4,
       make: () => ({
         root: lineUp(['classic', 'a', 'b'].map((style) => part(pose(makeLightBike({ style }).root, YAW), 6, 4))).root,
@@ -185,7 +184,7 @@ const ground = {
       },
     },
     {
-      // the four faction cars (SPACECOM's with its light bar), then the five civilian paints
+      // four faction cars (SPACECOM's with light bar), then five civilian paints
       id: 'veh.hover-cars', label: 'HOVER-CARS · 4 FACTION, 5 CIVILIAN', w: 36, d: 12,
       make: () => {
         const cars = [...['spacecom', 'vostok', 'kepler', 'meridian'].map((faction) => makeHoverCar({ faction })), ...[0, 1, 2, 3, 4].map((paint) => makeHoverCar({ paint }))];
@@ -198,7 +197,7 @@ const ground = {
       id: 'veh.kade-truck', label: "CAPTAIN KADE'S GUN TRUCK", w: 19, d: 17,
       make: () => {
         const m = makeKadeTruck();
-        m.root.scale.setScalar(1.25); // (a boss: bigger than anything else on the road)
+        m.root.scale.setScalar(1.25); // (boss: biggest thing on the road)
         return { root: pose(m.root, YAW), update: (dt) => { m.gatSpin.rotation.z += dt * 6; } };
       },
     },
@@ -208,13 +207,13 @@ const ground = {
       w: { convoy: 15, warden: 20, hammer: 17 }[k], d: { convoy: 12, warden: 17.5, hammer: 15 }[k],
       make: () => { const m = BOSS_MODELS[k](); m.root.scale.setScalar(1.25); return { root: pose(m.root, YAW) }; },
     })),
-    // land-trains: four faction liveries of each service, a train per item (they run 39 m)
+    // land-trains: four faction liveries per service, one train per item (39 m long)
     ...[['spacecom', 'SPACECOM'], ['vostok', 'VOSTOK'], ['kepler', 'KEPLER'], ['meridian', 'MERIDIAN']].map(([f, n]) =>
       trainItem('moonliner', f, ['pax', 'pax', 'pax'], `MOONLINER LAND-TRAIN · ${n}`, 39, 6)),
     ...[['spacecom', 'SPACECOM', ['tank', 'cargo', 'blast']], ['vostok', 'VOSTOK', ['cargo', 'tank', 'blast']], ['kepler', 'KEPLER', ['tank', 'tank', 'blast']], ['meridian', 'MERIDIAN', ['tank', 'cargo', 'cargo']]].map(([f, n, cars]) =>
       trainItem('prospector', f, cars, `PROSPECTOR FREIGHT TRAIN · ${n}`, 39, 6)),
     {
-      // the base gun turrets: each faction's colour, then the ILMB's heavy x1.35
+      // base gun turrets in each faction's colour, then the ILMB's heavy x1.35
       id: 'veh.turrets', label: 'BASE TURRETS · 5 FACTIONS · ILMB HEAVY', w: 44, d: 11,
       make: () => {
         const ts = [...Object.values(FACTION_COLOR).map((c) => makeTurret({ color: c })), makeTurret({ color: FACTION_COLOR.spacecom })];
@@ -229,7 +228,7 @@ const ground = {
 // ---------------------------------------------------------------------------------------------------------------------------
 // 07 SHIPS
 // ---------------------------------------------------------------------------------------------------------------------------
-// The transit ships' origin is where they fly; stood on the pad their feet are gearH below it: pose() puts the feet on y = 0.
+// Transit ships' origin is their flight point; on a pad their feet are gearH below it. pose() puts the feet on y = 0.
 const ships = {
   id: 'vehicles.ships',
   title: '07 · SHIPS',
@@ -251,7 +250,7 @@ const ships = {
       },
     },
     {
-      // the pirate wreck event's ship: small, dark, bay doors hanging, tipped over on one landing leg (events.js spawnWreck)
+      // pirate wreck event's ship: small, dark, bay doors hanging, tipped on one leg (events.js spawnWreck)
       id: 'ship.crashed-freighter', label: 'CRASHED PIRATE FREIGHTER', w: 39, d: 36,
       make: () => {
         const s = makeFreighter({ color: 0x3a2b4f, stripe: 0x7dff3a });
@@ -266,7 +265,7 @@ const ships = {
       id: 'ship.rocket', label: 'ARRIVALS ROCKET', w: 11, d: 11,
       make: () => {
         const r = makeRocket();
-        r.flame.visible = r.core.visible = false; // (it stands on its pad, not flying)
+        r.flame.visible = r.core.visible = false; // (on its pad, not flying)
         return { root: pose(pruneHidden(r.root), 0, 0) };
       },
     },
@@ -283,16 +282,15 @@ const ships = {
 
 export default [ground, ships];
 
-// SKIPPED (not shown, and why)
-// - The other shuttle-bus stripes (orange, green, violet), the freighter's other stripes (pink, cyan), and the medevac / recall /
-//   Spindle-pod scalings of the shuttle: the same model, only a colour or a scale differs (a row of them would be 100 m wide).
-// - The crashed freighter's prone pirate: a character (makeFigure), not a vehicle.
-// - Vehicles parked in places (the ILMB depot's patrol rovers, the casino car park, the events.js "supply rover"): the same models
-//   as above (the hometown motor pool's own paint is in the Mule item).
-// - Scenery that merely contains a vehicle shape (the tower crane, garage hall, dish stations, the Helium-3 bucket-wheel excavator,
-//   the junk pile's half-buried rover, the Meridian launch pad's rocket, the shuttle-bus rendered into the Vostok hangar): the
-//   buildings and places groups.
-// - The Spindle's alien drone (spindle.js makeDrone): an enemy, not a vehicle (the props manifest lists it).
-// - Driving, wheel spin, turret tracking, ramps and gear cycles, thrust plumes: vehicles here are static displays.
-// OVERLAP to watch: the props manifest also lists prop.turret, prop.rocket and spindle.mothership; they are built here too
-// (veh.turrets, ship.rocket, ship.mothership), so one of the two groups should drop them.
+// SKIPPED (and why)
+// - Other shuttle-bus stripes (orange, green, violet), freighter stripes (pink, cyan), and the shuttle's medevac / recall /
+//   Spindle-pod scalings: same model, only colour or scale differs (a row would be 100 m wide).
+// - The crashed freighter's prone pirate: a character (makeFigure).
+// - Vehicles parked in places (ILMB depot patrol rovers, casino car park, events.js "supply rover"): same models as above
+//   (the hometown motor pool's paint is in the Mule item).
+// - Scenery containing a vehicle shape (tower crane, garage hall, dish stations, Helium-3 bucket-wheel excavator, junk pile's
+//   half-buried rover, Meridian launch pad's rocket, shuttle-bus in the Vostok hangar): buildings and places groups.
+// - The Spindle's alien drone (spindle.js makeDrone): an enemy (the props manifest lists it).
+// - Driving, wheel spin, turret tracking, ramp and gear cycles, thrust plumes: these are static displays.
+// OVERLAP: the props manifest also lists prop.turret, prop.rocket and spindle.mothership, built here too (veh.turrets,
+// ship.rocket, ship.mothership); one group should drop them.

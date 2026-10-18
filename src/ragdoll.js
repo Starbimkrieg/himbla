@@ -2,21 +2,17 @@ import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { upAt, radOf } from './geo.js';
 
-// A physics ragdoll for the runner (wipeouts and hard crashes). Eleven verlet particles joined by
-// distance constraints: a rigid torso cage (pelvis, chest, both shoulders and hips), a head that
-// swings on the chest, arms and legs that swing at the shoulders and hips. They fall under the
-// planet's gravity and collide with the ground and the buildings, so no two falls play the same: the
-// tumble axis, the spin and every limb's kick are random, and what the body hits decides the rest.
-// The model is then posed from the particles: the whole runner is rigidly fitted to the torso cage
-// and each limb pivot aims at its particle. The player's own body keeps its momentum and its
-// controls: the player's body is carried by the ragdoll (sync): the camera follows it, and the
-// player ends up wherever it comes to rest. It runs until everything has stopped moving, then gets
-// back up, blending into the normal pose.
+// Runner ragdoll (wipeouts, hard crashes). Eleven verlet particles with distance constraints: a rigid torso cage
+// (pelvis, chest, shoulders, hips), a head swinging on the chest, limbs swinging at shoulders and hips. They fall
+// under planet gravity and collide with ground and buildings; tumble axis, spin and limb kicks are random.
+// The model is posed from the particles: rigidly fitted to the torso cage, each limb pivot aimed at its particle.
+// The ragdoll carries the player's body (sync), so the camera follows and the player ends where it rests. Once
+// everything stops it gets back up, blending into the normal pose.
 
 const PEL = 0, CHE = 1, HED = 2, SHL = 3, SHR = 4, HPL = 5, HPR = 6, HNL = 7, HNR = 8, FTL = 9, FTR = 10;
-const RAD = [0.28, 0.28, 0.26, 0.2, 0.2, 0.22, 0.22, 0.16, 0.16, 0.18, 0.18]; // (how thick each part is)
-const STEP = 1 / 120, ITER = 6, GRAV = 1.5; // (x the game's gravity: a fall should read as a fall)
-const MAXV = 140; // m/s: nothing flies off faster than this
+const RAD = [0.28, 0.28, 0.26, 0.2, 0.2, 0.22, 0.22, 0.16, 0.16, 0.18, 0.18]; // collision radius per particle
+const STEP = 1 / 120, ITER = 6, GRAV = 1.5; // GRAV: x game gravity, so a fall reads as a fall
+const MAXV = 140; // m/s particle speed cap
 const GETUP = 0.55;
 
 // [a, b, kind]: 0 rigid, -1 no closer than k x rest (min)
@@ -42,7 +38,7 @@ function basis(out, pel, che, shl, shr) {
 }
 
 export class Ragdoll {
-  // sign: +1 pitches forward (head first over the skates), -1 backward (thrown back off a wall)
+  // sign: +1 pitches forward (head first), -1 backward (thrown off a wall)
   constructor(game, model, body, sign = 1) {
     this.g = game;
     this.m = model;
@@ -52,7 +48,7 @@ export class Ragdoll {
     this.calm = 0;
     this.getUp = -1;
     const m = model;
-    // the model's rest pose, to measure the skeleton from
+    // measure the skeleton from the rest pose
     this.zero();
     m.root.updateMatrixWorld(true);
     const s = m.root.scale.x || 1;
@@ -87,24 +83,22 @@ export class Ragdoll {
     this.p = this.rest.map((w) => w.clone());
     this.prev = this.rest.map((w) => w.clone());
     this.G = (PHYS.gravity || 6) * GRAV;
-    // the sim moves in whole fixed steps, but frames land between them: q is the state one step back
-    // and R the particles as drawn (q -> p by how far into the next step the frame is), so the pose
-    // and the camera glide at the frame rate instead of stepping unevenly (see update())
+    // fixed steps, frames in between: q is the state one step back, R the drawn particles (q -> p by the frame's
+    // fraction into the step), so pose and camera move smoothly (update())
     this.q = this.p.map((w) => w.clone());
     this.R = this.p.map((w) => w.clone());
-    this.cam = body.pos.clone(); // (what the camera follows: body.pos, smoothed; see follow())
+    this.cam = body.pos.clone(); // camera focus: body.pos smoothed (follow())
     this.camAt = body.pos.clone();
     this.camV = body.vel.clone();
 
-    // launch: every particle gets the body's velocity plus a random tumble about a horizontal axis
-    // (pitching forward or back), a random spin about the vertical and a kick of its own
+    // launch: body velocity plus a random tumble about a horizontal axis, a random spin about up, and per-limb kicks
     const up = body.up;
     const vel = _vel.copy(body.vel);
     const vH = vel.clone().addScaledVector(up, -vel.dot(up));
     const sp = vH.length();
     const dir = sp > 1 ? vH.divideScalar(sp) : new THREE.Vector3(0, 0, 1).applyQuaternion(m.root.quaternion);
     const axis = new THREE.Vector3().crossVectors(up, dir).multiplyScalar(sign);
-    axis.addScaledVector(new THREE.Vector3().crossVectors(up, dir).cross(up), (Math.random() - 0.5) * 0.8); // (a bit of sideways roll)
+    axis.addScaledVector(new THREE.Vector3().crossVectors(up, dir).cross(up), (Math.random() - 0.5) * 0.8); // some sideways roll
     axis.normalize();
     const w = (3.5 + Math.min(sp, 60) * 0.1) * (0.6 + Math.random() * 0.9);
     const omega = axis.multiplyScalar(w).addScaledVector(up, (Math.random() - 0.5) * 6);
@@ -112,12 +106,12 @@ export class Ragdoll {
     for (let i = 0; i < this.p.length; i++) {
       const r = _d.subVectors(this.p[i], com);
       const v = new THREE.Vector3().crossVectors(omega, r).add(body.vel);
-      if (i >= HNL || i === HED) v.add(new THREE.Vector3((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5)); // (limbs kick)
+      if (i >= HNL || i === HED) v.add(new THREE.Vector3((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5)); // limbs kick
       this.prev[i].copy(this.p[i]).addScaledVector(v, -STEP);
     }
   }
 
-  // the model's pivots back at their rest values (animate() takes over again from here)
+  // pivots back to rest (animate() takes over from here)
   zero() {
     const m = this.m;
     m.trick.position.y = 1.2;
@@ -128,7 +122,7 @@ export class Ragdoll {
 
   release() { this.zero(); }
 
-  // one particle against the ground and buildings: pushed out, with a little bounce and plenty of friction
+  // one particle vs ground and buildings: pushed out, slight bounce, high friction
   collide(i, solids) {
     const g = this.g;
     const p = this.p[i], prev = this.prev[i], rad = RAD[i];
@@ -142,7 +136,7 @@ export class Ragdoll {
       }
     };
     const sr = g.planet.surface(p, _n);
-    const pen = sr + rad - radOf(p); // (from the Moon's centre, or the Spindle's axis)
+    const pen = sr + rad - radOf(p); // radius from the Moon's centre, or the Spindle's axis
     if (pen > 0) resolve(_n, pen, 0.2);
     if (!solids) return;
     for (const col of g.colliders.query(p, 1.2, _near)) {
@@ -158,7 +152,7 @@ export class Ragdoll {
       _vel.subVectors(p[i], prev[i]).multiplyScalar(0.996);
       if (_vel.length() > MAXV * h) _vel.setLength(MAXV * h);
       prev[i].copy(p[i]);
-      p[i].add(_vel).addScaledVector(upAt(p[i], _g), -this.G * h * h); // (down is toward the Moon's centre, or the Spindle's axis)
+      p[i].add(_vel).addScaledVector(upAt(p[i], _g), -this.G * h * h); // down: toward the Moon's centre, or the Spindle's axis
     }
     for (let it = 0; it < ITER; it++) {
       for (const [a, c, d] of this.rigid) {
@@ -176,15 +170,14 @@ export class Ragdoll {
       }
       for (let i = 0; i < p.length; i++) this.collide(i, it === ITER - 1);
     }
-    // settled? (the trunk and head have all but stopped)
+    // settled once trunk and head have all but stopped
     let fast = 0;
     for (const i of [PEL, CHE, HED]) fast = Math.max(fast, _vel.subVectors(p[i], prev[i]).length() / h);
     this.calm = fast < 0.7 ? this.calm + h : 0;
   }
 
-  // The camera's focus: the body's position (as drawn), filtered. The pelvis still jolts on every
-  // contact and constraint pass, so following it directly shakes the view. This coasts on a smoothed
-  // velocity (no lag behind a steady fall) and eases onto the target.
+  // Camera focus: the drawn body position, filtered (the pelvis jolts on every contact and constraint pass). Coasts
+  // on a smoothed velocity (no lag in a steady fall) and eases onto the target.
   follow(dt, at) {
     if (dt <= 0) return;
     const k = 1 - Math.exp(-dt * 10);
@@ -193,28 +186,27 @@ export class Ragdoll {
     this.cam.addScaledVector(this.camV, dt).lerp(at, k);
   }
 
-  // The player's body goes where the ragdoll goes: the pelvis, brought down to the feet's level
-  // while it's in the air and to the ground once it's lying. Called after update().
+  // The player's body follows the pelvis, dropped to feet level in the air and to the ground when lying. Call after update().
   sync(dt) {
     const b = this.b, pel = this.p[PEL];
-    if (this.getUp >= 0) { b.vel.set(0, 0, 0); this.follow(dt, b.pos); return; } // (settled: stay put and stand up here)
+    if (this.getUp >= 0) { b.vel.set(0, 0, 0); this.follow(dt, b.pos); return; } // settled: stand up here
     upAt(pel, b.up);
     const sr = this.g.planet.surface(pel, _n);
     const h = Math.max(0, radOf(pel) - sr);
     b.pos.copy(pel).addScaledVector(b.up, -Math.min(0.95, h));
     b.vel.subVectors(pel, this.prev[PEL]).multiplyScalar(1 / STEP);
-    this.follow(dt, _sh.copy(b.pos).add(this.R[PEL]).sub(pel)); // (b.pos, but for the pelvis as drawn)
+    this.follow(dt, _sh.copy(b.pos).add(this.R[PEL]).sub(pel)); // b.pos for the pelvis as drawn
     b.groundN.copy(_n);
     b.grounded = h < 0.7;
     b.airTime = b.grounded ? 0 : b.airTime + dt;
     b.skating = false; b.thrusting = false;
   }
 
-  // false when it's done and the runner is back on their feet
+  // false once the runner is back on their feet
   update(dt) {
     const m = this.m;
     const st = this.stand;
-    // (animate() has just posed the runner normally: that's what we get back up into)
+    // animate() just posed the runner normally: that's the get-up target
     st.pos.copy(m.root.position);
     st.quat.copy(m.root.quaternion);
     st.bodyY = m.body.position.y;
@@ -227,11 +219,10 @@ export class Ragdoll {
         this.simulate(STEP);
         this.acc -= STEP;
       }
-      if ((this.calm > 0.5 && this.t > 0.6) || this.t > 14) this.getUp = 0; // (the cap is only a safety net)
+      if ((this.calm > 0.5 && this.t > 0.6) || this.t > 14) this.getUp = 0; // the 14 s cap is a safety net
     } else this.getUp += dt / GETUP;
 
-    // pose: fit the whole runner to the torso cage, then aim each limb at its particle (drawn a
-    // fraction of the way from the last step's state to the newest, by how far this frame is into it)
+    // pose: fit the runner to the torso cage, aim each limb at its particle (interpolated by the frame's step fraction)
     const p = this.R, f = this.getUp < 0 ? this.acc / STEP : 1;
     for (let i = 0; i < p.length; i++) p[i].lerpVectors(this.q[i], this.p[i], f);
     this.zero();
