@@ -2589,6 +2589,8 @@ const DOWNS_FILES = ['downs-stand', 'downs-club', 'downs-course', 'downs-stalls'
 export const DOWNS_TOON = {
   mint: 0xf8fff8, mint2: 0xdfe8dd, gold: 0xcfb352, gold2: 0xa8903a, saddle: 0xb07c57, saddle2: 0x8c5f3f, black: 0x3b393a, black2: 0x5a5760,
   money: 0x7b9a6e, money2: 0x5b7a52, barn: 0x8b4044, barn2: 0x6a2e33, seat: 0x7b9a6e, cloth: 0x8b4044, accent: 0x8b4044,
+  // the spectators' slots (downs-crowd), which race.js tints per spectator; these are a typical racegoer's, for whatever draws a part untinted
+  coat: 0x3b393a, shirt: 0xf8fff8, legs: 0x5a5760, skin: 0xe9b98f, hair: 0x5a3a22, hat: 0x3b393a, band: 0x8b4044,
 };
 export const DOWNS_GLOW = { glasswarm: 0xfff0c0, glowgold: 0xffe9a0, glowmint: 0xe8fff0, glowred: 0xff5a4a };
 export const makeDownsPart = (name, tint) => ddGroup(SHIP_PARTS[name], tint || null, DOWNS_TOON, DOWNS_GLOW);

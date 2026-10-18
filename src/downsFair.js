@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { makeDownsPart } from './models.js';
+import { makeDownsPart, downsNode, downsSlot } from './models.js';
+import { T, G } from './outpostModels.js';
 import { bake } from './downsKit.js';
 
 // The fairground's two rides, rebuilt in Blender for Chimera Downs (tools/blender/build_downs_fair.py). Each is built into a settlement kit `k` at (x, z) in the place's frame, and
-// registers its rideable seats in world.rides (rides.js: `F` beside it pops you into the nearest gondola or onto the nearest horse).
+// registers its rideable seats in world.rides (rides.js: `F` beside it pops you into the nearest gondola or onto the nearest horse). Also the annex's queue lines.
 const TAU = Math.PI * 2;
 const ACCENTS = [0x8b4044, 0xcfb352, 0x7b9a6e, 0xb07c57];   // Barn Red, Gold Gleam, Money, Saddle Brown
 
@@ -13,8 +14,8 @@ export function ferrisWheel(world, loc, k, wx, wz) {
   k.at(wx, wz);
   bake(k, 'dn_wheel_frame');
   k.at();
-  world.col(loc, { type: 'box', x: wx, y: 0.6, z: wz, hx: 8, hy: 0.6, hz: 5 });
-  for (const t of [-1, 1]) world.col(loc, { type: 'cyl', x: wx + t * 5.5, z: wz, y0: -2, y1: 8, r: 1.1 });
+  world.col(loc, { type: 'box', x: wx, y: 0.4, z: wz, hx: 8, hy: 0.4, hz: 5 });                                   // (the platform, up to its deck)
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) world.col(loc, { type: 'cyl', x: wx + sx * 6.55, z: wz + sz * 3.9, y0: -2, y1: 5, r: 0.9 });   // (the A-frames' four feet)
   const wheel = makeDownsPart('dn_wheel');
   const gondolas = [];
   for (let i = 0; i < 12; i++) {
@@ -73,4 +74,23 @@ export function carousel(world, loc, k, cx, cz) {
       return out.addScaledVector(up, -out.dot(up)).normalize();
     },
   });
+}
+
+// A queue line: `n` posts (dn_stanchion) from (x, z) along the kit frame's +x, `gap` apart (3 m, the rope's length), standing at height y (the annex's turf is 12 cm up). Each post's rope
+// reaches the next post, so the last one goes without: the rope is the post's `rope` pivot, which bake() leaves out, baked here only where it has somewhere to go.
+export function queue(k, x, z, n, y = 0, gap = 3) {
+  const rope = downsNode('dn_stanchion').kids.find((c) => c.role === 'rope');
+  const mat = (slot) => { const c = downsSlot(slot); return c.glow ? G(c.color) : T(c.color); };
+  const m = new THREE.Matrix4(), one = new THREE.Vector3(1, 1, 1);
+  for (let i = 0; i < n; i++) {
+    k.at(x + i * gap, z);
+    bake(k, 'dn_stanchion', 0, y, 0);
+    if (rope && i < n - 1) {
+      const tag = k.tag;
+      k.tag = `${tag}>dn_stanchion_rope`;
+      k.baked(rope, mat, m.compose(rope.pos.clone().setY(rope.pos.y + y), rope.quat, one));
+      k.tag = tag;
+    }
+    k.at();
+  }
 }

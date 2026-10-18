@@ -172,7 +172,7 @@ const layoutB = {
     ...arcStalls(),
     // the infield: the screen drum on one core, a row of three podium sets, the parade ring, a lawn
     over('drum', 'SCREEN DRUM 40 x 20 + 14 x 20 ends', R(-20, 20, -7, 7), { g: 'drum' }), el('core', '', R(-5, 5, -5, 5), { zone: 'in', fill: PAL.black, line: PAL.mint, g: 'drum' }),
-    ...[-30, 0, 30].map((x) => el(`pod${x}`, '', R(x - 9, x + 9, 16, 21), { zone: 'in', fill: PAL.gold, line: PAL.black })),
+    ...[-30, 0, 30].map((x) => el(`pod${x}`, '', R(x - 9.65, x + 9.65, 15.85, 21.05), { zone: 'in', fill: PAL.gold, line: PAL.black })),
     free('winplaza', R(-44, 44, 10, 28), { fill: PAL.gold, op: 0.25, line: PAL.gold }),
     el('ring', '', E(-96, 0, 26, 18), { zone: 'in', fill: PAL.money, line: PAL.mint }), el('weigh', '', R(-65.2, -52, -9.2, 9.2), { zone: 'in' }),
     free('lawn', C(100, 0, 28), { fill: PAL.money, op: 0.4, line: PAL.money }),
