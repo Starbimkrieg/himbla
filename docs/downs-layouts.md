@@ -74,7 +74,7 @@ the Downs place.
 | Rails and posts | white posts, a thin rail | Mint posts, a Black top rail, Gold caps, lamps on every fourth post, furlong boards | `build_downs_course.py` |
 | Starting gate | a plain frame | a six-stall gate with Barn Red padded doors, number plates, Black frame | `build_downs_gate.py` |
 | Finish gantry and photo-finish tower | a green beam, a small booth | a Gold arch over the track with a camera bar, a tower with a glazed box on the apron | `build_downs_course.py` |
-| Concession stalls | six kiosks | twelve designs (the six, plus Space Slush, Lunar Coffee, Derby Donuts, Jockey's Grill, a foam-finger shop and a tote kiosk) on one kit: Mint body, Saddle Brown counter, striped Barn Red / Money / Gold awning, a lantern roof, a Black sign board, props on the counter | `build_downs_stalls.py` |
+| Concession stalls | six kiosks | twelve designs (the six, plus Space Slush, Lunar Coffee, Derby Donuts, Jockey's Grill, a foam-finger shop and a tote kiosk) on one kit, the Alcove, built into an arcade bay: a Mint screen wall with an arched opening and a Black name plate, a Saddle Brown counter trimmed in the stall's colour, two swags of pennants across the arch, props at the counter's ends so the vendor shows | `build_downs_stalls.py` |
 | Race office | a box with an awning | the **tote hall**: a hall with a clerestory, six betting windows, the race card board on its front | `build_downs_tote.py` |
 | Gates and arches | one arch, west | a grand gate with two pylons and a clock; lesser gates in the same style | `build_downs_gate.py` |
 | Stables, parade ring, saddling pavilion | none | a Barn Red stable yard (twelve boxes), an oval parade ring with a rail and viewing step, a small pavilion | `build_downs_stable.py` |

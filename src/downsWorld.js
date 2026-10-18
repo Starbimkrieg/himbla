@@ -204,9 +204,16 @@ function grandstand(k, S, { far = false } = {}) {
     for (const sx of [-1, 1]) k.box(0.2, 1.3, back - 0.8 + 0.2, T(MONEY2), ex + sx * (TUN_W + 0.1), 0, (back - 0.8 - 0.2) / 2, { outline: 0.01 });
     for (let z = roofZ + 3; z < back - 1.5; z += 7) k.box(1.4, 0.08, 0.9, G(0xffe9a0), ex, TUN_CH - 0.09, z, { outline: 0 });
   }
+  // The end walls: a Money band round the seats' side. Their outer faces are in the arcades (joiner) from the front to where the arcade's back wall meets them (zA, all the way on the far
+  // stand), and carry the arcade's own trim there, at its heights and depths, so it runs on round the bay's corner: a wainscot to 2.4 m (14 cm proud) and a string course at 4.4 m (8 cm).
+  const zA = Math.min(back, Math.sqrt(ARCADE.ro ** 2 - (hw + 0.8 - ARCADE.cx) ** 2) - S.z0);
   for (const sx of [-1, 1]) {
+    const xo = sx * (hw + 0.8), out = (a, b) => xo + sx * (a + b) / 2;          // (the middle of a strip from a to b metres out of the outer face)
     k.box(0.8, wallH - 2, back, T(PAL.mint), sx * (hw + 0.4), 0, back / 2, { outline: 0.06 });
-    k.box(0.9, 0.5, back - 0.04, T(MONEY2), sx * (hw + 0.4), 2.6, back / 2, { outline: 0 });
+    k.box(0.15, 0.5, back - 0.04, T(MONEY2), sx * (hw + 0.025), 2.6, back / 2, { outline: 0 });
+    k.box(0.14, 2.38, zA - 0.02, T(MONEY2), out(0, 0.14), 0.02, (zA + 0.02) / 2, { outline: 0 });
+    k.box(0.08, 0.35, zA - 0.02, T(MONEY2), out(0, 0.08), 4.4, (zA + 0.02) / 2, { outline: 0 });
+    if (zA < back - 0.1) k.box(0.15, 0.5, back - 0.02 - zA, T(MONEY2), out(-0.1, 0.05), 2.6, (zA + back - 0.02) / 2, { outline: 0 });
     k.solid(0.4, (wallH - 2) / 2, back / 2, sx * (hw + 0.4), back / 2);
   }
   if (!far) for (let i = 0; i < bays; i++) bake(k, 'dn_suite', S.x0 + 9.5 + i * 19, topY, (S.tiers - 1) * S.depth);
@@ -276,7 +283,8 @@ function slab(poly, yb, h) {
 
 // The arcade's last wedge stops on a radial line and the stand's end wall is straight, so there is a gap between them, wide at the back wall and tapering to the walk. This is a bay shaped
 // to fill it: a timber floor, the Mint back wall (the arc from the wedge's corner to the stand's wall, as a chord) with its wainscot and cornice, a Barn Red roof on the wedges' own slope
-// and an architrave along the walk. Built in the adjacent wedge's frame (`th` its middle, `side0` +1 when, on the west arcade, the stand is on its local +x), so the shared edge is the wedge's own.
+// and an architrave along the walk. The floor and roof are built in the adjacent wedge's frame (`th` its middle, `side0` +1 when, on the west arcade, the stand is on its local +x), so the shared
+// edge is the wedge's own; the walls in the place's frame.
 // wallU: where the stand's end wall's face is (x, the west arcade's way round); rearZ: for the far stand, where that wall's rear corner is (the arcade's back wall runs on past it).
 function joiner(k, mir, th, side0, wallU, rearZ) {
   const R = Math.PI / 180, side = side0 * mir;                                   // (the east arcade is the west one's mirror: the stand is on the other side of the wedge)
@@ -293,31 +301,51 @@ function joiner(k, mir, th, side0, wallU, rearZ) {
   // the floor, and a gold inlay along the walk's edge as the wedges have
   k.add(slab(plan, () => 0, 0.14), T(SADDLE2), 0, 0, 0, { outline: 0 });
   k.add(slab([D, A, [A[0], A[1] + 0.35], [D[0], 0.35]], () => 0.14, 0.03), T(PAL.gold), 0, 0, 0, { outline: 0 });
-  // the roof, on the wedges' own slope (dn_arcade: a deck from y 7.15 at z = -0.8 to 9.15 at the back, 0.32 thick), pushed 0.8 m out in front and 0.2 m behind; a Mint soffit under it
+  // The back wall, in the place's frame: a chord from the wedge's back corner (Cw) to the stand's wall (Bw), its outer face on the line and 0.7 m of Mint on the bay's side (offset t, toward
+  // the turn's centre), with the wedges' own trim at their own heights and depths: the Money wainscot (0.14 to 2.4 m, 14 cm proud), the Money string course (4.4 to 4.75 m, 8 cm proud) and the
+  // gold cornice (8.1 to 8.4 m, 0.3 m in and 0.1 m out). Each piece starts on the wedge's radial edge and is cut on a plane at the stand: for the main stand in the middle of its end wall,
+  // where every end is buried. Behind the far stand the arcade's back is 3.8 m behind the stand's, so a return closes it: the stand's end wall carried on, 0.82 m thick, from the stand's
+  // rear corner to the chord's outer face, its bay face flush with the end wall's and trimmed as it is (the stand's end wall carries the wainscot and string course itself: grandstand), its
+  // outer face against the back wall's last pilaster. The chord's wall and the return meet on the diagonal from the outer corner to the bay's inner corner, so the joint between them
+  // falls only on corners (an outline cannot poke through either's outer face); the trim ends inside the return.
+  const Oc = [mir * -ARCADE.cx, 0], edge = th - side0 * ARCADE.step / 2;
+  const Cw = polar(ARCADE.ro, edge), Bw = polar(ARCADE.ro, onWall(ARCADE.ro));
+  const len0 = Math.hypot(Bw[0] - Cw[0], Bw[1] - Cw[1]), u = [(Bw[0] - Cw[0]) / len0, (Bw[1] - Cw[1]) / len0];
+  let n = [-u[1], u[0]];
+  if (n[0] * (Oc[0] - Cw[0]) + n[1] * (Oc[1] - Cw[1]) < 0) n = [-n[0], -n[1]];
+  const ro = [Cw[0] - Oc[0], Cw[1] - Oc[1]], radial = [Cw, [-ro[1], ro[0]]];                                       // (the plane of the wedge's radial edge)
+  const xPlane = (x) => [[mir * x, 0], [1, 0]];
+  const onLine = (t, [Q, m]) => {                                                                                // where the line at offset t crosses plane [Q, m]
+    const ox = Cw[0] + n[0] * t, oz = Cw[1] + n[1] * t, s = ((Q[0] - ox) * m[0] + (Q[1] - oz) * m[1]) / (u[0] * m[0] + u[1] * m[1]);
+    return [ox + u[0] * s, oz + u[1] * s];
+  };
+  const strip = (t0, t1, endB, y0, y1, mat, ink = 0) => k.add(slab([onLine(t0, radial), onLine(t0, endB), onLine(t1, endB), onLine(t1, radial)], () => y0, y1 - y0), mat, 0, 0, 0, { outline: ink });
+  const inWall = xPlane(wallU + 0.4), outFace = xPlane(wallU + 0.82);                                           // (the middle of the stand's end wall or of the return: every end is buried there)
+  const K1 = onLine(0, outFace), Jin = onLine(0.7, xPlane(wallU)), diag = [K1, [-(Jin[1] - K1[1]), Jin[0] - K1[0]]];  // (the return's outer corner, the bay's inner corner, the plane through both)
+  // the roof, on the wedges' own slope (dn_arcade: a deck from y 7.15 at z = -0.8 to 9.15 at the back, 0.32 thick), pushed 0.8 m out in front and 0.2 m behind (and over the return); a Mint soffit under it
   const YF = 6.6, YB = 8.6, z0 = -0.8, z1 = WEDGE.d + 0.2, ym = (YF + YB) / 2 + 0.55, tn = (YB - YF) / (z1 - z0);
   const roofY = (x, z) => ym + (z - (z0 + z1) / 2) * tn;
-  const roof = plan.map((p) => (p === D || p === A ? [p[0], p[1] + z0] : p === E ? p : [p[0], p[1] + 0.2]));
+  const roof = south ? [[D[0], D[1] + z0], [C[0], C[1] + 0.2], local(onLine(-0.2, outFace)), local([mir * (wallU + 0.82), rearZ]), [A[0], A[1] + z0]]
+    : [[D[0], D[1] + z0], [C[0], C[1] + 0.2], [B[0], B[1] + 0.2], [A[0], A[1] + z0]];
   k.add(slab(roof, roofY, 0.32), T(PAL.barn), 0, 0, 0, { outline: 0.025 });
   k.add(slab(roof, (x, z) => roofY(x, z) - 0.07, 0.07), T(MINT2), 0, 0, 0, { outline: 0 });
   k.add(slab([[D[0], z0 + 0.7], [A[0], A[1] + z0 + 0.7], [A[0], A[1] + 1.0], [D[0], 1.0]], () => 6.5, 0.6), T(MINT2), 0, 0, 0, { outline: 0.012 });   // (the architrave over the walk's edge)
-  // the back wall along C-B (and B-E): Mint 0.7 thick on the bay's side of the line, a Money wainscot and a gold cornice
-  const cen = plan.reduce((a, p) => [a[0] + p[0] / plan.length, a[1] + p[1] / plan.length], [0, 0]);
-  for (const [P0, P1x] of [[C, B], ...(E ? [[B, E]] : [])]) {
-    let P1 = P1x;
-    if (P1x === E) { const l = Math.hypot(E[0] - B[0], E[1] - B[1]); P1 = [E[0] + (E[0] - B[0]) / l * 0.3, E[1] + (E[1] - B[1]) / l * 0.3]; }     // (a little into the stand's wall, not ending in its rear face's plane)
-    const dx = P1[0] - P0[0], dz = P1[1] - P0[1], len = Math.hypot(dx, dz), mx = (P0[0] + P1[0]) / 2, mz = (P0[1] + P1[1]) / 2;
-    let nx = -dz / len, nz = dx / len;
-    if (nx * (cen[0] - mx) + nz * (cen[1] - mz) < 0) { nx = -nx; nz = -nz; }                                  // (toward the bay)
-    const ry = Math.atan2(-dz, dx), at = (t) => [mx + nx * t, mz + nz * t];
-    const trim = P1x === E ? 0.7 : 0, ux = dx / len, uz = dz / len;           // (the cornice stops short of the stand's wall: it would end in the plane of its rear face)
-    const put = (y0, h, thick, t, mat, ink = 0, cut = 0) => { const q = at(t); k.box(len - cut, h, thick, mat, q[0] - ux * cut / 2, y0, q[1] - uz * cut / 2, { ry, outline: ink }); };
-    put(0.14, 8.16, 0.7, 0.35, T(PAL.mint), 0.03);
-    put(0.15, 2.4, 0.16, 0.78, T(MONEY2));
-    put(8.1, 0.4, 1.0, 0.45, T(PAL.gold), 0, trim);
-    const q = at(0.35);
-    k.solid(len / 2, 4.2, 0.4, q[0], q[1], ry);
-  }
   k.at();
+  strip(0, 0.7, south ? diag : inWall, 0.14, 8.3, T(PAL.mint), 0.03);
+  strip(0.7, 0.84, inWall, 0.14, 2.4, T(MONEY2));
+  strip(0.7, 0.78, inWall, 4.4, 4.75, T(MONEY2));
+  strip(-0.1, 1.0, inWall, 8.1, 8.4, T(PAL.gold));
+  const wm = onLine(0.35, [[(Cw[0] + Bw[0]) / 2, (Cw[1] + Bw[1]) / 2], u]);
+  k.solid(len0 / 2 + 0.2, 4.2, 0.4, wm[0], wm[1], Math.atan2(-u[1], u[0]));
+  if (south) {
+    const x0 = mir * wallU, x1 = mir * (wallU + 0.82);
+    k.add(slab([[x0, rearZ], [x1, rearZ], K1, Jin], () => 0, 8.3), T(PAL.mint), 0, 0, 0, { outline: 0.03 });
+    for (const [d, t, y0, y1] of [[0.14, 0.84, 0.14, 2.4], [0.08, 0.78, 4.4, 4.75]]) {                           // (the wainscot and string course on its bay face, from the stand's to the chord's)
+      k.add(slab([[mir * (wallU - d), rearZ], [x0, rearZ], onLine(t, xPlane(wallU)), onLine(t, xPlane(wallU - d))], () => y0, y1 - y0), T(MONEY2), 0, 0, 0, { outline: 0 });
+    }
+    k.add(slab([[mir * (wallU + 0.3), rearZ], [mir * (wallU + 0.92), rearZ], onLine(-0.1, xPlane(wallU + 0.92)), onLine(-0.1, xPlane(wallU + 0.3))], () => 8.1, 0.3), T(PAL.gold), 0, 0, 0, { outline: 0 });
+    k.solid(0.41, 4.2, Math.abs(K1[1] - rearZ) / 2, mir * (wallU + 0.41), (K1[1] + rearZ) / 2);
+  }
 }
 
 // ---- the arcades round the turns ----

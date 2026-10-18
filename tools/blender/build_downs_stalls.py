@@ -6,8 +6,9 @@
 # Twelve stalls on one kit, "THE ALCOVE", each built INTO an arcade bay (tools/blender/build_downs_arcade.py dn_arcade) against its back wall, so it is authored in that bay's frame: z = 0 on the walk's
 # edge, +z outward to the back wall (inner face z = 15.27), the floor top y = 0.14, x tangential, the stall facing -z toward the walk; the game bakes it at the bay's own place. About 10 m wide, 5.9 m
 # deep and 7.7 m tall: a Mint screen wall (z 11.6 to 12.1) with an arched opening, a gold band and keystone and a Black name plate above it with the name in raised letters; behind it the alcove
-# (side walls, a roof, a lit tiled niche on the back wall), a rounded counter (top at y = 1.3, z 12.2 to 13.7, the vendor stands behind it at about z = 14.4 on the alcove's floor, y = 0.34), a
-# barrel-vaulted hood in the `accent` slot (the game picks its colour per stall) striped with Mint, two pendant lanterns, and a blade sign with a lit emblem on the screen's right corner.
+# (side walls, a roof, a lit tiled niche on the back wall), a rounded counter (top at y = 1.3, z 12.2 to 13.7, the vendor stands behind it at about z = 14.4 on the alcove's floor, y = 0.34)
+# trimmed in the `accent` slot (the game picks its colour per stall), two swags of pennants across the opening, two pendant lanterns, and a blade sign with a lit emblem on the screen's right
+# corner. The counter's middle (x -1.2 to 1.2) is kept clear of anything taller than a tray, so the vendor shows from the front: the fixtures stand toward its two ends.
 #   dn_stall_0  MOON DOGS      a roller grill of sausages, buns, mustard and ketchup
 #   dn_stall_1  CRATER FRIES   two fryer baskets and a rack of paper cones
 #   dn_stall_2  HE-3 FIZZ      a soda fountain: a row of taps over a drip tray, tall lit glasses
@@ -106,16 +107,17 @@ def base(name, label, shelf="jars"):
     P["gold"].box(-3.7, 3.7, CT - 0.15, CT - 0.04, CZ0 - 0.17, CZ0 - 0.12)
     for i in range(7):
         P["accent"].box(-3.5 + i * 1.0 + 0.1, -3.5 + i * 1.0 + 0.9, 0.55, 1.0, CZ0 - 0.04, CZ0)
-    # the hood: a barrel vault of striped boards over the bar, 7.2 m long, narrower than the opening's piers (it stood against them and the side walls before), its springing 3 m up, its front
-    # edge inside the screen's plane and low enough to clear the arch
-    CZc, R1, R2, Y0 = 13.3, 1.7, 1.82, 3.0
-    for i in range(8):
-        x0 = -3.6 + i * 0.9 + 0.005
-        prof = [(CZc + R2 * math.cos(math.pi * k / 12), Y0 + R2 * math.sin(math.pi * k / 12)) for k in range(13)] + [(CZc + R1 * math.cos(math.pi * (12 - k) / 12), Y0 + R1 * math.sin(math.pi * (12 - k) / 12)) for k in range(13)]
-        (P["gold"] if i in (0, 7) else P["accent"] if i % 2 == 0 else P["mint"]).polyx(prof, x0, x0 + 0.89)
-    P["gold"].box(-3.6, 3.6, Y0 - 0.02, Y0 + 0.1, CZc - R2 - 0.04, CZc - R2 + 0.12)    # (the vault's front edge: a gold lip, and a row of bulbs)
-    for i in range(8):
-        P["glowgold"].add(sphere(0.075, 6, 4), t=(-3.15 + i * 0.9, Y0 - 0.1, CZc - R1 + 0.02))
+    # bunting: two swags of pennants across the opening, each on a cord from a pier's capital up to the keystone, 17 cm in front of the screen wall. They hang in the arch's upper corners
+    # (the lowest tip 3.6 m up, the middle ones above 4.7 m), clear of the vendor's head. Accent, gold and Mint in turn, as the derby's pennants alternate
+    F = parts(root, name + "_flags", {"accent": 0.012, "gold": 0.012, "mint": 0.012, "black2": 0.0})
+    FZ, SAG = ZS - 0.17, 0.35
+    for sx in (-1, 1):
+        def sw(s, sx=sx):
+            return sx * 4.6 * (1 - s), 4.3 + 1.45 * s - 4 * SAG * s * (1 - s)
+        F["black2"].path([(*sw(i / 16), FZ) for i in range(17)], 0.02, 5)
+        for i, s in enumerate((0.12, 0.31, 0.5, 0.69, 0.88)):
+            x, y = sw(s)
+            F[("accent", "gold", "mint")[i % 3]].poly([(-0.25, 0.02), (0.25, 0.02), (0, -0.68)], FZ - 0.02, FZ + 0.02, t=(x, y, 0))
     # pendant lanterns inside the niche
     for x in (-2.6, 2.6):
         P["black2"].bm((x, 5.0, 14.2), (x, 4.2, 14.2), 0.03)
@@ -134,61 +136,62 @@ def base(name, label, shelf="jars"):
 
 # ---- 0: MOON DOGS ----
 P = base("dn_stall_0", "MOON DOGS")
-P["black2"].box(-2.8, 0.8, CT, CT + 0.14, Z(0.0), Z(0.8))                               # the roller grill: a tray and four rollers
+P["black2"].box(-3.5, -1.3, CT, CT + 0.14, Z(0.0), Z(0.8))                              # the roller grill: a tray and four rollers
 for i in range(4):
-    P["saddle2"].cylc(-1.0, CT + 0.22, Z(0.08 + i * 0.2), 0.07, 3.2, 8, rot=(0, 0, PI / 2))
+    P["saddle2"].cylc(-2.4, CT + 0.22, Z(0.08 + i * 0.2), 0.07, 2.0, 8, rot=(0, 0, PI / 2))
 for i in range(3):                                                                      # buns, stacked
-    P["saddle"].boxc(1.9, CT + 0.1 + i * 0.2, Z(0.4), 0.9, 0.2, 0.5)
+    P["saddle"].boxc(2.0, CT + 0.1 + i * 0.2, Z(0.4), 0.9, 0.2, 0.5)
 P["gold"].cylc(3.0, CT + 0.25, Z(0.3), 0.1, 0.5, 8)                                     # mustard
 P["barn"].cylc(3.4, CT + 0.25, Z(0.3), 0.1, 0.5, 8)                                     # ketchup
 P["gold"].cylc(3.0, CT + 0.56, Z(0.3), 0.04, 0.12, 8)
 # ---- 1: CRATER FRIES ----
 P = base("dn_stall_1", "CRATER FRIES")
-for x in (-2.8, -1.6):
+for x in (-3.0, -1.85):
     P["black2"].box(x - 0.5, x + 0.5, CT, CT + 0.7, Z(0.0), Z(0.7))                     # a fryer
     P["glowgold"].box(x - 0.4, x + 0.4, CT + 0.7, CT + 0.76, Z(0.1), Z(0.6))            # lit oil
-    P["black"].bm((x + 0.4, CT + 0.7, Z(0.35)), (x + 0.4, CT + 1.3, Z(0.8)), 0.04)      # a basket handle
-for i in range(5):                                                                      # a rack of paper cones with fries
-    x = 0.4 + i * 0.8
+    P["black"].bm((x - 0.4, CT + 0.7, Z(0.35)), (x - 0.4, CT + 1.3, Z(0.8)), 0.04)      # a basket handle (on the side away from the vendor)
+for i in range(4):                                                                      # a rack of paper cones with fries
+    x = 1.6 + i * 0.6
     P["mint"].cylc(x, CT + 0.4, Z(0.3), 0.05, 0.6, 8, rt=0.26)
     P["gold"].cylc(x, CT + 0.82, Z(0.3), 0.2, 0.16, 8)
 # ---- 2: HE-3 FIZZ ----
 P = base("dn_stall_2", "HE-3 FIZZ")
-P["black2"].box(-3.2, 0.2, CT, CT + 0.12, Z(0.0), Z(0.7))                               # drip tray
-P["black"].box(-3.0, 0.0, CT + 0.12, CT + 1.4, Z(-0.3), Z(0.1))                         # the font
-for i in range(5):
-    P["gold"].cylc(-2.7 + i * 0.6, CT + 1.05, Z(0.2), 0.06, 0.3, 8, rot=(PI / 2, 0, 0))    # taps
-P["gold"].box(-3.05, 0.05, CT + 1.4, CT + 1.52, Z(-0.35), Z(0.15))
+P["black2"].box(-3.6, -1.3, CT, CT + 0.12, Z(0.0), Z(0.7))                              # drip tray
+P["black"].box(-3.45, -1.45, CT + 0.12, CT + 1.4, Z(-0.3), Z(0.1))                      # the font
 for i in range(4):
-    P["glowmint"].cylc(1.0 + i * 0.6, CT + 0.45, Z(0.3), 0.17, 0.9, 10)                 # tall glasses, lit
-    P["accent"].cylc(1.0 + i * 0.6, CT + 0.95, Z(0.3), 0.19, 0.1, 10)
+    P["gold"].cylc(-3.15 + i * 0.47, CT + 1.05, Z(0.2), 0.06, 0.3, 8, rot=(PI / 2, 0, 0))    # taps
+P["gold"].box(-3.5, -1.4, CT + 1.4, CT + 1.52, Z(-0.35), Z(0.15))
+for i in range(4):
+    P["glowmint"].cylc(1.6 + i * 0.6, CT + 0.45, Z(0.3), 0.17, 0.9, 10)                 # tall glasses, lit
+    P["accent"].cylc(1.6 + i * 0.6, CT + 0.95, Z(0.3), 0.19, 0.1, 10)
 # ---- 3: CHIMERA CHOW ----
 P = base("dn_stall_3", "CHIMERA CHOW")
-P["black"].cylc(-1.8, CT + 0.55, Z(0.2), 0.75, 1.1, 14, rt=0.6)                         # a big pot
-P["saddle2"].cylc(-1.8, CT + 1.1, Z(0.2), 0.62, 0.06, 14)
-P["black2"].bm((-1.0, CT + 1.4, Z(0.2)), (-0.3, CT + 0.7, Z(0.45)), 0.05)               # the ladle
-P["black2"].add(sphere(0.14, 8, 6), t=(-0.3, CT + 0.66, Z(0.45)))
+P["black"].cylc(-2.5, CT + 0.55, Z(0.2), 0.75, 1.1, 14, rt=0.6)                         # a big pot
+P["saddle2"].cylc(-2.5, CT + 1.1, Z(0.2), 0.62, 0.06, 14)
+P["black2"].bm((-2.2, CT + 1.6, Z(0.1)), (-2.6, CT + 0.9, Z(0.3)), 0.05)                # the ladle, standing in it
+P["black2"].bm((-2.2, CT + 1.6, Z(0.1)), (-2.0, CT + 1.5, Z(0.1)), 0.05)
 for i in range(5):
-    P["mint"].cylc(1.6, CT + 0.12 + i * 0.16, Z(0.3), 0.42, 0.14, 12, rt=0.3)           # a stack of bowls
+    P["mint"].cylc(1.8, CT + 0.12 + i * 0.16, Z(0.3), 0.42, 0.14, 12, rt=0.3)           # a stack of bowls
 for i in range(3):
-    P["money2"].cylc(2.9, CT + 0.12 + i * 0.16, Z(0.3), 0.42, 0.14, 12, rt=0.3)
+    P["money2"].cylc(3.0, CT + 0.12 + i * 0.16, Z(0.3), 0.42, 0.14, 12, rt=0.3)
 # ---- 4: ROCK CANDY ----
 P = base("dn_stall_4", "ROCK CANDY")
-P["saddle"].box(-3.6, 3.6, CT + 0.84, CT + 0.9, Z(0.0), Z(0.7))                         # a shelf for the upper row
-for sx in (-1, 1):
-    P["black2"].box(sx * 3.6 - 0.05, sx * 3.6 + 0.05, CT, CT + 0.84, Z(0.3), Z(0.4))
+for sx in (-1, 1):                                                                      # a stand of two rows at each end: a shelf for the upper row on two posts
+    P["saddle"].box(sx * 1.25, sx * 3.65, CT + 0.84, CT + 0.9, Z(0.0), Z(0.7))
+    for x in (1.3, 3.6):
+        P["black2"].box(sx * x - 0.05, sx * x + 0.05, CT, CT + 0.84, Z(0.3), Z(0.4))
 for r in range(2):
-    for i in range(7):
-        x = -3.0 + i * 1.0
+    for i in range(6):
+        x = (-3.15, -2.4, -1.65, 1.65, 2.4, 3.15)[i]
         P["glasswarm"].cylc(x, CT + 0.35 + r * 0.9 + (0.0 if r == 0 else 0.0), Z(0.35), 0.26, 0.7, 10)
         (P["accent"] if (i + r) % 2 == 0 else P["gold"]).cylc(x, CT + 0.22 + r * 0.9, Z(0.35), 0.2, 0.4, 7)
         P["gold"].cylc(x, CT + 0.74 + r * 0.9, Z(0.35), 0.28, 0.07, 10)
 # ---- 5: TOTE · BETS ----
 P = base("dn_stall_5", "TOTE · BETS")
-P["black"].box(-1.4, 1.4, CT + 0.6, CT + 2.0, Z(-0.2), Z(-0.4))                         # the tote screen, on two posts
-P["glowgold"].box(-1.25, 1.25, CT + 0.75, CT + 1.85, Z(-0.4), Z(-0.42))
+P["black"].box(-1.4, 1.4, 3.3, 4.7, Z(-0.2), Z(-0.4))                                   # the tote screen, hung from the roof over the vendor's head, lit on its front
+P["glowgold"].box(-1.25, 1.25, 3.45, 4.55, Z(-0.18), Z(-0.2))
 for sx in (-1, 1):
-    P["black2"].bm((sx * 1.2, CT, Z(-0.3)), (sx * 1.2, CT + 0.6, Z(-0.3)), 0.05)
+    P["black2"].bm((sx * 1.2, 4.7, Z(-0.3)), (sx * 1.2, 7.64, Z(-0.3)), 0.04)
 for x in (-3.0, -2.2, 2.2, 3.0):
     P["black2"].box(x - 0.3, x + 0.3, CT, CT + 0.55, Z(0.0), Z(0.6))                    # terminals
     P["glowmint"].box(x - 0.24, x + 0.24, CT + 0.3, CT + 0.5, Z(0.6), Z(0.62))
@@ -197,42 +200,44 @@ for i in range(6):
 # ---- 6: SPACE SLUSH ----
 P = base("dn_stall_6", "SPACE SLUSH")
 for i, s in enumerate(("barn", "gold", "money2")):
-    x = -2.4 + i * 1.6
+    x = (-3.0, -1.85, 2.0)[i]
     P["black2"].box(x - 0.55, x + 0.55, CT, CT + 0.35, Z(0.0), Z(0.7))
     P["glowmint"].cylc(x, CT + 0.95, Z(0.35), 0.5, 1.2, 14)                             # a lit tank
     P[s].cylc(x, CT + 1.6, Z(0.35), 0.52, 0.12, 14)
     P["gold"].cylc(x, CT + 0.2, Z(0.7), 0.05, 0.3, 8, rot=(PI / 2, 0, 0))               # tap
-P["accent"].cylc(3.1, CT + 0.3, Z(0.3), 0.22, 0.6, 10)
+P["accent"].cylc(3.2, CT + 0.3, Z(0.3), 0.22, 0.6, 10)
 # ---- 7: LUNAR COFFEE ----
 P = base("dn_stall_7", "LUNAR COFFEE")
 P["gold"].box(-3.2, -1.2, CT, CT + 0.9, Z(-0.2), Z(0.5))                                # the espresso machine
 P["black2"].box(-3.0, -1.4, CT + 0.9, CT + 1.05, Z(-0.2), Z(0.5))
 for x in (-2.7, -1.7):
     P["black"].cylc(x, CT + 0.45, Z(0.55), 0.05, 0.3, 8)
-for x in (0.0, 1.0):
+for x in (1.65, 2.55):
     P["saddle2"].cylc(x, CT + 0.7, Z(0.2), 0.4, 1.4, 12)                                # urns
     P["gold"].cylc(x, CT + 1.45, Z(0.2), 0.2, 0.1, 10)
     P["black"].cylc(x, CT + 0.45, Z(0.6), 0.04, 0.3, 8, rot=(PI / 2, 0, 0))
 for i in range(6):
-    P["mint"].cylc(2.6, CT + 0.1 + i * 0.14, Z(0.4), 0.28, 0.13, 10, rt=0.24)           # a tower of cups
+    P["mint"].cylc(3.35, CT + 0.1 + i * 0.14, Z(0.4), 0.28, 0.13, 10, rt=0.24)          # a tower of cups
 # ---- 8: DERBY DONUTS ----
 P = base("dn_stall_8", "DERBY DONUTS")
-P["saddle2"].box(-3.0, 3.0, CT, CT + 0.1, Z(0.0), Z(0.6))
+for sx in (-1, 1):                                                                      # a rack at each end
+    P["saddle2"].box(sx * 1.3, sx * 3.6, CT, CT + 0.1, Z(0.0), Z(0.6))
 for r in range(3):
     for i in range(6):
-        x = -2.5 + i * 1.0
+        x = (-3.15, -2.45, -1.75, 1.75, 2.45, 3.15)[i]
         P["saddle"].tor(0.2, 0.08, t=(x, CT + 0.35 + r * 0.45, Z(0.3)), rot=(PI / 2, 0, 0), n=14, rs=6)
         if (i + r) % 2:
             P["mint"].tor(0.19, 0.04, t=(x, CT + 0.41 + r * 0.45, Z(0.3) - 0.0), rot=(PI / 2, 0, 0), n=14, rs=5)
-    P["black2"].box(-3.0, 3.0, CT + 0.2 + r * 0.45, CT + 0.24 + r * 0.45, Z(0.0), Z(0.5))
+    for sx in (-1, 1):
+        P["black2"].box(sx * 1.4, sx * 3.5, CT + 0.2 + r * 0.45, CT + 0.24 + r * 0.45, Z(0.0), Z(0.5))
 # ---- 9: JOCKEY'S GRILL ----
 P = base("dn_stall_9", "JOCKEY'S GRILL")
-P["black"].box(-3.2, -0.4, CT, CT + 0.7, Z(0.0), Z(0.8))                                # the grill
-P["glowgold"].box(-3.0, -0.6, CT + 0.7, CT + 0.74, Z(0.1), Z(0.7))
-P["black2"].cylc(-3.0, CT + 1.6, Z(-0.3), 0.2, 1.8, 8)                                  # a chimney
+P["black"].box(-3.5, -1.3, CT, CT + 0.7, Z(0.0), Z(0.8))                                # the grill
+P["glowgold"].box(-3.3, -1.5, CT + 0.7, CT + 0.74, Z(0.1), Z(0.7))
+P["black2"].cylc(-3.2, CT + 1.6, Z(-0.3), 0.2, 1.8, 8)                                  # a chimney
 for i in range(4):
-    P["barn"].boxc(0.4 + i * 0.6, CT + 0.15, Z(0.4), 0.5, 0.1, 0.35, rot=(0, 0.25, 0))  # steaks on a rack
-P["accent"].cylc(3.3, CT + 0.35, Z(0.4), 0.16, 0.7, 8)
+    P["barn"].boxc(1.6 + i * 0.5, CT + 0.15, Z(0.4), 0.4, 0.1, 0.35, rot=(0, 0.25, 0))  # steaks on a rack
+P["accent"].cylc(3.45, CT + 0.35, Z(0.4), 0.16, 0.7, 8)
 # ---- 10: FOAM FINGERS ---- (the pegboard is on the lit back wall, so no shelves)
 P = base("dn_stall_10", "FOAM FINGERS", shelf="none")
 P["saddle"].box(-3.3, 3.3, 2.4, 4.7, ZB - 0.2, ZB - 0.09)                               # a pegboard on the lit panel
@@ -241,10 +246,10 @@ for i in range(6):
     P["gold"].cylc(x, 3.75, ZB - 0.3, 0.02, 0.9, 7, rt=0.18)
     P["accent"].cylc(x, 3.3, ZB - 0.3, 0.05, 0.3, 7)
 for i in range(4):
-    P["barn"].cylc(-2.7 + i * 0.9, CT + 0.15, Z(0.3), 0.3, 0.26, 12, rt=0.2)            # caps on the counter
-    P["black2"].boxc(-2.7 + i * 0.9, CT + 0.3, Z(0.6), 0.4, 0.04, 0.2)
-P["mint"].box(1.4, 3.6, CT, CT + 0.6, Z(0.0), Z(0.5))                                   # a stack of programmes
-P["accent"].box(1.38, 3.62, CT + 0.38, CT + 0.48, Z(-0.02), Z(0.52))
+    P["barn"].cylc(-3.35 + i * 0.6, CT + 0.15, Z(0.3), 0.27, 0.26, 12, rt=0.18)         # caps on the counter
+    P["black2"].boxc(-3.35 + i * 0.6, CT + 0.3, Z(0.55), 0.36, 0.04, 0.2)
+P["mint"].box(1.5, 3.5, CT, CT + 0.6, Z(0.0), Z(0.5))                                   # a stack of programmes
+P["accent"].box(1.48, 3.52, CT + 0.38, CT + 0.48, Z(-0.02), Z(0.52))
 # ---- 11: RAIL BAR ---- (the bottles are on the shelves)
 P = base("dn_stall_11", "RAIL BAR", shelf="bottles")
 for x in (-2.6, 2.6):
