@@ -23,6 +23,9 @@ const AHEAD_LOD = 1; // build-ahead: chunks round where you'll be soon, up to th
 // the ink line along crater crests: how many rims the terrain shader takes, and how far out
 const ROAD_KEEP = 14; // m a boulder's centre stays from the nearest sample of a road, beyond its own radius
 const RIM_INK_MAX = 64, RIM_INK_REACH = 1500, RIM_INK_BIG = 120; // (no ink on rims bigger than that)
+// a terrain chunk in the sun's depth pass: its grid only, not its skirt (makeChunkMesh)
+const gridOnly = (r, o, cam, sc, geo) => { geo.drawRange.count = o.userData.gridIdx; };
+const wholeChunk = (r, o, cam, sc, geo) => { geo.drawRange.count = Infinity; };
 const _rv = new THREE.Vector3();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _e = new THREE.Vector3();
 const _p00 = new THREE.Vector3(), _p10 = new THREE.Vector3(), _p01 = new THREE.Vector3(), _p11 = new THREE.Vector3();
@@ -407,6 +410,13 @@ ${SKIN_COLOR}`);
     // coarse far tile's big flat triangles threw hard-edged polygon shadows (and, with the sun low,
     // long radial "spider-web" streaks) across the ground near you, shapes no hill on screen has
     mesh.castShadow = lod <= 1;
+    // ...but not the skirt round the border (computeChunk: drawn after the grid's triangles). It drops
+    // straight down from the chunk's edge, double-sided, so its top edge sat in the shadow map at
+    // ground level and PCF smeared it onto the ground beside it: a thin dark line along every chunk
+    // seam, sharpest at HIGH shadow quality. It hangs below the ground, so it has nothing to shade
+    mesh.userData.gridIdx = (CH >> lod) * (CH >> lod) * 6;
+    mesh.onBeforeShadow = gridOnly;
+    mesh.onAfterShadow = wholeChunk;
     mesh.matrixAutoUpdate = false;
     mesh.visible = false;
     this.scene.add(mesh);
