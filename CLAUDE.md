@@ -49,5 +49,8 @@ hint and the git chip stay hidden until a reload). `src/freecam.js` has the cont
 - Don't open a PR unless asked. Dev changes go on the branch the session names.
 - Bump nothing in `package.json` unless releasing (`Release x.y.z [release]` commit message triggers the workflow).
 - Keep README's source map and CHANGELOG.md in step with what you change.
+- Code style: the `coding-standards` skill (`.claude/skills/coding-standards/SKILL.md`), except that its immutability,
+  function-length and magic-number rules don't apply here. Per-frame code mutates scratch vectors on purpose, model
+  factories are long on purpose, and tuned constants sit inline with a comment. The skill's top section says why.
 - After committing, shut down every dev or preview server you started for the work (`preview_stop`, or end the
   process). Leave alone any server you didn't start: the user often has their own on port 5173.
