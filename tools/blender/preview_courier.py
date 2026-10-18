@@ -17,10 +17,6 @@ os.makedirs(OUTDIR, exist_ok=True)
 VARIANTS = [a for a in sys.argv[1:] if a in ("a", "b")] or ["a", "b"]
 RES = (int(os.environ.get("PREVIEW_W", 1280)), int(os.environ.get("PREVIEW_H", 720)))
 SAMPLES = int(os.environ.get("PREVIEW_SAMPLES", 40))
-# the rider's pose per proposal: torso lean (rad, three.js x rotation), thigh swing, hand reach
-POSE = {"a": dict(lean=0.95, thigh=-1.05, arm=-0.75), "b": dict(lean=0.45, thigh=-1.25, arm=-0.55)}
-
-
 def emissive(name, rgb, strength, alpha=1.0):
     m = bpy.data.materials.new(name)
     m.use_nodes = True
@@ -174,29 +170,55 @@ def mock_trail(sc, color):
         o.data.materials.append(m)
 
 
-def add_rider(sc, variant, seat):
-    """The runner glb, sat on the bike in this proposal's pose (a stand-in: the real pose is the game's call)."""
+def add_rider(sc, g, seat):
+    """The runner glb, sat on the bike in this proposal's pose (SPEC["pose"] in build_courier.py: a stand-in, the real
+    pose is the game's call). The pivots turn in three.js's order (x, then z, about the leg's own axes), which is
+    Blender's ZYX; three.js's z is Blender's -y. Prints how well the hands meet the grips and whether the legs clear."""
+    from mathutils.bvhtree import BVHTree
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=os.path.join(REPO, "src", "assets", "runner.glb"))
     new = [o for o in bpy.data.objects if o not in before]
     root = next(o for o in new if o.parent is None)
     byname = {o.name: o for o in new}
-    P = POSE[variant]
+    P = g["SPEC"]["pose"]
     for o in new:
-        o.rotation_mode = "XYZ"   # (the glTF importer leaves nodes in quaternion mode)
+        o.rotation_mode = "ZYX"   # (the glTF importer leaves nodes in quaternion mode)
     byname["torso"].rotation_euler = (P["lean"], 0, 0)
-    for n in ("legL", "legR"):
-        byname[n].rotation_euler = (P["thigh"], 0, 0)
-    for n, s in (("armL", 1), ("armR", -1)):
-        byname[n].rotation_euler = (P["arm"], 0.22 * s, 0)
+    for n, sx in (("legL", -1), ("legR", 1)):
+        byname[n].rotation_euler = (P["thigh"], -sx * P["spread"], 0)
+    for n, sx in (("armL", -1), ("armR", 1)):
+        byname[n].rotation_euler = (P["arm_x"], -sx * P["arm_z"], 0)
+    for n in ("foreL", "foreR"):
+        byname[n].rotation_euler = (P["elbow"], 0, 0)
     k = 1 / 1.2   # the runner is 2 m tall beside a bike modelled at 1:1 and shown at 1.2x
     root.scale = (k, k, k)
     root.location = (seat[0], -seat[2], seat[1] - 0.95 * k)   # three.js (x, y, z) -> Blender (x, -z, y)
-    for o in new:
-        if o.type == "MESH":
-            for m in o.data.materials:
-                if m and m.name.split(".")[0] in ("stripe", "skate"):
-                    pass
+    bpy.context.view_layer.update()
+    # --- checks: the fists on the grips, the legs out of the shell and bags
+    GX, GY, GZ = g["SPEC"]["grip"]
+    for side, sx in (("L", -1), ("R", 1)):
+        pts = [c.matrix_world @ v.co for c in byname["fore" + side].children_recursive if c.type == "MESH" for v in c.data.vertices]
+        sh = byname["arm" + side].matrix_world.translation
+        far = max((p - sh).length for p in pts)
+        sel = [p for p in pts if (p - sh).length > far - 0.10]
+        fist = sum(sel, Vector()) / len(sel)
+        print(f"  fist {side} is {(fist - Vector((sx * GX, -(GZ + 0.035), GY))).length * 1000:.0f} mm from its grip")
+    dg = bpy.context.evaluated_depsgraph_get()
+    solids = [o for o in g["C"].objects if o.name in ("shell", "bagL", "bagR", "bagFlapL", "bagFlapR")]   # (the closed solids: the straps and seams are open bands)
+    bvhs = [BVHTree.FromObject(o, dg) for o in solids]
+    bad, deep = 0, 0.0
+    for n in ("legL", "legR"):
+        for c in byname[n].children_recursive:
+            if c.type != "MESH":
+                continue
+            for v in c.data.vertices:
+                p = c.matrix_world @ v.co
+                for b in bvhs:
+                    r = b.find_nearest(p)
+                    if r[0] is not None and (p - r[0]).dot(r[1]) < -0.004:
+                        bad += 1
+                        deep = max(deep, (p - r[0]).length)
+    print(f"  legs: {bad} vertices more than 4 mm inside the shell or bags (deepest {deep * 1000:.0f} mm)")
     return root
 
 
@@ -214,6 +236,7 @@ VIEWS = {
     "side": ((-8.8, 0.0, 1.55), (0, 0.0, 1.2), 42),
     "front": ((6.2, -7.8, 2.9), (0, 0.0, 1.3), 50),
     "rear": ((-6.2, 7.2, 2.9), (0, -0.2, 1.2), 50),
+    "detail": ((1.5, -3.0, 2.5), (0, -0.4, 1.45), 55),   # the cockpit and the front wheel's hub, close (not on the sheet)
 }
 
 for v in VARIANTS:
@@ -228,12 +251,12 @@ for v in VARIANTS:
     freestyle(sc, trail_objs + [bpy.data.objects["Plane"]])
     seat = g["ROOT"]["seat"]
     if os.environ.get("PREVIEW_RIDER", "1") == "1":
-        add_rider(sc, v, seat)
+        add_rider(sc, g, seat)
     for name, (loc, tgt, lens) in VIEWS.items():
         for o in [o for o in bpy.data.objects if o.type == "CAMERA"]:
             bpy.data.objects.remove(o)
         for o in trail_objs:
-            o.hide_render = name == "side"   # (the side view is the clean silhouette, like the in-game screenshot)
+            o.hide_render = name in ("side", "detail")   # (the side view is the clean silhouette, like the in-game screenshot)
         camera(sc, loc, tgt, lens)
         sc.render.filepath = os.path.join(OUTDIR, f"{v}_{name}.jpg")
         bpy.ops.render.render(write_still=True)
@@ -244,14 +267,15 @@ for v in VARIANTS:
 try:
     from PIL import Image, ImageDraw
     names = {"a": "A  SLIPSTREAM", "b": "B  PARCEL RUNNER"}
-    rows = [v for v in VARIANTS if all(os.path.isfile(os.path.join(OUTDIR, f"{v}_{n}.jpg")) for n in VIEWS)]
+    SHEET = ("side", "front", "rear")
+    rows = [v for v in VARIANTS if all(os.path.isfile(os.path.join(OUTDIR, f"{v}_{n}.jpg")) for n in SHEET)]
     if rows:
         w, h = RES[0] // 2, RES[1] // 2
-        sheet = Image.new("RGB", (w * len(VIEWS), (h + 28) * len(rows)), (24, 20, 40))
+        sheet = Image.new("RGB", (w * len(SHEET), (h + 28) * len(rows)), (24, 20, 40))
         d = ImageDraw.Draw(sheet)
         for r, v in enumerate(rows):
             d.text((10, r * (h + 28) + 8), names[v], fill=(255, 210, 63))
-            for c, n in enumerate(VIEWS):
+            for c, n in enumerate(SHEET):
                 im = Image.open(os.path.join(OUTDIR, f"{v}_{n}.jpg")).convert("RGB").resize((w, h), Image.LANCZOS)
                 sheet.paste(im, (c * w, r * (h + 28) + 28))
         sheet.save(os.path.join(OUTDIR, "courier_proposals.jpg"), quality=90)

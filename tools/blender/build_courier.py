@@ -275,13 +275,22 @@ SPEC = {
               (-0.2, 0.50, 1.43, 0.30, 2.3, 3), (0.3, 0.50, 1.53, 0.30, 2.3, 3), (0.75, 0.56, 1.46, 0.25, 2.3, 3),
               (1.15, 0.76, 1.33, 0.17, 2.4, 3), (1.5, 0.92, 1.18, 0.06, 2.4, 3)],
         seat_y=1.36, seat_z=-0.7,
+        # clip-ons pulled back to z 0.42 so the rider's 0.6 m arms reach them; the tall tank needs the legs spread 0.5 rad
+        # (solved: both fists within 9 mm of the grips, no leg vertex more than 4 mm inside the shell or bags)
+        peg=(0.56, 0.88, -0.16), grip=(0.46, 1.5, 0.42),
+        pose=dict(lean=1.186, thigh=-1.1, spread=0.5, arm_x=-1.908, arm_z=0.172, elbow=-0.678),
     ),
     "b": dict(
         name="Parcel Runner", tire_hw=0.27, tire_e=2.3,
-        body=[(-1.5, 0.95, 1.30, 0.12, 2.2, 3), (-1.15, 0.76, 1.38, 0.25, 2.2, 3), (-0.7, 0.54, 1.34, 0.34, 2.2, 3),
-              (-0.2, 0.48, 1.40, 0.37, 2.2, 3), (0.3, 0.48, 1.50, 0.37, 2.2, 3), (0.75, 0.55, 1.45, 0.31, 2.2, 3),
+        body=[(-1.5, 0.95, 1.30, 0.12, 2.2, 3), (-1.15, 0.76, 1.38, 0.24, 2.2, 3), (-0.7, 0.54, 1.30, 0.27, 2.2, 3),
+              (-0.2, 0.48, 1.30, 0.27, 2.2, 3), (0.3, 0.48, 1.40, 0.27, 2.2, 3), (0.75, 0.55, 1.45, 0.26, 2.2, 3),
               (1.15, 0.74, 1.30, 0.21, 2.2, 3), (1.5, 0.90, 1.14, 0.08, 2.2, 3)],
         seat_y=1.34, seat_z=-0.55,
+        # a slim, scooped tank (half width 0.27, top 1.30 at the seat) gives the thighs room; with the legs spread 0.35 rad
+        # they clear the shell and bags completely (checked in preview_courier.py). The pose is solved, not guessed: both
+        # fists land on the grips to a millimetre.
+        peg=(0.45, 0.8, 0.0), grip=(0.44, 1.6, 0.32), bag_x=0.36,
+        pose=dict(lean=0.752, thigh=-1.0, spread=0.35, arm_x=-1.179, arm_z=0.128, elbow=-0.704),
     ),
 }[V]
 
@@ -299,11 +308,12 @@ for name, z in (("rear", -WZ), ("front", WZ)):
     for sx in (-1, 1):
         mesh(f"rim_{name}_{'LR'[sx > 0]}", revolve_x(squircle(sx * (HW - 0.004), 0.47, 0.012, 0.03, 2.0, 4), 28), "stripe", W, 0)
         mesh(f"hubcap_{name}_{'LR'[sx > 0]}", revolve_x(squircle(sx * 0.31, 0.0, 0.04, 0.12, 2.4, 8), 14), "stripe", W, 0)
-    mesh(f"axle_{name}", revolve_x([(-0.31, 0.07), (0.31, 0.07), (0.31, 0.0), (-0.31, 0.0)], 10), "metal", W, 0.02)
-    for i in range(6):   # radial: hub to the rim ring, in the tyre's mid plane
+    mesh(f"axle_{name}", revolve_x([(-0.31, 0.07), (0.31, 0.07), (0.31, 0.001), (-0.31, 0.001)], 10), "metal", W, 0.02)
+    mesh(f"hub_{name}", revolve_x([(-0.05, 0.11), (0.05, 0.11), (0.05, 0.001), (-0.05, 0.001)], 14), "metal", W, 0.012)
+    for i in range(6):   # radial, from inside the hub out into the tyre, in its mid plane
         a = i * math.pi / 3
-        spoke = extrude([(-0.17, -0.014), (0.17, -0.014), (0.17, 0.014), (-0.17, 0.014)], 0.03, "x")
-        mesh(f"spoke_{name}{i}", xf(spoke, (0, math.cos(a) * 0.28, math.sin(a) * 0.28), (a - math.pi / 2, 0, 0)), "stripe", W, 0)
+        spoke = extrude([(-0.15, -0.014), (0.15, -0.014), (0.15, 0.014), (-0.15, 0.014)], 0.03, "x")   # (r 0.08 to 0.38: its root is inside the hub, r 0.11)
+        mesh(f"spoke_{name}{i}", xf(spoke, (0, math.cos(a) * 0.23, math.sin(a) * 0.23), (a - math.pi / 2, 0, 0)), "stripe", W, 0)
 
 # ---- the forks and the swingarm: slim blades that carry the wheels beside the tyres ----
 for sx in (-1, 1):
@@ -313,15 +323,19 @@ for sx in (-1, 1):
     mesh(f"forkCap{t}", xf(rbox(0.05, 0.05, 0.05, 0.4, 8, 4), (X, WY, WZ)), "dark", CH, 0.02)
     mesh(f"swing{t}", limb((X * 0.8, 0.86, -0.62), (X, WY, -WZ), 0.05, 0.085), "panel", CH, 0.03)
     mesh(f"swingStripe{t}", limb((X * 0.8 + sx * 0.04, 0.9, -0.7), (X + sx * 0.04, WY + 0.06, -WZ + 0.12), 0.008, 0.012), "stripe", CH, 0)
-    mesh(f"peg{t}", xf(rbox(0.1, 0.03, 0.03, 0.4, 6, 4), (sx * 0.42, 0.62, -0.25 if V == "a" else 0.1)), "metal", CH, 0)
+    mesh(f"peg{t}", xf(rbox(0.1, 0.03, 0.03, 0.4, 6, 4), (sx * SPEC["peg"][0], SPEC["peg"][1], SPEC["peg"][2])), "metal", CH, 0)
+    # the pegs stand out from the shell on a bracket
+    mesh(f"pegBracket{t}", limb((sx * 0.2, SPEC["peg"][1] + 0.04, SPEC["peg"][2]), (sx * 0.4, SPEC["peg"][1], SPEC["peg"][2]), 0.025, 0.03), "metal", CH, 0.012)
 
 # ---- the rider's place: seat pad, bars, tail ----
 SY, SZ = SPEC["seat_y"], SPEC["seat_z"]
 mesh("seat", xf(rbox(0.21, 0.05, 0.4 if V == "a" else 0.38, 0.35, 14, 6), (0, SY + 0.03, SZ), (0.04, 0, 0)), "seat", CH, 0.02)
-mesh("bars", limb((-0.44, 1.5, 0.66), (0.44, 1.5, 0.66), 0.03, 0.03, 0.5), "metal", CH, 0.02)
-for sx in (-1, 1):
-    mesh(f"grip{'LR'[sx > 0]}", xf(rbox(0.09, 0.04, 0.04, 0.5, 8, 4), (sx * 0.46, 1.5, 0.66)), "dark", CH, 0.02)
-    mesh(f"riser{'LR'[sx > 0]}", limb((sx * 0.2, 1.44, 0.78), (sx * 0.44, 1.5, 0.66), 0.025, 0.04), "metal", CH, 0.02)
+if V == "a":
+    mesh("barClamp", xf(rbox(0.2, 0.03, 0.05, 0.4, 12, 6), (0, 1.44, 0.82)), "metal", CH, 0.02)
+    for sx in (-1, 1):
+        mesh(f"grip{'LR'[sx > 0]}", xf(rbox(0.04, 0.04, 0.09, 0.5, 8, 4), (sx * SPEC["grip"][0], SPEC["grip"][1], SPEC["grip"][2] + 0.035)), "dark", CH, 0.02)
+        mesh(f"gripCap{'LR'[sx > 0]}", xf(rbox(0.036, 0.036, 0.01, 0.5, 8, 4), (sx * SPEC["grip"][0], SPEC["grip"][1], SPEC["grip"][2] - 0.07)), "trim", CH, 0.008)
+        mesh(f"riser{'LR'[sx > 0]}", limb((sx * 0.2, 1.44, 0.82), (sx * 0.44, 1.5, 0.5), 0.025, 0.035), "metal", CH, 0.02)
 
 # ---- flank detail: a glowing shoulder line, a gold pin-stripe, a dark side panel ----
 for sx in (-1, 1):
@@ -374,16 +388,47 @@ else:
     # =========================================================================================
     # B: Parcel Runner
     # =========================================================================================
-    # a wrap-around bubble visor: a front-facing dome that sweeps back round the bars
-    def visor(u, v):
-        ph = (u * 2 - 1) * 1.45
-        th = v * 1.15
-        return (0.38 * math.sin(ph) * math.cos(th), 1.38 + 0.58 * math.sin(th) - 0.1 * (1 - math.cos(ph)), 0.95 + 0.4 * math.cos(ph) * math.cos(th) - 0.3)
-    mesh("visor", sheet(visor, 12, 6, 0.012), "glass", CH, 0.015, sharp=0)
-    rim = edge_path(visor, "top", 16)
-    mesh("visorRim", tube(rim, [0.018] * len(rim), 4, False), "trim", CH, 0)
-    foot = edge_path(visor, "bottom", 10)
-    mesh("visorFoot", tube([(x, y - 0.015, z) for x, y, z in foot], [0.03] * len(foot), 5, False), "panel", CH, 0.015)
+    # no windscreen. The cockpit is open, with a pulled-back bar over the tank: a triple clamp on the fork tops,
+    # two risers, a swept bar with rubber grips and gold end caps, brake levers with reservoirs, folding mirrors,
+    # a gauge pod between the risers and brake lines running down to the forks.
+    GX, GY, GZ = SPEC["grip"]
+
+    def bar_path(sx):
+        pts = [(0.13, 1.62, 0.84), (0.27, 1.66, 0.74), (0.38, 1.66, 0.6), (GX - 0.02, GY + 0.04, GZ + 0.22), (GX, GY, GZ + 0.1)]
+        # (a short Catmull-Rom pass for a smooth sweep)
+        out = []
+        for i in range(len(pts) - 1):
+            p0, p1, p2, p3 = pts[max(i - 1, 0)], pts[i], pts[i + 1], pts[min(i + 2, len(pts) - 1)]
+            for k in range(4):
+                out.append(tuple(sx * catmull(p0[c], p1[c], p2[c], p3[c], k / 4) if c == 0 else catmull(p0[c], p1[c], p2[c], p3[c], k / 4) for c in range(3)))
+        out.append((sx * pts[-1][0], pts[-1][1], pts[-1][2]))
+        return out
+
+    mesh("triple", xf(rbox(0.2, 0.03, 0.07, 0.35, 12, 6), (0, 1.41, 0.92), (-0.12, 0, 0)), "metal", CH, 0.02)
+    mesh("stem", limb((0, 1.3, 0.97), (0, 1.5, 0.86), 0.04, 0.035), "metal", CH, 0.02)
+    mesh("barClamp", xf(rbox(0.09, 0.035, 0.045, 0.4, 10, 6), (0, 1.62, 0.84)), "dark", CH, 0.015)
+    mesh("barCross", tube([(-0.13, 1.62, 0.84), (0.13, 1.62, 0.84)], [0.021, 0.021], 8, False), "metal", CH, 0.015)
+    for sx in (-1, 1):
+        t = "LR"[sx > 0]
+        bp = bar_path(sx)
+        mesh(f"riser{t}", limb((sx * 0.13, 1.41, 0.9), (sx * 0.13, 1.6, 0.84), 0.022, 0.022), "metal", CH, 0.015)
+        mesh(f"bar{t}", tube(bp, [0.021] * len(bp), 8, False), "metal", CH, 0.015)
+        gp = [(sx * GX, GY, GZ + 0.12 - 0.17 * i / 4) for i in range(5)]
+        mesh(f"grip{t}", tube(gp, [0.033] * 5, 8), "dark", CH, 0.015)
+        mesh(f"gripCap{t}", xf(rbox(0.036, 0.036, 0.012, 0.5, 8, 4), (sx * GX, GY, GZ - 0.06)), "trim", CH, 0.008)
+        # brake lever + reservoir, and its line down to the fork
+        mesh(f"lever{t}", limb((sx * (GX - 0.02), GY - 0.02, GZ + 0.12), (sx * (GX - 0.07), GY - 0.04, GZ + 0.3), 0.009, 0.016), "metal", CH, 0.008)
+        mesh(f"reservoir{t}", xf(rbox(0.026, 0.026, 0.04, 0.4, 8, 6), (sx * (GX - 0.14), GY + 0.035, GZ + 0.3)), "dark", CH, 0.008)
+        line_ = [(sx * (GX - 0.14), GY + 0.02, GZ + 0.32), (sx * 0.32, 1.52, 0.82), (sx * 0.35, 1.4, 0.9), (sx * 0.34, 1.3, 0.94)]
+        mesh(f"brakeLine{t}", tube(line_, [0.008] * 4, 4, False), "dark", CH, 0)
+        # a folding mirror on a stalk
+        mesh(f"mirrorStalk{t}", limb((sx * (GX - 0.05), GY + 0.05, GZ + 0.2), (sx * (GX + 0.05), GY + 0.26, GZ + 0.12), 0.01, 0.01), "metal", CH, 0.008)
+        mesh(f"mirror{t}", xf(rbox(0.06, 0.04, 0.012, 0.5, 10, 6), (sx * (GX + 0.06), GY + 0.3, GZ + 0.11), (-0.35, sx * -0.3, 0)), "panel", CH, 0.01)
+        mesh(f"mirrorGlass{t}", xf(rbox(0.05, 0.032, 0.004, 0.5, 8, 4), (sx * (GX + 0.06), GY + 0.3, GZ + 0.1), (-0.35, sx * -0.3, 0)), "glass", CH, 0)
+    # the gauge pod: a dark housing on the clamp with a lit display and a gold bezel
+    mesh("gauge", xf(rbox(0.1, 0.045, 0.06, 0.35, 12, 6), (0, 1.69, 0.8), (-0.4, 0, 0)), "dark", CH, 0.015)
+    mesh("gaugeDisplay", xf(rbox(0.075, 0.02, 0.005, 0.5, 8, 4), (0, 1.706, 0.768), (-0.4, 0, 0)), "stripe", CH, 0)
+    mesh("gaugeBezel", xf(rbox(0.1, 0.012, 0.062, 0.35, 12, 6), (0, 1.658, 0.812), (-0.4, 0, 0)), "trim", CH, 0.006)
     # a round headlamp set into the nose cowl
     mesh("cowl", xf(rbox(0.24, 0.075, 0.24, 0.28, 14, 6), (0, 1.3, 0.96), (-0.1, 0, 0)), "panel", CH, 0.02)
     mesh("headlamp", xf(lathe([(0, 0), (0.1, 0), (0.1, 0.03), (0, 0.04)], 20), (0, 1.27, 1.12), (1.2, 0, 0)), "lamp", CH, 0)
@@ -391,14 +436,13 @@ else:
     # square flapped panniers slung low either side of the seat: a strap, a buckle and a tail lamp
     for sx in (-1, 1):
         t = "LR"[sx > 0]
-        bx = sx * 0.5
+        bx = sx * SPEC["bag_x"]   # centred about on the shell's skin: the bag is half sunk into it
         mesh(f"bag{t}", xf(rbox(0.12, 0.16, 0.4, 0.26, 14, 8), (bx, 0.9, -0.62)), "bag", CH, 0.04, sharp=0)
         mesh(f"bagFlap{t}", xf(rbox(0.128, 0.085, 0.415, 0.22, 14, 6), (bx, 1.03, -0.62), (0, 0, sx * -0.12)), "navy", CH, 0.03, sharp=0)
         mesh(f"bagStrap{t}", xf(rbox(0.135, 0.15, 0.03, 0.3, 10, 6), (bx, 0.98, -0.5)), "trim", CH, 0.012)
         mesh(f"bagBuckle{t}", xf(rbox(0.022, 0.042, 0.03, 0.4, 6, 4), (bx + sx * 0.128, 0.93, -0.5)), "metal", CH, 0.012)
         mesh(f"bagLine{t}", tube([(bx + sx * (0.12 + PROUD - 0.01), 0.84, z) for z in (-0.95, -0.8, -0.5, -0.3)], [0.01] * 4, 4, False), "stripe", CH, 0)
         mesh(f"bagTail{t}", xf(rbox(0.05, 0.035, 0.02, 0.5, 8, 4), (bx, 0.98, -1.045)), "tail", CH, 0)
-        mesh(f"bagBracket{t}", limb((sx * 0.3, 0.9, -0.62), (sx * 0.4, 0.9, -0.62), 0.03, 0.06), "metal", CH, 0.015)
 
 # a brake-light bar across the tail, either way
 mesh("tailBar", xf(rbox(0.12, 0.022, 0.025, 0.5, 8, 4), (0, SPEC["body"][0][2] - 0.02, SPEC["body"][0][0] + 0.05), (0.4, 0, 0)), "tail", CH, 0)
@@ -410,6 +454,8 @@ ROOT["radius"] = 2.1
 ROOT["proposal"] = SPEC["name"]
 # a seat (hip) for the rider, in the bike's own frame: the preview and the game both read it
 ROOT["seat"] = [0.0, SY + 0.1, SZ]
+for _k, _v in SPEC["pose"].items():
+    ROOT["pose_" + _k] = _v   # the rider's pose for this bike: torso lean, legs (x swing, spread out), arm (x, out), elbow
 audit_coplanar(C.objects, allow=ALLOW)
 _dg = bpy.context.evaluated_depsgraph_get()
 _tris = [(o.evaluated_get(_dg).to_mesh(), o["ink"]) for o in C.objects if o.type == "MESH"]

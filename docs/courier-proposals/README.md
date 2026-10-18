@@ -19,26 +19,37 @@ below is wired in until one is chosen. `tools/blender/preview_courier.py` rebuil
   panel. A spine light on top.
 - **Saddle bags,** a pair, one each side, in their own `bag` slot (the trim colour as a flat toon, not a glow) so they read
   as luggage against the dark shell. `bag` is the one slot the game has no entry for yet.
-- **A proper windscreen,** mounted on the nose cowl in front of the bars (the old canopy sat over them and looked wonky).
-- **8.3k triangles (A) / 8.1k (B)**, plus 5.3k / 5.1k drawn again for the outline: inside the house budget of about 11k for a
-  vehicle (`style.md`). 298 / 292 KB as exported, 118 / 121 KB compressed (`npm run optimize:glb`; the files here are plain so any
-  viewer opens them). Both pass `audit_coplanar` (no surfaces that would z-fight). Ink-0 details (the glow lines, rim rings,
+- **Spokes run into a hub:** six glowing spokes root inside a hub disc on the axle (they used to start 4 cm short of it).
+- **A tidy cockpit:** A has a tall windscreen on the nose cowl in front of the bars (the old canopy sat over them and looked wonky); B has no windscreen and a detailed handlebar set (below).
+- **9.0k triangles (A) / 10.0k (B)**, plus 6.0k / 7.0k drawn again for the outline: inside the house budget of about 11k for a
+  vehicle (`style.md`). About 325 / 356 KB as exported (the files here are plain so any viewer opens them; `npm run optimize:glb`
+  compresses them to roughly 40%). Both pass `audit_coplanar` (no surfaces that would z-fight). Ink-0 details (the glow lines, rim rings,
   spokes) stand at most 6 mm off the surface they lie on, as the outline rules ask; the straps stand 12 mm off and have ink of
   their own.
 
 ## A: Slipstream
 
 Long, low and pointed. A tall, raked sport windscreen on the nose with a glowing edge; tall teardrop bags that tuck in
-beside the rear wheel, with a gold strap and clasp and a tail lamp; a racing crouch. Keeps today's seat and pose almost
-exactly (`seat` 1.42, `seatZ` -0.88 stay as they are).
+beside the rear wheel, with a gold strap and clasp and a tail lamp; a racing crouch. The clip-on bars are pulled back to
+z 0.42 so the runner's 0.6 m arms reach them. The tall tank needs the legs spread 0.5 rad to clear it (thigh swing -1.1),
+which is a sprawl: scooping the tank like B's would bring that down to 0.3.
 
 ## B: Parcel Runner
 
-Rounder and friendlier, more of a delivery bike: a fatter shell, a tall wrap-around bubble visor, a round headlamp in the
-nose, wider tyres, and square flapped panniers slung low either side of the seat with a gold strap and buckle. The seat
-sits further forward and the rider sits more upright: torso lean 0.45 (now 0.95), legs 1.25 (now 1.05), arms 0.55
-(now 0.75), foot-pegs moved forward. Suggested `seat: 1.40, seatZ: -0.66`. (The pose is free to change with the bike;
-the renders use these numbers.)
+Rounder and friendlier, more of a delivery bike: a round headlamp in the nose, wider tyres, and square flapped panniers
+slung low with a gold strap and buckle, **centred on the shell's skin so they sit half sunk into its flank** (`bag_x` 0.36;
+it was 0.50). **No windscreen.** The cockpit is open, with a **detailed handlebar set**: a triple clamp on the fork tops,
+two risers with a cross-piece and a gauge pod (lit display, gold bezel), a pulled-back swept bar over the tank with rubber
+grips and gold end caps, brake levers with reservoirs and brake lines down to the forks, and mirrors on stalks. The pegs stand
+out from the shell on brackets.
+
+The tank is slimmer and scooped (half width 0.27, top 1.30 m at the seat) so the rider's thighs clear it.
+
+**The rider's pose is solved against the geometry**, not eyeballed (`SPEC["pose"]` in `build_courier.py`, written to the GLB's
+root as `pose_*` extras): torso lean 0.752, thigh swing -1.0, **leg spread 0.35 rad** (about 20 degrees: the smallest that
+clears), arm swing -1.179 with 0.128 out, elbow -0.704. `preview_courier.py` checks it every run: both fists land within
+3 mm of the grips and no leg vertex is more than 4 mm inside the shell or bags. The game's `player.js` sets only torso, thigh
+swing and arm swing, so using this needs leg spread and elbow added there. Suggested `seat: 1.40, seatZ: -0.66`.
 
 ## If one is picked: wiring it in
 
