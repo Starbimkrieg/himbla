@@ -3,19 +3,19 @@ import { makeDownsPart, downsNode, downsSlot } from './models.js';
 import { T, G } from './outpostModels.js';
 import { bake } from './downsKit.js';
 
-// The fairground's two rides, rebuilt in Blender for Chimera Downs (tools/blender/build_downs_fair.py). Each is built into a settlement kit `k` at (x, z) in the place's frame, and
-// registers its rideable seats in world.rides (rides.js: `F` beside it pops you into the nearest gondola or onto the nearest horse). Also the annex's queue lines.
+// Chimera Downs' two fairground rides (Blender: tools/blender/build_downs_fair.py), plus the annex's queue lines. Each is built
+// into settlement kit `k` at (x, z) in the place's frame and registers its seats in world.rides (rides.js: `F` takes the nearest).
 const TAU = Math.PI * 2;
 const ACCENTS = [0x8b4044, 0xcfb352, 0x7b9a6e, 0xb07c57];   // Barn Red, Gold Gleam, Money, Saddle Brown
 
-// Ferris wheel: a Mint A-frame on a platform, a big turning wheel with lit bulbs, twelve open gondolas that hang level (about 50 m tall; 48 m across the wheel's plane).
+// Ferris wheel: Mint A-frame on a platform, lit wheel, twelve level-hanging gondolas (~50 m tall, 48 m across).
 export function ferrisWheel(world, loc, k, wx, wz) {
-  const hub = 27, R = 22; // (the bottom gondola just clears the platform)
+  const hub = 27, R = 22; // bottom gondola just clears the platform
   k.at(wx, wz);
   bake(k, 'dn_wheel_frame');
   k.at();
-  world.col(loc, { type: 'box', x: wx, y: 0.4, z: wz, hx: 8, hy: 0.4, hz: 5 });                                   // (the platform, up to its deck)
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) world.col(loc, { type: 'cyl', x: wx + sx * 6.55, z: wz + sz * 3.9, y0: -2, y1: 5, r: 0.9 });   // (the A-frames' four feet)
+  world.col(loc, { type: 'box', x: wx, y: 0.4, z: wz, hx: 8, hy: 0.4, hz: 5 });                                   // platform, up to its deck
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) world.col(loc, { type: 'cyl', x: wx + sx * 6.55, z: wz + sz * 3.9, y0: -2, y1: 5, r: 0.9 });   // A-frame feet
   const wheel = makeDownsPart('dn_wheel');
   const gondolas = [];
   for (let i = 0; i < 12; i++) {
@@ -39,7 +39,7 @@ export function ferrisWheel(world, loc, k, wx, wz) {
   });
 }
 
-// Carousel: a Barn Red and Mint canopy, a turning deck, eight horses bobbing on poles (r about 10 m, 12 m tall).
+// Carousel: Barn Red and Mint canopy, turning deck, eight bobbing horses (r ~10 m, 12 m tall).
 export function carousel(world, loc, k, cx, cz) {
   k.at(cx, cz);
   bake(k, 'dn_carousel_base');
@@ -76,8 +76,8 @@ export function carousel(world, loc, k, cx, cz) {
   });
 }
 
-// A queue line: `n` posts (dn_stanchion) from (x, z) along the kit frame's +x, `gap` apart (3 m, the rope's length), standing at height y (the annex's turf is 12 cm up). Each post's rope
-// reaches the next post, so the last one goes without: the rope is the post's `rope` pivot, which bake() leaves out, baked here only where it has somewhere to go.
+// Queue line: `n` dn_stanchion posts from (x, z) along kit +x, `gap` apart (3 m = rope length), at height y (annex turf is
+// 12 cm up). The rope is the post's `rope` pivot, which bake() skips; baked here for every post but the last.
 export function queue(k, x, z, n, y = 0, gap = 3) {
   const rope = downsNode('dn_stanchion').kids.find((c) => c.role === 'rope');
   const mat = (slot) => { const c = downsSlot(slot); return c.glow ? G(c.color) : T(c.color); };

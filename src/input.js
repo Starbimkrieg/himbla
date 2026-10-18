@@ -1,8 +1,7 @@
 // Keyboard / mouse state with pointer lock.
 //
-// Key remapping lives here: the rest of the game always asks for the DEFAULT key code of an
-// action (e.g. pressed('KeyG') for "scoop"). setBindings({ KeyG: 'KeyT' }) makes the physical
-// T key report as 'KeyG', and the physical G key (no longer bound to anything) goes inert.
+// Remapping: the game always asks for an action's DEFAULT code (pressed('KeyG') for scoop). setBindings({ KeyG: 'KeyT' })
+// makes physical T report as 'KeyG', and physical G (now unbound) goes inert.
 export class Input {
   constructor(canvas) {
     this.canvas = canvas;
@@ -11,14 +10,14 @@ export class Input {
     this.mouse = [false, false, false];
     this.dx = 0;
     this.dy = 0;
-    this.wheelAcc = 0; // scroll since the last notch (a mouse wheel notch, or a trackpad's worth of swipe)
+    this.wheelAcc = 0; // scroll since the last step (wheel notch or trackpad swipe)
     this.wheelSteps = 0;
     this.wheelT = 0;
-    this.ptrLocked = false; // the mouse is captured
-    this.padActive = false; // a controller is in use (gamepad.js): counts as "in control" too
+    this.ptrLocked = false; // mouse captured
+    this.padActive = false; // controller in use (gamepad.js); also counts as in control
     this.padMove = { x: 0, y: 0, on: false };
     this.onKey = null;
-    this.binds = new Map(); // default code -> physical code (only entries that differ)
+    this.binds = new Map(); // default code -> physical code (only those that differ)
     this.rev = new Map(); // physical code -> default code
 
     window.addEventListener('keydown', (e) => {
@@ -36,7 +35,7 @@ export class Input {
     window.addEventListener('wheel', (e) => {
       if (!this.ptrLocked) return;
       this.wheelAcc += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
-      // one step per notch; a trackpad's stream of tiny deltas adds up to steps, at most ~6 a second
+      // one step per notch; trackpad deltas accumulate into steps, at most ~6/s
       const now = performance.now();
       if (Math.abs(this.wheelAcc) >= 50 && now - this.wheelT > 160) {
         this.wheelSteps += Math.sign(this.wheelAcc);
@@ -73,7 +72,7 @@ export class Input {
     if (code === 'Escape') return code;
     const def = this.rev.get(code);
     if (def) return def;
-    // this key's own action moved elsewhere and nothing took its place
+    // this key's action moved elsewhere and nothing replaced it
     if (this.binds.has(code)) return 'Unbound:' + code;
     return code;
   }
@@ -82,7 +81,7 @@ export class Input {
   get locked() { return this.ptrLocked || this.padActive; }
 
   lock() {
-    if (this.ptrLocked || this.padActive) return; // (a controller needs no capture)
+    if (this.ptrLocked || this.padActive) return; // controllers need no capture
     try {
       const p = this.canvas.requestPointerLock();
       if (p && p.catch) p.catch(() => {});

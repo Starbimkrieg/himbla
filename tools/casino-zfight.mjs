@@ -1,11 +1,11 @@
-// Dev-only Z-fighting audit for the Lucky Crater Casino (docs/casino-layouts.md, "Z-fighting"). Not part of the build.
+// Dev-only Z-fighting audit for the Lucky Crater Casino (docs/casino-layouts.md, "Z-fighting"). Not in the build.
 //   npx vite --port 5199 --host 127.0.0.1      (in one shell)
 //   node tools/casino-zfight.mjs                (Playwright from PLAYWRIGHT, default /opt/node-tools/node_modules/playwright/index.mjs; the game from GAME_URL)
-// Two surfaces fight when they lie on one plane (to within what the depth buffer can tell apart), face the same way and overlap. This walks every mesh near the casino, turns
-// every triangle into the casino's frame, files them by plane (normal and offset) and reports each pair of triangles from DIFFERENT meshes that share a plane and overlap by more
-// than 1 cm2. EPS is the plane distance below which two surfaces count as one: the 24-bit depth buffer tells surfaces 0.1 mm apart at 30 m and about 1 mm at 100 m, so 2 mm is what a layout should never
-// go under (a decal, a panel or a trim piece stands off its wall by at least 2 cm, and the textured planes also carry polygonOffset). The outline shells (back faces only) and the
-// undersides of floor-standing things are left out; what is left is what a visitor can see. Run it before and after a rebuild: the count is the number to bring down to zero.
+// Surfaces fight when coplanar (within depth precision), facing the same way and overlapping. This takes every mesh near the casino into
+// the casino frame, buckets triangles by plane (normal, offset), and reports pairs from DIFFERENT meshes sharing a plane and overlapping
+// by more than 1 cm2. EPS: plane distance under which two surfaces count as one. The 24-bit depth buffer separates 0.1 mm at 30 m and
+// ~1 mm at 100 m, so 2 mm is the floor for a layout (decals, panels and trim stand off by at least 2 cm; textured planes also use
+// polygonOffset). Outline shells (back faces only) and floor-standing undersides are skipped. Run before and after a rebuild; aim for zero.
 const { chromium } = await import(process.env.PLAYWRIGHT || '/opt/node-tools/node_modules/playwright/index.mjs');
 const EPS = Number(process.env.EPS || 0.002);
 
@@ -28,7 +28,7 @@ const report = await pg.evaluate((EPS) => {
   const g = window.game, W = g.world, loc = g.locations.find((l) => l.id === 'casino');
   const V = g.player.pos.constructor, M = W.casino.loc.group.matrixWorld.constructor;
   const inv = new M().copy(W.casino.loc.group.matrixWorld).invert();
-  // the hall and its forecourt, in the casino's frame (generous: the whole building, the canopy, the carousels)
+  // hall and forecourt in the casino frame (generous: whole building, canopy, carousels)
   const inBox = (p) => p.x > -70 && p.x < 70 && p.z > -50 && p.z < 60 && p.y > -1 && p.y < 90;
   const tris = [];
   const a = new V(), c = new V(), d = new V(), n = new V(), e1 = new V(), e2 = new V();
@@ -38,7 +38,7 @@ const report = await pg.evaluate((EPS) => {
     if (!o.isMesh || o.isInstancedMesh || !o.geometry || !o.visible) return;
     const pos = o.geometry.attributes.position; if (!pos) return;
     const mat0 = Array.isArray(o.material) ? o.material[0] : o.material;
-    if (mat0.side === 1) return;                                                  // the black outline shells draw back faces only: they never show through a front face
+    if (mat0.side === 1) return;                                                  // outline shells draw back faces only, never through a front face
     const m = new M().multiplyMatrices(inv, o.matrixWorld);
     const idx = o.geometry.index;
     const nt = idx ? idx.count / 3 : pos.count / 3;
@@ -53,7 +53,7 @@ const report = await pg.evaluate((EPS) => {
       n.divideScalar(area * 2);
       const cx = (a.x + c.x + d.x) / 3, cy = (a.y + c.y + d.y) / 3, cz = (a.z + c.z + d.z) / 3;
       if (!inBox({ x: cx, y: cy, z: cz })) continue;
-      if (n.y < -0.9 && cy < 1.2) continue;                                      // the underside of something standing on the floor is never seen
+      if (n.y < -0.9 && cy < 1.2) continue;                                      // undersides of floor-standing things are never seen
       used = true;
       tris.push({ p: [a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z], n: [n.x, n.y, n.z], d: n.x * a.x + n.y * a.y + n.z * a.z, area, mesh: meshes, tag, ds: mat.side === 2 });
     }
@@ -63,7 +63,7 @@ const report = await pg.evaluate((EPS) => {
   const bucket = new Map();
   const key = (t, k) => `${Math.round(t.n[0] * 200)},${Math.round(t.n[1] * 200)},${Math.round(t.n[2] * 200)},${Math.floor(t.d / 0.02) + k}`;
   tris.forEach((t, i) => { const k = key(t, 0); (bucket.get(k) || bucket.set(k, []).get(k)).push(i); });
-  // convex clip area of two coplanar triangles, in the plane's two dominant axes
+  // convex clip area of two coplanar triangles in the plane's dominant axes
   const area2 = (P) => { let s = 0; for (let i = 0; i < P.length; i++) { const [x1, y1] = P[i], [x2, y2] = P[(i + 1) % P.length]; s += x1 * y2 - x2 * y1; } return s / 2; };
   const clip = (subject, tri) => {
     let out = subject;
@@ -102,8 +102,8 @@ const report = await pg.evaluate((EPS) => {
     const nb = bucket.get(`${n0},${n1},${n2},${db + 1}`) || [];
     for (let x = 0; x < list.length; x++) { for (let y = x + 1; y < list.length; y++) test(list[x], list[y]); for (const y of nb) test(list[x], y); }
   }
-  // a face buried inside a solid (the back of a panel set into the wall, say) can never show, whatever it overlaps: a ray from 1 cm in front of it, along its normal, crosses an odd number of
-  // surfaces when that point is inside something closed
+  // a face buried in a solid (e.g. the back of a panel set into a wall) never shows: a ray from 1 cm in front along its normal crosses
+  // an odd number of surfaces when that point is inside something closed
   const hits = (o, d) => {
     let n = 0;
     for (const T of tris) {
@@ -119,7 +119,7 @@ const report = await pg.evaluate((EPS) => {
       const v = f * (d[0] * qx + d[1] * qy + d[2] * qz);
       if (v < 0 || u + v > 1) continue;
       const t = f * (e2x * qx + e2y * qy + e2z * qz);
-      if (t > 1e-4 && t < 4) n++;                   // (only what is within 4 m: a wall, a counter; a lone plane far off would flip the count)
+      if (t > 1e-4 && t < 4) n++;                   // within 4 m only (a wall, a counter); a lone far plane would flip the count
     }
     return n;
   };

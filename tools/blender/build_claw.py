@@ -1,22 +1,22 @@
-# Zero-G claw builder for Blender (4.2+ / 5.x): the Lucky Crater Casino's claw machine (a glass tank 15.6 m wide on the hall's front wall) and everything that floats
-# in it, exported to src/assets/claw.glb.
+# Zero-G claw builder for Blender (4.2+ / 5.x): the Lucky Crater Casino's claw machine (a 15.6 m glass tank on the hall's
+# front wall) and its floating prizes, exported to src/assets/claw.glb.
 #
 # In Blender's Python console or via MCP:   exec(open(r"<repo>/tools/blender/build_claw.py").read())
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 build_claw.py
 #
-# Authored in three.js axes (x right, y up, +z toward the player). Every root has its origin at its own centre, except the machine, whose origin is on the floor at the
-# middle of its back (which stands on the wall), its front toward +z. Each mesh has ONE material named after a slot (CLAW_TOON / CLAW_GLOW / CLAW_CLEAR in
-# src/models.js) and an `ink` property for its outline shell.
-#   claw_machine   the cabinet, 16.4 m wide, 5.2 m deep, 6.6 m tall (8.4 m with the marquee box): a plum base with gold trim, a brass frame of mullions round the tank, a
-#                  cornice and a marquee box, a cyan vent floor with a lit DROP hole centre-left (where prizes go down), a slanted console with a stick, a beam button and a
-#                  screen, and ten shuffle jets in the ceiling. The tank's inside is x +-7.7, y 1.45 to 6.4, z 0.3 to 3.5; the glass is the
-#                  slot `glass` (see CLAW_CLEAR). Pivots: marquee (plane w by h), screen (plane, extra tilt), drop (the hole in the tank floor), jets (one per ceiling jet, in
-#                  a group at the ceiling: `jet` roles at their own places)
-#   claw_claw      the energy claw: a brass body on three steel fingers with lamps. About 1 m across; its origin is the middle of its body
+# three.js axes (x right, y up, +z toward the player). Roots are centred on their origin, except the machine: origin on the
+# floor at the middle of its back (against the wall), front toward +z. One material per mesh, named after a slot
+# (CLAW_TOON / CLAW_GLOW / CLAW_CLEAR in src/models.js), plus an `ink` property for the outline shell.
+#   claw_machine   cabinet 16.4 m wide, 5.2 m deep, 6.6 m tall (8.4 m with marquee): plum base, gold trim, brass mullion frame,
+#                  cornice, marquee box, cyan vent floor with a lit DROP hole centre-left (prizes go down it), slanted console
+#                  (stick, beam button, screen), ten ceiling shuffle jets. Tank inside: x +-7.7, y 1.45 to 6.4, z 0.3 to 3.5;
+#                  glass is slot `glass` (CLAW_CLEAR). Pivots: marquee (plane w by h), screen (plane, extra tilt), drop (the
+#                  floor hole), jets (`jet` roles at each ceiling jet)
+#   claw_claw      energy claw: brass body on three steel fingers with lamps, ~1 m across, origin at the body's middle
 #   claw_crate, claw_canister, claw_gear, claw_girder, claw_mine, claw_magnet, claw_tyre, claw_hullplate, claw_chip (the LUCKY CHIP, the jackpot), claw_lockbox, claw_gem
-#                  the things that float in the tank, each centred on its origin and about 0.5 to 1.8 m across. The salvaged engine and the credits case are the game's own
-#                  models (engine.glb, briefcase.glb). `crate`'s slot `crate` is the one the game tints
-#   claw_link      one link of the chain that tows crates, canisters, cogs and tyres together: a steel ring 0.25 m long, lying in the xz plane
+#                  floating prizes, centred, ~0.5 to 1.8 m across. The engine and credits case are the game's own models
+#                  (engine.glb, briefcase.glb). The game tints `crate`'s slot `crate`
+#   claw_link      one link of the chain that tows crates, canisters, cogs and tyres: a 0.25 m steel ring in the xz plane
 
 import bpy, math, os
 
@@ -54,7 +54,7 @@ for s in SLOT_COLORS:
 
 
 class Acc:
-    """Boxes, cylinders, spheres and tubes that share a material slot and a parent, merged into one mesh when flushed."""
+    """Primitives sharing a slot and parent, merged into one mesh on flush."""
     all = []
 
     def __init__(self, name, slot, parent, ink=0.03):
@@ -94,14 +94,14 @@ def flush_all():
     Acc.all = []
 
 
-exec(open(os.path.join(REPO, "tools", "blender", "suits.py"), encoding="utf-8").read(), globals())   # the casino's card-suit panels
+exec(open(os.path.join(REPO, "tools", "blender", "suits.py"), encoding="utf-8").read(), globals())   # card-suit panels
 
 
 # =====================================================================================================================
 # the machine
 # =====================================================================================================================
-W, D, H0, H1 = 16.4, 5.2, 1.3, 6.6          # width, depth, the tank's floor (the base's top), the tank's roof (the frame's underside)
-DROP = (-3.4, 2.3)                           # the hole in the tank floor (x, z): centre-left, mid-depth
+W, D, H0, H1 = 16.4, 5.2, 1.3, 6.6          # width, depth, tank floor (base top), tank roof (frame underside)
+DROP = (-3.4, 2.3)                           # drop hole (x, z): centre-left, mid-depth
 m = pivot("claw_machine", (0, 0, 0), None)
 A = Acc("base", "plum", m, 0.05)
 A.boxc(0, H0 / 2, D / 2 - 0.55, W, H0, D - 1.1)
@@ -110,14 +110,14 @@ A = Acc("baseTrim", "gold", m, 0.03)
 A.boxc(0, H0 + 0.05, 2.1, W + 0.2, 0.12, 4.2)
 A.boxc(0, 0.15, 2.2, W + 0.1, 0.3, 4.5)
 A.flush()
-# the base's card-suit trim (the prize counter's panels, suits.py): along the front either side of the console, and one on each end
+# card-suit trim (suits.py): along the front either side of the console, one on each end
 AF = Acc("baseFrames", "brass", m, 0.0); AP = Acc("basePanels", "dark", m, 0.0); AR = Acc("baseRed", "suitred", m, 0.012); AC = Acc("baseCream", "suitcream", m, 0.012)
 for k, x in enumerate((-6.3, -4.7, -3.1, 3.1, 4.7, 6.3)):
     suit_panel(AF, AP, AR, AC, k % 4, (x, 0.78, D - 1.1), 0, 1.5, 0.66, 0.34)
 suit_panel(AF, AP, AR, AC, 1, (-W / 2, 0.78, 2.0), -PI / 2, 2.8, 0.66, 0.34)
 suit_panel(AF, AP, AR, AC, 2, (W / 2, 0.78, 2.0), PI / 2, 2.8, 0.66, 0.34)
 AF.flush(); AP.flush(); AR.flush(); AC.flush()
-# the frame: six mullions at the front and the back, a post at each end, a roof beam, a cornice and the marquee box
+# frame: six mullions front and back, end posts, roof beam, cornice, marquee box
 A = Acc("frame", "brass", m, 0.04)
 for i in range(6):
     x = -W / 2 + 0.4 + i * (W - 0.8) / 5
@@ -131,10 +131,10 @@ A = Acc("cornice", "gold", m, 0.03)
 A.boxc(0, H1 + 0.45, 2.0, W + 0.5, 0.25, 4.3)
 A.flush()
 A = Acc("marqueeBox", "plum2", m, 0.04)
-A.boxc(0, H1 + 1.15, 3.45, 9.0, 1.3, 0.6)                                       # (stands at the cornice's front edge, where the hall can read it)
+A.boxc(0, H1 + 1.15, 3.45, 9.0, 1.3, 0.6)                                       # at the cornice's front edge, readable from the hall
 A.flush()
 pivot("marquee", (0, H1 + 1.15, 3.77), m, role="marquee", w=8.6, h=1.0)
-# the floor: a dark grate with cyan vents, and the DROP hole: a lit ring round a dark well where what you bank goes down
+# floor: dark grate, cyan vents, and the DROP hole (lit ring round a dark well) where banked prizes go down
 A = Acc("floorGrate", "dark", m, 0.0)
 A.boxc(0, H0 + 0.08, 1.9, W - 0.7, 0.06, 3.3)
 A.flush()
@@ -153,8 +153,7 @@ A.tor(0.78, 0.05, (DROP[0], H0 + 0.16, DROP[1]), (0, 0, 0), 28, 5)
 A.tor(0.52, 0.03, (DROP[0], H0 + 0.165, DROP[1]), (0, 0, 0), 22, 5)
 A.flush()
 pivot("drop", (DROP[0], H0 + 0.16, DROP[1]), m, role="drop", r=0.72)
-# the glass: the front and the two ends of the tank, one flat quad each (the game draws it see-through and double-sided; a thin box here stacked four
-# layers of tint on every pane, which washed everything inside out)
+# glass: one flat quad each for front and ends (drawn see-through and double-sided; a box would stack four tint layers per pane)
 A = Acc("glassFront", "glass", m, 0.0)
 A.add(plane(W - 0.8, H1 - H0), (0, (H0 + H1) / 2, 3.62))
 A.flush()
@@ -162,7 +161,7 @@ A = Acc("glassEnds", "glass", m, 0.0)
 for sx in (-1, 1):
     A.add(plane(3.4, H1 - H0), (sx * (W / 2 - 0.62), (H0 + H1) / 2, 1.9), (0, PI / 2, 0))
 A.flush()
-# the console: a slanted desk the middle of the front, a stick, a beam button and a screen
+# console: slanted desk mid-front, stick, beam button, screen
 A = Acc("console", "plum2", m, 0.04)
 A.boxc(0, 0.95, 4.65, 4.6, 0.3, 1.3, rot=(-0.22, 0, 0))
 A.flush()
@@ -184,7 +183,7 @@ A = Acc("buttonRing", "neonpink", m, 0.0)
 A.tor(0.34, 0.03, (0.8, 1.14, 4.65), (0, 0, 0), 20, 5)
 A.flush()
 pivot("screen", (0, 1.45, 4.35), m, role="screen", w=1.7, h=0.5, tilt=0.22)
-# ten shuffle jets in the roof, one pivot each (the game puffs a plume from every one while the tank is shuffled)
+# ten roof shuffle jets, a pivot each (the game puffs plumes from them during a shuffle)
 A = Acc("jets", "neonpink", m, 0.0)
 for i in range(10):
     x = -W / 2 + 1.4 + i * (W - 2.8) / 9
@@ -194,7 +193,7 @@ A.flush()
 
 
 # =====================================================================================================================
-# the claw: a brass body on three steel fingers (its hose is drawn by the game, from the roof)
+# the claw (the game draws its hose from the roof)
 # =====================================================================================================================
 def claw():
     o = pivot("claw_claw", (0, 0, 0), None)
@@ -216,7 +215,7 @@ def claw():
 
 
 # =====================================================================================================================
-# what floats in the tank
+# floating prizes
 # =====================================================================================================================
 def crate():
     o = pivot("claw_crate", (0, 0, 0), None)

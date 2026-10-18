@@ -1,16 +1,16 @@
-# The Lucky Crater Casino's forecourt kit for Blender (4.2+ / 5.x), exported to src/assets/lot.glb: the Valet Court's barrier, bollards and signs (docs/casino-forecourt.md).
+# Lucky Crater Casino forecourt kit for Blender (4.2+ / 5.x) -> src/assets/lot.glb: the Valet Court's barrier, bollards and signs (docs/casino-forecourt.md).
 #
 # In Blender's Python console or via MCP:   exec(open(r"<repo>/tools/blender/build_lot.py").read())
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 build_lot.py
 #
-# Authored in three.js axes (x right, y up, +z front), each model standing on y = 0 with its origin on the ground, one material per mesh named after a slot (LOT_TOON / LOT_GLOW in
-# src/models.js; the glow slots are lit), `ink` the outline shell's thickness in metres:
-#   lot_card_wall   2.4 m of the court's barrier, 1.25 m tall and 0.6 m deep: a plum kerb with a gold cap and four giant playing cards stood on it, each turned 14 degrees from the one
-#                   before (a zigzag, like a row of dominoes) and leaning back a little, a suit on both faces. Runs are this repeated end to end, 2.4 m apart
-#   lot_card_post   the end and corner post of a run: plum plinth, gold shaft, brass collar and a gold chip on a pin, 1.9 m
-#   lot_chip_bollard  the walkway's bollard: eight chips stacked (red, cream, gold, violet, twice), a dark cap and a glowing cyan ring, 1 m, 0.42 m across
-#   lot_pylon_p     the parking sign: a plum post on a gold footing, a brass-framed board with a neon P on both faces and a lit diamond on top, 4.7 m, facing +z
-#   lot_bay_stud    a bay's head stop: a gold half-chip stud with a cream inlay, 0.3 m across
+# three.js axes (x right, y up, +z front), each model on y = 0, origin on the ground; one material per mesh named after a slot (LOT_TOON / LOT_GLOW in src/models.js;
+# glow slots are lit); `ink` = outline thickness in m:
+#   lot_card_wall   2.4 m of barrier, 1.25 m tall, 0.6 m deep: plum kerb, gold cap, four giant playing cards each turned 14 degrees from the last (a domino zigzag), leaning back
+#                   a little, a suit on both faces. Runs repeat it end to end, 2.4 m apart
+#   lot_card_post   end / corner post: plum plinth, gold shaft, brass collar, gold chip on a pin, 1.9 m
+#   lot_chip_bollard  walkway bollard: eight stacked chips (red, cream, gold, violet, twice), dark cap, glowing cyan ring, 1 m, 0.42 m across
+#   lot_pylon_p     parking sign: plum post on a gold footing, brass-framed board with a neon P on both faces, lit diamond on top, 4.7 m, facing +z
+#   lot_bay_stud    bay head stop: gold half-chip stud with a cream inlay, 0.3 m across
 import bpy, bmesh, math, os
 
 
@@ -94,11 +94,11 @@ def flush_all():
         a.flush()
 
 
-exec(open(os.path.join(REPO, "tools", "blender", "suits.py"), encoding="utf-8").read(), globals())   # heart_outline(), shared with the hall, the table, the Duck Derby and the claw
+exec(open(os.path.join(REPO, "tools", "blender", "suits.py"), encoding="utf-8").read(), globals())   # heart_outline(), shared with the hall, table, Duck Derby and claw
 
 
 def lite_suit(kind, s, depth):
-    """The same four suits as suits.py, with far fewer facets (a run of the wall repeats them 300 times): flat shapes extruded along z, about s metres tall, centred."""
+    """suits.py's four suits with far fewer facets (a wall run repeats them 300 times): flat shapes extruded along z, ~s m tall, centred."""
     def ring(cx, cy, r, n=10):
         return [(cx + r * math.cos(2 * PI * i / n), cy + r * math.sin(2 * PI * i / n)) for i in range(n)]
     if kind == 1:
@@ -121,19 +121,19 @@ def lite_suit(kind, s, depth):
 root = pivot("lot_card_wall", (0, 0, 0))
 plum = Acc("lot_card_wall_plum", "plum", root, 0.02)
 gold = Acc("lot_card_wall_gold", "gold", root, 0.012)
-cream = Acc("lot_card_wall_cream", "cardface", root, 0.012)       # (the card faces are lit: a wall that faces the shade would read as dark plates)
+cream = Acc("lot_card_wall_cream", "cardface", root, 0.012)       # (card faces are lit, or a wall in shade reads as dark plates)
 red = Acc("lot_card_wall_suitred", "suitred", root, 0.0)
 suitc = Acc("lot_card_wall_suitcream", "suitcream", root, 0.0)
-plum.box(-1.2, 1.2, 0.0, 0.34, -0.3, 0.3)                                          # the kerb
-gold.box(-1.19, 1.19, 0.34, 0.40, -0.25, 0.25)                                     # its cap
-CW, CH, CT = 0.5, 0.95, 0.05                                                       # a card: 0.5 x 0.95 m, 5 cm thick
+plum.box(-1.2, 1.2, 0.0, 0.34, -0.3, 0.3)                                          # kerb
+gold.box(-1.19, 1.19, 0.34, 0.40, -0.25, 0.25)                                     # cap
+CW, CH, CT = 0.5, 0.95, 0.05                                                       # card: 0.5 x 0.95 m, 5 cm thick
 for i in range(4):
     kind = i                                                                       # spade, heart, diamond, club
     x = -0.9 + i * 0.6
     yaw = 0.25 if i % 2 == 0 else -0.25
     t, rot = (x, 0.40 + CH / 2 - 0.03, 0.0), (0.1, yaw, 0)                         # (sunk 3 cm into the cap; leaning back 6 degrees)
     cream.add(rbox(CW / 2, CH / 2, CT / 2, 0.12, 8, 4), t, rot)
-    for side, z in ((1, CT / 2 + 0.006), (-1, -(CT / 2 + 0.006))):                 # a suit on each face, off its middle toward the top
+    for side, z in ((1, CT / 2 + 0.006), (-1, -(CT / 2 + 0.006))):                 # a suit on each face, above the middle
         geos = [xf(g[:2], (0, 0.12, z), (0, 0 if side > 0 else PI, 0)) for g in lite_suit(kind, 0.32, 0.012)]
         (red if kind in (1, 2) else suitc).add(join(geos), t, rot)
 
@@ -149,9 +149,9 @@ plum.box(-0.36, 0.36, 0.0, 0.30, -0.36, 0.36)                                   
 gold.box(-0.26, 0.26, 0.30, 1.22, -0.26, 0.26)                                     # shaft
 brass.box(-0.31, 0.31, 1.22, 1.34, -0.31, 0.31)                                    # collar
 plum.box(-0.24, 0.24, 1.34, 1.42, -0.24, 0.24)                                     # cap
-brass.cylc(0, 1.52, 0, 0.05, 0.2, 8)                                               # a pin
-gold.cylc(0, 1.7, 0, 0.32, 0.12, 20, rot=(PI / 2, 0, 0))                           # the chip, on edge, its face toward +z
-pink.cylc(0, 1.7, 0, 0.2, 0.14, 20, rot=(PI / 2, 0, 0))                            # (its inlay stands 1 cm proud each side)
+brass.cylc(0, 1.52, 0, 0.05, 0.2, 8)                                               # pin
+gold.cylc(0, 1.7, 0, 0.32, 0.12, 20, rot=(PI / 2, 0, 0))                           # chip on edge, face toward +z
+pink.cylc(0, 1.7, 0, 0.2, 0.14, 20, rot=(PI / 2, 0, 0))                            # (inlay 1 cm proud each side)
 
 # =====================================================================================================
 # the walkway's chip bollard
@@ -164,8 +164,8 @@ CHH = 0.11
 for i in range(8):
     r = 0.42 if i % 2 == 0 else 0.40
     chips[i % 4].cylc(0, CHH / 2 + i * CHH, 0, r, CHH, 20)
-dark.cylc(0, 8 * CHH + 0.02, 0, 0.34, 0.04, 20)                                    # the cap
-cyan.tor(0.28, 0.03, (0, 8 * CHH + 0.05, 0), n=24, rs=6)                          # the ring (half sunk into the cap's top)
+dark.cylc(0, 8 * CHH + 0.02, 0, 0.34, 0.04, 20)                                    # cap
+cyan.tor(0.28, 0.03, (0, 8 * CHH + 0.05, 0), n=24, rs=6)                          # ring (half sunk into the cap top)
 
 # =====================================================================================================
 # the P pylon
@@ -176,15 +176,15 @@ gold = Acc("lot_pylon_p_gold", "gold", root, 0.02)
 brass = Acc("lot_pylon_p_brass", "brass", root, 0.012)
 cyan = Acc("lot_pylon_p_cyan", "glowcyan", root, 0.0)
 sred = Acc("lot_pylon_p_suitred", "suitred", root, 0.0)
-gold.box(-0.45, 0.45, 0.0, 0.22, -0.45, 0.45)                                      # the footing
-plum.box(-0.18, 0.18, 0.22, 2.70, -0.18, 0.18)                                     # the post
-brass.box(-0.26, 0.26, 2.66, 2.74, -0.26, 0.26)                                    # a collar
-brass.box(-0.78, 0.78, 2.62, 4.18, -0.08, 0.08)                                    # the board's frame
-plum.box(-0.70, 0.70, 2.70, 4.10, -0.10, 0.10)                                     # its face, 2 cm proud of the frame each side
+gold.box(-0.45, 0.45, 0.0, 0.22, -0.45, 0.45)                                      # footing
+plum.box(-0.18, 0.18, 0.22, 2.70, -0.18, 0.18)                                     # post
+brass.box(-0.26, 0.26, 2.66, 2.74, -0.26, 0.26)                                    # collar
+brass.box(-0.78, 0.78, 2.62, 4.18, -0.08, 0.08)                                    # board frame
+plum.box(-0.70, 0.70, 2.70, 4.10, -0.10, 0.10)                                     # board face, 2 cm proud of the frame each side
 P_PTS = [(-0.22, -0.45), (-0.22, 0.45), (0.05, 0.45)] + [(0.05 + 0.25 * math.sin(PI * i / 10), 0.20 + 0.25 * math.cos(PI * i / 10)) for i in range(1, 10)] + [(0.05, -0.05), (-0.22, -0.05)]
-for side in (1, -1):                                                                # the neon P on both faces (mirrored behind, so it reads)
+for side in (1, -1):                                                                # neon P on both faces (mirrored behind so it reads)
     cyan.path([(side * x, 3.40 + y, side * 0.13) for x, y in P_PTS], 0.04, 6)
-sred.add(extrude([(0, 0.3), (0.2, 0), (0, -0.3), (-0.2, 0)], 0.1, "z"), (0, 4.55, 0))   # a lit diamond on top, on a brass pin
+sred.add(extrude([(0, 0.3), (0.2, 0), (0, -0.3), (-0.2, 0)], 0.1, "z"), (0, 4.55, 0))   # lit diamond on top, on a brass pin
 brass.cylc(0, 4.26, 0, 0.04, 0.16, 8)
 
 # =====================================================================================================

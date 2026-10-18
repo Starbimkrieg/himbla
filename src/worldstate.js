@@ -1,30 +1,25 @@
-// The Moon after the story: what each faction finale changed for good. Saved like every other
-// module (a live 'moonrunner-*' key, so it rides along in the save slot) and applied at boot, before
-// the world is built, so a conquered HQ, a dismantled pirate clan or a fallen ILMB is simply how the
-// Moon is from then on (every builder, defence and spawner reads the remapped locations).
+// The Moon after the story: what each faction finale changed for good. Saved under a live 'moonrunner-*' key (so it's in
+// the save slot) and applied at boot before the world is built, so every builder, defence and spawner sees the remapped
+// locations.
 //
-//   conquered   { loser: winner }  vostok/daedalus finales: the loser's settlements fly the
-//                                  winner's flag; its reputation, shops and clearance are the winner's
-//   piratesGone true               SPACECOM finale: Rustmoon Hold is a ruin, the other dens are
-//                                  resettled as civilian towns, no pirates spawn, Kade is gone
-//   lawless     true               Rustmoon finale: the ILMB fell to the pirates; SPACECOM's guns
-//                                  are silent everywhere
-//   razed       [outpost ids]      Lights Out: SPACECOM outposts the charges took down (rebuilt as
-//                                  Rustmoon outposts once the chapter is done)
-//   pirateTowns [location ids]     Lights Out: the towns the clans blew up and took (pirate dens now)
+//   conquered   { loser: winner }  vostok/daedalus finales: the loser's settlements fly the winner's flag and use its
+//                                  reputation, shops and clearance
+//   piratesGone true               SPACECOM finale: Rustmoon Hold is a ruin, other dens resettled as civilian towns,
+//                                  no pirates spawn, Kade is gone
+//   lawless     true               Rustmoon finale: the ILMB fell; SPACECOM's guns are silent everywhere
+//   razed       [outpost ids]      Lights Out: SPACECOM outposts the charges took down (rebuilt as Rustmoon's after the chapter)
+//   pirateTowns [location ids]     Lights Out: towns the clans blew up and took (pirate dens now)
 //   blackSun    true               Daedalus chapter 4: the reactor at the Forward Post stays
-//   town        {dir,name,kind,    Kepler finale: your town (hometown.js), a settlement on the map
-//               slots,bank,radio,  (slots: eight building keys or null; School & Playground became Roads,
-//               sapNext,defNext}   so an old save's 'school' is read as 'roads' at load; radio: the Radio Tower's
-//                                  sweep of the world map, { d: [x,y,z], r metres, on, n cells, f: [location ids] },
-//                                  radio.js; sapNext: when the Greenhouse Farm's nursery bench has its next sapling, and
-//                                  defNext: when the Motor Pool can send its militia rovers out again (both ms since 1970,
-//                                  real time, like council.next))
-//   council     {passed,next}      the Moon Council's carried motions (and when it sits next)
-//   respawnAt   string|null        the headquarters (location id) you set at your town's clinic to redeploy at after a
-//                                  K.O. (respawn.js); null = your nearest clinic, else home
-//   bulletin    string|null        news to show once, on the first load after a finale (a carried council vote sets it
-//                                  too, until its new dawn has played)
+//   town        {dir,name,kind,    Kepler finale: your town (hometown.js), a settlement on the map. slots: eight building
+//               slots,bank,radio,  keys or null ('school' is read as 'roads' at load); radio: the Radio Tower's map sweep
+//               sapNext,defNext}   { d: [x,y,z], r metres, on, n cells, f: [location ids] } (radio.js); sapNext: next
+//                                  nursery sapling at the Greenhouse Farm; defNext: when the Motor Pool can send its
+//                                  militia rovers again (both ms since 1970, real time, like council.next)
+//   council     {passed,next}      the Moon Council's carried motions and next sitting
+//   respawnAt   string|null        HQ (location id) set at your town clinic to redeploy at after a K.O. (respawn.js);
+//                                  null = nearest clinic, else home
+//   bulletin    string|null        news shown once on the first load after a finale (also set by a carried council vote,
+//                                  until its new dawn has played)
 import * as THREE from 'three';
 import { FACTIONS, SHOPS } from './locations.js';
 import { darkness, arcDist, tangent, greatCircle } from './geo.js';
@@ -41,7 +36,7 @@ export function saveWorldState(ws) {
   try { localStorage.setItem(KEY, JSON.stringify(ws)); } catch { /* unavailable */ }
 }
 
-// Remap the location table (and the faction table) before anything is built from it.
+// Remap the location and faction tables before anything is built from them.
 export function applyWorldState(ws, locations) {
   for (const [loser, winner] of Object.entries(ws.conquered || {})) {
     if (!FACTIONS[loser] || !FACTIONS[winner]) continue;
@@ -62,7 +57,7 @@ export function applyWorldState(ws, locations) {
         // Rustmoon Hold: demolished, a SPACECOM memorial on the rubble
         Object.assign(l, { type: 'ruin', faction: 'spacecom', jobs: undefined, blurb: 'What is left of Rustmoon Hold: scrap, scorch marks and a SPACECOM flag. The clans are finished.' });
       } else if (l.camp) {
-        // the little camps just empty out
+        // small camps just empty out
         Object.assign(l, { type: 'ruin', faction: 'none', small: true, blurb: 'An abandoned pirate camp. Nobody is coming back for it.' });
       } else {
         Object.assign(l, {
@@ -72,11 +67,11 @@ export function applyWorldState(ws, locations) {
       }
     }
   }
-  // Lights Out: the towns the clans blew up and moved into are pirate dens now
+  // Lights Out: towns the clans took are pirate dens
   for (const id of ws.pirateTowns || []) {
     const l = locations.find((x) => x.id === id);
     if (!l) continue;
-    l.genR ??= l.zoneR || l.r; // (outpost generation keeps seeing the town it was, so ids don't shift)
+    l.genR ??= l.zoneR || l.r; // outpost generation still sees the old town, so ids don't shift
     Object.assign(l, {
       type: 'pirate', faction: 'rustmoon', hostile: true, dark: true, safe: false, takenTown: true, jobs: ['rustmoon', 'rustmoon'],
       defense: undefined, restricted: false, zoneR: undefined, hq: false, r: Math.max(l.r, 110),
@@ -85,22 +80,20 @@ export function applyWorldState(ws, locations) {
   }
   // Meridian: the launch complex beside the Monolith
   if (ws.launchPad) { const l = locations.find((x) => x.id === 'monolith'); if (l) l.launchPad = true; }
-  // (ws.quantum: the Spindle's core is home; it used to switch on Quantum-Lock Delivery, now the
-  // finale's prize is the Slipstream Vanes, a story tech: story.js load gives it to old saves)
-  // the Black Sun: Daedalus' reactor stands by the Forward Post for good
+  // ws.quantum (Spindle core home) needs nothing here: its prize, the Slipstream Vanes, is a story tech (story.js load)
+  // the Black Sun: Daedalus' reactor stays by the Forward Post
   if (ws.blackSun) { const l = locations.find((x) => x.id === 'daedalus2'); if (l) l.blackSun = true; }
   if (ws.lawless) {
     FACTIONS.spacecom.fallen = true;
     for (const l of locations) if (l.faction === 'spacecom') l.lawless = true;
   }
-  // your town (late: it stays out of the crater and outpost generation, like Chimera Downs)
+  // your town (late: kept out of crater and outpost generation, like Chimera Downs)
   if (ws.town && !locations.some((l) => l.id === 'hometown')) {
     const t = ws.town;
-    // School & Playground is gone: its plot is Roads now, free (in place: the location's slots and ws.town.slots are one array)
+    // old saves' 'school' plot becomes Roads (in place: the location's slots and ws.town.slots are one array)
     t.slots.forEach((s, i) => { if (s === 'school') t.slots[i] = 'roads'; });
     let dir = new THREE.Vector3().fromArray(t.dir).normalize();
-    // never on top of another settlement (an old save could put it inside Kepler Civic Center):
-    // nudge it out along the ground until it's clear
+    // never on another settlement (an old save could sit inside Kepler Civic Center): nudge it along the ground until clear
     for (let k = 0; k < 60; k++) {
       const bad = locations.find((l) => l.dir && arcDist(dir, l.dir) < (l.zoneR || l.r) + 260);
       if (!bad) break;
@@ -109,7 +102,7 @@ export function applyWorldState(ws, locations) {
       dir = greatCircle(dir, away.normalize(), 60);
     }
     t.dir = dir.toArray();
-    // (fit: the plateau is levelled to the real ground under the town, not to the smooth base noise: terrainField.fitZone)
+    // fit: level the plateau to the real ground, not the smooth base noise (terrainField.fitZone)
     locations.push({
       id: 'hometown', name: t.name, short: t.name.toUpperCase().slice(0, 12), type: 'hometown', faction: 'kepler', r: 120, dir, late: true, fit: true,
       jobs: ['kepler', 'meridian', 'spacecom'], safe: true, repair: 10, defense: { ring: 100, turrets: 2 }, dark: darkness(dir) > 0.5,
@@ -119,13 +112,13 @@ export function applyWorldState(ws, locations) {
   applyCouncil(ws, locations);
 }
 
-// What the Moon Council has passed (hometown.js MOTIONS): open zones, new stock in the shops.
+// Moon Council motions passed (hometown.js MOTIONS): open zones, new shop stock.
 function applyCouncil(ws, locations) {
   const passed = (ws.council && ws.council.passed) || [];
   const sell = (shop, item) => { if (SHOPS[shop] && !SHOPS[shop].some((x) => x.key === item.key)) SHOPS[shop].push(item); };
   const open = (shop, key) => { const it = (SHOPS[shop] || []).find((x) => x.key === key); if (it) { delete it.faction; delete it.req; } };
   if (passed.includes('ceasefire')) {
-    // the militarised zones stand down: Vostok and Daedalus bases are ordinary walled bases now
+    // militarised zones stand down: Vostok and Daedalus bases become ordinary walled bases
     for (const l of locations) {
       if ((l.faction !== 'vostok' && l.faction !== 'daedalus') || !l.restricted) continue;
       Object.assign(l, { restricted: false, ceasefire: true, safe: true, defense: { ring: l.small ? 50 : 90, turrets: l.small ? 3 : 5 } });
@@ -146,7 +139,7 @@ function applyCouncil(ws, locations) {
   }
   if (passed.includes('militiaPact')) {
     for (const l of locations) if (l.faction === 'kepler' && l.defense && !l.militia) { l.militia = true; l.defense = { ...l.defense, turrets: (l.defense.turrets || 0) + 2 }; }
-    // (not the Mule: the Kepler story already gives it to the only players who can call a vote)
+    // not the Mule: the Kepler story already gives it to everyone who can call a vote
     sell('kepler', { key: 'v_carrier', name: 'Kepler Militia Carrier', desc: 'VEHICLE: the militia\'s armoured hauler with a turret cannon, yours to call with V', cost: 3500, max: 1, vehicle: 'carrier' });
   }
 }

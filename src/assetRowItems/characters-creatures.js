@@ -3,13 +3,12 @@ import { makeFollowerModel } from '../alchemy.js';
 import { makeDuck } from '../casinoWorld.js';
 import { span, cell, line } from './characters-util.js';
 
-// 03 · CREATURES: the chimera species and their mutation kits, hybrids, the Mega Mite, the wild mite, the
-// racing ducks and the reactor pets.
+// 03 · CREATURES: chimera species, mutation kits, hybrids, Mega Mite, wild mite, racing ducks, reactor pets.
 
 const SP_W = 4.4; // a chimera's cell along the row (m)
 const SP_D = 4.4;
 
-// the walk cycle every chimera has (chimera.js anim(t, speed)): the row shows them trotting on the spot
+// walk-cycle speed for chimera.js anim(t, speed): they trot on the spot
 const GAIT = 3.5;
 
 function chimeraCells(list, w = SP_W, d = SP_D, yaw = 0) {
@@ -23,7 +22,7 @@ function chimeraCells(list, w = SP_W, d = SP_D, yaw = 0) {
   return { cells, update: (dt, t) => { for (const a of anims) a(t, GAIT); } };
 }
 
-// ---- the eight species, each with its own body, legs and head
+// ---- the eight pure species
 function speciesItem() {
   return {
     id: 'creatures.species', label: 'CHIMERA SPECIES (8)', w: span(LIVING.length, SP_W), d: SP_D,
@@ -34,20 +33,20 @@ function speciesItem() {
   };
 }
 
-// ---- the eight mutation kits (a person on wheels with an alien head, one kit each)
+// ---- the eight mutation kits, one each on a person/car/alien chimera
 function modsItem() {
   const mods = [...new Set(Object.values(MODIFIERS))];
   const W = 4.8;
   return {
     id: 'creatures.mutations', label: 'CHIMERA MUTATIONS (8)', w: span(mods.length, W), d: SP_D + 1,
     make() {
-      const R = chimeraCells(mods.map((m) => [m.toUpperCase(), { seed: 11, body: 'person', legs: 'car', head: 'alien', extraHead: null, mods: [m], size: 1, tint: PALETTE.person[0] }]), W, SP_D + 1, 1.2); // (turned side-on: the kits sit on the back)
+      const R = chimeraCells(mods.map((m) => [m.toUpperCase(), { seed: 11, body: 'person', legs: 'car', head: 'alien', extraHead: null, mods: [m], size: 1, tint: PALETTE.person[0] }]), W, SP_D + 1, 1.2); // (side-on: kits sit on the back)
       return { root: line(R.cells).root, update: R.update };
     },
   };
 }
 
-// ---- hybrids: bodies, legs and heads mixed, a second head, a size
+// ---- hybrids: mixed parts, second heads, sizes
 function hybridsItem() {
   const mixes = [
     ['MITE LEGS', { seed: 3, body: 'person', legs: 'mite', head: 'junkbot', extraHead: 'pirate', mods: [], size: 1.2, tint: PALETTE.person[1] }],
@@ -75,7 +74,7 @@ function megaMiteItem() {
   };
 }
 
-// ---- the wild mite of the sunlit craters
+// ---- the wild mite (sunlit craters)
 function miteItem() {
   return {
     id: 'creatures.mite', label: 'WILD MITE', w: 3, d: 3,
@@ -96,7 +95,7 @@ function ducksItem() {
       const ducks = [];
       const cells = cols.map((c, i) => {
         const d = makeDuck(c, i === 0 ? 0xff5a1f : 0xff9f1c, i + 1);
-        d.root.rotation.y = -Math.PI / 2 + 0.5; // (they swim along +x; turned to show the face)
+        d.root.rotation.y = -Math.PI / 2 + 0.5; // (they swim along +x; turned face-on)
         ducks.push(d);
         return cell(d.root, 'DUCK ' + (i + 1), DW, 2.4, { h: 0.6, z: 1.4 });
       });
@@ -108,7 +107,7 @@ function ducksItem() {
   };
 }
 
-// ---- the reactor's pets: the slick-rock pet and the dirt golem (alchemy.js addFollower)
+// ---- reactor pets: slick-rock pet, dirt golem (alchemy.js addFollower)
 function followersItem() {
   return {
     id: 'creatures.followers', label: 'REACTOR PETS', w: span(2, 3.4), d: 2.8,

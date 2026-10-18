@@ -2,8 +2,8 @@ import { FACTIONS, TIERS } from './locations.js';
 
 const KEY = 'moonrunner-rep-v2';
 
-// Standing with each faction. Unlocks better-paying contracts, faction gear and (for the
-// military blocs) permanent clearance. Rustmoon stays hidden until the Pirate Wreck.
+// Faction standing: unlocks better pay, faction gear and (military blocs) clearance. Rustmoon is hidden until the
+// Pirate Wreck.
 export class Reputation {
   constructor(game) {
     this.game = game;
@@ -28,8 +28,7 @@ export class Reputation {
     try { localStorage.setItem(KEY, JSON.stringify({ values: this.values, rustmoon: this.rustmoon, history: this.history.slice(-30) })); } catch { /* unavailable */ }
   }
 
-  // a faction conquered in a story finale answers to its conqueror now (its shops, clearance and
-  // standing are the winner's: worldstate.js)
+  // a faction conquered in a story finale answers to its conqueror (shops, clearance, standing: worldstate.js)
   real(f) { return (FACTIONS[f] && FACTIONS[f].absorbedBy) || f; }
   get(f) { return this.values[this.real(f)] ?? 0; }
 
@@ -52,14 +51,13 @@ export class Reputation {
   }
 
   aligned() { return this.rustmoon === 'aligned'; }
-  // Sworn in with Rustmoon: every upright faction counts you an outlaw (their towns and patrols shoot
-  // on sight, like they would any pirate)
+  // Sworn to Rustmoon: every upright faction shoots you on sight, like any pirate
   outlaw() {
     for (const f of ['spacecom', 'vostok', 'daedalus', 'meridian', 'kepler']) this.values[f] = Math.min(this.get(f), -25);
     this.save();
   }
   hostile(f) { return this.get(f) <= -20; }
-  // FRIENDLY military factions let you into their zones (and their HQ shops)
+  // FRIENDLY military factions let you into their zones and HQ shops
   cleared(f) { return this.get(f) >= 10; }
 
   // Change standing. War: helping one side of Vostok/Daedalus annoys the other.
@@ -83,7 +81,7 @@ export class Reputation {
 
   payMultiplier(f) { return this.tier(f).pay || 0; }
 
-  // Does the player meet the reputation needed for the next level of a shop item?
+  // enough standing for this level of a shop item?
   canBuy(item, level) {
     if (item.unlock && item.unlock.smuggle && !(this.game.stats.blackMarket || []).includes(item.key)) return false;
     if (!item.faction) return true;

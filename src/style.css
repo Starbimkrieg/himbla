@@ -8,7 +8,7 @@
   --orange: #ff4f2e;
   --green: #7dff6a;
   --violet: #7b2ff7;
-  /* pixel fonts (bundled via src/fonts.js): display + readable body text */
+  /* pixel fonts (src/fonts.js): display + body */
   --comic: 'Press Start 2P', 'Pixelify Sans', monospace;
   --body: 'Pixelify Sans', 'Press Start 2P', 'Trebuchet MS', sans-serif;
   /* retro-arcade UI palette */
@@ -29,7 +29,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #05030c; col
 .hidden { display: none !important; }
 button { font-family: var(--comic); }
 
-/* every UI box: dark translucent body, crisp 2px border, hard pixel shadow */
+/* every UI box: dark translucent body, 2px border, hard pixel shadow */
 .panel {
   background: var(--ui-bg);
   color: var(--ui-text);
@@ -39,7 +39,7 @@ button { font-family: var(--comic); }
 }
 
 #hud { position: fixed; inset: 0; pointer-events: none; user-select: none; }
-/* the cracked visor (hud.js buildCracks): one canvas of glass cracks that spread as hull drops, in front of the rest of the HUD (the HUD's own z-indexes top out at 30) */
+/* cracked visor (hud.js buildCracks): cracks spread as hull drops, above the rest of the HUD (whose z-indexes top out at 30) */
 #cracks { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 40; pointer-events: none; }
 
 /* ---------- top-left ---------- */
@@ -53,14 +53,14 @@ button { font-family: var(--comic); }
 #credits { opacity: 0; transition: opacity 0.7s; }
 #credits.cr-show { opacity: 1; transition: opacity 0.15s; }
 #credits { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
-#credits .cr-delta { font-weight: bold; order: 2; } /* (to the right of the total) */
+#credits .cr-delta { font-weight: bold; order: 2; } /* right of the total */
 #credits .cr-delta:empty { display: none; }
 #credits .cr-delta.plus { color: #7dff3a; }
 #credits .cr-delta.minus { color: #ff4a4a; }
 #credits .cr-delta.cr-in { animation: crpop 0.4s ease-out; }
 @keyframes crpop { 0% { opacity: 0; transform: translateX(8px); } 100% { opacity: 1; transform: translateX(0); } }
 .chip.pink { color: var(--pink); border-color: var(--pink); font-size: 11px; }
-/* the dev menu's upstream chip (cheats.js): cyan while up to date, yellow and pulsing with commits waiting, dim when the dev server can't say */
+/* dev upstream chip (cheats.js): cyan up to date, pulsing yellow with commits waiting, dim when unknown */
 .chip.git { color: var(--cyan); border-color: var(--cyan); font-size: 11px; white-space: nowrap; }
 .chip.git.behind { color: var(--yellow); border-color: var(--yellow); animation: gitpulse 1.8s ease-in-out infinite; }
 .chip.git.unknown { color: var(--ui-dim); border-color: var(--ui-edge); }
@@ -134,7 +134,7 @@ button { font-family: var(--comic); }
 #toast { position: absolute; bottom: 24%; left: 50%; transform: translateX(-50%); max-width: min(720px, calc(100vw - 32px)); text-align: center; font-family: var(--comic); font-size: 12px; line-height: 1.5; background: var(--ui-bg); color: var(--yellow); padding: 8px 14px 6px; border: 2px solid var(--yellow); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); }
 #prompt { position: absolute; bottom: 16%; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); text-align: center; font-family: var(--comic); font-size: 12px; line-height: 1.5; background: var(--ui-bg); color: var(--ui-text); padding: 8px 14px 6px; border: 2px solid var(--ui-edge); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); }
 #prompt b { display: inline-block; background: var(--yellow); color: #05030c; padding: 3px 6px 2px; margin-right: 6px; font-weight: normal; }
-/* dev overlay (devoverlay.js): a performance box (frame graph, load graphs, stages, renderer, world counts) with a game-debug box beside it */
+/* dev overlay (devoverlay.js): performance box plus a game-debug box beside it */
 #dev-overlay { position: fixed; right: 12px; bottom: 12px; z-index: 45; display: flex; gap: 6px; align-items: flex-end; max-width: calc(100vw - 24px); pointer-events: none; font: 12px/1.35 monospace; color: #7dff3a; }
 #dev-overlay.hidden, #dev-overlay .hidden { display: none; }
 #dev-overlay .dv-box { max-height: calc(100vh - 24px); overflow: hidden; padding: 6px 10px; background: rgba(5, 3, 12, 0.78); border: 1px solid #7dff3a; }
@@ -147,8 +147,8 @@ button { font-family: var(--comic); }
 #dev-overlay .dv-none { color: #ffd23f; }
 /* the dev free cam's keys (freecam.js) */
 #free-cam { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 45; width: max-content; max-width: calc(100vw - 24px); padding: 4px 10px; font: 12px/1.35 monospace; color: #7dff3a; background: rgba(5, 3, 12, 0.78); border: 1px solid #7dff3a; pointer-events: none; }
-body.hud-off #hud { visibility: hidden; } /* (the dev free cam's d-pad → : a clean picture. Menus and dialogs are not in #hud, nor are the free cam's hint and the F3 overlay) */
-body.hud-off #gitchip { visibility: visible; } /* (a dev chip, in #hud's top left: it stays, a child's own visibility beats the one it inherits) */
+body.hud-off #hud { visibility: hidden; } /* free cam d-pad →: a clean picture (menus, dialogs, the cam hint and F3 overlay aren't in #hud) */
+body.hud-off #gitchip { visibility: visible; } /* dev chip in #hud: stays, since a child's own visibility beats the inherited one */
 #free-cam b { color: #ffd23f; font-weight: normal; }
 #free-cam .fc-pad { display: none; align-items: center; gap: 4px; vertical-align: middle; }
 body.pad-on #free-cam .fc-pad { display: inline-flex; }
@@ -188,9 +188,8 @@ body.pad-on #free-cam .fc-kb { display: none; }
 #input-mon .im-meter { fill: #e3e6ee; stroke: #aab1c3; stroke-width: 4; }
 #input-mon .im-meter-fill { fill: #3fd15f; }
 #input-mon .im-meter-t { fill: #1c2030; text-anchor: middle; dominant-baseline: central; font-family: monospace; font-weight: bold; }
-/* ---- progress bars over the picture: the story's hold meter (story.js), hold-to-recall / empty the jar (hud.js recallHold) and the pirate grab ----
-   One stack at the bottom centre, under the prompt, so they stay off the runner and the crosshair; each is a panel like the rest of the HUD in its own
-   colour (--col), and two at once sit one above the other instead of on top of each other. */
+/* ---- progress bars: story hold meter (story.js), hold-to-recall / empty the jar (hud.js recallHold), pirate grab ----
+   One stack at bottom centre under the prompt, off the runner and crosshair; each a HUD panel in its --col, stacking when two show. */
 #holdbars { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(360px, calc(100vw - 32px)); display: flex; flex-direction: column-reverse; gap: 8px; pointer-events: none; z-index: 30; }
 #holdbars > * { box-sizing: border-box; padding: 8px 12px 9px; text-align: center; background: var(--ui-bg); border: 2px solid var(--col, var(--ui-edge)); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); }
 #holdbars .hb-label { font-family: var(--comic); font-size: 10px; line-height: 1.4; color: var(--col, var(--ui-text)); margin-bottom: 7px; }
@@ -203,11 +202,11 @@ body.pad-on #free-cam .fc-kb { display: none; }
 #grab { --col: var(--green); }
 #grab .grab-label { animation: blink 0.3s steps(2) infinite; }
 @keyframes hbin { from { opacity: 0; } to { opacity: 1; } }
-@media (max-width: 860px) { #holdbars { left: calc(50% + 80px); width: min(320px, calc(100vw - 300px)); } } /* (clear of the speedometer, which is scaled down but still on the left) */
+@media (max-width: 860px) { #holdbars { left: calc(50% + 80px); width: min(320px, calc(100vw - 300px)); } } /* clear of the (scaled-down) speedometer */
 
 #banner { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); text-align: center; width: min(760px, calc(100vw - 32px)); }
 #banner.slam { animation: slam 0.45s cubic-bezier(.2,1.4,.4,1); }
-/* new-event pop-up: stacks under the territory chip below the minimap, slides in from the right edge of the screen, holds, slides back out (hud.js eventPopup) */
+/* new-event pop-up under the territory chip: slides in from the right, holds, slides out (hud.js eventPopup) */
 #evpop { order: 2; box-sizing: border-box; width: 100%; text-align: center; font-family: var(--comic); font-size: 9px; line-height: 1.4; background: var(--ui-bg); color: #fff; padding: 7px 8px 5px; border: 2px solid var(--c, var(--yellow)); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); transform: translateX(calc(100% + 40px)); transition: transform 0.45s cubic-bezier(.2,.9,.3,1); pointer-events: none; }
 #evpop.in { transform: translateX(0); }
 #evpop.out { transform: translateX(calc(100% + 40px)); transition-timing-function: cubic-bezier(.6,0,.9,.4); }
@@ -272,7 +271,7 @@ body.pad-on #free-cam .fc-kb { display: none; }
 .empty { padding: 12px; color: var(--ui-muted); font-size: 16px; }
 
 /* ---------- help / overlays ---------- */
-/* (opened from the pause card's HELP: centred over a dim backdrop, like the settings) */
+/* from the pause card's HELP: centred on a dim backdrop, like settings */
 #help { position: fixed; z-index: 60; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 16px; max-height: calc(100vh - 48px); overflow: auto; background: rgba(10, 8, 20, 0.97); border-color: var(--cyan); box-shadow: 0 0 0 2px #05030c, 0 0 0 100vmax rgba(5, 3, 12, 0.78); }
 #help h2 { font-family: var(--comic); margin: 0 0 10px; font-size: 14px; color: var(--yellow); }
 #help td { padding: 2px 12px 2px 0; font-size: 15px; color: var(--ui-text); }
@@ -479,7 +478,7 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 .pg-small { border-radius: 10px; min-width: 24px; padding: 1px 5px 0; font-size: 7px; }
 .pg-stick { border-width: 3px; background: #05030c; }
 .pg-dpad { border-radius: 4px; min-width: 18px; height: 18px; }
-.pg { width: auto; padding: 1px 0 0; text-align: center; white-space: nowrap; }  /* (the pixel font rides high in its line box: a pixel of top padding centres it) */
+.pg { width: auto; padding: 1px 0 0; text-align: center; white-space: nowrap; }  /* the pixel font rides high: 1px top padding centres it */
 .pg.long { padding: 1px 5px 0; border-radius: 10px; }
 .pg-bump.long { border-radius: 6px; }
 .pg.tiny { font-size: 5px; }
@@ -488,7 +487,7 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 .pg-b { color: #05030c; background: var(--cyan); border-color: var(--cyan); }
 .pg-y { color: #05030c; background: var(--yellow); border-color: var(--yellow); }
 .pg-p { color: #05030c; background: var(--pink); border-color: var(--pink); }
-/* Xbox art (trimmed to the artwork): sized to sit like the PlayStation glyphs, 20px tall (16px inside running text) */
+/* Xbox art (trimmed): sized like the PlayStation glyphs, 20px (16px in running text) */
 .pg.pg-img, .pgx .pg.pg-img { background: none; border: 0; padding: 0; min-width: 0; width: auto; height: 20px; border-radius: 0; }
 .pg-img img { display: block; height: 100%; width: auto; }
 .pg.pg-img.xb-dpad, .pg.pg-img.xb-du, .pg.pg-img.xb-dd, .pg.pg-img.xb-dl, .pg.pg-img.xb-dr { height: 18px; }
@@ -496,7 +495,7 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 .pgx .pg.pg-img { height: 16px; }
 .pgx .pg.pg-img.xb-du, .pgx .pg.pg-img.xb-dd, .pgx .pg.pg-img.xb-dl, .pgx .pg.pg-img.xb-dr { height: 15px; }
 .pgx .pg.pg-img.xb-lb, .pgx .pg.pg-img.xb-rb { height: 11px; }
-/* PlayStation face buttons: a dark button with a coloured symbol, as on the pad */
+/* PlayStation face buttons: dark button, coloured symbol */
 .pg.pg-sym { padding: 0; background: var(--ui-bg2); border-color: var(--ui-muted); }
 .pg-sym svg { display: block; width: 10px; height: 10px; }
 .pgx .pg-sym svg { width: 9px; height: 9px; }
@@ -720,7 +719,7 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 @keyframes casLever { 40% { transform: scaleY(-0.6); } 100% { transform: scaleY(1); } }
 @keyframes casDeal { from { transform: translate(120px, -80px) rotate(30deg) scale(0.6); opacity: 0; } }
 @media (max-width: 800px) { .cas-logo { font-size: 26px; } .cas-boss .cas-jp { display: none; } .slot-machine { width: 100%; } .reel { width: 28%; } }
-/* ---- instrument panel (bottom left): same dark panel family as the rest of the UI ---- */
+/* ---- instrument panel (bottom left) ---- */
 #speedo.panel { background: rgba(10, 8, 20, 0.9); color: var(--ui-text); border: 2px solid var(--ui-edge); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); }
 #speedo .fill.hp { background: var(--green); }
 #speedo #jarchip .artifact-slot { color: #7dffd4; text-shadow: 0 0 8px #7dffd4; }
@@ -741,18 +740,18 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 #cinebars .cb-cap { position: absolute; top: calc(11vh + 14px); left: 24px; max-width: calc(100vw - 48px); background: var(--ui-bg); color: var(--yellow); font-family: var(--comic); font-size: 12px; line-height: 1.4; padding: 8px 12px 6px; border: 2px solid var(--yellow); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); }
 #cinebars .cb-skip { position: absolute; bottom: calc(11vh + 12px); right: 24px; color: var(--ui-muted); font-family: var(--comic); font-size: 8px; opacity: 0.85; }
 #cinebars.cb-out { opacity: 0; transition: opacity 0.4s; }
-body.medevac #hud > *:not(#popups):not(#cinebars) { visibility: hidden; } /* (the Spindle med-evac cutscene: just the picture and its caption) */
+body.medevac #hud > *:not(#popups):not(#cinebars) { visibility: hidden; } /* Spindle med-evac cutscene: picture and caption only */
 /* ---- the Moon Council vote cutscene (chamber.js) ---- */
-body.council #hud > *:not(#popups):not(#cinebars) { visibility: hidden; } /* (just the picture, its caption and the speech bubble; stays up through the roll call on black) */
-#cinebars .cb-say { position: absolute; left: 50%; bottom: calc(11vh + 16px); transform: translateX(-50%); width: min(720px, calc(100vw - 48px)); background: var(--ui-bg); color: var(--ui-text); font-family: var(--body); font-size: 20px; line-height: 1.3; padding: 10px 14px 9px; border: 2px solid var(--yellow); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); text-wrap: pretty; /* (no one-word last lines; pretty only touches the last lines, so the typed-in text does not reflow letter by letter) */ }
+body.council #hud > *:not(#popups):not(#cinebars) { visibility: hidden; } /* picture, caption and speech bubble only; through the roll call on black too */
+#cinebars .cb-say { position: absolute; left: 50%; bottom: calc(11vh + 16px); transform: translateX(-50%); width: min(720px, calc(100vw - 48px)); background: var(--ui-bg); color: var(--ui-text); font-family: var(--body); font-size: 20px; line-height: 1.3; padding: 10px 14px 9px; border: 2px solid var(--yellow); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); text-wrap: pretty; /* no one-word last lines; pretty only touches the end, so typed-in text doesn't reflow per letter */ }
 #cinebars .cb-say b { display: block; font-family: var(--comic); font-size: 10px; color: var(--yellow); margin-bottom: 4px; letter-spacing: 1px; }
 #cinebars .cb-cap small { color: var(--ui-muted); }
 #cinebars .cb-bang { position: absolute; left: 50%; top: 40%; font-family: var(--comic); font-size: clamp(40px, 9vw, 110px); color: var(--yellow); text-shadow: 6px 6px 0 #ff2e88, -3px -3px 0 #05030c, 3px -3px 0 #05030c, -3px 3px 0 #05030c; transform: translate(-50%, -50%) rotate(-6deg); animation: cs-bang 0.25s steps(5) both; }
 @keyframes cs-bang { from { transform: translate(-50%, -50%) scale(0.2) rotate(-14deg); opacity: 0; } to { transform: translate(-50%, -50%) scale(1) rotate(-6deg); opacity: 1; } }
-#dialog .vote-roll .rc { opacity: 0; animation: rc-in 0.01s linear forwards; animation-delay: calc(0.5s + var(--i) * 0.6s); } /* (the roll call: one member at a time) */
-#dialog .vote-roll .dlg-btns { opacity: 0; animation: rc-in 0.01s linear forwards; animation-delay: var(--at, 0s); } /* (the buttons' labels would give the verdict away: they wait for it, announce() sets --at) */
+#dialog .vote-roll .rc { opacity: 0; animation: rc-in 0.01s linear forwards; animation-delay: calc(0.5s + var(--i) * 0.6s); } /* roll call, one member at a time */
+#dialog .vote-roll .dlg-btns { opacity: 0; animation: rc-in 0.01s linear forwards; animation-delay: var(--at, 0s); } /* labels would give the verdict away: they wait for announce() to set --at */
 @keyframes rc-in { to { opacity: 1; } }
-#dialog .vote-roll .rc b.vt { font-family: var(--comic); font-weight: normal; font-size: 12px; line-height: 1.6; } /* (the verdict headline in the display face: the body face draws a 5 like an S and a C like an O) */
+#dialog .vote-roll .rc b.vt { font-family: var(--comic); font-weight: normal; font-size: 12px; line-height: 1.6; } /* verdict in the display face (the body face draws 5 like S, C like O) */
 @keyframes cbin { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 #jarchip .artifact-slot { color: #7dffd4; text-shadow: 0 0 8px #7dffd4; }
 /* ---- rail lance scope ---- */
@@ -762,12 +761,12 @@ body.council #hud > *:not(#popups):not(#cinebars) { visibility: hidden; } /* (ju
 #scope .sc-h { width: 60vmin; height: 2px; transform: translate(-50%, -50%); }
 #scope .sc-v { width: 2px; height: 60vmin; transform: translate(-50%, -50%); }
 #scope .sc-label { position: absolute; left: 50%; top: calc(50% + 35vmin); transform: translateX(-50%); color: #c77dff; font-family: var(--comic); font-size: 14px; letter-spacing: 1px; }
-/* ---- objective arrow (always on top, drawn not typed) ---- */
+/* ---- objective arrow (always on top, drawn) ---- */
 #obj-arrow { position: absolute; transform: translate(-50%, -50%); z-index: 25; pointer-events: none; text-align: center; font-size: 0; -webkit-text-stroke: 0; filter: drop-shadow(0 0 6px rgba(255,210,63,0.6)); }
 #obj-arrow svg { display: block; margin: 0 auto; animation: oapulse 0.9s ease-in-out infinite alternate; }
 #obj-arrow .oa-dist { margin-top: 2px; font-family: var(--comic); font-size: 11px; color: #ffd23f; background: rgba(8,6,14,0.85); padding: 3px 6px; white-space: nowrap; border: 1px solid rgba(255,210,63,0.5); }
 #obj-marker { z-index: 25; }
-/* the Twin Cradle's second waypoint: the same marker and arrow, in green */
+/* Twin Cradle's second waypoint: same marker and arrow, green */
 #obj-marker2 { position: absolute; transform: translate(-50%, -100%); text-align: center; z-index: 25; }
 #obj-marker2 .diamond { width: 20px; height: 20px; margin: 0 auto 4px; background: #7dff6a; border: 4px solid var(--ink); transform: rotate(45deg); animation: bob 0.8s ease-in-out infinite alternate; }
 #obj-marker2 span { font-family: var(--comic); font-size: 10px; line-height: 1; background: rgba(8, 6, 14, 0.88); color: #7dff6a; padding: 4px 6px 3px; border: 1px solid rgba(125, 255, 106, 0.5); white-space: nowrap; }
@@ -779,11 +778,11 @@ body.council #hud > *:not(#popups):not(#cinebars) { visibility: hidden; } /* (ju
 /* ---- casino 3D ---- */
 /* walk-in games action bar (casinoGames.js) */
 #cas3d { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 35; width: min(760px, calc(100vw - 32px)); background: var(--ui-bg); color: var(--ui-text); border: 2px solid var(--ui-edge); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); padding: 8px 12px 6px; font-family: var(--body); pointer-events: auto; cursor: default; }
-/* inside the casino hall: no HUD at all (prompts, toasts and pop-ups still show, so you can sit down at a game) */
+/* in the casino hall: no HUD (prompts, toasts and pop-ups still show) */
 body.in-casino #hud > :not(#popups):not(#prompt):not(#toast):not(#splash):not(#dilate) { display: none !important; }
-/* seated at blackjack, the Duck Derby or Plinko: only the game's bar and its pop-ups (wins, QUACK!) stay up */
+/* seated at blackjack, Duck Derby or Plinko: only the game bar and pop-ups */
 body.seated #hud > :not(#popups) { display: none !important; }
-/* seated on the carousel or ferris wheel (rides.js): sightseeing, so no HUD; the prompt stays to say how to hop off, and the pop-ups (WHEEE!) */
+/* on the carousel or ferris wheel (rides.js): no HUD; the hop-off prompt and pop-ups stay */
 body.on-ride #hud > :not(#popups):not(#prompt):not(#splash):not(#dilate) { display: none !important; }
 #cas3d .c3-head { display: flex; align-items: center; gap: 12px; font-family: var(--comic); font-size: 11px; line-height: 1.4; border-bottom: 2px solid var(--ui-edge); padding-bottom: 6px; flex-wrap: wrap; }
 #cas3d .c3-title { color: var(--yellow); font-size: 14px; font-weight: normal; }
@@ -830,8 +829,8 @@ body.on-ride #hud > :not(#popups):not(#prompt):not(#splash):not(#dilate) { displ
 #cas3d .c3-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font-family: var(--comic); font-size: 8px; color: var(--ui-dim); flex-wrap: wrap; }
 @media (max-width: 600px) { #cas3d .c3-ducks { grid-template-columns: 1fr; } #cas3d .c3-row { gap: 10px; } }
 
-/* classic-games overlay: retro-arcade restyle (dark panels, 2px borders, hard pixel shadows,
-   no tilt / halftone / text-stroke; display sizes scaled for Press Start 2P) */
+/* classic-games overlay, retro-arcade style: dark panels, 2px borders, hard shadows, no tilt / halftone / text-stroke;
+   display sizes scaled for Press Start 2P */
 #casino { background: rgba(5, 3, 12, 0.88); }
 #casino::before { display: none; }
 .cas { color: var(--ui-text); background: var(--ui-bg2); border: 2px solid var(--ui-edge); box-shadow: 0 0 0 2px #05030c, 6px 6px 0 rgba(0,0,0,0.6); border-radius: 0; font-family: var(--body); }
@@ -896,7 +895,7 @@ body.on-ride #hud > :not(#popups):not(#prompt):not(#splash):not(#dilate) { displ
 .pz-txt small { font-weight: 400; font-size: 14px; color: var(--ui-muted); }
 .prize button { font-size: 10px; }
 
-/* ---- classic games: pixel-art icons (pixelIcons.js), the bigger slots and the bigger prize wheel ---- */
+/* ---- classic games: pixel icons (pixelIcons.js), bigger slots and prize wheel ---- */
 .px { display: inline-block; flex: none; width: calc(var(--w) * var(--s, 4px)); height: calc(var(--h) * var(--s, 4px)); background: center / 100% 100% no-repeat; image-rendering: pixelated; vertical-align: middle; }
 .px.ico { --s: 2px; margin: -5px 2px; }
 .px.sm { --s: var(--sm, 2px); }
@@ -905,7 +904,7 @@ body.on-ride #hud > :not(#popups):not(#prompt):not(#splash):not(#dilate) { displ
 .cas-face .px { --s: 3px; }
 .cas-chips .px { margin: -6px 4px -6px 0; }
 
-/* slots: the machine and its paytable grow with the window (the sprite pixel --s steps up, in whole pixels, so the art stays crisp) */
+/* slots grow with the window (sprite pixel --s steps in whole pixels so the art stays crisp) */
 .slots { --s: 4px; --sm: 2px; display: flex; gap: 20px 56px; align-items: stretch; justify-content: center; flex-wrap: wrap; }
 @media (min-height: 780px) { .slots { --s: 5px; } }
 @media (min-height: 840px) { .slots { --s: 6px; } }
@@ -915,7 +914,7 @@ body.on-ride #hud > :not(#popups):not(#prompt):not(#splash):not(#dilate) { displ
 .slot-top .px { --s: 3px; margin: 0; }
 .reels { position: relative; display: flex; gap: 6px; justify-content: center; background: #05030c; padding: 8px; border: 3px solid #c9a23a; }
 .reel { position: relative; width: var(--cell); height: calc(3 * var(--cell)); overflow: hidden; background: #1b1040 repeating-linear-gradient(0deg, rgba(255,255,255,0.045) 0 2px, transparent 2px 4px); border: 2px solid #05030c; box-shadow: inset 0 0 0 2px #3a2a78; }
-.reel::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(#05030c, transparent 24%, transparent 76%, #05030c); opacity: 0.5; } /* (the rows above and below the line are dimmer: the middle one is the one that pays) */
+.reel::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(#05030c, transparent 24%, transparent 76%, #05030c); opacity: 0.5; } /* rows off the pay line are dimmer */
 .reel .strip { will-change: transform; }
 .reel.spinning .strip { filter: blur(1.5px); }
 .reel.stop { animation: casThunk 0.25s; }
@@ -955,7 +954,7 @@ body.on-ride #hud > :not(#popups):not(#prompt):not(#splash):not(#dilate) { displ
   .slot-win { margin: 6px 0; }
 }
 
-/* cards use sprites for their suits */
+/* card suits are sprites */
 .card b { font-size: 0; }
 .card i .px { margin: 0; }
 .card i .cs { --s: 2px; }
@@ -963,11 +962,11 @@ body.on-ride #hud > :not(#popups):not(#prompt):not(#splash):not(#dilate) { displ
 .card.back::after { content: none; }
 .card.back .px { --s: 3px; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
 
-/* the prize wheel: sized from the window (the canvas is 640 px; the page scales it) */
+/* prize wheel sized from the window (640 px canvas, scaled) */
 .pwheel { --wd: clamp(240px, calc(min(860px, 94vh) - 316px), 600px); display: flex; gap: 44px; align-items: center; justify-content: center; flex-wrap: wrap; }
 .pw-wrap { position: relative; width: var(--wd); height: var(--wd); margin-top: 34px; }
 .pw-wrap canvas { width: 100%; height: 100%; border-radius: 50%; }
-/* the wheel page never scrolls: the spinning canvas is a square turning about its centre, and its corners swept past the page's edge, which grew a scrollbar that bobbed up and down with every spin (the wheel itself always fits: --wd is sized from the window) */
+/* the wheel page never scrolls: the spinning square canvas's corners would sweep past the edge and bob a scrollbar (the wheel fits: --wd is sized from the window) */
 .cas-body.tab-wheel { overflow: hidden; }
 .pw-ptr { --s: 4px; position: absolute; left: 50%; top: -26px; transform: translateX(-50%); z-index: 2; margin: 0; }
 .pw-hub { position: absolute; left: 50%; top: 50%; width: calc(var(--wd) * 0.17); height: calc(var(--wd) * 0.17); margin: calc(var(--wd) * -0.085); display: grid; place-items: center; text-align: center; border: 4px solid #05030c; border-radius: 50%; background: var(--yellow); color: #05030c; font-size: calc(var(--wd) * 0.026); line-height: 1.2; box-shadow: inset -4px -4px 0 #c9a23a; }
@@ -990,7 +989,7 @@ body.on-ride #hud > :not(#popups):not(#prompt):not(#splash):not(#dilate) { displ
 @media (max-width: 800px) { .cas-logo { font-size: 13px; } }
 
 /* ---- vehicle hull ---- */
-/* vehicle hull gauge: while you drive, these two rows replace the HULL and JET bars in the speed tracker */
+/* vehicle hull gauge: replaces HULL and JET in the speed tracker while driving */
 #speedo .veh-row.hidden { display: none; }
 #speedo .veh-name { height: 16px; line-height: 16px; flex: 1; min-width: 0; width: auto; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #speedo .veh-hp .vb-fill { transition: width 0.15s steps(4); background: #2ee6ff; }
@@ -1020,7 +1019,7 @@ body.trailer #vehbar { display: none !important; }
 .wd-jar-toggle:hover { color: var(--ui-text); border-color: var(--ui-muted); }
 .wd-jar-toggle.on { background: var(--cyan); color: #05030c; border-color: #05030c; box-shadow: 3px 3px 0 #05030c; }
 .wd-jar-toggle b { font-weight: normal; }
-.wd-jar-toggle.pad-focus { position: absolute; } /* (the pad highlight's position: relative would drop it out of the corner) */
+.wd-jar-toggle.pad-focus { position: absolute; } /* the pad highlight's position: relative would move it out of the corner */
 .wd-drag { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); font-family: var(--comic); font-size: 8px; line-height: 1; color: var(--ui-dim); pointer-events: none; white-space: nowrap; }
 .wd-side { display: flex; flex-direction: column; min-height: 0; padding: 10px 12px 12px; gap: 10px; }
 .wd-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -1049,7 +1048,7 @@ body.trailer #vehbar { display: none !important; }
 .wd-badge.elite { background: var(--yellow); }
 .wd-badge.casino { background: var(--pink); color: #fff; }
 .wd-badge.legend { background: #7dffd4; }
-/* outfit tile: a tiny runner bust in the outfit's colours */
+/* outfit tile: a runner bust in its colours */
 .wd-fig { position: relative; width: 46px; height: 50px; flex-shrink: 0; }
 .wd-fig .fh { position: absolute; left: 9px; top: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--h); border: 2px solid #05030c; z-index: 2; }
 .wd-fig .fh::after { content: ''; position: absolute; left: 3px; right: 3px; top: 7px; height: 12px; border-radius: 7px 7px 9px 9px; background: var(--v); border: 2px solid #05030c; }
@@ -1058,7 +1057,7 @@ body.trailer #vehbar { display: none !important; }
 .wd-fig .fb::after { content: ''; position: absolute; left: 8px; right: 8px; top: -2px; height: 6px; border-radius: 3px; background: var(--c); border: 2px solid #05030c; z-index: 3; }
 /* skate tile: boot on a glowing rail */
 .wd-skate { position: relative; width: 64px; height: 50px; flex-shrink: 0; }
-/* the rendered tile portraits (wardrobe.js bakeThumbs) */
+/* rendered tile portraits (wardrobe.js bakeThumbs) */
 .wd-thumb { width: 96px; height: 96px; flex-shrink: 0; image-rendering: auto; margin: -10px 0 -8px; filter: drop-shadow(2px 2px 0 #05030c); pointer-events: none; }
 .wd-thumb.skates { width: 92px; height: 92px; margin: -6px 0 -4px; }
 .wd-thumb.rainbow { filter: drop-shadow(2px 2px 0 #05030c) hue-rotate(0deg); animation: wdHue 2.4s linear infinite; }
@@ -1076,7 +1075,7 @@ body.trailer #vehbar { display: none !important; }
 .wd-tile:not(:hover):not(.sel) .wd-disc::before { animation-duration: 4s; }
 @keyframes wdSpin { to { transform: rotate(360deg); } }
 @keyframes wdRainbow { to { background-position: 200% 0; } }
-/* details for whatever is being tried on */
+/* details of what's tried on */
 .wd-info { flex-shrink: 0; padding: 10px 12px; background: var(--ui-bg2); border: 2px solid var(--ui-edge); }
 .wd-info.wd-shake { animation: shake 0.3s linear; border-color: var(--red); }
 .wd-info-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -1109,7 +1108,7 @@ body.trailer #vehbar { display: none !important; }
 
 /* ---- chimera cards ---- */
 #dialog .dlg:has(.cc-list), #dialog .dlg:has(.cc.big) { width: min(780px, calc(100vw - 32px)); }
-/* the holding pen: a wider page, three cards a row, and a bit more of everything */
+/* holding pen: wider page, three cards a row */
 #dialog .dlg:has(.cc-list.pen) { width: min(1080px, calc(100vw - 32px)); }
 .cc-list.pen { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 860px) { .cc-list.pen { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -1122,7 +1121,7 @@ body.trailer #vehbar { display: none !important; }
 .nametag { position: absolute; left: 0; top: 0; transform-origin: 50% 100%; white-space: nowrap; font-family: var(--comic); font-size: 10px; line-height: 1; padding: 5px 7px 4px; color: var(--tc); background: #120a1e; border: 2px solid #05030c; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--tc) 55%, transparent), 2px 2px 0 #05030c; }
 .nametag::after { content: ''; position: absolute; left: 50%; bottom: -7px; margin-left: -5px; border: 5px solid transparent; border-top-color: #05030c; border-bottom: 0; }
 .nametag.off { display: none; }
-/* the Hitch-Line Winch's tow-line marker (winch.js drawMarker): faint on a target in reach, brighter on what the reticle is on, orange once hooked */
+/* winch tow-line marker (winch.js drawMarker): faint in reach, brighter under the reticle, orange when hooked */
 #towmark { position: absolute; left: 0; top: 0; z-index: 1; pointer-events: none; display: flex; flex-direction: column; align-items: center; opacity: 0.5; transition: opacity 0.15s; }
 #towmark.hidden { display: none; }
 #towmark { filter: drop-shadow(0 0 2px var(--ink)); }
@@ -1133,7 +1132,7 @@ body.trailer #vehbar { display: none !important; }
 #towmark.hooked { opacity: 0.9; }
 #towmark.hooked i { background: #ff9f1c; }
 #towmark.hooked span { color: #ff9f1c; }
-/* the hover tips (chimeracard.js installTips) */
+/* hover tips (chimeracard.js installTips) */
 [data-tip] { cursor: help; }
 .cc-part[data-tip]:hover, .cc-lbl[data-tip]:hover, .cc-grade[data-tip]:hover { filter: brightness(1.35); }
 #cctip { position: fixed; z-index: 9999; max-width: 280px; padding: 7px 9px 6px; font-family: var(--body); font-size: 14px; line-height: 1.25; color: var(--ui-text); background: #0b0814; border: 2px solid var(--yellow); box-shadow: 3px 3px 0 #05030c; pointer-events: none; }
@@ -1198,7 +1197,7 @@ body.trailer #vehbar { display: none !important; }
 .cc-foot { font-size: 12px; color: var(--ui-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cc.mine .cc-foot { color: var(--green); }
 #dialog .bubble .cc + small { display: block; margin-top: 8px; }
-/* cards stand in for the first N plain dialog buttons (keys still work) */
+/* cards replace the first N plain dialog buttons (keys still work) */
 #dialog:has(.cc-list[data-hide="1"]) .dlg-btns button:nth-child(-n+1),
 #dialog:has(.cc-list[data-hide="2"]) .dlg-btns button:nth-child(-n+2),
 #dialog:has(.cc-list[data-hide="3"]) .dlg-btns button:nth-child(-n+3),
@@ -1227,7 +1226,7 @@ body.trailer #vehbar { display: none !important; }
   .cc-blurb { display: none; }
 }
 
-/* ---- distress log: open events stacked above the speed tracker, newest on top ---- */
+/* ---- distress log: open events above the speed tracker, newest on top ---- */
 #distresslog { position: absolute; left: -2px; bottom: calc(100% + 10px); width: 210px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
 #distresslog .dl-row { display: flex; align-items: center; gap: 6px; background: rgba(10, 8, 20, 0.88); border: 2px solid var(--ui-edge); border-left: 4px solid var(--c, #fff); box-shadow: 0 0 0 2px #05030c; padding: 4px 8px 4px 5px; font-family: var(--comic); font-size: 9.5px; line-height: 1.2; color: var(--ui-text); }
 #distresslog .dl-arrow { flex: none; width: 22px; height: 22px; overflow: visible; filter: drop-shadow(0 0 3px var(--c, #fff)); }
@@ -1278,7 +1277,7 @@ body.trailer #vehbar { display: none !important; }
 body.pad-on #board .foot-pad { display: inline-flex; }
 body.pad-on #board .foot-kb { display: none; }
 @media (max-width: 700px) { #board.term .term-status { grid-template-columns: 1fr; } }
-/* the board's tabs (CONTRACTS | COUNCIL HALL in your town): a strip under the title, the active tab in the board's colour */
+/* board tabs (CONTRACTS | COUNCIL HALL in your town) under the title, active one in the board's colour */
 #board.term .board-tabs { flex: none; display: flex; align-items: flex-end; gap: 6px; padding: 8px 14px 0; background: #0b0a14; border-bottom: 3px solid #23302a; }
 #board.term .board-tabs button { font-family: var(--comic); font-size: 10px; line-height: 1; padding: 8px 12px 7px; cursor: pointer; color: var(--ph-dim); background: #0b1410; border: 2px solid #23302a; border-bottom: 0; }
 #board.term .board-tabs button:hover { color: var(--ph); border-color: var(--ph-dim); }
@@ -1287,9 +1286,9 @@ body.pad-on #board .foot-kb { display: none; }
 #board.term .board-tabs .foot-pad { display: none; align-items: center; gap: 4px; }
 body.pad-on #board .board-tabs .foot-pad { display: inline-flex; }
 body.pad-on #board .board-tabs .foot-kb { display: none; }
-#board.term.tab-town .board-scroll { display: flex; flex-direction: column; overflow: hidden; } /* (the page fills the board; only its tiles scroll) */
+#board.term.tab-town .board-scroll { display: flex; flex-direction: column; overflow: hidden; } /* page fills the board; only the tiles scroll */
 #board.term.tab-town .otm.bare { flex: 1 1 auto; min-height: 0; }
-/* the Monolith's time dilation: a cold, slow-shutter edge round the screen */
+/* Monolith time dilation: cold, slow-shutter screen edge */
 #dilate {
   position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(ellipse at center, transparent 40%, rgba(125, 249, 255, 0.16) 65%, rgba(120, 70, 255, 0.55) 100%);
@@ -1297,7 +1296,7 @@ body.pad-on #board .board-tabs .foot-kb { display: none; }
   animation: dilate-pulse 2.4s ease-in-out infinite;
 }
 @keyframes dilate-pulse { 50% { opacity: 0.75; } }
-/* ---- trailer director (?trailer, trailer.js): no HUD, just the comic layer and the cards ---- */
+/* ---- trailer director (?trailer, trailer.js): no HUD, just comic layer and cards ---- */
 body.trailer #hud > *:not(#popups):not(#splash):not(#dilate) { display: none !important; }
 body.trailer #tutorial, body.trailer #racepanel, body.trailer #vehbar { display: none !important; }
 #trailer { position: fixed; inset: 0; pointer-events: none; z-index: 100; overflow: hidden; }
@@ -1311,14 +1310,14 @@ body.trailer #tutorial, body.trailer #racepanel, body.trailer #vehbar { display:
 #trailer .tr-cards { position: absolute; inset: 0; }
 .tr-card { position: absolute; font-family: var(--comic); line-height: 1.25; white-space: nowrap; animation: trIn 0.32s steps(5) both; }
 .tr-card.out { animation: trOut 0.24s steps(4) both; }
-/* narration caption: the yellow box in the corner of a comic panel */
+/* narration caption: comic-panel corner box */
 .tr-caption { left: 5.5%; top: 9%; padding: 0.8vw 1.2vw 0.6vw; font-size: 1.55vw; color: var(--ink); background: var(--yellow); border: 0.28vw solid var(--ink); box-shadow: 0.5vw 0.5vw 0 var(--ink); transform: rotate(-1.5deg); }
 .tr-caption.low { top: auto; bottom: 11%; }
 .tr-caption.right { left: auto; right: 5.5%; }
-/* a shout across the middle of the frame */
+/* a shout across the frame */
 .tr-shout { left: 50%; top: 44%; transform: translate(-50%, -50%) rotate(-3deg); font-size: 4.6vw; color: var(--yellow); text-shadow: 0.3vw 0.3vw 0 var(--pink), 0.6vw 0.6vw 0 var(--ink), -0.15vw -0.15vw 0 var(--ink), 0.15vw -0.15vw 0 var(--ink), -0.15vw 0.15vw 0 var(--ink); }
 .tr-shout.pink { color: var(--pink); text-shadow: 0.3vw 0.3vw 0 var(--yellow), 0.6vw 0.6vw 0 var(--ink), -0.15vw -0.15vw 0 var(--ink), 0.15vw -0.15vw 0 var(--ink), -0.15vw 0.15vw 0 var(--ink); }
-/* the Fissure tease: quiet mint text that flickers */
+/* Fissure tease: flickering mint text */
 .tr-whisper { left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 2.1vw; color: #7dffd4; letter-spacing: 0.2vw; text-shadow: 0 0 1.2vw rgba(125, 255, 212, 0.7), 0.25vw 0.25vw 0 #05030c; animation: trWhisper 1.4s steps(12) both; }
 .tr-whisper.out { animation: trOut 0.3s steps(3) both; }
 /* end card */
@@ -1333,11 +1332,11 @@ body.trailer #tutorial, body.trailer #racepanel, body.trailer #vehbar { display:
 @keyframes trEnd { 0% { opacity: 0; } 100% { opacity: 1; } }
 @keyframes trWhisper { 0% { opacity: 0; } 20% { opacity: 0.6; } 25% { opacity: 0.1; } 40% { opacity: 0.9; } 45% { opacity: 0.3; } 60%, 100% { opacity: 1; } }
 .tr-caption .tr-sub { display: block; margin-top: 0.5vw; font-size: 1.05vw; }
-/* the controls panel: section headers, and the note about what unlocks later */
+/* controls panel: section headers, note on later unlocks */
 #help tr.hsec td { padding-top: 8px; font-family: var(--comic); font-size: 8px; color: var(--yellow); letter-spacing: 1px; }
 #help .help-more { margin: 10px 0 0; font-size: 12px; color: var(--ui-text); opacity: 0.7; max-width: 340px; }
 #help .help-foot { text-align: center; }
-/* BOLT's passing remarks under the current training step */
+/* BOLT's remarks under the training step */
 #tutorial .tut-say { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--ui-edge); font-family: var(--body); font-size: 15px; line-height: 1.3; color: var(--cyan); }
 
 /* story finale time-skip card */
@@ -1348,7 +1347,7 @@ body.trailer #tutorial, body.trailer #racepanel, body.trailer #vehbar { display:
 #dawn.out { animation: dawn-out 1.1s ease-in both; }
 @keyframes dawn-out { from { opacity: 1; } to { opacity: 0; } }
 
-/* story hold meter: centre-low, in the faction's colour */
+/* story hold meter: centre-low, faction colour */
 
 /* boss health bar, upper-centre */
 #bossbar { position: fixed; left: 50%; top: 96px; transform: translateX(-50%); width: 420px; pointer-events: none; opacity: 0; transition: opacity .2s; z-index: 30; text-align: center; }
@@ -1362,17 +1361,17 @@ body.trailer #tutorial, body.trailer #racepanel, body.trailer #vehbar { display:
 #powerchip b { display: inline-block; padding: 3px 5px 2px; background: #ff9f1c; color: #05030c; margin-right: 4px; }
 #powerchip .pc-ok { color: #7dff6a; }
 #powerchip .pc-cd { color: #ff7a8a; }
-#powerchip.swap b { background: #ffd23f; box-shadow: 0 0 10px #ffd23f; } /* (just swapped) */
+#powerchip.swap b { background: #ffd23f; box-shadow: 0 0 10px #ffd23f; } /* just swapped */
 #powerchip small { color: var(--ui-dim); font-size: 8px; margin-left: 4px; }
 
-/* controller (gamepad.js): the menu highlight, and pad buttons in prompts */
+/* controller (gamepad.js): menu highlight, pad buttons in prompts */
 .pad-focus { outline: 3px solid #ffd23f !important; outline-offset: 2px; box-shadow: 0 0 0 5px rgba(255, 210, 63, 0.28), 0 0 14px rgba(255, 210, 63, 0.45) !important; position: relative; z-index: 2; }
-/* key names swapped for pad buttons (glyphs.js): smaller than the settings list, and no key-cap box behind them */
+/* pad buttons in place of key names (glyphs.js): smaller than in settings, no key-cap box */
 .pgx { display: inline-flex; align-items: center; gap: 3px; vertical-align: middle; }
-/* (!important: popup rules like `#prompt b` and `#powerchip b` box the key name as inline-block, which sits the glyph off the text's centre line) */
+/* !important: `#prompt b` and `#powerchip b` make the key inline-block, which sits the glyph off centre */
 b.pgx { display: inline-flex !important; align-items: center; vertical-align: middle; line-height: 1; background: none !important; padding: 0 !important; margin-right: 5px !important; box-shadow: none !important; }
 .pgx .pg { vertical-align: middle; }
-/* (the pixel font's capitals sit above its line box's middle: lift the glyph to the letters' centre line) */
+/* the pixel font's capitals sit high: lift the glyph to match */
 b.pgx { position: relative; top: -1px; }
 #prompt b.pgx, #powerchip b.pgx, #toast .pgx { top: -2px; }
 .pgx .pg { min-width: 16px; height: 16px; border-width: 2px; font-size: 6px; }
@@ -1385,11 +1384,11 @@ b.pgx { position: relative; top: -1px; }
 td .pg { min-width: 18px; height: 18px; }
 td .pg-txt, .pgx .pg-txt { font-size: 6px; }
 body.pad-on #clickhint { display: none !important; }
-/* the crosshair stays out of the way: it shows while firing, then fades 10 s after the last shot (gamepad.js crosshair()) */
+/* crosshair shows while firing, fades 10 s after the last shot (gamepad.js crosshair()) */
 #crosshair { opacity: 0; transition: opacity 0.8s; }
 body.aim #crosshair { opacity: 1; transition-duration: 0.12s; }
 
-/* the controller's free cursor on the roulette table (gamepad.js), and the table's pad hints */
+/* controller cursor on the roulette table (gamepad.js) and its pad hints */
 #padcursor { position: fixed; z-index: 60; width: 22px; height: 22px; margin: -11px 0 0 -11px; box-sizing: border-box; border: 3px solid #ffd23f; border-radius: 50%; box-shadow: 0 0 0 2px #120a1e, inset 0 0 0 2px #120a1e; pointer-events: none; }
 #padcursor::after { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #fff; }
 #padcursor.down { width: 14px; height: 14px; margin: -7px 0 0 -7px; background: #ffd23f; }
@@ -1397,8 +1396,8 @@ body.aim #crosshair { opacity: 1; transition-duration: 0.12s; }
 body:not(.pad-on) .rl-pd, body.pad-on .rl-kb { display: none; }
 .rl-ctl .rl-pd { margin-left: 4px; }
 
-/* the controller's radial menu (gamepad.js): d-pad down, only while a controller is in use. The picked wedge
-   glows the way the minimap does: faint white in the light, purple on the dark side */
+/* controller radial menu (gamepad.js, d-pad down, pad only). Picked wedge glows like the minimap: faint white in
+   the light, purple on the dark side */
 #padradial, #vradial, #powradial { position: fixed; left: 50%; top: 50%; width: 440px; height: 440px; margin: -220px 0 0 -220px; pointer-events: none; z-index: 40; }
 #padradial.hidden, #vradial.hidden, #powradial.hidden { display: none; }
 #padradial .pr-ring, #vradial .pr-ring, #powradial .pr-ring { position: absolute; inset: 40px; border-radius: 50%; border: 3px solid #5b5870; background: radial-gradient(circle, rgba(18,10,30,.7) 0 30%, rgba(18,10,30,.8) 31% 100%); }
@@ -1410,10 +1409,10 @@ body:not(.pad-on) .rl-pd, body.pad-on .rl-kb { display: none; }
 #padradial .pr-item.locked, #vradial .pr-item.locked, #powradial .pr-item.locked { opacity: .45; }
 #padradial .pr-item.on, #vradial .pr-item.on, #powradial .pr-item.on { z-index: 1; transform: translate(-50%, -50%) scale(1.12); border-color: #fff; box-shadow: 0 0 0 2px #05030c, 0 0 14px 3px rgba(255, 255, 255, 0.28); }
 body.dark-side #padradial .pr-item.on, body.dark-side #vradial .pr-item.on, body.dark-side #powradial .pr-item.on { border-color: #8f7bff; box-shadow: 0 0 0 2px #05030c, 0 0 22px 6px rgba(143, 100, 255, 0.75); }
-/* (the vehicle wheel's names are longer: its wedges are a little wider and wrap) */
+/* vehicle wheel: longer names, so wider wrapping wedges */
 #vradial .pr-item { width: 150px; height: auto; min-height: 46px; padding: 4px 6px; white-space: normal; }
 #vradial .pr-item.cd small { color: #ff7a8a; }
-/* (the power wheel: the same wedges as the vehicle wheel; the equipped power has an orange edge, and one that's recharging is red) */
+/* power wheel: vehicle-wheel wedges; equipped has an orange edge, recharging is red */
 #powradial .pr-item { width: 150px; height: auto; min-height: 46px; padding: 4px 6px; white-space: normal; }
 #powradial .pr-item small { color: #7dff6a; }
 #powradial .pr-item.cd small { color: #ff7a8a; }
@@ -1421,7 +1420,7 @@ body.dark-side #padradial .pr-item.on, body.dark-side #vradial .pr-item.on, body
 #powradial .pr-item.cur.on { border-color: #fff; }
 body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 
-/* map legend: a comic panel to the left of the globe; folds into a slim tab */
+/* map legend: comic panel left of the globe, folds to a tab */
 .globe-row { display: flex; align-items: flex-start; gap: 12px; max-width: 100vw; }
 #globe-legend { position: relative; width: 214px; flex: none; background: var(--ui-bg); color: var(--ui-text); border: 2px solid var(--ui-edge); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); max-height: min(760px, 92vmin); overflow-y: auto; cursor: default; }
 #globe-legend .lg-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 7px 10px; border-bottom: 2px solid var(--ui-edge); background: var(--ui-bg2, rgba(26, 20, 48, 0.95)); }
@@ -1442,7 +1441,7 @@ body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 #globe-legend.folded .lg-tab:hover, #globe-legend.folded .lg-tab.pad-focus { background: var(--cyan); color: #05030c; }
 #globe-legend .lg-tab-t { writing-mode: vertical-rl; letter-spacing: 2px; }
 @media (max-width: 1000px) { #globe-legend { width: 168px; } #globe-legend .lg-row { font-size: 12px; } }
-/* the Radio Tower's panel, beside the globe when the map is opened from the tower: the legend's comic look */
+/* Radio Tower panel beside the globe (map opened from the tower), legend style */
 #globe-radio { position: relative; width: 214px; flex: none; background: var(--ui-bg); color: var(--ui-text); border: 2px solid var(--ui-edge); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); cursor: default; }
 #globe-radio .gr-head { padding: 8px 10px 7px; border-bottom: 2px solid var(--ui-edge); background: var(--ui-bg2, rgba(26, 20, 48, 0.95)); font-family: var(--comic); font-size: 10px; color: var(--yellow); letter-spacing: 1px; }
 #globe-radio .gr-body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
@@ -1450,7 +1449,7 @@ body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 #globe-radio .gr-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 #globe-radio .gr-row label { font-family: var(--comic); font-size: 7px; color: var(--ui-violet); }
 #globe-radio .gr-row b { font-weight: normal; font-size: 15px; color: var(--cyan); }
-#globe-radio .gr-row b.cr { font-family: var(--comic); font-size: 9px; line-height: 1.3; white-space: nowrap; } /* (the body face draws a 5 like an S: figures use the display face) */
+#globe-radio .gr-row b.cr { font-family: var(--comic); font-size: 9px; line-height: 1.3; white-space: nowrap; } /* figures in the display face (the body face draws 5 like S) */
 #globe-radio .gr-row b.off { color: var(--ui-muted); }
 #globe-radio .gr-row b.done { color: var(--yellow); }
 #globe-radio .gr-bar { background: var(--cyan); }
@@ -1459,10 +1458,11 @@ body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 #globe-radio .gr-btn { font-family: var(--comic); font-size: 10px; line-height: 1.2; padding: 9px 8px 7px; cursor: pointer; background: var(--cyan); color: #05030c; border: 2px solid #05030c; box-shadow: 3px 3px 0 #05030c; }
 #globe-radio .gr-btn:disabled { background: var(--ui-bg3); color: var(--ui-muted); cursor: default; box-shadow: none; }
 #globe-radio .gr-help { font-size: 12px; line-height: 1.25; color: var(--ui-muted); }
-/* narrow windows (the legend 214 + gap 12 + globe up to 760 + gap 12 + panel 214 needs 1212 px, so the cut-over is 1230): the legend steps aside and the panel lies over the globe's lower left, without its help text */
+/* narrow windows (legend 214 + 12 + globe 760 + 12 + panel 214 = 1212 px, so cut over at 1230): legend steps aside, panel
+   lies over the globe's lower left without its help text */
 @media (max-width: 1230px) { #globe-wrap.radio #globe-legend { display: none; } .globe-row { position: relative; } #globe-radio { position: absolute; left: 6px; bottom: 6px; width: 188px; z-index: 2; background: rgba(18, 12, 32, 0.92); } #globe-radio .gr-help { display: none; } }
 
-/* save slot tools (load game): export / import / restore / delete, stacked beside the card */
+/* save slot tools (load game): export / import / restore / delete beside the card */
 .sv-tools { flex: none; width: 104px; display: flex; flex-direction: column; gap: 4px; }
 .sv-tool { flex: 1; min-height: 22px; font-family: var(--comic); font-size: 8px; color: var(--cyan); background: rgba(10, 8, 20, 0.82); border: 2px solid var(--ui-edge); box-shadow: 0 0 0 2px #05030c; cursor: pointer; padding: 3px 4px; }
 .sv-tool.focus, .sv-tool:hover { color: #05030c; background: var(--cyan); border-color: var(--cyan); }
@@ -1473,7 +1473,7 @@ body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 .sv-bad { color: var(--red) !important; }
 .mm-note { font-family: var(--comic); font-size: 8px; line-height: 1.6; color: var(--green); margin: 0 0 8px; text-align: center; }
 
-/* ---- terminal pages (terminalUI.js): building tiles + a detail screen. Phosphor-on-bezel like the job board (#board.term) ---- */
+/* ---- terminal pages (terminalUI.js): building tiles + detail screen, styled like #board.term ---- */
 #dialog .dlg.otm-dlg { width: min(860px, calc(100vw - 32px)); padding: 0; display: flex; flex-direction: column; overflow: hidden; background: #07060d; border: 3px solid #2a2440; box-shadow: 0 0 0 2px #05030c, 0 0 40px rgba(46, 230, 255, 0.15), var(--ui-shadow); }
 .otm { --ph: #8dffb4; --ph-dim: #4f9f74; display: flex; flex-direction: column; min-height: 0; max-height: calc(100vh - 38px); }
 .otm.bare { max-height: none; }
@@ -1483,8 +1483,8 @@ body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 .otm-cursor { animation: termblink 1s steps(1) infinite; margin-left: 4px; color: var(--ph); }
 .otm-close { flex: none; display: inline-flex; align-items: center; gap: 6px; font-family: var(--comic); font-size: 9px; line-height: 1; padding: 7px 9px 6px; cursor: pointer; background: #1b1630; color: var(--ph); border: 2px solid var(--ph-dim); }
 .otm-close:hover { background: var(--red); color: #fff; border-color: var(--red); }
-.otm-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 10px; } /* (only the stats and tiles scroll: the detail screen stays on view under them) */
-/* (the number badge of a choice: the same key the old menu's button had) */
+.otm-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 10px; } /* only stats and tiles scroll; the detail screen stays in view */
+/* a choice's number badge (its key) */
 .otm-key { flex: none; font-family: var(--comic); font-size: 9px; line-height: 1; padding: 4px 5px 3px; color: #05030c; background: var(--yellow); border: 2px solid #05030c; }
 
 .otm-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -1493,8 +1493,8 @@ body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 .otm-stat b { font-family: var(--comic); font-weight: normal; font-size: 13px; line-height: 1.2; color: var(--ph); text-shadow: 0 0 6px rgba(141, 255, 180, 0.45); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .otm-stat b.gold { color: var(--yellow); text-shadow: 0 0 8px rgba(255, 210, 63, 0.5); }
 
-/* the tiles. An icon is three paths (--i1 body, --i2 accent, --i3 shade): unbuilt tiles are the dimmed set, built ones are lit in their own tint */
-.otm-grid { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 8px; } /* (--cols: spec.cols; the narrow-screen rules below still win) */
+/* tiles. Icons are three paths (--i1 body, --i2 accent, --i3 shade): dimmed when unbuilt, lit in their tint when built */
+.otm-grid { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 8px; } /* --cols: spec.cols; narrow-screen rules below still win */
 .otm-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; min-height: 122px; padding: 12px 6px 8px; text-align: center; cursor: pointer; font-family: var(--body); color: var(--ui-muted); background: var(--ui-bg2); border: 2px solid var(--ui-edge); --i1: #6c6490; --i2: #4a4270; --i3: #3d3466; }
 .otm-tile:hover { border-color: var(--ui-muted); background: var(--ui-bg3); }
 .otm-tile.built { color: var(--ui-text); background: #0f1c16; border-color: #2f4a3c; --i1: var(--paper); --i2: var(--tint, var(--green)); --i3: #a39bc6; }
@@ -1507,12 +1507,12 @@ body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 .otm-tile:not(.built) .otm-name { color: var(--ui-muted); }
 .otm-feat { font-size: 13px; line-height: 1.15; color: var(--ui-dim); }
 .otm-tile.built .otm-feat { color: var(--ph); }
-.otm-feat b.cr { font-family: var(--comic); font-weight: normal; font-size: 9px; } /* (the body face draws a 5 like an S: figures use the display face) */
+.otm-feat b.cr { font-family: var(--comic); font-weight: normal; font-size: 9px; } /* figures in the display face (the body face draws 5 like S) */
 .otm-chip { margin-top: auto; font-family: var(--comic); font-size: 8px; line-height: 1; padding: 4px 6px 3px; border: 2px solid #05030c; background: var(--ui-bg3); color: var(--yellow); }
 .otm-tile.built .otm-chip { background: var(--green); color: #05030c; }
 .otm-chip.short { background: #2a1018; color: #ff7a8a; }
 
-/* the detail screen: bezelled, with scan lines */
+/* detail screen: bezel and scan lines */
 .otm-detail { position: relative; flex: none; min-height: 224px; margin: 0 12px 10px; display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; padding: 12px; background: #0a120e; border: 3px solid #23302a; box-shadow: inset 0 0 30px rgba(141, 255, 180, 0.07), 0 0 0 2px #05030c; }
 .otm-detail::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px); }
 .otm-d-art { align-self: start; width: 72px; height: 72px; padding: 6px; border: 2px solid #05030c; background: radial-gradient(circle at 50% 70%, color-mix(in srgb, var(--tint) 40%, #161126) 0 38%, #0b0814 72%); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--tint) 55%, transparent); --i1: #6c6490; --i2: #4a4270; --i3: #3d3466; }
@@ -1529,7 +1529,7 @@ body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 .otm-row span { font-family: var(--comic); font-size: 7px; line-height: 1.4; color: var(--ph-dim); }
 .otm-row b { font-weight: normal; font-size: 15px; line-height: 1.2; color: var(--ph); }
 .otm-row b.gold { color: var(--yellow); } .otm-row b.bad { color: #ff7a8a; } .otm-row b.dim { color: var(--ui-muted); }
-.otm-row b.cr { font-family: var(--comic); font-size: 11px; line-height: 1.3; } /* (the body face draws a 5 like an S: figures use the display face) */
+.otm-row b.cr { font-family: var(--comic); font-size: 11px; line-height: 1.3; } /* figures in the display face (the body face draws 5 like S) */
 .otm-meter { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .otm-bar { flex: 1 1 120px; height: 12px; background: #0b0814; border: 2px solid #23302a; }
 .otm-bar i { display: block; height: 100%; background: var(--yellow); }
@@ -1537,10 +1537,10 @@ body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 .otm-act { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; width: 100%; font-family: var(--comic); font-size: 11px; line-height: 1.2; text-align: left; padding: 9px 10px 7px; cursor: pointer; background: var(--yellow); color: #05030c; border: 2px solid #05030c; box-shadow: 3px 3px 0 #05030c; }
 .otm-act .otm-key { background: #05030c; color: var(--yellow); border-color: #05030c; }
 .otm-act.go { background: var(--green); }
-.otm-act.short { background: #2a1018; color: #ff7a8a; border-color: #ff2a4a; } /* (can't afford it: still clickable, it answers in the panel) */
+.otm-act.short { background: #2a1018; color: #ff7a8a; border-color: #ff2a4a; } /* can't afford: still clickable, answers in the panel */
 .otm-act.short .otm-key { background: #ff2a4a; color: #05030c; border-color: #05030c; }
 .otm-act:hover, .otm-act.pad-focus { background: var(--cyan); color: #05030c; }
-.otm-acts { display: flex; flex-direction: column; gap: 6px; } /* (a building can carry several buttons) */
+.otm-acts { display: flex; flex-direction: column; gap: 6px; } /* a building may have several buttons */
 .otm-act.vote { background: var(--ui-violet); }
 .otm-note { font-family: var(--comic); font-size: 8px; line-height: 1.5; color: var(--ui-dim); }
 .otm-msg { min-height: 1.2em; font-family: var(--comic); font-size: 9px; line-height: 1.4; color: var(--green); }
@@ -1562,11 +1562,11 @@ body.pad-on .otm-foot .foot-kb { display: none; }
   .otm-detail { margin: 0 8px 8px; }
   .otm-ico { width: 36px; height: 36px; }
 }
-/* a building that needs another one first */
+/* needs another building first */
 .otm-tile.locked { border-style: dashed; opacity: 0.72; }
 .otm-tile.locked .otm-chip { background: transparent; color: var(--ui-dim); }
 .otm-pill.locked { background: var(--ui-bg3); color: var(--ui-dim); }
-/* spec.side, wide screens: the tiles on the left and the detail screen the full height on the right (the town's page; below 900 px it stacks like the outposts') */
+/* spec.side, wide screens: tiles left, full-height detail right (town page; stacks below 900 px) */
 @media (min-width: 900px) {
   .otm.side { display: grid; grid-template-columns: minmax(0, 1fr) min(400px, 42%); grid-template-rows: auto minmax(0, 1fr) auto; }
   .otm.side:not(.bare) { height: min(700px, calc(100vh - 38px)); max-height: none; }

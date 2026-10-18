@@ -2,40 +2,37 @@
 #
 # In Blender's Python console or via MCP:   exec(open(r"<repo>/tools/blender/build_crane.py").read())
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 build_crane.py
+# CRANE_OUT overrides the output path; CRANE_BLEND also saves a .blend there.
 #
-# One crane, 34 m of lattice mast under a 30 m jib (the game scales it uniformly for the smaller cranes). Everything is
-# authored in three.js axes with the jib pointing +x at zero slew; the origin is on the ground in the middle of the base.
+# One crane: 34 m lattice mast, 30 m jib (the game scales it for smaller cranes). three.js axes, jib along +x at zero slew,
+# origin on the ground at the middle of the base.
 #
-# Built to work like the real thing, so a climber could get from the ground to the cab and out along the counter-jib:
-#   base        a cross frame on a concrete pad, its arms under the mast's four legs (along the diagonals), ballast on the arm
-#               ends; a short access ladder up the +z side to the mast's floor deck
-#   mast        the ladder runs inside the +z face (rungs 0.3 m apart, 0.3 m of toe room to the face bracing, a 0.75 m climbing
-#               space in front), through hatches in the rest decks every second section, up to the top platform under the
-#               slewing ring: a deck round the mast with a handrail (top rail, knee rail, toe board)
-#   slew        a second ladder, hung from the slewing platform, climbs through the middle of the slewing ring into the tower
-#               head; the head's +z face is left open as a doorway onto the slewing platform (handrails all round), from which a
-#               railed catwalk leads to the door of the cab, cantilevered out on brackets beside the jib root. The counter-jib
-#               is two side girders with the walkway between them, level with the platform; the top chords are its handrail.
-#   trolley     wheels on flanges outside the jib's bottom chords; two sheaves in line with the rope falls, each turning the
-#               rope down from the jib
-#   hook        a two-fall block: cheek plates either side of a sheave whose plane holds both falls, a crosshead, a swivel and
-#               a forged hook whose saddle sits under the swivel, its throat closed by a latch
+# Climbable like a real one, from the ground to the cab and along the counter-jib:
+#   base      cross frame on a concrete pad, arms under the four legs (diagonals), ballast on the ends; access ladder up the
+#             +z side to the mast's floor deck
+#   mast      ladder inside the +z face (rungs 0.3 m apart, 0.3 m toe room, 0.75 m climbing space), through hatches in rest
+#             decks every second section, to the railed top platform (top rail, knee rail, toe board) under the slewing ring
+#   slew      a second ladder up through the ring into the tower head; the head's +z face is a doorway onto the railed slewing
+#             platform, from which a catwalk leads to the cab (cantilevered beside the jib root). The counter-jib is two side
+#             girders with a walkway between, level with the platform; the top chords are its handrail.
+#   trolley   wheels on flanges outside the jib's bottom chords; two sheaves in line with the rope falls
+#   hook      two-fall block: cheek plates round a sheave in the plane of both falls, crosshead, swivel, forged hook with its
+#             saddle under the swivel and a latch across the throat
 #
-# The static parts (the root's own meshes) are the foundation, the base frame and the mast with its ladder and decks. Pivots
-# (empties with a `role`) carry everything that moves:
-#   slew      at the top of the mast (y = 34), turned about y by the game. Under it: the slewing ring and platform, its
-#             ladder, the tower head with the pendant bars, the jib (out to +x) and counter-jib (-x) with its counterweights and
-#             hoist house, the operator's cab and catwalk, the lamps and the wind gauge.
-#   blinker   the aircraft warning lights (apex, jib tip, counter-jib end); the game puts a blinking lamp on each
-#   trolley   the carriage on the jib's rails, a child of `slew`; the game slides it along x (it sits at x = 14)
-#   cable     the two rope falls, a child of `trolley`: one metre long, hanging down from its origin; the game scales y
-#   hook      the hook block, hook and bridle slings, a child of `trolley`; the game sets its y to minus the rope length
-#   load      under `hook`: the cargo container (the Prospector's, see build_landtrain.py) on its spreader frame, turned to lie along
-#             the jib. `livery` pivots under it (extra `faction`) carry each faction's plate and number; the game builds the one
-#             that matches the crane's cargo and leaves the rest out
-# Each mesh has ONE material named after a slot: body (the crane's colour) is swapped by the game, and so are the container's
-# load (its body), stripe and label (its trim and lettering) for the faction whose cargo it carries; the rest are fixed (see
-# craneSlot in src/models.js). The `drop` extra on the hook is the distance from its origin to the container's bottom.
+# Static parts (the root's own meshes): foundation, base frame, mast with ladder and decks. Pivots (empties with a `role`)
+# carry what moves:
+#   slew      top of the mast (y = 34), turned about y. Under it: slewing ring and platform, its ladder, tower head and
+#             pendants, jib (+x), counter-jib (-x) with counterweights and hoist house, cab and catwalk, lamps, wind gauge.
+#   blinker   aircraft warning lights (apex, jib tip, counter-jib end); the game puts a blinking lamp on each
+#   trolley   child of `slew`; the game slides it along x (sits at x = 14)
+#   cable     child of `trolley`: the two falls, 1 m long, hanging from its origin; the game scales y
+#   hook      child of `trolley`: hook block, hook and bridle slings; the game sets y to minus the rope length
+#   load      under `hook`: the Prospector's cargo container (build_landtrain.py) on its spreader, lying along the jib.
+#             `livery` pivots under it (extra `faction`) carry each faction's plate and number; the game keeps the one
+#             matching the crane's cargo
+# One material per mesh, named after a slot: body (crane colour) is swapped by the game, as are the container's load (body),
+# stripe and label (trim, lettering) for its cargo's faction; the rest are fixed (craneSlot in src/models.js). The hook's
+# `drop` extra is the distance from its origin to the container's bottom.
 
 import bpy, math, os
 
@@ -59,7 +56,7 @@ if not os.path.isdir(os.path.dirname(OUT)):
 print("Tower crane export ->", OUT)
 COLL = "MoonTowerCrane"
 
-# preview colours (the game swaps in its own materials)
+# preview colours (the game uses its own materials)
 SLOT_COLORS = {
     "body": (1.0, 0.82, 0.25), "dark": (0.16, 0.14, 0.25), "steel": (0.33, 0.38, 0.48), "concrete": (0.66, 0.65, 0.72),
     "white": (1.0, 0.96, 0.88), "glass": (0.81, 0.94, 1.0), "lamp": (1.0, 0.96, 0.66), "load": (1.0, 0.23, 0.36),
@@ -75,8 +72,8 @@ for s in SLOT_COLORS:
     material(s)
 
 PI = math.pi
-H = 34.0          # the top of the mast (the slewing ring sits on it)
-JIB = 30.0        # the jib's reach from the slew axis
+H = 34.0          # mast top (the slewing ring sits on it)
+JIB = 30.0        # jib reach from the slew axis
 
 
 def M(name, geo, slot, parent, ink=0.04, **kw):
@@ -93,16 +90,15 @@ def rb(name, hx, hy, hz, pos, slot, parent, ink=0.04, e=0.08, rot=(0, 0, 0), nu=
 
 
 def box(hx, hy, hz, pos, e=0.05, rot=(0, 0, 0)):
-    """A plain cuboid (half extents; `e` is ignored). (rbox with four segments round is an octahedron, not a box: the old decks
-    and plates built that way were diamonds turned 45 degrees.)"""
+    """A plain cuboid (half extents; `e` is ignored). rbox with four segments round is an octahedron, not a box."""
     v = [(sx * hx, sy * hy, sz * hz) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
     f = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
     return xf((v, f), pos, rot)
 
 
 def slab(x0, x1, z0, z1, y0, y1, cuts=()):
-    """A flat plate over [x0, x1] x [z0, z1] between heights y0 and y1, with rectangular holes `cuts` ((x0, x1, z0, z1) each),
-    as the fewest boxes along x for each band of z."""
+    """A plate over [x0, x1] x [z0, z1], heights y0..y1, with rectangular holes `cuts` ((x0, x1, z0, z1) each), as the
+    fewest boxes along x per band of z."""
     xs = sorted({x0, x1} | {min(max(v, x0), x1) for c in cuts for v in c[:2]})
     zs = sorted({z0, z1} | {min(max(v, z0), z1) for c in cuts for v in c[2:]})
     cut = lambda x, z: any(c[0] < x < c[1] and c[2] < z < c[3] for c in cuts)
@@ -117,16 +113,15 @@ def slab(x0, x1, z0, z1, y0, y1, cuts=()):
                 run = xa
             if not solid and run is not None:
                 end = xa if xa is not None else x1
-                # (a millimetre short of each seam, so the pieces' corners are not welded together on export)
+                # 1 mm short of each seam so export doesn't weld the corners together
                 out.append(box((end - run) / 2 - 0.001, (y1 - y0) / 2, (zb - za) / 2 - 0.001, ((end + run) / 2, (y0 + y1) / 2, (za + zb) / 2), 0.01))
                 run = None
     return join(out)
 
 
 def railing(a, b, y, posts=None, toe=True, every=1.5):
-    """A handrail along the straight edge a -> b ((x, z) points) of a deck whose top is at y: posts (at the ends and at most
-    `every` apart, or at the fractions `posts` along it), a top rail at 1.1 m, a knee rail at 0.55 m and a toe board.
-    Returns (rails, toe board)."""
+    """A handrail along deck edge a -> b ((x, z) points), deck top at y: posts at the ends and at most `every` apart (or at
+    fractions `posts`), top rail at 1.1 m, knee rail at 0.55 m, toe board. Returns (rails, toe board)."""
     (ax, az), (bx, bz) = a, b
     n = max(1, math.ceil(math.hypot(bx - ax, bz - az) / every))
     ts = posts if posts is not None else [i / n for i in range(n + 1)]
@@ -140,8 +135,8 @@ def railing(a, b, y, posts=None, toe=True, every=1.5):
 
 
 def ladder(x0, x1, z, ya, yb, rung0, rung1, axis="x"):
-    """A fixed ladder: two rails from ya to yb, rungs every 0.3 m from rung0 up to rung1. axis "x": the rails at x0 and x1 in
-    the plane z; "z": at z0 = x0 and z1 = x1 in the plane x = z."""
+    """A fixed ladder: rails from ya to yb, rungs every 0.3 m from rung0 to rung1. axis "x": rails at x0, x1 in the plane z;
+    "z": rails at z0 = x0, z1 = x1 in the plane x = z."""
     P = (lambda u, y: (u, y, z)) if axis == "x" else (lambda u, y: (z, y, u))
     out = [B(P(x0, ya), P(x0, yb), 0.032, 5), B(P(x1, ya), P(x1, yb), 0.032, 5)]
     y = rung0
@@ -156,8 +151,8 @@ root = PV("crane", (0, 0, 0), None)
 root["height"] = H
 root["jib"] = JIB
 
-# ---- the foundation and the cross frame: two box girders crossing under the mast along its diagonals (each leg stands on an arm),
-# two slabs of ballast on each arm's end, bound by a top plate and tie rods ----
+# ---- foundation and cross frame: two box girders along the mast's diagonals (a leg on each arm), two ballast slabs per
+# arm end, bound by a top plate and tie rods ----
 PAD = 0.45
 rb("pad", 4.3, PAD / 2, 4.3, (0, PAD / 2, 0), "concrete", root, 0.07, e=0.05)
 ARM_T = PAD + 0.8
@@ -170,17 +165,16 @@ for i, (sx, sz) in enumerate(((1, 1), (-1, 1), (-1, -1), (1, -1))):
         rb(f"ballast{i}_{k}", 0.85, 0.41, 1.05, (px, ARM_T + 0.42 + k * 0.84, pz), "concrete", root, 0.05, e=0.04, rot=(0, a, 0))
     top = ARM_T + 1.68
     rb(f"ballastPlate{i}", 0.9, 0.05, 1.18, (px, top + 0.05, pz), "steel", root, 0.03, e=0.04, rot=(0, a, 0))
-    # tie rods down each side of the stack, from anchors in the pad to the top plate
+    # tie rods each side of the stack, pad to top plate
     for t in (-1, 1):
         ox, oz = -sz / math.sqrt(2) * 1.13 * t, sx / math.sqrt(2) * 1.13 * t
         M(f"tie{i}_{t}", B((px + ox, PAD, pz + oz), (px + ox, top + 0.1, pz + oz), 0.045, 5, True), "steel", root, 0)
 
-# ---- the mast: 8 lattice sections, square chords, a diagonal per face, a horizontal at every joint and splice plates. The lattice
-# ends at the top deck; above it a short portal (no diagonals, so the top platform can be walked onto) carries the slewing ring
-# on a square frame open in the middle for the ladder ----
+# ---- mast: 8 lattice sections, square chords, a diagonal per face, horizontals and splice plates at each joint. Above the
+# top deck a short portal (no diagonals, so the platform can be walked onto) carries the ring seat, open for the ladder ----
 MW = 1.0
-Y0 = ARM_T + 0.2                     # the legs stand on shoes on the arms
-TOPD = H - 2.1                       # the top platform's deck (1.9 m of headroom under the top frame)
+Y0 = ARM_T + 0.2                     # legs stand on shoes on the arms
+TOPD = H - 2.1                       # top platform deck (1.9 m headroom under the top frame)
 SECT = 8
 levels = [Y0 + (TOPD - 0.15 - Y0) * i / SECT for i in range(SECT + 1)]
 corners = [(-MW, -MW), (MW, -MW), (MW, MW), (-MW, MW)]
@@ -201,29 +195,28 @@ for y in levels + [H - 0.12]:
         diags.append(B((ax, y, az), (bx, y, bz), 0.1))
 M("mastBracing", join(diags), "body", root, 0.03)
 M("splicePlates", join([box(0.3, 0.18, 0.3, (cx, y, cz), 0.03) for y in levels[1:-1] for cx, cz in corners]), "steel", root, 0.03)
-# the slewing ring's seat: a square frame on the chord tops, open in the middle (the ladder climbs through it)
+# slewing ring seat: a square frame on the chord tops, open for the ladder
 M("ringSeat", slab(-1.25, 1.25, -1.25, 1.25, H - 0.1, H, [(-0.98, 0.98, -0.98, 0.98)]), "steel", root, 0.03)
 
-# the ladder, inside the +z face: rails at LX +- 0.23 in the plane z = LZ (0.3 m of toe room to the face's bracing), climbed
-# facing +z from the middle of the mast; bracketed to every horizontal
+# ladder inside the +z face: rails at LX +- 0.23 in the plane z = LZ (0.3 m toe room), climbed facing +z; bracketed to
+# every horizontal
 LX, LZ = -0.35, 0.6
-HATCH = (LX - 0.4, LX + 0.4, -0.2, MW - 0.05)        # the opening it climbs through in each deck (x0, x1, z0, z1)
+HATCH = (LX - 0.4, LX + 0.4, -0.2, MW - 0.05)        # ladder opening in each deck (x0, x1, z0, z1)
 NOTCH = [(sx * MW - 0.25, sx * MW + 0.25, sz * MW - 0.25, sz * MW + 0.25) for sx in (-1, 1) for sz in (-1, 1)]   # round the chords
-D0 = levels[0] + 0.15                                # the floor deck, on the bottom horizontals
+D0 = levels[0] + 0.15                                # floor deck, on the bottom horizontals
 lad = ladder(LX - 0.23, LX + 0.23, LZ, D0, TOPD - 0.05, D0 + 0.3, TOPD - 0.25)
 lad += [B((x, y, LZ), (x, y, MW - 0.08), 0.025, 4) for y in levels[1:] for x in (LX - 0.23, LX + 0.23)]
 M("ladder", join(lad), "steel", root, 0)
 
-# the decks inside the mast, resting on the horizontals: the floor deck at the foot, a rest deck every second section (a hatch
-# for the ladder, its lid swung up against the back of the climbing space), the top deck (hatch shut: it is stood on) with the
-# platform round the outside of the mast
+# decks on the horizontals: floor deck, a rest deck every second section (ladder hatch, lid swung up against the back of
+# the climbing space), and the top deck (hatch shut, it's stood on) with the platform round the mast
 decks, lids, hinges = [slab(-0.95, 0.95, -0.95, 0.95, levels[0] + 0.1, D0, NOTCH)], [], []
 for k in (2, 4, 6):
     y = levels[k] + 0.15
     decks.append(slab(-0.95, 0.95, -0.95, 0.95, y - 0.05, y, NOTCH + [HATCH]))
     lids.append(box(0.39, (HATCH[3] - HATCH[2]) / 2, 0.015, (LX, y + (HATCH[3] - HATCH[2]) / 2, HATCH[2] - 0.03), 0.004))
     hinges += [B((LX + dx - 0.07, y + 0.02, HATCH[2] - 0.03), (LX + dx + 0.07, y + 0.02, HATCH[2] - 0.03), 0.025, 6, True) for dx in (-0.25, 0.25)]
-PW = 1.8                                              # the top platform's half width
+PW = 1.8                                              # top platform half width
 notch_top = [(sx * MW - 0.22, sx * MW + 0.22, sz * MW - 0.22, sz * MW + 0.22) for sx in (-1, 1) for sz in (-1, 1)]
 decks.append(slab(-PW, PW, -PW, PW, TOPD - 0.05, TOPD, notch_top + [HATCH]))
 lids.append(box(0.39, 0.015, (HATCH[3] - HATCH[2]) / 2, (LX, TOPD + 0.015, (HATCH[2] + HATCH[3]) / 2), 0.004))
@@ -231,7 +224,7 @@ hinges += [B((LX + dx - 0.07, TOPD + 0.02, HATCH[2] + 0.02), (LX + dx + 0.07, TO
 M("decks", join(decks), "steel", root, 0.03)
 M("hatchLids", join(lids), "body", root, 0.02)
 M("hatchHinges", join(hinges), "dark", root, 0)
-# the top platform's handrail and toe boards, and its brackets: a rim angle under each edge, a knee brace from each leg
+# top platform handrail, toe boards and brackets (rim angle under each edge, knee brace from each leg)
 rails, toes = [], []
 ring = [(-PW, -PW), (PW, -PW), (PW, PW), (-PW, PW)]
 for a in range(4):
@@ -245,34 +238,33 @@ brk += [box(0.04, 0.06, PW, (s * (PW - 0.04), TOPD - 0.11, 0), 0.01) for s in (-
 brk += [B((sx * MW, TOPD - 1.2, sz * MW), (sx * (PW - 0.06), TOPD - 0.12, sz * (PW - 0.06)), 0.06, 5) for sx in (-1, 1) for sz in (-1, 1)]
 M("topBrackets", join(brk), "body", root, 0.02)
 
-# the access ladder from the pad up the outside of the +z face to the floor deck (its rails run on 1.1 m above the deck as
-# grab handles; the climber steps in through the face, where the bottom diagonal leaves the +x side open)
+# access ladder from the pad up the outside of the +z face to the floor deck (rails run 1.1 m above it as grab handles;
+# you step in where the bottom diagonal leaves the +x side open)
 AX = 0.27
 acc = ladder(AX - 0.23, AX + 0.23, MW + 0.3, PAD, D0 + 1.1, PAD + 0.3, D0 - 0.2)
 acc += [B((x, y, MW + 0.3), (x, y, MW + 0.06), 0.025, 4) for x in (AX - 0.23, AX + 0.23) for y in (levels[0], D0 + 0.9)]
 M("accessLadder", join(acc), "steel", root, 0)
 
 # ---------------------------------------------------------------------------------------------------------------
-# the slewing assembly (local frame: y = 0 on top of the mast)
+# slewing assembly (local frame: y = 0 at the mast top)
 slew = PV("slew", (0, H, 0), root, role="slew")
 
 M("slewRing", lathe([(0.98, 0.0), (1.32, 0.0), (1.46, 0.08), (1.46, 0.5), (1.36, 0.6), (0.98, 0.6), (0.98, 0.0)], 20), "dark", slew, 0.04)
 M("slewGear", xf(torus(1.18, 0.09, 20, 6), (0, 0.62, 0)), "steel", slew, 0.02)
-# the slewing platform: its deck (y 1.02) is the floor of the tower head, the root of the counter-jib and the start of the
-# cab's catwalk; a hatch in it over the ring's middle lets the ladder through
+# slewing platform: its deck (y 1.02) floors the tower head, the counter-jib root and the cab catwalk; a hatch over the
+# ring's middle lets the ladder through
 TT = 1.02
 PX0, PX1, PZ = -2.2, 2.2, 1.9
 OPEN = (-0.85, 0.3, -0.45, 0.45)
 M("turntable", slab(PX0, PX1, -PZ, PZ, 0.62, TT, [OPEN]), "body", slew, 0.05)
-# the slewing ladder: hung from the platform through the ring, from just over the top deck to grab handles above the platform
-# (rungs in the plane x = 0, climbed facing +x from the -x side, so it turns about its own middle and clears the fixed parts)
+# slewing ladder: hung through the ring from just over the top deck to grab handles above the platform (rungs in the plane
+# x = 0, climbed facing +x, so it turns about its own middle and clears the fixed parts)
 SL0 = TOPD - H + 0.08
 sl = ladder(-0.23, 0.23, 0.0, SL0, TT + 1.1, SL0 + 0.3, TT - 0.1, axis="z")
 sl += [B((0.0, y, z), (x1, y, z), 0.03, 4) for z in (-0.23, 0.23) for y, x1 in ((0.8, OPEN[1] + 0.02), (0.25, 0.97))]
 M("slewLadder", join(sl), "steel", slew, 0)
 
-# the tower head: a tapering four-legged pylon with its pendant bars to the jib and counter-jib. Its lowest panel on the +z face
-# has no diagonal: that is the doorway from the ladder out onto the platform
+# tower head: a tapering four-legged pylon. The lowest +z panel has no diagonal: the doorway onto the platform
 HEAD = 9.8
 hw = lambda y: 0.8 + (0.16 - 0.8) * (y - 1.0) / (HEAD - 1.0)
 hc = lambda y: [(sx * hw(y), y, sz * hw(y)) for sx, sz in corners]
@@ -297,8 +289,7 @@ rb("headCap", 0.34, 0.26, 0.34, (0, HEAD + 0.2, 0), "dark", slew, 0.04, e=0.1)
 M("headSheaves", xf(lathe([(0.0, -0.1), (0.3, -0.1), (0.3, 0.1), (0.0, 0.1)], 12), (0, HEAD + 0.55, 0), (PI / 2, 0, 0)), "steel", slew, 0.02)
 M("doorGussets", join([B((sx * hw(2.9), 2.9, hw(2.9)), (sx * hw(3.2) * 0.45, ly[1], hw(3.2)), 0.06, 5) for sx in (-1, 1)]), "body", slew, 0.02)
 
-# the jib: a triangular truss, two bottom chords and one top chord, Warren diagonals; the trolley runs on flanges welded to
-# the outside of the bottom chords
+# jib: triangular truss (two bottom chords, one top), Warren diagonals; trolley flanges outside the bottom chords
 NX = 12
 J0 = 1.2
 xs = [J0 + (JIB - J0) * i / NX for i in range(NX + 1)]
@@ -314,7 +305,7 @@ for i in range(NX):
 jd.append(B((xs[-1], YB, -JW), (xs[-1], YB, JW), 0.1))
 M("jibChords", join(jb), "body", slew, 0.05)
 M("jibLattice", join(jd), "body", slew, 0.03)
-RZ = 1.12                            # the trolley's running flanges (their middle), outside the bottom chords
+RZ = 1.12                            # trolley flange middles, outside the bottom chords
 M("jibRails", join([box((JIB - J0 - 1.0) / 2, 0.03, 0.1, ((JIB + J0 + 1.0) / 2, YB, s * (RZ - 0.02))) for s in (-1, 1)]), "steel", slew, 0.02)
 rb("jibRoot", 0.55, 1.15, 1.05, (J0 - 0.1, 2.15, 0), "steel", slew, 0.04, e=0.06)
 rb("jibTip", 0.14, 0.98, 1.0, (JIB + 0.1, 2.15, 0), "steel", slew, 0.04, e=0.05)
@@ -324,9 +315,8 @@ for z in (-RZ, RZ):
 lugs = join([box(0.18, 0.28, 0.14, (x, YT + 0.3, 0), 0.02) for x in (9.0, 20.0)])
 M("jibLugs", lugs, "steel", slew, 0.02)
 
-# the counter-jib: two side girders pinned to the platform's -x end, the walkway between them on cross beams, level with the
-# platform; their top chords stand at handrail height over it, with a knee rail between. Counterweights on the end, the hoist
-# house to one side so the walkway runs past it
+# counter-jib: two side girders pinned to the platform's -x end, walkway between on cross beams, level with the platform;
+# top chords at handrail height, knee rail between. Counterweights at the end, hoist house to one side of the walkway
 CX = [PX0 - 2.6 * i for i in range(5)]
 CJW = 1.2
 CB = TT - 0.05
@@ -349,7 +339,7 @@ for i in range(4):
 M("counterJib", join(cj), "body", slew, 0.04)
 M("counterDeck", slab(CX[-1] + 0.1, CX[0], -(CJW - 0.12), CJW - 0.12, TT - 0.05, TT), "steel", slew, 0.03)
 M("counterRail", join([B((CX[0], TT + 0.55, z), (CX[-1], TT + 0.55, z), 0.032, 5, True) for z in (-(CJW - 0.04), CJW - 0.04)]), "body", slew, 0)
-# counterweights: stacks of slabs with a seam between each, bound by a top plate
+# counterweights: slab stacks bound by a top plate
 for name, x, n in (("cwA", -11.2, 3), ("cwB", -8.8, 2)):
     for k in range(n):
         rb(f"{name}{k}", 1.1, 0.41, 0.95, (x, TT + 0.42 + k * 0.84, 0), "concrete", slew, 0.05, e=0.04)
@@ -357,8 +347,7 @@ for name, x, n in (("cwA", -11.2, 3), ("cwB", -8.8, 2)):
     for sx in (-1, 1):
         for sz in (-1, 1):
             M(f"{name}Rod{sx}{sz}", B((x + sx * 0.95, TT, sz * 0.8), (x + sx * 0.95, TT + n * 0.84 + 0.05, sz * 0.8), 0.035, 4, True), "steel", slew, 0)
-# the hoist house on the walkway's -z side (0.85 m of walkway past it), its louvres and door facing the walkway, the exhaust,
-# and an electrical cabinet
+# hoist house on the walkway's -z side (0.85 m of walkway past it), louvres and door facing the walkway; exhaust; cabinet
 HZ0, HZ1 = -(CJW - 0.12), 0.2
 HC, HD = (HZ0 + HZ1) / 2, (HZ1 - HZ0) / 2
 rb("hoistHouse", 1.4, 0.85, HD, (-5.0, TT + 0.85, HC), "body", slew, 0.05, e=0.06)
@@ -369,16 +358,16 @@ M("hoistVents", join(vents), "dark", slew, 0)
 M("hoistStack", B((-6.0, TT + 1.75, HC - 0.2), (-6.0, TT + 2.8, HC - 0.2), 0.13, 6, True), "dark", slew, 0.03)
 rb("cabinet", 0.4, 0.7, 0.35, (-3.0, TT + 0.7, HC - 0.1), "steel", slew, 0.04, e=0.06)
 
-# the pendant bars: apex down to the jib lugs and to the counter-jib's top chords
+# pendant bars: apex to the jib lugs and the counter-jib top chords
 pend = [B((0, HEAD + 0.1, 0), (9.0, YT + 0.4, 0), 0.085, 5, True), B((0, HEAD + 0.1, 0), (20.0, YT + 0.4, 0), 0.085, 5, True)]
 for z in (-CJW, CJW):
     pend.append(B((0, HEAD + 0.1, 0), (CX[1], CT, z), 0.085, 5, True))
     pend.append(B((0, HEAD + 0.1, 0), (CX[3], CT, z), 0.085, 5, True))
 M("pendants", join(pend), "dark", slew, 0.02)
 
-# the platform's handrails: round the free edges, open where the counter-jib's walkway and the cab's catwalk leave it; across
-# the jib's heel the rails pass over its bottom chords (posts clear of them, no toe board there)
-CW0, CW1 = -0.4, 0.4                 # the catwalk's sides (x)
+# platform handrails round the free edges, open for the counter-jib walkway and the catwalk; over the jib heel they clear
+# its bottom chords (no toe board there)
+CW0, CW1 = -0.4, 0.4                 # catwalk sides (x)
 rails, toes = [], []
 for a, b, kw in (
     ((PX0, -PZ), (PX1, -PZ), {}),
@@ -394,12 +383,12 @@ r_, _ = railing((PX1, -PZ), (PX1, PZ), TT, posts=[0, (PZ - 1.15) / (2 * PZ), 0.5
 rails += r_
 toes += [box(0.012, 0.05, (PZ - 1.08) / 2, (PX1, TT + 0.05, s * (PZ + 1.08) / 2), 0.004) for s in (-1, 1)]
 
-# the operator's cab, cantilevered out beside the jib root on two beams and knee struts from the platform's +z side, its door
-# at the end of a railed catwalk; big front window down the jib, side windows, the roof unit and floodlights
-CZ0, CZ1 = 2.8, 4.9                  # the cab's inner and outer walls (z)
-CXc, CHX = 0.3, 1.15                 # its middle and half length along x
+# operator's cab, cantilevered beside the jib root on beams and knee struts from the platform's +z side, door at the end
+# of the catwalk; front window down the jib, side windows, roof unit, floodlights
+CZ0, CZ1 = 2.8, 4.9                  # cab inner and outer walls (z)
+CXc, CHX = 0.3, 1.15                 # cab middle and half length along x
 CZc, CHZ = (CZ0 + CZ1) / 2, (CZ1 - CZ0) / 2
-# the catwalk: a grating on two stringers from the platform's edge to the cab door, a handrail each side
+# catwalk: grating on two stringers to the cab door, handrail each side
 M("catwalk", join([box((CW1 - CW0) / 2, 0.025, (CZ0 - PZ) / 2, ((CW0 + CW1) / 2, TT - 0.025, (PZ + CZ0) / 2), 0.005)]), "steel", slew, 0.02)
 M("catStringers", join([box(0.04, 0.08, (CZ0 - PZ) / 2, (x, TT - 0.13, (PZ + CZ0) / 2), 0.01) for x in (CW0 + 0.04, CW1 - 0.04)]), "body", slew, 0.02)
 for x in (CW0 - 0.03, CW1 + 0.03):
@@ -408,7 +397,7 @@ for x in (CW0 - 0.03, CW1 + 0.03):
     toes += t_
 M("platformRail", join(rails), "body", slew, 0)
 M("platformToe", join(toes), "steel", slew, 0.015)
-# the cab's floor frame, the beams under it and the knee struts down to brackets under the platform's edge
+# cab floor frame, beams under it, knee struts to brackets under the platform edge
 beams = [box(0.07, 0.17, (CZ1 - PZ) / 2, (x, TT - 0.27, (PZ + CZ1) / 2), 0.01) for x in (CXc - CHX + 0.2, CXc + CHX - 0.2)]
 beams += [B((x, 0.2, PZ - 0.05), (x, TT - 0.44, CZ0 + 1.0), 0.06, 5) for x in (CXc - CHX + 0.2, CXc + CHX - 0.2)]
 beams += [box(0.1, 0.24, 0.08, (x, 0.38, PZ - 0.1), 0.01) for x in (CXc - CHX + 0.2, CXc + CHX - 0.2)]
@@ -427,60 +416,59 @@ for k, dz in enumerate((-0.55, 0.55)):
     rb(f"flood{k}", 0.2, 0.13, 0.13, (CXc + CHX - 0.15, TT + 2.36, CZc + dz), "dark", slew, 0.02, e=0.15)
     rb(f"floodLamp{k}", 0.03, 0.1, 0.1, (CXc + CHX + 0.07, TT + 2.36, CZc + dz), "lamp", slew, 0, e=0.2)
 
-# the wind gauge on the apex: a pole, a cup arm and a vane, topped with the red warning lamp
+# wind gauge on the apex: pole, cup arm, vane, under the red warning lamp
 M("windPole", B((0, HEAD + 0.4, 0), (0, HEAD + 1.7, 0), 0.04, 5, True), "dark", slew, 0)
 M("windArm", join([B((0, HEAD + 1.4, -0.4), (0, HEAD + 1.4, 0.4), 0.025, 4, True)]), "dark", slew, 0)
 for z in (-0.4, 0.4):
     M(f"windCup{z}", xf(lathe([(0.0, -0.1), (0.1, -0.1), (0.1, 0.05), (0.0, 0.1)], 8), (0, HEAD + 1.4, z)), "steel", slew, 0)
 rb("windVane", 0.22, 0.1, 0.015, (-0.25, HEAD + 1.15, 0), "dark", slew, 0, e=0.1)
 
-# warning lamps: the game blinks a lamp on each of these
+# warning lamps: the game blinks one on each
 PV("blinkApex", (0, HEAD + 1.95, 0), slew, role="blinker", radius=0.3)
 PV("blinkTip", (JIB + 0.3, 3.3, 0), slew, role="blinker", radius=0.3)
 PV("blinkCounter", (CX[-1] - 0.3, CT + 0.9, 0), slew, role="blinker", radius=0.3)
 
 # ---------------------------------------------------------------------------------------------------------------
-# the trolley: a carriage hung under the jib's bottom chords, four wheels on the running flanges and side plates outside them,
-# cross bars under the chords; between two cheek plates hang the sheaves that turn the hoist rope down into the falls, one on
-# each fall, the inner one taking the rope in from the mast side and the outer one sending it on to the jib tip
+# trolley: carriage under the jib's bottom chords, four wheels on the flanges, side plates outside, cross bars under. Between
+# two cheek plates, one sheave per fall turns the hoist rope down (inner from the mast side, outer on to the jib tip)
 TROLLEY_X = 14.0
-TY = YB - 0.2                        # the trolley's origin (slew frame)
-FALL = 0.33                          # each rope fall's offset from the middle (z)
-SR = 0.28                            # the sheaves' radius
+TY = YB - 0.2                        # trolley origin (slew frame)
+FALL = 0.33                          # each fall's offset from the middle (z)
+SR = 0.28                            # sheave radius
 trolley = PV("trolley", (TROLLEY_X, TY, 0), slew, role="trolley")
-WY = YB + 0.03 + 0.2 - TY            # the wheels' axles: on top of the flanges
+WY = YB + 0.03 + 0.2 - TY            # wheel axles, on top of the flanges
 M("trolleyPlates", join([box(0.85, 0.5, 0.04, (0, WY - 0.3, s * (RZ + 0.13)), 0.02) for s in (-1, 1)]), "dark", trolley, 0.03)
 M("trolleyBars", join([box(0.08, 0.08, RZ + 0.13, (x, -0.12, 0), 0.02) for x in (-0.6, 0.6)]), "steel", trolley, 0.02)
 for x in (-0.55, 0.55):
     for s in (-1, 1):
         M(f"trolleyWheel{x}_{s}", xf(lathe([(0.0, -0.05), (0.2, -0.05), (0.2, 0.05), (0.0, 0.05)], 10), (x, WY, s * RZ), (PI / 2, 0, 0)), "steel", trolley, 0.02)
         M(f"trolleyAxle{x}_{s}", B((x, WY, s * (RZ - 0.06)), (x, WY, s * (RZ + 0.13)), 0.04, 6, True), "dark", trolley, 0)
-SY_ = -0.42                          # the sheaves' axles (trolley frame)
+SY_ = -0.42                          # sheave axles (trolley frame)
 M("sheaveCheeks", join([box(0.5, 0.36, 0.03, (0, -0.42, s * (FALL + 0.12)), 0.02) for s in (-1, 1)]), "body", trolley, 0.03)
 for k, (dx, s) in enumerate(((-SR, -1), (SR, 1))):
     M(f"sheave{k}", xf(lathe([(0.0, -0.05), (SR, -0.05), (SR - 0.04, 0.0), (SR, 0.05), (0.0, 0.05)], 14), (dx, SY_, s * FALL), (PI / 2, 0, 0)), "dark", trolley, 0.02)
 M("sheaveAxles", join([B((dx, SY_, -(FALL + 0.16)), (dx, SY_, FALL + 0.16), 0.05, 6, True) for dx in (-SR, SR)]), "steel", trolley, 0)
-# the falls from the sheaves down to the rope pivot (the game stretches the rest)
+# falls from the sheaves to the rope pivot (the game stretches the rest)
 M("ropeStubs", join([B((0, SY_, s * FALL), (0, -0.71, s * FALL), 0.05, 4, True) for s in (-1, 1)]), "rope", trolley, 0.02)
 
-# the rope: two falls, one metre long, hanging from the trolley (the game stretches them to the hook)
+# rope: two 1 m falls from the trolley (the game stretches them to the hook)
 cable = PV("cable", (0, -0.7, 0), trolley, role="cable")
 M("ropes", join([B((0, 0, s * FALL), (0, -1.0, s * FALL), 0.05, 4, True) for s in (-1, 1)]), "rope", cable, 0.02)
 
-# the hook block (hook frame: the falls end at y = 0, where they leave the sheave). The sheave stands in the plane of the falls
-# (its axle along x), between two cheek plates; under it the crosshead, the swivel and the hook
+# hook block (hook frame: falls end at y = 0, at the sheave). Sheave in the plane of the falls (axle along x) between cheek
+# plates; under it crosshead, swivel, hook
 hook = PV("hook", (0, -0.7, 0), trolley, role="hook")
 M("hookSheave", xf(lathe([(0.0, -0.05), (SR, -0.05), (SR - 0.04, 0.0), (SR, 0.05), (0.0, 0.05)], 14), (0, 0, 0), (0, 0, PI / 2)), "dark", hook, 0.02)
-RC = FALL + 0.12                     # the cheek plates: round-topped about the axle, square below
+RC = FALL + 0.12                     # cheek plates: round-topped about the axle, square below
 cheek = [(RC * math.cos(math.radians(a)), RC * math.sin(math.radians(a))) for a in range(0, 181, 15)] + [(-RC, -0.62), (RC, -0.62)]
 M("hookCheeks", join([xf(extrude(cheek, 0.07, "x"), (s * 0.12, 0, 0)) for s in (-1, 1)]), "body", hook, 0.04)
 M("hookAxle", join([xf(lathe([(0.0, -0.05), (0.11, -0.05), (0.11, 0.05), (0.0, 0.05)], 10), (s * 0.18, 0, 0), (0, 0, PI / 2)) for s in (-1, 1)]), "steel", hook, 0.02)
 M("hookTie", join([box(0.12, 0.04, 0.05, (0, 0.38, 0))] + [box(0.12, 0.05, 0.05, (0, -0.48, s * 0.3)) for s in (-1, 1)]), "steel", hook, 0.02)
 rb("hookCrosshead", 0.2, 0.2, FALL + 0.12, (0, -0.8, 0), "body", hook, 0.04, e=0.1)
 M("hookSwivel", lathe([(0.0, -1.32), (0.16, -1.32), (0.18, -1.2), (0.18, -1.08), (0.12, -1.0), (0.0, -1.0)], 10), "steel", hook, 0.02)
-# the hook: the shank down from the swivel, the back bending out to -x, round the saddle (under the swivel) and up to the tip;
-# a sprung latch across the throat
-HC_ = (0.0, -1.88)                   # the bowl's middle
+# hook: shank down from the swivel, back bending out to -x, round the saddle (under the swivel) and up to the tip; a
+# sprung latch across the throat
+HC_ = (0.0, -1.88)                   # bowl middle
 HR = 0.24
 path = [(0.0, -1.3), (0.0, -1.48), (-0.09, -1.6)]
 rad = [0.085, 0.09, 0.1]
@@ -491,17 +479,16 @@ for k in range(12):
 M("hookIron", tube([(x, y, 0) for x, y in path], rad, 8, True), "dark", hook, 0.03)
 tip = path[-1]
 M("hookLatch", B((0.07, -1.47, 0), (tip[0] - 0.02, tip[1] + 0.04, 0), 0.025, 4, True), "body", hook, 0)
-SADDLE = (0.0, HC_[1] - HR + 0.1)   # where the sling eyes sit in the bowl
+SADDLE = (0.0, HC_[1] - HR + 0.1)   # sling eyes sit here in the bowl
 
-# ---- the load: the Prospector's cargo container (faction-coloured corrugated steel, corner castings, roof rails, barred rear doors,
-# a branding plate and the container number on each flank), hung from its spreader (spreader.py) by four bridle slings. Built in the
-# container's own frame (long axis z, deck level 0, box centre at y 3.3, as in build_landtrain.py), then the pivot is turned a
-# quarter so it lies along the jib.
+# ---- load: the Prospector's cargo container (faction-coloured corrugated steel, castings, roof rails, barred doors, plate
+# and number on each flank) hung from its spreader (spreader.py) by four bridle slings. Built in the container's frame (long
+# axis z, deck at 0, box centre y 3.3, as build_landtrain.py), the pivot turned a quarter to lie along the jib.
 LOAD_Y = -10.55
-LOAD_DROP = -(LOAD_Y + 1.9)          # hook origin to the container's bottom: 8.65
+LOAD_DROP = -(LOAD_Y + 1.9)          # hook origin to container bottom: 8.65
 load = PV("load", (0, LOAD_Y, 0), hook, role="load")
-load.rotation_euler = (0, 0, PI / 2)  # (three.js: a quarter turn about y)
-LB = (1.55, 1.4, 3.62)               # the box's half extents
+load.rotation_euler = (0, 0, PI / 2)  # three.js: a quarter turn about y
+LB = (1.55, 1.4, 3.62)               # box half extents
 
 
 def rbj(items, e=0.3, nu=6, nv=4):
@@ -513,20 +500,19 @@ M("ribs", rbj([(0.035, 1.28, 0.055, (sx * 1.57, 3.3, -3.3 + k * 0.388)) for sx i
 M("roofRibs", rbj([(1.42, 0.03, 0.06, (0, 4.72, -3.2 + k * 0.7)) for k in range(10)], nu=4, nv=2), "load", load, 0.02)
 M("roofRails", rbj([(0.08, 0.06, 3.62, (sx * 1.52, 4.74, 0)) for sx in (-1, 1)], e=0.2), "dark", load, 0.03)
 M("castings", rbj([(0.2, 0.17, 0.22, (sx * 1.5, y, sz * 3.55)) for sx in (-1, 1) for sz in (-1, 1) for y in (1.95, 4.62)], e=0.2), "dark", load, 0.03)
-# the doors at both ends (decals.py container_doors): joined into one mesh per end, slot and outline, like the rest of the load
+# doors at both ends (decals.py container_doors): one mesh per end, slot and outline
 doors = {}
 for name, geo, slot, ink in container_doors("load"):
-    doors.setdefault((name[4], slot, ink), []).append(geo)       # (name[4]: the end, F or R)
+    doors.setdefault((name[4], slot, ink), []).append(geo)       # name[4]: the end, F or R
 for (e, slot, ink), geos in sorted(doors.items()):
     M(f"doors{e}_{slot}_{round(ink * 1000)}", join(geos), slot, load, ink)
 for sx in (-1, 1):
     rb(f"plate{sx}", 0.04, CARGO_PLATE_HALF[1], CARGO_PLATE_HALF[0], (sx * 1.64, CARGO_PLATE_Y, 0.0), "dark", load, 0.03, e=0.08)
 
-# the spreader (spreader.py) on the top castings (their tops at 4.79)
+# spreader (spreader.py) on the top castings (tops at 4.79)
 PIN = spreader("crane_", load, 4.79)
 
-# the four bridle slings from the hook's saddle to the spreader's pad-eye pins (in the hook's frame the container's z runs along x,
-# and x along -z)
+# four bridle slings, hook saddle to the spreader's pad-eye pins (in the hook frame the container's z runs along x, x along -z)
 M("slings", join([B((SADDLE[0], SADDLE[1], 0), (sz * SPR_Z, LOAD_Y + PIN, -sx * SPR_X), 0.04, 4, True) for sx in (-1, 1) for sz in (-1, 1)]), "dark", hook, 0)
 
 

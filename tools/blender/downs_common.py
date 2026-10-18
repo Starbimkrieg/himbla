@@ -1,10 +1,12 @@
-# Shared set-up for the Chimera Downs builders (build_downs_*.py): the palette, the accumulator that merges a model's boxes and cylinders per slot, and the export.
-# Each builder sets DOWNS_OUT (the file name under src/assets) and DOWNS_COLL, then execs this file into its own globals:
+# Shared set-up for the Chimera Downs builders (build_downs_*.py): palette, a per-slot accumulator that merges a model's
+# primitives, and the export. Each builder sets DOWNS_OUT (file name under src/assets) and DOWNS_COLL, then execs this:
 #   DOWNS_OUT = "downs-stand.glb"; DOWNS_COLL = "MoonDownsStand"
 #   exec(open(os.path.join(REPO, "tools", "blender", "downs_common.py"), encoding="utf-8").read(), globals())
-# Authored in three.js axes (x right, y up, +z front), each model standing on y = 0 with its origin on the ground, one material per mesh named after a slot (DOWNS_TOON /
-# DOWNS_GLOW in src/models.js; the glow slots are lit), `ink` the outline shell's thickness in metres. The palette is the Downs' own (docs/downs-layouts.md):
-#   Gold Gleam cfb352, Saddle Brown b07c57, Black 3b393a, Money 7b9a6e, Barn Red 8b4044, Touch of Mint f8fff8 (and a darker tint of each for shading)
+# Env: MOONRUNNER_REPO (checkout), DOWNS_OUT (full output path override), MOONRUNNER_EXPORT=0 (build without exporting).
+# three.js axes (x right, y up, +z front), each model on y = 0 with its origin on the ground; one material per mesh named
+# after a slot (DOWNS_TOON / DOWNS_GLOW in src/models.js; glow slots are lit); `ink` = outline thickness in metres.
+# Palette (docs/downs-layouts.md), plus a darker tint of each for shading:
+#   Gold Gleam cfb352, Saddle Brown b07c57, Black 3b393a, Money 7b9a6e, Barn Red 8b4044, Touch of Mint f8fff8
 import bpy, bmesh, math, os
 
 
@@ -85,9 +87,9 @@ class Acc:
         self.geos.append(xf(extrude(pts, x1 - x0, "x"), ((x0 + x1) / 2, 0, 0))); return self
 
     def polyy(self, pts, y0, y1, t=(0, 0, 0), rot=(0, 0, 0)):
-        """a flat outline [(x, z)] extruded upward from y0 to y1 (a floor, a roof deck); `t` and `rot` move it afterwards"""
+        """a flat outline [(x, z)] extruded up from y0 to y1 (a floor, a roof deck); `t` and `rot` move it afterwards"""
         area = sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts)))
-        if area > 0:                                                                        # (it needs to run clockwise on the x-right, z-up plan to face its cap up)
+        if area > 0:                                                                        # clockwise on the x-right, z-up plan so the cap faces up
             pts = pts[::-1]
         self.geos.append(xf(extrude(pts, y1 - y0, "y"), (t[0], t[1] + (y0 + y1) / 2, t[2]), rot)); return self
 
@@ -99,7 +101,8 @@ class Acc:
         self.geos.append(xf(geo[:2], t, rot, s)); return self
 
     def letters(self, text, cx, cy, z, pix, depth, ry=0.0):
-        """raised lettering: `text` in the 5 x 7 pixel font, each pixel a box `pix` square and `depth` deep standing on the plane z (+z faces out; ry = pi for a -z face), the text centred on (cx, cy)"""
+        """raised 5 x 7 pixel lettering, each pixel a box `pix` square and `depth` deep on the plane z (+z face; ry = pi for
+        a -z face), centred on (cx, cy)"""
         px, w = letter_pixels(text)
         for c, r in px:
             x = (c - (w - 1) / 2) * pix * (1 if ry == 0 else -1)
@@ -107,18 +110,18 @@ class Acc:
         return self
 
     def letters_x(self, text, x, cy, cz, pix, depth, face=1):
-        """raised lettering on a plane x = const, facing +x (face = 1) or -x (face = -1), read from outside: the text centred on (cy, cz)"""
+        """raised lettering on a plane x = const facing +x (face = 1) or -x (-1), read from outside, centred on (cy, cz)"""
         px, w = letter_pixels(text)
         for c, r in px:
-            u = (c - (w - 1) / 2) * pix * -face                  # (facing +x, the viewer's right is -z)
+            u = (c - (w - 1) / 2) * pix * -face                  # facing +x, the viewer's right is -z
             self.boxc(x + face * depth / 2, cy + (3 - r) * pix, cz + u, depth, pix * 1.03, pix * 1.03)
         return self
 
     def letters_arc(self, text, yc, rm, pix, z, depth):
-        """the same set along an arc round (0, yc) at radius rm, the tops of the letters outward, the text centred on the crown, on the plane z (+z face)"""
+        """lettering along an arc round (0, yc) at radius rm, tops outward, centred on the crown, on the plane z (+z face)"""
         px, w = letter_pixels(text)
         for c, r in px:
-            u = (c - (w - 1) / 2) * pix                      # arc length from the crown, + to the right
+            u = (c - (w - 1) / 2) * pix                      # arc length from the crown, + right
             th = u / rm
             rad = rm + (3 - r) * pix
             self.boxc(rad * math.sin(th), yc + rad * math.cos(th), z + depth / 2, pix * 1.03, pix * 1.03, depth, rot=(0, 0, -th))
@@ -130,7 +133,7 @@ class Acc:
         self.geos = []
 
 
-# A 5 x 7 pixel font for raised lettering (signs are built from boxes, not painted: Acc.letters). Rows top to bottom, 1 = a pixel.
+# 5 x 7 pixel font for raised lettering (signs are boxes, not paint: Acc.letters). Rows top to bottom, 1 = a pixel.
 FONT5 = {
     "A": "01110 10001 10001 11111 10001 10001 10001", "B": "11110 10001 10001 11110 10001 10001 11110", "C": "01110 10001 10000 10000 10000 10001 01110",
     "D": "11110 10001 10001 10001 10001 10001 11110", "E": "11111 10000 10000 11110 10000 10000 11111", "F": "11111 10000 10000 11110 10000 10000 10000",
@@ -149,7 +152,7 @@ FONT5 = {
 
 
 def letter_pixels(text):
-    """(column, row) of every lit pixel of `text` in the 5 x 7 font, columns counted from the left (letters 6 apart), rows from the top; also the text's width in pixels"""
+    """(column, row) of each lit pixel of `text` (columns from the left, letters 6 apart; rows from the top), and the width in pixels"""
     px, col = [], 0
     for ch in text.upper():
         rows = FONT5[ch].split()
@@ -162,8 +165,9 @@ def letter_pixels(text):
 
 
 def hip(rt, rb, h):
-    """A four-sided frustum (a hip roof) with its sides parallel to the axes: cylinder() puts the corners there, and xf() scales before it turns, so a stretched one has to be turned FIRST
-    (turned after, a stretch shears it into a rhombus). Scale it with Acc.add(..., s=(sx, 1, sz)): its half-width at the foot is rb * 0.7071 * sx."""
+    """A four-sided frustum (hip roof) with sides parallel to the axes. cylinder() puts corners on the axes and xf() scales
+    before it turns, so it's turned FIRST (else a stretch shears it into a rhombus). Scale with Acc.add(..., s=(sx, 1, sz));
+    half-width at the foot is rb * 0.7071 * sx."""
     v, f = cylinder(rt, rb, h, 4)[:2]
     return xf((v, f), (0, 0, 0), (0, PI / 4, 0))
 
@@ -179,8 +183,8 @@ def parts(root, prefix, specs):
 
 
 def audit_flips(objs, min_faces=6):
-    """Primitives built inside-out. Every box, frustum, cylinder and prism of the kit is convex, so every face of one points away from its middle; a connected piece most of whose faces
-    point inward was built with its winding reversed (it shows only from inside, or not at all) or turned the wrong way. Reports (does not stop the build)."""
+    """Report inside-out primitives (doesn't stop the build). Kit primitives are convex, so a connected piece with most faces
+    pointing inward has reversed winding or a wrong turn (it shows only from inside, or not at all)."""
     import mathutils
     bad = []
     dg = bpy.context.evaluated_depsgraph_get()
@@ -210,7 +214,7 @@ def audit_flips(objs, min_faces=6):
             mid = sum((mw @ me.vertices[v].co for v in vs), mathutils.Vector()) / len(vs)
             inward = sum(1 for f in fs if (nm @ f.normal).dot(mw @ f.center - mid) < -1e-6)
             if inward > 0.85 * len(fs):
-                # (reported in three.js axes, like the builders write them)
+                # reported in three.js axes, as the builders write them
                 bad.append(f"{o.name}: {inward}/{len(fs)} faces point inward, piece at ({mid.x:.2f}, {mid.z:.2f}, {-mid.y:.2f})")
         o.evaluated_get(dg).to_mesh_clear()
     if bad:

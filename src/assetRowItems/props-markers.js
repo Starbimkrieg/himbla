@@ -16,16 +16,16 @@ import { Events } from '../events.js';
 import { World } from '../world.js';
 import { Traffic } from '../traffic.js';
 
-// 04 · PROPS & MARKERS: the small things the game scatters or plants (crates, pickups, event and mission props, the turrets and
-// dishes of the bases, the helper pieces of a settlement) and the light columns and rings that mark where to go.
+// 04 · PROPS & MARKERS: small things the game scatters or plants (crates, pickups, event and mission props, base turrets
+// and dishes, settlement pieces) and the light columns and rings that mark where to go.
 
 const FACTION_ORDER = ['spacecom', 'vostok', 'meridian', 'kepler', 'daedalus', 'rustmoon'];
 const fcol = (f) => hexOf(FACTIONS[f].color);
 
 // ---- crates (models.js makeCrate) ---------------------------------------------------------------
-// All 14 cargo colours the contracts use (locations.js CARGO + MIL_CARGO) at the usual 0.9 m, then the sizes the game uses:
-// 0.6 med-kit (events.js:677), 0.7 carried / on a pirate's back (player.js:110, enemies.js:1264), 1.2 a pirate's loot
-// (enemies.js:1386), 1.4 a dropped cargo (enemies.js:772), 1.6 supply pods and Kade's mortar crate.
+// All 14 contract cargo colours (locations.js CARGO + MIL_CARGO) at the usual 0.9 m, then the game's other sizes:
+// 0.6 med-kit (events.js:677), 0.7 carried / on a pirate's back (player.js:110, enemies.js:1264), 1.2 pirate loot
+// (enemies.js:1386), 1.4 dropped cargo (enemies.js:772), 1.6 supply pods and Kade's mortar crate.
 function crates() {
   const parts = [];
   for (const c of [...CARGO, ...MIL_CARGO]) parts.push(seat(makeCrate(c.color, 0.9)));
@@ -40,7 +40,7 @@ function loot() {
   const spin = [];
   const parts = kinds.map(([k, o]) => {
     const L = makeLoot(k, o || {});
-    L.root.position.y = 0.9; // (dropLoot lands them 0.9 m above the ground)
+    L.root.position.y = 0.9; // (dropLoot's height above the ground)
     spin.push(L.core);
     return { root: L.root, w: 2.4, d: 2.4 };
   });
@@ -51,12 +51,12 @@ function loot() {
   };
 }
 
-// ---- wreck salvage: the engine and the credits briefcase (models.js engineModel / caseModel; tools/blender/build_engine.py, build_briefcase.py) ----
-// In the game they lie on the ground as pickups, spinning and bobbing (alchemy.js makeLoot: they are also in LOOT PICKUPS above, small among the
-// others). Here each stands on the floor at its real size and turns slowly, so every side can be seen.
+// ---- wreck salvage: engine and credits briefcase (models.js engineModel / caseModel; tools/blender/build_engine.py, build_briefcase.py) ----
+// In game they are spinning pickups (alchemy.js makeLoot; also in LOOT PICKUPS above). Here each stands at real size
+// and turns slowly to show every side.
 function salvage(build, what) {
   const m = build();
-  if (!m) throw new Error(`${what} has not loaded`); // (null until the models have loaded)
+  if (!m) throw new Error(`${what} has not loaded`); // (null until the models load)
   const p = seat(m);
   const root = new THREE.Group();
   root.add(p.root);
@@ -65,17 +65,16 @@ function salvage(build, what) {
 const engine = () => salvage(engineModel, 'engine.glb');
 const briefcase = () => salvage(caseModel, 'briefcase.glb');
 
-// ---- the casino's slot machines (casinoWorld.js slotCabinet; the cabinet is tools/blender/build_slots.py) --------------------------------
-// The seven paints of the carousels (buildCasino), each with its own marquee word and side pictures (the marquee and the pixel sprites are
-// planes the casino hangs on the model), facing the walker. Every few seconds one is worked: the lever swings, the lamp bar flashes and the
-// reels run and stop one after another (updateSlot).
+// ---- casino slot machines (casinoWorld.js slotCabinet; cabinet: tools/blender/build_slots.py) --------------------------------
+// The carousels' seven paints (buildCasino), each with its marquee word and side pictures (planes hung on the model), facing
+// the walker. Every few seconds one plays: lever swings, lamp bar flashes, reels run and stop in turn (updateSlot).
 function slotMachines() {
   const paints = [0xff2e88, 0x2ee6ff, 0x7dff6a, 0xff9f1c, 0xc77dff, 0xffd23f, 0x4d7cff];
   const users = [];
   const parts = paints.map((c, i) => {
     const cab = slotCabinet(c, i);
     const g = new THREE.Group();
-    g.add(cab.userData.stat, cab); // (the casino places the frozen part and the moving part alike)
+    g.add(cab.userData.stat, cab); // (frozen and moving parts placed alike, as the casino does)
     users.push(cab.userData);
     return seat(g);
   });
@@ -91,15 +90,15 @@ function slotMachines() {
   };
 }
 
-// ---- the Plinko booth and the board's cabinet frame (models.js plinkoConsoleModel / plinkoFrameModel; tools/blender/build_plinko.py) ------
-// As buildCasino stands them: the frame (a plinth, two pillars, a cornice and the sign backing) with the board's dark panel in it, and the
-// booth you play from 6 m in front. The pegs, the ball, the slot labels and the neon sign are built inline in buildCasino and are seen with
-// the casino itself (places: LUCKY CRATER CASINO); the board's own colliders are the casino's (a box for the frame, one for the booth).
+// ---- Plinko booth and board frame (models.js plinkoConsoleModel / plinkoFrameModel; tools/blender/build_plinko.py) ------
+// As buildCasino stands them: the frame (plinth, two pillars, cornice, sign backing) with the board's dark panel, and the
+// booth 6 m in front. Pegs, ball, slot labels and neon sign are built in buildCasino (see places: LUCKY CRATER CASINO);
+// colliders are the casino's (one box for the frame, one for the booth).
 function plinko() {
   const frame = plinkoFrameModel(), booth = plinkoConsoleModel();
   if (!frame || !booth) throw new Error('plinko.glb has not loaded');
   const bw = SLOTS * SPACING + 2.4, bh = DROP_Y + 2.4;
-  const z0 = -2.2; // (the frame's origin: puts the middle of frame and booth on the item's own)
+  const z0 = -2.2; // (frame origin: centres frame + booth on the item)
   const root = new THREE.Group();
   frame.position.set(0, 0, z0);
   booth.position.set(0, 0, z0 + 6);
@@ -127,15 +126,15 @@ function tubes() {
   const parts = [], fluids = [];
   for (const fill of [0.02, 0.4, 0.75, 1]) {
     const m = makeTube();
-    m.fluid.scale.y = fill; // (events.js update_blackLake: the level it has filled to)
+    m.fluid.scale.y = fill; // (fill level, as events.js update_blackLake)
     fluids.push(m.fluid);
     parts.push(seat(m.root));
   }
   return { root: lineUp(parts, 0.8).root };
 }
 
-// The prop you walk up to to begin an event: Events.startProp reads only the faction table and the toon helpers, so it is called
-// on a bare object. One of each of the nine types, tinted by the faction that posts it.
+// The prop that begins an event: Events.startProp reads only the faction table and toon helpers, so it runs on a bare
+// object. One of each of the nine types, tinted by the posting faction.
 const START_TYPES = [
   ['seismic', 'meridian'], ['blackLake', 'spacecom'], ['escort', 'kepler'], ['pods', 'kepler'], ['relay', 'spacecom'],
   ['strike', 'vostok'], ['raid', 'rustmoon'], ['wreck', 'rustmoon'], ['clearCamp', 'daedalus'],
@@ -156,7 +155,7 @@ const STORY_KINDS = ['sensor', 'ballot', 'jammer', 'charge', 'relay', 'homegen',
 function storyProps() {
   const parts = STORY_KINDS.map((k) => {
     const o = makeProp(k);
-    if (k === 'node') o.position.y = 2.4; // (a flying ring: the mission hangs it 5+ m up; here just off the ground)
+    if (k === 'node') o.position.y = 2.4; // (flying ring: 5+ m up in the mission, just off the ground here)
     return seat(o, { lift: k !== 'node', y: k === 'node' ? 0.4 : 0 });
   });
   const root = lineUp(parts, 3).root;
@@ -173,7 +172,7 @@ function launchComplex() {
   return { root, update: animate(root), cols };
 }
 
-// ---- the bases' own props: pylon, dishes, turrets, rocket ------------------------------------------
+// ---- base props: pylon, dishes, turrets, rocket ------------------------------------------
 function signalPylon() {
   const m = makePylon();
   const p = seat(m.root);
@@ -203,7 +202,7 @@ function turrets() {
   return { root, update: (dt, t) => { hs.forEach((h, i) => { h.rotation.y = Math.sin(t * 0.7 + i * 2) * 1.2; }); } };
 }
 
-// The ILMB arrivals rocket (world.js updateRocket): it stands on its legs, then lifts off on its flame and comes back down.
+// The ILMB arrivals rocket (world.js updateRocket): stands, lifts off on its flame, comes back down.
 function rocket() {
   const r = makeRocket();
   const p = seat(r.root);
@@ -223,8 +222,8 @@ function rocket() {
 }
 
 // ---- settlement helpers (World.prototype pad / flag / lamp / tower / solarField / defensePylons, Traffic.prototype.shelter) ----
-// They only ever call put / curveR / col / toWorld / mount (and rand, blinkers for the tower, glow and pool materials for the rest) on
-// their World, so a bare stand-in with the real put and the real material helpers runs them as they are.
+// They only call put / curveR / col / toWorld / mount (plus rand, blinkers, glow and pool materials) on their World, so a
+// bare stand-in with the real put and material helpers runs them unchanged.
 function stubWorld() {
   const W = World.prototype, rr = mulberry32(9);
   return {
@@ -237,7 +236,7 @@ const stubLoc = (faction = 'meridian') => ({ group: new THREE.Group(), faction, 
 // (World.prototype.pad needs its own `this.put`; bound here)
 const padFn = (w, ...a) => World.prototype.pad.call(w, ...a);
 
-// the shuttle's pad (a 14.2 m deck: its ramp comes down inside the railing) and the freighter's (21 m), stairs toward you
+// shuttle pad (14.2 m deck: its ramp lands inside the railing) and freighter pad (21 m), stairs toward you
 function landingPads() {
   const w = stubWorld(), loc = stubLoc();
   let x = 0;
@@ -246,7 +245,7 @@ function landingPads() {
 }
 function rocketPad() {
   const w = stubWorld(), loc = stubLoc();
-  padFn(w, loc, 0, 0, 30, 0xff4f2e, false, { flat: true }); // world.js, the launch pad under the ILMB's rocket
+  padFn(w, loc, 0, 0, 30, 0xff4f2e, false, { flat: true }); // world.js, the ILMB rocket's launch pad
   return { root: seat(loc.group, { lift: false }).root };
 }
 
@@ -260,15 +259,15 @@ function furniture() {
   const w = stubWorld(), loc = stubLoc('vostok'), blinkers = w.blinkers;
   const items = [];
   const at = (fn) => { const l = stubLoc('vostok'); fn(l); l.group.updateMatrixWorld(true); items.push(seat(l.group)); };
-  at((l) => World.prototype.flag.call(w, l, 0, 0, [0xff3b5c, 0xffd23f, 0xff3b5c], 20)); // a Vostok base's flag (world.js:1572)
-  at((l) => World.prototype.flag.call(w, l, 0, 0, [0xc77dff, 0x111111, 0xc77dff], 20)); // a Daedalus one
-  at((l) => World.prototype.lamp.call(w, l, 0, 0, 0xfff1b0, 9, 20)); // a town's lamp (world.js:872)
-  at((l) => World.prototype.lamp.call(w, l, 0, 0, 0xff9f1c, 5, 14)); // a Rustmoon camp's
-  at((l) => World.prototype.tower.call(w, l, 0, 0, 30, 1.6, 0xe0e0e0, 0x6aff9e)); // the bio-lab's beacon tower (world.js:1558)
-  at((l) => World.prototype.defensePylons.call(w, l, [[0, 0]], 6)); // a free-standing settlement's gun pylon
+  at((l) => World.prototype.flag.call(w, l, 0, 0, [0xff3b5c, 0xffd23f, 0xff3b5c], 20)); // Vostok base flag (world.js:1572)
+  at((l) => World.prototype.flag.call(w, l, 0, 0, [0xc77dff, 0x111111, 0xc77dff], 20)); // Daedalus flag
+  at((l) => World.prototype.lamp.call(w, l, 0, 0, 0xfff1b0, 9, 20)); // town lamp (world.js:872)
+  at((l) => World.prototype.lamp.call(w, l, 0, 0, 0xff9f1c, 5, 14)); // Rustmoon camp lamp
+  at((l) => World.prototype.tower.call(w, l, 0, 0, 30, 1.6, 0xe0e0e0, 0x6aff9e)); // bio-lab beacon tower (world.js:1558)
+  at((l) => World.prototype.defensePylons.call(w, l, [[0, 0]], 6)); // free-standing settlement's gun pylon
   at((l) => {
     const traffic = { w: { put: World.prototype.put, curveR: World.prototype.curveR, col() {} }, groundY: () => 0 };
-    Traffic.prototype.shelter.call(traffic, l, 0, 0, 0, 'SHUTTLE > ILMB', 0xff9f1c); // a transit stop (traffic.js:421)
+    Traffic.prototype.shelter.call(traffic, l, 0, 0, 0, 'SHUTTLE > ILMB', 0xff9f1c); // transit stop (traffic.js:421)
   });
   const root = lineUp(items, 4).root;
   return {
@@ -282,8 +281,8 @@ function stretcher() {
   return { root: seat(m.root).root };
 }
 
-// What is left of a destroyed outpost with no wreck model of its own (territory.js, the rubble branch): ten broken blocks, and
-// the farm dome's ring of foundation
+// Remains of a destroyed outpost with no wreck model (territory.js rubble branch): ten broken blocks, plus the farm
+// dome's foundation ring
 function rubble() {
   const make = (seed, farm) => {
     const root = new THREE.Group();
@@ -309,7 +308,7 @@ function rubble() {
 // ---- markers ----
 const beamMat = (color, opacity, extra = {}) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, ...extra });
 
-// the objective's light column (story.js setMarker, line 677), in each faction's colour
+// objective light column (story.js setMarker, line 677) in each faction's colour
 function objectivePillars() {
   const parts = FACTION_ORDER.map((f) => {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 160, 10, 1, true).translate(0, 80, 0), beamMat(fcol(f), 0.3, { side: THREE.DoubleSide }));
@@ -318,7 +317,7 @@ function objectivePillars() {
   return { root: lineUp(parts, 6).root };
 }
 
-// an event's beacon with its sign (events.js marker, line 80)
+// event beacon with sign (events.js marker, line 80)
 function eventBeacons() {
   const parts = FACTION_ORDER.map((f) => {
     const g = new THREE.Group();
@@ -333,7 +332,7 @@ function eventBeacons() {
   return { root: lineUp(parts, 14).root };
 }
 
-// a dropped crate with its beam: pirates' cargo (enemies.js:772), Kade's mortar (kade.js:176), event pods (events.js:610)
+// dropped crate with beam: pirate cargo (enemies.js:772), Kade's mortar (kade.js:176), event pods (events.js:610)
 function cargoDrops() {
   const spec = [[0xffd23f, 1.4, 0x2ee6ff, 0.6, 120, 0.35], [0x7dff3a, 1.6, 0x7dff3a, 0.6, 120, 0.35], [0x2ec4ff, 1.6, 0x2ec4ff, 0.7, 90, 0.4], [0xff9f1c, 1.6, 0xff9f1c, 0.7, 90, 0.4]];
   const crates = [];
@@ -349,7 +348,7 @@ function cargoDrops() {
   return { root: row.root, update: (dt) => { for (const c of crates) c.rotation.y += dt * 1.2; } };
 }
 
-// the story leader's podium beacon: a faction ring and a soft column (story.js:395-420; the leader stands on the podium)
+// story leader's podium beacon: faction ring and soft column (story.js:395-420)
 function leaderBeacons() {
   const parts = FACTION_ORDER.slice(0, 5).map((f) => {
     const fc = fcol(f);
@@ -369,7 +368,7 @@ function leaderBeacons() {
   return { root: lineUp(parts, 4).root };
 }
 
-// the Daedalus phase-field experiment area (story.js:1448): a glowing ring 80 m across, lying on the ground
+// Daedalus phase-field experiment area (story.js:1448): glowing ground ring 80 m across
 function phaseRing() {
   const ring = new THREE.Mesh(new THREE.TorusGeometry(40, 0.6, 6, 64), glow(0xc77dff));
   ring.rotation.x = Math.PI / 2;
@@ -377,7 +376,7 @@ function phaseRing() {
   return { root: seat(ring, { lift: false }).root };
 }
 
-// a survey site's ground ring (story.js siteRing, line 1548; flat ground, so every vertex at y = 0.5)
+// survey site ground ring (story.js siteRing, line 1548; flat ground, so every vertex at y = 0.5)
 function surveyRing() {
   const r = 40, N = 96, HW = 1.25;
   const P = [], idx = [];
@@ -395,7 +394,7 @@ function surveyRing() {
   return { root: seat(mesh, { lift: false }).root };
 }
 
-// the zone walls: a red banded curtain round a hostile town's defence ring (enemies.js:170) and round a restricted base (world.js:1600)
+// zone walls: red banded curtain round a hostile town's defence ring (enemies.js:170) or a restricted base (world.js:1600)
 function zoneWall(R, height, y, hostile) {
   return () => {
     const mat = new THREE.ShaderMaterial({
@@ -418,8 +417,9 @@ function zoneWall(R, height, y, hostile) {
   };
 }
 
-// ---- the casino's lamp posts, fountain, chandelier and signs (casino.glb, tools/blender/build_casino.py): the boulevard's lamp post in pink and cyan and
-// the plaza's scaled-down one, the plaza fountain twice (the casino's with the chip, the Meridian Exchange's with the dollar sign; they turn, the water runs), a hall chandelier (hung 3.6 m up, turning) and the welcome and blackjack signs ----
+// ---- casino lamp posts, fountains, chandelier, signs (casino.glb, tools/blender/build_casino.py): boulevard lamp post in pink
+// and cyan plus the plaza's scaled-down one, the fountain twice (casino's chip top, Meridian Exchange's dollar sign; turning,
+// water running), a hall chandelier (3.6 m up, turning), the welcome and blackjack signs ----
 function casinoProps() {
   const parts = [], movers = [];
   const scaled = (g, k) => { const w = new THREE.Group(); g.scale.setScalar(k); w.add(g); return w; };
@@ -441,16 +441,17 @@ function casinoProps() {
   return { root: lineUp(parts, 3).root, update: (dt, t) => { for (const f of movers) f(dt, t); } };
 }
 
-// ---- the casino's blackjack table with its felt and stool (blackjack.glb, tools/blender/build_blackjack.py; casinoWorld.js blackjackTable) and the chip in the
-// seven stakes (makeChipStack), stacked five high ----
+// ---- casino blackjack table with felt and stool (blackjack.glb, tools/blender/build_blackjack.py; casinoWorld.js
+// blackjackTable), and chips in the seven stakes (makeChipStack), five high ----
 function blackjack() {
   const chips = new THREE.Group();
   [0xfff4e0, 0xff2a4a, 0x2ee6ff, 0x7dff6a, 0x16121f, 0xc77dff, 0xffd23f].forEach((c, i) => { const g = makeChipStack(c, 5); g.position.set(i * 0.5 - 1.5, 0, 0); chips.add(g); });
   return { root: lineUp([{ root: blackjackTable(), w: 8, d: 7 }, { root: chips, w: 3.4, d: 0.6 }], 3).root };
 }
 
-// ---- the casino's hall kit (hall.glb, tools/blender/build_hall.py; casinoWorld.js tiles it round the plan): the four wall bays (spade, heart, diamond, club) and the filler, a coffer tile
-// (hung 7 m up), the floor medallion, the Chip Bar (its chip turns), a lounge banquette with its table, the doors' frame, the four facade panels and the roof's crown ----
+// ---- casino hall kit (hall.glb, tools/blender/build_hall.py; casinoWorld.js tiles it round the plan): four wall bays
+// (spade, heart, diamond, club) and filler, coffer tile (7 m up), floor medallion, Chip Bar (chip turns), lounge banquette
+// with table, door frame, four facade panels, roof crown ----
 function casinoHall() {
   const movers = [];
   const part = (name, w, d, f) => { const o = makeHallPart(name); if (f) f(o); const g = new THREE.Group(); g.add(o); return { root: g, w, d }; };
@@ -472,7 +473,8 @@ function casinoHall() {
   return { root: lineUp(parts, 3).root, update: (dt) => { for (const f of movers) f(dt); } };
 }
 
-// ---- the casino's forecourt kit (lot.glb, tools/blender/build_lot.py; settlements.js dressCasinoLot, docs/casino-forecourt.md): a run of the card wall between its posts, a walkway chip bollard, the P pylon and a bay stud ----
+// ---- casino forecourt kit (lot.glb, tools/blender/build_lot.py; settlements.js dressCasinoLot, docs/casino-forecourt.md):
+// card wall run between posts, walkway chip bollard, P pylon, bay stud ----
 function casinoLot() {
   const part = (name, w, d, f) => { const o = makeLotPart(name); if (f) f(o); const g = new THREE.Group(); g.add(o); return { root: g, w, d }; };
   const wall = new THREE.Group();
@@ -483,8 +485,9 @@ function casinoLot() {
   return { root: lineUp(parts, 2).root };
 }
 
-// ---- the casino's zero-g claw (claw.glb, tools/blender/build_claw.py; clawSim.js and clawView.js run it): the machine with its marquee and screen lit and a tank of things drifting
-// about in it while the claw cruises over them (nobody plays: no beam), then every kind of thing in the tank at the size it floats, the six crate tints, and the claw ----
+// ---- casino zero-g claw (claw.glb, tools/blender/build_claw.py; run by clawSim.js and clawView.js): the machine, marquee
+// and screen lit, things drifting in the tank while the claw cruises over them (no beam); then every tank kind at float
+// size, the six crate tints, and the claw ----
 function clawMachine() {
   const cm = makeClawMachine(), root = new THREE.Group(), sim = new ClawSim(2077), view = new ClawView(cm.spots);
   root.add(cm.stat, view.group);
@@ -499,7 +502,7 @@ function clawMachine() {
   board(cm.spots.screen, 512, 150, (x, w, h) => { x.fillStyle = '#05030c'; x.fillRect(0, 0, w, h); x.fillStyle = '#ffd23f'; x.font = FONT(40); x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('₵200', w / 2, h * 0.32); x.fillStyle = '#fff4e0'; x.fillText('INSERT', w / 2, h * 0.72); });
   const clamp = (v) => Math.max(-1, Math.min(1, v));
   view.sync(sim, 0.016);
-  const mid = new THREE.Group();   // (the machine's origin is the middle of its back wall: stand it in the middle of its footprint)
+  const mid = new THREE.Group();   // (machine origin is mid back wall: centre it on its footprint)
   mid.add(root);
   root.position.z = -2.7;
   return {
@@ -536,8 +539,8 @@ function clawThings() {
   return { root: lineUp(parts, 0.5).root };
 }
 
-// ---- the casino's Duck Derby (duck.glb, tools/blender/build_duck.py): the whole track as the hall has it, with the water, lane numbers, banner, odds board and kiosk screen
-// painted on, the four racers at the gate (their number discs on their wings), the front rail along the near side ----
+// ---- casino Duck Derby (duck.glb, tools/blender/build_duck.py): the whole track as in the hall, with water, lane numbers,
+// banner, odds board and kiosk screen painted on, four racers at the gate (number discs on wings), front rail ----
 function duckDerby() {
   const root = new THREE.Group(), PI = Math.PI;
   const at = (o, x, y, z, ry = 0) => { o.position.set(x, y, z); o.rotation.y = ry; root.add(o); return o; };
@@ -552,7 +555,7 @@ function duckDerby() {
   });
   const fl = trough.getObjectByName('finishLine');
   flat(new THREE.PlaneGeometry(fl.userData.w, fl.userData.h), new THREE.MeshBasicMaterial({ map: finishTex() }), fl.position);
-  const gx = DUCK.x0 - 0.9 - (DUCK.x0 + DUCK.x1) / 2, fx = DUCK.x1 - (DUCK.x0 + DUCK.x1) / 2;   // (the gate and the finish, in the track's own frame)
+  const gx = DUCK.x0 - 0.9 - (DUCK.x0 + DUCK.x1) / 2, fx = DUCK.x1 - (DUCK.x0 + DUCK.x1) / 2;   // (gate and finish, in the track's frame)
   at(makeDerbyPart('dd_gate'), gx, 0, 0);
   at(makeDerbyPart('dd_grille'), gx, 3.4, 0);
   const arch = at(makeDerbyPart('dd_finish'), fx, 0, 0);

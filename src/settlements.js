@@ -1,4 +1,4 @@
-import { FRONT_OUT, HALL } from './casinoPlan.js'; // casino: where the hall's doors' wall ends and the forecourt starts
+import { FRONT_OUT, HALL } from './casinoPlan.js'; // casino: where the hall's door wall ends and the forecourt starts
 import * as THREE from 'three';
 import { Kit, T, G, D, GLASS, BEAM, prism, sandbags, container, crate, tank, lightString, junkHeap, PALETTE } from './outpostModels.js';
 import { FACTIONS } from './locations.js';
@@ -10,30 +10,29 @@ import { casinoNode, casinoSlot, lotNode, lotSlot } from './models.js';
 import { waterMesh } from './fountainFx.js';
 import { craneModel, craneSlot, CRANE_H, CRANE_LOAD_DROP, CRANE_TROLLEY_MIN, CRANE_TROLLEY_SPAN, gantryModel, cargoSlot, GANTRY_TROLLEY_SPAN, CARGO_BOX, garageModel, garageSlot, dishModel, dishSlot, DISH_KINDS } from './models.js';
 
-// Settlements, HQs and landmarks built with the outpost Kit (outpostModels.js): every static part
-// of a place bakes into one merged mesh per material plus one ink hull, so a detailed settlement
-// still costs a handful of draw calls. Moving parts (cranes, wheels, tickers, rides) are separate
-// objects tagged with userData.tick / spin / blink / flag, which World.update animates while the
-// settlement is active. Colliders are registered in the settlement's local frame.
+// Settlements, HQs and landmarks built with the outpost Kit (outpostModels.js): static parts bake into one merged mesh per
+// material plus one ink hull, so a detailed place costs a handful of draw calls. Moving parts (cranes, wheels, tickers, rides)
+// are separate objects tagged userData.tick / spin / blink / flag, animated by World.update while the place is active.
+// Colliders are in the settlement's local frame.
 const { STEEL, DARK, LIGHT, CREAM, CONC, YEL, RUST, TYRE, CHAR } = PALETTE;
 const WHITE = 0xfff4e0, PANEL = 0x5b5870, ROOF = 0x3a3550, WARM = 0xfff6a8;
 const TAU = Math.PI * 2;
 const hex = (c) => new THREE.Color(c).getHex();
 
-// Build one settlement: fn(k, ctx) draws into a Kit in the settlement's own frame; the result is
-// placed, its colliders registered and its moving parts handed to the world's animator.
+// Build one settlement: fn(k, ctx) draws into a Kit in its local frame; the result is placed, colliders registered and
+// moving parts handed to the world's animator.
 export function settle(world, loc, seed, fn) {
   const fc = hex((FACTIONS[loc.faction] || FACTIONS.spacecom).color || 0xffd23f);
   const k = new Kit(fc, seed, false);
-  k.onGround = true; // (a settlement's own dressing: toon.dropFloorFaces)
-  k.curveR = world.curveR ? world.curveR(loc) : 0; // (a curved place is drawn flat and bent onto its sphere: curve.js)
+  k.onGround = true; // settlement dressing (toon.dropFloorFaces)
+  k.curveR = world.curveR ? world.curveR(loc) : 0; // curved places are drawn flat and bent onto their sphere (curve.js)
   const ctx = { world, loc, k, fc, rr: k.rr, moving: [] };
   fn(k, ctx);
   k.at();
   const t = k.finish();
-  if (globalThis.__kitTags) loc._kitCols = t.cols; // (the dev audit looks at the colliders a place was built with)
+  if (globalThis.__kitTags) loc._kitCols = t.cols; // for the dev collider audit
   world.put(t.root, loc, 0, 0, 0, 0, true);
-  t.root.userData.kitRoot = true; // (it never moves; only its tagged moving parts do)
+  t.root.userData.kitRoot = true; // static; only tagged parts move
   for (const c of t.cols) world.col(loc, c);
   const list = [];
   t.root.traverse((o) => { const u = o.userData; if (u.tick || u.spin || u.blink || u.flag) list.push(o); });
@@ -41,7 +40,7 @@ export function settle(world, loc, seed, fn) {
   return t;
 }
 
-// A moving piece built from its own small Kit (merged meshes + ink), returned as a Group.
+// a moving piece from its own small Kit (merged meshes + ink), as a Group
 export function part(color, fn, seed = 1) {
   const k = new Kit(color, seed, false);
   fn(k);
@@ -52,37 +51,30 @@ export function part(color, fn, seed = 1) {
 // shared structures (each sets its own frame with k.at and leaves k at the origin)
 // ---------------------------------------------------------------------------------------------
 
-// Hab dome: a pressurised shell on a concrete ring footing, banked with a regolith berm (its
-// radiation cover), which is cut and held back by retaining walls where the airlock goes through
-// (and at `gaps`, local yaws where something else docks into the shell). Over the shell, meridian
-// ribs and latitude rings run up to a compression ring at the crown, with bolted node plates on the
-// big ones, and some panels have been swapped for new or weathered ones. A band of hooded windows,
-// floodlights under the first ring, a maintenance ladder up one flank and a pair of service conduits
-// up the other. On top (r > 9) an observation cupola with an antenna, a small dish and vents. The
-// airlock: a ribbed tunnel out to a lock housing (hazard-striped frame, split doors with portholes,
-// cycle lights, keypad, floodlights) and a grated step with handrails, facing local yaw `door`.
-// With `yard`, a radiator rack and a power cabinet with gas bottles stand beside the airlock. A
-// glass dome shows a planted floor.
-// piled regolith, darker than the ground round it so it reads; with the regolith ground texture on it takes the ground's
-// grain and stones (moonSkins.js patchBermMaterial). One material for every berm, so a place's berms merge into one mesh.
+// Hab dome: a pressurised shell on a ring footing, banked with a regolith berm (radiation cover) cut by retaining walls at the
+// airlock and at `gaps` (local yaws where something docks). Meridian ribs and latitude rings up to a crown compression ring
+// (node plates on big domes), some swapped panels, hooded windows, floodlights, a ladder up one flank and conduits up the
+// other. Above r 9: a cupola with antenna, small dish and vents. The airlock (ribbed tunnel, lock housing, grated step) faces
+// local yaw `door`. `yard` adds a radiator rack, power cabinet and gas bottles. Glass domes show a planted floor.
+// Berm regolith: darker than the ground so it reads; on the regolith skin it takes the ground's grain and stones
+// (moonSkins.js patchBermMaterial). One shared material, so a place's berms merge into one mesh.
 const REGO = 0x6f6878;
 let bermMat = null;
 const BERM = () => (bermMat ||= patchBermMaterial(new THREE.MeshToonMaterial({ color: REGO, gradientMap: gradientMap() })));
 const angDiff = (p, q) => Math.atan2(Math.sin(p - q), Math.cos(p - q));
-// a smooth lumpiness along an arc (s: metres round it, t: 0 at the foot, 1 at the crest), about -1..1
+// smooth lumpiness along an arc (s: metres round, t: 0 foot to 1 crest), about -1..1
 function domeWobble(seed) {
   const p = [1, 2, 3, 4].map((i) => { const s = Math.sin(seed * 9.17 + i * 78.233) * 43758.5453; return (s - Math.floor(s)) * TAU; });
   return (s, t) => 0.5 * Math.sin(s * 0.8 + p[0] + t * 1.7) + 0.3 * Math.sin(s * 1.9 + p[1] - t * 2.9) + 0.35 * Math.sin(s * 4.1 + p[2] + t * 5.3) * Math.sin(s * 0.37 + p[3]);
 }
-// A berm segment: regolith piled from radius r0 at height h (against the shell) out to r1 on the
-// ground, between azimuths a0 and a1 (0 = +z): bulged and lumpy, calming to a straight slope at
-// each end where a retaining wall holds it.
+// Berm segment from radius r0 at height h (against the shell) to r1 on the ground, azimuths a0..a1 (0 = +z): lumpy,
+// straightening at each end where a retaining wall holds it.
 function bermGeo(r0, r1, h, a0, a1, seg, wob) {
   const n = Math.max(3, Math.round(((a1 - a0) / TAU) * seg * 2)), rows = 4, w = r1 - r0;
   const g = new THREE.CylinderGeometry(r0, r1, h, n, rows, true, a0, a1 - a0), p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
-    const u = (i % (n + 1)) / n, t = 1 - Math.floor(i / (n + 1)) / rows; // (rows run crest to foot)
-    if (t === 1) continue; // the crest stays tight against the shell
+    const u = (i % (n + 1)) / n, t = 1 - Math.floor(i / (n + 1)) / rows; // rows run crest to foot
+    if (t === 1) continue; // crest stays tight to the shell
     const s = (a0 + u * (a1 - a0)) * (r0 + r1) / 2;
     const end = Math.min(1, (Math.min(u, 1 - u) * (a1 - a0) * r1) / 2.5);
     const lump = wob(s, t) * end, rise = Math.sin(Math.PI * t);
@@ -93,7 +85,7 @@ function bermGeo(r0, r1, h, a0, a1, seg, wob) {
   g.computeVertexNormals();
   return g;
 }
-// a wall along local z, standing on y = 0: hIn tall at its -z end sloping to hOut at +z
+// wall along local z on y = 0: hIn tall at -z sloping to hOut at +z
 function wedge(th, hIn, hOut, len) {
   const g = new THREE.BoxGeometry(th, 1, len).translate(0, 0.5, 0), p = g.attributes.position;
   for (let i = 0; i < p.count; i++) if (p.getY(i) > 0.5) p.setY(i, p.getZ(i) < 0 ? hIn : hOut);
@@ -106,19 +98,18 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
   const seg = Math.max(24, Math.min(56, Math.round(r * 2)));
   const wob = domeWobble(x * 0.37 + z * 0.91 + r * 1.7);
   const hash = (i) => { const s = Math.sin(i * 12.9898 + x * 0.731 + z * 0.417 + r) * 43758.5453; return s - Math.floor(s); };
-  // the shell's centre stands on the footing at height C. on(): a point d out from the shell at
-  // azimuth a (from +z) and elevation el; face(): the turn standing a part's +z out of it there,
-  // its x along the shell sideways; pt(): the same point moved off sideways
+  // Shell centre at height C on the footing. on(): point d out from the shell at azimuth a (from +z), elevation el;
+  // face(): rotation pointing a part's +z out there, x along the shell; pt(): on() shifted sideways
   const C = 1.0;
   const on = (a, el, d = 0) => { const R = r + d; return [Math.sin(a) * Math.cos(el) * R, C + Math.sin(el) * R, Math.cos(a) * Math.cos(el) * R]; };
   const face = (a, el) => new THREE.Quaternion().setFromEuler(new THREE.Euler(-el, a, 0, 'YXZ'));
   const pt = (a, el, d, off) => { const p = on(a, el, d); return [p[0] + Math.cos(a) * off, p[1], p[2] - Math.sin(a) * off]; };
-  const ar = Math.min(2.6, 1.4 + r * 0.06), L = Math.min(5, 2 + r * 0.12), ay = ar + 0.2; // the airlock tunnel
-  const hw = ar * 1.35, hh = ar * 2.3, hz = r + L - 0.4, hd = 1.8; // its housing
+  const ar = Math.min(2.6, 1.4 + r * 0.06), L = Math.min(5, 2 + r * 0.12), ay = ar + 0.2; // airlock tunnel
+  const hw = ar * 1.35, hh = ar * 2.3, hz = r + L - 0.4, hd = 1.8; // lock housing
 
-  // the footing: a concrete ring wall the shell stands on
+  // footing: concrete ring wall
   k.cyl(r + 0.2, r + 0.45, C + 0.05, seg, T(CONC), 0, 0, 0, { outline: 0.08 });
-  // the berm, in segments between the cuts, a retaining wall at each end
+  // berm segments between the cuts, a retaining wall at each end
   const bh = Math.min(2.6, 0.9 + r * 0.05), bw = bh * 1.2 + 0.5;
   const rIn = bh > C ? Math.sqrt(r * r - (bh - C) ** 2) - 0.05 : r + 0.15;
   const cuts = [[0, ar + 1.1], ...gaps.map((a) => [a, 4.2])]
@@ -135,15 +126,14 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
   // the shell
   const shell = glass ? GLASS(color, 0.28) : T(color);
   k.add(new THREE.SphereGeometry(r, seg, Math.max(8, Math.round(seg / 3)), 0, TAU, 0, Math.PI / 2), shell, 0, C, 0, { outline: glass ? 0 : Math.min(0.3, 0.1 + r * 0.008) });
-  // the frame: M meridian ribs (none over the airlock) up to the compression ring at the crown,
-  // latitude rings, and a painted band just over the berm
+  // frame: M meridian ribs (none over the airlock) to the crown ring, latitude rings, a painted band above the berm
   const M = glass ? (r < 12 ? 12 : 16) : r < 8 ? 8 : r < 18 ? 12 : r < 40 ? 16 : 24;
   const ribT = Math.max(0.12, r * 0.012);
   const crown = Math.acos(0.24);
   const rings = glass ? [0.26, 0.52, 0.8, 1.06] : r < 8 ? [0.62] : r < 20 ? [0.42, 0.86] : [0.34, 0.66, 0.98];
   const ribA = (i) => ((i + 0.5) / M) * TAU;
   for (let i = 0; i < M; i++) k.add(new THREE.TorusGeometry(r + ribT * 0.4, ribT, 4, Math.max(6, Math.round(seg * 0.25)), crown), T(WHITE), 0, C, 0, { ry: ribA(i) - Math.PI / 2, outline: 0 });
-  // (rings as fine as the shell's own facets, no finer: Kit.ring's would be five a metre round)
+  // rings no finer than the shell's facets (Kit.ring uses five segments a metre)
   const ring = (rad, tube, mat, y, outline = 0) => k.add(new THREE.TorusGeometry(rad, tube, 4, Math.min(seg, Math.max(12, Math.round(rad * 5)))).rotateX(Math.PI / 2), mat, 0, y, 0, { outline });
   for (const el of rings) ring(r * Math.cos(el) + ribT * 0.3, ribT * 0.9, T(WHITE), C + r * Math.sin(el));
   ring(r * Math.cos(crown) + ribT * 0.3, ribT * 1.6, T(WHITE), C + r * Math.sin(crown), 0.04);
@@ -153,8 +143,7 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
     const [px, py, pz] = on(ribA(i), el, ribT * 0.9);
     k.add(new THREE.BoxGeometry(ribT * 3.2, ribT * 3.2, ribT * 0.8), T(LIGHT), px, py, pz, { q: face(ribA(i), el), outline: 0 });
   }
-  // swapped panels above the window band: some newer and paler, some weathered darker (each a
-  // patch of sphere finer than the shell's own facets, so it never dips under them)
+  // swapped panels above the windows, paler or darker (sphere patches finer than the shell's facets, so they never dip under)
   if (!glass) {
     const edges = [...rings, crown], cA = new THREE.Color(color);
     const tints = [hex(cA.clone().lerp(new THREE.Color(WHITE), 0.3)), hex(cA.clone().lerp(new THREE.Color(DARK), 0.2))];
@@ -169,12 +158,11 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
       k.add(new THREE.SphereGeometry(r + 0.05, nW, nH, (i / M) * TAU + Math.PI / 2 - w / 2, w, Math.PI / 2 - e1, e1 - e0), T(tints[h < 0.15 ? 0 : 1]), 0, C, 0, { outline: 0 });
     }
   }
-  // the ladder runs up beside rib iL, the conduits beside rib iC
+  // ladder beside rib iL, conduits beside rib iC
   const iL = Math.round(M / 4), iC = Math.round((3 * M) / 4), aL = ribA(iL), aC = ribA(iC);
-  const el0 = Math.asin(Math.min(0.6, Math.max(0, bh + 0.15 - C) / r)); // just over the berm
+  const el0 = Math.asin(Math.min(0.6, Math.max(0, bh + 0.15 - C) / r)); // just above the berm
   if (windows && !glass) {
-    // curved panes on the shell (dark frame, lit glass) with a hood over each, in the bays between
-    // the ribs, clear of the ribs, the airlock and the ladder
+    // hooded curved panes in the rib bays, clear of ribs, airlock and ladder
     const el = 0.2, pr = r + 0.06, fr = r + 0.03, rc = r * Math.cos(el);
     const dTheta = Math.min(0.32, 1.0 / r), dTh2 = dTheta * 1.35;
     const bay = TAU / M, per = Math.max(1, Math.round((bay * rc) / 3.6));
@@ -183,7 +171,7 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
     const ladder = aL + (0.6 + ribT) / rc;
     for (let b = 0; b < M; b++) for (let j = 0; j < per; j++) {
       const a = (b - 0.5) * bay + gap + ((j + 0.5) / per) * (bay - 2 * gap);
-      if (Math.abs(angDiff(a, 0)) < Math.max(0.4, (ar + 1.6) / r)) continue; // the airlock side
+      if (Math.abs(angDiff(a, 0)) < Math.max(0.4, (ar + 1.6) / r)) continue; // airlock side
       if (Math.abs(angDiff(a, ladder)) * rc < 0.7 + (wA * rc) / 2) continue;
       const phi0 = a + Math.PI / 2; // SphereGeometry azimuth for direction (sin a, cos a)
       k.add(new THREE.SphereGeometry(fr, 4, 2, phi0 - wA * 0.62, wA * 1.24, Math.PI / 2 - el - dTh2 / 2, dTh2), T(DARK), 0, C, 0, { outline: 0 });
@@ -192,14 +180,14 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
       k.add(new THREE.BoxGeometry(wA * 1.3 * rc, 0.08, 0.64), T(PANEL), px, py, pz, { q: face(a, el + dTh2 / 2), outline: 0 });
     }
   }
-  // floodlights hung under the first ring on every other rib
+  // floodlights under the first ring, every other rib
   for (let i = 0; i < M; i += 2) {
     if (i === iL || i === iC) continue;
     const a = ribA(i), e = rings[0] - (ribT + 0.35) / r, q = face(a, e), [lx, ly, lz] = on(a, e, ribT + 0.2);
     k.add(new THREE.BoxGeometry(0.5, 0.24, 0.4), T(DARK), lx, ly, lz, { q, outline: 0.02 });
     k.add(new THREE.BoxGeometry(0.4, 0.05, 0.3).translate(0, -0.13, 0.02), G(0xfffbe0), lx, ly, lz, { q, outline: 0 });
   }
-  // the maintenance ladder: two rails on standoffs, outside the rings, from the berm to the crown
+  // maintenance ladder on standoffs outside the rings, berm to crown
   {
     const d = 0.4 + ribT * 1.5, top = crown - 0.02, n = Math.max(4, Math.round(((top - el0) * r) / 1.6));
     const o1 = 0.3 + ribT, o2 = 0.9 + ribT;
@@ -216,7 +204,7 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
       k.add(new THREE.BoxGeometry(o2 - o1, 0.05, 0.05), T(LIGHT), p[0], p[1], p[2], { q: face(aL, el), outline: 0 });
     }
   }
-  // the service conduits: two pipes out of the berm, clamped, up to a junction box under the first ring
+  // service conduits: two clamped pipes from the berm to a junction box under the first ring
   {
     const d = 0.2 + ribT * 1.3, elJ = rings[0] - (ribT + 0.9) / r, e0 = el0 - 0.05;
     const n = Math.max(3, Math.round(((elJ - e0) * r) / 1.6));
@@ -234,7 +222,7 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
     k.add(new THREE.BoxGeometry(0.16, 0.16, 0.04), G(0x7dff6a), f[0], f[1] + 0.5, f[2], { q, outline: 0 });
   }
   if (cupola && r > 9) {
-    // the observation cupola: a collar on the crown ring, a glazed drum, a cap, an antenna and beacon
+    // cupola: collar, glazed drum, cap, antenna and beacon
     const y0 = C + r * Math.sin(crown), cr = r * 0.16, cy = y0 + 0.6;
     k.cyl(r * 0.2, r * 0.235, 1.1, 18, T(PANEL), 0, y0 - 0.5, 0, { outline: 0.06 });
     k.cyl(cr, cr, 1.3, 16, T(WHITE), 0, cy, 0, { outline: 0.05 });
@@ -243,21 +231,21 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
     k.add(new THREE.SphereGeometry(cr, 16, 5, 0, TAU, 0, Math.PI / 2), T(color), 0, cy + 1.3, 0, { outline: 0.05 });
     k.ring(cr + 0.05, 0.12, T(trim), 0, cy + 1.3, 0);
     if (r >= 14) {
-      const rr = r * 0.2 - 0.15; // a railing round the collar's walkway
+      const rr = r * 0.2 - 0.15; // railing round the collar walkway
       for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; k.cyl(0.04, 0.04, 0.95, 4, T(DARK), Math.sin(a) * rr, cy, Math.cos(a) * rr, { outline: 0 }); }
       k.ring(rr, 0.05, T(trim), 0, cy + 0.95, 0);
     }
     const capTop = cy + 1.3 + cr;
     k.cyl(0.08, 0.13, r * 0.3, 5, T(DARK), 0, capTop - 0.2, 0, { outline: 0.03 });
     k.blinker(0, capTop + r * 0.3, 0, 0xff2a4a, 0.3);
-    // a small dish on a stalk round the back, looking up and out
+    // small dish on a stalk at the back, looking up and out
     const aD = Math.PI + 0.5, eD = crown - 0.25, ds = 0.5 + r * 0.025;
     const base = on(aD, eD, 0), tip = on(aD, eD, 0.9 + ds * 0.5);
     const look = new THREE.Vector3(Math.sin(aD) * 0.6, 1, Math.cos(aD) * 0.6).normalize();
     k.beam(base, tip, 0.08, T(DARK));
     k.add(new THREE.ConeGeometry(ds, ds * 0.35, 14, 1, true).rotateX(Math.PI), D(LIGHT), tip[0], tip[1], tip[2], { q: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), look), outline: 0.03 });
     k.beam(tip, [tip[0] + look.x * ds * 0.7, tip[1] + look.y * ds * 0.7, tip[2] + look.z * ds * 0.7], 0.04, T(DARK), { outline: 0 });
-    // vents standing up off the upper shell
+    // vents on the upper shell
     const vEl = (rings[rings.length - 1] + crown) / 2;
     for (const a of [0.6, 2.5, 5.3]) {
       const [px, py, pz] = on(a, vEl, 0);
@@ -266,7 +254,7 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
     }
   }
   if (glass) {
-    // inside: a floor, raised planting beds in rows, and a ring of grow lamps
+    // inside: floor, rows of planting beds, a ring of grow lamps
     k.cyl(r - 0.2, r - 0.2, 0.12, seg, T(0x6b6880), 0, C - 0.1, 0, { outline: 0 });
     const pr = r * 0.78;
     for (let zz = -pr + 1.2; zz < pr - 0.6; zz += 2.6) {
@@ -277,20 +265,20 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
     }
     k.ring(r * 0.5, 0.08, G(0xff7ad9), 0, C + r * 0.55, 0);
   }
-  // airlock: a ribbed tunnel out to +z, flared where it meets the dome, ending in an airlock housing
+  // airlock: ribbed tunnel out to +z into the lock housing
   k.add(new THREE.CylinderGeometry(ar, ar, L + 1, 16).rotateX(Math.PI / 2), T(WHITE), 0, ay, r - 0.6 + L / 2, { outline: 0.06 });
-  // where it meets the dome: a solid collar flaring into the shell, a docking ring and a row of bolts
+  // at the dome: flared collar, docking ring, bolts
   k.add(new THREE.CylinderGeometry(ar + 0.3, ar + 1.0, 1.6, 18).rotateX(Math.PI / 2), T(PANEL), 0, ay, r - 0.55, { outline: 0.05 });
   k.add(new THREE.TorusGeometry(ar + 0.34, 0.24, 6, 18), T(trim), 0, ay, r + 0.27, { outline: 0 });
   for (let i = 0; i < 10; i++) { const t = (i / 10) * TAU; k.add(new THREE.SphereGeometry(0.11, 6, 4), T(LIGHT), Math.cos(t) * (ar + 0.62), ay + Math.sin(t) * (ar + 0.62), r - 0.05, { outline: 0 }); }
   for (let i = 1; i <= 3; i++) k.add(new THREE.TorusGeometry(ar + 0.06, 0.13, 4, 16), T(i === 2 ? trim : PANEL), 0, ay, r - 0.4 + (L * i) / 4, { outline: 0 });
-  // the housing: a squared-off lock chamber the tunnel plugs into, a vent on its roof
+  // housing: square lock chamber with a roof vent
   k.box(hw * 2, hh, hd, T(WHITE), 0, 0, hz, { outline: 0.08 });
   k.box(hw * 2 + 0.2, 0.35, hd + 0.2, T(trim), 0, hh, hz, { outline: 0.03 });
   k.box(hw * 2 + 0.1, 0.3, hd + 0.1, T(PANEL), 0, 0, hz, { outline: 0 });
   k.cyl(0.22, 0.22, 0.7, 8, T(LIGHT), hw * 0.55, hh + 0.3, hz - 0.2, { outline: 0.02 });
   k.cyl(0.36, 0.3, 0.14, 8, T(DARK), hw * 0.55, hh + 1.0, hz - 0.2, { outline: 0.02 });
-  // the doorway: a recessed dark frame ringed with hazard stripes, split doors with portholes
+  // doorway: recessed frame with hazard stripes, split doors with portholes
   const dw = ar * 1.0, dh = ar * 1.65, fz = hz + hd / 2;
   k.box(dw * 2 + 0.5, dh + 0.5, 0.12, T(DARK), 0, 0.35, fz + 0.02, { outline: 0 });
   const nStripe = 7;
@@ -304,19 +292,19 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
     k.add(new THREE.TorusGeometry(0.3, 0.05, 4, 12), T(LIGHT), sx * (dw / 2 + 0.03), 0.35 + dh * 0.68, fz + 0.18, { outline: 0 });
     for (let j = 0; j < 3; j++) k.box(dw - 0.3, 0.1, 0.05, T(j % 2 ? DARK : YEL), sx * (dw / 2 + 0.03), 0.45 + j * 0.12, fz + 0.16, { outline: 0 });
   }
-  k.box(0.05, dh, 0.16, T(DARK), 0, 0.35, fz + 0.1, { outline: 0 }); // the seam between the doors
-  // status lamp over the door, cycle lights either side (green: outer door, red: inner), a keypad
+  k.box(0.05, dh, 0.16, T(DARK), 0, 0.35, fz + 0.1, { outline: 0 }); // door seam
+  // status lamp, cycle lights (green: outer door, red: inner), keypad
   k.box(dw * 1.4, 0.22, 0.25, G(WARM), 0, dh + 0.9, fz + 0.05, { outline: 0 });
   k.add(new THREE.SphereGeometry(0.16, 8, 6), G(0x7dff6a), -dw - 0.55, 0.35 + dh * 0.85, fz + 0.1, { outline: 0 });
   k.add(new THREE.SphereGeometry(0.16, 8, 6), G(0xff2a4a), dw + 0.55, 0.35 + dh * 0.85, fz + 0.1, { outline: 0 });
   k.box(0.4, 0.55, 0.12, T(DARK), dw + 0.55, 0.35 + dh * 0.4, fz + 0.06, { outline: 0.02 });
   k.box(0.28, 0.2, 0.05, G(0x2ee6ff), dw + 0.55, 0.35 + dh * 0.4 + 0.25, fz + 0.13, { outline: 0 });
-  // floodlights on the housing's top corners, looking down at the step
+  // floodlights on the housing's top corners, aimed at the step
   for (const sx of [-1, 1]) {
     k.box(0.5, 0.26, 0.45, T(DARK), sx * (hw - 0.4), hh - 0.05, fz + 0.2, { outline: 0.02 });
     k.box(0.4, 0.05, 0.36, G(0xfffbe0), sx * (hw - 0.4), hh - 0.09, fz + 0.2, { outline: 0 });
   }
-  // a step plate in front: a grating, and a handrail either side
+  // grated step with a handrail each side
   k.box(dw * 2 + 1, 0.22, 1.6, T(CONC), 0, 0, fz + 0.8, { outline: 0.03 });
   for (let i = -2; i <= 2; i++) k.box(dw * 2 + 0.4, 0.04, 0.12, T(DARK), 0, 0.22, fz + 0.8 + i * 0.28, { outline: 0 });
   for (const sx of [-1, 1]) {
@@ -325,12 +313,12 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
     k.beam([px, 1.22, fz + 0.2], [px, 1.22, fz + 1.4], 0.05, T(trim), { outline: 0.015 });
   }
   if (yard) {
-    // beside the airlock, clear of the berm: radiator racks (one, two on big domes) to the left,
-    // a power cabinet and a rack of gas bottles to the right, each with its line into the berm
+    // beside the airlock, clear of the berm: radiator racks left (two on big domes), power cabinet and gas bottles right,
+    // each with a line into the berm
     const rx = hw + 2.6, rz = Math.max(r + L * 0.45 + 1, Math.sqrt((r + bw) ** 2 - rx * rx) + 1.8);
     const into = (px, pz) => { const s = (r + bw * 0.4) / Math.hypot(px, pz); return [px * s, 0.3, pz * s]; };
     const rh = Math.min(4.5, 2.4 + r * 0.04), fh = (rh - 0.5) / 3;
-    // (the racks face out, side by side along x)
+    // racks face out, side by side along x
     const rzR = Math.max(r + L * 0.45 + 1, Math.sqrt((r + bw) ** 2 - (hw + 1.4) ** 2) + 1.2);
     for (let j = 0; j < (r >= 20 ? 2 : 1); j++) {
       const px = -(hw + 3.2 + j * 3.6);
@@ -363,8 +351,7 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
   k.at();
 }
 
-// Prefab cabin: body with corner posts, a lit window band, a door with a lamp, roof with a
-// parapet, an AC unit and a vent. Door faces local +z.
+// Prefab cabin: corner posts, lit windows, door with lamp, parapet roof, AC unit, vent. Door faces local +z.
 export function cabin(k, x, z, w, d, h, color, yaw = 0, { roof = ROOF, trim = YEL, solar = false } = {}) {
   k.at(x, z, yaw);
   k.box(w + 0.5, 0.5, d + 0.5, T(CONC), 0, 0, 0, { outline: 0.05 });
@@ -372,13 +359,13 @@ export function cabin(k, x, z, w, d, h, color, yaw = 0, { roof = ROOF, trim = YE
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.box(0.4, h, 0.4, T(PANEL), sx * (w / 2), 0.4, sz * (d / 2), { outline: 0 });
   k.box(w + 0.6, 0.5, d + 0.6, T(roof), 0, h + 0.4, 0, { outline: 0.06 });
   k.box(w + 0.7, 0.18, d + 0.7, T(trim), 0, h + 0.85, 0, { outline: 0 });
-  // windows: lit panes with dark mullions on all four faces
+  // lit windows on all four faces
   const wy = 0.4 + h * 0.55;
   for (const [len, face, rot] of [[w, d / 2, 0], [w, -d / 2, Math.PI], [d, w / 2, Math.PI / 2], [d, -w / 2, -Math.PI / 2]]) {
     const n = Math.max(1, Math.floor((len - 2.4) / 2.6));
     for (let i = 0; i < n; i++) {
       const u = (i - (n - 1) / 2) * 2.6;
-      if (rot === 0 && Math.abs(u) < 1.6) continue; // the door
+      if (rot === 0 && Math.abs(u) < 1.6) continue; // door
       const px = rot === 0 || rot === Math.PI ? u : face, pz = rot === 0 || rot === Math.PI ? face : u;
       k.box(1.5, 1.1, 0.12, G(WARM), px * (rot === Math.PI ? -1 : 1), wy - 0.55, pz, { ry: rot, outline: 0 });
       k.box(1.7, 0.16, 0.2, T(DARK), px * (rot === Math.PI ? -1 : 1), wy + 0.55, pz, { ry: rot, outline: 0 });
@@ -389,7 +376,7 @@ export function cabin(k, x, z, w, d, h, color, yaw = 0, { roof = ROOF, trim = YE
   k.box(0.5, 0.18, 0.18, G(WARM), 0, 2.7, d / 2 + 0.5, { outline: 0 });
   // roof kit
   if (solar) {
-    // tilted panels on little rack legs standing on the roof (top of the trim: h + 1.03)
+    // tilted panels on rack legs (trim top: h + 1.03)
     const pd = Math.min(d - 1.5, 3), pc = h + 1.03 + (pd / 2) * Math.sin(0.35) + 0.12, rz = (pd / 2) * 0.75;
     for (let i = 0; i < Math.max(1, Math.floor(w / 4)); i++) {
       const px = -w / 2 + 2.4 + i * 3.8;
@@ -409,7 +396,7 @@ export function cabin(k, x, z, w, d, h, color, yaw = 0, { roof = ROOF, trim = YE
   k.at();
 }
 
-// A tall industrial shed: sawtooth roof with glazing, roll-up doors and a loading dock (+z).
+// Tall industrial shed: glazed sawtooth roof, roll-up doors, loading dock (+z).
 export function warehouse(k, x, z, w, d, h, color, yaw, trim) {
   k.at(x, z, yaw);
   k.box(w, h, d, T(color), 0, 0, 0, { outline: 0.15 });
@@ -417,7 +404,7 @@ export function warehouse(k, x, z, w, d, h, color, yaw, trim) {
     const x0 = -w / 2 + (w / 6) * (i + 0.5);
     k.box(0.3, h, d + 0.15, T(PANEL), x0 - w / 12, 0, 0, { outline: 0 });
   }
-  // north-light roof: a row of ridges running front to back, one slope of each glazed and lit
+  // north-light roof: ridges front to back, one slope of each glazed
   const teeth = Math.max(3, Math.round(w / 6)), tw = w / teeth, th = 2.6, lean = Math.atan(tw / 2 / th);
   for (let i = 0; i < teeth; i++) {
     const tx = -w / 2 + tw * (i + 0.5);
@@ -425,7 +412,7 @@ export function warehouse(k, x, z, w, d, h, color, yaw, trim) {
     k.add(new THREE.BoxGeometry(0.12, th * 0.85 / Math.cos(lean), d - 1.2), G(0xcfefff), tx + tw / 4 + 0.08, h + 0.4 + th / 2, 0, { rz: lean, outline: 0 });
   }
   k.box(w + 0.4, 0.4, d + 0.4, T(ROOF), 0, h, 0, { outline: 0.05 });
-  // two roll-up doors with striped frames and a raised dock
+  // two striped roll-up doors and a raised dock
   for (const s of [-1, 1]) {
     k.box(w * 0.28, h * 0.62, 0.3, T(0x6b6880), s * w * 0.22, 0, d / 2 + 0.05, { outline: 0.03 });
     for (let j = 1; j < 6; j++) k.box(w * 0.28, 0.12, 0.34, T(DARK), s * w * 0.22, (h * 0.62 * j) / 6, d / 2 + 0.06, { outline: 0 });
@@ -439,13 +426,11 @@ export function warehouse(k, x, z, w, d, h, color, yaw, trim) {
   k.at();
 }
 
-// Vehicle garage (built in Blender, tools/blender/build_garage.py): the main one (`kind` 'main') is a three-bay motor pool with a
-// service office built onto one end and its compound round the other three sides (a bunded fuel yard with a pump island, a back yard
-// with a rover park, a parts store and a rack, a power compound behind the office); the small one ('small') is a two-bay shed about the
-// size of the old sheds. The shell, roof and yards are baked into the kit, and so are the parts store's cargo boxes (the gantry's);
-// `open` (a boolean per bay) says which bay doors are rolled up, showing a lit workshop with a rover on a lift, an engine stand or a
-// bench; the roof's turbine vents turn and (main) the antenna lamp blinks. Its doors (+z) face along the yaw. The colliders are the
-// model's own (its `col` pivots: the hall, whose doors' plane is a wall, the office, the tanks, the yard's furniture).
+// Vehicle garage (tools/blender/build_garage.py). 'main': three-bay motor pool with an end office and a compound (bunded fuel
+// yard with pump island, rover park, parts store and rack, power compound); 'small': a two-bay shed. Shell, roof, yards and the
+// parts store's cargo boxes are baked. `open` (per bay) rolls doors up to show a lit workshop (rover on a lift, engine stand or
+// bench). Turbine vents turn; (main) the antenna lamp blinks. Doors (+z) face the yaw. Colliders are the model's `col` pivots
+// (hall, its door plane a wall; office; tanks; yard furniture).
 export function garage(k, x, z, yaw, open = [true, false, true], kind = 'main') {
   const M = garageModel(open, kind);
   const mat = (slot) => { const c = garageSlot(slot); return c.glow ? G(c.color) : T(c.color); };
@@ -467,8 +452,8 @@ export function garage(k, x, z, yaw, open = [true, false, true], kind = 'main') 
   k.at();
 }
 
-// Four-legged lattice tower (masts, derricks, crane towers): legs taper from base half-width
-// w0 to top half-width w1, X-braced in `bays` bays. Returns nothing; draws in the current frame.
+// Four-legged lattice tower (masts, derricks): legs taper from half-width w0 to w1, X-braced in `bays` bays. Draws in the
+// current frame.
 export function lattice(k, x, z, h, w0, w1, bays, legM, braceM, { r = 0.22 } = {}) {
   const cn = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
   const hw = (y) => w0 + (w1 - w0) * (y / h);
@@ -482,18 +467,17 @@ export function lattice(k, x, z, h, w0, w1, bays, legM, braceM, { r = 0.22 } = {
       k.beam([x + ax * b, y1, z + az * b], [x + bx * b, y1, z + bz * b], r * 0.5, legM, { outline: 0.02, seg: 4 });
     }
   }
-  // a solid core, in two steps as it tapers (out to the legs, not the bracing between)
+  // solid core in two tapering steps (to the legs, not the bracing)
   k.column(Math.max(w0, hw(h / 2)) * 1.15 + r, h / 2, x, z);
   k.column(hw(h / 2) * 1.15 + r, h, x, z, h / 2);
 }
 
-// Tower crane (built in Blender, tools/blender/build_crane.py): foundation, ballasted base and lattice mast baked into the
-// kit; the slewing head (jib, counter-jib, cab, warning lamps), the trolley, the rope and the hook with its load are moving
-// objects. The model is 34 m of mast under a 30 m jib; `h` scales it uniformly (the `jib` argument is its own reach, kept for the
-// callers, and follows from the scale). The head slews, the trolley runs in and out, the hook rises and falls. The hook carries
-// the Prospector's cargo container, painted for one of three factions (by `phase`: a mixed yard of Kepler, Meridian and SpaceCom freight).
-// where the Meridian Exchange's main garage stands: out toward the ring road along the south-west diagonal, turned to face it
-// (clear of the landing pad at (-100, -60), 16 m, and the container yard, 6 m; the ring's casino-road junction is just short of where its road leaves); `yaw` turns its +z bays outward
+// Tower crane (tools/blender/build_crane.py): foundation, base and mast baked; slewing head (jib, counter-jib, cab, lamps),
+// trolley, rope and hook with load move. Model: 34 m mast, 30 m jib; `h` scales it uniformly (`jib` is unused, kept for callers:
+// reach follows from the scale). The hook carries the Prospector's container in one of three liveries (by `phase`: Kepler,
+// Meridian, SpaceCom).
+// Meridian Exchange main garage: out toward the ring road on the south-west diagonal, facing it (16 m clear of the landing pad at
+// (-100, -60), 6 m of the container yard, just past the ring's casino-road junction); `yaw` turns its +z bays outward
 const GARAGE_R = 128, GARAGE_ANGLE = 236;
 export const GARAGE_AT = { angle: GARAGE_ANGLE, x: Math.cos((GARAGE_ANGLE * Math.PI) / 180) * GARAGE_R, z: Math.sin((GARAGE_ANGLE * Math.PI) / 180) * GARAGE_R, yaw: Math.atan2(Math.cos((GARAGE_ANGLE * Math.PI) / 180), Math.sin((GARAGE_ANGLE * Math.PI) / 180)) };
 const CRANE_CARGO = ['kepler', 'meridian', 'spacecom'];
@@ -503,9 +487,9 @@ export function towerCrane(k, x, z, h, jib, color, { speed = 0.12, phase = 0 } =
   const mat = (slot) => { const c = craneSlot(slot, color, faction); return c.glow ? G(c.color) : T(c.color); };
   k.at(x, z);
   k.baked(C.root, mat, new THREE.Matrix4().makeScale(sc, sc, sc));
-  k.solid(4.3 * sc, 1.0 * sc, 4.3 * sc, 0, 0); // the foundation and its ballast
-  k.column(1.7 * sc, h, 0, 0); // the mast
-  // a moving piece: the node's own meshes, and those of its `load` and matching `livery` descendants, each in the node's frame
+  k.solid(4.3 * sc, 1.0 * sc, 4.3 * sc, 0, 0); // foundation and ballast
+  k.column(1.7 * sc, h, 0, 0); // mast
+  // a moving piece: the node's meshes plus its `load` and matching `livery` descendants, in the node's frame
   const piece = (node) => part(color, (q) => {
     const walk = (n, m) => {
       q.baked(n, mat, m);
@@ -529,13 +513,13 @@ export function towerCrane(k, x, z, h, jib, color, { speed = 0.12, phase = 0 } =
   trolley.add(cable, hook);
   top.add(trolley);
   top.position.y = C.slew.pos.y * sc;
-  // the rope pays out until the container is 1.5 m off the ground (the hook's height in the model is H + trolley + hook - rope)
+  // rope pays out until the container is 1.5 m up (hook height in the model: H + trolley + hook - rope)
   const ropeMax = CRANE_H + C.trolley.pos.y + C.hook.pos.y - CRANE_LOAD_DROP - 1.5 - 2;
   top.userData.tick = (o, dt, t) => {
     const u = t * speed + phase;
     o.rotation.y = phase * 2 + Math.sin(u) * 1.6;
     trolley.position.x = (CRANE_TROLLEY_MIN + CRANE_TROLLEY_SPAN * (0.5 + 0.5 * Math.sin(u * 1.7 + 1))) * sc;
-    const rope = 2 + ropeMax * (0.5 + 0.5 * Math.sin(u * 1.3)); // (metres of rope, in the model's own size)
+    const rope = 2 + ropeMax * (0.5 + 0.5 * Math.sin(u * 1.3)); // metres, at model size
     cable.scale.y = rope;
     hook.position.y = (C.hook.pos.y - rope) * sc;
   };
@@ -543,16 +527,14 @@ export function towerCrane(k, x, z, h, jib, color, { speed = 0.12, phase = 0 } =
   k.at();
 }
 
-// Gantry crane (built in Blender, tools/blender/build_gantry.py): the tower crane's sibling over a container yard. A portal of two
-// lattice legs on rail bogies under a truss girder; the whole crane is one moving object that runs along x on its rails (`travel` m
-// either way of `x`), the trolley (the tower crane's) hangs under the girder at `lane` along z, and the hook block lowers the
-// crane's load (the land-train's box container on a spreader, in `faction`'s livery) to the ground at each end of the run, then
-// lifts it and comes back: a cycle every 1 / `speed` seconds, starting `phase` of the way through. Drawn in the settlement's frame
-// (call with k at the origin); the legs ride at z +- GANTRY_LEG of `z`. No colliders: it never stands still.
+// Gantry crane (tools/blender/build_gantry.py) over a container yard: one moving object running along x (`travel` m either side
+// of `x`), trolley at `lane` along z. It sets its load (land-train container on a spreader, `faction` livery) down and lifts it at
+// each end of the run: one cycle per 1 / `speed` s, starting at `phase`. Settlement frame (k at the origin); legs at z +- GANTRY_LEG
+// of `z`. No colliders: it never stands still.
 export function gantryCrane(k, x, z, color, { speed = 1 / 70, phase = 0, travel = 24, lane = 10, faction = 'meridian' } = {}) {
   const C = gantryModel();
   const mat = (slot, cargo) => { const c = cargo ? cargoSlot(slot, faction) : craneSlot(slot, color, faction); return c.glow ? G(c.color) : T(c.color); };
-  // a moving piece: the node's own meshes, and under its `load` the spreader, the cargo unit and its matching livery
+  // a moving piece: the node's meshes plus, under `load`, the spreader, cargo and its matching livery
   const piece = (node) => part(color, (q) => {
     const walk = (n, m, cargo) => {
       q.baked(n, (slot) => mat(slot, cargo), m);
@@ -577,13 +559,13 @@ export function gantryCrane(k, x, z, color, { speed = 1 / 70, phase = 0, travel 
   hook.position.copy(C.hook.pos);
   trolley.add(cable, hook);
   body.add(trolley);
-  // the rope pays out until the container's bottom is 0.3 m off the ground
+  // rope pays out until the container is 0.3 m up
   const drop = C.hook.data.drop || 8.9;
   const ropeMin = 1.5, ropeMax = C.trolley.pos.y + C.hook.pos.y - drop - 0.3;
   const ease = (f) => 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, f)));
   body.userData.tick = (o, dt, t) => {
     const u = ((t * speed + phase) % 1 + 1) % 1;
-    // the cycle: set down and lift at this end (0 - 0.2), run to the far end (0.2 - 0.5), set down and lift there (0.5 - 0.7), run back
+    // cycle: dip here (0 to 0.2), run (0.2 to 0.5), dip at the far end (0.5 to 0.7), run back
     let along, dip;
     if (u < 0.2) { along = 0; dip = Math.sin(Math.PI * u / 0.2); }
     else if (u < 0.5) { along = ease((u - 0.2) / 0.3); dip = 0; }
@@ -598,8 +580,8 @@ export function gantryCrane(k, x, z, color, { speed = 1 / 70, phase = 0, travel 
   k.dyn(body, x, 0, z);
 }
 
-// A stack of `n` of the land-train's box containers (the gantry file's own, gantryModel().box) at (x, z), each in the livery of
-// `factions[j]` (bottom first), lying along local z, turned by `ry`, standing on y0; one collider the size of the stack.
+// Stack of `n` land-train containers (gantryModel().box) at (x, z), liveries `factions[j]` bottom first, along local z turned by
+// `ry`, on y0; one collider for the stack.
 export function cargoStack(k, x, z, n, factions, ry = 0, y0 = 0) {
   const C = gantryModel();
   for (let j = 0; j < n; j++) {
@@ -615,19 +597,17 @@ export function cargoStack(k, x, z, n, factions, ry = 0, y0 = 0) {
   k.solid(CARGO_BOX.hx + 0.1, (n * CARGO_BOX.h) / 2, CARGO_BOX.hz + 0.1, x, z, ry, y0);
 }
 
-// Radio-dish array station (built in Blender, tools/blender/build_dish.py): 'cryo' (the Helium-3 tanker on end under a banded dish) or
-// 'gantry' (a lattice mast over a yard of container control rooms). The whole station is baked into the kit, painted for `faction`
-// with the dish's `no` ('01'..) on its panel; the head and the dish on it are moving objects: the head turns about the vertical, the dish
-// nods on its trunnions (as the old bare dishes did), and a warning lamp on the feed blinks. `size` is the old dish's size (the model is
-// a 30 m mount and scales uniformly); the front (the panel, the cabinet, the containers' plates) faces local `yaw`.
+// Radio-dish station (tools/blender/build_dish.py): 'cryo' (He-3 tanker on end under a banded dish) or 'gantry' (lattice mast over
+// container control rooms). Baked in `faction` livery with dish number `no` ('01'..). The head turns about the vertical, the dish
+// nods on its trunnions, a feed lamp blinks. `size` scales the 30 m mount uniformly; the front (panel, cabinet, plates) faces `yaw`.
 const DISH_COLLIDERS = {
-  // the skirt and the vessel (a cylinder each), the valve cabinet (on the thin pad)
+  // skirt and vessel (a cylinder each), valve cabinet (on the thin pad)
   cryo(k, s) {
     k.column(6.9 * s, 3.2 * s, 0, 0);
     k.column(5.7 * s, 20.5 * s, 0, 0);
     k.solid(2.1 * s, 1.35 * s, 0.6 * s, -3.9 * s, 7.6 * s, 0, 0.3 * s);
   },
-  // the four footings, the mast as a solid core in three steps as it tapers, the boxes (one stacked), the battery bank, the fuel tank, the generator and its stack
+  // footings, mast core in three tapering steps, containers (one stacked), battery bank, fuel tank, generator and stack
   gantry(k, s) {
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.solid(1.5 * s, 0.55 * s, 1.5 * s, sx * 4.3 * s, sz * 4.3 * s);
     k.solid(4.4 * s, 4.0 * s, 4.4 * s, 0, 0);
@@ -670,7 +650,7 @@ export function dishStation(k, x, z, size, kind, faction, no, { yaw = 0, speed =
   k.at();
 }
 
-// Horton sphere: a pressure sphere on legs with an equator walkway, coloured bands and a ladder.
+// Horton sphere: pressure sphere on legs, equator walkway, bands, ladder.
 export function hortonSphere(k, x, z, r, color, band) {
   k.at(x, z);
   const cy = r + 3.2;
@@ -695,15 +675,14 @@ export function hortonSphere(k, x, z, r, color, band) {
 
 // Price ticker: a drum of scrolling text (canvas texture offset each frame) between two rings.
 export function ticker(k, x, y, z, r, h, text, { fg = '#7dff6a', bg = '#0d0a1a', ring = YEL, speed = 0.03 } = {}) {
-  // the canvas is exactly one pass of the text (whole passes repeat round the drum), so the wrap
-  // never cuts an item in half (a fixed-width canvas used to: "HMERIDIAN")
+  // the canvas is exactly one pass of the text, repeated whole round the drum, so the wrap never cuts an item
   const c = document.createElement('canvas');
   const parts = text.split('|').map((s) => s.trim() + '   ');
   const g0 = c.getContext('2d');
   let fs = 64;
   g0.font = pixelFont(fs);
   let W = parts.reduce((a, s) => a + g0.measureText(s).width, 0);
-  // a small drum: smaller lettering, so one pass fits round it instead of being squeezed
+  // small drum: shrink the lettering so one pass fits unsqueezed
   const nat = (h * W) / 128;
   if (nat > TAU * r * 1.25) fs = Math.max(28, Math.floor((fs * TAU * r) / nat));
   if ((W * fs) / 64 > 8000) fs = Math.floor((fs * 8000 * 64) / (W * fs));
@@ -711,8 +690,7 @@ export function ticker(k, x, y, z, r, h, text, { fg = '#7dff6a', bg = '#0d0a1a',
   W = parts.reduce((a, s) => a + g0.measureText(s).width, 0);
   c.width = Math.ceil(W); c.height = 128;
   const g = c.getContext('2d');
-  // (re)paint the text; a replacement is squeezed or stretched a little to fill the same canvas, so
-  // a feed whose prices change length keeps whole passes round the drum
+  // (re)paint; new text is squeezed or stretched to the same canvas, keeping whole passes as prices change length
   const paint = (items) => {
     const w = items.reduce((a, s) => a + g.measureText(s).width, 0);
     g.setTransform(1, 0, 0, 1, 0, 0);
@@ -732,7 +710,7 @@ export function ticker(k, x, y, z, r, h, text, { fg = '#7dff6a', bg = '#0d0a1a',
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
-  // whole passes round the drum, each about the text's natural aspect
+  // whole passes round the drum, near the text's natural aspect
   tex.repeat.set(Math.max(1, Math.round((TAU * r) / ((h * c.width) / c.height))), 1);
   const drum = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 40, 1, true), new THREE.MeshBasicMaterial({ map: tex }));
   drum.userData.tick = (o, dt) => { tex.offset.x = (tex.offset.x + dt * speed) % 1; };
@@ -743,7 +721,7 @@ export function ticker(k, x, y, z, r, h, text, { fg = '#7dff6a', bg = '#0d0a1a',
   return drum;
 }
 
-// Elevated conveyor on trestles along a polyline, with lumps of ore riding it.
+// Elevated conveyor on trestles along a polyline, ore lumps riding it.
 export function conveyor(k, pts, y, { lump = 0x6b6378, n = 14, speed = 3, belt = DARK } = {}) {
   const segs = [];
   let total = 0;
@@ -782,7 +760,7 @@ export function conveyor(k, pts, y, { lump = 0x6b6378, n = 14, speed = 3, belt =
   k.dyn(lumps, 0, 0, 0);
 }
 
-// Floodlight mast: lattice pole with a bank of lamps tilted at the yard centre.
+// Floodlight mast: lattice pole, lamp bank aimed at the yard centre.
 export function floodMast(k, x, z, h = 14, color = YEL) {
   k.at(x, z, Math.atan2(-x, -z));
   k.box(1.6, 0.4, 1.6, T(CONC), 0, 0, 0, { outline: 0.03 });
@@ -807,7 +785,7 @@ export function stack(k, x, z, h, r) {
   k.at();
 }
 
-// Pipe run along a polyline at height y (with supports).
+// Pipe run along a polyline at height y, with supports.
 export function pipe(k, pts, y, r = 0.35, color = 0xd8d4e8) {
   for (let i = 0; i < pts.length - 1; i++) {
     const a = pts[i], b = pts[i + 1];
@@ -823,14 +801,13 @@ export function pipe(k, pts, y, r = 0.35, color = 0xd8d4e8) {
 }
 
 // =============================================================================================
-// Helium-3 Exchange: a working strip-mine. A bucket-wheel excavator chews a regolith heap onto a
-// conveyor that runs to the refinery; a drilling derrick pumps in the middle; He-3 sits in
-// Horton spheres; the trading hall wears a scrolling price ticker; a tower crane slews overhead.
+// Helium-3 Exchange, a working strip-mine: bucket-wheel excavator feeding a conveyor to the refinery, a pumping derrick,
+// Horton spheres, a trading hall with a price ticker, a tower crane.
 // =============================================================================================
 export function buildHelium(world, loc) {
   settle(world, loc, 3301, (k, ctx) => {
     const blue = 0x2ec4ff;
-    // the derrick: a lattice tower over a rotary deck, with the drill string pumping and turning
+    // derrick: lattice tower over a rotary deck, drill string pumping and turning
     k.at(0, 0);
     k.box(18, 1.2, 18, T(CONC), 0, 0, 0, { outline: 0.08 });
     k.box(12, 0.6, 12, T(DARK), 0, 6, 0, { outline: 0.06 });
@@ -852,13 +829,13 @@ export function buildHelium(world, loc) {
     });
     drill.userData.tick = (o, dt, t) => { o.position.y = 7.8 + 9 * (0.5 + 0.5 * Math.sin(t * 0.5)); o.rotation.y += dt * 2.5; };
     k.dyn(drill, 0, 7.8, 0);
-    // mud and separator tanks beside it
+    // mud and separator tanks
     k.at(14, 8);
     tank(k, 0, 0, 2.6, 6, LIGHT, 0x7dff6a);
     tank(k, 0, 6.5, 2.2, 5, LIGHT, 0xc77dff);
     k.at();
     pipe(k, [[4, 4], [14, 4], [14, 8]], 3.2, 0.4);
-    // He-3 tank farm: four Horton spheres in the old green / purple colours, piped to a manifold
+    // He-3 tank farm: four green / purple Horton spheres piped to a manifold
     for (const [x, z, b] of [[58, -20, 0x7dff6a], [76, -20, 0xc77dff], [58, 2, 0xc77dff], [76, 2, 0x7dff6a]]) hortonSphere(k, x, z, 6, WHITE, b);
     pipe(k, [[44, -36], [44, -9], [67, -9]], 1.4, 0.45, 0x9be7ff);
     pipe(k, [[67, -9], [67, -20]], 1.4, 0.45, 0x9be7ff);
@@ -868,7 +845,7 @@ export function buildHelium(world, loc) {
     for (const s of [-1, 0, 1]) k.add(new THREE.TorusGeometry(0.5, 0.12, 4, 10), T(0xff3b5c), s * 1.1, 2.7, 0, { rx: Math.PI / 2, outline: 0 });
     k.solid(1.8, 1.2, 1.3, 0, 0);
     k.at();
-    // refinery: process hall, two stacks, cold boxes, and pipe racks to the farm
+    // refinery: process hall, two stacks, cold boxes, pipe racks to the farm
     cabin(k, 30, -42, 26, 14, 10, 0xd8d4e8, 0.3, { roof: ROOF, trim: blue });
     stack(k, 18, -54, 26, 1.6);
     stack(k, 23, -57, 20, 1.3);
@@ -880,7 +857,7 @@ export function buildHelium(world, loc) {
       k.column(1.7, 9, i * 4, 0);
     }
     k.at();
-    // the bucket-wheel excavator chewing a regolith heap, feeding the conveyor
+    // bucket-wheel excavator on the heap, feeding the conveyor
     k.at(-34, 40, 2.2);
     k.box(12, 2, 3.4, T(TYRE), 0, 0, -3.2, { outline: 0.06 });
     k.box(12, 2, 3.4, T(TYRE), 0, 0, 3.2, { outline: 0.06 });
@@ -914,17 +891,17 @@ export function buildHelium(world, loc) {
     wheel.userData.tick = (o, dt) => { o.rotation.z -= dt * 0.7; };
     k.dyn(wheel, 21, 5.6, 0);
     k.at();
-    // the heap it eats
+    // the heap
     k.at(-52, 66);
-    // a closed mound (lathe from rim to a rounded top, so it's solid from every side)
+    // closed lathe mound, solid from every side
     k.add(new THREE.LatheGeometry([[15, 0], [13, 2.6], [9.5, 5.6], [5, 8], [1.5, 8.9], [0, 9]].map(([r, y]) => new THREE.Vector2(r, y)), 16), T(0x8a8296), 0, 0, 0, { outline: 0.12 });
     for (let i = 0; i < 9; i++) { const a = i * 0.7; k.add(new THREE.DodecahedronGeometry(1 + (i % 3) * 0.6, 0), T(0x6b6378), Math.cos(a) * (6 + i), 0.6, Math.sin(a) * (6 + i), { ry: a, outline: 0.04 }); }
     k.at();
-    // (stepped like the mound: wide and low at the rim, narrow and high at the top)
+    // stepped colliders following the mound
     for (const [r, y1] of [[14, 1.6], [11.5, 4], [8, 6.6], [4, 8.6]]) world.col(loc, { type: 'cyl', x: -52, z: 66, y0: -2, y1, r });
-    // conveyor from the excavator boom to the refinery, ore riding it
+    // conveyor from the boom to the refinery
     conveyor(k, [[-30, 28], [-6, 22], [8, 12], [16, -20], [22, -34]], 4.6);
-    // trading hall with the price ticker on its roof, flags and a plaza sign
+    // trading hall with roof ticker, flags, plaza sign
     cabin(k, -28, -58, 26, 14, 9, WHITE, -0.35, { roof: blue, trim: YEL, solar: true });
     k.at(-28, -58, -0.35);
     k.box(10, 3.2, 8, T(blue), 0, 9.8, 0, { outline: 0.06 });
@@ -939,7 +916,7 @@ export function buildHelium(world, loc) {
     k.at();
     k.flag(-44, -44, 12, blue);
     k.flag(-12, -72, 12, 0x7dff6a);
-    // canister racks by the pad, glowing green
+    // glowing canister racks by the pad
     for (const [rx, rz, ry] of [[40, 36, 0.6], [48, 26, 0.6]]) {
       k.at(rx, rz, ry);
       k.box(9, 0.4, 2.4, T(DARK), 0, 0, 0, { outline: 0.03 });
@@ -951,7 +928,7 @@ export function buildHelium(world, loc) {
       k.solid(4.6, 1.2, 1.3, 0, 0);
       k.at();
     }
-    // the tower crane over the yard, the old site office, floodlights
+    // tower crane, site office, floodlights
     towerCrane(k, -50, -18, 30, 26, YEL, { speed: 0.1, phase: 0.6 });
     cabin(k, -64, -46, 16, 8, 5, 0x8a8aa0, Math.atan2(64, 46), { trim: blue });
     floodMast(k, 26, 22, 14); floodMast(k, -24, -24, 14); floodMast(k, 50, -60, 14); floodMast(k, -60, 20, 14);
@@ -961,21 +938,21 @@ export function buildHelium(world, loc) {
   });
 }
 
-// Sawtooth trade hall (the Exchange's bonded market, layout A of docs/meridian-layouts.md): a plinth, white walls with a
-// faction band, a sawtooth roof whose vertical faces are glass and face -x (the avenue), three glass doors on that side
-// and three loading doors on the back, the name over the doors. w across x, d along z.
+// Sawtooth trade hall (the Exchange's bonded market, layout A of docs/meridian-layouts.md): plinth, white walls, faction band,
+// sawtooth roof glazed toward -x (the avenue), three glass doors there under the name, three loading doors at the back.
+// w across x, d along z.
 function tradeHall(k, x, z, w, d, trim, name = 'TRADE HALL') {
   const H = 7, teeth = 4, tw = w / teeth, rise = 3.2;
   k.at(x, z);
   k.box(w + 1.2, 0.6, d + 1.2, T(CONC), 0, 0, 0, { outline: 0.08 });
   k.box(w, H, d, T(WHITE), 0, 0.6, 0, { outline: 0.14 });
   k.box(w + 0.12, 0.6, d + 0.12, T(trim), 0, 5.4, 0, { outline: 0.03 });
-  // the roof: a sawtooth profile across x, extruded along z
+  // roof: sawtooth profile across x, extruded along z
   const pts = [new THREE.Vector2(-w / 2, 0)];
   for (let i = 0; i < teeth; i++) { const x0 = -w / 2 + i * tw; pts.push(new THREE.Vector2(x0, rise), new THREE.Vector2(x0 + tw, 0)); }
   k.add(new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: d, bevelEnabled: false }).translate(0, 0, -d / 2), T(0xd8d4e8), 0, 0.6 + H, 0, { outline: 0.1 });
   for (let i = 0; i < teeth; i++) k.box(0.16, rise - 0.7, d - 2, G(0xbfe9ff), -w / 2 + i * tw + 0.1, 0.6 + H + 0.35, 0, { outline: 0 });
-  // the avenue side (-x): three glass doors in bronze frames under the name; the back (+x): three loading doors
+  // -x: three bronze-framed glass doors; +x: three loading doors
   for (const dz of [-d / 4, 0, d / 4]) {
     k.box(0.4, 5.2, 5.2, T(0x8a5a3a), -w / 2 - 0.1, 0.6, dz, { outline: 0.04 });
     k.box(0.2, 4.4, 4.4, G(0xbfe9ff), -w / 2 - 0.3, 1.0, dz, { outline: 0 });
@@ -988,10 +965,9 @@ function tradeHall(k, x, z, w, d, trim, name = 'TRADE HALL') {
   k.at();
 }
 
-// The plaza fountain (built in Blender, tools/blender/build_casino.py): the basin, pedestal, bowl, stem and spigots are baked into
-// the kit; the centrepiece turns (`top`: the casino's 'chip', or the 'dollar' sign in `accent`, the Meridian Exchange's), and the
-// two tiers' ripples, the curtain spilling over the bowl's lip and the jets from the spigots under it run on shaders
-// (fountainFx.js). Colliders for the basin, the pedestal and the stem. Drawn in the settlement's frame (k at the origin).
+// Plaza fountain (tools/blender/build_casino.py): basin, pedestal, bowl, stem and spigots baked; the centrepiece turns (`top`:
+// the casino's 'chip', or the Meridian Exchange's 'dollar' in `accent`); ripples, curtain and jets are shaders (fountainFx.js).
+// Colliders for basin, pedestal and stem. Settlement frame (k at the origin).
 export function fountain(k, x, z, { top = 'chip', accent = 0xff2e88 } = {}) {
   const F = casinoNode('fountain'), I = new THREE.Matrix4();
   const mat = (slot) => { const c = casinoSlot(slot, accent); return c.glow ? G(c.color) : T(c.color); };
@@ -1012,23 +988,18 @@ export function fountain(k, x, z, { top = 'chip', accent = 0xff2e88 } = {}) {
 }
 
 // =============================================================================================
-// Meridian Exchange: the trade HQ, laid out on one axis (docs/meridian-layouts.md, layout A): a gate
-// arch on the +z side, a 118 m avenue down to the plaza and the portico of the stepped glass trading
-// tower (which wears the price ticker), the lab dome and a sawtooth trade hall facing each other
-// across the avenue; behind the tower the port (a container yard under a travelling gantry crane,
-// two tower cranes, the motor-pool garage out by the ring road) and, in the north corners, the pads.
+// Meridian Exchange, the trade HQ on one axis (docs/meridian-layouts.md, layout A): gate arch at +z, a 118 m avenue to the plaza
+// and the portico of the stepped glass trading tower (with the ticker), lab dome and trade hall facing across the avenue; behind
+// the tower the port (container yard under a gantry crane, two tower cranes, the garage by the ring road); pads in the north corners.
 // =============================================================================================
 export function buildMeridian(world, loc) {
   settle(world, loc, 4409, (k, ctx) => {
     const blue = 0x2ec4ff, cols = [0x2ec4ff, 0xff9f1c, 0x7dff6a, 0xff3b5c, 0xffd23f, 0xc77dff];
-    // layout: the tower 24 m south of the origin (the name and HQ sprites hang over the origin at
-    // y 50 and 62, which would be inside the tower's cone), its portico facing +z onto the plaza at
-    // (0, 34); the avenue runs from the plaza north to the gate arch at (0, 140); the dome west of
-    // the avenue and the hall east of it; the chairwoman at the foot of the steps; the yard, the
-    // cranes and the garage south of the tower
+    // Layout: tower 24 m south of the origin (the name and HQ sprites at y 50 and 62 over the origin would sit inside its cone),
+    // portico facing +z onto the plaza at (0, 34); avenue north to the gate arch at (0, 140); dome west, hall east; chairwoman at
+    // the foot of the steps; yard, cranes and garage south of the tower
     const TZ = -24;
-    // the trading tower: three stepped octagonal tiers of glass and white bands (1.5x the old one,
-    // set further back off the plaza)
+    // trading tower: three stepped octagonal tiers of glass and white bands
     k.at(0, TZ, Math.PI / 8);
     k.cyl(22.5, 24, 1.6, 8, T(CONC), 0, 0, 0, { outline: 0.12 });
     const tiers = [[18, 15], [14, 13.5], [10.5, 13.5]];
@@ -1047,15 +1018,14 @@ export function buildMeridian(world, loc) {
     k.column(18, tierTop[0] + 0.9, 0, 0);
     k.column(14.4, y, 0, 0);
     k.at();
-    // the ticker rides on a round collar wider than the tier below it (the old drum hugged an
-    // octagon whose corners poked through it), under a canopy back to the second tier
+    // ticker on a round collar wider than the tier below (so the octagon's corners don't poke through), under a canopy
     const TY = tierTop[0];
     k.at(0, TZ);
     k.cyl(19.6, 19.6, 0.9, 48, T(blue), 0, TY, 0, { outline: 0.06 });
     k.add(new THREE.RingGeometry(13.9, 20.0, 48, 1).rotateX(-Math.PI / 2), T(blue), 0, TY + 3.75, 0, { outline: 0 });
     k.add(new THREE.RingGeometry(13.9, 20.0, 48, 1).rotateX(Math.PI / 2), T(0x1b3a8f), 0, TY + 3.7, 0, { outline: 0 });
     k.at();
-    // the ticker reads the market (market.js): live prices, refreshed every 15 s
+    // live market prices (market.js), refreshed every 15 s
     const drum = ticker(k, 0, TY + 1.0, TZ, 19.8, 2.6, tickerText(), { fg: '#ffd23f', speed: 0.014 });
     const scroll = drum.userData.tick;
     let seen = market.version;
@@ -1064,10 +1034,9 @@ export function buildMeridian(world, loc) {
       market.update(t);
       if (market.version !== seen) { seen = market.version; drum.userData.retext(tickerText()); }
     };
-    // the entrance: a columned portico on the plaza side, steps up to it, glass doors and the
-    // exchange's name over them, banners either side
+    // entrance: columned portico with steps, glass doors under the name, banners
     {
-      const fz = 16.6; // the front face of the bottom tier (an octagon's flat side faces the plaza)
+      const fz = 16.6; // bottom tier's front face (an octagon flat faces the plaza)
       k.at(0, TZ);
       k.box(19, 1.6, 7, T(CONC), 0, 0, fz + 3.3, { outline: 0.06 });
       for (let i = 0; i < 3; i++) k.box(19, 1.2 - i * 0.4, 1.0, T(0xd8d4e8), 0, 0, fz + 7.3 + i, { outline: 0.03 });
@@ -1084,12 +1053,12 @@ export function buildMeridian(world, loc) {
       const ped = new THREE.Shape([new THREE.Vector2(-9.8, 0), new THREE.Vector2(9.8, 0), new THREE.Vector2(0, 3.2)]);
       k.add(new THREE.ExtrudeGeometry(ped, { depth: 6.2, bevelEnabled: false }).translate(0, 0, -3.1), T(WHITE), 0, 13.15, fz + 3.2, { outline: 0.08 });
       k.text('MERIDIAN EXCHANGE', 0, 11.9, fz + 6.42, 0, 15, { fg: '#2ec4ff', bg: '#0d1a33', back: false, off: 0.03 });
-      // the doors: a bronze frame, four glass leaves, a lit transom
+      // doors: bronze frame, four glass leaves, lit transom
       k.box(9.5, 7.4, 0.4, T(0x8a5a3a), 0, 1.6, fz + 0.15, { outline: 0.04 });
       for (let i = 0; i < 4; i++) k.box(2.0, 5.6, 0.2, G(0xbfe9ff), -3.3 + i * 2.2, 1.9, fz + 0.4, { outline: 0 });
       for (let i = 0; i < 5; i++) k.box(0.18, 5.8, 0.25, T(0x8a5a3a), -4.4 + i * 2.2, 1.8, fz + 0.45, { outline: 0 });
       k.box(9.0, 1.0, 0.2, G(WARM), 0, 7.7, fz + 0.4, { outline: 0 });
-      // banners on poles, and a pair of lamps at the foot of the steps
+      // banners on poles, lamps at the foot of the steps
       for (const sx of [-1, 1]) {
         k.cyl(0.12, 0.14, 12, 6, T(DARK), sx * 11.5, 0, fz + 6, { outline: 0.02 });
         k.box(2.2, 6, 0.1, T(blue), sx * 11.5 + sx * 1.15, 5.4, fz + 6, { outline: 0.03 });
@@ -1098,8 +1067,8 @@ export function buildMeridian(world, loc) {
       k.at();
       k.lamp(-11, TZ + fz + 10.5, 6); k.lamp(11, TZ + fz + 10.5, 6);
     }
-    // the chairwoman (story.buildLeaders) stands at the foot of the portico's steps, off the doors' line, facing the plaza's fountain
-    // (her ballot stand, 5.5 m in front of her, stays clear of the basin)
+    // chairwoman (story.buildLeaders) at the foot of the steps, off the door line, facing the fountain (her ballot stand 5.5 m
+    // ahead stays clear of the basin)
     loc.leaderSpot = { x: 9.5, z: 6, yaw: Math.atan2(-9.5, 14) };
     const crown = part(blue, (q) => {
       for (let i = 0; i < 4; i++) {
@@ -1111,16 +1080,14 @@ export function buildMeridian(world, loc) {
     crown.userData.spin = 0.4;
     crown.scale.setScalar(1.5);
     k.dyn(crown, 0, y + 3.6, TZ);
-    // the motor pool: the main garage out by the south-west stretch of the ring road, its bays turned out to face it (a service road
-    // runs from its right-hand bay to the ring, traffic.js)
+    // motor pool by the south-west ring road, bays facing it (a service road runs from the right-hand bay to the ring, traffic.js)
     const GA = GARAGE_AT;
     garage(k, GA.x, GA.z, GA.yaw, [true, false, true], 'main');
-    loc.garage = { ...GA, bay: 2 }; // (the bay the rovers come out of: it is open and has nothing in the way)
-    // keep the traffic's pads and the defence pylons off its compound (61 by 45 m, its middle 3 m right of the hall's and 5.5 m behind)
+    loc.garage = { ...GA, bay: 2 }; // rovers exit this bay (open, unobstructed)
+    // keep traffic pads and defence pylons off the compound (61 by 45 m, centred 3 m right of the hall's and 5.5 m behind)
     (loc.keep ||= []).push({ x: GA.x + 3 * Math.cos(GA.yaw) - 5.5 * Math.sin(GA.yaw), z: GA.z - 3 * Math.sin(GA.yaw) - 5.5 * Math.cos(GA.yaw), r: 36 });
-    // the container yard: a 70 x 30 slab with the gantry crane's rails along its long edges, three rows of stacks of the
-    // land-train's box container (cargo.py, as the cranes carry it) in the freight factions' liveries, a lane along the
-    // north side for the gantry to set its load down in, and the gantry running the length of the yard over it all
+    // container yard: 70 x 30 slab, gantry rails along the long edges, three rows of land-train container stacks (cargo.py) in
+    // freight liveries, a north lane for the gantry's set-downs, the gantry running the length
     const yx = 0, yz = -97;
     k.at(yx, yz);
     k.box(70, 0.3, 30, T(0x6b6880), 0, 0, 0, { outline: 0.04 });
@@ -1132,24 +1099,23 @@ export function buildMeridian(world, loc) {
     const freight = ['meridian', 'kepler', 'spacecom', 'vostok'];
     for (let i = 0; i < 18; i++) {
       const col = i % 6, row = Math.floor(i / 6);
-      if (i === 4 || i === 13) continue; // (two bays stand empty)
+      if (i === 4 || i === 13) continue; // two empty bays
       const cx = -26 + col * 9.5, cz = -8.5 + row * 7;
       const n = 1 + ((i * 7 + row) % 3);
       cargoStack(k, cx, cz, n, [freight[(i + row) % 4], freight[(i * 3 + 1) % 4], freight[(i + 2) % 4]], Math.PI / 2, 0.3);
     }
     k.at();
     gantryCrane(k, yx, yz, YEL, { speed: 1 / 70, phase: 0.3, travel: 24, lane: 10, faction: 'meridian' });
-    // the yard's slab, the plaza and the avenue have no colliders to say they are taken: keep the traffic's pads, the ring's stop and
-    // the defence pylons off them (traffic.js keepouts, world.js defensePylons); the yard's is sized so the turret at (25, -122) stays put
+    // yard, plaza and avenue have no colliders, so keep traffic pads, the ring stop and defence pylons off them (traffic.js keepouts,
+    // world.js defensePylons); the yard's radius leaves the turret at (25, -122) in place
     (loc.keep ||= []).push({ x: yx, z: yz, r: 30 }, { x: 0, z: 34, r: 14 }, ...[56, 82, 108, 134].map((z) => ({ x: 0, z, r: 16 })));
     // two tower cranes over the yard
     towerCrane(k, -54, -72, 34, 30, YEL, { speed: 0.09, phase: 0 });
     towerCrane(k, 62, -78, 34, 30, YEL, { speed: 0.11, phase: 2.2 });
-    // the lab dome west of the avenue, its airlock facing it; the trade hall east of it, its doors facing it
+    // lab dome west of the avenue, trade hall east, both facing it
     habDome(k, -58, 40, 22, 0x9be7ff, { door: Math.PI / 2, trim: blue });
     tradeHall(k, 64, 24, 24, 56, blue);
-    // the plaza between the portico and the avenue, a good way out from the steps so the fountain has room: paving, the
-    // fountain (the casino's, with a dollar sign in Meridian blue turning on top), benches round the basin, lamps
+    // plaza well out from the steps for the fountain: paving, the casino's fountain with a Meridian-blue dollar on top, benches, lamps
     k.at(0, 34);
     k.cyl(12, 12.4, 0.25, 32, T(0xd8d4e8), 0, 0, 0, { outline: 0.04 });
     k.ring(12.2, 0.15, T(blue), 0, 0.25, 0);
@@ -1160,9 +1126,8 @@ export function buildMeridian(world, loc) {
     k.at();
     fountain(k, 0, 34, { top: 'dollar', accent: blue });
     k.lamp(16, 34, 8); k.lamp(-16, 34, 8);
-    // the avenue: a road from the plaza's edge to the gate, the traffic's own (traffic.js pavedStrip lays its bed, ruts and
-    // berms with the road network, melting in under the plaza's paving and out past the arch); lamps and banners in pairs
-    // along it (the flags between them are the world's)
+    // avenue: a traffic road from the plaza to the gate (traffic.js pavedStrip lays bed, ruts and berms, blending under the paving
+    // and past the arch); paired lamps and banners (the flags between are the world's)
     {
       loc.paved = [{ x0: 0, z0: 44, x1: 0, z1: 150 }];
       for (const z of [50, 90, 130]) { k.lamp(20, z, 8); k.lamp(-20, z, 8); }
@@ -1172,7 +1137,7 @@ export function buildMeridian(world, loc) {
         k.box(0.12, 0.6, 2.2, T(YEL), sx * 20, 6.4, z + 4 + 1.15, { outline: 0 });
       }
     }
-    // the gate arch at the avenue's head: two pylons and a beam carrying the exchange's name, read from either side
+    // gate arch: two pylons and a beam with the name on both sides
     {
       const az = 140;
       for (const sx of [-1, 1]) {
@@ -1187,15 +1152,14 @@ export function buildMeridian(world, loc) {
       k.blinker(0, 14.4, az, 0xff2a4a, 0.4);
     }
     floodMast(k, 40, -124, 14); floodMast(k, -44, -118, 14);
-    // the landing pads, in the north corners either side of the avenue (spares: the traffic keeps the ones its flights use and lays
-    // the freighter's own, clear of the buildings and of the other flight)
+    // spare landing pads in the north corners (traffic keeps the ones its flights use and lays the freighter's own clear of both)
     world.pad(loc, -96, 96, 14, 0x2ec4ff, true);
     world.pad(loc, 96, 96, 14, 0x2ec4ff, true);
     for (const sx of [-1, 1]) world.flag(loc, sx * 18, 110, [0x2ec4ff, 0xffffff, 0x2ec4ff], 20);
   });
 }
 
-// the gored shapes are outlined by one shell that draws nothing itself (only its ink hull shows)
+// outline-only shell for the gored shapes (draws nothing; only its ink hull shows)
 let _inkShell = null;
 function inkShell() {
   if (!_inkShell) _inkShell = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
@@ -1203,15 +1167,14 @@ function inkShell() {
 }
 
 // =============================================================================================
-// Dr. Zbornak's lab, outside: the hall itself stays in world.buildLab (you walk into it); this
-// dresses it with ribbed walls, fake windows, a hazard-striped doorway under a lit canopy, roof
-// fans that spin, a crackling Tesla coil, a reactor flue that pulses, gas racks, barrels, a
-// generator, a giant specimen jar on a plinth, and a proper holding-pen yard.
+// Dr. Zbornak's lab exterior (the walk-in hall is world.buildLab): ribbed walls, fake windows, a striped doorway under a lit
+// canopy, spinning roof fans, a Tesla coil, a pulsing reactor flue, gas racks, barrels, a generator, a giant specimen jar and a
+// holding-pen yard.
 // =============================================================================================
 export function dressLab(world, loc, { W, D, H }) {
   settle(world, loc, 6607, (k) => {
     const lime = 0x7dff3a, pink = 0xff2e88, wall = 0xe8e4f4;
-    // pilasters, a plinth and fake windows round the hall
+    // pilasters, plinth, fake windows
     for (const [x0, x1, z, rot] of [[-W, W, -D - 1, Math.PI], [-W, -4, D + 1, 0], [4, W, D + 1, 0]]) {
       for (let x = x0; x <= x1 + 0.01; x += 6) k.box(1.2, H + 0.4, 0.6, T(0xc9c4d8), x, 0, z + (rot ? -0.3 : 0.3), { outline: 0.05 });
       k.box(x1 - x0 + 2, 1.2, 0.8, T(PANEL), (x0 + x1) / 2, 0, z + (rot ? -0.4 : 0.4), { outline: 0.04 });
@@ -1224,11 +1187,11 @@ export function dressLab(world, loc, { W, D, H }) {
       for (let z = -D; z <= D + 0.01; z += 8) k.box(0.6, H + 0.4, 1.2, T(0xc9c4d8), sx * (W + 1.3), 0, z, { outline: 0.05 });
       k.box(0.8, 1.2, D * 2 + 2, T(PANEL), sx * (W + 1.4), 0, 0, { outline: 0.04 });
       for (const z of [-8, 0, 8]) k.box(0.2, 2.2, 3.2, G(lime), sx * (W + 1.15), H * 0.55, z, { outline: 0 });
-      // conduit pipes climbing the side walls to the roof
+      // conduits up the side walls
       k.beam([sx * (W + 1.5), 0.4, -D + 2], [sx * (W + 1.5), H + 1, -D + 2], 0.3, T(LIGHT), { outline: 0.03 });
       k.beam([sx * (W + 1.5), 0.4, D - 3], [sx * (W + 1.5), H + 1, D - 3], 0.3, T(0x9be7ff), { outline: 0.03 });
     }
-    // doorway: hazard-striped frame, canopy with lights, a mat and two warning beacons
+    // doorway: striped frame, lit canopy, mat, two beacons
     for (const sx of [-1, 1]) {
       k.box(1, H - 4, 1.2, T(YEL), sx * 4.4, 0, D + 1.2, { outline: 0.05 });
       for (let y = 1; y < H - 4; y += 2) k.box(1.04, 0.8, 1.24, T(DARK), sx * 4.4, y, D + 1.2, { rz: 0.5, outline: 0 });
@@ -1239,7 +1202,7 @@ export function dressLab(world, loc, { W, D, H }) {
     for (const sx of [-1, 1]) k.beam([sx * 4.6, 0, D + 5.4], [sx * 4.6, H - 4.6, D + 5.4], 0.12, T(DARK), { outline: 0.02 });
     for (const sx of [-3, 0, 3]) k.box(1.2, 0.15, 0.6, G(WARM), sx, H - 4.85, D + 4.2, { outline: 0 });
     k.box(7, 0.06, 4, T(0x3a2a4a), 0, 0, D + 3, { outline: 0 });
-    // roof: parapet, two spinning cooling fans, vent stacks, a flue over the reactor, the Tesla coil
+    // roof: parapet, two fans, vent stacks, reactor flue, Tesla coil
     const roofY = H + 1.5;
     for (const [w, d, x, z] of [[W * 2 + 2.6, 0.6, 0, D + 1.2], [W * 2 + 2.6, 0.6, 0, -D - 1.2], [0.6, D * 2 + 2.6, W + 1.2, 0], [0.6, D * 2 + 2.6, -W - 1.2, 0]]) k.box(w, 1, d, T(PANEL), x, roofY, z, { outline: 0.04 });
     for (const [fx, fz] of [[12, -8], [12, 6]]) {
@@ -1257,14 +1220,14 @@ export function dressLab(world, loc, { W, D, H }) {
       k.cyl(0.6, 0.7, h, 10, T(STEEL), vx, roofY, vz, { outline: 0.04 });
       k.cyl(0.9, 0.9, 0.3, 10, T(DARK), vx, roofY + h, vz, { outline: 0.02 });
     }
-    // the reactor flue: a squat chimney over the tube, its glow ring breathing
+    // reactor flue over the tube, glow ring breathing
     k.cyl(4.2, 4.6, 3, 20, T(DARK), -2, roofY, -3, { outline: 0.08 });
     k.cyl(3.4, 3.8, 2.2, 20, T(LIGHT), -2, roofY + 3, -3, { outline: 0.05 });
     const flue = new THREE.Mesh(new THREE.TorusGeometry(3.7, 0.3, 6, 28).rotateX(Math.PI / 2), glow(pink));
     flue.userData.tick = (o, dt, t) => { const s = 1 + Math.sin(t * 3.1) * 0.06 + (Math.sin(t * 17) > 0.97 ? 0.15 : 0); o.scale.set(s, 1, s); };
     k.dyn(flue, -2, roofY + 4.4, -3);
     k.solid(4.6, 2.6, 4.6, -2, -3, 0, roofY);
-    // Tesla coil: a stack of rings under a glowing torus, with sparks that flicker on and off
+    // Tesla coil: ring stack under a glowing torus, flickering sparks
     const cx = -14, cz = 8;
     k.cyl(1.4, 1.8, 1, 12, T(DARK), cx, roofY, cz, { outline: 0.04 });
     k.cyl(0.6, 0.7, 7, 10, T(0xb87333), cx, roofY + 1, cz, { outline: 0.04 });
@@ -1282,7 +1245,7 @@ export function dressLab(world, loc, { W, D, H }) {
       k.dyn(spark, cx + Math.cos(a) * 2, roofY + 8.4, cz + Math.sin(a) * 2);
     }
     k.solid(1.8, 4.5, 1.8, cx, cz, 0, roofY);
-    // antenna mast and a rooftop tank
+    // antenna mast, rooftop tank
     k.cyl(0.12, 0.2, 9, 6, T(DARK), 18, roofY, -13, { outline: 0.03 });
     for (let i = 1; i <= 3; i++) k.box(2.6 - i * 0.5, 0.1, 0.1, T(lime), 18, roofY + i * 2.4, -13, { ry: i, outline: 0 });
     k.blinker(18, roofY + 9.4, -13, 0xff2a4a, 0.35);
@@ -1290,7 +1253,7 @@ export function dressLab(world, loc, { W, D, H }) {
     k.add(new THREE.SphereGeometry(2.2, 16, 6, 0, TAU, 0, Math.PI / 2), T(LIGHT), 6, roofY + 3.2, -10, { outline: 0.04 });
     k.ring(2.25, 0.15, G(lime), 6, roofY + 2.2, -10);
     k.solid(2.2, 2.6, 2.2, 6, -10, 0, roofY);
-    // outside: a gas-cylinder rack, hazard barrels, a generator, cable spools
+    // outside: gas rack, barrels, generator, cable spools
     k.at(W + 6, 4);
     k.box(3, 0.3, 8, T(DARK), 0, 0, 0, { outline: 0.03 });
     for (let i = 0; i < 6; i++) {
@@ -1316,7 +1279,7 @@ export function dressLab(world, loc, { W, D, H }) {
       k.add(new THREE.TorusGeometry(0.9, 0.25, 6, 12), T(0x2ec4ff), x, 1.2, z, { outline: 0 });
       k.hcyl(1.2, 1.4, x, z, 0, 1.2);
     }
-    // the giant specimen jar by the door: a plinth, a glass jar, a glowing thing inside, a brass lid
+    // giant specimen jar by the door: plinth, glass, glowing blob, brass lid
     const jx = 12, jz = D + 9;
     k.cyl(2.4, 2.8, 1.6, 16, T(PANEL), jx, 0, jz, { outline: 0.06 });
     k.cyl(2, 2, 5, 20, GLASS(0x9be7ff, 0.25), jx, 1.6, jz, { outline: 0 });
@@ -1330,15 +1293,14 @@ export function dressLab(world, loc, { W, D, H }) {
     });
     blob.userData.tick = (o, dt, t) => { o.position.y = 4.1 + Math.sin(t * 1.3) * 0.6; o.rotation.y += dt * 0.4; };
     k.dyn(blob, jx, 4.1, jz);
-    // the label: a flat brass-rimmed plaque standing proud of the round plinth, so the text can't
-    // sink into the curve
+    // flat plaque proud of the round plinth so the text doesn't sink into the curve
     k.box(4.6, 1.3, 0.3, T(DARK), jx, 0.2, jz + 2.95, { outline: 0.05 });
     k.box(4.8, 0.14, 0.36, T(0xd8a060), jx, 1.5, jz + 2.95, { outline: 0 });
     k.text('SPECIMEN #1', jx, 1.12, jz + 3.1, 0, 2.6, { fg: '#7dff3a', bg: '#10241a', back: false, off: 0.02 });
     k.text('DO NOT TAP GLASS', jx, 0.62, jz + 3.1, 0, 3.6, { fg: '#ffd23f', bg: '#10241a', back: false, off: 0.02 });
-    // the pen terminal at the gate
-    penTerminal(k, 26, 20, 0); // (facing the pen, the way the old terminal box did)
-    // holding-pen yard: a gravel pad, a feeding trough, a floodlight on each corner
+    // pen terminal at the gate
+    penTerminal(k, 26, 20, 0); // facing the pen
+    // holding-pen yard: gravel pad, feeding trough, corner floodlights
     k.box(36, 0.12, 44, T(0x8a7a6a), 45, 0, 43, { outline: 0 });
     k.box(8, 1, 1.6, T(0x8a5a3a), 54, 0, 60, { outline: 0.04 });
     k.box(7.6, 0.2, 1.2, T(0x7dff6a), 54, 0.9, 60, { outline: 0 });
@@ -1351,18 +1313,16 @@ export function dressLab(world, loc, { W, D, H }) {
 }
 
 // =============================================================================================
-// Dr. Zbornak's lab, inside: lab gear along every wall (a fume hood, a glassware bench under a
-// chalkboard of sums, specimen tanks with things floating in them, a cryo freezer, a server bank,
-// gas bottles, lockers, an eyewash station, cable trays), and the doctor's own station: a dais,
-// a waist-high workbench in front of him with his instruments on it and a console bank behind.
-// And out at the holding pen's gate, its terminal: a small kiosk with a sloped desk and a screen.
+// Dr. Zbornak's lab interior: gear along every wall (fume hood, glassware bench under a chalkboard, specimen tanks, cryo
+// freezer, server bank, gas bottles, lockers, eyewash, cable trays) and the doctor's station: a dais, a waist-high workbench in
+// front of him, a console bank behind.
 // =============================================================================================
 export function dressLabInside(world, loc, { W, D, H, docX, docZ }) {
   settle(world, loc, 6611, (k) => {
     const lime = 0x7dff3a, pink = 0xff2e88, cyan = 0x2ec4ff, vio = 0xc77dff;
-    const IW = W - 1, ID = D - 1; // inner faces of the walls
+    const IW = W - 1, ID = D - 1; // inner wall faces
     const liquid = [lime, pink, cyan, 0xffd23f, vio];
-    // flasks and beakers on a surface at height y
+    // flasks and beakers at height y
     const glassware = (x0, x1, y, z, n, rr) => {
       for (let i = 0; i < n; i++) {
         const x = x0 + ((i + 0.5) / n) * (x1 - x0), c = liquid[i % 5];
@@ -1372,7 +1332,7 @@ export function dressLabInside(world, loc, { W, D, H, docX, docZ }) {
       }
     };
     // --- back wall (z = -ID) ---
-    // fume hood: a cabinet, a glass sash and a duct up into the roof
+    // fume hood: cabinet, glass sash, roof duct
     k.box(5, 1.1, 2.2, T(LIGHT), -6.5, 0, -ID + 1.1, { outline: 0.05 });
     k.box(5, 2.6, 2.2, T(0xc9c4d8), -6.5, 1.1, -ID + 1.1, { outline: 0.05 });
     k.box(4.4, 1.6, 0.08, GLASS(0x9be7ff, 0.35), -6.5, 1.4, -ID + 2.22, { outline: 0 });
@@ -1380,7 +1340,7 @@ export function dressLabInside(world, loc, { W, D, H, docX, docZ }) {
     glassware(-8.4, -4.6, 1.12, -ID + 1.3, 5);
     k.cyl(0.7, 0.7, H - 3.7, 10, T(STEEL), -6.5, 3.7, -ID + 1.0, { outline: 0.03 });
     k.solid(2.5, 1.85, 1.1, -6.5, -ID + 1.1);
-    // the glassware bench and a chalkboard of sums above it
+    // glassware bench under a chalkboard
     k.box(8, 1.0, 2, T(0x5b5870), 4, 0, -ID + 1, { outline: 0.05 });
     k.box(8.3, 0.15, 2.2, T(0x2a2540), 4, 1.0, -ID + 1, { outline: 0.03 });
     glassware(0.6, 7.4, 1.15, -ID + 1.2, 8);
@@ -1389,21 +1349,21 @@ export function dressLabInside(world, loc, { W, D, H, docX, docZ }) {
     k.box(8.4, 3.6, 0.15, T(0x1d2a22), 4, 3.4, -ID + 0.08, { outline: 0.05 });
     k.box(8.6, 0.2, 0.3, T(0x8a5a3a), 4, 3.3, -ID + 0.15, { outline: 0 });
     for (let i = 0; i < 9; i++) k.box(1.2 + (i * 37 % 5) * 0.4, 0.08, 0.04, T(0xe8f0e0), 0.6 + (i % 3) * 2.6 + (i * 13 % 4) * 0.2, 3.9 + Math.floor(i / 3) * 0.95, -ID + 0.17, { rz: ((i * 7) % 5 - 2) * 0.05, outline: 0 });
-    k.add(new THREE.TorusGeometry(0.45, 0.05, 4, 16), T(0xe8f0e0), 6.6, 5.6, -ID + 0.17, { outline: 0 }); // (a circled answer)
+    k.add(new THREE.TorusGeometry(0.45, 0.05, 4, 16), T(0xe8f0e0), 6.6, 5.6, -ID + 0.17, { outline: 0 }); // circled answer
     k.solid(4, 0.6, 1, 4, -ID + 1);
-    // pipe manifold with valve wheels and gauges, over in the corner
+    // corner pipe manifold with valve wheels and gauges
     for (const y of [2.2, 3.4, 4.6]) k.add(new THREE.CylinderGeometry(0.16, 0.16, 6, 8).rotateZ(Math.PI / 2), T(y === 3.4 ? 0xb87333 : STEEL), 14, y, -ID + 0.3, { outline: 0.02 });
     for (const x of [12, 14, 16]) {
       k.add(new THREE.TorusGeometry(0.35, 0.07, 4, 12), T(0xff2a4a), x, 3.4, -ID + 0.62, { outline: 0 });
       k.cyl(0.25, 0.25, 0.12, 12, T(WHITE), x + 0.8, 4.6, -ID + 0.5, { rx: Math.PI / 2, outline: 0.02 });
     }
-    // cryo freezer: a tall white cabinet with a frosted window and a cold glow at its seals
+    // cryo freezer: frosted window, cold glow at the seals
     k.box(2.6, 4.2, 1.8, T(WHITE), 19, 0, -ID + 0.95, { outline: 0.06 });
     k.box(1.6, 1.8, 0.08, GLASS(0xd8f4ff, 0.55), 19, 2, -ID + 1.88, { outline: 0 });
     k.box(2.62, 0.1, 1.82, G(0x9be7ff), 19, 3.9, -ID + 0.95, { outline: 0 });
     k.box(0.15, 0.9, 0.2, T(STEEL), 18, 1.6, -ID + 1.95, { outline: 0 });
     k.solid(1.3, 2.1, 0.9, 19, -ID + 0.95);
-    // --- left wall (x = -IW): specimen tanks with things floating in them ---
+    // --- left wall (x = -IW): specimen tanks ---
     for (const [z, c] of [[-8.5, lime], [-5.5, pink], [7.5, cyan], [11, vio]]) {
       k.cyl(1.2, 1.3, 0.6, 14, T(DARK), -IW + 1.4, 0, z, { outline: 0.04 });
       k.cyl(1.05, 1.05, 4.2, 16, GLASS(c, 0.22), -IW + 1.4, 0.6, z, { outline: 0 });
@@ -1413,10 +1373,10 @@ export function dressLabInside(world, loc, { W, D, H, docX, docZ }) {
       k.beam([-IW + 1.4, 5.2, z], [-IW + 0.2, H - 1, z], 0.08, T(DARK), { outline: 0 });
       k.column(1.3, 5.2, -IW + 1.4, z);
     }
-    // a cable tray along the left wall, high up
+    // high cable tray along the left wall
     k.box(0.6, 0.2, ID * 2 - 2, T(STEEL), -IW + 0.4, 7.5, 0, { outline: 0.02 });
     for (let i = 0; i < 4; i++) k.box(0.1, 0.12, ID * 2 - 2.4, T([0xff2a4a, lime, cyan, YEL][i]), -IW + 0.2 + i * 0.13, 7.7, 0, { outline: 0 });
-    // --- right wall (x = +IW): the server bank, gas bottles ---
+    // --- right wall (x = +IW): server bank, gas bottles ---
     for (const z of [-11, -8.4]) {
       k.box(1.6, 5, 2.4, T(0x2a2540), IW - 0.9, 0, z, { outline: 0.05 });
       for (let i = 0; i < 9; i++) k.box(0.05, 0.12, 1.8, G(i % 3 === 0 ? 0xff2a4a : i % 2 ? lime : cyan), IW - 1.72, 0.6 + i * 0.48, z + ((i * 5) % 3 - 1) * 0.2, { outline: 0 });
@@ -1429,7 +1389,7 @@ export function dressLabInside(world, loc, { W, D, H, docX, docZ }) {
     }
     k.solid(0.6, 1.4, 2.3, IW - 0.7, 12);
     // --- front wall (z = +ID), either side of the door ---
-    // lockers, a coat hook with a spare lab coat, and an eyewash station
+    // lockers, a spare lab coat on a hook, eyewash station
     for (let i = 0; i < 5; i++) {
       k.box(1.1, 3.6, 1.2, T(i % 2 ? 0x5b5870 : 0x6b6880), -16 + i * 1.15, 0, ID - 0.65, { outline: 0.03 });
       k.box(0.5, 0.06, 0.04, T(DARK), -16 + i * 1.15, 3.0, ID - 1.27, { outline: 0 });
@@ -1445,13 +1405,13 @@ export function dressLabInside(world, loc, { W, D, H, docX, docZ }) {
     // --- the doctor's station ---
     k.box(10, 0.3, 8, T(0x3a3550), docX, 0, docZ - 0.6, { outline: 0.04 });
     k.box(10.2, 0.08, 8.2, G(lime), docX, 0.3, docZ - 0.6, { outline: 0 });
-    // the workbench he stands behind (+z of him), waist high, with a short return on his left
+    // workbench in front of him (+z), with a short return on his left
     k.box(6.4, 1.15, 1.5, T(cyan), docX, 0, docZ + 2.1, { outline: 0.06 });
     k.box(6.7, 0.14, 1.8, T(0x2a2540), docX, 1.15, docZ + 2.1, { outline: 0.03 });
     k.box(1.5, 1.15, 3.4, T(cyan), docX - 3.95, 0, docZ + 0.35, { outline: 0.06 });
     k.box(1.8, 0.14, 3.7, T(0x2a2540), docX - 3.95, 1.15, docZ + 0.35, { outline: 0.03 });
     k.box(6, 0.4, 0.06, G(lime), docX, 0.6, docZ + 2.86, { outline: 0 });
-    // on it: a bubbling retort, a microscope, a tablet, a stack of papers, a coffee mug
+    // on it: retort, microscope, tablet, papers, mug
     k.ball(0.35, G(pink), docX - 2, 1.65, docZ + 2.1, { outline: 0.02 });
     k.beam([docX - 2, 1.9, docZ + 2.1], [docX - 1.2, 2.3, docZ + 2.3], 0.06, GLASS(0x9be7ff, 0.5), { outline: 0 });
     k.box(0.5, 0.8, 0.5, T(DARK), docX + 1.8, 1.29, docZ + 1.9, { outline: 0.03 });
@@ -1461,7 +1421,7 @@ export function dressLabInside(world, loc, { W, D, H, docX, docZ }) {
     k.cyl(0.13, 0.13, 0.25, 8, T(0xff7a1a), docX + 2.7, 1.29, docZ + 2.4, { outline: 0.02 });
     k.solid(3.2, 0.65, 0.75, docX, docZ + 2.1);
     k.solid(0.75, 0.65, 1.7, docX - 3.95, docZ + 0.35);
-    // the console bank behind him: three screens on a desk, a tall rack of dials at the end
+    // console bank behind: three screens, a tall dial rack at the end
     k.box(7, 1.1, 1.4, T(0x2a2540), docX, 0.3, docZ - 3.4, { outline: 0.05 });
     for (const [dx, c, ry] of [[-2.3, lime, 0.25], [0, cyan, 0], [2.3, pink, -0.25]]) {
       k.box(2, 1.3, 0.2, T(DARK), docX + dx, 1.5, docZ - 3.8, { ry, outline: 0.04 });
@@ -1474,8 +1434,7 @@ export function dressLabInside(world, loc, { W, D, H, docX, docZ }) {
   });
 }
 
-// The holding pen's terminal: a small kiosk at the gate. A concrete step, a console with a sloped
-// keypad desk and a screen, a card slot, a little canopy with a light strip and a turning holo ring.
+// Holding-pen terminal kiosk: step, console with sloped keypad and screen, card slot, lit canopy, turning holo ring.
 export function penTerminal(k, x, z, yaw) {
   const lime = 0x7dff3a;
   k.at(x, z, yaw);
@@ -1501,20 +1460,19 @@ export function penTerminal(k, x, z, yaw) {
 }
 
 // =============================================================================================
-// The Monolith: the slab itself stays in world.buildMonolith; around it now, a survey dig:
-// a trampled berm, floodlight tripods aimed at it, a scaffold, the researchers' tent and
-// generator, a laser theodolite, glyph lines in the dust, and black shards circling it.
+// The Monolith's survey dig (the slab is world.buildMonolith): berm, floodlight tripods, scaffold, tents and generator, a laser
+// theodolite, glyph lines in the dust, black shards circling it.
 // =============================================================================================
 export function dressMonolith(world, loc) {
   settle(world, loc, 7703, (k) => {
     const vio = 0xc77dff;
-    // a low ring berm of dug-out regolith (open on the approach side)
+    // low ring berm, open on the approach side
     for (let i = 0; i < 38; i++) {
       const a = (i / 44) * TAU + 0.5;
       k.add(new THREE.SphereGeometry(3.2, 8, 5, 0, TAU, 0, Math.PI / 2), T(0x9a92a8), Math.cos(a) * 36, -0.7, Math.sin(a) * 36, { outline: 0.06 });
       k.sphere(3.2, Math.cos(a) * 36, -0.7, Math.sin(a) * 36);
     }
-    // glyph lines radiating through the dust, and two carved rings
+    // radiating glyph lines and two carved rings
     for (let i = 0; i < 16; i++) {
       const a = (i / 16) * TAU + 0.13;
       k.box(0.3, 0.04, 12 + (i % 3) * 4, G(vio), Math.cos(a) * 13, 0.03, Math.sin(a) * 13, { ry: -a + Math.PI / 2, outline: 0 });
@@ -1530,7 +1488,7 @@ export function dressMonolith(world, loc) {
       k.box(1.6, 1.0, 0.1, G(0xfffbe0), 0, 7.15, 0.57, { rx: -0.3, outline: 0 });
       k.at();
     }
-    // scaffold tower on one side of the slab, with platforms halfway up and level with its top
+    // scaffold tower beside the slab, platforms at half and full height
     k.at(7.6, -3.4);
     for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.beam([sx * 1.7, 0, sz * 1.7], [sx * 1.7, 36, sz * 1.7], 0.11, T(YEL), { outline: 0.02 });
     for (let y = 4; y <= 36; y += 4) {
@@ -1541,8 +1499,7 @@ export function dressMonolith(world, loc) {
     k.box(3.8, 0.2, 3.8, T(0x8a5a3a), 0, 18, 0, { outline: 0.03 });
     k.solid(1.9, 18.2, 1.9, 0, 0);
     k.at();
-    // the researchers' camp: two tents, a site cabin, a generator, crates, and a laser theodolite
-    // with its beam on the slab
+    // camp: two tents, site cabin, generator, crates, a theodolite beaming at the slab
     for (const [x, z, yaw, c] of [[-24, 13, 0.8, 0xff9f1c], [14, 27, 2.6, 0x2ec4ff]]) {
       k.at(x, z, yaw);
       k.add(prism(7, 5, 3.6), T(c), 0, 0, 0, { outline: 0.08 });
@@ -1551,7 +1508,7 @@ export function dressMonolith(world, loc) {
       k.solid(3.5, 1.8, 2.5, 0, 0);
       k.at();
     }
-    // site cabin: a little prefab with a lit window, an antenna and a bench of instruments outside
+    // site cabin with lit window, antenna, instrument bench
     k.at(-26, -14, 0.5 + Math.PI / 2);
     k.box(8, 3.2, 5, T(0xd8d4e8), 0, 0, 0, { outline: 0.08 });
     k.box(8.4, 0.3, 5.4, T(vio), 0, 3.2, 0, { outline: 0.03 });
@@ -1561,7 +1518,7 @@ export function dressMonolith(world, loc) {
     k.box(3.2, 0.9, 1.0, T(0x5b5870), -1.5, 0, 3.6, { outline: 0.03 });
     for (let j = 0; j < 3; j++) k.box(0.6, 0.5, 0.5, G([0x2ee6ff, vio, 0x7dff6a][j]), -2.6 + j * 1.1, 0.9, 3.6, { outline: 0 });
     k.solid(4, 1.6, 2.5, 0, 0);
-    k.solid(1.6, 0.7, 0.5, -1.5, 3.6); // (the instrument bench)
+    k.solid(1.6, 0.7, 0.5, -1.5, 3.6); // instrument bench
     k.at();
     for (const [x, z, c] of [[-15, 22, 0x9a6a3a], [-13.6, 20.2, 0x4f5a42], [-16.6, 20.6, 0x9a6a3a], [16, -22, 0x4f5a42], [17.4, -20.5, 0x9a6a3a]]) crate(k, x, 0, z, 1.1, c, x);
     k.at(-29, -3, 0.4);
@@ -1569,7 +1526,7 @@ export function dressMonolith(world, loc) {
     k.cyl(0.15, 0.2, 1, 6, T(DARK), 0.7, 1.6, 0, { outline: 0.02 });
     k.solid(1.2, 0.8, 0.7, 0, 0);
     k.at();
-    // survey stakes and tape round the dig
+    // survey stakes and tape
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * TAU + 0.2, b = ((i + 1) / 10) * TAU + 0.2, r = 18;
       k.cyl(0.08, 0.08, 1.2, 4, T(0xff9f1c), Math.cos(a) * r, 0, Math.sin(a) * r, { outline: 0.02 });
@@ -1584,7 +1541,7 @@ export function dressMonolith(world, loc) {
     k.at(-5, 33, Math.PI);
     k.sign('DO NOT TOUCH. SERIOUSLY.', 0, 0, { w: 10, y: 3, fg: '#c77dff' });
     k.at();
-    // black shards circling the slab, each with a violet edge, at different heights and speeds
+    // violet-edged black shards circling at varied heights and speeds
     for (let i = 0; i < 9; i++) {
       const shard = new THREE.Group();
       const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.7 + (i % 3) * 0.4, 0), new THREE.MeshBasicMaterial({ color: 0x050308 }));
@@ -1604,7 +1561,7 @@ export function dressMonolith(world, loc) {
   });
 }
 
-// Ribbed connector tunnel between two ground points (radius r), with a lit window strip.
+// Ribbed connector tunnel between two ground points (radius r), lit window strips.
 export function tunnel(world, loc, k, ax, az, bx, bz, r = 1.6, color = WHITE) {
   const len = Math.hypot(bx - ax, bz - az), yaw = Math.atan2(bx - ax, bz - az);
   k.at((ax + bx) / 2, (az + bz) / 2, yaw);
@@ -1616,7 +1573,7 @@ export function tunnel(world, loc, k, ax, az, bx, bz, r = 1.6, color = WHITE) {
   world.col(loc, { type: 'box', x: (ax + bx) / 2, y: r * 0.8, z: (az + bz) / 2, hx: r, hy: r, hz: len / 2, yaw });
 }
 
-// Free spot for a footprint of radius r on the ring rmin..rmax, clear of the circles in occ.
+// free spot for radius r on the ring rmin..rmax, clear of the circles in occ
 function freeSpot(occ, r, rmin, rmax, rr, tries = 60) {
   for (let i = 0; i < tries; i++) {
     const a = rr() * TAU, d = rmin + rr() * (rmax - rmin);
@@ -1626,14 +1583,13 @@ function freeSpot(occ, r, rmin, rmax, rr, tries = 60) {
   return null;
 }
 
-// Playground: a spinning merry-go-round, a swing set with swaying swings, a slide, a climbing
-// dome and a sandpit, on a soft rubber pad (local frame at x, z).
+// Playground on a rubber pad (local frame at x, z): merry-go-round, swings, slide, climbing dome, sandpit.
 export function playground(world, loc, k, x, z, yaw = 0) {
   const pk = 0xff7ad9, cy = 0x2ec4ff;
   k.at(x, z, yaw);
   k.cyl(13, 13.2, 0.15, 28, T(0x3ad1a0), 0, 0, 0, { outline: 0.04 });
   k.ring(13.05, 0.15, T(YEL), 0, 0.15, 0);
-  // swings: an A-frame, three seats on chains (each swings)
+  // swings: A-frame, three swinging seats
   for (const s of [-1, 1]) for (const t of [-1, 1]) k.beam([s * 4.5, 0, t * 1.6 - 5], [s * 4.5, 4.5, -5], 0.12, T(cy), { outline: 0.03 });
   k.beam([-4.7, 4.5, -5], [4.7, 4.5, -5], 0.14, T(cy), { outline: 0.03 });
   for (const sx of [-1, 1]) k.solid(0.3, 2.25, 1.75, sx * 4.5, -5);
@@ -1652,7 +1608,7 @@ export function playground(world, loc, k, x, z, yaw = 0) {
     k.at();
   }
   k.at(x, z, yaw);
-  // slide: a ladder tower with a little roof and a chute
+  // slide: roofed ladder tower and chute
   k.box(2, 3, 2, T(YEL), 5, 0, 4, { outline: 0.05 });
   k.add(new THREE.ConeGeometry(1.7, 1.4, 4), T(pk), 5, 3.7, 4, { ry: Math.PI / 4, outline: 0.04 });
   k.add(new THREE.BoxGeometry(1.2, 0.2, 5.4), T(cy), 5, 1.6, 7.6, { rx: 0.55, outline: 0.04 });
@@ -1664,8 +1620,8 @@ export function playground(world, loc, k, x, z, yaw = 0) {
   k.cyl(2.6, 2.7, 0.35, 16, T(0xe8c98a), 1, 0, 9, { outline: 0.03 });
   k.ring(2.7, 0.15, T(0x8a5a3a), 1, 0.35, 9);
   k.solid(1, 1.5, 1, 5, 4);
-  k.solid(0.6, 0.9, 2.5, 5, 7.6, 0, 0.2); // (the chute)
-  k.sphere(2.6, -6, 0.4, 5); // (the climbing dome)
+  k.solid(0.6, 0.9, 2.5, 5, 7.6, 0, 0.2); // chute
+  k.sphere(2.6, -6, 0.4, 5); // climbing dome
   k.at();
   // merry-go-round
   const [mx, mz] = L(0, 0);
@@ -1686,7 +1642,7 @@ export function playground(world, loc, k, x, z, yaw = 0) {
   k.dyn(mgr, mx, 0.6, mz);
 }
 
-// Water tower: a tank on four legs with a ladder and the town's colour band.
+// Water tower: tank on four legs, ladder, town colour band.
 export function waterTower(world, loc, k, x, z, color) {
   k.at(x, z);
   for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
@@ -1703,7 +1659,7 @@ export function waterTower(world, loc, k, x, z, color) {
   k.at();
 }
 
-// Greenhouse: a long glass barrel vault over planter rows under violet grow-lights.
+// Greenhouse: glass barrel vault over planter rows and violet grow-lights.
 export function greenhouse(world, loc, k, x, z, yaw, len = 18) {
   k.at(x, z, yaw);
   k.box(7.4, 0.5, len + 0.4, T(CONC), 0, 0, 0, { outline: 0.05 });
@@ -1717,7 +1673,7 @@ export function greenhouse(world, loc, k, x, z, yaw, len = 18) {
   k.at();
 }
 
-// Comms mast with a small dish that turns (a dish head on a boom, in `faction`'s paint).
+// Comms mast with a turning dish head on a boom, in `faction` paint.
 export function commsMast(world, loc, k, x, z, h, color, faction) {
   k.at(x, z);
   k.box(3, 0.5, 3, T(CONC), 0, 0, 0, { outline: 0.03 });
@@ -1730,10 +1686,9 @@ export function commsMast(world, loc, k, x, z, h, color, faction) {
 }
 
 // =============================================================================================
-// Kepler towns (Tranquility, Aldrin, Kepler, Twilight, Hertzsprung): a hub dome with a ring of
-// family domes joined by ribbed tunnels, prefab cabins round the edge facing the square, a
-// playground, a greenhouse, a water tower and a comms mast. Kepler Civic Center trades the hub
-// for a gold council dome and adds the town hall with its clock tower.
+// Kepler towns (Tranquility, Aldrin, Kepler, Twilight, Hertzsprung): hub dome ringed by family domes on tunnels, edge cabins
+// facing the square, playground, greenhouse, water tower, comms mast. Kepler Civic Center has a gold council dome and the town
+// hall with its clock tower.
 // =============================================================================================
 export function buildTown(world, loc, { civic = false } = {}) {
   const palette = [0xff9f1c, 0xff7ad9, 0x2ec4ff, 0xffd23f, 0x7dff6a, 0xc77dff];
@@ -1741,7 +1696,7 @@ export function buildTown(world, loc, { civic = false } = {}) {
   settle(world, loc, 8101 + loc.id.length * 31, (k) => {
     const rr = world.rand;
     const hubR = civic ? 30 : 22;
-    habDome(k, 0, 0, hubR, civic ? 0xffd23f : 0xb8ffb0, { door: Math.PI, trim: 0xff9f1c, yard: false }); // (tunnels come in from every side)
+    habDome(k, 0, 0, hubR, civic ? 0xffd23f : 0xb8ffb0, { door: Math.PI, trim: 0xff9f1c, yard: false }); // tunnels come in from every side
     occ.push([0, 0, hubR + 4], [0, -hubR - 4, 4]);
     if (civic) occ.push([0, 52, 20], [-20, 64, 2], [20, 64, 2]);
     const n = loc.id === 'tranq' ? 8 : 6;
@@ -1755,12 +1710,12 @@ export function buildTown(world, loc, { civic = false } = {}) {
       occ.push([dx, dz, r + 5]);
       const k1 = hubR / d, k2 = 1 - r / d;
       tunnel(world, loc, k, dx * k1, dz * k1, dx * k2, dz * k2, 1.6);
-      // the tunnel's line is busy too
+      // keep the tunnel line clear too
       for (let t = k1 + 0.1; t < k2; t += 0.15) occ.push([dx * t, dz * t, 2.5]);
     }
     for (const p of loc.pads || []) occ.push([p.x, p.z, p.r + 2]);
     occ.push([-65, 55, 15]);
-    // cabins round the edge, doors to the square
+    // edge cabins, doors to the square
     for (let i = 0; i < 5; i++) {
       const sp = freeSpot(occ, 7, 80, Math.min(98, loc.r * 0.85), rr);
       if (!sp) continue;
@@ -1775,7 +1730,7 @@ export function buildTown(world, loc, { civic = false } = {}) {
     const cm = freeSpot(occ, 3, 60, 95, rr);
     if (cm) commsMast(world, loc, k, cm[0], cm[1], 16, 0xff9f1c, 'kepler');
     for (let i = 0; i < 6; i++) { const sp = freeSpot(occ, 1.5, 30, 95, rr); if (sp) k.lamp(sp[0], sp[1], 7); }
-    // the town sign by the hub's door
+    // town sign by the hub door
     k.at(0, -hubR - 9, Math.PI);
     k.sign(loc.name.toUpperCase(), 0, 0, { w: Math.max(10, loc.name.length * 0.75), y: 4, fg: '#ff9f1c' });
     k.at();
@@ -1784,9 +1739,8 @@ export function buildTown(world, loc, { civic = false } = {}) {
   world.pad(loc, -65, 55, 13, 0xffd23f, true);
 }
 
-// Kepler town hall: a colonnaded civic block under a pediment, steps, and a clock tower whose
-// hands go round. Its colonnade faces out of town, towards the way you ride in (it used to face the
-// hub dome, so arriving you saw a blank back wall).
+// Kepler town hall: colonnaded block under a pediment, steps, a clock tower with turning hands. The colonnade faces out of
+// town, toward arrivals.
 export function townHall(world, loc, k) {
   const x = 0, z = 52, orange = 0xff9f1c;
   k.at(x, z, Math.PI);
@@ -1803,7 +1757,7 @@ export function townHall(world, loc, k) {
   for (let i = 0; i < 6; i++) k.box(2.2, 3, 0.2, G(WARM), -10 + i * 4, 5, -5.0, { outline: 0 });
   k.box(3, 5, 0.3, T(0x2a2540), 0, 1.2, -5.0, { outline: 0.02 });
   k.solid(15.5, 8, 6.5, 0, 0.8);
-  // clock tower rising from the roof
+  // clock tower
   k.box(6, 14, 6, T(WHITE), 0, 13.4, 2, { outline: 0.1 });
   k.box(6.6, 0.8, 6.6, T(orange), 0, 27.4, 2, { outline: 0.05 });
   k.add(new THREE.ConeGeometry(4.6, 6, 4), T(orange), 0, 31.2, 2, { ry: Math.PI / 4, outline: 0.08 });
@@ -1828,8 +1782,7 @@ export function townHall(world, loc, k) {
   world.flag(loc, 20, 64, [0xff9f1c, 0xffffff, 0xff9f1c], 18);
 }
 
-// Quonset hut (barracks, garages): a ribbed half-barrel with an end wall, door and lamps; the
-// door end faces local +z.
+// Quonset hut (barracks, garages): ribbed half-barrel, end wall, door, lamps; door end faces local +z.
 export function quonset(k, x, z, r, len, color, yaw, trim) {
   k.at(x, z, yaw);
   k.box(r * 2 + 1, 0.4, len + 1, T(CONC), 0, 0, 0, { outline: 0.04 });
@@ -1841,12 +1794,12 @@ export function quonset(k, x, z, r, len, color, yaw, trim) {
   k.box(r * 0.8, r * 0.75, 0.2, T(0x2a2540), 0, 0.4, len / 2 + 0.05, { outline: 0.02 });
   for (const s of [-1, 1]) k.add(new THREE.CylinderGeometry(0.35, 0.35, 0.1, 10).rotateX(Math.PI / 2), G(WARM), s * r * 0.6, r * 0.6, len / 2 + 0.06, { outline: 0 });
   k.box(0.6, 0.25, 0.3, G(WARM), 0, r * 0.75 + 0.6, len / 2 + 0.2, { outline: 0 });
-  k.solid(r + 0.5, 0.2, len / 2 + 0.5, 0, 0); // the concrete pad
-  k.hcyl(r + 0.1, len, 0, 0, 0, 0.4); // a round roof you can roll over, not a box
+  k.solid(r + 0.5, 0.2, len / 2 + 0.5, 0, 0); // concrete pad
+  k.hcyl(r + 0.1, len, 0, 0, 0, 0.4); // round roof you can roll over
   k.at();
 }
 
-// A turning radar: a lattice reflector on a yoke, spinning on a pedestal (dynamic).
+// Turning radar: lattice reflector on a yoke, spinning on a pedestal (dynamic).
 export function radar(k, x, y, z, w, color, speed = 0.8) {
   const rd = part(color, (q) => {
     q.cyl(0.5, 0.7, 1.2, 10, T(DARK), 0, 0, 0, { outline: 0.03 });
@@ -1859,7 +1812,7 @@ export function radar(k, x, y, z, w, color, speed = 0.8) {
   k.dyn(rd, x, y, z);
 }
 
-// Searchlight: pedestal, tilted housing and a soft light cone, sweeping round (dynamic).
+// Searchlight: pedestal, tilted housing, soft light cone, sweeping (dynamic).
 export function searchlight(k, x, y, z, reach = 40) {
   const sl = new THREE.Group();
   const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 0.8, 8), T(DARK)); ped.position.y = 0.4; sl.add(ped);
@@ -1873,16 +1826,14 @@ export function searchlight(k, x, y, z, reach = 40) {
 }
 
 // =============================================================================================
-// ILMB core (the wings, skywalks, walls and boards stay in world.js): the great dome, a control
-// spire through its crown, the arched repair-bay hangar, the launch gantry and its fuel spheres,
-// two outlying domes, a comms mast and the barracks blocks.
+// ILMB core (wings, skywalks, walls and boards are in world.js): great dome, control spire through its crown, repair-bay
+// hangar, launch gantry with fuel spheres, two outlying domes, comms mast, barracks.
 // =============================================================================================
 export function dressIlmb(world, loc) {
   settle(world, loc, 9203, (k) => {
-    // (the berm is cut where the six wings' skywalks dock, world.js buildIlmbWings: wing angle a runs
-    // out along (cos a, sin a), the dome's azimuth pi/2 - a)
+    // berm cut where the six wing skywalks dock (world.js buildIlmbWings: wing angle a runs along (cos a, sin a), dome azimuth pi/2 - a)
     habDome(k, 0, 0, 58, 0x9be7ff, { door: 0, trim: 0xffd23f, cupola: false, gaps: [0, 0.62, 2.2, 3.8, 4.5, 5.2].map((a) => Math.PI / 2 - a) });
-    // control spire rising through the crown: banded shaft, an observation pod, antenna and beacon
+    // control spire: banded shaft, observation pod, antenna, beacon
     k.at(0, 0);
     k.cyl(2.6, 4.2, 70, 14, T(WHITE), 0, 0, 0, { outline: 0.12 });
     for (const y of [60, 64, 68]) k.ring(3.05 - (y - 60) * 0.03, 0.25, T(YEL), 0, y, 0);
@@ -1894,7 +1845,7 @@ export function dressIlmb(world, loc) {
     radar(k, 3.4, 77.4, 0, 4, 0x2ec4ff, 0.6);
     k.column(4.2, 82, 0, 0);
     k.at();
-    // the repair bay: an arched hangar with ribs and a lit doorway (+z faces the base)
+    // repair bay: ribbed arched hangar, lit doorway (+z faces the base)
     k.at(-168, -98, 1.05);
     k.box(36, 0.5, 36, T(CONC), 0, 0, 0, { outline: 0.05 });
     k.add(new THREE.CylinderGeometry(16, 16, 34, 24, 1, true, Math.PI / 2, Math.PI).rotateX(Math.PI / 2), D(0xff9f1c), 0, 0.5, 0, { outline: 0.25 });
@@ -1906,7 +1857,7 @@ export function dressIlmb(world, loc) {
     for (let i = -3; i <= 3; i++) k.box(1.6, 0.08, 6, T(i % 2 ? YEL : DARK), i * 3, 0.5, 21, { outline: 0 });
     for (const s of [-1, 1]) k.box(0.4, 0.4, 0.4, G(0xff9f1c), s * 15, 4, 17.4, { outline: 0 });
     k.at();
-    // launch gantry: a lattice umbilical tower with two swing arms, and the fuel spheres
+    // launch gantry: lattice umbilical tower with two swing arms; fuel spheres
     const gx = 60, gz = -185;
     k.at(gx, gz);
     k.box(10, 1, 10, T(CONC), 0, 0, 0, { outline: 0.06 });
@@ -1924,7 +1875,7 @@ export function dressIlmb(world, loc) {
     habDome(k, 70, 140, 16, 0xff7ad9, { door: Math.PI, trim: YEL });
     habDome(k, -60, 145, 14, 0xffd23f, { door: Math.PI, trim: 0xff7ad9 });
     commsMast(world, loc, k, 140, -120, 30, 0xffd23f, 'spacecom');
-    // barracks and the vehicle depot
+    // barracks and vehicle depot
     quonset(k, 175, 120, 7, 34, 0x5b5870, -0.6 + Math.PI, YEL);
     quonset(k, -175, 125, 7, 34, 0x5b5870, 0.6 + Math.PI, YEL);
     cabin(k, 190, -40, 26, 26, 11, 0x4a4660, 0.3 - Math.PI / 2, { roof: 0x2a2540, trim: YEL });
@@ -1932,50 +1883,47 @@ export function dressIlmb(world, loc) {
 }
 
 // =============================================================================================
-// Military bases (Vostok, Daedalus): inside the walls, a sloped command bunker with slit
-// windows, an antenna farm and a turning radar; Quonset barracks; a searchlight tower; tank traps
-// and sandbag nests; fuel and ammo.
+// Military bases (Vostok, Daedalus): sloped command bunker with slits, masts and radar; Quonset barracks; searchlight tower;
+// tank traps, sandbag nests; fuel and ammo.
 // =============================================================================================
 export function dressBase(world, loc) {
   const small = !!loc.small;
   settle(world, loc, 9901 + loc.id.length * 17, (k, ctx) => {
     const fc = ctx.fc;
-    // command bunker: an armoured octagonal frustum. Everything on it (firing slits, the faction
-    // band, armour plates) sits flush on its own face and leans with the wall, so it reads square
-    // from every side; a glazed command deck and a ring of masts on top; a recessed blast door
+    // command bunker: armoured octagonal frustum; slits, faction band and armour plates sit flush on each leaning face so it
+    // reads square from every side; glazed command deck and masts on top; recessed blast door
     const R = small ? 13 : 21, H = small ? 9 : 12.5;
-    const tilt = Math.atan((R * 0.18 * Math.cos(Math.PI / 8)) / H); // the faces' lean (measured across the face)
-    const face = (j) => (j + 0.5) * (TAU / 8);              // face centres (cylinder vertices sit at j*45deg)
+    const tilt = Math.atan((R * 0.18 * Math.cos(Math.PI / 8)) / H); // face lean (measured across the face)
+    const face = (j) => (j + 0.5) * (TAU / 8);              // face centres (cylinder vertices at j*45deg)
     const ap = (h) => (R - R * 0.18 * (h / H)) * Math.cos(Math.PI / 8); // apothem at height h
-    k.at(0, 0, -Math.PI / 8); // (turned so face 0 looks straight down the approach, +z: the door's face)
+    k.at(0, 0, -Math.PI / 8); // face 0 (the door's) looks down the approach, +z
     k.cyl(R * 1.12, R * 1.16, 0.8, 8, T(CONC), 0, 0, 0, { outline: 0.06 });
     k.cyl(R * 0.82, R, H, 8, T(0x4a4660), 0, 0.8, 0, { outline: 0.18 });
     for (let j = 0; j < 8; j++) {
       const a = face(j);
       const at = (h, out) => [Math.sin(a) * (ap(h) + out), 0.8 + h, Math.cos(a) * (ap(h) + out)];
-      // (turned to the face first, then leaned back with it: yaw-then-pitch, so every face's plates
-      // sit square and level on it, not skewed by a world-axis tilt)
+      // yaw then pitch, so plates sit square on each face rather than skewed by a world-axis tilt
       const fq = new THREE.Quaternion().setFromEuler(new THREE.Euler(-tilt, a, 0, 'YXZ'));
       const plate = (w, hh, d, h, out, mat) => { const [x, y, z] = at(h, out); k.add(new THREE.BoxGeometry(w, hh, d), mat, x, y, z, { q: fq, outline: 0.03 }); };
       const side = 2 * ap(0.62 * H) * Math.tan(Math.PI / 8) * 0.86;
       if (j !== 0) plate(side * 0.7, 0.55, 0.2, H * 0.55, 0.06, T(0x1d1a29));   // firing slit
-      if (j !== 0) plate(side * 0.6, 0.18, 0.14, H * 0.55 - 0.42, 0.1, G(fc)); // its glow
-      plate(side, 0.4, 0.16, H * 0.86, 0.08, T(fc));                           // the faction band
+      if (j !== 0) plate(side * 0.6, 0.18, 0.14, H * 0.55 - 0.42, 0.1, G(fc)); // slit glow
+      plate(side, 0.4, 0.16, H * 0.86, 0.08, T(fc));                           // faction band
       plate(side * 0.92, H * 0.28, 0.25, H * 0.18, 0.1, T(0x3a3550));          // armour skirt
     }
-    // the eaves, the command deck (glass all round) and its cap
+    // eaves, glazed command deck, cap
     k.cyl(R * 0.86, R * 0.86, 0.8, 8, T(0x3a3550), 0, H + 0.8, 0, { outline: 0.06 });
     k.cyl(R * 0.52, R * 0.6, 2.6, 8, T(0x5b5870), 0, H + 1.6, 0, { outline: 0.1 });
     k.cyl(R * 0.53, R * 0.58, 0.9, 8, G(0x9be7ff), 0, H + 2.4, 0, { outline: 0 });
     k.cyl(R * 0.62, R * 0.62, 0.5, 8, T(fc), 0, H + 4.2, 0, { outline: 0.04 });
-    // four masts at the corners, the same height, a beacon on each
+    // four corner masts with beacons
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * TAU + TAU / 8, rr = R * 0.5;
       k.cyl(0.08, 0.12, 6, 5, T(DARK), Math.sin(a) * rr, H + 4.7, Math.cos(a) * rr, { outline: 0.02 });
       k.ball(0.25, G(i % 2 ? 0xff2a4a : fc), Math.sin(a) * rr, H + 10.9, Math.cos(a) * rr, { outline: 0 });
     }
     radar(k, 0, H + 4.7, 0, small ? 4 : 6, fc, 0.9);
-    // the blast door, recessed into the front face (+z), hazard-striped, a lamp each side
+    // blast door recessed in the +z face, hazard stripes, a lamp each side
     {
       k.at(0, 0, 0);
       k.box(6.4, 5, 2.2, T(0x3a3550), 0, 0.8, R * 0.98, { outline: 0.06 });
@@ -1987,16 +1935,14 @@ export function dressBase(world, loc) {
       k.solid(3.2, 2.9, 1.1, 0, R * 0.98);
     }
     k.at();
-    // the bunker's walls slope in (R at the foot, 0.82R at the eaves), then a stepped roof:
-    // stacked columns follow the slope instead of one full-width cylinder
+    // stacked colliders follow the wall slope (R at the foot, 0.82R at the eaves), then the roof
     for (let i = 0; i < 4; i++) k.column(R * (1 - 0.18 * (i + 0.5) / 4) + 0.2, (H * (i + 1)) / 4, 0, 0, (H * i) / 4);
     k.column(R * 0.72, H + 3, 0, 0, H);
-    // barracks: big Quonset huts spread round the yard, each with its door end turned in toward
-    // the command bunker (clear of the gate lane at +x, the dish, the searchlight tower and the fuel)
+    // Quonset barracks round the yard, doors toward the bunker (clear of the +x gate lane, dish, searchlight tower and fuel)
     const hut = (a, d, r, len) => { const x = Math.cos(a) * d, z = Math.sin(a) * d; quonset(k, x, z, r, len, 0x5b5870, Math.atan2(-x, -z), fc); };
     if (!small) {
       for (const [a, d] of [[1.25, 62], [2.2, 60], [-2.05, 61], [-1.05, 62]]) hut(a, d, 8, 30);
-      // fuel tanks and an ammo dump
+      // fuel tanks, ammo dump
       k.at(-48, -20);
       tank(k, 0, 0, 3, 7, 0x6b6f78, fc);
       tank(k, 7.5, 0, 3, 7, 0x6b6f78, fc);
@@ -2005,7 +1951,7 @@ export function dressBase(world, loc) {
     } else {
       for (const [a, d] of [[2.1, 38], [-1.9, 37]]) hut(a, d, 5.5, 18);
     }
-    // searchlight tower (replaces the old pole)
+    // searchlight tower
     const tx = -30, tz = -30, th = small ? 24 : 34;
     k.at(tx, tz);
     k.box(6, 0.6, 6, T(CONC), 0, 0, 0, { outline: 0.04 });
@@ -2018,7 +1964,7 @@ export function dressBase(world, loc) {
     k.solid(2.4, th / 2, 2.4, 0, 0);
     k.at();
     searchlight(k, tx, th + 3.2, tz, 46);
-    // tank traps inside the gate and sandbag nests
+    // tank traps inside the gate
     const wallR = small ? 55 : 95;
     for (let i = 0; i < (small ? 4 : 6); i++) {
       const x = wallR - 10 - (i % 3) * 4, z = (i % 2 ? 1 : -1) * (9 + (i % 3) * 2.5);
@@ -2027,7 +1973,7 @@ export function dressBase(world, loc) {
       k.column(0.9, 1.8, 0, 0);
       k.at();
     }
-    // sandbag nests either side of the gate lane (clear of the bigger bunker)
+    // sandbag nests either side of the gate lane (clear of the large bunker)
     sandbags(k, wallR * 0.42, wallR * 0.3, 3.2, 0.3, 4.2, 2);
     sandbags(k, wallR * 0.42, -wallR * 0.3, 2.6, 2.2, 6.0, 2);
     floodMast(k, wallR * 0.65, -wallR * 0.6, 12); floodMast(k, -wallR * 0.6, wallR * 0.45, 12);
@@ -2035,19 +1981,17 @@ export function dressBase(world, loc) {
 }
 
 // =============================================================================================
-// Research arrays (Shackleton, Farside): four big dishes, each on a Blender-built station (a cryo
-// receiver, a tanker on end, or a gantry station, a lattice mast over container control rooms: they
-// alternate round the site, and swap places at Farside), painted for the site's faction and numbered
-// 01-04; plus an observatory whose cupola turns, two lab blocks and a control centre with a big
-// screen, a tall comms mast, cable runs between the dishes and the control centre, floodlights.
+// Research arrays (Shackleton, Farside): four dishes on Blender stations (cryo and gantry alternate, swapped at Farside), in the
+// site's livery, numbered 01-04; an observatory with a turning cupola, lab blocks, a control centre with a status display, a comms
+// mast, cable runs to the control centre, floodlights.
 // =============================================================================================
-// where the four dishes stand (x, z) and their size (a 30 m mount is size 30), and where their cables run to (the stations face it)
+// dish positions (x, z) and size (30 = a 30 m mount); ARRAY_CONTROL is where cables run and the stations face
 export const ARRAY_DISHES = [[-60, -30, 26], [55, -40, 30], [0, 60, 34], [-80, 70, 18]];
 const ARRAY_CONTROL = [-10, -72];
 export function dressArray(world, loc, speeds = []) {
   settle(world, loc, 7301 + loc.id.length * 13, (k, ctx) => {
     const green = 0x7dff6a;
-    // observatory: a drum with a turning slit cupola and a telescope peeking out
+    // observatory: drum, turning slit cupola, telescope
     const ox = 70, oz = 50, r = 14;
     k.at(ox, oz);
     k.cyl(r + 1, r + 1.4, 1, 28, T(PANEL), 0, 0, 0, { outline: 0.08 });
@@ -2068,9 +2012,8 @@ export function dressArray(world, loc, speeds = []) {
     });
     cup.userData.tick = (o, dt, t) => { o.rotation.y = Math.sin(t * 0.05) * 2.5; };
     k.dyn(cup, ox, 8, oz);
-    // the array's control centre: a two-tier block with a raked, glazed front, a radome and antennas
-    // on the roof, a canopy over the door and its name on the upper tier; its solar field stands on
-    // the ground beside it, and the status display on its own frame by the entrance
+    // control centre: two tiers, raked glazed front, roof radome and antennas, door canopy, name on the upper tier; solar field
+    // beside it, status display on a frame by the entrance
     cabin(k, 30, -95, 14, 12, 7, WHITE, -0.3 + Math.PI, { trim: green });
     k.at(-10, -80, 0.2 + Math.PI);
     k.box(34, 0.6, 20, T(CONC), 0, 0, 1, { outline: 0.05 });
@@ -2083,14 +2026,14 @@ export function dressArray(world, loc, speeds = []) {
     k.box(16.1, 1.0, 9.1, G(WARM), -3, 11.2, -1.5, { outline: 0 });
     k.box(16.4, 0.4, 9.4, T(green), -3, 14.1, -1.5, { outline: 0.03 });
     k.text(loc.name.toUpperCase(), -3, 12.4, 3.12, 0, 12, { fg: '#7dff6a', bg: '#10241a', back: false, off: 0.04 });
-    // radome and antennas on the lower roof
+    // radome and antennas
     k.cyl(2.2, 2.6, 1.6, 14, T(DARK), 8, 9.1, -2.5, { outline: 0.04 });
     k.add(new THREE.SphereGeometry(3.2, 18, 12), T(WHITE), 8, 13.2, -2.5, { outline: 0.08 });
     k.ring(3.25, 0.12, G(green), 8, 13.2, -2.5);
     k.beam([-9, 14.5, -4], [-9, 23, -4], 0.12, T(DARK), { outline: 0.02 });
     k.beam([-6, 14.5, -5], [-6, 19.5, -5], 0.08, T(DARK), { outline: 0.02 });
     k.blinker(-9, 23.3, -4, 0xff2a4a, 0.35);
-    // the entrance: a door under a canopy, a lamp
+    // entrance: door, canopy, lamp
     k.box(4, 4, 0.3, T(DARK), 0, 0.6, 7.1, { outline: 0.02 });
     k.box(6.5, 0.35, 2.8, T(green), 0, 4.9, 8.4, { outline: 0.04 });
     for (const sx of [-1, 1]) k.beam([sx * 3, 0.6, 9.6], [sx * 3, 4.9, 9.6], 0.1, T(DARK), { outline: 0 });
@@ -2098,7 +2041,7 @@ export function dressArray(world, loc, speeds = []) {
     k.solid(14, 4.3, 7, 0, 0);
     k.solid(8, 2.5, 4.5, -3, -1.5, 0, 9.1);
     k.solid(3.2, 1.6, 1.6, 8, -2.5, 0, 11.6);
-    // the status display, out front on its own frame (waveform bars and a sweep)
+    // status display on its own frame (waveform bars)
     k.box(11, 6, 0.4, T(DARK), 19, 2.6, 9, { ry: -0.35, outline: 0.05 });
     k.box(10, 5, 0.1, G(0x2ee6ff), 19 + Math.sin(-0.35) * 0.25, 3.1, 9 + Math.cos(-0.35) * 0.25, { ry: -0.35, outline: 0 });
     for (let i = 0; i < 6; i++) {
@@ -2107,7 +2050,7 @@ export function dressArray(world, loc, speeds = []) {
     }
     for (const sx of [-1, 1]) k.beam([19 + Math.cos(-0.35) * sx * 4.5, 0, 9 - Math.sin(-0.35) * sx * 4.5], [19 + Math.cos(-0.35) * sx * 4.5, 2.6, 9 - Math.sin(-0.35) * sx * 4.5], 0.15, T(DARK), { outline: 0 });
     k.solid(5.5, 4.3, 0.5, 19, 9, -0.35);
-    // the solar field beside it: three rows of tilted panels on posts
+    // solar field: three rows of tilted panels
     for (let row = 0; row < 3; row++) for (let i = 0; i < 5; i++) {
       const x = 23 + row * 5, z = -13 + i * 4;
       k.add(new THREE.BoxGeometry(4.2, 0.12, 3.2), T(0x2d4fc4), x, 2.0, z, { rz: -0.5, outline: 0.03 });
@@ -2117,7 +2060,7 @@ export function dressArray(world, loc, speeds = []) {
     k.solid(7.4, 1.25, 9.7, 28, -5);
     k.at();
     commsMast(world, loc, k, 100, -20, 40, green, loc.faction);
-    // the dish stations, and the cable runs from each to the control centre
+    // dish stations and their cable runs
     ARRAY_DISHES.forEach(([x, z, size], i) => {
       const kind = DISH_KINDS[(i + (loc.id === 'farside' ? 1 : 0)) % DISH_KINDS.length];
       dishStation(k, x, z, size, kind, loc.faction, String(i + 1).padStart(2, '0'), { yaw: Math.atan2(ARRAY_CONTROL[0] - x, ARRAY_CONTROL[1] - z), speed: speeds[i] ?? 0.1, phase: i * 2.1 });
@@ -2128,10 +2071,8 @@ export function dressArray(world, loc, speeds = []) {
 }
 
 // =============================================================================================
-// Pirate dens (Scrapjaw Gulch, Blackrock, Gloom Harbor, Rustmoon Hold): container shanties with
-// lean-to roofs and lit windows, scrap huts under rusty gables, junk heaps, wrecked ship hulls
-// gutted to their ribs, a lookout tower with a sweeping searchlight and strings of green lights.
-// Rustmoon Hold is ringed by its wrecks.
+// Pirate dens (Scrapjaw Gulch, Blackrock, Gloom Harbor, Rustmoon Hold): container shanties, scrap huts, junk heaps, gutted
+// wreck hulls, a lookout tower with a searchlight, green light strings. Rustmoon Hold is ringed by wrecks.
 // =============================================================================================
 export function shanty(k, x, z, w, h, d, color, yaw, rr) {
   k.at(x, z, yaw);
@@ -2165,12 +2106,11 @@ export function wreckHull(k, x, z, yaw, len, color, tilt = 0.12) {
   k.ball(1.2, G(0x7dff3a), -len * 0.66, r * 1.1, r * 0.25, { outline: 0 });
   for (let i = 0; i < 3; i++) k.cyl(1.2, 1.6, 2.4, 10, T(DARK), -len * 0.62 + 1, r * 0.4 + i * 1.6, 0, { rz: Math.PI / 2, outline: 0.04 });
   k.solid(len * 0.45, r * 0.75, r, -len * 0.22, 0);
-  k.solid(len * 0.28, r * 0.75, r * 0.9, len * 0.27, 0); // (the bare ribs: one clean block, not a cage to snag in)
-  k.solid(len * 0.18, 1.9, 4.2, -len * 0.2, r + 3.5, 0, r * 0.6 - 1.9); // (the torn-off plate, leaning on it)
+  k.solid(len * 0.28, r * 0.75, r * 0.9, len * 0.27, 0); // bare ribs: one block, nothing to snag on
+  k.solid(len * 0.18, 1.9, 4.2, -len * 0.2, r + 3.5, 0, r * 0.6 - 1.9); // leaning torn-off plate
   k.at();
 }
-// The ILMB after the clans took it: junk barricades across the approaches, a wreck dragged in for
-// a trophy, scrap heaps, crates and green clan lamps round the plaza and the outer ring.
+// The ILMB after the clans took it: junk barricades, a trophy wreck, scrap heaps, crates, green clan lamps.
 export function dressScrap(world, loc) {
   settle(world, loc, 6601, (k) => {
     const rr = world.rand;
@@ -2179,7 +2119,7 @@ export function dressScrap(world, loc) {
       const a = (i / 10) * TAU + 0.2 + rr() * 0.3, d = R * (0.55 + rr() * 0.3);
       junkHeap(k, Math.cos(a) * d, Math.sin(a) * d, 4 + rr() * 3, 1.6 + rr() * 1.4, 12, rr);
     }
-    // barricades: tipped containers and sheet metal across the plaza approach
+    // barricades across the plaza approach
     for (let i = 0; i < 6; i++) {
       const x = -30 + i * 12 + (rr() - 0.5) * 4, z = 82 + (rr() - 0.5) * 6;
       container(k, x, 0, z, [0x6b4a32, 0x55607a, 0x3a3550][i % 3], rr() * 0.6 - 0.3 + Math.PI / 2);
@@ -2195,8 +2135,8 @@ export function dressScrap(world, loc) {
   });
 }
 
-// A demolished den: Rustmoon Hold after SPACECOM's finale (scorched ground, its wreck-ships broken
-// open, scrap, a SPACECOM field post and a memorial), or an abandoned camp (just the wreckage).
+// A demolished den: Rustmoon Hold after SPACECOM's finale (scorched ground, broken wrecks, scrap, a field post, a memorial), or
+// an abandoned camp (wreckage only).
 export function buildRuin(world, loc) {
   settle(world, loc, 7301 + loc.id.length * 13, (k) => {
     const rr = world.rand, R = loc.r;
@@ -2208,7 +2148,7 @@ export function buildRuin(world, loc) {
       const a = (i / n) * TAU + rr() * 0.6, d = R * (0.4 + rr() * 0.3);
       wreckHull(k, Math.cos(a) * d, Math.sin(a) * d, rr() * TAU, 9 + rr() * 10, [0x6b4a32, 0x4a4f5e, 0x3a3550][i % 3], 0.3 + rr() * 0.25);
     }
-    // scrap: tipped containers, sheet metal, barrels, scorch-blackened crates
+    // scrap: containers, sheet metal, barrels, scorched crates
     for (let i = 0; i < (hold ? 26 : 8); i++) {
       const a = rr() * TAU, d = R * (0.15 + rr() * 0.6);
       const x = Math.cos(a) * d, z = Math.sin(a) * d;
@@ -2224,7 +2164,7 @@ export function buildRuin(world, loc) {
     }
     k.at();
     if (hold) {
-      // the SPACECOM field post on the cleared ground, and a memorial plinth with the clans' end
+      // SPACECOM field post and memorial plinth
       quonset(k, -26, -18, 5, 12, 0xeeecf6, 0.6, YEL);
       quonset(k, -12, -30, 5, 12, 0xeeecf6, 0.6, YEL);
       k.at(0, 10);
@@ -2277,7 +2217,7 @@ export function buildDen(world, loc) {
     k.solid(2.2, th / 2, 2.2, 0, 0);
     k.at();
     searchlight(k, tx, th + 0.4, tz, 40);
-    // green pirate lights strung round the yard
+    // green light string round the yard
     const ring = [];
     for (let i = 0; i <= 8; i++) { const a = (i / 8) * TAU * 0.75 + 0.3; ring.push([Math.cos(a) * 48, 5, Math.sin(a) * 48]); }
     lightString(k, ring, [0x7dff3a, 0x2ee6ff, 0x7dff3a, 0xff9f1c], 7, 1.3);
@@ -2285,7 +2225,7 @@ export function buildDen(world, loc) {
   });
 }
 
-// Pirate camp: tents, crates, a fire pit that flickers, a string of green lights.
+// Pirate camp: tents, crates, a flickering fire pit, green lights.
 export function buildPirateCamp(world, loc) {
   settle(world, loc, 5101 + loc.id.length * 11, (k) => {
     const rr = world.rand;
@@ -2300,7 +2240,7 @@ export function buildPirateCamp(world, loc) {
       k.at();
       crate(k, x * 0.75 + 2, 0, z * 0.75, 1.1, 0x5a3a22, a);
     }
-    // fire pit (the camp flag stands at the centre)
+    // fire pit (the camp flag is at the centre)
     for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU; k.add(new THREE.DodecahedronGeometry(0.5, 0), T(0x55505e), Math.cos(a) * 2, 0.3, 8 + Math.sin(a) * 2, { outline: 0.03 }); }
     for (let i = 0; i < 3; i++) {
       const f = new THREE.Mesh(new THREE.ConeGeometry(0.9 - i * 0.2, 2 - i * 0.3, 6), glow([0xff9f1c, 0xffd23f, 0xff2a4a][i]));
@@ -2312,7 +2252,7 @@ export function buildPirateCamp(world, loc) {
   });
 }
 
-// A canvas "screen": a terminal page of phosphor text lines (static, or scrolling when scroll > 0).
+// canvas terminal page of phosphor text lines
 function screenTex(lines, { fg = '#8dffb4', bg = '#07120c', head = null, hc = '#ffd23f', w = 512, h = 320 } = {}) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -2338,9 +2278,8 @@ function screenTex(lines, { fg = '#8dffb4', bg = '#07120c', head = null, hc = '#
 }
 
 // =============================================================================================
-// Job terminal (ILMB): a kiosk on a stepped plinth, a main contract screen flanked by two angled
-// side screens (a scrolling uplink feed and a route map), a status ticker under a canopy, a holo
-// ring turning over the top and an antenna. Faces local +z.
+// Job terminal (ILMB): kiosk on a stepped plinth, main contract screen between two angled side screens (scrolling uplink feed,
+// route map), lit canopy, turning holo ring, antenna. Faces local +z.
 // =============================================================================================
 export function jobTerminal(world, loc, x, z, yaw = 0, color = 0xffd23f) {
   settle(world, loc, 1201, (k) => {
@@ -2348,7 +2287,7 @@ export function jobTerminal(world, loc, x, z, yaw = 0, color = 0xffd23f) {
     k.box(18, 0.5, 9, T(CONC), 0, 0, 0, { outline: 0.06 });
     k.box(15, 0.4, 7, T(PANEL), 0, 0.5, 0.4, { outline: 0.04 });
     k.box(15.2, 0.12, 0.2, G(0x2ee6ff), 0, 0.9, 3.9, { outline: 0 });
-    // the body: a tall console with a sloped desk in front of the main screen
+    // tall console with a sloped desk under the main screen
     k.box(10, 9, 2.2, T(0x2a2540), 0, 0.9, -0.8, { outline: 0.1 });
     k.add(new THREE.BoxGeometry(10, 0.6, 2.6), T(color), 0, 2.4, 1.2, { rx: 0.35, outline: 0.05 });
     for (let i = 0; i < 8; i++) k.box(0.6, 0.12, 0.4, G([0x2ee6ff, 0x7dff6a, 0xff3b5c, 0xffd23f][i % 4]), -3.5 + i, 2.75, 1.3, { rx: 0.35, outline: 0 });
@@ -2367,7 +2306,7 @@ export function jobTerminal(world, loc, x, z, yaw = 0, color = 0xffd23f) {
     k.cyl(0.12, 0.18, 5, 6, T(DARK), 6.5, 13.1, -1, { outline: 0.02 });
     k.blinker(6.5, 18.4, -1, 0xff2a4a, 0.35);
     k.solid(9.2, 6.6, 4.5, 0, 0);
-    // the screens
+    // screens
     const scr = (tex, w, h, px, py, pz, ry = 0) => {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
       k.dyn(m, px, py, pz, ry);
@@ -2380,7 +2319,7 @@ export function jobTerminal(world, loc, x, z, yaw = 0, color = 0xffd23f) {
     const f = scr(feed, 4.2, 5.4, -7.4 + Math.sin(0.45) * 0.62, 5.4, Math.cos(0.45) * 0.62, 0.45);
     f.userData.tick = (o, dt) => { feed.offset.y = (feed.offset.y - dt * 0.05 + 1) % 1; };
     scr(screenTex(['  ILMB ─┬─ TRANQ', '        ├─ MERIDIAN', '        ├─ KEPLER', '        └─ TWILIGHT', '', '* ROUTES CLEAR', '! PIRATE ACTIVITY', '! PAST THE TERMINATOR'], { head: 'ROUTES', hc: '#2ee6ff', w: 384, h: 480 }), 4.2, 5.4, 7.4 - Math.sin(0.45) * 0.62, 5.4, Math.cos(0.45) * 0.62, -0.45);
-    // a holo ring turning above the canopy
+    // holo ring above the canopy
     const holo = new THREE.Group();
     const ring = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.12, 6, 32), glow(0x2ee6ff));
     const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.08, 6, 28), glow(color));
@@ -2393,37 +2332,36 @@ export function jobTerminal(world, loc, x, z, yaw = 0, color = 0xffd23f) {
 }
 
 // =============================================================================================
-// The Lucky Crater Casino's forecourt (the hall itself is casinoWorld.js): a neon boulevard from
-// the doors to a fountain plaza and a car park either side full
-// of parked hover-cars, so the hall doesn't sit alone in an empty crater.
+// Lucky Crater Casino forecourt (the hall is casinoWorld.js): a neon avenue from the doors to a fountain plaza, with parked
+// hover-cars in a wing each side.
 // =============================================================================================
 export function dressCasinoLot(world, loc, makeCar) {
   const PINK = 0xff2e88, CYAN = 0x2ee6ff, GOLD = 0xffd23f, PURP = 0x5a1a8f, ASPH = 0x34304a, CRM = 0xd8d4e8;
   const keep = (x, z, r) => (loc.keep ||= []).push({ x, z, r });
   const cars = [];
-  const FZ = 98, PR = 17; // the plaza: its centre and radius
-  // The Valet Court (docs/casino-forecourt.md): one asphalt court from the doors to halfway to the fountain (z 58), a paved walkway from there to the plaza. The court is an avenue (AV
-  // either side of the middle) the carpet runs down, with a wing of parking each side behind the slot carousels: two rows of bays (BAYW x BAYD) either side of an aisle, edged by a
-  // wall of giant cards (NMOD modules of MOD m between posts), its outer end open at the aisle's mouth.
+  const FZ = 98, PR = 17; // plaza centre and radius
+  // Valet Court (docs/casino-forecourt.md): asphalt from the doors to z 58, then a paved walkway to the plaza. The court is an avenue
+  // (AV either side of the middle) down which the carpet runs, with a parking wing each side behind the slot carousels: two rows of
+  // BAYW x BAYD bays either side of an aisle, walled by giant cards (NMOD modules of MOD m between posts), open at the aisle's mouth.
   const AV = 8.6, W0 = 38.4, W1 = 58.4, MID = (W0 + W1) / 2, MOD = 2.4, NMOD = 14, XA = AV + 0.36, XB = XA + 0.72 + NMOD * MOD;
   const BX0 = 11, BAYW = 5.2, NB = 6, BAYD = 6.2, AISLE = 5.6;
-  const bayZ = [W0 + 0.6 + 0.4 + BAYD / 2, W1 - 0.6 - 0.4 - BAYD / 2];   // the two rows' middles (z 42.5 and 54.3)
+  const bayZ = [W0 + 0.6 + 0.4 + BAYD / 2, W1 - 0.6 - 0.4 - BAYD / 2];   // row centres (z 42.5 and 54.3)
   settle(world, loc, 7707, (k) => {
-    // ---- the avenue: asphalt from the doors to the court's far edge, its gold edge lines meeting the wall's plinth beyond the gate's piers (which stand at 6 to 7.35), and the same
-    // asphalt through the doors' wall to the hall's floor; Blender-built neon lamp posts ----
+    // ---- avenue: asphalt from the hall floor through the door wall to the court's far edge, gold edge lines meeting the wall's
+    // plinth beyond the gate piers (at 6 to 7.35); neon lamp posts ----
     const DOOR_Z = FRONT_OUT, b1 = FZ - PR + 1;
     k.box(2 * AV, 0.1, W1 - DOOR_Z, T(0x4a4060), 0, 0, (DOOR_Z + W1) / 2, { outline: 0 });
     for (const s of [-1, 1]) k.box(0.3, 0.13, W0 - DOOR_Z, T(GOLD), s * AV, 0, (DOOR_Z + W0) / 2, { outline: 0 });
-    // through the doors: a little under the red carpet's strip, which rises from the hall's runner to the outside carpet, so the road runs right up to the hall's floor
+    // through the doors, just under the red carpet strip, so the road meets the hall floor
     k.box(2 * HALL.DOOR + 1, 0.06, DOOR_Z - HALL.FRONT + 0.1, T(0x4a4060), 0, 0, (HALL.FRONT + DOOR_Z) / 2, { outline: 0 });
-    // a lamp post (build_casino.py) at `sc` times its size, its small lamp toward `yaw`'s +z; `accent` colours its rings, lantern and small lamp
+    // lamp post (build_casino.py) scaled by `sc`, small lamp toward `yaw`'s +z; `accent` colours rings, lantern and small lamp
     const lamp = casinoNode('lamp_post');
     const lampAt = (x, z, accent, sc, yaw) => {
       k.at(x, z, yaw);
       k.baked(lamp, (slot) => { const c = casinoSlot(slot, accent); return c.glow ? G(c.color) : T(c.color); }, new THREE.Matrix4().makeScale(sc, sc, sc));
       k.at();
     };
-    // a forecourt-kit piece (build_lot.py) at (x, z) turned by yaw
+    // forecourt-kit piece (build_lot.py) at (x, z), turned by yaw
     const I4 = new THREE.Matrix4();
     const lotAt = (name, x, z, yaw = 0) => {
       k.at(x, z, yaw);
@@ -2431,18 +2369,18 @@ export function dressCasinoLot(world, loc, makeCar) {
       k.at();
     };
     let lampN = 0;
-    const post = (x, z, sc = 0.92) => {            // (the small lamp faces the middle of the way)
+    const post = (x, z, sc = 0.92) => {            // small lamp faces the middle of the way
       lampAt(x, z, lampN++ % 2 ? PINK : CYAN, sc, x < 0 ? Math.PI / 2 : -Math.PI / 2);
       k.column(0.5, 7.5, x, z);
     };
-    // (the lamps are few: one at each of the wings' north corners, one at each outer south corner and one each side where the walkway starts)
+    // lamps: the wings' north corners, the outer south corners, and each side of the walkway start
     for (const s of [-1, 1]) {
       for (const x of [AV + 1.2, XB + 1.1]) post(s * x, W0 - 1.2);
       post(s * (XB + 1.1), W1 + 1.2);
       post(s * 7.4, W1 + 2);
     }
     // ---- the fountain plaza ----
-    // paving with a gold edge, and a ring of chip-coloured tiles round the basin
+    // gold-edged paving, a ring of chip-coloured tiles round the basin
     k.cyl(PR, PR + 0.3, 0.14, 48, T(0x4a4060), 0, 0, FZ, { outline: 0.03 });
     k.ring(PR - 0.4, 0.14, G(GOLD), 0, 0.15, FZ);
     for (let i = 0; i < 16; i++) {
@@ -2450,9 +2388,9 @@ export function dressCasinoLot(world, loc, makeCar) {
       k.add(g, T(i % 2 ? 0x8a1030 : 0x2a1450), 0, 0.16, FZ, { outline: 0 });
     }
     k.ring(12.6, 0.1, G(GOLD), 0, 0.17, FZ);
-    // the fountain (build_casino.py), with the casino's chip turning on top
+    // fountain with the casino's chip on top
     fountain(k, 0, FZ);
-    // benches round the outside of the tiles, facing in (none across the way in, at -z)
+    // benches facing in (none across the -z way in)
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * TAU + TAU / 12;
       if (Math.sin(a) < -0.9) continue;
@@ -2464,7 +2402,7 @@ export function dressCasinoLot(world, loc, makeCar) {
       k.solid(1.7, 0.72, 0.55, 0, 0);
       k.at();
     }
-    // lamp posts between the benches: the boulevard's design, scaled down (the two either side of the way in frame it), their small lamps facing the fountain
+    // small lamp posts between the benches, small lamps facing the fountain
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * TAU;
       const x = Math.cos(a) * 15, z = FZ + Math.sin(a) * 15;
@@ -2474,18 +2412,18 @@ export function dressCasinoLot(world, loc, makeCar) {
     }
     keep(0, FZ, PR + 2);
     keep(0, 40, 22);
-    // ---- the walkway: from the court's edge to the plaza, paved, gold lines either side of the carpet's strip, a chip inlay every 6 m, chip-stack bollards along both sides ----
+    // ---- walkway from the court to the plaza: gold lines either side of the carpet, chip inlays every 6 m, chip-stack bollards ----
     k.box(10.4, 0.1, b1 - W1, T(0x6a5a8a), 0, 0, (W1 + b1) / 2, { outline: 0 });
     for (const s of [-1, 1]) {
       k.box(0.25, 0.13, b1 - W1, T(GOLD), s * 5.0, 0, (W1 + b1) / 2, { outline: 0 });
       for (let i = 0, z = W1 + 3.6; z < b1 - 1; i++, z += 6) k.cyl(0.7, 0.7, 0.04, 16, i % 2 ? G(CYAN) : G(PINK), s * 4.1, 0.1, z, { outline: 0 });
       for (let z = W1 + 2; z < b1 - 1; z += 3) { lotAt('lot_chip_bollard', s * 5.6, z); k.column(0.45, 1, s * 5.6, z); }
     }
-    // the card-stripe crossing where the court gives way to the walkway
+    // card-stripe crossing where the court meets the walkway
     for (let i = 0; i < 9; i++) k.box(1.1, 0.02, 2, T(i % 2 ? GOLD : 0x2a1450), -AV + 0.6 + i * 1.9, 0.1, W1 - 1, { outline: 0 });
     keep(0, (W1 + b1) / 2, 14);
 
-    // ---- the two wings of the court, one each side of the avenue ----
+    // ---- the court's two wings ----
     for (const s of [-1, 1]) {
       const x0 = AV, x1 = XB + 0.36;
       k.box(x1 - x0, 0.1, W1 - W0, T(ASPH), s * (x0 + x1) / 2, 0, MID, { outline: 0 });
@@ -2494,32 +2432,32 @@ export function dressCasinoLot(world, loc, makeCar) {
         for (let i = 0; i < NB; i++) {
           const bx = s * (BX0 + (i + 0.5) * BAYW), head = row === 0 ? W0 + 1.0 + 0.5 : W1 - 1.0 - 0.5;
           lotAt('lot_bay_stud', bx, head);
-          // most bays taken: a hover-car parked nose-in
+          // most bays hold a nose-in hover-car
           if ((i * 5 + (row === 0 ? 1 : 3) + (s > 0 ? 2 : 0)) % 4 !== 0) cars.push([bx, rz, row === 0 ? Math.PI : 0]);
         }
       }
-      // the wall of cards: the north and south runs between their posts, the outer end's two stubs either side of the aisle's mouth
+      // card wall: north and south runs between posts, two outer-end stubs either side of the aisle's mouth
       for (const z of [W0 + 0.3, W1 - 0.3]) {
         for (let i = 0; i < NMOD; i++) lotAt('lot_card_wall', s * (XA + 0.36 + MOD * (i + 0.5)), z);
         for (const x of [XA, XB]) lotAt('lot_card_post', s * x, z);
         k.solid((XB - XA) / 2 + 0.36, 0.65, 0.3, s * (XA + XB) / 2, z);
       }
       for (const dir of [1, -1]) {
-        const zc = (z) => MID + dir * (z - MID);                                  // (the south stub mirrors the north one)
+        const zc = (z) => MID + dir * (z - MID);                                  // south stub mirrors the north
         for (let i = 0; i < 2; i++) lotAt('lot_card_wall', s * XB, zc(W0 + 0.3 + 0.36 + MOD * (i + 0.5)), Math.PI / 2);
         lotAt('lot_card_post', s * XB, zc(W0 + 0.3 + 0.36 + 2 * MOD + 0.36));
         k.solid(0.3, 0.65, 2.4 + 0.36, s * XB, zc(W0 + 0.3 + 0.36 + MOD + 0.18));
       }
-      // the P pylons outside the outer end, turned to the road
+      // P pylons at the outer end, facing the road
       for (const dz of [-6.4, 6.4]) { lotAt('lot_pylon_p', s * (XB + 2.4), MID + dz, s * Math.PI / 2); k.solid(0.5, 2.3, 0.5, s * (XB + 2.4), MID + dz); }
       keep(s * 26, MID, 22);
     }
-    // the roads into the court: one from each end of the aisle out to the ring road, the traffic's own bed (traffic.js pavedStrip), melting in under the wings' asphalt and joining the ring by curved sweeps (a T)
-    loc.paved = [-1, 1].map((s) => ({ x0: s * (XB - 4), z0: MID, x1: s * 150, z1: MID, ring: true }));   // (to the ring, which the road joins by flared sweeps like any other: traffic.js inletFor)
+    // a road from each aisle end out to the ring road (traffic.js pavedStrip bed, blending under the wings' asphalt)
+    loc.paved = [-1, 1].map((s) => ({ x0: s * (XB - 4), z0: MID, x1: s * 150, z1: MID, ring: true }));   // joins the ring by flared sweeps (traffic.js inletFor)
   });
-  // the parked cars (shared baked models), each a solid block to bump into
+  // parked cars (shared baked models), each a solid block
   cars.forEach(([x, z, yaw], i) => {
-    const m = makeCar({ paint: i * 2 }); // (civilian cars, the paints in turn)
+    const m = makeCar({ paint: i * 2 }); // civilian paints in turn
     world.put(m.root, loc, x, z, 1.15, yaw + (((i * 7) % 5) - 2) * 0.03);
     world.col(loc, { type: 'box', x, y: 1.2, z, hx: 1.7, hy: 1.2, hz: 3.1, yaw });
   });

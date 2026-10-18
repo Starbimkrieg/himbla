@@ -1,7 +1,6 @@
-// What game.cheats (and its debug overlay) are in a release build (devtools.js): the same fields at their normal values and
-// every method a no-op, so the rest of the game reads `cheats.speed`, `cheats.god`, calls `devOverlay.lap('physics')` ... without
-// knowing the dev menu is gone. Keep it in step with cheats.js and devoverlay.js: `npm run check:dev-strip` fails if the game
-// uses a member this file lacks.
+// game.cheats (and its debug overlay) in a release build (devtools.js): same fields at their normal values, every method a
+// no-op, so the game can read `cheats.god` or call `devOverlay.lap('physics')` without the dev menu. Keep in step with
+// cheats.js and devoverlay.js: `npm run check:dev-strip` fails if the game uses a member missing here.
 class DevOverlay {
   constructor() { this.on = false; }
   begin() {}

@@ -1,33 +1,31 @@
 import { mulberry32 } from './rng.js';
 
-// The Zero-G claw's simulation (the Lucky Crater Casino's claw machine; the model is tools/blender/build_claw.py, the game is casinoGames.js, the drawing clawView.js).
-// No three.js in here, so tools/check-claw.mjs can play thousands of rounds with bots to tune the payout against the entry price.
+// Zero-G claw simulation (casino claw machine; model build_claw.py, game casinoGames.js, drawing clawView.js).
+// No three.js here, so tools/check-claw.mjs can bot thousands of rounds to tune payout against the entry price.
 //
-// A tank of floating things in zero gravity, in the machine's own frame (x along the tank, y up, z toward the glass). You fly the claw (a heavy body with some inertia) in
-// all three directions and hold the BEAM to pull things under it to its tip; it holds up to HOLD_CAP of weight. Let go over the DROP hole in the floor and the hole sucks
-// the thing in: that banks its value. Round the edges of that:
-//   chains    some things are chained in pairs: take one and the other follows (a chain's pull is a spring)
-//   magnets   a MAGNET draws steel (cogs, girders, hull plates, mines, lockboxes, the engine) to itself and holds up to five: one grab carries the clump
-//   blasts    a MINE that is hit hard goes off: it throws everything near it about, sets fuel canisters off (and they set off the next), pops lockboxes open (the LUCKY CHIP,
-//             the jackpot, is in one of them) and stuns the claw if it is close. Banking a mine costs you
-//   combo     banks within five seconds of each other build a multiplier (x1.25 a step, to x2.5), and three of a kind banked in a row pay a set bonus
-// Every round is a new tank: shuffle() deals a different mix, a different place for everything, a different jackpot hiding place and one of four moods (CALM, LOW DRIFT,
-// STORM, SURGE).
+// Floating things in a tank, machine frame (x along the tank, y up, z toward the glass). Fly the claw (heavy, with inertia)
+// in 3D; hold the BEAM to pull things under it to its tip (up to HOLD_CAP weight). Release over the DROP hole to bank.
+//   chains    paired things: take one and the other follows (a spring)
+//   magnets   a MAGNET pulls steel (cogs, girders, hull plates, mines, lockboxes, engine), holds up to five: one grab takes the clump
+//   blasts    a MINE hit hard explodes: scatters things, sets off fuel canisters (chaining), pops lockboxes (one holds the
+//             LUCKY CHIP jackpot), stuns a nearby claw. Banking a mine costs you
+//   combo     banks within 5 s build a multiplier (x1.25 a step, to x2.5); three of a kind in a row pay a set bonus
+// Each round shuffle() deals a new mix, layout, jackpot spot and mood (CALM, LOW DRIFT, STORM, SURGE).
 
-export const CLAW_COST = 200;           // the entry (credits)
-export const CLAW_TIME = 45;            // seconds a round lasts
-export const HOLD_CAP = 3;              // the weight the beam can carry
+export const CLAW_COST = 200;           // entry (credits)
+export const CLAW_TIME = 45;            // round length (s)
+export const HOLD_CAP = 3;              // beam weight capacity
 export const TANK = { x0: -7.5, x1: 7.5, y0: 1.5, y1: 6.35, z0: 0.5, z1: 3.3 };
 export const DROP = { x: -3.4, y: 1.46, z: 2.3, r: 0.72 };
 export const CLAW_HOME = { x: 0, y: 6.0, z: 1.9 };
 export const MOODS = ['CALM', 'LOW DRIFT', 'STORM', 'SURGE'];
-const CLAW_R = 0.42, CLAW_DY = -0.1;     // the claw's collision ball and where it hangs from its position
+const CLAW_R = 0.42, CLAW_DY = -0.1;     // claw collision ball radius and its offset below the position
 const BEAM_RANGE = 3.2, CHAIN_LEN = 1.55, MAGNET_RANGE = 2.9, MAGNET_MAX = 5, MAGNET_TIME = 12;
 const COMBO_WINDOW = 5, COMBO_STEP = 0.25, COMBO_MAX = 2.5, SET_BONUS = 1.5;
 const MINE_PENALTY = 30;
 const DT = 1 / 60;
 
-// r: radius of its collision ball; w: weight on the beam; mass; value: credits when banked; rest: bounciness
+// r: collision radius; w: beam weight; value: credits banked; rest: bounciness
 export const KINDS = {
   crate:    { r: 0.52, mass: 1.0, w: 1,   value: 4,  rest: 0.55, model: 'crate' },
   canister: { r: 0.46, mass: 0.9, w: 1,   value: 6,  rest: 0.5,  model: 'canister', fuel: true },
@@ -43,7 +41,7 @@ export const KINDS = {
   case:     { r: 0.58, mass: 1.0, w: 1,   value: 30, rest: 0.45, model: 'case' },
   chip:     { r: 0.80, mass: 2.0, w: 2,   value: 500, rest: 0.5, model: 'chip', jackpot: true },
 };
-// the mix of a tank: [kind, least, most, chance of any]
+// tank mix: [kind, min, max, chance of any]
 const MIX = [['crate', 5, 9, 1], ['canister', 2, 5, 1], ['gear', 3, 6, 1], ['girder', 1, 3, 1], ['magnet', 1, 2, 0.8], ['tyre', 2, 4, 1], ['hullplate', 2, 4, 1],
   ['lockbox', 1, 3, 1], ['mine', 2, 4, 1], ['gem', 3, 7, 1], ['engine', 1, 1, 0.45], ['case', 1, 2, 0.5]];
 const CHAINABLE = ['crate', 'canister', 'gear', 'tyre', 'hullplate'];
@@ -65,8 +63,8 @@ export class ClawSim {
     this.bank = 0;
     this.combo = 0;
     this.comboT = 0;
-    this.recent = [];     // the kinds banked last, newest first
-    this.banked = [];     // what was banked this round: { kind, value }
+    this.recent = [];     // last kinds banked, newest first
+    this.banked = [];     // this round's banks: { kind, value }
     this.mood = 0;
     this.moodT = 0;
     this.seed = seed;
@@ -77,7 +75,7 @@ export class ClawSim {
   emit(e) { this.events.push(e); }
 
   // ---------- the deal ----------
-  // A new tank: everything in it is thrown away and dealt again from `seed` (the old items are returned, for the view to fade them out).
+  // A new tank dealt from `seed`. Returns the old items for the view to fade out.
   shuffle(seed = (Math.random() * 1e9) | 0, intro = false) {
     const old = this.items.filter((i) => i.st !== 'out');
     const rng = mulberry32(seed);
@@ -85,23 +83,23 @@ export class ClawSim {
     this.rng = rng;
     this.tank = 1000 + (seed % 9000);
     this.mood = Math.floor(rng() * MOODS.length);
-    this.moodT = 18 + rng() * 10;     // when a SURGE comes
+    this.moodT = 18 + rng() * 10;     // SURGE time
     this.items = [];
     this.links = [];
     this.stuck = [];
     const want = [];
     for (const [kind, lo, hi, p] of MIX) if (rng() < p) for (let n = lo + Math.floor(rng() * (hi - lo + 1)); n > 0; n--) want.push(kind);
-    // the jackpot: in a lockbox when there is one (most of the time), else floating loose among the rest
+    // jackpot: in a lockbox if there is one, else loose
     const boxes = want.filter((k) => k === 'lockbox').length;
     const inBox = boxes > 0;
     if (!inBox) want.push('chip');
     for (let i = want.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [want[i], want[j]] = [want[j], want[i]]; }
     for (const kind of want) this.spawn(kind, this.place(KINDS[kind].r), { rng });
-    if (intro) for (const it of this.items) it.age = -(1.4 + rng() * 0.9);       // (dealt in after the old tank has gone: the view grows each in when its age passes 0)
+    if (intro) for (const it of this.items) it.age = -(1.4 + rng() * 0.9);       // dealt after the old tank goes: the view grows each in at age 0
     if (inBox) { const bx = this.items.filter((i) => i.kind === 'lockbox'); bx[Math.floor(rng() * bx.length)].inside = 'chip'; }
-    // what the other boxes hold
+    // other boxes' contents
     for (const b of this.items) if (b.kind === 'lockbox' && !b.inside) b.inside = rng() < 0.5 ? 'gems' : rng() < 0.5 ? 'case' : 'gems';
-    // chains: one to three pairs of something chainable, near each other
+    // chains: 1 to 3 pairs of nearby chainables
     const cand = this.items.filter((i) => CHAINABLE.includes(i.kind));
     for (let n = 1 + Math.floor(rng() * 3); n > 0 && cand.length > 1; n--) {
       const a = cand.splice(Math.floor(rng() * cand.length), 1)[0];
@@ -118,7 +116,7 @@ export class ClawSim {
     const rng = this.rng;
     for (let t = 0; t < 80; t++) {
       const p = { x: TANK.x0 + r + rng() * (TANK.x1 - TANK.x0 - 2 * r), y: TANK.y0 + r + 0.3 + rng() * (TANK.y1 - TANK.y0 - 2 * r - 1.9), z: TANK.z0 + r + rng() * (TANK.z1 - TANK.z0 - 2 * r) };
-      if (Math.hypot(p.x - DROP.x, p.z - DROP.z) < 1.8 && p.y < 3.4) continue;     // (the DROP hole is kept clear)
+      if (Math.hypot(p.x - DROP.x, p.z - DROP.z) < 1.8 && p.y < 3.4) continue;     // keep the DROP hole clear
       if (this.items.every((o) => Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z) > o.r + r + 0.08)) return p;
     }
     return { x: TANK.x0 + r + rng() * (TANK.x1 - TANK.x0 - 2 * r), y: TANK.y0 + 1 + rng() * 3, z: TANK.z0 + r + rng() * (TANK.z1 - TANK.z0 - 2 * r) };
@@ -132,7 +130,7 @@ export class ClawSim {
       qx: 0, qy: 0, qz: 0, qw: 1, wx: (rng() - 0.5) * 0.8, wy: (rng() - 0.5) * 0.8, wz: (rng() - 0.5) * 0.8,
       st: 'free', slot: -1, fuse: -1, spin: 0, tint: kind === 'crate' ? CRATE_TINTS[Math.floor(rng() * CRATE_TINTS.length)] : 0, inside: null, born: scale, age: 0,
     };
-    // a random orientation
+    // random orientation
     const a = rng() * 6.283, b = Math.acos(2 * rng() - 1), c = rng() * 6.283;
     const s1 = Math.sin(b / 2), c1 = Math.cos(b / 2);
     it.qx = s1 * Math.cos(a); it.qy = s1 * Math.sin(a); it.qz = c1 * Math.sin(c); it.qw = c1 * Math.cos(c);
@@ -287,7 +285,7 @@ export class ClawSim {
       const h = Math.hypot(dx, dz);
       if (dy < 0.1 || dy > BEAM_RANGE + it.r) continue;
       if (h > 0.7 + 0.2 * dy + it.r * 0.5) continue;
-      // pulled up toward the tip: its own weight matters (heavy things come slowly)
+      // pulled toward the tip; heavy things come slowly
       const o = this.holdOffset(0, it.r);
       const tx = c.x + o[0], ty = c.y + o[1], tz = c.z + o[2];
       const px = tx - it.x, py = ty - it.y, pz = tz - it.z, pd = Math.hypot(px, py, pz) || 1;
@@ -295,7 +293,7 @@ export class ClawSim {
       it.vx += (px / pd) * a * dt; it.vy += (py / pd) * a * dt; it.vz += (pz / pd) * a * dt;
       const rv = Math.min(1, 2.6 * dt);
       it.vx += (c.vx - it.vx) * rv * 0.5; it.vy += (c.vy - it.vy) * rv * 0.5; it.vz += (c.vz - it.vz) * rv * 0.5;
-      const ps = Math.hypot(it.vx - c.vx, it.vy - c.vy, it.vz - c.vz);       // (the beam does not fling things: they come in at a few metres a second at most)
+      const ps = Math.hypot(it.vx - c.vx, it.vy - c.vy, it.vz - c.vz);       // cap relative speed: the beam doesn't fling
       if (ps > 3.4) { const k = 3.4 / ps; it.vx = c.vx + (it.vx - c.vx) * k; it.vy = c.vy + (it.vy - c.vy) * k; it.vz = c.vz + (it.vz - c.vz) * k; }
       it.pulled = this.t;
       if (pd < it.r * 0.6 + 0.45 && this.heldWeight + KINDS[it.kind].w <= HOLD_CAP + 1e-6) {
@@ -307,7 +305,7 @@ export class ClawSim {
   }
 
   release(it) {
-    it.st = 'free'; it.slot = -1; it.rel = 4;      // (for four seconds the DROP hole will take it)
+    it.st = 'free'; it.slot = -1; it.rel = 4;      // the DROP hole takes it for 4 s
     this.emit({ type: 'release', item: it });
   }
 
@@ -330,7 +328,7 @@ export class ClawSim {
     const K = KINDS[it.kind];
     it.st = 'out'; it.dead = true;
     this.cutLinks(it);
-    // a chain's other end is dragged down after it
+    // its chain partner follows
     let value = K.value, tags = [];
     if (K.mine) {
       this.bank = Math.max(0, this.bank - MINE_PENALTY);
@@ -382,7 +380,7 @@ export class ClawSim {
     if (!s) return;
     const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny + (b.vz - a.vz) * nz;
     const f = (k * stretch + damp * rv) * dt;
-    const fa = f * ia, fb = f * ib;       // (the spring's force is the same on both: each moves by its own inverse mass)
+    const fa = f * ia, fb = f * ib;       // equal force, scaled by each inverse mass
     a.vx += nx * fa; a.vy += ny * fa; a.vz += nz * fa;
     b.vx -= nx * fb; b.vy -= ny * fb; b.vz -= nz * fb;
   }
@@ -422,7 +420,7 @@ export class ClawSim {
     const j = -(1 + e) * vn / s;
     a.vx -= nx * j * ia; a.vy -= ny * j * ia; a.vz -= nz * j * ia;
     b.vx += nx * j * ib; b.vy += ny * j * ib; b.vz += nz * j * ib;
-    // a little spin from the graze
+    // spin from the graze
     const tx = (b.vx - a.vx) - nx * vn, ty = (b.vy - a.vy) - ny * vn, tz = (b.vz - a.vz) - nz * vn;
     a.wx += (ny * tz - nz * ty) * 0.3 / a.r; a.wy += (nz * tx - nx * tz) * 0.3 / a.r; a.wz += (nx * ty - ny * tx) * 0.3 / a.r;
     b.wx += (ny * tz - nz * ty) * 0.3 / b.r; b.wy += (nz * tx - nx * tz) * 0.3 / b.r; b.wz += (nx * ty - ny * tx) * 0.3 / b.r;
@@ -430,7 +428,7 @@ export class ClawSim {
     if (sp > 1.2) this.emit({ type: 'hit', speed: sp, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
     // cogs turn each other
     if (a.cog && b.cog) { const w = Math.max(1.5, Math.min(9, sp * 3)); a.spin = a.spin || w; b.spin = -(a.spin) * 0.95; }
-    // a mine hit hard goes off
+    // hard-hit mines go off
     const thr = (a.st === 'held' || b.st === 'held') ? 3.6 : 4.5;
     if (sp > thr) { const why = `hit ${a.kind}/${b.kind} ${a.st}/${b.st}`; if (KINDS[a.kind].mine && !KINDS[b.kind].magnet) this.fuseMine(a, why); if (KINDS[b.kind].mine && !KINDS[a.kind].magnet) this.fuseMine(b, why); }
   }

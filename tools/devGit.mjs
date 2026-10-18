@@ -1,11 +1,10 @@
-// Dev server only (never part of a build): lets the game's dev menu fetch and pull this checkout's upstream.
+// Dev server only (never built): lets the game's dev menu fetch and pull this checkout's upstream.
 //
-//   POST /__dev/git/status   git fetch --prune, then where the branch stands against its upstream
-//   POST /__dev/git/pull     git pull --ff-only (a fast-forward, nothing else: it never merges, rebases or discards anything)
+//   POST /__dev/git/status   git fetch --prune, then the branch's standing against its upstream
+//   POST /__dev/git/pull     git pull --ff-only (fast-forward only: never merges, rebases or discards)
 //
-// The commands are fixed (nothing from the request reaches git), the endpoint answers only a POST from this machine's own
-// page (loopback address, a localhost Host, the same Origin if the browser sends one, and a custom header that a page on another
-// site could not add without a CORS preflight, which this server never grants).
+// Commands are fixed (nothing from the request reaches git). Only a POST from this machine's own page is answered: loopback
+// address, localhost Host, same Origin if sent, and a custom header another site can't add without a CORS preflight (never granted).
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -16,7 +15,7 @@ const HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 const git = (args, timeout = 90000) => new Promise((resolve) => {
   execFile('git', args, {
     cwd: ROOT, timeout, windowsHide: true, maxBuffer: 1 << 20,
-    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, // (a missing credential fails at once instead of waiting on a prompt nobody can see)
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, // missing credentials fail at once instead of waiting on an invisible prompt
   }, (err, stdout, stderr) => resolve({ ok: !err, out: String(stdout || '').trim(), err: String(stderr || '').trim() || (err ? err.message : '') }));
 });
 
@@ -52,7 +51,7 @@ async function pull() {
   };
 }
 
-// one at a time: the chip polls while a pull may be running, and two gits in one checkout would fight over its lock files
+// one at a time: the chip polls during pulls, and two gits in one checkout fight over lock files
 let queue = Promise.resolve();
 const serial = (fn) => { const run = queue.then(fn, fn); queue = run.catch(() => {}); return run; };
 

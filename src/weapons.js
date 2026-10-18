@@ -8,8 +8,8 @@ export const WEAPONS = [
   { key: 'mortar', name: 'Rustmoon Junk Mortar', unlock: 'mortar', delay: 1.2, desc: 'Lobbed scrap bomb, huge blast' },
 ];
 
-// The Vostok BTR-M's turret cannon (vehicles.js turretFire): while you drive the APC, left mouse fires this
-// from the barrel, wherever the camera points, instead of the runner's own weapons.
+// The Vostok BTR-M turret cannon (vehicles.js turretFire): left mouse while driving the APC, fired from the barrel
+// where the camera points, instead of the runner's weapons.
 export const APC_CANNON = { key: 'apccannon', name: 'BTR-M 30 mm Cannon', delay: 0.5, desc: 'Heavy high-explosive shell from the turret' };
 
 const _v = new THREE.Vector3();
@@ -30,15 +30,14 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
     const up = new THREE.Vector3().crossVectors(right, dir).normalize();
     for (let i = 0; i < 7; i++) {
       const d = dir.clone().addScaledVector(right, (Math.random() - 0.5) * 0.13).addScaledVector(up, (Math.random() - 0.5) * 0.08).normalize();
-      // (~200 m of reach; 7 x 17 up close)
+      // ~200 m reach; 7 x 17 up close
       g.projectiles.fire('player', muzzle, d.multiplyScalar(175).addScaledVector(inherit, 0.6), { damage: 17 * mult, splash: 3, color: 0xffb02e, size: 0.27, knock: 0.6, life: 1.15 });
     }
     g.audio.burst(0.25, 2400, 0.4);
     g.haptics.play('scatter');
     g.cam.shake = Math.max(g.cam.shake, 0.25);
   } else if (w.key === 'rail') {
-    // hitscan: it pierces targets, buildings and traffic, but the ground and any rock stop it
-    // (and so nothing behind them is hit). The ground is marched in 4 m steps then narrowed down.
+    // hitscan: pierces targets, buildings and traffic; ground and rock stop it. Ground marched in 4 m steps, then bisected.
     let len = 650;
     for (let t = 4; t <= 650; t += 4) {
       if (g.planet.altitude(_v.copy(muzzle).addScaledVector(dir, t)) >= 0) continue;
@@ -62,8 +61,7 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
         g.fx.explosion(t.center, 3, false);
       }
     }
-    // the beam also chews through anything else that can be blown up (outposts, road traffic):
-    // feed the blast hooks small hits along its length (a big target takes several)
+    // also hits other blastables (outposts, road traffic): small blast-hook hits along its length
     if (g.blastHooks) for (let t = 6; t < len; t += 6) {
       _v.copy(muzzle).addScaledVector(dir, t);
       for (const fn of g.blastHooks) fn(_v.clone(), 3, 40 * mult, 'player');
@@ -81,8 +79,8 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
   }
 }
 
-// One round from the APC cannon: a heavy tracer shell (projectiles.js type 'shell') with a flash at the muzzle.
-// `muzzle` is the barrel's mouth, `dir` the way the barrel points, `inherit` the vehicle's velocity.
+// One APC cannon round: a tracer shell (projectiles.js type 'shell') plus muzzle flash.
+// `muzzle` = barrel mouth, `dir` = barrel direction, `inherit` = vehicle velocity.
 export function fireCannon(g, muzzle, dir, inherit, mult = 1) {
   g.projectiles.fire('player', muzzle, dir.clone().multiplyScalar(170).addScaledVector(inherit, 0.6), {
     type: 'shell', damage: 55 * mult, splash: 9, color: 0xff8a2a, size: 0.5, knock: 2, gravity: 3, life: 3.2, spare: true,

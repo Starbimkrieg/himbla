@@ -4,11 +4,11 @@ import { CasinoGames } from './casinoGames.js';
 import { glyphHtml } from './glyphs.js';
 import { px, pxCanvas } from './pixelIcons.js';
 
-// The Lucky Crater Casino: slots, roulette, a prize wheel, high-low and a prize
-// counter, all in one comic overlay. State lives in game.stats.casino.
+// The Lucky Crater Casino: slots, roulette, prize wheel, high-low and a prize counter in one overlay.
+// State lives in game.stats.casino.
 
-// Casino-exclusive cosmetics: no `shop`/`cost`, so faction shops skip them, but the
-// wardrobe (C) picks them up once owned via game.upgrades['outfit_<id>' / 'skates_<id>'].
+// Casino-only cosmetics: no `shop`/`cost`, so faction shops skip them; the wardrobe (C) shows them once
+// owned via game.upgrades['outfit_<id>' / 'skates_<id>'].
 Object.assign(OUTFITS, {
   loungelizard: { name: 'Lounge Lizard Tux', casino: true, suit: 0x16121f, accent: 0xffd23f, helmet: 0xf4f1ff, visor: 0xff2e88, scarf: 0xd7263d, sc: [0.7, 0.28, 2] },
   highroller: { name: 'High Roller Gold Lamé', casino: true, suit: 0xffc83a, accent: 0xff2e88, helmet: 0xffe27a, visor: 0x120a1e, scarf: 0xff2e88, sc: [1.9, 0.34, 2], extras: ['halo'] },
@@ -27,7 +27,7 @@ const VIP = [
   { name: 'MOON ROYALTY', min: 150000, max: 50000, color: '#c77dff' },
 ];
 const BETS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000];
-// the classic cabinets and the prize counter are two places with their own screens: the cabinets' tabs, and the counter's one page
+// two venues with their own screens: the classic cabinets' tabs, and the prize counter's single page
 const TABS = [['slots', 'LUNAR SLOTS'], ['roulette', 'CRATER ROULETTE'], ['wheel', 'PRIZE WHEEL'], ['hilo', 'HIGH-LOW']];
 const PRIZE_TABS = [['prizes', 'PRIZE COUNTER']];
 const DEFAULTS = { wagered: 0, won: 0, biggest: 0, spins: 0, hands: 0, bjs: 0, bestStreak: 0, chips: 0, chipFrac: 0, jackpot: 2500, lastFree: 0, visits: 0, ducks: 0, plinko: 0 };
@@ -35,7 +35,7 @@ const CHIP_RATE = 50; // credits wagered per Lucky Chip
 const FREE_SPIN_MS = 10 * 60 * 1000;
 
 // ---------- slots ----------
-const SYMS = { // (each symbol's picture is the pixel sprite of the same name: pixelIcons.js)
+const SYMS = { // pictures: the same-named pixel sprites (pixelIcons.js)
   moon: { w: 13 }, comet: { w: 9 }, rocket: { w: 7 }, alien: { w: 5 }, ufo: { w: 4 }, diamond: { w: 2 }, wild: { w: 2 },
 };
 const SYM_IDS = Object.keys(SYMS);
@@ -51,7 +51,7 @@ function rollSym() {
   return 'moon';
 }
 
-// Returns { mult, jackpot }. Wilds substitute for everything except diamonds. Base RTP ≈ 91.6%, ~95% with the jackpot.
+// { mult, jackpot }. Wilds stand in for all but diamonds. Base RTP ≈ 91.6%, ~95% with the jackpot.
 function evalSlots(r) {
   const d = r.filter((s) => s === 'diamond').length;
   if (d === 3) return { mult: 0, jackpot: true, kind: 'JACKPOT' };
@@ -93,7 +93,7 @@ const PRIZES = [
   { label: 'MEGA', w: 1, kind: 'mega', n: 5000, color: '#fff6a8' },
 ];
 const PRIZE_TOTAL = PRIZES.reduce((a, p) => a + p.w, 0);
-const WHEEL_PX = 640; // the wheel's canvas, in its own pixels (the page scales it to fit: style.css .pw-wrap)
+const WHEEL_PX = 640; // wheel canvas size (scaled to fit by style.css .pw-wrap)
 const WHEEL_COST = 150;
 
 // ---------- prize counter ----------
@@ -141,17 +141,17 @@ export class Casino {
     this.wheelRot = 0;
     this.hl = { phase: 'idle', card: null, pot: 0, stake: 0, streak: 0 };
     this.lastSay = '';
-    this.mode = null; // a walk-in 3D game you're seated at ('bj' | 'duck' | 'plinko'), or null
+    this.mode = null; // seated walk-in 3D game ('bj' | 'duck' | 'plinko') or null
     if (this.el) this.build();
     this.games = new CasinoGames(game, this);
   }
 
-  // Saved state, with defaults filled in for older saves.
+  // saved state, defaults filled in for older saves
   get st() {
     const g = this.game;
     const s = g.stats.casino || (g.stats.casino = {});
     for (const k in DEFAULTS) if (s[k] === undefined) s[k] = DEFAULTS[k];
-    for (const k of ['debt', 'debtAt', 'loans']) delete s[k]; // (keys of a feature that has been removed: any old balance is simply forgiven)
+    for (const k of ['debt', 'debtAt', 'loans']) delete s[k]; // removed feature's keys; old balances are forgiven
     return s;
   }
 
@@ -162,7 +162,7 @@ export class Casino {
     return !!c && c.loc.active && c.near(p);
   }
 
-  // Walk-in casino: prompt + F at a game station. Returns true when it owns the prompt.
+  // walk-in casino: prompt + F at a station. True when it owns the prompt.
   interact() {
     const g = this.game;
     if (!this.games || !this.games.ok) return false;
@@ -257,7 +257,7 @@ export class Casino {
   get tier() { return VIP[this.tierIdx()]; }
   get maxBet() { return this.tier.max; }
 
-  // Deduct a stake. Returns false (and complains) when you can't cover it.
+  // deduct a stake; false (and a complaint) if you can't cover it
   take(n) {
     const g = this.game, s = this.st;
     if (n > g.credits) {
@@ -333,7 +333,7 @@ export class Casino {
     </div>`;
     this.$ = (q) => this.el.querySelector(q);
     this.root = this.$('.cas');
-    // never steal focus from the game: keyboard shortcuts must not re-click a focused button
+    // never take focus, or keyboard shortcuts would re-click a focused button
     this.el.addEventListener('mousedown', (e) => e.preventDefault());
     this.el.addEventListener('click', (e) => this.onClick(e));
   }
@@ -378,7 +378,7 @@ export class Casino {
     this.renderTab();
   }
 
-  // Header, footer and the credits ticker.
+  // header, footer, credits ticker
   refresh(instant = false) {
     if (!this.root) return;
     const g = this.game, s = this.st, t = this.tier, ti = this.tierIdx();
@@ -495,7 +495,7 @@ export class Casino {
     setTimeout(() => this.audio.tone(330, 0.8, 'sawtooth', 0.08, 0.92), 840);
   }
 
-  // Celebrate a win scaled to its size relative to the stake.
+  // celebrate in proportion to win / stake
   celebrate(win, stake) {
     const m = win / Math.max(1, stake);
     if (m >= 10) {
@@ -580,7 +580,7 @@ export class Casino {
     const res = [rollSym(), rollSym(), rollSym()];
     const ev = evalSlots(res);
     const win = !!ev.mult || ev.jackpot;
-    // near-miss tease: first two reels agree, the third takes its sweet time
+    // near-miss tease: first two reels agree, the third spins longer
     const tease = res[0] === res[1] && (!win || ev.jackpot || (res[0] === 'diamond'));
     const lever = this.$('.lever');
     if (lever) { lever.classList.remove('pull'); void lever.offsetWidth; lever.classList.add('pull'); }
@@ -673,7 +673,7 @@ export class Casino {
     let grid = '';
     for (let row = 0; row < 3; row++) for (let col = 0; col < 12; col++) grid += cellN(col * 3 + (3 - row));
     const out = (k) => `<div class="ro ${k}" data-rb="${k}">${OUTSIDE[k][0]}<em data-chip="${k}"></em></div>`;
-    // (key hints and their controller twins are both here: style.css shows whichever is in use)
+    // key and controller hints both; style.css shows the one in use
     const gl = (...toks) => `<span class="rl-pd pgx">${glyphHtml(toks)}</span>`;
     return `<div class="roul felt">
       <div class="rl-left">
@@ -767,7 +767,7 @@ export class Casino {
     this.busy = true;
     const res = Math.floor(Math.random() * 37);
     const i = WHEEL.indexOf(res);
-    // pocket i's centre sits at (i + .5)/37 of a turn clockwise from 3 o'clock; bring it to 12 o'clock
+    // pocket i's centre is (i + .5)/37 turn clockwise from 3 o'clock; bring it to 12
     const pocket = ((i + 0.5) / 37) * 360;
     const target = 270 - pocket;
     const cur = this.rl.rot;
@@ -804,7 +804,7 @@ export class Casino {
     if (win) { this.pay(win, tot); this.celebrate(win, tot); } else this.lost(res === 0 ? 'ZERO! HOUSE SWEEPS!' : undefined);
     if (win && this.rl.bets['n' + res]) this.burst(`STRAIGHT UP ${res}!!`, { size: 100, confetti: 100, shake: true });
     this.busy = false;
-    // bets ride again; drop what you can no longer afford
+    // bets ride again unless you can't afford them
     if (this.rlTotal() > this.game.credits) { this.rl.bets = {}; this.flash('BETS CLEARED'); }
     this.drawRBets();
     this.game.save();
@@ -827,15 +827,15 @@ export class Casino {
   drawWheel() {
     const cv = this.$('[data-pwheel]');
     const x = cv.getContext('2d');
-    const S = WHEEL_PX, c = S / 2, R = c - 22; // R: where the slices end, inside the rim
+    const S = WHEEL_PX, c = S / 2, R = c - 22; // R: slice radius, inside the rim
     x.clearRect(0, 0, S, S);
     x.imageSmoothingEnabled = false;
-    // the rim: a dark disc, a gold ring and bulbs
+    // rim: dark disc, gold ring, bulbs
     x.fillStyle = '#120a1e'; x.beginPath(); x.arc(c, c, c, 0, Math.PI * 2); x.fill();
     x.fillStyle = '#c9a23a'; x.beginPath(); x.arc(c, c, R + 12, 0, Math.PI * 2); x.fill();
     x.fillStyle = '#120a1e'; x.beginPath(); x.arc(c, c, R + 5, 0, Math.PI * 2); x.fill();
     const lum = (hex) => { const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); };
-    // a sprite scaled up in whole pixels first (nearest neighbour), so that turning it with the slice afterwards keeps its blocks square
+    // upscale a sprite by whole pixels (nearest) first, so rotating it with the slice keeps blocks square
     const blocky = (cvs, k) => {
       const o = document.createElement('canvas');
       o.width = cvs.width * k; o.height = cvs.height * k;
@@ -851,24 +851,24 @@ export class Casino {
       x.fillStyle = p.color;
       x.beginPath(); x.moveTo(c, c); x.arc(c, c, R, a, a + span); x.closePath(); x.fill();
       x.strokeStyle = '#120a1e'; x.lineWidth = 6; x.stroke();
-      // the label runs out along the slice's middle, from just outside the hub to the rim: dark ink on a bright slice, light on a dark one
+      // label along the slice's middle, hub to rim; dark ink on bright slices, light on dark
       x.save(); x.translate(c, c); x.rotate(a + span / 2);
       const dark = lum(p.color) < 110, ink = dark ? '#f4f1ff' : '#1a1030';
-      const reach = R - 24, inner = 92;               // (the text's right edge, and the hub's edge)
-      const slice = span * (R * 0.7);                 // the slice's width at about two thirds of the way out
+      const reach = R - 24, inner = 92;               // text's right edge, hub's edge
+      const slice = span * (R * 0.7);                 // slice width about two thirds out
       const text = (str, size, dy = 0, right = reach) => {
         x.font = pixelFont(size);
         x.textAlign = 'right'; x.textBaseline = 'middle';
         x.fillStyle = ink;
         x.fillText(str, right, dy);
       };
-      const fit = (str, max) => { // the biggest size (px) that keeps `str` between the hub and the rim
+      const fit = (str, max) => { // biggest px size that fits `str` between hub and rim
         let size = max;
         for (; size > 10; size -= 2) { x.font = pixelFont(size); if (x.measureText(str).width <= reach - inner) break; }
         return size;
       };
       if (p.kind === 'nothing') {
-        // two lines: NOTHING big, lol small under it (one line was too long for the slice and shrank to nothing legible)
+        // two lines: NOTHING big, lol small (on one line it shrinks illegibly)
         const big = Math.min(fit('NOTHING', 30), Math.floor(slice * 0.4));
         text('NOTHING', big, -big * 0.55);
         text('lol', Math.round(big * 0.75), big * 0.62);
@@ -1017,7 +1017,7 @@ export class Casino {
     this.drawHilo(true);
   }
 
-  hlMsg(t, cls = '') { const m = this.$('[data-hmsg]'); if (m) { m.innerHTML = t; m.className = `hl-msg ${cls}`; } } // (t is markup: only ever our own text and sprites)
+  hlMsg(t, cls = '') { const m = this.$('[data-hmsg]'); if (m) { m.innerHTML = t; m.className = `hl-msg ${cls}`; } } // t is markup: only our own text and sprites
 
   async hlGuess(dir) {
     const h = this.hl;

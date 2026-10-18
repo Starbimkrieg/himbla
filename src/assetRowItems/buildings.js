@@ -14,9 +14,8 @@ import {
 import { ferrisWheel, carousel } from '../downsFair.js';
 import { animate, together, lineUp } from './common.js';
 
-// Asset Row catalogue group: the small faction outposts (intact and wreck), the building parts the settlements are made of, and the
-// hometown buildings. Items: see index.js. Every make() builds from scratch (a fresh Kit, a fresh stand-in world) or clones a baked
-// template; nothing is kept between calls.
+// Asset Row group: faction outposts (intact and wreck), settlement building parts, hometown buildings. Items: see index.js.
+// Every make() builds fresh (new Kit, new stand-in world) or clones a baked template; nothing is kept between calls.
 
 const hex = (c) => new THREE.Color(c).getHex();
 const fc = (f) => hex(FACTIONS[f].color);
@@ -26,14 +25,13 @@ const YEL = 0xffd23f;
 // helpers
 // ---------------------------------------------------------------------------------------------
 
-// The Kit's colliders may be 'hcyl' (a lying cylinder: quonset roofs), which the Row's collider builder does not know: a box that
-// covers the same roof instead.
+// The Row's collider builder doesn't know the Kit's 'hcyl' (lying cylinder, quonset roofs): swap in a box over the same roof.
 const fixCols = (cols) => cols.map((c) => (c.type === 'hcyl'
   ? { type: 'box', x: c.x, y: c.y + c.r / 2, z: c.z, hx: c.r, hy: c.r / 2, hz: c.len / 2, yaw: c.yaw || 0 }
   : c));
 const shiftCols = (cols, dx, dz = 0) => { for (const c of cols) { c.x += dx; c.z += dz; } };
 
-// One kit-built part: fn(k) draws into a fresh Kit as a settlement does (onGround), returns { root, cols, update }.
+// One kit-built part: fn(k) draws into a fresh onGround Kit. Returns { root, cols, update }.
 function kitPart(fn, { color = YEL, seed = 1 } = {}) {
   const k = new Kit(color, seed, false);
   k.onGround = true;
@@ -43,9 +41,8 @@ function kitPart(fn, { color = YEL, seed = 1 } = {}) {
   return { root: t.root, cols: fixCols(t.cols), update: animate(t.root, seed) };
 }
 
-// The stand-in for the World and a settlement location, for the builders that take (world, loc, ...): put() puts into loc.group
-// (optionally re-framed: a plot's building comes out facing +z at the origin), col() collects the collider specs, flag() is the
-// real World's. Returns { root, cols, update }.
+// Stand-in World and location for builders taking (world, loc, ...): put() adds to loc.group (optionally re-framed so a plot's
+// building faces +z at the origin), col() collects collider specs, flag() is the real World's. Returns { root, cols, update }.
 function viaWorld(fn, { faction = 'spacecom', frame = null } = {}) {
   const loc = { id: 'row', name: 'ROW', faction, group: new THREE.Group(), pads: [], r: 100, slots: [] };
   const cols = [];
@@ -85,7 +82,7 @@ function worldPart(fn, { color = YEL, seed = 1 } = {}) {
   return { root: extra.root, cols: fixCols(t.cols).concat(extra.cols), update: animate(extra.root, seed) };
 }
 
-// centre a part on the origin in x and z (its feet stay on y = 0) and read off its size: w along x, d along z
+// centre a part on the origin in x/z (feet stay at y = 0); w = size along x, d along z
 function tidy(p) {
   p.root.updateMatrixWorld(true);
   const b = new THREE.Box3().setFromObject(p.root), c = b.getCenter(new THREE.Vector3()), sz = b.getSize(new THREE.Vector3());
@@ -110,10 +107,10 @@ function row(parts, gap = 3) {
 const item = (id, label, w, d, make, extra = {}) => ({ id, label, w, d, make, ...extra });
 
 // ---------------------------------------------------------------------------------------------
-// 08 OUTPOSTS: the seven small faction kinds, each intact and as its wreck (always the Kit build: src 'kit')
+// 08 OUTPOSTS: seven small faction kinds, intact and wrecked (Kit build, src 'kit')
 // ---------------------------------------------------------------------------------------------
 const OUTPOSTS = [
-  // kind, label, owner (a faction that has one in the game), w, d
+  // kind, label, owner (a faction that has one in game), w, d
   ['tower', 'WATCHTOWER', 'spacecom', 50, 55],
   ['depot', 'SUPPLY DEPOT', 'vostok', 56, 56],
   ['farm', 'FARM DOME', 'kepler', 58, 58],
@@ -131,13 +128,13 @@ function outpostItem(kind, label, faction, w, d, wreck) {
   });
 }
 
-// the compounds a player founds (storyAssets.js), bare and with all six modules and the second gun built
+// player-founded compounds (storyAssets.js): bare, and with all six modules plus the second gun
 const MODULES = ['greenhouse', 'clinic', 'beacon', 'turret', 'market', 'garage', 'turret2'];
 function foundedItem(kind, label, modules, w, d) {
   return item(`outpost.founded.${kind}${modules.length ? '.built' : ''}`, `${label}${modules.length ? ' (ALL MODULES)' : ' (BARE)'}`, w, d, () => {
     const t = foundedTemplate(kind, fc('kepler'), modules);
     const root = t.root.clone();
-    // (the militia guns sweep idly, as territory.updateGuns does with nothing to shoot at)
+    // militia guns sweep idly, like territory.updateGuns with no target
     const guns = [];
     root.traverse((o) => { if (o.userData.outpostGun) guns.push(o); });
     const sweep = guns.length ? (dt) => { for (const g of guns) g.rotation.y += dt * 0.3; } : undefined;
@@ -162,7 +159,7 @@ const outposts = {
 };
 
 // ---------------------------------------------------------------------------------------------
-// 09 BUILDING PARTS: what the settlements are built from (settlements.js, outpostModels.js)
+// 09 BUILDING PARTS: settlement pieces (settlements.js, outpostModels.js)
 // ---------------------------------------------------------------------------------------------
 const WH = 0xd8d4e8, GREY = 0x5b5870;
 const TICKER_TEXT = 'HE-3 ▲ 412.70 | REGOLITH ▼ 3.15 | DEUTERIUM ▲ 88.20 | ICE ▲ 19.95 | ANTIMATTER ▼ 9,999.00 | PIRATE RISK ▲ HIGH';
@@ -230,16 +227,16 @@ const parts = {
     item('part.cargo-stacks', 'CARGO CONTAINER STACKS', 42, 9, () => kitPart((k) => {
       ['spacecom', 'vostok', 'kepler', 'meridian'].forEach((f, i) => cargoStack(k, -16 + i * 10.5, 0, 1 + (i % 3), [f, f, f], Math.PI / 2));
     })),
-    // (the motor pool with its compound, 61 by 45 m: shifted so the compound, not the hall, is centred on the item)
+    // motor pool plus compound (61 x 45 m), shifted so the compound, not the hall, is centred
     item('part.garage.main', 'MOTOR POOL GARAGE', 62, 46, () => kitPart((k) => garage(k, -2.8, 5.5, 0, [true, false, true], 'main'))),
     item('part.garage.small', 'SMALL GARAGE', 34, 20, () => kitPart((k) => garage(k, 0, 0, 0, [true, true], 'small'))),
     item('part.dish-stations', 'DISH STATIONS (CRYO · GANTRY)', 66, 30, () => row([
       kitPart((k) => dishStation(k, 0, 0, DISH_SIZE, 'cryo', 'meridian', '01', { speed: 0.1 })),
       kitPart((k) => dishStation(k, 0, 0, DISH_SIZE, 'gantry', 'kepler', '02', { speed: 0.1, phase: 1 })),
     ], 6)),
-    // the Kit's shared props (outpostModels.js), as the outposts and settlements use them
+    // the Kit's shared props (outpostModels.js)
     item('kit.containers', 'CARGO CONTAINERS', 18.2, 2.6, () => kitPart((k) => {
-      k.at(0, 0, 0, -0.3); // (the helpers stand things on the outposts' apron, 0.3 m up)
+      k.at(0, 0, 0, -0.3); // helpers stand things on the outpost apron, 0.3 m up
       container(k, -3, 0.3, 0, 0xff9f1c, Math.PI / 2);
       container(k, 3, 0.3, 0, 0x2ec4ff, Math.PI / 2);
       container(k, 0, 2.92, 0, 0x7dff6a, Math.PI / 2);
@@ -280,7 +277,7 @@ const parts = {
 };
 
 // ---------------------------------------------------------------------------------------------
-// 10 HOMETOWN: the Moon Council hall and the nine buildings you can put on its plots (hometown.js)
+// 10 HOMETOWN: Moon Council hall and the nine plot buildings (hometown.js)
 // ---------------------------------------------------------------------------------------------
 const HOME = [
   ['housing', 'HOUSING DOMES'], ['market', 'MARKET HALL'], ['clinic', 'CLINIC'], ['farm', 'GREENHOUSE FARM'], ['motorpool', 'MOTOR POOL'],
@@ -290,7 +287,7 @@ const hometown = {
   id: 'buildings.hometown',
   title: '10 · HOMETOWN',
   items: [
-    // (the Shuttle Pad's deck is 28.6 m across and its stairs run 6 m further toward the hall)
+    // Shuttle Pad deck is 28.6 m across; its stairs run 6 m further toward the hall
     ...HOME.map(([type, label]) => item(`hometown.${type}`, label, type === 'pad' ? 31 : 27, type === 'pad' ? 37 : 27, () => {
       const slot = slotAt(0);
       return viaWorld((world, loc) => addBuilding(world, loc, 0, type), { faction: 'kepler', frame: slot });
@@ -302,13 +299,11 @@ const hometown = {
 export default [outposts, parts, hometown];
 
 // SKIPPED
-// - outpost.mast.glb / outpost.tower.glb (the Blender-GLB pilot outposts): not shown on purpose. The brief says the live game's GLB path
-//   must stay untouched, and outpostTemplate(.., 'glb') needs loadOutpostParts({ force }), which flips the game's own outposts.
-// - part.tower-crane / part.garage.* in their plain models.js form (makeTowerCrane, makeGarage): the Kit-baked settlement versions
-//   (towerCrane, garage) are shown instead; they are the same Blender models baked into the settlement kit. (The plain makeTowerCrane /
-//   makeGarage are vehicle-style models with a live crane rig / garage doors; the settlements never use them.)
-// - faction colour variants of the outposts: each kind is shown once intact and once as a wreck, in the colour of the faction that owns
-//   that kind in the game (territory.js KINDS); the other colours only change trim and flag colours.
-// - the farm ring of the founded-outpost rubble (territory.js spawnRubble): dead code in the game, since a farm is a small kind and
-//   takes the outpostTemplate wreck instead.
-// - World's generic primitives (dome, block, tube, wall pieces) and the settlement-sized dress* routines: those are places, not parts.
+// - outpost.mast.glb / outpost.tower.glb (Blender-GLB pilot outposts): the live game's GLB path must stay untouched, and
+//   outpostTemplate(.., 'glb') needs loadOutpostParts({ force }), which flips the game's own outposts.
+// - plain models.js makeTowerCrane / makeGarage (live crane rig, garage doors; settlements never use them): the Kit-baked
+//   towerCrane / garage are shown instead, same Blender models.
+// - outpost faction colour variants: each kind shows in its owner's colour (territory.js KINDS); others only change trim and flags.
+// - the farm ring of founded-outpost rubble (territory.js spawnRubble): dead code, a farm is a small kind and takes the
+//   outpostTemplate wreck.
+// - World's generic primitives (dome, block, tube, walls) and settlement-sized dress* routines: places, not parts.

@@ -1,6 +1,5 @@
 // Main menu (title screen) with save slots: CONTINUE / NEW GAME / LOAD GAME / SETTINGS / QUIT.
-// Keyboard (arrows or W/S, Enter, Esc, Delete) and mouse. Lives inside the #title overlay;
-// the Moon keeps rendering behind it.
+// Keyboard (arrows or W/S, Enter, Esc, Delete) and mouse. Lives in #title; the Moon renders behind it.
 import { SLOT_COUNT, fmtPlayTime, fmtDate } from './saves.js';
 import { FACTIONS } from './locations.js';
 
@@ -179,8 +178,7 @@ export class MainMenu {
     inp.click();
   }
 
-  // Pick a slot. Resuming the slot that's already loaded starts right away; anything else
-  // rewrites the live save keys and reloads into it.
+  // Pick a slot: the loaded one starts right away; any other rewrites the live save keys and reloads.
   choose(n, fresh) {
     if (!n) return;
     const S = this.saves;
@@ -209,7 +207,7 @@ export class MainMenu {
            <span>PLAY TIME</span><b>${fmtPlayTime(m.playTime)}</b>
            <span>LAST PLAYED</span><b>${fmtDate(m.savedAt)}</b>
          </div>`;
-    // the slot's tools: on LOAD GAME, export / import / restore the backup / delete; on NEW GAME, delete
+    // slot tools: LOAD GAME has export / import / restore backup / delete; NEW GAME has delete
     const tools = [];
     const btn = (act, label, title, cls = '') => tools.push(`<button class="sv-tool ${cls}" data-act="${act}" data-n="${s.n}" data-f="${f}" data-c="${tools.length + 1}" title="${title}">${label}</button>`);
     if (this.screen === 'load') {

@@ -11,29 +11,26 @@ import { makeBoulderShapes, makeBoulderInk, BOULDER_COLLIDER_K } from './boulder
 
 export { faceDir };
 const _g = { f: 0, i: 0, j: 0 };
-// terrain workers: chunks are worked out off the main thread (terrainWorker.js), so a detailed chunk
-// (~25 ms of maths) no longer drops frames when you're going fast
-// (2-4 workers, leaving cores for the game and the browser; jobs queued per worker: enough to keep
-// them busy, few enough that what they're making is still what's wanted)
+// terrain workers (terrainWorker.js): detailed chunks (~25 ms of maths) are built off the main thread so speed doesn't
+// drop frames. 2-4 workers, leaving cores for the game and browser; IN_FLIGHT jobs each keeps them busy while staying
+// relevant
 const WORKERS = Math.max(2, Math.min(4, ((typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 4) - 2)), IN_FLIGHT = 4;
-// a plateau as a worker needs it (the zone objects are whole locations: just the numbers)
-// (a fitted town sends its plane as zrSet, which the worker takes as it is rather than fitting again)
+// a plateau as plain numbers for a worker; a fitted town sends its plane as zrSet, used as is
 function zoneMsg(z) { return { dir: [z.dir.x, z.dir.y, z.dir.z], r: z.r, late: !!z.late, zoneR: z.zoneR || 0, flatR: z.flatR, fit: !!z.fit, curved: !!z.curved, zrSet: z.zrSet }; }
-const AHEAD_LOD = 1; // build-ahead: chunks round where you'll be soon, up to this level of detail
-// the ink line along crater crests: how many rims the terrain shader takes, and how far out
-const ROAD_KEEP = 14; // m a boulder's centre stays from the nearest sample of a road, beyond its own radius
-const RIM_INK_MAX = 64, RIM_INK_REACH = 1500, RIM_INK_BIG = 120; // (no ink on rims bigger than that)
-// a terrain chunk in the sun's depth pass: its grid only, not its skirt (makeChunkMesh)
+const AHEAD_LOD = 1; // build-ahead: chunks where you'll soon be, up to this LOD
+const ROAD_KEEP = 14; // m from a boulder's centre to the nearest road sample, beyond its radius
+// crater-crest ink: rims the shader takes, reach (m), and the largest rim inked
+const RIM_INK_MAX = 64, RIM_INK_REACH = 1500, RIM_INK_BIG = 120;
+// chunk in the sun's depth pass: grid only, not the skirt (makeChunkMesh)
 const gridOnly = (r, o, cam, sc, geo) => { geo.drawRange.count = o.userData.gridIdx; };
 const wholeChunk = (r, o, cam, sc, geo) => { geo.drawRange.count = Infinity; };
 const _rv = new THREE.Vector3();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _e = new THREE.Vector3();
 const _p00 = new THREE.Vector3(), _p10 = new THREE.Vector3(), _p01 = new THREE.Vector3(), _p11 = new THREE.Vector3();
 
-// The Moon: a procedurally generated cube-sphere with craters, ridges and flattened
-// settlement plateaus. Only chunks near the camera and above the horizon are built and
-// drawn, at a level of detail that falls off with distance; physics samples the exact
-// finest-level triangles so what you see up close is what you ski on.
+// The Moon: a procedural cube-sphere with craters, ridges and settlement plateaus. Only chunks near the camera and above
+// the horizon are built, LOD falling off with distance; physics samples the finest triangles, so what you see up close
+// is what you ski on.
 export class Planet extends TerrainField {
   constructor(scene, zones, seed = PLANET.seed) {
     super(zones, seed);
@@ -41,37 +38,36 @@ export class Planet extends TerrainField {
     this.R = R;
     this.initChunks();
     this.startWorkers(zones, seed);
-    // one rectangular hole can be cut in the terrain (the Whispering Fissure's entrance ramp)
+    // one rectangular terrain hole (the Whispering Fissure's entrance ramp)
     this.holeU = {
-      // mineral colour boost: the tints strengthened, warm and cool apart, more from high up
+      // mineral colour boost: warm and cool tints strengthened separately, more from high up
       uWarmK: { value: 1.45 }, uCoolK: { value: 1.35 }, uAltK: { value: 0.55 }, uCamAlt: { value: 0 },
       uHoleOn: { value: 0 }, uHoleO: { value: new THREE.Vector3() }, uHoleX: { value: new THREE.Vector3(1, 0, 0) },
       uHoleY: { value: new THREE.Vector3(0, 1, 0) }, uHoleZ: { value: new THREE.Vector3(0, 0, 1) },
       uHoleMin: { value: new THREE.Vector2() }, uHoleMax: { value: new THREE.Vector2() },
-      // crater rims near the camera, for the ink line along their crests (updateRimInk)
+      // nearby crater rims for the crest ink (updateRimInk)
       uRimC: { value: Array.from({ length: RIM_INK_MAX }, () => new THREE.Vector4()) }, uRimN: { value: 0 },
-      ...skinUniforms(), // (moonSkins.js: candidate ground textures, off unless ?moonskin=N)
+      ...skinUniforms(), // moonSkins.js candidate ground textures, off unless ?moonskin=N
     };
     this.rimInkAt = new THREE.Vector3(1e9, 0, 0);
-    this.tunnel = null; // set by the secrets system: overrides the floor underground
+    this.tunnel = null; // secrets system: overrides the floor underground
     this.material = this.makeMaterial();
     this.material.shadowSide = THREE.BackSide;
-    this.material.defines = { ...(this.material.defines || {}), KEEP_GRAZE_SHADOW: '' }; // (toon.js: the ground keeps its long dusk shadows)
-    this.boulderShapes = makeBoulderShapes(); // (boulders.js: a few lumpy shapes, one per chunk, set to unit RMS radius)
-    this.boulderMat = patchRockMaterial(new THREE.MeshToonMaterial({ color: 0x8d8898, gradientMap: gradientMap() })); // (moonSkins.js: grain and dust when ?moonskin=1)
+    this.material.defines = { ...(this.material.defines || {}), KEEP_GRAZE_SHADOW: '' }; // toon.js: keep long dusk shadows
+    this.boulderShapes = makeBoulderShapes(); // boulders.js: lumpy shapes (one per chunk), unit RMS radius
+    this.boulderMat = patchRockMaterial(new THREE.MeshToonMaterial({ color: 0x8d8898, gradientMap: gradientMap() })); // grain and dust with ?moonskin=1
     this.boulderInk = makeBoulderInk();
     this.colliders = null;
-    // dark backing sphere hides any sub-pixel cracks between LOD levels
+    // dark backing sphere hides sub-pixel cracks between LODs
     this.core = new THREE.Mesh(new THREE.SphereGeometry(R - 330, 96, 48), new THREE.MeshBasicMaterial({ color: 0x16121f }));
     scene.add(this.core);
     this.queue = [];
     this.stats = { built: 0, visible: 0 };
-    this.lakes = []; // black lakes: { d, cos, level } — flat liquid surfaces in crater floors
+    this.lakes = []; // black lakes: { d, cos, level }, flat liquid in crater floors
     this.lastLake = null;
   }
 
-  // Flatten ground after the fact (outposts the player founds): a plateau at the current height
-  // of the centre, blended out to ~2x the radius. Rebuilds the affected terrain chunks.
+  // Flatten ground later (player-founded outposts): a plateau at the centre's height, blended out to ~2x r. Rebuilds chunks.
   addFlat(dir, r) {
     const d = dir.clone().normalize();
     const zr = this.H(d.x, d.y, d.z);
@@ -80,10 +76,8 @@ export class Planet extends TerrainField {
     this.redo(d, r);
   }
 
-  // A settlement founded mid-game (main.js applyWorldLive): a plateau like the ones built at boot.
-  // `swallow` lists the directions of founding-outpost plateaus the settlement grows over: they come
-  // out first (else a 40 m flat at the old ground outlasts the town as a pit under its hall), and
-  // their chunks are redone along with the town's.
+  // A settlement founded mid-game (main.js applyWorldLive), like the boot plateaus. `swallow`: outpost plateau directions
+  // it grows over; removed first (else the old 40 m flat leaves a pit under the hall) and their chunks redone too.
   addZone(z, swallow = []) {
     for (const d of swallow) {
       const u = d.clone().normalize();
@@ -94,13 +88,13 @@ export class Planet extends TerrainField {
       this.tellWorkers({ type: 'unflat', dir: u.toArray() });
       this.redo(u, r);
     }
-    this.addZoneData(z); // (fits the plane here, once)
+    this.addZoneData(z); // fits the plane here, once
     this.tellWorkers({ type: 'zone', zone: zoneMsg(z) });
     this.redo(z.dir, z.fr);
-    this.rimInfo = null; this.rimRails = null; // (crater lips and grind rails worked out for ground that is now flat)
+    this.rimInfo = null; this.rimRails = null; // lips and rails may be on ground now flat
   }
 
-  // Drop the terrain chunks (and their boulders) round a plateau so they rebuild with it.
+  // Drop the chunks (and boulders) round a plateau so they rebuild with it.
   redo(d, r) {
     this.cache.clear();
     const c = d.clone().multiplyScalar(R);
@@ -110,7 +104,7 @@ export class Planet extends TerrainField {
       ch.shown = -1;
       if (ch.boulders) { this.scene.remove(ch.boulders); ch.boulders = null; ch.boulderSpec = null; }
       if (ch.boulderCols && this.colliders) { for (const col of ch.boulderCols) this.colliders.remove(col); ch.boulderCols = null; }
-      ch.ver++; // (anything the workers are still making for it is out of date)
+      ch.ver++; // in-flight worker jobs for it are stale
       ch.pending = 0;
     }
   }
@@ -127,8 +121,7 @@ export class Planet extends TerrainField {
         const wk = new Worker(new URL('./terrainWorker.js', import.meta.url), { type: 'module' });
         wk.busy = 0;
         wk.onmessage = (e) => this.onJob(wk, e.data);
-        // if a worker can't run (an odd browser, a locked-down file:// page), the main thread
-        // builds every chunk itself, as it always used to
+        // if a worker can't run (odd browser, locked-down file:// page), the main thread builds every chunk
         wk.onerror = (e) => { console.warn('[terrain] worker failed, building on the main thread', e.message || e); this.dropWorkers(); };
         wk.postMessage({ type: 'init', seed, painted: this.painted, zones: zones.map(zoneMsg) });
         this.workers.push(wk);
@@ -148,7 +141,7 @@ export class Planet extends TerrainField {
 
   tellWorkers(msg) { for (const wk of this.workers) wk.postMessage(msg); }
 
-  // ask a worker for a chunk at a level (the least busy one)
+  // ask the least busy worker for a chunk at a LOD
   request(ch, lod) {
     if (ch.pending & (1 << lod)) return true;
     let best = null;
@@ -168,7 +161,7 @@ export class Planet extends TerrainField {
     this.jobs.delete(d.id);
     wk.busy--;
     job.ch.pending &= ~(1 << job.lod);
-    if (job.ver !== job.ch.ver || job.ch.meshes[job.lod]) return; // (rebuilt since, or already made)
+    if (job.ver !== job.ch.ver || job.ch.meshes[job.lod]) return; // stale or already made
     this.ready.push({ ch: job.ch, lod: job.lod, d });
   }
 
@@ -181,7 +174,7 @@ export class Planet extends TerrainField {
     const fi = clamp(_g.i, 0, N - 1e-6), fj = clamp(_g.j, 0, N - 1e-6);
     const i = Math.floor(fi), j = Math.floor(fj);
     const tx = fi - i, ty = fj - j;
-    // (the square splits along whichever diagonal follows the ground: buildChunk makes the same choice)
+    // split along the diagonal that follows the ground (buildChunk chooses the same)
     const r00 = this.vr(f, i, j), r10 = this.vr(f, i + 1, j), r01 = this.vr(f, i, j + 1), r11 = this.vr(f, i + 1, j + 1);
     let A, B, C;
     if (Math.abs(r00 - r11) <= Math.abs(r10 - r01)) {
@@ -218,7 +211,7 @@ export class Planet extends TerrainField {
     return r;
   }
 
-  // is this direction inside the lake's traced shoreline?
+  // direction inside the lake's traced shoreline?
   inLake(lk, dx, dy, dz, cd) {
     const x = dx * lk.e1.x + dy * lk.e1.y + dz * lk.e1.z, y = dx * lk.e2.x + dy * lk.e2.y + dz * lk.e2.z;
     const n = lk.shore.length;
@@ -246,7 +239,7 @@ export class Planet extends TerrainField {
   initChunks() {
     this.chunks = [];
     for (let f = 0; f < 6; f++) {
-      // winding: make triangles face outward on every face
+      // winding: triangles face outward on every face
       const o = faceDir(f, N / 2, N / 2, new THREE.Vector3());
       const u = faceDir(f, N / 2 + 1, N / 2, new THREE.Vector3()).sub(o);
       const v = faceDir(f, N / 2, N / 2 + 1, new THREE.Vector3()).sub(o);
@@ -260,21 +253,19 @@ export class Planet extends TerrainField {
           radius: corner.multiplyScalar(R).distanceTo(dir.clone().multiplyScalar(R)) + 40,
           meshes: [null, null, null, null, null],
           shown: -1, want: -1, preWant: -1, queued: false, boulders: null, boulderCols: null, lastWanted: 0,
-          ver: 0, pending: 0, hole: false, // (worker jobs: which levels are being made, and for which version)
+          ver: 0, pending: 0, hole: false, // worker jobs: LODs in progress, and for which version
         });
       }
     }
   }
 
   makeMaterial() {
-    // the same three toon tones as everything else, but with short soft blends between them: a hard
-    // step follows the terrain triangles round steep, curved walls (crater bowls) in a saw-tooth
+    // the usual toon tones with short soft blends: a hard step saw-tooths along the triangles of curved crater walls
     const W = 64, ramp = new Uint8Array(W * 4);
     for (let i = 0; i < W; i++) {
       const x = (i + 0.5) / W;
-      // (a dark band for the far side, then one gentle rise to full sun: no second step. A mid-to-
-      // bright step turned every slope tipped a little toward the sun, round each crater, into a
-      // soft pale blob, seen from above as smudges and webs)
+      // a dark far-side band, then one gentle rise to full sun; a second (mid-to-bright) step made sun-tilted slopes
+      // round craters into pale blobs, smudges and webs from above
       const v = 60 + 110 * smoothstep(0.27, 0.4, x) + 85 * Math.min(1, Math.max(0, (x - 0.4) / 0.4));
       ramp.set([v, v, v, 255], i * 4);
     }
@@ -282,7 +273,7 @@ export class Planet extends TerrainField {
     soft.minFilter = soft.magFilter = THREE.LinearFilter;
     soft.needsUpdate = true;
     const mat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: soft });
-    // Inked crater rims: a crisp black line along each crest (updateRimInk), over a soft darker band.
+    // Inked crater rims: a crisp line along each crest (updateRimInk) over a soft darker band.
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.holeU);
       sh.vertexShader = sh.vertexShader
@@ -311,10 +302,8 @@ ${SKIN_COMMON}`)
   float skHeight = 0.0; // (the regolith's relief in metres, worked out in the colour and read again by the normal)`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${SKIN_NORMAL}`)
         .replace('#include <opaque_fragment>', `${SKIN_LIGHT}\n#include <opaque_fragment>`)
-        // a soft shade over the rim, and a crisp black ink line along each crest: a circle round the
-        // crater, measured per pixel on the sphere (so it's smooth whatever the triangles do). It
-        // fades out where the rim itself does (worn away, or flattened under a settlement), and
-        // with distance
+        // soft rim shade plus a crisp crest line: a circle round the crater measured per pixel on the sphere (smooth
+        // whatever the triangles do). Fades where the rim does (worn, flattened under a settlement) and with distance
         .replace('#include <color_fragment>', `#include <color_fragment>
 float rimOld = (uSkin > 0.5 && uSkin < 1.5) ? 0.0 : 1.0; // (the regolith look draws its own rims: moonSkins.js skRim)
 // the soft shade over the rim zone stays in the regolith look too, but only from a distance: it fades in as a pixel grows past 3 cm
@@ -375,14 +364,14 @@ ${SKIN_COLOR}`);
     return mat;
   }
 
-  // Build a chunk here and now (spawning, teleports, the trailer: no waiting on the workers).
+  // Build a chunk now (spawn, teleport, trailer: no waiting on workers).
   buildChunk(ch, lod) {
     const d = this.computeChunk(ch.f, ch.cx, ch.cy, ch.flip, lod);
     this.fillCache(ch, lod, d.inside);
     this.makeChunkMesh(ch, lod, d);
   }
 
-  // The physics cache gets a chunk's exact grid radii (what surface() would otherwise work out again).
+  // Cache a chunk's exact grid radii for physics (saves surface() recomputing them).
   fillCache(ch, lod, inside) {
     const s = 1 << lod, vn = CH / s + 1, i0 = ch.cx * CH, j0 = ch.cy * CH, f = ch.f;
     if (this.cache.size > 400000) this.cache.clear();
@@ -403,17 +392,13 @@ ${SKIN_COLOR}`);
     geo.computeBoundingSphere();
     const mesh = new THREE.Mesh(geo, this.material);
     mesh.receiveShadow = true;
-    mesh.renderOrder = -1; // (the road decal, renderOrder -0.5 in traffic.js, draws right after the terrain and before everything else)
-    // hills block the sun again (without it, a rock's shadow fell straight through the hill and
-    // landed a second time beyond it); only their far sides cast (material.shadowSide), so a
-    // sunlit slope can't shadow itself into jagged blotches. Only the two detailed levels cast: a
-    // coarse far tile's big flat triangles threw hard-edged polygon shadows (and, with the sun low,
-    // long radial "spider-web" streaks) across the ground near you, shapes no hill on screen has
+    mesh.renderOrder = -1; // the road decal (renderOrder -0.5, traffic.js) draws right after terrain
+    // hills cast so rock shadows don't pass through them; only far sides cast (material.shadowSide) so sunlit slopes
+    // don't self-shadow into blotches. Only the two detailed LODs cast: coarse tiles' big triangles throw hard polygon
+    // shadows (and low-sun "spider-web" streaks) no visible hill has
     mesh.castShadow = lod <= 1;
-    // ...but not the skirt round the border (computeChunk: drawn after the grid's triangles). It drops
-    // straight down from the chunk's edge, double-sided, so its top edge sat in the shadow map at
-    // ground level and PCF smeared it onto the ground beside it: a thin dark line along every chunk
-    // seam, sharpest at HIGH shadow quality. It hangs below the ground, so it has nothing to shade
+    // ...but not the skirt (computeChunk: drawn after the grid). Double-sided at ground level, PCF smeared it into a dark
+    // line along every chunk seam; it hangs below ground, so it has nothing to shade
     mesh.userData.gridIdx = (CH >> lod) * (CH >> lod) * 6;
     mesh.onBeforeShadow = gridOnly;
     mesh.onAfterShadow = wholeChunk;
@@ -424,7 +409,7 @@ ${SKIN_COLOR}`);
     this.stats.built++;
   }
 
-  // Is this spot free for a big rock? (no settlement or plateau, black lake or road)
+  // Free for a big rock? (no settlement, plateau, black lake or road)
   spotFree(p) {
     const d = _e.copy(p).normalize();
     for (const zn of this.zones) if (d.dot(zn.dir) > Math.cos((zn.r * 1.6 + 30) / R)) return false;
@@ -439,12 +424,9 @@ ${SKIN_COLOR}`);
     (this.rails ||= []).push(railOf(r.pts));
   }
 
-  // Crater lips: the ink line and the grind rail are the same thing. A crater's lip counts if it
-  // stands up as a firm ridge most of the way round (not flattened under a settlement, swallowed
-  // by a neighbour, worn away, or a giant); its crest - where it peaks - is where the ink is drawn
-  // and where you grind. Overlapping craters share one outline: each lip only runs where it
-  // isn't inside a neighbour, so the cluster has one rim round it, inked and grindable. A crater
-  // lying wholly on the floor of one at least twice its size keeps its whole lip.
+  // Crater lips: ink line and grind rail are one. A lip counts if it's a firm ridge most of the way round (not flattened
+  // by a settlement, swallowed, worn or a giant); its crest is inked and grindable. Overlapping craters share one outline
+  // (each lip runs only outside its neighbours). A crater wholly on the floor of one at least twice its size keeps its lip.
   rimOf(c) {
     this.rimInfo ||= new Map();
     let I = this.rimInfo.get(c);
@@ -458,7 +440,7 @@ ${SKIN_COLOR}`);
       out.copy(c.e1).multiplyScalar(Math.cos(th)).addScaledVector(c.e2, Math.sin(th)).multiplyScalar(Math.sin(a)).addScaledVector(c.d, Math.cos(a)).normalize();
       return this.surface(out);
     };
-    // the crest sits a touch outside r = 1 (the bowl drags the inner side down): find it
+    // find the crest, a touch outside r = 1 (the bowl drags the inner side down)
     let rpk = 1, best = -1e9;
     for (let rr = 0.88; rr <= 1.3; rr += 0.01) {
       let h = 0;
@@ -471,14 +453,12 @@ ${SKIN_COLOR}`);
     for (let i = 0; i < n; i++) {
       const th = (i / n) * Math.PI * 2;
       const top = at(rpk, th, v);
-      // the rail hugs the ground you see (smoothed below, so it doesn't bob over every grid cell)
+      // rail hugs the visible ground (smoothed below, so it doesn't bob per grid cell)
       pts.push(v.clone().multiplyScalar(top));
-      // a firm lip stands up off the line between the bowl and the ground outside (which can be
-      // higher than it, on a slope)
+      // firm: stands above the line from bowl to outside ground (which can be higher, on a slope)
       if (top - (at(rpk - 0.3, th, w) + at(rpk + 0.35, th, w)) / 2 > 1.5) firm++;
     }
-    // ease out the small bumps of the ground underneath, so the grind runs smooth
-    // (and the steps where a scarp or ridge crosses the lip)
+    // smooth out ground bumps (and scarp or ridge steps) so the grind runs smooth
     let rad = pts.map((q) => q.length());
     for (let pass = 0; pass < 1; pass++) {
       rad = rad.map((_, i) => (rad[(i + n - 2) % n] + 2 * rad[(i + n - 1) % n] + 3 * rad[i] + 2 * rad[(i + 1) % n] + rad[(i + 2) % n]) / 9);
@@ -489,7 +469,7 @@ ${SKIN_COLOR}`);
     return I;
   }
 
-  // the inked, grindable craters overlapping this one
+  // inked, grindable craters overlapping this one
   rimNeighbours(c) {
     const I = this.rimOf(c);
     if (I.nb) return I.nb;
@@ -506,8 +486,7 @@ ${SKIN_COLOR}`);
     return I.nb;
   }
 
-  // the grind rails along a crater's lip: one closed loop, or the open stretches of it that make up
-  // part of a cluster's shared outline
+  // a lip's grind rails: one closed loop, or the open stretches on a cluster's shared outline
   rimRailsOf(c) {
     const I = this.rimOf(c);
     if (!I.ok) return [];
@@ -516,7 +495,7 @@ ${SKIN_COLOR}`);
     const keep = pts.map((p) => {
       if (I.nested) return true;
       for (const { o, J } of nb) {
-        if (this.rimNeighbours(o) && J.nested) continue; // (nested ones don't cut the shared outline)
+        if (this.rimNeighbours(o) && J.nested) continue; // nested ones don't cut the outline
         if (R * Math.acos(Math.min(1, _rv.copy(p).normalize().dot(o.d))) < J.rc - 1) return false;
       }
       return true;
@@ -543,7 +522,7 @@ ${SKIN_COLOR}`);
     return out;
   }
 
-  // Build the rim rails round you as you go (the Grinder calls this every half second).
+  // Build nearby rim rails as you go (the Grinder calls this every 0.5 s).
   rimRailsNear(p) {
     this.rimRails ||= new Map();
     const d = _rv.copy(p).normalize();
@@ -554,13 +533,13 @@ ${SKIN_COLOR}`);
     }
   }
 
-  // Keep big rocks off these directions (the road network): set by the world once roads exist.
+  // Keep big rocks off these directions (the road network), set once roads exist.
   keepClear(dirs, r) {
     this.clearDirs = dirs;
     this.clearCos = Math.cos(r / R);
   }
 
-  // One more spot rocks stay off (a story gate): the chunks round it re-roll their boulders.
+  // One more rock-free spot (a story gate); nearby chunks re-roll their boulders.
   clearSpot(d) {
     (this.clearDirs ||= []).push(d.clone().normalize());
     this.clearCos ??= Math.cos(26 / R);
@@ -572,8 +551,8 @@ ${SKIN_COLOR}`);
     }
   }
 
-  // How far along the ray o + t*d (d unit) the first rock stands, or Infinity: every boulder and shaped
-  // rock that is drawn (not just the ones near enough to have colliders), for hitscan beams.
+  // Distance along ray o + t*d (d unit) to the first drawn boulder or shaped rock (colliders or not), or Infinity.
+  // For hitscan beams.
   rockRay(o, d, tmax) {
     let best = Infinity;
     for (const ch of this.chunks) {
@@ -589,13 +568,12 @@ ${SKIN_COLOR}`);
   buildBoulders(ch) {
     const rr = mulberry32((ch.f * 7919 + ch.cy * 131 + ch.cx) * 2654435761);
     const count = 4 + Math.floor(rr() * 6);
-    // rocky country (ridged highlands, scarps) gets extra boulders, from a generator of their own
+    // rocky country (ridged highlands, scarps) gets extra boulders, from their own generator
     this.H(ch.dir.x, ch.dir.y, ch.dir.z);
     const rock = this.attr.rock;
     const extra = Math.floor(rock * 12);
     const rx = mulberry32((ch.f * 7919 + ch.cy * 131 + ch.cx) * 2246822519 ^ 0x7ee);
-    // one lumpy shape for the whole chunk, and each boulder stretched a little its own way (from a sequence of its own: the
-    // places, sizes and turns above come from rr and rx, and stay as they were)
+    // one lumpy shape per chunk, each boulder stretched its own way (own sequence rv, so rr and rx placements are unaffected)
     const seed = ch.f * 7919 + ch.cy * 131 + ch.cx;
     const shape = this.boulderShapes[((seed * 2654435761) >>> 0) % this.boulderShapes.length];
     const rv = mulberry32(seed * 40503 ^ 0x6b0d1e);
@@ -605,18 +583,18 @@ ${SKIN_COLOR}`);
     const cols = [];
     let n = 0;
     for (let t = 0; t < count + extra; t++) {
-      const g0 = t < count ? rr : rx; // (the original boulders keep their own sequence)
+      const g0 = t < count ? rr : rx; // base boulders keep their own sequence
       faceDir(ch.f, ch.cx * CH + g0() * CH, ch.cy * CH + g0() * CH, p);
       let ok = true;
       for (const zn of this.zones) if (p.dot(zn.dir) > Math.cos((zn.r * 1.5) / R)) { ok = false; break; }
       for (const zn of this.flats) if (p.dot(zn.dir) > Math.cos((zn.r * 1.5) / R)) { ok = false; break; }
-      if (ok && this.noBoulders) for (const c of this.noBoulders) if (p.dot(c) > this.noBouldersCos) { ok = false; break; } // (spots kept bare: the trailer)
+      if (ok && this.noBoulders) for (const c of this.noBoulders) if (p.dot(c) > this.noBouldersCos) { ok = false; break; } // spots kept bare (trailer)
       const s = 1.2 + Math.pow(g0(), 3) * 7;
       e.set(g0() * 3, g0() * 3, g0() * 3);
-      const sx = 0.85 + rv() * 0.35, sy = 0.85 + rv() * 0.35, sz = 0.85 + rv() * 0.35; // (drawn for every spot, taken or not, so that one being refused moves none of the others)
-      // (nor on a road: clear of the strip and its berm, whatever the boulder's size; clearDirs are samples of the road network, its edges included)
+      const sx = 0.85 + rv() * 0.35, sy = 0.85 + rv() * 0.35, sz = 0.85 + rv() * 0.35; // drawn for every spot, so a refused one shifts no others
+      // not on a road: clear of strip and berm for any size (clearDirs sample the road network, edges included)
       if (ok && this.clearDirs) { const cr = Math.cos((ROAD_KEEP + s) / R); for (const c of this.clearDirs) if (p.dot(c) > cr) { ok = false; break; } }
-      // (nor in a black lake, or at its edge: the liquid would swallow it or stand it on the surface)
+      // not in or at the edge of a black lake (it'd sink or stand on the surface)
       if (ok) for (const lk of this.lakes) if (p.dot(lk.d) > lk.cos - (s + 6) / R) { ok = false; break; }
       if (!ok) continue;
       const r = this.surface(p);
@@ -624,9 +602,9 @@ ${SKIN_COLOR}`);
       q.setFromEuler(e);
       m4.compose(p, q, sc.set(s * sx, s * 0.8 * sy, s * sz));
       im.setMatrixAt(n, m4);
-      hull.setMatrixAt(n, m4); // (the ink is the same shell, pushed out along its normals in its shader: boulders.js)
-      // the collision sphere: its radius is the boulder's RMS radius (the shapes have unit RMS before they are scaled by
-      // sx, 0.8 sy and sz) times BOULDER_COLLIDER_K, which for an unstretched boulder is the 0.85 s it always was
+      hull.setMatrixAt(n, m4); // ink: same shell pushed out along normals in its shader (boulders.js)
+      // collision sphere: the boulder's RMS radius (unit-RMS shape scaled by sx, 0.8 sy, sz) times BOULDER_COLLIDER_K
+      // (0.85 s for an unstretched boulder)
       cols.push({ type: 'sphere', c: p.clone().addScaledVector(p.clone().normalize(), -s * 0.1), r: s * BOULDER_COLLIDER_K * Math.sqrt((sx * sx + 0.64 * sy * sy + sz * sz) / 3) });
       n++;
     }
@@ -634,7 +612,7 @@ ${SKIN_COLOR}`);
     im.castShadow = true;
     im.frustumCulled = hull.frustumCulled = false;
     im.updateMatrix(); hull.updateMatrix();
-    im.matrixAutoUpdate = hull.matrixAutoUpdate = false; // (never moved: the shadow cache can take them at once)
+    im.matrixAutoUpdate = hull.matrixAutoUpdate = false; // static: the shadow cache takes them at once
     const g = new THREE.Group();
     g.add(im, hull);
     // shaped rocks: ramps, arches, hoodoos, mesas, wave walls (rocks.js)
@@ -650,15 +628,13 @@ ${SKIN_COLOR}`);
     g.matrixAutoUpdate = false;
     g.visible = false;
     this.scene.add(g);
-    for (const c of cols) c.rock = true; // (the Rail Lance's beam stops at these: rockRay)
+    for (const c of cols) c.rock = true; // Rail Lance stops at these (rockRay)
     ch.boulders = g;
     ch.boulderSpec = cols;
   }
 
-  // Decide per chunk what LOD to show; build missing meshes within a time budget.
-  // Pick the crater crests within reach of the camera for the terrain shader's ink line: each one
-  // is drawn exactly, per pixel, as a circle round its crater (worked out from vertex data it
-  // followed the terrain triangles, and broke up wherever craters overlap).
+  // Pick crater crests in reach of the camera for the shader's ink line, each drawn per pixel as a circle round its
+  // crater (vertex data would follow the triangles and break up where craters overlap).
   updateRimInk(camPos) {
     if (camPos.distanceToSquared(this.rimInkAt) < 40 * 40) return;
     const cd = _rv.copy(camPos).normalize();
@@ -669,8 +645,7 @@ ${SKIN_COLOR}`);
       if (gap < RIM_INK_REACH) near.push({ c, gap });
     }
     near.sort((a, b) => a.gap - b.gap);
-    // measuring a lip takes about a millisecond: a few dozen at most per frame, nearest first
-    // (the rest come in over the next frames, out at the far end of the ink's reach)
+    // measuring a lip takes ~1 ms: a few dozen per frame at most, nearest first (the rest follow, at the far reach)
     const t0 = performance.now();
     let done = true;
     const U = this.holeU.uRimC.value;
@@ -687,19 +662,19 @@ ${SKIN_COLOR}`);
     if (done) this.rimInkAt.copy(camPos);
   }
 
-  // The LOD for a chunk this far (m) from the eye, or -1 past the limit.
+  // LOD for a chunk this far (m) from the eye, or -1 past the limit.
   lodAt(d, limit) {
     if (d >= limit) return -1;
     const dl = d / (this.lodScale || 1); // settings: terrain detail
     return dl < 130 ? 0 : dl < 260 ? 1 : dl < 800 ? 2 : dl < 1700 ? 3 : 4;
   }
 
-  // ahead: where the camera will be in a moment (main.js: your velocity), so the chunks there are
-  // being made before you arrive. budgetMs: main-thread time for turning finished chunks into meshes
-  // (or, with no workers, for making them); a huge budget builds everything wanted, right now.
+  // Per chunk: choose the LOD to show and build missing meshes within a budget. ahead: where the camera will soon be
+  // (main.js, from velocity), built before you arrive. budgetMs: main-thread time for meshing finished chunks (or, with
+  // no workers, building them); a huge budget builds everything now.
   update(camPos, { budgetMs = 5, maxDist = 3200, ahead = null } = {}) {
     this.updateRimInk(camPos);
-    this.holeU.uCamAlt.value = camPos.length() - this.surface(camPos); // (the mineral boost grows with height)
+    this.holeU.uCamAlt.value = camPos.length() - this.surface(camPos); // mineral boost grows with height
     const camLen = camPos.length();
     const rMin = R - 330, rMax = R + 260;
     const horizon = Math.sqrt(Math.max(0, camLen * camLen - rMin * rMin)) + Math.sqrt(rMax * rMax - rMin * rMin);
@@ -707,8 +682,7 @@ ${SKIN_COLOR}`);
     const now = performance.now();
     const sync = budgetMs >= 1e8 || !this.workers.length;
     const t0 = performance.now();
-    // finished chunks from the workers become meshes (a millisecond or two each): the ones filling a
-    // gap first, then the coarse ones (cheap, and they fill the most screen), then the detailed ones
+    // mesh finished worker chunks (1-2 ms each): gaps first, then coarse (cheap, most screen), then detailed
     if (this.ready.length > 1) this.ready.sort((a, b) => (b.ch.hole - a.ch.hole) || (b.lod - a.lod));
     while (this.ready.length && performance.now() - t0 < budgetMs) {
       const { ch, lod, d } = this.ready.shift();
@@ -722,7 +696,7 @@ ${SKIN_COLOR}`);
     for (const ch of this.chunks) {
       const want = this.lodAt(camPos.distanceTo(ch.center) - ch.radius, limit);
       ch.want = want;
-      // build-ahead: the detailed levels round where you're heading (never coarser than wanted now)
+      // build-ahead: detailed LODs where you're heading (never coarser than wanted now)
       let preWant = -1;
       if (ahead) {
         const pw = this.lodAt(ahead.distanceTo(ch.center) - ch.radius, limit);
@@ -735,7 +709,7 @@ ${SKIN_COLOR}`);
         if (ch.meshes[want]) show = want;
         else {
           this.queue.push(ch);
-          // show the closest available level meanwhile
+          // meanwhile show the closest available LOD
           for (let l = 0; l <= MAX_LOD; l++) if (ch.meshes[l] && (show < 0 || Math.abs(l - want) < Math.abs(show - want))) show = l;
         }
       }
@@ -747,15 +721,14 @@ ${SKIN_COLOR}`);
         ch.shown = show;
       }
       if (show >= 0) visible++;
-      // boulders: drawn for near chunks; colliders only where you can actually hit them
+      // boulders drawn for near chunks; colliders only where you can hit them
       const near = want >= 0 && want <= 2;
       if (near && !ch.boulders) this.buildBoulders(ch);
       if (ch.boulders) ch.boulders.visible = near;
       const active = want >= 0 && want <= 1;
       if (active && !ch.boulderCols && this.colliders) ch.boulderCols = ch.boulderSpec.map((c) => this.colliders.add(c));
       if (!active && ch.boulderCols) { for (const c of ch.boulderCols) this.colliders.remove(c); ch.boulderCols = null; }
-      // free detailed meshes that are no longer needed (the trailer keeps them all: no rebuilds at its
-      // cuts), but not ones made ahead for where you're going
+      // free unneeded detailed meshes, except build-ahead ones (the trailer keeps all: no rebuilds at its cuts)
       const keepAt = preWant >= 0 && (want < 0 || preWant < want) ? preWant : want;
       for (let l = 0; l < 3 && !this.keep; l++) {
         const m = ch.meshes[l];
@@ -768,7 +741,7 @@ ${SKIN_COLOR}`);
       }
     }
     this.stats.visible = visible;
-    // gaps first (nothing to show there at all), then closest first
+    // gaps (nothing to show) first, then closest
     this.queue.sort((a, b) => (b.hole - a.hole) || camPos.distanceToSquared(a.center) - camPos.distanceToSquared(b.center));
     if (sync) {
       for (const ch of this.queue) {
@@ -780,9 +753,9 @@ ${SKIN_COLOR}`);
       }
       return this.queue.length;
     }
-    // hand the workers what's wanted now, then what's wanted ahead
+    // request what's wanted now, then ahead
     for (const ch of this.queue) {
-      // a gap gets a quick coarse level first (a few ms of work), then the detailed one
+      // a gap gets a quick coarse LOD first (a few ms), then the detailed one
       if (ch.hole && ch.want < 2 && !ch.meshes[2] && !this.request(ch, 2)) break;
       if (!this.request(ch, ch.want)) break;
     }

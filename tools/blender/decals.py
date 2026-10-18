@@ -2,21 +2,18 @@
 #   exec(open(<repo>/tools/blender/decals.py).read(), globals())
 # after kit.py (it uses bpy, tb, C and material from there).
 #
-# Everything is authored in three.js axes like the rest of the kit (x right, y up, +z forward). A decal is
-# drawn on a flat face of a vehicle: Dec(face, origin) gives a little 2D page (u to the reader's right, v up)
-# standing on that face at `origin`, and everything added to it is flat polygons a hair above the surface
-# (no textures, so it all exports in the GLB and takes the same palette slots as the rest of the model).
-# Layers stack: layer 0 is the backing plate, layer 1 what is printed on it, and so on.
+# three.js axes like the rest of the kit (x right, y up, +z forward). Dec(face, origin) gives a 2D page (u to the
+# reader's right, v up) on a flat face at `origin`; shapes are flat polygons a hair above the surface (no textures,
+# so they export in the GLB with the model's palette slots). Layers stack: 0 the backing plate, 1 what's printed on it, ...
 #
-#   face "+x"/"-x"  a flank (reads front to back on +x, back to front on -x, as a person looking at it sees it)
+#   face "+x"/"-x"  a flank (reads front to back on +x, back to front on -x, as a viewer sees it)
 #   face "+z"/"-z"  the front/rear end
 #
-# Lettering is a 5x7 pixel font (the game's own look): runs of lit pixels in a row are merged into one
-# rectangle, so a word is a handful of quads.
+# Lettering is a 5x7 pixel font (the game's look); runs of lit pixels in a row merge into one rectangle.
 
 import math
 
-# ---------------- the font ----------------
+# ---------------- font ----------------
 _G = {
     "A": "01110 10001 10001 11111 10001 10001 10001", "B": "11110 10001 10001 11110 10001 10001 11110",
     "C": "01110 10001 10000 10000 10000 10001 01110", "D": "11110 10001 10001 10001 10001 10001 11110",
@@ -55,7 +52,7 @@ FACES = {
     "+z": ((1, 0, 0), (0, 1, 0), (0, 0, 1)),
     "-z": ((-1, 0, 0), (0, 1, 0), (0, 0, -1)),
 }
-LAYER = 0.004   # how far each layer stands off the one below
+LAYER = 0.004   # offset between layers (m)
 
 
 def _add(a, b, k=1.0):
@@ -63,7 +60,7 @@ def _add(a, b, k=1.0):
 
 
 def _clip(poly, u0, v0, u1, v1):
-    """Sutherland-Hodgman: a convex polygon clipped to an axis-aligned rectangle."""
+    """Sutherland-Hodgman: clip a convex polygon to an axis-aligned rectangle."""
     def run(pts, inside, cut):
         out = []
         for i, p in enumerate(pts):
@@ -101,7 +98,7 @@ class Dec:
         return _add(p, self.n, self.lift + layer * LAYER)
 
     def poly(self, pts, slot, layer=0):
-        """A convex (or star-shaped about its centroid) polygon from (u, v) points."""
+        """Convex (or star-shaped about its centroid) polygon from (u, v) points."""
         self.polys.setdefault(slot, []).append([self.pt(u, v, layer) for u, v in pts])
 
     def rect(self, u0, v0, u1, v1, slot, layer=0):
@@ -111,7 +108,7 @@ class Dec:
         self.poly([(cu + math.cos(2 * math.pi * i / n) * r, cv + math.sin(2 * math.pi * i / n) * r) for i in range(n)], slot, layer)
 
     def ring(self, cu, cv, r0, r1, slot, layer=0, n=24, a0=0.0, a1=2 * math.pi, sx=1.0, sy=1.0):
-        """An annulus (or an arc of one) between radii r0 < r1; sx / sy squash it into an ellipse."""
+        """Annulus (or arc) between radii r0 < r1; sx / sy squash it into an ellipse."""
         steps = max(3, int(round(n * (a1 - a0) / (2 * math.pi))))
         for i in range(steps):
             t0 = a0 + (a1 - a0) * i / steps
@@ -132,14 +129,14 @@ class Dec:
         self.poly([(cu, cv - half), (cu + half, cv), (cu, cv + half), (cu - half, cv)], slot, layer)
 
     def bar(self, u0, v0, u1, v1, w, slot, layer=0):
-        """A straight bar of width w from one point to another."""
+        """Straight bar of width w between two points."""
         du, dv = u1 - u0, v1 - v0
         L = math.hypot(du, dv) or 1.0
         nu, nv = -dv / L * w / 2, du / L * w / 2
         self.poly([(u0 + nu, v0 + nv), (u1 + nu, v1 + nv), (u1 - nu, v1 - nv), (u0 - nu, v0 - nv)], slot, layer)
 
     def hazard(self, u0, v0, u1, v1, slot_a, slot_b, layer=0, stripe=0.18, slant=1.0):
-        """Diagonal warning stripes clipped to a rectangle: slot_a over a slot_b ground."""
+        """Diagonal warning stripes in a rectangle: slot_a over slot_b."""
         self.rect(u0, v0, u1, v1, slot_b, layer)
         h = v1 - v0
         k = u0 - h * slant
@@ -148,7 +145,7 @@ class Dec:
             k += stripe * 2
 
     def text(self, s, u, v, ps, slot, layer=0, anchor="l"):
-        """Pixel lettering with its lower-left at (u, v) ('c' centres it on u, 'r' ends it there)."""
+        """Pixel lettering, lower-left at (u, v) ('c' centres on u, 'r' ends there)."""
         w = text_width(s, ps)
         x = u - (w / 2 if anchor == "c" else w if anchor == "r" else 0)
         for ch in s.upper():
@@ -169,7 +166,7 @@ class Dec:
         return w
 
     def build(self, name, parent):
-        """One flat mesh per slot; every polygon wound to face outward."""
+        """One flat mesh per slot, polygons wound to face outward."""
         made = []
         nb = tb(self.n)
         for slot, polys in self.polys.items():
@@ -203,15 +200,15 @@ class Dec:
         return made
 
 
-# ---------------- faction emblems: a dark roundel with a glyph in the faction's trim colour ----------------
+# ---------------- faction emblems: dark roundel, glyph in trim colour ----------------
 def emblem(d, faction, cu, cv, r, layer=0):
-    """The faction's mark, r the radius of its roundel. Backing 'dark', glyph 'stripe' (the trim colour)."""
+    """Faction mark, roundel radius r. Backing 'dark', glyph 'stripe' (trim colour)."""
     d.disc(cu, cv, r, "dark", layer, 24)
     g = layer + 1
     if faction == "vostok":
         d.star(cu, cv + r * 0.02, r * 0.78, r * 0.31, "stripe", g)
     elif faction == "spacecom":
-        # a crescent moon with a star in its mouth
+        # crescent with a star in its mouth
         R1, R2, dd = r * 0.74, r * 0.6, r * 0.3
         x = (R1 * R1 - R2 * R2 + dd * dd) / (2 * dd)
         y = math.sqrt(max(0.0, R1 * R1 - x * x))
@@ -224,17 +221,17 @@ def emblem(d, faction, cu, cv, r, layer=0):
             d.poly([outer[i], outer[i + 1], inner[i + 1], inner[i]], "stripe", g)
         d.star(cu + r * 0.28, cv, r * 0.2, r * 0.08, "stripe", g)
     elif faction == "kepler":
-        # an orbit: a tilted ellipse ring with a planet on it
+        # orbit: tilted ellipse ring with a planet
         d.ring(cu, cv, r * 0.58, r * 0.7, "stripe", g, 28, sy=0.5)
         d.disc(cu + r * 0.64, cv, r * 0.13, "stripe", g, 10)
         d.disc(cu, cv, r * 0.18, "stripe", g, 10)
     elif faction == "daedalus":
-        # a delta (a hollow triangle) with an eye in it
+        # hollow delta with an eye
         d.poly([(cu, cv + r * 0.74), (cu - r * 0.7, cv - r * 0.46), (cu + r * 0.7, cv - r * 0.46)], "stripe", g)
         d.poly([(cu, cv + r * 0.34), (cu - r * 0.38, cv - r * 0.28), (cu + r * 0.38, cv - r * 0.28)], "dark", g + 1)
         d.disc(cu, cv - r * 0.08, r * 0.1, "stripe", g + 2, 10)
     elif faction == "meridian":
-        # a globe: a ring, an equator and a meridian line
+        # globe: ring, equator, meridian
         d.ring(cu, cv, r * 0.62, r * 0.74, "stripe", g, 28)
         d.rect(cu - r * 0.62, cv - r * 0.05, cu + r * 0.62, cv + r * 0.05, "stripe", g)
         d.ring(cu, cv, r * 0.24, r * 0.31, "stripe", g, 20, sy=2.3)
@@ -243,7 +240,7 @@ def emblem(d, faction, cu, cv, r, layer=0):
 
 # ---------------- OSHA / DOT style signs ----------------
 def danger_sign(d, u, v, w, h, layer=0):
-    """An OSHA-style DANGER sign, (u, v) its lower-left: white board, red header with DANGER, black legend."""
+    """OSHA-style DANGER sign, lower-left (u, v): white board, red DANGER header, black legend."""
     d.rect(u - 0.04, v - 0.04, u + w + 0.04, v + h + 0.04, "dark", layer)
     d.rect(u, v, u + w, v + h, "white", layer + 1)
     hh = h * 0.3
@@ -259,12 +256,12 @@ def danger_sign(d, u, v, w, h, layer=0):
 
 
 def placard(d, cu, cv, half, layer=0):
-    """A DOT class 1 EXPLOSIVES placard: an orange diamond with a bomb on top, 1.1 across the middle, a 1 below."""
+    """DOT class 1 EXPLOSIVES placard: orange diamond, bomb on top, 1.1 across the middle, 1 below."""
     d.diamond(cu, cv, half * 1.0, "dark", layer)
     d.diamond(cu, cv, half * 0.95, "orange", layer + 1)
     d.diamond(cu, cv, half * 0.86, "dark", layer + 2)
     d.diamond(cu, cv, half * 0.83, "orange", layer + 3)
-    # the bomb: a black ball with a short fuse and a spark, in the upper corner
+    # bomb: black ball, short fuse and spark, upper corner
     bx, by, br = cu, cv + half * 0.3, half * 0.15
     d.disc(bx, by, br, "dark", layer + 4, 14)
     d.bar(bx + br * 0.4, by + br * 0.8, bx + br * 1.1, by + br * 1.6, br * 0.28, "dark", layer + 4)
@@ -275,7 +272,7 @@ def placard(d, cu, cv, half, layer=0):
 
 
 def prohibition(d, cu, cv, r, icon, layer=0):
-    """A round prohibition sign: red ring and slash over a black icon on white. icon: 'smoke' or 'flame'."""
+    """Round prohibition sign: red ring and slash over a black icon on white. icon: 'smoke' or 'flame'."""
     d.disc(cu, cv, r, "white", layer, 22)
     if icon == "smoke":
         d.rect(cu - r * 0.5, cv - r * 0.08, cu + r * 0.32, cv + r * 0.08, "dark", layer + 1)
@@ -290,43 +287,42 @@ def prohibition(d, cu, cv, r, icon, layer=0):
 
 
 def nfpa(d, cu, cv, half, health, flam, react, special, layer=0):
-    """An NFPA 704 fire diamond: blue health (left), red flammability (top), yellow reactivity (right), white special (bottom)."""
+    """NFPA 704 fire diamond: blue health (left), red flammability (top), yellow reactivity (right), white special (bottom)."""
     h = half
     q = [("blue", (cu - h * 0.5, cv), str(health)), ("redsafe", (cu, cv + h * 0.5), str(flam)), ("hazard", (cu + h * 0.5, cv), str(react)), ("white", (cu, cv - h * 0.5), special)]
     d.diamond(cu, cv, h * 1.04, "dark", layer)
     for slot, (qu, qv), txt in q:
-        # each quadrant is a little diamond a quarter the size of the whole
+        # each quadrant a small diamond
         d.diamond(qu, qv, h * 0.48, slot, layer + 1)
         ps = h * 0.052
         d.text(txt, qu, qv - 3.5 * ps, ps * (1.0 if len(txt) == 1 else 0.7), "white" if slot in ("blue", "redsafe") else "dark", layer + 2, "c")
 
 
-# ---------------- the factions the vehicles and the cargo are painted for ----------------
+# ---------------- factions painted on vehicles and cargo ----------------
 FACTIONS = ("spacecom", "vostok", "kepler", "meridian")
 NAMES = {"spacecom": "SPACECOM", "vostok": "VOSTOK", "kepler": "KEPLER", "meridian": "MERIDIAN", "daedalus": "DAEDALUS"}
 CODES = {"spacecom": "SPC", "vostok": "VOS", "kepler": "KPL", "meridian": "MRD", "daedalus": "DDL"}
-MARKED = FACTIONS + ("daedalus",)              # what the field dish's plates are made for (the vehicles and cargo have no Daedalus paint)
+MARKED = FACTIONS + ("daedalus",)              # field dish plates (vehicles and cargo have no Daedalus paint)
 
 
 def side_dec(side, x, y=0.0, z=0.0, lift=0.01):
-    """A page on the +x (side > 0) or -x flank at distance x from the centreline."""
+    """Page on the +x (side > 0) or -x flank, x from the centreline."""
     return Dec("+x" if side > 0 else "-x", (side * x, y, z), lift)
 
 
-# ---------------- the cargo container's flank markings (the Prospector's cargo car and the tower crane's load) ----------------
-# The box is centred on z = 0 and y = 3.3 in its own frame. Everything printed on a flank is centred on that middle: the plate
-# (an emblem and the faction's name over LOGISTICS, centred as a group on the plate) and, above it, the container number, with the
-# two stacked so the pair is centred vertically on the box.
-CARGO_PLATE_HALF = (1.8, 0.62)                 # half width and height of the dark plate
-CARGO_GAP = 0.2                                # between the plate and the number above it
-CARGO_NUM_PS = 0.04                            # the number's pixel size: 7 pixels tall
+# ---------------- cargo container flank markings (Prospector's cargo car, tower crane's load) ----------------
+# The box is centred on z = 0, y = 3.3 in its frame. Each flank has the plate (emblem and faction name over LOGISTICS,
+# centred as a group) with the container number above; the pair is centred vertically on the box.
+CARGO_PLATE_HALF = (1.8, 0.62)                 # dark plate half width, half height
+CARGO_GAP = 0.2                                # plate to number gap
+CARGO_NUM_PS = 0.04                            # number pixel size (7 px tall)
 _CARGO_STACK = 2 * CARGO_PLATE_HALF[1] + CARGO_GAP + 7 * CARGO_NUM_PS
 CARGO_PLATE_Y = 3.3 - _CARGO_STACK / 2 + CARGO_PLATE_HALF[1]
 CARGO_NUM_Y = 3.3 - _CARGO_STACK / 2 + 2 * CARGO_PLATE_HALF[1] + CARGO_GAP
 
 
 def cargo_decals(f, piv, prefix):
-    """The faction's plate and container number on both flanks of a cargo container, built under `piv`."""
+    """Faction plate and container number on both flanks, built under `piv`."""
     s = NAMES[f]
     code = f"{CODES[f]} 204117 6"
     ps, ps2 = 0.045, 0.035
@@ -344,8 +340,8 @@ def cargo_decals(f, piv, prefix):
         d2 = side_dec(side, 1.6, CARGO_NUM_Y, 0.0)
         d2.text(code, -text_width(code, CARGO_NUM_PS) / 2, 0, CARGO_NUM_PS, "label", 0)
         d2.build(f"{prefix}id{'P' if side > 0 else 'S'}_{f}", piv)
-    # the doors at each end: the number and size-type code on the reader's right-hand leaf, the weights on the left, all under
-    # the locking bars (stencilled on the leaf's face, between the top corrugation and the header)
+    # door ends: number and size-type code on the reader's right leaf, weights on the left, stencilled on the leaf face
+    # between the top corrugation and the header (under the locking bars)
     for sz in (-1, 1):
         d = Dec("+z" if sz > 0 else "-z", (0, 0, sz * (CARGO_END + CD_LEAF_D)))
         d.text(code, 0.1, 4.19, 0.016, "label", 0)
@@ -355,16 +351,15 @@ def cargo_decals(f, piv, prefix):
         d.build(f"{prefix}doorMarks{'F' if sz > 0 else 'R'}_{f}", piv)
 
 
-# ---------------- the cargo container's door ends (shared like the flank markings, and by cargo.py's box) ----------------
-# A pair of doors at each end of the box (half extents 1.55 x 1.4 x 3.62 about (0, 3.3, 0)), everything within the corner castings,
-# which stand 0.15 proud of the end faces: a frame (corner posts and a header in the body colour, a dark sill), a dark gasket in the
-# opening showing round two leaves pressed with four corrugations each, and on each leaf two locking bars (cams turning in keepers on
-# the header and sill, two guides, a handle on a hub, its tip held by a retainer), four hinges on the outer edge (a blade on the leaf,
-# a knuckle on its pin, a lug on the post), the CSC plate on the left leaf and a bolt seal on the right.
-# Depths are measured out from the end face.
+# ---------------- cargo container door ends (shared, also by cargo.py's box) ----------------
+# Two doors per end of the box (half extents 1.55 x 1.4 x 3.62 about (0, 3.3, 0)), inside the corner castings (0.15 proud
+# of the end faces): frame (body-colour posts and header, dark sill), dark gasket round two leaves of four corrugations;
+# per leaf two locking bars (cams in keepers on header and sill, two guides, a handle on a hub held by a retainer), four
+# hinges on the outer edge (blade, knuckle on its pin, lug on the post); CSC plate on the left leaf, bolt seal on the right.
+# Depths are out from the end face.
 CARGO_END = 3.62
-CD_LEAF_D = 0.05                  # the leaves' face (the markings stand on it)
-_CD_BARS = (0.30, 0.98)           # each leaf's locking bars, out from the middle
+CD_LEAF_D = 0.05                  # leaf face depth (markings stand on it)
+_CD_BARS = (0.30, 0.98)           # locking bars per leaf, out from the middle
 _CD_HINGES = (2.36, 2.98, 3.6, 4.22)
 _CD_RIBS = (2.55, 3.0, 3.45, 3.9)
 
@@ -376,7 +371,7 @@ def _cd_box(x0, x1, y0, y1, d0, d1, sz):
 
 
 def container_doors(body):
-    """The door ends of a cargo container, both of them: a list of (name, geo, slot, ink), the box's own body slot `body`."""
+    """Both door ends: a list of (name, geo, slot, ink); `body` is the box's body slot."""
     out = []
 
     def add(name, geo, slot, ink):
@@ -404,7 +399,7 @@ def container_doors(body):
                 add(f"{L}keeperB{j}", _cd_box(x - 0.07, x + 0.07, 1.97, 2.14, 0.08, 0.17, sz), "steel", 0.01)
                 for g, y in enumerate((3.22, 4.12)):
                     add(f"{L}guide{j}{g}", _cd_box(x - 0.055, x + 0.055, y - 0.04, y + 0.04, 0.04, 0.16, sz), "steel", 0.01)
-                # the handle: the inner bar's swings out towards the hinges, the outer bar's in, so the two never meet
+                # inner bar's handle swings toward the hinges, outer bar's inward, so they never meet
                 tip = sx * (0.56 if j == 0 else 0.72)
                 add(f"{L}hub{j}", _cd_box(x - 0.06, x + 0.06, 2.71, 2.85, 0.08, 0.18, sz), "steel", 0.01)
                 add(f"{L}handle{j}", beam((x, 2.78, Z(0.17)), (tip, 2.75, Z(0.17)), 0.025, 6), "metal", 0.01)
@@ -413,7 +408,7 @@ def container_doors(body):
                 add(f"{L}hinge{k}", _cd_box(sx * 1.15, sx * 1.3, y - 0.045, y + 0.045, 0.03, 0.085, sz), "dark", 0.01)
                 add(f"{L}knuckle{k}", beam((sx * 1.3, y - 0.07, Z(0.1)), (sx * 1.3, y + 0.07, Z(0.1)), 0.035, 6), "dark", 0.01)
                 add(f"{L}lug{k}", _cd_box(sx * 1.3, sx * 1.42, y - 0.05, y + 0.05, 0.06, 0.11, sz), "dark", 0.01)
-        # (the reader's left leaf is -x on the front end, +x on the rear)
+        # reader's left leaf: -x on the front end, +x on the rear
         add(f"door{e}_csc", _cd_box(-sz * 0.45, -sz * 0.8, 2.27, 2.45, 0.04, 0.065, sz), "steel", 0.01)
         add(f"door{e}_seal", _cd_box(sz * 0.54, sz * 0.58, 2.6, 2.7, 0.15, 0.23, sz), "stripe", 0.01)
     return out

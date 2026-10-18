@@ -1,16 +1,16 @@
 import { mulberry32 } from './rng.js';
 
-// Racing stats for chimeras, and the Derby race model that uses them. No three.js in here, so
-// the race can be simulated headlessly (odds are a Monte-Carlo of this exact model).
+// Chimera racing stats and the Derby race model. No three.js, so races simulate headlessly
+// (odds are a Monte-Carlo of this exact model).
 //
 //   SPEED   top speed
-//   POWER   acceleration (and how fast it gets going again after a stumble)
+//   POWER   acceleration (and recovery after a stumble)
 //   STAMINA how slowly it tires; tired racers lose top speed late in the race
 //   WIT     fewer stumbles / wrong-way / existential moments, quicker recovery
 
 export const STATS_V = 1;
 export const STAT_KEYS = ['speed', 'power', 'stamina', 'wit'];
-// (the hover tips on the chimera cards: chimeracard.js)
+// (chimera card hover tips: chimeracard.js)
 export const STAT_TIPS = {
   speed: 'SPEED: top speed on the straights. Mostly from the legs, some from the body. Big chimeras are a little slower.',
   power: 'POWER: acceleration off the start, and how fast it gets going again after a stumble. Legs and body.',
@@ -24,8 +24,7 @@ export const STAT_INFO = {
   wit: { short: 'WIT', name: 'WIT', blurb: 'fewer derps' },
 };
 
-// What each part brings to the table (0-100 per stat).
-// Legs drive speed and power, the body stamina and power, the head wit.
+// What each part brings (0-100 per stat). Legs drive speed and power, body stamina and power, head wit.
 export const LEGS = {
   car: { speed: 86, power: 55, stamina: 50, wit: 38 }, // wheels: fast, mid pickup
   mite: { speed: 60, power: 88, stamina: 36, wit: 45 }, // six legs: explosive starts, gasses out
@@ -61,7 +60,7 @@ const PERSON = LEGS.person;
 
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 
-// Deterministic from the gene sheet + seed, so old saves migrate to the same numbers every time.
+// Deterministic from gene sheet + seed, so old saves always migrate to the same numbers.
 export function computeStats(genes) {
   const L = LEGS[genes.legs] || PERSON, B = BODY[genes.body] || PERSON;
   const hw = HEAD_WIT[genes.head] ?? 50;
@@ -88,7 +87,7 @@ export function tierOf(st) {
 // top speed in m/s on the Derby track
 export const topSpeedOf = (st) => Math.round((32 + st.speed * 0.1) * 10) / 10;
 
-// Give a gene sheet its stats (new chimeras, and old saves that predate them). Mutates and returns it.
+// Gives a gene sheet its stats (new chimeras, and saves without them). Mutates and returns it.
 export function ensureStats(genes) {
   if (!genes) return genes;
   if (!genes.stats || genes.stats.v !== STATS_V) {
@@ -102,8 +101,8 @@ export function ensureStats(genes) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The Derby race model. Races at Chimera Downs run anywhere from a 450 m sprint to a 3.6 km
-// marathon, so stamina decides the long ones; the going (track condition) nudges the rest.
+// The Derby race model. Chimera Downs races run 450 m to 3.6 km, so stamina decides the long
+// ones; the going (track condition) nudges the rest.
 export const RACE_LEN = 1400; // default distance (tests, old callers)
 export const CONDITIONS = {
   fast: { name: 'FAST', speed: 1.05, drain: 0.95, chaos: 0.85, blurb: 'hard-packed regolith: speed tells' },
@@ -124,9 +123,9 @@ const EVENTS = [
 ];
 const EV_T = { stumble: 1.4, zoom: 2, wrong: 1.2, hop: 0.2, boom: 2.2, dread: 2.5, trip: 0.8 };
 
-// Advance one runner by dt. Returns the name of an event that just started (or null);
-// r.ended is set to the event that just finished this step (or null).
-// cond: one of CONDITIONS. r.boost > 0 is a crowd-cheered burst (the player's, never simulated).
+// Advances one runner by dt. Returns the event that just started (or null); r.ended = the event
+// that finished this step (or null). cond: one of CONDITIONS. r.boost > 0: crowd-cheered burst
+// (player only, never simulated).
 export function stepRunner(r, dt, rnd = Math.random, cond = NO_COND) {
   const st = r.st;
   const top = r.genes.speed * cond.speed;
@@ -146,12 +145,12 @@ export function stepRunner(r, dt, rnd = Math.random, cond = NO_COND) {
     let x = rnd() * tot;
     for (const [name, w, b] of EVENTS) { x -= b ? w * bad : w; if (x <= 0) { fired = name; break; } }
     fired = fired || 'zoom';
-  } else if (rnd() < dt * 0.07 * (1 - wit)) fired = 'trip'; // plain derp: tripping over its own feet
+  } else if (rnd() < dt * 0.07 * (1 - wit)) fired = 'trip'; // plain derp: trips over its own feet
   if (fired) {
     r.ev = fired;
     r.evT = EV_T[fired] * (fired === 'zoom' || fired === 'hop' || fired === 'boom' ? 1 : recov);
   }
-  // fatigue: below 40% stamina the top speed sags, down to 72% when empty
+  // fatigue: below 40% stamina top speed sags, to 72% when empty
   const fatigue = 0.72 + 0.28 * Math.min(1, r.stam / 0.4);
   const surge = 0.9 + Math.sin(r.t * 0.7 + (r.genes.seed % 100)) * 0.08 + rnd() * 0.04;
   let target = top * surge * fatigue;
@@ -160,7 +159,7 @@ export function stepRunner(r, dt, rnd = Math.random, cond = NO_COND) {
   else if (r.ev === 'wrong') target = -top * 0.5;
   if (r.boost > 0) { r.boost -= dt; if (target > 0) target *= 1.3; }
   if (target > r.v && r.v >= 0) r.v = Math.min(target, r.v + (3 + st.power * 0.14) * dt); // power: m/s² of pickup
-  else r.v += (target - r.v) * Math.min(1, dt * 3.5); // everyone brakes (or gets flung backwards) alike
+  else r.v += (target - r.v) * Math.min(1, dt * 3.5); // braking (or flung backwards) is the same for all
   const drain = (0.01 + (100 - st.stamina) * 0.00035) * (Math.abs(r.v) / top) * (r.ev === 'zoom' ? 2.5 : 1) * (r.boost > 0 ? 2.2 : 1) * cond.drain;
   r.stam = Math.max(0, Math.min(1, r.stam - drain * dt + (target === 0 ? 0.01 * dt : 0)));
   r.s = Math.max(0, r.s + r.v * dt);
@@ -181,7 +180,7 @@ export function simulateRace(field, rnd = Math.random, dt = 1 / 15, len = RACE_L
   return rs;
 }
 
-// Monte-Carlo win chances for each runner, and fair-ish odds with a small house edge.
+// Monte-Carlo win chances per runner, and fair-ish odds with a small house edge.
 export function raceOdds(field, n = 400, rnd = Math.random, len = RACE_LEN, cond = NO_COND) {
   const wins = field.map(() => 0);
   const dt = len > 2000 ? 1 / 10 : 1 / 15; // long races: coarser steps keep the bookie quick

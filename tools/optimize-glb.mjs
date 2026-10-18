@@ -1,15 +1,13 @@
 #!/usr/bin/env node
-// Compresses the game's model files: the vertex data is quantized (16-bit positions, 8-bit normals) and meshopt-coded
-// with glTF-Transform, which takes a file to about a quarter of its size (a third to a half of it gzipped). The game
-// decodes them in src/models.js (loadGlb), and reads a plain file just as well, so this step is optional: a model
-// re-exported from Blender is simply bigger until it is run through here again.
+// Compresses the game's models: vertex data quantized (16-bit positions, 8-bit normals) and meshopt-coded with
+// glTF-Transform, about a quarter of the size. src/models.js (loadGlb) decodes them and reads plain files too, so this
+// is optional: a fresh Blender export is just bigger until run through here.
 //
 //   npm run optimize:glb                 the models the world is built from at boot
 //   node tools/optimize-glb.mjs a.glb b.glb
 //
-// A file that is already compressed is left alone. Not run on runner.glb (the player: the one model whose outline
-// follows the stored normals closely) or outposts.glb (checked by tools/check-outposts.mjs, and loaded only on request).
-// glTF-Transform comes through npx at a pinned version, so nothing is added to package.json.
+// Already-compressed files are skipped. Not run on runner.glb (its outline follows the stored normals closely) or
+// outposts.glb (checked by tools/check-outposts.mjs, loaded on request). glTF-Transform comes via npx at a pinned version.
 import { execFileSync, execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -34,7 +32,7 @@ try {
     if (extensionsOf(file).includes('EXT_meshopt_compression')) { console.log(`${file}: already compressed`); continue; }
     const out = join(tmp, 'out.glb');
     const args = ['--yes', CLI, 'meshopt', file, out, '--level', 'high'], opts = { stdio: ['ignore', 'ignore', 'inherit'] };
-    // (npx is a .cmd on Windows, which Node runs only through a shell)
+    // npx is a .cmd on Windows, which Node runs only through a shell
     if (process.platform === 'win32') execSync(`npx ${args.map((a) => `"${a}"`).join(' ')}`, opts);
     else execFileSync('npx', args, opts);
     const before = statSync(file).size, after = statSync(out).size;

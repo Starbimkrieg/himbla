@@ -1,17 +1,17 @@
-# Duck Derby builder for Blender (4.2+ / 5.x): the Lucky Crater Casino's racing track, "Gilded Regatta" (the casino's plum and gold lacquer, brass and cream marquetry),
-# and the four racers. One file, src/assets/duck.glb, in three.js axes (x right, y up, z forward) like the other builders; the game is casinoWorld.js (the track) and
-# casinoGames.js (the race), models.js reads the file.
+# Duck Derby builder for Blender (4.2+ / 5.x): the Lucky Crater Casino's track, "Gilded Regatta" (plum and gold lacquer,
+# brass, cream marquetry), and the four racers. Exports src/assets/duck.glb in three.js axes (x right, y up, z forward);
+# used by casinoWorld.js (track) and casinoGames.js (race), read by models.js.
 #
-#   dd_duck1..4   the racers, each about 1.3 m long facing +x with its origin on the waterline's keel: QUACKERS (jockey cap, medal), SIR WADDLES (top hat, monocle,
-#                 moustache), DUCKTOR WHO (fez, bow tie, specs) and MOONBILL (bubble helmet, antenna). Slots `body`, `wing` and `silk` are tinted per duck by the game.
-#                 Pivots: head, wingR, wingL (role = the pivot's name).
-#   dd_trough     the 28.4 x 7.0 m basin, its top at y 1.1, the water at y 0.86: plum lacquer, gold, cream marquetry, lane floats. Pivots: water1..4 (a lane's water plane, w x h),
-#                 num1..4 (the lane's number disc on the water), finishLine (a plane across the lanes).
-#   dd_gate       the start gate's frame (pillars, header with four lane plaques, a lamp box). Pivots: lamp1..3 (where the game puts the lit lamps), startSign (a plate).
-#   dd_grille     the brass portcullis the game lifts (origin at its middle, 6.8 m wide, 1.5 m tall).
-#   dd_finish     the finish arch. Pivots: banner (the checker plane, w x h).
-#   dd_board      the odds board's frame, 17.2 x 6.8 m, facing +x. Pivot: face (the plane the game paints).
-#   dd_kiosk      the betting kiosk, its front toward +z. Pivot: screen (plane w x h).
+#   dd_duck1..4   racers, ~1.3 m long facing +x, origin on the waterline keel: QUACKERS (jockey cap, medal), SIR WADDLES
+#                 (top hat, monocle, moustache), DUCKTOR WHO (fez, bow tie, specs), MOONBILL (bubble helmet, antenna).
+#                 Slots `body`, `wing`, `silk` are tinted per duck. Pivots: head, wingR, wingL (role = pivot name).
+#   dd_trough     28.4 x 7.0 m basin, top at y 1.1, water at y 0.86. Pivots: water1..4 (lane water plane, w x h),
+#                 num1..4 (lane number disc on the water), finishLine (plane across the lanes).
+#   dd_gate       start gate frame. Pivots: lamp1..3 (where the game puts the lit lamps), startSign (a plate).
+#   dd_grille     brass portcullis the game lifts (origin at its middle, 6.8 m wide, 1.5 m tall).
+#   dd_finish     finish arch. Pivot: banner (checker plane, w x h).
+#   dd_board      odds board frame, 17.2 x 6.8 m, facing +x. Pivot: face (the plane the game paints).
+#   dd_kiosk      betting kiosk, front toward +z. Pivot: screen (plane w x h).
 #   dd_railpost / dd_rope   one brass post and one 3.5 m rope (from the post's origin along +x).
 # Run:  MOONRUNNER_REPO=. python3 tools/blender/build_duck.py   (or exec() it in Blender's Scripting tab)
 import bpy, bmesh, math, os
@@ -108,7 +108,7 @@ def flush_all():
 
 
 def digit(A, n, cx, cy, cz, h=0.3, th=0.045, depth=0.03, face="z"):
-    """a seven-segment digit of boxes, centred on (cx, cy, cz); face z: readable from +z, x: from +x"""
+    """seven-segment digit of boxes centred on (cx, cy, cz); face z: reads from +z, x: from +x"""
     w = h * 0.55
     seg = {"a": (0, h / 2, w, th), "d": (0, -h / 2, w, th), "g": (0, 0, w, th), "f": (-w / 2, h / 4, th, h / 2), "b": (w / 2, h / 4, th, h / 2), "e": (-w / 2, -h / 4, th, h / 2), "c": (w / 2, -h / 4, th, h / 2)}
     for s in {1: "bc", 2: "abged", 3: "abgcd", 4: "fgbc"}[n]:
@@ -117,23 +117,23 @@ def digit(A, n, cx, cy, cz, h=0.3, th=0.045, depth=0.03, face="z"):
             A.boxc(cx + x, cy + y, cz, sw, sh, depth)
         elif face == "x":
             A.boxc(cx, cy + y, cz - x, depth, sh, sw)
-        else:   # "-x": readable from -x
+        else:   # "-x": reads from -x
             A.boxc(cx, cy + y, cz + x, depth, sh, sw)
 
 
-exec(open(os.path.join(REPO, "tools", "blender", "suits.py"), encoding="utf-8").read(), globals())   # the card-suit panels (shared with the blackjack table and the claw machine)
+exec(open(os.path.join(REPO, "tools", "blender", "suits.py"), encoding="utf-8").read(), globals())   # card-suit panels (shared with blackjack and the claw machine)
 
 
-LANES = (2.4, 0.8, -0.8, -2.4)          # lane centres across the trough (z), lane 1 at +z (the player's side)
-LEN = 28.4                              # outer length of the trough
+LANES = (2.4, 0.8, -0.8, -2.4)          # lane centres (z), lane 1 at +z (player's side)
+LEN = 28.4                              # trough outer length
 WID = 7.0
 WATER = 0.86
-PZ = 4.8                                # where the gate's and the arch's pillars stand (z), clear of the basin's coping and the rail
-START_X, FIN_X = -12.0, 12.0           # where the gate and the finish line stand (the track's frame)
+PZ = 4.8                                # gate and arch pillar z, clear of the coping and rail
+START_X, FIN_X = -12.0, 12.0           # gate and finish line x
 
 
 # =====================================================================================================================
-# the racing duck: one body for both sets (a rubber duck about 1.3 m long facing +x), the headgear and the kit differ
+# the racing duck: one rubber-duck body (~1.3 m, facing +x); headgear and kit differ
 # =====================================================================================================================
 def duck(i):
     o = pivot(f"dd_duck{i}", (0, 0, 0), None)
@@ -174,7 +174,7 @@ def duck(i):
 
 def duck_A(i):
     o, head = duck(i)
-    # the number on each wing: a gold disc, its digit in black, a ring in the lane's colour
+    # wing numbers: gold disc, black digit, ring in the lane colour
     for s, nm in ((1, "wingR"), (-1, "wingL")):
         w = bpy.data.objects[f"dd_duck{i}_{nm}"]
         A = Acc(f"d{i}{nm}Disc", "gold", w, 0.0)
@@ -186,7 +186,7 @@ def duck_A(i):
         A = Acc(f"d{i}{nm}Num", "dark", w, 0.0)
         digit(A, i, -0.14, 0.0, s * 0.19, 0.22, 0.045, 0.02)
         A.flush()
-    if i == 1:    # QUACKERS: jockey's cap in the lane's silks, a pom on top, a medal on a ribbon
+    if i == 1:    # QUACKERS: jockey cap in silks, pom, medal
         A = Acc("d1Cap", "silk", head, 0.03)
         A.dome(0.1, 0.52, 0, 0.35, 14, 6, (1, 0.8, 1))
         A.rbc(0.43, 0.62, 0, 0.32, 0.04, 0.34, 0.9, (0, 0, -0.15))
@@ -214,7 +214,7 @@ def duck_A(i):
         for s in (-1, 1):
             A.ball(0.62, 0.14, s * 0.1, 0.07, 8, 6, (1.5, 0.7, 1), (0, 0, 0.1 * s))
         A.flush()
-    elif i == 3:  # DUCKTOR WHO: fez with a tassel, a bow tie, round spectacles
+    elif i == 3:  # DUCKTOR WHO: tasselled fez, bow tie, round specs
         A = Acc("d3Fez", "red", head, 0.03)
         A.cylc(0.1, 0.62, 0, 0.3, 0.3, 14, rt=0.2)
         A.flush()
@@ -231,7 +231,7 @@ def duck_A(i):
             A.add(cylinder(0.09, 0.0, 0.3, 8), (0.66, 0.62, s * 0.17), (s * PI / 2, 0, 0))
         A.ball(0.64, 0.62, 0, 0.07, 8, 6)
         A.flush()
-    else:         # MOONBILL: a bubble helmet with a collar and an antenna
+    else:         # MOONBILL: bubble helmet, collar, antenna
         A = Acc("d4Collar", "steel", o, 0.03)
         A.tor(0.34, 0.07, (0.42, 0.8, 0), (0, 0, 0), 18, 6, (1, 1, 1))
         A.flush()
@@ -247,7 +247,7 @@ def duck_A(i):
 
 
 # =====================================================================================================================
-# SET A: GILDED REGATTA, the casino's plum and gold lacquer, brass and cream marquetry
+# SET A: GILDED REGATTA
 # =====================================================================================================================
 def trough_A():
     o = pivot("dd_trough", (0, 0, 0), None)
@@ -275,7 +275,7 @@ def trough_A():
     A.flush()
     A = Acc("tGold", "gold", o, 0.03)
     A.boxc(0, 0.33, 0, LEN + 0.14, 0.1, WID + 0.14)
-    A.boxc(0, 1.07, WID / 2 - 0.19, LEN + 0.04, 0.1, 0.46)       # (the coping stands 2 cm proud of the body, so its sides never share a plane with it)
+    A.boxc(0, 1.07, WID / 2 - 0.19, LEN + 0.04, 0.1, 0.46)       # coping 2 cm proud of the body, so no shared planes
     A.boxc(0, 1.07, -(WID / 2 - 0.19), LEN + 0.04, 0.1, 0.46)
     for sx in (-1, 1):
         A.boxc(sx * (H - 0.19), 1.07, 0, 0.46, 0.1, WID - 0.84)
@@ -288,7 +288,7 @@ def trough_A():
         for j, z in enumerate((-1.7, 0.0, 1.7)):
             suit_panel(A, P, R, K, (j + (0 if sx > 0 else 2)) % 4, (sx * H, 0.67, z), sx * PI / 2, 1.5, 0.56, 0.3)
     A.flush(); P.flush(); R.flush(); K.flush()
-    # lane ropes: floats in red and cream along a fine line, brass cleats at each end
+    # lane ropes: red and cream floats on a line, brass cleats at the ends
     A = Acc("tFloatR", "red", o, 0.0); B2 = Acc("tFloatC", "cream", o, 0.0); L2 = Acc("tLine", "dark", o, 0.0)
     for zi, z in enumerate((-3.2, -1.6, 0.0, 1.6, 3.2)):
         xs = [-13.4 + 0.55 * k for k in range(int(26.8 / 0.55) + 1)]
@@ -302,7 +302,7 @@ def trough_A():
         for z in (-3.2, -1.6, 0.0, 1.6, 3.2):
             A.cylc(sx * 13.6, 1.0, z, 0.08, 0.14, 8)
     A.flush()
-    # the water, a plane per lane (the game gives it the ripple), the finish line and the number marks
+    # water plane per lane (the game adds the ripple), finish line, number marks
     for i, z in enumerate(LANES, 1):
         pivot(f"water{i}", (0, WATER, z), o, role="water", w=26.8, h=1.3)
         pivot(f"num{i}", (-13.0, WATER + 0.02, z), o, role="num", w=0.9, h=0.9)
@@ -317,14 +317,14 @@ def gate_A():
     A.flush()
     A = Acc("gShaft", "cream", o, 0.03)
     for s in (-1, 1):
-        A.cylc(0, 1.575, s * PZ, 0.26, 1.75, 12)                                                   # (the shaft stops under the capital: the header rests on it instead of running through it)
+        A.cylc(0, 1.575, s * PZ, 0.26, 1.75, 12)                                                   # stops under the capital, so the header rests on it
     A.flush()
     A = Acc("gGold", "gold", o, 0.03)
     for s in (-1, 1):
         A.boxc(0, 0.72, s * PZ, 0.92, 0.08, 0.92)
-        A.cylc(0, 2.44, s * PZ, 0.34, 0.12, 12)                                                    # a collar under the capital plate the header sits on
+        A.cylc(0, 2.44, s * PZ, 0.34, 0.12, 12)                                                    # collar under the capital plate
         A.boxc(0, 2.55, s * PZ, 0.74, 0.1, 0.74)
-        A.ball(0, 3.18, s * PZ, 0.16, 8, 6)                                                        # a finial on the cap beam, sitting on it (not skewered by it)
+        A.ball(0, 3.18, s * PZ, 0.16, 8, 6)                                                        # finial sitting on the cap beam
     A.boxc(0, 3.0, 0, 0.36, 0.08, 2 * PZ + 0.6)
     A.flush()
     A = Acc("gHeader", "plum", o, 0.04)
@@ -344,19 +344,19 @@ def gate_A():
     for i, z in enumerate(LANES, 1):
         digit(A, i, 0.2, 2.78, z, 0.22, 0.045, 0.02, "x"); digit(A, i, -0.2, 2.78, z, 0.22, 0.045, 0.02, "-x")
     A.flush()
-    # the starting lamps: a brass housing on the header with three lamps
+    # starting lamps: brass housing with three lamps
     A = Acc("gLampBox", "brass", o, 0.03)
     A.boxc(0, 3.28, 0, 0.5, 0.5, 1.7)
     A.boxc(0, 3.58, 0, 0.6, 0.08, 1.8)
     A.flush()
-    A = Acc("gLampCup", "dark", o, 0.02)   # (a dark lens cup on each face; the game sets a lit disc in each, red, amber and green, for the countdown)
+    A = Acc("gLampCup", "dark", o, 0.02)   # lens cups; the game sets lit red / amber / green discs in them for the countdown
     for k, z in enumerate((0.55, 0.0, -0.55)):
         for sx in (-1, 1):
             A.cylc(sx * 0.3, 3.28, z, 0.22, 0.04, 14, rot=(0, 0, PI / 2))
         pivot(f"lamp{k + 1}", (0.33, 3.28, z), o, role="lamp", r=0.2)
     A.flush()
-    pivot("startSign", (0.17, 2.78, 0.0), o, role="sign", w=1.6, h=0.34)    # (a plate on the header between plaques 2 and 3: the game paints START)
-    # the grille: a brass portcullis the game lifts away (its own object, origin at its middle)
+    pivot("startSign", (0.17, 2.78, 0.0), o, role="sign", w=1.6, h=0.34)    # plate between plaques 2 and 3; the game paints START
+    # grille: brass portcullis the game lifts (own object, origin at its middle)
     g = pivot("dd_grille", (0, 0, 0), None)
     A = Acc("grBars", "brass", g, 0.02)
     for k in range(21):
@@ -379,7 +379,7 @@ def finish_A():
     A.flush()
     A = Acc("fShaft", "cream", o, 0.03)
     for s in (-1, 1):
-        A.cylc(0, 3.2, s * PZ, 0.34, 4.6, 14)                                                      # (wide enough that the beams' corners end inside it)
+        A.cylc(0, 3.2, s * PZ, 0.34, 4.6, 14)                                                      # wide enough to hold the beams' corners
     A.flush()
     A = Acc("fGold", "gold", o, 0.03)
     for s in (-1, 1):
@@ -388,7 +388,7 @@ def finish_A():
             A.cylc(0, y, s * PZ, 0.40, 0.1, 14)
         A.lath([(0, 5.5), (0.46, 5.5), (0.38, 5.62), (0.28, 5.7), (0, 5.7)], (0, 0, s * PZ), (0, 0, 0), (1, 1, 1), 12)
         A.ball(0, 5.9, s * PZ, 0.2, 10, 8)
-    A.boxc(0, 5.19, 0, 0.66, 0.16, 2 * PZ)      # (its top stands 2 cm above the beam's: they used to share a plane; it ends at the pillars' middle, inside the shaft)
+    A.boxc(0, 5.19, 0, 0.66, 0.16, 2 * PZ)      # top 2 cm above the beam's (no shared plane); ends inside the shafts
     A.flush()
     A = Acc("fBeam", "plum", o, 0.04)
     A.boxc(0, 5.0, 0, 0.62, 0.5, 2 * PZ - 0.1)
@@ -397,7 +397,7 @@ def finish_A():
     for k, z in enumerate((-3.6, -1.8, 0.0, 1.8, 3.6)):
         suit_panel(A, P, R, K, k % 4, (0.31, 5.0, z), PI / 2, 1.5, 0.36, 0.2); suit_panel(A, P, R, K, (k + 2) % 4, (-0.31, 5.0, z), -PI / 2, 1.5, 0.36, 0.2)
     A.flush(); P.flush(); R.flush(); K.flush()
-    # the banner: a pole under the beam on brass rings, the cloth (the game's checker) and two tassels
+    # banner: pole on brass rings under the beam, cloth (the game's checker), two tassels
     A = Acc("fPole", "brass", o, 0.02)
     A.tube((0, 4.62, -(PZ - 0.3)), (0, 4.62, PZ - 0.3), 0.04, 8)
     for z in (-4.4, -3.4, -1.7, 0.0, 1.7, 3.4, 4.4):
@@ -414,7 +414,7 @@ def finish_A():
         A.path([(0, 4.58, s * 3.55), (0, 3.9, s * 3.6), (0, 3.4, s * 3.6)], [0.03, 0.03, 0.05], 5)
         A.ball(0, 3.3, s * 3.6, 0.09, 8, 6, (1, 1.5, 1))
     A.flush()
-    # the photo-finish camera: a brass body hung on a bracket from the beam, just before the line (clear of the banner), its lens looking straight down at it
+    # photo-finish camera on a bracket from the beam, just before the line (clear of the banner), lens looking down
     A = Acc("fCam", "brass", o, 0.03)
     A.boxc(-0.55, 4.45, 0, 0.5, 0.34, 0.6)
     A.tube((-0.3, 4.76, 0), (-0.55, 4.6, 0), 0.05, 6)
@@ -470,7 +470,7 @@ def board_A():
     A = Acc("bPedPlum", "plum", o, 0.03)
     A.cylc(0.1, 4.5, 0, 0.82, 0.1, 24, rot=(0, 0, PI / 2))
     A.flush()
-    A = Acc("bDuck", "body", o, 0.03)       # a duck in relief on the medallion
+    A = Acc("bDuck", "body", o, 0.03)       # duck in relief on the medallion
     A.ball(0.2, 4.35, 0, 0.36, 12, 8, (0.35, 0.6, 0.9)); A.ball(0.2, 4.75, 0.18, 0.2, 10, 8, (0.35, 1, 1))
     A.flush()
     A = Acc("bDuckBill", "bill", o, 0.0)
@@ -497,7 +497,7 @@ def kiosk_A():
     A = Acc("kFrame", "brass", o, 0.0); P = Acc("kPanel", "plum2", o, 0.0); R = Acc("kSuitRed", "suitred", o, 0.012); K = Acc("kSuitCream", "suitcream", o, 0.012)
     suit_panel(A, P, R, K, 0, (-0.65, 0.66, 0.65), 0, 1.0, 0.7, 0.4); suit_panel(A, P, R, K, 1, (0.65, 0.66, 0.65), 0, 1.0, 0.7, 0.4)
     A.flush(); P.flush(); R.flush(); K.flush()
-    # the window: brass posts and bars, an arched header, the screen inside
+    # window: brass posts, header, screen inside
     A = Acc("kWindow", "brass", o, 0.03)
     for sx in (-1, 1):
         A.cylc(sx * 1.15, 1.95, -0.25, 0.06, 1.2, 8)
@@ -521,7 +521,7 @@ def kiosk_A():
     for sx in (-1, 1):
         A.boxc(sx * 1.2, 1.95, -0.43, 0.06, 1.2, 0.04)
     A.flush()
-    # four brass-ringed buttons in the lanes' colours, a ticket slot and a bell
+    # four lane-coloured buttons, ticket slot, bell
     for i in range(4):
         A = Acc(f"kBtn{i + 1}", f"lane{i + 1}", o, 0.0)
         A.cylc(-0.75 + i * 0.5, 1.45, 0.3, 0.16, 0.08, 14)

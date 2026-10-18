@@ -3,14 +3,14 @@ import { ClawSim, CLAW_COST, CLAW_TIME, DROP } from './clawSim.js';
 import { ClawView } from './clawView.js';
 import { canvasTex, FONT, clawPt } from './casinoWorld.js';
 
-// The Zero-G claw as a seated game (casinoGames.js hands over to this while `mode` is 'claw'): the sim (clawSim.js), its drawing (clawView.js), the camera, the keys and the
-// action bar, and what the sim's events do to the room (sounds, pop-ups, blasts). ₵200 buys a round: the tank is shuffled, then 45 seconds to bank what you can.
+// The Zero-G claw as a seated game (casinoGames.js hands over while `mode` is 'claw'): ties the sim (clawSim.js) and its
+// view (clawView.js) to the camera, keys, action bar and room effects. ₵200 a round: shuffle, then 45 s to bank what you can.
 
 const MOOD_TEXT = ['CALM TANK', 'THICK AIR: THINGS STAY PUT', 'STORM: EVERYTHING KEEPS MOVING', 'SURGE: GRAVITY WILL HICCUP'];
 const fmt = (n) => Math.floor(n).toLocaleString('en-US');
 const _v = new THREE.Vector3();
-const CLAW_EARSHOT = 40; // metres from the machine within which its sounds, pop-ups and shakes play when nobody is seated
-// the machine's frame (build_claw.py): the front glass, and the part of the tank the camera frames (the frame's width, the floor to the roof)
+const CLAW_EARSHOT = 40; // m from the machine within which its sounds, pop-ups and shakes play when nobody is seated
+// machine frame (build_claw.py): front glass z, and the tank region the camera frames (half width, mid height, floor to roof)
 const GLASS_Z = 3.62, TANK_HALF_W = 8.55, TANK_MID_Y = 3.95, TANK_H = 5.5;
 
 export class ClawGame {
@@ -22,7 +22,7 @@ export class ClawGame {
     this.msg = '';
     this.msgT = 0;
     this.pad = { x: 0, z: 0, y: 0 };
-    this.mouse = [false, false, false];   // (the buttons held while seated: left lowers the claw, right raises it)
+    this.mouse = [false, false, false];   // buttons held while seated: left lowers the claw, right raises it
     this.view = null;
     this.hitT = 0;
     this.last = null;          // how the last round went: { bank, tank }
@@ -35,7 +35,7 @@ export class ClawGame {
 
   get cw() { return this.G.cw; }
 
-  // built the first time the casino is up (the machine is part of the hall)
+  // built the first time the casino is up
   build() {
     const cw = this.cw;
     if (this.view || !cw || !cw.claw) return;
@@ -64,7 +64,7 @@ export class ClawGame {
   }
 
   leave() {
-    if (this.phase === 'play') this.sim.end();     // (walking away ends the round: you are paid what you have banked)
+    if (this.phase === 'play') this.sim.end();     // walking away ends the round; you keep what you banked
     this.mouse = [false, false, false];
   }
 
@@ -73,12 +73,12 @@ export class ClawGame {
   // ---------- keys ----------
   onKey(code) {
     if ((code === 'Space' || code === 'Enter') && (this.phase === 'idle' || this.phase === 'over')) { this.start(); return true; }
-    return code.startsWith('Arrow') || code.startsWith('Key') || code === 'Space' || code === 'Minus' || code === 'Equal'; // (the rest of the bar's keys do nothing here)
+    return code.startsWith('Arrow') || code.startsWith('Key') || code === 'Space' || code === 'Minus' || code === 'Equal'; // swallow the bar's other keys
   }
 
   padClaw(x, z, y) { this.pad.x = x; this.pad.z = z; this.pad.y = y; }
 
-  // ₵200 for a round: the old tank is flushed out through the roof jets, a new one dealt in
+  // ₵200 a round: the old tank flushes out through the roof jets, a new one is dealt
   start() {
     const G = this.G;
     if (this.phase === 'shuffle' || this.phase === 'play') return;
@@ -134,9 +134,8 @@ export class ClawGame {
     return { mx: Math.max(-1, Math.min(1, (ex - c.vx) / 5)), my: Math.max(-1, Math.min(1, (ey - c.vy) / 4)), mz: Math.max(-1, Math.min(1, (ez - c.vz) / 5)), beam: false };
   }
 
-  // Whether what happens in the tank is for the player: seated at the machine, or within earshot of it. The tank runs its sim
-  // whenever the casino is active (world.js: within 2.6 km of the player), and an idle tank's magnets keep catching things that
-  // drift by, so without this its clicks, thuds and pop-ups played for the whole Moon.
+  // Seated or within earshot. The tank sims whenever the casino is active (world.js: within 2.6 km) and idle magnets keep
+  // catching drifters, so without this its sounds and pop-ups would play Moon-wide.
   near() {
     const G = this.G;
     if (G.mode === 'claw') return true;
@@ -148,7 +147,7 @@ export class ClawGame {
   event(e) {
     const G = this.G, A = G.audio;
     const at = (x, y, z) => clawPt(x, y, z);
-    if (e.type !== 'end' && !this.near()) return; // (a round only runs seated; its end settles the bank regardless)
+    if (e.type !== 'end' && !this.near()) return; // 'end' always settles the bank
     switch (e.type) {
       case 'bank': {
         const v = e.value, label = e.tags.length ? e.tags.join(' ') : '';
@@ -227,9 +226,9 @@ export class ClawGame {
 
   // ---------- the camera ----------
   camView() {
-    // (close to the glass: the tank's width just fills the screen (or its height, on a very wide one), sitting in the part above the action bar)
+    // close to the glass: the tank's width (or height, on a very wide screen) fills the area above the action bar
     const cam = this.G.g.camera, tv = Math.tan(cam.fov * Math.PI / 360);
-    const bar = Math.min(0.45, ((this.G.ui && this.G.ui.offsetHeight) || 190) / window.innerHeight + 0.02);   // (the share of the screen the bar covers)
+    const bar = Math.min(0.45, ((this.G.ui && this.G.ui.offsetHeight) || 190) / window.innerHeight + 0.02);   // screen share the bar covers
     const dist = Math.max(TANK_HALF_W / (tv * cam.aspect), TANK_H / (1 - bar) / (2 * tv));
     const lookY = TANK_MID_Y - bar * dist * tv;
     return [clawPt(0, TANK_MID_Y, GLASS_Z + dist), clawPt(0, lookY, GLASS_Z)];

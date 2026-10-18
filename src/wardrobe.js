@@ -5,18 +5,17 @@ import { OUTFITS, SKATES, LASERS, dressRunner, dressSkates, updateHalo } from '.
 import { makeJarMesh } from './alchemy.js';
 import { FACTIONS, LOCATIONS, TIERS } from './locations.js';
 
-// The wardrobe screen (C): a live turntable preview of the runner on the left, click-to-equip
-// grids for outfits / skate finishes / pulse-disc colours on the right. Hovering or arrowing
-// onto any tile (locked ones too) dresses the preview, clicking or Enter equips what you own.
-// The preview is its own little Scene drawn by a dedicated WebGLRenderer bound to the overlay's
-// canvas; it only runs while the screen is open and is reused between openings.
+// The wardrobe screen (C): live turntable preview of the runner on the left, click-to-equip grids
+// (outfits / skate finishes / pulse-disc colours) on the right. Hover or arrow onto any tile (locked
+// too) to dress the preview; click or Enter equips what you own. The preview is its own Scene on a
+// dedicated WebGLRenderer bound to the overlay canvas, run only while open and reused.
 
 const TABS = [
   { id: 'outfit', label: 'OUTFITS' },
   { id: 'skates', label: 'SKATES' },
   { id: 'laser', label: 'LASERS' },
 ];
-// Casino prize counter prices (mirrors casino.js SHOP): chips, minimum VIP tier
+// casino prize counter prices (mirrors casino.js SHOP): chips, minimum VIP tier
 const CASINO = {
   felt: [40, 'BRONZE'], loungelizard: [75, 'SILVER'], jackpot: [150, 'GOLD'], highroller: [250, 'GOLD'], moonroyal: [500, 'MOON ROYALTY'],
 };
@@ -56,7 +55,7 @@ export class Wardrobe {
     return it.kind === 'outfit' ? c.outfit === it.id : it.kind === 'skates' ? c.skates === it.id : c.laser === it.id;
   }
 
-  // Short tag shown on the tile, and the full "how to get it" lines for the info panel.
+  // Tile tag, and the info panel's "how to get it" lines.
   source(it) {
     const g = this.game, d = it.d;
     if (it.kind === 'laser') return { tag: 'FREE', lines: ['Every pulse spinner can be tuned to any colour.'] };
@@ -187,8 +186,8 @@ export class Wardrobe {
     if (!this.thumbs) setTimeout(() => { this.bakeThumbs(); if (this.game.state === 'wardrobe') this.renderGrid(); }, 30);
   }
 
-  // Tile portraits: every outfit (three-quarter view, scarf streaming) and every skate finish (the
-  // boot and rail, lit) rendered once on a small throwaway renderer and kept as images.
+  // Tile portraits: each outfit (three-quarter, scarf streaming) and skate finish (boot and rail, lit),
+  // rendered once on a throwaway renderer and kept as images.
   bakeThumbs() {
     const S = 168;
     const thumbs = new Map();
@@ -210,7 +209,7 @@ export class Wardrobe {
     scene.add(M.root);
     const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 40);
     const snap = () => { renderer.render(scene, cam); return renderer.domElement.toDataURL('image/png'); };
-    // outfits: standing, turned three-quarters, the scarf blown out behind
+    // outfits: standing three-quarters, scarf blown back
     const sim = new ScarfSim(M);
     M.root.rotation.y = -0.65;
     cam.position.set(0, 1.5, 5.3);
@@ -226,7 +225,7 @@ export class Wardrobe {
     }
     for (const x of extras) x.removeFromParent();
     dressRunner(M, 'courier');
-    // skates: a crouch, seen low from the side, close on the boots and rails
+    // skates: crouched, low side view close on boots and rails
     M.torso.rotation.x = 0.3;
     M.legL.rotation.x = 0.35; M.legR.rotation.x = -0.25;
     M.root.rotation.y = Math.PI / 2 - 0.35;
@@ -274,8 +273,7 @@ export class Wardrobe {
     this.refresh(true);
   }
 
-  // the jar on the pack: shown or hidden (only offered once you own one). The preview turns to show
-  // the back, where it hangs
+  // show / hide the pack jar (offered once owned); the preview turns to show the back
   toggleJar() {
     const c = this.cos;
     if (!c.hasJar) return;
@@ -326,7 +324,7 @@ export class Wardrobe {
     }
   }
 
-  // which item is being tried on: the hovered tile, else the keyboard/click selection
+  // item being tried on: hovered tile, else the selection
   focus() {
     const list = this.items();
     return list[this.hover ?? this.sel[this.tab]] || list[0];
@@ -356,7 +354,7 @@ export class Wardrobe {
 
   tileArt(it) {
     const d = it.d;
-    // a rendered portrait of the real thing once the thumbnails are baked (the flat CSS art until then)
+    // baked portrait once ready (flat CSS art until then)
     const shot = this.thumbs && this.thumbs.get(`${it.kind}|${it.id}`);
     if (shot) return `<img class="wd-thumb ${it.kind}${d.rainbow ? ' rainbow' : ''}" src="${shot}" alt="">`;
     if (it.kind === 'outfit') {
@@ -423,7 +421,7 @@ export class Wardrobe {
     const rim = new THREE.DirectionalLight(0x7fd8ff, 1.3);
     rim.position.set(-3.5, 2.5, -4);
     scene.add(key, rim);
-    // pedestal with a glowing ring that takes the outfit's accent colour
+    // pedestal with a glow ring in the outfit's accent colour
     const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.08, 0.18, 36), toon(0x221a3a));
     ped.position.y = -0.09;
     const ringM = glow(0x2ee6ff);
@@ -434,7 +432,7 @@ export class Wardrobe {
     const model = makeRunner({ own: true });
     model.root.position.y = 0.06;
     scene.add(model.root);
-    // a pulse disc hovering by the right hand, in the chosen laser colour
+    // pulse disc by the right hand, in the laser colour
     const discM = glow(0x9be7ff);
     const disc = new THREE.Group();
     const torus = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.035, 6, 24), discM);
@@ -446,14 +444,14 @@ export class Wardrobe {
     this.three = { renderer, scene, camera, model, extras: [], clones: [], jar: null, ringM, disc, discM, halo, w: 0, h: 0, t: 0, pose: 0 };
   }
 
-  // copy the player's mutation parts and whatever hangs in the cargo slot (jar, crate) onto the mannequin
+  // copy the player's mutation parts and cargo-slot contents (jar, crate) onto the mannequin
   syncBody() {
     const T = this.three, g = this.game;
     for (const m of T.clones) m.removeFromParent();
     T.clones = [];
     const P = g.player.model, M = T.model;
     const muts = new Set((g.alchemy && g.alchemy.mutMeshes) || []);
-    // the pack's jar is rebuilt here so the toggle can show or hide it on the preview straight away
+    // rebuild the pack jar here so the toggle works on the preview at once
     if (T.jar) T.jar.removeFromParent();
     T.jar = makeJarMesh(g.alchemy ? g.alchemy.jar : [], g.alchemy && g.alchemy.artifact);
     M.cargoSlot.add(T.jar);
@@ -483,7 +481,7 @@ export class Wardrobe {
     const l = LASERS[look.laser] || LASERS[0];
     T.discM.color.setHex(l.color);
     T.halo.material.color.setHex(l.color);
-    // swing round to face the camera whenever the item being shown changes
+    // face the camera whenever the shown item changes
     if (prev && (prev.outfit !== look.outfit || prev.skates !== look.skates || prev.laser !== look.laser)) { this.faceFront = true; this.faceOff = 0; this.spinHold = 2.5; }
   }
 
@@ -501,15 +499,14 @@ export class Wardrobe {
       T.w = w; T.h = h;
       T.renderer.setSize(w, h, false);
       T.camera.aspect = w / h;
-      // keep the whole runner (2.5 m to the helmet top, 2.8 m with the antenna) and the
-      // pedestal in frame at any aspect
+      // whole runner (2.5 m to helmet top, 2.8 m with antenna) and pedestal in frame at any aspect
       const half = Math.max(1.78, 1.12 / T.camera.aspect);
       const dist = half / Math.tan(THREE.MathUtils.degToRad(T.camera.fov / 2));
       T.camera.position.set(0, 1.6, dist);
       T.camera.lookAt(0, 1.38, 0);
       T.camera.updateProjectionMatrix();
     }
-    // turntable: slow spin, paused while dragging and after a change (when it turns to face you)
+    // turntable: slow spin, paused while dragging and after a change (turning to face you)
     if (this.dragging) { /* the pointer drives the yaw */ } else if (this.faceFront) {
       const off = this.faceOff || 0;
       const target = Math.round((this.yaw - off) / (Math.PI * 2)) * Math.PI * 2 + off;
@@ -519,7 +516,7 @@ export class Wardrobe {
     else this.yaw += dt * 0.32;
     const M = T.model;
     M.root.rotation.y = this.yaw;
-    // idle pose; the skate tab drops into a skating crouch with the rail lit
+    // idle pose; skate tab drops into a skating crouch
     const skating = this.tab === 'skates' ? 1 : 0;
     T.pose += (skating - T.pose) * Math.min(1, dt * 5);
     const p = T.pose, br = Math.sin(T.t * 2.2);
@@ -530,7 +527,7 @@ export class Wardrobe {
     M.armL.rotation.z = -0.14 - 0.2 * p - br * 0.02; M.armR.rotation.z = 0.14 + 0.2 * p + br * 0.02;
     M.head.rotation.y = Math.sin(T.t * 0.7) * 0.12;
     M.head.rotation.x = -0.15 * p;
-    // the scarf hangs (or streams in the skating pose) with the same physics as in game
+    // scarf hangs (or streams when skating) with the in-game physics
     if (!this.scarfSim || this.scarfSim.m !== M) this.scarfSim = new ScarfSim(M);
     M.root.updateMatrixWorld(true);
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(M.root.getWorldQuaternion(new THREE.Quaternion()));

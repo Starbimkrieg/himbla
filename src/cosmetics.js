@@ -20,9 +20,9 @@ export const OUTFITS = {
   rustmoon2: { name: 'Rustmoon Dread Captain', faction: 'rustmoon', shop: 'rustmoon', req: 50, cost: 1800, elite: true, suit: 0x111111, accent: 0x7dff3a, helmet: 0x111111, visor: 0x7dff3a, scarf: 0x7dff3a, sc: [2.0, 0.34, 2], extras: ['band', 'pads'] },
 };
 
-// Quantum-Lock Skate finishes, all sold by Meridian. Some need a deed, not just credits.
+// Quantum-Lock Skate finishes, all sold by Meridian; some need a deed as well as credits.
 export const SKATES = {
-  // tone: the skate hum's voice (audio.js setSkateTone): hum, glide or rumble (the gold rollers: jackpot)
+  // tone: the skate hum's voice (audio.js setSkateTone): hum, glide or rumble (gold rollers: jackpot)
   stock: { name: 'Q-Lock Standard', color: 0x2ee6ff, trail: null, tone: 'hum' },
   chrome: { name: 'Chrome Comets', cost: 900, req: 0, color: 0xffffff, trail: 0xe8f6ff, tone: 'hum' },
   solar: { name: 'Solar Flares', cost: 1400, req: 10, color: 0xff7b1c, trail: 0xffb02e, flame: true, tone: 'rumble' },
@@ -44,7 +44,7 @@ export const LASERS = [
   { name: 'Pure White', color: 0xffffff },
 ];
 
-// Shop entries for the job boards (bought once, then equipped from the wardrobe with C).
+// Job-board shop entries (bought once, equipped in the wardrobe with C).
 export function cosmeticShopItems(locId) {
   const out = [];
   for (const [id, o] of Object.entries(OUTFITS)) {
@@ -60,9 +60,8 @@ export function cosmeticShopItems(locId) {
   return out;
 }
 
-// Dress any runner from makeRunner({ own: true }) in an outfit: recolour its private
-// materials and hang the outfit's extra parts on it. Returns the extra meshes (caller removes
-// them before re-dressing). Shared by the player and the wardrobe's preview mannequin.
+// Dress a makeRunner({ own: true }) runner: recolour its own materials and hang the outfit's extras. Returns the extra
+// meshes (caller removes them before re-dressing). Used by the player and the wardrobe mannequin.
 export function dressRunner(M, outfitId) {
   const o = OUTFITS[outfitId] || OUTFITS.courier;
   const m = M.mats;
@@ -73,7 +72,7 @@ export function dressRunner(M, outfitId) {
   m.scarf.color.setHex(o.scarf);
   m.collar.color.setHex(o.scarf);
   m.glow.color.setHex(o.accent);
-  // the outfit's scarf: length, width, one tail or two (models.js ScarfSim)
+  // scarf: length, width, tails (models.js ScarfSim)
   const [len, w, tails] = o.sc || [1.3, 0.22, 1];
   M.scarfStyle = { len, w, tails };
   const out = [];
@@ -82,8 +81,7 @@ export function dressRunner(M, outfitId) {
   const add = (parent, mesh, outline = 0.03) => { if (outline) ink(mesh, outline); parent.add(mesh); out.push(mesh); return mesh; };
   for (const e of o.extras || []) {
     if (e === 'crest') {
-      // the Blender-built swept fin, its base sunk into the helmet (its outline is its own thin shell: see build_runner.py). The
-      // code-built slab only if the file has none
+      // Blender swept fin sunk into the helmet (own outline shell, build_runner.py); code slab if the file has none
       const g = runnerExtra('crest', { accent: toon(o.accent) });
       if (g) { M.head.add(g); out.push(g); }
       else {
@@ -91,8 +89,7 @@ export function dressRunner(M, outfitId) {
         c.position.set(0, 0.26, -0.04);
       }
     } else if (e === 'pads') {
-      // Blender-built shoulder pads (three stepped lames, trim, ridge, studs) that turn with the arm; the
-      // plain dome on the torso only if the file has none
+      // Blender shoulder pads that turn with the arm; a plain torso dome if the file has none
       const mats = { accent: toon(o.accent), helmet: toon(o.helmet), metal: toon(0x3a3550) };
       for (const [s, arm, key] of [[-1, M.armL, 'padL'], [1, M.armR, 'padR']]) {
         const g = runnerExtra(key, mats);
@@ -102,14 +99,14 @@ export function dressRunner(M, outfitId) {
         p.scale.set(1.1, 0.7, 1);
       }
     } else if (e === 'halo') {
-      // floats over the helmet on a magnetic spring (updateHalo); the antenna comes off, so the ring has nothing to pass through
+      // floats on a magnetic spring (updateHalo); the antenna is hidden so the ring can't pass through it
       const h = add(M.head, new THREE.Mesh(EXTRA_GEO().halo, glow(o.accent)), 0);
       h.rotation.x = Math.PI / 2;
       h.position.y = HALO_Y;
       M.halo = new HaloSim(h);
     } else if (e === 'band') {
-      // the Blender headband: a strip hugging the helmet, a knot with two tails behind the left ear. (Its outline
-      // is a shell along its normals: ink()'s box scaling floated a black line above a torus.)
+      // Blender headband, knot and tails behind the left ear. Its outline is a normal-offset shell (ink()'s box
+      // scaling floats a line above a torus).
       const g = runnerExtra('band', { accent: toon(0xd7263d), dark: toon(0x3a0f18) });
       if (g) { M.head.add(g); out.push(g); }
       else {
@@ -122,10 +119,8 @@ export function dressRunner(M, outfitId) {
   return out;
 }
 
-// The halo hangs above the helmet as if linked to it by magnets: a spring-and-damper in the head's own frame
-// that the head's acceleration pushes on (so it lags behind a sprint, swings out in a turn, bobs on a landing)
-// and that bumps (kick) set ringing. It slides a few centimetres and tilts at most 0.25 rad. A runner with a halo
-// has no antenna (dressRunner), so nothing is there for it to pass through.
+// Halo: a spring-damper in the head's frame, pushed by the head's acceleration (lags a sprint, swings in turns, bobs
+// on landing) and set ringing by kick(). Slides a few cm, tilts at most 0.25 rad.
 const HALO_Y = 0.62;
 const _hp = new THREE.Vector3(), _ha = new THREE.Vector3(), _hq = new THREE.Quaternion(), _hQ = new THREE.Quaternion(), _hE = new THREE.Euler();
 export class HaloSim {
@@ -136,7 +131,7 @@ export class HaloSim {
     this.prev = null; this.prevVel = new THREE.Vector3(); this.t = Math.random() * 6;
   }
 
-  // a bump of strength 0..1 (a landing, a hit): it rings, a little different every time
+  // a bump of strength 0..1 (landing, hit), randomised
   kick(k) {
     this.vx += (Math.random() - 0.5) * 9 * k; this.vz += (Math.random() - 0.5) * 9 * k;
     this.ov.y += (Math.random() < 0.5 ? -1 : 1) * 0.35 * k;
@@ -151,16 +146,16 @@ export class HaloSim {
     head.getWorldQuaternion(_hq).invert();
     if (this.prev) {
       _ha.copy(_hp).sub(this.prev).divideScalar(dt); // world velocity of the head
-      if (_ha.length() > 120) _ha.set(0, 0, 0);      // (a teleport isn't a swing)
+      if (_ha.length() > 120) _ha.set(0, 0, 0);      // a teleport isn't a swing
       const v = _ha.clone();
-      _ha.sub(this.prevVel).divideScalar(dt);        // ...and its acceleration
+      _ha.sub(this.prevVel).divideScalar(dt);        // acceleration
       this.prevVel.copy(v);
       if (_ha.length() > 80) _ha.setLength(80);
       _ha.applyQuaternion(_hq);                      // in the head's frame
     } else _ha.set(0, 0, 0);
     if (!this.prev) this.prev = new THREE.Vector3();
     this.prev.copy(_hp);
-    // the airflow, a gentle hover wobble so it is never quite still, and the head's acceleration pushing on it
+    // hover wobble (never quite still) plus the head's acceleration
     const wob = Math.sin(this.t * 1.9) * 0.012, wob2 = Math.cos(this.t * 1.4) * 0.012;
     const K = 60, C = 7, KT = 45, CT = 5;
     this.ov.x += (-_ha.x * 0.12 - K * this.o.x - C * this.ov.x) * dt;
@@ -179,7 +174,7 @@ export class HaloSim {
   }
 }
 
-// Per frame, for whatever runner wears a halo (the player, the wardrobe's mannequin)
+// Per frame, for any haloed runner (player, wardrobe mannequin)
 export function updateHalo(M, dt) {
   if (M.halo) M.halo.update(dt, M.head);
 }
@@ -191,7 +186,7 @@ export function dressSkates(M, skatesId) {
   for (const h of M.hoofMeshes || []) h.removeFromParent();
   M.hoofMeshes = [];
   if (s.coins) {
-    // casino bling: a big medallion on the outside of each boot and a row of studs along the rail
+    // casino bling: a medallion on each boot's outside, studs along the rail
     const face = s.coins === 'gold' ? COIN_GOLD : CHIP_GREEN;
     for (const [leg, side] of [[M.legL, -1], [M.legR, 1]]) {
       const med = new THREE.Mesh(EXTRA_GEO().coin, face);
@@ -226,7 +221,7 @@ const CHIP_GREEN = new THREE.MeshToonMaterial({ color: 0x1f8a4a, emissive: 0x0a3
 const CHIP_RIM = glow(0xffffff);
 function EXTRA_GEO() {
   if (!extraGeo) {
-    // crest: a bevelled fin profile extruded thin, front edge low, sweeping up and back
+    // crest: thin bevelled fin, low at the front, sweeping up and back
     const sh = new THREE.Shape();
     sh.moveTo(0.3, -0.06); sh.quadraticCurveTo(0.22, 0.12, 0.02, 0.2); sh.quadraticCurveTo(-0.2, 0.26, -0.34, 0.1); sh.lineTo(-0.3, -0.06); sh.closePath();
     const crest = new THREE.ExtrudeGeometry(sh, { depth: 0.07, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 1, curveSegments: 6 });
@@ -253,7 +248,7 @@ export class Cosmetics {
     this.outfit = 'courier';
     this.skates = 'stock';
     this.laser = 0;
-    this.jarShown = true; // wear the containment jar on your pack (if you own one)
+    this.jarShown = true; // show the containment jar on your pack, if owned
     this.extraMeshes = [];
     try {
       const d = JSON.parse(localStorage.getItem(KEY) || 'null');
@@ -270,7 +265,7 @@ export class Cosmetics {
     return id === 'stock' || (this.game.upgrades['skates_' + id] || 0) > 0;
   }
 
-  // the jar on your pack: only there to show once Dr. Zbornak has sold you one
+  // the pack jar, once Dr. Zbornak has sold you one
   get hasJar() { return !!(this.game.alchemy && this.game.alchemy.owned); }
   setJarShown(on) {
     this.jarShown = on;
@@ -299,7 +294,7 @@ export class Cosmetics {
   applySkates() {
     dressSkates(this.game.player.model, this.skates);
     const a = this.game.audio;
-    if (a && a.setSkateTone) a.setSkateTone(this.skate.tone || 'hum'); // (each pair of skates hums in its own voice)
+    if (a && a.setSkateTone) a.setSkateTone(this.skate.tone || 'hum'); // each pair hums in its own voice
   }
 
   // Per frame: skate glow, prism hue, trails.
@@ -309,7 +304,7 @@ export class Cosmetics {
     const b = P.body;
     const s = this.skate;
     const mat = P.model.mats.skate;
-    // the glide ribbons under the skates take the finish's trail colour (cyan on the stock skates)
+    // glide ribbons take the trail colour (cyan on stock skates)
     if (g.fx.trails) { const tc = s.trail ? this.trailColor(g.time) : 0x2ee6ff; for (const t of g.fx.trails) t.mat.uniforms.color.value.set(tc); }
     if (s.rainbow) mat.color.setHSL((g.time * 0.4) % 1, 1, 0.6);
     else mat.color.setHex(b.skating ? s.color : 0x3a3550);
@@ -321,8 +316,7 @@ export class Cosmetics {
     }
   }
 
-  // Casino skates: puffs of glittery smoke at the heels, and every so often a shiny coin (or a poker
-  // chip) pops out of the smoke, spins up, bounces and fades.
+  // Casino skates: glittery heel smoke; coins (or poker chips) pop out, spin, bounce and fade.
   updateCoins(dt, s) {
     const g = this.game;
     const P = g.player;
@@ -372,7 +366,7 @@ export class Cosmetics {
     }
   }
 
-  // C: the wardrobe screen (live preview + click-to-equip grids, see wardrobe.js).
+  // C: the wardrobe screen (wardrobe.js).
   wardrobe() {
     if (!this.ui) this.ui = new Wardrobe(this.game, this);
     this.ui.open();

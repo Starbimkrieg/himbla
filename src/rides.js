@@ -1,21 +1,19 @@
 import * as THREE from 'three';
 
-// Things you can sit in and be carried by: the transit ships (free: hop into a landed shuttle-bus or
-// freighter with F, ride it wherever it goes, hop out with F any time, on the pad or mid-flight)
-// and the fairground's carousel and ferris wheel (pop onto the nearest horse or gondola; settlements.js keeps both for Chimera Downs' rework).
-// While seated, player.js lets the seat carry you (player.seat) and skips the physics. A fairground ride's
-// seats are for sightseeing, so the HUD steps aside while you sit in one (style.css body.on-ride).
+// Seats that carry you: transit ships (free; F into a landed shuttle-bus or freighter, F out any time, even mid-flight)
+// and the fairground carousel and ferris wheel (nearest horse or gondola; settlements.js keeps both for Chimera Downs'
+// rework). Seated, player.js follows player.seat and skips physics. Fairground seats hide the HUD (style.css body.on-ride).
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 
 export class Rides {
   constructor(game) {
     this.game = game;
-    this.ride = null; // what you're on: { kind: 'ship' | 'fun', v?, ride?, seat }
-    this.hudOff = false; // (body.on-ride is on: syncHud)
+    this.ride = null; // { kind: 'ship' | 'fun', v?, ride?, seat }
+    this.hudOff = false; // body.on-ride set (syncHud)
   }
 
-  // the nearest seat you could take from p, or null
+  // nearest seat from p, or null
   nearest(p) {
     const g = this.game;
     let best = null, bd = Infinity;
@@ -37,7 +35,7 @@ export class Rides {
     return best;
   }
 
-  // F prompt + handling, called from main's interaction chain. True when it owns the prompt.
+  // F prompt and handling (main's interaction chain). True when it owns the prompt.
   interact() {
     const g = this.game, P = g.player;
     if (this.ride) {
@@ -60,7 +58,7 @@ export class Rides {
     return true;
   }
 
-  // where a ship goes next: parked at one end, it's heading for the other
+  // a ship's next stop (parked at one end: the other)
   shipLabel(v) {
     const kind = v.kind === 'ship' ? 'FREIGHTER' : 'SHUTTLE';
     const to = v.state === 'park' ? (v.s <= 0 ? v.stops[1] : v.stops[0]) : (v.dir > 0 ? v.stops[1] : v.stops[0]);
@@ -71,7 +69,7 @@ export class Rides {
     const g = this.game, P = g.player;
     if (n.kind === 'ship') {
       const v = n.v;
-      // you ride inside, out of sight; the camera hangs back far enough to see the whole ship
+      // ride hidden inside; camera far enough back to see the whole ship
       n.seat = { obj: v.root, local: new THREE.Vector3(0, 0.5, 0), face: new THREE.Vector3(0, 0, 1), hidden: true, camDist: v.kind === 'ship' ? 62 : 26 };
       g.hud.toast(`All aboard! ${this.shipLabel(v).toLowerCase().replace(/^./, (c) => c.toUpperCase())}. F to hop out.`, 3);
     } else {
@@ -99,7 +97,7 @@ export class Rides {
       const v = r.v;
       v.root.updateMatrixWorld(true);
       if (v.state === 'park') {
-        // down the ramp and a step clear of it
+        // a step past the ramp's foot
         const bottom = v.root.localToWorld(_a.copy(v.rampBottom));
         const top = v.root.localToWorld(_b.copy(v.rampTop));
         b.pos.copy(bottom).addScaledVector(bottom.clone().sub(top).normalize(), 1.5);
@@ -107,7 +105,7 @@ export class Rides {
         b.pos.addScaledVector(up, 1);
         b.vel.set(0, 0, 0);
       } else {
-        // out of the side hatch, keeping the ship's speed: good luck down there
+        // side hatch, keeping the ship's speed
         const side = v.kind === 'ship' ? 16 : 8;
         b.pos.copy(v.root.localToWorld(_a.set(side, -1, 0)));
         b.vel.copy(v.vel);
@@ -115,7 +113,7 @@ export class Rides {
         g.style(15, 'Bailed out');
       }
     } else {
-      // step off away from the ride's middle (and off the wheel's plane)
+      // step off away from the ride's middle (and the wheel's plane)
       const s = r.seat;
       const p = s.obj.localToWorld(_a.copy(s.local));
       up.copy(p).normalize();
@@ -129,7 +127,7 @@ export class Rides {
     g.audio.tone(440, 0.1, 'triangle', 0.1);
   }
 
-  // no HUD on the carousel and the ferris wheel (the hop-off prompt and the pop-ups stay: style.css body.on-ride); the shuttles and freighters keep it
+  // no HUD on fairground rides (hop-off prompt and pop-ups stay: style.css body.on-ride); ships keep it
   syncHud() {
     const off = !!(this.ride && this.ride.kind === 'fun');
     if (off !== this.hudOff) { this.hudOff = off; document.body.classList.toggle('on-ride', off); }

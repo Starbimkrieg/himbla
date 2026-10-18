@@ -1,13 +1,14 @@
-# Skimmer redesign review sheet. Builds the classic Skimmer (build_skimmer.py) and each proposal (build_skimmer_redesign.py) in a fresh
-# scene and renders side, front three-quarter, rear three-quarter and top views to docs/skimmer-proposals/<name>_<view>.jpg, and a
-# review sheet, skimmer_proposals.jpg (PREVIEW_OUT=<dir> writes them elsewhere; PREVIEW_W / PREVIEW_H / PREVIEW_SAMPLES set the quality;
-# PREVIEW_EXPORT=0 skips the GLBs). The runner rides inside, so there is none in the pictures.
+# Skimmer redesign review sheet. Builds the classic Skimmer (build_skimmer.py) and each proposal
+# (build_skimmer_redesign.py) in a fresh scene, renders side, front and rear three-quarter, top and close-up views to
+# docs/skimmer-proposals/<name>_<view>.jpg, plus skimmer_proposals.jpg (PREVIEW_OUT=<dir> writes elsewhere;
+# PREVIEW_W / PREVIEW_H / PREVIEW_SAMPLES set quality; PREVIEW_EXPORT=0 skips the GLBs). The runner rides inside, so
+# none shows.
 #
 #   pip install bpy pillow numpy
 #   MOONRUNNER_REPO=. python3 tools/blender/preview_skimmer.py [classic] [a] [b]
 #
-# Cycles on the CPU (no GPU or display needed); Freestyle draws the comic ink outline. The vehicle floats 0.8 m up, as in the game, over
-# a soft glow where its hover pads push on the ground.
+# Cycles on the CPU (no GPU or display needed); Freestyle draws the ink outline. The vehicle floats 0.8 m up, as in the
+# game, over its hover-pad glow.
 
 import bpy, math, os, sys
 from mathutils import Vector
@@ -16,10 +17,10 @@ REPO = os.environ.get("MOONRUNNER_REPO") or os.path.abspath(os.path.join(os.path
 OUTDIR = os.environ.get("PREVIEW_OUT") or os.path.join(REPO, "docs", "skimmer-proposals")
 os.makedirs(OUTDIR, exist_ok=True)
 NAMES = [a for a in sys.argv[1:] if a in ("classic", "a", "b", "bprev")] or ["classic", "a", "b"]
-ONLY = [v for v in os.environ.get("PREVIEW_VIEWS", "").split(",") if v]   # (render just these views)
+ONLY = [v for v in os.environ.get("PREVIEW_VIEWS", "").split(",") if v]   # PREVIEW_VIEWS=a,b: render only these views
 RES = (int(os.environ.get("PREVIEW_W", 1280)), int(os.environ.get("PREVIEW_H", 720)))
 SAMPLES = int(os.environ.get("PREVIEW_SAMPLES", 40))
-FLOAT = 0.8   # the game floats a hover vehicle this far above the ground
+FLOAT = 0.8   # hover height above the ground, as in the game (m)
 GLOWS = {"glow": 3.2, "stripe": 3.0, "accent": 6.0, "white": 9.0, "red": 7.0, "engine": 8.0, "core": 9.0, "lamp": 9.0, "plume": 2.5, "plumeCore": 5.0, "lift": 2.0}
 TOONS = ("body", "plate", "dark", "metal", "steel", "seat", "stripe")
 
@@ -61,8 +62,8 @@ def toon(m, rgb, rough=0.35, alpha=1.0, metallic=0.0):
 
 
 def dress_preview(livery_glow=True):
-    """Preview materials: lit slots glow, the flames are additive, glass is a pale pane, the rest are painted solids. (The classic
-    model's stripe is a TOON in the trim colour; the proposals' stripe is the same slot, so both are painted.)"""
+    """Preview materials: lit slots glow, flames additive, glass a pale pane, the rest painted solids. (stripe is painted:
+    a TOON in the trim colour on the classic, the same slot on the proposals.)"""
     for m in bpy.data.materials:
         n = m.name.split(".")[0]
         c = tuple(min(1, v) for v in m.diffuse_color[:3])
@@ -88,7 +89,7 @@ def scene_setup():
     sc.render.image_settings.file_format = "JPEG"
     sc.render.image_settings.quality = 90
     sc.view_settings.view_transform = "Standard"
-    # an evening-on-the-Moon backdrop: violet sky, a cool key, a warm rim
+    # Moon-evening backdrop: violet sky, cool key, warm rim
     w = bpy.data.worlds.new("w")
     w.use_nodes = True
     bg = w.node_tree.nodes["Background"]
@@ -102,7 +103,7 @@ def scene_setup():
         sc.collection.objects.link(o)
         o.location = loc
         o.rotation_euler = (-Vector(loc)).to_track_quat("-Z", "Y").to_euler()
-    # a ground: dark regolith
+    # ground: dark regolith
     bpy.ops.mesh.primitive_plane_add(size=80, location=(0, 0, -0.01))
     g = bpy.context.object
     gm = bpy.data.materials.new("ground")
@@ -113,7 +114,7 @@ def scene_setup():
 
 
 def freestyle(sc, skip):
-    """Ink everything except the objects in `skip` (the ground and the trail)."""
+    """Ink everything except `skip` (the ground and the trail)."""
     noink = bpy.data.collections.new("NoInk")
     sc.collection.children.link(noink)
     for o in skip:
@@ -150,8 +151,8 @@ VIEWS = {
     "side": ((-14.5, 0.0, 2.2), (0, 0.0, 1.75), 42),
     "front": ((8.2, -10.0, 3.8), (0, 0.0, 1.7), 42),
     "rear": ((-8.2, 10.0, 3.8), (0, 0.0, 1.7), 42),
-    "top": ((0.0, -0.4, 14.5), (0, -0.4, 1.4), 42),   # (not on the sheet)
-    # close-ups of the right nacelle's tail (fin, tip band, tail light, thruster), the nose's eye, and the coils on the nacelle
+    "top": ((0.0, -0.4, 14.5), (0, -0.4, 1.4), 42),   # not on the sheet
+    # close-ups: the right nacelle's tail (fin, tip band, tail light, thruster), the nose eye, the nacelle coils
     "fin": ((5.2, 5.4, 4.3), (2.0, 2.2, 2.75), 55),
     "eye": ((1.3, -4.5, 3.7), (0, -2.0, 2.0), 60),
     "coil": ((5.4, -2.4, 2.4), (2.0, 0.2, 1.6), 55),
@@ -166,7 +167,7 @@ for name in NAMES:
     if name == "classic":
         g = {"__file__": os.path.join(REPO, "tools", "blender", "build_skimmer.py")}
         os.environ["MOONRUNNER_EXPORT"] = "0"
-    elif name == "bprev":   # the B that was committed (BPREV = a copy of its builder), for a before and after
+    elif name == "bprev":   # the committed B (BPREV = path to a copy of its builder), for a before / after
         g = {"__file__": os.environ["BPREV"], "VARIANT": "b"}
         os.environ["MOONRUNNER_EXPORT"] = "0"
     else:
@@ -175,7 +176,7 @@ for name in NAMES:
     root = bpy.data.objects["skimmer"]
     root.location.z += FLOAT
     dress_preview()
-    for o in bpy.data.objects:   # the flames at rest, as the game's anim() draws them (plumes 0.35 long, hover glows 0.8 deep)
+    for o in bpy.data.objects:   # flames at rest as the game's anim() draws them (plumes 0.35 long, hover glows 0.8 deep)
         if o.type == "EMPTY" and o.get("role") == "plume":
             o.scale = (0.9, 0.9, 0.4)
         elif o.type == "EMPTY" and o.get("role") == "lift":
@@ -198,7 +199,7 @@ for name in NAMES:
 try:
     from PIL import Image, ImageDraw
     labels = {"classic": "CLASSIC (CURRENT)", "a": "A  AEGIS", "b": "B  BULWARK", "bprev": "B  BULWARK, BEFORE THIS REVISION"}
-    rows = [n for n in (os.environ.get("PREVIEW_SHEET", "").split(",") if os.environ.get("PREVIEW_SHEET") else NAMES) if all(os.path.isfile(os.path.join(OUTDIR, f"{n}_{v}.jpg")) for v in SHEET)]   # (PREVIEW_SHEET=bprev,b: these rows, from files already rendered)
+    rows = [n for n in (os.environ.get("PREVIEW_SHEET", "").split(",") if os.environ.get("PREVIEW_SHEET") else NAMES) if all(os.path.isfile(os.path.join(OUTDIR, f"{n}_{v}.jpg")) for v in SHEET)]   # PREVIEW_SHEET=bprev,b: these rows, from files already rendered
     if rows:
         w, h = RES[0] // 2, RES[1] // 2
         sheet = Image.new("RGB", (w * len(SHEET), (h + 28) * len(rows)), (24, 20, 40))
@@ -213,7 +214,7 @@ try:
 except ImportError:
     print("(pillow not installed: no contact sheet)")
 
-# a before-and-after of the close-ups, when both B's were rendered
+# before / after of the close-ups, when both Bs were rendered
 try:
     from PIL import Image, ImageDraw
     pair = [n for n in ("bprev", "b") if all(os.path.isfile(os.path.join(OUTDIR, f"{n}_{v}.jpg")) for v in DETAILS)]

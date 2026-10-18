@@ -1,18 +1,17 @@
 import * as THREE from 'three';
 
-// The Lucky Crater Casino's plaza fountain water (the model is built in Blender, tools/blender/build_casino.py; models.js makeFountain
-// and settlements.js dressCasinoLot dress it). Four kinds of water pivot, each a mesh with a shader of its own:
-//   water (tier basin / bowl)  a disc the two tiers' ripples run across, with foam where the water lands: the curtain's foot in the basin,
-//                              the jets' landing ring in the bowl
-//   curtain                    the sheet that spills over the bowl's lip into the basin: strands of water running down
-//   streams                    the eight jets from the spigots under the chip into the bowl: bright dashes running along them
-// Every material shares one clock (`time`), set by whichever of the meshes' tick runs (World.update: u.tick(o, dt, time)).
+// Lucky Crater Casino plaza fountain water (model: tools/blender/build_casino.py; dressed by models.js makeFountain and
+// settlements.js dressCasinoLot). Water pivot kinds, one shader each:
+//   water (tier basin / bowl)  ripple disc, foam where water lands (curtain foot in the basin, jet ring in the bowl)
+//   curtain                    sheet over the bowl lip into the basin: strands running down
+//   streams                    the eight jets into the bowl: bright dashes along them
+// All share one `time` uniform, set by any mesh's tick (World.update: u.tick(o, dt, time)).
 
 const TIME = { value: 0 };
 const VERT = 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
 const lin = (hex) => new THREE.Color(hex);
 
-// ripples travelling out from the middle and from the ring where water lands, a slow wobble through them, foam on the ring
+// ripples out from the middle and the landing ring, a slow wobble, foam on the ring
 const RIPPLE = `uniform float time; uniform vec3 deep; uniform vec3 light; uniform float landing; uniform float edge; varying vec3 vP;
   void main(){
     float d = length(vP.xz), a = atan(vP.z, vP.x);
@@ -30,7 +29,7 @@ const RIPPLE = `uniform float time; uniform vec3 deep; uniform vec3 light; unifo
     #include <colorspace_fragment>
   }`;
 
-// strands of water running down the sheet, brighter dashes sliding along them
+// strands down the sheet with brighter dashes
 const CURTAIN = `uniform float time; uniform vec3 deep; uniform vec3 light; varying vec3 vP;
   void main(){
     float a = atan(vP.z, vP.x);
@@ -42,7 +41,7 @@ const CURTAIN = `uniform float time; uniform vec3 deep; uniform vec3 light; vary
     #include <colorspace_fragment>
   }`;
 
-// bright dashes running down the arcs (the arc falls as it goes, so height is how far along it is)
+// dashes down the arcs (height stands in for distance along them)
 const STREAM = `uniform float time; uniform vec3 deep; uniform vec3 light; varying vec3 vP;
   void main(){
     float dash = sin(vP.y * 16.0 + time * 11.0) * 0.5 + 0.5;
@@ -57,8 +56,8 @@ const KINDS = {
   streams: { frag: STREAM, u: { deep: lin(0x6cc8ff), light: lin(0xf4fdff) }, extra: {} },
 };
 
-// One mesh for a water node of the model (baked by models.js bakeShip: its `parts` hold the geometry, `data` the pivot's extras), at the node's
-// place. `m.userData.tick` runs the shared clock.
+// A mesh for one water node (models.js bakeShip: `parts` hold the geometry, `data` the pivot's extras), at the node.
+// `m.userData.tick` runs the shared clock.
 export function waterMesh(node) {
   const kind = node.role === 'water' ? node.data.tier : node.role; // 'basin', 'bowl', 'curtain' or 'streams'
   const K = KINDS[kind];

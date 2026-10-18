@@ -1,7 +1,7 @@
-// Pixel fonts (bundled so the desktop build works offline).
-//   DISPLAY: Press Start 2P — headings, numbers, chips, in-world signs, canvas labels
-//   BODY:    Pixelify Sans — readable pixel text for sentences at small sizes
-// CSS gets them through --comic (display) and --body (text) in style.css.
+// Pixel fonts, bundled so the desktop build works offline.
+//   DISPLAY: Press Start 2P (headings, numbers, chips, in-world signs, canvas labels)
+//   BODY:    Pixelify Sans (sentences at small sizes)
+// CSS uses them via --comic (display) and --body in style.css.
 import '@fontsource/press-start-2p/400.css';
 import '@fontsource/pixelify-sans/400.css';
 import '@fontsource/pixelify-sans/700.css';
@@ -9,12 +9,10 @@ import '@fontsource/pixelify-sans/700.css';
 export const DISPLAY = '"Press Start 2P", "Pixelify Sans", monospace';
 export const BODY = '"Pixelify Sans", "Press Start 2P", sans-serif';
 
-// Canvas font string in the display face. Press Start 2P is wide, so callers pass the size
-// they want (roughly 0.6x what the old Bangers text used).
+// Canvas font string in the display face (it is wide, so callers pass small sizes).
 export const pixelFont = (px) => `${Math.round(px)}px ${DISPLAY}`;
 
-// Canvas text only uses a web font once it has loaded, so wait for the faces before any
-// textSprite / board canvas is drawn. Never blocks for more than a couple of seconds.
+// Canvas only uses a web font once loaded, so await this before drawing textSprites / boards. Gives up after `timeout` ms.
 export function loadFonts(timeout = 3000) {
   if (!document.fonts || !document.fonts.load) return Promise.resolve();
   const sample = 'MOON-RUNNER 0123456789 abc';

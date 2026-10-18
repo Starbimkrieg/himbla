@@ -2,22 +2,22 @@ import * as THREE from 'three';
 import { R, arcDist } from './geo.js';
 import { saveWorldState } from './worldstate.js';
 
-// speed: metres of radius a second; max: the most one sweep reaches before you must pick a new spot (80 s);
-// redraw: seconds between redraws of the map while you watch it
+// speed: m of radius per s; max: one sweep's reach before you pick a new spot (80 s); redraw: s between map redraws
+// while watching
 export const SWEEP = { speed: 25, max: 2000, redraw: 0.33 };
 
-// The Radio Tower's job: a disc of map that grows from a point you picked in the fog, charting the cells and
-// the places whose centres it reaches. Owned by the town (town.radio); main.frame() ticks it on real time while
-// you play or watch the map. The sweep is kept in ws.town.radio, so it carries on after a reload.
+// Radio Tower sweep: a map disc growing from a point picked in the fog, charting cells and places whose centres it
+// reaches. Owned by the town (town.radio); main.frame() ticks it in real time while playing or on the map. Saved in
+// ws.town.radio, so it survives a reload.
 export class RadioSweep {
   constructor(town) {
-    this.town = town; // (not game.town: the game is still building it when this runs)
+    this.town = town; // not game.town: still being built when this runs
     this.game = town.game;
     this.s = null; // { dir: Vector3, r: metres, on: bool, cells: new cells this sweep, found: [location ids] }
-    this.order = new Uint16Array(0); // the cells the disc can ever reach, nearest first
-    this.dist = new Float32Array(0); // ...and how far each one is from the centre (m)
-    this.locs = []; // [{ l, a }] the places it can reach, nearest first
-    this.i = 0; this.j = 0; // how far down those two lists the disc has got
+    this.order = new Uint16Array(0); // reachable cells, nearest first
+    this.dist = new Float32Array(0); // ...their distance from the centre (m)
+    this.locs = []; // [{ l, a }] reachable places, nearest first
+    this.i = 0; this.j = 0; // progress down those two lists
     this.saveT = 10; this.drawT = 0;
   }
 
@@ -25,13 +25,13 @@ export class RadioSweep {
   get on() { return !!(this.s && this.s.on); }
   get frac() { return this.s ? this.s.r / SWEEP.max : 0; }
 
-  // the sweep as it was saved (ws.town.radio = { d: [x, y, z], r, on, n, f }): rebuild the lists and mark the disc again
+  // from the save (ws.town.radio = { d: [x, y, z], r, on, n, f }): rebuild the lists and re-mark the disc
   restore() {
     const p = this.town.state && this.town.state.radio;
     if (!p || !p.d) return;
     this.s = { dir: new THREE.Vector3().fromArray(p.d).normalize(), r: Math.min(SWEEP.max, p.r || 0), on: !!p.on, cells: p.n || 0, found: p.f || [] };
     this.build();
-    this.advance(this.s.r, true); // (the explored cells may have been saved a few seconds before the radius was)
+    this.advance(this.s.r, true); // explored cells may have been saved a few s before the radius
     if (this.s.r >= SWEEP.max) this.s.on = false;
   }
 
@@ -43,7 +43,7 @@ export class RadioSweep {
     this.game.globe.save();
   }
 
-  // the cells and places the disc can ever reach, sorted by distance: a tick then only walks the new ones
+  // reachable cells and places, sorted by distance, so a tick only walks new ones
   build() {
     const G = this.game.globe, c = G.cells, d = this.s.dir, n = G.explored.length, cosMax = Math.cos(SWEEP.max / R);
     const hit = [], ang = new Float32Array(n);
@@ -58,8 +58,8 @@ export class RadioSweep {
     this.i = this.j = 0;
   }
 
-  // chart everything within r metres (cells and places by their centres). quiet: no 'NEW LOCATION' toast (a restore, or the map
-  // is open: the toast would sit under it, and the panel lists what was found)
+  // chart cells and places (by centre) within r m. quiet: no 'NEW LOCATION' toast (restore, or the map is open: its panel
+  // lists finds and the toast would sit under it)
   advance(r, quiet = false) {
     const G = this.game.globe, ex = G.explored, s = this.s;
     while (this.i < this.order.length && this.dist[this.i] <= r) {
@@ -72,7 +72,7 @@ export class RadioSweep {
     }
   }
 
-  // send a sweep from a point on the Moon (a unit direction). '' on success, else why not (the map's panel shows it)
+  // start a sweep at a unit direction. '' on success, else the reason (shown in the map panel)
   start(dir) {
     const G = this.game.globe;
     if (!this.tower) return 'NO RADIO TOWER';
@@ -86,10 +86,10 @@ export class RadioSweep {
   }
 
   stop() { if (this.s && this.s.on) { this.s.on = false; this.persist(); } }
-  // (a sweep that reached its maximum cannot be resumed: pick a new spot)
+  // a finished sweep can't resume: pick a new spot
   resume() { if (this.s && !this.s.on && this.s.r < SWEEP.max) { this.s.on = true; this.persist(); } }
 
-  // dt: real seconds (frame()'s capped step, so a slow frame rate slows it like the game). watching: the map is open
+  // dt: real s (frame()'s capped step: low frame rates slow it like the game). watching: map open
   tick(dt, watching = false) {
     const s = this.s;
     if (!s || !s.on) return;
@@ -99,7 +99,7 @@ export class RadioSweep {
     if (done) { s.on = false; this.game.hud.toast('RADIO SWEEP COMPLETE. PICK A NEW SPOT ON THE MAP FOR MORE.', 4); this.game.audio.tone(660, 0.45, 'sine', 0.2); }
     this.saveT -= dt;
     if (done || this.saveT <= 0) { this.saveT = 10; this.persist(); }
-    // (the map keeps its tinted ground layer between redraws, so a redraw with no new cells is cheap)
+    // the map keeps its tinted ground layer, so redraws without new cells are cheap
     if (watching && (done || (this.drawT -= dt) <= 0)) { this.drawT = SWEEP.redraw; this.game.globe.draw(); }
   }
 }

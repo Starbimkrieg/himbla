@@ -1,10 +1,9 @@
-// Controller glyphs. While a pad is in use (gamepad.js calls setActive), every key name the UI shows
-// (<b>F</b> in a prompt, "Press V" in a toast, tutorial steps, tips, dialogue, chips) is swapped for
-// the button that does the same thing on a controller, drawn the way the pad's own family does
-// (Xbox / PlayStation / Switch). Back on the keyboard they all swap back. The pad's actual mapping is
-// in gamepad.js; this only names it.
+// Controller glyphs. While a pad is in use (gamepad.js calls setActive), every key name in the UI
+// (<b>F</b> in a prompt, "Press V" in a toast, tutorial, tips, dialogue, chips) becomes the matching
+// pad button, drawn in the pad family's style (Xbox / PlayStation / Switch); keyboard use swaps back.
+// The mapping itself is in gamepad.js; this only names it.
 
-// The real Xbox One button art (Xelu's controller prompts, CC0), inlined like the other assets
+// Xbox One button art (Xelu's controller prompts, CC0), inlined like the other assets
 import xA from './assets/xbox/A.png?inline';
 import xB from './assets/xbox/B.png?inline';
 import xX from './assets/xbox/X.png?inline';
@@ -25,7 +24,7 @@ const XBOX_ART = { A: xA, B: xB, X: xX, Y: xY, LB: xLB, RB: xRB, LT: xLT, RT: xR
 
 export const glyphState = { kind: 'xbox' };
 
-// tokens are standard-mapping buttons: each family names (and colours) them its own way
+// tokens are standard-mapping buttons; each family names and colours them its own way
 const FACE = {
   xbox: { A: ['A', 'g'], B: ['B', 'r'], X: ['X', 'b'], Y: ['Y', 'y'], LB: 'LB', RB: 'RB', LT: 'LT', RT: 'RT', VIEW: '⧉', START: '☰' },
   ps: { A: ['✕', 'b'], B: ['○', 'r'], X: ['□', 'p'], Y: ['△', 'g'], LB: 'L1', RB: 'R1', LT: 'L2', RT: 'R2', VIEW: 'CREATE', START: 'OPTIONS' },
@@ -34,7 +33,7 @@ const FACE = {
 const SHAPE = { LB: 'bump', RB: 'bump', LT: 'bump', RT: 'bump', VIEW: 'small', START: 'small', LS: 'stick', RS: 'stick', L3: 'stick', R3: 'stick', DU: 'dpad', DD: 'dpad', DL: 'dpad', DR: 'dpad' };
 const MISC = { LS: 'L', RS: 'R', L3: 'L3', R3: 'R3', DU: '▲', DD: '▼', DL: '◀', DR: '▶' };
 
-// PlayStation face symbols are drawn, not typed: fonts place those characters all over their line box
+// PlayStation face symbols are drawn, not typed: fonts place them unpredictably in the line box
 const SYMS = {
   '✕': '<path d="M2.5 2.5L9.5 9.5M9.5 2.5L2.5 9.5"/>',
   '○': '<circle cx="6" cy="6" r="3.8"/>',
@@ -43,7 +42,7 @@ const SYMS = {
 };
 
 // '#text' in a token list is plain text between glyphs
-// [label, colour token] of a face button for a pad family (for the in-world signs, which draw their own glyphs)
+// [label, colour token] of a face button for a pad family (for in-world signs, which draw their own)
 export function faceInfo(token, kind = glyphState.kind) {
   const f = (FACE[kind] || FACE.xbox)[token] || token;
   return Array.isArray(f) ? f : [f, ''];
@@ -57,16 +56,16 @@ export function glyphHtml(tokens, kind = glyphState.kind) {
     const f = face[t] || MISC[t] || t;
     const [txt, col] = Array.isArray(f) ? f : [f, ''];
     if (SYMS[txt]) return `<i class="pg pg-face pg-sym pg-${col}"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">${SYMS[txt]}</svg></i>`;
-    const len = [...txt].length; // (labels longer than one character widen the button to a pill so they sit inside it)
+    const len = [...txt].length; // (multi-character labels widen the button to a pill)
     return `<i class="pg pg-${SHAPE[t] || 'face'} ${col ? 'pg-' + col : ''} ${len > 1 ? 'long' : ''} ${len > 3 ? 'tiny' : ''}">${txt}</i>`;
   }).join('');
 }
 
-// What a key name in the UI means on the pad (null: no equivalent, left as it is)
+// UI key name -> pad tokens (null: no equivalent, left as is)
 const WORDS = {
   SPACE: ['LB'], SHIFT: ['A'], ENTER: ['A'], MOUSE: ['RS'], 'RIGHT MOUSE': ['LT'], RMB: ['LT'], 'E/RMB': ['LT'], LMB: ['RT'],
   E: ['RB'], Q: ['B'], F: ['X'], G: ['R3'], V: ['Y'], M: ['VIEW'], R: ['VIEW', '#hold'],
-  X: ['DD'], C: ['DD'], J: ['DD'], P: ['DD'], T: ['DD'], // (the radial menu's wedges; N has no button: music is under Settings → Audio)
+  X: ['DD'], C: ['DD'], J: ['DD'], P: ['DD'], T: ['DD'], // (radial menu wedges; N has no button: music is in Settings → Audio)
 };
 export function tokensFor(text) {
   const t = text.trim();
@@ -127,7 +126,7 @@ export class Glyphs {
     for (const n of texts) this.text(n);
   }
 
-  // "Press V" / "hold E" in running text: the key becomes a glyph, the rest stays
+  // "Press V" / "hold E" in running text: only the key becomes a glyph
   text(n) {
     const p = n.parentElement;
     const s = n.nodeValue;

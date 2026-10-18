@@ -1,8 +1,8 @@
-// Little rolling graphs for the dev overlay (cheats.js): FPS, CPU and GPU load over the last 30 s.
+// Rolling graphs for the dev overlay (cheats.js): FPS, CPU and GPU load over the last 30 s.
 
 export const GRAPH_WINDOW = 30000; // ms of history shown
 
-// Canvas line graph of (time, value) points. The canvas is sized by CSS; the bitmap is fixed.
+// Canvas line graph of (time, value) points. CSS sizes the canvas; the bitmap is fixed.
 export class TimeGraph {
   constructor(canvas, w = 420, h = 92) {
     this.canvas = canvas;
@@ -59,8 +59,7 @@ export class TimeGraph {
   }
 }
 
-// GPU time per frame from the EXT_disjoint_timer_query_webgl2 extension (not every browser /
-// driver exposes it: `ok` is false then). Wrap the frame's render calls in begin() / end().
+// GPU time per frame via EXT_disjoint_timer_query_webgl2 (`ok` false where unsupported). Wrap render calls in begin() / end().
 export class GpuTimer {
   constructor(renderer) {
     this.gl = renderer.getContext();
@@ -99,7 +98,7 @@ export class GpuTimer {
       if (!disjoint) { this.sum += gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6; this.n++; }
       gl.deleteQuery(q);
     }
-    while (this.pending.length > 8) gl.deleteQuery(this.pending.shift()); // (driver stopped answering)
+    while (this.pending.length > 8) gl.deleteQuery(this.pending.shift()); // driver stopped answering
   }
 
   // average GPU ms per frame since the last call, or null if nothing came back

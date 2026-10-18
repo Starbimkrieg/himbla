@@ -2,12 +2,10 @@ import * as THREE from 'three';
 import { arcDist, frameQuat } from './geo.js';
 import { toon, glow, ink } from './toon.js';
 
-// Guided first shift, with BOLT: a little courier-school drone that hovers at your shoulder. It
-// teaches the controls (each step waits until you've actually done the thing), then rides along
-// for two training contracts: a gentle run from the ILMB to the nearest Kepler town, then a
-// cleared delivery from there to a Vostok base, where it explains factions and restricted zones.
-// It chips in as you go (big air, a hard landing that dings the parcel, top speed, grinds), and at
-// the end offers a free recovery shuttle back to the ILMB. No pirate ambushes while it's with you.
+// Guided first shift with BOLT, a courier-school drone at your shoulder. Teaches the controls (each step waits until
+// you've done it), then rides along for two training contracts: ILMB to the nearest Kepler town, then a cleared run to
+// a Vostok base (explaining factions and restricted zones). Quips on big air, rough landings, speed and grinds; offers a
+// free recovery shuttle to the ILMB at the end. No pirate ambushes while it's with you.
 const KEY = 'moonrunner-tutorial-v1';
 
 const STEPS = [
@@ -26,7 +24,7 @@ const STEPS = [
   { id: 'deliver2', title: 'CLEARED DELIVERY', text: 'Take it to <b>{base}</b>. Vostok is the military, and their bases are <b>restricted zones</b>. Your clearance gets you in.' },
 ];
 
-// BOLT himself: a round courier drone with a big glowing eye, two rotor pods and an antenna
+// BOLT: round drone, glowing eye, two rotor pods, antenna
 export function makeDrone() {
   const root = new THREE.Group();
   const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 12), toon(0xfff4e0));
@@ -74,7 +72,7 @@ export function makeDrone() {
   return { root, eye, rotors, tip, jet };
 }
 
-// what BOLT says when you do something worth a comment
+// BOLT's remarks
 const QUIPS = {
   air: ['Whoa, SICK air!', 'Look at you go!', 'Air time! The judges love it.', 'Wheeee! Er, I mean: very professional.'],
   rough: ['Ouch! Careful with the parcel!', 'That landing rattled the cargo. Skates ON when you touch down!', 'The client heard that one.'],
@@ -101,7 +99,7 @@ export class Tutorial {
     this.quipT = 0;
   }
 
-  // Offer the training at the start of a fresh game.
+  // Offer training at the start of a fresh game.
   offer() {
     const g = this.game;
     if (this.done || (g.stats.deliveries || 0) > 0) return;
@@ -129,7 +127,7 @@ export class Tutorial {
     this.render(true);
   }
 
-  // the two runs: the nearest Kepler town to the ILMB, then the nearest Vostok base from there
+  // the two runs: nearest Kepler town to the ILMB, then the nearest Vostok base from there
   pickRoute() {
     const g = this.game;
     const hub = g.hub;
@@ -157,7 +155,7 @@ export class Tutorial {
     ]);
   }
 
-  // A short, safe delivery from the ILMB to the nearest Kepler town.
+  // Short, safe delivery from the ILMB to the nearest Kepler town.
   trainingOffer() {
     const g = this.game;
     const M = g.missions;
@@ -173,7 +171,7 @@ export class Tutorial {
     return o;
   }
 
-  // The second run: Vostok rations from the Kepler town to the base, with clearance.
+  // Second run: Vostok rations from the Kepler town to the base, with clearance.
   vostokOffer() {
     const g = this.game;
     const M = g.missions;
@@ -202,7 +200,7 @@ export class Tutorial {
     g.fx.pop('NICE!', null, { color: '#2ee6ff', size: 46, life: 0.8 });
     if (this.step >= STEPS.length) { this.finish(false); return; }
     const id = STEPS[this.step].id;
-    // the contracts BOLT wants you on are waiting on the right boards
+    // put the training contracts on the right boards
     if (id === 'board') {
       const list = g.missions.offersFor(g.hub);
       if (!list.some((o) => o.training)) list.unshift(this.trainingOffer());
@@ -220,7 +218,7 @@ export class Tutorial {
     this.render(true);
   }
 
-  // a passing remark (shown in the panel under the current step, and chirped)
+  // a passing remark (shown under the current step, with a chirp)
   talk(text, dur = 3) {
     this.say = { text, t: dur };
     this.render();
@@ -230,7 +228,7 @@ export class Tutorial {
   }
 
   quip(kind) {
-    // (he's a companion, not a commentator: a long gap between remarks, and he lets most moments pass)
+    // companion, not commentator: long gaps, and most moments pass unremarked
     if (this.quipT > 0 || Math.random() < 0.55) { if (!(this.quipT > 0)) this.quipT = 6; return; }
     this.quipT = 22;
     const list = QUIPS[kind];
@@ -248,7 +246,7 @@ export class Tutorial {
     if (pop) { this.el.classList.remove('tut-pop'); void this.el.offsetWidth; this.el.classList.add('tut-pop'); }
   }
 
-  // objective arrow while heading for the ILMB board
+  // objective arrow to the ILMB board
   objective() {
     if (!this.active) return null;
     const s = STEPS[this.step];
@@ -257,7 +255,7 @@ export class Tutorial {
     return null;
   }
 
-  // screens that pause the world report in directly
+  // world-pausing screens report in here
   on(what) {
     if (!this.active) return;
     const id = STEPS[this.step].id;
@@ -265,10 +263,10 @@ export class Tutorial {
     if (what === 'board' && (id === 'board' || id === 'board2')) this.next();
   }
 
-  // the training runs never get ambushed
+  // no ambushes on training runs
   quiet() { return this.active; }
 
-  // BOLT hovers at your shoulder, bobbing, facing where you look (or you, while talking)
+  // BOLT bobs at your shoulder, facing where you look (or you, while talking)
   updateDrone(dt) {
     const D = this.drone;
     if (!D) return;
@@ -354,16 +352,16 @@ export class Tutorial {
       case 'accept2':
         if (M.active) {
           if (M.active.training) this.next();
-          else { this.step = STEPS.findIndex((x) => x.id === (s.id === 'accept' ? 'deliver' : 'deliver2')); this.deliveriesAt = g.stats.deliveries || 0; this.render(true); } // a different job: fine, deliver that
+          else { this.step = STEPS.findIndex((x) => x.id === (s.id === 'accept' ? 'deliver' : 'deliver2')); this.deliveriesAt = g.stats.deliveries || 0; this.render(true); } // a different job is fine too
         } else if (g.state === 'play') {
-          // closed the board without taking it: send them back
+          // closed the board without taking it: back a step
           this.step = STEPS.findIndex((x) => x.id === (s.id === 'accept' ? 'board' : 'board2'));
           this.render(true);
         }
         break;
       case 'deliver':
       case 'deliver2': {
-        // on the way: a word about the place you're heading for
+        // a word about the destination on approach
         const a = M.active;
         if (a && s.id === 'deliver' && !this.nearTown && arcDist(P.pos, a.to.dir) < 450) { this.nearTown = true; this.talk(`There's ${a.to.name}! Get inside the town to hand the parcel over.`, 4); }
         if (a && s.id === 'deliver2' && !this.warned && a.to.restricted && arcDist(P.pos, a.to.dir) < (a.to.zoneR || a.to.r * 2) * 1.35) {

@@ -1,15 +1,14 @@
 import * as THREE from 'three';
 
-// A place built on a `curved` plateau (locations.js; terrainField.js lays it as a cap of the sphere, not a plane) is still authored on flat local
-// coordinates (x, y, z), y up from the plateau, so its builders stay plain. Everything placed in it is bent onto the sphere here, so nothing leans
-// away from the local up: a point (x, y, z) at horizontal distance d goes d / R round the sphere and stands y above it, a frame at (x, z) is turned by
-// that angle about the horizontal axis at right angles to the radius, and a long piece is cut into short ones first so that it curves instead of
-// running as a chord (a 100 m wall would otherwise sink 0.35 m into the ground at its ends). R is the plateau's radius from the Moon's centre.
-// Used by outpostModels.js Kit (geometry, text planes, moving parts) and world.js (put, toWorld, colliders), and by race.js for its crowd.
+// A place on a `curved` plateau (locations.js; terrainField.js lays it as a sphere cap) is authored in flat local (x, y, z),
+// y up, and bent onto the sphere here so nothing leans off the local up: a point at horizontal distance d goes d / R round
+// the sphere, y above it; a frame at (x, z) turns by that angle about the horizontal axis normal to the radius; long pieces
+// are cut short first so they curve rather than chord (a 100 m wall would sink 0.35 m at its ends). R: plateau radius from
+// the Moon's centre. Used by outpostModels.js Kit, world.js (put, toWorld, colliders) and race.js (crowd).
 
 const _ax = new THREE.Vector3();
 
-// the bent position of a flat local point
+// bent position of a flat local point
 export function bendPoint(R, x, y, z, out) {
   const d = Math.hypot(x, z);
   if (d < 1e-6) return out.set(x, y, z);
@@ -17,7 +16,7 @@ export function bendPoint(R, x, y, z, out) {
   return out.set(x * s, r * Math.cos(phi) - R, z * s);
 }
 
-// the flat local point that bendPoint maps onto (x, y, z)
+// inverse of bendPoint
 export function unbendPoint(R, x, y, z, out) {
   const rho = Math.hypot(x, z);
   if (rho < 1e-6) return out.set(x, y, z);
@@ -25,14 +24,14 @@ export function unbendPoint(R, x, y, z, out) {
   return out.set(x * s, Math.hypot(rho, R + y) - R, z * s);
 }
 
-// the turn that takes the flat frame at (x, z) onto the sphere (+y to the radius there)
+// turn taking the flat frame at (x, z) onto the sphere (+y to the radius there)
 export function bendQuat(R, x, z, out) {
   const d = Math.hypot(x, z);
   if (d < 1e-6) return out.identity();
   return out.setFromAxisAngle(_ax.set(z / d, 0, -x / d), d / R);
 }
 
-// A matrix composed in the flat local frame, bent in place (translation by bendPoint, rotation turned by bendQuat; scale kept).
+// Bends a flat-frame matrix in place (translation by bendPoint, rotation by bendQuat; scale kept).
 const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _b = new THREE.Quaternion();
 export function bendMatrix(R, m) {
   m.decompose(_p, _q, _s);
@@ -41,8 +40,8 @@ export function bendMatrix(R, m) {
   return m.compose(_p, _q.premultiply(_b), _s);
 }
 
-// Cut every triangle edge whose horizontal length is over `maxLen` (conforming: a shared edge is cut the same way on both sides, so there are no
-// cracks), repeating until none is. Indexed, position + normal only (outpostModels.js prep). Returns the same geometry.
+// Cuts every triangle edge longer horizontally than `maxLen` until none is (conforming: shared edges cut alike, no cracks).
+// Indexed, position + normal only (outpostModels.js prep). Returns the same geometry.
 export function refine(geo, maxLen) {
   const names = Object.keys(geo.attributes), arrs = {}, size = {};
   for (const n of names) { arrs[n] = Array.from(geo.attributes[n].array); size[n] = geo.attributes[n].itemSize; }
@@ -73,12 +72,12 @@ export function refine(geo, maxLen) {
         const ab = mid(a, b), bc = mid(b, c), ca = mid(c, a);
         out.push(a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca);
       } else if (n === 1) {
-        if (e[1]) { const t = a; a = b; b = c; c = t; } else if (e[2]) { const t = c; c = b; b = a; a = t; } // (the cut edge first: a-b)
+        if (e[1]) { const t = a; a = b; b = c; c = t; } else if (e[2]) { const t = c; c = b; b = a; a = t; } // (cut edge first: a-b)
         const m = mid(a, b);
         out.push(a, m, c, m, b, c);
       } else {
-        if (e[0]) { if (e[1]) { const t = c; c = b; b = a; a = t; } else { const t = a; a = b; b = c; c = t; } } // (the uncut edge first: a-b)
-        // (a-b is now the one that is not cut: b-c and c-a are, meeting at c)
+        if (e[0]) { if (e[1]) { const t = c; c = b; b = a; a = t; } else { const t = a; a = b; b = c; c = t; } } // (uncut edge first: a-b)
+        // (b-c and c-a are cut, meeting at c)
         const bc = mid(b, c), ca = mid(c, a);
         out.push(bc, c, ca, a, b, bc, a, bc, ca);
       }
@@ -91,7 +90,7 @@ export function refine(geo, maxLen) {
   return geo;
 }
 
-// Bend a geometry's vertices (and turn its normals) onto the sphere; cut it first when `maxLen` is given.
+// Bends a geometry's vertices and normals onto the sphere; refines first when `maxLen` is given.
 const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _r = new THREE.Quaternion();
 export function bendGeometry(geo, R, maxLen = 0) {
   if (maxLen) refine(geo, maxLen);

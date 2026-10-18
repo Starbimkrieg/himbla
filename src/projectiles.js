@@ -21,15 +21,14 @@ export class Projectiles {
     this.list = [];
     this.geo = new THREE.SphereGeometry(1, 10, 8);
     this.inkMat = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
-    // the APC cannon's shell: a capsule along z with a hot additive halo (one geometry and halo for all of them)
+    // APC cannon shell: a capsule along z with an additive halo (shared by all)
     this.shellGeo = new THREE.CapsuleGeometry(0.42, 1.5, 4, 8).rotateX(Math.PI / 2);
     this.shellGlow = new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
   }
 
-  // fuse: burst after this many seconds; proxy: burst within this distance of the player;
-  // burst(pos): a custom detonation instead of the usual explosion (Kade's flak)
-  // type: 'bolt' (the usual glowing ball, stretched along its flight) or 'shell' (the APC cannon's tracer shell:
-  // a bright capsule with a halo, a fixed length, trailing sparks and smoke)
+  // fuse: burst after this many s; proxy: burst within this distance of the player; burst(pos): custom detonation
+  // instead of the explosion (Kade's flak). type: 'bolt' (glowing ball stretched along its flight) or 'shell' (APC
+  // tracer: fixed-length haloed capsule trailing sparks and smoke)
   fire(owner, pos, vel, { damage = 20, splash = 5, color = 0x9be7ff, size = 0.45, life = 4, gravity = 0, knock = 1, homing = 0, spare = false, fuse = 0, proxy = 0, burst = null, type = 'bolt' } = {}) {
     const shell = type === 'shell';
     const mesh = new THREE.Mesh(shell ? this.shellGeo : this.geo, new THREE.MeshBasicMaterial({ color: shell ? 0xfff1c0 : color }));
@@ -66,7 +65,7 @@ export class Projectiles {
       p.mesh.lookAt(_rel.copy(p.pos).add(p.vel));
       if (p.type === 'shell') {
         p.mesh.scale.setScalar(p.size);
-        // a spark trail and a thin smoke line behind it
+        // sparks and a thin smoke line
         g.fx.spawn(p.pos, _rel.copy(p.vel).multiplyScalar(-0.04), { color: p.color, size: 0.5, life: 0.35, count: 1, spread: 0.5, drag: 2 });
         g.fx.spawn(p.pos, _rel.set(0, 0, 0), { color: 0x4a4560, size: 0.75, life: 0.9, count: 1, spread: 0.7, drag: 1 });
       } else p.mesh.scale.set(p.size, p.size, p.size * (1 + Math.min(4, sp / 40)));
@@ -87,21 +86,20 @@ export class Projectiles {
             if (t.faction === 'ally') continue; // your shots pass your backup by
             if (segSphere(p.prev, p.pos, t.center, t.radius + 0.4)) { hit = true; break; }
           }
-          // people on foot (civilians.js) stop a shot too, and so do road vehicles (land-train
-          // trailers included) and Moon Mites
+          // civilians, road vehicles (land-train trailers too) and Moon Mites stop shots as well
           if (!hit && g.civilians && g.civilians.segHit(p.prev, p.pos)) hit = true;
           if (!hit && g.world.traffic && g.world.traffic.segHit(p.prev, p.pos)) hit = true;
           if (!hit && g.alchemy && g.alchemy.segHitMite(p.prev, p.pos)) hit = true;
         } else if (p.owner === 'ally') {
-          // your backup's shots: only the chapter's hostiles (and a stormed base's guns) stop them
+          // backup's shots: only the chapter's hostiles (and a stormed base's guns) stop them
           for (const t of g.enemies.targets()) {
             if (g.enemies.allyTarget(t) && segSphere(p.prev, p.pos, t.center, t.radius + 0.4)) { hit = true; break; }
           }
         } else {
           if (!g.player.dead && segSphere(p.prev, p.pos, g.player.center, 1.3)) hit = true;
-          // ...and the backup soaks up hostile fire too
+          // the backup soaks hostile fire too
           if (!hit) for (const t of g.enemies.list) if (t.faction === 'ally' && !t.dead && segSphere(p.prev, p.pos, t.center, t.radius + 0.4)) { hit = true; break; }
-          // the Monolith's echo holograms soak up a shot each
+          // Monolith echo holograms soak a shot each
           for (const d of g.decoys) if (segSphere(p.prev, p.pos, d.center, d.radius)) { hit = true; shatterEcho(g, d); p.burst = () => {}; break; }
           for (const o of g.events.protect) if (!o.dead && segSphere(p.prev, p.pos, o.center, o.radius + 0.4)) { hit = true; break; }
           // defense turrets fire on pirates too

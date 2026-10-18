@@ -1,12 +1,12 @@
-# Preview renderer for the freighter proposals: lays the game's own toon palette over the slot materials, adds a space
-# backdrop and ink outlines (Freestyle), and renders a few fixed views of one ship with Cycles on the CPU (so it runs headless,
-# with no GPU). exec() it after a build script has made the ship:  render_views(root_object, "/path/prefix", length=66.0)
+# Preview renderer for the freighter proposals: the game's toon palette on the slot materials, a space backdrop, Freestyle ink
+# outlines, and a few fixed views of one ship rendered with Cycles on the CPU (headless, no GPU). exec() it after a build script
+# has made the ship:  render_views(root_object, "/path/prefix", length=66.0)
 # Writes <prefix>_<view>.png for each view in VIEWS.
 
 import bpy, math, os
 from mathutils import Vector
 
-# the game's freighter colours (models.js SHIP_TOON / SHIP_GLOW and the freighter's own color / stripe)
+# the game's freighter colours (models.js SHIP_TOON / SHIP_GLOW plus the freighter's color / stripe)
 GAME = {
     "body": 0xb8b4c8, "stripe": 0xff9f1c, "trim": 0xd8d4e8, "dark": 0x2a2540, "metal": 0x8a87a0, "steel": 0x55607a, "deck": 0x5b5870,
     "hazard": 0xffd23f, "cargo0": 0xffd23f, "cargo1": 0x2ec4ff, "cargo2": 0xff3b5c, "cargo3": 0x7dff6a,
@@ -16,10 +16,10 @@ GAME = {
 EMIT = {"glass", "window", "cabin", "red", "green", "white", "sign", "engine", "core", "plume", "plumeCore", "lift", "beacon"}
 
 VIEWS = {
-    "front34": dict(az=-38, el=22, dist=1.35, aim=(0, 0, 0)),     # bow toward the camera's right, from above
-    "side": dict(az=-90, el=6, dist=1.5, aim=(0, 0, 0)),          # the flank: the cargo slots
-    "rear34": dict(az=148, el=24, dist=1.35, aim=(0, 0, -4)),     # the stern: engines, the deck
-    "top": dict(az=-90, el=84, dist=1.45, aim=(0, 0, 0)),         # the landing pad from above
+    "front34": dict(az=-38, el=22, dist=1.35, aim=(0, 0, 0)),     # bow to camera right, from above
+    "side": dict(az=-90, el=6, dist=1.5, aim=(0, 0, 0)),          # flank: cargo slots
+    "rear34": dict(az=148, el=24, dist=1.35, aim=(0, 0, -4)),     # stern: engines, deck
+    "top": dict(az=-90, el=84, dist=1.45, aim=(0, 0, 0)),         # landing pad from above
 }
 
 
@@ -44,14 +44,14 @@ def palette():
             sh.inputs["Strength"].default_value = 1.0
             nt.links.new(sh.outputs["Emission"], out.inputs["Surface"])
         else:
-            # a toon-ish look: diffuse through a colour ramp so the light falls off in steps
+            # plain diffuse (toon-ish)
             d = nt.nodes.new("ShaderNodeBsdfDiffuse")
             d.inputs["Color"].default_value = (*col, 1)
             nt.links.new(d.outputs["BSDF"], out.inputs["Surface"])
         m.diffuse_color = (*col, 1)
 
 
-# the land-train palette the game paints cargo units with (Kepler's livery here)
+# land-train palette for cargo units (Kepler livery)
 CARGO_GAME = {
     "body": 0xff9f1c, "stripe": 0xfff4e0, "accent": 0x6a8f3a, "label": 0x2a2540, "dark": 0x2a2540, "steel": 0x55607a, "metal": 0x8a87a0,
     "tire": 0x1d1a29, "white": 0xf3eee4, "hazard": 0xffd23f, "tank": 0xc6d6ea, "brand": 0x14a3b8, "redsafe": 0xc9202e, "orange": 0xff7a1a,
@@ -61,7 +61,7 @@ CARGO_EMIT = {"hot", "tail", "lamp", "glass", "window", "green"}
 
 
 def cargo_palette():
-    """Meshes under a "cargo" pivot take the land-train palette (the game does the same), not the ship's."""
+    """Meshes under a "cargo" pivot take the land-train palette, as in the game."""
     made = {}
     for o in bpy.data.objects:
         if o.type != "MESH" or not o.data.materials:
@@ -136,7 +136,7 @@ def render_views(root, prefix, length=66.0, views=None):
     palette()
     cargo_palette()
     stage()
-    for o in bpy.data.objects:   # (the thruster and lift-jet flames only burn in flight: leave them out of the portraits)
+    for o in bpy.data.objects:   # hide thruster and lift-jet flames (flight only)
         if o.type == "MESH" and o.data.materials and o.data.materials[0].name in ("plume", "plumeCore", "lift"):
             o.hide_render = True
     scn = bpy.context.scene
@@ -148,7 +148,7 @@ def render_views(root, prefix, length=66.0, views=None):
     base = root.matrix_world.translation.copy()
     for name, v in (views or VIEWS).items():
         az, el, d = math.radians(v["az"]), math.radians(v["el"]), length * v["dist"] * 1.25
-        # (the ship's nose is +z in three.js axes = -y in Blender's: so az 0 looks at the nose from in front)
+        # nose is three.js +z = Blender -y, so az 0 views the nose head-on
         aim = base + Vector((v["aim"][0], -v["aim"][2], v["aim"][1]))
         pos = aim + Vector((math.sin(az) * math.cos(el) * d, -math.cos(az) * math.cos(el) * d, math.sin(el) * d))
         cam.location = pos

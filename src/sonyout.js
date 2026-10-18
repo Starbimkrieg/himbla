@@ -1,16 +1,15 @@
-// PlayStation pad output over WebHID: rumble, the lightbar, the player LEDs and (DualSense) the adaptive triggers.
+// PlayStation pad output over WebHID: rumble, lightbar, player LEDs and (DualSense) adaptive triggers.
 //
-// The browser Gamepad API can't do any of this for a Sony pad except, sometimes, a plain rumble (and over Bluetooth
-// often not even that), so it is written straight to the pad as an HID output report, over the same link gyro.js
-// reads the motion sensors through (GyroPad opens the device; this only sends to it).
+// The Gamepad API can do at most a plain rumble on Sony pads (often not over Bluetooth), so this writes HID output
+// reports over gyro.js's link (GyroPad opens the device; this only sends).
 //
-// Report layouts, checked against the Linux hid-playstation / hid-sony drivers and the open-source dualsense-ts
-// and pydualsense packages (WebHID takes the report id separately, so every offset is from after it):
+// Report layouts, checked against Linux hid-playstation / hid-sony, dualsense-ts and pydualsense (WebHID takes the
+// report id separately, so offsets start after it):
 //   DualSense  USB  id 0x02, 47 bytes: the "common" block below
 //              BT   id 0x31, 77 bytes: sequence<<4, 0x10, the common block, 24 zero bytes, CRC-32
 //   DualShock4 USB  id 0x05, 31 bytes: flags, 0, 0, weak, strong, r, g, b, ...
 //              BT   id 0x11, 77 bytes: 0xC0|poll, 0, then those, zeros, CRC-32
-//   (Bluetooth CRC: standard CRC-32 of 0xA2, the report id, and every byte before the CRC; stored little-endian.)
+//   (BT CRC: standard CRC-32 of 0xA2, the report id and every byte before it; little-endian.)
 // DualSense common block:  0 flags0 (0x01 rumble, 0x02 haptics select, 0x04 / 0x08 right / left trigger)
 //   1 flags1 (0x04 lightbar, 0x10 player LEDs)   2 weak motor   3 strong motor   10..20 right trigger effect
 //   21..31 left trigger effect   38 flags2 (0x02 lightbar setup, 0x04 rumble v2)   41 lightbar setup
@@ -18,7 +17,7 @@
 
 const SONY_DS5 = 'ds5', SONY_DS4 = 'ds4';
 
-// ---- CRC-32 (the Bluetooth reports carry one) ----
+// ---- CRC-32 (Bluetooth reports) ----
 const CRC = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
@@ -28,17 +27,16 @@ export function crc32(bytes, from = 0, to = bytes.length, crc = 0xffffffff) {
   for (let i = from; i < to; i++) crc = CRC[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
   return crc >>> 0;
 }
-// the checksum of a Bluetooth output report: over the 0xA2 seed, the report id and the data up to the checksum
+// BT output report checksum: 0xA2 seed, report id, data up to the checksum
 export function btCrc(id, data) {
   let c = crc32([0xa2, id]);
   c = crc32(data, 0, data.length - 4, c);
   return (c ^ 0xffffffff) >>> 0;
 }
 
-// ---- DualSense trigger effects: 11 bytes, a mode and ten parameters ----
+// ---- DualSense trigger effects: 11 bytes, mode + ten parameters ----
 export const TRIGGER_OFF = new Uint8Array(11);
-// the ten zones of a trigger's travel (0 = untouched, 9 = all the way down), from `position` to the end, each with
-// the same strength 1..8: a 10-bit mask of the zones and 3 bits of strength per zone
+// travel zones `position`..9 (0 = untouched, 9 = fully down) at strength 1..8: a 10-bit zone mask and 3 bits per zone
 function zones(position, strength) {
   let active = 0, packed = 0;
   const b = (strength - 1) & 7;
@@ -56,7 +54,7 @@ export function feedback(position, strength) {
   e[3] = p & 0xff; e[4] = (p >>> 8) & 0xff; e[5] = (p >>> 16) & 0xff; e[6] = (p >>> 24) & 0xff;
   return e;
 }
-// a click: resistance that gives way (like a gun's trigger) between zones `start` (2-7) and `end` (start+1..8)
+// a click: resistance that gives way like a gun trigger, between zones `start` (2-7) and `end` (start+1..8)
 export function weapon(start, end, strength) {
   const e = new Uint8Array(11);
   start = clampI(start, 2, 7); end = clampI(end, start + 1, 8); strength = clampI(strength, 0, 8);
@@ -79,7 +77,7 @@ export function vibration(position, amplitude, hz) {
 
 // ---- reports ----
 // st: { weak, strong (0-255), rt, lt (effects), rgb [r, g, b] | null, leds (0-31), setup (first lightbar write) }
-// kind: 'usb' | 'bt'; seq: the Bluetooth sequence number (0-15). Returns { id, data }.
+// kind: 'usb' | 'bt'; seq: BT sequence number (0-15). Returns { id, data }.
 export function buildReport(model, kind, seq, st) {
   const rgb = st.rgb;
   if (model === SONY_DS5) {
@@ -102,7 +100,7 @@ export function buildReport(model, kind, seq, st) {
     new DataView(d.buffer).setUint32(73, btCrc(0x31, d), true);
     return { id: 0x31, data: d };
   }
-  // DualShock 4: rumble and the lightbar
+  // DualShock 4: rumble and lightbar
   const c = new Uint8Array(10);
   c[0] = 0x01 | (rgb ? 0x02 : 0);
   c[3] = st.weak; c[4] = st.strong;
@@ -113,16 +111,16 @@ export function buildReport(model, kind, seq, st) {
     return { id: 0x05, data: d };
   }
   const d = new Uint8Array(77);
-  d[0] = 0xc4; // (HID, CRC-32 and a 4 ms poll)
+  d[0] = 0xc4; // HID, CRC-32, 4 ms poll
   d.set(c, 2);
   new DataView(d.buffer).setUint32(73, btCrc(0x11, d), true);
   return { id: 0x11, data: d };
 }
 
-const FAIL_PAUSE = 10000; // ms to leave the pad alone after three writes in a row fail
-const GAP = 30;           // ms between reports at most (the lightbar and triggers change smoothly; a kick goes out at once)
+const FAIL_PAUSE = 10000; // ms to back off after three failed writes in a row
+const GAP = 30;           // ms min between reports (urgent kicks skip it)
 const KEEP = 1000;        // ms: re-send an unchanged state this often
-const HOLD = 300;         // ms: rumble that isn't refreshed this long is cut (the game stalled)
+const HOLD = 300;         // ms: unrefreshed rumble is cut (game stalled)
 
 export class SonyOut {
   constructor(gyro) {
@@ -134,20 +132,20 @@ export class SonyOut {
     this.busy = false;
     this.seq = 0;
     this.fails = 0;
-    this.pause = 0;     // performance.now() until which writes are held off
+    this.pause = 0;     // performance.now() until writes resume
     this.lastErr = '';
-    this.sent = 0;      // reports written (the dev overlay / settings status)
-    this.dev = null;    // the device the layout below belongs to
+    this.sent = 0;      // reports written (dev overlay / settings status)
+    this.dev = null;    // device `kind` belongs to
     this.kind = null;
     this.urgent = false;
-    // (a rumble the game stopped refreshing is cut: a stalled frame must not leave the pad buzzing)
+    // cut stale rumble so a stalled frame can't leave the pad buzzing
     setInterval(() => {
       const s = this.st;
       if ((s.weak || s.strong) && performance.now() - this.rumbleAt > HOLD) { s.weak = s.strong = 0; this.urgent = true; this.flush(); }
     }, 100);
   }
 
-  // 'usb' | 'bt' for the pad that's open, from the output reports its descriptor lists (null: not usable)
+  // 'usb' | 'bt' from the open pad's listed output reports (null: unusable)
   layout() {
     const d = this.gyro.dev;
     if (d !== this.dev) {
@@ -173,7 +171,7 @@ export class SonyOut {
   // 0..1
   rumble(strong, weak) {
     const s = this.st;
-    const q = (x) => Math.round(Math.max(0, Math.min(1, x)) * 15) * 17; // (16 steps: no flood of tiny changes)
+    const q = (x) => Math.round(Math.max(0, Math.min(1, x)) * 15) * 17; // 16 steps, so tiny changes don't flood
     const ns = q(strong), nw = q(weak);
     if (ns > s.strong || nw > s.weak) this.urgent = true;
     s.strong = ns; s.weak = nw;
@@ -182,14 +180,14 @@ export class SonyOut {
 
   triggerFx(rt, lt) { this.st.rt = rt || TRIGGER_OFF; this.st.lt = lt || TRIGGER_OFF; }
 
-  // colour 0-255 each (null: leave the pad's own), leds: 5 bits
+  // rgb 0-255 (null: keep the pad's own), leds: 5 bits
   light(rgb, leds) {
     const q = (v) => Math.min(255, Math.round(v / 8) * 8);
     this.st.rgb = rgb ? [q(rgb[0]), q(rgb[1]), q(rgb[2])] : null;
     this.st.leds = leds | 0;
   }
 
-  // everything off (a pause, the tab hidden, the settings turned it off)
+  // all off (pause, hidden tab, disabled in settings)
   quiet() {
     this.st.weak = this.st.strong = 0;
     this.st.rt = this.st.lt = TRIGGER_OFF;
@@ -197,7 +195,7 @@ export class SonyOut {
     this.flush();
   }
 
-  // Send the wanted state if it has changed (or a second has passed). Called once a frame.
+  // per frame: send the state if changed (or KEEP has passed)
   flush() {
     if (this.busy || !this.ready) return;
     const now = performance.now(), s = this.st;

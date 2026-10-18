@@ -1,9 +1,9 @@
-# The casino's card-suit trim in Blender (exec'd after kit.py, like decals.py): the prize counter's panels, as geometry. A recessed dark panel in a thin brass frame, a smooth
-# suit in it: spades and clubs cream, hearts and diamonds red (the prize counter's glyphs). The shapes are the ones build_plinko.py draws; the Duck Derby, the blackjack
-# table's apron and the claw machine's base use this file, so every card-suit trim in the hall is the same icon.
-#   suit_panel(frame, fill, red, cream, kind, pos, yaw, w, h, s)   adds to four accumulators (anything with .add(geo, t, rot)): the frame bars, the panel fill, and the suit
-#                                                                    into `red` (kind 1 heart, 2 diamond) or `cream` (0 spade, 3 club).
-#   pos is the middle of the face the panel stands on (its back); yaw 0 faces +z, PI / 2 faces +x. w x h the panel, s the suit's height.
+# The casino's card-suit trim (exec'd after kit.py, like decals.py): a dark panel in a thin brass frame with a suit in it,
+# spades and clubs cream, hearts and diamonds red. Same shapes as build_plinko.py; used by the Duck Derby, the blackjack
+# apron and the claw machine's base, so every suit trim in the hall matches.
+#   suit_panel(frame, fill, red, cream, kind, pos, yaw, w, h, s)   adds to four accumulators (anything with .add(geo, t, rot)):
+#       frame bars, panel fill, and the suit into `red` (kind 1 heart, 2 diamond) or `cream` (0 spade, 3 club).
+#   pos: middle of the panel's back; yaw 0 faces +z, PI / 2 faces +x. w x h: the panel; s: suit height.
 import math as _m
 
 
@@ -18,7 +18,7 @@ def heart_outline(flip=False):
 
 
 def suit_geos(kind, s, depth):
-    """kind 0 spade, 1 heart, 2 diamond, 3 club: shapes about s metres tall, centred on the origin, facing +z"""
+    """kind 0 spade, 1 heart, 2 diamond, 3 club: about s m tall, centred, facing +z"""
     if kind == 1:
         k = s / 29.0
         return [extrude([(x * k, (y + 2.5) * k) for x, y in heart_outline()], depth, "z")]

@@ -3,10 +3,10 @@ import { makeDownsPart, makeDownsFountain } from '../models.js';
 import { lineUp } from './common.js';
 import { arcadeBayShell } from '../downsKit.js';
 
-// Asset Row catalogue group: Chimera Downs' Blender kits (tools/blender/build_downs_*.py; docs/downs-layouts.md), each file's parts side by side as one item. The two rides (wheel and
-// carousel) are shown with the settlement parts (buildings.js); the whole course is the place at the end of the row (places.js).
+// Asset Row group: Chimera Downs' Blender kits (tools/blender/build_downs_*.py; docs/downs-layouts.md), one item per file.
+// The wheel and carousel are with the settlement parts (buildings.js); the whole course is a place (places.js).
 
-// A kit part as one part of a line-up: `w` the width it takes along the row, `dz` where its middle lies along z (so a part authored from its front edge sits in the middle of its item).
+// A kit part in a line-up: `w` its width along the row, `dz` its z offset (centres parts authored from their front edge).
 const P = (name, w, { d = 0, dz = 0, tint, y = 0, ry = 0 } = {}) => {
   const o = makeDownsPart(name, tint);
   o.position.set(0, y, dz);
@@ -15,9 +15,9 @@ const P = (name, w, { d = 0, dz = 0, tint, y = 0, ry = 0 } = {}) => {
   g.add(o);
   return { root: g, w, d };
 };
-// An arcade bay: the Blender wedge and the pieces the game runs on from bay to bay (downsKit.js arcadeShell), one bay's worth, its middle in the middle of its item
+// one arcade bay: the Blender wedge plus the game's per-bay shell (downsKit.js), centred
 const bayPart = () => { const p = P('dn_arcade', 11, { d: 16, dz: -8 }), s = arcadeBayShell(); s.position.z -= 8; p.root.add(s); return p; };
-// The fountain with its water running and its cup turning: a part of a line-up whose row item has an `update` hook (below).
+// the running fountain; its item needs an `update` hook (below)
 const fountainPart = (list) => { const f = makeDownsFountain(); list.push(f); return { root: f.root, w: 25, d: 25 }; };
 const item = (id, label, w, d, make, extra = {}) => ({ id, label, w, d, make: () => make(), ...extra });
 const row = (parts, gap = 3) => { const L = lineUp(parts, gap); return { root: L.root }; };
@@ -36,7 +36,7 @@ const downs = {
     item('downs.club', 'DOWNS CLUBHOUSE AND TOTE HALL', 62, 30, () => row([P('dn_club', 62, { d: 28, dz: 13.5 })])),
     item('downs.course', 'DOWNS COURSE KIT: RAIL · FURLONG POLE · FINISH ARCH · PHOTO TOWER · LAMP · FLAG MAST · CROSSING POST · STARTING GATE', 79, 10, () => {
       const gate = P('dn_gate_frame', 17, { d: 4, dz: 1.4 });
-      for (let i = 0; i < 4; i++) for (const s of [-1, 1]) {            // (the stall doors, hinged as race.js hangs them)
+      for (let i = 0; i < 4; i++) for (const s of [-1, 1]) {            // stall doors, hinged as in race.js
         const hinge = new THREE.Group();
         hinge.position.set((1.5 - i) * 4 + s * 1.95, 0, 0.1);
         const d = makeDownsPart('dn_gate_door');
@@ -76,8 +76,7 @@ const downs = {
       P('dn_fence', 4, { d: 1 }),
     ], 2)),
     item('downs.crowd', 'DOWNS SPECTATORS: SUIT · FROCK · SIX HATS · FOUR HAIRDOS · PROGRAMME · BINOCULARS · ROSETTE · SCARF · TWO CHEERS', 19, 3, () => {
-      // a seated racegoer as the stands draw one (race.js buildCrowd), each part tinted from the fan's own colours: legs, a body, the arms (at rest or cheering), a head and a
-      // hairdo, and a hat and a favour for some; the body 0.8 m up (the seat's height plus half a metre), the head 0.66 above it
+      // a seated racegoer as race.js buildCrowd draws one, parts tinted per fan; body 0.8 m up (seat + 0.5), head 0.66 above it
       const fan = ({ body, arms, hair, hat, favour }, tint) => {
         const g = new THREE.Group();
         for (const n of ['dn_fan_legs', body, arms, favour]) if (n) { const o = makeDownsPart(n, tint); o.position.y = 0.8; g.add(o); }

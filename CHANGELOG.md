@@ -5,6 +5,7 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Code comments trimmed across the repo (194 files, about 208 KB shorter):** history notes ("used to", "was X"), narration and filler are gone; reasons, units, tuned-constant notes, GLB contracts and tool usage docs stay. Comment-only: every file strips to the same code as before (checked by parsing each JS file and comparing the Python ASTs). A few comments that contradicted the code were corrected to match it (`physics.js` thruster unlock is 25%, `build_rover.py` dish at the back, `build_hovercar.py` names `CAR_PAINTS`). GLSL comments inside shader strings were left alone.
 
 - **Docs: the README is just the pitch and the downloads:** building, controls, the feature list and the source map moved to `docs/reference.md`, rewritten shorter. `CLAUDE.md`, the blender skill and the docs that pointed at the README now point there.
 

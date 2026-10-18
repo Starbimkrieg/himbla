@@ -1,7 +1,6 @@
-// An interactive "terminal page": a grid of building tiles (icon, feature line, state chip) and a detail
-// screen for the selected one. It renders from a plain spec and reports clicks; it knows nothing about
-// the game, so the outpost terminal (story.js outpostMenu, inside g.dialog), the town's council hall (hometown.js,
-// in g.dialog and as the job board's second tab) can all use it. Styles: .otm-* in style.css.
+// Interactive "terminal page": a grid of building tiles (icon, feature line, state chip) plus a detail screen for the selected
+// one. Renders from a plain spec and reports clicks, game-agnostic: used by the outpost terminal (story.js outpostMenu, in
+// g.dialog) and the council hall (hometown.js, in g.dialog and the job board's second tab). Styles: .otm-* in style.css.
 //
 //   terminalPage(spec) -> html     wireTerminal(root, { onSelect, onAct })     stepSel(root, sel, code) -> id | null
 //
@@ -13,15 +12,15 @@
 //   sel,                                    // id of the selected tile
 //   detail: { id, name, icon, tint, state, stateText, desc, rows: [[label, value, tone?]], meter?: { v: 0..1, text },
 //             action?: { id, label, key, tone: 'go' | 'build' },   // one button, or
-//             actions?: [{ id, label, key, tone: 'go' | 'build' | 'vote' }, ...],   // several (the town's buildings can carry more than one)
+//             actions?: [{ id, label, key, tone: 'go' | 'build' | 'vote' }, ...],   // several (town buildings can have more than one)
 //             note?: 'why there is no action', msg?: '', msgTone?: 'bad' | 'ok' },
 //   closeKey, foot: { kb, pad },            // footer hint html (pad: shown while a controller is in use)
-//   bare: true,                             // no header / footer: for a tab inside another screen (the job board), which has its own
-//   cols: 3,                                // tile columns (default 4; the narrow-screen rules in style.css still win)
-//   side: true,                             // wide screens: tiles on the left, the detail screen full height on the right
+//   bare: true,                             // no header / footer: for a tab inside another screen (the job board)
+//   cols: 3,                                // tile columns (default 4; style.css narrow-screen rules still win)
+//   side: true,                             // wide screens: tiles left, full-height detail right
 //   (a detail with no button shows detail.note instead; a button's `tone` may add ' short' for "can't afford")
 // }
-// Clicks: a tile carries data-sel="<id>", an action data-act="<id>" ('close' for the header's close button).
+// Clicks: tiles carry data-sel="<id>", actions data-act="<id>" ('close' for the header close button).
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -110,7 +109,7 @@ export const ICONS = {
     '#oo#oooo#oo#',
     '############',
   ],
-  // the town's: housing domes, the road crew's lane, the landing pad seen from above, the bank's vault door, the council hall's columns
+  // town: housing domes, road crew lane, landing pad from above, bank vault door, council hall columns
   housing: [
     '....####....',
     '..##oooo##..',
@@ -168,7 +167,7 @@ export const ICONS = {
 };
 
 const iconCache = new Map(), warned = new Set();
-// One <svg> per icon: a path per tone, so a tile only has to set --i1 / --i2 / --i3 to recolour it.
+// One <svg> per icon, a path per tone: a tile recolours it by setting --i1 / --i2 / --i3.
 export function icon(name, cls = '') {
   const key = `${name}|${cls}`;
   let svg = iconCache.get(key);
@@ -183,7 +182,7 @@ export function icon(name, cls = '') {
       if (!(c in d)) { x++; continue; }
       let w = 1;
       while (row[x + w] === c) w++;
-      d[c] += `M${x} ${ry + pad}h${w}v1h-${w}z`; // (horizontal runs, so a 12x12 icon is a few dozen path commands)
+      d[c] += `M${x} ${ry + pad}h${w}v1h-${w}z`; // horizontal runs: a few dozen commands per icon
       x += w;
     }
   });
@@ -233,9 +232,8 @@ export function terminalPage(s) {
   </div>`;
 }
 
-// ---- events: one delegated listener per render (the page is rebuilt by innerHTML, so nothing leaks) ----
-// Every <button> inside #dialog would otherwise read as a dialog choice (hud.dialog's onclick), so clicks
-// handled here stop at the page.
+// ---- events: one delegated listener per render (innerHTML rebuilds the page, so nothing leaks) ----
+// Clicks stop here, else any <button> in #dialog reads as a dialog choice (hud.dialog's onclick).
 export function wireTerminal(root, { onSelect, onAct }) {
   if (!root) return;
   root.addEventListener('click', (e) => {
@@ -244,12 +242,11 @@ export function wireTerminal(root, { onSelect, onAct }) {
     e.stopPropagation();
     const act = root.querySelector('.otm-act');
     if (t.dataset.act) onAct(t.dataset.act);
-    // A on a controller is a click with no mouse behind it (detail 0), and the highlight has already selected the tile it is on:
-    // D-pad Down from a top-row tile lands on the tile below, never on the button, so A on the selected tile presses its button
+    // pad A is a click with detail 0 on an already-selected tile (D-pad never lands on the button), so it presses that tile's button
     else if (e.detail === 0 && document.body.classList.contains('pad-on') && t.classList.contains('sel') && act) onAct(act.dataset.act);
     else onSelect(t.dataset.sel);
   });
-  // a controller's highlight fires a synthetic mouseover on what it lands on (gamepad.js setFocus): the detail follows it
+  // the pad highlight fires a synthetic mouseover (gamepad.js setFocus): the detail follows it
   root.addEventListener('mouseover', (e) => {
     if (!document.body.classList.contains('pad-on')) return;
     const t = e.target.closest('[data-sel]');
@@ -257,9 +254,8 @@ export function wireTerminal(root, { onSelect, onAct }) {
   });
 }
 
-// A repaint replaces the page's DOM, which would snap the tile list back to the top: `const done = keepScroll(); g.dialog(...); done();`
-// puts the scroll back and brings the selected tile into view (small screens: the grid scrolls above the pinned detail screen).
-// host is the panel the page lives in ('#dialog', or '#board' for the job board's tab): the page there is the one meant.
+// A repaint snaps the tile list to the top: `const done = keepScroll(); g.dialog(...); done();` restores the scroll and brings
+// the selected tile into view (small screens scroll the grid above the pinned detail). host: '#dialog', or '#board' for the job board tab.
 export function keepScroll(host = '#dialog') {
   const b = document.querySelector(`${host} .otm-body`);
   const y = b ? b.scrollTop : 0;
@@ -272,7 +268,7 @@ export function keepScroll(host = '#dialog') {
   };
 }
 
-// Arrow keys / WASD over the tile grid (the column count is whatever the CSS made of it): the id to select, or null for other keys.
+// Arrow keys / WASD over the tile grid (columns as CSS laid them out): id to select, or null for other keys.
 export function stepSel(root, sel, code) {
   const ids = [...root.querySelectorAll('[data-sel]')].map((t) => t.dataset.sel);
   const grid = root.querySelector('.otm-grid');
@@ -282,7 +278,7 @@ export function stepSel(root, sel, code) {
   if (step === undefined) return null;
   const i = Math.max(0, ids.indexOf(sel));
   let j = i + step;
-  if (Math.abs(step) > 1 && (j < 0 || j >= ids.length)) { // a vertical move off the grid: a short last row takes you to its last tile, the edge rows stay put
+  if (Math.abs(step) > 1 && (j < 0 || j >= ids.length)) { // vertical move off the grid: into a short last row lands on its last tile; edge rows stay put
     const lastRow = Math.floor((ids.length - 1) / cols);
     j = j >= ids.length && Math.floor(i / cols) < lastRow ? ids.length - 1 : i;
   }

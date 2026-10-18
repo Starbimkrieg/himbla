@@ -2,15 +2,15 @@ import { padKind } from './gamepad.js';
 import xboxImg from './assets/pads/xbox.webp?inline';
 import psImg from './assets/pads/ps.webp?inline';
 
-// Dev overlay (dev menu → INPUT & CONTROLLER MONITOR): a photo of the connected pad with its live state
-// lit on top, next to what the game thinks is held, plus the trick state. For chasing stuck inputs: if the
-// game has Q down while neither the keyboard's Q nor the pad's Circle / B is, the readout goes red.
+// Dev overlay (dev menu → INPUT & CONTROLLER MONITOR): the pad's photo with live state lit on top, beside what
+// the game thinks is held and the trick state. For stuck inputs: game Q down with neither keyboard Q nor pad
+// Circle / B held turns the readout red.
 //
-// The pad is read straight from navigator.getGamepads() (standard mapping), so it shows even when the game
-// is ignoring it. Button indexes: 0-3 face (bottom, right, left, top), 4/5 bumpers, 6/7 triggers, 8 View /
-// Create, 9 Start / Options, 10/11 stick clicks, 12-15 d-pad, 16 Home, 17 Share / PlayStation touchpad.
+// Read straight from navigator.getGamepads() (standard mapping), so it shows even when the game ignores the pad.
+// Buttons: 0-3 face (bottom, right, left, top), 4/5 bumpers, 6/7 triggers, 8 View / Create, 9 Start / Options,
+// 10/11 stick clicks, 12-15 d-pad, 16 Home, 17 Share / PlayStation touchpad.
 
-// what each standard-mapping button does in play (gamepad.js)
+// each button's action in play (gamepad.js)
 const ACTION = {
   0: 'jump / dive', 1: 'trick (Q)', 2: 'interact', 3: 'vehicle', 4: 'skates', 5: 'power', 6: 'thrust / scope', 7: 'fire',
   8: 'map / recall', 9: 'pause', 10: 'thrust', 11: 'scoop', 12: 'next power', 13: 'radial menu', 14: 'prev weapon', 15: 'next weapon',
@@ -34,9 +34,9 @@ const padName = (id = '') => {
 };
 
 // ---- the two photos ----
-// Every position is in the original picture's own pixels (the files in assets/pads are crops of them, drawn back at
-// `box`). Shapes: ['c', cx, cy, r] circle · ['r', x, y, w, h, rx] rounded rect · ['p', [[x, y], ...]] polygon.
-// `face` are the coloured buttons (bottom, right, left, top); `sticks` are [button index, cx, cy, radius, travel, x axis, y axis].
+// Positions in the original picture's pixels (assets/pads files are crops, drawn back at `box`).
+// Shapes: ['c', cx, cy, r] circle · ['r', x, y, w, h, rx] rounded rect · ['p', [[x, y], ...]] polygon.
+// `face`: coloured buttons (bottom, right, left, top); `sticks`: [button index, cx, cy, radius, travel, x axis, y axis].
 const mirror = (pts, axis) => pts.map(([x, y]) => [axis - x, y]);
 const XBOX_L1 = [[320, 418], [382, 360], [482, 332], [577, 335], [582, 352], [492, 362], [414, 392], [347, 440]];
 const PADS = {
@@ -49,7 +49,7 @@ const PADS = {
       12: ['r', 589, 700, 60, 78, 10], 13: ['r', 589, 832, 60, 78, 10], 14: ['r', 514, 775, 78, 60, 10], 15: ['r', 648, 775, 78, 60, 10],
     },
     sticks: [[10, 453, 577, 100, 42, 0, 1], [11, 975, 795, 100, 42, 2, 3]],
-    trig: { 6: [300, 300], 7: [1002, 300] }, // meter x and width, above the shoulders
+    trig: { 6: [300, 300], 7: [1002, 300] }, // meter x and width above the shoulders
   },
   ps: {
     img: psImg, box: [363, 193, 1638, 1060], head: 130,
@@ -64,12 +64,12 @@ const PADS = {
     trig: { 6: [530, 190], 7: [1280, 190] },
   },
 };
-PADS.switch = PADS.xbox; // (a Switch pad is drawn as the Xbox photo; its letters differ, see the header note)
+PADS.switch = PADS.xbox; // drawn as the Xbox photo; letters differ
 
 export class InputMonitor {
   constructor(game) {
     this.game = game;
-    this.rawKeys = new Set(); // physical keys as the window sees them (translated to the game's default codes, like Input does)
+    this.rawKeys = new Set(); // physical keys, translated to default codes like Input does
     this.on = false;
     this.kind = null;
     const I = game.input;
@@ -99,7 +99,7 @@ export class InputMonitor {
     if (!on) this.kind = null;
   }
 
-  // the pad gamepad.js would use: the first connected, preferring one with the standard mapping
+  // the pad gamepad.js would use: first connected, preferring standard mapping
   pad() {
     let gp = null;
     for (const p of (navigator.getGamepads ? navigator.getGamepads() : [])) if (p && p.connected) { gp = p; if (p.mapping === 'standard') break; }
@@ -120,7 +120,7 @@ export class InputMonitor {
     return this.mk('polygon', { points: s[1].map((p) => p.join(',')).join(' '), class: cls }, parent);
   }
 
-  // the photo with a highlight layer over every control
+  // the photo with a highlight per control
   build(kind) {
     this.kind = kind;
     const P = PADS[kind], [x0, y0, x1, y1] = P.box, w = x1 - x0, h = y1 - y0;
@@ -142,7 +142,7 @@ export class InputMonitor {
       const t = this.mk('text', { x: mx + mw / 2, y: my + mh / 2, 'font-size': fs, class: 'im-meter-t' }, svg);
       this.trig[i] = { fill, t, x: mx, w: mw, label: NAMES[kind][i] };
     }
-    // sticks: the click ring and a dot that follows the axes
+    // sticks: click ring and a dot following the axes
     this.sticks = P.sticks.map(([i, cx, cy, r, travel, ax, ay]) => {
       this.btn[i] = this.mk('circle', { cx, cy, r, class: 'im-hit im-hit-ring' }, svg);
       const dot = this.mk('circle', { cx, cy, r: Math.round(r * 0.3), class: 'im-dot' }, svg);
@@ -178,7 +178,7 @@ export class InputMonitor {
       gp.buttons.forEach((bt, i) => {
         const v = bt.value || (bt.pressed ? 1 : 0), on = !!bt.pressed || v > 0.5;
         if (this.btn[i]) {
-          if (i === 6 || i === 7) this.btn[i].style.fill = `rgba(125,255,58,${(v * 0.7).toFixed(2)})`; // (the L2 / R2 caps fill with the pull)
+          if (i === 6 || i === 7) this.btn[i].style.fill = `rgba(125,255,58,${(v * 0.7).toFixed(2)})`; // L2 / R2 caps fill with the pull
           else this.btn[i].classList.toggle('on', on);
         }
         const t = this.trig[i];
@@ -220,7 +220,7 @@ export class InputMonitor {
     const gy = g.pad && g.pad.gyro;
     if (gy && (gy.dev || kind === 'ps')) this.trickEl.insertAdjacentHTML('beforeend', row('gyro', `${gy.live() ? '<b class="hot">live</b>' : '<span class="dim">off</span>'}${g.pad.gyroOn ? ' · steering' : ''} <small>${esc(gy.status)}</small>`));
 
-    // a stuck trick button: the game has Q down but nothing physical does
+    // stuck trick button: game has Q down, nothing physical does
     const gameQ = I.down('KeyQ'), physQ = this.rawKeys.has('KeyQ'), padB = !!(gp && gp.buttons[1] && (gp.buttons[1].pressed || gp.buttons[1].value > 0.5));
     const stuck = gameQ && !physQ && !padB;
     this.alertEl.classList.toggle('hidden', !stuck);

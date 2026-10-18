@@ -1,12 +1,13 @@
-# Courier light-bike review sheet. Builds each proposal with build_courier.py in a fresh scene and renders
-# side, front three-quarter and rear three-quarter views (with a mock-up of the new, longer light trail and
-# the runner posed on the seat) to docs/courier-proposals/<variant>_<view>.jpg and a review sheet, courier_proposals.jpg
-# (PREVIEW_OUT=<dir> writes them elsewhere; PREVIEW_W / PREVIEW_H / PREVIEW_SAMPLES set the quality; PREVIEW_EXPORT=0 skips the GLBs).
+# Courier light-bike review sheet. Builds each proposal (build_courier.py) in a fresh scene and renders side, front
+# three-quarter and rear three-quarter views (with a light-trail mock-up and the runner on the seat) to
+# docs/courier-proposals/<variant>_<view>.jpg, plus a review sheet, courier_proposals.jpg.
+# Env: PREVIEW_OUT=<dir> output dir; PREVIEW_W / PREVIEW_H / PREVIEW_SAMPLES quality; PREVIEW_EXPORT=0 skips the GLBs;
+# PREVIEW_RIDER=0 leaves the runner off.
 #
 #   pip install bpy pillow numpy
 #   MOONRUNNER_REPO=. python3 tools/blender/preview_courier.py [a] [b]
 #
-# Cycles on the CPU (no GPU or display needed); Freestyle draws the comic ink outline.
+# Cycles on the CPU (no GPU or display needed); Freestyle draws the ink outline.
 
 import bpy, math, os, sys
 from mathutils import Vector
@@ -81,7 +82,7 @@ def scene_setup():
     sc.render.image_settings.file_format = "JPEG"
     sc.render.image_settings.quality = 90
     sc.view_settings.view_transform = "Standard"
-    # an evening-on-the-Moon backdrop: violet sky, a cool key, a warm rim
+    # Moon-evening backdrop: violet sky, cool key, warm rim
     w = bpy.data.worlds.new("w")
     w.use_nodes = True
     bg = w.node_tree.nodes["Background"]
@@ -95,7 +96,7 @@ def scene_setup():
         sc.collection.objects.link(o)
         o.location = loc
         o.rotation_euler = (-Vector(loc)).to_track_quat("-Z", "Y").to_euler()
-    # a ground: dark regolith
+    # ground: dark regolith
     bpy.ops.mesh.primitive_plane_add(size=80, location=(0, 0, -0.01))
     g = bpy.context.object
     gm = bpy.data.materials.new("ground")
@@ -129,14 +130,14 @@ def freestyle(sc, skip):
 
 
 def mock_trail(sc, color):
-    """The new light trail as the game will draw it (about 4 s of ribbon at ~20 m/s, fading): a wall 1.4 m tall
-    plus a ground strip, brightest at the bike and eased away along its length."""
+    """The light trail as the game draws it (~4 s of ribbon at ~20 m/s): a 1.4 m wall plus a ground strip, brightest at
+    the bike and fading along its length."""
     L, H, Wd, N = 10.0, 1.4, 0.55, 40
     for nm in ("wall", "floor"):
         verts, faces, fade = [], [], []
         for i in range(N + 1):
             t = i / N
-            k = (1 - t) ** 1.3   # (the game fades each point with its age)
+            k = (1 - t) ** 1.3   # the game fades each point with age
             y = 1.9 + L * t
             ends = ((0, y, 0.05), (0, y, H * (0.7 + 0.3 * k))) if nm == "wall" else (((-Wd / 2, y, 0.02), (Wd / 2, y, 0.02)))
             for j, p in enumerate(ends):
@@ -171,9 +172,9 @@ def mock_trail(sc, color):
 
 
 def add_rider(sc, g, seat):
-    """The runner glb, sat on the bike in this proposal's pose (SPEC["pose"] in build_courier.py: a stand-in, the real
-    pose is the game's call). The pivots turn in three.js's order (x, then z, about the leg's own axes), which is
-    Blender's ZYX; three.js's z is Blender's -y. Prints how well the hands meet the grips and whether the legs clear."""
+    """The runner glb on the bike in this proposal's pose (SPEC["pose"] in build_courier.py, a stand-in for the game's).
+    Pivots turn in three.js order (x then z, about the leg's own axes) = Blender ZYX; three.js z is Blender -y. Prints how
+    close the hands are to the grips and whether the legs clear."""
     from mathutils.bvhtree import BVHTree
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=os.path.join(REPO, "src", "assets", "runner.glb"))
@@ -182,7 +183,7 @@ def add_rider(sc, g, seat):
     byname = {o.name: o for o in new}
     P = g["SPEC"]["pose"]
     for o in new:
-        o.rotation_mode = "ZYX"   # (the glTF importer leaves nodes in quaternion mode)
+        o.rotation_mode = "ZYX"   # the glTF importer leaves nodes in quaternion mode
     byname["torso"].rotation_euler = (P["lean"], 0, 0)
     for n, sx in (("legL", -1), ("legR", 1)):
         byname[n].rotation_euler = (P["thigh"], -sx * P["spread"], 0)
@@ -190,11 +191,11 @@ def add_rider(sc, g, seat):
         byname[n].rotation_euler = (P["arm_x"], -sx * P["arm_z"], 0)
     for n in ("foreL", "foreR"):
         byname[n].rotation_euler = (P["elbow"], 0, 0)
-    k = 1 / 1.2   # the runner is 2 m tall beside a bike modelled at 1:1 and shown at 1.2x
+    k = 1 / 1.2   # the 2 m runner beside a bike modelled 1:1, shown at 1.2x
     root.scale = (k, k, k)
     root.location = (seat[0], -seat[2], seat[1] - 0.95 * k)   # three.js (x, y, z) -> Blender (x, -z, y)
     bpy.context.view_layer.update()
-    # --- checks: the fists on the grips, the legs out of the shell and bags
+    # --- checks: fists on the grips, legs clear of the shell and bags
     GX, GY, GZ = g["SPEC"]["grip"]
     for side, sx in (("L", -1), ("R", 1)):
         pts = [c.matrix_world @ v.co for c in byname["fore" + side].children_recursive if c.type == "MESH" for v in c.data.vertices]
@@ -204,7 +205,7 @@ def add_rider(sc, g, seat):
         fist = sum(sel, Vector()) / len(sel)
         print(f"  fist {side} is {(fist - Vector((sx * GX, -(GZ + 0.035), GY))).length * 1000:.0f} mm from its grip")
     dg = bpy.context.evaluated_depsgraph_get()
-    solids = [o for o in g["C"].objects if o.name in ("shell", "bagL", "bagR", "bagFlapL", "bagFlapR")]   # (the closed solids: the straps and seams are open bands)
+    solids = [o for o in g["C"].objects if o.name in ("shell", "bagL", "bagR", "bagFlapL", "bagFlapR")]   # closed solids only (straps and seams are open bands)
     bvhs = [BVHTree.FromObject(o, dg) for o in solids]
     bad, deep = 0, 0.0
     for n in ("legL", "legR"):
@@ -236,7 +237,7 @@ VIEWS = {
     "side": ((-8.8, 0.0, 1.55), (0, 0.0, 1.2), 42),
     "front": ((6.2, -7.8, 2.9), (0, 0.0, 1.3), 50),
     "rear": ((-6.2, 7.2, 2.9), (0, -0.2, 1.2), 50),
-    "detail": ((1.5, -3.0, 2.5), (0, -0.4, 1.45), 55),   # the cockpit and the front wheel's hub, close (not on the sheet)
+    "detail": ((1.5, -3.0, 2.5), (0, -0.4, 1.45), 55),   # cockpit and front hub close-up (not on the sheet)
 }
 
 for v in VARIANTS:
@@ -256,14 +257,14 @@ for v in VARIANTS:
         for o in [o for o in bpy.data.objects if o.type == "CAMERA"]:
             bpy.data.objects.remove(o)
         for o in trail_objs:
-            o.hide_render = name in ("side", "detail")   # (the side view is the clean silhouette, like the in-game screenshot)
+            o.hide_render = name in ("side", "detail")   # side view is the clean silhouette, like the in-game shot
         camera(sc, loc, tgt, lens)
         sc.render.filepath = os.path.join(OUTDIR, f"{v}_{name}.jpg")
         bpy.ops.render.render(write_still=True)
         print("rendered", sc.render.filepath)
 
 
-# the review sheet: one row a proposal, one column a view
+# review sheet: a row per proposal, a column per view
 try:
     from PIL import Image, ImageDraw
     names = {"a": "A  SLIPSTREAM", "b": "B  PARCEL RUNNER"}

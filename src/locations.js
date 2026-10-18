@@ -1,5 +1,4 @@
-// Static data for the lunar frontier. Positions are (theta, phi) in degrees relative to the
-// sub-solar point: theta < 90 is the lit near side, theta > 90 the dark side.
+// Static frontier data. Positions are (theta, phi) degrees from the sub-solar point: theta < 90 lit side, > 90 dark side.
 export const FACTIONS = {
   spacecom: {
     name: 'SPACECOM', color: '#ffd23f', hq: 'ilmb', kind: 'International Moon Force',
@@ -143,8 +142,8 @@ export const LOCATIONS = [
     theta: 122, phi: 168, r: 130, hostile: true, dark: true, jobs: ['rustmoon', 'rustmoon'],
     blurb: 'Seat of the Rustmoon clans. A ring of wrecked ships and bad intentions.',
   },
-  // late: added after the Moon's craters and outposts were laid out, so it stays out of their
-  // generation (old saves keep the same terrain and outpost ids); its plateau flattens what's there
+  // late: kept out of crater and outpost generation so old saves keep their terrain and outpost ids;
+  // its plateau flattens what's there
   {
     id: 'downs', name: 'Chimera Downs', short: 'DOWNS', type: 'derby', faction: 'none', poi: true, late: true,
     theta: 22, phi: 160, r: 280, curved: true, safe: true, repair: 6,
@@ -181,7 +180,7 @@ export const CLIENTS = {
   rustmoon: ['One-Eyed Imelda', 'Captain Grit', 'Scrapjaw Sal'],
 };
 
-// Reputation tiers. Contract pay scales with tier; faction gear unlocks by tier.
+// reputation tiers: contract pay scales and faction gear unlocks by tier
 export const TIERS = [
   { min: -Infinity, name: 'HOSTILE', color: '#ff2a4a', pay: 0 },
   { min: -20, name: 'WARY', color: '#ff9f1c', pay: 0.8 },
@@ -191,7 +190,7 @@ export const TIERS = [
   { min: 50, name: 'HONORED', color: '#ffd23f', pay: 2.4 },
 ];
 
-// Faction gear sold at each headquarters; each level needs a higher reputation.
+// faction gear at each HQ; each level needs more reputation
 import { cosmeticShopItems } from './cosmetics.js';
 
 export const SHOPS = {
@@ -223,8 +222,8 @@ export const SHOPS = {
   rustmoon: [
     { key: 'mortar', name: 'Rustmoon Junk Mortar', desc: 'WEAPON (key 4): lobbed scrap bomb, huge blast', cost: 1200, max: 1, faction: 'rustmoon', req: [5], weapon: true },
     { key: 'shadow', name: 'Rustmoon Shadow Rig', desc: 'Lawmen and turrets have a harder time hitting you', cost: 750, max: 3, faction: 'rustmoon', req: [0, 15, 35] },
-    // the black market: a smuggling run into a bright-side town sometimes carries a payload (one of
-    // these, named on the job board); deliver it and it's on sale here for good
+    // black market: a smuggling run to a bright-side town may carry one of these (named on the job board);
+    // deliver it and it's on sale here for good
     { key: 'armor', name: 'Black-Market Suit Plating', desc: '+25 max health', cost: 700, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 1 } },
     { key: 'dampers', name: 'Black-Market Dampers', desc: 'Safer hard landings, less cargo jostle', cost: 800, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 1 } },
     { key: 'scatter', name: 'Black-Market Scattergun', desc: 'WEAPON (key 2): a Vostok scattergun, serial filed off', cost: 1800, max: 1, faction: 'rustmoon', req: [0], weapon: true, unlock: { smuggle: true, n: 2 } },
