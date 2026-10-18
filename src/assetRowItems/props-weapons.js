@@ -315,21 +315,24 @@ function particlesAndPops(ctx) {
   };
 }
 
-// The winch line (winch.js drawRope): the real verlet rope, from a hand to a hook, sagging when it is slack
+// The winch line (winch.js drawRope): the real verlet cable laid in winch.glb's strand, from a hand to a grapple driven into a face,
+// sagging when it is slack. winch.glb loads on the first Winch (its parts are cached), so the cable and the claw appear a moment after
+// the first time the item is built.
 function winchRope() {
   const root = new THREE.Group();
   root.add(plate(40, 8));
   const w = new Winch({ scene: root });
-  const post = (x) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 3, 6), toon(0x3a3550)); m.position.set(x, 1.5, 0); root.add(m); };
+  const post = (x) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 6, 6), toon(0x3a3550)); m.position.set(x, 3, 0); root.add(m); };
   post(-17);
   const target = new THREE.Mesh(new THREE.BoxGeometry(3, 1.6, 2), toon(0xffd23f));
   target.position.set(17, 0.8, 0);
   ink(target, 0.05);
   root.add(target);
-  const a = V(-17, 3, 0), b = V(17, 1.7, 0);
+  const hand = V(-17, 6, 0), hook = V(15.5, 1.2, 0), face = V(-1, 0, 0); // (the grapple goes into the target's left face, its eye out along the normal)
+  w.buildPath({ wraps: [] }, hand, hook); // (a straight path, hand to hook: no wrap points)
   return {
     root,
-    update: (dt) => { w.drawRope(dt, a, b, 40); }, // (a 40 m line over a 34 m gap: it sags)
+    update: (dt) => { w.drawRope(dt, 36, face); }, // (a 36 m line over a 33 m span: it sags clear of the floor)
   };
 }
 

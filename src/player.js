@@ -5,6 +5,7 @@ import { makeRunner, makeCrate, ScarfSim } from './models.js';
 import { frameQuat, upAt } from './geo.js';
 import { Ragdoll } from './ragdoll.js';
 import { Idle } from './idles.js';
+import { updateHalo } from './cosmetics.js';
 import { WEAPONS, weaponUnlocked, fireWeapon } from './weapons.js';
 
 const SPEED_MARKS = [
@@ -84,11 +85,40 @@ export class Player {
     this.params.handling += gw * 0.3;
   }
 
+  // Ride the deck you stand on: called once the world has moved it this frame (main.js), so that you, your model and the camera move with the
+  // deck's move of THIS frame. (Carried before the physics step with the move of the last frame, as this was, you and the camera lagged the ship's
+  // mesh by one frame's move, the more so the faster it flew, and as frame times vary that is a wobble in every frame.) The deck's turn since the
+  // last frame is applied too: a ship following its route (it yaws and pitches with the curve of the Moon) would otherwise swing everything
+  // round its middle from under your feet, the further out you stand (the wings, the cargo bays) the more.
+  rideCarry() {
+    const b = this.body, plat = b.platform;
+    if (!plat) { this.platOn = null; return;  }
+    const d = _v.subVectors(plat.pos, plat.prevPos);
+    const pq = this.platQ || (this.platQ = new THREE.Quaternion());
+    let rot = false;
+    if (plat.quat) {
+      if (this.platOn === plat) {
+        _q.copy(pq).invert().premultiply(plat.quat);
+        // (however small the turn: w = cos(angle/2) is 1 to the last digit for a turn under a milliradian, so the size of the turn is read from the vector part;
+        // a rotation skipped as too small slid you a millimetre a frame, the further out the more, and a millimetre is the gap you fall across to lose the deck)
+        rot = _q.w > 0.9 && Math.abs(_q.x) + Math.abs(_q.y) + Math.abs(_q.z) > 1e-13;
+      }
+      pq.copy(plat.quat);
+      this.platOn = plat;
+    } else this.platOn = null;
+    const g = this.game, m = this.model.root;
+    const move = (p) => { p.add(d); if (rot) p.sub(plat.pos).applyQuaternion(_q).add(plat.pos); };
+    move(b.pos); move(m.position); move(this.center);
+    if (rot) b.vel.applyQuaternion(_q);
+    move(g.cam.position); move(g.camera.position);
+  }
+
   respawn(pos, facing) {
     this.body.pos.copy(pos);
     this.body.vel.set(0, 0, 0);
     this.body.platform = null; // never keep riding a deck (or satellite) you've been teleported off
-    this.seat = null; // ...or a ship or funpark ride (rides.js lets go too)
+    this.body.velFrame = null;
+    this.seat = null; // ...or a ship or fairground ride (rides.js lets go too)
     if (this.game.grind) this.game.grind.active = null; // ...or a grind rail
     upAt(pos, this.body.up);
     this.body.groundN.copy(this.body.up);
@@ -199,7 +229,10 @@ export class Player {
     }
 
     const wish = new THREE.Vector3();
-    const trickHeld = input.down('KeyQ') && !b.grounded && b.airTime > 0.12 && !this.rag;
+    // (no tricks on the end of the Hitch-Line: it has you by the harness)
+    const hitched = !!(g.winch && g.winch.on);
+    if (hitched && this.trick.active) this.clearTrick();
+    const trickHeld = input.down('KeyQ') && !b.grounded && b.airTime > 0.12 && !this.rag && !hitched;
     if (!trickHeld && input.padMove && input.padMove.on) {
       // a controller's left stick: analog (a gentle push, a gentle carve)
       wish.addScaledVector(cam.fwd, -input.padMove.y).addScaledVector(cam.right, input.padMove.x);
@@ -229,8 +262,8 @@ export class Player {
     const ctrl = {
       wish,
       skates: input.down('Space'),
-      // with the Rail Lance out, right mouse is the scope instead of the thrusters (E still thrusts)
-      thrust: input.down('KeyE') || (input.mouse[2] && WEAPONS[this.weapon || 0].key !== 'rail'),
+      // with the Rail Lance out, right mouse is the scope instead of the thrusters (L3 on a pad still thrusts)
+      thrust: input.down('Thrust') || (input.mouse[2] && WEAPONS[this.weapon || 0].key !== 'rail'),
       jump: jumpNow,
       // Dive: a fresh press of the jump key while airborne, held (so the jump itself never dives)
       dive: this.diveLatch = !b.grounded && !jumpNow && (this.diveLatch || (jumpKey && b.airTime > 0.15)) && (input.down('ShiftLeft') || input.down('ShiftRight')),
@@ -269,6 +302,7 @@ export class Player {
         if (m.armL && m.armR) {
           m.armL.rotation.x = m.armR.rotation.x = -0.75;
           m.armL.rotation.z = -0.22; m.armR.rotation.z = 0.22;
+          m.foreL.rotation.x = -0.55 + 0.2 * this.steerLean; m.foreR.rotation.x = -0.55 - 0.2 * this.steerLean; // (elbows in, a bend into the turn)
         }
       } else {
         m.torso.rotation.x = 0;
@@ -277,6 +311,7 @@ export class Player {
         if (m.armL && m.armR) {
           m.armL.rotation.x = -1.15 + 0.15 * this.steerLean; m.armR.rotation.x = -1.15 - 0.15 * this.steerLean;
           m.armL.rotation.z = -0.12; m.armR.rotation.z = 0.12;
+          m.foreL.rotation.x = -0.35 + 0.25 * this.steerLean; m.foreR.rotation.x = -0.35 - 0.25 * this.steerLean; // (the wheel hand pulls in)
         }
       }
       this.upSmooth.copy(b.up);
@@ -308,7 +343,7 @@ export class Player {
     b.jumped = false;
     // ride moving vehicles: carry along with the deck you're standing on
     const plat = b.platform;
-    if (plat) b.pos.add(_v.subVectors(plat.pos, plat.prevPos));
+    // (carried along with the deck you stand on, and turned with it, once the world has moved it: rideCarry)
     this.prevVel = (this.prevVel || new THREE.Vector3()).copy(b.vel);
     if (plat) this.prevVel.add(plat.vel);
     // Quantum Slipstream Vanes (a power: on for a few seconds when used): a share of your ground handling in the air
@@ -324,12 +359,20 @@ export class Player {
     for (let i = 0; i < steps; i++) {
       const before = b.grounded;
       const imp = stepSkater(b, ctrl, h, g.planet, g.colliders, pr, this.impacts);
+      // velocities on a deck are relative to it: convert at once when stepping on or off or from one to another (b.velFrame is the deck b.vel
+      // is in; stepSkater meets any other deck at the speed it closes). At the end of the frame, as this was, a landing on a deck that was
+      // dropping gave you its speed upward, and a hop off it the same: on a ship going down the rider kept popping off the deck.
+      if (b.platform !== (b.velFrame || null)) {
+        if (b.velFrame) b.vel.add(b.velFrame.vel);
+        if (b.platform) b.vel.sub(b.platform.vel);
+        b.velFrame = b.platform || null;
+      }
       if (!before && b.grounded) landed = true;
       for (const it of imp) this.onImpact(it, ctrl.skates);
       ctrl.jump = false;
     }
     g.devOverlay.lap('physics');
-    if (b.jumped) { g.audio.jump(); g.fx.dust(b.pos, b.vel, 6, up); }
+    if (b.jumped) { g.audio.jump(); g.haptics.play('jump'); g.fx.dust(b.pos, b.vel, 6, up); }
     // the Vanes at work: teal and violet sparks shed off the skates and a rising shimmer
     this.vaneCarve = vanes && !b.grounded ? b.airCarve || 0 : 0;
     if (this.vaneCarve) {
@@ -350,8 +393,7 @@ export class Player {
     }
     b.bounced = 0;
     // velocities on a deck are relative to it; convert when stepping on or off
-    if (!plat && b.platform) { b.vel.sub(b.platform.vel); g.fx.pop('ALL ABOARD!', null, { color: '#2ee6ff', size: 44, life: 1, prio: 1 }); }
-    else if (plat && b.platform !== plat) { b.vel.add(plat.vel); if (b.platform) b.vel.sub(b.platform.vel); }
+    if (!plat && b.platform) g.fx.pop('ALL ABOARD!', null, { color: '#2ee6ff', size: 44, life: 1, prio: 1 });
     // world-space acceleration (for sloshing fluids)
     const worldVel = _v.copy(b.vel);
     if (b.platform) worldVel.add(b.platform.vel);
@@ -484,6 +526,7 @@ export class Player {
         pts += Math.round(landedAfter * 5);
         const name = parts.join(' + ');
         g.style(pts, name);
+        g.haptics.play('stick');
         g.fx.pop('STUCK IT!', null, { color: '#7dff6a', size: 70, rot: 6, prio: 1 });
         this.trickLanding = true;
         g.stats.bestTrick = Math.max(g.stats.bestTrick || 0, pts);
@@ -493,6 +536,7 @@ export class Player {
         b.vel.multiplyScalar(0.55);
         g.missions.jostle(18, true);
         g.audio.thud(30);
+        g.haptics.play('wipeout');
         this.trickLanding = true;
         wiped = true;
       }
@@ -508,8 +552,10 @@ export class Player {
 
   onImpact(it, skates) {
     const g = this.game;
-    const safe = (g.alchemy && g.alchemy.buffs.cushion > 0) ? 1e9 : skates ? this.params.skateSafeImpact * (g.cheats ? g.cheats.speed : 1) : this.params.bootSafeImpact * (g.cheats ? g.cheats.speed : 1);
-    if (it.speed > 6) g.audio.thud(it.speed);
+    let safe = (g.alchemy && g.alchemy.buffs.cushion > 0) ? 1e9 : skates ? this.params.skateSafeImpact * (g.cheats ? g.cheats.speed : 1) : this.params.bootSafeImpact * (g.cheats ? g.cheats.speed : 1);
+    if (g.winch && g.winch.on) safe += 14; // (the winch's own pull is controlled: fetching up against a wall or a ship's tower at its pace is a bump, not a crash)
+    if (it.speed > 6) { g.audio.thud(it.speed); g.haptics.land(it.speed); }
+    if (it.speed > 4 && this.model.halo) this.model.halo.kick(Math.min(1, it.speed / 25)); // (a bump rings the halo)
     if (g.alchemy && g.alchemy.buffs.bouncy > 0 && it.kind === 'ground' && it.speed > 5) {
       this.body.bounceReady = Math.max(this.body.bounceReady || 0, it.speed);
       g.fx.pop('BOING!', null, { color: '#ff7ad9', size: 44, prio: 1 });
@@ -537,9 +583,9 @@ export class Player {
   updateScarf(dt) {
     const b = this.body;
     if (!this.scarfSim) this.scarfSim = new ScarfSim(this.model);
-    // (a crate on your back, or the Kepler twin stack, is taller and wider than the pack)
-    const twin = this.cargoMesh && this.cargoMesh.children.length > 3;
-    this.scarfSim.update(dt, this.vehicle ? this.vehicle.e.body.vel : b.vel, b.up, this.cargoMesh ? { back: 1.14, top: twin ? 1.5 : 1.0, hw: 0.42 } : { back: 0.55, top: 0.94 });
+    // (a crate on your back, or the Twin Cradle's two, is something for the scarf to ride over)
+    const cargo = this.cargoMesh ? (this.cargoMesh.children.length > 3 ? 2 : 1) : 0;
+    this.scarfSim.update(dt, this.vehicle ? this.vehicle.e.body.vel : b.vel, b.up, { cargo });
   }
 
   // Standing at rest: upright, limbs level, no bob or roll, the scarf hanging. animate() poses the model
@@ -550,6 +596,7 @@ export class Player {
     this.idle.cancel(m);
     m.torso.rotation.set(0, 0, 0);
     m.legL.rotation.set(0, 0, 0); m.legR.rotation.set(0, 0, 0);
+    m.foreL.rotation.set(0, 0, 0); m.foreR.rotation.set(0, 0, 0);
     m.armL.rotation.set(0, 0, -0.15); m.armR.rotation.set(0, 0, 0.15); // (arms a little out from the sides: the idle pose in animate)
     m.body.position.y = m.bodyBase;
     this.roll = 0;
@@ -601,12 +648,14 @@ export class Player {
       m.legL.rotation.x = m.legR.rotation.x = -0.35;
       m.armL.rotation.x = m.armR.rotation.x = 0.9;
       m.armL.rotation.z = -0.25; m.armR.rotation.z = 0.25;
+      m.foreL.rotation.x = m.foreR.rotation.x = -0.2; // (hands streamlined, a hint of bend)
       if (Math.random() < dt * 20) this.game.fx.spawn(b.pos.clone().addScaledVector(up, 1.2), b.vel.clone().multiplyScalar(-0.2), { color: 0x9be7ff, size: 0.3, life: 0.3, count: 1, spread: 0.6 });
     } else if (!b.grounded) {
       m.torso.rotation.x = 0.15;
       m.legL.rotation.x = -0.5; m.legR.rotation.x = 0.3;
       m.armL.rotation.z = -1.1; m.armR.rotation.z = 1.1;
       m.armL.rotation.x = m.armR.rotation.x = 0;
+      m.foreL.rotation.x = m.foreR.rotation.x = -0.35 + 0.1 * Math.sin(this.anim * 0.5); // (loose elbows, balancing)
       m.body.position.y = base;
       if (this.trick.tucked) { m.legL.rotation.x = m.legR.rotation.x = -1.2; m.torso.rotation.x = 0.6; }
     } else if (b.skating) {
@@ -616,6 +665,12 @@ export class Player {
       m.legL.rotation.x = 0.35 * crouch; m.legR.rotation.x = -0.35 * crouch;
       m.armL.rotation.x = m.armR.rotation.x = -0.9 * crouch;
       m.armL.rotation.z = -0.3; m.armR.rotation.z = 0.3;
+      // elbows bent, hands out in front; leaning into a turn the inside arm tucks and the outside one reaches
+      const bank = THREE.MathUtils.clamp(this.roll / 0.5, -1, 1);
+      // (leaned right over at full speed the hands are already forward, so the bend halves: 0.85 -> 0.43)
+      const bend = (0.3 + 0.55 * crouch) * (1 - 0.5 * crouch);
+      m.foreL.rotation.x = -bend + 0.25 * bank * (1 - 0.5 * crouch);
+      m.foreR.rotation.x = -bend - 0.25 * bank * (1 - 0.5 * crouch);
     } else {
       const run = Math.min(1, sp / 6);
       m.body.position.y = base + Math.abs(s) * 0.12 * run;
@@ -623,6 +678,8 @@ export class Player {
       m.legL.rotation.x = s * 0.9 * run; m.legR.rotation.x = -s * 0.9 * run;
       m.armL.rotation.x = -s * 0.8 * run; m.armR.rotation.x = s * 0.8 * run;
       m.armL.rotation.z = -0.15; m.armR.rotation.z = 0.15;
+      // elbows pump: bent most as the hand comes forward
+      m.foreL.rotation.x = -run * (0.45 + 0.55 * Math.max(0, s)); m.foreR.rotation.x = -run * (0.45 + 0.55 * Math.max(0, -s));
     }
     // stopped: the breath, and now and then another idle (idles.js), laid over the rest pose
     this.idle.apply(m, dt, b.grounded && !b.skating && !this.rag && !!ctrl && ctrl.wish.lengthSq() === 0, sp, !b.grounded || !!this.rag);
@@ -632,6 +689,7 @@ export class Player {
       this.game.devOverlay.lap('ragdoll');
     }
     this.updateScarf(dt);
+    updateHalo(m, dt);
 
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(m.root.quaternion);
     const strength = b.skating && b.grounded ? Math.min(1, sp / 30) : this.vaneCarve ? 0.55 + 0.45 * Math.abs(this.vaneCarve) : 0; // (the Vanes leave ribbons in the air)

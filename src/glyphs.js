@@ -65,7 +65,7 @@ export function glyphHtml(tokens, kind = glyphState.kind) {
 // What a key name in the UI means on the pad (null: no equivalent, left as it is)
 const WORDS = {
   SPACE: ['LB'], SHIFT: ['A'], ENTER: ['A'], MOUSE: ['RS'], 'RIGHT MOUSE': ['LT'], RMB: ['LT'], 'E/RMB': ['LT'], LMB: ['RT'],
-  E: ['LT'], Q: ['B'], F: ['X'], G: ['R3'], V: ['Y'], Z: ['RB'], M: ['VIEW'], R: ['VIEW', '#hold'],
+  E: ['RB'], Q: ['B'], F: ['X'], G: ['R3'], V: ['Y'], M: ['VIEW'], R: ['VIEW', '#hold'],
   X: ['DD'], C: ['DD'], J: ['DD'], P: ['DD'], T: ['DD'], // (the radial menu's wedges; N has no button: music is under Settings → Audio)
 };
 export function tokensFor(text) {

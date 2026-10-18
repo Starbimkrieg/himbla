@@ -1,5 +1,5 @@
-# Dish-array builder for Blender (4.2+ / 5.x): the two station designs that carry the big radio dishes at the research arrays
-# (Shackleton, Farside), exported to src/assets/dish.glb.
+# Dish builder for Blender (4.2+ / 5.x): the two station designs that carry the big radio dishes at the research arrays (Shackleton,
+# Farside) and the field dish the smaller bases use, exported to src/assets/dish.glb.
 #
 # In Blender's Python console or via MCP:   exec(open(r"<repo>/tools/blender/build_dish.py").read())
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 build_dish.py
@@ -10,6 +10,14 @@
 #   dish_gantry   GANTRY STATION, from the crane and the Prospector's containers: a faction-painted lattice mast with a caged ladder
 #                 and rest platforms over a yard of cargo-container control rooms, a red battery bank and a fuel tank; the dish is
 #                 carried on radial lattice trusses.
+#   dish_field    FIELD DISH, the small bases' dish (ILMB, the Daedalus relay, the Vostok and Daedalus posts, the Asset Row): an eight-sided
+#                 tower in three stages with a caged ladder, a cable duct and a service gallery, over an equipment room (a cargo container
+#                 with an air-handler and warning signs); the same truss-backed reflector as the gantry station, painted in the same slots
+#                 (body: the cowl, flanges, gallery, room, trusses and quadpod; stripe: half the rim blocks and the feed band). It has no
+#                 station number, and its livery pivots (the faction's mark and name on the tower and the room) cover Daedalus as well.
+#   dish_head     DISH HEAD, the field dish's reflector, trunnions, turning neck and feed with no tower and built lightly (about a fifth of the
+#                 triangles), for the small dishes on masts, roofs and posts, where a rim under 3 m shows none of the full reflector's detail. It has
+#                 only the yaw and tilt pivots, with the neck's foot at y = 21.2 (the game sets it on whatever carries it) and the same body and stripe slots.
 #
 # Each station is its own root, built at the size of the old dish (a 30 m mount: the reflector's rim is 14.1 m out and 6.8 m deep, the
 # tilt pivot 28.5 m up) with the ground at y = 0 in the middle of the base and +z the front (the panel, the cabinet, the containers' doors).
@@ -62,58 +70,14 @@ SLOT_COLORS = {
 exec(open(os.path.join(REPO, "tools", "blender", "kit.py"), encoding="utf-8").read(), globals())
 exec(open(os.path.join(REPO, "tools", "blender", "decals.py"), encoding="utf-8").read(), globals())
 LAYER = 0.02    # decals stand further off their faces than on a vehicle: these are read from 100 m (the game's camera starts at 0.5 m)
+exec(open(os.path.join(REPO, "tools", "blender", "dishkit.py"), encoding="utf-8").read(), globals())   # the reflector, the mount and the head
 
 C = coll()
 for s in SLOT_COLORS:
     material(s)
 
-PI = math.pi
-YP = 28.5                       # the tilt pivot's height
-RIM, DEEP = 14.1, 6.8           # the reflector's rim radius and depth (the old dish's cap)
-FOC = RIM * RIM / (4 * DEEP)    # a paraboloid through the same rim and depth: a focal length of 7.3 m
-SHELL = 0.45                    # thickness of the reflector's body
-APEX = 2.4                      # the reflector's apex above the tilt pivot, along the dish axis
 PFX = ""
 NUMBERS = ("01", "02", "03", "04")
-
-
-def par(r):
-    """Height of the reflector's face above its apex at radius r."""
-    return r * r / (4 * FOC)
-
-
-# ---------------- pieces (geometry returns) ----------------
-def cube(hx, hy, hz, pos=(0, 0, 0), rot=(0, 0, 0)):
-    """A plain box (half extents): 12 triangles, for the small parts."""
-    v = [(-hx, -hy, -hz), (hx, -hy, -hz), (hx, hy, -hz), (-hx, hy, -hz), (-hx, -hy, hz), (hx, -hy, hz), (hx, hy, hz), (-hx, hy, hz)]
-    return xf((v, [(4, 5, 6, 7), (1, 0, 3, 2), (5, 1, 2, 6), (0, 4, 7, 3), (3, 7, 6, 2), (0, 1, 5, 4)]), pos, rot)
-
-
-def turn(geo, a):
-    """Yaw a piece about the y axis."""
-    return xf(geo, r=(0, a, 0))
-
-
-def circ(r, y, n, close=True):
-    return [(r * math.sin(2 * PI * i / n), y, r * math.cos(2 * PI * i / n)) for i in range(n + (1 if close else 0))]
-
-
-def hoop(r, y, tr, n=48, seg=4):
-    """A hoop in the x-z plane round the y axis."""
-    return tube(circ(r, y, n), [tr] * (n + 1), seg, True)
-
-
-def hoops(rs, y, tr, n=48, seg=4):
-    """Rings of the same tube radius at several radii (y: a number, or a function of r)."""
-    return join([hoop(r, y(r) if callable(y) else y, tr, n, seg) for r in rs])
-
-
-def tori(R, ys, tr, n=32, rseg=4):
-    return join([xf(torus(R, tr, n, rseg), (0, y, 0)) for y in ys])
-
-
-def arc_pts(r, y, a0, a1, n):
-    return [(r * math.sin(a0 + (a1 - a0) * i / n), y, r * math.cos(a0 + (a1 - a0) * i / n)) for i in range(n + 1)]
 
 
 # ---------------- scene helpers ----------------
@@ -153,14 +117,9 @@ def unit(name):
     return root, yaw, tilt
 
 
-def Y(geo):
-    """Geometry authored at world heights, hung on the yaw pivot (which sits at y = YP)."""
-    return xf(geo, t=(0, -YP, 0))
-
-
-def liveries(root):
+def liveries(root, factions=FACTIONS):
     """One livery pivot per faction (role livery); the game keeps only the matching one."""
-    return {f: PV(f"livery_{f}", (0, 0, 0), root, role="livery", faction=f) for f in FACTIONS}
+    return {f: PV(f"livery_{f}", (0, 0, 0), root, role="livery", faction=f) for f in factions}
 
 
 def numbers(root):
@@ -186,75 +145,21 @@ def warn_sign(d, u, v, w, h, layer=0, head="WARNING", lines=("RF RADIATION", "KE
         d.text(s, u + w / 2, v + (h - hh) * 0.1 + (len(lines) - 1 - i) * 9 * ps2, ps2, "dark", layer + 2, "c")
 
 
-# ---------------- the dish itself (tilt frame; y0 lifts the apex above the pivot) ----------------
-def bowl(y0, thick, lift, N=11, segs=36):
-    """A closed, thick paraboloid: its underside at par(r) + lift - thick, its face at par(r) + lift."""
-    rs = [RIM * i / N for i in range(N + 1)]
-    prof = [(0.0, y0 + lift - thick)] + [(r, y0 + par(r) + lift - thick) for r in rs[1:]]
-    prof.append((RIM, y0 + par(RIM) + lift))
-    prof += [(r, y0 + par(r) + lift) for r in reversed(rs[1:-1])]
-    prof.append((0.0, y0 + lift))
-    return lathe(prof, segs)
-
-
-def face_seams(y0, n_rad=16, rings=(4.7, 9.4), r_in=1.5, tr=0.085):
-    """Panel seams on the face: radial ridges and ring ridges, thin raised tubes."""
-    out = []
-    n = 7
-    for k in range(n_rad):
-        a = 2 * PI * k / n_rad
-        rs = [r_in + (RIM - 0.5 - r_in) * i / (n - 1) for i in range(n)]
-        out.append(tube([(r * math.sin(a), y0 + par(r) + 0.15, r * math.cos(a)) for r in rs], [tr] * n, 4, True))
-    for r in rings:
-        out.append(hoop(r, y0 + par(r) + 0.15, tr, 56))
-    return join(out)
-
-
-def rim_collar(y0, up=0.45, down=1.0, out=0.5):
-    y = y0 + par(RIM)
-    prof = [(RIM - 0.15, y - down), (RIM + out, y - down), (RIM + out, y + up), (RIM - 0.15, y + up), (RIM - 0.15, y - down)]
-    return lathe(prof, 56)
-
-
-def rib_bottom(y0, r, r0=5.0, depth0=1.0, depth1=1.35):
-    """The height of the trusses' bottom chord at radius r."""
-    ya, yb = y0 + par(r0) - SHELL - depth0, y0 + par(RIM - 0.3) - SHELL - depth1
-    return ya + (yb - ya) * (r - r0) / (RIM - 0.3 - r0)
-
-
-def hub_cone(y0, r_bot=2.3, y_bot=0.0, r_top=5.1):
-    """A solid cone from the trunnion drum up to the reflector's underside, capped just under it."""
-    yb = lambda r: y0 + par(r) - SHELL - 0.06
-    prof = [(0.0, y_bot), (r_bot, y_bot), (r_bot + 0.25, y_bot + 0.3), (r_top, yb(r_top))]
-    prof += [(r_top * f, yb(r_top * f)) for f in (0.66, 0.33)] + [(0.0, yb(0.0))]
-    return lathe(prof, 28)
-
-
-def drum(hl=3.0, r=2.2):
-    """The trunnion drum along x, centred on the pivot."""
-    prof = [(0.0, -hl), (r - 0.2, -hl), (r, -hl + 0.2), (r, hl - 0.2), (r - 0.2, hl), (0.0, hl)]
-    return xf(lathe(prof, 18), r=(0, 0, PI / 2))
-
-
-def quadpod(y0, top_y, r_top, n, tr, seg=6):
-    """Struts from the rim up to the feed support."""
-    out = []
-    for k in range(n):
-        a = 2 * PI * (k + 0.5) / n
-        out.append(B((RIM * 0.97 * math.sin(a), y0 + par(RIM) + 0.1, RIM * 0.97 * math.cos(a)), (r_top * math.sin(a), top_y, r_top * math.cos(a)), tr, seg, True))
-    return join(out)
+def container(root, name, cx, cz, y0, slot, ribbed, L=9.6, W=3.5, H=3.3):
+    """A box on corner castings, its length along z; the corrugation is a row of ribs down each flank."""
+    hx, hz = W / 2, L / 2
+    rb(name, hx, H / 2, hz, (cx, y0 + H / 2, cz), slot, root, 0.1, 0.05)
+    M(name + "Castings", join([cube(0.34, H / 2 + 0.04, 0.34, (cx + sx * (hx - 0.2), y0 + H / 2, cz + sz * (hz - 0.2))) for sx in (-1, 1) for sz in (-1, 1)]), "dark", root, 0)
+    if ribbed:
+        n = int(L / 0.46)
+        M(name + "Ribs", join([cube(0.05, H / 2 - 0.2, 0.09, (cx + s * (hx + 0.03), y0 + H / 2, cz - L / 2 + 0.5 + k * (L - 1.0) / (n - 1))) for k in range(n) for s in (-1, 1)]), slot, root, 0)
+    M(name + "Rails", join([cube(0.1, 0.07, hz, (cx + s * (hx - 0.2), y0 + H + 0.02, cz)) for s in (-1, 1)]), "dark", root, 0)
 
 
 def mount(root, yaw, tilt, neck_y0, neck_y1, neck_r, neck_slot="steel"):
-    """What every station shares at the top: the turning neck, the head block and its two ears (all on yaw), the trunnion drum (tilt)."""
-    M("neck", Y(tube([(0, neck_y0, 0), (0, neck_y1, 0)], [neck_r, neck_r], 14)), neck_slot, yaw, 0.08)
-    bx("headBlock", 3.5, 0.5, 2.4, (0, 25.1 - YP, 0), "dark", yaw, 0.1)
-    for s in (-1, 1):
-        bx(f"ear{s}", 0.55, 1.9, 1.4, (s * 3.55, 26.8 - YP, 0), "steel", yaw, 0.08)
-        M(f"bearing{s}", xf(torus(1.3, 0.2, 16, 4), (s * 3.2, 0, 0), (0, 0, PI / 2)), "dark", yaw, 0.04)
-        bx(f"earPlate{s}", 0.6, 0.12, 1.5, (s * 3.55, 28.7 - YP, 0), "hazard", yaw)
-    M("drum", drum(), "steel", tilt, 0.1)
-    M("drumRings", join([xf(torus(2.26, 0.14, 18, 4), (s * 2.3, 0, 0), (0, 0, PI / 2)) for s in (-1, 1)]), "hazard", tilt, 0)
+    """What every station shares at the top (dishkit.py mount_pieces): the turning neck, the head block and its ears on yaw, the drum on tilt."""
+    for name, geo, slot, ink, part in mount_pieces(neck_y0, neck_y1, neck_r, neck_slot):
+        M(name, geo, slot, yaw if part == "yaw" else tilt, ink)
 
 
 # =====================================================================================================
@@ -471,21 +376,11 @@ def build_gantry():
     M("neckBands", Y(join([xf(torus(1.76, 0.12, 14, 4), (0, y, 0)) for y in (22.9, 23.9, 24.8)])), "metal", yaw, 0)
 
     # ---- the yard: cargo-container control rooms (one stacked, with a stair), a red battery bank, a fuel tank, a generator, cable trays ----
-    def container(name, cx, cz, y0, slot, ribbed, L=9.6, W=3.5, H=3.3):
-        """A box on corner castings, its length along z; the corrugation is a row of ribs down each flank."""
-        hx, hz = W / 2, L / 2
-        rb(name, hx, H / 2, hz, (cx, y0 + H / 2, cz), slot, root, 0.1, 0.05)
-        M(name + "Castings", join([cube(0.34, H / 2 + 0.04, 0.34, (cx + sx * (hx - 0.2), y0 + H / 2, cz + sz * (hz - 0.2))) for sx in (-1, 1) for sz in (-1, 1)]), "dark", root, 0)
-        if ribbed:
-            n = int(L / 0.46)
-            M(name + "Ribs", join([cube(0.05, H / 2 - 0.2, 0.09, (cx + s * (hx + 0.03), y0 + H / 2, cz - L / 2 + 0.5 + k * (L - 1.0) / (n - 1))) for k in range(n) for s in (-1, 1)]), slot, root, 0)
-        M(name + "Rails", join([cube(0.1, 0.07, hz, (cx + s * (hx - 0.2), y0 + H + 0.02, cz)) for s in (-1, 1)]), "dark", root, 0)
-
     YARD = (("boxA", -11.5, 3.0, 0.0, "1"), ("boxB", -11.5, 3.0, 3.3, "2"), ("boxC", 11.5, 4.5, 0.0, "3"))
     for nm, cx, cz, y0, ref in YARD:
-        container(nm, cx, cz, y0, "body", True)
+        container(root, nm, cx, cz, y0, "body", True)
     BX_, BZ_ = 11.5, -7.0           # the battery bank: a smooth armoured magazine with strobes and a lightning rod
-    container("bank", BX_, BZ_, 0.0, "redsafe", False)
+    container(root, "bank", BX_, BZ_, 0.0, "redsafe", False)
     for k, z in enumerate((-2.4, 2.4)):
         bx(f"bankVent{k}", 0.9, 0.1, 0.6, (BX_, 3.4, BZ_ + z), "dark", root)
         M(f"bankStrobe{k}", xf(lathe([(0.24, 0), (0.24, 0.08), (0.16, 0.24), (0.0, 0.3)], 10), (BX_ + (1.2 if k else -1.2), 3.42, BZ_ + z * 1.5)), "hot", root, 0)
@@ -603,15 +498,195 @@ def build_gantry():
     return root
 
 
+# =====================================================================================================
+# FIELD DISH  (the small bases' dish: an eight-sided tower and a container equipment room under a truss-backed reflector)
+# =====================================================================================================
+OCT = PI / 8      # the tower has a flat face to +z, +x, -z and -x: its corners stand at 22.5 degrees + k * 45
+
+
+def ring8(r, y):
+    """The corners of an eight-sided ring (corner radius r) as a closed path."""
+    return [(r * math.sin(OCT + PI * i / 4), y, r * math.cos(OCT + PI * i / 4)) for i in range(9)]
+
+
+def prism8(profile):
+    """An eight-sided lathe, a flat face to +z."""
+    return turn(lathe(profile, 8), OCT)
+
+
+def build_field():
+    root, yaw, tilt = unit("dish_field")
+    root["radius"] = 9.4
+    FACE = math.cos(OCT)       # a flat face stands this fraction of the corner radius from the axis
+
+    # ---- foundation: a pad with a hazard kerb ring and bollards, and an eight-sided plinth with gussets to the tower ----
+    PAD = 0.25
+    M("pad", lathe([(0.0, 0.0), (9.4, 0.0), (9.4, PAD), (0.0, PAD)], 40), "concrete", root, 0.12)
+    M("padRing", xf(torus(8.95, 0.12, 40, 4), (0, PAD + 0.04, 0)), "hazard", root, 0)
+    bol = [2 * PI * (k + 0.5) / 6 for k in range(6)]
+    M("bollards", join([B((10.0 * math.sin(a), 0.0, 10.0 * math.cos(a)), (10.0 * math.sin(a), 1.1, 10.0 * math.cos(a)), 0.22, 6, True) for a in bol]), "dark", root, 0)
+    M("bollardCaps", join([xf(torus(0.23, 0.08, 8, 3), (10.0 * math.sin(a), 0.95, 10.0 * math.cos(a))) for a in bol]), "hazard", root, 0)
+    M("plinth", prism8([(0.0, PAD), (5.4, PAD), (5.4, 1.2), (4.5, 1.7), (0.0, 1.7)]), "concrete", root, 0.14)
+    M("plinthHaz", tube(ring8(5.42, 0.75), [0.13] * 9, 4, True), "hazard", root, 0)
+    M("gussets", join([beam((4.2 * math.sin(a), 1.7, 4.2 * math.cos(a)), (3.6 * math.sin(a), 3.9, 3.6 * math.cos(a)), 0.15, 4) for a in (PI / 4, 3 * PI / 4, 5 * PI / 4, 7 * PI / 4)]), "steel", root, 0)
+
+    # ---- the tower: three straight eight-sided stages, each a little narrower, with corner posts, flanges and a gallery ----
+    SEC = ((1.7, 8.0, 3.8), (8.0, 14.2, 3.3), (14.2, 20.4, 2.8))
+    face = lambda y: next(r for y0, y1, r in SEC if y <= y1) * FACE
+    M("tower", join([prism8([(0.0, y0), (r, y0), (r, y1), (0.0, y1)]) for y0, y1, r in SEC]), "tank", root, 0.16)
+    M("corners", join([B((r * math.sin(OCT + PI * i / 4), y0 + 0.1, r * math.cos(OCT + PI * i / 4)), (r * math.sin(OCT + PI * i / 4), y1 - 0.1, r * math.cos(OCT + PI * i / 4)), 0.11, 4, True) for y0, y1, r in SEC for i in range(8)]), "steel", root, 0)
+    M("flanges", join([tube(ring8(r + 0.05, y), [0.22] * 9, 4, True) for y, r in ((1.95, 3.8), (8.0, 3.8), (14.2, 3.3))]), "body", root, 0)
+    M("cowl", prism8([(0.0, 19.4), (3.0, 19.4), (3.0, 20.4), (0.0, 20.4)]), "body", root, 0.1)
+    GY = 17.6                                                    # the gallery: a deck with a rail all round but the ladder's side
+    M("deck", prism8([(0.0, GY - 0.12), (4.6, GY - 0.12), (4.6, GY + 0.08), (0.0, GY + 0.08)]), "dark", root, 0.08)
+    M("deckBeams", join([beam((face(GY - 2.4) * math.sin(a), GY - 2.4, face(GY - 2.4) * math.cos(a)), (3.9 * math.sin(a), GY - 0.12, 3.9 * math.cos(a)), 0.12, 4) for a in [k * PI / 4 for k in range(8)]]), "steel", root, 0)
+    cn = ring8(4.6, GY)
+    M("deckPosts", join([B((x, GY, z), (x, GY + 1.2, z), 0.08, 4, True) for x, _, z in cn[:8]]), "body", root, 0)
+    M("deckRails", join([B((cn[i][0], GY + hh, cn[i][2]), (cn[i + 1][0], GY + hh, cn[i + 1][2]), 0.07, 4, True) for hh in (0.6, 1.2) for i in range(8) if i != 3]), "body", root, 0)
+    M("deckToe", tube(ring8(4.6, GY + 0.15), [0.06] * 9, 4, True), "hazard", root, 0)
+    for k, a in enumerate((PI / 3, -PI / 3)):                    # floodlights on the rail, facing out and down
+        g = xf(lathe([(0.0, 0), (0.34, 0), (0.42, 0.3), (0.0, 0.3)], 10), r=(PI / 2 - 0.2, 0, 0))
+        M(f"flood{k}", xf(turn(g, a), t=(4.3 * math.sin(a), GY + 1.0, 4.3 * math.cos(a))), "lamp", root, 0)
+        bx(f"floodBack{k}", 0.4, 0.4, 0.22, (4.15 * math.sin(a), GY + 1.0, 4.15 * math.cos(a)), "dark", root, 0, (0, a, 0))
+        bm(f"floodPost{k}", (4.15 * math.sin(a), GY, 4.15 * math.cos(a)), (4.15 * math.sin(a), GY + 0.85, 4.15 * math.cos(a)), 0.1, "metal", root)
+    bm("beaconMast", (-3.0, GY, -3.0), (-3.0, GY + 2.4, -3.0), 0.09, "dark", root)
+    PV("blinkGallery", (-3.0, GY + 2.6, -3.0), root, role="blinker", radius=0.4)
+
+    # ---- the caged ladder up the -z face, stood off each stage on brackets, and the cable duct up the +x face ----
+    LZ = -(face(3.0) + 0.45)
+    lad = [B((sx * 0.5, 1.8, LZ), (sx * 0.5, GY + 1.4, LZ), 0.06, 4, True) for sx in (-1, 1)]
+    y = 2.3
+    while y < GY + 1.3:
+        lad.append(B((-0.5, y, LZ), (0.5, y, LZ), 0.04, 4, True))
+        y += 0.5
+    M("ladder", join(lad), "metal", root, 0)
+    M("ladderBrackets", join([B((sx * 0.5, y, -face(y)), (sx * 0.5, y, LZ), 0.07, 4, True) for y in (2.6, 5.4, 7.6, 10.4, 13.4, 16.0) for sx in (-1, 1)]), "steel", root, 0)
+    M("cage", join([tube([(0.95 * math.sin(a), y, LZ - 0.9 * math.cos(a)) for a in [(-85 + 170 * i / 8) * PI / 180 for i in range(9)]], [0.05] * 9, 4, True) for y in [4.6 + 1.6 * k for k in range(9)]]), "metal", root, 0)
+    f1, f2, f3 = (r * FACE for _, _, r in SEC)
+    duct = [(f1 + 0.2, 3.2), (f1 + 0.2, 7.7), (f2 + 0.2, 8.3), (f2 + 0.2, 13.9), (f3 + 0.2, 14.5), (f3 + 0.2, GY - 0.3)]
+    M("duct", tube([(x, y, 0.0) for x, y in duct], [0.17] * len(duct), 6, True), "dark", root, 0)
+    M("ductClamps", join([cube(0.12, 0.1, 0.3, (x, y, 0.0)) for x, y in ((f1 + 0.2, 4.2), (f1 + 0.2, 6.2), (f2 + 0.2, 10.0), (f2 + 0.2, 12.0), (f3 + 0.2, 16.0))]), "steel", root, 0)
+
+    # ---- the equipment room: a smooth cargo container on the pad, a cable bridge to the tower, a roof air-handler ----
+    CX, CZ, L, W, H = 7.0, 0.0, 6.1, 2.6, 2.7
+    container(root, "room", CX, CZ, PAD, "body", False, L, W, H)
+    M("bridge", tube([(f1 + 0.2, 3.2, 0.0), (5.95, 3.2, 0.0), (5.95, PAD + H + 0.1, 0.0)], [0.17] * 3, 6, True), "dark", root, 0)
+    rb("airHandler", 0.8, 0.28, 0.6, (CX, PAD + H + 0.32, -1.5), "metal", root, 0.06, 0.08)
+    M("airFan", xf(lathe([(0.0, 0), (0.44, 0), (0.44, 0.06), (0.0, 0.06)], 14), (CX, PAD + H + 0.62, -1.5)), "dark", root, 0)
+    M("airLouvres", join([cube(0.7, 0.025, 0.04, (CX, PAD + H + 0.12 + 0.12 * k, -0.89)) for k in range(3)]), "dark", root, 0)
+    d = page("+z", (CX, 0, CZ + L / 2 + 0.03))
+    d.rect(-1.02, PAD + 0.1, 1.02, PAD + 2.5, "hazard", 0)
+    d.rect(-0.92, PAD + 0.18, 0.92, PAD + 2.42, "dark", 1)
+    d.rect(-0.2, PAD + 0.9, -0.12, PAD + 1.7, "metal", 2)
+    d.rect(0.12, PAD + 0.9, 0.2, PAD + 1.7, "metal", 2)
+    d.build(f"{PFX}roomDoor", root)
+    d = page("+x", (CX + W / 2 + 0.03, 0, CZ))      # (the +x flank's u runs along -z: the plate takes the -z end, the signs the +z end)
+    warn_sign(d, 0.1, PAD + 0.7, 1.75, 1.3, 0, "WARNING", ("RF RADIATION", "KEEP CLEAR"))
+    nfpa(d, 2.5, PAD + 1.35, 0.45, 2, 1, 0, "RF", 0)
+    d.build(f"{PFX}roomSigns", root)
+    d = page("+z", (0, 0, face(3.0) + 0.0))
+    d.hazard(-1.3, 2.2, 1.3, 2.9, "dark", "hazard", 0, 0.24)
+    warn_sign(d, -1.3, 3.6, 2.6, 2.0, 1, "DANGER", ("RF RADIATION", "DO NOT CLIMB"))
+    d.build(f"{PFX}towerSigns", root)
+
+    # ---- the top: a flange, the slew ring and the turning neck ----
+    M("flange", xf(torus(2.35, 0.2, 24, 4), (0, 20.55, 0)), "hazard", root, 0)
+    M("slewRing", lathe([(0.0, 20.5), (2.9, 20.5), (2.9, 21.2), (0.0, 21.2)], 24), "dark", root, 0.08)
+    M("slewGear", xf(torus(2.5, 0.14, 24, 4), (0, 21.3, 0)), "steel", root, 0)
+    mount(root, yaw, tilt, 21.2, 25.4, 1.75)
+    M("neckBands", Y(join([xf(torus(1.81, 0.12, 14, 4), (0, y, 0)) for y in (21.9, 23.2, 24.5)])), "metal", yaw, 0)
+
+    # ---- the dish: a white shell and cream face, a dark collar with stripe-and-body blocks, radial trusses behind in the body colour, a quadpod and a Cassegrain feed ----
+    M("hub", hub_cone(APEX), "steel", tilt, 0.12)
+    M("bowl", bowl(APEX, SHELL, 0.0, 9, 32), "white", tilt, 0.14)
+    M("face", bowl(APEX, 0.12, 0.12, 9, 32), "dish", tilt, 0)
+    M("seams", face_seams(APEX, 12, (5.0, 9.6), 1.5, 0.08), "seam", tilt, 0)
+    M("collar", rim_collar(APEX, 0.35, 0.7, 0.4), "dark", tilt, 0.1)
+    nb = 28
+    for slot, parity in (("stripe", 0), ("body", 1)):
+        M("rimBlocks_" + slot, join([tube(arc_pts(RIM + 0.46, APEX + par(RIM) - 0.15, 2 * PI * k / nb + 0.01, 2 * PI * (k + 1) / nb - 0.01, 2), [0.55] * 3, 4, True) for k in range(nb) if k % 2 == parity]), slot, tilt, 0)
+    NT, R0, nbay = 10, 5.0, 4
+    ch, dg = [], []
+    for k in range(NT):
+        a = 2 * PI * (k + 0.5) / NT
+        P = lambda r, y: (r * math.sin(a), y, r * math.cos(a))
+        rs = [R0 + (RIM - 0.3 - R0) * i / nbay for i in range(nbay + 1)]
+        tops = [(r, APEX + par(r) - SHELL - 0.05) for r in rs]
+        bots = [(r, rib_bottom(APEX, r)) for r in rs]
+        ch += [tube([P(*t) for t in tops], [0.17] * len(rs), 4, True), tube([P(*b) for b in bots], [0.2] * len(rs), 4, True)]
+        dg += [B(P(*tops[i]), P(*bots[i]), 0.1, 4, True) for i in range(nbay + 1)]
+        dg += [B(P(*tops[i]), P(*bots[i + 1]), 0.1, 4, True) if i % 2 else B(P(*bots[i]), P(*tops[i + 1]), 0.1, 4, True) for i in range(nbay)]
+    M("trussChords", join(ch), "body", tilt, 0.05)
+    M("trussWeb", join(dg), "steel", tilt, 0)
+    M("hoops", hoops((8.0, 12.2), lambda r: rib_bottom(APEX, r) - 0.05, 0.24, 40, 4), "body", tilt, 0.04)
+    FEED_Y = 14.2
+    legs = []
+    for k in range(4):
+        a = 2 * PI * (k + 0.5) / 4
+        p0 = (RIM * 0.97 * math.sin(a), APEX + par(RIM) + 0.1, RIM * 0.97 * math.cos(a))
+        p1 = (1.3 * math.sin(a), FEED_Y - 0.6, 1.3 * math.cos(a))
+        legs.append(B(p0, p1, 0.2, 6, True))
+        s2 = (math.sin(a + PI / 2), 0, math.cos(a + PI / 2))
+        for t in (0.35, 0.65):
+            c = tuple(p0[i] + (p1[i] - p0[i]) * t for i in range(3))
+            legs.append(B((c[0] + s2[0] * 0.7, c[1] - 0.25, c[2] + s2[2] * 0.7), (c[0] - s2[0] * 0.7, c[1] - 0.25, c[2] - s2[2] * 0.7), 0.08, 4, True))
+    M("quadpod", join(legs), "body", tilt, 0.05)
+    M("feedRing", hoop(1.4, FEED_Y - 0.6, 0.2, 20, 4), "dark", tilt, 0)
+    rb("feedCab", 1.4, 0.9, 1.4, (0, FEED_Y + 0.35, 0), "body", tilt, 0.1, 0.1)
+    bx("feedBand", 1.44, 0.13, 1.44, (0, FEED_Y + 0.35, 0), "stripe", tilt)
+    bx("feedWin", 0.65, 0.3, 0.06, (0, FEED_Y + 0.55, 1.4), "window", tilt)
+    M("subStruts", join([B((0.5 * math.sin(2 * PI * k / 3 + 0.5), FEED_Y - 0.5, 0.5 * math.cos(2 * PI * k / 3 + 0.5)), (1.0 * math.sin(2 * PI * k / 3 + 0.5), APEX + FOC + 1.0, 1.0 * math.cos(2 * PI * k / 3 + 0.5)), 0.07, 4, True) for k in range(3)]), "steel", tilt, 0)
+    M("subRefl", lathe([(0.0, APEX + FOC + 0.55), (1.0, APEX + FOC + 0.95), (1.0, APEX + FOC + 1.1), (0.0, APEX + FOC + 0.8)], 16), "white", tilt, 0.04)
+    M("feedStem", tube([(0, FEED_Y - 0.6, 0), (0, APEX + FOC + 0.95, 0)], [0.26, 0.26], 8), "steel", tilt, 0)
+    M("feedLens", lathe([(0.0, APEX + FOC + 0.5), (0.4, APEX + FOC + 0.55), (0.0, APEX + FOC + 0.8)], 12), "green", tilt, 0)
+    bm("feedBeacon", (0, FEED_Y + 1.25, 0), (0, FEED_Y + 2.8, 0), 0.1, "dark", tilt)
+    PV("blinkFeed", (0, FEED_Y + 3.0, 0), tilt, role="blinker", radius=0.45)
+
+    # ---- liveries: the faction's mark and name on a plate on the tower's second stage (facing +z) and along the room's flank ----
+    f2 = face(10.0)
+    for f, piv in liveries(root, MARKED).items():
+        s_ = NAMES[f]
+        d = page("+z", (0, 0, f2))
+        d.rect(-1.15, 9.45, 1.15, 11.35, "stripe", 0)
+        d.rect(-1.09, 9.51, 1.09, 11.29, "dark", 1)
+        emblem(d, f, 0.0, 10.6, 0.5, 2)
+        d.text(s_, 0.0, 9.75, 0.04, "stripe", 2, "c")
+        d.build(f"{PFX}towerPlate_{f}", piv)
+        d = page("+x", (CX + W / 2 + 0.03, 0, CZ))
+        d.rect(-2.95, PAD + 0.75, -0.2, PAD + 2.15, "stripe", 0)
+        d.rect(-2.89, PAD + 0.81, -0.26, PAD + 2.09, "dark", 1)
+        emblem(d, f, -2.89 + 0.62, PAD + 1.45, 0.48, 2)
+        tx = -2.89 + 1.2
+        ps = min(0.05, (-0.26 - tx - 0.1) / text_width(s_, 1.0))
+        d.text(s_, tx, PAD + 1.45 + 0.05, ps, "stripe", 2)
+        d.text("COMMS RELAY", tx, PAD + 1.45 - 0.5, 0.032, "white", 2)
+        d.build(f"{PFX}roomPlate_{f}", piv)
+    return root
+
+
+# =====================================================================================================
+# DISH HEAD  (the field dish's reflector, trunnions, turning neck and feed with no tower, lightly built, for the small dishes)
+# =====================================================================================================
+def build_head():
+    root, yaw, tilt = unit("dish_head")
+    for name, geo, slot, ink, part in head_pieces():
+        M(name, geo, slot, yaw if part == "yaw" else tilt, ink)
+    return root
+
+
 # ---------------------------------------------------------------------------------------------------------------
-ROOTS = (build_cryo(), build_gantry())
+ROOTS = (build_cryo(), build_gantry(), build_field(), build_head())
 
 # every root must have kept its exact name (Blender renames a clash to "name.001", and the game looks them up by name), and its pivots
+NEED = {   # the pivots each root must have: (number, livery, blinker); the field dish has no number and a livery for Daedalus too, the head neither
+    "dish_cryo": (len(NUMBERS), len(FACTIONS), 2), "dish_gantry": (len(NUMBERS), len(FACTIONS), 2),
+    "dish_field": (0, len(MARKED), 2), "dish_head": (0, 0, 0),
+}
 for r in ROOTS:
-    if r.name not in ("dish_cryo", "dish_gantry") or r.parent is not None or r.type != "EMPTY":
+    if r.name not in NEED or r.parent is not None or r.type != "EMPTY":
         raise RuntimeError(f"root {r.name!r} was renamed: some part of another station already uses that name")
     roles = sorted(o["role"] for o in C.objects if o.type == "EMPTY" and "role" in o and o.name.startswith(r.name + "_"))
-    for need, n in (("yaw", 1), ("tilt", 1), ("number", len(NUMBERS)), ("livery", len(FACTIONS)), ("blinker", 2)):
+    for need, n in zip(("yaw", "tilt", "number", "livery", "blinker"), (1, 1) + NEED[r.name]):
         if roles.count(need) < n:
             raise RuntimeError(f"{r.name}: expected {n} {need} pivots, found {roles.count(need)}")
 bad = [o.name for o in C.objects if "." in o.name and o.name.rsplit(".", 1)[1].isdigit()]

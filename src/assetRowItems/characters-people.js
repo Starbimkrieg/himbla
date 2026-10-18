@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeRunner, makeFigure } from '../models.js';
+import { makeRunner, makeFigure, makeBouncer } from '../models.js';
 import { toon, glow, ink } from '../toon.js';
 import { FACTIONS } from '../locations.js';
 import { LEADERS, Story } from '../story.js';
@@ -60,7 +60,7 @@ function zbornakItem() {
 function casinoItem() {
   const staff = [
     ['PATRON', () => makeFigure({ suit: 0xffc83a, helmet: 0xfff4e0, visor: 0xff2e88, seed: 900 }).root],
-    ['BOUNCER', () => makeFigure({ suit: 0x16121f, helmet: 0x16121f, visor: 0xffd23f, scale: 1.35 }).root],
+    ['BOUNCER', () => { const b = makeBouncer(); b.root.scale.setScalar(0.94); return b.root; }],
     ['DEALER', () => {
       const dealer = makeFigure({ suit: 0x16121f, helmet: 0xfff4e0, visor: 0xffd23f, scale: 1.05 });
       const bow = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, 0.06), glow(0xd7263d));
@@ -69,14 +69,6 @@ function casinoItem() {
       return dealer.root;
     }],
     ['VINNIE', () => makeFigure({ suit: 0x1f8a4a, helmet: 0x7dff6a, visor: 0xffd23f, scale: 1.1 }).root],
-    ['LOAN SHARK', () => {
-      const shark = makeFigure({ suit: 0x6d7a8f, helmet: 0x9aa7bb, visor: 0xff2a4a });
-      const fin = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.8, 3), toon(0x6d7a8f));
-      ink(fin, 0.03);
-      fin.position.set(0, 2.6, -0.1);
-      shark.root.add(fin);
-      return shark.root;
-    }],
     ['PRIZE CLERK', () => makeFigure({ suit: 0xff7ad9, helmet: 0xfff4e0, visor: 0x2ee6ff }).root],
     ['SPECTATOR', () => makeFigure({ suit: 0x2ee6ff, helmet: 0xfff4e0, visor: 0x241a5c }).root],
   ];

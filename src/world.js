@@ -1,17 +1,19 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces } from './toon.js';
-import { makeDish, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar } from './models.js';
+import { makeDish, makeDishHead, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar } from './models.js';
 import { mulberry32 } from './rng.js';
 import { FACTIONS } from './locations.js';
+import { bendPoint, bendQuat, unbendPoint } from './curve.js';
 import { SUN, frameQuat, arcDist, dirFromAngles, tangent } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
 import { Traffic } from './traffic.js';
-import { buildHelium, buildMeridian, buildFunpark, dressLab, dressLabInside, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot } from './settlements.js';
+import { buildHelium, buildMeridian, dressLab, dressLabInside, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot } from './settlements.js';
 import { makeProp } from './storyAssets.js';
 import { buildHomeTown } from './hometown.js';
 import { spindleGeometry } from './spindle.js';
 import { T as KT, G as KG } from './outpostModels.js';
+import { padPlan, padKit, padCols, padToFrame, colToFrame, padStairs } from './landingPad.js';
 
 function mesh(geo, mat, outline = 0.15) {
   const m = new THREE.Mesh(geo, mat);
@@ -24,6 +26,7 @@ function mesh(geo, mat, outline = 0.15) {
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
+const _up = new THREE.Vector3(0, 1, 0);
 const ACTIVE_DIST = 2600;
 // Culling (all cheap, all per frame): a settlement within ACTIVE_DIST still leaves the scene while a
 // hill or the moon's curve hides it from the camera (terrain line of sight to its top); within one
@@ -170,7 +173,7 @@ export class World {
     this.zoneWalls = [];
     this.walkers = []; // foot traffic inside the ILMB skywalks
     this.anims = []; // moving parts of kit-built settlements (settlements.js): { loc, list, seed }
-    this.rides = []; // rideable funpark rides (rides.js): { loc, name, seats: [{ obj, local, face }], camDist, exitDir(p, out) }
+    this.rides = []; // rideable fairground rides (rides.js; the ferris wheel and carousel are kept in settlements.js for Chimera Downs): { loc, name, seats: [{ obj, local, face }], camDist, exitDir(p, out) }
     this._mats = new Map();
     this.rand = mulberry32(42);
 
@@ -241,7 +244,7 @@ export class World {
     const skip = new Set();
     const mark = (o) => { if (o && o.traverse) o.traverse((c) => skip.add(c)); };
     for (const s of this.spinners) if (s.loc === loc) mark(s.obj);
-    for (const d of this.dishes) if (d.loc === loc) mark(d.root);
+    for (const d of this.dishes) if (d.loc === loc) mark(d.yaw);
     for (const a of this.anims) if (a.loc === loc) a.list.forEach(mark);
     for (const k of ['figures', 'walkers', 'rides']) for (const f of this[k]) if (f.loc === loc) mark(f.root);
     const flagged = (o) => { const u = o.userData; return u.keep || u.tick || u.spin || u.blink || u.flag || u.noMerge || u.inkGeo; };
@@ -484,31 +487,46 @@ export class World {
     return g;
   }
 
+  // The radius a curved place (locations.js `curved`: the Downs) is bent onto, 0 for a flat one. A place's builders and callers all work in flat
+  // local coordinates; toWorld, put and the colliders bend them onto the sphere (curve.js), and the Kit bends the geometry it bakes.
+  curveR(loc) { return loc.curved && loc.zr > 1000 ? loc.zr : 0; }
+
   toWorld(loc, x, y, z, out = new THREE.Vector3()) {
-    return loc.group.localToWorld(out.set(x, y, z));
+    const R = this.curveR(loc);
+    if (R) bendPoint(R, x, y, z, out); else out.set(x, y, z);
+    return loc.group.localToWorld(out);
   }
 
   col(loc, spec) {
     const c = this.colAdd(loc, spec);
+    if (spec.stick) c.stick = true; // (a landing pad's deck and stairs: physics keeps walkers on them)
     (loc._cols ||= []).push(c); // (so a rebuild can take them down again)
     return c;
   }
 
   colAdd(loc, spec) {
-    const g = loc.group;
+    const g = loc.group, R = this.curveR(loc);
+    // (a curved place: the turn that stands the flat frame at the collider on the sphere; identity otherwise)
+    const bq = R ? bendQuat(R, spec.x, spec.z, new THREE.Quaternion()) : null;
     if (spec.type === 'sphere') {
       return this.colliders.add({ type: 'sphere', c: this.toWorld(loc, spec.x, spec.y, spec.z), r: spec.r });
     }
     if (spec.type === 'cyl') {
-      return this.colliders.add({ type: 'cyl', c: this.toWorld(loc, spec.x, 0, spec.z), axis: loc.dir.clone(), y0: spec.y0, y1: spec.y1, r: spec.r });
+      const axis = loc.dir.clone();
+      if (bq) axis.set(0, 1, 0).applyQuaternion(bq).applyQuaternion(g.quaternion);
+      return this.colliders.add({ type: 'cyl', c: this.toWorld(loc, spec.x, 0, spec.z), axis, y0: spec.y0, y1: spec.y1, r: spec.r });
     }
     if (spec.type === 'hcyl') {
       // a horizontal cylinder (axis along local (sin yaw, 0, cos yaw)), so arched roofs are round to bump into
-      const axis = new THREE.Vector3(Math.sin(spec.yaw || 0), 0, Math.cos(spec.yaw || 0)).applyQuaternion(g.quaternion);
+      const axis = new THREE.Vector3(Math.sin(spec.yaw || 0), 0, Math.cos(spec.yaw || 0));
+      if (bq) axis.applyQuaternion(bq);
+      axis.applyQuaternion(g.quaternion);
       return this.colliders.add({ type: 'cyl', c: this.toWorld(loc, spec.x, spec.y, spec.z), axis, y0: -spec.len / 2, y1: spec.len / 2, r: spec.r, caps: true });
     }
     // yaw, then an optional pitch about the box's own x (ramps and bowl walls tilt their top face)
-    _q.setFromEuler(_e.set(spec.pitch || 0, spec.yaw || 0, spec.roll || 0, 'YXZ')).premultiply(g.quaternion);
+    _q.setFromEuler(_e.set(spec.pitch || 0, spec.yaw || 0, spec.roll || 0, 'YXZ'));
+    if (bq) _q.premultiply(bq);
+    _q.premultiply(g.quaternion);
     return this.colliders.add({
       type: 'box', c: this.toWorld(loc, spec.x, spec.y, spec.z),
       ax: new THREE.Vector3(1, 0, 0).applyQuaternion(_q), ay: new THREE.Vector3(0, 1, 0).applyQuaternion(_q), az: new THREE.Vector3(0, 0, 1).applyQuaternion(_q),
@@ -516,10 +534,23 @@ export class World {
     });
   }
 
+  // A field dish (models.makeDish), put (frozen) at its place, now turning and nodding at `speed`: only its head moves, so the tower, the
+  // pad and the equipment room merge with the rest of the place (mergeLocation) and the shadow cache keeps them.
+  addDish(dish, speed, loc) {
+    dish.yaw.traverse((o) => { o.matrixAutoUpdate = true; });
+    this.dishes.push({ ...dish, speed, loc });
+  }
+
   // Place object in a settlement's local frame. Static objects get frozen matrices.
   put(obj, loc, dx, dz, dy = 0, yaw = 0, dynamic = false) {
-    obj.position.set(dx, dy, dz);
-    obj.rotation.y = yaw;
+    const R = this.curveR(loc);
+    if (R) { // (a curved place: stood on the sphere, turned with it)
+      bendPoint(R, dx, dy, dz, obj.position);
+      obj.quaternion.setFromAxisAngle(_up, yaw).premultiply(bendQuat(R, dx, dz, _q));
+    } else {
+      obj.position.set(dx, dy, dz);
+      obj.rotation.y = yaw;
+    }
     loc.group.add(obj);
     if (!dynamic) {
       obj.updateMatrix();
@@ -714,22 +745,59 @@ export class World {
     return g;
   }
 
-  // spare: a decorative pad that only stays if transit ends up using it (traffic.js dropSparePads)
-  pad(loc, dx, dz, r, color = 0xffd23f, spare = false) {
+  // A landing pad for shuttles and freighters (landingPad.js): a deck up on legs with a railing round it, and a flight of stairs
+  // down on the side facing `opts.face` (an angle in the settlement's x-z plane, as Math.atan2(z, x); by default toward the
+  // settlement's middle). spare: a pad that only stays if transit ends up using it (traffic.js dropSparePads). opts.r is not
+  // needed; opts.flat: the old flat disc on the ground (the ILMB's rocket pad, which no shuttle uses). Returns the pad's record
+  // in loc.pads ({ x, z, r, top, stairs, mesh, cols, keep }), or null for a spare that was dropped before.
+  pad(loc, dx, dz, r, color = 0xffd23f, spare = false, opts = {}) {
     if (spare && (loc.droppedPads || []).some((p) => Math.hypot(p.x - dx, p.z - dz) < 1)) return null;
-    const g = new THREE.Group();
-    g.add(mesh(new THREE.CylinderGeometry(r, r * 1.05, 0.5, 32), toon(0x4a4660), 0.08));
-    const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.65, r * 0.8, 32), toon(color));
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.27;
-    g.add(ring);
-    const bar = new THREE.Mesh(new THREE.PlaneGeometry(r * 0.15, r * 0.9), toon(color));
-    bar.rotation.x = -Math.PI / 2;
-    bar.position.y = 0.28;
-    g.add(bar);
-    this.put(g, loc, dx, dz, 0);
-    (loc.pads ||= []).push({ x: dx, z: dz, r, spare, mesh: g }); // traffic reuses / avoids these
-    return g;
+    if (opts.flat) {
+      const g = new THREE.Group();
+      g.add(mesh(new THREE.CylinderGeometry(r, r * 1.05, 0.5, 32), toon(0x4a4660), 0.08));
+      const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.65, r * 0.8, 32), toon(color));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.27;
+      g.add(ring);
+      const bar = new THREE.Mesh(new THREE.PlaneGeometry(r * 0.15, r * 0.9), toon(color));
+      bar.rotation.x = -Math.PI / 2;
+      bar.position.y = 0.28;
+      g.add(bar);
+      this.put(g, loc, dx, dz, 0);
+      const rec = { x: dx, z: dz, r, spare, mesh: g, top: 0.27, cols: [], keep: null, flat: true };
+      (loc.pads ||= []).push(rec);
+      return rec;
+    }
+    const face = opts.face ?? Math.atan2(-dz, -dx);
+    const yaw = Math.PI / 2 - face; // (the stairs run along the pad's +z, which a turn by yaw points along (sin yaw, cos yaw))
+    const ground = opts.ground || ((x, z) => {
+      if (!this.planet) return 0;
+      const p = padToFrame(dx, dz, yaw, x, z);
+      const v = this.toWorld(loc, p.x, 0, p.z, new THREE.Vector3());
+      this.planet.ground(v, v);
+      return loc.group.worldToLocal(v).y;
+    });
+    const plan = padPlan(r, ground, opts.top ?? null);
+    const g = kitPart(color, (k) => padKit(k, plan, color));
+    this.put(g, loc, dx, dz, 0, yaw);
+    const cols = padCols(plan).map((c) => this.col(loc, colToFrame(dx, dz, yaw, c)));
+    // the flight's footprint and the ground at its foot are kept clear too (roads, other pads, a waiting shelter)
+    const sm = padToFrame(dx, dz, yaw, 0, r + plan.stairs.run * 0.6), keep = { x: sm.x, z: sm.z, r: plan.stairs.run * 0.6 + 2.5 };
+    (loc.keep ||= []).push(keep);
+    const rec = { x: dx, z: dz, r, spare, mesh: g, top: plan.top, cols, keep, yaw, stairs: padStairs(dx, dz, yaw, plan) };
+    (loc.pads ||= []).push(rec); // traffic reuses / avoids these
+    return rec;
+  }
+
+  // a pad and everything it brought (its colliders, the ground it kept): a spare no line used, or one a bigger pad replaces
+  dropPad(loc, rec) {
+    if (rec.mesh) rec.mesh.removeFromParent();
+    for (const c of rec.cols || []) {
+      this.colliders.remove(c);
+      if (loc._cols) { const i = loc._cols.indexOf(c); if (i >= 0) loc._cols.splice(i, 1); }
+    }
+    if (rec.keep && loc.keep) loc.keep = loc.keep.filter((k) => k !== rec.keep);
+    if (loc.pads) loc.pads = loc.pads.filter((p) => p !== rec);
   }
 
   flag(loc, dx, dz, colors, h = 14) {
@@ -836,8 +904,29 @@ export class World {
       else { const a = this.r() * Math.PI * 2, d = (0.3 + this.r() * 0.55) * loc.r; f.root.position.set(Math.cos(a) * d, 0, Math.sin(a) * d); }
       loc.group.add(f.root);
       // residents are the damageable crowd (civilians.js): spawn remembers how to make a replacement
-      this.figures.push({ ...ent, ...f, loc, spawn, area: opts.area, kind: spawn.kind || opts.kind || 'worker', target: f.root.position.clone(), wait: this.r() * 3, phase: this.r() * 10, vy: 0, hop: 0 });
+      const fig = { ...ent, ...f, loc, spawn, area: opts.area, kind: spawn.kind || opts.kind || 'worker', target: f.root.position.clone(), wait: this.r() * 3, phase: this.r() * 10, vy: 0, hop: 0 };
+      this.figures.push(fig);
+      if (this.curveR(loc)) { fig.fp = f.root.position.clone(); this.poseFigure(fig); }
     }
+  }
+
+  // A resident of a curved place (curve.js) walks on flat local coordinates, kept in `fp`; its root is posed on the sphere from them, so everything that
+  // reads root.position (civilians.js, the ink hulls) sees where it really stands.
+  poseFigure(f) {
+    const R = this.curveR(f.loc), p = f.fp;
+    bendPoint(R, p.x, p.y, p.z, f.root.position);
+    f.root.quaternion.setFromAxisAngle(_up, f.yaw || 0).premultiply(bendQuat(R, p.x, p.z, _q));
+  }
+
+  // ... and one that was knocked about and put back on the ground (civilians.js finish) takes its flat place from where it landed
+  reseatFigure(f) {
+    const R = this.curveR(f.loc);
+    if (!R) return;
+    const p = f.root.position;
+    unbendPoint(R, p.x, p.y, p.z, f.fp ||= new THREE.Vector3());
+    f.fp.y = 0;
+    const fwd = _v.set(0, 0, 1).applyQuaternion(f.root.quaternion);
+    f.yaw = Math.atan2(fwd.x, fwd.z);
   }
 
   // A knocked-out resident was cleared away (civilians.js): a fresh one moves in.
@@ -849,6 +938,7 @@ export class World {
     loc.group.add(f.root);
     Object.assign(entry, f, { target: f.root.position.clone(), wait: Math.random() * 3, vy: 0, hop: 0, hp: undefined, inks: null, inkOn: undefined });
     delete entry.civ;
+    if (this.curveR(loc)) { entry.fp = f.root.position.clone(); this.poseFigure(entry); }
   }
 
   buildLocation(loc) {
@@ -864,7 +954,6 @@ export class World {
       case 'pirate': loc.camp ? this.buildCamp(loc) : this.buildGulch(loc); break;
       case 'lab': this.buildLab(loc); break;
       case 'monolith': this.buildMonolith(loc); break;
-      case 'funpark': this.buildFunpark(loc); break;
       case 'casino': this.casino = buildCasino(this, loc); dressCasinoLot(this, loc, makeHoverCar); break; // casino
       case 'ruin': buildRuin(this, loc); break;
       case 'hometown': buildHomeTown(this, loc); this.addFigures(loc, 10, { kind: 'worker', look: (i) => ({ suit: [0xff9f1c, 0x7dff6a, 0x2ec4ff, 0xff7ad9][i % 4] }) }); break;
@@ -905,7 +994,7 @@ export class World {
     for (const k of ['spinners', 'blinkers', 'dishes', 'figures', 'zoneWalls', 'walkers', 'rides', 'anims']) this[k] = this[k].filter(mine);
     const pads = loc.pads; // (traffic already routes to these)
     loc.merged = false; // (the rebuilt place merges again, the next time it's drawn)
-    for (const k of ['turretMounts', 'keep', 'pads', 'sign', 'launchBuilt']) delete loc[k];
+    for (const k of ['turretMounts', 'keep', 'pads', 'sign', 'launchBuilt', 'leaderSpot', 'paved']) delete loc[k];
     this.buildLocation(loc);
     if (pads) loc.pads = pads;
     for (const o of keep) loc.group.add(o);
@@ -968,14 +1057,14 @@ export class World {
     this.pad(loc, 95, -60, 16);
     this.pad(loc, -120, 40, 16, 0x2ec4ff);
     this.solarField(loc, 150, 60, 4, 6, 0.4);
-    const dish = makeDish(14);
-    this.put(dish.root, loc, -150, -40, 0, 0, true);
-    this.dishes.push({ ...dish, speed: 0.2, loc });
-    this.col(loc, { type: 'cyl', x: -150, z: -40, y0: -2, y1: 12, r: 2.5 });
+    const dish = makeDish(14, 'spacecom');
+    this.put(dish.root, loc, -150, -40);
+    this.addDish(dish, 0.2, loc);
+    for (const c of dish.cols) this.col(loc, { ...c, x: -150 + c.x, z: -40 + c.z });
 
     // Launch complex: where most new arrivals touch down on the Moon
     const lp = { x: 20, z: -185 };
-    this.pad(loc, lp.x, lp.z, 30, 0xff4f2e);
+    this.pad(loc, lp.x, lp.z, 30, 0xff4f2e, false, { flat: true }); // (the rocket's: flat, no shuttle uses it)
     // (the gantry and fuel spheres are in settlements.dressIlmb)
     const ls = textSprite('ARRIVALS', { color: '#ff4f2e', size: 70, scale: 0.6 });
     ls.position.set(lp.x, 30, lp.z + 20);
@@ -1345,25 +1434,11 @@ export class World {
     w.add(new THREE.CylinderGeometry(11.95, 12.15, 0.8, 8, 1, true), this.glowM(purple), 0, 4.2, 0, { ry: Math.PI / 8, outline: 0 });
     for (const [x, z, s] of [[-4, -5, 2.6], [-4, 5, 2.6], [4, -1, 3.4]]) {
       w.add(new THREE.CylinderGeometry(0.3, 0.4, 2, 6), toon(0x3a3550), x, deck + 1, z, { outline: 0.04 });
-      const cy = deck + 2 + s;
-      w.add(new THREE.SphereGeometry(s, 14, 6, 0, Math.PI * 2, 0, 1.0), this.matDS(0xd8d4e8), x, cy, z, { rx: Math.PI + 0.5, outline: 0 });
-      // the receiver: a feed spoke from the middle of the bowl out along its axis (tilted 0.5 rad
-      // like the dish) to the glowing bead at the focus, braced by three thin struts from the rim
-      const ay = Math.cos(0.5), az = Math.sin(0.5); // the bowl's axis (it opens this way)
-      const vy = cy - s * ay, vz = z - s * az; // middle of the bowl
-      const fy = cy + s * 0.15 * ay, fz = z + s * 0.15 * az; // the focus, just above the rim plane
-      const len = s * 1.15;
-      w.add(new THREE.CylinderGeometry(0.09, 0.12, len, 6), toon(0x3a3550), x, (vy + fy) / 2, (vz + fz) / 2, { rx: 0.5, outline: 0.02 });
-      w.add(new THREE.SphereGeometry(0.34, 8, 6), this.glowM(purple), x, fy, fz, { outline: 0 });
-      const rimR = s * Math.sin(1.0), rimO = s * Math.cos(1.0); // rim circle radius, and how far it sits along the axis from the sphere's centre
-      for (let k = 0; k < 3; k++) {
-        const t = (k / 3) * Math.PI * 2 + 0.4;
-        // rim point: centre - axis * rimO + perpendicular offsets (x, and the axis-perpendicular in y/z)
-        const px = x + Math.cos(t) * rimR, py = cy - ay * rimO - az * Math.sin(t) * rimR, pz = z - az * rimO + ay * Math.sin(t) * rimR;
-        const dx = x - px, dy = fy - py, dz = fz - pz, sl = Math.hypot(dx, dy, dz);
-        const sg = new THREE.CylinderGeometry(0.04, 0.04, sl, 4).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx / sl, dy / sl, dz / sl)));
-        w.add(sg, toon(0x3a3550), (px + x) / 2, (py + fy) / 2, (pz + fz) / 2, { outline: 0 });
-      }
+      // a dish head (the field dish's reflector, trunnions and feed, without its tower) on the post, opening up and towards +z
+      const head = makeDishHead(s * Math.sin(1.0), 'daedalus');
+      head.yaw.rotation.y = Math.PI;
+      head.tilt.rotation.x = -0.5;
+      w.obj(head.root, x, z, deck + 2);
     }
     // lattice mast
     const mh = 30, mx = 5, mz = 6;
@@ -1375,10 +1450,10 @@ export class World {
     this.blinkers.push({ mat: bm, base: new THREE.Color(0xff2a4a), phase: 1.3, loc });
     w.cyl(mx, mz, deck - 1, deck + mh, 1);
     // big tracking dish beside the bunker
-    const dish = makeDish(12, 0xd8d4e8);
-    w.obj(dish.root, 6, -19, 0, 0, true);
-    this.dishes.push({ ...dish, speed: 0.12, loc });
-    w.cyl(6, -19, -2, 11, 2.5);
+    const dish = makeDish(12, 'daedalus');
+    w.obj(dish.root, 6, -19);
+    this.addDish(dish, 0.12, loc);
+    for (const c of dish.cols) { if (c.type === 'cyl') w.cyl(6 + c.x, -19 + c.z, c.y0, c.y1, c.r); else w.box(6 + c.x, c.y, -19 + c.z, c.hx, c.hy, c.hz); }
     this.vestibule(w, -12.5, 6.4, purple, 8.4, 5);
     w.cyl(0, 0, -2, deck, 12.3);
     w.flag(-6, -14, [0xc77dff, 0x111111, 0xc77dff]);
@@ -1574,10 +1649,10 @@ export class World {
       this.mount(loc, Math.cos(a) * r, Math.sin(a) * r, 0, { ground: true });
     }
     dressBase(this, loc); // command bunker, barracks, searchlight tower, traps, fuel
-    const dish = makeDish(small ? 8 : 12, 0xb0b0c0);
-    this.put(dish.root, loc, 30, 30, 0, 0, true);
-    this.dishes.push({ ...dish, speed: 0.6, loc });
-    this.col(loc, { type: 'cyl', x: 30, z: 30, y0: -2, y1: 11, r: 2.5 });
+    const dish = makeDish(small ? 8 : 12, loc.faction);
+    this.put(dish.root, loc, 30, 30);
+    this.addDish(dish, 0.6, loc);
+    for (const c of dish.cols) this.col(loc, { ...c, x: 30 + c.x, z: 30 + c.z });
     this.flag(loc, 0, small ? 40 : 70, loc.faction === 'vostok' ? [0xff3b5c, 0xffd23f, 0xff3b5c] : [0xc77dff, 0x111111, 0xc77dff], 20);
     this.addFigures(loc, small ? 4 : 8, { kind: 'soldier', look: () => ({ suit: 0x55607a, helmet: fc, visor: 0x111111 }) });
 
@@ -1674,6 +1749,7 @@ export class World {
       if (!d.loc.active) continue;
       d.yaw.rotation.y += d.speed * dt;
       d.tilt.rotation.x = -0.6 + Math.sin(time * d.speed * 2) * 0.25;
+      for (const l of d.lamps) l.visible = Math.sin(time * 4 + l.userData.seed) > -0.3; // (the aircraft lamps)
     }
     for (const b of this.blinkers) {
       if (!b.loc.active) continue;
@@ -1852,14 +1928,6 @@ export class World {
     (loc.keep ||= []).push({ x: 0, z: 0, r: 42 }, { x: loc.r * 1.25, z: 0, r: 34 });
   }
 
-  // Bounce Dome Funpark (settlements.js): inflatables, skate park, rides.
-  buildFunpark(loc) {
-    buildFunpark(this, loc);
-    const cols = [0xff2e88, 0xffd23f, 0x2ee6ff, 0x7dff6a, 0xff9f1c, 0xc77dff];
-    this.addFigures(loc, 8, { kind: 'kid', look: (i) => ({ suit: cols[i % cols.length], scale: 0.55 }) });
-    this.addFigures(loc, 3, { kind: 'worker', look: (i) => ({ suit: cols[(i + 3) % cols.length] }) });
-  }
-
   // Glowing crystal rock samples scattered across the sunlit side, for the jar.
   buildCrystals() {
     const P = this.planet;
@@ -1991,7 +2059,7 @@ export class World {
         const near = Math.hypot(e[12] - cp.x, e[13] - cp.y, e[14] - cp.z) < (f.inkOn === false ? FIG_INK_DIST : FIG_INK_DIST + 10);
         if (near !== f.inkOn) { f.inkOn = near; for (const o of hulls) o.visible = near; }
       }
-      const p = f.root.position;
+      const R = this.curveR(loc), p = R ? f.fp : f.root.position;
       if (f.kind === 'kid') {
         f.hop -= dt;
         if (f.vy === 0 && f.hop <= 0) { f.vy = 3 + Math.random() * 3; f.hop = 0.5 + Math.random(); }
@@ -2001,28 +2069,40 @@ export class World {
           if (p.y <= 0) { p.y = 0; f.vy = 0; }
         }
       }
-      if (f.wait > 0) { f.wait -= dt; continue; }
+      if (f.wait > 0) {
+        f.wait -= dt;
+        if (f.vendor) { // (serving: forearms forward and a gentle swing)
+          f.phase += dt * 2.2;
+          if (f.armL) { f.armL.rotation.x = -0.7 + Math.sin(f.phase) * 0.3; f.armR.rotation.x = -0.7 + Math.sin(f.phase + 1.9) * 0.3; }
+        }
+        if (R) this.poseFigure(f);
+        continue;
+      }
       const dx = f.target.x - p.x, dz = f.target.z - p.z;
       const d = Math.hypot(dx, dz);
       if (d < 1) {
         if (f.area) {
           f.area(f.target, f); // (somewhere else in its own patch)
+          if (f.vendor) p.copy(f.target); // (a vendor's patch is its post: it is there, at its own height)
         } else {
           const a = Math.random() * Math.PI * 2, rr = (0.25 + Math.random() * 0.6) * loc.r;
           f.target.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
         }
         f.wait = f.kind === 'soldier' ? 0.5 : 1 + Math.random() * 4;
+        if (R) this.poseFigure(f);
         continue;
       }
       const sp = f.kind === 'kid' ? 2.5 : f.kind === 'soldier' ? 2.2 : 1.4;
       const k = Math.min(d, sp * dt) / d;
       p.x += dx * k; p.z += dz * k;
-      f.root.rotation.y = Math.atan2(dx, dz);
+      f.yaw = Math.atan2(dx, dz);
+      if (!R) f.root.rotation.y = f.yaw;
       f.phase += dt * 6;
       f.legL.rotation.x = Math.sin(f.phase) * 0.6;
       f.legR.rotation.x = -Math.sin(f.phase) * 0.6;
       if (f.armL) { f.armL.rotation.x = -Math.sin(f.phase) * f.swing; f.armR.rotation.x = Math.sin(f.phase) * f.swing; }
       if (f.kind !== 'kid') p.y = Math.abs(Math.sin(f.phase)) * 0.15;
+      if (R) this.poseFigure(f);
     }
   }
 }

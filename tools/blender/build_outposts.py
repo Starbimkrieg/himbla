@@ -5,7 +5,7 @@
 # the `anim` groups and the `ink` property). Two kinds are here, each as two roots at the origin: the Relay Mast
 # (`mast`, `mast_wreck`) and the Watchtower (`tower`, `tower_wreck`; main building in ruins), ports of mast() and
 # tower() in src/outpostModels.js (same positions, sizes, colours and outline values; a wreck replays the game's own
-# random stream). Object names are unique across the file, so the mast's keep their plain names and the tower's all
+# random stream). The mast's dishes are the dish head of dishkit.py, as the game's Kit-built mast has them (models.js Kit.dishHead). Object names are unique across the file, so the mast's keep their plain names and the tower's all
 # carry a `tower` marker (`tower_apron`, `col_tower_lattice`, `smoke_tower`, ...; a role word stays first).
 #
 # Run it with any Python that has the bpy module (pip install bpy):
@@ -63,7 +63,7 @@ MATERIALS = {
     "apron": (0x7A7686, False), "apron_edge": (0x5A566A, False),
     "concrete": (CONC, False), "dark": (DARK, False), "steel": (STEEL, False), "light": (LIGHT, False),
     "mast_red": (0xFF4F2E, False), "mast_white": (0xF5F5F5, False),
-    "dish_white": (0xF5F5F5, True), "dish_grey": (0xB8B4C8, True),
+    "dish_cream": (0xFFF4E0, False), "dish_grey": (0xB8B4C8, False),
     "navy": (0x2A2540, False), "shed_wall": (0xE8E4F0, False), "cabinet": (0x3A3F50, False),
     "cable_orange": (0xFF9F1C, False), "cable_blue": (0x2EC4FF, False), "cable_black": (0x111111, False),
     "char": (CHAR, False), "rubble_dark": (0x3A3540, False), "rubble_brown": (0x4A3F3A, False),
@@ -81,9 +81,14 @@ MATERIALS = {
 # see-through light beams: name -> alpha (the game's BEAM(colour, opacity)). Additive, unlit and double sided in the game.
 ADDITIVE = {"additive_searchlight": 0.13}
 SLOT_COLORS = {name: srgb(h) for name, (h, _) in MATERIALS.items()}
+# the dish head's slots (dishkit.py) in this file's materials: its body takes the owner's accent and its stripe is cream (the Kit build paints the
+# owner's full livery: models.js dishSlot); a wreck's heads, flung off the mast, are grey
+HEAD = {"body": "faction", "stripe": "dish_cream", "steel": "steel", "dark": "navy", "white": "mast_white", "dish": "dish_cream", "hazard": "yellow", "green": "glow_green"}
+HEAD_WRECK = {**HEAD, "body": "dish_grey"}
 
 # geometry and scene helpers shared with the other build scripts
 exec(open(os.path.join(REPO, "tools", "blender", "kit.py"), encoding="utf-8").read(), globals())
+exec(open(os.path.join(REPO, "tools", "blender", "dishkit.py"), encoding="utf-8").read(), globals())   # the dish head the mast's dishes are made of
 
 C = coll()
 for _name, (_hex, _double) in MATERIALS.items():
@@ -130,11 +135,6 @@ def js_round(v):
 def euler_xyz(rx, ry, rz):
     """THREE.Euler 'XYZ' as a matrix: Rx * Ry * Rz (mathutils' own 'XYZ' is the reverse product)."""
     return Matrix.Rotation(rx, 4, "X") @ Matrix.Rotation(ry, 4, "Y") @ Matrix.Rotation(rz, 4, "Z")
-
-
-def dish_geo(r):
-    """A shallow dish facing local +z (dishGeo in outpostModels.js)."""
-    return place(sphere(r, 14, 6, 0.75), Matrix.Translation((0, 0, r * 0.85)) @ Matrix.Rotation(-math.pi / 2, 4, "X"))
 
 
 ROLE_WORDS = ("col", "hit", "raid", "smoke", "drop", "text")  # (the gameplay roles: an empty's name starts with its role)
@@ -223,6 +223,34 @@ class Kit:
         """A mesh under an anim node, with `geo` in the node's own frame."""
         n = self.name(name)
         return mesh_smooth(n, geo, slot, parent, ink)
+
+    # -- dish heads (dishkit.py's light head: what Kit.dishHead of models.js bakes into the game's Kit-built outposts)
+    def _head(self, name, m0, rim, slots, az, el, parent):
+        """The head's pieces as meshes named `name`_<piece> under `parent`: m0 puts the neck's foot (y = NECK in the model) where it stands, the
+        model is scaled so the rim is `rim` m from the axis, turned `az` about the vertical and nodded `el`."""
+        k = rim / RIM
+        base = m0 @ Matrix.Translation((0, (YP - NECK) * k, 0))
+        turn, nod, S = Matrix.Rotation(az, 4, "Y"), Matrix.Rotation(el, 4, "X"), Matrix.Scale(k, 4)
+        frames = {"yaw": base @ turn @ S, "tilt": base @ turn @ nod @ S}
+        for piece, (verts, faces), slot, ink, part in head_pieces():
+            m = frames[part]
+            mesh(self.name(f"{name}_{piece}"), ([tuple(m @ Vector(v)) for v in verts], faces), slots[slot], parent, ink * k if ink >= 0.04 else 0)
+
+    def dish_head(self, name, x, y, z, rim, slots, az=0.0, el=-0.5, lay=None):
+        """A dish head with its neck's foot at (x, y, z) of the current frame, opening up and towards -z (az = pi: towards +z), nodded `el`.
+        `lay` = (yaw, rx, rz) first sets the whole head down at that angle (a wreck's fallen ones)."""
+        m = self.base @ Matrix.Translation((x, y, z))
+        if lay:
+            m = m @ Matrix.Rotation(lay[0], 4, "Y") @ euler_xyz(lay[1], 0, lay[2])
+        self._head(name, m, rim, slots, az, el, self.root)
+
+    def dish_head_spin(self, name, x, y, z, rim, slots, az=0.0, el=-0.5, arm=0.0):
+        """The head on a boom `arm` m long out from a node at (x, y, z) that the game turns about the vertical (anim spin), standing at its end."""
+        node = self.dyn(name, "spin", x, y, z)
+        self._head(name, Matrix.Translation((0, 0, arm)), rim, slots, az, el, node)
+        if arm:
+            self.child(node, f"{name}_arm", place(cylinder(1.2 * rim / RIM, 1.2 * rim / RIM, arm, 5), Matrix.Translation((0, 0, arm / 2)) @ Matrix.Rotation(math.pi / 2, 4, "X")), "dark", 0.03)
+        return node
 
     # -- gameplay data (colliders / blast boxes in the current frame)
     def box_empty(self, role, hx, hy, hz, x, z, ry, y0, name):
@@ -350,20 +378,17 @@ def build_mast(wreck):
             k.blinker(MX + 2.0, y + 0.45, MZ, "glow_red", 0.3)
         k.cyl(0.08, 0.12, 2.6, 5, "light", MX, H, MZ, ink=0.02, name="mast_pole")
         k.blinker(MX, H + 2.9, MZ, "glow_red", 0.45)
-        for i, (h, ry, r) in enumerate(((17, 0.5, 1.6), (25, 2.6, 1.9), (28.5, 4.4, 1.4))):
+        for i, (h, ry, rim) in enumerate(((17, 0.5, 1.1), (25, 2.6, 1.3), (28.5, 4.4, 0.95))):   # (a dish head on an arm each)
             k.at(MX, MZ, ry)
-            k.add(dish_geo(r), "dish_white", 0, h, 1.2, ink=0.04, name=f"mast_dish_{i}")
-            k.beam((0, h, 0.4), (0, h, 1.4), 0.08, "dark", name=f"mast_dish_{i}_arm")
-            k.beam((0, h, 1.4), (0, h, 1.2 + r * 1.2), 0.04, "dark", ink=0, name=f"mast_dish_{i}_feed")
+            k.beam((0, h - 0.7, 0.4), (0, h - 0.7, 1.5), 0.08, "dark", name=f"mast_dish_{i}_arm")
+            k.dish_head(f"mast_dish_{i}", 0, h - 0.7, 1.5, rim, HEAD, az=math.pi, el=-1.35)
             k.at()
         for i in range(3):
             k.at(MX, MZ, (i * math.pi * 2) / 3 + 1.2)
             k.box(0.55, 2.8, 0.2, "light", 0, 35.6, 1.15, ink=0.03, name=f"mast_fin_{i}")
             k.at()
         # the spinning dish on the top platform
-        spin = k.dyn("spinner", "spin", MX, 32.8, MZ)
-        k.child(spin, "spinner_dish", place(dish_geo(1.5), Matrix.Translation((0, 1.0, 1.6)) @ Matrix.Rotation(-0.4, 4, "X")), "dish_white")
-        k.child(spin, "spinner_arm", place(cuboid(0.2, 0.2, 1.6), Matrix.Translation((0, 1.0, 0.8))), "dark")
+        k.dish_head_spin("spinner", MX, 32.8, MZ, 1.0, HEAD, az=math.pi, el=-0.7, arm=1.6)
         # guy wires to three anchors
         for i in range(3):
             a = 0.5 + (i * math.pi * 2) / 3
@@ -416,8 +441,8 @@ def build_mast(wreck):
 
         lying(0, (MX + 1, MZ - 2), (5, -20))
         lying(1, (5.5, -19), (17, -12))
-        k.add(dish_geo(1.9), "dish_grey", -8, F + 0.6, -14, rx=-1.3, ry=0.7, ink=0.04, name="fallen_dish_0")
-        k.add(dish_geo(1.5), "dish_grey", 9, F + 0.5, -16, rx=1.2, ry=2.1, ink=0.04, name="fallen_dish_1")
+        k.dish_head("fallen_dish_0", -8, F + 0.5, -14, 1.3, HEAD_WRECK, el=-0.3, lay=(0.7, -0.9, 0.3))   # (two heads thrown off the mast, on their sides)
+        k.dish_head("fallen_dish_1", 9, F + 0.4, -16, 1.0, HEAD_WRECK, el=-0.6, lay=(2.1, 0.8, -0.4))
         for i in range(3):
             a = 0.5 + (i * math.pi * 2) / 3
             ax, az = MX + math.cos(a) * 17, MZ + math.sin(a) * 17
@@ -464,8 +489,7 @@ def build_mast(wreck):
     k.at(-13, 10, 2.4)
     k.cyl(0.6, 0.9, 2.4, 8, "light", 0, 0, 0, ink=0.05, name="dish_ground_base")
     k.box(1.4, 0.8, 1.0, "dark", 0, 2.2, 0, ink=0.03, name="dish_ground_head")
-    k.add(dish_geo(3.2), "dish_white", 0, 3.2, -0.4, rx=-0.8, ink=0.05, name="dish_ground")
-    k.beam((0, 3.2, 0.3), (0, 5.2, 2.2), 0.06, "dark", ink=0, name="dish_ground_feed")
+    k.dish_head("dish_ground", 0, 3.0, 0, 2.2, HEAD, az=math.pi, el=-0.7)
     k.column(1.2, 3, 0, 0, name="col_dish_ground")
     k.at()
     # name board, flags, perimeter, lights

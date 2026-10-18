@@ -39,6 +39,7 @@ const LOOT = {
 };
 const MAP_GRID = 96; // owner cells per cube-face edge for the globe map's territory lookup
 const BUILT_R = 40; // founded outposts: flattened radius (the compound itself: storyAssets.js)
+const TOWN_R = 120; // your town's flat radius (worldstate.js); its blend reaches 1.95x that
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _w = new THREE.Vector3();
@@ -185,23 +186,52 @@ export class Territory {
     if (clear) this.clearSites();
   }
 
+  // Every road point as unit directions in one flat array (x, y, z, x, y, z...): the mesh's vertices (every other one) and the
+  // traffic pieces' paths. Built once and kept; it is rebuilt when the network's size changes under it.
+  roadDirs() {
+    const tr = this.game.world.traffic;
+    const rp = tr && tr.roadMesh && tr.roadMesh.geometry.attributes.position;
+    const pieces = (tr && tr.pieces) || [];
+    const c = this._roads;
+    if (c && c.mesh === (rp || null) && c.verts === (rp ? rp.count : 0) && c.pieces === pieces.length) return c.a;
+    const a = [];
+    const push = (v) => { v.normalize(); a.push(v.x, v.y, v.z); };
+    if (rp) for (let i = 0; i < rp.count; i += 2) push(_w.fromBufferAttribute(rp, i));
+    for (const pc of pieces) for (const p of (pc.path && pc.path.pts) || pc.raw || []) push(_w.copy(p));
+    this._roads = { mesh: rp || null, verts: rp ? rp.count : 0, pieces: pieces.length, a: Float64Array.from(a) };
+    return this._roads.a;
+  }
+
+  // Is any road within dist metres of unit direction d?
+  nearRoad(d, dist) {
+    const road = this.roadDirs(), cos = Math.cos(dist / this.game.planet.R);
+    for (let i = 0; i < road.length; i += 3) if (road[i] * d.x + road[i + 1] * d.y + road[i + 2] * d.z > cos) return true;
+    return false;
+  }
+
+  // Would a town founded at unit direction d crowd what is already laid down? Its 120 m plateau blends out to 234 m, and an
+  // outpost's own flat is applied after the zones (so it would overlay the blend ring); roads and lakes are baked into the ground
+  // as it was. The gaps are the ones clearSites keeps round a late settlement: 312 m to an outpost that is not built yet, 306 m to a
+  // road (the blend plus an outpost's 72 m), and a lake's whole reach plus 250 m (clear of the 240 m ring townScore reads).
+  siteClash(d) {
+    const g = this.game, R = g.planet.R;
+    const reach = TOWN_R * 1.95 + FLAT_R * 2 + 12;
+    for (const o of this.outposts) if (!o.built && arcDist(d, o.dir) < Math.max(TOWN_R * 1.6 + 120, reach)) return true;
+    for (const lk of g.world.lakes || []) if (arcDist(d, lk.d) < Math.acos(Math.min(1, lk.cos)) * R + 250) return true;
+    return this.nearRoad(d, reach);
+  }
+
   // The structures stand on ~60 m flattened plateaus (blending out to ~2x): keep them off the
   // roads, black lakes and settlement plateaus that were laid down before us. A clashing outpost
   // is nudged to the nearest clear spot, or dropped (ids stay stable for saves either way).
   clearSites() {
     const g = this.game, R = g.planet.R;
     const blend = FLAT_R * 2 + 12;
-    const road = [];
-    const tr = g.world.traffic;
-    const rp = tr && tr.roadMesh && tr.roadMesh.geometry.attributes.position;
-    if (rp) for (let i = 0; i < rp.count; i += 2) road.push(new THREE.Vector3().fromBufferAttribute(rp, i).normalize());
-    for (const pc of (tr && tr.pieces) || []) for (const p of (pc.path && pc.path.pts) || pc.raw || []) road.push(p.clone().normalize());
-    const cosRoad = Math.cos(blend / R);
     const lakes = (g.world.lakes || []).map((lk) => ({ d: lk.d, r: Math.acos(Math.min(1, lk.cos)) * R + blend }));
     const bad = (d, self) => {
       for (const l of g.locations) if (arcDist(d, l.dir) < Math.max((l.zoneR || l.r) * 1.6 + 120, l.r * 1.95 + blend)) return true;
       for (const lk of lakes) if (arcDist(d, lk.d) < lk.r) return true;
-      for (const p of road) if (p.dot(d) > cosRoad) return true;
+      if (this.nearRoad(d, blend)) return true;
       return this.outposts.some((o) => o !== self && !o.gone && arcDist(d, o.dir) < 420);
     };
     const rr = mulberry32(777);
@@ -262,7 +292,9 @@ export class Territory {
       for (const [id, f] of Object.entries(d.captured || {})) { const o = this.outposts.find((x) => x.id === id); if (o) { o.faction = f; o.captured = true; } }
       for (const [id, k] of Object.entries(d.kinds || {})) { const o = this.outposts.find((x) => x.id === id); if (o) { o.kind = k; o.kindChanged = true; } }
       for (const b of d.built || []) {
-        if (this.game.ws && this.game.ws.town && this.game.ws.town.replaces === b.id) continue; // (it grew into your town)
+        // (it grew into your town: no outpost and no 40 m flat of its own; the live finale takes that flat
+        // out too, in applyWorldLive, so a reload shows the same ground)
+        if (this.game.ws && this.game.ws.town && this.game.ws.town.replaces === b.id) continue;
         const o = { ...b, dir: new THREE.Vector3().fromArray(b.dir), model: null, cols: [], built: true };
         this.outposts.push(o);
         this.game.planet.addFlat(o.dir, BUILT_R);
@@ -767,4 +799,4 @@ export class Territory {
   }
 }
 
-export { KIND_NAMES, MILITARY };
+export { KIND_NAMES, MILITARY, SAP_NAMES };

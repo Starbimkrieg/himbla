@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="874" height="737" viewBox="0 0 874 737" role="img" aria-label="Today: plan of Chimera Downs, one stand, one back stand, the concourse and the stalls behind the stand">
+<style>text{font:9px ui-monospace,Menlo,monospace;fill:#f8fff8}.t{font-size:14px;font-weight:bold}.k{fill:#cfb352;font-size:10px}.n{fill:#f8fff8;font-size:9px}</style>
+<rect width="874" height="737" fill="#242326"/>
+<text x="12" y="19" class="t">Today</text><text x="12" y="33" class="k">one stand, one back stand, the concourse and the stalls behind the stand</text>
+<circle cx="437.0" cy="375.0" r="365.5" fill="none" stroke="#7b9a6e" stroke-width="1" stroke-dasharray="7 5"/>
+<text x="437.0" y="19.5" text-anchor="middle" class="k">plateau r 215</text>
+<path d="M 284.0 299.2 L 590.0 299.2 A 75.8 75.8 0 0 1 590.0 450.8 L 284.0 450.8 A 75.8 75.8 0 0 1 284.0 299.2 Z" fill="#7b9a6e" fill-opacity="0.55"/>
+<path d="M 284.0 282.0 L 590.0 282.0 A 93.0 93.0 0 0 1 590.0 468.0 L 284.0 468.0 A 93.0 93.0 0 0 1 284.0 282.0 Z" fill="none" stroke="#b07c57" stroke-width="34.3"/>
+<path d="M 284.0 298.5 L 590.0 298.5 A 76.5 76.5 0 0 1 590.0 451.5 L 284.0 451.5 A 76.5 76.5 0 0 1 284.0 298.5 Z" fill="none" stroke="#f8fff8" stroke-width="0.8"/><path d="M 284.0 265.5 L 590.0 265.5 A 109.5 109.5 0 0 1 590.0 484.5 L 284.0 484.5 A 109.5 109.5 0 0 1 284.0 265.5 Z" fill="none" stroke="#f8fff8" stroke-width="0.8"/>
+<rect x="512.6" y="450.8" width="1.7" height="34.3" fill="#f8fff8"/><text x="510.9" y="468.0" text-anchor="end" class="n">finish</text>
+<rect x="233.0" y="547.0" width="408.0" height="66.0" fill="#8f8a9a" fill-opacity="0.35" stroke="#b07c57" stroke-width="0.8"/>
+<rect x="412.0" y="348.8" width="50.0" height="2.0" fill="#3b393a" fill-opacity="0.55" stroke="#f8fff8" stroke-width="1.2" stroke-dasharray="4 3"/>
+<rect x="273.8" y="494.8" width="326.4" height="51.0" fill="#f8fff8" fill-opacity="0.85" stroke="#cfb352" stroke-width="0.8"/>
+<rect x="333.3" y="233.0" width="207.4" height="22.1" fill="#f8fff8" fill-opacity="0.85" stroke="#cfb352" stroke-width="0.8"/>
+<rect x="285.4" y="596.0" width="14.3" height="11.9" fill="#8b4044" fill-opacity="0.85" stroke="#f8fff8" stroke-width="0.8"/>
+<rect x="343.2" y="596.0" width="14.3" height="11.9" fill="#8b4044" fill-opacity="0.85" stroke="#f8fff8" stroke-width="0.8"/>
+<rect x="401.0" y="596.0" width="14.3" height="11.9" fill="#8b4044" fill-opacity="0.85" stroke="#f8fff8" stroke-width="0.8"/>
+<rect x="458.8" y="596.0" width="14.3" height="11.9" fill="#8b4044" fill-opacity="0.85" stroke="#f8fff8" stroke-width="0.8"/>
+<rect x="516.6" y="596.0" width="14.3" height="11.9" fill="#8b4044" fill-opacity="0.85" stroke="#f8fff8" stroke-width="0.8"/>
+<rect x="574.4" y="596.0" width="14.3" height="11.9" fill="#8b4044" fill-opacity="0.85" stroke="#f8fff8" stroke-width="0.8"/>
+<rect x="221.1" y="504.2" width="30.6" height="20.4" fill="#f8fff8" fill-opacity="0.85" stroke="#cfb352" stroke-width="0.8"/>
+<circle cx="488.0" cy="419.2" r="10.9" fill="#cfb352" fill-opacity="0.85" stroke="#f8fff8" stroke-width="0.8"/>
+<circle cx="369.0" cy="388.6" r="6.0" fill="#cfb352" fill-opacity="0.85" stroke="#f8fff8" stroke-width="0.8"/>
+<rect x="133.6" y="357.1" width="8.5" height="35.7" fill="#f8fff8" fill-opacity="0.85" stroke="#cfb352" stroke-width="0.8"/>
+<text x="437.0" y="575.6" text-anchor="middle" class="n" style="paint-order:stroke;stroke:#242326;stroke-width:3px">CONCESSIONS BEHIND THE STAND</text>
+<text x="471.0" y="337.6" text-anchor="middle" class="n" style="paint-order:stroke;stroke:#242326;stroke-width:3px">jumbotron 25 x 12.5</text>
+<text x="369.0" y="412.4" text-anchor="middle" class="n" style="paint-order:stroke;stroke:#242326;stroke-width:3px">golden statue</text>
+<text x="488.0" y="432.8" text-anchor="middle" class="n" style="paint-order:stroke;stroke:#242326;stroke-width:3px">winner's circle</text>
+<text x="137.8" y="398.8" text-anchor="middle" class="n" style="paint-order:stroke;stroke:#242326;stroke-width:3px">way in</text>
+<text x="236.4" y="494.0" text-anchor="middle" class="n" style="paint-order:stroke;stroke:#242326;stroke-width:3px">race office</text>
+<text x="437.0" y="521.2" text-anchor="middle" class="n" style="paint-order:stroke;stroke:#242326;stroke-width:3px">GRANDSTAND (11 tiers)</text>
+<text x="437.0" y="242.4" text-anchor="middle" class="n" style="paint-order:stroke;stroke:#242326;stroke-width:3px">back stand (5 tiers)</text>
+</svg>

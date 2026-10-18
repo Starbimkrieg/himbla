@@ -16,8 +16,11 @@
 //                               { root,            an Object3D standing on y = 0, with an IDENTITY transform of its own
 //                                 cols?,           colliders in root's frame (an empty array = none, e.g. a line of figures): [{ type: 'box'|'cyl'|'sphere', ... }] as
 //                                                  outpostTemplate gives them (box: x y z hx hy hz yaw; cyl: x z y0 y1 r;
-//                                                  sphere: x y z r)
-//                                 update?(dt, t),  called every frame while it is built (a spinner, a blinker, a lifted gear)
+//                                                  sphere: x y z r); a box may carry its whole frame instead of a yaw (ax ay az: unit axes, for a tilted
+//                                                  one) and a `rail`: the index into `rails` of the grind rail it belongs to
+//                                 rails?,          grind rails (rails.js): [[Vector3, ...], ...], the crest line of each snake rock in root's frame; they stand
+//                                                  in the flat world while the item is built, so the rock can be ground like the Moon's
+//                                 update?(dt, t),  called every frame while it is built (a spinner, a blinker, a lifted gear); one that throws is switched off
 //                                 dispose?() }     anything beyond the geometry and materials under root
 //                             and is called each time you come near it (it is let go of when you walk off), so it must be
 //                             repeatable and must not touch the Moon, the player or the game's registries.
@@ -27,7 +30,8 @@ import characters from './characters.js';
 import props from './props.js';
 import vehicles from './vehicles.js';
 import buildings from './buildings.js';
+import downs from './downs.js';
 import places from './places.js';
 
 // (small things first, so the first stretch of the row is cheap and dense; the places, the biggest and heaviest, last)
-export const GROUPS = [characters, props, vehicles, buildings, places].flat();
+export const GROUPS = [characters, props, vehicles, buildings, downs, places].flat();

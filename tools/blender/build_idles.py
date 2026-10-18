@@ -1,7 +1,7 @@
 # Idle animations for the Moon-runner, authored in Blender (4.2+ / 5.x) and exported for the game.
 #
-# Builds the runner with build_runner.py (without touching runner.glb), keys five idles as actions on its
-# pivots (runner = the whole body, torso, head, armL, armR, legL, legR), and writes src/assets/idles.json,
+# Builds the runner with build_runner.py (without touching runner.glb), keys the idles as actions on its
+# pivots (runner = the whole body, torso, head, armL, armR, foreL, foreR (the elbows), legL, legR), and writes src/assets/idles.json,
 # which src/idles.js plays while the courier stands still. Run it headless or from Blender's Scripting tab:
 #   python3 tools/blender/build_idles.py            (MOONRUNNER_REPO=<checkout> if it isn't run from one)
 #   MOONRUNNER_IDLES_BLEND=idles.blend python3 ...  also saves the keyed scene to look at in Blender
@@ -49,6 +49,7 @@ def breathe(u):
         "head": {"rot": (-0.014 * s + 0.01 * math.sin(TAU * u * 0.5 + 1), 0.05 * math.sin(TAU * u * 0.5 + 2), 0.0)},
         "armL": {"rot": (0.03 * s, 0, -(0.05 + 0.025 * c))},
         "armR": {"rot": (0.03 * s, 0, 0.05 + 0.025 * c)},
+        "foreL": {"rot": (-0.14 - 0.03 * c - 0.02 * s, 0, 0)}, "foreR": {"rot": (-0.14 - 0.03 * c - 0.02 * s, 0, 0)},
         "legL": {"rot": (0.0, 0, 0.0)}, "legR": {"rot": (0.0, 0, 0.0)},
     }
 
@@ -62,6 +63,7 @@ def look_around(u):
         "head": {"rot": (-up + 0.05 * abs(yaw), yaw * 0.85, -0.06 * yaw)},
         "armL": {"rot": (0.04 * yaw, 0, -0.06)},
         "armR": {"rot": (-0.04 * yaw, 0, 0.06)},
+        "foreL": {"rot": (-0.16 - 0.1 * max(0.0, yaw), 0, 0)}, "foreR": {"rot": (-0.16 - 0.1 * max(0.0, -yaw), 0, 0)},
         "legL": {"rot": (0, 0.0, 0)}, "legR": {"rot": (0, 0.0, 0)},
     }
 
@@ -75,6 +77,7 @@ def weight_shift(u):
         "head": {"rot": (0.0, 0.1 * s, 0.05 * s)},
         "armL": {"rot": (0.1 * s, 0, -0.08 - 0.07 * s)},
         "armR": {"rot": (-0.1 * s, 0, 0.08 - 0.07 * s)},
+        "foreL": {"rot": (-0.2 - 0.18 * max(0.0, -s), 0, 0)}, "foreR": {"rot": (-0.2 - 0.18 * max(0.0, s), 0, 0)},
         "legL": {"rot": (-0.22 * left, 0, 0.02 * s)},
         "legR": {"rot": (-0.22 * right, 0, 0.02 * s)},
     }
@@ -90,6 +93,7 @@ def stretch(u):
         "head": {"rot": (-0.35 * arch, 0.0, 0.0)},
         "armL": {"rot": (-2.7 * up + shake, 0, -0.1 - 0.35 * up + quiver)},
         "armR": {"rot": (-2.7 * up - shake, 0, 0.1 + 0.35 * up - quiver)},
+        "foreL": {"rot": (-0.15 - 0.35 * up - 4 * shake, 0, 0)}, "foreR": {"rot": (-0.15 - 0.35 * up + 4 * shake, 0, 0)},
         "legL": {"rot": (0.06 * arch, 0, 0)}, "legR": {"rot": (-0.04 * arch, 0, 0)},
     }
 
@@ -103,6 +107,40 @@ def check_wrist(u):
         "head": {"rot": (0.32 * look, 0.0, 0.0)},
         "armR": {"rot": (-1.25 * raise_ + tap, 0, (0.06 - 0.5 * raise_))},
         "armL": {"rot": (-0.5 * raise_, 0, -(0.06 + 0.1 * raise_))},
+        "foreR": {"rot": (-0.15 - 1.35 * raise_ - 0.5 * tap, 0, 0)},   # forearm folds up so the wrist is in front of the chest
+        "foreL": {"rot": (-0.15 - 0.9 * raise_, 0, 0)},                # the left hand comes across to meet it
+        "legL": {"rot": (0, 0, 0)}, "legR": {"rot": (0, 0, 0)},
+    }
+
+def lean_back(u):
+    # settles back onto one hip, weight on the right leg, one hand up at the chin and the other tucked in at the belt,
+    # head tipped; then comes upright again
+    k = pulse(u, 0.1, 0.3, 0.72, 0.9)
+    breathe = 0.012 * math.sin(TAU * u * 3) * k
+    return {
+        "runner": {"pos": (0.025 * k, -0.02 * k, 0)},
+        "torso": {"rot": (-0.1 * k + breathe, 0.0, 0.07 * k), "pos": (0, 0, -0.02 * k)},
+        "head": {"rot": (0.1 * k, 0.12 * k, -0.1 * k)},
+        "armR": {"rot": (-0.85 * k, 0, 0.12 * k)},
+        "foreR": {"rot": (-0.12 - 1.45 * k, 0, 0)},                      # hand to the chin
+        "armL": {"rot": (-0.3 * k, 0, -(0.08 + 0.12 * k))},
+        "foreL": {"rot": (-0.14 - 1.2 * k, 0, 0)},                      # hand at the belt
+        "legL": {"rot": (0.12 * k, 0, -0.04 * k)},
+        "legR": {"rot": (-0.14 * k, 0, 0.0)},
+    }
+
+def shake_out(u):
+    # a quick loosen-up: forearms up in front, hands flicked, then relaxed
+    k = pulse(u, 0.08, 0.2, 0.78, 0.92)
+    f = math.sin(TAU * u * 9) * pulse(u, 0.2, 0.26, 0.7, 0.78)
+    return {
+        "runner": {"pos": (0, 0.0, 0)},
+        "torso": {"rot": (0.04 * k, 0.0, 0.0)},
+        "head": {"rot": (-0.03 * k, 0.0, 0.0)},
+        "armL": {"rot": (-0.5 * k + 0.05 * f, 0, -(0.1 + 0.05 * k))},
+        "armR": {"rot": (-0.5 * k - 0.05 * f, 0, 0.1 + 0.05 * k)},
+        "foreL": {"rot": (-0.15 - 1.1 * k + 0.45 * f, 0, 0)},
+        "foreR": {"rot": (-0.15 - 1.1 * k - 0.45 * f, 0, 0)},
         "legL": {"rot": (0, 0, 0)}, "legR": {"rot": (0, 0, 0)},
     }
 
@@ -113,11 +151,13 @@ ANIMS = [
     ("idle_weight_shift", weight_shift, 120),  # rocks from skate to skate, one foot easing up, arms counter-swinging
     ("idle_stretch", stretch, 135),            # arms up over the head, leaning back with a quiver, then a shake-out
     ("idle_check_wrist", check_wrist, 120),    # right arm across the chest, head down, taps at the wrist, lowers it
+    ("idle_lean_back", lean_back, 150),        # settles back onto one hip, a hand at the chin and one at the belt, then straightens
+    ("idle_shake_out", shake_out, 120),        # forearms up in front, hands flicked loose
 ]
 
 FPS = 30
 STEP = 3                                       # keys every STEP frames; also what the game's file stores
-NAMES = ["runner", "torso", "head", "armL", "armR", "legL", "legR"]
+NAMES = ["runner", "torso", "head", "armL", "armR", "foreL", "foreR", "legL", "legR"]
 GAME_NAME = {"runner": "body"}                 # the whole-figure pivot is `body` in models.js
 OBJ = {n: bpy.data.objects[n] for n in NAMES}
 REST = {n: OBJ[n].location.copy() for n in NAMES}

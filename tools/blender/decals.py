@@ -228,6 +228,11 @@ def emblem(d, faction, cu, cv, r, layer=0):
         d.ring(cu, cv, r * 0.58, r * 0.7, "stripe", g, 28, sy=0.5)
         d.disc(cu + r * 0.64, cv, r * 0.13, "stripe", g, 10)
         d.disc(cu, cv, r * 0.18, "stripe", g, 10)
+    elif faction == "daedalus":
+        # a delta (a hollow triangle) with an eye in it
+        d.poly([(cu, cv + r * 0.74), (cu - r * 0.7, cv - r * 0.46), (cu + r * 0.7, cv - r * 0.46)], "stripe", g)
+        d.poly([(cu, cv + r * 0.34), (cu - r * 0.38, cv - r * 0.28), (cu + r * 0.38, cv - r * 0.28)], "dark", g + 1)
+        d.disc(cu, cv - r * 0.08, r * 0.1, "stripe", g + 2, 10)
     elif faction == "meridian":
         # a globe: a ring, an equator and a meridian line
         d.ring(cu, cv, r * 0.62, r * 0.74, "stripe", g, 28)
@@ -298,8 +303,9 @@ def nfpa(d, cu, cv, half, health, flam, react, special, layer=0):
 
 # ---------------- the factions the vehicles and the cargo are painted for ----------------
 FACTIONS = ("spacecom", "vostok", "kepler", "meridian")
-NAMES = {"spacecom": "SPACECOM", "vostok": "VOSTOK", "kepler": "KEPLER", "meridian": "MERIDIAN"}
-CODES = {"spacecom": "SPC", "vostok": "VOS", "kepler": "KPL", "meridian": "MRD"}
+NAMES = {"spacecom": "SPACECOM", "vostok": "VOSTOK", "kepler": "KEPLER", "meridian": "MERIDIAN", "daedalus": "DAEDALUS"}
+CODES = {"spacecom": "SPC", "vostok": "VOS", "kepler": "KPL", "meridian": "MRD", "daedalus": "DDL"}
+MARKED = FACTIONS + ("daedalus",)              # what the field dish's plates are made for (the vehicles and cargo have no Daedalus paint)
 
 
 def side_dec(side, x, y=0.0, z=0.0, lift=0.01):
@@ -338,3 +344,76 @@ def cargo_decals(f, piv, prefix):
         d2 = side_dec(side, 1.6, CARGO_NUM_Y, 0.0)
         d2.text(code, -text_width(code, CARGO_NUM_PS) / 2, 0, CARGO_NUM_PS, "label", 0)
         d2.build(f"{prefix}id{'P' if side > 0 else 'S'}_{f}", piv)
+    # the doors at each end: the number and size-type code on the reader's right-hand leaf, the weights on the left, all under
+    # the locking bars (stencilled on the leaf's face, between the top corrugation and the header)
+    for sz in (-1, 1):
+        d = Dec("+z" if sz > 0 else "-z", (0, 0, sz * (CARGO_END + CD_LEAF_D)))
+        d.text(code, 0.1, 4.19, 0.016, "label", 0)
+        d.text("22G1", 0.1, 4.04, 0.016, "label", 0)
+        for k, line in enumerate(("MAX GROSS 30480 KG", "TARE 2200 KG", "PAYLOAD 28280 KG")):
+            d.text(line, -1.2, 4.24 - k * 0.1, 0.008, "label", 0)
+        d.build(f"{prefix}doorMarks{'F' if sz > 0 else 'R'}_{f}", piv)
+
+
+# ---------------- the cargo container's door ends (shared like the flank markings, and by cargo.py's box) ----------------
+# A pair of doors at each end of the box (half extents 1.55 x 1.4 x 3.62 about (0, 3.3, 0)), everything within the corner castings,
+# which stand 0.15 proud of the end faces: a frame (corner posts and a header in the body colour, a dark sill), a dark gasket in the
+# opening showing round two leaves pressed with four corrugations each, and on each leaf two locking bars (cams turning in keepers on
+# the header and sill, two guides, a handle on a hub, its tip held by a retainer), four hinges on the outer edge (a blade on the leaf,
+# a knuckle on its pin, a lug on the post), the CSC plate on the left leaf and a bolt seal on the right.
+# Depths are measured out from the end face.
+CARGO_END = 3.62
+CD_LEAF_D = 0.05                  # the leaves' face (the markings stand on it)
+_CD_BARS = (0.30, 0.98)           # each leaf's locking bars, out from the middle
+_CD_HINGES = (2.36, 2.98, 3.6, 4.22)
+_CD_RIBS = (2.55, 3.0, 3.45, 3.9)
+
+
+def _cd_box(x0, x1, y0, y1, d0, d1, sz):
+    z0, z1 = sz * (CARGO_END + d0), sz * (CARGO_END + d1)
+    v = [(x, y, z) for x in (x0, x1) for y in (y0, y1) for z in (z0, z1)]
+    return v, [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+
+
+def container_doors(body):
+    """The door ends of a cargo container, both of them: a list of (name, geo, slot, ink), the box's own body slot `body`."""
+    out = []
+
+    def add(name, geo, slot, ink):
+        out.append((name, geo, slot, ink))
+
+    for sz in (-1, 1):
+        e = "F" if sz > 0 else "R"
+        Z = lambda d: sz * (CARGO_END + d)
+        for sx in (-1, 1):
+            add(f"door{e}_post{sx}", _cd_box(sx * 1.3, sx * 1.55, 2.12, 4.45, -0.04, 0.08, sz), body, 0.03)
+        add(f"door{e}_header", _cd_box(-1.3, 1.3, 4.38, 4.66, -0.04, 0.09, sz), body, 0.03)
+        add(f"door{e}_sill", _cd_box(-1.3, 1.3, 1.92, 2.17, -0.04, 0.1, sz), "dark", 0.03)
+        add(f"door{e}_gasket", _cd_box(-1.3, 1.3, 2.17, 4.38, -0.02, 0.02, sz), "dark", 0)
+        for sx in (-1, 1):
+            L = f"door{e}_{'P' if sx > 0 else 'S'}"
+            add(f"{L}leaf", _cd_box(sx * 0.025, sx * 1.275, 2.21, 4.34, -0.02, CD_LEAF_D, sz), body, 0.02)
+            for k, y in enumerate(_CD_RIBS):
+                add(f"{L}rib{k}", _cd_box(sx * 0.1, sx * 1.1, y - 0.06, y + 0.06, 0.04, 0.075, sz), body, 0.015)
+            for j, bx in enumerate(_CD_BARS):
+                x = sx * bx
+                add(f"{L}bar{j}", beam((x, 2.0, Z(0.12)), (x, 4.56, Z(0.12)), 0.03, 6), "metal", 0.015)
+                for y, cy in ((2.24, "B"), (4.31, "T")):
+                    add(f"{L}cam{j}{cy}", _cd_box(x - 0.05, x + 0.05, y - 0.06, y + 0.06, 0.08, 0.17, sz), "steel", 0.01)
+                add(f"{L}keeperT{j}", _cd_box(x - 0.07, x + 0.07, 4.42, 4.6, 0.07, 0.17, sz), "steel", 0.01)
+                add(f"{L}keeperB{j}", _cd_box(x - 0.07, x + 0.07, 1.97, 2.14, 0.08, 0.17, sz), "steel", 0.01)
+                for g, y in enumerate((3.22, 4.12)):
+                    add(f"{L}guide{j}{g}", _cd_box(x - 0.055, x + 0.055, y - 0.04, y + 0.04, 0.04, 0.16, sz), "steel", 0.01)
+                # the handle: the inner bar's swings out towards the hinges, the outer bar's in, so the two never meet
+                tip = sx * (0.56 if j == 0 else 0.72)
+                add(f"{L}hub{j}", _cd_box(x - 0.06, x + 0.06, 2.71, 2.85, 0.08, 0.18, sz), "steel", 0.01)
+                add(f"{L}handle{j}", beam((x, 2.78, Z(0.17)), (tip, 2.75, Z(0.17)), 0.025, 6), "metal", 0.01)
+                add(f"{L}retainer{j}", _cd_box(tip - 0.03, tip + 0.03, 2.69, 2.81, 0.04, 0.2, sz), "steel", 0.01)
+            for k, y in enumerate(_CD_HINGES):
+                add(f"{L}hinge{k}", _cd_box(sx * 1.15, sx * 1.3, y - 0.045, y + 0.045, 0.03, 0.085, sz), "dark", 0.01)
+                add(f"{L}knuckle{k}", beam((sx * 1.3, y - 0.07, Z(0.1)), (sx * 1.3, y + 0.07, Z(0.1)), 0.035, 6), "dark", 0.01)
+                add(f"{L}lug{k}", _cd_box(sx * 1.3, sx * 1.42, y - 0.05, y + 0.05, 0.06, 0.11, sz), "dark", 0.01)
+        # (the reader's left leaf is -x on the front end, +x on the rear)
+        add(f"door{e}_csc", _cd_box(-sz * 0.45, -sz * 0.8, 2.27, 2.45, 0.04, 0.065, sz), "steel", 0.01)
+        add(f"door{e}_seal", _cd_box(sz * 0.54, sz * 0.58, 2.6, 2.7, 0.15, 0.23, sz), "stripe", 0.01)
+    return out

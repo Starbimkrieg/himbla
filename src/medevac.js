@@ -119,6 +119,7 @@ export class Medevac {
 
     // the craft, behind you, nose away so its rear ramp drops toward you
     const ship = makeShuttle({ color: 0xeeecf6, stripe: 0x2ec4ff });
+    ship.setSign('MEDEVAC');
     ship.root.scale.setScalar(SCALE);
     ship.setGear(0);
     ship.setRamp(0);

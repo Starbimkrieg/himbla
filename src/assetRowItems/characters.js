@@ -11,7 +11,6 @@ export default [runner, people, creatures];
 
 /*
 SKIPPED
-- Rusty's loans clerk (casinoWorld.js): the booth has a sign but no figure of its own was found in the code.
 - The Spindle's alien drone (spindle.js makeDrone) is in the props catalogue (spindle.drone), not here.
 - The road-traffic pedestrians and buggy drivers (traffic.js) and the crowds in the settlements (world.js addFigures) are the same
   makeFigure looks as people.archetypes and people.special; no separate model.

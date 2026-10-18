@@ -66,7 +66,7 @@ export const LOCATIONS = [
   {
     id: 'meridian', name: 'Meridian Exchange', short: 'MERIDIAN', type: 'trade', faction: 'meridian', hq: true,
     theta: 18, phi: 25, r: 150, jobs: ['meridian', 'meridian', 'kepler'], safe: true, repair: 8, defense: { ring: 125, turrets: 4 },
-    blurb: 'Meridian headquarters: a glass trading tower whose ticker never sleeps, motor-pool garages, a container port and cranes.',
+    blurb: 'Meridian headquarters: a gate arch, an avenue to the glass trading tower whose ticker never sleeps, a trade hall, a container port and cranes.',
   },
   {
     id: 'vostok', name: 'Bastion Vostok-9', short: 'VOSTOK-9', type: 'military', faction: 'vostok', hq: true,
@@ -118,11 +118,6 @@ export const LOCATIONS = [
     theta: 96, phi: -138, r: 150,
     blurb: 'A clean-cut trench sliding into the Moon. It hums. Something down there is waiting for a key.',
   },
-  {
-    id: 'bounce', name: 'Bounce Dome Funpark', short: 'BOUNCE', type: 'funpark', faction: 'none', poi: true,
-    theta: 30, phi: 135, r: 180, safe: true, repair: 6,
-    blurb: 'Inflatable theme park, back in business: bounce domes, a ferris wheel, trampolines and a skate park. The chimera races moved to Chimera Downs, just down the road.',
-  },
   { // casino
     id: 'casino', name: 'Lucky Crater Casino', short: 'CASINO', type: 'casino', faction: 'none', poi: true,
     theta: 50, phi: -22, r: 110, safe: true, repair: 6,
@@ -152,8 +147,8 @@ export const LOCATIONS = [
   // generation (old saves keep the same terrain and outpost ids); its plateau flattens what's there
   {
     id: 'downs', name: 'Chimera Downs', short: 'DOWNS', type: 'derby', faction: 'none', poi: true, late: true,
-    theta: 22, phi: 160, r: 215, safe: true, repair: 6,
-    blurb: "A proper racecourse for the things that crawl out of Dr. Zbornak's reactor: a grandstand, a jumbotron and a race card that never sleeps.",
+    theta: 22, phi: 160, r: 280, curved: true, safe: true, repair: 6,
+    blurb: "A proper racecourse for the things that crawl out of Dr. Zbornak's reactor: a roofed grandstand, a screen the size of a barn and a race card that never sleeps.",
   },
 ];
 
@@ -213,7 +208,7 @@ export const SHOPS = {
     { key: 'uplink', name: 'Meridian Market Uplink', desc: '+10% pay on every contract (per level)', cost: 900, max: 3, faction: 'meridian', req: [5, 15, 30] },
   ],
   kepler: [
-    { key: 'winch', name: 'Kepler Hitch-Line Winch', desc: 'POWER (Z, hold): cable onto a passing vehicle within 85 m and ride its pull. Swing under shuttles, trail behind rovers. Up to 10 s', cost: 2400, max: 1, faction: 'kepler', req: [15] },
+    { key: 'winch', name: 'Kepler Hitch-Line Winch', desc: 'POWER (E, again to let go): steel cable onto a vehicle or a structure within 120 m; the drum reels you in to 2 m. Swing under shuttles, trail behind rovers. Up to 20 s', cost: 2400, max: 1, faction: 'kepler', req: [15] },
     { key: 'twin', name: 'Kepler Twin Cradle', desc: 'Carry two contracts at once: the second crate stacks on top of the first', cost: 2600, max: 1, faction: 'kepler', req: [10] },
   ],
   vostok: [
@@ -223,6 +218,7 @@ export const SHOPS = {
   daedalus: [
     { key: 'rail', name: 'Daedalus Rail Lance', desc: 'WEAPON (key 3): instant piercing beam, long range', cost: 1600, max: 1, faction: 'daedalus', req: [10], weapon: true },
     { key: 'overcharge', name: 'Daedalus Overcharger', desc: 'Faster fire rate for every weapon', cost: 800, max: 3, faction: 'daedalus', req: [5, 15, 30] },
+    { key: 'cloak', name: 'Daedalus Dark-Side Cloak', desc: 'Roaming pirates check for you less often on the dark side: +5 s per level (doubled on Daedalus ground). Den guards unaffected', cost: 900, max: 3, faction: 'daedalus', req: [10, 20, 35] },
   ],
   rustmoon: [
     { key: 'mortar', name: 'Rustmoon Junk Mortar', desc: 'WEAPON (key 4): lobbed scrap bomb, huge blast', cost: 1200, max: 1, faction: 'rustmoon', req: [5], weapon: true },
@@ -244,8 +240,8 @@ export const SHOPS = {
     { key: 't_shield', name: 'Black-Market Deflector', desc: 'TECH: absorbs one hit every 12 s', cost: 3600, max: 1, faction: 'rustmoon', req: [0], tech: 'shield', unlock: { smuggle: true, n: 6 } },
     { key: 'uplink', name: 'Black-Market Market Uplink', desc: '+10% pay on every contract (per level)', cost: 1150, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 6 } },
     { key: 'v_skimmer', name: 'Hot-Wired Phase Skimmer', desc: 'VEHICLE: a Daedalus skimmer, liberated', cost: 4800, max: 1, faction: 'rustmoon', req: [0], vehicle: 'skimmer', unlock: { smuggle: true, n: 7 } },
-    { key: 't_dash', name: 'Black-Market Phase Dash', desc: 'TECH (Z): swing all your momentum to wherever you look', cost: 4200, max: 1, faction: 'rustmoon', req: [0], tech: 'dash', unlock: { smuggle: true, n: 8 } },
-    { key: 'winch', name: 'Black-Market Hitch-Line', desc: 'POWER (Z, hold): cable onto a passing vehicle within 85 m and ride its pull', cost: 3000, max: 1, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 9 } },
+    { key: 't_dash', name: 'Black-Market Phase Dash', desc: 'TECH (E): swing all your momentum to wherever you look', cost: 4200, max: 1, faction: 'rustmoon', req: [0], tech: 'dash', unlock: { smuggle: true, n: 8 } },
+    { key: 'winch', name: 'Black-Market Hitch-Line', desc: 'POWER (E, again to let go): steel cable onto a vehicle or a structure within 120 m and reel in', cost: 3000, max: 1, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 9 } },
     { key: 'twin', name: 'Black-Market Twin Cradle', desc: 'Carry two contracts at once: the second crate stacks on top of the first', cost: 3200, max: 1, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 9 } },
     { key: 'v_apc', name: 'Hot-Wired BTR-M', desc: 'VEHICLE: a Vostok APC, liberated', cost: 5200, max: 1, faction: 'rustmoon', req: [0], vehicle: 'apc', unlock: { smuggle: true, n: 10 } },
   ],

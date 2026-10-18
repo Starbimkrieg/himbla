@@ -468,3 +468,100 @@ def torus_partial(R, r, radial, tubular, arc=math.pi):
             k2 = (k + 1) % radial
             faces.append((i * radial + k, i2 * radial + k, i2 * radial + k2, i * radial + k2))
     return verts, faces, [1] * len(faces)
+
+
+# ---------------- build-time check: surfaces that would z-fight ----------------
+
+def audit_coplanar(objects=None, eps=0.003, min_area=1e-4, allow=()):
+    """Raise if two different mesh objects have triangles that face the same way, lie on one plane (within eps metres) and overlap by more than min_area m2: the game's depth
+    buffer cannot tell such surfaces apart, and they flicker as the camera moves. (tools/casino-zfight.mjs runs the same test on the live scene.) `allow` is a list of
+    (name fragment, name fragment) pairs that are known and intended. Run after every mesh is built, before export."""
+    dg = bpy.context.evaluated_depsgraph_get()
+    tris = []
+    for oi, o in enumerate(objects if objects is not None else C.objects):
+        if o.type != "MESH":
+            continue
+        top = o
+        while top.parent:
+            top = top.parent
+        e = o.evaluated_get(dg)
+        me = e.to_mesh()
+        me.calc_loop_triangles()
+        mw = e.matrix_world
+        for lt in me.loop_triangles:
+            ps = []
+            for vi in lt.vertices:
+                w = mw @ me.vertices[vi].co
+                ps.append((w.x, w.z, -w.y))                      # (back to three.js axes)
+            a, b, c = ps
+            ux, uy, uz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
+            vx, vy, vz = c[0] - a[0], c[1] - a[1], c[2] - a[2]
+            nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
+            ln = math.sqrt(nx * nx + ny * ny + nz * nz)
+            if ln < 2e-4:
+                continue
+            nx, ny, nz = nx / ln, ny / ln, nz / ln
+            tris.append((oi, o.name, (nx, ny, nz), nx * a[0] + ny * a[1] + nz * a[2], ps, top.name))
+    buckets = {}
+    for i, t in enumerate(tris):
+        n = t[2]
+        buckets.setdefault((round(n[0] * 200), round(n[1] * 200), round(n[2] * 200), math.floor(t[3] / 0.02)), []).append(i)
+
+    def area2(P):
+        return sum(P[i][0] * P[(i + 1) % len(P)][1] - P[(i + 1) % len(P)][0] * P[i][1] for i in range(len(P))) / 2
+
+    def clip(subject, tri):
+        out = subject
+        for i in range(3):
+            A, Bp = tri[i], tri[(i + 1) % 3]
+            inp, out = out, []
+            if not inp:
+                break
+            side = lambda P: (Bp[0] - A[0]) * (P[1] - A[1]) - (Bp[1] - A[1]) * (P[0] - A[0])
+            for j in range(len(inp)):
+                P, Q = inp[j], inp[(j + 1) % len(inp)]
+                sp, sq = side(P), side(Q)
+                if sp >= 0:
+                    out.append(P)
+                if (sp >= 0) != (sq >= 0):
+                    t = sp / (sp - sq)
+                    out.append((P[0] + (Q[0] - P[0]) * t, P[1] + (Q[1] - P[1]) * t))
+        return out
+
+    found = {}
+
+    def test(i, j):
+        A, Bt = tris[i], tris[j]
+        if A[0] == Bt[0] or A[5] != Bt[5]:       # (one mesh, or two different models that merely share the origin)
+            return
+        if A[2][0] * Bt[2][0] + A[2][1] * Bt[2][1] + A[2][2] * Bt[2][2] < 0.9999 or abs(A[3] - Bt[3]) > eps:
+            return
+        if any((f in A[1] and g in Bt[1]) or (g in A[1] and f in Bt[1]) for f, g in allow):
+            return
+        n = A[2]
+        ax = 0 if abs(n[0]) > abs(n[1]) and abs(n[0]) > abs(n[2]) else 1 if abs(n[1]) > abs(n[2]) else 2
+        u, v = (ax + 1) % 3, (ax + 2) % 3
+        ta, tb = [(p[u], p[v]) for p in A[4]], [(p[u], p[v]) for p in Bt[4]]
+        if area2(ta) < 0:
+            ta = [ta[0], ta[2], ta[1]]
+        if area2(tb) < 0:
+            tb = [tb[0], tb[2], tb[1]]
+        ov = abs(area2(clip(ta, tb)))
+        if ov < 1e-9:
+            return
+        k = (min(A[1], Bt[1]), max(A[1], Bt[1]), round(A[3] * 50))
+        f = found.setdefault(k, [0.0, A[4][0]])
+        f[0] += ov
+
+    for key, lst in buckets.items():
+        nb = buckets.get((key[0], key[1], key[2], key[3] + 1), [])
+        for xi in range(len(lst)):
+            for yi in range(xi + 1, len(lst)):
+                test(lst[xi], lst[yi])
+            for yi in nb:
+                test(lst[xi], yi)
+    bad = {k: v for k, v in found.items() if v[0] >= min_area}
+    if bad:
+        lines = [f"{v[0]:.4f} m2  {k[0]} / {k[1]}  at ({v[1][0]:.2f}, {v[1][1]:.2f}, {v[1][2]:.2f})" for k, v in sorted(bad.items(), key=lambda kv: -kv[1][0])[:12]]
+        raise RuntimeError("coplanar overlaps (these would z-fight):\n  " + "\n  ".join(lines))
+    print(f"AUDIT coplanar ok: {len(tris)} triangles, no overlap above {min_area} m2 within {eps * 1000:.0f} mm")

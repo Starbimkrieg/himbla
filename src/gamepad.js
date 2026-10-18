@@ -15,16 +15,17 @@
 //   X            interact (F)                   MENUS
 //   Y            vehicle (V)                    d-pad / left stick  move the highlight
 //   LB           Quantum-Lock skates, hold      A  press   B  back   right stick  scroll
-//   RB           power (Z, hold for the winch)  LB / RB  previous / next tab (where there are tabs)
+//   RB           power (E; again lets go of the winch)  LB / RB  previous / next tab (where there are tabs)
 //   LT           thrusters / Rail Lance scope
 //   RT           fire                           Start        pause / resume
-//   L3           thrusters (E)                  View, tap    globe map (M)
+//   L3           thrusters (like LT)            View, tap    globe map (M)
 //   R3           scoop into the jar (G)         View, hold   emergency recall (R)
 //   d-pad ←/→    previous / next weapon
 //   d-pad ↑      next power (the mouse wheel)    GLOBE MAP
 //                                               left stick  move the cursor   right stick  zoom
 //                                               RT, hold    grab the globe and drag it round
 //                                               LB / RB, hold  turn the map round
+//                                               A  send a sweep, X  stop / resume it (from the Radio Tower)
 //                                               B / View    close
 //                                               PLINKO
 //                                               left stick / d-pad ←/→  aim the chute
@@ -40,6 +41,8 @@
 //                                               DUCK DERBY
 //                                               left stick / d-pad  pick a duck   A  race · new race
 //                                               LB / RB     lower / raise the bet   B  stand up
+//   (the pad rumbles too, and a PlayStation pad lights up and gets adaptive triggers: see haptics.js, sonyout.js)
+//   (with the dev free cam on: LB / RB are its up / down, LT is fast, d-pad ↑ / ↓ change its speed, d-pad → hides the HUD: freecam.js)
 //   d-pad ↓      the radial menu (tap to open, tap again to close): vehicles, powers, wardrobe, reputation log,
 //                empty the jar (vehicles and powers open their own wheel of the ones you own:
 //                same controls; a power you pick on its wheel is the one RB uses). The right stick picks a wedge (the
@@ -48,13 +51,14 @@
 import { WEAPONS, weaponUnlocked } from './weapons.js';
 import { Glyphs, glyphState, glyphHtml } from './glyphs.js';
 import { GyroPad } from './gyro.js';
+import { SonyOut } from './sonyout.js';
 import { DEV_TOOLS } from './devtools.js';
 
 const DEAD = 0.18; // stick deadzone (radial)
 const AIM_SHOW = 10; // seconds the crosshair stays up after the last shot
 const B = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8, START: 9, L3: 10, R3: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
 // buttons held straight onto default key codes in play
-const HOLD = { [B.A]: 'ShiftLeft', [B.B]: 'KeyQ', [B.X]: 'KeyF', [B.Y]: 'KeyV', [B.LB]: 'Space', [B.RB]: 'KeyZ', [B.L3]: 'KeyE', [B.R3]: 'KeyG' };
+const HOLD = { [B.A]: 'ShiftLeft', [B.B]: 'KeyQ', [B.X]: 'KeyF', [B.Y]: 'KeyV', [B.LB]: 'Space', [B.RB]: 'KeyE', [B.L3]: 'Thrust', [B.R3]: 'KeyG' };
 // the radial menu on d-pad down: everything that has no button of its own, clockwise from the top.
 // `has`: is it yours yet (the wedge stays in place, dimmed, until it is); `code`: the key it presses
 const RADIAL = [
@@ -95,6 +99,7 @@ export class Gamepad {
     this.gyro = new GyroPad();
     this.gyroOn = false;
     this.gyro.init();
+    this.fx = new SonyOut(this.gyro); // ...and, over the same link, the pad's rumble, lightbar and adaptive triggers (haptics.js)
     window.addEventListener('gamepadconnected', (e) => {
       this.game.hud.toast(`Controller connected: ${(e.gamepad.id || 'gamepad').replace(/\(.*\)/, '').trim().slice(0, 40)}`, 2.5);
     });
@@ -124,6 +129,7 @@ export class Gamepad {
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     let gp = null;
     for (const p of pads) if (p && p.connected) { gp = p; if (p.mapping === 'standard') break; }
+    if (this.game.haptics) this.game.haptics.attach(gp);
     if (!gp) return;
     const kind = padKind(gp.id);
     if (kind !== this.kind) { this.kind = kind; if (this.input.padActive) { this.glyphs.set(false); this.glyphs.set(true, kind); } else glyphState.kind = kind; }
@@ -163,6 +169,7 @@ export class Gamepad {
     else if (roul) this.roulette(btn, pressed, trig, lx, ly, dt);
     else if (st === 'casino' && g.casino.mode) this.seated(g.casino.mode, btn, pressed, trig, lx, ly, dt);
     else if (st === 'dead') { this.releaseAll(); if (pressed(B.A) || pressed(B.START)) document.getElementById('death').click(); }
+    else if (st === 'cutscene') { this.releaseAll(); if (pressed(B.A) || pressed(B.B) || pressed(B.START)) this.tap('Space'); } // (the cutscenes skip on Space: the recall shuttle, the med-evac and the council's vote)
     else this.ui(btn, pressed, lx, ly, ry, dt);
     this.prev = btn;
   }
@@ -229,8 +236,12 @@ export class Gamepad {
     for (const [i, code] of Object.entries(HOLD)) this.set(code, btn[i] && !((hold || wheelOpen) && (i == B.A || i == B.B)) && !((hold || gwSticky) && i == B.Y));
     I.mouse[0] = trig(B.RT) > 0.35;
     I.mouse[2] = trig(B.LT) > 0.35;
+    // the dev free cam (freecam.js) has the buttons while it is on: LB up, RB down, LT fast, d-pad ↑ / ↓ its speed, d-pad → the HUD on
+    // and off (so the d-pad is not the weapon and power switch, nor the radial menu below)
+    const fc = g.cheats.freeCam;
+    if (fc.on) fc.pad = { rise: (btn[B.LB] ? 1 : 0) - (btn[B.RB] ? 1 : 0), fast: trig(B.LT) > 0.35, speed: (btn[B.UP] ? 1 : 0) - (btn[B.DOWN] ? 1 : 0), hud: pressed(B.RIGHT) };
     // (not while the wheel is open or d-pad down is down: a diagonal press on the way to ↓ isn't a weapon swap)
-    if (!this.radial && !gw && !pw && !btn[B.DOWN]) {
+    else if (!this.radial && !gw && !pw && !btn[B.DOWN]) {
       if (pressed(B.LEFT)) this.cycleWeapon(-1);
       if (pressed(B.RIGHT)) this.cycleWeapon(1);
       if (pressed(B.UP)) I.wheelSteps += 1;
@@ -239,7 +250,7 @@ export class Gamepad {
     if (btn[B.VIEW]) { this.viewT = this.viewT < 0 ? 0 : this.viewT + dt; this.set('KeyR', this.viewT > 0.35); }
     else if (this.viewT >= 0) { if (this.viewT <= 0.35) this.tap('KeyM'); this.set('KeyR', false); this.viewT = -1; }
     const wasOpen = !!this.radial || !!gw || !!pw; // (Start cancels a wheel without also pausing)
-    if (!wheelUsed) this.radialMenu(btn, pressed, rx, ry);
+    if (!wheelUsed && !fc.on) this.radialMenu(btn, pressed, rx, ry);
     if (pressed(B.START) && !wasOpen) this.pause();
   }
 
@@ -433,7 +444,8 @@ export class Gamepad {
     this.game.globe.padUpdate(lx, ly, trig(B.RT) > 0.35, ry, (btn[B.RB] ? 1 : 0) - (btn[B.LB] ? 1 : 0), dt);
     // (View closes on the release, so letting go of it can't be read as the tap that opens the map)
     if (pressed(B.B) || pressed(B.START)) this.key('Escape');
-    else if (pressed(B.A)) this.game.globe.padClick(); // (the dev menu's click-to-teleport)
+    else if (pressed(B.A)) this.game.globe.padClick(); // (the Radio Tower's sweep, or the dev menu's click-to-teleport)
+    else if (pressed(B.X) && this.game.globe.mode === 'radio') this.game.globe.radioToggle(); // (stop / resume the sweep)
     else if (released(B.VIEW)) this.tap('KeyM');
   }
 
@@ -450,6 +462,12 @@ export class Gamepad {
     if (mode === 'plinko') {
       games.padAim(lx || (btn[B.RIGHT] ? 1 : 0) - (btn[B.LEFT] ? 1 : 0), dt);
       this.set('Space', btn[B.A] || trig(B.RT) > 0.35);
+    } else if (mode === 'claw') {
+      // the claw: the left stick flies it (across and in and out), LB / RB lower and raise it, A or RT is the beam (held)
+      games.claw.padClaw(lx || (btn[B.RIGHT] ? 1 : 0) - (btn[B.LEFT] ? 1 : 0), ly || (btn[B.DOWN] ? 1 : 0) - (btn[B.UP] ? 1 : 0), (btn[B.RB] ? 1 : 0) - (btn[B.LB] ? 1 : 0));
+      this.set('Space', btn[B.A] || trig(B.RT) > 0.35);
+      if (pressed(B.B) || pressed(B.START)) { this.set('Space', false); this.key('Escape'); }
+      return;
     } else if (mode === 'duck') {
       this.set('Space', false);
       // (the ducks sit two by two on the bar: the highlight moves the way they're laid out)
@@ -559,7 +577,7 @@ export class Gamepad {
     if (pressed(B.A) && this.focus) {
       const el = this.focus;
       if (el.tagName === 'SELECT') { el.selectedIndex = (el.selectedIndex + 1) % el.options.length; el.dispatchEvent(new Event('change', { bubbles: true })); }
-      else el.click();
+      else { el.click(); g.haptics.play('press'); }
     }
     // (settings close back to whatever opened them: resuming from under them would leave them up)
     const setOpen = g.settings && g.settings.open;
@@ -652,6 +670,7 @@ export class Gamepad {
     el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
     el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
     if (this.game.audio && this.game.audio.tone) this.game.audio.tone(900, 0.03, 'square', 0.06);
+    this.game.haptics.play('tick');
   }
 
   clearFocus() { if (this.focus) { this.focus.classList.remove('pad-focus'); this.focus = null; } }

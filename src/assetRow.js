@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GRAV } from './geo.js';
 import { toon, glow, ink, textSprite } from './toon.js';
 import { mulberry32 } from './rng.js';
+import { railOf } from './rails.js';
 import { GROUPS } from './assetRowItems/index.js';
 
 // THE ASSET ROW (a dev tool): a flat showroom with the game's assets lined up side by side, each under a name board.
@@ -55,6 +56,9 @@ class FlatWorld {
   visible() { return true; }
   inLake() { return null; }
   rimRailsNear() { return []; }
+  // grind rails (rails.js): an item's crest lines stand here while it is built
+  addRail(pts) { const r = railOf(pts); this.rails.push(r); return r; }
+  removeRail(r) { const i = this.rails.indexOf(r); if (i >= 0) this.rails.splice(i, 1); }
   update() {}
 }
 
@@ -129,7 +133,7 @@ export class AssetRow {
         lanes[lane] += 16;
         for (const it of mine) {
           const w = Math.max(it.w || 4, 2), d = Math.max(it.d || 4, 2);
-          this.items.push({ it, group: grp.id, lane, x: lanes[lane] + w / 2, z: LANE_Z[lane], w, d, state: 'off', inst: null, cols: [], api: null });
+          this.items.push({ it, group: grp.id, lane, x: lanes[lane] + w / 2, z: LANE_Z[lane], w, d, state: 'off', inst: null, cols: [], rails: [], api: null });
           lanes[lane] += w + GAP(w);
         }
         lanes[lane] += SECTION_GAP;
@@ -219,14 +223,18 @@ export class AssetRow {
       const specs = [];
       // (obj sits inside inst; the specs are in obj's frame, which differs from inst's only by obj.position: a pure translation)
       const at = (x, y, z) => new THREE.Vector3(e.x + obj.position.x + x, y, e.z + obj.position.z + z);
+      // grind rails (a snake rock's crest line, rails.js): polylines in obj's frame like the colliders, standing in the flat world while it is built.
+      // A collider's `rail` is the index of the one it belongs to (the rider on a crest doesn't collide with its own rock).
+      e.rails = (made.rails || []).map((pts) => this.world.addRail(pts.map((p) => at(p.x, p.y, p.z))));
+      const own = (b) => (b.rail === undefined ? {} : { rail: e.rails[b.rail].pts });
       if (made.cols) { // (an array, even an empty one, is the item's own word on it; none at all: one box round what was built)
         for (const b of made.cols) {
           if (b.type === 'sphere') specs.push({ type: 'sphere', c: at(b.x, b.y, b.z), r: b.r });
           else if (b.type === 'cyl') specs.push({ type: 'cyl', c: at(b.x, 0, b.z), axis: UP.clone(), y0: b.y0, y1: b.y1, r: b.r });
-          else if ((b.type === 'box' || b.type === undefined) && b.ax) specs.push({ type: 'box', c: at(b.x, b.y, b.z), hx: b.hx, hy: b.hy, hz: b.hz, ax: b.ax.clone(), ay: b.ay.clone(), az: b.az.clone() }); // (a full spec: a tilted ramp)
+          else if ((b.type === 'box' || b.type === undefined) && b.ax) specs.push({ type: 'box', c: at(b.x, b.y, b.z), hx: b.hx, hy: b.hy, hz: b.hz, ax: b.ax.clone(), ay: b.ay.clone(), az: b.az.clone(), ...own(b) }); // (a full spec: a tilted ramp, a snake's sloping tip)
           else if (b.type === 'box' || b.type === undefined) {
             const q = new THREE.Quaternion().setFromAxisAngle(UP, b.yaw || 0);
-            specs.push({ type: 'box', c: at(b.x, b.y, b.z), hx: b.hx, hy: b.hy, hz: b.hz, ax: new THREE.Vector3(1, 0, 0).applyQuaternion(q), ay: UP.clone(), az: new THREE.Vector3(0, 0, 1).applyQuaternion(q) });
+            specs.push({ type: 'box', c: at(b.x, b.y, b.z), hx: b.hx, hy: b.hy, hz: b.hz, ax: new THREE.Vector3(1, 0, 0).applyQuaternion(q), ay: UP.clone(), az: new THREE.Vector3(0, 0, 1).applyQuaternion(q), ...own(b) });
           }
         }
       } else if (!box.isEmpty()) {
@@ -243,6 +251,8 @@ export class AssetRow {
     const g = this.game;
     for (const c of e.cols) g.colliders.remove(c);
     e.cols = [];
+    for (const r of e.rails) this.world.removeRail(r);
+    e.rails = [];
     if (e.api && e.api.dispose) { try { e.api.dispose(); } catch (err) { console.warn('[assetRow] dispose', e.it.id, err); } }
     if (e.inst) { e.inst.removeFromParent(); disposeTree(e.inst); }
     e.inst = null; e.api = null; e.state = 'off'; e.failed = false;
@@ -299,7 +309,7 @@ export class AssetRow {
     GRAV.flat = UP;
     // the Moon's HUD (contract, event, territory, objective, prompts, minimap) has nothing to say here
     this.style = document.createElement('style');
-    this.style.textContent = 'body.asset-row :is(#mission, #eventpanel, #scanchip, #techchip, #obj-arrow, #obj-marker, #zonewarn, #tip, #banner, #evpop, #terrchip, #minimap, #dilate) { display: none !important; }';
+    this.style.textContent = 'body.asset-row :is(#mission, #eventpanel, #scanchip, #techchip, #obj-arrow, #obj-marker, #zonewarn, #banner, #evpop, #terrchip, #minimap, #dilate) { display: none !important; }';
     document.head.appendChild(this.style);
     document.body.classList.add('asset-row');
     this.termCols = this.terminals.map((t) => g.colliders.add({ type: 'box', c: new THREE.Vector3(t.x, 1, t.z), hx: 0.9, hy: 1, hz: 0.6, ax: new THREE.Vector3(1, 0, 0), ay: UP.clone(), az: new THREE.Vector3(0, 0, 1) }));
@@ -324,6 +334,7 @@ export class AssetRow {
     const g = this.game;
     if (!this.active) return;
     this.active = false;
+    if (g.grind) g.grind.active = null; // (a ride on one of the row's rails ends with it)
     for (const e of this.items) if (e.state === 'on') this.dropItem(e);
     for (const c of this.termCols || []) g.colliders.remove(c);
     this.termCols = null;
@@ -388,7 +399,11 @@ export class AssetRow {
     for (const t of this.terminals) if (Math.hypot(P.pos.x - t.x, P.pos.z - t.z) < TERMINAL_R && P.pos.y < 8) { near = t; break; }
     if (near !== this.nearTerminal) { this.nearTerminal = near; g.hud.prompt(near ? 'F · TERMINAL: JUMP TO ANOTHER SECTION' : null); }
     if (near && g.input.pressed('KeyF') && g.boardCooldown <= 0) this.terminalMenu();
-    for (const e of this.items) if (e.state === 'on' && e.api && e.api.update) e.api.update(dt, this.t);
+    for (const e of this.items) {
+      if (e.state !== 'on' || !e.api || !e.api.update) continue;
+      // (a demo that drives a live system breaks when that system changes: one that throws is switched off, it must not stop the whole frame)
+      try { e.api.update(dt, this.t); } catch (err) { console.warn('[assetRow] update failed, switched off:', e.it.id, err); e.api.update = null; }
+    }
     // flat, even light: a high sun, the sky fill straight up, no moonlight, no helmet lamp
     const sunDir = _sd.set(0.45, 0.8, 0.4).normalize();
     g.sun.intensity = 1.5;

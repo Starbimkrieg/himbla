@@ -14,7 +14,7 @@ the real look of the game: toon shading, ink outlines, halftone, comic pop text,
   cut, an object wiping the frame). It shouldn't feel like a slideshow.
 - **Show:** vehicles, action (pirates, Kade's gun truck, turrets), tricks, grinds (snake rocks and
   crater rims, with sparks), unique places (Chimera Downs derby, Antimatter Research Lab, casino,
-  funpark, Monolith), meteor showers, transit ships.
+  Monolith), meteor showers, transit ships.
 - **Don't explain everything.** Secrets stay secret. The **Xenoglide legendary skates** get a
   *tease only*: a glimpse of the alien gate in the Whispering Fissure, a mint-green glow (0x7dffd4)
   behind it, a "???" or "SOMETHING IS DOWN THERE" card. Never show what they do. Same spirit for the
@@ -61,7 +61,7 @@ Times are rough; tune them to the music. ▸ marks how each shot hands off to th
 | 10 | 24–27 | **Transit ship:** hop aboard, landing gear retracts, ship lifts off over a settlement. | ▸ the ship flies into the next shot |
 | 11 | 27–30 | **Chimera Downs:** gates spring, chimeras race, crowd roars; cut to a close-up of the leader. | Downs space-western music sting |
 | 12 | 30–33 | **Antimatter Lab:** the reactor flashes, Dr. Zbornak, jar bloops, a mutation pops. | Clinical-strange music sting. Card: *"SHENANIGANS."* |
-| 13 | 33–35 | **Casino / Funpark** quick double cut: slots, then the rideable ferris wheel or carousel at night. | Jazzy synthwave sting |
+| 13 | 33–35 | **Casino** quick double cut: slots, then the Duck Derby or Plinko lit up at night. (The funpark and its ferris wheel shot are gone; the wheel now stands in Chimera Downs' fairground annex and could be a shot there.) | Jazzy synthwave sting |
 | 14 | 35–37 | **The Monolith:** touch it; time dilation (violet screen edge) or echo decoys pull pirate fire. | |
 | 15 | 37–40 | **Tease:** descend into the Whispering Fissure; the alien gate; a mint-green glow behind it. Hold, cut to black. | Card: *"SOMETHING IS DOWN THERE."* Don't show the skates. |
 | 16 | 40–45 | **Hero shot plus end card:** the courier crests a rim at sunset with the cargo, grinding off into the dark; logo. | Last beat lands on the logo |
@@ -70,7 +70,7 @@ Times are rough; tune them to the music. ▸ marks how each shot hands off to th
 
 **Location ids** (`src/locations.js`; teleport with the cheats menu or `g.cheats.teleport(loc)`):
 `ilmb` (International Moon Base, hub), `meridian` (trade), `antimatter` (Antimatter Research Lab),
-`downs` (Chimera Downs derby), `casino` (Lucky Crater Casino), `bounce` (Bounce Dome Funpark),
+`downs` (Chimera Downs derby), `casino` (Lucky Crater Casino),
 `monolith`, `fissure` (Whispering Fissure, Xenoglide shrine), `rustmoon` / `gulch` / `blackrock` /
 `gloom` (pirate dens, dark side), `daedalus` (military citadel), `farside`, `twilight`
 (terminator waystation), plus the civilian towns `tranq`, `aldrin`, `kepler`, `hertz`.

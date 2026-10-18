@@ -1,15 +1,15 @@
-// Powers: the actives you've earned, all on one key. Z uses the selected one; the mouse wheel steps
-// through them. A chip by the weapon readout shows which power Z will use and whether it's ready.
+// Powers: the actives you've earned, all on one key. E uses the selected one; the mouse wheel steps
+// through them. A chip by the weapon readout shows which power E will use and whether it's ready.
 //
 //   dash      Daedalus Phase Dash (story tech)
 //   teleport  Meridian Personal Teleporter (story tech; T still works)
 //   vanes     Meridian Quantum Slipstream Vanes (story tech: steer in the air for 10 s, story.js)
-//   winch     Kepler Hitch-Line Winch (hold Z: winch.js)
+//   winch     Kepler Hitch-Line Winch (E toggles it: winch.js)
 //   pen       Dr. Zbornak's holding-pen link (P still works)
 //   meteor    dev: drops a meteor on you (granted the first time the dev menu's SPAWN A METEOR ON ME is used: cheats.js)
 //
 // On a controller, d-pad ↓ opens the radial menu and its POWERS wedge opens the power wheel (below): the
-// right stick picks one, A equips it (what a notch of the mouse wheel does), and RB / Z then uses it.
+// right stick picks one, A equips it (what a notch of the mouse wheel does), and RB / E then uses it.
 
 import { glyphHtml } from './glyphs.js';
 import { DEV_TOOLS } from './devtools.js';
@@ -151,7 +151,7 @@ export class Powers {
   use(k) {
     const g = this.game;
     if (k === 'dash' || k === 'teleport' || k === 'vanes') g.story.useTech(k);
-    else if (k === 'winch') g.winch.fire();
+    else if (k === 'winch') { if (g.winch.on) g.winch.release(); else g.winch.fire(); } // (E again lets go)
     else if (k === 'pen') g.alchemy.penMenu();
     else if (k === 'meteor') g.cheats.spawnMeteor(false);
   }
@@ -164,13 +164,13 @@ export class Powers {
     const steps = I.consumeWheel();
     if (steps && !g.winch.on) this.cycle(steps > 0 ? 1 : -1);
     const limp = !!g.player.rag; // (a ragdoll can't use powers)
-    if (I.pressed('KeyZ') && !limp) {
+    if (I.pressed('KeyE') && !limp) {
       const k = this.current();
       if (k) this.use(k);
-      else g.hud.toast('No powers yet. Phase Dash, the Teleporter, the Kepler winch and the pen link all go on Z.', 2.5);
+      else g.hud.toast('No powers yet. Phase Dash, the Teleporter, the Kepler winch and the pen link all go on E.', 2.5);
     }
-    // the winch holds while Z does
-    g.winch.update(dt, I.down('KeyZ') && this.current() === 'winch' && !limp);
+    // the winch stays on until E is pressed again (or it runs out, snaps or slips)
+    g.winch.update(dt, this.current() === 'winch' && !limp);
     if (this.flash > 0) this.flash -= dt;
     if (this.radial && (this.radial.t -= dt) <= 0) { this.radial.t = 0.1; this.radialDraw(); }
     this.chipT -= dt;
@@ -194,6 +194,6 @@ export class Powers {
     const extra = this.status(k);
     const many = this.owned().length > 1;
     el.classList.toggle('swap', this.flash > 0);
-    el.innerHTML = `<b>Z</b> ${POWERS[k].name.toUpperCase()} <span class="${cd > 0 ? 'pc-cd' : 'pc-ok'}">${extra}</span>${many ? ` <small>WHEEL: ${this.owned().indexOf(k) + 1}/${this.owned().length}</small>` : ''}`;
+    el.innerHTML = `<b>E</b> ${POWERS[k].name.toUpperCase()} <span class="${cd > 0 ? 'pc-cd' : 'pc-ok'}">${extra}</span>${many ? ` <small>WHEEL: ${this.owned().indexOf(k) + 1}/${this.owned().length}</small>` : ''}`;
   }
 }

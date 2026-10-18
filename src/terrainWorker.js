@@ -17,6 +17,9 @@ self.onmessage = (e) => {
   } else if (m.type === 'flat') {
     field.addFlatData(v3(m.dir), m.r, m.zr);
     field.cache.clear();
+  } else if (m.type === 'unflat') {
+    field.removeFlatData(v3(m.dir));
+    field.cache.clear();
   } else if (m.type === 'build') {
     const d = field.computeChunk(m.f, m.cx, m.cy, m.flip, m.lod);
     self.postMessage({ id: m.id, ...d }, [d.pos.buffer, d.nor.buffer, d.col.buffer, d.rim.buffer, d.tint.buffer, d.idx.buffer, d.inside.buffer]);

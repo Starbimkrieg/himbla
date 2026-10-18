@@ -5,3 +5,6 @@ release
 
 # trailer renders (trailer.js director mode)
 trailer-out/
+
+# local agent skill installs
+.agents/

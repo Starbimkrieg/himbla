@@ -49,6 +49,7 @@ export function dirToGrid(x, y, z, o) {
 const _g = { f: 0, i: 0, j: 0 };
 const _d = new THREE.Vector3();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _e = new THREE.Vector3();
+const NO_FLATS = []; // (stands in for every flat bucket while a town's native ground is measured)
 
 // Hue tints for the painted Moon: multipliers on r, g, b (the brightness is put back afterwards)
 const TINT_COOL = [0.9, 0.96, 1.16]; // maria: blue-grey
@@ -69,14 +70,19 @@ export class TerrainField {
     this.nC = createNoise3D(rand);
     this.zones = zones;
     for (const z of zones) {
-      z.zr = R + this.base(z.dir.x * R, z.dir.y * R, z.dir.z * R, darkness(z.dir));
-      z.cosFlat = Math.cos((z.r * 1.95) / R);
+      // (a plane the main thread already fitted comes in as zrSet: workers never refit, so they can't disagree)
+      z.zr = z.zrSet ?? R + this.base(z.dir.x * R, z.dir.y * R, z.dir.z * R, darkness(z.dir));
+      // (how far the plateau is flat: a place can ask for more than r with flatR; none does yet, and
+      // the rock keep-outs in planet.js still read r)
+      z.fr = z.flatR || z.r;
+      z.cosFlat = Math.cos((z.fr * 1.95) / R);
     }
     this.cache = new Map();
     this.attr = { floor: 0, rim: 0, ray: 0, rock: 0, rille: 0, crest: 0, ejecta: 0, old: 0 };
     // the painted look (maria, white crests, gravel blankets): PLANET.painted, and the settings toggle
     this.painted = PLANET.painted !== false;
     this.makeCraters(rand);
+    for (const z of zones) if (z.fit && z.zrSet === undefined) this.fitZone(z); // (needs the craters and the flat buckets)
   }
 
   base(x, y, z, far) {
@@ -327,9 +333,11 @@ export class TerrainField {
       const dot = dx * zn.dir.x + dy * zn.dir.y + dz * zn.dir.z;
       if (dot < zn.cosFlat) continue;
       const d = R * Math.acos(Math.min(1, dot));
-      // plateau is a true plane in the settlement's local frame
-      const t = smoothstep(zn.r, zn.r * 1.95, d);
-      rad = zn.zr / dot + (rad - zn.zr / dot) * t;
+      // plateau is a true plane in the settlement's local frame (or, for a `curved` place, a cap of the sphere at the plane's height, so
+      // nothing built on it leans away from the local up; see downsKit.js makeBend)
+      const t = smoothstep(zn.fr, zn.fr * 1.95, d);
+      const pl = zn.curved ? zn.zr : zn.zr / dot;
+      rad = pl + (rad - pl) * t;
       floorA *= t; rimA *= t; rayA *= t; ejA *= t; oldA *= t; this.attr.rock *= t; this.attr.rille *= t; this.attr.crest *= t;
     }
     const fb = this.flatBuckets[(_g.f * CPF + cy) * CPF + cx];
@@ -357,11 +365,58 @@ export class TerrainField {
     return zn;
   }
 
+  // (the opposite of addFlatData: a founded outpost's plateau goes when the town grows over it)
+  removeFlatData(d) {
+    const k = this.flats.findIndex((z) => z.dir.dot(d) > 0.999999);
+    if (k < 0) return false;
+    const zn = this.flats.splice(k, 1)[0];
+    for (const b of this.flatBuckets) { const i = b.indexOf(zn); if (i >= 0) b.splice(i, 1); }
+    this.cache.clear();
+    return true;
+  }
+
   addZoneData(z) {
-    z.zr = R + this.base(z.dir.x * R, z.dir.y * R, z.dir.z * R, darkness(z.dir));
-    z.cosFlat = Math.cos((z.r * 1.95) / R);
+    z.zr = z.zrSet ?? R + this.base(z.dir.x * R, z.dir.y * R, z.dir.z * R, darkness(z.dir));
+    z.fr = z.flatR || z.r;
+    z.cosFlat = Math.cos((z.fr * 1.95) / R);
+    if (z.fit && z.zrSet === undefined) this.fitZone(z);
     if (!this.zones.includes(z)) this.zones.push(z);
     this.cache.clear();
+  }
+
+  // A town's plane is the mean height of the NATIVE ground under its footprint (craters and landforms
+  // only: no plateaus, no flats), not the smooth base() noise, which knows nothing of either. So the
+  // plateau cuts where the ground is high and fills where it is low, and the hall never hangs over a
+  // crater bowl or sinks into a hill. Rings every 10 m out to rFit (the plots reach 77.5 m), each
+  // sample weighted by the ground it stands for. Worked out once, on the main thread; the workers are
+  // sent the answer (zrSet) and never fit again, so they can't disagree with the physics.
+  fitZone(z, rFit = 80) {
+    const zones = this.zones, fb = this.flatBuckets;
+    this.zones = [];
+    this.flatBuckets = new Array(fb.length).fill(NO_FLATS);
+    try {
+      const d = z.dir;
+      const t1 = _a.set(1, 0, 0).addScaledVector(d, -d.x);
+      if (t1.lengthSq() < 1e-4) t1.set(0, 1, 0).addScaledVector(d, -d.y);
+      t1.normalize();
+      const t2 = _b.crossVectors(d, t1);
+      let sum = 0, w = 0;
+      for (let r = 0; r <= rFit; r += 10) {
+        const n = r ? Math.max(8, Math.round(2 * Math.PI * r / 10)) : 1;
+        // (each ring stands for the 10 m band round it, so it weighs its radius, shared out over its samples; the
+        // centre stands for a 5 m disc and the outer ring only for the 5 m inside rFit: counted whole it pulled the
+        // plane towards what lies just outside the footprint, and the mean missed 0.5 m on 1 site in 12)
+        const hi = Math.min(r + 5, rFit), lo = r - 5;
+        const ww = r ? (hi * hi - lo * lo) / (20 * n) : 1.25;
+        for (let i = 0; i < n; i++) {
+          const a = i / n * 2 * Math.PI;
+          _c.copy(d).multiplyScalar(R).addScaledVector(t1, Math.cos(a) * r).addScaledVector(t2, Math.sin(a) * r).normalize();
+          sum += this.H(_c.x, _c.y, _c.z) * (z.curved ? 1 : _c.dot(d)) * ww;
+          w += ww;
+        }
+      }
+      z.zr = z.zrSet = sum / w; // (~230 samples, under a millisecond)
+    } finally { this.zones = zones; this.flatBuckets = fb; }
   }
 
   vr(f, i, j) {

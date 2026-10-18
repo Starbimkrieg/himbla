@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { frameQuat } from './geo.js';
+import { frameQuat, upAt } from './geo.js';
 
 // Grinding the crests of snake rocks (rocks.js; the planet keeps their crest lines in planet.rails).
 // Land on (or drop onto) a crest and you lock to it, standing sideways to the line, carried along
@@ -24,6 +24,19 @@ function railAt(r, s, outP, outT) {
   outP.copy(r.pts[i]).lerp(r.pts[i + 1], f);
   outT.copy(r.pts[i + 1]).sub(r.pts[i]).normalize();
   return outP;
+}
+
+// A rail from its crest line (a polyline of points): with the arc length at each point and a bounding sphere, which is what
+// nearest() looks at first. planet.js addRail keeps these for the Moon; the Asset Row's flat world makes its own.
+export function railOf(pts) {
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1]));
+  const c = new THREE.Vector3();
+  for (const p of pts) c.add(p);
+  c.divideScalar(pts.length);
+  let rad = 0;
+  for (const p of pts) rad = Math.max(rad, p.distanceTo(c));
+  return { pts, cum, len: cum[cum.length - 1], c, rad };
 }
 
 export class Grinder {
@@ -62,7 +75,7 @@ export class Grinder {
     const steps = Math.max(1, Math.ceil(Math.abs(ds) / 0.5));
     for (let i = 1; i <= steps; i++) {
       railAt(A.r, A.s + ds * (i / steps), _hp, _ht);
-      _hu.copy(_hp).normalize();
+      upAt(_hp, _hu);
       _hp.addScaledVector(_hu, BODY_UP);
       for (const c of cols.query(_hp, BODY + 2, _near)) {
         if (c.platform || c.rail === A.r.pts) continue;
@@ -91,7 +104,7 @@ export class Grinder {
       }
       if (!n) return false;
       railAt(n.r, n.s, _p, _t);
-      _u.copy(n.p).normalize();
+      upAt(n.p, _u);
       const along = b.vel.dot(_t);
       const hsp = Math.sqrt(Math.max(0, b.vel.lengthSq() - b.vel.dot(_u) ** 2));
       // heading along the line (within ~40 degrees) pulls you on from further away; the tips
@@ -123,10 +136,11 @@ export class Grinder {
       this.active = { r: n.r, s: n.s, dir, speed: Math.max(Math.abs(along), hsp * 0.85, 9), t: 0, spark: 0 };
       g.fx.pop('GRIND!', null, { color: '#ffd23f', size: 44 });
       g.audio.tone(1400, 0.08, 'square', 0.08);
+      g.haptics.play('grind');
     }
     const A = this.active, r = A.r;
     railAt(r, A.s, _p, _t);
-    _u.copy(_p).normalize();
+    upAt(_p, _u);
     // gravity along the rail, and a little friction
     A.speed += -GRAV * _t.dot(_u) * A.dir * dt;
     A.speed = Math.max(3, Math.min(85, A.speed - 0.5 * dt));
@@ -141,7 +155,7 @@ export class Grinder {
     b.energy = Math.min(b.maxEnergy, b.energy + P.params.energyRegen * dt);
     if (b.jetLocked && b.energy >= b.maxEnergy * 0.25) b.jetLocked = false;
     railAt(r, A.s, _p, _t);
-    _u.copy(_p).normalize();
+    upAt(_p, _u);
     const left = r.loop ? Infinity : A.dir > 0 ? r.len - A.s : A.s;
     const jump = input.pressed('ShiftLeft') || input.pressed('ShiftRight');
     if (jump || left < 1.2 || P.dead) { this.pop(P, jump); return true; }
@@ -216,7 +230,7 @@ export class Grinder {
   pop(P, jumped, knocked = false) {
     const g = this.game, b = P.body, A = this.active;
     railAt(A.r, A.s, _p, _t);
-    _u.copy(_p).normalize();
+    upAt(_p, _u);
     b.pos.copy(_p).addScaledVector(_u, 0.4);
     b.vel.copy(_t).multiplyScalar(A.dir * A.speed).addScaledVector(_u, jumped ? 12 : 9);
     b.grounded = false;
@@ -230,7 +244,7 @@ export class Grinder {
       const pts = Math.round(15 + A.t * 30);
       g.style(pts, 'GRIND');
     }
-    if (jumped) g.audio.jump();
+    if (jumped) { g.audio.jump(); g.haptics.play('jump'); }
     this.active = null;
     this.cool = 0.6;
   }

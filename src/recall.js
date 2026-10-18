@@ -118,6 +118,7 @@ export class Recall {
     if (this.failed.length) g.hud.failedList('SHUTTLE RECALL: WORK FAILED', this.failed.map((r) => r.line), this.endAt + 0.5); // (up for the whole scene)
     // the shuttle sits behind where you'll stand, nose away, so its rear door drops toward you
     const s = makeShuttle({ color: 0xfff4e0, stripe: g.rep.aligned() ? 0x7dff3a : 0x2ec4ff });
+    s.setSign('RECALL');
     s.root.scale.setScalar(SCALE);
     s.setGear(0);
     s.setRamp(0);

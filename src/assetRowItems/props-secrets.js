@@ -84,7 +84,7 @@ function fissure() {
   const loc = { group: new THREE.Group(), pos: V(0, 3600, 0), dir: V(0, 1, 0) };
   const hole = { uHoleOn: { value: 0 }, uHoleO: { value: V(0, 0, 0) }, uHoleX: { value: V(0, 0, 0) }, uHoleY: { value: V(0, 0, 0) }, uHoleZ: { value: V(0, 0, 0) }, uHoleMin: { value: new THREE.Vector2() }, uHoleMax: { value: new THREE.Vector2() } };
   const self = {
-    game: { world: { put: W.put, toWorld: W.toWorld, col: (l, spec) => { specs.push(spec); return spec; } }, planet: { R: 3600, holeU: hole }, colliders: { remove() {} } },
+    game: { world: { put: W.put, curveR: W.curveR, toWorld: W.toWorld, col: (l, spec) => { specs.push(spec); return spec; } }, planet: { R: 3600, holeU: hole }, colliders: { remove() {} } },
     loc,
     state: { artifactTaken: false, gateOpen: false, skatesTaken: false },
     glyphTexture: Secrets.prototype.glyphTexture,

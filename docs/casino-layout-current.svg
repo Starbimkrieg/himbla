@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 905.4 939.5" width="905.4" height="939.5" font-family="Helvetica, Arial, sans-serif">
+<rect width="905.4" height="939.5" fill="#f4f1ea"/>
+<text x="36" y="24" font-size="17" font-weight="bold" fill="#2a1450">Current</text>
+<text x="336" y="24" font-size="11" fill="#555">looking down: +x right, the doors at the bottom (+z); 10 m grid</text>
+<line x1="91.79999999999995" y1="66" x2="91.79999999999995" y2="889.5" stroke="#e1dccf" stroke-width="1"/>
+<line x1="181.79999999999995" y1="66" x2="181.79999999999995" y2="889.5" stroke="#e1dccf" stroke-width="1"/>
+<line x1="271.79999999999995" y1="66" x2="271.79999999999995" y2="889.5" stroke="#e1dccf" stroke-width="1"/>
+<line x1="361.79999999999995" y1="66" x2="361.79999999999995" y2="889.5" stroke="#e1dccf" stroke-width="1"/>
+<line x1="451.79999999999995" y1="66" x2="451.79999999999995" y2="889.5" stroke="#e1dccf" stroke-width="1"/>
+<line x1="541.8" y1="66" x2="541.8" y2="889.5" stroke="#e1dccf" stroke-width="1"/>
+<line x1="631.8" y1="66" x2="631.8" y2="889.5" stroke="#e1dccf" stroke-width="1"/>
+<line x1="721.8" y1="66" x2="721.8" y2="889.5" stroke="#e1dccf" stroke-width="1"/>
+<line x1="811.8" y1="66" x2="811.8" y2="889.5" stroke="#e1dccf" stroke-width="1"/>
+<line x1="36" y1="141.6" x2="869.4" y2="141.6" stroke="#e1dccf" stroke-width="1"/>
+<line x1="36" y1="231.6" x2="869.4" y2="231.6" stroke="#e1dccf" stroke-width="1"/>
+<line x1="36" y1="321.6" x2="869.4" y2="321.6" stroke="#e1dccf" stroke-width="1"/>
+<line x1="36" y1="411.59999999999997" x2="869.4" y2="411.59999999999997" stroke="#e1dccf" stroke-width="1"/>
+<line x1="36" y1="501.59999999999997" x2="869.4" y2="501.59999999999997" stroke="#e1dccf" stroke-width="1"/>
+<line x1="36" y1="591.6" x2="869.4" y2="591.6" stroke="#e1dccf" stroke-width="1"/>
+<line x1="36" y1="681.6" x2="869.4" y2="681.6" stroke="#e1dccf" stroke-width="1"/>
+<line x1="36" y1="771.6" x2="869.4" y2="771.6" stroke="#e1dccf" stroke-width="1"/>
+<line x1="36" y1="861.6" x2="869.4" y2="861.6" stroke="#e1dccf" stroke-width="1"/>
+<rect x="226.79999999999995" y="114.6" width="450" height="396" fill="#3a1d63" stroke="#3a1d63" stroke-width="43.199999999999996" stroke-linejoin="miter"/>
+<rect x="226.79999999999995" y="114.6" width="450" height="396" fill="#fbf5e6"/>
+<rect x="406.79999999999995" y="487.99999999999994" width="90" height="23.599999999999998" fill="#d7263d"/>
+<circle cx="343.79999999999995" cy="285.6" r="13.5" fill="none" stroke="#b08a00" stroke-dasharray="3 3"/>
+<circle cx="559.8" cy="285.6" r="13.5" fill="none" stroke="#b08a00" stroke-dasharray="3 3"/>
+<circle cx="451.79999999999995" cy="393.59999999999997" r="13.5" fill="none" stroke="#b08a00" stroke-dasharray="3 3"/>
+<rect x="408.59999999999997" y="453.59999999999997" width="86.39999999999999" height="6" fill="none" stroke="#b08a00" stroke-dasharray="3 3"/>
+<rect x="228.59999999999997" y="380.09999999999997" width="165.6" height="83.52000000000001" fill="#2ee6ff" fill-opacity="0.10" stroke="#1aa6c0" stroke-dasharray="2 4"/>
+<rect x="343.79999999999995" y="255" width="36" height="71.1" fill="#2ee6ff" fill-opacity="0.10" stroke="#1aa6c0" stroke-dasharray="2 4"/>
+<rect x="235.79999999999995" y="281.1" width="252" height="13.5" fill="#2ee6ff" fill-opacity="0.10" stroke="#1aa6c0" stroke-dasharray="2 4"/>
+<rect x="501.29999999999995" y="138.89999999999998" width="153" height="142.20000000000002" fill="#2ee6ff" fill-opacity="0.10" stroke="#1aa6c0" stroke-dasharray="2 4"/>
+<circle cx="311.4" cy="453.71999999999997" r="29.7" fill="#7dff6a" fill-opacity="0.18" stroke="#2f9a1f" stroke-dasharray="4 3"/>
+<circle cx="288.35999999999996" cy="339.59999999999997" r="25.2" fill="#7dff6a" fill-opacity="0.18" stroke="#2f9a1f" stroke-dasharray="4 3"/>
+<circle cx="361.79999999999995" cy="273" r="25.2" fill="#7dff6a" fill-opacity="0.18" stroke="#2f9a1f" stroke-dasharray="4 3"/>
+<circle cx="577.8" cy="202.79999999999998" r="28.8" fill="#7dff6a" fill-opacity="0.18" stroke="#2f9a1f" stroke-dasharray="4 3"/>
+<circle cx="624.5999999999999" cy="434.09999999999997" r="48.6" fill="#7dff6a" fill-opacity="0.18" stroke="#2f9a1f" stroke-dasharray="4 3"/>
+<circle cx="624.5999999999999" cy="294.6" r="34.199999999999996" fill="#7dff6a" fill-opacity="0.18" stroke="#2f9a1f" stroke-dasharray="4 3"/>
+<circle cx="309.59999999999997" cy="690.6" r="68.39999999999999" fill="#bfe0c8" stroke="#2a6a4a" stroke-width="1.5"/>
+<text x="309.59999999999997" y="693.6" font-size="10.5" text-anchor="middle" fill="#1a1030">Slot carousel W</text>
+<circle cx="594" cy="690.6" r="68.39999999999999" fill="#bfe0c8" stroke="#2a6a4a" stroke-width="1.5"/>
+<text x="594" y="693.6" font-size="10.5" text-anchor="middle" fill="#1a1030">Slot carousel E</text>
+<circle cx="127.79999999999995" cy="609.6" r="43.199999999999996" fill="#bfe0c8" stroke="#2a6a4a" stroke-width="1.5"/>
+<text x="127.79999999999995" y="612.6" font-size="10.5" text-anchor="middle" fill="#1a1030">Giant die</text>
+<rect x="730.8" y="582.6" width="90" height="18" fill="#bfe0c8" stroke="#2a6a4a" stroke-width="1.5"/>
+<text x="775.8" y="594.6" font-size="10.5" text-anchor="middle" fill="#1a1030">Roulette wheel</text>
+<circle cx="235.79999999999995" cy="555.5999999999999" r="15.299999999999999" fill="#bfe0c8" stroke="#2a6a4a" stroke-width="1.5"/>
+<text x="235.79999999999995" y="558.5999999999999" font-size="7" text-anchor="middle" fill="#1a1030">Chip stack</text>
+<circle cx="667.8" cy="555.5999999999999" r="15.299999999999999" fill="#bfe0c8" stroke="#2a6a4a" stroke-width="1.5"/>
+<text x="667.8" y="558.5999999999999" font-size="7" text-anchor="middle" fill="#1a1030">Chip stack</text>
+<circle cx="208.79999999999995" cy="807.6" r="15.299999999999999" fill="#bfe0c8" stroke="#2a6a4a" stroke-width="1.5"/>
+<text x="208.79999999999995" y="810.6" font-size="7" text-anchor="middle" fill="#1a1030">Chip stack</text>
+<circle cx="694.8" cy="825.6" r="15.299999999999999" fill="#bfe0c8" stroke="#2a6a4a" stroke-width="1.5"/>
+<text x="694.8" y="828.6" font-size="7" text-anchor="middle" fill="#1a1030">Chip stack</text>
+<rect x="388.79999999999995" y="525" width="126" height="63.000000000000014" fill="#ffc2dd" stroke="#a01a5a" stroke-width="1.5"/>
+<text x="451.79999999999995" y="559.5" font-size="10.5" text-anchor="middle" fill="#1a1030">Canopy</text>
+<rect x="237.59999999999997" y="463.62" width="147.6" height="46.800000000000004" fill="#f3d98a" stroke="#8a5a00" stroke-width="1.5"/>
+<text x="311.4" y="490.02" font-size="10.5" text-anchor="middle" fill="#1a1030">Zero-G claw</text>
+<rect x="227.15999999999997" y="305.4" width="60.3" height="68.4" fill="#f3d98a" stroke="#8a5a00" stroke-width="1.5"/>
+<text x="257.30999999999995" y="342.59999999999997" font-size="7.309090909090909" text-anchor="middle" fill="#1a1030">Blackjack table</text>
+<rect x="233.09999999999997" y="161.39999999999998" width="257.40000000000003" height="70.2" fill="#f3d98a" stroke="#8a5a00" stroke-width="1.5"/>
+<text x="361.79999999999995" y="199.5" font-size="10.5" text-anchor="middle" fill="#1a1030">Duck basin</text>
+<rect x="348.29999999999995" y="247.35" width="27" height="15.300000000000026" fill="#f3d98a" stroke="#8a5a00" stroke-width="1.5"/>
+<text x="361.79999999999995" y="258" font-size="7" text-anchor="middle" fill="#1a1030">Duck kiosk</text>
+<rect x="505.79999999999995" y="114.6" width="144" height="24.299999999999994" fill="#f3d98a" stroke="#8a5a00" stroke-width="1.5"/>
+<text x="577.8" y="129.75" font-size="10.5" text-anchor="middle" fill="#1a1030">Plinko frame</text>
+<rect x="561.5999999999999" y="180.3" width="32.40000000000001" height="12.599999999999987" fill="#f3d98a" stroke="#8a5a00" stroke-width="1.5"/>
+<text x="577.8" y="189.6" font-size="7" text-anchor="middle" fill="#1a1030">Plinko booth</text>
+<rect x="645.75" y="381" width="15.299999999999994" height="108" fill="#f3d98a" stroke="#8a5a00" stroke-width="1.5"/>
+<text x="653.4" y="438" font-size="7" text-anchor="middle" fill="#1a1030">Classic games</text>
+<rect x="636.3" y="262.2" width="40.5" height="64.80000000000001" fill="#f3d98a" stroke="#8a5a00" stroke-width="1.5"/>
+<text x="656.55" y="297.6" font-size="7" text-anchor="middle" fill="#1a1030">Prize counter</text>
+<g font-size="10" fill="#333"><rect x="36" y="913.5" width="12" height="10" fill="#f3d98a" stroke="#8a5a00"/><text x="52" y="922.5">game / existing model</text><rect x="186" y="913.5" width="12" height="10" fill="#c9a6ff" stroke="#4a1f8a"/><text x="202" y="922.5">new model</text><rect x="276" y="913.5" width="12" height="10" fill="#d9b03a" stroke="#5a4000"/><text x="292" y="922.5">pier / column</text><rect x="376" y="913.5" width="12" height="10" fill="#7dff6a" fill-opacity="0.4" stroke="#2f9a1f" stroke-dasharray="3 2"/><text x="392" y="922.5">trigger zone</text><rect x="476" y="913.5" width="12" height="10" fill="#2ee6ff" fill-opacity="0.25" stroke="#1aa6c0" stroke-dasharray="2 3"/><text x="492" y="922.5">seated lens corridor</text><text x="626" y="922.5">dashed circles / bars: chandeliers, dome, hung sign</text></g>
+</svg>

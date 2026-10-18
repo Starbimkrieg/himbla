@@ -21,7 +21,7 @@ const NAMES = {
   ps: ['✕', '○', '□', '△', 'L1', 'R1', 'L2', 'R2', 'Create', 'Options', 'L3', 'R3', '↑', '↓', '←', '→', 'PS', 'Touchpad'],
   switch: ['B', 'A', 'Y', 'X', 'L', 'R', 'ZL', 'ZR', '−', '+', 'LS', 'RS', '↑', '↓', '←', '→', 'Home', 'Capture'],
 };
-const KEYS = [['KeyQ', 'Q'], ['KeyW', 'W'], ['KeyA', 'A'], ['KeyS', 'S'], ['KeyD', 'D'], ['ShiftLeft', 'Shift'], ['Space', 'Space'], ['KeyE', 'E']];
+const KEYS = [['KeyQ', 'Q'], ['KeyW', 'W'], ['KeyA', 'A'], ['KeyS', 'S'], ['KeyD', 'D'], ['ShiftLeft', 'Shift'], ['Space', 'Space']];
 const NS = 'http://www.w3.org/2000/svg';
 const DEAD = 0.18;
 const TAU = Math.PI * 2;

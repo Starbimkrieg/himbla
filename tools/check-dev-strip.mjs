@@ -18,7 +18,7 @@ let bad = 0;
 const fail = (m) => { bad++; console.log('FAIL', m); };
 
 // ---- 1. the stand-in covers what the rest of the game uses of game.cheats and of the debug overlay (game.devOverlay)
-const stub = readFileSync(join(SRC, 'cheatsStub.js'), 'utf8');
+const stub = readFileSync(join(SRC, 'cheatsStub.js'), 'utf8').replace(/\r\n/g, '\n'); // (a Windows checkout has CRLF; the patterns below are LF)
 const members = (text) => { // (what a class body declares: its `this.x =` fields and its methods)
   const have = new Set([...text.matchAll(/this\.(\w+) =/g)].map((m) => m[1]));
   for (const m of text.matchAll(/^  (?:get )?(\w+)\(.*\) \{/gm)) have.add(m[1]);
@@ -26,18 +26,22 @@ const members = (text) => { // (what a class body declares: its `this.x =` field
 };
 const [, overlayText, cheatsText] = stub.match(/class DevOverlay \{([\s\S]*?)\n\}\n[\s\S]*?export class Cheats \{([\s\S]*)\n\}\n/) || [];
 if (!overlayText) { fail('src/cheatsStub.js: could not find its DevOverlay and Cheats classes'); process.exit(1); }
-const haveCheats = members(cheatsText), haveOverlay = members(overlayText);
-const DEV_ONLY = new Set(['cheatsStub.js', 'cheats.js', 'devtools.js', 'devoverlay.js']); // (the dev tools' own files may use all of it)
-const usedCheats = new Map(), usedOverlay = new Map();
+const [, freeText] = stub.match(/class FreeCam \{([\s\S]*?)\n\}\n/) || [];
+if (!freeText) { fail('src/cheatsStub.js: could not find its FreeCam class'); process.exit(1); }
+const haveCheats = members(cheatsText), haveOverlay = members(overlayText), haveFree = members(freeText);
+const DEV_ONLY = new Set(['cheatsStub.js', 'cheats.js', 'devtools.js', 'devoverlay.js', 'freecam.js']); // (the dev tools' own files may use all of it)
+const usedCheats = new Map(), usedOverlay = new Map(), usedFree = new Map();
 for (const f of readdirSync(SRC)) {
   if (!f.endsWith('.js') || DEV_ONLY.has(f) || f.startsWith('assetRow')) continue;
   const text = readFileSync(join(SRC, f), 'utf8');
   for (const m of text.matchAll(/\bcheats\.(\w+)/g)) if (m[1] !== 'js' && !usedCheats.has(m[1])) usedCheats.set(m[1], f); // ("cheats.js" in a comment is the file)
   for (const m of text.matchAll(/\b(?:devOverlay|dbg|cheats\.overlay)\.(\w+)/g)) if (!usedOverlay.has(m[1])) usedOverlay.set(m[1], f);
+  for (const m of text.matchAll(/\bcheats\.freeCam\.(\w+)/g)) if (!usedFree.has(m[1])) usedFree.set(m[1], f);
 }
 for (const [name, f] of usedCheats) if (!haveCheats.has(name)) fail(`src/${f} uses cheats.${name}, which src/cheatsStub.js does not have`);
 for (const [name, f] of usedOverlay) if (!haveOverlay.has(name)) fail(`src/${f} uses the debug overlay's ${name}(), which src/cheatsStub.js does not have`);
-console.log(`stand-in: ${usedCheats.size} cheats members and ${usedOverlay.size} overlay members used by the game, ${haveCheats.size} and ${haveOverlay.size} in the stand-in`);
+for (const [name, f] of usedFree) if (!haveFree.has(name)) fail(`src/${f} uses the free cam's ${name}(), which src/cheatsStub.js does not have`);
+console.log(`stand-in: ${usedCheats.size} cheats members, ${usedOverlay.size} overlay members and ${usedFree.size} free cam members used by the game, ${haveCheats.size}, ${haveOverlay.size} and ${haveFree.size} in the stand-in`);
 
 if (!process.argv.includes('--static')) {
   // ---- 2. a release build against a normal one
@@ -51,7 +55,7 @@ if (!process.argv.includes('--static')) {
     return { text, bytes };
   };
   // strings that only the dev tools carry (a menu title, a storage key, the Asset Row's name and so on)
-  const MARKS = ['DEV MENU', 'FULL CHEAT MENU', 'mr-dev-unlocked', 'CLICK MAP TO TELEPORT', 'SPAWN PIRATE SQUAD', 'INPUT & CONTROLLER MONITOR', 'ASSET ROW', 'DEBUG OVERLAY', 'CPU TIME BY STAGE', 'FETCH & PULL UPSTREAM', 'dev-btn-pause', 'Meteor Spawn (dev)', 'PREPARING THE TRAILER'];
+  const MARKS = ['DEV MENU', 'FULL CHEAT MENU', 'mr-dev-unlocked', 'CLICK MAP TO TELEPORT', 'SPAWN PIRATE SQUAD', 'INPUT & CONTROLLER MONITOR', 'ASSET ROW', 'DEBUG OVERLAY', 'CPU TIME BY STAGE', 'FETCH & PULL UPSTREAM', 'dev-btn-pause', 'Meteor Spawn (dev)', 'PREPARING THE TRAILER', 'FREE CAM'];
   const dev = build('production'), rel = build('release');
   for (const m of MARKS) {
     if (!dev.text.includes(m)) fail(`"${m}" is not in the normal build, so this check proves nothing about it (stale string?)`);

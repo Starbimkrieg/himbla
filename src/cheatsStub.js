@@ -15,6 +15,13 @@ class DevOverlay {
   alertNote() {}
 }
 
+class FreeCam {
+  constructor() { this.on = false; }
+  takeInput() {}
+  giveBack() {}
+  view() {}
+}
+
 export class Cheats {
   constructor(game) {
     this.game = game;
@@ -29,6 +36,7 @@ export class Cheats {
     this.unlocked = false;
     this.meteorPower = false;
     this.overlay = new DevOverlay();
+    this.freeCam = new FreeCam();
   }
 
   showPauseButton() {}

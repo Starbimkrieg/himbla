@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { makeRunner, ScarfSim } from './models.js';
 import { toon, glow } from './toon.js';
-import { OUTFITS, SKATES, LASERS, dressRunner, dressSkates } from './cosmetics.js';
+import { OUTFITS, SKATES, LASERS, dressRunner, dressSkates, updateHalo } from './cosmetics.js';
 import { makeJarMesh } from './alchemy.js';
 import { FACTIONS, LOCATIONS, TIERS } from './locations.js';
 
@@ -457,7 +457,7 @@ export class Wardrobe {
     if (T.jar) T.jar.removeFromParent();
     T.jar = makeJarMesh(g.alchemy ? g.alchemy.jar : [], g.alchemy && g.alchemy.artifact);
     M.cargoSlot.add(T.jar);
-    for (const k of ['legL', 'legR', 'torso', 'armL', 'armR', 'head', 'cargoSlot']) {
+    for (const k of ['legL', 'legR', 'torso', 'armL', 'armR', 'foreL', 'foreR', 'head', 'cargoSlot']) {
       for (const c of P[k].children) {
         if (!(muts.has(c) || k === 'cargoSlot') || c === (g.alchemy && g.alchemy.jarMesh)) continue;
         const cl = c.clone();
@@ -535,6 +535,7 @@ export class Wardrobe {
     M.root.updateMatrixWorld(true);
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(M.root.getWorldQuaternion(new THREE.Quaternion()));
     this.scarfSim.update(Math.min(0.05, dt || 1 / 60), fwd.multiplyScalar(14 * p), new THREE.Vector3(0, 1, 0));
+    updateHalo(M, dt || 1 / 60);
     const s = SKATES[this.look.skates] || SKATES.stock;
     if (s.rainbow) M.mats.skate.color.setHSL((T.t * 0.4) % 1, 1, 0.6);
     for (const x of T.clones) if (x.userData.flap) x.rotation.y = x.userData.flap * (0.5 + Math.sin(T.t * 3) * 0.3);

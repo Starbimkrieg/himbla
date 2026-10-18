@@ -186,7 +186,8 @@ const PROPS = {
     k.at(0, 0, 0, 2.2); // the mast stands on the container's roof
     lattice(k, -0.6, 0, 11, 0.8, 0.3, 4, T(LT), T(DK), { r: 0.12 });
     k.at();
-    k.add(new THREE.SphereGeometry(1.4, 14, 6, 0, Math.PI * 2, 0, 0.8).rotateX(-Math.PI / 2 + 0.3), T(CREAM), -0.6, 10.2, 0.6, { outline: 0.05 });
+    k.beam([-0.6, 9.4, 0.2], [-0.6, 9.4, 0.7], 0.08, T(DK));
+    k.dishHead(-0.6, 9.4, 0.7, 1.0, 'spacecom', { az: Math.PI, el: -1.2 });
     k.ball(0.3, G(0x2ec4ff), -0.6, 13.4, 0, { outline: 0 });
     k.ball(0.2, G(0xff2a4a), 1.8, 2.6, 1.0, { outline: 0 });
   },
@@ -354,7 +355,7 @@ export function foundedTemplate(kind, color, modules) {
       cabin(k, 0, 0, 16, 10, 6, 0xeeecf6, 0, { trim: color });
       k.at();
       k.cyl(1.2, 1.5, 1.4, 10, T(DK), -4, 6.9, -1, { outline: 0.03 });
-      k.add(new THREE.SphereGeometry(3, 16, 6, 0, Math.PI * 2, 0, 0.8).rotateX(-0.9), T(CREAM), -4, 9.4, -1, { outline: 0.05 });
+      k.dishHead(-4, 8.3, -1, 2.1, color, { az: Math.PI, el: -0.8 });
       k.add(new THREE.SphereGeometry(2.4, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), GLASS(0x9be7ff, 0.35), 4.5, 7.0, -1.5, { outline: 0 });
       k.box(10, 0.8, 0.12, G(WARM), 0, 3.4, 5.06, { outline: 0 });
       k.solid(8, 3.5, 5, 0, 0);

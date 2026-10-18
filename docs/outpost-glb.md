@@ -17,7 +17,7 @@ the wreck smoulder at `smoke` and throws loot to `drop`. A GLB supplies all of t
 - **Geometry** is baked once per kind × faction colour × wreck into a handful of merged meshes: vertex-coloured toon
   and unlit glow meshes (one more of each for a double-sided material), one outline hull, one mesh per `additive…`
   colour and opacity, a set of its own for every moving part, and a face or two per sign. Hundreds of Blender objects
-  cost the same as a Kit build: 8 to 13 draw calls (the Relay Mast 13, the Watchtower 11, either wreck 8;
+  cost the same as a Kit build: 8 to 13 draw calls (the Relay Mast 13, the Watchtower 11, the Relay Mast wreck 7 and the Watchtower's 8;
   `npm run check:outposts` prints the count for each root).
 - **Gameplay data** (`cols`, `hits`, `raid`, `smoke`, `drop`) comes from **empties**, not from the visible meshes.
   Collision is never read from a mesh: draw the building however you like, then place the colliders by hand.
@@ -136,6 +136,12 @@ exports the GLB. Run it inside Blender, or with Blender as a Python module (`pip
 ```
 MOONRUNNER_REPO=<repo> python tools/blender/build_outposts.py     # MOONRUNNER_EXPORT=0 builds without writing
 ```
+
+The Relay Mast's dishes are the game's dish head (`head_pieces()` in `tools/blender/dishkit.py`, which `build_dish.py` uses for the dish
+stations and `models.js` bakes into the Kit-built mast): three on arms up the mast, one turning on a boom at the top (the `spin` node), a big one
+on the ground, and two flung off the wreck. The file cannot know the owner's full livery, so a head's body (cowl, trusses, quadpod, feed cabin,
+half the rim blocks) is the material `faction` and its stripe a cream `dish_cream`; the Kit build paints the head in the faction's own body and
+stripe colours (`dishSlot` in `models.js`), and a wreck's heads are grey in both.
 
 It is deterministic: running it again reproduces `src/assets/outposts.glb` byte for byte, so a diff in the committed file
 means the script or Blender changed. Nothing in CI runs it; `npm run check:outposts` checks the committed file.

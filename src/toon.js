@@ -61,6 +61,23 @@ export function toon(color, opts) {
 
 export const inkMat = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
 
+// The same outline for shells that carry their offset in an `off` attribute apart from the surface they wrap (`position` is the
+// surface, `off` how far out the line goes at full thickness: models.js shellOff, for the Blender-built runner). The line stays that
+// thick, in metres, out to INK_FULL from the camera (the game's follow camera is 7.5 m or more away, so play looks as it always did)
+// and is no thicker on screen than it is there when you come closer, down to INK_MIN of full thickness: a 3 cm shell is a 6 px
+// line at 8 m but 40 px at 1 m, which in the wardrobe, a cutscene or a close camera swallowed the model's small details.
+// (A separate material from inkMat so that shells without `off` never run this program: a missing attribute reads whatever the
+// last program left in that attribute slot.)
+export const INK_FULL = 7, INK_MIN = 0.3;
+export const inkMatNear = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
+inkMatNear.onBeforeCompile = (sh) => {
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', `#include <common>\nattribute vec3 off;\nconst float INK_FULL = ${INK_FULL.toFixed(1)}; const float INK_MIN = ${INK_MIN.toFixed(2)};`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+      transformed += off * clamp(-(modelViewMatrix * vec4(position, 1.0)).z / INK_FULL, INK_MIN, 1.0);`);
+};
+inkMatNear.customProgramCacheKey = () => 'inkNear';
+
 // Inverted-hull outline: a slightly larger black back-face shell for bold silhouettes.
 export function ink(mesh, t = 0.06) {
   const g = mesh.geometry;
@@ -138,6 +155,13 @@ export function dropFloorFaces(g, maxY = 0.05) {
 
 export function glow(color) {
   return new THREE.MeshBasicMaterial({ color });
+}
+// A glow material shared by colour: pieces that glow the same colour then merge into one draw call (the world's static merge).
+const sharedGlows = new Map();
+export function glowShared(color) {
+  let m = sharedGlows.get(color);
+  if (!m) sharedGlows.set(color, m = glow(color));
+  return m;
 }
 
 // Canvas text texture in the pixel display font, for in-world signs. Press Start 2P is much

@@ -24,6 +24,7 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
   if (w.key === 'pulse') {
     g.projectiles.fire('player', muzzle, dir.clone().multiplyScalar(115).addScaledVector(inherit, 0.5), { damage: 34 * mult, splash: 7, color: g.cosmetics ? g.cosmetics.laserColor : 0x9be7ff, size: 0.45, knock: 1.6, homing });
     g.audio.shoot();
+    g.haptics.play('pulse');
   } else if (w.key === 'scatter') {
     const right = _v.crossVectors(dir, P.up).normalize().clone();
     const up = new THREE.Vector3().crossVectors(right, dir).normalize();
@@ -33,6 +34,7 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
       g.projectiles.fire('player', muzzle, d.multiplyScalar(175).addScaledVector(inherit, 0.6), { damage: 17 * mult, splash: 3, color: 0xffb02e, size: 0.27, knock: 0.6, life: 1.15 });
     }
     g.audio.burst(0.25, 2400, 0.4);
+    g.haptics.play('scatter');
     g.cam.shake = Math.max(g.cam.shake, 0.25);
   } else if (w.key === 'rail') {
     // hitscan: it pierces targets, buildings and traffic, but the ground and any rock stop it
@@ -69,11 +71,13 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
     g.fx.beam(muzzle, end, 0xc77dff);
     g.fx.explosion(end, 3, false);
     g.audio.tone(1600, 0.35, 'sawtooth', 0.15, 0.2);
+    g.haptics.play('rail');
     g.cam.shake = Math.max(g.cam.shake, 0.35);
   } else if (w.key === 'mortar') {
     const d = dir.clone().addScaledVector(P.up, 0.28).normalize();
     g.projectiles.fire('player', muzzle, d.multiplyScalar(100).addScaledVector(inherit, 0.5), { damage: 70 * mult, splash: 13, color: 0x7dff3a, size: 0.8, knock: 2.2, gravity: 20, life: 6 });
     g.audio.tone(140, 0.3, 'square', 0.25, 0.5);
+    g.haptics.play('mortar');
   }
 }
 
@@ -88,5 +92,6 @@ export function fireCannon(g, muzzle, dir, inherit, mult = 1) {
   g.fx.spawn(muzzle, dir.clone().multiplyScalar(5).addScaledVector(up, 1), { color: 0x4a4560, size: 1.0, life: 0.8, count: 4, spread: 2.5, drag: 1.5 });
   g.audio.tone(95, 0.3, 'square', 0.3, 0.35);
   g.audio.burst(0.3, 1600, 0.45);
+  g.haptics.play('cannon');
   g.cam.shake = Math.max(g.cam.shake, 0.3);
 }

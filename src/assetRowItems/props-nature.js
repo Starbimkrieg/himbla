@@ -14,11 +14,13 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 // rocks.build wants a planet only for the snake rail, which drapes itself over planet.ground(). That one is given a very large
 // sphere (the snake takes "up" as the direction from the planet's centre, so a flat plane would not do): at R = 1e5 m its
 // curvature over a 40 m rail is under a centimetre. The rocks' colliders come back as full 3D boxes; the Row takes yaw-only ones
-// (and the ramp, which tilts, is given a flight of steps instead of its sloped slab).
+// (and the ramp, which tilts, is given a flight of steps instead of its sloped slab). A snake keeps all of its boxes whole (its
+// sloping tips are what you roll up onto the crest by) and brings its crest line: the item's `rails`, which the flat world
+// registers while it stands, so the rock can be ground like the Moon's (rails.js).
 const R_BIG = 1e5;
 const bigSphere = { ground: (v, out) => out.copy(v).normalize().multiplyScalar(R_BIG) };
 
-// one built rock as a lineUp part, with its colliders in the part's own frame ({ root, w, d, cols }); `turn`: yaw to stand it at
+// one built rock as a lineUp part, with its colliders (and a snake's rail) in the part's own frame ({ root, w, d, cols, rails }); `turn`: yaw to stand it at
 function rockPart(kind, seed, over, dims, turn = 0) {
   const rr = rngWith(mulberry32(seed), over);
   const snake = kind === 'snake';
@@ -28,29 +30,37 @@ function rockPart(kind, seed, over, dims, turn = 0) {
   r.mesh.rotation.y = turn;
   const ct = Math.cos(turn), st = Math.sin(turn);
   const turned = (x, z) => [x * ct + z * st, -x * st + z * ct]; // (a point carried round by `turn`, three.js's rotation.y)
+  const turnedDir = (v) => { const [x, z] = turned(v.x, v.z); return V(x, v.y, z); };
   const cols = [];
   const box = (x, y, z, hx, hy, hz, yaw) => { const [tx, tz] = turned(x, z); cols.push({ type: 'box', x: tx, y, z: tz, hx, hy, hz, yaw: yaw + turn }); };
   for (const c of r.cols) {
     const x = c.c.x - p.x, y = c.c.y - p.y, z = c.c.z - p.z;
     if (c.type === 'cyl') { const [tx, tz] = turned(x, z); cols.push({ type: 'cyl', x: tx, z: tz, y0: c.y0, y1: c.y1, r: c.r }); }
+    else if (c.rail) { const [tx, tz] = turned(x, z); cols.push({ type: 'box', x: tx, y, z: tz, hx: c.hx, hy: c.hy, hz: c.hz, ax: turnedDir(c.ax), ay: turnedDir(c.ay), az: turnedDir(c.az), rail: 0 }); } // (a snake's: whole, and part of its rail)
     else if (Math.abs(c.ay.y) > 0.999) box(x, y, z, c.hx, c.hy, c.hz, Math.atan2(c.az.x, c.az.z));
     else if (kind === 'ramp') { // the tilted riding slab: steps up the slope, h / 10 each (rocks.js ramp: slope(z) = h * (z / L + 0.5))
       const { L, W, h } = dims, N = 10, dz = L / N;
       for (let j = 0; j < N; j++) { const top = h * ((j + 1) / N) + 0.2; box(0, top / 2, -L / 2 + dz * (j + 0.5), W * 0.36, top / 2, dz / 2, 0); }
     }
   }
+  const rails = r.rail ? [r.rail.pts.map((q) => { const [tx, tz] = turned(q.x - p.x, q.z - p.z); return V(tx, q.y - p.y, tz); })] : [];
   const part = seat(r.mesh, { lift: false });
-  const dx = -r.mesh.position.x, dz2 = -r.mesh.position.z; // (seat's centring shift: the colliders move by the same)
+  const dx = r.mesh.position.x, dz2 = r.mesh.position.z; // (seat's centring shift: the colliders and the rail move by the same)
   for (const c of cols) { c.x += dx; c.z += dz2; }
-  return { root: part.root, w: part.w, d: part.d, cols };
+  for (const pts of rails) for (const q of pts) { q.x += dx; q.z += dz2; }
+  return { root: part.root, w: part.w, d: part.d, cols, rails };
 }
 
-// a row of parts as one item: the colliders move with their parts
+// a row of parts as one item: the colliders and the rails move with their parts
 function rockRow(parts, gap) {
   const row = lineUp(parts, gap);
-  const cols = [];
-  for (const p of parts) for (const c of p.cols) cols.push({ ...c, x: c.x + p.root.position.x });
-  return { root: row.root, cols };
+  const cols = [], rails = [];
+  for (const p of parts) {
+    const at = p.root.position.x, first = rails.length;
+    for (const c of p.cols) cols.push({ ...c, x: c.x + at, ...(c.rail === undefined ? {} : { rail: first + c.rail }) });
+    for (const pts of p.rails) rails.push(pts.map((q) => V(q.x + at, q.y, q.z)));
+  }
+  return { root: row.root, cols, rails };
 }
 
 const ramps = () => rockRow([

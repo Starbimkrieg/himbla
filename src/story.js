@@ -28,16 +28,16 @@ export const LEADERS = {
 
 // Tech unlocked by the research-minded stories.
 export const TECH = {
-  dash: { name: 'Phase Dash', key: 'Z', desc: 'Swing all your momentum (plus a kick) towards wherever you are looking: a mid-air turn, climb or dive, leaving a violet ghost trail of you along the way. 4 s cooldown.' },
+  dash: { name: 'Phase Dash', key: 'E', desc: 'Swing all your momentum (plus a kick) towards wherever you are looking: a mid-air turn, climb or dive, leaving a violet ghost trail of you along the way. 4 s cooldown.' },
   shield: { name: 'Deflector Shield', key: '—', desc: 'An invisible field that absorbs one hit or hard knock every 12 s (you see it when it takes one).' },
-  vanes: { name: 'Quantum Slipstream Vanes', key: 'Z', desc: 'Switch on to let your skates keep a share of their grip on the air for 10 s: steer while you fly. 30 s cooldown.' },
+  vanes: { name: 'Quantum Slipstream Vanes', key: 'E', desc: 'Switch on to let your skates keep a share of their grip on the air for 10 s: steer while you fly. 30 s cooldown.' },
   teleport: { name: 'Personal Teleporter', key: 'T', desc: 'Jump to any discovered settlement or your outposts. 90 s cooldown.' },
 };
 
 // Modules for outposts you found (the base-builder part).
 export const MODULES = {
   greenhouse: { name: 'Greenhouse', cost: 600, icon: 'greenhouse', tint: '#7dff6a', feature: 'Heals you within 60 m', desc: 'Heals you while you are nearby.' },
-  clinic: { name: 'Clinic', cost: 800, icon: 'clinic', tint: '#ff2a4a', feature: 'K.O. respawn point', desc: 'You redeploy here after a K.O. (nearest clinic wins).' },
+  clinic: { name: 'Clinic', cost: 800, icon: 'clinic', tint: '#ff2a4a', feature: 'K.O. respawn point', desc: 'You redeploy here after a K.O. (nearest clinic wins), unless you have set a charted headquarters as your respawn point (at your town\'s clinic).' },
   beacon: { name: 'Beacon Tower', cost: 700, icon: 'beacon', tint: '#2ee6ff', feature: 'Charts the map · fast travel', desc: 'Charts a wide circle of map around it and links to your other beacons for fast travel.' },
   turret: { name: 'Militia Turret', cost: 900, icon: 'turret', tint: '#ff9f1c', feature: 'Shoots pirates within 300 m', desc: 'A manned gun on a tall stand. Shoots pirates within 300 m.' },
   turret2: { name: 'Second Militia Turret', cost: 900, needs: 'turret', icon: 'turret2', tint: '#ff9f1c', feature: 'A second gun by the gate', desc: 'A second gun on a stand of its own beside the gate. Shoots pirates within 300 m.' },
@@ -168,7 +168,7 @@ const CHAPTERS = {
         { t: 'experiment', at: { prev: true }, secs: 75, nodes: 5, label: 'Fly through the calibration nodes' },
       ],
       reward: { credits: 780, tech: 'dash', vehicle: 'skimmer' },
-      outro: '"Calibrated. The field rewrote a little of you: point yourself anywhere and press Z, and your momentum will follow. And take a Phase Skimmer (V). It hovers. It drifts. Do not do either into a wall."',
+      outro: '"Calibrated. The field rewrote a little of you: point yourself anywhere and press E, and your momentum will follow. And take a Phase Skimmer (V). It hovers. It drifts. Do not do either into a wall."',
     },
     {
       title: 'The Black Sun',
@@ -212,9 +212,9 @@ const CHAPTERS = {
       title: 'The Survey',
       brief: '"A homestead is lovely. But the Moon needs a proper town of ours, a real one, and the councils want YOU to choose where. I\'ve three spots in mind. Go and see each one, then tell me."',
       steps: [{ t: 'survey', sites: [
-        { site: 'hertz', min: 700, max: 1000, clear: 320, kind: 'ice', name: 'Shadow Crater', note: 'Water ice under the dark: the town\'s bank fills faster. But the dark side is pirate country.' },
-        { site: 'aldrin', min: 800, max: 1100, clear: 320, kind: 'plain', name: 'Sunlit Plain', note: 'Flat, bright and right by the traffic lanes: a busy, easy place to live.' },
-        { site: 'kepler', min: 900, max: 1200, clear: 320, kind: 'ridge', name: 'High Ridge', note: 'You can see half the Moon from up there: the town\'s guns and radio reach further.' },
+        { site: 'hertz', min: 700, max: 1000, clear: 320, town: true, kind: 'ice', name: 'Shadow Crater', note: 'Water ice under the dark: the town\'s bank fills faster. But the dark side is pirate country.' },
+        { site: 'aldrin', min: 800, max: 1100, clear: 320, town: true, kind: 'plain', name: 'Sunlit Plain', note: 'Flat, bright and right by the traffic lanes: a busy, easy place to live.' },
+        { site: 'kepler', min: 900, max: 1200, clear: 320, town: true, kind: 'ridge', name: 'High Ridge', note: 'You can see half the Moon from up there: the town\'s guns and radio reach further.' },
       ], hold: 3, r: 40, label: 'Survey the three sites' }],
       reward: { credits: 780, vehicle: 'mule' },
       outro: '"A fine choice. I\'ve sent you a Homestead Mule for the hauling to come. Press V. Now: the town core."',
@@ -397,8 +397,11 @@ export class Story {
       if (!loc) continue;
       const m = makeRunner({ ...L.look, pirate: f === 'rustmoon' });
       if (f === 'rustmoon') this.addRifle(m, true);
-      const spot = this.findSpot(loc);
-      g.world.put(m.root, loc, spot.x, spot.z, 0, Math.atan2(-spot.x, -spot.z), true);
+      // where they stand: the spot the HQ's builder pinned (loc.leaderSpot: x, z and the yaw they face; Meridian's chairwoman at the
+      // foot of the exchange's steps), else an open spot found here, facing the HQ's middle
+      const spot = loc.leaderSpot || this.findSpot(loc);
+      const yaw = spot.yaw ?? Math.atan2(-spot.x, -spot.z);
+      g.world.put(m.root, loc, spot.x, spot.z, 0, yaw, true);
       m.root.scale.setScalar(1.15);
       // a little podium + name plate
       const pod = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.9, 0.4, 16), toon(new THREE.Color(FACTIONS[f].color).getHex()));
@@ -417,7 +420,7 @@ export class Story {
       g.world.put(beam, loc, spot.x, spot.z, 0, 0, true);
       loc.group.updateMatrixWorld(true);
       for (const o of [m.root, sign, pod, ring, beam]) o.userData.keep = true; // (world.rebuildLocation)
-      this.leaders[f] = { f, loc, model: m, sign, pod, ring, beam, pos: g.world.toWorld(loc, spot.x, 1, spot.z), t: Math.random() * 5 };
+      this.leaders[f] = { f, loc, model: m, sign, pod, ring, beam, pos: g.world.toWorld(loc, spot.x, 1, spot.z), front: g.world.toWorld(loc, spot.x + Math.sin(yaw) * 2, 1, spot.z + Math.cos(yaw) * 2), t: Math.random() * 5 };
       // a leader whose faction the story has ended (conquered, dismantled, fallen) isn't there at all
       m.root.visible = sign.visible = ring.visible = beam.visible = pod.visible = this.leaderVisible(f);
     }
@@ -560,9 +563,10 @@ export class Story {
       return { pos: g.planet.ground(d, new THREE.Vector3()) };
     }
     if (sel.leader) {
-      // a stand 5.5 m in front of a faction's leader, towards the middle of their HQ: clear of the podium (1.9 m) and ring (3.2 m)
+      // a stand 5.5 m in front of a faction's leader, the way they face (towards the middle of their HQ, unless the HQ's builder
+      // turned them): clear of the podium (1.9 m) and ring (3.2 m)
       const Ld = this.leaders[sel.leader];
-      if (Ld) return { pos: g.planet.ground(greatCircle(Ld.pos.clone().normalize(), Ld.loc.pos.clone().sub(Ld.pos), 5.5), new THREE.Vector3()), loc: Ld.loc };
+      if (Ld) return { pos: g.planet.ground(greatCircle(Ld.pos.clone().normalize(), Ld.front.clone().sub(Ld.pos), 5.5), new THREE.Vector3()), loc: Ld.loc };
       return this.resolve({ locOpen: FACTIONS[sel.leader].hq }, step);
     }
     if (sel.locOpen) { const l = locOf(sel.locOpen); const sp = this.findSpot(l); return { pos: g.planet.ground(g.world.toWorld(l, sp.x, 0, sp.z), new THREE.Vector3()), loc: l }; }
@@ -596,10 +600,11 @@ export class Story {
       return { pos: g.planet.ground(o.dir, new THREE.Vector3()), outpost: o };
     }
     if (sel.site) {
-      // the flattest of a dozen candidates: fights on a crater's rim or a slope were clunky
+      // the flattest of a dozen candidates: fights on a crater's rim or a slope were clunky. A town site is judged by the ground
+      // under the whole town instead (townScore), and must keep off roads, unbuilt outposts and lakes (the plateau would cut them).
       const l = locOf(sel.site);
       const clear = sel.clear || 150;
-      let best = null, bestScore = Infinity;
+      let best = null, bestScore = Infinity, spare = null, spareScore = Infinity;
       for (let tries = 0, ok = 0; tries < 90 && ok < 12; tries++) {
         const dist = sel.min + Math.random() * (sel.max - sel.min);
         const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), l.dir).normalize();
@@ -607,11 +612,16 @@ export class Story {
         if (g.locations.some((x) => arcDist(d, x.dir) < (x.zoneR || x.r) + clear)) continue;
         if (T.outposts.some((o) => arcDist(d, o.dir) < 120)) continue;
         if (g.world.lakes.some((lk) => arcDist(d, lk.d) < lk.rad + 30)) continue;
+        if (sel.town && T.siteClash(d)) {
+          // (kept only if nothing clear turns up: a candidate that crowds a road is better than the fixed fallback below)
+          if (!best) { const sc = this.townScore(d); if (sc < spareScore) { spareScore = sc; spare = d; } }
+          continue;
+        }
         ok++;
-        const sc = this.roughness(d);
+        const sc = sel.town ? this.townScore(d) : this.roughness(d);
         if (sc < bestScore) { bestScore = sc; best = d; }
       }
-      if (best) return { pos: g.planet.ground(best, new THREE.Vector3()) };
+      if (best || spare) return { pos: g.planet.ground(best || spare, new THREE.Vector3()) };
       return { pos: g.planet.ground(greatCircle(l.dir, tangent(new THREE.Vector3(1, 0, 0), l.dir).normalize(), sel.min), new THREE.Vector3()) };
     }
     return null;
@@ -796,7 +806,7 @@ export class Story {
       this.founded = this.founded.filter((id) => id !== t.outpost);
       this.save();
       title = `${t.name.toUpperCase()} IS FOUNDED`;
-      news = `<b>THE MOON HAS A NEW TOWN, AND A COUNCIL.</b> ${t.name} has its charter, and you are its Councillor. The Moon Council (SPACECOM, Vostok, Daedalus, Meridian and Kepler) now sits in ${t.name}'s hall.<br><br><small>Fill your town's eight plots from the hall's terminal. Call council votes there too: every member votes with you more readily the better its standing with you, and a motion that carries changes the Moon.</small>`;
+      news = `<b>THE MOON HAS A NEW TOWN, AND A COUNCIL.</b> ${t.name} has its charter, and you are its Councillor. The Moon Council (SPACECOM, Vostok, Daedalus, Meridian and Kepler) now sits in ${t.name}'s hall.<br><br><small>Fill your town's eight plots from the hall's terminal or from the COUNCIL HALL tab of the town's job board (F, then E). Call council votes there too: every member votes with you more readily the better its standing with you, and a motion that carries changes the Moon.</small>`;
     } else if (r.world === 'quantum') {
       ws.quantum = true; // (the core is home: it glows in the Spindle up in the sky)
       saveWorldState(ws);
@@ -995,9 +1005,39 @@ export class Story {
     return sum / 8 + rim;
   }
 
+  // How badly the ground round a point suits a town (lower is better): the heights along the point's up, every 20 m out to 240 m,
+  // 16 to a ring. The plateau is cut to the mean ground under the footprint (r <= 80, by area), so 'dev' is the worst cut or
+  // fill inside it (r <= 90: the hall, the eight plots and the aprons), and 'skirt' is the worst on the blend ring (r >= 200),
+  // where a crater wall would be a cliff at the plateau's edge. The skirt counts a quarter as much: it is only a slope.
+  townScore(dir) {
+    const P = this.game.planet;
+    const d = dir.clone().normalize();
+    const t1 = tangent(new THREE.Vector3(1, 0, 0), d).normalize(), t2 = new THREE.Vector3().crossVectors(d, t1);
+    const p = new THREE.Vector3(), hs = [];
+    let sum = 0, area = 0;
+    for (let r = 0; r <= 240; r += 20) {
+      const n = r ? 16 : 1;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        p.copy(d).multiplyScalar(P.R).addScaledVector(t1, Math.cos(a) * r).addScaledVector(t2, Math.sin(a) * r).normalize();
+        const h = P.surface(p) * p.dot(d);
+        hs.push(r, h);
+        if (r <= 80) { const w = r || 1; sum += h * w; area += w; }
+      }
+    }
+    const mean = sum / area;
+    let dev = 0, skirt = 0;
+    for (let i = 0; i < hs.length; i += 2) {
+      const e = Math.abs(hs[i + 1] - mean);
+      if (hs[i] <= 90) dev = Math.max(dev, e);
+      if (hs[i] >= 200) skirt = Math.max(skirt, e);
+    }
+    return dev + 0.25 * skirt;
+  }
+
   // A town site when the survey was skipped (cheats): the first candidate that's well clear.
   defaultTownSite() {
-    const r = this.resolve({ site: 'aldrin', min: 800, max: 1100, clear: 320 });
+    const r = this.resolve({ site: 'aldrin', min: 800, max: 1100, clear: 320, town: true });
     this.townSite = { dir: r.pos.clone().normalize().toArray(), kind: 'plain', name: 'Pike\'s Landing', outpost: null };
     this.save();
   }
@@ -1704,8 +1744,8 @@ export class Story {
     const has = (m) => o.modules.includes(m);
     if (k === 'greenhouse') return { rows: [['EFFECT', 'Heals 4 hull / s'], ['RANGE', '60 m round the hub'], ['STATUS', 'ACTIVE']], note: 'Nothing to press: it works while you stand near it.' };
     if (k === 'clinic') {
-      const near = this.clinicSpawn(P.pos.clone().normalize());
-      return { rows: [['EFFECT', 'You redeploy here after a K.O.'], ['NEAREST CLINIC', near === o ? 'THIS ONE (to you)' : 'Another is nearer to you', near === o ? '' : 'dim']] };
+      const near = this.clinicSpawn(P.pos.clone().normalize()), plan = this.game.respawnPt.plan(P.pos.clone().normalize());
+      return { rows: [['EFFECT', 'You redeploy here after a K.O.'], ['REDEPLOY AT', plan.name, plan.kind === 'hq' ? 'gold' : ''], ['NEAREST CLINIC', near === o ? 'THIS ONE (to you)' : 'Another is nearer to you', near === o ? '' : 'dim']] };
     }
     if (k === 'beacon') {
       const linked = this.myOutposts().filter((x) => x !== o && x.modules.includes('beacon')).length;
@@ -1866,7 +1906,7 @@ export class Story {
   clinicSpawn(from) {
     let best = null, bd = Infinity;
     const T = this.game.town;
-    if (T && T.has('clinic')) { const p = T.slotWorld('clinic'); if (p) { best = { dir: p.clone().normalize() }; bd = arcDist(from, best.dir); } }
+    if (T && T.has('clinic')) { const p = T.slotWorld('clinic'); if (p) { best = { dir: p.clone().normalize(), name: `${T.state.name} clinic` }; bd = arcDist(from, best.dir); } }
     for (const o of this.myOutposts()) {
       if (!o.modules.includes('clinic')) continue;
       const d = arcDist(from, o.dir);
@@ -2013,19 +2053,19 @@ export class Story {
   }
 
   // ---------- per frame ----------
-  // the hold meter, centre-low on screen (see meter())
+  // the hold meter, in the stack of progress bars at the bottom of the screen (see meter())
   renderMeter() {
     if (!this.meterEl) {
       this.meterEl = document.createElement('div');
       this.meterEl.id = 'storymeter';
-      this.meterEl.innerHTML = '<div class="sm-label"></div><div class="sm-track"><div class="sm-fill"></div></div>';
-      document.getElementById('hud').appendChild(this.meterEl);
+      this.meterEl.innerHTML = '<div class="hb-label"></div><div class="hb-track"><div class="hb-fill"></div></div>';
+      document.getElementById('holdbars').appendChild(this.meterEl);
     }
     const m = this.meter();
     this.meterEl.classList.toggle('on', !!m);
     if (!m) return;
-    this.meterEl.querySelector('.sm-label').textContent = m.label;
-    const f = this.meterEl.querySelector('.sm-fill');
+    this.meterEl.querySelector('.hb-label').textContent = m.label;
+    const f = this.meterEl.querySelector('.hb-fill');
     f.style.width = `${Math.round(Math.min(1, Math.max(0, m.k)) * 100)}%`;
     f.style.background = m.col;
     this.meterEl.style.setProperty('--col', m.col);

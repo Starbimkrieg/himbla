@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PHYS } from './config.js';
-import { makeFigure } from './models.js';
+import { makeFigure, engineModel, caseModel } from './models.js';
 import { toon, glow, ink } from './toon.js';
 import { frameQuat, tangent, greatCircle, SUN, arcDist } from './geo.js';
 import { pick, mulberry32 } from './rng.js';
@@ -70,14 +70,17 @@ const NAMES = ['Gary', 'Priya', 'Tomasz', 'Little Juno', 'Ade', 'Wen', 'Marisol'
 const _v = new THREE.Vector3();
 
 // What a pickup looks like on the ground (dropLoot below; the Asset Row shows them too): a core in the item's colour (an octahedron;
-// an engine, a plating slab, a junk-bot box, or a pink crate), a halo ring and a thin light pillar. Returns { root, core }.
+// a plating slab, a junk-bot box, or a pink crate), a halo ring and a thin light pillar. A salvaged engine and a credits briefcase are
+// Blender-built models (models.js engineModel / caseModel, once the models have loaded) and get no halo or pillar. Returns { root, core }.
 export function makeLoot(kind, { credits = 0, crate = false } = {}) {
   const root = new THREE.Group();
   const color = crate ? 0xff7ad9 : credits && !kind ? 0xffd23f : new THREE.Color(ITEMS[kind].color).getHex();
+  const model = crate ? null : kind === 'engine' ? engineModel() : credits && !kind ? caseModel() : null;
   const geo = crate ? new THREE.BoxGeometry(0.9, 0.9, 0.9) : kind === 'engine' ? new THREE.CylinderGeometry(0.5, 0.5, 0.9, 8).rotateZ(Math.PI / 2) : kind === 'plating' ? new THREE.BoxGeometry(1, 0.15, 0.8) : kind === 'junkbot' ? new THREE.BoxGeometry(0.6, 0.5, 0.6) : new THREE.OctahedronGeometry(0.45, 0);
-  const core = new THREE.Mesh(geo, toon(color));
-  ink(core, 0.05);
+  const core = model || new THREE.Mesh(geo, toon(color));
+  if (!model) ink(core, 0.05);
   root.add(core);
+  if (model) return { root, core };
   const halo = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.06, 6, 20).rotateX(Math.PI / 2), glow(color));
   halo.position.y = -0.6;
   root.add(halo);
@@ -224,6 +227,15 @@ export class Alchemy {
     const P = g.player;
     if (!this.owned) { g.hud.toast('You need a containment jar. Dr. Zbornak sells them at the Antimatter Lab.', 3); return; }
     if (this.used >= this.slots) { g.hud.toast('Jar is full. Empty it with X (into the reactor, if you\'re brave).', 2.5); return; }
+    // a salvaged engine lying at rest
+    const eng = this.restingEngine();
+    if (eng) {
+      eng.root.removeFromParent();
+      this.loot.splice(this.loot.indexOf(eng), 1);
+      this.add('engine', eng.name);
+      g.fx.pop('SALVAGED ENGINE!', null, { color: ITEMS.engine.color, size: 42 });
+      return;
+    }
     // knocked-out pirates first
     for (const e of g.enemies.list) {
       if (e.dead || e.kind !== 'skater' || e.faction !== 'pirate' || e.hp > e.maxHp * 0.45) continue;
@@ -305,6 +317,15 @@ export class Alchemy {
     const { root, core } = makeLoot(kind, { credits, crate });
     frameQuat(at.clone().normalize(), tangent(SUN.clone(), up).normalize(), root.quaternion);
     g.scene.add(root);
+    if (kind === 'engine' && !to) {
+      // a salvaged engine is a heavy lump: it pops out in a random direction, thuds, skids and settles
+      // (updateEngine), and only then can it be scooped with G.
+      const dir = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+      const p0 = pos.clone().addScaledVector(up, 1.5);
+      root.position.copy(p0);
+      this.loot.push({ kind, name, credits, crate, root, core, pos: p0, phys: true, rest: false, vel: dir.multiplyScalar(4 + Math.random() * 3).addScaledVector(up, 5 + Math.random() * 2), spin: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(9), smokeT: 0, t: 0 });
+      return;
+    }
     const from = pos.clone().addScaledVector(up, 2);
     root.position.copy(to ? from : at);
     this.loot.push({ kind, name, credits, crate, root, core, pos: at, from, fly: to ? 0 : 1, flyT: 0.9 + from.distanceTo(at) / 25, t: 0 });
@@ -316,6 +337,7 @@ export class Alchemy {
     for (let i = this.loot.length - 1; i >= 0; i--) {
       const L = this.loot[i];
       L.t += dt;
+      if (L.phys) { this.updateEngine(L, dt); if (L.t > 240) { L.root.removeFromParent(); this.loot.splice(i, 1); } continue; }
       if (L.fly < 1) {
         // ballistic hop from the wreck to its landing spot
         L.fly = Math.min(1, L.fly + dt / L.flyT);
@@ -340,6 +362,60 @@ export class Alchemy {
       } else if (L.warned && L.pos.distanceTo(P.pos) > 8) L.warned = false;
       if (take || L.t > 240) { L.root.removeFromParent(); this.loot.splice(i, 1); }
     }
+  }
+
+  // Rigid-body step for a dropped engine: heavy gravity, a dull bounce, hard ground friction, so it
+  // lands near the wreck instead of skipping off. Once it stops it smokes and waits for the scoop.
+  updateEngine(L, dt) {
+    const g = this.game;
+    const sub = Math.ceil(dt / 0.02);
+    const h = dt / sub;
+    for (let k = 0; k < sub && !L.rest; k++) {
+      const up = L.pos.clone().normalize();
+      L.vel.addScaledVector(up, -16 * h);
+      L.pos.addScaledVector(L.vel, h);
+      L.root.rotateX(L.spin.x * h); L.root.rotateY(L.spin.y * h); L.root.rotateZ(L.spin.z * h);
+      const floor = g.planet.surface(L.pos) + 0.45;
+      if (L.pos.length() <= floor) {
+        L.pos.setLength(floor);
+        const vr = L.vel.dot(up);
+        if (vr < 0) {
+          const hit = -vr;
+          L.vel.addScaledVector(up, -vr * (1 + (hit > 3 ? 0.12 : 0))); // (barely bounces; a soft landing just stops)
+          L.vel.multiplyScalar(Math.max(0, 1 - 6 * h)); // (grinding along the dirt)
+          L.spin.multiplyScalar(0.45);
+          if (hit > 2) { g.audio.thud(Math.min(14, hit * 2.5)); g.fx.dust(L.pos, L.vel, 4, up); }
+        } else L.vel.multiplyScalar(Math.max(0, 1 - 6 * h));
+        if (L.vel.length() < 0.6 && L.spin.length() < 1.2) {
+          L.rest = true;
+          L.vel.set(0, 0, 0);
+          L.pos.setLength(g.planet.surface(L.pos) + 0.45);
+          // lie flat on the ground, whichever way it ended up facing
+          frameQuat(L.pos.clone().normalize(), tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), L.pos.clone().normalize()).normalize(), L.root.quaternion);
+        }
+      }
+    }
+    L.root.position.copy(L.pos);
+    if (!L.rest) return;
+    // resting: a thin wisp of smoke from the casing
+    L.smokeT -= dt;
+    if (L.smokeT <= 0) {
+      L.smokeT = 0.35 + Math.random() * 0.25;
+      const up = L.pos.clone().normalize();
+      g.fx.spawn(L.pos.clone().addScaledVector(up, 0.5), up.multiplyScalar(0.9), { color: 0x8a8594, size: 0.55, life: 1.6, drag: 1.5, count: 1, spread: 0.25 });
+    }
+  }
+
+  // Nearest resting engine within reach (a still-tumbling one can't be scooped yet)
+  restingEngine() {
+    const P = this.game.player;
+    let best = null, bd = 7;
+    for (const L of this.loot) {
+      if (!L.phys || !L.rest) continue;
+      const d = L.pos.distanceTo(P.pos);
+      if (d < bd) { bd = d; best = L; }
+    }
+    return best;
   }
 
   // a Trading Kiosk mystery crate: open it on the spot
@@ -491,7 +567,7 @@ export class Alchemy {
     return {
       delay: hatching ? HATCH_T + 0.5 : 0,
       title: `BEHOLD: ${genes.name.toUpperCase()}`,
-      text: `"It has a ${parts}${genes.mods.length ? `, ${genes.mods.join(' and ')}-touched` : ''}. Speed ${st.speed}, power ${st.power}, stamina ${st.stamina}, wit ${st.wit}: a grade <b>${genes.tier}</b> racer, top speed about ${Math.round(genes.speed * 3.6)} km/h, chaos rating ${genes.chaos}. ${brag}. It loves you. ${genes.follow ? 'Race it at the Bounce Dome Funpark!' : 'Three already follow you, so it\'s gone to the holding pen behind the lab.'}"${chimeraCard(g, genes, { status: genes.follow ? '★ WITH YOU' : 'IN PEN' })}`,
+      text: `"It has a ${parts}${genes.mods.length ? `, ${genes.mods.join(' and ')}-touched` : ''}. Speed ${st.speed}, power ${st.power}, stamina ${st.stamina}, wit ${st.wit}: a grade <b>${genes.tier}</b> racer, top speed about ${Math.round(genes.speed * 3.6)} km/h, chaos rating ${genes.chaos}. ${brag}. It loves you. ${genes.follow ? 'Race it at Chimera Downs!' : 'Three already follow you, so it\'s gone to the holding pen behind the lab.'}"${chimeraCard(g, genes, { status: genes.follow ? '★ WITH YOU' : 'IN PEN' })}`,
     };
   }
 
@@ -976,9 +1052,9 @@ export function buildMutationMeshes(M, has, add) {
     sp.rotation.z = (i < 2 ? 1 : -1) * 1.0;
     add(M.torso, sp);
   }
-  if (has('claws')) for (const arm of [M.armL, M.armR]) for (let k = 0; k < 3; k++) {
+  if (has('claws')) for (const arm of [M.foreL, M.foreR]) for (let k = 0; k < 3; k++) { // (on the forearms, so they follow the hands)
     const c = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.22, 4), toon(0xfff4e0));
-    c.position.set((k - 1) * 0.06, -0.78, 0.06);
+    c.position.set((k - 1) * 0.06, -0.47, 0.06);
     c.rotation.x = Math.PI;
     add(arm, c);
   }

@@ -639,10 +639,9 @@ def container_frame(R, body_slot, ribbed):
 # ---- the cargo container: faction-coloured corrugated steel, a branding plate on each flank, barred rear doors ----
 CG = unit("prospector_cargo")
 container_frame(CG, "body", True)
-for k, x in enumerate((-1.0, -0.35, 0.35, 1.0)):
-    bm(f"bar{k}", (x, 1.95, -3.66), (x, 4.6, -3.66), 0.05, "metal", CG, 0.02)
-    rb(f"cam{k}", 0.12, 0.05, 0.05, (x, 2.7, -3.7), "steel", CG, 0.01, 0.3, nu=6, nv=4)
-rb("doorSeam", 0.02, 1.35, 0.02, (0, 3.3, -3.65), "dark", CG, 0, 0.3, nu=6, nv=4)
+# a pair of doors at each end (decals.py container_doors, shared with the crane's load and cargo.py)
+for name, geo, slot, ink in container_doors("body"):
+    M(name, geo, slot, CG, ink)
 for sx in (-1, 1):
     rb(f"plate{sx}", 0.04, CARGO_PLATE_HALF[1], CARGO_PLATE_HALF[0], (sx * 1.64, CARGO_PLATE_Y, 0.0), "dark", CG, 0.03, 0.08)
 

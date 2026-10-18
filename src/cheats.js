@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { greatCircle } from './geo.js';
 import { MUTATIONS } from './alchemy.js';
 import { DevOverlay, SECTIONS } from './devoverlay.js';
+import { FreeCam } from './freecam.js';
 import { AssetRow } from './assetRow.js';
 
 const DEV_KEY = 'mr-dev-unlocked';
@@ -32,6 +33,7 @@ export class Cheats {
     // the first time the dev menu's SPAWN A METEOR ON ME is used it becomes a power (powers.js), remembered across launches too
     try { this.meteorPower = localStorage.getItem(METEOR_KEY) === '1'; } catch { this.meteorPower = false; }
     this.overlay = new DevOverlay(game, this); // (F3: every on-screen readout in one panel: devoverlay.js)
+    this.freeCam = new FreeCam(game); // (Dev menu → Debug overlay → Free cam: the camera flies on its own: freecam.js)
     this.showPauseButton();
     // the chip at the top left that counts the commits the upstream has and this checkout does not (GIT menu, dev server only)
     try { this.gitChip = localStorage.getItem(GITCHIP_KEY) === '1'; } catch { this.gitChip = false; }
@@ -204,7 +206,7 @@ export class Cheats {
   }
 
   // The dev menu's meteor button. The first time it also becomes a power (the power wheel's METEOR SPAWN, equipped straight
-  // away), so from then on Z / RB drops one on you without the menu.
+  // away), so from then on E / RB drops one on you without the menu.
   meteorFromMenu() {
     const g = this.game;
     const first = !this.meteorPower;
@@ -214,7 +216,7 @@ export class Cheats {
       g.powers.select('meteor');
     }
     const ok = this.spawnMeteor(!first);
-    if (first) g.hud.toast(`${ok ? 'Meteor inbound. ' : ''}Meteor Spawn is now one of your powers, and equipped: Z / RB drops another on you.`, 5);
+    if (first) g.hud.toast(`${ok ? 'Meteor inbound. ' : ''}Meteor Spawn is now one of your powers, and equipped: E / RB drops another on you.`, 5);
   }
 
   // A rock that comes down on the spot you're standing on (meteors.js spawnOnPlayer): a few seconds' warning from the ring.
@@ -313,14 +315,15 @@ export class Cheats {
   // (enemies.js: the Kade roll note under the squad alert, shown with the overlay's pirate spawns section)
   alertNote(text, secs) { this.overlay.alertNote(text, secs); }
 
-  // Dev menu → Debug overlay: the master switch (F3 does the same in play) and which sections are in it.
+  // Dev menu → Debug overlay: the master switch (F3 does the same in play), the free cam, and which sections are in the overlay.
   // Each toggle re-opens the menu, like the other submenus.
   overlayMenu() {
-    const g = this.game, o = this.overlay;
+    const g = this.game, o = this.overlay, f = this.freeCam;
     const on = (v) => (v ? 'ON' : 'OFF');
-    g.dialog('DEBUG OVERLAY', '<small>Every on-screen readout in one panel. F3 shows or hides it in play; the sections you pick are remembered.</small>', [
+    g.dialog('DEBUG OVERLAY', '<small>Every on-screen readout in one panel. F3 shows or hides it in play; the sections you pick are remembered. Free cam flies the camera while the runner stands still (its controls are shown at the top of the screen); it is off after a reload.</small>', [
       { label: `1 · OVERLAY: ${on(o.on)}`, fn: () => { o.toggle(); this.overlayMenu(); } },
-      ...SECTIONS.map((s, i) => ({ label: `${i + 2} · ${s.name}: ${on(o.sec[s.key])}`, fn: () => { o.setSection(s.key, !o.sec[s.key]); this.overlayMenu(); } })),
+      { label: `2 · FREE CAM: ${on(f.on)}`, fn: () => { f.toggle(); this.overlayMenu(); } },
+      ...SECTIONS.map((s, i) => ({ label: `${i + 3} · ${s.name}: ${on(o.sec[s.key])}`, fn: () => { o.setSection(s.key, !o.sec[s.key]); this.overlayMenu(); } })),
       { label: 'BACK', fn: () => this.dev() }, // (rows past the ninth are mouse / pad: the number keys stop at 9; Esc closes)
       { label: 'CLOSE' },
     ]);

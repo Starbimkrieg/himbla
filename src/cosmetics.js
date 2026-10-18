@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { toon, glow, ink } from './toon.js';
 import { Wardrobe } from './wardrobe.js';
+import { runnerExtra } from './models.js';
 
 // Suits. Each faction sells a base outfit (FRIENDLY) and an elite one (HONORED).
 export const OUTFITS = {
@@ -76,29 +77,111 @@ export function dressRunner(M, outfitId) {
   const [len, w, tails] = o.sc || [1.3, 0.22, 1];
   M.scarfStyle = { len, w, tails };
   const out = [];
+  M.halo = null;
+  if (M.antenna) M.antenna.visible = !(o.extras || []).includes('halo');
   const add = (parent, mesh, outline = 0.03) => { if (outline) ink(mesh, outline); parent.add(mesh); out.push(mesh); return mesh; };
   for (const e of o.extras || []) {
     if (e === 'crest') {
-      // a swept fin over the helmet: a rounded blade instead of a flat slab
-      const c = add(M.head, new THREE.Mesh(EXTRA_GEO().crest, toon(o.accent)));
-      c.position.set(0, 0.26, -0.04);
+      // the Blender-built swept fin, its base sunk into the helmet (its outline is its own thin shell: see build_runner.py). The
+      // code-built slab only if the file has none
+      const g = runnerExtra('crest', { accent: toon(o.accent) });
+      if (g) { M.head.add(g); out.push(g); }
+      else {
+        const c = add(M.head, new THREE.Mesh(EXTRA_GEO().crest, toon(o.accent)));
+        c.position.set(0, 0.26, -0.04);
+      }
     } else if (e === 'pads') {
-      for (const s of [-1, 1]) {
+      // Blender-built shoulder pads (three stepped lames, trim, ridge, studs) that turn with the arm; the
+      // plain dome on the torso only if the file has none
+      const mats = { accent: toon(o.accent), helmet: toon(o.helmet), metal: toon(0x3a3550) };
+      for (const [s, arm, key] of [[-1, M.armL, 'padL'], [1, M.armR, 'padR']]) {
+        const g = runnerExtra(key, mats);
+        if (g) { arm.add(g); out.push(g); continue; }
         const p = add(M.torso, new THREE.Mesh(EXTRA_GEO().pad, toon(o.accent)));
         p.position.set(s * 0.45, 0.88, 0);
         p.scale.set(1.1, 0.7, 1);
       }
     } else if (e === 'halo') {
+      // floats over the helmet on a magnetic spring (updateHalo); the antenna comes off, so the ring has nothing to pass through
       const h = add(M.head, new THREE.Mesh(EXTRA_GEO().halo, glow(o.accent)), 0);
       h.rotation.x = Math.PI / 2;
-      h.position.y = 0.62;
+      h.position.y = HALO_Y;
+      M.halo = new HaloSim(h);
     } else if (e === 'band') {
-      const b = add(M.head, new THREE.Mesh(EXTRA_GEO().band, toon(0xd7263d)), 0.02);
-      b.rotation.x = Math.PI / 2;
-      b.position.y = 0.12;
+      // the Blender headband: a strip hugging the helmet, a knot with two tails behind the left ear. (Its outline
+      // is a shell along its normals: ink()'s box scaling floated a black line above a torus.)
+      const g = runnerExtra('band', { accent: toon(0xd7263d), dark: toon(0x3a0f18) });
+      if (g) { M.head.add(g); out.push(g); }
+      else {
+        const b = add(M.head, new THREE.Mesh(EXTRA_GEO().band, toon(0xd7263d)), 0);
+        b.rotation.x = Math.PI / 2;
+        b.position.y = 0.12;
+      }
     }
   }
   return out;
+}
+
+// The halo hangs above the helmet as if linked to it by magnets: a spring-and-damper in the head's own frame
+// that the head's acceleration pushes on (so it lags behind a sprint, swings out in a turn, bobs on a landing)
+// and that bumps (kick) set ringing. It slides a few centimetres and tilts at most 0.25 rad. A runner with a halo
+// has no antenna (dressRunner), so nothing is there for it to pass through.
+const HALO_Y = 0.62;
+const _hp = new THREE.Vector3(), _ha = new THREE.Vector3(), _hq = new THREE.Quaternion(), _hQ = new THREE.Quaternion(), _hE = new THREE.Euler();
+export class HaloSim {
+  constructor(mesh) {
+    this.mesh = mesh;
+    this.o = new THREE.Vector3(); this.ov = new THREE.Vector3(); // offset from rest (head frame) and its speed
+    this.tx = 0; this.tz = 0; this.vx = 0; this.vz = 0;           // tilt about x and z, and its speed
+    this.prev = null; this.prevVel = new THREE.Vector3(); this.t = Math.random() * 6;
+  }
+
+  // a bump of strength 0..1 (a landing, a hit): it rings, a little different every time
+  kick(k) {
+    this.vx += (Math.random() - 0.5) * 9 * k; this.vz += (Math.random() - 0.5) * 9 * k;
+    this.ov.y += (Math.random() < 0.5 ? -1 : 1) * 0.35 * k;
+  }
+
+  // head: the model's head group
+  update(dt, head) {
+    if (dt <= 0) return;
+    dt = Math.min(dt, 1 / 30);
+    this.t += dt;
+    head.getWorldPosition(_hp);
+    head.getWorldQuaternion(_hq).invert();
+    if (this.prev) {
+      _ha.copy(_hp).sub(this.prev).divideScalar(dt); // world velocity of the head
+      if (_ha.length() > 120) _ha.set(0, 0, 0);      // (a teleport isn't a swing)
+      const v = _ha.clone();
+      _ha.sub(this.prevVel).divideScalar(dt);        // ...and its acceleration
+      this.prevVel.copy(v);
+      if (_ha.length() > 80) _ha.setLength(80);
+      _ha.applyQuaternion(_hq);                      // in the head's frame
+    } else _ha.set(0, 0, 0);
+    if (!this.prev) this.prev = new THREE.Vector3();
+    this.prev.copy(_hp);
+    // the airflow, a gentle hover wobble so it is never quite still, and the head's acceleration pushing on it
+    const wob = Math.sin(this.t * 1.9) * 0.012, wob2 = Math.cos(this.t * 1.4) * 0.012;
+    const K = 60, C = 7, KT = 45, CT = 5;
+    this.ov.x += (-_ha.x * 0.12 - K * this.o.x - C * this.ov.x) * dt;
+    this.ov.z += (-_ha.z * 0.12 - K * this.o.z - C * this.ov.z) * dt;
+    this.ov.y += (-_ha.y * 0.08 - K * this.o.y - C * this.ov.y) * dt;
+    this.vx += (-_ha.z * 0.34 - KT * (this.tx - wob) - CT * this.vx) * dt;
+    this.vz += (_ha.x * 0.34 - KT * (this.tz - wob2) - CT * this.vz) * dt;
+    this.o.addScaledVector(this.ov, dt);
+    this.tx += this.vx * dt; this.tz += this.vz * dt;
+    this.o.x = Math.max(-0.05, Math.min(0.05, this.o.x)); this.o.z = Math.max(-0.05, Math.min(0.05, this.o.z));
+    this.o.y = Math.max(-0.025, Math.min(0.06, this.o.y));
+    this.tx = Math.max(-0.25, Math.min(0.25, this.tx)); this.tz = Math.max(-0.25, Math.min(0.25, this.tz));
+    this.mesh.position.set(this.o.x, HALO_Y + this.o.y, this.o.z);
+    _hE.set(this.tx, 0, this.tz, 'XYZ');
+    this.mesh.quaternion.setFromEuler(_hE).multiply(_hQ.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
+  }
+}
+
+// Per frame, for whatever runner wears a halo (the player, the wardrobe's mannequin)
+export function updateHalo(M, dt) {
+  if (M.halo) M.halo.update(dt, M.head);
 }
 
 // Skate finish: rail colour and the Derby horseshoes.

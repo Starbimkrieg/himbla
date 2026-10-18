@@ -123,7 +123,7 @@ export class Ragdoll {
     m.trick.position.y = 1.2;
     m.trick.rotation.set(0, 0, 0);
     m.body.position.y = m.bodyBase;
-    for (const o of [m.armL, m.armR, m.legL, m.legR, m.head, m.torso]) o.rotation.set(0, 0, 0);
+    for (const o of [m.armL, m.armR, m.foreL, m.foreR, m.legL, m.legR, m.head, m.torso]) o.rotation.set(0, 0, 0);
   }
 
   release() { this.zero(); }

@@ -11,8 +11,10 @@
 </head>
 <body>
   <!-- Dev-only model viewer (npm run dev, then /tools/viewer.html). Not part of the build.
-       Query: ?m=shuttle|freighter|chimera|mite|hovercar|apc|landtrain|crane|garage|dish|outpost  &gear=0..1 &ramp=0..1 &thrust=0..1 &lift=0..1
-       &seed=N (chimera)  garage: &kind=main|small &open=101 &trim=hex  crane: &h=34 &slew=rad &trolley=0..1 &rope=m &color=hex &faction=kepler|meridian|spacecom|vostok  dish: &kind=cryo|gantry &faction=meridian|spacecom|kepler|vostok &no=01..04 &size=30 &tilt=rad &az=rad &sweep=1  landtrain: &type=moonliner|prospector &faction=spacecom|vostok|kepler|meridian &cars=a,b,c &unit=0..n &parts=body,legs,head[,extraHead] &mods=a,b &size=1.1 &yaw=deg &pitch=deg &dist=m &at=x,y,z &spin=0|1
+       Query: ?m=shuttle|freighter|runner|chimera|mite|hovercar|rover|interceptor|apc|landtrain|crane|garage|dish|outpost  &gear=0..1 &ramp=0..1 &thrust=0..1 &lift=0..1
+       shuttle: &sign=TRANQ (its route board's text)  &ships=<url of a ships .glb> (load it instead of ships.glb; see docs/shuttle-design.md)
+       &seed=N (chimera)  garage: &kind=main|small &open=101 &trim=hex  crane: &h=34 &slew=rad &trolley=0..1 &rope=m &color=hex &faction=kepler|meridian|spacecom|vostok  dish: &kind=cryo|gantry|field|head &faction=meridian|spacecom|kepler|vostok|daedalus &no=01..04 &size=30 &tilt=rad &az=rad &sweep=1  landtrain: &type=moonliner|prospector &faction=spacecom|vostok|kepler|meridian &cars=a,b,c &unit=0..n &parts=body,legs,head[,extraHead] &mods=a,b &size=1.1 &yaw=deg &pitch=deg &dist=m &at=x,y,z &spin=0|1
+       ?m=runner &outfit=<id from OUTFITS> &speed=m/s (scarf and halo simulated) &lean=rad &arms=rad &armz=rad &fore=rad (elbow bend, negative = hand forward)
        ?m=outpost &kind=mast|tower &src=kit|glb|both &wreck=1 &color=rrggbb &cols=0  (Kit build beside the Blender build, with every
        collider, blast box and gameplay point drawn; see docs/outpost-glb.md) -->
   <div id="ui"></div>

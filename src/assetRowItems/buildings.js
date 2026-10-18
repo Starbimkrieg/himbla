@@ -9,8 +9,9 @@ import { DISH_SIZE } from '../models.js';
 import { buildHomeTown, addBuilding, slotAt } from '../hometown.js';
 import {
   habDome, cabin, warehouse, quonset, lattice, hortonSphere, floodMast, stack, ticker, conveyor, pipe, radar, searchlight, shanty,
-  wreckHull, penTerminal, jobTerminal, playground, waterTower, greenhouse, commsMast, townHall, bounceDome, towerCrane, garage, dishStation,
+  wreckHull, penTerminal, jobTerminal, playground, waterTower, greenhouse, commsMast, townHall, towerCrane, gantryCrane, cargoStack, garage, dishStation,
 } from '../settlements.js';
+import { ferrisWheel, carousel } from '../downsFair.js';
 import { animate, together, lineUp } from './common.js';
 
 // Asset Row catalogue group: the small faction outposts (intact and wreck), the building parts the settlements are made of, and the
@@ -170,14 +171,14 @@ const parts = {
   id: 'buildings.parts',
   title: '09 · BUILDING PARTS',
   items: [
-    item('part.habdome.family', 'HAB DOMES 6 · 12 · 16 M', 83, 40, () => row([
+    item('part.habdome.family', 'HAB DOMES 6 · 12 · 16 M', 89, 41, () => row([
       kitPart((k) => habDome(k, 0, 0, 6, 0xff7ad9, { trim: 0xff9f1c })),
       kitPart((k) => habDome(k, 0, 0, 12, 0x2ec4ff, { trim: 0xffd23f })),
       kitPart((k) => habDome(k, 0, 0, 16, 0xb8ffb0, { trim: 0xff9f1c, glass: true })),
     ])),
-    item('part.habdome.hub', 'HAB DOME 22 M (TOWN HUB)', 47, 52, () => kitPart((k) => habDome(k, 0, 0, 22, 0xb8ffb0, { trim: 0xff9f1c }))),
-    item('part.habdome.council', 'HAB DOME 30 M (COUNCIL)', 63, 69, () => kitPart((k) => habDome(k, 0, 0, 30, 0xffd23f, { trim: 0xff9f1c }))),
-    item('part.habdome.great', 'HAB DOME 58 M (ILMB GREAT DOME)', 119, 125, () => kitPart((k) => habDome(k, 0, 0, 58, 0x9be7ff, { trim: YEL, cupola: false })), { big: true }),
+    item('part.habdome.hub', 'HAB DOME 22 M (TOWN HUB)', 51, 54, () => kitPart((k) => habDome(k, 0, 0, 22, 0xb8ffb0, { trim: 0xff9f1c }))),
+    item('part.habdome.council', 'HAB DOME 30 M (COUNCIL)', 68, 71, () => kitPart((k) => habDome(k, 0, 0, 30, 0xffd23f, { trim: 0xff9f1c }))),
+    item('part.habdome.great', 'HAB DOME 58 M (ILMB GREAT DOME)', 124, 128, () => kitPart((k) => habDome(k, 0, 0, 58, 0x9be7ff, { trim: YEL, cupola: false })), { big: true }),
     item('part.cabin', 'PREFAB CABINS', 38, 9, () => row([
       kitPart((k) => cabin(k, 0, 0, 10, 8, 4.6, 0xff9f1c, 0, { trim: 0xffd23f })),
       kitPart((k) => cabin(k, 0, 0, 10, 8, 4.6, 0x2ec4ff, 0, { trim: 0xff7ad9, solar: true })),
@@ -218,16 +219,19 @@ const parts = {
     item('part.water-tower', 'WATER TOWER', 9, 9, () => worldPart((world, loc, k) => waterTower(world, loc, k, 0, 0, 0xff9f1c))),
     item('part.greenhouse', 'GREENHOUSE', 7.5, 18.5, () => worldPart((world, loc, k) => greenhouse(world, loc, k, 0, 0, 0))),
     item('part.comms-mast', 'COMMS MASTS 16 · 30 M', 12, 3, () => row([
-      worldPart((world, loc, k) => commsMast(world, loc, k, 0, 0, 16, 0xff9f1c)),
-      worldPart((world, loc, k) => commsMast(world, loc, k, 0, 0, 30, 0xffd23f)),
+      worldPart((world, loc, k) => commsMast(world, loc, k, 0, 0, 16, 0xff9f1c, 'kepler')),
+      worldPart((world, loc, k) => commsMast(world, loc, k, 0, 0, 30, 0xffd23f, 'spacecom')),
     ], 6)),
     item('part.town-hall', 'KEPLER TOWN HALL', 44, 19, () => worldPart((world, loc, k) => townHall(world, loc, k))),
-    item('part.bounce-dome', 'BOUNCE DOMES 12 · 26 M', 89, 57, () => row([
-      worldPart((world, loc, k) => bounceDome(world, loc, k, 0, 0, 12, 0xff2e88, 0xffd23f)),
-      worldPart((world, loc, k) => bounceDome(world, loc, k, 0, 0, 26, 0x2ec4ff, 0x7dff6a)),
-    ], 4)),
+    item('part.ferris-wheel', 'FERRIS WHEEL', 50, 12, () => worldPart((world, loc, k) => ferrisWheel(world, loc, k, 0, 0))),
+    item('part.carousel', 'CAROUSEL', 22, 22, () => worldPart((world, loc, k) => carousel(world, loc, k, 0, 0))),
     item('part.tower-crane', 'TOWER CRANE', 44, 9, () => kitPart((k) => towerCrane(k, 0, 0, 34, 30, YEL, { speed: 0.12 }))),
-    item('part.garage.main', 'MOTOR POOL GARAGE', 54, 26, () => kitPart((k) => garage(k, 0, 0, 0, [true, false, true], 'main'))),
+    item('part.gantry-crane', 'GANTRY CRANE', 58, 36, () => kitPart((k) => gantryCrane(k, 0, 0, YEL, { speed: 1 / 40, phase: 0.3, travel: 24 }))),
+    item('part.cargo-stacks', 'CARGO CONTAINER STACKS', 42, 9, () => kitPart((k) => {
+      ['spacecom', 'vostok', 'kepler', 'meridian'].forEach((f, i) => cargoStack(k, -16 + i * 10.5, 0, 1 + (i % 3), [f, f, f], Math.PI / 2));
+    })),
+    // (the motor pool with its compound, 61 by 45 m: shifted so the compound, not the hall, is centred on the item)
+    item('part.garage.main', 'MOTOR POOL GARAGE', 62, 46, () => kitPart((k) => garage(k, -2.8, 5.5, 0, [true, false, true], 'main'))),
     item('part.garage.small', 'SMALL GARAGE', 34, 20, () => kitPart((k) => garage(k, 0, 0, 0, [true, true], 'small'))),
     item('part.dish-stations', 'DISH STATIONS (CRYO · GANTRY)', 66, 30, () => row([
       kitPart((k) => dishStation(k, 0, 0, DISH_SIZE, 'cryo', 'meridian', '01', { speed: 0.1 })),
@@ -280,13 +284,14 @@ const parts = {
 // ---------------------------------------------------------------------------------------------
 const HOME = [
   ['housing', 'HOUSING DOMES'], ['market', 'MARKET HALL'], ['clinic', 'CLINIC'], ['farm', 'GREENHOUSE FARM'], ['motorpool', 'MOTOR POOL'],
-  ['barracks', 'MILITIA BARRACKS'], ['school', 'SCHOOL & PLAYGROUND'], ['radio', 'RADIO TOWER'], ['pad', 'SHUTTLE PAD'],
+  ['barracks', 'MILITIA BARRACKS'], ['roads', 'ROADS'], ['radio', 'RADIO TOWER'], ['pad', 'SHUTTLE PAD'],
 ];
 const hometown = {
   id: 'buildings.hometown',
   title: '10 · HOMETOWN',
   items: [
-    ...HOME.map(([type, label]) => item(`hometown.${type}`, label, 27, 27, () => {
+    // (the Shuttle Pad's deck is 28.6 m across and its stairs run 6 m further toward the hall)
+    ...HOME.map(([type, label]) => item(`hometown.${type}`, label, type === 'pad' ? 31 : 27, type === 'pad' ? 37 : 27, () => {
       const slot = slotAt(0);
       return viaWorld((world, loc) => addBuilding(world, loc, 0, type), { faction: 'kepler', frame: slot });
     })),

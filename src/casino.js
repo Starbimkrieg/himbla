@@ -2,9 +2,10 @@ import { OUTFITS, SKATES } from './cosmetics.js';
 import { pixelFont } from './fonts.js';
 import { CasinoGames } from './casinoGames.js';
 import { glyphHtml } from './glyphs.js';
+import { px, pxCanvas } from './pixelIcons.js';
 
-// The Lucky Crater Casino: slots, blackjack, roulette, a prize wheel, high-low, a prize
-// counter and a loan shark, all in one comic overlay. State lives in game.stats.casino.
+// The Lucky Crater Casino: slots, roulette, a prize wheel, high-low and a prize
+// counter, all in one comic overlay. State lives in game.stats.casino.
 
 // Casino-exclusive cosmetics: no `shop`/`cost`, so faction shops skip them, but the
 // wardrobe (C) picks them up once owned via game.upgrades['outfit_<id>' / 'skates_<id>'].
@@ -26,19 +27,16 @@ const VIP = [
   { name: 'MOON ROYALTY', min: 150000, max: 50000, color: '#c77dff' },
 ];
 const BETS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000];
-const TABS = [
-  ['slots', 'LUNAR SLOTS'], ['roulette', 'CRATER ROULETTE'], ['wheel', 'PRIZE WHEEL'],
-  ['hilo', 'HIGH-LOW'], ['prizes', 'PRIZE COUNTER'], ['shark', 'LOAN SHARK'],
-];
-const DEFAULTS = { wagered: 0, won: 0, biggest: 0, spins: 0, hands: 0, bjs: 0, bestStreak: 0, chips: 0, chipFrac: 0, jackpot: 2500, lastFree: 0, debt: 0, debtAt: 0, loans: 0, visits: 0, ducks: 0, plinko: 0 };
+// the classic cabinets and the prize counter are two places with their own screens: the cabinets' tabs, and the counter's one page
+const TABS = [['slots', 'LUNAR SLOTS'], ['roulette', 'CRATER ROULETTE'], ['wheel', 'PRIZE WHEEL'], ['hilo', 'HIGH-LOW']];
+const PRIZE_TABS = [['prizes', 'PRIZE COUNTER']];
+const DEFAULTS = { wagered: 0, won: 0, biggest: 0, spins: 0, hands: 0, bjs: 0, bestStreak: 0, chips: 0, chipFrac: 0, jackpot: 2500, lastFree: 0, visits: 0, ducks: 0, plinko: 0 };
 const CHIP_RATE = 50; // credits wagered per Lucky Chip
 const FREE_SPIN_MS = 10 * 60 * 1000;
-const INTEREST_MS = 10 * 60 * 1000;
 
 // ---------- slots ----------
-const SYMS = {
-  moon: { e: '🌙', w: 13 }, comet: { e: '☄️', w: 9 }, rocket: { e: '🚀', w: 7 }, alien: { e: '👽', w: 5 },
-  ufo: { e: '🛸', w: 4 }, diamond: { e: '💎', w: 2 }, wild: { e: '⭐', w: 2 },
+const SYMS = { // (each symbol's picture is the pixel sprite of the same name: pixelIcons.js)
+  moon: { w: 13 }, comet: { w: 9 }, rocket: { w: 7 }, alien: { w: 5 }, ufo: { w: 4 }, diamond: { w: 2 }, wild: { w: 2 },
 };
 const SYM_IDS = Object.keys(SYMS);
 const SYM_TOTAL = SYM_IDS.reduce((a, k) => a + SYMS[k].w, 0);
@@ -65,7 +63,8 @@ function evalSlots(r) {
 }
 
 // ---------- cards ----------
-const SUITS = ['♠', '♥', '♦', '♣'];
+const SUITS = ['S', 'H', 'D', 'C'];
+const SUIT_SPRITE = { S: 'spade', H: 'heart', D: 'diamondsuit', C: 'club' };
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const hiloRank = (c) => (c.r === 'A' ? 14 : c.r === 'K' ? 13 : c.r === 'Q' ? 12 : c.r === 'J' ? 11 : +c.r);
 
@@ -91,9 +90,10 @@ const PRIZES = [
   { label: '₵250', w: 6, kind: 'cr', n: 250, color: '#ffd23f' },
   { label: '15 CHIPS', w: 5, kind: 'chips', n: 15, color: '#7dff6a' },
   { label: '₵500', w: 3, kind: 'cr', n: 500, color: '#ff2a4a' },
-  { label: '★', w: 1, kind: 'mega', n: 5000, color: '#fff6a8' },
+  { label: 'MEGA', w: 1, kind: 'mega', n: 5000, color: '#fff6a8' },
 ];
 const PRIZE_TOTAL = PRIZES.reduce((a, p) => a + p.w, 0);
+const WHEEL_PX = 640; // the wheel's canvas, in its own pixels (the page scales it to fit: style.css .pw-wrap)
 const WHEEL_COST = 150;
 
 // ---------- prize counter ----------
@@ -105,7 +105,6 @@ const SHOP = [
   { key: 'outfit_moonroyal', kind: 'outfit', id: 'moonroyal', chips: 500, tier: 4, desc: 'Purple and gold regalia for Moon Royalty only.' },
 ];
 const EXCHANGE = { chips: 10, credits: 150 };
-const LOANS = [{ n: 500, tier: 0 }, { n: 2000, tier: 1 }, { n: 10000, tier: 2 }];
 
 // ---------- the pit boss ----------
 const LINES = {
@@ -113,18 +112,12 @@ const LINES = {
   win: ['Huh. Beginner\'s luck.', 'Don\'t get used to it.', 'Nice. Now give it back.', 'The odds are just warming up.', 'See? Winning is easy. Do it again.', 'A winner! Somebody take a photo for the wall.'],
   big: ['WHOA! Somebody check that machine!', 'Security! …No wait, that\'s legit. Ugh.', 'That\'s coming out of MY bonus!', 'Now THAT\'s a moonshot!', 'I need to sit down. I AM sitting down. I need to sit down more.'],
   lose: ['The house thanks you for your donation.', 'Close! …Not really, but close.', 'Gravity\'s low. So are your odds.', 'Have you tried winning?', 'Keep going, you\'re due! (You are not due.)', 'That one\'s going toward the new chandelier.', 'Ooh. Unlucky. Again?'],
-  broke: ['Outta credits? Rusty the loan shark has a… flexible rate. Press 6.', 'No credits, no service. Those are the rules. I made them.', 'Go deliver some packages and come back rich. Or come back poor. I\'m easy.'],
+  broke: ['Outta credits? Go deliver some packages and come back rich.', 'No credits, no service. Those are the rules. I made them.', 'Or come back poor. I\'m easy.'],
   jackpot: ['JACKPOT?! I\'m calling my mom. I\'m calling YOUR mom!', 'THE MACHINE IS SCREAMING! THE MACHINE IS SCREAMING!'],
   nothing: ['NOTHING! Ha! That\'s my favourite slice.', 'It says "lol" right on it, kid.', 'The wheel giveth. Mostly the wheel taketh.'],
   vip: ['VIP upgrade! I\'ll have them warm up the velvet rope.', 'A high roller! I knew it the moment you skated in.'],
-  shark: ['Rusty\'s watching you, kid. Pay your debts.', 'I\'d pay Rusty back if I were you. He bites. Literally. He\'s a shark.'],
   wait: ['Easy, easy — let it finish!', 'Patience. The Moon wasn\'t built in a day.'],
   shop: ['Lookin\' sharp! Very… expensive.', 'Drip acquired. The Moon salutes you.'],
-};
-const SHARK = {
-  offer: ['"Need a little float, friend? Rustmoon rates: fifty percent up front, ten percent every ten minutes. Very reasonable. For a shark."', '"I lend, you spend, you pay me back. Simple. Simple like a shark."'],
-  owed: ['"Tick tock, courier. The vig don\'t sleep."', '"I can smell debt from three craters away."', '"Nice skates. Be a shame if something… compounded."'],
-  paid: ['"Pleasure doin\' business. Come back when you\'re desperate."'],
 };
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -136,6 +129,8 @@ export class Casino {
     this.game = game;
     this.el = document.getElementById('casino');
     this.tab = 'slots';
+    this.tabs = TABS;
+    this.venue = 'classic';
     this.bet = 10;
     this.busy = false;
     this.auto = 0;
@@ -156,6 +151,7 @@ export class Casino {
     const g = this.game;
     const s = g.stats.casino || (g.stats.casino = {});
     for (const k in DEFAULTS) if (s[k] === undefined) s[k] = DEFAULTS[k];
+    for (const k of ['debt', 'debtAt', 'loans']) delete s[k]; // (keys of a feature that has been removed: any old balance is simply forgiven)
     return s;
   }
 
@@ -175,7 +171,7 @@ export class Casino {
     g.hud.prompt(`<b>F</b> — ${s.label}`);
     if (g.input.pressed('KeyF') && g.boardCooldown <= 0) {
       if (s.id === 'classic') this.open();
-      else if (s.id === 'prizes') { this.open(); this.setTab('prizes'); } else this.sit(s.id);
+      else if (s.id === 'prizes') this.open('prizes'); else this.sit(s.id);
     }
     return true;
   }
@@ -193,9 +189,14 @@ export class Casino {
   }
 
   // ---------- open / close / keys ----------
-  open() {
+  open(venue = 'classic') {
     const g = this.game;
     g.openModal('casino');
+    this.venue = venue;
+    this.tabs = venue === 'prizes' ? PRIZE_TABS : TABS;
+    this.tab = venue === 'prizes' ? 'prizes' : (this.tab === 'prizes' ? 'slots' : this.tab);
+    this.root.classList.toggle('venue-prizes', venue === 'prizes');
+    this.$('.cas-tabs').innerHTML = this.tabs.map(([id, name], i) => `<button data-tab="${id}"><i>${i + 1}</i>${name}</button>`).join('');
     this.el.classList.remove('hidden');
     const s = this.st;
     s.visits++;
@@ -204,7 +205,7 @@ export class Casino {
     this.shown = g.credits;
     this.refresh(true);
     this.renderTab();
-    this.say(this.debt() > 0 ? 'shark' : 'greet');
+    this.say('greet');
     [392, 523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.audio.tone(f, 0.16, 'triangle', 0.12), i * 70));
     if (this.welcome) { this.welcome = false; setTimeout(() => this.burst('WELCOME GIFT: 10 LUCKY CHIPS!', { color: '#7dff6a', size: 46 }), 400); }
     clearInterval(this.clock);
@@ -229,7 +230,7 @@ export class Casino {
   onKey(code) {
     if (this.mode) { this.games.onKey(code); return; }
     const n = parseInt(code.replace('Digit', ''), 10);
-    if (code.startsWith('Digit') && n >= 1 && n <= TABS.length) { this.setTab(TABS[n - 1][0]); return; }
+    if (code.startsWith('Digit') && n >= 1 && n <= this.tabs.length) { this.setTab(this.tabs[n - 1][0]); return; }
     if (code === 'ArrowLeft' || code === 'Minus') { this.stepBet(-1); return; }
     if (code === 'ArrowRight' || code === 'Equal') { this.stepBet(1); return; }
     const go = code === 'Space' || code === 'Enter';
@@ -308,15 +309,6 @@ export class Casino {
     this.refresh();
   }
 
-  // Loan-shark debt grows 10% per 10 real minutes, applied lazily.
-  debt() {
-    const s = this.st;
-    if (s.debt <= 0) return 0;
-    const steps = Math.floor((Date.now() - s.debtAt) / INTEREST_MS);
-    if (steps > 0) { s.debt = Math.ceil(s.debt * Math.pow(1.1, Math.min(steps, 50))); s.debtAt += steps * INTEREST_MS; }
-    return s.debt;
-  }
-
   // ---------- DOM skeleton ----------
   build() {
     this.el.innerHTML = `<div class="cas">
@@ -325,13 +317,13 @@ export class Casino {
         <div class="cas-logo">LUCKY CRATER <span>CASINO</span></div>
         <div class="cas-meters">
           <div class="cas-cred" data-cred>₵0</div>
-          <div class="cas-chips" title="Lucky Chips: earned by playing (1 per ₵${CHIP_RATE} wagered). Spend them at the Prize Counter.">🍀 <b data-chips>0</b></div>
+          <div class="cas-chips" title="Lucky Chips: earned by playing (1 per ₵${CHIP_RATE} wagered). Spend them at the Prize Counter.">${px('chip', 'ico')} <b data-chips>0</b></div>
           <div class="cas-vip" data-vip></div>
         </div>
-        <button class="cas-x" data-act="close">✕ LEAVE <small>ESC</small></button>
+        <button class="cas-x" data-act="close">X LEAVE <small>ESC</small></button>
       </header>
-      <div class="cas-boss"><div class="cas-face">🦎</div><div class="cas-say"><b>VINNIE "THE VISOR"</b>, PIT BOSS<p data-say></p></div><div class="cas-jp">PROGRESSIVE JACKPOT<b data-jp>₵0</b></div></div>
-      <nav class="cas-tabs">${TABS.map(([id, name], i) => `<button data-tab="${id}"><i>${i + 1}</i>${name}</button>`).join('')}</nav>
+      <div class="cas-boss"><div class="cas-face">${px('lizard')}</div><div class="cas-say"><b>VINNIE "THE VISOR"</b>, PIT BOSS<p data-say></p></div><div class="cas-jp">PROGRESSIVE JACKPOT<b data-jp>₵0</b></div></div>
+      <nav class="cas-tabs"></nav>
       <div class="cas-body" data-body></div>
       <footer class="cas-foot">
         <div class="cas-bet"><button data-act="betdown">◀</button><span>BET <b data-bet>₵10</b></span><button data-act="betup">▶</button><small data-max></small></div>
@@ -347,14 +339,13 @@ export class Casino {
   }
 
   onClick(e) {
-    const t = e.target.closest('[data-act],[data-tab],[data-rb],[data-buy],[data-wear],[data-loan]');
+    const t = e.target.closest('[data-act],[data-tab],[data-rb],[data-buy],[data-wear]');
     if (!t || !this.el.contains(t)) return;
     const d = t.dataset;
     if (d.tab) return this.setTab(d.tab);
     if (d.rb) return this.placeBet(d.rb);
     if (d.buy) return this.buyPrize(d.buy);
     if (d.wear) return this.wear(d.wear);
-    if (d.loan) return this.borrow(+d.loan);
     switch (d.act) {
       case 'close': this.close(false); break;
       case 'betdown': this.stepBet(-1); break;
@@ -371,12 +362,11 @@ export class Casino {
       case 'hflip': this.hlGuess('flip'); break;
       case 'hcash': this.hlCash(); break;
       case 'exchange': this.exchange(); break;
-      case 'repay': this.repay(+d.n); break;
     }
   }
 
   setTab(id) {
-    if (id === this.tab) return;
+    if (id === this.tab || !this.tabs.some(([t]) => t === id)) return;
     if (this.busy || this.hl.phase === 'play') {
       this.say('wait');
       this.shake(true);
@@ -401,8 +391,7 @@ export class Casino {
     this.$('[data-bet]').textContent = `₵${fmt(this.bet)}`;
     this.$('[data-max]').textContent = `MAX ₵${fmt(this.maxBet)} · ◀ ▶ KEYS`;
     const net = s.won - s.wagered;
-    const debt = this.debt();
-    this.$('[data-stats]').innerHTML = `WAGERED <b>₵${fmt(s.wagered)}</b> · NET <b class="${net >= 0 ? 'up' : 'down'}">${net >= 0 ? '+' : '−'}₵${fmt(Math.abs(net))}</b> · BIGGEST WIN <b>₵${fmt(s.biggest)}</b>${debt ? ` · <b class="down">OWE RUSTY ₵${fmt(debt)}</b>` : ''}`;
+    this.$('[data-stats]').innerHTML = `WAGERED <b>₵${fmt(s.wagered)}</b> · NET <b class="${net >= 0 ? 'up' : 'down'}">${net >= 0 ? '+' : '−'}₵${fmt(Math.abs(net))}</b> · BIGGEST WIN <b>₵${fmt(s.biggest)}</b>`;
     for (const b of this.el.querySelectorAll('[data-tab]')) b.classList.toggle('on', b.dataset.tab === this.tab);
     this.tickCredits(instant);
   }
@@ -427,7 +416,6 @@ export class Casino {
 
   tickClock() {
     if (this.tab === 'wheel') this.updateWheelButtons();
-    if (this.tab === 'shark') this.renderShark();
   }
 
   say(kind, text) {
@@ -538,31 +526,33 @@ export class Casino {
     if (this.tab === 'roulette') this.drawRoulette();
     if (this.tab === 'wheel') this.drawWheel();
     if (this.tab === 'hilo') this.drawHilo();
-    if (this.tab === 'shark') this.renderShark();
     this.refresh();
   }
 
   // ================= LUNAR SLOTS =================
   html_slots() {
-    const row = (syms, pay) => `<tr><td>${syms}</td><td>×${pay}</td></tr>`;
+    const row = (syms, pay) => `<div class="pt-row"><span>${syms}</span><b>×${pay}</b></div>`;
+    const trio = (id) => px(id, 'sm').repeat(3);
+    const duo = (id) => `<em>ANY</em>${px(id, 'sm').repeat(2)}`;
     return `<div class="slots">
       <div class="slot-machine">
-        <div class="slot-top">★ LUNAR SLOTS ★</div>
-        <div class="reels">${[0, 1, 2].map((i) => `<div class="reel" data-reel="${i}"><div class="strip"></div></div>`).join('')}<div class="payline"></div></div>
+        <div class="slot-top">${px('star', 'ico')}<span>LUNAR SLOTS</span>${px('star', 'ico')}</div>
+        <div class="reels">${[0, 1, 2].map((i) => `<div class="reel" data-reel="${i}"><div class="strip"></div></div>`).join('')}<div class="payline"><i></i><i></i></div></div>
         <div class="slot-win" data-swin>PULL THE LEVER, LOSER. I MEAN, LEGEND.</div>
         <div class="slot-ctl"><button class="big" data-act="spin">SPIN <small>SPACE</small></button><button data-act="auto">AUTO ×10 <small>A</small></button></div>
         <div class="lever" data-act="spin"><i></i></div>
       </div>
-      <table class="paytable"><tr><th colspan="2">PAYTABLE (× BET)</th></tr>
-        <tr class="jp"><td>💎💎💎</td><td>JACKPOT</td></tr>
-        ${row('⭐⭐⭐', PAY3.wild)}${row('🛸🛸🛸', PAY3.ufo)}${row('👽👽👽', PAY3.alien)}${row('🚀🚀🚀', PAY3.rocket)}${row('☄️☄️☄️', PAY3.comet)}${row('🌙🌙🌙', PAY3.moon)}
-        ${row('any 💎💎', 2.5)}${row('any 🌙🌙', 1)}
-        <tr><td colspan="2" class="fine">⭐ WILD subs for anything but 💎. Jackpot pays in full on bets of ₵${JACKPOT_FULL_BET}+ (bet/₵${JACKPOT_FULL_BET} share below). ${Math.round(JACKPOT_CUT * 100)}% of every spin feeds the pot.</td></tr>
-      </table>
+      <div class="paytable">
+        <div class="pt-head">PAYTABLE <small>× BET</small></div>
+        <div class="pt-row jp"><span>${trio('diamond')}</span><b>JACKPOT</b></div>
+        ${row(trio('wild'), PAY3.wild)}${row(trio('ufo'), PAY3.ufo)}${row(trio('alien'), PAY3.alien)}${row(trio('rocket'), PAY3.rocket)}${row(trio('comet'), PAY3.comet)}${row(trio('moon'), PAY3.moon)}
+        ${row(duo('diamond'), 2.5)}${row(duo('moon'), 1)}
+        <p class="fine">${px('wild', 'ico')} WILD stands in for anything but ${px('diamond', 'ico')}. The jackpot pays in full on bets of ₵${JACKPOT_FULL_BET}+ (bet / ₵${JACKPOT_FULL_BET} share below that). ${Math.round(JACKPOT_CUT * 100)}% of every spin feeds the pot.</p>
+      </div>
     </div>`;
   }
 
-  cell(id) { return `<div class="cell s-${id}">${SYMS[id].e}${id === 'wild' ? '<small>WILD</small>' : ''}</div>`; }
+  cell(id) { return `<div class="cell s-${id}">${px(id)}${id === 'wild' ? '<small>WILD</small>' : ''}</div>`; }
 
   drawReels() {
     this.el.querySelectorAll('.reel').forEach((r, i) => {
@@ -625,7 +615,7 @@ export class Casino {
         r.classList.remove('stop'); void r.offsetWidth; r.classList.add('stop');
         if (i === 1 && tease) {
           reelEls[2].classList.add('tease');
-          this.$('[data-swin]').textContent = res[0] === 'diamond' ? '💎 💎 … JACKPOT?!' : 'C\'MON… C\'MON…';
+          this.$('[data-swin]').innerHTML = res[0] === 'diamond' ? `${px('diamond', 'ico')}${px('diamond', 'ico')} … JACKPOT?!` : 'C\'MON… C\'MON…';
           [0, 300, 600, 900, 1200].forEach((t, k) => setTimeout(() => this.audio.tone(440 + k * 80, 0.12, 'square', 0.07), t));
         }
         if (--spinning === 0) { clearInterval(ticker); this.slotResult(res, ev, bet); }
@@ -644,7 +634,7 @@ export class Casino {
       s.jackpot = Math.max(JACKPOT_SEED, s.jackpot - amount);
       this.pay(amount, bet);
       reelEls.forEach((r) => r.classList.add('hit'));
-      msg.textContent = `💎 JACKPOT! ₵${fmt(amount)} 💎`;
+      msg.innerHTML = `${px('diamond', 'ico')} JACKPOT! ₵${fmt(amount)} ${px('diamond', 'ico')}`;
       msg.className = 'slot-win big';
       this.burst('JACKPOT!!!', { size: 130, confetti: 160, shake: true });
       this.fanfare();
@@ -672,9 +662,9 @@ export class Casino {
 
   // a card as the hi-lo table shows it
   cardHTML(c, hidden = false, fresh = false) {
-    if (hidden) return `<div class="card back${fresh ? ' deal' : ''}"></div>`;
-    const red = c.s === '♥' || c.s === '♦';
-    return `<div class="card${red ? ' red' : ''}${fresh ? ' deal' : ''}"><i>${c.r}<br>${c.s}</i><b>${c.s}</b><i class="br">${c.r}<br>${c.s}</i></div>`;
+    if (hidden) return `<div class="card back${fresh ? ' deal' : ''}">${px('moon')}</div>`;
+    const red = c.s === 'H' || c.s === 'D', suit = (cls) => px(SUIT_SPRITE[c.s], cls);
+    return `<div class="card${red ? ' red' : ''}${fresh ? ' deal' : ''}"><i>${c.r}<br>${suit('cs')}</i><b>${suit('cb')}</b><i class="br">${c.r}<br>${suit('cs')}</i></div>`;
   }
 
   // ================= CRATER ROULETTE =================
@@ -687,7 +677,7 @@ export class Casino {
     const gl = (...toks) => `<span class="rl-pd pgx">${glyphHtml(toks)}</span>`;
     return `<div class="roul felt">
       <div class="rl-left">
-        <div class="rl-wheel"><canvas width="300" height="300" data-rwheel></canvas><div class="rl-ballring" data-rball><i></i></div><div class="rl-ptr">▼</div></div>
+        <div class="rl-wheel"><canvas width="300" height="300" data-rwheel></canvas><div class="rl-ballring" data-rball><i></i></div>${px('ptr', 'rl-ptr')}</div>
         <div class="rl-result" data-rres>PLACE YOUR BETS</div>
         <div class="rl-hist" data-rhist></div>
       </div>
@@ -824,10 +814,10 @@ export class Casino {
   // ================= PRIZE WHEEL =================
   html_wheel() {
     return `<div class="pwheel">
-      <div class="pw-wrap"><canvas width="420" height="420" data-pwheel></canvas><div class="pw-ptr">▼</div><div class="pw-hub">SPIN<br>ME</div></div>
+      <div class="pw-wrap"><canvas width="${WHEEL_PX}" height="${WHEEL_PX}" data-pwheel></canvas>${px('ptr', 'pw-ptr')}<div class="pw-hub">SPIN<br>ME</div></div>
       <div class="pw-side">
         <h3>THE WHEEL OF MILD FORTUNE</h3>
-        <p>One <b>free spin every 10 minutes</b> — real minutes, the Moon doesn't care. Extra spins ₵${WHEEL_COST}. Slice size = your actual odds. That tiny ★ is the <b>₵5,000 MEGA PRIZE</b>. Good luck, it's thin.</p>
+        <p>One <b>free spin every 10 minutes</b> — real minutes, the Moon doesn't care. Extra spins ₵${WHEEL_COST}. Slice size = your actual odds. That tiny ${px('star', 'ico')} is the <b>₵5,000 MEGA PRIZE</b>. Good luck, it's thin.</p>
         <div class="pw-btns"><button class="big" data-act="wfree" data-wfree>FREE SPIN</button><button data-act="wpaid">PAID SPIN ₵${WHEEL_COST} <small>P</small></button></div>
         <div class="pw-res" data-pwres></div>
       </div>
@@ -837,30 +827,73 @@ export class Casino {
   drawWheel() {
     const cv = this.$('[data-pwheel]');
     const x = cv.getContext('2d');
-    const c = 210;
-    x.clearRect(0, 0, 420, 420);
+    const S = WHEEL_PX, c = S / 2, R = c - 22; // R: where the slices end, inside the rim
+    x.clearRect(0, 0, S, S);
+    x.imageSmoothingEnabled = false;
+    // the rim: a dark disc, a gold ring and bulbs
     x.fillStyle = '#120a1e'; x.beginPath(); x.arc(c, c, c, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#c9a23a'; x.beginPath(); x.arc(c, c, R + 12, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#120a1e'; x.beginPath(); x.arc(c, c, R + 5, 0, Math.PI * 2); x.fill();
+    const lum = (hex) => { const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); };
+    // a sprite scaled up in whole pixels first (nearest neighbour), so that turning it with the slice afterwards keeps its blocks square
+    const blocky = (cvs, k) => {
+      const o = document.createElement('canvas');
+      o.width = cvs.width * k; o.height = cvs.height * k;
+      const ox = o.getContext('2d');
+      ox.imageSmoothingEnabled = false;
+      ox.drawImage(cvs, 0, 0, o.width, o.height);
+      return o;
+    };
+    x.imageSmoothingEnabled = true;
     let a = 0;
     for (const p of PRIZES) {
       const span = (p.w / PRIZE_TOTAL) * Math.PI * 2;
       x.fillStyle = p.color;
-      x.beginPath(); x.moveTo(c, c); x.arc(c, c, c - 12, a, a + span); x.closePath(); x.fill();
-      x.strokeStyle = '#120a1e'; x.lineWidth = 4; x.stroke();
+      x.beginPath(); x.moveTo(c, c); x.arc(c, c, R, a, a + span); x.closePath(); x.fill();
+      x.strokeStyle = '#120a1e'; x.lineWidth = 6; x.stroke();
+      // the label runs out along the slice's middle, from just outside the hub to the rim: dark ink on a bright slice, light on a dark one
       x.save(); x.translate(c, c); x.rotate(a + span / 2);
-      x.textAlign = 'right'; x.textBaseline = 'middle';
-      const fs = Math.max(12, Math.min(26, span * 90));
-      x.font = pixelFont(fs * 0.55);
-      x.lineWidth = 4; x.strokeStyle = '#120a1e'; x.strokeText(p.label, c - 24, 0);
-      x.fillStyle = p.kind === 'nothing' ? '#c9c3d9' : '#fff';
-      x.fillText(p.label, c - 24, 0);
+      const dark = lum(p.color) < 110, ink = dark ? '#f4f1ff' : '#1a1030';
+      const reach = R - 24, inner = 92;               // (the text's right edge, and the hub's edge)
+      const slice = span * (R * 0.7);                 // the slice's width at about two thirds of the way out
+      const text = (str, size, dy = 0, right = reach) => {
+        x.font = pixelFont(size);
+        x.textAlign = 'right'; x.textBaseline = 'middle';
+        x.fillStyle = ink;
+        x.fillText(str, right, dy);
+      };
+      const fit = (str, max) => { // the biggest size (px) that keeps `str` between the hub and the rim
+        let size = max;
+        for (; size > 10; size -= 2) { x.font = pixelFont(size); if (x.measureText(str).width <= reach - inner) break; }
+        return size;
+      };
+      if (p.kind === 'nothing') {
+        // two lines: NOTHING big, lol small under it (one line was too long for the slice and shrank to nothing legible)
+        const big = Math.min(fit('NOTHING', 30), Math.floor(slice * 0.4));
+        text('NOTHING', big, -big * 0.55);
+        text('lol', Math.round(big * 0.75), big * 0.62);
+      } else if (p.kind === 'mega') {
+        const cvs = pxCanvas('wild'), sz = 44;
+        x.drawImage(blocky(cvs, 3), reach - sz, -sz / 2, sz, sz);
+      } else if (p.kind === 'chips') {
+        const num = String(p.n), size = Math.min(fit(num, 36), Math.floor(slice * 0.7));
+        text(num, size, 0, reach - 52);
+        x.drawImage(blocky(pxCanvas('chip'), 3), reach - 46, -22, 44, 44);
+      } else if (p.kind === 'cosmetic') {
+        const size = Math.min(fit('DRIP', 30), Math.max(14, Math.floor(slice * 0.7)));
+        text('DRIP', size);
+      } else {
+        const str = `₵${p.n}`, size = Math.min(fit(str, 40), Math.max(14, Math.floor(slice * 0.7)));
+        text(str, size);
+      }
       x.restore();
       a += span;
     }
-    // bulbs on the rim
-    for (let i = 0; i < 24; i++) {
-      const t = (i / 24) * Math.PI * 2;
+    // bulbs on the rim, alternating
+    for (let i = 0; i < 28; i++) {
+      const t = (i / 28) * Math.PI * 2, bx = c + Math.cos(t) * (R + 8.5), by = c + Math.sin(t) * (R + 8.5);
       x.fillStyle = i % 2 ? '#fff6a8' : '#ff2e88';
-      x.beginPath(); x.arc(c + Math.cos(t) * (c - 6), c + Math.sin(t) * (c - 6), 4, 0, Math.PI * 2); x.fill();
+      x.fillRect(Math.round(bx) - 3, Math.round(by) - 3, 6, 6);
     }
     cv.style.transition = 'none';
     cv.style.transform = `rotate(${this.wheelRot}deg)`;
@@ -915,7 +948,7 @@ export class Casino {
     } else if (p.kind === 'chips') {
       s.chips += p.n;
       out.textContent = `+${p.n} LUCKY CHIPS!`;
-      this.burst(`+${p.n} 🍀`, { color: '#7dff6a', size: 90, confetti: 20 });
+      this.burst(`+${p.n} ${px('chip', 'big')}`, { color: '#7dff6a', size: 90, confetti: 20 });
       this.audio.cash();
     } else if (p.kind === 'cosmetic') {
       const unowned = SHOP.filter((it) => !this.game.upgrades[it.key]);
@@ -929,7 +962,7 @@ export class Casino {
       } else {
         s.chips += 50;
         out.textContent = 'YOU OWN EVERYTHING ALREADY — +50 CHIPS';
-        this.burst('+50 🍀', { color: '#7dff6a', size: 90, confetti: 30 });
+        this.burst(`+50 ${px('chip', 'big')}`, { color: '#7dff6a', size: 90, confetti: 30 });
       }
     }
     this.busy = false;
@@ -960,14 +993,14 @@ export class Casino {
     if (this.tab !== 'hilo') return;
     const h = this.hl;
     this.$('[data-hpot]').textContent = `₵${fmt(h.pot)}`;
-    this.$('[data-hstreak]').innerHTML = h.streak ? `${'🔥'.repeat(Math.min(h.streak, 8))} STREAK ×${h.streak}` : `BEST STREAK ${this.st.bestStreak}`;
-    this.$('[data-hcards]').innerHTML = h.card ? (h.prev ? this.cardHTML(h.prev).replace('card', 'card old') : '') + this.cardHTML(h.card, false, flipped) : '<div class="card back"></div>';
+    this.$('[data-hstreak]').innerHTML = h.streak ? `${px('flame', 'ico').repeat(Math.min(h.streak, 8))} STREAK ×${h.streak}` : `BEST STREAK ${this.st.bestStreak}`;
+    this.$('[data-hcards]').innerHTML = h.card ? (h.prev ? this.cardHTML(h.prev).replace('card', 'card old') : '') + this.cardHTML(h.card, false, flipped) : `<div class="card back">${px('moon')}</div>`;
     const ctl = this.$('[data-hctl]');
     if (h.phase === 'play') {
       const hi = this.hlMult('hi'), lo = this.hlMult('lo');
       ctl.innerHTML = `<button data-act="hhi" ${hi ? '' : 'disabled'}>▲ HIGHER ${hi ? '×' + hi.toFixed(2) : ''} <small>↑</small></button>
         <button data-act="hlo" ${lo ? '' : 'disabled'}>▼ LOWER ${lo ? '×' + lo.toFixed(2) : ''} <small>↓</small></button>
-        <button data-act="hflip">🪙 FLIP ×1.94 <small>F</small></button>
+        <button data-act="hflip">${px('coin', 'ico')} FLIP ×1.94 <small>F</small></button>
         <button class="big cash" data-act="hcash" ${h.streak ? '' : 'disabled'}>CASH OUT ₵${fmt(h.pot)} <small>ENTER</small></button>`;
     } else ctl.innerHTML = `<button class="big" data-act="hstart">START ₵${fmt(this.bet)} <small>SPACE</small></button>`;
   }
@@ -984,7 +1017,7 @@ export class Casino {
     this.drawHilo(true);
   }
 
-  hlMsg(t, cls = '') { const m = this.$('[data-hmsg]'); if (m) { m.textContent = t; m.className = `hl-msg ${cls}`; } }
+  hlMsg(t, cls = '') { const m = this.$('[data-hmsg]'); if (m) { m.innerHTML = t; m.className = `hl-msg ${cls}`; } } // (t is markup: only ever our own text and sprites)
 
   async hlGuess(dir) {
     const h = this.hl;
@@ -994,7 +1027,7 @@ export class Casino {
     this.busy = true;
     let ok, push = false;
     if (dir === 'flip') {
-      this.hlMsg('🪙 FLIPPING…');
+      this.hlMsg(`${px('coin', 'ico')} FLIPPING…`);
       for (let i = 0; i < 6; i++) { this.audio.tone(1200 + i * 120, 0.04, 'triangle', 0.08); await wait(90); }
       ok = Math.random() < 0.5;
     } else {
@@ -1053,16 +1086,16 @@ export class Casino {
       const owned = (g.upgrades[it.key] || 0) > 0;
       const worn = it.kind === 'outfit' ? g.cosmetics.outfit === it.id : g.cosmetics.skates === it.id;
       const locked = ti < it.tier;
-      const btn = owned ? (worn ? '<button disabled>WEARING ✔</button>' : `<button data-wear="${it.key}">WEAR IT</button>`)
-        : locked ? `<button disabled>🔒 ${VIP[it.tier].name}</button>`
-          : `<button data-buy="${it.key}" ${s.chips < it.chips ? 'disabled' : ''}>🍀 ${it.chips}</button>`;
+      const btn = owned ? (worn ? '<button disabled>WEARING</button>' : `<button data-wear="${it.key}">WEAR IT</button>`)
+        : locked ? `<button disabled>${px('lock', 'ico')} ${VIP[it.tier].name}</button>`
+          : `<button data-buy="${it.key}" ${s.chips < it.chips ? 'disabled' : ''}>${px('chip', 'ico')} ${it.chips}</button>`;
       const cols = it.kind === 'outfit' ? [d.suit, d.accent, d.scarf] : [d.color, d.trail];
       return `<div class="prize ${owned ? 'owned' : ''} ${locked ? 'locked' : ''}"><div class="pz-sw">${cols.map(sw).join('')}</div><div class="pz-txt"><b>${d.name}</b><small>${it.kind === 'outfit' ? 'OUTFIT' : 'SKATE FINISH'} · ${it.desc}</small></div>${btn}</div>`;
     }).join('');
     return `<div class="prizes">
-      <div class="pz-head"><h3>PRIZE COUNTER</h3><div class="pz-bal">YOU HAVE <b>🍀 ${fmt(s.chips)}</b> LUCKY CHIPS<small>Earn 1 chip per ₵${CHIP_RATE} wagered, plus wheel prizes. Casino exclusives show up in your wardrobe (C).</small></div></div>
+      <div class="pz-head"><h3>PRIZE COUNTER</h3><div class="pz-bal">YOU HAVE <b>${px('chip', 'ico')} ${fmt(s.chips)}</b> LUCKY CHIPS<small>Earn 1 chip per ₵${CHIP_RATE} wagered, plus wheel prizes. Casino exclusives show up in your wardrobe (C).</small></div></div>
       <div class="pz-list">${rows}
-        <div class="prize"><div class="pz-sw">🍀→₵</div><div class="pz-txt"><b>CHIP EXCHANGE</b><small>Trade ${EXCHANGE.chips} Lucky Chips for ₵${EXCHANGE.credits}. Vinnie takes a small cut. A big one, really.</small></div><button data-act="exchange" ${s.chips < EXCHANGE.chips ? 'disabled' : ''}>🍀 ${EXCHANGE.chips} → ₵${EXCHANGE.credits}</button></div>
+        <div class="prize"><div class="pz-sw">${px('chip', 'ico')}<span>→ ₵</span></div><div class="pz-txt"><b>CHIP EXCHANGE</b><small>Trade ${EXCHANGE.chips} Lucky Chips for ₵${EXCHANGE.credits}. Vinnie takes a small cut. A big one, really.</small></div><button data-act="exchange" ${s.chips < EXCHANGE.chips ? 'disabled' : ''}>${px('chip', 'ico')} ${EXCHANGE.chips} → ₵${EXCHANGE.credits}</button></div>
       </div>
     </div>`;
   }
@@ -1100,62 +1133,5 @@ export class Casino {
     this.float(`+₵${EXCHANGE.credits}`, '#7dff6a');
     this.game.save();
     this.renderTab();
-  }
-
-  // ================= LOAN SHARK =================
-  html_shark() { return '<div class="shark" data-shark></div>'; }
-
-  renderShark() {
-    const el = this.$('[data-shark]');
-    if (!el) return;
-    const s = this.st, debt = this.debt(), ti = this.tierIdx();
-    let html = `<div class="sh-card"><div class="sh-face">🦈</div><div class="sh-txt"><h3>RUSTY "KNUCKLES" VASQUEZ</h3><small>RUSTMOON CLANS · "FINANCIAL SERVICES"</small>`;
-    if (debt > 0) {
-      const next = INTEREST_MS - ((Date.now() - s.debtAt) % INTEREST_MS);
-      html += `<div class="bubble">${this.sharkLine || (this.sharkLine = pick(SHARK.owed))}</div>
-        <div class="sh-debt">YOU OWE <b>₵${fmt(debt)}</b><small>+10% in ${Math.floor(next / 60000)}:${String(Math.floor((next % 60000) / 1000)).padStart(2, '0')}</small></div>
-        <div class="sh-btns">${[100, 500, 2000].filter((n) => n < debt).map((n) => `<button data-act="repay" data-n="${n}" ${this.game.credits < n ? 'disabled' : ''}>PAY ₵${fmt(n)}</button>`).join('')}<button class="big" data-act="repay" data-n="${debt}" ${this.game.credits < debt ? 'disabled' : ''}>PAY IT ALL ₵${fmt(debt)}</button></div>`;
-    } else {
-      html += `<div class="bubble">${this.sharkLine || (this.sharkLine = pick(SHARK.offer))}</div>
-        <div class="sh-btns">${LOANS.map((l) => (ti >= l.tier ? `<button data-loan="${l.n}">BORROW ₵${fmt(l.n)}<small>OWE ₵${fmt(l.n * 1.5)}</small></button>` : `<button disabled>🔒 ₵${fmt(l.n)}<small>VIP ${VIP[l.tier].name}</small></button>`)).join('')}</div>`;
-    }
-    html += `<p class="sh-fine">Loans taken: ${s.loans}. Interest compounds in real time while you owe, even when you're out delivering. Rusty does not accept chips, excuses, or chimeras.</p></div></div>`;
-    el.innerHTML = html;
-  }
-
-  borrow(n) {
-    const s = this.st;
-    if (this.debt() > 0) return;
-    const l = LOANS.find((x) => x.n === n);
-    if (!l || this.tierIdx() < l.tier) return;
-    s.debt = Math.ceil(n * 1.5);
-    s.debtAt = Date.now();
-    s.loans++;
-    this.game.credits += n;
-    this.sharkLine = '"Pleasure. I know where your skates sleep."';
-    this.audio.cash();
-    this.float(`+₵${fmt(n)}`, '#7dff6a');
-    this.say('shark');
-    this.game.save();
-    this.renderShark();
-    this.refresh();
-  }
-
-  repay(n) {
-    const s = this.st, g = this.game;
-    const debt = this.debt();
-    const amt = Math.min(n, debt);
-    if (!amt || g.credits < amt) return;
-    g.credits -= amt;
-    s.debt -= amt;
-    if (s.debt <= 0) {
-      s.debt = 0;
-      this.sharkLine = pick(SHARK.paid);
-      this.burst('DEBT FREE!', { color: '#7dff6a', size: 90, confetti: 40 });
-      this.audio.cash();
-    } else this.audio.tone(600, 0.1, 'triangle', 0.1);
-    g.save();
-    this.renderShark();
-    this.refresh();
   }
 }

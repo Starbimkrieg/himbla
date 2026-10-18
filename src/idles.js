@@ -14,7 +14,7 @@ const GAP_MIN = 10, GAP_MAX = 30; // s of breathing between the occasional idles
 const STOP_BELOW = 0.6, MOVE_ABOVE = 1.2; // m/s: stopped, and moving again (a little hysteresis)
 const DEFAULT = 0;      // the breath
 
-const ROT = ['torso', 'head', 'armL', 'armR', 'legL', 'legR']; // pivots the clips turn
+const ROT = ['torso', 'head', 'armL', 'armR', 'foreL', 'foreR', 'legL', 'legR']; // pivots the clips turn
 const POS = ['body', 'torso'];                                   // ...and the ones they shift
 
 const CLIPS = data.anims.map(a => ({

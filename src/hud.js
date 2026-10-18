@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { glyphHtml } from './glyphs.js';
+import { keepScroll } from './terminalUI.js';
 import { NAME_TAGS } from './toon.js';
 import { FACTIONS } from './locations.js';
 import { arcDist, darkness, upAt, E1, E2 } from './geo.js';
@@ -217,14 +218,14 @@ export class HUD {
     if (!this.recallEl) {
       this.recallEl = document.createElement('div');
       this.recallEl.id = 'recallhold';
-      this.recallEl.innerHTML = '<div class="rh-label"></div><div class="rh-track"><div class="rh-fill"></div></div>';
-      document.getElementById('hud').appendChild(this.recallEl);
+      this.recallEl.innerHTML = '<div class="hb-label"></div><div class="hb-track"><div class="hb-fill"></div></div>';
+      document.getElementById('holdbars').appendChild(this.recallEl); // (the stack of progress bars in the bottom centre)
     }
     this.recallEl.classList.toggle('show', k > 0);
     if (k <= 0) return;
-    if (label) this.recallEl.querySelector('.rh-label').textContent = label;
-    else if (loc) this.recallEl.querySelector('.rh-label').textContent = `HOLD R · RECALL TO ${loc.short || loc.name.toUpperCase()} · 100 CR`;
-    this.recallEl.querySelector('.rh-fill').style.width = `${Math.min(1, k) * 100}%`;
+    if (label) this.recallEl.querySelector('.hb-label').textContent = label;
+    else if (loc) this.recallEl.querySelector('.hb-label').textContent = `HOLD R · RECALL TO ${loc.short || loc.name.toUpperCase()} · 100 CR`;
+    this.recallEl.querySelector('.hb-fill').style.width = `${Math.min(1, k) * 100}%`;
   }
 
   toast(text, dur = 2.5, html = false) {
@@ -251,7 +252,7 @@ export class HUD {
   banner(loc) {
     const el = $('banner');
     const f = FACTIONS[loc.faction];
-    const kind = { trade: 'TRADE HUB', lab: 'STRANGE PLACE — RESEARCH', monolith: 'STRANGE PLACE', tunnel: 'STRANGE PLACE — ???', funpark: 'STRANGE PLACE — FUNPARK', derby: 'STRANGE PLACE — RACECOURSE', casino: 'STRANGE PLACE — CASINO', hub: 'INTERNATIONAL HUB', civilian: 'CIVILIAN HABITAT', research: 'RESEARCH FACILITY', military: 'MILITARY — RESTRICTED', industrial: 'INDUSTRIAL OUTPOST', pirate: 'PIRATE TERRITORY' }[loc.type]; // casino: banner kind
+    const kind = { trade: 'TRADE HUB', lab: 'STRANGE PLACE — RESEARCH', monolith: 'STRANGE PLACE', tunnel: 'STRANGE PLACE — ???', derby: 'STRANGE PLACE — RACECOURSE', casino: 'STRANGE PLACE — CASINO', hub: 'INTERNATIONAL HUB', civilian: 'CIVILIAN HABITAT', research: 'RESEARCH FACILITY', military: 'MILITARY — RESTRICTED', industrial: 'INDUSTRIAL OUTPOST', pirate: 'PIRATE TERRITORY', hometown: 'YOUR TOWN', ruin: 'RUINS' }[loc.type]; // casino: banner kind; hometown + ruin used to print "undefined" in the chip
     el.innerHTML = `<div class="b-kind" style="background:${f.color}">${kind}</div><div class="b-name">${loc.name}</div><div class="b-blurb">${loc.blurb}</div>`;
     el.classList.remove('hidden');
     el.classList.remove('slam'); void el.offsetWidth; el.classList.add('slam');
@@ -340,67 +341,82 @@ export class HUD {
   }
 
   // ---- Job board / shop ----
-  openBoard(loc, offers, { onAccept, onClose, shop, onBuy, upgrades, credits, active, extra, canTake, onAbandon, rep, event, onEventAbandon }) {
+  // tabs: [{ id, label }] puts a tab bar under the title (tab: the one showing, onTab(id): a click on another); pane: { html, foot: { kb, pad }, wire(root) }
+  // is what that tab shows in place of the contracts and the shop (the town's COUNCIL HALL page)
+  openBoard(loc, offers, { onAccept, onClose, shop, onBuy, upgrades, credits, active, extra, canTake, onAbandon, rep, event, onEventAbandon, tabs, tab, onTab, pane }) {
     const el = $('board');
     const f = FACTIONS[loc.faction];
     const tier = rep.tier(loc.faction);
     // a terminal: a title bar, a strip of little status screens, then one bezelled screen per section
     const node = `${loc.short || loc.id}`.toUpperCase().replace(/[^A-Z0-9]/g, '');
     let html = `<div class="board-head" style="--fc:${f.color}"><span class="term-title">◢ ${loc.name.toUpperCase()} <span class="term-dim">// JOB TERMINAL · NODE ${node}-${String(loc.r).padStart(3, '0')}</span><span class="term-cursor">█</span></span><span class="board-right"><button class="board-close" data-close="1">✕ LOG OFF</button></span></div>`;
+    if (tabs) html += `<nav class="board-tabs" role="tablist">${tabs.map((t) => `<button type="button" role="tab" data-tab="${t.id}" class="${t.id === tab ? 'on' : ''}" aria-selected="${t.id === tab}">${t.label}</button>`).join('')}<span class="bt-hint"><span class="foot-kb">Q · E</span><span class="foot-pad">${glyphHtml(['LB'])} ${glyphHtml(['RB'])}</span></span></nav>`;
     html += `<div class="board-scroll">`; // (only this part scrolls, so the scroll bar stays between the header and the footer)
-    html += `<div class="term-status">
-      <div class="term-mini"><label>CREDITS</label><b class="board-credits">₵${credits}</b></div>
-      <div class="term-mini"><label>${f.name.toUpperCase()} STANDING</label><b><span class="tierchip" style="background:${tier.color}">${tier.name}</span></b></div>
-      <div class="term-mini"><label>UPLINK</label><b class="term-ok">● SECURE</b><span class="term-dim">${offers.length} CONTRACT${offers.length === 1 ? '' : 'S'} POSTED</span></div>
-    </div>`;
-    if (active) {
-      html += `<div class="board-active"><span><span class="term-dim">ACTIVE CONTRACT ›</span> ${active.cargo.name} → ${active.to.name}${extra ? ` <span class="term-dim">+ ON TOP ›</span> ${extra.cargo.name} → ${extra.to.name}` : ''}</span><button data-abandon="1">ABANDON</button></div>`;
-      if (canTake) html += `<div class="board-active"><span><span class="term-dim">TWIN CRADLE ›</span> room for one more contract on top</span></div>`;
-    }
-    if (event) {
-      html += `<div class="board-active"><span><span class="term-dim">ACTIVE EVENT ›</span> ${event.title}</span><button data-evabandon="1">ABANDON</button></div>`;
-    }
-    html += `<div class="board-cols">`;
-    html += `<div class="board-jobs screen"><h3><span>SCR-01 · CONTRACTS</span><span class="term-dim">${offers.length ? 'SELECT 1-' + offers.length : 'NO DATA'}</span></h3>`;
-    if (!offers.length) html += `<div class="empty">${rep.hostile(loc.faction) ? `${f.name} won't deal with you. Raise your reputation first.` : 'No contracts right now. Check back after your next run!'}</div>`;
-    offers.forEach((o, i) => {
-      const fc = FACTIONS[o.faction];
-      const fr = '●'.repeat(Math.round(o.cargo.fragile * 3)) || '–';
-      const hot = '☠'.repeat(o.cargo.hot) || '–';
-      html += `<div class="job ${canTake === false || (canTake == null && active) ? 'disabled' : ''} ${o.premium ? 'premium' : ''}" data-i="${i}">
-        <div class="job-top"><span class="job-key">${i + 1}</span><span class="job-fac" style="background:${fc.color}">${fc.name}</span><span class="job-pay">₵${o.reward}</span></div>
-        <div class="job-cargo">${o.cargo.name}</div>
-        <div class="job-route">${o.pickup === o.board ? 'HERE' : o.pickup.name} → <b>${o.to.name}</b> · ${(o.dist / 1000).toFixed(1)} km · ${o.time}s</div>
-        <div class="bubble"><b>${o.client}:</b> “${o.text}”</div>
-        <div class="job-tags">Fragile ${fr} &nbsp; Pirate risk ${hot}${o.clearance ? ' &nbsp; <span class="clr">MILITARY CLEARANCE</span>' : ''}${o.dark ? ' &nbsp; <span class="darktag">☾ DARK SIDE · HAZARD PAY</span>' : ''}${o.payload ? ` &nbsp; <span class="paytag">☠ PAYLOAD: ${o.payload.name.toUpperCase()}</span>` : ''}</div>
+    if (pane) html += pane.html;
+    else {
+      html += `<div class="term-status">
+        <div class="term-mini"><label>CREDITS</label><b class="board-credits">₵${credits}</b></div>
+        <div class="term-mini"><label>${f.name.toUpperCase()} STANDING</label><b><span class="tierchip" style="background:${tier.color}">${tier.name}</span></b></div>
+        <div class="term-mini"><label>UPLINK</label><b class="term-ok">● SECURE</b><span class="term-dim">${offers.length} CONTRACT${offers.length === 1 ? '' : 'S'} POSTED</span></div>
       </div>`;
-    });
-    html += `</div>`;
-    if (shop) {
-      html += `<div class="board-shop screen"><h3><span>SCR-02 · ${loc.id === 'ilmb' ? 'REPAIR BAY & SPACECOM GEAR' : `${f.name.toUpperCase()} GEAR`}</span></h3>`;
-      for (const u of shop) {
-        const lvl = upgrades[u.key] || 0;
-        const maxed = lvl >= u.max;
-        const cost = u.cost * (lvl + 1);
-        const ok = rep.canBuy(u, lvl);
-        const unlockMissing = u.unlock && u.unlock.smuggle && !(rep.game.stats.blackMarket || []).includes(u.key);
-        const need = !maxed && !ok ? (unlockMissing ? 'Comes in on a smuggling run: watch the boards for a PAYLOAD tag' : u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
-        const sw = u.swatch ? u.swatch.map((c) => `<span class="swatch" style="background:#${c.toString(16).padStart(6, '0')}"></span>`).join('') : '';
-        html += `<div class="shop-item ${maxed || credits < cost || !ok ? 'disabled' : ''} ${u.faction ? 'unique' : ''}" data-buy="${u.key}">
-          <div class="job-top"><span>${sw}${u.name}</span><span class="job-pay">${maxed ? (u.cosmetic ? 'OWNED' : 'MAX') : '₵' + cost}</span></div>
-          <div class="job-route">${u.desc}</div>${need ? `<div class="lock">🔒 ${need}</div>` : ''}${u.cosmetic ? '' : `<div class="lvl">${'■'.repeat(lvl)}${'□'.repeat(u.max - lvl)}</div>`}</div>`;
+      if (active) {
+        html += `<div class="board-active"><span><span class="term-dim">ACTIVE CONTRACT ›</span> ${active.cargo.name} → ${active.to.name}${extra ? ` <span class="term-dim">+ ON TOP ›</span> ${extra.cargo.name} → ${extra.to.name}` : ''}</span><button data-abandon="1">ABANDON</button></div>`;
+        if (canTake) html += `<div class="board-active"><span><span class="term-dim">TWIN CRADLE ›</span> room for one more contract on top</span></div>`;
+      }
+      if (event) {
+        html += `<div class="board-active"><span><span class="term-dim">ACTIVE EVENT ›</span> ${event.title}</span><button data-evabandon="1">ABANDON</button></div>`;
+      }
+      html += `<div class="board-cols">`;
+      html += `<div class="board-jobs screen"><h3><span>SCR-01 · CONTRACTS</span><span class="term-dim">${offers.length ? 'SELECT 1-' + offers.length : 'NO DATA'}</span></h3>`;
+      if (!offers.length) html += `<div class="empty">${rep.hostile(loc.faction) ? `${f.name} won't deal with you. Raise your reputation first.` : 'No contracts right now. Check back after your next run!'}</div>`;
+      offers.forEach((o, i) => {
+        const fc = FACTIONS[o.faction];
+        const fr = '●'.repeat(Math.round(o.cargo.fragile * 3)) || '–';
+        const hot = '☠'.repeat(o.cargo.hot) || '–';
+        html += `<div class="job ${canTake === false || (canTake == null && active) ? 'disabled' : ''} ${o.premium ? 'premium' : ''}" data-i="${i}">
+          <div class="job-top"><span class="job-key">${i + 1}</span><span class="job-fac" style="background:${fc.color}">${fc.name}</span><span class="job-pay">₵${o.reward}</span></div>
+          <div class="job-cargo">${o.cargo.name}</div>
+          <div class="job-route">${o.pickup === o.board ? 'HERE' : o.pickup.name} → <b>${o.to.name}</b> · ${(o.dist / 1000).toFixed(1)} km · ${o.time}s</div>
+          <div class="bubble"><b>${o.client}:</b> “${o.text}”</div>
+          <div class="job-tags">Fragile ${fr} &nbsp; Pirate risk ${hot}${o.clearance ? ' &nbsp; <span class="clr">MILITARY CLEARANCE</span>' : ''}${o.dark ? ' &nbsp; <span class="darktag">☾ DARK SIDE · HAZARD PAY</span>' : ''}${o.payload ? ` &nbsp; <span class="paytag">☠ PAYLOAD: ${o.payload.name.toUpperCase()}</span>` : ''}</div>
+        </div>`;
+      });
+      html += `</div>`;
+      if (shop) {
+        html += `<div class="board-shop screen"><h3><span>SCR-02 · ${loc.id === 'ilmb' ? 'REPAIR BAY & SPACECOM GEAR' : `${f.name.toUpperCase()} GEAR`}</span></h3>`;
+        for (const u of shop) {
+          const lvl = upgrades[u.key] || 0;
+          const maxed = lvl >= u.max;
+          const cost = u.cost * (lvl + 1);
+          const ok = rep.canBuy(u, lvl);
+          const unlockMissing = u.unlock && u.unlock.smuggle && !(rep.game.stats.blackMarket || []).includes(u.key);
+          const need = !maxed && !ok ? (unlockMissing ? 'Comes in on a smuggling run: watch the boards for a PAYLOAD tag' : u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
+          const sw = u.swatch ? u.swatch.map((c) => `<span class="swatch" style="background:#${c.toString(16).padStart(6, '0')}"></span>`).join('') : '';
+          html += `<div class="shop-item ${maxed || credits < cost || !ok ? 'disabled' : ''} ${u.faction ? 'unique' : ''}" data-buy="${u.key}">
+            <div class="job-top"><span>${sw}${u.name}</span><span class="job-pay">${maxed ? (u.cosmetic ? 'OWNED' : 'MAX') : '₵' + cost}</span></div>
+            <div class="job-route">${u.desc}</div>${need ? `<div class="lock">🔒 ${need}</div>` : ''}${u.cosmetic ? '' : `<div class="lvl">${'■'.repeat(lvl)}${'□'.repeat(u.max - lvl)}</div>`}</div>`;
+        }
+        html += `</div>`;
       }
       html += `</div>`;
     }
     html += `</div>`;
-    html += `</div>`;
     // (the footer stays on screen while the board scrolls; with a controller in use it names the pad's buttons)
-    html += `<div class="board-foot"><span class="foot-kb">&gt; Click a contract or press 1-${Math.max(1, offers.length)} · F / ESC to log off</span><span class="foot-pad">&gt; Press ${glyphHtml(['A'])} on a contract or an upgrade · ${glyphHtml(['B'])} to log off</span><span class="term-cursor">_</span></div>`;
+    const other = tabs && tabs.find((t) => t.id !== tab);
+    html += pane
+      ? `<div class="board-foot"><span class="foot-kb">&gt; ${pane.foot.kb}</span><span class="foot-pad">&gt; ${pane.foot.pad}</span><span class="term-cursor">_</span></div>`
+      : `<div class="board-foot"><span class="foot-kb">&gt; Click a contract or press 1-${Math.max(1, offers.length)}${other ? ` · Q / E: ${other.label}` : ''} · F / ESC to log off</span><span class="foot-pad">&gt; Press ${glyphHtml(['A'])} on a contract or an upgrade${other ? ` · ${glyphHtml(['LB'])} ${glyphHtml(['RB'])} ${other.label}` : ''} · ${glyphHtml(['B'])} to log off</span><span class="term-cursor">_</span></div>`;
+    const settle = pane ? keepScroll('#board') : null; // (before the markup is replaced: the page's tile list keeps its scroll)
     el.innerHTML = html;
     el.classList.add('term');
+    el.classList.toggle('tab-town', !!pane);
     el.style.setProperty('--fc', f.color);
     el.classList.remove('hidden');
+    if (pane) { pane.wire(el.querySelector('.otm')); settle(); }
+    else if (tabs) { const j = el.querySelector('.job:not(.disabled)'); if (j) j.classList.add('pad-default'); } // (the tab bar comes first: a controller's highlight starts on the first contract, not on a tab)
     el.onclick = (ev) => {
+      const tb = ev.target.closest('[data-tab]');
+      if (tb) { if (!tb.classList.contains('on')) onTab(tb.dataset.tab); return; }
       const job = ev.target.closest('.job');
       const buy = ev.target.closest('[data-buy]');
       if (ev.target.closest('[data-close]')) { onClose(); return; }
@@ -412,7 +428,7 @@ export class HUD {
     this.boardClose = onClose;
   }
 
-  closeBoard() { $('board').classList.add('hidden'); }
+  closeBoard() { const b = $('board'); b.classList.add('hidden'); b.innerHTML = ''; } // (emptied: a hidden page left in the DOM is found first by anything that looks for one)
 
   // ---- per-frame ----
   // NPC name tags (toon.js nameTag): a solid label over each named NPC you can see, smaller the
@@ -503,7 +519,7 @@ export class HUD {
     else if (this.crT > 0) this.crT -= dt;
     crEl.classList.toggle('cr-show', this.crT > 0 || g.state === 'board');
     const wi = P.weapon || 0;
-    const wtxt = P.vehicle && P.vehicle.def.turret ? `<span class="on">1</span> ${APC_CANNON.name.toUpperCase()}` : WEAPONS.map((w, i) => `<span class="${i === wi ? 'on' : ''} ${(!w.unlock || g.upgrades[w.unlock]) ? '' : 'locked'}">${i + 1}</span>`).join('') + ` ${WEAPONS[wi].name.toUpperCase()}`;
+    const wtxt = P.vehicle && P.vehicle.def.turret ? `<span class="on">1</span> ${(P.vehicle.def.cannon || APC_CANNON.name).toUpperCase()}` : WEAPONS.map((w, i) => `<span class="${i === wi ? 'on' : ''} ${(!w.unlock || g.upgrades[w.unlock]) ? '' : 'locked'}">${i + 1}</span>`).join('') + ` ${WEAPONS[wi].name.toUpperCase()}`;
     if (wtxt !== this.lastW) { $c('weaponchip').innerHTML = wtxt; this.lastW = wtxt; }
     const jt = g.alchemy ? g.alchemy.hudText() : '';
     if (jt !== this.lastJar) { $c('jarchip').innerHTML = jt; $c('jarchip').classList.toggle('hidden', !jt); this.lastJar = jt; }

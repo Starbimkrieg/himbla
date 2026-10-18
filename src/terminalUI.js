@@ -1,7 +1,7 @@
 // An interactive "terminal page": a grid of building tiles (icon, feature line, state chip) and a detail
 // screen for the selected one. It renders from a plain spec and reports clicks; it knows nothing about
-// the game, so the outpost terminal (story.js outpostMenu, inside g.dialog) and later the job board's
-// second tab can both use it. Styles: .otm-* in style.css.
+// the game, so the outpost terminal (story.js outpostMenu, inside g.dialog), the town's council hall (hometown.js,
+// in g.dialog and as the job board's second tab) can all use it. Styles: .otm-* in style.css.
 //
 //   terminalPage(spec) -> html     wireTerminal(root, { onSelect, onAct })     stepSel(root, sel, code) -> id | null
 //
@@ -12,10 +12,14 @@
 //   tiles: [{ id, name, icon, tint, state: 'built' | 'open' | 'full' | 'locked', feature, chip: 'BUILT' | '₵600', chipTone: 'ok' | 'short', key: '' | 1..9 }],
 //   sel,                                    // id of the selected tile
 //   detail: { id, name, icon, tint, state, stateText, desc, rows: [[label, value, tone?]], meter?: { v: 0..1, text },
-//             action?: { id, label, key, tone: 'go' | 'build' }, note?: 'why there is no action', msg?: '', msgTone?: 'bad' | 'ok' },
+//             action?: { id, label, key, tone: 'go' | 'build' },   // one button, or
+//             actions?: [{ id, label, key, tone: 'go' | 'build' | 'vote' }, ...],   // several (the town's buildings can carry more than one)
+//             note?: 'why there is no action', msg?: '', msgTone?: 'bad' | 'ok' },
 //   closeKey, foot: { kb, pad },            // footer hint html (pad: shown while a controller is in use)
 //   bare: true,                             // no header / footer: for a tab inside another screen (the job board), which has its own
-//   (an action with no `action` shows detail.note instead; an action's `tone` may add ' short' for "can't afford")
+//   cols: 3,                                // tile columns (default 4; the narrow-screen rules in style.css still win)
+//   side: true,                             // wide screens: tiles on the left, the detail screen full height on the right
+//   (a detail with no button shows detail.note instead; a button's `tone` may add ' short' for "can't afford")
 // }
 // Clicks: a tile carries data-sel="<id>", an action data-act="<id>" ('close' for the header's close button).
 
@@ -106,6 +110,61 @@ export const ICONS = {
     '#oo#oooo#oo#',
     '############',
   ],
+  // the town's: housing domes, the road crew's lane, the landing pad seen from above, the bank's vault door, the council hall's columns
+  housing: [
+    '....####....',
+    '..##oooo##..',
+    '.#oo+oo+oo#.',
+    '.#oo+oo+oo#.',
+    '#oooooooooo#',
+    '#ooo+##+ooo#',
+    '#ooo+##+ooo#',
+    '############',
+  ],
+  roads: [
+    '.....##.....',
+    '....#oo#....',
+    '....#oo#....',
+    '...#o++o#...',
+    '...#oooo#...',
+    '..#oo++oo#..',
+    '..#oooooo#..',
+    '.#ooo++ooo#.',
+    '.#oooooooo#.',
+    '############',
+  ],
+  pad: [
+    '...######...',
+    '..#oooooo#..',
+    '.#oo+oo+oo#.',
+    '#ooo+oo+ooo#',
+    '#ooo++++ooo#',
+    '#ooo+oo+ooo#',
+    '.#oo+oo+oo#.',
+    '..#oooooo#..',
+    '...######...',
+  ],
+  bank: [
+    '..########..',
+    '.#++++++++#.',
+    '.#oooooooo#.',
+    '..########..',
+    '.##########.',
+    '#++++++++++#',
+    '#oooooooooo#',
+    '.##########.',
+  ],
+  council: [
+    '.....##.....',
+    '....#oo#....',
+    '..##oooo##..',
+    '.#oooooooo#.',
+    '############',
+    '.#+#+##+#+#.',
+    '.#+#+##+#+#.',
+    '.#+#+##+#+#.',
+    '############',
+  ],
 };
 
 const iconCache = new Map(), warned = new Set();
@@ -138,13 +197,14 @@ export function terminalPage(s) {
   const tile = (t) => `<button type="button" class="otm-tile ${t.state}${t.id === s.sel ? ' sel' : ''}" data-sel="${esc(t.id)}" style="--tint:${t.tint}" aria-pressed="${t.id === s.sel}">
       ${t.key ? `<span class="otm-key">${t.key}</span>` : ''}${icon(t.icon)}
       <span class="otm-name">${esc(t.name)}</span>
-      <span class="otm-feat">${esc(t.feature)}</span>
+      <span class="otm-feat">${esc(t.feature).replace(/₵\d+|\d*5\d*/g, '<b class="cr">$&</b>')}</span>
       <span class="otm-chip ${t.chipTone || ''}">${esc(t.chip)}</span>
     </button>`;
   const d = s.detail;
   let detail = '';
   if (d) {
-    const a = d.action;
+    const list = d.actions || (d.action ? [d.action] : []);
+    const btn = (a) => `<button type="button" class="otm-act ${a.tone || ''}" data-act="${esc(a.id)}">${a.key ? `<span class="otm-key">${a.key}</span>` : ''}<span>${esc(a.label)}</span></button>`;
     detail = `<section class="otm-detail ${d.state}" style="--tint:${d.tint}">
       <div class="otm-d-art">${icon(d.icon)}</div>
       <div class="otm-d-main">
@@ -152,7 +212,7 @@ export function terminalPage(s) {
         <p class="otm-d-desc">${esc(d.desc)}</p>
         <div class="otm-rows">${d.rows.map(([k, v, tone]) => { const cls = [tone, /[₵5]/.test(v) ? 'cr' : ''].filter(Boolean).join(' '); return `<div class="otm-row"><span>${esc(k)}</span><b${cls ? ` class="${cls}"` : ''}>${esc(v)}</b></div>`; }).join('')}</div>
         ${d.meter ? `<div class="otm-meter"><div class="otm-bar"><i style="width:${Math.round(Math.max(0, Math.min(1, d.meter.v)) * 100)}%"></i></div><span>${esc(d.meter.text)}</span></div>` : ''}
-        ${a ? `<button type="button" class="otm-act ${a.tone || ''}" data-act="${esc(a.id)}">${a.key ? `<span class="otm-key">${a.key}</span>` : ''}<span>${esc(a.label)}</span></button>` : (d.note ? `<div class="otm-note">${esc(d.note)}</div>` : '')}
+        ${list.length ? `<div class="otm-acts">${list.map(btn).join('')}</div>` : (d.note ? `<div class="otm-note">${esc(d.note)}</div>` : '')}
         <div class="otm-msg ${d.msg ? d.msgTone || '' : 'empty'}" role="status">${d.msg ? esc(d.msg) : ''}</div>
       </div>
     </section>`;
@@ -162,11 +222,11 @@ export function terminalPage(s) {
       <button type="button" class="otm-close" data-act="close">${s.closeKey ? `<span class="otm-key">${s.closeKey}</span>` : ''}ESC · CLOSE</button>
     </header>`;
   const foot = s.bare ? '' : `<footer class="otm-foot"><span class="foot-kb">&gt; ${s.foot.kb}</span><span class="foot-pad">&gt; ${s.foot.pad}</span><span class="otm-cursor">_</span></footer>`;
-  return `<div class="otm${s.bare ? ' bare' : ''}" style="--fc:${s.accent || 'var(--yellow)'}">
+  return `<div class="otm${s.bare ? ' bare' : ''}${s.side ? ' side' : ''}" style="--fc:${s.accent || 'var(--yellow)'}">
     ${head}
     <div class="otm-body">
       <div class="otm-stats">${s.stats.map((x) => `<div class="otm-stat"><label>${esc(x.k)}</label><b${x.tone ? ` class="${x.tone}"` : ''}>${esc(x.v)}</b></div>`).join('')}</div>
-      <div class="otm-grid" role="group" aria-label="Buildings">${s.tiles.map(tile).join('')}</div>
+      <div class="otm-grid" role="group" aria-label="Buildings"${s.cols ? ` style="--cols:${s.cols}"` : ''}>${s.tiles.map(tile).join('')}</div>
     </div>
     ${detail}
     ${foot}
@@ -199,11 +259,12 @@ export function wireTerminal(root, { onSelect, onAct }) {
 
 // A repaint replaces the page's DOM, which would snap the tile list back to the top: `const done = keepScroll(); g.dialog(...); done();`
 // puts the scroll back and brings the selected tile into view (small screens: the grid scrolls above the pinned detail screen).
-export function keepScroll() {
-  const b = document.querySelector('.otm-body');
+// host is the panel the page lives in ('#dialog', or '#board' for the job board's tab): the page there is the one meant.
+export function keepScroll(host = '#dialog') {
+  const b = document.querySelector(`${host} .otm-body`);
   const y = b ? b.scrollTop : 0;
   return () => {
-    const n = document.querySelector('.otm-body');
+    const n = document.querySelector(`${host} .otm-body`);
     if (!n) return;
     n.scrollTop = y;
     const t = n.querySelector('.otm-tile.sel');

@@ -80,7 +80,8 @@ export function buildPlace(ctx, spec) {
     const fake = Object.create(Race.prototype);
     Object.assign(fake, { game: { world: w }, loc, crowd: [], panel: null, state: 'idle', card: [], postT: 60, excite: 0, racers: [] });
     fake.build();
-    fake.drawScreen(); fake.drawBoard();
+    fake.plates = fake.plates || [];
+    fake.drawScreen(); fake.drawEnd(); fake.drawBoard(); fake.drawPlates();
     w.race = fake;
   }
   if (spec.after) spec.after(w, loc);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ink, gradientMap } from './toon.js';
 import { mulberry32, createNoise3D } from './rng.js';
+import { patchRockMaterial } from './moonSkins.js';
 
 // Shaped rocks scattered over the Moon between the ordinary lumpy boulders: each has a feature
 // you can play with, and colliders that follow its shape.
@@ -17,7 +18,7 @@ const KINDS = ['ramp', 'ramp', 'arch', 'hoodoo', 'snake', 'snake'];
 let MATS = null;
 function mats() {
   if (MATS) return MATS;
-  const m = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap: gradientMap() });
+  const m = (c) => patchRockMaterial(new THREE.MeshToonMaterial({ color: c, gradientMap: gradientMap() })); // (moonSkins.js: grain and dust when ?moonskin=1)
   MATS = { grey: m(0x8d8898), basalt: m(0x6e6a7a), tan: m(0xa59886), pale: m(0xb8b2c4), dark: m(0x5f5a6c) };
   return MATS;
 }

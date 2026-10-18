@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { AIPaths, EnemyMarkers } from './aipaths.js';
 import { TimeGraph, GpuTimer } from './perfgraph.js';
 import { InputMonitor } from './inputmon.js';
+import { unbendPoint } from './curve.js';
 
 // Dev overlay: one place for every on-screen dev readout. F3 shows or hides the lot while you play (on
 // any screen); Dev menu → Debug overlay picks which sections are in it. Which ones, and whether it's up,
@@ -27,11 +28,12 @@ export const SECTIONS = [
   { key: 'detail', name: 'STAGE DETAIL (player, systems)', box: null, sub: true }, // (rows under the stages: part of that section)
   { key: 'render', name: 'DRAW CALLS & POLYGONS', box: 'perf' },
   { key: 'world', name: 'WORLD COUNTS', box: 'perf' },
+  { key: 'where', name: 'WHERE (PLACE-LOCAL COORDINATES)', box: 'game' }, // the camera and the runner in the nearest place's own x, y, z (flat, as its builders write them)
   { key: 'pirates', name: 'PIRATE SPAWNS', box: 'game' },
   { key: 'paths', name: 'AI PATHS', box: null },
   { key: 'input', name: 'INPUT & CONTROLLER MONITOR', box: null },
 ];
-const DEFAULTS = { frame: true, load: false, stages: true, detail: true, render: true, world: true, pirates: false, paths: false, input: false };
+const DEFAULTS = { frame: true, load: false, stages: true, detail: true, render: true, world: true, where: true, pirates: false, paths: false, input: false };
 
 // The stages of a frame, in the order main.js reaches them (debug and overlay are this overlay's own cost).
 // A stage with a third entry is a group: its row is the sum of its parts, and the parts (each a lap() of its
@@ -190,6 +192,7 @@ export class DevOverlay {
     sec('stages', [['t', 'pre']]);
     sec('render', [['t', 'pre']]);
     sec('world', [['t', 'pre']]);
+    sec('where', [['t', 'pre']]);
     sec('pirates', [['t', 'pre']]);
     dom.none.textContent = 'No sections on. Dev menu → Debug overlay.';
     document.body.appendChild(root);
@@ -319,6 +322,7 @@ export class DevOverlay {
     if (this.sec.stages) this.publishStages(D.stages.t);
     if (this.sec.render) this.publishRender(D.render.t);
     if (this.sec.world) this.publishWorld(D.world.t);
+    if (this.sec.where) D.where.t.textContent = this.whereRows().join('\n');
     if (this.sec.pirates) D.pirates.t.innerHTML = this.pirateRows().join('\n');
     this.sum.fill(0); this.max.fill(0);
     this.winMs = 0; this.winN = 0; this.winFrames = 0;
@@ -389,6 +393,28 @@ export class DevOverlay {
       `colliders ${n0(G.colliders.count)}   enemies ${live(G.enemies.list)}   civilians ${live(G.civilians && G.civilians.list)}`,
       `traffic ${live(T && T.vehicles)} vehicles · ${live(T && T.walkers)} walkers   shots ${live(G.projectiles.list)}   particles ${live(G.fx.particles)}`,
     ].join('\n');
+  }
+
+  // Where the camera and the runner are, in the nearest place's local frame: x across, y up from its ground, z along (the numbers its builders use, so a spot in a
+  // screenshot can be named exactly; a curved place's bend is undone: curve.js), and the camera's heading (0 = +z, 90 = +x).
+  whereRows() {
+    const G = this.game, W = G.world;
+    const cam = G.camera.position;
+    let best = null, bd = 1e9;
+    for (const l of G.locations) {
+      if (!l.group) continue;
+      const d = l.pos.distanceTo(cam);
+      if (d < bd) { bd = d; best = l; }
+    }
+    if (!best || bd > best.r * 3) return ['(no place near)'];
+    const R = W.curveR(best), loc = best;
+    const flat = (v) => { const q = loc.group.worldToLocal(v.clone()); return R ? unbendPoint(R, q.x, q.y, q.z, q) : q; };
+    const f = (v) => `${v.x.toFixed(1)}, ${v.y.toFixed(1)}, ${v.z.toFixed(1)}`;
+    const c = flat(cam), p = flat(G.player.pos);
+    const a = flat(cam.clone().add(G.camera.getWorldDirection(new THREE.Vector3())));
+    const head = (Math.atan2(a.x - c.x, a.z - c.z) * 180) / Math.PI;
+    const pitch = (Math.asin(Math.max(-1, Math.min(1, a.y - c.y))) * 180) / Math.PI;
+    return [`${loc.name}${R ? ' (curved)' : ''}`, `camera  ${f(c)}   heading ${head.toFixed(0)}  pitch ${pitch.toFixed(0)}`, `runner  ${f(p)}`];
   }
 
   // pirates alive per pool, when the next patrol spawn is attempted, why the last one did or didn't happen

@@ -359,6 +359,7 @@ export class Spindle {
     this.ship.root.traverse((o) => { o.castShadow = false; });
     root.add(this.ship.root);
     const pod = makeShuttle({ color: 0xeeecf6, stripe: 0x2ec4ff });
+    pod.setSign('EXTRACT');
     pod.root.scale.setScalar(0.6);
     pod.setGear(1);
     this.pod = pod;

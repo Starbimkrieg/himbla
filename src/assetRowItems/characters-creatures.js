@@ -3,7 +3,7 @@ import { makeFollowerModel } from '../alchemy.js';
 import { makeDuck } from '../casinoWorld.js';
 import { span, cell, line } from './characters-util.js';
 
-// 03 · CREATURES: the chimera species and their mutation kits, hybrids, the Mega Mite, the wild mite, the Derby statue, the
+// 03 · CREATURES: the chimera species and their mutation kits, hybrids, the Mega Mite, the wild mite, the
 // racing ducks and the reactor pets.
 
 const SP_W = 4.4; // a chimera's cell along the row (m)
@@ -86,17 +86,6 @@ function miteItem() {
   };
 }
 
-// ---- the golden Derby statue in the Winner's Circle (race.js)
-function statueItem() {
-  return {
-    id: 'creatures.derby-statue', label: 'DERBY STATUE', w: 5, d: 7.5,
-    make() {
-      const m = makeChimera({ seed: 1, body: 'mite', legs: 'car', head: 'person', extraHead: 'alien', mods: ['turbo'], size: 2.4, tint: 0xffd23f });
-      return { root: m.root };
-    },
-  };
-}
-
 // ---- the four racing ducks (casinoWorld.js: the Duck Derby)
 function ducksItem() {
   const cols = [0xffd23f, 0xff2e88, 0x2ee6ff, 0x7dff6a];
@@ -106,7 +95,7 @@ function ducksItem() {
     make() {
       const ducks = [];
       const cells = cols.map((c, i) => {
-        const d = makeDuck(c, i === 0 ? 0xff5a1f : 0xff9f1c);
+        const d = makeDuck(c, i === 0 ? 0xff5a1f : 0xff9f1c, i + 1);
         d.root.rotation.y = -Math.PI / 2 + 0.5; // (they swim along +x; turned to show the face)
         ducks.push(d);
         return cell(d.root, 'DUCK ' + (i + 1), DW, 2.4, { h: 0.6, z: 1.4 });
@@ -136,5 +125,5 @@ function followersItem() {
 export default {
   id: 'characters.creatures',
   title: '03 · CREATURES',
-  items: [speciesItem(), modsItem(), hybridsItem(), megaMiteItem(), miteItem(), statueItem(), ducksItem(), followersItem()],
+  items: [speciesItem(), modsItem(), hybridsItem(), megaMiteItem(), miteItem(), ducksItem(), followersItem()],
 };

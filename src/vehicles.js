@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeRover, makeApc, makeSkimmer, makeLightBike, LightTrail } from './models.js';
+import { makeRover, makeInterceptor, makeApc, makeSkimmer, makeLightBike, LightTrail } from './models.js';
 import { fireCannon } from './weapons.js';
 import { makeBody } from './physics.js';
 import { stepRover, CRASH_SAFE } from './enemies.js';
@@ -13,6 +13,8 @@ export const VEHICLES = {
   apc: { hp: 480, name: 'Vostok BTR-M Moon APC', faction: 'vostok', max: 62, engine: 24, turn: 1.9, grip: 18, armor: 0.4, color: 0x6b6f78, trim: 0xff3b5c, scale: 1.35, hideRider: true, turret: true, desc: 'Slow tank of a thing. Shrugs off fire. The turret follows where you look and fires on left mouse.' },
   skimmer: { hp: 180, name: 'Daedalus Phase Skimmer', faction: 'daedalus', max: 100, engine: 34, turn: 2.2, grip: 4, armor: 0.85, color: 0x1a1426, trim: 0xc77dff, hover: true, desc: 'Hovers. Drifts. Terrifyingly fast.' },
   mule: { hp: 300, name: 'Kepler Homestead Mule', faction: 'kepler', max: 58, engine: 26, turn: 2.2, grip: 16, armor: 0.6, color: 0x6a8f3a, trim: 0xff9f1c, scale: 1.2, cargoSafe: true, desc: 'Hauler. Cargo rides in a padded bed and takes no jostle damage.' },
+  // (the Moon Council's Militia Pact puts it on sale at Kepler Civic Center: the APC's hull and cannon in militia paint, with the Mule's padded bed)
+  carrier: { hp: 380, name: 'Kepler Militia Carrier', faction: 'kepler', max: 66, engine: 28, turn: 2.1, grip: 18, armor: 0.5, color: 0x5c8a2e, trim: 0xff9f1c, scale: 1.15, hideRider: true, turret: true, apcHull: true, cargoSafe: true, cannon: 'Militia 30 mm Cannon', desc: 'The Mule\'s big brother: a padded cargo bay, field armour and a turret cannon that follows where you look.' },
   // (id stays 'van' so existing saves keep it: it's a light-bike now)
   van: { hp: 190, name: 'Meridian Courier Light-Bike', faction: 'meridian', max: 96, engine: 34, turn: 2.7, grip: 10, armor: 0.8, color: 0x2ec4ff, trim: 0xffd23f, bike: true, seat: 1.42, seatZ: -0.88, radius: 2.1, desc: 'A sleek light-bike that leaves a glowing trail. Fast, sharp, and very stylish.' },
   warrig: { hp: 340, name: 'Rustmoon Scrapjaw War-Rig', faction: 'rustmoon', max: 78, engine: 32, turn: 2.4, grip: 14, armor: 0.6, color: 0x7b2ff7, trim: 0x7dff3a, scale: 1.35, pirate: true, desc: 'Stolen, welded, painted green. Rams for damage.' },
@@ -34,12 +36,17 @@ const SUMMON_MAX_SPEED = 2; // m/s: the fastest the runner can be moving and sti
 export function buildVehicleModel(id) {
   const def = VEHICLES[id];
   let m;
+  if (id === 'interceptor') {
+    // its own pursuit-car model, with a seat back of its own
+    m = makeInterceptor({ color: def.color, trim: def.trim });
+    return m;
+  }
   if (id === 'skimmer') {
     // its own hover-racer model (it has a seat of its own, too)
     m = makeSkimmer({ color: def.color, trim: def.trim });
     return m;
   }
-  if (id === 'apc') {
+  if (id === 'apc' || def.apcHull) {
     m = makeApc({ color: def.color, trim: def.trim });
     m.root.scale.setScalar(def.scale);
     return m; // (no seat-back: the runner is buttoned up inside)
@@ -59,7 +66,8 @@ export function buildVehicleModel(id) {
     }
     if (def.scale) m.root.scale.setScalar(def.scale);
   }
-  // a seat-back so the runner looks like they're driving
+  // a seat-back so the runner looks like they're driving (the civil buggy has a bench of its own)
+  if (m.ownSeat) return m;
   const seat = new THREE.Mesh(new THREE.BoxGeometry(1, 1.2, 0.3), toon(0x221d33));
   ink(seat, 0.04);
   seat.position.set(0, 2.4, -0.6);
@@ -142,6 +150,7 @@ export class Garage {
     const g = this.game;
     const P = g.player;
     if (P.rag) return; // (limp in a ragdoll: nothing to call)
+    if (g.winch.on) return; // (on the Hitch-Line)
     if (P.vehicle) { this.exit(); return; }
     const owned = this.owned();
     if (!owned.length) { g.hud.toast('No vehicles yet. Faction leaders hand them out as you rise in their story.', 3); return; }
@@ -267,7 +276,7 @@ export class Garage {
     if (this.radialEl) this.radialEl.classList.add('hidden');
     if (!commit || !R || R.sel < 0) return;
     const k = R.items[R.sel];
-    if (g.rides.ride || g.player.dead || g.player.vehicle) return; // (a transit ride started, or you died or boarded something while it was up: nothing to call)
+    if (g.rides.ride || g.player.dead || g.player.vehicle || g.winch.on) return; // (a transit ride started, or you died or boarded something while it was up: nothing to call)
     if (this.cooldown(k) > 0) { g.hud.toast(`${VEHICLES[k].name} is being rebuilt: ready in ${Math.ceil(this.cooldown(k))}s.`, 2.5); return; }
     this.choice = k;
     if (this.active && this.active.id === k && this.active.e.body.pos.distanceTo(g.player.pos) < 12) { this.enter(); return; }
@@ -276,14 +285,15 @@ export class Garage {
     this.enter();
   }
 
-  summon(id) {
+  // at / face: set it down there with its nose along `face` (the town's motor pool) instead of beside you, facing where you look
+  summon(id, at = null, face = null) {
     const g = this.game;
     const P = g.player;
     if (this.active) { this.active.model.root.removeFromParent(); if (this.active.model.trail) this.active.model.trail.dispose(); }
     const def = VEHICLES[id];
     const model = this.build(id);
-    const pos = g.planet.ground(P.pos.clone().addScaledVector(g.cam.right, 5), new THREE.Vector3(), 0.5);
-    const e = { body: makeBody(pos), heading: tangent(g.cam.fwd.clone(), pos.clone().normalize()).normalize() };
+    const pos = g.planet.ground(at ? at.clone() : P.pos.clone().addScaledVector(g.cam.right, 5), new THREE.Vector3(), 0.5);
+    const e = { body: makeBody(pos), heading: tangent((face || g.cam.fwd).clone(), pos.clone().normalize()).normalize() };
     model.root.position.copy(pos).addScaledVector(pos.clone().normalize(), def.hover ? 0.35 : RIDE_LIFT);
     g.scene.add(model.root);
     this.active = { id, def, e, model };
