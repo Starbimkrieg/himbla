@@ -778,6 +778,7 @@ src/
   assets/idles.json  the runner's five idle animations (10 poses a second per pivot, keyed in Blender)
   assets/ships.glb   the shuttle-bus (with a route board that names its destination) and freighter, with folding gear, ramps and thruster flames
   assets/skimmer.glb the Daedalus Phase Skimmer (hover-racer with spinning phase coils)
+  assets/lightbike_a.glb, lightbike_b.glb  the Courier light-bike's two Blender redesigns, A Slipstream and B Parcel Runner (the dev menu's COURIER MODEL picks one; `classic` is the original, built in `models.js`)
   assets/warrig.glb  the Rustmoon pirate war-rig (patchwork mad-max rover with a spiked ram plow)
   assets/rover.glb   the shared rovers: the civil buggy (Mule, road traffic, hometown) and the military patrol car (base patrols, troops)
   assets/interceptor.glb the SPACECOM Lunar Interceptor, the player's pursuit car (open cockpit, rear wing, twin rocket bells)
@@ -845,7 +846,7 @@ tools/
                            build_downs_stable.py, build_downs_crowd.py   build Chimera Downs' kits -> src/assets/downs-*.glb (each runs `audit_coplanar` too)
   blender/build_blackjack.py  builds the blackjack table and chip -> src/assets/blackjack.glb (also runs headless; the build stops if anything stands in the places cards, chips and the felt's lettering go)
   blender/build_dish.py    builds the cryo receiver, the gantry station, the field dish and the light dish head -> src/assets/dish.glb (also runs headless)
-  blender/build_courier.py builds the two Courier light-bike redesign proposals -> docs/courier-proposals/courier_a.glb, courier_b.glb (headless: `MOONRUNNER_COURIER=a|b`); `blender/preview_courier.py` renders the review sheet
+  blender/build_courier.py builds the two Courier light-bike redesigns -> src/assets/lightbike_a.glb, lightbike_b.glb (and plain copies in docs/courier-proposals/; headless: `MOONRUNNER_COURIER=a|b`); `blender/preview_courier.py` renders the review sheet
   blender/build_winch.py   builds the winch's grapple and cable piece -> src/assets/winch.glb and renders the tow-line marker -> src/assets/towmark.png (also runs headless: `pip install bpy`, then `MOONRUNNER_REPO=. python3 tools/blender/build_winch.py`)
   blender/build_outposts.py builds the Relay Mast and Watchtower -> src/assets/outposts.glb (also runs headless; `npm run check:outposts` checks the file); the mast's dishes are the dish head of dishkit.py
   blender/dishkit.py       the dish geometry build_dish.py and build_outposts.py share (the reflector and its parts, the trunnion mount, the light dish head); exec'd by them after kit.py, builds nothing itself

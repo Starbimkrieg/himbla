@@ -1,7 +1,8 @@
 # Meridian Courier Light-Bike builder for Blender (4.2+ / 5.x): two redesign PROPOSALS.
 #
-# Builds one proposal from code and exports it as docs/courier-proposals/courier_<variant>.glb (the game still
-# uses the primitive-built makeLightBike in src/models.js until one of these is chosen). In Blender's Python
+# Builds one proposal from code and exports it twice: docs/courier-proposals/courier_<variant>.glb (plain, for any viewer)
+# and src/assets/lightbike_<variant>.glb (what the game loads: makeLightBike in src/models.js; run `npm run optimize:glb`
+# after, the same as for the other models). The dev menu's COURIER MODEL switch picks classic, A or B. In Blender's Python
 # console or via MCP:  VARIANT = "a"; exec(open(r"<repo>/tools/blender/build_courier.py").read())
 # or headless, with the bpy module:  MOONRUNNER_REPO=. MOONRUNNER_COURIER=a python3 tools/blender/build_courier.py
 # (tools/blender/preview_courier.py builds both and renders the review sheet.)
@@ -46,6 +47,7 @@ REPO = find_repo()
 V = (globals().get("VARIANT") or os.environ.get("MOONRUNNER_COURIER") or "a").lower()
 assert V in ("a", "b"), "variant must be a or b"
 OUT = os.path.join(REPO, "docs", "courier-proposals", f"courier_{V}.glb")
+GAME_OUT = os.path.join(REPO, "src", "assets", f"lightbike_{V}.glb")
 COLL = f"CourierBike{V.upper()}"
 print("Courier proposal", V, "->", OUT)
 
@@ -465,3 +467,4 @@ print("built", len(C.objects), "objects,", sum(len(m.loop_triangles) for m, _ in
 
 if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
     export(OUT, C.objects)
+    export(GAME_OUT, C.objects)

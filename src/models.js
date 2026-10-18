@@ -14,6 +14,8 @@ const GLB = {
   runner: () => import('./assets/runner.glb?inline'),
   ships: () => import('./assets/ships.glb?inline'),
   skimmer: () => import('./assets/skimmer.glb?inline'),
+  lightbike_a: () => import('./assets/lightbike_a.glb?inline'),
+  lightbike_b: () => import('./assets/lightbike_b.glb?inline'),
   warrig: () => import('./assets/warrig.glb?inline'),
   rover: () => import('./assets/rover.glb?inline'),
   interceptor: () => import('./assets/interceptor.glb?inline'),
@@ -1432,7 +1434,7 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, ...dn] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lba, lbb, ...dn] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike_a', 'lightbike_b', ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
   SHIP_PARTS = {};
   for (const name of ['shuttle', 'freighter']) {
     const root = gltf.scene.getObjectByName(name);
@@ -1457,6 +1459,12 @@ export async function loadShipParts({ ships } = {}) {
   const icp = ic.scene.getObjectByName('interceptor');
   if (!icp) throw new Error('interceptor.glb has no interceptor');
   SHIP_PARTS.interceptor = bakeShip(icp);
+  // the Courier light-bike's two Blender redesigns, A and B (tools/blender/build_courier.py)
+  for (const [v, g] of [['a', lba], ['b', lbb]]) {
+    const bike = g.scene.getObjectByName('courier');
+    if (!bike) throw new Error(`lightbike_${v}.glb has no courier`);
+    SHIP_PARTS['bike_' + v] = bakeShip(bike);
+  }
   // the Vostok BTR-M Moon APC (tools/blender/build_apc.py)
   const apc = ap.scene.getObjectByName('apc');
   if (!apc) throw new Error('apc.glb has no apc');
@@ -2717,13 +2725,81 @@ export function makeShuttle({ color = 0xfff4e0, stripe = 0x2ec4ff } = {}) {
   return makeShip('shuttle', { color, stripe });
 }
 
-// Meridian Courier Light-Bike: a sleek shell whose nose and tail ARE the curved fairings over its two
+// Which Courier light-bike gets built: 'a' (Slipstream) or 'b' (Parcel Runner), the Blender redesigns (docs/courier-proposals,
+// tools/blender/build_courier.py), or 'classic', the original built from primitives below. Kept across launches; the dev menu's
+// COURIER MODEL switches it (it applies to the next bike you call).
+export const BIKE_STYLES = ['b', 'a', 'classic'];
+const BIKE_KEY = 'mr-courier-model';
+let bikeStyle = 'b';
+try { const k = localStorage.getItem(BIKE_KEY); if (BIKE_STYLES.includes(k)) bikeStyle = k; } catch { /* unavailable */ }
+export const getBikeStyle = () => bikeStyle;
+export function setBikeStyle(k) {
+  bikeStyle = BIKE_STYLES.includes(k) ? k : 'b';
+  try { localStorage.setItem(BIKE_KEY, bikeStyle); } catch { /* unavailable */ }
+}
+
+// A Blender light-bike (build_courier.py): the shell, forks and fittings on a chassis, two wheels spun about x. Slots: the
+// livery glows `stripe` (the bike's colour) and `trim` (the gold), the fixed toons and glows below, and `bag` (the saddle bags: the
+// trim colour as a toon). The root carries the rider's solved pose (`pose_*`) and hip (`seat`), which the Garage and the player read.
+const BIKE_TOON = { navy: 0x0d1428, panel: 0x1a2440, dark: 0x2a2540, metal: 0x5b5870, seat: 0x2a2540, tire: 0x1d1a29 };
+const BIKE_GLOW = { glass: 0x9be7ff, lamp: 0xfff6a8, tail: 0xff2a4a };
+const BIKE_SCALE = 1.2; // (built 1:1, shown at 1.2x)
+function makeBlenderBike(B, { color, trim }) {
+  const root = new THREE.Group();
+  root.scale.setScalar(BIKE_SCALE);
+  const matFor = (slot) => {
+    if (slot === 'stripe') return glow(color);
+    if (slot === 'trim') return glow(trim);
+    if (slot === 'bag') return toon(trim);
+    if (BIKE_GLOW[slot] !== undefined) return glow(BIKE_GLOW[slot]);
+    return toon(BIKE_TOON[slot] ?? 0xff00ff);
+  };
+  const lit = (slot) => slot === 'stripe' || slot === 'trim' || BIKE_GLOW[slot] !== undefined;
+  const dress = (node, g) => {
+    for (const { slot, geo } of node.parts) {
+      const m = new THREE.Mesh(geo, matFor(slot));
+      m.castShadow = !lit(slot);
+      g.add(m);
+    }
+    if (node.ink) {
+      const h = new THREE.Mesh(node.ink, inkMat);
+      h.castShadow = false;
+      h.userData.isInk = true;
+      g.add(h);
+    }
+  };
+  const chassis = new THREE.Group();
+  dress(B.kids.find((k) => k.role === 'chassis'), chassis);
+  root.add(chassis);
+  // the wheels hang off the root, as the classic bike's do, so the chassis can move without them
+  const wheels = [];
+  for (const k of B.kids.find((n) => n.role === 'chassis').kids.filter((n) => n.role === 'wheel')) {
+    const w = new THREE.Group();
+    w.position.copy(k.pos);
+    dress(k, w);
+    root.add(w);
+    wheels.push(w);
+  }
+  const d = B.data;
+  const P = (k) => d['pose_' + k];
+  return {
+    root, chassis, wheels, gun: new THREE.Group(),
+    trailFrom: B.kids.find((k) => k.role === 'trail').pos.clone(), trailColor: color, wheelR: 0.78 * BIKE_SCALE,
+    // where the rider's hip sits (the bike's frame, scaled) and the pose that puts their hands on the grips and keeps their legs out of the shell
+    seat: new THREE.Vector3(d.seat[0], d.seat[1], d.seat[2]).multiplyScalar(BIKE_SCALE),
+    pose: { lean: P('lean'), thigh: P('thigh'), spread: P('spread'), armX: P('arm_x'), armZ: P('arm_z'), elbow: P('elbow') },
+  };
+}
+
+// Meridian Courier Light-Bike (the classic one, built here from primitives: see makeBlenderBike above for the Blender redesigns): a sleek shell whose nose and tail ARE the curved fairings over its two
 // hubless wheels (the wells sweep round the top of each wheel, down to the axle), with a hump for the
 // rider between them. The flanks carry raised side panels, vents, glowing arcs tracing each well and a
 // seam down the length; a tinted canopy, a seat, clip-ons and pegs. Built 1:1, shown at 1.2x. Forward
 // is +z. Returns { root, chassis, wheels, gun, trailFrom, trailColor } (trailFrom: where the light trail
 // streams from, in the bike's own frame).
-export function makeLightBike({ color = 0x2ec4ff, trim = 0xffd23f } = {}) {
+export function makeLightBike({ color = 0x2ec4ff, trim = 0xffd23f, style = bikeStyle } = {}) {
+  const B = style !== 'classic' && SHIP_PARTS && SHIP_PARTS['bike_' + style];
+  if (B) return makeBlenderBike(B, { color, trim });
   const root = new THREE.Group();
   root.scale.setScalar(1.2);
   const chassis = new THREE.Group();

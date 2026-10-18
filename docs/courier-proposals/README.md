@@ -3,8 +3,11 @@
 ![The two proposals: side, front and rear views, with the new trail](courier_proposals.jpg)
 
 Both are built from code in Blender by `tools/blender/build_courier.py` (`VARIANT = "a"` or `"b"`) and exported here as
-`courier_a.glb` / `courier_b.glb`. **The game still uses the primitive-built `makeLightBike` in `src/models.js`**; nothing
-below is wired in until one is chosen. `tools/blender/preview_courier.py` rebuilds both and re-renders this sheet
+`courier_a.glb` / `courier_b.glb` (plain, for any viewer). **Both are in the game now:** the builder also writes the
+compressed `src/assets/lightbike_a.glb` / `lightbike_b.glb`, `makeLightBike` in `src/models.js` builds whichever is selected
+(**B by default**), and the original primitive-built bike is still there as `classic`. Switch with the dev menu (F8) item
+**9 · COURIER MODEL** (B, A, CLASSIC; remembered across launches; it applies to the next bike you call with V). The Asset Row
+shows all three side by side. `tools/blender/preview_courier.py` rebuilds both and re-renders this sheet
 (Cycles on the CPU, `pip install bpy pillow`; the runner is the game's own `runner.glb`, posed as a stand-in).
 
 ## What changed from the current bike (both)
@@ -51,12 +54,15 @@ clears), arm swing -1.179 with 0.128 out, elbow -0.704. `preview_courier.py` che
 3 mm of the grips and no leg vertex is more than 4 mm inside the shell or bags. The game's `player.js` sets only torso, thigh
 swing and arm swing, so using this needs leg spread and elbow added there. Suggested `seat: 1.40, seatZ: -0.66`.
 
-## If one is picked: wiring it in
+## How the game uses them
 
-Same pattern as the skimmer and APC: build to `src/assets/lightbike.glb`, run `npm run optimize:glb` on it, load it in
-`src/models.js`, and have `makeLightBike` return `{ root, chassis, wheels, gun, trailFrom, trailColor }` as now. Then update
-the Asset Row's light-bike item (`src/assetRowItems/vehicles.js`), as `.claude/skills/blender/SKILL.md` asks of any model change.
-The GLB already carries what the game reads:
+`makeLightBike({ style })` picks `'a'`, `'b'` or `'classic'` (default: the dev-menu setting, else B). `makeBlenderBike` in
+`src/models.js` dresses the baked GLB with the game's toon and glow materials and returns the same `{ root, chassis, wheels, gun,
+trailFrom, trailColor }` as the classic bike, plus `wheelR`, `seat` (the rider's hip, scaled) and `pose`. The Garage seats the
+rider from `model.seat` and `player.js` poses them from `model.pose` (torso lean, thigh swing, leg spread, arm swing and out,
+elbow), so each bike's rider fits it; the classic bike has neither and keeps the old numbers and seat. After a rebuild, run
+`npm run optimize:glb` (the builder writes plain files). To retire a proposal, remove its entries from the `GLB` map and
+`loadShipParts` in `src/models.js`, and from `BIKE_STYLES`. The GLB carries what the game reads:
 
 - **Pivots** (empties with a `role`): `chassis`; two `wheel`, spun about x; `trail`, the empty the light trail streams from
   (it replaces `trailFrom`). The rider's hip is in the root's `seat` extra, in the bike's own frame.
