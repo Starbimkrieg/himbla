@@ -58,12 +58,16 @@ export const PODIUMS = { z: 18.5, xs: [-30, 0, 30], steps: { 1: [0, 1.4], 2: [-6
 // ---- the arcades: a covered market hall round each turn (docs/downs-layouts.md). Each is a run of 6.3 degree wedges between radius 84 and 100 round the turn's centre (the west
 // one's is (-90, 0), the east one's (90, 0), its mirror), with a gate hall in the middle (at 180 degrees on the west one). Angles are in degrees, measured from the turn's centre
 // (x = cx + r cos a, z = r sin a), the west arcade's way round: from the main stand's end (108) through the gate (180) to the far stand's (264.6) ----
-export const ARCADE = { cx: 90, ri: 84, ro: 100, step: 6.3, runs: [{ a0: 108, n: 10 }, { a0: 189, n: 12 }], gate: 180, walk: [112, 262] };
+// Each run's `stalls` are the bays (0 from the run's first edge) that hold a stall, five a run, spread with the same open space round each: a stall in every second bay, a bay between
+// stalls, and the run's spare room at its ends. The gate hall's block reaches into the bay beside it (171 to 169 degrees at the walk, about 170.6 at the stall's depth, and their mirror
+// past 189), so that bay is never a stall's: the main stand's run takes 0 to 8 (the joiner's few metres past bay 0, the open bay 9 at the gate), the far stand's 2 to 10 (bays 0 and 1
+// at the gate, bay 11 and the joiner at the stand).
+export const ARCADE = { cx: 90, ri: 84, ro: 100, step: 6.3, runs: [{ a0: 108, n: 10, stalls: [0, 2, 4, 6, 8] }, { a0: 189, n: 12, stalls: [2, 4, 6, 8, 10] }], gate: 180, walk: [112, 262] };
 export const WEDGE = (() => {
   const a2 = (ARCADE.step / 2) * Math.PI / 180, s = Math.sin(a2), c = Math.cos(a2);
   return { a2, wi: ARCADE.ri * s, wo: ARCADE.ro * s, d: (ARCADE.ro - ARCADE.ri) * c, r0: ARCADE.ri * c };
 })();
-// a stall stands in every second bay of a run (the others hold a bench and two planters): five on each run, ten on each arcade
+// a stall stands in the bays of ARCADE.runs[].stalls (the others hold a bench and two planters): five on each run, ten on each arcade
 export const STALLS = [
   { d: 0, name: 'MOON DOGS', accent: 0x8b4044 }, { d: 1, name: 'CRATER FRIES', accent: 0xcfb352 }, { d: 2, name: 'HE-3 FIZZ', accent: 0x7b9a6e },
   { d: 3, name: 'CHIMERA CHOW', accent: 0xb07c57 }, { d: 4, name: 'ROCK CANDY', accent: 0x8b4044 }, { d: 5, name: 'TOTE · BETS', accent: 0x3b393a },

@@ -74,11 +74,11 @@ the Downs place.
 | Rails and posts | white posts, a thin rail | Mint posts, a Black top rail, Gold caps, lamps on every fourth post, furlong boards | `build_downs_course.py` |
 | Starting gate | a plain frame | a six-stall gate with Barn Red padded doors, number plates, Black frame | `build_downs_gate.py` |
 | Finish gantry and photo-finish tower | a green beam, a small booth | a Gold arch over the track with a camera bar, a tower with a glazed box on the apron | `build_downs_course.py` |
-| Concession stalls | six kiosks | twelve designs (the six, plus Space Slush, Lunar Coffee, Derby Donuts, Jockey's Grill, a foam-finger shop and a tote kiosk) on one kit, the Alcove, built into an arcade bay: a Mint screen wall with an arched opening and a Black name plate, a Saddle Brown counter trimmed in the stall's colour, two swags of pennants across the arch, props at the counter's ends so the vendor shows | `build_downs_stalls.py` |
+| Concession stalls | six kiosks | twelve designs (the six, plus Space Slush, Lunar Coffee, Derby Donuts, Jockey's Grill, a foam-finger shop and a tote kiosk) on one kit, the Alcove, built into an arcade bay: on a Mint2 plinth, a one-piece Mint shell with the arch cut out and a gold cornice raked 0.6 m under the arcade's ceiling, a Black name plate and a lit roundel on each spandrel, a Saddle Brown counter trimmed in the stall's colour, two swags of pennants across the arch, props at the counter's ends so the vendor shows | `build_downs_stalls.py` |
 | Race office | a box with an awning | the **tote hall**: a hall with a clerestory, six betting windows, the race card board on its front | `build_downs_tote.py` |
 | Gates and arches | one arch, west | a grand gate with two pylons and a clock; lesser gates in the same style | `build_downs_gate.py` |
 | Stables, parade ring, saddling pavilion | none | a Barn Red stable yard (twelve boxes), an oval parade ring with a rail and viewing step, a small pavilion | `build_downs_stable.py` |
-| Lamps, floodmasts, bunting | stock lamps, four masts | the casino pass's lamp, eight masts on the roofs, pennants in the palette | `build_downs_course.py` |
+| Lamps, floodmasts, bunting | stock lamps, four masts | the casino pass's lamp, pennants in the palette (the flood masts were removed in the general pass) | `build_downs_course.py` |
 | Ferris wheel and carousel (from the old funpark) | built from boxes in `settlements.js`, funfair colours | rebuilt in Blender, recoloured to the palette; the wheel's gondolas and the carousel's rotor stay animated pivots, and both stay rideable (`rides.js`) | `build_downs_fair.py` |
 | **Removed** | the golden chimera statue, its plinth ("THE FIRST CHIMERA") and the winner's circle dais, the concourse stalls, the picnic tables, the festoon lights | | |
 
@@ -122,7 +122,7 @@ infield lawn.
 | Arcades | two bands 16 m wide, r 84 to 100 round each turn's centre, 165° each | A walk under a roof on the inside (8 m), stalls on the outside; they run into the stand ends. |
 | Concessions | 20 stalls, 9 m wide on a 21 m pitch (a bench or planter in each gap) | Ten a side, five either side of the gate hall. |
 | Screen drum | core 10 × 10, drum 40 × 14 on top, faces 40 × 20 (long) and 14 × 20 (ends), underside at 18 m | The long faces look at the stands, the short ones down the arcades and out of the gates. |
-| Podium row | three sets 18 × 5 at x = -30, 0, 30 | One for each race on the card; the set for a race lights when it finishes. |
+| Podium row | three sets 19.2 × 5.15 at x = -30, 0, 30 | One for each race on the card; the set for a race lights when it finishes. |
 | Tote hall | 60 × 27 with the clubhouse, behind the main stand | The window and the card board face the forecourt. |
 | Forecourt | 140 × 46, a gate arch on its south side | Flag court with the palette's flags, valet bays, the main arrival. |
 | Stables | 140 × 26 behind the far stand | A walk to the parade ring; the whole back is quiet. |
@@ -170,18 +170,18 @@ outer rail, and no two things from different builders are closer than 2.4 m.
 
 The build follows the plan above, with these differences and additions:
 
-- **Stands.** The main stand is 14 tiers and 228 m with a row of lit suites over the top tier and 11 roof bays between two end towers in its front corners; the far stand is 8 tiers and
-  190 m (not 184) with its own lower roof and towers. Seats are Blender strips (`dn_seat3`); the crowd is 1,060 seated figures (`downs-crowd`).
+- **Stands.** The main stand is 14 tiers and 228 m with a row of lit suites over the top tier and one roof from end wall to end wall, through the end towers in its front corners; the far
+  stand is 8 tiers and 190 m (not 184) with its own lower roof and towers (18 m, so they rise through it). Seats are Blender strips (`dn_seat3`); the crowd is 1,060 seated figures (`downs-crowd`).
 - **Clubhouse and tote hall** are one building behind the main stand's centre: the six betting windows are under its portico (three each side of the great door), the race card board
   hangs in the recess over them, and the prompt (`F`) works at those windows.
 - **Stables.** Four blocks of six boxes (24) round a lane, with the hay barn between the back two, not twelve boxes.
 - **Weighing room.** 13.2 m deep with its porch, 18 m long (the plan had 10 × 18), on the ring's east side.
-- **Crossings.** The rails leave an 8 m gap at x = +-70 on both straights with a raised-boom barrier post at each end of each gap. The booms do not drop: nobody is on the track while a race runs.
+- **Crossings.** The rails leave an 8 m gap at x = +-70 on both straights with a raised-boom barrier post at each of the gap's four corners, where the rails' runs end; the road is one deck as wide as the gap, with gold edge lines and seven evenly spaced bars. The booms do not drop: nobody is on the track while a race runs.
 - **Forecourt.** Gate arch, fountain (24 m across), nine flag masts a side with festoons across the avenue at every other pair, lamps, benches and planters, and twelve valet bays (no cars parked in them).
 - **Drum.** A 41 × 15 m shell on a 10 × 10 m core; the long faces (40 × 20 m) look at the stands, the ends (14 × 20 m) down the arcades. Each podium set has a plate on its backdrop: its slot of the
   race card, or, after a race from that slot has finished, the first three home.
-- **Annex.** The ticket hall, two stalls, queue posts, a striped fence with a gate on its west side, and the two rides (rebuilt in Blender; `src/downsFair.js`).
-- **Models.** Nothing of the old derby survives unreworked: the starting gate, rails, finish arch, lamps, flood masts, festoons, flags, stalls and spectators are all new Blender models. The golden
+- **Annex.** The ticket hall, two free-standing kiosks (`dn_kiosk`), queue posts, a striped fence with a gate on its west side, and the two rides (rebuilt in Blender; `src/downsFair.js`).
+- **Models.** Nothing of the old derby survives unreworked: the starting gate, rails, finish arch, lamps, festoons, flags, stalls and spectators are all new Blender models (the flood masts were built too, then removed). The golden
   statue, its plinth and the winner's circle were removed.
 - **Not built:** Layout A's bridges and Midway.
 - **Curved ground.** The plateau is a cap of the Moon's sphere (`curved: true` in `locations.js`), not a flat plane: on a plane the far arcades, 250 m out, stood about 9 m above the Moon's curve and

@@ -22,7 +22,6 @@ const fountainPart = (list) => { const f = makeDownsFountain(); list.push(f); re
 const item = (id, label, w, d, make, extra = {}) => ({ id, label, w, d, make: () => make(), ...extra });
 const row = (parts, gap = 3) => { const L = lineUp(parts, gap); return { root: L.root }; };
 
-const tintFor = (c) => ({ mint: c });
 
 const downs = {
   id: 'downs',
@@ -35,7 +34,7 @@ const downs = {
       P('dn_roof_bay', 19.6, { d: 44, dz: -17.5 }), P('dn_roof_bay_s', 19.6, { d: 27, dz: -10 }),
     ], 2)),
     item('downs.club', 'DOWNS CLUBHOUSE AND TOTE HALL', 62, 30, () => row([P('dn_club', 62, { d: 28, dz: 13.5 })])),
-    item('downs.course', 'DOWNS COURSE KIT: RAIL · FURLONG POLE · FINISH ARCH · PHOTO TOWER · LAMP · FLOOD MAST · FLAG MAST · CROSSING POST · STARTING GATE', 108, 10, () => {
+    item('downs.course', 'DOWNS COURSE KIT: RAIL · FURLONG POLE · FINISH ARCH · PHOTO TOWER · LAMP · FLAG MAST · CROSSING POST · STARTING GATE', 79, 10, () => {
       const gate = P('dn_gate_frame', 17, { d: 4, dz: 1.4 });
       for (let i = 0; i < 4; i++) for (const s of [-1, 1]) {            // (the stall doors, hinged as race.js hangs them)
         const hinge = new THREE.Group();
@@ -47,7 +46,7 @@ const downs = {
       }
       return row([
         P('dn_rail', 5, { d: 1 }), P('dn_furlong', 2.5, { d: 1 }), P('dn_finish_arch', 26, { d: 3 }), P('dn_photo_tower', 6, { d: 7 }), P('dn_lamp', 2.5, { d: 1 }),
-        P('dn_flood', 4, { d: 1 }), P('dn_mast', 4, { d: 1 }), P('dn_crossing', 2, { d: 1 }), gate,
+        P('dn_mast', 4, { d: 1 }), P('dn_crossing', 2, { d: 1 }), gate,
       ], 2);
     }),
     item('downs.stalls', 'DOWNS CONCESSION STALLS ×12, EACH IN AN ARCADE BAY: MOON DOGS · CRATER FRIES · HE-3 FIZZ · CHIMERA CHOW · ROCK CANDY · TOTE · SPACE SLUSH · LUNAR COFFEE · DERBY DONUTS · JOCKEY\'S GRILL · FOAM FINGERS · RAIL BAR', 140, 18, () => {
@@ -62,30 +61,40 @@ const downs = {
     item('downs.arcade', 'DOWNS ARCADE BAY · GATE HALL · FORECOURT GATE · FOUNTAIN · VALET BAY · BENCH · PLANTER · FESTOON', 154, 27, () => {
       const fs = [];
       const L = row([
-        bayPart(), P('dn_gate_hall', 32, { d: 22 }), P('dn_gate_main', 30, { d: 4 }), fountainPart(fs),
-        P('dn_bay', 3, { d: 6, dz: -2.8 }), P('dn_bench', 2.4, { d: 1 }), P('dn_planter', 2.6, { d: 1 }), P('dn_festoon', 30, { d: 1, y: 10 }),
+        bayPart(), P('dn_gate_hall', 34, { d: 24 }), P('dn_gate_main', 30, { d: 4 }), fountainPart(fs),
+        P('dn_bay', 3, { d: 6, dz: -2.8 }), P('dn_bench', 3.4, { d: 1 }), P('dn_planter', 2.6, { d: 1 }), P('dn_festoon', 30, { d: 1, y: 10 }),
       ], 2);
       return { root: L.root, update: (dt, t) => { for (const f of fs) f.update(t, dt); } };
     }),
-    item('downs.screen', 'DOWNS SCREEN DRUM AND WINNERS\' PODIUM', 63, 20, () => row([P('dn_drum', 42, { d: 16 }), P('dn_podium', 19, { d: 5 })], 2)),
+    item('downs.screen', 'DOWNS SCREEN DRUM AND WINNERS\' PODIUM', 64, 20, () => row([P('dn_drum', 42, { d: 16 }), P('dn_podium', 19.3, { d: 5.15 })], 2)),
     item('downs.stable', 'DOWNS STABLE BLOCK · HAY BARN · WEIGHING ROOM · RING GATE · HAY · PICNIC TABLE', 112, 16, () => row([
       P('dn_stable_block', 31, { d: 12, dz: 3 }), P('dn_hay_barn', 25, { d: 14, dz: 7 }), P('dn_pavilion', 19, { d: 13, dz: 3.4 }), P('dn_ring_gate', 4, { d: 1 }),
       P('dn_hay', 1.4, { d: 1 }), P('dn_picnic', 3.8, { d: 3, tint: { accent: 0x8b4044 } }),
     ], 2)),
-    item('downs.fair', 'DOWNS FAIR KIT: GONDOLA · HORSE · TICKET HALL · FAIR GATE · STANCHION · FENCE', 52, 10, () => row([
-      P('dn_gondola', 3, { d: 3, y: 3.6 }), P('dn_horse', 3, { d: 1, y: 1 }), P('dn_ticket_hall', 23, { d: 8, dz: 4 }), P('dn_fair_gate', 12, { d: 2 }), P('dn_stanchion', 3.2, { d: 1 }),
+    item('downs.fair', 'DOWNS FAIR KIT: GONDOLA · HORSE · TICKET HALL · FAIR GATE · KIOSK · STANCHION · FENCE', 60, 10, () => row([
+      P('dn_gondola', 3, { d: 3, y: 3.6 }), P('dn_horse', 3, { d: 1, y: 1 }), P('dn_ticket_hall', 23, { d: 8, dz: 4 }), P('dn_fair_gate', 12, { d: 2 }), P('dn_kiosk', 5.4, { d: 4.6, dz: 1.7, tint: { accent: 0x7b9a6e } }), P('dn_stanchion', 3.2, { d: 1 }),
       P('dn_fence', 4, { d: 1 }),
     ], 2)),
-    item('downs.crowd', 'DOWNS SPECTATORS: SEATED FANS (BODY · HEAD · CAP · HAIR) AND ONE WAVING', 14, 3, () => {
-      const fan = (jacket, skin, cap, wave, hat) => {
+    item('downs.crowd', 'DOWNS SPECTATORS: SUIT · FROCK · SIX HATS · FOUR HAIRDOS · PROGRAMME · BINOCULARS · ROSETTE · SCARF · TWO CHEERS', 19, 3, () => {
+      // a seated racegoer as the stands draw one (race.js buildCrowd), each part tinted from the fan's own colours: legs, a body, the arms (at rest or cheering), a head and a
+      // hairdo, and a hat and a favour for some; the body 0.8 m up (the seat's height plus half a metre), the head 0.66 above it
+      const fan = ({ body, arms, hair, hat, favour }, tint) => {
         const g = new THREE.Group();
-        const body = makeDownsPart('dn_fan_body', tintFor(jacket)); body.position.y = 0.8; g.add(body);
-        const head = makeDownsPart('dn_fan_head', tintFor(skin)); head.position.y = 0.8 + 0.66; g.add(head);
-        const top = makeDownsPart(hat ? 'dn_fan_cap' : 'dn_fan_hair', tintFor(cap)); top.position.y = 0.8 + 0.66; g.add(top);
-        if (wave) { const arms = makeDownsPart('dn_fan_arms', tintFor(jacket)); arms.position.y = 0.8; g.add(arms); }
-        return { root: g, w: 1.6, d: 2 };
+        for (const n of ['dn_fan_legs', body, arms, favour]) if (n) { const o = makeDownsPart(n, tint); o.position.y = 0.8; g.add(o); }
+        for (const n of ['dn_fan_head', hair, hat]) if (n) { const o = makeDownsPart(n, tint); o.position.y = 0.8 + 0.66; g.add(o); }
+        return { root: g, w: 1.8, d: 2 };
       };
-      return row([fan(0x8b4044, 0xf1c9a5, 0x3b393a, false, true), fan(0x7b9a6e, 0xa8714f, 0x2a1d18, false, false), fan(0xcfb352, 0xe9b98f, 0xdfe8dd, true, true), fan(0x3b393a, 0x6e4632, 0x5a3a22, true, false)], 1);
+      const T = (coat, shirt, legs, skin, hair, hat, band) => ({ coat, shirt, legs, skin, hair, hat, band });
+      return row([
+        fan({ body: 'dn_fan_body', arms: 'dn_fan_lap', hair: 'dn_fan_hair', hat: 'dn_fan_derby', favour: 'dn_fan_rosette' }, T(0x3b393a, 0xf8fff8, 0x3b393a, 0xf1c9a5, 0x2a1d18, 0x3b393a, 0x8b4044)),
+        fan({ body: 'dn_fan_body2', arms: 'dn_fan_prog', hair: 'dn_fan_hair_bun', hat: 'dn_fan_sunhat' }, T(0x7b9a6e, 0xf8fff8, 0x7b9a6e, 0xa8714f, 0x1d1a29, 0xf8fff8, 0xcfb352)),
+        fan({ body: 'dn_fan_body', arms: 'dn_fan_bino', hair: 'dn_fan_hair_thin', hat: 'dn_fan_tophat' }, T(0x2f4f7a, 0xdfe8dd, 0x5a5760, 0xe9b98f, 0x8a8698, 0x3b393a, 0xcfb352)),
+        fan({ body: 'dn_fan_body2', arms: 'dn_fan_lap', hair: 'dn_fan_hair_long', hat: 'dn_fan_fascinator', favour: 'dn_fan_scarf' }, T(0x8b4044, 0xf8fff8, 0x8b4044, 0xd8a47f, 0x9a6a3a, 0xcfb352, 0xf8fff8)),
+        fan({ body: 'dn_fan_body', arms: 'dn_fan_arms', hair: 'dn_fan_hair', hat: 'dn_fan_cap' }, T(0xb07c57, 0xf8fff8, 0x8c5f3f, 0x6e4632, 0x1d1a29, 0x5b7a52, 0x6a2e33)),
+        fan({ body: 'dn_fan_body', arms: 'dn_fan_arm1', hair: 'dn_fan_hair_bun', hat: 'dn_fan_boater', favour: 'dn_fan_scarf' }, T(0xdfe8dd, 0xcfb352, 0x2f4f7a, 0xf1c9a5, 0xd8b56a, 0xcfb352, 0x8b4044)),
+        fan({ body: 'dn_fan_body2', arms: 'dn_fan_arms', hair: 'dn_fan_hair_long', favour: 'dn_fan_rosette' }, T(0xcfb352, 0xf8fff8, 0xcfb352, 0xe9b98f, 0x5a3a22, 0x3b393a, 0x8b4044)),
+        fan({ body: 'dn_fan_body', arms: 'dn_fan_lap', hair: 'dn_fan_hair_thin' }, T(0x5b7a52, 0xf8fff8, 0x3b393a, 0xd8a47f, 0x8a8698, 0x3b393a, 0x8b4044)),
+      ], 0.4);
     }),
   ],
 };

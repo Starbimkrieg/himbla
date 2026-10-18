@@ -28,9 +28,9 @@ export function bake(k, name, x = 0, y = 0, z = 0, { ry = 0, sx = 1, sy = 1, sz 
 
 // The forecourt's fountain (dn_fountain, tools/blender/build_downs_arcade.py) at (x, z) of the kit's frame: the basin, pedestal, bowl and stem are baked in; the derby cup on top turns, and the two tiers'
 // ripples, the curtain over the bowl's lip and the jets run on the shaders the casino's fountain uses (fountainFx.js). Colliders for the basin, the pedestal and the stem.
-export function fountain(k, x, z) {
+export function fountain(k, x, z, y = 0) {
   const F = downsNode('dn_fountain'), I = new THREE.Matrix4();
-  k.at(x, z);
+  k.at(x, z, 0, y);                                                               // (y: what it stands on, the forecourt's avenue)
   bake(k, 'dn_fountain');
   for (const n of F.kids) {
     if (n.role === 'spin') {
@@ -40,9 +40,9 @@ export function fountain(k, x, z) {
     } else k.dyn(waterMesh(n), n.pos.x, n.pos.y, n.pos.z);
   }
   k.at();
-  k.column(9.8, 1.05, x, z);
-  k.column(2.7, 4.7, x, z);
-  k.column(1.7, 9.2, x, z, 4.7);
+  k.column(9.8, 1.05 + y, x, z, y);
+  k.column(2.7, 4.7 + y, x, z, y);
+  k.column(1.7, 9.2 + y, x, z, 4.7 + y);
 }
 
 // ---- the arcades' continuous parts ----
@@ -148,42 +148,55 @@ export function arcadeShell(sink, { mir = 1, cx = ARCADE.cx, edges, stand = null
     };
     const xPlane = (x) => [[mir * x, 0], [1, 0]];
     const back = chord(Pz(te, D), polar(ARCADE.ro, onWall(ARCADE.ro))), front = chord(Pz(te, 0), polar(ARCADE.ri, onWall(ARCADE.ri)));
-    const inWall = xPlane(wallU + 0.4), outFace = xPlane(wallU + 0.82);
+    const outFace = xPlane(wallU + 0.82);
     const K1 = at(back, 0, outFace), Jin = at(back, -0.7, xPlane(wallU));
-    J = { te, tm: te + (atStart ? 1 : -1) * ARCADE.step / 2, south, rearZ, wallU, back, front, at, inWall, outFace, diag: [K1, [-(Jin[1] - K1[1]), Jin[0] - K1[0]]] };
+    J = { te, tm: te + (atStart ? 1 : -1) * ARCADE.step / 2, south, rearZ, wallU, back, front, at, xPlane, outFace, diag: [K1, [-(Jin[1] - K1[1]), Jin[0] - K1[0]]] };
   }
-  const band = (zA, zB, y0, y1, color, ink, side, end = 'inWall') => {
+  // Every piece ends buried: in the gate hall's block at the run's open end (its last radial edge is inside the block), in the stand's end wall at the other. They end on planes of their
+  // own, `ov` metres apart (into the block, along the edge's tangent; into the wall, from its middle, wallU + 0.4), so no two pieces' end faces lie on one plane (they would z-fight).
+  const gi = !stand ? -1 : stand.atStart ? edges.length - 1 : 0, gs = gi < 0 ? 0 : Math.sign(edges[gi] - edges[gi ? gi - 1 : 1]);
+  const Pe = (i, z, ov) => {                                                                      // the point at local z on edge i, the gate end's moved ov out of the run
+    const p = Pz(edges[i], z);
+    if (i !== gi || !ov) return p;
+    const t = edges[i] * R, d = gs * ov;
+    return [p[0] - mir * Math.sin(t) * d, p[1] + Math.cos(t) * d];
+  };
+  const inWall = (ov) => J.xPlane(J.wallU + 0.4 + ov);
+  const band = (zA, zB, y0, y1, color, ink, side, ov, diag = false) => {
     const polys = [];
-    for (let i = 0; i < edges.length - 1; i++) polys.push({ pts: [Pz(edges[i], zA), Pz(edges[i + 1], zA), Pz(edges[i + 1], zB), Pz(edges[i], zB)], yb: () => y0 });
+    for (let i = 0; i < edges.length - 1; i++) polys.push({ pts: [Pe(i, zA, ov), Pe(i + 1, zA, ov), Pe(i + 1, zB, ov), Pe(i, zB, ov)], yb: () => y0 });
     if (J) {
-      const c = side === 'back' ? J.back : J.front, zr = side === 'back' ? D : 0, pl = J[end];
+      const c = side === 'back' ? J.back : J.front, zr = side === 'back' ? D : 0, pl = diag ? J.diag : inWall(ov);
       polys.push({ pts: [Pz(J.te, zA), Pz(J.te, zB), J.at(c, zB - zr, pl), J.at(c, zA - zr, pl)], yb: () => y0 });
     }
     sink(sheet(polys, y1 - y0), color, ink);
   };
-  band(D - 0.7, D, 0.14, 8.3, PAL.mint, 0.03, 'back', J && J.south ? 'diag' : 'inWall');   // the back wall
-  band(D - 0.84, D - 0.7, 0.14, 2.4, MONEY2, 0, 'back');                                       // its wainscot
-  band(D - 0.78, D - 0.7, 4.4, 4.75, MONEY2, 0, 'back');                                       // the string course
-  band(D - 1.0, D + 0.1, 8.1, 8.4, PAL.gold, 0.012, 'back');                                   // the cornice
-  band(0, 0.35, 0.14, 0.17, PAL.gold, 0, 'front');                                             // the inlay along the walk's edge
-  band(0.1, 1.0, 6.5, 7.1, MINT2, 0.012, 'front');                                             // the architrave over the colonnade
-  band(0.08, 1.06, 6.44, 6.58, PAL.gold, 0.012, 'front');                                      // its gold band
-  band(-0.92, -0.68, 6.15, 7.2, PAL.mint, 0.03, 'front');                                      // the fascia, up into the roof
-  band(-0.98, -0.62, 6.05, 6.15, PAL.gold, 0.012, 'front');                                    // its gold lip
-  // the roof: each bay's deck a plane raked along its own middle radius (so two bays' decks meet on their shared edge), and the bay at the stand on its neighbour's plane
+  band(D - 0.7, D, -0.05, 8.3, PAL.mint, 0.03, 'back', 0, J && J.south);                      // the back wall, from under the ground (the bays' floors end inside it, so no floor edge shows under its outer face and its outline's foot is buried; behind the far stand it ends on the diagonal it shares with the return)
+  band(D - 0.84, D - 0.7, 0.14, 2.4, MONEY2, 0, 'back', 0.02);                                 // its wainscot
+  band(D - 0.78, D - 0.7, 4.4, 4.75, MONEY2, 0, 'back', 0.04);                                 // the string course
+  band(D - 1.0, D + 0.1, 8.1, 8.4, PAL.gold, 0.012, 'back', 0.06);                             // the cornice
+  band(0, 0.35, 0.14, 0.17, PAL.gold, 0, 'front', 0.08);                                       // the inlay along the walk's edge
+  band(0.1, 1.0, 6.5, 7.1, MINT2, 0.012, 'front', 0.1);                                        // the architrave over the colonnade
+  band(0.08, 1.06, 6.44, 6.58, PAL.gold, 0.012, 'front', 0.12);                                // its gold band
+  band(-0.92, -0.68, 6.15, 7.2, PAL.mint, 0.03, 'front', 0.14);                                // the fascia, up into the roof
+  band(-0.98, -0.62, 6.05, 6.15, PAL.gold, 0.012, 'front', 0.16);                              // its gold lip
+  // the roof: each bay's deck a plane raked along its own middle radius (so two bays' decks meet on their shared edge), and the bay at the stand on its neighbour's plane. Behind the far
+  // stand the deck runs on over the return, and past its outer face as an eave (18 cm, over the return's gold cornice): its edge is not in that face's plane
   const yOn = (tm, dy) => { const c = Math.cos(tm * R), s = Math.sin(tm * R); return (x, z) => ROOF.y0 + ((mir * x + cx) * c + z * s - WEDGE.r0 + 0.8) * ROOF.k + dy; };
-  const roof = (zf, zb, dy) => {
+  const roof = (zf, zb, dy, ov, overReturn) => {
     const polys = [];
-    for (let i = 0; i < edges.length - 1; i++) polys.push({ pts: [Pz(edges[i], zf), Pz(edges[i + 1], zf), Pz(edges[i + 1], zb), Pz(edges[i], zb)], yb: yOn((edges[i] + edges[i + 1]) / 2, dy) });
-    if (J) {
-      const pts = J.south ? [Pz(J.te, zf), Pz(J.te, zb), J.at(J.back, zb - D, J.outFace), [mir * (J.wallU + 0.82), J.rearZ], J.at(J.front, zf, J.inWall)]
-        : [Pz(J.te, zf), Pz(J.te, zb), J.at(J.back, zb - D, J.inWall), J.at(J.front, zf, J.inWall)];
-      polys.push({ pts, yb: yOn(J.tm, dy) });
-    }
+    for (let i = 0; i < edges.length - 1; i++) polys.push({ pts: [Pe(i, zf, ov), Pe(i + 1, zf, ov), Pe(i + 1, zb, ov), Pe(i, zb, ov)], yb: yOn((edges[i] + edges[i + 1]) / 2, dy) });
+    if (J && overReturn && J.south) {
+      const K = J.at(J.back, zb - D, J.outFace), E = [mir * (J.wallU + 0.82), J.rearZ], eave = J.xPlane(J.wallU + 1.0);
+      polys.push({ pts: [Pz(J.te, zf), Pz(J.te, zb), K, E, J.at(J.front, zf, inWall(ov))], yb: yOn(J.tm, dy) });
+      polys.push({ pts: [K, J.at(J.back, zb - D, eave), [mir * (J.wallU + 1.0), J.rearZ], E], yb: yOn(J.tm, dy) });
+    } else if (J) polys.push({ pts: [Pz(J.te, zf), Pz(J.te, zb), J.at(J.back, zb - D, inWall(ov)), J.at(J.front, zf, inWall(ov))], yb: yOn(J.tm, dy) });
     return polys;
   };
-  sink(sheet(roof(-0.8, D + 0.2, 0), 0.32), PAL.barn, 0.025);
-  sink(sheet(roof(-0.7, D + 0.1, -0.07), 0.07), MINT2, 0);                                    // the ceiling, one piece under the whole run
+  sink(sheet(roof(-0.8, D + 0.2, 0, 0.18, true), 0.32), PAL.barn, 0.025);
+  // the ceiling, one piece under the whole run: from inside the fascia to inside the cornice (its back edge buried there, not in the cornice's outer face), and at the stands into the
+  // end wall and the return (not out to the return's outer face)
+  sink(sheet(roof(-0.7, D - 0.3, -0.07, 0.2, false), 0.07), MINT2, 0);
 }
 
 // One bay's run pieces as plain meshes in the wedge's own frame (dn_arcade's: the inner chord's middle at the origin, +z outward), for the Asset Row, which shows the wedge alone.

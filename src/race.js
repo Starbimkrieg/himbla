@@ -5,7 +5,7 @@ import { pick } from './rng.js';
 import { spliceGenes, makeChimera, LIVING } from './chimera.js';
 import { ensureStats, statTotal, newRunner, stepRunner, raceOdds, CONDITIONS } from './chimerastats.js';
 import { chimeraCard, cardList } from './chimeracard.js';
-import { makeDownsPart, downsNode } from './models.js';
+import { makeDownsPart, downsNode, downsSlot } from './models.js';
 import { buildDowns } from './downsWorld.js';
 import { LAP, LANES, RAIL_IN, RAIL_OUT, FINISH_U, STAND, FAR, CLUB, WINDOW, BOARD, DRUM, PODIUMS, ENTRIES, oval } from './downsPlan.js';
 import { pixelFont } from './fonts.js';
@@ -47,6 +47,25 @@ const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vec
 const _o = {}, _bq = new THREE.Quaternion();
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const rand = (a, b) => a + Math.random() * (b - a);
+// Canvas text fitted to a width: drawn at `size` px if it fits in `maxW`, else at the largest whole size that does (never under `min`), and if even that is too wide, cut short
+// with an ellipsis. The pixel face is wide (every glyph a full em), so a long race or chimera name would otherwise run into whatever stands beside it on the screens and plates.
+// Draws with the context's current fill, alignment and baseline at (px, py); returns the size used.
+function fitText(x, str, px, py, maxW, size, min = 10) {
+  x.font = pixelFont(size);
+  let w = x.measureText(str).width;
+  if (w > maxW) {
+    size = Math.max(min, Math.floor((size * maxW) / w));
+    x.font = pixelFont(size);
+    w = x.measureText(str).width;
+    while (w > maxW && size > min) { x.font = pixelFont(--size); w = x.measureText(str).width; }
+    if (w > maxW) {
+      while (str.length > 1 && x.measureText(str + '…').width > maxW) str = str.slice(0, -1);
+      str = str.trimEnd() + '…';
+    }
+  }
+  x.fillText(str, px, py);
+  return size;
+}
 export class Race {
   constructor(game) {
     this.game = game;
@@ -196,9 +215,10 @@ export class Race {
     for (const d of this.gate.doors) d.g.rotation.y = d.s * k * 1.9;
   }
 
-  // The crowd: seated spectators in both stands, drawn as instanced bodies, heads, hats and raised
-  // arms, each with a black ink shell so they read as figures (not coloured pegs). They bob in
-  // their seats; when the race gets exciting they jump and throw their arms up.
+  // The crowd: seated spectators in both stands, each dressed from the kit's wardrobe (tools/blender/build_downs_crowd.py): a suit or a frock, arms at rest, on a programme or
+  // up at binoculars, a hairdo, for some a hat (flat cap, bowler, top hat, boater, race-day hat, fascinator) and a rosette or scarf in the derby colours. Every part is drawn
+  // instanced, one InstancedMesh per part's slot plus one for its ink shell, holding only the fans who wear it, so a variant costs only the fans who have it; the meshes of a
+  // part share one buffer of matrices. They bob in their seats; when the race gets exciting they jump, and the wavers throw their arms (or a pennant) up.
   buildCrowd() {
     const seats = [];
     // (seat strips stand 0.95 m behind each tier's front edge; none in the aisles, the front corners' towers or the main stand's top tier, which carries the suites)
@@ -213,36 +233,70 @@ export class Race {
     sit(STAND, 760, Math.PI, 1, 8.7);
     sit(FAR, 300, 0, -1, 7.7);
     const N = seats.length;
-    // the spectator's parts come from the kit (tools/blender/build_downs_crowd.py): a seated body, a head, a cap, hair and a pair of raised arms, each one white mesh tinted per fan
-    const part = (n) => downsNode(n);
-    const mk = (geo, mat) => { const m = new THREE.InstancedMesh(geo, mat, N); m.frustumCulled = false; return m; };
-    const body = mk(part('dn_fan_body').parts[0].geo, toon(0xffffff)), head = mk(part('dn_fan_head').parts[0].geo, toon(0xffffff)), hat = mk(part('dn_fan_cap').parts[0].geo, toon(0xffffff));
-    const arms = mk(part('dn_fan_arms').parts[0].geo, toon(0xffffff)), hair = mk(part('dn_fan_hair').parts[0].geo, toon(0xffffff));
-    const bodyInk = mk(part('dn_fan_body').ink, inkMat), headInk = mk(part('dn_fan_head').ink, inkMat);
-    // racegoers' colours: smart jackets, a few loud shirts, skin and hair tones, hats
-    const cols = [0x3b393a, 0x8b4044, 0x7b9a6e, 0xcfb352, 0xb07c57, 0xf8fff8, 0x2f4f7a, 0x5b7a52, 0xdfe8dd, 0x6a2e33];
-    const skin = [0xf1c9a5, 0xd8a47f, 0xa8714f, 0x6e4632, 0xe9b98f];
-    const hats = [0x3b393a, 0xdfe8dd, 0x8b4044, 0x5b7a52, 0xcfb352];
-    const hairs = [0x2a1d18, 0x5a3a22, 0x9a6a3a, 0xd8b56a, 0x8a8698, 0x1d1a29];
-    const c = new THREE.Color();
-    this.crowd = seats.map((s, i) => {
-      const p = { ...s, ph: Math.random() * 10, f: 6 + Math.random() * 5, jump: Math.random(), sc: 0.92 + Math.random() * 0.2, hat: Math.random() < 0.45, wave: Math.random() < 0.6 };
-      body.setColorAt(i, c.setHex(cols[(i * 7) % cols.length]));
-      arms.setColorAt(i, c);
-      head.setColorAt(i, c.setHex(skin[(i * 3) % skin.length]));
-      hat.setColorAt(i, c.setHex(hats[i % hats.length]));
-      hair.setColorAt(i, c.setHex(hairs[(i * 5) % hairs.length]));
+    // racegoers' colours: smart jackets, frocks, shirts, trousers and hats from the Downs' palette and its darker tints (and the navy the crowd has always worn), skin and hair tones, and the
+    // favours (ties, rosettes, scarves, hat bands) in the derby colours alone: Barn Red and its maroon, Gold, Money Green, Mint
+    const COAT = [0x3b393a, 0x8b4044, 0x7b9a6e, 0xcfb352, 0xb07c57, 0xf8fff8, 0x2f4f7a, 0x5b7a52, 0xdfe8dd, 0x6a2e33];
+    const FROCK = [0x8b4044, 0x7b9a6e, 0xcfb352, 0xf8fff8, 0xdfe8dd, 0x2f4f7a, 0xb07c57, 0x6a2e33, 0x5b7a52];
+    const SHIRT = [0xf8fff8, 0xf8fff8, 0xdfe8dd, 0xcfb352];
+    const LEGS = [0x3b393a, 0x5a5760, 0x8c5f3f, 0x2f4f7a, 0xdfe8dd, 0x3b393a];
+    const SKIN = [0xf1c9a5, 0xd8a47f, 0xa8714f, 0x6e4632, 0xe9b98f];
+    const HAT = [0x3b393a, 0xdfe8dd, 0x8b4044, 0x5b7a52, 0xcfb352, 0xf8fff8, 0xb07c57];
+    const HAIR = [0x2a1d18, 0x5a3a22, 0x9a6a3a, 0xd8b56a, 0x8a8698, 0x1d1a29];
+    const BAND = [0x8b4044, 0xcfb352, 0x7b9a6e, 0xf8fff8, 0x6a2e33];
+    const any = (a) => a[Math.floor(Math.random() * a.length)];
+    const other = (a, not) => { let v; do v = any(a); while (not.includes(v)); return v; };    // (a shirt that shows against its jacket; a favour against the shirt, jacket and hat it lies on)
+    const pickw = (w) => { let r = Math.random() * w.reduce((s, e) => s + e[1], 0); for (const [n, k] of w) if ((r -= k) < 0) return n; return w[0][0]; };
+    this.crowd = seats.map((s) => {
+      const suit = Math.random() < 0.55;
+      const rest = pickw([['dn_fan_lap', 70], ['dn_fan_prog', 18], ['dn_fan_bino', 12]]);
+      const wave = rest !== 'dn_fan_bino' && Math.random() < 0.6;                                  // (the ones at the binoculars keep watching)
+      const coat = suit ? any(COAT) : any(FROCK), hat = any(HAT);
+      const p = {
+        ...s, ph: Math.random() * 10, f: 6 + Math.random() * 5, jump: Math.random(), sc: 0.92 + Math.random() * 0.2, wave,
+        body: suit ? 'dn_fan_body' : 'dn_fan_body2', rest, cheer: wave ? (Math.random() < 0.35 ? 'dn_fan_arm1' : 'dn_fan_arms') : null,
+        hair: pickw(suit ? [['dn_fan_hair', 5], ['dn_fan_hair_thin', 3], ['dn_fan_hair_bun', 1], ['dn_fan_hair_long', 1]] : [['dn_fan_hair_bun', 4], ['dn_fan_hair_long', 4], ['dn_fan_hair', 2]]),
+        // (no flat cap or race-day hat at the binoculars: the cap's peak and the wide brim come down where the barrels are)
+        hat: Math.random() < 0.5 ? pickw((suit ? [['dn_fan_derby', 4], ['dn_fan_cap', 3], ['dn_fan_boater', 3], ['dn_fan_tophat', 2]] : [['dn_fan_sunhat', 4], ['dn_fan_fascinator', 4], ['dn_fan_boater', 2], ['dn_fan_derby', 1]])
+          .filter(([n]) => rest !== 'dn_fan_bino' || (n !== 'dn_fan_cap' && n !== 'dn_fan_sunhat'))) : null,
+        favour: Math.random() < 0.22 ? 'dn_fan_rosette' : Math.random() < 0.12 ? 'dn_fan_scarf' : null,
+      };
+      const shirt = other(SHIRT, [coat]);
+      p.tint = { coat, shirt, legs: suit ? any(LEGS) : coat, skin: any(SKIN), hair: any(HAIR), hat, band: other(BAND, [shirt, coat, hat]) };
       return p;
     });
-    for (const m of [body, head, hat, arms, hair]) m.instanceColor.needsUpdate = true;
-    this.crowdParts = { body, head, hat, arms, hair, bodyInk, headInk };
-    for (const m of Object.values(this.crowdParts)) this.game.world.put(m, this.loc, 0, 0, 0, 0, true);
+    // one layer per part worn: the fans who wear it (the resting arms' wavers last, so a cheer hides them by count), drawn in the body's frame or the head's (0.66 m above it)
+    const HEAD = new Set(['dn_fan_head', 'dn_fan_hair', 'dn_fan_hair_bun', 'dn_fan_hair_long', 'dn_fan_hair_thin', 'dn_fan_cap', 'dn_fan_derby', 'dn_fan_tophat', 'dn_fan_boater', 'dn_fan_sunhat', 'dn_fan_fascinator']);
+    const TINT = new Set(['coat', 'shirt', 'legs', 'skin', 'hair', 'hat', 'band']);             // (the slots tinted per fan; the rest keep the Downs' colours)
+    const wear = new Map();
+    const put = (name, i, kind) => { if (!wear.has(name)) wear.set(name, { name, kind, fans: [] }); wear.get(name).fans.push(i); };
+    this.crowd.forEach((p, i) => {
+      put('dn_fan_legs', i, 'all'); put(p.body, i, 'all'); put('dn_fan_head', i, 'all'); put(p.hair, i, 'all');
+      put(p.rest, i, 'rest');
+      if (p.cheer) put(p.cheer, i, 'cheer');
+      if (p.hat) put(p.hat, i, 'all');
+      if (p.favour) put(p.favour, i, 'all');
+    });
+    const c = new THREE.Color();
+    this.crowdLayers = [...wear.values()].map((L) => {
+      if (L.kind === 'rest') L.fans.sort((a, b) => this.crowd[a].wave - this.crowd[b].wave);
+      const n = L.fans.length, node = downsNode(L.name);
+      const mat4 = new THREE.InstancedBufferAttribute(new Float32Array(n * 16), 16).setUsage(THREE.DynamicDrawUsage);
+      const mk = (geo, mat) => { const m = new THREE.InstancedMesh(geo, mat, n); m.instanceMatrix = mat4; m.frustumCulled = false; return m; };
+      const meshes = node.parts.map(({ slot, geo }) => {
+        const m = mk(geo, TINT.has(slot) ? toon(0xffffff) : toon(downsSlot(slot).color));
+        if (TINT.has(slot)) { L.fans.forEach((i, j) => m.setColorAt(j, c.setHex(this.crowd[i].tint[slot]))); m.instanceColor.needsUpdate = true; }
+        return m;
+      });
+      if (node.ink) meshes.push(mk(node.ink, inkMat));
+      return { ...L, head: HEAD.has(L.name), calm: L.kind === 'rest' ? L.fans.filter((i) => !this.crowd[i].wave).length : n, meshes, mat4 };
+    });
+    this.crowdM = new Float32Array(N * 32);                                                          // (each fan's body and head matrices, worked out once a frame)
+    for (const L of this.crowdLayers) for (const m of L.meshes) this.game.world.put(m, this.loc, 0, 0, 0, 0, true);
     this.updateCrowd(0);
   }
 
   updateCrowd(t) {
-    const { body, head, hat, arms, hair, bodyInk, headInk } = this.crowdParts;
-    const ex = this.excite, R = this.game.world.curveR(this.loc);
+    const ex = this.excite, R = this.game.world.curveR(this.loc), M = this.crowdM, cheer = ex > 0.35;
     for (let i = 0; i < this.crowd.length; i++) {
       const p = this.crowd[i];
       // fans bob in their seats; when the crowd is excited, they leap and wave
@@ -251,21 +305,28 @@ export class Race {
       const k = p.sc;
       const y = p.y + 0.5 * k + hop;
       // (the stands are on a curved plateau: each fan is stood on the sphere and turned with it, curve.js)
-      const set = (m, yy, sc) => {
-        _q.setFromAxisAngle(_Y, p.face + sway);
-        _p.set(p.x, yy, p.z);
-        if (R) { _q.premultiply(bendQuat(R, p.x, p.z, _bq)); bendPoint(R, p.x, yy, p.z, _p); }
-        m.setMatrixAt(i, _m4.compose(_p, _q, _s.set(sc, sc, sc)));
-      };
-      set(body, y, k);
-      set(bodyInk, y, k);
-      set(arms, y, ex > 0.35 && p.wave ? k : 0);
-      set(head, y + 0.66 * k, k);
-      set(headInk, y + 0.66 * k, k);
-      set(hat, y + 0.66 * k, p.hat ? k : 0);
-      set(hair, y + 0.66 * k, p.hat ? 0 : k);
+      _q.setFromAxisAngle(_Y, p.face + sway);
+      if (R) _q.premultiply(bendQuat(R, p.x, p.z, _bq));
+      _s.set(k, k, k);
+      _p.set(p.x, y, p.z);
+      if (R) bendPoint(R, p.x, y, p.z, _p);
+      _m4.compose(_p, _q, _s).toArray(M, i * 32);
+      const yh = y + 0.66 * k;
+      _p.set(p.x, yh, p.z);
+      if (R) bendPoint(R, p.x, yh, p.z, _p);
+      _m4.compose(_p, _q, _s).toArray(M, i * 32 + 16);
     }
-    for (const m of [body, head, hat, arms, hair, bodyInk, headInk]) m.instanceMatrix.needsUpdate = true;
+    // each layer copies its fans' matrices; the cheers are drawn only while the crowd cheers, and then the wavers' resting arms are not (they sort last, so the count leaves them out)
+    for (const L of this.crowdLayers) {
+      const n = L.kind === 'cheer' ? (cheer ? L.fans.length : 0) : L.kind === 'rest' && cheer ? L.calm : L.fans.length;
+      for (const m of L.meshes) m.count = n;
+      const a = L.mat4.array, off = L.head ? 16 : 0;
+      for (let j = 0; j < n; j++) {
+        const src = L.fans[j] * 32 + off, dst = j * 16;
+        for (let e = 0; e < 16; e++) a[dst + e] = M[src + e];
+      }
+      L.mat4.needsUpdate = true;
+    }
   }
 
   // the race keeps the camera while the result dialog is up: the finishers are on the podium
@@ -773,17 +834,19 @@ export class Race {
     x.fillStyle = '#cfb352'; x.fillRect(0, 40, W, 3);
     x.fillStyle = '#f8fff8'; x.font = pixelFont(20); x.textBaseline = 'middle';
     if (this.state !== 'idle' && this.race) {
-      x.textAlign = 'left';
-      x.fillText(this.race.name.toUpperCase(), 14, 21);
-      x.textAlign = 'right';
+      // the header: the state on the right, the race's name fitted into what is left of the bar (GET READY beside ZBORNAK INVITATIONAL used to overlap it)
       const togo = Math.max(0, this.race.dist - this.order()[0].s);
-      x.fillText(this.state === 'countdown' ? 'GET READY' : this.state === 'cooldown' ? 'RESULT' : togo > 0 ? `${fmt(togo)} M` : 'FINISH!', W - 14, 21);
+      const status = this.state === 'countdown' ? 'GET READY' : this.state === 'cooldown' ? 'RESULT' : togo > 0 ? `${fmt(togo)} M` : 'FINISH!';
+      x.textAlign = 'right';
+      x.fillText(status, W - 14, 21);
+      x.textAlign = 'left';
+      fitText(x, this.race.name.toUpperCase(), 14, 21, W - 28 - x.measureText(status).width - 18, 20);
       this.order().forEach((r, i) => {
         const y = 68 + i * 46;
         x.fillStyle = r.mine ? '#a8d08d' : '#cfb352'; x.textAlign = 'left'; x.font = pixelFont(24);
         x.fillText(`${r.done ? r.place : i + 1}`, 16, y);
-        x.fillStyle = '#f8fff8'; x.font = pixelFont(18);
-        x.fillText(r.genes.name.slice(0, 22).toUpperCase(), 56, y);
+        x.fillStyle = '#f8fff8';
+        fitText(x, r.genes.name.toUpperCase(), 56, y, W - 56 - 14, 18);
         x.fillStyle = '#3b393a'; x.fillRect(56, y + 14, 300, 6);
         x.fillStyle = r.stam < 0.25 ? '#b07c57' : '#7b9a6e'; x.fillRect(56, y + 14, 300 * r.stam, 6);
       });
@@ -794,10 +857,10 @@ export class Race {
       if (!this.card.length) { x.fillStyle = '#cfb352'; x.fillText(`NEXT RACE POSTS IN ${Math.ceil(this.postT)}s`, W / 2, H / 2); }
       this.card.forEach((r, i) => {
         const y = 72 + i * 62;
-        x.fillStyle = '#cfb352'; x.textAlign = 'left'; x.font = pixelFont(18);
-        x.fillText(`${i + 1} · ${r.name.toUpperCase()}`, 16, y);
-        x.fillStyle = '#f8fff8'; x.font = pixelFont(13);
-        x.fillText(`${fmt(r.dist)} M · CLASS ${r.cls} · ${CONDITIONS[r.cond].name} · PURSE ${fmt(r.purse)}`, 16, y + 24);
+        x.fillStyle = '#cfb352'; x.textAlign = 'left';
+        fitText(x, `${i + 1} · ${r.name.toUpperCase()}`, 16, y, W - 32, 18);
+        x.fillStyle = '#f8fff8';
+        fitText(x, `${fmt(r.dist)} M · CLASS ${r.cls} · ${CONDITIONS[r.cond].name} · PURSE ${fmt(r.purse)}`, 16, y + 24, W - 32, 13);
       });
     }
     tex.needsUpdate = true;
@@ -813,7 +876,7 @@ export class Race {
     x.fillStyle = '#f8fff8'; x.font = pixelFont(17); x.textAlign = 'center'; x.textBaseline = 'middle';
     x.fillText('CHIMERA DOWNS', W / 2, 24);
     const running = this.state !== 'idle' && this.race && this.racers.length;
-    const lines = (str, y, size, col) => { x.fillStyle = col; x.font = pixelFont(size); x.fillText(str, W / 2, y); };
+    const lines = (str, y, size, col) => { x.fillStyle = col; fitText(x, str, W / 2, y, W - 20, size); };      // (centred, fitted inside 10 px margins: the face is narrow)
     if (running) {
       const order = this.order();
       lines(this.race.name.toUpperCase(), 80, 14, '#cfb352');
@@ -826,14 +889,14 @@ export class Race {
       order.slice(0, 3).forEach((r, i) => {
         const y = 215 + i * 50;
         x.fillStyle = [ '#cfb352', '#f8fff8', '#b07c57' ][i]; x.font = pixelFont(26); x.textAlign = 'left'; x.fillText(String(r.done ? r.place : i + 1), 16, y);
-        x.fillStyle = '#f8fff8'; x.font = pixelFont(13); x.fillText(r.genes.name.slice(0, 15).toUpperCase(), 52, y);
+        x.fillStyle = '#f8fff8'; fitText(x, r.genes.name.toUpperCase(), 52, y, W - 52 - 8, 13);
         x.textAlign = 'center';
       });
     } else {
       lines('NEXT RACE', 86, 16, '#cfb352');
       const r = this.card[0];
       if (r) {
-        lines(r.name.toUpperCase().slice(0, 18), 130, 14, '#f8fff8');
+        lines(r.name.toUpperCase(), 130, 14, '#f8fff8');
         lines(`${fmt(r.dist)} M`, 184, 36, '#f8fff8');
         lines(`${r.cat} · CLASS ${r.cls}`, 226, 13, '#b07c57');
         lines(CONDITIONS[r.cond].name, 252, 13, '#7b9a6e');
@@ -865,27 +928,38 @@ export class Race {
     tex.needsUpdate = true;
   }
 
-  // the plates on the podium backdrops: each set shows its slot of the race card, or, once a race from that slot has finished, its first three
+  // the plates on the podium backdrops: each set shows its slot of the race card, or, once a race from that slot has finished, its first three. No line holds two things that can
+  // grow into each other (the name used to share its line with the distance and class, and VOSTOK GRAND PRIX ran into 2,400 M · CLASS OPEN): the card view heads the plate with
+  // the slot on the left and the distance and class on the right, fitted to the room the slot leaves, and gives the name the line under them to itself, fitted to the plate's
+  // width; the result view stacks the race's name, the winner, and second and third side by side, each fitted to its own room. The top 14 px stay bare: the backdrop's valance
+  // (dn_podium) hangs its pennant tips 2 cm in front of the plate's top 20 cm.
   drawPlates() {
     this.plates.forEach((p, i) => {
       const { ctx: x, c, tex } = p;
-      const W = c.width, H = c.height;
+      const W = c.width, H = c.height, L = 16, R = W - 16;
       const res = this.podiumResult && this.podiumResult.slot === i ? this.podiumResult : null;
       x.fillStyle = res ? '#cfb352' : '#2b2a2c'; x.fillRect(0, 0, W, H);
       x.textBaseline = 'middle'; x.textAlign = 'left';
       if (res) {
-        x.fillStyle = '#3b393a'; x.font = pixelFont(26); x.fillText(res.name.toUpperCase().slice(0, 22), 16, 26);
-        x.font = pixelFont(24);
-        x.fillText(`1 ${res.top[0] || ''}`.toUpperCase().slice(0, 18), 16, 66);
-        x.textAlign = 'right';
-        x.font = pixelFont(18);
-        x.fillText(`2 ${res.top[1] || ''}  3 ${res.top[2] || ''}`.toUpperCase().slice(0, 34), W - 16, 66);
+        const half = (R - L - 24) / 2;
+        x.fillStyle = '#3b393a';
+        fitText(x, res.name.toUpperCase(), L, 25, R - L, 18);
+        fitText(x, `1 ${res.top[0] || ''}`.toUpperCase(), L, 51, R - L, 24);
+        const pair = [[`2 ${res.top[1] || '-'}`.toUpperCase(), L], [`3 ${res.top[2] || '-'}`.toUpperCase(), R - half]];
+        x.font = pixelFont(15);
+        pair.sort((a, b) => x.measureText(b[0]).width - x.measureText(a[0]).width);     // (the longer first, and the other at the size it got, so the two match)
+        fitText(x, pair[1][0], pair[1][1], 77, half, fitText(x, pair[0][0], pair[0][1], 77, half, 15));
       } else {
-        const r = this.card[i];
-        x.fillStyle = '#cfb352'; x.font = pixelFont(26); x.fillText(`RACE ${i + 1}`, 16, 26);
-        x.fillStyle = '#f8fff8'; x.font = pixelFont(22);
-        x.fillText(r ? `${r.name.toUpperCase()}` : 'NEXT RACE POSTING SOON', 16, 64);
-        if (r) { x.textAlign = 'right'; x.fillStyle = '#b07c57'; x.font = pixelFont(18); x.fillText(`${fmt(r.dist)} M · CLASS ${r.cls}`, W - 16, 64); }
+        const r = this.card[i], slot = `RACE ${i + 1}`;
+        x.fillStyle = '#cfb352'; x.font = pixelFont(20); x.fillText(slot, L, 28);
+        if (r) {
+          const room = R - L - x.measureText(slot).width - 24;
+          x.textAlign = 'right'; x.fillStyle = '#b07c57';
+          fitText(x, `${fmt(r.dist)} M · CLASS ${r.cls}`, R, 28, room, 18);
+          x.textAlign = 'left';
+        }
+        x.fillStyle = '#f8fff8';
+        fitText(x, r ? r.name.toUpperCase() : 'NEXT RACE POSTING SOON', L, 64, R - L, 28);
       }
       tex.needsUpdate = true;
     });
