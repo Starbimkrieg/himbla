@@ -16,6 +16,8 @@ const GLB = {
   skimmer: () => import('./assets/skimmer.glb?inline'),
   lightbike_a: () => import('./assets/lightbike_a.glb?inline'),
   lightbike_b: () => import('./assets/lightbike_b.glb?inline'),
+  skimmer_a: () => import('./assets/skimmer_a.glb?inline'),
+  skimmer_b: () => import('./assets/skimmer_b.glb?inline'),
   warrig: () => import('./assets/warrig.glb?inline'),
   rover: () => import('./assets/rover.glb?inline'),
   interceptor: () => import('./assets/interceptor.glb?inline'),
@@ -1434,7 +1436,7 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lba, lbb, ...dn] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike_a', 'lightbike_b', ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lba, lbb, ska, skb, ...dn] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike_a', 'lightbike_b', 'skimmer_a', 'skimmer_b', ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
   SHIP_PARTS = {};
   for (const name of ['shuttle', 'freighter']) {
     const root = gltf.scene.getObjectByName(name);
@@ -1464,6 +1466,12 @@ export async function loadShipParts({ ships } = {}) {
     const bike = g.scene.getObjectByName('courier');
     if (!bike) throw new Error(`lightbike_${v}.glb has no courier`);
     SHIP_PARTS['bike_' + v] = bakeShip(bike);
+  }
+  // the Phase Skimmer's two Blender redesigns, A Aegis and B Bulwark (tools/blender/build_skimmer_redesign.py)
+  for (const [v, g] of [['a', ska], ['b', skb]]) {
+    const sk2 = g.scene.getObjectByName('skimmer');
+    if (!sk2) throw new Error(`skimmer_${v}.glb has no skimmer`);
+    SHIP_PARTS['skimmer_' + v] = bakeShip(sk2);
   }
   // the Vostok BTR-M Moon APC (tools/blender/build_apc.py)
   const apc = ap.scene.getObjectByName('apc');
@@ -1833,11 +1841,29 @@ function makeShip(kind, { color, stripe, faction = 'kepler' }) {
   return ship;
 }
 
+// Which Phase Skimmer gets built: 'a' (Aegis, an armoured delta gunship) or 'b' (Bulwark, an armoured catamaran gunship), the Blender
+// redesigns (docs/skimmer-proposals, tools/blender/build_skimmer_redesign.py), or 'classic', the original (skimmer.glb). Both redesigns
+// carry the runner inside (they are not drawn, like the APC's crew). Kept across launches; the dev menu's SKIMMER MODEL switches it (it
+// applies to the next skimmer you call).
+export const SKIMMER_STYLES = ['a', 'b', 'classic'];
+const SKIMMER_KEY = 'mr-skimmer-model';
+let skimmerStyle = 'a';
+try { const k = localStorage.getItem(SKIMMER_KEY); if (SKIMMER_STYLES.includes(k)) skimmerStyle = k; } catch { /* unavailable */ }
+export const getSkimmerStyle = () => skimmerStyle;
+export function setSkimmerStyle(k) {
+  skimmerStyle = SKIMMER_STYLES.includes(k) ? k : 'a';
+  try { localStorage.setItem(SKIMMER_KEY, skimmerStyle); } catch { /* unavailable */ }
+}
+// the redesigns' third colour (the `accent` slot, a glow), beside the livery's near-black and violet; and their armour (`plate`, a toon)
+const SKIMMER_ACCENT = { a: 0xffb62e, b: 0x2ee6c0 };
+const SKIMMER_PLATE = 0x514a73;
+
 // Daedalus Phase Skimmer: a wheel-less hover-racer (built in Blender, see build_skimmer.py). Body
 // and stripe take the vehicle's livery; the phase-coil rings round its nacelles spin, and the
 // thrusters and hover emitters glow with speed. Call anim(t, speed) every frame.
-export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff } = {}) {
-  const B = SHIP_PARTS.skimmer;
+export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff, style = skimmerStyle } = {}) {
+  const key = style !== 'classic' && SHIP_PARTS['skimmer_' + style] ? style : 'classic';
+  const B = key === 'classic' ? SHIP_PARTS.skimmer : SHIP_PARTS['skimmer_' + key];
   const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
   const fx = {
     plume: new THREE.MeshBasicMaterial({ color: trim, opacity: 0.6, ...add }),
@@ -1851,6 +1877,8 @@ export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff } = {}) {
     if (slot === 'stripe') return toon(trim);
     if (slot === 'glow') return glow(trim);
     if (slot === 'seat') return toon(0x221d33);
+    if (slot === 'accent') return glow(SKIMMER_ACCENT[key] ?? 0xffb62e);
+    if (slot === 'plate') return toon(SKIMMER_PLATE);
     if (SHIP_GLOW[slot] !== undefined) return glow(SHIP_GLOW[slot]);
     return toon(SHIP_TOON[slot] ?? 0xff00ff);
   };
@@ -1861,7 +1889,7 @@ export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff } = {}) {
     g.quaternion.copy(node.quat);
     for (const { slot, geo } of node.parts) {
       const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = !FLAMES.has(slot) && slot !== 'glow';
+      m.castShadow = !FLAMES.has(slot) && slot !== 'glow' && slot !== 'accent';
       if (FLAMES.has(slot)) m.renderOrder = 2;
       g.add(m);
     }
@@ -1880,8 +1908,11 @@ export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff } = {}) {
   const root = build(B);
   root.position.set(0, 0, 0);
   root.quaternion.identity();
+  // the redesigns say where a hover vehicle scatters dust (x, z pairs) and that the runner rides inside (hidden)
+  const dust = B.data.dust;
+  const dustSpots = dust ? Array.from({ length: dust.length / 2 }, (_, i) => [dust[i * 2], dust[i * 2 + 1]]) : null;
   return {
-    root, chassis: root, wheels: [], gun: new THREE.Group(), size: 4,
+    root, chassis: root, wheels: [], gun: new THREE.Group(), size: 4, hideRider: !!B.data.hide_rider, ...(dustSpots ? { dustSpots } : {}),
     anim(t, speed = 0) {
       const k = Math.min(1, speed / 60);
       for (const c of coils) c.g.rotation.z = t * c.spin * (1 + 2.5 * k);

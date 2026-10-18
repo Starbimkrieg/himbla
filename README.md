@@ -777,7 +777,7 @@ src/
   assets/runner.glb  the Moon-runner model (player, pirate skaters, story leaders)
   assets/idles.json  the runner's five idle animations (10 poses a second per pivot, keyed in Blender)
   assets/ships.glb   the shuttle-bus (with a route board that names its destination) and freighter, with folding gear, ramps and thruster flames
-  assets/skimmer.glb the Daedalus Phase Skimmer (hover-racer with spinning phase coils)
+  assets/skimmer.glb the Daedalus Phase Skimmer (hover-racer with spinning phase coils); assets/skimmer_a.glb, skimmer_b.glb its two armoured redesigns, A Aegis and B Bulwark (the dev menu's SKIMMER MODEL picks one; the runner rides inside)
   assets/lightbike_a.glb, lightbike_b.glb  the Courier light-bike's two Blender redesigns, A Slipstream and B Parcel Runner (the dev menu's COURIER MODEL picks one; `classic` is the original, built in `models.js`)
   assets/warrig.glb  the Rustmoon pirate war-rig (patchwork mad-max rover with a spiked ram plow)
   assets/rover.glb   the shared rovers: the civil buggy (Mule, road traffic, hometown) and the military patrol car (base patrols, troops)
@@ -817,6 +817,8 @@ tools/
   blender/cargo.py         the land-train's box container, Helium-3 tanker and explosives magazine, without their flatbed, for other models to carry
   blender/proposals/       the freighter design study: freighter_b.py (the open-truss "Girder" alternative to the chosen Atlas) and preview.py / preview_ships.py, which render a ship in the game's palette with Cycles on the CPU
   blender/build_skimmer.py builds the Daedalus skimmer -> src/assets/skimmer.glb
+  blender/build_skimmer_redesign.py builds the Skimmer's two armoured redesigns -> src/assets/skimmer_a.glb, skimmer_b.glb (and plain copies in docs/skimmer-proposals/; headless: `MOONRUNNER_SKIMMER=a|b`); `blender/preview_skimmer.py` renders the review sheet
+  blender/hullkit.py       the hull and fitting geometry the Courier and Skimmer redesign builders share (smoothed lofts, skin-hugging plates and lines, tubes, rounded bars, thin curved panels); exec'd after kit.py
   blender/build_engine.py  builds the salvaged engine that drops out of wrecks -> src/assets/engine.glb
   blender/build_briefcase.py builds the credits briefcase that drops out of wrecks -> src/assets/briefcase.glb
   blender/build_hovercar.py builds the faction and civilian hover-cars -> src/assets/hovercar.glb (the road cars, the casino car park, the Asset Row)
