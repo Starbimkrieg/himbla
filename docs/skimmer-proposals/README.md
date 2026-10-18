@@ -42,10 +42,26 @@ An armoured **catamaran**: the classic's layout, hardened. A central fuselage wi
 slits, between two big hover nacelles that carry twin nose cannons (mint muzzle rings and intake rims), three heavy phase coils each,
 armoured wing roots, mint chine lines and canted fins. Three hover pads under each nacelle. The heavier, more obviously armed one.
 
+## B, revised: everything flush
+
+B's first pass had parts hovering on curved surfaces: the tail fins stood 15 cm above the nacelle roof with their tip lights offset, the
+head and tail lamps floated, and the eye, chevrons and bridge slits were flat slabs laid on curved skin. Now (`skimmer_b_details.jpg`
+shows before above, revised below):
+
+- **Fins** grow out of the nacelle's own roofline (the foot follows the roof and sinks 0.12 m into it); the mint tip is a band cut from the
+  fin's own outline, 6 mm thicker, so it is flush whatever the fin does.
+- **Marks and lights are draped:** the eye (an almond with a round pupil), the chevrons, the bridge slits and the head and tail lenses are
+  solved vertex by vertex onto the section's own superellipse (`top_point`, `flank_point`, `patch`, `decal` in the builder), so they
+  follow the surface's curve across and along it.
+- **Intake rims** follow the nacelle's actual cross-section; the two mint skin lines are sunk to stand 6 mm off the hull.
+- **Coil tabs are round:** circular drums with a softly domed face, axis along the radius (`coil(..., tab="round")`).
+
+A keeps its original flat eye, chevrons and fin lights (its builder path is unchanged, so its files still match it).
+
 ## Numbers
 
-- **9.1k triangles (A) / 10.9k (B)**, plus 4.9k / 6.1k drawn again for the outline: inside the house budget of about 11k for a vehicle
-  (`style.md`). 105 / 97 KB compressed (the files here are plain: about 260 / 310 KB). Both pass `audit_coplanar`; ink-0 details lie
+- **9.1k triangles (A) / 11.0k (B)**, plus 4.9k / 6.3k drawn again for the outline: inside the house budget of about 11k for a vehicle
+  (`style.md`). 105 / 102 KB compressed (the files here are plain: about 260 / 310 KB). Both pass `audit_coplanar`; ink-0 details lie
   within about 6 mm of the surface they are on.
 - Slots: livery `body`, `stripe`; glows `glow`, `accent` (**new**), `white`, `red`, and the flames `plume plumeCore lift engine`;
   fixed toons `plate` (**new**), `dark`, `metal`, `steel`. The two new slots have entries in `makeSkimmer` (`SKIMMER_ACCENT`, `SKIMMER_PLATE`).

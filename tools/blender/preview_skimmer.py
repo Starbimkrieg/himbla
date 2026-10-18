@@ -15,7 +15,8 @@ from mathutils import Vector
 REPO = os.environ.get("MOONRUNNER_REPO") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUTDIR = os.environ.get("PREVIEW_OUT") or os.path.join(REPO, "docs", "skimmer-proposals")
 os.makedirs(OUTDIR, exist_ok=True)
-NAMES = [a for a in sys.argv[1:] if a in ("classic", "a", "b")] or ["classic", "a", "b"]
+NAMES = [a for a in sys.argv[1:] if a in ("classic", "a", "b", "bprev")] or ["classic", "a", "b"]
+ONLY = [v for v in os.environ.get("PREVIEW_VIEWS", "").split(",") if v]   # (render just these views)
 RES = (int(os.environ.get("PREVIEW_W", 1280)), int(os.environ.get("PREVIEW_H", 720)))
 SAMPLES = int(os.environ.get("PREVIEW_SAMPLES", 40))
 FLOAT = 0.8   # the game floats a hover vehicle this far above the ground
@@ -150,7 +151,12 @@ VIEWS = {
     "front": ((8.2, -10.0, 3.8), (0, 0.0, 1.7), 42),
     "rear": ((-8.2, 10.0, 3.8), (0, 0.0, 1.7), 42),
     "top": ((0.0, -0.4, 14.5), (0, -0.4, 1.4), 42),   # (not on the sheet)
+    # close-ups of the right nacelle's tail (fin, tip band, tail light, thruster), the nose's eye, and the coils on the nacelle
+    "fin": ((5.2, 5.4, 4.3), (2.0, 2.2, 2.75), 55),
+    "eye": ((1.3, -4.5, 3.7), (0, -2.0, 2.0), 60),
+    "coil": ((5.4, -2.4, 2.4), (2.0, 0.2, 1.6), 55),
 }
+DETAILS = ("fin", "eye", "coil")
 SHEET = ("side", "front", "rear")
 
 for name in NAMES:
@@ -159,6 +165,9 @@ for name in NAMES:
     os.environ["MOONRUNNER_EXPORT"] = "1" if (name != "classic" and os.environ.get("PREVIEW_EXPORT", "1") == "1") else "0"
     if name == "classic":
         g = {"__file__": os.path.join(REPO, "tools", "blender", "build_skimmer.py")}
+        os.environ["MOONRUNNER_EXPORT"] = "0"
+    elif name == "bprev":   # the B that was committed (BPREV = a copy of its builder), for a before and after
+        g = {"__file__": os.environ["BPREV"], "VARIANT": "b"}
         os.environ["MOONRUNNER_EXPORT"] = "0"
     else:
         g = {"__file__": os.path.join(REPO, "tools", "blender", "build_skimmer_redesign.py"), "VARIANT": name}
@@ -177,6 +186,8 @@ for name in NAMES:
     ground = bpy.data.objects["Plane"]
     freestyle(sc, [ground])
     for view, (loc, tgt, lens) in VIEWS.items():
+        if ONLY and view not in ONLY:
+            continue
         for o in [o for o in bpy.data.objects if o.type == "CAMERA"]:
             bpy.data.objects.remove(o)
         camera(sc, loc, tgt, lens)
@@ -186,8 +197,8 @@ for name in NAMES:
 
 try:
     from PIL import Image, ImageDraw
-    labels = {"classic": "CLASSIC (CURRENT)", "a": "A  AEGIS", "b": "B  BULWARK"}
-    rows = [n for n in NAMES if all(os.path.isfile(os.path.join(OUTDIR, f"{n}_{v}.jpg")) for v in SHEET)]
+    labels = {"classic": "CLASSIC (CURRENT)", "a": "A  AEGIS", "b": "B  BULWARK", "bprev": "B  BULWARK, BEFORE THIS REVISION"}
+    rows = [n for n in (os.environ.get("PREVIEW_SHEET", "").split(",") if os.environ.get("PREVIEW_SHEET") else NAMES) if all(os.path.isfile(os.path.join(OUTDIR, f"{n}_{v}.jpg")) for v in SHEET)]   # (PREVIEW_SHEET=bprev,b: these rows, from files already rendered)
     if rows:
         w, h = RES[0] // 2, RES[1] // 2
         sheet = Image.new("RGB", (w * len(SHEET), (h + 28) * len(rows)), (24, 20, 40))
@@ -201,3 +212,21 @@ try:
         print("sheet ->", os.path.join(OUTDIR, "skimmer_proposals.jpg"))
 except ImportError:
     print("(pillow not installed: no contact sheet)")
+
+# a before-and-after of the close-ups, when both B's were rendered
+try:
+    from PIL import Image, ImageDraw
+    pair = [n for n in ("bprev", "b") if all(os.path.isfile(os.path.join(OUTDIR, f"{n}_{v}.jpg")) for v in DETAILS)]
+    if len(pair) == 2:
+        w, h = RES[0] // 2, RES[1] // 2
+        sheet = Image.new("RGB", (w * len(DETAILS), (h + 28) * 2), (24, 20, 40))
+        d = ImageDraw.Draw(sheet)
+        for r, n in enumerate(pair):
+            d.text((10, r * (h + 28) + 8), labels[n] + "  -  close-ups: tail fin and light, nose eye, phase coils", fill=(255, 210, 63))
+            for c, v in enumerate(DETAILS):
+                im = Image.open(os.path.join(OUTDIR, f"{n}_{v}.jpg")).convert("RGB").resize((w, h), Image.LANCZOS)
+                sheet.paste(im, (c * w, r * (h + 28) + 28))
+        sheet.save(os.path.join(OUTDIR, "skimmer_b_details.jpg"), quality=90)
+        print("details ->", os.path.join(OUTDIR, "skimmer_b_details.jpg"))
+except ImportError:
+    pass

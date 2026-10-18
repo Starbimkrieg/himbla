@@ -25,7 +25,7 @@
 # engine`; FIXED TOON `plate` (NEW: armour, a lighter plum-slate), `dark`, `metal`, `steel`. Ink (metres) follows style.md; ink-0
 # details lie within ~6 mm of the surface they are on.
 
-import bpy, math, os
+import bpy, bmesh, math, os
 from mathutils import Vector
 
 
@@ -106,6 +106,138 @@ def chevron(secs, sx, z, th, size, parent, tag, off):
     mesh(f"chevron{tag}", xf(extrude(shape, 0.012, "x"), (sx * (x + off + 0.006), y, z)), "accent", parent, 0)
 
 
+# --- decals that lie ON a loft's skin (B): every vertex is solved onto the section's own superellipse, so a mark follows the surface's
+# curve across and along it instead of being a flat slab laid on top ---
+
+PLATE = 0.03   # how far the armour plates (skin_patch) stand off the hull
+
+
+def _skin_at(s, x):
+    """(y, ring angle) of a section's upper skin at lateral offset x, or None when x is beyond the section's width."""
+    ax = abs(x)
+    if ax >= s["w"]:
+        return None
+    e = s.get("eT", 2.5)
+    lo, hi = 0.0, math.pi / 2
+    for _ in range(28):   # x falls from w to 0 as the angle goes 0 -> pi/2
+        mid = (lo + hi) / 2
+        if s["w"] * math.cos(mid) ** (2 / e) > ax:
+            lo = mid
+        else:
+            hi = mid
+    th = (lo + hi) / 2
+    return s["yc"] + s["t"] * math.sin(th) ** (2 / e), th
+
+
+def _bracket(secs, z):
+    if z <= secs[0]["z"]:
+        return secs[0], secs[0], 0.0
+    if z >= secs[-1]["z"]:
+        return secs[-1], secs[-1], 0.0
+    for a, b in zip(secs, secs[1:]):
+        if a["z"] <= z <= b["z"]:
+            return a, b, (z - a["z"]) / ((b["z"] - a["z"]) or 1.0)
+
+
+def top_point(secs, z, x, off):
+    """The point on the upper skin at (z, x), `off` out along the skin's own direction (so on a plate that stands PLATE off the hull, use PLATE + a little)."""
+    a, b, f = _bracket(secs, z)
+    pa, pb = _skin_at(a, x), _skin_at(b, x)
+    pa, pb = pa or pb, pb or pa
+    if pa is None:
+        raise ValueError(f"({z:.2f}, {x:.2f}) is off the skin")
+    y, th = lerp(pa[0], pb[0], f), lerp(pa[1], pb[1], f)
+    return (x + (1 if x >= 0 else -1) * off * math.cos(th), y + off * math.sin(th), z)
+
+
+def flank_point(secs, sx, z, y, off):
+    """The point on one flank of a loft at (z, height y), `off` out along the skin's own direction."""
+    a, b, f = _bracket(secs, z)
+
+    def at(s):
+        dy = y - s["yc"]
+        hh, ee = (s["t"], s.get("eT", 2.5)) if dy >= 0 else (s["b"], s.get("eB", 2.5))
+        sin_abs = min(abs(dy) / hh, 0.999) ** (ee / 2)
+        th = math.copysign(math.asin(sin_abs), dy)
+        return s["w"] * math.cos(th) ** (2 / ee), th
+    (xa, ta), (xb, tb_) = at(a), at(b)
+    x, th = lerp(xa, xb, f), lerp(ta, tb_, f)
+    return (sx * (x + off * math.cos(th)), y + off * math.sin(th), z)
+
+
+def patch(pt, nu, nv):
+    """A grid of points pt(u, v) in [0, 1]^2 as a thin surface (open)."""
+    verts = [pt(i / nu, j / nv) for i in range(nu + 1) for j in range(nv + 1)]
+    faces = [(i * (nv + 1) + j, (i + 1) * (nv + 1) + j, (i + 1) * (nv + 1) + j + 1, i * (nv + 1) + j + 1) for i in range(nu) for j in range(nv)]
+    return verts, faces
+
+
+def decal(name, geo, slot, parent, outward):
+    """A mesh with no ink for an open surface, turned so its faces look out along `outward` (three.js axes): an open patch has no inside for
+    the normal fix-up to find, so the winding is checked here."""
+    o = mesh(name, geo, slot, parent, 0)
+    me = o.data
+    want = Vector(tb(outward))
+    if sum(p.normal.dot(want) * p.area for p in me.polygons) < 0:
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bmesh.ops.reverse_faces(bm, faces=bm.faces)
+        bm.to_mesh(me)
+        bm.free()
+    return o
+
+
+def eye_on(secs, cz, a, off, parent, tag):
+    """The Daedalus mark draped on the roof: an almond (a long across the hull) with a round pupil, both following the skin's curve."""
+    hw = lambda u: 0.36 * a * max(math.sin(math.pi * u), 0.0) ** 0.8
+    decal(f"eye{tag}", patch(lambda u, v: top_point(secs, cz + (2 * v - 1) * hw(u), a * (2 * u - 1), off), 16, 3), "accent", parent, (0, 1, 0))
+    pr = 0.2 * a
+    decal(f"pupil{tag}", patch(lambda u, v: top_point(secs, cz + pr * v * math.sin(2 * math.pi * u), pr * v * math.cos(2 * math.pi * u), off + 0.004), 12, 1), "dark", parent, (0, 1, 0))
+
+
+def chevron_on(secs, sx, zc, yc, s, parent, tag, off=0.004):
+    """A forward-pointing chevron painted on a flank: two strokes, each a strip draped on the skin."""
+    tip = (zc + 0.6 * s, yc)
+    geos = []
+    for st in ((zc - 0.5 * s, yc + s), (zc - 0.5 * s, yc - s)):
+        dz, dy = tip[0] - st[0], tip[1] - st[1]
+        n = math.hypot(dz, dy)
+        nz, ny, th = -dy / n, dz / n, 0.17 * s
+        geos.append(patch(lambda u, v, st=st, dz=dz, dy=dy, nz=nz, ny=ny, th=th: flank_point(secs, sx, st[0] + u * dz + (2 * v - 1) * th * nz, st[1] + u * dy + (2 * v - 1) * th * ny, off), 5, 1))
+    decal(f"chevron{tag}", join(geos), "accent", parent, (sx, 0, 0))
+
+
+def lamp_on(secs, tx, z, hx, hz, slot, name, parent, off=0.004):
+    """A small light lens draped on the roof of a loft (placed at lateral offset tx)."""
+    decal(name, xf(patch(lambda u, v: top_point(secs, z + (2 * v - 1) * hz, (2 * u - 1) * hx, off), 4, 2), (tx, 0, 0)), slot, parent, (0, 1, 0))
+
+
+def ring_on(secs, tx, z, r, off, slot, name, parent):
+    """A tube round a loft's cross-section at z (an intake rim) that follows the section's own shape."""
+    q = min(secs, key=lambda c: abs(c["z"] - z))
+    pts = []
+    for i in range(25):
+        th = 2 * math.pi * (i % 24) / 24
+        x, y = ring_xy(q, th)
+        pts.append((tx + x + off * math.cos(th), y + off * math.sin(th), q["z"]))
+    mesh(name, tube(pts, [r] * len(pts), 6, False), slot, parent, 0.01)
+
+
+def fin_on(secs, tx, z0, z1, ztop0, ztop1, top, thick, parent, name, embed=0.12, band=0.1):
+    """A tail fin that grows out of a loft's roofline: its foot follows the roof and sinks `embed` into it, so nothing can float. A band of
+    accent colour caps its top edge, cut from the fin's own outline and a little thicker, so it is flush with the fin whatever the fin does."""
+    zs = [z0 + (z1 - z0) * i / 4 for i in range(5)]
+    yb = [top_point(secs, z, 0.0, 0.0)[1] - embed for z in zs]
+    poly = [(z, y) for z, y in zip(zs, yb)] + [(ztop0, top), (ztop1, top)]   # foot aft -> fore, then the raked top fore -> aft
+    mesh(name, xf(extrude(poly, thick, "x"), (tx, 0, 0)), "body", parent, 0.03)
+    d = band
+    zf = ztop0 + (z1 - ztop0) * d / (top - yb[-1])     # the leading edge, `band` down from the top
+    za = ztop1 + (zs[0] - ztop1) * d / (top - yb[0])   # the trailing edge
+    e = 0.006
+    cap = [(ztop1 - e, top + e), (ztop0 + e, top + e), (zf + e, top - d), (za - e, top - d)]
+    mesh(name + "Tip", xf(extrude(cap, thick + 2 * e, "x"), (tx, 0, 0)), "accent", parent, 0)
+
+
 ROOT = pivot("skimmer", (0, 0, 0), None)
 H = pivot("skimmer_hull", (0, 0, 0), ROOT, role="hull")
 
@@ -117,13 +249,17 @@ def emitter(tag, x, y, z, r, flame=0.45):
     plume(H, f"lift{tag}", (x, y - 0.06, z), r * 0.9, flame, axis="y")
 
 
-def coil(tag, x, y, z, R, spin, tabs=3, r=0.055):
-    """A phase-coil ring that spins about z, with armoured tabs round it."""
+def coil(tag, x, y, z, R, spin, tabs=3, r=0.055, tab="square"):
+    """A phase-coil ring that spins about z, with armoured tabs round it (tab="round": circular bosses, axis along the radius)."""
     P = pivot(f"coil{tag}", (x, y, z), ROOT, role="coil", spin=spin)
     mesh(f"coil{tag}_ring", xf(torus(R, r, 24, 6), r=(math.pi / 2, 0, 0)), "glow", P, 0)
     for j in range(tabs):
         a = j * 2 * math.pi / tabs
-        mesh(f"coil{tag}_tab{j}", xf(rbox(0.07, 0.07, 0.1, 0.3, 8, 6), (math.cos(a) * R, math.sin(a) * R, 0)), "plate", P, 0.012)
+        if tab == "round":
+            boss = lathe([(0, -0.05), (0.075, -0.05), (0.075, 0.035), (0.055, 0.052), (0, 0.058)], 16)   # a short drum with a softly domed face, axis y
+            mesh(f"coil{tag}_tab{j}", xf(boss, (math.cos(a) * R, math.sin(a) * R, 0), (0, 0, a - math.pi / 2)), "plate", P, 0.012)
+        else:
+            mesh(f"coil{tag}_tab{j}", xf(rbox(0.07, 0.07, 0.1, 0.3, 8, 6), (math.cos(a) * R, math.sin(a) * R, 0)), "plate", P, 0.012)
     return P
 
 
@@ -213,12 +349,13 @@ else:
                       (0.9, 1.68, 2.12, 0.48, 2.2, 3), (1.3, 1.66, 1.84, 0.14, 2.2, 3)], 3)
     mesh("bridge", loft(BR, 22), "dark", H, 0.04)
     mesh("bridgeCollar", skin_patch(BR, -0.05, math.pi + 0.05, 0.03, -0.95, 1.1, 1, 4), "plate", H, 0.02)
-    for sx in (-1, 1):
-        mesh(f"slit{'LR'[sx > 0]}", xf(rbox(0.38, 0.045, 0.015, 0.4, 8, 4), (sx * 0.3, 2.12, 0.62), (0.7, sx * 0.5, 0)), "accent", H, 0)
-    eye(SECS, 2.0, 0.4, H, "Nose")
+    for sx in (-1, 1):   # the mint slit windows, draped on the bridge's collar plate (slanting in towards the front)
+        decal(f"slit{'LR'[sx > 0]}", patch(lambda u, v, sx=sx: top_point(BR, 0.36 + u * 0.55, sx * (0.32 - 0.1 * u + (v - 0.5) * 0.05), PLATE + 0.004), 8, 1), "accent", H, (0, 1, 0))
+    eye_on(SECS, 2.0, 0.32, PLATE + 0.004, H, "Nose")   # on the nose's spine plate
     for sx in (-1, 1):
         for k, cz in enumerate((-1.5, -1.05, -0.6)):
-            chevron(SECS, sx, cz, 0.15, 0.22, H, f"{'LR'[sx > 0]}{k}", 0.0)
+            q = min(SECS, key=lambda c: abs(c["z"] - cz))
+            chevron_on(SECS, sx, cz, ring_xy(q, 0.15)[1], 0.22, H, f"{'LR'[sx > 0]}{k}")
     # ---- the nacelles: long armoured hover pods with a plate cap, nose cannons, phase coils, hover pads and tail thrusters ----
     NX, NY = 2.0, 0.85
     NAC = [(-2.8, 0.45, 1.25, 0.45, 2.4, 2.6), (-2.2, 0.38, 1.40, 0.60, 2.4, 2.6), (0.9, 0.38, 1.40, 0.60, 2.4, 2.6),
@@ -237,23 +374,22 @@ else:
             tubez(gx, gy, 2.2, 3.7, 0.06, "metal", f"barrel{t}{k}", H, 0.012)
             mesh(f"muzzle{t}{k}", xf(zlathe([(0.095, 0), (0.095, 0.14), (0.07, 0.14)], 12), (gx, gy, 3.55)), "dark", H, 0.012)
             mesh(f"muzzleGlow{t}{k}", xf(zlathe([(0.095, 0), (0.095, 0.02), (0.068, 0.02), (0.068, 0)], 12), (gx, gy, 3.71)), "accent", H, 0)
-        mesh(f"nacChine{t}", tube([(sx * NX + sx * (ring_xy(q, -0.5)[0] + 0.025), ring_xy(q, -0.5)[1], q["z"]) for q in NSECS if -2.3 <= q["z"] <= 1.9][::2], [0.022] * len([q for q in NSECS if -2.3 <= q["z"] <= 1.9][::2]), 4, False), "accent", H, 0)
+        mesh(f"nacChine{t}", tube([(sx * NX + sx * (ring_xy(q, -0.5)[0] + PROUD - 0.022), ring_xy(q, -0.5)[1], q["z"]) for q in NSECS if -2.3 <= q["z"] <= 1.9][::2], [0.022] * len([q for q in NSECS if -2.3 <= q["z"] <= 1.9][::2]), 4, False), "accent", H, 0)
         # a mint intake rim round the nacelle's nose
-        mesh(f"rim{t}", xf(torus(0.4, 0.035, 20, 6), (sx * NX, NY, 1.85), (math.pi / 2, 0, 0), (1, 1, 0.9)), "accent", H, 0.01)
+        ring_on(NSECS, sx * NX, 2.15, 0.03, 0.0, "accent", f"rim{t}", H)
         # phase coils round the pod
         for k, cz in enumerate((-1.5, -0.4, 0.7)):
-            coil(f"{t}{k}", sx * NX, NY, cz, 0.7, sx * (2.4 + k * 0.7), 3)
+            coil(f"{t}{k}", sx * NX, NY, cz, 0.7, sx * (2.4 + k * 0.7), 3, tab="round")
         # hover pads and tail thruster
         for k, pz in enumerate((-1.5, -0.3, 0.9)):
             emitter(f"{t}{k}", sx * NX, 0.4, pz, 0.33)
         thruster(t, sx * NX, NY, -2.85, 0.36, 2.2)
-        # a canted fin on top of the nacelle, mint at the tip
-        fin = [(-2.7, 0.0), (-1.3, 0.0), (-2.1, 1.0), (-2.8, 1.0)]
-        mesh(f"fin{t}", xf(extrude(fin, 0.07, "x"), (sx * NX, NY + 0.7, 0), (0, 0, -sx * 0.14)), "body", H, 0.03)
-        mesh(f"finTip{t}", xf(rbox(0.05, 0.05, 0.32, 0.4, 8, 6), (sx * (NX - 0.14), NY + 1.7, -2.5)), "accent", H, 0.008)
-        mesh(f"head{t}", xf(rbox(0.12, 0.06, 0.05, 0.4, 8, 6), (sx * NX, NY + 0.4, 2.5), (-0.2, 0, 0)), "white", H, 0)
-        mesh(f"tail{t}", xf(rbox(0.12, 0.04, 0.03, 0.4, 8, 4), (sx * NX, NY + 0.45, -2.78)), "red", H, 0)
-        mesh(f"seam{t}", tube([(sx * (ring_xy(q, 0.5)[0] + 0.012), ring_xy(q, 0.5)[1], q["z"]) for q in SECS if -2.2 <= q["z"] <= 2.0][::2], [0.014] * len([q for q in SECS if -2.2 <= q["z"] <= 2.0][::2]), 4, False), "glow", H, 0)
+        # a tail fin growing out of the nacelle's roofline, with a mint band flush along its top edge
+        fin_on(NSECS, sx * NX, -2.7, -1.3, -2.1, -2.8, 2.5, 0.07, H, f"fin{t}")
+        # the running lights are lenses draped on the nacelle's skin: white at the nose, red at the tail
+        lamp_on(NSECS, sx * NX, 2.45, 0.06, 0.035, "white", f"head{t}", H)
+        lamp_on(NSECS, sx * NX, -2.62, 0.08, 0.025, "red", f"tail{t}", H)
+        mesh(f"seam{t}", tube([(sx * (ring_xy(q, 0.5)[0] + PROUD - 0.014), ring_xy(q, 0.5)[1], q["z"]) for q in SECS if -2.2 <= q["z"] <= 2.0][::2], [0.014] * len([q for q in SECS if -2.2 <= q["z"] <= 2.0][::2]), 4, False), "glow", H, 0)
     DUST = [-2.0, -5.2, 2.0, -5.2, -1.2, 1.6, 1.2, 1.6]
 
 ROOT["radius"] = 3.4
