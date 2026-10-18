@@ -864,7 +864,7 @@ class Game {
       }
     }
     // other blastables (outposts, road traffic) register here: fn(pos, radius, damage, owner).
-    // Meteor landings hurt NPCs on their own terms (meteors.js).
+    // Meteor landings hurt NPCs on their own terms (meteors.js calls meteorBlast on enemies, civilians and traffic).
     if (owner !== 'meteor') for (const fn of this.blastHooks || []) fn(pos, radius, damage, owner);
     for (const t of owner === 'meteor' ? [] : this.enemies.targets()) {
       if (owner === t.faction) continue;

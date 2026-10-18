@@ -66,7 +66,8 @@ function readGround(P, d, out) {
  *   blocks: [{ d, r }]  no-go areas (r m of arc round d): settlement rings, military zones, lakes. A block holding an end
  *                       (the town's own ring) is opened along the way in so the road can leave.
  *   avoid:  [[Vector3 unit directions]] roads already laid: crossing costs, running along costs more
- * Returns { dirs: [unit Vector3...] (from d0 to d1, ~40 m apart), len, cost, maxGrade, rough } or null if no way through.
+ * Returns { dirs: [unit Vector3...] (from d0 to d1, ~56 m apart), len (great-circle m, d0 to d1), cost, ms, nodes } or null if
+ * no way through.
  */
 export function planRoad(P, d0, d1, blocks = [], avoid = []) {
   const t0 = performance.now();

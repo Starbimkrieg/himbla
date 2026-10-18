@@ -3,7 +3,7 @@
 // docs/winch-handoff.md). Not in the build; needs the dev server (window.game).
 //
 // WHAT IT DOES.  Teleports the real Player (Player.update -> stepSkater) onto the crater wall in front of the casino, aims the real camera
-// at the fountain, presses a real KeyboardEvent Z so powers.js fires the real Winch (reticle pick() on the fountain), then pulls for SECS
+// at the fountain, presses a real KeyboardEvent E so powers.js fires the real Winch (reticle pick() on the fountain), then pulls for SECS
 // game seconds under a steering policy, one row per frame. powers.update runs the winch inside the game's frame() after the player moves,
 // as in play. Stubbed: rendering, terrain streaming and (by default) traffic and ambient actors. W.targets is emptied (structures only:
 // a clean gate says nothing about towing vehicles); `pin` and ring rides use a fixed hook on a fountain column instead of the reticle.
@@ -28,12 +28,12 @@
 // sloping ~20 degrees down toward the lot; the repro's y = 1 plane is under the terrain here):
 //   policy  coast    skates held (Space) only: passive, from rest, rolling down the crater wall
 //           toward   W + Space, start speed v toward the fountain, camera follows the hook: straight at it (pursuit curve)
-//           line     as toward, but steered along the straight line (position at Z) -> hook, so a line through a post is run into
+//           line     as toward, but steered along the straight line (position at E) -> hook, so a line through a post is run into
 //           orbitE+  W + Space, carve a radius-R circle round the east post (right-hand seen from the road); + or - = direction
 //           orbitE-  (also orbitW+ / orbitW-: the west post)
 //   opts    v=12 start speed (m/s) toward the fountain, set after the aim (default 12 for toward/line/orbit, 0 for coast, 26 for ring)
 //           look=25 / in=0 for ring (see below)
-//           run=2.5 seconds of W + Space toward the aim point before Z (default 0)     R=3 orbit radius     secs=14    boots  no Space
+//           run=2.5 seconds of W + Space toward the aim point before E (default 0)     R=3 orbit radius     secs=14    boots  no Space
 //           hook modes: (default) auto = hook what the reticle is on after aiming at the fountain; if a post blocks that line of sight
 //           (no player could hook it) the hook is pinned and the summary says "pin(blocked by b1)"; aim = strict, "no-target" when blocked;
 //           pin = always a fixed point on a fountain cylinder (pinR=2.7 pinH=3; ring rides use pinR=1.7 pinH=8, the column).
@@ -49,7 +49,7 @@
 //   DT=0.0166667   frame dt (s), <= 0.05 (Game.frame() caps real frames there). 1/30 = 0.0333333, 1/144 = 0.00694444.
 //                  A hair over 1/60 (DT=0.0167) gives 3 physics substeps per frame instead of 2 (player.js:352: ceil(dt / (1/120))).
 //   JITTER=0       per-frame dt jitter (s, uniform +-J, seeded by JSEED=1 and SEED): 0.0005 = a realistic display clock
-//   SECS=14        game seconds to ride after Z            MODE=frame|direct   (frame = the whole game.frame(); direct = updatePlay & co)
+//   SECS=14        game seconds to ride after E            MODE=frame|direct   (frame = the whole game.frame(); direct = updatePlay & co)
 //   SKATES=1       Space held (0 = boots; the ground model then fights the winch)       SEED=1   Math.random seed per scenario
 //   REPEAT=1       passes over the list in ONE page (>1 compares each pass with pass 1: in-page determinism check)
 //   FREEZE=1       stub world.update (traffic and ambient actors still; 0 = live world)   TERRAIN=0 (1 = keep planet.update)

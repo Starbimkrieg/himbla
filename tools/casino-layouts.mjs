@@ -121,7 +121,7 @@ const merge = (...parts) => ({ items: parts.flatMap((p) => p.items), stations: p
 const prop = (id, s, h, cls, o = {}) => ({ id, s, h, cls, ...o });
 
 // =====================================================================================================================================
-// CURRENT: casinoWorld.js as it stands (HALL W 26 FRONT 12 BACK -34: inner faces x +-25, z -33 .. 11; doors 5 m either side of x 0)
+// CURRENT: the box hall casinoWorld.js built before layout B, kept for contrast (HALL W 26 FRONT 12 BACK -34: inner faces x +-25, z -33 .. 11; doors 5 m either side of x 0)
 // =====================================================================================================================================
 const current = (() => {
   const g = merge(

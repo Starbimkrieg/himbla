@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
   return {
     base: './',
     define: { __APP_VERSION__: JSON.stringify(version), __DEV_TOOLS__: JSON.stringify(!release) }, // version: shown on title and pause screens
-    // the runner model (src/assets/runner.glb, from Blender) is imported with ?inline
+    // the Blender models (src/assets/*.glb) are imported with ?inline (models.js GLB)
     assetsInclude: ['**/*.glb'],
     build: { chunkSizeWarningLimit: 2000 },
     plugins: [

@@ -465,7 +465,7 @@ export class ScarfSim {
     else _sa.set(0, 0, 0);
     if (_sa.length() > 20) _sa.setLength(20); // (respawns / teleports aren't swings)
     this.prevVel = (this.prevVel || new THREE.Vector3()).copy(vel);
-    // (a faint breeze to the right keeps the tails from lying dead centre)
+    // gravity + airflow + swing (no side breeze: the rest channel below keeps the tails off the spine)
     const fx = _sg.x + _sw.x + _sa.x, fy = _sg.y + _sw.y + _sa.y, fz = _sg.z + _sw.z + _sa.z;
     const flut = Math.min(0.5, ws / 28);
     const boxes = cargo ? [PACK_BOX, cargo > 1 ? TWIN_BOX : CRATE_BOX] : [PACK_BOX];

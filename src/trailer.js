@@ -1,4 +1,4 @@
-// Trailer director mode (?trailer): plays the ~77 s trailer from in-game footage. Shots each have a setup (teleport,
+// Trailer director mode (?trailer): plays the ~72 s trailer from in-game footage. Shots each have a setup (teleport,
 // spawn, stage), per-frame direction (held keys, steering) and a camera, joined by transitions (whip-pans, flashes, ink
 // wipes) under comic title cards.
 //
@@ -548,7 +548,7 @@ function buildUI() {
 const LOGO = `<div class="tr-logo">MOON<span>-</span>RUNNER</div><div class="tr-tagline">QUANTUM-LOCK DELIVERY SERVICE</div><div class="tr-cta">COMING SOON</div>`;
 
 // ---------------------------------------------------------------------------------------------
-// Shot list (about 45 s). Times are per shot; `out` is the hand-off to the next.
+// Shot list (about 72 s with FISSURE, HERO and SCOOP, spliced in at the end). Times are per shot; `out` is the hand-off to the next.
 // ---------------------------------------------------------------------------------------------
 // transit ship by route (first stop, second stop)
 function ship(T, a, b) {

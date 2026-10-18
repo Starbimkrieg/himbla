@@ -133,7 +133,7 @@ function obeliskItem() {
 function shrineItem() {
   const root = new THREE.Group();
   root.add(kit(shrine));
-  // the Quantum Core on its pedestal (spindle.js:330): octahedron in a soft sphere, turning
+  // the Quantum Core on its pedestal as spindle.js places it (core 4.2 m up, shrine sunk 0.2): octahedron in a soft sphere, turning
   const core = new THREE.Mesh(new THREE.OctahedronGeometry(1.6, 0), glow(TEAL));
   core.add(new THREE.Mesh(new THREE.SphereGeometry(3, 16, 10), BEAM(TEAL, 0.22)));
   core.position.y = 4.4;
