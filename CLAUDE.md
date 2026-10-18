@@ -23,3 +23,5 @@ build, compress and check workflow.
 - Don't open a PR unless asked. Dev changes go on the branch the session names.
 - Bump nothing in `package.json` unless releasing (`Release x.y.z [release]` commit message triggers the workflow).
 - Keep README's source map and CHANGELOG.md in step with what you change.
+- After committing, shut down every dev or preview server you started for the work (`preview_stop`, or end the
+  process). Leave alone any server you didn't start: the user often has their own on port 5173.
