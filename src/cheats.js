@@ -3,6 +3,7 @@ import { OUTFITS, SKATES } from './cosmetics.js';
 import { spliceGenes } from './chimera.js';
 import { pick } from './rng.js';
 import { VEHICLES } from './vehicles.js';
+import { BIKE_STYLES, getBikeStyle, setBikeStyle, SKIMMER_STYLES, getSkimmerStyle, setSkimmerStyle } from './models.js';
 import { TECH } from './story.js';
 import * as THREE from 'three';
 import { greatCircle } from './geo.js';
@@ -14,6 +15,8 @@ import { AssetRow } from './assetRow.js';
 const DEV_KEY = 'mr-dev-unlocked';
 const METEOR_KEY = 'mr-dev-meteor-power';
 const GITCHIP_KEY = 'mr-dev-git-chip';
+const BIKE_NAMES = { b: 'B · PARCEL RUNNER', a: 'A · SLIPSTREAM', classic: 'CLASSIC' };
+const SKIMMER_NAMES = { a: 'A · AEGIS', b: 'B · BULWARK', classic: 'CLASSIC' };
 const GIT_POLL = 90; // seconds between looks at the upstream while the upstream chip is on
 
 // Testing menu on the ` (backtick) key. Everything goes through the normal dialog, so number
@@ -76,9 +79,29 @@ export class Cheats {
       { label: '6 · FULL CHEAT MENU…', fn: () => this.open() },
       { label: `7 · RAGDOLL: ${this.ragdoll ? 'ON' : 'OFF'}`, fn: () => { this.toggleRagdoll(); this.dev(); } },
       { label: '8 · GIT: FETCH & PULL UPSTREAM…', fn: () => this.gitMenu() },
+      { label: `9 · COURIER MODEL: ${BIKE_NAMES[getBikeStyle()]}`, fn: () => this.bikeModel() },
+      { label: `10 · SKIMMER MODEL: ${SKIMMER_NAMES[getSkimmerStyle()]}`, fn: () => this.skimmerModel() },
       { label: 'CLOSE' },
     ]);
     g.dialogButtons.dev = true;
+  }
+
+  // Cycles which Courier light-bike gets built (models.js makeLightBike): B and A are the Blender redesigns (docs/courier-proposals).
+  // Remembered across launches; it applies to the next bike you call (V), so a bike already out keeps the model it was built with.
+  bikeModel() {
+    const next = BIKE_STYLES[(BIKE_STYLES.indexOf(getBikeStyle()) + 1) % BIKE_STYLES.length];
+    setBikeStyle(next);
+    this.game.hud.toast(`Courier light-bike: ${BIKE_NAMES[next]}. Put the bike away (V) and call it again to see it.`, 4);
+    this.dev();
+  }
+
+  // Cycles which Phase Skimmer gets built (models.js makeSkimmer): A and B are the Blender redesigns (docs/skimmer-proposals), which carry
+  // the runner inside. Remembered across launches; it applies to the next skimmer you call (V).
+  skimmerModel() {
+    const next = SKIMMER_STYLES[(SKIMMER_STYLES.indexOf(getSkimmerStyle()) + 1) % SKIMMER_STYLES.length];
+    setSkimmerStyle(next);
+    this.game.hud.toast(`Phase Skimmer: ${SKIMMER_NAMES[next]}. Put it away (V) and call it again to see it.`, 4);
+    this.dev();
   }
 
   // ---- git: the dev server runs it for us (tools/devGit.mjs: a fetch, and a fast-forward pull only), so all of this works from

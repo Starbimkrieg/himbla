@@ -14,6 +14,10 @@ const GLB = {
   runner: () => import('./assets/runner.glb?inline'),
   ships: () => import('./assets/ships.glb?inline'),
   skimmer: () => import('./assets/skimmer.glb?inline'),
+  lightbike_a: () => import('./assets/lightbike_a.glb?inline'),
+  lightbike_b: () => import('./assets/lightbike_b.glb?inline'),
+  skimmer_a: () => import('./assets/skimmer_a.glb?inline'),
+  skimmer_b: () => import('./assets/skimmer_b.glb?inline'),
   warrig: () => import('./assets/warrig.glb?inline'),
   rover: () => import('./assets/rover.glb?inline'),
   interceptor: () => import('./assets/interceptor.glb?inline'),
@@ -1432,7 +1436,7 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, ...dn] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lba, lbb, ska, skb, ...dn] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike_a', 'lightbike_b', 'skimmer_a', 'skimmer_b', ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
   SHIP_PARTS = {};
   for (const name of ['shuttle', 'freighter']) {
     const root = gltf.scene.getObjectByName(name);
@@ -1457,6 +1461,18 @@ export async function loadShipParts({ ships } = {}) {
   const icp = ic.scene.getObjectByName('interceptor');
   if (!icp) throw new Error('interceptor.glb has no interceptor');
   SHIP_PARTS.interceptor = bakeShip(icp);
+  // the Courier light-bike's two Blender redesigns, A and B (tools/blender/build_courier.py)
+  for (const [v, g] of [['a', lba], ['b', lbb]]) {
+    const bike = g.scene.getObjectByName('courier');
+    if (!bike) throw new Error(`lightbike_${v}.glb has no courier`);
+    SHIP_PARTS['bike_' + v] = bakeShip(bike);
+  }
+  // the Phase Skimmer's two Blender redesigns, A Aegis and B Bulwark (tools/blender/build_skimmer_redesign.py)
+  for (const [v, g] of [['a', ska], ['b', skb]]) {
+    const sk2 = g.scene.getObjectByName('skimmer');
+    if (!sk2) throw new Error(`skimmer_${v}.glb has no skimmer`);
+    SHIP_PARTS['skimmer_' + v] = bakeShip(sk2);
+  }
   // the Vostok BTR-M Moon APC (tools/blender/build_apc.py)
   const apc = ap.scene.getObjectByName('apc');
   if (!apc) throw new Error('apc.glb has no apc');
@@ -1825,11 +1841,29 @@ function makeShip(kind, { color, stripe, faction = 'kepler' }) {
   return ship;
 }
 
+// Which Phase Skimmer gets built: 'a' (Aegis, an armoured delta gunship) or 'b' (Bulwark, an armoured catamaran gunship), the Blender
+// redesigns (docs/skimmer-proposals, tools/blender/build_skimmer_redesign.py), or 'classic', the original (skimmer.glb). Both redesigns
+// carry the runner inside (they are not drawn, like the APC's crew). Kept across launches; the dev menu's SKIMMER MODEL switches it (it
+// applies to the next skimmer you call).
+export const SKIMMER_STYLES = ['a', 'b', 'classic'];
+const SKIMMER_KEY = 'mr-skimmer-model';
+let skimmerStyle = 'a';
+try { const k = localStorage.getItem(SKIMMER_KEY); if (SKIMMER_STYLES.includes(k)) skimmerStyle = k; } catch { /* unavailable */ }
+export const getSkimmerStyle = () => skimmerStyle;
+export function setSkimmerStyle(k) {
+  skimmerStyle = SKIMMER_STYLES.includes(k) ? k : 'a';
+  try { localStorage.setItem(SKIMMER_KEY, skimmerStyle); } catch { /* unavailable */ }
+}
+// the redesigns' third colour (the `accent` slot, a glow), beside the livery's near-black and violet; and their armour (`plate`, a toon)
+const SKIMMER_ACCENT = { a: 0xffb62e, b: 0x2ee6c0 };
+const SKIMMER_PLATE = 0x514a73;
+
 // Daedalus Phase Skimmer: a wheel-less hover-racer (built in Blender, see build_skimmer.py). Body
 // and stripe take the vehicle's livery; the phase-coil rings round its nacelles spin, and the
 // thrusters and hover emitters glow with speed. Call anim(t, speed) every frame.
-export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff } = {}) {
-  const B = SHIP_PARTS.skimmer;
+export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff, style = skimmerStyle } = {}) {
+  const key = style !== 'classic' && SHIP_PARTS['skimmer_' + style] ? style : 'classic';
+  const B = key === 'classic' ? SHIP_PARTS.skimmer : SHIP_PARTS['skimmer_' + key];
   const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
   const fx = {
     plume: new THREE.MeshBasicMaterial({ color: trim, opacity: 0.6, ...add }),
@@ -1843,6 +1877,8 @@ export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff } = {}) {
     if (slot === 'stripe') return toon(trim);
     if (slot === 'glow') return glow(trim);
     if (slot === 'seat') return toon(0x221d33);
+    if (slot === 'accent') return glow(SKIMMER_ACCENT[key] ?? 0xffb62e);
+    if (slot === 'plate') return toon(SKIMMER_PLATE);
     if (SHIP_GLOW[slot] !== undefined) return glow(SHIP_GLOW[slot]);
     return toon(SHIP_TOON[slot] ?? 0xff00ff);
   };
@@ -1853,7 +1889,7 @@ export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff } = {}) {
     g.quaternion.copy(node.quat);
     for (const { slot, geo } of node.parts) {
       const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = !FLAMES.has(slot) && slot !== 'glow';
+      m.castShadow = !FLAMES.has(slot) && slot !== 'glow' && slot !== 'accent';
       if (FLAMES.has(slot)) m.renderOrder = 2;
       g.add(m);
     }
@@ -1872,8 +1908,11 @@ export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff } = {}) {
   const root = build(B);
   root.position.set(0, 0, 0);
   root.quaternion.identity();
+  // the redesigns say where a hover vehicle scatters dust (x, z pairs) and that the runner rides inside (hidden)
+  const dust = B.data.dust;
+  const dustSpots = dust ? Array.from({ length: dust.length / 2 }, (_, i) => [dust[i * 2], dust[i * 2 + 1]]) : null;
   return {
-    root, chassis: root, wheels: [], gun: new THREE.Group(), size: 4,
+    root, chassis: root, wheels: [], gun: new THREE.Group(), size: 4, hideRider: !!B.data.hide_rider, ...(dustSpots ? { dustSpots } : {}),
     anim(t, speed = 0) {
       const k = Math.min(1, speed / 60);
       for (const c of coils) c.g.rotation.z = t * c.spin * (1 + 2.5 * k);
@@ -2719,13 +2758,81 @@ export function makeShuttle({ color = 0xfff4e0, stripe = 0x2ec4ff } = {}) {
   return makeShip('shuttle', { color, stripe });
 }
 
-// Meridian Courier Light-Bike: a sleek shell whose nose and tail ARE the curved fairings over its two
+// Which Courier light-bike gets built: 'a' (Slipstream) or 'b' (Parcel Runner), the Blender redesigns (docs/courier-proposals,
+// tools/blender/build_courier.py), or 'classic', the original built from primitives below. Kept across launches; the dev menu's
+// COURIER MODEL switches it (it applies to the next bike you call).
+export const BIKE_STYLES = ['b', 'a', 'classic'];
+const BIKE_KEY = 'mr-courier-model';
+let bikeStyle = 'b';
+try { const k = localStorage.getItem(BIKE_KEY); if (BIKE_STYLES.includes(k)) bikeStyle = k; } catch { /* unavailable */ }
+export const getBikeStyle = () => bikeStyle;
+export function setBikeStyle(k) {
+  bikeStyle = BIKE_STYLES.includes(k) ? k : 'b';
+  try { localStorage.setItem(BIKE_KEY, bikeStyle); } catch { /* unavailable */ }
+}
+
+// A Blender light-bike (build_courier.py): the shell, forks and fittings on a chassis, two wheels spun about x. Slots: the
+// livery glows `stripe` (the bike's colour) and `trim` (the gold), the fixed toons and glows below, and `bag` (the saddle bags: the
+// trim colour as a toon). The root carries the rider's solved pose (`pose_*`) and hip (`seat`), which the Garage and the player read.
+const BIKE_TOON = { navy: 0x0d1428, panel: 0x1a2440, dark: 0x2a2540, metal: 0x5b5870, seat: 0x2a2540, tire: 0x1d1a29 };
+const BIKE_GLOW = { glass: 0x9be7ff, lamp: 0xfff6a8, tail: 0xff2a4a };
+const BIKE_SCALE = 1.2; // (built 1:1, shown at 1.2x)
+function makeBlenderBike(B, { color, trim }) {
+  const root = new THREE.Group();
+  root.scale.setScalar(BIKE_SCALE);
+  const matFor = (slot) => {
+    if (slot === 'stripe') return glow(color);
+    if (slot === 'trim') return glow(trim);
+    if (slot === 'bag') return toon(trim);
+    if (BIKE_GLOW[slot] !== undefined) return glow(BIKE_GLOW[slot]);
+    return toon(BIKE_TOON[slot] ?? 0xff00ff);
+  };
+  const lit = (slot) => slot === 'stripe' || slot === 'trim' || BIKE_GLOW[slot] !== undefined;
+  const dress = (node, g) => {
+    for (const { slot, geo } of node.parts) {
+      const m = new THREE.Mesh(geo, matFor(slot));
+      m.castShadow = !lit(slot);
+      g.add(m);
+    }
+    if (node.ink) {
+      const h = new THREE.Mesh(node.ink, inkMat);
+      h.castShadow = false;
+      h.userData.isInk = true;
+      g.add(h);
+    }
+  };
+  const chassis = new THREE.Group();
+  dress(B.kids.find((k) => k.role === 'chassis'), chassis);
+  root.add(chassis);
+  // the wheels hang off the root, as the classic bike's do, so the chassis can move without them
+  const wheels = [];
+  for (const k of B.kids.find((n) => n.role === 'chassis').kids.filter((n) => n.role === 'wheel')) {
+    const w = new THREE.Group();
+    w.position.copy(k.pos);
+    dress(k, w);
+    root.add(w);
+    wheels.push(w);
+  }
+  const d = B.data;
+  const P = (k) => d['pose_' + k];
+  return {
+    root, chassis, wheels, gun: new THREE.Group(),
+    trailFrom: B.kids.find((k) => k.role === 'trail').pos.clone(), trailColor: color, wheelR: 0.78 * BIKE_SCALE,
+    // where the rider's hip sits (the bike's frame, scaled) and the pose that puts their hands on the grips and keeps their legs out of the shell
+    seat: new THREE.Vector3(d.seat[0], d.seat[1], d.seat[2]).multiplyScalar(BIKE_SCALE),
+    pose: { lean: P('lean'), thigh: P('thigh'), spread: P('spread'), armX: P('arm_x'), armZ: P('arm_z'), elbow: P('elbow') },
+  };
+}
+
+// Meridian Courier Light-Bike (the classic one, built here from primitives: see makeBlenderBike above for the Blender redesigns): a sleek shell whose nose and tail ARE the curved fairings over its two
 // hubless wheels (the wells sweep round the top of each wheel, down to the axle), with a hump for the
 // rider between them. The flanks carry raised side panels, vents, glowing arcs tracing each well and a
 // seam down the length; a tinted canopy, a seat, clip-ons and pegs. Built 1:1, shown at 1.2x. Forward
 // is +z. Returns { root, chassis, wheels, gun, trailFrom, trailColor } (trailFrom: where the light trail
 // streams from, in the bike's own frame).
-export function makeLightBike({ color = 0x2ec4ff, trim = 0xffd23f } = {}) {
+export function makeLightBike({ color = 0x2ec4ff, trim = 0xffd23f, style = bikeStyle } = {}) {
+  const B = style !== 'classic' && SHIP_PARTS && SHIP_PARTS['bike_' + style];
+  if (B) return makeBlenderBike(B, { color, trim });
   const root = new THREE.Group();
   root.scale.setScalar(1.2);
   const chassis = new THREE.Group();
@@ -2797,18 +2904,21 @@ export function makeLightBike({ color = 0x2ec4ff, trim = 0xffd23f } = {}) {
   return { root, chassis, wheels, gun: new THREE.Group(), trailFrom: new THREE.Vector3(0, 0.15, -WZ), trailColor: color };
 }
 
-// A light trail: a glowing ribbon that streams out behind something and fades over `life` seconds.
-// Feed it a world point (where it streams from) and the local up each frame; it lives in world space.
+// A light trail: a glowing wall that streams out behind something and fades over `life` seconds, laid on a
+// strip of glowing floor `width` across so it has body from any angle (a lone ribbon vanishes edge-on). Feed
+// it a world point (where it streams from) and the local up each frame; it lives in world space. `max` points
+// at `step` metres apart must reach `life` seconds at the top speed: 256 x 0.45 m is 115 m, 3.4 s at 34 m/s.
 export class LightTrail {
-  constructor(scene, color, { life = 1, height = 1.0, max = 64 } = {}) {
-    this.life = life; this.height = height; this.max = max;
+  constructor(scene, color, { life = 4, height = 1.5, width = 0.6, max = 256, step = 0.45 } = {}) {
+    this.life = life; this.height = height; this.width = width; this.max = max; this.step2 = step * step;
     this.pts = []; // { p, up, t }
     this.t = 0;
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(max * 2 * 3), 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(max * 2 * 4), 4));
+    // four vertices a point: the wall's foot and top, the floor strip's left and right
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(max * 4 * 3), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(max * 4 * 4), 4));
     const idx = [];
-    for (let i = 0; i < max - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    for (let i = 0; i < max - 1; i++) { const a = i * 4, b = a + 4; idx.push(a, a + 1, b, a + 1, b + 1, b, a + 2, a + 3, b + 2, a + 3, b + 3, b + 2); }
     geo.setIndex(idx);
     this.mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     this.mesh.frustumCulled = false;
@@ -2820,7 +2930,7 @@ export class LightTrail {
   update(dt, p, up, emit = true) {
     this.t += dt;
     const last = this.pts[this.pts.length - 1];
-    if (emit && p && (!last || last.p.distanceToSquared(p) > 0.09)) {
+    if (emit && p && (!last || last.p.distanceToSquared(p) > this.step2)) {
       this.pts.push({ p: p.clone(), up: up.clone(), t: this.t });
       if (this.pts.length > this.max) this.pts.shift();
     } else if (emit && p && last) { last.p.copy(p); last.up.copy(up); last.t = this.t; } // the head follows the bike
@@ -2828,15 +2938,25 @@ export class LightTrail {
     const pos = this.mesh.geometry.attributes.position, col = this.mesh.geometry.attributes.color;
     const n = this.pts.length;
     for (let i = 0; i < this.max; i++) {
-      const q = this.pts[Math.min(i, Math.max(0, n - 1))];
+      const j = Math.min(i, Math.max(0, n - 1)), q = this.pts[j];
       const k = !q || i >= n ? 0 : Math.max(0, 1 - (this.t - q.t) / this.life);
-      const a = k * k; // eases away
+      const a = k * (2 - k); // holds bright, then eases away at the tail end
       if (q) {
-        pos.setXYZ(i * 2, q.p.x, q.p.y, q.p.z);
-        pos.setXYZ(i * 2 + 1, q.p.x + q.up.x * this.height * (0.4 + 0.6 * k), q.p.y + q.up.y * this.height * (0.4 + 0.6 * k), q.p.z + q.up.z * this.height * (0.4 + 0.6 * k));
+        const h = this.height * (0.45 + 0.55 * k);
+        pos.setXYZ(i * 4, q.p.x, q.p.y, q.p.z);
+        pos.setXYZ(i * 4 + 1, q.p.x + q.up.x * h, q.p.y + q.up.y * h, q.p.z + q.up.z * h);
+        // across the path: up x (the way the trail runs), which narrows towards the old end
+        const p0 = this.pts[Math.max(0, j - 1)].p, p1 = this.pts[Math.min(n - 1, j + 1)].p;
+        _tr.copy(p1).sub(p0);
+        _tr.crossVectors(q.up, _tr);
+        const w = _tr.lengthSq() > 1e-8 ? (this.width * (0.5 + 0.5 * k)) / (2 * _tr.length()) : 0;
+        pos.setXYZ(i * 4 + 2, q.p.x - _tr.x * w, q.p.y - _tr.y * w, q.p.z - _tr.z * w);
+        pos.setXYZ(i * 4 + 3, q.p.x + _tr.x * w, q.p.y + _tr.y * w, q.p.z + _tr.z * w);
       }
-      col.setXYZW(i * 2, a, a, a, a);
-      col.setXYZW(i * 2 + 1, a * 0.4, a * 0.4, a * 0.4, a * 0.25);
+      col.setXYZW(i * 4, a, a, a, a);
+      col.setXYZW(i * 4 + 1, a * 0.45, a * 0.45, a * 0.45, a * 0.3);
+      col.setXYZW(i * 4 + 2, a * 0.6, a * 0.6, a * 0.6, a * 0.6);
+      col.setXYZW(i * 4 + 3, a * 0.6, a * 0.6, a * 0.6, a * 0.6);
     }
     pos.needsUpdate = col.needsUpdate = true;
     this.mesh.visible = n > 1;
@@ -2844,6 +2964,7 @@ export class LightTrail {
 
   dispose() { this.mesh.removeFromParent(); this.mesh.geometry.dispose(); this.mesh.material.dispose(); }
 }
+const _tr = new THREE.Vector3();
 
 // ---- The hover-cars (built in Blender, see build_hovercar.py) ----
 // The smallest road vehicle, in two sets from one body style, about 6.5 m long and 3.9 m over the pods: the FACTION car (a low, sharp

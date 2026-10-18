@@ -296,17 +296,22 @@ export class Player {
         // a motorcycle crouch: tucked low over the tank, knees in, arms reaching to the clip-ons,
         // leaning into the turn
         m.root.quaternion.multiply(_q.setFromAxisAngle(_Z, -this.steerLean * 0.28));
-        m.torso.rotation.x = 0.95;
-        m.legL.rotation.x = m.legR.rotation.x = -1.05;
+        // (a Blender bike carries its own pose, solved so the hands meet the grips and the legs clear the shell: model.pose)
+        const bp = this.vehicle.model.pose;
+        m.torso.rotation.x = bp ? bp.lean : 0.95;
+        m.legL.rotation.x = m.legR.rotation.x = bp ? bp.thigh : -1.05;
+        m.legL.rotation.z = bp ? -bp.spread : 0; m.legR.rotation.z = bp ? bp.spread : 0; // (knees out round the tank)
         m.body.position.y = m.bodyBase - 0.62;
         if (m.armL && m.armR) {
-          m.armL.rotation.x = m.armR.rotation.x = -0.75;
-          m.armL.rotation.z = -0.22; m.armR.rotation.z = 0.22;
-          m.foreL.rotation.x = -0.55 + 0.2 * this.steerLean; m.foreR.rotation.x = -0.55 - 0.2 * this.steerLean; // (elbows in, a bend into the turn)
+          m.armL.rotation.x = m.armR.rotation.x = bp ? bp.armX : -0.75;
+          m.armL.rotation.z = bp ? -bp.armZ : -0.22; m.armR.rotation.z = bp ? bp.armZ : 0.22;
+          const el = bp ? bp.elbow : -0.55, lean = bp ? 0.12 : 0.2; // (elbows in, a bend into the turn; less on a bike whose hands are on the grips)
+          m.foreL.rotation.x = el + lean * this.steerLean; m.foreR.rotation.x = el - lean * this.steerLean;
         }
       } else {
         m.torso.rotation.x = 0;
         m.legL.rotation.x = m.legR.rotation.x = -1.3;
+        m.legL.rotation.z = m.legR.rotation.z = 0;
         m.body.position.y = m.bodyBase - 0.5;
         if (m.armL && m.armR) {
           m.armL.rotation.x = -1.15 + 0.15 * this.steerLean; m.armR.rotation.x = -1.15 - 0.15 * this.steerLean;
@@ -642,6 +647,7 @@ export class Player {
     const s = Math.sin(this.anim);
     const base = m.bodyBase;
     this.idle.begin(m); // (last frame's idle off the figure: the poses below only set the angles they use)
+    m.legL.rotation.z = m.legR.rotation.z = 0; // (a bike's knees-out spread must not follow you off it)
     if (!b.grounded && ctrl && ctrl.dive) {
       // dive: tuck, lean hard forward, arms swept back
       m.torso.rotation.x = 0.85;

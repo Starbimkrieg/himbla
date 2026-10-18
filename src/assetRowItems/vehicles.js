@@ -5,10 +5,10 @@
 // phase coils, a land-train's beacon). Everything is built with the pure model factories, never through Garage, Traffic or Enemies.
 import * as THREE from 'three';
 import {
-  makeRover, makeHoverCar, makeKadeTruck, makeTurret, makeLandTrain, makeShuttle, makeFreighter, makeRocket,
+  makeLightBike, makeSkimmer, makeRover, makeHoverCar, makeKadeTruck, makeTurret, makeLandTrain, makeShuttle, makeFreighter, makeRocket,
   LAND_TRAIN_FACTIONS,
 } from '../models.js';
-import { buildVehicleModel } from '../vehicles.js';
+import { buildVehicleModel, VEHICLES } from '../vehicles.js';
 import { buildBuggyRig } from '../traffic.js';
 import { BOSS_MODELS, FOES } from '../storyAssets.js';
 import { makeMothership } from '../spindle.js';
@@ -129,8 +129,13 @@ const ground = {
       make: () => { const m = buildVehicleModel('apc'); return { root: pose(m.root, YAW) }; },
     },
     {
-      id: 'veh.skimmer', label: 'DAEDALUS PHASE SKIMMER', w: 10, d: 8.5,
-      make: () => { const m = buildVehicleModel('skimmer'); return { root: pose(m.root, YAW), update: (dt, t) => m.anim(t, 24) }; },
+      // the classic Skimmer and the two Blender redesigns (A Aegis, B Bulwark) side by side, as built (the runner rides inside)
+      id: 'veh.skimmer', label: 'DAEDALUS PHASE SKIMMER · CLASSIC, A, B', w: 28, d: 9,
+      make: () => {
+        const { color, trim } = VEHICLES.skimmer;
+        const ms = ['classic', 'a', 'b'].map((style) => makeSkimmer({ color, trim, style }));
+        return { root: lineUp(ms.map((m) => part(pose(m.root, YAW), 8.5, 9))).root, update: (dt, t) => { for (const m of ms) m.anim(t, 24); } };
+      },
     },
     {
       // the Mule, and the Kepler hometown motor pool's own (a lighter green, no scale-up)
@@ -147,8 +152,11 @@ const ground = {
       make: () => { const m = buildVehicleModel('carrier'); return { root: pose(m.root, YAW) }; },
     },
     {
-      id: 'veh.lightbike', label: 'MERIDIAN COURIER LIGHT-BIKE', w: 6, d: 4,
-      make: () => { const m = buildVehicleModel('van'); return { root: pose(m.root, YAW) }; },
+      // the classic bike and the two Blender redesigns (A Slipstream, B Parcel Runner) side by side, as built (no rider)
+      id: 'veh.lightbike', label: 'MERIDIAN COURIER LIGHT-BIKE · CLASSIC, A, B', w: 22, d: 4,
+      make: () => ({
+        root: lineUp(['classic', 'a', 'b'].map((style) => part(pose(makeLightBike({ style }).root, YAW), 6, 4))).root,
+      }),
     },
     {
       id: 'veh.warrig', label: 'RUSTMOON SCRAPJAW WAR-RIG', w: 10, d: 9,

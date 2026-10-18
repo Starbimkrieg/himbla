@@ -141,7 +141,7 @@ export class Garage {
   build(id) {
     const m = buildVehicleModel(id);
     const def = VEHICLES[id];
-    if (def.bike) m.trail = new LightTrail(this.game.scene, def.color, { life: 1, height: 1.0 });
+    if (def.bike) m.trail = new LightTrail(this.game.scene, def.color);
     return m;
   }
 
@@ -381,9 +381,11 @@ export class Garage {
     // whenever it tilted in the air or bobbed. (Seat heights are measured from the ground; a hover
     // model already floats 0.8 above it.)
     const mq = model.root.quaternion;
-    const seatUp = (def.seat ?? 1.6 * (def.scale || 1)) - (def.hover ? 0.8 : 0);
+    // (a Blender bike says where the rider's hip goes; the hip is 0.33 above the runner's own origin when sat)
+    const seatUp = model.seat ? model.seat.y - 0.33 : (def.seat ?? 1.6 * (def.scale || 1)) - (def.hover ? 0.8 : 0);
     P.body.pos.copy(model.root.position).addScaledVector(_mu.set(0, 1, 0).applyQuaternion(mq), seatUp);
-    if (def.seatZ) P.body.pos.addScaledVector(_mf.set(0, 0, 1).applyQuaternion(mq), def.seatZ);
+    const seatZ = model.seat ? model.seat.z : def.seatZ;
+    if (seatZ) P.body.pos.addScaledVector(_mf.set(0, 0, 1).applyQuaternion(mq), seatZ);
     v.riderQuat = mq;
     if (model.turret) this.aimTurret(v, dt, cam);
     if (model.exhaust) this.exhaustSmoke(v, dt, fwdIn ? 1 : 0, up);

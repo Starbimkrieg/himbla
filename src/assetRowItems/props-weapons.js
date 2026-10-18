@@ -271,11 +271,11 @@ function skateTrails(ctx) {
   };
 }
 
-// the light-bike's trail (models.js LightTrail): a ribbon standing on its edge behind the bike, per bike colour
+// the light-bike's trail (models.js LightTrail): a glowing wall on a strip of floor behind the bike, per bike colour
 function lightTrails() {
   const root = new THREE.Group();
   const cols = [0x2ec4ff, 0xff7ad9, 0xffd23f, 0x7dff3a];
-  const trails = cols.map((c) => new LightTrail(root, c, { life: 1, height: 1.0 }));
+  const trails = cols.map((c) => new LightTrail(root, c));
   root.add(plate(44, cols.length * 3.2 + 2, 0x2a2540));
   const heads = cols.map((c) => { const m = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.5, 0.6), glow(c)); m.position.y = 0.4; root.add(m); return m; });
   const p = V(0, 0.15, 0);

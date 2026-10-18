@@ -20,6 +20,17 @@ build, compress and check workflow.
 
 ## Screenshots in dev sessions
 
+When you start a game to test visuals or gameplay (headless or in the browser pane), skip the tutorial first, or BOLT's
+courier-school dialog opens a few seconds into play and covers every screenshot (it is a modal state: nothing else runs
+until it is answered). Set the flag before starting:
+
+```js
+game.tutorial.done = true; // no BOLT offer (src/main.js only offers it while this is false)
+game.startPlay();
+```
+
+If a dialog is up anyway, `game.state` is `'dialog'`: answer it with `game.pickDialog(i)` (`game.dialogButtons` lists the choices).
+
 When you look at something in the running game (a dev server in the browser pane), turn on the free cam and hide
 the HUD first, so screenshots show the world and nothing over it. From the page, once `game.state` is `'play'`:
 
