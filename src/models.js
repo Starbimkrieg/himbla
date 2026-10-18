@@ -1845,13 +1845,13 @@ function makeShip(kind, { color, stripe, faction = 'kepler' }) {
 // redesigns (docs/skimmer-proposals, tools/blender/build_skimmer_redesign.py), or 'classic', the original (skimmer.glb). Both redesigns
 // carry the runner inside (they are not drawn, like the APC's crew). Kept across launches; the dev menu's SKIMMER MODEL switches it (it
 // applies to the next skimmer you call).
-export const SKIMMER_STYLES = ['a', 'b', 'classic'];
+export const SKIMMER_STYLES = ['b', 'a', 'classic'];
 const SKIMMER_KEY = 'mr-skimmer-model';
-let skimmerStyle = 'a';
+let skimmerStyle = 'b';
 try { const k = localStorage.getItem(SKIMMER_KEY); if (SKIMMER_STYLES.includes(k)) skimmerStyle = k; } catch { /* unavailable */ }
 export const getSkimmerStyle = () => skimmerStyle;
 export function setSkimmerStyle(k) {
-  skimmerStyle = SKIMMER_STYLES.includes(k) ? k : 'a';
+  skimmerStyle = SKIMMER_STYLES.includes(k) ? k : 'b';
   try { localStorage.setItem(SKIMMER_KEY, skimmerStyle); } catch { /* unavailable */ }
 }
 // the redesigns' third colour (the `accent` slot, a glow), beside the livery's near-black and violet; and their armour (`plate`, a toon)
