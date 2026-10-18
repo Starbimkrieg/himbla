@@ -746,6 +746,7 @@ tools/
   blender/build_crane.py   builds the tower crane -> src/assets/crane.glb (also runs headless, like build_apc.py)
   blender/build_garage.py  builds the main and small motor-pool garages -> src/assets/garage.glb (also runs headless)
   blender/build_dish.py    builds the cryo receiver and gantry station dish arrays -> src/assets/dish.glb (also runs headless)
+  blender/build_courier.py builds the two Courier light-bike redesign proposals -> docs/courier-proposals/courier_a.glb, courier_b.glb (headless: `MOONRUNNER_COURIER=a|b`); `blender/preview_courier.py` renders the review sheet
   blender/build_outposts.py builds the Relay Mast and Watchtower -> src/assets/outposts.glb (also runs headless; `npm run check:outposts` checks the file)
   blender/decals.py        flat lettering, emblems, hazard stripes and safety signs (no textures) the land-train builder execs after kit.py
   blender/kit.py           shared geometry/material/export helpers every Blender builder execs (the runner and ships keep their own variants of a few)

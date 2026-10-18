@@ -133,7 +133,7 @@ export class Garage {
   build(id) {
     const m = buildVehicleModel(id);
     const def = VEHICLES[id];
-    if (def.bike) m.trail = new LightTrail(this.game.scene, def.color, { life: 1, height: 1.0 });
+    if (def.bike) m.trail = new LightTrail(this.game.scene, def.color);
     return m;
   }
 

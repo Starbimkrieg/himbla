@@ -1976,18 +1976,21 @@ export function makeLightBike({ color = 0x2ec4ff, trim = 0xffd23f } = {}) {
   return { root, chassis, wheels, gun: new THREE.Group(), trailFrom: new THREE.Vector3(0, 0.15, -WZ), trailColor: color };
 }
 
-// A light trail: a glowing ribbon that streams out behind something and fades over `life` seconds.
-// Feed it a world point (where it streams from) and the local up each frame; it lives in world space.
+// A light trail: a glowing wall that streams out behind something and fades over `life` seconds, laid on a
+// strip of glowing floor `width` across so it has body from any angle (a lone ribbon vanishes edge-on). Feed
+// it a world point (where it streams from) and the local up each frame; it lives in world space. `max` points
+// at `step` metres apart must reach `life` seconds at the top speed: 256 x 0.45 m is 115 m, 3.4 s at 34 m/s.
 export class LightTrail {
-  constructor(scene, color, { life = 1, height = 1.0, max = 64 } = {}) {
-    this.life = life; this.height = height; this.max = max;
+  constructor(scene, color, { life = 4, height = 1.5, width = 0.6, max = 256, step = 0.45 } = {}) {
+    this.life = life; this.height = height; this.width = width; this.max = max; this.step2 = step * step;
     this.pts = []; // { p, up, t }
     this.t = 0;
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(max * 2 * 3), 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(max * 2 * 4), 4));
+    // four vertices a point: the wall's foot and top, the floor strip's left and right
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(max * 4 * 3), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(max * 4 * 4), 4));
     const idx = [];
-    for (let i = 0; i < max - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    for (let i = 0; i < max - 1; i++) { const a = i * 4, b = a + 4; idx.push(a, a + 1, b, a + 1, b + 1, b, a + 2, a + 3, b + 2, a + 3, b + 3, b + 2); }
     geo.setIndex(idx);
     this.mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     this.mesh.frustumCulled = false;
@@ -1999,7 +2002,7 @@ export class LightTrail {
   update(dt, p, up, emit = true) {
     this.t += dt;
     const last = this.pts[this.pts.length - 1];
-    if (emit && p && (!last || last.p.distanceToSquared(p) > 0.09)) {
+    if (emit && p && (!last || last.p.distanceToSquared(p) > this.step2)) {
       this.pts.push({ p: p.clone(), up: up.clone(), t: this.t });
       if (this.pts.length > this.max) this.pts.shift();
     } else if (emit && p && last) { last.p.copy(p); last.up.copy(up); last.t = this.t; } // the head follows the bike
@@ -2007,15 +2010,25 @@ export class LightTrail {
     const pos = this.mesh.geometry.attributes.position, col = this.mesh.geometry.attributes.color;
     const n = this.pts.length;
     for (let i = 0; i < this.max; i++) {
-      const q = this.pts[Math.min(i, Math.max(0, n - 1))];
+      const j = Math.min(i, Math.max(0, n - 1)), q = this.pts[j];
       const k = !q || i >= n ? 0 : Math.max(0, 1 - (this.t - q.t) / this.life);
-      const a = k * k; // eases away
+      const a = k * (2 - k); // holds bright, then eases away at the tail end
       if (q) {
-        pos.setXYZ(i * 2, q.p.x, q.p.y, q.p.z);
-        pos.setXYZ(i * 2 + 1, q.p.x + q.up.x * this.height * (0.4 + 0.6 * k), q.p.y + q.up.y * this.height * (0.4 + 0.6 * k), q.p.z + q.up.z * this.height * (0.4 + 0.6 * k));
+        const h = this.height * (0.45 + 0.55 * k);
+        pos.setXYZ(i * 4, q.p.x, q.p.y, q.p.z);
+        pos.setXYZ(i * 4 + 1, q.p.x + q.up.x * h, q.p.y + q.up.y * h, q.p.z + q.up.z * h);
+        // across the path: up x (the way the trail runs), which narrows towards the old end
+        const p0 = this.pts[Math.max(0, j - 1)].p, p1 = this.pts[Math.min(n - 1, j + 1)].p;
+        _tr.copy(p1).sub(p0);
+        _tr.crossVectors(q.up, _tr);
+        const w = _tr.lengthSq() > 1e-8 ? (this.width * (0.5 + 0.5 * k)) / (2 * _tr.length()) : 0;
+        pos.setXYZ(i * 4 + 2, q.p.x - _tr.x * w, q.p.y - _tr.y * w, q.p.z - _tr.z * w);
+        pos.setXYZ(i * 4 + 3, q.p.x + _tr.x * w, q.p.y + _tr.y * w, q.p.z + _tr.z * w);
       }
-      col.setXYZW(i * 2, a, a, a, a);
-      col.setXYZW(i * 2 + 1, a * 0.4, a * 0.4, a * 0.4, a * 0.25);
+      col.setXYZW(i * 4, a, a, a, a);
+      col.setXYZW(i * 4 + 1, a * 0.45, a * 0.45, a * 0.45, a * 0.3);
+      col.setXYZW(i * 4 + 2, a * 0.6, a * 0.6, a * 0.6, a * 0.6);
+      col.setXYZW(i * 4 + 3, a * 0.6, a * 0.6, a * 0.6, a * 0.6);
     }
     pos.needsUpdate = col.needsUpdate = true;
     this.mesh.visible = n > 1;
@@ -2023,6 +2036,7 @@ export class LightTrail {
 
   dispose() { this.mesh.removeFromParent(); this.mesh.geometry.dispose(); this.mesh.material.dispose(); }
 }
+const _tr = new THREE.Vector3();
 
 // Hover-car: a smooth flattened capsule with a bubble canopy, a rub-strip round the waist, slim
 // side pods, swept fins and lights set into the skin. Built at the old size (4.8 long) and scaled
