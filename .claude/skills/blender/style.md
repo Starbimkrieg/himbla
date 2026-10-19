@@ -68,7 +68,8 @@ when in doubt:
 - **A part that enters another goes in all the way.** Its base stays inside the host along its whole length; a base that stops
   above the surface shows its own outline as a second line (the crest rebuild in `build_runner.py`).
 - **No coplanar overlaps.** Two meshes on one plane z-fight. Offset by at least about 3 mm, or cut a hole. End every builder
-  with `audit_coplanar()` (`build_rover.py`, `build_hall.py`, `build_lot.py`); it raises on overlaps above 1 cm². `slab()` in
+  with `audit_coplanar()` and `audit_flips()` (both in `kit.py`; `build_hall.py`, the casino builders, `build_rover.py`); the first
+  raises on overlaps above 1 cm², the second lists inside-out pieces. `slab()` in
   `build_crane.py` leaves 1 mm between its pieces so their corners are not welded together.
 - **Glowing parts mostly carry no ink.** Give one a thin line (0.01 to 0.02) only when it is a shape of its own that stands out
   (light-bar lenses, lamps, a raked screen).

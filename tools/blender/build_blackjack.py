@@ -141,7 +141,7 @@ A = Acc("railLeather", "leather", table, 0.04)
 A.path([(RAIL_R * math.cos(a), 1.255, RAIL_R * math.sin(a)) for a in [PI * i / 40 for i in range(41)]], [0.12] * 41, 8)
 A.flush()
 A = Acc("railGold", "gold", table, 0.0)
-A.path([(RAIL_R * math.cos(a), 1.125, RAIL_R * math.sin(a)) for a in [PI * i / 40 for i in range(41)]], [0.05] * 41, 5)
+A.path([(RAIL_R * math.cos(a), 1.125, RAIL_R * math.sin(a)) for a in [0.004 + (PI - 0.008) * i / 40 for i in range(41)]], [0.05] * 41, 5)   # ends 1.4 cm short of the leather's
 for i in range(30):
     a = PI * (i + 0.5) / 30
     A.ball((RAIL_R + 0.1) * math.cos(a), 1.255, (RAIL_R + 0.1) * math.sin(a), 0.028, 6, 4)
@@ -161,13 +161,13 @@ for i in range(8):
     suit_panel(AF, AP, AR, AC, i % 4, (3.2 * math.cos(a), 0.56, 3.2 * math.sin(a)), PI / 2 - a, 0.9, 0.66, 0.34)
 for i in range(9):
     a = PI * i / 8
-    A3.add(cuboid(0.1, 0.84, 0.07), (3.2 * math.cos(a), 0.58, 3.2 * math.sin(a)), (0, PI / 2 - a, 0))
+    A3.add(cuboid(0.1, 0.825, 0.07), (3.2 * math.cos(a), 0.5825, 3.2 * math.sin(a)), (0, PI / 2 - a, 0))   # ends inside both girdles
 AF.flush(); AP.flush(); AR.flush(); AC.flush(); A3.flush()
 
 # brass chip rack in the shelf (behind z = 0.05, clear of the cards): five chip columns between gold dividers
 A = Acc("rackTray", "brass", table, 0.03)
 A.boxc(-0.85, 1.145, -0.26, 1.7, 0.03, 0.46)
-A.boxc(-0.85, 1.2, -0.5, 1.7, 0.14, 0.04)
+A.boxc(-0.85, 1.2, -0.49, 1.7, 0.14, 0.04)                      # back 1 cm inside the top slab's back face
 for s in (-1, 1):
     A.boxc(-0.85 + s * 0.86, 1.2, -0.26, 0.04, 0.14, 0.46)
 A.boxc(-0.85, 1.2, -0.03, 1.7, 0.14, 0.04)
@@ -200,7 +200,7 @@ A = Acc("shoeBody", "plum2", table, 0.03)
 A.boxc(2.03, 1.31, 0.62, 0.5, 0.32, 0.7, rot=(0.12, 0, 0))
 A.flush()
 A = Acc("shoeGold", "gold", table, 0.02)
-A.boxc(2.03, 1.47, 0.62, 0.54, 0.03, 0.74, rot=(0.12, 0, 0))
+A.boxc(2.03, 1.47, 0.62, 0.54, 0.03, 0.78, rot=(0.12, 0, 0))   # lip 2 cm past the body's leaning front
 A.boxc(2.03, 1.37, 0.97, 0.54, 0.22, 0.03)
 A.boxc(2.03, 1.23, 0.6, 0.56, 0.05, 0.74)
 A.flush()
@@ -248,8 +248,8 @@ A.flush()
 A = Acc("chipEdge", "cream", chip, 0.0)
 for i in range(7):
     a = 2 * PI * i / 7
-    A.boxc(0.158 * math.sin(a), 0.035, 0.158 * math.cos(a), 0.06, 0.072, 0.014, rot=(0, a, 0))
-A.cylc(0, 0.0705, 0, 0.055, 0.003, 4, rot=(0, PI / 4, 0))     # diamond medallion
+    A.boxc(0.158 * math.sin(a), 0.035, 0.158 * math.cos(a), 0.06, 0.062, 0.014, rot=(0, a, 0))   # 4 mm short of the faces
+A.cylc(0, 0.0715, 0, 0.055, 0.005, 4, rot=(0, PI / 4, 0))     # diamond medallion, 4 mm proud
 A.flush()
 A = Acc("chipRing", "gold", chip, 0.0)
 A.add(torus(0.115, 0.006, 16, 4), (0, 0.0715, 0))
@@ -320,6 +320,9 @@ def audit(tol=0.10, over=0.004):
 
 audit()
 
+audit_coplanar(C.objects)        # kit.py: same-plane faces of two parts would z-fight (raises)
+audit_flips(C.objects)
+
 _dg = bpy.context.evaluated_depsgraph_get()
 _tris = {}
 for _o in C.objects:
@@ -330,4 +333,5 @@ for _o in C.objects:
         _p = _p.parent
     _tris[_p.name] = _tris.get(_p.name, 0) + sum(len(q.vertices) - 2 for q in _o.evaluated_get(_dg).to_mesh().polygons)
 print("built", len(C.objects), "objects; triangles per root:", _tris)
-export(OUT, list(C.objects))
+if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
+    export(OUT, list(C.objects))

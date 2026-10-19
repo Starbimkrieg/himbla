@@ -274,7 +274,7 @@ def trough_A():
         A.boxc(sx * (H - 0.31), 0.7, 0, 0.02, 0.6, WID - 0.6)
     A.flush()
     A = Acc("tGold", "gold", o, 0.03)
-    A.boxc(0, 0.33, 0, LEN + 0.14, 0.1, WID + 0.14)
+    A.boxc(0, 0.31, 0, LEN + 0.14, 0.1, WID + 0.14)          # foot band 2 cm under the body and slab, so no shared floor-side plane
     A.boxc(0, 1.07, WID / 2 - 0.19, LEN + 0.04, 0.1, 0.46)       # coping 2 cm proud of the body, so no shared planes
     A.boxc(0, 1.07, -(WID / 2 - 0.19), LEN + 0.04, 0.1, 0.46)
     for sx in (-1, 1):
@@ -361,7 +361,7 @@ def gate_A():
     A = Acc("grBars", "brass", g, 0.02)
     for k in range(21):
         z = -3.2 + k * 0.32
-        A.cylc(0, 0, z, 0.035, 1.5, 6)
+        A.cylc(0, 0, z, 0.035, 1.48, 6)                      # ends inside the top and bottom rails
         A.add(cylinder(0.0, 0.07, 0.2, 6), (0, 0.84, z))
     A.flush()
     A = Acc("grRails", "gold", g, 0.03)
@@ -379,7 +379,7 @@ def finish_A():
     A.flush()
     A = Acc("fShaft", "cream", o, 0.03)
     for s in (-1, 1):
-        A.cylc(0, 3.2, s * PZ, 0.34, 4.6, 14)                                                      # wide enough to hold the beams' corners
+        A.cylc(0, 3.25, s * PZ, 0.34, 4.7, 14)                                                      # wide enough to hold the beams' corners
     A.flush()
     A = Acc("fGold", "gold", o, 0.03)
     for s in (-1, 1):
@@ -388,7 +388,7 @@ def finish_A():
             A.cylc(0, y, s * PZ, 0.40, 0.1, 14)
         A.lath([(0, 5.5), (0.46, 5.5), (0.38, 5.62), (0.28, 5.7), (0, 5.7)], (0, 0, s * PZ), (0, 0, 0), (1, 1, 1), 12)
         A.ball(0, 5.9, s * PZ, 0.2, 10, 8)
-    A.boxc(0, 5.19, 0, 0.66, 0.16, 2 * PZ)      # top 2 cm above the beam's (no shared plane); ends inside the shafts
+    A.boxc(0, 5.19, 0, 0.64, 0.16, 2 * PZ)      # top 2 cm above the beam's, sides 1 cm out (no shared plane); ends inside the shafts, clear of their facets
     A.flush()
     A = Acc("fBeam", "plum", o, 0.04)
     A.boxc(0, 5.0, 0, 0.62, 0.5, 2 * PZ - 0.1)
@@ -486,7 +486,7 @@ def board_A():
 def kiosk_A():
     o = pivot("dd_kiosk", (0, 0, 0), None)
     A = Acc("kBody", "plum", o, 0.05)
-    A.boxc(0, 0.65, 0, 2.6, 1.3, 1.3)
+    A.boxc(0, 0.66, 0, 2.6, 1.28, 1.3)                                # foot inside the gold base
     A.flush()
     A = Acc("kGold", "gold", o, 0.03)
     A.boxc(0, 0.06, 0, 2.8, 0.12, 1.5)
@@ -500,7 +500,7 @@ def kiosk_A():
     # window: brass posts, header, screen inside
     A = Acc("kWindow", "brass", o, 0.03)
     for sx in (-1, 1):
-        A.cylc(sx * 1.15, 1.95, -0.25, 0.06, 1.2, 8)
+        A.cylc(sx * 1.15, 1.945, -0.25, 0.055, 1.19, 8)                    # tops inside the header
     A.boxc(0, 2.55, -0.25, 2.5, 0.1, 0.2)
     A.flush()
     A = Acc("kBack", "plum2", o, 0.03)
@@ -509,15 +509,16 @@ def kiosk_A():
     A = Acc("kValance", "red", o, 0.03)
     for k in range(10):
         A.add(cylinder(0.14, 0.14, 0.4, 8), (-1.1 + k * 0.245, 2.75, -0.2), (0, 0, 0))
-        A.ball(-1.1 + k * 0.245, 2.55, -0.2, 0.14, 8, 5, (1, 0.8, 1))
+        if k % 2:                                                           # (the even ones are cream, below: one ball per swag)
+            A.ball(-1.1 + k * 0.245, 2.55, -0.2, 0.14, 8, 5, (1, 0.8, 1))
     A.flush()
     A = Acc("kValCream", "cream", o, 0.0)
     for k in range(0, 10, 2):
-        A.ball(-1.1 + k * 0.245, 2.55, -0.2, 0.15, 8, 5, (1, 0.82, 1.02))
+        A.ball(-1.1 + k * 0.245, 2.55, -0.2, 0.16, 8, 5, (1, 0.8, 1))       # 1 cm wider than the red cylinder's facets above it
     A.flush()
     pivot("screen", (0, 1.95, -0.42), o, role="screen", w=2.3, h=1.1, tilt=0.0)
     A = Acc("kScreenRim", "gold", o, 0.0)
-    A.boxc(0, 2.52, -0.43, 2.5, 0.06, 0.04); A.boxc(0, 1.38, -0.43, 2.5, 0.06, 0.04)
+    A.boxc(0, 2.52, -0.43, 2.46, 0.06, 0.04); A.boxc(0, 1.38, -0.43, 2.46, 0.06, 0.04)   # ends flush with the posts, inside the back's ends
     for sx in (-1, 1):
         A.boxc(sx * 1.2, 1.95, -0.43, 0.06, 1.2, 0.04)
     A.flush()
@@ -564,6 +565,9 @@ trough_A(); gate_A(); finish_A(); board_A(); kiosk_A(); rail_A()
 for i in (1, 2, 3, 4):
     duck_A(i)
 flush_all()
+audit_coplanar(C.objects)        # kit.py: same-plane faces of two parts would z-fight (raises)
+audit_flips(C.objects)
+
 _dg = bpy.context.evaluated_depsgraph_get()
 _tris = {}
 for _o in C.objects:
@@ -574,4 +578,5 @@ for _o in C.objects:
         _p = _p.parent
     _tris[_p.name] = _tris.get(_p.name, 0) + sum(len(q.vertices) - 2 for q in _o.evaluated_get(_dg).to_mesh().polygons)
 print("built", len(C.objects), "objects; triangles per root:", _tris)
-export(OUT, list(C.objects))
+if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
+    export(OUT, list(C.objects))

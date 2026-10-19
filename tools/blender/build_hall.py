@@ -435,6 +435,7 @@ brass.lath(ring_prof(0.0, 0.3, TOP + 4.2, TOP + 4.5), segs=12)
 
 flush_all()
 audit_coplanar(C.objects)
+audit_flips(C.objects)
 
 _dg = bpy.context.evaluated_depsgraph_get()
 _tris = {}

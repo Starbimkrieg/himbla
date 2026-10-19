@@ -182,47 +182,6 @@ def parts(root, prefix, specs):
     return {s: Acc(f"{prefix}_{s}", s, root, ink) for s, ink in specs.items()}
 
 
-def audit_flips(objs, min_faces=6):
-    """Report inside-out primitives (doesn't stop the build). Kit primitives are convex, so a connected piece with most faces
-    pointing inward has reversed winding or a wrong turn (it shows only from inside, or not at all)."""
-    import mathutils
-    bad = []
-    dg = bpy.context.evaluated_depsgraph_get()
-    for o in objs:
-        if o.type != "MESH":
-            continue
-        me = o.evaluated_get(dg).to_mesh()
-        mw, nm = o.matrix_world, o.matrix_world.to_3x3()
-        parent = list(range(len(me.vertices)))
-
-        def find(a):
-            while parent[a] != a:
-                parent[a] = parent[parent[a]]
-                a = parent[a]
-            return a
-        for f in me.polygons:
-            vs = list(f.vertices)
-            for a in vs[1:]:
-                parent[find(a)] = find(vs[0])
-        groups = {}
-        for f in me.polygons:
-            groups.setdefault(find(f.vertices[0]), []).append(f)
-        for fs in groups.values():
-            if len(fs) < min_faces:
-                continue
-            vs = {v for f in fs for v in f.vertices}
-            mid = sum((mw @ me.vertices[v].co for v in vs), mathutils.Vector()) / len(vs)
-            inward = sum(1 for f in fs if (nm @ f.normal).dot(mw @ f.center - mid) < -1e-6)
-            if inward > 0.85 * len(fs):
-                # reported in three.js axes, as the builders write them
-                bad.append(f"{o.name}: {inward}/{len(fs)} faces point inward, piece at ({mid.x:.2f}, {mid.z:.2f}, {-mid.y:.2f})")
-        o.evaluated_get(dg).to_mesh_clear()
-    if bad:
-        print("AUDIT flips: " + str(len(bad)) + " inside-out piece(s):\n  " + "\n  ".join(bad[:15]))
-    else:
-        print("AUDIT flips ok")
-
-
 def finish_and_export():
     flush_all()
     audit_coplanar(C.objects)

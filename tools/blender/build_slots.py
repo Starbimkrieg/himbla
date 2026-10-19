@@ -171,7 +171,8 @@ for sx in (-1, 1):
 # ---- screen housing: leaning bezel, pixel-reel display, neon corner brackets ----
 TILT = math.atan2(0.44 - 0.3, 3.1 - 1.66)   # lean of the housing front (the profile's slope there)
 SCR_Y = 2.38
-BZ = 0.38 - (SCR_Y - 1.66) * 0.098          # bezel centre z: its front sits on the profile
+BZ = 0.38 - (SCR_Y - 1.66) * 0.098          # bezel centre z with its front on the profile ...
+SCR_Y, BZ = on_plane(SCR_Y, BZ, TILT, 0, 0.03)   # ... then 3 cm out of it (a front on the shell's face z-fights)
 A = Acc("bezel", "bezel", root, 0.03)
 A.boxc(0, SCR_Y, BZ, 1.86, 1.42, 0.12, rot=(-TILT, 0, 0))
 A.flush()
@@ -232,7 +233,7 @@ A = Acc("deckPlate", "panel", root, 0.02)
 A.boxc(0, 1.375, 0.74, 1.9, 0.05, 0.62, rot=(0.3, 0, 0))
 A.flush()
 A = Acc("deckLip", "chrome", root, 0.02)
-A.boxc(0, 1.29, 1.02, 1.94, 0.04, 0.05, rot=(0.3, 0, 0))
+A.boxc(0, 1.29, 1.02, 1.94, 0.07, 0.05, rot=(0.3, 0, 0))   # top 1.2 cm over the plate's, its slope
 A.flush()
 BTN = [(-0.72, "ledr"), (-0.5, "ledg"), (0.5, "ledb"), (0.72, "gold")]
 A = Acc("btnCups", "dark", root, 0.0)
@@ -368,6 +369,9 @@ def audit():
 
 audit()
 
+audit_coplanar(C.objects)        # kit.py: same-plane faces of two parts would z-fight (raises)
+audit_flips(C.objects)
+
 _dg = bpy.context.evaluated_depsgraph_get()
 _tris, _ink = {}, 0
 for _o in C.objects:
@@ -378,4 +382,5 @@ for _o in C.objects:
     if _o["ink"] > 0:
         _ink += _t
 print("built", len(C.objects), "objects;", sum(_tris.values()), "triangles in", len(_tris), "slots, plus", _ink, "in the outline shells")
-export(OUT, list(C.objects))
+if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
+    export(OUT, list(C.objects))

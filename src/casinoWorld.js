@@ -425,9 +425,9 @@ export function buildCasino(w, loc) {
   // Rings round the outline, between two offsets of it: mitred corners, and each buried in the wall by a different depth so
   // no faces coincide. `a` buried side, `b` front: metres from the wall's inner face, + outward, - into the room.
   // Built quad by quad between the mitred chains: tight corners make a thin ring's edges cross, breaking a polygon fill.
-  const bandGeo = (a, b, y0, y1) => {
+  const bandGeo = (a, b, y0, y1, end = 0.01) => {
     const A = offsetPolygon(IN, a), B = offsetPolygon(IN, b), pos = [];
-    for (const V of [A, B]) { V[0] = [V[0][0] + 0.01, V[0][1]]; V[V.length - 1] = [V[V.length - 1][0] - 0.01, V[V.length - 1][1]]; }     // ends 1 cm back from the jambs (no shared plane)
+    for (const V of [A, B]) { V[0] = [V[0][0] + end, V[0][1]]; V[V.length - 1] = [V[V.length - 1][0] - end, V[V.length - 1][1]]; }     // ends `end` m back from the jambs: each ring its own, so no two end caps share a plane
     const quad = (p0, p1, p2, p3, n) => {     // two triangles, wound to face n
       const u = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]], v = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
       const c = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
@@ -451,8 +451,8 @@ export function buildCasino(w, loc) {
     g.computeVertexNormals();
     return g;
   };
-  const band = (a, b, y0, y1, mat, ol = 0) => put(ol ? mesh(bandGeo(a, b, y0, y1), mat, ol) : new THREE.Mesh(bandGeo(a, b, y0, y1), mat), 0, 0);
-  const across = (off0, off1, y0, y1, mat, ol = 0.012) => put(mesh(new THREE.BoxGeometry(DOOR * 2, y1 - y0, off1 - off0), mat, ol), 0, FRONT + off0 + (off1 - off0) / 2, (y0 + y1) / 2);   // the same ring over the doors
+  const band = (a, b, y0, y1, mat, ol = 0, end = 0.01) => put(ol ? mesh(bandGeo(a, b, y0, y1, end), mat, ol) : new THREE.Mesh(bandGeo(a, b, y0, y1, end), mat), 0, 0);
+  const across = (off0, off1, y0, y1, mat, ol = 0.012) => put(mesh(new THREE.BoxGeometry(DOOR * 2 + 0.04, y1 - y0, off1 - off0), mat, ol), 0, FRONT + off0 + (off1 - off0) / 2, (y0 + y1) / 2);   // the same ring over the doors, its ends 1 cm into the ring's
   const GOLD = toon(0xffd23f), BRASS = toon(0xc79a1f);
   // outside: plinth, belt, cornice with dentils and neon channel; a suit panel per long run; the door frame
   band(WALL - 0.02, WALL + 0.35, 0, 1.3, BRASS, 0.02);
@@ -498,12 +498,12 @@ export function buildCasino(w, loc) {
   const slotsSignM = new THREE.MeshBasicMaterial({ map: neonTex('SLOTS', { w: 512, h: 160, color: '#ffd23f', edge: '#ff2e88' }) });
   for (let i = 0; i <= 18; i++) bulb(-8 + i * (16 / 18), CAN + 3.55, CANY - 0.4);
   for (const sx of [-1, 1]) for (let i = 1; i <= 8; i++) bulb(sx * 8.05, CAN + 3.5 - i * (7 / 8), CANY - 0.4);
-  // chase bulbs on the roof edge: coarse spheres, they're 17 m up
+  // chase bulbs on the roof edge: coarse spheres, they're 17 m up; each sunk 6 cm into the gold edge's top (H + 1.7)
   const edgeBulbGeo = new THREE.SphereGeometry(0.28, 6, 4);
   const edgeBulb = (x, z, y) => put(new THREE.Mesh(edgeBulbGeo, bulbMats[k++ % 3]), x, z, y);
   for (let i = 0; i < PB.length; i++) {
     const a = PB[i], b = PB[(i + 1) % PB.length], n = Math.max(1, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / 1.3));
-    for (let q = 0; q < n; q++) edgeBulb(a[0] + ((b[0] - a[0]) * q) / n, a[1] + ((b[1] - a[1]) * q) / n, H + 2.05);
+    for (let q = 0; q < n; q++) edgeBulb(a[0] + ((b[0] - a[0]) * q) / n, a[1] + ((b[1] - a[1]) * q) / n, H + 1.92);
   }
   // red carpet + velvet ropes outside, and on inside up to the games
   const ASPH = 0.1; // asphalt thickness
@@ -568,6 +568,7 @@ export function buildCasino(w, loc) {
     const topper = new THREE.Mesh(new THREE.BoxGeometry(5.2, 1.6, 0.3), [edgeM, edgeM, edgeM, edgeM, slotsSignM, slotsSignM]);
     ink(topper, 0.06);
     put(topper, cx, cz, 9.4, 0, true);
+    put(mesh(new THREE.CylinderGeometry(0.12, 0.22, 0.85, 10), edgeM, 0.04), cx, cz, 8.2);   // spindle from the canopy (top 7.9) into the topper (bottom 8.6), thinner than the sign
     toppers.push(topper);
     col({ type: 'cyl', x: cx, z: cz, y0: -1, y1: 8, r: CAR_R + 1.2 });   // cabinet fronts reach 4.7 m
     for (let k2 = 0; k2 < CAR_N; k2++) {
@@ -646,13 +647,13 @@ export function buildCasino(w, loc) {
   // the wall (rings via `band`): damask field, brass skirting, wainscot girdle over a cyan line, gold cornice with pink
   // neon, brass crown; then a hall-kit bay (half pilasters, suit panels, arched panel) per bay of each long run
   band(0.02, -0.04, 0, H - 0.02, toon(0x45207a));
-  band(0.03, -0.16, 0, 0.25, BRASS, 0.01);
-  band(0.04, -0.14, 1.84, 1.99, GOLD, 0.01);
-  band(0.04, -0.10, 1.756, 1.826, bandMats[1]);   // 7 cm, between the wainscot top (1.75) and the girdle
-  band(0.05, -0.55, 13.12, 13.55, GOLD, 0.012);
+  band(0.03, -0.16, 0, 0.25, BRASS, 0.01, 0.015);            // (last argument: each ring ends at its own distance from the jambs)
+  band(0.04, -0.14, 1.84, 1.99, GOLD, 0.01, 0.02);
+  band(0.04, -0.10, 1.756, 1.826, bandMats[1], 0, 0.025);   // 7 cm, between the wainscot top (1.75) and the girdle
+  band(0.05, -0.55, 13.12, 13.55, GOLD, 0.012, 0.03);
   band(-0.45, -0.52, 13.06, 13.12, bandMats[0]);
-  band(0.06, -0.28, 15.4, 15.95, BRASS, 0.01);
-  band(-0.02, -0.42, 0.05, 0.09, BRASS);                 // floor border inlay
+  band(0.06, -0.28, 15.4, 15.95, BRASS, 0.01, 0.035);
+  band(-0.02, -0.42, 0.05, 0.09, BRASS, 0, 0.04);         // floor border inlay
   // things against the wall, as plan rectangles: no bay where one overlaps (they cover the wall behind)
   const wallItems = [];
   {
@@ -877,7 +878,7 @@ export function buildCasino(w, loc) {
   // rails, dividers, floor
   for (const s of SEGS) {
     const len = Math.hypot(s.bx - s.ax, s.by - s.ay);
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(len + 0.1, s.divider ? 0.1 : 0.14, 0.6), glow(s.divider ? 0xfff4e0 : 0x2ee6ff));
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(len + 0.1, s.divider ? 0.1 : 0.14, s.divider ? 0.56 : 0.6), glow(s.divider ? 0xfff4e0 : 0x2ee6ff));   // dividers 2 cm inside the rails' faces
     bar.rotation.z = Math.atan2(s.by - s.ay, s.bx - s.ax);
     bar.position.set(P.x + (s.ax + s.bx) / 2, P.y + (s.ay + s.by) / 2, P.z);
     bar.updateMatrix();
@@ -1026,7 +1027,7 @@ export function buildCasino(w, loc) {
 
   // dais and counter: kick plate, gold body with five suit panels, neon, pink top
   pcBox(PCL + 1.0, 0.08, 5.0, pm.felt, 0, 0.04, -1.1, 0.02);
-  pcBox(PCL + 1.0, 0.1, 0.12, pm.gold, 0, 0.05, 1.4, 0.01);
+  pcBox(PCL + 1.04, 0.1, 0.12, pm.gold, 0, 0.05, 1.4, 0.01);   // nosing 2 cm past the dais' ends
   pcBox(PCL, 0.3, 1.5, pm.dark, 0, 0.23, 0);
   pcBox(PCL, 1.1, 1.6, pm.gold, 0, 0.93, 0, 0.06);
   pcBox(PCL + 0.4, 0.16, 1.95, pm.pink, 0, 1.56, 0, 0.04);
@@ -1079,8 +1080,8 @@ export function buildCasino(w, loc) {
   // header: posts, PRIZES board, chase bulbs, pennants
   for (const sx of [-1, 1]) pcPut(mesh(new THREE.CylinderGeometry(0.09, 0.09, 3.0, 8), pm.gold, 0.04), sx * 3.45, 3.14, -0.1);
   pcBox(PCL, 0.9, 0.26, pm.plum, 0, 4.25, -0.1, 0.04);
-  pcBox(PCL + 0.1, 0.07, 0.3, pm.gold, 0, 4.72, -0.1, 0.01);
-  pcBox(PCL + 0.1, 0.07, 0.3, pm.gold, 0, 3.8, -0.1, 0.01);
+  pcBox(PCL + 0.1, 0.07, 0.34, pm.gold, 0, 4.72, -0.1, 0.01);   // 2 cm proud of the PRIZES plane, so the flags hang from it
+  pcBox(PCL + 0.1, 0.07, 0.34, pm.gold, 0, 3.8, -0.1, 0.01);
   pcPut(new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.85), new THREE.MeshBasicMaterial({ map: neonTex('PRIZES', { w: 512, h: 128, color: '#ffd23f', edge: '#ff2e88' }) })), 0, 4.25, 0.05);
   const smallBulb = new THREE.SphereGeometry(0.07, 6, 5);
   for (let i = 0; i <= 22; i++) {
@@ -1093,10 +1094,10 @@ export function buildCasino(w, loc) {
 
   // prize wall: three lit shelves behind the staff
   pcBox(PCL - 0.2, 3.9, 0.1, pm.plum, 0, 2.0, -2.93, 0.02);
-  for (const sx of [-1, 1]) pcBox(0.14, 3.9, 0.6, pm.gold, sx * 3.45, 2.0, -2.65, 0.02);
+  for (const sx of [-1, 1]) pcBox(0.14, 3.96, 0.6, pm.gold, sx * 3.45, 2.03, -2.65, 0.02);   // tops 6 cm over the back panel's
   [1.5, 2.4, 3.3].forEach((y, row) => {
-    pcBox(PCL - 0.6, 0.07, 0.56, pm.felt, 0, y, -2.62, 0.015);
-    pcBox(PCL - 0.6, 0.1, 0.05, pm.gold, 0, y + 0.01, -2.34, 0.01);
+    pcBox(6.8, 0.07, 0.56, pm.felt, 0, y, -2.62, 0.015);              // ends 2 cm into the gold posts (inner faces at 3.38)
+    pcBox(6.84, 0.1, 0.05, pm.gold, 0, y + 0.01, -2.34, 0.01);
     pcGlow(PCL - 0.7, 0.035, 0.035, row % 2 ? 0xff2e88 : 0x2ee6ff, 0, y - 0.07, -2.35);
     for (let i = 0; i < 6; i++) stand(PRIZES_3D[(row * 5 + i * 3) % PRIZES_3D.length], -2.75 + i * 1.1, y + 0.04, -2.62);
   });

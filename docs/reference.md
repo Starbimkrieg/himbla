@@ -392,6 +392,7 @@ tools/
   casino-layouts.mjs       casino plan study and spacing check (docs/casino-layouts.md)
   casino-forecourt.mjs     forecourt plans and Valet Court check (docs/casino-forecourt.md)
   casino-zfight.mjs        lists coplanar faces in the running casino
+  casino-audit.js          in-page casino audit: z-fights by colour, pieces touching nothing, what is at a spot
   casino-shots.mjs         casino screenshots from fixed spots
   check-claw.mjs           bots play the claw to tune its payout
   downs-audit.mjs          Chimera Downs audit: zfight, colliders, text, gaps

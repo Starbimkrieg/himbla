@@ -318,7 +318,7 @@ def bouncer():
     A.boxc(0, 1.34, 0.31, 0.7, 0.12, 0.05)                   # the cummerbund's edge
     A.flush()
     A = Acc("shirt", "shirt", root, 0.0)
-    A.boxc(0, 2.0, 0.372, 0.2, 0.52, 0.025)
+    A.boxc(0, 2.0, 0.368, 0.2, 0.52, 0.025)                   # back 4 mm off the lapels
     A.boxc(0, 2.19, 0.27, 0.52, 0.07, 0.2)                    # the collar
     A.flush()
     A = Acc("tie", "tie", root, 0.015)
@@ -519,7 +519,7 @@ def wall_sign():
     sign_frame(root, 7.4, 1.95, 0.16, "wall")
     # cornice with downlights, four brackets into the wall behind
     A = Acc("wallCornice", "gold", root, 0.03)
-    A.boxc(0, 1.0, 0.04, 7.7, 0.12, 0.34)
+    A.boxc(0, 1.0, 0.03, 7.7, 0.12, 0.32)                    # front 2 cm behind the corner neons' faces
     for x in (-2.6, 0.0, 2.6):
         A.boxc(x, 1.14, 0.04, 0.18, 0.16, 0.22)
     A.flush()
@@ -543,6 +543,9 @@ welcome_sign()
 wall_sign()
 flush_all()
 
+audit_coplanar(C.objects)        # kit.py: same-plane faces of two parts would z-fight (raises)
+audit_flips(C.objects)
+
 _dg = bpy.context.evaluated_depsgraph_get()
 _tris = {}
 for _o in C.objects:
@@ -555,4 +558,5 @@ for _o in C.objects:
     _t = sum(len(p.vertices) - 2 for p in _o.evaluated_get(_dg).to_mesh().polygons)
     _tris[_top] = _tris.get(_top, 0) + _t
 print("built", len(C.objects), "objects; triangles per root:", _tris)
-export(OUT, list(C.objects))
+if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
+    export(OUT, list(C.objects))

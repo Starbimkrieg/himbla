@@ -198,6 +198,7 @@ cream.cylc(0, 0.085, 0, 0.1, 0.05, 16)
 
 flush_all()
 audit_coplanar(C.objects)
+audit_flips(C.objects)
 
 _dg = bpy.context.evaluated_depsgraph_get()
 _tris = {}

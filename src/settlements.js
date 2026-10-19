@@ -2425,8 +2425,8 @@ export function dressCasinoLot(world, loc, makeCar) {
 
     // ---- the court's two wings ----
     for (const s of [-1, 1]) {
-      const x0 = AV, x1 = XB + 0.36;
-      k.box(x1 - x0, 0.1, W1 - W0, T(ASPH), s * (x0 + x1) / 2, 0, MID, { outline: 0 });
+      const x0 = AV, x1 = XB + 0.38;                                              // 2 cm past the card posts' outer faces
+      k.box(x1 - x0, 0.1, W1 - W0 + 0.04, T(ASPH), s * (x0 + x1) / 2, 0, MID, { outline: 0 });   // and 2 cm past the card walls' backs (no shared edge face)
       for (const [row, rz] of bayZ.entries()) {
         for (let i = 0; i <= NB; i++) k.box(0.12, 0.02, BAYD - 0.2, T(CRM), s * (BX0 + i * BAYW), 0.1, rz, { outline: 0 });
         for (let i = 0; i < NB; i++) {

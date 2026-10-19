@@ -499,10 +499,16 @@ def audit_coplanar(objects=None, eps=0.003, min_area=1e-4, allow=()):
                 continue
             nx, ny, nz = nx / ln, ny / ln, nz / ln
             tris.append((oi, o.name, (nx, ny, nz), nx * a[0] + ny * a[1] + nz * a[2], ps, top.name))
+    # files by plane on two grids per axis, half a cell apart: two triangles within the tolerances share a cell in one of the
+    # 16 (a single grid misses pairs either side of a cell edge, which a model turned another way then shows)
     buckets = {}
     for i, t in enumerate(tris):
-        n = t[2]
-        buckets.setdefault((round(n[0] * 200), round(n[1] * 200), round(n[2] * 200), math.floor(t[3] / 0.02)), []).append(i)
+        n, d = t[2], t[3]
+        for kx in (0.0, 0.5):
+            for ky in (0.0, 0.5):
+                for kz in (0.0, 0.5):
+                    for kd in (0.0, 0.5):
+                        buckets.setdefault((kx, ky, kz, kd, math.floor(n[0] * 100 + kx), math.floor(n[1] * 100 + ky), math.floor(n[2] * 100 + kz), math.floor(d / 0.02 + kd)), []).append(i)
 
     def area2(P):
         return sum(P[i][0] * P[(i + 1) % len(P)][1] - P[(i + 1) % len(P)][0] * P[i][1] for i in range(len(P))) / 2
@@ -531,7 +537,11 @@ def audit_coplanar(objects=None, eps=0.003, min_area=1e-4, allow=()):
         A, Bt = tris[i], tris[j]
         if A[0] == Bt[0] or A[5] != Bt[5]:       # same mesh, or different models that merely share the origin
             return
-        if A[2][0] * Bt[2][0] + A[2][1] * Bt[2][1] + A[2][2] * Bt[2][2] < 0.9999 or abs(A[3] - Bt[3]) > eps:
+        if A[2][0] * Bt[2][0] + A[2][1] * Bt[2][1] + A[2][2] * Bt[2][2] < 0.9999:
+            return
+        cb = [sum(p[i] for p in Bt[4]) / 3 for i in range(3)]          # gap measured at the faces, not at the origin: a 0.5 degree tilt
+        ca = [sum(p[i] for p in A[4]) / 3 for i in range(3)]           # would make faces 3 m out look 2.5 cm apart (or together)
+        if abs(sum(A[2][i] * cb[i] for i in range(3)) - A[3]) > eps or abs(sum(Bt[2][i] * ca[i] for i in range(3)) - Bt[3]) > eps:
             return
         if any((f in A[1] and g in Bt[1]) or (g in A[1] and f in Bt[1]) for f, g in allow):
             return
@@ -547,18 +557,68 @@ def audit_coplanar(objects=None, eps=0.003, min_area=1e-4, allow=()):
         if ov < 1e-9:
             return
         k = (min(A[1], Bt[1]), max(A[1], Bt[1]), round(A[3] * 50))
-        f = found.setdefault(k, [0.0, A[4][0]])
+        f = found.setdefault(k, [0.0, tuple(sum(p[i] for p in A[4]) / 3 for i in range(3)), A[2]])   # area, a clashing triangle's middle, normal
         f[0] += ov
 
+    combos = [(kx, ky, kz, kd) for kx in (0.0, 0.5) for ky in (0.0, 0.5) for kz in (0.0, 0.5) for kd in (0.0, 0.5)]
+
+    def cell(t, c):
+        return (math.floor(t[2][0] * 100 + c[0]), math.floor(t[2][1] * 100 + c[1]), math.floor(t[2][2] * 100 + c[2]), math.floor(t[3] / 0.02 + c[3]))
+
     for key, lst in buckets.items():
-        nb = buckets.get((key[0], key[1], key[2], key[3] + 1), [])
+        here = combos.index(key[:4])
         for xi in range(len(lst)):
+            A = tris[lst[xi]]
             for yi in range(xi + 1, len(lst)):
+                Bt = tris[lst[yi]]
+                if A[0] == Bt[0] or A[5] != Bt[5]:
+                    continue
+                if any(cell(A, c) == cell(Bt, c) for c in combos[:here]):     # (tested in an earlier grid that also holds both)
+                    continue
                 test(lst[xi], lst[yi])
-            for yi in nb:
-                test(lst[xi], yi)
     bad = {k: v for k, v in found.items() if v[0] >= min_area}
     if bad:
-        lines = [f"{v[0]:.4f} m2  {k[0]} / {k[1]}  at ({v[1][0]:.2f}, {v[1][1]:.2f}, {v[1][2]:.2f})" for k, v in sorted(bad.items(), key=lambda kv: -kv[1][0])[:12]]
+        lines = [f"{v[0]:.4f} m2  {k[0]} / {k[1]}  at ({v[1][0]:.2f}, {v[1][1]:.2f}, {v[1][2]:.2f}) facing ({v[2][0]:.2f}, {v[2][1]:.2f}, {v[2][2]:.2f})" for k, v in sorted(bad.items(), key=lambda kv: -kv[1][0])[:12]]
         raise RuntimeError("coplanar overlaps (these would z-fight):\n  " + "\n  ".join(lines))
     print(f"AUDIT coplanar ok: {len(tris)} triangles, no overlap above {min_area} m2 within {eps * 1000:.0f} mm")
+
+
+def audit_flips(objs, min_faces=6):
+    """Report inside-out primitives (doesn't stop the build). Kit primitives are convex, so a connected piece with most faces
+    pointing inward has reversed winding or a wrong turn (it shows only from inside, or not at all)."""
+    import mathutils
+    bad = []
+    dg = bpy.context.evaluated_depsgraph_get()
+    for o in objs:
+        if o.type != "MESH":
+            continue
+        me = o.evaluated_get(dg).to_mesh()
+        mw, nm = o.matrix_world, o.matrix_world.to_3x3()
+        parent = list(range(len(me.vertices)))
+
+        def find(a):
+            while parent[a] != a:
+                parent[a] = parent[parent[a]]
+                a = parent[a]
+            return a
+        for f in me.polygons:
+            vs = list(f.vertices)
+            for a in vs[1:]:
+                parent[find(a)] = find(vs[0])
+        groups = {}
+        for f in me.polygons:
+            groups.setdefault(find(f.vertices[0]), []).append(f)
+        for fs in groups.values():
+            if len(fs) < min_faces:
+                continue
+            vs = {v for f in fs for v in f.vertices}
+            mid = sum((mw @ me.vertices[v].co for v in vs), mathutils.Vector()) / len(vs)
+            inward = sum(1 for f in fs if (nm @ f.normal).dot(mw @ f.center - mid) < -1e-6)
+            if inward > 0.85 * len(fs):
+                # reported in three.js axes, as the builders write them
+                bad.append(f"{o.name}: {inward}/{len(fs)} faces point inward, piece at ({mid.x:.2f}, {mid.z:.2f}, {-mid.y:.2f})")
+        o.evaluated_get(dg).to_mesh_clear()
+    if bad:
+        print("AUDIT flips: " + str(len(bad)) + " inside-out piece(s):\n  " + "\n  ".join(bad[:15]))
+    else:
+        print("AUDIT flips ok")
