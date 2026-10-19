@@ -261,7 +261,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
   | Scrap Shack | Scrap Plating | 3 to Zbornak: more hull |
   | Junk Pile | Junk Bot | Chimera part |
 
-- **Traffic:** shuttle-buses and freighters fly between landing pads; press `F` to ride free, or bail mid-flight.
+- **Traffic:** shuttle-buses and freighters fly between landing pads (their stairs come down toward the nearest road); press `F` to ride free, or bail mid-flight.
   13 roads (planned over the terrain by `roadplan.js`) join the towns, with ring roads round each. **Moonliner**
   passenger and **Prospector** freight land-trains run in faction liveries. Wreck one for a salvaged engine (-3 rep).
 - **People:** humans wear helmets; the bare-headed **Vrill** breathe vacuum (jar one for the PSI ANTENNAE mutation).

@@ -5,6 +5,7 @@ import { makeFigure, makeShuttle, makeRover, makeHoverCar, makeFreighter, makeLa
 import { mulberry32 } from './rng.js';
 import { SUN, frameQuat, arcDist } from './geo.js';
 import { planRoad, roadQuality } from './roadplan.js';
+import { padPlan, padToFrame } from './landingPad.js';
 
 // Ambient traffic: freighters and shuttle-buses landing on pads at each settlement's edge (passengers walk to and from
 // the buildings), and a road network joining the safe outposts (through or round each town) driven by land-trains,
@@ -51,6 +52,7 @@ const JOIN_OUT = 26; // ...and leave the road lanes this far out from the ring
 const GATE_SEP = 90; // minimum ring distance between two junctions
 const GATE_NEAR = GATE_SEP * 0.6; // minimum for a junction laid late (addTownRoads, on a built ring): flares (24 m a side) clear
 const PAD_APART = 26; // clear ground between two flights' pad discs, where the town has room (makePadStop)
+const STAIR_ROAD = 6; // a pad's flight, foot and waiting shelter stay this far from any road lane point (lanes run ~2.5 m off the centreline)
 // your town's shuttle climbs this high off its plot before turning: hall spire 26.6 m, hull 9 m round, gear down 5.4 m,
 // so it clears the hall on any heading (the hall has no collider that tall for flightPath to lift over)
 const TOWN_CLIMB = 40;
@@ -240,6 +242,7 @@ export class Traffic {
     this.L = {};
     for (const loc of world.locations) this.registerLocation(loc);
     this.buildRoads();
+    this.faceSettlementPads();
     this.buildFlights();
     this.dropSparePads();
   }
@@ -465,13 +468,17 @@ export class Traffic {
     rec.used = true;
     const top = rec.top, st = rec.stairs;
     loc.stopKeep.push({ x: pick.x, z: pick.z, r: spec.clearR, flyPad: true });
-    // waiting shelter on the ground beside the stairs' foot, facing them
+    // waiting shelter on the ground beside the stairs' foot, facing them (beside the flight if the foot's sides are taken),
+    // off the road: the stairs face it, so the ground in front of the foot is the road's
     const fx = st.foot.x, fz = st.foot.z, ox = Math.cos(st.face), oz = Math.sin(st.face), sx = -oz, sz = ox;
+    const roads = this.roadPoints(loc);
+    const offRoad = (x, z) => { for (let i = 0; i < roads.length; i += 2) if (Math.hypot(roads[i] - x, roads[i + 1] - z) < STAIR_ROAD + 1.5) return false; return true; };
     let wx = st.out.x + ox * 3, wz = st.out.z + oz * 3;
-    for (const [side, along] of [[1, -0.6], [-1, -0.6], [1, 1.5], [-1, 1.5], [1, 3.5], [-1, 3.5]]) {
+    if (!offRoad(wx, wz)) { wx = fx + sx * (st.w / 2 + 3.6) - ox * 2.6; wz = fz + sz * (st.w / 2 + 3.6) - oz * 2.6; }
+    for (const [side, along] of [[1, -0.6], [-1, -0.6], [1, 1.5], [-1, 1.5], [1, 3.5], [-1, 3.5], [1, -2.6], [-1, -2.6]]) {
       const lat = st.w / 2 + 3.6;
       const x = fx + sx * side * lat + ox * along, z = fz + sz * side * lat + oz * along;
-      if (keeps.some((k) => k !== pick.existing && k !== rec.keep && Math.hypot(x - k.x, z - k.z) < k.r + 2.5)) continue;
+      if (keeps.some((k) => !k.ring && k !== pick.existing && k !== rec.keep && Math.hypot(x - k.x, z - k.z) < k.r + 2.5) || !offRoad(x, z)) continue;
       this.w.toWorld(loc, x, this.groundY(loc, x, z) + 1.5, z, _c);
       if (this.blocked(_c, 2.4)) continue;
       wx = x; wz = z;
@@ -498,26 +505,74 @@ export class Traffic {
     return stop;
   }
 
-  // Which way a new pad's stairs run (angle as Math.atan2(z, x)): toward the middle if clear, else the nearest clear way
-  // round (nothing solid or kept clear where the flight and its foot stand).
-  stairFace(loc, pick, r, keeps) {
-    const base = Math.atan2(-pick.z, -pick.x);
+  // Which way a pad's stairs run (angle as Math.atan2(z, x)): toward the nearest road (`roads`: roadPoints), else the
+  // nearest clear way round it; a town without roads, toward the middle (on a slope, the high side for a shorter flight).
+  // Clear: nothing solid or kept clear where the flight and its foot stand, and the foot off the road.
+  stairFace(loc, pick, r, keeps, roads = this.roadPoints(loc)) {
+    let near = null, nd = Infinity;
+    for (let i = 0; i < roads.length; i += 2) { const d = Math.hypot(roads[i] - pick.x, roads[i + 1] - pick.z); if (d < nd) { nd = d; near = i; } }
+    const base = near !== null ? Math.atan2(roads[near + 1] - pick.z, roads[near] - pick.x) : Math.atan2(-pick.z, -pick.x);
+    const own = keeps.filter((k) => !k.ring);                         // (the ring's own keep-outs: the road check below does better)
+    const offRoad = (x, z) => { for (let i = 0; i < roads.length; i += 2) if (Math.hypot(roads[i] - x, roads[i + 1] - z) < STAIR_ROAD) return false; return true; };
+    const offs = near !== null ? [0] : [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 2.0, -2.0, 2.6, -2.6, Math.PI];
+    if (near !== null) for (let k = 1; k <= 12; k++) offs.push(k * 0.26, -k * 0.26);
     const clear = [];
-    for (const off of [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 2.0, -2.0, 2.6, -2.6, Math.PI]) {
+    for (const off of offs) {
       const a = base + off, ca = Math.cos(a), sa = Math.sin(a);
+      // the flight as World.pad will lay it this way round (longer where the ground falls away): deck edge, middle, foot, beyond
+      const yaw = Math.PI / 2 - a, plan = padPlan(r, (x, z) => { const p = padToFrame(pick.x, pick.z, yaw, x, z); return this.groundY(loc, p.x, p.z); });
+      const S = plan.stairs;
       let ok = true;
-      for (const d of [r + 1.5, r + 4, r + 7]) {
+      for (const d of [r + 1.5, (S.z0 + S.z1) / 2, S.z1 + 0.5, S.z1 + 2.6]) {
         const x = pick.x + ca * d, z = pick.z + sa * d;
-        if (keeps.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + 1)) { ok = false; break; }
+        if (own.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + 1) || (near !== null && !offRoad(x, z))) { ok = false; break; }
         this.w.toWorld(loc, x, this.groundY(loc, x, z) + 1.4, z, _c);
         if (this.blocked(_c, 1.7)) { ok = false; break; }
       }
       if (ok) clear.push({ a, y: this.groundY(loc, pick.x + ca * (r + 4), pick.z + sa * (r + 4)) });
+      if (ok && near !== null) break;                                 // (offsets run outward from the road's bearing: the first clear wins)
     }
     if (!clear.length) return base;
-    // on a slope, stairs on the high side (shorter flight); on the level, toward the middle
+    if (near !== null) return clear[0].a;
     const hi = Math.max(...clear.map((c) => c.y));
     return (hi - clear[0].y > 1.5 ? clear.find((c) => c.y === hi) : clear[0]).a;
+  }
+
+  // Road points near `loc` in its frame, as a flat [x, z, x, z ...] list: every lane of the network within 450 m of the
+  // middle, and the town's own paved strips (loc.paved) every 4 m. What pads turn their stairs to (stairFace).
+  roadPoints(loc) {
+    const out = [], p = new THREE.Vector3();
+    for (const pc of this.pieces || []) {
+      for (const q of pc.path.pts) {
+        this.local(loc, q, p);
+        if (Math.abs(p.y) < 80 && p.x * p.x + p.z * p.z < 450 * 450) out.push(p.x, p.z);
+      }
+    }
+    for (const s of loc.paved || []) {
+      const n = Math.max(1, Math.ceil(Math.hypot(s.x1 - s.x0, s.z1 - s.z0) / 4));
+      for (let i = 0; i <= n; i++) out.push(s.x0 + ((s.x1 - s.x0) * i) / n, s.z0 + ((s.z1 - s.z0) * i) / n);
+    }
+    return out;
+  }
+
+  // Pads the settlements laid before the roads (world.pad callers in settlements.js and world.js) faced the middle: turn
+  // each to face its nearest road now the network is down (rebuilt in place, same size, colour and spare flag). Your
+  // town's plot pad is built facing out, toward its ring (hometown.js).
+  faceSettlementPads() {
+    for (const loc of this.w.locations) {
+      if (!loc.pads || !loc.pads.length) continue;
+      const roads = this.roadPoints(loc);
+      if (!roads.length) continue;
+      for (const rec of loc.pads.slice()) {
+        if (rec.flat || rec.plot !== undefined || !rec.mesh || !rec.stairs) continue;
+        const keeps = this.keepouts(loc).filter((k) => k !== rec && k !== rec.keep);
+        const face = this.stairFace(loc, rec, rec.r, keeps, roads);
+        const turn = Math.abs(((face - rec.stairs.face + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
+        if (turn < 0.05) continue;
+        this.w.dropPad(loc, rec);
+        this.w.pad(loc, rec.x, rec.z, rec.r, rec.color, rec.spare, { face });
+      }
+    }
   }
 
   // The deck walk from a flyer's ramp foot to the stairs' head, round the ship's side (not under its belly): out to the

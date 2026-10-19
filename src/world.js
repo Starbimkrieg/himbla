@@ -737,7 +737,8 @@ export class World {
   }
 
   // Shuttle / freighter landing pad (landingPad.js): raised railed deck, stairs down on the side facing `opts.face` (angle in
-  // the settlement's x-z plane, as Math.atan2(z, x); default toward the middle). spare: kept only if transit uses it
+  // the settlement's x-z plane, as Math.atan2(z, x); default toward the middle, and traffic.js turns it to the nearest road
+  // once the roads are down: faceSettlementPads). spare: kept only if transit uses it
   // (traffic.js dropSparePads). opts.r is not needed; opts.flat: a flat ground disc (the ILMB rocket pad, no shuttles).
   // Returns the loc.pads record ({ x, z, r, top, stairs, mesh, cols, keep }), or null for a previously dropped spare.
   pad(loc, dx, dz, r, color = 0xffd23f, spare = false, opts = {}) {
@@ -774,7 +775,7 @@ export class World {
     // keep the flight's footprint and foot clear too (roads, other pads, shelters)
     const sm = padToFrame(dx, dz, yaw, 0, r + plan.stairs.run * 0.6), keep = { x: sm.x, z: sm.z, r: plan.stairs.run * 0.6 + 2.5 };
     (loc.keep ||= []).push(keep);
-    const rec = { x: dx, z: dz, r, spare, mesh: g, top: plan.top, cols, keep, yaw, stairs: padStairs(dx, dz, yaw, plan) };
+    const rec = { x: dx, z: dz, r, color, spare, mesh: g, top: plan.top, cols, keep, yaw, stairs: padStairs(dx, dz, yaw, plan) };
     (loc.pads ||= []).push(rec); // traffic reuses / avoids these
     return rec;
   }
