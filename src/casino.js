@@ -1,7 +1,7 @@
 import { OUTFITS, SKATES } from './cosmeticsData.js';
 import { pixelFont } from './fonts.js';
-import { CasinoGames } from './casinoGames.js';
-import { fmt } from './casinoWorld.js';
+import { CasinoGames, RANKS } from './casinoGames.js';
+import { fmt, hex, disc, WHEEL, REDS, roulettePockets } from './casinoWorld.js';
 import { pick } from './rng.js';
 import { glyphHtml } from './glyphs.js';
 import { px, pxCanvas } from './pixelIcons.js';
@@ -67,18 +67,16 @@ function evalSlots(r) {
 // ---------- cards ----------
 const SUITS = ['S', 'H', 'D', 'C'];
 const SUIT_SPRITE = { S: 'spade', H: 'heart', D: 'diamondsuit', C: 'club' };
-const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const hiloRank = (c) => (c.r === 'A' ? 14 : c.r === 'K' ? 13 : c.r === 'Q' ? 12 : c.r === 'J' ? 11 : +c.r);
 
 // ---------- roulette ----------
-const WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
-const REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 const OUTSIDE = {
   low: ['1–18', (n) => n >= 1 && n <= 18, 2], even: ['EVEN', (n) => n && n % 2 === 0, 2], red: ['RED', (n) => REDS.has(n), 2],
   black: ['BLACK', (n) => n && !REDS.has(n), 2], odd: ['ODD', (n) => n % 2 === 1, 2], high: ['19–36', (n) => n >= 19, 2],
   d1: ['1st 12', (n) => n >= 1 && n <= 12, 3], d2: ['2nd 12', (n) => n >= 13 && n <= 24, 3], d3: ['3rd 12', (n) => n >= 25, 3],
 };
 const numColor = (n) => (n === 0 ? 'green' : REDS.has(n) ? 'red' : 'black');
+const RB_KEYS = { KeyR: 'red', KeyB: 'black', KeyO: 'odd', KeyE: 'even' };
 
 // ---------- prize wheel ----------
 const PRIZES = [
@@ -107,6 +105,7 @@ const SHOP = [
   { key: 'outfit_moonroyal', kind: 'outfit', id: 'moonroyal', chips: 500, tier: 4, desc: 'Purple and gold regalia for Moon Royalty only.' },
 ];
 const EXCHANGE = { chips: 10, credits: 150 };
+const itemDef = (it) => (it.kind === 'outfit' ? OUTFITS : SKATES)[it.id];
 
 // ---------- the pit boss ----------
 const LINES = {
@@ -123,6 +122,8 @@ const LINES = {
 };
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+// restart a CSS animation: drop the class, reflow, add it back
+const replay = (el, cls) => { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
 
 export class Casino {
   constructor(game) {
@@ -136,7 +137,6 @@ export class Casino {
     this.auto = 0;
     this.shown = game.credits;
     this.reels = [['moon', 'rocket', 'comet'], ['ufo', 'alien', 'moon'], ['comet', 'diamond', 'rocket']];
-    this.shoe = [];
     this.rl = { bets: {}, rot: 0, ball: 0, history: [] };
     this.wheelRot = 0;
     this.hl = { phase: 'idle', card: null, pot: 0, stake: 0, streak: 0 };
@@ -170,8 +170,7 @@ export class Casino {
     if (!s) return false;
     g.hud.prompt(`<b>F</b> — ${s.label}`);
     if (g.input.pressed('KeyF') && g.boardCooldown <= 0) {
-      if (s.id === 'classic') this.open();
-      else if (s.id === 'prizes') this.open('prizes'); else this.sit(s.id);
+      if (s.id === 'classic' || s.id === 'prizes') this.open(s.id); else this.sit(s.id);
     }
     return true;
   }
@@ -181,11 +180,16 @@ export class Casino {
     const g = this.game;
     g.openModal('casino');
     this.mode = id;
-    const s = this.st;
-    s.visits++;
-    if (s.visits === 1) { s.chips += 10; g.fx.pop('WELCOME GIFT: 10 LUCKY CHIPS!', null, { color: '#7dff6a', size: 30, life: 2.2 }); }
+    if (this.visit()) g.fx.pop('WELCOME GIFT: 10 LUCKY CHIPS!', null, { color: '#7dff6a', size: 30, life: 2.2 });
     this.clampBet();
     this.games.enter(id);
+  }
+
+  // counts a visit; the first comes with 10 Lucky Chips (true then)
+  visit() {
+    const s = this.st;
+    if (++s.visits === 1) s.chips += 10;
+    return s.visits === 1;
   }
 
   // ---------- open / close / keys ----------
@@ -198,16 +202,14 @@ export class Casino {
     this.root.classList.toggle('venue-prizes', venue === 'prizes');
     this.$('.cas-tabs').innerHTML = this.tabs.map(([id, name], i) => `<button data-tab="${id}"><i>${i + 1}</i>${name}</button>`).join('');
     this.el.classList.remove('hidden');
-    const s = this.st;
-    s.visits++;
-    if (s.visits === 1) { s.chips += 10; this.welcome = true; }
+    const first = this.visit();
     this.clampBet();
     this.shown = g.credits;
     this.refresh(true);
     this.renderTab();
     this.say('greet');
     [392, 523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.audio.tone(f, 0.16, 'triangle', 0.12), i * 70));
-    if (this.welcome) { this.welcome = false; setTimeout(() => this.burst('WELCOME GIFT: 10 LUCKY CHIPS!', { color: '#7dff6a', size: 46 }), 400); }
+    if (first) setTimeout(() => this.burst('WELCOME GIFT: 10 LUCKY CHIPS!', { color: '#7dff6a', size: 46 }), 400);
     clearInterval(this.clock);
     this.clock = setInterval(() => this.tickClock(), 1000);
   }
@@ -216,13 +218,11 @@ export class Casino {
     if (this.mode) {
       this.games.leave();
       this.mode = null;
-      this.game.save();
-      this.game.closeModal(viaEscape);
-      return;
+    } else {
+      this.auto = 0;
+      clearInterval(this.clock);
+      this.el.classList.add('hidden');
     }
-    this.auto = 0;
-    clearInterval(this.clock);
-    this.el.classList.add('hidden');
     this.game.save();
     this.game.closeModal(viaEscape);
   }
@@ -239,7 +239,7 @@ export class Casino {
       case 'roulette':
         if (go) this.spinRoulette();
         else if (code === 'Backspace' || code === 'KeyC') this.clearBets();
-        else if ({ KeyR: 'red', KeyB: 'black', KeyO: 'odd', KeyE: 'even' }[code]) this.placeBet({ KeyR: 'red', KeyB: 'black', KeyO: 'odd', KeyE: 'even' }[code]);
+        else if (RB_KEYS[code]) this.placeBet(RB_KEYS[code]);
         break;
       case 'wheel': if (go) this.spinWheel(this.freeReady()); else if (code === 'KeyP') this.spinWheel(false); break;
       case 'hilo':
@@ -425,39 +425,31 @@ export class Casino {
     if (!text && line === this.lastSay) line = pick(LINES[kind] || LINES.greet);
     this.lastSay = line;
     el.textContent = line;
-    const b = this.$('.cas-boss');
-    b.classList.remove('talk'); void b.offsetWidth; b.classList.add('talk');
+    replay(this.$('.cas-boss'), 'talk');
   }
 
   // ---------- juice ----------
-  burst(text, { color = '#ffd23f', size = 90, confetti = 0, shake = false } = {}) {
-    const fx = this.$('[data-fx]');
+  // an element on the fx layer for `ms`
+  fxEl(cls, ms) {
     const el = document.createElement('div');
-    el.className = 'cas-burst';
-    el.innerHTML = `<div class="rays"></div><span style="color:${color};font-size:${Math.round(size * 0.55)}px">${text}</span>`;
-    fx.appendChild(el);
-    setTimeout(() => el.remove(), 1900);
+    el.className = cls;
+    this.$('[data-fx]').appendChild(el);
+    setTimeout(() => el.remove(), ms);
+    return el;
+  }
+
+  burst(text, { color = '#ffd23f', size = 90, confetti = 0, shake = false } = {}) {
+    this.fxEl('cas-burst', 1900).innerHTML = `<div class="rays"></div><span style="color:${color};font-size:${Math.round(size * 0.55)}px">${text}</span>`;
     if (confetti) this.confetti(confetti);
     if (shake) this.shake(true);
   }
 
-  flash(text) {
-    const fx = this.$('[data-fx]');
-    const el = document.createElement('div');
-    el.className = 'cas-flash';
-    el.textContent = text;
-    fx.appendChild(el);
-    setTimeout(() => el.remove(), 1300);
-  }
+  flash(text) { this.fxEl('cas-flash', 1300).textContent = text; }
 
   float(text, color) {
-    const fx = this.$('[data-fx]');
-    const el = document.createElement('div');
-    el.className = 'cas-float';
+    const el = this.fxEl('cas-float', 1500);
     el.style.color = color;
     el.textContent = text;
-    fx.appendChild(el);
-    setTimeout(() => el.remove(), 1500);
   }
 
   confetti(n) {
@@ -583,7 +575,7 @@ export class Casino {
     // near-miss tease: first two reels agree, the third spins longer
     const tease = res[0] === res[1] && (!win || ev.jackpot || (res[0] === 'diamond'));
     const lever = this.$('.lever');
-    if (lever) { lever.classList.remove('pull'); void lever.offsetWidth; lever.classList.add('pull'); }
+    if (lever) replay(lever, 'pull');
     this.$('[data-swin]').textContent = this.auto > 0 ? `AUTO-SPIN · ${this.auto} LEFT` : 'SPINNING…';
     this.$('[data-swin]').className = 'slot-win';
     this.audio.tone(300, 0.2, 'sawtooth', 0.08, 2);
@@ -612,7 +604,7 @@ export class Casino {
         this.reels[i] = [above, res[i], below];
         this.audio.tone(160, 0.1, 'square', 0.14, 0.6);
         this.audio.burst(0.07, 900, 0.15);
-        r.classList.remove('stop'); void r.offsetWidth; r.classList.add('stop');
+        replay(r, 'stop');
         if (i === 1 && tease) {
           reelEls[2].classList.add('tease');
           this.$('[data-swin]').innerHTML = res[0] === 'diamond' ? `${px('diamond', 'ico')}${px('diamond', 'ico')} … JACKPOT?!` : 'C\'MON… C\'MON…';
@@ -661,8 +653,7 @@ export class Casino {
   }
 
   // a card as the hi-lo table shows it
-  cardHTML(c, hidden = false, fresh = false) {
-    if (hidden) return `<div class="card back${fresh ? ' deal' : ''}">${px('moon')}</div>`;
+  cardHTML(c, fresh = false) {
     const red = c.s === 'H' || c.s === 'D', suit = (cls) => px(SUIT_SPRITE[c.s], cls);
     return `<div class="card${red ? ' red' : ''}${fresh ? ' deal' : ''}"><i>${c.r}<br>${suit('cs')}</i><b>${suit('cb')}</b><i class="br">${c.r}<br>${suit('cs')}</i></div>`;
   }
@@ -694,25 +685,15 @@ export class Casino {
   drawRoulette() {
     const cv = this.$('[data-rwheel]');
     const x = cv.getContext('2d');
-    const c = 150, n = WHEEL.length;
-    x.fillStyle = '#ffd23f'; x.beginPath(); x.arc(c, c, c, 0, Math.PI * 2); x.fill();
-    x.fillStyle = '#120a1e'; x.beginPath(); x.arc(c, c, c - 6, 0, Math.PI * 2); x.fill();
-    for (let i = 0; i < n; i++) {
-      const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2;
-      const v = WHEEL[i];
-      x.fillStyle = v === 0 ? '#1f8a4a' : REDS.has(v) ? '#d7263d' : '#1a1426';
-      x.beginPath(); x.moveTo(c, c); x.arc(c, c, c - 10, a0, a1); x.closePath(); x.fill();
-      x.strokeStyle = '#ffd23f'; x.lineWidth = 1; x.stroke();
-      x.save(); x.translate(c, c); x.rotate((a0 + a1) / 2 + Math.PI / 2);
-      x.fillStyle = '#fff4e0'; x.font = pixelFont(9); x.textAlign = 'center';
-      x.fillText(String(v), 0, -c + 28);
-      x.restore();
-    }
-    x.fillStyle = '#5a1a8f'; x.beginPath(); x.arc(c, c, c * 0.55, 0, Math.PI * 2); x.fill();
+    const c = 150;
+    disc(x, c, c, c, '#ffd23f');
+    disc(x, c, c, c - 6, '#120a1e');
+    roulettePockets(x, c, pixelFont(9), 28, '#ffd23f');
+    disc(x, c, c, c * 0.55, '#5a1a8f');
     x.strokeStyle = '#120a1e'; x.lineWidth = 4; x.stroke();
     x.fillStyle = '#ffd23f';
     for (let i = 0; i < 4; i++) { x.save(); x.translate(c, c); x.rotate(i * Math.PI / 2); x.fillRect(-4, 0, 8, c * 0.5); x.restore(); }
-    x.beginPath(); x.arc(c, c, 18, 0, Math.PI * 2); x.fill();
+    disc(x, c, c, 18, '#ffd23f');
     cv.style.transition = 'none';
     cv.style.transform = `rotate(${this.rl.rot}deg)`;
     this.drawRBets();
@@ -749,7 +730,7 @@ export class Casino {
     setTimeout(() => this.audio.tone(1800, 0.05, 'triangle', 0.08), 40);
     this.drawRBets();
     const cell = this.el.querySelector(`[data-rb="${k}"]`);
-    if (cell) { cell.classList.remove('bump'); void cell.offsetWidth; cell.classList.add('bump'); }
+    if (cell) replay(cell, 'bump');
   }
 
   clearBets() {
@@ -831,9 +812,9 @@ export class Casino {
     x.clearRect(0, 0, S, S);
     x.imageSmoothingEnabled = false;
     // rim: dark disc, gold ring, bulbs
-    x.fillStyle = '#120a1e'; x.beginPath(); x.arc(c, c, c, 0, Math.PI * 2); x.fill();
-    x.fillStyle = '#c9a23a'; x.beginPath(); x.arc(c, c, R + 12, 0, Math.PI * 2); x.fill();
-    x.fillStyle = '#120a1e'; x.beginPath(); x.arc(c, c, R + 5, 0, Math.PI * 2); x.fill();
+    disc(x, c, c, c, '#120a1e');
+    disc(x, c, c, R + 12, '#c9a23a');
+    disc(x, c, c, R + 5, '#120a1e');
     const lum = (hex) => { const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); };
     // upscale a sprite by whole pixels (nearest) first, so rotating it with the slice keeps blocks square
     const blocky = (cvs, k) => {
@@ -955,7 +936,7 @@ export class Casino {
       if (unowned.length) {
         const it = pick(unowned);
         this.game.upgrades[it.key] = 1;
-        out.textContent = `YOU WON: ${this.itemName(it).toUpperCase()}!`;
+        out.textContent = `YOU WON: ${itemDef(it).name.toUpperCase()}!`;
         this.burst('FREE DRIP!!', { color: '#c77dff', size: 100, confetti: 80, shake: true });
         this.fanfare();
         this.wear(it.key, true);
@@ -994,7 +975,7 @@ export class Casino {
     const h = this.hl;
     this.$('[data-hpot]').textContent = `₵${fmt(h.pot)}`;
     this.$('[data-hstreak]').innerHTML = h.streak ? `${px('flame', 'ico').repeat(Math.min(h.streak, 8))} STREAK ×${h.streak}` : `BEST STREAK ${this.st.bestStreak}`;
-    this.$('[data-hcards]').innerHTML = h.card ? (h.prev ? this.cardHTML(h.prev).replace('card', 'card old') : '') + this.cardHTML(h.card, false, flipped) : `<div class="card back">${px('moon')}</div>`;
+    this.$('[data-hcards]').innerHTML = h.card ? (h.prev ? this.cardHTML(h.prev).replace('card', 'card old') : '') + this.cardHTML(h.card, flipped) : `<div class="card back">${px('moon')}</div>`;
     const ctl = this.$('[data-hctl]');
     if (h.phase === 'play') {
       const hi = this.hlMult('hi'), lo = this.hlMult('lo');
@@ -1076,15 +1057,13 @@ export class Casino {
   }
 
   // ================= PRIZE COUNTER =================
-  itemName(it) { return (it.kind === 'outfit' ? OUTFITS : SKATES)[it.id].name; }
-
   html_prizes() {
     const g = this.game, s = this.st, ti = this.tierIdx();
-    const sw = (c) => `<span class="swatch" style="background:#${c.toString(16).padStart(6, '0')}"></span>`;
+    const sw = (c) => `<span class="swatch" style="background:${hex(c)}"></span>`;
     const rows = SHOP.map((it) => {
-      const d = (it.kind === 'outfit' ? OUTFITS : SKATES)[it.id];
+      const d = itemDef(it);
       const owned = (g.upgrades[it.key] || 0) > 0;
-      const worn = it.kind === 'outfit' ? g.cosmetics.outfit === it.id : g.cosmetics.skates === it.id;
+      const worn = g.cosmetics[it.kind] === it.id;
       const locked = ti < it.tier;
       const btn = owned ? (worn ? '<button disabled>WEARING</button>' : `<button data-wear="${it.key}">WEAR IT</button>`)
         : locked ? `<button disabled>${px('lock', 'ico')} ${VIP[it.tier].name}</button>`
@@ -1117,7 +1096,7 @@ export class Casino {
     const it = SHOP.find((x) => x.key === key);
     const g = this.game;
     if (!it || !g.upgrades[key]) return;
-    if (it.kind === 'outfit') g.cosmetics.outfit = it.id; else g.cosmetics.skates = it.id;
+    g.cosmetics[it.kind] = it.id;
     g.cosmetics.apply();
     if (!quiet) { this.audio.pickup(); this.flash('LOOKIN\' GOOD!'); }
     g.save();

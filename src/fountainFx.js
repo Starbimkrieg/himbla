@@ -50,10 +50,10 @@ const STREAM = `uniform float time; uniform vec3 deep; uniform vec3 light; varyi
   }`;
 
 const KINDS = {
-  basin: { frag: RIPPLE, u: { deep: lin(0x2f9be0), light: lin(0xc6f4ff), landing: { value: 3.95 }, edge: { value: 8.5 } }, extra: {} },
-  bowl: { frag: RIPPLE, u: { deep: lin(0x3fb2f2), light: lin(0xd8f8ff), landing: { value: 2.5 }, edge: { value: 3.36 } }, extra: {} },
+  basin: { frag: RIPPLE, u: { deep: lin(0x2f9be0), light: lin(0xc6f4ff), landing: { value: 3.95 }, edge: { value: 8.5 } } },
+  bowl: { frag: RIPPLE, u: { deep: lin(0x3fb2f2), light: lin(0xd8f8ff), landing: { value: 2.5 }, edge: { value: 3.36 } } },
   curtain: { frag: CURTAIN, u: { deep: lin(0x7fd0ff), light: lin(0xf0fcff) }, extra: { transparent: true, depthWrite: false, side: THREE.DoubleSide } },
-  streams: { frag: STREAM, u: { deep: lin(0x6cc8ff), light: lin(0xf4fdff) }, extra: {} },
+  streams: { frag: STREAM, u: { deep: lin(0x6cc8ff), light: lin(0xf4fdff) } },
 };
 
 // A mesh for one water node (models.js bakeShip: `parts` hold the geometry, `data` the pivot's extras), at the node.
@@ -70,7 +70,7 @@ export function waterMesh(node) {
   const m = new THREE.Mesh(geo, mat);
   m.position.copy(node.pos);
   m.name = node.name;
-  if (K.extra.transparent) m.renderOrder = 2;
+  if (K.extra?.transparent) m.renderOrder = 2;
   m.userData.tick = (o, dt, t) => { TIME.value = t; };
   return m;
 }

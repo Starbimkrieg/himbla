@@ -40,7 +40,7 @@ export const FOES = {
 
 // SPACECOM armoured hauler, the night convoy's lead truck: three axles, armoured cab, banded cargo module,
 // twin-cannon roof turret.
-export function makeConvoyRig() {
+function makeConvoyRig() {
   const W = 0xeeecf6, Y = 0xffd23f, B = 0x2ec4ff;
   const root = new THREE.Group(), chassis = new THREE.Group();
   root.add(chassis);
@@ -86,7 +86,7 @@ export function makeConvoyRig() {
 }
 
 // Daedalus Warden: hovering hex hull, pink-lit seams, phase crystal turret. No wheels: four lift pads.
-export function makeWarden() {
+function makeWarden() {
   const HULL = 0x1a1426, DECK = 0x2a2440, PINK = 0xff2e88, VIO = 0xc77dff;
   const root = new THREE.Group(), chassis = new THREE.Group();
   root.add(chassis);
@@ -124,7 +124,7 @@ export function makeWarden() {
 }
 
 // Vostok Hammer: tracked heavy with a dozer-hammer plate, long cannon, red star.
-export function makeHammer() {
+function makeHammer() {
   const OLIVE = 0x4a5236, RED = 0xff3b5c;
   const root = new THREE.Group(), chassis = new THREE.Group();
   root.add(chassis);
@@ -314,7 +314,6 @@ export function makeProp(kind) {
     halo.rotation.x = Math.PI / 2 - 0.35;
     halo.position.y = 5.4;
     const spin = new THREE.Group();
-    spin.position.y = 0;
     spin.add(halo);
     spin.userData.spin = true;
     const glowBall = new THREE.Mesh(new THREE.SphereGeometry(3.0, 16, 12), BEAM(0xc77dff, 0.18));
@@ -329,7 +328,8 @@ export function makeProp(kind) {
 // Founded outposts (story base-building): a hab dome hub (homesteads) or research block with dish (labs) on a paved
 // apron, built modules on plots round it. Returns a kit template ({ root, cols, ... }) for territory.place().
 // ---------------------------------------------------------------------------------------------
-export const BUILT_R = 40, MOD_R = 26, TERMINAL_Z = 16.4, PLOTS = 6, TURRET_H = 8;
+export const BUILT_R = 40, TERMINAL_Z = 16.4, PLOTS = 6;
+const MOD_R = 26, TURRET_H = 8;
 // shared by the gun logic (territory.js) and terminal page (story.js); tip is head-local (twin barrels at x +-0.42,
 // ending ~z 4.1: models.js turretParts)
 export const OUTPOST_GUN = { range: 300, turn: 2.5, pitchTurn: 1.5, interval: 0.9, speed: 150, damage: 26, splash: 5, cone: 0.2, pitchCone: 0.25, tip: [0.42, -0.1, 4.1] };
@@ -414,7 +414,7 @@ function buildModule(k, mod, x, z, face, color) {
     k.at(x, z, face);
     k.box(9, 0.3, 6, T(CONC), 0, 0, 0, { outline: 0.03 });
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.cyl(0.12, 0.12, 3.6, 6, T(DK), sx * 3.8, 0.3, sz * 2.4, { outline: 0.02 });
-    for (let i = 0; i < 6; i++) k.add(new THREE.BoxGeometry(1.36, 0.14, 5.6), T(i % 2 ? CREAM : 0xff2e88), -3.4 + i * 1.36, 4.1, 0, { rx: 0, rz: 0.12, outline: 0.02 });
+    for (let i = 0; i < 6; i++) k.add(new THREE.BoxGeometry(1.36, 0.14, 5.6), T(i % 2 ? CREAM : 0xff2e88), -3.4 + i * 1.36, 4.1, 0, { rz: 0.12, outline: 0.02 });
     k.box(7, 1.1, 1.0, T(0x8a5a3a), 0, 0.3, 1.8, { outline: 0.04 });
     for (const [cx, c] of [[-2.2, 0xff9f1c], [0, 0x7dff6a], [2.2, 0x2ec4ff]]) crate(k, cx, 1.4, 1.8, 0.7, c, cx);
     crate(k, -3, 0.3, -1.6, 1.2, 0x9a6a3a, 0.4); crate(k, -1.6, 0.3, -1.8, 1.0, 0x4f5a42, -0.3);

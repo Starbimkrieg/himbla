@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces } from './toon.js';
 import { makeDish, makeDishHead, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar } from './models.js';
-import { mulberry32 } from './rng.js';
+import { mulberry32, clamp } from './rng.js';
 import { FACTIONS, defenseSpots } from './locations.js';
 import { bendPoint, bendQuat, unbendPoint } from './curve.js';
-import { SUN, frameQuat, arcDist, dirFromAngles, tangent } from './geo.js';
+import { SUN, frameQuat, arcDist, dirFromAngles, tangent, collectNodes } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
 import { Traffic } from './traffic.js';
 import { buildHelium, buildMeridian, dressLab, dressLabInside, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot } from './settlements.js';
@@ -21,6 +21,12 @@ function mesh(geo, mat, outline = 0.15) {
   m.receiveShadow = true;
   if (outline) ink(m, outline);
   return m;
+}
+// hang obj (a sign sprite) in the place's frame at (x, y, z)
+function hang(loc, obj, x, y, z) {
+  obj.position.set(x, y, z);
+  loc.group.add(obj);
+  return obj;
 }
 
 const _v = new THREE.Vector3();
@@ -229,7 +235,6 @@ export class World {
     if (loc.merged) return;
     loc.merged = true;
     if (NO_MERGE) return;
-    const t0 = performance.now();
     const G = loc.group;
     // (turn culled detail cells back on first, so nothing merges with its mask off)
     if (loc.cells) for (const c of loc.cells) if (!c.on) { c.on = true; setMask(c.objs, true); }
@@ -303,7 +308,6 @@ export class World {
     // swap merged chunks in, originals out
     const root = new THREE.Group();
     root.name = 'merged';
-    let made = 0;
     for (const gr of groups.values()) {
       if (!gr.list.length) continue;
       const geo = gr.list.length === 1 ? gr.list[0] : mergeGeometries(gr.list);
@@ -318,14 +322,12 @@ export class World {
         if (gr.small) m.userData.mergedDetail = true;
         m.matrixAutoUpdate = false;
         root.add(m);
-        made++;
         if (gr.mat === inkMat) loc.inkChunks.push({ m, c: new THREE.Vector3(), r: 0, on: true });
       }
       gr.done = true;
     }
     // remove only what was merged
-    let removed = 0;
-    for (const gr of groups.values()) if (gr.done) for (const o of gr.objs) { if (o.parent && !(o.parent.isMesh && !taking.has(o.parent))) { o.parent.remove(o); removed++; } }
+    for (const gr of groups.values()) if (gr.done) for (const o of gr.objs) if (o.parent && !(o.parent.isMesh && !taking.has(o.parent))) o.parent.remove(o);
     root.matrixAutoUpdate = false;
     G.add(root);
     root.updateMatrixWorld(true);
@@ -334,7 +336,6 @@ export class World {
       ch.c.copy(ch.m.geometry.boundingSphere.center).applyMatrix4(root.matrixWorld);
       ch.r = ch.m.geometry.boundingSphere.radius;
     }
-    loc.mergeStats = { removed, made, ms: Math.round(performance.now() - t0) };
     this.prepCulling(loc);
   }
 
@@ -362,15 +363,13 @@ export class World {
   // blocks it; ridges thinner than a sample step slip through, erring toward drawing).
   lineOfSight(cam, p, lift = 0) {
     _los.copy(p).normalize().multiplyScalar(p.length() + lift);
-    const steps = Math.min(40, Math.max(8, Math.ceil(cam.distanceTo(_los) / 50)));
+    const steps = clamp(Math.ceil(cam.distanceTo(_los) / 50), 8, 40);
     for (let i = 1; i < steps; i++) {
       _lp.lerpVectors(cam, _los, i / steps);
       if (this.planet.altitude(_lp) < -3) return false;
     }
     return true;
   }
-
-
 
   r() { return this.rand(); }
 
@@ -552,37 +551,6 @@ export class World {
     return obj;
   }
 
-  dome(loc, dx, dz, r, color, outline = 0.25) {
-    const g = new THREE.Group();
-    g.add(mesh(new THREE.SphereGeometry(r, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), toon(color), outline));
-    const ring = mesh(new THREE.CylinderGeometry(r * 1.04, r * 1.08, r * 0.08, 28), toon(0x4a4660), 0.1);
-    ring.position.y = r * 0.04;
-    g.add(ring);
-    const band = mesh(new THREE.TorusGeometry(r * 0.86, r * 0.03, 6, 32), glow(0xfff6a8), 0);
-    band.rotation.x = Math.PI / 2;
-    band.position.y = r * 0.5;
-    g.add(band);
-    this.put(g, loc, dx, dz, -0.5);
-    this.col(loc, { type: 'sphere', x: dx, y: -0.5, z: dz, r });
-    return g;
-  }
-
-  block(loc, dx, dz, w, h, d, color, yaw = 0, roof = 0x3a3550) {
-    const g = new THREE.Group();
-    const main = mesh(new THREE.BoxGeometry(w, h, d), toon(color), 0.2);
-    main.position.y = h / 2;
-    g.add(main);
-    const rf = mesh(new THREE.BoxGeometry(w * 1.06, 0.6, d * 1.06), toon(roof), 0.1);
-    rf.position.y = h + 0.3;
-    g.add(rf);
-    const win = new THREE.Mesh(new THREE.BoxGeometry(w * 1.01, h * 0.12, d * 1.01), glow(0xfff6a8));
-    win.position.y = h * 0.65;
-    g.add(win);
-    this.put(g, loc, dx, dz, 0, yaw);
-    this.col(loc, { type: 'box', x: dx, y: h / 2 + 0.3, z: dz, hx: w / 2 + 0.2, hy: h / 2 + 0.3, hz: d / 2 + 0.2, yaw });
-    return g;
-  }
-
   // Fortress wall segment (local x along the wall, +z = outside): battered plinth, outer buttresses and
   // crenellations, capped walkway, panel seams, inner light strip, outer wall lamps. One box collider.
   wallB(B, loc, dx, dz, len, h, t, color, yaw, trim) {
@@ -711,14 +679,6 @@ export class World {
       this.col(loc, { type: 'cyl', x, z, y0: -2, y1: h, r: 1.4 });
       this.mount(loc, x, z, h);
     }
-  }
-
-  tube(loc, ax, az, bx, bz, r = 2.2, color = 0xd8d4e8) {
-    const len = Math.hypot(bx - ax, bz - az);
-    const m = mesh(new THREE.CylinderGeometry(r, r, len, 12).rotateZ(Math.PI / 2), toon(color), 0.12);
-    const yaw = -Math.atan2(bz - az, bx - ax);
-    this.put(m, loc, (ax + bx) / 2, (az + bz) / 2, r * 0.8, yaw);
-    this.col(loc, { type: 'hcyl', x: (ax + bx) / 2, y: r * 0.8, z: (az + bz) / 2, r, len, yaw: yaw + Math.PI / 2 });
   }
 
   tower(loc, dx, dz, h, r, color, beacon = 0xff2e88) {
@@ -879,10 +839,7 @@ export class World {
   }
 
   sign(loc, text, color, y = 46) {
-    const s = textSprite(text, { color, scale: 1.4 });
-    s.position.set(0, y, 0);
-    loc.group.add(s);
-    loc.sign = s;
+    loc.sign = hang(loc, textSprite(text, { color, scale: 1.4 }), 0, y, 0);
   }
 
   addFigures(loc, count, opts) {
@@ -960,8 +917,7 @@ export class World {
     if (loc.defense && loc.type !== 'hub') this.defensePylons(loc, defenseSpots(loc)); // (no restricted site has loc.defense)
     if (loc.hq && loc.type !== 'ruin') {
       const hq = textSprite(loc.conqueredFrom ? `★ TAKEN BY ${FACTIONS[loc.faction].name.toUpperCase()} ★` : loc.lawless ? '★ HELD BY THE RUSTMOON CLANS ★' : `★ ${FACTIONS[loc.faction].name.toUpperCase()} HQ ★`, { color: '#ffffff', size: 60, scale: 0.8 });
-      hq.position.set(0, loc.type === 'hub' ? 110 : 62, 0);
-      loc.group.add(hq);
+      hang(loc, hq, 0, loc.type === 'hub' ? 110 : 62, 0);
     }
     this.sign(loc, loc.name.toUpperCase(), fc, loc.type === 'hub' ? 95 : loc.camp ? 26 : 50);
   }
@@ -1019,8 +975,7 @@ export class World {
       this.put(R, loc, -loc.r * 0.4, 0, 0, 0, true);
       this.col(loc, { type: 'cyl', x: -loc.r * 0.4, z: 0, y0: -1, y1: 3, r: 8 });
       this.col(loc, { type: 'sphere', x: -loc.r * 0.4, y: 5.4, z: 0, r: 2.6 });
-      const list = []; R.traverse((o) => { if (o.userData.spin) list.push(o); });
-      this.anims.push({ loc, list, seed: 3 });
+      this.anims.push({ loc, list: collectNodes(R, (o) => o.userData.spin), seed: 3 });
     }
   }
 
@@ -1031,14 +986,10 @@ export class World {
     // job terminal: a kiosk of screens facing the arrival point (settlements.jobTerminal); the Hall of
     // Highlights is on the board's own screen (hud.openBoard)
     jobTerminal(this, loc, 0, 76, 0, 0xffd23f);
-    const bs = textSprite('JOB BOARD', { color: '#ffffff', size: 80, scale: 0.6 });
-    bs.position.set(0, 21, 76);
-    loc.group.add(bs);
+    hang(loc, textSprite('JOB BOARD', { color: '#ffffff', size: 80, scale: 0.6 }), 0, 21, 76);
 
     // repair bay hangar (past the Daedalus relay, clear of the wings; built in settlements.js)
-    const rs = textSprite('REPAIR BAY', { color: '#ff9f1c', size: 70, scale: 0.6 });
-    rs.position.set(-168, 24, -98);
-    loc.group.add(rs);
+    hang(loc, textSprite('REPAIR BAY', { color: '#ff9f1c', size: 70, scale: 0.6 }), -168, 24, -98);
     this.pad(loc, 95, -60, 16);
     this.pad(loc, -120, 40, 16, 0x2ec4ff);
     this.solarField(loc, 150, 60, 4, 6, 0.4);
@@ -1051,9 +1002,7 @@ export class World {
     const lp = { x: 20, z: -185 };
     this.pad(loc, lp.x, lp.z, 30, 0xff4f2e, false, { flat: true }); // (rocket pad: flat, no shuttles)
     // (gantry and fuel spheres: settlements.dressIlmb)
-    const ls = textSprite('ARRIVALS', { color: '#ff4f2e', size: 70, scale: 0.6 });
-    ls.position.set(lp.x, 30, lp.z + 20);
-    loc.group.add(ls);
+    hang(loc, textSprite('ARRIVALS', { color: '#ff4f2e', size: 70, scale: 0.6 }), lp.x, 30, lp.z + 20);
     const rocket = makeRocket();
     this.put(rocket.root, loc, lp.x, lp.z, 900, 0, true);
     this.rocket = { ...rocket, loc, lp, t: 0, alt: 900, period: 76 };
@@ -1078,12 +1027,7 @@ export class World {
     }
     const beacon = new THREE.MeshBasicMaterial({ color: 0xff2a4a });
     this.blinkers.push({ mat: beacon, base: new THREE.Color(0xff2a4a), phase: 0, loc });
-    for (let q = 0; q < 4; q++) {
-      for (const f of [1 / 3, 2 / 3]) {
-        const a = (q + f) * (Math.PI / 2);
-        this.bastion(B, loc, a, R, { r: 5.5, h: 10, out: 4, ped: 2.2, color: 0x4a4660, trim: 0xffd23f, beacon, heavy: true });
-      }
-    }
+    for (let q = 0; q < 4; q++) for (const f of [1 / 3, 2 / 3]) this.bastion(B, loc, (q + f) * (Math.PI / 2), R, { r: 5.5, h: 10, out: 4, ped: 2.2, color: 0x4a4660, trim: 0xffd23f, beacon, heavy: true });
     for (const g of gates) {
       for (const s of [-1, 1]) {
         const a = g + s * 0.14;
@@ -1106,11 +1050,8 @@ export class World {
       for (const sz of [-1, 1]) B.add(new THREE.BoxGeometry(half * 2, 0.3, 0.2), this.glowM(0x2ee6ff), 0, 15, sz * 1.4, { outline: 0 });
       this.col(loc, { type: 'box', x: Math.cos(g) * gr, y: 15.3, z: Math.sin(g) * gr, hx: half, hy: 1.1, hz: 1.4, yaw: -g + Math.PI / 2 });
     }
-    // inner ring guns on pylons, clear of the wings
-    const d = loc.defense;
-    const inner = [];
-    for (let i = 0; i < (d.inner || 0); i++) inner.push([(i / d.inner) * Math.PI * 2 + 0.8, d.ring * 0.55]);
-    this.defensePylons(loc, inner, 7);
+    // inner ring guns on pylons, clear of the wings (locations.js defenseSpots: the outer ring's turrets first)
+    this.defensePylons(loc, defenseSpots(loc).slice(loc.defense.turrets), 7);
     // (barracks and vehicle depot: settlements.dressIlmb)
     for (let i = 0; i < 3; i++) {
       const r = makeRover({ color: 0x55607a, trim: 0xffd23f, pirate: false, flag: 0xffd23f });
@@ -1118,9 +1059,7 @@ export class World {
       this.put(r.root, loc, 150 + i * 12, -95 + i * 6, 0, 1.2);
       this.col(loc, { type: 'box', x: 150 + i * 12, y: 1.5, z: -95 + i * 6, hx: 2.5, hy: 1.5, hz: 3.0, yaw: 1.2 });
     }
-    const sc = loc.lawless ? textSprite('RUSTMOON', { color: '#7dff3a', size: 90, scale: 1.1 }) : textSprite('SPACECOM', { color: '#ffd23f', size: 90, scale: 1.1 });
-    sc.position.set(0, 132, 0);
-    loc.group.add(sc);
+    hang(loc, loc.lawless ? textSprite('RUSTMOON', { color: '#7dff3a', size: 90, scale: 1.1 }) : textSprite('SPACECOM', { color: '#ffd23f', size: 90, scale: 1.1 }), 0, 132, 0);
   }
 
   // ---------- ILMB wings: six distinct buildings joined to the main dome by glass skywalks ----------
@@ -1160,12 +1099,7 @@ export class World {
         const ex = dx * c + dz * s, ez = -dx * s + dz * c;
         return this.col(loc, { type: 'hcyl', x, y: ly * S, z, r: r * S, len: len * S, yaw: Math.atan2(ex, ez) });
       },
-      sign: (text, color, lx, y, lz, scale = 0.55) => {
-        const sp = textSprite(text, { color, size: 64, scale });
-        const [x, z] = P(lx, lz);
-        sp.position.set(x, y * S, z);
-        loc.group.add(sp);
-      },
+      sign: (text, color, lx, y, lz, scale = 0.55) => { const [x, z] = P(lx, lz); hang(loc, textSprite(text, { color, size: 64, scale }), x, y * S, z); },
       flag: (lx, lz, colors, h) => { const [x, z] = P(lx, lz); this.flag(loc, x, z, colors, h); },
       obj: (o, lx, lz, y = 0, ry = 0, dynamic = false) => { const [x, z] = P(lx, lz); o.scale.multiplyScalar(S); return this.put(o, loc, x, z, y * S, yaw + ry, dynamic); },
     };
@@ -1214,18 +1148,13 @@ export class World {
       for (const sz of [-1, 1]) B.add(new THREE.BoxGeometry(t * 2, wallH, t * 2), m, x, F + wallH / 2, sz * R, { outline: 0.06 });
       if (!end) B.add(new THREE.SphereGeometry(0.2, 6, 4), this.glowM(0xfff6a8), x, top - 0.25, 0, { outline: 0 });
     });
-    // each end opens onto a faintly glowing doorway in the walkway's own arch section, not a flat wall
-    const arch = new THREE.Shape();
-    arch.moveTo(-R + 0.35, F);
-    arch.lineTo(R - 0.35, F);
-    arch.lineTo(R - 0.35, F + wallH);
-    arch.absarc(0, F + wallH, R - 0.35, 0, Math.PI, false);
-    arch.lineTo(-R + 0.35, F);
-    const archGeo = new THREE.ShapeGeometry(arch, 12).rotateY(Math.PI / 2);
+    // each end opens onto a faintly glowing doorway in the walkway's own arch section, not a flat wall (archP: that section,
+    // e either side of the middle, drawn into p)
+    const archP = (e, p = new THREE.Path()) => { p.moveTo(-e, F); p.lineTo(e, F); p.lineTo(e, F + wallH); p.absarc(0, F + wallH, e, 0, Math.PI, false); p.lineTo(-e, F); return p; };
+    const archGeo = new THREE.ShapeGeometry(archP(R - 0.35, new THREE.Shape()), 12).rotateY(Math.PI / 2);
     const portal = new THREE.MeshBasicMaterial({ color: 0xbfefff, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     // (just inside the end rings: at the very ends they'd be buried in the dome and wing)
     // and a lit rim round each doorway so it reads from both sides
-    const archP = (e) => { const p = new THREE.Path(); p.moveTo(-e, F); p.lineTo(e, F); p.lineTo(e, F + wallH); p.absarc(0, F + wallH, e, 0, Math.PI, false); p.lineTo(-e, F); return p; };
     const rim = new THREE.Shape(archP(R - 0.3).getPoints(24));
     rim.holes.push(new THREE.Path(archP(R - 0.62).getPoints(24)));
     const rimGeo = new THREE.ShapeGeometry(rim).rotateY(Math.PI / 2);
@@ -1271,7 +1200,7 @@ export class World {
       }
       w.x += w.dir * w.speed * dt;
       if (w.x > w.max || w.x < w.min) {
-        w.x = Math.min(w.max, Math.max(w.min, w.x));
+        w.x = clamp(w.x, w.min, w.max);
         w.dir = -w.dir;
         w.lane = -w.lane; // keep to the right
         w.wait = 0.6 + Math.random() * 2.5;
@@ -1370,8 +1299,7 @@ export class World {
     const red = 0xff3b5c, R = 13, L = 30, dark = 0x3a3550;
     w.add(new THREE.CylinderGeometry(R, R, L, 24, 1, false, 0, Math.PI).rotateZ(Math.PI / 2), toon(0x5b5870), 0, 0, 0, { outline: 0.2 });
     for (const x of [-L / 2 + 0.4, -7.5, 0, 7.5, L / 2 - 0.4]) w.add(new THREE.TorusGeometry(R + 0.15, 0.45, 6, 24, Math.PI), toon(red), x, 0, 0, { ry: Math.PI / 2, outline: 0.06 });
-    w.add(new THREE.BoxGeometry(L - 2, 0.9, 0.3), this.glowM(0xfff6a8), 0, 8.2, R * 0.62, { rx: -0.9, outline: 0 });
-    w.add(new THREE.BoxGeometry(L - 2, 0.9, 0.3), this.glowM(0xfff6a8), 0, 8.2, -R * 0.62, { rx: 0.9, outline: 0 });
+    for (const s of [1, -1]) w.add(new THREE.BoxGeometry(L - 2, 0.9, 0.3), this.glowM(0xfff6a8), 0, 8.2, s * R * 0.62, { rx: -s * 0.9, outline: 0 });
     // big door (outward end), half open on a dark bay
     const dx = L / 2;
     w.add(new THREE.BoxGeometry(0.4, 9.6, 10.4), toon(0x1d1a29), dx + 0.1, 4.8, 0, { outline: 0 });
@@ -1450,8 +1378,7 @@ export class World {
     w.add(new THREE.BoxGeometry(18.2, 1.2, 20.2), this.glowM(0x2ee6ff), 0, 6.2, 0, { outline: 0 });
     for (let k = 0; k < 9; k++) w.add(new THREE.BoxGeometry(18.3, 0.9, 1.1), toon(k % 2 ? yel : 0x1d1a29), 0, 1.0, -8.8 + k * 2.2, { outline: 0 });
     w.add(new THREE.CylinderGeometry(5.5, 5.5, 6, 20), toon(0xd8d4e8), -2, 12.8, 0, { outline: 0.15 });
-    w.add(new THREE.TorusGeometry(5.8, 0.35, 6, 28), this.glowM(0x2ee6ff), -2, 12.8, 0, { rx: Math.PI / 2, outline: 0 });
-    w.add(new THREE.TorusGeometry(5.8, 0.35, 6, 28), this.glowM(0x2ee6ff), -2, 11, 0, { rx: Math.PI / 2, outline: 0 });
+    for (const y of [12.8, 11]) w.add(new THREE.TorusGeometry(5.8, 0.35, 6, 28), this.glowM(0x2ee6ff), -2, y, 0, { rx: Math.PI / 2, outline: 0 });
     w.add(new THREE.CylinderGeometry(3.5, 5.5, 1.6, 20), toon(yel), -2, 16.6, 0, { outline: 0.1 });
     const prof = [[7, 0], [6.1, 4], [5.0, 10], [4.7, 14], [5.0, 18], [5.6, 22]].map(([x, y]) => new THREE.Vector2(x, y));
     const steam = this.glassM(0xffffff, 0.3);
@@ -1688,7 +1615,7 @@ export class World {
     // activate nearby settlements, drop far ones from the scene
     const camDir = _v.copy(camPos).normalize();
     for (const loc of this.locations) {
-      loc.camDist = this.planet.R * Math.acos(Math.min(1, Math.max(-1, camDir.dot(loc.dir))));
+      loc.camDist = this.planet.R * Math.acos(clamp(camDir.dot(loc.dir), -1, 1));
       const want = loc.camDist < ACTIVE_DIST;
       loc.active = want;
       // drawn while in range and not behind terrain
@@ -1747,15 +1674,14 @@ export class World {
       r.core.position.x = -2 + (Math.random() - 0.5) * 0.25 * k;
       r.orb.scale.setScalar(1 + Math.sin(time * 23) * 0.12 + r.flash * 0.8);
       r.flash = Math.max(0, r.flash - dt * 0.8);
-      const near = camPos.distanceTo(this.lab.reactor);
-      this.reactorLight.intensity = near < 80 ? (6 + r.flash * 30) * (0.8 + Math.random() * 0.4) : 0;
+      this.reactorLight.intensity = camPos.distanceTo(this.lab.reactor) < 80 ? (6 + r.flash * 30) * (0.8 + Math.random() * 0.4) : 0;
     } else if (this.reactorLight) this.reactorLight.intensity = 0;
     if (this.monolith && this.monolith.loc.active) this.monolith.halo.material.opacity = 0.3 + 0.25 * Math.sin(time * 2);
     if (this.casino && this.casino.loc.active) this.casino.update(dt, time); // casino
     if (this.crystals) for (const c of this.crystals) c.mesh.visible = !c.taken && c.pos.distanceToSquared(camPos) < 450 * 450;
 
-    this.updateRocket(dt, camPos);
-    this.updateTraffic(dt, camPos);
+    this.updateRocket(dt);
+    this.traffic.update(dt, camPos);
     this.updateFigures(dt);
     if (this.civilians) this.civilians.update(dt);
     this.updateWalkers(dt, camPos);
@@ -1780,10 +1706,6 @@ export class World {
     if (r.loc.active) r.worldPos = r.loc.group.localToWorld(new THREE.Vector3(r.lp.x, alt + 20, r.lp.z));
   }
 
-  updateTraffic(dt, camPos) {
-    this.traffic.update(dt, camPos);
-  }
-
   // ---------- strange places ----------
 
   // Dr. Zbornak's lab: a walk-in hollow building with a violently spinning antimatter reactor in a
@@ -1791,8 +1713,7 @@ export class World {
   buildLab(loc) {
     const W = 22, D = 16, H = 16, T = 1;
     const wall = (x, z, w, d) => {
-      const m = mesh(new THREE.BoxGeometry(w, H, d), toon(0xe8e4f4), 0.15);
-      this.put(m, loc, x, z, H / 2);
+      this.put(mesh(new THREE.BoxGeometry(w, H, d), toon(0xe8e4f4), 0.15), loc, x, z, H / 2);
       this.col(loc, { type: 'box', x, y: H / 2, z, hx: w / 2, hy: H / 2, hz: d / 2 });
     };
     wall(0, -D, W * 2, T * 2);
@@ -1800,37 +1721,28 @@ export class World {
     wall(W, 0, T * 2, D * 2);
     wall(-13, D, 18, T * 2);
     wall(13, D, 18, T * 2);
-    const roof = mesh(new THREE.BoxGeometry(W * 2 + 2, 1.5, D * 2 + 2), toon(0x3a3550), 0.15);
-    this.put(roof, loc, 0, 0, H + 0.75);
+    this.put(mesh(new THREE.BoxGeometry(W * 2 + 2, 1.5, D * 2 + 2), toon(0x3a3550), 0.15), loc, 0, 0, H + 0.75);
     this.col(loc, { type: 'box', x: 0, y: H + 0.75, z: 0, hx: W + 1, hy: 0.75, hz: D + 1 });
     // hazard stripes over the door + a warning sign
-    const stripe = mesh(new THREE.BoxGeometry(8, 1.2, 0.3), toon(0xffd23f), 0.05);
-    this.put(stripe, loc, 0, D + 1.1, H - 2);
-    const sign = textSprite('☢ ANTIMATTER — KNOCK FIRST', { color: '#ffd23f', size: 60, scale: 0.55, bg: '#120a1e' });
-    sign.position.set(0, H + 5, D + 2);
-    loc.group.add(sign);
+    this.put(mesh(new THREE.BoxGeometry(8, 1.2, 0.3), toon(0xffd23f), 0.05), loc, 0, D + 1.1, H - 2);
+    hang(loc, textSprite('☢ ANTIMATTER — KNOCK FIRST', { color: '#ffd23f', size: 60, scale: 0.55, bg: '#120a1e' }), 0, H + 5, D + 2);
     // interior: checker floor, glowing strip lights, shelves
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(W * 2 - 2, D * 2 - 2, 1, 1), new THREE.MeshToonMaterial({ map: this.checker(), gradientMap: toon(0).gradientMap }));
     floor.rotation.x = -Math.PI / 2;
     this.put(floor, loc, 0, 0, 0.06);
     for (const z of [-10, 0, 10]) this.put(new THREE.Mesh(new THREE.BoxGeometry(W * 2 - 4, 0.3, 0.6), glow(0xc77dff)), loc, 0, z, H - 0.4);
     for (const x of [-18, -12]) {
-      const shelf = mesh(new THREE.BoxGeometry(4, 7, 2.5), toon(0x5b5870), 0.06);
-      this.put(shelf, loc, x, -13, 3.5);
+      this.put(mesh(new THREE.BoxGeometry(4, 7, 2.5), toon(0x5b5870), 0.06), loc, x, -13, 3.5);
       for (let k = 0; k < 3; k++) this.put(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.2, 8), glow([0x7dff3a, 0xff2e88, 0x2ec4ff][k])), loc, x - 1.2 + k * 1.2, -12, 5.5);
     }
     // Dr. Zbornak's station (dressed in settlements.js dressLabInside): low dais on the hall's right,
     // behind his waist-high workbench, facing the door
     const docX = 15.5, docZ = 1.6;
-    const doc = makeFigure({ suit: 0xffffff, helmet: 0xfff4e0, visor: 0x7dff3a });
-    this.put(doc.root, loc, docX, docZ, 0.3, 0);
-    const docSign = nameTag(textSprite('DR. ZBORNAK', { color: '#7dff3a', size: 50, scale: 0.35 }), 'DR. ZBORNAK', '#7dff3a');
-    docSign.position.set(docX, 3.1, docZ);
-    loc.group.add(docSign);
+    this.put(makeFigure({ suit: 0xffffff, helmet: 0xfff4e0, visor: 0x7dff3a }).root, loc, docX, docZ, 0.3, 0);
+    hang(loc, nameTag(textSprite('DR. ZBORNAK', { color: '#7dff3a', size: 50, scale: 0.35 }), 'DR. ZBORNAK', '#7dff3a'), docX, 3.1, docZ);
     // the reactor
     const rx = -2, rz = -3;
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, H - 1, 28, 1, true), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
-    this.put(tube, loc, rx, rz, H / 2);
+    this.put(new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, H - 1, 28, 1, true), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })), loc, rx, rz, H / 2);
     for (const y of [0.6, H - 1]) this.put(mesh(new THREE.CylinderGeometry(3.8, 3.8, 1.2, 28), toon(0x3a3550), 0.08), loc, rx, rz, y);
     this.col(loc, { type: 'cyl', x: rx, z: rz, y0: -1, y1: H, r: 3.6 });
     const core = new THREE.Group();
@@ -1843,16 +1755,11 @@ export class World {
     loc.group.updateMatrixWorld(true);
     // splice pod: step in with a full jar, come out… improved
     const px = -16, pz = 1;
-    const podBase = mesh(new THREE.CylinderGeometry(2.2, 2.4, 0.8, 20), toon(0x3a3550), 0.08);
-    this.put(podBase, loc, px, pz, 0.4);
-    const podTop = mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.6, 20), toon(0x3a3550), 0.08);
-    this.put(podTop, loc, px, pz, 5.6);
-    const podGlass = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 4.6, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x7dff3a, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
-    this.put(podGlass, loc, px, pz, 3.1);
+    this.put(mesh(new THREE.CylinderGeometry(2.2, 2.4, 0.8, 20), toon(0x3a3550), 0.08), loc, px, pz, 0.4);
+    this.put(mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.6, 20), toon(0x3a3550), 0.08), loc, px, pz, 5.6);
+    this.put(new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 4.6, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x7dff3a, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })), loc, px, pz, 3.1);
     this.put(new THREE.Mesh(new THREE.TorusGeometry(2, 0.12, 6, 24).rotateX(Math.PI / 2), glow(0x7dff3a)), loc, px, pz, 0.9);
-    const podSign = textSprite('SPLICE POD', { color: '#7dff3a', size: 50, scale: 0.35 });
-    podSign.position.set(px, 7.4, pz);
-    loc.group.add(podSign);
+    hang(loc, textSprite('SPLICE POD', { color: '#7dff3a', size: 50, scale: 0.35 }), px, 7.4, pz);
     // chimera holding pen out front, terminal at its gate
     const pen = { x0: 28, z0: 22, x1: 62, z1: 64 };
     const rail = toon(0xffd23f), postM = toon(0x3a3550);
@@ -1860,8 +1767,7 @@ export class World {
       const len = Math.hypot(bx - ax, bz - az);
       const n = Math.ceil(len / 4);
       for (let i = 0; i <= n; i++) this.put(mesh(new THREE.CylinderGeometry(0.2, 0.2, 2.2, 6), postM, 0.04), loc, ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n, 1.1);
-      const r = mesh(new THREE.BoxGeometry(0.15, 0.25, len), rail, 0.03);
-      this.put(r, loc, (ax + bx) / 2, (az + bz) / 2, 1.7, Math.atan2(bx - ax, bz - az));
+      this.put(mesh(new THREE.BoxGeometry(0.15, 0.25, len), rail, 0.03), loc, (ax + bx) / 2, (az + bz) / 2, 1.7, Math.atan2(bx - ax, bz - az));
       this.col(loc, { type: 'box', x: (ax + bx) / 2, y: 1.1, z: (az + bz) / 2, hx: Math.abs(bx - ax) / 2 + 0.2, hy: 1.1, hz: Math.abs(bz - az) / 2 + 0.2 });
     };
     fence(pen.x0, pen.z1, pen.x1, pen.z1);
@@ -1869,9 +1775,7 @@ export class World {
     fence(pen.x0, pen.z0 + 8, pen.x0, pen.z1);
     fence(pen.x0 + 8, pen.z0, pen.x1, pen.z0);
     // (gate terminal kiosk: settlements.js penTerminal)
-    const penSign = textSprite('HOLDING PEN', { color: '#7dff3a', size: 50, scale: 0.35 });
-    penSign.position.set(pen.x0 - 2, 5.6, pen.z0 - 2);
-    loc.group.add(penSign);
+    hang(loc, textSprite('HOLDING PEN', { color: '#7dff3a', size: 50, scale: 0.35 }), pen.x0 - 2, 5.6, pen.z0 - 2);
     loc.group.updateMatrixWorld(true);
     this.lab = { loc, reactor: this.toWorld(loc, rx, 2, rz), scientist: this.toWorld(loc, docX, 0, docZ + 4.5), pod: this.toWorld(loc, px, 1, pz), penTerm: this.toWorld(loc, pen.x0 - 2, 0, pen.z0 - 2), half: { w: W, d: D, h: H } };
     // permanent scene light (never added/removed, so shaders don't recompile)
@@ -1897,8 +1801,7 @@ export class World {
   }
 
   buildMonolith(loc) {
-    const slab = mesh(new THREE.BoxGeometry(8.4, 36, 2.2), new THREE.MeshBasicMaterial({ color: 0x050308 }), 0.25);
-    this.put(slab, loc, 0, 0, 18);
+    this.put(mesh(new THREE.BoxGeometry(8.4, 36, 2.2), new THREE.MeshBasicMaterial({ color: 0x050308 }), 0.25), loc, 0, 0, 18);
     this.col(loc, { type: 'box', x: 0, y: 18, z: 0, hx: 4.2, hy: 18, hz: 1.1 });
     const halo = new THREE.Mesh(new THREE.RingGeometry(22, 23.5, 72), new THREE.MeshBasicMaterial({ color: 0xc77dff, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
     halo.rotation.x = -Math.PI / 2;
@@ -2034,7 +1937,7 @@ export class World {
       f.root.visible = !f.captured && loc.active && loc.camDist < 450;
       if (!f.root.visible) continue;
       if (this._camPos) {
-        const hulls = f.inks || (f.inks = []);
+        const hulls = (f.inks ||= []);
         if (!hulls.length) f.root.traverse((o) => { if (o.userData.isInk) hulls.push(o); });
         const e = f.root.matrixWorld.elements, cp = this._camPos;
         const near = Math.hypot(e[12] - cp.x, e[13] - cp.y, e[14] - cp.z) < (f.inkOn === false ? FIG_INK_DIST : FIG_INK_DIST + 10);

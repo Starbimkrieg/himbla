@@ -1,24 +1,22 @@
 import * as THREE from 'three';
-import { toon, glow, ink } from './toon.js';
-import { canvasTex, FONT, fmt, fitText, BJ, bjPt, BJ_RACK, DUCK, PLK, CLASSIC, PRIZE, CLAW } from './casinoWorld.js';
+import { toon, ink } from './toon.js';
+import { canvasTex, FONT, fmt, hex, disc, fitText, BJ, bjPt, BJ_RACK, DUCK, PLK, CLASSIC, PRIZE, CLAW } from './casinoWorld.js';
 import { ClawGame } from './clawGame.js';
 import { CLAW_COST } from './clawSim.js';
 import { makeChipStack } from './models.js';
 import { PlinkoSim, MULTS, AIM_RANGE, DROP_Y, BALL_R, PEGS, slotCentre } from './plinko.js';
 import { glyphHtml } from './glyphs.js';
-import { pick } from './rng.js';
+import { pick, clamp } from './rng.js';
 
 // The walk-in Lucky Crater games: BLACKJACK, the DUCK DERBY and a giant physics PLINKO board.
 // Driven by casinoWorld's onUpdate, so it only ticks while the casino is active. While "seated"
 // the game is in the 'casino' modal state and this class flies the camera.
 
-const hex = (c) => '#' + c.toString(16).padStart(6, '0');
-
 // ---------- cards ----------
 const SUITS = ['♠', '♥', '♦', '♣'];
-const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const cardVal = (c) => (c.r === 'A' ? 11 : ['J', 'Q', 'K'].includes(c.r) ? 10 : +c.r);
-export function handValue(h) {
+function handValue(h) {
   let t = 0, aces = 0;
   for (const c of h) { t += cardVal(c); if (c.r === 'A') aces++; }
   while (t > 21 && aces) { t -= 10; aces--; }
@@ -66,10 +64,10 @@ function cardBack() {
     x.fillStyle = '#5a1a8f'; x.beginPath(); x.roundRect(5, 5, w - 10, h - 10, 16); x.fill();
     x.strokeStyle = '#ffd23f'; x.lineWidth = 3;
     for (let i = -h; i < w + h; i += 18) { x.beginPath(); x.moveTo(i, 10); x.lineTo(i + h, h - 10); x.stroke(); x.beginPath(); x.moveTo(i + h, 10); x.lineTo(i, h - 10); x.stroke(); }
-    x.fillStyle = '#5a1a8f'; x.beginPath(); x.arc(w / 2, h / 2, 40, 0, Math.PI * 2); x.fill();
+    disc(x, w / 2, h / 2, 40, '#5a1a8f');
     x.strokeStyle = '#ffd23f'; x.lineWidth = 6; x.stroke();
-    x.fillStyle = '#ffd23f'; x.beginPath(); x.arc(w / 2, h / 2, 26, 0, Math.PI * 2); x.fill();
-    x.fillStyle = '#5a1a8f'; x.beginPath(); x.arc(w / 2 + 11, h / 2 - 6, 22, 0, Math.PI * 2); x.fill();
+    disc(x, w / 2, h / 2, 26, '#ffd23f');
+    disc(x, w / 2 + 11, h / 2 - 6, 22, '#5a1a8f');
   }) });
   return backMat;
 }
@@ -138,7 +136,7 @@ function duckOdds(forms, n = 2500) {
 }
 
 // ---------- interaction spots (casino-local x/z) ----------
-export const STATIONS = [
+const STATIONS = [
   { id: 'bj', x: bjPt(0, 0, BJ.R + 1.4)[0], z: bjPt(0, 0, BJ.R + 1.4)[2], r: 2.8, label: 'SIT AT THE BLACKJACK TABLE' },
   { id: 'duck', x: DUCK.kiosk[0], z: DUCK.kiosk[1] + 2, r: 2.8, label: 'DUCK DERBY — PICK A DUCK &amp; BET' },
   { id: 'plinko', x: PLK.x, z: PLK.z + 7.8, r: 3.2, label: 'PLAY PLINKO' },
@@ -343,8 +341,8 @@ export class CasinoGames {
     const v = this.view();
     if (!v) return;
     this.camT += dt;
-    const p = cw.toWorld(v[0][0], v[0][1], v[0][2], _v);
-    const l = cw.toWorld(v[1][0], v[1][1], v[1][2], _w);
+    const p = cw.toWorld(...v[0], _v);
+    const l = cw.toWorld(...v[1], _w);
     const k = Math.min(1, dt * (this.camT < 1 ? 4 : 6));
     this.camP.lerp(p, k);
     this.camL.lerp(l, k);
@@ -372,6 +370,8 @@ export class CasinoGames {
 
   fanfare() { this.casino.fanfare(); }
 
+  camShake(k) { this.g.cam.shake = Math.max(this.g.cam.shake, k); }
+
   cheer(n = 7) { for (const c of this.cw.crowd.slice(0, n)) c.cheer = 2 + Math.random(); }
 
   // big wins get the full treatment
@@ -381,7 +381,7 @@ export class CasinoGames {
     if (m >= 10) {
       this.popAt(pick(['KA-CHING!!', 'MOONSHOT!!', 'KA-BLAMMO!!', 'JACKPOT!!']), x, y + 1.5, z, { color: '#ffd23f', size: 96, life: 2, prio: 1 });
       this.confetti(x, y, z, 160, 10);
-      this.g.cam.shake = Math.max(this.g.cam.shake, 0.9);
+      this.camShake(0.9);
       this.fanfare();
       this.cheer();
     } else if (m >= 2) {
@@ -419,6 +419,13 @@ export class CasinoGames {
     this.audio.burst(0.05, 5000, 0.18);
     this.layoutCards(card);
     return card;
+  }
+
+  // the shoe's next card to the player ('p') or the dealer ('d')
+  dealTo(who, faceUp = true) {
+    const c = this.draw();
+    (who === 'p' ? this.bj.player : this.bj.dealer).push(c);
+    this.spawnCard(c, who, faceUp);
   }
 
   layoutCards(fresh) {
@@ -479,10 +486,7 @@ export class CasinoGames {
     this.chipStack(bet, new THREE.Vector3(0, BJ.top, 2.72), new THREE.Vector3(0, BJ.top + 0.6, BJ.R + 0.5));
     for (let k = 0; k < 4; k++) {
       this.after(0.3 + k * 0.42, () => {
-        const toP = k % 2 === 0;
-        const c = this.draw();
-        (toP ? b.player : b.dealer).push(c);
-        this.spawnCard(c, toP ? 'p' : 'd', k !== 3);
+        this.dealTo(k % 2 === 0 ? 'p' : 'd', k !== 3);
         this.render();
       });
     }
@@ -508,9 +512,7 @@ export class CasinoGames {
   hit() {
     const b = this.bj;
     if (b.phase !== 'play') return;
-    const c = this.draw();
-    b.player.push(c);
-    this.spawnCard(c, 'p', true);
+    this.dealTo('p');
     const v = handValue(b.player).t;
     if (v > 21) {
       b.phase = 'busy';
@@ -531,9 +533,7 @@ export class CasinoGames {
     this.chipStack(b.stake, new THREE.Vector3(0.36, BJ.top, 2.72), new THREE.Vector3(0.3, BJ.top + 0.6, BJ.R + 0.5));
     b.stake *= 2;
     this.popAt('DOUBLE DOWN!', ...bjPt(0, 2.4, 2), { color: '#ffd23f', size: 54 });
-    const c = this.draw();
-    b.player.push(c);
-    this.spawnCard(c, 'p', true);
+    this.dealTo('p');
     const v = handValue(b.player).t;
     b.phase = 'busy';
     if (v > 21) this.after(0.5, () => { this.flipHole(); this.settle('bust', `DOUBLE BUST WITH ${v}!`); });
@@ -549,9 +549,7 @@ export class CasinoGames {
     this.flipHole();
     const step = () => {
       if (handValue(b.dealer).t < 17) {
-        const c = this.draw();
-        b.dealer.push(c);
-        this.spawnCard(c, 'd', true);
+        this.dealTo('d');
         this.render();
         this.after(0.65, step);
       } else this.after(0.35, () => this.compare());
@@ -585,7 +583,7 @@ export class CasinoGames {
     if (kind === 'bj') {
       this.popAt('BLACKJACK!!', ...bjPt(0, 2.6, 2), { color: '#ffd23f', size: 92, life: 2, prio: 1 });
       this.confetti(...bjPt(0, 1.6, 2), 120, 8);
-      this.g.cam.shake = Math.max(this.g.cam.shake, 0.6);
+      this.camShake(0.6);
       this.fanfare();
       this.cheer(4);
     } else if (kind === 'win') this.celebrate(win, stake, where);
@@ -748,7 +746,7 @@ export class CasinoGames {
       this.msgCls = 'good';
       this.celebrate(win, d.stake, [lx - 1, 2.5, DUCK.lanes[w]]);
       this.popAt(`+₵${fmt(win)}`, lx - 2, 3, DUCK.lanes[w], { color: '#7dff6a', size: 60, life: 1.8, prio: 1 });
-      this.g.cam.shake = Math.max(this.g.cam.shake, 0.4);
+      this.camShake(0.4);
     } else {
       d.msg = `#${w + 1} ${DUCKS[w].name} WINS. YOUR DUCK #${d.bet + 1} WAS ${['', '2ND', '3RD', '4TH'][Math.max(1, this.placeOf(d.bet))] || 'SLOW'}.`;
       this.msgCls = 'bad';
@@ -777,7 +775,7 @@ export class CasinoGames {
     const places = d.phase === 'race' || d.phase === 'done' ? d.ds.map((q, i) => this.placeOf(i)) : null;
     DUCKS.forEach((dk, i) => {
       const y = 150 + i * 52;
-      x.fillStyle = hex(dk.color); x.beginPath(); x.arc(70, y, 20, 0, Math.PI * 2); x.fill();
+      disc(x, 70, y, 20, hex(dk.color));
       x.fillStyle = '#120a1e'; x.font = FONT(30); x.textAlign = 'center'; x.fillText(String(i + 1), 70, y + 2);
       x.textAlign = 'left'; x.fillStyle = d.bet === i && d.phase !== 'bet' ? '#ffd23f' : '#fff4e0'; x.font = FONT(38);
       x.fillText(dk.name + (d.phase !== 'bet' && d.bet === i ? '  ← YOU' : d.phase === 'bet' && d.pick === i ? '  ◀' : ''), 110, y + 2);
@@ -793,7 +791,7 @@ export class CasinoGames {
     if (d.history.length) {
       x.textAlign = 'left'; x.font = FONT(24); x.fillStyle = '#c9c3d9';
       x.fillText('LAST WINNERS:', 40, h - 32);
-      d.history.forEach((k, j) => { x.fillStyle = hex(DUCKS[k].color); x.beginPath(); x.arc(250 + j * 40, h - 32, 14, 0, Math.PI * 2); x.fill(); });
+      d.history.forEach((k, j) => disc(x, 250 + j * 40, h - 32, 14, hex(DUCKS[k].color)));
     }
     this.cw.duck.oddsTex.needsUpdate = true;
   }
@@ -851,7 +849,7 @@ export class CasinoGames {
       p.msg = `${m}× !!! +₵${fmt(win)}`;
       this.msgCls = 'good';
       if (m >= 50) {
-        this.g.cam.shake = Math.max(this.g.cam.shake, 1.4);
+        this.camShake(1.4);
         this.popAt('MEGA PLINKO!!!', PLK.x, PLK.y + 6, PLK.z + 1, { color: '#ffd23f', size: 110, life: 2.6, prio: 1 });
         this.confetti(PLK.x, PLK.y + 10, PLK.z + 1, 250, 14);
       }
@@ -867,7 +865,7 @@ export class CasinoGames {
     if (this.mode === 'plinko') {
       const inp = this.g.input;
       const dir = (inp.down('KeyD') ? 1 : 0) - (inp.down('KeyA') ? 1 : 0);
-      if (dir) p.aim = Math.max(-AIM_RANGE, Math.min(AIM_RANGE, p.aim + dir * dt * 1.6));
+      this.padAim(dir, dt);   // keys: the stick at full tilt
       if (inp.down('Space') && p.cd <= 0) this.dropBall();
     }
     // aim marker (ball and arrow over the chute) only while playing
@@ -914,7 +912,7 @@ export class CasinoGames {
   // controller aim (gamepad.js): the stick slides the chute, further = faster
   padAim(x, dt) {
     if (this.mode !== 'plinko' || !x) return;
-    this.pk.aim = Math.max(-AIM_RANGE, Math.min(AIM_RANGE, this.pk.aim + x * dt * 1.6));
+    this.pk.aim = clamp(this.pk.aim + x * dt * 1.6, -AIM_RANGE, AIM_RANGE);
   }
 
   aimFromScreen(clientX) {
@@ -924,7 +922,7 @@ export class CasinoGames {
     const b = this.cw.toWorld(PLK.x + 6, PLK.y + DROP_Y, PLK.z).project(cam);
     const sx = (clientX / window.innerWidth) * 2 - 1;
     const t = (sx - a.x) / (b.x - a.x || 1);
-    this.pk.aim = Math.max(-AIM_RANGE, Math.min(AIM_RANGE, (t * 2 - 1) * AIM_RANGE));
+    this.pk.aim = clamp((t * 2 - 1) * AIM_RANGE, -AIM_RANGE, AIM_RANGE);
   }
 
   onMouseMove(e) {
@@ -970,10 +968,9 @@ export class CasinoGames {
     if (!this.mode || !this.ui) return;
     const btn = (label, k, { on = false, dis = false, cls = '' } = {}) => `<button data-k="${k}" class="${on ? 'on ' : ''}${cls}" ${dis ? 'disabled' : ''}>${label}</button>`;
     const betBtns = (dis) => btn('◀', 'ArrowLeft', { dis, cls: 'sm' }) + btn('▶', 'ArrowRight', { dis, cls: 'sm' });
-    let title = '', body = '', msg = '', btns = '';
+    let title = '', body = '', msg = '', btns = '', clawFoot = '';
     // on a controller the bar names the pad's buttons
     const pad = this.padShown = !!this.g.input.padActive;
-    const pk = pad;
     const gl = (...toks) => glyphHtml(toks);
     const key = (k, tok) => (pad ? gl(tok) : `<i>${k}</i>`);
     if (this.mode === 'bj') {
@@ -1007,22 +1004,20 @@ export class CasinoGames {
       if (pad) btns = betBtns(false) + btn(`DROP ₵${fmt(this.casino.bet)} ${gl('A')}`, 'Space', { cls: 'big' }) + btn(`◀ AIM ▶ ${gl('LS')}`, 'x', { dis: true, cls: 'hint' });
       else btns = betBtns(false) + btn('◀ AIM <i>A</i>', 'x', { dis: true, cls: 'hint' }) + btn(`DROP ₵${fmt(this.casino.bet)} <i>SPACE</i>`, 'Space', { cls: 'big' }) + btn('AIM ▶ <i>D</i>', 'x', { dis: true, cls: 'hint' });
     } else if (this.mode === 'claw') {
-      const u = this.claw.ui({ btn, key, gl, pad });
-      title = u.title; body = u.body; msg = u.msg; btns = u.btns;
-      this.clawFoot = u.foot;
+      ({ title, body, msg, btns, foot: clawFoot } = this.claw.ui({ btn, key, gl, pad }));
     }
     this.$('.c3-title').textContent = title;
     this.$('.c3-body').innerHTML = body;
     const m = this.$('.c3-msg');
     m.textContent = msg;
     m.className = `c3-msg ${this.msgCls || ''}`;
-    this.$('.c3-btns').innerHTML = btns + btn(pk ? `LEAVE ${gl('B')}` : 'LEAVE <i>ESC</i>', 'Escape', { cls: 'sm' });
+    this.$('.c3-btns').innerHTML = btns + btn(pad ? `LEAVE ${gl('B')}` : 'LEAVE <i>ESC</i>', 'Escape', { cls: 'sm' });
     const foot = this.$('.c3-foot');
-    foot.classList.toggle('pgx', pk);
-    foot.lastChild.innerHTML = pk ? `${gl('B')} STAND UP` : 'ESC · STAND UP';
-    if (pk) foot.firstChild.innerHTML = (this.mode === 'plinko' ? `${gl('LS')} AIM · ${gl('A')} / ${gl('RT')} DROP, HOLD TO POUR` : this.mode === 'duck' ? `${gl('LS')} PICK A DUCK · ${gl('A')} RACE` : `${gl('A')} DEAL / HIT · ${gl('X')} STAND · ${gl('Y')} DOUBLE · ${gl('R3')} ZOOM`) + ` · ${gl('LB')} ${gl('RB')} BET`;
-    else foot.firstChild.textContent = this.mode === 'plinko' ? 'MOUSE / A · D AIM · CLICK OR HOLD SPACE TO DROP · ◀ ▶ BET' : this.mode === 'duck' ? '1–4 PICK A DUCK · ◀ ▶ BET' : 'H HIT · S STAND · D DOUBLE · Z ZOOM · ◀ ▶ BET';
-    if (this.mode === 'claw') { if (pk) foot.firstChild.innerHTML = this.clawFoot; else foot.firstChild.textContent = this.clawFoot; }
+    foot.classList.toggle('pgx', pad);
+    foot.lastChild.innerHTML = pad ? `${gl('B')} STAND UP` : 'ESC · STAND UP';
+    const hint = this.mode === 'claw' ? clawFoot : pad ? (this.mode === 'plinko' ? `${gl('LS')} AIM · ${gl('A')} / ${gl('RT')} DROP, HOLD TO POUR` : this.mode === 'duck' ? `${gl('LS')} PICK A DUCK · ${gl('A')} RACE` : `${gl('A')} DEAL / HIT · ${gl('X')} STAND · ${gl('Y')} DOUBLE · ${gl('R3')} ZOOM`) + ` · ${gl('LB')} ${gl('RB')} BET`
+      : this.mode === 'plinko' ? 'MOUSE / A · D AIM · CLICK OR HOLD SPACE TO DROP · ◀ ▶ BET' : this.mode === 'duck' ? '1–4 PICK A DUCK · ◀ ▶ BET' : 'H HIT · S STAND · D DOUBLE · Z ZOOM · ◀ ▶ BET';
+    if (pad) foot.firstChild.innerHTML = hint; else foot.firstChild.textContent = hint;
     this.renderHead();
   }
 }
@@ -1031,4 +1026,3 @@ const _col = new THREE.Color();
 const HOT = new THREE.Color(0xffd23f);
 const WHITE = new THREE.Color(0xffffff);
 const TOP_ROW_Y = PEGS[0].y;
-void glow;

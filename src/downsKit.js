@@ -9,13 +9,15 @@ import { inkMat } from './toon.js';
 // Shared by Chimera Downs' builders: palette, text widths, baking a Blender kit part into a settlement kit (docs/downs-layouts.md).
 // Palette: Gold Gleam, Saddle Brown, Black, Money, Barn Red, Touch of Mint (darker tints for shading).
 export const PAL = { gold: 0xcfb352, saddle: 0xb07c57, black: 0x3b393a, money: 0x7b9a6e, barn: 0x8b4044, mint: 0xf8fff8 };
-export const MINT2 = 0xdfe8dd, MONEY2 = 0x5b7a52, SADDLE2 = 0x8c5f3f, BLACK2 = 0x5a5760, CONC = 0xc6d1c4, CONC2 = 0xb2bfb0;
+export const MINT2 = 0xdfe8dd, MONEY2 = 0x5b7a52, SADDLE2 = 0x8c5f3f, CONC = 0xc6d1c4, CONC2 = 0xb2bfb0;
 export const FG = { gold: '#cfb352', mint: '#f8fff8' }, BG = { black: '#3b393a', money: '#5b7a52', barn: '#6a2e33' };
 // Kit.text sign width for a letter height (pixel font is ~square per character)
 export const tw = (str, h) => h * (0.347 * str.length + 0.667);
 
 const _M = new THREE.Matrix4(), _P = new THREE.Vector3(), _Q = new THREE.Quaternion(), _S = new THREE.Vector3(), _Y = new THREE.Vector3(0, 1, 0);
-const matFor = (slot, over) => { const c = downsSlot(slot, over); return c.glow ? G(c.color) : T(c.color); };
+export const matFor = (slot, over) => { const c = downsSlot(slot, over); return c.glow ? G(c.color) : T(c.color); };
+// twice a plan polygon's signed area
+export const area2 = (pts) => pts.reduce((a, p, i) => { const q = pts[(i + 1) % pts.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0);
 
 // Bake a kit part into `k`'s current frame at (x, y, z), turned `ry` about y, scaled (sx, sy, sz); `over` maps slot to replacement colour.
 export function bake(k, name, x = 0, y = 0, z = 0, { ry = 0, sx = 1, sy = 1, sz = 1, over } = {}) {
@@ -34,7 +36,7 @@ export function fountain(k, x, z, y = 0) {
   bake(k, 'dn_fountain');
   for (const n of F.kids) {
     if (n.role === 'spin') {
-      const piece = part(0xffffff, (q) => q.baked(n, (slot) => matFor(slot), I));
+      const piece = part(0xffffff, (q) => q.baked(n, matFor, I));
       piece.userData.spin = n.data.speed || 0.7;
       k.dyn(piece, n.pos.x, n.pos.y, n.pos.z);
     } else k.dyn(waterMesh(n), n.pos.x, n.pos.y, n.pos.z);
@@ -53,8 +55,7 @@ export function sheet(polys, h = 0) {
   const ek = (p, q) => { const a = K(p), b = K(q); return a < b ? `${a}|${b}` : `${b}|${a}`; };
   const uses = new Map();
   const rings = polys.map(({ pts, yb, yt }) => {
-    const area = pts.reduce((a, p, i) => { const q = pts[(i + 1) % pts.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0);
-    const ring = area > 0 ? [...pts].reverse() : pts;                         // clockwise on the x-right, z-up plan: top faces up, sides out
+    const ring = area2(pts) > 0 ? [...pts].reverse() : pts;                   // clockwise on the x-right, z-up plan: top faces up, sides out
     ring.forEach((p, i) => { const e = ek(p, ring[(i + 1) % ring.length]); uses.set(e, (uses.get(e) || 0) + 1); });
     return { ring, yb, yt };
   });

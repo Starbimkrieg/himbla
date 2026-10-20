@@ -2,9 +2,9 @@
 // straights, +z toward the main grandstand (home straight at z = +r). Layout B, The Horseshoe (docs/downs-layouts.md).
 
 // ---- the oval: two 180 m straights, half circles of centre-line radius 55, four lanes, rails at 45 and 64.4 ----
-export const STRAIGHT = 180, HALF = STRAIGHT / 2, R0 = 55;
+const STRAIGHT = 180, HALF = STRAIGHT / 2, R0 = 55;
 export const SEGS = [STRAIGHT, Math.PI * R0, STRAIGHT, Math.PI * R0];
-export const LAP = SEGS[0] + SEGS[1] + SEGS[2] + SEGS[3]; // ~706 m round the centre line
+const LAP = SEGS[0] + SEGS[1] + SEGS[2] + SEGS[3]; // ~706 m round the centre line
 export const LANES = [48.5, 52.5, 56.5, 60.5];
 export const RAIL_IN = 45, RAIL_OUT = 64.4;
 export const DIRT = [44.6, 64.8];                         // dirt band inner/outer radius

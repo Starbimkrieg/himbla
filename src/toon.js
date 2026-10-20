@@ -84,8 +84,6 @@ export function ink(mesh, t = 0.06) {
   const hull = new THREE.Mesh(g, inkMat);
   hull.scale.set(1 + (2 * t) / Math.max(size.x, 0.02), 1 + (2 * t) / Math.max(size.y, 0.02), 1 + (2 * t) / Math.max(size.z, 0.02));
   hull.position.set(center.x * (1 - hull.scale.x), center.y * (1 - hull.scale.y), center.z * (1 - hull.scale.z));
-  hull.castShadow = false;
-  hull.receiveShadow = false;
   hull.userData.isInk = true;
   mesh.add(hull);
   return mesh;

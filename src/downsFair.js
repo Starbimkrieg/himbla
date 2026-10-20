@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { makeDownsPart, downsNode, downsSlot } from './models.js';
-import { T, G } from './outpostModels.js';
-import { bake } from './downsKit.js';
+import { makeDownsPart, downsNode } from './models.js';
+import { bake, matFor } from './downsKit.js';
 
 // Chimera Downs' two fairground rides (Blender: tools/blender/build_downs_fair.py), plus the annex's queue lines. Each is built
 // into settlement kit `k` at (x, z) in the place's frame and registers its seats in world.rides (rides.js: `F` takes the nearest).
@@ -80,7 +79,6 @@ export function carousel(world, loc, k, cx, cz) {
 // 12 cm up). The rope is the post's `rope` pivot, which bake() skips; baked here for every post but the last.
 export function queue(k, x, z, n, y = 0, gap = 3) {
   const rope = downsNode('dn_stanchion').kids.find((c) => c.role === 'rope');
-  const mat = (slot) => { const c = downsSlot(slot); return c.glow ? G(c.color) : T(c.color); };
   const m = new THREE.Matrix4(), one = new THREE.Vector3(1, 1, 1);
   for (let i = 0; i < n; i++) {
     k.at(x + i * gap, z);
@@ -88,7 +86,7 @@ export function queue(k, x, z, n, y = 0, gap = 3) {
     if (rope && i < n - 1) {
       const tag = k.tag;
       k.tag = `${tag}>dn_stanchion_rope`;
-      k.baked(rope, mat, m.compose(rope.pos.clone().setY(rope.pos.y + y), rope.quat, one));
+      k.baked(rope, matFor, m.compose(rope.pos.clone().setY(rope.pos.y + y), rope.quat, one));
       k.tag = tag;
     }
     k.at();

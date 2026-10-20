@@ -40,8 +40,7 @@ export function parseStaticGlb(scene, { warn = console.warn } = {}) {
   const assets = new Map();
   for (const root of scene.children) {
     if (!root.name) continue;
-    const warnRoot = (m) => warn(`${root.name}: ${m}`);
-    const asset = parseRoot(root, warnRoot);
+    const asset = parseRoot(root, (m) => warn(`${root.name}: ${m}`));
     asset.empty = asset.groups.every((g) => !g.parts.length); // nothing to draw: the loader skips it
     assets.set(root.name, asset);
   }
@@ -223,7 +222,6 @@ function bakeParts(parts, faction, fixed) {
   for (const [mat, list] of beams) {
     const m = new THREE.Mesh(mergeGeometries(list), mat);
     m.renderOrder = 3; // after lit scenery, like the Kit's beams
-    m.castShadow = m.receiveShadow = false;
     for (const g of list) g.dispose();
     out.push(m);
   }
@@ -231,7 +229,6 @@ function bakeParts(parts, faction, fixed) {
     const h = new THREE.Mesh(mergeGeometries(shells), inkMat);
     h.userData.isInk = true;
     if (fixed) h.userData.kitMesh = true;
-    h.castShadow = h.receiveShadow = false;
     for (const g of shells) g.dispose();
     out.push(h);
   }

@@ -18,16 +18,20 @@ const { STEEL, DARK, LIGHT, CONC, YEL, RUST, TYRE } = PALETTE;
 const WHITE = 0xfff4e0, PANEL = 0x5b5870, ROOF = 0x3a3550, WARM = 0xfff6a8;
 const TAU = Math.PI * 2;
 const hex = (c) => new THREE.Color(c).getHex();
+// a Blender model's slot colour ({ color, glow }) as a Kit material
+const slotMat = (c) => (c.glow ? G(c.color) : T(c.color));
+const ONE = new THREE.Vector3(1, 1, 1);
+// a model node's matrix under its parent's m
+const nodeMatrix = (n, m) => new THREE.Matrix4().compose(n.pos, n.quat, ONE).premultiply(m);
 
-// Build one settlement: fn(k, ctx) draws into a Kit in its local frame; the result is placed, colliders registered and
-// moving parts handed to the world's animator.
+// Build one settlement: fn(k, { fc, rr }) draws into a Kit in its local frame (fc: the faction colour, rr: the world's random
+// stream); the result is placed, colliders registered and moving parts handed to the world's animator.
 export function settle(world, loc, seed, fn) {
   const fc = hex((FACTIONS[loc.faction] || FACTIONS.spacecom).color || 0xffd23f);
   const k = new Kit(fc, seed, false);
   k.onGround = true; // settlement dressing (toon.dropFloorFaces)
   k.curveR = world.curveR ? world.curveR(loc) : 0; // curved places are drawn flat and bent onto their sphere (curve.js)
-  const ctx = { world, loc, k, fc, rr: k.rr, moving: [] };
-  fn(k, ctx);
+  fn(k, { fc, rr: world.rand });
   k.at();
   const t = k.finish();
   if (globalThis.__kitTags) loc._kitCols = t.cols; // for the dev collider audit
@@ -41,10 +45,18 @@ export function settle(world, loc, seed, fn) {
 }
 
 // a moving piece from its own small Kit (merged meshes + ink), as a Group
-export function part(color, fn, seed = 1) {
-  const k = new Kit(color, seed, false);
+export function part(color, fn) {
+  const k = new Kit(color, 1, false);
   fn(k);
   return k.finish().root;
+}
+
+// a model's blinker node as a red blinking lamp (radius r unless the node sets one), scaled by sc
+function blinkLamp(b, r, sc = 1) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry((b.data.radius || r) * sc, 8, 6), G(0xff2a4a));
+  m.userData.blink = true;
+  m.position.copy(b.pos).multiplyScalar(sc);
+  return m;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -95,7 +107,7 @@ function wedge(th, hIn, hOut, len) {
 
 export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows = true, cupola = true, glass = false, yard = r >= 9, gaps = [] } = {}) {
   k.at(x, z, door);
-  const seg = Math.max(24, Math.min(56, Math.round(r * 2)));
+  const seg = Math.max(24, Math.min(56, Math.round(r * 2))), hs = Math.max(8, Math.round(seg / 3)); // (hs: the shell's rows)
   const wob = domeWobble(x * 0.37 + z * 0.91 + r * 1.7);
   const hash = (i) => { const s = Math.sin(i * 12.9898 + x * 0.731 + z * 0.417 + r) * 43758.5453; return s - Math.floor(s); };
   // Shell centre at height C on the footing. on(): point d out from the shell at azimuth a (from +z), elevation el;
@@ -125,7 +137,7 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
 
   // the shell
   const shell = glass ? GLASS(color, 0.28) : T(color);
-  k.add(new THREE.SphereGeometry(r, seg, Math.max(8, Math.round(seg / 3)), 0, TAU, 0, Math.PI / 2), shell, 0, C, 0, { outline: glass ? 0 : Math.min(0.3, 0.1 + r * 0.008) });
+  k.add(new THREE.SphereGeometry(r, seg, hs, 0, TAU, 0, Math.PI / 2), shell, 0, C, 0, { outline: glass ? 0 : Math.min(0.3, 0.1 + r * 0.008) });
   // frame: M meridian ribs (none over the airlock) to the crown ring, latitude rings, a painted band above the berm
   const M = glass ? (r < 12 ? 12 : 16) : r < 8 ? 8 : r < 18 ? 12 : r < 40 ? 16 : 24;
   const ribT = Math.max(0.12, r * 0.012);
@@ -147,7 +159,6 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
   if (!glass) {
     const edges = [...rings, crown], cA = new THREE.Color(color);
     const tints = [hex(cA.clone().lerp(new THREE.Color(WHITE), 0.3)), hex(cA.clone().lerp(new THREE.Color(DARK), 0.2))];
-    const hs = Math.max(8, Math.round(seg / 3));
     for (let j = 0; j + 1 < edges.length; j++) for (let i = 0; i < M; i++) {
       const h = hash(i * 7 + j * 31);
       if (h > 0.3) continue;
@@ -282,10 +293,7 @@ export function habDome(k, x, z, r, color, { door = 0, trim = 0xffd23f, windows 
   const dw = ar * 1.0, dh = ar * 1.65, fz = hz + hd / 2;
   k.box(dw * 2 + 0.5, dh + 0.5, 0.12, T(DARK), 0, 0.35, fz + 0.02, { outline: 0 });
   const nStripe = 7;
-  for (let i = 0; i < nStripe; i++) {
-    const m = T(i % 2 ? DARK : YEL);
-    k.box((dw * 2 + 0.5) / nStripe, 0.22, 0.1, m, -dw - 0.25 + (i + 0.5) * ((dw * 2 + 0.5) / nStripe), dh + 0.62, fz + 0.06, { outline: 0 });
-  }
+  for (let i = 0; i < nStripe; i++) k.box((dw * 2 + 0.5) / nStripe, 0.22, 0.1, T(i % 2 ? DARK : YEL), -dw - 0.25 + (i + 0.5) * ((dw * 2 + 0.5) / nStripe), dh + 0.62, fz + 0.06, { outline: 0 });
   for (const sx of [-1, 1]) {
     k.box(dw - 0.06, dh, 0.14, T(0x3a3550), sx * (dw / 2 + 0.03), 0.35, fz + 0.08, { outline: 0.02 });
     k.add(new THREE.CylinderGeometry(0.28, 0.28, 0.06, 12).rotateX(Math.PI / 2), G(0x9be7ff), sx * (dw / 2 + 0.03), 0.35 + dh * 0.68, fz + 0.17, { outline: 0 });
@@ -400,10 +408,7 @@ export function cabin(k, x, z, w, d, h, color, yaw = 0, { roof = ROOF, trim = YE
 export function warehouse(k, x, z, w, d, h, color, yaw, trim) {
   k.at(x, z, yaw);
   k.box(w, h, d, T(color), 0, 0, 0, { outline: 0.15 });
-  for (let i = 0; i < 6; i++) {
-    const x0 = -w / 2 + (w / 6) * (i + 0.5);
-    k.box(0.3, h, d + 0.15, T(PANEL), x0 - w / 12, 0, 0, { outline: 0 });
-  }
+  for (let i = 0; i < 6; i++) k.box(0.3, h, d + 0.15, T(PANEL), -w / 2 + (w / 6) * (i + 0.5) - w / 12, 0, 0, { outline: 0 });
   // north-light roof: ridges front to back, one slope of each glazed
   const teeth = Math.max(3, Math.round(w / 6)), tw = w / teeth, th = 2.6, lean = Math.atan(tw / 2 / th);
   for (let i = 0; i < teeth; i++) {
@@ -433,7 +438,7 @@ export function warehouse(k, x, z, w, d, h, color, yaw, trim) {
 // (hall, its door plane a wall; office; tanks; yard furniture).
 export function garage(k, x, z, yaw, open = [true, false, true], kind = 'main') {
   const M = garageModel(open, kind);
-  const mat = (slot) => { const c = garageSlot(slot); return c.glow ? G(c.color) : T(c.color); };
+  const mat = (slot) => slotMat(garageSlot(slot));
   const I = new THREE.Matrix4();
   k.at(x, z, yaw);
   for (const n of M.flat) k.baked(n, mat, I);
@@ -479,12 +484,12 @@ export function lattice(k, x, z, h, w0, w1, bays, legM, braceM, { r = 0.22 } = {
 // Meridian Exchange main garage: out toward the ring road on the south-west diagonal, facing it (16 m clear of the landing pad at
 // (-100, -60), 6 m of the container yard, just past the ring's casino-road junction); `yaw` turns its +z bays outward
 const GARAGE_R = 128, GARAGE_ANGLE = 236;
-export const GARAGE_AT = { angle: GARAGE_ANGLE, x: Math.cos((GARAGE_ANGLE * Math.PI) / 180) * GARAGE_R, z: Math.sin((GARAGE_ANGLE * Math.PI) / 180) * GARAGE_R, yaw: Math.atan2(Math.cos((GARAGE_ANGLE * Math.PI) / 180), Math.sin((GARAGE_ANGLE * Math.PI) / 180)) };
+const GARAGE_AT = { angle: GARAGE_ANGLE, x: Math.cos((GARAGE_ANGLE * Math.PI) / 180) * GARAGE_R, z: Math.sin((GARAGE_ANGLE * Math.PI) / 180) * GARAGE_R, yaw: Math.atan2(Math.cos((GARAGE_ANGLE * Math.PI) / 180), Math.sin((GARAGE_ANGLE * Math.PI) / 180)) };
 const CRANE_CARGO = ['kepler', 'meridian', 'spacecom'];
 export function towerCrane(k, x, z, h, jib, color, { speed = 0.12, phase = 0 } = {}) {
   const C = craneModel(), sc = h / CRANE_H;
   const faction = CRANE_CARGO[Math.abs(Math.round(phase * 3)) % 3];
-  const mat = (slot) => { const c = craneSlot(slot, color, faction); return c.glow ? G(c.color) : T(c.color); };
+  const mat = (slot) => slotMat(craneSlot(slot, color, faction));
   k.at(x, z);
   k.baked(C.root, mat, new THREE.Matrix4().makeScale(sc, sc, sc));
   k.solid(4.3 * sc, 1.0 * sc, 4.3 * sc, 0, 0); // foundation and ballast
@@ -494,22 +499,15 @@ export function towerCrane(k, x, z, h, jib, color, { speed = 0.12, phase = 0 } =
     const walk = (n, m) => {
       q.baked(n, mat, m);
       for (const c of n.kids) {
-        if (c.role === 'load' || (c.role === 'livery' && c.data.faction === faction)) walk(c, new THREE.Matrix4().compose(c.pos, c.quat, new THREE.Vector3(1, 1, 1)).premultiply(m));
+        if (c.role === 'load' || (c.role === 'livery' && c.data.faction === faction)) walk(c, nodeMatrix(c, m));
       }
     };
     walk(node, new THREE.Matrix4().makeScale(sc, sc, sc));
   });
   const top = piece(C.slew);
-  for (const b of C.blinkers) {
-    const lamp = new THREE.Mesh(new THREE.SphereGeometry((b.data.radius || 0.3) * sc, 8, 6), G(0xff2a4a));
-    lamp.userData.blink = true;
-    lamp.position.copy(b.pos).multiplyScalar(sc);
-    top.add(lamp);
-  }
+  for (const b of C.blinkers) top.add(blinkLamp(b, 0.3, sc));
   const trolley = piece(C.trolley), cable = piece(C.cable), hook = piece(C.hook);
-  trolley.position.copy(C.trolley.pos).multiplyScalar(sc);
-  cable.position.copy(C.cable.pos).multiplyScalar(sc);
-  hook.position.copy(C.hook.pos).multiplyScalar(sc);
+  for (const [o, n] of [[trolley, C.trolley], [cable, C.cable], [hook, C.hook]]) o.position.copy(n.pos).multiplyScalar(sc);
   trolley.add(cable, hook);
   top.add(trolley);
   top.position.y = C.slew.pos.y * sc;
@@ -533,36 +531,29 @@ export function towerCrane(k, x, z, h, jib, color, { speed = 0.12, phase = 0 } =
 // of `z`. No colliders: it never stands still.
 export function gantryCrane(k, x, z, color, { speed = 1 / 70, phase = 0, travel = 24, lane = 10, faction = 'meridian' } = {}) {
   const C = gantryModel();
-  const mat = (slot, cargo) => { const c = cargo ? cargoSlot(slot, faction) : craneSlot(slot, color, faction); return c.glow ? G(c.color) : T(c.color); };
+  const mat = (slot, cargo) => slotMat(cargo ? cargoSlot(slot, faction) : craneSlot(slot, color, faction));
   // a moving piece: the node's meshes plus, under `load`, the spreader, cargo and its matching livery
   const piece = (node) => part(color, (q) => {
     const walk = (n, m, cargo) => {
       q.baked(n, (slot) => mat(slot, cargo), m);
       for (const c of n.kids) {
         if (c.role === 'load' || c.role === 'cargo' || (c.role === 'livery' && c.data.faction === faction)) {
-          walk(c, new THREE.Matrix4().compose(c.pos, c.quat, new THREE.Vector3(1, 1, 1)).premultiply(m), cargo || c.role === 'cargo');
+          walk(c, nodeMatrix(c, m), cargo || c.role === 'cargo');
         }
       }
     };
     walk(node, new THREE.Matrix4(), false);
   });
   const body = piece(C.root);
-  for (const b of C.blinkers) {
-    const lamp = new THREE.Mesh(new THREE.SphereGeometry(b.data.radius || 0.3, 8, 6), G(0xff2a4a));
-    lamp.userData.blink = true;
-    lamp.position.copy(b.pos);
-    body.add(lamp);
-  }
+  for (const b of C.blinkers) body.add(blinkLamp(b, 0.3));
   const trolley = piece(C.trolley), cable = piece(C.cable), hook = piece(C.hook);
-  trolley.position.copy(C.trolley.pos);
-  cable.position.copy(C.cable.pos);
-  hook.position.copy(C.hook.pos);
+  for (const [o, n] of [[trolley, C.trolley], [cable, C.cable], [hook, C.hook]]) o.position.copy(n.pos);
   trolley.add(cable, hook);
   body.add(trolley);
   // rope pays out until the container is 0.3 m up
   const drop = C.hook.data.drop || 8.9;
   const ropeMin = 1.5, ropeMax = C.trolley.pos.y + C.hook.pos.y - drop - 0.3;
-  const ease = (f) => 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, f)));
+  const ease = (f) => 0.5 - 0.5 * Math.cos(Math.PI * f); // (f is in 0..1 on both runs)
   body.userData.tick = (o, dt, t) => {
     const u = ((t * speed + phase) % 1 + 1) % 1;
     // cycle: dip here (0 to 0.2), run (0.2 to 0.5), dip at the far end (0.5 to 0.7), run back
@@ -586,12 +577,12 @@ export function cargoStack(k, x, z, n, factions, ry = 0, y0 = 0) {
   const C = gantryModel();
   for (let j = 0; j < n; j++) {
     const f = factions[j % factions.length];
-    const mat = (slot) => { const c = cargoSlot(slot, f); return c.glow ? G(c.color) : T(c.color); };
+    const mat = (slot) => slotMat(cargoSlot(slot, f));
     const m = new THREE.Matrix4().makeRotationY(ry).setPosition(x, y0 + j * CARGO_BOX.h, z);
     k.baked(C.box, mat, m);
     for (const c of C.box.kids) {
       if (c.role === 'livery' && c.data.faction !== f) continue;
-      k.baked(c, mat, new THREE.Matrix4().compose(c.pos, c.quat, new THREE.Vector3(1, 1, 1)).premultiply(m));
+      k.baked(c, mat, nodeMatrix(c, m));
     }
   }
   k.solid(CARGO_BOX.hx + 0.1, (n * CARGO_BOX.h) / 2, CARGO_BOX.hz + 0.1, x, z, ry, y0);
@@ -623,23 +614,16 @@ const DISH_COLLIDERS = {
 };
 export function dishStation(k, x, z, size, kind, faction, no, { yaw = 0, speed = 0.1, phase = 0 } = {}) {
   const D = dishModel(kind, faction, no), sc = size / D.size;
-  const mat = (slot) => { const c = dishSlot(slot, faction); return c.glow ? G(c.color) : T(c.color); };
+  const mat = (slot) => slotMat(dishSlot(slot, faction));
   const S = new THREE.Matrix4().makeScale(sc, sc, sc);
-  const ONE = new THREE.Vector3(1, 1, 1);
-  const lamp = (b) => {
-    const m = new THREE.Mesh(new THREE.SphereGeometry((b.data.radius || 0.4) * sc, 8, 6), G(0xff2a4a));
-    m.userData.blink = true;
-    m.position.copy(b.pos).multiplyScalar(sc);
-    return m;
-  };
   k.at(x, z, yaw);
-  for (const n of D.fixed) k.baked(n, mat, new THREE.Matrix4().compose(n.pos, n.quat, ONE).premultiply(S));
+  for (const n of D.fixed) k.baked(n, mat, nodeMatrix(n, S));
   for (const b of D.blinkers) k.blinker(b.pos.x * sc, b.pos.y * sc, b.pos.z * sc, 0xff2a4a, (b.data.radius || 0.4) * sc);
   DISH_COLLIDERS[kind](k, sc);
   const piece = (node) => part(0xffffff, (q) => q.baked(node, mat, S));
   const head = piece(D.yaw), dish = piece(D.tilt);
   dish.position.copy(D.tilt.pos).multiplyScalar(sc);
-  for (const b of D.tiltBlinkers) dish.add(lamp(b));
+  for (const b of D.tiltBlinkers) dish.add(blinkLamp(b, 0.4, sc));
   head.add(dish);
   const turn0 = k.yaw;
   head.userData.tick = (o, dt, t) => {
@@ -678,18 +662,17 @@ export function ticker(k, x, y, z, r, h, text, { fg = '#7dff6a', bg = '#0d0a1a',
   // the canvas is exactly one pass of the text, repeated whole round the drum, so the wrap never cuts an item
   const c = document.createElement('canvas');
   const parts = text.split('|').map((s) => s.trim() + '   ');
-  const g0 = c.getContext('2d');
+  const g = c.getContext('2d');
   let fs = 64;
-  g0.font = pixelFont(fs);
-  let W = parts.reduce((a, s) => a + g0.measureText(s).width, 0);
+  g.font = pixelFont(fs);
+  let W = parts.reduce((a, s) => a + g.measureText(s).width, 0);
   // small drum: shrink the lettering so one pass fits unsqueezed
   const nat = (h * W) / 128;
   if (nat > TAU * r * 1.25) fs = Math.max(28, Math.floor((fs * TAU * r) / nat));
   if ((W * fs) / 64 > 8000) fs = Math.floor((fs * 8000 * 64) / (W * fs));
-  g0.font = pixelFont(fs);
-  W = parts.reduce((a, s) => a + g0.measureText(s).width, 0);
+  g.font = pixelFont(fs);
+  W = parts.reduce((a, s) => a + g.measureText(s).width, 0);
   c.width = Math.ceil(W); c.height = 128;
-  const g = c.getContext('2d');
   // (re)paint; new text is squeezed or stretched to the same canvas, keeping whole passes as prices change length
   const paint = (items) => {
     const w = items.reduce((a, s) => a + g.measureText(s).width, 0);
@@ -761,11 +744,11 @@ export function conveyor(k, pts, y, { lump = 0x6b6378, n = 14, speed = 3, belt =
 }
 
 // Floodlight mast: lattice pole, lamp bank aimed at the yard centre.
-export function floodMast(k, x, z, h = 14, color = YEL) {
+export function floodMast(k, x, z, h = 14) {
   k.at(x, z, Math.atan2(-x, -z));
   k.box(1.6, 0.4, 1.6, T(CONC), 0, 0, 0, { outline: 0.03 });
   lattice(k, 0, 0, h, 0.6, 0.35, Math.round(h / 3), T(STEEL), T(DARK), { r: 0.12 });
-  k.box(3.2, 0.3, 0.3, T(color), 0, h, 0.4, { outline: 0.03 });
+  k.box(3.2, 0.3, 0.3, T(YEL), 0, h, 0.4, { outline: 0.03 });
   for (const s of [-1, 0, 1]) {
     k.box(0.9, 0.7, 0.5, T(DARK), s * 1.05, h + 0.3, 0.5, { rx: 0.4, outline: 0.03 });
     k.box(0.75, 0.55, 0.08, G(0xfffbe0), s * 1.05, h + 0.37, 0.77, { rx: 0.4, outline: 0 });
@@ -805,7 +788,7 @@ export function pipe(k, pts, y, r = 0.35, color = 0xd8d4e8) {
 // Horton spheres, a trading hall with a price ticker, a tower crane.
 // =============================================================================================
 export function buildHelium(world, loc) {
-  settle(world, loc, 3301, (k, ctx) => {
+  settle(world, loc, 3301, (k) => {
     const blue = 0x2ec4ff;
     // derrick: lattice tower over a rotary deck, drill string pumping and turning
     k.at(0, 0);
@@ -910,7 +893,6 @@ export function buildHelium(world, loc) {
     k.at(-28, -58);
     k.cyl(0.25, 0.3, 6, 6, T(DARK), 0, 16.2, 0, { outline: 0.03 });
     k.blinker(0, 22.5, 0, 0x2ec4ff, 0.4);
-    k.at();
     k.at(-18, -38, -0.35);
     k.sign('HE-3 EXCHANGE', 0, 0, { w: 14, y: 5, fg: '#2ec4ff' });
     k.at();
@@ -968,9 +950,9 @@ function tradeHall(k, x, z, w, d, trim, name = 'TRADE HALL') {
 // Plaza fountain (tools/blender/build_casino.py): basin, pedestal, bowl, stem and spigots baked; the centrepiece turns (`top`:
 // the casino's 'chip', or the Meridian Exchange's 'dollar' in `accent`); ripples, curtain and jets are shaders (fountainFx.js).
 // Colliders for basin, pedestal and stem. Settlement frame (k at the origin).
-export function fountain(k, x, z, { top = 'chip', accent = 0xff2e88 } = {}) {
+function fountain(k, x, z, { top = 'chip', accent = 0xff2e88 } = {}) {
   const F = casinoNode('fountain'), I = new THREE.Matrix4();
-  const mat = (slot) => { const c = casinoSlot(slot, accent); return c.glow ? G(c.color) : T(c.color); };
+  const mat = (slot) => slotMat(casinoSlot(slot, accent));
   k.at(x, z);
   k.baked(F, mat, I);
   for (const n of F.kids) {
@@ -993,7 +975,7 @@ export function fountain(k, x, z, { top = 'chip', accent = 0xff2e88 } = {}) {
 // the tower the port (container yard under a gantry crane, two tower cranes, the garage by the ring road); pads in the north corners.
 // =============================================================================================
 export function buildMeridian(world, loc) {
-  settle(world, loc, 4409, (k, ctx) => {
+  settle(world, loc, 4409, (k) => {
     const blue = 0x2ec4ff;
     // Layout: tower 24 m south of the origin (the name and HQ sprites at y 50 and 62 over the origin would sit inside its cone),
     // portico facing +z onto the plaza at (0, 34); avenue north to the gate arch at (0, 140); dome west, hall east; chairwoman at
@@ -1101,8 +1083,7 @@ export function buildMeridian(world, loc) {
       const col = i % 6, row = Math.floor(i / 6);
       if (i === 4 || i === 13) continue; // two empty bays
       const cx = -26 + col * 9.5, cz = -8.5 + row * 7;
-      const n = 1 + ((i * 7 + row) % 3);
-      cargoStack(k, cx, cz, n, [freight[(i + row) % 4], freight[(i * 3 + 1) % 4], freight[(i + 2) % 4]], Math.PI / 2, 0.3);
+      cargoStack(k, cx, cz, 1 + ((i * 7 + row) % 3), [freight[(i + row) % 4], freight[(i * 3 + 1) % 4], freight[(i + 2) % 4]], Math.PI / 2, 0.3);
     }
     k.at();
     gantryCrane(k, yx, yz, YEL, { speed: 1 / 70, phase: 0.3, travel: 24, lane: 10, faction: 'meridian' });
@@ -1147,24 +1128,19 @@ export function buildMeridian(world, loc) {
       }
       k.box(32, 2.2, 2.6, T(WHITE), 0, 11.5, az, { outline: 0.1 });
       k.box(32.2, 0.4, 2.8, T(blue), 0, 13.7, az, { outline: 0.03 });
-      k.text('MERIDIAN EXCHANGE', 0, 12.6, az + 1.33, 0, 20, { fg: '#2ec4ff', bg: '#0d1a33', back: false, off: 0.03 });
-      k.text('MERIDIAN EXCHANGE', 0, 12.6, az - 1.33, Math.PI, 20, { fg: '#2ec4ff', bg: '#0d1a33', back: false, off: 0.03 });
+      for (const s of [1, -1]) k.text('MERIDIAN EXCHANGE', 0, 12.6, az + s * 1.33, s > 0 ? 0 : Math.PI, 20, { fg: '#2ec4ff', bg: '#0d1a33', back: false, off: 0.03 });
       k.blinker(0, 14.4, az, 0xff2a4a, 0.4);
     }
     floodMast(k, 40, -124, 14); floodMast(k, -44, -118, 14);
     // spare landing pads in the north corners (traffic keeps the ones its flights use and lays the freighter's own clear of both)
-    world.pad(loc, -96, 96, 14, 0x2ec4ff, true);
-    world.pad(loc, 96, 96, 14, 0x2ec4ff, true);
+    for (const sx of [-1, 1]) world.pad(loc, sx * 96, 96, 14, 0x2ec4ff, true);
     for (const sx of [-1, 1]) world.flag(loc, sx * 18, 110, [0x2ec4ff, 0xffffff, 0x2ec4ff], 20);
   });
 }
 
 // outline-only shell for the gored shapes (draws nothing; only its ink hull shows)
 let _inkShell = null;
-function inkShell() {
-  if (!_inkShell) _inkShell = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
-  return _inkShell;
-}
+const inkShell = () => (_inkShell ||= new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
 
 // =============================================================================================
 // Dr. Zbornak's lab exterior (the walk-in hall is world.buildLab): ribbed walls, fake windows, a striped doorway under a lit
@@ -1237,7 +1213,6 @@ export function dressLab(world, loc, { W, D, H }) {
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * TAU + 0.4;
       const spark = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.02, 4.5, 4).translate(0, 2.25, 0), glow(0xe8d8ff));
-      spark.rotation.set(0, 0, 0);
       spark.userData.tick = (o, dt, t) => {
         o.visible = Math.sin(t * 23 + i * 2.1) * Math.sin(t * 7.3 + i) > 0.55;
         o.rotation.set(Math.sin(t * 31 + i) * 0.8, a, 1.2 + Math.sin(t * 19 + i * 3) * 0.4);
@@ -1562,10 +1537,10 @@ export function dressMonolith(world, loc) {
 }
 
 // Ribbed connector tunnel between two ground points (radius r), lit window strips.
-export function tunnel(world, loc, k, ax, az, bx, bz, r = 1.6, color = WHITE) {
+function tunnel(world, loc, k, ax, az, bx, bz, r = 1.6) {
   const len = Math.hypot(bx - ax, bz - az), yaw = Math.atan2(bx - ax, bz - az);
   k.at((ax + bx) / 2, (az + bz) / 2, yaw);
-  k.add(new THREE.CylinderGeometry(r, r, len, 14).rotateX(Math.PI / 2), T(color), 0, r * 0.8, 0, { outline: 0.1 });
+  k.add(new THREE.CylinderGeometry(r, r, len, 14).rotateX(Math.PI / 2), T(WHITE), 0, r * 0.8, 0, { outline: 0.1 });
   for (let t = -len / 2 + 1.5; t < len / 2 - 1; t += 3) k.add(new THREE.TorusGeometry(r + 0.06, 0.14, 4, 16), T(PANEL), 0, r * 0.8, t, { outline: 0 });
   for (const s of [-1, 1]) k.box(0.1, 0.4, len - 1, G(WARM), s * r * 0.93, r * 1.15, 0, { rz: s * 0.5, outline: 0 });
   k.box(r * 1.6, 0.3, len, T(PANEL), 0, 0, 0, { outline: 0 });
@@ -1693,8 +1668,7 @@ export function commsMast(world, loc, k, x, z, h, color, faction) {
 export function buildTown(world, loc, { civic = false } = {}) {
   const palette = [0xff9f1c, 0xff7ad9, 0x2ec4ff, 0xffd23f, 0x7dff6a, 0xc77dff];
   const occ = [];
-  settle(world, loc, 8101 + loc.id.length * 31, (k) => {
-    const rr = world.rand;
+  settle(world, loc, 8101 + loc.id.length * 31, (k, { rr }) => {
     const hubR = civic ? 30 : 22;
     habDome(k, 0, 0, hubR, civic ? 0xffd23f : 0xb8ffb0, { door: Math.PI, trim: 0xff9f1c, yard: false }); // tunnels come in from every side
     occ.push([0, 0, hubR + 4], [0, -hubR - 4, 4]);
@@ -1778,8 +1752,7 @@ export function townHall(world, loc, k) {
     k.dyn(hands, 0, 22.5, 0.2);
     k.at();
   }
-  world.flag(loc, -20, 64, [0xff9f1c, 0xffffff, 0xff9f1c], 18);
-  world.flag(loc, 20, 64, [0xff9f1c, 0xffffff, 0xff9f1c], 18);
+  for (const sx of [-1, 1]) world.flag(loc, sx * 20, 64, [0xff9f1c, 0xffffff, 0xff9f1c], 18);
 }
 
 // Quonset hut (barracks, garages): ribbed half-barrel, end wall, door, lamps; door end faces local +z.
@@ -1888,8 +1861,7 @@ export function dressIlmb(world, loc) {
 // =============================================================================================
 export function dressBase(world, loc) {
   const small = !!loc.small;
-  settle(world, loc, 9901 + loc.id.length * 17, (k, ctx) => {
-    const fc = ctx.fc;
+  settle(world, loc, 9901 + loc.id.length * 17, (k, { fc }) => {
     // command bunker: armoured octagonal frustum; slits, faction band and armour plates sit flush on each leaning face so it
     // reads square from every side; glazed command deck and masts on top; recessed blast door
     const R = small ? 13 : 21, H = small ? 9 : 12.5;
@@ -1989,7 +1961,7 @@ export function dressBase(world, loc) {
 export const ARRAY_DISHES = [[-60, -30, 26], [55, -40, 30], [0, 60, 34], [-80, 70, 18]];
 const ARRAY_CONTROL = [-10, -72];
 export function dressArray(world, loc, speeds = []) {
-  settle(world, loc, 7301 + loc.id.length * 13, (k, ctx) => {
+  settle(world, loc, 7301 + loc.id.length * 13, (k) => {
     const green = 0x7dff6a;
     // observatory: drum, turning slit cupola, telescope
     const ox = 70, oz = 50, r = 14;
@@ -2112,8 +2084,7 @@ export function wreckHull(k, x, z, yaw, len, color, tilt = 0.12) {
 }
 // The ILMB after the clans took it: junk barricades, a trophy wreck, scrap heaps, crates, green clan lamps.
 export function dressScrap(world, loc) {
-  settle(world, loc, 6601, (k) => {
-    const rr = world.rand;
+  settle(world, loc, 6601, (k, { rr }) => {
     const R = loc.r;
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * TAU + 0.2 + rr() * 0.3, d = R * (0.55 + rr() * 0.3);
@@ -2138,8 +2109,8 @@ export function dressScrap(world, loc) {
 // A demolished den: Rustmoon Hold after SPACECOM's finale (scorched ground, broken wrecks, scrap, a field post, a memorial), or
 // an abandoned camp (wreckage only).
 export function buildRuin(world, loc) {
-  settle(world, loc, 7301 + loc.id.length * 13, (k) => {
-    const rr = world.rand, R = loc.r;
+  settle(world, loc, 7301 + loc.id.length * 13, (k, { rr }) => {
+    const R = loc.r;
     const hold = !loc.small;
     k.at();
     k.cyl(R * 0.75, R * 0.8, 0.18, 40, T(0x2a2433), 0, 0, 0, { outline: 0 });
@@ -2183,8 +2154,8 @@ export function buildRuin(world, loc) {
 export function buildDen(world, loc) {
   const rust = [0x8a4b2a, 0x6b5a3a, 0x9a9a9a, 0x5a3a5a];
   const hold = loc.id === 'rustmoon';
-  settle(world, loc, 6151 + loc.id.length * 7, (k, ctx) => {
-    const rr = world.rand, occ = [[0, 0, 12], [-30, 30, 5], [20, 20, 3]];
+  settle(world, loc, 6151 + loc.id.length * 7, (k, { rr }) => {
+    const occ = [[0, 0, 12], [-30, 30, 5], [20, 20, 3]];
     for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU + 0.3; occ.push([Math.cos(a) * 60, Math.sin(a) * 60, 2]); }
     if (hold) {
       for (let i = 0; i < 5; i++) {
@@ -2227,8 +2198,7 @@ export function buildDen(world, loc) {
 
 // Pirate camp: tents, crates, a flickering fire pit, green lights.
 export function buildPirateCamp(world, loc) {
-  settle(world, loc, 5101 + loc.id.length * 11, (k) => {
-    const rr = world.rand;
+  settle(world, loc, 5101 + loc.id.length * 11, (k, { rr }) => {
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * TAU + rr(), x = Math.cos(a) * 28, z = Math.sin(a) * 28;
       k.at(x, z, a);
@@ -2327,7 +2297,6 @@ export function jobTerminal(world, loc, x, z, yaw = 0, color = 0xffd23f) {
     holo.add(ring, ring2);
     holo.userData.tick = (o, dt, t) => { ring.rotation.y += dt * 1.2; ring2.rotation.z += dt * 0.8; o.position.y = 15.2 + Math.sin(t * 1.5) * 0.25; };
     k.dyn(holo, 0, 15.2, 0.8);
-    k.at();
   });
 }
 
@@ -2358,14 +2327,14 @@ export function dressCasinoLot(world, loc, makeCar) {
     const lamp = casinoNode('lamp_post');
     const lampAt = (x, z, accent, sc, yaw) => {
       k.at(x, z, yaw);
-      k.baked(lamp, (slot) => { const c = casinoSlot(slot, accent); return c.glow ? G(c.color) : T(c.color); }, new THREE.Matrix4().makeScale(sc, sc, sc));
+      k.baked(lamp, (slot) => slotMat(casinoSlot(slot, accent)), new THREE.Matrix4().makeScale(sc, sc, sc));
       k.at();
     };
     // forecourt-kit piece (build_lot.py) at (x, z), turned by yaw
     const I4 = new THREE.Matrix4();
     const lotAt = (name, x, z, yaw = 0) => {
       k.at(x, z, yaw);
-      k.baked(lotNode(name), (slot) => { const c = lotSlot(slot); return c.glow ? G(c.color) : T(c.color); }, I4);
+      k.baked(lotNode(name), (slot) => slotMat(lotSlot(slot)), I4);
       k.at();
     };
     let lampN = 0;
@@ -2457,8 +2426,7 @@ export function dressCasinoLot(world, loc, makeCar) {
   });
   // parked cars (shared baked models), each a solid block
   cars.forEach(([x, z, yaw], i) => {
-    const m = makeCar({ paint: i * 2 }); // civilian paints in turn
-    world.put(m.root, loc, x, z, 1.15, yaw + (((i * 7) % 5) - 2) * 0.03);
+    world.put(makeCar({ paint: i * 2 }).root, loc, x, z, 1.15, yaw + (((i * 7) % 5) - 2) * 0.03); // civilian paints in turn
     world.col(loc, { type: 'box', x, y: 1.2, z, hx: 1.7, hy: 1.2, hz: 3.1, yaw });
   });
 }

@@ -10,7 +10,7 @@ import { T, G } from './outpostModels.js';
 // point, so the base reaches it and the stairs end on it. Used by traffic.js (line pads), world.js (World.pad) and
 // hometown.js (your plot's Shuttle Pad).
 
-export const PAD_H = 3;      // deck height above the highest ground under it
+const PAD_H = 3;      // deck height above the highest ground under it
 const DECK_T = 0.7;          // deck slab thickness
 const RAIL_H = 1.15;         // railing height over the deck
 const RAIL_IN = 0.35;        // ...and its inset from the deck edge
@@ -30,7 +30,7 @@ export function padPlan(r, ground = () => 0, top = null) {
   if (top === null) top = hi + PAD_H;
   // flight: from the deck edge along +z to the ground (re-measured where it lands, for slopes)
   let footY = ground(0, r + (top / RISE) * RUN);
-  let n = 1, run = RUN;
+  let n, run;
   for (let k = 0; k < 3; k++) {
     n = Math.max(2, Math.round((top - footY) / RISE));
     run = n * RUN;
@@ -67,10 +67,7 @@ export function padKit(k, plan, color = YEL) {
   k.cyl(r, r * 0.97, DECK_T, seg, T(DECK), 0, bot, 0, { outline: 0.08 });
   k.cyl(r - 0.25, r - 0.25, 0.04, seg, T(TOP), 0, top, 0, { outline: 0 });
   const bands = Math.round(seg / 2) * 2;
-  for (let i = 0; i < bands; i++) {
-    const g = new THREE.CylinderGeometry(r + 0.03, r * 0.97 + 0.03, 0.3, 2, 1, true, (i / bands) * Math.PI * 2, (Math.PI * 2) / bands);
-    k.add(g, T(i % 2 ? DARK : YEL), 0, top - 0.17, 0, { outline: 0 });
-  }
+  for (let i = 0; i < bands; i++) k.add(new THREE.CylinderGeometry(r + 0.03, r * 0.97 + 0.03, 0.3, 2, 1, true, (i / bands) * Math.PI * 2, (Math.PI * 2) / bands), T(i % 2 ? DARK : YEL), 0, top - 0.17, 0, { outline: 0 });
   k.ring(r * 0.72, Math.max(0.12, r * 0.022), T(color), 0, top + 0.05, 0);
   k.ring(r * 0.56, Math.max(0.08, r * 0.012), T(color), 0, top + 0.05, 0);
   // an H in the middle (its foot toward the stairs), and a chevron pointing to the stairs

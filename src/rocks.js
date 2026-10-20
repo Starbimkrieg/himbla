@@ -44,7 +44,7 @@ function sweep(n, frame, prof) {
   }
   for (const i of [0, n - 1]) {
     const tri = THREE.ShapeUtils.triangulateShape(prof(i).map(([a, b]) => new THREE.Vector2(a, b)), []);
-    for (const [a, b, c] of tri) { if (i === 0) idx.push(i * m + a, i * m + c, i * m + b); else idx.push(i * m + a, i * m + b, i * m + c); }
+    for (const [a, b, c] of tri) { if (i === 0) idx.push(a, c, b); else idx.push(i * m + a, i * m + b, i * m + c); }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -98,8 +98,7 @@ function roughen(geo, amp, seed, strata = 0.25) {
 // Roughened rubble for a formation's foot. pts: [x, y, z, r]
 function rubble(pts, seed) {
   return pts.map(([x, y, z, r], i) => {
-    const g = new THREE.IcosahedronGeometry(r, 1);
-    g.scale(1, 0.75, 1.1).translate(x, y, z);
+    const g = new THREE.IcosahedronGeometry(r, 1).scale(1, 0.75, 1.1).translate(x, y, z);
     return roughen(g, () => r * 0.25, seed + i * 3.1, 0);
   });
 }
@@ -224,9 +223,8 @@ export function build(kind, rr, p, q, planet, dims = null) {
       t.normalize();
       const up = ups[i].clone().add(ups[i + 1]).normalize();
       const sd = new THREE.Vector3().crossVectors(t, up).normalize();
-      const hh = H;
-      const c = base[i].clone().add(base[i + 1]).multiplyScalar(0.5).addScaledVector(up, hh * 0.38);
-      cols.push({ type: 'box', c, ax: sd, ay: new THREE.Vector3().crossVectors(t, sd).normalize(), az: t, hx: w * 1.2 + SKIN, hy: hh * 0.38 + 0.5, hz: sl / 2 + 0.05 });
+      const c = base[i].clone().add(base[i + 1]).multiplyScalar(0.5).addScaledVector(up, H * 0.38);
+      cols.push({ type: 'box', c, ax: sd, ay: new THREE.Vector3().crossVectors(t, sd).normalize(), az: t, hx: w * 1.2 + SKIN, hy: H * 0.38 + 0.5, hz: sl / 2 + 0.05 });
     }
     rail = { pts: railPts };
     for (const c of cols) c.rail = railPts; // a rider on this crest ignores its own rock (rails.js)
@@ -258,8 +256,7 @@ export function shapedRocks(planet, ch, centreOf, ok, rock) {
     up.copy(p).normalize();
     t.set(rr() - 0.5, rr() - 0.5, rr() - 0.5);
     t.addScaledVector(up, -t.dot(up)).normalize();
-    const m = new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(up, t).normalize(), up, t);
-    q.setFromRotationMatrix(m);
+    q.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(up, t).normalize(), up, t));
     if (kind === 'snake') {
       // hugs the ground, so slopes are fine; keep both ends clear
       const e1 = p.clone().addScaledVector(t, 26), e2 = p.clone().addScaledVector(t, -26);
@@ -282,8 +279,7 @@ export function shapedRocks(planet, ch, centreOf, ok, rock) {
         lowest = Math.min(lowest, base + hgt);
       }
       if (highest > 0.6) continue;
-      const g = up.clone().multiplyScalar(base);
-      const r = build(kind, rr, g, q, planet, { L, W, h, drop: Math.max(0, base - lowest) });
+      const r = build(kind, rr, up.clone().multiplyScalar(base), q, planet, { L, W, h, drop: Math.max(0, base - lowest) });
       out.meshes.push(r.mesh);
       out.cols.push(...r.cols);
       continue;
@@ -296,8 +292,7 @@ export function shapedRocks(planet, ch, centreOf, ok, rock) {
       low = Math.min(low, h); high = Math.max(high, h);
     }
     if (high - low > 4.5) continue;
-    const g = up.clone().multiplyScalar((low + high) / 2 - 0.35 - (high - low) * 0.2);
-    const r = build(kind, rr, g, q, planet);
+    const r = build(kind, rr, up.clone().multiplyScalar((low + high) / 2 - 0.35 - (high - low) * 0.2), q, planet);
     out.meshes.push(r.mesh);
     out.cols.push(...r.cols);
   }

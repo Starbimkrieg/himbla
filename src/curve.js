@@ -33,7 +33,7 @@ export function bendQuat(R, x, z, out) {
 
 // Cuts every triangle edge longer horizontally than `maxLen` until none is (conforming: shared edges cut alike, no cracks).
 // Indexed, position + normal only (outpostModels.js prep). Returns the same geometry.
-export function refine(geo, maxLen) {
+function refine(geo, maxLen) {
   const names = Object.keys(geo.attributes), arrs = {}, size = {};
   for (const n of names) { arrs[n] = Array.from(geo.attributes[n].array); size[n] = geo.attributes[n].itemSize; }
   const pos = arrs.position;

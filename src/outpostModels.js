@@ -211,11 +211,9 @@ class Kit {
     for (const side of back ? [0, 1] : [0]) {
       const lz = side ? -1 : 1;
       if (this.curveR) { // cut into strips, bent with the wall behind
-        const g = geo.clone();
         _m.compose(_p.copy(this.P(x, y, z)).add(_d.set(Math.sin(this.yaw + ry), 0, Math.cos(this.yaw + ry)).multiplyScalar(off * lz)),
           _q.setFromEuler(_e.set(0, this.yaw + ry + (side ? Math.PI : 0), side ? -rz : rz)), _s);
-        const m = new THREE.Mesh(bendGeometry(g.applyMatrix4(_m), this.curveR), mat);
-        this.root.add(m);
+        this.root.add(new THREE.Mesh(bendGeometry(geo.clone().applyMatrix4(_m), this.curveR), mat));
         continue;
       }
       const m = new THREE.Mesh(geo, mat);
@@ -230,8 +228,7 @@ class Kit {
     const mat = textMat(str, fg || '#ffd23f', bg || '#241a3a', stroke || '#120a1e');
     const pw = w - 0.5, ph = pw / mat.userData.aspect;
     const save = this.base.clone(), saveYaw = this.yaw;
-    const local = new THREE.Matrix4().makeRotationY(ry).setPosition(x, 0, z);
-    this.base.multiply(local);
+    this.base.multiply(new THREE.Matrix4().makeRotationY(ry).setPosition(x, 0, z));
     this.yaw += ry;
     for (const s of [-1, 1]) this.box(0.3, y + ph / 2 + 0.2, 0.3, T(DARK), s * (w / 2 - 0.6), 0, 0, { outline: 0.04 });
     this.box(w, ph + 0.5, 0.26, T(DARK), 0, y - ph / 2 - 0.25, 0, { rz, outline: 0.06 });
@@ -342,8 +339,7 @@ function container(k, x, y0, z, color, ry = 0) {
 function tank(k, x, z, r, h, color, band) {
   k.cyl(r, r, h, 16, T(color), x, F, z, { outline: 0.08 });
   k.add(new THREE.SphereGeometry(r, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2), T(color), x, F + h, z, { outline: 0.06 });
-  k.ring(r + 0.05, 0.16, T(band), x, F + h * 0.72, z);
-  k.ring(r + 0.05, 0.16, T(band), x, F + h * 0.62, z);
+  for (const f of [0.72, 0.62]) k.ring(r + 0.05, 0.16, T(band), x, F + h * f, z);
   k.column(r, F + h + r * 0.7, x, z);
 }
 // a lumpy heap of wreckage over a frustum mound
@@ -436,10 +432,10 @@ function tower(k) {
     if (n % 3 === 0) k.box(2.97, 0.16, 0.52, T(c), x, F + 0.85, z, { ry: a, outline: 0 });
   }
   const TX = -7, TZ = -7, H = 22, BX = 8.5, BZ = -8;
+  const cn = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
   if (!k.wreck) {
     // the tower
     const hw = (y) => 3.4 + (2.0 - 3.4) * (y / H);
-    const cn = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
     k.box(8, 0.5, 8, T(CONC), TX, 0, TZ);
     for (const [sx, sz] of cn) k.beam([TX + sx * 3.4, 0.4, TZ + sz * 3.4], [TX + sx * 2.0, H, TZ + sz * 2.0], 0.24, T(STEEL), { outline: 0.05, seg: 6 });
     const lv = [0.5, 5.8, 11.1, 16.4, H];
@@ -498,7 +494,6 @@ function tower(k) {
     // tower snapped above the first bay, folded towards the gate
     k.box(8, 0.5, 8, T(CONC), TX, 0, TZ);
     k.box(9, 0.06, 9, T(CHAR), TX, 0.5, TZ, { outline: 0 });
-    const cn = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
     for (const [sx, sz] of cn) { const h = 2.5 + wr() * 3.5; k.beam([TX + sx * 3.4, 0.4, TZ + sz * 3.4], [TX + sx * 3.1 + (wr() - 0.5), h, TZ + sz * 3.1 + (wr() - 0.5)], 0.24, T(0x3e4352), { outline: 0.05, seg: 6 }); }
     for (const sx of [-1, 1]) for (const y of [1.0, 1.9]) k.beam([TX + sx * 2.1, y, TZ + 2], [TX + sx * 2.3 + (wr() - 0.5) * 0.6, y + 0.3, TZ + 14], 0.22, T(0x3e4352), { outline: 0.05, seg: 6 });
     for (let i = 0; i < 6; i++) { const z = TZ + 3 + i * 2; k.beam([TX - 2.2, 1.0 + (i % 2) * 0.9, z], [TX + 2.2, 1.9 - (i % 2) * 0.9, z + 2], 0.08, T(DARK)); }
@@ -817,7 +812,7 @@ function mast(k) {
     for (let i = 0; i < 3; i++) { const a = (i * Math.PI * 2) / 3 + 0.3; k.beam([MX + Math.cos(a) * 0.95, 0.7, MZ + Math.sin(a) * 0.95], [MX + Math.cos(a) * 1.3 + (wr() - 0.5), 2.5 + wr() * 3, MZ + Math.sin(a) * 1.3 + (wr() - 0.5)], 0.13, T(i % 2 ? 0xff4f2e : 0xf5f5f5), { outline: 0.03 }); }
     const lying = (a, b) => {
       const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, px = -uz * 0.8, pz = ux * 0.8;
-      const legs = [[px, F + 0.2], [-px, F + 0.2], [0, F + 1.4]].map(([o, y]) => [o, y]);
+      const legs = [[px, F + 0.2], [-px, F + 0.2], [0, F + 1.4]];
       for (let s = 0; s < Math.floor(L / 5); s++) for (const [o, y] of legs) {
         const t0 = s * 5, t1 = Math.min(L, t0 + 5);
         const oz = o === 0 ? 0 : (o === px ? pz : -pz);
@@ -881,7 +876,7 @@ function mast(k) {
 // benches, a hover-cart, strings of lights.
 // =====================================================================================
 function kiosk(k) {
-  const c = k.c;
+  const c = k.c, awn = [c, 0xff2e88, 0x2ec4ff], stalls = [[-15, -1], [15, -1], [-11, 14]];
   k.apron(26, 0xb0a290, 0x7a6c5c);
   k.ring(9, 0.5, T(0x8a7c6c), 0, F, 0);
   k.ring(18, 0.5, T(0x8a7c6c), 0, F, 0);
@@ -914,8 +909,7 @@ function kiosk(k) {
     k.solid(4.6, 1.9, 2.6, 0, 0);
     k.at();
     // stalls facing the centre
-    const awn = [c, 0xff2e88, 0x2ec4ff];
-    [[-15, -1], [15, -1], [-11, 14]].forEach(([x, z], i) => {
+    stalls.forEach(([x, z], i) => {
       k.at(x, z, Math.atan2(-x, -z));
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.box(0.14, 2.7, 0.14, T(WOOD), sx * 1.7, F, sz * 1.1, { outline: 0.02 });
       k.box(3.4, 0.9, 1.6, T(WOOD), 0, F, 0.2, { outline: 0.04 });
@@ -941,19 +935,18 @@ function kiosk(k) {
     scatterDebris(k, 0, 0, 4.5, 3, 12, wr);
     k.at();
     // the stalls knocked flat
-    const awnW = [c, 0xff2e88, 0x2ec4ff];
-    [[-15, -1], [15, -1], [-11, 14]].forEach(([x, z], i) => {
+    stalls.forEach(([x, z], i) => {
       k.at(x, z, Math.atan2(-x, -z));
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.box(0.14, 0.4 + wr() * 1.2, 0.14, T(0x4a3a2a), sx * 1.7, F, sz * 1.1, { outline: 0.02 });
       k.box(3.4, 0.9, 1.6, T(0x5a3a22), 0.3, F + 0.45, 0.6, { rx: 1.3, outline: 0.04 });
-      k.add(new THREE.ConeGeometry(2.7, 1.1, 4).rotateY(Math.PI / 4).scale(1, 1, 0.72), T(awnW[i]), -0.8, F + 0.9, -1.2, { rz: 0.9 + wr() * 0.4, outline: 0.05 });
+      k.add(new THREE.ConeGeometry(2.7, 1.1, 4).rotateY(Math.PI / 4).scale(1, 1, 0.72), T(awn[i]), -0.8, F + 0.9, -1.2, { rz: 0.9 + wr() * 0.4, outline: 0.05 });
       for (let j = 0; j < 6; j++) k.add(new THREE.SphereGeometry(0.2, 6, 4), T([0xff4f2e, YEL, 0x7dff3a, 0xff7ad9][j % 4]), (wr() - 0.5) * 5, F + 0.2, 1 + wr() * 2.5, { outline: 0.02 });
       crate(k, 2.4, F, -0.4, 1.0, 0x4a3a2a, 0.9);
       k.at();
     });
   }
   k.hit(4.6, 2.0, 2.6, 0, -13);
-  for (const [x, z] of [[-15, -1], [15, -1], [-11, 14]]) { k.at(x, z, Math.atan2(-x, -z)); k.hit(1.8, 1.5, 1.2, 0, 0); k.at(); }
+  for (const [x, z] of stalls) { k.at(x, z, Math.atan2(-x, -z)); k.hit(1.8, 1.5, 1.2, 0, 0); k.at(); }
   k.smoke = new THREE.Vector3(0, 1.5, -13);
   k.drop = new THREE.Vector3(-9, F, 5);
   // a stack of mystery crates at the counter: the raid spot
@@ -1064,9 +1057,9 @@ function shack(k) {
   k.box(7.6, 0.2, 6.4, T(0x7a6a5a), 0, 4, 0, { outline: 0.04 });
   k.box(1.4, 0.9, 0.1, G(0x7dff6a), -1.4, 5.3, 1.78, { outline: 0 });
   k.box(1.4, 2.6, 0.12, T(0x2a2422), 1.9, F - 0.1, 3.05, { outline: 0.02 });
-  damage(k, 'z', 1.75, 1.0, 6.0, 0.75, k.rr, { pocks: 6 });
-  damage(k, 'z', 3.0, -2.2, 2.6, 0.5, k.rr, { scorch: false, pocks: 12 });
-  for (let i = 0; i < 4; i++) k.box(0.5 + k.rr() * 0.7, 0.08, 0.4 + k.rr() * 0.5, T(i % 2 ? 0x8a4a2a : HOLE), 2.6 + k.rr() * 2, F + 0.05, 1.5 + k.rr() * 2.5, { ry: k.rr() * 3, outline: 0.02 }); // rubble
+  damage(k, 'z', 1.75, 1.0, 6.0, 0.75, rr, { pocks: 6 });
+  damage(k, 'z', 3.0, -2.2, 2.6, 0.5, rr, { scorch: false, pocks: 12 });
+  for (let i = 0; i < 4; i++) k.box(0.5 + rr() * 0.7, 0.08, 0.4 + rr() * 0.5, T(i % 2 ? 0x8a4a2a : HOLE), 2.6 + rr() * 2, F + 0.05, 1.5 + rr() * 2.5, { ry: rr() * 3, outline: 0.02 }); // rubble
   for (const s2 of [-0.4, 0.4]) k.beam([3.7, 0, 1.2 + s2], [3.7, 6.3, 0.7 + s2], 0.05, T(DARK), { outline: 0.02 });
   for (let y = 0.6; y < 6.1; y += 0.6) k.beam([3.7, y, 0.75 + 0.45 * (1 - y / 6.3)], [3.7, y, 1.6 + 0.45 * (1 - y / 6.3)], 0.035, T(DARK), { outline: 0 });
   // torn tarp awning: one half up, the other hanging off its pole
@@ -1284,5 +1277,5 @@ export function outpostTemplate(kind, color, variant = 0, wreck = false, src = '
 }
 
 // the kit and shared props also build the bigger settlements (settlements.js)
-export { Kit, T, G, D, GLASS, BEAM, prism, sandbags, crate, container, tank, junkHeap, lightString, scatterDebris };
+export { Kit, T, G, D, GLASS, BEAM, prism, sandbags, crate, container, tank, junkHeap, lightString };
 export const PALETTE = { STEEL, DARK, LIGHT, CREAM, CONC, YEL, WOOD, RUST, TYRE, CHAR };

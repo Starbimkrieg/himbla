@@ -19,24 +19,24 @@ import { RadioSweep, SWEEP } from './radio.js';
 import { padPlan, padKit, padCols, padStairs, colToFrame } from './landingPad.js';
 
 const DK = 0x3a3550, LT = 0xd8d4e8, CONC = 0x8a8698, CREAM = 0xfff4e0, WARM = 0xfff6a8, KEP = 0xff9f1c, GRN = 0x7dff6a;
-export const SLOT_R = 64, SLOTS = 8;
+const SLOT_R = 64, SLOTS = 8;
 // plot i round the hall, leaving the entrance (local +z) clear
 export const slotAt = (i) => { const a = Math.PI / 8 + (i * Math.PI * 2) / SLOTS; return { x: Math.sin(a) * SLOT_R, z: Math.cos(a) * SLOT_R, face: a + Math.PI }; };
 
 // plot i frame point (x across, z toward the hall: the building kits' frame) -> town frame
-export const plotPoint = (i, x, z) => { const p = slotAt(i), c = Math.cos(p.face), s = Math.sin(p.face); return { x: p.x + x * c + z * s, z: p.z - x * s + z * c }; };
+const plotPoint = (i, x, z) => { const p = slotAt(i), c = Math.cos(p.face), s = Math.sin(p.face); return { x: p.x + x * c + z * s, z: p.z - x * s + z * c }; };
 // SPOTS: where you stand to use a building (F), plot frame; the kit draws a glowing ring there. BAY: the motor pool apron in
 // front of the quonset door where vehicles are set down, nose to the plaza (+z)
-export const SPOTS = { farm: { x: 0, z: 12.8 }, motorpool: { x: -3, z: 9.8 }, radio: { x: 0, z: 6.5 }, clinic: { x: 0, z: 7.5 } };
-export const BAY = { x: -3, z: 15.5 };
+const SPOTS = { farm: { x: 0, z: 12.8 }, motorpool: { x: -3, z: 9.8 }, radio: { x: 0, z: 6.5 }, clinic: { x: 0, z: 7.5 } };
+const BAY = { x: -3, z: 15.5 };
 // shuttle pad (landingPad.js): deck big enough for the shuttle's ramp to land inside the railing; stairs toward the hall (plot +z)
 const PAD_R = 14.3, PAD_PLAN = padPlan(PAD_R);
 
-export const BANK_CAP = 1500; // town bank capacity (₵); a full bank stops earning until collected
+const BANK_CAP = 1500; // town bank capacity (₵); a full bank stops earning until collected
 
 // Key order = hall tile and number-key order. icon / tint / feature: the tile (icon names from terminalUI.js);
 // income: ₵ a minute into the town bank.
-export const BUILDINGS = {
+const BUILDINGS = {
   housing: { name: 'Housing Domes', cost: 1500, icon: 'housing', tint: '#ffd23f', feature: '+₵20 a minute', income: 20, desc: 'Families move in: +₵20 a minute to the town bank.' },
   market: { name: 'Market Hall', cost: 2000, icon: 'market', tint: '#ff2e88', feature: '+₵60 a minute', income: 60, desc: `Traders set up shop: +₵60 a minute to the town bank (it holds up to ₵${BANK_CAP}).` },
   clinic: { name: 'Clinic', cost: 1200, icon: 'clinic', tint: '#ff2a4a', feature: 'K.O. respawn point', desc: 'You redeploy here after a K.O. unless you have set a charted headquarters as your respawn point (set it here).' },
@@ -54,7 +54,7 @@ export const BUILDINGS = {
 // as for buildings. For the vote cutscene (chamber.js): say (two lines of ~100 chars max, typed at 34
 // letters a second) and focus (delegations addressed; the camera cuts to their faces).
 // ---------------------------------------------------------------------------------------------
-export const MOTIONS = {
+const MOTIONS = {
   ceasefire: {
     name: 'Vostok–Daedalus Ceasefire', icon: 'council', tint: '#ff3b5c', feature: 'Vostok & Daedalus stand down',
     desc: 'Vostok and Daedalus stand down. Their militarised zones open up, and their armour (the BTR-M APC and the Phase Skimmer), their weapons and Daedalus\' Phase Dash go on sale to anyone.',
@@ -95,6 +95,13 @@ const SAPLING_CD = 5 * 60 * 1000; // between farm saplings (real time, so reload
 const ALERT_R = 300, ALERT_HOLD = 1.5, MILITIA_STAY = 120, MILITIA_CLEAR = 12;
 const MILITIA_CD = 10 * 60 * 1000;
 const mmss = (ms) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+// ms left on a real-time clock (obj[key]: when it runs out), the wait capped at cd, saved value too: a clock set back must
+// not lock the bench, the militia or the council
+const waitLeft = (obj, key, cd) => {
+  const now = Date.now();
+  if (obj[key] > now + cd) obj[key] = now + cd;
+  return Math.max(0, (obj[key] || 0) - now);
+};
 
 // ---------------------------------------------------------------------------------------------
 // The town itself (built like any settlement: world.js 'hometown').
@@ -139,7 +146,7 @@ function hallKit(k) {
   k.solid(11.5, 5, 11.5, 0, 0);
   k.solid(8, 4, 2.5, 0, 14.6, 0, 0.8);
 }
-export const TERMINAL = { x: 4, z: 20.4 };
+const TERMINAL = { x: 4, z: 20.4 };
 
 // glowing use-ring in the building's tile colour (kit frame: call after k.at())
 const spotRing = (k, type) => k.raidAt(SPOTS[type].x, SPOTS[type].z, parseInt(BUILDINGS[type].tint.slice(1), 16));
@@ -246,7 +253,6 @@ function buildingKit(type) {
         k.at();
         for (const c of padCols(PAD_PLAN)) k.cols.push(colToFrame(0, 0, Math.PI, c));
         break;
-      default: break;
     }
   };
 }
@@ -283,8 +289,7 @@ export function addBuilding(world, loc, i, type) {
   const plot = loc.group.getObjectByName(`plot${i}`);
   if (plot) plot.removeFromParent();
   const b = bake(`b|${type}`, buildingKit(type));
-  const root = b.root.clone();
-  world.put(root, loc, p.x, p.z, 0, p.face, false);
+  world.put(b.root.clone(), loc, p.x, p.z, 0, p.face, false);
   // colliders: the kit's, turned to the plot's facing
   const c = Math.cos(p.face), s = Math.sin(p.face);
   for (const col of b.cols) {
@@ -306,14 +311,8 @@ export function addBuilding(world, loc, i, type) {
   // its records: world.rebuildLocation)
   if (type === 'pad' && !(loc.pads || []).some((q) => q.plot === i)) (loc.pads ||= []).push({ x: p.x, z: p.z, r: PAD_R, spare: false, mesh: null, plot: i, top: PAD_PLAN.top, stairs: padStairs(p.x, p.z, p.face + Math.PI, PAD_PLAN) });
   // barracks guns and motor pool Mule are proper models
-  if (type === 'barracks') for (const sx of [-1, 1]) {
-    const t = makeTurret({ color: KEP });
-    world.put(t.root, loc, p.x + (sx * 6 * c), p.z - (sx * 6 * s), 0.3, p.face, false);
-  }
-  if (type === 'motorpool') {
-    const m = makeRover({ color: 0x7dff6a, trim: KEP, pirate: false, flag: KEP, style: 'civil' });
-    world.put(m.root, loc, p.x + 7 * c - 2 * s, p.z - 7 * s - 2 * c, 0.3, p.face + 0.4, false);
-  }
+  if (type === 'barracks') for (const sx of [-1, 1]) world.put(makeTurret({ color: KEP }).root, loc, p.x + (sx * 6 * c), p.z - (sx * 6 * s), 0.3, p.face, false);
+  if (type === 'motorpool') world.put(makeRover({ color: 0x7dff6a, trim: KEP, pirate: false, flag: KEP, style: 'civil' }).root, loc, p.x + 7 * c - 2 * s, p.z - 7 * s - 2 * c, 0.3, p.face + 0.4, false);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -478,9 +477,8 @@ export class HomeTown {
   // a link meets a ring laid at load, until the next load lays the full network. Returns the page's line, or '' if the ring
   // existed. On failure the game goes on (plot built and paid; the next load lays the roads as for any town with Roads)
   layRoads() {
-    const tr = this.game.world.traffic;
     try {
-      const r = tr.addTownRoads(this.loc);
+      const r = this.game.world.traffic.addTownRoads(this.loc);
       if (!r) return '';
       const n = r.links.length;
       return n ? `ROAD CREWS FINISHED: RING ROAD + ${n} ${n === 1 ? 'LINK' : 'LINKS'}` : 'NO SETTLEMENT IN REACH: THE CREWS HAVE NOTHING TO LINK';
@@ -509,11 +507,7 @@ export class HomeTown {
   // ---------- the farm: a sapling every 5 minutes ----------
   // Free (no reputation cost, unlike raiding a Farm Dome outpost, territory.js), on top of income. Needs jar room like outpost
   // saplings; a refusal doesn't start the clock. Real-time clock, saved with the town.
-  saplingWait() {
-    const st = this.state, now = Date.now();
-    if (st.sapNext > now + SAPLING_CD) st.sapNext = now + SAPLING_CD; // (a clock set back must not lock the bench: cap the wait)
-    return Math.max(0, (st.sapNext || 0) - now);
-  }
+  saplingWait() { return waitLeft(this.state, 'sapNext', SAPLING_CD); }
 
   // nursery bench prompt and action: { prompt, act? }
   farmUse() {
@@ -585,11 +579,7 @@ export class HomeTown {
     return out;
   }
 
-  militiaWait() {
-    const st = this.state, now = Date.now();
-    if (st.defNext > now + MILITIA_CD) st.defNext = now + MILITIA_CD; // (a clock set back must not lock the militia: cap the wait, saved value too)
-    return Math.max(0, (st.defNext || 0) - now);
-  }
+  militiaWait() { return waitLeft(this.state, 'defNext', MILITIA_CD); }
 
   // Two Kepler militia rovers (enemies.spawnAlly, chapter backup in Kepler colours; no friendly fire either way) roll out,
   // hunt what is at the gates and stand down when quiet. The cooldown starts at the call, not the stand-down
@@ -610,8 +600,7 @@ export class HomeTown {
   }
 
   standDown() {
-    const g = this.game;
-    for (const e of this.def.rovers) if (!e.dead) { e.dead = true; e.model.root.removeFromParent(); g.fx.pop('MILITIA STANDING DOWN', e.center.clone().addScaledVector(e.body.up, 4), { color: '#ff9f1c', size: 36, life: 1.6 }); }
+    for (const e of this.def.rovers) if (!e.dead) { e.dead = true; e.model.root.removeFromParent(); this.game.fx.pop('MILITIA STANDING DOWN', e.center.clone().addScaledVector(e.body.up, 4), { color: '#ff9f1c', size: 36, life: 1.6 }); }
     this.def.rovers = []; // (the enemies list drops dead entries itself)
   }
 
@@ -642,9 +631,7 @@ export class HomeTown {
   //   screen after leave(), and that screen's exit calls back())
   // Number keys run the first nine acts in tile order; the rest are for mouse, arrows + Enter, and pad.
   rate() {
-    let r = 0;
-    for (const k of this.state.slots) if (k && BUILDINGS[k] && BUILDINGS[k].income) r += BUILDINGS[k].income;
-    return r;
+    return this.state.slots.reduce((r, k) => r + ((k && BUILDINGS[k] && BUILDINGS[k].income) || 0), 0);
   }
 
   income() {
@@ -684,8 +671,7 @@ export class HomeTown {
 
   // motions on the page: not hidden ones, unless passed
   motionKeys() {
-    const c = this.ws.council;
-    return Object.entries(MOTIONS).filter(([k, m]) => c.passed.includes(k) || !(m.hidden && m.hidden(this.ws))).map(([k]) => k);
+    return Object.entries(MOTIONS).filter(([k, m]) => this.ws.council.passed.includes(k) || !(m.hidden && m.hidden(this.ws))).map(([k]) => k);
   }
 
   motionDef(key) {
@@ -799,7 +785,6 @@ export class HomeTown {
 
   // skin 2: the job board's COUNCIL HALL tab: { html, foot, wire } for hud.openBoard (which draws header and tab bar)
   boardPane() {
-    const g = this.game;
     this.skin = 'board';
     this.warm();
     const v = this.view || {};
@@ -810,7 +795,7 @@ export class HomeTown {
       html: terminalPage(spec),
       foot: { kb: `Click a tile · 1-${Math.min(9, acts.length) || 1} do it · Arrows pick · Enter acts · Q / E or Tab: other tab · F / Esc log off`, pad: `${glyphHtml(['A'])} do it · ${glyphHtml(['LB'])} ${glyphHtml(['RB'])} other tab · ${glyphHtml(['B'])} log off` },
       wire: (root) => wireTerminal(root, {
-        onSelect: (id) => { g.audio.click(); this.show(id); },
+        onSelect: (id) => { this.game.audio.click(); this.show(id); },
         onAct: (id) => { if (performance.now() < this.quietUntil) return; const a = this.ui.acts.find((x) => x.id === id); if (a) this.run(a); },
       }),
     };
@@ -851,21 +836,15 @@ export class HomeTown {
 
   chance(f, motion) {
     if (f === 'kepler') return 1; // your own seat
-    const rep = this.game.rep.get(f);
-    return Math.min(0.97, Math.max(0.03, 0.15 + rep / 50 + (motion.stance[f] || 0)));
+    return Math.min(0.97, Math.max(0.03, 0.15 + this.game.rep.get(f) / 50 + (motion.stance[f] || 0)));
   }
 
-  // (a clock set back must not lock the council: cap the wait at VOTE_CD, saved value too, as saplingWait() / militiaWait())
-  cooldown() {
-    const c = this.ws.council, now = Date.now();
-    if (c.next > now + VOTE_CD) c.next = now + VOTE_CD;
-    return Math.max(0, (c.next || 0) - now);
-  }
+  // ms until the council can sit again (at most VOTE_CD: waitLeft)
+  cooldown() { return waitLeft(this.ws.council, 'next', VOTE_CD); }
 
   // Call a vote. The result is decided and saved HERE, before the cutscene (chamber.js), so skipping or quitting can't change
   // it; the scene fades to black, then announce() reads it out. The page is left first; a failed motion returns via back()
   vote(key, back = () => this.back()) {
-    const g = this.game;
     const m = MOTIONS[key];
     const c = this.ws.council;
     if (!m || c.passed.includes(key)) return { msg: 'ALREADY CARRIED', tone: 'bad', sel: 'm:' + key };
@@ -880,7 +859,7 @@ export class HomeTown {
     saveWorldState(this.ws);
     this.leave();
     // (the scene gets odds, not ballots: chamber faces match the page's forecast and spoil nothing)
-    g.chamber.play({ motion: key, name: m.name, say: m.say, focus: m.focus, town: this.state.name, members: members.map((f) => ({ f, p: this.chance(f, m) })) },
+    this.game.chamber.play({ motion: key, name: m.name, say: m.say, focus: m.focus, town: this.state.name, members: members.map((f) => ({ f, p: this.chance(f, m) })) },
       () => this.announce(m, ballots, yes, members.length, pass, news, back));
     return { takeover: true };
   }

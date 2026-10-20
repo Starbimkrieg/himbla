@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { toon, inkMat } from './toon.js';
 import { clawKindParts, clawNode, makeClawHead } from './models.js';
-import { KINDS, TANK, CLAW_HOME } from './clawSim.js';
+import { KINDS, TANK, normQ } from './clawSim.js';
 
 // Draws the Zero-G claw's tank (clawSim.js): each kind as InstancedMeshes, the claw, hose, beam, chains, blasts and shuffle
 // jets. `group` is in the machine's frame, which is also the sim's coordinate frame.
@@ -127,7 +127,7 @@ export class ClawView {
       const it = g.it;
       it.x += (g.jet.x - it.x) * Math.min(1, dt * 3 * (0.4 + e)); it.y += (6.5 - it.y) * Math.min(1, dt * 2.4); it.z += (g.jet.z - it.z) * Math.min(1, dt * 3);
       it.qx += dt * 0.6;
-      const n = Math.hypot(it.qx, it.qy, it.qz, it.qw) || 1; it.qx /= n; it.qy /= n; it.qz /= n; it.qw /= n;
+      normQ(it);
       if (k >= 1) { this.ghosts.splice(i, 1); continue; }
       put(it, 1 - e);
     }
@@ -149,8 +149,7 @@ export class ClawView {
         const t = (i + 0.5) / cnt, sag = Math.sin(t * Math.PI) * Math.max(0, 0.9 - d * 0.5) * 0.22;
         _p.set(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t - sag, a.z + (b.z - a.z) * t);
         _a.setFromAxisAngle(AXIS_X, (i % 2) * Math.PI / 2);
-        const qq = _q.clone().multiply(_a);
-        _m.compose(_p, qq, _s.setScalar(1));
+        _m.compose(_p, _a.premultiply(_q), _s.setScalar(1));
         this.links.setMatrixAt(n, _m);
       }
     }
@@ -196,5 +195,3 @@ export class ClawView {
     }
   }
 }
-
-export { CLAW_HOME };

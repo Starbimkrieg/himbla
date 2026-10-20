@@ -2,15 +2,16 @@ import * as THREE from 'three';
 import { settle } from './settlements.js';
 import { ferrisWheel, carousel, queue } from './downsFair.js';
 import { T, G } from './outpostModels.js';
-import { PAL, MINT2, MONEY2, SADDLE2, CONC, CONC2, FG, BG, tw, bake, fountain, sheet, kitSink, arcadeShell, ROOF } from './downsKit.js';
+import { PAL, MINT2, MONEY2, SADDLE2, CONC, CONC2, FG, BG, tw, bake, fountain, sheet, kitSink, arcadeShell, ROOF, area2 } from './downsKit.js';
 import {
   SEGS, RAIL_IN, RAIL_OUT, DIRT, FINISH_U, FINISH_X, STAND, FAR, CLUB, ENTRIES, ARCADE, WEDGE, STALLS, STALL_ORDER, CROSSINGS, CROSS_GAP, FORECOURT, DRUM, PODIUMS, RING, PAVILION, LAWN, STABLES, ANNEX, oval, lapLen,
 } from './downsPlan.js';
 
 // Chimera Downs' static scenery, from the Blender kits (tools/blender/build_downs_*.py) plus a few code-made surfaces. race.js builds
 // the live parts (screens, gate, crowd) and calls buildDowns for the rest. Layout: docs/downs-layouts.md, Layout B: The Horseshoe.
-export { PAL, FG, BG, tw, bake };
 const _o = {};
+const SIGN = { fg: FG.gold, bg: BG.black, back: false, off: 0.0 };   // Kit.text: gold on black, no back panel
+const ENTRY_XS = [...ENTRIES].sort((a, b) => a - b);
 
 // A flat band round the oval between radii r0 and r1 (track surface, lane lines, turf stripes).
 function ovalStrip(r0, r1, y, perCurve = 48) {
@@ -28,11 +29,12 @@ function ovalStrip(r0, r1, y, perCurve = 48) {
   return g;
 }
 
-// A kit lamp post (dn_lamp: arm and globe reach toward model +x) at (x, z), its head turned toward (tx, tz).
+// A kit lamp post (dn_lamp: arm and globe reach toward model +x) at (x, z), its head turned toward (tx, tz), and its column.
 function lamp(k, x, z, tx, tz) {
   k.at(x, z, 0);
   bake(k, 'dn_lamp', 0, 0, 0, { ry: Math.atan2(-(tz - z), tx - x) });
   k.at();
+  k.column(0.4, 6.5, x, z);
 }
 
 // ---- the oval: turf, dirt, lanes, rails, finish ----
@@ -103,7 +105,7 @@ function course(k) {
   for (let i = 0; i < 20; i++) for (let j = 0; j < 2; j++) k.box(0.9, 0.03, 0.9, T((i + j) % 2 ? PAL.black : PAL.mint), FINISH_X - 0.45 + j * 0.9, 0.06, 45.2 + i * 0.95, { outline: 0 });
   k.at(FINISH_X, 54.7, -Math.PI / 2);
   bake(k, 'dn_finish_arch');
-  for (const sz of [-1, 1]) k.text('FINISH', 0, 10.1, sz * 0.715, sz > 0 ? 0 : Math.PI, tw('FINISH', 1.4), { fg: FG.gold, bg: BG.black, back: false, off: 0.0 });   // 1 cm in front of its panel
+  for (const sz of [-1, 1]) k.text('FINISH', 0, 10.1, sz * 0.715, sz > 0 ? 0 : Math.PI, tw('FINISH', 1.4), SIGN);   // 1 cm in front of its panel
   for (const sx of [-1, 1]) k.solid(0.7, 5.7, 0.8, sx * 11.8, 0);
   k.solid(12.6, 1.3, 0.9, 0, 0, 0, 8.6);                                                  // beam and its two belts
   k.at();
@@ -133,8 +135,7 @@ function grandstand(k, S, { far = false } = {}) {
   // sharing no vertices (for inkShell). axis 'z': polygon in (x, y), along z (a tier with tunnels cut from its foot); 'x': in (z, y),
   // along x (a tunnel wall's profile).
   function prism(pts, a0, a1, axis = 'z') {
-    const area = pts.reduce((a, p, i) => { const q = pts[(i + 1) % pts.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0);
-    const ring = area < 0 ? [...pts].reverse() : pts;                                       // CCW in (u, v): cap at a1 faces +a, sides face out
+    const ring = area2(pts) < 0 ? [...pts].reverse() : pts;                                 // CCW in (u, v): cap at a1 faces +a, sides face out
     const P = (p, a) => (axis === 'z' ? [p[0], p[1], a] : [a, p[1], p[0]]);
     const flip = axis === 'x', pos = [];                                                     // (z, y, x) mirrors (x, y, z): flip every triangle
     const tri = (A, B, C) => (flip ? pos.push(...A, ...C, ...B) : pos.push(...A, ...B, ...C));
@@ -182,7 +183,7 @@ function grandstand(k, S, { far = false } = {}) {
   const spans = (xa, xb, cut = true, m = MOUTH) => {
     const out = [];
     let a = xa;
-    if (cut) for (const ex of [...ENTRIES].sort((p, q) => p - q)) { if (ex + m <= xa || ex - m >= xb) continue; if (ex - m > a) out.push([a, ex - m]); a = Math.max(a, ex + m); }
+    if (cut) for (const ex of ENTRY_XS) { if (ex + m <= xa || ex - m >= xb) continue; if (ex - m > a) out.push([a, ex - m]); a = Math.max(a, ex + m); }
     if (xb > a) out.push([a, xb]);
     return out;
   };
@@ -197,7 +198,7 @@ function grandstand(k, S, { far = false } = {}) {
       // tunnelled tier: ONE step the full length with the tunnels cut from its foot (separate pieces show joints), 2 cm short of
       // each end so its ends aren't in the towers' and end walls' planes
       const xa = -(len - 0.04) / 2, xb = (len - 0.04) / 2, pts = [[xa, 0]];
-      for (const ex of [...ENTRIES].sort((p, q) => p - q)) pts.push([ex - MOUTH, 0], [ex - MOUTH, TUN_CH], [ex + MOUTH, TUN_CH], [ex + MOUTH, 0]);
+      for (const ex of ENTRY_XS) pts.push([ex - MOUTH, 0], [ex - MOUTH, TUN_CH], [ex + MOUTH, TUN_CH], [ex + MOUTH, 0]);
       pts.push([xb, 0], [xb, top], [xa, top]);
       addSolid(k, prism(pts, z0, z0 + d), conc, 0.03);
       for (const [sa, sb] of spans(xa, xb)) k.solid((sb - sa) / 2, top / 2, d / 2, (sa + sb) / 2, zc);
@@ -320,7 +321,7 @@ function grandstand(k, S, { far = false } = {}) {
   bake(k, far ? 'dn_roof_s' : 'dn_roof', 0, 0, 0);
   for (let j = 1; j < Math.round(len / 19); j++) k.column(0.5, wallH + 0.85, S.x0 + 19 * j, back + 0.4);
   const names = far ? [] : [['CHIMERA DOWNS', 0], ['EST. YEAR ONE', -57], ['EST. YEAR ONE', 57]];
-  for (const [t, x] of names) k.text(t, x, 22.1, -4.62, Math.PI, Math.min(14, tw(t, 1.1)), { fg: FG.gold, bg: BG.black, back: false, off: 0.0 });
+  for (const [t, x] of names) k.text(t, x, 22.1, -4.62, Math.PI, Math.min(14, tw(t, 1.1)), SIGN);
   // front-corner towers, the roof deck running through them
   for (const sx of [-1, 1]) {
     bake(k, far ? 'dn_tower_s' : 'dn_tower', sx * (hw - towerW / 2), 0, TZ);
@@ -347,7 +348,7 @@ function clubhouse(k) {
 // the main stand the tunnel floors end under the back wall where the forecourt slate begins; behind the far stand, 0.5 m outside.
 function aprons(k) {
   const END = ARCADE.cx, W = 3.1;                                                 // apron ends at the rail walk's straight edge; W: half a tunnel floor (10 cm under each wall)
-  const ex = [...ENTRIES].sort((a, b) => a - b), xs = [-END, ...ex.flatMap((e) => [e - W, e + W]), END];
+  const xs = [-END, ...ENTRY_XS.flatMap((e) => [e - W, e + W]), END];
   k.at();
   for (const s of [-1, 1]) {
     const S = s > 0 ? STAND : FAR, zf = s * (DIRT[1] - 0.1), zs = s * (S.z0 + 0.1);
@@ -355,35 +356,13 @@ function aprons(k) {
     const zt = s > 0 ? FORECOURT.z0 - 0.6 : -(FAR.z0 + FAR.tiers * FAR.depth + FAR.wall + 0.5);
     const polys = [];
     for (let i = 0; i < xs.length - 1; i++) polys.push({ pts: [[xs[i], zf], [xs[i + 1], zf], [xs[i + 1], zs], [xs[i], zs]], yb: () => 0 });
-    for (const e of ex) polys.push({ pts: [[e - W, zs], [e + W, zs], [e + W, zt], [e - W, zt]], yb: () => 0 });
+    for (const e of ENTRY_XS) polys.push({ pts: [[e - W, zs], [e + W, zs], [e + W, zt], [e - W, zt]], yb: () => 0 });
     kitSink(k)(sheet(polys, 0.12), SADDLE2, 0);
     for (let x = -100; x <= 100; x += 20) {
       if (Math.abs(x - FINISH_X) < 7) continue;
       lamp(k, x, s * (STAND.z0 - 3), x, 0);                                  // head toward the track
-      k.column(0.4, 6.5, x, s * (STAND.z0 - 3));
     }
   }
-}
-
-// A flat-shaded prism over a convex plan polygon [[x, z]...], bottom at yb(x, z), `h` thick (the joiner bays aren't boxes).
-function slab(poly, yb, h) {
-  const area = poly.reduce((a, p, i) => { const q = poly[(i + 1) % poly.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0);
-  const ring = area > 0 ? [...poly].reverse() : poly;                       // clockwise on the x-right, z-up plan: tops face up, sides out
-  const pos = [], tri = (a, b, d) => pos.push(...a, ...b, ...d);
-  const lo = (p) => [p[0], yb(p[0], p[1]), p[1]], hi = (p) => [p[0], yb(p[0], p[1]) + h, p[1]];
-  for (let i = 1; i < ring.length - 1; i++) {
-    tri(hi(ring[0]), hi(ring[i]), hi(ring[i + 1]));
-    tri(lo(ring[0]), lo(ring[i + 1]), lo(ring[i]));
-  }
-  for (let i = 0; i < ring.length; i++) {
-    const p = ring[i], q = ring[(i + 1) % ring.length];
-    tri(lo(p), lo(q), hi(q));
-    tri(lo(p), hi(q), hi(p));
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.computeVertexNormals();
-  return g;
 }
 
 // The arcade's last wedge ends on a radial line but the stand's end wall is straight, leaving a tapering gap; this bay fills it.
@@ -408,14 +387,14 @@ function joiner(k, mir, th, side0, wallU, rearZ) {
   const B = local(toX(polar(rB, edgeT), polar(rB, onWall(rB)), wallU + 0.1));
   k.at(px, pz, yaw);
   // the floor (inlay, walls, trim, roof and ceiling are arcadeShell's)
-  k.add(slab([D, C, B, A], () => 0, 0.14), T(SADDLE2), 0, 0, 0, { outline: 0 });
+  k.add(sheet([{ pts: [D, C, B, A], yb: () => 0 }], 0.14), T(SADDLE2), 0, 0, 0, { outline: 0 });
   k.at();
   // Back wall chord from the wedge's back corner (Cw) to the stand's wall (Bw): arcadeShell builds it, here its collider. Behind
   // the far stand the arcade's back is 3.8 m behind the stand's, so a return closes it: the end wall carried on 0.82 m thick from
   // the stand's rear corner to the chord, bay face flush and trimmed like the end wall, meeting the chord on the diagonal so joints
   // fall on corners. Its top runs into the roof (raked along the wedge's radius, ROOF); its gold cornice meets the chord's (8.1 to 8.4 m).
-  const Oc = [mir * -ARCADE.cx, 0], edge = th - side0 * ARCADE.step / 2;
-  const Cw = polar(ARCADE.ro, edge), Bw = polar(ARCADE.ro, onWall(ARCADE.ro));
+  const Oc = [mir * -ARCADE.cx, 0];
+  const Cw = polar(ARCADE.ro, edgeT), Bw = polar(ARCADE.ro, onWall(ARCADE.ro));
   const len0 = Math.hypot(Bw[0] - Cw[0], Bw[1] - Cw[1]), u = [(Bw[0] - Cw[0]) / len0, (Bw[1] - Cw[1]) / len0];
   let n = [-u[1], u[0]];
   if (n[0] * (Oc[0] - Cw[0]) + n[1] * (Oc[1] - Cw[1]) < 0) n = [-n[0], -n[1]];
@@ -432,7 +411,7 @@ function joiner(k, mir, th, side0, wallU, rearZ) {
     const sink = kitSink(k);
     sink(sheet([{ pts: [[x0, rearZ], [x1, rearZ], K1, Jin], yb: () => 0, yt: (x, z) => under(x, z) + 0.1 }]), PAL.mint, 0.03);
     for (const [d, t, y0, y1] of [[0.14, 0.84, 0.14, 2.4], [0.08, 0.78, 4.4, 4.75]]) {                           // wainscot and string course on its bay face
-      k.add(slab([[mir * (wallU - d), rearZ], [x0, rearZ], onLine(t, xPlane(wallU)), onLine(t, xPlane(wallU - d))], () => y0, y1 - y0), T(MONEY2), 0, 0, 0, { outline: 0 });
+      k.add(sheet([{ pts: [[mir * (wallU - d), rearZ], [x0, rearZ], onLine(t, xPlane(wallU)), onLine(t, xPlane(wallU - d))], yb: () => y0 }], y1 - y0), T(MONEY2), 0, 0, 0, { outline: 0 });
     }
     sink(sheet([{ pts: [[mir * (wallU + 0.3), rearZ + 0.02], [mir * (wallU + 0.92), rearZ + 0.02], onLine(-0.1, xPlane(wallU + 0.92)), onLine(-0.1, xPlane(wallU + 0.3))],   // 2 cm into the stand's walls, off the return's end plane
       yb: (x, z) => under(x, z) - 0.28, yt: (x, z) => under(x, z) + 0.02 }]), PAL.gold, 0);
@@ -493,8 +472,8 @@ function arcades(k, vendors) {
     k.at(gx, gz, gyaw);
     bake(k, 'dn_gate_hall');
     const nm = mir > 0 ? 'WEST GATE' : 'EAST GATE';
-    k.text(nm, 0, 9.7, 10.66, 0, tw(nm, 1.7), { fg: FG.gold, bg: BG.black, back: false, off: 0.0 });
-    k.text('CHIMERA DOWNS', 0, 9.7, -10.66, Math.PI, tw('CHIMERA DOWNS', 1.5), { fg: FG.gold, bg: BG.black, back: false, off: 0.0 });
+    k.text(nm, 0, 9.7, 10.66, 0, tw(nm, 1.7), SIGN);
+    k.text('CHIMERA DOWNS', 0, 9.7, -10.66, Math.PI, tw('CHIMERA DOWNS', 1.5), SIGN);
     for (const sx of [-1, 1]) {
       k.solid(5.25, 0.3, 11.25, sx * 11, 0);                           // tower plinth, 0.25 m proud into the passage and round the faces
       k.solid(5, 6.7, 11, sx * 11, 0, 0, 0.6);                         // tower, to its cornice (14 m)
@@ -518,7 +497,7 @@ function arcades(k, vendors) {
     {
       joiner(k, mir, ARCADE.runs[0].a0 + ARCADE.step * 0.5, 1, -(STAND.x1 + 0.8), null);
       const last = ARCADE.runs[1];
-      joiner(k, mir, last.a0 + ARCADE.step * (last.n - 0.5), -1, -(FAR.x1 + 0.8), -(FAR.z0 + FAR.tiers * FAR.depth + FAR.wall), true);
+      joiner(k, mir, last.a0 + ARCADE.step * (last.n - 0.5), -1, -(FAR.x1 + 0.8), -(FAR.z0 + FAR.tiers * FAR.depth + FAR.wall));
     }
   }
 }
@@ -568,7 +547,6 @@ function forecourt(k) {
   }
   for (const s of [-1, 1]) for (let z = 154; z < 190; z += 12) {                                                   // lamps just outside the masts
     lamp(k, s * (F.avenue + 4.2), z, 0, z);                                  // over the avenue
-    k.column(0.4, 6.5, s * (F.avenue + 4.2), z);
   }
   // benches (3.2 m along z) facing the avenue on the paving (0.12 m), a planter along z midway between each pair
   for (const s of [-1, 1]) for (let z = 156; z < 188; z += 10) {
@@ -671,14 +649,12 @@ function paddock(k) {
   k.at();
   for (const s of [-1, 1]) k.column(0.25, 2.5, gx, rz + s * 1.8);
   for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {                                          // lamps round the outside
-    const px2 = rx + lx * (a + 3) * 0.72, pz2 = rz + lz * (b + 3) * 0.72;
-    lamp(k, px2, pz2, rx, rz);                                               // over the ring
-    k.column(0.4, 6.5, px2, pz2);
+    lamp(k, rx + lx * (a + 3) * 0.72, rz + lz * (b + 3) * 0.72, rx, rz);    // over the ring
   }
   // weighing room, porch toward the ring
   k.at(PAVILION.x, PAVILION.z, -Math.PI / 2);
   bake(k, 'dn_pavilion');
-  k.text('WEIGHING ROOM', 0, 4.48, 3.27, 0, Math.min(8.6, tw('WEIGHING ROOM', 0.3)), { fg: FG.gold, bg: BG.black, back: false, off: 0.0 });
+  k.text('WEIGHING ROOM', 0, 4.48, 3.27, 0, Math.min(8.6, tw('WEIGHING ROOM', 0.3)), SIGN);
   k.solid(9.2, 2.5, 5.0, 0, -5);
   for (const x of [-8.4, -2.8, 2.8, 8.4]) k.column(0.3, 4.3, x, 2.8);
   k.at();
@@ -721,15 +697,13 @@ function annex(w, loc, k) {
   // the gate
   k.at(gx, gz, -Math.PI / 2);
   bake(k, 'dn_fair_gate');
-  k.text('THE FAIRGROUND', 0, 7.4, 0.46, 0, tw('THE FAIRGROUND', 0.8), { fg: FG.gold, bg: BG.black, back: false, off: 0.0 });
-  k.text('THE FAIRGROUND', 0, 7.4, -0.46, Math.PI, tw('THE FAIRGROUND', 0.8), { fg: FG.gold, bg: BG.black, back: false, off: 0.0 });
-  k.solid(1.0, 4.5, 1.0, -5.2, 0);
-  k.solid(1.0, 4.5, 1.0, 5.2, 0);
+  for (const s of [1, -1]) k.text('THE FAIRGROUND', 0, 7.4, s * 0.46, s > 0 ? 0 : Math.PI, tw('THE FAIRGROUND', 0.8), SIGN);
+  for (const s of [-1, 1]) k.solid(1.0, 4.5, 1.0, s * 5.2, 0);
   k.at();
   // ticket hall, front toward the plaza
   k.at(A.ticket[0], A.ticket[1], 0);
   bake(k, 'dn_ticket_hall');
-  k.text('TICKETS', 0, 4.8, -7.38, 0, tw('TICKETS', 1.6), { fg: FG.gold, bg: BG.black, back: false, off: 0.0 });
+  k.text('TICKETS', 0, 4.8, -7.38, 0, tw('TICKETS', 1.6), SIGN);
   k.solid(11, 1.8, 4, 0, -4);
   k.at();
   // two free-standing kiosks (dn_kiosk), name on the board over the serving bay
@@ -737,7 +711,7 @@ function annex(w, loc, k) {
     k.at(sx, sz, 0);
     bake(k, 'dn_kiosk', 0, 0, 0, { over: { accent: d === 6 ? PAL.money : PAL.barn } });
     const nm = d === 6 ? 'SPACE SLUSH' : 'DERBY DONUTS';
-    k.text(nm, 0, 3.325, 0.06, 0, tw(nm, 0.45), { fg: FG.gold, bg: BG.black, back: false, off: 0.0 });
+    k.text(nm, 0, 3.325, 0.06, 0, tw(nm, 0.45), SIGN);
     k.solid(2.5, 1.95, 1.8, 0, -1.7);
     k.at();
   }
@@ -750,7 +724,7 @@ function annex(w, loc, k) {
   carousel(w, loc, k, A.carousel[0], A.carousel[1]);
   // lamps
   for (const [lx, lz] of [[132, 112], [200, 112], [200, 162], [132, 162], [165, 140]]) {
-    lamp(k, lx, lz, xc, zc); k.column(0.4, 6.5, lx, lz);                      // over the plaza
+    lamp(k, lx, lz, xc, zc);                                                 // over the plaza
   }
   // path from the forecourt onto the gate's threshold
   path([70, 158], [100, 150], 4);

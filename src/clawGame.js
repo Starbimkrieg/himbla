@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ClawSim, CLAW_COST, CLAW_TIME, DROP } from './clawSim.js';
 import { ClawView } from './clawView.js';
 import { canvasTex, FONT, fmt, clawPt } from './casinoWorld.js';
+import { clamp } from './rng.js';
 
 // The Zero-G claw as a seated game (casinoGames.js hands over while `mode` is 'claw'): ties the sim (clawSim.js) and its
 // view (clawView.js) to the camera, keys, action bar and room effects. ₵200 a round: shuffle, then 45 s to bank what you can.
@@ -100,10 +101,7 @@ export class ClawGame {
     if (!this.view) return;
     const G = this.G, sim = this.sim, seated = G.mode === 'claw';
     // the claw: your stick in play, autopilot home while the tank shuffles
-    let input = {};
-    if (seated && this.phase === 'play') input = this.readInput();
-    else if (this.phase === 'shuffle') input = this.home();
-    sim.update(dt, input);
+    sim.update(dt, seated && this.phase === 'play' ? this.readInput() : this.phase === 'shuffle' ? this.home() : {});
     this.view.sync(sim, dt);
     for (const e of sim.events) this.event(e);
     sim.events.length = 0;
@@ -123,14 +121,13 @@ export class ClawGame {
     const mx = (d('KeyD') || d('ArrowRight') ? 1 : 0) - (d('KeyA') || d('ArrowLeft') ? 1 : 0) + p.x;
     const mz = (d('KeyS') || d('ArrowDown') ? 1 : 0) - (d('KeyW') || d('ArrowUp') ? 1 : 0) + p.z;
     const my = (this.mouse[2] ? 1 : 0) - (this.mouse[0] ? 1 : 0) + p.y;   // right click up, left click down
-    const cl = (v) => Math.max(-1, Math.min(1, v));
-    return { mx: cl(mx), my: cl(my), mz: cl(mz), beam: d('Space') };
+    return { mx: clamp(mx, -1, 1), my: clamp(my, -1, 1), mz: clamp(mz, -1, 1), beam: d('Space') };
   }
 
   home() {
     const c = this.sim.claw, k = 2.6;
     const ex = (0 - c.x) * k, ey = (6.0 - c.y) * k, ez = (1.9 - c.z) * k;
-    return { mx: Math.max(-1, Math.min(1, (ex - c.vx) / 5)), my: Math.max(-1, Math.min(1, (ey - c.vy) / 4)), mz: Math.max(-1, Math.min(1, (ez - c.vz) / 5)), beam: false };
+    return { mx: clamp((ex - c.vx) / 5, -1, 1), my: clamp((ey - c.vy) / 4, -1, 1), mz: clamp((ez - c.vz) / 5, -1, 1), beam: false };
   }
 
   // Seated or within earshot. The tank sims whenever the casino is active (world.js: within 2.6 km) and idle magnets keep
@@ -145,15 +142,14 @@ export class ClawGame {
   // ---------- what the sim says happened ----------
   event(e) {
     const G = this.G, A = G.audio;
-    const at = (x, y, z) => clawPt(x, y, z);
     if (e.type !== 'end' && !this.near()) return; // 'end' always settles the bank
     switch (e.type) {
       case 'bank': {
         const v = e.value, label = e.tags.length ? e.tags.join(' ') : '';
-        G.popAt(v < 0 ? `−₵${fmt(-v)}  ${label}` : `+₵${fmt(v)}${label ? '  ' + label : ''}`, ...at(DROP.x + 0.6, DROP.y + 2.2, DROP.z + 1.2), { color: v < 0 ? '#ff2a4a' : e.item.kind === 'chip' ? '#ffd23f' : '#7dff6a', size: e.item.kind === 'chip' ? 90 : v < 0 ? 56 : 44, life: e.item.kind === 'chip' ? 2.4 : 1.2 });
+        G.popAt(v < 0 ? `−₵${fmt(-v)}  ${label}` : `+₵${fmt(v)}${label ? '  ' + label : ''}`, ...clawPt(DROP.x + 0.6, DROP.y + 2.2, DROP.z + 1.2), { color: v < 0 ? '#ff2a4a' : e.item.kind === 'chip' ? '#ffd23f' : '#7dff6a', size: e.item.kind === 'chip' ? 90 : v < 0 ? 56 : 44, life: e.item.kind === 'chip' ? 2.4 : 1.2 });
         if (v < 0) A.burst(0.5, 160, 0.4);
         else { A.tone(520 + Math.min(500, v * 3), 0.12, 'triangle', 0.16); setTimeout(() => A.tone(780 + Math.min(500, v * 3), 0.14, 'triangle', 0.14), 90); }
-        if (e.item.kind === 'chip') { G.confetti(...at(0, 4, 3), 160, 12); G.g.cam.shake = Math.max(G.g.cam.shake, 0.8); G.fanfare(); G.cheer(); }
+        if (e.item.kind === 'chip') { G.confetti(...clawPt(0, 4, 3), 160, 12); G.camShake(0.8); G.fanfare(); G.cheer(); }
         this.setMsg(v < 0 ? 'A MINE IN THE DROP HOLE! OUCH.' : `BANKED ₵${fmt(v)}  ${label}`, 2.5);
         G.render();
         break;
@@ -161,13 +157,13 @@ export class ClawGame {
       case 'boom': {
         this.view.boom(e.x, e.y, e.z, e.r * (e.dull ? 0.6 : 1), e.dull);
         A.burst(0.5, e.dull ? 200 : 140, 0.45); A.tone(90, 0.4, 'sawtooth', 0.14, -40);
-        G.g.cam.shake = Math.max(G.g.cam.shake, e.dull ? 0.3 : 0.55);
-        const pos = G.cw.toWorld(...at(e.x, e.y, e.z), _v);
+        G.camShake(e.dull ? 0.3 : 0.55);
+        const pos = G.cw.toWorld(...clawPt(e.x, e.y, e.z), _v);
         for (const c of [0xffb21f, 0xff5a36, 0xfff1a0]) G.g.fx.spawn(pos, G.cw.up.clone().multiplyScalar(0.5), { color: c, size: 0.22, life: 0.9, gravity: 0, drag: 2, count: 8, spread: 5 });
         break;
       }
       case 'open':
-        G.popAt(e.jackpot ? 'THE LUCKY CHIP!!' : 'LOCKBOX POPPED!', ...at(e.x, e.y + 0.8, e.z), { color: e.jackpot ? '#ffd23f' : '#2ee6ff', size: e.jackpot ? 84 : 48, life: 1.8, prio: e.jackpot ? 1 : 0 });
+        G.popAt(e.jackpot ? 'THE LUCKY CHIP!!' : 'LOCKBOX POPPED!', ...clawPt(e.x, e.y + 0.8, e.z), { color: e.jackpot ? '#ffd23f' : '#2ee6ff', size: e.jackpot ? 84 : 48, life: 1.8, prio: e.jackpot ? 1 : 0 });
         A.tone(660, 0.1, 'square', 0.14); setTimeout(() => A.tone(990, 0.2, 'triangle', 0.16), 100);
         if (e.jackpot) this.setMsg('THE LUCKY CHIP IS LOOSE! GRAB IT!', 4);
         break;
@@ -175,9 +171,9 @@ export class ClawGame {
       case 'grab': A.tone(740, 0.07, 'triangle', 0.1); break;
       case 'release': A.tone(500, 0.05, 'triangle', 0.06); break;
       case 'stick': A.tone(1200, 0.04, 'square', 0.05); break;
-      case 'stun': G.popAt('STUNNED!', ...at(this.sim.claw.x, this.sim.claw.y + 0.6, this.sim.claw.z), { color: '#ff2a4a', size: 56, life: 1.3 }); break;
-      case 'overheat': G.popAt('BEAM OVERHEATED', ...at(this.sim.claw.x, this.sim.claw.y + 0.8, this.sim.claw.z), { color: '#ff9f1c', size: 44, life: 1.1 }); A.tone(180, 0.25, 'square', 0.12); break;
-      case 'surge': G.popAt('GRAVITY SURGE!', ...at(0, 5.5, 3), { color: '#ff7ad9', size: 80, life: 1.8, prio: 1 }); A.tone(110, 0.9, 'sawtooth', 0.14, 90); this.setMsg('GRAVITY SURGE!', 2.5); break;
+      case 'stun': G.popAt('STUNNED!', ...clawPt(this.sim.claw.x, this.sim.claw.y + 0.6, this.sim.claw.z), { color: '#ff2a4a', size: 56, life: 1.3 }); break;
+      case 'overheat': G.popAt('BEAM OVERHEATED', ...clawPt(this.sim.claw.x, this.sim.claw.y + 0.8, this.sim.claw.z), { color: '#ff9f1c', size: 44, life: 1.1 }); A.tone(180, 0.25, 'square', 0.12); break;
+      case 'surge': G.popAt('GRAVITY SURGE!', ...clawPt(0, 5.5, 3), { color: '#ff7ad9', size: 80, life: 1.8, prio: 1 }); A.tone(110, 0.9, 'sawtooth', 0.14, 90); this.setMsg('GRAVITY SURGE!', 2.5); break;
       case 'hit': if (this.hitT <= 0 && e.speed > 1.6) { this.hitT = 0.06; A.tone(180 + Math.random() * 120, 0.05, 'triangle', Math.min(0.1, e.speed * 0.02)); } break;
       case 'end': this.finish(e.bank); break;
       default: break;
@@ -245,13 +241,12 @@ export class ClawGame {
 
   ui({ btn, key, gl, pad }) {
     const ph = this.phase;
-    const body = this.bodyHtml();
     let btns;
     if (ph === 'idle' || ph === 'over') btns = btn(`INSERT ₵${CLAW_COST} ${key('SPACE', 'A')}`, 'Space', { cls: 'big' });
     else if (ph === 'shuffle') btns = btn('SHUFFLING…', 'x', { dis: true });
     else btns = btn(pad ? `BEAM ${gl('A')} HOLD` : 'BEAM <i>SPACE</i> HOLD', 'x', { dis: true, cls: 'hint' }) + btn(pad ? `MOVE ${gl('LS')} · ${gl('LB')}${gl('RB')} DOWN/UP` : 'MOVE <i>WASD</i> · <i>CLICK</i> DOWN · <i>R-CLICK</i> UP', 'x', { dis: true, cls: 'hint' });
     const foot = pad ? `${gl('LS')} MOVE · ${gl('LB')} / ${gl('RB')} DOWN / UP · ${gl('A')} BEAM` : 'WASD MOVE · LEFT CLICK DOWN · RIGHT CLICK UP · HOLD SPACE FOR THE BEAM';
-    return { title: 'ZERO-G CLAW', body, msg: this.msg || (ph === 'idle' ? `₵${CLAW_COST} A ROUND · ${CLAW_TIME} SECONDS · A NEW TANK EVERY TIME` : ''), btns, foot, bet: `ENTRY <b>₵${CLAW_COST}</b>` };
+    return { title: 'ZERO-G CLAW', body: this.bodyHtml(), msg: this.msg || (ph === 'idle' ? `₵${CLAW_COST} A ROUND · ${CLAW_TIME} SECONDS · A NEW TANK EVERY TIME` : ''), btns, foot };
   }
 }
 

@@ -4,7 +4,7 @@ import { makeFigure, makeSlotCabinet, SLOT_LAMP_OFF, plinkoConsoleModel, plinkoF
 import { pxCanvas } from './pixelIcons.js';
 import { pixelFont } from './fonts.js';
 import { faceInfo, glyphState } from './glyphs.js';
-import { PEGS, SEGS, SLOTS, MULTS, SPACING, DROP_Y, DIVIDER_TOP, slotEdge, slotCentre } from './plinko.js';
+import { PEGS, SEGS, SLOTS, MULTS, SPACING, DROP_Y, DIVIDER_TOP, slotCentre } from './plinko.js';
 import { HALL, WALL, FRONT_OUT, BJ, bjPt, CLAW, clawPt, DUCK, PLK, CLASSIC, PRIZE, hallPolygon, offsetPolygon, wallEdges, wallBoxes, floorShapes, inHall } from './casinoPlan.js';
 export { HALL, BJ, bjPt, CLAW, clawPt, DUCK, PLK, CLASSIC, PRIZE, inHall };
 
@@ -33,6 +33,8 @@ export function canvasTex(w, h, draw) {
 // canvas text uses the game's pixel display face (Press Start 2P is wide: scale sizes ~0.6x)
 export const FONT = (px) => pixelFont(px * 0.6);
 export const fmt = (n) => Math.floor(n).toLocaleString('en-US'); // credits, as every casino screen shows them
+export const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+export function disc(x, cx, cy, r, fill) { x.fillStyle = fill; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill(); }
 
 // shrink the font until the text fits
 export function fitText(x, text, maxW, px) {
@@ -48,8 +50,8 @@ function drawFaceGlyph(x, token, kind, cx, cy, r) {
   const [txt, col] = faceInfo(token, kind);
   x.save();
   x.shadowBlur = 0;
-  x.fillStyle = '#26232e'; x.strokeStyle = '#0a0810'; x.lineWidth = r * 0.16;
-  x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill(); x.stroke();
+  x.strokeStyle = '#0a0810'; x.lineWidth = r * 0.16;
+  disc(x, cx, cy, r, '#26232e'); x.stroke();
   const c = kind === 'switch' ? '#fff4e0' : PAD_COL[col === 'b' && kind === 'ps' ? 'b' : col] || '#fff4e0';
   x.strokeStyle = c; x.fillStyle = c; x.lineWidth = r * 0.2; x.lineCap = 'round'; x.lineJoin = 'round';
   const s = r * 0.5;
@@ -63,7 +65,7 @@ function drawFaceGlyph(x, token, kind, cx, cy, r) {
 
 // Neon sign board. `pad` (a pad family, or null for keyboard) picks how "{F}" in the sub line draws: F, or that
 // family's button.
-export function neonTex(text, { w = 1024, h = 256, color = '#ffd23f', edge = '#ff2e88', bg = '#120a1e', sub = null, pad = null } = {}) {
+function neonTex(text, { w = 1024, h = 256, color = '#ffd23f', edge = '#ff2e88', bg = '#120a1e', sub = null, pad = null } = {}) {
   return canvasTex(w, h, (x) => {
     x.fillStyle = bg; x.fillRect(0, 0, w, h);
     x.strokeStyle = edge; x.lineWidth = 14; x.strokeRect(12, 12, w - 24, h - 24);
@@ -98,34 +100,38 @@ function pipTex(n) {
     x.fillStyle = '#fff4e0'; x.fillRect(0, 0, w, w);
     x.strokeStyle = '#120a1e'; x.lineWidth = 8; x.strokeRect(4, 4, w - 8, w - 8);
     const P = { 1: [[2, 2]], 2: [[1, 1], [3, 3]], 3: [[1, 1], [2, 2], [3, 3]], 4: [[1, 1], [3, 1], [1, 3], [3, 3]], 5: [[1, 1], [3, 1], [2, 2], [1, 3], [3, 3]], 6: [[1, 1], [3, 1], [1, 2], [3, 2], [1, 3], [3, 3]] }[n];
-    x.fillStyle = n === 1 ? '#ff2a4a' : '#120a1e';
-    for (const [a, b] of P) { x.beginPath(); x.arc(a * 32, b * 32, n === 1 ? 18 : 12, 0, Math.PI * 2); x.fill(); }
+    for (const [a, b] of P) disc(x, a * 32, b * 32, n === 1 ? 18 : 12, n === 1 ? '#ff2a4a' : '#120a1e');
   });
 }
 
-const WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
-const REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+export const WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
+export const REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+// the pockets round (c, c) in wheel order, numbers `inset` in from the rim; `edge`: a line between pockets
+export function roulettePockets(x, c, font, inset, edge = null) {
+  const n = WHEEL.length;
+  for (let i = 0; i < n; i++) {
+    const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2;
+    const v = WHEEL[i];
+    x.fillStyle = v === 0 ? '#1f8a4a' : REDS.has(v) ? '#d7263d' : '#1a1426';
+    x.beginPath(); x.moveTo(c, c); x.arc(c, c, c - 10, a0, a1); x.closePath(); x.fill();
+    if (edge) { x.strokeStyle = edge; x.lineWidth = 1; x.stroke(); }
+    x.save(); x.translate(c, c); x.rotate((a0 + a1) / 2 + Math.PI / 2);
+    x.fillStyle = '#fff4e0'; x.font = font; x.textAlign = 'center';
+    x.fillText(String(v), 0, -c + inset);
+    x.restore();
+  }
+}
 
 function wheelTex() {
   return canvasTex(512, 512, (x, w) => {
-    const c = w / 2, n = WHEEL.length;
-    x.fillStyle = '#120a1e'; x.beginPath(); x.arc(c, c, c, 0, Math.PI * 2); x.fill();
-    for (let i = 0; i < n; i++) {
-      const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2;
-      const v = WHEEL[i];
-      x.fillStyle = v === 0 ? '#1f8a4a' : REDS.has(v) ? '#d7263d' : '#1a1426';
-      x.beginPath(); x.moveTo(c, c); x.arc(c, c, c - 10, a0, a1); x.closePath(); x.fill();
-      x.save();
-      x.translate(c, c); x.rotate((a0 + a1) / 2 + Math.PI / 2);
-      x.fillStyle = '#fff4e0'; x.font = FONT(30); x.textAlign = 'center';
-      x.fillText(String(v), 0, -c + 44);
-      x.restore();
-    }
-    x.fillStyle = '#ffd23f'; x.beginPath(); x.arc(c, c, c * 0.52, 0, Math.PI * 2); x.fill();
-    x.fillStyle = '#5a1a8f'; x.beginPath(); x.arc(c, c, c * 0.44, 0, Math.PI * 2); x.fill();
+    const c = w / 2;
+    disc(x, c, c, c, '#120a1e');
+    roulettePockets(x, c, FONT(30), 44);
+    disc(x, c, c, c * 0.52, '#ffd23f');
+    disc(x, c, c, c * 0.44, '#5a1a8f');
     x.strokeStyle = '#ffd23f'; x.lineWidth = 14;
     for (let i = 0; i < 4; i++) { x.beginPath(); x.moveTo(c, c); x.lineTo(c + Math.cos(i * Math.PI / 2) * c * 0.44, c + Math.sin(i * Math.PI / 2) * c * 0.44); x.stroke(); }
-    x.fillStyle = '#ffd23f'; x.beginPath(); x.arc(c, c, 26, 0, Math.PI * 2); x.fill();
+    disc(x, c, c, 26, '#ffd23f');
   });
 }
 
@@ -147,10 +153,8 @@ function carpetTex() {
     for (const [cx, cy] of [[0, 0], [w, 0], [0, w], [w, w], [w / 2, w / 2]]) {
       x.beginPath(); x.moveTo(cx, cy - 60); x.lineTo(cx + 60, cy); x.lineTo(cx, cy + 60); x.lineTo(cx - 60, cy); x.closePath(); x.stroke();
     }
-    x.fillStyle = '#ff2e88';
-    for (const [cx, cy] of [[w / 2, 0], [0, w / 2], [w, w / 2], [w / 2, w]]) { x.beginPath(); x.arc(cx, cy, 14, 0, Math.PI * 2); x.fill(); }
-    x.fillStyle = '#2ee6ff';
-    x.beginPath(); x.arc(w / 2, w / 2, 9, 0, Math.PI * 2); x.fill();
+    for (const [cx, cy] of [[w / 2, 0], [0, w / 2], [w, w / 2], [w / 2, w]]) disc(x, cx, cy, 14, '#ff2e88');
+    disc(x, w / 2, w / 2, 9, '#2ee6ff');
   });
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(0.2, 0.2); // floor uv are metres: a tile per 5 m
@@ -160,7 +164,7 @@ function carpetTex() {
 // Blackjack felt print: a half disc, dealer's flat edge at the top; the plane is 2R by R (1024 px = 2R m). Laid out to
 // build_blackjack.py ZONES (the model keeps out of them): red card rows with gold corner brackets on the edge, the bet
 // circle alone, lettering round the rim outside the bet stacks.
-export const BJ_AREAS = { x: 1.6, dealer: [0.26, 0.98], player: [1.39, 2.26] }; // x: half width; z from, to (table-local m)
+const BJ_AREAS = { x: 1.6, dealer: [0.26, 0.98], player: [1.39, 2.26] }; // x: half width; z from, to (table-local m)
 function feltTex(R) {
   return canvasTex(1024, 512, (x, w, h) => {
     const PX = w / (2 * R), mx = (m) => w / 2 + m * PX, mz = (m) => m * PX;
@@ -208,8 +212,8 @@ function feltTex(R) {
     x.fillStyle = '#ffd23f'; x.font = '52px serif';
     x.fillText('♠', mx(-2.9), mz(0.52)); x.fillText('♥', mx(2.9), mz(0.52));
     x.fillText('♦', mx(-2.55), mz(1.55)); x.fillText('♣', mx(2.55), mz(1.55));
-    x.fillStyle = 'rgba(255,210,63,0.9)'; x.beginPath(); x.arc(mx(0), mz(0.1), 22, 0, Math.PI * 2); x.fill();
-    x.fillStyle = '#14603a'; x.beginPath(); x.arc(mx(0) + 8, mz(0.1) - 4, 19, 0, Math.PI * 2); x.fill();
+    disc(x, mx(0), mz(0.1), 22, 'rgba(255,210,63,0.9)');
+    disc(x, mx(0) + 8, mz(0.1) - 4, 19, '#14603a');
   });
 }
 
@@ -218,9 +222,8 @@ export function finishTex() {
   return canvasTex(32, 256, (x) => { for (let i = 0; i < 2; i++) for (let j = 0; j < 16; j++) { x.fillStyle = (i + j) % 2 ? '#120a1e' : '#fff4e0'; x.fillRect(i * 16, j * 16, 16, 16); } });
 }
 export function checkerTex() {
-  return canvasTex(256, 64, (x, w, h) => {
+  return canvasTex(256, 64, (x) => {
     for (let i = 0; i < 16; i++) for (let j = 0; j < 4; j++) { x.fillStyle = (i + j) % 2 ? '#120a1e' : '#fff4e0'; x.fillRect(i * 16, j * 16, 16, 16); }
-    void w; void h;
   });
 }
 
@@ -254,12 +257,12 @@ function marqueeMat(face, color) {
   const key = face + color;
   let m = slotMats.marquee.get(key);
   if (!m) {
-    const hex = '#' + color.toString(16).padStart(6, '0');
+    const col = hex(color);
     m = new THREE.MeshBasicMaterial({
       map: canvasTex(256, 92, (x, w, h) => {
         x.fillStyle = '#120a1e'; x.fillRect(0, 0, w, h);
         x.fillStyle = '#3d1366'; x.fillRect(5, 5, w - 10, h - 10);
-        for (let i = 0; i < 16; i++) { x.fillStyle = i % 2 ? '#fff6a8' : hex; x.fillRect(10 + i * 15.6, 8, 6, 6); x.fillRect(10 + i * 15.6, h - 14, 6, 6); }
+        for (let i = 0; i < 16; i++) { x.fillStyle = i % 2 ? '#fff6a8' : col; x.fillRect(10 + i * 15.6, 8, 6, 6); x.fillRect(10 + i * 15.6, h - 14, 6, 6); }
         fitText(x, face, w - 40, 56);
         x.textAlign = 'center'; x.textBaseline = 'middle';
         x.lineWidth = 8; x.lineJoin = 'round'; x.strokeStyle = '#120a1e'; x.strokeText(face, w / 2, h / 2 + 2);
@@ -450,7 +453,7 @@ export function buildCasino(w, loc) {
     g.computeVertexNormals();
     return g;
   };
-  const band = (a, b, y0, y1, mat, ol = 0, end = 0.01) => put(ol ? mesh(bandGeo(a, b, y0, y1, end), mat, ol) : new THREE.Mesh(bandGeo(a, b, y0, y1, end), mat), 0, 0);
+  const band = (a, b, y0, y1, mat, ol = 0, end = 0.01) => { const g = bandGeo(a, b, y0, y1, end); put(ol ? mesh(g, mat, ol) : new THREE.Mesh(g, mat), 0, 0); };
   const across = (off0, off1, y0, y1, mat, ol = 0.012) => put(mesh(new THREE.BoxGeometry(DOOR * 2 + 0.04, y1 - y0, off1 - off0), mat, ol), 0, FRONT + off0 + (off1 - off0) / 2, (y0 + y1) / 2);   // the same ring over the doors, its ends 1 cm into the ring's
   const GOLD = toon(0xffd23f), BRASS = toon(0xc79a1f);
   // outside: plinth, belt, cornice with dentils and neon channel; a suit panel per long run; the door frame
@@ -492,7 +495,6 @@ export function buildCasino(w, loc) {
   const bulbGeo = new THREE.SphereGeometry(0.28, 8, 6);
   let k = 0;
   const bulb = (x, z, y) => put(new THREE.Mesh(bulbGeo, bulbMats[k++ % 3]), x, z, y);
-  const bulbAt = bulb;
   const edgeM = toon(0xffd23f);
   const slotsSignM = new THREE.MeshBasicMaterial({ map: neonTex('SLOTS', { w: 512, h: 160, color: '#ffd23f', edge: '#ff2e88' }) });
   for (let i = 0; i <= 18; i++) bulb(-8 + i * (16 / 18), CAN + 3.55, CANY - 0.4);
@@ -537,10 +539,10 @@ export function buildCasino(w, loc) {
   col({ type: 'box', x: 34, y: 5, z: 7, hx: 5, hy: 5, hz: 1 });
   const face = new THREE.MeshBasicMaterial({ map: wheelTex() });
   const wheel = new THREE.Group();
-  const disc = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 1.4, 48), [toon(0x5a1a8f), face, face]);
-  disc.rotation.x = Math.PI / 2;
-  ink(disc, 0.2);
-  wheel.add(disc);
+  const wheelDisc = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 1.4, 48), [toon(0x5a1a8f), face, face]);
+  wheelDisc.rotation.x = Math.PI / 2;
+  ink(wheelDisc, 0.2);
+  wheel.add(wheelDisc);
   wheel.add(new THREE.Mesh(new THREE.TorusGeometry(9.2, 0.45, 8, 48), toon(0xffd23f)));
   put(wheel, 34, 7, 12.5, 0, true);
   const pointer = mesh(new THREE.ConeGeometry(1, 2.4, 4), toon(0xfff4e0), 0.08);
@@ -563,7 +565,7 @@ export function buildCasino(w, loc) {
     // canopy and chase bulbs
     const canopy = mesh(new THREE.CylinderGeometry(6.6, 6.9, 0.6, 32), toon(0xff2e88), 0.08);
     put(canopy, cx, cz, 7.6);
-    for (let i = 0; i < 28; i++) { const a = (i / 28) * Math.PI * 2; bulbAt(cx + Math.cos(a) * 6.95, cz + Math.sin(a) * 6.95, 7.6); }
+    for (let i = 0; i < 28; i++) { const a = (i / 28) * Math.PI * 2; bulb(cx + Math.cos(a) * 6.95, cz + Math.sin(a) * 6.95, 7.6); }
     const topper = new THREE.Mesh(new THREE.BoxGeometry(5.2, 1.6, 0.3), [edgeM, edgeM, edgeM, edgeM, slotsSignM, slotsSignM]);
     ink(topper, 0.06);
     put(topper, cx, cz, 9.4, 0, true);
@@ -590,7 +592,7 @@ export function buildCasino(w, loc) {
   for (const [x, z] of CHIPS) yardSpots.push({ kind: 'watch', x: x * 0.85, z: z + 3, look: [x, z], busy: false });
   for (const [x, z] of [[-4.6, FRONT_OUT + 5], [4.6, FRONT_OUT + 7], [-4.6, FRONT_OUT + 23], [4.6, FRONT_OUT + 25]]) yardSpots.push({ kind: 'chat', x, z, look: [0, z], busy: false });
   for (const sp of yardSpots) if (sp.ax === undefined) { sp.ax = sp.x; sp.az = sp.z; }
-  if (yardSpots.some((sp) => sp.look)) for (const sp of yardSpots) if (sp.look) sp.yaw = Math.atan2(sp.look[0] - sp.x, sp.look[1] - sp.z);
+  for (const sp of yardSpots) if (sp.look) sp.yaw = Math.atan2(sp.look[0] - sp.x, sp.look[1] - sp.z);
   // patrons wander game to game
   const patrons = [];
   const suitCols = [0x16121f, 0xffc83a, 0xff7ad9, 0x2ee6ff, 0x7dff6a, 0xc77dff, 0xff9f1c, 0xfff4e0];
@@ -654,6 +656,7 @@ export function buildCasino(w, loc) {
   band(0.06, -0.28, 15.4, 15.95, BRASS, 0.01, 0.035);
   band(-0.02, -0.42, 0.05, 0.09, BRASS, 0, 0.04);         // floor border inlay
   // things against the wall, as plan rectangles: no bay where one overlaps (they cover the wall behind)
+  const clX = CLASSIC.xs.reduce((a, b) => a + b) / CLASSIC.xs.length;
   const wallItems = [];
   {
     const R = (x0, x1, z0, z1) => wallItems.push({ x0, x1, z0, z1 });
@@ -663,8 +666,7 @@ export function buildCasino(w, loc) {
     R(Math.min(...bc.map((c) => c[0])) - 0.3, Math.max(...bc.map((c) => c[0])) + 0.3, Math.min(...bc.map((c) => c[2])) - 0.3, Math.max(...bc.map((c) => c[2])) + 0.3);
     R(PRIZE.wallX - 4.8, PRIZE.wallX + 0.2, PRIZE.z - 4.3, PRIZE.z + 4.3);
     R((DUCK.x0 + DUCK.x1) / 2 - 8.7, (DUCK.x0 + DUCK.x1) / 2 + 8.7, DUCK.wallZ - 0.2, DUCK.wallZ + 1.0);
-    const cx = CLASSIC.xs.reduce((a, b) => a + b) / CLASSIC.xs.length;
-    R(cx - 6.5, cx + 6.5, CLASSIC.wallZ - 0.5, CLASSIC.wallZ + 0.2);
+    R(clX - 6.5, clX + 6.5, CLASSIC.wallZ - 0.5, CLASSIC.wallZ + 0.2);
   }
   const onItem = (x, z) => wallItems.some((r) => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1);
   const turnAt = (i) => {      // outline turn at vertex i (radians)
@@ -786,7 +788,7 @@ export function buildCasino(w, loc) {
     const wp = trough.getObjectByName('water' + (i + 1)), np = trough.getObjectByName('num' + (i + 1));
     flat(new THREE.PlaneGeometry(wp.userData.w, wp.userData.h), waterMat, wp.position);
     flat(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map: canvasTex(64, 64, (x) => {
-      x.fillStyle = '#' + c.toString(16).padStart(6, '0'); x.beginPath(); x.arc(32, 32, 30, 0, Math.PI * 2); x.fill();
+      disc(x, 32, 32, 30, hex(c));
       x.fillStyle = '#120a1e'; x.font = FONT(44); x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(String(i + 1), 32, 35);
     }) }), np.position);
   });
@@ -904,7 +906,6 @@ export function buildCasino(w, loc) {
     }) }));
     put(label, P.x + slotCentre(s), P.z + 0.08, P.y - 0.42);
   }
-  void slotEdge;
   // aim ball and arrow on top of the chute
   const aim = new THREE.Group();
   const aimBall = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 10), glow(0xffd23f));
@@ -924,7 +925,6 @@ export function buildCasino(w, loc) {
     const c = Math.cos(CLASSIC.yaw), sn = Math.sin(CLASSIC.yaw), lx = 0.2, lz = 0.1;   // box off-centre: lever side is local +x
     col({ type: 'box', x: x + lx * c + lz * sn, y: 2.2, z: CLASSIC.z - lx * sn + lz * c, hx: 1.3, hy: 2.2, hz: 0.85, yaw: CLASSIC.yaw });
   });
-  const clX = CLASSIC.xs.reduce((a, b) => a + b) / CLASSIC.xs.length;
   const clSign = new THREE.Mesh(new THREE.PlaneGeometry(10, 2.5), new THREE.MeshBasicMaterial({ map: neonTex('CLASSIC GAMES', { color: '#ff7ad9', edge: '#7dff6a', sub: 'SLOTS · ROULETTE · PRIZE WHEEL · HIGH-LOW' }) }));
   put(clSign, clX, CLASSIC.wallZ - 0.15, 8.2, Math.PI);
   const vinnie = makeFigure({ suit: 0x1f8a4a, helmet: 0x7dff6a, visor: 0xffd23f, scale: 1.1 });
@@ -1133,6 +1133,7 @@ export function buildCasino(w, loc) {
   // world's colliders on first use (the forecourt's are laid after this runs). A* gives the way, pulled straight where clear.
   let nav = null;
   const NAV = { x0: -72, z0: -48, nx: 144, nz: 160, r: 0.95 };   // r: patron radius plus half a cell diagonal
+  const free = (i, j) => i >= 0 && j >= 0 && i < NAV.nx && j < NAV.nz && !nav.blocked[j * NAV.nx + i];
   function buildNav() {
     const { x0, z0, nx, nz, r } = NAV, blocked = new Uint8Array(nx * nz);
     const qi = loc.group.quaternion.clone().invert(), tmp = new THREE.Vector3();
@@ -1142,10 +1143,8 @@ export function buildCasino(w, loc) {
     const reach = (lo, hi) => hi > 0.25 && lo < 2.2;   // walker height: skip lintels and roofs
     for (const c of loc._cols || []) {
       const m = loc.group.worldToLocal(c.c.clone());
-      if (c.type === 'sphere') {
-        if (reach(m.y - c.r, m.y + c.r)) mark(m.x - c.r - r, m.x + c.r + r, m.z - c.r - r, m.z + c.r + r, (x, z) => Math.hypot(x - m.x, z - m.z) <= c.r + r);
-      } else if (c.type === 'cyl') {
-        if (tmp.copy(c.axis).applyQuaternion(qi).y < 0.9 || !reach(m.y + c.y0, m.y + c.y1)) continue;
+      if (c.type === 'sphere' || c.type === 'cyl') {
+        if (c.type === 'sphere' ? !reach(m.y - c.r, m.y + c.r) : tmp.copy(c.axis).applyQuaternion(qi).y < 0.9 || !reach(m.y + c.y0, m.y + c.y1)) continue;
         mark(m.x - c.r - r, m.x + c.r + r, m.z - c.r - r, m.z + c.r + r, (x, z) => Math.hypot(x - m.x, z - m.z) <= c.r + r);
       } else if (c.type === 'box') {
         const ax = c.ax.clone().applyQuaternion(qi), az = c.az.clone().applyQuaternion(qi), ay = c.ay.clone().applyQuaternion(qi);
@@ -1161,9 +1160,8 @@ export function buildCasino(w, loc) {
   }
   function navPath(sx, sz, gx, gz) {
     nav ||= buildNav();
-    const { x0, z0, nx, nz } = NAV, B = nav.blocked;
+    const { x0, z0, nx, nz } = NAV;
     const cell = (x, z) => [Math.min(nx - 1, Math.max(0, Math.floor(x - x0))), Math.min(nz - 1, Math.max(0, Math.floor(z - z0)))];
-    const free = (i, j) => i >= 0 && j >= 0 && i < nx && j < nz && !B[j * nx + i];
     const snap = ([i, j]) => {                       // nearest open cell
       if (free(i, j)) return [i, j];
       for (let d = 1; d <= 6; d++) for (let b = -d; b <= d; b++) for (const [a, c] of [[b, -d], [b, d], [-d, b], [d, b]]) if (free(i + a, j + c)) return [i + a, j + c];
@@ -1279,7 +1277,7 @@ export function buildCasino(w, loc) {
     plinko: { pegs, pegBase, slotMats, aim },
     crowd,
     navPath,                                                   // also read by the checks and the Asset Row
-    navFree: (x, z) => { nav ||= buildNav(); const i = Math.floor(x - NAV.x0), j = Math.floor(z - NAV.z0); return i >= 0 && j >= 0 && i < NAV.nx && j < NAV.nz && !nav.blocked[j * NAV.nx + i]; },
+    navFree: (x, z) => { nav ||= buildNav(); return free(Math.floor(x - NAV.x0), Math.floor(z - NAV.z0)); },
     onUpdate: null, // set by casinoGames.js
     update(dt, time) {
       const gm = globalThis.game;

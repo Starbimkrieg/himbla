@@ -5,12 +5,12 @@ import { INK_FULL, INK_MIN } from './toon.js';
 
 // The Moon's boulders (planet.buildBoulders): a few lumpy shapes shared by every chunk, each an icosphere pushed out by two
 // noise octaves and chiselled flat in places, then scaled to unit RMS radius so the colliders (BOULDER_COLLIDER_K) fit.
-export const BOULDER_SHAPES = 6;
+const BOULDER_SHAPES = 6;
 const DETAIL = 3; // 320 faces
 export const BOULDER_COLLIDER_K = 0.906; // collision radius over RMS radius
 
 // full outline thickness (m); the ink is the shell pushed out along its normals, not a scaled copy
-export const BOULDER_INK_M = 0.15;
+const BOULDER_INK_M = 0.15;
 
 // smooth min of two radii: rounds a flat into the lump over width k
 const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };

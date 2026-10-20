@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FACTIONS } from './locations.js';
 import { toon, ink } from './toon.js';
 import { arcDist, tangent, frameQuat, greatCircle, SUN, R as PLANET_R, collectNodes } from './geo.js';
-import { mulberry32 } from './rng.js';
+import { mulberry32, clamp, pick } from './rng.js';
 import { ITEMS } from './alchemy.js';
 import { outpostTemplate, SMALL_KINDS, FLAT_R } from './outpostModels.js';
 import { foundedTemplate, TERMINAL_Z, OUTPOST_GUN as GUN } from './storyAssets.js';
@@ -24,7 +24,7 @@ const OUTPOST_W = 0.42; // outpost claim weight relative to a settlement
 const BUILD_R = 900, DROP_R = 1150;
 const LOOT_CD = 240, LOOT_REP = 2; // raid/rebuild cooldown (s) and reputation cost
 const OUTPOST_HP = { farm: 160, depot: 220, tower: 200, mast: 180, kiosk: 140, shack: 160, junk: 200 };
-const SAP_NAMES = ['Fern', 'Sprig', 'Basil', 'Twiggy', 'Moss', 'Clover'];
+export const SAP_NAMES = ['Fern', 'Sprig', 'Basil', 'Twiggy', 'Moss', 'Clover'];
 const BOT_NAMES = ['Bolt', 'Sprocket', 'Widget', 'Tinny', 'Gizmo', 'Rivet'];
 // Loot per small structure, raided (F at its marked spot) or destroyed.
 const LOOT = {
@@ -105,7 +105,7 @@ const hex = (f) => new THREE.Color(FACTIONS[f] ? FACTIONS[f].color : '#c9c3d9').
 export class Territory {
   constructor(game) {
     this.game = game;
-    this.anchors = this.locAnchors();
+    this.anchors = locationAnchors(game.locations);
     this.baseAnchors = this.anchors.slice();
     this.outposts = [];
     this.patrols = [];
@@ -119,26 +119,20 @@ export class Territory {
     // drop the flash class when its animation ends or is cancelled (HUD hidden mid-flash); a restart also cancels, but leaves
     // the new animation running, so only remove when none remain
     const flashDone = () => { if (!this.chip.getAnimations().length) this.chip.classList.remove('flash'); };
-    this.chip.addEventListener('animationend', flashDone);
-    this.chip.addEventListener('animationcancel', flashDone);
+    for (const ev of ['animationend', 'animationcancel']) this.chip.addEventListener(ev, flashDone);
     this.genOutposts();
     this.flatten();
     this.prebake();
     this.load();
     this.rebuild();
     // farm domes and supply depots can be destroyed (same haul as a raid)
-    game.blastHooks = game.blastHooks || [];
-    game.blastHooks.push((pos, radius, damage, owner) => this.onBlast(pos, radius, damage, owner));
-  }
-
-  locAnchors() {
-    return locationAnchors(this.game.locations);
+    (game.blastHooks ||= []).push((pos, radius, damage, owner) => this.onBlast(pos, radius, damage, owner));
   }
 
   // After a finale moves borders (main.js applyWorldLive): re-deal outposts as a fresh boot would (same ids, rolls),
   // keeping captures, your builds and story changes.
   refreshWorld() {
-    this.baseAnchors = this.locAnchors();
+    this.baseAnchors = locationAnchors(this.game.locations);
     const live = this.outposts;
     this.outposts = [];
     this.genOutposts(false);
@@ -168,13 +162,12 @@ export class Territory {
   }
 
   genOutposts(clear = true) {
-    const g = this.game;
     const rr = mulberry32(4242);
     for (let tries = 0; tries < 6000 && this.outposts.length < 120; tries++) {
       const u = rr() * 2 - 1, th = rr() * Math.PI * 2, sq = Math.sqrt(1 - u * u);
       const d = new THREE.Vector3(sq * Math.cos(th), u, sq * Math.sin(th));
       // late locations stay out of this pass so ids don't shift; clearSites nudges clashing outposts
-      if (g.locations.some((l) => !l.late && arcDist(d, l.dir) < (l.genR || l.zoneR || l.r) * 1.6 + 120)) continue;
+      if (this.game.locations.some((l) => !l.late && arcDist(d, l.dir) < (l.genR || l.zoneR || l.r) * 1.6 + 120)) continue;
       if (this.outposts.some((o) => arcDist(d, o.dir) < 420)) continue;
       const faction = this.owner(d, this.baseAnchors);
       const kinds = KINDS[faction] || KINDS.kepler;
@@ -264,7 +257,6 @@ export class Territory {
   // Register every plateau before near terrain is (re)built, so nothing pops. Crystals in the blend ring move onto the new ground.
   flatten() {
     const g = this.game, P = g.planet;
-    const t0 = performance.now();
     const cosNear = Math.cos((FLAT_R * 2.2) / P.R);
     const moved = [];
     for (const cr of (g.world.crystals || [])) {
@@ -277,7 +269,6 @@ export class Territory {
       m.cr.pos.addScaledVector(up, dh);
       m.cr.mesh.position.addScaledVector(up, dh);
     }
-    this.flattenMs = performance.now() - t0;
   }
 
   load() {
@@ -429,10 +420,9 @@ export class Territory {
     g.scene.add(root);
     root.updateMatrixWorld(true);
     o.model = root;
-    const up = o.dir;
     o.cols = tpl.cols.map((b) => {
       if (b.type === 'sphere') return g.colliders.add({ type: 'sphere', c: root.localToWorld(new THREE.Vector3(b.x, b.y, b.z)), r: b.r });
-      if (b.type === 'cyl') return g.colliders.add({ type: 'cyl', c: root.localToWorld(new THREE.Vector3(b.x, 0, b.z)), axis: up.clone(), y0: b.y0, y1: b.y1, r: b.r });
+      if (b.type === 'cyl') return g.colliders.add({ type: 'cyl', c: root.localToWorld(new THREE.Vector3(b.x, 0, b.z)), axis: o.dir.clone(), y0: b.y0, y1: b.y1, r: b.r });
       const q = root.quaternion.clone().multiply(_q.setFromAxisAngle(_w.set(0, 1, 0), b.yaw));
       return g.colliders.add({
         type: 'box', c: root.localToWorld(new THREE.Vector3(b.x, b.y, b.z)), hx: b.hx, hy: b.hy, hz: b.hz,
@@ -481,7 +471,7 @@ export class Territory {
     const spots = this.landingSpots(o, (L.credits ? 1 : 0) + 1);
     if (L.credits) g.alchemy.dropLoot(null, c, { credits: L.credits[0] + Math.floor(Math.random() * (L.credits[1] - L.credits[0] + 1)), to: spots.pop() });
     if (L.crate) g.alchemy.dropLoot(null, c, { crate: true, to: spots.pop() });
-    else g.alchemy.dropLoot(L.item, c, { name: L.names ? L.names[Math.floor(Math.random() * L.names.length)] : undefined, to: spots.pop() });
+    else g.alchemy.dropLoot(L.item, c, { name: L.names ? pick(L.names) : undefined, to: spots.pop() });
     g.rep.add(o.faction, -LOOT_REP, `Destroyed a ${KIND_NAMES[o.kind]}`, { war: false });
     o.hp = OUTPOST_HP[o.kind];
     o.wreckedUntil = g.time + LOOT_CD;
@@ -498,7 +488,7 @@ export class Territory {
     const t = tangent(_w.set(1, 0, 0), up).normalize();
     const b = new THREE.Vector3().crossVectors(up, t);
     const clear = (p) => !g.colliders.query(p, 4, []).some((col) => g.colliders.contact(col, p, 2.2, new THREE.Vector3()) > 0);
-    const base = o.dropPoint || null;
+    const base = o.dropPoint;
     for (let i = 0; i < n; i++) {
       let p = null;
       if (base) {
@@ -564,14 +554,13 @@ export class Territory {
   // patrol cars themselves: enemies.js spawnRoamer
   spawnPatrol(r) {
     const g = this.game;
-    const P = g.player;
     // start out of the player's sight along the route
     let t = Math.random();
     for (let i = 0; i < 8; i++) {
       const c = Math.random();
       const d = this.routePoint(r, c, new THREE.Vector3());
       t = c;
-      if (arcDist(d, P.pos) > 450) break;
+      if (arcDist(d, g.player.pos) > 450) break;
     }
     r.unit = g.enemies.spawnRoamer(r, t, Math.random() < 0.5 ? 1 : -1);
   }
@@ -613,7 +602,7 @@ export class Territory {
       if (o.guns && o.guns.length && o.model && !o.rubble) this.updateGuns(o, dt);
       if (o.rubble && o.model && d < 500 && Math.random() < dt * 6) g.fx.spawn((o.mainC || o.model.position).clone().addScaledVector(o.dir, 1.5), o.dir.clone().multiplyScalar(5), { color: 0x2a2433, size: 1.4, life: 1.6, count: 1, spread: 3 });
       if (o.model && d < 400) {
-        const movers = o.model.userData.movers || (o.model.userData.movers = collectNodes(o.model, (m) => m.userData.spin || m.userData.blink || m.userData.flag));
+        const movers = (o.model.userData.movers ||= collectNodes(o.model, (m) => m.userData.spin || m.userData.blink || m.userData.flag));
         for (const m of movers) {
           if (m.userData.spin) m.rotation.y += dt * 0.6;
           if (m.userData.blink) m.visible = Math.sin(this.t * 4 + o.seed) > -0.3;
@@ -689,7 +678,7 @@ export class Territory {
       if (!A.owned) { g.hud.toast(`You need a containment jar to carry a ${ITEMS[L.item].name.toLowerCase()}. Dr. Zbornak sells them.`, 5); return true; }
       if (A.used >= A.slots) { g.hud.toast('Your jar is full.', 3.5); return true; }
       if (L.credits) g.addCredits(L.credits[0] + Math.floor(Math.random() * (L.credits[1] - L.credits[0] + 1)), KIND_NAMES[o.kind]);
-      A.add(L.item, L.names ? L.names[Math.floor(Math.random() * L.names.length)] : undefined);
+      A.add(L.item, L.names ? pick(L.names) : undefined);
       g.fx.pop(L.pop, null, { color: ITEMS[L.item].color, size: 46, life: 2.4 });
     }
     o.lootAt = g.time;
@@ -768,7 +757,7 @@ export class Territory {
     if (ax >= ay && ax >= az) { if (x > 0) { f = 0; a = -z / x; b = y / x; } else { f = 1; a = z / -x; b = y / -x; } }
     else if (ay >= az) { if (y > 0) { f = 2; a = x / y; b = -z / y; } else { f = 3; a = x / -y; b = z / -y; } }
     else if (z > 0) { f = 4; a = x / z; b = y / z; } else { f = 5; a = x / z; b = y / -z; }
-    const i = Math.min(T - 1, Math.max(0, ((a + 1) * 0.5 * T) | 0)), j = Math.min(T - 1, Math.max(0, ((b + 1) * 0.5 * T) | 0));
+    const i = clamp(((a + 1) * 0.5 * T) | 0, 0, T - 1), j = clamp(((b + 1) * 0.5 * T) | 0, 0, T - 1);
     const c = (f * T + j) * T + i, e = G.edge[c];
     if (e < 0) return G.rgb[G.col[c]];
     // at a border: closest nearby anchor (owner()'s weighted distance)
@@ -782,5 +771,3 @@ export class Territory {
     return G.rgb[G.af[best]];
   }
 }
-
-export { KIND_NAMES, MILITARY, SAP_NAMES };

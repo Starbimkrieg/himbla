@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { toon, inkMat } from './toon.js';
 import { frameQuat } from './geo.js';
-import { pick, randRange as rand } from './rng.js';
+import { pick, clamp, randRange as rand } from './rng.js';
 import { spliceGenes, makeChimera, LIVING } from './chimera.js';
 import { ensureStats, statTotal, newRunner, stepRunner, raceOdds, CONDITIONS } from './chimerastats.js';
 import { chimeraCard, cardList } from './chimeracard.js';
@@ -43,6 +43,8 @@ const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _up = new THREE.Vector
 const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _Y = new THREE.Vector3(0, 1, 0);
 const _o = {}, _bq = new THREE.Quaternion();
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
+const above = (p, h) => p.clone().addScaledVector(p.clone().normalize(), h);   // h m up from a point on the Moon
+const fits = (cls, tier) => cls === 'OPEN' || TIERS.indexOf(tier) <= TIERS.indexOf(cls);   // class races take their tier and lower
 // Canvas text fitted to `maxW`: at `size` px if it fits, else the largest whole size that does (not under `min`), else ellipsised.
 // The pixel face is wide (full-em glyphs), so long names would run into neighbours. Uses the context's fill, align and baseline
 // at (px, py); returns the size used.
@@ -366,8 +368,7 @@ export class Race {
         const gn = spliceGenes(items);
         const t = statTotal(gn.stats);
         // class races keep to their tier, then closest to the target total
-        const ok = cls === 'OPEN' || TIERS.indexOf(gn.tier) <= TIERS.indexOf(cls);
-        gn.dist = Math.abs(t - target) + (ok ? 0 : 1000);
+        gn.dist = Math.abs(t - target) + (fits(cls, gn.tier) ? 0 : 1000);
         if (!best || gn.dist < best.dist) best = gn;
       }
       delete best.dist;
@@ -380,9 +381,7 @@ export class Race {
     return out;
   }
 
-  eligible(race, genes) {
-    return race.cls === 'OPEN' || TIERS.indexOf(genes.tier) <= TIERS.indexOf(race.cls);
-  }
+  eligible(race, genes) { return fits(race.cls, genes.tier); }
 
   raceLine(r) {
     const C = CONDITIONS[r.cond];
@@ -455,7 +454,7 @@ export class Race {
   // ================= the race =================
   start(race, field, bet, odds) {
     const g = this.game;
-    race.slot = Math.max(0, Math.min(2, this.card.indexOf(race)));      // this race's podium set
+    race.slot = clamp(this.card.indexOf(race), 0, 2);      // this race's podium set
     this.card = this.card.filter((r) => r !== race);
     this.race = race;
     this.podiumResult = null;
@@ -491,18 +490,22 @@ export class Race {
   }
 
   place(r) {
-    const g = this.game;
-    const w = g.world;
+    const w = this.game.world;
     const u = this.startU + r.s;
     const off = Math.sin(r.t * 0.6 + r.weave) * 0.5;
     oval(u, r.lane + off, _o);
     w.toWorld(this.loc, _o.x, 0, _o.z, _v);
-    g.planet.ground(_v, _v);
-    _up.copy(_v).normalize();
     const dir = r.ev === 'wrong' ? -1 : 1;
     w.toWorld(this.loc, _o.x + _o.hx * dir, 0, _o.z + _o.hz * dir, _f);
     _f.sub(w.toWorld(this.loc, _o.x, 0, _o.z, _w));
-    r.m.root.position.copy(_v).addScaledVector(_up, r.hop + 0.1);
+    this.pose(r, r.hop + 0.1);
+  }
+
+  // stand runner r on the ground under _v, h up, facing _f
+  pose(r, h) {
+    this.game.planet.ground(_v, _v);
+    _up.copy(_v).normalize();
+    r.m.root.position.copy(_v).addScaledVector(_up, h);
     frameQuat(_up, _f, r.m.root.quaternion);
     r.pos = r.m.root.position;
     r.fwd = (r.fwd || new THREE.Vector3()).copy(_f).normalize();
@@ -511,7 +514,7 @@ export class Race {
   // show an event the race model rolled for this runner
   chaosFx(r, ev) {
     const g = this.game;
-    const at = r.m.root.position.clone().addScaledVector(r.m.root.position.clone().normalize(), 4);
+    const at = above(r.m.root.position, 4);
     if (ev === 'stumble') g.fx.pop('STUMBLE!', at, { color: '#ffd23f', size: 36 });
     else if (ev === 'trip') g.fx.pop(pick(['TRIPPED!', 'OOPS', 'WHICH LEG?!']), at, { color: '#ffd23f', size: 30 });
     else if (ev === 'zoom') g.fx.pop('ZOOOM!', at, { color: '#2ee6ff', size: 40 });
@@ -534,7 +537,7 @@ export class Race {
     this.cheers--;
     this.excite = 1;
     g.audio.roar(1.1);
-    const at = r.pos.clone().addScaledVector(r.pos.clone().normalize(), 5);
+    const at = above(r.pos, 5);
     if (r.st.wit < 38 && Math.random() < 0.35) {
       // a dim creature panics at the noise instead
       r.ev = 'trip'; r.evT = 0.9;
@@ -586,8 +589,7 @@ export class Race {
       const before = Math.ceil(this.timer);
       this.timer -= dt;
       const now = Math.ceil(this.timer);
-      const r0 = this.racers[0];
-      if (now !== before && now > 0 && now <= 3) { g.fx.pop(String(now), r0.pos.clone().addScaledVector(r0.pos.clone().normalize(), 6), { color: '#ffd23f', size: 80, prio: 1 }); g.audio.tone(440, 0.2, 'square', 0.08); }
+      if (now !== before && now > 0 && now <= 3) { g.fx.pop(String(now), above(this.racers[0].pos, 6), { color: '#ffd23f', size: 80, prio: 1 }); g.audio.tone(440, 0.2, 'square', 0.08); }
       if (this.timer <= 0) {
         this.state = 'run';
         this.excite = 1;
@@ -609,8 +611,8 @@ export class Race {
         }
         const ev = stepRunner(r, dt, Math.random, this.cond);
         if (ev) this.chaosFx(r, ev);
-        if (r.ended === 'boom') { r.m.root.visible = true; g.fx.pop('REASSEMBLED!', r.pos.clone().addScaledVector(r.pos.clone().normalize(), 4), { color: '#7dff6a', size: 32 }); }
-        if (!r.tiredSaid && r.stam < 0.2) { r.tiredSaid = true; g.fx.pop(r.mine ? 'YOURS IS GASSED!' : 'RUNNING ON FUMES', r.pos.clone().addScaledVector(r.pos.clone().normalize(), 5), { color: '#ff9f1c', size: 28 }); }
+        if (r.ended === 'boom') { r.m.root.visible = true; g.fx.pop('REASSEMBLED!', above(r.pos, 4), { color: '#7dff6a', size: 32 }); }
+        if (!r.tiredSaid && r.stam < 0.2) { r.tiredSaid = true; g.fx.pop(r.mine ? 'YOURS IS GASSED!' : 'RUNNING ON FUMES', above(r.pos, 5), { color: '#ff9f1c', size: 28 }); }
         r.hop += r.vy * dt; r.vy -= (this.cond === CONDITIONS.lowg ? 18 : 30) * dt;
         if (r.hop <= 0) { r.hop = 0; r.vy = r.genes.hop > 0.5 && Math.random() < dt * 4 ? 5 : 0; }
         this.place(r);
@@ -619,7 +621,7 @@ export class Race {
           r.done = true;
           r.place = ++this.finished;
           this.excite = 1;
-          g.fx.pop(r.place === 1 ? `${r.genes.name.toUpperCase()} WINS!` : `#${r.place}`, r.pos.clone().addScaledVector(r.pos.clone().normalize(), 6), { color: r.mine ? '#7dff3a' : '#ffffff', size: r.place === 1 ? 70 : 40, prio: 1 });
+          g.fx.pop(r.place === 1 ? `${r.genes.name.toUpperCase()} WINS!` : `#${r.place}`, above(r.pos, 6), { color: r.mine ? '#7dff3a' : '#ffffff', size: r.place === 1 ? 70 : 40, prio: 1 });
           if (r.place === 1) g.audio.tone(660, 0.6, 'square', 0.25);
           if (r.mine) g.audio.roar(r.place === 1 ? 1.5 : r.place <= 3 ? 0.9 : 0.4);
           if (r.mine && r.place <= 3) this.confetti(r.pos);
@@ -639,18 +641,13 @@ export class Race {
 
   // stand a finisher on step `n` (1 to 3) of podium set `slot`, facing the main stand
   toPodium(r, n, slot) {
-    const g = this.game, w = g.world;
+    const w = this.game.world;
     const [dx, h] = PODIUMS.steps[n], px = PODIUMS.xs[slot] + dx;
     w.toWorld(this.loc, px, 0, PODIUMS.z, _v);
-    g.planet.ground(_v, _v);
-    _up.copy(_v).normalize();
     w.toWorld(this.loc, px, 0, PODIUMS.z + 1, _f).sub(w.toWorld(this.loc, px, 0, PODIUMS.z, _w));
     r.podium = n;
     r.m.root.visible = true;
-    r.m.root.position.copy(_v).addScaledVector(_up, h + 0.1);
-    frameQuat(_up, _f, r.m.root.quaternion);
-    r.pos = r.m.root.position;
-    r.fwd = (r.fwd || new THREE.Vector3()).copy(_f).normalize();
+    this.pose(r, h + 0.1);
     r.m.anim(r.t, 0);
   }
 
@@ -668,7 +665,7 @@ export class Race {
     const [mx, my] = g.input.consumeMouse();
     const sens = 0.0022 * (g.settings ? g.settings.v.sensitivity : 1);
     this.camYaw -= mx * sens;
-    this.camPitch = Math.max(-0.1, Math.min(1.2, this.camPitch + my * sens));
+    this.camPitch = clamp(this.camPitch + my * sens, -0.1, 1.2);
     this.update(dt);
     if (this.state === 'idle' || !this.racers.length) return;
     this.updateCam(dt);
@@ -716,7 +713,7 @@ export class Race {
     } else if (this.camMode === 'stands') {
       // high in the stands, sliding along with the runner
       oval(this.startU + subject.s, 0, _o);
-      w.toWorld(this.loc, Math.max(-60, Math.min(60, _o.x * 0.6)), 17, STAND.z0 + 14, want);
+      w.toWorld(this.loc, clamp(_o.x * 0.6, -60, 60), 17, STAND.z0 + 14, want);
       look.copy(P).addScaledVector(up, 1);
     } else {
       // blimp: high over the pack, trailing it
