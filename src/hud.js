@@ -3,7 +3,7 @@ import { glyphHtml } from './glyphs.js';
 import { keepScroll } from './terminalUI.js';
 import { NAME_TAGS } from './toon.js';
 import { FACTIONS } from './locations.js';
-import { arcDist, darkness, upAt, E1, E2 } from './geo.js';
+import { arcDist, darkness, upAt, toScreen, E1, E2 } from './geo.js';
 import { WEAPONS, APC_CANNON } from './weapons.js';
 import { EVENT_RANGE, PLANET } from './config.js';
 import { pixelFont } from './fonts.js';
@@ -453,10 +453,7 @@ export class HUD {
         if (t.losT <= 0) { t.losT = 0.25; t.seen = g.enemies.clearShot(cam.position, p); } // terrain and walls
         on = t.seen;
       }
-      if (on) {
-        p.project(cam);
-        if (p.z > 1 || Math.abs(p.x) > 1.05 || Math.abs(p.y) > 1.05) on = false;
-      }
+      if (on && (!toScreen(p, cam) || Math.abs(p.x) > 1.05 || Math.abs(p.y) > 1.05)) on = false;
       if (!on) { if (!t.el.classList.contains('off')) t.el.classList.add('off'); continue; }
       t.el.classList.remove('off');
       const s = Math.max(0.6, Math.min(1, 0.6 + (d - 4) / 36 * 0.4)); // smaller up close
@@ -758,8 +755,8 @@ export class HUD {
     if (!obj || g.player.dead) { el.classList.add('hidden'); mk.classList.add('hidden'); return; }
     const up = upAt(obj.pos);
     const away = g.spindle && g.spindle.active;
-    this.v.copy(g.planet.ground(obj.pos)).addScaledVector(up, away ? 6 : 25).project(g.camera);
-    const onScreen = this.v.z < 1 && Math.abs(this.v.x) < 0.95 && Math.abs(this.v.y) < 0.92;
+    this.v.copy(g.planet.ground(obj.pos)).addScaledVector(up, away ? 6 : 25);
+    const onScreen = toScreen(this.v, g.camera) && Math.abs(this.v.x) < 0.95 && Math.abs(this.v.y) < 0.92;
     const dist = away ? obj.pos.distanceTo(g.player.pos) : arcDist(obj.pos, g.player.pos);
     if (onScreen) {
       el.classList.add('hidden');

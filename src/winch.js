@@ -17,7 +17,7 @@
 // the last. If the drum runs but you aren't coming in, the cable strains (creaking louder and higher, pull rising to
 // yank you free) and slips off after STRAIN_MAX s.
 import * as THREE from 'three';
-import { upAt } from './geo.js';
+import { upAt, toScreen } from './geo.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { rayCollider } from './physics.js';
@@ -932,8 +932,8 @@ export class Winch {
       document.getElementById('hud').appendChild(el);
     }
     this.anchorOf(h, _pt);
-    const v = _to.copy(_pt).project(g.camera);
-    if (v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) { el.classList.add('hidden'); return; }
+    const v = _to.copy(_pt);
+    if (!toScreen(v, g.camera) || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) { el.classList.add('hidden'); return; }
     const W = window.innerWidth, H = window.innerHeight;
     el.classList.remove('hidden');
     el.classList.toggle('looked', !!h.looked && !this.on);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { upAt } from './geo.js';
+import { upAt, toScreen } from './geo.js';
 
 const MAX_P = 1200;
 // skate trail ribbons: a point every 1/60 s, tail 40 points (2/3 s), up to 2 s while grinding
@@ -340,8 +340,7 @@ export class FX {
   placePop(p) {
     if (p.pos) {
       this.camera.updateMatrixWorld();
-      this.v.copy(p.pos).project(this.camera);
-      if (this.v.z > 1 || Math.abs(this.v.x) > 1.2 || Math.abs(this.v.y) > 1.2) return false;
+      if (!toScreen(this.v.copy(p.pos), this.camera) || Math.abs(this.v.x) > 1.2 || Math.abs(this.v.y) > 1.2) return false;
       p.lp = ((this.v.x + 1) / 2) * 100;
       p.tp = ((1 - this.v.y) / 2) * 100;
     }

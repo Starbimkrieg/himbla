@@ -85,6 +85,15 @@ export function greatCircle(dir, t, dist, out = new THREE.Vector3()) {
   return out.copy(dir).multiplyScalar(Math.cos(a)).addScaledVector(tn, Math.sin(a)).normalize();
 }
 
+// Projects world point v to normalised device coords in place. False when it is behind the camera: with the
+// renderer's reversed depth buffer (main.js) a point behind gets a small negative z, not one past 1, so z can't tell.
+const _ahead = new THREE.Vector3();
+export function toScreen(v, cam) {
+  if (_ahead.copy(v).applyMatrix4(cam.matrixWorldInverse).z > -cam.near) return false;
+  v.project(cam);
+  return true;
+}
+
 // Nodes under root that pass test, collected once so per-frame code (spinners, blinkers) needn't walk the tree.
 export function collectNodes(root, test) {
   const out = [];
