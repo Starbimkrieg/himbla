@@ -3,7 +3,7 @@ import { animate, lineUp } from './common.js';
 import { V, seat } from './props-util.js';
 import { toon, glow, ink } from '../toon.js';
 import { Kit, BEAM } from '../outpostModels.js';
-import { makeSat7, Secrets } from '../secrets.js';
+import { makeSat7, artifactCradle, Secrets } from '../secrets.js';
 import { spire, obelisk, lander, shrine, extract, makeMothership, makeDrone } from '../spindle.js';
 import { World } from '../world.js';
 
@@ -52,16 +52,7 @@ function artifact() {
   stand.position.y = 0.3;
   ink(stand, 0.04);
   root.add(stand);
-  const cradle = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.18, 8, 20), toon(0x2a2440));
-  cradle.rotation.x = Math.PI / 2;
-  cradle.position.y = 0.9;
-  root.add(cradle);
-  const stone = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), glow(TEAL));
-  stone.position.y = 1.8;
-  root.add(stone);
-  const aGlow = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 8), new THREE.MeshBasicMaterial({ color: TEAL, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }));
-  aGlow.position.copy(stone.position);
-  root.add(aGlow);
+  const { artifact: stone, aGlow } = artifactCradle(root, 0.9);
   return {
     root,
     update: (dt, t) => { stone.rotation.y += dt * 1.5; aGlow.scale.setScalar(1 + Math.sin(t * 4) * 0.15); },

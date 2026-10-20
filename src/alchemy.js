@@ -4,7 +4,8 @@ import { makeFigure, engineModel, caseModel } from './models.js';
 import { toon, glow, ink } from './toon.js';
 import { frameQuat, tangent, randomTangent, greatCircle, SUN, arcDist } from './geo.js';
 import { pick, mulberry32 } from './rng.js';
-import { LIVING, spliceGenes, makeChimera, makeMite, ensureStats } from './chimera.js';
+import { LIVING, spliceGenes, makeChimera, makeMite } from './chimera.js';
+import { ensureStats } from './chimerastats.js';
 import { chimeraCard, cardList, installTips } from './chimeracard.js';
 import { monolithTouch, updateEchoes } from './monolith.js';
 

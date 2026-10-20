@@ -1,11 +1,10 @@
 import * as THREE from 'three';
-import { World, zoneWallMaterial } from '../world.js';
+import { World, zoneWallMaterial, stepMover } from '../world.js';
 import { LOCATIONS } from '../locations.js';
 import { mulberry32 } from '../rng.js';
 import { NAME_TAGS, setMask } from '../toon.js';
 import { Race } from '../race.js';
 import { Colliders } from '../physics.js';
-import { stepMover } from './common.js';
 
 // Builds one settlement / HQ / landmark standalone for the Asset Row (assetRowItems/places.js).
 //

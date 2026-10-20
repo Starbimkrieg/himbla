@@ -562,21 +562,13 @@ export class Race {
         this.postT = rand(50, 90);
       }
     }
-    // crowd audio: murmur at the course, roar in a race, louder while you lead
-    const racing = this.state === 'countdown' || this.state === 'run';
-    const here = this.loc && (racing || (this.loc.active && g.player.pos.distanceTo(this.booth) < 260));
-    let crowd = 0;
-    if (here) {
-      crowd = 0.08;
-      if (racing) {
-        const lead = this.order()[0];
-        const leading = this.state === 'run' && lead && lead.mine;
-        if (leading && !this.wasLeading && this.racers[0].s > 30) g.audio.roar(0.6);
-        this.wasLeading = leading;
-        crowd = 0.42 + this.excite * 0.3 + (leading ? 0.28 : 0);
-      }
+    // crowd audio: a roar when your runner takes the lead
+    if (this.loc && (this.state === 'countdown' || this.state === 'run')) {
+      const lead = this.order()[0];
+      const leading = this.state === 'run' && lead && lead.mine;
+      if (leading && !this.wasLeading && this.racers[0].s > 30) g.audio.roar(0.6);
+      this.wasLeading = leading;
     }
-    g.audio.setCrowd(crowd);
     if (this.loc && this.loc.active) {
       this.excite = Math.max(this.state === 'run' ? 0.25 : 0, this.excite - dt * 0.25);
       this.updateCrowd(this.t);

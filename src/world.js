@@ -159,6 +159,28 @@ export function zoneWallMaterial() {
   });
 }
 
+// One of a place's Kit movers (userData spin / blink / flag, or a tick function) at time t (the Asset Row's too)
+export function stepMover(o, dt, t, seed) {
+  const u = o.userData;
+  if (u.tick) u.tick(o, dt, t);
+  else if (u.spin) o.rotation.y += dt * (u.spin === true ? 0.6 : u.spin);
+  else if (u.blink) o.visible = Math.sin(t * 4 + seed) > -0.3;
+  else if (u.flag) o.rotation.y = Math.sin(t * 2 + seed) * 0.25;
+}
+
+// the black lakes' rippling surface (buildLakes; the Asset Row's lake too)
+export const lakeMaterial = () => new THREE.ShaderMaterial({
+  uniforms: { time: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: `uniform float time; varying vec2 vUv;
+        void main(){ vec2 p = vUv - 0.5; float r = length(p) * 2.0;
+          float ripple = sin(r * 40.0 - time * 1.5) * 0.5 + 0.5;
+          float glint = smoothstep(0.92, 1.0, ripple) * (1.0 - r) * 0.35;
+          float rim = smoothstep(0.86, 0.98, r);
+          vec3 col = vec3(0.03, 0.02, 0.06) + vec3(0.35, 0.22, 0.6) * glint + vec3(0.25, 0.15, 0.45) * rim;
+          gl_FragColor = vec4(col, 1.0); }`,
+});
+
 // Builds everything on the Moon. Each settlement has its own local frame (Y = local up, XZ = its
 // plateau) and is in the scene only while the camera is near enough to see it.
 export class World {
@@ -1645,13 +1667,7 @@ export class World {
     for (const s of this.spinners) if (s.loc.active) s.obj.rotation[s.axis] += s.speed * dt;
     for (const a of this.anims) {
       if (!a.loc.active) continue;
-      for (const o of a.list) {
-        const u = o.userData;
-        if (u.tick) u.tick(o, dt, time);
-        else if (u.spin) o.rotation.y += dt * (u.spin === true ? 0.6 : u.spin);
-        else if (u.blink) o.visible = Math.sin(time * 4 + a.seed) > -0.3;
-        else if (u.flag) o.rotation.y = Math.sin(time * 2 + a.seed) * 0.25;
-      }
+      for (const o of a.list) stepMover(o, dt, time, a.seed);
     }
     for (const d of this.dishes) {
       if (!d.loc.active) continue;
@@ -1853,18 +1869,7 @@ export class World {
       if (rr() < 0.25 || chosen.some((o) => arcDist(o.d, c.d) < 450)) continue;
       chosen.push(c);
     }
-    const mat = new THREE.ShaderMaterial({
-      uniforms: { time: { value: 0 } },
-      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: `uniform float time; varying vec2 vUv;
-        void main(){ vec2 p = vUv - 0.5; float r = length(p) * 2.0;
-          float ripple = sin(r * 40.0 - time * 1.5) * 0.5 + 0.5;
-          float glint = smoothstep(0.92, 1.0, ripple) * (1.0 - r) * 0.35;
-          float rim = smoothstep(0.86, 0.98, r);
-          vec3 col = vec3(0.03, 0.02, 0.06) + vec3(0.35, 0.22, 0.6) * glint + vec3(0.25, 0.15, 0.45) * rim;
-          gl_FragColor = vec4(col, 1.0); }`,
-    });
-    this.lakeMat = mat;
+    const mat = this.lakeMat = lakeMaterial();
     this.lakes = [];
     for (const c of chosen) {
       const s0 = P.surface(c.d.clone().multiplyScalar(P.R));

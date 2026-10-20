@@ -16,6 +16,7 @@ import { mulberry32, clamp01, lerp, smoothstep } from './rng.js';
 import { spliceGenes } from './chimera.js';
 import { clearEchoes } from './monolith.js';
 import { DEV_TOOLS } from './devtools.js';
+import { railAt } from './rails.js';
 
 const Q = new URLSearchParams(location.search);
 export const TRAILER = DEV_TOOLS && Q.has('trailer'); // dev tool: off in a release build
@@ -1408,14 +1409,7 @@ function rim(T) {
   if (!T._rim) T._rim = T.rimNear(T.at('ilmb', 136, 0, 778), 30, 45, 60);
   return T._rim;
 }
-// point at arc length s along a rail
-function railPoint(r, s) {
-  s = r.loop ? ((s % r.len) + r.len) % r.len : Math.max(0, Math.min(r.len, s));
-  let i = 0;
-  while (i < r.cum.length - 2 && r.cum[i + 1] < s) i++;
-  const f = (s - r.cum[i]) / Math.max(1e-6, r.cum[i + 1] - r.cum[i]);
-  return r.pts[i].clone().lerp(r.pts[i + 1], f);
-}
+function railPoint(r, s) { return railAt(r, s, V(), V()); } // point at arc length s along a rail
 
 SHOTS.push(FISSURE, HERO);
 // running order: casino after the Downs, then scoop and Dr. Zbornak's lab

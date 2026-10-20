@@ -5,7 +5,7 @@ import { arcDist, tangent, frameQuat, greatCircle, SUN, R as PLANET_R, collectNo
 import { mulberry32, clamp, pick } from './rng.js';
 import { ITEMS } from './alchemy.js';
 import { outpostTemplate, SMALL_KINDS, FLAT_R } from './outpostModels.js';
-import { foundedTemplate, TERMINAL_Z, OUTPOST_GUN as GUN } from './storyAssets.js';
+import { foundedTemplate, TERMINAL_Z, BUILT_R, OUTPOST_GUN as GUN } from './storyAssets.js';
 
 // Every square metre of the Moon belongs to somebody: a weighted Voronoi split round faction settlements and outposts.
 // Small faction structures dot the countryside, with military patrols between them.
@@ -37,7 +37,6 @@ const LOOT = {
   junk: { verb: 'COAX OUT A JUNK BOT', boom: 'JUNK EVERYWHERE!', item: 'junkbot', names: BOT_NAMES, pop: 'JUNK BOT! BEEP!' },
 };
 const MAP_GRID = 96; // owner cells per cube-face edge for the globe map's territory lookup
-const BUILT_R = 40; // founded outposts: flat radius (compound: storyAssets.js)
 const TOWN_R = 120; // your town's flat radius (worldstate.js); blend reaches 1.95x
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();

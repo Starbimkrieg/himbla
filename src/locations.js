@@ -199,6 +199,8 @@ export const TIERS = [
   { min: 25, name: 'TRUSTED', color: '#2ec4ff', pay: 1.85 },
   { min: 50, name: 'HONORED', color: '#ffd23f', pay: 2.4 },
 ];
+// the standing tier a reputation value v falls in
+export const tierFor = (v) => { let t = TIERS[0]; for (const x of TIERS) if (v >= x.min) t = x; return t; };
 
 // faction gear at each HQ; each level needs more reputation
 import { cosmeticShopItems } from './cosmeticsData.js';

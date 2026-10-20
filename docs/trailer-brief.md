@@ -95,7 +95,7 @@ Times are rough; tune them to the music. ▸ marks how each shot hands off to th
   (`g.fx.clearPops()` empties the screen and the queue between shots). Toasts and alerts: `g.hud.toast` /
   `g.hud.alert`. Slow motion: `g.slowmo = seconds`.
 - Music: `g.audio.setZone(...)` picks the track (menu, casino, downs, lab, dark side, …), from
-  `musicZone()` in `main.js`. Crowd: `g.audio.setCrowd` / `roar`.
+  `musicZone()` in `main.js`. Crowd: `g.audio.roar`.
 - Cheats (backtick): unlock everything, teleport, reveal the map, set rep.
 
 ## Quirks learned driving the game from scripts

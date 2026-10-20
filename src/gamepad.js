@@ -50,6 +50,7 @@ import { Glyphs, glyphState, glyphHtml } from './glyphs.js';
 import { GyroPad } from './gyro.js';
 import { SonyOut } from './sonyout.js';
 import { DEV_TOOLS } from './devtools.js';
+import { radialFill, wedgeAt } from './powers.js';
 
 const DEAD = 0.18; // stick deadzone (radial)
 const AIM_SHOW = 10; // s the crosshair stays up after the last shot
@@ -313,9 +314,7 @@ export class Gamepad {
     }
     const R = this.radial;
     if (Math.hypot(rx, ry) > 0.55) {
-      const n = RADIAL.length;
-      const a = Math.atan2(rx, -ry); // 0 at the top, clockwise
-      const sel = ((Math.round((a / (Math.PI * 2)) * n) % n) + n) % n;
+      const sel = wedgeAt(Math.atan2(rx, -ry), RADIAL.length); // 0 at the top, clockwise
       if (sel !== R.sel) {
         R.sel = sel;
         this.beep(700 + sel * 40, 0.04, 'square', 0.06);
@@ -367,21 +366,11 @@ export class Gamepad {
   drawRadial(build) {
     const g = this.game, R = this.radial;
     let el = document.getElementById('padradial');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'padradial';
-      document.getElementById('hud').appendChild(el);
-      build = true;
-    }
-    if (build) {
-      const n = RADIAL.length;
-      el.innerHTML = '<div class="pr-ring"></div><div class="pr-hub"></div>' + RADIAL.map((q, i) => {
-        const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+    if (!el || build) {
+      el = radialFill(el, 'padradial', RADIAL, (q) => {
         const locked = q.has && !q.has(g);
-        const st = q.state ? `<small>${q.state(g)}</small>` : '';
-        return `<div class="pr-item${locked ? ' locked' : ''}" data-i="${i}" style="left:${50 + Math.cos(a) * 38}%;top:${50 + Math.sin(a) * 38}%"><b>${q.name}</b>${locked ? '<small>LOCKED</small>' : st}</div>`;
-      }).join('');
-      el.classList.remove('hidden');
+        return [locked ? ' locked' : '', `<b>${q.name}</b>${locked ? '<small>LOCKED</small>' : q.state ? `<small>${q.state(g)}</small>` : ''}`];
+      });
     }
     el.querySelectorAll('.pr-item').forEach((it) => {
       const i = +it.dataset.i, q = RADIAL[i];

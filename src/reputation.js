@@ -1,4 +1,4 @@
-import { FACTIONS, TIERS } from './locations.js';
+import { FACTIONS, TIERS, tierFor } from './locations.js';
 
 const KEY = 'moonrunner-rep-v2';
 
@@ -32,12 +32,7 @@ export class Reputation {
   real(f) { return (FACTIONS[f] && FACTIONS[f].absorbedBy) || f; }
   get(f) { return this.values[this.real(f)] ?? 0; }
 
-  tier(f) {
-    const v = this.get(f);
-    let t = TIERS[0];
-    for (const x of TIERS) if (v >= x.min) t = x;
-    return t;
-  }
+  tier(f) { return tierFor(this.get(f)); }
 
   nextTier(f) { return TIERS.find((x) => x.min > this.get(f)) || null; }
 

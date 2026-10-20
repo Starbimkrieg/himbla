@@ -9,7 +9,6 @@ import { TerrainField, faceDir, dirToGrid, N, CH, CPF, N1, R, MAX_LOD } from './
 import { skinUniforms, patchRockMaterial, SK_NOISE, SKIN_COMMON, SKIN_NORMAL, SKIN_COLOR, SKIN_LIGHT } from './moonSkins.js';
 import { makeBoulderShapes, makeBoulderInk, BOULDER_COLLIDER_K } from './boulders.js';
 
-export { faceDir };
 const _g = { f: 0, i: 0, j: 0 };
 // terrain workers (terrainWorker.js): detailed chunks (~25 ms of maths) are built off the main thread so speed doesn't
 // drop frames. 2-4 workers, leaving cores for the game and browser; IN_FLIGHT jobs each keeps them busy while staying

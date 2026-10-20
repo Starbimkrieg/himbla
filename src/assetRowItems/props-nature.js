@@ -5,6 +5,7 @@ import { toon, glow, inkMat } from '../toon.js';
 import { mulberry32 } from '../rng.js';
 import { build as buildRock } from '../rocks.js';
 import { KINDS as METEOR_KINDS, meteorMats, makeMeteorRock } from '../meteors.js';
+import { lakeMaterial } from '../world.js';
 
 // 11 · NATURE: shaped rocks, boulders, crystal samples, meteors and the black lake.
 
@@ -113,18 +114,8 @@ function crystals() {
 
 // ---- black lake (world.js buildLakes): the game's shader on a disc ----
 function blackLake() {
-  const mat = new THREE.ShaderMaterial({
-    uniforms: { time: { value: 0 } },
-    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-    fragmentShader: `uniform float time; varying vec2 vUv;
-        void main(){ vec2 p = vUv - 0.5; float r = length(p) * 2.0;
-          float ripple = sin(r * 40.0 - time * 1.5) * 0.5 + 0.5;
-          float glint = smoothstep(0.92, 1.0, ripple) * (1.0 - r) * 0.35;
-          float rim = smoothstep(0.86, 0.98, r);
-          vec3 col = vec3(0.03, 0.02, 0.06) + vec3(0.35, 0.22, 0.6) * glint + vec3(0.25, 0.15, 0.45) * rim;
-          gl_FragColor = vec4(col, 1.0); }`,
-    side: THREE.DoubleSide,
-  });
+  const mat = lakeMaterial();
+  mat.side = THREE.DoubleSide;
   const lake = new THREE.Mesh(new THREE.CircleGeometry(45, 72).rotateX(-Math.PI / 2), mat); // game lakes are 40-380 m across
   lake.position.y = 0.06;
   const root = new THREE.Group();

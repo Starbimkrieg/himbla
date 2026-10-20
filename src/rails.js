@@ -12,8 +12,8 @@ const _near = [];
 const BODY = 0.45, BODY_UP = 0.5; // rider's shins-to-waist as a ball (radius, lift): what crest rocks must clear
 const TRAIL_LIFE = 2; // s a grind's skate trail lasts
 
-// point and unit tangent at arc length s along a rail (crater rims are closed loops)
-function railAt(r, s, outP, outT) {
+// point and unit tangent at arc length s along a rail (crater rims are closed loops); returns outP (trailer.js too)
+export function railAt(r, s, outP, outT) {
   const cum = r.cum, n = cum.length;
   s = r.loop ? ((s % r.len) + r.len) % r.len : Math.max(0, Math.min(r.len, s));
   let i = 0;
@@ -21,6 +21,7 @@ function railAt(r, s, outP, outT) {
   const f = (s - cum[i]) / Math.max(1e-6, cum[i + 1] - cum[i]);
   outP.copy(r.pts[i]).lerp(r.pts[i + 1], f);
   outT.copy(r.pts[i + 1]).sub(r.pts[i]).normalize();
+  return outP;
 }
 
 // A rail from a crest polyline: per-point arc lengths and a bounding sphere (nearest() checks it first).

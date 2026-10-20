@@ -46,8 +46,6 @@ export function spliceGenes(items, seed = Math.floor(Math.random() * 1e9)) {
   return ensureStats({ seed, body, legs, head, extraHead, mods, size, tint, name, speed: 0, hop: legs === 'mite' ? 1 : 0.3, chaos, parents: living.map((i) => i.kind), born: Date.now() });
 }
 
-export { ensureStats };
-
 // =============================================================================================
 // Part geometry: each shape built once and shared (userData.shared); inked parts get an outline
 // shell pushed out along smoothed normals.

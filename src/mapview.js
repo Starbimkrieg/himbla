@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { faceDir } from './planet.js';
+import { faceDir } from './terrainField.js';
 import { PLANET } from './config.js';
 import { SUN, E1, E2, arcDist } from './geo.js';
 import { FACTIONS, SHOPS } from './locations.js';

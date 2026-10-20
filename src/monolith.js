@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { makeRunner } from './models.js';
-import { tangent, arcDist, greatCircle } from './geo.js';
+import { tangent, randomTangent, arcDist, greatCircle } from './geo.js';
 import { pick, clamp01 } from './rng.js';
 
 // Touching the Monolith casts one of three spells, never the same twice running.
@@ -80,7 +80,7 @@ export function monolithTeleport(g, kmh = null) {
   const hp = P.health, en = P.body.energy;
   g.planet.update(g.planet.ground(dir), { budgetMs: 1e9 });
   const pos = g.planet.ground(dir, new THREE.Vector3(), 1.5);
-  const fwd = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), dir).normalize();
+  const fwd = randomTangent(dir);
   P.respawn(pos, fwd);
   P.health = hp; P.body.energy = en;
   g.cam.fwd.copy(fwd);
@@ -98,9 +98,18 @@ export function monolithTeleport(g, kmh = null) {
 
 // ---------- echo followers ----------
 
-export function holoMaterial() {
+// A runner model as an echo hologram (the Asset Row's too): one translucent cyan material, ink shells hidden (they'd make a
+// solid cyan blob). Returns the material.
+export function holoRunner(m) {
   // alpha blending: additive would burn out to white over the pale ground
-  return new THREE.MeshBasicMaterial({ color: 0x3fd8ff, transparent: true, opacity: 0.5, depthWrite: false });
+  const mat = new THREE.MeshBasicMaterial({ color: 0x3fd8ff, transparent: true, opacity: 0.5, depthWrite: false });
+  m.root.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.material && o.material.side === THREE.BackSide) { o.visible = false; return; }
+    o.material = mat;
+    o.castShadow = false;
+  });
+  return mat;
 }
 
 // One or two holograms (returns the count), each retracing your path a moment late, to one side.
@@ -109,15 +118,7 @@ function spawnEchoes(g) {
   const P = g.player;
   const n = Math.random() < 0.5 ? 1 : 2;
   for (let i = 0; i < n; i++) {
-    const m = makeRunner();
-    const mat = holoMaterial();
-    m.root.traverse((o) => {
-      if (!o.isMesh) return;
-      // hide ink shells (they'd make a solid cyan blob)
-      if (o.material && o.material.side === THREE.BackSide) { o.visible = false; return; }
-      o.material = mat;
-      o.castShadow = false;
-    });
+    const m = makeRunner(), mat = holoRunner(m);
     g.scene.add(m.root);
     // first on your left, second further back on your right
     g.decoys.push({

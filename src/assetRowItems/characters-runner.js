@@ -6,7 +6,7 @@ import '../casino.js'; // adds the casino outfits and skate finishes
 import '../secrets.js'; // adds the Xenoglide finish
 import { ITEMS, MUTATIONS, makeJarMesh, buildMutationMeshes } from '../alchemy.js';
 import { CARGO, MIL_CARGO } from '../locations.js';
-import { holoMaterial } from '../monolith.js';
+import { holoRunner } from '../monolith.js';
 import { makeXenoSkates } from '../secrets.js';
 import { makeDrone } from '../tutorial.js';
 import { span, cell, line, restRunner } from './characters-util.js';
@@ -155,13 +155,7 @@ function echoItem() {
     id: 'runner.echo', label: 'ECHO HOLOGRAM', w: 2, d: 2,
     make() {
       const m = restRunner(makeRunner());
-      const mat = holoMaterial();
-      m.root.traverse((o) => {
-        if (!o.isMesh) return;
-        if (o.material && o.material.side === THREE.BackSide) { o.visible = false; return; }
-        o.material = mat;
-        o.castShadow = false;
-      });
+      holoRunner(m);
       return { root: m.root };
     },
   };

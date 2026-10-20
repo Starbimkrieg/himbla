@@ -57,8 +57,7 @@ export class Audio {
     this.initMusic();
   }
 
-  // Racecourse crowd (race.js): setCrowd(level) does nothing since the noise bed went (it read as static); roar() adds whoops.
-  setCrowd() {}
+  // Racecourse crowd (race.js): whoops as your runner takes the lead
   roar(amount = 1) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

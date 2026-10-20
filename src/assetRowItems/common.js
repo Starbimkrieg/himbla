@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { toon, glow, ink } from '../toon.js';
 import { FACTIONS } from '../locations.js';
+import { stepMover } from '../world.js';
 
 // Helpers the catalogue groups share (index.js says what an item is).
 
@@ -8,15 +9,8 @@ import { FACTIONS } from '../locations.js';
 export const factionHex = (f) => new THREE.Color(FACTIONS[f].color).getHex();
 
 // The Kit marks moving parts in userData (spin / blink / flag, or a `tick` function); the game animates them from the
-// owner (territory.js for outposts, world.js for settlements). Same for the row: stepMover moves one, animate() returns
-// the item's update(dt, t) for all of them under root.
-export function stepMover(o, dt, t, seed) {
-  const u = o.userData;
-  if (u.tick) u.tick(o, dt, t);
-  else if (u.spin) o.rotation.y += dt * (u.spin === true ? 0.6 : u.spin);
-  else if (u.blink) o.visible = Math.sin(t * 4 + seed) > -0.3;
-  else if (u.flag) o.rotation.y = Math.sin(t * 2 + seed) * 0.25;
-}
+// owner (territory.js for outposts, world.js for settlements: stepMover). Same for the row: animate() returns the item's
+// update(dt, t) for all of them under root.
 export function animate(root, seed = 3) {
   const movers = [];
   root.traverse((o) => { const u = o.userData; if (u.spin || u.blink || u.flag || u.tick) movers.push(o); });

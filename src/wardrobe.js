@@ -4,7 +4,7 @@ import { toon, glow } from './toon.js';
 import { OUTFITS, SKATES, LASERS } from './cosmeticsData.js';
 import { dressRunner, dressSkates, updateHalo } from './cosmetics.js';
 import { makeJarMesh } from './alchemy.js';
-import { FACTIONS, LOCATIONS, TIERS } from './locations.js';
+import { FACTIONS, LOCATIONS, tierFor } from './locations.js';
 import { hex, esc } from './chimeracard.js';
 
 // The wardrobe screen (C): live turntable preview of the runner on the left, click-to-equip grids
@@ -24,7 +24,6 @@ const CASINO = {
 const EXTRA_NAMES = { crest: 'helmet crest', pads: 'shoulder pads', halo: 'halo', band: 'bandana' };
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
-const tierFor = (v) => { let t = TIERS[0]; for (const x of TIERS) if (v >= x.min) t = x; return t; };
 
 export class Wardrobe {
   constructor(game, cosmetics) {

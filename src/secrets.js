@@ -32,6 +32,19 @@ const N_ORBIT = 1440;
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 
+// The alien artifact over its cradle (cradle at height y, z: SAT-7's deck, the Asset Row's stand), added to parent: { artifact, aGlow }
+export function artifactCradle(parent, y, z = 0) {
+  const cradle = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.18, 8, 20), toon(0x2a2440));
+  cradle.rotation.x = Math.PI / 2;
+  cradle.position.set(0, y, z);
+  const artifact = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), glow(0x7dffd4));
+  artifact.position.set(0, y + 0.9, z);
+  const aGlow = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 8), new THREE.MeshBasicMaterial({ color: 0x7dffd4, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }));
+  aGlow.position.copy(artifact.position);
+  parent.add(cradle, artifact, aGlow);
+  return { artifact, aGlow };
+}
+
 // SAT-7 "Lantern" as a pure model (buildSatellite flies it; the Asset Row shows it at rest): { root, inner, nameSign,
 // artifact, aGlow, lights, halo }. `inner` carries SAT_SCALE; withArtifact: the artifact still sits on the deck.
 export function makeSat7(withArtifact = true) {
@@ -118,18 +131,8 @@ export function makeSat7(withArtifact = true) {
   const halo = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
   inner.add(halo);
   // the artifact cradle on deck
-  const cradle = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.18, 8, 20), toon(0x2a2440));
-  cradle.rotation.x = Math.PI / 2;
-  cradle.position.set(0, 2.0, 2);
-  inner.add(cradle);
-  const artifact = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), glow(0x7dffd4));
-  artifact.position.set(0, 2.9, 2);
-  artifact.visible = withArtifact;
-  inner.add(artifact);
-  const aGlow = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 8), new THREE.MeshBasicMaterial({ color: 0x7dffd4, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }));
-  aGlow.position.copy(artifact.position);
-  aGlow.visible = artifact.visible;
-  inner.add(aGlow);
+  const { artifact, aGlow } = artifactCradle(inner, 2.0, 2);
+  artifact.visible = aGlow.visible = withArtifact;
   return { root, inner, nameSign, artifact, aGlow, lights, halo };
 }
 
