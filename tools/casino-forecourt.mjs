@@ -76,7 +76,6 @@ const proposed = () => {
 };
 
 // ---- checks (the proposal only) ----
-const shapeBox = (s) => (s.k === 'r' ? s : { x0: s.x - s.r, x1: s.x + s.r, z0: s.z - s.r, z1: s.z + s.r });
 const gap = (a, b) => {                                    // distance between shapes (negative: overlap)
   if (a.k === 'c' && b.k === 'c') return Math.hypot(a.x - b.x, a.z - b.z) - a.r - b.r;
   if (a.k === 'c' || b.k === 'c') {

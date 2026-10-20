@@ -1,13 +1,12 @@
 import * as THREE from 'three';
 import { ClawSim, CLAW_COST, CLAW_TIME, DROP } from './clawSim.js';
 import { ClawView } from './clawView.js';
-import { canvasTex, FONT, clawPt } from './casinoWorld.js';
+import { canvasTex, FONT, fmt, clawPt } from './casinoWorld.js';
 
 // The Zero-G claw as a seated game (casinoGames.js hands over while `mode` is 'claw'): ties the sim (clawSim.js) and its
 // view (clawView.js) to the camera, keys, action bar and room effects. ₵200 a round: shuffle, then 45 s to bank what you can.
 
 const MOOD_TEXT = ['CALM TANK', 'THICK AIR: THINGS STAY PUT', 'STORM: EVERYTHING KEEPS MOVING', 'SURGE: GRAVITY WILL HICCUP'];
-const fmt = (n) => Math.floor(n).toLocaleString('en-US');
 const _v = new THREE.Vector3();
 const CLAW_EARSHOT = 40; // m from the machine within which its sounds, pop-ups and shakes play when nobody is seated
 // machine frame (build_claw.py): front glass z, and the tank region the camera frames (half width, mid height, floor to roof)

@@ -4,12 +4,9 @@
 // no thrust. Only cheap cosmetic updates run (flag cloth, gatling, phase coils, land-train beacon). Built with the pure
 // model factories, never through Garage, Traffic or Enemies.
 import * as THREE from 'three';
-import {
-  makeLightBike, makeSkimmer, makeRover, makeHoverCar, makeKadeTruck, makeTurret, makeLandTrain, makeShuttle, makeFreighter, makeRocket,
-  LAND_TRAIN_FACTIONS,
-} from '../models.js';
+import { makeLightBike, makeSkimmer, makeRover, makeHoverCar, makeKadeTruck, makeTurret, makeLandTrain, makeShuttle, makeFreighter, makeRocket } from '../models.js';
 import { buildVehicleModel, VEHICLES } from '../vehicles.js';
-import { buildBuggyRig } from '../traffic.js';
+import { buildBuggyRig, linkBar } from '../traffic.js';
 import { BOSS_MODELS, FOES } from '../storyAssets.js';
 import { makeMothership } from '../spindle.js';
 import { lineUp, together } from './common.js';
@@ -83,17 +80,6 @@ function troopRover(faction) {
 
 // Land-trains: tractor (nose +z) and cars behind it along z at traffic.js spacings, drawbars aimed at each coupling pin,
 // then the whole train turned to run along the row (+x).
-const _z = new THREE.Vector3(0, 0, 1), _b = new THREE.Vector3();
-function linkBar(t, ahead, pinZ) {
-  ahead.updateMatrixWorld();
-  t.root.updateMatrixWorld();
-  _b.set(0, 1.4, pinZ).applyMatrix4(ahead.matrixWorld);
-  t.root.worldToLocal(_b).sub(t.bar.position);
-  const len = Math.max(0.3, _b.length());
-  t.bar.quaternion.setFromUnitVectors(_z, _b.divideScalar(len));
-  t.rod.scale.z = len;
-  t.eye.position.z = len;
-}
 function landTrain(spec) {
   const lt = makeLandTrain(spec);
   const train = new THREE.Group();

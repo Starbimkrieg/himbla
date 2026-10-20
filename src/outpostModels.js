@@ -652,7 +652,7 @@ function depot(k, wreck) {
 // =====================================================================================
 const FARM_DOMES = [[-11, -8, 10], [10, -10, 7]];
 function farm(k, wreck) {
-  const c = k.c, rr = k.rr;
+  const c = k.c;
   k.apron(28, 0x948a7a, 0x6a604f);
   k.box(4, 0.05, 22, T(0xb0a898), 0, F - 0.02, 16, { outline: 0 });
   for (const [x, z, R] of FARM_DOMES) {
@@ -881,7 +881,7 @@ function mast(k) {
 // benches, a hover-cart, strings of lights.
 // =====================================================================================
 function kiosk(k) {
-  const c = k.c, rr = k.rr;
+  const c = k.c;
   k.apron(26, 0xb0a290, 0x7a6c5c);
   k.ring(9, 0.5, T(0x8a7c6c), 0, F, 0);
   k.ring(18, 0.5, T(0x8a7c6c), 0, F, 0);

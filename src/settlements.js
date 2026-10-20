@@ -8,13 +8,13 @@ import { patchBermMaterial } from './moonSkins.js';
 import { market, tickerText } from './market.js';
 import { casinoNode, casinoSlot, lotNode, lotSlot } from './models.js';
 import { waterMesh } from './fountainFx.js';
-import { craneModel, craneSlot, CRANE_H, CRANE_LOAD_DROP, CRANE_TROLLEY_MIN, CRANE_TROLLEY_SPAN, gantryModel, cargoSlot, GANTRY_TROLLEY_SPAN, CARGO_BOX, garageModel, garageSlot, dishModel, dishSlot, DISH_KINDS } from './models.js';
+import { craneModel, craneSlot, CRANE_H, CRANE_LOAD_DROP, CRANE_TROLLEY_MIN, CRANE_TROLLEY_SPAN, gantryModel, cargoSlot, CARGO_BOX, garageModel, garageSlot, dishModel, dishSlot, DISH_KINDS } from './models.js';
 
 // Settlements, HQs and landmarks built with the outpost Kit (outpostModels.js): static parts bake into one merged mesh per
 // material plus one ink hull, so a detailed place costs a handful of draw calls. Moving parts (cranes, wheels, tickers, rides)
 // are separate objects tagged userData.tick / spin / blink / flag, animated by World.update while the place is active.
 // Colliders are in the settlement's local frame.
-const { STEEL, DARK, LIGHT, CREAM, CONC, YEL, RUST, TYRE, CHAR } = PALETTE;
+const { STEEL, DARK, LIGHT, CONC, YEL, RUST, TYRE } = PALETTE;
 const WHITE = 0xfff4e0, PANEL = 0x5b5870, ROOF = 0x3a3550, WARM = 0xfff6a8;
 const TAU = Math.PI * 2;
 const hex = (c) => new THREE.Color(c).getHex();
@@ -529,7 +529,7 @@ export function towerCrane(k, x, z, h, jib, color, { speed = 0.12, phase = 0 } =
 
 // Gantry crane (tools/blender/build_gantry.py) over a container yard: one moving object running along x (`travel` m either side
 // of `x`), trolley at `lane` along z. It sets its load (land-train container on a spreader, `faction` livery) down and lifts it at
-// each end of the run: one cycle per 1 / `speed` s, starting at `phase`. Settlement frame (k at the origin); legs at z +- GANTRY_LEG
+// each end of the run: one cycle per 1 / `speed` s, starting at `phase`. Settlement frame (k at the origin); legs at z +- 15
 // of `z`. No colliders: it never stands still.
 export function gantryCrane(k, x, z, color, { speed = 1 / 70, phase = 0, travel = 24, lane = 10, faction = 'meridian' } = {}) {
   const C = gantryModel();
@@ -994,7 +994,7 @@ export function fountain(k, x, z, { top = 'chip', accent = 0xff2e88 } = {}) {
 // =============================================================================================
 export function buildMeridian(world, loc) {
   settle(world, loc, 4409, (k, ctx) => {
-    const blue = 0x2ec4ff, cols = [0x2ec4ff, 0xff9f1c, 0x7dff6a, 0xff3b5c, 0xffd23f, 0xc77dff];
+    const blue = 0x2ec4ff;
     // Layout: tower 24 m south of the origin (the name and HQ sprites at y 50 and 62 over the origin would sit inside its cone),
     // portico facing +z onto the plaza at (0, 34); avenue north to the gate arch at (0, 140); dome west, hall east; chairwoman at
     // the foot of the steps; yard, cranes and garage south of the tower
@@ -1173,7 +1173,7 @@ function inkShell() {
 // =============================================================================================
 export function dressLab(world, loc, { W, D, H }) {
   settle(world, loc, 6607, (k) => {
-    const lime = 0x7dff3a, pink = 0xff2e88, wall = 0xe8e4f4;
+    const lime = 0x7dff3a, pink = 0xff2e88;
     // pilasters, plinth, fake windows
     for (const [x0, x1, z, rot] of [[-W, W, -D - 1, Math.PI], [-W, -4, D + 1, 0], [4, W, D + 1, 0]]) {
       for (let x = x0; x <= x1 + 0.01; x += 6) k.box(1.2, H + 0.4, 0.6, T(0xc9c4d8), x, 0, z + (rot ? -0.3 : 0.3), { outline: 0.05 });
@@ -2336,7 +2336,7 @@ export function jobTerminal(world, loc, x, z, yaw = 0, color = 0xffd23f) {
 // hover-cars in a wing each side.
 // =============================================================================================
 export function dressCasinoLot(world, loc, makeCar) {
-  const PINK = 0xff2e88, CYAN = 0x2ee6ff, GOLD = 0xffd23f, PURP = 0x5a1a8f, ASPH = 0x34304a, CRM = 0xd8d4e8;
+  const PINK = 0xff2e88, CYAN = 0x2ee6ff, GOLD = 0xffd23f, ASPH = 0x34304a, CRM = 0xd8d4e8;
   const keep = (x, z, r) => (loc.keep ||= []).push({ x, z, r });
   const cars = [];
   const FZ = 98, PR = 17; // plaza centre and radius
@@ -2344,7 +2344,7 @@ export function dressCasinoLot(world, loc, makeCar) {
   // (AV either side of the middle) down which the carpet runs, with a parking wing each side behind the slot carousels: two rows of
   // BAYW x BAYD bays either side of an aisle, walled by giant cards (NMOD modules of MOD m between posts), open at the aisle's mouth.
   const AV = 8.6, W0 = 38.4, W1 = 58.4, MID = (W0 + W1) / 2, MOD = 2.4, NMOD = 14, XA = AV + 0.36, XB = XA + 0.72 + NMOD * MOD;
-  const BX0 = 11, BAYW = 5.2, NB = 6, BAYD = 6.2, AISLE = 5.6;
+  const BX0 = 11, BAYW = 5.2, NB = 6, BAYD = 6.2;
   const bayZ = [W0 + 0.6 + 0.4 + BAYD / 2, W1 - 0.6 - 0.4 - BAYD / 2];   // row centres (z 42.5 and 54.3)
   settle(world, loc, 7707, (k) => {
     // ---- avenue: asphalt from the hall floor through the door wall to the court's far edge, gold edge lines meeting the wall's

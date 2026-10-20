@@ -349,7 +349,6 @@ export class Territory {
 
   // ---------- outpost structures (built only near the player) ----------
   spawn(o) {
-    const g = this.game;
     if (this.wrecked(o)) { this.spawnRubble(o); return; }
     const c = hex(o.faction);
     if (SMALL_KINDS.has(o.kind)) { this.place(o, outpostTemplate(o.kind, c, o.seed % 2, false)); return; }

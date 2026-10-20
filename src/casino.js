@@ -1,6 +1,8 @@
 import { OUTFITS, SKATES } from './cosmeticsData.js';
 import { pixelFont } from './fonts.js';
 import { CasinoGames } from './casinoGames.js';
+import { fmt } from './casinoWorld.js';
+import { pick } from './rng.js';
 import { glyphHtml } from './glyphs.js';
 import { px, pxCanvas } from './pixelIcons.js';
 
@@ -120,8 +122,6 @@ const LINES = {
   shop: ['Lookin\' sharp! Very… expensive.', 'Drip acquired. The Moon salutes you.'],
 };
 
-const pick = (a) => a[Math.floor(Math.random() * a.length)];
-const fmt = (n) => Math.floor(n).toLocaleString('en-US');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export class Casino {
@@ -381,7 +381,7 @@ export class Casino {
   // header, footer, credits ticker
   refresh(instant = false) {
     if (!this.root) return;
-    const g = this.game, s = this.st, t = this.tier, ti = this.tierIdx();
+    const s = this.st, t = this.tier, ti = this.tierIdx();
     this.clampBet();
     const next = VIP[ti + 1];
     const prog = next ? (s.wagered - t.min) / (next.min - t.min) : 1;

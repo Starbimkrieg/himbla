@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces } from './toon.js';
 import { makeDish, makeDishHead, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar } from './models.js';
 import { mulberry32 } from './rng.js';
-import { FACTIONS } from './locations.js';
+import { FACTIONS, defenseSpots } from './locations.js';
 import { bendPoint, bendQuat, unbendPoint } from './curve.js';
 import { SUN, frameQuat, arcDist, dirFromAngles, tangent } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
@@ -957,13 +957,7 @@ export class World {
         this.lamp(loc, Math.cos(a) * loc.r * 0.8, Math.sin(a) * loc.r * 0.8, 0xfff1b0, 9, 20);
       }
     }
-    if (loc.defense && loc.type !== 'hub') {
-      const d = loc.defense;
-      const spots = [];
-      for (let i = 0; i < d.turrets; i++) spots.push([(i / d.turrets) * Math.PI * 2 + 0.2, d.ring]);
-      for (let i = 0; i < (d.inner || 0); i++) spots.push([(i / d.inner) * Math.PI * 2 + 0.8, d.ring * 0.55]);
-      this.defensePylons(loc, spots);
-    }
+    if (loc.defense && loc.type !== 'hub') this.defensePylons(loc, defenseSpots(loc)); // (no restricted site has loc.defense)
     if (loc.hq && loc.type !== 'ruin') {
       const hq = textSprite(loc.conqueredFrom ? `★ TAKEN BY ${FACTIONS[loc.faction].name.toUpperCase()} ★` : loc.lawless ? '★ HELD BY THE RUSTMOON CLANS ★' : `★ ${FACTIONS[loc.faction].name.toUpperCase()} HQ ★`, { color: '#ffffff', size: 60, scale: 0.8 });
       hq.position.set(0, loc.type === 'hub' ? 110 : 62, 0);
@@ -2093,5 +2087,3 @@ export class World {
     }
   }
 }
-
-const time = () => performance.now() / 1000;

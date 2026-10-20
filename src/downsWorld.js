@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { settle } from './settlements.js';
 import { ferrisWheel, carousel, queue } from './downsFair.js';
 import { T, G } from './outpostModels.js';
-import { PAL, MINT2, MONEY2, SADDLE2, BLACK2, CONC, CONC2, FG, BG, tw, bake, fountain, sheet, kitSink, arcadeShell, ROOF } from './downsKit.js';
+import { PAL, MINT2, MONEY2, SADDLE2, CONC, CONC2, FG, BG, tw, bake, fountain, sheet, kitSink, arcadeShell, ROOF } from './downsKit.js';
 import {
   SEGS, RAIL_IN, RAIL_OUT, DIRT, FINISH_U, FINISH_X, STAND, FAR, CLUB, ENTRIES, ARCADE, WEDGE, STALLS, STALL_ORDER, CROSSINGS, CROSS_GAP, FORECOURT, DRUM, PODIUMS, RING, PAVILION, LAWN, STABLES, ANNEX, oval, lapLen,
 } from './downsPlan.js';

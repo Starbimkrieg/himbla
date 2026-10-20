@@ -9,12 +9,12 @@ export function mulberry32(a) {
 }
 
 export const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
+export const clamp01 = (x) => clamp(x, 0, 1);
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const smoothstep = (e0, e1, x) => {
   const t = clamp((x - e0) / (e1 - e0), 0, 1);
   return t * t * (3 - 2 * t);
 };
-export const rand = Math.random;
 export const randRange = (a, b) => a + Math.random() * (b - a);
 export const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 

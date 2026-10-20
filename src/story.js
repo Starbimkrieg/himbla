@@ -2,11 +2,11 @@ import * as THREE from 'three';
 import { FACTIONS } from './locations.js';
 import { makeRunner, makeCrate } from './models.js';
 import { toon, glow, ink, textSprite, nameTag } from './toon.js';
-import { arcDist, tangent, greatCircle, darkness, collectNodes } from './geo.js';
+import { arcDist, tangent, randomTangent, greatCircle, darkness, collectNodes } from './geo.js';
 import { pick } from './rng.js';
 import { VEHICLES } from './vehicles.js';
 import { spawnKadeTruck, updateKadeTruck, kadeDefeated, updateMortarDrop } from './kade.js';
-import { FOES, makeProp, EXTRA_MODS, PLOTS, OUTPOST_GUN } from './storyAssets.js';
+import { makeProp, EXTRA_MODS, PLOTS, OUTPOST_GUN } from './storyAssets.js';
 import { saveWorldState } from './worldstate.js';
 import { terminalPage, wireTerminal, stepSel, keepScroll } from './terminalUI.js';
 import { glyphHtml } from './glyphs.js';
@@ -599,7 +599,7 @@ export class Story {
       let best = null, bestScore = Infinity, spare = null, spareScore = Infinity;
       for (let tries = 0, ok = 0; tries < 90 && ok < 12; tries++) {
         const dist = sel.min + Math.random() * (sel.max - sel.min);
-        const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), l.dir).normalize();
+        const t = randomTangent(l.dir);
         const d = greatCircle(l.dir, t, dist);
         if (g.locations.some((x) => arcDist(d, x.dir) < (x.zoneR || x.r) + clear)) continue;
         if (T.outposts.some((o) => arcDist(d, o.dir) < 120)) continue;
@@ -1260,7 +1260,7 @@ export class Story {
       // in the open round the site, never inside a building
       let p = null;
       for (let k = 0; k < 24 && !p; k++) {
-        const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+        const t = randomTangent(up);
         const c = g.planet.ground(greatCircle(up, t, 25 + Math.random() * 50 + k * 3), new THREE.Vector3(), 2);
         if (!g.colliders.query(c, 8, []).some((col) => g.colliders.contact(col, c, 5, new THREE.Vector3()) > 0)) p = c;
       }
@@ -1348,7 +1348,7 @@ export class Story {
             // escort
             for (let i = 0; i < (s.escort || 0); i++) {
               const up = s.pos.clone().normalize();
-              const side = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+              const side = randomTangent(up);
               const u = g.enemies.spawnPirate('rover', s.pos.clone().addScaledVector(side, 25 + i * 10), null, { rogue: true, foe: s.foe });
               u.storyUnit = true;
               s.units.push(u);
@@ -1506,7 +1506,7 @@ export class Story {
           if (s.zap <= 0) {
             s.zap = Math.max(0.7, 2 - A.t / 40);
             const up = P.up;
-            const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+            const t = randomTangent(up);
             const p = g.planet.ground(greatCircle(P.pos.clone().normalize(), t, Math.random() < 0.3 ? 0 : 4 + Math.random() * 22), new THREE.Vector3(), 0.3);
             g.fx.warningRing(p, 6, 1.1);
             g.schedule(1.1, () => { if (this.active) { g.explode(p.clone().addScaledVector(p.clone().normalize(), 1), 6, 20, 'anomaly', 1.6); g.fx.pop('ZZAP!', p.clone().addScaledVector(p.clone().normalize(), 3), { color: '#c77dff', size: 46 }); } });

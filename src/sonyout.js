@@ -15,7 +15,7 @@
 //   21..31 left trigger effect   38 flags2 (0x02 lightbar setup, 0x04 rumble v2)   41 lightbar setup
 //   43 player LEDs (5 bits)   44..46 lightbar red, green, blue.
 
-const SONY_DS5 = 'ds5', SONY_DS4 = 'ds4';
+const SONY_DS5 = 'ds5';
 
 // ---- CRC-32 (Bluetooth reports) ----
 const CRC = (() => {

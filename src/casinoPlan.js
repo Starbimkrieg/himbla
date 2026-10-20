@@ -47,7 +47,6 @@ export const floorShapes = () => {
     { k: 'r', x0: WING.x0, x1: WING.x1, z0: WING.z0, z1: WING.z1 },
   ];
 };
-const inShape = (s, x, z) => (s.k === 'r' ? x >= s.x0 && x <= s.x1 && z >= s.z0 && z <= s.z1 : Math.hypot(x - s.x, z - s.z) <= s.r);
 // is (x, z) in the hall? m > 0: at least m in from the walls; m < 0: or within |m| outside them
 export function inHall(x, z, m = 0) {
   const P = hallPolygon();
@@ -123,4 +122,3 @@ export const wallBoxes = (E = wallEdges()) => E.map((e) => {
 });
 // is (x, z) in a box? (as the colliders read it: yaw about y turns local x to (cos, -sin))
 export const inBox = (b, x, z, grow = 0) => { const dx = x - b.x, dz = z - b.z, c = Math.cos(b.yaw), sn = Math.sin(b.yaw); const lx = dx * c - dz * sn, lz = dx * sn + dz * c; return Math.abs(lx) <= b.hx + grow && Math.abs(lz) <= b.hz + grow; };
-export const floorArea = () => { let area = 0; const sh = floorShapes(); for (let x = -70; x < 70; x += 0.25) for (let z = -60; z < 30; z += 0.25) if (sh.some((s) => inShape(s, x + 0.125, z + 0.125))) area += 0.0625; return area; };

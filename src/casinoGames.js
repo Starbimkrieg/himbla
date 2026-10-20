@@ -1,18 +1,17 @@
 import * as THREE from 'three';
 import { toon, glow, ink } from './toon.js';
-import { canvasTex, FONT, fitText, BJ, bjPt, BJ_RACK, DUCK, PLK, CLASSIC, PRIZE, CLAW } from './casinoWorld.js';
+import { canvasTex, FONT, fmt, fitText, BJ, bjPt, BJ_RACK, DUCK, PLK, CLASSIC, PRIZE, CLAW } from './casinoWorld.js';
 import { ClawGame } from './clawGame.js';
 import { CLAW_COST } from './clawSim.js';
 import { makeChipStack } from './models.js';
 import { PlinkoSim, MULTS, AIM_RANGE, DROP_Y, BALL_R, PEGS, slotCentre } from './plinko.js';
 import { glyphHtml } from './glyphs.js';
+import { pick } from './rng.js';
 
 // The walk-in Lucky Crater games: BLACKJACK, the DUCK DERBY and a giant physics PLINKO board.
 // Driven by casinoWorld's onUpdate, so it only ticks while the casino is active. While "seated"
 // the game is in the 'casino' modal state and this class flies the camera.
 
-const fmt = (n) => Math.floor(n).toLocaleString('en-US');
-const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
 
 // ---------- cards ----------

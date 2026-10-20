@@ -62,6 +62,10 @@ export function arcDist(a, b) {
 export function tangent(v, up, out = new THREE.Vector3()) {
   return out.copy(v).addScaledVector(up, -v.dot(up));
 }
+// A random unit direction along the ground at up.
+export function randomTangent(up, out = new THREE.Vector3()) {
+  return tangent(out.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up, out).normalize();
+}
 
 // Quaternion whose local +Y is `up` and local +Z points along `fwd` (projected).
 const _m = new THREE.Matrix4(), _x = new THREE.Vector3(), _z = new THREE.Vector3();

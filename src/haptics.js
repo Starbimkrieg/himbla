@@ -17,6 +17,7 @@
 // TRIGGERS (DualSense, in play, pad in use): RT is the weapon (a click that gives way; stiff while recharging), LT the
 // thrusters (light spring, buzz while burning, a wall when locked out) or the Rail Lance's scope.
 import { WEAPONS } from './weapons.js';
+import { clamp01 } from './rng.js';
 import { feedback, weapon, vibration, TRIGGER_OFF } from './sonyout.js';
 
 const SEND_MS = 80;   // re-send a steady effect this often (each lasts LONG_MS: no gap)
@@ -46,7 +47,6 @@ const PRESETS = {
 };
 const ECHO = { cash: 0.09 }; // presets replayed this many seconds later
 
-const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
 // trigger effects (built once, not per frame)
 const FIRE = { pulse: weapon(4, 6, 3), scatter: weapon(2, 7, 7), rail: weapon(3, 8, 8), mortar: weapon(3, 6, 5), cannon: weapon(2, 6, 7) };

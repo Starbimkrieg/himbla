@@ -221,7 +221,7 @@ export function buildRockArrays() {
     const ns = Math.ceil((S1 - S0) / ds) + 1, nw = MESH_NW;
     const pos = new Float32Array(ns * nw * 3), col = new Float32Array(ns * nw * 3), hs = new Float32Array(ns * nw);
     const c0 = new THREE.Color(0xb0a8c4), c1 = new THREE.Color(0x8a82a2), c2 = new THREE.Color(0x3e3656), cc = new THREE.Color();
-    const cMare = new THREE.Color(0x5e5878), cRay = new THREE.Color(0xe6e2f4), cFloor = new THREE.Color(0x6d6688), cWall = new THREE.Color(0x4a4366), cRim = new THREE.Color(0xd8d2ec);
+    const cMare = new THREE.Color(0x5e5878), cFloor = new THREE.Color(0x6d6688), cWall = new THREE.Color(0x4a4366), cRim = new THREE.Color(0xd8d2ec);
     const rr = mulberry32(5);
     const pt = new THREE.Vector3();
     for (let i = 0; i < ns; i++) for (let j = 0; j < nw; j++) {

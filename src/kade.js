@@ -13,7 +13,7 @@ import { shatterEcho } from './monolith.js';
 // Wreck it and Kade bails out on foot (caught, in SPACECOM's showdown); the first time he drops his Rustmoon Junk Mortar.
 
 const ORBIT = [45, 80];
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _m = new THREE.Matrix4();
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 
 export function spawnKadeTruck(story, final) {
   const g = story.game, P = g.player;

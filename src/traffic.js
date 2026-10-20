@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { toon, ink, glow, textSprite, setMask } from './toon.js';
+import { toon, glow, textSprite, setMask } from './toon.js';
 const VEH_DETAIL = 220; // m: past this a vehicle's small parts stop drawing
-import { makeFigure, makeShuttle, makeRover, makeHoverCar, makeFreighter, makeLandTrain, LAND_TRAIN_FACTIONS, GARAGE_HALL, GARAGE_BAYS, GARAGE_FLOOR } from './models.js';
+import { part, makeFigure, makeShuttle, makeRover, makeHoverCar, makeFreighter, makeLandTrain, LAND_TRAIN_FACTIONS, GARAGE_HALL, GARAGE_BAYS, GARAGE_FLOOR } from './models.js';
 import { mulberry32 } from './rng.js';
+import { defenseSpots } from './locations.js';
 import { SUN, frameQuat, arcDist } from './geo.js';
 import { planRoad, roadQuality } from './roadplan.js';
 import { padPlan, padToFrame } from './landingPad.js';
@@ -68,14 +69,6 @@ const UNSUITABLE_STEEP = 0.2, UNSUITABLE_OFF = 0.35; // roadCentreline
 const T_ARM = 30; // m from a T's centre where lanes stop and the turning connectors take over
 const STOP_IN = 50; // m: minimum stop distance along its ring stretch (room for a land-train)
 const pairKey = (a, b) => (a.id < b.id ? `${a.id}|${b.id}` : `${b.id}|${a.id}`); // name of the road between two settlements
-
-function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
-  const m = new THREE.Mesh(geo, mat);
-  m.position.set(x, y, z);
-  m.castShadow = true;
-  if (outline) ink(m, outline);
-  return m;
-}
 
 // ---------------- models ----------------
 
@@ -225,6 +218,18 @@ export function buildBuggyRig(k) {
   return r;
 }
 
+// point a trailer's drawbar from its yoke at the coupling pin of the unit ahead (local z = pinZ); the Asset Row's trains too
+export function linkBar(t, ahead, pinZ) {
+  ahead.updateMatrixWorld();
+  t.root.updateMatrixWorld();
+  _b.set(0, 1.4, pinZ).applyMatrix4(ahead.matrixWorld);
+  t.root.worldToLocal(_b).sub(t.bar.position);
+  const len = Math.max(0.3, _b.length());
+  t.bar.quaternion.setFromUnitVectors(_z, _b.divideScalar(len));
+  t.rod.scale.z = len;
+  t.eye.position.z = len;
+}
+
 export class Traffic {
   constructor(world) {
     this.w = world;
@@ -334,22 +339,12 @@ export class Traffic {
   // later), and claimed stops.
   keepouts(loc, withStops = true) {
     const k = [...(loc.pads || []), ...(loc.keep || []), ...(withStops ? loc.stopKeep : [])];
-    const spots = [];
     // use world.js's real gun mounts (walls, bastions, pylons) when present
     if (loc.turretMounts && loc.turretMounts.length) {
       for (const m of loc.turretMounts) k.push({ x: m.x, z: m.z, r: 6 });
       return k;
     }
-    if (loc.restricted) {
-      const small = !!loc.small, inner = small ? 3 : 4, outer = small ? 2 : 4;
-      for (let i = 0; i < inner; i++) spots.push([(i / inner) * Math.PI * 2 + 0.4, small ? 68 : 112]);
-      for (let i = 0; i < outer; i++) spots.push([(i / outer) * Math.PI * 2 + 1.2, small ? 180 : 290]);
-    } else if (loc.defense) {
-      const d = loc.defense;
-      for (let i = 0; i < d.turrets; i++) spots.push([(i / d.turrets) * Math.PI * 2 + 0.2, d.ring]);
-      for (let i = 0; i < (d.inner || 0); i++) spots.push([(i / d.inner) * Math.PI * 2 + 0.8, d.ring * 0.55]);
-    }
-    for (const [a, r] of spots) k.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, r: 4 });
+    for (const [a, r] of defenseSpots(loc)) k.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, r: 4 });
     return k;
   }
 
@@ -2718,23 +2713,11 @@ export class Traffic {
         if (p.vel.lengthSq() > 3600 || v.state === 'wreck') p.vel.set(0, 0, 0);
         for (const w of t.wheels) w.rotation.x += (v.cur * dt) / 1.0;
         this.syncDeck(p, camPos);
-        this.linkBar(t, i ? v.trailers[i - 1].root : v.root, i ? -4.25 : -4.55);
+        linkBar(t, i ? v.trailers[i - 1].root : v.root, i ? -4.25 : -4.55);
       });
     }
     if (v.deck || v.decks) this.syncDeck(v, camPos);
     if (v.maxHp) this.smoke(v, dt);
-  }
-
-  // point a trailer's drawbar from its yoke at the coupling pin of the unit ahead (local z = pinZ)
-  linkBar(t, ahead, pinZ) {
-    ahead.updateMatrixWorld();
-    t.root.updateMatrixWorld();
-    _b.set(0, 1.4, pinZ).applyMatrix4(ahead.matrixWorld);
-    t.root.worldToLocal(_b).sub(t.bar.position);
-    const len = Math.max(0.3, _b.length());
-    t.bar.quaternion.setFromUnitVectors(_z, _b.divideScalar(len));
-    t.rod.scale.z = len;
-    t.eye.position.z = len;
   }
 
   // position at arc length s along the route: back through pieces just left (trailers), or into the next (front axle)

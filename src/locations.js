@@ -151,6 +151,16 @@ export const LOCATIONS = [
   },
 ];
 
+// Turret spots on a location's defence rings, [angle, radius from the centre] (enemies.js arms them, world.js builds their
+// pylons, traffic.js keeps roads off them): a restricted site's fixed inner and outer rings, else loc.defense's.
+export function defenseSpots(loc) {
+  const spots = [];
+  const ring = (n, a0, r) => { for (let i = 0; i < n; i++) spots.push([(i / n) * Math.PI * 2 + a0, r]); };
+  if (loc.restricted) { const small = !!loc.small; ring(small ? 3 : 4, 0.4, small ? 68 : 112); ring(small ? 2 : 4, 1.2, small ? 180 : 290); }
+  else if (loc.defense) { const d = loc.defense; ring(d.turrets, 0.2, d.ring); ring(d.inner || 0, 0.8, d.ring * 0.55); }
+  return spots;
+}
+
 export const CARGO = [
   { name: 'Medical Supplies', fragile: 0.5, hot: 1, color: 0xff3b5c },
   { name: 'Family Care Package', fragile: 0.3, hot: 0, color: 0xff9f1c },

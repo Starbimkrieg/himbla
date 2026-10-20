@@ -28,8 +28,8 @@ export function skinUniforms() { return SKIN_U; }
 // set by ?moonskin=N: the Settings toggle leaves the look alone until first used
 export const SKIN_FROM_URL = q !== null;
 
-// the terrain shader's value noise (planet.js), for the rock shaders
-const SK_NOISE = /* glsl */`
+// value noise: the terrain shader's (planet.js) and the rock shaders'
+export const SK_NOISE = /* glsl */`
 float rimHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float rimNoise(vec3 x) {
   vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);

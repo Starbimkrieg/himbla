@@ -31,15 +31,6 @@ export function bendQuat(R, x, z, out) {
   return out.setFromAxisAngle(_ax.set(z / d, 0, -x / d), d / R);
 }
 
-// Bends a flat-frame matrix in place (translation by bendPoint, rotation by bendQuat; scale kept).
-const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _b = new THREE.Quaternion();
-export function bendMatrix(R, m) {
-  m.decompose(_p, _q, _s);
-  bendQuat(R, _p.x, _p.z, _b);
-  bendPoint(R, _p.x, _p.y, _p.z, _p);
-  return m.compose(_p, _q.premultiply(_b), _s);
-}
-
 // Cuts every triangle edge longer horizontally than `maxLen` until none is (conforming: shared edges cut alike, no cracks).
 // Indexed, position + normal only (outpostModels.js prep). Returns the same geometry.
 export function refine(geo, maxLen) {

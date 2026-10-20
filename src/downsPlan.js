@@ -11,9 +11,6 @@ export const DIRT = [44.6, 64.8];                         // dirt band inner/out
 export const FINISH_U = 135;                              // finish line: x = +45 on the home straight, before the grandstand
 export const FINISH_X = 45;
 
-// plateau radius (locations.js `r`); the farthest solid is 257 m out
-export const LOC_R = 280;
-
 // position and heading at centre-line distance u (wrapped), offset r from the centre line
 export function oval(u, r, out = {}) {
   u = ((u % LAP) + LAP) % LAP;
@@ -38,7 +35,6 @@ export const lapLen = (r) => 2 * STRAIGHT + 2 * Math.PI * r;
 export const STAND = { x0: -114, x1: 114, z0: 76, tiers: 14, rise: 1.1, depth: 2.6, aisles: [-76, -38, 0, 38, 76], wall: 0.8, roof: 8.5 };
 // far stand: across the course (z negative), smaller
 export const FAR = { x0: -95, x1: 95, z0: 76, tiers: 8, rise: 1.0, depth: 2.4, aisles: [-47.5, 0, 47.5], wall: 0.8 };
-export const standBack = (S) => S.z0 + S.tiers * S.depth;   // back wall's front face
 
 // ---- clubhouse and tote hall behind the main stand's centre; front (forecourt side) at z = 142 ----
 export const CLUB = { x0: -30, x1: 30, z0: 115, z1: 142 };

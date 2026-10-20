@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Kit, T, G, outpostTemplate, container, crate, tank, junkHeap, sandbags, lightString } from '../outpostModels.js';
+import { Kit, T, outpostTemplate, container, crate, tank, junkHeap, sandbags, lightString } from '../outpostModels.js';
 import { foundedTemplate } from '../storyAssets.js';
 import { rubbleModel } from '../territory.js';
 import { FACTIONS } from '../locations.js';

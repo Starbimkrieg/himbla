@@ -32,6 +32,7 @@ export function canvasTex(w, h, draw) {
 
 // canvas text uses the game's pixel display face (Press Start 2P is wide: scale sizes ~0.6x)
 export const FONT = (px) => pixelFont(px * 0.6);
+export const fmt = (n) => Math.floor(n).toLocaleString('en-US'); // credits, as every casino screen shows them
 
 // shrink the font until the text fits
 export function fitText(x, text, maxW, px) {
@@ -387,8 +388,7 @@ export function buildCasino(w, loc) {
   // signs naming a button: redrawn with the pad's glyph when a controller is in use
   const padSigns = [];
   const padSign = (mesh, text, opts) => padSigns.push({ mesh, text, opts, key: 'kb', cache: { kb: mesh.material.map } });
-  const { H, DOOR, DOOR_H, FRONT, C: [HCX, CZ], R: CR } = HALL;
-  const TAU = Math.PI * 2;
+  const { H, DOOR, DOOR_H, FRONT, C: [HCX, CZ] } = HALL;
   const put = (o, x, z, y = 0, yaw = 0, dyn = false) => w.put(o, loc, x, z, y, yaw, dyn);
   const col = (spec) => w.col(loc, spec);
   // slot: frozen body (merged) plus the cabinet, frozen too unless a patron works it
@@ -400,7 +400,6 @@ export function buildCasino(w, loc) {
   // ---------- outline (casinoPlan.js): IN inner boundary, PO wall outer face, PE roof gold edge; E the straight runs ----------
   const IN = hallPolygon(), PO = offsetPolygon(IN, WALL), PE = offsetPolygon(IN, WALL + 0.9), PB = offsetPolygon(IN, WALL + 0.6);
   const E = wallEdges();
-  const along = (e, f, side = 0) => [e.p[0] + (e.q[0] - e.p[0]) * f + e.nx * side, e.p[1] + (e.q[1] - e.p[1]) * f + e.nz * side];   // point f along a run's inner face, `side` m out
 
   // ---------- hall: wall band with the door gap, lintel, roof, drum and dome over the crossing ----------
   const wallM = toon(0x2a1450);

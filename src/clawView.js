@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toon, glowShared, inkMat } from './toon.js';
+import { toon, inkMat } from './toon.js';
 import { clawKindParts, clawNode, makeClawHead } from './models.js';
 import { KINDS, TANK, CLAW_HOME } from './clawSim.js';
 

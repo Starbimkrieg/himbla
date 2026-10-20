@@ -256,7 +256,7 @@ function svg(L, key) {
 
 // ---------- main ----------
 let failed = 0;
-for (const [key, L] of [['a', layoutA], ['b', layoutB]]) {
+for (const L of [layoutA, layoutB]) {
   const r = check(L);
   console.log(`\n${L.name}: ${r.solids} solid footprints, ${r.stalls} stalls, farthest point r ${r.far.toFixed(0)} (limit ${RMAX})`);
   for (const [g, a, b] of r.tight) console.log(`  gap ${g.toFixed(1)} m  ${a} / ${b}`);

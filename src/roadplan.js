@@ -132,7 +132,7 @@ export function planRoad(P, d0, d1, blocks = [], avoid = []) {
   const bl = blocks.map((b) => ({ d: b.d, c: cosOf(b.r), r: b.r }));
   // a block holding an end shrinks to that end's distance less a margin, so the road can get out
   for (const b of bl) {
-    for (const [e, n] of [[d0, startN], [d1, endN]]) {
+    for (const e of [d0, d1]) {
       const dist = R * Math.acos(Math.min(1, e.x * b.d.x + e.y * b.d.y + e.z * b.d.z));
       if (dist < b.r) { b.r = Math.max(0, dist - 10); b.c = cosOf(b.r); }
     }

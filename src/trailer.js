@@ -12,7 +12,7 @@
 // Saves are untouched: localStorage and sessionStorage are swapped for in-memory stores before any module reads them.
 import * as THREE from 'three';
 import { tangent, frameQuat, dirFromAngles } from './geo.js';
-import { mulberry32 } from './rng.js';
+import { mulberry32, clamp01, lerp } from './rng.js';
 import { spliceGenes } from './chimera.js';
 import { clearEchoes } from './monolith.js';
 import { DEV_TOOLS } from './devtools.js';
@@ -86,12 +86,10 @@ if (TRAILER) {
 }
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
-const clamp01 = (x) => Math.max(0, Math.min(1, x));
-const ease = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); };
+const ease =(x) => { x = clamp01(x); return x * x * (3 - 2 * x); };
 const easeIn = (x) => { x = clamp01(x); return x * x * x; };
 const easeOut = (x) => { x = clamp01(x); return 1 - (1 - x) ** 3; };
-const lerp = (a, b, k) => a + (b - a) * k;
-const _a = V(), _b = V(), _c = V(), _q = new THREE.Quaternion();
+const _a = V(), _b = V(), _c = V();
 const SUN_DIR = dirFromAngles(0, 0);
 const _m4 = new THREE.Matrix4();
 

@@ -1,4 +1,4 @@
-import { mulberry32 } from './rng.js';
+import { mulberry32, clamp } from './rng.js';
 
 // Chimera racing stats and the Derby race model. No three.js, so races simulate headlessly
 // (odds are a Monte-Carlo of this exact model).
@@ -58,7 +58,6 @@ export const MOD_FX = {
 };
 const PERSON = LEGS.person;
 
-const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 
 // Deterministic from gene sheet + seed, so old saves always migrate to the same numbers.
 export function computeStats(genes) {

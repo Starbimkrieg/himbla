@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { Kit, T as TOON, G, D } from './outpostModels.js';
 import { toon } from './toon.js';
+import { clamp01, lerp } from './rng.js';
 import { makeFigure, makeRunner } from './models.js';
 import { LEADERS } from './story.js';
 import { FACTIONS } from './locations.js';
@@ -27,9 +28,7 @@ const DELEG = { // delegation staff looks (makeFigure); leaders are makeRunner w
 
 const pol = (r, a, y = 0) => new THREE.Vector3(Math.sin(a) * r, y, -Math.cos(a) * r); // radius r, angle a (from -z), height y
 const faceCentre = (a) => Math.atan2(-Math.sin(a), Math.cos(a)); // yaw facing the lectern from angle a
-const clamp01 = (k) => Math.min(1, Math.max(0, k));
 const ease = (k) => 0.5 - 0.5 * Math.cos(Math.PI * clamp01(k));
-const lerp = (a, b, u) => a + (b - a) * u;
 const lerp3 = (a, b, u) => new THREE.Vector3().lerpVectors(a, b, u);
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 

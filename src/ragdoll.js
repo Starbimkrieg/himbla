@@ -51,7 +51,6 @@ export class Ragdoll {
     // measure the skeleton from the rest pose
     this.zero();
     m.root.updateMatrixWorld(true);
-    const s = m.root.scale.x || 1;
     const loc = (o) => m.root.worldToLocal(o.getWorldPosition(new THREE.Vector3()));
     const J = [];
     J[PEL] = loc(m.torso);

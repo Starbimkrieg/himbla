@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { toon, inkMat } from './toon.js';
 import { frameQuat } from './geo.js';
-import { pick } from './rng.js';
+import { pick, randRange as rand } from './rng.js';
 import { spliceGenes, makeChimera, LIVING } from './chimera.js';
 import { ensureStats, statTotal, newRunner, stepRunner, raceOdds, CONDITIONS } from './chimerastats.js';
 import { chimeraCard, cardList } from './chimeracard.js';
 import { makeDownsPart, downsNode, downsSlot } from './models.js';
 import { buildDowns } from './downsWorld.js';
-import { LAP, LANES, RAIL_IN, RAIL_OUT, FINISH_U, STAND, FAR, CLUB, WINDOW, BOARD, DRUM, PODIUMS, ENTRIES, oval } from './downsPlan.js';
+import { LANES, RAIL_IN, RAIL_OUT, FINISH_U, STAND, FAR, CLUB, WINDOW, BOARD, DRUM, PODIUMS, ENTRIES, oval } from './downsPlan.js';
 import { pixelFont } from './fonts.js';
 import { bendPoint, bendQuat } from './curve.js';
 
@@ -43,7 +43,6 @@ const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _up = new THREE.Vector
 const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _Y = new THREE.Vector3(0, 1, 0);
 const _o = {}, _bq = new THREE.Quaternion();
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
-const rand = (a, b) => a + Math.random() * (b - a);
 // Canvas text fitted to `maxW`: at `size` px if it fits, else the largest whole size that does (not under `min`), else ellipsised.
 // The pixel face is wide (full-em glyphs), so long names would run into neighbours. Uses the context's fill, align and baseline
 // at (px, py); returns the size used.
@@ -240,14 +239,13 @@ export class Race {
     const HAT = [0x3b393a, 0xdfe8dd, 0x8b4044, 0x5b7a52, 0xcfb352, 0xf8fff8, 0xb07c57];
     const HAIR = [0x2a1d18, 0x5a3a22, 0x9a6a3a, 0xd8b56a, 0x8a8698, 0x1d1a29];
     const BAND = [0x8b4044, 0xcfb352, 0x7b9a6e, 0xf8fff8, 0x6a2e33];
-    const any = (a) => a[Math.floor(Math.random() * a.length)];
-    const other = (a, not) => { let v; do v = any(a); while (not.includes(v)); return v; };    // contrast: shirt vs jacket; favour vs shirt, jacket and hat
+    const other = (a, not) => { let v; do v = pick(a); while (not.includes(v)); return v; };    // contrast: shirt vs jacket; favour vs shirt, jacket and hat
     const pickw = (w) => { let r = Math.random() * w.reduce((s, e) => s + e[1], 0); for (const [n, k] of w) if ((r -= k) < 0) return n; return w[0][0]; };
     this.crowd = seats.map((s) => {
       const suit = Math.random() < 0.55;
       const rest = pickw([['dn_fan_lap', 70], ['dn_fan_prog', 18], ['dn_fan_bino', 12]]);
       const wave = rest !== 'dn_fan_bino' && Math.random() < 0.6;                                  // binocular fans keep watching
-      const coat = suit ? any(COAT) : any(FROCK), hat = any(HAT);
+      const coat = suit ? pick(COAT) : pick(FROCK), hat = pick(HAT);
       const p = {
         ...s, ph: Math.random() * 10, f: 6 + Math.random() * 5, jump: Math.random(), sc: 0.92 + Math.random() * 0.2, wave,
         body: suit ? 'dn_fan_body' : 'dn_fan_body2', rest, cheer: wave ? (Math.random() < 0.35 ? 'dn_fan_arm1' : 'dn_fan_arms') : null,
@@ -258,7 +256,7 @@ export class Race {
         favour: Math.random() < 0.22 ? 'dn_fan_rosette' : Math.random() < 0.12 ? 'dn_fan_scarf' : null,
       };
       const shirt = other(SHIRT, [coat]);
-      p.tint = { coat, shirt, legs: suit ? any(LEGS) : coat, skin: any(SKIN), hair: any(HAIR), hat, band: other(BAND, [shirt, coat, hat]) };
+      p.tint = { coat, shirt, legs: suit ? pick(LEGS) : coat, skin: pick(SKIN), hair: pick(HAIR), hat, band: other(BAND, [shirt, coat, hat]) };
       return p;
     });
     // one layer per part: its wearers (resting-arm wavers last, so a cheer hides them by count), in the body frame or the head's (0.66 m up)

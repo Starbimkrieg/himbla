@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FACTIONS } from './locations.js';
 import { makeSeismo, makeTube, makeCrate, makeRover, makeFreighter, makeFigure } from './models.js';
-import { frameQuat, greatCircle, arcDist, darkness, tangent, collectNodes } from './geo.js';
+import { frameQuat, greatCircle, arcDist, darkness, tangent, randomTangent, collectNodes } from './geo.js';
 import { pick, randRange } from './rng.js';
 import { EVENT_RANGE } from './config.js';
 import { textSprite, toon, glow, ink } from './toon.js';
@@ -50,7 +50,7 @@ export class Events {
     const g = this.game;
     const up = fromDir.clone().normalize();
     for (let i = 0; i < 60; i++) {
-      const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+      const t = randomTangent(up);
       const d = greatCircle(up, t, randRange(minD, maxD));
       if (g.locations.some((l) => arcDist(d, l.dir) < (l.zoneR || l.r) * 1.6)) continue;
       if (wantDark !== null && (darkness(d) > 0.5) !== wantDark) continue;
@@ -547,7 +547,6 @@ export class Events {
   }
 
   start_escort(ev) {
-    const g = this.game;
     const dest = this.nearestSafe(ev.spotDir);
     ev.dest = dest;
     ev.goal = dest.pos;
@@ -603,7 +602,7 @@ export class Events {
     ev.pods = [];
     const up = ev.center.clone();
     for (let i = 0; i < ev.count; i++) {
-      const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+      const t = randomTangent(up);
       const p = this.ground(greatCircle(up, t, 80 + Math.random() * 280), 1);
       const crate = makeCrate(ev.type === 'relay' ? 0x2ec4ff : 0xff9f1c, 1.6);
       crate.position.copy(p);
@@ -692,7 +691,6 @@ export class Events {
 
   update(dt) {
     const g = this.game;
-    const P = g.player;
     // post: one per faction, ~a minute or more between postings
     this.gap -= dt;
     for (const f of Object.keys(TYPES)) {

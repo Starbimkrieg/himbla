@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { makeShuttle, makeFigure } from './models.js';
 import { frameQuat } from './geo.js';
+import { clamp01 } from './rng.js';
 import { toon, glow, ink } from './toon.js';
 import { L, START_S, CORE_S, PAD_S, wrapW } from './spindleTerrain.js';
 
@@ -41,7 +42,6 @@ const KEEP_OUT = [PAD_S, CORE_S, START_S];
 
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _m = new THREE.Matrix4();
 const Q_LIE = new THREE.Quaternion().setFromAxisAngle(X, -Math.PI / 2); // on your back, head toward -z
-const clamp01 = (k) => Math.min(1, Math.max(0, k));
 const smooth01 = (k) => { k = clamp01(k); return k * k * (3 - 2 * k); };
 const easeOut = (k, p = 3) => 1 - Math.pow(1 - clamp01(k), p);
 const ease2 = (k) => 0.5 - 0.5 * Math.cos(Math.PI * clamp01(k));

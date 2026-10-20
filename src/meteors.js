@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { toon, glow, ink } from './toon.js';
 import { arcDist, greatCircle, tangent } from './geo.js';
+import { randRange as rand } from './rng.js';
 
 // Meteor showers: rare, one at a time, over open ground (never a settlement or outpost), shown as a red zone on the
 // globe and minimap. Rocks are huge (7.5-17 m radius) and come in slow and shallow, nearly sideways, so you can ride
@@ -21,7 +22,6 @@ const BOUNCE_AWAY = 16; // m/s along the ground, away from the rock
 const BOUNCE_GLIDE = 0.6; // share of the rock's glide you carry
 const BOUNCE_CD = 0.7; // s before the same rock can fling you again
 const CHAIN_WINDOW = 14; // s: a bounce within this of the last is a chain
-const rand = (a, b) => a + Math.random() * (b - a);
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 const _z = new THREE.Vector3(0, 0, 1);

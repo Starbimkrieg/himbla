@@ -70,7 +70,7 @@ const loadGlb = async (name, url) => { // (url: load this instead of the bundled
 import { Kit, T as KT, G as KG } from './outpostModels.js';
 import { FACTIONS } from './locations.js';
 
-function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
+export function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
   const m = new THREE.Mesh(geo, mat);
   m.position.set(x, y, z);
   m.castShadow = true;
@@ -1187,7 +1187,7 @@ function baked(key, fn) {
   }
   return r.clone();
 }
-const VDARK = 0x1d1a29, VSTEEL = 0x55607a, VMETAL = 0x8a87a0;
+const VDARK = 0x1d1a29, VMETAL = 0x8a87a0;
 
 // tyre with hub, rim and tread, centred on its axle (x): spins with rotation.x
 export function rWheel(r, w, hub = VMETAL) {
@@ -2017,7 +2017,7 @@ export function makeLandTrain({ faction = 'kepler', type = 'moonliner', cars } =
 // about y) = head, jib, counter-jib, cab, lamps, `blinker` warning lights; its `trolley` (slides along the jib) holds
 // `cable` (two 1 m rope falls, stretched to the hook) and `hook` (lowered with it), carrying `load`: the Prospector
 // container on a spreader, one `livery` pivot per faction (only the crane cargo's is built).
-export const CRANE_H = 34, CRANE_JIB = 30;
+export const CRANE_H = 34;
 export const CRANE_LOAD_DROP = 8.65; // hook origin to container bottom
 // trolley range (m along the jib): any nearer the mast and the 7.2 m container hits ballast and platforms
 export const CRANE_TROLLEY_MIN = 7.9, CRANE_TROLLEY_SPAN = 19.1;
@@ -2106,7 +2106,6 @@ export function makeTowerCrane({ color = 0xffd23f, faction = 'kepler', h = CRANE
 // a `cargo` pivot (cargo.py box container, along the girder, `livery` per faction, only the crane cargo's built).
 // `blinker` pivots at girder ends and leg tops. `gantryBox`: one container alone (a `cargo` pivot, origin at the middle of
 // its ground footprint), baked per stack by the settlements in a faction's colours.
-export const GANTRY_H = 23, GANTRY_LEG = 15; // trolley rail height; legs (and crane rails) at z = +-LEG
 export const GANTRY_TROLLEY_SPAN = 10; // trolley z in [-span, span] (clear of the knees at the legs)
 export const CARGO_BOX = { hx: 1.75, hz: 3.95, h: 3.2 }; // yard box footprint (its rack) and height (stacking pitch)
 
@@ -2535,7 +2534,6 @@ export const downsNode = (name) => {
   if (!SHIP_PARTS[name]) throw new Error('no Downs model ' + name);
   return SHIP_PARTS[name];
 };
-export const downsParts = () => Object.keys(SHIP_PARTS).filter((n) => n.startsWith('dn_'));
 export function downsSlot(slot, over = {}) {
   if (slot in over) return { color: over[slot], glow: false };
   return slot in DOWNS_GLOW ? { color: DOWNS_GLOW[slot], glow: true } : { color: DOWNS_TOON[slot] ?? 0xff00ff, glow: false };

@@ -6,7 +6,7 @@ import { shapedRocks } from './rocks.js';
 import { railOf } from './rails.js';
 import { rayCollider } from './physics.js';
 import { TerrainField, faceDir, dirToGrid, N, CH, CPF, N1, R, MAX_LOD } from './terrainField.js';
-import { skinUniforms, patchRockMaterial, SKIN_COMMON, SKIN_NORMAL, SKIN_COLOR, SKIN_LIGHT } from './moonSkins.js';
+import { skinUniforms, patchRockMaterial, SK_NOISE, SKIN_COMMON, SKIN_NORMAL, SKIN_COLOR, SKIN_LIGHT } from './moonSkins.js';
 import { makeBoulderShapes, makeBoulderInk, BOULDER_COLLIDER_K } from './boulders.js';
 
 export { faceDir };
@@ -284,14 +284,7 @@ export class Planet extends TerrainField {
 varying float vRim; varying vec3 vTint; varying vec3 vHoleW;
 uniform float uWarmK, uCoolK, uAltK, uCamAlt;
 uniform float uHoleOn; uniform vec3 uHoleO, uHoleX, uHoleY, uHoleZ; uniform vec2 uHoleMin, uHoleMax;
-uniform vec4 uRimC[${RIM_INK_MAX}]; uniform int uRimN;
-float rimHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
-float rimNoise(vec3 x) {
-  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(mix(rimHash(i), rimHash(i + vec3(1, 0, 0)), f.x), mix(rimHash(i + vec3(0, 1, 0)), rimHash(i + vec3(1, 1, 0)), f.x), f.y),
-             mix(mix(rimHash(i + vec3(0, 0, 1)), rimHash(i + vec3(1, 0, 1)), f.x), mix(rimHash(i + vec3(0, 1, 1)), rimHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
-}
-${SKIN_COMMON}`)
+uniform vec4 uRimC[${RIM_INK_MAX}]; uniform int uRimN;${SK_NOISE}${SKIN_COMMON}`)
         .replace('void main() {', `void main() {
   if (uHoleOn > 0.5) {
     vec3 hq = vHoleW - uHoleO;

@@ -4,8 +4,8 @@ import { makeBody, stepSkater } from './physics.js';
 import { Ragdoll } from './ragdoll.js';
 import { makeRunner, makeRover, makeTurret, makeCrate, makePylon, ScarfSim } from './models.js';
 import { randRange } from './rng.js';
-import { FACTIONS } from './locations.js';
-import { frameQuat, greatCircle, arcDist, darkness, tangent } from './geo.js';
+import { FACTIONS, defenseSpots } from './locations.js';
+import { frameQuat, greatCircle, arcDist, darkness, tangent, randomTangent } from './geo.js';
 import { FOES, BOSS_MODELS } from './storyAssets.js';
 
 // m/s a rover can hit a wall, building or deck unhurt; shared by your vehicles (vehicles.js) and hunters (crashRover)
@@ -119,20 +119,8 @@ export class Enemies {
     const fc = new THREE.Color(FACTIONS[loc.faction].color).getHex();
     const base = { loc, faction: loc.faction, restricted: !!loc.restricted, time: 0, hostile: false, aggro: 0, outside: 0, artyCd: 0, warnBeep: 0, turrets: [], patrols: [], awake: false, inside: false };
     base.group = new THREE.Group();
-    const spots = [];
-    let patrols = 0;
-    if (loc.restricted) {
-      const small = !!loc.small;
-      const inner = small ? 3 : 4, outer = small ? 2 : 4;
-      for (let i = 0; i < inner; i++) spots.push([(i / inner) * Math.PI * 2 + 0.4, small ? 68 : 112]);
-      for (let i = 0; i < outer; i++) spots.push([(i / outer) * Math.PI * 2 + 1.2, small ? 180 : 290]);
-      patrols = small ? 1 : 2;
-    } else {
-      const d = loc.defense;
-      for (let i = 0; i < d.turrets; i++) spots.push([(i / d.turrets) * Math.PI * 2 + 0.2, d.ring]);
-      for (let i = 0; i < (d.inner || 0); i++) spots.push([(i / d.inner) * Math.PI * 2 + 0.8, d.ring * 0.55]);
-      patrols = d.patrols || 0;
-    }
+    const spots = defenseSpots(loc);
+    const patrols = loc.restricted ? (loc.small ? 1 : 2) : loc.defense.patrols || 0;
     const heavy = loc.id === 'ilmb';
     // gun mounts from world.js (loc.turretMounts), else ground spots on the defence ring
     const mounts = loc.turretMounts || spots.map(([a, r]) => ({ x: Math.cos(a) * r, z: Math.sin(a) * r, y: 0, ground: true }));
@@ -600,7 +588,7 @@ export class Enemies {
   // Event waves: spawn around a point and go after something you're protecting.
   spawnWave(center, n, targetObj, dist = 360, foe = 'rustmoon') {
     const up = center.clone().normalize();
-    const t0 = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+    const t0 = randomTangent(up);
     const out = [];
     for (let i = 0; i < n; i++) {
       const t = t0.clone().applyAxisAngle(up, (i / n) * Math.PI * 2 + Math.random() * 0.6);
@@ -1048,7 +1036,7 @@ export class Enemies {
     if (base.artyCd > 0) return;
     base.artyCd = base.loc.id === 'ilmb' ? 1.2 : 1.8;
     const tgt = P.pos.clone().addScaledVector(P.vel, 2.4 * 0.75);
-    const side = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), P.up).normalize();
+    const side = randomTangent(P.up);
     tgt.addScaledVector(side, Math.random() * 18);
     const gp = this.ground(tgt);
     g.fx.warningRing(gp, 16, 2.4);
@@ -1144,7 +1132,7 @@ export class Enemies {
       const home = e.home ? e.home.pos : e.body.pos;
       if (!e.wander || e.body.pos.distanceTo(e.wander) < 15) {
         const up = home.clone().normalize();
-        const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+        const t = randomTangent(up);
         e.wander = this.ground(greatCircle(up, t, 30 + Math.random() * 70));
       }
       return e.wander;

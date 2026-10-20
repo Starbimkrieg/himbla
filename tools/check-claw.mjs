@@ -7,7 +7,7 @@
 //   node tools/check-claw.mjs 500 expert      500 rounds of the expert only
 //
 // Bots only know what a player sees, and are simpler than a person (none throws a mine at a lockbox on purpose).
-import { ClawSim, KINDS, CLAW_COST, CLAW_TIME, DROP, TANK, HOLD_CAP } from '../src/clawSim.js';
+import { ClawSim, KINDS, CLAW_COST, CLAW_TIME, DROP, HOLD_CAP } from '../src/clawSim.js';
 import { mulberry32 } from '../src/rng.js';
 
 const SKILLS = {
@@ -23,7 +23,7 @@ function playRound(seed, S, rng) {
   const sim = new ClawSim(seed);
   sim.start();
   const c = sim.claw;
-  let mode = 'seek', target = null, tmr = 0, wobX = 0, wobZ = 0, box = null, lastMode = '';
+  let mode = 'seek', target = null, tmr = 0, wobX = 0, wobZ = 0, lastMode = '';
   const dt = 1 / 30;
   const stats = { banked: 0, mines: 0, chipBanked: false, booms: 0, opens: 0, chipLoose: false, chipPay: 0 };
   const hover = (tx, ty, tz) => {

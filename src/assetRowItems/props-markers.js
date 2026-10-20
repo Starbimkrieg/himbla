@@ -256,7 +256,7 @@ function solarField() {
 }
 
 function furniture() {
-  const w = stubWorld(), loc = stubLoc('vostok'), blinkers = w.blinkers;
+  const w = stubWorld(), blinkers = w.blinkers;
   const items = [];
   const at = (fn) => { const l = stubLoc('vostok'); fn(l); l.group.updateMatrixWorld(true); items.push(seat(l.group)); };
   at((l) => World.prototype.flag.call(w, l, 0, 0, [0xff3b5c, 0xffd23f, 0xff3b5c], 20)); // Vostok base flag (world.js:1572)

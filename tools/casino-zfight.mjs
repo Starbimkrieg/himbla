@@ -25,7 +25,7 @@ await pg.evaluate(() => {
 await pg.waitForTimeout(6000);
 
 const report = await pg.evaluate((EPS) => {
-  const g = window.game, W = g.world, loc = g.locations.find((l) => l.id === 'casino');
+  const g = window.game, W = g.world;
   const V = g.player.pos.constructor, M = W.casino.loc.group.matrixWorld.constructor;
   const inv = new M().copy(W.casino.loc.group.matrixWorld).invert();
   // hall and forecourt in the casino frame (generous: whole building, canopy, carousels)

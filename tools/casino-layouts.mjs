@@ -11,7 +11,7 @@
 //   - a game's trigger zone (station circle, casinoGames.js STATIONS) touches no other footprint or station
 //   - the seated camera's corridor (casinoGames.js view(): the lens path) holds nothing taller than the lens
 import { writeFileSync } from 'node:fs';
-import { HALL, WALL, BJ, CLAW, DUCK, PLK, CLASSIC, PRIZE, floorShapes, hallPolygon, wallEdges, wallBoxes, inBox, inHall } from '../src/casinoPlan.js';
+import { HALL, WALL, BJ, CLAW, DUCK, PLK, CLASSIC, PRIZE, floorShapes, wallEdges, wallBoxes, inBox, inHall } from '../src/casinoPlan.js';
 
 const AISLE = 2.4;            // narrowest walkable gap, m
 const WALL_T = 2.4;           // wall thickness drawn in the plans, m
