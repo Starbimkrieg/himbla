@@ -6,7 +6,6 @@ import { outpostTemplate } from '../src/outpostModels.js';
 import { loadOutpostParts, GLB_KINDS } from '../src/outpostGlb.js';
 import { makeChimera, makeMite, LIVING, MODIFIERS, spliceGenes } from '../src/chimera.js';
 import { ComicPost } from '../src/post.js';
-import '../src/wardrobe.js'; // (first: wardrobe and cosmetics import each other; only this order initialises OUTFITS in time)
 import { dressRunner } from '../src/cosmetics.js';
 import { slotCabinet, updateSlot, blackjackTable } from '../src/casinoWorld.js';
 import { KINDS } from '../src/clawSim.js';

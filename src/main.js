@@ -34,6 +34,7 @@ import { Gamepad } from './gamepad.js';
 import { Haptics } from './haptics.js';
 import { DILATE_RATE } from './monolith.js';
 import { Cosmetics } from './cosmetics.js';
+import { Wardrobe } from './wardrobe.js';
 import { Cheats, DEV_TOOLS, loadDevTools } from './devtools.js';
 import { Territory, locationAnchors, holderOf } from './territory.js';
 import { Civilians } from './civilians.js';
@@ -406,7 +407,7 @@ class Game {
       } else if (this.state === 'casino') { // casino
         if (esc) this.casino.close(true); else this.casino.onKey(code);
       } else if (this.state === 'wardrobe') { // wardrobe
-        if (esc || code === 'KeyC') this.cosmetics.ui.close(esc); else this.cosmetics.ui.onKey(code);
+        if (esc || code === 'KeyC') this.wardrobe.close(esc); else this.wardrobe.onKey(code);
       } else if (this.state === 'play') {
         if (code === 'KeyM') this.openMap();
         if (code === 'KeyJ') this.openLog();
@@ -1482,7 +1483,7 @@ class Game {
     } else if (this.jarHold) { this.jarHold = 0; this.hud.recallHold(0); }
     if (!this.input.down('KeyX')) this.jarHoldDone = false;
     if (this.input.pressed('KeyX') && !A.jar.length) A.empty();
-    if (this.input.pressed('KeyC') && this.boardCooldown <= 0) this.cosmetics.wardrobe();
+    if (this.input.pressed('KeyC') && this.boardCooldown <= 0) (this.wardrobe ||= new Wardrobe(this, this.cosmetics)).open(); // the wardrobe screen, built on first use
     if (this.input.pressed('KeyP') && this.boardCooldown <= 0 && !this.player.rag) {
       if (this.upgrades.penlink) this.alchemy.penMenu();
       else this.hud.toast('No pen link. Dr. Zbornak sells a remote holding-pen link at the Antimatter Lab.', 3);

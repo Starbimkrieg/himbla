@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { makeRunner, makeCrate } from '../models.js';
-import { OUTFITS, SKATES, dressRunner, dressSkates } from '../cosmetics.js';
+import { OUTFITS, SKATES } from '../cosmeticsData.js';
+import { dressRunner, dressSkates } from '../cosmetics.js';
 import '../casino.js'; // adds the casino outfits and skate finishes
 import '../secrets.js'; // adds the Xenoglide finish
 import { ITEMS, MUTATIONS, makeJarMesh, buildMutationMeshes } from '../alchemy.js';

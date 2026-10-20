@@ -1,4 +1,4 @@
-import { OUTFITS, SKATES } from './cosmetics.js';
+import { OUTFITS, SKATES } from './cosmeticsData.js';
 import { pixelFont } from './fonts.js';
 import { CasinoGames } from './casinoGames.js';
 import { glyphHtml } from './glyphs.js';

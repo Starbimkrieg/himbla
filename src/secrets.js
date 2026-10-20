@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { toon, glow, ink, textSprite } from './toon.js';
 import { frameQuat, tangent, arcDist } from './geo.js';
-import { SKATES } from './cosmetics.js';
+import { SKATES } from './cosmeticsData.js';
 
 // The Moon's two big secrets.
 // 1. SAT-7 "Lantern": a derelict satellite on a low inclined orbit, skimming the ground near the ILMB once per lap.

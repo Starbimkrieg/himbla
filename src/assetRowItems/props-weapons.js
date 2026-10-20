@@ -6,7 +6,7 @@ import { FX } from '../fx.js';
 import { Projectiles } from '../projectiles.js';
 import { Winch } from '../winch.js';
 import { LightTrail, makeRunner } from '../models.js';
-import { SKATES, LASERS } from '../cosmetics.js';
+import { SKATES, LASERS } from '../cosmeticsData.js';
 import { scorchTex, meteorMats } from '../meteors.js';
 
 // 05 · WEAPONS & FX. Weapons have no model, so each is shown as its shot: the game's Projectiles.fire builds it (on a scene of

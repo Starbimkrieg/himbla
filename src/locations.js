@@ -191,7 +191,7 @@ export const TIERS = [
 ];
 
 // faction gear at each HQ; each level needs more reputation
-import { cosmeticShopItems } from './cosmetics.js';
+import { cosmeticShopItems } from './cosmeticsData.js';
 
 export const SHOPS = {
   ilmb: [

@@ -332,7 +332,8 @@ src/
   clawSim.js       Zero-G claw rules and physics (clawView.js draws it, clawGame.js runs the seat)
   fountainFx.js    fountain water shaders
   pixelIcons.js    classic-games pixel sprites
-  cosmetics.js     outfits, skate finishes, laser colours
+  cosmetics.js     dresses the runner: outfit extras, skate finishes, halo
+  cosmeticsData.js outfit, skate and laser tables, their shop entries (imports nothing)
   race.js          Chimera Downs racing, betting, cameras, crowd, podium
   downsPlan.js     Chimera Downs layout (no three.js)
   downsWorld.js    Chimera Downs scenery
@@ -355,7 +356,7 @@ src/
   traffic.js       pads, flights, passengers, roads, land-trains, cars
   landingPad.js    landing pad geometry and waypoints
   roadplan.js      least-cost road routing
-  wardrobe.js      wardrobe screen
+  wardrobe.js      wardrobe screen (main.js builds it on the first C)
   trailer.js       trailer director (?trailer)
   models.js        characters and vehicles; loads the Blender models
   post.js          comic post-processing

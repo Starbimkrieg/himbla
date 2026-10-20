@@ -1,5 +1,5 @@
 import { FACTIONS, SHOPS } from './locations.js';
-import { OUTFITS, SKATES } from './cosmetics.js';
+import { OUTFITS, SKATES } from './cosmeticsData.js';
 import { spliceGenes } from './chimera.js';
 import { pick } from './rng.js';
 import { VEHICLES } from './vehicles.js';

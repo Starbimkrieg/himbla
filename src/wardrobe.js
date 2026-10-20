@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { makeRunner, ScarfSim } from './models.js';
 import { toon, glow } from './toon.js';
-import { OUTFITS, SKATES, LASERS, dressRunner, dressSkates, updateHalo } from './cosmetics.js';
+import { OUTFITS, SKATES, LASERS } from './cosmeticsData.js';
+import { dressRunner, dressSkates, updateHalo } from './cosmetics.js';
 import { makeJarMesh } from './alchemy.js';
 import { FACTIONS, LOCATIONS, TIERS } from './locations.js';
 
