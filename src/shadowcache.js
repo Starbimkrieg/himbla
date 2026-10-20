@@ -266,9 +266,9 @@ export class ShadowCache {
       const fr = sh.getFrustum(0);
       // between full walks only cached casters are checked (uncached ones draw live, so nothing new is missed)
       const tx = light.target.position.x, ty = light.target.position.y, tz = light.target.position.z;
-      const quick = this.on && this.valid && this.M === M && this.S && this.S.width === M.width && this.S.height === M.height
-        && pass < this.nextWalk && hv.tx === tx && hv.ty === ty && hv.tz === tz && hv.sx === dx && hv.sy === dy && hv.sz === dz
-        && this.stillSo(scene, camera.layers);
+      const fits = this.S && this.S.width === M.width && this.S.height === M.height; // S matches the live map
+      const same = hv.tx === tx && hv.ty === ty && hv.tz === tz && hv.sx === dx && hv.sy === dy && hv.sz === dz; // box and sun S was drawn for
+      const quick = this.on && this.valid && this.M === M && fits && pass < this.nextWalk && same && this.stillSo(scene, camera.layers);
       if (!quick) {
         // walk every caster in the box
         st.walks++;
@@ -277,18 +277,14 @@ export class ShadowCache {
         this._cnt = 0; this._s1 = 0; this._s2 = 0; this._tris = 0; this._demoted = 0;
         this.walk(scene, camera.layers, fr);
 
-        dirty = !this.valid || this.M !== M || !this.S || this.S.width !== M.width || this.S.height !== M.height || this._demoted > 0
-          || hv.tx !== tx || hv.ty !== ty || hv.tz !== tz || hv.sx !== dx || hv.sy !== dy || hv.sz !== dz
+        dirty = !this.valid || this.M !== M || !fits || this._demoted > 0 || !same
           || !hv.sig || hv.sig[0] !== this._cnt || hv.sig[1] !== this._s1 || hv.sig[2] !== this._s2;
         // still ordinary casters join in a batch when S is redrawn anyway or every PROMO passes
+        // (take() files each caster under exactly one of statics, dyns and pend, and the walk meets each once)
         if (this.pend.length && (dirty || pass >= this.nextPromo)) {
-          const taken = new Set(this.pend);
           for (const o of this.pend) { const rec = this.recs.get(o); rec.promoted = true; this.member(o, rec); }
-          const keep = this.dyns.filter((o) => !taken.has(o));
-          this.dyns.length = 0;
-          for (const o of keep) this.dyns.push(o);
           this.nextPromo = pass + cfg.PROMO;
-          st.promoted += taken.size;
+          st.promoted += this.pend.length;
           dirty = true;
         } else for (const o of this.pend) this.dyns.push(o); // waiting: drawn live meanwhile
         st.demoted += this._demoted;
@@ -306,7 +302,7 @@ export class ShadowCache {
       }
 
       if (dirty) {
-        if (!this.S || this.S.width !== M.width || this.S.height !== M.height) this.makeS(M);
+        if (!fits) this.makeS(M);
         // static casters into S ...
         this.hide(this.dyns);
         sh.map = this.S;

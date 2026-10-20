@@ -614,7 +614,7 @@ export class Winch {
 
   hand(out) { const P = this.game.player; return out.copy(P.center).addScaledVector(P.up, 0.4); }
 
-  // the cable's path into this.path (hand, wrap points, hook); returns the point count. pathLen(): its length
+  // the cable's path into this.path (hand, wrap points, hook), its point count into pathN. pathLen(): its length
   buildPath(o, hand, anchor) {
     const P = this.path;
     P[0].copy(hand);
@@ -622,7 +622,6 @@ export class Winch {
     const k = o.wraps.length + 1;
     P[k].copy(anchor);
     this.pathN = k + 1;
-    return k + 1;
   }
 
   pathLen() {
@@ -693,7 +692,6 @@ export class Winch {
       o.len += Math.max(0, this.pathLen() - before); // pay out the extra so a new wrap doesn't jerk you
       return 'changed';
     }
-    _ignore = null;
     return null;
   }
 

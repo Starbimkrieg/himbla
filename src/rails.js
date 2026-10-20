@@ -21,7 +21,6 @@ function railAt(r, s, outP, outT) {
   const f = (s - cum[i]) / Math.max(1e-6, cum[i + 1] - cum[i]);
   outP.copy(r.pts[i]).lerp(r.pts[i + 1], f);
   outT.copy(r.pts[i + 1]).sub(r.pts[i]).normalize();
-  return outP;
 }
 
 // A rail from a crest polyline: per-point arc lengths and a bounding sphere (nearest() checks it first).
@@ -122,9 +121,7 @@ export class Grinder {
       if (!lined && !tip && !sideOn && !dropping) return false;
       if (above < (sideOn ? -3.6 : -1.6) || above > (rim ? 3 : 2.2) || b.vel.dot(_u) > 6 + 0.25 * hsp) return false; // a little rise is just the slope, at speed
       // direction: inward at a tip, else the way you're moving
-      let dir;
-      if (tip) dir = n.s < n.r.len / 2 ? 1 : -1;
-      else dir = Math.abs(along) > 2 ? Math.sign(along) : Math.sign(P.heading.dot(_t)) || 1;
+      const dir = tip ? (n.s < n.r.len / 2 ? 1 : -1) : Math.abs(along) > 2 ? Math.sign(along) : Math.sign(P.heading.dot(_t)) || 1;
       this.active = { r: n.r, s: n.s, dir, speed: Math.max(Math.abs(along), hsp * 0.85, 9), t: 0, spark: 0 };
       g.fx.pop('GRIND!', null, { color: '#ffd23f', size: 44 });
       g.audio.tone(1400, 0.08, 'square', 0.08);
@@ -230,10 +227,7 @@ export class Grinder {
     if (m.armL) m.armL.rotation.set(0, 0, 0);
     if (m.armR) m.armR.rotation.set(0, 0, 0);
     m.torso.rotation.x = 0;
-    if (!knocked) {
-      const pts = Math.round(15 + A.t * 30);
-      g.style(pts, 'GRIND');
-    }
+    if (!knocked) g.style(Math.round(15 + A.t * 30), 'GRIND');
     if (jumped) { g.audio.jump(); g.haptics.play('jump'); }
     this.active = null;
     this.cool = 0.6;

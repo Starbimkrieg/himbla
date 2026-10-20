@@ -48,8 +48,7 @@ export class Civilians {
     this.gone = []; // cleared residents waiting to respawn
     this.byLoc = null;
     this.repT = {}; // faction -> time of the last 'attacked a civilian' penalty
-    game.blastHooks = game.blastHooks || [];
-    game.blastHooks.push((pos, radius, damage, owner) => this.blast(pos, radius, damage, owner));
+    (game.blastHooks ||= []).push((pos, radius, damage, owner) => this.blast(pos, radius, damage, owner));
   }
 
   get world() { return this.g.world; }
@@ -67,7 +66,6 @@ export class Civilians {
 
   // fn(fig, src, ref, centre) for every damageable person within `reach` of p (far settlements skipped first)
   each(p, reach, fn) {
-    const W = this.world;
     for (const [loc, figs] of this.locFigures()) {
       if (!loc.active || loc.camDist > 450) continue;
       if (loc.pos.distanceTo(p) > loc.r + reach + 10) continue;
@@ -80,7 +78,7 @@ export class Civilians {
         if (_v.distanceToSquared(p) < reach * reach) fn(f, 'res', f, _v);
       }
     }
-    const T = W.traffic;
+    const T = this.world.traffic;
     if (T) for (const wk of T.walkers) {
       if (wk.done || !wk.loc.active || wk.fig.civ || !wk.fig.root.visible) continue;
       if (wk.loc.pos.distanceTo(p) > 600) continue;
@@ -106,8 +104,7 @@ export class Civilians {
     let hit = false;
     const mid = _x.addVectors(a, b).multiplyScalar(0.5);
     const reach = a.distanceTo(b) * 0.5 + 2;
-    const m = mid.clone();
-    this.each(m, reach, (f, src, ref, c) => { if (!hit && segDist2(a, b, c) < 0.9 * 0.9) hit = true; });
+    this.each(mid, reach, (f, src, ref, c) => { if (!hit && segDist2(a, b, c) < 0.9 * 0.9) hit = true; });
     return hit;
   }
 
@@ -204,6 +201,14 @@ export class Civilians {
     const g = this.g;
     const P = g.planet;
     const seen = new Set();
+    // plain hits count once per blast (one splash or a rail beam's samples); every K.O. counts
+    const dock = (faction) => {
+      const last = this.repT[faction] ?? -9;
+      if (killed || g.time - last > 0.3) {
+        if (!killed) this.repT[faction] = g.time;
+        g.rep.add(faction, rep, killed ? 'Knocked out a civilian' : 'Attacked a civilian');
+      }
+    };
     for (const loc of g.locations) {
       if (!loc.faction || loc.faction === 'none' || !loc.pos) continue;
       const range = loc.zoneR || (loc.defense ? loc.defense.ring + 40 : loc.r * 1.4);
@@ -215,12 +220,7 @@ export class Civilians {
       if (!sees) continue;
       if (!seen.has(loc.faction)) {
         seen.add(loc.faction);
-        // plain hits count once per blast (one splash or a rail beam's samples); every K.O. counts
-        const last = this.repT[loc.faction] ?? -9;
-        if (killed || g.time - last > 0.3) {
-          if (!killed) this.repT[loc.faction] = g.time;
-          g.rep.add(loc.faction, rep, killed ? 'Knocked out a civilian' : 'Attacked a civilian');
-        }
+        dock(loc.faction);
       }
       if (base) this.alertBase(base);
       else if (loc.type === 'pirate') this.alertDen(loc);
@@ -236,13 +236,7 @@ export class Civilians {
           if (d < best) { best = d; owner = loc; }
         }
       }
-      if (owner) {
-        const last = this.repT[owner.faction] ?? -9;
-        if (killed || g.time - last > 0.3) {
-          if (!killed) this.repT[owner.faction] = g.time;
-          g.rep.add(owner.faction, rep, killed ? 'Knocked out a civilian' : 'Attacked a civilian');
-        }
-      }
+      if (owner) dock(owner.faction);
     }
   }
 

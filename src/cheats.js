@@ -18,6 +18,7 @@ const GITCHIP_KEY = 'mr-dev-git-chip';
 const BIKE_NAMES = { b: 'B · PARCEL RUNNER', a: 'A · SLIPSTREAM', classic: 'CLASSIC' };
 const SKIMMER_NAMES = { a: 'A · AEGIS', b: 'B · BULWARK', classic: 'CLASSIC' };
 const GIT_POLL = 90; // s between upstream checks while the upstream chip is on
+const onOff = (v) => (v ? 'ON' : 'OFF');
 
 // Testing menu on ` (backtick). Uses the normal dialog: number keys pick, Esc closes.
 export class Cheats {
@@ -72,11 +73,11 @@ export class Cheats {
     g.dialog('DEV MENU', '<small>Hidden. Toggles last until you reload.</small>', [
       { label: '1 · UNLIMITED JET, HEALTH & SPEED…', fn: () => this.boostMenu() },
       { label: '2 · SPAWN A METEOR ON ME', fn: () => this.meteorFromMenu() },
-      { label: `3 · DEBUG OVERLAY: ${this.overlay.on ? 'ON' : 'OFF'}  (F3)…`, fn: () => this.overlayMenu() },
+      { label: `3 · DEBUG OVERLAY: ${onOff(this.overlay.on)}  (F3)…`, fn: () => this.overlayMenu() },
       { label: '4 · DISPLAY TESTS…', fn: () => this.displayMenu() },
-      { label: `5 · CLICK MAP TO TELEPORT: ${this.mapTeleport ? 'ON' : 'OFF'}`, fn: () => { this.mapTeleport = !this.mapTeleport; this.dev(); } },
+      { label: `5 · CLICK MAP TO TELEPORT: ${onOff(this.mapTeleport)}`, fn: () => { this.mapTeleport = !this.mapTeleport; this.dev(); } },
       { label: '6 · FULL CHEAT MENU…', fn: () => this.open() },
-      { label: `7 · RAGDOLL: ${this.ragdoll ? 'ON' : 'OFF'}`, fn: () => { this.toggleRagdoll(); this.dev(); } },
+      { label: `7 · RAGDOLL: ${onOff(this.ragdoll)}`, fn: () => { this.toggleRagdoll(); this.dev(); } },
       { label: '8 · GIT: FETCH & PULL UPSTREAM…', fn: () => this.gitMenu() },
       { label: `9 · COURIER MODEL: ${BIKE_NAMES[getBikeStyle()]}`, fn: () => this.bikeModel() },
       { label: `10 · SKIMMER MODEL: ${SKIMMER_NAMES[getSkimmerStyle()]}`, fn: () => this.skimmerModel() },
@@ -152,7 +153,7 @@ export class Cheats {
     const show = (text, buttons, again = null) => {
       // the chip's switch goes just before BACK on every screen that can redraw itself
       const sw = dev && again ? [{
-        label: `UPSTREAM CHIP: ${this.gitChip ? 'ON' : 'OFF'}`,
+        label: `UPSTREAM CHIP: ${onOff(this.gitChip)}`,
         fn: () => { this.gitChip = !this.gitChip; try { localStorage.setItem(GITCHIP_KEY, this.gitChip ? '1' : '0'); } catch { /* unavailable */ } this.gitChipSync(); again(); },
       }] : [];
       const list = [...buttons, ...sw, { label: 'BACK', fn: () => this.dev() }, { label: 'CLOSE' }].map((b, i) => ({ ...b, label: `${i + 1} · ${b.label}` }));
@@ -200,10 +201,9 @@ export class Cheats {
   // unlimited jet and health, speed multiplier
   boostMenu() {
     const g = this.game;
-    const on = (v) => (v ? 'ON' : 'OFF');
     g.dialog('UNLIMITED JET, HEALTH & SPEED', '<small>Toggles last until you reload.</small>', [
-      { label: `1 · UNLIMITED JET: ${on(this.infJet)}`, fn: () => { this.infJet = !this.infJet; this.tick(); this.boostMenu(); } },
-      { label: `2 · UNLIMITED HEALTH: ${on(this.god)}`, fn: () => { this.god = !this.god; this.tick(); this.boostMenu(); } },
+      { label: `1 · UNLIMITED JET: ${onOff(this.infJet)}`, fn: () => { this.infJet = !this.infJet; this.tick(); this.boostMenu(); } },
+      { label: `2 · UNLIMITED HEALTH: ${onOff(this.god)}`, fn: () => { this.god = !this.god; this.tick(); this.boostMenu(); } },
       { label: this.speedLabel(), fn: () => { this.setSpeed(this.speed >= 10 ? 1 : this.speed + 1); this.boostMenu(); } },
       { label: '4 · BACK', fn: () => this.dev() },
       { label: 'CLOSE' },
@@ -254,12 +254,11 @@ export class Cheats {
   // display tests: effects and render modes to look at (readouts are in the debug overlay)
   displayMenu() {
     const g = this.game;
-    const on = (v) => (v ? 'ON' : 'OFF');
     g.dialog('DISPLAY TESTS', '<small>Toggles last until you reload.</small>', [
-      { label: `1 · CRACKED VISOR: ${on(this.crackedVisor)}`, fn: () => { this.crackedVisor = !this.crackedVisor; g.hud.crackKey = -1; this.displayMenu(); } },
-      { label: `2 · SHOW EACH POLYGON: ${on(this.debugView === 'poly')}`, fn: () => { this.setDebugView(this.debugView === 'poly' ? null : 'poly'); this.displayMenu(); } },
-      { label: `3 · SHOW EACH DRAW CALL: ${on(this.debugView === 'draw')}`, fn: () => { this.setDebugView(this.debugView === 'draw' ? null : 'draw'); this.displayMenu(); } },
-      { label: `4 · STATIC SHADOW CACHE: ${g.shadowCache.failed ? 'FAILED (see console)' : on(g.shadowCache.enabled)}`, fn: () => { g.shadowCache.enabled = !g.shadowCache.enabled; g.shadowCache.failed = false; g.shadowCache.invalidate(); this.displayMenu(); } },
+      { label: `1 · CRACKED VISOR: ${onOff(this.crackedVisor)}`, fn: () => { this.crackedVisor = !this.crackedVisor; g.hud.crackKey = -1; this.displayMenu(); } },
+      { label: `2 · SHOW EACH POLYGON: ${onOff(this.debugView === 'poly')}`, fn: () => { this.setDebugView(this.debugView === 'poly' ? null : 'poly'); this.displayMenu(); } },
+      { label: `3 · SHOW EACH DRAW CALL: ${onOff(this.debugView === 'draw')}`, fn: () => { this.setDebugView(this.debugView === 'draw' ? null : 'draw'); this.displayMenu(); } },
+      { label: `4 · STATIC SHADOW CACHE: ${g.shadowCache.failed ? 'FAILED (see console)' : onOff(g.shadowCache.enabled)}`, fn: () => { g.shadowCache.enabled = !g.shadowCache.enabled; g.shadowCache.failed = false; g.shadowCache.invalidate(); this.displayMenu(); } },
       { label: '5 · BACK', fn: () => this.dev() },
       { label: 'CLOSE' },
     ]);
@@ -335,11 +334,10 @@ export class Cheats {
   // Dev menu → Debug overlay: master switch (F3 in play), free cam, and the overlay's sections. Each toggle re-opens the menu.
   overlayMenu() {
     const g = this.game, o = this.overlay, f = this.freeCam;
-    const on = (v) => (v ? 'ON' : 'OFF');
     g.dialog('DEBUG OVERLAY', '<small>Every on-screen readout in one panel. F3 shows or hides it in play; the sections you pick are remembered. Free cam flies the camera while the runner stands still (its controls are shown at the top of the screen); it is off after a reload.</small>', [
-      { label: `1 · OVERLAY: ${on(o.on)}`, fn: () => { o.toggle(); this.overlayMenu(); } },
-      { label: `2 · FREE CAM: ${on(f.on)}`, fn: () => { f.toggle(); this.overlayMenu(); } },
-      ...SECTIONS.map((s, i) => ({ label: `${i + 3} · ${s.name}: ${on(o.sec[s.key])}`, fn: () => { o.setSection(s.key, !o.sec[s.key]); this.overlayMenu(); } })),
+      { label: `1 · OVERLAY: ${onOff(o.on)}`, fn: () => { o.toggle(); this.overlayMenu(); } },
+      { label: `2 · FREE CAM: ${onOff(f.on)}`, fn: () => { f.toggle(); this.overlayMenu(); } },
+      ...SECTIONS.map((s, i) => ({ label: `${i + 3} · ${s.name}: ${onOff(o.sec[s.key])}`, fn: () => { o.setSection(s.key, !o.sec[s.key]); this.overlayMenu(); } })),
       { label: 'BACK', fn: () => this.dev() }, // rows past the ninth are mouse / pad only (number keys stop at 9)
       { label: 'CLOSE' },
     ]);
@@ -352,7 +350,7 @@ export class Cheats {
       { label: '2 · REVEAL WHOLE MAP', fn: () => { this.revealMap(); this.open(); } },
       { label: '3 · REPUTATION…', fn: () => this.repMenu() },
       { label: '4 · TELEPORT…', fn: () => this.teleportMenu(0) },
-      { label: `5 · GOD MODE: ${this.god ? 'ON' : 'OFF'}`, fn: () => { this.god = !this.god; g.player.health = g.player.maxHealth; this.open(); } },
+      { label: `5 · GOD MODE: ${onOff(this.god)}`, fn: () => { this.god = !this.god; g.player.health = g.player.maxHealth; this.open(); } },
       { label: '6 · UNLOCK ALL GEAR, WEAPONS & COSMETICS', fn: () => { this.unlockAll(); this.open(); } },
       { label: '7 · LAB KIT (big jar, items, 3 chimeras)', fn: () => { this.labKit(); this.open(); } },
       { label: '8 · MORE…', fn: () => this.moreMenu() },
@@ -405,7 +403,7 @@ export class Cheats {
     const rows = keys.slice(page * per, page * per + per).map((k, i) => {
       const on = A.mutations.includes(k);
       return {
-        label: `${i + 1} · ${MUTATIONS[k].name}: ${on ? 'ON' : 'OFF'}`,
+        label: `${i + 1} · ${MUTATIONS[k].name}: ${onOff(on)}`,
         fn: () => {
           A.mutations = on ? A.mutations.filter((m) => m !== k) : A.mutations.concat(k);
           A.save();
@@ -428,11 +426,11 @@ export class Cheats {
     const A = S.active;
     g.dialog('CHEAT MENU · STORY', `<small>Committed to: <b>${S.faction ? FACTIONS[S.faction].name : 'nobody yet'}</b>${A ? ` · active: ${A.def.title} (step ${A.si + 1}/${A.steps.length})` : ''}<br>Vehicles: ${S.vehicles.join(', ') || 'none'} · Tech: ${S.tech.join(', ') || 'none'}</small>`, [
       { label: '1 · SKIP CURRENT STEP', fn: () => { if (S.active) S.skipStep(); this.storyMenu(); } },
-      { label: '2 · TELEPORT TO CURRENT OBJECTIVE', fn: () => { const o = S.objective(); if (o) { S.teleportTo(o.pos.clone().normalize()); } } },
-      { label: '3 · SPAWN CAPTAIN KADE (ambush)', fn: () => { S.spawnKade(false); } },
+      { label: '2 · TELEPORT TO CURRENT OBJECTIVE', fn: () => { const o = S.objective(); if (o) S.teleportTo(o.pos.clone().normalize()); } },
+      { label: '3 · SPAWN CAPTAIN KADE (ambush)', fn: () => S.spawnKade(false) },
       { label: '4 · ALL VEHICLES + TECH', fn: () => { S.vehicles = Object.keys(VEHICLES); S.tech = Object.keys(TECH); S.save(); this.storyMenu(); } },
       { label: '5 · RESET STORY (keeps outposts)', fn: () => { if (S.active) S.fail('Reset.'); S.faction = null; S.progress = {}; S.kade.captured = false; S.save(); this.storyMenu(); } },
-      { label: '6 · DROP ME ON SAT-7 (matched speed)', fn: () => { const S = g.secrets; const o = S.sat; const up = o.pos.clone().normalize(); g.player.respawn(o.pos.clone().addScaledVector(up, 4)); g.player.body.vel.copy(o.vel); } },
+      { label: '6 · DROP ME ON SAT-7 (matched speed)', fn: () => { const o = g.secrets.sat; const up = o.pos.clone().normalize(); g.player.respawn(o.pos.clone().addScaledVector(up, 4)); g.player.body.vel.copy(o.vel); } },
       { label: '7 · TELEPORT TO THE WHISPERING FISSURE', fn: () => { const L = g.secrets.loc; g.globe.discover(L, true); S.teleportTo(g.world.toWorld(L, 0, 0, -90).normalize()); } },
       { label: '8 · GIVE ME THE ALIEN ARTIFACT', fn: () => { g.upgrades.jar = Math.max(1, g.upgrades.jar || 0); g.alchemy.artifact = true; g.secrets.state.artifactTaken = true; g.secrets.sat.artifact.visible = g.secrets.sat.aGlow.visible = false; g.secrets.save(); g.alchemy.save(); g.alchemy.refreshJarMesh(); this.storyMenu(); } },
       { label: '9 · LAUNCH TO THE SPINDLE (Meridian finale)', fn: () => this.toSpindle() },
@@ -462,14 +460,15 @@ export class Cheats {
 
   repFaction(f) {
     const g = this.game;
+    const to = (v) => { this.setRep(f, v); this.repFaction(f); };
     g.dialog(FACTIONS[f].name.toUpperCase(), `Current: <b>${g.rep.get(f)}</b> (${g.rep.tier(f).name})`, [
-      { label: '1 · +10', fn: () => { this.setRep(f, g.rep.get(f) + 10); this.repFaction(f); } },
-      { label: '2 · −10', fn: () => { this.setRep(f, g.rep.get(f) - 10); this.repFaction(f); } },
-      { label: '3 · FRIENDLY (10)', fn: () => { this.setRep(f, 10); this.repFaction(f); } },
-      { label: '4 · TRUSTED (25)', fn: () => { this.setRep(f, 25); this.repFaction(f); } },
-      { label: '5 · HONORED (60)', fn: () => { this.setRep(f, 60); this.repFaction(f); } },
-      { label: '6 · NEUTRAL (0)', fn: () => { this.setRep(f, 0); this.repFaction(f); } },
-      { label: '7 · HOSTILE (−30)', fn: () => { this.setRep(f, -30); this.repFaction(f); } },
+      { label: '1 · +10', fn: () => to(g.rep.get(f) + 10) },
+      { label: '2 · −10', fn: () => to(g.rep.get(f) - 10) },
+      { label: '3 · FRIENDLY (10)', fn: () => to(10) },
+      { label: '4 · TRUSTED (25)', fn: () => to(25) },
+      { label: '5 · HONORED (60)', fn: () => to(60) },
+      { label: '6 · NEUTRAL (0)', fn: () => to(0) },
+      { label: '7 · HOSTILE (−30)', fn: () => to(-30) },
       { label: '8 · BACK', fn: () => this.repMenu() },
     ]);
   }
@@ -508,16 +507,14 @@ export class Cheats {
 
   teleport(l) {
     const g = this.game;
-    const P = g.player;
     if (this.inRow()) g.assetRow.exit(); // back to the Moon first (the Row has its own flat ground)
     const p = g.world.toWorld(l, 0, 0, Math.min(l.r * 0.8, 120));
-    const pos = g.planet.ground(p, p.clone(), 1.5);
-    g.planet.update(pos, { budgetMs: 1e9 });
+    g.planet.update(g.planet.ground(p, p.clone(), 1.5), { budgetMs: 1e9 });
     const ground = g.planet.ground(p, p.clone(), 1.5);
     const fwd = l.pos.clone().sub(ground);
     const up = ground.clone().normalize();
     fwd.addScaledVector(up, -fwd.dot(up)).normalize();
-    P.respawn(ground, fwd);
+    g.player.respawn(ground, fwd);
     g.cam.fwd.copy(fwd);
     g.globe.discover(l, true);
     g.fx.pop(`→ ${l.short || l.name}`, null, { color: '#2ee6ff', size: 50 });

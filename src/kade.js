@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { makeKadeTruck, makeCrate } from './models.js';
+import { makeKadeTruck } from './models.js';
 import { makeBody } from './physics.js';
-import { stepRover } from './enemies.js';
+import { stepRover, beaconCrate } from './enemies.js';
 import { tangent, frameQuat, greatCircle } from './geo.js';
 import { pick } from './rng.js';
 import { shatterEcho } from './monolith.js';
@@ -66,7 +66,8 @@ export function updateKadeTruck(story, e, dt) {
   const T = g.enemies.victim(e) || P; // (Monolith echo holograms fool him)
   const target = T.center.clone().addScaledVector(T.vel, Math.min(1.2, T.center.distanceTo(e.center) / 160));
   const local = m.turret.parent.worldToLocal(target.clone()).sub(m.turret.position);
-  m.turret.rotation.y += Math.atan2(Math.sin(Math.atan2(local.x, local.z) - m.turret.rotation.y), Math.cos(Math.atan2(local.x, local.z) - m.turret.rotation.y)) * Math.min(1, dt * 5);
+  const turn = Math.atan2(local.x, local.z) - m.turret.rotation.y;
+  m.turret.rotation.y += Math.atan2(Math.sin(turn), Math.cos(turn)) * Math.min(1, dt * 5);
   const elev = Math.atan2(local.y - 1.6, Math.hypot(local.x, local.z));
   m.pitch.rotation.x = -THREE.MathUtils.clamp(elev, -0.3, 1.2);
   const lock = story.lockEl;
@@ -116,7 +117,7 @@ function fireFlak(g, e, dt, T) {
 // A flak burst. Within 11 m it stings and shoves you away (FLAK_PUSH m/s point-blank, fading to 0 at 11 m, softened by
 // the Flak Weave), bleeds speed and pulls you down. A shove, not a launch: at most FLAK_PUSH per burst, one per 0.6 s.
 const FLAK_PUSH = 20;
-export function flakBurst(g, pos) {
+function flakBurst(g, pos) {
   const P = g.player;
   g.fx.explosion(pos, 3.5, false);
   g.fx.spawn(pos, new THREE.Vector3(), { color: 0x2a2433, size: 1.6, life: 1.2, count: 6, spread: 3 });
@@ -142,7 +143,7 @@ export function flakBurst(g, pos) {
   if (Math.random() < 0.4) g.fx.pop('FLAK!', pos.clone(), { color: '#ff9f1c', size: 34, life: 0.6 });
 }
 
-export function despawn(story, e) {
+function despawn(story, e) {
   e.dead = true;
   e.model.root.removeFromParent();
   story.lockEl.classList.add('hidden');
@@ -166,14 +167,7 @@ export function kadeDefeated(story, e) {
   g.rep.add('spacecom', 4, 'Wrecked Captain Kade\'s gun truck');
   // first time: the Junk Mortar drops from the wreck
   if (!g.upgrades.mortar && !story.mortarDrop) {
-    const crate = makeCrate(0x7dff3a, 1.6);
-    const p = g.planet.ground(e.center.clone(), new THREE.Vector3(), 1.2);
-    crate.position.copy(p);
-    frameQuat(p.clone().normalize(), new THREE.Vector3(1, 0, 0), crate.quaternion);
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 120, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0x7dff3a, transparent: true, opacity: 0.35, depthWrite: false }));
-    beam.position.y = 60;
-    crate.add(beam);
-    g.scene.add(crate);
+    const { crate, p } = beaconCrate(g, e.center, 0x7dff3a, 1.6, 0x7dff3a);
     story.mortarDrop = { mesh: crate, pos: p };
     g.fx.pop('JUNK MORTAR DROPPED!', p.clone().addScaledVector(p.clone().normalize(), 6), { color: '#7dff3a', size: 48 });
   }

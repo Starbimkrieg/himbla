@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FACTIONS } from './locations.js';
 import { makeSeismo, makeTube, makeCrate, makeRover, makeFreighter, makeFigure } from './models.js';
 import { frameQuat, greatCircle, arcDist, darkness, tangent, randomTangent, collectNodes } from './geo.js';
-import { pick, randRange } from './rng.js';
+import { pick, randRange, clamp } from './rng.js';
 import { EVENT_RANGE } from './config.js';
 import { textSprite, toon, glow, ink } from './toon.js';
 
@@ -41,8 +41,6 @@ export class Events {
   }
 
   // ---------- helpers ----------
-  locs(filter) { return this.game.locations.filter(filter); }
-
   ground(dir, lift = 0) { return this.game.planet.ground(dir, new THREE.Vector3(), lift); }
 
   // random open ground minD-maxD (arc) from a direction, clear of settlements
@@ -82,11 +80,12 @@ export class Events {
     const up = pos.clone().normalize();
     g.position.copy(pos);
     frameQuat(up, new THREE.Vector3(1, 0, 0), g.quaternion);
-    const col = new THREE.Color(FACTIONS[faction] ? FACTIONS[faction].color : '#ffffff');
+    const fc = FACTIONS[faction] && FACTIONS[faction].color;
+    const col = new THREE.Color(fc || '#ffffff');
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 400, 10, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending }));
     beam.position.y = 200;
     g.add(beam);
-    const s = textSprite(label, { color: '#ffffff', size: 64, scale: 0.7, bg: FACTIONS[faction] ? FACTIONS[faction].color : '#3a3550' });
+    const s = textSprite(label, { color: '#ffffff', size: 64, scale: 0.7, bg: fc || '#3a3550' });
     s.position.y = 22;
     g.add(s);
     this.game.scene.add(g);
@@ -186,7 +185,7 @@ export class Events {
     ev.reward = Math.round(((ev.reward || 400) * 0.5 * Math.max(0.8, this.game.rep.payMultiplier(faction) || 1)) / 10) * 10;
     ev.stage = this.stagePoint(ev);
     ev.icon = `${ICON[type] || '!'} `;
-    ev.marker = this.marker(ev.stage, faction, `${ICON[type] || '!'} ${ev.short || ev.title}`);
+    ev.marker = this.marker(ev.stage, faction, ev.icon + (ev.short || ev.title));
     ev.marker.add(this.startProp(ev));
     if (ev.needsCrawler) {
       ev.model = this.makeCrawler(ev);
@@ -339,12 +338,10 @@ export class Events {
 
   complete(ev, text) {
     const g = this.game;
-    const mult = ev.payFactor ?? 1;
-    const credits = Math.round(ev.reward * mult);
+    const credits = Math.round(ev.reward * (ev.payFactor ?? 1));
     g.addCredits(credits, null);
     g.audio.cash();
-    const repGain = ev.type === 'wreck' ? 0 : 8;
-    if (repGain) g.rep.add(ev.faction, repGain, ev.title);
+    if (ev.type !== 'wreck') g.rep.add(ev.faction, 8, ev.title);
     if (ev.type === 'strike') g.rep.add(ev.target.faction, -4, `Struck ${ev.target.name}`, { war: false });
     if (ev.type === 'raid') { g.rep.add(ev.target.faction, -12, `Raided ${ev.target.name}`, { war: false }); g.rep.add('spacecom', -4, 'Piracy', { silent: true }); }
     g.hud.eventResult(ev, true, text || `+₵${credits}`);
@@ -515,7 +512,7 @@ export class Events {
     const P = this.game.player;
     const a = P.accel || _v.set(0, 0, 0);
     const fwd = P.heading, right = _v.clone().crossVectors(P.heading, P.up);
-    const ax = THREE.MathUtils.clamp(a.dot(right), -200, 200), ay = THREE.MathUtils.clamp(a.dot(fwd), -200, 200);
+    const ax = clamp(a.dot(right), -200, 200), ay = clamp(a.dot(fwd), -200, 200);
     const k = 22, c = 1.6, gain = 0.07;
     f.vx += (-k * f.sx - c * f.vx - ax * gain) * dt;
     f.vy += (-k * f.sy - c * f.vy - ay * gain) * dt;
@@ -577,10 +574,9 @@ export class Events {
     if (near) {
       const step = Math.min(left, 13 * dt);
       const t = tangent(ev.dest.dir.clone().sub(ev.dir), ev.dir).normalize();
-      const before = pos.clone();
       ev.dir = greatCircle(ev.dir, t, step);
       const after = this.ground(ev.dir);
-      o.vel.copy(after).sub(before).divideScalar(Math.max(dt, 1e-3));
+      o.vel.copy(after).sub(pos).divideScalar(Math.max(dt, 1e-3));
       ev.model.root.position.copy(after);
       frameQuat(ev.dir, t, ev.model.root.quaternion);
       for (const w of ev.model.wheels) w.rotation.x += dt * 10;
@@ -600,14 +596,14 @@ export class Events {
   start_pods(ev) {
     const g = this.game;
     ev.pods = [];
-    const up = ev.center.clone();
+    const up = ev.center.clone(), col = ev.type === 'relay' ? 0x2ec4ff : 0xff9f1c;
     for (let i = 0; i < ev.count; i++) {
       const t = randomTangent(up);
       const p = this.ground(greatCircle(up, t, 80 + Math.random() * 280), 1);
-      const crate = makeCrate(ev.type === 'relay' ? 0x2ec4ff : 0xff9f1c, 1.6);
+      const crate = makeCrate(col, 1.6);
       crate.position.copy(p);
       frameQuat(p.clone().normalize(), new THREE.Vector3(1, 0, 0), crate.quaternion);
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 90, 8, 1, true), new THREE.MeshBasicMaterial({ color: ev.type === 'relay' ? 0x2ec4ff : 0xff9f1c, transparent: true, opacity: 0.4, depthWrite: false }));
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 90, 8, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.4, depthWrite: false }));
       beam.position.y = 45;
       crate.add(beam);
       g.scene.add(crate);
@@ -649,15 +645,13 @@ export class Events {
   update_relay(ev, dt) { this.update_pods(ev, dt); }
 
   start_wreck(ev) {
-    const g = this.game;
     const out = this.nearestSafe(ev.start.clone().normalize(), { lit: true });
     ev.outpost = out;
     ev.phase = 'fetch';
-    const dist = arcDist(ev.start, out.dir);
-    ev.timer = Math.round((dist * 2) / 30 + 60);
+    ev.timer = Math.round((arcDist(ev.start, out.dir) * 2) / 30 + 60);
     ev.goal = out.pos;
     ev.goalLabel = `MED SUPPLIES @ ${out.short}`;
-    g.dialog('PIRATE WRECK', `"Hey… you. Runner. I'm stuck under this junk and my air's going. ${out.name} has med-kits. Please… ${ev.timer} seconds, maybe less."`, [{ label: 'ON MY WAY' }]);
+    this.game.dialog('PIRATE WRECK', `"Hey… you. Runner. I'm stuck under this junk and my air's going. ${out.name} has med-kits. Please… ${ev.timer} seconds, maybe less."`, [{ label: 'ON MY WAY' }]);
   }
 
   update_wreck(ev, dt) {
@@ -671,8 +665,7 @@ export class Events {
         ev.phase = 'return';
         ev.goal = ev.start;
         ev.goalLabel = 'BACK TO THE WRECK';
-        const kit = makeCrate(0xff3b5c, 0.6);
-        this.carryProp(kit);
+        this.carryProp(makeCrate(0xff3b5c, 0.6));
         this.game.fx.pop('MED-KIT!', null, { color: '#ff3b5c', size: 60 });
       }
     } else {
@@ -716,8 +709,8 @@ export class Events {
         ev.age += dt;
         if (ev.cool > 0) ev.cool -= dt;
         if (!ev.special && ev.age > OPEN_LIFETIME) { this.removeMarker(ev); this.list = this.list.filter((e) => e !== ev); this.cooldown[ev.faction] = 10; continue; }
-        if (ev.marker) ev.marker.children[1].material.rotation = Math.sin(g.time * 2) * 0.05;
         if (ev.marker) {
+          ev.marker.children[1].material.rotation = Math.sin(g.time * 2) * 0.05;
           const pulses = ev.marker.userData.pulses || (ev.marker.userData.pulses = collectNodes(ev.marker, (o) => o.userData.pulse));
           for (const o of pulses) o.scale.setScalar(1 + Math.sin(g.time * 3) * 0.08);
         }

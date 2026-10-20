@@ -25,6 +25,30 @@ const _near = [];
 const _sv = new THREE.Vector3();
 const _sn = new THREE.Vector3();
 
+// a faction's own armoured car (FOES[foe].rover), else a pirate war-rig
+const foeRover = (F) => (F.rover ? makeRover({ color: F.rover.color, trim: F.rover.trim, flag: F.rover.flag, pirate: false, style: F.rover.civil ? 'civil' : 'military' }) : makeRover({ color: 0x7b2ff7, trim: 0x7dff3a, pirate: true }));
+
+// the point R m from c round the ground circle at angle a (a fixed frame per c: a = 0 along the world x axis)
+function circlePoint(c, a, R) {
+  const u = c.clone().normalize();
+  const t1 = tangent(new THREE.Vector3(1, 0, 0), u).normalize();
+  const t2 = new THREE.Vector3().crossVectors(u, t1);
+  return c.clone().addScaledVector(t1, Math.cos(a) * R).addScaledVector(t2, Math.sin(a) * R);
+}
+
+// A crate on the ground under a tall beam of light (stolen cargo, Kade's Junk Mortar); returns it and where it sits.
+export function beaconCrate(g, at, color, size, beam) {
+  const crate = makeCrate(color, size);
+  const p = g.planet.ground(at, new THREE.Vector3(), 1.2);
+  crate.position.copy(p);
+  frameQuat(p.clone().normalize(), new THREE.Vector3(1, 0, 0), crate.quaternion);
+  const b = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 120, 8, 1, true), new THREE.MeshBasicMaterial({ color: beam, transparent: true, opacity: 0.35, depthWrite: false }));
+  b.position.y = 60;
+  crate.add(b);
+  g.scene.add(crate);
+  return { crate, p };
+}
+
 function steerToward(heading, up, target, maxAngle) {
   const t = tangent(target, up).normalize();
   heading.addScaledVector(up, -heading.dot(up)).normalize();
@@ -326,18 +350,12 @@ export class Enemies {
       g.scene.add(m.root);
       e = { kind, model: m, hp: 70, maxHp: 70, body: makeBody(pos), radius: 1.3 };
       e.body.maxEnergy = e.body.energy = PIRATE_SKATER.maxEnergy;
-    } else if (F.rover) {
-      // faction troops drive their own armoured cars
-      const m = makeRover({ color: F.rover.color, trim: F.rover.trim, flag: F.rover.flag, pirate: false, style: F.rover.civil ? 'civil' : 'military' });
-      m.root.scale.setScalar(1.3);
-      g.scene.add(m.root);
-      e = { kind: 'rover', model: m, hp: 210, maxHp: 210, body: makeBody(pos), radius: 3.8 };
     } else {
-      // pirate war-rigs: big, heavy, planted, fast
-      const m = makeRover({ color: 0x7b2ff7, trim: 0x7dff3a, pirate: true });
-      m.root.scale.setScalar(1.35); // Captain Kade's truck is the big one
+      // faction troops drive their own armoured cars; pirate war-rigs are big, heavy, planted, fast
+      const m = foeRover(F);
+      m.root.scale.setScalar(F.rover ? 1.3 : 1.35); // (a war-rig 1.35: Captain Kade's truck is the big one)
       g.scene.add(m.root);
-      e = { kind: 'rover', model: m, hp: 210, maxHp: 210, body: makeBody(pos), radius: 4.0 };
+      e = { kind: 'rover', model: m, hp: 210, maxHp: 210, body: makeBody(pos), radius: F.rover ? 3.8 : 4.0 };
     }
     const toP = tangent(g.player.pos.clone().sub(pos), up);
     if (toP.lengthSq() < 1e-4) toP.copy(tangent(new THREE.Vector3(1, 0, 0), up));
@@ -385,7 +403,7 @@ export class Enemies {
       e = { kind: 'ally', sub: 'skater', model: m, hp: 120, maxHp: 120, body: makeBody(pos), radius: 1.3 };
       e.body.maxEnergy = e.body.energy = PIRATE_SKATER.maxEnergy;
     } else {
-      const m = F.rover ? makeRover({ color: F.rover.color, trim: F.rover.trim, flag: F.rover.flag, pirate: false, style: F.rover.civil ? 'civil' : 'military' }) : makeRover({ color: 0x7b2ff7, trim: 0x7dff3a, pirate: true });
+      const m = foeRover(F);
       m.root.scale.setScalar(1.3);
       g.scene.add(m.root);
       e = { kind: 'ally', sub: 'rover', model: m, hp: 340, maxHp: 340, body: makeBody(pos), radius: 3.6, rideH: 2.2 };
@@ -435,11 +453,7 @@ export class Enemies {
       goal = tp.clone().addScaledVector(r, want).addScaledVector(side, want * 0.7);
     } else {
       // regroup round the objective
-      const au = e.anchor.clone().normalize();
-      const t1 = tangent(new THREE.Vector3(1, 0, 0), au).normalize();
-      const t2 = new THREE.Vector3().crossVectors(au, t1);
-      const a = e.slot + g.time * 0.05;
-      goal = e.anchor.clone().addScaledVector(t1, Math.cos(a) * 30).addScaledVector(t2, Math.sin(a) * 30);
+      goal = circlePoint(e.anchor, e.slot + g.time * 0.05, 30);
     }
     // stuck (no line of fire to a target in range, or barely moving): detour to one side for a few seconds
     e.stuckT = (e.stuckT || 0) + dt;
@@ -474,8 +488,7 @@ export class Enemies {
       frameQuat(up, e.heading, m.root.quaternion);
       m.torso.rotation.x = b.grounded ? 0.5 : 0.1;
       m.armL.rotation.z = -0.5; m.armR.rotation.z = 0.5;
-      if (!e.scarfSim) e.scarfSim = new ScarfSim(m);
-      e.scarfSim.update(dt, b.vel, up);
+      (e.scarfSim ||= new ScarfSim(m)).update(dt, b.vel, up);
       m.glowM.color.setHex(e.flash > 0 ? 0xffffff : 0x2ee6ff);
     }
     if (e.flash > 0) e.flash -= dt;
@@ -525,7 +538,6 @@ export class Enemies {
 
   maxRoamers() { return MAX_ROAMERS; }
   maxDen() { return MAX_DEN; }
-  roamCount() { return this.hunters(); }
   denFull(extra = 0) { return this.denCount() + extra > MAX_DEN; }
   denCount() { return this.list.filter((e) => e.faction === 'pirate' && e.home && e.kind !== 'core' && !e.dead).length; }
 
@@ -557,7 +569,7 @@ export class Enemies {
     const dir = tangent(P.vel, up);
     if (dir.lengthSq() < 4) dir.copy(g.cam.fwd);
     dir.normalize();
-    n = Math.min(n, MAX_ROAMERS - this.roamCount());
+    n = Math.min(n, MAX_ROAMERS - this.hunters());
     let spawned = 0, tries = 0, zoned = 0;
     // a few tries ahead of you, then anywhere round (settlements near a dark-side den can cover the forward arc)
     for (let i = 0; i < Math.max(8, n * 4) && spawned < n; i++) {
@@ -571,7 +583,7 @@ export class Enemies {
       this.spawnPirate(kind, d, null, opts);
       spawned++;
     }
-    this.dbgSpawn = { at: g.time, want: n, tries, zoned, spawned, roam: this.roamCount() }; // (dev overlay)
+    this.dbgSpawn = { at: g.time, want: n, tries, zoned, spawned, roam: this.hunters() }; // (dev overlay)
     if (spawned) {
       g.hud.alert(opts.rogue ? 'RENEGADE RAIDERS INBOUND!' : 'PIRATE INTERCEPT INBOUND!', '#7dff3a', 3);
       g.audio.alarm();
@@ -623,7 +635,7 @@ export class Enemies {
       e.dazed = 6;
     }
     if (fromPlayer) {
-      if (e.faction === 'pirate' && g.rep.aligned() && !e.rogue && !e.aggro) {
+      if (this.friendly(e)) {
         // shooting your own crew
         e.aggro = true;
         if (e.kind !== 'core') g.rep.add('rustmoon', -2, 'Shot a Rustmoon pirate');
@@ -735,16 +747,8 @@ export class Enemies {
 
   dropCargo(pos) {
     const g = this.game;
-    const color = g.missions.active ? g.missions.active.cargo.color : 0xffd23f;
-    const crate = makeCrate(color, 1.4);
-    const p = this.ground(pos, 1.2);
+    const { crate, p } = beaconCrate(g, pos, g.missions.active ? g.missions.active.cargo.color : 0xffd23f, 1.4, 0x2ee6ff);
     const up = p.clone().normalize();
-    crate.position.copy(p);
-    frameQuat(up, new THREE.Vector3(1, 0, 0), crate.quaternion);
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 120, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0x2ee6ff, transparent: true, opacity: 0.35, depthWrite: false }));
-    beam.position.y = 60;
-    crate.add(beam);
-    g.scene.add(crate);
     this.drops.push({ mesh: crate, pos: p.clone(), up });
     g.missions.onCargoDropped(p);
     g.fx.pop('CARGO DROPPED!', p.clone().addScaledVector(up, 5), { color: '#2ee6ff', size: 52 });
@@ -777,7 +781,6 @@ export class Enemies {
     const dark = darkness(P.up);
     if (dark < 0.5 && g.story && g.story.kadeChance != null) g.story.kadeChance = null; // back in the light: Kade's odds reset
     const aligned = g.rep.aligned();
-    const shadow = 1 + (g.upgrades.shadow || 0) * 0.35;
     // pirate blood (lab mutation): hunters mostly lose interest
     const blood = g.alchemy && g.alchemy.mutations.includes('blood') ? 0.35 : 1;
 
@@ -796,7 +799,7 @@ export class Enemies {
         this.pirateTimer -= dt * (1 + dark) * blood;
         if (this.pirateTimer <= 0) {
           const hot = ms.active.cargo.hot;
-          if ((hot > 0 || Math.random() < 0.35 + dark * 0.5) && this.roamCount() < MAX_ROAMERS) this.spawnSquad(Math.min(4, 1 + Math.floor(Math.max(1, hot) * 0.8 + Math.random() + dark)));
+          if ((hot > 0 || Math.random() < 0.35 + dark * 0.5) && this.hunters() < MAX_ROAMERS) this.spawnSquad(Math.min(4, 1 + Math.floor(Math.max(1, hot) * 0.8 + Math.random() + dark)));
           this.pirateTimer = randRange(30, 50) / Math.max(1, hot * 0.8);
           this.darkTimer = Math.max(this.darkTimer, 14);
         }
@@ -846,11 +849,11 @@ export class Enemies {
       if (e.kind === 'core') { this.updateCore(e, dt, time); continue; }
       if (e.kind === 'megamite') { g.alchemy.updateBeast(e, dt); if (e.flash > 0) e.flash -= dt; continue; }
       if (e.kind === 'kade') { g.story.updateKade(e, dt); if (e.dead) continue; }
-      if (e.kind === 'skater') this.updateSkater(e, dt, time);
+      if (e.kind === 'skater') this.updateSkater(e, dt);
       else if (e.kind === 'rover') this.updateRover(e, dt);
       else if (e.kind === 'milrover') { if (e.roam) this.updateRoamRover(e, dt); else this.updateMilRover(e, dt); }
       else if (e.kind === 'ally') this.updateAlly(e, dt);
-      else if (e.kind === 'turret') this.updateTurret(e, dt, shadow);
+      else if (e.kind === 'turret') this.updateTurret(e, dt);
       if (e.flash > 0) e.flash -= dt;
 
       // beyond threat range hunters soon give up (den guards head home and vanish much further out;
@@ -1147,7 +1150,7 @@ export class Enemies {
     return obj ? e.center.distanceTo(obj.center) : P.dead ? Infinity : e.body.pos.distanceTo(P.pos);
   }
 
-  updateSkater(e, dt, time) {
+  updateSkater(e, dt) {
     const g = this.game;
     const b = e.body;
     if (e.rag) { this.updateRag(e, dt); return; } // limp after a hard landing: ragdoll drives the body
@@ -1223,8 +1226,7 @@ export class Enemies {
     m.torso.rotation.x = b.grounded ? 0.5 : 0.1;
     m.body.position.y = m.bodyBase + (b.grounded ? -0.15 : 0);
     m.armL.rotation.z = -0.5; m.armR.rotation.z = 0.5;
-    if (!e.scarfSim) e.scarfSim = new ScarfSim(m);
-    e.scarfSim.update(dt, b.vel, up, e.carrying ? { cargo: 1 } : undefined);
+    (e.scarfSim ||= new ScarfSim(m)).update(dt, b.vel, up, e.carrying ? { cargo: 1 } : undefined);
     m.glowM.color.setHex(e.flash > 0 ? 0xffffff : dazed ? 0xffd23f : friendly ? 0x2ee6ff : e.glowColor || 0x7dff3a);
     if (e.carrying && !m.loot) { m.loot = makeCrate(g.missions.active ? g.missions.active.cargo.color : 0xffd23f, 0.7); m.cargoSlot.add(m.loot); }
     this.impactSkater(e, skating, hits); // last, after posing: a ragdoll starts from that pose
@@ -1241,8 +1243,7 @@ export class Enemies {
     m.body.position.y = m.bodyBase - 0.15;
     if (!e.rag.update(dt)) { e.rag.release(); e.rag = null; } else e.rag.sync(dt);
     e.center.copy(b.pos).addScaledVector(up, 1.3);
-    if (!e.scarfSim) e.scarfSim = new ScarfSim(m);
-    e.scarfSim.update(dt, b.vel, up);
+    (e.scarfSim ||= new ScarfSim(m)).update(dt, b.vel, up);
     m.glowM.color.setHex(e.flash > 0 ? 0xffffff : this.friendly(e) ? 0x2ee6ff : e.glowColor || 0x7dff3a);
   }
 
@@ -1359,11 +1360,7 @@ export class Enemies {
     let aim;
     if (e.boss === 'convoy') {
       e.routeA += dt * 0.19;
-      const ru = e.route.clone().normalize();
-      const t1 = tangent(new THREE.Vector3(1, 0, 0), ru).normalize();
-      const t2 = new THREE.Vector3().crossVectors(ru, t1);
-      const goal = e.route.clone().addScaledVector(t1, Math.cos(e.routeA) * 130).addScaledVector(t2, Math.sin(e.routeA) * 130);
-      aim = goal.sub(b.pos);
+      aim = circlePoint(e.route, e.routeA, 130).sub(b.pos);
       stepRover(e, dt, g.planet, g.colliders, aim, 25, { engine: 18, grip: 16, turn: 1.6, radius: 5, stick: 80 });
     } else {
       const victim = this.victim(e);

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { makeFigure, engineModel, caseModel } from './models.js';
 import { toon, glow, ink } from './toon.js';
-import { frameQuat, tangent, greatCircle, SUN, arcDist } from './geo.js';
+import { frameQuat, tangent, randomTangent, greatCircle, SUN, arcDist } from './geo.js';
 import { pick, mulberry32 } from './rng.js';
 import { LIVING, spliceGenes, makeChimera, makeMite, ensureStats } from './chimera.js';
 import { chimeraCard, cardList, installTips } from './chimeracard.js';
@@ -60,7 +60,7 @@ export const MUTATIONS = {
 const MAX_MUTATIONS = 3;
 const MAX_FOLLOW = 3;
 // holding pen behind the lab (lab-local), and how many residents get models
-export const PEN = { x0: 28, z0: 22, x1: 62, z1: 64 };
+const PEN = { x0: 28, z0: 22, x1: 62, z1: 64 };
 const PEN_SHOWN = 36;
 const KEY = 'moonrunner-lab-v1';
 
@@ -207,7 +207,7 @@ export class Alchemy {
       let speed = 2.5;
       if (m.flee > 0) m.flee -= dt;
       if ((d < 14 && P.speed > 6) || (m.flee > 0 && d < 30)) { m.dir = tangent(m.pos.clone().sub(P.pos), up).normalize(); speed = 9; }
-      else if (Math.random() < dt * 0.5) m.dir = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+      else if (Math.random() < dt * 0.5) m.dir = randomTangent(up);
       if (arcDist(m.pos, m.home) > 35) m.dir = tangent(m.home.clone().sub(up), up).normalize();
       const next = greatCircle(up, m.dir, speed * dt);
       m.hop += m.vy * dt; m.vy -= 4 * dt;
@@ -308,14 +308,14 @@ export class Alchemy {
   dropLoot(kind, pos, { name, credits = 0, to = null, crate = false } = {}) {
     const g = this.game;
     const up = pos.clone().normalize();
-    const land = to || pos.clone().addScaledVector(tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize(), 1 + Math.random() * 2);
+    const land = to || pos.clone().addScaledVector(randomTangent(up), 1 + Math.random() * 2);
     const at = g.planet.ground(land, new THREE.Vector3(), 0.9);
     const { root, core } = makeLoot(kind, { credits, crate });
     frameQuat(at.clone().normalize(), tangent(SUN.clone(), up).normalize(), root.quaternion);
     g.scene.add(root);
     if (kind === 'engine' && !to) {
       // engines pop out, thud, skid and settle (updateEngine); only then can G scoop them
-      const dir = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+      const dir = randomTangent(up);
       const p0 = pos.clone().addScaledVector(up, 1.5);
       root.position.copy(p0);
       this.loot.push({ kind, name, credits, crate, root, core, pos: p0, phys: true, rest: false, vel: dir.multiplyScalar(4 + Math.random() * 3).addScaledVector(up, 5 + Math.random() * 2), spin: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(9), smokeT: 0, t: 0 });
@@ -338,7 +338,7 @@ export class Alchemy {
         L.fly = Math.min(1, L.fly + dt / L.flyT);
         const k = L.fly;
         L.root.position.lerpVectors(L.from, L.pos, k).addScaledVector(L.pos.clone().normalize(), Math.sin(k * Math.PI) * (6 + L.from.distanceTo(L.pos) * 0.25));
-        if (L.fly >= 1) { this.game.fx.dust(L.pos, new THREE.Vector3(), 6, L.pos.clone().normalize()); this.game.audio.thud(8); }
+        if (L.fly >= 1) { g.fx.dust(L.pos, new THREE.Vector3(), 6, L.pos.clone().normalize()); g.audio.thud(8); }
         continue;
       }
       L.core.rotation.y += dt * 2;
@@ -348,11 +348,12 @@ export class Alchemy {
         if (L.crate) { this.openCrate(); take = true; }
         if (L.credits) { g.addCredits(L.credits, 'Salvage'); g.fx.pop(`+₵${L.credits}`, null, { color: '#ffd23f', size: 44 }); L.credits = 0; if (!L.kind) take = true; }
         if (L.kind) {
-          if (this.owned && this.used + (ITEMS[L.kind].slots || 1) <= this.slots) {
+          const I = ITEMS[L.kind];
+          if (this.owned && this.used + (I.slots || 1) <= this.slots) {
             this.add(L.kind, L.name);
-            g.fx.pop(`${ITEMS[L.kind].name.toUpperCase()}!`, null, { color: ITEMS[L.kind].color, size: 42 });
+            g.fx.pop(`${I.name.toUpperCase()}!`, null, { color: I.color, size: 42 });
             take = true;
-          } else if (!L.warned) { L.warned = true; g.hud.toast(this.owned ? `Jar is full: no room for the ${ITEMS[L.kind].name.toLowerCase()}.` : `A ${ITEMS[L.kind].name.toLowerCase()}! You need a containment jar to carry it.`, 2.5); }
+          } else if (!L.warned) { L.warned = true; g.hud.toast(this.owned ? `Jar is full: no room for the ${I.name.toLowerCase()}.` : `A ${I.name.toLowerCase()}! You need a containment jar to carry it.`, 2.5); }
         }
       } else if (L.warned && L.pos.distanceTo(P.pos) > 8) L.warned = false;
       if (take || L.t > 240) { L.root.removeFromParent(); this.loot.splice(i, 1); }
@@ -386,7 +387,7 @@ export class Alchemy {
           L.vel.set(0, 0, 0);
           L.pos.setLength(g.planet.surface(L.pos) + 0.45);
           // lie flat, random facing
-          frameQuat(L.pos.clone().normalize(), tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), L.pos.clone().normalize()).normalize(), L.root.quaternion);
+          frameQuat(L.pos.clone().normalize(), randomTangent(L.pos.clone().normalize()), L.root.quaternion);
         }
       }
     }
@@ -464,6 +465,7 @@ export class Alchemy {
   dump() {
     const g = this.game;
     const P = g.player;
+    const spray = (sp, o) => g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(sp), o); // bits flung up off you
     for (const it of this.jar) {
       if (it.kind === 'person' || it.kind === 'voidling' || it.kind === 'pirate') this.spawnWanderer(it.name, it.kind === 'voidling', it.kind === 'pirate');
       else if (it.kind === 'alien') this.spawnWanderer(it.name, false, false, null, true);
@@ -481,13 +483,13 @@ export class Alchemy {
           m.flee = 3.5;
         }
       }
-      else if (it.kind === 'sapling') { g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(2), { color: 0x5fbf4a, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 }); g.fx.pop('REPLANTED!', null, { color: '#5fbf4a', size: 36 }); }
-      else if (it.kind === 'junkbot') { g.fx.pop(`${(it.name || 'BOT').toUpperCase()}: BEEP BOOP!`, null, { color: '#ffb347', size: 36 }); g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0xffb347, size: 0.3, life: 0.6, gravity: 2, count: 8, spread: 2 }); }
+      else if (it.kind === 'sapling') { spray(2, { color: 0x5fbf4a, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 }); g.fx.pop('REPLANTED!', null, { color: '#5fbf4a', size: 36 }); }
+      else if (it.kind === 'junkbot') { g.fx.pop(`${(it.name || 'BOT').toUpperCase()}: BEEP BOOP!`, null, { color: '#ffb347', size: 36 }); spray(3, { color: 0xffb347, size: 0.3, life: 0.6, gravity: 2, count: 8, spread: 2 }); }
       else if (it.kind === 'engine') { this.dropLoot('engine', P.pos.clone().addScaledVector(g.cam.right, 3)); continue; }
-      else if (it.kind === 'wiring') g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0xffb347, size: 0.3, life: 0.6, gravity: 2, count: 8, spread: 2 });
+      else if (it.kind === 'wiring') spray(3, { color: 0xffb347, size: 0.3, life: 0.6, gravity: 2, count: 8, spread: 2 });
       else if (it.kind === 'car') {
         // pops out beside you and hovers off to the nearest road
-        const v = this.game.world.vehicles.find((x) => x.captured > 0 && x.kind === 'car');
+        const v = g.world.vehicles.find((x) => x.captured > 0 && x.kind === 'car');
         if (v) {
           v.captured = 0;
           v.root.visible = true;
@@ -495,8 +497,8 @@ export class Alchemy {
         }
         g.fx.pop('BEEP BEEP!', null, { color: '#ff7ad9', size: 40 });
       }
-      else if (it.kind === 'rock' || it.kind === 'slickrock') g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0x2ee6ff, size: 0.5, life: 1, gravity: 2, count: 6, spread: 3 });
-      else g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(2), { color: it.kind === 'dirt' ? 0xc9b79c : 0x2a1f4f, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 });
+      else if (it.kind === 'rock' || it.kind === 'slickrock') spray(3, { color: 0x2ee6ff, size: 0.5, life: 1, gravity: 2, count: 6, spread: 3 });
+      else spray(2, { color: it.kind === 'dirt' ? 0xc9b79c : 0x2a1f4f, size: 0.4, life: 1, gravity: 2, count: 10, spread: 3 });
     }
     const freed = this.jar.filter((i) => LIVING.includes(i.kind)).length;
     const lost = this.jar.length - freed;
@@ -512,7 +514,7 @@ export class Alchemy {
     const pos = g.planet.ground(at || P.pos.clone().addScaledVector(g.cam.right, 3), new THREE.Vector3());
     f.root.position.copy(pos);
     g.scene.add(f.root);
-    this.wanderers.push({ ...f, purple, name: name || pick(NAMES), dir: tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), pos.clone().normalize()).normalize(), t: 0 });
+    this.wanderers.push({ ...f, purple, name: name || pick(NAMES), dir: randomTangent(pos.clone().normalize()), t: 0 });
     g.fx.pop(`${(name || 'THEY').toUpperCase()} IS FREE!`, null, { color: '#ff9f1c', size: 36 });
   }
 
@@ -552,8 +554,8 @@ export class Alchemy {
     const born = this.followers.find((f) => f.genes === genes);
     const hatching = born && g.world.reactor && this.hatch(born);
     if (items.some((i) => i.kind === 'person' || i.kind === 'voidling')) g.rep.add('kepler', -2, 'Spliced a resident', { silent: true });
-    if (hatching) g.schedule(HATCH_T, () => g.fx.pop(`IT'S ${genes.name.toUpperCase()}!`, null, { color: '#7dff3a', size: 60 }));
-    else g.fx.pop(`IT'S ${genes.name.toUpperCase()}!`, null, { color: '#7dff3a', size: 60 });
+    const pop = () => g.fx.pop(`IT'S ${genes.name.toUpperCase()}!`, null, { color: '#7dff3a', size: 60 });
+    if (hatching) g.schedule(HATCH_T, pop); else pop();
     g.style(40, 'NEW CHIMERA');
     const parts = `${genes.body} body, ${genes.legs} legs, ${genes.head} head${genes.extraHead ? `, and a spare ${genes.extraHead} head` : ''}`;
     const st = genes.stats;
@@ -765,12 +767,11 @@ export class Alchemy {
     P.mutFire = has('arms') ? 0.7 : 1;
     P.mutHealth = has('stone') ? 40 : 0;
     P.mutGrip = has('roots') ? 0.3 : 0;
-    g.player.applyUpgrades(g.upgrades);
+    P.applyUpgrades(g.upgrades);
     for (const m of this.mutMeshes) m.removeFromParent();
     this.mutMeshes = [];
-    const M = P.model;
     const add = (parent, mesh) => { parent.add(mesh); this.mutMeshes.push(mesh); return mesh; };
-    buildMutationMeshes(M, has, add);
+    buildMutationMeshes(P.model, has, add);
   }
 
   // ---------- per-frame ----------
@@ -949,7 +950,7 @@ export class Alchemy {
       const p = w.root.position;
       const up = p.clone().normalize();
       w.t += dt;
-      if (Math.random() < dt * 0.3) w.dir = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+      if (Math.random() < dt * 0.3) w.dir = randomTangent(up);
       const next = greatCircle(up, w.dir, 1.2 * dt);
       p.copy(this.game.planet.ground(next, new THREE.Vector3()));
       frameQuat(next, w.dir, w.root.quaternion);
@@ -977,9 +978,9 @@ export class Alchemy {
       let used = 0;
       if (this.artifact) { cells.push('<span class="artifact-slot" title="Alien Artifact (sealed)">✧</span>'); used++; }
       for (const it of this.jar) {
-        const n = ITEMS[it.kind].slots || 1;
+        const I = ITEMS[it.kind], n = I.slots || 1;
         used += n;
-        for (let k = 0; k < n; k++) cells.push(`<span style="color:${ITEMS[it.kind].color}" title="${ITEMS[it.kind].name}">${ITEMS[it.kind].icon}</span>`);
+        for (let k = 0; k < n; k++) cells.push(`<span style="color:${I.color}" title="${I.name}">${I.icon}</span>`);
       }
       for (let i = used; i < this.slots; i++) cells.push('<span class="empty-slot">·</span>');
       parts.push(`JAR ${cells.join('')}${this.jar.length >= 2 ? ' <i>stewing…</i>' : ''}${this.jar.length ? ' <i>· X empty · ⇧X dump</i>' : ''}`);
@@ -993,18 +994,13 @@ export class Alchemy {
 
 // Reactor pet: 'rock' = slick rock with eyes, else the dirt golem. Used by addFollower and the Asset Row.
 export function makeFollowerModel(kind) {
-  let root;
-  if (kind === 'rock') {
-    root = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), toon(0x8d8898));
-    ink(body, 0.08);
-    body.position.y = 1;
-    root.add(body);
-    for (const s of [-1, 1]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 4), glow(0x2ee6ff)); eye.position.set(s * 0.35, 1.3, 0.85); root.add(eye); }
-  } else {
-    const f = makeFigure({ suit: 0x8a6a4a, helmet: 0x6b5a3a, visor: 0xffd23f, scale: 0.7 });
-    root = f.root;
-  }
+  if (kind !== 'rock') return makeFigure({ suit: 0x8a6a4a, helmet: 0x6b5a3a, visor: 0xffd23f, scale: 0.7 }).root;
+  const root = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), toon(0x8d8898));
+  ink(body, 0.08);
+  body.position.y = 1;
+  root.add(body);
+  for (const s of [-1, 1]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 4), glow(0x2ee6ff)); eye.position.set(s * 0.35, 1.3, 0.85); root.add(eye); }
   return root;
 }
 
@@ -1175,13 +1171,10 @@ const RECIPES = {
 
 // statue for the lab gallery
 Alchemy.prototype.statue = function statue(name) {
-  const g = this.game;
-  const lab = g.world.lab;
-  const loc = lab.loc;
   const f = makeFigure({ suit: 0x9a9a9a, helmet: 0x9a9a9a, visor: 0x5b5870 });
   const i = this.statues++;
   f.root.position.set(-16 + (i % 6) * 3, 0, 10);
   f.root.rotation.y = Math.PI;
   f.root.userData.name = name;
-  loc.group.add(f.root);
+  this.game.world.lab.loc.group.add(f.root);
 };

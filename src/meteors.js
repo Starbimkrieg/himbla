@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { toon, glow, ink } from './toon.js';
-import { arcDist, greatCircle, tangent } from './geo.js';
+import { arcDist, greatCircle, tangent, randomTangent } from './geo.js';
 import { randRange as rand } from './rng.js';
 
 // Meteor showers: rare, one at a time, over open ground (never a settlement or outpost), shown as a red zone on the
@@ -25,6 +25,7 @@ const CHAIN_WINDOW = 14; // s: a bounce within this of the last is a chain
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 const _z = new THREE.Vector3(0, 0, 1);
+const randDir = (v) => v.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
 
 let CHUNK_GEO = null, SCORCH_TEX = null;
 // a lumpy unit boulder, shaped by seed
@@ -105,7 +106,7 @@ export function makeMeteorRock(kind, M, r, seed) {
     // frost shards
     for (let i = 0; i < 9; i++) {
       const sp = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0).scale(0.6, 1.8, 0.6), M.hot);
-      _a.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      randDir(_a);
       sp.position.copy(_a).multiplyScalar(0.95);
       sp.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), _a);
       body.add(sp);
@@ -114,7 +115,7 @@ export function makeMeteorRock(kind, M, r, seed) {
     // glowing veins: half-sunk embers
     for (let i = 0; i < 14; i++) {
       const e = new THREE.Mesh(new THREE.SphereGeometry(rand(0.06, 0.13), 6, 4), M.hot);
-      _a.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      randDir(_a);
       e.position.copy(_a).multiplyScalar(0.98);
       e.scale.set(1, 1, rand(1.5, 3));
       e.lookAt(_a.clone().multiplyScalar(2));
@@ -123,7 +124,7 @@ export function makeMeteorRock(kind, M, r, seed) {
   } else if (kind === 'crystal') {
     // clusters of glowing crystals
     for (let c = 0; c < 3; c++) {
-      _c.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      randDir(_c);
       for (let i = 0; i < 4; i++) {
         const cr = new THREE.Mesh(new THREE.OctahedronGeometry(rand(0.15, 0.28), 0).scale(0.55, 1.9, 0.55), i % 2 ? M.hot : glow(0xff2e88));
         _a.copy(_c).add(new THREE.Vector3((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5)).normalize();
@@ -136,7 +137,7 @@ export function makeMeteorRock(kind, M, r, seed) {
     // regmaglypts (thumbprint pits)
     for (let i = 0; i < 10; i++) {
       const pit = new THREE.Mesh(new THREE.SphereGeometry(rand(0.12, 0.2), 8, 6), toon(0x23252e));
-      _a.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+      randDir(_a);
       pit.position.copy(_a).multiplyScalar(0.97);
       pit.scale.set(1, 1, 0.35);
       pit.lookAt(_a.clone().multiplyScalar(2));
@@ -167,7 +168,7 @@ export class Meteors {
     const up = P.pos.clone().normalize();
     for (let tries = 0; tries < 80; tries++) {
       const r = rand(380, 560);
-      const t = tangent(_a.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+      const t = randomTangent(up);
       const dir = greatCircle(up, t, rand(1200, 3500), new THREE.Vector3());
       if (g.locations.some((l) => arcDist(dir, l.dir) < Math.max(l.zoneR || 0, l.r * 1.9) + r + 200)) continue;
       if (g.territory && g.territory.outposts.some((o) => !o.gone && arcDist(dir, o.dir) < r + 120)) continue;
@@ -180,11 +181,10 @@ export class Meteors {
     const g = this.game;
     const site = this.pickSite();
     if (!site) { this.next = 60; return; }
-    const up = site.dir;
     this.zone = {
       dir: site.dir, r: site.r, t: 0, dur: rand(...DUR), spawnT: 0,
       // the whole shower shares one slant
-      slant: tangent(_a.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize(),
+      slant: randomTangent(site.dir),
     };
     g.hud.alert('☄ METEOR SHOWER INCOMING ☄', '#ff4f2e', 4);
     g.audio.alarm();
@@ -203,7 +203,7 @@ export class Meteors {
     const g = this.game, Z = this.zone;
     let dir = at;
     if (!dir) {
-      const t = tangent(_a.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), Z.dir).normalize();
+      const t = randomTangent(Z.dir);
       dir = greatCircle(Z.dir, t, Math.sqrt(Math.random()) * Z.r, new THREE.Vector3());
     }
     const gp = g.planet.ground(dir, new THREE.Vector3());
@@ -219,7 +219,7 @@ export class Meteors {
     const seed = Math.random() * 100;
     const { body, geo } = makeMeteorRock(kind, M, r, seed);
     // collision: three spheres along its longest axis (they turn with it)
-    const sc = [body.scale.x, body.scale.y, body.scale.z];
+    const sc = body.scale.toArray();
     const li = sc.indexOf(Math.max(...sc));
     const minor = (sc.reduce((a, b) => a + b, 0) - sc[li]) / 2 * 0.92;
     const axis = new THREE.Vector3().setComponent(li, 1);
@@ -231,15 +231,13 @@ export class Meteors {
     const near = g.player.pos.distanceTo(gp) < 900;
     const blast = 8 + r * 1.8;
     const ring = near ? g.fx.warningRing(gp, blast, travel / speed) : null;
-    const rock = { grp, mesh: body, geo, kind, pos, vel, r, gp, blast, axis, reach, minor, cols: [], spin: new THREE.Vector3(Math.random(), Math.random(), Math.random()).normalize(), spinRate: rand(0.2, 0.8), col: null, bounceT: 0, hurt: false, ring };
-    this.rocks.push(rock);
+    this.rocks.push({ grp, mesh: body, geo, kind, pos, vel, r, gp, blast, axis, reach, minor, cols: [], spin: new THREE.Vector3(Math.random(), Math.random(), Math.random()).normalize(), spinRate: rand(0.2, 0.8), col: null, bounceT: 0, hurt: false, ring });
   }
 
   // dev menu: a rock aimed at your spot, first seen 70 m up (a few seconds away). Move, or jump on it.
   spawnOnPlayer() {
     const dir = this.game.player.pos.clone().normalize();
-    const slant = tangent(_a.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), dir).normalize();
-    this.spawnRock({ dir, slant, height: 70 });
+    this.spawnRock({ dir, slant: randomTangent(dir), height: 70 });
     return this.rocks[this.rocks.length - 1];
   }
 
@@ -319,7 +317,7 @@ export class Meteors {
       m.scale.setScalar(s);
       m.castShadow = true;
       ink(m, 0.06);
-      const t = tangent(_a.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+      const t = randomTangent(up);
       m.position.copy(rock.gp).addScaledVector(up, 1 + rock.r * 0.5).addScaledVector(t, rock.r * 0.5);
       g.scene.add(m);
       this.chunks.push({ m, s, vel: up.clone().multiplyScalar(rand(7, 18)).addScaledVector(t, rand(5, 18)).addScaledVector(rock.vel, 0.25), spin: new THREE.Vector3(Math.random(), Math.random(), Math.random()).normalize(), rate: rand(2, 7), life: rand(5, 8), t: 0 });
@@ -364,8 +362,7 @@ export class Meteors {
       rk.grp.position.copy(rk.pos);
       rk.mesh.rotateOnAxis(rk.spin, rk.spinRate * dt);
       if (Math.random() < dt * 40 && P.pos.distanceTo(rk.pos) < 1300) g.fx.spawn(rk.pos.clone().addScaledVector(rk.vel, -rk.r / rk.vel.length()), rk.vel.clone().multiplyScalar(-0.3), { color: Math.random() < 0.5 ? KINDS[rk.kind].trail : 0xffd23f, size: rk.r * 0.4, life: 1.3, count: 3, spread: rk.r * 0.6 });
-      const dP = P.pos.distanceTo(rk.pos);
-      if (dP < 250) this.syncCollider(rk);
+      if (P.pos.distanceTo(rk.pos) < 250) this.syncCollider(rk);
       else if (rk.col) this.dropCollider(rk);
       // touching: on top, it flings you (every landing); from the side or below, it hurts once
       rk.bounceT = Math.max(0, (rk.bounceT || 0) - dt);

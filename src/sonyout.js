@@ -23,36 +23,33 @@ const CRC = (() => {
   for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
   return t;
 })();
-export function crc32(bytes, from = 0, to = bytes.length, crc = 0xffffffff) {
+function crc32(bytes, from = 0, to = bytes.length, crc = 0xffffffff) {
   for (let i = from; i < to; i++) crc = CRC[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
   return crc >>> 0;
 }
 // BT output report checksum: 0xA2 seed, report id, data up to the checksum
-export function btCrc(id, data) {
-  let c = crc32([0xa2, id]);
-  c = crc32(data, 0, data.length - 4, c);
-  return (c ^ 0xffffffff) >>> 0;
+function btCrc(id, data) {
+  return (crc32(data, 0, data.length - 4, crc32([0xa2, id])) ^ 0xffffffff) >>> 0;
 }
 
 // ---- DualSense trigger effects: 11 bytes, mode + ten parameters ----
 export const TRIGGER_OFF = new Uint8Array(11);
-// travel zones `position`..9 (0 = untouched, 9 = fully down) at strength 1..8: a 10-bit zone mask and 3 bits per zone
-function zones(position, strength) {
+// effect `mode` over travel zones `position`..9 (0 = untouched, 9 = fully down) at strength 1..8: a 10-bit zone mask and
+// 3 bits per zone, written into e[0..6]
+function zones(e, mode, position, strength) {
   let active = 0, packed = 0;
   const b = (strength - 1) & 7;
   for (let i = position; i < 10; i++) { active |= 1 << i; packed |= b << (3 * i); }
-  return [active, packed];
+  e[0] = mode; e[1] = active & 0xff; e[2] = (active >> 8) & 0xff;
+  e[3] = packed & 0xff; e[4] = (packed >>> 8) & 0xff; e[5] = (packed >>> 16) & 0xff; e[6] = (packed >>> 24) & 0xff;
+  return e;
 }
 const clampI = (x, lo, hi) => Math.max(lo, Math.min(hi, Math.round(x)));
 // a wall: resistance from `position` (0-9) on, `strength` 1-8
 export function feedback(position, strength) {
   const e = new Uint8Array(11);
   position = clampI(position, 0, 9); strength = clampI(strength, 0, 8);
-  if (!strength) return e;
-  const [a, p] = zones(position, strength);
-  e[0] = 0x21; e[1] = a & 0xff; e[2] = (a >> 8) & 0xff;
-  e[3] = p & 0xff; e[4] = (p >>> 8) & 0xff; e[5] = (p >>> 16) & 0xff; e[6] = (p >>> 24) & 0xff;
-  return e;
+  return strength ? zones(e, 0x21, position, strength) : e;
 }
 // a click: resistance that gives way like a gun trigger, between zones `start` (2-7) and `end` (start+1..8)
 export function weapon(start, end, strength) {
@@ -68,9 +65,7 @@ export function vibration(position, amplitude, hz) {
   const e = new Uint8Array(11);
   position = clampI(position, 0, 9); amplitude = clampI(amplitude, 0, 8); hz = clampI(hz, 0, 255);
   if (!amplitude || !hz) return e;
-  const [a, p] = zones(position, amplitude);
-  e[0] = 0x26; e[1] = a & 0xff; e[2] = (a >> 8) & 0xff;
-  e[3] = p & 0xff; e[4] = (p >>> 8) & 0xff; e[5] = (p >>> 16) & 0xff; e[6] = (p >>> 24) & 0xff;
+  zones(e, 0x26, position, amplitude);
   e[9] = hz;
   return e;
 }
@@ -78,7 +73,7 @@ export function vibration(position, amplitude, hz) {
 // ---- reports ----
 // st: { weak, strong (0-255), rt, lt (effects), rgb [r, g, b] | null, leds (0-31), setup (first lightbar write) }
 // kind: 'usb' | 'bt'; seq: BT sequence number (0-15). Returns { id, data }.
-export function buildReport(model, kind, seq, st) {
+function buildReport(model, kind, seq, st) {
   const rgb = st.rgb;
   if (model === SONY_DS5) {
     const c = new Uint8Array(47);
@@ -93,28 +88,22 @@ export function buildReport(model, kind, seq, st) {
       c[43] = st.leds & 0x1f;
       c[44] = rgb[0]; c[45] = rgb[1]; c[46] = rgb[2];
     }
-    if (kind === 'usb') return { id: 0x02, data: c };
-    const d = new Uint8Array(77);
-    d[0] = (seq & 15) << 4; d[1] = 0x10;
-    d.set(c, 2);
-    new DataView(d.buffer).setUint32(73, btCrc(0x31, d), true);
-    return { id: 0x31, data: d };
+    return kind === 'usb' ? { id: 0x02, data: c } : btReport(0x31, (seq & 15) << 4, 0x10, c);
   }
   // DualShock 4: rumble and lightbar
-  const c = new Uint8Array(10);
+  const c = new Uint8Array(31);
   c[0] = 0x01 | (rgb ? 0x02 : 0);
   c[3] = st.weak; c[4] = st.strong;
   if (rgb) { c[5] = rgb[0]; c[6] = rgb[1]; c[7] = rgb[2]; }
-  if (kind === 'usb') {
-    const d = new Uint8Array(31);
-    d.set(c, 0);
-    return { id: 0x05, data: d };
-  }
+  return kind === 'usb' ? { id: 0x05, data: c } : btReport(0x11, 0xc4, 0, c); // 0xc4: HID, CRC-32, 4 ms poll
+}
+// the Bluetooth form: two header bytes, the USB report from byte 2, CRC-32 in the last four
+function btReport(id, h0, h1, c) {
   const d = new Uint8Array(77);
-  d[0] = 0xc4; // HID, CRC-32, 4 ms poll
+  d[0] = h0; d[1] = h1;
   d.set(c, 2);
-  new DataView(d.buffer).setUint32(73, btCrc(0x11, d), true);
-  return { id: 0x11, data: d };
+  new DataView(d.buffer).setUint32(73, btCrc(id, d), true);
+  return { id, data: d };
 }
 
 const FAIL_PAUSE = 10000; // ms to back off after three failed writes in a row
@@ -134,7 +123,6 @@ export class SonyOut {
     this.fails = 0;
     this.pause = 0;     // performance.now() until writes resume
     this.lastErr = '';
-    this.sent = 0;      // reports written (dev overlay / settings status)
     this.dev = null;    // device `kind` belongs to
     this.kind = null;
     this.urgent = false;
@@ -165,7 +153,6 @@ export class SonyOut {
     return !!(d && d.opened && this.layout() && performance.now() >= this.pause);
   }
 
-  get model() { return this.gyro.model; }
   get triggers() { return this.gyro.model === SONY_DS5; }
 
   // 0..1
@@ -208,7 +195,7 @@ export class SonyOut {
     this.busy = true; this.sentAt = now; this.sentKey = key;
     const dev = this.gyro.dev;
     dev.sendReport(id, data).then(() => {
-      this.busy = false; this.fails = 0; this.sent++;
+      this.busy = false; this.fails = 0;
       if (s.rgb) s.setup = false;
     }).catch((err) => {
       this.busy = false; this.sentKey = '';

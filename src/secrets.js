@@ -213,8 +213,7 @@ export class Secrets {
       return b;
     };
     // trench wall colliders and rough faces, a little proud of the ground as a lip
-    W.col(loc, { type: 'box', x: -RAMP.x - 0.5, y: FLOOR / 2 - 1, z: (RAMP.z0 + RAMP.z1) / 2, hx: 0.5, hy: -FLOOR / 2 + 0.7, hz: (RAMP.z1 - RAMP.z0) / 2 });
-    W.col(loc, { type: 'box', x: RAMP.x + 0.5, y: FLOOR / 2 - 1, z: (RAMP.z0 + RAMP.z1) / 2, hx: 0.5, hy: -FLOOR / 2 + 0.7, hz: (RAMP.z1 - RAMP.z0) / 2 });
+    for (const sx of [-1, 1]) W.col(loc, { type: 'box', x: sx * (RAMP.x + 0.5), y: FLOOR / 2 - 1, z: (RAMP.z0 + RAMP.z1) / 2, hx: 0.5, hy: -FLOOR / 2 + 0.7, hz: (RAMP.z1 - RAMP.z0) / 2 });
     rough(-RAMP.x - 2.4, -RAMP.x + 0.1, FLOOR - 2, 0.9, RAMP.z0, RAMP.z1, rockT, 0.65);
     rough(RAMP.x - 0.1, RAMP.x + 2.4, FLOOR - 2, 0.9, RAMP.z0, RAMP.z1, rockT, 0.65);
     // rim outcrops (break up the straight edges), heaped over the mouth
@@ -482,12 +481,12 @@ export class Secrets {
     this.orbit = { a, b, n };
     // altitude: high everywhere, dipping low once per lap near the ILMB
     const ground = new Float32Array(N_ORBIT);
+    let maxG = 0;
     for (let i = 0; i < N_ORBIT; i++) {
       const th = (i / N_ORBIT) * Math.PI * 2;
       ground[i] = P.surface(_v.copy(a).multiplyScalar(Math.cos(th)).addScaledVector(b, Math.sin(th)).multiplyScalar(P.R));
+      maxG = Math.max(maxG, ground[i]);
     }
-    let maxG = 0;
-    for (let i = 0; i < N_ORBIT; i++) maxG = Math.max(maxG, ground[i]);
     const high = maxG + 160;
     const lowAt = 0.32; // radians past the ILMB
     this.radius = new Float32Array(N_ORBIT);
@@ -528,7 +527,7 @@ export class Secrets {
     const th = this.satTheta();
     S.prevPos.copy(S.pos);
     this.orbitPoint(th, S.pos);
-    const ahead = this.orbitPoint(th + 0.002, new THREE.Vector3());
+    const ahead = this.orbitPoint(th + 0.002);
     const up = S.pos.clone().normalize();
     // velocity from the orbit, so a time skip can't fling you off the deck
     S.vel.copy(ahead).sub(S.pos).multiplyScalar(SAT_SPEED / 3750 / 0.002);

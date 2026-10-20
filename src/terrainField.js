@@ -60,6 +60,7 @@ function tint(c, t, k) {
   if (k <= 0) return;
   c.r *= 1 + (t[0] - 1) * k; c.g *= 1 + (t[1] - 1) * k; c.b *= 1 + (t[2] - 1) * k;
 }
+const lum = (c) => c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
 
 export class TerrainField {
   constructor(zones, seed = PLANET.seed) {
@@ -237,10 +238,8 @@ export class TerrainField {
   craterBase(c) {
     const rock = this.attr.rock, rille = this.attr.rille, crest = this.attr.crest;
     const x = c.d.x * R, y = c.d.y * R, z = c.d.z * R;
-    let far = clamp((0.12 - (c.d.x * SUN.x + c.d.y * SUN.y + c.d.z * SUN.z)) / 0.4, 0, 1);
-    far = far * far * (3 - 2 * far);
     c.hf = this.features(x, y, z);
-    const hb = this.base(x, y, z, far);
+    const hb = this.base(x, y, z, darkness(c.d));
     this.attr.rock = rock; this.attr.rille = rille; this.attr.crest = crest;
     return hb;
   }
@@ -253,7 +252,6 @@ export class TerrainField {
     far = far * far * (3 - 2 * far);
     const hB = this.base(x, y, z, far), hF = this.features(x, y, z);
     let h = hB + hF;
-    const rilleCut = this.attr.rille * 18;
     // smooth rille floors: cancel the base's small bumps in the channel
     const rl = this.attr.rille;
     // (the floor undulates but has no fine rubble: under a low sun each bump casts a speck, stippling the rille)
@@ -318,7 +316,7 @@ export class TerrainField {
         rayA = Math.max(rayA, ray * (0.6 + 0.4 * this.nC(x * 0.01, y * 0.01, z * 0.01)));
       }
     }
-    h -= rilleCut; // rilles carve through everything, rims included
+    h -= rl * 18; // rilles carve through everything, rims included
     let rad = R + h;
     for (let k = 0; k < this.zones.length; k++) {
       const zn = this.zones[k];
@@ -471,7 +469,7 @@ export class TerrainField {
           c.lerp(rilleC, this.attr.rille * 0.5);
           if (this.painted) {
             // mineral tints: hue only, brightness kept (a tint never reads as shadow; shadows keep contrast)
-            const lum0 = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
+            const lum0 = lum(c);
             const c0r = c.r, c0g = c.g, c0b = c.b;
             // (A) broad regions a touch cooler (blue-grey maria) or warmer (tan, iron-bearing)
             const reg = this.nC(x * 0.00042 - 31, y * 0.00042 + 7, z * 0.00042 + 19) + 0.35 * this.nA(x * 0.0016 + 5, y * 0.0016, z * 0.0016 - 9);
@@ -484,9 +482,9 @@ export class TerrainField {
             tint(c, TINT_RUST, this.attr.rille * 0.9);
             tint(c, TINT_OLD, this.attr.old * 0.85);
             const fresh = Math.max(this.attr.rim * 0.7, this.attr.ejecta * 0.45);
-            if (fresh > 0) { const g = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722; c.r += (g - c.r) * fresh; c.g += (g - c.g) * fresh; c.b += (g - c.b) * fresh; }
+            if (fresh > 0) { const g = lum(c); c.r += (g - c.r) * fresh; c.g += (g - c.g) * fresh; c.b += (g - c.b) * fresh; }
             // restore brightness exactly
-            const lum1 = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
+            const lum1 = lum(c);
             if (lum1 > 1e-4) c.multiplyScalar(lum0 / lum1);
             tintA[li * 3] = c.r - c0r; tintA[li * 3 + 1] = c.g - c0g; tintA[li * 3 + 2] = c.b - c0b;
           }
@@ -559,5 +557,4 @@ export class TerrainField {
     }
     return { pos, nor, col, rim, tint: tintA, idx, inside: radiiIn };
   }
-
 }

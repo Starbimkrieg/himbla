@@ -20,16 +20,11 @@ export class Colliders {
   key(x, y, z) { return ((x + OFF) * 1024 + (y + OFF)) * 1024 + (z + OFF); }
 
   add(c) {
-    if (c.type === 'box') {
-      c.br = Math.hypot(c.hx, c.hy, c.hz);
-      c.mid = c.c;
-    } else if (c.type === 'cyl') {
-      const hmax = Math.max(Math.abs(c.y0), Math.abs(c.y1));
+    if (c.type === 'cyl') {
       c.br = Math.hypot(c.r, (c.y1 - c.y0) / 2) + 0.5;
       c.mid = c.c.clone().addScaledVector(c.axis, (c.y0 + c.y1) / 2);
-      c.hmax = hmax;
     } else {
-      c.br = c.r;
+      c.br = c.type === 'box' ? Math.hypot(c.hx, c.hy, c.hz) : c.r;
       c.mid = c.c;
     }
     c._s = 0;
@@ -200,7 +195,6 @@ const _near = [];
 // squared speed that curves over the world (all of it on a sphere; on the Spindle's cylinder only the part round the
 // girth, since along the axis is straight)
 function orbitV2(v, up, vh2) {
-  if (GRAV.flat) return 0; // flat world: nothing curves away
   const a = GRAV.axis;
   if (!a) return vh2;
   const g = _tmp2.crossVectors(a, up);
@@ -389,31 +383,24 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
       const glide = Math.sqrt(Math.max(0, v.lengthSq() - vn * vn));
       if (input.skates) v.addScaledVector(_sn, -vn);
       else v.addScaledVector(_sn, -vn * (1 + (impact > 7 ? 0.28 : 0)));
-      if (!wasGrounded && impact > 3) impacts.push({ speed: impact, glide, kind: 'ground', normal: _sn.clone() });
-      else if (impact > (input.skates ? params.skateSafeImpact : params.bootSafeImpact)) impacts.push({ speed: impact, glide, kind: 'ground', normal: _sn.clone() });
+      if ((!wasGrounded && impact > 3) || impact > (input.skates ? params.skateSafeImpact : params.bootSafeImpact)) impacts.push({ speed: impact, glide, kind: 'ground', normal: _sn.clone() });
     }
     b.grounded = true;
     b.groundN.copy(_sn);
     b.altitude = 0;
     b.onLake = planet.lastLake;
-  } else if (params.skateSnap !== false && input.skates && wasGrounded && !onStruct && alt < (params.skateBuffer ?? 0.6) + Math.min(1.6, v.length() * 0.02) && v.dot(_sn) < (params.skateLaunch ?? 3) + Math.min(9, v.length() * 0.1)) {
-    // magnetic buffer: lift-offs over crests and bumps snap back down, even at speed. Only a real ramp (a hard upward
-    // kick for your speed) or a jump throws you clear
+  } else if (wasGrounded && !onStruct && (input.skates
+    ? params.skateSnap !== false && alt < (params.skateBuffer ?? 0.6) + Math.min(1.6, v.length() * 0.02) && v.dot(_sn) < (params.skateLaunch ?? 3) + Math.min(9, v.length() * 0.1)
+    : alt < 0.3 && v.dot(_sn) < 1.5)) {
+    // skates: a magnetic buffer. Lift-offs over crests and bumps snap back down, even at speed; only a real ramp (a hard
+    // upward kick for your speed) or a jump throws you clear. Walking boots stick to the ground.
     setRad(b.pos, sr);
     const vn = v.dot(_sn);
     if (vn > 0) v.addScaledVector(_sn, -vn);
     b.grounded = true;
     b.groundN.copy(_sn);
     b.altitude = 0;
-    b.onLake = planet.lastLake;
-  } else if (alt < 0.3 && wasGrounded && !onStruct && !input.skates && v.dot(_sn) < 1.5) {
-    // walking boots stick to the ground
-    setRad(b.pos, sr);
-    const vn = v.dot(_sn);
-    if (vn > 0) v.addScaledVector(_sn, -vn);
-    b.grounded = true;
-    b.groundN.copy(_sn);
-    b.altitude = 0;
+    if (input.skates) b.onLake = planet.lastLake;
   } else {
     b.altitude = alt;
     b.grounded = alt < 0.12;

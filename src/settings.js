@@ -1,7 +1,7 @@
 // Settings menu: graphics / gameplay / audio / controls. Values in `settings.v`, saved to localStorage, pushed into the
 // game by apply(game). Game code reads `g.settings ? g.settings.v.<key> : <default>`, so it works without this module.
 
-import { glyphHtml, glyphState, tokensFor } from './glyphs.js';
+import { glyphHtml, tokensFor, esc } from './glyphs.js';
 import { gyroSupported } from './gyro.js';
 import { DEV_TOOLS } from './devtools.js';
 import { SKIN_FROM_URL } from './moonSkins.js';
@@ -22,7 +22,7 @@ function migrateBinds(old) {
 }
 
 // Remappable actions: the game always checks the DEFAULT code; Input translates.
-export const ACTIONS = [
+const ACTIONS = [
   { code: 'KeyW', label: 'Forward / flip forward' },
   { code: 'KeyS', label: 'Back / flip backward' },
   { code: 'KeyA', label: 'Left / carve / spin' },
@@ -47,7 +47,6 @@ export const ACTIONS = [
 // keys the game hard-wires for menus and weapon slots
 const RESERVED = ['Escape', 'Enter', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
 
-
 // Quality presets: picking one sets these; changing one by hand makes it CUSTOM. Ground detail is for the regolith
 // texture (moonSkins.js; dev builds only, via its setting or ?moonskin=1), so release presets leave it out.
 const gd = (n) => (DEV_TOOLS ? { groundDetail: n } : {});
@@ -57,12 +56,11 @@ const PRESETS = {
   high: { renderScale: 1, viewDist: 1.3, terrainDetail: 1.3, shadows: true, shadowRes: 4096, particles: 1.3, ...gd(2) },
 };
 const PRESET_KEYS = Object.keys(PRESETS.medium);
-const PRESET_NAME = { low: 'LOW', medium: 'MEDIUM', high: 'HIGH' };
 const pct = (v) => `${Math.round(v * 100)}%`;
 const mult = (v) => `×${v.toFixed(2).replace(/0$/, '')}`;
 
 // type: range | toggle | choice
-export const SCHEMA = {
+const SCHEMA = {
   graphics: [
     { key: 'preset', label: 'Quality preset', type: 'choice', def: 'medium', options: [['low', 'LOW'], ['medium', 'MEDIUM'], ['high', 'HIGH'], ['custom', 'CUSTOM']], hint: 'Sets the options below in one go' },
     { key: 'renderScale', label: 'Render scale', type: 'range', min: 0.4, max: 1.5, step: 0.05, def: 1, fmt: pct, hint: 'Lower = faster, blurrier' },
@@ -111,8 +109,9 @@ export const SCHEMA = {
   ],
 };
 const TABS = [['graphics', 'GRAPHICS'], ['gameplay', 'GAMEPLAY'], ['audio', 'AUDIO'], ['controls', 'CONTROLS']];
+const ALL_SETTINGS = Object.values(SCHEMA).flat();
 
-export function keyName(code) {
+function keyName(code) {
   if (!code) return '—';
   const named = {
     Space: 'SPACE', ShiftLeft: 'L-SHIFT', ShiftRight: 'R-SHIFT', ControlLeft: 'L-CTRL', ControlRight: 'R-CTRL',
@@ -196,7 +195,7 @@ export class Settings {
 
   defaults() {
     const v = { binds: {} };
-    for (const tab of Object.values(SCHEMA)) for (const s of tab) v[s.key] = s.def;
+    for (const s of ALL_SETTINGS) v[s.key] = s.def;
     return v;
   }
 
@@ -204,9 +203,7 @@ export class Settings {
     try {
       const d = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (!d || typeof d !== 'object') return;
-      for (const tab of Object.values(SCHEMA)) {
-        for (const s of tab) if (d[s.key] !== undefined && typeof d[s.key] === typeof s.def) this.v[s.key] = d[s.key];
-      }
+      for (const s of ALL_SETTINGS) if (d[s.key] !== undefined && typeof d[s.key] === typeof s.def) this.v[s.key] = d[s.key];
       if (d.binds && typeof d.binds === 'object') this.v.binds = d.bindsV >= 2 ? { ...d.binds } : migrateBinds(d.binds);
       if (typeof d.autoTuned === 'boolean') this.v.autoTuned = d.autoTuned;
       if (d.preset === undefined) this.v.preset = this.matchPreset(); // (saves with no preset)
@@ -268,7 +265,7 @@ export class Settings {
       this.usePreset(down);
       this.apply();
       const g = this.game;
-      if (g && g.hud) g.hud.toast(`Graphics set to ${PRESET_NAME[down]} for smoother play. Change it any time in Settings.`, 6);
+      if (g && g.hud) g.hud.toast(`Graphics set to ${down.toUpperCase()} for smoother play. Change it any time in Settings.`, 6);
     }
     this.save();
   }
@@ -324,9 +321,8 @@ export class Settings {
       }
     }
     if (g.fx) g.fx.density = v.particles;
-    for (const post of [g.post]) {
-      if (!post) continue;
-      const u = post.material.uniforms;
+    if (g.post) {
+      const u = g.post.material.uniforms;
       if (u.halftone) u.halftone.value = v.halftone ? 1 : 0;
       if (u.lines) u.lines.value = v.speedLines ? 1 : 0;
       if (u.inkK) u.inkK.value = v.ink;
@@ -444,11 +440,10 @@ export class Settings {
     if (!this.open) return;
     this.open = false;
     this.rebinding = null;
-    const gy = this.game && this.game.pad && this.game.pad.gyro;
+    const g = this.game, gy = g && g.pad && g.pad.gyro;
     if (gy) gy.onStatus = null;
     this.el.classList.add('hidden');
     this.save();
-    const g = this.game;
     // back to the pause card, unless the game was resumed meanwhile
     if (this.from === 'pause' && g && g.state === 'paused') document.getElementById('pause').classList.remove('hidden');
   }
@@ -458,10 +453,7 @@ export class Settings {
     this.apply();
   }
 
-  find(key) {
-    for (const tab of Object.values(SCHEMA)) for (const s of tab) if (s.key === key) return s;
-    return null;
-  }
+  find(key) { return ALL_SETTINGS.find((s) => s.key === key) || null; }
 
   resetTab() {
     if (this.tab === 'controls') this.v.binds = {};
@@ -481,7 +473,7 @@ export class Settings {
     if (PRESET_KEYS.includes(s.key)) {
       const was = this.v.preset;
       this.v.preset = this.matchPreset();
-      if (was !== this.v.preset) for (const b of this.el.querySelectorAll('[data-key="preset"]')) b.classList.toggle('on', s && b.textContent === (PRESET_NAME[this.v.preset] || 'CUSTOM'));
+      if (was !== this.v.preset) for (const b of this.el.querySelectorAll('[data-key="preset"]')) b.classList.toggle('on', b.textContent === this.v.preset.toUpperCase());
     }
     this.commit();
   }
@@ -517,13 +509,12 @@ export class Settings {
   }
 
   render() {
-    const v = this.v;
     const tabs = TABS.map(([id, name]) => `<button class="set-tab ${id === this.tab ? 'on' : ''}" data-act="tab" data-tab="${id}">${name}</button>`).join('');
     let body = '';
     const pad = this.game && this.game.input && this.game.input.padActive;
     if (this.tab === 'controls' && pad) {
       body = `<div class="set-hint">Controller in use: these buttons are fixed. Touch the keyboard or mouse to see (and change) the key binds.</div>`;
-      body += PAD_ROWS.map(([label, toks]) => `<div class="set-row bind fixed"><span class="set-label">${label}</span><span class="set-pad">${glyphHtml(toks, glyphState.kind)}</span></div>`).join('');
+      body += PAD_ROWS.map(([label, toks]) => `<div class="set-row bind fixed"><span class="set-label">${label}</span><span class="set-pad">${glyphHtml(toks)}</span></div>`).join('');
     } else if (this.tab === 'controls') {
       body = `<div class="set-hint">Click an action, then press the new key. <b>ESC</b> cancels. Taking a key that's already used swaps the two. ESC, ENTER and 1–9 (weapons / menu picks) are fixed.</div>`;
       body += ACTIONS.map((a) => {
@@ -537,7 +528,7 @@ export class Settings {
       body += `<div class="set-row bind fixed"><span class="set-label">Weapon slots</span><span class="set-key">1 2 3 4</span></div>`;
     } else {
       body = SCHEMA[this.tab].map((s) => {
-        const val = v[s.key];
+        const val = this.v[s.key];
         let ctl = '';
         if (s.type === 'range') {
           ctl = `<input type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${val}" data-key="${s.key}"><span class="set-val">${s.fmt ? s.fmt(val) : val}</span>`;
@@ -552,7 +543,6 @@ export class Settings {
         // gyro read from the pad over WebHID: may need a one-time CONNECT
         const gy = this.game && this.game.pad && this.game.pad.gyro;
         const g_ = this.game && this.game.haptics;
-        const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
         if (g_) body += `<div class="set-row"><span class="set-label">Controller feedback<small>${esc(g_.status)}</small></span><span class="set-ctl"><button class="set-btn" data-act="fx-test">TEST</button></span></div>`;
         if (gy) body += `<div class="set-row"><span class="set-label">PlayStation controller link<small>${esc(gy.status)}</small></span><span class="set-ctl">${gyroSupported() ? '<button class="set-btn" data-act="gyro-connect">CONNECT</button>' : ''}</span></div>`;
       }

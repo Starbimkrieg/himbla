@@ -65,9 +65,7 @@ export class Ragdoll {
     this.P0 = m.root.position.clone();
     this.Q0 = m.root.quaternion.clone();
     this.rest = J.map((j) => m.root.localToWorld(j.clone())); // world rest positions
-    this.W = this.rest;
-    this.Br = basis(new THREE.Matrix4(), this.rest[PEL], this.rest[CHE], this.rest[SHL], this.rest[SHR]).clone();
-    this.Brinv = this.Br.clone().invert();
+    this.Brinv = basis(new THREE.Matrix4(), this.rest[PEL], this.rest[CHE], this.rest[SHL], this.rest[SHR]).invert();
     const dist = (a, c) => this.rest[a].distanceTo(this.rest[c]);
     this.rigid = RIGID.map(([a, c]) => [a, c, dist(a, c)]);
     this.min = MIN.map(([a, c, k]) => [a, c, dist(a, c) * k]);
@@ -76,9 +74,8 @@ export class Ragdoll {
       legL: J[FTL].clone().sub(J[HPL]).normalize(), legR: J[FTR].clone().sub(J[HPR]).normalize(),
       head: J[HED].clone().sub(J[CHE]).normalize(),
     };
-    this.stand = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), q: [], bodyY: 0 };
     this.limbs = [m.armL, m.armR, m.legL, m.legR, m.head, m.torso];
-    for (let i = 0; i < this.limbs.length; i++) this.stand.q.push(new THREE.Quaternion());
+    this.stand = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), q: this.limbs.map(() => new THREE.Quaternion()), bodyY: 0 };
     this.p = this.rest.map((w) => w.clone());
     this.prev = this.rest.map((w) => w.clone());
     this.G = (PHYS.gravity || 6) * GRAV;
@@ -228,10 +225,9 @@ export class Ragdoll {
     basis(_mc, p[PEL], p[CHE], p[SHL], p[SHR]);
     _mr.multiplyMatrices(_mc, this.Brinv);
     _qr.setFromRotationMatrix(_mr);
-    const qn = _qr.clone().multiply(this.Q0);
-    m.root.quaternion.copy(qn);
+    m.root.quaternion.copy(_qr).multiply(this.Q0);
     m.root.position.copy(this.rest[PEL]).sub(this.P0).applyQuaternion(_qr).negate().add(p[PEL]);
-    _ql.copy(qn).invert();
+    _ql.copy(m.root.quaternion).invert();
     const aim = (obj, from, to, rest) => {
       _d.subVectors(p[to], p[from]).applyQuaternion(_ql).normalize();
       obj.quaternion.setFromUnitVectors(rest, _d);

@@ -48,13 +48,8 @@ export class Rides {
     if (P.dead || P.vehicle) return false;
     const n = this.nearest(P.pos);
     if (!n) return false;
-    if (n.kind === 'ship') {
-      g.hud.prompt(`<b>F</b> — HOP IN (FREE RIDE) · ${this.shipLabel(n.v)}`);
-      if (g.input.pressed('KeyF') && g.boardCooldown <= 0) this.board(n);
-    } else {
-      g.hud.prompt(`<b>F</b> — RIDE THE ${n.ride.name}`);
-      if (g.input.pressed('KeyF') && g.boardCooldown <= 0) this.board(n);
-    }
+    g.hud.prompt(n.kind === 'ship' ? `<b>F</b> — HOP IN (FREE RIDE) · ${this.shipLabel(n.v)}` : `<b>F</b> — RIDE THE ${n.ride.name}`);
+    if (g.input.pressed('KeyF') && g.boardCooldown <= 0) this.board(n);
     return true;
   }
 

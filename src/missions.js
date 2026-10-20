@@ -48,14 +48,12 @@ export class Missions {
     this.dropPos = null;
   }
 
-  get locs() { return this.game.locations; }
-
   civilianDestinations(exclude) {
-    return this.locs.filter((l) => !l.restricted && !l.hostile && !l.poi && l.id !== exclude);
+    return this.game.locations.filter((l) => !l.restricted && !l.hostile && !l.poi && l.id !== exclude);
   }
 
   makeOffer(board, faction) {
-    const L = this.locs;
+    const L = this.game.locations;
     let pickup = board, to, cargo, clearance = null, smuggle = false, payload = null;
     if (faction === 'vostok' || faction === 'daedalus') {
       // military logistics between the faction's own bases (clearance granted; ceasefire bases need none)
@@ -142,30 +140,14 @@ export class Missions {
   // bottom crate; when the first job ends either way, the second becomes the main contract.
   canTake() { return !this.active || (!!this.game.upgrades.twin && !this.extra); }
 
+  // the main contract, or (with one on already) the second
   accept(offer) {
-    if (this.active && this.canTake()) return this.acceptExtra(offer);
-    if (this.active) return false;
-    this.active = offer;
-    this.timer = offer.time;
-    this.late = false;
-    this.integrity = 1;
-    this.stylePool = 0;
-    this.cargoState = 'toPickup';
+    if (this.active && !this.canTake()) return false;
+    const g = this.game, second = !!this.active;
+    if (second) this.extra = { a: offer, timer: offer.time, late: false, integrity: 1, cargoState: 'toPickup' };
+    else Object.assign(this, { active: offer, timer: offer.time, late: false, integrity: 1, stylePool: 0, cargoState: 'toPickup' });
     this.offers[offer.board.id] = this.offers[offer.board.id].filter((o) => o !== offer);
-    const g = this.game;
-    g.hud.toast(`CONTRACT ACCEPTED — ${offer.cargo.name}`);
-    g.globe.discover(offer.to, true);
-    g.globe.discover(offer.pickup, true);
-    if (offer.clearance) g.hud.alert(`TEMPORARY CLEARANCE: ${offer.to.restricted ? offer.to.name : offer.pickup.name}`, '#2ec4ff', 3);
-    this.checkPickup();
-    return true;
-  }
-
-  acceptExtra(offer) {
-    const g = this.game;
-    this.extra = { a: offer, timer: offer.time, late: false, integrity: 1, cargoState: 'toPickup' };
-    this.offers[offer.board.id] = this.offers[offer.board.id].filter((o) => o !== offer);
-    g.hud.toast(`SECOND CONTRACT ON THE CRADLE — ${offer.cargo.name}`);
+    g.hud.toast(`${second ? 'SECOND CONTRACT ON THE CRADLE' : 'CONTRACT ACCEPTED'} — ${offer.cargo.name}`);
     g.globe.discover(offer.to, true);
     g.globe.discover(offer.pickup, true);
     if (offer.clearance) g.hud.alert(`TEMPORARY CLEARANCE: ${offer.to.restricted ? offer.to.name : offer.pickup.name}`, '#2ec4ff', 3);
@@ -346,7 +328,6 @@ export class Missions {
     const style = Math.min(styleRaw, base);
     const condition = 0.5 + 0.5 * integrity;
     const total = Math.round((base + timeBonus + style) * condition * lateMult);
-    const integ = base;
     g.addCredits(total, null);
     const repGain = late ? 1 : (a.premium ? 4 : 3) + (integrity > 0.8 ? 1 : 0);
     g.rep.add(a.faction, repGain, `Delivered ${a.cargo.name}`);
@@ -361,9 +342,9 @@ export class Missions {
       } else g.hud.toast(`Smuggled! (${g.stats.smuggled} runs.)`, 3);
     }
     g.audio.cash();
-    g.hud.delivered({ a, integ, timeBonus, style, styleCapped: styleRaw > base, condition, late, total, integrity, faction: FACTIONS[a.faction].name, repGain });
+    g.hud.delivered({ a, integ: base, timeBonus, style, styleCapped: styleRaw > base, condition, late, total, integrity, faction: FACTIONS[a.faction].name, repGain });
     // clearance ends with the contract: grace so the base you're in doesn't open fire
-    if (a.clearance) { const L = this.game.locations.find((l) => l.id === a.clearance); if (L) g.enemies.grantGrace(L); }
+    if (a.clearance) { const L = g.locations.find((l) => l.id === a.clearance); if (L) g.enemies.grantGrace(L); }
   }
 
   // quiet: the caller shows its own message (an emergency recall lists all failures in one panel)

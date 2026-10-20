@@ -3,7 +3,7 @@ import { FACTIONS } from './locations.js';
 import { makeRunner, makeCrate } from './models.js';
 import { toon, glow, ink, textSprite, nameTag } from './toon.js';
 import { arcDist, tangent, randomTangent, greatCircle, darkness, collectNodes } from './geo.js';
-import { pick } from './rng.js';
+import { pick, clamp, clamp01 } from './rng.js';
 import { VEHICLES } from './vehicles.js';
 import { spawnKadeTruck, updateKadeTruck, kadeDefeated, updateMortarDrop } from './kade.js';
 import { makeProp, EXTRA_MODS, PLOTS, OUTPOST_GUN } from './storyAssets.js';
@@ -34,7 +34,7 @@ export const TECH = {
 };
 
 // Modules for outposts you found (base building).
-export const MODULES = {
+const MODULES = {
   greenhouse: { name: 'Greenhouse', cost: 600, icon: 'greenhouse', tint: '#7dff6a', feature: 'Heals you within 60 m', desc: 'Heals you while you are nearby.' },
   clinic: { name: 'Clinic', cost: 800, icon: 'clinic', tint: '#ff2a4a', feature: 'K.O. respawn point', desc: 'You redeploy here after a K.O. (nearest clinic wins), unless you have set a charted headquarters as your respawn point (at your town\'s clinic).' },
   beacon: { name: 'Beacon Tower', cost: 700, icon: 'beacon', tint: '#2ee6ff', feature: 'Charts the map · fast travel', desc: 'Charts a wide circle of map around it and links to your other beacons for fast travel.' },
@@ -192,7 +192,7 @@ const CHAPTERS = {
     {
       title: 'Room to Grow',
       brief: '"Kepler\'s bursting at the seams, dear. I\'ve found a lovely flat spot for a homestead. Haul two loads of prefab parts out there and we\'ll have a new home by supper."',
-      steps: [{ t: 'build', from: 'kepler', site: { site: 'kepler', min: 600, max: 900 }, trips: 2, found: { kind: 'homestead', name: 'Pike\'s Hope' }, label: 'Haul two loads of prefab parts to the homestead site' }],
+      steps: [{ t: 'build', from: 'kepler', site: { site: 'kepler', min: 600, max: 900 }, trips: 2, found: { kind: 'homestead', name: HOMESTEAD }, label: 'Haul two loads of prefab parts to the homestead site' }],
       reward: { credits: 420, outfit: 'kepler' },
       outro: '"Pike\'s Hope! Oh, it\'s perfect. It\'s yours to run, love: use the terminal there to add a greenhouse, a clinic, a market… Kepler\'s proud to call you family."',
     },
@@ -344,7 +344,7 @@ const PARTS_SAFE = 14;
 const PARTS_RATE = 4;
 const PARTS_LOW = 35; // % condition below which the readout goes red and a one-off warning shows
 // display condition: a dented load never reads 100%, a surviving one never 0%
-const condPct = (hp) => (hp == null || hp >= 100 ? 100 : Math.min(99, Math.max(1, Math.round(hp))));
+const condPct = (hp) => (hp == null || hp >= 100 ? 100 : clamp(Math.round(hp), 1, 99));
 
 export class Story {
   constructor(game) {
@@ -382,13 +382,15 @@ export class Story {
     try { localStorage.setItem(KEY, JSON.stringify({ faction: this.faction, progress: this.progress, vehicles: this.vehicles, tech: this.tech, founded: this.founded, capturedIds: this.capturedIds, kade: this.kade, townSite: this.townSite })); } catch { /* unavailable */ }
   }
 
-  chaptersDone(f) { return this.progress[f] || 0; }
+  locOf(id) { return this.game.locations.find((l) => l.id === id); }
+  // you're within r m of pos (falsy without a pos)
+  near(pos, r) { return pos && this.game.player.pos.distanceTo(pos) < r; }
 
   // ---------- leaders ----------
   buildLeaders() {
     const g = this.game;
     for (const [f, L] of Object.entries(LEADERS)) {
-      const loc = g.locations.find((l) => l.id === FACTIONS[f].hq);
+      const loc = this.locOf(FACTIONS[f].hq);
       if (!loc) continue;
       const m = makeRunner({ ...L.look, pirate: f === 'rustmoon' });
       if (f === 'rustmoon') this.addRifle(m, true);
@@ -398,15 +400,15 @@ export class Story {
       g.world.put(m.root, loc, spot.x, spot.z, 0, yaw, true);
       m.root.scale.setScalar(1.15);
       // podium + name plate
-      const pod = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.9, 0.4, 16), toon(new THREE.Color(FACTIONS[f].color).getHex()));
+      const col = FACTIONS[f].color, fc = new THREE.Color(col).getHex(), name = L.name.toUpperCase();
+      const pod = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.9, 0.4, 16), toon(fc));
       ink(pod, 0.05);
       g.world.put(pod, loc, spot.x, spot.z, 0.2);
       m.root.position.y = 0.4;
-      const sign = nameTag(textSprite(L.name.toUpperCase(), { color: FACTIONS[f].color, size: 52, scale: 0.5, bg: '#120a1e' }), L.name.toUpperCase(), FACTIONS[f].color);
+      const sign = nameTag(textSprite(name, { color: col, size: 52, scale: 0.5, bg: '#120a1e' }), name, col);
       sign.position.set(spot.x, 4.0, spot.z);
       loc.group.add(sign);
       // faction-coloured beacon: glowing ground ring and a light column visible from afar
-      const fc = new THREE.Color(FACTIONS[f].color).getHex();
       const ring = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.18, 8, 40), glow(fc));
       ring.rotation.x = Math.PI / 2;
       g.world.put(ring, loc, spot.x, spot.z, 0.15, 0, true);
@@ -432,15 +434,8 @@ export class Story {
       }
     }
     cands.sort((p, q) => p.score - q.score);
-    for (const c of cands) {
-      let blocked = false;
-      for (const y of [1.2, 3.5, 6]) {
-        const p = g.world.toWorld(loc, c.x, y, c.z);
-        if (g.colliders.query(p, 9, []).some((col) => g.colliders.contact(col, p, 8, _v) > 0)) { blocked = true; break; }
-      }
-      if (!blocked) return c;
-    }
-    return { x: 0, z: Math.min(loc.r * 0.6, 90) };
+    const blocked = (c) => [1.2, 3.5, 6].some((y) => { const p = g.world.toWorld(loc, c.x, y, c.z); return g.colliders.query(p, 9, []).some((col) => g.colliders.contact(col, p, 8, _v) > 0); });
+    return cands.find((c) => !blocked(c)) || { x: 0, z: Math.min(loc.r * 0.6, 90) };
   }
 
   addRifle(m, slung) {
@@ -494,9 +489,9 @@ export class Story {
   talk(f) {
     const g = this.game;
     const L = LEADERS[f];
-    const done = this.chaptersDone(f);
+    const done = this.progress[f] || 0;
     const chapters = CHAPTERS[f];
-    const name = `${L.name.toUpperCase()}`;
+    const name = L.name.toUpperCase();
     const sub = `<small>${L.title}</small><br><br>`;
     if (this.faction && this.faction !== f) {
       const other = FACTIONS[this.faction].name;
@@ -518,8 +513,7 @@ export class Story {
     const need = REQ[done];
     const rep = g.rep.get(f);
     if (rep < need) {
-      const tier = need >= 25 ? 'TRUSTED' : 'FRIENDLY';
-      g.dialog(name, `${sub}"${done ? 'Not yet. Do some more work for us first.' : `Who are you? Come back when ${FACTIONS[f].name} knows your name.`}"<br><br><small>Next chapter needs ${need} reputation with ${FACTIONS[f].name} (you have ${rep}). Contracts and events raise it.${tier ? '' : ''}</small>`, [{ label: 'OK' }]);
+      g.dialog(name, `${sub}"${done ? 'Not yet. Do some more work for us first.' : `Who are you? Come back when ${FACTIONS[f].name} knows your name.`}"<br><br><small>Next chapter needs ${need} reputation with ${FACTIONS[f].name} (you have ${rep}). Contracts and events raise it.</small>`, [{ label: 'OK' }]);
       return;
     }
     if (this.active) { g.dialog(name, `${sub}"Finish what you're doing for ${FACTIONS[this.active.f].name} first."`, [{ label: 'OK' }]); return; }
@@ -543,58 +537,53 @@ export class Story {
   }
 
   // Site selector -> position (+ its outpost, if any).
-  resolve(sel, step) {
+  resolve(sel) {
     const g = this.game;
     const T = g.territory;
     const A = this.active;
-    const locOf = (id) => g.locations.find((l) => l.id === id);
     if (!sel) return null;
     if (sel.prev) return A.lastAt;
     if (sel.chosen) {
       if (!this.townSite) this.defaultTownSite();
-      const d = new THREE.Vector3().fromArray(this.townSite.dir);
-      return { pos: g.planet.ground(d, new THREE.Vector3()) };
+      return { pos: g.planet.ground(new THREE.Vector3().fromArray(this.townSite.dir)) };
     }
     if (sel.leader) {
       // 5.5 m in front of the leader, the way they face: clear of the podium (1.9 m) and ring (3.2 m)
       const Ld = this.leaders[sel.leader];
-      if (Ld) return { pos: g.planet.ground(greatCircle(Ld.pos.clone().normalize(), Ld.front.clone().sub(Ld.pos), 5.5), new THREE.Vector3()), loc: Ld.loc };
-      return this.resolve({ locOpen: FACTIONS[sel.leader].hq }, step);
+      if (Ld) return { pos: g.planet.ground(greatCircle(Ld.pos.clone().normalize(), Ld.front.clone().sub(Ld.pos), 5.5)), loc: Ld.loc };
+      return this.resolve({ locOpen: FACTIONS[sel.leader].hq });
     }
-    if (sel.locOpen) { const l = locOf(sel.locOpen); const sp = this.findSpot(l); return { pos: g.planet.ground(g.world.toWorld(l, sp.x, 0, sp.z), new THREE.Vector3()), loc: l }; }
-    if (sel.loc && sel.off) { const l = locOf(sel.loc); return { pos: g.planet.ground(g.world.toWorld(l, l.r * sel.off[0], 0, l.r * sel.off[1]), new THREE.Vector3()), loc: l }; }
-    if (sel.loc) { const l = locOf(sel.loc); return { pos: l.pos.clone(), loc: l }; }
+    if (sel.locOpen) { const l = this.locOf(sel.locOpen); const sp = this.findSpot(l); return { pos: g.planet.ground(g.world.toWorld(l, sp.x, 0, sp.z)), loc: l }; }
+    if (sel.loc && sel.off) { const l = this.locOf(sel.loc); return { pos: g.planet.ground(g.world.toWorld(l, l.r * sel.off[0], 0, l.r * sel.off[1])), loc: l }; }
+    if (sel.loc) { const l = this.locOf(sel.loc); return { pos: l.pos.clone(), loc: l }; }
     if (sel.outpost || sel.outpostAny) {
-      const ref = locOf(sel.near) || { dir: g.player.pos.clone().normalize() };
+      const ref = this.locOf(sel.near) || { dir: g.player.pos.clone().normalize() };
       const want = sel.outpost || sel.outpostAny;
       const pool = T.outposts.filter((x) => x.faction === want && !x.built).sort((a, b) => arcDist(ref.dir, a.dir) - arcDist(ref.dir, b.dir)).slice(0, 4);
-      let o = pool.sort((a, b) => this.roughness(a.dir) - this.roughness(b.dir))[0] || null;
-      if (!o) o = T.nearest(ref.dir, (x) => !x.built && x.faction !== A.f);
+      const o = pool.sort((a, b) => this.roughness(a.dir) - this.roughness(b.dir))[0] || T.nearest(ref.dir, (x) => !x.built && x.faction !== A.f);
       if (!o) return this.resolve({ site: sel.near || 'ilmb', min: 400, max: 700 });
-      return { pos: g.planet.ground(o.dir, new THREE.Vector3()), outpost: o };
+      return { pos: g.planet.ground(o.dir), outpost: o };
     }
     if (sel.captured) {
       const o = T.outposts.find((x) => x.id === this.capturedIds[this.capturedIds.length - 1]) || T.nearest(g.player.pos.clone().normalize(), (x) => x.faction === A.f);
-      if (!o) return { pos: g.player.pos.clone() };
-      return { pos: g.planet.ground(o.dir, new THREE.Vector3()), outpost: o };
+      return o ? { pos: g.planet.ground(o.dir), outpost: o } : { pos: g.player.pos.clone() };
     }
     if (sel.founded || sel.foundedIdx !== undefined) {
       let mine = this.myOutposts();
       if (!mine.length) {
         const r = this.resolve({ site: 'kepler', min: 600, max: 900, clear: 220 });
-        const o2 = g.territory.found(r.pos.clone().normalize(), 'kepler', 'homestead', 'Pike\'s Hope');
+        const o2 = g.territory.found(r.pos.clone().normalize(), 'kepler', 'homestead', HOMESTEAD);
         this.founded.push(o2.id);
         this.save();
         mine = this.myOutposts();
       }
       const o = sel.foundedIdx !== undefined ? mine[sel.foundedIdx] || mine[0] : mine[mine.length - 1];
-      if (!o) return { pos: g.player.pos.clone() };
-      return { pos: g.planet.ground(o.dir, new THREE.Vector3()), outpost: o };
+      return o ? { pos: g.planet.ground(o.dir), outpost: o } : { pos: g.player.pos.clone() };
     }
     if (sel.site) {
       // flattest of a dozen candidates (rim and slope fights play badly). A town site is judged by the ground under the whole
       // town (townScore) and keeps off roads, unbuilt outposts and lakes (the plateau would cut them).
-      const l = locOf(sel.site);
+      const l = this.locOf(sel.site);
       const clear = sel.clear || 150;
       let best = null, bestScore = Infinity, spare = null, spareScore = Infinity;
       for (let tries = 0, ok = 0; tries < 90 && ok < 12; tries++) {
@@ -613,8 +602,8 @@ export class Story {
         const sc = sel.town ? this.townScore(d) : this.roughness(d);
         if (sc < bestScore) { bestScore = sc; best = d; }
       }
-      if (best || spare) return { pos: g.planet.ground(best || spare, new THREE.Vector3()) };
-      return { pos: g.planet.ground(greatCircle(l.dir, tangent(new THREE.Vector3(1, 0, 0), l.dir).normalize(), sel.min), new THREE.Vector3()) };
+      if (best || spare) return { pos: g.planet.ground(best || spare) };
+      return { pos: g.planet.ground(greatCircle(l.dir, tangent(new THREE.Vector3(1, 0, 0), l.dir).normalize(), sel.min)) };
     }
     return null;
   }
@@ -636,11 +625,11 @@ export class Story {
     s.phase = 'go';
     s.prog = 0;
     s.timer = s.secs || 0;
-    if (s.at) { const r = this.resolve(s.at, s); if (r) { s.pos = r.pos; s.outpost = r.outpost; A.lastAt = r; } }
-    if (s.site) { const r = this.resolve(s.site, s); s.pos = r.pos; A.lastAt = r; }
+    if (s.at) { const r = this.resolve(s.at); if (r) { s.pos = r.pos; s.outpost = r.outpost; A.lastAt = r; } }
+    if (s.site) { const r = this.resolve(s.site); s.pos = r.pos; A.lastAt = r; }
     if (s.t === 'relays') {
       if (s.hqs) s.sites = this.hqSites(s);
-      const rs = s.sites.map((x) => this.resolve(x, s)); s.list = rs.map((r) => r.pos); s.outs = rs.map((r) => r.outpost || null); s.locs = rs.map((r) => r.loc || null); s.guarded = []; s.k = 0; s.pos = s.list[0];
+      const rs = s.sites.map((x) => this.resolve(x)); s.list = rs.map((r) => r.pos); s.outs = rs.map((r) => r.outpost || null); s.locs = rs.map((r) => r.loc || null); s.guarded = []; s.k = 0; s.pos = s.list[0];
       if (s.hqs) {
         if (!s.list.length) { this.next(); return; } // nobody left to vote
         s.names = s.locs.map((l) => l.short);
@@ -652,12 +641,12 @@ export class Story {
         if (gated.length) g.hud.toast(`Gran's letter of introduction clears you through the ${gated.join(' and ')} gates until the Charter is signed. Don't shoot anything.`, 6);
       }
     }
-    if (s.t === 'gates') { s.fromLoc = g.locations.find((l) => l.id === s.from); s.toLoc = g.locations.find((l) => l.id === s.to); s.phase = 'fetch'; }
-    if (s.t === 'survey') { s.list = s.sites.map((x) => this.resolve(x, s).pos); s.k = 0; s.pos = s.list[0]; this.placeSurveyRing(s); }
-    if (s.t === 'assault') { s.locRef = g.locations.find((l) => l.id === s.loc); s.phase = 'go'; s.prog = 0; }
+    if (s.t === 'gates') { s.fromLoc = this.locOf(s.from); s.toLoc = this.locOf(s.to); s.phase = 'fetch'; }
+    if (s.t === 'survey') { s.list = s.sites.map((x) => this.resolve(x).pos); s.k = 0; s.pos = s.list[0]; this.placeSurveyRing(s); }
+    if (s.t === 'assault') s.locRef = this.locOf(s.loc);
     if (s.t === 'experiment' && s.nodes) { s.got = 0; }
-    if (s.t === 'build' || s.t === 'carry') { s.fromLoc = g.locations.find((l) => l.id === s.from); s.phase = 'fetch'; s.trip = 0; }
-    if (s.t === 'carry') { const r = this.resolve(s.to, s); s.dest = r.pos; s.destLoc = r.loc || null; }
+    if (s.t === 'build' || s.t === 'carry') { s.fromLoc = this.locOf(s.from); s.phase = 'fetch'; s.trip = 0; }
+    if (s.t === 'carry') { const r = this.resolve(s.to); s.dest = r.pos; s.destLoc = r.loc || null; }
     if (s.t === 'kade') { s.unit = this.spawnKade(true); }
     this.setMarker(this.stepTarget(s));
   }
@@ -771,12 +760,11 @@ export class Story {
     if (r.world === 'blackSun') {
       ws.blackSun = true;
       saveWorldState(ws);
-      const l = g.locations.find((x) => x.id === 'daedalus2');
+      const l = this.locOf('daedalus2');
       if (l && !l.blackSun) { l.blackSun = true; g.world.storyMarks(l); }
       unlocks.push('The Black Sun stands at the Forward Post for good');
       return null;
     }
-    const L = (id) => g.locations.find((l) => l.id === id);
     // finale: saved now (sticks even if the game closes), shown after the cut
     let title = null, news = null;
     if (r.world === 'conquer') {
@@ -788,7 +776,7 @@ export class Story {
     } else if (r.world === 'piratesGone') {
       ws.piratesGone = true;
       title = 'THE RUSTMOON CLANS ARE FINISHED';
-      news = `<b>SPACECOM HOLDS THE DARK SIDE.</b> Rustmoon Hold is a ruin under a SPACECOM flag; ${['gulch', 'blackrock', 'gloom'].map((id) => L(id) && L(id).name).filter(Boolean).join(', ')} have been resettled by Kepler families, and the camps stand empty. No pirate squads roam the Moon any more.<br><br><small>Renegades still turn up for the odd job. The Moon is quieter, not empty.</small>`;
+      news = `<b>SPACECOM HOLDS THE DARK SIDE.</b> Rustmoon Hold is a ruin under a SPACECOM flag; ${['gulch', 'blackrock', 'gloom'].map((id) => this.locOf(id)?.name).filter(Boolean).join(', ')} have been resettled by Kepler families, and the camps stand empty. No pirate squads roam the Moon any more.<br><br><small>Renegades still turn up for the odd job. The Moon is quieter, not empty.</small>`;
     } else if (r.world === 'hometown' && this.townSite) {
       const t = this.townSite;
       ws.town = { dir: t.dir, name: t.name, kind: t.kind, slots: Array(8).fill(null), bank: 0, replaces: t.outpost };
@@ -804,7 +792,7 @@ export class Story {
     } else if (r.world === 'pirateTowns') {
       ws.pirateTowns = [...new Set([...(ws.pirateTowns || []), ...r.towns])];
       title = 'THE DARK SIDE BURNS';
-      news = `<b>THE CLANS HAVE MOVED IN.</b> ${r.towns.map((id) => L(id) && L(id).name).filter(Boolean).join(', ')} are Rustmoon dens now: SPACECOM's listening post and two Kepler waystations, rebuilt from the wreckage under black-and-green flags.<br><br><small>You ride with the clans, so their guns are yours. Everyone else would do well to steer clear.</small>`;
+      news = `<b>THE CLANS HAVE MOVED IN.</b> ${r.towns.map((id) => this.locOf(id)?.name).filter(Boolean).join(', ')} are Rustmoon dens now: SPACECOM's listening post and two Kepler waystations, rebuilt from the wreckage under black-and-green flags.<br><br><small>You ride with the clans, so their guns are yours. Everyone else would do well to steer clear.</small>`;
     } else if (r.world === 'lawless') {
       ws.lawless = true;
       title = 'THE INTERNATIONAL MOON BASE HAS FALLEN';
@@ -836,7 +824,7 @@ export class Story {
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
       const m = makeProp('emitter');
-      m.position.copy(g.planet.ground(s.pos.clone().addScaledVector(t1, Math.cos(a) * 42).addScaledVector(t2, Math.sin(a) * 42), new THREE.Vector3()));
+      g.planet.ground(s.pos.clone().addScaledVector(t1, Math.cos(a) * 42).addScaledVector(t2, Math.sin(a) * 42), m.position);
       m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), m.position.clone().normalize());
       g.scene.add(m);
       A.props.push(m);
@@ -845,7 +833,7 @@ export class Story {
     for (let i = 0; i < s.nodes; i++) {
       const a = (i / s.nodes) * Math.PI * 2 + 0.3;
       const r = 12 + (i % 2) * 14;
-      const ground = g.planet.ground(s.pos.clone().addScaledVector(t1, Math.cos(a) * r).addScaledVector(t2, Math.sin(a) * r), new THREE.Vector3());
+      const ground = g.planet.ground(s.pos.clone().addScaledVector(t1, Math.cos(a) * r).addScaledVector(t2, Math.sin(a) * r));
       const pos = ground.clone().addScaledVector(ground.clone().normalize(), 5 + i * 2.2);
       const m = makeProp('node');
       m.position.copy(pos);
@@ -860,20 +848,17 @@ export class Story {
   // Jam (Daedalus): get past the guards, plant the jammer, keep it alive through the waves; then the post is yours.
   updateJam(s, dt) {
     const g = this.game;
-    const P = g.player;
     const A = this.active;
-    const near = (pos, r) => pos && P.pos.distanceTo(pos) < r;
     if (s.phase === 'go') {
-      if (!s.spawned && near(s.pos, 600)) {
+      if (!s.spawned && this.near(s.pos, 600)) {
         s.spawned = true;
         s.units = this.spawnGuards(s.pos, s.guards, { foe: s.foe });
         if (s.backup && !A.backup) this.spawnBackup(s.backup, s.pos);
       }
-      if (near(s.pos, 28)) {
+      if (this.near(s.pos, 28)) {
         s.phase = 'jam';
         s.timer = s.secs;
-        const m = this.generatorProp(s.pos, 'jammer');
-        A.props.push(m);
+        A.props.push(this.relayProp(s.pos, 'jammer'));
         const up = s.pos.clone().normalize();
         A.obj = { center: s.pos.clone().addScaledVector(up, 2.5), vel: new THREE.Vector3(), radius: 2.2, hp: s.hp, maxHp: s.hp, dead: false, label: 'JAMMER' };
         g.events.protect.push(A.obj);
@@ -886,15 +871,20 @@ export class Story {
     s.timer -= dt;
     s.waveT -= dt;
     if (s.waveT <= 0) { s.waveT = 14; this.wave(s.pos, 2 + Math.floor((s.secs - s.timer) / 20), A.obj, 280, s.foe); }
-    if (s.timer <= 0) {
-      if (!s.outpost) s.outpost = g.territory.found(s.pos, A.f, 'tower', null);
-      g.territory.capture(s.outpost, A.f);
-      this.capturedIds.push(s.outpost.id);
-      if (s.war) g.rep.add(s.war, -6, `Lost an outpost to ${FACTIONS[A.f].name}`);
-      g.fx.pop('POST REWRITTEN!', null, { color: '#c77dff', size: 70 });
-      g.hud.alert(`${FACTIONS[A.f].name.toUpperCase()} TERRITORY EXPANDS`, FACTIONS[A.f].color, 3);
-      this.next();
-    }
+    if (s.timer <= 0) this.takePost(s, 'POST REWRITTEN!', '#c77dff');
+  }
+
+  // a captured or jammed post turns yours (pop: the cheer, in `color`)
+  takePost(s, pop, color) {
+    const g = this.game;
+    const A = this.active;
+    if (!s.outpost) s.outpost = g.territory.found(s.pos, A.f, 'tower', null);
+    g.territory.capture(s.outpost, A.f);
+    this.capturedIds.push(s.outpost.id);
+    if (s.war) g.rep.add(s.war, -6, `Lost an outpost to ${FACTIONS[A.f].name}`);
+    g.fx.pop(pop, null, { color, size: 70 });
+    g.hud.alert(`${FACTIONS[A.f].name.toUpperCase()} TERRITORY EXPANDS`, FACTIONS[A.f].color, 3);
+    this.next();
   }
 
   // Flash Crash (Meridian): grab the data spike and race it to the Exchange through relay gates before the market catches
@@ -912,10 +902,9 @@ export class Story {
       const free = (d) => {
         // flat, out of crater bowls, nothing solid within a gate's width
         if (this.roughness(d) > 5) return false;
-        const gp = g.planet.ground(d, new THREE.Vector3());
+        const gp = g.planet.ground(d);
         const up = gp.clone().normalize();
-        for (const h of [1.5, 5.5, 10]) { const q = gp.clone().addScaledVector(up, h); if (g.colliders.query(q, 9, []).some((c) => g.colliders.contact(c, q, 8, new THREE.Vector3()) > 0)) return false; }
-        return true;
+        return ![1.5, 5.5, 10].some((h) => { const q = gp.clone().addScaledVector(up, h); return g.colliders.query(q, 9, []).some((c) => g.colliders.contact(c, q, 8, new THREE.Vector3()) > 0); });
       };
       for (let i = 1; i <= s.gates; i++) {
         const t = i / (s.gates + 1);
@@ -930,7 +919,7 @@ export class Story {
         }
         if (!d) d = base;
         g.planet.clearSpot(d); // no boulder under a gate, built chunk or not
-        const ground = g.planet.ground(d, new THREE.Vector3());
+        const ground = g.planet.ground(d);
         const up = ground.clone().normalize();
         const fwd = tangent(b.clone().sub(a), up).normalize();
         const m = makeProp('gate');
@@ -984,12 +973,7 @@ export class Story {
       const p = R.clone().addScaledVector(t1, Math.cos(a) * 45).addScaledVector(t2, Math.sin(a) * 45);
       sum += Math.abs(g.planet.surface(p) - h0);
     }
-    let rim = 0;
-    for (const c of g.planet.craters || []) {
-      if (c.R < 40) continue;
-      const k = arcDist(d, c.d) / c.R;
-      if (k > 0.7 && k < 1.35) rim = Math.max(rim, 25);
-    }
+    const rim = (g.planet.craters || []).some((c) => { if (c.R < 40) return false; const k = arcDist(d, c.d) / c.R; return k > 0.7 && k < 1.35; }) ? 25 : 0;
     return sum / 8 + rim;
   }
 
@@ -1032,7 +1016,7 @@ export class Story {
   // The Meridian launch complex beside the Monolith (built in Launch Window; made good if skipped).
   ensureLaunchPad() {
     const g = this.game;
-    const ml = g.locations.find((l) => l.id === 'monolith');
+    const ml = this.locOf('monolith');
     if (!ml || ml.launchPad) return;
     g.ws.launchPad = true;
     saveWorldState(g.ws);
@@ -1130,12 +1114,10 @@ export class Story {
   // Assault: with your backup, break a settlement's guns (or command pylon) under fire, then hold its centre.
   updateAssault(s, dt) {
     const g = this.game;
-    const P = g.player;
     const A = this.active;
-    const near = (pos, r) => pos && P.pos.distanceTo(pos) < r;
     const L = s.locRef;
     if (s.phase === 'go') {
-      if (!near(s.pos, 750)) return;
+      if (!this.near(s.pos, 750)) return;
       s.phase = 'break';
       s.base = g.enemies.bases.find((b) => b.loc === L) || null;
       if (s.core) {
@@ -1167,14 +1149,14 @@ export class Story {
       if (done) {
         s.phase = 'hold';
         s.prog = 0;
-        s.holdAt = s.holdOff ? g.planet.ground(g.world.toWorld(L, s.holdOff[0], 0, s.holdOff[1]), new THREE.Vector3()) : s.pos;
+        s.holdAt = s.holdOff ? g.planet.ground(g.world.toWorld(L, s.holdOff[0], 0, s.holdOff[1])) : s.pos;
         this.setMarker(s.holdAt);
         g.fx.pop(s.core ? 'PYLON DOWN!' : 'GUNS SILENT!', null, { color: '#ffd23f', size: 70 });
         g.hud.alert('TAKE THE CENTRE AND HOLD IT!', FACTIONS[A.f].color, 3);
       }
       return;
     }
-    if (near(s.holdAt, 95)) s.prog += dt; else s.prog = Math.max(0, s.prog - dt * 0.5);
+    if (this.near(s.holdAt, 95)) s.prog += dt; else s.prog = Math.max(0, s.prog - dt * 0.5);
     if (s.prog >= s.hold) {
       g.fx.pop(`${L.name.toUpperCase()} TAKEN!`, null, { color: FACTIONS[A.f].color, size: 80 });
       g.cam.shake = 1;
@@ -1295,7 +1277,6 @@ export class Story {
     const out = this.game.enemies.spawnWave(pos, n, obj, dist, foe);
     for (const u of out) u.storyUnit = true;
     this.active.units.push(...out);
-    return out;
   }
 
   updateStep(dt) {
@@ -1304,22 +1285,20 @@ export class Story {
     const A = this.active;
     const s = A.steps[A.si];
     if (!s) return;
-    const near = (pos, r) => pos && P.pos.distanceTo(pos) < r;
     A.t += dt;
     switch (s.t) {
       case 'goto':
-        if (near(s.pos, s.r || 30)) this.next();
+        if (this.near(s.pos, s.r || 30)) this.next();
         break;
       case 'relays': {
         // charges: wait for the last to go off
         if (s.doneIn !== undefined) { s.doneIn -= dt; if (s.doneIn <= 0) this.next(); return; }
-        if (s.guards && !s.guarded[s.k] && near(s.pos, 420)) { s.guarded[s.k] = true; this.spawnGuards(s.pos.clone(), s.guards, { foe: s.foe }); }
-        if (near(s.pos, 18)) {
+        if (s.guards && !s.guarded[s.k] && this.near(s.pos, 420)) { s.guarded[s.k] = true; this.spawnGuards(s.pos.clone(), s.guards, { foe: s.foe }); }
+        if (this.near(s.pos, 18)) {
           s.prog += dt;
           if (s.prog >= (s.hold || 3)) {
             s.prog = 0;
-            const prop = this.relayProp(s.pos, s.prop || (s.charge ? 'charge' : 'sensor'));
-            A.props.push(prop);
+            A.props.push(this.relayProp(s.pos, s.prop || (s.charge ? 'charge' : 'sensor')));
             g.fx.pop(s.charge ? 'CHARGE SET!' : s.facs ? `${FACTIONS[s.facs[s.k]].name.toUpperCase()}: AYE!` : 'DONE!', null, { color: s.facs ? FACTIONS[s.facs[s.k]].color : FACTIONS[A.f].color, size: 54 });
             if (s.facs) g.hud.toast(`${LEADERS[s.facs[s.k]].name} puts ${FACTIONS[s.facs[s.k]].name} down as an aye.`, 4);
             g.audio.pickup();
@@ -1338,7 +1317,7 @@ export class Story {
       }
       case 'clear':
       case 'boss': {
-        if (!s.spawned && near(s.pos, 600)) {
+        if (!s.spawned && this.near(s.pos, 600)) {
           s.spawned = true;
           if (s.t === 'boss') {
             const e = g.enemies.spawnBoss(s.pos, s.boss, s.foe);
@@ -1368,7 +1347,7 @@ export class Story {
       }
       case 'capture': {
         if (s.phase === 'go') {
-          if (!s.spawned && near(s.pos, 600)) {
+          if (!s.spawned && this.near(s.pos, 600)) {
             s.spawned = true;
             s.units = this.spawnGuards(s.pos, s.guards, { foe: s.foe });
             if (s.backup && !A.backup) this.spawnBackup(s.backup, s.pos);
@@ -1378,25 +1357,17 @@ export class Story {
             else { s.phase = 'hold'; g.hud.toast('Guards down. Stand on the outpost to take it.', 3); }
           }
         } else {
-          if (near(s.pos, 55)) s.prog += dt; else s.prog = Math.max(0, s.prog - dt * 0.5);
+          if (this.near(s.pos, 55)) s.prog += dt; else s.prog = Math.max(0, s.prog - dt * 0.5);
           s.waveT = (s.waveT || 6) - dt;
           if (s.waveT <= 0) { s.waveT = 14; this.spawnGuards(s.pos.clone(), 2, { foe: s.foe }); }
-          if (s.prog >= s.hold) {
-            if (!s.outpost) s.outpost = g.territory.found(s.pos, A.f, 'tower', null);
-            g.territory.capture(s.outpost, A.f);
-            this.capturedIds.push(s.outpost.id);
-            if (s.war) g.rep.add(s.war, -6, `Lost an outpost to ${FACTIONS[A.f].name}`);
-            g.fx.pop('OUTPOST TAKEN!', null, { color: FACTIONS[A.f].color, size: 70 });
-            g.hud.alert(`${FACTIONS[A.f].name.toUpperCase()} TERRITORY EXPANDS`, FACTIONS[A.f].color, 3);
-            this.next();
-          }
+          if (s.prog >= s.hold) this.takePost(s, 'OUTPOST TAKEN!', FACTIONS[A.f].color);
         }
         break;
       }
       case 'build':
       case 'carry': {
         if (s.phase === 'fetch') {
-          if (near(s.fromLoc.pos, Math.max(60, s.fromLoc.r * 0.85))) {
+          if (this.near(s.fromLoc.pos, Math.max(60, s.fromLoc.r * 0.85))) {
             s.phase = 'haul';
             A.carrying = true;
             A.cargoHp = 100;
@@ -1417,14 +1388,14 @@ export class Story {
             }
           }
           const dest = s.t === 'carry' ? s.dest : s.pos;
-          if (near(dest, s.t === 'carry' ? Math.max(45, (s.destLoc ? s.destLoc.r * 0.85 : 45)) : 32)) {
+          if (this.near(dest, s.t === 'carry' ? Math.max(45, (s.destLoc ? s.destLoc.r * 0.85 : 45)) : 32)) {
             A.carrying = false;
             P.setCargo(null);
             if (s.t === 'carry') { g.fx.pop('DELIVERED!', null, { color: '#7dff3a', size: 64 }); this.next(); break; }
             s.trip++;
             const crate = makeCrate(0xffd23f, 1.6);
             const up = s.pos.clone().normalize();
-            crate.position.copy(g.planet.ground(greatCircle(up, tangent(new THREE.Vector3(Math.random(), Math.random(), Math.random()), up).normalize(), 4 + s.trip * 3), new THREE.Vector3(), 0.8));
+            g.planet.ground(greatCircle(up, tangent(new THREE.Vector3(Math.random(), Math.random(), Math.random()), up).normalize(), 4 + s.trip * 3), crate.position, 0.8);
             g.scene.add(crate);
             A.props.push(crate);
             g.fx.pop(`LOAD ${s.trip}/${s.trips}`, null, { color: '#ffd23f', size: 54 });
@@ -1432,7 +1403,7 @@ export class Story {
               if (s.found.kind === 'launch') {
                 g.ws.launchPad = true;
                 saveWorldState(g.ws);
-                const ml = g.locations.find((l) => l.id === 'monolith');
+                const ml = this.locOf('monolith');
                 if (ml && !ml.launchPad) { ml.launchPad = true; g.world.storyMarks(ml); }
                 g.fx.explosion(s.pos.clone().addScaledVector(up, 3), 8, false);
                 g.hud.alert('THE MERIDIAN LAUNCH COMPLEX IS BUILT!', FACTIONS[A.f].color, 3.5);
@@ -1457,8 +1428,7 @@ export class Story {
       case 'defend': {
         if (!A.obj) {
           const up = s.pos.clone().normalize();
-          const m = this.generatorProp(s.pos, s.prop);
-          A.props.push(m);
+          A.props.push(this.relayProp(s.pos, s.prop));
           const big = s.prop === 'reactor';
           A.obj = { center: s.pos.clone().addScaledVector(up, big ? 5 : 2.5), vel: new THREE.Vector3(), radius: big ? 6 : 2.6, hp: s.hp, maxHp: s.hp, dead: false, label: big ? 'REACTOR' : 'GENERATOR' };
           g.events.protect.push(A.obj);
@@ -1477,10 +1447,10 @@ export class Story {
         break;
       }
       case 'experiment': {
-        const inside = near(s.pos, 40);
+        const inside = this.near(s.pos, 40);
         if (!A.props.length) {
           const ring = new THREE.Mesh(new THREE.TorusGeometry(40, 0.6, 6, 64), glow(0xc77dff));
-          ring.position.copy(g.planet.ground(s.pos, new THREE.Vector3(), 0.6));
+          g.planet.ground(s.pos, ring.position, 0.6);
           ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), s.pos.clone().normalize());
           g.scene.add(ring);
           A.props.push(ring);
@@ -1535,11 +1505,10 @@ export class Story {
   // The Charter's stops: every faction HQ not in `skip` (Rustmoon's), as leader selectors in HQ_ROUTE order. Ended
   // factions (conquered, dismantled, fallen) and ruined HQs have nobody left to vote.
   hqSites(s) {
-    const g = this.game;
     const out = [];
     for (const [f, F] of Object.entries(FACTIONS)) {
       if (!F.hq || (s.skip && s.skip.includes(f)) || F.absorbedBy || F.gone || F.fallen) continue;
-      const loc = g.locations.find((l) => l.id === F.hq);
+      const loc = this.locOf(F.hq);
       if (!loc || loc.type === 'ruin') continue;
       out.push({ leader: f });
     }
@@ -1603,21 +1572,12 @@ export class Story {
     A.props.push(s.ring);
   }
 
-  // planted prop (storyAssets): sensor pylon, ballot stand, demolition charge...
-  relayProp(pos, kind) {
+  // planted prop (storyAssets): sensor pylon, ballot stand, demolition charge...; or a defend step's objective: relay mast,
+  // field generator, homestead generator, Black Sun reactor
+  relayProp(pos, kind = 'homegen') {
     const g = this.game;
     const root = makeProp(kind);
-    root.position.copy(g.planet.ground(pos, new THREE.Vector3()));
-    root.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pos.clone().normalize());
-    g.scene.add(root);
-    return root;
-  }
-
-  // a defend step's objective (storyAssets): relay mast, field generator, homestead generator, Black Sun reactor
-  generatorProp(pos, kind = 'homegen') {
-    const g = this.game;
-    const root = makeProp(kind);
-    root.position.copy(g.planet.ground(pos, new THREE.Vector3()));
+    g.planet.ground(pos, root.position);
     root.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pos.clone().normalize());
     g.scene.add(root);
     return root;
@@ -1630,6 +1590,7 @@ export class Story {
     if (!s) return '';
     const P = this.game.player;
     const dist = (p) => (p ? `${(P.pos.distanceTo(p) / 1000).toFixed(1)} km` : '');
+    const secs = `${Math.ceil(Math.max(0, s.timer))} s`;
     switch (s.t) {
       case 'relays': return `${s.label} (${s.k}/${s.list.length}) · ${s.names ? `next: ${s.names[s.k]} · ` : ''}${dist(s.pos)}${s.prog > 0 ? ` · ${Math.round((s.prog / (s.hold || 3)) * 100)}%` : ''}`;
       case 'clear': return `${s.label}${s.units ? ` · ${s.units.filter((e) => !e.dead).length} left` : ''} · ${dist(s.pos)}`;
@@ -1637,12 +1598,12 @@ export class Story {
       case 'capture': return s.phase === 'hold' ? `Hold the outpost: ${Math.round((s.prog / s.hold) * 100)}%` : `${s.label} · ${dist(s.pos)}`;
       case 'build': return `${s.phase === 'fetch' ? `Pick up parts at ${s.fromLoc.name}` : `Haul the parts to the site · ${this.condText()}`} (${s.trip}/${s.trips}) · ${dist(this.stepTarget(s))}`;
       case 'carry': return `${s.phase === 'fetch' ? `Pick up the ${s.cargo.toLowerCase()} at ${s.fromLoc.name}` : `Deliver it · ${this.condText()}`} · ${dist(this.stepTarget(s))}`;
-      case 'defend': return `${s.label} · ${Math.ceil(Math.max(0, s.timer))} s${this.active.obj ? ` · ${Math.round((this.active.obj.hp / this.active.obj.maxHp) * 100)}% integrity` : ''}`;
-      case 'experiment': return s.nodes ? `${s.label} (${s.got}/${s.nodes}) · ${Math.ceil(Math.max(0, s.timer))} s` : `${s.label} · ${Math.ceil(Math.max(0, s.timer))} s${P.pos.distanceTo(s.pos) > 40 ? ' · GET INSIDE THE RING' : ''}`;
-      case 'gates': return s.phase === 'fetch' ? `Pick up the data spike at ${s.fromLoc.name} · ${dist(s.fromLoc.pos)}` : `${s.k < s.gateList.length ? `Gate ${s.k + 1}/${s.gateList.length}` : 'Into the Exchange'} · ${Math.ceil(Math.max(0, s.timer))} s · ${dist(this.stepTarget(s))}`;
+      case 'defend': return `${s.label} · ${secs}${A.obj ? ` · ${Math.round((A.obj.hp / A.obj.maxHp) * 100)}% integrity` : ''}`;
+      case 'experiment': return s.nodes ? `${s.label} (${s.got}/${s.nodes}) · ${secs}` : `${s.label} · ${secs}${P.pos.distanceTo(s.pos) > 40 ? ' · GET INSIDE THE RING' : ''}`;
+      case 'gates': return s.phase === 'fetch' ? `Pick up the data spike at ${s.fromLoc.name} · ${dist(s.fromLoc.pos)}` : `${s.k < s.gateList.length ? `Gate ${s.k + 1}/${s.gateList.length}` : 'Into the Exchange'} · ${secs} · ${dist(this.stepTarget(s))}`;
       case 'spindle': return this.game.spindle.status();
       case 'survey': return `${s.label} (${s.k}/${s.list.length}) · ${dist(s.pos)}${s.prog > 0 ? ` · ${Math.round((s.prog / (s.hold || 3)) * 100)}%` : s.choosing || P.pos.distanceTo(s.pos) < (s.r || SURVEY_R) || P.pos.distanceTo(s.pos) > 250 ? '' : ' · GET INSIDE THE RING'}`;
-      case 'jam': return s.phase === 'jam' ? `Keep the jammer alive · ${Math.ceil(Math.max(0, s.timer))} s${this.active.obj ? ` · ${Math.round((this.active.obj.hp / this.active.obj.maxHp) * 100)}%` : ''}` : `${s.label} · ${dist(s.pos)}`;
+      case 'jam': return s.phase === 'jam' ? `Keep the jammer alive · ${secs}${A.obj ? ` · ${Math.round((A.obj.hp / A.obj.maxHp) * 100)}%` : ''}` : `${s.label} · ${dist(s.pos)}`;
       case 'assault': return s.phase === 'go' ? `${s.label} · ${dist(s.pos)}` : s.phase === 'break' ? (s.core ? `Destroy the command pylon${s.coreE ? ` · ${Math.max(0, Math.round(s.coreE.hp))} HP` : ''}` : `Silence the guns (${this.gunsDown(s)}/${s.need})`) : `Take the centre: ${Math.round((s.prog / s.hold) * 100)}%${P.pos.distanceTo(s.holdAt || s.pos) > 60 ? ' · GET TO THE CENTRE' : ''}`;
       case 'kade': return 'Defeat Captain Kade';
       default: return `${s.label} · ${dist(s.pos)}`;
@@ -1704,9 +1665,9 @@ export class Story {
     const id = this.grantModule(o, k);
     if (id) unlocks.push(`Free ${MODULES[id].name} at ${at}`);
     else {
-      const m = MODULES[k];
+      const m = MODULES[k], both = (MODULE_LINES[k] || []).length > 1;
       this.game.addCredits(m.cost, `${m.name} refund`);
-      unlocks.push(`${(MODULE_LINES[k] || []).length > 1 ? `Both ${m.name} slots` : `The ${m.name}`} at ${at} ${(MODULE_LINES[k] || []).length > 1 ? 'were' : 'was'} already built: ₵${m.cost} instead`);
+      unlocks.push(`${both ? `Both ${m.name} slots` : `The ${m.name}`} at ${at} ${both ? 'were' : 'was'} already built: ₵${m.cost} instead`);
     }
     this.refreshOutposts();
   }
@@ -1854,7 +1815,7 @@ export class Story {
     if (P.vehicle) g.garage.exit();
     const t = tangent(new THREE.Vector3(1, 0, 0), dir).normalize();
     const d = greatCircle(dir.clone().normalize(), t, 18);
-    g.planet.update(g.planet.ground(d, new THREE.Vector3()), { budgetMs: 1e9 });
+    g.planet.update(g.planet.ground(d), { budgetMs: 1e9 });
     const pos = g.planet.ground(d, new THREE.Vector3(), 1.5);
     const fwd = tangent(dir.clone().sub(d), d).normalize();
     P.respawn(pos, fwd);
@@ -2016,14 +1977,8 @@ export class Story {
   // ---------- UI ----------
   buildUI() {
     const hud = document.getElementById('hud');
-    this.splashEl = document.createElement('div');
-    this.splashEl.id = 'splash';
-    this.splashEl.className = 'hidden';
-    hud.appendChild(this.splashEl);
-    this.lockEl = document.createElement('div');
-    this.lockEl.id = 'lockwarn';
-    this.lockEl.className = 'hidden';
-    hud.appendChild(this.lockEl);
+    this.splashEl = hud.appendChild(Object.assign(document.createElement('div'), { id: 'splash', className: 'hidden' }));
+    this.lockEl = hud.appendChild(Object.assign(document.createElement('div'), { id: 'lockwarn', className: 'hidden' }));
   }
 
   // ---------- per frame ----------
@@ -2040,7 +1995,7 @@ export class Story {
     if (!m) return;
     this.meterEl.querySelector('.hb-label').textContent = m.label;
     const f = this.meterEl.querySelector('.hb-fill');
-    f.style.width = `${Math.round(Math.min(1, Math.max(0, m.k)) * 100)}%`;
+    f.style.width = `${Math.round(clamp01(m.k) * 100)}%`;
     f.style.background = m.col;
     this.meterEl.style.setProperty('--col', m.col);
   }
@@ -2087,5 +2042,3 @@ export class Story {
     }).join(' · ');
   }
 }
-
-export { CHAPTERS, REQ };

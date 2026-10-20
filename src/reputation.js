@@ -39,10 +39,7 @@ export class Reputation {
     return t;
   }
 
-  nextTier(f) {
-    const v = this.get(f);
-    return TIERS.find((x) => x.min > v) || null;
-  }
+  nextTier(f) { return TIERS.find((x) => x.min > this.get(f)) || null; }
 
   visible(f) {
     if (FACTIONS[f] && (FACTIONS[f].absorbedBy || FACTIONS[f].gone)) return false;

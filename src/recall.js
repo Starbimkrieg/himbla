@@ -4,7 +4,7 @@ import { frameQuat, tangent } from './geo.js';
 import { FACTIONS } from './locations.js';
 
 // Emergency recall: ₵100 and a cutscene. A shuttle lands at your home base, drops its ramp, and you stroll out.
-export const RECALL_COST = 100;
+const RECALL_COST = 100;
 
 const SCALE = 0.85;
 const SET_BACK = 15; // m, shuttle centre behind your stand point
@@ -25,6 +25,13 @@ const CAM_SIDE = 22, CAM_AHEAD = 13, CAM_UP = 6; // cinematic camera, off the sh
 const LEG_A = 0.66; // s from the hold to the ramp's foot
 const WALK_SPEED = 6.5; // m/s from the ramp's foot to your spot
 const _near = [], _n = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+
+// A (scaled) shuttle on its gear over `land`, alt m up, nose along fwd, pitched by tilt (also the Spindle's med-evac craft)
+export function poseShuttle(s, land, up, fwd, alt, tilt = 0) {
+  s.root.position.copy(land).addScaledVector(up, s.gearH * s.root.scale.x + alt);
+  frameQuat(up, fwd, s.root.quaternion);
+  if (tilt) s.root.rotateX(tilt);
+}
 
 export class Recall {
   constructor(game) {
@@ -104,8 +111,7 @@ export class Recall {
     this.land = site.land;
     this.up = this.land.clone().normalize();
     this.fwd = site.dir; // shuttle toward your stand point (ramp end)
-    this.right = site.right;
-    this.side = site.side; // camera's flank
+    this.spot = site; // and the camera's flank (camera())
     // stroll time from the ramp's foot scales with the distance
     this.walkT = LEG_A + Math.max(0.54, Math.min(3, Math.max(0, this.land.distanceTo(home.point) - RAMP_FOOT) / WALK_SPEED));
     this.endAt = 3.4 + this.walkT + 0.6;
@@ -176,7 +182,7 @@ export class Recall {
     let best = null;
     search: for (const d of SET_BACKS) for (const k of SWINGS) {
       const at = back.clone().applyAxisAngle(standUp, k * Math.PI / 6);
-      const land = g.planet.ground(stand.clone().addScaledVector(at, d), new THREE.Vector3());
+      const land = g.planet.ground(stand.clone().addScaledVector(at, d));
       const up = land.clone().normalize();
       const dir = tangent(stand.clone().sub(land), up).normalize();
       const n = this.clutter(land, dir, stand, best ? best.n : Infinity);
@@ -198,19 +204,14 @@ export class Recall {
     return out.copy(site.land).addScaledVector(site.right, CAM_SIDE * side).addScaledVector(site.dir, CAM_AHEAD).addScaledVector(site.up, CAM_UP);
   }
 
-  pose(alt, tilt = 0) {
-    const s = this.shuttle;
-    s.root.position.copy(this.land).addScaledVector(this.up, s.gearH * SCALE + alt);
-    frameQuat(this.up, _v.copy(this.fwd).negate(), s.root.quaternion);
-    if (tilt) s.root.rotateX(tilt);
-  }
+  pose(alt, tilt) { poseShuttle(this.shuttle, this.land, this.up, _v.copy(this.fwd).negate(), alt, tilt); }
 
   // cinematic camera off to the side
   camera() {
     const g = this.game;
     const cam = g.camera;
     const focus = this.land.clone().addScaledVector(this.up, 2.5 + Math.max(0, this.shuttleAlt || 0) * 0.6);
-    cam.position.copy(this.land).addScaledVector(this.right, CAM_SIDE * this.side).addScaledVector(this.fwd, CAM_AHEAD).addScaledVector(this.up, CAM_UP);
+    this.camSpot(this.spot, this.spot.side, cam.position);
     cam.up.copy(this.up);
     cam.lookAt(focus);
     g.cam.position.copy(cam.position);
@@ -298,21 +299,16 @@ export class Recall {
 
   // after the scene: close up and climb away
   flyAway(dt) {
-    const L = this.leaving;
+    const L = this.leaving, s = this.shuttle;
     L.t += dt;
+    s.setRamp(Math.max(0, s.rampK - dt * 2));
     if (L.t > 0.6) {
       L.vel += dt * 30;
       L.root.position.addScaledVector(this.up, L.vel * dt);
-      const s = this.shuttle;
-      s.setRamp(Math.max(0, s.rampK - dt * 2));
       s.setGear(Math.max(0, s.gearK - dt * 0.6));
       s.setThrust(Math.min(1, (L.t - 0.6) * 0.5), 1, L.t);
       if (Math.random() < dt * 30) this.game.fx.spawn(L.root.position.clone().addScaledVector(this.up, -3), this.up.clone().multiplyScalar(-14), { color: 0xff9f1c, size: 0.5, life: 0.4, count: 1, spread: 1.5 });
-    } else {
-      const s = this.shuttle;
-      s.setRamp(Math.max(0, s.rampK - dt * 2));
-      s.setThrust(0, L.t / 0.6, L.t);
-    }
+    } else s.setThrust(0, L.t / 0.6, L.t);
     if (L.t > 8) { L.root.removeFromParent(); this.leaving = null; }
   }
 }

@@ -68,6 +68,8 @@ const RADIAL = [
 // panels the highlight works in, topmost first
 const UI_ROOTS = ['settings', 'dialog', 'board', 'replog', 'wardrobe', 'casino', 'help', 'pause', 'death', 'globe-wrap'];
 const FOCUSABLE = 'button, [data-i], [data-k], [data-f], [data-tab], [data-buy], a[href], input, select, .wd-tile, [role="button"]'; // [data-i]: a job-terminal contract, [data-buy]: one of its upgrades
+const axis = (btn, plus, minus) => (btn[plus] ? 1 : 0) - (btn[minus] ? 1 : 0); // -1, 0 or 1 from a pair of buttons
+const scrolls = (el) => el.scrollHeight > el.clientHeight + 4 && /(auto|scroll)/.test(getComputedStyle(el).overflowY); // more in it than shows
 
 // glyph set: PlayStation (Sony 054c), Switch (Nintendo 057e), else Xbox
 export function padKind(id = '') {
@@ -75,6 +77,13 @@ export function padKind(id = '') {
   if (/054c|dualsense|dualshock|playstation|wireless controller/i.test(id)) return 'ps';
   if (/057e|nintendo|switch|pro controller|joy-?con/i.test(id)) return 'switch';
   return 'xbox';
+}
+
+// the pad in use: the first connected one, preferring standard mapping (the input monitor, inputmon.js, reads it too)
+export function activePad() {
+  let gp = null;
+  for (const p of (navigator.getGamepads ? navigator.getGamepads() : [])) if (p && p.connected) { gp = p; if (p.mapping === 'standard') break; }
+  return gp;
 }
 
 export class Gamepad {
@@ -89,7 +98,6 @@ export class Gamepad {
     this.focus = null;
     this.aimT = AIM_SHOW; // s since the last shot (starts faded out)
     this.radial = null; // open radial menu { sel }, or null
-    this.input.padMove = { x: 0, y: 0, on: false };
     this.kind = 'xbox';
     this.glyphs = new Glyphs();
     // PlayStation motion sensors (WebHID): while Circle is held, tilt stands in for the left stick
@@ -123,9 +131,7 @@ export class Gamepad {
 
   // ---- per frame ----
   update(dt) {
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    let gp = null;
-    for (const p of pads) if (p && p.connected) { gp = p; if (p.mapping === 'standard') break; }
+    const gp = activePad();
     if (this.game.haptics) this.game.haptics.attach(gp);
     if (!gp) return;
     const kind = padKind(gp.id);
@@ -150,12 +156,13 @@ export class Gamepad {
     const g = this.game;
     const menu = g.menu && g.menu.open;
     const st = g.state;
-    if (DEV_TOOLS && st === 'play' && !menu && !(g.settings && g.settings.open)) this.devCombo(pressed, dt);
     const setOpen = g.settings && g.settings.open;
-    if (this.radial && (st !== 'play' || menu || setOpen)) this.closeRadial(); // a dialog or screen opened over it
-    if (g.garage && g.garage.radial && (st !== 'play' || menu || setOpen)) { g.garage.closeRadial(false); g.vHold = 0; }
-    if (g.powers.radial && (st !== 'play' || menu || setOpen)) g.powers.closeRadial(false);
-    if (this.gyroOn && (st !== 'play' || menu || setOpen)) { this.gyroOn = false; this.gyro.end(); }
+    if (DEV_TOOLS && st === 'play' && !menu && !setOpen) this.devCombo(pressed, dt);
+    const away = st !== 'play' || menu || setOpen; // a dialog or screen opened over the wheels or the gyro
+    if (this.radial && away) this.closeRadial();
+    if (g.garage && g.garage.radial && away) { g.garage.closeRadial(false); g.vHold = 0; }
+    if (g.powers.radial && away) g.powers.closeRadial(false);
+    if (this.gyroOn && away) { this.gyroOn = false; this.gyro.end(); }
     const roul = st === 'casino' && !g.casino.mode && g.casino.tab === 'roulette' && !setOpen && !menu;
     if (!roul) this.hideCursor();
     if (setOpen) this.ui(btn, pressed, lx, ly, ry, dt); // settings sit over the title / pause card and get the highlight
@@ -233,7 +240,7 @@ export class Gamepad {
     // dev free cam (freecam.js) takes the buttons while on: LB up, RB down, LT fast, d-pad ↑ / ↓ speed, d-pad → HUD toggle
     // (so the d-pad isn't weapon / power switching or the radial)
     const fc = g.cheats.freeCam;
-    if (fc.on) fc.pad = { rise: (btn[B.LB] ? 1 : 0) - (btn[B.RB] ? 1 : 0), fast: trig(B.LT) > 0.35, speed: (btn[B.UP] ? 1 : 0) - (btn[B.DOWN] ? 1 : 0), hud: pressed(B.RIGHT) };
+    if (fc.on) fc.pad = { rise: axis(btn, B.LB, B.RB), fast: trig(B.LT) > 0.35, speed: axis(btn, B.UP, B.DOWN), hud: pressed(B.RIGHT) };
     // not while a wheel is open or d-pad ↓ is held: a diagonal on the way to ↓ isn't a weapon swap
     else if (!this.radial && !gw && !pw && !btn[B.DOWN]) {
       if (pressed(B.LEFT)) this.cycleWeapon(-1);
@@ -262,7 +269,7 @@ export class Gamepad {
     const q = gw.sel >= 0 ? gw.items[gw.sel] : null;
     const notReady = !!q && (gar.cooldown(q) > 0 || g.boardCooldown > 0);
     if (pressed(B.A)) {
-      if (notReady) { if (g.audio && g.audio.tone) g.audio.tone(180, 0.1, 'sawtooth', 0.05); return true; } // stays open, like a locked wedge
+      if (notReady) { this.beep(180, 0.1, 'sawtooth', 0.05); return true; } // stays open, like a locked wedge
       gar.closeRadial(true); this.radialMask = true;
       return true;
     }
@@ -280,7 +287,7 @@ export class Gamepad {
     const q = pows.radialPick();
     if (pressed(B.B) || pressed(B.START)) done(false);
     else if (pressed(B.A)) {
-      if (!pows.pickable(q)) { if (g.audio && g.audio.tone) g.audio.tone(180, 0.1, 'sawtooth', 0.05); g.hud.toast('Let go of the cable first.', 1.5); } // stays open
+      if (!pows.pickable(q)) { this.beep(180, 0.1, 'sawtooth', 0.05); g.hud.toast('Let go of the cable first.', 1.5); } // stays open
       else done(true);
     } else if (pressed(B.DOWN)) done(pows.pickable(q));
     return true;
@@ -311,14 +318,14 @@ export class Gamepad {
       const sel = ((Math.round((a / (Math.PI * 2)) * n) % n) + n) % n;
       if (sel !== R.sel) {
         R.sel = sel;
-        if (g.audio && g.audio.tone) g.audio.tone(700 + sel * 40, 0.04, 'square', 0.06);
+        this.beep(700 + sel * 40, 0.04, 'square', 0.06);
       }
     }
     if (pressed(B.B) || pressed(B.START)) { this.closeRadial(); return; }
     if (pressed(B.A) || pressed(B.DOWN)) {
       let q = R.sel >= 0 ? RADIAL[R.sel] : null;
       const locked = !!(q && q.has && !q.has(g));
-      if (locked && pressed(B.A)) { if (g.audio && g.audio.tone) g.audio.tone(180, 0.1, 'sawtooth', 0.05); return; } // A on a locked wedge: stays open
+      if (locked && pressed(B.A)) { this.beep(180, 0.1, 'sawtooth', 0.05); return; } // A on a locked wedge: stays open
       if (locked) q = null; // d-pad ↓ on one just closes
       this.closeRadial();
       // a held d-pad ↓ mustn't also step the highlight in the screen this opens
@@ -346,7 +353,7 @@ export class Gamepad {
     this.game.vHold = 0; // a vehicle key going down isn't a tap: Y is masked while the wheel is up
     this.set('KeyV', false); this.input.justPressed.delete('KeyV'); // nor one pressed this frame with d-pad ↓
     this.drawRadial(true);
-    if (this.game.audio && this.game.audio.tone) this.game.audio.tone(520, 0.08, 'triangle', 0.12);
+    this.beep(520, 0.08, 'triangle', 0.12);
   }
 
   closeRadial() {
@@ -386,6 +393,10 @@ export class Gamepad {
     const hub = `${q ? `<b>${q.name}</b>` : 'MENU'}<small><span>${glyphHtml(['RS'])} pick</span><span>${glyphHtml(['A'])} use</span><span>${glyphHtml(['B'])} cancel</span></small>`;
     if (R.hub !== hub) { R.hub = hub; el.querySelector('.pr-hub').innerHTML = hub; }
   }
+
+  // menu blips and the buzz of a locked choice (audio.js tone)
+  beep(f, dur, type, vol) { const a = this.game.audio; if (a && a.tone) a.tone(f, dur, type, vol); }
+
   // a key held a couple of frames (some actions read held, some the press)
   pulse(code) {
     this.set(code, true);
@@ -431,7 +442,7 @@ export class Gamepad {
   map(btn, pressed, released, trig, lx, ly, ry, dt) {
     this.releaseAll();
     this.clearFocus();
-    this.game.globe.padUpdate(lx, ly, trig(B.RT) > 0.35, ry, (btn[B.RB] ? 1 : 0) - (btn[B.LB] ? 1 : 0), dt);
+    this.game.globe.padUpdate(lx, ly, trig(B.RT) > 0.35, ry, axis(btn, B.RB, B.LB), dt);
     // View closes on release, so letting go can't read as the tap that opens the map
     if (pressed(B.B) || pressed(B.START)) this.key('Escape');
     else if (pressed(B.A)) this.game.globe.padClick(); // Radio Tower sweep, or dev click-to-teleport
@@ -449,11 +460,11 @@ export class Gamepad {
     for (const code of [...this.holding]) if (code !== 'Space') this.set(code, false);
     I.padMove.on = false; I.mouse[0] = false; I.mouse[2] = false;
     if (mode === 'plinko') {
-      games.padAim(lx || (btn[B.RIGHT] ? 1 : 0) - (btn[B.LEFT] ? 1 : 0), dt);
+      games.padAim(lx || axis(btn, B.RIGHT, B.LEFT), dt);
       this.set('Space', btn[B.A] || trig(B.RT) > 0.35);
     } else if (mode === 'claw') {
       // claw: left stick flies it (across, in / out), LB / RB lower / raise, A or RT is the beam (held)
-      games.claw.padClaw(lx || (btn[B.RIGHT] ? 1 : 0) - (btn[B.LEFT] ? 1 : 0), ly || (btn[B.DOWN] ? 1 : 0) - (btn[B.UP] ? 1 : 0), (btn[B.RB] ? 1 : 0) - (btn[B.LB] ? 1 : 0));
+      games.claw.padClaw(lx || axis(btn, B.RIGHT, B.LEFT), ly || axis(btn, B.DOWN, B.UP), axis(btn, B.RB, B.LB));
       this.set('Space', btn[B.A] || trig(B.RT) > 0.35);
       if (pressed(B.B) || pressed(B.START)) { this.set('Space', false); this.key('Escape'); }
       return;
@@ -506,8 +517,7 @@ export class Gamepad {
     c.el.style.left = c.x + 'px'; c.el.style.top = c.y + 'px';
     const under = document.elementFromPoint(c.x, c.y);
     let hit = under && area.contains(under) ? under.closest('[data-rb], button, [data-act], [data-tab]') : null;
-    if (hit && !area.contains(hit)) hit = null;
-    if (hit && hit.disabled) hit = null;
+    if (hit && (!area.contains(hit) || hit.disabled)) hit = null;
     this.setFocus(hit);
     const down = btn[B.A] || trig(B.RT) > 0.35;
     if (down && !c.down && hit) hit.click();
@@ -576,17 +586,16 @@ export class Gamepad {
     // right stick scrolls whatever scrolls
     if (ry) {
       let s = this.focus && this.focus.parentElement;
-      while (s && s !== document.body && !(s.scrollHeight > s.clientHeight + 4 && /(auto|scroll)/.test(getComputedStyle(s).overflowY))) s = s.parentElement;
+      while (s && s !== document.body && !scrolls(s)) s = s.parentElement;
       // a tab or footer button sits outside the scroller: fall back to the panel's
-      if (!s || s === document.body) s = [...root.querySelectorAll('*')].find((el) => el.scrollHeight > el.clientHeight + 4 && /(auto|scroll)/.test(getComputedStyle(el).overflowY) && el.getClientRects().length);
+      if (!s || s === document.body) s = [...root.querySelectorAll('*')].find((el) => scrolls(el) && el.getClientRects().length);
       if (s && s !== document.body) s.scrollTop += ry * 900 * dt;
     }
   }
 
   resume() {
-    const g = this.game;
     document.getElementById('pause').click();
-    g.hud.show('clickhint', false);
+    this.game.hud.show('clickhint', false);
   }
 
   uiRoot() {
@@ -651,14 +660,14 @@ export class Gamepad {
     this.focus = el;
     this.focusSig = el ? this.sig(el) : null;
     if (!el) return;
-    if (quiet) { el.classList.add('pad-focus'); return; }
     el.classList.add('pad-focus');
+    if (quiet) return;
     el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     // hover effects follow the highlight (wardrobe previews, tips)
     const r = el.getBoundingClientRect();
     el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
     el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
-    if (this.game.audio && this.game.audio.tone) this.game.audio.tone(900, 0.03, 'square', 0.06);
+    this.beep(900, 0.03, 'square', 0.06);
     this.game.haptics.play('tick');
   }
 
@@ -687,12 +696,11 @@ export class Gamepad {
 
   // a real key event, for screens listening to the DOM (title menu, Escape everywhere)
   key(code) {
-    const e = new KeyboardEvent('keydown', { code, key: code === 'Escape' ? 'Escape' : code, bubbles: true, cancelable: true });
-    e.padSynth = true;
-    window.dispatchEvent(e);
-    const u = new KeyboardEvent('keyup', { code, key: code, bubbles: true });
-    u.padSynth = true;
-    window.dispatchEvent(u);
+    for (const type of ['keydown', 'keyup']) {
+      const e = new KeyboardEvent(type, { code, key: code, bubbles: true, cancelable: type === 'keydown' });
+      e.padSynth = true;
+      window.dispatchEvent(e);
+    }
   }
 
   releaseAll() {

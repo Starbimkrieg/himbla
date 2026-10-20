@@ -83,10 +83,9 @@ export class Planet extends TerrainField {
       const u = d.clone().normalize();
       const flat = this.flats.find((f) => f.dir.dot(u) > 0.999999);
       if (!flat) continue;
-      const r = flat.r;
       this.removeFlatData(u);
       this.tellWorkers({ type: 'unflat', dir: u.toArray() });
-      this.redo(u, r);
+      this.redo(u, flat.r);
     }
     this.addZoneData(z); // fits the plane here, once
     this.tellWorkers({ type: 'zone', zone: zoneMsg(z) });
@@ -452,10 +451,8 @@ ${SKIN_COLOR}`);
       if (top - (at(rpk - 0.3, th, w) + at(rpk + 0.35, th, w)) / 2 > 1.5) firm++;
     }
     // smooth out ground bumps (and scarp or ridge steps) so the grind runs smooth
-    let rad = pts.map((q) => q.length());
-    for (let pass = 0; pass < 1; pass++) {
-      rad = rad.map((_, i) => (rad[(i + n - 2) % n] + 2 * rad[(i + n - 1) % n] + 3 * rad[i] + 2 * rad[(i + 1) % n] + rad[(i + 2) % n]) / 9);
-    }
+    const r0 = pts.map((q) => q.length());
+    const rad = r0.map((_, i) => (r0[(i + n - 2) % n] + 2 * r0[(i + n - 1) % n] + 3 * r0[i] + 2 * r0[(i + 1) % n] + r0[(i + 2) % n]) / 9);
     for (let i = 0; i < n; i++) pts[i].setLength(rad[i] + 0.1);
     I.ok = firm >= n * 0.8;
     I.rpk = rpk; I.rc = c.R * rpk; I.pts = pts;
@@ -493,16 +490,7 @@ ${SKIN_COLOR}`);
       }
       return true;
     });
-    const rail = (list, loop) => {
-      const cum = [0];
-      for (let i = 1; i < list.length; i++) cum.push(cum[i - 1] + list[i].distanceTo(list[i - 1]));
-      const cen = new THREE.Vector3();
-      for (const q of list) cen.add(q);
-      cen.divideScalar(list.length);
-      let rad = 0;
-      for (const q of list) rad = Math.max(rad, q.distanceTo(cen));
-      return { pts: list, cum, len: cum[cum.length - 1], c: cen, rad, loop, rimOf: c };
-    };
+    const rail = (list, loop) => ({ ...railOf(list), loop, rimOf: c });
     if (keep.every(Boolean)) return [rail([...pts, pts[0].clone()], true)];
     const out = [];
     const start = keep.indexOf(false);
@@ -559,28 +547,27 @@ ${SKIN_COLOR}`);
   }
 
   buildBoulders(ch) {
-    const rr = mulberry32((ch.f * 7919 + ch.cy * 131 + ch.cx) * 2654435761);
+    const seed = ch.f * 7919 + ch.cy * 131 + ch.cx;
+    const rr = mulberry32(seed * 2654435761);
     const count = 4 + Math.floor(rr() * 6);
     // rocky country (ridged highlands, scarps) gets extra boulders, from their own generator
     this.H(ch.dir.x, ch.dir.y, ch.dir.z);
     const rock = this.attr.rock;
     const extra = Math.floor(rock * 12);
-    const rx = mulberry32((ch.f * 7919 + ch.cy * 131 + ch.cx) * 2246822519 ^ 0x7ee);
+    const rx = mulberry32(seed * 2246822519 ^ 0x7ee);
     // one lumpy shape per chunk, each boulder stretched its own way (own sequence rv, so rr and rx placements are unaffected)
-    const seed = ch.f * 7919 + ch.cy * 131 + ch.cx;
     const shape = this.boulderShapes[((seed * 2654435761) >>> 0) % this.boulderShapes.length];
     const rv = mulberry32(seed * 40503 ^ 0x6b0d1e);
     const im = new THREE.InstancedMesh(shape, this.boulderMat, count + extra);
     const hull = new THREE.InstancedMesh(shape, this.boulderInk, count + extra);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
     const cols = [];
+    const onPlace = (zn) => p.dot(zn.dir) > Math.cos((zn.r * 1.5) / R); // a settlement or plateau there
     let n = 0;
     for (let t = 0; t < count + extra; t++) {
       const g0 = t < count ? rr : rx; // base boulders keep their own sequence
       faceDir(ch.f, ch.cx * CH + g0() * CH, ch.cy * CH + g0() * CH, p);
-      let ok = true;
-      for (const zn of this.zones) if (p.dot(zn.dir) > Math.cos((zn.r * 1.5) / R)) { ok = false; break; }
-      for (const zn of this.flats) if (p.dot(zn.dir) > Math.cos((zn.r * 1.5) / R)) { ok = false; break; }
+      let ok = !this.zones.some(onPlace) && !this.flats.some(onPlace);
       if (ok && this.noBoulders) for (const c of this.noBoulders) if (p.dot(c) > this.noBouldersCos) { ok = false; break; } // spots kept bare (trailer)
       const s = 1.2 + Math.pow(g0(), 3) * 7;
       e.set(g0() * 3, g0() * 3, g0() * 3);
@@ -590,8 +577,7 @@ ${SKIN_COLOR}`);
       // not in or at the edge of a black lake (it'd sink or stand on the surface)
       if (ok) for (const lk of this.lakes) if (p.dot(lk.d) > lk.cos - (s + 6) / R) { ok = false; break; }
       if (!ok) continue;
-      const r = this.surface(p);
-      p.multiplyScalar(r + s * 0.3);
+      p.multiplyScalar(this.surface(p) + s * 0.3);
       q.setFromEuler(e);
       m4.compose(p, q, sc.set(s * sx, s * 0.8 * sy, s * sz));
       im.setMatrixAt(n, m4);
@@ -667,8 +653,8 @@ ${SKIN_COLOR}`);
   // no workers, building them); a huge budget builds everything now.
   update(camPos, { budgetMs = 5, maxDist = 3200, ahead = null } = {}) {
     this.updateRimInk(camPos);
-    this.holeU.uCamAlt.value = camPos.length() - this.surface(camPos); // mineral boost grows with height
     const camLen = camPos.length();
+    this.holeU.uCamAlt.value = camLen - this.surface(camPos); // mineral boost grows with height
     const rMin = R - 330, rMax = R + 260;
     const horizon = Math.sqrt(Math.max(0, camLen * camLen - rMin * rMin)) + Math.sqrt(rMax * rMax - rMin * rMin);
     const limit = Math.min(maxDist, horizon);

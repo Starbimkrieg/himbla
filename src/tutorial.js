@@ -155,36 +155,33 @@ export class Tutorial {
     ]);
   }
 
+  // a training contract: a stock offer from `from` to `to`, rewritten; the clock is dist / pace + slack s, in 5 s steps
+  trainingRun(from, to, pace, slack, fields) {
+    const o = this.game.missions.makeOffer(from, 'kepler');
+    const dist = arcDist(to.dir, from.dir);
+    return Object.assign(o, { board: from, pickup: from, to, dist, ...fields, premium: false, training: true, time: Math.ceil((dist / pace + slack) / 5) * 5 });
+  }
+
   // Short, safe delivery from the ILMB to the nearest Kepler town.
   trainingOffer() {
-    const g = this.game;
-    const M = g.missions;
-    const hub = g.hub, to = this.town;
-    const o = M.makeOffer(hub, 'kepler');
-    const dist = arcDist(to.dir, hub.dir);
-    Object.assign(o, {
-      board: hub, pickup: hub, to, dist, faction: 'kepler', dark: false, clearance: null, premium: false, training: true,
+    const to = this.town;
+    return this.trainingRun(this.game.hub, to, 18, 60, {
+      faction: 'kepler', dark: false, clearance: null,
       cargo: { name: 'TRAINING RUN: Welcome Parcel', fragile: 0.1, hot: 0, color: 0x2ec4ff },
-      client: 'BOLT (courier school)', time: Math.ceil((dist / 18 + 60) / 5) * 5, reward: 150,
+      client: 'BOLT (courier school)', reward: 150,
       text: `Take this to ${to.name}. No pirates on this route: I'm watching.`,
     });
-    return o;
   }
 
   // Second run: Vostok rations from the Kepler town to the base, with clearance.
   vostokOffer() {
-    const g = this.game;
-    const M = g.missions;
-    const from = this.town, to = this.base;
-    const o = M.makeOffer(from, 'kepler');
-    const dist = arcDist(to.dir, from.dir);
-    Object.assign(o, {
-      board: from, pickup: from, to, dist, faction: 'vostok', dark: !!to.dark, clearance: to.id, premium: false, training: true,
+    const to = this.base;
+    return this.trainingRun(this.town, to, 16, 90, {
+      faction: 'vostok', dark: !!to.dark, clearance: to.id,
       cargo: { name: 'TRAINING RUN: Vostok Ration Crates', fragile: 0.2, hot: 0, color: 0xff3b5c },
-      client: 'Quartermaster Ilya (Vostok)', time: Math.ceil((dist / 16 + 90) / 5) * 5, reward: 220,
+      client: 'Quartermaster Ilya (Vostok)', reward: 220,
       text: `Rations for ${to.name}. Clearance attached: our gunners will let you through. Do not dawdle on the perimeter.`,
     });
-    return o;
   }
 
   fill(text) {
@@ -249,10 +246,8 @@ export class Tutorial {
   // objective arrow to the ILMB board
   objective() {
     if (!this.active) return null;
-    const s = STEPS[this.step];
     const g = this.game;
-    if (s.id === 'board') return { pos: g.world.toWorld(g.hub, 0, 0, 84), label: 'JOB BOARD' };
-    return null;
+    return STEPS[this.step].id === 'board' ? { pos: g.world.toWorld(g.hub, 0, 0, 84), label: 'JOB BOARD' } : null;
   }
 
   // world-pausing screens report in here

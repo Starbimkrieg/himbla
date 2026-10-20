@@ -57,17 +57,11 @@ function cached(key, fn) {
   let g = GEO.get(key);
   if (!g) {
     g = fn();
-    if (!g.index) g = toIndexed(g);
+    if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
     g.computeBoundingSphere();
     g.userData.shared = true;
     GEO.set(key, g);
   }
-  return g;
-}
-function toIndexed(g) {
-  const idx = [];
-  for (let i = 0; i < g.attributes.position.count; i++) idx.push(i);
-  g.setIndex(idx);
   return g;
 }
 const SHELL = new Map();
@@ -280,7 +274,7 @@ function treadLegs(inner) {
 // BODIES. Sit on the hips at legH; return anchors: head (neck point), back (mutation mount, facing
 // 'up' or 'rear'), top and half-width.
 // =============================================================================================
-function bipedBody(inner, kind, tint, legH, rr, arms) {
+function bipedBody(inner, kind, tint, legH, arms) {
   const c = kind === 'pirate' ? 0x3a2b4f : tint;
   const y0 = legH - 0.08;
   inner.add(part(lathe([[0, 0], [0.26, 0.02], [0.34, 0.18], [0.37, 0.42], [0.33, 0.66], [0.2, 0.8], [0, 0.82]], 18), toon(c), 0, y0, 0, 0.035));
@@ -465,20 +459,18 @@ export function makeChimera(genes) {
   root.add(inner);
   const rr = mulberry32(genes.seed);
   const L = genes.legs;
-  const legs = L === 'car' ? wheelLegs(inner)
+  const { legH, parts: legParts } = L === 'car' ? wheelLegs(inner)
     : L === 'mite' ? miteLegs(inner, genes.tint)
       : L === 'junkbot' ? treadLegs(inner)
         : L === 'sapling' ? rootLegs(inner, rr)
           : bipedLegs(inner, L, rr);
-  const legH = legs.legH;
-  const legParts = legs.parts;
   const arms = [];
   const B = genes.body;
   const bodyA = B === 'car' ? carBody(inner, genes.tint, legH)
     : B === 'mite' ? miteBody(inner, genes.tint, legH, rr)
       : B === 'junkbot' ? junkBody(inner, genes.tint, legH)
         : B === 'sapling' ? saplingBody(inner, genes.tint, legH, rr)
-          : bipedBody(inner, B, genes.tint, legH, rr, L === 'car' || L === 'junkbot' ? null : arms);
+          : bipedBody(inner, B, genes.tint, legH, L === 'car' || L === 'junkbot' ? null : arms);
   const { top, w: halfW } = bodyA;
   const [hy, hz] = bodyA.head;
   const [by, bz, bdir] = bodyA.back;
@@ -574,6 +566,5 @@ export function makeChimera(genes) {
 
 // small wild critter of the sunlit craters
 export function makeMite() {
-  const genes = { seed: Math.floor(Math.random() * 1e9), body: 'mite', legs: 'mite', head: 'mite', extraHead: null, mods: [], size: 0.8, tint: 0xb8e986 };
-  return makeChimera(genes);
+  return makeChimera({ seed: Math.floor(Math.random() * 1e9), body: 'mite', legs: 'mite', head: 'mite', extraHead: null, mods: [], size: 0.8, tint: 0xb8e986 });
 }

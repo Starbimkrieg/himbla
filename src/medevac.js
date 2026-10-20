@@ -1,16 +1,16 @@
 import * as THREE from 'three';
 import { makeShuttle, makeFigure } from './models.js';
 import { frameQuat } from './geo.js';
-import { clamp01 } from './rng.js';
+import { clamp, clamp01, smoothstep } from './rng.js';
 import { toon, glow, ink } from './toon.js';
 import { L, START_S, CORE_S, PAD_S, wrapW } from './spindleTerrain.js';
+import { poseShuttle } from './recall.js';
 
 // The Spindle's med-evac (spindle.recover): KO'd on the rock, a Meridian craft lands beside you, two medics
 // stretcher you aboard and it lifts off; then a fade and spindle.finishRecovery sets you at the Monolith.
 // Everything is a function of the scene clock (this.t), so SPACE can skip straight to the fade.
 const AX = new THREE.Vector3(1, 0, 0);
 const NEG_AX = new THREE.Vector3(-1, 0, 0);
-const X = new THREE.Vector3(1, 0, 0);
 const TEAL = 0x7dffd4;
 
 const SCALE = 0.85; // craft scale (as the Moon recall shuttle)
@@ -41,8 +41,7 @@ T.end = T.fade0 + 1.1;
 const KEEP_OUT = [PAD_S, CORE_S, START_S];
 
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _m = new THREE.Matrix4();
-const Q_LIE = new THREE.Quaternion().setFromAxisAngle(X, -Math.PI / 2); // on your back, head toward -z
-const smooth01 = (k) => { k = clamp01(k); return k * k * (3 - 2 * k); };
+const Q_LIE = new THREE.Quaternion().setFromAxisAngle(AX, -Math.PI / 2); // on your back, head toward -z
 const easeOut = (k, p = 3) => 1 - Math.pow(1 - clamp01(k), p);
 const ease2 = (k) => 0.5 - 0.5 * Math.cos(Math.PI * clamp01(k));
 const radial = (p, out = new THREE.Vector3()) => { out.set(0, p.y, p.z); if (out.lengthSq() < 1e-8) out.set(0, 1, 0); return out.normalize(); };
@@ -109,7 +108,7 @@ export class Medevac {
 
     // where you lie: clear of the ends and the KEEP_OUT spots
     let [s, w] = g.planet.sw(P.pos);
-    s = Math.min(L - 80, Math.max(80, s));
+    s = clamp(s, 80, L - 80);
     w = wrapW(w);
     if (Math.abs(w) < 70) for (const c of KEEP_OUT) if (s > c - 36 && s < c + 66) { s = s < c + 15 ? c - 36 : c + 66; break; }
     this.bodyC = ground(s, w);
@@ -120,13 +119,10 @@ export class Medevac {
     const ship = makeShuttle({ color: 0xeeecf6, stripe: 0x2ec4ff });
     ship.setSign('MEDEVAC');
     ship.root.scale.setScalar(SCALE);
-    ship.setGear(0);
-    ship.setRamp(0);
     g.scene.add(ship.root);
     this.ship = ship;
     this.land = ground(s - SET_BACK, w + LAT);
     this.up = radial(this.land);
-    this.pose(this.alt);
     // run from hold to stretcher spot: inside, ramp top, ramp foot, you
     ship.setGear(1);
     ship.setRamp(1);
@@ -183,12 +179,7 @@ export class Medevac {
     this.bars.querySelector('.cb-cap').textContent = text;
   }
 
-  pose(alt, tilt = 0) {
-    const s = this.ship;
-    s.root.position.copy(this.land).addScaledVector(this.up, s.gearH * SCALE + alt);
-    frameQuat(this.up, NEG_AX, s.root.quaternion);
-    if (tilt) s.root.rotateX(tilt);
-  }
+  pose(alt, tilt) { poseShuttle(this.ship, this.land, this.up, NEG_AX, alt, tilt); }
 
   // point on the run u metres from the hold (extrapolates straight past either end)
   pathAt(u, out) {
@@ -290,7 +281,7 @@ export class Medevac {
     else if (t < T.turn1) uC = len;
     else uC = len + (-SP - len) * ease2((t - T.turn1) / (T.back1 - T.turn1));
     // crouched to set it down / lift it
-    const ck = smooth01((t - T.out1) / (T.down1 - T.out1)) * (1 - smooth01((t - T.load1) / (T.up1 - T.load1)));
+    const ck = smoothstep(T.out1, T.down1, t) * (1 - smoothstep(T.load1, T.up1, t));
     const crouch = CROUCH * ck;
     const h = CARRY_H + (REST_H - CARRY_H) * ck;
 
@@ -364,7 +355,7 @@ export class Medevac {
     const g = this.game;
     const cam = g.camera;
     // in while the medics work, out as they run for the craft
-    const m = smooth01((t - (T.out1 - 0.9)) / 0.9) * (1 - smooth01((t - T.up1) / (T.turn1 + 0.4 - T.up1)));
+    const m = smoothstep(0, 1, (t - (T.out1 - 0.9)) / 0.9) * (1 - smoothstep(T.up1, T.turn1 + 0.4, t));
     const pos = this.camWide.clone().lerp(this.camClose, m);
     const wide = this.focusWide.clone().addScaledVector(this.up, this.alt * 0.45);
     const close = this.stand.clone().addScaledVector(this.upB, 0.9);

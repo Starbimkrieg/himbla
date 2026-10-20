@@ -47,7 +47,6 @@ const PRESETS = {
 };
 const ECHO = { cash: 0.09 }; // presets replayed this many seconds later
 
-
 // trigger effects (built once, not per frame)
 const FIRE = { pulse: weapon(4, 6, 3), scatter: weapon(2, 7, 7), rail: weapon(3, 8, 8), mortar: weapon(3, 6, 5), cannon: weapon(2, 6, 7) };
 const COOLING = feedback(1, 3);   // RT while recharging
@@ -260,12 +259,10 @@ export class Haptics {
     if (P.vehicle) return [P.vehicle.def.turret ? FIRE.cannon : TRIGGER_OFF, TRIGGER_OFF];
     const w = WEAPONS[P.weapon || 0], b = P.body;
     const rt = P.fireCd > 0 && w.delay > 0.7 ? COOLING : FIRE[w.key] || TRIGGER_OFF;
-    let lt;
-    if (w.key === 'rail') lt = SCOPE;
-    else if (b.jetLocked) lt = LOCKED;
-    else if (b.thrusting) lt = b.energy < b.maxEnergy * 0.25 ? LOW : BURN;
-    else lt = SPRING;
-    return [rt, lt];
+    if (w.key === 'rail') return [rt, SCOPE];
+    if (b.jetLocked) return [rt, LOCKED];
+    if (b.thrusting) return [rt, b.energy < b.maxEnergy * 0.25 ? LOW : BURN];
+    return [rt, SPRING];
   }
 
   // ---- browser rumble ----
@@ -287,13 +284,10 @@ export class Haptics {
     this.sentAt = now; this.sent = { s, w };
     const bad = (err) => { this.lastResult = `refused (${(err && err.message) || err})`; if (++this.fails >= 8) { this.failed = true; this.mode = 'none'; } };
     try {
-      if (this.mode === 'dual') {
-        const p = this.act.playEffect('dual-rumble', { startDelay: 0, duration: LONG_MS, strongMagnitude: s, weakMagnitude: w });
-        if (p && p.then) p.then((r) => { this.lastResult = String(r); this.fails = 0; }, bad);
-      } else {
-        const p = this.act.pulse(Math.max(s, w), LONG_MS);
-        if (p && p.then) p.then((r) => { this.lastResult = String(r); this.fails = 0; }, bad);
-      }
+      const p = this.mode === 'dual'
+        ? this.act.playEffect('dual-rumble', { startDelay: 0, duration: LONG_MS, strongMagnitude: s, weakMagnitude: w })
+        : this.act.pulse(Math.max(s, w), LONG_MS);
+      if (p && p.then) p.then((r) => { this.lastResult = String(r); this.fails = 0; }, bad);
     } catch (err) { bad(err); }
   }
 

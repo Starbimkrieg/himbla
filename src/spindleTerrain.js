@@ -21,6 +21,7 @@ const softAbs = (x, k = 0.18) => Math.sqrt(x * x + k * k) - k;
 // Craters like the Moon's: simple bowls, big complex ones with central peaks, terraced walls. Kept off the start,
 // shrine and pad (levelled below).
 const KEEP = [[START_S, 0, 130], [CORE_S, 0, 120], [PAD_S, 0, 150]];
+const kept = (s, w, r) => KEEP.some(([ks, kw, kr]) => Math.hypot(s - ks, wrapW(w - kw)) < kr + r); // (s, w) within r of a kept site
 const CRATERS = (() => {
   const rr = mulberry32(91);
   const out = [];
@@ -28,12 +29,12 @@ const CRATERS = (() => {
     const big = rr() < 0.24;
     const r = big ? 45 + rr() * 70 : 15 + rr() * 26; // no smaller: on the grid a tinier pit draws as a star of triangles
     const c = { s: 380 + rr() * (L - 760), w: (rr() - 0.5) * CIRC, r };
-    if (KEEP.some(([ks, kw, kr]) => Math.hypot(c.s - ks, wrapW(c.w - kw)) < kr + r)) continue;
+    if (kept(c.s, c.w, r)) continue;
     if (out.some((o) => Math.hypot(o.s - c.s, wrapW(o.w - c.w)) < (o.r + r) * 0.7)) continue;
     c.kind = big ? (rr() < 0.6 ? 'complex' : 'terraced') : 'bowl'; // no rayed craters: their streaks read as smudges
     if (!big && r > 26) rr(); // spare roll keeps the RNG sequence, so crater positions don't move
     c.d = r * (big ? 0.24 : 0.32);
-    c.rays = rr() * 6;
+    rr(); // spare roll (the old rays' phase), as above
     out.push(c);
   }
   // chains of small pits: secondary impacts
@@ -41,9 +42,9 @@ const CRATERS = (() => {
     let cs = 500 + rr() * (L - 1000), cw = (rr() - 0.5) * CIRC;
     const a = rr() * Math.PI;
     for (let i = 0; i < 7; i++) {
-      const c = { s: cs, w: cw, r: 13 + rr() * 4, kind: 'bowl', rays: 0 };
+      const c = { s: cs, w: cw, r: 13 + rr() * 4, kind: 'bowl' };
       c.d = c.r * 0.3;
-      if (!KEEP.some(([ks, kw, kr]) => Math.hypot(c.s - ks, wrapW(c.w - kw)) < kr + c.r)) out.push(c);
+      if (!kept(c.s, c.w, c.r)) out.push(c);
       cs += Math.cos(a) * 34; cw += Math.sin(a) * 34;
     }
   }
@@ -66,7 +67,7 @@ const MASSIFS = (() => {
   for (let tries = 0; tries < 400 && out.length < 9; tries++) {
     const m = { s: 600 + rr() * (L - 1200), w: (rr() - 0.5) * CIRC, r: 55 + rr() * 50, h: 18 + rr() * 22, ph: rr() * 6 };
     if (Math.abs(wrapW(m.w)) < m.r + 40) continue; // not across the straight line along the top
-    if (KEEP.some(([ks, kw, kr]) => Math.hypot(m.s - ks, wrapW(m.w - kw)) < kr + m.r * 1.6)) continue;
+    if (kept(m.s, m.w, m.r * 1.6)) continue;
     if (out.some((o) => Math.hypot(o.s - m.s, wrapW(o.w - m.w)) < o.r + m.r + 60)) continue;
     out.push(m);
   }
@@ -93,7 +94,7 @@ const SCARPS = [
 const FLATS = [{ s: START_S, w: 0, r: 38 }, { s: CORE_S, w: 0, r: 30 }, { s: PAD_S, w: 0, r: 42 }];
 
 // what the last heightAt call found (for colouring)
-const TA = { mare: 0, ray: 0, floor: 0, wall: 0, rim: 0, rille: 0 };
+const TA = { floor: 0, wall: 0, rim: 0, rille: 0 };
 
 function rawHeight(s, w) {
   const ph = w / RC;
@@ -141,7 +142,7 @@ function rawHeight(s, w) {
     // high side +hh/2, low side -hh/2, easing to nothing 30 m off the cliff (no seam)
     h += c.hh * (0.5 - smooth(c.r - 3, c.r + 3, d)) * smooth(0, 60, edge) * (1 - smooth(12, 30, Math.abs(d - c.r)));
   }
-  let ray = 0, floor = 0, wall = 0, rim = 0;
+  let floor = 0, wall = 0, rim = 0;
   for (const c of CRATER_BINS[Math.floor(s / CBIN)] || []) {
     const ds = s - c.s;
     if (Math.abs(ds) > c.r * 4) continue;
@@ -170,10 +171,8 @@ function rawHeight(s, w) {
     if (x > 1.12 - rs * 2.5 && x < 1.12 + rs * 2.5) { const q = (x - 1.12) / rs; h += c.d * 0.42 * Math.exp(-q * q); }
     if (x > 0.9 && x < 1.4) rim = Math.max(rim, 1 - Math.abs(x - 1.12) / 0.25);
     if (x < 2) h += c.d * 0.14 * smooth(0.8, 1.1, x) * (1 - smooth(1.1, 2, x));
-    // rays: five broad soft streaks (hairlines break into spokes on the grid)
-    if (c.kind === 'ray' && x < 4) ray = Math.max(ray, Math.pow(Math.abs(Math.sin(Math.atan2(dw, ds) * 2.5 + c.rays)), 4) * smooth(1, 1.4, x) * (1 - smooth(1.6, 4, x)) * 0.8);
   }
-  TA.mare = 0; TA.ray = ray; TA.floor = floor; TA.wall = wall; TA.rim = Math.max(0, rim);
+  TA.floor = floor; TA.wall = wall; TA.rim = Math.max(0, rim);
   // the ends taper to blunt tips, then fall away into space
   const toEnd = Math.min(s, L - s);
   if (toEnd < 300) h -= Math.pow(1 - Math.max(0, toEnd) / 300, 2) * 90;
@@ -216,24 +215,22 @@ export function meshHeightAt(s, w) {
 
 // The rock's mesh data as plain arrays: positions, colours, index, smooth normals.
 export function buildRockArrays() {
-    const ds = MESH_D;
-    const S0 = ROCK_S0, S1 = ROCK_S1;
-    const ns = Math.ceil((S1 - S0) / ds) + 1, nw = MESH_NW;
+    const ns = Math.ceil((ROCK_S1 - ROCK_S0) / MESH_D) + 1, nw = MESH_NW;
     const pos = new Float32Array(ns * nw * 3), col = new Float32Array(ns * nw * 3), hs = new Float32Array(ns * nw);
     const c0 = new THREE.Color(0xb0a8c4), c1 = new THREE.Color(0x8a82a2), c2 = new THREE.Color(0x3e3656), cc = new THREE.Color();
-    const cMare = new THREE.Color(0x5e5878), cFloor = new THREE.Color(0x6d6688), cWall = new THREE.Color(0x4a4366), cRim = new THREE.Color(0xd8d2ec);
+    const cFloor = new THREE.Color(0x6d6688), cWall = new THREE.Color(0x4a4366), cRim = new THREE.Color(0xd8d2ec);
     const rr = mulberry32(5);
     const pt = new THREE.Vector3();
     for (let i = 0; i < ns; i++) for (let j = 0; j < nw; j++) {
-      const s = S0 + i * ds, w = (j / nw) * CIRC;
+      const s = ROCK_S0 + i * MESH_D, w = (j / nw) * CIRC;
       const h = heightAt(s, w);
       hs[i * nw + j] = h;
       pointAt(s, w, RC + h, pt);
       const k = (i * nw + j) * 3;
       pos[k] = pt.x; pos[k + 1] = pt.y; pos[k + 2] = pt.z;
       if (h < -40) cc.copy(c2); else cc.copy(c1).lerp(c0, Math.min(1, Math.max(0, (h + 4) / 18)));
-      // TA (what heightAt just found): dark maria, darker crater floors
-      cc.lerp(cMare, TA.mare * 0.75).lerp(cFloor, TA.floor * 0.45);
+      // TA (what heightAt just found): darker crater floors
+      cc.lerp(cFloor, TA.floor * 0.45);
       // walls a shade darker, rims brighter: craters read in any light
       cc.lerp(cWall, Math.max(TA.wall * 0.5, TA.rille * 0.55)).lerp(cRim, TA.rim * 0.55);
       cc.offsetHSL(0, 0, (rr() - 0.5) * 0.04);

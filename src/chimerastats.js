@@ -8,7 +8,7 @@ import { mulberry32, clamp } from './rng.js';
 //   STAMINA how slowly it tires; tired racers lose top speed late in the race
 //   WIT     fewer stumbles / wrong-way / existential moments, quicker recovery
 
-export const STATS_V = 1;
+const STATS_V = 1;
 export const STAT_KEYS = ['speed', 'power', 'stamina', 'wit'];
 // (chimera card hover tips: chimeracard.js)
 export const STAT_TIPS = {
@@ -58,9 +58,8 @@ export const MOD_FX = {
 };
 const PERSON = LEGS.person;
 
-
 // Deterministic from gene sheet + seed, so old saves always migrate to the same numbers.
-export function computeStats(genes) {
+function computeStats(genes) {
   const L = LEGS[genes.legs] || PERSON, B = BODY[genes.body] || PERSON;
   const hw = HEAD_WIT[genes.head] ?? 50;
   const s = (genes.size ?? 1.1) - 1.1; // -0.35 .. +0.35: big = more stamina/power, less speed
@@ -79,20 +78,17 @@ export function computeStats(genes) {
 }
 
 export const statTotal = (st) => st.speed + st.power + st.stamina + st.wit;
-export function tierOf(st) {
+function tierOf(st) {
   const t = statTotal(st);
   return t >= 260 ? 'S' : t >= 244 ? 'A' : t >= 220 ? 'B' : 'C';
 }
 // top speed in m/s on the Derby track
-export const topSpeedOf = (st) => Math.round((32 + st.speed * 0.1) * 10) / 10;
+const topSpeedOf = (st) => Math.round((32 + st.speed * 0.1) * 10) / 10;
 
 // Gives a gene sheet its stats (new chimeras, and saves without them). Mutates and returns it.
 export function ensureStats(genes) {
   if (!genes) return genes;
-  if (!genes.stats || genes.stats.v !== STATS_V) {
-    const st = computeStats(genes);
-    genes.stats = { v: STATS_V, ...st };
-  }
+  if (!genes.stats || genes.stats.v !== STATS_V) genes.stats = { v: STATS_V, ...computeStats(genes) };
   genes.tier = tierOf(genes.stats);
   genes.speed = topSpeedOf(genes.stats);
   if (genes.chaos === undefined) genes.chaos = new Set(genes.parents || []).size + (genes.mods || []).length + (genes.extraHead ? 1 : 0);
@@ -102,7 +98,7 @@ export function ensureStats(genes) {
 // ---------------------------------------------------------------------------------------------
 // The Derby race model. Chimera Downs races run 450 m to 3.6 km, so stamina decides the long
 // ones; the going (track condition) nudges the rest.
-export const RACE_LEN = 1400; // default distance (tests, old callers)
+const RACE_LEN = 1400; // default distance (tests, old callers)
 export const CONDITIONS = {
   fast: { name: 'FAST', speed: 1.05, drain: 0.95, chaos: 0.85, blurb: 'hard-packed regolith: speed tells' },
   dusty: { name: 'DUSTY', speed: 1, drain: 1, chaos: 1, blurb: 'ordinary lunar going' },
@@ -166,7 +162,7 @@ export function stepRunner(r, dt, rnd = Math.random, cond = NO_COND) {
 }
 
 // Run the model to the finish line; returns runners sorted by finish.
-export function simulateRace(field, rnd = Math.random, dt = 1 / 15, len = RACE_LEN, cond = NO_COND) {
+function simulateRace(field, rnd = Math.random, dt = 1 / 15, len = RACE_LEN, cond = NO_COND) {
   const rs = field.map((g) => newRunner(g, rnd));
   let finished = 0;
   for (let step = 0; step < 12000 && finished < rs.length; step++) {

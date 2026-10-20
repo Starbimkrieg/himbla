@@ -15,13 +15,8 @@ const DEFAULT = 0;      // the breath
 const ROT = ['torso', 'head', 'armL', 'armR', 'foreL', 'foreR', 'legL', 'legR']; // pivots the clips turn
 const POS = ['body', 'torso'];                                   // ...and shift
 
-const CLIPS = data.anims.map(a => ({
-  name: a.name,
-  n: a.n,
-  dur: a.n / data.fps,
-  q: Object.fromEntries(Object.entries(a.q).map(([k, v]) => [k, Float32Array.from(v)])),
-  p: Object.fromEntries(Object.entries(a.p).map(([k, v]) => [k, Float32Array.from(v)])),
-}));
+const f32 = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Float32Array.from(v)]));
+const CLIPS = data.anims.map(a => ({ n: a.n, dur: a.n / data.fps, q: f32(a.q), p: f32(a.p) }));
 
 const _qb = new THREE.Quaternion(), _v = new THREE.Vector3();
 

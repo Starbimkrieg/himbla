@@ -26,17 +26,14 @@ export function dressRunner(M, outfitId) {
     if (e === 'crest') {
       // Blender swept fin sunk into the helmet (own outline shell, build_runner.py); code slab if the file has none
       const g = runnerExtra('crest', { accent: toon(o.accent) });
-      if (g) { M.head.add(g); out.push(g); }
-      else {
-        const c = add(M.head, new THREE.Mesh(EXTRA_GEO().crest, toon(o.accent)));
-        c.position.set(0, 0.26, -0.04);
-      }
+      if (g) add(M.head, g, 0);
+      else add(M.head, new THREE.Mesh(EXTRA_GEO().crest, toon(o.accent))).position.set(0, 0.26, -0.04);
     } else if (e === 'pads') {
       // Blender shoulder pads that turn with the arm; a plain torso dome if the file has none
       const mats = { accent: toon(o.accent), helmet: toon(o.helmet), metal: toon(0x3a3550) };
       for (const [s, arm, key] of [[-1, M.armL, 'padL'], [1, M.armR, 'padR']]) {
         const g = runnerExtra(key, mats);
-        if (g) { arm.add(g); out.push(g); continue; }
+        if (g) { add(arm, g, 0); continue; }
         const p = add(M.torso, new THREE.Mesh(EXTRA_GEO().pad, toon(o.accent)));
         p.position.set(s * 0.45, 0.88, 0);
         p.scale.set(1.1, 0.7, 1);
@@ -51,7 +48,7 @@ export function dressRunner(M, outfitId) {
       // Blender headband, knot and tails behind the left ear. Its outline is a normal-offset shell (ink()'s box
       // scaling floats a line above a torus).
       const g = runnerExtra('band', { accent: toon(0xd7263d), dark: toon(0x3a0f18) });
-      if (g) { M.head.add(g); out.push(g); }
+      if (g) add(M.head, g, 0);
       else {
         const b = add(M.head, new THREE.Mesh(EXTRA_GEO().band, toon(0xd7263d)), 0);
         b.rotation.x = Math.PI / 2;
@@ -66,7 +63,7 @@ export function dressRunner(M, outfitId) {
 // on landing) and set ringing by kick(). Slides a few cm, tilts at most 0.25 rad.
 const HALO_Y = 0.62;
 const _hp = new THREE.Vector3(), _ha = new THREE.Vector3(), _hq = new THREE.Quaternion(), _hQ = new THREE.Quaternion(), _hE = new THREE.Euler();
-export class HaloSim {
+class HaloSim {
   constructor(mesh) {
     this.mesh = mesh;
     this.o = new THREE.Vector3(); this.ov = new THREE.Vector3(); // offset from rest (head frame) and its speed
@@ -95,8 +92,7 @@ export class HaloSim {
       this.prevVel.copy(v);
       if (_ha.length() > 80) _ha.setLength(80);
       _ha.applyQuaternion(_hq);                      // in the head's frame
-    } else _ha.set(0, 0, 0);
-    if (!this.prev) this.prev = new THREE.Vector3();
+    } else { _ha.set(0, 0, 0); this.prev = new THREE.Vector3(); }
     this.prev.copy(_hp);
     // hover wobble (never quite still) plus the head's acceleration
     const wob = Math.sin(this.t * 1.9) * 0.012, wob2 = Math.cos(this.t * 1.4) * 0.012;
@@ -221,8 +217,7 @@ export class Cosmetics {
 
   trailColor(t) {
     const s = this.skate;
-    if (s.trail === 'rainbow') return new THREE.Color().setHSL((t * 0.4) % 1, 1, 0.6).getHex();
-    return s.trail;
+    return s.trail === 'rainbow' ? new THREE.Color().setHSL((t * 0.4) % 1, 1, 0.6).getHex() : s.trail;
   }
 
   // Recolour the runner's own materials and swap the outfit's extra parts.

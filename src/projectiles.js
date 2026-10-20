@@ -9,8 +9,7 @@ const _near = [];
 function segSphere(a, b, c, r) {
   _seg.subVectors(b, a);
   const L2 = _seg.lengthSq();
-  let t = L2 > 0 ? _rel.subVectors(c, a).dot(_seg) / L2 : 0;
-  t = Math.max(0, Math.min(1, t));
+  const t = L2 > 0 ? Math.max(0, Math.min(1, _rel.subVectors(c, a).dot(_seg) / L2)) : 0;
   const px = a.x + _seg.x * t - c.x, py = a.y + _seg.y * t - c.y, pz = a.z + _seg.z * t - c.z;
   return px * px + py * py + pz * pz <= r * r;
 }

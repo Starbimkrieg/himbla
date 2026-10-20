@@ -12,11 +12,11 @@ import { FACTIONS } from './locations.js';
 const TAU = Math.PI * 2;
 const CREAM = 0xfff4e0, LT = 0xd8d4e8, CONC = 0x8a8698, KEP = 0xff9f1c, DK = 0x3a3550, WARM = 0xfff6a8, MARBLE = 0xe9e2d0, WOOD = 0x6b4328;
 const GD = (c) => { const m = G(c).clone(); m.side = THREE.DoubleSide; m.userData.shared = true; return m; }; // unlit two-sided colour (dome inside)
-export const R = 14.5, WALL_H = 9; // chamber radius, wall height (m). Lectern at the origin facing -z, doors behind (+z)
-export const ARC = { a0: -1.82, a1: 1.82 }; // audience arc: angles from -z, + toward +x (+-104 deg)
-export const ROWS = [{ r: 6.4, y: 0.45 }, { r: 8.5, y: 1.0 }, { r: 10.6, y: 1.55 }, { r: 12.7, y: 2.1 }];
-export const SEATS = ['vostok', 'spacecom', 'kepler', 'meridian', 'daedalus']; // left to right from the lectern; war partners at opposite ends
-export const HEX = { spacecom: 0xffd23f, vostok: 0xff3b5c, meridian: 0x2ec4ff, kepler: 0xff9f1c, daedalus: 0xc77dff };
+const R = 14.5, WALL_H = 9; // chamber radius, wall height (m). Lectern at the origin facing -z, doors behind (+z)
+const ARC = { a0: -1.82, a1: 1.82 }; // audience arc: angles from -z, + toward +x (+-104 deg)
+const ROWS = [{ r: 6.4, y: 0.45 }, { r: 8.5, y: 1.0 }, { r: 10.6, y: 1.55 }, { r: 12.7, y: 2.1 }];
+const SEATS = ['vostok', 'spacecom', 'kepler', 'meridian', 'daedalus']; // left to right from the lectern; war partners at opposite ends
+const HEX = { spacecom: 0xffd23f, vostok: 0xff3b5c, meridian: 0x2ec4ff, kepler: 0xff9f1c, daedalus: 0xc77dff };
 const DELEG = { // delegation staff looks (makeFigure); leaders are makeRunner with their story look
   spacecom: { suit: 0xf4f1ff, helmet: 0xf4f1ff, visor: 0x2ec4ff, look: 'trooper' },
   vostok: { suit: 0x6b6f78, helmet: 0x8a8f99, visor: 0x111111, look: 'trooper' },
@@ -55,7 +55,7 @@ function mk(pos, nor, idx) {
 
 // ---- the set: one Kit (nine merged meshes, ~8k tris), built once per session ----
 let kitCache = null;
-export function chamberKit() {
+function chamberKit() {
   if (kitCache) return kitCache;
   const k = new Kit(KEP, 29, false);
   k.at();
@@ -116,7 +116,7 @@ export function chamberKit() {
 }
 
 // ---- timeline (s) ----
-export const TL = {};
+const TL = {};
 TL.out = 0.45; // world dips to black
 TL.pan0 = 4.0; // after the establishing shot: the delegations, one by one
 TL.close0 = 7.8; // councillor from the front: the opening
@@ -129,7 +129,7 @@ TL.bang = 23.4; // it falls
 TL.fade0 = 23.5; // fade to black (1.1 s)
 TL.end = 24.7; // black: set comes down, result announced
 
-export const mood = (p) => (p >= 0.7 ? 'warm' : p >= 0.4 ? 'unsure' : 'cold'); // menu forecast: likely yes / leaning / unlikely
+const mood = (p) => (p >= 0.7 ? 'warm' : p >= 0.4 ? 'unsure' : 'cold'); // menu forecast: likely yes / leaning / unlikely
 
 export class Chamber {
   constructor(game) {
@@ -154,7 +154,7 @@ export class Chamber {
       const key = new THREE.DirectionalLight(0xfff1d6, 1.7);
       key.position.set(3, 14, 9);
       this.scene.add(key, key.target, chamberKit().root);
-      this.populate(['vostok', 'spacecom', 'kepler', 'meridian', 'daedalus'].map((f) => ({ f, p: 0.5 })));
+      this.populate(SEATS.map((f) => ({ f, p: 0.5 })));
       this.camera.position.set(0, 5, 9); this.camera.lookAt(0, 1.6, -6);
       r.setRenderTarget(g.post.target);
       try { await r.compileAsync(this.scene, this.camera); } catch (e) { console.warn('[chamber] precompile failed', e); }
@@ -171,10 +171,9 @@ export class Chamber {
     const wood = toon(0x8a5a3a), band = toon(0xffd23f), black = toon(0x0b0612, { side: THREE.BackSide });
     const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.34, 8).rotateX(Math.PI / 2).translate(0, 0, -0.17), wood);
     const head = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.3, 12).rotateZ(Math.PI / 2).translate(0, 0, -0.34), wood);
-    const b1 = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.035, 12).rotateZ(Math.PI / 2).translate(0.12, 0, -0.34), band);
-    const b2 = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.035, 12).rotateZ(Math.PI / 2).translate(-0.12, 0, -0.34), band);
+    const bands = [0.12, -0.12].map((x) => new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.035, 12).rotateZ(Math.PI / 2).translate(x, 0, -0.34), band));
     for (const m of [handle, head]) { const hull = new THREE.Mesh(m.geometry, black); hull.scale.setScalar(1.18); m.add(hull); }
-    grp.add(handle, head, b1, b2);
+    grp.add(handle, head, ...bands);
     grp.position.set(0, -0.66, 0.05);
     return grp;
   }
@@ -389,7 +388,7 @@ export class Chamber {
       const which = list[Math.min(list.length - 1, Math.floor((t - TL.react0) / half))] || present[0];
       const a = angleOf(which), u = clamp01(((t - TL.react0) % half) / half);
       pos = lerp3(pol(3.2, a + 0.5, 1.45), pol(3.2, a + 0.3, 1.6), u); look = pol(7.8, a, 2.35); fov = 46;
-      this.cap(`${FACTIONS[which].name.toUpperCase()}`);
+      this.cap(FACTIONS[which].name.toUpperCase());
     } else if (t < TL.gavel0) { // the call: slow push in from behind the councillor
       const u = ease((t - TL.call0) / (TL.gavel0 - TL.call0));
       pos = lerp3(V3(2.6, 3.8, 4.6), V3(2.0, 3.3, 3.5), u); look = V3(-0.4, 2.2, -8); fov = lerp(54, 48, u);

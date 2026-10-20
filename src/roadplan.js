@@ -137,8 +137,7 @@ export function planRoad(P, d0, d1, blocks = [], avoid = []) {
       if (dist < b.r) { b.r = Math.max(0, dist - 10); b.c = cosOf(b.r); }
     }
   }
-  const avoidD = [];
-  for (const line of avoid) for (const q of line) avoidD.push(q);
+  const avoidD = avoid.flat();
   for (let i = I0; i < I0 + NI; i++) {
     const fromEnd = Math.min(Math.abs(i), Math.abs(i - nS)) * ds;
     const outside = i < 0 || i > nS;

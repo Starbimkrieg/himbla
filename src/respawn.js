@@ -58,15 +58,14 @@ export class Respawn {
 
   // a K.O. at `from` (unit direction): { kind, name, note, ...where } (hq/home: point, facing, loc; clinic: dir)
   plan(from) {
-    const g = this.game;
+    const g = this.game, c = g.story.clinicSpawn(from);
     let note = '';
     if (this.id) {
       const l = g.locations.find((x) => x.id === this.id);
       const why = l ? this.why(l) : 'GONE';
       if (!why) return { kind: 'hq', name: l.name, ...this.spot(l) };
-      note = `${l ? l.name : 'Your respawn point'} will not take you in (${why.toLowerCase()}): redeploying ${g.story.clinicSpawn(from) ? 'at your clinic' : 'at home'} instead.`;
+      note = `${l ? l.name : 'Your respawn point'} will not take you in (${why.toLowerCase()}): redeploying ${c ? 'at your clinic' : 'at home'} instead.`;
     }
-    const c = g.story.clinicSpawn(from);
     if (c) return { kind: 'clinic', name: c.modules ? `${g.territory.name(c)} clinic` : c.name, dir: c.dir, note }; // (an outpost has modules; the town's entry has a name)
     const h = g.home();
     return { kind: 'home', name: h.loc.name, point: h.point, facing: h.facing, loc: h.loc, note };

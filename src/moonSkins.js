@@ -10,7 +10,7 @@ import { DEV_TOOLS } from './devtools.js';
 //   3  survey    hypsometric chart: altitude bands, glowing contours, a world grid with crossing marks
 // Pick with ?moonskin=N or game.planet.holeU.uSkin.value = N (planet.js; dev builds only).
 
-export const SKIN_COUNT = 4;
+const SKIN_COUNT = 4;
 
 // One uniform set shared by the terrain and rock materials (patchRockMaterial), so one switch or quality setting moves all.
 const q = DEV_TOOLS && typeof location !== 'undefined' ? new URLSearchParams(location.search).get('moonskin') : null; // dev only: release always draws the classic ground
@@ -501,25 +501,30 @@ if (uSkin > 0.5 && uSkin < 1.5) {
 `;
 
 export function patchRockMaterial(mat) {
-  mat.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, SKIN_U);
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', `#include <common>\n${ROCK_VARY}`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
-vec4 skWp = vec4(transformed, 1.0), skCp = vec4(0.0, 0.0, 0.0, 1.0);
+  return patchSkin(mat, 'rockSkin', ROCK_VARY, `vec4 skWp = vec4(transformed, 1.0), skCp = vec4(0.0, 0.0, 0.0, 1.0);
 float skSz = -1.0; // (the stone's size when it is an instance; none otherwise)
 #ifdef USE_INSTANCING
   skWp = instanceMatrix * skWp; skCp = instanceMatrix * skCp; skSz = length(instanceMatrix[0].xyz);
 #endif
-vSkW = (modelMatrix * skWp).xyz; vSkC = (modelMatrix * skCp).xyz; vSkS = skSz;`);
+vSkW = (modelMatrix * skWp).xyz; vSkC = (modelMatrix * skCp).xyz; vSkS = skSz;`, 'stone', '', ROCK_COLOR);
+}
+
+// Hooks a material onto the skins: `vary` (vSkW and the rest) in both stages, `vert` after begin_vertex, the shared GLSL
+// (plus `fns`) in the fragment's common block, skPx (metres per pixel on the `what`) and skHeight, `color` after the colour.
+function patchSkin(mat, key, vary, vert, what, fns, color) {
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, SKIN_U);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>\n${vary}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${vert}`);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\n${ROCK_VARY}\n${SK_NOISE}\n${SKIN_COMMON}`)
+      .replace('#include <common>', `#include <common>\n${vary}\n${SK_NOISE}\n${SKIN_COMMON}${fns}`)
       .replace('void main() {', `void main() {
-  float skPx = length(fwidth(vSkW)); // (metres per pixel on the stone)
+  float skPx = length(fwidth(vSkW)); // (metres per pixel on the ${what})
   float skHeight = 0.0;`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\n${ROCK_COLOR}`);
+      .replace('#include <color_fragment>', `#include <color_fragment>\n${color}`);
   };
-  mat.customProgramCacheKey = () => 'rockSkin';
+  mat.customProgramCacheKey = () => key;
   return mat;
 }
 
@@ -561,18 +566,5 @@ if (uSkin > 0.5 && uSkin < 1.5) {
 `;
 
 export function patchBermMaterial(mat) {
-  mat.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, SKIN_U);
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vSkW;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSkW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vSkW;\n${SK_NOISE}\n${SKIN_COMMON}\n${BERM_FN}`)
-      .replace('void main() {', `void main() {
-  float skPx = length(fwidth(vSkW)); // (metres per pixel on the berm)
-  float skHeight = 0.0;`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\n${BERM_COLOR}`);
-  };
-  mat.customProgramCacheKey = () => 'bermSkin';
-  return mat;
+  return patchSkin(mat, 'bermSkin', 'varying vec3 vSkW;', 'vSkW = (modelMatrix * vec4(transformed, 1.0)).xyz;', 'berm', `\n${BERM_FN}`, BERM_COLOR);
 }

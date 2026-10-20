@@ -73,15 +73,14 @@ export class Input {
     const def = this.rev.get(code);
     if (def) return def;
     // this key's action moved elsewhere and nothing replaced it
-    if (this.binds.has(code)) return 'Unbound:' + code;
-    return code;
+    return this.binds.has(code) ? 'Unbound:' + code : code;
   }
 
   // in control: the mouse captured, or a controller in hand
   get locked() { return this.ptrLocked || this.padActive; }
 
   lock() {
-    if (this.ptrLocked || this.padActive) return; // controllers need no capture
+    if (this.locked) return; // controllers need no capture
     try {
       const p = this.canvas.requestPointerLock();
       if (p && p.catch) p.catch(() => {});

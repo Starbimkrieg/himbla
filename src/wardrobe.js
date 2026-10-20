@@ -5,6 +5,7 @@ import { OUTFITS, SKATES, LASERS } from './cosmeticsData.js';
 import { dressRunner, dressSkates, updateHalo } from './cosmetics.js';
 import { makeJarMesh } from './alchemy.js';
 import { FACTIONS, LOCATIONS, TIERS } from './locations.js';
+import { hex, esc } from './chimeracard.js';
 
 // The wardrobe screen (C): live turntable preview of the runner on the left, click-to-equip grids
 // (outfits / skate finishes / pulse-disc colours) on the right. Hover or arrow onto any tile (locked
@@ -22,8 +23,6 @@ const CASINO = {
 };
 const EXTRA_NAMES = { crest: 'helmet crest', pads: 'shoulder pads', halo: 'halo', band: 'bandana' };
 
-const hex = (c) => '#' + (c >>> 0).toString(16).padStart(6, '0').slice(-6);
-const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const tierFor = (v) => { let t = TIERS[0]; for (const x of TIERS) if (v >= x.min) t = x; return t; };
 
@@ -51,10 +50,7 @@ export class Wardrobe {
 
   owned(it) { return it.kind === 'laser' || this.cos.owned(it.kind, it.id); }
 
-  equipped(it) {
-    const c = this.cos;
-    return it.kind === 'outfit' ? c.outfit === it.id : it.kind === 'skates' ? c.skates === it.id : c.laser === it.id;
-  }
+  equipped(it) { return this.cos[it.kind] === it.id; } // (kind names the Cosmetics field: outfit, skates, laser)
 
   // Tile tag, and the info panel's "how to get it" lines.
   source(it) {
@@ -62,9 +58,8 @@ export class Wardrobe {
     if (it.kind === 'laser') return { tag: 'FREE', lines: ['Every pulse spinner can be tuned to any colour.'] };
     if (it.id === 'courier' || it.id === 'stock') return { tag: 'STANDARD ISSUE', lines: ['Standard courier issue.'] };
     const repLine = (f, req) => {
-      const F = FACTIONS[f];
       const known = !g.rep || g.rep.visible(f);
-      const fname = known ? F.name : 'a hidden faction';
+      const fname = known ? FACTIONS[f].name : 'a hidden faction';
       const you = g.rep && known ? ` You: ${g.rep.tier(f).name} (${g.rep.get(f)}).` : '';
       return `Needs ${fname} standing ${tierFor(req).name} (${req}+).${you}`;
     };
@@ -265,9 +260,7 @@ export class Wardrobe {
     const c = this.cos;
     if (!this.owned(it)) { this.flashLocked(); this.refresh(false); return; }
     if (!this.equipped(it)) {
-      if (it.kind === 'outfit') c.outfit = it.id;
-      else if (it.kind === 'skates') c.skates = it.id;
-      else c.laser = it.id;
+      c[it.kind] = it.id;
       if (it.kind === 'laser') c.save(); else c.apply();
       this.game.audio.click();
     }
@@ -302,7 +295,6 @@ export class Wardrobe {
 
   onKey(code) {
     const list = this.items();
-    const n = list.length;
     let i = this.sel[this.tab];
     const cols = Math.max(1, getComputedStyle(this.gridEl).gridTemplateColumns.split(' ').length);
     const tabIdx = TABS.findIndex((t) => t.id === this.tab);
@@ -317,7 +309,7 @@ export class Wardrobe {
       else if (code === 'ArrowDown' || code === 'KeyS') i += cols;
       else if (code === 'ArrowUp' || code === 'KeyW') i -= cols;
       else return;
-      this.sel[this.tab] = Math.max(0, Math.min(n - 1, i));
+      this.sel[this.tab] = Math.max(0, Math.min(list.length - 1, i));
       this.hover = null;
       this.refresh(true);
       const t = this.gridEl.querySelector('.wd-tile.sel');
@@ -487,8 +479,7 @@ export class Wardrobe {
   }
 
   tick() {
-    const g = this.game;
-    if (g.state !== 'wardrobe') { this.close(false); return; }
+    if (this.game.state !== 'wardrobe') { this.close(false); return; }
     const T = this.three;
     const now = performance.now();
     const dt = Math.min(0.05, (now - this.last) / 1000);
@@ -534,12 +525,10 @@ export class Wardrobe {
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(M.root.getWorldQuaternion(new THREE.Quaternion()));
     this.scarfSim.update(Math.min(0.05, dt || 1 / 60), fwd.multiplyScalar(14 * p), new THREE.Vector3(0, 1, 0));
     updateHalo(M, dt || 1 / 60);
-    const s = SKATES[this.look.skates] || SKATES.stock;
-    if (s.rainbow) M.mats.skate.color.setHSL((T.t * 0.4) % 1, 1, 0.6);
+    if ((SKATES[this.look.skates] || SKATES.stock).rainbow) M.mats.skate.color.setHSL((T.t * 0.4) % 1, 1, 0.6);
     for (const x of T.clones) if (x.userData.flap) x.rotation.y = x.userData.flap * (0.5 + Math.sin(T.t * 3) * 0.3);
     // pulse disc spins and bobs; bigger on the laser tab
-    const ds = this.tab === 'laser' ? 1.5 : 0.85;
-    T.disc.scale.setScalar(ds);
+    T.disc.scale.setScalar(this.tab === 'laser' ? 1.5 : 0.85);
     T.disc.rotation.set(0.3, T.t * 2.5, 0);
     T.disc.position.y = 1.05 + Math.sin(T.t * 2) * 0.06;
     T.halo.material.opacity = 0.18 + 0.1 * Math.sin(T.t * 6);

@@ -61,16 +61,14 @@ export class GlobeMap {
       return cv;
     };
     const ink = '#120a1e';
-    const star = (c, col, r = 8) => { c.fillStyle = col; c.strokeStyle = ink; c.lineWidth = 2.5; c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.5 : r; c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } c.closePath(); c.fill(); c.stroke(); };
     const dot = (c, col, r) => { c.fillStyle = col; c.strokeStyle = ink; c.lineWidth = 2.5; c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.fill(); c.stroke(); };
-    const diamond = (c, col, rim, s2 = 6) => { c.fillStyle = col; c.strokeStyle = rim; c.lineWidth = 2; c.beginPath(); c.moveTo(0, -s2); c.lineTo(s2, 0); c.lineTo(0, s2); c.lineTo(-s2, 0); c.closePath(); c.fill(); c.stroke(); };
     const rows = [
       ['PLACES', [
-        [icon((c) => star(c, '#ffd23f')), 'Faction HQ'],
+        [icon((c) => { c.fillStyle = '#ffd23f'; c.strokeStyle = ink; c.lineWidth = 2.5; c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? 4 : 8; c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } c.closePath(); c.fill(); c.stroke(); }), 'Faction HQ'],
         [icon((c) => dot(c, '#2ec4ff', 6)), 'Settlement or base'],
         [icon((c) => dot(c, '#7dff3a', 4.5)), 'Pirate camp'],
         [icon((c) => { dot(c, '#ff3b5c', 4); c.strokeStyle = '#ff2a4a'; c.lineWidth = 1.5; c.beginPath(); c.arc(0, 0, 9.5, 0, Math.PI * 2); c.stroke(); }), 'Restricted airspace'],
-        [icon((c) => { diamond(c, '#ff9f1c', ink, 4.5); }), 'Outpost'],
+        [icon((c) => { c.fillStyle = '#ff9f1c'; c.strokeStyle = ink; c.lineWidth = 2; c.beginPath(); c.moveTo(0, -4.5); c.lineTo(4.5, 0); c.lineTo(0, 4.5); c.lineTo(-4.5, 0); c.closePath(); c.fill(); c.stroke(); }), 'Outpost'],
         [icon((c) => { c.lineCap = 'round'; c.beginPath(); c.moveTo(-12, 3); c.quadraticCurveTo(0, -7, 12, 3); c.strokeStyle = 'rgba(18,10,30,0.8)'; c.lineWidth = 5; c.stroke(); c.strokeStyle = '#e9cf94'; c.lineWidth = 2.4; c.stroke(); }), 'Road'],
       ]],
       ['MARKERS', [
@@ -153,24 +151,22 @@ export class GlobeMap {
     this.saveT -= dt;
     if (this.revealT > 0) return;
     this.revealT = 0.4;
-    const P = this.game.player;
-    const up = P.up;
-    const cosR = Math.cos(REVEAL / PLANET.radius);
-    const c = this.cells;
-    for (let k = 0; k < this.explored.length; k++) {
-      if (this.explored[k]) continue;
-      if (c[k * 3] * up.x + c[k * 3 + 1] * up.y + c[k * 3 + 2] * up.z > cosR) this.explored[k] = 1;
-    }
+    const up = this.game.player.up;
+    this.uncover(up, REVEAL);
     for (const l of this.game.locations) if (!l.discovered && arcDist(up, l.dir) < DISCOVER) this.discover(l);
     if (this.saveT <= 0) { this.saveT = 10; this.save(); }
   }
 
-  // Uncover fog within radius m of a direction (Signal Transponder pings).
+  // Uncover fog within radius m of a unit direction.
+  uncover(d, radius) {
+    const cosR = Math.cos(radius / PLANET.radius), c = this.cells;
+    for (let k = 0; k < this.explored.length; k++) if (!this.explored[k] && c[k * 3] * d.x + c[k * 3 + 1] * d.y + c[k * 3 + 2] * d.z > cosR) this.explored[k] = 1;
+  }
+
+  // ...and chart the places in it, silently (Signal Transponder pings).
   revealAround(dir, radius) {
     const d = dir.clone().normalize();
-    const cosR = Math.cos(radius / PLANET.radius);
-    const c = this.cells;
-    for (let k = 0; k < this.explored.length; k++) if (!this.explored[k] && c[k * 3] * d.x + c[k * 3 + 1] * d.y + c[k * 3 + 2] * d.z > cosR) this.explored[k] = 1;
+    this.uncover(d, radius);
     for (const l of this.game.locations) if (!l.discovered && arcDist(d, l.dir) < radius) this.discover(l, true);
     this.save();
   }
@@ -178,8 +174,7 @@ export class GlobeMap {
   // Open with you in the middle, facing up.
   center() {
     const c = this.game.cam;
-    const m = new THREE.Matrix4().makeBasis(c.right, c.fwd, c.up);
-    this.Q.setFromRotationMatrix(m).invert();
+    this.Q.setFromRotationMatrix(new THREE.Matrix4().makeBasis(c.right, c.fwd, c.up)).invert();
     this.zoom = 1;
     this.cursor = null;
     this.laySig = null; // (territory may have changed since last open)
@@ -277,8 +272,7 @@ export class GlobeMap {
   radioPick(sx, sy) {
     const g = this.game, S = g.town && g.town.radio, d = this.dirAt(sx, sy);
     if (!S || !d) return false;
-    const why = S.start(d);
-    this.radioMsg = why;
+    const why = this.radioMsg = S.start(d);
     if (why) g.audio.tone(180, 0.08, 'square', 0.05); else g.audio.click();
     this.aim = null; this.aimCell = -1;
     this.draw();
@@ -339,8 +333,7 @@ export class GlobeMap {
     const c = this.ctx;
     const W = this.canvas.width, H = this.canvas.height;
     const v = new THREE.Vector3();
-    const P0 = this.project(v.set(0, 0, 1), new THREE.Vector3());
-    const Rp = P0.Rp;
+    const { Rp } = this.project(v.set(0, 0, 1), new THREE.Vector3());
     c.fillStyle = '#05030c';
     c.fillRect(0, 0, W, H);
     c.save();
@@ -488,21 +481,11 @@ export class GlobeMap {
     // active meteor shower: pulsing red zone (shown through fog: a public warning)
     const mw = g.meteors && g.meteors.warning;
     if (mw) {
-      const e1 = new THREE.Vector3().crossVectors(mw.dir, Math.abs(mw.dir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)).normalize();
-      const e2 = new THREE.Vector3().crossVectors(mw.dir, e1);
-      const a = Math.max(mw.r, 120) / PLANET.radius, q = new THREE.Vector3();
-      c.beginPath();
-      let pen = false, vis = false;
-      for (let i = 0; i <= 48; i++) {
-        const t = (i / 48) * Math.PI * 2;
-        q.copy(mw.dir).multiplyScalar(Math.cos(a)).addScaledVector(e1, Math.sin(a) * Math.cos(t)).addScaledVector(e2, Math.sin(a) * Math.sin(t));
-        const pp = this.project(q, v);
-        if (pp.z > 0) { if (pen) c.lineTo(pp.x, pp.y); else c.moveTo(pp.x, pp.y); pen = true; vis = true; } else pen = false;
-      }
-      c.closePath();
-      if (vis) {
-        c.fillStyle = `rgba(255,79,46,${0.28 + 0.12 * Math.sin(performance.now() / 220)})`; c.fill();
-        c.strokeStyle = '#ff4f2e'; c.lineWidth = 2; c.stroke();
+      const zone = this.ringPath(mw.dir, Math.max(mw.r, 120), 48);
+      zone.path.closePath();
+      if (zone.any) {
+        c.fillStyle = `rgba(255,79,46,${0.28 + 0.12 * Math.sin(performance.now() / 220)})`; c.fill(zone.path);
+        c.strokeStyle = '#ff4f2e'; c.lineWidth = 2; c.stroke(zone.path);
         const p = this.project(mw.dir, v);
         if (p.z > 0) {
           c.font = pixelFont(8 + this.zoom * 0.5); c.lineWidth = 3; c.strokeStyle = '#120a1e'; c.fillStyle = '#ff9f1c';
@@ -603,9 +586,8 @@ export class GlobeMap {
       c.beginPath(); c.moveTo(0, -11); c.lineTo(8, 9); c.lineTo(0, 4); c.lineTo(-8, 9); c.closePath(); c.fill(); c.stroke();
       c.restore();
     }
-    const pct = Math.round((sum / this.explored.length) * 100);
     c.font = pixelFont(11); c.textAlign = 'left'; c.fillStyle = '#ffd23f';
-    c.fillText(`CHARTED ${pct}% · ${this.game.locations.filter((l) => l.discovered).length} LOCATIONS`, 14, 24);
+    c.fillText(`CHARTED ${Math.round((sum / this.explored.length) * 100)}% · ${g.locations.filter((l) => l.discovered).length} LOCATIONS`, 14, 24);
     const sweep = g.town && g.town.radio;
     if (sweep && sweep.on) { c.fillStyle = '#7dffd4'; c.fillText(`RADIO SWEEP ${Math.round(sweep.frac * 100)}%`, 14, 42); }
     c.textAlign = 'right'; c.fillStyle = '#c9c3d9';
@@ -631,19 +613,19 @@ export class GlobeMap {
     if (radio) this.radioPanel();
   }
 
-  // A ring of `metres` round a Moon point as a Path2D, far side left out (whole: none of it is round the back).
+  // A ring of `metres` round a Moon point as a Path2D, far side left out (whole: all of it in front; any: some).
   ringPath(dir, metres, steps = 72) {
     const e1 = new THREE.Vector3().crossVectors(dir, Math.abs(dir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)).normalize();
     const e2 = new THREE.Vector3().crossVectors(dir, e1);
     const a = metres / PLANET.radius, q = new THREE.Vector3(), v = new THREE.Vector3(), path = new Path2D();
-    let pen = false, whole = true;
+    let pen = false, whole = true, any = false;
     for (let i = 0; i <= steps; i++) {
       const t = (i / steps) * Math.PI * 2;
       q.copy(dir).multiplyScalar(Math.cos(a)).addScaledVector(e1, Math.sin(a) * Math.cos(t)).addScaledVector(e2, Math.sin(a) * Math.sin(t));
       const p = this.project(q, v);
-      if (p.z > 0) { if (pen) path.lineTo(p.x, p.y); else path.moveTo(p.x, p.y); pen = true; } else { pen = false; whole = false; }
+      if (p.z > 0) { if (pen) path.lineTo(p.x, p.y); else path.moveTo(p.x, p.y); pen = any = true; } else { pen = false; whole = false; }
     }
-    return { path, whole };
+    return { path, whole, any };
   }
 
   // The Radio Tower sweep (both modes): max reach (dashed), growing rim, start point; in radio mode also the ring a click

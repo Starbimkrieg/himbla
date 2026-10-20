@@ -1,4 +1,4 @@
-import { padKind } from './gamepad.js';
+import { padKind, activePad } from './gamepad.js';
 import xboxImg from './assets/pads/xbox.webp?inline';
 import psImg from './assets/pads/ps.webp?inline';
 
@@ -99,13 +99,6 @@ export class InputMonitor {
     if (!on) this.kind = null;
   }
 
-  // the pad gamepad.js would use: first connected, preferring standard mapping
-  pad() {
-    let gp = null;
-    for (const p of (navigator.getGamepads ? navigator.getGamepads() : [])) if (p && p.connected) { gp = p; if (p.mapping === 'standard') break; }
-    return gp;
-  }
-
   mk(tag, attrs, parent) {
     const n = document.createElementNS(NS, tag);
     for (const k in attrs) n.setAttribute(k, attrs[k]);
@@ -129,10 +122,7 @@ export class InputMonitor {
     this.btn = {};
     this.trig = {};
     for (const [i, s] of Object.entries(P.hit)) this.btn[i] = this.shape(s, 'im-hit', svg);
-    for (const [i, cx, cy, r, col] of P.face) {
-      const c = this.mk('circle', { cx, cy, r, class: 'im-hit im-hit-face', style: `--c:${col}` }, svg);
-      this.btn[i] = c;
-    }
+    for (const [i, cx, cy, r, col] of P.face) this.btn[i] = this.mk('circle', { cx, cy, r, class: 'im-hit im-hit-face', style: `--c:${col}` }, svg);
     // trigger meters in the margin above the pad
     const fs = Math.round(w / 31), mh = Math.round(w / 26), my = y0 - P.head + Math.round(P.head * 0.3);
     for (const i of [6, 7]) {
@@ -155,11 +145,11 @@ export class InputMonitor {
   update() {
     if (!this.on) return;
     const g = this.game, I = g.input, P = g.player, b = P && P.body;
-    const gp = this.pad();
+    const gp = activePad();
     const kind = gp ? padKind(gp.id) : null;
     if (kind !== this.kind) { if (kind) this.build(kind); else { this.kind = null; this.mapEl.replaceChildren(); } }
     const N = NAMES[kind] || NAMES.xbox;
-    const lab = (i) => `${N[i] || '#' + i}`;
+    const lab = (i) => N[i] || '#' + i;
 
     // header
     this.badge.textContent = kind ? { ps: 'PS', xbox: 'XBOX', switch: 'SWITCH' }[kind] : '—';
@@ -221,7 +211,7 @@ export class InputMonitor {
     if (gy && (gy.dev || kind === 'ps')) this.trickEl.insertAdjacentHTML('beforeend', row('gyro', `${gy.live() ? '<b class="hot">live</b>' : '<span class="dim">off</span>'}${g.pad.gyroOn ? ' · steering' : ''} <small>${esc(gy.status)}</small>`));
 
     // stuck trick button: game has Q down, nothing physical does
-    const gameQ = I.down('KeyQ'), physQ = this.rawKeys.has('KeyQ'), padB = !!(gp && gp.buttons[1] && (gp.buttons[1].pressed || gp.buttons[1].value > 0.5));
+    const gameQ = I.down('KeyQ'), physQ = this.rawKeys.has('KeyQ'), padB = pressed.includes(1);
     const stuck = gameQ && !physQ && !padB;
     this.alertEl.classList.toggle('hidden', !stuck);
     if (stuck) this.alertEl.textContent = `STUCK: the game has Q (trick) down, but neither the keyboard Q nor the pad's ${kind === 'ps' ? '○' : 'B'} is.`;

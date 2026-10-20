@@ -6,8 +6,7 @@ import '@fontsource/press-start-2p/400.css';
 import '@fontsource/pixelify-sans/400.css';
 import '@fontsource/pixelify-sans/700.css';
 
-export const DISPLAY = '"Press Start 2P", "Pixelify Sans", monospace';
-export const BODY = '"Pixelify Sans", "Press Start 2P", sans-serif';
+const DISPLAY = '"Press Start 2P", "Pixelify Sans", monospace';
 
 // Canvas font string in the display face (it is wide, so callers pass small sizes).
 export const pixelFont = (px) => `${Math.round(px)}px ${DISPLAY}`;

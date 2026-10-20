@@ -37,14 +37,12 @@ export class Audio {
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
 
-    // glide noise (suit-transmitted rumble)
-    const src = ctx.createBufferSource();
-    src.buffer = this.noise; src.loop = true;
-    // lowpassed: a soft rumble, never static
+    // a looping noise source through filter f and gain g into the effects bus
+    const loop = (f, g) => { const s = ctx.createBufferSource(); s.buffer = this.noise; s.loop = true; s.connect(f).connect(g).connect(this.master); s.start(); };
+    // glide noise (suit-transmitted rumble), lowpassed: a soft rumble, never static
     this.windF = ctx.createBiquadFilter(); this.windF.type = 'lowpass'; this.windF.Q.value = 0.3;
     this.windG = ctx.createGain(); this.windG.gain.value = 0;
-    src.connect(this.windF).connect(this.windG).connect(this.master);
-    src.start();
+    loop(this.windF, this.windG);
 
     // skate hum: a shared level (humG, rises with speed) over the worn skates' voice (setSkateTone). Kept low and soft.
     this.humG = ctx.createGain(); this.humG.gain.value = 0;
@@ -52,25 +50,17 @@ export class Audio {
     this.setSkateTone(this.skateTone);
 
     // thruster
-    const src2 = ctx.createBufferSource();
-    src2.buffer = this.noise; src2.loop = true;
     this.jetF = ctx.createBiquadFilter(); this.jetF.type = 'lowpass'; this.jetF.frequency.value = 520;
     this.jetG = ctx.createGain(); this.jetG.gain.value = 0;
-    src2.connect(this.jetF).connect(this.jetG).connect(this.master);
-    src2.start();
-
-    // racecourse crowd: no noise bed (it read as static); setCrowd() records the level, roar() adds whoops
-    this.crowdLevel = 0;
-    this.crowdBoost = 0;
+    loop(this.jetF, this.jetG);
 
     this.initMusic();
   }
 
-  // Racecourse crowd: 0 = silent, ~0.1 a murmur, 1 = on its feet. roar() adds a swell and some whoops.
-  setCrowd(level) { this.crowdLevel = level; }
+  // Racecourse crowd (race.js): setCrowd(level) does nothing since the noise bed went (it read as static); roar() adds whoops.
+  setCrowd() {}
   roar(amount = 1) {
     if (!this.ctx) return;
-    this.crowdBoost = Math.min(1.5, this.crowdBoost + amount);
     const t = this.ctx.currentTime;
     const n = Math.round(3 + amount * 6);
     for (let i = 0; i < n; i++) {
@@ -95,13 +85,11 @@ export class Audio {
     this.music.connect(this.musicTone).connect(this.musicBus); // settings
     // dreamy echo for pads, arp and snare
     this.echoIn = ctx.createGain(); this.echoIn.gain.value = 1;
-    const delay = ctx.createDelay(1); delay.delayTime.value = (60 / 96) * 0.75;
-    this.delay = delay;
+    const delay = this.delay = ctx.createDelay(1); // (its time follows the track's tempo, below)
     const fb = ctx.createGain(); fb.gain.value = 0.32;
     const damp = ctx.createBiquadFilter(); damp.type = 'lowpass'; damp.frequency.value = 1600;
     this.echoIn.connect(delay).connect(damp).connect(fb).connect(delay);
     damp.connect(this.music);
-    this.bpm = 96;
     this.step = 0;
     this.nextNote = ctx.currentTime + 0.1;
     this.level = 0;
@@ -179,14 +167,21 @@ export class Audio {
 
   // a resonant noise "bloop" (bubbling lab glassware)
   bloop(t, f0, vol) {
+    const f = this.noiseHit(t, 0, 18, vol, 0.22, 0.25, 0.4);
+    f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f0 * 2.6, t + 0.18);
+  }
+
+  // a band-passed noise hit into the music, some of it into the echo (snare, hat, bloop). freq 0: the caller sweeps the
+  // filter it returns
+  noiseHit(t, freq, q, vol, decay, stop, echo = 0) {
     const ctx = this.ctx;
     const s = ctx.createBufferSource(); s.buffer = this.noise;
-    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 18;
-    f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f0 * 2.6, t + 0.18);
-    const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; if (freq) f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
     s.connect(f).connect(g).connect(this.music);
-    const e = ctx.createGain(); e.gain.value = 0.4; g.connect(e).connect(this.echoIn);
-    s.start(t, Math.random()); s.stop(t + 0.25);
+    if (echo) { const e = ctx.createGain(); e.gain.value = echo; g.connect(e).connect(this.echoIn); }
+    s.start(t, Math.random()); s.stop(t + stop);
+    return f;
   }
 
   kick(t) {
@@ -198,37 +193,25 @@ export class Audio {
   }
 
   snare(t, vol) {
-    const ctx = this.ctx;
-    const s = ctx.createBufferSource(); s.buffer = this.noise;
-    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1500; f.Q.value = 0.9;
-    const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-    s.connect(f).connect(g); g.connect(this.music);
-    const e = ctx.createGain(); e.gain.value = 0.5; g.connect(e).connect(this.echoIn);
-    s.start(t, Math.random()); s.stop(t + 0.3);
+    this.noiseHit(t, 1500, 0.9, vol, 0.22, 0.3, 0.5);
     this.voice('triangle', 190, t, 0.12, vol * 0.6);
   }
 
-  hat(t, vol) {
-    const ctx = this.ctx;
-    const s = ctx.createBufferSource(); s.buffer = this.noise;
-    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 7000; f.Q.value = 1.2;
-    const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-    s.connect(f).connect(g).connect(this.music);
-    s.start(t, Math.random()); s.stop(t + 0.08);
-  }
+  hat(t, vol) { this.noiseHit(t, 7000, 1.2, vol, 0.05, 0.08); }
+
+  // A 16th step's place: six its length (s), bar in the 4-bar loop, s the 16th in the bar, phrase the 4-bar phrase.
+  grid(step) { return { six: 60 / this.bpm / 4, bar: Math.floor(step / 16) % 4, s: step % 16, phrase: Math.floor(step / 64) }; }
 
   // Schedule one 16th note. Layers come in as `lvl` (0..1, from speed) rises.
   playStep(t, step, lvl) {
-    const sixteenth = 60 / this.bpm / 4;
-    const bar = Math.floor(step / 16) % 4;
-    const s = step % 16;
+    const { six, bar, s } = this.grid(step);
     const chord = this.chords[bar];
     // pad: always there, a warm bed
-    if (s === 0) for (const n of chord) for (const d of [-7, 7]) this.voice('sawtooth', this.mtof(n), t, sixteenth * 16 + 0.6, 0.022, { attack: 0.7, cutoff: 900 + lvl * 900, echo: 0.35, detune: d });
+    if (s === 0) for (const n of chord) for (const d of [-7, 7]) this.voice('sawtooth', this.mtof(n), t, six * 16 + 0.6, 0.022, { attack: 0.7, cutoff: 900 + lvl * 900, echo: 0.35, detune: d });
     // bass: pulsing 8ths on the root
     if (s % 2 === 0) {
       const root = chord[0] - 24 + (s === 6 || s === 14 ? 12 : 0);
-      this.voice('sawtooth', this.mtof(root), t, sixteenth * 1.8, 0.11 + lvl * 0.05, { cutoff: 260 + lvl * 380 });
+      this.voice('sawtooth', this.mtof(root), t, six * 1.8, 0.11 + lvl * 0.05, { cutoff: 260 + lvl * 380 });
     }
     if (lvl > 0.3 && s % 4 === 0) this.kick(t);
     if (lvl > 0.45 && (s === 4 || s === 12)) this.snare(t, 0.16);
@@ -236,20 +219,18 @@ export class Audio {
     // arpeggio over the chord, up an octave
     if (lvl > 0.72) {
       const n = chord[[0, 1, 2, 1][s % 4]] + 12 + (s >= 8 ? 12 : 0);
-      this.voice('square', this.mtof(n), t, sixteenth * 0.9, 0.028, { cutoff: 2200, echo: 0.45 });
+      this.voice('square', this.mtof(n), t, six * 0.9, 0.028, { cutoff: 2200, echo: 0.45 });
     }
   }
 
   // Title track: faster, brighter. Em, C, G, D; four-on-the-floor, offbeat hats, octave bass, hooky lead.
   menuStep(t, step) {
-    const sixteenth = 60 / this.bpm / 4;
-    const bar = Math.floor(step / 16) % 4;
-    const s = step % 16;
+    const { six, bar, s, phrase } = this.grid(step);
     const chords = [[52, 55, 59], [48, 52, 55], [55, 59, 62], [50, 54, 57]];
     const chord = chords[bar];
-    if (s === 0) for (const n of chord) for (const d of [-9, 9]) this.voice('sawtooth', this.mtof(n), t, sixteenth * 16 + 0.4, 0.02, { attack: 0.25, cutoff: 1900, echo: 0.3, detune: d });
+    if (s === 0) for (const n of chord) for (const d of [-9, 9]) this.voice('sawtooth', this.mtof(n), t, six * 16 + 0.4, 0.02, { attack: 0.25, cutoff: 1900, echo: 0.3, detune: d });
     // octave-bouncing bass on every 8th
-    if (s % 2 === 0) this.voice('sawtooth', this.mtof(chord[0] - 24 + ((s / 2) % 2 ? 12 : 0)), t, sixteenth * 1.6, 0.13, { cutoff: 700 });
+    if (s % 2 === 0) this.voice('sawtooth', this.mtof(chord[0] - 24 + ((s / 2) % 2 ? 12 : 0)), t, six * 1.6, 0.13, { cutoff: 700 });
     if (s % 4 === 0) this.kick(t);
     if (s === 4 || s === 12) this.snare(t, 0.2);
     if (s % 4 === 2) this.hat(t, 0.05);
@@ -258,11 +239,11 @@ export class Audio {
     const hook = [0, -1, 2, -1, 1, -1, 2, 0, -1, 2, -1, 1, 0, -1, 2, -1];
     const k = hook[s];
     if (k >= 0 && (bar % 2 === 0 || s < 12)) {
-      const n = chord[k] + 12 + (Math.floor(step / 64) % 2 ? 12 : 0);
-      this.voice('square', this.mtof(n), t, sixteenth * 1.4, 0.034, { cutoff: 3200, echo: 0.5 });
+      const n = chord[k] + 12 + (phrase % 2 ? 12 : 0);
+      this.voice('square', this.mtof(n), t, six * 1.4, 0.034, { cutoff: 3200, echo: 0.5 });
     }
     // sparkle arp on the last bar of each phrase
-    if (bar === 3 && s % 2 === 1) this.voice('triangle', this.mtof(chord[(s >> 1) % 3] + 24), t, sixteenth * 0.8, 0.025, { cutoff: 5000, echo: 0.4 });
+    if (bar === 3 && s % 2 === 1) this.voice('triangle', this.mtof(chord[(s >> 1) % 3] + 24), t, six * 0.8, 0.025, { cutoff: 5000, echo: 0.4 });
   }
 
   // ---------- zone tracks ----------
@@ -270,8 +251,7 @@ export class Audio {
   // CASINO: lounge synthwave. ii-V-I-vi in F with 9ths and 13ths, walking bass, swung brushes, e-piano comping,
   // a muted vibrato lead every other phrase.
   casinoStep(t, step) {
-    const six = 60 / this.bpm / 4;
-    const bar = Math.floor(step / 16) % 4, s = step % 16, phrase = Math.floor(step / 64);
+    const { six, bar, s, phrase } = this.grid(step);
     const chords = [[55, 58, 62, 65, 69], [48, 52, 58, 62, 69], [53, 57, 60, 64, 67], [50, 53, 57, 60, 64]];
     const ch = chords[bar];
     const swing = (s % 4 === 2) ? six * 0.33 : 0; // swung 8ths
@@ -297,8 +277,7 @@ export class Audio {
   // DOWNS: space-western. A minor with a harmonic-minor E7, galloping kick and shaker, rolling twangy guitar,
   // a sliding whistle lead, a sci-fi zap on the turnaround.
   downsStep(t, step) {
-    const six = 60 / this.bpm / 4;
-    const bar = Math.floor(step / 16) % 4, s = step % 16, phrase = Math.floor(step / 64);
+    const { six, bar, s, phrase } = this.grid(step);
     const chords = [[45, 52, 57, 60, 64], [50, 57, 62, 65, 69], [52, 56, 59, 62, 64], [45, 52, 57, 60, 64]];
     const ch = chords[bar];
     // gallop: kick on the beat, ta-ta on the shaker
@@ -330,8 +309,7 @@ export class Audio {
   // LAB: sterile and slightly wrong. Unresolved whole-tone and #11 harmony, glassy pings in odd groupings, bloops,
   // clicks, a slow sub pulse, a theremin on alternate phrases.
   labStep(t, step) {
-    const six = 60 / this.bpm / 4;
-    const bar = Math.floor(step / 16) % 4, s = step % 16, phrase = Math.floor(step / 64);
+    const { six, bar, s, phrase } = this.grid(step);
     const chords = [[48, 52, 55, 59, 66], [46, 50, 54, 58], [44, 48, 52, 56], [47, 51, 54, 58, 61]];
     const ch = chords[bar];
     if (s === 0) for (const n of ch) this.voice('sine', this.mtof(n), t, six * 16 + 0.8, 0.018, { attack: 1.4, cutoff: 1800, echo: 0.3, detune: ((n % 3) - 1) * 9 });
@@ -350,8 +328,7 @@ export class Audio {
   // DARK SIDE: darksynth. D phrygian, driven 16th bass, four-on-the-floor, big echoing snare, gated pad stabs,
   // a growling saw riff on alternate phrases.
   darkStep(t, step) {
-    const six = 60 / this.bpm / 4;
-    const bar = Math.floor(step / 16) % 4, s = step % 16, phrase = Math.floor(step / 64);
+    const { six, bar, s, phrase } = this.grid(step);
     const chords = [[50, 53, 57], [51, 55, 58], [46, 50, 53], [48, 51, 55]];
     const ch = chords[bar];
     const bn = ch[0] - 24 + (s >= 14 ? 12 : 0);
@@ -454,6 +431,7 @@ export class Audio {
     const voice = (level) => { const g = ctx.createGain(); g.gain.value = 0; g.connect(this.humG); return { g, level }; };
     const osc = (type, out, f = 60) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; o.connect(out); o.start(); srcs.push(o); return o; };
     const lp = (f, q = 0.7) => { const b = ctx.createBiquadFilter(); b.type = 'lowpass'; b.frequency.value = f; b.Q.value = q; return b; };
+    const wobble = (param, f, depth) => { const d = ctx.createGain(); d.gain.value = depth; d.connect(param); return osc('sine', d, f); }; // LFO on param
     const done = (v) => {
       v.id = kind;
       v.stop = (when) => { for (const o of srcs) o.stop(when); srcs[0].onended = () => v.g.disconnect(); };
@@ -481,9 +459,7 @@ export class Audio {
       f.connect(throb).connect(v.g);
       const o = osc('square', f);
       // wheel-throb: shallow tremolo, quicker with speed
-      const lfo = osc('sine', ctx.createGain(), 5);
-      const depth = ctx.createGain(); depth.gain.value = 0.22;
-      lfo.disconnect(); lfo.connect(depth).connect(throb.gain);
+      const lfo = wobble(throb.gain, 5, 0.22);
       v.pitch = (f0, t, s, k = 1) => {
         o.frequency.setTargetAtTime(f0 * 0.5, t, 0.1 * k);
         lfo.frequency.setTargetAtTime(4 + s * 9, t, 0.2 * k);
@@ -498,9 +474,7 @@ export class Audio {
       const shimmer = ctx.createGain(); shimmer.gain.value = 0.35; shimmer.connect(f);
       const fifth = osc('sine', shimmer), oct = osc('sine', shimmer), oct2 = osc('sine', shimmer);
       // shimmer breathes slowly so it glints rather than whines
-      const lfo = osc('sine', ctx.createGain(), 0.35);
-      const depth = ctx.createGain(); depth.gain.value = 0.25;
-      lfo.disconnect(); lfo.connect(depth).connect(shimmer.gain);
+      wobble(shimmer.gain, 0.35, 0.25);
       // metal: ring modulation at a bell's odd ratio gives an inharmonic coin ring, swelling in a slow spin
       const ring = ctx.createGain(); ring.gain.value = 0; // gain driven by the modulator
       const ringOut = ctx.createGain(); ringOut.gain.value = 0.28;
@@ -508,9 +482,7 @@ export class Audio {
       ring.connect(ringBp).connect(ringOut).connect(v.g);
       const carrier = osc('sine', ring);
       const mod = osc('sine', ring.gain);
-      const spin = osc('sine', ctx.createGain(), 1.6);
-      const spinDepth = ctx.createGain(); spinDepth.gain.value = 0.18;
-      spin.disconnect(); spin.connect(spinDepth).connect(ringOut.gain);
+      const spin = wobble(ringOut.gain, 1.6, 0.18);
       v.pitch = (f0, t, s, k = 1) => {
         base.frequency.setTargetAtTime(f0 * 2, t, 0.1 * k);
         fifth.frequency.setTargetAtTime(f0 * 3, t, 0.1 * k);
@@ -574,7 +546,6 @@ export class Audio {
     this.skatePitch.f0 = f0; this.skatePitch.s = s;
     if (this.skateVoice) this.skateVoice.pitch(f0, t, s);
     this.jetG.gain.setTargetAtTime(thrusting && !quiet ? 0.16 : 0, t, 0.05);
-    this.crowdBoost = Math.max(0, this.crowdBoost - 0.006);
     this.updateMusic(speed);
   }
 

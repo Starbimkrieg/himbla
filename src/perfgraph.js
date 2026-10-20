@@ -1,6 +1,6 @@
 // Rolling graphs for the dev overlay (cheats.js): FPS, CPU and GPU load over the last 30 s.
 
-export const GRAPH_WINDOW = 30000; // ms of history shown
+const GRAPH_WINDOW = 30000; // ms of history shown
 
 // Canvas line graph of (time, value) points. CSS sizes the canvas; the bitmap is fixed.
 export class TimeGraph {
