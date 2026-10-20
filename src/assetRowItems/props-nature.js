@@ -1,14 +1,12 @@
 import * as THREE from 'three';
 import { lineUp } from './common.js';
-import { seat, rngWith } from './props-util.js';
+import { V, seat, rngWith } from './props-util.js';
 import { toon, glow, inkMat } from '../toon.js';
 import { mulberry32 } from '../rng.js';
 import { build as buildRock } from '../rocks.js';
 import { KINDS as METEOR_KINDS, meteorMats, makeMeteorRock } from '../meteors.js';
 
 // 11 · NATURE: shaped rocks, boulders, crystal samples, meteors and the black lake.
-
-const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // ---- shaped rocks (rocks.js build) ----
 // Only the snake needs a planet (it drapes over planet.ground() and takes "up" from the centre, so a plane won't do): a
@@ -46,7 +44,7 @@ function rockPart(kind, seed, over, dims, turn = 0) {
   const dx = r.mesh.position.x, dz2 = r.mesh.position.z; // seat's centring shift; colliders and rail follow
   for (const c of cols) { c.x += dx; c.z += dz2; }
   for (const pts of rails) for (const q of pts) { q.x += dx; q.z += dz2; }
-  return { root: part.root, w: part.w, d: part.d, cols, rails };
+  return { ...part, cols, rails };
 }
 
 // a row of parts as one item, colliders and rails moved with their parts
@@ -148,9 +146,7 @@ function meteorParts(radius, kinds) {
 }
 function meteorRocks() {
   const { parts, bodies } = meteorParts(7.5, Object.keys(METEOR_KINDS));
-  const row = lineUp(parts, 3);
-  const cols = parts.map((p) => ({ type: 'sphere', x: p.root.position.x, y: p.minor, z: 0, r: p.minor }));
-  return { root: row.root, cols, update: (dt) => { for (const b of bodies) b.rotation.y += dt * 0.35; } }; // they tumble in flight
+  return { root: lineUp(parts, 3).root, cols: parts.map((p) => ({ type: 'sphere', x: p.root.position.x, y: p.minor, z: 0, r: p.minor })), update: (dt) => { for (const b of bodies) b.rotation.y += dt * 0.35; } }; // they tumble in flight
 }
 function meteorBig() {
   const { parts, bodies } = meteorParts(16.875, ['stony']);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { plate } from './props-util.js';
+import { V, plate } from './props-util.js';
 import { toon, glow, ink } from '../toon.js';
 import { mulberry32 } from '../rng.js';
 import { FX } from '../fx.js';
@@ -14,7 +14,6 @@ import { scorchTex, meteorMats } from '../meteors.js';
 // speed so the eye can follow (the stretch still uses the real speed). Each effect has a private FX drawing into the item.
 
 const UP = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
-const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // test range: a low plate, a muzzle block per lane at -x, a target stake at +x
 function range(len, laneZ) {
@@ -145,35 +144,24 @@ function apcShell(ctx) {
 }
 
 // ---- effects ---------------------------------------------------------------------------------------
-function explosions(ctx) {
+// Effects on a plate (plateArgs: plate()'s), fired in turn: spec row i calls fire(fx, ...row) at t0 + i * step, then every `period` s
+function fxTimer(ctx, plateArgs, spec, t0, step, period, fire) {
   const root = new THREE.Group();
   const fx = new FX(root, ctx.game.camera);
-  const spec = [[-24, 4, false], [0, 9, true], [34, 16, true]]; // [x, radius, big]: game.explode passes radius * 0.7
-  root.add(plate(84, 40));
-  const next = spec.map((_, i) => 0.3 + i * 0.9);
+  root.add(plate(...plateArgs));
+  const next = spec.map((_, i) => t0 + i * step);
   return {
     root,
     update: (dt, t) => {
-      spec.forEach(([x, r, big], i) => { if (t >= next[i]) { next[i] += 3.2; fx.explosion(V(x, 1, 0), r, big); } });
+      spec.forEach((s, i) => { if (t >= next[i]) { next[i] += period; fire(fx, ...s); } });
       fx.update(dt);
     },
   };
 }
-
-function warningRings(ctx) {
-  const root = new THREE.Group();
-  const fx = new FX(root, ctx.game.camera);
-  const spec = [[-22, 8], [0, 16], [34, 30]]; // artillery strikes and the meteor marker (blast 8 + r * 1.8)
-  root.add(plate(100, 66, 0x4a4660, 0.05));
-  const next = spec.map((_, i) => 0.2 + i * 0.5);
-  return {
-    root,
-    update: (dt, t) => {
-      spec.forEach(([x, r], i) => { if (t >= next[i]) { next[i] += 4.5; fx.warningRing(V(x, 0, 0), r, 4); } });
-      fx.update(dt);
-    },
-  };
-}
+// [x, radius, big]: game.explode passes radius * 0.7
+const explosions = (ctx) => fxTimer(ctx, [84, 40], [[-24, 4, false], [0, 9, true], [34, 16, true]], 0.3, 0.9, 3.2, (fx, x, r, big) => fx.explosion(V(x, 1, 0), r, big));
+// [x, radius]: artillery strikes and the meteor marker (blast 8 + r * 1.8)
+const warningRings = (ctx) => fxTimer(ctx, [100, 66, 0x4a4660, 0.05], [[-22, 8], [0, 16], [34, 30]], 0.2, 0.5, 4.5, (fx, x, r) => fx.warningRing(V(x, 0, 0), r, 4));
 
 function deflectorShield(ctx) {
   const root = new THREE.Group();
@@ -235,7 +223,7 @@ function skateTrails(ctx) {
   const lanes = finishes.map((s, i) => {
     const color = s.trail && s.trail !== 'rainbow' ? s.trail : 0x2ee6ff;
     const L = { s, z: (i - (finishes.length - 1) / 2) * 2.6, tr: [fx.makeTrail(color), fx.makeTrail(color)], ph: i * 0.37 };
-    fx.trails.push(L.tr[0], L.tr[1]);
+    fx.trails.push(...L.tr);
     const foot = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), glow(s.color));
     foot.position.y = 0.3;
     root.add(foot);

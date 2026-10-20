@@ -70,15 +70,15 @@ const current = {
   note: [[0, 118, 'CONCESSIONS BEHIND THE STAND'], [20, -22, 'jumbotron 25 x 12.5'], [-40, 22, 'golden statue'], [30, 34, "winner's circle"], [-176, 14, 'way in'], [-118, 70, 'race office'], [0, 86, 'GRANDSTAND (11 tiers)'], [0, -78, 'back stand (5 tiers)']],
   plateau: 215,
   els: [
-    el('stand', '', R(-96, 96, 70.5, 100.5), {}),
-    el('back', '', R(-61, 61, -83.5, -70.5), {}),
+    el('stand', '', R(-96, 96, 70.5, 100.5)),
+    el('back', '', R(-61, 61, -83.5, -70.5)),
     free('conc', R(-120, 120, 101.2, 140), { fill: '#8f8a9a' }),
     ...[0, 1, 2, 3, 4, 5].map((i) => stall(`s${i}`, R(-85 + i * 34 - 4.2, -85 + i * 34 + 4.2, 130, 137))),
     el('office', '', R(-127, -109, 76, 88), { fill: PAL.mint }),
     over('screen', '', R(-14.7, 14.7, -15.4, -14.2)),
     el('circle', '', C(30, 26, 6.4), { fill: PAL.gold, line: PAL.mint }),
     el('plinth', '', C(-40, 8, 3.5), { fill: PAL.gold, line: PAL.mint }),
-    el('arch', '', R(-178.5, -173.5, -10.5, 10.5), {}),
+    el('arch', '', R(-178.5, -173.5, -10.5, 10.5)),
   ],
 };
 
@@ -202,7 +202,7 @@ function check(L) {
     }
     for (const [x, z] of pts) {
       const d = stad(x, z);
-      if (e.zone === 'in' && d > LANE_IN - e.margin + 1e-6) { bad.push(`${e.id}: leaves the infield (${(d).toFixed(1)} from the centre line, limit ${(LANE_IN - e.margin).toFixed(1)})`); break; }
+      if (e.zone === 'in' && d > LANE_IN - e.margin + 1e-6) { bad.push(`${e.id}: leaves the infield (${d.toFixed(1)} from the centre line, limit ${(LANE_IN - e.margin).toFixed(1)})`); break; }
       if (e.zone === 'out' && d < LANE_OUT + e.margin - 1e-6) { bad.push(`${e.id}: too near the track (${d.toFixed(1)}, need ${(LANE_OUT + e.margin).toFixed(1)})`); break; }
     }
   }
@@ -224,7 +224,7 @@ const px = (x) => ((x - X0) * S + PAD).toFixed(1), pz = (z) => ((z - Z0) * S + P
 const sc = (v) => (v * S).toFixed(1);
 const stadium = (r) => `M ${px(-HALF)} ${pz(-r)} L ${px(HALF)} ${pz(-r)} A ${sc(r)} ${sc(r)} 0 0 1 ${px(HALF)} ${pz(r)} L ${px(-HALF)} ${pz(r)} A ${sc(r)} ${sc(r)} 0 0 1 ${px(-HALF)} ${pz(-r)} Z`;
 const P = (s, r, a) => [s.x + Math.cos(a * D2R) * r, s.z + Math.sin(a * D2R) * r];
-function shapeSvg(e, f) {
+function shapeSvg(e) {
   const s = e.s, a = `fill="${e.fill}" fill-opacity="${e.op ?? 0.85}" stroke="${e.line}" stroke-width="${e.cls === 'over' ? 1.2 : 0.8}"${e.cls === 'over' ? ' stroke-dasharray="4 3"' : ''}`;
   if (s.k === 'r') return `<rect x="${px(s.x0)}" y="${pz(s.z0)}" width="${sc(s.x1 - s.x0)}" height="${sc(s.z1 - s.z0)}" ${a}/>`;
   if (s.k === 'c') return `<circle cx="${px(s.x)}" cy="${pz(s.z)}" r="${sc(s.r)}" ${a}/>`;

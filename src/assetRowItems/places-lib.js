@@ -5,6 +5,7 @@ import { mulberry32 } from '../rng.js';
 import { NAME_TAGS, setMask } from '../toon.js';
 import { Race } from '../race.js';
 import { Colliders } from '../physics.js';
+import { stepMover } from './common.js';
 
 // Builds one settlement / HQ / landmark standalone for the Asset Row (assetRowItems/places.js).
 //
@@ -99,13 +100,7 @@ export function buildPlace(ctx, spec) {
     camL.copy(cam); stage.worldToLocal(camL);
     // (the place-animating part of world.js update())
     for (const s of w.spinners) s.obj.rotation[s.axis] += s.speed * dt;
-    for (const a of w.anims) for (const o of a.list) {
-      const u = o.userData;
-      if (u.tick) u.tick(o, dt, t);
-      else if (u.spin) o.rotation.y += dt * (u.spin === true ? 0.6 : u.spin);
-      else if (u.blink) o.visible = Math.sin(t * 4 + a.seed) > -0.3;
-      else if (u.flag) o.rotation.y = Math.sin(t * 2 + a.seed) * 0.25;
-    }
+    for (const a of w.anims) for (const o of a.list) stepMover(o, dt, t, a.seed);
     for (const d of w.dishes) { d.yaw.rotation.y += d.speed * dt; d.tilt.rotation.x = -0.6 + Math.sin(t * d.speed * 2) * 0.25; }
     for (const b of w.blinkers) b.mat.color.copy(b.base).multiplyScalar(Math.sin(t * 3 + b.phase) > 0.2 ? 1 : 0.25);
     for (const z of w.zoneWalls) z.mat.uniforms.time.value = t;

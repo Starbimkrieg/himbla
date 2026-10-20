@@ -37,13 +37,12 @@ const report = await pg.evaluate((EPS) => {
   g.scene.traverse((o) => {
     if (!o.isMesh || o.isInstancedMesh || !o.geometry || !o.visible) return;
     const pos = o.geometry.attributes.position; if (!pos) return;
-    const mat0 = Array.isArray(o.material) ? o.material[0] : o.material;
-    if (mat0.side === 1) return;                                                  // outline shells draw back faces only, never through a front face
+    const mat = Array.isArray(o.material) ? o.material[0] : o.material;
+    if (mat.side === 1) return;                                                  // outline shells draw back faces only, never through a front face
     const m = new M().multiplyMatrices(inv, o.matrixWorld);
     const idx = o.geometry.index;
     const nt = idx ? idx.count / 3 : pos.count / 3;
     let used = false;
-    const mat = Array.isArray(o.material) ? o.material[0] : o.material;
     const tag = (o.name || mat.name || '') + (o.parent && o.parent.name ? '<' + o.parent.name + '>' : '') + '#' + (mat.color ? mat.color.getHexString() : mat.map ? 'map' : '?') + (mat.side === 2 ? ' (double-sided)' : '') + (mat.transparent ? ' (transparent)' : '');
     for (let t = 0; t < nt; t++) {
       const i0 = idx ? idx.getX(t * 3) : t * 3, i1 = idx ? idx.getX(t * 3 + 1) : t * 3 + 1, i2 = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;

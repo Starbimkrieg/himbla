@@ -8,7 +8,7 @@
 //
 // Bots only know what a player sees, and are simpler than a person (none throws a mine at a lockbox on purpose).
 import { ClawSim, KINDS, CLAW_COST, CLAW_TIME, DROP, HOLD_CAP } from '../src/clawSim.js';
-import { mulberry32 } from '../src/rng.js';
+import { mulberry32, clamp } from '../src/rng.js';
 
 const SKILLS = {
   // vmax: claw speed; think: s of dithering before a grab; noise: stick wander; hold: how steadily it keeps the beam on
@@ -28,9 +28,9 @@ function playRound(seed, S, rng) {
   const stats = { banked: 0, mines: 0, chipBanked: false, booms: 0, opens: 0, chipLoose: false, chipPay: 0 };
   const hover = (tx, ty, tz) => {
     const k = 2.6;
-    const des = (e) => Math.max(-S.vmax, Math.min(S.vmax, e * k));
+    const des = (e) => clamp(e * k, -S.vmax, S.vmax);
     const ex = des(tx + wobX - c.x), ey = des(ty - c.y), ez = des(tz + wobZ - c.z);
-    return { mx: Math.max(-1, Math.min(1, (ex - c.vx) / 0.3 / 18)), my: Math.max(-1, Math.min(1, (ey - c.vy) / 0.3 / 14)), mz: Math.max(-1, Math.min(1, (ez - c.vz) / 0.3 / 18)) };
+    return { mx: clamp((ex - c.vx) / 0.3 / 18, -1, 1), my: clamp((ey - c.vy) / 0.3 / 14, -1, 1), mz: clamp((ez - c.vz) / 0.3 / 18, -1, 1) };
   };
   const free = () => sim.items.filter((i) => i.st === 'free');
   const score = (it) => {
@@ -67,8 +67,7 @@ function playRound(seed, S, rng) {
         if (tmr < 0 && Math.hypot(target.x - c.x, target.z - c.z) < 0.45 && Math.hypot(c.vx, c.vz) < 1.2) { mode = 'grab'; tmr = 3.2; }
       }
     } else if (mode === 'grab') {
-      if (!target || target.st === 'out') mode = 'seek';
-      else if (target.st === 'held') { mode = 'seek'; }
+      if (!target || target.st === 'out' || target.st === 'held') mode = 'seek';
       else {
         input = { ...hover(target.x, Math.min(c.y, target.y + 1.9), target.z), beam: true };
         if (rng() > S.hold ** (1 / 30)) { mode = 'seek'; input.beam = false; }
@@ -90,10 +89,9 @@ function playRound(seed, S, rng) {
     for (const e of sim.events) { if (e.type === 'bank') { stats.banked++; if (e.value < 0) stats.mines++; if (e.item.kind === 'chip') { stats.chipBanked = true; stats.chipPay += e.value; } } else if (e.type === 'fuse') { WHY[e.why] = (WHY[e.why] || 0) + 1; } else if (e.type === 'boom') stats.booms++; else if (e.type === 'open') { stats.opens++; if (e.jackpot) stats.chipLoose = true; } }
     sim.events.length = 0;
   }
-  return { pay: sim.payout, ...stats, mood: sim.mood };
+  return { pay: sim.payout, ...stats };
 }
 
-if (process.env.CLAW_NORUN) process.exit0 = 1;
 const rounds = parseInt(process.argv[2] || '200', 10) || 200;
 const only = process.argv[3];
 console.log(`entry ₵${CLAW_COST}, ${CLAW_TIME} s, ${rounds} rounds each\n`);

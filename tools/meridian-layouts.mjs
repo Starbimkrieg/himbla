@@ -85,7 +85,7 @@ function check(L) {
   for (const it of hard) { const ext = it.kind === 'circle' ? Math.hypot(it.x, it.z) + it.r : Math.max(...corners(it).map(([x, z]) => Math.hypot(x, z))); if (ext > LOC_R) out.push(`  outside loc.r by ${(ext - LOC_R).toFixed(1)} m: ${it.id}`); }
   // podium: story.findSpot wants no collider within 8 m of its first candidate (38, 67), else it moves on
   const pod = L.items.find((i) => i.cls === 'podium');
-  if (pod) for (const it of hard) if (it !== pod && !it.soft) { const d = sep({ kind: 'circle', x: pod.x, z: pod.z, r: 0 }, it); if (d < 8) out.push(`  podium candidate (38,67) blocked (${d.toFixed(1)} m) by ${it.id}: findSpot moves it`); }
+  if (pod) for (const it of hard) if (it !== pod) { const d = sep({ kind: 'circle', x: pod.x, z: pod.z, r: 0 }, it); if (d < 8) out.push(`  podium candidate (38,67) blocked (${d.toFixed(1)} m) by ${it.id}: findSpot moves it`); }
   console.log(`${L.name}:\n${out.length ? out.join('\n') : '  all clear (>= 4 m between footprints, >= 6 m to turrets, inside loc.r)'}`);
 }
 

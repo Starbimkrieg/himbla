@@ -24,7 +24,7 @@ function pieces() {
     const M = inv.clone().multiply(o.matrixWorld);
     const names = []; for (let a = o; a && a !== g.scene && names.length < 3; a = a.parent) if (a.name) names.push(a.name);
     const color = mat.color ? mat.color.getHex() + (mat.map ? 0x2000000 : 0) + (mat.transparent ? 0x1000000 : 0) : -1;
-    const w = o.getWorldPosition(window.game.camera.position.clone()).applyMatrix4(inv);   // unnamed pieces: where their origin is
+    const w = o.getWorldPosition(g.camera.position.clone()).applyMatrix4(inv);   // unnamed pieces: where their origin is
     const where = `${o.geometry.type.replace('Geometry', '')} @(${w.x.toFixed(1)}, ${w.y.toFixed(1)}, ${w.z.toFixed(1)})`;
     out.push({ o, M, tag: (names.length ? names.join('<') + ' ' : '') + where + ' #' + (mat.color ? mat.color.getHexString() : '?') + (mat.map ? ' map' : '') + (mat.transparent ? ' (tr)' : ''), color });
   });

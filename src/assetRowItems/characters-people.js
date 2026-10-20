@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { makeRunner, makeFigure, makeBouncer } from '../models.js';
-import { toon, glow, ink } from '../toon.js';
+import { glow } from '../toon.js';
 import { FACTIONS } from '../locations.js';
 import { LEADERS, Story } from '../story.js';
 import { FOES } from '../storyAssets.js';
 import { span, cell, line, restRunner, tag } from './characters-util.js';
+import { podium, factionHex } from './common.js';
 
 // 02 · PEOPLE: townsfolk (makeFigure), Dr. Zbornak, casino staff, the six faction leaders and six troop liveries.
 
@@ -18,8 +19,7 @@ function archetypesItem() {
   return {
     id: 'people.archetypes', label: 'TOWNSFOLK (9 LOOKS)', w: span(LOOKS.length, FW), d: FD,
     make() {
-      const cells = LOOKS.map((look, i) => cell(makeFigure({ look, seed: 7 + i * 5 }).root, look.toUpperCase(), FW, FD, { h: 0.6 }));
-      return { root: line(cells).root };
+      return { root: line(LOOKS.map((look, i) => cell(makeFigure({ look, seed: 7 + i * 5 }).root, look.toUpperCase(), FW, FD, { h: 0.6 }))).root };
     },
   };
 }
@@ -39,8 +39,7 @@ function specialItem() {
   return {
     id: 'people.special', label: 'SPECIAL FIGURES', w: span(specs.length, FW), d: FD,
     make() {
-      const cells = specs.map(([name, f]) => cell(f().root, name, FW, FD, { h: 0.6 }));
-      return { root: line(cells).root };
+      return { root: line(specs.map(([name, f]) => cell(f().root, name, FW, FD, { h: 0.6 }))).root };
     },
   };
 }
@@ -75,8 +74,7 @@ function casinoItem() {
   return {
     id: 'people.casino', label: 'CASINO STAFF', w: span(staff.length, 3), d: FD + 0.6,
     make() {
-      const cells = staff.map(([name, f]) => cell(f(), name, 3, FD + 0.6, { h: 0.6 }));
-      return { root: line(cells).root };
+      return { root: line(staff.map(([name, f]) => cell(f(), name, 3, FD + 0.6, { h: 0.6 }))).root };
     },
   };
 }
@@ -97,29 +95,16 @@ function leadersItem() {
         m.root.scale.setScalar(1.15);
         m.root.position.y = 0.4;
         g.add(m.root);
-        const col = new THREE.Color(FACTIONS[f].color).getHex();
-        const pod = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.9, 0.4, 16), toon(col));
-        ink(pod, 0.05);
-        pod.position.y = 0.2;
-        g.add(pod);
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.18, 8, 40), glow(col));
-        ring.rotation.x = Math.PI / 2;
-        ring.position.y = 0.15;
-        g.add(ring);
-        const beam = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.2, 40, 20, 1, true).translate(0, 20, 0), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-        g.add(beam);
+        const { ring, beam } = podium(g, factionHex(f));
         const sign = tag(L.name.toUpperCase(), FACTIONS[f].color, 0.9);
         sign.position.set(0, 4.2, 0);
         g.add(sign);
         swayers.push({ m, ring, beam, phase: swayers.length * 1.3 });
         return cell(g, null, PW, 7);
       });
-      const L = line(cells);
-      // only the podiums are solid
-      const cols = cells.map((c) => ({ type: 'cyl', x: c.root.position.x, z: 0, y0: 0, y1: 0.4, r: 1.9 }));
       return {
-        root: L.root,
-        cols,
+        root: line(cells).root,
+        cols: cells.map((c) => ({ type: 'cyl', x: c.root.position.x, z: 0, y0: 0, y1: 0.4, r: 1.9 })), // only the podiums are solid
         // idle as in story.update: head turns, left arm sways, ring and column pulse
         update: (dt, t) => {
           for (const s of swayers) {

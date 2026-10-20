@@ -48,11 +48,11 @@ if (!process.argv.includes('--static')) {
   const build = (mode) => {
     const out = mkdtempSync(join(tmpdir(), `mr-${mode}-`));
     execFileSync(process.execPath, [join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js'), 'build', '--mode', mode, '--outDir', out, '--emptyOutDir', '--logLevel', 'error'], { cwd: ROOT, stdio: 'inherit' });
-    let text = '', bytes = 0;
-    const walk = (d) => { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) walk(p); else if (/\.(js|html)$/.test(e)) { const t = readFileSync(p, 'utf8'); text += t; bytes += t.length; } } };
+    let text = '';
+    const walk = (d) => { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) walk(p); else if (/\.(js|html)$/.test(e)) { text += readFileSync(p, 'utf8'); } } };
     walk(out);
     rmSync(out, { recursive: true, force: true });
-    return { text, bytes };
+    return { text, bytes: text.length };
   };
   // strings only the dev tools carry (menu titles, a storage key, the Asset Row's name...)
   const MARKS = ['DEV MENU', 'FULL CHEAT MENU', 'mr-dev-unlocked', 'CLICK MAP TO TELEPORT', 'SPAWN PIRATE SQUAD', 'INPUT & CONTROLLER MONITOR', 'ASSET ROW', 'DEBUG OVERLAY', 'CPU TIME BY STAGE', 'FETCH & PULL UPSTREAM', 'dev-btn-pause', 'Meteor Spawn (dev)', 'PREPARING THE TRAILER', 'FREE CAM'];

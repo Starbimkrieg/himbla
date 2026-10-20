@@ -19,9 +19,8 @@ const P = (name, w, { d = 0, dz = 0, tint, y = 0, ry = 0 } = {}) => {
 const bayPart = () => { const p = P('dn_arcade', 11, { d: 16, dz: -8 }), s = arcadeBayShell(); s.position.z -= 8; p.root.add(s); return p; };
 // the running fountain; its item needs an `update` hook (below)
 const fountainPart = (list) => { const f = makeDownsFountain(); list.push(f); return { root: f.root, w: 25, d: 25 }; };
-const item = (id, label, w, d, make, extra = {}) => ({ id, label, w, d, make: () => make(), ...extra });
-const row = (parts, gap = 3) => { const L = lineUp(parts, gap); return { root: L.root }; };
-
+const item = (id, label, w, d, make) => ({ id, label, w, d, make });
+const row = (parts, gap = 3) => ({ root: lineUp(parts, gap).root });
 
 const downs = {
   id: 'downs',

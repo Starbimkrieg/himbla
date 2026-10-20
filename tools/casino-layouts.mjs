@@ -20,7 +20,6 @@ const TAU = Math.PI * 2;
 // ---------- shapes: rect {x0,x1,z0,z1}, circle {x,z,r} ----------
 const R = (x0, x1, z0, z1) => ({ k: 'r', x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1) });
 const C = (x, z, r) => ({ k: 'c', x, z, r });
-const C_ = C;
 const rc = (cx, cz, w, d) => R(cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2);
 const dist = (a, b) => {
   if (a.k === 'c' && b.k === 'c') return Math.hypot(a.x - b.x, a.z - b.z) - a.r - b.r;
@@ -66,10 +65,10 @@ const plinko = (wallZ, cx) => {
 //              station 4.8 out (r 2.8). yaw as bjPt: 0 faces +z, PI/2 +x, -PI/2 -x
 const blackjack = (x0, z0, yaw) => {
   const c = Math.cos(yaw), s = Math.sin(yaw), P = (lx, lz) => [x0 + lx * c + lz * s, z0 - lx * s + lz * c];
-  const pts = [[-3.8, -2], [3.8, -2], [-3.8, 4.7], [3.8, 4.7]].map(([a, b]) => P(a, b));
+  const pts = [[-3.8, -2], [3.8, -2], [-3.8, 4.7], [3.8, 4.7]].map(([a, b]) => P(a, b)), xs = pts.map((p) => p[0]), zs = pts.map((p) => p[1]);
   const st = P(0, 4.8);
   return {
-    items: [{ id: 'Blackjack table', s: R(Math.min(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[1]))), h: 2.1, cls: 'game' }],
+    items: [{ id: 'Blackjack table', s: R(Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)), h: 2.1, cls: 'game' }],
     stations: [{ of: 'Blackjack table', s: C(st[0], st[1], 2.8), cls: 'game' }],
     corridors: [],
   };
@@ -184,7 +183,7 @@ const nave = (() => {
 // =====================================================================================================================================
 const cross = (() => {
   // numbers from src/casinoPlan.js (what the game builds), so drift from the game fails here
-  const { C, WING } = HALL, CZ = C[1];
+  const { WING } = HALL, CZ = HALL.C[1];
   const floor = floorShapes();
   const eDuck = duck((u, v) => [u, DUCK.wallZ + v], DUCK.x0 - 2.2, 1.9, 5.4, true);
   const lane0 = DUCK.wallZ + 1.9 + 6.3;
@@ -196,18 +195,18 @@ const cross = (() => {
     classic(CLASSIC.wallZ, [CLASSIC.xs.reduce((a, b) => a + b) / CLASSIC.xs.length, 0], 'N'),
     blackjack(BJ.x, BJ.z, BJ.yaw),
     eDuck,
-    { items: [prop('Chip bar', C_(0, CZ, 4.7), 4.2, 'new', { free: true }), prop('Roped lounge (W)', R(-54.4, -49.2, WING.z0, WING.z0 + 3.2), 1.1, 'new'), prop('Roped lounge (E)', R(49.6, 55, WING.z0, WING.z0 + 5.6), 1.1, 'new')], stations: [], corridors: [] },
+    { items: [prop('Chip bar', C(0, CZ, 4.7), 4.2, 'new', { free: true }), prop('Roped lounge (W)', R(-54.4, -49.2, WING.z0, WING.z0 + 3.2), 1.1, 'new'), prop('Roped lounge (E)', R(49.6, 55, WING.z0, WING.z0 + 5.6), 1.1, 'new')], stations: [], corridors: [] },
   );
   const piers = [];
-  for (const a of [45, 135, 225, 315]) piers.push(prop('Rotunda pier', C_(Math.cos((a * Math.PI) / 180) * 13, CZ + Math.sin((a * Math.PI) / 180) * 13, 1.0), 14, 'struct', { struct: true }));
+  for (const a of [45, 135, 225, 315]) piers.push(prop('Rotunda pier', C(Math.cos((a * Math.PI) / 180) * 13, CZ + Math.sin((a * Math.PI) / 180) * 13, 1.0), 14, 'struct', { struct: true }));
   return {
     name: 'B: The Crater Cross', file: 'casino-layout-b.svg',
     floor, doors: [{ x: 0, z: HALL.FRONT, w: HALL.DOOR * 2 }], ...g, items: [...g.items, ...piers],
     overhead: [['chandelier', 0, 6], ['dome', 0, CZ, 14], ['chandelier', -32, -13], ['chandelier', 33, -13], ['sign', 0, 8, 12, 2.5]],
     walls: 'union', planWalls: true,
     outside: [
-      prop('Porte-cochere', R(-10, 10, 16.4, 23.6), 11, 'new'), prop('Slot carousel W', C_(-19.5, 40, 7.6), 10, 'ext'), prop('Slot carousel E', C_(19.5, 40, 7.6), 10, 'ext'),
-      prop('Giant die (W court)', C_(-34, 7, 4.8), 14, 'ext'), prop('Roulette wheel (E court)', R(29, 39, 6, 8), 22, 'ext'),
+      prop('Porte-cochere', R(-10, 10, 16.4, 23.6), 11, 'new'), prop('Slot carousel W', C(-19.5, 40, 7.6), 10, 'ext'), prop('Slot carousel E', C(19.5, 40, 7.6), 10, 'ext'),
+      prop('Giant die (W court)', C(-34, 7, 4.8), 14, 'ext'), prop('Roulette wheel (E court)', R(29, 39, 6, 8), 22, 'ext'),
       prop('Court pool W', R(-24, -14, 2.5, 10.5), 0.2, 'new'), prop('Court pool E', R(14, 24, 2.5, 10.5), 0.2, 'new'),
     ],
     note: 'Footprint: a crossing with four rounded corners (r 16.5), foyer and Plinko arm 18 wide, wings 22 x 45; about 3,090 m2 inside (the current hall is 2,200).',
@@ -225,11 +224,11 @@ function check(L) {
   for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
     const a = all[i], b = all[j];
     if (a.struct && b.struct) continue;
-    const d = dist(a.s, b.s);
+    const d = dist(a.s, b.s), pier = a.struct || b.struct, need = pier ? 1.2 : AISLE;
     const same = (a.grp && a.grp === b.grp) || (a.id === b.id);
     if (d < 0 && !same) bad.push(`${a.id} overlaps ${b.id}`);
-    else if (d < (a.struct || b.struct ? 1.2 : AISLE) && !same) bad.push(`${a.id} to ${b.id}: ${d.toFixed(2)} m (needs ${a.struct || b.struct ? 1.2 : AISLE})`);
-    else if (!same && d < 12) tight.push([d, `${a.id} / ${b.id}${a.struct || b.struct ? ' (pier)' : ''}`, !(a.struct || b.struct)]);
+    else if (d < need && !same) bad.push(`${a.id} to ${b.id}: ${d.toFixed(2)} m (needs ${need})`);
+    else if (!same && d < 12) tight.push([d, `${a.id} / ${b.id}${pier ? ' (pier)' : ''}`, !pier]);
   }
   for (const st of L.stations) {
     if (!onFloorShape(L, st.s)) bad.push(`${st.of} station: spills off the floor`);
@@ -268,9 +267,10 @@ function check(L) {
 // ---------- the drawing ----------
 const S = 9, PAD = 36;
 function draw(L) {
-  const pts = [...L.floor.flatMap((s) => (s.k === 'r' ? [[s.x0, s.z0], [s.x1, s.z1]] : [[s.x - s.r, s.z - s.r], [s.x + s.r, s.z + s.r]])), ...L.outside.flatMap((o) => (o.s.k === 'r' ? [[o.s.x0, o.s.z0], [o.s.x1, o.s.z1]] : [[o.s.x - o.s.r, o.s.z - o.s.r], [o.s.x + o.s.r, o.s.z + o.s.r]]))];
-  const x0 = Math.min(...pts.map((p) => p[0])) - WALL_T - 3, x1 = Math.max(...pts.map((p) => p[0])) + WALL_T + 3;
-  const z0 = Math.min(...pts.map((p) => p[1])) - WALL_T - 3, z1 = Math.max(...pts.map((p) => p[1])) + WALL_T + 3;
+  const corners = (s) => (s.k === 'r' ? [[s.x0, s.z0], [s.x1, s.z1]] : [[s.x - s.r, s.z - s.r], [s.x + s.r, s.z + s.r]]);
+  const pts = [...L.floor, ...L.outside.map((o) => o.s)].flatMap(corners), xs = pts.map((p) => p[0]), zs = pts.map((p) => p[1]);
+  const x0 = Math.min(...xs) - WALL_T - 3, x1 = Math.max(...xs) + WALL_T + 3;
+  const z0 = Math.min(...zs) - WALL_T - 3, z1 = Math.max(...zs) + WALL_T + 3;
   const W = (x1 - x0) * S + PAD * 2, H = (z1 - z0) * S + PAD * 2 + 44;
   const X = (x) => (x - x0) * S + PAD, Z = (z) => (z - z0) * S + PAD + 30;
   const shape = (s, attr) => (s.k === 'r' ? `<rect x="${X(s.x0)}" y="${Z(s.z0)}" width="${(s.x1 - s.x0) * S}" height="${(s.z1 - s.z0) * S}" ${attr}/>` : `<circle cx="${X(s.x)}" cy="${Z(s.z)}" r="${s.r * S}" ${attr}/>`);

@@ -19,7 +19,7 @@ function chimeraCells(list, w = SP_W, d = SP_D, yaw = 0) {
     anims.push(c.anim);
     return cell(c.root, name, w, d, { h: 0.7 });
   });
-  return { cells, update: (dt, t) => { for (const a of anims) a(t, GAIT); } };
+  return { root: line(cells).root, update: (dt, t) => { for (const a of anims) a(t, GAIT); } };
 }
 
 // ---- the eight pure species
@@ -27,8 +27,7 @@ function speciesItem() {
   return {
     id: 'creatures.species', label: 'CHIMERA SPECIES (8)', w: span(LIVING.length, SP_W), d: SP_D,
     make() {
-      const R = chimeraCells(LIVING.map((k) => [k.toUpperCase(), { seed: 11, body: k, legs: k, head: k, extraHead: null, mods: [], size: 1, tint: PALETTE[k][0] }]));
-      return { root: line(R.cells).root, update: R.update };
+      return chimeraCells(LIVING.map((k) => [k.toUpperCase(), { seed: 11, body: k, legs: k, head: k, extraHead: null, mods: [], size: 1, tint: PALETTE[k][0] }]));
     },
   };
 }
@@ -40,8 +39,7 @@ function modsItem() {
   return {
     id: 'creatures.mutations', label: 'CHIMERA MUTATIONS (8)', w: span(mods.length, W), d: SP_D + 1,
     make() {
-      const R = chimeraCells(mods.map((m) => [m.toUpperCase(), { seed: 11, body: 'person', legs: 'car', head: 'alien', extraHead: null, mods: [m], size: 1, tint: PALETTE.person[0] }]), W, SP_D + 1, 1.2); // (side-on: kits sit on the back)
-      return { root: line(R.cells).root, update: R.update };
+      return chimeraCells(mods.map((m) => [m.toUpperCase(), { seed: 11, body: 'person', legs: 'car', head: 'alien', extraHead: null, mods: [m], size: 1, tint: PALETTE.person[0] }]), W, SP_D + 1, 1.2); // (side-on: kits sit on the back)
     },
   };
 }
@@ -57,8 +55,7 @@ function hybridsItem() {
   return {
     id: 'creatures.hybrids', label: 'HYBRIDS', w: span(mixes.length, 5.2), d: 5,
     make() {
-      const R = chimeraCells(mixes, 5.2, 5);
-      return { root: line(R.cells).root, update: R.update };
+      return chimeraCells(mixes, 5.2, 5);
     },
   };
 }
@@ -112,11 +109,7 @@ function followersItem() {
   return {
     id: 'creatures.followers', label: 'REACTOR PETS', w: span(2, 3.4), d: 2.8,
     make() {
-      const cells = [
-        cell(makeFollowerModel('rock'), 'PET ROCK', 3.4, 2.8, { h: 0.6, z: 1.9 }),
-        cell(makeFollowerModel('dirt'), 'DIRT GOLEM', 3.4, 2.8, { h: 0.6, z: 1.9 }),
-      ];
-      return { root: line(cells).root };
+      return { root: line([['rock', 'PET ROCK'], ['dirt', 'DIRT GOLEM']].map(([k, name]) => cell(makeFollowerModel(k), name, 3.4, 2.8, { h: 0.6, z: 1.9 }))).root };
     },
   };
 }

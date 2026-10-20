@@ -13,6 +13,7 @@ import { inkMat } from '../src/toon.js';
 
 const Q = new URLSearchParams(location.search);
 const num = (k, d) => (Q.has(k) ? parseFloat(Q.get(k)) : d);
+const hex = (k, d) => (Q.has(k) ? parseInt(Q.get(k), 16) : d);
 
 await Promise.all([loadFonts(), loadRunnerParts(), loadShipParts({ ships: Q.get('ships') || undefined }), loadOutpostParts({ force: true })]);
 
@@ -57,7 +58,7 @@ function outpostOverlay(t) {
 // Does template b hold a's gameplay data (within tol m)? A box as (hx, hz, yaw) or turned a quarter counts as the same.
 function outpostParity(a, b, tol = 0.01) {
   const same = (x, y) => Math.abs(x - y) <= tol;
-  const turn = (p, q) => { const d = Math.abs(Math.sin(p - q)); return d <= tol; };
+  const turn = (p, q) => Math.abs(Math.sin(p - q)) <= tol;
   const eq = {
     box: (p, q) => same(p.x, q.x) && same(p.y, q.y) && same(p.z, q.z) && same(p.hy, q.hy) &&
       ((same(p.hx, q.hx) && same(p.hz, q.hz) && turn(p.yaw, q.yaw)) || (same(p.hx, q.hz) && same(p.hz, q.hx) && turn(p.yaw + Math.PI / 2, q.yaw))),
@@ -67,7 +68,7 @@ function outpostParity(a, b, tol = 0.01) {
   const lists = (what, xs, ys, typed) => {
     const left = ys.slice(), miss = [];
     for (const p of xs) {
-      const k = left.findIndex((q) => (typed ? p.type === q.type : true) && eq[typed ? p.type : 'box'](p, q));
+      const k = left.findIndex((q) => (!typed || p.type === q.type) && eq[typed ? p.type : 'box'](p, q));
       if (k < 0) miss.push(p); else left.splice(k, 1);
     }
     return { what, of: xs.length, matched: xs.length - miss.length, missing: miss, extra: left };
@@ -88,15 +89,15 @@ function outpostStats(t) {
 }
 
 const m = Q.get('m') || 'shuttle';
-let model, rig = null, anim = null, height = 2;
+let model, rig = null, anim = null;
 if (m === 'shuttle' || m === 'freighter') {
-  rig = m === 'shuttle' ? makeShuttle({ stripe: Q.has('stripe') ? parseInt(Q.get('stripe'), 16) : undefined }) : makeFreighter({ faction: Q.get('faction') || undefined });
+  rig = m === 'shuttle' ? makeShuttle({ stripe: hex('stripe') }) : makeFreighter({ faction: Q.get('faction') || undefined });
   model = rig.root;
-  rig.setGear(num('gear', 1));
+  const gear = num('gear', 1);
+  rig.setGear(gear);
   rig.setRamp(num('ramp', 0));
   if (Q.has('sign')) rig.setSign(Q.get('sign')); // (shuttle route board: &sign=TRANQ)
-  model.position.y = rig.gearH * num('gear', 1) + (num('gear', 1) < 1 ? 4 : 0);
-  height = m === 'shuttle' ? 8 : 20;
+  model.position.y = rig.gearH * gear + (gear < 1 ? 4 : 0);
   // &cols=1 draws the freighter's collision boxes (straight from rig.decks)
   if (Q.get('cols') === '1' && rig.decks) {
     const cm = new THREE.LineBasicMaterial({ color: 0xff2e63, depthTest: false, transparent: true });
@@ -109,20 +110,17 @@ if (m === 'shuttle' || m === 'freighter') {
   }
 } else if (m === 'interceptor') {
   // &color=hex &trim=hex  &speed=<m/s> (stretches the rocket flames, lays the whips back)
-  const hex = (k, d) => (Q.has(k) ? parseInt(Q.get(k), 16) : d);
   const ic = makeInterceptor({ color: hex('color', 0xfff4e0), trim: hex('trim', 0xffd23f) });
   model = ic.root;
   anim = (t) => ic.anim(t, num('speed', 0));
-  height = 3;
 } else if (m === 'apc') {
   // &turret=<yaw rad>&barrel=<elevation rad> to pose it; &color=hex &trim=hex (faction colours)
-  const apc = makeApc({ color: Q.has('color') ? parseInt(Q.get('color'), 16) : 0x6b6f78, trim: Q.has('trim') ? parseInt(Q.get('trim'), 16) : 0xff3b5c });
+  const apc = makeApc({ color: hex('color', 0x6b6f78), trim: hex('trim', 0xff3b5c) });
   apc.turret.rotation.y = num('turret', 0);
   apc.barrel.rotation.x = -num('barrel', 0);
   model = apc.root;
   model.scale.setScalar(1.35);
   model.position.y = 0.2;
-  height = 4;
 } else if (m === 'landtrain') {
   // &type=moonliner|prospector  &faction=spacecom|vostok|kepler|meridian  &cars=pax,pax,pax | tank,cargo,blast
   // &unit=0 tractor alone, 1..n that trailer alone
@@ -136,38 +134,33 @@ if (m === 'shuttle' || m === 'freighter') {
     t.eye.position.z = 1.5;
     if (only < 0 || only === i + 1) model.add(t.root);
   });
-  height = 3;
 } else if (m === 'crane') {
   // &h=34 (mast m; the model is 34)  &slew=<rad>  &trolley=0..1 (along its run)  &rope=<m>  &color=hex  &faction=kepler|meridian|spacecom|vostok (cargo)
-  const c = makeTowerCrane({ color: Q.has('color') ? parseInt(Q.get('color'), 16) : 0xffd23f, faction: Q.get('faction') || 'kepler', h: num('h', 34) });
+  const c = makeTowerCrane({ color: hex('color', 0xffd23f), faction: Q.get('faction') || 'kepler', h: num('h', 34) });
   const sc = num('h', 34) / 34;
   c.slew.rotation.y = num('slew', 0);
   c.trolley.position.x = (CRANE_TROLLEY_MIN + CRANE_TROLLEY_SPAN * num('trolley', 0.5)) * sc;
   c.cable.scale.y = num('rope', 14);
   c.hook.position.y = (-0.7 - num('rope', 14)) * sc;
   model = c.root;
-  height = 25;
 } else if (m === 'gantry') {
   // &trolley=0..1 (along the girder)  &rope=<m>  &color=hex  &faction=kepler|meridian|spacecom|vostok (cargo)
-  const c = makeGantryCrane({ color: Q.has('color') ? parseInt(Q.get('color'), 16) : 0xffd23f, faction: Q.get('faction') || 'meridian' });
+  const c = makeGantryCrane({ color: hex('color', 0xffd23f), faction: Q.get('faction') || 'meridian' });
   c.trolley.position.z = GANTRY_TROLLEY_SPAN * (2 * num('trolley', 0.5) - 1);
   c.cable.scale.y = num('rope', 6);
   c.hook.position.y = -0.7 - num('rope', 6);
   model = c.root;
-  height = 14;
 } else if (m === 'cargobox') {
   // yard box container alone: &faction=kepler|meridian|spacecom|vostok  &n=3 (a stack)
   model = new THREE.Group();
   const n = num('n', 1);
   for (let i = 0; i < n; i++) { const b = makeCargoBox({ faction: Q.get('faction') || 'meridian' }).root; b.position.y = i * 3.2; model.add(b); }
-  height = 2;
 } else if (m === 'garage') {
   // &kind=main|small  &open=101 (bays up, bay 0 first: 1 open, 0 shut)  &trim=hex
   const o = (Q.get('open') || '101').padEnd(3, '0').split('').map((c) => c === '1');
-  const gar = makeGarage({ open: o, kind: Q.get('kind') || 'main', trim: Q.has('trim') ? parseInt(Q.get('trim'), 16) : 0x2ec4ff });
+  const gar = makeGarage({ open: o, kind: Q.get('kind') || 'main', trim: hex('trim', 0x2ec4ff) });
   model = gar.root;
   anim = (t) => gar.update(t);
-  height = 12;
 } else if (m === 'slots') {
   // casino slot cabinet (build_slots.py). &n=4 in a row, &gap=3.2 apart  &ring=7 a carousel round a pillar at &rr=3.6  &idx=0 first one's colour and name
   // &pull=rad turns the lever  &play=1 plays them like a patron (lever, lamp bar, reels)
@@ -185,11 +178,9 @@ if (m === 'shuttle' || m === 'freighter') {
     const base = new THREE.Mesh(new THREE.CylinderGeometry(rr + 3.8, rr + 4, 0.3, 40), new THREE.MeshToonMaterial({ color: 0x2a1450 })); base.position.y = 0.15; model.add(base);
     const pil = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.6, 7.5, 16), new THREE.MeshToonMaterial({ color: 0x5a1a8f })); pil.position.y = 3.75; model.add(pil);
     for (let k = 0; k < ring; k++) { const a = (k / ring) * Math.PI * 2; add(k, Math.cos(a) * rr, Math.sin(a) * rr, Math.atan2(Math.cos(a), Math.sin(a))); }
-    height = 9;
   } else {
     const n = num('n', 4), gap = num('gap', 3.2);
     for (let i = 0; i < n; i++) add(i, (i - (n - 1) / 2) * gap, 0, 0);
-    height = 5;
   }
   let nextPull = 0;
   anim = (t, sp, dt) => {
@@ -204,30 +195,25 @@ if (m === 'shuttle' || m === 'freighter') {
   const part = Q.get('part') || 'lamp';
   model = new THREE.Group();
   if (part === 'lamp') {
-    const acc = Q.has('accent') ? parseInt(Q.get('accent'), 16) : 0xff2e88;
+    const acc = hex('accent', 0xff2e88);
     for (let i = 0; i < num('n', 1); i++) { const l = makeLampPost(i % 2 ? 0x2ee6ff : acc); l.position.x = i * 4; model.add(l); }
-    height = 9;
   } else if (part === 'fountain') {
     // &top=chip|dollar (centrepiece)  &accent=hex (dollar sign colour)
-    const f = makeFountain({ top: Q.get('top') || 'chip', accent: Q.has('accent') ? parseInt(Q.get('accent'), 16) : 0x2ec4ff });
+    const f = makeFountain({ top: Q.get('top') || 'chip', accent: hex('accent', 0x2ec4ff) });
     model.add(f.root);
     anim = (t, sp, dt) => f.update(t, dt);
-    height = 9;
   } else if (part === 'bouncer') {
     const b = makeBouncer();
     model.add(b.root);
     anim = (t) => { b.head.rotation.y = Math.sin(t * 0.7) * 0.5; };
-    height = 2.5;
   } else if (part === 'chandelier') {
     const c = makeChandelier();
     c.root.position.y = 3;   // (hangs from a ceiling 3.3 m above its centre)
     model.add(c.root);
     anim = (t, sp, dt) => { c.spin.rotation.y += dt * 0.3; };
-    height = 6;
   } else if (part === 'blackjack') {
     model.add(blackjackTable());
     [0xfff4e0, 0xff2a4a, 0x2ee6ff, 0x7dff6a, 0x16121f, 0xc77dff, 0xffd23f].forEach((c, i) => { const g = makeChipStack(c, 5); g.position.set(-1.5 + i * 0.5, 1.155, 1.7); model.add(g); });
-    height = 5;
   } else if (part === 'duckderby') {
     // Duck Derby pieces in a row (build_duck.py): four racers, kiosk, rail post and rope, start gate and grille, finish arch
     let x = 0;
@@ -235,15 +221,13 @@ if (m === 'shuttle' || m === 'freighter') {
     [0xffd23f, 0xff2e88, 0x2ee6ff, 0x7dff6a].forEach((c, i) => { const d = makeRacer(i + 1, c, 0xff9f1c); put(d.root, 1.8, 0.4); });
     put(makeDerbyPart('dd_kiosk'), 3);
     const post = makeDerbyPart('dd_railpost'), rope = makeDerbyPart('dd_rope');
-    put(post, 3.5); rope.position.x = post.position.x - 0.0; model.add(rope);
+    put(post, 3.5); rope.position.x = post.position.x; model.add(rope);
     const gate = makeDerbyPart('dd_gate'), grille = makeDerbyPart('dd_grille');
     put(gate, 1); grille.position.set(gate.position.x, 1.35, 0); model.add(grille);
     put(makeDerbyPart('dd_finish'), 1);
     model.position.x = -x / 2;
-    height = 7;
   } else if (part === 'claw') {
     model.add(makeClawMachine().stat);   // (empty; the game fills it via clawSim.js / clawView.js)
-    height = 12;
   } else if (part === 'clawthings') {
     // every claw-tank item kind at its floating size, then the claw (build_claw.py)
     let x = 0;
@@ -259,12 +243,10 @@ if (m === 'shuttle' || m === 'freighter') {
     }
     const hd = makeClawHead(); hd.position.y = 1; put(hd, 1.8);
     model.position.x = -x / 2;
-    height = 2.5;
   } else {
     const sg = makeCasinoSign(part === 'welcome' ? 'welcome_sign' : 'wall_sign');
     sg.root.position.y = part === 'welcome' ? 7 : 3;
     model.add(sg.root);
-    height = 6;
   }
 } else if (m === 'dish') {
   // &kind=cryo|gantry|field|head  &faction=kepler|meridian|spacecom|vostok|daedalus  &no=01..04 (array dish number)  &size=30 (the 30 m mount scales to it)
@@ -280,7 +262,6 @@ if (m === 'shuttle' || m === 'freighter') {
     if (Q.get('sweep') === '1') { st.yaw.rotation.y = num('az', 0) + t * 0.12; st.tilt.rotation.x = -0.6 + Math.sin(t * 0.24) * 0.25; }
     for (const o of lamps) o.visible = Math.sin(t * 4) > -0.3;
   };
-  height = 24;
   Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, far: 400 });
   sun.shadow.camera.updateProjectionMatrix();
 } else if (m === 'runner') {
@@ -304,12 +285,10 @@ if (m === 'shuttle' || m === 'freighter') {
   let simT = 0;
   anim = (t, sp, dt) => { if (Q.get('manual') === '1') { sim.draw && sim.tails && sim.tails.forEach((T) => sim.draw(T)); return; } simT += dt; sim.update(Math.max(dt, 1e-3), fwd.clone().multiplyScalar(Q.has('stop') && simT > num('stop', 0) ? 0 : num('speed', 0)), upv, { cargo }); };
   model = R.root;
-  height = 2.2;
   window.runner = R;
 } else if (m === 'rover') {
   // &style=civil|military|pirate|all (all three side by side)  &color=hex &trim=hex &flag=hex  &driver=1 (road-traffic buggy with driver; &k=<n> picks it)
   // &gun=<yaw rad>
-  const hex = (k, d) => (Q.has(k) ? parseInt(Q.get(k), 16) : d);
   const LOOKS = { civil: { color: 0x6a8f3a, trim: 0xff9f1c }, military: { color: 0x55607a, trim: 0x2ec4ff }, pirate: { color: 0x7b2ff7, trim: 0x7dff3a } };
   const styles = Q.get('style') === 'all' ? ['civil', 'military', 'pirate'] : [Q.get('style') || 'civil'];
   const { buildBuggyRig } = Q.get('driver') === '1' ? await import('../src/traffic.js') : {};
@@ -324,7 +303,6 @@ if (m === 'shuttle' || m === 'freighter') {
     if (r.anim) anims.push(r.anim);
   });
   anim = (t, sp) => anims.forEach((a) => a(t, sp));
-  height = 3;
 } else if (m === 'hovercar') {
   model = makeHoverCar({}).root;
   model.position.y = 2;
@@ -344,7 +322,7 @@ if (m === 'shuttle' || m === 'freighter') {
   anim = (t, sp) => anims.forEach((a) => a(t, sp));
 } else if (m === 'outpost') {
   // &kind=mast|tower (any kind in outposts.glb; src=kit takes any Kit kind)  &src=kit|glb|both (default both, side by side)  &wreck=1  &color=rrggbb  &cols=0 hides the colliders
-  const kind = Q.get('kind') || 'mast', wreck = Q.get('wreck') === '1', color = Q.has('color') ? parseInt(Q.get('color'), 16) : 0x2ec4ff;
+  const kind = Q.get('kind') || 'mast', wreck = Q.get('wreck') === '1', color = hex('color', 0x2ec4ff);
   const srcs = Q.get('src') === 'kit' ? ['kit'] : Q.get('src') === 'glb' ? ['glb'] : ['kit', 'glb'];
   model = new THREE.Group();
   const lines = [];
@@ -386,7 +364,7 @@ if (m === 'shuttle' || m === 'freighter') {
   if (m === 'mite') genes = null;
   else if (Q.has('parts')) {
     const [body, legs, head, extraHead] = Q.get('parts').split(',');
-    genes = { seed: num('seed', 1) | 0, body, legs, head, extraHead: extraHead || null, mods: (Q.get('mods') || '').split(',').filter(Boolean), size: num('size', 1.1), tint: Q.has('tint') ? parseInt(Q.get('tint'), 16) : 0xff9f1c };
+    genes = { seed: num('seed', 1) | 0, body, legs, head, extraHead: extraHead || null, mods: (Q.get('mods') || '').split(',').filter(Boolean), size: num('size', 1.1), tint: hex('tint', 0xff9f1c) };
   } else {
     const rr = (() => { let s = num('seed', 7) | 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); })();
     const items = [{ kind: LIVING[Math.floor(rr() * LIVING.length)] }, { kind: LIVING[Math.floor(rr() * LIVING.length)] }];
@@ -396,7 +374,6 @@ if (m === 'shuttle' || m === 'freighter') {
   const c = genes ? makeChimera(genes) : makeMite();
   model = c.root;
   anim = c.anim;
-  height = c.height;
   document.getElementById('ui').textContent = genes ? `${genes.body}/${genes.legs}/${genes.head}${genes.extraHead ? '+' + genes.extraHead : ''} [${genes.mods.join(',')}] size ${genes.size.toFixed(2)}` : 'mite';
 }
 scene.add(model);

@@ -30,11 +30,9 @@ function playerItem() {
     id: 'runner.player', label: 'RUNNER (FRONT, BACK)', w: span(2, RW), d: RD,
     make() {
       // own: private materials, so the wardrobe can recolour it
-      const front = restRunner(makeRunner({ suit: 0xff4f2e, accent: 0x2ee6ff, scarf: 0xffd23f, own: true }));
-      const back = restRunner(makeRunner({ suit: 0xff4f2e, accent: 0x2ee6ff, scarf: 0xffd23f, own: true }));
+      const [front, back] = [0, 1].map(() => restRunner(makeRunner({ suit: 0xff4f2e, accent: 0x2ee6ff, scarf: 0xffd23f, own: true })));
       back.root.rotation.y = Math.PI;
-      const L = line([cell(front.root, 'FRONT', RW, RD), cell(back.root, 'BACK', RW, RD)]);
-      return { root: L.root };
+      return { root: line([cell(front.root, 'FRONT', RW, RD), cell(back.root, 'BACK', RW, RD)]).root };
     },
   };
 }
@@ -200,15 +198,13 @@ function boltItem() {
       const root = new THREE.Group();
       D.root.position.y = 1.6;
       root.add(D.root);
-      let t0 = 0;
       return {
         root,
         update: (dt, t) => {
-          t0 = t;
           for (const r of D.rotors) r.rotation.y += dt * 40;
-          D.tip.visible = Math.sin(t0 * 5) > 0;
-          D.jet.scale.y = 0.8 + Math.sin(t0 * 30) * 0.2;
-          D.root.position.y = 1.6 + Math.sin(t0 * 2) * 0.12;
+          D.tip.visible = Math.sin(t * 5) > 0;
+          D.jet.scale.y = 0.8 + Math.sin(t * 30) * 0.2;
+          D.root.position.y = 1.6 + Math.sin(t * 2) * 0.12;
         },
       };
     },

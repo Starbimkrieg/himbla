@@ -9,6 +9,7 @@ import { FRONT_OUT, HALL } from '../src/casinoPlan.js';
 const FZ = 98, PR = 17;                                   // plaza centre and radius
 const rect = (id, x0, x1, z0, z1, cls, extra = {}) => ({ id, s: { k: 'r', x0, x1, z0, z1 }, cls, ...extra });
 const circ = (id, x, z, r, cls, extra = {}) => ({ id, s: { k: 'c', x, z, r }, cls, ...extra });
+const bayRect = (b) => ({ k: 'r', x0: b.x - b.w / 2, x1: b.x + b.w / 2, z0: b.z - b.d / 2, z1: b.z + b.d / 2 });
 
 // ---- today ----
 const current = () => {
@@ -87,11 +88,11 @@ const gap = (a, b) => {                                    // distance between s
   const dx = Math.max(a.x0 - b.x1, b.x0 - a.x1), dz = Math.max(a.z0 - b.z1, b.z0 - a.z1);
   return dx > 0 || dz > 0 ? Math.hypot(Math.max(dx, 0), Math.max(dz, 0)) : Math.max(dx, dz);
 };
-export function check(L) {
+function check(L) {
   const issues = [], solids = [];
   for (const it of L.items) solids.push({ id: it.id, s: it.s });
   for (const l of L.lamps) solids.push({ id: 'Lamp post', s: { k: 'c', x: l.x, z: l.z, r: 0.7 * l.sc } });
-  for (const b of L.bays) solids.push({ id: 'Bay', s: { k: 'r', x0: b.x - b.w / 2, x1: b.x + b.w / 2, z0: b.z - b.d / 2, z1: b.z + b.d / 2 }, bay: true });
+  for (const b of L.bays) solids.push({ id: 'Bay', s: bayRect(b), bay: true });
   for (const b of L.barrier) solids.push({ id: 'Card wall', s: b, wall: true });
   let tight = 1e9, tightPair = '';
   for (let i = 0; i < solids.length; i++) for (let j = i + 1; j < solids.length; j++) {
@@ -113,7 +114,7 @@ const PXM = 7, X0 = -80, Z0 = -2, W = 160, H = 126;
 const px = (x) => ((x - X0) * PXM).toFixed(1), pz = (z) => ((z - Z0) * PXM).toFixed(1), len = (m) => (m * PXM).toFixed(1);
 const C = { ground: '#2a2442', gridl: '#3b3459', asphalt: '#4a4060', paving: '#8a6fb0', gold: '#ffd23f', carpet: '#d7263d', game: '#ff2e88', ext: '#2ee6ff', prop: '#ffd23f', hall: '#5a1a8f', wall: '#7a2fb0', hedge: '#2f6b3a', card: '#fff4e0', lamp: '#fff6a8', bay: '#c9c3d9', car: '#7dff6a' };
 const sh = (s, fill, extra = '') => (s.k === 'r' ? `<rect x="${px(s.x0)}" y="${pz(s.z0)}" width="${len(s.x1 - s.x0)}" height="${len(s.z1 - s.z0)}" fill="${fill}" ${extra}/>` : s.k === 'c' ? `<circle cx="${px(s.x)}" cy="${pz(s.z)}" r="${len(s.r)}" fill="${fill}" ${extra}/>` : `<polygon points="${s.pts.map(([x, z]) => `${px(x)},${pz(z)}`).join(' ')}" fill="${fill}" ${extra}/>`);
-export function svg(L, proposed) {
+function svg(L, proposed) {
   const o = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W * PXM} ${H * PXM}" font-family="ui-monospace,Menlo,monospace">`, `<rect width="100%" height="100%" fill="${C.ground}"/>`];
   for (let x = -80; x <= 80; x += 10) o.push(`<line x1="${px(x)}" y1="0" x2="${px(x)}" y2="${H * PXM}" stroke="${C.gridl}" stroke-width="${x === 0 ? 1.4 : 0.6}"/>`);
   for (let z = 0; z <= 124; z += 10) o.push(`<line x1="0" y1="${pz(z)}" x2="${W * PXM}" y2="${pz(z)}" stroke="${C.gridl}" stroke-width="0.6"/><text x="6" y="${(+pz(z) - 3).toFixed(1)}" fill="#8c84b0" font-size="11">z ${z}</text>`);
@@ -127,7 +128,7 @@ export function svg(L, proposed) {
   for (const a of L.paving) o.push(sh(a, C.paving, 'opacity="0.9"'));
   if (L.crossing) for (let i = 0; i < 9; i++) o.push(sh({ k: 'r', x0: -8.6 + i * 1.9 + 0.2, x1: -8.6 + i * 1.9 + 1.3, z0: L.crossing.z0, z1: L.crossing.z1 }, i % 2 ? C.gold : '#2a1450'));
   if (L.carpet) o.push(sh({ k: 'r', ...L.carpet }, C.carpet));
-  for (const b of L.bays) { o.push(sh({ k: 'r', x0: b.x - b.w / 2, x1: b.x + b.w / 2, z0: b.z - b.d / 2, z1: b.z + b.d / 2 }, 'none', `stroke="${C.bay}" stroke-width="0.8" opacity="0.6"`)); if (b.taken) o.push(sh({ k: 'r', x0: b.x - 1.5, x1: b.x + 1.5, z0: b.z - 2.2, z1: b.z + 2.2 }, C.car, 'opacity="0.75" rx="6"')); }
+  for (const b of L.bays) { o.push(sh(bayRect(b), 'none', `stroke="${C.bay}" stroke-width="0.8" opacity="0.6"`)); if (b.taken) o.push(sh({ k: 'r', x0: b.x - 1.5, x1: b.x + 1.5, z0: b.z - 2.2, z1: b.z + 2.2 }, C.car, 'opacity="0.75" rx="6"')); }
   for (const b of L.barrier) o.push(sh(b, proposed ? C.card : C.hedge));
   for (const b of L.bollards || []) o.push(sh({ k: 'c', x: b.x, z: b.z, r: 0.45 }, C.gold));
   for (const it of L.items) o.push(sh(it.s, C[it.cls] || '#fff', `opacity="${it.cls === 'ext' ? 0.55 : 0.8}" stroke="#120a1e" stroke-width="1"`));

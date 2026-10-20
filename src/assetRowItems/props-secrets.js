@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { animate, lineUp } from './common.js';
-import { seat } from './props-util.js';
+import { V, seat } from './props-util.js';
 import { toon, glow, ink } from '../toon.js';
 import { Kit, BEAM } from '../outpostModels.js';
 import { makeSat7, Secrets } from '../secrets.js';
@@ -9,7 +9,6 @@ import { World } from '../world.js';
 
 // 12 · SECRETS & THE SPINDLE'S PROPS (the Spindle rock itself is skipped: see the note at the bottom).
 
-const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const TEAL = 0x7dffd4;
 
 // ---- SAT-7 "Lantern" (secrets.js makeSat7) ---------------------------------------------------------------------------
@@ -145,9 +144,8 @@ function extractionPad() {
 }
 function mothership() {
   const m = makeMothership();
-  const p = seat(m.root, { y: 14 }); // hovering (92 m up in the game)
   return {
-    root: p.root,
+    root: seat(m.root, { y: 14 }).root, // hovering (92 m up in the game)
     update: (dt, t) => { m.eyes.forEach((e, i) => e.scale.setScalar(1 + Math.sin(t * 3 + i * 2.1) * 0.12)); },
   };
 }

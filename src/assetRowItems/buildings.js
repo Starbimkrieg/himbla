@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { Kit, T, outpostTemplate, container, crate, tank, junkHeap, sandbags, lightString } from '../outpostModels.js';
 import { foundedTemplate } from '../storyAssets.js';
 import { rubbleModel } from '../territory.js';
-import { FACTIONS } from '../locations.js';
 import { mulberry32 } from '../rng.js';
 import { World } from '../world.js';
 import { DISH_SIZE } from '../models.js';
@@ -12,13 +11,11 @@ import {
   wreckHull, penTerminal, jobTerminal, playground, waterTower, greenhouse, commsMast, townHall, towerCrane, gantryCrane, cargoStack, garage, dishStation,
 } from '../settlements.js';
 import { ferrisWheel, carousel } from '../downsFair.js';
-import { animate, together, lineUp } from './common.js';
+import { animate, together, lineUp, factionHex } from './common.js';
 
 // Asset Row group: faction outposts (intact and wreck), settlement building parts, hometown buildings. Items: see index.js.
 // Every make() builds fresh (new Kit, new stand-in world) or clones a baked template; nothing is kept between calls.
 
-const hex = (c) => new THREE.Color(c).getHex();
-const fc = (f) => hex(FACTIONS[f].color);
 const YEL = 0xffd23f;
 
 // ---------------------------------------------------------------------------------------------
@@ -122,7 +119,7 @@ const OUTPOSTS = [
 
 function outpostItem(kind, label, faction, w, d, wreck) {
   return item(`outpost.${kind}${wreck ? '.wreck' : ''}`, `${label}${wreck ? ' (WRECK)' : ''}`, w, d, () => {
-    const t = outpostTemplate(kind, fc(faction), 0, wreck, 'kit');
+    const t = outpostTemplate(kind, factionHex(faction), 0, wreck, 'kit');
     const root = t.root.clone();
     return { root, cols: fixCols(t.cols), update: animate(root) };
   });
@@ -132,7 +129,7 @@ function outpostItem(kind, label, faction, w, d, wreck) {
 const MODULES = ['greenhouse', 'clinic', 'beacon', 'turret', 'market', 'garage', 'turret2'];
 function foundedItem(kind, label, modules, w, d) {
   return item(`outpost.founded.${kind}${modules.length ? '.built' : ''}`, `${label}${modules.length ? ' (ALL MODULES)' : ' (BARE)'}`, w, d, () => {
-    const t = foundedTemplate(kind, fc('kepler'), modules);
+    const t = foundedTemplate(kind, factionHex('kepler'), modules);
     const root = t.root.clone();
     // militia guns sweep idly, like territory.updateGuns with no target
     const guns = [];
@@ -151,10 +148,7 @@ const outposts = {
     foundedItem('homestead', 'FOUNDED HOMESTEAD', MODULES, 74, 74),
     foundedItem('lab', 'FOUNDED FIELD LAB', [], 74, 74),
     foundedItem('lab', 'FOUNDED FIELD LAB', MODULES, 74, 74),
-    item('outpost.founded.rubble', 'FOUNDED OUTPOST RUBBLE', 11, 9, () => {
-      const root = rubbleModel('homestead', 1234);
-      return { root };
-    }, { solid: false }),
+    item('outpost.founded.rubble', 'FOUNDED OUTPOST RUBBLE', 11, 9, () => ({ root: rubbleModel('homestead', 1234) }), { solid: false }),
   ],
 };
 
@@ -288,10 +282,8 @@ const hometown = {
   title: '10 · HOMETOWN',
   items: [
     // Shuttle Pad deck is 28.6 m across; its stairs run 6 m further toward the hall
-    ...HOME.map(([type, label]) => item(`hometown.${type}`, label, type === 'pad' ? 31 : 27, type === 'pad' ? 37 : 27, () => {
-      const slot = slotAt(0);
-      return viaWorld((world, loc) => addBuilding(world, loc, 0, type), { faction: 'kepler', frame: slot });
-    })),
+    ...HOME.map(([type, label]) => item(`hometown.${type}`, label, type === 'pad' ? 31 : 27, type === 'pad' ? 37 : 27,
+      () => viaWorld((world, loc) => addBuilding(world, loc, 0, type), { faction: 'kepler', frame: slotAt(0) }))),
     item('hometown.hall', 'MOON COUNCIL HALL (EMPTY PLOTS)', 139, 188, () => viaWorld((world, loc) => buildHomeTown(world, loc), { faction: 'kepler' }), { big: true }),
   ],
 };

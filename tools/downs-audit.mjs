@@ -116,10 +116,11 @@ if (run('zfight')) {
 if (run('colliders')) {
   const res = await pg.evaluate(() => {
     const loc = window.game.locations.find((l) => l.id === 'downs'), cols = loc._kitCols || [];
+    const rect = (c, hx, hz, hy) => { const s = Math.sin(c.yaw || 0), k = Math.cos(c.yaw || 0); return { P: [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [c.x + a * hx * k + b * hz * s, c.z - a * hx * s + b * hz * k]), y0: c.y - hy, y1: c.y + hy }; };
     const poly = (c) => {
-      if (c.type === 'box') { const s = Math.sin(c.yaw || 0), k = Math.cos(c.yaw || 0); return { P: [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [c.x + a * c.hx * k + b * c.hz * s, c.z - a * c.hx * s + b * c.hz * k]), y0: c.y - c.hy, y1: c.y + c.hy }; }
+      if (c.type === 'box') return rect(c, c.hx, c.hz, c.hy);
       if (c.type === 'cyl') return { P: Array.from({ length: 12 }, (_, i) => [c.x + Math.cos(i / 12 * 2 * Math.PI) * c.r, c.z + Math.sin(i / 12 * 2 * Math.PI) * c.r]), y0: c.y0 ?? 0, y1: c.y1 };
-      if (c.type === 'hcyl') { const s = Math.sin(c.yaw || 0), k = Math.cos(c.yaw || 0); return { P: [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [c.x + a * c.r * k + b * c.len / 2 * s, c.z - a * c.r * s + b * c.len / 2 * k]), y0: c.y - c.r, y1: c.y + c.r }; }
+      if (c.type === 'hcyl') return rect(c, c.r, c.len / 2, c.r);
       return null;
     };
     const items = cols.map((c) => ({ c, g: poly(c) })).filter((o) => o.g);
