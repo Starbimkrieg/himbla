@@ -8,7 +8,7 @@ import { patchBermMaterial } from './moonSkins.js';
 import { market, tickerText } from './market.js';
 import { casinoNode, casinoSlot, lotNode, lotSlot } from './models.js';
 import { waterMesh } from './fountainFx.js';
-import { craneModel, craneSlot, CRANE_H, CRANE_LOAD_DROP, CRANE_TROLLEY_MIN, CRANE_TROLLEY_SPAN, gantryModel, cargoSlot, CARGO_BOX, garageModel, garageSlot, dishModel, dishSlot, DISH_KINDS, powerModel, powerSlot, POWER_PULSE } from './models.js';
+import { craneModel, craneSlot, CRANE_H, CRANE_LOAD_DROP, CRANE_TROLLEY_MIN, CRANE_TROLLEY_SPAN, gantryModel, cargoSlot, CARGO_BOX, garageModel, garageSlot, dishModel, dishSlot, DISH_KINDS, powerModel, powerSlot, POWER_PULSE, habitatModel, habitatSlot } from './models.js';
 
 // Settlements, HQs and landmarks built with the outpost Kit (outpostModels.js): static parts bake into one merged mesh per
 // material plus one ink hull, so a detailed place costs a handful of draw calls. Moving parts (cranes, wheels, tickers, rides)
@@ -479,6 +479,25 @@ export function powerBlock(k, x, z, yaw) {
     for (const [s, m] of pulse) m.color.setHex(powerSlot(s).color).multiplyScalar(f);
   };
   k.dyn(beat, 0, 0, 0);
+  k.at();
+}
+
+// ILMB Kepler Habitat, "Orrery" (tools/blender/build_habitat.py): the family wing in its frame (+x away from the hub), origin at
+// (x, z) turned by yaw. Baked whole but for the orbit ring round the crown, a part of its own that turns. Colliders are the
+// model's `col` pivots (the slanted legs are pitched boxes).
+export function keplerHabitat(k, x, z, yaw) {
+  const M = habitatModel(), I = new THREE.Matrix4();
+  const mat = (slot) => (slot === 'glass' ? GLASS(0x9be7ff, 0.22) : slotMat(habitatSlot(slot)));
+  k.at(x, z, yaw);
+  k.baked(M.root, mat, I);
+  const orbit = part(0xff9f1c, (o) => o.baked(M.orbit, mat, I));
+  orbit.userData.spin = M.orbit.data.spin;
+  k.dyn(orbit, M.orbit.pos.x, M.orbit.pos.y, M.orbit.pos.z);
+  for (const { pos: p, data: d } of M.cols) {
+    if (d.shape === 'box') k.solid(d.hx, d.hy, d.hz, p.x, p.z, d.yaw || 0, p.y, d.pitch || 0);
+    else if (d.shape === 'cyl') k.column(d.r, p.y + d.h, p.x, p.z, p.y);
+    else if (d.shape === 'hcyl') k.hcyl(d.r, d.len, p.x, p.z, d.yaw || 0, p.y);
+  }
   k.at();
 }
 

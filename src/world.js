@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces } from './toon.js';
-import { makeDish, makeDishHead, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK } from './models.js';
+import { makeDish, makeDishHead, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK, HABITAT_DOCK } from './models.js';
 import { mulberry32, clamp } from './rng.js';
 import { FACTIONS, defenseSpots } from './locations.js';
 import { bendPoint, bendQuat, unbendPoint } from './curve.js';
 import { SUN, frameQuat, arcDist, dirFromAngles, tangent, collectNodes } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
 import { Traffic } from './traffic.js';
-import { buildHelium, buildMeridian, dressLab, dressLabInside, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot, settle, powerBlock } from './settlements.js';
+import { buildHelium, buildMeridian, dressLab, dressLabInside, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot, settle, powerBlock, keplerHabitat } from './settlements.js';
 import { makeProp } from './storyAssets.js';
 import { buildHomeTown } from './hometown.js';
 import { spindleGeometry } from './spindle.js';
@@ -1115,12 +1115,6 @@ export class World {
       sph: (lx, ly, lz, r) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'sphere', x, y: ly * S, z, r: r * S }); },
       // horizontal cylinder along wing-local x (arched roofs collide round, not as a box)
       hcyl: (lx, ly, lz, r, len) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'hcyl', x, y: ly * S, z, r: r * S, len: len * S, yaw: yaw + Math.PI / 2 }); },
-      // same along any wing-local direction (dx, dz)
-      hcylDir: (lx, ly, lz, r, len, dx, dz) => {
-        const [x, z] = P(lx, lz);
-        const ex = dx * c + dz * s, ez = -dx * s + dz * c;
-        return this.col(loc, { type: 'hcyl', x, y: ly * S, z, r: r * S, len: len * S, yaw: Math.atan2(ex, ez) });
-      },
       sign: (text, color, lx, y, lz, scale = 0.55) => { const [x, z] = P(lx, lz); hang(loc, textSprite(text, { color, size: 64, scale }), x, y * S, z); },
       flag: (lx, lz, colors, h) => { const [x, z] = P(lx, lz); this.flag(loc, x, z, colors, h); },
       obj: (o, lx, lz, y = 0, ry = 0, dynamic = false) => { const [x, z] = P(lx, lz); o.scale.multiplyScalar(S); return this.put(o, loc, x, z, y * S, yaw + ry, dynamic); },
@@ -1396,106 +1390,15 @@ export class World {
     return POWER_DOCK;
   }
 
-  // Kepler habitat: a big ring on A-frame legs, high enough to skate under, with glowing window decks,
-  // six spokes to a hub tower with an observation crown, and a park inside. The ring is a round tube,
-  // its collider a chain of short tubes along it.
+  // Kepler habitat "Orrery" (tools/blender/build_habitat.py, settlements.keplerHabitat): twelve two-deck modules in a ring on
+  // lander legs, high enough to skate under, three glazed spokes to a hub tower with an observation crown, a park inside, and
+  // an orbit ring turning round the crown. Baked in a settlement kit of its own, lobby included.
   wingHabitat(loc, w) {
-    const orange = 0xff9f1c, cream = 0xfff4e0, dark = 0x3a3550, RR = 22, tr = 5.4, hy = 11.5;
-    const at = (t, r) => [Math.cos(t) * r, Math.sin(t) * r];
-    const Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
-    // ring: round tube banded top and bottom, two window decks outside and one inside (a band at angle
-    // phi round the tube sits at radius RR + tr cos(phi))
-    w.add(new THREE.TorusGeometry(RR, tr, 18, 72), toon(cream), 0, hy, 0, { rx: Math.PI / 2, outline: 0.18 });
-    const band = (phi, tube, mat) => w.add(new THREE.TorusGeometry(RR + tr * Math.cos(phi), tube, 6, 72), mat, 0, hy + tr * Math.sin(phi), 0, { rx: Math.PI / 2, outline: 0 });
-    band(1.15, 0.42, toon(orange));
-    band(-1.15, 0.42, toon(orange));
-    band(0.42, 0.62, this.glowM(0xfff6a8));
-    band(-0.3, 0.62, this.glowM(0xfff6a8));
-    band(0.06, 0.2, toon(dark));
-    band(Math.PI, 0.55, this.glowM(0xfff6a8)); // inner side, facing the park
-    // window mullions across the outer decks
-    for (let k = 0; k < 36; k++) {
-      const t = (k / 36) * Math.PI * 2;
-      const [mx, mz] = at(t, RR + tr * Math.cos(0.06) + 0.05);
-      w.add(new THREE.BoxGeometry(0.3, tr * 1.05, 0.3), toon(dark), mx, hy + 0.3, mz, { ry: -t, outline: 0 });
-    }
-    // A-frame legs: pairs splayed from under the ring to ground footings
-    const legs = 10, yTop = hy - tr + 0.6;
-    for (let k = 0; k < legs; k++) {
-      const t = (k / legs) * Math.PI * 2 + 0.31;
-      for (const off of [-1.8, 1.8]) {
-        const [tx, tz] = at(t, RR + off * 0.3);
-        const [bx, bz] = at(t, RR + off * 1.6);
-        const dx = tx - bx, dy = yTop, dz = tz - bz, ln = Math.hypot(dx, dy, dz);
-        const lg = new THREE.CylinderGeometry(0.45, 0.65, ln, 8).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y, new THREE.Vector3(dx / ln, dy / ln, dz / ln)));
-        w.add(lg, toon(dark), (tx + bx) / 2, yTop / 2, (tz + bz) / 2, { outline: 0.04 });
-        w.add(new THREE.CylinderGeometry(1.1, 1.3, 0.5, 8), toon(0x5b5870), bx, 0.25, bz, { outline: 0.03 });
-        w.cyl(bx * 0.6 + tx * 0.4, bz * 0.6 + tz * 0.4, -1, yTop, 0.7);
-      }
-      const [sx, sz] = at(t, RR);
-      w.add(new THREE.BoxGeometry(3.2, 0.7, 1.6), toon(orange), sx, hy - tr + 0.2, sz, { ry: -t, outline: 0.04 }); // saddle under the tube
-    }
-    // spokes from hub to ring inner wall, each with a lit strip
-    const hubR = 7.2;
-    for (let k = 0; k < 6; k++) {
-      const t = (k / 6) * Math.PI * 2 + Math.PI / 6;
-      const r0 = hubR - 0.6, r1 = RR - tr + 0.8, len = r1 - r0, mid = (r0 + r1) / 2;
-      const dir = new THREE.Vector3(Math.cos(t), 0, Math.sin(t));
-      const q = new THREE.Quaternion().setFromUnitVectors(Y, dir);
-      const [px, pz] = at(t, mid);
-      const [cx2, cz2] = at(t, r1 - 0.6);
-      w.add(new THREE.CylinderGeometry(1.4, 1.4, len, 12).applyQuaternion(q), toon(cream), px, hy + 1.5, pz, { outline: 0.06 });
-      w.add(new THREE.CylinderGeometry(1.5, 1.5, 0.5, 12).applyQuaternion(q), toon(orange), cx2, hy + 1.5, cz2, { outline: 0.03 });
-      w.add(new THREE.BoxGeometry(0.22, 0.3, len).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Z, dir)), this.glowM(0xfff6a8), px, hy + 2.85, pz, { outline: 0 });
-      w.hcylDir(px, hy + 1.5, pz, 1.5, len, dir.x, dir.z);
-    }
-    // hub tower: drum, banded shaft, observation crown, mast
-    w.add(new THREE.CylinderGeometry(8.4, 9, 4, 28), toon(0x5b5870), 0, 2, 0, { outline: 0.1 });
-    w.add(new THREE.CylinderGeometry(hubR - 0.6, hubR, 24, 28), toon(orange), 0, 16, 0, { outline: 0.15 });
-    for (const y of [10, 17, 24]) {
-      const r = hubR - 0.42 - (y - 4) * 0.025;
-      w.add(new THREE.CylinderGeometry(r, r, 1.1, 28), this.glowM(0xfff6a8), 0, y, 0, { outline: 0 });
-    }
-    w.add(new THREE.CylinderGeometry(9.5, hubR - 0.6, 2, 28), toon(cream), 0, 29, 0, { outline: 0.1 });
-    w.add(new THREE.CylinderGeometry(9.5, 9.5, 3.2, 28, 1, true), this.glassM(0x9be7ff, 0.3), 0, 31.6, 0, { outline: 0 });
-    for (let k = 0; k < 12; k++) { const [px, pz] = at((k / 12) * Math.PI * 2, 9.5); w.add(new THREE.BoxGeometry(0.3, 3.2, 0.3), toon(cream), px, 31.6, pz, { outline: 0 }); }
-    w.add(new THREE.SphereGeometry(9.5, 28, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon(cream), 0, 33.2, 0, { outline: 0.12 });
-    w.add(new THREE.TorusGeometry(9.6, 0.35, 6, 40), toon(orange), 0, 33.2, 0, { rx: Math.PI / 2, outline: 0 });
-    w.add(new THREE.CylinderGeometry(0.2, 0.3, 8, 6), toon(dark), 0, 46, 0, { outline: 0.03 });
-    w.add(new THREE.SphereGeometry(0.6, 8, 6), this.glowM(0xff9f1c), 0, 50.3, 0, { outline: 0 });
-    // park inside the ring: lawn, paths, trees, pond, benches
-    const lawnR = RR - tr - 1;
-    w.add(new THREE.CylinderGeometry(lawnR, lawnR, 0.3, 48), toon(0x3ad15a), 0, 0.15, 0, { outline: 0 });
-    for (let k = 0; k < 6; k++) {
-      const t = (k / 6) * Math.PI * 2 + Math.PI / 6;
-      const [px, pz] = at(t, (hubR + 1 + lawnR) / 2);
-      w.add(new THREE.BoxGeometry(lawnR - hubR - 1.5, 0.05, 1.6), toon(0xd8c9a8), px, 0.32, pz, { ry: -t, outline: 0 });
-    }
-    const rr = mulberry32(31);
-    for (let k = 0; k < 12; k++) {
-      const t = rr() * Math.PI * 2, d = hubR + 2.5 + rr() * (lawnR - hubR - 4);
-      const [tx, tz] = at(t, d);
-      w.add(new THREE.CylinderGeometry(0.2, 0.3, 1.6, 6), toon(0x6b4a2a), tx, 1.1, tz, { outline: 0.02 });
-      w.add(rr() < 0.5 ? new THREE.ConeGeometry(1.3, 3.4, 7) : new THREE.SphereGeometry(1.4, 8, 6), toon(rr() < 0.5 ? 0x1f8a3a : 0x3ad15a), tx, 3.3, tz, { outline: 0.04 });
-    }
-    w.add(new THREE.CylinderGeometry(2.6, 2.6, 0.1, 20), this.glowM(0x5ad8ff), 11.5, 0.36, -2, { outline: 0 });
-    w.add(new THREE.TorusGeometry(2.6, 0.3, 4, 20), toon(0xb8b2cc), 11.5, 0.36, -2, { rx: Math.PI / 2, outline: 0 });
-    for (let k = 0; k < 4; k++) { const t = (k / 4) * Math.PI * 2 + 0.4; const [bx, bz] = at(t, 12.5); w.add(new THREE.BoxGeometry(2.4, 0.5, 0.7), toon(0x8a5a3a), bx, 0.6, bz, { ry: -t + Math.PI / 2, outline: 0.02 }); }
-    // colliders: ring as a chain of short tubes, hub as a column
-    const segs = 28;
-    for (let k = 0; k < segs; k++) {
-      const t = ((k + 0.5) / segs) * Math.PI * 2;
-      const [px, pz] = at(t, RR);
-      w.hcylDir(px, hy, pz, tr + 0.1, ((2 * Math.PI * RR) / segs) * 1.08, -Math.sin(t), Math.cos(t));
-    }
-    w.cyl(0, 0, -2, 33, 9.6);
-    // entrance: lobby block under the ring where the skywalk docks, lift shaft up into the ring
-    const ex = -(RR + tr) + 2.5;
-    this.vestibule(w, ex, 8.6, orange, 9, 6);
-    w.add(new THREE.CylinderGeometry(2.6, 2.6, hy - 8.6, 12), toon(cream), ex + 1, 8.6 + (hy - 8.6) / 2, 0, { outline: 0.06 });
-    w.flag(8, RR + tr + 4, [0xff9f1c, 0xffffff]);
-    w.sign('KEPLER HABITAT', '#ff9f1c', 0, 55, 0);
-    return -ex + 3 + 1; // lobby outer face (6 deep), plus the metre the skywalk tucks in
+    const [x, z] = w.P(0, 0);
+    settle(this, loc, 4519, (k) => keplerHabitat(k, x, z, w.yaw));
+    w.flag(8, 31.4, [0xff9f1c, 0xffffff]);
+    w.sign('KEPLER HABITAT', '#ff9f1c', 0, 52, 0);
+    return HABITAT_DOCK;
   }
 
   // Meridian Exchange (settlements.js): trading tower, warehouses, container gantry, cranes.

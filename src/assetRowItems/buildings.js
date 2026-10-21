@@ -8,7 +8,7 @@ import { DISH_SIZE } from '../models.js';
 import { buildHomeTown, addBuilding, slotAt } from '../hometown.js';
 import {
   habDome, cabin, warehouse, quonset, lattice, hortonSphere, floodMast, stack, ticker, conveyor, pipe, radar, searchlight, shanty,
-  wreckHull, penTerminal, jobTerminal, playground, waterTower, greenhouse, commsMast, townHall, towerCrane, gantryCrane, cargoStack, garage, dishStation, powerBlock,
+  wreckHull, penTerminal, jobTerminal, playground, waterTower, greenhouse, commsMast, townHall, towerCrane, gantryCrane, cargoStack, garage, dishStation, powerBlock, keplerHabitat,
 } from '../settlements.js';
 import { ferrisWheel, carousel } from '../downsFair.js';
 import { animate, together, lineUp, factionHex } from './common.js';
@@ -226,6 +226,8 @@ const parts = {
     item('part.garage.small', 'SMALL GARAGE', 34, 20, () => kitPart((k) => garage(k, 0, 0, 0, [true, true], 'small'))),
     // the ILMB's power wing (40 x 45 m, its frame's origin 7.25 m behind the middle): fusion plant, skywalk vestibule at -x
     item('part.power-block', 'ILMB POWER BLOCK (FUSION)', 40, 45, () => kitPart((k) => powerBlock(k, -7.25, 0, 0))),
+    // the ILMB's family wing (57 x 55 m, its lobby out to x -28.9, so shifted 0.7 m): the Orrery ring, its orbit ring turning
+    item('part.kepler-habitat', 'ILMB KEPLER HABITAT (ORRERY)', 57, 55, () => kitPart((k) => keplerHabitat(k, 0.7, 0, 0))),
     item('part.dish-stations', 'DISH STATIONS (CRYO · GANTRY)', 66, 30, () => row([
       kitPart((k) => dishStation(k, 0, 0, DISH_SIZE, 'cryo', 'meridian', '01', { speed: 0.1 })),
       kitPart((k) => dishStation(k, 0, 0, DISH_SIZE, 'gantry', 'kepler', '02', { speed: 0.1, phase: 1 })),

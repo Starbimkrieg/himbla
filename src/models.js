@@ -48,6 +48,7 @@ const GLB = {
   'downs-stable': () => import('./assets/downs-stable.glb?inline'),
   'downs-crowd': () => import('./assets/downs-crowd.glb?inline'),
   power: () => import('./assets/power.glb?inline'),
+  habitat: () => import('./assets/habitat.glb?inline'),
 };
 
 // Models may be compressed (tools/optimize-glb.mjs: quantized + meshopt, ~1/3 size; the decoder ignores plain files).
@@ -1393,7 +1394,7 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lba, lbb, ska, skb, pw, ...dn] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike_a', 'lightbike_b', 'skimmer_a', 'skimmer_b', 'power', ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lba, lbb, ska, skb, pw, hb, ...dn] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike_a', 'lightbike_b', 'skimmer_a', 'skimmer_b', 'power', 'habitat', ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
   // a root node in a loaded file (`file`.glb), or a load error
   const named = (g, file, name) => {
     const o = g.scene.getObjectByName(name);
@@ -1429,6 +1430,8 @@ export async function loadShipParts({ ships } = {}) {
   SHIP_PARTS.garage_small = bakeShip(named(ga, 'garage', 'garage_small'));
   // the ILMB's Power Block, a D-He3 fusion plant (tools/blender/build_power.py, proposal B)
   SHIP_PARTS.power = bakeShip(named(pw, 'power', 'power_b'));
+  // the ILMB's Kepler Habitat, "Orrery" (tools/blender/build_habitat.py)
+  SHIP_PARTS.habitat = bakeShip(named(hb, 'habitat', 'habitat'));
   // the casino's slot-machine cabinet (tools/blender/build_slots.py)
   SHIP_PARTS.slot = bakeShip(named(sl, 'slots', 'slot'));
   // casino lamp post, fountain, bouncer, chandelier, signs (tools/blender/build_casino.py)
@@ -2082,6 +2085,31 @@ export function powerModel() {
   const root = SHIP_PARTS.power;
   if (!root) throw new Error('power.glb not loaded');
   return { root, blinkers: root.kids.filter((k) => k.role === 'blinker'), cols: root.kids.filter((k) => k.role === 'col') };
+}
+
+// ---- ILMB Kepler Habitat, "Orrery" (build_habitat.py; docs/habitat-proposals) ----
+// The family wing in its frame (+x away from the hub; the skywalk docks at x -28.6): a 12-module ring on lander legs (7 m clear
+// underneath), three glazed spokes to the hub tower, a park inside. Tree: root meshes = everything static; `fan` = the orbit
+// ring round the crown (extra `spin`, rad/s); `col` = colliders (extras `shape` box / cyl / hcyl and sizes; boxes may `pitch`).
+const HABITAT_TOON = {
+  wall: 0xfff4e0, trim: 0xff9f1c, roof: 0x3a3550, dark: 0x2a2540, panel: 0x5b5870, metal: 0x8a87a0, steel: 0x55607a, solar: 0x1d2f6b,
+  door: 0x2a2540, lawn: 0x3ad15a, concrete: 0xb8b2cc, path: 0xd8c9a8, bark: 0x6b4a2a, leaf: 0x1f8a3a, leaf2: 0x5cc94a, stone: 0x6f6878,
+  wood: 0x8a5a3a, hazard: 0xffd23f,
+};
+const HABITAT_GLOW = { window: 0xfff6a8, lamp: 0xfff6a8, beacon: 0xff9f1c, water: 0x5ad8ff };
+export const HABITAT_DOCK = 28.6; // wing centre to the lobby face the skywalk docks into
+
+// a slot's { color, glow }; `glass` is the see-through panes (the caller's glass material)
+export function habitatSlot(slot) {
+  if (slot in HABITAT_GLOW) return { color: HABITAT_GLOW[slot], glow: true };
+  return { color: HABITAT_TOON[slot] ?? 0xff00ff, glow: false };
+}
+
+// The baked habitat: static root, the orbit ring's pivot, colliders.
+export function habitatModel() {
+  const root = SHIP_PARTS.habitat;
+  if (!root) throw new Error('habitat.glb not loaded');
+  return { root, orbit: root.kids.find((k) => k.role === 'fan'), cols: root.kids.filter((k) => k.role === 'col') };
 }
 
 // ---- casino slot-machine cabinet (build_slots.py) ----

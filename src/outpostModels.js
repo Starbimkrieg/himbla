@@ -265,8 +265,9 @@ class Kit {
     this.raid = this.P(x, F, z);
   }
 
-  // colliders / blast boxes, given in the current frame
-  solid(hx, hy, hz, x, z, ry = 0, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'box', hx, hy, hz, x: p.x, y: y0 + hy, z: p.z, yaw: this.yaw + ry, tag: this.tag }); }
+  // colliders / blast boxes, given in the current frame (a box with a pitch, tilted about its x after the yaw, is centred hy
+  // above y0 rather than standing on it)
+  solid(hx, hy, hz, x, z, ry = 0, y0 = 0, pitch = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'box', hx, hy, hz, x: p.x, y: y0 + hy, z: p.z, yaw: this.yaw + ry, pitch, tag: this.tag }); }
   sphere(r, x, y, z) { const p = this.P(x, y, z); this.cols.push({ type: 'sphere', r, x: p.x, y: p.y, z: p.z, tag: this.tag }); }
   column(r, h, x, z, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'cyl', r, y0, y1: h, x: p.x, z: p.z, tag: this.tag }); }
   // lying cylinder (quonsets, hangars, pipes): axis along local z (turned by ry), centre at height y

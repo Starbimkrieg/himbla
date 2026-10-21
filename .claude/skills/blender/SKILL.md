@@ -31,11 +31,11 @@ MOONRUNNER_REPO=. python3 tools/blender/build_idles.py    # -> src/assets/idles.
 ```
 
 Each run takes 1 to 3 s. Builders: runner, idles, ships, skimmer, warrig, rover, interceptor, apc, landtrain, crane, garage, slots, casino, blackjack, claw, duck, dish,
-outposts, hall, lot and the Chimera Downs' nine (`build_downs_stand`, `_club`, `_course`, `_stalls`, `_arcade`, `_screen`, `_fair`, `_stable`, `_crowd`, which share `downs_common.py`). In the Blender app they run with `exec(open(r"<repo>/tools/blender/build_x.py").read())`.
+outposts, hall, lot, power, habitat (with `habitat_kit.py`) and the Chimera Downs' nine (`build_downs_stand`, `_club`, `_course`, `_stalls`, `_arcade`, `_screen`, `_fair`, `_stable`, `_crowd`, which share `downs_common.py`). In the Blender app they run with `exec(open(r"<repo>/tools/blender/build_x.py").read())`.
 
 ## After a build
 
-1. `npm run optimize:glb` for the compressed models (ships, skimmer, warrig, rover, interceptor, apc, landtrain, crane, garage, slots, casino, blackjack, claw, duck, dish, hall, lot, the `downs-*` files).
+1. `npm run optimize:glb` for the compressed models (ships, skimmer, warrig, rover, interceptor, apc, landtrain, crane, garage, slots, casino, blackjack, claw, duck, dish, hall, lot, power, habitat, the `downs-*` files).
    `runner.glb` and `outposts.glb` stay plain. A build overwrites a compressed file with a plain one, so a
    model you did not change shows as modified if you rebuilt it: `git checkout` it.
 2. `npm run check:outposts` after touching outposts.

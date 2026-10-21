@@ -281,7 +281,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (226 in 26 sections) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (227 in 26 sections) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).
@@ -376,6 +376,7 @@ src/
     gantry.glb       container gantry and box container
     garage.glb       Meridian motor-pool garages (colliders as pivots)
     power.glb        ILMB Power Block, the D-He3 fusion plant (colliders and lamps as pivots)
+    habitat.glb      ILMB Kepler Habitat, the Orrery ring (colliders and the turning orbit ring as pivots)
     slots.glb        slot-machine cabinet
     casino.glb       lamp post, fountain, bouncer, chandelier, sign frames
     claw.glb         Zero-G claw machine and its contents
@@ -409,6 +410,7 @@ tools/
     cargo.py               land-train cargo units for other models to carry
     spreader.py            crane container spreader
     suits.py               card-suit trim (blackjack, claw, duck)
+    habitat_kit.py         Kepler Habitat palette and parts (build_habitat.py, proposals/habitat_b.py)
     downs_common.py        Downs palette, merging, export, coplanar audit
     audit_outline.py       lists runner parts missing an outline
     build_runner.py        -> runner.glb
@@ -430,6 +432,7 @@ tools/
     build_gantry.py        -> gantry.glb
     build_garage.py        -> garage.glb
     build_power.py         -> power.glb (MOONRUNNER_POWER=a|b: B is the game's; preview_power.py renders docs/power-proposals)
+    build_habitat.py       -> habitat.glb (proposals/preview_habitat.py renders docs/habitat-proposals)
     build_slots.py         -> slots.glb
     build_casino.py        -> casino.glb
     build_claw.py          -> claw.glb
@@ -441,7 +444,7 @@ tools/
     build_winch.py         -> winch.glb, towmark.png
     build_outposts.py      -> outposts.glb (check with npm run check:outposts)
     build_downs_*.py       -> downs-*.glb
-    proposals/             freighter design study and Cycles preview renders
+    proposals/             freighter and Kepler Habitat design studies, Cycles preview renders
 ```
 
 **Blender models:** each builder runs in Blender's Scripting tab or headless (`tools/setup-blender.sh` installs
