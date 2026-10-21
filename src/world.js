@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces } from './toon.js';
-import { makeDish, makeDishHead, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar } from './models.js';
+import { makeDish, makeDishHead, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK } from './models.js';
 import { mulberry32, clamp } from './rng.js';
 import { FACTIONS, defenseSpots } from './locations.js';
 import { bendPoint, bendQuat, unbendPoint } from './curve.js';
 import { SUN, frameQuat, arcDist, dirFromAngles, tangent, collectNodes } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
 import { Traffic } from './traffic.js';
-import { buildHelium, buildMeridian, dressLab, dressLabInside, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot } from './settlements.js';
+import { buildHelium, buildMeridian, dressLab, dressLabInside, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot, settle, powerBlock } from './settlements.js';
 import { makeProp } from './storyAssets.js';
 import { buildHomeTown } from './hometown.js';
 import { spindleGeometry } from './spindle.js';
@@ -1127,12 +1127,6 @@ export class World {
     };
   }
 
-  matDS(color) {
-    const k = 'ds' + color;
-    if (!this._mats.has(k)) this._mats.set(k, toon(color, { side: THREE.DoubleSide }));
-    return this._mats.get(k);
-  }
-
   // Doorway vestibule each wing docks its skywalk into (front face at x = x0 - w/2).
   vestibule(w, x0, h, roof, wd = 8.4, dx = 4) {
     w.add(new THREE.BoxGeometry(dx, h, wd), toon(0xfff4e0), x0, h / 2, 0, { outline: 0.15 });
@@ -1392,37 +1386,14 @@ export class World {
     return 15;
   }
 
-  // Power block: reactor hall with a glowing core drum and two hyperboloid cooling stacks.
+  // Power block: a D-He3 fusion plant (tools/blender/build_power.py, settlements.powerBlock): hall with a control bridge, a
+  // magnetic bottle on trestles across the wing (high enough to drive under), beam injectors, cryoplant, He-3 and deuterium
+  // spheres. Baked in a settlement kit of its own, vestibule included.
   wingPower(loc, w) {
-    const yel = 0xffd23f, dark = 0x3a3550;
-    w.add(new THREE.BoxGeometry(18, 9, 20), toon(0x5b5870), 0, 4.5, 0, { outline: 0.2 });
-    w.add(new THREE.BoxGeometry(18.6, 0.8, 20.6), toon(yel), 0, 9.4, 0, { outline: 0.1 });
-    w.add(new THREE.BoxGeometry(18.2, 1.2, 20.2), this.glowM(0x2ee6ff), 0, 6.2, 0, { outline: 0 });
-    for (let k = 0; k < 9; k++) w.add(new THREE.BoxGeometry(18.3, 0.9, 1.1), toon(k % 2 ? yel : 0x1d1a29), 0, 1.0, -8.8 + k * 2.2, { outline: 0 });
-    w.add(new THREE.CylinderGeometry(5.5, 5.5, 6, 20), toon(0xd8d4e8), -2, 12.8, 0, { outline: 0.15 });
-    for (const y of [12.8, 11]) w.add(new THREE.TorusGeometry(5.8, 0.35, 6, 28), this.glowM(0x2ee6ff), -2, y, 0, { rx: Math.PI / 2, outline: 0 });
-    w.add(new THREE.CylinderGeometry(3.5, 5.5, 1.6, 20), toon(yel), -2, 16.6, 0, { outline: 0.1 });
-    const prof = [[7, 0], [6.1, 4], [5.0, 10], [4.7, 14], [5.0, 18], [5.6, 22]].map(([x, y]) => new THREE.Vector2(x, y));
-    const steam = this.glassM(0xffffff, 0.3);
-    for (const [sx, sz, sc] of [[16.5, -8, 1], [17.5, 8.5, 0.85]]) {
-      w.add(new THREE.LatheGeometry(prof, 24), this.matDS(0xe8e4f4), sx, 0, sz, { sx: sc, sy: sc, sz: sc, outline: 0.18 });
-      w.add(new THREE.CylinderGeometry(5.45, 5.15, 2, 24, 1, true), this.matDS(0xff4f2e), sx, 19 * sc, sz, { sx: sc, sy: sc, sz: sc, outline: 0 });
-      w.add(new THREE.CylinderGeometry(5.3, 5.3, 0.1, 24), toon(0x1d1a29), sx, 21 * sc, sz, { sx: sc, sy: sc, sz: sc, outline: 0 });
-      w.add(new THREE.SphereGeometry(3.6 * sc, 10, 8), steam, sx, 23.5 * sc, sz, { outline: 0 });
-      w.add(new THREE.SphereGeometry(4.4 * sc, 10, 8), steam, sx + 1.5, 27.5 * sc, sz + 1, { outline: 0 });
-      w.add(new THREE.CylinderGeometry(0.8, 0.8, 3.4, 10), toon(yel), 10.2, 3, sz * 0.9, { rz: Math.PI / 2, outline: 0.05 });
-      w.cyl(sx, sz, -2, 22 * sc, 7 * sc);
-    }
-    for (const s of [-1, 1]) {
-      w.add(new THREE.BoxGeometry(4, 4, 3), toon(dark), -3, 2, s * 13, { outline: 0.1 });
-      for (let k = -1; k <= 1; k++) w.add(new THREE.CylinderGeometry(0.25, 0.35, 1.6, 6), toon(0xd8d4e8), -3 + k * 1.2, 4.8, s * 13, { outline: 0.03 });
-      w.box(-3, 2, s * 13, 2.1, 2.1, 1.6);
-    }
-    this.vestibule(w, -10.6, 6.6, yel);
-    w.box(0, 4.8, 0, 9.3, 4.9, 10.3);
-    w.cyl(-2, 0, 9, 17.4, 5.8);
-    w.sign('POWER BLOCK', '#ffd23f', 0, 26, 0);
-    return 12.6;
+    const [x, z] = w.P(0, 0);
+    settle(this, loc, 4513, (k) => powerBlock(k, x, z, w.yaw));
+    w.sign('POWER BLOCK', '#ffd23f', 0, 22, 0);
+    return POWER_DOCK;
   }
 
   // Kepler habitat: a big ring on A-frame legs, high enough to skate under, with glowing window decks,

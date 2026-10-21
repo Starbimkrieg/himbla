@@ -8,7 +8,7 @@ import { patchBermMaterial } from './moonSkins.js';
 import { market, tickerText } from './market.js';
 import { casinoNode, casinoSlot, lotNode, lotSlot } from './models.js';
 import { waterMesh } from './fountainFx.js';
-import { craneModel, craneSlot, CRANE_H, CRANE_LOAD_DROP, CRANE_TROLLEY_MIN, CRANE_TROLLEY_SPAN, gantryModel, cargoSlot, CARGO_BOX, garageModel, garageSlot, dishModel, dishSlot, DISH_KINDS } from './models.js';
+import { craneModel, craneSlot, CRANE_H, CRANE_LOAD_DROP, CRANE_TROLLEY_MIN, CRANE_TROLLEY_SPAN, gantryModel, cargoSlot, CARGO_BOX, garageModel, garageSlot, dishModel, dishSlot, DISH_KINDS, powerModel, powerSlot, POWER_PULSE } from './models.js';
 
 // Settlements, HQs and landmarks built with the outpost Kit (outpostModels.js): static parts bake into one merged mesh per
 // material plus one ink hull, so a detailed place costs a handful of draw calls. Moving parts (cranes, wheels, tickers, rides)
@@ -454,6 +454,31 @@ export function garage(k, x, z, yaw, open = [true, false, true], kind = 'main') 
     else if (d.shape === 'cyl') k.column(d.r, p.y + d.h, p.x, p.z, p.y);
     else if (d.shape === 'hcyl') k.hcyl(d.r, d.len, p.x, p.z, d.yaw || 0, p.y);
   }
+  k.at();
+}
+
+// ILMB Power Block (tools/blender/build_power.py, proposal B): a D-He3 fusion plant in the power wing's frame (+x away from
+// the hub), origin at (x, z) turned by yaw. Baked whole; the aircraft lamps blink, and the plasma windows and converter faces
+// breathe (their own glow materials, stepped by a tick piece). Colliders are the model's `col` pivots.
+export function powerBlock(k, x, z, yaw) {
+  const M = powerModel();
+  const pulse = new Map(POWER_PULSE.map((s) => [s, glow(powerSlot(s).color)]));
+  const mat = (slot) => pulse.get(slot) || slotMat(powerSlot(slot));
+  k.at(x, z, yaw);
+  k.baked(M.root, mat, new THREE.Matrix4());
+  for (const b of M.blinkers) k.blinker(b.pos.x, b.pos.y, b.pos.z, 0xff2a4a, b.data.radius || 0.25);
+  for (const { pos: p, data: d } of M.cols) {
+    if (d.shape === 'box') k.solid(d.hx, d.hy, d.hz, p.x, p.z, d.yaw || 0, p.y);
+    else if (d.shape === 'cyl') k.column(d.r, p.y + d.h, p.x, p.z, p.y);
+    else if (d.shape === 'hcyl') k.hcyl(d.r, d.len, p.x, p.z, d.yaw || 0, p.y);
+    else if (d.shape === 'sphere') k.sphere(d.r, p.x, p.y, p.z);
+  }
+  const beat = new THREE.Group();
+  beat.userData.tick = (o, dt, t) => {
+    const f = 0.72 + 0.14 * (1 + Math.sin(t * 1.8)); // (dims to 72 % and back, about every 3.5 s)
+    for (const [s, m] of pulse) m.color.setHex(powerSlot(s).color).multiplyScalar(f);
+  };
+  k.dyn(beat, 0, 0, 0);
   k.at();
 }
 

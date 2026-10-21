@@ -190,7 +190,7 @@ Wreck it for ₵800 and, the first time, his Junk Mortar. Not while you ride wit
 
 | Location | Faction | Notes |
 | --- | --- | --- |
-| International Moon Base (ILMB) | SPACECOM | Fortress, job board, repair bay, launch pad, six buildings joined by skywalks |
+| International Moon Base (ILMB) | SPACECOM | Fortress, job board, repair bay, launch pad, six buildings joined by skywalks (one is the Power Block, a D-He3 fusion plant you can drive under) |
 | Meridian Exchange · Shackleton Radar Array · Helium-3 Exchange | Meridian | Trade hub with live ticker and motor pool; radar dishes; strip-mine |
 | Kepler Civic Center · Tranquility Commons · Aldrin Heights · Twilight Waystation · Hertzsprung Refuge | Kepler | Towns, rest and repair |
 | Farside Listening Post | SPACECOM (dark side) | Hazard-pay dish array |
@@ -281,7 +281,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (225 in 26 sections) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (226 in 26 sections) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).
@@ -375,6 +375,7 @@ src/
     crane.glb        tower crane
     gantry.glb       container gantry and box container
     garage.glb       Meridian motor-pool garages (colliders as pivots)
+    power.glb        ILMB Power Block, the D-He3 fusion plant (colliders and lamps as pivots)
     slots.glb        slot-machine cabinet
     casino.glb       lamp post, fountain, bouncer, chandelier, sign frames
     claw.glb         Zero-G claw machine and its contents
@@ -428,6 +429,7 @@ tools/
     build_crane.py         -> crane.glb
     build_gantry.py        -> gantry.glb
     build_garage.py        -> garage.glb
+    build_power.py         -> power.glb (MOONRUNNER_POWER=a|b: B is the game's; preview_power.py renders docs/power-proposals)
     build_slots.py         -> slots.glb
     build_casino.py        -> casino.glb
     build_claw.py          -> claw.glb
