@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces } from './toon.js';
-import { makeDish, makeDishHead, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK, HABITAT_DOCK } from './models.js';
+import { makeDish, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK, wingModel, HABITAT_DOCK } from './models.js';
 import { mulberry32, clamp } from './rng.js';
-import { FACTIONS, defenseSpots } from './locations.js';
+import { FACTIONS, defenseSpots, ILMB_WINGS_AT } from './locations.js';
 import { bendPoint, bendQuat, unbendPoint } from './curve.js';
 import { SUN, frameQuat, arcDist, dirFromAngles, tangent, collectNodes } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
 import { Traffic } from './traffic.js';
-import { buildHelium, buildMeridian, dressLab, dressLabInside, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot, settle, powerBlock, keplerHabitat } from './settlements.js';
+import { buildHelium, buildMeridian, dressLab, dressLabInside, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot, settle, powerBlock, keplerHabitat, ilmbWing } from './settlements.js';
 import { makeProp } from './storyAssets.js';
 import { buildHomeTown } from './hometown.js';
 import { spindleGeometry } from './spindle.js';
@@ -1072,7 +1072,8 @@ export class World {
       for (const sz of [-1, 1]) B.add(new THREE.BoxGeometry(half * 2, 0.3, 0.2), this.glowM(0x2ee6ff), 0, 15, sz * 1.4, { outline: 0 });
       this.col(loc, { type: 'box', x: Math.cos(g) * gr, y: 15.3, z: Math.sin(g) * gr, hx: half, hy: 1.1, hz: 1.4, yaw: -g + Math.PI / 2 });
     }
-    // inner ring guns on pylons, clear of the wings (locations.js defenseSpots: the outer ring's turrets first)
+    // inner guns on pylons, one in each gap between the wings (locations.js ILMB_WINGS_AT; defenseSpots lists the outer ring's
+    // turrets first)
     this.defensePylons(loc, defenseSpots(loc).slice(loc.defense.turrets), 7);
     // (barracks and vehicle depot: settlements.dressIlmb)
     for (let i = 0; i < 3; i++) {
@@ -1086,47 +1087,37 @@ export class World {
 
   // ---------- ILMB wings: six distinct buildings joined to the main dome by glass skywalks ----------
   buildIlmbWings(loc, B) {
+    // (in ILMB_WINGS_AT's order: locations.js keeps where each stands, so the inner guns can stand between them)
     const wings = [
-      { a: 0.0, d: 116, walkers: 2, build: (w) => this.wingHydroponics(loc, w) },
-      { a: 0.62, d: 122, walkers: 3, S: 1.3, build: (w) => this.wingLabs(loc, w) },
-      { a: 2.2, d: 124, walkers: 3, S: 1.25, build: (w) => this.wingHangar(loc, w) },
-      { a: 3.8, d: 120, walkers: 2, S: 1.3, build: (w) => this.wingRelay(loc, w) },
-      { a: 4.5, d: 110, walkers: 2, build: (w) => this.wingPower(loc, w) },
-      { a: 5.2, d: 120, walkers: 3, build: (w) => this.wingHabitat(loc, w) },
+      { walkers: 2, build: (w) => this.wingHydroponics(loc, w) },
+      { walkers: 3, build: (w) => this.wingLabs(loc, w) },
+      { walkers: 3, build: (w) => this.wingHangar(loc, w) },
+      { walkers: 2, build: (w) => this.wingRelay(loc, w) },
+      { walkers: 2, build: (w) => this.wingPower(loc, w) },
+      { walkers: 3, build: (w) => this.wingHabitat(loc, w) },
     ];
-    for (const s of wings) {
-      const w = this.wing(loc, B, s.a, s.d, s.S || 1);
-      const E = s.build(w) * (s.S || 1); // wing centre to the face its skywalk docks into
-      this.skywalk(loc, B, s.a, 53, s.d - E + 1.2, s.walkers);
-    }
+    wings.forEach((s, i) => {
+      const [a, d] = ILMB_WINGS_AT[i];
+      const w = this.wing(loc, a, d);
+      const E = s.build(w); // wing centre to the face its skywalk docks into
+      this.skywalk(loc, B, a, 53, d - E + 1.2, s.walkers);
+    });
   }
 
-  // A wing's local frame: +X away from the hub, -X faces the skywalk. S scales the whole wing (geometry,
-  // colliders, props, signs) while builders keep their own units.
-  wing(loc, B, a, d, S = 1) {
+  // A wing's local frame: +X away from the hub, -X faces the skywalk. The buildings themselves are Blender models baked by
+  // settlements.js; this places what the world adds round them (colliders, props, flags, signs).
+  wing(loc, a, d) {
     const yaw = -a, c = Math.cos(yaw), s = Math.sin(yaw);
     const cx = Math.cos(a) * d, cz = Math.sin(a) * d;
-    const P = (lx, lz) => [cx + (lx * c + lz * s) * S, cz + (-lx * s + lz * c) * S];
+    const P = (lx, lz) => [cx + lx * c + lz * s, cz - lx * s + lz * c];
     return {
-      a, d, yaw, P, S,
-      add: (geo, mat, x, y, z, o = {}) => { B.at(cx, cz, yaw); B.add(geo, mat, x * S, y * S, z * S, { ...o, sx: (o.sx ?? 1) * S, sy: (o.sy ?? 1) * S, sz: (o.sz ?? 1) * S }); },
-      box: (lx, ly, lz, hx, hy, hz, ry = 0) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'box', x, y: ly * S, z, hx: hx * S, hy: hy * S, hz: hz * S, yaw: yaw + ry }); },
-      cyl: (lx, lz, y0, y1, r) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'cyl', x, z, y0: y0 * S, y1: y1 * S, r: r * S }); },
-      sph: (lx, ly, lz, r) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'sphere', x, y: ly * S, z, r: r * S }); },
-      // horizontal cylinder along wing-local x (arched roofs collide round, not as a box)
-      hcyl: (lx, ly, lz, r, len) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'hcyl', x, y: ly * S, z, r: r * S, len: len * S, yaw: yaw + Math.PI / 2 }); },
-      sign: (text, color, lx, y, lz, scale = 0.55) => { const [x, z] = P(lx, lz); hang(loc, textSprite(text, { color, size: 64, scale }), x, y * S, z); },
+      a, d, yaw, P,
+      box: (lx, ly, lz, hx, hy, hz, ry = 0) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'box', x, y: ly, z, hx, hy, hz, yaw: yaw + ry }); },
+      cyl: (lx, lz, y0, y1, r) => { const [x, z] = P(lx, lz); return this.col(loc, { type: 'cyl', x, z, y0, y1, r }); },
+      sign: (text, color, lx, y, lz, scale = 0.55) => { const [x, z] = P(lx, lz); hang(loc, textSprite(text, { color, size: 64, scale }), x, y, z); },
       flag: (lx, lz, colors, h) => { const [x, z] = P(lx, lz); this.flag(loc, x, z, colors, h); },
-      obj: (o, lx, lz, y = 0, ry = 0, dynamic = false) => { const [x, z] = P(lx, lz); o.scale.multiplyScalar(S); return this.put(o, loc, x, z, y * S, yaw + ry, dynamic); },
+      obj: (o, lx, lz, y = 0, ry = 0, dynamic = false) => { const [x, z] = P(lx, lz); return this.put(o, loc, x, z, y, yaw + ry, dynamic); },
     };
-  }
-
-  // Doorway vestibule each wing docks its skywalk into (front face at x = x0 - w/2).
-  vestibule(w, x0, h, roof, wd = 8.4, dx = 4) {
-    w.add(new THREE.BoxGeometry(dx, h, wd), toon(0xfff4e0), x0, h / 2, 0, { outline: 0.15 });
-    w.add(new THREE.BoxGeometry(dx + 0.4, 0.7, wd + 0.4), toon(roof), x0, h + 0.35, 0, { outline: 0.08 });
-    w.add(new THREE.BoxGeometry(dx + 0.1, 0.5, wd + 0.1), this.glowM(0xfff6a8), x0, h - 1.2, 0, { outline: 0 });
-    w.box(x0, h / 2 + 0.35, 0, dx / 2, h / 2 + 0.35, wd / 2);
   }
 
   // Enclosed glass skywalk from the main dome along angle a (radius r0 → r1): floor slab, inked ribs
@@ -1224,105 +1215,39 @@ export class World {
     }
   }
 
-  // Hydroponics: ribbed glass greenhouse dome of planters under green grow-lights.
+  // One of the ILMB's Blender-built wings (settlements.ilmbWing), baked in a settlement kit of its own, lobby included. Returns
+  // the dock distance (wing centre to the lobby face).
+  blenderWing(loc, w, name, seed) {
+    const [x, z] = w.P(0, 0);
+    let dock = 0;
+    settle(this, loc, seed, (k) => { dock = ilmbWing(k, name, x, z, w.yaw); });
+    return dock;
+  }
+
+  // Hydroponics (tools/blender/build_hydroponics.py): a lattice greenhouse dome over stepped beds and an aeroponic tower on a
+  // light pipe, lit by six heliostats through the lantern; water and nutrient tanks, a produce airlock.
   wingHydroponics(loc, w) {
-    const R = 19, cream = 0xfff4e0;
-    w.add(new THREE.CylinderGeometry(R + 1.5, R + 2.2, 1.4, 32), toon(0x5b5870), 0, 0.7, 0, { outline: 0.12 });
-    w.add(new THREE.SphereGeometry(R, 32, 14, 0, Math.PI * 2, 0, Math.PI / 2), this.glassM(0x8dffb0, 0.22), 0, 1.4, 0, { outline: 0 });
-    for (let k = 0; k < 4; k++) w.add(new THREE.TorusGeometry(R, 0.3, 6, 28, Math.PI), toon(cream), 0, 1.4, 0, { ry: (k * Math.PI) / 4, outline: 0.06 });
-    for (const [y, rr] of [[1.6, R], [1.4 + R * 0.5, R * 0.866], [1.4 + R * 0.82, R * 0.572]]) {
-      w.add(new THREE.TorusGeometry(rr, 0.25, 6, 40), toon(y < 2 ? 0xffd23f : cream), 0, y, 0, { rx: Math.PI / 2, outline: 0.05 });
-    }
-    w.add(new THREE.CylinderGeometry(2.4, 2.9, 1.6, 12), toon(cream), 0, 1.4 + R + 0.4, 0, { outline: 0.08 });
-    w.add(new THREE.SphereGeometry(0.8, 8, 6), this.glowM(0x7dff6a), 0, 1.4 + R + 1.6, 0, { outline: 0 });
-    const rr = mulberry32(77);
-    for (const z of [-12, -6, 0, 6, 12]) {
-      const L = 2 * Math.sqrt((R - 3) ** 2 - z * z);
-      w.add(new THREE.BoxGeometry(L, 1.1, 2.4), toon(0x6b4a2a), 0, 1.95, z, { outline: 0.06 });
-      w.add(new THREE.BoxGeometry(L - 0.4, 0.1, 2.0), toon(0x2a1d14), 0, 2.52, z, { outline: 0 });
-      for (let x = -L / 2 + 1.4; x < L / 2 - 1; x += 2.1) {
-        if (rr() < 0.55) w.add(new THREE.SphereGeometry(0.75 + rr() * 0.5, 8, 6), toon(rr() < 0.5 ? 0x3ad15a : 0x7dff6a), x, 3.2, z, { outline: 0.04 });
-        else w.add(new THREE.ConeGeometry(0.7, 2.2 + rr() * 1.6, 6), toon(0x1f8a3a), x, 3.8, z, { outline: 0.04 });
-      }
-      w.add(new THREE.BoxGeometry(L - 2, 0.25, 0.5), this.glowM(0xb8ff9e), 0, 9, z, { outline: 0 });
-    }
-    // nutrient tanks out back
-    for (const s of [-1, 1]) {
-      w.add(new THREE.CylinderGeometry(2.2, 2.2, 6, 14), toon(0x2edfa0), 9, 3, s * (R + 3.5), { outline: 0.1 });
-      w.add(new THREE.CylinderGeometry(2.3, 2.3, 0.6, 14), this.glowM(0x7dff6a), 9, 4.2, s * (R + 3.5), { outline: 0 });
-      w.cyl(9, s * (R + 3.5), -2, 6, 2.4);
-    }
-    const pool = new THREE.Mesh(new THREE.CircleGeometry(R - 1, 32), this.poolMat(0x5aff7a));
-    pool.rotation.x = -Math.PI / 2;
-    const [px, pz] = w.P(0, 0);
-    this.put(pool, loc, px, pz, 1.45);
-    this.vestibule(w, -R - 1, 6.6, 0x7dff6a, 8.4, 8);
-    w.sph(0, 1.4, 0, R + 0.2);
-    w.cyl(0, 0, -2, 1.4, R + 2.2);
-    w.sign('HYDROPONICS', '#7dff6a', 0, R + 8, 0);
-    return R + 5;
+    const dock = this.blenderWing(loc, w, 'hydroponics', 4501);
+    w.sign('HYDROPONICS', '#7dff6a', 0, 33, 0);
+    return dock;
   }
 
-  // Meridian Labs: stepped lab block with a tall leaning tower and a glass observation deck.
+  // Meridian Labs (tools/blender/build_labs.py): a lab block with an observatory on the roof and, off its outer end, a pylon
+  // leaning out on stays to a roof counterweight, carrying a glazed sky lab and the turning Meridian globe.
   wingLabs(loc, w) {
-    const blue = 0x2ec4ff, cream = 0xfff4e0, pane = 0x9be7ff;
-    w.add(new THREE.BoxGeometry(22, 10, 20), toon(cream), 0, 5, 0, { outline: 0.2 });
-    w.add(new THREE.BoxGeometry(22.6, 0.8, 20.6), toon(blue), 0, 10.4, 0, { outline: 0.1 });
-    w.add(new THREE.BoxGeometry(22.2, 1.4, 20.2), this.glowM(pane), 0, 6.6, 0, { outline: 0 });
-    w.add(new THREE.BoxGeometry(22.2, 1.0, 20.2), this.glowM(pane), 0, 3.2, 0, { outline: 0 });
-    w.add(new THREE.BoxGeometry(12, 6, 11), toon(0xd8d4e8), -3, 13.8, -3.5, { outline: 0.15 });
-    w.add(new THREE.BoxGeometry(12.4, 0.6, 11.4), toon(blue), -3, 17.1, -3.5, { outline: 0.08 });
-    w.add(new THREE.BoxGeometry(12.1, 1.0, 11.1), this.glowM(pane), -3, 14.6, -3.5, { outline: 0 });
-    w.add(new THREE.SphereGeometry(3.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), toon(0xe0e0f0), -6, 17.4, -5, { outline: 0.1 });
-    w.add(new THREE.BoxGeometry(0.8, 0.8, 4.6), toon(0x3a3550), -6, 19.6, -5, { rx: 0.5, outline: 0.04 });
-    // leaning tower seated in a roof plinth (a tilted box's foot lifts off a flat roof at one corner;
-    // the plinth hides it)
-    const lean = 0.2, th = 40, bx = 5, bz = 5, by = 10.2, ux = Math.sin(lean), uy = Math.cos(lean);
-    w.add(new THREE.BoxGeometry(9.5, 2.8, 9.5), toon(cream), bx, 10.8 + 1.4, bz, { outline: 0.1 });
-    w.add(new THREE.BoxGeometry(9.8, 0.5, 9.8), toon(blue), bx, 10.8 + 2.85, bz, { outline: 0.04 });
-    w.box(bx, 12.2, bz, 4.75, 1.4, 4.75);
-    w.add(new THREE.BoxGeometry(6, th, 6), toon(blue), bx + (ux * th) / 2, by + (uy * th) / 2, bz, { rz: -lean, outline: 0.15 });
-    w.add(new THREE.BoxGeometry(6.2, th * 0.84, 1.4), this.glowM(pane), bx + (ux * th) / 2, by + (uy * th) / 2, bz, { rz: -lean, outline: 0 });
-    for (const t of [0.22, 0.5, 0.78]) w.add(new THREE.BoxGeometry(6.4, 0.9, 6.4), toon(cream), bx + ux * th * t, by + uy * th * t, bz, { rz: -lean, outline: 0.06 });
-    const tx = bx + ux * th, ty = by + uy * th;
-    w.add(new THREE.CylinderGeometry(8.5, 5.0, 1.8, 24), toon(cream), tx, ty + 0.2, bz, { outline: 0.12 });
-    w.add(new THREE.CylinderGeometry(8, 8, 3.2, 24, 1, true), this.glassM(pane, 0.3), tx, ty + 2.7, bz, { outline: 0 });
-    w.add(new THREE.TorusGeometry(8.1, 0.18, 6, 32), this.glowM(0xfff6a8), tx, ty + 1.7, bz, { rx: Math.PI / 2, outline: 0 });
-    for (let k = 0; k < 8; k++) {
-      const t = (k / 8) * Math.PI * 2;
-      w.add(new THREE.BoxGeometry(0.3, 3.2, 0.3), toon(cream), tx + Math.cos(t) * 8, ty + 2.7, bz + Math.sin(t) * 8, { outline: 0.04 });
-    }
-    w.add(new THREE.CylinderGeometry(4.5, 8.8, 1.4, 24), toon(blue), tx, ty + 5, bz, { outline: 0.12 });
-    w.add(new THREE.CylinderGeometry(0.2, 0.25, 7, 6), toon(0x3a3550), tx, ty + 9, bz, { outline: 0.04 });
-    w.add(new THREE.SphereGeometry(0.6, 8, 6), this.glowM(0xff2e88), tx, ty + 12.6, bz, { outline: 0 });
-    w.box(0, 5.3, 0, 11.3, 5.4, 10.3);
-    w.box(-3, 13.8, -3.5, 6.2, 3.4, 5.7);
-    for (const t of [1 / 6, 0.5, 5 / 6]) w.box(bx + ux * th * t, by + uy * th * t, bz, 4.2, (th / 6) * uy + 0.4, 3.2);
-    w.cyl(tx, bz, ty - 0.8, ty + 5.8, 8.8);
-    w.flag(-9, 13, [0x2ec4ff, 0xffffff, 0x1b3a8f]);
-    w.sign('MERIDIAN LABS', '#2ec4ff', -6, 27, -4);
-    return 11;
+    const dock = this.blenderWing(loc, w, 'labs', 4503);
+    w.flag(-12, 16, [0x2ec4ff, 0xffffff, 0x1b3a8f]);
+    w.sign('MERIDIAN LABS', '#2ec4ff', -4, 24, 0);
+    return dock;
   }
 
-  // Vostok hangar: ribbed quonset with a half-open door and a shuttle-bus parked on the apron.
+  // Vostok Hangar (tools/blender/build_hangar.py): a bermed, slab-sided hangar under red portal frames, its blast doors half
+  // open on a lit bay with a bridge crane; a control tower with a turning radar; an apron where a route shuttle-bus is parked.
   wingHangar(loc, w) {
-    const red = 0xff3b5c, R = 13, L = 30, dark = 0x3a3550;
-    w.add(new THREE.CylinderGeometry(R, R, L, 24, 1, false, 0, Math.PI).rotateZ(Math.PI / 2), toon(0x5b5870), 0, 0, 0, { outline: 0.2 });
-    for (const x of [-L / 2 + 0.4, -7.5, 0, 7.5, L / 2 - 0.4]) w.add(new THREE.TorusGeometry(R + 0.15, 0.45, 6, 24, Math.PI), toon(red), x, 0, 0, { ry: Math.PI / 2, outline: 0.06 });
-    for (const s of [1, -1]) w.add(new THREE.BoxGeometry(L - 2, 0.9, 0.3), this.glowM(0xfff6a8), 0, 8.2, s * R * 0.62, { rx: -s * 0.9, outline: 0 });
-    // big door (outward end), half open on a dark bay
-    const dx = L / 2;
-    w.add(new THREE.BoxGeometry(0.4, 9.6, 10.4), toon(0x1d1a29), dx + 0.1, 4.8, 0, { outline: 0 });
-    for (const s of [-1, 1]) {
-      w.add(new THREE.BoxGeometry(0.8, 9.2, 4.2), toon(0xd8d4e8), dx + 0.6, 4.6, s * 7.2, { outline: 0.1 });
-      for (let k = 0; k < 4; k++) w.add(new THREE.BoxGeometry(0.9, 0.6, 4.3), toon(0xffd23f), dx + 0.6, 1.2 + k * 2.4, s * 7.2, { outline: 0 });
-    }
-    w.add(new THREE.BoxGeometry(1.4, 1.2, 19), toon(red), dx + 0.6, 10, 0, { outline: 0.1 });
-    w.add(new THREE.BoxGeometry(18, 0.15, 20), toon(0x4a4660), dx + 9, 0.08, 0, { outline: 0 });
-    for (let k = 0; k < 4; k++) w.add(new THREE.BoxGeometry(0.9, 0.06, 18), toon(0xffd23f), dx + 2 + k * 4.5, 0.18, 0, { outline: 0 });
+    const dock = this.blenderWing(loc, w, 'hangar', 4507);
     // a real route shuttle-bus in Vostok red, parked nose-out on the apron, gear down, ramp lowered
-    const cx = dx + 10.5, SS = 0.72;
-    const sh = makeShuttle({ color: 0xfff4e0, stripe: red });
+    const cx = wingModel('hangar').root.data.apron, SS = 0.9;
+    const sh = makeShuttle({ color: 0xfff4e0, stripe: 0xff3b5c });
     sh.root.scale.setScalar(SS);
     sh.setGear(1);
     sh.setRamp(1);
@@ -1332,52 +1257,23 @@ export class World {
     w.obj(sh.root, cx, 0, sh.gearH * SS, Math.PI / 2);
     // (quarter-turned: its length runs along apron x)
     w.box(cx + bc.z, sh.gearH * SS + bc.y, -bc.x, bs.z / 2 * 0.92, bs.y / 2, bs.x / 2 * 0.9);
-    // control office on the flank
-    w.add(new THREE.BoxGeometry(9, 6, 6), toon(0xfff4e0), -3, 3, R + 2, { outline: 0.15 });
-    w.add(new THREE.BoxGeometry(9.4, 0.6, 6.4), toon(red), -3, 6.3, R + 2, { outline: 0.08 });
-    w.add(new THREE.BoxGeometry(9.1, 1.2, 6.1), this.glowM(0xfff6a8), -3, 4.2, R + 2, { outline: 0 });
-    w.add(new THREE.CylinderGeometry(0.12, 0.12, 6, 6), toon(dark), 0, 9.6, R + 3, { outline: 0.03 });
-    w.box(-3, 3.3, R + 2, 4.7, 3.3, 3.2);
-    this.vestibule(w, -L / 2 - 1.6, 6.6, red);
-    w.hcyl(0, 0, 0, R + 0.2, L); // the quonset collides round (a box would square its shoulders)
-    w.flag(6, -(R + 4), [0xff3b5c, 0xffd23f]);
-    w.sign('VOSTOK HANGAR', '#ff3b5c', 0, R + 7, 0);
-    return L / 2 + 3.6;
+    w.flag(12, -21, [0xff3b5c, 0xffd23f]);
+    w.sign('VOSTOK HANGAR', '#ff3b5c', 0, 20, 0);
+    return dock;
   }
 
-  // Daedalus relay: octagonal listening bunker, roof dish cluster, big tracking dish and a mast.
+  // Daedalus Relay (tools/blender/build_relay.py): a delta-plan phased-array station whose two arrays read as eyes, a radome
+  // and a lattice mast on the roof, an RF fence in front; the tracking dish (makeDish, Daedalus paint) stands off its -z side.
   wingRelay(loc, w) {
-    const purple = 0xc77dff, dark = 0x4a4660, deck = 7.9;
-    w.add(new THREE.CylinderGeometry(11, 12.5, 7, 8), toon(dark), 0, 3.5, 0, { ry: Math.PI / 8, outline: 0.2 });
-    w.add(new THREE.CylinderGeometry(11.6, 11.2, 0.9, 8), toon(purple), 0, 7.45, 0, { ry: Math.PI / 8, outline: 0.1 });
-    w.add(new THREE.CylinderGeometry(11.95, 12.15, 0.8, 8, 1, true), this.glowM(purple), 0, 4.2, 0, { ry: Math.PI / 8, outline: 0 });
-    for (const [x, z, s] of [[-4, -5, 2.6], [-4, 5, 2.6], [4, -1, 3.4]]) {
-      w.add(new THREE.CylinderGeometry(0.3, 0.4, 2, 6), toon(0x3a3550), x, deck + 1, z, { outline: 0.04 });
-      // dish head (field dish reflector, trunnions, feed; no tower) on the post, opening up and toward +z
-      const head = makeDishHead(s * Math.sin(1.0), 'daedalus');
-      head.yaw.rotation.y = Math.PI;
-      head.tilt.rotation.x = -0.5;
-      w.obj(head.root, x, z, deck + 2);
-    }
-    // lattice mast
-    const mh = 30, mx = 5, mz = 6;
-    w.add(new THREE.CylinderGeometry(0.35, 0.65, mh, 6), toon(0x3a3550), mx, deck + mh / 2, mz, { outline: 0.05 });
-    for (let k = 1; k <= 4; k++) w.add(new THREE.BoxGeometry(5.2 - k * 0.8, 0.25, 0.25), toon(purple), mx, deck + k * 6, mz, { ry: k * 0.8, outline: 0.03 });
-    const bm = new THREE.MeshBasicMaterial({ color: 0xff2a4a });
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.8, 10, 8), bm);
-    w.obj(beacon, mx, mz, deck + mh + 0.8);
-    this.blinkers.push({ mat: bm, base: new THREE.Color(0xff2a4a), phase: 1.3, loc });
-    w.cyl(mx, mz, deck - 1, deck + mh, 1);
-    // big tracking dish beside the bunker
-    const dish = makeDish(12, 'daedalus');
-    w.obj(dish.root, 6, -19);
+    const dock = this.blenderWing(loc, w, 'relay', 4509);
+    const { dishX, dishZ } = wingModel('relay').root.data;
+    const dish = makeDish(15.6, 'daedalus');
+    w.obj(dish.root, dishX, dishZ);
     this.addDish(dish, 0.12, loc);
-    for (const c of dish.cols) { if (c.type === 'cyl') w.cyl(6 + c.x, -19 + c.z, c.y0, c.y1, c.r); else w.box(6 + c.x, c.y, -19 + c.z, c.hx, c.hy, c.hz); }
-    this.vestibule(w, -12.5, 6.4, purple, 8.4, 5);
-    w.cyl(0, 0, -2, deck, 12.3);
-    w.flag(-6, -14, [0xc77dff, 0x111111, 0xc77dff]);
-    w.sign('DAEDALUS RELAY', '#c77dff', -3, 19, -3);
-    return 15;
+    for (const c of dish.cols) { if (c.type === 'cyl') w.cyl(dishX + c.x, dishZ + c.z, c.y0, c.y1, c.r); else w.box(dishX + c.x, c.y, dishZ + c.z, c.hx, c.hy, c.hz); }
+    w.flag(-15, -11, [0xc77dff, 0x111111, 0xc77dff]);
+    w.sign('DAEDALUS RELAY', '#c77dff', 6, 28, 0);
+    return dock;
   }
 
   // Power block: a D-He3 fusion plant (tools/blender/build_power.py, settlements.powerBlock): hall with a control bridge, a

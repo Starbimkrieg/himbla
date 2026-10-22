@@ -8,7 +8,7 @@ import { DISH_SIZE } from '../models.js';
 import { buildHomeTown, addBuilding, slotAt } from '../hometown.js';
 import {
   habDome, cabin, warehouse, quonset, lattice, hortonSphere, floodMast, stack, ticker, conveyor, pipe, radar, searchlight, shanty,
-  wreckHull, penTerminal, jobTerminal, playground, waterTower, greenhouse, commsMast, townHall, towerCrane, gantryCrane, cargoStack, garage, dishStation, powerBlock, keplerHabitat,
+  wreckHull, penTerminal, jobTerminal, playground, waterTower, greenhouse, commsMast, townHall, towerCrane, gantryCrane, cargoStack, garage, dishStation, powerBlock, keplerHabitat, ilmbWing,
 } from '../settlements.js';
 import { ferrisWheel, carousel } from '../downsFair.js';
 import { animate, together, lineUp, factionHex } from './common.js';
@@ -228,6 +228,15 @@ const parts = {
     item('part.power-block', 'ILMB POWER BLOCK (FUSION)', 40, 45, () => kitPart((k) => powerBlock(k, -7.25, 0, 0))),
     // the ILMB's family wing (57 x 55 m, its lobby out to x -28.9, so shifted 0.7 m): the Orrery ring, its orbit ring turning
     item('part.kepler-habitat', 'ILMB KEPLER HABITAT (ORRERY)', 57, 55, () => kitPart((k) => keplerHabitat(k, 0.7, 0, 0))),
+    // the ILMB's farm wing (62 x 57 m, heliostats out to x -26.3, tank pad to x 36): greenhouse dome, heliostats, tank farm
+    item('part.hydroponics', 'ILMB HYDROPONICS', 62, 57, () => kitPart((k) => ilmbWing(k, 'hydroponics', -4.85, 0, 0))),
+    // Meridian's research wing (70 x 29 m: plaza bollards at x -29.8, the sky lab out to x 39.8 from 50 m up, the loading ramp
+    // to z -16): lab block, leaning pylon
+    item('part.labs', 'ILMB MERIDIAN LABS', 70, 29, () => kitPart((k) => ilmbWing(k, 'labs', -5.0, 1.75, 0))),
+    // Vostok's wing (67 x 50 m, lobby at x -21.9, apron to x 45, the tower out to z -26.5): bermed hangar, blast doors, tower
+    item('part.hangar', 'ILMB VOSTOK HANGAR', 67, 50, () => kitPart((k) => ilmbWing(k, 'hangar', -11.55, 2.0, 0))),
+    // Daedalus's wing (41 x 34 m, lobby at x -14.3, the fence out to x 26): the delta array station (the game adds the dish)
+    item('part.relay', 'ILMB DAEDALUS RELAY', 41, 34, () => kitPart((k) => ilmbWing(k, 'relay', -6.0, 0, 0))),
     item('part.dish-stations', 'DISH STATIONS (CRYO · GANTRY)', 66, 30, () => row([
       kitPart((k) => dishStation(k, 0, 0, DISH_SIZE, 'cryo', 'meridian', '01', { speed: 0.1 })),
       kitPart((k) => dishStation(k, 0, 0, DISH_SIZE, 'gantry', 'kepler', '02', { speed: 0.1, phase: 1 })),

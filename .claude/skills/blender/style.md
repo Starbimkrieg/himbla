@@ -39,6 +39,11 @@ material for that slot. To give a part two colours, make two meshes.
 - **`SLOT_COLORS` should match the game's colours,** so the Blender preview tells the truth. They are preview only.
 - **Darks are plum, not black.** `dark` 0x2a2540 and `tire` 0x1d1a29 are the deepest colours. Pure black is the ink.
 - **Glow slots cast no shadow** (the factories skip them). Use them for things that emit light: lenses, screens, windows, flames.
+- **Pieces that meet corner to corner keep their own winding.** `kit.mesh()` welds coincident vertices and then recalculates
+  normals per connected piece, so slabs whose corners touch exactly (a faceted shell built edge by edge) become one non-manifold
+  piece and can come out inside-out: black from outside, and `audit_coplanar` reports faces facing the wrong way. `frame_box`
+  and the kit primitives are already wound outward, so put such pieces in `Acc.of(slot, ink, raw=True)` (`build_hangar.py`'s
+  shell and frames).
 - **Faces read flat or round, never lumpy.** `kit.mesh()` smooths and then hard-edges creases over 38°. For crisp boxes use
   `cuboid`, `cbox`, `prism` or `extrude`; use `lathe`, `loft` or `tube` for round things. `rbox` / `superquad` with 4 to 6
   segments round is **not** a box: it comes out as an octahedron or lozenge. The crane decks were diamonds for this reason
@@ -98,8 +103,9 @@ when in doubt:
   and 0.75 m of climbing space in front (`ladder()`); a personnel door about 1.2 × 2.45 m; land-train bays about 7 m wide and
   5.6 m high.
 - **Share parts, don't copy them.** Parts used by more than one model live in one module: `spreader.py` (both cranes),
-  `decals.py` (`container_doors`, faction marks), `cargo.py` (the land-train's container), `dishkit.py`. The gantry reuses the
-  tower crane's trolley and hook block.
+  `hookblock.py` (the hook block of both cranes and the Vostok Hangar's bridge crane), `decals.py` (`container_doors`, faction
+  marks), `cargo.py` (the land-train's container), `dishkit.py`, `wing_kit.py` (the ILMB's wing buildings: the skywalk lobby,
+  ladders, railings, colliders). The gantry reuses the tower crane's trolley.
 
 ## 4. Mechanical plausibility
 

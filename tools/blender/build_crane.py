@@ -66,6 +66,7 @@ SLOT_COLORS = {
 exec(open(os.path.join(REPO, "tools", "blender", "kit.py"), encoding="utf-8").read(), globals())
 exec(open(os.path.join(REPO, "tools", "blender", "decals.py"), encoding="utf-8").read(), globals())
 exec(open(os.path.join(REPO, "tools", "blender", "spreader.py"), encoding="utf-8").read(), globals())
+exec(open(os.path.join(REPO, "tools", "blender", "hookblock.py"), encoding="utf-8").read(), globals())
 
 C = coll()
 for s in SLOT_COLORS:
@@ -455,31 +456,10 @@ M("ropeStubs", join([B((0, SY_, s * FALL), (0, -0.71, s * FALL), 0.05, 4, True) 
 cable = PV("cable", (0, -0.7, 0), trolley, role="cable")
 M("ropes", join([B((0, 0, s * FALL), (0, -1.0, s * FALL), 0.05, 4, True) for s in (-1, 1)]), "rope", cable, 0.02)
 
-# hook block (hook frame: falls end at y = 0, at the sheave). Sheave in the plane of the falls (axle along x) between cheek
-# plates; under it crosshead, swivel, hook
+# hook block (hookblock.py; hook frame: falls end at y = 0, at the sheave): sheave in the plane of the falls (axle along x)
+# between cheek plates; under it crosshead, swivel, hook (its back bending out to -x) with its latch
 hook = PV("hook", (0, -0.7, 0), trolley, role="hook")
-M("hookSheave", xf(lathe([(0.0, -0.05), (SR, -0.05), (SR - 0.04, 0.0), (SR, 0.05), (0.0, 0.05)], 14), (0, 0, 0), (0, 0, PI / 2)), "dark", hook, 0.02)
-RC = FALL + 0.12                     # cheek plates: round-topped about the axle, square below
-cheek = [(RC * math.cos(math.radians(a)), RC * math.sin(math.radians(a))) for a in range(0, 181, 15)] + [(-RC, -0.62), (RC, -0.62)]
-M("hookCheeks", join([xf(extrude(cheek, 0.07, "x"), (s * 0.12, 0, 0)) for s in (-1, 1)]), "body", hook, 0.04)
-M("hookAxle", join([xf(lathe([(0.0, -0.05), (0.11, -0.05), (0.11, 0.05), (0.0, 0.05)], 10), (s * 0.18, 0, 0), (0, 0, PI / 2)) for s in (-1, 1)]), "steel", hook, 0.02)
-M("hookTie", join([box(0.12, 0.04, 0.05, (0, 0.38, 0))] + [box(0.12, 0.05, 0.05, (0, -0.48, s * 0.3)) for s in (-1, 1)]), "steel", hook, 0.02)
-rb("hookCrosshead", 0.2, 0.2, FALL + 0.12, (0, -0.8, 0), "body", hook, 0.04, e=0.1)
-M("hookSwivel", lathe([(0.0, -1.32), (0.16, -1.32), (0.18, -1.2), (0.18, -1.08), (0.12, -1.0), (0.0, -1.0)], 10), "steel", hook, 0.02)
-# hook: shank down from the swivel, back bending out to -x, round the saddle (under the swivel) and up to the tip; a
-# sprung latch across the throat
-HC_ = (0.0, -1.88)                   # bowl middle
-HR = 0.24
-path = [(0.0, -1.3), (0.0, -1.48), (-0.09, -1.6)]
-rad = [0.085, 0.09, 0.1]
-for k in range(12):
-    a = math.radians(150 + (395 - 150) * k / 11)
-    path.append((HC_[0] + HR * math.cos(a), HC_[1] + HR * math.sin(a)))
-    rad.append(0.11 - 0.06 * max(0.0, (k - 6) / 5) if k > 6 else 0.11)
-M("hookIron", tube([(x, y, 0) for x, y in path], rad, 8, True), "dark", hook, 0.03)
-tip = path[-1]
-M("hookLatch", B((0.07, -1.47, 0), (tip[0] - 0.02, tip[1] + 0.04, 0), 0.025, 4, True), "body", hook, 0)
-SADDLE = (0.0, HC_[1] - HR + 0.1)   # sling eyes sit here in the bowl
+SADDLE = (0.0, hook_block(M, hook, "z", FALL, SR))   # sling eyes sit here in the bowl
 
 # ---- load: the Prospector's cargo container (faction-coloured corrugated steel, castings, roof rails, barred doors, plate
 # and number on each flank) hung from its spreader (spreader.py) by four bridle slings. Built in the container's frame (long

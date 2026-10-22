@@ -1,14 +1,14 @@
 import { FRONT_OUT, HALL } from './casinoPlan.js'; // casino: where the hall's door wall ends and the forecourt starts
 import * as THREE from 'three';
 import { Kit, T, G, D, GLASS, BEAM, prism, sandbags, container, crate, tank, lightString, junkHeap, PALETTE } from './outpostModels.js';
-import { FACTIONS } from './locations.js';
+import { FACTIONS, ILMB_WINGS_AT } from './locations.js';
 import { pixelFont } from './fonts.js';
 import { glow, gradientMap } from './toon.js';
 import { patchBermMaterial } from './moonSkins.js';
 import { market, tickerText } from './market.js';
 import { casinoNode, casinoSlot, lotNode, lotSlot } from './models.js';
 import { waterMesh } from './fountainFx.js';
-import { craneModel, craneSlot, CRANE_H, CRANE_LOAD_DROP, CRANE_TROLLEY_MIN, CRANE_TROLLEY_SPAN, gantryModel, cargoSlot, CARGO_BOX, garageModel, garageSlot, dishModel, dishSlot, DISH_KINDS, powerModel, powerSlot, POWER_PULSE, habitatModel, habitatSlot } from './models.js';
+import { craneModel, craneSlot, CRANE_H, CRANE_LOAD_DROP, CRANE_TROLLEY_MIN, CRANE_TROLLEY_SPAN, gantryModel, cargoSlot, CARGO_BOX, garageModel, garageSlot, dishModel, dishSlot, DISH_KINDS, powerModel, powerSlot, POWER_PULSE, habitatModel, habitatSlot, wingModel, wingSlot, WING_GLASS } from './models.js';
 
 // Settlements, HQs and landmarks built with the outpost Kit (outpostModels.js): static parts bake into one merged mesh per
 // material plus one ink hull, so a detailed place costs a handful of draw calls. Moving parts (cranes, wheels, tickers, rides)
@@ -449,12 +449,19 @@ export function garage(k, x, z, yaw, open = [true, false, true], kind = 'main') 
   }
   for (const b of M.blinkers) k.blinker(b.pos.x, b.pos.y, b.pos.z, 0xffd23f, b.data.radius || 0.25);
   for (const c of M.cargo) cargoStack(k, c.pos.x, c.pos.z, c.data.n || 1, [c.data.faction || 'meridian'], c.data.yaw || 0, c.pos.y);
-  for (const { pos: p, data: d } of M.cols) {
-    if (d.shape === 'box') k.solid(d.hx, d.hy, d.hz, p.x, p.z, d.yaw || 0, p.y);
+  modelCols(k, M.cols);
+  k.at();
+}
+
+// A Blender model's `col` pivots as Kit colliders in the current frame (extras `shape` box / cyl / hcyl / sphere and sizes;
+// boxes may `pitch`: build_habitat.py's legs).
+function modelCols(k, cols) {
+  for (const { pos: p, data: d } of cols) {
+    if (d.shape === 'box') k.solid(d.hx, d.hy, d.hz, p.x, p.z, d.yaw || 0, p.y, d.pitch || 0);
     else if (d.shape === 'cyl') k.column(d.r, p.y + d.h, p.x, p.z, p.y);
     else if (d.shape === 'hcyl') k.hcyl(d.r, d.len, p.x, p.z, d.yaw || 0, p.y);
+    else if (d.shape === 'sphere') k.sphere(d.r, p.x, p.y, p.z);
   }
-  k.at();
 }
 
 // ILMB Power Block (tools/blender/build_power.py, proposal B): a D-He3 fusion plant in the power wing's frame (+x away from
@@ -467,12 +474,7 @@ export function powerBlock(k, x, z, yaw) {
   k.at(x, z, yaw);
   k.baked(M.root, mat, new THREE.Matrix4());
   for (const b of M.blinkers) k.blinker(b.pos.x, b.pos.y, b.pos.z, 0xff2a4a, b.data.radius || 0.25);
-  for (const { pos: p, data: d } of M.cols) {
-    if (d.shape === 'box') k.solid(d.hx, d.hy, d.hz, p.x, p.z, d.yaw || 0, p.y);
-    else if (d.shape === 'cyl') k.column(d.r, p.y + d.h, p.x, p.z, p.y);
-    else if (d.shape === 'hcyl') k.hcyl(d.r, d.len, p.x, p.z, d.yaw || 0, p.y);
-    else if (d.shape === 'sphere') k.sphere(d.r, p.x, p.y, p.z);
-  }
+  modelCols(k, M.cols);
   const beat = new THREE.Group();
   beat.userData.tick = (o, dt, t) => {
     const f = 0.72 + 0.14 * (1 + Math.sin(t * 1.8)); // (dims to 72 % and back, about every 3.5 s)
@@ -493,12 +495,27 @@ export function keplerHabitat(k, x, z, yaw) {
   const orbit = part(0xff9f1c, (o) => o.baked(M.orbit, mat, I));
   orbit.userData.spin = M.orbit.data.spin;
   k.dyn(orbit, M.orbit.pos.x, M.orbit.pos.y, M.orbit.pos.z);
-  for (const { pos: p, data: d } of M.cols) {
-    if (d.shape === 'box') k.solid(d.hx, d.hy, d.hz, p.x, p.z, d.yaw || 0, p.y, d.pitch || 0);
-    else if (d.shape === 'cyl') k.column(d.r, p.y + d.h, p.x, p.z, p.y);
-    else if (d.shape === 'hcyl') k.hcyl(d.r, d.len, p.x, p.z, d.yaw || 0, p.y);
-  }
+  modelCols(k, M.cols);
   k.at();
+}
+
+// The ILMB's other wings (models.js ILMB_WINGS: Hydroponics, Meridian Labs, Vostok Hangar, Daedalus Relay; tools/blender/
+// build_<name>.py), each in its wing's frame (+x away from the hub), origin at (x, z) turned by yaw. Baked whole; the aircraft
+// lamps blink and the `fan` parts turn (pieces of their own). Colliders are the model's `col` pivots. Returns the dock distance.
+export function ilmbWing(k, name, x, z, yaw) {
+  const M = wingModel(name), I = new THREE.Matrix4();
+  const mat = (slot) => (slot === 'glass' ? GLASS(WING_GLASS[name], 0.22) : slotMat(wingSlot(slot)));
+  k.at(x, z, yaw);
+  k.baked(M.root, mat, I);
+  for (const b of M.blinkers) k.blinker(b.pos.x, b.pos.y, b.pos.z, 0xff2a4a, b.data.radius || 0.25);
+  for (const f of M.fans) {
+    const piece = part(0xffffff, (q) => q.baked(f, mat, I));
+    piece.userData.spin = f.data.spin;
+    k.dyn(piece, f.pos.x, f.pos.y, f.pos.z);
+  }
+  modelCols(k, M.cols);
+  k.at();
+  return M.dock;
 }
 
 // Four-legged lattice tower (masts, derricks): legs taper from half-width w0 to w1, X-braced in `bays` bays. Draws in the
@@ -1849,7 +1866,7 @@ export function searchlight(k, x, y, z, reach = 40) {
 export function dressIlmb(world, loc) {
   settle(world, loc, 9203, (k) => {
     // berm cut where the six wing skywalks dock (world.js buildIlmbWings: wing angle a runs along (cos a, sin a), dome azimuth pi/2 - a)
-    habDome(k, 0, 0, 58, 0x9be7ff, { door: 0, trim: 0xffd23f, cupola: false, gaps: [0, 0.62, 2.2, 3.8, 4.5, 5.2].map((a) => Math.PI / 2 - a) });
+    habDome(k, 0, 0, 58, 0x9be7ff, { door: 0, trim: 0xffd23f, cupola: false, gaps: ILMB_WINGS_AT.map(([a]) => Math.PI / 2 - a) });
     // control spire: banded shaft, observation pod, antenna, beacon
     k.at(0, 0);
     k.cyl(2.6, 4.2, 70, 14, T(WHITE), 0, 0, 0, { outline: 0.12 });

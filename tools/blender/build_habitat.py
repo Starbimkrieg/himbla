@@ -47,6 +47,7 @@ def find_repo():
 REPO = find_repo()
 OUT = os.environ.get("HABITAT_OUT") or os.path.join(REPO, "src", "assets", "habitat.glb")
 COLL = "MoonHabitat"
+PFX = "habitat_"
 exec(open(os.path.join(REPO, "tools", "blender", "habitat_kit.py"), encoding="utf-8").read(), globals())
 
 ROOT = pivot("habitat", (0, 0, 0), None, radius=27.5, dock=28.6)
@@ -60,7 +61,6 @@ CORES = (2, 6, 10)                  # vertices with a lift core and a spoke; 6 i
 LEGS = ((18.8, 16.0), (22.4, 25.6)) # (top pin, foot pin) radius of each leg of a pair
 PIN_Y = (6.15, 0.95)                # (top, foot) pin heights
 UP = Vector((0, 1, 0))
-NCOL = [0]
 
 
 def rv_out(y):
@@ -98,11 +98,6 @@ def poly_pt(k, s, r, y):
 def spun(g, t, rot):
     """a part built along +x (a spoke's frame), moved to t there, then turned out to its spoke"""
     return xf(xf(g[:2], t), (0, 0, 0), rot)
-
-
-def col(pos, **extras):
-    NCOL[0] += 1
-    return pivot(f"habitat_col{NCOL[0]}", pos, ROOT, role="col", **extras)
 
 
 # ================= the ring =================
@@ -231,17 +226,8 @@ for k in CORES:
         for v0 in (1.2, 3.8):
             slit.put(frame_box(o, tn, UP, Vector((-c, 0, -s)), -0.45, 0.45, v0, v0 + 1.9, r - 0.12, r - 0.02))
 
-# lobby where the skywalk docks (theta = pi, x < 0)
-Acc.of("wall", 0.08).put(box(-25.3, 3.6, 0, 6.6, 7.2, 9.0))
-Acc.of("trim", 0.05).put(box(-26.2, 7.325, 0, 5.4, 0.75, 9.6))
-Acc.of("door", 0.0).put(box(-28.55, 3.0, 0, 0.2, 4.8, 5.4))
-jamb = Acc.of("trim", 0.02)
-for sz in (-1, 1):
-    jamb.put(box(-28.65, 2.975, sz * 3.0, 0.3, 6.05, 0.5))
-    for x in (-27.2, -24.0):
-        win.put(box(x, 4.3, sz * 4.503, 1.6, 1.8, 0.02))
-jamb.put(box(-28.65, 6.25, 0, 0.3, 0.5, 6.5))
-Acc.of("lamp", 0.0).put(box(-28.63, 5.75, 0, 0.06, 0.3, 5.2))
+# lobby where the skywalk docks (theta = pi, x < 0); its collider comes last, below
+lobby(-28.6, 6.6, 9.0, 7.2, "wall", "trim", win_x=(-27.2, -24.0), collide=False)
 
 # ================= spoke bridges: glazed walkways from the hub to the balcony =================
 glass = Acc.of("glass", 0.0)

@@ -49,6 +49,10 @@ const GLB = {
   'downs-crowd': () => import('./assets/downs-crowd.glb?inline'),
   power: () => import('./assets/power.glb?inline'),
   habitat: () => import('./assets/habitat.glb?inline'),
+  hydroponics: () => import('./assets/hydroponics.glb?inline'),
+  labs: () => import('./assets/labs.glb?inline'),
+  hangar: () => import('./assets/hangar.glb?inline'),
+  relay: () => import('./assets/relay.glb?inline'),
 };
 
 // Models may be compressed (tools/optimize-glb.mjs: quantized + meshopt, ~1/3 size; the decoder ignores plain files).
@@ -1394,7 +1398,7 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lba, lbb, ska, skb, pw, hb, ...dn] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike_a', 'lightbike_b', 'skimmer_a', 'skimmer_b', 'power', 'habitat', ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lba, lbb, ska, skb, pw, hb, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike_a', 'lightbike_b', 'skimmer_a', 'skimmer_b', 'power', 'habitat', ...ILMB_WINGS, ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
   // a root node in a loaded file (`file`.glb), or a load error
   const named = (g, file, name) => {
     const o = g.scene.getObjectByName(name);
@@ -1432,6 +1436,9 @@ export async function loadShipParts({ ships } = {}) {
   SHIP_PARTS.power = bakeShip(named(pw, 'power', 'power_b'));
   // the ILMB's Kepler Habitat, "Orrery" (tools/blender/build_habitat.py)
   SHIP_PARTS.habitat = bakeShip(named(hb, 'habitat', 'habitat'));
+  // the ILMB's other wings (tools/blender/build_<name>.py)
+  ILMB_WINGS.forEach((name, i) => { SHIP_PARTS[name] = bakeShip(named(more[i], name, name)); });
+  const dn = more.slice(ILMB_WINGS.length);
   // the casino's slot-machine cabinet (tools/blender/build_slots.py)
   SHIP_PARTS.slot = bakeShip(named(sl, 'slots', 'slot'));
   // casino lamp post, fountain, bouncer, chandelier, signs (tools/blender/build_casino.py)
@@ -2112,6 +2119,36 @@ export function habitatModel() {
   return { root, orbit: root.kids.find((k) => k.role === 'fan'), cols: root.kids.filter((k) => k.role === 'col') };
 }
 
+// ---- the ILMB's other wings: Hydroponics, Meridian Labs, Vostok Hangar, Daedalus Relay (build_hydroponics.py, build_labs.py,
+// build_hangar.py, build_relay.py) ----
+// Each in its wing's frame (+x away from the hub; the skywalk docks into the lobby face at x = -dock, the root's `dock` extra).
+// Tree: root meshes = everything static; `blinker` = aircraft lamps (extra `radius`); `fan` = parts that turn about y (extra
+// `spin`, rad/s); `col` = colliders (extras `shape` box / cyl / hcyl / sphere and sizes; boxes may `pitch`). One palette serves
+// the four files; `glass` is see-through, tinted per wing (WING_GLASS).
+export const ILMB_WINGS = ['hydroponics', 'labs', 'hangar', 'relay'];
+const WING_TOON = {
+  wall: 0xfff4e0, white: 0xf3eee4, light: 0xd8d4e8, panel: 0x5b5870, roof: 0x3a3550, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55607a,
+  concrete: 0xb8b2cc, pave: 0x9d97b0, planter: 0x6f6878, soil: 0x4a3326, leaf: 0x1f8a3a, leaf2: 0x5cc94a, crop: 0x9be35a, fruit: 0xff4f2e,
+  wheat: 0xd8c25a, mirror: 0xd8f0ff, tank: 0xf3eee4, water: 0x2ec4ff, door: 0x2a2540, hazard: 0xffd23f, green: 0x3ad15a,
+  cyan: 0x2ec4ff, navy: 0x1b3a8f, gold: 0xffd23f, slate: 0x6b6f78, slateDark: 0x2c2f38, red: 0xff3b5c, regolith: 0xb7b0c3, sand: 0x8f8577,
+  plum: 0x4a4660, violet: 0xc77dff,
+};
+const WING_GLOW = { window: 0xfff6a8, lamp: 0xfff6a8, grow: 0xff5cd6, pane: 0xbfefff, bay: 0x7a7698, redlamp: 0xff2a4a, element: 0xb98cff, iris: 0xf4e6ff };
+export const WING_GLASS = { hydroponics: 0x8dffb0, labs: 0x9be7ff };
+
+export function wingSlot(slot) {
+  if (slot in WING_GLOW) return { color: WING_GLOW[slot], glow: true };
+  return { color: WING_TOON[slot] ?? 0xff00ff, glow: false };
+}
+
+// A baked wing: static root, the dock distance, lamps, turning parts, colliders.
+export function wingModel(name) {
+  const root = SHIP_PARTS?.[name];
+  if (!root) throw new Error(`${name}.glb not loaded`);
+  const kids = (role) => root.kids.filter((k) => k.role === role);
+  return { root, dock: root.data.dock, blinkers: kids('blinker'), fans: kids('fan'), cols: kids('col') };
+}
+
 // ---- casino slot-machine cabinet (build_slots.py) ----
 // Pixel-arcade video slot facing +z, ~2.2 m wide, 1.6 m deep (z -0.71 to 0.91), 4.3 m tall, lever on the right. Tree: root
 // meshes = cabinet; `pull` = lever (turns about x); `lamp` = roof lamp bar; `screen` (marquee), `display` (pixel reels)
@@ -2438,7 +2475,7 @@ export function makeRacer(i = 1, color = 0xffd23f, bill = 0xff9f1c) {
 export const DISH_SIZE = 30;
 export const DISH_KINDS = ['cryo', 'gantry'];
 const DISH_FIELD = 'field'; // small bases' dish (makeDish), not an array station
-const DISH_HEAD = 'head'; // field dish head alone, light, for small dishes on masts and roofs (makeDishHead, Kit.dishHead)
+const DISH_HEAD = 'head'; // field dish head alone, light, for small dishes on masts and roofs (Kit.dishHead)
 const DISH_TOON = { dark: 0x2a2540, steel: 0x55607a, metal: 0x8a87a0, concrete: 0x8a8698, white: 0xf3eee4, dish: 0xfff4e0, seam: 0x8a87a0, tank: 0xc6d6ea, hazard: 0xffd23f, brand: 0x14a3b8, redsafe: 0xc9202e, blue: 0x1d63d6 };
 const DISH_GLOW = { glass: 0x9be7ff, window: 0xfff6a8, lamp: 0xfff6a8, tail: 0xff2a4a, green: 0x7dff6a, hot: 0xff9f1c };
 
@@ -2474,7 +2511,7 @@ export function dishModel(kind, faction = 'meridian', no = '01') {
 
 // A whole station as plain meshes (model viewer, field dish): root, driven pivots and aircraft lamps (userData.blink).
 // Array sites bake the parts into their kit instead (settlements.js dishStation).
-export function makeDishStation({ kind = 'cryo', faction = 'meridian', no = '01', size = DISH_SIZE, head = false } = {}) {
+export function makeDishStation({ kind = 'cryo', faction = 'meridian', no = '01', size = DISH_SIZE } = {}) {
   const D = dishModel(kind, faction, no);
   const matFor = perSlot((slot) => slotMat(dishSlot(slot, faction)));
   const dress = (node, g) => dressNode(node, g, matFor, (slot) => !(slot in DISH_GLOW));
@@ -2488,16 +2525,14 @@ export function makeDishStation({ kind = 'cryo', faction = 'meridian', no = '01'
     return m;
   };
   const root = new THREE.Group();
-  if (!head) { // (head: yaw and tilt parts only, no tower or lamps)
-    for (const n of D.fixed) dress(n, root);
-    for (const b of D.blinkers) root.add(lamp(b));
-  }
+  for (const n of D.fixed) dress(n, root);
+  for (const b of D.blinkers) root.add(lamp(b));
   const yaw = new THREE.Group(), tilt = new THREE.Group();
   yaw.position.copy(D.yaw.pos);
   tilt.position.copy(D.tilt.pos);
   dress(D.yaw, yaw);
   dress(D.tilt, tilt);
-  if (!head) for (const b of D.tiltBlinkers) tilt.add(lamp(b));
+  for (const b of D.tiltBlinkers) tilt.add(lamp(b));
   yaw.add(tilt);
   root.add(yaw);
   root.scale.setScalar(size / D.size);
@@ -2901,20 +2936,10 @@ export function makeCrate(color = 0xffd23f, size = 0.9) {
   return g;
 }
 
-// A dish head alone for a roof or post: the field dish's reflector, trunnions, neck and feed, no tower, lamps or colliders;
-// rim `rim` m from the axis, `faction` paint. Origin at the neck's foot. Returns pivots to aim it (yaw about the vertical;
-// tilt -0.5, yaw 0 opens up and towards -z).
 const DISH_RIM = 14.1, DISH_NECK = 21.2, DISH_PIVOT = 28.5; // field dish rim radius, neck-foot height, pivot height, at size 30
-export function makeDishHead(rim, faction = 'none') {
-  const k = rim / DISH_RIM;
-  const d = makeDishStation({ kind: DISH_HEAD, faction, size: DISH_SIZE * k, head: true });
-  d.root.position.y = -DISH_NECK * k;
-  const root = new THREE.Group();
-  root.add(d.root);
-  return { root, yaw: d.yaw, tilt: d.tilt };
-}
 
-// The same head baked into a kit (outposts, settlements, founded bases): neck foot at (x, y, z) in the current frame,
+// A dish head alone (the field dish's reflector, trunnions, neck and feed; no tower, lamps or colliders) baked into a kit
+// (outposts, settlements, founded bases): rim `rim` m from the axis, neck foot at (x, y, z) in the current frame,
 // `faction` a key or colour. `az` turns about the vertical (0: opens towards -z, PI: +z); `el` nods (-0.5: a bit over 45°
 // up; -1.4: nearly sideways). With `spin` (rad/s) it's a returned moving piece turning about the vertical through
 // (x, y, z) on an `arm` m boom (head at the end, facing out for az PI).

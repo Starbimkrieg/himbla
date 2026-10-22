@@ -19,8 +19,8 @@ const FLAT = { R: 3600, addFlat() {}, keepClear() {}, surface: () => 0, altitude
 const UP = new THREE.Vector3(0, 1, 0);
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
 
-// A game collider (world space) -> a row spec (yawed box, vertical cylinder, sphere). A horizontal cylinder (arched roof)
-// becomes its bounding box; a tilted box (ramp) the upright box round it.
+// A game collider (world space) -> a row spec (yawed box, possibly pitched about its x; vertical cylinder; sphere). A horizontal
+// cylinder (arched roof) becomes its bounding box; a box tilted any other way the upright box round it.
 function toSpec(c) {
   if (c.type === 'sphere') return { type: 'sphere', x: c.c.x, y: c.c.y, z: c.c.z, r: c.r };
   if (c.type === 'cyl') {
@@ -30,6 +30,8 @@ function toSpec(c) {
   }
   const yaw = Math.hypot(c.ax.x, c.ax.z) > 1e-6 ? Math.atan2(-c.ax.z, c.ax.x) : 0;
   const X = _a.set(Math.cos(yaw), 0, -Math.sin(yaw)), Z = _b.set(Math.sin(yaw), 0, Math.cos(yaw));
+  // (x still level: the box is yawed, then pitched about its x, as World.colAdd builds it: a ramp, a leaning wall or leg)
+  if (Math.abs(c.ax.y) < 1e-6) return { type: 'box', x: c.c.x, y: c.c.y, z: c.c.z, hx: c.hx, hy: c.hy, hz: c.hz, yaw, pitch: Math.atan2(c.ay.dot(Z), c.ay.y) };
   const ext = (v) => Math.abs(c.ax.dot(v)) * c.hx + Math.abs(c.ay.dot(v)) * c.hy + Math.abs(c.az.dot(v)) * c.hz;
   const hx = ext(X), hz = ext(Z), hy = ext(UP);
   return { type: 'box', x: c.c.x, y: c.c.y, z: c.c.z, hx, hy, hz, yaw };
