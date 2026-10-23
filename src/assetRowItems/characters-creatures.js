@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { makeChimera, makeMite, LIVING, MODIFIERS, PALETTE } from '../chimera.js';
-import { chimeraBuilder } from '../chimerabuild.js';
 import { makeFollowerModel } from '../alchemy.js';
 import { makeDuck } from '../casinoWorld.js';
 import { span, cell, line } from './characters-util.js';
@@ -11,7 +10,7 @@ import { span, cell, line } from './characters-util.js';
 const SP_W = 4.4; // a chimera's cell along the row (m)
 const SP_D = 4.4;
 
-// the walk cycle every chimera has (chimera.js anim(t, speed)): the row shows them trotting on the spot
+// the walk cycle every chimera has (chimerabuild.js anim(t, speed)): the row shows them trotting on the spot
 const GAIT = 3.5;
 
 function chimeraCells(list, w = SP_W, d = SP_D, yaw = 0) {
@@ -124,66 +123,25 @@ function followersItem() {
   };
 }
 
-// ---- the chimera builder (chimerabuild.js, the kit in chimera.glb): round three of the rework, not in the game yet. The kit loads on
-// request, so the cell fills in a moment after it is built.
-function builderItem() {
-  const mixes = [
-    { seed: 3, body: 'car', legs: 'mite', head: 'person', mods: [] },
-    { seed: 21, body: 'sapling', legs: 'car', head: 'pirate', extraHead: 'mite', mods: [] },
-    { seed: 12, body: 'mite', legs: 'car', head: 'person', mods: ['armor'] },
-    { seed: 14, body: 'person', legs: 'sapling', head: 'mite', mods: ['crystal'] },
-    { seed: 6, body: 'car', legs: 'pirate', head: 'car', mods: ['turbo', 'lens', 'spark'] },
-    { seed: 31, body: 'sapling', legs: 'mite', head: 'alien', mods: ['void', 'radio', 'mud'] },
-  ];
+// ---- every look of the mite, car and sapling parts (legs, body and head of a look together), and every settler's outfit (the NPCs')
+function looksItem() {
+  const list = [];
+  for (const k of ['mite', 'car', 'sapling']) for (let n = 0; n < 3; n++) list.push([`${k.toUpperCase()} ${n + 1}`, { seed: 21 + n, body: k, legs: k, head: k, mods: [], size: 1.1, style: { legs: n, body: n, head: n } }]);
   return {
-    id: 'creatures.builder', label: 'CHIMERA BUILDER: FUSED PARTS, MUTATIONS (NOT IN THE GAME YET)', w: span(mixes.length, 3.2), d: 4,
+    id: 'creatures.looks', label: 'CHIMERA PARTS: THE THREE LOOKS', w: span(list.length, SP_W), d: SP_D,
     make() {
-      const root = new THREE.Group(), anims = [];
-      let gone = false;
-      chimeraBuilder().then((build) => {
-        if (gone) return;
-        mixes.forEach((g, i) => {
-          const c = build({ ...g, size: 1.1, parents: [...new Set([g.body, g.legs, g.head, g.extraHead].filter(Boolean))] });
-          c.root.position.x = (i - (mixes.length - 1) / 2) * 3.2;
-          root.add(c.root);
-          anims.push(c.anim);
-        });
-      });
-      return { root, update: (dt, t) => { for (const a of anims) a(t, GAIT); }, dispose() { gone = true; } };
+      const R = chimeraCells(list);
+      return { root: line(R.cells).root, update: R.update };
     },
   };
 }
-
-// ---- the builder's HD showcase (build_chimera_hd.py -> chimera_hd.glb): person, mite, car and sapling parts at full resolution, with their
-// fitted armour and crystal, and two-headed ones on forked bodies. Up for sign-off; the rest of the kinds follow once it is.
-function builderHdItem() {
-  const mixes = [
-    { body: 'sapling', legs: 'car', head: 'person', mods: [] },
-    { body: 'person', legs: 'sapling', head: 'mite', mods: [] },
-    { body: 'mite', legs: 'person', head: 'car', mods: [] },
-    { body: 'car', legs: 'mite', head: 'sapling', mods: [] },
-    { body: 'mite', legs: 'car', head: 'person', mods: ['armor'] },
-    { body: 'person', legs: 'person', head: 'person', mods: ['armor'] },
-    { body: 'sapling', legs: 'mite', head: 'car', mods: ['crystal'] },
-    { body: 'car', legs: 'person', head: 'mite', mods: ['crystal'] },
-    { body: 'sapling', legs: 'car', head: 'sapling', extraHead: 'person', mods: [] },
-    { body: 'mite', legs: 'mite', head: 'sapling', extraHead: 'person', mods: [] },
-  ];
+function outfitsItem() {
+  const list = ['coveralls', 'engineer', 'lab', 'trader', 'elder', 'casual'].map((arch, i) => [arch.toUpperCase(), { seed: 31 + i, body: 'person', legs: 'person', head: 'person', mods: [], size: 1.1, looks: { person: { arch, headgear: i % 3 === 2 ? 'bowl' : 'sealed' } } }]);
   return {
-    id: 'creatures.builderhd', label: 'CHIMERA BUILDER, HD SHOWCASE: FITTED ARMOUR AND CRYSTAL (NOT IN THE GAME YET)', w: span(mixes.length, 3.2), d: 4,
+    id: 'creatures.outfits', label: 'CHIMERA PEOPLE: THE SETTLERS\' OUTFITS', w: span(list.length, SP_W), d: SP_D,
     make() {
-      const root = new THREE.Group(), anims = [];
-      let gone = false;
-      chimeraBuilder().then((build) => {
-        if (gone) return;
-        mixes.forEach((g, i) => {
-          const c = build({ ...g, seed: 7, size: 1.1, parents: [...new Set([g.body, g.legs, g.head, g.extraHead].filter(Boolean))] }, { hd: true });
-          c.root.position.x = (i - (mixes.length - 1) / 2) * 3.2;
-          root.add(c.root);
-          anims.push(c.anim);
-        });
-      });
-      return { root, update: (dt, t) => { for (const a of anims) a(t, GAIT); }, dispose() { gone = true; } };
+      const R = chimeraCells(list);
+      return { root: line(R.cells).root, update: R.update };
     },
   };
 }
@@ -191,5 +149,5 @@ function builderHdItem() {
 export default {
   id: 'characters.creatures',
   title: '03 · CREATURES',
-  items: [speciesItem(), modsItem(), hybridsItem(), builderItem(), builderHdItem(), megaMiteItem(), miteItem(), ducksItem(), followersItem()],
+  items: [speciesItem(), modsItem(), hybridsItem(), looksItem(), outfitsItem(), megaMiteItem(), miteItem(), ducksItem(), followersItem()],
 };

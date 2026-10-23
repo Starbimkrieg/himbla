@@ -9,7 +9,7 @@ headless to check the balance (the figures at the end are from it).
 Two or more **different** kinds of creature in the reactor make a chimera (two of one kind and nothing else come back out of the reactor;
 one kind with materials makes a Mutant). Body, legs and head are each drawn at random from the parents (the order they went in counts for
 nothing), and with two or more kinds the three parts always come from at least two of them. An extra head: 15% + 12% per distinct kind.
-Size: 0.75 to 1.45 (drawn at 0.72 of that).
+Size: 0.75 to 1.45 (drawn at 0.95 of that: `CHIMERA_DRAWN` in chimeragenes.js).
 
 ## Stats
 

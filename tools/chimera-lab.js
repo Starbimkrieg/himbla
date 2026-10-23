@@ -1,9 +1,10 @@
-// Dev-only: the chimera builder's lab. Puts chimeras together with src/chimerabuild.js and draws them through the game's comic post pass:
-// one at a time (pick its parts, mutations and seed) or a grid of twelve random ones (the reactor's own random draw, chimeragenes.js).
+// Dev-only: the chimera builder's lab. Puts chimeras together with src/chimerabuild.js (the kit: tools/blender/build_chimera.py) and draws
+// them through the game's comic post pass: one at a time (pick its parts, a settler's outfit, mutations and seed), a grid of twelve random
+// ones (the reactor's own random draw, chimeragenes.js), one in each mutation, every kind in its looks, or the showcase.
 // The mouse orbits (drag) and zooms (wheel).
 import * as THREE from 'three';
 import { ComicPost } from '../src/post.js';
-import { chimeraBuilder, BUILT_KINDS, MUTATIONS } from '../src/chimerabuild.js';
+import { chimeraBuilder, KINDS, MUTATIONS } from '../src/chimerabuild.js';
 import { spliceGenes, MODIFIERS } from '../src/chimeragenes.js';
 import { mulberry32 } from '../src/rng.js';
 
@@ -22,63 +23,66 @@ const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 0.05, 5
 const sun = new THREE.DirectionalLight(0xfff1d6, 1.6);
 sun.position.set(6, 12, 8);
 sun.castShadow = true;
-sun.shadow.camera.left = sun.shadow.camera.bottom = -12; sun.shadow.camera.right = sun.shadow.camera.top = 12;
+sun.shadow.camera.left = sun.shadow.camera.bottom = -14; sun.shadow.camera.right = sun.shadow.camera.top = 14;
 scene.add(sun, new THREE.HemisphereLight(0x9a8cff, 0x40305a, 0.85));
-const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 48).rotateX(-Math.PI / 2), new THREE.MeshToonMaterial({ color: 0x8a8398 }));
+const ground = new THREE.Mesh(new THREE.CircleGeometry(80, 48).rotateX(-Math.PI / 2), new THREE.MeshToonMaterial({ color: 0x8a8398 }));
 ground.receiveShadow = true;
 scene.add(ground);
 const post = new ComicPost(renderer, camera);
 
 // ---- the panel ----
 const MOD_ITEM = Object.fromEntries(Object.entries(MODIFIERS).map(([item, m]) => [m, item]));
+const OUTFITS = ['', 'coveralls', 'engineer', 'lab', 'trader', 'elder', 'casual'];
+const MODES = ['grid', 'modgrid', 'kinds', 'showcase'];
 const S = {
   body: Q.get('body') || 'car', legs: Q.get('legs') || 'mite', head: Q.get('head') || 'person', extra: Q.get('extra') || '',
+  outfit: Q.get('outfit') || '', headgear: Q.get('headgear') || '',
   mods: new Set((Q.get('mods') || '').split(',').filter(Boolean)), seed: num('seed', 7), size: num('size', 1.1), crown: Q.get('crown') === '1',
-  grid: Q.get('grid') === '1', modgrid: Q.get('modgrid') === '1', hd: Q.get('hd') === '1' || Q.get('showcase') === '1', showcase: Q.get('showcase') === '1',
+  style: Q.has('style') ? Q.get('style').split(',').map(Number) : null,     // (&style=legs,body,head: a mite's, car's or sapling's looks, 0 to 2)
+  far: Q.get('far') === '1', mode: MODES.find((m) => Q.get(m) === '1') || '',
 };
 const ui = document.getElementById('ui');
 if (Q.get('ui') === '0') ui.style.display = 'none';
-const sel = (key, opts) => `<label>${key}<select data-k="${key}">${opts.map((o) => `<option${S[key] === o ? ' selected' : ''} value="${o}">${o || '(none)'}</option>`).join('')}</select></label>`;
-ui.innerHTML = `<h1>CHIMERA LAB</h1>${sel('body', BUILT_KINDS)}${sel('legs', BUILT_KINDS)}${sel('head', BUILT_KINDS)}${sel('extra', ['', ...BUILT_KINDS])}
+const sel = (key, opts) => `<label>${key}<select data-k="${key}">${opts.map((o) => `<option${S[key] === o ? ' selected' : ''} value="${o}">${o || '(any)'}</option>`).join('')}</select></label>`;
+ui.innerHTML = `<h1>CHIMERA LAB</h1>${sel('body', KINDS)}${sel('legs', KINDS)}${sel('head', KINDS)}${sel('extra', ['', ...KINDS])}
+  ${sel('outfit', OUTFITS)}${sel('headgear', ['', 'sealed', 'bowl'])}
   <div class="mods">${MUTATIONS.map((m) => `<label><input type="checkbox" data-m="${m}"${S.mods.has(m) ? ' checked' : ''}> ${m}</label>`).join('')}</div>
   <label>seed<input type="number" data-k="seed" value="${S.seed}"></label>
   <label>size<input type="number" data-k="size" value="${S.size}" step="0.05" min="0.75" max="1.45"></label>
   <label style="justify-content:flex-start"><input type="checkbox" data-k="crown"${S.crown ? ' checked' : ''}> Triple Crown</label>
-  <label style="justify-content:flex-start"><input type="checkbox" data-k="hd"${S.hd ? ' checked' : ''}> HD parts (person, mite, car, sapling)</label>
-  <button data-a="showcase">HD SHOWCASE</button><button data-a="seed">NEW SEED (other looks)</button><button data-a="random">RANDOM CHIMERA</button><button data-a="grid">GRID OF 12 RANDOM</button><button data-a="modgrid">THIS ONE, EACH MUTATION</button>
-  <small>Drag to orbit, wheel to zoom. The seed picks each part's look, the people's outfits, and where the mutations grow.</small>`;
+  <label style="justify-content:flex-start"><input type="checkbox" data-k="far"${S.far ? ' checked' : ''}> far LOD</label>
+  <button data-a="seed">NEW SEED (other looks)</button><button data-a="random">RANDOM CHIMERA</button><button data-a="grid">GRID OF 12 RANDOM</button>
+  <button data-a="modgrid">THIS ONE, EACH MUTATION</button><button data-a="kinds">EVERY KIND, THREE SEEDS</button><button data-a="showcase">SHOWCASE</button>
+  <small>Drag to orbit, wheel to zoom. The seed picks each part's look, the people's outfits (unless picked), and the colours.</small>`;
 ui.addEventListener('change', (e) => {
   const t = e.target;
   if (t.dataset.m) { if (t.checked) S.mods.add(t.dataset.m); else S.mods.delete(t.dataset.m); }
-  else if (t.dataset.k === 'crown' || t.dataset.k === 'hd') S[t.dataset.k] = t.checked;
+  else if (t.dataset.k === 'crown' || t.dataset.k === 'far') S[t.dataset.k] = t.checked;
   else if (t.dataset.k) S[t.dataset.k] = t.type === 'number' ? parseFloat(t.value) : t.value;
-  S.grid = S.modgrid = S.showcase = false;
+  if (t.dataset.k !== 'far') S.mode = '';
   show();
 });
 ui.addEventListener('click', (e) => {
   const a = e.target.dataset && e.target.dataset.a;
   if (!a) return;
-  if (a !== 'modgrid' && a !== 'showcase') S.seed = Math.floor(Math.random() * 1e6);
+  if (a === 'seed' || a === 'random' || a === 'grid') S.seed = Math.floor(Math.random() * 1e6);
   ui.querySelector('[data-k=seed]').value = S.seed;
   if (a === 'random') {
     const g = randomGenes(mulberry32(S.seed));
-    Object.assign(S, { body: g.body, legs: g.legs, head: g.head, extra: g.extraHead || '', mods: new Set(g.mods), size: g.size, grid: false });
+    Object.assign(S, { body: g.body, legs: g.legs, head: g.head, extra: g.extraHead || '', mods: new Set(g.mods), size: g.size });
     for (const k of ['body', 'legs', 'head', 'extra']) ui.querySelector(`[data-k=${k}]`).value = S[k];
     for (const c of ui.querySelectorAll('[data-m]')) c.checked = S.mods.has(c.dataset.m);
   }
-  S.grid = a === 'grid' ? true : a === 'seed' ? S.grid : false;
-  S.modgrid = a === 'modgrid';
-  S.showcase = a === 'showcase';
-  if (S.showcase) { S.hd = true; ui.querySelector('[data-k=hd]').checked = true; }
+  S.mode = MODES.includes(a) ? a : a === 'seed' ? S.mode : '';
   show();
 });
 
 // the reactor's own random draw: two or three living kinds (at least two different), a material now and then
 function randomGenes(rr) {
   const pick = (a) => a[Math.floor(rr() * a.length)];
-  const a = pick(BUILT_KINDS);
-  const items = [{ kind: a }, { kind: pick(BUILT_KINDS.filter((k) => k !== a)) }];
-  if (rr() < 0.35) items.push({ kind: pick(BUILT_KINDS) });
+  const a = pick(KINDS);
+  const items = [{ kind: a }, { kind: pick(KINDS.filter((k) => k !== a)) }];
+  if (rr() < 0.35) items.push({ kind: pick(KINDS) });
   for (const m of MUTATIONS) if (rr() < 0.14) items.push({ kind: MOD_ITEM[m] });
   return spliceGenes(items, Math.floor(rr() * 1e9));
 }
@@ -91,7 +95,8 @@ function clear() {
   shown = []; tags = [];
 }
 function add(genes, x, z, label) {
-  const c = build(genes, { hd: S.hd });
+  const c = build(genes);
+  if (S.far) { c.root.autoUpdate = false; c.root.levels[0].object.visible = false; c.root.levels[1].object.visible = true; }
   c.root.position.set(x, 0, z);
   c.root.rotation.y = 0.5;
   scene.add(c.root);
@@ -102,43 +107,60 @@ const describe = (g) => `${g.body} body · ${g.legs} legs · ${g.head} head${g.e
 let target = new THREE.Vector3(), dist = 4;
 function show() {
   clear();
-  const one = (mods) => ({ seed: S.seed, body: S.body, legs: S.legs, head: S.head, extraHead: S.extra || null, mods, size: S.size, crown: S.crown, parents: [...new Set([S.body, S.legs, S.head, S.extra].filter(Boolean))] });
-  if (S.showcase) {
-    // the HD set: each kind's legs, body and head once, plain, armoured, crystalled, and two-headed (the body forked)
-    const kinds = ['person', 'mite', 'car', 'sapling'];
-    kinds.forEach((k, i) => {
-      for (const [j, mods] of [[], ['armor'], ['crystal'], null].entries()) {
-        const g = { ...one(mods || []), legs: k, body: kinds[(i + 1) % 4], head: kinds[(i + 2) % 4], extraHead: mods ? null : kinds[(i + 3) % 4] };
-        g.parents = [...new Set([g.legs, g.body, g.head, g.extraHead].filter(Boolean))];
-        add(g, (i - 1.5) * 2.5, (j - 1.5) * 2.8, j === 3 ? `${g.legs} legs · ${g.body} body · ${g.head} head` : null);
-      }
-    });
-    target.set(0, 0.4, 0.4); dist = 13;
-    document.getElementById('info').textContent = `the HD showcase, back to front: plain, armour, crystal, two heads (seed ${S.seed})`;
-  } else if (S.grid) {
+  const looks = () => {
+    const o = {};
+    if (S.outfit) o.arch = S.outfit;
+    if (S.headgear) o.headgear = S.headgear;
+    return Object.keys(o).length ? { person: o, voidling: { ...o, headgear: undefined } } : undefined;
+  };
+  const one = (mods, over = {}) => {
+    const g = { seed: S.seed, body: S.body, legs: S.legs, head: S.head, extraHead: S.extra || null, mods, size: S.size, crown: S.crown, looks: looks(), ...over };
+    if (S.style && !g.style) g.style = { legs: S.style[0], body: S.style[1], head: S.style[2] };
+    g.parents = [...new Set([g.body, g.legs, g.head, g.extraHead].filter(Boolean))];
+    return g;
+  };
+  const info = document.getElementById('info');
+  if (S.mode === 'grid') {
     const rr = mulberry32(S.seed);
     for (let i = 0; i < 12; i++) {
       const g = randomGenes(rr);
       add(g, (i % 4 - 1.5) * 2.8, (Math.floor(i / 4) - 1) * 3.4, describe(g));
     }
     target.set(0, 0.5, 0); dist = 15;
-    document.getElementById('info').textContent = `twelve random chimeras, seed ${S.seed}`;
-  } else if (S.modgrid) {
+    info.textContent = `twelve random chimeras, seed ${S.seed}`;
+  } else if (S.mode === 'modgrid') {
     MUTATIONS.forEach((m, i) => add(one([m]), (i % 4 - 1.5) * 2.4, (Math.floor(i / 4) - 0.5) * 3, m));
     target.set(0, 0.5, 0); dist = 11;
-    document.getElementById('info').textContent = `${describe(one([]))}: each mutation, seed ${S.seed}`;
+    info.textContent = `${describe(one([]))}: each mutation, seed ${S.seed}`;
+  } else if (S.mode === 'kinds') {
+    // every kind on its own legs, body and head, three seeds (other looks, outfits and colours)
+    KINDS.forEach((k, i) => { for (let j = 0; j < 3; j++) add(one([], { body: k, legs: k, head: k, extraHead: null, seed: S.seed + j * 101, looks: undefined, parents: [k], style: { legs: j, body: j, head: j } }), (i - 3.5) * 2.2, (j - 1) * 3, j === 2 ? k : null); });
+    target.set(0, 0.5, 0.5); dist = 14;
+    info.textContent = `every kind in three seeds (seed ${S.seed})`;
+  } else if (S.mode === 'showcase') {
+    // amalgams across all eight kinds: plain, armoured, crystalled, two-headed, in mud and sparks
+    const rows = [[], ['armor'], ['crystal'], null, ['mud', 'spark']];
+    for (let i = 0; i < 8; i++) {
+      rows.forEach((mods, j) => {
+        const g = one(mods || [], { legs: KINDS[i], body: KINDS[(i + 3) % 8], head: KINDS[(i + 5) % 8], extraHead: mods ? null : KINDS[(i + 6) % 8], seed: S.seed + i * 13 + j, looks: undefined });
+        g.parents = [...new Set([g.body, g.legs, g.head, g.extraHead].filter(Boolean))];
+        add(g, (i - 3.5) * 2.3, (j - 2) * 2.8, j === 4 ? `${g.legs} · ${g.body} · ${g.head}` : null);
+      });
+    }
+    target.set(0, 0.4, 0.6); dist = 18;
+    info.textContent = `the showcase, back to front: plain, armour, crystal, two heads, mud and spark (seed ${S.seed})`;
   } else {
     const genes = one([...S.mods]);
     add(genes, 0, 0);
     target.set(0, shown[0].height * 0.45, 0); dist = Math.max(2.6, shown[0].height * 2.6);
-    document.getElementById('info').textContent = `${describe(genes)}\nseed ${S.seed} · ${shown[0].height.toFixed(2)} m tall`;
+    info.textContent = `${describe(genes)}\nseed ${S.seed} · ${shown[0].height.toFixed(2)} m tall`;
   }
+  if (Q.has('dist')) dist = num('dist', dist);                       // (a close-up: &dist=m &ty=m, the height looked at)
+  if (Q.has('ty')) target.y = num('ty', target.y);
 }
 show();
 
 // ---- the camera: drag to orbit, wheel to zoom ----
-if (Q.has('dist')) dist = num('dist', dist);                       // (a close-up: &dist=m &ty=m, the height looked at)
-if (Q.has('ty')) target.y = num('ty', target.y);
 let yaw = THREE.MathUtils.degToRad(num('yaw', 25)), pitch = THREE.MathUtils.degToRad(num('pitch', 14)), drag = null;
 renderer.domElement.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; });
 addEventListener('pointerup', () => { drag = null; });

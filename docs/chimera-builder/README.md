@@ -1,98 +1,68 @@
-# The chimera builder (round three)
+# The chimera builder
 
-A chimera is no longer three creatures stacked up: `src/chimerabuild.js` puts it together from its gene sheet, fusing the parts where
-they meet. (Grafts, the other parents' traits growing on each part, were tried and taken out: too noisy.) **Not in the game yet**: the game still draws chimeras with `src/chimera.js`
-until this look is signed off. Look at it in the lab: `npm run dev`, then `/tools/chimera-lab.html`.
+Every chimera in the game is put together by `src/chimerabuild.js` from its gene sheet: the races, the pen, followers, the cards' portraits,
+the wild mites and the Mega Mite. Its parts are the chimera kit, built in Blender (`tools/blender/build_chimera.py` ->
+`src/assets/chimera.glb`). Look at it in the lab: `npm run dev`, then `/tools/chimera-lab.html`.
 
-| A blend | Armour on a mite-car-settler |
-|---|---|
-| ![sapling body on car legs, a pirate's head and a mite's](amalgam.jpg) | ![mite body on car legs, a settler's head, armour](armour.jpg) |
+![The showcase: amalgams of all eight kinds, plain, armoured, crystalled, two-headed, in mud and sparks](showcase.jpg)
 
-![Twelve random chimeras](grid.jpg)
+## The kinds and their looks
 
-![Mutations: armour, crystal, turbo with spark and lens, void with radio and mud](mutations.jpg)
+![Every kind on its own legs, body and head, three seeds each](kinds.jpg)
 
-## The HD showcase (up for sign-off)
+![The three looks of the mite, the car and the sapling](looks.jpg)
 
-The parts rebuilt at full resolution in Blender (`tools/blender/build_chimera_hd.py` -> `src/assets/chimera_hd.glb`, 955 KB compressed):
-person, mite, car and sapling, one look each, with armour and crystal fitted to every part. In the lab: **HD SHOWCASE**, or tick **HD
-parts** (`?showcase=1`, `&hd=1`); in the Asset Row: `creatures.builderhd`, beside the builder's line-up.
+| Kind | Legs | Body | Head |
+|---|---|---|---|
+| Mite (3 looks) | a thorax on six long legs; a beetle's stout spiny legs; a strider's six long legs, two knees each | a segmented abdomen with glassy wing cases; a beetle's domed shell; a wasp's banded gaster and small wings | great compound eyes; a rhinoceros beetle's horn; an ant's mandibles |
+| Car (3 looks) | a coupe's lower half; an off-roader's (lifted, knobbly tyres, bull bar); a racer's (low, slim tyres, skirts) | a coupe's glass cabin; a van's tall cab with a roof rack; a roadster's open cockpit and wing | a box face; a bug face with round lamps; a wedge with a lamp bar |
+| Sapling (3 looks) | a mossy bulb on gnarled roots; a stump with toadstools; a mandrake's tuber on spidery roots | a knotted trunk with leafy branches; a conifer in tiers of needles; a blossom tree | a daisy; a tulip; a leafy bud |
+| Settler | the suit's legs and boots (coveralls, engineer); trousers and shoes (lab coat, jacket, hoodie) | coveralls (an engineer adds a tool belt, pouches and a band); a lab coat; a jacket (a trader adds a tie); a hoodie | a sealed helmet and visor; a bare head in a fishbowl |
+| Void-touched | a settler's parts, in purple with violet veins and a green visor | | |
+| Pirate | patched knees, tall studded boots | a bandolier of brass shells, a red scarf, a spiked pauldron | a black helmet, a green visor, a red bandana, claw marks |
+| Vrill | bare slender legs, feet bound in strips | a tunic with a high collar and a gem clasp; long arms, three fingers | a tall skull, great dark eyes, antennae with glowing tips |
+| Junkbot | two tank treads under a chassis | a scrap torso: rust patches, a hatch, a vent, an exhaust stack, claw arms | an old CRT with a pixel face, a whip aerial |
 
-![Four amalgams: car legs, sapling body, settler's head; sapling legs, settler body, mite head; settler legs, mite body, car head; mite legs, car body, sapling head](hd-amalgams.jpg)
+**A settler wears the outfit of the NPC you scooped up**: `makeFigure` reports it (archetype, colours, headgear), the jar item keeps it
+(`alchemy.js add`), and `spliceGenes` hands it on (`genes.looks`). A chimera without one (a rival, a cheat) has one drawn from its seed.
+The player's orange is never drawn.
 
-| Armour, fitted | Crystal, grown in |
-|---|---|
-| ![a settler in a vest, pads and knee pads; a car with plates on its nose, deck and flanks](hd-armour.jpg) | ![crystal clusters on a sapling trunk and a car body](hd-crystal.jpg) |
+![The settlers' outfits (coveralls, engineer, lab coat, trader, elder, casual), the pirate, the void-touched, the Vrill, the junkbot](outfits.jpg)
 
-**Two heads:** a body forks for them (a second form of its main surface, with a neck for each head): the sapling's trunk splits into two
-branches, the mite and the settler grow two necks, the car's nose two pods.
+## How a part is made
 
-![Two heads: a sapling forked for a sunflower and a settler's helmet; a mite with two necks; a settler with a mite's and a car's heads; a car body with two pods](hd-two-heads.jpg)
+- **One surface per part.** Each colour region is built from overlapping shapes, voxel-remeshed into one watertight surface, smoothed and
+  reduced to its triangle budget: limbs grow out of bodies with no seam and one outline goes round the whole part.
+- **Details cut in, not laid on.** Sockets, recesses, grooves, the zip, panel lines, tread and the bolt and rivet holes are Boolean cuts;
+  lamps, eyes and glass sit inside them. The outline is drawn from the surface before the cuts (an `inkonly` copy), and it is the
+  game's camera-scaled outline (`inkMatNear`): no thicker on screen up close than at the follow camera's distance.
+- **Joints built in.** A body's base is a skirt that wraps down over the legs and a head ends in a stub that goes into the body; the hides
+  shade into each other's colours across the joint.
+- **Two heads**: each body has a second, forked form with a neck for each head (the trunk splits, the necks grow from the shoulders, the
+  car's nose grows two pods).
+- **Far away** each part swaps to its lighter copy (`_far`, about a third of the triangles; a `THREE.LOD` at 22 m times the chimera's size).
+- **Budget:** a plain chimera is 6.9k to 13.1k triangles near (median 9.4k), 2.1k to 4.0k far; the mutations add up to a few thousand.
 
-![The showcase: each kind's legs, body and head, plain, armoured, crystalled and two-headed](hd-showcase.jpg)
+## Mutations
 
-How the parts are made (the Blender tools that answer the last round's notes):
+![One chimera in each mutation](mutations.jpg)
 
-- **One surface per part, not stacked primitives.** Each colour region is built from overlapping shapes, then voxel-remeshed into one
-  watertight surface (Remesh), smoothed (Smooth) and reduced to its triangle budget (Decimate). Limbs grow out of bodies with no seam
-  and one outline goes round the whole part.
-- **Details cut in, not laid on.** Lamp and eye sockets, window recesses, wheel arches, the zip and pocket flaps, the grille, bark furrows,
-  the tree's hollow, seed pits, tyre tread, and the bolt and rivet holes are Boolean differences in the surface; lamps, eyes and glass
-  sit inside their sockets. The outline is drawn from the surface before the cuts, so a groove reads as a dent in the shading, not a
-  black line.
-- **Outlines that follow the surface.** The game's comic pass already inks every edge it sees in the depth buffer; the black shell round
-  each part only has to carry the silhouette. On the HD parts it is the runner's kind (`inkMatNear`): its full thickness (2 cm on a big
-  part, less on a small one, none on the belt or the hubs) at the follow camera's distance and no thicker on screen when you come closer,
-  so it doesn't stand off the edge as a band in a close-up or fold over in a crease.
-- **The joints are built in.** A body's base is a skirt that wraps down over the legs and a head ends in a stub that goes into the body,
-  so the builder adds no bridge between HD parts; only the colours bleed across.
-- **Mutations fitted to the part.** Armour plates are shrinkwrapped onto each part's own surface and given thickness, with rivets cut in:
-  bare metal on a car, dark plated chitin with a ridge on a mite, stone-grey bark slabs on a sapling, olive vest panels and pads on a
-  settler. Crystal clusters are rooted 4 cm inside the surface (found by ray casting) and grow out along it. They come with the part and
-  show only on a chimera with that mutation. The other mutations still use the kit's pieces for now.
-- **Budget:** a part is 1.9k to 4.4k triangles, a chimera about 7k to 10k (armour adds 0.3k to 2.7k a part, crystal 0.1k to 0.3k, a
-  forked body about 10 % more).
-
-Still to come once the look is signed off: the other looks and kinds (pirate, void-touched, Vrill, junkbot), the other mutations
-fitted the same way, a far LOD, and wiring it into the game.
-
-## How a chimera is put together
-
-1. **Parts.** Legs, body and head (and a second head) are drawn from the parents as before (`spliceGenes`). Mites, cars and saplings come
-   from the kit (`tools/blender/build_chimera_kit.py` -> `src/assets/chimera.glb`), each part in three looks, picked by the seed. The
-   **human kinds are the game's own NPCs**, cut out of `models.js figureSpec`: a person is a settler in one of the NPCs' outfits (coveralls,
-   lab coat, engineer, trader, elder, casual; never the player's orange), a pirate is the pirate you scooped (dark purple, black helmet,
-   green visor), a void-touched is purple, a Vrill has its bare antennaed head. Their legs, torso and arms, and head come off the figure at
-   0.7 (the head at 0.55) and keep its colours.
-2. **Fused joints, no seams.** Each joint gives its size (the legs' hip, the body's base and neck, the head's base). The builder fills the
-   gap with a bridge of hide that shades from the lower parent's colour into the upper's, and every part's hide shades toward its
-   neighbour's colour near the joint (half way at the joint itself).
-3. **Mutations, in the form of what they grow on:**
-   - **armour**: plating on the flanks and tops of every part: riveted steel on car parts, steel-rimmed plated chitin on mite parts,
-     cracked stone-grey bark on sapling parts, padded body armour on human parts
-   - **crystal**: five to eight crystal clusters sprouting from anywhere on the body
-   - **spark**: on the back, the body's kind of power (a tesla coil on a car, a glowing bioelectric sac on a mite, glowing seed pods on a
-     sapling, a battery pack on a person), and sparks on a couple of flanks
-   - **turbo**: on the back, an engine (a car), jet vents (a mite), a smouldering hollow log (a sapling), a jet pack (a person)
-   - **radio**: on the head, a whip aerial and dish (a car), a third feeler with a receiver (a mite), a leaf dish (a sapling), a headset
-   - **lens**: on the eye, a big lensed headlight (a car), a glass eye bud (a sapling), a jeweller's eyepiece (a mite or a person)
-   - **mud**: caked on the legs and the underside
-   - **void**: the whole creature darkens toward violet, wrapped in a shadowy purple aura, with void shards drifting round it
-4. **The Triple Crown** sits on the head (the laurel halo).
-
-## Still to do (after sign-off)
-
-- Junkbot parts (it draws as a car for now) and the eight kinds' third looks where they are thin.
-- Wiring it into the game: the race, the pen, the followers and the card portraits (`makeChimera` would call the builder), and remembering
-  which NPC you scooped (so the chimera wears that settler's actual outfit, not one drawn from the seed).
-- Retiring the old procedural models in `chimera.js`.
+- **Fitted to every part in Blender** (shown on a chimera that has them): **armour** (plates shrinkwrapped onto the part, rivets cut in:
+  bare metal on a car or junkbot, dark plated chitin on a mite, stone-grey bark slabs on a sapling, olive vest panels and pads on a person;
+  a junkbot's rust patches go under them), **crystal** (clusters rooted in the surface, found by ray casting), **mud** (a crust caked on
+  the legs and the underside, drips running down).
+- **Devices on sockets fitted to the surface**, in the family's form: **spark** (a battery pack; a bioelectric sac; a tesla coil; glowing
+  seed pods), with arcs crackling on the flanks; **turbo** (a jet pack; three jet vents; an engine with its stacks; a smouldering hollow
+  log); **radio** on the head (a field radio; a third feeler; an aerial and a dish; a leaf dish); **lens** on the eye (a jeweller's
+  eyepiece; a big lensed headlamp; a glass eye bud). With two heads, the lens goes on the first and the radio on the second.
+- **Void** darkens the whole creature into a shadowy violet aura with shards drifting round it.
+- **The Triple Crown**: gold laurels on the head.
 
 ## The files
 
-- `src/chimerabuild.js`: the builder (`chimeraBuilder()` loads the kit and returns `build(genes)` -> `{ root, anim(t, speed), height }`)
-- `src/models.js`: `figureSpec` (an NPC's look and its labelled parts, which `makeFigure` bakes), `figurePiece` (a piece of one), `loadChimeraKit`
-- `tools/blender/build_chimera_kit.py` -> `src/assets/chimera.glb`: the parts, mutation pieces and the crown (the contract is in its header)
-- `tools/blender/build_chimera_hd.py` -> `src/assets/chimera_hd.glb`: the HD showcase's parts (`hd_<slot>_<kind>`) with their fitted armour
-  and crystal (empties with role `mut`); the pipeline is in its header
-- `tools/chimera-lab.html`: the lab (pick the parts, mutations, seed and size; HD parts; HD SHOWCASE; NEW SEED for other looks; RANDOM
-  CHIMERA; a grid of twelve random ones; THIS ONE, EACH MUTATION). Query parameters for screenshots are in the file.
+- `src/chimerabuild.js`: the builder (`makeChimera(genes)`, `preloadChimeras()` at boot, `chimeraBuilder()` for the lab)
+- `src/chimera.js`: `makeChimera`, `makeMite` and the splicing and stats re-exports (the old procedural models are gone)
+- `tools/blender/build_chimera.py` (the contract is in its header), with `chimera_common.py` (the pipeline, the fitting, the far LOD),
+  `chimera_people.py`, `chimera_mite.py`, `chimera_car.py`, `chimera_sapling.py`, `chimera_junkbot.py` and `chimera_devices.py`
+- `tools/chimera-lab.html`: the lab (parts, a settler's outfit and headgear, mutations, seed, size, the crown, the far LOD; a random
+  chimera, a grid of twelve, each mutation, every kind, the showcase). Query parameters for screenshots are in the file.

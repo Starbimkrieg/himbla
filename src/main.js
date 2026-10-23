@@ -12,6 +12,7 @@ import { Colliders } from './physics.js';
 import { World } from './world.js';
 import { Player } from './player.js';
 import { loadRunnerParts, loadShipParts } from './models.js';
+import { preloadChimeras } from './chimerabuild.js';
 import { loadOutpostParts } from './outpostGlb.js';
 import { Enemies } from './enemies.js';
 import { Projectiles } from './projectiles.js';
@@ -1744,6 +1745,7 @@ class Game {
 loadDevTools().then(() => {
   const game = new Game();
   if (DEV_TOOLS) window.game = game; // (the console, the test harnesses and the trailer's pump mode)
+  preloadChimeras();                 // (not waited for: a chimera made before the kit is in fills in when it arrives)
   return Promise.all([loadFonts(), loadRunnerParts(), loadShipParts(), loadOutpostParts()]).then(() => game.init());
 }).catch((e) => {
   console.error(e);

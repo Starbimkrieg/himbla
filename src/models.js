@@ -48,7 +48,6 @@ const GLB = {
   'downs-stable': () => import('./assets/downs-stable.glb?inline'),
   'downs-crowd': () => import('./assets/downs-crowd.glb?inline'),
   chimera: () => import('./assets/chimera.glb?inline'),
-  chimera_hd: () => import('./assets/chimera_hd.glb?inline'),
 };
 
 // A model file can be compressed (tools/optimize-glb.mjs: quantized, then meshopt-coded: about a third of the size).
@@ -1171,18 +1170,7 @@ export function figureSpec({ suit, helmet, visor, scale = 1, seed, kind, look, a
   return { key, build, pivots, headC, headS, neck, headgear, arch, alien, scale, tall, hip, torsoLen, w, limb, C, skin, pants, hatC, visorC };
 }
 
-// A piece of an NPC for the chimera builder: the parts of figureSpec(..).build() that pass `keep`, baked in the frame `frame` takes them to
-// (a Matrix4 from the figure's frame). { body (vertex-coloured toon), hull (its ink), geo (the body's geometry: its `color` attribute is
-// the builder's to tint) }. figureGlass is the fishbowl helmet's glass, for a head that wears one.
-export function figurePiece(parts, keep, frame) {
-  const baked = bakeFigure(parts.filter(keep).map((p) => ({ ...p, bone: 0, m: frame.clone().multiply(p.m) })));
-  baked.geo.computeBoundingSphere(); baked.hull.computeBoundingSphere();
-  const body = new THREE.Mesh(baked.geo, figMats());
-  body.castShadow = true;
-  const hull = new THREE.Mesh(baked.hull, FIG_INK);
-  hull.userData.isInk = true;
-  return { body, hull, geo: baked.geo };
-}
+// The fishbowl helmet's glass material (and its globe), for the chimera builder's settlers who wear one.
 export const figureGlass = () => { figMats(); return { geo: figGeo().bowl, mat: FIG_GLASS }; };
 
 // Cheap NPC townsperson for ambient life. Pivot at the feet; legL/legR pivot at the hips and
@@ -1223,7 +1211,9 @@ export function makeFigure(opts = {}) {
   bones[3].rotation.z = -0.07 * (arch === 'eva' ? 2 : 1);
   bones[4].rotation.z = 0.07 * (arch === 'eva' ? 2 : 1);
   root.scale.setScalar(scale * tall);
-  return { root, body, legL: bones[1], legR: bones[2], armL: bones[3], armR: bones[4], look: arch, alien: S.alien, swing: arch === 'elder' ? 0.15 : arch === 'eva' ? 0.3 : 0.45 };
+  // outfit: what a chimera spliced from this person wears (alchemy.js keeps it on the jar item when you scoop them up)
+  const outfit = S.alien ? { skin: S.skin } : { arch, headgear: headgear === 'bowl' || headgear === 'bubble' ? 'bowl' : 'sealed', suit: S.C, pants: S.pants, helmet: S.hatC, visor: S.visorC, skin: S.skin };
+  return { root, body, legL: bones[1], legR: bones[2], armL: bones[3], armR: bones[4], look: arch, alien: S.alien, outfit, swing: arch === 'elder' ? 0.15 : arch === 'eva' ? 0.3 : 0.45 };
 }
 
 
@@ -2653,15 +2643,15 @@ export const lotNode = (name) => SHIP_PARTS[name];
 export function lotSlot(slot) {
   return slot in LOT_GLOW ? { color: LOT_GLOW[slot], glow: true } : { color: LOT_TOON[slot] ?? 0xff00ff, glow: false };
 }
-// ---- The chimera kit (built in Blender, see build_chimera_kit.py, and the HD showcase's build_chimera_hd.py, its `hd_` pieces): the parts
-// and mutations chimerabuild.js puts chimeras together from. Loaded on request (not at boot): loadChimeraKit() resolves to { [piece name]: baked node } (bakeShip's nodes: parts per
+// ---- The chimera kit (built in Blender, see build_chimera.py): the parts, devices and the crown chimerabuild.js puts every chimera together
+// from. Loaded on request (not at boot): loadChimeraKit() resolves to { [piece name]: baked node } (bakeShip's nodes: parts per
 // slot, an ink shell, and the pivots, sockets and graft points as kids, their extras in `data`).
 let CHIMERA_KIT = null;
 export async function loadChimeraKit() {
   if (!CHIMERA_KIT) {
-    CHIMERA_KIT = Promise.all([loadGlb('chimera'), loadGlb('chimera_hd')]).then((files) => {
+    CHIMERA_KIT = loadGlb('chimera').then((gltf) => {
       const kit = {};
-      for (const gltf of files) for (const o of gltf.scene.children) if (/^(ck|hd)_/.test(o.name)) kit[o.name] = bakeShip(o, { near: o.name.startsWith('hd_') });
+      for (const o of gltf.scene.children) if (o.name.startsWith('ch_')) kit[o.name] = bakeShip(o, { near: true });
       return kit;
     });
   }

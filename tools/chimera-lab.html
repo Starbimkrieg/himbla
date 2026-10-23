@@ -20,9 +20,9 @@
 <body>
   <!-- Dev-only: the chimera builder's lab (npm run dev, then /tools/chimera-lab.html). Not part of the build.
        Query: ?body=car&legs=mite&head=person&extra=sapling&mods=armor,crystal&seed=7&size=1.1&crown=1   one chimera
-              ?grid=1&seed=3                                                                            twelve random ones
-              ?showcase=1   the HD set (each kind's legs, body and head, plain, armoured, crystalled); &hd=1 uses the HD parts anywhere
-              &yaw=deg &pitch=deg &dist=m &ty=m (a close-up) &spin=1 &speed=m/s (walk) &ui=0 (hide the panel, for screenshots) -->
+              &outfit=lab &headgear=bowl     a settler's outfit (coveralls, engineer, lab, trader, elder, casual) and headgear (sealed, bowl)
+              ?grid=1 | ?modgrid=1 | ?kinds=1 | ?showcase=1                                       twelve random, each mutation, every kind, the showcase
+              &style=0,2,1 (a mite's, car's or sapling's looks: legs, body, head) &far=1 (the far LOD) &yaw=deg &pitch=deg &dist=m &ty=m (a close-up) &spin=1 &speed=m/s (walk) &ui=0 (hide the panel, for screenshots) -->
   <div id="ui"></div>
   <div id="info"></div>
   <script type="module" src="./chimera-lab.js"></script>

@@ -314,7 +314,7 @@ export class Alchemy {
       const name = vrill ? pick(VRILL) : best.kind === 'figure' ? pick(NAMES) : best.w.name;
       if (best.kind === 'figure') { best.f.captured = true; best.f.root.visible = false; }
       else { best.w.root.removeFromParent(); this.wanderers = this.wanderers.filter((w) => w !== best.w); }
-      this.add(vrill ? 'alien' : best.kind === 'wanderer' && best.w.purple ? 'voidling' : 'person', name);
+      this.add(vrill ? 'alien' : best.kind === 'wanderer' && best.w.purple ? 'voidling' : 'person', name, best.kind === 'figure' ? best.f.outfit : best.w.outfit);
       g.fx.pop(`GOTCHA, ${name.toUpperCase()}!`, null, { color: '#ff9f1c', size: 46 });
       if (best.kind === 'figure') g.rep.add(best.f.loc.faction, -1, 'Jarred a resident', { silent: true });
       return;
@@ -469,13 +469,14 @@ export class Alchemy {
     g.save();
   }
 
-  add(kind, name) {
+  // outfit: a person's clothes (makeFigure's), so a chimera spliced from them wears them, and they wear them again when freed
+  add(kind, name, outfit) {
     if (kind === 'transponder' && this.game.globe && this.game.globe.revealAround) {
       // it pings as you bag it: the map around you lights up
       this.game.globe.revealAround(this.game.player.up, 1400);
       this.game.fx.pop('SIGNAL PING: MAP REVEALED NEARBY', null, { color: '#2ec4ff', size: 34 });
     }
-    this.jar.push({ kind, name });
+    this.jar.push(outfit ? { kind, name, outfit } : { kind, name });
     this.mixT = 0;
     this.game.audio.pickup();
     this.refreshJarMesh();
@@ -497,7 +498,7 @@ export class Alchemy {
     const g = this.game;
     const P = g.player;
     for (const it of this.jar) {
-      if (it.kind === 'person' || it.kind === 'voidling' || it.kind === 'pirate') this.spawnWanderer(it.name, it.kind === 'voidling', it.kind === 'pirate');
+      if (it.kind === 'person' || it.kind === 'voidling' || it.kind === 'pirate') this.spawnWanderer(it.name, it.kind === 'voidling', it.kind === 'pirate', null, false, it.outfit);
       else if (it.kind === 'alien') this.spawnWanderer(it.name, false, false, null, true);
       else if (it.kind === 'mite') {
         // tipped out right here, and it scarpers (this spot becomes its new patch)
@@ -537,10 +538,11 @@ export class Alchemy {
   }
 
   // Free people wander off (and can be scooped up again).
-  spawnWanderer(name, purple, pirate, at, alien = false) {
+  spawnWanderer(name, purple, pirate, at, alien = false, outfit = null) {
     const g = this.game;
     const P = g.player;
-    const f = alien ? makeFigure({ alien: true }) : makeFigure({ suit: pirate ? 0x3a2b4f : purple ? 0xc77dff : 0xff9f1c, visor: purple || pirate ? 0x7dff3a : 0x241a5c, helmet: pirate ? 0x2b2b2b : 0xfff4e0 });
+    const o = outfit || {};
+    const f = alien ? makeFigure({ alien: true }) : makeFigure({ look: o.arch, suit: pirate ? 0x3a2b4f : purple ? 0xc77dff : o.suit ?? 0xff9f1c, visor: purple || pirate ? 0x7dff3a : o.visor ?? 0x241a5c, helmet: pirate ? 0x2b2b2b : o.helmet ?? 0xfff4e0 });
     const pos = g.planet.ground(at || P.pos.clone().addScaledVector(g.cam.right, 3), new THREE.Vector3());
     f.root.position.copy(pos);
     g.scene.add(f.root);
@@ -850,7 +852,7 @@ export class Alchemy {
           if (!m.into) { if (!this.jar[ib].mited) { this.jar[ib].mited = true; g.hud.toast(m.text, 3.5); } continue; }
           const keep = this.jar[m.a === 'person' ? ia : ib];
           this.jar = this.jar.filter((_, i) => i !== ia && i !== ib);
-          this.jar.push({ kind: m.into, name: keep.name });
+          this.jar.push(keep.outfit ? { kind: m.into, name: keep.name, outfit: keep.outfit } : { kind: m.into, name: keep.name });
           g.hud.toast(m.text, 3.5);
           g.fx.pop('BLOOP!', null, { color: ITEMS[m.into].color, size: 50 });
           this.refreshJarMesh();

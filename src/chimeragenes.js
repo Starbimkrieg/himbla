@@ -4,6 +4,9 @@ import { ensureStats } from './chimerastats.js';
 // Splicing: what comes out of the reactor, as a gene sheet (no three.js, so tools/race-sim.mjs can breed fields headless).
 // chimera.js builds the model from the sheet.
 
+// Chimeras are drawn at this fraction of their gene size (a field of six fits the gate's 3 m stalls; the race model's widths match).
+export const CHIMERA_DRAWN = 0.95;
+
 // Things with bodies. Two or more of these in the reactor make a Chimera.
 export const LIVING = ['person', 'voidling', 'mite', 'car', 'pirate', 'sapling', 'junkbot', 'alien'];
 // Things that only mutate whatever they get spliced into.
@@ -46,7 +49,10 @@ export function spliceGenes(items, seed = Math.floor(Math.random() * 1e9)) {
   let name = a.replace(/^Little /, '').slice(0, Math.max(2, Math.ceil(a.length / 2))) + b.replace(/^Little /, '').slice(Math.floor(b.length / 2)).toLowerCase();
   if (living.length === 1) name = `Mutant ${a}`;
   if (mods.length) name += ' ' + EPITHET[mods[0]];
+  // the people's outfits, as they were scooped up (the first of each kind's): the chimera wears them
+  const looks = {};
+  for (const i of living) if (i.outfit && !looks[i.kind]) looks[i.kind] = i.outfit;
   const chaos = kinds.size + mods.length + (extraHead ? 1 : 0) + (mods.includes('void') ? 1 : 0);
   // racing stats (speed / power / stamina / wit), growth, running style, tier and top speed come from the parts + seed
-  return ensureStats({ seed, body, legs, head, extraHead, mods, size, tint, name, speed: 0, hop: legs === 'mite' ? 1 : 0.3, chaos, parents: living.map((i) => i.kind), born: Date.now() });
+  return ensureStats({ seed, body, legs, head, extraHead, mods, size, tint, name, looks, speed: 0, hop: legs === 'mite' ? 1 : 0.3, chaos, parents: living.map((i) => i.kind), born: Date.now() });
 }

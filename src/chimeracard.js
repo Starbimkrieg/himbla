@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { inkMat } from './toon.js';
 import { makeChimera } from './chimera.js';
+import { chimeraReady } from './chimerabuild.js';
 import { ensureStats, STAT_KEYS, STAT_INFO, STAT_TIPS, LEGS, BODY, HEAD_WIT, MOD_FX, STYLES, SEASONS, SEASON_RACES } from './chimerastats.js';
 import { SKILLS } from './chimeraskills.js';
 
@@ -20,8 +20,9 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&
 
 // A small 3D snapshot of the creature, rendered once per chimera and cached as a data URL.
 export function portrait(renderer, genes) {
-  const key = `${genes.seed}|${genes.body}|${genes.legs}|${genes.head}|${genes.extraHead}|${(genes.mods || []).join()}|${genes.tint}|${genes.size}`;
+  const key = `${genes.seed}|${genes.body}|${genes.legs}|${genes.head}|${genes.extraHead}|${(genes.mods || []).join()}|${genes.tint}|${genes.size}|${JSON.stringify(genes.looks || {})}`;
   if (cache.has(key)) return cache.get(key);
+  if (!chimeraReady()) return null;                 // (the kit is still loading: no portrait yet, and none cached)
   let url = null;
   if (renderer) {
     try {
@@ -63,8 +64,8 @@ export function portrait(renderer, genes) {
       scene.remove(m.root);
       m.root.traverse((o) => {
         if (!o.isMesh) return;
-        if (!o.geometry.userData.shared) o.geometry.dispose(); // part geometry is cached and shared
-        if (o.material !== inkMat && o.material.isMeshBasicMaterial) o.material.dispose();
+        if (o.geometry.userData.own) o.geometry.dispose();       // (the kit's geometry and materials are shared: only its own goes)
+        if (o.material.userData.own) o.material.dispose();
       });
       const img = ctx.createImageData(PS, PS);
       for (let y = 0; y < PS; y++) img.data.set(pixels.subarray((PS - 1 - y) * PS * 4, (PS - y) * PS * 4), y * PS * 4);
