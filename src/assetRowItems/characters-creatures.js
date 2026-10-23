@@ -1,4 +1,6 @@
+import * as THREE from 'three';
 import { makeChimera, makeMite, LIVING, MODIFIERS, PALETTE } from '../chimera.js';
+import { chimeraBuilder } from '../chimerabuild.js';
 import { makeFollowerModel } from '../alchemy.js';
 import { makeDuck } from '../casinoWorld.js';
 import { span, cell, line } from './characters-util.js';
@@ -122,8 +124,38 @@ function followersItem() {
   };
 }
 
+// ---- the chimera builder (chimerabuild.js, the kit in chimera.glb): round three of the rework, not in the game yet. The kit loads on
+// request, so the cell fills in a moment after it is built.
+function builderItem() {
+  const mixes = [
+    { seed: 3, body: 'car', legs: 'mite', head: 'person', mods: [] },
+    { seed: 21, body: 'sapling', legs: 'car', head: 'pirate', extraHead: 'mite', mods: [] },
+    { seed: 12, body: 'mite', legs: 'car', head: 'person', mods: ['armor'] },
+    { seed: 14, body: 'person', legs: 'sapling', head: 'mite', mods: ['crystal'] },
+    { seed: 6, body: 'car', legs: 'pirate', head: 'car', mods: ['turbo', 'lens', 'spark'] },
+    { seed: 31, body: 'sapling', legs: 'mite', head: 'alien', mods: ['void', 'radio', 'mud'] },
+  ];
+  return {
+    id: 'creatures.builder', label: 'CHIMERA BUILDER: FUSED PARTS, GRAFTS, MUTATIONS (NOT IN THE GAME YET)', w: span(mixes.length, 3.2), d: 4,
+    make() {
+      const root = new THREE.Group(), anims = [];
+      let gone = false;
+      chimeraBuilder().then((build) => {
+        if (gone) return;
+        mixes.forEach((g, i) => {
+          const c = build({ ...g, size: 1.1, parents: [...new Set([g.body, g.legs, g.head, g.extraHead].filter(Boolean))] });
+          c.root.position.x = (i - (mixes.length - 1) / 2) * 3.2;
+          root.add(c.root);
+          anims.push(c.anim);
+        });
+      });
+      return { root, update: (dt, t) => { for (const a of anims) a(t, GAIT); }, dispose() { gone = true; } };
+    },
+  };
+}
+
 export default {
   id: 'characters.creatures',
   title: '03 · CREATURES',
-  items: [speciesItem(), modsItem(), hybridsItem(), megaMiteItem(), miteItem(), ducksItem(), followersItem()],
+  items: [speciesItem(), modsItem(), hybridsItem(), builderItem(), megaMiteItem(), miteItem(), ducksItem(), followersItem()],
 };

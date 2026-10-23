@@ -47,6 +47,7 @@ const GLB = {
   'downs-fair': () => import('./assets/downs-fair.glb?inline'),
   'downs-stable': () => import('./assets/downs-stable.glb?inline'),
   'downs-crowd': () => import('./assets/downs-crowd.glb?inline'),
+  chimera: () => import('./assets/chimera.glb?inline'),
 };
 
 // A model file can be compressed (tools/optimize-glb.mjs: quantized, then meshopt-coded: about a third of the size).
@@ -943,11 +944,12 @@ const _fq = new THREE.Quaternion(), _fe = new THREE.Euler(), _fp = new THREE.Vec
 const figMat = (p = [0, 0, 0], r = [0, 0, 0], s = 1) => new THREE.Matrix4().compose(
   _fp.set(p[0], p[1], p[2]), _fq.setFromEuler(_fe.set(r[0], r[1], r[2])), typeof s === 'number' ? _fs.setScalar(s) : _fs.set(s[0], s[1], s[2]));
 
-// Cheap NPC townsperson for ambient life. Pivot at the feet; legL/legR pivot at the hips and
-// armL/armR at the shoulders (Bones: animate them by rotation.x).
-export function makeFigure({ suit, helmet, visor, scale = 1, seed, kind, look, alien: forceAlien = false } = {}) {
+// An NPC's look, before it is baked: its outfit, palette and proportions, and `build()`, which lists its parts (each { g, bone, grp, c, m,
+// ink }: grp 'torso', 'head' or the bone 1-4 it hangs from: legL, legR, armL, armR). Call build() once (it draws the accessories' colours).
+// makeFigure bakes a whole one; the chimera builder (chimerabuild.js) cuts the legs, torso, arms or head out of one, so a chimera's human
+// parts are the very people you can scoop up.
+export function figureSpec({ suit, helmet, visor, scale = 1, seed, kind, look, alien: forceAlien = false } = {}) {
   const G = figGeo();
-  const mat = figMats();
   const rnd = figRng(seed);
   const pick = (a) => a[Math.floor(rnd() * a.length) % a.length];
   const chance = (p) => rnd() < p;
@@ -1005,15 +1007,14 @@ export function makeFigure({ suit, helmet, visor, scale = 1, seed, kind, look, a
   const legAt = (side) => new THREE.Vector3(side * 0.125 * w * (arch === 'eva' ? 1.1 : 1), hip, 0);
   const pivots = [new THREE.Vector3(), legAt(-1), legAt(1), shoulderAt(-1), shoulderAt(1)];
 
-  let baked = FIG_CACHE.get(key);
-  if (!baked) {
+  const build = () => {
     const parts = [];
     const col = (c) => (mono && typeof c === 'number' ? C : mono ? () => C : c);
     const vis = (c) => (mono ? (c === visorC ? c : C) : c);
     // add(part geometry, bone, colour, transform in the bone's (or the torso/head's) frame, ink)
     const add = (g, bone, c, m, ink = 0) => {
       const base = bone === 'torso' ? torsoM : bone === 'head' ? headM : figMat(pivots[bone].toArray());
-      parts.push({ g, bone: typeof bone === 'number' ? bone : 0, c: typeof c === 'number' ? vis(c) : col(c), m: base.clone().multiply(m), ink });
+      parts.push({ g, bone: typeof bone === 'number' ? bone : 0, grp: bone, c: typeof c === 'number' ? vis(c) : col(c), m: base.clone().multiply(m), ink });
     };
     // torso garment (in the torso frame: y 0 = hips, 0.97 = neck base)
     const flat = 0.74;
@@ -1163,8 +1164,37 @@ export function makeFigure({ suit, helmet, visor, scale = 1, seed, kind, look, a
         add(G.caneTop, b, 0x6b4a2a, figMat([0, hy + 0.02, 0.08], [0, Math.PI / 2, 0]));
       } else if (acc.hand === 'toy') add(G.toy, b, pick([0xff4f2e, 0x2ec4ff, 0x7dff6a, 0xffd23f]), figMat([0, hy - 0.04, 0.1]), 0.015);
     }
-    baked = bakeFigure(parts);
-    FIG_CACHE.set(key, baked);
+    return parts;
+  };
+  const neck = new THREE.Vector3(0, 0.97 * torsoLen, 0.02).applyMatrix4(figMat([0, hip, 0], [stoop, 0, 0]));
+  return { key, build, pivots, headC, headS, neck, headgear, arch, alien, scale, tall, hip, torsoLen, w, limb, C, skin, pants, hatC, visorC };
+}
+
+// A piece of an NPC for the chimera builder: the parts of figureSpec(..).build() that pass `keep`, baked in the frame `frame` takes them to
+// (a Matrix4 from the figure's frame). { body (vertex-coloured toon), hull (its ink), geo (the body's geometry: its `color` attribute is
+// the builder's to tint) }. figureGlass is the fishbowl helmet's glass, for a head that wears one.
+export function figurePiece(parts, keep, frame) {
+  const baked = bakeFigure(parts.filter(keep).map((p) => ({ ...p, bone: 0, m: frame.clone().multiply(p.m) })));
+  baked.geo.computeBoundingSphere(); baked.hull.computeBoundingSphere();
+  const body = new THREE.Mesh(baked.geo, figMats());
+  body.castShadow = true;
+  const hull = new THREE.Mesh(baked.hull, FIG_INK);
+  hull.userData.isInk = true;
+  return { body, hull, geo: baked.geo };
+}
+export const figureGlass = () => { figMats(); return { geo: figGeo().bowl, mat: FIG_GLASS }; };
+
+// Cheap NPC townsperson for ambient life. Pivot at the feet; legL/legR pivot at the hips and
+// armL/armR at the shoulders (Bones: animate them by rotation.x).
+export function makeFigure(opts = {}) {
+  const S = figureSpec(opts);
+  const G = figGeo();
+  const mat = figMats();
+  const { pivots, headC, headS, headgear, arch, scale, tall } = S;
+  let baked = FIG_CACHE.get(S.key);
+  if (!baked) {
+    baked = bakeFigure(S.build());
+    FIG_CACHE.set(S.key, baked);
   }
 
   // skeleton
@@ -1192,7 +1222,7 @@ export function makeFigure({ suit, helmet, visor, scale = 1, seed, kind, look, a
   bones[3].rotation.z = -0.07 * (arch === 'eva' ? 2 : 1);
   bones[4].rotation.z = 0.07 * (arch === 'eva' ? 2 : 1);
   root.scale.setScalar(scale * tall);
-  return { root, body, legL: bones[1], legR: bones[2], armL: bones[3], armR: bones[4], look: arch, alien, swing: arch === 'elder' ? 0.15 : arch === 'eva' ? 0.3 : 0.45 };
+  return { root, body, legL: bones[1], legR: bones[2], armL: bones[3], armR: bones[4], look: arch, alien: S.alien, swing: arch === 'elder' ? 0.15 : arch === 'eva' ? 0.3 : 0.45 };
 }
 
 
@@ -2621,6 +2651,21 @@ export const lotNode = (name) => SHIP_PARTS[name];
 export function lotSlot(slot) {
   return slot in LOT_GLOW ? { color: LOT_GLOW[slot], glow: true } : { color: LOT_TOON[slot] ?? 0xff00ff, glow: false };
 }
+// ---- The chimera kit (built in Blender, see build_chimera_kit.py): the parts, grafts and mutations chimerabuild.js puts chimeras
+// together from. Loaded on request (not at boot): loadChimeraKit() resolves to { [piece name]: baked node } (bakeShip's nodes: parts per
+// slot, an ink shell, and the pivots, sockets and graft points as kids, their extras in `data`).
+let CHIMERA_KIT = null;
+export async function loadChimeraKit() {
+  if (!CHIMERA_KIT) {
+    CHIMERA_KIT = loadGlb('chimera').then((gltf) => {
+      const kit = {};
+      for (const o of gltf.scene.children) if (o.name.startsWith('ck_')) kit[o.name] = bakeShip(o);
+      return kit;
+    });
+  }
+  return CHIMERA_KIT;
+}
+
 // ---- Chimera Downs' kits (built in Blender, see build_downs_*.py and downs_common.py; docs/downs-layouts.md) ----
 // One file per family, each `dn_*` node standing on y = 0. downsNode / downsSlot are for baking into the Downs' kit (race.js build); makeDownsPart gives a piece as a Group (the Asset Row's).
 // The palette is Gold Gleam, Saddle Brown, Black, Money, Barn Red and Touch of Mint (a darker tint of each for shading); slots named glow* and glass* are lit.
