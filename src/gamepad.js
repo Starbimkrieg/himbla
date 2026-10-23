@@ -8,8 +8,8 @@
 // scrolls. The title menu has its own arrow-key navigation, so there the pad just sends arrows.
 //
 //   PLAY                                        DERBY (watching your chimera race)
-//   left stick   move / steer / carve           A        cheer (Space)
-//   right stick  look                           Y        switch camera (C)
+//   left stick   move / steer / carve           A / Y    switch camera (C)
+//   right stick  look
 //   A            mag-jump · dive (Shift)        right stick  orbit the camera
 //   B            tricks, hold in the air (Q)
 //   X            interact (F)                   MENUS
@@ -432,8 +432,7 @@ export class Gamepad {
   derby(btn, pressed, rx, ry, dt) {
     this.clearFocus();
     this.look(rx, ry, dt);
-    if (pressed(B.A)) this.tap('Space');
-    if (pressed(B.Y) || pressed(B.RB)) this.tap('KeyC');
+    if (pressed(B.Y) || pressed(B.RB) || pressed(B.A)) this.tap('KeyC');
     if (pressed(B.START)) this.pause();
   }
 

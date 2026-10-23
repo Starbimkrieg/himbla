@@ -1173,8 +1173,10 @@ body.trailer #vehbar { display: none !important; }
 .cc-part { font-size: 12px; line-height: 1; padding: 2px 4px 2px; background: var(--ui-bg3); border: 1px solid var(--ui-edge); color: var(--ui-text); white-space: nowrap; }
 .cc-part em { font-style: normal; color: var(--ui-dim); margin-right: 3px; }
 .cc-part.mod { color: var(--cyan); border-color: #1e5a66; }
-.cc-stats { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 3px 6px; align-items: center; }
-.cc-stats.big { grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 6px 8px; }
+.cc-stats { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 3px 6px; align-items: center; }
+.cc-stats.big { grid-template-columns: auto minmax(0, 1fr) auto auto auto; gap: 6px 8px; }
+.cc-grow { font-family: var(--comic); font-size: 6px; line-height: 1; color: var(--green); min-width: 0; }
+.cc-stats.big .cc-grow { font-size: 8px; }
 .cc-stat { display: contents; }
 .cc-lbl { font-family: var(--comic); font-size: 7px; line-height: 1; color: var(--ui-muted); }
 .cc-stats.big .cc-lbl { font-size: 9px; }
@@ -1192,9 +1194,15 @@ body.trailer #vehbar { display: none !important; }
 .s-power .cc-lbl { color: #ff9f1c; }
 .s-stamina .cc-lbl { color: var(--green); }
 .s-wit .cc-lbl { color: var(--ui-violet); }
-.cc-odds { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 13px; color: var(--ui-muted); border-top: 1px dashed var(--ui-edge); padding-top: 4px; }
-.cc-odds b { font-family: var(--comic); font-weight: normal; font-size: 9px; line-height: 1; color: var(--yellow); }
-.cc.mine .cc-odds b { color: var(--green); }
+.cc-race { display: flex; flex-wrap: wrap; gap: 3px; }
+.cc-race > span { font-family: var(--comic); font-size: 6px; line-height: 1; padding: 3px 4px 2px; border: 1px solid var(--ui-edge); background: var(--ui-bg3); color: var(--ui-text); white-space: nowrap; }
+.cc.big .cc-race > span { font-size: 8px; padding: 4px 5px 3px; }
+.cc-style { color: var(--yellow) !important; border-color: #6b5a1e !important; }
+.cc-skill { color: var(--cyan) !important; border-color: #1e5a66 !important; }
+.cc-skill.soul { color: #05030c !important; background: var(--pink) !important; border-color: #05030c !important; }
+.cc-career { color: var(--ui-muted) !important; }
+.cc-ribbon.retired { background: var(--ui-dim); color: var(--ui-text); }
+.cc-crown { color: var(--yellow); margin-right: 4px; }
 .cc-foot { font-size: 12px; color: var(--ui-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cc.mine .cc-foot { color: var(--green); }
 #dialog .bubble .cc + small { display: block; margin-top: 8px; }

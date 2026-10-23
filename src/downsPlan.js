@@ -1,11 +1,11 @@
 // Chimera Downs' plan: the numbers of the racecourse and its grounds (no three.js, so tools/downs-layouts.mjs can read them), in the location's own frame: metres, +x along the
 // straights, +z toward the main grandstand (the home straight is at z = +r). docs/downs-layouts.md has the layout these follow (Layout B, The Horseshoe).
 
-// ---- the oval: two 180 m straights joined by half circles of radius 55 (the centre line), four lanes, rails at 45 and 64.4 ----
+// ---- the oval: two 180 m straights joined by half circles of radius 55 (the centre line), six starting lanes 3 m apart, rails at 45 and 64.4 ----
 export const STRAIGHT = 180, HALF = STRAIGHT / 2, R0 = 55;
 export const SEGS = [STRAIGHT, Math.PI * R0, STRAIGHT, Math.PI * R0];
 export const LAP = SEGS[0] + SEGS[1] + SEGS[2] + SEGS[3]; // ~706 m round the centre line
-export const LANES = [48.5, 52.5, 56.5, 60.5];
+export const LANES = [47.5, 50.5, 53.5, 56.5, 59.5, 62.5];   // (the stalls' centres; out of the gate the runners go where they like)
 export const RAIL_IN = 45, RAIL_OUT = 64.4;
 export const DIRT = [44.6, 64.8];                         // the dirt band's inner and outer radius
 export const FINISH_U = 135;                              // finish line: x = +45 on the home straight (in front of the grandstand)

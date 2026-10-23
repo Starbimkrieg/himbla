@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { inkMat } from './toon.js';
 import { makeChimera } from './chimera.js';
-import { ensureStats, STAT_KEYS, STAT_INFO, STAT_TIPS, LEGS, BODY, HEAD_WIT, MOD_FX } from './chimerastats.js';
+import { ensureStats, STAT_KEYS, STAT_INFO, STAT_TIPS, LEGS, BODY, HEAD_WIT, MOD_FX, STYLES, SEASONS, SEASON_RACES } from './chimerastats.js';
+import { SKILLS } from './chimeraskills.js';
 
 // Pixel "trading card" HTML for chimeras: portrait, parts, the four racing stats as segmented
-// bars, and a grade. Rendered inside g.dialog bubbles (pen, detail, Derby entry/betting, breeding).
+// bars (a + where it grows faster in training), a grade, its running style, skills and career. Rendered inside g.dialog bubbles (pen, detail, Derby entry/betting, breeding).
 // A card rendered as <button data-i="n"> is clickable through the dialog's own button handler,
 // and wrapping the cards in cardList(.., hide) hides the duplicate plain dialog buttons.
 
@@ -75,14 +76,15 @@ export function portrait(renderer, genes) {
   return url;
 }
 
-export function statBars(st, big = false) {
+export function statBars(st, big = false, growth = {}) {
   return `<div class="cc-stats${big ? ' big' : ''}">${STAT_KEYS.map((k) => {
     const v = st[k];
+    const gr = growth[k] ? `<span class="cc-grow" data-tip="${esc(`GROWTH: training gains in ${STAT_INFO[k].name} are ${Math.round(growth[k] * 100)}% bigger.`)}">+${Math.round(growth[k] * 100)}%</span>` : '<span class="cc-grow"></span>';
     const on = Math.max(1, Math.round(v / 10));
     let seg = '';
     for (let i = 0; i < 10; i++) seg += `<i${i < on ? ' class="on"' : ''}></i>`;
     const tip = ` data-tip="${esc(STAT_TIPS[k])}"`;
-    return `<div class="cc-stat s-${k}"><span class="cc-lbl"${tip}>${big ? STAT_INFO[k].name : STAT_INFO[k].short}</span><span class="cc-bar"${tip}>${seg}</span><span class="cc-num">${v}</span>${big ? `<span class="cc-blurb">${STAT_INFO[k].blurb}</span>` : ''}</div>`;
+    return `<div class="cc-stat s-${k}"><span class="cc-lbl"${tip}>${big ? STAT_INFO[k].name : STAT_INFO[k].short}</span><span class="cc-bar"${tip}>${seg}</span><span class="cc-num">${v}</span>${gr}${big ? `<span class="cc-blurb">${STAT_INFO[k].blurb}</span>` : ''}</div>`;
   }).join('')}</div>`;
 }
 
@@ -114,9 +116,21 @@ export function partsLine(genes) {
   return `<div class="cc-parts">${s}</div>`;
 }
 
-const GRADE_TIP = 'GRADE: its racing class from all four stats together. S (yellow) is the best, then A (pink), B (cyan) and C (grey).';
+const GRADE_TIP = 'GRADE: its racing class from all four stats together. S (yellow) is the best, then A (pink), B (cyan) and C (grey). EASY races take C and B, MEDIUM up to A, HARD anyone.';
 
-// opts: key (number badge), button (clickable, data-i = key - 1), mine, status (html), odds {p, odds}, big, tag (ribbon text)
+// its running style, skills (named on a full card, else counted) and where it is in its career
+function raceLine(genes, full) {
+  const S = STYLES[genes.style];
+  const style = S ? `<span class="cc-style" data-tip="${esc(`${S.name}: ${S.blurb}.`)}">${S.short}</span>` : '';
+  const sk = genes.skills || [];
+  const skills = full ? sk.map((id) => `<span class="cc-skill${id === 'chimeraSoul' ? ' soul' : ''}" data-tip="${esc(`${SKILLS[id].name}: ${SKILLS[id].blurb}`)}">${SKILLS[id].short}</span>`).join('')
+    : sk.length ? `<span class="cc-skill" data-tip="${esc(sk.map((id) => SKILLS[id].name).join(', '))}">${sk.length} SKILL${sk.length > 1 ? 'S' : ''}</span>` : '';
+  const c = genes.career;
+  const car = genes.rival || !c ? '' : `<span class="cc-career" data-tip="${esc(`CAREER: ${SEASONS} seasons of ${SEASON_RACES} races and a tournament, then retirement. ${c.train ? `${c.train} training session${c.train > 1 ? 's' : ''} banked.` : ''}`)}">${c.retired ? 'RETIRED' : `S${c.season} · ${Math.min(c.races, SEASON_RACES)}/${SEASON_RACES}${c.races >= SEASON_RACES ? ' · CUP' : ''}`}${c.train ? ` · ${c.train}🏋` : ''}${c.trophies.length ? ` · ${'🏆'.repeat(c.trophies.length)}` : ''}</span>`;
+  return `<div class="cc-race">${style}${skills}${car}</div>`;
+}
+
+// opts: key (number badge), button (clickable, data-i = key - 1), mine, status (html), big, full (name its skills), tag (ribbon text)
 export function chimeraCard(g, genes, opts = {}) {
   ensureStats(genes);
   const st = genes.stats;
@@ -126,11 +140,11 @@ export function chimeraCard(g, genes, opts = {}) {
   const cls = ['cc', opts.mine ? 'mine' : '', opts.big ? 'big' : '', opts.button ? 'pick' : ''].filter(Boolean).join(' ');
   const attrs = opts.button ? ` data-i="${opts.key - 1}" type="button"` : '';
   const por = `<div class="cc-por" style="--tint:${tint}">${url ? `<img src="${url}" alt="">` : '<span class="cc-blob"></span>'}${opts.key ? `<span class="cc-key">${opts.key}</span>` : ''}</div>`;
-  const odds = opts.odds ? `<div class="cc-odds"><span>WIN ${Math.round(opts.odds.p * 100)}%</span><b>PAYS ${opts.odds.odds.toFixed(1)}x</b></div>` : '';
-  const top = `<div class="cc-top"><span class="cc-name t-${genes.tier}">${esc(genes.name)}</span><span class="cc-grade g-${genes.tier}" data-tip="${GRADE_TIP}">${genes.tier}</span></div>`;
+  const crown = genes.crown ? '<span class="cc-crown" data-tip="TRIPLE CROWN: won the Regolith Guineas, the Lunar Derby and the Dark Side St. Leger.">♛</span>' : '';
+  const top = `<div class="cc-top"><span class="cc-name t-${genes.tier}">${crown}${esc(genes.name)}</span><span class="cc-grade g-${genes.tier}" data-tip="${GRADE_TIP}">${genes.tier}</span></div>`;
   const foot = opts.status ? `<div class="cc-foot">${opts.status}</div>` : '';
-  const ribbon = opts.tag ? `<span class="cc-ribbon">${opts.tag}</span>` : '';
-  return `<${tag} class="${cls}"${attrs}>${ribbon}${por}<div class="cc-main">${top}${partsLine(genes)}${statBars(st, opts.big)}${odds}${foot}</div></${tag}>`;
+  const ribbon = opts.tag ? `<span class="cc-ribbon">${opts.tag}</span>` : genes.career && genes.career.retired ? '<span class="cc-ribbon retired">RETIRED</span>' : '';
+  return `<${tag} class="${cls}"${attrs}>${ribbon}${por}<div class="cc-main">${top}${partsLine(genes)}${statBars(st, opts.big, opts.full || opts.big || !genes.rival ? genes.growth : {})}${raceLine(genes, opts.full || opts.big)}${foot}</div></${tag}>`;
 }
 
 // Hover tips for anything with a data-tip (the card stats, parts and grade): one floating box that

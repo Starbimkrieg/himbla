@@ -4,49 +4,13 @@ import { toon, glow, inkMat } from './toon.js';
 import { inkShell } from './models.js';
 import { mulberry32 } from './rng.js';
 import { ensureStats } from './chimerastats.js';
+import { PALETTE } from './chimeragenes.js';
 
-// Things with bodies. Two or more of these in the reactor make a Chimera.
-export const LIVING = ['person', 'voidling', 'mite', 'car', 'pirate', 'sapling', 'junkbot', 'alien'];
-// Things that only mutate whatever they get spliced into.
-export const MODIFIERS = { water: 'void', rock: 'crystal', slickrock: 'crystal', dirt: 'mud', mud: 'mud', wiring: 'spark', engine: 'turbo', lens: 'lens', transponder: 'radio', plating: 'armor' };
-
-export const PALETTE = {
-  person: [0xff9f1c, 0x2ec4ff, 0xffd23f, 0x7dff6a],
-  voidling: [0xc77dff, 0x7b2ff7],
-  mite: [0xb8e986, 0xd8d0c4, 0x9be7ff],
-  car: [0xff7ad9, 0x2ec4ff, 0x7dff6a, 0xffd23f],
-  pirate: [0x3a2b4f, 0x5a3a5a],
-  sapling: [0x5fbf4a, 0x8fd16a, 0x3f9a3a],
-  junkbot: [0xffb347, 0x9aa7bb, 0x55607a],
-  alien: [0x7dd87a, 0x5fc9b8, 0xb59cff, 0xc9f27a],
-};
-const SYLL = { car: 'Vroom', mite: 'Skitter', pirate: 'Grit', sapling: 'Sprout', junkbot: 'Bolt', alien: 'Zorp' };
-const EPITHET = { void: 'the Unholy', crystal: 'the Crystalline', mud: 'of the Mud', spark: 'the Electric', turbo: 'the Turbocharged', lens: 'the All-Seeing', radio: 'the Broadcaster', armor: 'the Ironclad' };
-
-// Mix the parents into a gene sheet: which body, legs and head; mutations; stats; a name.
-export function spliceGenes(items, seed = Math.floor(Math.random() * 1e9)) {
-  const rr = mulberry32(seed);
-  const living = items.filter((i) => LIVING.includes(i.kind));
-  const mods = [...new Set(items.map((i) => MODIFIERS[i.kind]).filter(Boolean))];
-  const pickPart = () => living[Math.floor(rr() * living.length)].kind;
-  const body = living[0].kind;
-  const legs = living.length > 1 ? living[1].kind : pickPart();
-  const head = pickPart();
-  const kinds = new Set(living.map((i) => i.kind));
-  const extraHead = rr() < 0.15 + 0.12 * kinds.size ? pickPart() : null;
-  const size = 0.75 + rr() * 0.7;
-  const tint = PALETTE[body][Math.floor(rr() * PALETTE[body].length)];
-  const nameOf = (i) => i.name || SYLL[i.kind] || 'Blob';
-  const a = nameOf(living[0]), b = nameOf(living[living.length - 1]);
-  let name = a.replace(/^Little /, '').slice(0, Math.max(2, Math.ceil(a.length / 2))) + b.replace(/^Little /, '').slice(Math.floor(b.length / 2)).toLowerCase();
-  if (living.length === 1) name = `Mutant ${a}`;
-  if (mods.length) name += ' ' + EPITHET[mods[0]];
-  const chaos = kinds.size + mods.length + (extraHead ? 1 : 0) + (mods.includes('void') ? 1 : 0);
-  // racing stats (speed / power / stamina / wit), tier and top speed come from the parts + seed
-  return ensureStats({ seed, body, legs, head, extraHead, mods, size, tint, name, speed: 0, hop: legs === 'mite' ? 1 : 0.3, chaos, parents: living.map((i) => i.kind), born: Date.now() });
-}
-
+export { LIVING, MODIFIERS, PALETTE, spliceGenes } from './chimeragenes.js';
 export { ensureStats };
+
+// Chimeras are drawn at this fraction of their gene size (a field of six fits the gate's 3 m stalls; the race model's widths match).
+export const DRAWN = 0.72;
 
 // =============================================================================================
 // Part geometry. Every shape is built once and shared (geometry.userData.shared), and every
@@ -546,7 +510,8 @@ export function makeChimera(genes) {
     aura.position.y = legH + 0.7;
     inner.add(aura);
   }
-  inner.scale.setScalar(genes.size);
+  const k = genes.size * DRAWN;
+  inner.scale.setScalar(k);
   // walk / roll / skitter animation
   let lastT = null;
   const anim = (t, speed) => {
@@ -555,7 +520,7 @@ export function makeChimera(genes) {
     lastT = t;
     for (const p of legParts) {
       if (p.kind === 'wheel') {
-        const roll = (speed * dt) / (p.r * genes.size);
+        const roll = (speed * dt) / (p.r * k);
         if (p.axis === 'y') p.m.rotation.y += roll; else p.m.rotation.x += roll;
       } else if (p.kind === 'mite') {
         // tripod gait: swing fore and aft, lift on the forward stroke
@@ -572,7 +537,7 @@ export function makeChimera(genes) {
     const bob = L === 'car' ? 0 : L === 'mite' ? Math.abs(Math.sin(t * 16)) * 0.04 : Math.abs(Math.sin(t * 10)) * 0.1;
     inner.position.y = bob * k;
   };
-  return { root, anim, height: (top + 0.8) * genes.size };
+  return { root, anim, height: (top + 0.8) * k };
 }
 
 // Small wild critter of the sunlit craters.

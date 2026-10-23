@@ -34,19 +34,22 @@ const downs = {
       P('dn_roof_bay', 19.6, { d: 44, dz: -17.5 }), P('dn_roof_bay_s', 19.6, { d: 27, dz: -10 }),
     ], 2)),
     item('downs.club', 'DOWNS CLUBHOUSE AND TOTE HALL', 62, 30, () => row([P('dn_club', 62, { d: 28, dz: 13.5 })])),
-    item('downs.course', 'DOWNS COURSE KIT: RAIL · FURLONG POLE · FINISH ARCH · PHOTO TOWER · LAMP · FLAG MAST · CROSSING POST · STARTING GATE', 79, 10, () => {
-      const gate = P('dn_gate_frame', 17, { d: 4, dz: 1.4 });
-      for (let i = 0; i < 4; i++) for (const s of [-1, 1]) {            // (the stall doors, hinged as race.js hangs them)
-        const hinge = new THREE.Group();
-        hinge.position.set((1.5 - i) * 4 + s * 1.95, 0, 0.1);
-        const d = makeDownsPart('dn_gate_door');
-        d.scale.x = s > 0 ? 1 : -1;
-        hinge.add(d);
-        gate.root.children[0].add(hinge);
-      }
+    item('downs.course', 'DOWNS COURSE KIT: RAIL · FURLONG POLE · FINISH ARCH · PHOTO TOWER · LAMP · FLAG MAST · CROSSING POST · SIX-STALL STARTING GATES A (CLASSIC SIX) AND B (THE GANTRY)', 104, 10, () => {
+      const gate = (k, w) => {
+        const G = P(`dn_gate6_frame_${k}`, w, { d: 3.5, dz: 1.2 });
+        for (let i = 0; i < 6; i++) for (const s of [-1, 1]) {          // (the stall doors, hinged as race.js hangs them)
+          const hinge = new THREE.Group();
+          hinge.position.set((2.5 - i) * 3 + s * 1.45, 0, 0.1);
+          const d = makeDownsPart(`dn_gate6_door_${k}`);
+          d.scale.x = s > 0 ? 1 : -1;
+          hinge.add(d);
+          G.root.children[0].add(hinge);
+        }
+        return G;
+      };
       return row([
         P('dn_rail', 5, { d: 1 }), P('dn_furlong', 2.5, { d: 1 }), P('dn_finish_arch', 26, { d: 3 }), P('dn_photo_tower', 6, { d: 7 }), P('dn_lamp', 2.5, { d: 1 }),
-        P('dn_mast', 4, { d: 1 }), P('dn_crossing', 2, { d: 1 }), gate,
+        P('dn_mast', 4, { d: 1 }), P('dn_crossing', 2, { d: 1 }), gate('a', 18.5), gate('b', 19.1),
       ], 2);
     }),
     item('downs.stalls', 'DOWNS CONCESSION STALLS ×12, EACH IN AN ARCADE BAY: MOON DOGS · CRATER FRIES · HE-3 FIZZ · CHIMERA CHOW · ROCK CANDY · TOTE · SPACE SLUSH · LUNAR COFFEE · DERBY DONUTS · JOCKEY\'S GRILL · FOAM FINGERS · RAIL BAR', 140, 18, () => {

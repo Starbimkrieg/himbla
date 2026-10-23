@@ -1,6 +1,8 @@
 import { FACTIONS, SHOPS } from './locations.js';
 import { OUTFITS, SKATES } from './cosmetics.js';
-import { spliceGenes } from './chimera.js';
+import { spliceGenes, ensureStats } from './chimera.js';
+import { SEASON_RACES } from './chimerastats.js';
+import { SKILL_IDS } from './chimeraskills.js';
 import { pick } from './rng.js';
 import { VEHICLES } from './vehicles.js';
 import { BIKE_STYLES, getBikeStyle, setBikeStyle, SKIMMER_STYLES, getSkimmerStyle, setSkimmerStyle } from './models.js';
@@ -361,7 +363,7 @@ export class Cheats {
       { label: '4 · TELEPORT…', fn: () => this.teleportMenu(0) },
       { label: `5 · GOD MODE: ${this.god ? 'ON' : 'OFF'}`, fn: () => { this.god = !this.god; g.player.health = g.player.maxHealth; this.open(); } },
       { label: '6 · UNLOCK ALL GEAR, WEAPONS & COSMETICS', fn: () => { this.unlockAll(); this.open(); } },
-      { label: '7 · LAB KIT (big jar, items, 3 chimeras)', fn: () => { this.labKit(); this.open(); } },
+      { label: '7 · LAB & CHIMERAS… (lab kit, careers, skills)', fn: () => this.chimeraMenu() },
       { label: '8 · MORE…', fn: () => this.moreMenu() },
       { label: '9 · SPAWN A VEHICLE…', fn: () => this.vehicleMenu() },
       { label: 'CLOSE' },
@@ -545,6 +547,22 @@ export class Cheats {
     g.alchemy.refreshJarMesh();
     g.save();
     g.hud.toast('Everything unlocked (incl. grip tunes, plating, event radar, pen link, Xenoglide skates). Weapons on 1-4, wardrobe on C.', 4);
+  }
+
+  // the lab kit, and shortcuts through the chimeras' racing careers
+  chimeraMenu() {
+    const g = this.game;
+    const A = g.alchemy;
+    const all = (fn) => { for (const c of A.chimeras) { ensureStats(c); fn(c); } A.save(); A.syncChimeras(); this.chimeraMenu(); };
+    g.dialog('CHEAT MENU · LAB & CHIMERAS', `<small>${A.chimeras.length} chimeras. The career shortcuts apply to every one of them.</small>`, [
+      { label: '1 · LAB KIT (big jar, items, 3 chimeras)', fn: () => { this.labKit(); this.chimeraMenu(); } },
+      { label: '2 · +3 TRAINING SESSIONS EACH', fn: () => all((c) => { c.career.train += 3; }) },
+      { label: '3 · SKIP TO THIS SEASON\'S TOURNAMENT', fn: () => all((c) => { if (!c.career.retired) c.career.races = SEASON_RACES; }) },
+      { label: '4 · TEACH EVERY SKILL', fn: () => all((c) => { c.skills = [...SKILL_IDS]; }) },
+      { label: '5 · RETIRE THEM ALL (to test selling)', fn: () => all((c) => { c.career.retired = true; }) },
+      { label: '6 · BACK', fn: () => this.open() },
+      { label: 'CLOSE' },
+    ]);
   }
 
   labKit() {

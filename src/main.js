@@ -1592,6 +1592,7 @@ class Game {
     const nearPod = lab && z === lab.loc && P.pos.distanceTo(lab.pod) < 4;
     const nearPen = lab && z === lab.loc && P.pos.distanceTo(lab.penTerm) < 5;
     const nearBooth = this.race.near(P.pos);
+    const nearYard = this.race.nearYard(P.pos);
     if (this.rides.interact()) {
       // aboard a ship or a fairground ride (or next to one you could hop on)
     } else if (this.events.interact()) {
@@ -1613,6 +1614,9 @@ class Game {
     } else if (nearBooth) {
       this.hud.prompt('<b>F</b> — CHIMERA DOWNS: RACE CARD &amp; BETS');
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.race.open();
+    } else if (nearYard) {
+      this.hud.prompt('<b>F</b> — TRAINING YARD (spend your chimeras\' banked sessions)');
+      if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.race.trainMenu();
     } else if (nearDoc) {
       this.hud.prompt('<b>F</b> — TALK TO DR. ZBORNAK');
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.talkScientist();

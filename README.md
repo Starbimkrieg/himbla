@@ -136,7 +136,7 @@ back. Prompts show the pad's buttons while it's in use.
 
 In menus, dialogs, the board, the wardrobe and the casino, the d-pad (or left stick) moves a
 highlight, `A` presses, `B` backs out, `LB`/`RB` switch tabs and the right stick scrolls. Watching
-a Derby race: `A` cheers, `Y` switches camera, the right stick orbits. On the globe map the left
+a Derby race: `A` or `Y` switches camera, the right stick orbits. On the globe map the left
 stick moves a cursor (rest it on a pin to read it), holding `RT` grabs the globe so the cursor drags
 it round, holding `LB` / `RB` turns the map anticlockwise / clockwise, the right stick zooms, and `B` or
 `View` closes it (from your town's Radio Tower, `A` sends a sweep from the cursor and `X` stops or resumes it). At the Plinko board the left stick (or d-pad) aims the chute, `A` or `RT` drops a
@@ -625,16 +625,19 @@ crowd-noise bed for now (the cheering is due a rework), and the race countdown b
   credits, a pet rock, a dirt golem, statues, a love match, black rain, inverted colours, low gravity,
   super-slick skates, a springy "resonance" and, with three different things, a SINGULARITY that blows you
   through the roof.
-- **Chimeras (the Horsey-Game part):** put **two or more living things** in the reactor together
+- **Chimeras (the Horsey-Game part):** put **two or more different kinds of living thing** in the reactor together
   (people, Void-Touched people, wild **Moon Mites**, knocked-out **pirates**, whole **hover-cars**) and out
   comes a chimera, which climbs out of the reactor tube, leaps clear and lands beside you before its
-  result card shows. Body, legs and head are picked from the parents (car wheels, six mite legs, pirate
-  boots…), sometimes with a spare head, plus mutations from anything non-living in the mix (black water
+  result card shows (two of one kind come back out: that's a pair, not a chimera). Body, legs and head are each drawn at random
+  from the parents (the order they went in counts for nothing; the three always come from at least two of them: car wheels, six
+  mite legs, pirate boots…), sometimes with a spare head, plus mutations from anything non-living in the mix (black water
   → void aura "the Unholy", rock → crystal spikes, dirt/mud → mud blobs). Each gets a mashed-up name,
-  a top speed and a chaos rating. Wheel and tread legs sit on a chassis base, so they never
+  racing stats, a **growth** (one or two stats train 5–15 % faster), a **running style** (Front Runner, Pace Chaser or
+  Late Surger) and a chaos rating. Chimeras are drawn at 0.72 of their old size (a field of six fits the gate). Wheel and tread legs sit on a chassis base, so they never
   hang off thin air. Up to three follow you; any number more live in the **holding pen** in
   front of the lab. Use the pen terminal (or `P` anywhere once you buy Dr. Zbornak's ₵1200 remote pen link) to
-  call chimeras out, send them back, or release them for good. Chimeras are saved.
+  call chimeras out, send them back, or release them for good. Retired racers wear a RETIRED tag in the pen and can be
+  **sold** to the Lunar Stud Farm for what their record is worth. Chimeras are saved.
 - **New things to scoop:** Moon Mites roam sunlit craters in herds of 3–6, away from settlements (green dots on the minimap within ~400 m; they flee if you rush them); hover-cars
   can be scooped straight out of traffic (two jar slots, the car is gone ~150 s); pirate skaters at ≤45 %
   hull get **DAZED** for 6 s and can be jarred (Rustmoon −3 if you're aligned).
@@ -646,28 +649,36 @@ crowd-noise bed for now (the cheering is due a rework), and the race countdown b
   Void Skin (water/void-touched, see in the dark and harder to hit), Stone Hide (rock, +40 hull, more drag),
   Burrower Claws (dirt/mud, painless boot landings), Pirate Blood (pirate, hunting squads mostly ignore you).
   Each shows on your runner. Dr. Zbornak cures them for ₵200 each.
-- **Chimera Downs** (the racecourse): a four-lane dirt oval under a 14-tier roofed grandstand (suites, end towers,
+- **Chimera Downs** (the racecourse): a dirt oval with a six-stall starting gate under a 14-tier roofed grandstand (suites, end towers,
   a clubhouse with a clock tower and six betting windows behind it) and a smaller far stand, joined round the two turns
   by colonnaded arcades with twenty concession stalls and a gate hall each; a **screen drum** in the middle of the
   infield with live standings (one 40 × 20 m face for each stand, a tall one for each arcade), three sets of **winners'
   podiums** (the first three home stand on their steps behind the result, and the camera swings round to them), a finish
   arch, a photo-finish tower, distance poles, a parade ring, a weighing room, a stable yard, a grand forecourt with a
   fountain, and a fairground annex with the ferris wheel and carousel (rideable: `F`). In the Gold Gleam / Saddle Brown /
-  Black / Money / Barn Red / Touch of Mint palette. The **race office** window (`F`, under the clubhouse's portico) posts races over time, **up to three on the card**, each with
-  its own **distance** (450 m sprints, miles, 2–2.8 km stakes and 3–3.6 km marathons), **class** (C, B, A or S
-  and under, or open), **going** (FAST, DUSTY, HEAVY: tiring, LOW-G: bouncy and chaotic), purse (60/25/15 % to the
-  top three), entry fee and a pre-drawn field of three rivals ("Glue Factory Escapee", "Hoof Hearted"…). Races close
-  after a few minutes and new ones post every minute or so. Pick a race, pick a chimera (grade must fit the class),
-  then enter alone or with a ₵50/200/500 bet.
-  Every chimera has four stats (1–100) and a C/B/A/S grade, set mostly by its parts plus some randomness:
-  **SPEED** (top speed: wheels, void, crystal), **POWER** (acceleration, and recovery after a stumble: mite legs,
-  turbo, spark), **STAMINA** (how long before it tires: roots, treads, armour, mud; it decides the long races) and
-  **WIT** (fewer stumbles, wrong-way runs and trips: alien and person heads, lenses, radios). The bookie simulates
-  the exact race (distance and going included) a few hundred times to set the odds.
+  Black / Money / Barn Red / Touch of Mint palette. The **race office** window (`F`, under the clubhouse's portico) keeps
+  **one race posted in each of three sections**: **EASY** (grades C and B only), **MEDIUM** (up to A) and **HARD** (anyone),
+  each with its own **distance** (450 m sprints, miles, 2–2.8 km medium and 3–3.6 km long races), **going** (FAST, DUSTY,
+  HEAVY: tiring, LOW-G: more bad moments), purse (60/25/15 % to the top three), entry fee and a field of five rivals
+  ("Glue Factory Escapee", "Hoof Hearted"…), trained to the section's strength and knowing its share of skills. The card
+  shows each rival's grade and skill count; after you pick your runner, a **scouting** screen shows every runner's full card.
+  **No odds:** enter alone or with a ₵50/200/500 bet, and a win pays the section's flat multiple (2.5×, 3.5×, 5×).
+  Every chimera has four stats (1–100) and a C/B/A/S grade, set by its parts and its training:
+  **SPEED** (top speed: wheels, void, crystal), **POWER** (acceleration, moving across the track and getting a pass done:
+  mite legs, turbo, spark), **STAMINA** (the tank: pushing and passing burn it, and what is left becomes the final sprint;
+  it decides the long races: roots, treads, armour, mud) and **WIT** (skills firing, judging the sprint, and dodging
+  **Late Starts**, **Spot Struggles** and **Rushed** spells: alien and person heads, lenses, radios).
+  **The race:** six runners break from the gate and fight for the inner rail (shorter round the bends), cruise at their
+  style's pace, draft behind each other, get boxed in and pass (a slower chimera can pass a faster one that is cruising
+  or tired, if it has the POWER to get by and the stamina to spend), and kick for home on what is left in the tank.
+  **Skills** (ten, learned now and then from a win): four passive distance skills, Gate Burst, Rail Hugger, Slipstream,
+  Second Wind, Home Stretch and the rare **Chimera Soul**; each fires on a wit roll, once a race.
+  **Careers:** three seasons of three races and a tournament (the **Regolith Guineas**, the **Lunar Derby**, the **Dark
+  Side St. Leger**: TOURNAMENTS at the window), then retirement; win all three for the **Triple Crown** and the **Hall of
+  Fame**. Every race banks a training session for the **Training Yard** (the trainer in the stable lane behind the far
+  stand): Sprints, Hill Pulls, Long Laps or the Maze Run. The numbers: `docs/chimera-racing.md`.
   **While your chimera races, the camera locks onto it:** `1`–`5` (or `C`) switch between chase, infield rail,
-  leader, grandstand and blimp cameras, the mouse orbits the chase cam, and `SPACE` spends one of three **crowd
-  cheers** for a short surge that burns stamina (a dim creature may get spooked instead). Chaos as ever: stumbles,
-  zooms, wrong-way runs, giant hops, and the occasional explosion and reassembly.
+  leader, grandstand and blimp cameras, and the mouse orbits the chase cam.
 - **The Monolith:** touch it (90 s cooldown) and it casts one of three spells, never the same twice running: **Time Dilation** (20 s with pirates, their shots, traffic and meteors at 40 % speed while you keep full speed), **Echo Followers** (one or two holograms of you that retrace your every move a moment late, mid-air jumps and all, for up to ten minutes or until one takes a shot for you; anyone shooting at you picks one of you at random) or **Teleport** (a random spot on the Moon, on flat safe ground away from settlements and lakes, where you land at a standstill one time in four and otherwise running at a random 1–300 km/h; you keep your health and fuel, and a launch comes with a few seconds of Soft Landing so the arrival can't wipe you out).
 
 ## Locations
@@ -723,7 +734,8 @@ src/
   events.js      per-faction events, fluid sloshing, escorts, the Pirate Wreck
   mapview.js     draggable fog-of-war globe map (also where the Radio Tower's sweeps are sent from)
   alchemy.js     containment jar, reactor recipes, wild mites, followers, splice-pod mutations, Mega Mite
-  chimera.js     gene splicing + procedural chimera models
+  chimera.js     procedural chimera models (drawn at 0.72 of their gene size)
+  chimeragenes.js splicing: the gene sheet from the reactor's parents (body, legs and head drawn at random, two kinds at least), no three.js
   cheats.js      testing menu (backtick)
   devoverlay.js  dev overlay (F3): every on-screen dev readout in one panel (frame times, CPU / GPU graphs, CPU time by stage, draw calls, world counts, pirate spawns, AI paths, input monitor); perfgraph.js has its graphs
   freecam.js     dev free cam (Dev menu → Debug overlay → FREE CAM): the camera flies on its own (mouse, WASD, wheel for speed) while the runner stands still and the game runs on
@@ -747,7 +759,7 @@ src/
   fountainFx.js  the plaza fountain's water: ripple, curtain and jet shaders on the casino.glb water pivots, sharing one clock
   pixelIcons.js  the classic-games overlay's pixel-art sprites (slot symbols, the pit boss, chips, cards' suits…) as plain rows of palette letters
   cosmetics.js   outfits, skate finishes, laser colours, wardrobe
-  race.js        Chimera Downs: race card, betting, locked race camera, chaos racing, the live screens, the crowd, the podium finish
+  race.js        Chimera Downs: the race card's EASY / MEDIUM / HARD sections and the tournaments, scouting and betting, the live race (the six-stall gate, the locked camera, the event pop-ups), the screens, the crowd, the podium finish, careers, the Training Yard, the Hall of Fame
   downsPlan.js   Chimera Downs' plan: the oval, the stands, the arcades and their stalls, the forecourt, the drum, the podiums, the annex (no three.js)
   downsWorld.js  Chimera Downs' scenery, built from the Blender kits (the Downs kit baked into one settlement kit)
   downsKit.js    what the Downs builders share: the palette, text widths, `bake` (a Blender kit part into a settlement kit), `fountain` (the forecourt's, with the casino's water shaders and a turning derby cup), `arcadeShell` (the parts of an arcade that run on from bay to bay, one seamless piece per run, with `sheet` and `inkShell` for a solid of joined polygons and its outline)
@@ -757,7 +769,8 @@ src/
   rocks.js       shaped rocks (ramps, arches, hoodoos, snake rails) and their colliders
   rails.js       grinding the snake rocks' crests and crater rims (the Asset Row's flat world has rails too)
   meteors.js     meteor showers: the warning zone, falling rocks (colliders), chunks and scorch marks
-  chimerastats.js chimera racing stats and the race model (distance, going, cheers) the bookie simulates
+  chimerastats.js chimera racing stats, growth, running styles, careers and training, and the race model (the rail, drafting, blocking, passing, pushing on stamina, the final sprint, the three bad moments); no three.js (docs/chimera-racing.md)
+  chimeraskills.js the ten racing skills, their wit rolls, and the roll that teaches one after a win
   physics.js     collider hash + shared skater movement model (player and pirate skaters)
   player.js      input → movement, weapon, animation, style events
   idles.js       the courier's standing idles (the breath and four occasional ones), played over the rest pose
@@ -794,7 +807,7 @@ src/
   assets/lot.glb     the casino forecourt's kit: the card wall (giant cards dominoed on a plum and gold kerb), its posts, the walkway's chip bollard, the P pylon and a bay stud
   assets/downs-stand.glb  Chimera Downs' grandstand kit: a three-seat strip; each stand's whole roof (raked Barn Red deck on trusses, end wall to end wall through the corner towers), back wall (with the ways in and rear quoins) and the main stand's suites row, one piece each; the end towers, the frame of a way in, and 19 m samples of the roof, back wall and suites for the Asset Row
   assets/downs-club.glb   the clubhouse and tote hall: a Mint hall under hip roofs with dormers, quoins and a string course round it, a colonnade tied back to the wall over six betting windows and a striped awning, the board's recess, the 50 m clock tower with four faces
-  assets/downs-course.glb the course kit: the rail, distance pole, finish arch, photo-finish tower, lamp, flag mast, the crossings' barrier post (which also ends the rail runs) and the starting gate with its doors
+  assets/downs-course.glb the course kit: the rail, distance pole, finish arch, photo-finish tower, lamp, flag mast, the crossings' barrier post (which also ends the rail runs) and the six-stall starting gate in two designs with their doors (A Classic Six, B The Gantry; race.js `GATE` picks one: docs/downs-gate-proposals/)
   assets/downs-stalls.glb twelve concession stalls (hot dogs, fries, fizz, chow, rock candy, tote, slush, coffee, donuts, grill, foam fingers, bar) on one kit: a plinth, a one-piece shell with the arch cut out, a cornice raked 0.6 m under the arcade's ceiling, lit roundels on the spandrels; each with its own props
   assets/downs-arcade.glb a wedge bay of the arcades (its own fittings; the walls, trim, roof and ceiling run on from bay to bay: downsKit.js `arcadeShell`), the gate hall (two towers either side of a vaulted passage), the forecourt's gate and fountain, a valet bay, a bench for two runners, planter and a festoon
   assets/downs-screen.glb the scoreboard drum (core, struts, the shell in one bezel sleeve with four openings and gold sills, a recessed soffit, a cap with a parapet ring and a beacon) and the winners' podium set (19.2 x 5.15 m)
@@ -846,6 +859,7 @@ tools/
   blender/downs_common.py  shared by the Downs builders: the palette, the accumulator that merges boxes and cylinders per slot, the export (and the coplanar audit)
   blender/build_downs_stand.py, build_downs_club.py, build_downs_course.py, build_downs_stalls.py, build_downs_arcade.py, build_downs_screen.py, build_downs_fair.py,
                            build_downs_stable.py, build_downs_crowd.py   build Chimera Downs' kits -> src/assets/downs-*.glb (each runs `audit_coplanar` too)
+  blender/build_chimera_kit.py the chimera parts kit, two proposals (A Plush, B Specimen; `MOONRUNNER_CHIMERA=a|b`): legs, bodies and heads that fit through sockets, and the Triple Crown -> docs/chimera-proposals/chimera_kit_a.glb, _b.glb (not in the game yet); `blender/preview_chimera_kit.py` renders the blends and the review sheet
   blender/build_blackjack.py  builds the blackjack table and chip -> src/assets/blackjack.glb (also runs headless; the build stops if anything stands in the places cards, chips and the felt's lettering go)
   blender/build_dish.py    builds the cryo receiver, the gantry station, the field dish and the light dish head -> src/assets/dish.glb (also runs headless)
   blender/build_courier.py builds the two Courier light-bike redesigns -> src/assets/lightbike_a.glb, lightbike_b.glb (and plain copies in docs/courier-proposals/; headless: `MOONRUNNER_COURIER=a|b`); `blender/preview_courier.py` renders the review sheet
@@ -857,6 +871,7 @@ tools/
   viewer.html              dev-only model viewer (npm run dev, then /tools/viewer.html?m=shuttle|freighter|apc|landtrain|crane|gantry|cargobox|garage|slots|dish|outpost|mite|lineup…; slots takes &n=<cabinets in a row>&ring=<cabinets round a pillar>&idx=<first colour and name>&play=1 (works them like a patron); casino takes &part=lamp|fountain|bouncer|chandelier|welcome|wall|blackjack|claw|clawthings|duckderby (&accent=<hex>&n=<lamps> for lamp); shuttle takes &sign=<route board text>&ships=<a ships .glb to load instead of ships.glb> (docs/shuttle-design.md); freighter takes &faction=spacecom|vostok|kepler|meridian (the cargo's livery); dish takes &kind=cryo|gantry|field|head&faction=…&no=01..04&size=30&tilt=<rad>&sweep=1; apc takes &turret=<rad>&barrel=<rad>; landtrain takes &type=moonliner|prospector&faction=spacecom|vostok|kepler|meridian&cars=pax,tank,cargo,blast&unit=<n>)
   downs-audit.mjs         dev-only: audits Chimera Downs' build in its flat design frame: z-fighting (coplanar triangles of different colours, named by builder and part), colliders standing in each other, text planes facing into walls or hanging in air, bare-ground seams (`node tools/downs-audit.mjs [zfight|colliders|text|gaps|all]`)
   downs-layouts.mjs        dev-only: the Chimera Downs overhaul study (docs/downs-layouts.md): the old course and the two proposed layouts (B was built), a clearance check against the oval and the plateau, and the plan drawings in docs/ (`node tools/downs-layouts.mjs docs`)
+  race-sim.mjs             dev-only: runs the Chimera Downs race model headless thousands of times and reports the balance: what each stat and style wins, the starting stalls, passes, skills, the bad moments, the tank at the line (`node tools/race-sim.mjs [races] [all|sprint|mile|medium|long|<metres>] [field] [skills=0|1]`)
   meridian-layouts.mjs     the Meridian Exchange layout study (docs/meridian-layouts.md): the footprints of the site as built and of two proposed layouts, a clearance check, and the plan drawings in docs/
   winch-ride.mjs           dev-only headless test of the Hitch-Line winch with the real player and the real winch: rides toward the casino fountain past the Lucky Crater Casino's old sign posts (the harness stands their colliders in: coasting, running at them, circling a post, skating the ring road), and judges flings, snapped lines, posts the cable gave up on and cable inside a post; `--gate ring` is the check to run after touching `src/winch.js` (see docs/winch-handoff.md)
 ```

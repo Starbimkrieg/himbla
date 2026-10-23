@@ -147,7 +147,7 @@ export class Trailer {
     if (g.settings) Object.assign(g.settings.v, { panels: 'off' });
     g.enemies.pirateTimer = g.enemies.darkTimer = 1e9;
     g.meteors.next = 1e9;
-    g.race.postT = 1e9;
+    for (const k of Object.keys(g.race.postT)) g.race.postT[k] = 1e9;
     g.story.kade.nextAt = 1e9;
     g.updateScanner = () => {}; // no red threat-scanner ink: the shots show the models as they are
     const pop = g.fx.pop.bind(g.fx);
@@ -1094,13 +1094,13 @@ const SHOTS = [
       // a fresh card under this shot's seed, so the field is the same every run (the one posted
       // at load is random), with a wheeled racer in it
       R.card = [];
-      R.post();
+      R.post('medium');
       T.place(R.booth.clone(), T.at('downs', 0, 0, 1).sub(T.at('downs', 0, 0, 0)));
       T.hidePlayer = true;
       const race = R.card[0];
       if (!race.field.some((f) => f.legs === 'car')) race.field[0].legs = 'car';
       const mine = spliceGenes([{ kind: 'mite' }, { kind: 'person', name: 'Gary' }]);
-      R.start(race, [mine, ...race.field], 0, 3);
+      R.start(race, [mine, ...race.field], 0);
       R.timer = 0.3; // a beat of stillness in the stalls, then the gates
       g.audio.roar(1);
     },

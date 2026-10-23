@@ -5,8 +5,10 @@ import { toon, glow, ink } from './toon.js';
 import { frameQuat, tangent, greatCircle, SUN, arcDist } from './geo.js';
 import { pick, mulberry32 } from './rng.js';
 import { LIVING, spliceGenes, makeChimera, makeMite, ensureStats } from './chimera.js';
+import { resaleValue, careerNext, SEASON_RACES } from './chimerastats.js';
 import { chimeraCard, cardList, installTips } from './chimeracard.js';
 import { monolithTouch, updateEchoes } from './monolith.js';
+import { pixelFont } from './fonts.js';
 
 const _seg = new THREE.Vector3(), _seg2 = new THREE.Vector3();
 
@@ -61,6 +63,31 @@ const MAX_MUTATIONS = 3;
 const MAX_FOLLOW = 3;
 // holding pen area behind the lab (lab-local coordinates) and how many pen residents get models
 export const PEN = { x0: 28, z0: 22, x1: 62, z1: 64 };
+
+// the RETIRED tag that floats over a retired racer in the pen (one canvas, shared)
+let retiredTex = null;
+function retiredTag(h) {
+  if (!retiredTex) {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 64;
+    const x = c.getContext('2d');
+    const draw = () => {
+      x.fillStyle = '#05030c'; x.fillRect(0, 0, 256, 64);
+      x.fillStyle = '#c9c3d9'; x.fillRect(4, 4, 248, 56);
+      x.fillStyle = '#05030c'; x.font = pixelFont(30); x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText('RETIRED', 128, 34);
+      retiredTex.needsUpdate = true;
+    };
+    retiredTex = new THREE.CanvasTexture(c);
+    retiredTex.colorSpace = THREE.SRGBColorSpace;
+    draw();
+    if (document.fonts) document.fonts.ready.then(draw);     // (again once the pixel face has loaded)
+  }
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: retiredTex, depthWrite: false }));
+  s.scale.set(2, 0.5, 1);
+  s.position.y = h + 0.7;
+  return s;
+}
 const PEN_SHOWN = 36;
 const KEY = 'moonrunner-lab-v1';
 
@@ -460,7 +487,7 @@ export class Alchemy {
     const g = this.game;
     if (!this.jar.length) { g.hud.toast(this.owned ? (this.artifact ? 'Only the alien artifact is left, and its compartment is sealed.' : 'The jar is empty. Press G to scoop something.') : 'You don\'t have a jar yet.', 1.8); return; }
     const lab = g.world.lab;
-    if (!forceDump && lab && g.player.pos.distanceTo(lab.reactor) < 11) this.feedReactor();
+    if (!forceDump && lab && g.player.pos.distanceTo(lab.reactor) < 11) { if (this.feedReactor() === 'kept') return; }
     else this.dump();
     this.jar = [];
     this.refreshJarMesh();
@@ -522,16 +549,22 @@ export class Alchemy {
   }
 
   // ---------- the reactor ----------
+  // Returns 'kept' when the reactor hands the jar back untouched.
   feedReactor() {
     const g = this.game;
     const kinds = this.jar.map((i) => i.kind).sort();
+    const living = this.jar.filter((i) => LIVING.includes(i.kind));
+    // a chimera takes two different kinds of creature: two (or more) of one kind and nothing else go back in your jar
+    if (living.length >= 2 && living.length === this.jar.length && new Set(kinds).size === 1) {
+      g.dialog('DR. ZBORNAK', `"Two ${kinds[0] === 'person' ? 'people' : `${kinds[0]}s`}? That isn't a chimera, that's a <i>pair</i>. A chimera needs two different kinds of creature. Or throw in some material and I'll mutate the one kind. Here, have them back."`, [{ label: 'FINE' }]);
+      return 'kept';
+    }
     const key = kinds.join('+');
     const names = this.jar.filter((i) => i.name).map((i) => i.name);
     const r = g.world.reactor;
     r.flash = 1.5;
     g.audio.boom(false);
     g.cam.shake = Math.max(g.cam.shake, 0.6);
-    const living = this.jar.filter((i) => LIVING.includes(i.kind));
     const mods = this.jar.length - living.length;
     const unique = new Set(kinds);
     let res;
@@ -672,6 +705,7 @@ export class Alchemy {
         const m = makeChimera(genes);
         const k = this.pen.length;
         m.root.position.set(PEN.x0 + 3 + (k % 6) * 5, 0, PEN.z0 + 3 + Math.floor(k / 6) * 5);
+        if (genes.career && genes.career.retired) m.root.add(retiredTag(m.height));
         lab.loc.group.add(m.root);
         this.pen.push({ root: m.root, anim: m.anim, genes, t: Math.random() * 5, idle: Math.random() * 4, goal: null });
       }
@@ -690,8 +724,8 @@ export class Alchemy {
     page = Math.min(page, pages - 1);
     const slice = list.slice(page * per, page * per + per);
     slice.forEach(ensureStats);
-    const buttons = slice.map((c, i) => ({ label: `${i + 1} · ${c.follow ? '★ ' : ''}${c.name}${c.wins ? ` 🏆${c.wins}` : ''} — ${c.follow ? 'WITH YOU' : 'IN PEN'}`, fn: () => this.chimeraMenu(c, page) }));
-    const cards = slice.map((c, i) => chimeraCard(g, c, { key: i + 1, button: true, mine: c.follow, status: `${c.follow ? '★ WITH YOU' : 'IN PEN'}${c.wins ? ` · 🏆 ${c.wins} win${c.wins > 1 ? 's' : ''}` : ''}` }));
+    const buttons = slice.map((c, i) => ({ label: `${i + 1} · ${c.follow ? '★ ' : ''}${c.name}${c.wins ? ` 🏆${c.wins}` : ''} — ${c.follow ? 'WITH YOU' : 'IN PEN'}${c.career.retired ? ' (RETIRED)' : ''}`, fn: () => this.chimeraMenu(c, page) }));
+    const cards = slice.map((c, i) => chimeraCard(g, c, { key: i + 1, button: true, mine: c.follow, status: `${c.follow ? '★ WITH YOU' : 'IN PEN'}${c.wins ? ` · 🏆 ${c.wins} win${c.wins > 1 ? 's' : ''}` : ''}${c.career.retired ? ` · worth ₵${resaleValue(c).toLocaleString('en-US')}` : ''}` }));
     if (pages > 1) buttons.push({ label: `${buttons.length + 1} · NEXT PAGE (${page + 1}/${pages})`, fn: () => this.penMenu((page + 1) % pages) });
     buttons.push({ label: `${buttons.length + 1} · CLOSE` });
     g.dialog('HOLDING PEN', `<small>${list.length} chimera${list.length === 1 ? '' : 's'} · ${this.followingCount()}/${MAX_FOLLOW} following you. Pick one to call it out or send it back. <span class="cc-hint">Hover a stat, part or grade to see what it means.</span></small>${cardList(cards, slice.length, 'pen')}`, buttons);
@@ -700,7 +734,10 @@ export class Alchemy {
   chimeraMenu(c, page) {
     const g = this.game;
     ensureStats(c);
-    const facts = `<small>Bred from ${c.parents.join(' + ')} · top speed ${Math.round(c.speed * 3.6)} km/h · chaos ${c.chaos}${c.wins ? ` · ${c.wins} Derby win${c.wins > 1 ? 's' : ''}` : ''}${c.born ? ` · born ${new Date(c.born).toLocaleDateString()}` : ''}</small>`;
+    const k = c.career, next = careerNext(k);
+    const record = `${c.races || 0} start${c.races === 1 ? '' : 's'}, ${c.wins || 0} win${c.wins === 1 ? '' : 's'}${k.trophies.length ? `, ${k.trophies.length} tournament${k.trophies.length > 1 ? 's' : ''}` : ''}${c.crown ? ', the Triple Crown' : ''}`;
+    const stage = next === null ? 'retired' : next === 'tournament' ? `season ${k.season}, its tournament is next` : `season ${k.season}, ${k.races} of ${SEASON_RACES} races run`;
+    const facts = `<small>Bred from ${c.parents.join(' + ')} · top speed ${Math.round(c.speed * 3.6)} km/h · chaos ${c.chaos} · ${record} · ${stage}${k.train ? ` · ${k.train} training session${k.train > 1 ? 's' : ''} banked` : ''}${c.born ? ` · born ${new Date(c.born).toLocaleDateString()}` : ''}</small>`;
     const info = `${chimeraCard(g, c, { big: true, mine: c.follow, status: c.follow ? '★ FOLLOWING YOU' : 'IN THE HOLDING PEN' })}${facts}`;
     g.dialog('HOLDING PEN', info, [
       {
@@ -713,8 +750,18 @@ export class Alchemy {
           this.penMenu(page);
         },
       },
-      { label: '2 · RELEASE INTO THE WILD (gone for good)', fn: () => this.confirmRelease(c, page) },
-      { label: '3 · BACK', fn: () => this.penMenu(page) },
+      ...(k.retired ? [{ label: `2 · SELL TO THE STUD FARM (₵${resaleValue(c).toLocaleString('en-US')})`, fn: () => this.confirmSell(c, page) }] : []),
+      { label: `${k.retired ? 3 : 2} · RELEASE INTO THE WILD (gone for good)`, fn: () => this.confirmRelease(c, page) },
+      { label: `${k.retired ? 4 : 3} · BACK`, fn: () => this.penMenu(page) },
+    ]);
+  }
+
+  // a retired racer's price is its record
+  confirmSell(c, page) {
+    const g = this.game, price = resaleValue(c);
+    g.dialog('SELL?', `The Lunar Stud Farm offers <b>₵${price.toLocaleString('en-US')}</b> for ${c.name}: its record is what they pay for.${chimeraCard(g, c, {})}`, [
+      { label: `1 · SELL (₵${price.toLocaleString('en-US')})`, fn: () => { this.chimeras = this.chimeras.filter((x) => x !== c); this.syncChimeras(); g.addCredits(price, `${c.name} sold`); g.fx.pop('SOLD!', null, { color: '#7dff3a', size: 40 }); this.penMenu(page); } },
+      { label: '2 · NO, KEEP IT', fn: () => this.chimeraMenu(c, page) },
     ]);
   }
 

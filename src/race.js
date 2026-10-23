@@ -2,42 +2,65 @@ import * as THREE from 'three';
 import { toon, inkMat } from './toon.js';
 import { frameQuat } from './geo.js';
 import { pick } from './rng.js';
-import { spliceGenes, makeChimera, LIVING } from './chimera.js';
-import { ensureStats, statTotal, newRunner, stepRunner, raceOdds, CONDITIONS } from './chimerastats.js';
+import { spliceGenes, makeChimera, LIVING, DRAWN } from './chimera.js';
+import { ensureStats, statTotal, newRace, stepRace, CONDITIONS, CATS, DRILLS, train, careerNext, SEASONS, SEASON_RACES, STAT_INFO } from './chimerastats.js';
+import { SKILLS, skillPool, rollSkill } from './chimeraskills.js';
 import { chimeraCard, cardList } from './chimeracard.js';
-import { makeDownsPart, downsNode, downsSlot } from './models.js';
+import { makeDownsPart, downsNode, downsSlot, makeFigure } from './models.js';
 import { buildDowns } from './downsWorld.js';
-import { LAP, LANES, RAIL_IN, RAIL_OUT, FINISH_U, STAND, FAR, CLUB, WINDOW, BOARD, DRUM, PODIUMS, ENTRIES, oval } from './downsPlan.js';
+import { LAP, LANES, RAIL_IN, RAIL_OUT, FINISH_U, STAND, FAR, CLUB, WINDOW, BOARD, DRUM, PODIUMS, ENTRIES, STABLES, oval } from './downsPlan.js';
 import { pixelFont } from './fonts.js';
 import { bendPoint, bendQuat } from './curve.js';
 
 // Chimera Downs: a proper racecourse for the things that crawl out of Dr. Zbornak's reactor.
-// A dirt oval with four lanes, a grandstand full of cheering spectators, a screen drum, a finish
-// arch, winners' podiums, and a clubhouse whose board posts races over time (up to three at once): each has
-// its own distance (450 m sprints to 3.6 km marathons, so stamina matters), class, going, purse
-// and field. Enter one of your chimeras, bet on it, and the camera locks onto it for the race
-// (1-5 or C switch cameras, the mouse orbits, SPACE spends one of three crowd cheers). When it is
-// over, the first three stand on a podium and the camera swings round to them behind the result.
+// A dirt oval, a grandstand full of cheering spectators, a screen drum, a finish arch, winners' podiums, and a clubhouse whose
+// board posts three races at a time, one in each section (EASY, MEDIUM, HARD), each with its own distance (450 m sprints to
+// 3.6 km marathons), going, purse and field of five rivals. Enter one of your chimeras, scout the field, bet on it, and the
+// camera locks onto it for the race (1-5 or C switch cameras, the mouse orbits). The race itself is chimerastats.js's model:
+// six runners fighting for the rail, drafting, passing, pushing on their stamina and firing their skills. When it is over, the
+// first three stand on a podium and the camera swings round to them behind the result.
+//
+// Every chimera has a career (chimerastats.js): three seasons of three races and a tournament (the Regolith Guineas, the Lunar
+// Derby, the Dark Side St. Leger), a training session banked for each race run (spent at the Training Yard in the stables), a
+// skill to learn now and then from a win, and retirement after the third tournament. Win all three tournaments: the Triple Crown.
 
 // The oval, the stands and the grounds are in downsPlan.js (the location's frame: two 180 m straights joined by half circles; the finish at x = 45 on the home straight).
-const MAX_CARD = 3;
+const FIELD = 6;
 
 const BETS = [0, 50, 200, 500];
 const SHARE = [0.6, 0.25, 0.15]; // purse split for 1st / 2nd / 3rd
 const TIERS = ['C', 'B', 'A', 'S'];
-const CLASS_BAND = { C: [196, 218], B: [222, 242], A: [246, 258], S: [262, 284], OPEN: [206, 266] };
-const PURSE = { C: 160, B: 320, A: 640, S: 1250, OPEN: 480 };
+// The card's three sections: who may enter (grades), how strong the rivals are (their stat totals, with training on top of
+// their parts to reach them) and how many skills they know, the purse, and the flat bet payout (no odds: you find out by racing).
+const SECTIONS = {
+  easy: { name: 'EASY', i: 0, grades: ['C', 'B'], band: [196, 226], skills: [0, 0], purse: 160, pays: 2.5 },
+  medium: { name: 'MEDIUM', i: 1, grades: ['C', 'B', 'A'], band: [228, 258], skills: [0, 1], purse: 380, pays: 3.5 },
+  hard: { name: 'HARD', i: 2, grades: TIERS, band: [258, 296], skills: [1, 3], purse: 850, pays: 5 },
+};
+const SEC_KEYS = ['easy', 'medium', 'hard'];
+// one tournament a season, each longer and stronger than the last
+const CUPS = [
+  { name: 'Regolith Guineas', dist: 1600, band: [236, 262], skills: [1, 1], purse: 2000, pays: 4 },
+  { name: 'Lunar Derby', dist: 2400, band: [262, 290], skills: [1, 2], purse: 4000, pays: 5 },
+  { name: 'Dark Side St. Leger', dist: 3200, band: [286, 318], skills: [2, 4], purse: 8000, pays: 6 },
+];
 const RIVALS = [
   'Glue Factory Escapee', 'Mare-y Poppins', 'Hoof Hearted', 'Sir Trots-a-Lot', 'Neigh Sayer', 'Seabiscuit II (Moon)',
   'Gallop Poll', 'Unbridled Horror', 'Bad Genes', 'Whinny the Pooh', 'Stable Genius', 'Foal Play', 'Hay Hey Hey', 'Clip Clop Cthulhu',
   'Legs Eleven', 'Regolith Rocket', 'Six Knees', 'Mostly Harmless', 'Crater Tot', 'Sample 7B', 'Do Not Feed', 'Lunar Tick',
+  'Tranquility Base Jumper', 'Furlong Shot', 'Dust Devil', 'Odd Socks', 'Photon Finish', 'Earthshine', 'Sir Gallops-a-Lot', 'Pyroclast',
 ];
 const RACE_NAMES = {
   SPRINT: ['Tycho Dash', 'Regolith Sprint', 'Crater Rim Scurry', 'Pulse Spinner Sprint', 'Short Fuse Stakes'],
   MILE: ['Copernicus Mile', 'Kepler Cup', 'Mare Imbrium Mile', 'Crater Handicap', 'Tranquility Trot'],
-  STAKES: ['Antimatter Classic', 'Zbornak Invitational', 'Lucky Crater Stakes', 'Meridian Gold Cup', 'Vostok Grand Prix'],
-  MARATHON: ['Dark Side Marathon', 'Long Night Endurance', 'Terminator Trek', 'Grand Lunar Marathon', 'Earthrise Ultra'],
+  MEDIUM: ['Antimatter Classic', 'Zbornak Invitational', 'Lucky Crater Stakes', 'Meridian Gold Cup', 'Vostok Grand Prix'],
+  LONG: ['Dark Side Marathon', 'Long Night Endurance', 'Terminator Trek', 'Grand Lunar Marathon', 'Earthrise Ultra'],
 };
+const CAT_NAME = { SPRINT: 'sprint', MILE: 'mile', MEDIUM: 'medium', LONG: 'long' };
+// The six-stall starting gate (tools/blender/build_downs_course.py builds two designs, A and B; GATE picks the one the course uses):
+// where each stall's doors hang (their hinges, either side of the stall's centre) and its number plate.
+const GATES = { a: { hinge: 1.45, doorZ: 0.1, plateY: 4.05, plateZ: 0.16 }, b: { hinge: 1.45, doorZ: 0.1, plateY: 4.46, plateZ: 0.24 } };
+export const GATE = 'a';
 const CAMS = ['chase', 'rail', 'leader', 'stands', 'blimp'];
 const CAM_NAME = { chase: 'CHASE', rail: 'RAIL', leader: 'LEADER', stands: 'GRANDSTAND', blimp: 'BLIMP' };
 const MOD_KINDS = ['water', 'rock', 'dirt', 'mud', 'wiring', 'engine'];
@@ -72,9 +95,10 @@ export class Race {
     this.state = 'idle';
     this.racers = [];
     this.entrant = null;
-    this.card = [];
+    this.card = [];                       // the posted races, at most one per section
+    this.postT = { easy: rand(20, 40), medium: rand(30, 50), hard: rand(40, 60) };
+    this.cups = new Map();                // a chimera's tournament field, drawn once per season (so backing out of the scouting can't re-roll it)
     this.nextId = 1;
-    this.postT = rand(40, 70);
     this.camMode = 'chase';
     this.camYaw = 0;
     this.camPitch = 0.28;
@@ -90,9 +114,9 @@ export class Race {
     document.getElementById('hud').appendChild(this.panel);
     if (this.loc) {
       this.build();
-      // the board opens with a couple of races already posted
-      this.post();
-      this.post();
+      // the board opens with two of its three sections posted
+      this.post('easy');
+      this.post('medium');
     }
   }
 
@@ -147,6 +171,11 @@ export class Race {
     this.booth = w.toWorld(loc, WINDOW[0], 0, WINDOW[1]);
     // the six betting windows, along the clubhouse's front
     this.windows = [-24.5, -17, -9.5, 9.5, 17, 24.5].map((x) => w.toWorld(loc, x, 0, CLUB.z1 - 3.2));
+    // the Training Yard: a trainer in the stable lane, between the blocks, in front of the hay barn
+    const [bx, bz] = STABLES.barn;
+    const trainer = makeFigure({ look: 'trader', seed: 4417, suit: 0x8b4044 });
+    w.put(trainer.root, loc, bx, bz + 6.5, 0, 0, true);
+    this.yard = w.toWorld(loc, bx, 0, bz + 6.5);
   }
 
   canvasPlane(cw, ch, w, h) {
@@ -159,26 +188,26 @@ export class Race {
     return { c, ctx: c.getContext('2d'), tex, mesh };
   }
 
-  // A four-stall starting gate (tools/blender/build_downs_course.py): a frame across the lanes and stall doors that spring open.
-  makeGate() {
+  // The six-stall starting gate (tools/blender/build_downs_course.py, design A or B): a frame across the lanes and stall doors that spring open.
+  makeGate(style = GATE) {
     const root = new THREE.Group();
-    const mid = (LANES[0] + LANES[3]) / 2;
+    const n = LANES.length, mid = (LANES[0] + LANES[n - 1]) / 2, G = GATES[style];
     // across the lanes = local x (outer lanes at -x), forward = +z
-    root.add(makeDownsPart('dn_gate_frame'));
+    root.add(makeDownsPart(`dn_gate6_frame_${style}`));
     const doors = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < n; i++) {
       const xc = -(LANES[i] - mid);
       for (const s of [-1, 1]) {
         const hinge = new THREE.Group();
-        hinge.position.set(xc + s * 1.95, 0, 0.1);
-        const d = makeDownsPart('dn_gate_door');
+        hinge.position.set(xc + s * G.hinge, 0, G.doorZ);
+        const d = makeDownsPart(`dn_gate6_door_${style}`);
         d.scale.x = s > 0 ? 1 : -1;          // (the model reaches toward -x from its hinge)
         hinge.add(d);
         root.add(hinge);
         doors.push({ g: hinge, s });
       }
       const num = this.numberPlate(i + 1);
-      num.position.set(xc, 4.85, 0.14);
+      num.position.set(xc, G.plateY, G.plateZ);
       root.add(num);
     }
     return { root, doors, open: 0, mid };
@@ -333,66 +362,90 @@ export class Race {
   holdsCamera() { return this.state === 'cooldown' && this.camMode === 'podium'; }
 
   near(p) { return !!this.booth && this.loc.active && this.windows.some((q) => p.distanceTo(q) < 5.5); }
+  nearYard(p) { return !!this.yard && this.loc.active && p.distanceTo(this.yard) < 4.5; }
 
   // ================= the race card =================
-  post() {
-    const cat = pick(['SPRINT', 'SPRINT', 'MILE', 'MILE', 'STAKES', 'STAKES', 'MARATHON']);
-    const [a, b] = { SPRINT: [450, 850], MILE: [1000, 1800], STAKES: [2000, 2800], MARATHON: [3000, 3600] }[cat];
+  post(sec) {
+    const cat = pick(sec === 'easy' ? ['SPRINT', 'SPRINT', 'MILE', 'MILE', 'MEDIUM'] : sec === 'medium' ? ['SPRINT', 'MILE', 'MILE', 'MEDIUM', 'MEDIUM', 'LONG'] : ['SPRINT', 'MILE', 'MEDIUM', 'MEDIUM', 'LONG', 'LONG']);
+    const [a, b] = CATS[cat];
     const dist = Math.round(rand(a, b) / 50) * 50;
-    const cls = pick(['C', 'C', 'C', 'B', 'B', 'B', 'A', 'A', 'S', 'OPEN', 'OPEN']);
     const cond = pick(['fast', 'fast', 'dusty', 'dusty', 'dusty', 'heavy', 'heavy', 'lowg']);
     const used = new Set(this.card.map((r) => r.name));
     let name;
     for (let i = 0; i < 8 && (!name || used.has(name)); i++) name = pick(RACE_NAMES[cat]);
-    const purse = Math.round((PURSE[cls] * (0.75 + dist / 2400)) / 10) * 10;
+    const S = SECTIONS[sec];
+    const purse = Math.round((S.purse * (0.75 + dist / 2400)) / 10) * 10;
     const race = {
-      id: this.nextId++, name, cat, dist, cls, cond, purse,
+      id: this.nextId++, name, cat, dist, sec, cond, purse, pays: S.pays,
       fee: Math.max(10, Math.round((purse * 0.12) / 10) * 10),
-      field: this.makeRivals(cls), ttl: rand(360, 540),
+      field: this.makeRivals(S.band, S.skills, cat, dist, sec === 'hard' ? 0.08 : 0), ttl: rand(360, 540),
     };
     this.card.push(race);
+    this.card.sort((x, y) => SECTIONS[x.sec].i - SECTIONS[y.sec].i);
     const g = this.game;
-    if (this.loc.active && g.currentZone === this.loc) g.hud.toast(`🏁 Posted: ${race.name} · ${fmt(dist)} m · class ${cls}`, 3);
+    if (this.loc.active && g.currentZone === this.loc) g.hud.toast(`🏁 Posted (${S.name}): ${race.name} · ${fmt(dist)} m`, 3);
     return race;
   }
 
-  makeRivals(cls) {
-    const [lo, hi] = CLASS_BAND[cls];
+  // Five rivals for a field: each a fresh splice, trained up to a stat total in `band`, knowing a few skills (the race's kind of
+  // skills, and now and then Chimera Soul).
+  makeRivals(band, skills, cat, dist, soul = 0) {
     const out = [];
     const used = new Set();
-    for (let i = 0; i < 3; i++) {
-      const target = rand(lo, hi);
+    for (let i = 0; i < FIELD - 1; i++) {
+      const target = rand(band[0], band[1]);
+      // the splice whose parts come closest to the target from below, trained the rest of the way
       let best = null;
       for (let c = 0; c < 14; c++) {
         const items = [];
-        const n = 2 + (Math.random() < 0.3 ? 1 : 0);
-        for (let k = 0; k < n; k++) items.push({ kind: pick(LIVING) });
+        const a = pick(LIVING);
+        items.push({ kind: a }, { kind: pick(LIVING.filter((k) => k !== a)) });          // (two kinds at least: a chimera, never a pair)
+        if (Math.random() < 0.3) items.push({ kind: pick(LIVING) });
         if (Math.random() < 0.5) items.push({ kind: pick(MOD_KINDS) });
         const gn = spliceGenes(items);
         const t = statTotal(gn.stats);
-        // class races keep to their tier; within that, the closest to the target total
-        const ok = cls === 'OPEN' || TIERS.indexOf(gn.tier) <= TIERS.indexOf(cls);
-        gn.dist = Math.abs(t - target) + (ok ? 0 : 1000);
-        if (!best || gn.dist < best.dist) best = gn;
+        gn.miss = t <= target ? target - t : (t - target) * 3;
+        if (!best || gn.miss < best.miss) best = gn;
       }
-      delete best.dist;
+      delete best.miss;
+      const drills = Object.keys(DRILLS);
+      for (let k = 0; k < 40 && statTotal(best.stats) < target; k++) train(best, pick(drills));
+      const nk = skills[0] + Math.floor(Math.random() * (skills[1] - skills[0] + 1));
+      const pool = Object.entries(skillPool(cat, dist));
+      for (let k = 0; k < nk; k++) {
+        if (soul && !best.skills.includes('chimeraSoul') && Math.random() < soul) { best.skills.push('chimeraSoul'); continue; }
+        const left = pool.filter(([id]) => !best.skills.includes(id));
+        let x = Math.random() * left.reduce((sum, e) => sum + e[1], 0);
+        for (const [id, w] of left) if ((x -= w) <= 0) { best.skills.push(id); break; }
+      }
       let name;
       do name = pick(RIVALS); while (used.has(name));
       used.add(name);
       best.name = name;
+      best.rival = true;
       out.push(best);
     }
     return out;
   }
 
-  eligible(race, genes) {
-    return race.cls === 'OPEN' || TIERS.indexOf(genes.tier) <= TIERS.indexOf(race.cls);
+  // why `genes` can't run `race` (null if it can)
+  barred(race, genes) {
+    const c = genes.career, next = careerNext(c);
+    if (!next) return 'RETIRED';
+    if (race.sec === 'tournament') return next === 'tournament' ? null : `${SEASON_RACES - c.races} RACE${SEASON_RACES - c.races > 1 ? 'S' : ''} TO GO THIS SEASON`;
+    if (next === 'tournament') return `SEASON ${c.season} TOURNAMENT DUE`;
+    if (!SECTIONS[race.sec].grades.includes(genes.tier)) return `GRADE ${genes.tier}: TOO STRONG FOR ${SECTIONS[race.sec].name}`;
+    return null;
   }
+
+  // a rival on the card: its name, grade and how many skills it knows (the rest is for the scouting)
+  rivalTag(f) { return `${f.name} (${f.tier}${f.skills.length ? ` · ${f.skills.length} skill${f.skills.length > 1 ? 's' : ''}` : ''})`; }
 
   raceLine(r) {
     const C = CONDITIONS[r.cond];
-    const mins = Math.max(1, Math.ceil(r.ttl / 60));
-    return `<b>${r.name.toUpperCase()}</b> · ${fmt(r.dist)} m ${r.cat.toLowerCase()} · ${r.cls === 'OPEN' ? 'OPEN CLASS' : r.cls === 'C' ? 'CLASS C' : `CLASS ${r.cls} &amp; under`} · going <b>${C.name}</b> <small>(${C.blurb})</small><br><small>Purse ₵${fmt(r.purse)} (1st ₵${fmt(r.purse * SHARE[0])} · 2nd ₵${fmt(r.purse * SHARE[1])} · 3rd ₵${fmt(r.purse * SHARE[2])}) · entry ₵${r.fee} · closes in ${mins} min · field: ${r.field.map((f) => `${f.name} (${f.tier})`).join(', ')}</small>`;
+    const head = r.sec === 'tournament' ? `<b>${r.name.toUpperCase()}</b> · SEASON ${r.season} TOURNAMENT` : `<b>${SECTIONS[r.sec].name}</b> · <b>${r.name.toUpperCase()}</b>`;
+    const closes = r.sec === 'tournament' ? '' : ` · closes in ${Math.max(1, Math.ceil(r.ttl / 60))} min`;
+    return `${head} · ${fmt(r.dist)} m ${CAT_NAME[r.cat]} · going <b>${C.name}</b> <small>(${C.blurb})</small><br><small>Purse ₵${fmt(r.purse)} (1st ₵${fmt(r.purse * SHARE[0])} · 2nd ₵${fmt(r.purse * SHARE[1])} · 3rd ₵${fmt(r.purse * SHARE[2])}) · entry ₵${r.fee} · a win pays ${r.pays}× a bet${closes} · field: ${r.field.map((f) => this.rivalTag(f)).join(', ')}</small>`;
   }
 
   // ---------- at the window ----------
@@ -404,84 +457,119 @@ export class Race {
       g.dialog('CHIMERA DOWNS', '"No chimera, no race, pal. Go see the egghead at the Antimatter Lab, put two living things in his reactor, and bring me whatever crawls out. Cars count. Mites count. People… legally count."', [{ label: 'FINE' }]);
       return;
     }
-    if (!this.card.length) {
-      g.dialog('CHIMERA DOWNS', `"Card's empty, friend. Next race posts in about ${Math.ceil(this.postT)} seconds. Grab a hot dog. It's mostly regolith."`, [{ label: 'OK' }]);
-      return;
+    ch.forEach(ensureStats);
+    const due = ch.filter((c) => careerNext(c.career) === 'tournament');
+    const rows = SEC_KEYS.map((k) => {
+      const r = this.card.find((x) => x.sec === k);
+      return `<p class="race-card">${r ? this.raceLine(r) : `<b>${SECTIONS[k].name}</b> · <small>next race posts in about ${Math.ceil(this.postT[k])} s</small>`}</p>`;
+    }).join('');
+    const buttons = this.card.map((r) => ({ label: `${SECTIONS[r.sec].name} · ${r.name.toUpperCase()} (${fmt(r.dist)} m)`, fn: () => this.pickRunner(r) }));
+    buttons.push({ label: `TOURNAMENTS${due.length ? ` (${due.length} DUE)` : ''}`, fn: () => this.cupMenu() });
+    buttons.push({ label: 'HALL OF FAME', fn: () => this.hallOfFame() });
+    buttons.push({ label: 'NEVER MIND' });
+    buttons.forEach((b, i) => { b.label = `${i + 1} · ${b.label}`; });
+    g.dialog('RACE CARD', `"Pick a race. EASY takes grades C and B, MEDIUM up to A, HARD anyone. Every chimera runs three seasons: three races, then the season's tournament." <small>Record: ${g.stats.raceWins || 0} wins · ${g.stats.raceStarts || 0} starts.</small>${rows}`, buttons);
+  }
+
+  // the tournaments: one per season, for chimeras that have run their three races
+  cupMenu() {
+    const g = this.game;
+    const ch = g.alchemy.chimeras;
+    const due = ch.filter((c) => careerNext(c.career) === 'tournament');
+    const rows = CUPS.map((C, i) => `<p class="race-card"><b>SEASON ${i + 1} · ${C.name.toUpperCase()}</b> · ${fmt(C.dist)} m · purse ₵${fmt(C.purse)} · a win always teaches a skill${i === 2 ? ' · win all three for the <b>Triple Crown</b>' : ''}</p>`).join('');
+    const cards = due.slice(0, 8).map((c, i) => chimeraCard(g, c, { key: i + 1, button: true, status: `SEASON ${c.career.season} · ${CUPS[c.career.season - 1].name.toUpperCase()}` }));
+    g.dialog('TOURNAMENTS', `"The big ones. A chimera gets in once it has run its three races of the season, and the season ends with it, win or lose."${rows}${due.length ? cardList(cards, cards.length) : '<p><small>None of your chimeras is due for one yet.</small></p>'}`, due.slice(0, 8).map((c, i) => ({
+      label: `${i + 1} · ${c.name.toUpperCase()} (SEASON ${c.career.season})`,
+      fn: () => this.scout(this.cupRace(c), c),
+    })).concat([{ label: `${Math.min(8, due.length) + 1} · BACK`, fn: () => this.open() }]));
+  }
+
+  cupRace(genes) {
+    const c = genes.career, key = `${genes.seed}|${c.season}`;
+    if (!this.cups.has(key)) {
+      const C = CUPS[c.season - 1];
+      const cat = C.dist < 2000 ? 'MILE' : C.dist < 3000 ? 'MEDIUM' : 'LONG';
+      this.cups.set(key, { id: this.nextId++, name: C.name, cat, dist: C.dist, sec: 'tournament', season: c.season, cond: pick(['fast', 'dusty', 'dusty', 'heavy']), purse: C.purse, pays: C.pays, fee: Math.round(C.purse * 0.05), field: this.makeRivals(C.band, C.skills, cat, C.dist, 0.1 * c.season) });
     }
-    const rows = this.card.map((r, i) => `<p class="race-card"><b>${i + 1}.</b> ${this.raceLine(r)}</p>`).join('');
-    g.dialog('RACE CARD', `"Pick a race. Distances vary, so mind the stamina: sprinters gas out on the long ones." <small>Record: ${g.stats.raceWins || 0} wins · ${g.stats.raceStarts || 0} starts.</small>${rows}`, this.card.map((r, i) => ({
-      label: `${i + 1} · ${r.name.toUpperCase()} (${fmt(r.dist)} m, ${r.cls})`,
-      fn: () => this.pickRunner(r),
-    })).concat([{ label: `${this.card.length + 1} · NEVER MIND` }]));
+    return this.cups.get(key);
+  }
+
+  hallOfFame() {
+    const g = this.game;
+    const list = g.stats.crowns || [];
+    const rows = list.length ? list.map((e, i) => `<p class="race-card"><b>${i + 1}. ${e.name}</b> · Triple Crown ${new Date(e.at).toLocaleDateString()} · ${e.wins} win${e.wins === 1 ? '' : 's'} from ${e.races} starts</p>`).join('') : '<p><small>No Triple Crown winner yet. Win the Regolith Guineas, the Lunar Derby and the Dark Side St. Leger with one chimera.</small></p>';
+    g.dialog('HALL OF FAME', `"The immortals. Well. The chimeras."${rows}`, [{ label: '1 · BACK', fn: () => this.open() }]);
   }
 
   pickRunner(race) {
     const g = this.game;
     if (!this.card.includes(race)) { g.hud.toast('That race just closed.', 2); return; }
-    const ch = g.alchemy.chimeras;
+    const ch = g.alchemy.chimeras.filter((c) => !c.career.retired);
     const recent = [...ch.filter((c) => c.follow), ...ch.filter((c) => !c.follow).reverse()].slice(0, 8);
     recent.forEach(ensureStats);
     const long = race.dist >= 2000;
     const cards = recent.map((c, i) => {
-      const ok = this.eligible(race, c);
+      const no = this.barred(race, c);
       const fit = long ? (c.stats.stamina >= 60 ? 'built to last' : c.stats.stamina < 45 ? '⚠ will tire' : '') : (c.stats.speed >= 60 ? 'quick' : '');
-      return chimeraCard(g, c, { key: i + 1, button: true, status: ok ? `${c.follow ? '★ WITH YOU' : 'IN PEN'}${c.wins ? ` · 🏆 ${c.wins}` : ''}${fit ? ` · ${fit}` : ''}` : `✖ GRADE ${c.tier}: TOO STRONG FOR CLASS ${race.cls}` });
+      return chimeraCard(g, c, { key: i + 1, button: true, status: no ? `✖ ${no}` : `${c.follow ? '★ WITH YOU' : 'IN PEN'}${fit ? ` · ${fit}` : ''}` });
     });
-    g.dialog(race.name.toUpperCase(), `${this.raceLine(race)}<br>"Which of your… <i>creatures</i>… is running?" <small>(number key or click)</small>${cardList(cards, recent.length)}`, recent.map((c, i) => ({
+    g.dialog(race.name.toUpperCase(), `${this.raceLine(race)}<br>"Which of your… <i>creatures</i>… is running?" <small>(number key or click)</small>${recent.length ? cardList(cards, recent.length) : '<p><small>All your chimeras are retired. Breed a new one at the lab.</small></p>'}`, recent.map((c, i) => ({
       label: `${i + 1} · ${c.name.toUpperCase()} (${c.tier})`,
       fn: () => {
-        if (!this.eligible(race, c)) { g.hud.toast(`Grade ${c.tier} is too strong for a class ${race.cls} race.`, 2.5); this.pickRunner(race); return; }
-        this.chooseBet(race, c);
+        const no = this.barred(race, c);
+        if (no) { g.hud.toast(`${c.name}: ${no.toLowerCase()}.`, 2.5); this.pickRunner(race); return; }
+        this.scout(race, c);
       },
     })).concat([{ label: `${recent.length + 1} · BACK`, fn: () => this.open() }]));
   }
 
-  chooseBet(race, genes) {
+  // Scouting the field, then the bet: every runner's full card (stats, style, skills, growth), and no odds. A win pays the
+  // race's flat multiple of the bet.
+  scout(race, genes) {
     const g = this.game;
     const field = [genes, ...race.field];
     const cond = CONDITIONS[race.cond];
-    // the bookie runs this exact race a few hundred times in his head
-    const book = raceOdds(field, 300, Math.random, race.dist, cond);
-    const odds = book[0].odds;
-    const cards = field.map((r, i) => chimeraCard(g, r, { mine: i === 0, tag: i === 0 ? 'YOUR ENTRY' : `LANE ${i + 1}`, odds: book[i], status: `${(r.parents || []).join(' + ')} · chaos ${r.chaos}` }));
-    g.dialog('PLACE YOUR BET', `${race.name} · ${fmt(race.dist)} m · going ${cond.name}. Entry ₵${race.fee}. Your <b>${genes.name}</b> pays <b>${odds.toFixed(1)}×</b> a bet if it wins.<small> Odds come from the bookie's simulations of this race: distance, going, speed, power, stamina and wit all count, and chaos is chaos.</small>${cardList(cards, 0, 'derby')}`, BETS.map((b, i) => ({
-      label: b ? `${i + 1} · ENTER + BET ₵${b} (PAYS ₵${fmt(b * odds)})` : `${i + 1} · JUST ENTER (₵${race.fee})`,
+    const cards = field.map((r, i) => chimeraCard(g, r, { mine: i === 0, tag: i === 0 ? 'YOUR ENTRY' : `STALL ${i + 1}`, full: true }));
+    const back = race.sec === 'tournament' ? () => this.cupMenu() : () => this.pickRunner(race);
+    g.dialog('SCOUTING THE FIELD', `${race.name} · ${fmt(race.dist)} m ${CAT_NAME[race.cat]} · going ${cond.name}. Entry ₵${race.fee}. A win pays <b>${race.pays}×</b> a bet.<small> No bookie's odds here: read the cards and trust your creature. Distance, going, stats, style and skills all count.</small>${cardList(cards, 0, 'derby')}`, BETS.map((b, i) => ({
+      label: b ? `${i + 1} · ENTER + BET ₵${b} (A WIN PAYS ₵${fmt(b * race.pays)})` : `${i + 1} · JUST ENTER (₵${race.fee})`,
       fn: () => {
         const cost = race.fee + b;
         if (g.credits < cost) { g.hud.toast(`Not enough credits (need ₵${cost}).`, 2); return; }
-        if (!this.card.includes(race)) { g.hud.toast('That race just closed.', 2); return; }
+        if (race.sec !== 'tournament' && !this.card.includes(race)) { g.hud.toast('That race just closed.', 2); return; }
         g.credits -= cost;
         g.audio.cash();
-        this.start(race, field, b, odds);
+        this.start(race, field, b);
       },
-    })).concat([{ label: `${BETS.length + 1} · BACK`, fn: () => this.pickRunner(race) }]));
+    })).concat([{ label: `${BETS.length + 1} · BACK`, fn: back }]));
   }
 
   // ================= the race =================
-  start(race, field, bet, odds) {
+  start(race, field, bet) {
     const g = this.game;
-    race.slot = Math.max(0, Math.min(2, this.card.indexOf(race)));      // (which podium set is this race's)
+    // (which podium set is this race's: its section's, the middle one for a tournament)
+    race.slot = race.sec === 'tournament' ? 1 : SECTIONS[race.sec].i;
     this.card = this.card.filter((r) => r !== race);
+    if (race.sec !== 'tournament') this.postT[race.sec] = rand(25, 45);
     this.race = race;
     this.podiumResult = null;
     this.cond = CONDITIONS[race.cond];
     this.bet = bet;
-    this.odds = odds;
     this.entrant = field[0];
     this.startU = FINISH_U - race.dist;
-    this.cheers = 3;
     this.excite = 0.4;
     g.stats.raceStarts = (g.stats.raceStarts || 0) + 1;
     g.alchemy.syncChimeras();
-    this.racers = field.map((genes, i) => {
-      const m = makeChimera(genes);
+    this.R = newRace(field, { dist: race.dist, cond: this.cond });
+    this.racers = this.R.runners.map((r, i) => {
+      const m = makeChimera(r.genes);
       g.scene.add(m.root);
-      return Object.assign(newRunner(genes), { m, lane: LANES[i], hop: 0, vy: 0, mine: i === 0, tiredSaid: false, weave: Math.random() * 6 });
+      return Object.assign(r, { m, hop: 0, vy: 0, mine: i === 0, tiredSaid: false });
     });
     this.placeGate(this.startU);
     this.state = 'countdown';
     this.timer = 4.5;
-    this.finished = 0;
+    this.finishAt = 0;
     for (const r of this.racers) this.place(r);
     // lock the camera to your runner
     this.camMode = 'chase';
@@ -499,13 +587,11 @@ export class Race {
     const g = this.game;
     const w = g.world;
     const u = this.startU + r.s;
-    const off = Math.sin(r.t * 0.6 + r.weave) * 0.5;
-    oval(u, r.lane + off, _o);
+    oval(u, RAIL_IN + r.x, _o);
     w.toWorld(this.loc, _o.x, 0, _o.z, _v);
     g.planet.ground(_v, _v);
     _up.copy(_v).normalize();
-    const dir = r.ev === 'wrong' ? -1 : 1;
-    w.toWorld(this.loc, _o.x + _o.hx * dir, 0, _o.z + _o.hz * dir, _f);
+    w.toWorld(this.loc, _o.x + _o.hx, 0, _o.z + _o.hz, _f);
     _f.sub(w.toWorld(this.loc, _o.x, 0, _o.z, _w));
     r.m.root.position.copy(_v).addScaledVector(_up, r.hop + 0.1);
     frameQuat(_up, _f, r.m.root.quaternion);
@@ -513,55 +599,39 @@ export class Race {
     r.fwd = (r.fwd || new THREE.Vector3()).copy(_f).normalize();
   }
 
-  // the race model rolled an event for this runner: make it visible
-  chaosFx(r, ev) {
-    const g = this.game;
-    const at = r.m.root.position.clone().addScaledVector(r.m.root.position.clone().normalize(), 4);
-    if (ev === 'stumble') g.fx.pop('STUMBLE!', at, { color: '#ffd23f', size: 36 });
-    else if (ev === 'trip') g.fx.pop(pick(['TRIPPED!', 'OOPS', 'WHICH LEG?!']), at, { color: '#ffd23f', size: 30 });
-    else if (ev === 'zoom') g.fx.pop('ZOOOM!', at, { color: '#2ee6ff', size: 40 });
-    else if (ev === 'wrong') g.fx.pop('WRONG WAY!', at, { color: '#ff4f2e', size: 36 });
-    else if (ev === 'hop') { r.vy = this.cond === CONDITIONS.lowg ? 22 : 14; g.fx.pop('BOING!', at, { color: '#ff2e88', size: 36 }); }
-    else if (ev === 'boom') {
-      g.fx.explosion(r.m.root.position, 4, false);
-      r.m.root.visible = false;
-      g.fx.pop('IT EXPLODED?!', at, { color: '#ff4f2e', size: 40 });
-    } else if (ev === 'dread') g.fx.pop(r.genes.extraHead ? 'HEADS ARGUING' : 'EXISTENTIAL DREAD', at, { color: '#c77dff', size: 32 });
-    if (r.mine || ev === 'boom') this.excite = Math.min(1, this.excite + 0.3);
-  }
-
-  // SPACE while your runner races: the crowd roars, it surges (and burns stamina doing it)
-  cheer() {
-    const g = this.game;
-    const r = this.racers[0];
-    if (this.state !== 'run' || !r || r.done) return;
-    if (this.cheers <= 0) { g.hud.toast('The crowd is hoarse. No cheers left.', 1.5); return; }
-    this.cheers--;
-    this.excite = 1;
-    g.audio.roar(1.1);
-    const at = r.pos.clone().addScaledVector(r.pos.clone().normalize(), 5);
-    if (r.st.wit < 38 && Math.random() < 0.35) {
-      // a dim creature panics at the noise instead
-      r.ev = 'trip'; r.evT = 0.9;
-      g.fx.pop('SPOOKED BY THE CROWD!', at, { color: '#ff9f1c', size: 34 });
-    } else {
-      r.boost = 1.6;
-      g.fx.pop(pick(['GO GO GO!', 'C\'MON!!', 'RUN, BABY!', 'YOU CAN DO IT!']), at, { color: '#7dff3a', size: 40 });
-    }
-    [523, 659, 784].forEach((f, i) => setTimeout(() => g.audio.tone(f, 0.12, 'square', 0.12), i * 70));
+  // the race model reported something for a runner: show it over its head (the bad moments and the skills for everyone; the
+  // passes, the sprint and the empty tank for yours)
+  eventFx(e) {
+    const g = this.game, r = e.r;
+    if (!r.pos) return;
+    const at = r.pos.clone().addScaledVector(r.pos.clone().normalize(), 4 + (r.genes.size || 1) * DRAWN);
+    const mine = r.mine;
+    if (e.kind === 'skill') {
+      const S = SKILLS[e.id];
+      g.fx.pop(`${S.name}!`, at, { color: e.id === 'chimeraSoul' ? '#ff2e88' : mine ? '#7dff3a' : '#2ee6ff', size: e.id === 'chimeraSoul' ? 46 : 32, prio: mine ? 1 : 0 });
+      if (e.id === 'chimeraSoul') { g.fx.explosion(r.m.root.position, 2, false); g.audio.roar(0.8); }
+      if (mine || e.id === 'chimeraSoul') this.excite = Math.min(1, this.excite + 0.35);
+      if (mine) g.audio.tone(988, 0.15, 'square', 0.1);
+    } else if (e.kind === 'late') g.fx.pop('LATE START!', at, { color: '#ffd23f', size: 30 });
+    else if (e.kind === 'struggle') g.fx.pop(r.genes.extraHead ? 'HEADS ARGUING' : 'SPOT STRUGGLE', at, { color: '#ff9f1c', size: 26 });
+    else if (e.kind === 'rushed') g.fx.pop('RUSHED!', at, { color: '#ff4f2e', size: 32 });
+    else if (mine && e.kind === 'calm') g.fx.pop('SETTLED', at, { color: '#a8d08d', size: 24 });
+    else if (mine && e.kind === 'passed') { g.fx.pop('PASSED!', at, { color: '#7dff3a', size: 30 }); this.excite = Math.min(1, this.excite + 0.2); }
+    else if (mine && e.kind === 'sprint') g.fx.pop('FINAL SPRINT!', at, { color: '#2ee6ff', size: 34 });
+    else if (e.kind === 'gassed') g.fx.pop(mine ? 'YOURS IS GASSED!' : 'RUNNING ON FUMES', at, { color: '#ff9f1c', size: 26 });
   }
 
   update(dt) {
     const g = this.game;
     this.t += dt;
-    // the board posts races over time and closes stale ones
+    // the board keeps one race posted per section, and closes stale ones
     if (this.loc && this.state === 'idle') {
       for (const r of this.card) r.ttl -= dt;
+      for (const r of this.card) if (r.ttl <= 0) this.postT[r.sec] = rand(20, 40);
       this.card = this.card.filter((r) => r.ttl > 0);
-      this.postT -= dt;
-      if (this.postT <= 0) {
-        if (this.card.length < MAX_CARD) this.post();
-        this.postT = rand(50, 90);
+      for (const k of SEC_KEYS) {
+        if (this.card.some((r) => r.sec === k)) continue;
+        if ((this.postT[k] -= dt) <= 0) this.post(k);
       }
     }
     // the crowd you hear: a murmur at the course, a roar during a race, louder while you lead
@@ -599,38 +669,29 @@ export class Race {
         g.fx.pop('AND THEY\'RE OFF!', null, { color: '#ff2e88', size: 70, prio: 1 });
         g.audio.roar(1);
         g.audio.tone(880, 0.4, 'square', 0.1);
+        for (const e of this.R.events) this.eventFx(e);      // (the break: Gate Bursts and Late Starts, rolled at the gate)
       }
       for (const r of this.racers) { r.t += dt; r.m.anim(r.t, 0); this.place(r); }
     } else if (this.state === 'run') {
-      const len = this.race.dist;
+      // past the line: trot on round the bend and slow down (the model leaves finishers alone)
+      for (const r of this.racers) if (r.done) { r.v = Math.max(0, r.v - dt * 6); r.s += r.v * dt; r.t += dt; }
+      const before = this.R.finished;
+      for (const e of stepRace(this.R, dt)) this.eventFx(e);
       for (const r of this.racers) {
-        if (r.done) {
-          // past the line: trot on round the bend and slow down
-          r.v = Math.max(0, r.v - dt * 6);
-          r.s += r.v * dt; r.t += dt;
-          this.place(r);
-          r.m.anim(r.t, r.v);
-          continue;
-        }
-        const ev = stepRunner(r, dt, Math.random, this.cond);
-        if (ev) this.chaosFx(r, ev);
-        if (r.ended === 'boom') { r.m.root.visible = true; g.fx.pop('REASSEMBLED!', r.pos.clone().addScaledVector(r.pos.clone().normalize(), 4), { color: '#7dff6a', size: 32 }); }
-        if (!r.tiredSaid && r.stam < 0.2) { r.tiredSaid = true; g.fx.pop(r.mine ? 'YOURS IS GASSED!' : 'RUNNING ON FUMES', r.pos.clone().addScaledVector(r.pos.clone().normalize(), 5), { color: '#ff9f1c', size: 28 }); }
         r.hop += r.vy * dt; r.vy -= (this.cond === CONDITIONS.lowg ? 18 : 30) * dt;
-        if (r.hop <= 0) { r.hop = 0; r.vy = r.genes.hop > 0.5 && Math.random() < dt * 4 ? 5 : 0; }
+        if (r.hop <= 0) { r.hop = 0; r.vy = r.genes.hop > 0.5 && r.v > 5 && Math.random() < dt * 4 ? (this.cond === CONDITIONS.lowg ? 8 : 5) : 0; }
         this.place(r);
         r.m.anim(r.t, Math.abs(r.v));
-        if (r.s >= len) {
-          r.done = true;
-          r.place = ++this.finished;
-          this.excite = 1;
-          g.fx.pop(r.place === 1 ? `${r.genes.name.toUpperCase()} WINS!` : `#${r.place}`, r.pos.clone().addScaledVector(r.pos.clone().normalize(), 6), { color: r.mine ? '#7dff3a' : '#ffffff', size: r.place === 1 ? 70 : 40, prio: 1 });
-          if (r.place === 1) g.audio.tone(660, 0.6, 'square', 0.25);
-          if (r.mine) g.audio.roar(r.place === 1 ? 1.5 : r.place <= 3 ? 0.9 : 0.4);
-          if (r.mine && r.place <= 3) this.confetti(r.pos);
-        }
       }
-      if (!this.finishAt && (this.finished >= this.racers.length || this.racers[0].done)) this.finishAt = this.t + 2.2;
+      for (const r of this.racers) {
+        if (!r.done || r.place <= before) continue;
+        this.excite = 1;
+        g.fx.pop(r.place === 1 ? `${r.genes.name.toUpperCase()} WINS!` : `#${r.place}`, r.pos.clone().addScaledVector(r.pos.clone().normalize(), 6), { color: r.mine ? '#7dff3a' : '#ffffff', size: r.place === 1 ? 70 : 40, prio: 1 });
+        if (r.place === 1) g.audio.tone(660, 0.6, 'square', 0.25);
+        if (r.mine) g.audio.roar(r.place === 1 ? 1.5 : r.place <= 3 ? 0.9 : 0.4);
+        if (r.mine && r.place <= 3) this.confetti(r.pos);
+      }
+      if (!this.finishAt && (this.R.finished >= this.racers.length || this.racers[0].done)) this.finishAt = this.t + 2.2;
       if (this.finishAt && this.t >= this.finishAt) { this.finishAt = 0; this.finish(); }
     } else if (this.state === 'cooldown') {
       for (const r of this.racers) {
@@ -683,7 +744,6 @@ export class Race {
     const n = parseInt(code.replace('Digit', ''), 10);
     if (code.startsWith('Digit') && n >= 1 && n <= CAMS.length) this.setCam(CAMS[n - 1]);
     else if (code === 'KeyC') this.setCam(CAMS[(CAMS.indexOf(this.camMode) + 1) % CAMS.length]);
-    else if (code === 'Space') this.cheer();
   }
 
   setCam(mode) {
@@ -700,13 +760,13 @@ export class Race {
     const lead = [...this.racers].sort((a, b) => b.s - a.s)[0];
     const subject = this.camMode === 'leader' ? lead : mine;
     const P = subject.pos, up = _up.copy(P).normalize();
-    const size = subject.genes.size || 1;
+    const size = (subject.genes.size || 1) * DRAWN;     // (as drawn)
     const want = _v, look = _w;
     if (this.camMode === 'chase' || this.camMode === 'leader') {
       // behind and above the runner, swung round by the mouse
       const back = _f.copy(subject.fwd).negate().applyAxisAngle(up, this.camYaw);
-      const dist = 7.5 + size * 2.5;
-      want.copy(P).addScaledVector(back, dist * Math.cos(this.camPitch)).addScaledVector(up, 1.6 + size * 1.2 + dist * Math.sin(this.camPitch));
+      const dist = 6.5 + size * 3;
+      want.copy(P).addScaledVector(back, dist * Math.cos(this.camPitch)).addScaledVector(up, 1.4 + size * 1.4 + dist * Math.sin(this.camPitch));
       look.copy(P).addScaledVector(up, 1.0 + size * 0.6).addScaledVector(subject.fwd, 4);
     } else if (this.camMode === 'rail') {
       // tracking shot from the infield, level with the runner (the crowd behind it on the straight)
@@ -752,12 +812,13 @@ export class Race {
   drawPanel() {
     const order = this.order();
     const len = this.race.dist;
-    const EV = { stumble: 'stumbling', trip: 'tripped', zoom: 'ZOOMING', wrong: 'wrong way!', hop: 'airborne', boom: 'in pieces', dread: 'having doubts' };
-    const rows = order.map((r, i) => `<div class="race-row ${r.mine ? 'mine' : ''}"><b>${r.done ? r.place : i + 1}</b> ${r.genes.name}${r.ev ? ` <i>${EV[r.ev]}</i>` : r.boost > 0 ? ' <i>SURGING</i>' : !r.done && r.stam < 0.25 ? ' <i>tired</i>' : ''}<span>${r.done ? (r.behind !== undefined ? `+${fmt(r.behind)} m` : `${r.time.toFixed(1)}s`) : `${fmt(Math.max(0, len - r.s))} m`}</span><em class="race-stam" title="stamina"><u style="width:${Math.round(r.stam * 20) * 5}%"></u></em></div>`).join('');
+    const EV = { late: 'late start', struggle: 'spot struggle', rushed: 'RUSHED', passing: 'passing', blocked: 'boxed in' };
+    const tag = (r) => (r.done ? '' : r.ev ? ` <i>${EV[r.ev]}</i>` : r.sprint && r.pushing ? ' <i>SPRINTING</i>' : r.stam < 0.15 ? ' <i>tired</i>' : '');
+    const rows = order.map((r, i) => `<div class="race-row ${r.mine ? 'mine' : ''}"><b>${r.done ? r.place : i + 1}</b> ${r.genes.name}${tag(r)}<span>${r.done ? (r.behind !== undefined ? `+${fmt(r.behind)} m` : `${r.time.toFixed(1)}s`) : `${fmt(Math.max(0, len - r.s))} m`}</span><em class="race-stam" title="stamina"><u style="width:${Math.round(r.stam * 20) * 5}%"></u></em></div>`).join('');
     const togo = Math.max(0, len - order[0].s);
     const head = this.state === 'countdown' ? `${this.race.name.toUpperCase()} · STARTING IN ${Math.max(1, Math.ceil(this.timer))}` : `${this.race.name.toUpperCase()} · ${togo > 0 ? `${fmt(togo)} M TO GO` : 'FINISHED'}`;
-    const info = `<div class="race-info">${fmt(len)} m · going ${this.cond.name}${this.bet ? ` · ₵${this.bet} @ ${this.odds.toFixed(1)}×` : ''}</div>`;
-    const foot = this.state === 'cooldown' ? '' : `<div class="race-keys"><b>SPACE</b> cheer ×${this.cheers} · <b>1-5</b>/<b>C</b> camera: ${CAM_NAME[this.camMode]} · mouse orbits</div>`;
+    const info = `<div class="race-info">${fmt(len)} m · going ${this.cond.name}${this.bet ? ` · ₵${this.bet} at ${this.race.pays}×` : ''}</div>`;
+    const foot = this.state === 'cooldown' ? '' : `<div class="race-keys"><b>1-5</b>/<b>C</b> camera: ${CAM_NAME[this.camMode]} · mouse orbits</div>`;
     const html = `<div class="m-head">${head}</div>${info}${rows}${foot}`;
     if (html !== this.lastHtml) { this.panel.innerHTML = html; this.lastHtml = html; }
     this.panel.classList.remove('hidden');
@@ -772,19 +833,48 @@ export class Race {
     const mine = this.racers[0];
     // whoever hasn't crossed yet gets ranked by distance
     const rest = this.racers.filter((r) => !r.done).sort((a, b) => b.s - a.s);
-    for (const r of rest) { r.done = true; r.place = ++this.finished; r.behind = Math.max(0, this.race.dist - r.s); }
+    for (const r of rest) { r.done = true; r.place = ++this.R.finished; r.behind = Math.max(0, this.race.dist - r.s); }
     const race = this.race;
     const place = mine.place;
     const prize = place <= 3 ? Math.round(race.purse * SHARE[place - 1]) : 0;
-    const betWin = place === 1 ? Math.round(this.bet * this.odds) : 0;
+    const betWin = place === 1 ? Math.round(this.bet * race.pays) : 0;
     const genes = mine.genes;
     genes.races = (genes.races || 0) + 1;
+    if (place <= 3) genes.placed = (genes.placed || 0) + 1;
+    const cup = race.sec === 'tournament';
+    let learned = null;
     if (place === 1) {
       g.stats.raceWins = (g.stats.raceWins || 0) + 1;
       genes.wins = (genes.wins || 0) + 1;
-      g.style(60, 'DERBY WIN');
+      g.style(cup ? 150 : 60, cup ? 'TOURNAMENT WIN' : 'DERBY WIN');
       g.hud.alert(`${genes.name.toUpperCase()} WINS THE ${race.name.toUpperCase()}!`, '#7dff3a', 4);
+      learned = rollSkill(genes, race.sec, race.cat, race.dist);
     } else g.hud.alert(`${genes.name.toUpperCase()} FINISHED #${place}`, place <= 3 ? '#ffd23f' : '#ff9f1c', 3);
+    // the career moves on: a training session banked, the season's count, and after a tournament the next season (or retirement)
+    const c = genes.career;
+    const season = c.season;
+    c.log.push({ season, sec: race.sec, name: race.name, dist: race.dist, place });
+    c.train++;
+    let career = '';
+    if (cup) {
+      this.cups.delete(`${genes.seed}|${season}`);
+      if (place === 1) c.trophies.push(season);
+      c.season++;
+      c.races = 0;
+      if (c.season > SEASONS) { c.retired = true; c.season = SEASONS; }
+      if (place === 1 && c.trophies.length === SEASONS && !genes.crown) {
+        genes.crown = true;
+        (g.stats.crowns ||= []).push({ name: genes.name, at: Date.now(), wins: genes.wins, races: genes.races });
+        g.style(500, 'TRIPLE CROWN');
+        career = `<p><b>🏆 THE TRIPLE CROWN!</b> ${genes.name} has won the Regolith Guineas, the Lunar Derby and the Dark Side St. Leger. Its name goes up in the Hall of Fame.</p>`;
+      }
+      career += c.retired ? `<p>That was ${genes.name}'s last season: it <b>retires</b> with ${genes.wins || 0} win${genes.wins === 1 ? '' : 's'} from ${genes.races} starts. It keeps its place in your pen (and could fetch a price there).</p>`
+        : `<p>Season ${season} is over. Season ${c.season} begins: three races, then the ${CUPS[c.season - 1].name}.</p>`;
+    } else {
+      c.races++;
+      career = `<p>Season ${c.season}: ${c.races} of ${SEASON_RACES} races run.${c.races >= SEASON_RACES ? ` Next up: the <b>${CUPS[c.season - 1].name}</b> (TOURNAMENTS, at the window).` : ''}</p>`;
+    }
+    career += `<p><small>A training session is banked (${c.train} now): spend it at the Training Yard in the stables, behind the far stand.</small></p>`;
     if (prize) g.addCredits(prize, `${race.name} purse`);
     if (betWin) g.addCredits(betWin, 'Derby bet');
     g.alchemy.save();
@@ -802,12 +892,55 @@ export class Race {
     const rows = order.map((r) => `<div class="race-row ${r.mine ? 'mine' : ''}"><b>${r.place}</b> ${r.genes.name} <small>(${r.genes.tier})</small><span>${r.behind !== undefined ? `+${fmt(r.behind)} m` : `${r.time.toFixed(1)}s`}</span></div>`).join('');
     const quip = place === 1 ? pick(['Wire to wire. Beautiful. Terrifying, but beautiful.', 'The crowd is chanting its name. One of its names.', 'Dr. Zbornak will want a sample.'])
       : place <= 3 ? pick(['In the money!', 'A podium finish. The podium is slightly sticky now.'])
-        : this.bet ? `Lost your ₵${this.bet} bet. ${pick(['It tried its best. Probably.', 'One of its heads wasn\'t committed.', 'Maybe add more legs.', race.dist >= 2000 ? 'It ran out of puff. Breed for stamina for the long ones.' : 'Have you tried more antimatter?'])}` : pick(['Next time.', 'It had fun. Probably.']);
+        : this.bet ? `Lost your ₵${this.bet} bet. ${pick(['It tried its best. Probably.', 'One of its heads wasn\'t committed.', 'Train it up and try again.', race.dist >= 2000 ? 'It ran out of puff. Long laps at the Training Yard.' : 'Sprints at the Training Yard might help.'])}` : pick(['Next time.', 'It had fun. Probably.']);
     const money = [prize ? `purse ₵${fmt(prize)}` : '', betWin ? `bet ₵${fmt(betWin)}` : ''].filter(Boolean).join(' + ');
-    g.dialog(`${race.name.toUpperCase()} · RESULT`, `<div class="race-result">${rows}</div><p>Your <b>${genes.name}</b> finished <b>#${place}</b>${money ? `: you collect ${money}` : ''}. ${quip}</p>`, [
+    const skill = learned ? `<p>✨ <b>${genes.name} learned ${SKILLS[learned].name}</b>: ${SKILLS[learned].blurb}</p>` : '';
+    const fired = [...mine.used].filter((id) => !SKILLS[id].passive).map((id) => SKILLS[id].name);
+    const used = fired.length ? `<p><small>Skills it fired: ${fired.join(', ')}.</small></p>` : '';
+    g.dialog(`${race.name.toUpperCase()} · RESULT`, `<div class="race-result">${rows}</div><p>Your <b>${genes.name}</b> finished <b>#${place}</b>${money ? `: you collect ${money}` : ''}. ${quip}</p>${skill}${used}${career}`, [
       { label: '1 · BACK TO THE STANDS', fn: () => this.clear() },
       { label: '2 · SEE THE RACE CARD', fn: () => { this.clear(); this.open(); } },
     ]);
+  }
+
+  // ---------- the Training Yard (the stables): spend a banked session on a drill ----------
+  trainMenu() {
+    const g = this.game;
+    const ch = g.alchemy.chimeras.filter((c) => { ensureStats(c); return c.career.train > 0; });
+    if (!ch.length) {
+      g.dialog('TRAINING YARD', '"Nothing to train, boss. Every race a chimera runs earns it one session here. Come back after the next one."', [{ label: 'OK' }]);
+      return;
+    }
+    const list = ch.slice(0, 8);
+    const cards = list.map((c, i) => chimeraCard(g, c, { key: i + 1, button: true, status: `${c.career.train} session${c.career.train > 1 ? 's' : ''} banked` }));
+    g.dialog('TRAINING YARD', `"One session per race run. Pick a creature." <span class="cc-hint">Growth (the +% on a card) makes those stats train faster; past 80 a stat is slow to move.</span>${cardList(cards, list.length)}`, list.map((c, i) => ({
+      label: `${i + 1} · ${c.name.toUpperCase()} (${c.career.train})`, fn: () => this.drillMenu(c),
+    })).concat([{ label: `${list.length + 1} · DONE` }]));
+  }
+
+  drillMenu(genes) {
+    const g = this.game;
+    const keys = Object.keys(DRILLS);
+    const gr = (k) => (genes.growth[k] ? ` +${Math.round(genes.growth[k] * 100)}%` : '');
+    g.dialog('TRAINING YARD', `${chimeraCard(g, genes, { big: true, full: true, status: `${genes.career.train} session${genes.career.train > 1 ? 's' : ''} banked` })}"Which drill?"`, keys.map((k, i) => {
+      const D = DRILLS[k];
+      return {
+        label: `${i + 1} · ${D.name}: ${STAT_INFO[D.main].short}${gr(D.main)}, a little ${STAT_INFO[D.side].short}${gr(D.side)} (${D.blurb})`,
+        fn: () => {
+          if (genes.career.train <= 0) { this.trainMenu(); return; }
+          genes.career.train--;
+          const got = train(genes, k);
+          g.alchemy.save();
+          g.audio.tone(660, 0.12, 'square', 0.1);
+          const txt = Object.entries(got).map(([s, v]) => `+${v} ${STAT_INFO[s].name}`).join(', ') || 'nothing (it is as good as it gets there)';
+          g.fx.pop(Object.entries(got).map(([s, v]) => `+${v} ${STAT_INFO[s].short}`).join(' ') || 'MAXED', null, { color: '#7dff3a', size: 40 });
+          g.dialog('TRAINING YARD', `${chimeraCard(g, genes, { big: true, full: true })}<p>${D.name}: ${genes.name} gains ${txt}.</p>`, [
+            ...(genes.career.train > 0 ? [{ label: `1 · ANOTHER SESSION (${genes.career.train} left)`, fn: () => this.drillMenu(genes) }] : []),
+            { label: `${genes.career.train > 0 ? 2 : 1} · BACK`, fn: () => this.trainMenu() },
+          ]);
+        },
+      };
+    }).concat([{ label: `${keys.length + 1} · BACK`, fn: () => this.trainMenu() }]));
   }
 
   clear() {
@@ -841,26 +974,27 @@ export class Race {
       x.fillText(status, W - 14, 21);
       x.textAlign = 'left';
       fitText(x, this.race.name.toUpperCase(), 14, 21, W - 28 - x.measureText(status).width - 18, 20);
+      // six rows: the place, the name, and the stamina bar under it
       this.order().forEach((r, i) => {
-        const y = 68 + i * 46;
-        x.fillStyle = r.mine ? '#a8d08d' : '#cfb352'; x.textAlign = 'left'; x.font = pixelFont(24);
+        const y = 60 + i * 33;
+        x.fillStyle = r.mine ? '#a8d08d' : '#cfb352'; x.textAlign = 'left'; x.font = pixelFont(20);
         x.fillText(`${r.done ? r.place : i + 1}`, 16, y);
         x.fillStyle = '#f8fff8';
-        fitText(x, r.genes.name.toUpperCase(), 56, y, W - 56 - 14, 18);
-        x.fillStyle = '#3b393a'; x.fillRect(56, y + 14, 300, 6);
-        x.fillStyle = r.stam < 0.25 ? '#b07c57' : '#7b9a6e'; x.fillRect(56, y + 14, 300 * r.stam, 6);
+        fitText(x, r.genes.name.toUpperCase(), 52, y - 2, W - 52 - 14, 15);
+        x.fillStyle = '#3b393a'; x.fillRect(52, y + 10, 300, 4);
+        x.fillStyle = r.stam < 0.25 ? '#b07c57' : '#7b9a6e'; x.fillRect(52, y + 10, 300 * r.stam, 4);
       });
     } else {
       x.textAlign = 'center';
       x.fillText('★ CHIMERA DOWNS ★', W / 2, 21);
       x.font = pixelFont(16);
-      if (!this.card.length) { x.fillStyle = '#cfb352'; x.fillText(`NEXT RACE POSTS IN ${Math.ceil(this.postT)}s`, W / 2, H / 2); }
+      if (!this.card.length) { x.fillStyle = '#cfb352'; x.fillText('NEXT RACES POSTING SOON', W / 2, H / 2); }
       this.card.forEach((r, i) => {
         const y = 72 + i * 62;
         x.fillStyle = '#cfb352'; x.textAlign = 'left';
-        fitText(x, `${i + 1} · ${r.name.toUpperCase()}`, 16, y, W - 32, 18);
+        fitText(x, `${SECTIONS[r.sec].name} · ${r.name.toUpperCase()}`, 16, y, W - 32, 18);
         x.fillStyle = '#f8fff8';
-        fitText(x, `${fmt(r.dist)} M · CLASS ${r.cls} · ${CONDITIONS[r.cond].name} · PURSE ${fmt(r.purse)}`, 16, y + 24, W - 32, 13);
+        fitText(x, `${fmt(r.dist)} M ${r.cat} · ${CONDITIONS[r.cond].name} · PURSE ${fmt(r.purse)}`, 16, y + 24, W - 32, 13);
       });
     }
     tex.needsUpdate = true;
@@ -898,7 +1032,7 @@ export class Race {
       if (r) {
         lines(r.name.toUpperCase(), 130, 14, '#f8fff8');
         lines(`${fmt(r.dist)} M`, 184, 36, '#f8fff8');
-        lines(`${r.cat} · CLASS ${r.cls}`, 226, 13, '#b07c57');
+        lines(`${r.cat} · ${SECTIONS[r.sec].name}`, 226, 13, '#b07c57');
         lines(CONDITIONS[r.cond].name, 252, 13, '#7b9a6e');
         lines(`PURSE ₵${fmt(r.purse)}`, 296, 16, '#cfb352');
         lines(`CLOSES IN ${Math.ceil(r.ttl / 60)} MIN`, 330, 11, '#f8fff8');
@@ -914,23 +1048,26 @@ export class Race {
     x.fillStyle = '#cfb352'; x.fillRect(0, 0, W, 44);
     x.fillStyle = '#3b393a'; x.font = pixelFont(22); x.textAlign = 'center'; x.textBaseline = 'middle';
     x.fillText('TODAY\'S RACE CARD', W / 2, 23);
-    if (!this.card.length) { x.fillStyle = '#f8fff8'; x.font = pixelFont(15); x.fillText('NEXT RACE POSTING SOON', W / 2, H / 2); }
-    this.card.forEach((r, i) => {
+    // a row per section, posted or not
+    SEC_KEYS.forEach((k, i) => {
+      const r = this.card.find((c) => c.sec === k);
       const y = 76 + i * 76;
       x.textAlign = 'left';
-      x.fillStyle = '#cfb352'; x.font = pixelFont(22); x.fillText(String(i + 1), 14, y);
-      x.fillStyle = '#f8fff8'; x.font = pixelFont(16); x.fillText(r.name.toUpperCase(), 48, y);
+      x.fillStyle = '#cfb352'; x.font = pixelFont(15); x.fillText(SECTIONS[k].name, 14, y);
+      x.fillStyle = '#f8fff8';
+      fitText(x, r ? r.name.toUpperCase() : 'POSTING SOON', 112, y, W - 112 - 12, 16);
+      if (!r) return;
       x.fillStyle = '#b07c57'; x.font = pixelFont(12);
-      x.fillText(`${fmt(r.dist)} M ${r.cat} · CLASS ${r.cls} · ${CONDITIONS[r.cond].name}`, 48, y + 22);
+      x.fillText(`${fmt(r.dist)} M ${r.cat} · ${CONDITIONS[r.cond].name}`, 112, y + 22);
       x.fillStyle = '#a8d08d';
-      x.fillText(`PURSE ₵${fmt(r.purse)} · ENTRY ₵${r.fee} · ${Math.ceil(r.ttl / 60)} MIN`, 48, y + 40);
+      x.fillText(`PURSE ₵${fmt(r.purse)} · ENTRY ₵${r.fee} · ${Math.ceil(r.ttl / 60)} MIN`, 112, y + 40);
     });
     tex.needsUpdate = true;
   }
 
-  // the plates on the podium backdrops: each set shows its slot of the race card, or, once a race from that slot has finished, its first three. No line holds two things that can
+  // the plates on the podium backdrops: each set shows its section of the race card (EASY, MEDIUM, HARD; a tournament finishes on the middle one), or, once a race from it has finished, its first three. No line holds two things that can
   // grow into each other (the name used to share its line with the distance and class, and VOSTOK GRAND PRIX ran into 2,400 M · CLASS OPEN): the card view heads the plate with
-  // the slot on the left and the distance and class on the right, fitted to the room the slot leaves, and gives the name the line under them to itself, fitted to the plate's
+  // the section on the left and the distance and category on the right, fitted to the room the slot leaves, and gives the name the line under them to itself, fitted to the plate's
   // width; the result view stacks the race's name, the winner, and second and third side by side, each fitted to its own room. The top 14 px stay bare: the backdrop's valance
   // (dn_podium) hangs its pennant tips 2 cm in front of the plate's top 20 cm.
   drawPlates() {
@@ -950,12 +1087,12 @@ export class Race {
         pair.sort((a, b) => x.measureText(b[0]).width - x.measureText(a[0]).width);     // (the longer first, and the other at the size it got, so the two match)
         fitText(x, pair[1][0], pair[1][1], 77, half, fitText(x, pair[0][0], pair[0][1], 77, half, 15));
       } else {
-        const r = this.card[i], slot = `RACE ${i + 1}`;
+        const k = SEC_KEYS[i], r = this.card.find((c) => c.sec === k), slot = SECTIONS[k].name;
         x.fillStyle = '#cfb352'; x.font = pixelFont(20); x.fillText(slot, L, 28);
         if (r) {
           const room = R - L - x.measureText(slot).width - 24;
           x.textAlign = 'right'; x.fillStyle = '#b07c57';
-          fitText(x, `${fmt(r.dist)} M · CLASS ${r.cls}`, R, 28, room, 18);
+          fitText(x, `${fmt(r.dist)} M ${r.cat}`, R, 28, room, 18);
           x.textAlign = 'left';
         }
         x.fillStyle = '#f8fff8';
