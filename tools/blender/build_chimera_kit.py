@@ -1,6 +1,6 @@
 # The chimera kit for Blender (4.2+ / 5.x) -> src/assets/chimera.glb: the pieces src/chimerabuild.js puts chimeras together from.
 # Round three: parts meet flush (no collars: each joint gives its size and the builder fuses the two parts with a bridge of hide that
-# shades from one parent's colour into the other's), every part carries graft points where the other parents' traits grow, and each
+# shades from one parent's colour into the other's), every part carries attachment points (graft points) for the mutations, and each
 # mutation comes in the form of the family it grows on. Human parts are not here: the builder cuts them out of the game's own NPCs
 # (models.js figureSpec), so a chimera's human parts are the settlers, pirates, void-touched and Vrill you can scoop up.
 #
@@ -16,13 +16,11 @@
 #                    head shares it, 0.3 m apart, leaning out) and `<root>_back`.
 #   ck_head_<kind>_<alt>   its origin IS the neck socket (extras jrx / jrz); it stands above it facing +z. Sockets `<root>_top` and `<root>_eye`.
 #   graft points     empties (role graft) on every part, under the pivot they move with: extras tag (side, top, low, front, back), size, and
-#                    nx / ny / nz, the outward normal a graft or mutation piece stands along.
-#   ck_graft_<family>_<n>  a trait one parent lends another's parts (n 0-2), standing on y = 0 along +y, its foot sunk 2 cm.
+#                    nx / ny / nz, the outward normal a mutation piece stands along.
 #   ck_mut_<mutation>_<family>  a mutation in the form of the family it grows on (armor, spark, radio, lens, turbo); ck_mut_crystal_<n> and
-#                    ck_mut_mud_<n> grow on anything; ck_mut_void_mote floats round a void-touched chimera. Same frame as the grafts.
+#                    ck_mut_mud_<n> grow on anything; ck_mut_void_mote floats round a void-touched chimera. Each stands on y = 0 along +y, its foot sunk 2 cm.
 #   ck_crown         the Triple Crown, a glowing laurel halo, on a head's top socket.
-# Slots: the hides are named after the family (`mite`, `car`, `sapling`) and `cloth` (a human graft's: the builder paints it the figure's
-# clothes): the builder colours them per part, shading into the neighbours' colours near the joints. Fixed: dark, steel, metal, chrome,
+# Slots: the hides are named after the family (`mite`, `car`, `sapling`): the builder colours them per part, shading into the neighbours' colours near the joints. Fixed: dark, steel, metal, chrome,
 # tire, white, bark, stonebark, moss, leaf, petal, blossom, cap, gold, mud; lit: glass, eye, lamp, red, splice, crystal, spark, voidglow.
 import math, os, random
 
@@ -36,7 +34,7 @@ def S(h):
 
 
 HEX = {
-    "mite": "b8e986", "car": "ff7ad9", "sapling": "8fd16a", "cloth": "ff9f1c",
+    "mite": "b8e986", "car": "ff7ad9", "sapling": "8fd16a",
     "dark": "2a2540", "steel": "55607a", "metal": "8a87a0", "chrome": "d8d4e8", "tire": "1d1a29", "white": "f3eee4", "bark": "7a5236",
     "stonebark": "8c8798", "moss": "3f7a34", "leaf": "5fbf4a", "petal": "ff7ad9", "blossom": "ffc2e2", "cap": "ff3b5c", "gold": "ffd23f", "mud": "6b4a2a",
     "glass": "9be7ff", "eye": "ff2e88", "lamp": "fff6a8", "red": "ff2a4a", "splice": "7dff3a", "crystal": "2ee6ff", "spark": "ffb347", "voidglow": "a86bff",
@@ -467,63 +465,7 @@ def head_sapling(root, alt):
 
 
 # =====================================================================================================
-# GRAFTS: a trait one parent lends to the others' parts (on y = 0 along +y, the foot sunk 2 cm)
-# =====================================================================================================
-def graft_mite(root, n):
-    if n == 0:                                                                  # a chitin plate, ridged
-        mesh(root.name + "_plate", ell(0.11, 0.05, 0.09, (0, 0.005, 0)), "mite", root, 0.012)
-        mesh(root.name + "_ridge", ell(0.012, 0.035, 0.08, (0, 0.03, 0)), "dark", root, 0.006)
-    elif n == 1:                                                                # a tuft of bristles
-        mesh(root.name + "_bristles", join([cone_between((math.cos(a) * 0.03, -0.02, math.sin(a) * 0.03), (math.cos(a) * 0.07, 0.12 + 0.03 * math.sin(a * 3), math.sin(a) * 0.07), 0.012, 4) for a in [k * 1.05 for k in range(6)]]), "dark", root, 0.005)
-    else:                                                                       # a spare compound eye
-        mesh(root.name + "_socket", ell(0.06, 0.04, 0.06, (0, 0.0, 0)), "mite", root, 0.01)
-        mesh(root.name + "_eye", ell(0.045, 0.045, 0.045, (0, 0.03, 0)), "eye", root, 0.008)
-
-
-def graft_car(root, n):
-    if n == 0:                                                                  # a body panel with a seam and four rivets
-        mesh(root.name + "_panel", soft(0.18, 0.05, 0.13, (0, 0.005, 0), e=0.25), "car", root, 0.01)
-        mesh(root.name + "_seam", box(0.005, 0.006, 0.12, (0.03, 0.031, 0)), "dark", root, 0)
-        mesh(root.name + "_rivets", join([ell(0.01, 0.008, 0.01, (x, 0.03, z)) for x in (-0.07, 0.07) for z in (-0.05, 0.05)]), "metal", root, 0)
-    elif n == 1:                                                                # a headlight in a chrome cup
-        mesh(root.name + "_cup", lathe([(0, -0.02), (0.05, -0.02), (0.06, 0.03), (0.05, 0.035), (0, 0.025)], 10), "chrome", root, 0.008)
-        mesh(root.name + "_lens", ell(0.045, 0.012, 0.045, (0, 0.03, 0)), "lamp", root, 0)
-    else:                                                                       # an exhaust stub with a hot tip
-        mesh(root.name + "_pipe", xf(cylinder(0.03, 0.035, 0.12, 8)[:2], (0, 0.04, 0)), "metal", root, 0.008)
-        mesh(root.name + "_tip", ell(0.024, 0.008, 0.024, (0, 0.1, 0)), "spark", root, 0)
-
-
-def graft_sapling(root, n):
-    if n == 0:                                                                  # a bark patch with a leaf sprouting from it
-        mesh(root.name + "_bark", ell(0.1, 0.04, 0.08, (0, 0.0, 0)), "bark", root, 0.01)
-        mesh(root.name + "_sprout", limb([(0, 0.02, 0), (0.02, 0.07, 0.01)], [0.008, 0.006], 4), "leaf", root, 0)
-        mesh(root.name + "_leaf", ell_between((0.02, 0.07, 0.01), (0.09, 0.12, 0.02), 0.035, 0.008, n=8), "leaf", root, 0.006)
-    elif n == 1:                                                                # a clump of moss with two toadstools
-        mesh(root.name + "_moss", join([ell(0.07, 0.03, 0.06, (0, 0.0, 0)), ell(0.04, 0.025, 0.04, (0.05, 0.01, 0.03))]), "moss", root, 0.008)
-        for x, h in ((-0.02, 0.06), (0.03, 0.045)):
-            mesh(f"{root.name}_stalk{x}", xf(lathe([(0, 0), (0.008, 0), (0.007, h), (0, h + 0.003)], 6), (x, 0.01, 0)), "white", root, 0)
-            mesh(f"{root.name}_cap{x}", xf(lathe([(0, -0.003), (0.025, 0.0), (0.02, 0.015), (0, 0.022)], 8), (x, 0.01 + h, 0)), "cap", root, 0.005)
-    else:                                                                       # a twig with leaves
-        mesh(root.name + "_twig", limb([(0, -0.02, 0), (0.02, 0.08, 0.01), (0.06, 0.15, 0.0)], [0.016, 0.012, 0.008], 5), "bark", root, 0.006)
-        mesh(root.name + "_leaves", join([ell(0.04, 0.025, 0.035, p) for p in ((0.06, 0.16, 0.0), (0.0, 0.12, 0.03), (0.05, 0.1, -0.03))]), "leaf", root, 0.008)
-
-
-def graft_human(root, n):
-    if n == 0:                                                                  # a patch of the figure's clothes, a pocket on it
-        mesh(root.name + "_patch", soft(0.15, 0.04, 0.13, (0, 0.0, 0), e=0.4), "cloth", root, 0.01)
-        mesh(root.name + "_pocket", box(0.07, 0.008, 0.06, (0.02, 0.022, 0.02)), "cloth", root, 0.004)
-        mesh(root.name + "_button", ell(0.01, 0.006, 0.01, (0.02, 0.028, 0.04)), "dark", root, 0)
-    elif n == 1:                                                                # a strap with a buckle
-        mesh(root.name + "_strap", soft(0.2, 0.025, 0.05, (0, 0.0, 0), e=0.4), "dark", root, 0.006)
-        mesh(root.name + "_buckle", xf(torus(0.025, 0.006, 10, 4), (0.03, 0.015, 0)), "gold", root, 0.004)
-    else:                                                                       # a little hand, reaching out
-        mesh(root.name + "_wrist", limb([(0, -0.02, 0), (0, 0.06, 0.01)], [0.025, 0.022], 6), "cloth", root, 0.008)
-        mesh(root.name + "_hand", ell(0.035, 0.04, 0.025, (0, 0.09, 0.015)), "white", root, 0.008)
-        mesh(root.name + "_fingers", join([limb([(x, 0.11, 0.02), (x * 1.3, 0.15, 0.03)], [0.009, 0.007], 4) for x in (-0.02, 0.0, 0.02)]), "white", root, 0.004)
-
-
-# =====================================================================================================
-# MUTATIONS, each in the form of the family it grows on (same frame as the grafts)
+# MUTATIONS, each in the form of the family it grows on (on y = 0 along +y, the foot sunk 2 cm)
 # =====================================================================================================
 def mut_armor(root, fam):
     if fam == "mite":                                                           # plated chitin: a thick dark shell plate rimmed in steel
@@ -641,7 +583,6 @@ FAMILIES = ("mite", "car", "sapling", "human")
 BUILD = {"legs": {"mite": legs_mite, "car": legs_car, "sapling": legs_sapling},
          "body": {"mite": body_mite, "car": body_car, "sapling": body_sapling},
          "head": {"mite": head_mite, "car": head_car, "sapling": head_sapling}}
-GRAFTS = {"mite": graft_mite, "car": graft_car, "sapling": graft_sapling, "human": graft_human}
 MUTS = {"armor": mut_armor, "spark": mut_spark, "radio": mut_radio, "lens": mut_lens, "turbo": mut_turbo}
 
 
@@ -657,8 +598,6 @@ if not globals().get("CHIMERA_KIT_LIB"):
             for alt in ALTS:
                 build_part(slot, kind, alt)
     for fam in FAMILIES:
-        for n in range(3):
-            GRAFTS[fam](pivot(f"ck_graft_{fam}_{n}", (0, 0, 0), None, part="graft", family=fam), n)
         for m, fn in MUTS.items():
             fn(pivot(f"ck_mut_{m}_{fam}", (0, 0, 0), None, part="mut", mut=m, family=fam), fam)
     for n in range(3):

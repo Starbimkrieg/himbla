@@ -735,7 +735,7 @@ src/
   mapview.js     draggable fog-of-war globe map (also where the Radio Tower's sweeps are sent from)
   alchemy.js     containment jar, reactor recipes, wild mites, followers, splice-pod mutations, Mega Mite
   chimera.js     procedural chimera models (drawn at 0.72 of their gene size)
-  chimerabuild.js the chimera builder (not in the game yet: docs/chimera-builder/): fuses legs, body and head from the kit or from the game's own NPCs, shades the hides into each other at the joints, grows grafts from the other parents and fits the mutations to what they grow on
+  chimerabuild.js the chimera builder (not in the game yet: docs/chimera-builder/): fuses legs, body and head from the kit or from the game's own NPCs, shades the hides into each other at the joints, and fits the mutations to what they grow on
   chimeragenes.js splicing: the gene sheet from the reactor's parents (body, legs and head drawn at random, two kinds at least), no three.js
   cheats.js      testing menu (backtick)
   devoverlay.js  dev overlay (F3): every on-screen dev readout in one panel (frame times, CPU / GPU graphs, CPU time by stage, draw calls, world counts, pirate spawns, AI paths, input monitor); perfgraph.js has its graphs
@@ -815,7 +815,7 @@ src/
   assets/downs-fair.glb   the fairground: the ferris wheel (frame, wheel, gondola), the carousel (base, canopy deck, horse), a ticket hall, a gate, a free-standing kiosk, queue posts (their rope a `rope` pivot) and fence
   assets/downs-stable.glb the stable block (six boxes), hay barn, weighing room, ring gate, hay bale and picnic table
   assets/downs-crowd.glb  a seated racegoer's wardrobe (legs, suit or frock, arms at rest / with a programme / at binoculars / cheering, head, four hairdos, six hats, rosette, scarf), drawn instanced in the stands per part worn
-  assets/chimera.glb     the chimera kit (tools/blender/build_chimera_kit.py; chimerabuild.js, loaded on request): parts, grafts, mutations, the Triple Crown
+  assets/chimera.glb     the chimera kit (tools/blender/build_chimera_kit.py; chimerabuild.js, loaded on request): parts, mutations, the Triple Crown
   assets/duck.glb    the casino's Duck Derby: the four racers (a cap, hat, fez or bubble helmet each, a numbered wing disc) and the gilded track: basin with lane floats, start gate and grille, finish arch, odds-board frame, bookmaker's kiosk, brass rail post and velvet rope
   assets/blackjack.glb  the casino's gilded blackjack table (plum lacquer, gold, cream suit panels, a leather rail, a chip rack, shoe and discard well, the dealer's back counter) and its chip
   assets/dish.glb    the dish stations: the two for the research arrays' big dishes, the cryo receiver (a banded Helium-3 vessel with a stair, valve cabinet and branding panel) and the gantry station (a lattice mast, container control rooms, battery bank, fuel tank), the field dish the smaller bases use (an eight-sided tower with a gallery and caged ladder, an equipment-room container, and the gantry's truss-backed reflector) and a light head (the field dish's reflector and trunnions with no tower) for the small dishes on masts and roofs, each with the dish, its yaw and tilt pivots and a livery for every faction (the stations also a number for every dish)
@@ -861,7 +861,7 @@ tools/
   blender/downs_common.py  shared by the Downs builders: the palette, the accumulator that merges boxes and cylinders per slot, the export (and the coplanar audit)
   blender/build_downs_stand.py, build_downs_club.py, build_downs_course.py, build_downs_stalls.py, build_downs_arcade.py, build_downs_screen.py, build_downs_fair.py,
                            build_downs_stable.py, build_downs_crowd.py   build Chimera Downs' kits -> src/assets/downs-*.glb (each runs `audit_coplanar` too)
-  blender/build_chimera_kit.py the chimera kit for chimerabuild.js: mite, car and sapling parts in three looks with their joints and graft points, each family's grafts, the mutations in each family's form, the Triple Crown -> src/assets/chimera.glb
+  blender/build_chimera_kit.py the chimera kit for chimerabuild.js: mite, car and sapling parts in three looks with their joints and attachment points, the mutations in each family's form, the Triple Crown -> src/assets/chimera.glb
   blender/build_blackjack.py  builds the blackjack table and chip -> src/assets/blackjack.glb (also runs headless; the build stops if anything stands in the places cards, chips and the felt's lettering go)
   blender/build_dish.py    builds the cryo receiver, the gantry station, the field dish and the light dish head -> src/assets/dish.glb (also runs headless)
   blender/build_courier.py builds the two Courier light-bike redesigns -> src/assets/lightbike_a.glb, lightbike_b.glb (and plain copies in docs/courier-proposals/; headless: `MOONRUNNER_COURIER=a|b`); `blender/preview_courier.py` renders the review sheet

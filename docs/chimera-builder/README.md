@@ -1,7 +1,7 @@
 # The chimera builder (round three)
 
 A chimera is no longer three creatures stacked up: `src/chimerabuild.js` puts it together from its gene sheet, fusing the parts where
-they meet and growing each parent's traits on the others. **Not in the game yet**: the game still draws chimeras with `src/chimera.js`
+they meet. (Grafts, the other parents' traits growing on each part, were tried and taken out: too noisy.) **Not in the game yet**: the game still draws chimeras with `src/chimera.js`
 until this look is signed off. Look at it in the lab: `npm run dev`, then `/tools/chimera-lab.html`.
 
 | A blend | Armour on a mite-car-settler |
@@ -23,11 +23,7 @@ until this look is signed off. Look at it in the lab: `npm run dev`, then `/tool
 2. **Fused joints, no seams.** Each joint gives its size (the legs' hip, the body's base and neck, the head's base). The builder fills the
    gap with a bridge of hide that shades from the lower parent's colour into the upper's, and every part's hide shades toward its
    neighbour's colour near the joint (half way at the joint itself).
-3. **Grafts.** Every part has graft points (on its flanks, top, front, back and underside, each with a direction). Up to three per part
-   (one or two on a head) take a trait from one of the *other* parents: a mite lends chitin plates, bristles and a spare eye; a car body
-   panels with rivets, a headlight and an exhaust stub; a sapling bark with a sprout, moss with toadstools and a leafy twig; a person
-   patches of their clothes with a pocket, a strap and buckle, a little reaching hand. Two kinds of people swap clothes too.
-4. **Mutations, in the form of what they grow on:**
+3. **Mutations, in the form of what they grow on:**
    - **armour**: plating on the flanks and tops of every part: riveted steel on car parts, steel-rimmed plated chitin on mite parts,
      cracked stone-grey bark on sapling parts, padded body armour on human parts
    - **crystal**: five to eight crystal clusters sprouting from anywhere on the body
@@ -38,7 +34,7 @@ until this look is signed off. Look at it in the lab: `npm run dev`, then `/tool
    - **lens**: on the eye, a big lensed headlight (a car), a glass eye bud (a sapling), a jeweller's eyepiece (a mite or a person)
    - **mud**: caked on the legs and the underside
    - **void**: the whole creature darkens toward violet, wrapped in a shadowy purple aura, with void shards drifting round it
-5. **The Triple Crown** sits on the head (the laurel halo).
+4. **The Triple Crown** sits on the head (the laurel halo).
 
 ## Still to do (after sign-off)
 
@@ -51,6 +47,6 @@ until this look is signed off. Look at it in the lab: `npm run dev`, then `/tool
 
 - `src/chimerabuild.js`: the builder (`chimeraBuilder()` loads the kit and returns `build(genes)` -> `{ root, anim(t, speed), height }`)
 - `src/models.js`: `figureSpec` (an NPC's look and its labelled parts, which `makeFigure` bakes), `figurePiece` (a piece of one), `loadChimeraKit`
-- `tools/blender/build_chimera_kit.py` -> `src/assets/chimera.glb`: the parts, grafts, mutation pieces and the crown (the contract is in its header)
-- `tools/chimera-lab.html`: the lab (pick the parts, mutations, seed and size; NEW SEED for other looks and grafts; RANDOM CHIMERA; a grid of
+- `tools/blender/build_chimera_kit.py` -> `src/assets/chimera.glb`: the parts, mutation pieces and the crown (the contract is in its header)
+- `tools/chimera-lab.html`: the lab (pick the parts, mutations, seed and size; NEW SEED for other looks; RANDOM CHIMERA; a grid of
   twelve random ones; THIS ONE, EACH MUTATION). Query parameters for screenshots are in the file.

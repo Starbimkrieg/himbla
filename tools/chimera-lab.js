@@ -44,8 +44,8 @@ ui.innerHTML = `<h1>CHIMERA LAB</h1>${sel('body', BUILT_KINDS)}${sel('legs', BUI
   <label>seed<input type="number" data-k="seed" value="${S.seed}"></label>
   <label>size<input type="number" data-k="size" value="${S.size}" step="0.05" min="0.75" max="1.45"></label>
   <label style="justify-content:flex-start"><input type="checkbox" data-k="crown"${S.crown ? ' checked' : ''}> Triple Crown</label>
-  <button data-a="seed">NEW SEED (other looks, grafts)</button><button data-a="random">RANDOM CHIMERA</button><button data-a="grid">GRID OF 12 RANDOM</button><button data-a="modgrid">THIS ONE, EACH MUTATION</button>
-  <small>Drag to orbit, wheel to zoom. The seed picks each part's look, the people's outfits, and where the grafts and mutations grow.</small>`;
+  <button data-a="seed">NEW SEED (other looks)</button><button data-a="random">RANDOM CHIMERA</button><button data-a="grid">GRID OF 12 RANDOM</button><button data-a="modgrid">THIS ONE, EACH MUTATION</button>
+  <small>Drag to orbit, wheel to zoom. The seed picks each part's look, the people's outfits, and where the mutations grow.</small>`;
 ui.addEventListener('change', (e) => {
   const t = e.target;
   if (t.dataset.m) { if (t.checked) S.mods.add(t.dataset.m); else S.mods.delete(t.dataset.m); }

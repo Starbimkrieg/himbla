@@ -8,9 +8,8 @@ import { PALETTE } from './chimeragenes.js';
 // build_chimera_kit.py: mites, cars, saplings, each part in three looks) or, for the human kinds, are cut out of the game's own NPCs
 // (models.js figureSpec: the settlers, pirates, void-touched and Vrill you can scoop up). The parts are fused where they meet, with no
 // collar or seam: a bridge of hide that shades from one parent's colour into the other's, and each part's hide bleeds toward its
-// neighbours' colours near the joints. Then the other parents' traits grow on every part (grafts: chitin plates, headlights, bark and
-// sprouts, patches of clothes), and the mutations grow in the form of what they grow on (armour is plating on a car, plated chitin on a
-// mite, hardened bark on a sapling, body armour on a person; crystals sprout all over; void wraps the whole creature in a shadowy aura).
+// neighbours' colours near the joints. The mutations grow in the form of what they grow on (armour is plating on a car, plated chitin on
+// a mite, hardened bark on a sapling, body armour on a person; crystals sprout all over; void wraps the whole creature in a shadowy aura).
 //
 // buildChimera(genes, kit) -> { root, anim(t, speed), height } once loadChimeraKit() has resolved (chimeraBuilder() does both). The game
 // still draws its chimeras with chimera.js until this look is signed off; tools/chimera-lab.html shows it.
@@ -90,7 +89,6 @@ export function buildChimera(genes, kit = KIT) {
     heads.push(h);
   }
   inner.updateMatrixWorld(true);
-  grafts(C, [legs, body, ...heads]);
   mutate(C, genes, legs, body, heads);
   if (genes.crown) place(C, 'ck_crown', heads[0].sockets.top.node, null, 1);
   inner.updateMatrixWorld(true);
@@ -128,7 +126,7 @@ function spec(C, kind) {
 }
 
 // ---------------- parts ----------------
-// A part: { kind, slot, family, node, sockets: { name: { node, jrx, jrz } }, points: [graft points], joint: { jrx, jrz }, hides: [...] }
+// A part: { kind, slot, family, node, sockets: { name: { node, jrx, jrz } }, points: [attachment points, where mutations grow], joint: { jrx, jrz }, hides: [...] }
 function part(C, slot, kind, parent) {
   const P = FAMILY[kind] === 'human' ? figurePart(C, slot, kind) : kitPart(C, slot, kind);
   P.slot = slot; P.family = FAMILY[kind];
@@ -335,7 +333,7 @@ function bleed(C) {
   }
 }
 
-// ---------------- grafts: the other parents' traits, growing on each part ----------------
+// ---------------- placing a kit piece on a point or a socket ----------------
 function place(C, name, parent, point, scale, tint = {}, used = true) {
   const node = C.kit[name];
   if (!node) return null;
@@ -352,21 +350,6 @@ function place(C, name, parent, point, scale, tint = {}, used = true) {
 function tintFor(C, kind) {
   const c = C.colors[kind];
   return FAMILY[kind] === 'human' ? { cloth: c } : { [FAMILY[kind] === 'car' ? 'car' : kind]: c };
-}
-
-function grafts(C, parts) {
-  // every part gets something from each other parent, where there is room
-  for (const P of parts) {
-    // (two kinds of people swap clothes too: a pirate's patches on a settler's torso)
-    const others = C.kinds.filter((k) => FAMILY[k] && k !== P.kind && (FAMILY[k] !== P.family || P.family === 'human'));
-    if (!others.length) continue;
-    const pts = P.points.filter((p) => !p.used).sort(() => C.rr() - 0.5);
-    const n = Math.min(pts.length, P.slot === 'head' ? 1 + (C.rr() < 0.5 ? 1 : 0) : 3);
-    for (let i = 0; i < n; i++) {
-      const k = others[Math.floor(C.rr() * others.length)];
-      place(C, `ck_graft_${FAMILY[k]}_${Math.floor(C.rr() * 3)}`, null, pts[i], pts[i].size * (0.85 + C.rr() * 0.3), tintFor(C, k));
-    }
-  }
 }
 
 // ---------------- mutations, in the form of what they grow on ----------------
