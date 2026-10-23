@@ -48,6 +48,7 @@ const GLB = {
   'downs-stable': () => import('./assets/downs-stable.glb?inline'),
   'downs-crowd': () => import('./assets/downs-crowd.glb?inline'),
   chimera: () => import('./assets/chimera.glb?inline'),
+  chimera_hd: () => import('./assets/chimera_hd.glb?inline'),
 };
 
 // A model file can be compressed (tools/optimize-glb.mjs: quantized, then meshopt-coded: about a third of the size).
@@ -2651,15 +2652,15 @@ export const lotNode = (name) => SHIP_PARTS[name];
 export function lotSlot(slot) {
   return slot in LOT_GLOW ? { color: LOT_GLOW[slot], glow: true } : { color: LOT_TOON[slot] ?? 0xff00ff, glow: false };
 }
-// ---- The chimera kit (built in Blender, see build_chimera_kit.py): the parts, grafts and mutations chimerabuild.js puts chimeras
-// together from. Loaded on request (not at boot): loadChimeraKit() resolves to { [piece name]: baked node } (bakeShip's nodes: parts per
+// ---- The chimera kit (built in Blender, see build_chimera_kit.py, and the HD showcase's build_chimera_hd.py, its `hd_` pieces): the parts
+// and mutations chimerabuild.js puts chimeras together from. Loaded on request (not at boot): loadChimeraKit() resolves to { [piece name]: baked node } (bakeShip's nodes: parts per
 // slot, an ink shell, and the pivots, sockets and graft points as kids, their extras in `data`).
 let CHIMERA_KIT = null;
 export async function loadChimeraKit() {
   if (!CHIMERA_KIT) {
-    CHIMERA_KIT = loadGlb('chimera').then((gltf) => {
+    CHIMERA_KIT = Promise.all([loadGlb('chimera'), loadGlb('chimera_hd')]).then((files) => {
       const kit = {};
-      for (const o of gltf.scene.children) if (o.name.startsWith('ck_')) kit[o.name] = bakeShip(o);
+      for (const gltf of files) for (const o of gltf.scene.children) if (/^(ck|hd)_/.test(o.name)) kit[o.name] = bakeShip(o);
       return kit;
     });
   }

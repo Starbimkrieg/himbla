@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 const CLI = '@gltf-transform/cli@4.5.1';
 const ASSETS = fileURLToPath(new URL('../src/assets/', import.meta.url));
-const DEFAULT = ['ships', 'skimmer', 'lightbike_a', 'lightbike_b', 'skimmer_a', 'skimmer_b', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'gantry', 'garage', 'slots', 'casino', 'blackjack', 'claw', 'duck', 'dish', 'engine', 'briefcase', 'hovercar', 'plinko', 'hall', 'lot', 'downs-stand', 'downs-club', 'downs-course', 'downs-stalls', 'downs-arcade', 'downs-screen', 'downs-fair', 'downs-stable', 'downs-crowd', 'chimera'].map((n) => `${ASSETS}${n}.glb`);
+const DEFAULT = ['ships', 'skimmer', 'lightbike_a', 'lightbike_b', 'skimmer_a', 'skimmer_b', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'gantry', 'garage', 'slots', 'casino', 'blackjack', 'claw', 'duck', 'dish', 'engine', 'briefcase', 'hovercar', 'plinko', 'hall', 'lot', 'downs-stand', 'downs-club', 'downs-course', 'downs-stalls', 'downs-arcade', 'downs-screen', 'downs-fair', 'downs-stable', 'downs-crowd', 'chimera', 'chimera_hd'].map((n) => `${ASSETS}${n}.glb`);
 const files = process.argv.length > 2 ? process.argv.slice(2) : DEFAULT;
 
 const extensionsOf = (file) => {

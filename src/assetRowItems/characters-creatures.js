@@ -136,7 +136,7 @@ function builderItem() {
     { seed: 31, body: 'sapling', legs: 'mite', head: 'alien', mods: ['void', 'radio', 'mud'] },
   ];
   return {
-    id: 'creatures.builder', label: 'CHIMERA BUILDER: FUSED PARTS, GRAFTS, MUTATIONS (NOT IN THE GAME YET)', w: span(mixes.length, 3.2), d: 4,
+    id: 'creatures.builder', label: 'CHIMERA BUILDER: FUSED PARTS, MUTATIONS (NOT IN THE GAME YET)', w: span(mixes.length, 3.2), d: 4,
     make() {
       const root = new THREE.Group(), anims = [];
       let gone = false;
@@ -154,8 +154,40 @@ function builderItem() {
   };
 }
 
+// ---- the builder's HD showcase (build_chimera_hd.py -> chimera_hd.glb): person, mite, car and sapling parts at full resolution, with their
+// fitted armour and crystal. Up for sign-off; the rest of the kinds follow once it is.
+function builderHdItem() {
+  const mixes = [
+    { body: 'sapling', legs: 'car', head: 'person', mods: [] },
+    { body: 'person', legs: 'sapling', head: 'mite', mods: [] },
+    { body: 'mite', legs: 'person', head: 'car', mods: [] },
+    { body: 'car', legs: 'mite', head: 'sapling', mods: [] },
+    { body: 'mite', legs: 'car', head: 'person', mods: ['armor'] },
+    { body: 'person', legs: 'person', head: 'person', mods: ['armor'] },
+    { body: 'sapling', legs: 'mite', head: 'car', mods: ['crystal'] },
+    { body: 'car', legs: 'person', head: 'mite', mods: ['crystal'] },
+  ];
+  return {
+    id: 'creatures.builderhd', label: 'CHIMERA BUILDER, HD SHOWCASE: FITTED ARMOUR AND CRYSTAL (NOT IN THE GAME YET)', w: span(mixes.length, 3.2), d: 4,
+    make() {
+      const root = new THREE.Group(), anims = [];
+      let gone = false;
+      chimeraBuilder().then((build) => {
+        if (gone) return;
+        mixes.forEach((g, i) => {
+          const c = build({ ...g, seed: 7, size: 1.1, parents: [...new Set([g.body, g.legs, g.head])] }, { hd: true });
+          c.root.position.x = (i - (mixes.length - 1) / 2) * 3.2;
+          root.add(c.root);
+          anims.push(c.anim);
+        });
+      });
+      return { root, update: (dt, t) => { for (const a of anims) a(t, GAIT); }, dispose() { gone = true; } };
+    },
+  };
+}
+
 export default {
   id: 'characters.creatures',
   title: '03 · CREATURES',
-  items: [speciesItem(), modsItem(), hybridsItem(), builderItem(), megaMiteItem(), miteItem(), ducksItem(), followersItem()],
+  items: [speciesItem(), modsItem(), hybridsItem(), builderItem(), builderHdItem(), megaMiteItem(), miteItem(), ducksItem(), followersItem()],
 };

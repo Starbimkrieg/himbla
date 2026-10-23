@@ -11,17 +11,22 @@ import { PALETTE } from './chimeragenes.js';
 // neighbours' colours near the joints. The mutations grow in the form of what they grow on (armour is plating on a car, plated chitin on
 // a mite, hardened bark on a sapling, body armour on a person; crystals sprout all over; void wraps the whole creature in a shadowy aura).
 //
-// buildChimera(genes, kit) -> { root, anim(t, speed), height } once loadChimeraKit() has resolved (chimeraBuilder() does both). The game
+// buildChimera(genes, kit, { hd }) -> { root, anim(t, speed), height } once loadChimeraKit() has resolved (chimeraBuilder() does both). The game
 // still draws its chimeras with chimera.js until this look is signed off; tools/chimera-lab.html shows it.
+//
+// hd: the full-resolution showcase (tools/blender/build_chimera_hd.py -> chimera_hd.glb: person, mite, car, sapling, one look each). Each
+// part is one fused surface with its details cut in; its joint is built in (a body's skirt wraps over the legs, a head's stub goes into the
+// body), so no bridge is added; its armour and crystal are fitted to it in Blender and shown only when the chimera has them.
 
 export const FAMILY = { person: 'human', pirate: 'human', voidling: 'human', alien: 'human', mite: 'mite', car: 'car', sapling: 'sapling', junkbot: 'car' };
 export const KIT_KINDS = ['mite', 'car', 'sapling'];
 export const BUILT_KINDS = ['person', 'pirate', 'voidling', 'alien', 'mite', 'car', 'sapling'];   // (junkbot is still to come: it draws as a car)
 export const MUTATIONS = ['armor', 'crystal', 'spark', 'radio', 'lens', 'turbo', 'mud', 'void'];
-const HIDES = new Set(['mite', 'car', 'sapling', 'cloth']);
+const HIDES = new Set(['mite', 'car', 'sapling', 'cloth', 'person']);
 const KIT_TOON = {
   dark: 0x2a2540, steel: 0x55607a, metal: 0x8a87a0, chrome: 0xd8d4e8, tire: 0x1d1a29, white: 0xf3eee4, bark: 0x7a5236, stonebark: 0x8c8798,
   moss: 0x3f7a34, leaf: 0x5fbf4a, petal: 0xff7ad9, blossom: 0xffc2e2, cap: 0xff3b5c, gold: 0xffd23f, mud: 0x6b4a2a,
+  boot: 0x3a3550, sole: 0x221d33, glove: 0xe8e4f0, helmet: 0xf3eee4, belt: 0x2a2540, vest: 0x5b6b4a,    // (the HD settler's, and its armour)
 };
 const KIT_GLOW = { glass: 0x9be7ff, eye: 0xff2e88, lamp: 0xfff6a8, red: 0xff2a4a, splice: 0x7dff3a, crystal: 0x2ee6ff, spark: 0xffb347, voidglow: 0xa86bff };
 const FIG_K = 0.7, FIG_K_HEAD = 0.55;     // the NPCs, at this scale, are the kit's size (their heads a little smaller, or a helmet swamps the body under it)
@@ -48,11 +53,11 @@ const _Y = new THREE.Vector3(0, 1, 0);
 let KIT = null;
 export async function chimeraBuilder() {
   KIT = await loadChimeraKit();
-  return (genes) => buildChimera(genes, KIT);
+  return (genes, opts) => buildChimera(genes, KIT, opts);
 }
 
 // ---------------- one chimera ----------------
-export function buildChimera(genes, kit = KIT) {
+export function buildChimera(genes, kit = KIT, { hd = false } = {}) {
   const rr = mulberry32(((genes.seed | 0) ^ 0x51ce) >>> 0);
   const root = new THREE.Group();
   const inner = new THREE.Group();
@@ -60,7 +65,7 @@ export function buildChimera(genes, kit = KIT) {
   const C = {
     rr, kit, inner, joints: [], points: [], anims: { legs: [], wheels: [], arms: [], motes: [] }, hides: [], specs: {}, colors: {},
     kinds: [...new Set(genes.parents && genes.parents.length ? genes.parents : [genes.body, genes.legs, genes.head])],
-    void: (genes.mods || []).includes('void'),
+    void: (genes.mods || []).includes('void'), mods: new Set(genes.mods || []), hd,
   };
   // each kind's colour: its palette (a sapling's bark-green), or a person's clothes
   for (const k of new Set([...C.kinds, genes.body, genes.legs, genes.head, genes.extraHead].filter(Boolean))) {
@@ -128,7 +133,7 @@ function spec(C, kind) {
 // ---------------- parts ----------------
 // A part: { kind, slot, family, node, sockets: { name: { node, jrx, jrz } }, points: [attachment points, where mutations grow], joint: { jrx, jrz }, hides: [...] }
 function part(C, slot, kind, parent) {
-  const P = FAMILY[kind] === 'human' ? figurePart(C, slot, kind) : kitPart(C, slot, kind);
+  const P = C.hd && C.kit[`hd_${slot}_${kind}`] ? hdPart(C, slot, kind) : FAMILY[kind] === 'human' ? figurePart(C, slot, kind) : kitPart(C, slot, kind);
   P.slot = slot; P.family = FAMILY[kind];
   parent.add(P.node);
   return P;
@@ -142,6 +147,7 @@ function kitGroup(C, node, P, tint) {
   g.quaternion.copy(node.quat);
   g.userData = { ...node.data, role: node.role };
   for (const { slot, geo } of node.parts) {
+    if (slot === 'inkonly') continue;                         // (an HD part's outline source: its ink is already in node.ink)
     let m;
     if (HIDES.has(slot)) {
       const geo2 = geo.clone();
@@ -158,6 +164,10 @@ function kitGroup(C, node, P, tint) {
   }
   if (node.ink) { const m = new THREE.Mesh(node.ink, inkMat); m.userData.isInk = true; g.add(m); }
   for (const k of node.kids) {
+    if (k.role === 'mut') {                                   // (an HD part's fitted mutation: only on a chimera that has it)
+      if (!C.mods.has(k.data.mut)) continue;
+      P.fitted?.add(k.data.mut);
+    }
     const kg = kitGroup(C, k, P, tint);
     g.add(kg);
     if (!P.sockets) continue;
@@ -165,6 +175,7 @@ function kitGroup(C, node, P, tint) {
     else if (k.role === 'graft') P.points.push({ node: kg, tag: k.data.tag, size: k.data.size, n: new THREE.Vector3(k.data.nx, k.data.ny, k.data.nz), owner: P });
     else if (k.role === 'leg') C.anims.legs.push({ node: kg, ph: (P.legN = (P.legN || 0) + 1) % 2 ? 0 : Math.PI });
     else if (k.role === 'wheel') C.anims.wheels.push({ node: kg, r: k.data.r || 0.16 });
+    else if (k.role === 'arm') C.anims.arms.push({ node: kg, ph: (P.armN = (P.armN || 0) + 1) % 2 ? Math.PI : 0 });
   }
   return g;
 }
@@ -173,6 +184,14 @@ function kitPart(C, slot, kind) {
   const alt = Math.floor(C.rr() * 3);
   const node = C.kit[`ck_${slot}_${kind === 'junkbot' ? 'car' : kind}_${alt}`];
   const P = { kind, sockets: {}, points: [], hides: C.hides, joint: { jrx: node.data.jrx || 0.1, jrz: node.data.jrz || 0.1 } };
+  P.node = kitGroup(C, { ...node, pos: new THREE.Vector3(), quat: new THREE.Quaternion() }, P, {});
+  return P;
+}
+
+// an HD part (one look per kind); its fitted mutations are kids with role `mut`
+function hdPart(C, slot, kind) {
+  const node = C.kit[`hd_${slot}_${kind}`];
+  const P = { kind, hd: true, fitted: new Set(), sockets: {}, points: [], hides: C.hides, joint: { jrx: node.data.jrx || 0.1, jrz: node.data.jrz || 0.1 } };
   P.node = kitGroup(C, { ...node, pos: new THREE.Vector3(), quat: new THREE.Quaternion() }, P, {});
   return P;
 }
@@ -265,6 +284,10 @@ function figurePart(C, slot, kind) {
 
 // ---------------- the joints: no seam, a bridge of hide from one part into the other ----------------
 function joinParts(C, lower, upper, sock, up) {
+  if (upper.hd) {                                             // (its skirt or neck stub is the joint: only the colours bleed across it)
+    C.joints.push({ node: sock.node, lower, upper, r: Math.max(sock.jrx || 0.1, sock.jrz || 0.1, up.jrx || 0.1, up.jrz || 0.1) });
+    return;
+  }
   const a = { rx: sock.jrx || 0.1, rz: sock.jrz || 0.1 }, b = { rx: up.jrx || 0.1, rz: up.jrz || 0.1 };
   const cA = C.colors[lower.kind], cB = C.colors[upper.kind];
   const seg = 14, rings = 7, h0 = -0.07, h1 = 0.08;
@@ -359,9 +382,9 @@ function mutate(C, genes, legs, body, heads) {
   const free = (P, tags) => P.points.filter((p) => !p.used && (!tags || tags.includes(p.tag)));
   for (const m of mods) {
     if (m === 'armor') {
-      for (const P of parts) for (const p of free(P, ['side', 'top', 'front', 'back']).slice(0, P.slot === 'head' ? 1 : 4)) place(C, `ck_mut_armor_${P.family}`, null, p, p.size * 1.45, tintFor(C, P.kind));
+      for (const P of parts.filter((Q) => !Q.fitted?.has('armor'))) for (const p of free(P, ['side', 'top', 'front', 'back']).slice(0, P.slot === 'head' ? 1 : 4)) place(C, `ck_mut_armor_${P.family}`, null, p, p.size * 1.45, tintFor(C, P.kind));
     } else if (m === 'crystal') {
-      const all = parts.flatMap((P) => free(P)).sort(() => C.rr() - 0.5);
+      const all = parts.filter((P) => !P.fitted?.has('crystal')).flatMap((P) => free(P)).sort(() => C.rr() - 0.5);
       for (const p of all.slice(0, 5 + Math.floor(C.rr() * 4))) place(C, `ck_mut_crystal_${Math.floor(C.rr() * 3)}`, null, p, p.size * (1.2 + C.rr() * 0.9));
     } else if (m === 'mud') {
       for (const p of parts.flatMap((P) => free(P, ['low', 'side'])).slice(0, 5)) place(C, `ck_mut_mud_${Math.floor(C.rr() * 2)}`, null, p, p.size * 1.6);

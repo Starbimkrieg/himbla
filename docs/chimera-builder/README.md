@@ -12,6 +12,40 @@ until this look is signed off. Look at it in the lab: `npm run dev`, then `/tool
 
 ![Mutations: armour, crystal, turbo with spark and lens, void with radio and mud](mutations.jpg)
 
+## The HD showcase (up for sign-off)
+
+The parts rebuilt at full resolution in Blender (`tools/blender/build_chimera_hd.py` -> `src/assets/chimera_hd.glb`, 611 KB compressed):
+person, mite, car and sapling, one look each, with armour and crystal fitted to every part. In the lab: **HD SHOWCASE**, or tick **HD
+parts** (`?showcase=1`, `&hd=1`); in the Asset Row: `creatures.builderhd`, beside the builder's line-up.
+
+![Four amalgams: car legs, sapling body, settler's head; sapling legs, settler body, mite head; settler legs, mite body, car head; mite legs, car body, sapling head](hd-amalgams.jpg)
+
+| Armour, fitted | Crystal, grown in |
+|---|---|
+| ![a settler in a vest, pads and knee pads; a car with plates on its nose, deck and flanks](hd-armour.jpg) | ![crystal clusters on a sapling trunk and a car body](hd-crystal.jpg) |
+
+![The showcase: each kind's legs, body and head, plain, armoured and crystalled](hd-showcase.jpg)
+
+How the parts are made (the Blender tools that answer the last round's notes):
+
+- **One surface per part, not stacked primitives.** Each colour region is built from overlapping shapes, then voxel-remeshed into one
+  watertight surface (Remesh), smoothed (Smooth) and reduced to its triangle budget (Decimate). Limbs grow out of bodies with no seam
+  and one outline goes round the whole part.
+- **Details cut in, not laid on.** Lamp and eye sockets, window recesses, wheel arches, the zip and pocket flaps, the grille, bark furrows,
+  the tree's hollow, seed pits, tyre tread, and the bolt and rivet holes are Boolean differences in the surface; lamps, eyes and glass
+  sit inside their sockets. The outline is drawn from the surface before the cuts, so a groove reads as a dent in the shading, not a
+  black line.
+- **The joints are built in.** A body's base is a skirt that wraps down over the legs and a head ends in a stub that goes into the body,
+  so the builder adds no bridge between HD parts; only the colours bleed across.
+- **Mutations fitted to the part.** Armour plates are shrinkwrapped onto each part's own surface and given thickness, with rivets cut in:
+  bare metal on a car, dark plated chitin with a ridge on a mite, stone-grey bark slabs on a sapling, olive vest panels and pads on a
+  settler. Crystal clusters are rooted 4 cm inside the surface (found by ray casting) and grow out along it. They come with the part and
+  show only on a chimera with that mutation. The other mutations still use the kit's pieces for now.
+- **Budget:** a part is 1.9k to 4.4k triangles, a chimera about 7k to 10k (armour adds 0.3k to 2.7k a part, crystal 0.1k to 0.3k).
+
+Still to come once the look is signed off: the other looks and kinds (pirate, void-touched, Vrill, junkbot), the other mutations
+fitted the same way, a far LOD, and wiring it into the game.
+
 ## How a chimera is put together
 
 1. **Parts.** Legs, body and head (and a second head) are drawn from the parents as before (`spliceGenes`). Mites, cars and saplings come
@@ -48,5 +82,7 @@ until this look is signed off. Look at it in the lab: `npm run dev`, then `/tool
 - `src/chimerabuild.js`: the builder (`chimeraBuilder()` loads the kit and returns `build(genes)` -> `{ root, anim(t, speed), height }`)
 - `src/models.js`: `figureSpec` (an NPC's look and its labelled parts, which `makeFigure` bakes), `figurePiece` (a piece of one), `loadChimeraKit`
 - `tools/blender/build_chimera_kit.py` -> `src/assets/chimera.glb`: the parts, mutation pieces and the crown (the contract is in its header)
-- `tools/chimera-lab.html`: the lab (pick the parts, mutations, seed and size; NEW SEED for other looks; RANDOM CHIMERA; a grid of
-  twelve random ones; THIS ONE, EACH MUTATION). Query parameters for screenshots are in the file.
+- `tools/blender/build_chimera_hd.py` -> `src/assets/chimera_hd.glb`: the HD showcase's parts (`hd_<slot>_<kind>`) with their fitted armour
+  and crystal (empties with role `mut`); the pipeline is in its header
+- `tools/chimera-lab.html`: the lab (pick the parts, mutations, seed and size; HD parts; HD SHOWCASE; NEW SEED for other looks; RANDOM
+  CHIMERA; a grid of twelve random ones; THIS ONE, EACH MUTATION). Query parameters for screenshots are in the file.

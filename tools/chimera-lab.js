@@ -34,7 +34,7 @@ const MOD_ITEM = Object.fromEntries(Object.entries(MODIFIERS).map(([item, m]) =>
 const S = {
   body: Q.get('body') || 'car', legs: Q.get('legs') || 'mite', head: Q.get('head') || 'person', extra: Q.get('extra') || '',
   mods: new Set((Q.get('mods') || '').split(',').filter(Boolean)), seed: num('seed', 7), size: num('size', 1.1), crown: Q.get('crown') === '1',
-  grid: Q.get('grid') === '1', modgrid: Q.get('modgrid') === '1',
+  grid: Q.get('grid') === '1', modgrid: Q.get('modgrid') === '1', hd: Q.get('hd') === '1' || Q.get('showcase') === '1', showcase: Q.get('showcase') === '1',
 };
 const ui = document.getElementById('ui');
 if (Q.get('ui') === '0') ui.style.display = 'none';
@@ -44,20 +44,21 @@ ui.innerHTML = `<h1>CHIMERA LAB</h1>${sel('body', BUILT_KINDS)}${sel('legs', BUI
   <label>seed<input type="number" data-k="seed" value="${S.seed}"></label>
   <label>size<input type="number" data-k="size" value="${S.size}" step="0.05" min="0.75" max="1.45"></label>
   <label style="justify-content:flex-start"><input type="checkbox" data-k="crown"${S.crown ? ' checked' : ''}> Triple Crown</label>
-  <button data-a="seed">NEW SEED (other looks)</button><button data-a="random">RANDOM CHIMERA</button><button data-a="grid">GRID OF 12 RANDOM</button><button data-a="modgrid">THIS ONE, EACH MUTATION</button>
+  <label style="justify-content:flex-start"><input type="checkbox" data-k="hd"${S.hd ? ' checked' : ''}> HD parts (person, mite, car, sapling)</label>
+  <button data-a="showcase">HD SHOWCASE</button><button data-a="seed">NEW SEED (other looks)</button><button data-a="random">RANDOM CHIMERA</button><button data-a="grid">GRID OF 12 RANDOM</button><button data-a="modgrid">THIS ONE, EACH MUTATION</button>
   <small>Drag to orbit, wheel to zoom. The seed picks each part's look, the people's outfits, and where the mutations grow.</small>`;
 ui.addEventListener('change', (e) => {
   const t = e.target;
   if (t.dataset.m) { if (t.checked) S.mods.add(t.dataset.m); else S.mods.delete(t.dataset.m); }
-  else if (t.dataset.k === 'crown') S.crown = t.checked;
+  else if (t.dataset.k === 'crown' || t.dataset.k === 'hd') S[t.dataset.k] = t.checked;
   else if (t.dataset.k) S[t.dataset.k] = t.type === 'number' ? parseFloat(t.value) : t.value;
-  S.grid = S.modgrid = false;
+  S.grid = S.modgrid = S.showcase = false;
   show();
 });
 ui.addEventListener('click', (e) => {
   const a = e.target.dataset && e.target.dataset.a;
   if (!a) return;
-  if (a !== 'modgrid') S.seed = Math.floor(Math.random() * 1e6);
+  if (a !== 'modgrid' && a !== 'showcase') S.seed = Math.floor(Math.random() * 1e6);
   ui.querySelector('[data-k=seed]').value = S.seed;
   if (a === 'random') {
     const g = randomGenes(mulberry32(S.seed));
@@ -67,6 +68,8 @@ ui.addEventListener('click', (e) => {
   }
   S.grid = a === 'grid' ? true : a === 'seed' ? S.grid : false;
   S.modgrid = a === 'modgrid';
+  S.showcase = a === 'showcase';
+  if (S.showcase) { S.hd = true; ui.querySelector('[data-k=hd]').checked = true; }
   show();
 });
 
@@ -88,7 +91,7 @@ function clear() {
   shown = []; tags = [];
 }
 function add(genes, x, z, label) {
-  const c = build(genes);
+  const c = build(genes, { hd: S.hd });
   c.root.position.set(x, 0, z);
   c.root.rotation.y = 0.5;
   scene.add(c.root);
@@ -100,7 +103,19 @@ let target = new THREE.Vector3(), dist = 4;
 function show() {
   clear();
   const one = (mods) => ({ seed: S.seed, body: S.body, legs: S.legs, head: S.head, extraHead: S.extra || null, mods, size: S.size, crown: S.crown, parents: [...new Set([S.body, S.legs, S.head, S.extra].filter(Boolean))] });
-  if (S.grid) {
+  if (S.showcase) {
+    // the HD set: each kind's legs, body and head once, plain, armoured, crystalled
+    const kinds = ['person', 'mite', 'car', 'sapling'];
+    kinds.forEach((k, i) => {
+      for (const [j, mods] of [[], ['armor'], ['crystal']].entries()) {
+        const g = { ...one(mods), legs: k, body: kinds[(i + 1) % 4], head: kinds[(i + 2) % 4], extraHead: null };
+        g.parents = [...new Set([g.legs, g.body, g.head])];
+        add(g, (i - 1.5) * 2.5, (j - 1) * 2.8, j === 2 ? `${g.legs} legs · ${g.body} body · ${g.head} head` : null);
+      }
+    });
+    target.set(0, 0.4, 0.4); dist = 10.5;
+    document.getElementById('info').textContent = `the HD showcase, back to front: plain, armour, crystal (seed ${S.seed})`;
+  } else if (S.grid) {
     const rr = mulberry32(S.seed);
     for (let i = 0; i < 12; i++) {
       const g = randomGenes(rr);
