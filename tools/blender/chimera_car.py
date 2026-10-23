@@ -100,7 +100,8 @@ def car_body(root, rng, look):
                                           + [capsule((sx * 0.2, 0.5, z), (sx * 0.2, 0.54, z), 0.01, seg=8) for sx in (-1, 1) for z in (-0.38, 0.1)]), "chrome", root, 0.006, 500)
     else:
         fused(root.name + "_seat", join([soft(0.3, 0.06, 0.2, (0, 0.17, -0.04), e=0.35), soft(0.3, 0.2, 0.06, (0, 0.27, -0.14), (-0.2, 0, 0), e=0.35)]), "dark", root, 0.01, 400)
-        plain(root.name + "_screen", along(soft(0.34, 0.006, 0.09, e=0.4), (0, 1, 0.5), (0, 0.27, 0.15)), "glass", root, 0.0)
+        plain(root.name + "_screen", soft(0.34, 0.12, 0.008, (0, 0.26, 0.17), (-0.5, 0, 0), e=0.4), "glass", root, 0.0)   # (raked back, its foot 1 cm into the scuttle)
+        fused(root.name + "_screenframe", join([capsule((-0.175, 0.314, 0.141), (0.175, 0.314, 0.141), 0.009, seg=8)] + [capsule((sx * 0.175, 0.2, 0.2), (sx * 0.175, 0.314, 0.141), 0.009, seg=8) for sx in (-1, 1)]), "chrome", root, 0.006, 300)
         fused(root.name + "_hoop", chain([(-0.15, 0.2, -0.2), (-0.13, 0.38, -0.2), (0.13, 0.38, -0.2), (0.15, 0.2, -0.2)], [0.016] * 4, seg=8), "chrome", root, 0.008, 300)
         fused(root.name + "_wing", join([soft(0.54, 0.024, 0.12, (0, 0.38, -0.42), (-0.1, 0, 0), e=0.3)] + [box(0.015, 0.14, 0.05, (sx * 0.16, 0.3, -0.42)) for sx in (-1, 1)]), "dark", root, 0.01, 300)
     for sx in (-1, 1):
@@ -124,7 +125,7 @@ def car_head(root, rng, look):
     if look == 0:
         face = fused(root.name + "_face", join([soft(0.31, 0.22, 0.22, (0, 0.13, 0.03), e=0.28), soft(0.33, 0.04, 0.2, (0, 0.215, 0.03), e=0.35), stub]), "car", root, 0.018, 1100,
                      cuts=[ell(0.05, 0.05, 0.04, (sx * 0.085, 0.15, 0.135), n=16) for sx in (-1, 1)] + [soft(0.17, 0.06, 0.05, (0, 0.07, 0.14), e=0.25)])
-        plain(root.name + "_lamps", join([ell(0.044, 0.044, 0.03, (sx * 0.085, 0.15, 0.115), n=16) for sx in (-1, 1)]), "lamp", root, 0.0)
+        lamps = plain(root.name + "_lamps", join([ell(0.044, 0.044, 0.03, (sx * 0.085, 0.15, 0.115), n=16) for sx in (-1, 1)]), "lamp", root, 0.0)
         fused(root.name + "_slats", join([box(0.16, 0.008, 0.02, (0, 0.05 + 0.015 * k, 0.12)) for k in range(4)]), "chrome", root, 0.0, 300, smooth=0, vox=0.004)
         fused(root.name + "_bumper", soft(0.34, 0.045, 0.07, (0, 0.025, 0.12), e=0.3), "chrome", root, 0.008, 200)
         fused(root.name + "_siren", join([cyl(0.035, 0.045, 0.02, (0, 0.24, 0.0)), ell(0.035, 0.035, 0.035, (0, 0.26, 0.0))]), "red", root, 0.008, 120)
@@ -133,18 +134,18 @@ def car_head(root, rng, look):
         face = fused(root.name + "_face", join([ell(0.16, 0.13, 0.13, (0, 0.13, 0.02)), stub] + [ell(0.06, 0.06, 0.075, (sx * 0.105, 0.1, 0.07)) for sx in (-1, 1)]), "car", root, 0.018, 1200,
                      cuts=[cyl(0.04, 0.04, 0.06, (sx * 0.105, 0.11, 0.14), (math.pi / 2, 0, 0)) for sx in (-1, 1)] + [box(0.012, 0.035, 0.03, (dx, 0.06, 0.13)) for dx in (-0.04, -0.013, 0.013, 0.04)])
         fused(root.name + "_rings", join([ring(0.042, 0.008, (sx * 0.105, 0.11, 0.135), (math.pi / 2, 0, 0), seg=20) for sx in (-1, 1)]), "chrome", root, 0.0, 300)
-        plain(root.name + "_lamps", join([ell(0.036, 0.036, 0.02, (sx * 0.105, 0.11, 0.12), n=16) for sx in (-1, 1)]), "lamp", root, 0.0)
+        lamps = plain(root.name + "_lamps", join([ell(0.036, 0.036, 0.02, (sx * 0.105, 0.11, 0.12), n=16) for sx in (-1, 1)]), "lamp", root, 0.0)
         fused(root.name + "_bumper", soft(0.32, 0.04, 0.06, (0, 0.02, 0.1), e=0.3), "chrome", root, 0.008, 200)
         top, eye = (0, 0.26, 0.0), (0.105, 0.11, 0.16)
     else:                                                                                            # a wedge: one lamp bar across, raked vents
         face = fused(root.name + "_face", join([soft(0.31, 0.17, 0.25, (0, 0.11, 0.02), (0.18, 0, 0), e=0.2), stub]), "car", root, 0.018, 1100,
                      cuts=[box(0.25, 0.024, 0.05, (0, 0.13, 0.15))] + [xf(box(0.04, 0.008, 0.06, (0, 0, 0)), (sx * 0.155, 0.1 - 0.02 * k, 0.03), (0, 0, sx * 0.5)) for sx in (-1, 1) for k in range(3)])
-        plain(root.name + "_bar", box(0.24, 0.016, 0.01, (0, 0.13, 0.134)), "lamp", root, 0.0)
+        lamps = plain(root.name + "_bar", box(0.24, 0.016, 0.01, (0, 0.13, 0.134)), "lamp", root, 0.0)
         fused(root.name + "_chin", soft(0.3, 0.02, 0.08, (0, 0.025, 0.13), e=0.3), "dark", root, 0.008, 200)
         top, eye = (0, 0.23, -0.03), (0.08, 0.13, 0.17)
     F.main(face, faces=("x", "-x"), crystals=1, size=0.55)
     mount(root, "radio", face, (0.05, 0.13, -0.03), (0, 1, 0))
-    lens_at(root, (eye[0], eye[1], eye[2] - 0.01))
+    mount(root, "lens", lamps, (eye[0], eye[1], eye[2] - 0.04), (0, 0, 1))                        # (a big lensed lamp over the right one)
     socket(root, "top", top)
     socket(root, "eye", eye)
     point(root, "side", (-0.15, 0.13, 0.02), (-1, 0.1, 0), "side", 0.45)

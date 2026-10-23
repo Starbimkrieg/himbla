@@ -212,13 +212,6 @@ def mount(root, name, target, p, n, roll=0.0):
     return e
 
 
-def lens_at(root, pos, n=(0, 0, 1)):
-    """the lens's socket: at the eye, looking out along n"""
-    e = pivot(f"{root.name}_lens", pos, root, role="socket", socket="lens")
-    orient(e, n)
-    return e
-
-
 def point(parent, name, pos, normal, tag, size=1.0):
     """an attachment point (role graft): where the spark's arcs crackle"""
     n = Vector(normal).normalized()

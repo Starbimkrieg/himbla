@@ -40,6 +40,7 @@ The player's orange is never drawn.
   shade into each other's colours across the joint.
 - **Two heads**: each body has a second, forked form with a neck for each head (the trunk splits, the necks grow from the shoulders, the
   car's nose grows two pods).
+- **Machines are built as machines**: the junkbot's boxes skip the organic remesh, so their panels stay flat and their edges and cuts crisp.
 - **Far away** each part swaps to its lighter copy (`_far`, about a third of the triangles; a `THREE.LOD` at 22 m times the chimera's size).
 - **Budget:** a plain chimera is 6.9k to 13.1k triangles near (median 9.4k), 2.1k to 4.0k far; the mutations add up to a few thousand.
 

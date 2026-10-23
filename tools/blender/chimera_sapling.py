@@ -154,13 +154,13 @@ def sapling_head(root, rng, look):
         disc = fused(root.name + "_disc", ell(0.13, 0.13, 0.05, (0, 0.24, 0.045), n=20), "gold", root, 0.008, 800,
                      cuts=[ell(0.009, 0.009, 0.01, (math.cos(a) * rr, 0.24 + math.sin(a) * rr, 0.094), n=8) for rr, n_ in ((0.095, 12), (0.07, 9)) for a in [2 * math.pi * k / n_ for k in range(n_)] if not (abs(math.cos(a) * rr) < 0.06 and 0.0 < math.sin(a) * rr < 0.06)]
                      + [ell(0.019, 0.027, 0.012, (sx * 0.043, 0.26, 0.094), n=12) for sx in (-1, 1)])
-        plain(root.name + "_eyes", join([ell(0.016, 0.023, 0.008, (sx * 0.043, 0.26, 0.086), n=12) for sx in (-1, 1)]), "dark", root, 0.0)
+        eyes = plain(root.name + "_eyes", join([ell(0.016, 0.023, 0.008, (sx * 0.043, 0.26, 0.086), n=12) for sx in (-1, 1)]), "dark", root, 0.0)
         fused(root.name + "_petals", join([ell(0.085, 0.042, 0.02, (math.cos(a) * 0.165, 0.24 + math.sin(a) * 0.165, 0.025), (0, 0, a), n=14) for a in [2 * math.pi * k / 9 for k in range(9)]]), "petal", root, 0.01, 700)
         face, top, eye = disc, (0, 0.4, 0.03), (0.043, 0.26, 0.11)
     elif look == 1:                                                                              # a tulip: a cup of petals round a face
         disc = fused(root.name + "_pod", ell(0.085, 0.09, 0.07, (0, 0.24, 0.0), n=18), "gold", root, 0.008, 600,
                      cuts=[ell(0.015, 0.022, 0.012, (sx * 0.032, 0.26, 0.068), n=12) for sx in (-1, 1)] + [box(0.03, 0.005, 0.02, (0, 0.215, 0.07))])
-        plain(root.name + "_eyes", join([ell(0.013, 0.019, 0.008, (sx * 0.032, 0.26, 0.061), n=12) for sx in (-1, 1)]), "dark", root, 0.0)
+        eyes = plain(root.name + "_eyes", join([ell(0.013, 0.019, 0.008, (sx * 0.032, 0.26, 0.061), n=12) for sx in (-1, 1)]), "dark", root, 0.0)
         cup = []
         for k in range(5):
             a = 2 * math.pi * k / 5 + 0.3
@@ -173,13 +173,13 @@ def sapling_head(root, rng, look):
     else:                                                                                        # a leafy bud with a face, sepals wrapped round it
         disc = fused(root.name + "_bud", join([ell(0.11, 0.14, 0.1, (0, 0.27, 0.0)), along(lathe([(0.03, 0), (0, 0.1)], 10), (0, 1, 0.1), (0, 0.39, 0.0))]), "leaf", root, 0.012, 900,
                      cuts=[ell(0.017, 0.024, 0.012, (sx * 0.038, 0.28, 0.097), n=12) for sx in (-1, 1)] + [box(0.035, 0.005, 0.02, (0, 0.235, 0.096))])
-        plain(root.name + "_eyes", join([ell(0.015, 0.021, 0.008, (sx * 0.038, 0.28, 0.09), n=12) for sx in (-1, 1)]), "dark", root, 0.0)
+        eyes = plain(root.name + "_eyes", join([ell(0.015, 0.021, 0.008, (sx * 0.038, 0.28, 0.09), n=12) for sx in (-1, 1)]), "dark", root, 0.0)
         fused(root.name + "_sepals", join([ell_between((sx * 0.06, 0.17, -0.02), (sx * 0.1, 0.36, -0.06), 0.06, 0.014, roll=sx * 0.8, n=14) for sx in (-1, 1)]
                                           + [chain([(0, 0.48, 0.0), (0.04, 0.54, 0.0), (0.07, 0.52, 0.0), (0.06, 0.48, 0.0)], [0.008, 0.007, 0.006, 0.005], seg=8)]), "pine", root, 0.01, 600)
         face, top, eye = disc, (0, 0.5, 0.0), (0.038, 0.28, 0.11)
     F.main(face, faces=("-z",), crystals=1, size=0.5)
     mount(root, "radio", face, (0, 0.24, -0.02), (0, 0.6, -1))
-    lens_at(root, (eye[0], eye[1], eye[2] - 0.005))
+    mount(root, "lens", eyes, (eye[0], eye[1], eye[2] - 0.03), (0.2, 0, 1))                       # (a glass bud over the right eye)
     socket(root, "top", top)
     socket(root, "eye", eye)
     point(root, "side", (-0.1, 0.24, 0), (-1, 0.1, 0), "side", 0.45)

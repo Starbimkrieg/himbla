@@ -108,13 +108,14 @@ def mite_head(root, rng, look):
             fused(f"{root.name}_mandible{sx}", chain([(sx * 0.05, 0.07, 0.19), (sx * 0.09, 0.06, 0.26), (sx * 0.06, 0.05, 0.32), (sx * 0.015, 0.05, 0.33)], [0.025, 0.02, 0.014, 0.006]), "dark", root, 0.008, 220)
         feelers = [[(sx * 0.04, 0.2, 0.16), (sx * 0.09, 0.33, 0.19), (sx * 0.19, 0.36, 0.3)] for sx in (-1, 1)]
         top, eye = (0, 0.24, 0.05), (0.1, 0.15, 0.12)
-    plain(root.name + "_eyes", join(eyes), "eye", root, 0.0)
+    eyes_o = plain(root.name + "_eyes", join(eyes), "eye", root, 0.0)
     for sx, feel in zip((-1, 1), feelers):
         fused(f"{root.name}_feeler{sx}", chain(feel, [0.011, 0.009, 0.007]), "dark", root, 0.006, 120)
         plain(f"{root.name}_bulb{sx}", ell(0.025 if look == 0 else 0.018, 0.025 if look == 0 else 0.018, 0.025 if look == 0 else 0.018, feel[-1], n=12), "eye" if look == 0 else "dark", root, 0.0)
     F.main(head, faces=("-x", "-z", "y"), crystals=1, size=0.5)
     mount(root, "radio", head, (0, 0.12, 0.0), (0, 1, -0.3))
-    mount(root, "lens", head, (eye[0], eye[1], eye[2] - 0.05), (0.4, 0, 1))
+    ec = ((0.09, 0.145, 0.11), (0.088, 0.12, 0.105), (0.1, 0.15, 0.07))[look]                    # (the right eye's centre)
+    mount(root, "lens", eyes_o, ec, (0.45, 0, 1) if look != 2 else (0.8, 0, 0.6))                # (on the right eye)
     socket(root, "top", top)
     socket(root, "eye", eye)
     point(root, "side", (-0.13, 0.11, 0.03), (-1, 0.2, 0), "side", 0.45)

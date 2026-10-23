@@ -189,7 +189,7 @@ def head_human(root, rng, look):
         if look == "pirate":                                                                          # claw marks
             cuts += [xf(box(0.004, 0.09, 0.03, (0, 0, 0)), (-0.1 - 0.018 * k, cy + 0.06, 0.1), (0, -0.7, 0.5)) for k in range(3)]
         helmet = fused(root.name + "_helmet", ell(r, r, r, (0, cy, 0), n=24), "helmet", root, 0.02, 1200, cuts=cuts)
-        plain(root.name + "_visor", ell(r * 0.955, r * 0.955, r * 0.955, (0, cy, 0.0), n=18), "glass", root, 0.0)
+        visor = plain(root.name + "_visor", ell(r * 0.955, r * 0.955, r * 0.955, (0, cy, 0.0), n=18), "glass", root, 0.0)
         plain(root.name + "_lamp", xf(cylinder(0.02, 0.02, 0.02, 14)[:2], (r * 0.95, cy + 0.03, 0.0), (0, 0, math.pi / 2)), "lamp", root, 0.0)
         F.main(helmet, faces=("-x", "-z"), crystals=1, size=0.6)
         if look == "pirate":                                                                          # a red bandana round the brow, knotted behind
@@ -198,7 +198,7 @@ def head_human(root, rng, look):
                                                 ell_between((0.0, cy + 0.05, -0.17), (0.05, cy - 0.06, -0.21), 0.025, 0.008, roll=0.4),
                                                 ell_between((0.0, cy + 0.05, -0.17), (-0.04, cy - 0.04, -0.22), 0.022, 0.008, roll=-0.4)]), "scarf", root, 0.012, 600)
         mount(root, "radio", helmet, (0, cy + 0.1, 0), (0, 1, 0))
-        mount(root, "lens", helmet, (0.05, cy + 0.01, 0.1), (0.3, 0, 1))
+        mount(root, "lens", visor, (0.05, cy + 0.01, 0.1), (0.3, 0.05, 1))                         # (on the visor's glass, over the right eye)
     elif look == "bowl":                                                                              # a bare head in a fishbowl
         fused(root.name + "_collar", join([cyl(0.07, 0.075, 0.1, (0, -0.02, 0)), ring(0.12, 0.026, (0, 0.04, 0), seg=28)]), "metal", root, 0.012, 400)
         fused(root.name + "_neck", cyl(0.04, 0.045, 0.1, (0, 0.06, 0)), "skin", root, 0.0, 120)
@@ -209,14 +209,14 @@ def head_human(root, rng, look):
         plain(root.name + "_eyes", join([ell(0.01, 0.014, 0.006, tuple(hc + Vector((sx * 0.036, 0.018, 0.088))), n=10) for sx in (-1, 1)]), "dark", root, 0.0)
         hair = fused(root.name + "_hair", ell(0.1, 0.105, 0.104, tuple(hc + Vector((0, 0.022, -0.008)))), "hair", root, 0.01, 500,
                      cuts=[ell(0.11, 0.1, 0.1, tuple(hc + Vector((0, -0.06, 0.07))))])
-        plain(root.name + "_bowl", ell(0.17, 0.17, 0.17, (0, cy, 0), n=24), "bowl", root, 0.0)
+        bowl = plain(root.name + "_bowl", ell(0.17, 0.17, 0.17, (0, cy, 0), n=24), "bowl", root, 0.0)
         F.crystal.append((hair, [(hc, Vector((-0.4, 1, -0.3)), 0.5, 0.4)]))
         mount(root, "radio", hair, tuple(hc), (0, 1, 0))
-        lens_at(root, (0.036, cy + 0.01, 0.17))
+        mount(root, "lens", bowl, tuple(hc + Vector((0.036, 0.018, 0.094))), (0.3, 0.05, 1))       # (on the bowl's glass, before the right eye)
     else:                                                                                             # a Vrill: a tall smooth skull, great dark eyes, antennae
         skull = fused(root.name + "_skull", join([ell(0.115, 0.165, 0.125, (0, 0.24, 0)), ell(0.07, 0.07, 0.075, (0, 0.11, 0.035)), cyl(0.04, 0.046, 0.14, (0, 0.0, 0))]), "alien", root, 0.02, 1100,
                       cuts=[along(ell(0.03, 0.05, 0.03, n=14), (sx * -0.35, 1, 0), (sx * 0.052, 0.2, 0.108)) for sx in (-1, 1)] + [box(0.03, 0.004, 0.02, (0, 0.105, 0.105))])
-        plain(root.name + "_eyes", join([along(ell(0.027, 0.046, 0.022, n=14), (sx * -0.35, 1, 0), (sx * 0.052, 0.2, 0.1)) for sx in (-1, 1)]), "dark", root, 0.0)
+        eyes = plain(root.name + "_eyes", join([along(ell(0.027, 0.046, 0.022, n=14), (sx * -0.35, 1, 0), (sx * 0.052, 0.2, 0.1)) for sx in (-1, 1)]), "dark", root, 0.0)
         plain(root.name + "_glints", join([ell(0.007, 0.007, 0.004, (sx * 0.045 - 0.008, 0.225, 0.122), n=8) for sx in (-1, 1)]), "cream", root, 0.0)
         for sx in (-1, 1):
             ant = [(sx * 0.045, 0.37, -0.02), (sx * 0.08, 0.45, -0.03), (sx * 0.1, 0.5, 0.0), (sx * 0.14, 0.54, -0.01)]
@@ -224,7 +224,7 @@ def head_human(root, rng, look):
             plain(f"{root.name}_tip{sx}", ell(0.022, 0.022, 0.022, ant[-1], n=12), "tip", root, 0.0)
         F.main(skull, faces=("-x", "-z", "y"), crystals=1, size=0.5)
         mount(root, "radio", skull, (0, 0.3, -0.03), (0, 1, -0.2))
-        mount(root, "lens", skull, (0.052, 0.2, 0.08), (0.2, 0, 1))
+        mount(root, "lens", eyes, (0.052, 0.2, 0.1), (0.35, 0, 1))                                   # (over the right eye)
     top = 0.41 if look == "alien" else cy + (0.17 if look == "bowl" else r)
     socket(root, "top", (0, top, 0))
     socket(root, "eye", (0.05, cy, 0.15))

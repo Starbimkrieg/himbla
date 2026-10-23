@@ -3,6 +3,8 @@
 #   body   a scrap-metal torso: patched panels with their rivets cut in, a round hatch, a vent grille, an exhaust stack, two claw arms
 #   head   an old CRT monitor: a glowing pixel face on its screen, a whip aerial, bolts for ears
 # Its hide is the junkbot's paint (the builder tints it); the patches are rust. It counts as a car for its mutations' devices and armour.
+# Its boxes are built as boxes (remesh=False: flat panels and crisp edges, the details cut into them), each its own piece: a robot is
+# bolted together, so its seams show.
 
 
 def stadium(L, R, n=10):
@@ -21,7 +23,8 @@ def junk_legs(root, rng):
     F = Fit(rng)
     R, L, w, tx = 0.15, 0.62, 0.15, 0.27
     hip = 0.48
-    chassis = fused(root.name + "_chassis", join([soft(0.42, 0.2, 0.6, (0, 0.34, 0), e=0.2), soft(0.3, 0.08, 0.5, (0, 0.44, 0), e=0.3)]), "junkbot", root, 0.02, 900,
+    fused(root.name + "_deck", soft(0.3, 0.08, 0.5, (0, 0.45, 0), e=0.3, n=20), "junkbot", root, 0.016, 400, remesh=False)
+    chassis = fused(root.name + "_chassis", soft(0.42, 0.2, 0.6, (0, 0.34, 0), e=0.2, n=24), "junkbot", root, 0.02, 900, remesh=False,
                     cuts=[box(0.006, 0.12, 0.004, (x, 0.34, 0.3)) for x in (-0.1, 0.1)] + [ell(0.01, 0.01, 0.01, (sx * 0.2, 0.34 + dy, dz), n=8) for sx in (-1, 1) for dy in (-0.05, 0.05) for dz in (-0.2, 0.0, 0.2)])
     F.main(chassis, faces=("z", "-z"), crystals=1, mud=1, low=0.3)
     for sx in (-1, 1):
@@ -42,13 +45,15 @@ def junk_legs(root, rng):
 
 def junk_body(root, rng):
     F = Fit(rng)
-    common = [soft(0.5, 0.48, 0.42, (0, 0.24, 0), e=0.18), ell(0.14, 0.08, 0.16, (0, 0.0, 0))]
-    forks = [chain([(sx * 0.08, 0.42, 0), (sx * 0.15, 0.5, 0), (sx * 0.16, 0.54, 0)], [0.06, 0.05, 0.045]) for sx in (-1, 1)]
-    one = [cyl(0.07, 0.08, 0.08, (0, 0.5, 0))]
-    cuts = [ring(0.075, 0.006, (0, 0.27, 0.21), (math.pi / 2, 0, 0), seg=28)]                       # (the hatch's seam)
+    cuts = [ring(0.075, 0.008, (0, 0.27, 0.21), (math.pi / 2, 0, 0), seg=40)]                       # (the hatch's seam)
     cuts += [box(0.16, 0.012, 0.04, (0.0, 0.1 + 0.024 * k, 0.21)) for k in range(4)]                # (a vent grille under it)
-    cuts += [ell(0.07, 0.05, 0.03, (0.18, 0.4, 0.18), n=12)]                                        # (a dent)
-    torso = forms(root, root.name + "_torso", common, one, forks, "junkbot", 0.02, 1600, cuts=cuts)
+    cuts += [ell(0.07, 0.05, 0.03, (0.18, 0.4, 0.18), n=16)]                                        # (a dent)
+    torso = fused(root.name + "_torso", soft(0.5, 0.48, 0.42, (0, 0.24, 0), e=0.18, n=28), "junkbot", root, 0.02, 1600, cuts=cuts, remesh=False)
+    fused(root.name + "_skirt", ell(0.14, 0.08, 0.16, (0, 0.0, 0)), "junkbot", root, 0.0, 300)
+    f1 = pivot(f"{root.name}_form1", (0, 0, 0), root, role="form", form=1)                        # (one neck, or two forked from the shoulders)
+    f2 = pivot(f"{root.name}_form2", (0, 0, 0), root, role="form", form=2)
+    fused(root.name + "_neck", join([cyl(0.07, 0.08, 0.08, (0, 0.5, 0), seg=24), ring(0.08, 0.012, (0, 0.47, 0), seg=24)]), "junkbot", f1, 0.012, 300, remesh=False)
+    fused(root.name + "_necks", join([chain([(sx * 0.08, 0.42, 0), (sx * 0.15, 0.5, 0), (sx * 0.16, 0.54, 0)], [0.06, 0.05, 0.045]) for sx in (-1, 1)]), "junkbot", f2, 0.014, 600)
     plain(root.name + "_bolts", join([ell(0.01, 0.01, 0.006, (math.cos(a) * 0.09, 0.27 + math.sin(a) * 0.09, 0.205), n=8) for a in [k * math.pi / 2 + 0.785 for k in range(4)]]), "metal", root, 0.0)
     patches = pivot(f"{root.name}_patches", (0, 0, 0), root, role="mut", mut="!armor")      # (rust patches: under armour plating, gone)
     for k, (c, n, w, h, spin) in enumerate((((0.24, 0.3, 0.05), (1, 0, 0), 0.16, 0.12, 0.2), ((-0.24, 0.16, -0.06), (-1, 0, 0), 0.14, 0.1, -0.3), ((0.0, 0.36, -0.2), (0, 0, -1), 0.18, 0.14, 0.1))):
@@ -79,9 +84,12 @@ def junk_body(root, rng):
 
 def junk_head(root, rng):
     F = Fit(rng)
-    crt = fused(root.name + "_crt", join([soft(0.34, 0.27, 0.26, (0, 0.17, 0.0), e=0.22), soft(0.24, 0.2, 0.14, (0, 0.17, -0.14), e=0.3), cyl(0.05, 0.06, 0.12, (0, -0.01, -0.05))]), "junkbot", root, 0.018, 1100,
-                cuts=[soft(0.27, 0.2, 0.06, (0, 0.17, 0.14), e=0.25)] + [box(0.008, 0.06, 0.02, (0.07 + 0.016 * k, 0.17, -0.21)) for k in range(4)])   # (the screen's well, vents behind)
-    plain(root.name + "_screen", soft(0.25, 0.18, 0.02, (0, 0.17, 0.112), e=0.25), "screen", root, 0.0)
+    crt = fused(root.name + "_crt", soft(0.34, 0.27, 0.26, (0, 0.17, 0.0), e=0.22, n=28), "junkbot", root, 0.018, 1100, remesh=False,
+                cuts=[soft(0.27, 0.2, 0.06, (0, 0.17, 0.14), e=0.25, n=24)])                       # (the screen's well)
+    fused(root.name + "_tube", soft(0.24, 0.2, 0.14, (0, 0.17, -0.14), e=0.3, n=20), "junkbot", root, 0.014, 500, remesh=False,
+          cuts=[box(0.008, 0.06, 0.02, (0.07 + 0.016 * k, 0.17, -0.21)) for k in range(4)])      # (the tube's housing, vents in it)
+    fused(root.name + "_stalk", cyl(0.05, 0.06, 0.12, (0, -0.01, -0.05), seg=20), "dark", root, 0.01, 200, remesh=False)
+    screen = plain(root.name + "_screen", soft(0.25, 0.18, 0.02, (0, 0.17, 0.112), e=0.25), "screen", root, 0.0)
     px = [box(0.026, 0.026, 0.006, (sx * 0.055, 0.2, 0.124)) for sx in (-1, 1)] + [box(0.022, 0.012, 0.006, (x, 0.12 + (0.012 if abs(x) > 0.03 else 0), 0.124)) for x in (-0.044, -0.022, 0.0, 0.022, 0.044)]
     plain(root.name + "_face", join(px), "pixel", root, 0.0, smooth=False)
     fused(root.name + "_bezel", soft(0.3, 0.025, 0.05, (0, 0.04, 0.12), e=0.3), "dark", root, 0.006, 160)
@@ -91,7 +99,7 @@ def junk_head(root, rng):
     plain(root.name + "_ball", ell(0.016, 0.016, 0.016, (-0.16, 0.49, -0.06), n=10), "red", root, 0.0)
     F.main(crt, faces=("x", "-x", "y"), crystals=1, size=0.55)
     mount(root, "radio", crt, (0.06, 0.2, -0.04), (0, 1, 0))
-    lens_at(root, (0.055, 0.2, 0.13))
+    mount(root, "lens", screen, (0.055, 0.2, 0.112), (0, 0, 1))                                    # (over its right pixel eye)
     socket(root, "top", (0.04, 0.31, 0.0))
     socket(root, "eye", (0.055, 0.2, 0.13))
     point(root, "side", (-0.17, 0.17, 0), (-1, 0.1, 0), "side", 0.45)
