@@ -1,12 +1,16 @@
-# Chimera parts kit review sheet. Builds each proposal's parts (build_chimera_kit.py) and puts chimeras together the way the game would,
-# through the sockets (the legs' hip, the body's neck), then renders them to docs/chimera-proposals/<variant>_<view>.jpg and a sheet,
-# chimera_proposals.jpg (PREVIEW_OUT=<dir> writes them elsewhere; PREVIEW_W / PREVIEW_H / PREVIEW_SAMPLES set the quality).
+# Chimera parts kit review sheet (the Specimen kit, build_chimera_kit.py). Puts chimeras together the way the game would, through the
+# sockets (the legs' hip, the body's neck and back, the head's top), and renders to docs/chimera-proposals/:
+#   set0.jpg, set1.jpg, set2.jpg   five chimeras in each of the parts' three looks (the same Latin square of kinds each time: car body on
+#                                  mite legs with a person's head, sapling on car with a mite's, person on sapling with a car's and the
+#                                  Triple Crown, mite on person with a sapling's; the fifth has two heads on one neck)
+#   mods.jpg                       eight chimeras, each wearing one mutation's piece
+#   revisions.jpg                  close on the reworked parts: the car's lower body, the person, the mite's wing cases, the sapling's roots
+#   chimera_sheet.jpg              the four, on one sheet
+# PREVIEW_OUT=<dir> writes them elsewhere; PREVIEW_W / PREVIEW_H / PREVIEW_SAMPLES set the quality. Cycles on the CPU (a few minutes);
+# Freestyle draws the comic ink outline.
 #
 #   pip install bpy pillow
-#   MOONRUNNER_REPO=. python3 tools/blender/preview_chimera_kit.py [a] [b]
-#
-# The blends are a Latin square of the four kinds (each kind's legs, body and head appear once), and a fifth with two heads on one neck.
-# Cycles on the CPU; Freestyle draws the comic ink outline.
+#   MOONRUNNER_REPO=. python3 tools/blender/preview_chimera_kit.py [set0] [set1] [set2] [mods] [revisions]
 
 import bpy, math, os, sys
 from mathutils import Vector
@@ -14,13 +18,16 @@ from mathutils import Vector
 REPO = os.environ.get("MOONRUNNER_REPO") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUTDIR = os.environ.get("PREVIEW_OUT") or os.path.join(REPO, "docs", "chimera-proposals")
 os.makedirs(OUTDIR, exist_ok=True)
-NAMES = [a for a in sys.argv[1:] if a in ("a", "b")] or ["a", "b"]
+SHOTS = [a for a in sys.argv[1:] if a in ("set0", "set1", "set2", "mods", "revisions")] or ["set0", "set1", "set2", "mods", "revisions"]
 RES = (int(os.environ.get("PREVIEW_W", 1600)), int(os.environ.get("PREVIEW_H", 720)))
-SAMPLES = int(os.environ.get("PREVIEW_SAMPLES", 32))
-GLOWS = {"glass": 2.2, "eye": 3.0, "lamp": 5.0, "red": 4.0, "splice": 4.0}
+SAMPLES = int(os.environ.get("PREVIEW_SAMPLES", 24))
+GLOWS = {"glass": 2.2, "eye": 3.0, "lamp": 5.0, "red": 4.0, "splice": 4.0, "crystal": 4.0, "spark": 5.0, "voidglow": 4.0}
 # (body, legs, head[, extra head])
 BLENDS = [("car", "mite", "person"), ("sapling", "car", "mite"), ("person", "sapling", "car"), ("mite", "person", "sapling"), ("person", "car", "mite", "sapling")]
-LABELS = {"a": "A  PLUSH  (round toy shapes, big heads, stitched pink collars at the splice joints)", "b": "B  SPECIMEN  (lean, faceted, long-legged; steel clamps with a glowing splice band)"}
+# (body, legs, head, alt of each, mutation)
+MODDED = [("person", "car", "mite", 0, "crystal"), ("car", "sapling", "person", 1, "spark"), ("mite", "person", "car", 2, "radio"), ("sapling", "mite", "person", 0, "armor"),
+          ("car", "person", "sapling", 2, "turbo"), ("person", "mite", "car", 1, "mud"), ("mite", "car", "sapling", 1, "void"), ("sapling", "person", "mite", 2, "lens")]
+LABELS = {"set0": "SET 1 (the revised parts)", "set1": "SET 2 (each part's second look)", "set2": "SET 3 (each part's third look)", "mods": "MUTATIONS: crystal, spark, radio, armour, turbo, mud, void, lens"}
 
 
 def light_material(m, rgb, strength):
@@ -74,22 +81,15 @@ def scene_setup():
     gm.use_nodes = True
     toon(gm, (0.11, 0.09, 0.15), 0.9)
     g.data.materials.append(gm)
-    return sc, g
-
-
-def freestyle(sc, skip):
     noink = bpy.data.collections.new("NoInk")
     sc.collection.children.link(noink)
-    for o in skip:
-        noink.objects.link(o)
+    noink.objects.link(g)
     sc.render.use_freestyle = True
     sc.render.line_thickness = 1.3
     vl = sc.view_layers[0]
     vl.use_freestyle = True
     ls = vl.freestyle_settings.linesets.new("ink") if not vl.freestyle_settings.linesets else vl.freestyle_settings.linesets[0]
-    ls.select_silhouette = True
-    ls.select_crease = False
-    ls.select_border = True
+    ls.select_silhouette, ls.select_crease, ls.select_border = True, False, True
     ls.select_by_collection = True
     ls.collection = noink
     ls.collection_negation = "EXCLUSIVE"
@@ -97,6 +97,7 @@ def freestyle(sc, skip):
         ls.linestyle = bpy.data.linestyles.new("ink")
     ls.linestyle.color = (0.02, 0.01, 0.06)
     ls.linestyle.thickness = 2.0
+    return sc, g
 
 
 def camera(sc, loc, target, lens=50):
@@ -110,79 +111,86 @@ def camera(sc, loc, target, lens=50):
     sc.camera = cam
 
 
-def render(sc, path):
-    sc.render.filepath = path
-    bpy.ops.render.render(write_still=True)
-    print("rendered", path)
+def paint():
+    for m in bpy.data.materials:
+        n = m.name.split(".")[0]
+        c = tuple(min(1, x) for x in m.diffuse_color[:3])
+        if n in GLOWS:
+            light_material(m, c, GLOWS[n])
+        elif n != "ground":
+            toon(m, c, 0.45)
 
 
-for v in NAMES:
-    sc, ground = scene_setup()
-    g = {"__file__": os.path.join(REPO, "tools", "blender", "build_chimera_kit.py"), "VARIANT": v, "CHIMERA_KIT_LIB": True}
+def kit():
+    g = {"__file__": os.path.join(REPO, "tools", "blender", "build_chimera_kit.py"), "CHIMERA_KIT_LIB": True}
     os.environ["MOONRUNNER_REPO"] = REPO
     exec(open(g["__file__"], encoding="utf-8").read(), g)
-    build_part, sockets = g["build_part"], g["sockets"]
-    # ---- the blends, side by side, each turned a little toward the camera ----
-    gap = 1.25
-    roots = []
-    for i, b in enumerate(BLENDS):
-        x = (i - (len(BLENDS) - 1) / 2) * gap
-        legs = build_part("legs", b[1], f"bl{i}_legs", (x, 0, 0))
-        legs.rotation_euler[2] = math.radians(28)
-        body = build_part("body", b[0], f"bl{i}_body", (0, 0, 0), sockets(legs)["hip"])
-        neck = sockets(body)["neck"]
-        if len(b) == 3:
-            hd = build_part("head", b[2], f"bl{i}_head", (0, 0, 0), neck)
-            if i == 2:                                                          # (this one won the Triple Crown)
-                g["BUILD_CROWN"](g["pivot"](f"bl{i}_crown", (0, 0, 0), sockets(hd)["top"]))
-        else:                                                                   # two heads share the neck, leaning apart (as the game seats them)
-            for k, (kind, dx, lean) in enumerate(((b[2], -0.15, 0.28), (b[3], 0.15, -0.28))):
-                h = build_part("head", kind, f"bl{i}_head{k}", (dx, 0, 0), neck)
-                h.rotation_euler[1] = -lean                                     # (about three.js z, which is Blender's -y)
-        roots.append(legs)
-    for m in bpy.data.materials:
-        n = m.name.split(".")[0]
-        c = tuple(min(1, x) for x in m.diffuse_color[:3])
-        if n in GLOWS:
-            light_material(m, c, GLOWS[n])
-        elif n != "ground":
-            toon(m, c, 0.45)
-    freestyle(sc, [ground])
-    camera(sc, (0.6, -6.6, 1.9), (0.0, 0, 0.62), 40)
-    render(sc, os.path.join(OUTDIR, f"{v}_blends.jpg"))
-    camera(sc, (-1.2, -3.4, 1.3), (-gap * 1.0, 0, 0.55), 45)               # close: the sapling-on-car blend and its joints
-    render(sc, os.path.join(OUTDIR, f"{v}_closeup.jpg"))
-    # ---- every part on its own, in rows: legs, bodies, heads ----
-    for o in list(bpy.data.objects):
-        if o.type in ("MESH", "EMPTY") and o is not ground:
-            bpy.data.objects.remove(o)
-    for r, slot in enumerate(("legs", "body", "head")):
-        for i, kind in enumerate(g["KINDS"]):
-            p = build_part(slot, kind, f"pt_{slot}_{kind}", ((i - 1.5) * 1.15, 0, (1 - r) * 1.3))      # (legs in front, heads at the back)
-            p.rotation_euler[2] = math.radians(25)
-    for m in bpy.data.materials:
-        n = m.name.split(".")[0]
-        c = tuple(min(1, x) for x in m.diffuse_color[:3])
-        if n in GLOWS:
-            light_material(m, c, GLOWS[n])
-        elif n != "ground":
-            toon(m, c, 0.45)
-    camera(sc, (0.3, -6.4, 3.3), (0, 0.2, 0.3), 40)
-    render(sc, os.path.join(OUTDIR, f"{v}_parts.jpg"))
+    return g
+
+
+def chimera(g, tag, x, body, legs, heads, alt, yaw=28, mod=None, crown=False):
+    """legs, then the body on the hip, the head(s) on the neck, a mutation on the back (or the lens on the head), maybe the crown"""
+    bp, sk = g["build_part"], g["sockets"]
+    L = bp("legs", legs, alt, f"{tag}_legs", (x, 0, 0))
+    L.rotation_euler[2] = math.radians(yaw)
+    B = bp("body", body, alt, f"{tag}_body", (0, 0, 0), sk(L)["hip"])
+    neck = sk(B)["neck"]
+    hs = []
+    if len(heads) == 1:
+        hs.append(bp("head", heads[0], alt, f"{tag}_head", (0, 0, 0), neck))
+    else:                                                                       # two heads share the neck, leaning apart (as the game seats them)
+        for k, (kind, dx, lean) in enumerate(((heads[0], -0.15, 0.28), (heads[1], 0.15, -0.28))):
+            h = bp("head", kind, alt, f"{tag}_head{k}", (dx, 0, 0), neck)
+            h.rotation_euler[1] = -lean
+            hs.append(h)
+    if mod:
+        g["build_mod"](mod, f"{tag}_mod", sk(hs[0])["top"] if mod == "lens" else sk(B)["back"])
+    if crown:
+        g["BUILD_CROWN"](g["pivot"](f"{tag}_crown", (0, 0, 0), sk(hs[0])["top"]))
+    return L
+
+
+def render(sc, name):
+    sc.render.filepath = os.path.join(OUTDIR, name + ".jpg")
+    bpy.ops.render.render(write_still=True)
+    print("rendered", sc.render.filepath)
+
+
+for shot in SHOTS:
+    sc, ground = scene_setup()
+    g = kit()
+    if shot.startswith("set"):
+        alt = int(shot[-1])
+        for i, b in enumerate(BLENDS):
+            chimera(g, f"bl{i}", (i - 2) * 1.25, b[0], b[1], b[2:], alt, crown=(i == 2))
+        paint()
+        camera(sc, (0.6, -6.6, 1.9), (0.0, 0, 0.62), 40)
+    elif shot == "mods":
+        for i, (body, legs, head, alt, m) in enumerate(MODDED):
+            chimera(g, f"md{i}", (i - 3.5) * 1.15, body, legs, (head,), alt, yaw=25 if m == "lens" else 150, mod=m)   # (backs to the camera: the pieces sit on the back)
+        paint()
+        camera(sc, (0.3, -10.4, 2.9), (0.0, 0, 0.6), 38)
+    else:                                                                       # the reworked parts, close
+        chimera(g, "rv0", -1.5, "car", "car", ("car",), 0, yaw=35)
+        chimera(g, "rv1", -0.5, "person", "person", ("person",), 0, yaw=20)
+        chimera(g, "rv2", 0.55, "mite", "mite", ("mite",), 0, yaw=60)
+        chimera(g, "rv3", 1.6, "sapling", "sapling", ("sapling",), 0, yaw=20)
+        paint()
+        camera(sc, (0.2, -5.0, 1.75), (0.05, 0, 0.72), 40)
+    render(sc, shot)
 
 try:
     from PIL import Image, ImageDraw
-    rows = [n for n in ("a", "b") if all(os.path.isfile(os.path.join(OUTDIR, f"{n}_{k}.jpg")) for k in ("blends", "parts"))]
+    rows = [n for n in ("set0", "set1", "set2", "mods") if os.path.isfile(os.path.join(OUTDIR, n + ".jpg"))]
     if rows:
         w, h = RES[0] // 2, RES[1] // 2
-        sheet = Image.new("RGB", (w * 2, (h + 28) * len(rows)), (24, 20, 40))
+        sheet = Image.new("RGB", (w * 2, (h + 28) * ((len(rows) + 1) // 2)), (24, 20, 40))
         d = ImageDraw.Draw(sheet)
-        for r, n in enumerate(rows):
-            d.text((10, r * (h + 28) + 8), LABELS[n], fill=(255, 210, 63))
-            for c, k in enumerate(("blends", "parts")):
-                im = Image.open(os.path.join(OUTDIR, f"{n}_{k}.jpg")).convert("RGB").resize((w, h), Image.LANCZOS)
-                sheet.paste(im, (c * w, r * (h + 28) + 28))
-        sheet.save(os.path.join(OUTDIR, "chimera_proposals.jpg"), quality=90)
-        print("sheet ->", os.path.join(OUTDIR, "chimera_proposals.jpg"))
+        for i, n in enumerate(rows):
+            x, y = (i % 2) * w, (i // 2) * (h + 28)
+            d.text((x + 10, y + 8), LABELS[n], fill=(255, 210, 63))
+            sheet.paste(Image.open(os.path.join(OUTDIR, n + ".jpg")).convert("RGB").resize((w, h), Image.LANCZOS), (x, y + 28))
+        sheet.save(os.path.join(OUTDIR, "chimera_sheet.jpg"), quality=90)
+        print("sheet ->", os.path.join(OUTDIR, "chimera_sheet.jpg"))
 except ImportError:
     print("(pillow not installed: no contact sheet)")

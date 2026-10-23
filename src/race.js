@@ -60,7 +60,7 @@ const CAT_NAME = { SPRINT: 'sprint', MILE: 'mile', MEDIUM: 'medium', LONG: 'long
 // The six-stall starting gate (tools/blender/build_downs_course.py builds two designs, A and B; GATE picks the one the course uses):
 // where each stall's doors hang (their hinges, either side of the stall's centre) and its number plate.
 const GATES = { a: { hinge: 1.45, doorZ: 0.1, plateY: 4.05, plateZ: 0.16 }, b: { hinge: 1.45, doorZ: 0.1, plateY: 4.46, plateZ: 0.24 } };
-export const GATE = 'a';
+export const GATE = 'b';
 const CAMS = ['chase', 'rail', 'leader', 'stands', 'blimp'];
 const CAM_NAME = { chase: 'CHASE', rail: 'RAIL', leader: 'LEADER', stands: 'GRANDSTAND', blimp: 'BLIMP' };
 const MOD_KINDS = ['water', 'rock', 'dirt', 'mud', 'wiring', 'engine'];

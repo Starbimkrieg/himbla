@@ -2,7 +2,7 @@
 
 A field of six needed a six-stall gate. Six 3 m stalls fit between the rails (45 and 64.4 m from the oval's centre) where four 4 m
 ones stood, so nothing else on the course moved. Both designs are in `src/assets/downs-course.glb` (built by
-`tools/blender/build_downs_course.py`); `GATE` at the top of `src/race.js` picks the one the course uses (**A** for now), and the Asset Row's
+`tools/blender/build_downs_course.py`); `GATE` at the top of `src/race.js` picks the one the course uses: **B, The Gantry** (chosen), and the Asset Row's
 course kit shows both, doors hung. The screenshots are from the running game, at the start of a race.
 
 | A, "Classic Six" | B, "The Gantry" |
@@ -17,4 +17,4 @@ door.
 stall posts with Mint pads, and a Black lattice beam with gold diagonals across the top, whose Mint frames carry the numbers. Mint doors
 with a Barn Red diagonal band. 19.1 m across. 988 triangles plus 72 per door.
 
-To switch, set `GATE = 'b'` in `src/race.js`.
+To switch back, set `GATE = 'a'` in `src/race.js`.
