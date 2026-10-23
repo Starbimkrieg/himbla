@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toon, glowShared, inkMat, gradientMap } from './toon.js';
+import { toon, glowShared, inkMat, inkMatNear, gradientMap } from './toon.js';
 import { loadChimeraKit, figureSpec, figurePiece, figureGlass, inkShell } from './models.js';
 import { mulberry32 } from './rng.js';
 import { PALETTE } from './chimeragenes.js';
@@ -79,18 +79,20 @@ export function buildChimera(genes, kit = KIT, { hd = false } = {}) {
   // the parts, each on the one below
   const legs = part(C, 'legs', genes.legs, inner);
   const hip = legs.sockets.hip;
-  const body = part(C, 'body', genes.body, hip.node);
+  const body = part(C, 'body', genes.body, hip.node, genes.extraHead ? 2 : 1);
   joinParts(C, legs, body, hip, body.joint);
   const heads = [];
   const neck = body.sockets.neck;
-  const two = genes.extraHead ? [[genes.head, -0.15, 0.28], [genes.extraHead, 0.15, -0.28]] : [[genes.head, 0, 0]];
-  for (const [kind, dx, lean] of two) {
+  // two heads: an HD body forks, a neck for each (sockets neckL and neckR, already leaning out); any other body takes both on its one neck
+  const forked = genes.extraHead && body.sockets.neckL;
+  const two = genes.extraHead ? [[genes.head, -0.15, 0.28, 'neckL'], [genes.extraHead, 0.15, -0.28, 'neckR']] : [[genes.head, 0, 0]];
+  for (const [kind, dx, lean, fork] of two) {
+    const at = forked ? body.sockets[fork] : neck;
     const seat = new THREE.Group();
-    seat.position.x = dx;
-    seat.rotation.z = lean;
-    neck.node.add(seat);
+    if (!forked) { seat.position.x = dx; seat.rotation.z = lean; }
+    at.node.add(seat);
     const h = part(C, 'head', kind, seat);
-    joinParts(C, body, h, { node: seat, jrx: neck.jrx, jrz: neck.jrz }, h.joint);
+    joinParts(C, body, h, { node: seat, jrx: at.jrx, jrz: at.jrz }, h.joint);
     heads.push(h);
   }
   inner.updateMatrixWorld(true);
@@ -132,8 +134,8 @@ function spec(C, kind) {
 
 // ---------------- parts ----------------
 // A part: { kind, slot, family, node, sockets: { name: { node, jrx, jrz } }, points: [attachment points, where mutations grow], joint: { jrx, jrz }, hides: [...] }
-function part(C, slot, kind, parent) {
-  const P = C.hd && C.kit[`hd_${slot}_${kind}`] ? hdPart(C, slot, kind) : FAMILY[kind] === 'human' ? figurePart(C, slot, kind) : kitPart(C, slot, kind);
+function part(C, slot, kind, parent, form = 1) {
+  const P = C.hd && C.kit[`hd_${slot}_${kind}`] ? hdPart(C, slot, kind, form) : FAMILY[kind] === 'human' ? figurePart(C, slot, kind) : kitPart(C, slot, kind);
   P.slot = slot; P.family = FAMILY[kind];
   parent.add(P.node);
   return P;
@@ -162,8 +164,9 @@ function kitGroup(C, node, P, tint) {
     m.castShadow = !(slot in KIT_GLOW);
     g.add(m);
   }
-  if (node.ink) { const m = new THREE.Mesh(node.ink, inkMat); m.userData.isInk = true; g.add(m); }
+  if (node.ink) { const m = new THREE.Mesh(node.ink, node.inkNear ? inkMatNear : inkMat); m.userData.isInk = true; g.add(m); }
   for (const k of node.kids) {
+    if (k.role === 'form' && k.data.form !== (P.form || 1)) continue;   // (an HD body's other form: one neck, or forked for two heads)
     if (k.role === 'mut') {                                   // (an HD part's fitted mutation: only on a chimera that has it)
       if (!C.mods.has(k.data.mut)) continue;
       P.fitted?.add(k.data.mut);
@@ -189,9 +192,9 @@ function kitPart(C, slot, kind) {
 }
 
 // an HD part (one look per kind); its fitted mutations are kids with role `mut`
-function hdPart(C, slot, kind) {
+function hdPart(C, slot, kind, form) {
   const node = C.kit[`hd_${slot}_${kind}`];
-  const P = { kind, hd: true, fitted: new Set(), sockets: {}, points: [], hides: C.hides, joint: { jrx: node.data.jrx || 0.1, jrz: node.data.jrz || 0.1 } };
+  const P = { kind, hd: true, form, fitted: new Set(), sockets: {}, points: [], hides: C.hides, joint: { jrx: node.data.jrx || 0.1, jrz: node.data.jrz || 0.1 } };
   P.node = kitGroup(C, { ...node, pos: new THREE.Vector3(), quat: new THREE.Quaternion() }, P, {});
   return P;
 }

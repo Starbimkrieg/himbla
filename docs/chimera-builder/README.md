@@ -14,7 +14,7 @@ until this look is signed off. Look at it in the lab: `npm run dev`, then `/tool
 
 ## The HD showcase (up for sign-off)
 
-The parts rebuilt at full resolution in Blender (`tools/blender/build_chimera_hd.py` -> `src/assets/chimera_hd.glb`, 611 KB compressed):
+The parts rebuilt at full resolution in Blender (`tools/blender/build_chimera_hd.py` -> `src/assets/chimera_hd.glb`, 955 KB compressed):
 person, mite, car and sapling, one look each, with armour and crystal fitted to every part. In the lab: **HD SHOWCASE**, or tick **HD
 parts** (`?showcase=1`, `&hd=1`); in the Asset Row: `creatures.builderhd`, beside the builder's line-up.
 
@@ -24,7 +24,12 @@ parts** (`?showcase=1`, `&hd=1`); in the Asset Row: `creatures.builderhd`, besid
 |---|---|
 | ![a settler in a vest, pads and knee pads; a car with plates on its nose, deck and flanks](hd-armour.jpg) | ![crystal clusters on a sapling trunk and a car body](hd-crystal.jpg) |
 
-![The showcase: each kind's legs, body and head, plain, armoured and crystalled](hd-showcase.jpg)
+**Two heads:** a body forks for them (a second form of its main surface, with a neck for each head): the sapling's trunk splits into two
+branches, the mite and the settler grow two necks, the car's nose two pods.
+
+![Two heads: a sapling forked for a sunflower and a settler's helmet; a mite with two necks; a settler with a mite's and a car's heads; a car body with two pods](hd-two-heads.jpg)
+
+![The showcase: each kind's legs, body and head, plain, armoured, crystalled and two-headed](hd-showcase.jpg)
 
 How the parts are made (the Blender tools that answer the last round's notes):
 
@@ -35,13 +40,18 @@ How the parts are made (the Blender tools that answer the last round's notes):
   the tree's hollow, seed pits, tyre tread, and the bolt and rivet holes are Boolean differences in the surface; lamps, eyes and glass
   sit inside their sockets. The outline is drawn from the surface before the cuts, so a groove reads as a dent in the shading, not a
   black line.
+- **Outlines that follow the surface.** The game's comic pass already inks every edge it sees in the depth buffer; the black shell round
+  each part only has to carry the silhouette. On the HD parts it is the runner's kind (`inkMatNear`): its full thickness (2 cm on a big
+  part, less on a small one, none on the belt or the hubs) at the follow camera's distance and no thicker on screen when you come closer,
+  so it doesn't stand off the edge as a band in a close-up or fold over in a crease.
 - **The joints are built in.** A body's base is a skirt that wraps down over the legs and a head ends in a stub that goes into the body,
   so the builder adds no bridge between HD parts; only the colours bleed across.
 - **Mutations fitted to the part.** Armour plates are shrinkwrapped onto each part's own surface and given thickness, with rivets cut in:
   bare metal on a car, dark plated chitin with a ridge on a mite, stone-grey bark slabs on a sapling, olive vest panels and pads on a
   settler. Crystal clusters are rooted 4 cm inside the surface (found by ray casting) and grow out along it. They come with the part and
   show only on a chimera with that mutation. The other mutations still use the kit's pieces for now.
-- **Budget:** a part is 1.9k to 4.4k triangles, a chimera about 7k to 10k (armour adds 0.3k to 2.7k a part, crystal 0.1k to 0.3k).
+- **Budget:** a part is 1.9k to 4.4k triangles, a chimera about 7k to 10k (armour adds 0.3k to 2.7k a part, crystal 0.1k to 0.3k, a
+  forked body about 10 % more).
 
 Still to come once the look is signed off: the other looks and kinds (pirate, void-touched, Vrill, junkbot), the other mutations
 fitted the same way, a far LOD, and wiring it into the game.

@@ -16,6 +16,8 @@
 #
 # THE CONTRACT is the kit's (build_chimera_kit.py): hd_legs_<kind> stands on y = 0 with socket `hip` (jrx / jrz); hd_body_<kind>'s origin
 # is the hip, sockets `neck` and `back`; hd_head_<kind>'s origin is the neck, sockets `top` and `eye`; pivots `leg`, `wheel` (r), `arm`.
+# A body comes in two forms (empties with role `form`, form 1 and 2): one neck, or forked for two heads, with sockets `neckL` and `neckR`
+# at the ends of the forks, turned out the way the heads lean. The builder shows the form it needs.
 # Slots: hides `person` (a settler's clothes: the builder picks the colour), `mite`, `car`, `sapling`; fixed: dark, steel, metal,
 # chrome, tire, boot, sole, glove, helmet, belt, gold, bark, moss, leaf, petal, stonebark, vest; lit: glass, eye, lamp, red, crystal.
 import math, os, random
@@ -148,7 +150,7 @@ def fused(name, geo, slot, parent, ink, budget, cuts=(), smooth=5, vox=VOX, reme
         k.data.materials.clear()
         k.data.materials.append(material("inkonly"))
         k["slot"] = "inkonly"
-        decimate(k, budget * 0.5)
+        decimate(k, budget)
         k.data.validate()
         o["ink"] = 0
     for g in cuts:
@@ -175,8 +177,26 @@ def plain(name, geo, slot, parent, ink, smooth=True):
     return mesh(name, geo, slot, parent, ink, sharp=None if smooth else math.radians(38))
 
 
-def socket(root, name, pos, **props):
-    return pivot(f"{root.name}_{name}", pos, root, role="socket", socket=name, **props)
+def socket(root, name, pos, lean=0.0, tilt=0.0, **props):
+    """a socket; lean turns it about z (three.js axes: + leans its top toward -x), tilt about x"""
+    e = pivot(f"{root.name}_{name}", pos, root, role="socket", socket=name, **props)
+    e.rotation_euler = (tilt, -lean, 0)              # (three.js z is Blender's -y)
+    return e
+
+
+def forms(root, name, common, one, two, slot, ink, budget, cuts=()):
+    """a body's main surface in its two forms: with one neck (form 1), and forked for two heads (form 2); returns form 1's (the one the
+    mutations are fitted to)"""
+    f1 = pivot(f"{root.name}_form1", (0, 0, 0), root, role="form", form=1)
+    f2 = pivot(f"{root.name}_form2", (0, 0, 0), root, role="form", form=2)
+    a = fused(name, join(common + one), slot, f1, ink, budget, cuts)
+    fused(name + "_twin", join(common + two), slot, f2, ink, int(budget * 1.1), cuts)
+    return a
+
+
+def owner(target):
+    """the pivot a target's mutations hang under (the part's root for a body's form)"""
+    return target.parent.parent if target.parent.get("role") == "form" else target.parent
 
 
 def point(parent, name, pos, normal, tag, size=1.0):
@@ -221,7 +241,7 @@ def mut_group(parent, mut):
 
 def armor_plates(target, spots, family, rng):
     """plates shrinkwrapped onto the target's surface at each spot (p, n, w, h), with thickness and rivet holes cut in"""
-    g = mut_group(target.parent, "armor")
+    g = mut_group(owner(target), "armor")
     for k, (p, n, w, h) in enumerate(spots):
         H = hit(target, p, n)
         if not H:
@@ -249,7 +269,7 @@ def armor_plates(target, spots, family, rng):
                     i = b * (nu + 1) + a
                     faces.append((i, i + 1, i + nu + 2, i + nu + 1))
             o = mesh(f"{g.name}_plate{k}_{j}", (verts, faces), slot, g, 0.012, sharp=0)
-            o.parent = target.parent
+            o.parent = owner(target)
             sw = o.modifiers.new("sw", "SHRINKWRAP")
             th = 0.016 if family != "sapling" else 0.024
             sw.target, sw.wrap_method, sw.offset = target, "NEAREST_SURFACEPOINT", th / 2 - 0.004   # (the inner face sunk 4 mm into the hide)
@@ -272,7 +292,7 @@ def armor_plates(target, spots, family, rng):
 
 def crystal_cluster(target, spots, rng):
     """crystal clusters rooted 4 cm inside the target's surface, growing out along it"""
-    g = mut_group(target.parent, "crystal")
+    g = mut_group(owner(target), "crystal")
     shards = []
     for (p, n, s) in spots:
         H = hit(target, p, n)
@@ -296,7 +316,7 @@ def crystal_cluster(target, spots, rng):
 # =====================================================================================================
 def legs_person(root, rng):
     J = 0.6
-    pel = fused(root.name + "_pelvis", xf(lathe([(0, -0.07), (0.12, -0.065), (0.155, -0.02), (0.165, 0.04), (0.155, 0.09), (0.1, 0.11), (0, 0.115)], 20), (0, J - 0.02, 0), s=(1, 1, 0.78)), "person", root, 0.025, 400)
+    pel = fused(root.name + "_pelvis", xf(lathe([(0, -0.07), (0.12, -0.065), (0.155, -0.02), (0.165, 0.04), (0.155, 0.09), (0.1, 0.11), (0, 0.115)], 20), (0, J - 0.02, 0), s=(1, 1, 0.78)), "person", root, 0.02, 400)
     legs = []
     for sx in (-1, 1):
         p = pivot(f"{root.name}_leg{'L' if sx < 0 else 'R'}", (sx * 0.085, J, 0), root, role="leg")
@@ -317,23 +337,24 @@ def legs_person(root, rng):
 
 def body_person(root, rng):
     prof = [(0, -0.07), (0.15, -0.07), (0.168, -0.04), (0.172, 0.02), (0.165, 0.12), (0.17, 0.24), (0.185, 0.36), (0.2, 0.45), (0.2, 0.51), (0.18, 0.56), (0.12, 0.6), (0.07, 0.62), (0, 0.625)]
-    torso = fused(root.name + "_torso", join([xf(lathe(prof, 24), s=(1, 1, 0.74)), xf(torus(0.075, 0.03, 20, 8), (0, 0.6, 0.005)),
-                                                 soft(0.09, 0.08, 0.04, (0.07, 0.42, 0.135), e=0.35), soft(0.09, 0.08, 0.04, (-0.07, 0.42, 0.135), e=0.35)]),
-                  "person", root, 0.025, 1600,
-                  cuts=[box(0.005, 0.5, 0.02, (0, 0.33, 0.14)),                                    # the zip
-                        box(0.085, 0.006, 0.03, (0.07, 0.448, 0.15)), box(0.085, 0.006, 0.03, (-0.07, 0.448, 0.15))])   # the pocket flaps
-    fused(root.name + "_belt", xf(torus(0.168, 0.022, 32, 8), (0, 0.11, 0), s=(1, 1, 0.76)), "belt", root, 0.012, 300)
-    buckle = fused(root.name + "_buckle", soft(0.06, 0.045, 0.02, (0, 0.11, 0.135), e=0.3), "gold", root, 0.006, 100, cuts=[box(0.035, 0.022, 0.03, (0, 0.11, 0.14))])
+    flaps = [soft(0.085, 0.024, 0.016, (sx * 0.068, 0.44, 0.138), (0.15, sx * 0.35, 0), e=0.3) for sx in (-1, 1)]     # (pocket flaps, lying flat on the chest)
+    forks = [chain([(sx * 0.07, 0.55, 0), (sx * 0.13, 0.615, 0), (sx * 0.15, 0.645, 0)], [0.075, 0.068, 0.062]) for sx in (-1, 1)]
+    torso = forms(root, root.name + "_torso", [xf(lathe(prof, 24), s=(1, 1, 0.74))] + flaps, [xf(torus(0.075, 0.03, 20, 8), (0, 0.6, 0.005))], forks,
+                  "person", 0.02, 1600, cuts=[box(0.005, 0.5, 0.02, (0, 0.33, 0.14))])           # (the zip)
+    fused(root.name + "_belt", xf(torus(0.168, 0.022, 32, 8), (0, 0.11, 0), s=(1, 1, 0.76)), "belt", root, 0.0, 300)
+    buckle = fused(root.name + "_buckle", soft(0.06, 0.045, 0.02, (0, 0.11, 0.135), e=0.3), "gold", root, 0.0, 100, cuts=[box(0.035, 0.022, 0.03, (0, 0.11, 0.14))])
     arms = []
     for sx in (-1, 1):
         p = pivot(f"{root.name}_arm{'L' if sx < 0 else 'R'}", (sx * 0.2, 0.5, 0), root, role="arm")
         path = [(0, 0, 0), (sx * 0.02, -0.15, -0.005), (sx * 0.03, -0.29, 0.035)]
-        sleeve = fused(p.name + "_sleeve", join([ell(0.062, 0.062, 0.058, (0, -0.01, 0)), chain(path, [0.052, 0.045, 0.04]), xf(torus(0.04, 0.012, 16, 6), path[-1], (0.25, 0, 0))]), "person", p, 0.02, 500)
+        sleeve = fused(p.name + "_sleeve", join([ell(0.062, 0.062, 0.058, (0, -0.01, 0)), chain(path, [0.052, 0.045, 0.04]), xf(torus(0.04, 0.012, 16, 6), path[-1], (0.25, 0, 0))]), "person", p, 0.016, 500)
         w = Vector(path[-1]) + Vector((0, -0.05, 0.012))
         hand = fused(p.name + "_glove", join([ell(0.038, 0.048, 0.026, tuple(w)), capsule(tuple(w + Vector((sx * 0.03, 0.01, 0.015))), tuple(w + Vector((sx * 0.045, -0.02, 0.03))), 0.012),
-                                               ell(0.034, 0.03, 0.022, tuple(w + Vector((0, -0.045, 0.006))))]), "glove", p, 0.012, 250)
+                                               ell(0.034, 0.03, 0.022, tuple(w + Vector((0, -0.045, 0.006))))]), "glove", p, 0.008, 250)
         arms.append((p, sleeve))
     socket(root, "neck", (0, 0.62, 0), jrx=0.07, jrz=0.07)
+    for sx in (-1, 1):
+        socket(root, f"neck{'L' if sx < 0 else 'R'}", (sx * 0.15, 0.64, 0), lean=-sx * 0.3, jrx=0.06, jrz=0.06)
     socket(root, "back", (0, 0.36, -0.15))
     point(root, "chest", (0, 0.42, 0.15), (0, 0, 1), "front", 0.8)
     point(root, "back", (0, 0.36, -0.15), (0, 0.1, -1), "back", 0.8)
@@ -348,8 +369,8 @@ def body_person(root, rng):
 def head_person(root, rng):
     r = 0.16
     cy = 0.2
-    fused(root.name + "_neck", join([cyl(0.058, 0.064, 0.1, (0, -0.02, 0)), xf(torus(0.07, 0.024, 20, 8), (0, 0.035, 0))]), "dark", root, 0.015, 250)
-    helmet = fused(root.name + "_helmet", ell(r, r, r, (0, cy, 0), n=24), "helmet", root, 0.025, 1200,
+    fused(root.name + "_neck", join([cyl(0.058, 0.064, 0.1, (0, -0.02, 0)), xf(torus(0.07, 0.024, 20, 8), (0, 0.035, 0))]), "dark", root, 0.01, 250)
+    helmet = fused(root.name + "_helmet", ell(r, r, r, (0, cy, 0), n=24), "helmet", root, 0.02, 1200,
                    cuts=[ell(0.135, 0.075, 0.07, (0, cy + 0.005, 0.158), n=20),                     # the visor opening: wide and shallow
                          xf(cylinder(0.026, 0.026, 0.06, 14)[:2], (r * 0.96, cy + 0.03, 0.0), (0, 0, math.pi / 2)),   # the lamp's socket
                          box(0.01, 0.006, 0.2, (0, cy + r * 0.99, -0.02))])                         # a ridge seam over the top
@@ -366,7 +387,7 @@ def head_person(root, rng):
 # =====================================================================================================
 def legs_mite(root, rng):
     hip = 0.56
-    thorax = fused(root.name + "_thorax", join([ell(0.16, 0.115, 0.22, (0, hip - 0.07, 0))] + [ell(0.05, 0.045, 0.05, (sx * 0.12, hip - 0.1, z)) for sx in (-1, 1) for z in (-0.12, 0.0, 0.12)]), "dark", root, 0.025, 900)
+    thorax = fused(root.name + "_thorax", join([ell(0.16, 0.115, 0.22, (0, hip - 0.07, 0))] + [ell(0.05, 0.045, 0.05, (sx * 0.12, hip - 0.1, z)) for sx in (-1, 1) for z in (-0.12, 0.0, 0.12)]), "dark", root, 0.02, 900)
     legs = []
     for sx in (-1, 1):
         for k in (-1, 0, 1):
@@ -383,11 +404,14 @@ def legs_mite(root, rng):
 
 def body_mite(root, rng):
     rings = [xf(torus(1, 0.06, 28, 8), (0, 0.2, -0.26 + dz), (math.pi / 2, 0, 0), (0.255 * f + 0.004, 1, 0.22 * f + 0.004)) for dz, f in ((-0.2, 0.86), (0.0, 1.0), (0.2, 0.86))]
-    body = fused(root.name + "_body", join([ell(0.255, 0.22, 0.4, (0, 0.2, -0.26)), ell(0.17, 0.15, 0.2, (0, 0.17, 0.12)), ell(0.11, 0.08, 0.12, (0, -0.0, 0.0))]), "mite", root, 0.025, 2400,
-                 cuts=rings)                                                                        # (the segments: grooves cut round the abdomen)
+    forks = [chain([(sx * 0.04, 0.18, 0.12), (sx * 0.11, 0.24, 0.24), (sx * 0.15, 0.27, 0.28)], [0.09, 0.07, 0.06]) for sx in (-1, 1)]
+    body = forms(root, root.name + "_body", [ell(0.255, 0.22, 0.4, (0, 0.2, -0.26)), ell(0.17, 0.15, 0.2, (0, 0.17, 0.12)), ell(0.11, 0.08, 0.12, (0, -0.0, 0.0))], [], forks,
+                 "mite", 0.02, 2400, cuts=rings)                                                    # (the segments: grooves cut round the abdomen)
     for sx in (-1, 1):                                                                              # wing cases, raised in a V, clear of the abdomen
         plain(f"{root.name}_wing{sx}", ell_between((sx * 0.06, 0.3, 0.14), (sx * 0.3, 0.62, -0.48), 0.1, 0.012, roll=sx * 0.35, n=14), "glass", root, 0.008)
     socket(root, "neck", (0, 0.26, 0.3), jrx=0.07, jrz=0.07)
+    for sx in (-1, 1):
+        socket(root, f"neck{'L' if sx < 0 else 'R'}", (sx * 0.15, 0.27, 0.28), lean=-sx * 0.38, jrx=0.055, jrz=0.055)
     socket(root, "back", (0, 0.42, -0.26))
     point(root, "top", (0, 0.41, -0.3), (0, 1, -0.1), "top", 1.0)
     point(root, "tail", (0, 0.22, -0.65), (0, 0.1, -1), "back", 0.8)
@@ -419,61 +443,64 @@ def head_mite(root, rng):
 def legs_car(root, rng):
     r, tw, tx, tz = 0.16, 0.065, 0.34, 0.34
     yc = 0.26                                                       # (the hull: 0.14 to 0.38 high, wider than the track, so it covers the wheels)
-    top = yc + 0.15
+    top = yc + 0.17
     arches = [cyl(r + 0.028, r + 0.028, 0.26, (sx * tx, r, z), (0, 0, math.pi / 2), seg=32) for sx in (-1, 1) for z in (-tz, tz)]
-    hull = fused(root.name + "_hull", join([soft(0.8, 0.24, 1.04, (0, yc, 0), e=0.2), soft(0.56, 0.1, 0.72, (0, yc + 0.1, -0.02), e=0.3)]),
-                 "car", root, 0.025, 1300,
+    hull = fused(root.name + "_hull", join([soft(0.8, 0.3, 1.04, (0, yc + 0.03, 0), e=0.24)]),                     # (one hull: a smooth deck on top, no plinth)
+                 "car", root, 0.02, 1300,
                  cuts=arches + [ell(0.05, 0.034, 0.03, (sx * 0.25, yc + 0.03, 0.52), n=14) for sx in (-1, 1)]       # (the wheel arches, headlamp sockets)
                  + [box(0.1, 0.03, 0.02, (sx * 0.25, yc + 0.03, -0.52)) for sx in (-1, 1)]                         # (tail lamp recesses)
                  + [box(0.02, 0.006, 0.36, (sx * 0.4, yc + 0.06, 0.0)) for sx in (-1, 1)]                          # (a swage line down each side)
-                 + [box(0.44, 0.012, 0.006, (0, top, z)) for z in (-0.2, 0.18)])                                 # (seams across the deck)
+                 + [box(0.5, 0.014, 0.005, (0, top + 0.005, z)) for z in (-0.24, 0.24)])                         # (seams across the deck)
     plain(root.name + "_lamps", join([ell(0.044, 0.03, 0.02, (sx * 0.25, yc + 0.03, 0.505), n=14) for sx in (-1, 1)]), "lamp", root, 0.0)
-    plain(root.name + "_tails", join([box(0.09, 0.024, 0.01, (sx * 0.25, yc + 0.03, -0.508)) for sx in (-1, 1)]), "red", root, 0.0)
+    plain(root.name + "_tails", join([box(0.09, 0.024, 0.01, (sx * 0.25, yc + 0.03, -0.521)) for sx in (-1, 1)]), "red", root, 0.0)
     fused(root.name + "_bumpers", join([soft(0.84, 0.055, 0.07, (0, 0.17, 0.53 * s), e=0.3) for s in (-1, 1)]), "chrome", root, 0.012, 300)
     for sx in (-1, 1):
         for z in (-tz, tz):
             p = pivot(f"{root.name}_wheel{'L' if sx < 0 else 'R'}{'F' if z > 0 else 'B'}", (sx * tx, r, z), root, role="wheel", r=r)
             prof = [(r * 0.55, -tw), (r * 0.9, -tw), (r, -tw * 0.6), (r, tw * 0.6), (r * 0.9, tw), (r * 0.55, tw), (r * 0.55, -tw)]
             tread = [xf(box(tw * 0.95, 0.014, 0.024, ((k % 2 - 0.5) * tw * 0.9, r, 0)), r=(k * math.pi / 12, 0, 0)) for k in range(24)]   # (blocks, staggered)
-            fused(p.name + "_tire", xf(lathe(prof, 36), r=(0, 0, math.pi / 2)), "tire", p, 0.02, 420, cuts=tread, remesh=False)
-            fused(p.name + "_hub", xf(lathe([(0, -tw * 0.9), (r * 0.58, -tw * 0.9), (r * 0.6, tw * 0.6), (r * 0.5, tw), (0, tw * 1.05)], 24), r=(0, 0, math.pi / 2)), "metal", p, 0.01, 160,
+            fused(p.name + "_tire", xf(lathe(prof, 36), r=(0, 0, math.pi / 2)), "tire", p, 0.016, 420, cuts=tread, remesh=False)
+            fused(p.name + "_hub", xf(lathe([(0, -tw * 0.9), (r * 0.58, -tw * 0.9), (r * 0.6, tw * 0.6), (r * 0.5, tw), (0, tw * 1.05)], 24), r=(0, 0, math.pi / 2)), "metal", p, 0.0, 160,
                   cuts=[ell(0.012, 0.012, 0.012, (sx * tw * 1.0, math.cos(a) * r * 0.3, math.sin(a) * r * 0.3), n=8) for a in [k * 2 * math.pi / 5 for k in range(5)]], remesh=False)   # (bolt holes)
     point(root, "tail", (0, yc, -0.52), (0, 0.2, -1), "back", 0.8)
     point(root, "low", (0, 0.14, 0), (0, -1, 0), "low", 0.7)
     for sx in (-1, 1):
         point(root, f"side{sx}", (sx * 0.4, yc, 0), (sx, 0.15, 0), "side", 0.9)
     socket(root, "hip", (0, top, 0), jrx=0.2, jrz=0.24)
-    return [(hull, [((0.4, yc, 0.0), (1, 0.1, 0), 0.2, 0.1), ((-0.4, yc, 0.0), (-1, 0.1, 0), 0.2, 0.1), ((0.0, yc, 0.52), (0, 0.15, 1), 0.28, 0.08), ((0.3, top - 0.04, 0.34), (0.3, 1, 0.2), 0.16, 0.2), ((-0.3, top - 0.04, -0.34), (-0.3, 1, -0.2), 0.16, 0.2)],
+    return [(hull, [((0.4, yc, 0.0), (1, 0.1, 0), 0.2, 0.1), ((-0.4, yc, 0.0), (-1, 0.1, 0), 0.2, 0.1), ((0.0, yc, 0.52), (0, 0.15, 1), 0.28, 0.08), ((0.33, yc + 0.08, 0.34), (1, 0.6, 0.3), 0.14, 0.12), ((-0.33, yc + 0.08, -0.34), (-1, 0.6, -0.3), 0.14, 0.12)],
              [((0.3, top - 0.03, -0.32), (0.4, 1, 0), 0.9), ((-0.4, yc, 0.2), (-1, 0.3, 0.2), 0.8), ((0.0, yc, -0.52), (0, 0.4, -1), 0.7)])]
 
 
 def body_car(root, rng):
-    hull = fused(root.name + "_hull", join([soft(0.56, 0.2, 0.92, (0, 0.13, 0), e=0.22), soft(0.42, 0.17, 0.44, (0, 0.3, -0.06), e=0.28), ell(0.13, 0.08, 0.15, (0, -0.0, 0.0)),
-                                              extrude([(-0.46, 0.15), (-0.3, 0.2), (-0.44, 0.42)], 0.03, "x")]),
-                 "car", root, 0.025, 1800,
-                 cuts=[box(0.44, 0.08, 0.2, (0, 0.32, 0.12), (0.5, 0, 0)), box(0.44, 0.07, 0.3, (0, 0.32, -0.08)),   # (windscreen and side windows, inset)
-                       box(0.006, 0.12, 0.004, (0.0, 0.12, 0.46))])                                  # (a seam on the nose)
-    plain(root.name + "_glass", join([soft(0.4, 0.07, 0.18, (0, 0.315, 0.105), (0.5, 0, 0), e=0.3), soft(0.4, 0.06, 0.28, (0, 0.315, -0.08), e=0.3)]), "glass", root, 0.0)
+    pillars = [capsule((sx * 0.175, 0.2, z0), (sx * 0.165, 0.375, z1), 0.02) for sx in (-1, 1) for z0, z1 in ((0.2, 0.07), (-0.31, -0.24))]
+    fin = extrude([(-0.46, 0.15), (-0.3, 0.2), (-0.44, 0.42)], 0.03, "x")
+    common = [soft(0.56, 0.2, 0.92, (0, 0.13, 0), e=0.22), ell(0.13, 0.08, 0.15, (0, -0.0, 0.0)), fin, soft(0.38, 0.04, 0.36, (0, 0.38, -0.085), e=0.3)] + pillars
+    pods = [soft(0.17, 0.08, 0.17, (sx * 0.16, 0.23, 0.35), e=0.3) for sx in (-1, 1)]
+    hull = forms(root, root.name + "_hull", common, [], pods, "car", 0.02, 1800,
+                 cuts=[box(0.006, 0.12, 0.004, (0.0, 0.12, 0.46))])                                # (a seam on the nose)
+    plain(root.name + "_glass", xf(extrude([(-0.3, 0.215), (0.21, 0.215), (0.08, 0.37), (-0.24, 0.37)], 0.33, "x"), (0, 0, 0)), "glass", root, 0.0, smooth=False)   # (the cabin, raked)
     for sx in (-1, 1):
-        fused(f"{root.name}_pipe{sx}", join([cyl(0.036, 0.04, 0.14, (sx * 0.13, 0.09, -0.48), (math.pi / 2, 0, 0))]), "chrome", root, 0.01, 150, cuts=[cyl(0.024, 0.024, 0.05, (sx * 0.13, 0.09, -0.55), (math.pi / 2, 0, 0))])
+        fused(f"{root.name}_pipe{sx}", join([cyl(0.036, 0.04, 0.14, (sx * 0.13, 0.09, -0.48), (math.pi / 2, 0, 0))]), "chrome", root, 0.008, 150, cuts=[cyl(0.024, 0.024, 0.05, (sx * 0.13, 0.09, -0.55), (math.pi / 2, 0, 0))])
         plain(f"{root.name}_glow{sx}", ell(0.024, 0.024, 0.006, (sx * 0.13, 0.09, -0.52), n=12), "red", root, 0.0)
     socket(root, "neck", (0, 0.24, 0.37), jrx=0.08, jrz=0.08)
+    for sx in (-1, 1):
+        socket(root, f"neck{'L' if sx < 0 else 'R'}", (sx * 0.16, 0.25, 0.36), lean=-sx * 0.1, jrx=0.06, jrz=0.06)
     socket(root, "back", (0, 0.3, -0.3))
-    point(root, "roof", (0, 0.39, -0.06), (0, 1, 0), "top", 0.9)
+    point(root, "roof", (0, 0.4, -0.08), (0, 1, 0), "top", 0.9)
     point(root, "rear", (0, 0.15, -0.46), (0, 0.1, -1), "back", 0.8)
     for sx in (-1, 1):
         point(root, f"door{sx}", (sx * 0.28, 0.14, 0.12), (sx, 0.1, 0), "side", 1.0)
         point(root, f"sill{sx}", (sx * 0.26, 0.05, -0.05), (sx, -0.5, 0), "low", 0.7)
     return [(hull, [((0.28, 0.14, 0.15), (1, 0.05, 0), 0.24, 0.13), ((-0.28, 0.14, 0.15), (-1, 0.05, 0), 0.24, 0.13), ((0.28, 0.14, -0.22), (1, 0.05, 0), 0.2, 0.13), ((-0.28, 0.14, -0.22), (-1, 0.05, 0), 0.2, 0.13)],
-             [((0.0, 0.39, -0.12), (0.2, 1, -0.2), 1.0), ((0.25, 0.2, -0.32), (0.8, 0.5, -0.3), 0.7), ((-0.22, 0.12, 0.3), (-1, 0.3, 0.3), 0.7)])]
+             [((0.0, 0.4, -0.12), (0.2, 1, -0.2), 1.0), ((0.25, 0.2, -0.32), (0.8, 0.5, -0.3), 0.7), ((-0.22, 0.12, 0.3), (-1, 0.3, 0.3), 0.7)])]
 
 
 def head_car(root, rng):
-    face = fused(root.name + "_face", join([soft(0.31, 0.22, 0.22, (0, 0.13, 0.03), e=0.28), soft(0.33, 0.04, 0.2, (0, 0.215, 0.03), e=0.35), cyl(0.06, 0.07, 0.1, (0, -0.02, 0))]), "car", root, 0.022, 1100,
+    face = fused(root.name + "_face", join([soft(0.31, 0.22, 0.22, (0, 0.13, 0.03), e=0.28), soft(0.33, 0.04, 0.2, (0, 0.215, 0.03), e=0.35), cyl(0.06, 0.07, 0.1, (0, -0.02, 0))]), "car", root, 0.018, 1100,
                  cuts=[ell(0.05, 0.05, 0.04, (sx * 0.085, 0.15, 0.135), n=16) for sx in (-1, 1)] + [soft(0.17, 0.06, 0.05, (0, 0.07, 0.14), e=0.25)])   # (lamp sockets, the grille recess)
     plain(root.name + "_lamps", join([ell(0.044, 0.044, 0.03, (sx * 0.085, 0.15, 0.115), n=16) for sx in (-1, 1)]), "lamp", root, 0.0)
     fused(root.name + "_slats", join([box(0.16, 0.008, 0.02, (0, 0.05 + 0.015 * k, 0.12)) for k in range(4)]), "chrome", root, 0.0, 300, smooth=0, vox=0.004)
-    fused(root.name + "_bumper", soft(0.34, 0.045, 0.07, (0, 0.025, 0.12), e=0.3), "chrome", root, 0.01, 200)
+    fused(root.name + "_bumper", soft(0.34, 0.045, 0.07, (0, 0.025, 0.12), e=0.3), "chrome", root, 0.008, 200)
     fused(root.name + "_siren", join([cyl(0.035, 0.045, 0.02, (0, 0.24, 0.0)), ell(0.035, 0.035, 0.035, (0, 0.26, 0.0))]), "red", root, 0.008, 120)
     socket(root, "top", (0.06, 0.24, -0.05))
     socket(root, "eye", (0.085, 0.15, 0.16))
@@ -486,7 +513,7 @@ def head_car(root, rng):
 def legs_sapling(root, rng):
     hip = 0.54
     bulb = fused(root.name + "_bulb", join([ell(0.17, 0.15, 0.17, (0, hip - 0.1, 0))] + [ell(rng.uniform(0.07, 0.11), rng.uniform(0.06, 0.09), rng.uniform(0.07, 0.11), (rng.uniform(-0.08, 0.08), hip - 0.12 + rng.uniform(-0.04, 0.03), rng.uniform(-0.08, 0.08))) for _ in range(4)]),
-                 "sapling", root, 0.025, 800)
+                 "sapling", root, 0.02, 800)
     moss = [ell(rng.uniform(0.045, 0.07), 0.028, rng.uniform(0.045, 0.07), (math.cos(a) * 0.12, hip - 0.025 + rng.uniform(-0.02, 0.02), math.sin(a) * 0.12)) for a in [rng.uniform(0, 6.28) for _ in range(5)]]
     fused(root.name + "_moss", join(moss), "moss", root, 0.008, 300)
     sprouts = []
@@ -525,9 +552,11 @@ def body_sapling(root, rng):
     for f in (0.2, 0.38, 0.55, 0.72, 0.88, 1.0):
         prof.append(((0.14 - 0.06 * f) * rng.uniform(0.9, 1.1), h * f))
     prof.append((0, h + 0.02))
-    trunk = lathe(prof, 22)
-    trunk = ([(v[0] + lean * v[1], v[1], v[2]) for v in trunk[0]], trunk[1])
-    geo, tips = [trunk], []
+    bend = lambda g: ([(v[0] + lean * v[1], v[1], v[2]) for v in g[0]], g[1])
+    trunk = bend(lathe(prof, 22))
+    short = bend(lathe([q for q in prof if q[1] < h * 0.8] + [(0, h * 0.84)], 22))      # (form 2: the trunk stops where it forks)
+    forks = [chain([(lean * h * 0.6, h * 0.62, 0), (sx * 0.08 + lean * h, h * 0.86, 0.0), (sx * 0.15 + lean * h, h + 0.03, 0.0)], [0.075, 0.06, 0.048]) for sx in (-1, 1)]
+    geo, tips = [], []
     for k, sx in enumerate((-1, 1, rng.choice((-1, 1)))):
         hy = h * (0.55 + 0.15 * k + rng.uniform(-0.05, 0.05))
         tip = (sx * rng.uniform(0.24, 0.32) + lean * hy, hy + rng.uniform(0.12, 0.2), rng.uniform(-0.08, 0.08))
@@ -537,11 +566,13 @@ def body_sapling(root, rng):
     for y in (h * 0.3, h * 0.62):
         geo.append(ell(0.035, 0.04, 0.03, (rng.uniform(-0.05, 0.05) + lean * y, y, 0.1), n=12))
     hollow = ell(0.035, 0.05, 0.04, (lean * h * 0.45, h * 0.45, 0.12), n=14)
-    tree = fused(root.name + "_trunk", join(geo), "sapling", root, 0.025, 1800, cuts=[hollow] + [box(0.004, rng.uniform(0.08, 0.14), 0.03, (math.sin(a) * 0.13 + lean * 0.3, h * rng.uniform(0.15, 0.7), math.cos(a) * 0.13), (0, a, 0)) for a in [rng.uniform(0, 6.28) for _ in range(6)]])   # (the hollow, bark furrows)
+    tree = forms(root, root.name + "_trunk", geo, [trunk], [short] + forks, "sapling", 0.02, 1800, cuts=[hollow] + [box(0.004, rng.uniform(0.08, 0.14), 0.03, (math.sin(a) * 0.13 + lean * 0.3, h * rng.uniform(0.15, 0.7), math.cos(a) * 0.13), (0, a, 0)) for a in [rng.uniform(0, 6.28) for _ in range(6)]])   # (the hollow, bark furrows)
     plain(root.name + "_hollow", ell(0.028, 0.042, 0.01, (lean * h * 0.45, h * 0.45, 0.095), n=12), "dark", root, 0.0)
     for k, tip in enumerate(tips):
         fused(f"{root.name}_leaves{k}", join([ell(rng.uniform(0.05, 0.08), rng.uniform(0.04, 0.06), rng.uniform(0.05, 0.08), (tip[0] + rng.uniform(-0.08, 0.08), tip[1] + rng.uniform(-0.02, 0.08), tip[2] + rng.uniform(-0.07, 0.07)), n=12) for _ in range(7)]), "leaf", root, 0.012, 400)
     socket(root, "neck", (lean * h, h + 0.02, 0), jrx=0.05, jrz=0.05)
+    for sx in (-1, 1):
+        socket(root, f"neck{'L' if sx < 0 else 'R'}", (sx * 0.15 + lean * h, h + 0.02, 0), lean=-sx * 0.45, jrx=0.045, jrz=0.045)
     socket(root, "back", (0, h * 0.5, -0.13))
     point(root, "chest", (lean * h * 0.62, h * 0.62, 0.1), (0, 0.1, 1), "front", 0.8)
     for sx in (-1, 1):
@@ -553,11 +584,11 @@ def body_sapling(root, rng):
 def head_sapling(root, rng):
     s = 0.85
     fused(root.name + "_stem", join([chain([(0, -0.06, 0), (0, 0.08, 0.01), (0, 0.15, 0.03)], [0.035, 0.03, 0.026])] + [ell(0.085, 0.022, 0.042, (sx * 0.07, 0.06, 0.01), (0, 0, sx * 0.4), n=14) for sx in (-1, 1)]), "leaf", root, 0.012, 350)
-    disc = fused(root.name + "_disc", ell(0.13, 0.13, 0.05, (0, 0.24, 0.045), n=20), "gold", root, 0.02, 800,
+    disc = fused(root.name + "_disc", ell(0.13, 0.13, 0.05, (0, 0.24, 0.045), n=20), "gold", root, 0.008, 800,
                  cuts=[ell(0.009, 0.009, 0.01, (math.cos(a) * rr, 0.24 + math.sin(a) * rr, 0.094), n=8) for rr, n_ in ((0.095, 12), (0.07, 9)) for a in [2 * math.pi * k / n_ for k in range(n_)] if not (abs(math.cos(a) * rr) < 0.06 and 0.0 < math.sin(a) * rr < 0.06)]
                  + [ell(0.019, 0.027, 0.012, (sx * 0.043, 0.26, 0.094), n=12) for sx in (-1, 1)])        # (seed pits round the rim, the eyes)
     plain(root.name + "_eyes", join([ell(0.016, 0.023, 0.008, (sx * 0.043, 0.26, 0.086), n=12) for sx in (-1, 1)]), "dark", root, 0.0)
-    fused(root.name + "_petals", join([ell(0.085, 0.042, 0.02, (math.cos(a) * 0.165, 0.24 + math.sin(a) * 0.165, 0.025), (0, 0, a), n=14) for a in [2 * math.pi * k / 9 for k in range(9)]]), "petal", root, 0.012, 700)
+    fused(root.name + "_petals", join([ell(0.085, 0.042, 0.02, (math.cos(a) * 0.165, 0.24 + math.sin(a) * 0.165, 0.025), (0, 0, a), n=14) for a in [2 * math.pi * k / 9 for k in range(9)]]), "petal", root, 0.01, 700)
     socket(root, "top", (0, 0.4, 0.03))
     socket(root, "eye", (0.043, 0.26, 0.11))
     return [(disc, [((0.0, 0.24, -0.01), (0, 0.1, -1), 0.1, 0.1)], [((0.06, 0.32, -0.02), (0.4, 1, -0.5), 0.5)])]
@@ -593,8 +624,9 @@ if not globals().get("CHIMERA_HD_LIB"):
             under = [o for o in C.objects if o.type == "MESH" and o.get("slot") != "inkonly" and root in parents(o)]
             muts = {}
             for o in under:
-                m = next((q["mut"] for q in parents(o) if q.get("role") == "mut"), None)
+                m = next((q["mut"] if q.get("role") == "mut" else f"form {q['form']}" for q in parents(o) if q.get("role") in ("mut", "form")), None)
                 muts[m] = muts.get(m, 0) + tris(o)
             print(f"{root.name}: {muts.pop(None, 0)} triangles, " + ", ".join(f"{k} +{v}" for k, v in muts.items()))
-    audit_coplanar([o for o in C.objects if o.get("slot") != "inkonly"])
+    for hide in (2, 1):                                                       # (a body's two forms are never shown together)
+        audit_coplanar([o for o in C.objects if o.get("slot") != "inkonly" and not any(q.get("form") == hide for q in parents(o))])
     export(os.path.join(REPO, "src", "assets", "chimera_hd.glb"), list(C.objects))

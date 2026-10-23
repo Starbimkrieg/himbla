@@ -1627,7 +1627,7 @@ export const caseModel = () => dressLoot(CASE_MODEL, CASE_TOON);
 export const plinkoConsoleModel = () => dressLoot(PLINKO_CONSOLE, PLINKO_TOON);
 export const plinkoFrameModel = () => dressLoot(PLINKO_FRAME, PLINKO_TOON);
 
-function bakeShip(root) {
+function bakeShip(root, { near = false } = {}) {
   root.updateMatrixWorld(true);
   const rel = new THREE.Matrix4();
   // a pivot: the root itself or any empty with a role
@@ -1660,7 +1660,8 @@ function bakeShip(root) {
     return {
       name: pivot.name, role: pivot === root ? 'root' : pivot.userData.role, data: pivot.userData, pos, quat,
       parts: [...slots].map(([slot, geos]) => ({ slot, geo: mergeGeometries(geos) })),
-      ink: inks.length ? shellAt(mergeGeometries(inks), 1) : null, kids,
+      // near: the outline as a shellOff geometry for inkMatNear (no thicker on screen up close than at the follow camera's distance)
+      ink: inks.length ? (near ? shellOff(mergeGeometries(inks), 1) : shellAt(mergeGeometries(inks), 1)) : null, inkNear: near, kids,
     };
   };
   return bake(root, new THREE.Matrix4().copy(root.matrixWorld).invert());
@@ -2660,7 +2661,7 @@ export async function loadChimeraKit() {
   if (!CHIMERA_KIT) {
     CHIMERA_KIT = Promise.all([loadGlb('chimera'), loadGlb('chimera_hd')]).then((files) => {
       const kit = {};
-      for (const gltf of files) for (const o of gltf.scene.children) if (/^(ck|hd)_/.test(o.name)) kit[o.name] = bakeShip(o);
+      for (const gltf of files) for (const o of gltf.scene.children) if (/^(ck|hd)_/.test(o.name)) kit[o.name] = bakeShip(o, { near: o.name.startsWith('hd_') });
       return kit;
     });
   }

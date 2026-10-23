@@ -155,7 +155,7 @@ function builderItem() {
 }
 
 // ---- the builder's HD showcase (build_chimera_hd.py -> chimera_hd.glb): person, mite, car and sapling parts at full resolution, with their
-// fitted armour and crystal. Up for sign-off; the rest of the kinds follow once it is.
+// fitted armour and crystal, and two-headed ones on forked bodies. Up for sign-off; the rest of the kinds follow once it is.
 function builderHdItem() {
   const mixes = [
     { body: 'sapling', legs: 'car', head: 'person', mods: [] },
@@ -166,6 +166,8 @@ function builderHdItem() {
     { body: 'person', legs: 'person', head: 'person', mods: ['armor'] },
     { body: 'sapling', legs: 'mite', head: 'car', mods: ['crystal'] },
     { body: 'car', legs: 'person', head: 'mite', mods: ['crystal'] },
+    { body: 'sapling', legs: 'car', head: 'sapling', extraHead: 'person', mods: [] },
+    { body: 'mite', legs: 'mite', head: 'sapling', extraHead: 'person', mods: [] },
   ];
   return {
     id: 'creatures.builderhd', label: 'CHIMERA BUILDER, HD SHOWCASE: FITTED ARMOUR AND CRYSTAL (NOT IN THE GAME YET)', w: span(mixes.length, 3.2), d: 4,
@@ -175,7 +177,7 @@ function builderHdItem() {
       chimeraBuilder().then((build) => {
         if (gone) return;
         mixes.forEach((g, i) => {
-          const c = build({ ...g, seed: 7, size: 1.1, parents: [...new Set([g.body, g.legs, g.head])] }, { hd: true });
+          const c = build({ ...g, seed: 7, size: 1.1, parents: [...new Set([g.body, g.legs, g.head, g.extraHead].filter(Boolean))] }, { hd: true });
           c.root.position.x = (i - (mixes.length - 1) / 2) * 3.2;
           root.add(c.root);
           anims.push(c.anim);

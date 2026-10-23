@@ -104,17 +104,17 @@ function show() {
   clear();
   const one = (mods) => ({ seed: S.seed, body: S.body, legs: S.legs, head: S.head, extraHead: S.extra || null, mods, size: S.size, crown: S.crown, parents: [...new Set([S.body, S.legs, S.head, S.extra].filter(Boolean))] });
   if (S.showcase) {
-    // the HD set: each kind's legs, body and head once, plain, armoured, crystalled
+    // the HD set: each kind's legs, body and head once, plain, armoured, crystalled, and two-headed (the body forked)
     const kinds = ['person', 'mite', 'car', 'sapling'];
     kinds.forEach((k, i) => {
-      for (const [j, mods] of [[], ['armor'], ['crystal']].entries()) {
-        const g = { ...one(mods), legs: k, body: kinds[(i + 1) % 4], head: kinds[(i + 2) % 4], extraHead: null };
-        g.parents = [...new Set([g.legs, g.body, g.head])];
-        add(g, (i - 1.5) * 2.5, (j - 1) * 2.8, j === 2 ? `${g.legs} legs · ${g.body} body · ${g.head} head` : null);
+      for (const [j, mods] of [[], ['armor'], ['crystal'], null].entries()) {
+        const g = { ...one(mods || []), legs: k, body: kinds[(i + 1) % 4], head: kinds[(i + 2) % 4], extraHead: mods ? null : kinds[(i + 3) % 4] };
+        g.parents = [...new Set([g.legs, g.body, g.head, g.extraHead].filter(Boolean))];
+        add(g, (i - 1.5) * 2.5, (j - 1.5) * 2.8, j === 3 ? `${g.legs} legs · ${g.body} body · ${g.head} head` : null);
       }
     });
-    target.set(0, 0.4, 0.4); dist = 10.5;
-    document.getElementById('info').textContent = `the HD showcase, back to front: plain, armour, crystal (seed ${S.seed})`;
+    target.set(0, 0.4, 0.4); dist = 13;
+    document.getElementById('info').textContent = `the HD showcase, back to front: plain, armour, crystal, two heads (seed ${S.seed})`;
   } else if (S.grid) {
     const rr = mulberry32(S.seed);
     for (let i = 0; i < 12; i++) {
@@ -137,6 +137,8 @@ function show() {
 show();
 
 // ---- the camera: drag to orbit, wheel to zoom ----
+if (Q.has('dist')) dist = num('dist', dist);                       // (a close-up: &dist=m &ty=m, the height looked at)
+if (Q.has('ty')) target.y = num('ty', target.y);
 let yaw = THREE.MathUtils.degToRad(num('yaw', 25)), pitch = THREE.MathUtils.degToRad(num('pitch', 14)), drag = null;
 renderer.domElement.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; });
 addEventListener('pointerup', () => { drag = null; });
