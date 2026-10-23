@@ -18,3 +18,8 @@ stall posts with Mint pads, and a Black lattice beam with gold diagonals across 
 with a Barn Red diagonal band. 19.1 m across. 988 triangles plus 72 per door.
 
 To switch back, set `GATE = 'a'` in `src/race.js`.
+
+**During a race** (`towGate` in `src/race.js`): once the whole field is 30 m clear of the stalls, the doors close, the gate swings round to
+lie along the track and is towed to the outer edge, where it stands just inside the outer rail (5 s in all; a lap takes about 20, so it is
+clear before anyone comes round again). The race model keeps runners inside that strip (`X_MAX` in `src/chimerastats.js`: 15 m out from the
+inner rail, about the fifth lane).

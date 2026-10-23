@@ -57,6 +57,8 @@ Six runners break from the gate in their stalls (3 m apart) and head for the inn
   faster one that is cruising, tired or holding back), and it gets across and by within 4.5 s (POWER). A WIT check when the pass starts
   (35% + 0.55 x wit) decides whether it costs 1.4x stamina or 2.2x (and maybe a Spot Struggle). A front runner being passed pushes back.
 - **Bends:** the inside line is shorter: progress x (55 / radius)^0.35.
+- **The outer strip:** runners go no wider than 15 m out from the inner rail (the outer stalls start wider and come in); the starting gate
+  is towed onto the outer 4 m once the field has gone.
 
 **WIT's three bad moments:** Late Start (one roll at the gate, 30% - 0.28% per wit point: a 0.3 to 1 s late break); Spot Struggle (a
 position check every 1.5 s while another runner is close: 12% x (1 - wit/100) to hesitate for 1.2 s at 0.9 pace, drifting wide); Rushed

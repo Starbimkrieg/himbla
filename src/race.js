@@ -61,6 +61,7 @@ const CAT_NAME = { SPRINT: 'sprint', MILE: 'mile', MEDIUM: 'medium', LONG: 'long
 // where each stall's doors hang (their hinges, either side of the stall's centre) and its number plate.
 const GATES = { a: { hinge: 1.45, doorZ: 0.1, plateY: 4.05, plateZ: 0.16 }, b: { hinge: 1.45, doorZ: 0.1, plateY: 4.46, plateZ: 0.24 } };
 export const GATE = 'b';
+const GATE_PARK = RAIL_OUT - 2.7;          // where the gate is towed to once the field has gone: lying along the track, its back (2.3 m deep, toward the outside) 0.4 m inside the outer rail
 const CAMS = ['chase', 'rail', 'leader', 'stands', 'blimp'];
 const CAM_NAME = { chase: 'CHASE', rail: 'RAIL', leader: 'LEADER', stands: 'GRANDSTAND', blimp: 'BLIMP' };
 const MOD_KINDS = ['water', 'rock', 'dirt', 'mud', 'wiring', 'engine'];
@@ -225,10 +226,11 @@ export class Race {
     return new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map: tex }));
   }
 
-  placeGate(u) {
+  // the gate at centre-line distance u, its middle `rad` from the oval's centre, turned `turn` from across the track
+  placeGate(u, rad = this.gate.mid, turn = 0) {
     const G0 = this.gate;
-    oval(u, G0.mid, _o);
-    const yaw = Math.atan2(_o.hx, _o.hz), R = this.game.world.curveR(this.loc);
+    oval(u, rad, _o);
+    const yaw = Math.atan2(_o.hx, _o.hz) + turn, R = this.game.world.curveR(this.loc);
     G0.root.position.set(_o.x, 0.05, _o.z);
     G0.root.rotation.y = yaw;
     if (R) { // (stood on the curved plateau, curve.js)
@@ -236,7 +238,22 @@ export class Race {
       G0.root.quaternion.setFromAxisAngle(_Y, yaw).premultiply(bendQuat(R, _o.x, _o.z, _bq));
     }
     G0.root.visible = true;
-    this.setGate(0);
+  }
+
+  // Once the whole field is 30 m clear, the gate is towed out of the way before they come round again (any race over a lap): the
+  // doors close, it swings round to lie along the track and slides to the outer edge, where it stands just inside the outer rail (the
+  // race model keeps the runners off that strip: X_MAX in chimerastats.js). 5 s in all; a lap takes about 20.
+  towGate(dt) {
+    const G0 = this.gate;
+    if (G0.towT === undefined) {
+      if (this.racers.some((r) => !r.done && r.s < 30)) return;
+      G0.towT = 0;
+    }
+    if (G0.towT >= 5) return;
+    G0.towT = Math.min(5, G0.towT + dt);
+    const t = G0.towT, ease = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+    this.setGate(1 - ease(t / 1.2));
+    this.placeGate(this.startU, G0.mid + (GATE_PARK - G0.mid) * ease((t - 1.6) / 3.4), (Math.PI / 2) * ease((t - 0.6) / 1.6));
   }
 
   setGate(k) {
@@ -567,6 +584,8 @@ export class Race {
       return Object.assign(r, { m, hop: 0, vy: 0, mine: i === 0, tiredSaid: false });
     });
     this.placeGate(this.startU);
+    this.setGate(0);
+    this.gate.towT = undefined;
     this.state = 'countdown';
     this.timer = 4.5;
     this.finishAt = 0;
@@ -654,7 +673,8 @@ export class Race {
       this.updateCrowd(this.t);
       this.screenT -= dt;
       if (this.screenT <= 0) { this.screenT = 0.3; this.drawScreen(); this.drawEnd(); this.drawBoard(); this.drawPlates(); }
-      if (this.gate.root.visible && this.state !== 'countdown') this.setGate(Math.min(1, this.gate.open + dt * 4));
+      if (this.gate.root.visible && this.state !== 'countdown' && this.gate.towT === undefined) this.setGate(Math.min(1, this.gate.open + dt * 4));
+      if (this.gate.root.visible && this.state === 'run') this.towGate(dt);
     }
     if (this.state === 'idle') { this.panel.classList.add('hidden'); return; }
     if (this.state === 'countdown') {

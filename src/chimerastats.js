@@ -199,6 +199,7 @@ const STRUGGLE_T = 1.2;
 const CHECK_T = 1.5;            // seconds between position checks
 const DRAIN_POW = 4;            // stamina use grows with (speed / top) ^ 4: cruising at 0.88 costs 0.6 of flat out
 const RESERVE = 0.015;          // what a runner tries to keep in the tank at the line
+const X_MAX = 15;               // how wide a runner goes, from the inner rail (the outer 4 m are where the starting gate is towed once the field has gone)
 export const onBend = (u) => { u = ((u % LAP) + LAP) % LAP; return (u >= SEGS[0] && u < SEGS[0] + BEND_LEN) || u >= SEGS[0] * 2 + BEND_LEN; };
 export const widthOf = (genes) => 0.9 * (genes.size ?? 1.1);   // body width in metres (the models are drawn at 0.72 of their size)
 export const lengthOf = (genes) => 1.1 * (genes.size ?? 1.1);
@@ -406,7 +407,7 @@ function stepRunner(R, r, dt, q) {
       // wants by: room inside, else outside?
       const gap = (r.w + ahead.w) / 2 + 0.3;
       const xin = ahead.x - gap, xout = ahead.x + gap;
-      const free = (x) => x >= r.w / 2 + 0.5 && x <= RAIL_OUT - RAIL_IN - r.w / 2 - 0.4 && !R.runners.some((o) => o !== r && o !== ahead && !o.done && Math.abs(o.s - r.s) < 3.5 && overlap(r, o, x));
+      const free = (x) => x >= r.w / 2 + 0.5 && x <= X_MAX && !R.runners.some((o) => o !== r && o !== ahead && !o.done && Math.abs(o.s - r.s) < 3.5 && overlap(r, o, x));
       const x = free(xin) ? xin : free(xout) ? xout : null;
       if (x !== null && (spare > 0 || frac >= r.sprintAt)) {
         r.pass = { q: ahead, x, t: 0, drain: 1.4, auto: false };
@@ -435,7 +436,7 @@ function stepRunner(R, r, dt, q) {
       if (o === r || o.done || Math.abs(o.s - r.s) > (r.len + o.len) / 2 + 0.3) continue;
       if (overlap(r, o, nx) && !overlap(r, o, r.x)) { ok = false; break; }
     }
-    if (ok) r.x = clamp(nx, r.w / 2 + 0.5, RAIL_OUT - RAIL_IN - r.w / 2 - 0.4);
+    if (ok) r.x = clamp(nx, r.w / 2 + 0.5, Math.max(X_MAX, r.x));     // (the outer stalls start wider, and may only come in)
   }
   // ---- speed ----
   if (target > r.v) r.v = Math.min(target, r.v + r.accel * r.mAccel * (1 + bAccel) * (r.pushing ? 1.15 : 1) * dt);
