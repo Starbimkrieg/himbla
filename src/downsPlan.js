@@ -127,7 +127,7 @@ export const STABLE_LAYOUTS = {
       [[-74.5, -129.7], [-74.5, -128.3]],                                       // across the gap between the wing's blocks
       [[-39.7, -164.5], [-38.3, -164.5]], [[-17.7, -165], [-12.2, -165]],       // across the back row's gaps
     ],
-    gates: [[-74.5, -102, Q, 'CHIMERA STABLES']],
+    gates: [[-74.5, -102, -Q, 'CHIMERA STABLES']],                             // (front out, its leaves swung into the court)
     hay: [[-18, -151, 0.15], [-9, -153.5, -0.1]],
     ground: [[-80, 80, -173, -96, 'earth']],
     trainer: [3, -116],
