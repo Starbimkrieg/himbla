@@ -1,11 +1,11 @@
 // Chimera Downs' plan numbers (no three.js, so tools/downs-layouts.mjs can read them). Location frame: metres, +x along the
 // straights, +z toward the main grandstand (home straight at z = +r). Layout B, The Horseshoe (docs/downs-layouts.md).
 
-// ---- the oval: two 180 m straights, half circles of centre-line radius 55, four lanes, rails at 45 and 64.4 ----
+// ---- the oval: two 180 m straights joined by half circles of radius 55 (the centre line), six starting lanes 3 m apart, rails at 45 and 64.4 ----
 export const STRAIGHT = 180, HALF = STRAIGHT / 2, R0 = 55;
 export const SEGS = [STRAIGHT, Math.PI * R0, STRAIGHT, Math.PI * R0];
 export const LAP = SEGS[0] + SEGS[1] + SEGS[2] + SEGS[3]; // ~706 m round the centre line
-export const LANES = [48.5, 52.5, 56.5, 60.5];
+export const LANES = [47.5, 50.5, 53.5, 56.5, 59.5, 62.5];   // (the stalls' centres; out of the gate the runners go where they like)
 export const RAIL_IN = 45, RAIL_OUT = 64.4;
 export const DIRT = [44.6, 64.8];                         // dirt band inner/outer radius
 export const FINISH_U = 135;                              // finish line: x = +45 on the home straight, before the grandstand
@@ -88,8 +88,93 @@ export const RING = { x: -96, z: 0, rx: 26, rz: 18 };                // parade r
 export const PAVILION = { x: -62, z: 0 };                             // weighing room front wall (porch 3.2 m west of it)
 export const LAWN = { x: 100, z: 0, r: 28, tables: [[84, -12, 0], [92, 12, 1], [104, -16, 2], [110, 6, 3], [96, -2, 4], [118, -6, 5]] };
 
-// ---- stables behind the far stand: four blocks of six boxes round a lane, hay barn between the back two ----
-export const STABLES = { blocks: [[-36, -126, 0], [36, -126, 0], [-36, -114, Math.PI], [36, -114, Math.PI]], barn: [0, -126] };
+// ---- the stables behind the far stand (docs/stable-proposals/): two layouts, A and B; STABLE picks the one built (B, the Twin Lanes). Both hang off the far stand's
+// back wall (its outer face at z = -96), so its two tunnels (x = +-47.5) come out into the yard. Each is mirrored about x = 0.
+//   pieces  [name, x, z, yaw]: dn_stable_4 / dn_stable_6 (yaw 0: front +z; PI/2: front +x; -PI/2: front -x), dn_stable_corner (yaw 0: its inner corner toward
+//           +x +z; -PI/2: toward -x +z), dn_hay_barn (front +z), dn_lunge_ring, dn_trough, dn_tack
+//   fences  runs of post and rail, as polylines [[x, z]...] (cut into equal bays of about 4 m)
+//   gates   [x, z, yaw]: dn_yard_gate (yaw 0: its leaves swung toward -z)
+//   ground  [x0, x1, z0, z1, colour]: the yard's earth (and B's turnout grass), laid flat
+//   trainer where the Training Yard's trainer stands; hay [x, z, yaw] stacks; walks [x0, x1, z0, z1]: the ways through, kept clear of props (tools/stable-layouts.mjs)
+const mirror = (L) => {
+  const flip = (yaw) => (yaw === 0 || yaw === Math.PI ? yaw : -yaw);
+  const corner = (yaw) => (yaw === 0 ? -Math.PI / 2 : 0);                 // (an L's knuckle: its inner corner turned from +x to -x)
+  const half = (list) => list.map(([n, x, z, yaw]) => [n, -x, z, n === 'dn_stable_corner' ? corner(yaw) : flip(yaw)]);
+  return {
+    ...L,
+    pieces: [...L.pieces, ...half(L.pieces.filter((p) => p[1] < 0))],
+    fences: [...L.fences, ...L.fences.filter((f) => f.every(([x]) => x <= 0) && f.some(([x]) => x < 0)).map((f) => f.map(([x, z]) => [-x, z]))],
+    gates: [...L.gates, ...L.gates.filter((g) => g[0] < 0).map(([x, z, yaw]) => [-x, z, flip(yaw)])],
+    hay: [...L.hay, ...L.hay.filter((h) => h[0] < 0).map(([x, z, yaw]) => [-x, z, -yaw])],
+  };
+};
+const Q = Math.PI / 2;
+export const STABLE_LAYOUTS = {
+  // A, The Stable Court: one court the width of the stand's middle, closed by an L of boxes on each side (a wing coming back from the stand, a row along the
+  // back, a clock-towered tack room at the knuckle), the hay barn in the middle of the back row, a lunge ring in the middle; a gate at each wing's end
+  a: mirror({
+    name: 'A: The Stable Court',
+    pieces: [
+      ['dn_stable_corner', -70.3, -160.3, 0],
+      ['dn_stable_6', -55, -160, 0], ['dn_stable_4', -28, -160, 0],          // the back row, front to the stand
+      ['dn_stable_6', -70, -145, Q], ['dn_stable_4', -70, -118, Q],           // the wing, front into the court
+      ['dn_hay_barn', 0, -160, 0], ['dn_lunge_ring', 0, -128, 0],
+      ['dn_trough', -63, -124, Q], ['dn_trough', -36, -153, 0], ['dn_tack', -62, -150, 0.6], ['dn_tack', -63, -136, -0.3],
+    ],
+    fences: [
+      [[-74.5, -96.2], [-74.5, -98.5]], [[-74.5, -105.5], [-74.5, -108.2]],   // either side of the wing's gate
+      [[-74.5, -129.7], [-74.5, -128.3]],                                       // across the gap between the wing's blocks
+      [[-39.7, -164.5], [-38.3, -164.5]], [[-17.7, -165], [-12.2, -165]],       // across the back row's gaps
+    ],
+    gates: [[-74.5, -102, -Q]],                                                // (its leaves swung into the court)
+    hay: [[-18, -151, 0.15], [-9, -153.5, -0.1]],
+    ground: [[-80, 80, -173, -96, 'earth']],
+    trainer: [3, -116],
+  }),
+  // B, The Twin Lanes: each tunnel comes out into a lane of boxes running straight back, an L at its far end (the outer row turning along the back at a clock
+  // tower), the two lanes joined across the back by a yard in front of the hay barn; between them a fenced turnout paddock with the lunge ring, a gate to it
+  // from each lane and one from the back yard. The lanes and the back yard are kept clear: the troughs, the saddle rack and the hay stand in the paddock or
+  // in the nook between the back row and the barn
+  b: mirror({
+    name: 'B: The Twin Lanes',
+    pieces: [
+      ['dn_stable_6', -53.5, -115.3, Q], ['dn_stable_4', -53.5, -142.1, Q],  // each lane's outer row, front into the lane
+      ['dn_stable_corner', -53.8, -152.3, 0], ['dn_stable_6', -38.5, -152, 0], // its knuckle and the back row
+      ['dn_stable_6', -41.5, -116, -Q],                                        // the inner row, front into the lane, its back to the paddock
+      ['dn_hay_barn', 0, -152, 0], ['dn_lunge_ring', 0, -120, 0],
+      ['dn_trough', -22, -100.6, 0], ['dn_trough', -18, -155.5, 0], ['dn_tack', -14.8, -155.3, 0.3],
+    ],
+    fences: [
+      [[-63.4, -98.2], [-51, -98.2]], [[-44, -98.2], [-33, -98.2], [0, -98.2]],   // across the lanes' mouths (a gate in each) and the paddock's north side
+      [[-37, -131.6], [-37, -135.5]], [[-36.55, -142], [-3.5, -142]],             // the paddock's side by the lane (its gate) and its south side, from that gate's pier (a gate to the back yard)
+      [[-58, -130.6], [-58, -131.8]], [[-23.2, -157], [-12.2, -157]],              // across the gaps in the outer row and the back row
+    ],
+    gates: [[-47.5, -98.2, 0], [-37, -139, Q], [0, -142, 0]],
+    hay: [[-21, -154.6, 0.1], [-30, -103.5, 0.2]],
+    ground: [[-64, 64, -163, -96, 'earth'], [-36.8, 36.8, -141.8, -98.4, 'grass']],
+    walks: [[-51.1, -43.9, -149.6, -96], [43.9, 51.1, -149.6, -96], [-51.1, 51.1, -149.6, -142.3], [-12.6, 12.6, -151.5, -142.3]],   // the two lanes, the back yard, the barn's apron
+    trainer: [3, -108],
+  }),
+};
+const DEV = typeof __DEV_TOOLS__ === 'undefined' ? true : __DEV_TOOLS__;     // (in a dev build ?stables=a|b picks the layout, to compare them)
+const asked = DEV && typeof location !== 'undefined' ? /[?&]stables=(a|b)\b/.exec(location.search) : null;
+export const STABLE = asked ? asked[1] : 'b';
+export const STABLES = STABLE_LAYOUTS[STABLE];
+// The boxes a layout's blocks hold: [x, z, yaw] of where a chimera stands in each box, 1.6 m in from the door (its head over it), the way it looks out (the game stands a chimera in some)
+export const BOX_PITCH = 5;
+export function stallsOf(L) {
+  const out = [];
+  for (const [n, x, z, yaw] of L.pieces) {
+    const m = /^dn_stable_(\d)$/.exec(n);
+    if (!m) continue;
+    const k = +m[1], c = Math.cos(yaw), s = Math.sin(yaw);
+    for (let i = 0; i < k; i++) {
+      const lx = -(k - 1) * BOX_PITCH / 2 + i * BOX_PITCH, lz = -1.6;
+      out.push([x + lx * c + lz * s, z - lx * s + lz * c, yaw]);
+    }
+  }
+  return out;
+}
 
 // ---- fairground annex, behind the main stand's east end ----
 export const ANNEX = {

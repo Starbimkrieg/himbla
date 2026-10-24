@@ -620,29 +620,69 @@ function podiums(k) {
   }
 }
 
-// ---- stable yard behind the far stand: four blocks of six boxes round a lane, hay barn between the back two, bales ----
+// ---- the stable yard behind the far stand (STABLES, docs/stable-proposals/): blocks of boxes in Ls round a court or down two lanes, a clock-towered tack room at each
+// knuckle, the hay barn, a lunge ring, fences with gates, troughs, saddle racks, hay. The chimeras in the boxes are race.js's (they move) ----
 function stables(k) {
-  for (const [x, z, yaw] of STABLES.blocks) {
+  for (const [n, x, z, yaw] of STABLES.pieces) {
     k.at(x, z, yaw);
-    bake(k, 'dn_stable_block');
-    k.solid(15.2, 3.7, 4.6, 0, -4.4);
-    for (let i = 0; i < 7; i++) k.column(0.3, 4.2, -15 + i * 5, 2.18);
+    bake(k, n);
+    const boxes = /^dn_stable_(\d)$/.exec(n);
+    if (boxes) {
+      const Lh = +boxes[1] * 2.5;
+      k.solid(Lh + 0.2, 3.7, 4.6, 0, -4.4);                                                          // (the body to its ridge, the boxes shut: you look in over the doors)
+      for (let i = 0; i <= +boxes[1]; i++) k.column(0.2, 4.0, -Lh + i * 5, 2.18);                      // the porch posts
+      for (let i = 0; i < +boxes[1]; i++) k.solid(0.6, 0.23, 0.35, -Lh + 2.5 + i * 5, 0.95);           // and each box's feed trough
+    } else if (n === 'dn_stable_corner') {
+      k.solid(4.8, 4.3, 4.8, -4.5, -4.5);
+      k.column(0.2, 4.0, 2.18, 2.18);                                                                // (the post where the porch beams cross)
+    } else if (n === 'dn_hay_barn') k.solid(12.2, 6.2, 7.2, 0, -7);
+    else if (n === 'dn_trough') k.solid(1.2, 0.38, 0.45, 0, 0);
+    else if (n === 'dn_tack') k.column(0.5, 1.2, 0, 0);
+    else if (n === 'dn_lunge_ring') {
+      // the rail: a wall along each bay but the gate's, at +z; the ring's sand inside it
+      const R = 9, N = 22, at = (i) => { const a = (2 * Math.PI * (i + 0.5)) / N + Math.PI / 2; return [Math.cos(a) * R, Math.sin(a) * R]; };
+      for (let i = 0; i < N - 1; i++) {
+        const [ax, az] = at(i), [bx, bz] = at(i + 1);
+        k.solid(0.12, 0.8, Math.hypot(bx - ax, bz - az) / 2, (ax + bx) / 2, (az + bz) / 2, Math.atan2(bx - ax, bz - az));
+      }
+      k.cyl(R - 0.15, R - 0.15, 0.15, 48, T(PAL.saddle), 0, 0, 0, { outline: 0 });
+    }
     k.at();
   }
-  const [bx, bz] = STABLES.barn;
-  k.at(bx, bz, 0);
-  bake(k, 'dn_hay_barn');
-  k.solid(12.2, 6.2, 7.2, 0, -7);
-  k.at();
-  // hay: two stacks (two bales 6 cm apart, a third across them so it rests on both) and a few singles
-  for (const [x, z, yaw] of [[-20, -120.3, 0.15], [8, -124.4, -0.1]]) {
+  // the fences: each run cut into equal bays of about 4 m (a bay's rails stretched to fit), a post to end it; a bay squeezed under 3 m gets a whole post at its start
+  for (const run of STABLES.fences) {
+    for (let j = 0; j + 1 < run.length; j++) {
+      const [ax, az] = run[j], [bx, bz] = run[j + 1], dx = bx - ax, dz = bz - az, l = Math.hypot(dx, dz), n = Math.max(1, Math.round(l / 4));
+      for (let i = 0; i < n; i++) {
+        k.at(ax + (dx * i) / n, az + (dz * i) / n, Math.atan2(-dz, dx));
+        bake(k, 'dn_stable_fence', 0, 0, 0, { sx: l / n / 4 });
+        if (l / n < 3) bake(k, 'dn_stable_post');
+        k.at();
+      }
+      k.solid(0.15, 0.75, l / 2, (ax + bx) / 2, (az + bz) / 2, Math.atan2(dx, dz));
+    }
+    const [ex, ez] = run[run.length - 1];
+    k.at(ex, ez, 0);
+    bake(k, 'dn_stable_post');
+    k.at();
+  }
+  // the gates
+  for (const [x, z, yaw] of STABLES.gates) {
+    k.at(x, z, yaw);
+    bake(k, 'dn_yard_gate');
+    for (const s of [-1, 1]) k.column(0.5, 3.6, s * 3, 0);
+    k.at();
+  }
+  // hay: stacks (a pair of bales 6 cm apart with a third laid across them, so a lifted bale always rests on two)
+  for (const [x, z, yaw] of STABLES.hay) {
     k.at(x, z, yaw);
     for (const s of [-1, 1]) bake(k, 'dn_hay', 0, 0, s * 0.33);
     bake(k, 'dn_hay', 0, 0.6, 0, { ry: Math.PI / 2 });
     k.at();
   }
-  for (const [x, z, yaw] of [[19.5, -119.8, 0.7], [22.2, -120.3, 2.1], [-8, -124.6, 2.8], [0.5, -124.9, 0.4]]) { k.at(x, z, yaw); bake(k, 'dn_hay'); k.at(); }
-  k.box(112, 0.1, 32, T(SADDLE2), 0, 0, -120, { outline: 0 });                                        // yard's trodden earth
+  for (const [x0, x1, z0, z1, c] of STABLES.ground) {                                                  // the yard's trodden earth, a turnout's grass on it
+    k.box(x1 - x0, c === 'grass' ? 0.12 : 0.1, z1 - z0, T(c === 'grass' ? PAL.money : SADDLE2), (x0 + x1) / 2, 0, (z0 + z1) / 2, { outline: 0 });
+  }
 }
 
 // ---- infield parade ring and weighing room; picnic lawn on the east side ----

@@ -681,7 +681,7 @@ export class GlobeMap {
     c.restore();
   }
 
-  // panel text (radio mode, end of every draw). Figures use the display face (the body face's 5 looks like an S)
+  // the panel's lines (radio mode: the end of every draw). Figures are set in the display face
   radioPanel() {
     const g = this.game, T = g.town, S = T && T.radio, el = this.gr;
     if (!el || !S) return;

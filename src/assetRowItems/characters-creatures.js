@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { makeChimera, makeMite, LIVING, MODIFIERS, PALETTE } from '../chimera.js';
 import { makeFollowerModel } from '../alchemy.js';
 import { makeDuck } from '../casinoWorld.js';
@@ -8,7 +9,7 @@ import { span, cell, line } from './characters-util.js';
 const SP_W = 4.4; // a chimera's cell along the row (m)
 const SP_D = 4.4;
 
-// walk-cycle speed for chimera.js anim(t, speed): they trot on the spot
+// the walk cycle every chimera has (chimerabuild.js anim(t, speed)): the row shows them trotting on the spot
 const GAIT = 3.5;
 
 function chimeraCells(list, w = SP_W, d = SP_D, yaw = 0) {
@@ -121,8 +122,31 @@ function followersItem() {
   };
 }
 
+// ---- every look of the mite, car and sapling parts (legs, body and head of a look together), and every settler's outfit (the NPCs')
+function looksItem() {
+  const list = [];
+  for (const k of ['mite', 'car', 'sapling']) for (let n = 0; n < 3; n++) list.push([`${k.toUpperCase()} ${n + 1}`, { seed: 21 + n, body: k, legs: k, head: k, mods: [], size: 1.1, style: { legs: n, body: n, head: n } }]);
+  return {
+    id: 'creatures.looks', label: 'CHIMERA PARTS: THE THREE LOOKS', w: span(list.length, SP_W), d: SP_D,
+    make() {
+      const R = chimeraCells(list);
+      return { root: line(R.cells).root, update: R.update };
+    },
+  };
+}
+function outfitsItem() {
+  const list = ['coveralls', 'engineer', 'lab', 'trader', 'elder', 'casual'].map((arch, i) => [arch.toUpperCase(), { seed: 31 + i, body: 'person', legs: 'person', head: 'person', mods: [], size: 1.1, looks: { person: { arch, headgear: i % 3 === 2 ? 'bowl' : 'sealed' } } }]);
+  return {
+    id: 'creatures.outfits', label: 'CHIMERA PEOPLE: THE SETTLERS\' OUTFITS', w: span(list.length, SP_W), d: SP_D,
+    make() {
+      const R = chimeraCells(list);
+      return { root: line(R.cells).root, update: R.update };
+    },
+  };
+}
+
 export default {
   id: 'characters.creatures',
   title: '03 · CREATURES',
-  items: [speciesItem(), modsItem(), hybridsItem(), megaMiteItem(), miteItem(), ducksItem(), followersItem()],
+  items: [speciesItem(), modsItem(), hybridsItem(), looksItem(), outfitsItem(), megaMiteItem(), miteItem(), ducksItem(), followersItem()],
 };

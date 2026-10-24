@@ -6,31 +6,28 @@
 # In Blender's Python console or via MCP:   exec(open(r"<repo>/tools/blender/build_downs_course.py").read())
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 build_downs_course.py
 #
-# three.js axes (x right, y up, +z front), each model on y = 0. One material per mesh, named after a slot
-# (DOWNS_TOON / DOWNS_GLOW in src/models.js).
-#   dn_rail        5 m of rail, 1 m tall, along +x from its post at x = 0: Mint post, gold cap, Black top rail, Mint mid
-#                  rail (the game scales y to 1.2 m). Rails run from inside the post to x = 5 (the next post's middle).
-#   dn_furlong     distance pole, 3.56 m: Mint pole with Barn Red bands (the game turns them Mint on every other pole),
-#                  Black-framed Money board on +z (the game writes the distance 2.86 m up, face at z = 0.225), gold collar
-#                  under the board, gold cap
-#   dn_finish_arch finish gantry, 23.6 m between pylons along x, 11.6 m tall: Mint pylons with a gold band, a beam 10 cm
-#                  back from their faces ending inside them, two gold belts round beam and pylons, a Black / Mint chequer
-#                  and a Black FINISH panel on each face (flush, face at z = +-0.705), a camera pod under the lower belt,
-#                  two Barn Red pennants
-#   dn_photo_tower photo-finish tower, 3 m square foot, 10.2 m tall: Mint shaft, Black corner pilasters, glazed box on
-#                  top with its lens toward -z, gold cap, mast
-#   dn_lamp        lamp, 6.4 m: Black post on a Mint plinth, gold collar, Barn Red band, gooseneck from a top gold collar
-#                  down into a gold cup over a lit globe; head reaches toward +x
-#   dn_mast        flag mast, 11 m: Mint pole, gold ball, Barn Red pennant (slot `cloth`, game-recoloured) 3.2 x 1.5 m
-#                  streaming toward +x
-#   dn_crossing    crossing barrier post, 5.2 m with boom: the rail's end post, on the rail's line, road toward +x, rail
-#                  running in from -x. Mint foot (0.5 m square), Mint post (0.26 m), gold cap, red lamp, Black hinge box on
-#                  the road side, boom straight up (Mint, four Barn Red bands). Symmetric in z, so turned half round it is
-#                  its own mirror image (the post across the road).
-#   dn_gate_frame  starting gate, 16.4 m across x, 3.4 m deep (z = -3.2 to 0.2), 4.2 m tall, four stalls: Mint padded
-#                  dividers, Black roof with a gold lip, number plate frames
-#   dn_gate_door   stall door hinged at x = 0 reaching toward -x (1.9 m), 2.6 m tall, Barn Red with gold edging; the game
-#                  hangs two per stall and swings them open
+# Authored in three.js axes (x right, y up, +z front), each model standing on y = 0. One material per mesh named after a slot (DOWNS_TOON / DOWNS_GLOW in src/models.js).
+#   dn_rail        5 m of the course's rail, 1 m tall, running along +x from its post at x = 0: a Mint post with a gold cap, a Black top rail and a Mint mid rail (the game scales it in y for 1.2 m).
+#                  Both rails start inside the post and end at x = 5, the next bay's post's middle, so they run into a post at both ends.
+#   dn_furlong     a distance pole, 3.56 m: one Mint pole with Barn Red bands laid on it (the game turns them Mint on every other pole), a Black-framed Money board on its +z side (the game
+#                  writes the distance on it, 2.86 m up, its face at z = 0.225), a gold collar under the board and a gold cap on top
+#   dn_finish_arch the finish gantry, 23.6 m between its pylons along x, 11.6 m tall: Mint pylons with a gold band, a beam set 10 cm back from the pylons' faces and ending inside them,
+#                  two gold belts round beam and pylons, a Black and Mint chequer and a Black panel for the word FINISH on each face (flush, the face at z = +-0.705), a camera pod
+#                  hung from the lower belt, two Barn Red pennants
+#   dn_photo_tower the photo-finish tower, 3 m square at the foot, 10.2 m tall: a Mint shaft with Black corner pilasters, a glazed box on top with its lens toward -z, a gold cap, a mast
+#   dn_lamp        the Downs' lamp, 6.4 m: a Black post on a Mint plinth, a gold collar and a Barn Red band, a gooseneck from a gold collar on the post's top down into a gold cup
+#                  over a lit globe; the head reaches toward +x
+#   dn_mast        a flag mast, 11 m: a Mint pole, a gold ball, a Barn Red pennant (slot `cloth`, which the game recolours) 3.2 x 1.5 m streaming toward +x
+#   dn_crossing    a track crossing's barrier post, 5.2 m with its boom: the rail's end post, standing on the rail's line with the road toward its +x and the rail running into it
+#                  from -x. A Mint foot (0.5 m square), a Mint post (0.26 m) with a gold cap and a red lamp, a Black hinge box on its road side and the boom raised straight up
+#                  from it (Mint, four Barn Red bands). Symmetric in z, so turned half round it is its own mirror image (the post across the road).
+#   dn_gate6_frame_a / _b  the six-stall starting gate, two designs (race.js GATE picks one), stalls 3 m apart across x (their centres at +-1.5, +-4.5, +-7.5), the doors' line at z = 0.
+#                  A "Classic Six": 18.5 m across, 3.0 m deep, 4.6 m to the number frames: Mint and padded dividers, a Black roof with gold lips, a gold number frame per stall on
+#                  the roof (the game's plates: centre 4.05 m up, 0.16 m out), a pennant at each end. B "The Gantry": 19.1 m across, open-topped: Barn Red end towers with gold cornices
+#                  and starter's lamps (red and mint), slim Black stall posts with Mint pads, a Black lattice beam with gold diagonals from tower to tower whose Mint frames carry the
+#                  numbers (centre 4.45 m up, 0.24 m out), a Saddle sill.
+#   dn_gate6_door_a / _b  one stall door, hinged at x = 0 and reaching toward -x (1.4 m); the game hangs two on each stall (hinges 1.45 m either side of its centre) and turns
+#                  them open. A: Barn Red with gold edging, 2.3 m. B: Mint with a Barn Red diagonal band and gold edging, 2.0 m.
 DOWNS_OUT = "downs-course.glb"
 DOWNS_COLL = "MoonDownsCourse"
 import os
@@ -161,11 +158,9 @@ for i in range(4):
     P["barn"].box(0.246, 0.354, y0, y0 + 0.47 + (0.004 if i == 3 else 0.0), -0.054, 0.054)
 
 # =====================================================================================================
-# dn_gate_frame / dn_gate_door
+# dn_gate6_frame_a / dn_gate6_door_a: "Classic Six", today's gate in six 3 m stalls (roofed, padded Mint dividers, the numbers on the roof)
 # =====================================================================================================
-root = pivot("dn_gate_frame", (0, 0, 0))
-P = parts(root, "dn_gate_frame", {"mint": 0.03, "money2": 0.02, "black": 0.03, "gold": 0.015, "black2": 0.0, "barn2": 0.0})
-SPAN = 16.4
+SPAN, PITCH, N = 18.0, 3.0, 6
 
 
 def plate_frame(o, h, z0, z1):
@@ -180,30 +175,80 @@ def plate_frame(o, h, z0, z1):
     return verts, faces
 
 
-for i in range(5):
-    x = SPAN / 2 - i * (SPAN / 4)
-    P["mint"].box(x - 0.18, x + 0.18, 0.15, 3.75, -3.1, 0.1)                            # divider, ends 5 cm into floor frame and roof
-    if 0 < i < 4:
-        for s in (-1, 1):                                                               # padding both sides, 3 cm into the divider
-            P["money2"].box(x + s * 0.15, x + s * 0.28, 0.3, 3.0, -2.9, -0.2)
-P["black"].box(-SPAN / 2 - 0.2, SPAN / 2 + 0.2, 3.7, 4.25, -3.2, 0.2)                    # roof
-P["gold"].box(-SPAN / 2 - 0.25, SPAN / 2 + 0.25, 3.62, 3.76, 0.15, 0.3)                 # gold lip over the doors
-P["gold"].box(-SPAN / 2 - 0.25, SPAN / 2 + 0.25, 4.1, 4.3, 0.15, 0.34)                  # both 5 cm into the roof's face
-P["black2"].box(-SPAN / 2 - 0.25, SPAN / 2 + 0.25, 0.0, 0.2, -3.2, 0.2)                 # floor frame, 5 cm past the end dividers like the lips
-for i in range(4):                                                                      # rear gates: black rails
-    xc = SPAN / 2 - SPAN / 8 - i * (SPAN / 4)
-    for y in (0.5, 1.4, 2.3):
-        P["black2"].box(xc - 1.8, xc + 1.8, y, y + 0.08, -3.14, -3.06)
-    # number plate frame on the roof over each stall (the game hangs live numbers in it: 0.9 m square, centre 4.85 m up,
-    # 0.13 m out); opening 1.1 x 1.0, bars 0.1 wide, foot 5 cm inside the roof
-    P["gold"].add(plate_frame((xc - 0.65, xc + 0.65, 4.2, 5.45), (xc - 0.55, xc + 0.55, 4.35, 5.35), 0.0, 0.12))
+root = pivot("dn_gate6_frame_a", (0, 0, 0))
+P = parts(root, "dn_gate6_frame_a", {"mint": 0.03, "money2": 0.02, "black": 0.03, "gold": 0.015, "black2": 0.0, "barn": 0.02})
+for i in range(N + 1):
+    x = SPAN / 2 - i * PITCH
+    P["mint"].box(x - 0.15, x + 0.15, 0.15, 3.15, -2.7, 0.1)                            # a divider, its ends 5 cm into the floor frame and the roof
+    if 0 < i < N:
+        for sd in (-1, 1):                                                              # padding on both sides, 3 cm into the divider
+            P["money2"].box(x + sd * 0.12, x + sd * 0.24, 0.3, 2.5, -2.5, -0.2)
+P["black"].box(-SPAN / 2 - 0.2, SPAN / 2 + 0.2, 3.1, 3.55, -2.8, 0.2)                    # the roof
+P["gold"].box(-SPAN / 2 - 0.25, SPAN / 2 + 0.25, 3.03, 3.16, 0.15, 0.3)                 # a gold lip over the doors
+P["gold"].box(-SPAN / 2 - 0.25, SPAN / 2 + 0.25, 3.45, 3.62, 0.15, 0.34)                # (both 5 cm into the roof's face)
+P["black2"].box(-SPAN / 2 - 0.25, SPAN / 2 + 0.25, 0.0, 0.2, -2.8, 0.2)                 # the floor frame, out under the end dividers
+for i in range(N):
+    xc = SPAN / 2 - PITCH / 2 - i * PITCH
+    for y in (0.5, 1.3, 2.1):                                                           # the rear gate's black rails, 5 cm into the dividers either side
+        P["black2"].box(xc - 1.4, xc + 1.4, y, y + 0.08, -2.64, -2.56)
+    # number plate frames standing on the roof over each stall (the game hangs a 0.9 m plate in each: centre 4.05 m up, 0.16 m out); the foot 5 cm into the roof
+    P["gold"].add(plate_frame((xc - 0.6, xc + 0.6, 3.5, 4.6), (xc - 0.5, xc + 0.5, 3.6, 4.5), 0.0, 0.12))
+for sx in (-1, 1):                                                                      # a Barn Red pennant on a short staff at each end of the roof
+    P["black2"].box(sx * 8.95 - 0.04, sx * 8.95 + 0.04, 3.5, 5.3, -1.34, -1.26)
+    P["barn"].poly([(sx * 8.99, 5.25), (sx * 8.99, 4.65), (sx * (8.99 + 1.0), 4.95)], -1.33, -1.27)
 
-root = pivot("dn_gate_door", (0, 0, 0))
-P = parts(root, "dn_gate_door", {"barn": 0.025, "gold": 0.012, "black2": 0.0})
-P["barn"].box(-1.88, -0.02, 0.2, 2.78, -0.06, 0.06)
-P["gold"].box(-1.9, 0.0, 2.7, 2.8 + 0.03, -0.09, 0.09)                                  # top edge
-P["gold"].box(-1.9, 0.0, 0.17, 0.3, -0.09, 0.09)                                        # foot
-P["gold"].box(-0.1, 0.0, 0.3, 2.7, -0.09, 0.09)                                         # hinge side
-P["black2"].box(-1.7, -0.2, 0.36, 0.9, 0.05, 0.065)                                     # kick plate (skin 5 mm proud, clear of the foot)
+root = pivot("dn_gate6_door_a", (0, 0, 0))
+P = parts(root, "dn_gate6_door_a", {"barn": 0.025, "gold": 0.012, "black2": 0.0})
+P["barn"].box(-1.38, -0.02, 0.2, 2.3, -0.06, 0.06)
+P["gold"].box(-1.4, 0.0, 2.22, 2.33, -0.09, 0.09)                                       # the top edge
+P["gold"].box(-1.4, 0.0, 0.17, 0.3, -0.09, 0.09)                                        # the foot
+P["gold"].box(-0.1, 0.0, 0.3, 2.22, -0.09, 0.09)                                        # the hinge side
+P["black2"].box(-1.25, -0.2, 0.36, 0.8, 0.05, 0.065)                                    # a kick plate (a skin 5 mm proud, clear of the foot)
+
+# =====================================================================================================
+# dn_gate6_frame_b / dn_gate6_door_b: "The Gantry", open-topped: Barn Red end towers with starter's lamps, slim Black stall posts, and a lattice beam
+# across the top whose Mint frames carry the numbers
+# =====================================================================================================
+root = pivot("dn_gate6_frame_b", (0, 0, 0))
+P = parts(root, "dn_gate6_frame_b", {"barn": 0.03, "barn2": 0.0, "black": 0.025, "black2": 0.0, "gold": 0.015, "mint": 0.02, "saddle": 0.02, "glowred": 0.0, "glowmint": 0.0})
+TX = SPAN / 2 + 0.25                                                                    # the towers' centres (0.6 m wide, so the whole gate is 19.1 m)
+for sx in (-1, 1):
+    x = sx * TX
+    P["barn"].box(x - 0.3, x + 0.3, 0.02, 5.6, -2.0, 0.3)                               # the tower (its foot inside the plinth band)
+    P["barn2"].box(x - 0.305, x + 0.305, 0.0, 0.6, -2.005, 0.305)                       # its plinth band (a skin 5 mm proud)
+    P["gold"].box(x - 0.38, x + 0.38, 5.55, 5.72, -2.08, 0.38)                          # a gold cornice, 5 cm down over the tower's top
+    P["black"].box(x - 0.08, x + 0.08, 5.67, 6.25, -0.93, -0.77)                        # the lamp post, from inside the cornice
+    P["black"].box(x - 0.2, x + 0.2, 6.2, 6.3, -1.05, -0.65)                            # its cup, the post 5 cm into it
+    P["glowred" if sx < 0 else "glowmint"].cylc(x, 6.48, -0.85, 0.17, 0.36, 12)       # the starter's lamps: red on one tower, mint on the other; the cup holds them 2 cm deep
+for i in range(1, N):                                                                   # the stall posts: slim, from the sill up into the beam's bottom chord
+    x = SPAN / 2 - i * PITCH
+    P["black"].box(x - 0.08, x + 0.08, 0.1, 3.95, -2.25, 0.0)
+    for sd in (-1, 1):
+        P["mint"].box(x + sd * 0.06, x + sd * 0.14, 0.45, 2.2, -2.1, -0.25)            # a Mint pad either side, 2 cm into the post
+P["saddle"].box(-TX + 0.25, TX - 0.25, 0.03, 0.14, -2.3, 0.15)                          # the sill: tower to tower, 5 cm into each
+# the beam: two chords from tower to tower (5 cm into each), the bays between them laced with gold diagonals
+for y0, y1 in ((3.9, 4.06), (4.86, 5.02)):
+    P["black"].box(-TX + 0.25, TX - 0.25, y0, y1, -0.11, 0.09)
+for i in range(N):
+    xc = SPAN / 2 - PITCH / 2 - i * PITCH
+    for sd in (-1, 1):                                                                  # a diagonal down each side of the stall's number, its ends sunk into the chords
+        P["gold"].bm((xc + sd * 0.72, 4.0, -0.01), (xc + sd * 1.42, 4.93, -0.01), 0.04, 6)
+    # the number frame, on the beam's face over each stall (the game hangs a 0.9 m plate in it: centre 4.45 m up, 0.24 m out); 3 cm into the chords
+    P["mint"].add(plate_frame((xc - 0.58, xc + 0.58, 4.03, 4.89), (xc - 0.48, xc + 0.48, 4.08, 4.84), 0.04, 0.2))
+for i in range(1, N):                                                                   # the beam's verticals, over each post
+    x = SPAN / 2 - i * PITCH
+    P["black2"].box(x - 0.05, x + 0.05, 4.0, 4.92, -0.08, 0.06)
+for i in range(N):
+    xc = SPAN / 2 - PITCH / 2 - i * PITCH
+    P["black2"].box(xc - 1.45, xc + 1.45, 1.6, 1.68, -2.24, -2.16)                    # a rear bar per stall, into the posts either side
+
+root = pivot("dn_gate6_door_b", (0, 0, 0))
+P = parts(root, "dn_gate6_door_b", {"mint": 0.025, "barn": 0.0, "gold": 0.012, "black2": 0.0})
+P["mint"].box(-1.38, -0.02, 0.18, 2.0, -0.05, 0.05)
+P["barn"].poly([(-1.38, 0.55), (-1.38, 0.95), (-0.02, 1.75), (-0.02, 1.35)], 0.05, 0.055)  # a Barn Red diagonal band across the face (a skin 5 mm proud)
+P["barn"].poly([(-1.38, 0.55), (-1.38, 0.95), (-0.02, 1.75), (-0.02, 1.35)], -0.055, -0.05)
+P["gold"].box(-1.4, 0.0, 1.94, 2.04, -0.08, 0.08)                                       # the top edge
+P["gold"].box(-0.09, 0.0, 0.2, 1.96, -0.08, 0.08)                                       # the hinge side, from 2 cm into the foot into the top edge
+P["black2"].box(-1.4, -0.01, 0.14, 0.22, -0.075, 0.075)                                 # a rubber foot
 
 finish_and_export()

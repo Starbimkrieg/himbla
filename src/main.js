@@ -12,6 +12,7 @@ import { Colliders } from './physics.js';
 import { World } from './world.js';
 import { Player } from './player.js';
 import { loadRunnerParts, loadShipParts } from './models.js';
+import { preloadChimeras } from './chimerabuild.js';
 import { loadOutpostParts } from './outpostGlb.js';
 import { Enemies } from './enemies.js';
 import { Projectiles } from './projectiles.js';
@@ -354,12 +355,13 @@ class Game {
     document.getElementById('death').addEventListener('click', () => this.respawn());
     // clicking the game while released recaptures the mouse
     this.renderer.domElement.addEventListener('click', () => {
-      if ((this.state === 'play' || this.state === 'derby') && !this.input.locked) this.input.lock();
+      if (this.state === 'play' && !this.input.locked) this.input.lock();     // (a race is watched with a free cursor: race.js setView)
     });
     document.addEventListener('pointerlockchange', () => {
       if (this.input.ptrLocked) {
-        // a lock from a closed dialog can land after the next one opened (chained menus): release again
-        if (this.state !== 'play' && this.state !== 'cutscene' && this.state !== 'derby') { this.releasing = true; this.input.unlock(); return; }
+        // a lock requested when a dialog closed can land after the next dialog opened (chained
+        // menus): hand the mouse straight back to the menu
+        if (this.state !== 'play' && this.state !== 'cutscene') { this.releasing = true; this.input.unlock(); return; }
         this.hud.show('clickhint', false);
         return;
       }
@@ -402,6 +404,7 @@ class Game {
         else if (n >= 1 && n <= this.dialogButtons.length) this.pickDialog(n - 1);
         else if (esc) this.pickDialog(this.dialogButtons.length - 1, esc);
       } else if (this.state === 'derby') {
+        if (esc) { this.resumeState = 'derby'; this.state = 'paused'; this.hud.show('pause', true); return; }   // (no pointer lock to lose: Esc pauses here)
         this.race.onKey(code);
       } else if (this.state === 'casino') { // casino
         if (esc) this.casino.close(true); else this.casino.onKey(code);
@@ -1565,6 +1568,7 @@ class Game {
     const nearPod = lab && z === lab.loc && P.pos.distanceTo(lab.pod) < 4;
     const nearPen = lab && z === lab.loc && P.pos.distanceTo(lab.penTerm) < 5;
     const nearBooth = this.race.near(P.pos);
+    const nearYard = this.race.nearYard(P.pos);
     if (this.rides.interact()) {
       // aboard (or next to) a ship or fairground ride
     } else if (this.events.interact()) {
@@ -1586,6 +1590,9 @@ class Game {
     } else if (nearBooth) {
       this.hud.prompt('<b>F</b> — CHIMERA DOWNS: RACE CARD &amp; BETS');
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.race.open();
+    } else if (nearYard) {
+      this.hud.prompt('<b>F</b> — TRAINING YARD (spend your chimeras\' banked sessions)');
+      if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.race.trainMenu();
     } else if (nearDoc) {
       this.hud.prompt('<b>F</b> — TALK TO DR. ZBORNAK');
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.talkScientist();
@@ -1707,7 +1714,8 @@ class Game {
 // the outpostGlb pilot on.
 loadDevTools().then(() => {
   const game = new Game();
-  if (DEV_TOOLS) window.game = game; // console, test harnesses, trailer pump mode
+  if (DEV_TOOLS) window.game = game; // (the console, the test harnesses and the trailer's pump mode)
+  preloadChimeras();                 // (not waited for: a chimera made before the kit is in fills in when it arrives)
   return Promise.all([loadFonts(), loadRunnerParts(), loadShipParts(), loadOutpostParts()]).then(() => game.init());
 }).catch((e) => {
   console.error(e);

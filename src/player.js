@@ -163,8 +163,10 @@ export class Player {
   // Wipeout or hard crash: the runner goes limp as a physics ragdoll (ragdoll.js). Pose only: momentum and controls stay.
   // sign: +1 tumbles forward, -1 back.
   startRagdoll(sign = 1) {
-    if (this.rag || this.vehicle || this.dead || this.game.indoors) return; // no tumbling indoors (casino, lab)
-    if (this.game.cheats && !this.game.cheats.ragdoll) return; // dev menu's RAGDOLL switch
+    if (this.rag || this.vehicle || this.dead || this.game.indoors) return; // (no tumbling inside the casino or Dr. Zbornak's lab)
+    const downs = this.game.race && this.game.race.loc;
+    if (downs && this.game.currentZone === downs) return;                   // (nor at Chimera Downs: a crowd, a rail, a race to watch)
+    if (this.game.cheats && !this.game.cheats.ragdoll) return; // (the dev menu's RAGDOLL switch)
     this.rag = new Ragdoll(this.game, this.model, this.body, sign);
   }
 

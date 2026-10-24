@@ -186,7 +186,7 @@ def tower(name, W, D, H, bands, slit, banner):
 
 # the third band clears the roof deck through the tower (22.8 to 23.9 m main, 15.2 to 16.5 m far)
 tower("dn_tower", 8.0, 9.0, 26.0, (7.5, 15.0, 24.8), ((11.0, 5.6), (19.0, 3.2)), (7.0, 8.0))
-tower("dn_tower_s", 7.0, 8.0, 18.0, (6.5, 12.0, 17.0), ((9.0, 3.6),), (5.0, 4.8))
+tower("dn_tower_s", 7.0, 8.0, 18.0, (6.5, 12.0, 17.0), ((9.0, 3.6),), (6.0, 6.0))                # (the banners over the slit, 1 m past its frame each way, like the main tower's)
 
 
 # =====================================================================================================

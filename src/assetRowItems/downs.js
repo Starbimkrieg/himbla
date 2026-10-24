@@ -6,10 +6,10 @@ import { arcadeBayShell } from '../downsKit.js';
 // Asset Row group: Chimera Downs' Blender kits (tools/blender/build_downs_*.py; docs/downs-layouts.md), one item per file.
 // The wheel and carousel are with the settlement parts (buildings.js); the whole course is a place (places.js).
 
-// A kit part in a line-up: `w` its width along the row, `dz` its z offset (centres parts authored from their front edge).
-const P = (name, w, { d = 0, dz = 0, tint, y = 0, ry = 0 } = {}) => {
+// A kit part as one part of a line-up: `w` the width it takes along the row, `dz` where its middle lies along z (so a part authored from its front edge sits in the middle of its item).
+const P = (name, w, { d = 0, dz = 0, x = 0, tint, y = 0, ry = 0 } = {}) => {
   const o = makeDownsPart(name, tint);
-  o.position.set(0, y, dz);
+  o.position.set(x, y, dz);
   o.rotation.y = ry;
   const g = new THREE.Group();
   g.add(o);
@@ -34,19 +34,22 @@ const downs = {
       P('dn_roof_bay', 19.6, { d: 44, dz: -17.5 }), P('dn_roof_bay_s', 19.6, { d: 27, dz: -10 }),
     ], 2)),
     item('downs.club', 'DOWNS CLUBHOUSE AND TOTE HALL', 62, 30, () => row([P('dn_club', 62, { d: 28, dz: 13.5 })])),
-    item('downs.course', 'DOWNS COURSE KIT: RAIL · FURLONG POLE · FINISH ARCH · PHOTO TOWER · LAMP · FLAG MAST · CROSSING POST · STARTING GATE', 79, 10, () => {
-      const gate = P('dn_gate_frame', 17, { d: 4, dz: 1.4 });
-      for (let i = 0; i < 4; i++) for (const s of [-1, 1]) {            // stall doors, hinged as in race.js
-        const hinge = new THREE.Group();
-        hinge.position.set((1.5 - i) * 4 + s * 1.95, 0, 0.1);
-        const d = makeDownsPart('dn_gate_door');
-        d.scale.x = s > 0 ? 1 : -1;
-        hinge.add(d);
-        gate.root.children[0].add(hinge);
-      }
+    item('downs.course', 'DOWNS COURSE KIT: RAIL · FURLONG POLE · FINISH ARCH · PHOTO TOWER · LAMP · FLAG MAST · CROSSING POST · SIX-STALL STARTING GATES A (CLASSIC SIX) AND B (THE GANTRY)', 104, 10, () => {
+      const gate = (k, w) => {
+        const G = P(`dn_gate6_frame_${k}`, w, { d: 3.5, dz: 1.2 });
+        for (let i = 0; i < 6; i++) for (const s of [-1, 1]) {          // (the stall doors, hinged as race.js hangs them)
+          const hinge = new THREE.Group();
+          hinge.position.set((2.5 - i) * 3 + s * 1.45, 0, 0.1);
+          const d = makeDownsPart(`dn_gate6_door_${k}`);
+          d.scale.x = s > 0 ? 1 : -1;
+          hinge.add(d);
+          G.root.children[0].add(hinge);
+        }
+        return G;
+      };
       return row([
         P('dn_rail', 5, { d: 1 }), P('dn_furlong', 2.5, { d: 1 }), P('dn_finish_arch', 26, { d: 3 }), P('dn_photo_tower', 6, { d: 7 }), P('dn_lamp', 2.5, { d: 1 }),
-        P('dn_mast', 4, { d: 1 }), P('dn_crossing', 2, { d: 1 }), gate,
+        P('dn_mast', 4, { d: 1 }), P('dn_crossing', 2, { d: 1 }), gate('a', 18.5), gate('b', 19.1),
       ], 2);
     }),
     item('downs.stalls', 'DOWNS CONCESSION STALLS ×12, EACH IN AN ARCADE BAY: MOON DOGS · CRATER FRIES · HE-3 FIZZ · CHIMERA CHOW · ROCK CANDY · TOTE · SPACE SLUSH · LUNAR COFFEE · DERBY DONUTS · JOCKEY\'S GRILL · FOAM FINGERS · RAIL BAR', 140, 18, () => {
@@ -67,9 +70,13 @@ const downs = {
       return { root: L.root, update: (dt, t) => { for (const f of fs) f.update(t, dt); } };
     }),
     item('downs.screen', 'DOWNS SCREEN DRUM AND WINNERS\' PODIUM', 64, 20, () => row([P('dn_drum', 42, { d: 16 }), P('dn_podium', 19.3, { d: 5.15 })], 2)),
-    item('downs.stable', 'DOWNS STABLE BLOCK · HAY BARN · WEIGHING ROOM · RING GATE · HAY · PICNIC TABLE', 112, 16, () => row([
-      P('dn_stable_block', 31, { d: 12, dz: 3 }), P('dn_hay_barn', 25, { d: 14, dz: 7 }), P('dn_pavilion', 19, { d: 13, dz: 3.4 }), P('dn_ring_gate', 4, { d: 1 }),
+    item('downs.stable', 'DOWNS STABLE BLOCK (SIX BOXES) · HAY BARN · WEIGHING ROOM · RING GATE · HAY · PICNIC TABLE', 112, 16, () => row([
+      P('dn_stable_6', 31, { d: 12, dz: 3 }), P('dn_hay_barn', 25, { d: 14, dz: 7 }), P('dn_pavilion', 19, { d: 13, dz: 3.4 }), P('dn_ring_gate', 4, { d: 1 }),
       P('dn_hay', 1.4, { d: 1 }), P('dn_picnic', 3.8, { d: 3, tint: { accent: 0x8b4044 } }),
+    ], 2)),
+    item('downs.yard', 'DOWNS STABLE YARD: FOUR BOXES · CLOCK TOWER · YARD GATE · FENCE · LUNGE RING · TROUGH · SADDLE RACK', 80, 20, () => row([
+      P('dn_stable_4', 21, { d: 12, dz: 3 }), P('dn_stable_corner', 10, { d: 10, x: 4.5, dz: 4.5 }), P('dn_yard_gate', 7.2, { d: 3 }),
+      P('dn_stable_fence', 4.2, { d: 1, x: -2 }), P('dn_lunge_ring', 18.5, { d: 18.5 }), P('dn_trough', 2.6, { d: 1 }), P('dn_tack', 1.3, { d: 1 }),
     ], 2)),
     item('downs.fair', 'DOWNS FAIR KIT: GONDOLA · HORSE · TICKET HALL · FAIR GATE · KIOSK · STANCHION · FENCE', 60, 10, () => row([
       P('dn_gondola', 3, { d: 3, y: 3.6 }), P('dn_horse', 3, { d: 1, y: 1 }), P('dn_ticket_hall', 23, { d: 8, dz: 4 }), P('dn_fair_gate', 12, { d: 2 }), P('dn_kiosk', 5.4, { d: 4.6, dz: 1.7, tint: { accent: 0x7b9a6e } }), P('dn_stanchion', 3.2, { d: 1 }),
