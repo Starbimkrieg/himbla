@@ -208,13 +208,32 @@ def add_gunner(crew):
         rot("head", -0.1)
 
 
-def add_flags():
-    """the game hangs a ragged cloth on each `flag` empty (makeWaveFlag); a flat stand-in here"""
+def add_flags(speed=24.0, t=1.7):
+    """the game's flag cloth on each `flag` empty: makeWaveFlag (src/models.js) ported vertex for vertex, ragged, posed as at
+    `speed` m/s (at speed it flies level behind the pole, rippling; at rest it droops)"""
+    NX, NY = 10, 4
+    k = min(1.0, speed / 28)
+    p1, p2, phase = t * (5 + 8 * k), t * (4 + 6 * k), 0.7
     for e in [o for o in bpy.data.objects if o.get("role") == "flag"]:
         w, h = e.get("w", 1.1), e.get("h", 0.75)
-        rag = [(0, 0), (-w, 0.03), (-w * 0.88, -h * 0.28), (-w * 1.04, -h * 0.5), (-w * 0.8, -h * 0.66), (-w * 0.92, -h * 0.95), (0, -h)]
+        verts = []
+        for iy in range(NY + 1):
+            for ix in range(NX + 1):
+                z0, y0 = -w * ix / NX, -h * iy / NY
+                u = -z0 / w
+                y0 *= 1 - 0.55 * u * (0.5 + 0.5 * abs(math.sin(u * 14)))   # ragged
+                v = -y0 / h
+                wave = math.sin(p1 - u * 6 + v * 0.9 + phase)
+                x = wave * (0.05 + 0.3 * k) * w * u
+                y = y0 - (1 - 0.85 * k) * 0.3 * h * u * u + math.cos(p2 - u * 5 + phase) * 0.04 * h * u * (0.4 + k)
+                z = z0 * (1 - (1 - k) * 0.18 * u)
+                verts.append(tb((x, y, z)))
+        faces = [(iy * (NX + 1) + ix, iy * (NX + 1) + ix + 1, (iy + 1) * (NX + 1) + ix + 1, (iy + 1) * (NX + 1) + ix)
+                 for iy in range(NY) for ix in range(NX)]
         me = bpy.data.meshes.new("rag")
-        me.from_pydata([tb((0, y, z)) for z, y in rag], [], [tuple(range(len(rag)))])
+        me.from_pydata(verts, [], faces)
+        for f in me.polygons:
+            f.use_smooth = True
         o = bpy.data.objects.new("rag", me)
         bpy.context.scene.collection.objects.link(o)
         o.parent = e
@@ -222,21 +241,6 @@ def add_flags():
         m.use_nodes = True
         m.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (*lin(0x1a1a1a), 1)
         me.materials.append(m)
-        # a skull daub
-        sk = bpy.data.meshes.new("skull")
-        import bmesh
-        bm = bmesh.new()
-        bmesh.ops.create_circle(bm, cap_ends=True, radius=0.16, segments=10)
-        bm.to_mesh(sk)
-        so = bpy.data.objects.new("skull", sk)
-        bpy.context.scene.collection.objects.link(so)
-        so.parent = e
-        so.location = tb((0.012, -h * 0.45, -w * 0.45))
-        so.rotation_euler = (0, math.pi / 2, 0)
-        sm = bpy.data.materials.new("skullm")
-        sm.use_nodes = True
-        sm.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (*lin(0xe8e0c8), 1)
-        sk.materials.append(sm)
 
 
 def add_spots():

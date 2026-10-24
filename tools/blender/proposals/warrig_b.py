@@ -2,7 +2,7 @@
 #
 # Six balloon tyres clawed with scrap paddles, each on its own long swing arm: a lower wishbone and an upper link out to an
 # upright, and a tall coilover slanting in to a shoulder tower on the hull, so the rig stands on six crab legs with a
-# track wider than it is tall. Up front, set right of centre, a welded pillbox cab with a row of tiny round viewports behind
+# track wider than it is tall. Up front, set right of centre, a pillbox cab with a row of tiny round viewports behind
 # crossbar cages and a periscope; to its left a low armoured bow carries the "light crown", a pipe frame of mismatched
 # lamps (one huge searchlight, two smaller ones, LED bars at odd angles) and a stolen military target-lock pod with an IR
 # laser. A cow-catcher of scrap blades and teeth leads. Mid-ship a pedestal tower carries the turret: a seated pirate
@@ -11,7 +11,7 @@
 # copper electrode bars between two magnet blocks wound with copper racetrack coils, cooling coils on its feed lines,
 # two big radiator fins in a V, and a magnetic nozzle at the tail spitting sparks. Frayed MLI over the cab roof and the
 # magnets; a bent radar dish, antenna needles and a flag at the back; RCS quads at the corners. No rust: bleached plate,
-# primer and bare metal, welded at every seam.
+# primer and bare metal.
 #
 #   MOONRUNNER_REPO=<repo> python3 tools/blender/proposals/warrig_b.py [out.glb]       (or exec() it in Blender)
 #
@@ -57,7 +57,6 @@ for z in WZS:
         kn = (sx * 1.98, WY, z)
         # shoulder tower on the hull side
         A.add(bx((sx * 1.08, 2.65, z), (0.13, 0.42, 0.17)), "dark", CH, 0.02)
-        weld_loop(A, CH, [(sx * 0.95, 2.25, z - 0.17), (sx * 0.95, 3.07, z - 0.17), (sx * 0.95, 3.07, z + 0.17), (sx * 0.95, 2.25, z + 0.17)])
         # lower wishbone, upper link, upright
         for dz in (-0.38, 0.38):
             A.add(beam((sx * 0.95, 1.62, z + dz), (sx * 1.9, WY - 0.12, z), 0.06, 6), "steel", CH, 0.015)
@@ -166,7 +165,7 @@ BA.add(bx((0.46, -0.06, -0.02), (0.13, 0.2, 0.22)), "stripe", BR, 0.015)
 BA.add(bx((0.33, -0.04, -0.02), (0.012, 0.08, 0.12)), "dark", BR, 0)
 for sx in (-1, 1):
     BA.add(tube([(sx * 0.22, -0.05, -0.2), (sx * 0.25, -0.1, -0.32), (sx * 0.25, -0.24, -0.32)], [0.03] * 3, 6), "dark", BR, 0.008)
-plate(BA, BR, (0.0, 0.01, 0.5), (0.36, 0.2, 0.02), (0, 0, 0.0), slot="bleach", ink=0.02, weld=False)
+plate(BA, BR, (0.0, 0.01, 0.5), (0.36, 0.2, 0.02), (0, 0, 0.0), slot="bleach", ink=0.02)
 laser_sight(BA, BR, (0.0, 0.23, 0.35), (0, 0, 1), 5.0)
 BA.add(cyl((-0.36, 0.14, 0.2), 0.045, 0.4, 8, rot=(PI / 2, 0, 0)), "dark", BR, 0.008)
 BA.add(cyl((-0.36, 0.14, 0.41), 0.04, 0.02, 8, rot=(PI / 2, 0, 0)), "lens", BR, 0)
@@ -232,7 +231,7 @@ pivot(P + "flag", (0.45, HT + 2.0, -3.0), CH, role="flag", w=1.0, h=0.7)
 i = 0
 for z in WZS:
     for sx in (-1, 1):
-        monster_wheel(P, i, (sx * WX, WY, z), sx, WR, HW, ROOT, cleats=12, spiked=z > 1, seed=i)
+        monster_wheel(P, i, (sx * WX, WY, z), sx, WR, HW, ROOT, lugs=12, spiked=z > 1, seed=i)
         i += 1
 
 A.flush()
