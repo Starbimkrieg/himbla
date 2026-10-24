@@ -7,6 +7,7 @@ import { ensureStats, statTotal, newRunner, stepRunner, raceOdds, CONDITIONS } f
 import { chimeraCard, cardList } from './chimeracard.js';
 import { makeDownsPart, downsNode, downsSlot } from './models.js';
 import { buildDowns } from './downsWorld.js';
+import { buildDome } from './downsDome.js';
 import { LANES, RAIL_IN, RAIL_OUT, FINISH_U, STAND, FAR, CLUB, WINDOW, BOARD, DRUM, PODIUMS, ENTRIES, oval } from './downsPlan.js';
 import { pixelFont } from './fonts.js';
 import { bendPoint, bendQuat } from './curve.js';
@@ -99,6 +100,7 @@ export class Race {
     const w = this.game.world;
     const loc = this.loc;
     buildDowns(w, loc);
+    this.dome = buildDome(w, loc); // the glass dome over it all, and its airlocks
 
     // ---- moving parts ----
     // live canvases: drum screens (dn_drum; one for both long faces, one for both ends), the race card board in the
@@ -575,6 +577,7 @@ export class Race {
       this.screenT -= dt;
       if (this.screenT <= 0) { this.screenT = 0.3; this.drawScreen(); this.drawEnd(); this.drawBoard(); this.drawPlates(); }
       if (this.gate.root.visible && this.state !== 'countdown') this.setGate(Math.min(1, this.gate.open + dt * 4));
+      this.dome.update(dt, g); // airlocks: doors, lamps, cycling
     }
     if (this.state === 'idle') { this.panel.classList.add('hidden'); return; }
     if (this.state === 'countdown') {

@@ -1808,13 +1808,14 @@ export class Story {
     G.save();
   }
 
-  teleportTo(dir, quiet = false) {
+  // `at`: land on this direction instead of 18 m off `dir` (a place's arrival spot, locations.js `arrive`), still facing `dir`
+  teleportTo(dir, quiet = false, at = null) {
     const g = this.game;
     const P = g.player;
     if (g.assetRow && g.assetRow.active) g.assetRow.exit(true); // leave the dev Asset Row for the Moon first
     if (P.vehicle) g.garage.exit();
     const t = tangent(new THREE.Vector3(1, 0, 0), dir).normalize();
-    const d = greatCircle(dir.clone().normalize(), t, 18);
+    const d = at ? at.clone().normalize() : greatCircle(dir.clone().normalize(), t, 18);
     g.planet.update(g.planet.ground(d), { budgetMs: 1e9 });
     const pos = g.planet.ground(d, new THREE.Vector3(), 1.5);
     const fwd = tangent(dir.clone().sub(d), d).normalize();
@@ -1888,11 +1889,12 @@ export class Story {
       g.audio.tone(900, 0.2, 'sine', 0.2, 0.3);
       this.techCd.dash = 4;
     } else if (k === 'teleport') {
-      const places = g.locations.filter((l) => l.discovered && !l.camp).map((l) => ({ name: l.name, dir: l.dir }))
+      const places = g.locations.filter((l) => l.discovered && !l.camp)
+        .map((l) => ({ name: l.name, dir: l.dir, at: l.arrive ? g.world.toWorld(l, l.arrive[0], 0, l.arrive[1]) : null }))
         .concat(this.myOutposts().map((o) => ({ name: g.territory.name(o), dir: o.dir })));
       const page = (n) => {
         const per = 7, sl = places.slice(n * per, n * per + per), pages = Math.ceil(places.length / per);
-        g.dialog('PERSONAL TELEPORTER', 'Pick a destination. (90 s recharge)', sl.map((p, i) => ({ label: `${i + 1} · ${p.name}`, fn: () => { this.techCd.teleport = 90; this.teleportTo(p.dir); } }))
+        g.dialog('PERSONAL TELEPORTER', 'Pick a destination. (90 s recharge)', sl.map((p, i) => ({ label: `${i + 1} · ${p.name}`, fn: () => { this.techCd.teleport = 90; this.teleportTo(p.dir, false, p.at); } }))
           .concat(pages > 1 ? [{ label: `${sl.length + 1} · MORE (${n + 1}/${pages})`, fn: () => page((n + 1) % pages) }] : [])
           .concat([{ label: 'CANCEL' }]));
       };

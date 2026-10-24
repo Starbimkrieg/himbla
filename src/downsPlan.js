@@ -87,6 +87,15 @@ export const LAWN = { x: 100, z: 0, r: 28, tables: [[84, -12, 0], [92, 12, 1], [
 // ---- stables behind the far stand: four blocks of six boxes round a lane, hay barn between the back two ----
 export const STABLES = { blocks: [[-36, -126, 0], [36, -126, 0], [-36, -114, Math.PI], [36, -114, Math.PI]], barn: [0, -126] };
 
+// ---- glass dome over the whole site (tools/blender/build_downs_dome.py, src/downsDome.js): a drum at r 272 (plinth r 269.6 to
+// 274.4, ring beam 12.6 to 14.8 m), the shell from 14.4 m on it to the crown at 120.4 m (superellipse r^2.4 + y^2.4, rise 106).
+// 96 bays 3.75 degrees apart, bay c centred at c * 3.75 degrees from +x toward +z. An airlock on each gate's axis, its head
+// filling bays c - 1 to c + 1, the main one on the forecourt's (the teleports' arrival spot, locations.js `arrive`, is in front of it) ----
+export const DOME = {
+  r: 272, foot: 14.4, rise: 106, exp: 2.4, bays: 96, drum: [269.6, 274.4], top: 14.8, beam: 12.6,
+  locks: [{ key: 'main', bay: 24 }, { key: 'west', bay: 48 }, { key: 'east', bay: 0 }],
+};
+
 // ---- fairground annex, behind the main stand's east end ----
 export const ANNEX = {
   x0: 124, x1: 206, z0: 106, z1: 168, gate: [124, 139], wheel: [175, 156], carousel: [142, 134], ticket: [171, 118],

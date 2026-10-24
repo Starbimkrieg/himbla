@@ -160,6 +160,8 @@ export const LOCATIONS = [
   {
     id: 'downs', name: 'Chimera Downs', short: 'DOWNS', type: 'derby', faction: 'none', poi: true, late: true,
     theta: 22, phi: 160, r: 280, curved: true, safe: true, repair: 6,
+    arrive: [0, 290], // teleports land here (local x, z), facing the centre: in front of the main lock, past its apron's end
+    // (tools/blender/build_downs_dome.py: outer door at z 274.6, apron to 280)
     blurb: "A proper racecourse for the things that crawl out of Dr. Zbornak's reactor: a roofed grandstand, a screen the size of a barn and a race card that never sleeps.",
   },
 ];

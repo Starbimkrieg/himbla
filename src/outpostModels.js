@@ -275,9 +275,10 @@ class Kit {
   hit(hx, hy, hz, x, z, ry = 0) { const p = this.P(x, 0, z); this.hits.push({ hx, hy, hz, x: p.x, y: hy, z: p.z, yaw: this.yaw + ry }); }
 
   finish() {
-    if (this.curveR) { // long pieces cut every 8 m so they curve (curve.js)
-      for (const list of this.byMat.values()) for (let i = 0; i < list.length; i++) list[i] = bendGeometry(list[i], this.curveR, 8);
-      for (let i = 0; i < this.ink.length; i++) this.ink[i] = bendGeometry(this.ink[i], this.curveR, 8);
+    if (this.curveR) { // long pieces cut every 8 m (or `bendLen`) so they curve (curve.js)
+      const len = this.bendLen || 8;
+      for (const list of this.byMat.values()) for (let i = 0; i < list.length; i++) list[i] = bendGeometry(list[i], this.curveR, len);
+      for (let i = 0; i < this.ink.length; i++) this.ink[i] = bendGeometry(this.ink[i], this.curveR, len);
     }
     // shared plain colours: one vertex-coloured mesh per kind (toon / glow) and side
     const vc = new Map();

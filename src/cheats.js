@@ -508,7 +508,8 @@ export class Cheats {
   teleport(l) {
     const g = this.game;
     if (this.inRow()) g.assetRow.exit(); // back to the Moon first (the Row has its own flat ground)
-    const p = g.world.toWorld(l, 0, 0, Math.min(l.r * 0.8, 120));
+    const [ax, az] = l.arrive || [0, Math.min(l.r * 0.8, 120)]; // a place's own arrival spot (locations.js), else toward its edge
+    const p = g.world.toWorld(l, ax, 0, az);
     g.planet.update(g.planet.ground(p, p.clone(), 1.5), { budgetMs: 1e9 });
     const ground = g.planet.ground(p, p.clone(), 1.5);
     const fwd = l.pos.clone().sub(ground);

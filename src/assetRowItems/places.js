@@ -47,7 +47,7 @@ const pirates = [
 ];
 const fun = [
   P('casino', 'LUCKY CRATER CASINO', 152, 174, { loc: 'casino' }),
-  P('downs', 'CHIMERA DOWNS', 470, 345, { loc: 'downs', race: true, yaw: Math.PI }),
+  P('downs', 'CHIMERA DOWNS', 560, 560, { loc: 'downs', race: true, yaw: Math.PI }), // (the glass dome's aprons reach r 280)
 ];
 
 const zones = [

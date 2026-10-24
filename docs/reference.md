@@ -227,7 +227,9 @@ A walk-in hall with slot carousels out front. Press `F` at a station:
 ### Chimera Downs
 
 A racecourse with grandstands, clubhouse, screen drum, podiums, arcades, stables and a fairground (rideable ferris
-wheel and carousel). The race office posts up to three races with distance, class, going, purse and rivals. Chimeras
+wheel and carousel), all under a glass dome 544 m across. The way in is through one of three airlocks, on the forecourt
+gate's axis (teleports land in front of this one) and the west and east gates'. Walk or drive up and the door opens. Go 6 m
+in and it shuts behind you; the chamber cycles (red lamps, an amber light, a hiss) and the far door opens. The race office posts up to three races with distance, class, going, purse and rivals. Chimeras
 have SPEED, POWER, STAMINA and WIT; the bookie simulates each race to set odds. While racing, `1`-`5` switch cameras
 and `Space` spends a crowd cheer.
 
@@ -340,6 +342,7 @@ src/
   downsKit.js      shared Downs builders (bake, fountain, arcadeShell)
   curve.js         bends flat layouts onto the sphere
   downsFair.js     ferris wheel, carousel, queue lines
+  downsDome.js     the glass dome over the Downs: its colliders, the airlocks' doors, lamps and cycling
   rides.js         transit-ship rides and fairground rides
   rocks.js         shaped rocks and colliders
   rails.js         grinding rocks and crater rims
@@ -384,7 +387,7 @@ src/
     claw.glb         Zero-G claw machine and its contents
     hall.glb         casino hall kit
     lot.glb          casino forecourt kit
-    downs-*.glb      Chimera Downs kits (stand, club, course, stalls, arcade, screen, fair, stable, crowd)
+    downs-*.glb      Chimera Downs kits (stand, club, course, stalls, arcade, screen, fair, stable, crowd, dome)
     duck.glb         Duck Derby racers and track
     blackjack.glb    blackjack table and chip
     dish.glb         dish stations and dish heads
@@ -451,7 +454,8 @@ tools/
     build_dish.py          -> dish.glb
     build_winch.py         -> winch.glb, towmark.png
     build_outposts.py      -> outposts.glb (check with npm run check:outposts)
-    build_downs_*.py       -> downs-*.glb
+    build_downs_*.py       -> downs-*.glb (build_downs_dome.py -> downs-dome.glb; preview_dome.py renders it over a block model
+                              of the Downs)
     proposals/             freighter and Kepler Habitat design studies, Cycles preview renders
 ```
 

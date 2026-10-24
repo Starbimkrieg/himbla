@@ -47,7 +47,8 @@ const GLB = {
   'downs-fair': () => import('./assets/downs-fair.glb?inline'),
   'downs-stable': () => import('./assets/downs-stable.glb?inline'),
   'downs-crowd': () => import('./assets/downs-crowd.glb?inline'),
-  power: () => import('./assets/power.glb?inline'),
+  'downs-dome': () => import('./assets/downs-dome.glb?inline'),
+  power:() => import('./assets/power.glb?inline'),
   habitat: () => import('./assets/habitat.glb?inline'),
   hydroponics: () => import('./assets/hydroponics.glb?inline'),
   labs: () => import('./assets/labs.glb?inline'),
@@ -2395,8 +2396,8 @@ function ddGroup(node, tint, toonMap = DD_TOON, glowMap = DD_GLOW) {
   const g = pivotGroup(node);
   Object.assign(g.userData, node.data);
   if (node.role) g.userData.role = node.role;
-  dressNode(node, g, (slot) => (slot === 'glass' ? ddGlass || (ddGlass = new THREE.MeshToonMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }))
-    : slot in glowMap ? glowShared(glowMap[slot]) : toon(tint?.[slot] ?? toonMap[slot] ?? 0xff00ff)), (slot) => !(slot in glowMap) && slot !== 'glass');
+  dressNode(node, g, (slot) => (slot === 'glass' || slot === 'domeglass' ? ddGlass || (ddGlass = new THREE.MeshToonMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }))
+    : slot in glowMap ? glowShared(glowMap[slot]) : toon(tint?.[slot] ?? toonMap[slot] ?? 0xff00ff)), (slot) => !(slot in glowMap) && slot !== 'glass' && slot !== 'domeglass');
   for (const k of node.kids) g.add(ddGroup(k, tint, toonMap, glowMap));
   return g;
 }
@@ -2428,15 +2429,19 @@ export function lotSlot(slot) {
 // One file per family, each `dn_*` node on y = 0. downsNode / downsSlot: for baking into the Downs kit (race.js build);
 // makeDownsPart: a Group (Asset Row). Palette: Gold Gleam, Saddle Brown, Black, Money, Barn Red, Touch of Mint (plus a
 // darker shade of each); glow* and glass* slots are lit.
-const DOWNS_FILES = ['downs-stand', 'downs-club', 'downs-course', 'downs-stalls', 'downs-arcade', 'downs-screen', 'downs-fair', 'downs-stable', 'downs-crowd'];
+const DOWNS_FILES = ['downs-stand', 'downs-club', 'downs-course', 'downs-stalls', 'downs-arcade', 'downs-screen', 'downs-fair', 'downs-stable', 'downs-crowd', 'downs-dome'];
 const DOWNS_TOON = {
   mint: 0xf8fff8, mint2: 0xdfe8dd, gold: 0xcfb352, gold2: 0xa8903a, saddle: 0xb07c57, saddle2: 0x8c5f3f, black: 0x3b393a, black2: 0x5a5760,
   money: 0x7b9a6e, money2: 0x5b7a52, barn: 0x8b4044, barn2: 0x6a2e33, seat: 0x7b9a6e, cloth: 0x8b4044, accent: 0x8b4044,
   // spectator slots (downs-crowd), tinted per spectator by race.js; these are defaults for untinted draws
   coat: 0x3b393a, shirt: 0xf8fff8, legs: 0x5a5760, skin: 0xe9b98f, hair: 0x5a3a22, hat: 0x3b393a, band: 0x8b4044,
+  // the dome's lattice (downs-dome); baked into the Downs it gets its own material (downsDome.js), this is the plain draw
+  domeframe: 0xf8fff8,
 };
-const DOWNS_GLOW = { glasswarm: 0xfff0c0, glowgold: 0xffe9a0, glowmint: 0xe8fff0, glowred: 0xff5a4a };
+const DOWNS_GLOW = { glasswarm: 0xfff0c0, glowgold: 0xffe9a0, glowmint: 0xe8fff0, glowred: 0xff5a4a, glowgreen: 0x7dff9a };
 export const makeDownsPart = (name, tint) => ddGroup(SHIP_PARTS[name], tint || null, DOWNS_TOON, DOWNS_GLOW);
+// a pivot of a Downs node (a door leaf, a lamp: node.kids) as a Group of its own, painted like makeDownsPart
+export const makeDownsKid = (kid, tint) => ddGroup(kid, tint || null, DOWNS_TOON, DOWNS_GLOW);
 // Forecourt fountain as plain meshes (Asset Row), like makeFountain: { root, update(t, dt) }; cup turns, water runs with `t`.
 export function makeDownsFountain() {
   const node = SHIP_PARTS.dn_fountain, root = ddGroup(node, null, DOWNS_TOON, DOWNS_GLOW);
