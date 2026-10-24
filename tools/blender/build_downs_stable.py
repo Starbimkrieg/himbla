@@ -10,7 +10,7 @@
 #                   a hay rack, a lantern) where the game stands a chimera; a blank name board over each door, a lantern on a bracket, a feed trough; a gable roof, a Mint ridge, louvred
 #                   cupolas, 7.4 m to the ridge
 #   dn_stable_corner the knuckle of an L of blocks: a two-storey tack room (lit windows on its two outer faces) under a hip roof and a clock turret with a chimera weathervane
-#   dn_stable_fence a 4 m bay of Mint post and rail (dn_stable_post: a post alone, to end a run); dn_yard_gate the yard's gate: Barn Red piers, a name board, two leaves swung in
+#   dn_stable_fence a 4 m bay of Mint post and rail (dn_stable_post: a post alone, to end a run); dn_yard_gate the yard's gate: Barn Red piers, two braced leaves swung in
 #   dn_lunge_ring   a round pen 18 m across, its gate standing open on +z; dn_trough a water trough; dn_tack a saddle on a rack
 #   dn_hay_barn     the hay barn, 24 m along x, 14 deep (z = 0 to -14), front +z: Barn Red walls with gambrel gable ends (one solid), Mint corner boards wrapping the four corners, a Black-framed
 #                   sliding door of two Mint leaves with X braces under a rail, two lit windows, a hayloft door with a hoist beam on each gable end, and a gambrel Barn Red2 roof that is one slab
@@ -196,24 +196,35 @@ P = parts(root, "dn_stable_post", {"mint": 0.02})
 P["mint"].box(-0.11, 0.11, 0.0, 1.45, -0.11, 0.11)
 P["mint"].box(-0.14, 0.14, 1.45, 1.53, -0.14, 0.14)
 
-root = pivot("dn_yard_gate", (0, 0, 0))                                                 # the yard's gate: two Barn Red piers 6 m apart, an arched board over them (the game letters it), two leaves swung in
-P = parts(root, "dn_yard_gate", {"barn": 0.04, "mint": 0.025, "mint2": 0.015, "gold": 0.015, "black": 0.02, "saddle": 0.015})
+def slat(acc, a, b, y0, y1, t):
+    """a straight member in plan from a to b ((x, z) ends), t thick across, from y0 up to y1: laid out from its corners, so it lies exactly along a-b"""
+    l = math.hypot(b[0] - a[0], b[1] - a[1])
+    nx, nz = -(b[1] - a[1]) / l * t / 2, (b[0] - a[0]) / l * t / 2
+    acc.polyy([(a[0] + nx, a[1] + nz), (b[0] + nx, b[1] + nz), (b[0] - nx, b[1] - nz), (a[0] - nx, a[1] - nz)], y0, y1)
+
+
+def leaf(rails, stiles, h, d, L, ys, top):
+    """a gate's leaf hung at h ((x, z), the hinge) and swung to lie along d (a unit (x, z)), L long: a stile at each end from the ground to `top`,
+    rails at the heights ys running into both stiles, and a brace from the hinge's foot to the far stile's head"""
+    at = lambda u: (h[0] + d[0] * u, h[1] + d[1] * u)
+    for u in (0.05, L - 0.05):
+        slat(stiles, at(u - 0.05), at(u + 0.05), 0.12, top, 0.1)
+    for y in ys:
+        slat(rails, at(0.04), at(L - 0.04), y - 0.06, y + 0.06, 0.06)
+    a, b = at(0.12), at(L - 0.12)
+    rails.bm((a[0], ys[0], a[1]), (b[0], ys[-1], b[1]), 0.035)
+
+
+root = pivot("dn_yard_gate", (0, 0, 0))                                                 # the yard's gate: two Barn Red piers 6 m apart, two leaves swung in
+P = parts(root, "dn_yard_gate", {"barn": 0.04, "mint": 0.025, "mint2": 0.015, "gold": 0.015})
+SW = math.radians(80)                                                                   # (how far the leaves stand open)
 for sx in (-1, 1):
     P["barn"].box(sx * 3.0 - 0.45, sx * 3.0 + 0.45, 0.3, 3.4, -0.45, 0.45)
     P["mint"].box(sx * 3.0 - 0.55, sx * 3.0 + 0.55, 3.4, 3.62, -0.55, 0.55)
     P["gold"].add(sphere(0.28, 10, 7), t=(sx * 3.0, 3.85, 0))
     P["mint"].box(sx * 3.0 - 0.5, sx * 3.0 + 0.5, 0.0, 0.35, -0.5, 0.5)
-    hx = sx * 2.5                                                                         # a leaf, hinged on the pier, swung 80 degrees in (-z)
-    a = sx * math.radians(80)
-    for y in (0.3, 1.5):
-        P["mint2"].boxc(hx - sx * 1.25 * math.cos(math.radians(80)), y, -1.25 * math.sin(math.radians(80)), 2.5, 0.12, 0.08, rot=(0, a, 0))
-    for t in (0.06, 2.44):
-        P["mint"].boxc(hx - sx * t * math.cos(math.radians(80)), 0.9, -t * math.sin(math.radians(80)), 0.1, 1.4, 0.1, rot=(0, a, 0))
-P["black"].box(-2.6, 2.6, 4.0, 4.9, -0.12, 0.12)                                           # the name board
-P["gold"].box(-2.7, 2.7, 3.92, 4.0, -0.15, 0.15)
-P["gold"].box(-2.7, 2.7, 4.9, 4.98, -0.15, 0.15)
-for sx in (-1, 1):
-    P["black"].bm((sx * 2.6, 4.45, 0), (sx * 3.0, 3.6, 0), 0.06)
+    # a leaf hung on the pier's inner face, swung in (-z): shut, the two would meet on the axis
+    leaf(P["mint2"], P["mint"], (sx * 2.53, -0.2), (-sx * math.cos(SW), -math.sin(SW)), 2.45, (0.4, 0.9, 1.4), 1.55)
 
 # =====================================================================================================
 # dn_lunge_ring: a round pen 18 m across, its gate on +z; dn_trough, dn_tack
@@ -231,12 +242,10 @@ for i in range(NP):
         L, ang = math.hypot(x1 - x, z1 - z), math.atan2(x1 - x, z1 - z)
         for y in (0.6, 1.2):
             P["mint2"].boxc((x + x1) / 2, y, (z + z1) / 2, 0.07, 0.14, L - 0.12, rot=(0, ang, 0))
-# the gate, standing open between the last post and the first
-a0, a1 = 2 * PI * (NP - 0.5) / NP + PI / 2, 2 * PI * 0.5 / NP + PI / 2
+# the gate: a leaf hung on the post east of the opening, swung out (+z and away from it), clear of the way in
+a1 = 2 * PI * (NP - 0.5) / NP + PI / 2
 gx, gz = math.cos(a1) * RR, math.sin(a1) * RR
-for y in (0.4, 1.3):
-    P["saddle"].boxc(gx + 1.2, y, gz + 0.2, 2.4, 0.12, 0.08, rot=(0, -0.25, 0))
-P["saddle"].boxc(gx + 2.35, 0.85, gz + 0.5, 0.1, 1.1, 0.1, rot=(0, -0.25, 0))
+leaf(P["saddle"], P["saddle"], (gx - 0.15, gz + 0.12), (math.cos(math.radians(70)), math.sin(math.radians(70))), 2.3, (0.6, 1.2), 1.45)
 
 root = pivot("dn_trough", (0, 0, 0))                                                    # a water trough: a plank tub, dark water 6 cm under its rim
 P = parts(root, "dn_trough", {"saddle": 0.02, "saddle2": 0.0, "black2": 0.0, "gold": 0.0})

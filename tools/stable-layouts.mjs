@@ -50,6 +50,12 @@ function check(L) {
       }
     }
   }
+  // the walks (the lanes and the back yard) are kept clear: no trough, saddle rack or hay in one
+  const props = S.filter((s) => s.n === 'dn_trough' || s.n === 'dn_tack').concat((L.hay || []).map(([x, z, yaw], j) => ({ i: 200 + j, n: 'hay', poly: corners([-0.7, 0.7, -0.7, 0.7], x, z, yaw) })));
+  for (const s of props) for (const [x0, x1, z0, z1] of L.walks || []) {
+    const P = pts(s);
+    if (Math.max(...P.map((p) => p[0])) > x0 && Math.min(...P.map((p) => p[0])) < x1 && Math.max(...P.map((p) => p[1])) > z0 && Math.min(...P.map((p) => p[1])) < z1) out.push(`${s.n} #${s.i} stands in a walk`);
+  }
   let tight = [];
   // an L's two arms cross in its inner corner (porch on porch), where the knuckle lays its porch square over them: the knuckle's inner corner, in the plan
   const knuckles = L.pieces.filter((p) => p[0] === 'dn_stable_corner').map(([, x, z, yaw]) => corners([1.4, 1.4, 1.4, 1.4], x, z, yaw)[0]);
@@ -93,7 +99,7 @@ function svg(L) {
     else s += poly(sh.poly, FILL[sh.n], PAL.mint, sh.n === 'dn_yard_gate' ? 1 : 0.9);
   }
   for (const [x, z, yaw] of stallsOf(L)) s += `<circle cx="${px(x)}" cy="${pz(z)}" r="3.5" fill="${PAL.gold}"/><line x1="${px(x)}" y1="${pz(z)}" x2="${px(x + Math.sin(yaw) * 2.6)}" y2="${pz(z + Math.cos(yaw) * 2.6)}" stroke="${PAL.gold}" stroke-width="2"/>`;
-  for (const [x, z, , n] of L.gates) if (n) s += `<text x="${px(x)}" y="${+pz(z) - 14}" fill="${PAL.mint}" font-size="12" text-anchor="middle">${n}</text>`;
+  for (const [x0, x1, z0, z1] of L.walks || []) s += `<rect x="${px(x0)}" y="${pz(z1)}" width="${(x1 - x0) * SC}" height="${(z1 - z0) * SC}" fill="none" stroke="${PAL.gold}" stroke-dasharray="2 4" stroke-width="1"/>`;
   for (const [n, x, z] of L.pieces) {
     const label = { dn_stable_corner: 'CLOCK TOWER', dn_hay_barn: 'HAY BARN', dn_lunge_ring: 'LUNGE RING' }[n];
     if (label) s += `<text x="${px(x + (n === 'dn_stable_corner' ? -4.5 * Math.sign(x) : 0))}" y="${+pz(z - (n === 'dn_hay_barn' ? 7 : n === 'dn_stable_corner' ? 4.5 : 0)) + 5}" fill="${n === 'dn_lunge_ring' ? PAL.black : PAL.mint}" font-size="12" text-anchor="middle" font-weight="bold">${label}</text>`;

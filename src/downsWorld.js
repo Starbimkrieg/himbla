@@ -677,11 +677,10 @@ function stables(k) {
     bake(k, 'dn_stable_post');
     k.at();
   }
-  // the gates, their boards lettered both ways
-  for (const [x, z, yaw, name] of STABLES.gates) {
+  // the gates
+  for (const [x, z, yaw] of STABLES.gates) {
     k.at(x, z, yaw);
     bake(k, 'dn_yard_gate');
-    if (name) for (const s of [1, -1]) k.text(name, 0, 4.45, s * 0.14, s > 0 ? 0 : Math.PI, Math.min(4.9, tw(name, 0.5)), { fg: FG.gold, bg: BG.black, back: false, off: 0.0 });
     for (const s of [-1, 1]) k.column(0.5, 3.6, s * 3, 0);
     k.at();
   }

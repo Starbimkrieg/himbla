@@ -94,9 +94,9 @@ export const LAWN = { x: 100, z: 0, r: 28, tables: [[84, -12, 0], [92, 12, 1], [
 //   pieces  [name, x, z, yaw]: dn_stable_4 / dn_stable_6 (yaw 0: front +z; PI/2: front +x; -PI/2: front -x), dn_stable_corner (yaw 0: its inner corner toward
 //           +x +z; -PI/2: toward -x +z), dn_hay_barn (front +z), dn_lunge_ring, dn_trough, dn_tack
 //   fences  runs of post and rail, as polylines [[x, z]...] (cut into equal bays of about 4 m)
-//   gates   [x, z, yaw, name]: dn_yard_gate, its board lettered `name`
+//   gates   [x, z, yaw]: dn_yard_gate (yaw 0: its leaves swung toward -z)
 //   ground  [x0, x1, z0, z1, colour]: the yard's earth (and B's turnout grass), laid flat
-//   trainer where the Training Yard's trainer stands; hay [x, z, yaw] stacks
+//   trainer where the Training Yard's trainer stands; hay [x, z, yaw] stacks; walks [x0, x1, z0, z1]: the ways through, kept clear of props (tools/stable-layouts.mjs)
 const mirror = (L) => {
   const flip = (yaw) => (yaw === 0 || yaw === Math.PI ? yaw : -yaw);
   const corner = (yaw) => (yaw === 0 ? -Math.PI / 2 : 0);                 // (an L's knuckle: its inner corner turned from +x to -x)
@@ -105,7 +105,7 @@ const mirror = (L) => {
     ...L,
     pieces: [...L.pieces, ...half(L.pieces.filter((p) => p[1] < 0))],
     fences: [...L.fences, ...L.fences.filter((f) => f.every(([x]) => x <= 0) && f.some(([x]) => x < 0)).map((f) => f.map(([x, z]) => [-x, z]))],
-    gates: [...L.gates, ...L.gates.filter((g) => g[0] < 0).map(([x, z, yaw, n]) => [-x, z, flip(yaw), n.replace('WEST', 'EAST')])],
+    gates: [...L.gates, ...L.gates.filter((g) => g[0] < 0).map(([x, z, yaw]) => [-x, z, flip(yaw)])],
     hay: [...L.hay, ...L.hay.filter((h) => h[0] < 0).map(([x, z, yaw]) => [-x, z, -yaw])],
   };
 };
@@ -127,13 +127,15 @@ export const STABLE_LAYOUTS = {
       [[-74.5, -129.7], [-74.5, -128.3]],                                       // across the gap between the wing's blocks
       [[-39.7, -164.5], [-38.3, -164.5]], [[-17.7, -165], [-12.2, -165]],       // across the back row's gaps
     ],
-    gates: [[-74.5, -102, -Q, 'CHIMERA STABLES']],                             // (front out, its leaves swung into the court)
+    gates: [[-74.5, -102, -Q]],                                                // (its leaves swung into the court)
     hay: [[-18, -151, 0.15], [-9, -153.5, -0.1]],
     ground: [[-80, 80, -173, -96, 'earth']],
     trainer: [3, -116],
   }),
   // B, The Twin Lanes: each tunnel comes out into a lane of boxes running straight back, an L at its far end (the outer row turning along the back at a clock
-  // tower), the two lanes joined across the back in front of the hay barn; between them a fenced turnout paddock with the lunge ring, a gate to it from each lane
+  // tower), the two lanes joined across the back by a yard in front of the hay barn; between them a fenced turnout paddock with the lunge ring, a gate to it
+  // from each lane and one from the back yard. The lanes and the back yard are kept clear: the troughs, the saddle rack and the hay stand in the paddock or
+  // in the nook between the back row and the barn
   b: mirror({
     name: 'B: The Twin Lanes',
     pieces: [
@@ -141,16 +143,17 @@ export const STABLE_LAYOUTS = {
       ['dn_stable_corner', -53.8, -152.3, 0], ['dn_stable_6', -38.5, -152, 0], // its knuckle and the back row
       ['dn_stable_6', -41.5, -116, -Q],                                        // the inner row, front into the lane, its back to the paddock
       ['dn_hay_barn', 0, -152, 0], ['dn_lunge_ring', 0, -120, 0],
-      ['dn_trough', -47.5, -146, 0], ['dn_tack', -46, -104, 0.5], ['dn_trough', -20, -138, 0.2],
+      ['dn_trough', -22, -100.6, 0], ['dn_trough', -18, -155.5, 0], ['dn_tack', -14.8, -155.3, 0.3],
     ],
     fences: [
       [[-63.4, -98.2], [-51, -98.2]], [[-44, -98.2], [-33, -98.2], [0, -98.2]],   // across the lanes' mouths (a gate in each) and the paddock's north side
-      [[-37, -131.6], [-37, -135.5]], [[-37, -142.5], [-37, -147], [-3.5, -147]], // the paddock's side by the lane (its gate) and its south side (a gate to the back yard)
+      [[-37, -131.6], [-37, -135.5]], [[-36.55, -142], [-3.5, -142]],             // the paddock's side by the lane (its gate) and its south side, from that gate's pier (a gate to the back yard)
       [[-58, -130.6], [-58, -131.8]], [[-23.2, -157], [-12.2, -157]],              // across the gaps in the outer row and the back row
     ],
-    gates: [[-47.5, -98.2, 0, 'WEST LANE'], [-37, -139, Q, ''], [0, -147, 0, 'PADDOCK']],
-    hay: [[-14, -144.5, 0.2], [-27, -149.2, -0.2]],
-    ground: [[-64, 64, -163, -96, 'earth'], [-36.8, 36.8, -146.8, -98.4, 'grass']],
+    gates: [[-47.5, -98.2, 0], [-37, -139, Q], [0, -142, 0]],
+    hay: [[-21, -154.6, 0.1], [-30, -103.5, 0.2]],
+    ground: [[-64, 64, -163, -96, 'earth'], [-36.8, 36.8, -141.8, -98.4, 'grass']],
+    walks: [[-51.1, -43.9, -149.6, -96], [43.9, 51.1, -149.6, -96], [-51.1, 51.1, -149.6, -142.3], [-12.6, 12.6, -151.5, -142.3]],   // the two lanes, the back yard, the barn's apron
     trainer: [3, -108],
   }),
 };

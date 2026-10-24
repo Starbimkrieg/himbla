@@ -23,7 +23,7 @@ redraws the plans here.
 
 One court the width of the stand's middle. On each side an L of boxes: a wing (a six-box and a four-box block) running back from the
 stand, turning at a clock-towered tack room into the back row, which runs in to the hay barn in the middle. The lunge ring stands in
-the middle of the court, the trainer between it and the tunnels. A gate at the front of each wing (CHIMERA STABLES on its board)
+the middle of the court, the trainer between it and the tunnels. A gate at the front of each wing
 leads out to the west and the east; fences close the gaps.
 
 ![A from over the far stand](a_over.jpg)
@@ -36,10 +36,12 @@ leads out to the west and the east; fences close the gaps.
 
 ![Layout B](plan-b.png)
 
-Each tunnel comes out at a gate (WEST LANE, EAST LANE) into a lane of boxes running straight back: an outer row and an inner row
-facing each other across it. At the far end the outer row turns at a clock tower into the back row, which runs in to the hay barn.
-Between the two lanes is a fenced turnout paddock on grass with the lunge ring, a gate to it from each lane and one at the back
-(PADDOCK) to the barn's yard.
+Each tunnel comes out at a gate into a lane of boxes running straight back: an outer row and an inner row facing each other across
+it. At the far end the outer row turns at a clock tower into the back row, which runs in to the hay barn. Between the two lanes is a
+fenced turnout paddock on grass with the lunge ring, a gate to it from each lane and one at the back. The paddock stops at the line
+between its two side gates, leaving an earth yard 10 m deep in front of the barn that joins the lanes. The lanes and that yard
+(dotted on the plan) are kept clear: the troughs, the saddle racks and the hay stand in the paddock or in the nooks between the back
+rows and the barn, and the checker fails a layout that puts one in a walk.
 
 ![B from over the far stand](b_over.jpg)
 
@@ -56,7 +58,7 @@ Between the two lanes is a fenced turnout paddock on grass with the lunge ring, 
 - **`dn_stable_corner`**: the knuckle of an L, a two-storey tack room with lit windows on its outer faces, a hip roof, a clock turret
   with a clock on each face and a chimera weathervane. It lays the porch's square in the inner corner, a post where the two porch
   beams cross and a soffit under the two roofs' eaves.
-- **`dn_yard_gate`**: Barn Red piers, a name board the game letters, two leaves swung in. **`dn_stable_fence`**, **`dn_stable_post`**:
+- **`dn_yard_gate`**: Barn Red piers with Mint caps and gold balls, two braced leaves swung in. **`dn_stable_fence`**, **`dn_stable_post`**:
   Mint post and rail, cut into equal bays of about 4 m.
 - **`dn_lunge_ring`** (a round pen 18 m across), **`dn_trough`**, **`dn_tack`** (a saddle on its rack).
 
