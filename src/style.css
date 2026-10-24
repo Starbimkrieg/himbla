@@ -9,8 +9,8 @@
   --green: #7dff6a;
   --violet: #7b2ff7;
   /* pixel fonts (bundled via src/fonts.js): display + readable body text */
-  --comic: 'Press Start 2P', 'Pixelify Sans', monospace;
-  --body: 'Pixelify Sans', 'Press Start 2P', 'Trebuchet MS', sans-serif;
+  --comic: 'Press Start 2P', 'Display Credit', 'Jersey 15', monospace;
+  --body: 'Jersey 15', 'Body Credit', 'Press Start 2P', 'Trebuchet MS', sans-serif;
   /* retro-arcade UI palette */
   --ui-bg: rgba(10, 8, 20, 0.9);
   --ui-bg2: #161126;
@@ -752,7 +752,7 @@ body.council #hud > *:not(#popups):not(#cinebars) { visibility: hidden; } /* (ju
 #dialog .vote-roll .rc { opacity: 0; animation: rc-in 0.01s linear forwards; animation-delay: calc(0.5s + var(--i) * 0.6s); } /* (the roll call: one member at a time) */
 #dialog .vote-roll .dlg-btns { opacity: 0; animation: rc-in 0.01s linear forwards; animation-delay: var(--at, 0s); } /* (the buttons' labels would give the verdict away: they wait for it, announce() sets --at) */
 @keyframes rc-in { to { opacity: 1; } }
-#dialog .vote-roll .rc b.vt { font-family: var(--comic); font-weight: normal; font-size: 12px; line-height: 1.6; } /* (the verdict headline in the display face: the body face draws a 5 like an S and a C like an O) */
+#dialog .vote-roll .rc b.vt { font-family: var(--comic); font-weight: normal; font-size: 12px; line-height: 1.6; } /* (the verdict headline in the display face) */
 @keyframes cbin { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 #jarchip .artifact-slot { color: #7dffd4; text-shadow: 0 0 8px #7dffd4; }
 /* ---- rail lance scope ---- */
@@ -1458,7 +1458,7 @@ body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 #globe-radio .gr-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 #globe-radio .gr-row label { font-family: var(--comic); font-size: 7px; color: var(--ui-violet); }
 #globe-radio .gr-row b { font-weight: normal; font-size: 15px; color: var(--cyan); }
-#globe-radio .gr-row b.cr { font-family: var(--comic); font-size: 9px; line-height: 1.3; white-space: nowrap; } /* (the body face draws a 5 like an S: figures use the display face) */
+#globe-radio .gr-row b.cr { font-family: var(--comic); font-size: 9px; line-height: 1.3; white-space: nowrap; } /* (figures in the display face, like the HUD's) */
 #globe-radio .gr-row b.off { color: var(--ui-muted); }
 #globe-radio .gr-row b.done { color: var(--yellow); }
 #globe-radio .gr-bar { background: var(--cyan); }
@@ -1515,7 +1515,7 @@ body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 .otm-tile:not(.built) .otm-name { color: var(--ui-muted); }
 .otm-feat { font-size: 13px; line-height: 1.15; color: var(--ui-dim); }
 .otm-tile.built .otm-feat { color: var(--ph); }
-.otm-feat b.cr { font-family: var(--comic); font-weight: normal; font-size: 9px; } /* (the body face draws a 5 like an S: figures use the display face) */
+.otm-feat b.cr { font-family: var(--comic); font-weight: normal; font-size: 9px; } /* (figures in the display face, like the HUD's) */
 .otm-chip { margin-top: auto; font-family: var(--comic); font-size: 8px; line-height: 1; padding: 4px 6px 3px; border: 2px solid #05030c; background: var(--ui-bg3); color: var(--yellow); }
 .otm-tile.built .otm-chip { background: var(--green); color: #05030c; }
 .otm-chip.short { background: #2a1018; color: #ff7a8a; }
@@ -1537,7 +1537,7 @@ body.dark-side #powradial .pr-item.cur.on { border-color: #8f7bff; }
 .otm-row span { font-family: var(--comic); font-size: 7px; line-height: 1.4; color: var(--ph-dim); }
 .otm-row b { font-weight: normal; font-size: 15px; line-height: 1.2; color: var(--ph); }
 .otm-row b.gold { color: var(--yellow); } .otm-row b.bad { color: #ff7a8a; } .otm-row b.dim { color: var(--ui-muted); }
-.otm-row b.cr { font-family: var(--comic); font-size: 11px; line-height: 1.3; } /* (the body face draws a 5 like an S: figures use the display face) */
+.otm-row b.cr { font-family: var(--comic); font-size: 11px; line-height: 1.3; } /* (figures in the display face, like the HUD's) */
 .otm-meter { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .otm-bar { flex: 1 1 120px; height: 12px; background: #0b0814; border: 2px solid #23302a; }
 .otm-bar i { display: block; height: 100%; background: var(--yellow); }

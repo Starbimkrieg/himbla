@@ -726,6 +726,7 @@ crowd-noise bed for now (the cheering is due a rework), and the race countdown b
 src/
   main.js        game loop, camera, state, explosions, job board flow
   config.js      world size and physics tuning
+  fonts.js       the two pixel faces, bundled for offline play: Press Start 2P (display: headings, figures, buttons, signs) and Jersey 15 (body text), and the credit sign (₵) neither has (assets/fonts/)
   planet.js      spherical moon: cube-sphere heightfield, craters, LOD chunk streaming, exact surface queries
   boulders.js    the boulders' lumpy shapes (six, shared by every chunk), their ink shell, and the collider constant that fits a sphere to them
   moonSkins.js   experiment: three candidate ground textures (regolith, etching, survey) as terrain shader chunks, and regolith's matching look for the rocks (`patchRockMaterial`), the hab domes' berms (`patchBermMaterial`) and the crater rims (`skRim`); off unless `?moonskin=1|2|3` or the Regolith ground texture setting (dev builds); the Ground detail setting sets its quality
@@ -874,6 +875,7 @@ tools/
   downs-audit.mjs         dev-only: audits Chimera Downs' build in its flat design frame: z-fighting (coplanar triangles of different colours, named by builder and part), colliders standing in each other, text planes facing into walls or hanging in air, bare-ground seams (`node tools/downs-audit.mjs [zfight|colliders|text|gaps|all]`)
   downs-layouts.mjs        dev-only: the Chimera Downs overhaul study (docs/downs-layouts.md): the old course and the two proposed layouts (B was built), a clearance check against the oval and the plateau, and the plan drawings in docs/ (`node tools/downs-layouts.mjs docs`)
   chimera-lab.html         dev-only: the chimera builder's lab (npm run dev, then /tools/chimera-lab.html): pick parts, a settler's outfit, mutations and a seed, or a grid of random chimeras, each mutation, every kind, the showcase, the far LOD (docs/chimera-builder/)
+  make-credit-glyph.py     draws the credit sign (₵) for both pixel faces (each font's own C with a bar, on its pixel grid) -> src/assets/fonts/credit-*.woff2 (`pip install fonttools brotli`)
   race-sim.mjs             dev-only: runs the Chimera Downs race model headless thousands of times and reports the balance: what each stat and style wins, the starting stalls, passes, skills, the bad moments, the tank at the line (`node tools/race-sim.mjs [races] [all|sprint|mile|medium|long|<metres>] [field] [skills=0|1]`)
   meridian-layouts.mjs     the Meridian Exchange layout study (docs/meridian-layouts.md): the footprints of the site as built and of two proposed layouts, a clearance check, and the plan drawings in docs/
   winch-ride.mjs           dev-only headless test of the Hitch-Line winch with the real player and the real winch: rides toward the casino fountain past the Lucky Crater Casino's old sign posts (the harness stands their colliders in: coasting, running at them, circling a post, skating the ring road), and judges flings, snapped lines, posts the cable gave up on and cable inside a post; `--gate ring` is the check to run after touching `src/winch.js` (see docs/winch-handoff.md)
