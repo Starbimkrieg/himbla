@@ -43,9 +43,11 @@ between its two side gates, leaving an earth yard 10 m deep in front of the barn
 (dotted on the plan) are kept clear: the troughs, the saddle racks and the hay stand in the paddock or in the nooks between the back
 rows and the barn, and the checker fails a layout that puts one in a walk.
 
-![B from over the far stand](b_over.jpg)
+![B: the paddock, the yard before the barn, the hay in the nooks](b_over.jpg)
 
-![B: down the west lane](b_lane.jpg)
+![B: the west lane's gate, from the lane](b_lane.jpg)
+
+![B: the paddock's west gate and the back row](b_paddock.jpg)
 
 ## The kit (`tools/blender/build_downs_stable.py`)
 
