@@ -78,7 +78,7 @@ export class Cheats {
       { label: `5 · CLICK MAP TO TELEPORT: ${onOff(this.mapTeleport)}`, fn: () => { this.mapTeleport = !this.mapTeleport; this.dev(); } },
       { label: '6 · FULL CHEAT MENU…', fn: () => this.open() },
       { label: `7 · RAGDOLL: ${onOff(this.ragdoll)}`, fn: () => { this.toggleRagdoll(); this.dev(); } },
-      { label: '8 · GIT: FETCH & PULL UPSTREAM…', fn: () => this.gitMenu() },
+      { label: '8 · GIT: FETCH, PULL & SWITCH BRANCH…', fn: () => this.gitMenu() },
       { label: `9 · COURIER MODEL: ${BIKE_NAMES[getBikeStyle()]}`, fn: () => this.bikeModel() },
       { label: `10 · SKIMMER MODEL: ${SKIMMER_NAMES[getSkimmerStyle()]}`, fn: () => this.skimmerModel() },
       { label: 'CLOSE' },
@@ -104,10 +104,10 @@ export class Cheats {
     this.dev();
   }
 
-  // ---- git: run by the dev server (tools/devGit.mjs: fetch and fast-forward pull only), so `npm run dev` only ----
-  async gitCall(act) {
+  // ---- git: run by the dev server (tools/devGit.mjs: fetch, fast-forward pull, switch branch), so `npm run dev` only ----
+  async gitCall(act, body = null) {
     try {
-      const r = await fetch(`/__dev/git/${act}`, { method: 'POST', headers: { 'X-Dev-Git': '1' } });
+      const r = await fetch(`/__dev/git/${act}`, { method: 'POST', headers: { 'X-Dev-Git': '1', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
       return await r.json();
     } catch (e) { return { ok: false, err: String((e && e.message) || e) }; }
   }
@@ -157,7 +157,7 @@ export class Cheats {
         fn: () => { this.gitChip = !this.gitChip; try { localStorage.setItem(GITCHIP_KEY, this.gitChip ? '1' : '0'); } catch { /* unavailable */ } this.gitChipSync(); again(); },
       }] : [];
       const list = [...buttons, ...sw, { label: 'BACK', fn: () => this.dev() }, { label: 'CLOSE' }].map((b, i) => ({ ...b, label: `${i + 1} · ${b.label}` }));
-      g.dialog('GIT: FETCH & PULL', text, list);
+      g.dialog('GIT: FETCH, PULL & SWITCH', text, list);
       return list;
     };
     if (!dev) { show('<small>Only available when the game runs from the dev server (npm run dev).</small>', []); return; }
@@ -165,7 +165,8 @@ export class Cheats {
     const st = await this.gitCall('status');
     if (g.dialogButtons !== mine) return; // closed or changed meanwhile
     this.gitSeen(st);
-    const note = (msg) => { const again = () => note(msg); show(`<small>${msg}</small>`, [{ label: 'TRY AGAIN', fn: () => this.gitMenu() }], again); };
+    const branchBtn = { label: 'SWITCH BRANCH…', fn: () => this.gitBranches(show, esc) };
+    const note = (msg) => { const again = () => note(msg); show(`<small>${msg}</small>`, [{ label: 'TRY AGAIN', fn: () => this.gitMenu() }, branchBtn], again); };
     if (!st.ok) { note(esc(st.err || 'The dev server did not answer.')); return; }
     if (st.noUpstream) { note(`${esc(st.branch)} has no upstream branch. In a terminal: git branch -u origin/${esc(st.branch)}`); return; }
     const screen = () => {
@@ -178,10 +179,62 @@ export class Cheats {
       const buttons = [];
       if (st.behind && !st.ahead) buttons.push({ label: `PULL ${st.behind} COMMIT${st.behind === 1 ? '' : 'S'}`, fn: () => this.gitPull(show, esc) });
       else if (st.behind) lines.push('Diverged from upstream: pull it by hand (a merge or rebase is not for the game to choose).');
-      buttons.push({ label: 'CHECK AGAIN', fn: () => this.gitMenu() });
+      buttons.push({ label: 'CHECK AGAIN', fn: () => this.gitMenu() }, branchBtn);
       show(`<small>${lines.join('<br>')}</small>`, buttons, screen);
     };
     screen();
+  }
+
+  // Pick one of origin's branches (newest commit first, 8 a page) and switch this checkout to it. The dev server refuses
+  // while tracked files have uncommitted changes, so nothing of yours is lost; the page reloads on the new branch's files.
+  async gitBranches(show, esc, page = 0, list = null) {
+    const g = this.game;
+    if (!list) {
+      const mine = show('<small>Fetching branches…</small>', []);
+      const r = await this.gitCall('branches');
+      if (g.dialogButtons !== mine) return;
+      if (!r.ok) { show(`<small>${esc(r.err || 'The dev server did not answer.')}</small>`, [{ label: 'BACK TO GIT', fn: () => this.gitMenu() }]); return; }
+      list = r;
+    }
+    const PAGE = 8;
+    const all = list.branches;
+    const shown = all.slice(page * PAGE, page * PAGE + PAGE);
+    const lines = [`On <b>${esc(list.current)}</b>. Pick a branch from origin (newest first):`];
+    if (list.dirty) lines.push(`${list.dirty} uncommitted change${list.dirty === 1 ? '' : 's'} here: commit or stash first, or the switch is refused.`);
+    if (list.fetchError) lines.push(`Fetch failed (the list may be stale): ${esc(list.fetchError.split('\n')[0])}`);
+    const short = (t, n) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
+    const buttons = shown.map((b) => ({
+      label: `${b.name === list.current ? '● ' : ''}${short(b.name, 34)} · ${b.when}`,
+      fn: () => this.gitSwitch(show, esc, b, list),
+    }));
+    if (all.length > PAGE) buttons.push({ label: `MORE (${page + 1}/${Math.ceil(all.length / PAGE)})`, fn: () => this.gitBranches(show, esc, (page + 1) % Math.ceil(all.length / PAGE), list) });
+    buttons.push({ label: 'BACK TO GIT', fn: () => this.gitMenu() });
+    show(`<small>${lines.join('<br>')}</small>`, buttons);
+  }
+
+  async gitSwitch(show, esc, b, list) {
+    const g = this.game;
+    if (b.name === list.current) { this.gitMenu(); return; }
+    show(`<small>Switch this checkout from <b>${esc(list.current)}</b> to <b>${esc(b.name)}</b>?<br>Last commit ${esc(b.when)}: ${esc(b.subject)}<br>Your progress is saved first; the game reloads on that branch.</small>`, [
+      {
+        label: `SWITCH TO ${esc(b.name).toUpperCase()}`,
+        fn: async () => {
+          try { g.save(); } catch { /* the switch goes ahead without a fresh save */ }
+          const mine = show('<small>Switching…</small>', []);
+          const r = await this.gitCall('switch', { branch: b.name });
+          if (g.dialogButtons !== mine) return;
+          if (!r.ok) { show(`<small>Switch stopped: ${esc((r.err || 'git said no').split('\n').filter((l) => l && !/^hint:/.test(l)).slice(0, 4).join(' · '))}</small>`, [{ label: 'BACK TO BRANCHES', fn: () => this.gitBranches(show, esc) }]); return; }
+          const lines = [`Now on <b>${esc(r.branch)}</b> at ${esc(r.head)} · ${r.changed} file${r.changed === 1 ? '' : 's'} differ from ${esc(r.from)}.`];
+          if (r.ffError) lines.push(`Your local copy of it could not fast-forward to origin's: ${esc(r.ffError.split('\n')[0])}`);
+          if (r.deps) lines.push('package.json differs: run npm install, then restart the dev server.');
+          lines.push('The page reloads by itself when the dev server sees the files (if that branch has no branch switcher, switch back from a terminal).');
+          this.gitState = null;
+          this.gitChipSync();
+          show(`<small>${lines.join('<br>')}</small>`, [{ label: 'RELOAD NOW', fn: () => location.reload() }]);
+        },
+      },
+      { label: 'BACK TO BRANCHES', fn: () => this.gitBranches(show, esc, 0, list) },
+    ]);
   }
 
   async gitPull(show, esc) {

@@ -1,10 +1,14 @@
-// Dev server only (never built): lets the game's dev menu fetch and pull this checkout's upstream.
+// Dev server only (never built): lets the game's dev menu fetch and pull this checkout's upstream, and switch branches.
 //
-//   POST /__dev/git/status   git fetch --prune, then the branch's standing against its upstream
-//   POST /__dev/git/pull     git pull --ff-only (fast-forward only: never merges, rebases or discards)
+//   POST /__dev/git/status     git fetch --prune, then the branch's standing against its upstream
+//   POST /__dev/git/pull       git pull --ff-only (fast-forward only: never merges, rebases or discards)
+//   POST /__dev/git/branches   git fetch --prune, then origin's branches, newest commit first
+//   POST /__dev/git/switch     body {"branch": name}: switch to origin's branch of that name (a local branch tracking it is
+//                              made if there is none) and fast-forward it; refused while tracked files have changes
 //
-// Commands are fixed (nothing from the request reaches git). Only a POST from this machine's own page is answered: loopback
-// address, localhost Host, same Origin if sent, and a custom header another site can't add without a CORS preflight (never granted).
+// Only the switch takes anything from the request, and only a name that is one of origin's branches as git lists them (and
+// a plain ref name, never an option). Only a POST from this machine's own page is answered: loopback address, localhost
+// Host, same Origin if sent, and a custom header another site can't add without a CORS preflight (never granted).
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -51,11 +55,53 @@ async function pull() {
   };
 }
 
+async function remoteBranches() {
+  const r = await git(['for-each-ref', '--sort=-committerdate', '--format=%(refname:short)%09%(committerdate:relative)%09%(subject)', 'refs/remotes/origin']);
+  return lines(r.out).map((l) => l.split('\t')).filter(([ref]) => ref.startsWith('origin/') && ref !== 'origin/HEAD' && ref !== 'origin')
+    .map(([ref, when, subject]) => ({ name: ref.slice('origin/'.length), when, subject }));
+}
+
+async function branches() {
+  const fetched = await git(['fetch', '--prune']);
+  const [list, branch, dirty] = await Promise.all([remoteBranches(), git(['rev-parse', '--abbrev-ref', 'HEAD']), git(['status', '--porcelain', '--untracked-files=no'])]);
+  return { ok: true, fetchError: fetched.ok ? '' : fetched.err, current: branch.out, dirty: lines(dirty.out).length, branches: list };
+}
+
+const SAFE_NAME = /^(?!-)(?!.*\.\.)[A-Za-z0-9._/-]{1,200}$/;
+
+async function switchTo(body) {
+  const name = body && typeof body.branch === 'string' ? body.branch : '';
+  if (!SAFE_NAME.test(name) || !(await remoteBranches()).some((b) => b.name === name)) return { ok: false, err: `origin has no branch "${name}"` };
+  if (lines((await git(['status', '--porcelain', '--untracked-files=no'])).out).length) {
+    return { ok: false, err: 'This checkout has uncommitted changes to tracked files; commit or stash them first. Nothing was changed.' };
+  }
+  const before = (await git(['rev-parse', 'HEAD'])).out;
+  const from = (await git(['rev-parse', '--abbrev-ref', 'HEAD'])).out;
+  const local = await git(['show-ref', '--verify', '--quiet', `refs/heads/${name}`]);
+  const sw = local.ok ? await git(['switch', name]) : await git(['switch', '--track', `origin/${name}`]);
+  if (!sw.ok) return { ok: false, err: sw.err || sw.out };
+  const ff = local.ok ? await git(['merge', '--ff-only', `origin/${name}`]) : { ok: true };
+  const after = (await git(['rev-parse', 'HEAD'])).out;
+  const changed = before !== after ? lines((await git(['diff', '--name-only', `${before}..${after}`])).out) : [];
+  return {
+    ok: true, from, branch: name, head: after.slice(0, 7), changed: changed.length, ffError: ff.ok ? '' : (ff.err || ff.out),
+    deps: changed.some((f) => f === 'package.json' || f === 'package-lock.json'),
+  };
+}
+
+// a small JSON body (the switch's branch name)
+const readBody = (req) => new Promise((resolve) => {
+  let s = '';
+  req.on('data', (c) => { s += c; if (s.length > 4096) req.destroy(); });
+  req.on('end', () => { try { resolve(JSON.parse(s || '{}')); } catch { resolve({}); } });
+  req.on('error', () => resolve({}));
+});
+
 // one at a time: the chip polls during pulls, and two gits in one checkout fight over lock files
 let queue = Promise.resolve();
 const serial = (fn) => { const run = queue.then(fn, fn); queue = run.catch(() => {}); return run; };
 
-const ACTIONS = { '/status': () => serial(status), '/pull': () => serial(pull) };
+const ACTIONS = { '/status': () => serial(status), '/pull': () => serial(pull), '/branches': () => serial(branches), '/switch': (body) => serial(() => switchTo(body)) };
 
 export function devGit() {
   return {
@@ -72,7 +118,7 @@ export function devGit() {
         }
         const act = ACTIONS[req.url.split('?')[0]];
         if (!act) return send(404, { ok: false, err: 'No such action' });
-        act().then((r) => send(200, r), (e) => send(500, { ok: false, err: String((e && e.message) || e) }));
+        readBody(req).then((body) => act(body)).then((r) => send(200, r), (e) => send(500, { ok: false, err: String((e && e.message) || e) }));
       });
     },
   };
