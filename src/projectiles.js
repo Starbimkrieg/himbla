@@ -5,6 +5,7 @@ import { shatterEcho } from './monolith.js';
 const _seg = new THREE.Vector3();
 const _rel = new THREE.Vector3();
 const _near = [];
+const ROUND_TRAIL = 6; // m: a War-Rig tracer's streak
 
 function segSphere(a, b, c, r) {
   _seg.subVectors(b, a);
@@ -23,12 +24,39 @@ export class Projectiles {
     // APC cannon shell: a capsule along z with an additive halo (shared by all)
     this.shellGeo = new THREE.CapsuleGeometry(0.42, 1.5, 4, 8).rotateX(Math.PI / 2);
     this.shellGlow = new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
+    // War-Rig tracer round: a unit streak from z = -1 to 0 (its head at the round), stretched along the flight
+    this.roundGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0, -0.5);
+    this.roundMats = new Map(); // (core and glow per colour, shared)
+  }
+
+  roundMat(color) {
+    let m = this.roundMats.get(color);
+    if (!m) {
+      m = {
+        core: new THREE.MeshBasicMaterial({ color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.6) }),
+        glow: new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }),
+      };
+      this.roundMats.set(color, m);
+    }
+    return m;
   }
 
   // fuse: burst after this many s; proxy: burst within this distance of the player; burst(pos): custom detonation
-  // instead of the explosion (Kade's flak). type: 'bolt' (glowing ball stretched along its flight) or 'shell' (APC
-  // tracer: fixed-length haloed capsule trailing sparks and smoke)
+  // instead of the explosion (Kade's flak). type: 'bolt' (glowing ball stretched along its flight), 'shell' (APC
+  // tracer: fixed-length haloed capsule trailing sparks and smoke) or 'round' (War-Rig gun: a thin glowing streak that
+  // grows out behind the round to a few metres, shedding embers; it hits with a spark, not an explosion)
   fire(owner, pos, vel, { damage = 20, splash = 5, color = 0x9be7ff, size = 0.45, life = 4, gravity = 0, knock = 1, homing = 0, spare = false, fuse = 0, proxy = 0, burst = null, type = 'bolt' } = {}) {
+    if (type === 'round') {
+      const m = this.roundMat(color);
+      const mesh = new THREE.Mesh(this.roundGeo, m.core);
+      const halo = new THREE.Mesh(this.roundGeo, m.glow);
+      halo.scale.set(3.6, 3.6, 1.1);
+      mesh.add(halo);
+      mesh.position.copy(pos);
+      this.game.scene.add(mesh);
+      this.list.push({ owner, mesh, pos: pos.clone(), prev: pos.clone(), vel: vel.clone(), damage, splash, life, gravity, knock, size, color, homing: 0, spare, age: 0, fuse, proxy, burst, type, shared: true });
+      return;
+    }
     const shell = type === 'shell';
     const mesh = new THREE.Mesh(shell ? this.shellGeo : this.geo, new THREE.MeshBasicMaterial({ color: shell ? 0xfff1c0 : color }));
     const hull = new THREE.Mesh(shell ? this.shellGeo : this.geo, this.inkMat);
@@ -62,7 +90,10 @@ export class Projectiles {
       const sp = p.vel.length();
       upAt(p.pos, p.mesh.up);
       p.mesh.lookAt(_rel.copy(p.pos).add(p.vel));
-      if (p.type === 'shell') {
+      if (p.type === 'round') {
+        p.mesh.scale.set(p.size, p.size, Math.min(ROUND_TRAIL, p.age * sp)); // the trail grows to its length, never back past the muzzle
+        if (Math.random() < 0.3) g.fx.spawn(p.pos, _rel.copy(p.vel).multiplyScalar(-0.02), { color: p.color, size: 0.22, life: 0.22, count: 1, spread: 0.4, drag: 3 });
+      } else if (p.type === 'shell') {
         p.mesh.scale.setScalar(p.size);
         // sparks and a thin smoke line
         g.fx.spawn(p.pos, _rel.copy(p.vel).multiplyScalar(-0.04), { color: p.color, size: 0.5, life: 0.35, count: 1, spread: 0.5, drag: 2 });
@@ -112,9 +143,9 @@ export class Projectiles {
       }
       if (hit) {
         if (p.burst) p.burst(p.pos.clone());
-        else g.explode(p.pos, p.splash, p.damage, p.owner, p.knock, p.spare);
+        else g.explode(p.pos, p.splash, p.damage, p.owner, p.knock, p.spare, p.type === 'round');
         g.scene.remove(p.mesh);
-        p.mesh.material.dispose();
+        if (!p.shared) p.mesh.material.dispose();
         this.list.splice(i, 1);
       }
     }
@@ -146,7 +177,7 @@ export class Projectiles {
   }
 
   clear() {
-    for (const p of this.list) { this.game.scene.remove(p.mesh); p.mesh.material.dispose(); }
+    for (const p of this.list) { this.game.scene.remove(p.mesh); if (!p.shared) p.mesh.material.dispose(); }
     this.list.length = 0;
   }
 }

@@ -1,12 +1,14 @@
 # Rustmoon War-Rig: two redesign proposals
 
 The Rustmoon War-Rig (renamed from "Rustmoon Scrapjaw War-Rig") is the pirates' truck: the one they hunt you in, and the
-one Rustmoon gives you as a reward (`VEHICLES.warrig`). Today it is a low scrap buggy with a spiked plow, an open seat and
-a twin gun that only the AI swings (`tools/blender/build_warrig.py`).
+one Rustmoon gives you as a reward (`VEHICLES.warrig`). It was a low scrap buggy with a spiked plow, an open seat and a
+twin gun that only the AI swung:
 
-![The current War-Rig: hero, rear, side, night](current_sheet.jpg)
+![The old War-Rig: hero, rear, side, night](old_sheet.jpg)
 
-**A, FURNACE, is the favourite** and has had a revision round (below). B stays here as the alternative.
+**A, FURNACE, went in after four revision rounds** (`tools/blender/build_warrig.py` -> `src/assets/warrig.glb`, shared
+parts in `tools/blender/warrig_kit.py`; see "In the game" below). B stays here as the runner-up study
+(`tools/blender/proposals/warrig_b.py`).
 
 ## The brief
 
@@ -23,10 +25,11 @@ A Mad-Max monster truck, sci-fi and lunar, that looks like nothing else in the g
   **RCS thrusters** to turn it in the air, and **sun-bleached paint and frayed MLI blankets instead of rust** (no oxygen,
   so no iron oxide)
 
-Both are built from code in Blender (`tools/blender/proposals/warrig_a.py`, `warrig_b.py`, sharing `warrig_kit.py`) and
-rendered by `tools/blender/proposals/preview_warrig.py` at the game's 1.35 scale. The plain GLBs are here (`warrig_a.glb`,
-`warrig_b.glb`) for any viewer, e.g. `tools/viewer.html`. The gunner in the renders is the game's courier in the Rustmoon
-pirate colours, hung on the rig's `crew` point and posed by hand.
+Both are built from code in Blender (A by `tools/blender/build_warrig.py`, B by `tools/blender/proposals/warrig_b.py`,
+sharing `tools/blender/warrig_kit.py`) and rendered by `tools/blender/proposals/preview_warrig.py` at the game's 1.35
+scale. B's plain GLB is here (`warrig_b.glb`) for any viewer, e.g. `tools/viewer.html`; A's is the game's. The gunner in
+the renders is the game's courier in the Rustmoon pirate colours, hung on the rig's `crew` point and posed as the game
+poses him.
 
 ## A: FURNACE (a big-rig head on monster-truck legs, the reactor in the hood)
 
@@ -49,18 +52,18 @@ short rear deck, over two axles 4.9 m apart (6.6 m in the game).
   blue sparks into the ring, copper cooling coils along the bay into the louvres, two plasma conduits under the ring into
   the cab.
 - **Front:** a plow of raked blades with ramming teeth on a bumper beam, a bull bar with two mismatched pod lamps,
-  mismatched headlamps on stalks off the front wheel wells, RCS quads on the ends of the plow beam.
+  mismatched headlamps on stalks off the front wheel wells.
 - **Cab:** armoured. The windscreen is plated: the driver's two slits in the left half, caged, the right half plated over
   round one caged porthole; the slits look out over the reactor's guard bars. A visor bar of LEDs over the windscreen, a
   big searchlight on the left pillar, mirrors on both sides, a green LED strip along the brow, corner irons, ribs on the
   back.
 - **The door** is on the left: a painted armour leaf in a heavy frame, hinges, a lever latch, a caged slit, a grab
-  handle. Under it, between the wheel wells, a sill: a tread-plate running board (the step up to the door) over a skirt
-  with a second tread.
-- **The right side:** a bundle of three tanks of different sizes strapped together between the wheels (bands round the
-  bundle, brackets to the frame, a valve, a line into the bay), a closed equipment locker on the cab wall (two doors with
+  handle. Under it, joining the wheel wells, a step plate the same width with the same lip, riveted round its edges and
+  across (the step up to the door).
+- **The right side:** the same riveted step plate between the wells, with a bundle of three tanks of different sizes
+  strapped together on it (bands round the bundle, a valve, a line into the bay), a closed equipment locker on the cab wall (two doors with
   hinges, T-handles and a louvred vent, a small searchlight on top), and a full-height ladder from the bundle to grab
-  rails over the roof.
+  rails over the roof, down to the step plate.
 - **Underneath:** a finned drive motor hung under the cab with driveshafts (U-joints and a slip joint) to both diffs, and
   lines down each frame rail (a cable and a copper coolant line), clamped, and a fat coolant hose on each side sagging
   below the body line on hangers from the bay back to the deck.
@@ -73,15 +76,14 @@ short rear deck, over two axles 4.9 m apart (6.6 m in the game).
   sight.
 - **Rear deck:** two He-3 tanks under frayed MLI blankets with silver patches, a relay dish on a mast, three antenna
   needles on the left sideboard, the flag on the back-left corner (nothing behind it, so the game's waving cloth streams
-  back; the renders use that cloth, ported from `makeWaveFlag`, at 24 m/s), a rear bumper with two ramming spikes and RCS
-  quads on its ends.
+  back; the renders use that cloth, ported from `makeWaveFlag`, at 24 m/s), a rear bumper with two ramming spikes.
 - **Colour:** primer, sun-bleached plate and bare metal; only the door and the front wheel wells are painted, in sun-faded
-  faction violet. The faction's violet and green only glow: viewport slits, LED strips, the turret's LED ring, the RCS
-  lights, a violet underglow under the frame.
+  faction violet. The faction's violet and green only glow: viewport slits, LED strips, the turret's LED ring, a violet
+  underglow under the frame.
 
 ### Checked by the builder
 
-`warrig_a.py` ends with three checks from the kit, and A passes all of them:
+`build_warrig.py` ends with three checks from the kit, and A passes all of them:
 
 - `audit_flips()`: no inside-out pieces.
 - `clash_check()`: no part cuts through another, with the turret also swung every 30 degrees with the barrel at both
@@ -100,9 +102,11 @@ short rear deck, over two axles 4.9 m apart (6.6 m in the game).
 3. **Third round:** reshaped as a big-rig head (a long truck hood with a grille and the reactor open in it, a conventional
    cab, heat stacks, a rear deck, fenders), 0.85 m longer; a cleaner build under 20k triangles; tyres modelled whole with
    the grooves cut in, instead of blocks sitting on the carcass; the float check.
-4. **This round:** angular full-width wheel wells instead of the round fenders, for depth low on the body; a sill and
+4. **Fourth round:** angular full-width wheel wells instead of the round fenders, for depth low on the body; a sill and
    running board on the door side; the open shelf replaced by a closed locker and a strapped tank bundle; a drive motor,
    driveshafts and pipe runs underneath; the RCS quads moved to the bumper ends.
+5. **Into the game:** the RCS quads removed; the wells joined on each side by a riveted step plate (the step up to the
+   door), the tank bundle on the right one; the gun's mechanics (above).
 
 ## B: CRATERCRAB (six-wheeled cab-forward, the drive on its back)
 
@@ -156,25 +160,35 @@ we want the rigs to light the ground in the shadow zones. The renders do exactly
 
 | | A FURNACE | B CRATERCRAB |
 |---|---|---|
-| Triangles | 19.9k (16.2k of them inked) | 17.2k (14.6k inked) |
+| Triangles | 19.3k (15.0k of them inked) | 17.2k (14.6k inked) |
 | Wheels | 4, radius 1.05 (1.42 m in the game) | 6, radius 0.95 (1.28 m in the game) |
 | Length × width (game scale) | about 10.9 m (11.7 m with the plow's teeth) × 7.3 m | about 10 m × 7.8 m |
 | Height (game scale) | about 7.9 m to the gunner's head (cab roof 5.5 m) | about 6.5 m to the cage roof |
+| Compressed (in the game) | 267 KB | |
 
 Both are over the house budget for a vehicle (11k, `.claude/skills/blender/style.md`); for the War-Rig the cap is 20k.
 The tyres are the biggest single cost (about 0.9k triangles each). A passes `audit_flips`, `clash_check` and
 `float_check`; B passes `audit_flips`.
 
-## What going in would take
+## In the game
 
-1. Move A's builder to `tools/blender/build_warrig.py` (it already writes the same root name `warrig`); add its new slots
-   to `makeWarRig` in `src/models.js`, and read its turret, barrel, muzzle, crew, spot and flag empties. The flag cloth
-   (`makeWaveFlag`) moves from its hard-coded spot to the `flag` empty, `w` x `h` from the empty.
-2. `VEHICLES.warrig`: `turret: true`, `hideRider: true`, and a burst fire mode (10 rounds, then a cooldown) instead of the
-   APC's single shell; a pirate (`makeRunner` with `FOES.rustmoon.look`) placed on the `crew` empty, posed as in the
-   renders. `color` becomes the faded violet if we keep the paint muted in the game too.
-3. Pirate rigs driven by the AI: they currently swing a `gun` pivot; they would swing the turret instead, and get a
-   gunner too.
-4. The frame is much bigger than the old one (wheels 1.05 against 0.85, a 4.9 m wheelbase against 3.6, a wider track, a
-   taller cab), so `radius` (4.0 on the root), the ride lift and the dust spots need checking in the game; the Asset
-   Row item's footprint grows too.
+- **Model:** `makeWarRig` (`src/models.js`) builds it from `warrig.glb` at frame size; the game scales it 1.35, for you and
+  for the pirates. Its painted panels are the faction colour faded toward primer; `lens` glows in the trim colour and the
+  underglow in the body colour. The flag cloth (`makeWaveFlag`, the same as the other vehicles') hangs on the `flag`
+  empty and streams back with speed. On the `crew` empty stands the pirate gunner: a runner in the Rustmoon pirate look
+  (`RUSTMOON_LOOK`, which the pirate skaters wear too), posed at the grips, leaning back and raising them as the barrel
+  climbs (`aimPose`).
+- **You drive it from inside** (`hideRider`), like the APC. The gun works like the APC's turret (`vehicles.js
+  aimTurret`): the turret, and the gunner on it, swing where the camera looks, and the barrel pitches to the point under
+  your crosshair.
+- **Burst fire** (`vehicles.js burstFire`, numbers in `weapons.js RIG_GUN`): left mouse (RT on a pad) fires 10 rounds at
+  12 a second, then the gun cools for 2 s; a burst, once started, runs out even if you let go, and holding fires burst
+  after burst. Each round leaves the barrels up to 1 degree off their line (about 0.7 on average): it groups, it does not
+  hose. Rounds fly at 320 m/s, drop a little, do 14 damage (your damage upgrades count) and hit with a spark and a puff
+  of dust, not an explosion.
+- **Tracers** (`projectiles.js`, type `round`): each round is a white-hot streak in an orange glow that grows out behind
+  it to 6 m and sheds embers as it flies.
+- **The pirates' rigs** use the same model and gunner; their AI already swung the `gun` pivot, which is now the turret,
+  so their gunner tracks his target. They still fire their old single shots.
+- **Size:** the rig is much bigger than the old one, so its collision radius is 4.6 (was 4.3 for yours and 4.0 for theirs)
+  and the AI aims at the middle of its taller hull. The Asset Row item (RUSTMOON WAR-RIG) is 13 x 12 m.

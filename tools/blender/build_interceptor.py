@@ -16,7 +16,7 @@
 # Read by makeInterceptor (src/models.js): 'body' takes the vehicle's color, 'stripe' its trim, other slots are fixed
 # (INTERCEPTOR_TOON / INTERCEPTOR_GLOW). buildVehicleModel (src/vehicles.js) adds no seat-back: the model has its own.
 #
-# Pivots (empties, as on the APC and war-rig):
+# Pivots (empties, as on the APC and the rovers):
 #   chassis  everything that isn't a wheel
 #   wheel    four, spun about x (by ground speed / wheelRadius)
 #   plume    the two rocket flames, along -z; the game can stretch them with speed

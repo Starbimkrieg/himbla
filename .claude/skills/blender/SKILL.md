@@ -30,7 +30,7 @@ MOONRUNNER_REPO=. python3 tools/blender/build_crane.py    # -> src/assets/crane.
 MOONRUNNER_REPO=. python3 tools/blender/build_idles.py    # -> src/assets/idles.json
 ```
 
-Each run takes 1 to 3 s. Builders: runner, idles, ships, skimmer, warrig, rover, interceptor, apc, landtrain, crane, garage, slots, casino, blackjack, claw, duck, dish,
+Each run takes 1 to 3 s. Builders: runner, idles, ships, skimmer, warrig (with `warrig_kit.py`, whose `clash_check()` and `float_check()` find parts cutting through each other or hanging free), rover, interceptor, apc, landtrain, crane, garage, slots, casino, blackjack, claw, duck, dish,
 outposts, hall, lot, power, habitat (with `habitat_kit.py`), the ILMB's other wings (hydroponics, labs, hangar, relay; they and habitat_kit share `wing_kit.py`) and the Chimera Downs' nine (`build_downs_stand`, `_club`, `_course`, `_stalls`, `_arcade`, `_screen`, `_fair`, `_stable`, `_crowd`, which share `downs_common.py`). In the Blender app they run with `exec(open(r"<repo>/tools/blender/build_x.py").read())`.
 
 ## After a build

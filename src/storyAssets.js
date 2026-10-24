@@ -3,7 +3,7 @@
 // (outpostModels.js) like the settlements.
 import * as THREE from 'three';
 import { Kit, T, G, GLASS, BEAM, crate, sandbags } from './outpostModels.js';
-import { rWheel, makeTurret } from './models.js';
+import { rWheel, makeTurret, RUSTMOON_LOOK } from './models.js';
 import { habDome, cabin, lattice, quonset } from './settlements.js';
 
 const DK = 0x1d1a29, ST = 0x55607a, LT = 0xd8d4e8, CONC = 0x8a8698, CREAM = 0xfff4e0, WARM = 0xfff6a8;
@@ -25,7 +25,7 @@ const bakedRoot = (key, fn, color) => bake(key, fn, color).root.clone();
 // Troops: what each faction's soldiers wear and drive, and their shot colour.
 // ---------------------------------------------------------------------------------------------
 export const FOES = {
-  rustmoon: { label: 'PIRATES!', shot: 0x7dff3a, glow: 0x7dff3a, look: { suit: 0x3a2b4f, accent: 0x7dff3a, helmet: 0x2b2b2b, visor: 0x7dff3a, scarf: 0xd7263d, pirate: true }, rover: null },
+  rustmoon: { label: 'PIRATES!', shot: 0x7dff3a, glow: 0x7dff3a, look: RUSTMOON_LOOK, rover: null },
   spacecom: { label: 'SPACECOM TROOPS!', shot: 0x2ee6ff, glow: 0xffd23f, look: { suit: 0xf4f1ff, accent: 0xffd23f, helmet: 0xf4f1ff, visor: 0x2ec4ff, scarf: 0x2ec4ff }, rover: { color: 0xe8e6f2, trim: 0xffd23f, flag: 0x2ec4ff } },
   vostok: { label: 'VOSTOK TROOPS!', shot: 0xff3b5c, glow: 0xff3b5c, look: { suit: 0x6b6f78, accent: 0xff3b5c, helmet: 0x8a8f99, visor: 0x111111, scarf: 0xff3b5c }, rover: { color: 0x5a6340, trim: 0xff3b5c, flag: 0xff3b5c } },
   daedalus: { label: 'DAEDALUS SECURITY!', shot: 0xc77dff, glow: 0xff2e88, look: { suit: 0x1a1426, accent: 0xff2e88, helmet: 0xeeeaf8, visor: 0xc77dff, scarf: 0xc77dff }, rover: { color: 0x2a2440, trim: 0xc77dff, flag: 0xff2e88 } },

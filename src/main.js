@@ -817,16 +817,22 @@ class Game {
     this.input.lock();
   }
 
-  explode(pos, radius, damage, owner, knock = 1, spare = false) {
+  // impact: a bullet's hit (a spark and a puff of dust, no blast, no boom); the damage works the same
+  explode(pos, radius, damage, owner, knock = 1, spare = false, impact = false) {
     const big = radius > 10;
     const up = upAt(pos);
-    this.fx.explosion(pos, radius * 0.7, big);
     const P = this.player;
     const dCam = pos.distanceTo(this.camera.position);
-    if (dCam < 600) this.audio.boom(big);
-    this.haptics.boom(dCam, big);
+    if (impact) {
+      this.fx.spawn(pos, up.clone().multiplyScalar(4), { color: 0xffd28a, size: 0.35, life: 0.18, count: 4, spread: 5, drag: 4 });
+      this.fx.spawn(pos, up.clone().multiplyScalar(1.5), { color: 0xc9c1d8, size: 0.7, life: 0.5, count: 2, spread: 1.5, drag: 2 });
+    } else {
+      this.fx.explosion(pos, radius * 0.7, big);
+      if (dCam < 600) this.audio.boom(big);
+      this.haptics.boom(dCam, big);
+    }
     if (big && dCam < 200) this.cam.shake = Math.min(1.5, this.cam.shake + (1 - dCam / 200));
-    if (owner !== 'player' && Math.random() < 0.5 && dCam < 150) this.fx.pop(pick(['BLAM!', 'ZAKK!', 'FWOOM!']), pos.clone().addScaledVector(up, 2), { color: '#ff4f2e', size: 46, life: 0.7 });
+    if (!impact && owner !== 'player' && Math.random() < 0.5 && dCam < 150) this.fx.pop(pick(['BLAM!', 'ZAKK!', 'FWOOM!']), pos.clone().addScaledVector(up, 2), { color: '#ff4f2e', size: 46, life: 0.7 });
     if (!P.dead && !spare) {
       const d = pos.distanceTo(P.center);
       if (d < radius + 1) {

@@ -1301,8 +1301,9 @@ function whipSprings(antennas) {
   };
 }
 
-// Rovers: pirate war-rig, military patrol car, civilian buggy share one layout (body 3.2 x 5.2, wheels at
-// (±1.85, 0.85, ±1.8), gun mount (0, 3, 0.8), loot slot on the chassis) so AI, traffic and faction code drive them alike.
+// Rovers: military patrol car and civilian buggy share one layout (body 3.2 x 5.2, wheels at (±1.85, 0.85, ±1.8), gun
+// mount (0, 3, 0.8), loot slot on the chassis) so AI, traffic and faction code drive them alike; style 'pirate' is the
+// Rustmoon War-Rig (makeWarRig: its own, bigger frame, the same chassis / gun / wheels contract).
 // style: pirate | military | civil. Blender: war-rig build_warrig.py, buggy and patrol car build_rover.py (rover.glb).
 // Body takes `color`, stripe `trim` (light-bar lenses glow in it); the rest fixed. The buggy has its own seat and wheel
 // (ownSeat); the patrol car's whip antennas lie back with speed.
@@ -1796,30 +1797,56 @@ export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff, style = getSkim
   };
 }
 
-// Rustmoon pirate war-rig (build_warrig.py): scrap buggy with a spiked ram plow, makeRover's layout (wheels at
-// (+-1.85, 0.85, +-1.8), gun mount (0, 3, 0.8)). Body and stripe take the colours; patches, rust, bone spikes are fixed.
-const RIG_TOON = { rust: 0x7a4a32, primer: 0x6b6f78, olive: 0x5a6a3a, scrap: 0x3a5a7a, dark: 0x2a2540, steel: 0x55607a, tire: 0x1d1a29, bone: 0xe8e0c8, seat: 0x3a2a22, red: 0xd7263d, flag: 0x1a1a1a };
-const RIG_GLOW = { lamp: 0xfff6a8, hot: 0xff9f1c };
-function makeWarRig({ color = 0x7b2ff7, trim = 0x7dff3a } = {}) {
+// Rustmoon War-Rig (build_warrig.py): a big-rig head on monster-truck legs, its own frame (wheels at (+-2.2, 1.05, 2.6 /
+// -2.3), radius 1.05). Driven pivots: chassis, turret (yawed to the aim, or at the AI's target; also `gun`), barrel
+// (pitch about x), muzzle (empty at the barrels' mouth), four wheels. The `crew` empty gets the pirate gunner (a runner in
+// Rustmoon colours, posed at the grips; he turns with the turret and leans with the barrel through aimPose), the `flag`
+// empty the waving cloth (streams back with speed through anim). Body is painted panels, sun-faded from `color`; lens
+// glows in `trim`, the underglow in `color`; the rest fixed. Build at frame size: callers scale the root (RIG_SCALE).
+export const RUSTMOON_LOOK = { suit: 0x3a2b4f, accent: 0x7dff3a, helmet: 0x2b2b2b, visor: 0x7dff3a, scarf: 0xd7263d, pirate: true };
+export const RIG_SCALE = 1.35;
+const RIG_TOON = { dark: 0x2a2540, steel: 0x55607a, metal: 0x8a87a0, tire: 0x1d1a29, bleach: 0xc9c0b0, primer: 0x6b6f78, copper: 0xc8783e, mli: 0xd9b25a, foil: 0xcfd3dc, bone: 0xe8e0c8, red: 0xd7263d, tank: 0xc6d6ea, flag: 0x1a1a1a };
+const RIG_GLOW = { lamp: 0xfff6a8, led: 0xe8f4ff, plasma: 0x5ad8ff, ion: 0x9be7ff, laser: 0xff2a4a, beacon: 0xff2a4a };
+const RIG_FADE = new THREE.Color(0x6b6f78); // paint left in the sun goes toward the primer under it
+export function makeWarRig({ color = 0x7b2ff7, trim = 0x7dff3a } = {}) {
   const B = SHIP_PARTS.warrig;
-  const matFor = perSlot((slot) => (slot === 'body' ? toon(color) : slot === 'stripe' ? toon(trim) : RIG_GLOW[slot] !== undefined ? glow(RIG_GLOW[slot])
-    : toon(RIG_TOON[slot] ?? 0xff00ff, slot === 'flag' ? { side: THREE.DoubleSide } : undefined)));
-  const out = { chassis: null, gun: null, wheels: [] };
+  const matFor = perSlot((slot) => (slot === 'body' ? toon(new THREE.Color(color).lerp(RIG_FADE, 0.7).getHex()) : slot === 'stripe' ? toon(trim)
+    : slot === 'lens' ? glow(trim) : slot === 'underglow' ? glow(color) : RIG_GLOW[slot] !== undefined ? glow(RIG_GLOW[slot])
+      : toon(RIG_TOON[slot] ?? 0xff00ff, slot === 'flag' ? { side: THREE.DoubleSide } : undefined)));
+  const out = { wheels: [] };
   const root = buildPivots(B, {
-    matFor: (slot) => (slot === 'flag' ? null : matFor(slot)), // (the rag is cloth: below)
-    shadow: (slot) => RIG_GLOW[slot] === undefined,
+    matFor,
+    shadow: (slot) => RIG_GLOW[slot] === undefined && slot !== 'lens' && slot !== 'underglow',
     onPivot(node, g) {
-      if (node.role === 'chassis') {
-        // tattered rag on its whip pole
-        out.cloth = makeWaveFlag({ w: 1.3, h: 0.9, mat: matFor('flag'), ragged: true });
-        out.cloth.mesh.position.set(-1.2, 4.55, -2.25);
+      const role = node.role;
+      if (role === 'wheel') out.wheels.push(g);
+      else if (role === 'flag') {
+        out.cloth = makeWaveFlag({ w: node.data.w || 1.1, h: node.data.h || 0.75, mat: matFor('flag'), ragged: true });
         g.add(out.cloth.mesh);
-        out.chassis = g;
-      } else if (node.role === 'gun') out.gun = g;
-      else if (node.role === 'wheel') out.wheels.push(g);
+      } else if (role === 'crew') {
+        const p = makeRunner(RUSTMOON_LOOK);
+        p.root.scale.setScalar(1 / RIG_SCALE); // (the rig is scaled up; the gunner stays runner-sized)
+        p.legL.rotation.set(0.12, 0, 0.06);
+        p.legR.rotation.set(-0.18, 0, -0.06);
+        p.head.rotation.x = -0.1;
+        p.foreL.rotation.x = p.foreR.rotation.x = -0.55;
+        g.add(p.root);
+        out.gunner = p;
+      } else if (role) out[role] = g;
     },
   });
-  return { root, chassis: out.chassis, gun: out.gun, wheels: out.wheels, anim: out.cloth.update };
+  const gunner = out.gunner;
+  const aimPose = (pitch) => {
+    // leans back and raises the grips as the barrel climbs
+    gunner.torso.rotation.x = 0.18 - 0.45 * pitch;
+    gunner.armL.rotation.set(-0.95 - 0.6 * pitch, 0, 0.18);
+    gunner.armR.rotation.set(-0.95 - 0.6 * pitch, 0, -0.18);
+  };
+  aimPose(0);
+  return {
+    root, chassis: out.chassis, gun: out.turret, turret: out.turret, barrel: out.barrel, barrelRest: out.barrel.position.clone(), muzzle: out.muzzle,
+    wheels: out.wheels, wheelR: B.data.wheelRadius || 1.05, rideH: B.data.rideH, gunner, aimPose, anim: out.cloth.update,
+  };
 }
 
 // Vostok BTR-M Moon APC (build_apc.py): eight wheels, sloped hull, roof turret. Driven pivots: chassis, turret (yaw

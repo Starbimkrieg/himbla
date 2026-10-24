@@ -26,7 +26,7 @@ import bpy, math, os, sys
 REPO = os.environ.get("MOONRUNNER_REPO") or os.path.abspath(os.path.join(os.path.dirname(globals().get("__file__", ".")), "..", "..", ".."))
 COLL = "WarRigB"
 exec(open(os.path.join(REPO, "tools", "blender", "kit.py"), encoding="utf-8").read(), globals())
-exec(open(os.path.join(REPO, "tools", "blender", "proposals", "warrig_kit.py"), encoding="utf-8").read(), globals())
+exec(open(os.path.join(REPO, "tools", "blender", "warrig_kit.py"), encoding="utf-8").read(), globals())
 C = coll()
 for s in SLOT_COLORS:
     material(s)

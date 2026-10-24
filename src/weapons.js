@@ -12,7 +12,13 @@ export const WEAPONS = [
 // where the camera points, instead of the runner's weapons.
 export const APC_CANNON = { key: 'apccannon', name: 'BTR-M 30 mm Cannon', delay: 0.5, desc: 'Heavy high-explosive shell from the turret' };
 
+// The Rustmoon War-Rig's rotary gun (vehicles.js burstFire): the pirate gunner on the roof turns it where the camera
+// points; left mouse fires a burst of `rounds` tracer rounds at `rate` a second, then the gun cools for `cool` s. Each round
+// leaves the barrels up to `spread` rad off their line (a tight cone, not a hose).
+export const RIG_GUN = { key: 'riggun', name: 'Scrap Rotary Gun', rounds: 10, rate: 12, cool: 2, spread: 0.018, speed: 320, damage: 14, desc: 'Ten-round tracer bursts from the roof gunner' };
+
 const _v = new THREE.Vector3();
+const _up = new THREE.Vector3();
 
 export function weaponUnlocked(w, upgrades) {
   return !w.unlock || (upgrades[w.unlock] || 0) > 0;
@@ -81,6 +87,23 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
 
 // One APC cannon round: a tracer shell (projectiles.js type 'shell') plus muzzle flash.
 // `muzzle` = barrel mouth, `dir` = barrel direction, `inherit` = vehicle velocity.
+// One War-Rig round: a tracer (projectiles type 'round') along `dir` thrown off by up to RIG_GUN.spread, a muzzle flash
+// and a short bark.
+export function fireRound(g, muzzle, dir, inherit, mult = 1) {
+  const right = _v.crossVectors(dir, Math.abs(dir.y) < 0.9 ? _up.set(0, 1, 0) : _up.set(1, 0, 0)).normalize();
+  const up = _up.crossVectors(right, dir);
+  const a = Math.random() * Math.PI * 2, r = RIG_GUN.spread * Math.sqrt(Math.random()); // even over the cone's disc
+  const d = dir.clone().addScaledVector(right, Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r).normalize();
+  g.projectiles.fire('player', muzzle, d.multiplyScalar(RIG_GUN.speed).addScaledVector(inherit, 0.6), {
+    type: 'round', damage: RIG_GUN.damage * mult, splash: 1.6, color: 0xffb347, size: 0.14, knock: 0.3, gravity: 1.6, life: 1.8, spare: true,
+  });
+  g.fx.spawn(muzzle, dir.clone().multiplyScalar(18).add(inherit), { color: 0xffe08a, size: 0.45, life: 0.07, count: 3, spread: 2.5, drag: 5 });
+  g.audio.tone(170 + Math.random() * 40, 0.05, 'square', 0.12, 0.4);
+  g.audio.burst(0.05, 2600, 0.22);
+  g.haptics.play('rotary');
+  g.cam.shake = Math.max(g.cam.shake, 0.08);
+}
+
 export function fireCannon(g, muzzle, dir, inherit, mult = 1) {
   g.projectiles.fire('player', muzzle, dir.clone().multiplyScalar(170).addScaledVector(inherit, 0.6), {
     type: 'shell', damage: 55 * mult, splash: 9, color: 0xff8a2a, size: 0.5, knock: 2, gravity: 3, life: 3.2, spare: true,

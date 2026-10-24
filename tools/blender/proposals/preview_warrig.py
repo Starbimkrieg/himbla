@@ -1,13 +1,14 @@
-# Review renders for the Rustmoon War-Rig: the current rig (../build_warrig.py, not exported here) and the proposals A
-# (warrig_a.py) and B (warrig_b.py), each in a fresh scene, at the game's 1.35 scale. Renders hero (front three-quarter),
-# rear (rear three-quarter), side, close (the gun and the gunner) and night (sun off, the searchlights on) to
-# docs/warrig-proposals/<name>_<view>.jpg, plus <name>_sheet.jpg (hero, rear, side, close; 2 x 2).
+# Review renders for the Rustmoon War-Rig: A, the War-Rig itself (../build_warrig.py, not exported here), and B, the
+# alternative study (warrig_b.py), each in a fresh scene, at the game's 1.35 scale. Renders hero (front three-quarter),
+# rear (rear three-quarter), side, close (the gun and the gunner), night (sun off, the searchlights on) and, for A, under
+# (low, the underbody) to docs/warrig-proposals/<name>_<view>.jpg, plus <name>_sheet.jpg (hero, rear, side, close; 2 x 2).
+# (old_*.jpg there are the rig before it, rendered by an earlier version of this script.)
 #
-#   MOONRUNNER_REPO=<repo> python3 tools/blender/proposals/preview_warrig.py [current] [a] [b]
+#   MOONRUNNER_REPO=<repo> python3 tools/blender/proposals/preview_warrig.py [a] [b]
 #
 # PREVIEW_OUT=<dir> writes elsewhere; PREVIEW_W / PREVIEW_H / PREVIEW_SAMPLES set quality; PREVIEW_VIEWS=hero,night renders
-# only those. Cycles on the CPU; Freestyle draws the ink. The proposals' gunner is the game's courier (src/assets/runner.glb)
-# in the Rustmoon pirate colours, hung on the rig's `crew` empty and posed by hand; the game would place its own pirate there.
+# only those. Cycles on the CPU; Freestyle draws the ink. The gunner is the game's courier (src/assets/runner.glb) in the
+# Rustmoon pirate colours, hung on the rig's `crew` empty and posed by hand, as makeWarRig does in the game.
 
 import bpy, math, os, sys
 from mathutils import Vector
@@ -17,17 +18,12 @@ os.environ["MOONRUNNER_REPO"] = REPO
 OUT = os.environ.get("PREVIEW_OUT") or os.path.join(REPO, "docs", "warrig-proposals")
 os.makedirs(OUT, exist_ok=True)
 ARGS = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
-NAMES = [a for a in ARGS if a in ("current", "a", "b")] or ["current", "a", "b"]
+NAMES = [a for a in ARGS if a in ("a", "b")] or ["a", "b"]
 ONLY = [v for v in os.environ.get("PREVIEW_VIEWS", "").split(",") if v]
 RES = (int(os.environ.get("PREVIEW_W", 1280)), int(os.environ.get("PREVIEW_H", 720)))
 SAMPLES = int(os.environ.get("PREVIEW_SAMPLES", 32))
 SCALE = 1.35  # the game's war-rig scale
 
-# the current rig's colours (RIG_TOON / RIG_GLOW in src/models.js, Rustmoon livery)
-CURRENT_HEX = {"body": 0x7b2ff7, "stripe": 0x7dff3a, "rust": 0x7a4a32, "primer": 0x6b6f78, "olive": 0x5a6a3a, "scrap": 0x3a5a7a,
-               "dark": 0x2a2540, "steel": 0x55607a, "tire": 0x1d1a29, "bone": 0xe8e0c8, "seat": 0x3a2a22, "red": 0xd7263d,
-               "flag": 0x1a1a1a, "lamp": 0xfff6a8, "hot": 0xff9f1c}
-CURRENT_GLOW = {"lamp": 6.0, "hot": 4.0}
 # the pirate gunner: FOES.rustmoon.look (src/storyAssets.js) on the courier's slots
 PIRATE_HEX = {"suit": 0x3a2b4f, "accent": 0x7dff3a, "helmet": 0x2b2b2b, "visor": 0x7dff3a, "scarf": 0xd7263d, "dark": 0x221d33,
               "metal": 0x3a3550, "glow": 0x7dff3a, "skate": 0x7dff3a, "collar": 0x221d33, "lens": 0x7dff3a, "glint": 0xffffff}
@@ -303,30 +299,27 @@ def sheet(name, views):
 
 
 for name in NAMES:
-    views = [v for v in VIEWS if (not ONLY or v in ONLY) and not (name == "current" and v in ("close",)) and (v != "under" or v in ONLY or name == "a")]
+    views = [v for v in VIEWS if (not ONLY or v in ONLY) and (v != "under" or v in ONLY or name == "a")]
     for night in (False, True):
         vs = [v for v in views if (v == "night") == night]
         if not vs:
             continue
         bpy.ops.wm.read_factory_settings(use_empty=True)
-        path = os.path.join(REPO, "tools", "blender", "build_warrig.py") if name == "current" else os.path.join(REPO, "tools", "blender", "proposals", f"warrig_{name}.py")
+        path = os.path.join(REPO, "tools", "blender", "build_warrig.py") if name == "a" else os.path.join(REPO, "tools", "blender", "proposals", f"warrig_{name}.py")
         os.environ["MOONRUNNER_EXPORT"] = "0"
         g = {"__file__": path, "__name__": "__warrig__"}
         exec(open(path, encoding="utf-8").read(), g)
         root = bpy.data.objects["warrig"]
         root.scale = (SCALE,) * 3
         sc = stage(night)
-        if name == "current":
-            dress(CURRENT_HEX, CURRENT_GLOW)
-        else:
-            dress(g["HEX"], g["GLOW_SLOTS"])
-            crew = next((o for o in bpy.data.objects if o.get("role") == "crew"), None)
-            if crew:
-                add_gunner(crew)
-                dress(PIRATE_HEX, PIRATE_GLOW, "rn_")
-            add_flags()
-            if night:
-                add_spots()
+        dress(g["HEX"], g["GLOW_SLOTS"])
+        crew = next((o for o in bpy.data.objects if o.get("role") == "crew"), None)
+        if crew:
+            add_gunner(crew)
+            dress(PIRATE_HEX, PIRATE_GLOW, "rn_")
+        add_flags()
+        if night:
+            add_spots()
         bpy.context.view_layer.update()
         for v in vs:
             spec = VIEWS[v]
@@ -336,4 +329,4 @@ for name in NAMES:
                 spec = orbit(-30, 20, 8.5, (w.x, w.z + 1.0, -w.y + 0.4), 45)
             shoot(sc, name, v, spec)
     if not ONLY:
-        sheet(name, ("hero", "rear", "side", "close") if name != "current" else ("hero", "rear", "side", "night"))
+        sheet(name, ("hero", "rear", "side", "close"))

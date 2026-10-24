@@ -1,4 +1,5 @@
-# Parts shared by the two Rustmoon War-Rig proposals (warrig_a.py, warrig_b.py). exec() it after kit.py.
+# Parts shared by the Rustmoon War-Rig (build_warrig.py) and its alternative study (proposals/warrig_b.py), and the build
+# checks clash_check() and float_check(). exec() it after kit.py.
 #
 # Three.js axes (x right, y up, +z forward), metres, in the model's own frame (the game scales the war-rig 1.35).
 # Everything static goes through an Acc (one mesh per slot, parent and ink); wheels are pivots of their own.

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { makeRover, makeInterceptor, makeApc, makeSkimmer, makeLightBike, LightTrail } from './models.js';
-import { fireCannon } from './weapons.js';
+import { makeRover, makeInterceptor, makeApc, makeSkimmer, makeLightBike, makeWarRig, LightTrail } from './models.js';
+import { fireCannon, fireRound, RIG_GUN } from './weapons.js';
 import { makeBody } from './physics.js';
 import { stepRover, CRASH_SAFE } from './enemies.js';
 import { frameQuat, tangent } from './geo.js';
@@ -18,7 +18,7 @@ export const VEHICLES = {
   carrier: { hp: 380, name: 'Kepler Militia Carrier', faction: 'kepler', max: 66, engine: 28, turn: 2.1, grip: 18, armor: 0.5, color: 0x5c8a2e, trim: 0xff9f1c, scale: 1.15, hideRider: true, turret: true, apcHull: true, cargoSafe: true, cannon: 'Militia 30 mm Cannon', desc: 'The Mule\'s big brother: a padded cargo bay, field armour and a turret cannon that follows where you look.' },
   // a light-bike; id 'van' kept for existing saves
   van: { hp: 190, name: 'Meridian Courier Light-Bike', faction: 'meridian', max: 96, engine: 34, turn: 2.7, grip: 10, armor: 0.8, color: 0x2ec4ff, trim: 0xffd23f, bike: true, seat: 1.42, seatZ: -0.88, radius: 2.1, desc: 'A sleek light-bike that leaves a glowing trail. Fast, sharp, and very stylish.' },
-  warrig: { hp: 340, name: 'Rustmoon War-Rig', faction: 'rustmoon', max: 78, engine: 32, turn: 2.4, grip: 14, armor: 0.6, color: 0x7b2ff7, trim: 0x7dff3a, scale: 1.35, pirate: true, desc: 'Stolen, welded, painted green. Rams for damage.' },
+  warrig: { hp: 340, name: 'Rustmoon War-Rig', faction: 'rustmoon', max: 78, engine: 32, turn: 2.4, grip: 14, armor: 0.6, color: 0x7b2ff7, trim: 0x7dff3a, scale: 1.35, radius: 4.6, pirate: true, hideRider: true, turret: true, burst: RIG_GUN, cannon: RIG_GUN.name, desc: 'A stolen big-rig on monster legs, a fusion core in the hood. Rams for damage; the pirate on the roof gun fires ten-round tracer bursts where you look.' },
 };
 
 const _v = new THREE.Vector3(), _mu = new THREE.Vector3(), _mf = new THREE.Vector3();
@@ -43,6 +43,11 @@ export function buildVehicleModel(id) {
     const m = makeApc({ color: def.color, trim: def.trim });
     m.root.scale.setScalar(def.scale);
     return m; // no seat-back: the runner is inside
+  }
+  if (id === 'warrig') {
+    const m = makeWarRig({ color: def.color, trim: def.trim });
+    m.root.scale.setScalar(def.scale);
+    return m; // no seat-back: you drive from inside the cab, the pirate works the gun
   }
   if (def.bike) return makeLightBike({ color: def.color, trim: def.trim }); // no seat-back: ridden like a motorcycle
   const m = makeRover({ color: def.color, trim: def.trim, pirate: !!def.pirate, flag: def.trim, style: def.pirate ? 'pirate' : def.cargoSafe ? 'civil' : 'military' });
@@ -276,9 +281,10 @@ export class Garage {
     g.hud.toast(g.input.padActive
       ? `${name}: ${glyphHtml(['LS'])} drive / steer · ${glyphHtml(['A'])} hop · ${glyphHtml(['Y'])} get out`
       : `${name}: W/S drive · A/D steer · SHIFT hop · V to get out`, 3.5, g.input.padActive);
+    const burst = this.active.def.burst;
     if (this.active.def.turret) g.hud.toast(g.input.padActive
-      ? `The turret follows where you look: ${glyphHtml(['RT'])} fires the cannon`
-      : 'The turret follows where you look: left mouse fires the cannon', 3.5, g.input.padActive);
+      ? `${burst ? 'The gunner aims' : 'The turret follows'} where you look: ${glyphHtml(['RT'])} fires ${burst ? `a ${burst.rounds}-round burst` : 'the cannon'}`
+      : `${burst ? 'The gunner aims' : 'The turret follows'} where you look: left mouse fires ${burst ? `a ${burst.rounds}-round burst` : 'the cannon'}`, 3.5, g.input.padActive);
   }
 
   exit() {
@@ -434,6 +440,7 @@ export class Garage {
     m.turret.rotation.y = a.yaw;
     m.barrel.rotation.x = -a.pitch; // +z forward: raising is a negative turn about x
     m.barrel.position.copy(m.barrelRest).z -= 0.35 * a.recoil * a.recoil; // recoil kick, then runs out
+    if (m.aimPose) m.aimPose(a.pitch); // the War-Rig's gunner leans with the barrel
     m.root.updateMatrixWorld(true);
   }
 
@@ -456,6 +463,7 @@ export class Garage {
     const P = g.player;
     const v = P.vehicle;
     if (!v || !v.aim) return;
+    if (v.def.burst) return this.burstFire(dt, input, v);
     const a = v.aim;
     a.cd -= dt;
     if (!input.mouse[0] || a.cd > 0 || !input.locked || P.dead || P.rag) return;
@@ -466,6 +474,33 @@ export class Garage {
     const muzzle = m.muzzle.getWorldPosition(new THREE.Vector3());
     const dir = _am.set(0, 0, 1).applyQuaternion(m.muzzle.getWorldQuaternion(_aq)).clone();
     fireCannon(g, muzzle, dir, v.e.body.vel, P.damageMult || 1);
+  }
+
+  // Left mouse in the War-Rig: the gunner fires a burst of B.rounds tracer rounds, B.rate a second, along the barrels
+  // (which may still be swinging to your aim); then the gun cools B.cool s before the next burst. A burst, once
+  // started, runs out even if you let go; holding the button fires burst after burst.
+  burstFire(dt, input, v) {
+    const g = this.game;
+    const P = g.player;
+    const B = v.def.burst;
+    const a = v.aim;
+    a.cd -= dt;
+    if (!(a.left > 0)) {
+      if (!input.mouse[0] || a.cd > 0 || !input.locked || P.dead || P.rag) return;
+      a.left = B.rounds;
+      a.cd = 0;
+    }
+    const m = v.model;
+    m.root.updateMatrixWorld(true);
+    while (a.left > 0 && a.cd <= 0) {
+      const muzzle = m.muzzle.getWorldPosition(new THREE.Vector3());
+      const dir = _am.set(0, 0, 1).applyQuaternion(m.muzzle.getWorldQuaternion(_aq)).clone();
+      fireRound(g, muzzle, dir, v.e.body.vel, P.damageMult || 1);
+      a.recoil = Math.min(0.5, a.recoil + 0.18);
+      a.left--;
+      a.cd += 1 / B.rate;
+      if (!a.left) a.cd = B.cool; // the last round out: cool down
+    }
   }
 
   // the light-bike's trail streams from its rear wheel while moving (sp: its speed), fading when it stops

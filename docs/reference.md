@@ -180,7 +180,8 @@ Farm, Motor Pool, Militia Barracks, Roads, Radio Tower (charts fog) and Shuttle 
 Garage, plus a second turret by the gate.
 
 **Vehicles** (`V`): SPACECOM Lunar Interceptor, Vostok BTR-M APC (turret cannon), Daedalus Phase Skimmer (hover),
-Kepler Homestead Mule, Kepler Militia Carrier, Meridian Courier Light-Bike (light trail), Rustmoon War-Rig.
+Kepler Homestead Mule, Kepler Militia Carrier, Meridian Courier Light-Bike (light trail), Rustmoon War-Rig (a pirate
+gunner on the roof turns its rotary gun where you look; left mouse fires a 10-round tracer burst, then it cools for 2 s).
 They have hull points, smoke when hurt, and take 90 s to rebuild if wrecked.
 
 **Captain Kade** sometimes (8%) rides with a dark-side squad in a monster truck with a gatling and flak turret.
@@ -367,7 +368,7 @@ src/
     ships.glb        shuttle-bus and freighter
     skimmer.glb      Phase Skimmer classic; skimmer_a.glb, skimmer_b.glb the redesigns (dev menu picks)
     lightbike_a.glb, lightbike_b.glb  Courier light-bike redesigns (dev menu picks)
-    warrig.glb       pirate war-rig
+    warrig.glb       Rustmoon War-Rig (and the pirates' rigs)
     rover.glb        civil buggy and military patrol car
     interceptor.glb  SPACECOM Lunar Interceptor
     apc.glb          Vostok APC
@@ -428,7 +429,7 @@ tools/
     build_briefcase.py     -> briefcase.glb (wreck drop)
     build_hovercar.py      -> hovercar.glb
     build_plinko.py        -> plinko.glb
-    build_warrig.py        -> warrig.glb
+    build_warrig.py        -> warrig.glb (shared parts and the clash / float checks: warrig_kit.py)
     build_rover.py         -> rover.glb
     build_interceptor.py   -> interceptor.glb
     build_apc.py           -> apc.glb
@@ -454,7 +455,7 @@ tools/
     build_outposts.py      -> outposts.glb (check with npm run check:outposts)
     build_downs_*.py       -> downs-*.glb
     proposals/             freighter, Kepler Habitat and War-Rig design studies, Cycles preview renders
-                           (warrig_a.py, warrig_b.py on warrig_kit.py; preview_warrig.py renders docs/warrig-proposals)
+                           (warrig_b.py, the War-Rig's runner-up; preview_warrig.py renders both to docs/warrig-proposals)
 ```
 
 **Blender models:** each builder runs in Blender's Scripting tab or headless (`tools/setup-blender.sh` installs

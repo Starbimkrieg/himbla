@@ -7,8 +7,8 @@
 # Eight-wheeled slab-sided carrier in Vostok slate and red: sloped hull, raised driver's block, striped fenders,
 # louvred engine deck, antennas, and a roof turret with a 30 mm cannon and coaxial gun.
 #
-# Rover conventions (makeRover in src/models.js, build_warrig.py): origin on the ground at the centre, +z forward.
-# Pivots (empties with a `role`, as the war-rig):
+# Rover conventions (makeRover in src/models.js, build_rover.py): origin on the ground at the centre, +z forward.
+# Pivots (empties with a `role`, as on the rovers):
 #   chassis  everything but the wheels and turret group
 #   turret   child of chassis, yawed about y to follow the camera
 #   barrel   child of turret, pitched about x to follow the camera; mantlet, cannon and coax ride on it
