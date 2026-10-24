@@ -7,9 +7,9 @@ import { arcadeBayShell } from '../downsKit.js';
 // carousel) are shown with the settlement parts (buildings.js); the whole course is the place at the end of the row (places.js).
 
 // A kit part as one part of a line-up: `w` the width it takes along the row, `dz` where its middle lies along z (so a part authored from its front edge sits in the middle of its item).
-const P = (name, w, { d = 0, dz = 0, tint, y = 0, ry = 0 } = {}) => {
+const P = (name, w, { d = 0, dz = 0, x = 0, tint, y = 0, ry = 0 } = {}) => {
   const o = makeDownsPart(name, tint);
-  o.position.set(0, y, dz);
+  o.position.set(x, y, dz);
   o.rotation.y = ry;
   const g = new THREE.Group();
   g.add(o);
@@ -70,9 +70,13 @@ const downs = {
       return { root: L.root, update: (dt, t) => { for (const f of fs) f.update(t, dt); } };
     }),
     item('downs.screen', 'DOWNS SCREEN DRUM AND WINNERS\' PODIUM', 64, 20, () => row([P('dn_drum', 42, { d: 16 }), P('dn_podium', 19.3, { d: 5.15 })], 2)),
-    item('downs.stable', 'DOWNS STABLE BLOCK · HAY BARN · WEIGHING ROOM · RING GATE · HAY · PICNIC TABLE', 112, 16, () => row([
-      P('dn_stable_block', 31, { d: 12, dz: 3 }), P('dn_hay_barn', 25, { d: 14, dz: 7 }), P('dn_pavilion', 19, { d: 13, dz: 3.4 }), P('dn_ring_gate', 4, { d: 1 }),
+    item('downs.stable', 'DOWNS STABLE BLOCK (SIX BOXES) · HAY BARN · WEIGHING ROOM · RING GATE · HAY · PICNIC TABLE', 112, 16, () => row([
+      P('dn_stable_6', 31, { d: 12, dz: 3 }), P('dn_hay_barn', 25, { d: 14, dz: 7 }), P('dn_pavilion', 19, { d: 13, dz: 3.4 }), P('dn_ring_gate', 4, { d: 1 }),
       P('dn_hay', 1.4, { d: 1 }), P('dn_picnic', 3.8, { d: 3, tint: { accent: 0x8b4044 } }),
+    ], 2)),
+    item('downs.yard', 'DOWNS STABLE YARD: FOUR BOXES · CLOCK TOWER · YARD GATE · FENCE · LUNGE RING · TROUGH · SADDLE RACK', 80, 20, () => row([
+      P('dn_stable_4', 21, { d: 12, dz: 3 }), P('dn_stable_corner', 10, { d: 10, x: 4.5, dz: 4.5 }), P('dn_yard_gate', 7.2, { d: 3 }),
+      P('dn_stable_fence', 4.2, { d: 1, x: -2 }), P('dn_lunge_ring', 18.5, { d: 18.5 }), P('dn_trough', 2.6, { d: 1 }), P('dn_tack', 1.3, { d: 1 }),
     ], 2)),
     item('downs.fair', 'DOWNS FAIR KIT: GONDOLA · HORSE · TICKET HALL · FAIR GATE · KIOSK · STANCHION · FENCE', 60, 10, () => row([
       P('dn_gondola', 3, { d: 3, y: 3.6 }), P('dn_horse', 3, { d: 1, y: 1 }), P('dn_ticket_hall', 23, { d: 8, dz: 4 }), P('dn_fair_gate', 12, { d: 2 }), P('dn_kiosk', 5.4, { d: 4.6, dz: 1.7, tint: { accent: 0x7b9a6e } }), P('dn_stanchion', 3.2, { d: 1 }),

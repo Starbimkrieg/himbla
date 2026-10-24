@@ -567,7 +567,7 @@ the unlock counters, toggle any splice-pod mutation (with a reset), or reset all
 ### The Asset Row (dev builds only)
 
 Dev menu (`F8`) → **Full cheat menu** → **Teleport** → option 1, **ASSET ROW**: a flat showroom with every asset in the game
-lined up side by side, 227 of them in 26 sections (the runner and its gear, people, creatures, props and markers,
+lined up side by side, 228 of them in 26 sections (the runner and its gear, people, creatures, props and markers,
 weapons and effects, rocks and nature, the secrets and the Spindle's props, ground vehicles and ships, outposts intact and
 wrecked, the building parts the settlements are made of, the hometown, Chimera Downs' kits, and all the places). The small ones stand in the
 yellow lane (z = 0), the places over 100 m across in the cyan lane 460 m over; the whole row is about 9 km, so the dev
@@ -675,7 +675,7 @@ crowd-noise bed for now (the cheering is due a rework), and the race countdown b
   Second Wind, Home Stretch and the rare **Chimera Soul**; each fires on a wit roll, once a race.
   **Careers:** three seasons of three races and a tournament (the **Regolith Guineas**, the **Lunar Derby**, the **Dark
   Side St. Leger**: TOURNAMENTS at the window), then retirement; win all three for the **Triple Crown** and the **Hall of
-  Fame**. Every race banks a training session for the **Training Yard** (the trainer in the stable lane behind the far
+  Fame**. Every race banks a training session for the **Training Yard** (the trainer in the stable yard behind the far
   stand): Sprints, Hill Pulls, Long Laps or the Maze Run. The numbers: `docs/chimera-racing.md`.
   **While your chimera races, the camera locks onto it:** `1`–`5` (or `C`) switch between chase, infield rail,
   leader, grandstand and blimp cameras. The HUD steps aside for the standings, the mouse is free (its cursor the reticle): drag
@@ -764,7 +764,7 @@ src/
   pixelIcons.js  the classic-games overlay's pixel-art sprites (slot symbols, the pit boss, chips, cards' suits…) as plain rows of palette letters
   cosmetics.js   outfits, skate finishes, laser colours, wardrobe
   race.js        Chimera Downs: the race card's EASY / MEDIUM / HARD sections and the tournaments, scouting and betting, the live race (the six-stall gate, the locked camera, the event pop-ups), the screens, the crowd, the podium finish, careers, the Training Yard, the Hall of Fame
-  downsPlan.js   Chimera Downs' plan: the oval, the stands, the arcades and their stalls, the forecourt, the drum, the podiums, the annex (no three.js)
+  downsPlan.js   Chimera Downs' plan: the oval, the stands, the arcades and their stalls, the forecourt, the drum, the podiums, the annex, the stable yard's two layouts (STABLE_LAYOUTS, the boxes' stalls) (no three.js)
   downsWorld.js  Chimera Downs' scenery, built from the Blender kits (the Downs kit baked into one settlement kit)
   downsKit.js    what the Downs builders share: the palette, text widths, `bake` (a Blender kit part into a settlement kit), `fountain` (the forecourt's, with the casino's water shaders and a turning derby cup), `arcadeShell` (the parts of an arcade that run on from bay to bay, one seamless piece per run, with `sheet` and `inkShell` for a solid of joined polygons and its outline)
   curve.js       a `curved` place's bend: flat local coordinates onto the sphere (point, frame, geometry cut into short pieces); the Downs plateau is a cap of the Moon, not a plane, so nothing on it leans
@@ -816,7 +816,7 @@ src/
   assets/downs-arcade.glb a wedge bay of the arcades (its own fittings; the walls, trim, roof and ceiling run on from bay to bay: downsKit.js `arcadeShell`), the gate hall (two towers either side of a vaulted passage), the forecourt's gate and fountain, a valet bay, a bench for two runners, planter and a festoon
   assets/downs-screen.glb the scoreboard drum (core, struts, the shell in one bezel sleeve with four openings and gold sills, a recessed soffit, a cap with a parapet ring and a beacon) and the winners' podium set (19.2 x 5.15 m)
   assets/downs-fair.glb   the fairground: the ferris wheel (frame, wheel, gondola), the carousel (base, canopy deck, horse), a ticket hall, a gate, a free-standing kiosk, queue posts (their rope a `rope` pivot) and fence
-  assets/downs-stable.glb the stable block (six boxes), hay barn, weighing room, ring gate, hay bale and picnic table
+  assets/downs-stable.glb the stable yard (blocks of four and six boxes with lit stalls, the clock-towered knuckle of an L, the yard gate, post and rail, the lunge ring, a trough, a saddle rack), the hay barn, weighing room, ring gate, hay bale and picnic table
   assets/downs-crowd.glb  a seated racegoer's wardrobe (legs, suit or frock, arms at rest / with a programme / at binoculars / cheering, head, four hairdos, six hats, rosette, scarf), drawn instanced in the stands per part worn
   assets/chimera.glb     the chimera kit (tools/blender/build_chimera.py; chimerabuild.js, loaded at boot without holding it up): every kind's legs, body and head in their looks, each with its fitted armour, crystal and mud and a far copy; the mutations' devices; the spark's arc, the Triple Crown
   assets/duck.glb    the casino's Duck Derby: the four racers (a cap, hat, fez or bubble helmet each, a numbered wing disc) and the gilded track: basin with lane floats, start gate and grille, finish arch, odds-board frame, bookmaker's kiosk, brass rail post and velvet rope
@@ -876,6 +876,7 @@ tools/
   viewer.html              dev-only model viewer (npm run dev, then /tools/viewer.html?m=shuttle|freighter|apc|landtrain|crane|gantry|cargobox|garage|slots|dish|outpost|mite|lineup…; slots takes &n=<cabinets in a row>&ring=<cabinets round a pillar>&idx=<first colour and name>&play=1 (works them like a patron); casino takes &part=lamp|fountain|bouncer|chandelier|welcome|wall|blackjack|claw|clawthings|duckderby (&accent=<hex>&n=<lamps> for lamp); shuttle takes &sign=<route board text>&ships=<a ships .glb to load instead of ships.glb> (docs/shuttle-design.md); freighter takes &faction=spacecom|vostok|kepler|meridian (the cargo's livery); dish takes &kind=cryo|gantry|field|head&faction=…&no=01..04&size=30&tilt=<rad>&sweep=1; apc takes &turret=<rad>&barrel=<rad>; landtrain takes &type=moonliner|prospector&faction=spacecom|vostok|kepler|meridian&cars=pax,tank,cargo,blast&unit=<n>)
   downs-audit.mjs         dev-only: audits Chimera Downs' build in its flat design frame: z-fighting (coplanar triangles of different colours, named by builder and part), colliders standing in each other, text planes facing into walls or hanging in air, bare-ground seams (`node tools/downs-audit.mjs [zfight|colliders|text|gaps|all]`)
   downs-layouts.mjs        dev-only: the Chimera Downs overhaul study (docs/downs-layouts.md): the old course and the two proposed layouts (B was built), a clearance check against the oval and the plateau, and the plan drawings in docs/ (`node tools/downs-layouts.mjs docs`)
+  stable-layouts.mjs       dev-only: the stable yard's two layouts (docs/stable-proposals/): a clearance check (the stand, the arcades, each other) and the plans (`node tools/stable-layouts.mjs docs`)
   chimera-lab.html         dev-only: the chimera builder's lab (npm run dev, then /tools/chimera-lab.html): pick parts, a settler's outfit, mutations and a seed, or a grid of random chimeras, each mutation, every kind, the showcase, the far LOD (docs/chimera-builder/)
   make-credit-glyph.py     draws the credit sign (₵) for both pixel faces (each font's own C with a bar, on its pixel grid) -> src/assets/fonts/credit-*.woff2 (`pip install fonttools brotli`)
   race-sim.mjs             dev-only: runs the Chimera Downs race model headless thousands of times and reports the balance: what each stat and style wins, the starting stalls, passes, skills, the bad moments, the tank at the line (`node tools/race-sim.mjs [races] [all|sprint|mile|medium|long|<metres>] [field] [skills=0|1]`)

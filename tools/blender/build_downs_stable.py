@@ -5,9 +5,13 @@
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 build_downs_stable.py
 #
 # Authored in three.js axes (x right, y up, +z front), each model standing on y = 0. One material per mesh named after a slot (DOWNS_TOON / DOWNS_GLOW in src/models.js).
-#   dn_stable_block a block of six boxes, 30 m along x, front (+z) at z = 0, the body behind it to z = -9, a 2.4 m porch on Saddle posts in front: Barn Red walls, the two end walls clad in Mint
-#                   (8 cm proud, so the kick strip and eaves board along the front end inside the cladding), six Dutch doors (a Saddle lower half, the upper half open and dark) each with a
-#                   lantern on a bracket and a feed trough, a Barn Red2 gable roof with a Mint ridge and two louvred cupolas (their bases sunk into the roof), 7.4 m to the ridge
+#   dn_stable_4/6   a block of four or six loose boxes 5 m apart along x, front (+z) at z = 0, the body to z = -9, a 2.4 m porch on Saddle posts with knee braces: Barn Red walls, the end
+#                   walls clad in Mint, each box a Dutch door with its lower leaf shut and its upper leaf swung back against the wall, opening on a lit stall (dark plank walls, straw,
+#                   a hay rack, a lantern) where the game stands a chimera; a blank name board over each door, a lantern on a bracket, a feed trough; a gable roof, a Mint ridge, louvred
+#                   cupolas, 7.4 m to the ridge
+#   dn_stable_corner the knuckle of an L of blocks: a two-storey tack room (lit windows on its two outer faces) under a hip roof and a clock turret with a chimera weathervane
+#   dn_stable_fence a 4 m bay of Mint post and rail (dn_stable_post: a post alone, to end a run); dn_yard_gate the yard's gate: Barn Red piers, a name board, two leaves swung in
+#   dn_lunge_ring   a round pen 18 m across, its gate standing open on +z; dn_trough a water trough; dn_tack a saddle on a rack
 #   dn_hay_barn     the hay barn, 24 m along x, 14 deep (z = 0 to -14), front +z: Barn Red walls with gambrel gable ends (one solid), Mint corner boards wrapping the four corners, a Black-framed
 #                   sliding door of two Mint leaves with X braces under a rail, two lit windows, a hayloft door with a hoist beam on each gable end, and a gambrel Barn Red2 roof that is one slab
 #                   0.3 m thick (flat soffits at the eaves, 0.6 m past the gables), a Mint ridge and a louvred cupola
@@ -53,45 +57,207 @@ def hip_roof(x0, x1, z0, z1, y0, h):
 
 
 # =====================================================================================================
-# dn_stable_block
+# dn_stable_4, dn_stable_6: a block of N loose boxes
 # =====================================================================================================
-root = pivot("dn_stable_block", (0, 0, 0))
-P = parts(root, "dn_stable_block", {"barn": 0.04, "barn2": 0.04, "mint": 0.03, "mint2": 0.02, "saddle": 0.02, "saddle2": 0.015, "black": 0.02, "gold": 0.012, "glowgold": 0.0, "black2": 0.012})
-P["mint2"].box(-15.3, 15.3, 0.0, 0.5, -9.2, 0.2)                                         # plinth
-P["barn"].box(-15.0, 15.0, 0.5, 4.2, -9.0, 0.0)                                          # the walls
-for sx in (-1, 1):                                                                       # the end walls' Mint cladding, 8 cm proud on the end, the front and the back
-    P["mint"].box(sx * 14.8, sx * 15.08, 0.45, 4.25, -9.08, 0.08)
-P["mint"].box(-14.9, 14.9, 0.5, 0.9, 0.0, 0.05)                                         # a Mint kick strip along the foot, on the plinth, its ends 10 cm into the cladding
-P["mint"].box(-14.9, 14.9, 3.9, 4.18, 0.0, 0.05)                                        # and an eaves board, its top in the roof
-for i in range(6):
-    x = -12.5 + 5.0 * i
-    P["mint"].box(x - 1.0, x + 1.0, 0.5, 3.4, 0.0, 0.08)                                 # the door frame (the strips run on inside it)
-    P["black"].box(x - 0.7, x + 0.7, 1.95, 3.2, 0.08, 0.1)                               # the open upper half: dark, standing on the leaf, 5 cm in from its sides
-    P["saddle"].box(x - 0.75, x + 0.75, 0.55, 1.95, 0.08, 0.14)                          # the lower half, shut
-    P["saddle2"].box(x - 0.7, x + 0.7, 1.0, 1.06, 0.14, 0.17)                            # a plank line across it
-    P["gold"].box(x + 0.5, x + 0.62, 1.2, 1.5, 0.14, 0.2)                                # the latch
-    lx = x + 1.23                                                                       # a lantern on a bracket: a base, a lit glass, a cap, the bracket's end in the cap
-    P["black2"].box(lx - 0.04, lx + 0.04, 2.53, 2.63, 0.0, 0.5)
-    P["black2"].box(lx - 0.11, lx + 0.11, 2.1, 2.18, 0.38, 0.6)
-    P["glowgold"].box(lx - 0.08, lx + 0.08, 2.18, 2.48, 0.41, 0.57)
-    P["black2"].box(lx - 0.13, lx + 0.13, 2.48, 2.58, 0.36, 0.62)
-    P["saddle2"].box(x - 0.6, x + 0.6, 0.0, 0.45, 0.6, 1.3)                              # the feed trough, on the porch floor
-# the porch: posts, a beam, a floor
-P["saddle2"].box(-15.2, 15.2, 0.0, 0.12, 0.2, 2.4)
-for i in range(7):
-    x = -15.0 + 5.0 * i
-    P["saddle"].box(x - 0.13, x + 0.13, 0.12, 4.0, 2.05, 2.31)
-P["saddle"].box(-15.2, 15.2, 3.95, 4.2, 2.0, 2.36)
-# the roof: a gable prism over the whole block, eaves 0.6 m past the porch beam and back wall
-P["barn2"].polyx([(-9.6, 4.15), (2.6, 4.15), (2.6, 4.3), (-3.5, 7.2), (-9.6, 4.3)], -15.6, 15.6)
-P["mint"].box(-15.7, 15.7, 7.05, 7.35, -3.75, -3.25)                                      # the ridge cap
-for x in (-8.0, 8.0):                                                                    # a louvred cupola each, its base sunk into the roof (the slopes are 6.99 m up at its faces)
-    P["mint2"].box(x - 1.0, x + 1.0, 6.8, 8.5, -3.95, -3.05)
-    for i in range(4):
-        P["black"].box(x - 0.8, x + 0.8, 7.55 + i * 0.25, 7.65 + i * 0.25, -4.0, -3.95)
-        P["black"].box(x - 0.8, x + 0.8, 7.55 + i * 0.25, 7.65 + i * 0.25, -3.05, -3.0)
-    P["barn2"].add(hip(0.15, 1.41421, 0.9), t=(x, 8.9, -3.5), s=(1.15, 1.0, 0.6))      # its hipped cap, 15 cm over each face, its foot 5 cm into the body
-    P["gold"].bm((x, 9.3, -3.5), (x, 10.0, -3.5), 0.04)
+def stable_block(name, n):
+    """N boxes 5 m apart along x, front (+z) at z = 0, the body to z = -9, a 2.4 m porch. Each box's upper door stands open on a lit stall
+    4.3 m deep (dark plank walls, straw, a hay rack, a lantern): the game stands a chimera in it (chimera_stalls in src/downsPlan.js), its
+    head over the shut lower leaf. The upper leaf is swung back against the wall beside the door."""
+    Lh = n * 2.5
+    root = pivot(name, (0, 0, 0))
+    P = parts(root, name, {"barn": 0.04, "barn2": 0.04, "mint": 0.03, "mint2": 0.02, "saddle": 0.02, "saddle2": 0.015, "black": 0.02, "gold": 0.012,
+                           "glowgold": 0.0, "black2": 0.012})
+    IN = {k: Acc(f"{name}_in_{k}", k, root, 0.0) for k in ("black", "black2", "saddle", "saddle2", "glowgold")}     # (the stalls' insides: no outlines)
+    xs = [-Lh + 2.5 + 5.0 * i for i in range(n)]
+    P["mint2"].box(-Lh - 0.3, Lh + 0.3, 0.0, 0.5, -9.2, 0.2)                                 # plinth
+    P["barn"].box(-Lh, Lh, 0.5, 4.2, -9.0, -4.6)                                             # the back half of the walls, solid
+    for sx in (-1, 1):
+        P["barn"].box(sx * (Lh - 0.3), sx * Lh, 0.5, 4.2, -4.6, 0.0)                         # the end walls' front halves
+        P["mint"].box(sx * (Lh - 0.2), sx * (Lh + 0.08), 0.45, 4.25, -9.08, 0.08)            # the end walls' Mint cladding, 8 cm proud on the end, the front and the back
+    # the front wall round the open upper doors: a band below them, a band above, a pier between each two
+    P["barn"].box(-Lh + 0.25, Lh - 0.25, 0.5, 1.95, -0.3, 0.0)
+    P["barn"].box(-Lh + 0.25, Lh - 0.25, 3.2, 4.2, -0.3, 0.0)
+    edges = [-Lh + 0.25] + [e for x in xs for e in (x - 0.7, x + 0.7)] + [Lh - 0.25]
+    for a, b in zip(edges[0::2], edges[1::2]):
+        P["barn"].box(a, b, 1.94, 3.21, -0.3, 0.0)
+    P["mint"].box(-Lh + 0.1, Lh - 0.1, 0.5, 0.9, 0.0, 0.05)                                  # a Mint kick strip along the foot, its ends in the cladding
+    P["mint"].box(-Lh + 0.1, Lh - 0.1, 3.9, 4.18, 0.0, 0.05)                                 # and an eaves board, its top in the roof
+    for x in xs:
+        for sx in (-1, 1):
+            P["mint"].box(x + sx * 0.7, x + sx * 1.0, 0.5, 3.4, 0.0, 0.08)                   # the door frame: its posts and head round the opening
+        P["mint"].box(x - 1.0, x + 1.0, 3.2, 3.4, 0.0, 0.08)
+        P["saddle"].box(x - 0.75, x + 0.75, 0.55, 1.95, 0.08, 0.14)                          # the lower leaf, shut
+        P["saddle2"].box(x - 0.7, x + 0.7, 1.0, 1.06, 0.14, 0.17)                            # a plank line across it
+        P["gold"].box(x + 0.5, x + 0.62, 1.2, 1.5, 0.14, 0.2)                                # the latch
+        P["saddle"].box(x - 2.4, x - 1.06, 1.98, 3.17, 0.0, 0.07)                            # the upper leaf, swung back flat against the wall
+        P["saddle2"].box(x - 2.35, x - 1.11, 2.55, 2.6, 0.07, 0.1)
+        P["black"].box(x - 0.55, x + 0.55, 3.46, 3.74, 0.05, 0.1)                            # the box's name board (blank: the game knows who's in)
+        P["gold"].box(x - 0.6, x + 0.6, 3.43, 3.46, 0.05, 0.11)
+        lx = x + 1.23                                                                       # a lantern on a bracket: a base, a lit glass, a cap, the bracket's end in the cap
+        P["black2"].box(lx - 0.04, lx + 0.04, 2.53, 2.63, 0.0, 0.5)
+        P["black2"].box(lx - 0.11, lx + 0.11, 2.1, 2.18, 0.38, 0.6)
+        P["glowgold"].box(lx - 0.08, lx + 0.08, 2.18, 2.48, 0.41, 0.57)
+        P["black2"].box(lx - 0.13, lx + 0.13, 2.48, 2.58, 0.36, 0.62)
+        P["saddle2"].box(x - 0.6, x + 0.6, 0.0, 0.45, 0.6, 1.3)                              # the feed trough, on the porch floor
+        # inside: plank lining on the back wall, a ceiling, straw, a hay rack, a lantern on the back wall
+        IN["black2"].box(x - 2.35, x + 2.35, 0.47, 3.6, -4.59, -4.54)                     # (1 cm off the back wall, its foot in the plinth)
+        IN["black"].box(max(x - 2.4, -Lh + 0.32), min(x + 2.4, Lh - 0.32), 3.59, 4.14, -4.58, -0.31)   # (its top under the roof's soffit, its ends clear of the end walls)
+        IN["saddle"].box(x - 2.32, x + 2.32, 0.44, 0.58, -4.53, -0.31)
+        IN["saddle2"].box(x - 1.3, x - 0.1, 1.9, 2.5, -4.54, -4.25)
+        IN["glowgold"].box(x + 1.4, x + 1.7, 2.7, 3.05, -4.54, -4.46)
+    for x in xs[:-1]:                                                                        # the partitions between the stalls
+        IN["black2"].box(x + 2.3, x + 2.7, 0.46, 3.6, -4.55, -0.3)
+    for sx in (-1, 1):                                                                       # and a lining on the end walls' inner faces, 1 cm off them
+        IN["black2"].box(sx * (Lh - 0.31), sx * (Lh - 0.35), 0.46, 3.6, -4.55, -0.3)
+    # the porch: posts, a beam with knee braces, a floor
+    P["saddle2"].box(-Lh - 0.2, Lh + 0.2, 0.0, 0.12, 0.2, 2.4)
+    for i in range(n + 1):
+        x = -Lh + 5.0 * i
+        P["saddle"].box(x - 0.13, x + 0.13, 0.12, 4.0, 2.05, 2.31)
+        for sx in (-1, 1):
+            if -Lh < x + sx * 0.6 < Lh:
+                P["saddle"].bm((x, 3.3, 2.18), (x + sx * 0.62, 3.98, 2.18), 0.055)
+    P["saddle"].box(-Lh - 0.2, Lh + 0.2, 3.95, 4.2, 2.0, 2.36)
+    # the roof: a gable prism over the whole block, eaves 0.6 m past the porch beam and back wall
+    P["barn2"].polyx([(-9.6, 4.15), (2.6, 4.15), (2.6, 4.3), (-3.5, 7.2), (-9.6, 4.3)], -Lh - 0.6, Lh + 0.6)
+    P["mint"].box(-Lh - 0.7, Lh + 0.7, 7.05, 7.35, -3.75, -3.25)                             # the ridge cap
+    for x in ((-8.0, 8.0) if n >= 6 else (0.0,)):                                          # a louvred cupola, its base sunk into the roof
+        P["mint2"].box(x - 1.0, x + 1.0, 6.8, 8.5, -3.95, -3.05)
+        for i in range(4):
+            P["black"].box(x - 0.8, x + 0.8, 7.55 + i * 0.25, 7.65 + i * 0.25, -4.0, -3.95)
+            P["black"].box(x - 0.8, x + 0.8, 7.55 + i * 0.25, 7.65 + i * 0.25, -3.05, -3.0)
+        P["barn2"].add(hip(0.15, 1.41421, 0.9), t=(x, 8.9, -3.5), s=(1.15, 1.0, 0.6))
+        P["gold"].bm((x, 9.3, -3.5), (x, 10.0, -3.5), 0.04)
+
+
+stable_block("dn_stable_4", 4)
+stable_block("dn_stable_6", 6)
+
+# =====================================================================================================
+# dn_stable_corner: the knuckle of an L, a two-storey tack room under a clock turret
+# =====================================================================================================
+# Its walls fill x -9.3 to 0.3, z -9.3 to 0.3. One block runs off its +x face (front +z, from x = 0.3) and another off its +z face (turned a quarter, front +x, from
+# z = 0.3): their ends, plinths and roofs' eaves die into its walls, which stand above their ridges. In the inner corner it lays the porch's square (3 cm over the blocks'
+# porch floors, so it is the one that shows), a post where the two porch beams cross, and a soffit under the two roofs' eaves.
+root = pivot("dn_stable_corner", (0, 0, 0))
+P = parts(root, "dn_stable_corner", {"barn": 0.05, "barn2": 0.045, "mint": 0.03, "mint2": 0.02, "saddle": 0.02, "saddle2": 0.015, "black": 0.025, "gold": 0.015,
+                                     "glasswarm": 0.0, "black2": 0.015})
+C0, C1, CH = -9.3, 0.3, 8.6
+P["mint2"].box(C0 - 0.3, C1 + 0.3, 0.0, 0.6, C0 - 0.3, C1 + 0.3)
+P["barn"].box(C0, C1, 0.6, CH, C0, C1)
+for cx in (C0, C1):                                                                       # Mint corner boards wrapping its four corners
+    for cz in (C0, C1):
+        P["mint"].box(cx - 0.28, cx + 0.28, 0.55, CH + 0.05, cz - 0.28, cz + 0.28)
+P["mint"].box(C0 - 0.06, C1 + 0.06, 4.3, 4.6, C0 - 0.06, C1 + 0.06)                         # a string course between the storeys
+P["gold"].box(C0 - 0.12, C1 + 0.12, CH - 0.27, CH - 0.02, C0 - 0.12, C1 + 0.12)                    # a gold frieze under the eaves
+for face in ("-x", "-z"):                                                                # the outer faces: two lit windows a storey, a door below
+    for u in (-6.7, -2.3):
+        for y0, y1 in ((1.6, 3.4), (5.2, 7.4)):
+            if face == "-x":
+                P["black"].box(C0 - 0.06, C0 + 0.05, y0 - 0.15, y1 + 0.15, u - 0.95, u + 0.95)
+                P["glasswarm"].box(C0 - 0.064, C0 - 0.06, y0, y1, u - 0.8, u + 0.8)
+                P["black"].box(C0 - 0.094, C0 - 0.064, y0, y1, u - 0.04, u + 0.04)
+            else:
+                P["black"].box(u - 0.95, u + 0.95, y0 - 0.15, y1 + 0.15, C0 - 0.06, C0 + 0.05)
+                P["glasswarm"].box(u - 0.8, u + 0.8, y0, y1, C0 - 0.064, C0 - 0.06)
+                P["black"].box(u - 0.04, u + 0.04, y0, y1, C0 - 0.094, C0 - 0.064)
+P["barn2"].add(hip(0.2, 1.41421, 2.6), t=(-4.5, CH + 1.3, -4.5), s=(7.7, 1.0, 7.7))       # the hip roof, 0.6 m past the walls
+# the clock turret on the roof: a Mint box with a clock face on each side, a cap, a weathervane
+TY = CH + 2.0
+P["mint"].box(-6.0, -3.0, TY, TY + 2.8, -6.0, -3.0)
+for (fx, fz, ry) in ((-4.5, -2.94, 0.0), (-4.5, -6.06, PI), (-2.94, -4.5, PI / 2), (-6.06, -4.5, -PI / 2)):
+    P["mint2"].cylc(fx, TY + 1.5, fz, 1.05, 0.06, 20, rot=(PI / 2, ry, 0))
+    P["gold"].tor(1.07, 0.06, t=(fx, TY + 1.5, fz), rot=(PI / 2, ry, 0), n=24)
+    ux, uz = math.sin(ry), math.cos(ry)                                                   # (the hands: ten past ten, standing 4 cm off the face)
+    P["black"].bm((fx + ux * 0.05, TY + 1.5, fz + uz * 0.05), (fx + ux * 0.05 - uz * 0.55, TY + 1.8, fz + uz * 0.05 + ux * 0.55), 0.045)
+    P["black"].bm((fx + ux * 0.05, TY + 1.5, fz + uz * 0.05), (fx + ux * 0.05 + uz * 0.4, TY + 1.75, fz + uz * 0.05 - ux * 0.4), 0.045)
+P["gold"].box(-6.15, -2.85, TY + 2.75, TY + 2.95, -6.15, -2.85)
+P["barn2"].add(hip(0.12, 1.41421, 1.6), t=(-4.5, TY + 3.7, -4.5), s=(2.5, 1.0, 2.5))
+P["gold"].bm((-4.5, TY + 4.4, -4.5), (-4.5, TY + 6.2, -4.5), 0.05)
+P["gold"].box(-5.3, -3.7, TY + 5.6, TY + 5.68, -4.54, -4.46)                              # the vane: an arrow, a chimera's silhouette riding it
+P["gold"].poly([(-5.5, TY + 5.64), (-5.2, TY + 5.84), (-5.2, TY + 5.44)], -4.53, -4.47)
+P["gold"].poly([(-4.6, TY + 5.68), (-4.4, TY + 6.0), (-4.0, TY + 6.05), (-3.85, TY + 6.3), (-3.75, TY + 6.0), (-3.9, TY + 5.68)], -4.53, -4.47)
+# the inner corner: the porch's square, the post where the beams cross, a soffit under the eaves
+P["saddle2"].box(0.25, 2.45, 0.01, 0.15, 0.25, 2.45)
+P["saddle"].box(1.98, 2.38, 0.12, 4.3, 1.98, 2.38)
+P["barn2"].box(0.2, 2.65, 4.08, 4.16, 0.2, 2.65)
+
+# =====================================================================================================
+# dn_stable_fence (a 4 m bay of post and rail, its post at x = 0, its rails running on into the next post), dn_stable_post, dn_yard_gate
+# =====================================================================================================
+root = pivot("dn_stable_fence", (0, 0, 0))
+P = parts(root, "dn_stable_fence", {"mint": 0.02, "mint2": 0.012, "gold": 0.0})
+P["mint"].box(-0.11, 0.11, 0.0, 1.45, -0.11, 0.11)
+P["mint"].box(-0.14, 0.14, 1.45, 1.53, -0.14, 0.14)
+for y in (0.45, 0.85, 1.25):
+    P["mint2"].box(0.0, 4.0, y - 0.07, y + 0.07, -0.04, 0.04)
+root = pivot("dn_stable_post", (0, 0, 0))
+P = parts(root, "dn_stable_post", {"mint": 0.02})
+P["mint"].box(-0.11, 0.11, 0.0, 1.45, -0.11, 0.11)
+P["mint"].box(-0.14, 0.14, 1.45, 1.53, -0.14, 0.14)
+
+root = pivot("dn_yard_gate", (0, 0, 0))                                                 # the yard's gate: two Barn Red piers 6 m apart, an arched board over them (the game letters it), two leaves swung in
+P = parts(root, "dn_yard_gate", {"barn": 0.04, "mint": 0.025, "mint2": 0.015, "gold": 0.015, "black": 0.02, "saddle": 0.015})
+for sx in (-1, 1):
+    P["barn"].box(sx * 3.0 - 0.45, sx * 3.0 + 0.45, 0.3, 3.4, -0.45, 0.45)
+    P["mint"].box(sx * 3.0 - 0.55, sx * 3.0 + 0.55, 3.4, 3.62, -0.55, 0.55)
+    P["gold"].add(sphere(0.28, 10, 7), t=(sx * 3.0, 3.85, 0))
+    P["mint"].box(sx * 3.0 - 0.5, sx * 3.0 + 0.5, 0.0, 0.35, -0.5, 0.5)
+    hx = sx * 2.5                                                                         # a leaf, hinged on the pier, swung 80 degrees in (-z)
+    a = sx * math.radians(80)
+    for y in (0.3, 1.5):
+        P["mint2"].boxc(hx - sx * 1.25 * math.cos(math.radians(80)), y, -1.25 * math.sin(math.radians(80)), 2.5, 0.12, 0.08, rot=(0, a, 0))
+    for t in (0.06, 2.44):
+        P["mint"].boxc(hx - sx * t * math.cos(math.radians(80)), 0.9, -t * math.sin(math.radians(80)), 0.1, 1.4, 0.1, rot=(0, a, 0))
+P["black"].box(-2.6, 2.6, 4.0, 4.9, -0.12, 0.12)                                           # the name board
+P["gold"].box(-2.7, 2.7, 3.92, 4.0, -0.15, 0.15)
+P["gold"].box(-2.7, 2.7, 4.9, 4.98, -0.15, 0.15)
+for sx in (-1, 1):
+    P["black"].bm((sx * 2.6, 4.45, 0), (sx * 3.0, 3.6, 0), 0.06)
+
+# =====================================================================================================
+# dn_lunge_ring: a round pen 18 m across, its gate on +z; dn_trough, dn_tack
+# =====================================================================================================
+root = pivot("dn_lunge_ring", (0, 0, 0))
+P = parts(root, "dn_lunge_ring", {"mint": 0.02, "mint2": 0.012, "saddle": 0.015, "gold": 0.0})
+RR, NP = 9.0, 22
+for i in range(NP):
+    a0 = 2 * PI * (i + 0.5) / NP + PI / 2                                                 # (posts round from the gate at +z: the first and the last stand either side of it)
+    x, z = math.cos(a0) * RR, math.sin(a0) * RR
+    P["mint"].box(x - 0.1, x + 0.1, 0.0, 1.6, z - 0.1, z + 0.1)
+    if i < NP - 1:
+        a1 = 2 * PI * (i + 1.5) / NP + PI / 2
+        x1, z1 = math.cos(a1) * RR, math.sin(a1) * RR
+        L, ang = math.hypot(x1 - x, z1 - z), math.atan2(x1 - x, z1 - z)
+        for y in (0.6, 1.2):
+            P["mint2"].boxc((x + x1) / 2, y, (z + z1) / 2, 0.07, 0.14, L - 0.12, rot=(0, ang, 0))
+# the gate, standing open between the last post and the first
+a0, a1 = 2 * PI * (NP - 0.5) / NP + PI / 2, 2 * PI * 0.5 / NP + PI / 2
+gx, gz = math.cos(a1) * RR, math.sin(a1) * RR
+for y in (0.4, 1.3):
+    P["saddle"].boxc(gx + 1.2, y, gz + 0.2, 2.4, 0.12, 0.08, rot=(0, -0.25, 0))
+P["saddle"].boxc(gx + 2.35, 0.85, gz + 0.5, 0.1, 1.1, 0.1, rot=(0, -0.25, 0))
+
+root = pivot("dn_trough", (0, 0, 0))                                                    # a water trough: a plank tub, dark water 6 cm under its rim
+P = parts(root, "dn_trough", {"saddle": 0.02, "saddle2": 0.0, "black2": 0.0, "gold": 0.0})
+P["saddle"].box(-1.2, 1.2, 0.1, 0.75, -0.45, 0.45)
+P["black2"].box(-1.12, 1.12, 0.62, 0.69, -0.37, 0.37)
+for x in (-0.9, 0.9):
+    P["saddle2"].box(x - 0.12, x + 0.12, 0.0, 0.12, -0.5, 0.5)
+P["gold"].box(-1.21, 1.21, 0.5, 0.55, -0.46, 0.46)
+
+root = pivot("dn_tack", (0, 0, 0))                                                      # a saddle rack: a post and a sawhorse, a saddle with its blanket and a stirrup
+P = parts(root, "dn_tack", {"saddle": 0.015, "saddle2": 0.012, "barn": 0.015, "gold": 0.0, "black2": 0.0})
+for sx in (-1, 1):
+    P["saddle2"].bm((sx * 0.45, 0.0, -0.3), (sx * 0.45, 0.9, 0.0), 0.04)
+    P["saddle2"].bm((sx * 0.45, 0.0, 0.3), (sx * 0.45, 0.9, 0.0), 0.04)
+P["saddle2"].box(-0.55, 0.55, 0.86, 0.96, -0.05, 0.05)
+P["barn"].box(-0.4, 0.4, 0.92, 0.97, -0.38, 0.38)
+P["saddle"].rbc(0, 1.05, 0, 0.62, 0.2, 0.62, e=0.4)
+P["saddle"].rbc(0.24, 1.18, 0, 0.12, 0.14, 0.2, e=0.4)
+for sz in (-1, 1):
+    P["black2"].bm((0, 1.0, sz * 0.3), (0, 0.6, sz * 0.36), 0.015)
+    P["gold"].tor(0.07, 0.015, t=(0, 0.55, sz * 0.36), rot=(PI / 2, 0, 0), n=10, rs=4)
 
 # =====================================================================================================
 # dn_hay_barn

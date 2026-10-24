@@ -89,8 +89,90 @@ export const RING = { x: -96, z: 0, rx: 26, rz: 18 };                // the para
 export const PAVILION = { x: -62, z: 0 };                             // the weighing room's front wall (the porch stands 3.2 m west of it)
 export const LAWN = { x: 100, z: 0, r: 28, tables: [[84, -12, 0], [92, 12, 1], [104, -16, 2], [110, 6, 3], [96, -2, 4], [118, -6, 5]] };
 
-// ---- the stables behind the far stand: four blocks of six boxes round a lane, the hay barn between the back two ----
-export const STABLES = { blocks: [[-36, -126, 0], [36, -126, 0], [-36, -114, Math.PI], [36, -114, Math.PI]], barn: [0, -126] };
+// ---- the stables behind the far stand (docs/stable-proposals/): two layouts, A and B; STABLE picks the one built. Both hang off the far stand's
+// back wall (its outer face at z = -96), so its two tunnels (x = +-47.5) come out into the yard. Each is mirrored about x = 0.
+//   pieces  [name, x, z, yaw]: dn_stable_4 / dn_stable_6 (yaw 0: front +z; PI/2: front +x; -PI/2: front -x), dn_stable_corner (yaw 0: its inner corner toward
+//           +x +z; -PI/2: toward -x +z), dn_hay_barn (front +z), dn_lunge_ring, dn_trough, dn_tack
+//   fences  runs of post and rail, as polylines [[x, z]...] (cut into equal bays of about 4 m)
+//   gates   [x, z, yaw, name]: dn_yard_gate, its board lettered `name`
+//   ground  [x0, x1, z0, z1, colour]: the yard's earth (and B's turnout grass), laid flat
+//   trainer where the Training Yard's trainer stands; hay [x, z, yaw] stacks
+const mirror = (L) => {
+  const flip = (yaw) => (yaw === 0 || yaw === Math.PI ? yaw : -yaw);
+  const corner = (yaw) => (yaw === 0 ? -Math.PI / 2 : 0);                 // (an L's knuckle: its inner corner turned from +x to -x)
+  const half = (list) => list.map(([n, x, z, yaw]) => [n, -x, z, n === 'dn_stable_corner' ? corner(yaw) : flip(yaw)]);
+  return {
+    ...L,
+    pieces: [...L.pieces, ...half(L.pieces.filter((p) => p[1] < 0))],
+    fences: [...L.fences, ...L.fences.filter((f) => f.every(([x]) => x <= 0) && f.some(([x]) => x < 0)).map((f) => f.map(([x, z]) => [-x, z]))],
+    gates: [...L.gates, ...L.gates.filter((g) => g[0] < 0).map(([x, z, yaw, n]) => [-x, z, flip(yaw), n.replace('WEST', 'EAST')])],
+    hay: [...L.hay, ...L.hay.filter((h) => h[0] < 0).map(([x, z, yaw]) => [-x, z, -yaw])],
+  };
+};
+const Q = Math.PI / 2;
+export const STABLE_LAYOUTS = {
+  // A, The Stable Court: one court the width of the stand's middle, closed by an L of boxes on each side (a wing coming back from the stand, a row along the
+  // back, a clock-towered tack room at the knuckle), the hay barn in the middle of the back row, a lunge ring in the middle; a gate at each wing's end
+  a: mirror({
+    name: 'A: The Stable Court',
+    pieces: [
+      ['dn_stable_corner', -70.3, -160.3, 0],
+      ['dn_stable_6', -55, -160, 0], ['dn_stable_4', -28, -160, 0],          // the back row, front to the stand
+      ['dn_stable_6', -70, -145, Q], ['dn_stable_4', -70, -118, Q],           // the wing, front into the court
+      ['dn_hay_barn', 0, -160, 0], ['dn_lunge_ring', 0, -128, 0],
+      ['dn_trough', -63, -124, Q], ['dn_trough', -36, -153, 0], ['dn_tack', -62, -150, 0.6], ['dn_tack', -63, -136, -0.3],
+    ],
+    fences: [
+      [[-74.5, -96.2], [-74.5, -98.5]], [[-74.5, -105.5], [-74.5, -108.2]],   // either side of the wing's gate
+      [[-74.5, -129.7], [-74.5, -128.3]],                                       // across the gap between the wing's blocks
+      [[-39.7, -164.5], [-38.3, -164.5]], [[-17.7, -165], [-12.2, -165]],       // across the back row's gaps
+    ],
+    gates: [[-74.5, -102, Q, 'CHIMERA STABLES']],
+    hay: [[-18, -151, 0.15], [-9, -153.5, -0.1]],
+    ground: [[-80, 80, -173, -96, 'earth']],
+    trainer: [3, -116],
+  }),
+  // B, The Twin Lanes: each tunnel comes out into a lane of boxes running straight back, an L at its far end (the outer row turning along the back at a clock
+  // tower), the two lanes joined across the back in front of the hay barn; between them a fenced turnout paddock with the lunge ring, a gate to it from each lane
+  b: mirror({
+    name: 'B: The Twin Lanes',
+    pieces: [
+      ['dn_stable_6', -53.5, -115.3, Q], ['dn_stable_4', -53.5, -142.1, Q],  // each lane's outer row, front into the lane
+      ['dn_stable_corner', -53.8, -152.3, 0], ['dn_stable_6', -38.5, -152, 0], // its knuckle and the back row
+      ['dn_stable_6', -41.5, -116, -Q],                                        // the inner row, front into the lane, its back to the paddock
+      ['dn_hay_barn', 0, -152, 0], ['dn_lunge_ring', 0, -120, 0],
+      ['dn_trough', -47.5, -146, 0], ['dn_tack', -46, -104, 0.5], ['dn_trough', -20, -138, 0.2],
+    ],
+    fences: [
+      [[-63.4, -98.2], [-51, -98.2]], [[-44, -98.2], [-33, -98.2], [0, -98.2]],   // across the lanes' mouths (a gate in each) and the paddock's north side
+      [[-37, -131.6], [-37, -135.5]], [[-37, -142.5], [-37, -147], [-3.5, -147]], // the paddock's side by the lane (its gate) and its south side (a gate to the back yard)
+      [[-58, -130.6], [-58, -131.8]], [[-23.2, -157], [-12.2, -157]],              // across the gaps in the outer row and the back row
+    ],
+    gates: [[-47.5, -98.2, 0, 'WEST LANE'], [-37, -139, Q, ''], [0, -147, 0, 'PADDOCK']],
+    hay: [[-14, -144.5, 0.2], [-27, -149.2, -0.2]],
+    ground: [[-64, 64, -163, -96, 'earth'], [-36.8, 36.8, -146.8, -98.4, 'grass']],
+    trainer: [3, -108],
+  }),
+};
+const DEV = typeof __DEV_TOOLS__ === 'undefined' ? true : __DEV_TOOLS__;     // (in a dev build ?stables=a|b picks the layout, to compare them)
+const asked = DEV && typeof location !== 'undefined' ? /[?&]stables=(a|b)\b/.exec(location.search) : null;
+export const STABLE = asked ? asked[1] : 'a';
+export const STABLES = STABLE_LAYOUTS[STABLE];
+// The boxes a layout's blocks hold: [x, z, yaw] of each stall's middle, 2.2 m in from the door, the way it looks out (the game stands a chimera in some)
+export const BOX_PITCH = 5;
+export function stallsOf(L) {
+  const out = [];
+  for (const [n, x, z, yaw] of L.pieces) {
+    const m = /^dn_stable_(\d)$/.exec(n);
+    if (!m) continue;
+    const k = +m[1], c = Math.cos(yaw), s = Math.sin(yaw);
+    for (let i = 0; i < k; i++) {
+      const lx = -(k - 1) * BOX_PITCH / 2 + i * BOX_PITCH, lz = -2.2;
+      out.push([x + lx * c + lz * s, z - lx * s + lz * c, yaw]);
+    }
+  }
+  return out;
+}
 
 // ---- the fairground annex, behind the main stand's east end ----
 export const ANNEX = {

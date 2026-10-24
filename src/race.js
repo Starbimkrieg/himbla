@@ -3,12 +3,13 @@ import { toon, inkMat } from './toon.js';
 import { frameQuat } from './geo.js';
 import { pick } from './rng.js';
 import { spliceGenes, makeChimera, LIVING, DRAWN } from './chimera.js';
+import { chimeraReady } from './chimerabuild.js';
 import { ensureStats, statTotal, newRace, stepRace, CONDITIONS, CATS, DRILLS, train, careerNext, SEASONS, SEASON_RACES, STAT_INFO } from './chimerastats.js';
 import { SKILLS, skillPool, rollSkill } from './chimeraskills.js';
 import { chimeraCard, cardList } from './chimeracard.js';
 import { makeDownsPart, downsNode, downsSlot, makeFigure } from './models.js';
 import { buildDowns } from './downsWorld.js';
-import { LAP, LANES, RAIL_IN, RAIL_OUT, FINISH_U, STAND, FAR, CLUB, WINDOW, BOARD, DRUM, PODIUMS, ENTRIES, STABLES, oval } from './downsPlan.js';
+import { LAP, LANES, RAIL_IN, RAIL_OUT, FINISH_U, STAND, FAR, CLUB, WINDOW, BOARD, DRUM, PODIUMS, ENTRIES, STABLES, stallsOf, oval } from './downsPlan.js';
 import { pixelFont } from './fonts.js';
 import { bendPoint, bendQuat } from './curve.js';
 
@@ -177,11 +178,29 @@ export class Race {
     this.booth = w.toWorld(loc, WINDOW[0], 0, WINDOW[1]);
     // the six betting windows, along the clubhouse's front
     this.windows = [-24.5, -17, -9.5, 9.5, 17, 24.5].map((x) => w.toWorld(loc, x, 0, CLUB.z1 - 3.2));
-    // the Training Yard: a trainer in the stable lane, between the blocks, in front of the hay barn
-    const [bx, bz] = STABLES.barn;
+    // the Training Yard: a trainer in the stable yard, by the lunge ring
+    const [tx, tz] = STABLES.trainer;
     const trainer = makeFigure({ look: 'trader', seed: 4417, suit: 0x8b4044 });
-    w.put(trainer.root, loc, bx, bz + 6.5, 0, 0, true);
-    this.yard = w.toWorld(loc, bx, 0, bz + 6.5);
+    w.put(trainer.root, loc, tx, tz, 0, 0, true);
+    this.yard = w.toWorld(loc, tx, 0, tz);
+    this.stabled = null;                  // the chimeras in the boxes: put in when the kit has loaded and you are at the course (stable())
+  }
+
+  // A third of the boxes have a chimera in them, a rival's sort (two kinds or three), sized so its head is over the shut lower door (2.4 m tall, the
+  // straw 0.58 m up), looking out. They idle while you are in the yard.
+  stable() {
+    const w = this.game.world, boxes = stallsOf(STABLES);
+    this.stabled = [];
+    for (let i = boxes.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [boxes[i], boxes[j]] = [boxes[j], boxes[i]]; }
+    for (const [x, z, yaw] of boxes.slice(0, Math.round(boxes.length / 3))) {
+      const a = pick(LIVING), items = [{ kind: a }, { kind: pick(LIVING.filter((q) => q !== a)) }];
+      if (Math.random() < 0.3) items.push({ kind: pick(LIVING) });
+      const m = makeChimera(spliceGenes(items));
+      m.root.scale.setScalar(THREE.MathUtils.clamp(2.4 / m.height, 0.7, 2.4));
+      w.put(m.root, this.loc, x, z, 0.58, yaw, true);
+      this.stabled.push({ m, t: Math.random() * 10 });
+    }
+    this.stableAt = w.toWorld(this.loc, 0, 0, -130);
   }
 
   canvasPlane(cw, ch, w, h) {
@@ -682,6 +701,8 @@ export class Race {
       if (this.screenT <= 0) { this.screenT = 0.3; this.drawScreen(); this.drawEnd(); this.drawBoard(); this.drawPlates(); }
       if (this.gate.root.visible && this.state !== 'countdown' && this.gate.towT === undefined) this.setGate(Math.min(1, this.gate.open + dt * 4));
       if (this.gate.root.visible && this.state === 'run') this.towGate(dt);
+      if (!this.stabled && chimeraReady()) this.stable();
+      if (this.stabled && g.player.pos.distanceTo(this.stableAt) < 110) for (const s of this.stabled) s.m.anim((s.t += dt), 0);
     }
     if (this.state === 'idle') { this.panel.classList.add('hidden'); return; }
     if (this.state === 'countdown') {

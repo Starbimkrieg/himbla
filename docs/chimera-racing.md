@@ -99,7 +99,7 @@ in the pen with a RETIRED tag and can be sold to the Lunar Stud Farm for its rec
 + 1500 a tournament + 12,000 for the Triple Crown). Winning all three tournaments is the **Triple Crown**: a crown on its card, its name in
 the Hall of Fame (at the race window).
 
-**Training:** every race banks one session, spent at the Training Yard (the trainer in the stable lane). Four drills: Sprints (SPD, a
+**Training:** every race banks one session, spent at the Training Yard (the trainer in the stable yard, by the lunge ring). Four drills: Sprints (SPD, a
 little POW), Hill Pulls (POW, a little STA), Long Laps (STA, a little SPD), Maze Run (WIT, a little POW). +4 to 7 on the main stat and +1
 to 2 on the side one, times (1 + growth), halved once a stat is past 80 unless it is a growth stat. The training result shows the
 growth's share (`+7 SPEED (+2 growth)`). Twelve sessions add about 90 to the total: about two grades. Four sessions on one stat add about
