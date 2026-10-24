@@ -982,15 +982,17 @@ export class Alchemy {
     this.followers.forEach((f, i) => {
       if (f.birth) { this.updateHatch(f, dt); return; }
       const up = f.root.position.clone().normalize();
-      const target = P.pos.clone().addScaledVector(this.game.cam.right, (i % 2 ? 3 + i : -3 - i)).addScaledVector(P.heading, -4 - i * 2);
+      // at your side in pairs, just behind your shoulders (chimeras are small now: a few metres out, they left the forward view)
+      const row = Math.floor(i / 2);
+      const target = P.pos.clone().addScaledVector(this.game.cam.right, (i % 2 ? 1 : -1) * (1.7 + 0.5 * row)).addScaledVector(P.heading, -1.2 - 1.5 * row);
       const to = tangent(target.clone().sub(f.root.position), up);
       const d = to.length();
       if (d > 300) { f.root.position.copy(P.pos); return; }
       const sp = Math.min(d, (8 + d * 1.5) * dt);
-      if (d > 2) f.root.position.addScaledVector(to.normalize(), sp);
+      if (d > 0.6) f.root.position.addScaledVector(to.normalize(), sp);
       f.h += f.vy * dt; f.vy -= 9 * dt;
       const hop = f.kind === 'chimera' ? f.genes.hop : 1;
-      if (f.h <= 0) { f.h = 0; f.vy = d > 3 && Math.random() < hop ? 4 * hop : 0; }
+      if (f.h <= 0) { f.h = 0; f.vy = d > 1.5 && Math.random() < hop ? 4 * hop : 0; }
       const gp = this.game.planet.ground(f.root.position, new THREE.Vector3());
       f.root.position.copy(gp).addScaledVector(up, f.h);
       frameQuat(up, d > 0.5 ? to : P.heading, f.root.quaternion);

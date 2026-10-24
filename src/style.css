@@ -429,6 +429,12 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 #racepanel .race-row span { margin-left: auto; color: var(--ui-muted); font-size: 13px; }
 #racepanel .race-row.mine { background: rgba(125, 255, 58, 0.18); font-weight: bold; }
 @media (max-width: 600px) { #racepanel { width: calc(100% - 32px); top: 110px; } }
+/* watching a race (race.js setView): the HUD hides but for the standings and the pop-ups over the runners; the mouse is free, its cursor the
+   game's reticle (drag the track to swing the camera), and the standings can be dragged anywhere */
+body.race-view #hud > :not(#racepanel):not(#popups) { visibility: hidden; }
+body.race-view canvas { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='14' cy='14' r='10' fill='none' stroke='%2305030c' stroke-width='7'/%3E%3Ccircle cx='14' cy='14' r='10' fill='none' stroke='%23fff4e0' stroke-width='3'/%3E%3Crect x='12' y='12' width='4' height='4' fill='%23ffd23f'/%3E%3C/svg%3E") 14 14, crosshair; }
+body.race-view #racepanel { pointer-events: auto; cursor: grab; }
+body.race-view #racepanel.dragging { cursor: grabbing; }
 #scanchip.chip { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); color: #fff; background: #b8001a; border-color: #ff4a5e; font-size: 9px; white-space: nowrap; width: max-content; animation: scanpulse 1.3s ease-in-out infinite alternate; }
 @keyframes scanpulse { from { opacity: 1; } to { opacity: 0.45; } }
 .swatch { display: inline-block; width: 12px; height: 12px; border: 2px solid #05030c; margin-right: 4px; vertical-align: -2px; }
@@ -1222,6 +1228,19 @@ body.trailer #vehbar { display: none !important; }
 #racepanel .race-keys { margin-top: 4px; padding: 4px 10px 0; border-top: 1px solid #2a2540; font-size: 12px; color: var(--ui-muted); }
 #racepanel .race-keys b { font-family: var(--comic); font-size: 9px; color: var(--yellow); }
 #dialog .race-card { margin: 8px 0; padding: 6px 8px; background: rgba(255, 46, 136, 0.1); border-left: 3px solid #ff2e88; }
+/* the race card's tiles: like the screen over the windows (a dark panel, the distance big, the purse in gold) */
+#dialog .rt-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0 2px; }
+#dialog .rt-row.one { grid-template-columns: minmax(0, 260px); }
+#dialog .rt { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 3px; padding: 8px 6px 9px; background: #2b2a2c; border: 2px solid #3b393a; border-top: 6px solid var(--sec, #cfb352); font-size: 15px; line-height: 1.15; color: #b9b2c4; }
+#dialog .rt b { font-weight: normal; }
+#dialog .rt-easy { --sec: #7b9a6e; } #dialog .rt-medium { --sec: #cfb352; } #dialog .rt-hard { --sec: #8b4044; } #dialog .rt-tournament { --sec: #ff2e88; }
+#dialog .rt-sec { font-family: var(--comic); font-size: 9px; color: var(--sec); }
+#dialog .rt-name { font-family: var(--comic); font-size: 10px; line-height: 1.4; color: #f8fff8; }
+#dialog .rt-dist { font-family: var(--comic); font-size: 20px; color: #f8fff8; margin: 3px 0 1px; }
+#dialog .rt-cat { color: #b07c57; } #dialog .rt-cat i { font-style: normal; color: #9fc28f; }
+#dialog .rt-purse { font-family: var(--comic); font-size: 10px; color: #cfb352; margin-top: 3px; }
+#dialog .rt-wait { justify-content: center; opacity: 0.7; }
+@media (max-width: 640px) { #dialog .rt-row { grid-template-columns: minmax(0, 1fr); } }
 #dialog .race-result .race-row { display: flex; gap: 8px; padding: 2px 6px; }
 #dialog .race-result .race-row span { margin-left: auto; }
 #dialog .race-result .race-row.mine { background: rgba(125, 255, 58, 0.18); font-weight: bold; }

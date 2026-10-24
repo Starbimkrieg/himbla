@@ -113,6 +113,11 @@ export class Race {
     this.panel.id = 'racepanel';
     this.panel.className = 'panel hidden';
     document.getElementById('hud').appendChild(this.panel);
+    this.viewing = false;
+    this.drag = null;                     // a drag in progress: the standings panel's, or the camera's (orbiting)
+    this.orbit = [0, 0];                  // the camera drag's movement since the last frame
+    this.panelAt = null;                  // where you dragged the standings to (null: its place at the top centre)
+    this.hookView();
     if (this.loc) {
       this.build();
       // the board opens with two of its three sections posted
@@ -455,14 +460,15 @@ export class Race {
     return null;
   }
 
-  // a rival on the card: its name, grade and how many skills it knows (the rest is for the scouting)
-  rivalTag(f) { return `${f.name} (${f.tier}${f.skills.length ? ` · ${f.skills.length} skill${f.skills.length > 1 ? 's' : ''}` : ''})`; }
-
-  raceLine(r) {
+  // a race as a tile, the way the screen over the windows shows it: section, name, the distance big, the going, the purse and the
+  // terms. The field is left out (the scouting shows it, runner by runner).
+  raceTile(r) {
     const C = CONDITIONS[r.cond];
-    const head = r.sec === 'tournament' ? `<b>${r.name.toUpperCase()}</b> · SEASON ${r.season} TOURNAMENT` : `<b>${SECTIONS[r.sec].name}</b> · <b>${r.name.toUpperCase()}</b>`;
-    const closes = r.sec === 'tournament' ? '' : ` · closes in ${Math.max(1, Math.ceil(r.ttl / 60))} min`;
-    return `${head} · ${fmt(r.dist)} m ${CAT_NAME[r.cat]} · going <b>${C.name}</b> <small>(${C.blurb})</small><br><small>Purse ₵${fmt(r.purse)} (1st ₵${fmt(r.purse * SHARE[0])} · 2nd ₵${fmt(r.purse * SHARE[1])} · 3rd ₵${fmt(r.purse * SHARE[2])}) · entry ₵${r.fee} · a win pays ${r.pays}× a bet${closes} · field: ${r.field.map((f) => this.rivalTag(f)).join(', ')}</small>`;
+    const sec = r.sec === 'tournament' ? `SEASON ${r.season} CUP` : SECTIONS[r.sec].name;
+    const closes = r.sec === 'tournament' ? '' : `<span>closes in ${Math.max(1, Math.ceil(r.ttl / 60))} min</span>`;
+    return `<div class="rt rt-${r.sec}"><b class="rt-sec">${sec}</b><b class="rt-name">${r.name.toUpperCase()}</b>`
+      + `<b class="rt-dist">${fmt(r.dist)} M</b><span class="rt-cat">${r.cat} · going <i title="${C.blurb}">${C.name}</i></span>`
+      + `<b class="rt-purse">PURSE ₵${fmt(r.purse)}</b><span>entry ₵${r.fee} · pays ${r.pays}×</span>${closes}</div>`;
   }
 
   // ---------- at the window ----------
@@ -476,16 +482,16 @@ export class Race {
     }
     ch.forEach(ensureStats);
     const due = ch.filter((c) => careerNext(c.career) === 'tournament');
-    const rows = SEC_KEYS.map((k) => {
+    const rows = `<div class="rt-row">${SEC_KEYS.map((k) => {
       const r = this.card.find((x) => x.sec === k);
-      return `<p class="race-card">${r ? this.raceLine(r) : `<b>${SECTIONS[k].name}</b> · <small>next race posts in about ${Math.ceil(this.postT[k])} s</small>`}</p>`;
-    }).join('');
+      return r ? this.raceTile(r) : `<div class="rt rt-${k} rt-wait"><b class="rt-sec">${SECTIONS[k].name}</b><span>next race posts in about ${Math.ceil(this.postT[k])} s</span></div>`;
+    }).join('')}</div>`;
     const buttons = this.card.map((r) => ({ label: `${SECTIONS[r.sec].name} · ${r.name.toUpperCase()} (${fmt(r.dist)} m)`, fn: () => this.pickRunner(r) }));
     buttons.push({ label: `TOURNAMENTS${due.length ? ` (${due.length} DUE)` : ''}`, fn: () => this.cupMenu() });
     buttons.push({ label: 'HALL OF FAME', fn: () => this.hallOfFame() });
     buttons.push({ label: 'NEVER MIND' });
     buttons.forEach((b, i) => { b.label = `${i + 1} · ${b.label}`; });
-    g.dialog('RACE CARD', `"Pick a race. EASY takes grades C and B, MEDIUM up to A, HARD anyone. Every chimera runs three seasons: three races, then the season's tournament." <small>Record: ${g.stats.raceWins || 0} wins · ${g.stats.raceStarts || 0} starts.</small>${rows}`, buttons);
+    g.dialog('RACE CARD', `<small>EASY: grades C, B · MEDIUM: up to A · HARD: anyone · record ${g.stats.raceWins || 0} wins from ${g.stats.raceStarts || 0} starts</small>${rows}`, buttons);
   }
 
   // the tournaments: one per season, for chimeras that have run their three races
@@ -530,7 +536,7 @@ export class Race {
       const fit = long ? (c.stats.stamina >= 60 ? 'built to last' : c.stats.stamina < 45 ? '⚠ will tire' : '') : (c.stats.speed >= 60 ? 'quick' : '');
       return chimeraCard(g, c, { key: i + 1, button: true, status: no ? `✖ ${no}` : `${c.follow ? '★ WITH YOU' : 'IN PEN'}${fit ? ` · ${fit}` : ''}` });
     });
-    g.dialog(race.name.toUpperCase(), `${this.raceLine(race)}<br>"Which of your… <i>creatures</i>… is running?" <small>(number key or click)</small>${recent.length ? cardList(cards, recent.length) : '<p><small>All your chimeras are retired. Breed a new one at the lab.</small></p>'}`, recent.map((c, i) => ({
+    g.dialog(race.name.toUpperCase(), `<div class="rt-row one">${this.raceTile(race)}</div>"Which of your… <i>creatures</i>… is running?" <small>(number key or click)</small>${recent.length ? cardList(cards, recent.length) : '<p><small>All your chimeras are retired. Breed a new one at the lab.</small></p>'}`, recent.map((c, i) => ({
       label: `${i + 1} · ${c.name.toUpperCase()} (${c.tier})`,
       fn: () => {
         const no = this.barred(race, c);
@@ -598,6 +604,7 @@ export class Race {
     this.camL.copy(this.racers[0].pos);
     this.camT = 0;
     g.state = 'derby';
+    this.setView(true);
     g.hud.prompt(null);
     g.hud.alert(`${race.name.toUpperCase()} — ${fmt(race.dist)} M`, '#ff2e88', 3);
   }
@@ -751,13 +758,62 @@ export class Race {
   // ---------- watching: the 'derby' game state (main.js) calls this instead of the player ----------
   watch(dt) {
     const g = this.game;
-    const [mx, my] = g.input.consumeMouse();
+    let [mx, my] = g.input.consumeMouse();
+    mx += this.orbit[0]; my += this.orbit[1];
+    this.orbit[0] = this.orbit[1] = 0;
     const sens = 0.0022 * (g.settings ? g.settings.v.sensitivity : 1);
     this.camYaw -= mx * sens;
     this.camPitch = Math.max(-0.1, Math.min(1.2, this.camPitch + my * sens));
     this.update(dt);
     if (this.state === 'idle' || !this.racers.length) return;
     this.updateCam(dt);
+  }
+
+  // Watching a race: the HUD hides but for the standings (and the pop-ups over the runners), the mouse is free, its cursor the game's
+  // reticle; drag the standings anywhere (kept for the next race), or drag anywhere else to swing the camera round.
+  setView(on) {
+    if (on === this.viewing) return;
+    const g = this.game;
+    this.viewing = on;
+    document.body.classList.toggle('race-view', on);
+    this.drag = null;
+    if (on) {
+      if (g.input.ptrLocked) { g.releasing = true; g.input.unlock(); }
+      this.placePanel();
+    } else {
+      this.panel.style.left = this.panel.style.top = this.panel.style.transform = '';
+    }
+  }
+
+  placePanel() {
+    if (!this.panelAt) return;
+    const P = this.panel, w = P.offsetWidth || 330, h = P.offsetHeight || 200;
+    const x = Math.max(0, Math.min(innerWidth - w, this.panelAt[0])), y = Math.max(0, Math.min(innerHeight - h, this.panelAt[1]));   // (kept wholly on screen)
+    P.style.left = `${x}px`; P.style.top = `${y}px`; P.style.transform = 'none';
+  }
+
+  hookView() {
+    const canvas = this.game.renderer && this.game.renderer.domElement;
+    this.panel.addEventListener('mousedown', (e) => {
+      if (!this.viewing || e.button !== 0) return;
+      const r = this.panel.getBoundingClientRect();
+      this.drag = { kind: 'panel', dx: e.clientX - r.left, dy: e.clientY - r.top };
+      this.panel.classList.add('dragging');
+      e.preventDefault();
+    });
+    if (canvas) canvas.addEventListener('mousedown', (e) => {
+      if (!this.viewing || this.game.state !== 'derby') return;
+      this.drag = { kind: 'orbit', x: e.clientX, y: e.clientY };
+      e.preventDefault();
+    });
+    addEventListener('mousemove', (e) => {
+      const d = this.drag;
+      if (!d) return;
+      if (d.kind === 'panel') { this.panelAt = [e.clientX - d.dx, e.clientY - d.dy]; this.placePanel(); }
+      else { this.orbit[0] += e.clientX - d.x; this.orbit[1] += e.clientY - d.y; d.x = e.clientX; d.y = e.clientY; }
+    });
+    addEventListener('mouseup', () => { this.drag = null; this.panel.classList.remove('dragging'); });
+    addEventListener('resize', () => { if (this.viewing) this.placePanel(); });
   }
 
   onKey(code) {
@@ -973,6 +1029,7 @@ export class Race {
     this.gate.root.visible = false;
     this.panel.classList.add('hidden');
     this.lastHtml = '';
+    this.setView(false);
     g.alchemy.syncChimeras();
     if (g.state === 'derby') g.state = 'play';
     g.updateCamera(0.016, true);

@@ -362,13 +362,13 @@ class Game {
     document.getElementById('death').addEventListener('click', () => this.respawn());
     // clicking the game while mouse-look is released just recaptures it
     this.renderer.domElement.addEventListener('click', () => {
-      if ((this.state === 'play' || this.state === 'derby') && !this.input.locked) this.input.lock();
+      if (this.state === 'play' && !this.input.locked) this.input.lock();     // (a race is watched with a free cursor: race.js setView)
     });
     document.addEventListener('pointerlockchange', () => {
       if (this.input.ptrLocked) {
         // a lock requested when a dialog closed can land after the next dialog opened (chained
         // menus): hand the mouse straight back to the menu
-        if (this.state !== 'play' && this.state !== 'cutscene' && this.state !== 'derby') { this.releasing = true; this.input.unlock(); return; }
+        if (this.state !== 'play' && this.state !== 'cutscene') { this.releasing = true; this.input.unlock(); return; }
         this.hud.show('clickhint', false);
         return;
       }
@@ -411,6 +411,7 @@ class Game {
         else if (n >= 1 && n <= this.dialogButtons.length) this.pickDialog(n - 1);
         else if (esc) this.pickDialog(this.dialogButtons.length - 1, esc);
       } else if (this.state === 'derby') {
+        if (esc) { this.resumeState = 'derby'; this.state = 'paused'; this.hud.show('pause', true); return; }   // (no pointer lock to lose: Esc pauses here)
         this.race.onKey(code);
       } else if (this.state === 'casino') { // casino
         if (esc) this.casino.close(true); else this.casino.onKey(code);

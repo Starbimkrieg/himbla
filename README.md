@@ -678,7 +678,9 @@ crowd-noise bed for now (the cheering is due a rework), and the race countdown b
   Fame**. Every race banks a training session for the **Training Yard** (the trainer in the stable lane behind the far
   stand): Sprints, Hill Pulls, Long Laps or the Maze Run. The numbers: `docs/chimera-racing.md`.
   **While your chimera races, the camera locks onto it:** `1`–`5` (or `C`) switch between chase, infield rail,
-  leader, grandstand and blimp cameras, and the mouse orbits the chase cam.
+  leader, grandstand and blimp cameras. The HUD steps aside for the standings, the mouse is free (its cursor the reticle): drag
+  the track to orbit the chase cam, or drag the standings wherever you like (they stay there for the next race). Nobody
+  ragdolls at the Downs.
 - **The Monolith:** touch it (90 s cooldown) and it casts one of three spells, never the same twice running: **Time Dilation** (20 s with pirates, their shots, traffic and meteors at 40 % speed while you keep full speed), **Echo Followers** (one or two holograms of you that retrace your every move a moment late, mid-air jumps and all, for up to ten minutes or until one takes a shot for you; anyone shooting at you picks one of you at random) or **Teleport** (a random spot on the Moon, on flat safe ground away from settlements and lakes, where you land at a standstill one time in four and otherwise running at a random 1–300 km/h; you keep your health and fuel, and a launch comes with a few seconds of Soft Landing so the arrival can't wipe you out).
 
 ## Locations
