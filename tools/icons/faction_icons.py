@@ -131,6 +131,42 @@ def wreath(cx, cy, r, a0, a1, n, leaf_len, leaf_w, fill, fill2):
     return ''.join(out)
 
 
+def leaf(x, y, ang, length, width, fill, vein):
+    """Pointed laurel leaf from its base (x, y) along `ang` (radians), with a midrib."""
+    d = (f'M0 0 C{f(width)} {f(-length * 0.3)} {f(width * 0.8)} {f(-length * 0.75)} 0 {f(-length)} '
+         f'C{f(-width * 0.8)} {f(-length * 0.75)} {f(-width)} {f(-length * 0.3)} 0 0 Z')
+    t = f'translate({f(x)} {f(y)}) rotate({f(math.degrees(ang) + 90)})'
+    return (f'<g transform="{t}"><path d="{d}" fill="{fill}"/>'
+            f'<path d="M0 -2 L0 {f(-length * 0.86)}" stroke="{vein}" stroke-width="1.6" stroke-linecap="round"/></g>')
+
+
+def laurel_branch(cx, cy, r, a_start, a_end, pairs, fill, fill2, vein, stem):
+    """A laurel branch along an arc from a_start (the stem's foot) to a_end (its tip): curved stem, leaf pairs that
+    sweep toward the tip, a terminal leaf and a few berries on short stalks."""
+    sgn = 1 if a_end > a_start else -1
+    x0, y0 = polar(cx, cy, r, a_start)
+    x1, y1 = polar(cx, cy, r, a_end)
+    large = 1 if abs(a_end - a_start) > math.pi else 0
+    out = [f'<path d="M{f(x0)} {f(y0)} A{f(r)} {f(r)} 0 {large} {1 if sgn > 0 else 0} {f(x1)} {f(y1)}" fill="none" stroke="{stem}" stroke-width="3.2" stroke-linecap="round"/>']
+    for i in range(pairs):
+        t = (i + 0.6) / (pairs + 0.2)
+        a = a_start + (a_end - a_start) * t
+        x, y = polar(cx, cy, r, a)
+        tang = a + sgn * math.pi / 2             # direction of travel toward the tip
+        size = 20 - 6 * t                        # leaves shrink toward the tip
+        out.append(leaf(x, y, tang + sgn * 0.62, size, size * 0.29, fill, vein))       # outer leaf
+        out.append(leaf(x, y, tang - sgn * 0.62, size * 0.92, size * 0.27, fill2, vein))   # inner leaf
+    tip_a = a_end
+    tx, ty = polar(cx, cy, r, tip_a)
+    out.append(leaf(tx, ty, tip_a + sgn * math.pi / 2, 15, 4.6, fill, vein))
+    for k in (0.2, 0.42):                        # berries near the foot, off the inner side
+        a = a_start + (a_end - a_start) * k
+        bx, by = polar(cx, cy, r - 12, a)
+        sx, sy = polar(cx, cy, r, a)
+        out.append(f'<line x1="{f(sx)}" y1="{f(sy)}" x2="{f(bx)}" y2="{f(by)}" stroke="{stem}" stroke-width="2"/>' + circle(bx, by, 3.4, ORG_D))
+    return ''.join(out)
+
+
 def svg(body, title):
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img">'
             f'<title>{title}</title>{body}</svg>\n')
@@ -194,15 +230,48 @@ def vostok_b():
 
 # ---------------------------------------------------------------------------------------------------- MERIDIAN
 def meridian_a():
-    """EXCHANGE GLOBE: the proto globe with two gold arrows circling it, goods one way and credit the other."""
+    """EXCHANGE GLOBE: the proto globe, now a graticule globe with continents, a gold prime meridian and trade routes,
+    ringed by two gold arrows: goods one way, credit the other."""
     b = circle(128, 128, 120, DEEP) + circle(128, 128, 112, 'none', CYAN, 3)
-    b += circle(128, 128, 70, CYAN)
-    b += f'<clipPath id="g"><circle cx="128" cy="128" r="70"/></clipPath><g clip-path="url(#g)" fill="none" stroke="{DEEP}" stroke-width="5">'
-    b += '<line x1="58" y1="128" x2="198" y2="128"/><line x1="64" y1="98" x2="192" y2="98"/><line x1="64" y1="158" x2="192" y2="158"/>'
-    b += '<ellipse cx="128" cy="128" rx="30" ry="70"/><line x1="128" y1="58" x2="128" y2="198"/></g>'
-    b += circle(128, 128, 70, 'none', SAND, 5)
-    b += arrow_arc(128, 128, 94, math.radians(-165), math.radians(-25), 11, GOLD, 24)
-    b += arrow_arc(128, 128, 94, math.radians(15), math.radians(155), 11, GOLD, 24)
+    # bezel: a degree scale round the rim
+    for i in range(72):
+        a = 2 * math.pi * i / 72
+        r0, r1 = (104, 111) if i % 6 == 0 else (107, 111)
+        (x0, y0), (x1, y1) = polar(128, 128, r0, a), polar(128, 128, r1, a)
+        b += f'<line x1="{f(x0)}" y1="{f(y0)}" x2="{f(x1)}" y2="{f(y1)}" stroke="{CYAN}" stroke-width="{2.2 if i % 6 == 0 else 1.2}" opacity=".8"/>'
+    G = 66
+    b += f'<defs><clipPath id="gl"><circle cx="128" cy="128" r="{G}"/></clipPath></defs>'
+    b += circle(128, 128, G, CYAN)
+    b += '<g clip-path="url(#gl)">'
+    # continents
+    land = ['M88 84 C100 74 118 78 120 92 C122 104 112 108 112 120 C112 134 104 148 96 146 C88 140 92 128 86 118 C80 106 80 92 88 84 Z',
+            'M136 76 C152 70 176 78 180 96 C182 110 170 112 164 124 C160 136 150 146 144 138 C140 126 148 118 140 108 C132 98 128 82 136 76 Z',
+            'M150 150 C160 146 172 152 170 162 C166 170 152 170 150 150 Z', 'M80 158 C88 152 98 156 96 164 C90 170 80 168 80 158 Z']
+    night = 'M128 62 A66 66 0 0 1 128 194 A92 92 0 0 0 128 62 Z'
+    b += f'<path d="{night}" fill="{CYAN_D}"/>'                                    # the sea in shade
+    b += f'<clipPath id="nt"><path d="{night}"/></clipPath>'
+    for d in land:
+        b += f'<path d="{d}" fill="{SAND}"/><path d="{d}" fill="#d9ccae" clip-path="url(#nt)"/>'   # land, shaded on the night side
+    # graticule: latitudes bow toward the viewer, longitudes are true ellipses
+    for k in (-44, -22, 0, 22, 44):
+        rx = math.sqrt(G * G - k * k)
+        b += f'<path d="M{f(128 - rx)} {f(128 + k)} A{f(rx)} {f(rx * 0.2)} 0 0 0 {f(128 + rx)} {f(128 + k)}" fill="none" stroke="{DEEP}" stroke-width="2.4" opacity=".7"/>'
+    for rx in (24, 48):
+        b += f'<ellipse cx="128" cy="128" rx="{rx}" ry="{G}" fill="none" stroke="{DEEP}" stroke-width="2.4" opacity=".7"/>'
+    b += f'<line x1="128" y1="{128 - G}" x2="128" y2="{128 + G}" stroke="{GOLD}" stroke-width="4"/>'      # the prime meridian
+    b += '</g>'
+    b += circle(128, 128, G, 'none', SAND, 4.5)
+    # trade routes between hubs
+    hubs = [(100, 100), (160, 110), (116, 156), (158, 150)]
+    for (ax, ay), (bx, by) in ((hubs[0], hubs[1]), (hubs[1], hubs[3]), (hubs[0], hubs[2])):
+        b += f'<path d="M{ax} {ay} Q{(ax + bx) // 2} {min(ay, by) - 20} {bx} {by}" fill="none" stroke="{GOLD}" stroke-width="2.4" stroke-dasharray="4 4" clip-path="url(#gl)"/>'
+    b += ''.join(circle(x, y, 5.5, GOLD, DEEP, 2.2) for x, y in hubs)
+    # exchange arrows, with a navy centre-line down the shaft like a conveyor
+    for a0, a1 in ((-165, -25), (15, 155)):
+        b += arrow_arc(128, 128, 90, math.radians(a0), math.radians(a1), 13, GOLD, 26)
+        x0, y0 = polar(128, 128, 90, math.radians(a0 + 6))
+        x1, y1 = polar(128, 128, 90, math.radians(a1 - 20))
+        b += f'<path d="M{f(x0)} {f(y0)} A90 90 0 0 1 {f(x1)} {f(y1)}" fill="none" stroke="{DEEP}" stroke-width="2.2" stroke-dasharray="1 7" stroke-linecap="round"/>'
     return svg(b, 'Meridian - Exchange Globe')
 
 
@@ -226,8 +295,11 @@ def kepler_a():
     """CAPITOL DOME: the civic dome on its colonnade, in a laurel wreath, on the settlement orange."""
     b = circle(128, 128, 120, ORG) + circle(128, 128, 108, ORG_D)
     b += circle(128, 128, 102, ORG)
-    b += wreath(128, 134, 94, math.radians(80), math.radians(-35), 10, 11, 4.5, GRN, GRN_D)
-    b += wreath(128, 134, 94, math.radians(100), math.radians(215), 10, 11, 4.5, GRN, GRN_D)
+    # two branches grow up from the bottom, tied with a ribbon
+    b += laurel_branch(128, 128, 82, math.radians(98), math.radians(-52 + 0), 8, GRN, GRN_D, '#33491a', GRN_D)
+    b += laurel_branch(128, 128, 82, math.radians(82), math.radians(232), 8, GRN, GRN_D, '#33491a', GRN_D)
+    b += f'<path d="M128 206 L112 226 L122 224 L128 232 L134 224 L144 226 Z" fill="{SAND}"/><circle cx="128" cy="208" r="6" fill="{SAND}"/>'
+    b += '<g transform="translate(128 118) scale(.78) translate(-128 -118)">'
     # dome
     b += f'<path d="M78 118 A50 50 0 0 1 178 118 Z" fill="{SAND}"/>'
     b += f'<path d="M128 68 V118" stroke="{ORG_D}" stroke-width="3"/><path d="M104 74 Q98 96 100 118 M152 74 Q158 96 156 118" fill="none" stroke="{ORG_D}" stroke-width="3"/>'
@@ -238,6 +310,7 @@ def kepler_a():
     for x in (80, 100, 120, 140, 160):
         b += f'<rect x="{x}" y="128" width="9" height="40" fill="{SAND}"/>'
     b += f'<rect x="72" y="168" width="112" height="8" fill="{SAND}"/><rect x="64" y="176" width="128" height="8" fill="{SAND}"/><rect x="56" y="184" width="144" height="8" fill="{SAND}"/>'
+    b += '</g>'
     return svg(b, 'Kepler - Capitol Dome')
 
 
@@ -327,6 +400,7 @@ ICONS = {
     ('meridian', 'a'): meridian_a, ('meridian', 'b'): meridian_b,
     ('kepler', 'a'): kepler_a, ('kepler', 'b'): kepler_b,
 }
+FINAL = [('kepler', 'a'), ('vostok', 'b'), ('meridian', 'a'), ('spacecom', 'a'), ('daedalus', 'b'), ('rustmoon', 'b')]
 ORDER = ['kepler', 'vostok', 'meridian', 'spacecom', 'daedalus', 'rustmoon']
 NAMES = {('kepler', 'a'): 'Capitol Dome', ('kepler', 'b'): 'Council Seal', ('vostok', 'a'): 'Eclipse Star',
          ('vostok', 'b'): 'Star Fort', ('meridian', 'a'): 'Exchange Globe', ('meridian', 'b'): 'Ticker M',
@@ -360,6 +434,44 @@ def sheet():
     return ''.join(parts)
 
 
+def sheet_action(svg_path, png_path, scale=1.5):
+    """Inkscape action string for a sheet at scale x its viewBox. Sizes are explicit because export-width and
+    export-height otherwise carry over from the icon exports before it."""
+    vb = open(svg_path).read().split('viewBox="0 0 ')[1].split('"')[0].split()
+    return (f'file-open:{svg_path};export-type:png;export-width:{int(float(vb[0]) * scale)};export-height:{int(float(vb[1]) * scale)};'
+            f'export-filename:{png_path};export-do;file-close')
+
+
+def final_sheet():
+    cell, pad = 320, 24
+    w, h = pad + 3 * cell, pad + 2 * (cell + 40) + 10
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}"><rect width="{w}" height="{h}" fill="#14102a"/>']
+    for i, (fac, s_) in enumerate(FINAL):
+        x0, y0 = pad + (i % 3) * cell, pad + (i // 3) * (cell + 40)
+        parts.append(f'<g transform="translate({x0 + 20} {y0})"><svg viewBox="0 0 256 256" width="256" height="256">{inner(ICONS[(fac, s_)]())}</svg></g>')
+        parts.append(f'<text x="{x0 + 148}" y="{y0 + 290}" text-anchor="middle" fill="#f3eee4" font-family="sans-serif" font-size="18" font-weight="bold">{fac.upper()}</text>')
+    return ''.join(parts) + '</svg>'
+
+
+def write_final(px=1024):
+    """The chosen six as docs/faction-icons/<faction>.svg, with export/<faction>.png (px) and .pdf when Inkscape is there."""
+    d = os.path.join(OUT, '..', 'faction-icons')
+    os.makedirs(d, exist_ok=True)
+    for fac, s_ in FINAL:
+        with open(os.path.join(d, f'{fac}.svg'), 'w') as fh:
+            fh.write(ICONS[(fac, s_)]())
+    with open(os.path.join(d, 'sheet.svg'), 'w') as fh:
+        fh.write(final_sheet())
+    if not shutil.which('inkscape'):
+        return
+    ex = os.path.join(d, 'export')
+    os.makedirs(ex, exist_ok=True)
+    acts = [f'file-open:{os.path.join(d, fac + ".svg")};export-type:png;export-width:{px};export-height:{px};export-filename:{os.path.join(ex, fac + ".png")};export-do;'
+            f'export-type:pdf;export-filename:{os.path.join(ex, fac + ".pdf")};export-do;file-close' for fac, _ in FINAL]
+    acts.append(sheet_action(os.path.join(d, 'sheet.svg'), os.path.join(d, 'sheet.png'), 1.5))
+    subprocess.run(['inkscape', '--actions=' + ';'.join(acts)], check=True, capture_output=True)
+
+
 def export_inkscape(px=1024):
     """Inkscape renders: <name>.png at px x px and a vector <name>.pdf per icon in export/, plus sheet.png."""
     ex = os.path.join(OUT, 'export')
@@ -369,7 +481,7 @@ def export_inkscape(px=1024):
         src = os.path.join(OUT, f'{fac}_{s_}.svg')
         acts.append(f'file-open:{src};export-type:png;export-width:{px};export-height:{px};export-filename:{os.path.join(ex, f"{fac}_{s_}.png")};export-do;'
                     f'export-type:pdf;export-filename:{os.path.join(ex, f"{fac}_{s_}.pdf")};export-do;file-close')
-    acts.append(f'file-open:{os.path.join(OUT, "sheet.svg")};export-type:png;export-dpi:144;export-filename:{os.path.join(OUT, "sheet.png")};export-do;file-close')
+    acts.append(sheet_action(os.path.join(OUT, 'sheet.svg'), os.path.join(OUT, 'sheet.png'), 1.5))
     subprocess.run(['inkscape', '--actions=' + ';'.join(acts)], check=True, capture_output=True)
 
 
@@ -380,6 +492,7 @@ def main():
             fh.write(fn())
     with open(os.path.join(OUT, 'sheet.svg'), 'w') as fh:
         fh.write(sheet())
+    write_final()
     if shutil.which('inkscape'):
         export_inkscape()
         return
