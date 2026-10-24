@@ -10,11 +10,11 @@ import { pixelFont } from './fonts.js';
 import { mulberry32 } from './rng.js';
 
 const $ = (id) => document.getElementById(id);
-// (the frame's lookups: the HUD elements are static page nodes, so each is found once)
+// per-frame lookups: HUD elements are static, so each is found once
 const $els = {};
 const $c = (id) => $els[id] || ($els[id] = document.getElementById(id));
-const MM_CURVE_N = 720; // samples round each great circle drawn on the minimap (~30 m apart)
-const MM_RANGE = 700; // metres from the centre to the edge of the minimap when standing still
+const MM_CURVE_N = 720; // samples per minimap great circle (~30 m apart)
+const MM_RANGE = 700; // m, minimap centre to edge when standing still
 
 export class HUD {
   constructor(game) {
@@ -32,26 +32,24 @@ export class HUD {
     this.buildCracks();
   }
 
-  // Cracked visor: glass cracks spread over the screen (in front of the rest of the HUD) as hull drops.
-  // Five impact points, each a star of jagged rays with a few branches; an impact wakes up at its hull
-  // level and its rays then grow out over the next 10% or so, so the damage creeps in. The geometry is
-  // built once; the cracks are painted onto one canvas, and only repainted when the hull moves by a
-  // whole percent (a canvas the browser just composites costs nothing per frame, unlike a few hundred
-  // live SVG paths under a CSS filter, which it redrew over the whole game every frame).
+  // Cracked visor: cracks spread over the screen (above the HUD) as hull drops. Five impacts, each a star of jagged
+  // rays with branches; each starts at its hull level and grows over the next ~10%. Geometry is built once and painted
+  // onto one canvas, repainted only per whole percent of hull (a composited canvas is free per frame; live SVG paths
+  // under a CSS filter are not).
   buildCracks() {
-    const W = 1280, H = 720, K = W / 160; // (the canvas is 16:9 and cover-fitted to the screen; points are in a 160 x 90 box)
+    const W = 1280, H = 720, K = W / 160; // 16:9 canvas, cover-fitted; points in a 160 x 90 box
     const cv = document.createElement('canvas');
     cv.id = 'cracks';
     cv.width = W; cv.height = H;
     const rnd = mulberry32(7731);
-    const IMPACTS = [[128, 22, 0.72], [24, 70, 0.58], [100, 78, 0.44], [34, 20, 0.3], [80, 46, 0.16]]; // x, y, hull fraction it starts at
+    const IMPACTS = [[128, 22, 0.72], [24, 70, 0.58], [100, 78, 0.44], [34, 20, 0.3], [80, 46, 0.16]]; // x, y, starting hull fraction
     this.cracks = [];
     const mk = (pts, w, thr) => {
       const cum = [0];
       for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
       this.cracks.push({ pts, cum, total: cum[cum.length - 1], w, thr });
     };
-    // a jagged line from (x, y) heading `a`, `n` segments long; returns its points
+    // jagged line from (x, y) heading `a`, `n` segments; returns its points
     const walk = (x, y, a, n, seg) => {
       const pts = [[x, y]];
       for (let i = 0; i < n; i++) {
@@ -68,9 +66,9 @@ export class HUD {
       for (let r = 0; r < rays; r++) {
         const a = a0 + (r / rays) * Math.PI * 2 + (rnd() - 0.5) * 0.5;
         const pts = walk(cx, cy, a, 5 + Math.floor(rnd() * 4), 5 + rnd() * 3);
-        const t = thr - rnd() * 0.05; // (rays of one impact don't all start together)
+        const t = thr - rnd() * 0.05; // stagger the rays
         mk(pts, 0.3, t);
-        // a branch or two off the middle of the ray
+        // a branch or two off the ray
         for (let b = 0; b < 2; b++) {
           if (rnd() < 0.35) continue;
           const i = 1 + Math.floor(rnd() * (pts.length - 2));
@@ -79,7 +77,7 @@ export class HUD {
           mk(walk(from[0], from[1], ba, 2 + Math.floor(rnd() * 3), 3 + rnd() * 2), 0.17, t - 0.03);
         }
       }
-      // a few short rings of hairline cracks round the impact point
+      // hairline rings round the impact
       for (let k = 0; k < 2; k++) {
         const rad = 3.5 + k * 4.5;
         const pts = [];
@@ -100,7 +98,7 @@ export class HUD {
     this.crackKey = -1;
   }
 
-  // paint the cracks for a hull fraction (0-1): each crack grows from nothing to full length over the 10% of hull after its threshold
+  // paint cracks for hull fraction 0-1: each grows to full length over the 10% of hull below its threshold
   paintCracks(frac) {
     const ctx = this.crackCtx, K = this.crackK;
     ctx.clearRect(0, 0, 1280, 720);
@@ -115,12 +113,12 @@ export class HUD {
       ctx.moveTo(c.pts[0][0] * K, c.pts[0][1] * K);
       for (let i = 1; i < c.pts.length; i++) {
         if (c.cum[i] <= len) { ctx.lineTo(c.pts[i][0] * K, c.pts[i][1] * K); continue; }
-        const f = (len - c.cum[i - 1]) / (c.cum[i] - c.cum[i - 1]); // (the segment the crack has reached: partway along it)
+        const f = (len - c.cum[i - 1]) / (c.cum[i] - c.cum[i - 1]); // partway along the segment reached
         ctx.lineTo((c.pts[i - 1][0] + (c.pts[i][0] - c.pts[i - 1][0]) * f) * K, (c.pts[i - 1][1] + (c.pts[i][1] - c.pts[i - 1][1]) * f) * K);
         break;
       }
     };
-    // a dark under-stroke for body, then the bright glass line on top (instead of a blurred shadow)
+    // dark under-stroke, then the bright line (cheaper than a blurred shadow)
     ctx.strokeStyle = 'rgba(5, 3, 12, 0.7)';
     for (const [c, len] of strokes) { ctx.lineWidth = c.w * K + 2; trace(c, len); ctx.stroke(); }
     ctx.strokeStyle = '#e8f4ff';
@@ -130,37 +128,36 @@ export class HUD {
 
   // hull fraction 0-1
   updateCracks(frac) {
-    const off = this.game.cheats && !this.game.cheats.crackedVisor; // (dev menu: DISPLAY & DEBUG)
-    const key = off ? -2 : Math.round(frac * 100); // (repainted at most once per percent of hull)
+    const off = this.game.cheats && !this.game.cheats.crackedVisor; // dev menu: DISPLAY & DEBUG
+    const key = off ? -2 : Math.round(frac * 100); // repaint at most once per percent
     if (key === this.crackKey) return;
     this.crackKey = key;
     if (off) { this.crackEl.style.display = 'none'; return; }
     const any = this.paintCracks(frac);
-    this.crackEl.style.display = any ? '' : 'none'; // (nothing to composite while the hull is healthy)
+    this.crackEl.style.display = any ? '' : 'none'; // nothing to composite while healthy
     this.crackEl.style.opacity = String(0.6 + 0.4 * (1 - frac));
   }
 
   show(id, on = true) { $(id).classList.toggle('hidden', !on); }
 
-  // Distress log: every open event (and the one you're running) as a small stack above the speed
-  // tracker, newest on top, each with an arrow pointing where it is relative to your view.
+  // Distress log: open events (and the active one) stacked above the speedo, newest on top, each with an arrow
+  // pointing to it relative to your view.
   distressLog(dt) {
     const g = this.game;
     if (!g.events) return;
     if (!this.logEl) {
       this.logEl = document.createElement('div');
       this.logEl.id = 'distresslog';
-      $('speedo').appendChild(this.logEl); // (a child of the speed tracker, so CSS keeps it glued above it)
+      $('speedo').appendChild(this.logEl); // child of the speedo so CSS keeps it above
       this.logRows = new Map();
       this.logT = 0;
     }
     this.logT -= dt;
     const P = g.player, up = P.up, cam = g.cam;
-    // rows, layout and text refresh ten times a second; the arrows turn every frame so they track
-    // your view smoothly instead of stepping
+    // rows and text refresh at 10 Hz; arrows turn every frame so they track smoothly
     if (this.logT <= 0) {
       this.logT = 0.1;
-      // (open events farther than EVENT_RANGE stay off the log; the one you're running always shows)
+      // open events beyond EVENT_RANGE are left off; the active one always shows
       const evs = g.events.list.filter((e) => e.state === 'active' || (e.state === 'open' && this.logTarget(e).distanceTo(P.pos) <= EVENT_RANGE));
       this.logEl.classList.toggle('hidden', !evs.length || g.state === 'title');
       const seen = new Set();
@@ -181,7 +178,7 @@ export class HUD {
         row.style.setProperty('--c', col);
         row.classList.toggle('dl-active', ev.state === 'active');
         const left = g.events.timeLeft(ev);
-        row.classList.toggle('dl-expiring', left !== null && left <= 30); // about to be withdrawn: flash slowly
+        row.classList.toggle('dl-expiring', left !== null && left <= 30); // about to expire: slow flash
         row.querySelector('.dl-name').textContent = `${ev.icon || ''}${ev.short || ev.title}`.toUpperCase();
         const dist = this.logTarget(ev).distanceTo(P.pos);
         row.querySelector('.dl-dist').textContent = dist > 999 ? `${(dist / 1000).toFixed(1)}KM` : `${Math.round(dist / 10) * 10}M`;
@@ -212,14 +209,13 @@ export class HUD {
     this.alertT = dur;
   }
 
-  // hold-to-act progress bar (k: 0..1; 0 hides it): the recall shuttle, or `label` for anything else
-  // held (emptying the jar)
+  // hold-to-act bar (k: 0..1; 0 hides): the recall shuttle, or `label` for other holds (emptying the jar)
   recallHold(k, loc, label) {
     if (!this.recallEl) {
       this.recallEl = document.createElement('div');
       this.recallEl.id = 'recallhold';
       this.recallEl.innerHTML = '<div class="hb-label"></div><div class="hb-track"><div class="hb-fill"></div></div>';
-      document.getElementById('holdbars').appendChild(this.recallEl); // (the stack of progress bars in the bottom centre)
+      document.getElementById('holdbars').appendChild(this.recallEl); // bottom-centre bar stack
     }
     this.recallEl.classList.toggle('show', k > 0);
     if (k <= 0) return;
@@ -230,7 +226,7 @@ export class HUD {
 
   toast(text, dur = 2.5, html = false) {
     const el = $('toast');
-    if (html) el.innerHTML = text; else el.textContent = text; // (html: the caller has escaped it, or built it from glyphHtml)
+    if (html) el.innerHTML = text; else el.textContent = text; // html: caller escaped it or built it with glyphHtml
     el.classList.remove('hidden');
     this.toastT = dur;
   }
@@ -238,7 +234,7 @@ export class HUD {
   prompt(text) {
     const el = $('prompt');
     if (!text) { el.classList.add('hidden'); return; }
-    el.innerHTML = text; // (key names become pad buttons by themselves: glyphs.js)
+    el.innerHTML = text; // key names become pad buttons (glyphs.js)
     el.classList.remove('hidden');
   }
 
@@ -252,15 +248,14 @@ export class HUD {
   banner(loc) {
     const el = $('banner');
     const f = FACTIONS[loc.faction];
-    const kind = { trade: 'TRADE HUB', lab: 'STRANGE PLACE — RESEARCH', monolith: 'STRANGE PLACE', tunnel: 'STRANGE PLACE — ???', derby: 'STRANGE PLACE — RACECOURSE', casino: 'STRANGE PLACE — CASINO', hub: 'INTERNATIONAL HUB', civilian: 'CIVILIAN HABITAT', research: 'RESEARCH FACILITY', military: 'MILITARY — RESTRICTED', industrial: 'INDUSTRIAL OUTPOST', pirate: 'PIRATE TERRITORY', hometown: 'YOUR TOWN', ruin: 'RUINS' }[loc.type]; // casino: banner kind; hometown + ruin used to print "undefined" in the chip
+    const kind = { trade: 'TRADE HUB', lab: 'STRANGE PLACE — RESEARCH', monolith: 'STRANGE PLACE', tunnel: 'STRANGE PLACE — ???', derby: 'STRANGE PLACE — RACECOURSE', casino: 'STRANGE PLACE — CASINO', hub: 'INTERNATIONAL HUB', civilian: 'CIVILIAN HABITAT', research: 'RESEARCH FACILITY', military: 'MILITARY — RESTRICTED', industrial: 'INDUSTRIAL OUTPOST', pirate: 'PIRATE TERRITORY', hometown: 'YOUR TOWN', ruin: 'RUINS' }[loc.type]; // every loc.type needs an entry here, or the chip reads "undefined"
     el.innerHTML = `<div class="b-kind" style="background:${f.color}">${kind}</div><div class="b-name">${loc.name}</div><div class="b-blurb">${loc.blurb}</div>`;
     el.classList.remove('hidden');
     el.classList.remove('slam'); void el.offsetWidth; el.classList.add('slam');
     this.bannerT = 4;
   }
 
-  // New-event pop-up: slides in from the right under the territory chip (below the minimap),
-  // holds for 3 s, slides back out to the right. They queue, one at a time.
+  // New-event pop-up: slides in from the right under the territory chip, holds 3 s, slides out. Queued, one at a time.
   eventPopup(text, color = '#ffd23f') {
     if (!this.evQ) this.evQ = [];
     this.evQ.push({ text, color });
@@ -275,7 +270,7 @@ export class HUD {
       this.evT = 0;
       el.textContent = this.evCur.text;
       el.style.setProperty('--c', this.evCur.color);
-      el.className = 'pre'; // (parked off the right edge, no transition)
+      el.className = 'pre'; // parked off the right edge, no transition
       el.classList.remove('hidden');
       void el.offsetWidth;
       el.className = 'in';
@@ -309,8 +304,8 @@ export class HUD {
     this.resultT = 4;
   }
 
-  // One panel listing everything that was failed at once (an emergency recall), held for `dur` seconds so it
-  // stays up through the cutscene. Rows are built as text: they carry names, not markup.
+  // One panel listing everything failed at once (emergency recall), held `dur` s to last through the cutscene.
+  // Rows are text, not markup.
   failedList(title, lines, dur = 8) {
     const el = $('result');
     el.className = 'panel result lose';
@@ -328,7 +323,7 @@ export class HUD {
     this.resultT = dur;
   }
 
-  // (resultT has to go to zero as well as the class: update() shows the panel every frame while it's above it)
+  // zero resultT too: update() re-shows the panel while it's positive
   hideResult() {
     this.resultT = 0;
     $('result').classList.add('hidden');
@@ -341,17 +336,17 @@ export class HUD {
   }
 
   // ---- Job board / shop ----
-  // tabs: [{ id, label }] puts a tab bar under the title (tab: the one showing, onTab(id): a click on another); pane: { html, foot: { kb, pad }, wire(root) }
-  // is what that tab shows in place of the contracts and the shop (the town's COUNCIL HALL page)
+  // tabs: [{ id, label }] adds a tab bar (tab: current, onTab(id): click on another). pane: { html, foot: { kb, pad }, wire(root) }
+  // replaces the contracts and shop (the town's COUNCIL HALL page).
   openBoard(loc, offers, { onAccept, onClose, shop, onBuy, upgrades, credits, active, extra, canTake, onAbandon, rep, event, onEventAbandon, tabs, tab, onTab, pane }) {
     const el = $('board');
     const f = FACTIONS[loc.faction];
     const tier = rep.tier(loc.faction);
-    // a terminal: a title bar, a strip of little status screens, then one bezelled screen per section
+    // terminal: title bar, a strip of status screens, then a bezelled screen per section
     const node = `${loc.short || loc.id}`.toUpperCase().replace(/[^A-Z0-9]/g, '');
     let html = `<div class="board-head" style="--fc:${f.color}"><span class="term-title">◢ ${loc.name.toUpperCase()} <span class="term-dim">// JOB TERMINAL · NODE ${node}-${String(loc.r).padStart(3, '0')}</span><span class="term-cursor">█</span></span><span class="board-right"><button class="board-close" data-close="1">✕ LOG OFF</button></span></div>`;
     if (tabs) html += `<nav class="board-tabs" role="tablist">${tabs.map((t) => `<button type="button" role="tab" data-tab="${t.id}" class="${t.id === tab ? 'on' : ''}" aria-selected="${t.id === tab}">${t.label}</button>`).join('')}<span class="bt-hint"><span class="foot-kb">Q · E</span><span class="foot-pad">${glyphHtml(['LB'])} ${glyphHtml(['RB'])}</span></span></nav>`;
-    html += `<div class="board-scroll">`; // (only this part scrolls, so the scroll bar stays between the header and the footer)
+    html += `<div class="board-scroll">`; // only this scrolls, between header and footer
     if (pane) html += pane.html;
     else {
       html += `<div class="term-status">
@@ -401,19 +396,19 @@ export class HUD {
       html += `</div>`;
     }
     html += `</div>`;
-    // (the footer stays on screen while the board scrolls; with a controller in use it names the pad's buttons)
+    // fixed footer; names pad buttons when a controller is in use
     const other = tabs && tabs.find((t) => t.id !== tab);
     html += pane
       ? `<div class="board-foot"><span class="foot-kb">&gt; ${pane.foot.kb}</span><span class="foot-pad">&gt; ${pane.foot.pad}</span><span class="term-cursor">_</span></div>`
       : `<div class="board-foot"><span class="foot-kb">&gt; Click a contract or press 1-${Math.max(1, offers.length)}${other ? ` · Q / E: ${other.label}` : ''} · F / ESC to log off</span><span class="foot-pad">&gt; Press ${glyphHtml(['A'])} on a contract or an upgrade${other ? ` · ${glyphHtml(['LB'])} ${glyphHtml(['RB'])} ${other.label}` : ''} · ${glyphHtml(['B'])} to log off</span><span class="term-cursor">_</span></div>`;
-    const settle = pane ? keepScroll('#board') : null; // (before the markup is replaced: the page's tile list keeps its scroll)
+    const settle = pane ? keepScroll('#board') : null; // before replacing markup, so the tile list keeps its scroll
     el.innerHTML = html;
     el.classList.add('term');
     el.classList.toggle('tab-town', !!pane);
     el.style.setProperty('--fc', f.color);
     el.classList.remove('hidden');
     if (pane) { pane.wire(el.querySelector('.otm')); settle(); }
-    else if (tabs) { const j = el.querySelector('.job:not(.disabled)'); if (j) j.classList.add('pad-default'); } // (the tab bar comes first: a controller's highlight starts on the first contract, not on a tab)
+    else if (tabs) { const j = el.querySelector('.job:not(.disabled)'); if (j) j.classList.add('pad-default'); } // pad highlight starts on the first contract, not the tab bar
     el.onclick = (ev) => {
       const tb = ev.target.closest('[data-tab]');
       if (tb) { if (!tb.classList.contains('on')) onTab(tb.dataset.tab); return; }
@@ -428,22 +423,22 @@ export class HUD {
     this.boardClose = onClose;
   }
 
-  closeBoard() { const b = $('board'); b.classList.add('hidden'); b.innerHTML = ''; } // (emptied: a hidden page left in the DOM is found first by anything that looks for one)
+  closeBoard() { const b = $('board'); b.classList.add('hidden'); b.innerHTML = ''; } // emptied: a hidden page left in the DOM would be found by lookups
 
   // ---- per-frame ----
-  // NPC name tags (toon.js nameTag): a solid label over each named NPC you can see, smaller the
-  // closer you are, faded out with distance, hidden behind the camera, hills and walls
+  // NPC name tags (toon.js nameTag): a label over each visible named NPC, smaller up close, faded with distance,
+  // hidden behind the camera, hills and walls
   updateTags(dt) {
     const g = this.game;
     const cam = g.camera;
-    cam.updateMatrixWorld(); // (this frame's camera, not last frame's)
+    cam.updateMatrixWorld(); // this frame's camera
     let box = this.tagBox;
     if (!box) { box = this.tagBox = document.createElement('div'); box.id = 'nametags'; document.getElementById('hud').appendChild(box); }
     const W = window.innerWidth, H = window.innerHeight;
     const playing = g.state === 'play';
     for (let n = NAME_TAGS.length - 1; n >= 0; n--) {
       const t = NAME_TAGS[n];
-      // taken off its place (a rebuilt place): drop it. A place out of range isn't in the scene: hide it
+      // detached (place rebuilt): drop it. Place out of range (not in the scene): hide it
       if (!t.sprite.parent) { if (t.el) t.el.remove(); NAME_TAGS.splice(n, 1); continue; }
       let o = t.sprite, shown = true;
       while (o.parent) { if (!o.visible) shown = false; o = o.parent; }
@@ -459,9 +454,9 @@ export class HUD {
       const d = p.distanceTo(cam.position);
       let on = playing && shown && d < 150;
       if (on) {
-        // (line of sight: a few times a second is plenty)
+        // line of sight, a few times a second
         t.losT -= dt;
-        if (t.losT <= 0) { t.losT = 0.25; t.seen = g.enemies.clearShot(cam.position, p); } // (terrain and walls)
+        if (t.losT <= 0) { t.losT = 0.25; t.seen = g.enemies.clearShot(cam.position, p); } // terrain and walls
         on = t.seen;
       }
       if (on) {
@@ -470,7 +465,7 @@ export class HUD {
       }
       if (!on) { if (!t.el.classList.contains('off')) t.el.classList.add('off'); continue; }
       t.el.classList.remove('off');
-      const s = Math.max(0.6, Math.min(1, 0.6 + (d - 4) / 36 * 0.4)); // (smaller up close)
+      const s = Math.max(0.6, Math.min(1, 0.6 + (d - 4) / 36 * 0.4)); // smaller up close
       t.el.style.transform = `translate(${((p.x * 0.5 + 0.5) * W).toFixed(1)}px, ${((-p.y * 0.5 + 0.5) * H).toFixed(1)}px) translate(-50%, -100%) scale(${s.toFixed(3)})`;
       t.el.style.opacity = d > 110 ? Math.max(0, 1 - (d - 110) / 40).toFixed(2) : '1';
     }
@@ -494,12 +489,12 @@ export class HUD {
     $c('hp-fill').style.width = (P.health / P.maxHealth) * 100 + '%';
     this.updateCracks(Math.max(0, P.health / P.maxHealth));
     $c('en-fill').style.width = (P.body.energy / P.body.maxEnergy) * 100 + '%';
-    $c('en-fill').style.opacity = P.body.jetLocked ? 0.45 : ''; // dimmed while the thrusters are locked out
+    $c('en-fill').style.opacity = P.body.jetLocked ? 0.45 : ''; // dimmed while thrusters are locked out
     const sk = $c('skates');
     const on = P.body.skating;
     sk.textContent = on ? 'Q-LOCK: ENGAGED' : 'Q-LOCK: OFF (BOOTS)';
     sk.classList.toggle('on', on);
-    // the cash chip appears for five seconds whenever credits change, with a green + (earned) or a red − (spent)
+    // cash chip shows for 5 s on any credit change, with a green + or red −
     const crEl = $c('credits');
     crEl.querySelector('.cr-amt').textContent = `₵${g.credits}`;
     if (this.lastCr === undefined) this.lastCr = g.credits;
@@ -509,13 +504,13 @@ export class HUD {
       const sign = crEl.querySelector('.cr-delta');
       sign.textContent = `${up ? '+' : '−'}₵${Math.abs(delta)}`;
       sign.className = `cr-delta ${up ? 'plus' : 'minus'}`;
-      void sign.offsetWidth; // (restarts the slide-in)
+      void sign.offsetWidth; // restart the slide-in
       sign.classList.add('cr-in');
       crEl.classList.add('cr-show');
       this.crT = 5;
     }
-    // (and it stays up while a job board is open, so you can see what you have to spend)
-    if (g.state === 'board') this.crT = Math.max(this.crT || 0, 2); // (lingers two seconds after you log off)
+    // also up while a job board is open
+    if (g.state === 'board') this.crT = Math.max(this.crT || 0, 2); // lingers 2 s after log-off
     else if (this.crT > 0) this.crT -= dt;
     crEl.classList.toggle('cr-show', this.crT > 0 || g.state === 'board');
     const wi = P.weapon || 0;
@@ -538,7 +533,7 @@ export class HUD {
         <div class="m-obj">${obj ? obj.label : ''} <span>${(dist / 1000).toFixed(2)} km</span></div>
         <div class="m-row"><span class="m-timer ${ms.late || t < 15 ? 'low' : ''}">${ms.late ? 'LATE +' : ''}${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}</span>
         <span class="m-int">CARGO ${Math.round(ms.integrity * 100)}%</span></div>`;
-      // the Twin Cradle's second contract, under the first
+      // Twin Cradle second contract, below the first
       const x = ms.extra;
       if (x) {
         const o2 = ms.objective2();
@@ -596,19 +591,18 @@ export class HUD {
     }
   }
 
-  // Heading-up local map: everything is projected onto the tangent plane around you.
+  // Heading-up local map, projected onto your tangent plane.
   drawMinimap(dt = 0) {
     const g = this.game;
     const P = g.player;
     const c = this.mctx;
     const W = this.mini.width, H = this.mini.height;
-    // the faster you go, the further out it looks (up to ~2.8x the standing range), eased so it
-    // opens out quickly on a burst of speed and closes in slowly after
+    // zooms out with speed (up to ~2.8x), opening fast and closing slowly
     const want = MM_RANGE * (1 + Math.min(1.8, Math.max(0, P.speed - 15) / 70));
     if (!this.mmRange) this.mmRange = MM_RANGE;
     this.mmRange += (want - this.mmRange) * (1 - Math.exp(-dt * (want > this.mmRange ? 2.5 : 0.8)));
     const range = this.mmRange;
-    // zoomed out, everything but the settlements (and their names) drops away: fully gone by 1.5x
+    // zoomed out, all but settlements fades away (gone by 1.5x)
     const fade = Math.max(0, Math.min(1, 1 - (range / MM_RANGE - 1) / 0.5));
     const s = (W / 2) / range;
     const up = P.up, fwd = g.cam.fwd, right = g.cam.right;
@@ -622,8 +616,7 @@ export class HUD {
     const dark = darkness(up);
     c.fillStyle = dark > 0.5 ? '#0e0b18' : '#2a2440';
     c.fillRect(0, 0, W, H);
-    // the road network, under everything: only the stretches of ground you've charted (the same fog
-    // as the globe map), and it stays when the rest drops away at speed
+    // roads, under everything: only charted ground (the globe map's fog); kept when zoomed out
     const tr = g.world.traffic, gl = g.globe;
     if (tr && tr.mapChunks && gl) {
       c.save();
@@ -637,8 +630,7 @@ export class HUD {
       c.stroke();
       c.restore();
     }
-    // the terminator and SAT-7's orbit, in the globe map's colours, under the markers. Like the roads
-    // they stay however far out it looks
+    // terminator and SAT-7's orbit in the globe map's colours, under the markers; kept when zoomed out
     const cv = this.mmCurves();
     c.save();
     c.lineJoin = c.lineCap = 'round';
@@ -657,7 +649,7 @@ export class HUD {
     for (const ev of fade > 0.02 ? g.events.list : []) {
       let [x, y, d] = proj(ev.stage || ev.start);
       if (d > range * 1.4) {
-        // event radar (3 transponders to Dr. Zbornak): far events sit on the rim, pointing the way
+        // event radar (3 transponders to Dr. Zbornak): far events on the rim
         if (!g.upgrades.radar || d > 2500) continue;
         const ang = Math.atan2(y - H / 2, x - W / 2), rr = W / 2 - 9;
         x = W / 2 + Math.cos(ang) * rr; y = H / 2 + Math.sin(ang) * rr;
@@ -668,7 +660,7 @@ export class HUD {
       c.fillStyle = FACTIONS[ev.faction].color; c.strokeStyle = '#fff'; c.lineWidth = 2;
       c.beginPath(); c.moveTo(x, y - 8); c.lineTo(x + 7, y + 5); c.lineTo(x - 7, y + 5); c.closePath(); c.fill(); c.stroke();
     }
-    // an active meteor shower: a red warning zone
+    // active meteor shower: red zone
     const mw = g.meteors && g.meteors.warning;
     if (mw && fade > 0.02) {
       const [x, y, d] = proj(mw.dir);
@@ -678,7 +670,7 @@ export class HUD {
         c.beginPath(); c.arc(x, y, mw.r * s, 0, Math.PI * 2); c.fill(); c.stroke(); c.setLineDash([]);
       }
     }
-    c.globalAlpha = 1; // (settlements and their names stay)
+    c.globalAlpha = 1; // settlements and names stay
     for (const l of g.locations) {
       if (!l.discovered) continue;
       const [x, y, d] = proj(l.dir);
@@ -700,7 +692,7 @@ export class HUD {
     }
     c.globalAlpha = fade;
     c.fillStyle = '#9be7ff';
-    // wild moon mites show up as little green specks
+    // wild mites: green specks
     if (g.alchemy && fade > 0.02) {
       c.fillStyle = '#b8e986';
       for (const m of g.alchemy.mites) {
@@ -723,7 +715,7 @@ export class HUD {
       if (e.carrying) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); }
     }
     for (const d of fade > 0.02 ? g.enemies.drops : []) { const [x, y] = proj(d.pos); c.fillStyle = '#2ee6ff'; c.fillRect(x - 4, y - 4, 8, 8); }
-    c.globalAlpha = 1; // (the player and the objective markers stay too)
+    c.globalAlpha = 1; // player and objectives stay too
     const obj = g.objective();
     const obj2 = g.missions.objective2();
     for (const [o, col] of [[obj, '#ffd23f'], [obj2, '#7dff6a']]) {
@@ -737,8 +729,7 @@ export class HUD {
     c.beginPath(); c.moveTo(W / 2, H / 2 - 9); c.lineTo(W / 2 + 6, H / 2 + 7); c.lineTo(W / 2, H / 2 + 3); c.lineTo(W / 2 - 6, H / 2 + 7); c.closePath(); c.fill(); c.stroke();
   }
 
-  // The two fixed great circles drawn on the minimap, sampled once as unit directions: the terminator
-  // (the edge of the dark side) and, once there is one, SAT-7's orbit.
+  // Fixed minimap great circles, sampled once as unit directions: the terminator, and SAT-7's orbit (mmOrbit).
   mmCurves() {
     if (this.mmCv) return this.mmCv;
     const term = [], N = MM_CURVE_N;
@@ -757,8 +748,7 @@ export class HUD {
     return (this.mmOrb = pts);
   }
 
-  // Stroke the stretches of a sampled curve that lie within the minimap's reach: a dark casing under
-  // a dashed coloured line, so it reads on lit ground and in the dark alike.
+  // Stroke the parts of a sampled curve within minimap reach: dark casing under a dashed colour line, readable lit or dark.
   mmLine(c, proj, up, range, pts, dash, casing, color) {
     const cosLim = Math.cos((range * 1.8) / PLANET.radius);
     const path = new Path2D();
@@ -779,7 +769,7 @@ export class HUD {
   updateArrow() {
     const g = this.game;
     this.placeArrow(g.objective(), $('obj-arrow'), $('obj-marker'));
-    // the Twin Cradle's second contract gets a waypoint of its own (green)
+    // Twin Cradle second contract: its own green waypoint
     if (!this.arrow2) {
       this.arrow2 = $('obj-arrow').cloneNode(false); this.arrow2.id = 'obj-arrow2'; this.arrow2.removeAttribute('data-svg');
       this.marker2 = $('obj-marker').cloneNode(true); this.marker2.id = 'obj-marker2';
@@ -803,16 +793,16 @@ export class HUD {
       mk.style.top = ((1 - this.v.y) / 2) * 100 + '%';
       mk.querySelector('span').textContent = `${obj.label} · ${dist > 2000 ? (dist / 1000).toFixed(1) + 'km' : Math.round(dist) + 'm'}`;
     } else {
-      // a drawn arrow (fonts can't drop it) with the distance, on a ring clear of the HUD panels
+      // SVG arrow (no font dependency) with distance, on a ring clear of the HUD panels
       if (!el.dataset.svg) {
         el.dataset.svg = '1';
         el.innerHTML = `<svg viewBox="0 0 64 64" width="64" height="64"><path d="M60 32 L14 8 L24 32 L14 56 Z" fill="${color}" stroke="#120a1e" stroke-width="5" stroke-linejoin="round"/></svg><div class="oa-dist"></div>`;
       }
       mk.classList.add('hidden');
       el.classList.remove('hidden');
-      // beyond the horizon: point along the surface toward it
+      // off screen: point along the surface toward it
       const P = g.player;
-      const t = obj.pos.clone().sub(P.pos); // (along the ground toward it)
+      const t = obj.pos.clone().sub(P.pos);
       t.addScaledVector(P.up, -t.dot(P.up));
       let x = t.dot(g.cam.right), yy = t.dot(g.cam.fwd);
       const a = Math.atan2(yy, x);
@@ -887,7 +877,7 @@ export class HUD {
     if (f.spill > 0) { c.fillStyle = '#ff2a4a'; c.font = pixelFont(10); c.fillText('SPILLING!', x0 + 6, y0 + 18); }
   }
 
-  // opts.raw: `text` is a whole page that draws its own title, choices and close (terminalUI.js); opts.cls: an extra class on the panel
+  // opts.raw: `text` is a whole page with its own title, choices and close (terminalUI.js); opts.cls: extra panel class
   dialog(title, text, buttons, onPick, opts = {}) {
     const el = $('dialog');
     el.innerHTML = opts.raw
@@ -896,7 +886,7 @@ export class HUD {
     el.classList.remove('hidden');
     el.onclick = (e) => {
       const b = e.target.closest('button');
-      if (b && b.dataset.i !== undefined) onPick(+b.dataset.i); // (a button that isn't a dialog choice used to read as choice NaN and just close the dialog)
+      if (b && b.dataset.i !== undefined) onPick(+b.dataset.i); // ignore buttons that aren't dialog choices
     };
   }
 

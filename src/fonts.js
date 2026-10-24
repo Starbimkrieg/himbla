@@ -25,12 +25,10 @@ if (typeof FontFace !== 'undefined' && typeof document !== 'undefined' && docume
 export const DISPLAY = '"Press Start 2P", "Display Credit", "Jersey 15", monospace';
 export const BODY = '"Jersey 15", "Body Credit", "Press Start 2P", sans-serif';
 
-// Canvas font string in the display face. Press Start 2P is wide, so callers pass the size
-// they want (roughly 0.6x what the old Bangers text used).
+// Canvas font string in the display face (it is wide, so callers pass small sizes).
 export const pixelFont = (px) => `${Math.round(px)}px ${DISPLAY}`;
 
-// Canvas text only uses a web font once it has loaded, so wait for the faces before any
-// textSprite / board canvas is drawn. Never blocks for more than a couple of seconds.
+// Canvas only uses a web font once loaded, so await this before drawing textSprites / boards. Gives up after `timeout` ms.
 export function loadFonts(timeout = 3000) {
   if (!document.fonts || !document.fonts.load) return Promise.resolve();
   const sample = 'MOON-RUNNER 0123456789 abc';

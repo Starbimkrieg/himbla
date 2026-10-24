@@ -1,6 +1,6 @@
 // Meridian Exchange layout study (docs/meridian-layouts.md): each layout is a list of footprints in the settlement frame
-// (+x right, +z up / "north", metres). `node tools/meridian-layouts.mjs` checks every layout (footprints 4 m apart, 6 m off the
-// defence turrets, inside loc.r; the leader's podium spot clear) and `node tools/meridian-layouts.mjs docs` also draws the plans.
+// (+x right, +z up / "north", metres). `node tools/meridian-layouts.mjs` checks every layout (footprints 4 m apart, 6 m
+// off the turrets, inside loc.r, podium spot clear); `node tools/meridian-layouts.mjs docs` also writes the SVG plans there.
 import { writeFileSync } from 'node:fs';
 
 const LOC_R = 150, RING = 182; // loc.r and the ring road centreline (RING_GAP 32)
@@ -13,7 +13,7 @@ const GA = { x: Math.cos(deg(236)) * 128, z: Math.sin(deg(236)) * 128, a: deg(23
 // kinds: box {x,z,w,d,rot?} (w along x before rot, d along z), circle {x,z,r}
 const box = (id, x, z, w, d, o = {}) => ({ kind: 'box', id, x, z, w, d, ...o });
 const circ = (id, x, z, r, o = {}) => ({ kind: 'circle', id, x, z, r, ...o });
-// the main garage: hall 38x20 plus the office end (x to +25.5) and tank yard (x to -25); modelled as one 52x20 box, rotated
+// main garage: hall 38x20, office end (x to +25.5) and tank yard (x to -25) as one rotated 52x20 box
 const mainGarage = () => box('main garage (fixed)', GA.x, GA.z, 52, 21, { rot: -(deg(236) - Math.PI / 2), cls: 'fixed' });
 const tower = (x, z, doorDeg) => [circ('trading tower', x, z, 22.5, { cls: 'tower' }), box('portico + steps', x + Math.sin(deg(doorDeg)) * 22, z + Math.cos(deg(doorDeg)) * 22, 24, 11, { rot: -deg(doorDeg), cls: 'tower', soft: true })];
 const dome = (x, z) => circ('lab dome', x, z, 23, { cls: 'dome' });
@@ -58,7 +58,7 @@ const freeport = {
   ],
 };
 
-// ---- clearance check: each item as a polygon (boxes) or circle; separation by sampling ----
+// ---- clearance check: items as polygons (boxes) or circles ----
 const corners = (b) => { const c = Math.cos(b.rot || 0), s = Math.sin(b.rot || 0); return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => [b.x + (u * b.w / 2) * c - (v * b.d / 2) * s, b.z + (u * b.w / 2) * s + (v * b.d / 2) * c]); };
 const distPtSeg = (p, a, b) => { const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz))); return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dz); };
 const inPoly = (p, poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, zi] = poly[i], [xj, zj] = poly[j]; if ((zi > p[1]) !== (zj > p[1]) && p[0] < ((xj - xi) * (p[1] - zi)) / (zj - zi) + xi) inside = !inside; } return inside; };
@@ -83,7 +83,7 @@ function check(L) {
   }
   for (const it of hard) for (const t of TURRETS) { const d = sep(it, { kind: 'circle', ...t }); if (d < 6) out.push(`  ${d < 0 ? 'OVERLAP' : 'tight  '} ${d.toFixed(1).padStart(6)} m  ${it.id}  <->  turret (${t.x.toFixed(0)}, ${t.z.toFixed(0)})`); }
   for (const it of hard) { const ext = it.kind === 'circle' ? Math.hypot(it.x, it.z) + it.r : Math.max(...corners(it).map(([x, z]) => Math.hypot(x, z))); if (ext > LOC_R) out.push(`  outside loc.r by ${(ext - LOC_R).toFixed(1)} m: ${it.id}`); }
-  // the podium: story.findSpot wants no collider within 8 m of (38, 67) (first candidate), else it moves on
+  // podium: story.findSpot wants no collider within 8 m of its first candidate (38, 67), else it moves on
   const pod = L.items.find((i) => i.cls === 'podium');
   if (pod) for (const it of hard) if (it !== pod && !it.soft) { const d = sep({ kind: 'circle', x: pod.x, z: pod.z, r: 0 }, it); if (d < 8) out.push(`  podium candidate (38,67) blocked (${d.toFixed(1)} m) by ${it.id}: findSpot moves it`); }
   console.log(`${L.name}:\n${out.length ? out.join('\n') : '  all clear (>= 4 m between footprints, >= 6 m to turrets, inside loc.r)'}`);

@@ -1,22 +1,21 @@
 # Rustmoon faction outposts builder for Blender (4.2+ / 5.x).
 #
-# Builds the small faction structures from code and exports src/assets/outposts.glb, the file
-# docs/outpost-glb.md describes (read it first: axes, root names, material names, the gameplay empties,
-# the `anim` groups and the `ink` property). Two kinds are here, each as two roots at the origin: the Relay Mast
-# (`mast`, `mast_wreck`) and the Watchtower (`tower`, `tower_wreck`; main building in ruins), ports of mast() and
-# tower() in src/outpostModels.js (same positions, sizes, colours and outline values; a wreck replays the game's own
-# random stream). The mast's dishes are the dish head of dishkit.py, as the game's Kit-built mast has them (models.js Kit.dishHead). Object names are unique across the file, so the mast's keep their plain names and the tower's all
-# carry a `tower` marker (`tower_apron`, `col_tower_lattice`, `smoke_tower`, ...; a role word stays first).
+# Builds the small faction structures and exports src/assets/outposts.glb as docs/outpost-glb.md describes (read it
+# first: axes, root names, material names, gameplay empties, `anim` groups, the `ink` property). Two kinds, each two
+# roots at the origin: Relay Mast (`mast`, `mast_wreck`) and Watchtower (`tower`, `tower_wreck`; main building in ruins),
+# ports of mast() and tower() in src/outpostModels.js (same positions, sizes, colours, outlines; a wreck replays the
+# game's random stream). The mast's dishes are dishkit.py's dish head, as in the game (models.js Kit.dishHead). Object
+# names are unique across the file: the mast's are plain, the tower's carry a `tower` marker (`tower_apron`,
+# `col_tower_lattice`, `smoke_tower`, ...; a role word stays first).
 #
 # Run it with any Python that has the bpy module (pip install bpy):
 #     MOONRUNNER_REPO=<checkout> python tools/blender/build_outposts.py
 # or inside Blender:  exec(open(r"<repo>/tools/blender/build_outposts.py").read())
 # MOONRUNNER_EXPORT=0 builds the scene without writing the file.
 #
-# Everything is authored in three.js axes (x right, y up, +z towards the gate, ground at y = 0) like the other
-# build scripts. To add a kind: write build_<kind>(wreck) the way build_mast does (a Kit on a root pivot, and
-# tag=<kind> so its object names stay unique across the file: see build_tower) and register it in BUILDERS together
-# with its seed in KIND_SEED (must equal the one in src/outpostModels.js).
+# Three.js axes (x right, y up, +z towards the gate, ground at y = 0). To add a kind: write build_<kind>(wreck) like
+# build_mast (a Kit on a root pivot, tag=<kind> for unique names: see build_tower), register it in BUILDERS and give it
+# a KIND_SEED (must match src/outpostModels.js).
 
 import bpy, math, os
 from mathutils import Matrix, Vector
@@ -43,7 +42,7 @@ COLL = "MoonOutposts"
 
 
 def srgb(h):
-    """sRGB hex (the game's colours) -> linear floats (what Blender and glTF store)."""
+    """sRGB hex (game colours) -> linear floats (Blender / glTF)."""
     def lin(c):
         c /= 255
         return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
@@ -52,12 +51,12 @@ def srgb(h):
 
 # colours from outpostModels.js
 STEEL, DARK, LIGHT, CONC, CHAR = 0x55607A, 0x3A3550, 0xD8D4E8, 0x8A8698, 0x2A2433
-FACTION = 0x2EC4FF  # preview accent: the game paints its own per owner
+FACTION = 0x2EC4FF  # preview accent; the game paints the owner's
 F = 0.3  # apron top: small props stand on this
-KIND_SEED = {"mast": 41, "tower": 11}  # the seeds of outpostModels.js (a kind's random streams start at KIND_SEED * 977)
+KIND_SEED = {"mast": 41, "tower": 11}  # outpostModels.js seeds (a kind's streams start at KIND_SEED * 977)
 
-# material name -> (sRGB hex, double sided). The name picks the game's treatment: faction* take the owner's accent,
-# glow* are unlit in their own colour, anything else is lit toon in its own colour. Same hex and side = one material.
+# material name -> (sRGB hex, double sided). The name picks the treatment: faction* take the owner's accent, glow* are
+# unlit, anything else is lit toon. Same hex and side = one material.
 MATERIALS = {
     "faction": (FACTION, False), "faction_glow": (FACTION, False), "faction_cloth": (FACTION, True),
     "apron": (0x7A7686, False), "apron_edge": (0x5A566A, False),
@@ -70,7 +69,7 @@ MATERIALS = {
     "rubble_grey": (0x55505E, False), "burnt_wall": (0x4A4652, False),
     "glow_red": (0xFF2A4A, False), "glow_green": (0x7DFF3A, False), "glow_cyan": (0x2EE6FF, False),
     "glow_lamp": (0xFFF3B0, False),
-    # the watchtower's (a name that repeats a colour above is the same material: "navy" is the barracks door, "cabinet" the fallen roof)
+    # the watchtower's (reused colours above are the same material: "navy" is the barracks door, "cabinet" the fallen roof)
     "apron_tower": (0x7E7A8C, False), "jersey": (0xA8A4B4, False), "yellow": (0xFFD23F, False),
     "olive": (0x6F7A5A, False), "olive_dark": (0x4F5A42, False), "hut_skin": (0x4F5A42, True), "olive_burnt": (0x3A3F30, False),
     "mustard": (0xC9A227, False), "sandbag": (0xB59F74, False), "crate_band": (0x5A3A22, False),
@@ -78,35 +77,34 @@ MATERIALS = {
     "glow_window": (0xFFF0A0, False), "glow_lens": (0xFFFBE0, False), "glow_warm": (0xFFE6A8, False), "glow_yellow": (0xFFD23F, False),
     "additive_searchlight": (0xFFF3B0, True),
 }
-# see-through light beams: name -> alpha (the game's BEAM(colour, opacity)). Additive, unlit and double sided in the game.
+# light beams: name -> alpha (the game's BEAM(colour, opacity)); additive, unlit, double sided in the game.
 ADDITIVE = {"additive_searchlight": 0.13}
 SLOT_COLORS = {name: srgb(h) for name, (h, _) in MATERIALS.items()}
-# the dish head's slots (dishkit.py) in this file's materials: its body takes the owner's accent and its stripe is cream (the Kit build paints the
-# owner's full livery: models.js dishSlot); a wreck's heads, flung off the mast, are grey
+# dish head slots (dishkit.py) -> this file's materials: body takes the owner's accent, stripe cream (the Kit build
+# paints full livery: models.js dishSlot); a wreck's flung-off heads are grey
 HEAD = {"body": "faction", "stripe": "dish_cream", "steel": "steel", "dark": "navy", "white": "mast_white", "dish": "dish_cream", "hazard": "yellow", "green": "glow_green"}
 HEAD_WRECK = {**HEAD, "body": "dish_grey"}
 
-# geometry and scene helpers shared with the other build scripts
+# shared geometry and scene helpers
 exec(open(os.path.join(REPO, "tools", "blender", "kit.py"), encoding="utf-8").read(), globals())
-exec(open(os.path.join(REPO, "tools", "blender", "dishkit.py"), encoding="utf-8").read(), globals())   # the dish head the mast's dishes are made of
+exec(open(os.path.join(REPO, "tools", "blender", "dishkit.py"), encoding="utf-8").read(), globals())   # the mast's dish head
 
 C = coll()
 for _name, (_hex, _double) in MATERIALS.items():
-    material(_name).use_backface_culling = not _double  # (off = double sided in glTF)
+    material(_name).use_backface_culling = not _double  # off = double sided in glTF
 
 
 def setup_additive():
-    """Make the beam materials see-through the way the glTF exporter writes it: the Principled BSDF's Alpha input
-    (below 1) gives both alphaMode BLEND and baseColorFactor[3]; backface culling off gives doubleSided. The render
-    method and diffuse colour only make the viewport match. material() only rewrites Base Color and Roughness, so
-    this survives it; call it once the meshes are built."""
+    """Make beam materials see-through for the glTF exporter: Principled Alpha < 1 gives alphaMode BLEND and
+    baseColorFactor[3]; culling off gives doubleSided. Render method and diffuse colour only fix the viewport.
+    material() only rewrites Base Color and Roughness, so this survives it; call once the meshes are built."""
     for name, alpha in ADDITIVE.items():
         m = material(name)
         bsdf = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
         bsdf.inputs["Alpha"].default_value = alpha
         m.diffuse_color = (*SLOT_COLORS[name], alpha)
         if hasattr(m, "surface_render_method"):
-            m.surface_render_method = "BLENDED"  # (Blender 4.2+)
+            m.surface_render_method = "BLENDED"  # Blender 4.2+
         elif hasattr(m, "blend_method"):
             m.blend_method = "BLEND"
         m.use_backface_culling = False
@@ -133,19 +131,18 @@ def js_round(v):
 
 
 def euler_xyz(rx, ry, rz):
-    """THREE.Euler 'XYZ' as a matrix: Rx * Ry * Rz (mathutils' own 'XYZ' is the reverse product)."""
+    """THREE.Euler 'XYZ' as a matrix: Rx * Ry * Rz (mathutils' 'XYZ' is the reverse product)."""
     return Matrix.Rotation(rx, 4, "X") @ Matrix.Rotation(ry, 4, "Y") @ Matrix.Rotation(rz, 4, "Z")
 
 
-ROLE_WORDS = ("col", "hit", "raid", "smoke", "drop", "text")  # (the gameplay roles: an empty's name starts with its role)
+ROLE_WORDS = ("col", "hit", "raid", "smoke", "drop", "text")  # gameplay roles: an empty's name starts with its role
 
 
 class Kit:
     """The parts of the game's Kit this builder needs. Parts are meshes (verts in the root's frame) under `root`;
-    colliders, blast boxes, the raid spot, smoke, drop and sign faces are empties; flags, blinkers and the
-    spinning dish are `anim` empties with their meshes as children. Every method takes `name=` (the object's
-    name; a wreck's names all end in _wreck so they stay unique, and a kit made with `tag=` puts that marker in every
-    name) and `ink=` (the JS `outline`, 0 = none)."""
+    colliders, blast boxes, raid spot, smoke, drop and sign faces are empties; flags, blinkers and the spinning dish
+    are `anim` empties with child meshes. Methods take `name=` (wreck names end in _wreck; `tag=` adds its marker to
+    every name) and `ink=` (the JS `outline`, 0 = none)."""
 
     def __init__(self, root, seed, wreck, tag=""):
         self.root, self.wreck, self.tag = root, wreck, tag
@@ -157,7 +154,7 @@ class Kit:
     # -- plumbing
     def name(self, base, auto="part"):
         n = base or f"{auto}_{self.count(auto)}"
-        if self.tag:  # (names are unique across the file: the marker goes after a role word, before anything else)
+        if self.tag:  # unique across the file: the marker goes after a role word, else first
             head, _, rest = n.partition("_")
             n = f"{head}_{self.tag}" + (f"_{rest}" if rest else "") if head in ROLE_WORDS else f"{self.tag}_{n}"
         n += self.sfx
@@ -170,7 +167,7 @@ class Kit:
         return self.counts[key]
 
     def at(self, x=0, z=0, yaw=0, y=0):
-        """Frame for the following parts: position and yaw (about +y)."""
+        """Frame for the following parts: position and yaw about +y."""
         self.base = Matrix.Translation((x, y, z)) @ Matrix.Rotation(yaw, 4, "Y")
         self.yaw = yaw
         return self
@@ -210,24 +207,24 @@ class Kit:
     def empty(self, name, pos, display="PLAIN_AXES", size=0.3, scale=(1, 1, 1), yaw=0.0, **props):
         e = pivot(name, pos, self.root, **props)
         e.empty_display_type, e.empty_display_size = display, size
-        e.rotation_euler = (0, 0, yaw)  # yaw about three.js +y is a turn about Blender +z
+        e.rotation_euler = (0, 0, yaw)  # three.js +y yaw = Blender +z
         e.scale = scale
         return e
 
     def dyn(self, name, anim, x, y, z, ry=0):
-        """The animated group's node (the game swings / blinks / spins it); author its meshes relative to it."""
+        """An animated group's node (the game swings / blinks / spins it); its meshes are relative to it."""
         p = self.P(x, y, z)
         return self.empty(self.name(name), (p.x, p.y, p.z), yaw=self.yaw + ry, anim=anim)
 
     def child(self, parent, name, geo, slot, ink=0):
-        """A mesh under an anim node, with `geo` in the node's own frame."""
+        """A mesh under an anim node, `geo` in the node's frame."""
         n = self.name(name)
         return mesh_smooth(n, geo, slot, parent, ink)
 
-    # -- dish heads (dishkit.py's light head: what Kit.dishHead of models.js bakes into the game's Kit-built outposts)
+    # -- dish heads (dishkit.py's light head, as models.js Kit.dishHead bakes into the game's outposts)
     def _head(self, name, m0, rim, slots, az, el, parent):
-        """The head's pieces as meshes named `name`_<piece> under `parent`: m0 puts the neck's foot (y = NECK in the model) where it stands, the
-        model is scaled so the rim is `rim` m from the axis, turned `az` about the vertical and nodded `el`."""
+        """Head pieces as meshes `name`_<piece> under `parent`: m0 places the neck's foot (model y = NECK), scaled so
+        the rim is `rim` m from the axis, turned `az` about the vertical, nodded `el`."""
         k = rim / RIM
         base = m0 @ Matrix.Translation((0, (YP - NECK) * k, 0))
         turn, nod, S = Matrix.Rotation(az, 4, "Y"), Matrix.Rotation(el, 4, "X"), Matrix.Scale(k, 4)
@@ -237,15 +234,15 @@ class Kit:
             mesh(self.name(f"{name}_{piece}"), ([tuple(m @ Vector(v)) for v in verts], faces), slots[slot], parent, ink * k if ink >= 0.04 else 0)
 
     def dish_head(self, name, x, y, z, rim, slots, az=0.0, el=-0.5, lay=None):
-        """A dish head with its neck's foot at (x, y, z) of the current frame, opening up and towards -z (az = pi: towards +z), nodded `el`.
-        `lay` = (yaw, rx, rz) first sets the whole head down at that angle (a wreck's fallen ones)."""
+        """Dish head, neck foot at (x, y, z) in the current frame, opening up and towards -z (az = pi: +z), nodded `el`.
+        `lay` = (yaw, rx, rz) first lays the whole head at that angle (a wreck's fallen ones)."""
         m = self.base @ Matrix.Translation((x, y, z))
         if lay:
             m = m @ Matrix.Rotation(lay[0], 4, "Y") @ euler_xyz(lay[1], 0, lay[2])
         self._head(name, m, rim, slots, az, el, self.root)
 
     def dish_head_spin(self, name, x, y, z, rim, slots, az=0.0, el=-0.5, arm=0.0):
-        """The head on a boom `arm` m long out from a node at (x, y, z) that the game turns about the vertical (anim spin), standing at its end."""
+        """A head at the end of an `arm` m boom from a node at (x, y, z) the game spins about the vertical (anim spin)."""
         node = self.dyn(name, "spin", x, y, z)
         self._head(name, Matrix.Translation((0, 0, arm)), rim, slots, az, el, node)
         if arm:
@@ -287,9 +284,8 @@ class Kit:
         return node
 
     def sign(self, text, x, z, w=8, y=3.4, ph=2.0, ry=0, fg="#ffd23f", bg="#241a3a", stroke="#120a1e"):
-        """A name board on two posts, face towards local +z. The game draws the words from the `text` empty, so
-        the board's height `ph` is the text plane's height for width w - 0.5 (measured: Kit.sign takes it from the
-        canvas aspect)."""
+        """Name board on two posts, facing local +z. The game draws the words from the `text` empty; `ph` is the text
+        plane's height for width w - 0.5 (measured: Kit.sign takes it from the canvas aspect)."""
         pw = w - 0.5
         save, save_yaw = self.base, self.yaw
         self.base = self.base @ Matrix.Translation((x, 0, z)) @ Matrix.Rotation(ry, 4, "Y")
@@ -318,7 +314,7 @@ class Kit:
         self.ring(r - 0.3, 0.16, edge, 0, 0.3, 0, name="apron_edge")
 
     def perimeter(self, r, step=0.32, gap=0.3):
-        """Little glowing marker posts round the apron edge, with a gap at the entrance (+z)."""
+        """Glowing marker posts round the apron edge, gap at the entrance (+z)."""
         a, n = gap, 0
         while a < math.pi * 2 - gap + 1e-3:
             x, z = math.sin(a) * r, math.cos(a) * r
@@ -328,7 +324,7 @@ class Kit:
             n += 1
 
     def raid_at(self, x, z, slot):
-        """The raid marker: two glowing rings on the ground, plus the stand point (nothing on a wreck)."""
+        """Raid marker: two glowing ground rings and the stand point (none on a wreck)."""
         if self.wreck:
             return
         self.ring(1.7, 0.14, slot, x, F + 0.04, z, name="ring_raid_outer")
@@ -336,7 +332,7 @@ class Kit:
         self.point("raid", x, F, z)
 
     def scatter_debris(self, cx, cz, hx, hz, n, rr, colors=("char", "rubble_dark", "rubble_brown", "rubble_grey")):
-        for i in range(n):  # (every rr() call in the order the JS argument list evaluates them)
+        for i in range(n):  # rr() calls in the JS argument evaluation order
             s = 0.6 + rr() * 2.2
             h = 0.3 + rr() * 1.1
             d = 0.6 + rr() * 2
@@ -347,9 +343,8 @@ class Kit:
 
 
 # ---------------- Relay mast ----------------
-# A 40 m guyed lattice mast in aviation red and white with dishes and beacons, an equipment shed, a cable tray
-# and a big dish on the ground. The wreck: the mast buckled at the base and came down in two folded lengths,
-# the shed burnt out.
+# 40 m guyed red and white lattice mast with dishes and beacons, an equipment shed, a cable tray and a ground dish.
+# Wreck: the mast buckled at the base and lies in two folded lengths; the shed is burnt out.
 
 def build_mast(wreck):
     root = pivot("mast_wreck" if wreck else "mast", (0, 0, 0), None)
@@ -378,7 +373,7 @@ def build_mast(wreck):
             k.blinker(MX + 2.0, y + 0.45, MZ, "glow_red", 0.3)
         k.cyl(0.08, 0.12, 2.6, 5, "light", MX, H, MZ, ink=0.02, name="mast_pole")
         k.blinker(MX, H + 2.9, MZ, "glow_red", 0.45)
-        for i, (h, ry, rim) in enumerate(((17, 0.5, 1.1), (25, 2.6, 1.3), (28.5, 4.4, 0.95))):   # (a dish head on an arm each)
+        for i, (h, ry, rim) in enumerate(((17, 0.5, 1.1), (25, 2.6, 1.3), (28.5, 4.4, 0.95))):   # a dish head on an arm each
             k.at(MX, MZ, ry)
             k.beam((0, h - 0.7, 0.4), (0, h - 0.7, 1.5), 0.08, "dark", name=f"mast_dish_{i}_arm")
             k.dish_head(f"mast_dish_{i}", 0, h - 0.7, 1.5, rim, HEAD, az=math.pi, el=-1.35)
@@ -387,7 +382,7 @@ def build_mast(wreck):
             k.at(MX, MZ, (i * math.pi * 2) / 3 + 1.2)
             k.box(0.55, 2.8, 0.2, "light", 0, 35.6, 1.15, ink=0.03, name=f"mast_fin_{i}")
             k.at()
-        # the spinning dish on the top platform
+        # spinning dish on the top platform
         k.dish_head_spin("spinner", MX, 32.8, MZ, 1.0, HEAD, az=math.pi, el=-0.7, arm=1.6)
         # guy wires to three anchors
         for i in range(3):
@@ -441,7 +436,7 @@ def build_mast(wreck):
 
         lying(0, (MX + 1, MZ - 2), (5, -20))
         lying(1, (5.5, -19), (17, -12))
-        k.dish_head("fallen_dish_0", -8, F + 0.5, -14, 1.3, HEAD_WRECK, el=-0.3, lay=(0.7, -0.9, 0.3))   # (two heads thrown off the mast, on their sides)
+        k.dish_head("fallen_dish_0", -8, F + 0.5, -14, 1.3, HEAD_WRECK, el=-0.3, lay=(0.7, -0.9, 0.3))   # two heads thrown off, on their sides
         k.dish_head("fallen_dish_1", 9, F + 0.4, -16, 1.0, HEAD_WRECK, el=-0.6, lay=(2.1, 0.8, -0.4))
         for i in range(3):
             a = 0.5 + (i * math.pi * 2) / 3
@@ -449,7 +444,7 @@ def build_mast(wreck):
             k.box(1.8, 1, 1.8, "concrete", ax, 0, az, ink=0.04, name=f"guy_anchor_{i}")
             k.beam((ax, 1.1, az), (ax - math.cos(a) * 3, F, az - math.sin(a) * 3 + 0.5), 0.045, "navy", ink=0, seg=3, name=f"guy_wire_{i}_0")
         k.scatter_debris(MX, MZ, 4, 4, 8, wr)
-        # the shed burnt out
+        # burnt-out shed
         k.box(8.6, 0.06, 6, "char", SX, F, SZ, ink=0, name="shed_floor")
         n = 0
         x = -3.5
@@ -469,7 +464,7 @@ def build_mast(wreck):
     k.hit(4, 1.9, 2.75, SX, SZ, name="hit_shed")
     k.point("smoke", MX, 2, MZ)
     k.point("drop", -4, F, 10)
-    # transponder rack by the shed door: the raid spot
+    # transponder rack by the shed door (raid spot)
     k.box(0.8, 2.2, 1.2, "dark", SX - 4.6, F, SZ + 2.8, ink=0.05, name="rack")
     for i in range(4):
         k.box(0.05, 0.1, 0.9, "glow_cyan" if i % 2 else "glow_green", SX - 5.02, F + 0.5 + i * 0.4, SZ + 2.8, ink=0, name=f"rack_led_{i}")
@@ -485,7 +480,7 @@ def build_mast(wreck):
     for i in range(5):
         t = i / 4
         k.cyl(0.06, 0.06, 1.3, 4, "dark", t0[0] + (t1[0] - t0[0]) * t, 0, t0[1] + (t1[1] - t0[1]) * t, ink=0, name=f"tray_post_{i}")
-    # the big ground dish
+    # big ground dish
     k.at(-13, 10, 2.4)
     k.cyl(0.6, 0.9, 2.4, 8, "light", 0, 0, 0, ink=0.05, name="dish_ground_base")
     k.box(1.4, 0.8, 1.0, "dark", 0, 2.2, 0, ink=0.03, name="dish_ground_head")
@@ -493,7 +488,7 @@ def build_mast(wreck):
     k.column(1.2, 3, 0, 0, name="col_dish_ground")
     k.at()
     # name board, flags, perimeter, lights
-    k.sign("RELAY MAST", 0, 21.6, w=9, ph=2.0537)  # (2.0537 m: the board's text plane height at width 8.5, measured in the game)
+    k.sign("RELAY MAST", 0, 21.6, w=9, ph=2.0537)  # text plane height at width 8.5, measured in the game
     k.flag(-5.8, 21.4, 9)
     k.flag(5.8, 21.4, 9)
     k.perimeter(23.4, 0.32, 0.32)
@@ -505,8 +500,8 @@ def build_mast(wreck):
 # ---------------- shared props: sandbag nests and crates (sandbags() / crate() in outpostModels.js) ----------------
 
 def sandbags(k, cx, cz, r, a0, a1, rows=2):
-    """Rows of squashed sandbag spheres along an arc of radius r about (cx, cz), angles a0..a1 (a turn about +y from +z),
-    plus the collider boxes the game registers: one block per 2.4 m of the arc, as high as the stack."""
+    """Rows of squashed sandbags on an arc of radius r about (cx, cz), angles a0..a1 (about +y from +z), plus colliders:
+    one block per 2.4 m of arc, as high as the stack."""
     nest = k.count("nest")
     for row in range(rows):
         step = 1.25 / r
@@ -524,7 +519,7 @@ def sandbags(k, cx, cz, r, a0, a1, rows=2):
 
 
 def crate(k, x, y0, z, s, slot, ry=0.0):
-    """A crate with a dark band round it, and its collider (crate() in outpostModels.js)."""
+    """Banded crate and its collider (crate() in outpostModels.js)."""
     n = k.count("crate")
     k.box(s, s, s, slot, x, y0, z, ry=ry, ink=0.04, name=f"crate_{n}")
     k.box(s * 1.02, s * 0.14, s * 1.02, "crate_band", x, y0 + s * 0.43, z, ry=ry, ink=0, name=f"crate_{n}_band")
@@ -532,15 +527,15 @@ def crate(k, x, y0, z, s, slot, ry=0.0):
 
 
 # ---------------- Watchtower ----------------
-# A lattice tower with a lit cab and a sweeping searchlight (a spinning part), a Quonset barracks, a gun nest, a ring
-# of concrete barriers and a gate sign. The wreck: the tower snapped above the first bay and folded over towards the
-# gate, the barracks burnt out to ribs and buckled skin.
+# Lattice tower with a lit cab and a sweeping searchlight (spinning part), a Quonset barracks, a gun nest, a ring of
+# barriers and a gate sign. Wreck: the tower snapped above the first bay and folded towards the gate; the barracks
+# burnt to ribs and buckled skin.
 
 def build_tower(wreck):
     root = pivot("tower_wreck" if wreck else "tower", (0, 0, 0), None)
     k = Kit(root, KIND_SEED["tower"] * 977 + 0 * 131, wreck, tag="tower")
     k.apron(24, "apron_tower", "apron_edge")
-    # jersey barriers round the edge, gap at the gate (+z); every third one wears a faction cap
+    # jersey barriers round the edge, gap at the gate (+z); every third has a faction cap
     n, a = 0, 0.38
     while a < math.pi * 2 - 0.37:
         x, z = math.sin(a) * 22, math.cos(a) * 22
@@ -576,7 +571,7 @@ def build_tower(wreck):
             k.beam((TX - 0.5, y, zz), (TX + 0.5, y, zz), 0.04, "dark", ink=0, name=f"ladder_rung_{j}")
             y += 1.2
             j += 1
-        # platform, railing and the observation cab
+        # platform, railing, observation cab
         k.box(7.6, 0.4, 7.6, "dark", TX, H, TZ, name="platform")
         for i, s in enumerate((-1, 1)):
             k.box(7.6, 0.12, 0.12, "faction", TX, H + 1.1, TZ + s * 3.74, ink=0.02, name=f"rail_{i}_x")
@@ -593,18 +588,18 @@ def build_tower(wreck):
         k.box(6, 0.45, 6, "faction", TX, H + 3.2, TZ, name="cab_roof")
         k.cyl(0.07, 0.09, 4, 5, "dark", TX + 2.2, H + 3.6, TZ + 2.2, ink=0.02, name="antenna")
         k.blinker(TX + 2.2, H + 7.8, TZ + 2.2, "glow_red", 0.35)
-        # searchlight sweeping round on the roof: a spinning part whose meshes are authored in the spin node's frame,
-        # with the head's turn (up 1.15 m, nodded 0.42 rad about x) baked into the housing, lens and beam
+        # roof searchlight: meshes in the spin node's frame, the head's offset (up 1.15 m, nodded 0.42 rad about x)
+        # baked into housing, lens and beam
         sl = k.dyn("searchlight", "spin", TX, H + 3.62, TZ)
         head = Matrix.Translation((0, 1.15, 0)) @ Matrix.Rotation(0.42, 4, "X")
         k.child(sl, "searchlight_pedestal", place(cylinder(0.35, 0.5, 0.8, 8), Matrix.Translation((0, 0.4, 0))), "dark")
         k.child(sl, "searchlight_housing", place(place(cylinder(0.6, 0.48, 1.3, 10), Matrix.Rotation(math.pi / 2, 4, "X")), head), "light")
         k.child(sl, "searchlight_lens", place(place(cylinder(0.52, 0.52, 0.06, 10), Matrix.Rotation(math.pi / 2, 4, "X")), head @ Matrix.Translation((0, 0, 0.66))), "glow_lens")
-        cone = place(cylinder(0, 5, 38, 16, True), Matrix.Translation((0, 0, 19.7)) @ Matrix.Rotation(-math.pi / 2, 4, "X"))  # (ConeGeometry(5, 38, 16, 1, true))
+        cone = place(cylinder(0, 5, 38, 16, True), Matrix.Translation((0, 0, 19.7)) @ Matrix.Rotation(-math.pi / 2, 4, "X"))  # ConeGeometry(5, 38, 16, 1, true)
         beam = k.child(sl, "searchlight_beam", place(cone, head), "additive_searchlight")
-        del beam["ink"]  # (a light beam gets no outline)
+        del beam["ink"]  # no outline on a light beam
         k.solid(3.4, 12.6, 3.4, TX, TZ, name="col_lattice")
-        # the barracks: a Quonset hut
+        # Quonset barracks
         k.add(place(cylinder(3.4, 3.4, 11, 16), Matrix.Rotation(math.pi / 2, 4, "X")), "olive", BX, 0, BZ, ink=0.1, name="barracks")
         for i, dz in enumerate((-4.5, -1.5, 1.5, 4.5)):
             k.add(torus_partial(3.44, 0.1, 4, 18, math.pi), "olive_dark", BX, 0, BZ + dz, ink=0, name=f"barracks_rib_{i}")
@@ -618,7 +613,7 @@ def build_tower(wreck):
         k.solid(3.4, 1.8, 5.5, BX, BZ, name="col_barracks")
     else:
         wr = k.wr
-        # the tower snapped above the first bay and folded over towards the gate
+        # tower snapped above the first bay, folded towards the gate
         k.box(8, 0.5, 8, "concrete", TX, 0, TZ, name="lattice_base")
         k.box(9, 0.06, 9, "char", TX, 0.5, TZ, ink=0, name="lattice_scorch")
         for i, (sx, sz) in enumerate(cn):
@@ -634,7 +629,7 @@ def build_tower(wreck):
             k.beam((TX - 2.2, 1.0 + (i % 2) * 0.9, z), (TX + 2.2, 1.9 - (i % 2) * 0.9, z + 2), 0.08, "dark", name=f"fallen_brace_{i}")
         k.box(5, 2.2, 5, "wreck_block", TX, F + 0.3, TZ + 16.5, rx=0.25, rz=0.35, ink=0.08, name="fallen_cab")
         k.box(6, 0.45, 6, "cabinet", TX + 0.8, F, TZ + 19.5, ry=0.5, rx=0.15, ink=0.06, name="fallen_roof")
-        # the barracks burnt out: ribs and buckled skin
+        # burnt barracks: ribs and buckled skin
         k.box(7.4, 0.06, 11.5, "char", BX, F, BZ, ink=0, name="barracks_floor")
         for i, dz in enumerate((-4.5, -1.5, 1.5, 4.5)):
             if wr() < 0.75:
@@ -653,7 +648,7 @@ def build_tower(wreck):
     k.hit(3.4, 1.8, 5.5, BX, BZ, name="hit_barracks")
     k.point("smoke", TX, 2, TZ)
     k.point("drop", 1, F, 8)
-    # ammo locker by the barracks door, with a crate of searchlight lenses: the raid spot
+    # ammo locker by the barracks door with a crate of searchlight lenses (raid spot)
     k.box(1.4, 2.0, 0.8, "olive_dark", BX + 2.6, F, BZ + 6.4, ink=0.05, name="locker")
     k.box(1.42, 0.25, 0.82, "faction", BX + 2.6, F + 1.5, BZ + 6.4, ink=0, name="locker_cap")
     k.box(0.9, 0.5, 0.05, "yellow", BX + 2.6, F + 0.8, BZ + 6.82, ink=0, name="locker_label")
@@ -669,7 +664,7 @@ def build_tower(wreck):
     sandbags(k, 9, 12, 1.8, -0.6, 3.6, 2)
     crate(k, 9, F, 12, 1.1, "olive_dark")
     # gate arch, flags and floodlights
-    k.sign("WATCHTOWER", 0, 22, w=9.8, y=5.4, ph=2.2470)  # (2.2470 m: the board's text plane height at width 9.3 with the game's sign font; the text itself is drawn at runtime)
+    k.sign("WATCHTOWER", 0, 22, w=9.8, y=5.4, ph=2.2470)  # text plane height at width 9.3 in the game's sign font (text drawn at runtime)
     k.flag(-6.6, 21.2, 10)
     k.flag(6.6, 21.2, 10)
     k.lamp(16, 13, 8)
@@ -684,7 +679,7 @@ for _kind, _build in BUILDERS.items():
     _build(False)
     _build(True)
 setup_additive()
-# (Blender renames a clashing object `name.001`: a kind without its own tag= would end up here)
+# Blender renames clashes `name.001` (a kind without its own tag= ends up here)
 _clash = [o.name for o in C.objects if o.name[-4:-3] == "." and o.name[-3:].isdigit()]
 assert not _clash, f"object names must be unique across the file, Blender renamed {_clash[:3]}: give each kind its own tag="
 print("built", len(C.objects), "objects:", sum(o.type == "MESH" for o in C.objects), "meshes,", sum(o.type == "EMPTY" for o in C.objects), "empties")

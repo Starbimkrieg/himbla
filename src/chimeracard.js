@@ -18,7 +18,7 @@ const MOD_NAME = { void: 'VOID', crystal: 'CRYSTAL', mud: 'MUD', spark: 'SPARK',
 const hex = (c) => '#' + (c >>> 0).toString(16).padStart(6, '0').slice(-6);
 const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
-// A small 3D snapshot of the creature, rendered once per chimera and cached as a data URL.
+// 3D snapshot of the creature, rendered once per chimera, cached as a data URL.
 export function portrait(renderer, genes) {
   const key = `${genes.seed}|${genes.body}|${genes.legs}|${genes.head}|${genes.extraHead}|${(genes.mods || []).join()}|${genes.tint}|${genes.size}|${JSON.stringify(genes.looks || {})}`;
   if (cache.has(key)) return cache.get(key);
@@ -148,8 +148,7 @@ export function chimeraCard(g, genes, opts = {}) {
   return `<${tag} class="${cls}"${attrs}>${ribbon}${por}<div class="cc-main">${top}${partsLine(genes)}${statBars(st, opts.big, opts.full || opts.big || !genes.rival ? genes.growth : {})}${raceLine(genes, opts.full || opts.big)}${foot}</div></${tag}>`;
 }
 
-// Hover tips for anything with a data-tip (the card stats, parts and grade): one floating box that
-// follows the pointer, so it's never clipped by the dialog's scrolling.
+// Hover tips for any [data-tip]: one floating box following the pointer, so dialog scrolling never clips it.
 let tipEl = null;
 export function installTips() {
   if (tipEl) return;

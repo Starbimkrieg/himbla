@@ -1,8 +1,7 @@
-// Plinko physics: a 2D rigid-ball simulation in the plane of the board (x right, y up, metres).
-// Pure JS with no Three.js dependency so it can be calibrated headless in node.
+// Plinko physics: 2D rigid balls in the board plane (x right, y up, metres). No Three.js, so it calibrates headless in node.
 //
-// Layout: a triangle of pegs (row r has r + 3 pegs), slanted guard rails just outside the outer
-// pegs, and ROWS + 1 slots between the pegs of the bottom row, separated by short dividers.
+// Layout: a peg triangle (row r has r + 3 pegs), slanted guard rails just outside the outer pegs, and ROWS + 1 slots
+// between the bottom-row pegs, split by short dividers.
 
 export const ROWS = 12;
 export const SPACING = 0.9; // peg pitch along a row
@@ -10,23 +9,22 @@ export const ROW_H = 0.78; // vertical distance between rows
 export const PEG_R = 0.13;
 export const BALL_R = 0.22;
 export const GRAVITY = 20;
-export const TOP_Y = ROWS * ROW_H + 0.4; // y of the top peg row (bottom slot floor sits at y = 0)
+export const TOP_Y = ROWS * ROW_H + 0.4; // top peg row y (slot floor at y = 0)
 export const DROP_Y = TOP_Y + 1.1;
 export const DROP_RANGE = SPACING * 0.85; // chute half-width (physics)
-export const AIM_RANGE = DROP_RANGE * 0.75; // how far the player can aim off-centre
+export const AIM_RANGE = DROP_RANGE * 0.75; // player's off-centre aim limit
 export const SLOTS = ROWS + 1;
 const REST = 0.42; // restitution off pegs
 const WALL_REST = 0.35;
 const FRICTION = 0.08; // fraction of tangential speed lost per hit
-const JITTER = 0.32; // random tangential kick (m/s) per peg hit: keeps it lively and unpredictable
+const JITTER = 0.32; // random tangential kick (m/s) per peg hit, for unpredictability
 const BALL_REST = 0.6;
-const REAL_HIT = 0.8; // m/s into a peg: faster is a hit, slower is resting or rolling contact
+const REAL_HIT = 0.8; // m/s into a peg: above is a hit, below is resting / rolling
 export const FLOOR_Y = 0;
 export const DIVIDER_TOP = 1.1;
 
-// Measured headless (20k drops per aim point): RTP about 97% at the centre and half-way out either way and about 94% over
-// uniformly random aim (the 50x slots alone are about 0.35-0.4% of drops, so a few thousand drops swing the figure by a
-// few points). The two 50x outer slots are hit about once in 250 drops. Median fall about 6.7 s (p95 7.5 s).
+// Measured headless (20k drops per aim point): RTP ~97% at centre and half-way out, ~94% over random aim (the 50x slots
+// take ~0.35-0.4% of drops, so a few thousand drops swing it by points; hit about once in 250). Median fall ~6.7 s (p95 7.5 s).
 export const MULTS = [50, 8, 3, 1.2, 0.6, 0.3, 0.2, 0.3, 0.6, 1.2, 3, 8, 50];
 
 export const rowY = (r) => TOP_Y - r * ROW_H;
@@ -41,11 +39,11 @@ export const slotEdge = (k) => pegX(ROWS - 1, k);
 export const slotCentre = (k) => (slotEdge(k) + slotEdge(k + 1)) / 2;
 export const slotOf = (x) => Math.max(0, Math.min(SLOTS - 1, Math.floor((x - slotEdge(0)) / SPACING)));
 
-// segments: guard rails (from the drop chute down to the outer slot walls), slot dividers, chute
+// segments: guard rails (chute down to the outer slot walls), slot dividers, chute
 const SEGS = [];
 {
   const botL = slotEdge(0), botR = slotEdge(SLOTS);
-  // guard rails run tangent to the outer pegs so a ball can never wedge between rail and peg
+  // rails tangent to the outer pegs so a ball can't wedge between rail and peg
   const ox = pegX(ROWS - 1, 0) - pegX(0, 0), oy = rowY(ROWS - 1) - rowY(0);
   const ol = Math.hypot(ox, oy), px = oy / ol, py = -ox / ol; // outward normal (left side)
   const off = PEG_R + 0.03;
@@ -57,7 +55,7 @@ const SEGS = [];
   SEGS.push({ ax: -lBx, ay: lBy, bx: botR + 0.05, by: lastRowY - 0.3 });
   SEGS.push({ ax: botL - 0.05, ay: lastRowY - 0.3, bx: botL - 0.05, by: FLOOR_Y });
   SEGS.push({ ax: botR + 0.05, ay: lastRowY - 0.3, bx: botR + 0.05, by: FLOOR_Y });
-  // the drop chute: straight walls that funnel onto the outer top pegs
+  // drop chute: walls funnelling onto the outer top pegs
   const cw = DROP_RANGE + BALL_R + 0.04;
   for (const sx of [-1, 1]) {
     SEGS.push({ ax: sx * cw, ay: DROP_Y + 1, bx: sx * cw, by: rowY(0) + 0.45 });
@@ -77,7 +75,7 @@ export class PlinkoSim {
   }
 
   drop(x, data = {}) {
-    // the release wobbles a little, so no aim point is a sure thing
+    // release wobble: no aim point is a sure thing
     const b = { x: Math.max(-DROP_RANGE, Math.min(DROP_RANGE, x)) + (this.rand() - 0.5) * 0.24, y: DROP_Y, vx: (this.rand() - 0.5) * 0.6, vy: 0, slot: -1, settle: 0, still: 0, done: false, age: 0, ...data };
     this.balls.push(b);
     return b;
@@ -115,7 +113,7 @@ export class PlinkoSim {
           const vn = b.vx * nx + b.vy * ny;
           if (vn < 0) {
             if (-vn > REAL_HIT) {
-              // a real hit: it bounces, loses a little sliding speed and gets a random kick
+              // real hit: bounce, lose some sliding speed, random kick
               const tx = -ny, ty = nx;
               let vt = b.vx * tx + b.vy * ty;
               vt = vt * (1 - FRICTION) + (R() - 0.5) * 2 * JITTER;
@@ -123,9 +121,8 @@ export class PlinkoSim {
               b.vx = nx * vnn + tx * vt; b.vy = ny * vnn + ty * vt;
               if (this.onPeg) this.onPeg(p, b, -vn);
             } else {
-              // resting or rolling on the peg: lose the push into it and keep the sliding speed. (Friction and a kick on every
-              // 1/240 s sub-step of contact held a ball on a peg for a second at a crawl: the "sticking".) A ball balanced
-              // dead on the crown is tipped off, as a real one would be by the least draught.
+              // resting / rolling: drop the push into the peg, keep sliding speed (friction and kicks per 1/240 s sub-step
+              // would hold it there at a crawl). A ball balanced on the crown is tipped off.
               b.vx -= vn * nx; b.vy -= vn * ny;
               if (ny > 0.985 && Math.abs(b.vx) < 0.6) b.vx += (R() < 0.5 ? -1 : 1) * (0.35 + R() * 0.3);
             }
@@ -170,12 +167,12 @@ export class PlinkoSim {
       }
     }
     for (const b of balls) {
-      // a ball is committed to its slot once it drops below the dividers' tops
+      // committed to a slot below the dividers' tops
       if (b.slot < 0 && b.y < DIVIDER_TOP - 0.05) {
         b.slot = slotOf(b.x);
         if (this.onLand) this.onLand(b, b.slot);
       }
-      // anything that comes to rest above the slots gets a nudge (no ball ever hangs forever)
+      // nudge balls resting above the slots (none hangs forever)
       if (b.slot < 0 && b.vx * b.vx + b.vy * b.vy < 0.04) { b.still += h; if (b.still > 0.3) { b.vx += (R() - 0.5) * 3; b.vy += 1; b.still = 0; } } else b.still = 0;
       if (b.slot >= 0) {
         b.settle += h;

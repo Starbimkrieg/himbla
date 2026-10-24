@@ -4,28 +4,28 @@
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 build_garage.py
 #
 # Two service garages for land-trains and rovers, both exported (roots `garage` and `garage_small`):
-#   garage        the main one: three tall bays with sectional doors under a name board, a glazed roof monitor over a lit workshop
-#                 (steel trusses, a bridge crane), a service office built onto one end and, round it, its compound: a bunded fuel and
-#                 coolant yard with a canopied pump island, a back yard (a rover park with chargers, a parts store, a rack, a skip) and
-#                 a power compound behind the office, on a concrete slab inside a railing, under lamp posts (61 m by 45 m in all)
-#   garage_small  about the old sheds' size (32 m by 17 m): two bays, the same building, no office, compound or antenna
-# Authored in three.js axes (x right, y up, +z forward, the bay doors face +z); the origin is on the ground in the middle of the hall.
+#   garage        main: three tall bays with sectional doors under a name board, glazed roof monitor over a lit workshop (trusses,
+#                 bridge crane), a service office on one end, and its compound: bunded fuel / coolant yard with canopied pump island,
+#                 back yard (rover park with chargers, parts store, rack, skip), power compound behind the office; concrete slab,
+#                 railing, lamp posts (61 m by 45 m in all)
+#   garage_small  32 m by 17 m: two bays, same building, no office, compound or antenna
+# three.js axes (x right, y up, +z forward, bay doors face +z); origin on the ground in the middle of the hall.
 #
-# The root's own meshes are the shell, the roof and what is outside. Pivots (empties with a `role`, all at the origin unless
-# they spin or mark a place) carry what the game chooses between or reads:
-#   door   one pair per bay (extras `bay` and `state` "open" / "closed"): the sectional door shut, or rolled up and
-#          its status lamp. The game builds the state each bay is in, so the four garages need not look alike
-#   fit    one per bay (extra `bay`): what is working inside it (a rover on a two-post lift, an engine stand and drums, a
-#          bench with parts shelves and tyres). Only built for a bay that is open
-#   fan    a roof turbine ventilator's head, at its own centre; the game spins it about y (extra `speed`, rad/s)
+# Root meshes: shell, roof, outside. Pivots (empties with a `role`, at the origin unless they spin or mark a place) carry what the
+# game picks between or reads:
+#   door   one pair per bay (extras `bay`, `state` "open" / "closed"): the door shut, or rolled up, plus its status lamp. The game
+#          builds each bay's state, so the four garages need not look alike
+#   fit    one per bay (extra `bay`): the work inside (rover on a two-post lift, engine stand and drums, or bench with shelves and
+#          tyres). Only built for an open bay
+#   fan    a roof turbine ventilator head, at its centre; the game spins it about y (extra `speed`, rad/s)
 #   blinker  the aircraft lamp on the antenna mast (extra `radius`)
-#   cargo  where the game stands a stack of its cargo containers (gantry.glb's box): at the stack's foot, extras `n` (how many
-#          high), `yaw` and `faction`
-#   col    a collider, at its foot: extras `shape` "box" (`hx` `hy` `hz` half sizes, `yaw`), "cyl" (`r`, `h`) or "hcyl" (a
-#          cylinder lying along z turned by `yaw`: `r`, `len`; the pivot is at its axis)
-# `interior` (the lining) and `shopfloor` are drawn self-lit, so the open bays read as a lit workshop whatever the sun does.
-# Each mesh has ONE material named after a slot (see GARAGE_TOON / GARAGE_GLOW in src/models.js); `trim` (the cyan band, the
-# sign's frame, the rovers' fenders) is the one the game may recolour for another faction.
+#   cargo  where the game stands a stack of cargo containers (gantry.glb's box): at the stack's foot, extras `n` (how many high),
+#          `yaw`, `faction`
+#   col    a collider, at its foot: extras `shape` "box" (`hx` `hy` `hz` half sizes, `yaw`), "cyl" (`r`, `h`) or "hcyl" (cylinder
+#          lying along z turned by `yaw`: `r`, `len`; pivot on its axis)
+# `interior` (lining) and `shopfloor` are self-lit, so open bays read as a lit workshop whatever the sun does.
+# Each mesh has ONE material named after a slot (GARAGE_TOON / GARAGE_GLOW in src/models.js); `trim` (cyan band, sign frame,
+# rover fenders) is the one the game may recolour per faction.
 
 import bpy, math, os
 
@@ -68,18 +68,18 @@ for s in SLOT_COLORS:
     material(s)
 
 PI = math.pi
-PFX = "garage_"   # the prefix of every object name in the garage being built (Blender names are unique across the file)
+PFX = "garage_"   # object name prefix for the garage being built (Blender names are file-unique)
 
 
 # ---------------------------------------------------------------------------------------------------------------
-# geometry helpers: hard-edged boxes and the kit's cylinders, gathered per material slot into a few merged meshes
+# geometry helpers: boxes and kit cylinders, merged per material slot
 # ---------------------------------------------------------------------------------------------------------------
 class Acc:
-    """Boxes and tubes that share a material slot and a parent, merged into one mesh when flushed."""
+    """Boxes and tubes sharing a slot and parent, merged into one mesh on flush."""
     all = []
 
     def __init__(self, name, slot, parent, ink=0.04, dz=0.0):
-        self.name, self.slot, self.parent, self.ink, self.geos, self.dz = name, slot, parent, ink, [], dz   # (dz: shifts everything in z)
+        self.name, self.slot, self.parent, self.ink, self.geos, self.dz = name, slot, parent, ink, [], dz   # dz: z offset for everything
         Acc.all.append(self)
 
     def box(self, cx, y0, cz, w, h, d, rot=(0, 0, 0)):
@@ -87,7 +87,7 @@ class Acc:
         return self
 
     def cyl(self, cx, y0, cz, r, h, seg=10, axis="y", rt=None):
-        """A cylinder standing on y0 (axis y), or lying with its centre at height y0 + h/2 (axis x or z)."""
+        """Cylinder standing on y0 (axis y), or lying with its centre at y0 + h/2 (axis x or z)."""
         g = cylinder(r if rt is None else rt, r, h, seg)[:2]
         rot = {"y": (0, 0, 0), "z": (PI / 2, 0, 0), "x": (0, 0, PI / 2)}[axis]
         self.geos.append(xf(g, (cx, y0 + h / 2, cz + self.dz), rot))
@@ -114,7 +114,7 @@ def flush_all():
 
 
 class Pal:
-    """A palette of accumulators under one parent, one per (slot, ink), each made the first time it is asked for: P("steel").box(...)."""
+    """Accumulators under one parent, one per (slot, ink), made on first use: P("steel").box(...)."""
 
     def __init__(self, name, parent, ink=0.03, dz=0.0):
         self.name, self.parent, self.ink, self.dz, self.accs = name, parent, ink, dz, {}
@@ -128,7 +128,7 @@ class Pal:
 
 
 class Frame:
-    """Draws into a Pal through a turn about y and then a move: for a thing set down somewhere at an angle (a rover, a lamp post)."""
+    """Draws into a Pal via a yaw then a move: for things set down at an angle (a rover, a lamp post)."""
 
     def __init__(self, pal, t, yaw=0.0):
         self.pal, self.t, self.yaw = pal, t, yaw
@@ -138,7 +138,7 @@ class Frame:
 
 
 class _Moved:
-    """An Acc seen through a Frame (the same box / cyl / tube / add)."""
+    """An Acc seen through a Frame (same box / cyl / tube / add)."""
 
     def __init__(self, acc, t, yaw):
         self.acc, self.t, self.yaw = acc, t, yaw
@@ -177,14 +177,14 @@ def col_hcyl(parent, x, y, z, r, length, yaw=0.0):
 
 
 def flat_dec(x, y, z):
-    """A Dec page lying on the ground (or a roof) at height y, read from the front: u = +x, v = -z."""
+    """Dec page lying flat at height y, read from the front: u = +x, v = -z."""
     d = Dec("+z", (x, y, z))
     d.right, d.up, d.n = (1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)
     return d
 
 
 def capsule(r, length, end, seg=12):
-    """A tank on its side: the axis along z, `length` of straight with a rounded end of depth `end` at each."""
+    """Tank on its side, axis along z: `length` of straight, rounded ends of depth `end`."""
     prof = []
     for i in range(0, 5):
         a = (PI / 2) * i / 4
@@ -196,9 +196,8 @@ def capsule(r, length, end, seg=12):
 
 
 def dishlet(A, rim_acc, strut_acc, pos, R, tilt, yaw):
-    """A small reflector in the dish stations' style (build_dish.py): a thin paraboloid shell opening along +y, a trim-coloured rim ring and three
-    struts to a feed, all tilted `tilt` about x then turned `yaw` about the vertical and set at `pos`. R is the rim's radius; A, rim_acc and
-    strut_acc take the shell, the ring (and the feed's head) and the struts."""
+    """Small reflector in build_dish.py's style: thin paraboloid opening along +y, trim rim ring, three struts to a feed; tilted `tilt`
+    about x, turned `yaw`, set at `pos`. R: rim radius. A, rim_acc, strut_acc take the shell, the ring (and feed head), the struts."""
     foc, t, n = 0.8 * R, 0.05, 5
     par = lambda r: r * r / (4 * foc)
     rs = [R * i / n for i in range(n + 1)]
@@ -214,9 +213,8 @@ def dishlet(A, rim_acc, strut_acc, pos, R, tilt, yaw):
 
 
 def rover(F, parked=True):
-    """The motor pool's utility rover, in its own frame (nose +z, tyres on y = 0): a ladder frame on four big tyres, a roll cage over an
-    open seat, the battery pack in front and the drive unit behind. Parked it has its fenders, lamps, cover and whip on; on the lift
-    its drive unit is bare and glowing hot. F is a Frame."""
+    """Motor-pool utility rover in its own frame (nose +z, tyres on y = 0): ladder frame, four big tyres, roll cage over an open seat,
+    battery pack in front, drive unit behind. Parked: fenders, lamps, cover, whip; on the lift: drive unit bare and hot. F is a Frame."""
     A = F("steel", 0.04)
     for s in (-1, 1):
         A.box(s * 0.95, 1.15, 0.0, 0.24, 0.26, 6.8)
@@ -228,7 +226,7 @@ def rover(F, parked=True):
     for s in (-1, 1):
         for z in (-2.2, 2.2):
             T.cyl(s * 1.95, 0.55, z, 0.8, 0.5, 12, "x")
-            H.cyl(s * 1.95, 0.52, z, 0.35, 0.56, 10, "x")                # (the hub on the wheel's own centre)
+            H.cyl(s * 1.95, 0.52, z, 0.35, 0.56, 10, "x")                # hub on the wheel centre
     K = F("dark", 0.0)
     for sx in (-1, 1):
         for sz in (-1, 1):
@@ -242,7 +240,7 @@ def rover(F, parked=True):
     F("blue", 0.0).box(0, 1.41, 2.4, 1.4, 0.5, 0.9)
     F("green", 0.0).box(0, 1.7, 2.86, 1.1, 0.07, 0.05)
     if parked:
-        F("navy", 0.03).box(0, 1.41, -2.3, 1.9, 0.9, 1.5)               # the drive unit under its cover
+        F("navy", 0.03).box(0, 1.41, -2.3, 1.9, 0.9, 1.5)               # drive unit cover
         Fd = F("trim", 0.03)
         for s in (-1, 1):
             for z in (-2.2, 2.2):
@@ -258,12 +256,12 @@ def rover(F, parked=True):
         F("steel", 0.0).tube((-0.9, 1.41, -3.0), (-0.9, 3.9, -3.0), 0.025, 4)
         F("orange", 0.0).box(-0.68, 3.5, -3.0, 0.42, 0.26, 0.02)
     else:
-        A.box(0, 1.41, -2.3, 1.7, 0.95, 1.3)                             # the drive unit, its cover off
+        A.box(0, 1.41, -2.3, 1.7, 0.95, 1.3)                             # drive unit, cover off
         F("hot", 0.0).cyl(0, 2.35, -2.3, 0.22, 0.12, 8)
 
 
 def lamp_post(P, h=7.5):
-    """A yard lamp in a Frame's own frame: a pole on a footing, an arm out along +z and a head shining down."""
+    """Yard lamp in a Frame: pole on a footing, arm along +z, head shining down."""
     P("concrete", 0.03).box(0, 0, 0, 0.6, 0.4, 0.6)
     S = P("steel", 0.03)
     S.cyl(0, 0.4, 0, 0.1, h - 0.4, 8)
@@ -273,7 +271,7 @@ def lamp_post(P, h=7.5):
 
 
 def railing(A, Cp, a, b, step=2.5):
-    """A yard railing from a to b (x, z) on the ground: steel posts with yellow caps and two rails."""
+    """Yard railing from a to b (x, z): steel posts, yellow caps, two rails."""
     (x0, z0), (x1, z1) = a, b
     L = math.hypot(x1 - x0, z1 - z0)
     n = max(1, round(L / step))
@@ -286,7 +284,7 @@ def railing(A, Cp, a, b, step=2.5):
 
 
 def hv_sign(d, u, v, w, h, layer=0):
-    """A DANGER / HIGH VOLTAGE board, (u, v) its lower-left: red header, black legend on white."""
+    """DANGER / HIGH VOLTAGE board, (u, v) lower-left: red header, black legend on white."""
     d.rect(u - 0.03, v - 0.03, u + w + 0.03, v + h + 0.03, "dark", layer)
     d.rect(u, v, u + w, v + h, "white", layer + 1)
     hh = h * 0.36
@@ -298,7 +296,7 @@ def hv_sign(d, u, v, w, h, layer=0):
 
 
 def build(NAME, PFX_, kind):
-    """One garage: kind "main" (three bays, a service office and the compound round it) or "small" (two bays, about an old shed's size)."""
+    """One garage: kind "main" (three bays, service office, compound) or "small" (two bays)."""
     global PFX
     PFX = PFX_
     FULL = kind == "main"
@@ -307,34 +305,34 @@ def build(NAME, PFX_, kind):
     # ---------------------------------------------------------------------------------------------------------------
     # the plan
     # ---------------------------------------------------------------------------------------------------------------
-    W, D = (38.0, 20.0) if FULL else (32.0, 17.0)      # the hall's outside (the small one is about the old sheds' 34 by 18)
+    W, D = (38.0, 20.0) if FULL else (32.0, 17.0)      # hall outside
     HX, HZ = W / 2, D / 2
-    FY = 0.08                          # the floor, a thin plinth proud of the ground (the road runs right up to the doors: no apron, no ramp)
-    TOP = 9.0 if FULL else 8.6         # the wall tops (the parapet stands on the roof above them)
-    RY = TOP + 0.3                     # the roof deck
-    BAYS = (-10.0, 0.0, 10.0) if FULL else (-8.0, 8.0)   # the bay centres
-    BH = 3.5                           # half a bay's width
-    OPEN = 5.85 if FULL else 5.4       # the top of the openings
-    JAMBS = [(-HX, BAYS[0] - BH)] + [(BAYS[i] + BH, BAYS[i + 1] - BH) for i in range(len(BAYS) - 1)] + [(BAYS[-1] + BH, HX)]  # the wall between openings
-    LMID, RMID = (JAMBS[0][0] + JAMBS[0][1]) / 2, (JAMBS[-1][0] + JAMBS[-1][1]) / 2   # the middle of the end piers
-    PIERS = [(a + b) / 2 for a, b in JAMBS[1:-1]]                                       # the middle of the piers between bays
-    FIT_DZ = 10.0 - HZ                 # the fit-outs are laid out for a hall 20 m deep: slide them forward to the back wall of a shallower one
+    FY = 0.08                          # floor: thin plinth (the road runs right up to the doors: no apron, no ramp)
+    TOP = 9.0 if FULL else 8.6         # wall tops (parapet stands on the roof above)
+    RY = TOP + 0.3                     # roof deck
+    BAYS = (-10.0, 0.0, 10.0) if FULL else (-8.0, 8.0)   # bay centres
+    BH = 3.5                           # half bay width
+    OPEN = 5.85 if FULL else 5.4       # top of the openings
+    JAMBS = [(-HX, BAYS[0] - BH)] + [(BAYS[i] + BH, BAYS[i + 1] - BH) for i in range(len(BAYS) - 1)] + [(BAYS[-1] + BH, HX)]  # wall between openings
+    LMID, RMID = (JAMBS[0][0] + JAMBS[0][1]) / 2, (JAMBS[-1][0] + JAMBS[-1][1]) / 2   # end pier middles
+    PIERS = [(a + b) / 2 for a, b in JAMBS[1:-1]]                                       # middles of piers between bays
+    FIT_DZ = 10.0 - HZ                 # fit-outs are laid out for a 20 m deep hall: slide them to a shallower one's back wall
     BX0, BX1 = BAYS[0] - BH, BAYS[-1] + BH
-    YY = 0.06                          # the top of the compound's slab (main), a step below the hall's plinth
+    YY = 0.06                          # compound slab top (main), a step below the plinth
 
-    # ---- the plinth (the road runs right up to it) ----
+    # ---- plinth (the road runs right up to it) ----
     A = Acc("plinth", "concrete", root, 0.06)
     A.box(0, 0, 0, W + 1.2, FY, D + 1.2)
     A.flush()
     A = Acc("shopFloor", "shopfloor", root, 0.0)
-    A.box(0, FY, 0, W - 1.0, 0.02, D - 1.0)                    # the workshop floor (lit: the game draws it self-lit)
+    A.box(0, FY, 0, W - 1.0, 0.02, D - 1.0)                    # workshop floor (self-lit in the game)
     A.flush()
 
-    # ---- the shell: front wall in pieces round the openings, the back and the sides, the lining inside ----
+    # ---- shell: front wall round the openings, back, sides, lining inside ----
     A = Acc("walls", "body", root, 0.07)
     for x0, x1 in JAMBS:
         A.box((x0 + x1) / 2, FY, HZ - 0.25, x1 - x0, OPEN - FY, 0.5)
-    A.box(0, OPEN, HZ - 0.25, W, TOP - OPEN, 0.5)              # the lintel across all the openings
+    A.box(0, OPEN, HZ - 0.25, W, TOP - OPEN, 0.5)              # lintel across all openings
     A.box(0, FY, -HZ + 0.25, W, TOP - FY, 0.5)
     for s in (-1, 1):
         A.box(s * (HX - 0.25), FY, 0, 0.5, TOP - FY, D)
@@ -348,7 +346,7 @@ def build(NAME, PFX_, kind):
     for x in [-(HX - 2.5) + 3.0 * i for i in range(int((W - 5.0) / 3.0) + 1)]:
         A.box(x, FY, -HZ + 0.56, 0.16, 7.35, 0.1)
     A.flush()
-    A = Acc("wainscot", "navy", root, 0.0)                      # a navy dado round the lining's foot
+    A = Acc("wainscot", "navy", root, 0.0)                      # navy dado round the lining's foot
     A.box(0, FY, -HZ + 0.555, W - 1.1, 1.2, 0.03)
     for s in (-1, 1):
         A.box(s * (HX - 0.555), FY, 0, 0.03, 1.2, D - 1.1)
@@ -361,8 +359,8 @@ def build(NAME, PFX_, kind):
         A.box(0, 7.45, z, W - 4.0, 0.08, 0.35)
     A.flush()
 
-    # ---- the hall's frame inside (seen through an open door): steel columns down the side walls under three roof trusses, a crane
-    # runway on brackets with a yellow bridge crane across the back and its hoist over bay 1, and the bay lines on the floor ----
+    # ---- inside frame (seen through open doors): side columns under three trusses, crane runway on brackets, yellow bridge crane
+    # across the back with its hoist over bay 1, bay lines on the floor ----
     TZS = (-HZ / 2, 0.0, HZ / 2)
     CX = HX - 0.75
     A = Acc("columns", "steel", root, 0.03)
@@ -383,13 +381,13 @@ def build(NAME, PFX_, kind):
                 x2 = x + span / n
                 A.tube((x, 6.8, z), (x2, 7.4, z), 0.04, 4) if i % 2 == 0 else A.tube((x, 7.4, z), (x2, 6.8, z), 0.04, 4)
     A.flush()
-    BZ = -HZ + 3.6                                            # the bridge crane's line
-    RX = CX - 0.45                                            # its runway's
+    BZ = -HZ + 3.6                                            # bridge crane line
+    RX = CX - 0.45                                            # runway line
     A = Acc("runway", "steel", root, 0.02)
     for s in (-1, 1):
         A.box(s * RX, 5.95, 0.0 - 0.2, 0.3, 0.3, D - 2.0)
         for z in TZS:
-            A.box(s * (RX + 0.25), 5.85, z, 0.3, 0.4, 0.3)        # the brackets off the columns
+            A.box(s * (RX + 0.25), 5.85, z, 0.3, 0.4, 0.3)        # column brackets
     A.flush()
     A = Acc("bridge", "gold", root, 0.03)
     A.box(0, 6.3, BZ, 2 * RX - 0.4, 0.42, 0.5)
@@ -410,10 +408,10 @@ def build(NAME, PFX_, kind):
         for s in (-1, 1):
             u = cx + s * BH
             d.rect(u - 0.06, -(HZ - 0.9), u + 0.06, HZ - 1.0, "hazard")
-    d.rect(-HX + 0.6, HZ - 2.66, HX - 0.6, HZ - 2.54, "white")          # the walkway line along the back
+    d.rect(-HX + 0.6, HZ - 2.66, HX - 0.6, HZ - 2.54, "white")          # walkway line along the back
     d.build(PFX + "bayLines", root)
 
-    # ---- the roof deck, its parapet and cap, the membrane's seams ----
+    # ---- roof deck, parapet and cap, membrane seams ----
     A = Acc("roof", "roof", root, 0.06)
     A.box(0, TOP, 0, W + 0.4, 0.3, D + 0.4)
     A.flush()
@@ -436,8 +434,8 @@ def build(NAME, PFX_, kind):
         x += 2.4
     d.build(PFX + "roofSeams", root)
 
-    # ---- the walls' dressing: a navy base course, a cyan band between two gold pinstripes, steel pilasters ----
-    # (round the sides and back whole, on the front only on the wall between the openings)
+    # ---- wall dressing: navy base course, cyan band between gold pinstripes, pilasters ----
+    # (all round the sides and back; on the front only between the openings)
     runs = [(x0, x1, HZ) for x0, x1 in JAMBS]
 
     def dress(name, slot, y0, h, out, ink=0.0):
@@ -453,8 +451,8 @@ def build(NAME, PFX_, kind):
     dress("band", "trim", 3.9, 0.7, 0.08, 0.02)
     dress("pinLow", "gold", 3.74, 0.09, 0.1)
     dress("pinHigh", "gold", 4.67, 0.09, 0.1)
-    PZ = (-0.375 * D, -0.125 * D, 0.125 * D, 0.375 * D)      # the side pilasters
-    PXS = (-0.4 * W, -0.2 * W, 0.0, 0.2 * W, 0.4 * W)         # the back ones
+    PZ = (-0.375 * D, -0.125 * D, 0.125 * D, 0.375 * D)      # side pilasters
+    PXS = (-0.4 * W, -0.2 * W, 0.0, 0.2 * W, 0.4 * W)         # back pilasters
     A = Acc("pilasters", "navy", root, 0.04)
     for z in PZ:
         for s in (-1, 1):
@@ -463,8 +461,7 @@ def build(NAME, PFX_, kind):
         A.box(x, FY, -HZ - 0.15, 0.5, TOP - FY, 0.3)
     A.flush()
 
-    # the cladding's panel seams: faint vertical joints every 1.25 m, below the band and above it (not under the pilasters, nor where
-    # the office stands against the wall)
+    # cladding seams: faint joints every 1.25 m above and below the band (not under pilasters or behind the office)
     SEGS = ((FY + 1.0, 3.7), (4.8, TOP - 0.1))
     clear = lambda v, posts: all(abs(v - p) > 0.5 for p in posts)
     for face, s in (("+x", 1), ("-x", -1)):
@@ -494,8 +491,7 @@ def build(NAME, PFX_, kind):
             x += 1.25
     d.build(PFX + "seamsFront", root)
 
-    # ---- the front: door hoods with the bay plates, the name board, the jamb posts, the wall lamps and keypads, floodlights on the
-    # parapet ----
+    # ---- front: door hoods and bay plates, name board, jamb posts, wall lamps, keypads, parapet floodlights ----
     A = Acc("hoods", "dark", root, 0.04)
     for cx in BAYS:
         A.box(cx, OPEN, HZ, 7.6, 0.9, 0.9)
@@ -505,7 +501,7 @@ def build(NAME, PFX_, kind):
         for s in (-1, 1):
             A.box(cx + s * (BH + 0.2), FY, HZ + 0.03, 0.4, OPEN - FY, 0.06)
     A.flush()
-    BW = BX1 - BX0 + 0.6                           # the name board spans the openings
+    BW = BX1 - BX0 + 0.6                           # name board spans the openings
     BY0, BHT = (7.0, 1.5) if FULL else (6.55, 1.1)
     A = Acc("board", "navy", root, 0.05)
     A.box(0, BY0, HZ + 0.09, BW, BHT, 0.18)
@@ -516,7 +512,7 @@ def build(NAME, PFX_, kind):
     for s in (-1, 1):
         A.box(s * (BW + 0.2) / 2, BY0 - 0.08, HZ + 0.1, 0.1, BHT + 0.16, 0.22)
     A.flush()
-    # the lamp over each pier and each end of the front
+    # a lamp over each pier and each front end
     A = Acc("wallLamps", "dark", root, 0.03)
     L = Acc("wallLampGlow", "lamp", root, 0.0)
     for x in [(a + b) / 2 for a, b in JAMBS]:
@@ -525,7 +521,7 @@ def build(NAME, PFX_, kind):
         L.box(x, 5.1, HZ + 0.3, 0.7, 0.06, 0.34)
     A.flush()
     L.flush()
-    # a keypad on the pier right of each door
+    # keypad right of each door
     A = Acc("keypads", "steel", root, 0.02)
     Gk = Acc("keypadLamps", "green", root, 0.0)
     for cx in BAYS:
@@ -533,7 +529,7 @@ def build(NAME, PFX_, kind):
         Gk.box(cx + BH + 0.68, 1.42, HZ + 0.105, 0.1, 0.08, 0.02)
     A.flush()
     Gk.flush()
-    # floodlights on the parapet over the piers, tilted down at the road
+    # parapet floodlights over the piers, tilted at the road
     A = Acc("floods", "dark", root, 0.03)
     Lf = Acc("floodGlow", "lamp", root, 0.0)
     tilt = 0.55
@@ -544,7 +540,7 @@ def build(NAME, PFX_, kind):
     A.flush()
     Lf.flush()
 
-    # personnel doors (in the front's end pier and in the back wall): a frame, a canopy on stays, the leaf with its window
+    # personnel doors (front end pier, back wall): frame, canopy on stays, leaf with window
     def pdoor(x, z0, sg, name):
         A = Acc(name, "dark", root, 0.03)
         A.box(x, FY, z0 + sg * 0.02, 1.6, 2.7, 0.1)
@@ -566,7 +562,7 @@ def build(NAME, PFX_, kind):
         for k in range(6):
             A.box(PDX + 2.4, 1.1 + k * 0.2, HZ + 0.08, 0.95, 0.06, 0.1)
         A.flush()
-    # the right end: a fire cabinet, the electrical cabinet and a conduit run to the roof
+    # right end: fire cabinet, electrical cabinet, conduit to the roof
     A = Acc("cabinets", "redsafe", root, 0.03)
     A.box(RMID - 1.45, 1.1, HZ + 0.1, 0.55, 0.85, 0.2)
     A.flush()
@@ -575,14 +571,14 @@ def build(NAME, PFX_, kind):
     A.tube((RMID + 1.05, 2.7, HZ + 0.1), (RMID + 1.05, TOP, HZ + 0.1), 0.06, 5)
     A.flush()
 
-    # ---- the sides and back: high windows between the pilasters, a side door with its lamp on the left, and on the back a rear
-    # roller door into bay 1's end of the hall, a personnel door and lamps over the yard ----
+    # ---- sides and back: high windows between pilasters, left side door and lamp; at the back a roller door into bay 1's end,
+    # a personnel door, yard lamps ----
     A = Acc("highFrames", "dark", root, 0.03)
     Gl = Acc("highGlass", "glass", root, 0.0)
     for s_ in (-1, 1):
         for z in (-0.25 * D, 0.0, 0.25 * D):
             if FULL and s_ > 0 and z > -0.2 * D:
-                continue                                     # (the office's roof is in front of these)
+                continue                                     # the office roof is in front of these
             A.box(s_ * (HX + 0.04), 6.1, z, 0.08, 1.1, 0.19 * D)
             Gl.box(s_ * (HX + 0.09), 6.25, z, 0.04, 0.8, 0.19 * D - 0.3)
     for x in (-0.3 * W, -0.1 * W, 0.1 * W, 0.3 * W):
@@ -603,10 +599,10 @@ def build(NAME, PFX_, kind):
     Lm.box(-HX - 0.4, 3.2, SDZ + 2.2, 0.34, 0.06, 0.7)
     Lm.flush()
 
-    RDX, RDW, RDH = -0.3 * W, 3.8, 4.4                         # the rear roller door
+    RDX, RDW, RDH = -0.3 * W, 3.8, 4.4                         # rear roller door
     A = Acc("rearDoorFrame", "dark", root, 0.03)
     A.box(RDX, FY, -HZ - 0.06, RDW + 0.5, RDH + 0.25 - FY, 0.12)
-    A.box(RDX, RDH, -HZ - 0.35, RDW + 0.6, 0.6, 0.6)           # the coil's hood
+    A.box(RDX, RDH, -HZ - 0.35, RDW + 0.6, 0.6, 0.6)           # coil hood
     A.flush()
     A = Acc("rearDoor", "door", root, 0.03)
     A.box(RDX, FY, -HZ - 0.15, RDW, RDH - FY, 0.06)
@@ -642,8 +638,8 @@ def build(NAME, PFX_, kind):
         A.cyl(x, 1.0, HZ + 2.4, 0.19, 0.09, 6)
     A.flush()
 
-    # ---- the lettering: the name board, the bay plates, the hazard stripes on the jambs and the thresholds ----
-    d = Dec("+z", (0, BY0 + BHT / 2, HZ + 0.18))      # (the middle of the board)
+    # ---- lettering: name board, bay plates, jamb and threshold hazard stripes ----
+    d = Dec("+z", (0, BY0 + BHT / 2, HZ + 0.18))      # board middle
     txt = "MERIDIAN MOTOR POOL" if FULL else "MERIDIAN SERVICE"
     ps = 0.17 if FULL else 0.15
     tw = text_width(txt, ps)
@@ -655,7 +651,7 @@ def build(NAME, PFX_, kind):
     d.build(PFX + "name", root)
     d = Dec("+z", (0, 0, HZ + 0.9))
     for cx, n in zip(BAYS, "123"):
-        # the plate is centred on the bay, and so is the lettering on the plate (a lamp either side, in the door's own pivot)
+        # plate and lettering centred on the bay (a lamp either side, in the door pivot)
         d.rect(cx - 1.15, OPEN + 0.22, cx + 1.15, OPEN + 0.72, "white", 0)
         d.text(f"BAY {n}", cx, OPEN + 0.47 - 3.5 * 0.05, 0.05, "label", 1, "c")
     d.build(PFX + "bayPlates", root)
@@ -665,17 +661,17 @@ def build(NAME, PFX_, kind):
             u = cx + s * (BH + 0.2)
             d.hazard(u - 0.17, 0.0, u + 0.17, OPEN - FY, "dark", "hazard", 0, 0.16, 0.9)
     d.build(PFX + "jambStripes", root)
-    # the floor: a hazard strip at each threshold
+    # hazard strip at each threshold
     d = flat_dec(0, FY + 0.01, HZ + 0.6)
     for cx in BAYS:
         d.hazard(cx - BH, 0.05, cx + BH, 0.75, "dark", "hazard", 0, 0.2, 0.8)
     d.build(PFX + "thresholds", root)
 
     # ---------------------------------------------------------------------------------------------------------------
-    # the bay doors: for each bay one closed and one open, as pivots the game picks between
+    # bay doors: a closed and an open pivot per bay, for the game to pick
     # ---------------------------------------------------------------------------------------------------------------
     for b, cx in enumerate(BAYS):
-        # the tracks and the hood are static; what differs is the panels and the status lamp
+        # tracks and hood are static; the panels and status lamp differ
         for state in ("closed", "open"):
             P = pivot(f"{PFX}door{b}_{state}", (0, 0, 0), root, role="door", bay=b, state=state)
             A = Acc(f"door{b}{state}", "door", P, 0.04)
@@ -694,11 +690,11 @@ def build(NAME, PFX_, kind):
                 H.flush()
                 lamp = "red"
             else:
-                A.box(cx, OPEN - 1.0, HZ - 0.36, 2 * BH - 0.04, 1.0, 0.12)   # the last panels, still in the opening
+                A.box(cx, OPEN - 1.0, HZ - 0.36, 2 * BH - 0.04, 1.0, 0.12)   # last panels, still in the opening
                 for k in (1, 2):
                     G.box(cx, OPEN - 1.0 + k * 0.33, HZ - 0.29, 2 * BH - 0.04, 0.05, 0.04)
                 R = Acc(f"door{b}{state}Rails", "steel", P, 0.0)
-                for s in (-1, 1):                                              # the overhead tracks the door runs back on
+                for s in (-1, 1):                                              # overhead tracks the door runs back on
                     R.box(cx + s * 3.15, OPEN - 0.25, 1.2, 0.12, 0.12, D - 2.4)
                     for z in (HZ - 4.0, HZ - 8.5, HZ - 13.0):
                         R.box(cx + s * 3.15, OPEN - 0.15, z, 0.1, 0.4, 0.1)
@@ -706,7 +702,7 @@ def build(NAME, PFX_, kind):
                 lamp = "green"
             A.flush()
             G.flush()
-            # the track on each jamb, and the lamp on the plate
+            # jamb tracks, plate lamps
             T = Acc(f"door{b}{state}Tracks", "steel", P, 0.0)
             for s in (-1, 1):
                 T.box(cx + s * (BH - 0.04), FY, HZ - 0.5, 0.14, OPEN - FY, 0.16)
@@ -717,10 +713,10 @@ def build(NAME, PFX_, kind):
             Lp.flush()
 
     # ---------------------------------------------------------------------------------------------------------------
-    # what is working inside each bay (built only for a bay that is open)
+    # bay fit-outs (built only for open bays)
     # ---------------------------------------------------------------------------------------------------------------
     def fit_lift(b):
-        # a rover on a two-post lift, its drive unit bare, a rolling toolbox and a hose reel
+        # rover on a two-post lift (drive unit bare), rolling toolbox, hose reel
         cx = BAYS[b]
         F = pivot(f"{PFX}fit{b}", (0, 0, 0), root, role="fit", bay=b)
         P = Pal("fit0", F, 0.0, dz=FIT_DZ)
@@ -735,7 +731,7 @@ def build(NAME, PFX_, kind):
             for t in (-1, 1):
                 A.box(cx + s * 1.82, 1.85, 0.6 + t * 0.9, 1.7, 0.13, 0.2)
                 A.cyl(cx + s * 1.0, 1.98, 0.6 + t * 0.9, 0.2, 0.12, 8)
-        rover(Frame(P, (cx, 0.95, 0.6)), parked=False)                   # (its frame rests on the arms' pads, 2.1 m up)
+        rover(Frame(P, (cx, 0.95, 0.6)), parked=False)                   # frame rests on the arm pads, 2.1 m up
         P("redsafe").box(cx - 3.0, FY, -6.2, 1.3, 1.25, 0.8)
         A = P("dark")
         for k in range(4):
@@ -743,7 +739,7 @@ def build(NAME, PFX_, kind):
         P("orange").cyl(cx + 2.8, 3.4, -9.2, 0.6, 0.35, 10, "z")
 
     def fit_stand(b):
-        # an engine on a stand, an inspection pit, a parts cart and drums
+        # engine on a stand, inspection pit, parts cart, drums
         cx = BAYS[b]
         F = pivot(f"{PFX}fit{b}", (0, 0, 0), root, role="fit", bay=b)
         P = Pal("fit1", F, 0.0, dz=FIT_DZ)
@@ -768,7 +764,7 @@ def build(NAME, PFX_, kind):
                 A.cyl(cx - 3.0 + sx * 0.42, FY + 0.13, 2.0 + sz * 0.7, 0.18, 0.1, 8, "x")
 
     def fit_bench(b):
-        # a workbench with a vice, a pegboard and parts shelves, a stack of tyres, a work lamp on a lead
+        # workbench with vice, pegboard, parts shelves, tyre stack, work lamp on a lead
         cx = BAYS[b]
         F = pivot(f"{PFX}fit{b}", (0, 0, 0), root, role="fit", bay=b)
         P = Pal("fit2", F, 0.0, dz=FIT_DZ)
@@ -799,16 +795,16 @@ def build(NAME, PFX_, kind):
         P("metal", 0.02).cyl(cx - 3.3, FY + 1.6, -4.6, 0.4, 0.02, 10)
         P("lamp").box(cx + 1.0, 4.4, -2.9, 0.3, 0.3, 0.3)
 
-    # which fit-out goes in which bay
+    # fit-out per bay
     for b, fit in enumerate((fit_lift, fit_stand, fit_bench) if FULL else (fit_lift, fit_bench)):
         fit(b)
 
     # ---------------------------------------------------------------------------------------------------------------
-    # the roof: a glazed monitor down the middle over the bays; in front of it the turbine vents (and, on the main one, its name
-    # painted big for the cranes and the shuttles); behind it the plant on dunnage with its ducts, the exhaust stacks, the solar
-    # array, a hatch with a guard rail at the ladder's head and a walkway of pavers between them; the antenna mast in the corner
+    # roof: glazed monitor over the bays; in front, turbine vents (and on the main one its name, big, for cranes and shuttles);
+    # behind, plant on dunnage with ducts, exhaust stacks, solar array, ladder hatch with guard rail, paver walkway; antenna mast
+    # in the corner
     # ---------------------------------------------------------------------------------------------------------------
-    MZ, MW, MUP, MRH = (0.5 if FULL else 0.3), 2.4, 0.6, 1.9   # the monitor's middle, half width, upstand and ridge
+    MZ, MW, MUP, MRH = (0.5 if FULL else 0.3), 2.4, 0.6, 1.9   # monitor middle, half width, upstand, ridge
     CW = W - 8.0                                                 # and length
     A = Acc("monitor", "body", root, 0.05)
     A.box(0, RY, MZ, CW, MUP, 2 * MW)
@@ -817,7 +813,7 @@ def build(NAME, PFX_, kind):
         A.add(extrude(gable, 0.3, "x"), (s * (CW / 2 - 0.15), RY, MZ))
     A.flush()
     sl, th = math.hypot(MW, MRH - MUP), math.atan2(MRH - MUP, MW)
-    nrm = (math.cos(th), math.sin(th))                            # (the +z slope's normal, in (y, z))
+    nrm = (math.cos(th), math.sin(th))                            # +z slope normal, in (y, z)
     A = Acc("monitorGlass", "glass", root, 0.0)
     for s in (-1, 1):
         A.add(cuboid(CW - 0.6, 0.05, sl)[:2], (0, RY + (MUP + MRH) / 2, MZ + s * MW / 2), (s * th, 0, 0))
@@ -836,7 +832,7 @@ def build(NAME, PFX_, kind):
     A.flush()
     Acc("monitorRidge", "roof", root, 0.03).box(0, RY + MRH - 0.08, MZ, CW - 0.2, 0.16, 0.5).flush()
 
-    # the turbine vents: a fixed neck on the roof, and the head that spins
+    # turbine vents: fixed neck, spinning head
     VZ = (MZ + MW + HZ - 0.4) / 2
     VX = 12.5 if FULL else 9.0
     for i, x in enumerate((-VX, VX)):
@@ -853,7 +849,7 @@ def build(NAME, PFX_, kind):
             vanes.append(xf(cuboid(0.07, 0.8, 0.5)[:2], (math.sin(a) * 0.72, 0.45, math.cos(a) * 0.72), (0, a + 0.5, 0)))
         mesh(f"{PFX}fanVanes{i}", join(vanes), "steel", Pf, 0.0)
     if FULL:
-        d = flat_dec(0, RY + 0.008, VZ)                # (over the roof's seams)
+        d = flat_dec(0, RY + 0.008, VZ)                # over the roof seams
         rps, rer = 0.22, 1.0
         tw = text_width("MOTOR POOL", rps)
         u0 = -(2 * rer + 0.6 + tw) / 2
@@ -861,13 +857,13 @@ def build(NAME, PFX_, kind):
         d.text("MOTOR POOL", u0 + 2 * rer + 0.6, -3.5 * rps, rps, "stripe", 1)
         d.build(PFX + "roofName", root)
 
-    # the plant: air handlers on steel dunnage, a fan pair on top, a grille, and a duct into a curb on the roof
+    # plant: air handlers on dunnage, fan pair on top, grille, duct into a roof curb
     PLZ = -HZ + 3.3
     for i, x in enumerate((-14.5, -10.6) if FULL else (-12.0,)):
         A = Acc(f"plant{i}", "metal", root, 0.05)
         A.box(x, RY + 0.3, PLZ, 3.4, 1.6, 2.2)
-        A.box(x, RY + 0.6, PLZ + 1.55, 0.7, 0.7, 0.9)               # the duct
-        A.box(x, RY, PLZ + 2.45, 1.0, 1.3, 1.0)                     # and its curb
+        A.box(x, RY + 0.6, PLZ + 1.55, 0.7, 0.7, 0.9)               # duct
+        A.box(x, RY, PLZ + 2.45, 1.0, 1.3, 1.0)                     # curb
         A.flush()
         A = Acc(f"plant{i}Dunnage", "steel", root, 0.02)
         for s in (-1, 1):
@@ -879,7 +875,7 @@ def build(NAME, PFX_, kind):
         for s in (-1, 1):
             A.cyl(x + s * 0.8, RY + 1.9, PLZ, 0.72, 0.12, 14)
         A.flush()
-    # exhaust stacks (the workshop's extraction), just right of the plant
+    # exhaust stacks (workshop extraction), right of the plant
     STK = ((-7.4, -3.4, 2.6), (-6.5, -2.8, 2.0), (-6.9, -4.3, 3.0)) if FULL else ((-7.5, -4.5, 2.4),)
     A = Acc("stacks", "steel", root, 0.04)
     for x, z, h in STK:
@@ -889,7 +885,7 @@ def build(NAME, PFX_, kind):
     for x, z, h in STK:
         A.cyl(x, RY + h, z, 0.32, 0.12, 8, rt=0.05)
     A.flush()
-    # the solar array: panels tilted toward the front in rows across the back half, a cable tray to the plant
+    # solar array: rows of front-tilted panels across the back half, cable tray to the plant
     rot = (PI / 9, 0, 0)
     SX0, SN, ROWS = (-2.6, 7, (-4.4, -7.4)) if FULL else (-3.5, 5, (-5.0,))
     A = Acc("solarPanels", "panel", root, 0.03)
@@ -906,7 +902,7 @@ def build(NAME, PFX_, kind):
     F.box((SX0 - 1.25 + plant_end) / 2, RY, -5.0, SX0 - 1.25 - plant_end, 0.12, 0.3)
     A.flush()
     F.flush()
-    # the hatch at the ladder's head, with its guard rail, and the walkway of pavers from it along the back
+    # hatch at the ladder head with guard rail; paver walkway from it along the back
     HKZ, HXX = -HZ + 2.0, HX - 1.9
     A = Acc("hatch", "metal", root, 0.03)
     A.box(HXX, RY, HKZ, 1.2, 0.5, 1.2)
@@ -925,7 +921,7 @@ def build(NAME, PFX_, kind):
         A.box(x, RY, -HZ + 0.95, 0.85, 0.06, 0.7)
         x -= 1.0
     A.flush()
-    # the roof ladder up the back wall: rails, rungs and cage hoops
+    # roof ladder up the back wall: rails, rungs, cage hoops
     A = Acc("ladder", "steel", root, 0.02)
     LX, LZ = HX - 2.0, -HZ - 0.5
     for s in (-1, 1):
@@ -941,7 +937,7 @@ def build(NAME, PFX_, kind):
             A.tube((LX + s * 0.3, y, LZ), (LX + s * 0.3, y, LZ + 0.5), 0.03, 4)
     A.flush()
     if FULL:
-        # the antenna mast with its dish and the warning lamp
+        # antenna mast, dish, warning lamp
         MX, MZ_ = -HX + 1.6, -HZ + 1.3
         A = Acc("mast", "steel", root, 0.03)
         A.tube((MX, RY, MZ_), (MX, RY + 7.2, MZ_), 0.09, 6)
@@ -953,12 +949,12 @@ def build(NAME, PFX_, kind):
         A.flush(); R_.flush(); S_.flush()
         pivot(PFX + "beacon", (MX, RY + 7.4, MZ_), root, role="blinker", radius=0.25)
 
-    # the hall's collider (the bays are for show: the doors' plane is a wall)
+    # hall collider (bays are for show: the door plane is a wall)
     col_box(root, 0, 0, 0, HX + 0.2, 5.4 if FULL else 5.0, HZ + 0.2)
 
     if FULL:
         # ---------------------------------------------------------------------------------------------------------------
-        # the service office on the right: windows, a door under a canopy with its lettering, steps and a roof plant
+        # service office on the right: windows, door under a lettered canopy, steps, roof plant
         # ---------------------------------------------------------------------------------------------------------------
         OX0, OX1, OZ0, OZ1, OH = HX, HX + 8.5, -3.0, HZ, 4.45
         A = Acc("office", "body", root, 0.06)
@@ -988,7 +984,7 @@ def build(NAME, PFX_, kind):
         A.box(OX1 + 0.04, 3.45, (OZ0 + OZ1) / 2, 0.08, 0.5, OZ1 - OZ0)
         A.box((OX0 + OX1) / 2 + 0.03, 3.45, OZ0 - 0.04, OX1 - OX0, 0.5, 0.08)
         A.flush()
-        # windows: lit panes in dark frames with sills, on the front and the end
+        # windows (front and end): lit panes, dark frames, sills
         WXS = (OX0 + 4.3, OX0 + 6.8)
         WZS = (OZ0 + 1.5, OZ0 + 4.7, OZ0 + 7.9, OZ0 + 11.1)
         A = Acc("officeFrames", "dark", root, 0.03)
@@ -1009,7 +1005,7 @@ def build(NAME, PFX_, kind):
         for z in WZS:
             A.box(OX1 + 0.13, 1.9, z, 0.05, 1.2, 0.08)
         A.flush()
-        # the door, canopy, steps and a lamp
+        # door, canopy, steps, lamp
         ODX = OX0 + 2.0
         A = Acc("officeDoor", "steel", root, 0.03)
         A.box(ODX, FY, OZ1 + 0.05, 1.5, 2.6, 0.1)
@@ -1028,7 +1024,7 @@ def build(NAME, PFX_, kind):
         d = Dec("+z", (ODX, 2.7, OZ1 + 1.36))
         d.text("SERVICE", -text_width("SERVICE", 0.045) / 2, 0.42 / 2 - 3.5 * 0.045, 0.045, "stripe", 0)
         d.build(PFX + "officeSign", root)
-        # the roof plant, a dish and a vent on the office
+        # office roof plant, dish, vent
         Acc("officePlant", "metal", root, 0.04).box(OX0 + 5.5, OH + 0.25, 1.0, 2.4, 1.2, 1.8).flush()
         Acc("officeFan", "dark", root, 0.03).cyl(OX0 + 5.5, OH + 1.45, 1.0, 0.7, 0.1, 12).flush()
         A, R_, S_ = Acc("officeDish", "white", root, 0.03), Acc("officeDishRim", "trim", root, 0.02), Acc("officeDishStruts", "steel", root, 0.0)
@@ -1038,22 +1034,22 @@ def build(NAME, PFX_, kind):
         col_box(root, (OX0 + OX1) / 2 + 0.25, 0, (OZ0 + OZ1) / 2, (OX1 - OX0) / 2 + 0.15, 2.7, (OZ1 - OZ0) / 2 + 0.2)
 
         # ---------------------------------------------------------------------------------------------------------------
-        # the compound round three sides of the hall (the road's forecourt is the fourth). On the left the fuel and coolant yard;
-        # behind the hall the back yard; behind the office the power compound; a railing round the outside. Only the tanks' bund and the
-        # power compound stand on concrete: the pumps, the back yard and the side lane are on the road's own bed, which traffic.js lays
-        # with the forecourt (garageRoad: the forecourt reaches out over the pumps, a wide bed without ruts covers the yard and the lane)
+        # compound round three sides (the road forecourt is the fourth): fuel / coolant yard left, back yard behind the hall,
+        # power compound behind the office, railing outside. Only the bund and power compound are on concrete; pumps, back yard and
+        # side lane sit on the road bed traffic.js lays with the forecourt (garageRoad: forecourt over the pumps, a wide rutless bed
+        # under the yard and lane)
         # ---------------------------------------------------------------------------------------------------------------
-        CX0, CX1, CZ0 = -27.4, 33.0, -28.0                 # the compound's outer edges (left, right, back)
-        YB = 0.0                                           # (what stands on the road's bed stands on the ground)
+        CX0, CX1, CZ0 = -27.4, 33.0, -28.0                 # compound outer edges (left, right, back)
+        YB = 0.0                                           # things on the road bed stand on the ground
         A = Acc("yardSlab", "concrete", root, 0.04)
         A.box((CX0 - HX - 0.6) / 2, 0, (-HZ - 0.6 + HZ + 0.2) / 2, -HX - 0.6 - CX0, YY, 2 * HZ + 0.8)   # under the bund
-        A.box((HX + 0.6 + HX + 8.6) / 2, 0, (-HZ - 0.6 - 3.5) / 2, 8.0, YY, HZ + 0.6 - 3.5)               # the power compound's
+        A.box((HX + 0.6 + HX + 8.6) / 2, 0, (-HZ - 0.6 - 3.5) / 2, 8.0, YY, HZ + 0.6 - 3.5)               # under the power compound
         A.flush()
 
-        # ---- the fuel and coolant yard: two tanks on cradles inside a bund, piped into the wall on stanchions; a stile over the bund,
-        # a sign board, a spill kit; out front a pump island under a canopy, with a fire point ----
+        # ---- fuel / coolant yard: two cradled tanks in a bund, piped into the wall on stanchions; stile, sign board, spill kit;
+        # out front a canopied pump island with a fire point ----
         TX, TR, TY = -HX - 4.6, 1.3, 2.0
-        BDX0, BDX1, BDZ0, BDZ1, BT = -27.2, -HX - 0.1, -HZ - 0.2, HZ, 0.24     # the bund's outer faces, its wall's thickness
+        BDX0, BDX1, BDZ0, BDZ1, BT = -27.2, -HX - 0.1, -HZ - 0.2, HZ, 0.24     # bund outer faces, wall thickness
         A = Acc("bund", "concrete", root, 0.04)
         A.box(BDX0 + BT / 2, YY, (BDZ0 + BDZ1) / 2, BT, 0.7, BDZ1 - BDZ0)
         for z in (BDZ0 + BT / 2, BDZ1 - BT / 2):
@@ -1067,7 +1063,7 @@ def build(NAME, PFX_, kind):
         col_box(root, BDX0 + BT / 2, 0, (BDZ0 + BDZ1) / 2, BT / 2, 0.4, (BDZ1 - BDZ0) / 2)
         for z in (BDZ0 + BT / 2, BDZ1 - BT / 2):
             col_box(root, (BDX0 + BDX1) / 2, 0, z, (BDX1 - BDX0) / 2, 0.4, BT / 2)
-        # the stile over the front wall
+        # stile over the front wall
         STX = -21.2
         A = Acc("stile", "steel", root, 0.02)
         for sg in (-1, 1):
@@ -1095,30 +1091,30 @@ def build(NAME, PFX_, kind):
             A.flush()
             Acc(f"tank{i}Hazard", "hazard", tank, 0.02).cyl(TX, TY - 0.08, tz, TR + 0.04, 0.16, 16, "z").flush()
             A = Acc(f"tank{i}Fit", "steel", tank, 0.03)
-            A.cyl(TX, TY + TR - 0.1, tz - 1.2, 0.38, 0.25, 10)             # the manway
+            A.cyl(TX, TY + TR - 0.1, tz - 1.2, 0.38, 0.25, 10)             # manway
             A.cyl(TX, TY + TR + 0.12, tz - 1.2, 0.45, 0.07, 10)
-            A.cyl(TX + 0.5, TY + TR - 0.1, tz + 1.4, 0.1, 0.8, 8)           # the relief stack
+            A.cyl(TX + 0.5, TY + TR - 0.1, tz + 1.4, 0.1, 0.8, 8)           # relief stack
             A.cyl(TX + 0.5, TY + TR + 0.7, tz + 1.4, 0.2, 0.08, 8)
-            for s in (-1, 1):                                                # a ladder up the end
+            for s in (-1, 1):                                                # end ladder
                 A.tube((TX + s * 0.3, YY, tz + 3.65), (TX + s * 0.3, TY + TR, tz + 3.2), 0.035, 4)
             for k in range(5):
                 t = (k + 0.5) / 5
                 A.tube((TX - 0.3, YY + t * (TY + TR - YY), tz + 3.65 - 0.45 * t), (TX + 0.3, YY + t * (TY + TR - YY), tz + 3.65 - 0.45 * t), 0.022, 4)
-            # the line: out of the tank's side, along the stanchions to the wall and up into it, a flange at the wall
+            # pipe: out of the tank side, along the stanchions, up into the wall, flange at the wall
             PY = 1.1
-            A.tube((TX + 0.5, PY, tz), (-HX - 0.3, PY, tz), 0.12, 6)                 # (from inside the tank)
+            A.tube((TX + 0.5, PY, tz), (-HX - 0.3, PY, tz), 0.12, 6)                 # starts inside the tank
             A.tube((-HX - 0.3, PY, tz), (-HX - 0.3, 2.4, tz), 0.12, 6)
             A.tube((-HX - 0.3, 2.4, tz), (-HX + 0.1, 2.4, tz), 0.12, 6)
             A.cyl(-HX - 0.12, 2.4 - 0.06, tz, 0.2, 0.12, 8, "x")
             for x in (-21.0,):
                 A.box(x, YY, tz, 0.14, PY - 0.12 - YY, 0.14)
                 A.box(x, PY - 0.18, tz, 0.5, 0.06, 0.18)
-            A.cyl(-21.9, PY, tz, 0.08, 0.35, 6)                               # the valve's stem
+            A.cyl(-21.9, PY, tz, 0.08, 0.35, 6)                               # valve stem
             A.flush()
             Acc(f"tank{i}Valve", "redsafe", tank, 0.02).add(torus(0.22, 0.04, 12, 5), (-21.9, PY + 0.4, tz)).flush()
             Acc(f"tank{i}Gauge", "white", tank, 0.0).cyl(TX - TR - 0.05, TY - 0.2, tz, 0.22, 0.08, 12, "x").flush()
             col_hcyl(root, TX, TY, tz, 1.5, 8.2)
-        # the spill kit in the bund's corner, the sign board on posts in front of it, and a lamp post at the back
+        # spill kit in the bund corner, sign board in front, lamp post at the back
         Acc("spillKit", "hazard", root, 0.03).box(-20.0, YY, BDZ1 - 0.9, 0.9, 0.75, 0.7).flush()
         Acc("spillKitLid", "dark", root, 0.02).box(-20.0, YY + 0.75, BDZ1 - 0.9, 0.96, 0.08, 0.76).flush()
         SGX, SGZ = -25.5, BDZ1 + 0.5
@@ -1135,7 +1131,7 @@ def build(NAME, PFX_, kind):
         prohibition(d, 0.6, 0.5, 0.36, "smoke", 1)
         d.build(PFX + "fuelSignFace", root)
         col_box(root, SGX, 0, SGZ, 1.1, 1.25, 0.1)
-        # the pump island: two pumps on a kerbed island under a canopy, a fire point at its end
+        # pump island: two pumps on a kerbed island under a canopy, fire point at the end
         IZ = HZ + 4.2
         A = Acc("island", "concrete", root, 0.05)
         A.box(-21.5, 0, IZ, 4.6, 0.22, 1.4)
@@ -1174,12 +1170,12 @@ def build(NAME, PFX_, kind):
         Fp("redsafe").cyl(-24.6, 0.5, IZ + 0.18, 0.12, 0.55, 8)
         Fp("dark", 0.0).cyl(-24.6, 1.05, IZ + 0.18, 0.05, 0.1, 6)
 
-        # ---- the back yard: a walkway line along the hall, a hatched loading box at the rear door, a rover park with chargers on the
-        # right, the parts store (containers, the game's own) on the left, a pallet rack, tyres, a skip, drums on a spill pallet ----
+        # ---- back yard: walkway line, hatched loading box at the rear door, rover park with chargers (right), parts store (the
+        # game's containers, left), pallet rack, tyres, skip, drums on a spill pallet ----
         d = flat_dec(0, YY, 0)
-        d.rect(RDX + RDW / 2 + 0.3, HZ + 2.7, CX1 - 5.6, HZ + 2.82, "hazard")            # the walkway's edge (v = -z)
+        d.rect(RDX + RDW / 2 + 0.3, HZ + 2.7, CX1 - 5.6, HZ + 2.82, "hazard")            # walkway edge (v = -z)
         d.hazard(RDX - RDW / 2, HZ + 0.7, RDX + RDW / 2, HZ + 4.9, "hazard", "floor", 0, 0.3, 1.0)
-        PKX = (1.0, 6.0, 11.0, 16.0, 21.0)                       # the rover park's bay lines
+        PKX = (1.0, 6.0, 11.0, 16.0, 21.0)                       # rover park bay lines
         PK0, PK1 = -26.4, -18.8
         for x in PKX:
             d.rect(x - 0.06, -PK1, x + 0.06, -PK0, "white")
@@ -1194,12 +1190,12 @@ def build(NAME, PFX_, kind):
             d.poly([(tail[0] + n_[0] * w / 2, tail[1] + n_[1] * w / 2), (neck[0] + n_[0] * w / 2, neck[1] + n_[1] * w / 2),
                     (neck[0] - n_[0] * w / 2, neck[1] - n_[1] * w / 2), (tail[0] - n_[0] * w / 2, tail[1] - n_[1] * w / 2)], "white")
             d.poly([(neck[0] + n_[0] * 0.55, neck[1] + n_[1] * 0.55), head, (neck[0] - n_[0] * 0.55, neck[1] - n_[1] * 0.55)], "white")
-        arrow(30.4, -4.0, 0.0, 1.0)                              # (down the lane, toward the back: +v is -z)
+        arrow(30.4, -4.0, 0.0, 1.0)                              # down the lane to the back (+v is -z)
         arrow(30.4, 7.0, 0.0, 1.0)
-        arrow(24.0, 16.4, -1.0, 0.0)                             # (along the back, toward the park)
+        arrow(24.0, 16.4, -1.0, 0.0)                             # along the back to the park
         d.build(PFX + "yardMarks", root)
 
-        # the rover park: wheel stops, a charger at the head of each bay, two rovers home and on charge
+        # rover park: wheel stops, a charger per bay, two rovers on charge
         A = Acc("wheelStops", "hazard", root, 0.02)
         for i in range(len(PKX) - 1):
             A.box((PKX[i] + PKX[i + 1]) / 2, YB, PK0 + 0.5, 1.8, 0.15, 0.25)
@@ -1215,13 +1211,13 @@ def build(NAME, PFX_, kind):
         Rp = Pal("parked", root, 0.03)
         for bay in (0, 2):
             x = (PKX[bay] + PKX[bay + 1]) / 2
-            rz = PK0 + 0.65 + 3.65                               # (its back bumper just short of the wheel stop)
+            rz = PK0 + 0.65 + 3.65                               # back bumper just short of the wheel stop
             rover(Frame(Rp, (x, YB, rz)), parked=True)
             Rp("dark", 0.0).tube((x + 1.3, YB + 0.85, PK0 - 0.45), (x + 0.6, YB + 0.35, PK0 + 0.2), 0.04, 4)
             Rp("dark", 0.0).tube((x + 0.6, YB + 0.35, PK0 + 0.2), (x + 0.3, YB + 0.9, rz - 3.6), 0.04, 4)
             col_box(root, x, 0, rz, 2.25, 1.45, 3.7)
 
-        # the parts store: a stack of two containers and one beside it, end-on to the yard (the game stands its cargo boxes there)
+        # parts store: a two-high container stack and one beside it, end-on to the yard (the game places its cargo boxes)
         for z, nh in ((-23.6, 2), (-19.4, 1)):
             pivot(f"{PFX}cargo{nh}", (-18.0, YB, z), root, role="cargo", n=nh, yaw=PI / 2, faction="meridian")
         # drums on a spill pallet by the store
@@ -1235,7 +1231,7 @@ def build(NAME, PFX_, kind):
                 A.cyl(x, YB + 1.2, z, 0.4, 0.04, 12)
             A.flush()
         col_box(root, -15.6, 0, -14.6, 1.0, 0.65, 0.75)
-        # the pallet rack against the back railing: blue frames, orange beams, crates, bins, tyres and gas bottles
+        # pallet rack on the back railing: blue frames, orange beams, crates, bins, tyres, gas bottles
         RKX, RKZ = -3.5, -26.6
         Rk = Pal("rack", root, 0.02)
         for x in (RKX - 2.75, RKX, RKX + 2.75):
@@ -1248,19 +1244,19 @@ def build(NAME, PFX_, kind):
                 Rk("orange").box(RKX, YB + y, RKZ + dz, 5.6, 0.12, 0.1)
         for y in (1.37, 2.57):
             Rk("metal", 0.0).box(RKX, YB + y, RKZ, 5.4, 0.04, 1.0)
-        for x in (RKX - 2.0, RKX - 0.75):                      # the floor: tyres on their sides
+        for x in (RKX - 2.0, RKX - 0.75):                      # floor: tyres on their sides
             for k in range(3):
                 Rk("tire").cyl(x, YB + k * 0.3, RKZ, 0.55, 0.3, 10)
         for x in (RKX + 0.8, RKX + 2.0):
             Rk("blue").cyl(x, YB, RKZ, 0.36, 0.95, 10)
-        for i, x in enumerate((RKX - 2.0, RKX - 0.8, RKX + 0.7, RKX + 1.9)):   # the first beam level: crates and bins
+        for i, x in enumerate((RKX - 2.0, RKX - 0.8, RKX + 0.7, RKX + 1.9)):   # first beam level: crates and bins
             Rk("steel" if i % 2 == 0 else "navy").box(x, YB + 1.41, RKZ, 1.0, 0.75 if i % 2 == 0 else 0.6, 0.85)
-        for x in (RKX - 1.6, RKX + 1.2):                      # the second: gas bottles lying in a cradle, and a crate
+        for x in (RKX - 1.6, RKX + 1.2):                      # second: gas bottles in a cradle, a crate
             for k in range(3):
-                Rk("tank").cyl(x - 0.4 + k * 0.4, YB + 2.79 - 0.7, RKZ, 0.18, 1.4, 8, "z")   # (a lying cylinder: y0 + h / 2 is its axis)
+                Rk("tank").cyl(x - 0.4 + k * 0.4, YB + 2.79 - 0.7, RKZ, 0.18, 1.4, 8, "z")   # lying cylinder: axis at y0 + h / 2
         Rk("orange").box(RKX + 2.3, YB + 2.61, RKZ, 0.8, 0.7, 0.8)
         col_box(root, RKX, 0, RKZ, 2.85, 1.9, 0.6)
-        # a loose stack of tyres and one leaning on it
+        # loose tyre stack, one leaning on it
         A = Acc("tyres", "tire", root, 0.04)
         for k in range(4):
             A.cyl(-8.4, YB + k * 0.3, -25.9, 0.78, 0.3, 12)
@@ -1268,7 +1264,7 @@ def build(NAME, PFX_, kind):
         A.flush()
         Acc("tyreHub", "metal", root, 0.0).cyl(-8.4, YB + 1.2, -25.9, 0.38, 0.02, 10).flush()
         col_cyl(root, -8.0, 0, -25.9, 1.0, 1.3)
-        # the skip: an open steel bin with lifting lugs, junk sticking out of it
+        # skip: open steel bin with lifting lugs, junk sticking out
         SKX, SKZ = -5.5, -17.6
         A = Acc("skip", "hazard", root, 0.04)
         A.box(SKX, YB, SKZ, 3.0, 0.12, 1.7)
@@ -1289,7 +1285,7 @@ def build(NAME, PFX_, kind):
         Sk("trim").add(cuboid(0.66, 0.08, 1.9)[:2], (SKX - 0.2, YB + 1.25, SKZ - 0.2), (-0.4, 0.9, 0.2))
         col_box(root, SKX, 0, SKZ, 1.75, 0.75, 1.0)
 
-        # ---- the power compound behind the office: a transformer and a battery container behind a railing, a conduit into the hall ----
+        # ---- power compound behind the office: transformer, battery container, railing, conduit into the hall ----
         Pw = Pal("power", root, 0.03)
         TFX, TFZ = HX + 3.4, -7.0
         Pw("concrete").box(TFX, YY, TFZ, 2.6, 0.2, 2.2)
@@ -1324,7 +1320,7 @@ def build(NAME, PFX_, kind):
         d.build(PFX + "batteryName", root)
         col_box(root, BBX, 0, BBZ, 1.35, 1.4, BBL / 2 + 0.2)
 
-        # ---- the railing: along the back and down the right side, and round the power compound (a gap for its gate) ----
+        # ---- railing: back, right side, and round the power compound (gap for its gate) ----
         A = Acc("railing", "steel", root, 0.02)
         Cp = Acc("railingCaps", "hazard", root, 0.0)
         RL = [((-13.8, CZ0 + 0.1), (CX1 - 0.1, CZ0 + 0.1)), ((CX1 - 0.1, CZ0 + 0.1), (CX1 - 0.1, HZ - 0.2)),

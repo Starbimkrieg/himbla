@@ -4,40 +4,37 @@ import { TimeGraph, GpuTimer } from './perfgraph.js';
 import { InputMonitor } from './inputmon.js';
 import { unbendPoint } from './curve.js';
 
-// Dev overlay: one place for every on-screen dev readout. F3 shows or hides the lot while you play (on
-// any screen); Dev menu → Debug overlay picks which sections are in it. Which ones, and whether it's up,
-// are remembered across launches. It only works once the dev menu has been unlocked (cheats.js), nothing
-// is built until then, and while it's off main.js's frame hooks are a single branch each.
+// Dev overlay: every on-screen dev readout. F3 toggles it (any screen); Dev menu → Debug overlay picks
+// sections. Both are remembered across launches. Works only once the dev menu is unlocked (cheats.js);
+// nothing is built until then, and while off main.js's frame hooks are one branch each.
 //
-// Frame times are the gap between one frame() and the next (so they include vsync and any wait on the
-// GPU). The CPU stages are main-thread time, from main.js calling lap() at the end of each stage: whatever
-// they don't add up to is the browser / GPU / vsync. The 30 s graphs come from perfgraph.js.
+// Frame times are frame()-to-frame() gaps (so include vsync and GPU waits). CPU stages are main-thread
+// time from main.js's lap() calls; the remainder is browser / GPU / vsync. 30 s graphs: perfgraph.js.
 
 const KEY = 'mr-dev-overlay';
 const RING = 600; // frames kept for p99 / worst / hitches
 const SAMPLE_MS = 250; // graph samples
 const PUBLISH_MS = 500; // text refresh
-const MON_W = 360 + 6; // the input monitor's width (style.css #input-mon) and the gap beside it
+const MON_W = 360 + 6; // input monitor width (style.css #input-mon) + gap
 
-// box: which panel a section sits in (performance on the right, game debug beside it); the AI paths are
-// drawn in the world and the input monitor is its own panel, so neither has a box
+// box: the section's panel (perf on the right, game debug beside it); AI paths draw in the world and the
+// input monitor is its own panel, so neither has a box
 export const SECTIONS = [
   { key: 'frame', name: 'FRAME TIMES', box: 'perf' }, // FPS, frame ms, p99, hitches, 30 s FPS graph
   { key: 'load', name: 'CPU & GPU GRAPHS', box: 'perf' }, // 30 s load graphs
   { key: 'stages', name: 'CPU TIME BY STAGE', box: 'perf' },
-  { key: 'detail', name: 'STAGE DETAIL (player, systems)', box: null, sub: true }, // (rows under the stages: part of that section)
+  { key: 'detail', name: 'STAGE DETAIL (player, systems)', box: null, sub: true }, // (rows inside the stages section)
   { key: 'render', name: 'DRAW CALLS & POLYGONS', box: 'perf' },
   { key: 'world', name: 'WORLD COUNTS', box: 'perf' },
-  { key: 'where', name: 'WHERE (PLACE-LOCAL COORDINATES)', box: 'game' }, // the camera and the runner in the nearest place's own x, y, z (flat, as its builders write them)
+  { key: 'where', name: 'WHERE (PLACE-LOCAL COORDINATES)', box: 'game' }, // camera and runner in the nearest place's flat builder x, y, z
   { key: 'pirates', name: 'PIRATE SPAWNS', box: 'game' },
   { key: 'paths', name: 'AI PATHS', box: null },
   { key: 'input', name: 'INPUT & CONTROLLER MONITOR', box: null },
 ];
 const DEFAULTS = { frame: true, load: false, stages: true, detail: true, render: true, world: true, where: true, pirates: false, paths: false, input: false };
 
-// The stages of a frame, in the order main.js reaches them (debug and overlay are this overlay's own cost).
-// A stage with a third entry is a group: its row is the sum of its parts, and the parts (each a lap() of its
-// own, where main.js and player.js call them) show under it with STAGE DETAIL on.
+// Frame stages in main.js order (debug and overlay are this overlay's own cost). A third entry makes a group:
+// its row sums its parts (each its own lap() in main.js / player.js), shown under it with STAGE DETAIL on.
 const STAGES = [
   ['player', 'player + input', [
     ['pad', 'pad + input'], ['look', 'mouse look'], ['indoors', 'indoors check'], ['rail', 'rail grind'], ['physics', 'move + physics'],
@@ -54,8 +51,8 @@ const STAGES = [
   ['hud', 'hud + audio'],
   ['terrain', 'terrain stream'],
   ['render', 'render submit'],
-  ['debug', 'debug drawing'], // (AI paths, enemy markers, the input monitor)
-  ['overlay', 'this overlay'], // (its own text and graphs: nonzero only on the frames that refresh them)
+  ['debug', 'debug drawing'], // (AI paths, enemy markers, input monitor)
+  ['overlay', 'this overlay'], // (its text and graphs: nonzero only on refresh frames)
 ];
 const LAPS = []; // { key, label, parent (index, or -1), kids (indexes) }: groups and their parts, flat
 for (const [key, label, parts] of STAGES) {
@@ -65,7 +62,7 @@ for (const [key, label, parts] of STAGES) {
 }
 const LAP_IX = Object.fromEntries(LAPS.map((L, i) => [L.key, i]));
 const GROUPS = LAPS.filter((L) => L.kids.length);
-const DETAIL_AVG = 0.1, DETAIL_MAX = 0.5; // ms: a part shows under its group when it averages this much, or spiked to this
+const DETAIL_AVG = 0.1, DETAIL_MAX = 0.5; // ms: a part shows when its average or spike reaches these
 
 const GOOD = '#7dff3a', WARN = '#ffd23f', BAD = '#ff4a4a', LOAD = '#4fd8ff';
 const f1 = (v, w = 5) => v.toFixed(1).padStart(w);
@@ -109,7 +106,7 @@ export class DevOverlay {
     try { localStorage.setItem(KEY, JSON.stringify({ on: this.on, sec: this.sec })); } catch { /* unavailable */ }
   }
 
-  // F3 / the menu's master switch. Does nothing until the dev menu has been unlocked.
+  // F3 / the menu's master switch. No-op until the dev menu is unlocked.
   toggle() {
     if (!this.cheats.unlocked) return false;
     this.on = !this.on;
@@ -124,11 +121,11 @@ export class DevOverlay {
     this.apply();
   }
 
-  // push the on / off state into the DOM and the renderer
+  // push on / off state into the DOM and renderer
   apply() {
     const R = this.game.renderer;
-    // (three resets its draw counters on every render() call, and the post pass renders twice a frame:
-    // read the whole frame's worth by resetting them ourselves, in renderStart())
+    // (three resets draw counters per render() and the post pass renders twice a frame, so we reset them
+    // ourselves in renderStart() to count the whole frame)
     if (R) R.info.autoReset = !this.shows('render');
     if (!this.on) { this.live = false; this.lastBegin = 0; }
     if (!this.dom && this.on) this.build();
@@ -148,7 +145,7 @@ export class DevOverlay {
       this.dom.root.style.right = `${12 + (this.shows('input') ? MON_W : 0)}px`; // (clear of the input monitor)
     }
     const now = performance.now();
-    this.pubAt = this.sampleAt = now; // (the first numbers come after a clean half second)
+    this.pubAt = this.sampleAt = now; // (first numbers after a clean half second)
     this.winMs = this.winN = this.winFrames = this.sFrames = this.cpuSum = this.cpuN = 0;
     this.sum.fill(0); this.max.fill(0);
     if (this.dom && this.dom.frame.graph) { this.fpsG.clear(); this.loadG.cpu.g.clear(); this.loadG.gpu.g.clear(); }
@@ -163,7 +160,7 @@ export class DevOverlay {
       el.className = `dv-box dv-${name}`;
       root.appendChild(el);
     };
-    box('game'); box('perf'); box('none'); // (left to right: the performance box sits against the screen edge)
+    box('game'); box('perf'); box('none'); // (left to right: perf against the screen edge)
     const sec = (key, parts) => {
       const s = SECTIONS.find((x) => x.key === key);
       const el = document.createElement('div');
@@ -205,7 +202,7 @@ export class DevOverlay {
     const t = performance.now();
     if (this.lastBegin) {
       const ms = t - this.lastBegin;
-      if (ms < 2000) { // (longer is a hidden tab or a stall, not a frame)
+      if (ms < 2000) { // (longer: hidden tab or stall)
         this.ring[this.head] = ms;
         this.head = (this.head + 1) % RING;
         if (this.count < RING) this.count++;
@@ -218,7 +215,7 @@ export class DevOverlay {
     this.cur.fill(0);
   }
 
-  // end of a stage: the time since the last lap() is that stage's
+  // end of a stage: time since the last lap() is that stage's
   lap(name) {
     if (!this.live) return;
     const i = LAP_IX[name];
@@ -228,14 +225,14 @@ export class DevOverlay {
     this.tLap = t;
   }
 
-  // just before the frame is drawn: this frame's draw counters start from zero, and the GPU timer opens
+  // just before drawing: zero the draw counters, open the GPU timer
   renderStart() {
     if (!this.live) return;
     if (this.sec.render) this.game.renderer.info.reset();
     if (this.sec.load) (this.gpuT ||= new GpuTimer(this.game.renderer)).begin();
   }
 
-  // just after: the GPU timer closes, and the main thread's frame so far (update + submitting the draws) is the CPU load
+  // just after: close the GPU timer; the main thread's frame so far (update + draw submit) is the CPU load
   renderEnd() {
     if (!this.live) return;
     if (this.gpuT) this.gpuT.end();
@@ -244,7 +241,7 @@ export class DevOverlay {
     this.cpuN++;
   }
 
-  // every frame, whatever the screen (a pause or a menu is when you'd want to read it): the input monitor
+  // input monitor: every frame on any screen (pause and menus are when you'd read it)
   updateInput() {
     const m = this.mon;
     if (this.shows('input')) {
@@ -256,7 +253,7 @@ export class DevOverlay {
 
   end() {
     if (!this.live) return;
-    for (const G of GROUPS) for (const k of G.kids) this.cur[LAP_IX[G.key]] += this.cur[k]; // (a group's frame is the sum of its parts)
+    for (const G of GROUPS) for (const k of G.kids) this.cur[LAP_IX[G.key]] += this.cur[k]; // (group = sum of parts)
     for (let i = 0; i < LAPS.length; i++) {
       this.sum[i] += this.cur[i];
       if (this.cur[i] > this.max[i]) this.max[i] = this.cur[i];
@@ -265,17 +262,17 @@ export class DevOverlay {
     const t = performance.now();
     if (t - this.sampleAt >= SAMPLE_MS) this.sample(t);
     if (t - this.pubAt >= PUBLISH_MS) this.publish(t);
-    const own = performance.now() - t; // (counted in the next refresh's numbers)
+    const own = performance.now() - t; // (counted in the next refresh)
     this.sum[LAP_IX.overlay] += own;
     if (own > this.max[LAP_IX.overlay]) this.max[LAP_IX.overlay] = own;
   }
 
-  // every frame while playing (Cheats.tick): the in-world debug drawing
+  // in-world debug drawing, every frame while playing (Cheats.tick)
   tick() {
-    this.lap('look'); // (what ran before this is the mouse look and prep; the drawing below gets its own stage)
+    this.lap('look'); // (closes mouse look + prep; the drawing below gets its own stage)
     if (this.shows('paths')) (this.paths ||= new AIPaths(this.game)).update();
     else if (this.paths) this.paths.hide();
-    if (this.shows('pirates')) (this.marks ||= new EnemyMarkers(this.game)).update(); // (rings + beacons on every enemy)
+    if (this.shows('pirates')) (this.marks ||= new EnemyMarkers(this.game)).update(); // (rings + beacons on enemies)
     else if (this.marks) this.marks.hide();
     this.lap('debug');
   }
@@ -287,8 +284,8 @@ export class DevOverlay {
     const frames = this.sFrames;
     const cpuMs = this.cpuN ? this.cpuSum / this.cpuN : null;
     this.sampleAt = t; this.sFrames = 0; this.cpuSum = 0; this.cpuN = 0;
-    const gpuMs = this.gpuT ? this.gpuT.take() : null; // (drained even when the graph is off, so it never reads a stale average)
-    if (dt > 1000 || !frames) return; // a stall or a hidden tab: no bogus point (the graphs show it as a break)
+    const gpuMs = this.gpuT ? this.gpuT.take() : null; // (drained even with the graph off: no stale average)
+    if (dt > 1000 || !frames) return; // stall or hidden tab: no point (graphs show a break)
     const fps = (frames * 1000) / dt, frameMs = 1000 / fps;
     if (this.sec.frame) {
       this.fpsG.push(t, fps);
@@ -307,7 +304,7 @@ export class DevOverlay {
     }
   }
 
-  // green inside the frame budget, yellow up to two budgets, red past that
+  // green within the frame budget, yellow up to two budgets, red beyond
   colour(ms) { return ms <= this.targetMs * 1.15 ? GOOD : ms <= this.targetMs * 2.05 ? WARN : BAD; }
 
   // ---------- text (twice a second) ----------
@@ -316,7 +313,7 @@ export class DevOverlay {
     this.pubAt = t;
     const D = this.dom;
     const cap = this.game.settings ? this.game.settings.v.fpsCap : 0;
-    this.targetMs = cap ? 1000 / cap : 1000 / 60; // (the budget the colours and the hitch count are measured against)
+    this.targetMs = cap ? 1000 / cap : 1000 / 60; // (budget for the colours and hitch count)
     this.hitchMs = Math.round(this.targetMs * 2.05);
     if (this.sec.frame) this.publishFrame(D.frame.t);
     if (this.sec.stages) this.publishStages(D.stages.t);
@@ -359,7 +356,7 @@ export class DevOverlay {
       cpu += m;
       rows.push(`${L.label.padEnd(16)}${f1(m)}  ${bar(m).padEnd(14)} max ${f1(this.max[i])}`);
       if (!detail) continue;
-      for (const k of L.kids) { // (only the parts worth a row: the rest are in the group's number)
+      for (const k of L.kids) { // (only parts worth a row; the rest are in the group's number)
         const pm = this.sum[k] / fr, px = this.max[k];
         if (pm >= DETAIL_AVG || px >= DETAIL_MAX) rows.push(`  ${LAPS[k].label.slice(0, 14).padEnd(14)}${f1(pm)}  ${bar(pm).padEnd(14)} max ${f1(px)}`);
       }
@@ -372,7 +369,7 @@ export class DevOverlay {
     const G = this.game, R = G.renderer, info = R.info;
     const size = R.getDrawingBufferSize(this.v2);
     const dbg = G.cheats.debugView;
-    // (the post pass's one draw and two triangles left out, as the scene's own numbers are what you're after)
+    // (post pass's one draw and two triangles left out: scene numbers only)
     const tris = Math.max(0, info.render.triangles - (dbg ? 0 : 2));
     const sc = G.shadowCache;
     const mem = performance.memory;
@@ -395,8 +392,8 @@ export class DevOverlay {
     ].join('\n');
   }
 
-  // Where the camera and the runner are, in the nearest place's local frame: x across, y up from its ground, z along (the numbers its builders use, so a spot in a
-  // screenshot can be named exactly; a curved place's bend is undone: curve.js), and the camera's heading (0 = +z, 90 = +x).
+  // Camera and runner in the nearest place's local frame (x across, y up from its ground, z along: its builders' numbers,
+  // so a screenshot spot can be named exactly; curved places unbent via curve.js), plus camera heading (0 = +z, 90 = +x).
   whereRows() {
     const G = this.game, W = G.world;
     const cam = G.camera.position;
@@ -417,7 +414,7 @@ export class DevOverlay {
     return [`${loc.name}${R ? ' (curved)' : ''}`, `camera  ${f(c)}   heading ${head.toFixed(0)}  pitch ${pitch.toFixed(0)}`, `runner  ${f(p)}`];
   }
 
-  // pirates alive per pool, when the next patrol spawn is attempted, why the last one did or didn't happen
+  // pirates alive per pool, next patrol spawn attempt, why the last did or didn't happen
   pirateRows() {
     const G = this.game, E = G.enemies;
     const d = E.dbg || {};
@@ -450,7 +447,7 @@ export class DevOverlay {
     return rows;
   }
 
-  // A note under the big alert banner (the Kade roll, with the pirate spawns section on)
+  // A note under the alert banner (the Kade roll, with the pirate spawns section on)
   alertNote(text, secs) {
     if (!this.shows('pirates')) return;
     let el = this.noteEl;

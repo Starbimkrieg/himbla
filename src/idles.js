@@ -1,21 +1,19 @@
 import * as THREE from 'three';
 import data from './assets/idles.json';
 
-// The courier's idles, keyed in Blender (tools/blender/build_idles.py writes src/assets/idles.json).
-// Once you've stopped, the first clip (the breath) plays and loops; every 10-30 s one of the others plays
-// through once, and the breath comes back. They take turns in a shuffled order, so all four come round
-// before any repeats. An idle is laid over whatever pose animate() has built, weighted: it eases in once
-// you've been still for a moment and out the moment you move, skate, jump or go limp.
-const FADE_IN = 0.4;    // s to ease into the idle after stopping
-const FADE_OUT = 0.2;   // s to ease back out to the run / skate / air pose
-const CROSS = 0.5;      // s of cross-fade between the breath and the occasional ones
-const SETTLE = 0.25;    // s you must be still before it starts (a stop isn't a flicker)
-const GAP_MIN = 10, GAP_MAX = 30; // s of breathing between the occasional idles
-const STOP_BELOW = 0.6, MOVE_ABOVE = 1.2; // m/s: stopped, and moving again (a little hysteresis)
+// The courier's idles (tools/blender/build_idles.py writes src/assets/idles.json). When stopped the breath (clip 0) loops;
+// every 10-30 s one of the others plays once, in shuffled rounds so all come up before any repeats. Blended over animate()'s
+// pose: eases in after a moment still, out when you move, skate, jump or go limp.
+const FADE_IN = 0.4;    // s ease in after stopping
+const FADE_OUT = 0.2;   // s ease out to the run / skate / air pose
+const CROSS = 0.5;      // s cross-fade between clips
+const SETTLE = 0.25;    // s still before it starts
+const GAP_MIN = 10, GAP_MAX = 30; // s of breath between occasional idles
+const STOP_BELOW = 0.6, MOVE_ABOVE = 1.2; // m/s hysteresis: stopped / moving again
 const DEFAULT = 0;      // the breath
 
 const ROT = ['torso', 'head', 'armL', 'armR', 'foreL', 'foreR', 'legL', 'legR']; // pivots the clips turn
-const POS = ['body', 'torso'];                                   // ...and the ones they shift
+const POS = ['body', 'torso'];                                   // ...and shift
 
 const CLIPS = data.anims.map(a => ({
   name: a.name,
@@ -34,7 +32,7 @@ function makePose() {
   return pose;
 }
 
-// one clip `t` seconds in (it loops), as quaternions and offsets between the stored poses
+// a clip at `t` s (looping), interpolated between stored frames
 function sample(clip, t, out) {
   const f = (t * data.fps) % clip.n, i = Math.floor(f), k = f - i, j = (i + 1) % clip.n;
   for (const key of ROT) {
@@ -51,20 +49,20 @@ function sample(clip, t, out) {
 
 export class Idle {
   constructor() {
-    this.on = false;       // stopped (and has been for a moment)
+    this.on = false;       // stopped for at least SETTLE
     this.hold = 0;         // s stopped so far
-    this.w = 0;            // how much of the idle is on the figure, 0..1
-    this.touched = false;  // the figure carries last frame's idle: begin() takes it off
-    this.dy = 0;           // the height the idle added to the body last frame
+    this.w = 0;            // idle weight 0..1
+    this.touched = false;  // figure carries last frame's idle (begin() removes it)
+    this.dy = 0;           // body height the idle added last frame
     this.bag = [];
     this.last = -1;
-    this.rig = null;       // the model the rest positions below belong to
+    this.rig = null;       // model the rest positions belong to
     this.rest = null;
     this.cur = makePose(); this.old = makePose();
     this.restart();
   }
 
-  // back to the breath, with a fresh wait before the first occasional idle
+  // back to the breath with a fresh wait
   restart() {
     this.fresh = true;
     this.clip = DEFAULT; this.t = 0;
@@ -72,8 +70,7 @@ export class Idle {
     this.wait = GAP_MIN + Math.random() * (GAP_MAX - GAP_MIN);
   }
 
-  // Before animate() builds the pose: take last frame's idle off the figure, so the run, skate and air
-  // poses (which only set the angles they use) start from a clean one.
+  // Before animate(): remove last frame's idle, since the run/skate/air poses only set the angles they use.
   begin(m) {
     if (!this.touched) return;
     this.touched = false;
@@ -83,18 +80,17 @@ export class Idle {
     m.torso.position.copy(this.rest.torso);
   }
 
-  // Anything that takes over the figure (a seat, a vehicle, a rail, a cutscene): drop the idle altogether.
+  // something took over the figure (seat, vehicle, rail, cutscene): drop the idle
   cancel(m) {
     this.begin(m);
     this.on = false; this.hold = 0; this.w = 0;
     if (!this.fresh) this.restart();
   }
 
-  // After animate() has built the pose. `calm`: on the ground, no move input, skates off, not limp. `cut`:
-  // airborne or limp, where the pose changes all at once anyway, so the idle goes at once too; any other
-  // reason to stop (you moved, you skated) fades it out.
+  // After animate(). `calm`: grounded, no move input, skates off, not limp. `cut`: airborne or limp, so the idle
+  // drops at once (the pose snaps anyway); otherwise it fades out.
   apply(m, dt, calm, speed, cut) {
-    if (this.rig !== m) { // (first use, or the model was swapped)
+    if (this.rig !== m) { // first use, or model swapped
       this.rig = m;
       this.rest = { bodyX: m.body.position.x, bodyZ: m.body.position.z, torso: m.torso.position.clone() };
     }
@@ -109,7 +105,7 @@ export class Idle {
     this.fresh = false;
     this.advance(dt);
     sample(CLIPS[this.clip], this.t, this.cur);
-    if (this.prev >= 0) { // cross-fading from the clip before: it keeps playing as it fades
+    if (this.prev >= 0) { // cross-fade; the previous clip keeps playing as it fades
       sample(CLIPS[this.prev], this.prevT, this.old);
       const s = this.x * this.x * (3 - 2 * this.x);
       for (const k of ROT) this.old.q[k].slerp(this.cur.q[k], s);
@@ -148,7 +144,7 @@ export class Idle {
     this.clip = i; this.t = 0; this.x = 0;
   }
 
-  // the next occasional idle: a shuffled round of all of them, never the one that just played
+  // next occasional idle: shuffled rounds, never the one just played
   next() {
     if (!this.bag.length) {
       for (let i = 0; i < CLIPS.length; i++) if (i !== DEFAULT) this.bag.push(i);

@@ -1,13 +1,11 @@
-// Asset Row catalogue group: places. Items: see index.js.
-//
-// Every settlement, headquarters and landmark the World builds, each built standalone on a private stub World
-// (places-lib.js). w x d are the measured footprints of what is built (shell measurement, incl. the floating name sign).
+// Asset Row group: places (item format: index.js). Every settlement, HQ and landmark the World builds, each on a private
+// stub World (places-lib.js). w x d are measured footprints, including the floating name sign.
 import { buildPlace, buildZoneWall } from './places-lib.js';
 import { LOCATIONS } from '../locations.js';
 
 const loc = (id) => LOCATIONS.find((l) => l.id === id);
 
-// one place: id, label, w, d, the build spec (places-lib buildPlace) and anything else for the item
+// one place: id, label, w, d, build spec (places-lib buildPlace), extra item fields
 const P = (id, label, w, d, spec, extra = {}) => ({ id: `places.${id}`, label, w, d, big: Math.max(w, d) > 100, make: (ctx) => buildPlace(ctx, spec), ...extra });
 
 const CAMP = { id: 'camp0', name: 'Grimtooth Camp', short: 'CAMP', type: 'pirate', faction: 'rustmoon', camp: true, r: 55, hostile: true, dark: true };
@@ -56,7 +54,7 @@ const fun = [
 ];
 
 const zones = [
-  // (last on the row: its 170 m tall red cylinder would colour the view of its neighbours)
+  // last on the row: its 170 m red cylinder would tint its neighbours
   { id: 'places.zonewall', label: 'ZONE WALL (R260)', w: 520, d: 520, big: true, solid: false, make: () => buildZoneWall(260) },
 ];
 
@@ -71,7 +69,6 @@ export default [
 ];
 
 /* SKIPPED
- - The Whispering Fissure (LOCATIONS 'fissure'): a trench into the Moon (type 'tunnel'), not built by the World (it has no
-   case in buildLocation); it is spindle/terrain content.
- - The Meridian launch complex beside the Monolith (loc.launchPad): needs the Moon's tilt; the same model is the 'launch' story prop.
+ - Whispering Fissure (LOCATIONS 'fissure', type 'tunnel'): a trench, spindle/terrain content; buildLocation has no case for it.
+ - Meridian launch complex by the Monolith (loc.launchPad): needs the Moon's tilt; same model as the 'launch' story prop.
 */

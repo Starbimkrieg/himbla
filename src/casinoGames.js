@@ -7,10 +7,9 @@ import { makeChipStack } from './models.js';
 import { PlinkoSim, MULTS, AIM_RANGE, DROP_Y, BALL_R, PEGS, slotCentre } from './plinko.js';
 import { glyphHtml } from './glyphs.js';
 
-// The walk-in Lucky Crater games: BLACKJACK at a real table, the DUCK DERBY and a giant PLINKO
-// board with real ball physics. Everything here is driven from the casino's per-frame update
-// (casinoWorld's onUpdate), so it only ticks while the casino location is active. While you are
-// "seated" the game sits in the 'casino' modal state and this class flies the camera.
+// The walk-in Lucky Crater games: BLACKJACK, the DUCK DERBY and a giant physics PLINKO board.
+// Driven by casinoWorld's onUpdate, so it only ticks while the casino is active. While "seated"
+// the game is in the 'casino' modal state and this class flies the camera.
 
 const fmt = (n) => Math.floor(n).toLocaleString('en-US');
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -98,8 +97,8 @@ const DUCK_EDGE = 0.95; // payout = EDGE / P(win)
 function duckInit() {
   return [0, 1, 2, 3].map(() => ({ x: 0, v: 0, mult: 1, ev: 0, kind: null, ph: Math.random() * 6, fin: -1 }));
 }
-// One fixed step of the race model. Used both for the live race and the odds simulation, so the
-// displayed odds are the true odds of the race you watch.
+// One fixed race-model step, used by the live race and the odds simulation alike, so the shown
+// odds are the true odds.
 function duckStep(ds, forms, rand) {
   for (let i = 0; i < 4; i++) {
     const d = ds[i];
@@ -212,7 +211,7 @@ export class CasinoGames {
     this.playerWasVisible = g.player.model.root.visible;
     g.player.model.root.visible = false;
     this.ui.classList.remove('hidden');
-    document.body.classList.add('seated'); // (style.css: the rest of the HUD steps aside for the game's own bar)
+    document.body.classList.add('seated'); // (style.css: the HUD steps aside for the game's bar)
     this.audio.tone(660, 0.08, 'triangle', 0.12);
     if (id === 'bj') { this.bj.auto = false; if (this.bj.phase === 'done') this.bj.msg = 'ANOTHER HAND?'; }
     if (id === 'duck' && this.dk.phase === 'done') this.newRace();
@@ -223,7 +222,7 @@ export class CasinoGames {
   leave() {
     const g = this.g;
     if (this.mode === 'bj' && (this.bj.phase === 'play' || this.bj.phase === 'dealing')) {
-      // walking away mid-hand stands on whatever you hold
+      // leaving mid-hand stands
       this.bj.auto = true;
       if (this.bj.phase === 'play') this.stand();
     }
@@ -280,7 +279,7 @@ export class CasinoGames {
     this.render();
   }
 
-  // ---------- timeline + tweens (dt-driven, so they pause with the casino) ----------
+  // ---------- timeline + tweens (dt-driven: pause with the casino) ----------
   after(t, fn) { this.queue.push({ at: this.clock + t, fn }); }
 
   tween(obj, to, dur, { arc = 0, rotTo = null, onDone = null, delay = 0 } = {}) {
@@ -315,14 +314,14 @@ export class CasinoGames {
     if (this.mode) this.updateCam(dt);
     this.uiTick = (this.uiTick || 0) - dt;
     if (this.mode && this.uiTick <= 0) { this.uiTick = 0.25; this.renderHead(); if (this.mode === 'claw') { this.$('.c3-body').innerHTML = this.claw.bodyHtml(); this.$('.c3-msg').textContent = this.claw.msg || this.$('.c3-msg').textContent; } }
-    // (picking the controller up or putting it down swaps the hints on the bar)
+    // (switching to or from the controller swaps the bar's hints)
     if (this.mode && !!this.g.input.padActive !== this.padShown) this.render();
   }
 
   // ---------- camera ----------
   view() {
     const R = BJ.R;
-    // (zoomed: leaning in over the felt, both hands of cards above the action bar)
+    // (zoomed: leaning over the felt, both hands above the action bar)
     if (this.mode === 'bj') return this.bj.zoom ? [bjPt(0, 3.7, 3.3), bjPt(0, BJ.top, 1.9)] : [bjPt(0, 3.9, R + 1.9), bjPt(0, 0.75, 0.7)];
     if (this.mode === 'duck') {
       const d = this.dk;
@@ -334,7 +333,7 @@ export class CasinoGames {
       }
       return [[DUCK.kiosk[0], 9, DUCK.kiosk[1] + 7.5], [DUCK.kiosk[0], 0, (DUCK.lanes[1] + DUCK.lanes[2]) / 2 - 1]];
     }
-    // framed so the whole board sits above the action bar
+    // whole board above the action bar
     if (this.mode === 'plinko') return [[PLK.x, 6.4, PLK.z + 16.5], [PLK.x, 4.4, PLK.z]];
     if (this.mode === 'claw') return this.claw.camView();
     return null;
@@ -355,7 +354,7 @@ export class CasinoGames {
     const sk = g.cam.shake * (g.settings && g.settings.v ? g.settings.v.shake ?? 1 : 1);
     if (sk > 0) cam.position.add(_v.set((Math.random() - 0.5) * sk, (Math.random() - 0.5) * sk, (Math.random() - 0.5) * sk));
     cam.up.copy(cw.up);
-    g.player.model.root.visible = false; // the follow camera re-shows the runner every frame
+    g.player.model.root.visible = false; // the follow camera re-shows the runner each frame
     cam.lookAt(this.camL);
     cam.updateMatrixWorld();
   }
@@ -596,7 +595,7 @@ export class CasinoGames {
       this.popAt(kind === 'bust' ? 'BUST!' : pick(['NOPE!', 'OOF!', 'WHIFF!']), ...bjPt(0, 2.4, 2), { color: '#ff2a4a', size: 80 });
       if (kind === 'bust') this.casino.sadTrombone(); else this.audio.tone(220, 0.25, 'sawtooth', 0.08, 0.6);
     }
-    // chips: winnings slide out of the dealer's tray, then everything slides to you (or to the house)
+    // chips: winnings slide from the dealer's tray, then all slide to you (or the house)
     if (pay > 0) this.chipStack(pay, new THREE.Vector3(-0.42, BJ.top, 2.72), BJ_RACK.clone());
     const chips = b.chips.slice();
     this.after(1.1, () => {
@@ -638,7 +637,7 @@ export class CasinoGames {
     this.drawOddsBoard();
   }
 
-  // the start gate's three lamps: the first n are lit (red, amber, green)
+  // start gate's three lamps (red, amber, green): first n lit
   derbyLamps(n) { this.cw.duck.lamps.forEach((l, k) => l.mat.color.copy(l.color).multiplyScalar(k < n ? 1 : 0.22)); }
 
   pickDuck(i) {
@@ -683,7 +682,7 @@ export class CasinoGames {
   updateDucks(dt, time) {
     const d = this.dk, ducks = this.cw.duck.ducks;
     if (d.phase === 'race') {
-      // photo-finish slow motion: the model still runs in fixed steps, only the clock slows
+      // photo-finish slow motion: fixed model steps, only the clock slows
       const xs = d.ds.map((q) => q.x).sort((a, b) => b - a);
       const tense = !d.order.length && xs[0] > RACE_L - 2.6 && xs[0] - xs[1] < 0.55;
       d.scale += ((tense ? 0.3 : 1) - d.scale) * Math.min(1, dt * 6);
@@ -872,8 +871,7 @@ export class CasinoGames {
       if (dir) p.aim = Math.max(-AIM_RANGE, Math.min(AIM_RANGE, p.aim + dir * dt * 1.6));
       if (inp.down('Space') && p.cd <= 0) this.dropBall();
     }
-    // the aim marker (the ball and arrow over the chute) is only there while somebody is playing: stood at the board without sitting down, it
-    // floated over the chute for nothing
+    // aim marker (ball and arrow over the chute) only while playing
     const aiming = this.mode === 'plinko';
     cw.plinko.aim.visible = aiming;
     if (aiming) {
@@ -906,7 +904,7 @@ export class CasinoGames {
   }
 
   liveMeshes() {
-    // meshes currently attached to sim balls are tagged; anything visible and untagged is done
+    // meshes on sim balls are tagged; visible untagged ones are done
     const live = new Set(this.sim.balls.map((b) => b.mesh));
     const out = [];
     for (const b of this.allBallMeshes || (this.allBallMeshes = new Set())) { b.inSim = live.has(b); if (b.visible) out.push(b); }
@@ -914,14 +912,14 @@ export class CasinoGames {
     return out;
   }
 
-  // the controller's aim (gamepad.js): the stick slides the chute, further over = faster
+  // controller aim (gamepad.js): the stick slides the chute, further = faster
   padAim(x, dt) {
     if (this.mode !== 'plinko' || !x) return;
     this.pk.aim = Math.max(-AIM_RANGE, Math.min(AIM_RANGE, this.pk.aim + x * dt * 1.6));
   }
 
   aimFromScreen(clientX) {
-    // map the mouse across the board's on-screen width onto the chute's aim range
+    // mouse across the board's on-screen width -> chute aim range
     const cam = this.g.camera;
     const a = this.cw.toWorld(PLK.x - 6, PLK.y + DROP_Y, PLK.z).project(cam);
     const b = this.cw.toWorld(PLK.x + 6, PLK.y + DROP_Y, PLK.z).project(cam);

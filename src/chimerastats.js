@@ -12,7 +12,7 @@ import { SKILLS, DIST_SKILL, activationChance } from './chimeraskills.js';
 
 export const STATS_V = 2;
 export const STAT_KEYS = ['speed', 'power', 'stamina', 'wit'];
-// (the hover tips on the chimera cards: chimeracard.js)
+// (chimera card hover tips: chimeracard.js)
 export const STAT_TIPS = {
   speed: 'SPEED: top speed, and so how fast it cruises. Mostly from the legs, some from the body. Big chimeras are a little slower.',
   power: 'POWER: acceleration, and how quickly it moves across the track. It decides whether a pass gets done before the gap closes. Legs and body.',
@@ -26,8 +26,7 @@ export const STAT_INFO = {
   wit: { short: 'WIT', name: 'WIT', blurb: 'skills, judgement' },
 };
 
-// What each part brings to the table (0-100 per stat).
-// Legs drive speed and power, the body stamina and power, the head wit.
+// What each part brings (0-100 per stat). Legs drive speed and power, body stamina and power, head wit.
 export const LEGS = {
   car: { speed: 86, power: 55, stamina: 50, wit: 38 }, // wheels: fast, mid pickup
   mite: { speed: 60, power: 88, stamina: 36, wit: 45 }, // six legs: explosive starts, gasses out

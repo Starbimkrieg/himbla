@@ -1,38 +1,33 @@
-# Dish builder for Blender (4.2+ / 5.x): the two station designs that carry the big radio dishes at the research arrays (Shackleton,
-# Farside) and the field dish the smaller bases use, exported to src/assets/dish.glb.
+# Dish builder for Blender (4.2+ / 5.x): the two big-dish station designs of the research arrays (Shackleton, Farside), the
+# small bases' field dish and a light dish head, exported to src/assets/dish.glb.
 #
 # In Blender's Python console or via MCP:   exec(open(r"<repo>/tools/blender/build_dish.py").read())
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 build_dish.py
 #
-#   dish_cryo     CRYO RECEIVER, the Prospector's Helium-3 tanker stood on end: a banded pressure vessel on a dark skirt with a faction
-#                 dome and a gantry stair winding up it, a valve cabinet and a branding panel; the dish is banded like the tank and
-#                 feeds a dewar hung at its focus.
-#   dish_gantry   GANTRY STATION, from the crane and the Prospector's containers: a faction-painted lattice mast with a caged ladder
-#                 and rest platforms over a yard of cargo-container control rooms, a red battery bank and a fuel tank; the dish is
-#                 carried on radial lattice trusses.
-#   dish_field    FIELD DISH, the small bases' dish (ILMB, the Daedalus relay, the Vostok and Daedalus posts, the Asset Row): an eight-sided
-#                 tower in three stages with a caged ladder, a cable duct and a service gallery, over an equipment room (a cargo container
-#                 with an air-handler and warning signs); the same truss-backed reflector as the gantry station, painted in the same slots
-#                 (body: the cowl, flanges, gallery, room, trusses and quadpod; stripe: half the rim blocks and the feed band). It has no
-#                 station number, and its livery pivots (the faction's mark and name on the tower and the room) cover Daedalus as well.
-#   dish_head     DISH HEAD, the field dish's reflector, trunnions, turning neck and feed with no tower and built lightly (about a fifth of the
-#                 triangles), for the small dishes on masts, roofs and posts, where a rim under 3 m shows none of the full reflector's detail. It has
-#                 only the yaw and tilt pivots, with the neck's foot at y = 21.2 (the game sets it on whatever carries it) and the same body and stripe slots.
+#   dish_cryo     CRYO RECEIVER, the Prospector's He-3 tanker on end: banded vessel on a dark skirt, faction dome, winding gantry
+#                 stair, valve cabinet, branding panel; banded dish feeding a dewar at its focus.
+#   dish_gantry   GANTRY STATION (crane + Prospector containers): faction lattice mast with caged ladder and rest platforms over
+#                 a yard of container control rooms, red battery bank, fuel tank; dish on radial lattice trusses.
+#   dish_field    FIELD DISH for small bases (ILMB, Daedalus relay, Vostok and Daedalus posts, Asset Row): eight-sided three-stage
+#                 tower (caged ladder, cable duct, gallery) over a container equipment room (air-handler, warning signs); the
+#                 gantry station's reflector in the same slots (body: cowl, flanges, gallery, room, trusses, quadpod; stripe:
+#                 half the rim blocks, feed band). No station number; its liveries (tower and room) include Daedalus.
+#   dish_head     DISH HEAD: the field dish's reflector, trunnions, neck and feed with no tower, ~a fifth of the triangles, for
+#                 small dishes (rim under 3 m) on masts, roofs and posts. Only yaw and tilt pivots; neck foot at y = 21.2 (the game
+#                 sets it on its carrier); same body and stripe slots.
 #
-# Each station is its own root, built at the size of the old dish (a 30 m mount: the reflector's rim is 14.1 m out and 6.8 m deep, the
-# tilt pivot 28.5 m up) with the ground at y = 0 in the middle of the base and +z the front (the panel, the cabinet, the containers' doors).
-# The game scales a station uniformly (size / 30). Pivots (empties with a `role`):
-#   yaw       at the top of the neck (y = 28.5), turned about y by the game: the neck's turning column, the head block and its ears
-#   tilt      a child of yaw at its origin, turned about x: the trunnion drum, the reflector (axis along +y), its back structure, the
-#             rim, the quadpod or tripod and the feed
-#   blinker   the aircraft warning lamps (extra `radius`); the game puts a blinking lamp on each. Some hang off the root, some off tilt.
-#   livery    one per faction (extra `faction`): that faction's emblem and name on the panel / the containers' plates. The game
-#             builds the one that matches the array and leaves the rest out.
-#   number    one per station number (extra `no`, "01".."04"): the digits painted on the branding panel (cryo) or the fascia
-#             (gantry). The game builds the one for that dish.
-# Each root also carries `size` (30) and `radius` (the footprint's reach, m). Each mesh has ONE material named after a slot: body, stripe,
-# accent and label take the faction's colours (see DISH_COLORS in src/models.js); the rest are fixed. Colliders are not in the file: the
-# game places them from the dimensions here (settlements.js dishStation).
+# Each station is its own root at a 30 m mount size (rim 14.1 m out, 6.8 m deep, tilt pivot 28.5 m up), ground y = 0 at the
+# base's middle, +z the front (panel, cabinet, container doors). The game scales uniformly (size / 30). Pivots (empties with a `role`):
+#   yaw       neck top (y = 28.5), turned about y: the neck's turning column, head block and ears
+#   tilt      child of yaw at its origin, turned about x: trunnion drum, reflector (axis +y), back structure, rim, quadpod or
+#             tripod, feed
+#   blinker   aircraft warning lamps (extra `radius`); the game puts a blinking lamp on each. Off the root or off tilt.
+#   livery    one per faction (extra `faction`): emblem and name on the panel / container plates. The game keeps the array's.
+#   number    one per station number (extra `no`, "01".."04"): digits on the branding panel (cryo) or fascia (gantry). The game
+#             keeps the dish's.
+# Roots carry `size` (30) and `radius` (footprint reach, m). One material per mesh, named after a slot: body, stripe, accent and
+# label take faction colours (DISH_COLORS in src/models.js); the rest are fixed. No colliders in the file: the game places them
+# from these dimensions (settlements.js dishStation).
 
 import bpy, math, os
 
@@ -56,7 +51,7 @@ if not os.path.isdir(os.path.dirname(OUT)):
 print("Dish export ->", OUT)
 COLL = "MoonDish"
 
-# preview colours (the game swaps in its own materials; body/stripe/accent/label are the Meridian livery here)
+# preview colours (Meridian livery); the game swaps in its own materials
 SLOT_COLORS = {
     "body": (0.18, 0.77, 1.0), "stripe": (1.0, 0.96, 0.88), "accent": (1.0, 0.82, 0.25), "label": (0.09, 0.22, 0.37),
     "dark": (0.16, 0.14, 0.25), "steel": (0.33, 0.38, 0.48), "metal": (0.54, 0.53, 0.63), "concrete": (0.54, 0.52, 0.6),
@@ -66,11 +61,11 @@ SLOT_COLORS = {
     "redsafe": (0.79, 0.13, 0.18), "blue": (0.11, 0.39, 0.84),
 }
 
-# geometry and scene helpers shared with the other build scripts, then the flat lettering / emblem / signage kit
+# shared geometry/scene helpers, then the lettering / emblem / signage kit
 exec(open(os.path.join(REPO, "tools", "blender", "kit.py"), encoding="utf-8").read(), globals())
 exec(open(os.path.join(REPO, "tools", "blender", "decals.py"), encoding="utf-8").read(), globals())
-LAYER = 0.02    # decals stand further off their faces than on a vehicle: these are read from 100 m (the game's camera starts at 0.5 m)
-exec(open(os.path.join(REPO, "tools", "blender", "dishkit.py"), encoding="utf-8").read(), globals())   # the reflector, the mount and the head
+LAYER = 0.02    # decal stand-off, larger than on vehicles: read from 100 m
+exec(open(os.path.join(REPO, "tools", "blender", "dishkit.py"), encoding="utf-8").read(), globals())   # reflector, mount, head
 
 C = coll()
 for s in SLOT_COLORS:
@@ -82,12 +77,12 @@ NUMBERS = ("01", "02", "03", "04")
 
 # ---------------- scene helpers ----------------
 def M(name, geo, slot, parent, ink=0.04):
-    """A mesh named for the station; outlines only where they read (under 4 cm they are lost)."""
+    """A station-prefixed mesh; outlines under 4 cm are dropped (they don't read)."""
     return mesh(PFX + name, geo, slot, parent, ink if ink >= 0.04 else 0)
 
 
 def rb(name, hx, hy, hz, pos, slot, parent, ink=0.1, e=0.06, rot=(0, 0, 0)):
-    """A rounded box (half extents), for the big bodies."""
+    """Rounded box (half extents) for big bodies."""
     return M(name, xf(rbox(hx, hy, hz, e, 6, 3), pos, rot), slot, parent, ink)
 
 
@@ -108,7 +103,7 @@ def page(face, origin):
 
 
 def unit(name):
-    """A new station: its root pivot (named exactly `name`), yaw and tilt, and the prefix for everything in it."""
+    """New station: root pivot (named exactly `name`), yaw, tilt, and the name prefix for its parts."""
     global PFX
     PFX = name + "_"
     root = pivot(name, (0, 0, 0), None, size=30.0)
@@ -127,14 +122,14 @@ def numbers(root):
 
 
 def warn_sign(d, u, v, w, h, layer=0, head="WARNING", lines=("RF RADIATION", "KEEP CLEAR")):
-    """A yellow warning board, (u, v) its lower-left: a dark header with the word, an RF icon, two lines of legend."""
+    """Yellow warning board, (u, v) lower-left: dark header word, RF icon, two legend lines."""
     d.rect(u - 0.05, v - 0.05, u + w + 0.05, v + h + 0.05, "dark", layer)
     d.rect(u, v, u + w, v + h, "hazard", layer + 1)
     hh = h * 0.27
     d.rect(u, v + h - hh, u + w, v + h, "dark", layer + 2)
     ps = min(hh * 0.62 / 7, (w * 0.86) / (len(head) * 6 - 1))
     d.text(head, u + w / 2, v + h - hh + (hh - 7 * ps) / 2, ps, "hazard", layer + 3, "c")
-    cu, cv = u + w / 2, v + (h - hh) * 0.66      # the RF icon: a dot with two arcs either side
+    cu, cv = u + w / 2, v + (h - hh) * 0.66      # RF icon: a dot with two arcs each side
     rr = (h - hh) * 0.2
     d.disc(cu, cv, rr * 0.28, "dark", layer + 2, 10)
     for r0, r1 in ((rr * 0.55, rr * 0.72), (rr * 0.9, rr * 1.07)):
@@ -146,7 +141,7 @@ def warn_sign(d, u, v, w, h, layer=0, head="WARNING", lines=("RF RADIATION", "KE
 
 
 def container(root, name, cx, cz, y0, slot, ribbed, L=9.6, W=3.5, H=3.3):
-    """A box on corner castings, its length along z; the corrugation is a row of ribs down each flank."""
+    """Container on corner castings, length along z; optional ribs down each flank."""
     hx, hz = W / 2, L / 2
     rb(name, hx, H / 2, hz, (cx, y0 + H / 2, cz), slot, root, 0.1, 0.05)
     M(name + "Castings", join([cube(0.34, H / 2 + 0.04, 0.34, (cx + sx * (hx - 0.2), y0 + H / 2, cz + sz * (hz - 0.2))) for sx in (-1, 1) for sz in (-1, 1)]), "dark", root, 0)
@@ -157,20 +152,20 @@ def container(root, name, cx, cz, y0, slot, ribbed, L=9.6, W=3.5, H=3.3):
 
 
 def mount(root, yaw, tilt, neck_y0, neck_y1, neck_r, neck_slot="steel"):
-    """What every station shares at the top (dishkit.py mount_pieces): the turning neck, the head block and its ears on yaw, the drum on tilt."""
+    """Shared top (dishkit.py mount_pieces): neck, head block and ears on yaw, drum on tilt."""
     for name, geo, slot, ink, part in mount_pieces(neck_y0, neck_y1, neck_r, neck_slot):
         M(name, geo, slot, yaw if part == "yaw" else tilt, ink)
 
 
 # =====================================================================================================
-# CRYO RECEIVER  (the Helium-3 tanker on end: 22 m of vessel under the dish, a 10 m pad round it)
+# CRYO RECEIVER  (He-3 tanker on end: 22 m vessel, 10 m pad)
 # =====================================================================================================
 def build_cryo():
     root, yaw, tilt = unit("dish_cryo")
     root["radius"] = 11.5
 
-    # ---- foundation: a concrete pad with a hazard kerb ring, bollards, and the vessel's dark skirt ----
-    PAD = 0.3      # (thin: the player walks at ground level, and a thick apron would swallow their feet)
+    # ---- foundation: pad with hazard kerb ring, bollards, the vessel's dark skirt ----
+    PAD = 0.3      # thin: the player walks at ground level, a thick apron would swallow their feet
     M("pad", lathe([(0.0, 0.0), (10.2, 0.0), (10.2, PAD), (0.0, PAD)], 40), "concrete", root, 0.12)
     M("padRing", xf(torus(9.7, 0.12, 40, 4), (0, PAD + 0.04, 0)), "hazard", root, 0)
     M("bollards", join([B((11.0 * math.sin(a), 0.0, 11.0 * math.cos(a)), (11.0 * math.sin(a), 1.25, 11.0 * math.cos(a)), 0.24, 6, True) for a in [2 * PI * (k + 0.5) / 10 for k in range(10)]]), "dark", root, 0)
@@ -179,13 +174,13 @@ def build_cryo():
     M("skirtHaz", xf(torus(6.84, 0.2, 32, 4), (0, 1.05, 0)), "hazard", root, 0)
     M("skirtVents", join([turn(cube(0.55, 0.42, 0.1, (0, 2.0, 6.82)), 2 * PI * (k + 0.25) / 12) for k in range(12)]), "steel", root, 0)
 
-    # ---- the vessel: pale shell, faction dome, accent rings, steel insulation bands ----
+    # ---- vessel: pale shell, faction dome, accent rings, steel bands ----
     M("shell", lathe([(0.0, 3.1), (5.6, 3.1), (5.6, 17.0), (0.0, 17.0)], 32), "tank", root, 0.2)
     M("dome", lathe([(0.0, 17.0), (5.63, 17.0), (5.63, 17.15), (5.3, 18.0), (4.5, 18.95), (3.3, 19.7), (1.9, 20.2), (0.0, 20.4)], 32), "body", root, 0.14)
     M("rings", tori(5.66, (3.4, 17.2), 0.17, 32), "accent", root, 0)
     M("bands", tori(5.66, (5.0, 7.2, 9.4, 11.6, 13.8, 16.0), 0.16, 32), "steel", root, 0)
 
-    # ---- the gantry stair: treads and stringers winding up the vessel, handrails, a landing with a floodlight bank ----
+    # ---- gantry stair winding up the vessel, handrails, landing with floodlights ----
     A0, TURNS, H0, H1, SR = math.radians(200), 1.65, 0.7, 16.9, 6.85
     NS = int(TURNS * 30)
     hp = lambda r, t, dy=0.0: (r * math.sin(A0 + 2 * PI * TURNS * t), H0 + (H1 - H0) * t + dy, r * math.cos(A0 + 2 * PI * TURNS * t))
@@ -204,7 +199,7 @@ def build_cryo():
     M("landingFloods", turn(join([xf(flood, t=((k - 1) * 1.3, H1 + 1.3, SR + 1.35)) for k in range(3)]), ae), "lamp", root, 0)
     M("landingFloodBacks", turn(join([cube(0.4, 0.4, 0.2, ((k - 1) * 1.3, H1 + 1.3, SR + 1.18)) for k in range(3)]), ae), "dark", root, 0)
 
-    # ---- the valve cabinet with gauges and hand-wheel valves, and two pipes climbing the shell ----
+    # ---- valve cabinet (gauges, hand-wheels), two pipes up the shell ----
     CBX, CBZ = -3.9, 7.6
     rb("cabinet", 2.1, 1.35, 0.6, (CBX, PAD + 1.35, CBZ), "dark", root, 0.1, 0.1)
     bx("cabinetTop", 2.2, 0.1, 0.7, (CBX, PAD + 2.75, CBZ), "steel", root)
@@ -228,7 +223,7 @@ def build_cryo():
     d.hazard(CBX - 1.9, PAD + 2.88, CBX + 1.9, PAD + 3.36, "dark", "hazard", 0, 0.28)
     d.build(f"{PFX}cabinetHaz", root)
 
-    # ---- the dome's fittings: a relief valve with its vent stack; the neck: a flange, the slew ring, the turning column ----
+    # ---- dome relief valve and vent stack; neck: flange, slew ring, turning column ----
     M("vent", tube([(-3.0, 19.35, 0.0), (-3.0, 23.8, 0.0)], [0.3, 0.3], 10), "steel", root, 0)
     M("ventCap", xf(lathe([(0.0, 0), (0.45, 0), (0.42, 0.12), (0.0, 0.22)], 10), (-3.0, 23.8, 0.0)), "dark", root, 0)
     M("ventBands", join([xf(torus(0.33, 0.07, 10, 4), (-3.0, y, 0.0)) for y in (20.3, 21.4, 22.5)]), "metal", root, 0)
@@ -240,7 +235,7 @@ def build_cryo():
     M("neckBands", Y(join([xf(torus(1.81, 0.12, 14, 4), (0, y, 0)) for y in (21.9, 23.2, 24.5)])), "metal", yaw, 0)
     M("neckHaz", Y(xf(torus(1.85, 0.17, 14, 4), (0, 22.55, 0))), "hazard", yaw, 0)
 
-    # ---- the dish: banded like the tank. A pale insulated underside with steel straps and a faction rim ----
+    # ---- dish, banded like the tank: pale underside with steel straps, faction rim ----
     und = lambda r: APEX + par(r) - SHELL
     M("hub", hub_cone(APEX), "tank", tilt, 0.14)
     M("hubBand", xf(torus(3.55, 0.17, 24, 4), (0, 1.3, 0)), "accent", tilt, 0)
@@ -259,7 +254,7 @@ def build_cryo():
     M("collar", rim_collar(APEX, 0.4, 0.8, 0.4), "body", tilt, 0.1)
     M("collarBands", join([hoop(RIM + 0.42, APEX + par(RIM) + y, 0.11, 56) for y in (0.38, -0.78)]), "steel", tilt, 0)
     M("collarHaz", hoop(RIM + 0.45, APEX + par(RIM) - 0.2, 0.13, 56), "hazard", tilt, 0)
-    # the tripod and the dewar at the focus: a banded vessel with faction ends, a stem and horn down to the focus, a vent stack
+    # tripod and focus dewar: banded vessel with faction ends, stem and horn to the focus, vent stack
     FEED_Y = 13.9
     M("tripod", quadpod(APEX, FEED_Y - 0.9, 1.4, 3, 0.26, 6), "steel", tilt, 0.06)
     M("feedRing", hoop(1.5, FEED_Y - 0.9, 0.2, 20, 4), "dark", tilt, 0)
@@ -279,7 +274,7 @@ def build_cryo():
     PV("blinkFeed", (0, DY1 + 2.8, 0), tilt, role="blinker", radius=0.45)
     PV("blinkVent", (-3.0, 24.15, 0), root, role="blinker", radius=0.4)
 
-    # ---- the branding panel on brackets (the faction's mark and name; the station's number is its own roundel) ----
+    # ---- branding panel on brackets (faction mark and name; the number is its own roundel) ----
     PNX, PNY, PNZ = 1.6, 10.3, 6.95
     PW, PH = 5.2, 1.95
     rb("panel", PW, PH, 0.1, (PNX, PNY, PNZ), "dark", root, 0.05, 0.08)
@@ -313,20 +308,20 @@ def build_cryo():
 
 
 # =====================================================================================================
-# GANTRY STATION  (a 21.6 m lattice mast; the yard of containers reaches 13 m out each side)
+# GANTRY STATION  (21.6 m lattice mast; container yard 13 m out each side)
 # =====================================================================================================
 def build_gantry():
     root, yaw, tilt = unit("dish_gantry")
     root["radius"] = 17.0
 
-    # ---- footings and the mast: four chords tapering up, X bracing on every face, splice plates, platforms, a caged ladder ----
+    # ---- footings; mast: four tapering chords, X bracing, splice plates, platforms, caged ladder ----
     for sx in (-1, 1):
         for sz in (-1, 1):
             rb(f"foot{sx}{sz}", 1.5, 0.55, 1.5, (sx * 4.3, 0.55, sz * 4.3), "concrete", root, 0.1, 0.05)
             bx(f"footPlate{sx}{sz}", 1.0, 0.12, 1.0, (sx * 4.0, 1.17, sz * 4.0), "steel", root)
     bx("basePad", 5.3, 0.1, 5.3, (0, 0.1, 0), "concrete", root, 0.06)
     MY0, MY1, SECT = 1.2, 21.6, 7
-    hw = lambda y: 4.0 + (2.2 - 4.0) * (y - MY0) / (MY1 - MY0)      # half width of the mast at height y
+    hw = lambda y: 4.0 + (2.2 - 4.0) * (y - MY0) / (MY1 - MY0)      # mast half width at height y
     lv = [MY0 + (MY1 - MY0) * i / SECT for i in range(SECT + 1)]
     corn = lambda y: [(-hw(y), -hw(y)), (hw(y), -hw(y)), (hw(y), hw(y)), (-hw(y), hw(y))]
     M("mastChords", join([B((corn(MY0)[i][0], MY0 - 0.1, corn(MY0)[i][1]), (corn(MY1)[i][0], MY1, corn(MY1)[i][1]), 0.36, 6) for i in range(4)]), "body", root, 0.08)
@@ -355,7 +350,7 @@ def build_gantry():
         cage.append(tube([(0.95 * math.sin(a), y, LZ(y) + 0.9 * math.cos(a)) for a in [(-85 + 170 * i / 8) * PI / 180 for i in range(9)]], [0.05] * 9, 4, True))
         y += 1.6
     M("cage", join(cage), "metal", root, 0)
-    for pi, (py, pw) in enumerate(((8.0, 0.0), (14.6, 0.0), (21.7, 1.0))):      # rest platforms with rails and a toe board: low, middle, and the top gantry
+    for pi, (py, pw) in enumerate(((8.0, 0.0), (14.6, 0.0), (21.7, 1.0))):      # rest platforms (rails, toe board): low, middle, top gantry
         w = hw(py) + 1.0 + pw
         rb(f"deck{pi}", w, 0.1, w, (0, py, 0), "dark", root, 0.06, 0.08)
         ring = [(-w, -w), (w, -w), (w, w), (-w, w)]
@@ -363,23 +358,23 @@ def build_gantry():
         M(f"posts{pi}", join([B((px, py, pz), (px, py + 1.2, pz), 0.08, 4, True) for px, pz in posts]), "body", root, 0)
         M(f"rails{pi}", join([B((ring[a][0], py + hh, ring[a][1]), (ring[(a + 1) % 4][0], py + hh, ring[(a + 1) % 4][1]), 0.07, 4, True) for hh in (0.6, 1.2) for a in range(4)]), "body", root, 0)
         bx(f"toe{pi}", w, 0.04, 0.04, (0, py + 0.15, w), "hazard", root)
-    for k, (fx, fz, fa) in enumerate(((1, 1, PI / 4), (-1, 1, -PI / 4), (1, -1, 3 * PI / 4), (-1, -1, -3 * PI / 4))):     # floodlights on the top gantry's corners
+    for k, (fx, fz, fa) in enumerate(((1, 1, PI / 4), (-1, 1, -PI / 4), (1, -1, 3 * PI / 4), (-1, -1, -3 * PI / 4))):     # floodlights on the top gantry corners
         g = xf(lathe([(0.0, 0), (0.34, 0), (0.42, 0.3), (0.0, 0.3)], 10), r=(PI / 2 - 0.2, 0, 0))
         M(f"flood{k}", xf(turn(g, fa), t=(fx * 4.35, 23.0, fz * 4.35)), "lamp", root, 0)
         bx(f"floodBack{k}", 0.4, 0.4, 0.22, (fx * 4.2, 23.0, fz * 4.2), "dark", root, 0, (0, fa, 0))
         bm(f"floodPost{k}", (fx * 4.2, 21.8, fz * 4.2), (fx * 4.2, 22.7, fz * 4.2), 0.1, "metal", root)
     bx("fascia", 4.6, 0.62, 0.1, (0, 21.05, hw(21.7) + 2.0), "dark", root)
-    # the top: the slew ring and a turning steel neck
+    # top: slew ring and turning neck
     M("slewRing", lathe([(0.0, 21.6), (2.8, 21.6), (2.8, 22.3), (0.0, 22.3)], 24), "dark", root, 0.08)
     M("slewGear", xf(torus(2.4, 0.14, 24, 4), (0, 22.4, 0)), "steel", root, 0)
     mount(root, yaw, tilt, 22.3, 25.4, 1.7)
     M("neckBands", Y(join([xf(torus(1.76, 0.12, 14, 4), (0, y, 0)) for y in (22.9, 23.9, 24.8)])), "metal", yaw, 0)
 
-    # ---- the yard: cargo-container control rooms (one stacked, with a stair), a red battery bank, a fuel tank, a generator, cable trays ----
+    # ---- yard: container control rooms (one stacked, with stair), red battery bank, fuel tank, generator, cable trays ----
     YARD = (("boxA", -11.5, 3.0, 0.0, "1"), ("boxB", -11.5, 3.0, 3.3, "2"), ("boxC", 11.5, 4.5, 0.0, "3"))
     for nm, cx, cz, y0, ref in YARD:
         container(root, nm, cx, cz, y0, "body", True)
-    BX_, BZ_ = 11.5, -7.0           # the battery bank: a smooth armoured magazine with strobes and a lightning rod
+    BX_, BZ_ = 11.5, -7.0           # battery bank: armoured magazine with strobes and a lightning rod
     container(root, "bank", BX_, BZ_, 0.0, "redsafe", False)
     for k, z in enumerate((-2.4, 2.4)):
         bx(f"bankVent{k}", 0.9, 0.1, 0.6, (BX_, 3.4, BZ_ + z), "dark", root)
@@ -389,7 +384,7 @@ def build_gantry():
     bm("bankEarth", (BX_ + 1.75, 3.3, BZ_ - 4.6), (BX_ + 1.75, 0.2, BZ_ - 4.6), 0.04, "metal", root)
     M("boxStair", join([cube(0.7, 0.05, 0.28, (-6.9, 0.3 + i * 0.3, 7.6 - i * 0.55)) for i in range(11)]), "dark", root, 0)
     M("boxStairRails", join([B((x, 1.2, 8.2), (x, 4.5, 2.2), 0.06, 4, True) for x in (-6.15, -7.65)]), "metal", root, 0)
-    # the fuel tank on saddles, and the generator with its stack
+    # fuel tank on saddles; generator and stack
     M("fuelTank", xf(lathe([(0.0, -2.8), (0.8, -2.7), (1.3, -2.3), (1.45, -1.8), (1.45, 1.8), (1.3, 2.3), (0.8, 2.7), (0.0, 2.8)], 16), (-1.5, 2.3, -9.5), (0, 0, PI / 2)), "tank", root, 0.1)
     M("tankBands", join([xf(torus(1.46, 0.07, 14, 4), (x, 2.3, -9.5), (0, 0, PI / 2)) for x in (-3.0, 0.0)]), "steel", root, 0)
     M("saddles", join([xf(rbox(0.3, 0.8, 1.4, 0.12, 6, 3), (x, 0.9, -9.5)) for x in (-3.4, -1.5, 0.4)]), "dark", root, 0.05)
@@ -404,7 +399,7 @@ def build_gantry():
         warn_sign(d, -1.6, 0.9, 3.2, 1.9, 0, "DANGER", ("HIGH VOLTAGE", "BATTERY BANK"))
         d.build(f"{PFX}bankSign{'P' if side > 0 else 'S'}", root)
 
-    # ---- the dish: faction trusses under a white shell, a stripe-and-body rim, a lattice quadpod and a Cassegrain feed ----
+    # ---- dish: faction trusses under a white shell, stripe-and-body rim, lattice quadpod, Cassegrain feed ----
     M("hub", hub_cone(APEX), "steel", tilt, 0.12)
     M("bowl", bowl(APEX, SHELL, 0.0), "white", tilt, 0.14)
     M("face", bowl(APEX, 0.12, 0.12), "dish", tilt, 0)
@@ -430,7 +425,7 @@ def build_gantry():
     M("hoopBraces", join([B((r0 * math.sin(2 * PI * (k + 0.5) / NT), rib_bottom(APEX, r0) - 0.05, r0 * math.cos(2 * PI * (k + 0.5) / NT)),
                             (r1 * math.sin(2 * PI * (k + 1.5) / NT), rib_bottom(APEX, r1) - 0.05, r1 * math.cos(2 * PI * (k + 1.5) / NT)), 0.1, 4, True)
                           for r0, r1 in ((7.6, 10.4), (10.4, 13.0)) for k in range(NT)]), "steel", tilt, 0)
-    # the quadpod: lattice legs to a square head, a feed cabin and a subreflector on three struts
+    # quadpod: lattice legs to a feed cabin; subreflector on three struts
     FEED_Y = 14.4
     legs = []
     for k in range(4):
@@ -456,7 +451,7 @@ def build_gantry():
     for sx in (-1, 1):
         PV(f"blinkTop{sx}", (sx * 4.2, 24.0, 4.2), root, role="blinker", radius=0.4)
 
-    # ---- liveries (the faction's plate on each container's flanks, the array's name on the fascia) and the station number ----
+    # ---- liveries (container flank plates, fascia name) and station number ----
     def cargo_plate(f, piv, cx, cz, y0, ref, W=3.5, H=3.3):
         s = NAMES[f]
         ps, ps2, r = 0.075, 0.055, 0.62
@@ -499,27 +494,27 @@ def build_gantry():
 
 
 # =====================================================================================================
-# FIELD DISH  (the small bases' dish: an eight-sided tower and a container equipment room under a truss-backed reflector)
+# FIELD DISH  (eight-sided tower and container room under a truss-backed reflector)
 # =====================================================================================================
-OCT = PI / 8      # the tower has a flat face to +z, +x, -z and -x: its corners stand at 22.5 degrees + k * 45
+OCT = PI / 8      # flat faces to +-x and +-z: corners at 22.5 degrees + k * 45
 
 
 def ring8(r, y):
-    """The corners of an eight-sided ring (corner radius r) as a closed path."""
+    """Eight-sided ring corners (corner radius r) as a closed path."""
     return [(r * math.sin(OCT + PI * i / 4), y, r * math.cos(OCT + PI * i / 4)) for i in range(9)]
 
 
 def prism8(profile):
-    """An eight-sided lathe, a flat face to +z."""
+    """Eight-sided lathe, flat face to +z."""
     return turn(lathe(profile, 8), OCT)
 
 
 def build_field():
     root, yaw, tilt = unit("dish_field")
     root["radius"] = 9.4
-    FACE = math.cos(OCT)       # a flat face stands this fraction of the corner radius from the axis
+    FACE = math.cos(OCT)       # face distance over corner radius
 
-    # ---- foundation: a pad with a hazard kerb ring and bollards, and an eight-sided plinth with gussets to the tower ----
+    # ---- foundation: pad with kerb ring and bollards; eight-sided plinth with gussets ----
     PAD = 0.25
     M("pad", lathe([(0.0, 0.0), (9.4, 0.0), (9.4, PAD), (0.0, PAD)], 40), "concrete", root, 0.12)
     M("padRing", xf(torus(8.95, 0.12, 40, 4), (0, PAD + 0.04, 0)), "hazard", root, 0)
@@ -530,21 +525,21 @@ def build_field():
     M("plinthHaz", tube(ring8(5.42, 0.75), [0.13] * 9, 4, True), "hazard", root, 0)
     M("gussets", join([beam((4.2 * math.sin(a), 1.7, 4.2 * math.cos(a)), (3.6 * math.sin(a), 3.9, 3.6 * math.cos(a)), 0.15, 4) for a in (PI / 4, 3 * PI / 4, 5 * PI / 4, 7 * PI / 4)]), "steel", root, 0)
 
-    # ---- the tower: three straight eight-sided stages, each a little narrower, with corner posts, flanges and a gallery ----
+    # ---- tower: three narrowing eight-sided stages, corner posts, flanges, gallery ----
     SEC = ((1.7, 8.0, 3.8), (8.0, 14.2, 3.3), (14.2, 20.4, 2.8))
     face = lambda y: next(r for y0, y1, r in SEC if y <= y1) * FACE
     M("tower", join([prism8([(0.0, y0), (r, y0), (r, y1), (0.0, y1)]) for y0, y1, r in SEC]), "tank", root, 0.16)
     M("corners", join([B((r * math.sin(OCT + PI * i / 4), y0 + 0.1, r * math.cos(OCT + PI * i / 4)), (r * math.sin(OCT + PI * i / 4), y1 - 0.1, r * math.cos(OCT + PI * i / 4)), 0.11, 4, True) for y0, y1, r in SEC for i in range(8)]), "steel", root, 0)
     M("flanges", join([tube(ring8(r + 0.05, y), [0.22] * 9, 4, True) for y, r in ((1.95, 3.8), (8.0, 3.8), (14.2, 3.3))]), "body", root, 0)
     M("cowl", prism8([(0.0, 19.4), (3.0, 19.4), (3.0, 20.4), (0.0, 20.4)]), "body", root, 0.1)
-    GY = 17.6                                                    # the gallery: a deck with a rail all round but the ladder's side
+    GY = 17.6                                                    # gallery deck, railed except on the ladder's side
     M("deck", prism8([(0.0, GY - 0.12), (4.6, GY - 0.12), (4.6, GY + 0.08), (0.0, GY + 0.08)]), "dark", root, 0.08)
     M("deckBeams", join([beam((face(GY - 2.4) * math.sin(a), GY - 2.4, face(GY - 2.4) * math.cos(a)), (3.9 * math.sin(a), GY - 0.12, 3.9 * math.cos(a)), 0.12, 4) for a in [k * PI / 4 for k in range(8)]]), "steel", root, 0)
     cn = ring8(4.6, GY)
     M("deckPosts", join([B((x, GY, z), (x, GY + 1.2, z), 0.08, 4, True) for x, _, z in cn[:8]]), "body", root, 0)
     M("deckRails", join([B((cn[i][0], GY + hh, cn[i][2]), (cn[i + 1][0], GY + hh, cn[i + 1][2]), 0.07, 4, True) for hh in (0.6, 1.2) for i in range(8) if i != 3]), "body", root, 0)
     M("deckToe", tube(ring8(4.6, GY + 0.15), [0.06] * 9, 4, True), "hazard", root, 0)
-    for k, a in enumerate((PI / 3, -PI / 3)):                    # floodlights on the rail, facing out and down
+    for k, a in enumerate((PI / 3, -PI / 3)):                    # rail floodlights, facing out and down
         g = xf(lathe([(0.0, 0), (0.34, 0), (0.42, 0.3), (0.0, 0.3)], 10), r=(PI / 2 - 0.2, 0, 0))
         M(f"flood{k}", xf(turn(g, a), t=(4.3 * math.sin(a), GY + 1.0, 4.3 * math.cos(a))), "lamp", root, 0)
         bx(f"floodBack{k}", 0.4, 0.4, 0.22, (4.15 * math.sin(a), GY + 1.0, 4.15 * math.cos(a)), "dark", root, 0, (0, a, 0))
@@ -552,7 +547,7 @@ def build_field():
     bm("beaconMast", (-3.0, GY, -3.0), (-3.0, GY + 2.4, -3.0), 0.09, "dark", root)
     PV("blinkGallery", (-3.0, GY + 2.6, -3.0), root, role="blinker", radius=0.4)
 
-    # ---- the caged ladder up the -z face, stood off each stage on brackets, and the cable duct up the +x face ----
+    # ---- caged ladder up -z on brackets; cable duct up +x ----
     LZ = -(face(3.0) + 0.45)
     lad = [B((sx * 0.5, 1.8, LZ), (sx * 0.5, GY + 1.4, LZ), 0.06, 4, True) for sx in (-1, 1)]
     y = 2.3
@@ -567,7 +562,7 @@ def build_field():
     M("duct", tube([(x, y, 0.0) for x, y in duct], [0.17] * len(duct), 6, True), "dark", root, 0)
     M("ductClamps", join([cube(0.12, 0.1, 0.3, (x, y, 0.0)) for x, y in ((f1 + 0.2, 4.2), (f1 + 0.2, 6.2), (f2 + 0.2, 10.0), (f2 + 0.2, 12.0), (f3 + 0.2, 16.0))]), "steel", root, 0)
 
-    # ---- the equipment room: a smooth cargo container on the pad, a cable bridge to the tower, a roof air-handler ----
+    # ---- equipment room: container on the pad, cable bridge to the tower, roof air-handler ----
     CX, CZ, L, W, H = 7.0, 0.0, 6.1, 2.6, 2.7
     container(root, "room", CX, CZ, PAD, "body", False, L, W, H)
     M("bridge", tube([(f1 + 0.2, 3.2, 0.0), (5.95, 3.2, 0.0), (5.95, PAD + H + 0.1, 0.0)], [0.17] * 3, 6, True), "dark", root, 0)
@@ -580,7 +575,7 @@ def build_field():
     d.rect(-0.2, PAD + 0.9, -0.12, PAD + 1.7, "metal", 2)
     d.rect(0.12, PAD + 0.9, 0.2, PAD + 1.7, "metal", 2)
     d.build(f"{PFX}roomDoor", root)
-    d = page("+x", (CX + W / 2 + 0.03, 0, CZ))      # (the +x flank's u runs along -z: the plate takes the -z end, the signs the +z end)
+    d = page("+x", (CX + W / 2 + 0.03, 0, CZ))      # +x flank's u runs along -z: plate at the -z end, signs at +z
     warn_sign(d, 0.1, PAD + 0.7, 1.75, 1.3, 0, "WARNING", ("RF RADIATION", "KEEP CLEAR"))
     nfpa(d, 2.5, PAD + 1.35, 0.45, 2, 1, 0, "RF", 0)
     d.build(f"{PFX}roomSigns", root)
@@ -589,14 +584,14 @@ def build_field():
     warn_sign(d, -1.3, 3.6, 2.6, 2.0, 1, "DANGER", ("RF RADIATION", "DO NOT CLIMB"))
     d.build(f"{PFX}towerSigns", root)
 
-    # ---- the top: a flange, the slew ring and the turning neck ----
+    # ---- top: flange, slew ring, turning neck ----
     M("flange", xf(torus(2.35, 0.2, 24, 4), (0, 20.55, 0)), "hazard", root, 0)
     M("slewRing", lathe([(0.0, 20.5), (2.9, 20.5), (2.9, 21.2), (0.0, 21.2)], 24), "dark", root, 0.08)
     M("slewGear", xf(torus(2.5, 0.14, 24, 4), (0, 21.3, 0)), "steel", root, 0)
     mount(root, yaw, tilt, 21.2, 25.4, 1.75)
     M("neckBands", Y(join([xf(torus(1.81, 0.12, 14, 4), (0, y, 0)) for y in (21.9, 23.2, 24.5)])), "metal", yaw, 0)
 
-    # ---- the dish: a white shell and cream face, a dark collar with stripe-and-body blocks, radial trusses behind in the body colour, a quadpod and a Cassegrain feed ----
+    # ---- dish: white shell, cream face, dark collar with stripe/body blocks, body-colour radial trusses, quadpod, Cassegrain feed ----
     M("hub", hub_cone(APEX), "steel", tilt, 0.12)
     M("bowl", bowl(APEX, SHELL, 0.0, 9, 32), "white", tilt, 0.14)
     M("face", bowl(APEX, 0.12, 0.12, 9, 32), "dish", tilt, 0)
@@ -642,7 +637,7 @@ def build_field():
     bm("feedBeacon", (0, FEED_Y + 1.25, 0), (0, FEED_Y + 2.8, 0), 0.1, "dark", tilt)
     PV("blinkFeed", (0, FEED_Y + 3.0, 0), tilt, role="blinker", radius=0.45)
 
-    # ---- liveries: the faction's mark and name on a plate on the tower's second stage (facing +z) and along the room's flank ----
+    # ---- liveries: mark and name on the tower's second stage (+z) and the room's flank ----
     f2 = face(10.0)
     for f, piv in liveries(root, MARKED).items():
         s_ = NAMES[f]
@@ -665,7 +660,7 @@ def build_field():
 
 
 # =====================================================================================================
-# DISH HEAD  (the field dish's reflector, trunnions, turning neck and feed with no tower, lightly built, for the small dishes)
+# DISH HEAD  (light field-dish reflector, trunnions, neck and feed, no tower)
 # =====================================================================================================
 def build_head():
     root, yaw, tilt = unit("dish_head")
@@ -677,8 +672,8 @@ def build_head():
 # ---------------------------------------------------------------------------------------------------------------
 ROOTS = (build_cryo(), build_gantry(), build_field(), build_head())
 
-# every root must have kept its exact name (Blender renames a clash to "name.001", and the game looks them up by name), and its pivots
-NEED = {   # the pivots each root must have: (number, livery, blinker); the field dish has no number and a livery for Daedalus too, the head neither
+# roots must keep their exact names (Blender renames clashes to "name.001"; the game looks them up by name) and pivots
+NEED = {   # required pivots per root: (number, livery, blinker)
     "dish_cryo": (len(NUMBERS), len(FACTIONS), 2), "dish_gantry": (len(NUMBERS), len(FACTIONS), 2),
     "dish_field": (0, len(MARKED), 2), "dish_head": (0, 0, 0),
 }

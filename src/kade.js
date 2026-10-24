@@ -6,15 +6,11 @@ import { tangent, frameQuat, greatCircle } from './geo.js';
 import { pick } from './rng.js';
 import { shatterEcho } from './monolith.js';
 
-// Captain Kade rides a mad-max monster truck now. He never rams: he skirts around
-// you at 45-80 m, swapping direction now and then, glued to the ground, while his gunner works a
-// turret with two modes:
-//   GATLING  on the ground: fast bursts of small rounds
-//   FLAK     once you're well off the ground: shells that burst around you in mid-air; a burst
-//            stings a little and nudges you (bleeds your speed and pulls you down), it doesn't
-//            blast you clear - hard to escape upward, but not impossible
-// Wreck the truck and Kade bails out on foot (the showdown in SPACECOM's story: he's caught), and
-// the first time he drops his Rustmoon Junk Mortar.
+// Captain Kade's monster truck. Never rams: circles you at 45-80 m, swapping direction now and then, while his gunner's
+// turret has two modes:
+//   GATLING  you on the ground: fast bursts of small rounds
+//   FLAK     you well off the ground: mid-air bursts that sting, bleed speed and pull you down (hard to escape upward)
+// Wreck it and Kade bails out on foot (caught, in SPACECOM's showdown); the first time he drops his Rustmoon Junk Mortar.
 
 const ORBIT = [45, 80];
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _m = new THREE.Matrix4();
@@ -25,7 +21,7 @@ export function spawnKadeTruck(story, final) {
   const base = tangent(g.cam.fwd.clone(), P.up).normalize();
   const pos = g.planet.ground(greatCircle(P.pos.clone().normalize(), base.applyAxisAngle(P.up, (Math.random() - 0.5) * 1.2), 230), new THREE.Vector3(), 0.3);
   const m = makeKadeTruck();
-  m.root.scale.setScalar(1.25); // (a boss: bigger than anything else on the road)
+  m.root.scale.setScalar(1.25); // (boss size)
   g.scene.add(m.root);
   const hp = final ? 1500 : 1100;
   const up = pos.clone().normalize();
@@ -63,11 +59,11 @@ export function updateKadeTruck(story, e, dt) {
   m.chassis.position.y = Math.sin(e.t * 9) * 0.06 * Math.min(1, sp / 20);
   m.flag.rotation.y = Math.sin(e.t * 5) * 0.4;
   e.center.copy(b.pos).addScaledVector(up, 4.4);
-  // --- the turret: track you, pick a mode by how high you are ---
+  // --- turret: track you, mode by your altitude ---
   m.root.updateMatrixWorld(true);
   const alt = P.dead ? 0 : g.planet.altitude(P.pos);
   e.mode = e.mode === 'flak' ? (alt < 5 ? 'gatling' : 'flak') : (alt > 7 ? 'flak' : 'gatling');
-  const T = g.enemies.victim(e) || P; // his gunner can be fooled by the Monolith's echo holograms
+  const T = g.enemies.victim(e) || P; // (Monolith echo holograms fool him)
   const target = T.center.clone().addScaledVector(T.vel, Math.min(1.2, T.center.distanceTo(e.center) / 160));
   const local = m.turret.parent.worldToLocal(target.clone()).sub(m.turret.position);
   m.turret.rotation.y += Math.atan2(Math.sin(Math.atan2(local.x, local.z) - m.turret.rotation.y), Math.cos(Math.atan2(local.x, local.z) - m.turret.rotation.y)) * Math.min(1, dt * 5);
@@ -80,7 +76,7 @@ export function updateKadeTruck(story, e, dt) {
     if (e.mode === 'gatling') fireGatling(g, e, dt, T);
     else fireFlak(g, e, dt, T);
   }
-  // he gives up the chase if you get right away (except in the showdown)
+  // gives up past 1.5 km (not in the showdown)
   if (!e.final && P.pos.distanceTo(b.pos) > 1500) { despawn(story, e); story.kade.nextAt = g.time + 300; }
 }
 
@@ -108,8 +104,7 @@ function fireFlak(g, e, dt, T) {
   e.flakCd = 0.6;
   const from = m.flakMuzzle.getWorldPosition(new THREE.Vector3());
   const speed = 210;
-  // aim at where you'll be (the lead solved over a few passes, so a fast runner is properly led),
-  // and set the fuse to burst there, or as soon as it's close to you
+  // lead solved over a few passes (so a fast runner is led properly); fuse bursts there, or as soon as it's close to you
   let t = T.center.distanceTo(from) / speed;
   for (let i = 0; i < 3; i++) t = T.center.clone().addScaledVector(T.vel, t).distanceTo(from) / speed;
   const at = T.center.clone().addScaledVector(T.vel, t).add(_c.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(3));
@@ -118,16 +113,14 @@ function fireFlak(g, e, dt, T) {
   g.audio.tone(90, 0.25, 'sawtooth', 0.2, 0.5);
 }
 
-// A flak burst: a black puff and some fragments. Close enough and it stings and shoves you: a blast
-// knock away from the burst (FLAK_PUSH m/s at point-blank, fading to nothing at 11 m, softened by the
-// Flak Weave like any blast), plus you lose some speed and get pulled down. A hard shove, not a launch:
-// one burst can't move you more than FLAK_PUSH, and they come at most every 0.6 s.
+// A flak burst. Within 11 m it stings and shoves you away (FLAK_PUSH m/s point-blank, fading to 0 at 11 m, softened by
+// the Flak Weave), bleeds speed and pulls you down. A shove, not a launch: at most FLAK_PUSH per burst, one per 0.6 s.
 const FLAK_PUSH = 20;
 export function flakBurst(g, pos) {
   const P = g.player;
   g.fx.explosion(pos, 3.5, false);
   g.fx.spawn(pos, new THREE.Vector3(), { color: 0x2a2433, size: 1.6, life: 1.2, count: 6, spread: 3 });
-  // white phosphorus: burning fragments that rain down trailing smoke and hang about a moment
+  // white phosphorus: burning, smoking fragments
   g.fx.phosphor(pos, 10);
   g.audio.burst(0.35, 900, 0.35);
   for (const d of g.decoys.slice()) if (pos.distanceTo(d.center) < 6) shatterEcho(g, d);
@@ -143,7 +136,7 @@ export function flakBurst(g, pos) {
   const away = _c.copy(P.center).sub(pos);
   if (away.lengthSq() < 0.01) away.copy(up);
   P.vel.addScaledVector(away.normalize(), FLAK_PUSH * f * (P.knockResist || 1));
-  P.body.grounded = false; // (so the shove isn't ironed out by the skates)
+  P.body.grounded = false; // (else the skates iron out the shove)
   P.body.sinceContact = 1;
   g.cam.shake = Math.max(g.cam.shake, 0.3 * f);
   if (Math.random() < 0.4) g.fx.pop('FLAK!', pos.clone(), { color: '#ff9f1c', size: 34, life: 0.6 });
@@ -155,7 +148,7 @@ export function despawn(story, e) {
   story.lockEl.classList.add('hidden');
 }
 
-// The truck's been wrecked (enemies.kill already blew it up).
+// Truck wrecked (enemies.kill already blew it up).
 export function kadeDefeated(story, e) {
   const g = story.game;
   story.lockEl.classList.add('hidden');
@@ -171,7 +164,7 @@ export function kadeDefeated(story, e) {
   g.addCredits(800, 'Kade bounty');
   g.style(150, 'GUN TRUCK DOWN');
   g.rep.add('spacecom', 4, 'Wrecked Captain Kade\'s gun truck');
-  // the first time, his Junk Mortar tumbles out of the wreck
+  // first time: the Junk Mortar drops from the wreck
   if (!g.upgrades.mortar && !story.mortarDrop) {
     const crate = makeCrate(0x7dff3a, 1.6);
     const p = g.planet.ground(e.center.clone(), new THREE.Vector3(), 1.2);
@@ -187,7 +180,7 @@ export function kadeDefeated(story, e) {
   story.save();
 }
 
-// Pick up the dropped Junk Mortar by skating over it (called every frame from Story.update).
+// Skate over the dropped Junk Mortar to take it (every frame, from Story.update).
 export function updateMortarDrop(story) {
   const g = story.game, D = story.mortarDrop;
   if (!D) return;

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Installs headless Blender (the `bpy` module) so tools/blender/*.py can run without the Blender app.
-# Idempotent: does nothing if the pinned version is already importable. Used by the SessionStart hook
-# in .claude/settings.json; also fine to paste into a cloud environment's setup script, which caches
-# the install in the environment so a new session starts with it already there.
+# Installs headless Blender (the `bpy` module) so tools/blender/*.py run without the Blender app.
+# Idempotent: no-op if the pinned version is importable. Used by the SessionStart hook in .claude/settings.json;
+# also fine in a cloud environment's setup script (cached, so new sessions start with it).
 # Needs Python 3.13 (bpy 5.2.x wheels are cp313 only).
 set -u
 BPY_VERSION="${BPY_VERSION:-5.2.2}"

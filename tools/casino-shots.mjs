@@ -1,8 +1,8 @@
-// Dev-only: screenshots of the Lucky Crater Casino from fixed vantage points (docs/casino-layouts.md, "How it gets built"). Not part of the build.
+// Dev-only: Lucky Crater Casino screenshots from fixed vantage points (docs/casino-layouts.md, "How it gets built"). Not in the build.
 //   npx vite --port 5199 --host 127.0.0.1      (in one shell)
 //   node tools/casino-shots.mjs [outdir] [name ...]     (Playwright from PLAYWRIGHT, default /opt/node-tools/node_modules/playwright/index.mjs; the game from GAME_URL)
-// Each view is a camera and a look-at point in the casino's frame (metres: +x right, +z toward the doors, y up). The probe flies the camera itself, hides the HUD and the player, and
-// waits for frames to run; with swiftshader a frame takes a second or two, so a view is ready after a few seconds.
+// Each view: camera and look-at in the casino frame (m: +x right, +z toward the doors, y up). The probe flies the camera, hides HUD and
+// player, and waits; with swiftshader a frame takes a second or two, so each view takes a few seconds.
 import { mkdirSync } from 'node:fs';
 const { chromium } = await import(process.env.PLAYWRIGHT || '/opt/node-tools/node_modules/playwright/index.mjs');
 const OUT = process.argv[2] || 'casino-shots';
@@ -10,18 +10,18 @@ const ONLY = process.argv.slice(3);
 mkdirSync(OUT, { recursive: true });
 
 export const VIEWS = [
-  ['in-door-nave', [0, 2.2, 13], [0, 5, -18]],           // from the doors, down the foyer into the crossing and the Plinko arm
-  ['in-foyer-left', [-6, 2.2, 12], [8, 3, 4]],           // the foyer's east wall: the prize counter
-  ['in-crossing-n', [0, 2.2, -4], [0, 8, -40]],          // from the crossing's south, up the Plinko arm
+  ['in-door-nave', [0, 2.2, 13], [0, 5, -18]],           // from the doors down the foyer, into the crossing and Plinko arm
+  ['in-foyer-left', [-6, 2.2, 12], [8, 3, 4]],           // foyer east wall: prize counter
+  ['in-crossing-n', [0, 2.2, -4], [0, 8, -40]],          // crossing south, up the Plinko arm
   ['in-crossing-w', [-2, 2.4, -13], [-40, 4, -13]],      // into the west wing
   ['in-crossing-e', [2, 2.4, -13], [40, 4, -13]],        // into the east wing
-  ['in-west-wing', [-14, 2.4, -8], [-44, 3, -14]],       // the west wing: claw, classic slots, blackjack
-  ['in-east-wing', [14, 2.4, -6], [40, 3.5, -18]],       // the east wing: the Duck Derby
-  ['in-ceiling', [0, 6, -4], [0, 15, -22]],              // the crossing's ceiling
-  ['out-front', [0, 4, 60], [0, 10, 14]],                // the front, from the boulevard
-  ['out-left', [-70, 6, 30], [0, 8, -10]],               // the west flank
-  ['out-right', [70, 10, 40], [0, 10, -10]],             // the east flank
-  ['out-air', [0, 70, 80], [0, 14, -12]],                // the roofs and the dome from the air
+  ['in-west-wing', [-14, 2.4, -8], [-44, 3, -14]],       // west wing: claw, classic slots, blackjack
+  ['in-east-wing', [14, 2.4, -6], [40, 3.5, -18]],       // east wing: Duck Derby
+  ['in-ceiling', [0, 6, -4], [0, 15, -22]],              // crossing ceiling
+  ['out-front', [0, 4, 60], [0, 10, 14]],                // front, from the boulevard
+  ['out-left', [-70, 6, 30], [0, 8, -10]],               // west flank
+  ['out-right', [70, 10, 40], [0, 10, -10]],             // east flank
+  ['out-air', [0, 70, 80], [0, 14, -12]],                // roofs and dome from the air
 ];
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -1,6 +1,5 @@
-# Builds the desktop game for Windows, Linux and macOS and attaches the downloads to a GitHub
-# Release named after package.json's version. Runs when a version tag (v1.2.3) is pushed, when a
-# commit message contains [release], or manually from the Actions tab.
+# Builds the desktop game (Windows, Linux, macOS) into a GitHub Release named after package.json's version.
+# Runs on a version tag (v1.2.3), a commit message containing [release], or manually from the Actions tab.
 name: Desktop release
 
 on:

@@ -1,66 +1,63 @@
 // Controller feedback: rumble, and on a PlayStation pad the lightbar, player LEDs and adaptive triggers.
 //
-// RUMBLE has two ways out. Over WebHID (sonyout.js, a DualSense or DualShock 4 whose link is open: the desktop app
-// opens it itself, a browser after CONNECT in Settings) the game writes the pad's own output report: this works
-// over USB and Bluetooth and doesn't depend on what the browser exposes. Otherwise the Gamepad API's
-// `vibrationActuator` (dual-rumble: `strong` is the big low-frequency motor, `weak` the small high-frequency one;
+// RUMBLE, two routes. Over WebHID (sonyout.js; a DualSense / DualShock 4 with the link open: the desktop app opens it,
+// a browser after CONNECT in Settings) the game writes the pad's output report, over USB or Bluetooth, browser-agnostic.
+// Otherwise the Gamepad API's `vibrationActuator` (dual-rumble: `strong` = big low motor, `weak` = small high one;
 // older browsers only have `hapticActuators[0].pulse`, one intensity, which gets the louder of the two).
 //
-// Two layers are mixed into one effect and re-sent a dozen times a second (a pad can only play one effect, and a
-// new one replaces it, so everything has to go out as a single mix):
-//   impulses   short kicks the game asks for: play('jump'), land(speed), hit(damage), boom(distance, big), ...
-//              each fades out over its own length, and several at once add up
-//   continuous the skates' rumble with speed, the thrusters, a rail under the skates, a vehicle's engine
-// Only while the pad is the thing being played with (Gamepad.setActive), scaled by the Settings' vibration
-// strength, and off for the keyboard, a hidden tab, a pause (the continuous layer) or no way to rumble at all.
+// A pad plays one effect at a time (a new one replaces it), so two layers are mixed and re-sent ~12 times a second:
+//   impulses   kicks the game asks for: play('jump'), land(speed), hit(damage), boom(distance, big), ...
+//              each fades over its own length; overlaps add up
+//   continuous skate rumble with speed, thrusters, a rail underfoot, a vehicle engine
+// Only while the pad is in use (Gamepad.setActive), scaled by Settings strength; off for keyboard, hidden tab, pause
+// (continuous layer) or no rumble route.
 //
-// THE LIGHTBAR (over the link only) is the colour of your skates, dimmer in menus and brighter in play, white-hot
-// with the thrusters, red when you're hit and pulsing red when you're low; the five player LEDs count your health.
-// THE TRIGGERS (DualSense only, in play, with the pad in use): RT is the weapon's trigger (a click that gives way;
-// stiff again while it recharges), LT the thrusters (a light spring, a buzz while they burn, a wall when they're
-// locked out) or the Rail Lance's scope.
+// LIGHTBAR (link only): skate colour, dim in menus, white-hot with thrusters, red when hit, pulsing red when low; the
+// five player LEDs show health.
+// TRIGGERS (DualSense, in play, pad in use): RT is the weapon (a click that gives way; stiff while recharging), LT the
+// thrusters (light spring, buzz while burning, a wall when locked out) or the Rail Lance's scope.
 import { WEAPONS } from './weapons.js';
 import { feedback, weapon, vibration, TRIGGER_OFF } from './sonyout.js';
 
-const SEND_MS = 80;   // re-send a steady effect this often (each one is played for LONG_MS, so there's no gap)
+const SEND_MS = 80;   // re-send a steady effect this often (each lasts LONG_MS: no gap)
 const LONG_MS = 140;
-const MIN_MS = 40;    // but never changes faster than this (the pad takes a moment to spin up)
-const EPS = 0.025;    // a change smaller than this isn't worth sending
+const MIN_MS = 40;    // fastest change rate (the pad needs a moment to spin up)
+const EPS = 0.025;    // smallest change worth sending
 const SONY = /054c|dualsense|dualshock|playstation|wireless controller/i;
-const BLUE = [0, 0, 255]; // a Sony pad's own colour: what the lightbar goes back to when it's switched off here
+const BLUE = [0, 0, 255]; // Sony default lightbar colour, restored when ours is switched off
 
-// name: [strong, weak, seconds] (an impulse starts at that strength and fades to nothing)
+// name: [strong, weak, seconds] (starts at that strength, fades to nothing)
 const PRESETS = {
-  jump:    [0.0, 0.35, 0.07],  // a tick off the ground
-  grind:   [0.45, 0.7, 0.14],  // the skates biting a rail
-  stick:   [0.55, 0.55, 0.16], // a trick landed clean
-  wipeout: [1.0, 0.8, 0.45],   // a trick landed badly
+  jump:    [0.0, 0.35, 0.07],  // tick off the ground
+  grind:   [0.45, 0.7, 0.14],  // skates biting a rail
+  stick:   [0.55, 0.55, 0.16], // clean trick landing
+  wipeout: [1.0, 0.8, 0.45],   // bad trick landing
   death:   [1.0, 1.0, 0.95],
-  pulse:   [0.0, 0.5, 0.06],   // the pulse pistol
+  pulse:   [0.0, 0.5, 0.06],   // pulse pistol
   scatter: [0.7, 0.9, 0.13],
   rail:    [1.0, 0.55, 0.28],
   mortar:  [0.8, 0.3, 0.2],
-  cannon:  [1.0, 0.7, 0.3],    // the APC's turret
+  cannon:  [1.0, 0.7, 0.3],    // APC turret
   pickup:  [0.0, 0.5, 0.09],
-  cash:    [0.0, 0.45, 0.07],  // (twice, a moment apart)
-  tick:    [0.0, 0.22, 0.04],  // a menu highlight moving
-  press:   [0.12, 0.4, 0.06],  // a menu button pressed
-  test:    [0.7, 0.7, 0.3],    // changing the strength in Settings
+  cash:    [0.0, 0.45, 0.07],  // twice (ECHO)
+  tick:    [0.0, 0.22, 0.04],  // menu highlight moves
+  press:   [0.12, 0.4, 0.06],  // menu button pressed
+  test:    [0.7, 0.7, 0.3],    // Settings strength changed
 };
-const ECHO = { cash: 0.09 }; // presets that play a second time this many seconds later
+const ECHO = { cash: 0.09 }; // presets replayed this many seconds later
 
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
-// the triggers' feel (built once: one per frame would be garbage)
+// trigger effects (built once, not per frame)
 const FIRE = { pulse: weapon(4, 6, 3), scatter: weapon(2, 7, 7), rail: weapon(3, 8, 8), mortar: weapon(3, 6, 5), cannon: weapon(2, 6, 7) };
-const COOLING = feedback(1, 3);   // RT while the weapon recharges
-const SCOPE = feedback(3, 3);     // LT with the Rail Lance: a half pull to scope
-const SPRING = feedback(3, 2);    // LT otherwise: a light spring, like a throttle
-const LOCKED = feedback(0, 8);    // LT with the thrusters locked out
-const BURN = vibration(0, 3, 38); // LT while they burn
-const LOW = vibration(0, 6, 12);  // ...and the tank nearly out
+const COOLING = feedback(1, 3);   // RT while recharging
+const SCOPE = feedback(3, 3);     // LT with the Rail Lance: half pull to scope
+const SPRING = feedback(3, 2);    // LT otherwise: light throttle spring
+const LOCKED = feedback(0, 8);    // LT, thrusters locked out
+const BURN = vibration(0, 3, 38); // LT while burning
+const LOW = vibration(0, 6, 12);  // ...tank nearly out
 const DEMO_R = weapon(2, 6, 8), DEMO_L = vibration(0, 4, 30);
-const HEALTH_LEDS = [0x04, 0x0a, 0x15, 0x1b, 0x1f]; // 1..5 of the player LEDs, centred
+const HEALTH_LEDS = [0x04, 0x0a, 0x15, 0x1b, 0x1f]; // 1..5 player LEDs, centred
 
 export class Haptics {
   constructor(game) {
@@ -69,38 +66,38 @@ export class Haptics {
     this.level = 1;       // Settings: strength
     this.light = true;    // Settings: lightbar and player LEDs
     this.trig = true;     // Settings: adaptive triggers
-    this.act = null;      // the Gamepad API's actuator of the pad in use
-    this.key = null;      // which pad that is
+    this.act = null;      // Gamepad API actuator of the pad in use
+    this.key = null;      // which pad
     this.padId = '';
-    this.failed = false;  // the browser refused effects
+    this.failed = false;  // browser refused effects
     this.fails = 0;       // ...in a row
-    this.lastResult = ''; // what the browser last said about an effect
-    this.mode = 'none';   // the Gamepad API's: 'dual' | 'pulse' | 'none'
+    this.lastResult = ''; // browser's last effect result
+    this.mode = 'none';   // Gamepad API: 'dual' | 'pulse' | 'none'
     this.lastVia = 'none';
-    this.lit = false;     // the lightbar has been ours
+    this.lit = false;     // we have set the lightbar
     this.imp = [];        // live impulses: { s, w, t, d, at }
     this.t = 0;           // own clock (s)
     this.demo = 0;        // s left of the Settings TEST
-    this.cont = { s: 0, w: 0 }; // the continuous layer, smoothed
+    this.cont = { s: 0, w: 0 }; // continuous layer, smoothed
     this.sent = { s: 0, w: 0 };
     this.sentAt = -9;
-    this.ready = false;   // (the first configure() is the settings loading: no test buzz for that)
+    this.ready = false;   // first configure() is the settings load: no test buzz
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.stop(); });
   }
 
   get fx() { const p = this.game.pad; return p && p.fx; }
 
-  // how rumble gets out right now: the pad's own report ('hid'), the browser's ('api') or not at all
+  // rumble route: pad report ('hid'), browser ('api') or 'none'
   get via() {
     const fx = this.fx;
     if (fx && fx.ready) return 'hid';
     return this.mode === 'none' ? 'none' : 'api';
   }
 
-  // the pad the Gamepad is reading this frame (null when there is none)
+  // the pad Gamepad reads this frame (or null)
   attach(gp) {
     const act = gp && (gp.vibrationActuator && gp.vibrationActuator.playEffect ? gp.vibrationActuator : gp.hapticActuators && gp.hapticActuators[0] && gp.hapticActuators[0].pulse ? gp.hapticActuators[0] : null);
-    const key = gp ? `${gp.index}:${gp.id}` : null; // (some browsers hand out a fresh object for the same pad each poll)
+    const key = gp ? `${gp.index}:${gp.id}` : null; // some browsers give a fresh object per poll
     if (key !== this.key) { this.stop(); this.key = key; this.failed = false; this.fails = 0; this.lastResult = ''; this.padId = gp ? gp.id : ''; }
     this.act = act;
     this.mode = !act || this.failed ? 'none' : act.playEffect ? 'dual' : 'pulse';
@@ -117,7 +114,7 @@ export class Haptics {
     this.ready = true;
   }
 
-  // A kick by name, scaled by `k` (0..1+). `force`: even when the keyboard is what's being played with.
+  // A named kick scaled by `k` (0..1+). `force`: even while on keyboard.
   play(name, k = 1, force = false) {
     const p = PRESETS[name];
     if (!p || !this.live(force)) return;
@@ -132,21 +129,21 @@ export class Haptics {
     this.dirty = true;
   }
 
-  // landing at `speed` m/s into the ground / a wall
+  // landing at `speed` m/s (ground or wall)
   land(speed) {
     if (!this.live()) return;
     const k = clamp01((speed - 5) / 32);
     this.add(0.2 + 0.8 * k, 0.15 + 0.6 * k, 0.1 + 0.2 * k);
   }
 
-  // the player took `amount` damage
+  // player took `amount` damage
   hit(amount) {
     if (!this.live()) return;
     const k = clamp01(amount / 30);
     this.add(0.3 + 0.7 * k, 0.5 + 0.4 * k, 0.16 + 0.3 * k);
   }
 
-  // a blast `dist` m from the camera (big: a large one)
+  // blast `dist` m from the camera
   boom(dist, big) {
     if (!this.live()) return;
     const reach = big ? 170 : 70;
@@ -155,25 +152,25 @@ export class Haptics {
     this.add((big ? 1 : 0.65) * k, (big ? 0.8 : 0.6) * k, (big ? 0.55 : 0.28) * (0.5 + 0.5 * k));
   }
 
-  // Settings TEST: three kicks, the lightbar white and both triggers working, for a second and a half
+  // Settings TEST: ~1.5 s of three kicks, white lightbar, both triggers
   test() {
     this.demo = 1.6;
     if (this.via === 'none') return;
     for (let i = 0; i < 3; i++) this.add(0.8, 0.8, 0.28, i * 0.5);
   }
 
-  // is there a pad to feel it on, and is it the one in use?
+  // a pad that can rumble, and it's in use?
   live(force = false) {
     if (!this.on || this.via === 'none' || document.hidden) return false;
     return force || !!(this.game.input && this.game.input.padActive);
   }
 
-  // Per frame (real seconds), late in the frame so that this frame's events go out at once.
+  // Per frame (real seconds), late so this frame's events go out at once.
   update(dt) {
     this.t += dt;
     if (this.demo > 0) this.demo -= dt;
     const via = this.via, fx = this.fx;
-    if (via !== this.lastVia) { // (the link came up or went: whatever the other way was playing stops)
+    if (via !== this.lastVia) { // route changed: stop the old one
       if (this.lastVia === 'hid' && fx) fx.quiet(); else this.silence();
       this.imp.length = 0; this.cont.s = this.cont.w = 0; this.sent = { s: 0, w: 0 };
       this.lastVia = via;
@@ -188,7 +185,7 @@ export class Haptics {
         if (g.grind && g.grind.active) { // metal under the skates
           const k = clamp01(sp / 60);
           ts = 0.1 + 0.1 * k; tw = 0.35 + 0.25 * k;
-        } else if (P.vehicle) { // an engine, rising with speed
+        } else if (P.vehicle) { // engine, rising with speed
           const k = clamp01(sp / 70);
           ts = 0.1 + 0.25 * k; tw = 0.03 + 0.15 * k;
         } else if (b.skating && b.grounded && !P.rag && sp > 3) { // skates on the ground
@@ -198,19 +195,19 @@ export class Haptics {
         if (b.thrusting) { ts = Math.max(ts, 0.25); tw = Math.max(tw, 0.32); }
       }
     }
-    // (a little smoothing, so the layer swells in and out rather than jumping)
+    // smoothed so it swells rather than jumps
     const a = 1 - Math.exp(-dt * 12);
     this.cont.s += (ts - this.cont.s) * a;
     this.cont.w += (tw - this.cont.w) * a;
     if (this.cont.s < 0.01 && ts === 0) this.cont.s = 0;
     if (this.cont.w < 0.01 && tw === 0) this.cont.w = 0;
 
-    // the impulses: a linear fade, summed softly with each other and with the continuous layer
+    // impulses: linear fade, soft-summed with each other and the continuous layer
     let is = 0, iw = 0;
     for (let i = this.imp.length - 1; i >= 0; i--) {
       const m = this.imp[i];
       if (m.at > 0) { m.at -= dt; continue; }
-      const f = 1 - m.t / m.d; // (heard once at its full strength before it ages: a kick shorter than a frame still goes out)
+      const f = 1 - m.t / m.d; // full strength before ageing, so sub-frame kicks still go out
       is = 1 - (1 - is) * (1 - m.s * f);
       iw = 1 - (1 - iw) * (1 - m.w * f);
       m.t += dt;
@@ -226,7 +223,7 @@ export class Haptics {
     } else this.send(s, w);
   }
 
-  // ---- the lightbar and the triggers (over the link) ----
+  // ---- lightbar and triggers (link only) ----
   feel(g, fx) {
     if (this.light || this.demo > 0) { const l = this.glow(g); fx.light(l.rgb, l.leds); this.lit = true; }
     else fx.light(this.lit ? BLUE : null, 0x04);
@@ -245,7 +242,7 @@ export class Haptics {
     const dim = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
     const RED = [255, 24, 24];
     if (P.dead) return { rgb: dim(RED, 0.55), leds: 0x04 };
-    if (g.state !== 'play') return { rgb: dim(base, 0.4), leds: 0x04 }; // (menus, pauses, the map, the casino)
+    if (g.state !== 'play') return { rgb: dim(base, 0.4), leds: 0x04 }; // menus, pause, map, casino
     let c = dim(base, 0.7);
     const b = P.body;
     if (b.thrusting) c = mix(c, [255, 255, 255], 0.45);
@@ -271,7 +268,7 @@ export class Haptics {
     return [rt, lt];
   }
 
-  // ---- the browser's rumble ----
+  // ---- browser rumble ----
   send(s, w) {
     const now = this.t;
     const since = (now - this.sentAt) * 1000;
@@ -284,7 +281,7 @@ export class Haptics {
       return;
     }
     const rising = s > sc.s + EPS || w > sc.w + EPS;
-    if (!(rising && this.dirty) && since < MIN_MS) return;       // (a fresh kick goes out at once)
+    if (!(rising && this.dirty) && since < MIN_MS) return;       // a fresh kick goes out at once
     if (!moved && since < SEND_MS) return;
     this.dirty = false;
     this.sentAt = now; this.sent = { s, w };
@@ -308,7 +305,7 @@ export class Haptics {
     } catch { /* the pad went away */ }
   }
 
-  // everything off (a pause, the tab hidden, the pad gone, vibration switched off)
+  // all off (pause, hidden tab, pad gone, vibration off)
   stop() {
     this.imp.length = 0;
     this.cont.s = this.cont.w = 0;
@@ -319,7 +316,7 @@ export class Haptics {
     if (fx && fx.ready) fx.quiet();
   }
 
-  // a line for Settings: how this pad is being driven
+  // Settings line: how this pad is driven
   get status() {
     const fx = this.fx, gy = this.game.pad && this.game.pad.gyro;
     const sony = SONY.test(this.padId);

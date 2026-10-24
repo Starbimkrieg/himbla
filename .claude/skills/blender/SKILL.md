@@ -41,7 +41,7 @@ outposts, hall, lot, chimera (the chimera kit: about 6 minutes, it remeshes ever
 2. `npm run check:outposts` after touching outposts.
 3. Check the diff touches only the models you meant to change. `runner.glb` can differ by a few bytes between
    runs; that is not a change.
-4. Update the README source map if a model or builder was added or renamed.
+4. Update the source map in `docs/reference.md` if a model or builder was added or renamed.
 5. Update the Asset Row (next section), in the same commit as the model.
 
 ## Keep the Asset Row in step
@@ -70,7 +70,7 @@ a changed shape, size, variant or part list.
    item. Ids stay unique.
 6. **Look at it.** `npm run dev`, open the Row, press `F` at the plaza terminal (or the one at the section's start) to jump to the section.
    The item should stand on the floor, have its name board, and not show a red `DID NOT BUILD` board; compare it with how the game draws it.
-7. **Keep the text in step.** The README's Asset Row paragraph states how many items and sections there are: update it if that changes.
+7. **Keep the text in step.** The Asset Row entry in `docs/reference.md` states how many items and sections there are: update it if that changes.
    Add the item to the CHANGELOG entry for the model.
 
 A headless check that every item still builds, and that none throws while it is on screen, works in a cloud session (Chromium and

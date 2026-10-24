@@ -1,6 +1,5 @@
-// Settings menu: graphics / gameplay / audio / controls. Values live in `settings.v`, are saved
-// to localStorage and pushed into the running game by apply(game). Game code reads them as
-// `g.settings ? g.settings.v.<key> : <default>` so it still works without this module.
+// Settings menu: graphics / gameplay / audio / controls. Values in `settings.v`, saved to localStorage, pushed into the
+// game by apply(game). Game code reads `g.settings ? g.settings.v.<key> : <default>`, so it works without this module.
 
 import { glyphHtml, glyphState, tokensFor } from './glyphs.js';
 import { gyroSupported } from './gyro.js';
@@ -8,16 +7,16 @@ import { DEV_TOOLS } from './devtools.js';
 import { SKIN_FROM_URL } from './moonSkins.js';
 
 const KEY = 'moonrunner-settings-v1';
-const BINDS_V = 2; // 2: thrusters left the keyboard (right mouse only) and the power moved from Z to E
+const BINDS_V = 2; // 2: no thruster key (right mouse only); power on E, not Z
 
-// Binds saved before v2: the thruster key is gone, and whatever the power (Z) was moved to now belongs to E.
+// Migrates pre-v2 binds: drop the thruster key (E); the power's binding moves from Z to E.
 function migrateBinds(old) {
   const out = {};
   for (const [def, phys] of Object.entries(old)) {
     if (def === 'KeyE') continue;
     out[def === 'KeyZ' ? 'KeyE' : def] = phys;
   }
-  // another action sitting on the physical E (the thruster's old key) trades places with the power
+  // an action on physical E swaps with the power
   if (!out.KeyE) for (const def of Object.keys(out)) if (out[def] === 'KeyE') out[def] = 'KeyZ';
   return out;
 }
@@ -43,15 +42,14 @@ export const ACTIONS = [
   { code: 'KeyV', label: 'Vehicle: call / board / leave' },
   { code: 'KeyE', label: 'Power (mouse wheel: pick one)' },
   { code: 'KeyT', label: 'Personal Teleporter (tech)' },
-  { code: 'KeyH', label: 'Blackjack: hit' }, // (H used to be the help panel: that's the pause card's HELP now, but the casino still reads the code)
+  { code: 'KeyH', label: 'Blackjack: hit' }, // (the casino reads this code)
 ];
 // keys the game hard-wires for menus and weapon slots
 const RESERVED = ['Escape', 'Enter', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
 
 
-// Quality presets: picking one sets these; changing any of them by hand makes it CUSTOM.
-// (Ground detail is for the regolith ground texture, moonSkins.js, which dev builds can switch on with the Regolith ground texture setting or ?moonskin=1: a release
-// build has neither, so its presets leave Ground detail out.)
+// Quality presets: picking one sets these; changing one by hand makes it CUSTOM. Ground detail is for the regolith
+// texture (moonSkins.js; dev builds only, via its setting or ?moonskin=1), so release presets leave it out.
 const gd = (n) => (DEV_TOOLS ? { groundDetail: n } : {});
 const PRESETS = {
   low: { renderScale: 0.75, viewDist: 0.7, terrainDetail: 0.75, shadows: true, shadowRes: 1024, particles: 0.6, ...gd(0) },
@@ -73,7 +71,7 @@ export const SCHEMA = {
     { key: 'terrainDetail', label: 'Terrain detail', type: 'range', min: 0.6, max: 1.6, step: 0.05, def: 1, fmt: pct, hint: 'How far the detailed ground reaches' },
     { key: 'shadows', label: 'Shadows', type: 'toggle', def: true },
     { key: 'shadowRes', label: 'Shadow quality', type: 'choice', def: 2048, options: [[1024, 'LOW'], [2048, 'MEDIUM'], [4096, 'HIGH']] },
-    // (the regolith ground texture, moonSkins.js: dev builds only for now, and off unless chosen)
+    // (regolith ground texture, moonSkins.js: dev builds only, off by default)
     ...(DEV_TOOLS ? [
       { key: 'regolith', label: 'Regolith ground texture', type: 'toggle', def: false, hint: 'Lunar dust, pebbles and craters on the ground, and grain and dust on the rocks' },
       { key: 'groundDetail', label: 'Ground detail', type: 'choice', def: 1, options: [[0, 'LOW'], [1, 'MEDIUM'], [2, 'HIGH']], hint: 'How much of the regolith texture is drawn: lower is faster' },
@@ -155,13 +153,13 @@ const PAD_ROWS = [
   ['Menus: previous / next tab', ['LB', 'RB']],
 ];
 
-// Help-table rows whose key names aren't a single key (the rest go through tokensFor)
+// Help-table rows that aren't a single key (the rest go through tokensFor)
 const HELP_PAD = {
   Mouse: ['RS'], 'Left mouse': ['RT'], 'SPACE (hold)': ['LB'], 'A / D on skates': ['LS'], 'Right mouse': ['LT'],
   'Q + W/S · Q + A/D': ['B', '#+', 'LS'], '1 2 3 4': ['DL', 'DR'], 'X (hold)': ['DD'], 'R (hold)': ['VIEW', '#hold'], M: ['VIEW', '#tap'],
 };
 
-// Help-table rows with no pad button at all (music is under Settings → Audio): left out while a pad is in use
+// Help-table rows with no pad button (music: Settings → Audio), hidden while a pad is in use
 const HELP_PAD_HIDE = ['N'];
 
 // Help-table / title-card labels rebuilt from the current bindings (k = code -> label).
@@ -211,8 +209,8 @@ export class Settings {
       }
       if (d.binds && typeof d.binds === 'object') this.v.binds = d.bindsV >= 2 ? { ...d.binds } : migrateBinds(d.binds);
       if (typeof d.autoTuned === 'boolean') this.v.autoTuned = d.autoTuned;
-      if (d.preset === undefined) this.v.preset = this.matchPreset(); // (settings saved before presets existed)
-      // (saved before Ground detail existed: it follows the preset they were on, so a LOW preset does not get HIGH detail)
+      if (d.preset === undefined) this.v.preset = this.matchPreset(); // (saves with no preset)
+      // (saves with no Ground detail take the preset's, so LOW doesn't get HIGH detail)
       else if (d.groundDetail === undefined && PRESETS[d.preset] && PRESETS[d.preset].groundDetail !== undefined) this.v.groundDetail = PRESETS[d.preset].groundDetail;
       this.stored = true;
     } catch { /* corrupt or unavailable */ }
@@ -231,13 +229,12 @@ export class Settings {
     this.v.preset = id;
   }
 
-  // First launch (no saved settings): a first guess at the preset from the graphics card and the
-  // CPU, before anything is drawn. A software renderer, an integrated Intel GPU or a small CPU gets
-  // LOW, a big discrete card HIGH, everything else MEDIUM. Then the first half-minute of play is
-  // timed (perfSample), and if it's still struggling it steps down once and says so.
+  // First launch (no saved settings): guess a preset from GPU and CPU before anything is drawn. Software renderer,
+  // integrated Intel or a small CPU: LOW; a big discrete card: HIGH; else MEDIUM. perfSample then times the first
+  // half-minute of play and steps down once if it struggles.
   autoDetect(renderer) {
     if (this.stored) return;
-    // (only a brand-new install: anyone who's played already keeps what they had)
+    // (brand-new installs only: existing players keep what they had)
     try { for (let i = 0; i < localStorage.length; i++) if (/^mr-slot|^mr-slots-init|^moonrunner-save/.test(localStorage.key(i) || '')) return; } catch { return; }
     let gpu = '';
     try {
@@ -255,7 +252,7 @@ export class Settings {
     this.save();
   }
 
-  // Per frame (raw ms between frames): the first-launch check. 5 s to settle, then 25 s timed.
+  // Per frame (raw ms between frames), first launch: 5 s to settle, then 25 s timed.
   perfSample(ms, playing) {
     if (this.v.autoTuned !== false || !playing || ms > 250 || document.hidden) return;
     this.pf ||= { t: 0, n: 0, sum: 0 };
@@ -293,7 +290,7 @@ export class Settings {
     return false;
   }
 
-  // Push every value into the running game. Each subsystem is optional (may not exist yet).
+  // Push every value into the game. Each subsystem is optional (may not exist yet).
   apply(g = this.game, initial = false) {
     if (!g) return;
     this.game = g;
@@ -318,8 +315,8 @@ export class Settings {
       g.planet.lodScale = v.terrainDetail;
       if (DEV_TOOLS && g.planet.holeU.uSkinQ) {
         g.planet.holeU.uSkinQ.value = v.groundDetail;
-        // the regolith toggle picks look 1 or the classic 0. ?moonskin=N (the other looks, for trying) wins until the toggle is
-        // first changed, so opening the Settings menu does not undo it.
+        // regolith toggle: look 1 or classic 0. ?moonskin=N wins until the toggle is first changed (so opening Settings
+        // doesn't undo it).
         const sk = g.planet.holeU.uSkin;
         if (this.regolithOn === undefined) { if (!SKIN_FROM_URL) sk.value = v.regolith ? 1 : 0; }
         else if (this.regolithOn !== v.regolith) sk.value = v.regolith ? 1 : 0;
@@ -437,7 +434,7 @@ export class Settings {
     this.el.classList.remove('hidden');
     this.render();
     const g = this.game;
-    // (the PlayStation link row follows the pad coming and going while this is open)
+    // (the PlayStation link row tracks the pad connecting / leaving)
     const gy = g && g.pad && g.pad.gyro;
     if (gy) gy.onStatus = () => { if (this.open && this.tab === 'gameplay') this.render(); };
     if (g && g.audio && g.audio.click) g.audio.click();
@@ -452,7 +449,7 @@ export class Settings {
     this.el.classList.add('hidden');
     this.save();
     const g = this.game;
-    // back to the pause card unless the game was resumed some other way meanwhile
+    // back to the pause card, unless the game was resumed meanwhile
     if (this.from === 'pause' && g && g.state === 'paused') document.getElementById('pause').classList.remove('hidden');
   }
 
@@ -552,7 +549,7 @@ export class Settings {
         return `<div class="set-row"><span class="set-label">${s.label}${s.hint ? `<small>${s.hint}</small>` : ''}</span><span class="set-ctl">${ctl}</span></div>`;
       }).join('');
       if (this.tab === 'gameplay') {
-        // the gyro is read straight from the pad (WebHID): it may need a one-time CONNECT
+        // gyro read from the pad over WebHID: may need a one-time CONNECT
         const gy = this.game && this.game.pad && this.game.pad.gyro;
         const g_ = this.game && this.game.haptics;
         const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');

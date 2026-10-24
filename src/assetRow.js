@@ -5,18 +5,14 @@ import { mulberry32 } from './rng.js';
 import { railOf } from './rails.js';
 import { GROUPS } from './assetRowItems/index.js';
 
-// THE ASSET ROW (a dev tool): a flat showroom with the game's assets lined up side by side, each under a name board.
-// The one way in is the dev menu -> full cheat menu -> TELEPORT -> "1 · ASSET ROW" (cheats.js); a release build has none
-// of it (devtools.js). It is not a location, is in no save, and leaving (the same menu entry, any other teleport, quitting
-// to the menu) puts you back on the Moon exactly where you left.
+// THE ASSET ROW (dev tool): a flat showroom with the game's assets side by side, each under a name board.
+// Way in: dev menu -> full cheat menu -> TELEPORT -> "1 · ASSET ROW" (cheats.js); not in release builds (devtools.js).
+// Not a location, in no save; leaving (same entry, any teleport, quit to menu) puts you back on the Moon where you left.
 //
-// Modelled on spindle.js: while you are here the Moon is hidden and frozen (main.js `away()`), g.planet is this world
-// (FlatWorld), and "up" is one fixed direction (geo.js GRAV.flat). The things shown are the catalogue in
-// assetRowItems/ (see index.js for what an item is). They are built when you come near and let go of when you walk off, so
-// the whole catalogue never has to be alive at once.
+// Like spindle.js: the Moon is hidden and frozen (main.js `away()`), g.planet is FlatWorld, "up" is fixed (GRAV.flat).
+// Items are the assetRowItems/ catalogue (index.js), built when you come near and dropped when you walk off.
 //
-// Layout: two lanes along +x. Lane A (z = 0) holds everything under 100 m across, group after group; lane B (z = LANE_B)
-// the big places, which need the room. You start on the plaza at x = 0.
+// Layout: two lanes along +x. Lane A (z = 0): everything under 100 m across; lane B: the big places. Start at x = 0.
 
 const UP = new THREE.Vector3(0, 1, 0);
 const LANE_Z = { A: 0, B: 460 };
@@ -24,14 +20,14 @@ const LANE_HALF = { A: 90, B: 330 }; // the plinth reaches this far either side 
 const PLINTH_X0 = -90, PLINTH_PAD = 120;
 const VOID_Y = -1e5; // "no floor" past the plinth's edge
 const FALL_LIMIT = -70; // below this you went over the edge: back to the start
-const BUILD_R = 320, DROP_R = 520; // m from an item's footprint: built inside the first, let go of outside the second
-const BUILD_MS = 14; // at most this long a frame spent building items (a big place can take longer on its own)
+const BUILD_R = 320, DROP_R = 520; // m from an item's footprint: build inside, drop outside
+const BUILD_MS = 14; // per-frame build budget (one big place can overrun it)
 const GAP = (w) => Math.min(14, Math.max(6, w * 0.12)); // clear metres between neighbouring footprints
 const SECTION_GAP = 36;
 const COLOR = { A: '#ffd23f', B: '#2ee6ff' };
 const TERMINAL_R = 5.5; // m: how near a terminal you must stand to use it
 
-// A section terminal: a console with a slanted screen under a light column that shows from far off. `color` is the lane's.
+// A section terminal: console, slanted screen and a light column visible from afar. `color` is the lane's.
 function makeTerminal(color) {
   const g = new THREE.Group();
   const base = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.1, 1.1), toon(0x2a2438)); base.position.y = 0.55; ink(base, 0.06); g.add(base);
@@ -42,7 +38,7 @@ function makeTerminal(color) {
   return g;
 }
 
-// ---------- the flat planet interface the physics, camera, effects and HUD use (planet.js has the Moon's) ----------
+// ---------- flat planet interface for physics, camera, fx and HUD (planet.js has the Moon's) ----------
 class FlatWorld {
   constructor() {
     this.R = 3600; this.craters = []; this.rails = []; this.lastLake = null; this.colliders = null; this.rockRay = Infinity;
@@ -56,13 +52,13 @@ class FlatWorld {
   visible() { return true; }
   inLake() { return null; }
   rimRailsNear() { return []; }
-  // grind rails (rails.js): an item's crest lines stand here while it is built
+  // grind rails (rails.js): an item's crest lines, while it is built
   addRail(pts) { const r = railOf(pts); this.rails.push(r); return r; }
   removeRail(r) { const i = this.rails.indexOf(r); if (i >= 0) this.rails.splice(i, 1); }
   update() {}
 }
 
-// canvas grid for the plinth: a line every 10 m, so scale reads at a glance
+// plinth grid texture: a line every 10 m, for scale
 function gridTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const x = c.getContext('2d');
@@ -76,16 +72,16 @@ function gridTexture() {
   return t;
 }
 
-// a name board: the game's pixel-font sign as a sprite that always draws, `height` m tall
+// a name board: pixel-font sprite, `height` m tall, always drawn on top
 function board(text, height, color = '#ffd23f') {
   const s = textSprite(text, { color, scale: height / 10 });
-  s.material.depthTest = false; // (readable over what stands behind it)
+  s.material.depthTest = false;
   s.renderOrder = 10;
   return s;
 }
 
-// the box round what is drawn: visible meshes only (a hidden plume or ghost does not count), each by its own geometry's box
-// moved into place (a tilted part is not swelled to its rotated corners the way Box3.setFromObject does)
+// box round visible meshes only (no hidden plumes or ghosts), each geometry's box moved into place
+// (unlike Box3.setFromObject, a tilted part isn't swelled to its rotated corners)
 const _gb = new THREE.Box3();
 function drawnBox(obj) {
   const box = new THREE.Box3();
@@ -101,8 +97,8 @@ function drawnBox(obj) {
 const disposeTree = (root) => {
   root.traverse((o) => {
     if (o.geometry) o.geometry.dispose();
-    if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose(); // (a skinned figure's bone texture)
-    if (o.isInstancedMesh) o.dispose(); // (a crowd's instance buffers)
+    if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose(); // bone texture
+    if (o.isInstancedMesh) o.dispose(); // instance buffers
     const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
     for (const m of mats) { if (m.map) m.map.dispose(); m.dispose(); }
   });
@@ -115,13 +111,13 @@ export class AssetRow {
     this.active = false;
     this.world = new FlatWorld();
     this.root = null;
-    this.items = []; // every catalogue item, with its place in the layout (layout())
+    this.items = []; // every catalogue item with its layout slot (layout())
     this.sections = [];
-    this.terminals = []; // one by the plaza and one at the start of every section (build())
+    this.terminals = []; // plaza + one per section (build())
     this.t = 0;
   }
 
-  // ---- the layout: where every item stands, worked out from the sizes the items declare, before any is built
+  // ---- layout: every item's slot, from its declared size, before any is built
   layout() {
     if (this.items.length) return;
     const lanes = { A: 40, B: 40 };
@@ -142,7 +138,7 @@ export class AssetRow {
     this.world.x1 = Math.max(lanes.A, lanes.B) + PLINTH_PAD;
   }
 
-  // The static parts: the plinth, the stars, the plaza and the section boards
+  // static parts: plinth, stars, plaza, section boards
   build() {
     if (this.root) return;
     this.layout();
@@ -157,7 +153,7 @@ export class AssetRow {
     plinth.position.set(w.x0 + len / 2, -2, (w.z0 + w.z1) / 2);
     plinth.receiveShadow = true;
     root.add(plinth);
-    // the sky: stars (a sphere that follows the camera)
+    // stars (a sphere that follows the camera)
     const sky = new THREE.Group();
     const rr = mulberry32(5), N = 2000, sp = new Float32Array(N * 3);
     for (let i = 0; i < N; i++) { const u = rr() * 2 - 1, th = rr() * Math.PI * 2, q = Math.sqrt(1 - u * u); sp[i * 3] = q * Math.cos(th) * 7600; sp[i * 3 + 1] = Math.abs(u) * 7600; sp[i * 3 + 2] = q * Math.sin(th) * 7600; }
@@ -165,10 +161,10 @@ export class AssetRow {
     sky.add(new THREE.Points(sg, new THREE.PointsMaterial({ size: 2.2, sizeAttenuation: false, color: 0xe8e8ff })));
     this.sky = sky;
     root.add(sky);
-    // the plaza: the way in, and what is down the row
+    // the plaza: title and what's down the row
     const title = board('ASSET ROW', 9, '#2ee6ff'); title.position.set(0, 12, 20); root.add(title);
     const note = board(`${this.items.length} ASSETS · LANE A (YELLOW): EVERYTHING UNDER 100 M · LANE B (CYAN, ${LANE_Z.B} M OVER): THE BIG PLACES`, 1.6, '#ffffff'); note.position.set(0, 5.5, 20); root.add(note);
-    // the terminals: where you can jump to any section instead of walking (use: F, see terminalMenu)
+    // terminals: F jumps to any section (terminalMenu)
     const addTerminal = (name, x, z, color, hex) => {
       const t = makeTerminal(color);
       t.position.set(x, 0, z);
@@ -176,7 +172,7 @@ export class AssetRow {
       this.terminals.push({ name, x, z, color: hex });
     };
     addTerminal('PLAZA', 8, 52, 0x2ee6ff, '#2ee6ff');
-    for (const s of [...this.sections].sort((a, b) => a.lane.localeCompare(b.lane) || a.x - b.x)) { // (the menu lists the yellow lane's sections down the row, then the cyan lane's)
+    for (const s of [...this.sections].sort((a, b) => a.lane.localeCompare(b.lane) || a.x - b.x)) { // menu order: yellow lane down the row, then cyan
       addTerminal(`${s.lane} · ${s.title}`, s.x + 4, LANE_Z[s.lane] + 34, s.lane === 'A' ? 0xffd23f : 0x2ee6ff, COLOR[s.lane]);
       const b = board(s.title, 6, COLOR[s.lane]);
       b.position.set(s.x + 8, 13, LANE_Z[s.lane]);
@@ -206,7 +202,7 @@ export class AssetRow {
     }
     const obj = made.root;
     inst.add(obj);
-    // (centre the footprint on its slot: a factory's own origin may sit off to one side; measured with inst at the origin)
+    // centre the footprint on its slot (a factory's origin may be off to one side); measured with inst at the origin
     inst.updateMatrixWorld(true);
     const box = drawnBox(obj);
     if (!box.isEmpty()) { const c = box.getCenter(new THREE.Vector3()); obj.position.x -= c.x; obj.position.z -= c.z; }
@@ -218,20 +214,20 @@ export class AssetRow {
     const label = board(e.it.label || e.it.id, bh, COLOR[e.lane]);
     label.position.set(0, bh * 0.5 + 0.3, e.d / 2 + (e.it.labelZ ?? 3 + bh * 0.4));
     inst.add(label);
-    // colliders: the item's own (kit-built things carry real specs) or one box round what was built
+    // colliders: the item's own specs, or one box round what was built
     if (e.it.solid !== false) {
       const specs = [];
-      // (obj sits inside inst; the specs are in obj's frame, which differs from inst's only by obj.position: a pure translation)
+      // specs are in obj's frame, which differs from inst's only by obj.position (a translation)
       const at = (x, y, z) => new THREE.Vector3(e.x + obj.position.x + x, y, e.z + obj.position.z + z);
-      // grind rails (a snake rock's crest line, rails.js): polylines in obj's frame like the colliders, standing in the flat world while it is built.
-      // A collider's `rail` is the index of the one it belongs to (the rider on a crest doesn't collide with its own rock).
+      // grind rails (snake-rock crests, rails.js): polylines in obj's frame. A collider's `rail` is the index of its rail
+      // (a rider on a crest doesn't collide with its own rock).
       e.rails = (made.rails || []).map((pts) => this.world.addRail(pts.map((p) => at(p.x, p.y, p.z))));
       const own = (b) => (b.rail === undefined ? {} : { rail: e.rails[b.rail].pts });
-      if (made.cols) { // (an array, even an empty one, is the item's own word on it; none at all: one box round what was built)
+      if (made.cols) { // any array (even empty) is final; absent: one box round what was built
         for (const b of made.cols) {
           if (b.type === 'sphere') specs.push({ type: 'sphere', c: at(b.x, b.y, b.z), r: b.r });
           else if (b.type === 'cyl') specs.push({ type: 'cyl', c: at(b.x, 0, b.z), axis: UP.clone(), y0: b.y0, y1: b.y1, r: b.r });
-          else if ((b.type === 'box' || b.type === undefined) && b.ax) specs.push({ type: 'box', c: at(b.x, b.y, b.z), hx: b.hx, hy: b.hy, hz: b.hz, ax: b.ax.clone(), ay: b.ay.clone(), az: b.az.clone(), ...own(b) }); // (a full spec: a tilted ramp, a snake's sloping tip)
+          else if ((b.type === 'box' || b.type === undefined) && b.ax) specs.push({ type: 'box', c: at(b.x, b.y, b.z), hx: b.hx, hy: b.hy, hz: b.hz, ax: b.ax.clone(), ay: b.ay.clone(), az: b.az.clone(), ...own(b) }); // full spec: tilted ramp, sloping snake tip
           else if (b.type === 'box' || b.type === undefined) {
             const q = new THREE.Quaternion().setFromAxisAngle(UP, b.yaw || 0);
             specs.push({ type: 'box', c: at(b.x, b.y, b.z), hx: b.hx, hy: b.hy, hz: b.hz, ax: new THREE.Vector3(1, 0, 0).applyQuaternion(q), ay: UP.clone(), az: new THREE.Vector3(0, 0, 1).applyQuaternion(q), ...own(b) });
@@ -243,7 +239,7 @@ export class AssetRow {
       }
       e.cols = specs.map((s) => g.colliders.add(s));
     }
-    // what it really measures, for the checks (and to see at a glance when a declared size is off)
+    // real size, for the checks (shows when a declared size is off)
     e.measured = box.isEmpty() ? null : box.getSize(new THREE.Vector3()).toArray().map((v) => Math.round(v * 10) / 10);
   }
 
@@ -270,7 +266,7 @@ export class AssetRow {
       const d = this.reach(e, p);
       if (e.state === 'on' && d > DROP_R) this.dropItem(e);
       else if (e.state === 'off' && d < BUILD_R) {
-        if (performance.now() - t0 > budgetMs) break; // (the rest next frame)
+        if (performance.now() - t0 > budgetMs) break; // rest next frame
         this.buildItem(e);
       }
     }
@@ -285,10 +281,10 @@ export class AssetRow {
     this.active = true;
     this.t = 0;
     this.nearTerminal = null;
-    // remember where you were, and what a visit must not change
+    // where you were, and what a visit must not change
     this.back = { pos: g.player.pos.clone(), fwd: g.cam.fwd.clone(), pitch: g.cam.pitch };
     this.keep = { credits: g.credits, stats: JSON.parse(JSON.stringify(g.stats)) };
-    // nothing carries over: a vehicle, a ride, the winch line, a ragdoll, shots in flight
+    // nothing carries over: vehicle, ride, winch, ragdoll, shots in flight
     if (g.player.vehicle) g.garage.exit();
     if (g.garage.active) g.garage.active.model.root.visible = false;
     if (g.rides && g.rides.exit) g.rides.exit();
@@ -307,14 +303,14 @@ export class AssetRow {
     g.hemi.color.setHex(0xd8d4ff);
     g.hemi.groundColor.setHex(0x7a7298);
     GRAV.flat = UP;
-    // the Moon's HUD (contract, event, territory, objective, prompts, minimap) has nothing to say here
+    // hide the Moon-only HUD (contract, event, territory, objective, minimap...)
     this.style = document.createElement('style');
     this.style.textContent = 'body.asset-row :is(#mission, #eventpanel, #scanchip, #techchip, #obj-arrow, #obj-marker, #zonewarn, #banner, #evpop, #terrchip, #minimap, #dilate) { display: none !important; }';
     document.head.appendChild(this.style);
     document.body.classList.add('asset-row');
     this.termCols = this.terminals.map((t) => g.colliders.add({ type: 'box', c: new THREE.Vector3(t.x, 1, t.z), hx: 0.9, hy: 1, hz: 0.6, ax: new THREE.Vector3(1, 0, 0), ay: UP.clone(), az: new THREE.Vector3(0, 0, 1) }));
     this.respawnAt();
-    this.stream(1e9); // (what is round the start, all at once)
+    this.stream(1e9); // build round the start at once
     g.hud.alert('ASSET ROW', '#2ee6ff', 2.5);
     g.hud.toast('Dev showroom: walk (or skate, or turn the dev speed up) along the row. Leave from the dev menu (F8) → full cheat menu → teleport, or teleport anywhere.', 6);
   }
@@ -329,12 +325,12 @@ export class AssetRow {
     g.updateCamera(0.016, true);
   }
 
-  // back on the Moon, where you were. quiet: arriving some other way (the caller then moves you itself)
+  // back on the Moon where you were. quiet: the caller moves you itself
   exit(quiet = false) {
     const g = this.game;
     if (!this.active) return;
     this.active = false;
-    if (g.grind) g.grind.active = null; // (a ride on one of the row's rails ends with it)
+    if (g.grind) g.grind.active = null; // end a grind on a row rail
     for (const e of this.items) if (e.state === 'on') this.dropItem(e);
     for (const c of this.termCols || []) g.colliders.remove(c);
     this.termCols = null;
@@ -355,7 +351,7 @@ export class AssetRow {
     // what a visit must not change
     if (this.keep) { g.credits = this.keep.credits; g.stats = this.keep.stats; this.keep = null; }
     g.player.body.vel.set(0, 0, 0);
-    if (g.settings && g.settings.apply) g.settings.apply(g); // (anything that was written to the planet while away: the detail setting)
+    if (g.settings && g.settings.apply) g.settings.apply(g); // re-apply planet settings changed while away (detail)
     const b = this.back;
     this.back = null;
     if (b && !quiet) {
@@ -369,7 +365,7 @@ export class AssetRow {
     if (g.territory) g.territory.current = null;
   }
 
-  // The terminal menu: every terminal (the plaza's, then each section's, in row order) as a jump, 7 to a page
+  // terminal menu: a jump to every terminal (plaza, then sections in row order), 7 per page
   terminalMenu(page = 0) {
     const g = this.game;
     const per = 7, pages = Math.ceil(this.terminals.length / per);
@@ -380,7 +376,7 @@ export class AssetRow {
     g.dialog('ASSET ROW TERMINAL', '<small>Jump to the start of a section: the yellow lane is everything under 100 m across, the cyan one the big places.</small>', buttons);
   }
 
-  // Stand in front of a terminal, facing down the row, and build what is round you
+  // stand at a terminal facing down the row; build what's round you
   jumpTo(t) {
     const g = this.game;
     this.respawnAt(t.x, t.z + 3.5);
@@ -401,10 +397,10 @@ export class AssetRow {
     if (near && g.input.pressed('KeyF') && g.boardCooldown <= 0) this.terminalMenu();
     for (const e of this.items) {
       if (e.state !== 'on' || !e.api || !e.api.update) continue;
-      // (a demo that drives a live system breaks when that system changes: one that throws is switched off, it must not stop the whole frame)
+      // a demo that throws is switched off so it can't stop the frame
       try { e.api.update(dt, this.t); } catch (err) { console.warn('[assetRow] update failed, switched off:', e.it.id, err); e.api.update = null; }
     }
-    // flat, even light: a high sun, the sky fill straight up, no moonlight, no helmet lamp
+    // flat even light: high sun, sky fill straight up, no moonlight or helmet lamp
     const sunDir = _sd.set(0.45, 0.8, 0.4).normalize();
     g.sun.intensity = 1.5;
     g.hemi.position.copy(UP);

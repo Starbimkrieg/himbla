@@ -1,17 +1,18 @@
 #!/usr/bin/env node
-// Plays the Zero-G claw (src/clawSim.js) with bots of four skill levels and prints what each takes home against the entry price, so the item values, the combo and the
-// jackpot can be tuned (an average bot should about break even; the best ones should clear the entry; a bad round should still pay something).
+// Plays the Zero-G claw (src/clawSim.js) with bots of four skill levels and prints their take against the entry price,
+// for tuning item values, combo and jackpot (average bots should about break even, the best clear the entry, a bad round
+// still pay something).
 //
 //   node tools/check-claw.mjs                 200 rounds of each bot
 //   node tools/check-claw.mjs 500 expert      500 rounds of the expert only
 //
-// The bots only know what a player sees: where things are, what the claw is doing. They are simpler than a person: none of them throws a mine at a lockbox on purpose.
+// Bots only know what a player sees, and are simpler than a person (none throws a mine at a lockbox on purpose).
 import { ClawSim, KINDS, CLAW_COST, CLAW_TIME, DROP, TANK, HOLD_CAP } from '../src/clawSim.js';
 import { mulberry32 } from '../src/rng.js';
 
 const SKILLS = {
-  // vmax: how fast it flies the claw; think: seconds it dithers before each grab; noise: how far the stick wanders; hold: how steadily it keeps the beam on
-  novice:  { vmax: 2.4, think: 1.6, noise: 0.9, pick: 'near', mines: 0.3, multi: false, hold: 0.8 },   // grabs what is close, wobbles, sometimes lets go early, takes mines
+  // vmax: claw speed; think: s of dithering before a grab; noise: stick wander; hold: how steadily it keeps the beam on
+  novice:  { vmax: 2.4, think: 1.6, noise: 0.9, pick: 'near', mines: 0.3, multi: false, hold: 0.8 },   // grabs what's close, wobbles, lets go early, takes mines
   average: { vmax: 3.0, think: 0.9, noise: 0.4, pick: 'value', mines: 0, multi: false, hold: 0.95 },
   skilled: { vmax: 3.8, think: 0.45, noise: 0.15, pick: 'value', mines: 0, multi: true, hold: 1 },
   expert:  { vmax: 4.6, think: 0.2, noise: 0.05, pick: 'value', mines: 0, multi: true, hold: 1 },
@@ -35,7 +36,7 @@ function playRound(seed, S, rng) {
   const score = (it) => {
     const K = KINDS[it.kind];
     if (K.mine && rng() > S.mines) return -1;
-    if (K.lock && S.pick === 'value') return -1;              // (nobody carries a closed lockbox for 70 credits: too heavy)
+    if (K.lock && S.pick === 'value') return -1;              // a closed lockbox is too heavy for 70 credits
     const d = Math.hypot(it.x - c.x, it.z - c.z, (it.y - c.y) * 0.5);
     if (S.pick === 'near') return 10 - d + rng() * 3;
     const dd = Math.hypot(it.x - DROP.x, it.z - DROP.z);

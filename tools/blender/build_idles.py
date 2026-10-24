@@ -1,23 +1,21 @@
 # Idle animations for the Moon-runner, authored in Blender (4.2+ / 5.x) and exported for the game.
 #
-# Builds the runner with build_runner.py (without touching runner.glb), keys the idles as actions on its
-# pivots (runner = the whole body, torso, head, armL, armR, foreL, foreR (the elbows), legL, legR), and writes src/assets/idles.json,
-# which src/idles.js plays while the courier stands still. Run it headless or from Blender's Scripting tab:
-#   python3 tools/blender/build_idles.py            (MOONRUNNER_REPO=<checkout> if it isn't run from one)
-#   MOONRUNNER_IDLES_BLEND=idles.blend python3 ...  also saves the keyed scene to look at in Blender
+# Builds the runner with build_runner.py (runner.glb untouched), keys the idles as actions on its pivots (runner = whole
+# body, torso, head, armL, armR, foreL, foreR (elbows), legL, legR) and writes src/assets/idles.json, which src/idles.js
+# plays while the courier stands still. Headless or from Blender's Scripting tab:
+#   python3 tools/blender/build_idles.py            (MOONRUNNER_REPO=<checkout> if not run from one)
+#   MOONRUNNER_IDLES_BLEND=idles.blend python3 ...  also saves the keyed scene for Blender
 #
-# Poses are authored in three.js axes (x right, y up, +z forward), the same as the game's rotations:
-#   rx pitches (+ swings a hanging limb back / leans the torso forward), ry turns, rz rolls
-#   (+ lifts the right arm outward, - lifts the left outward). pos is a small offset from the pivot's rest.
-# Each pose function takes u in [0,1) round the loop and returns {pivot: {"rot": (rx,ry,rz), "pos": (x,y,z)}}.
+# Poses use three.js axes (x right, y up, +z forward), like the game's rotations: rx pitches (+ swings a hanging limb
+# back / leans the torso forward), ry turns, rz rolls (+ lifts the right arm out, - the left). pos: small offset from rest.
+# Pose functions take u in [0,1) and return {pivot: {"rot": (rx,ry,rz), "pos": (x,y,z)}}.
 #
-# idles.json is sampled at 10 poses a second (the keys themselves: every 3rd frame at 30 fps) and the game
-# slerps between them; a pivot that never leaves its rest pose is left out. Frame counts must divide by 3.
-# The FIRST animation is the default the game falls back to (the breath); the rest are the occasional ones.
+# idles.json holds 10 poses a second (every 3rd frame at 30 fps; frame counts must divide by 3), slerped by the game;
+# pivots that never leave rest are left out. The FIRST animation (the breath) is the default; the rest are occasional.
 
 import os, sys, json, math
 
-# build_runner.py reads these before it builds: point it at this checkout, and skip its glb export
+# for build_runner.py: this checkout, and no glb export
 if "MOONRUNNER_REPO" not in os.environ:
     _here = globals().get("__file__", "")
     if _here:
@@ -69,7 +67,7 @@ def look_around(u):
 
 def weight_shift(u):
     s = math.sin(TAU * u)
-    right = max(0.0, s)    # weight on the right foot, left foot eases
+    right = max(0.0, s)    # weight on the right foot, the left eases up
     left = max(0.0, -s)
     return {
         "runner": {"pos": (0.03 * s, -0.012 * abs(s), 0)},
@@ -98,7 +96,7 @@ def stretch(u):
     }
 
 def check_wrist(u):
-    raise_ = pulse(u, 0.08, 0.26, 0.74, 0.9)                  # right arm up in front of the chest
+    raise_ = pulse(u, 0.08, 0.26, 0.74, 0.9)                  # right arm up before the chest
     tap = 0.08 * math.sin(TAU * u * 4) * pulse(u, 0.3, 0.34, 0.66, 0.7)
     look = pulse(u, 0.14, 0.3, 0.7, 0.86)                     # head down to the wrist
     return {
@@ -107,14 +105,13 @@ def check_wrist(u):
         "head": {"rot": (0.32 * look, 0.0, 0.0)},
         "armR": {"rot": (-1.25 * raise_ + tap, 0, (0.06 - 0.5 * raise_))},
         "armL": {"rot": (-0.5 * raise_, 0, -(0.06 + 0.1 * raise_))},
-        "foreR": {"rot": (-0.15 - 1.35 * raise_ - 0.5 * tap, 0, 0)},   # forearm folds up so the wrist is in front of the chest
-        "foreL": {"rot": (-0.15 - 0.9 * raise_, 0, 0)},                # the left hand comes across to meet it
+        "foreR": {"rot": (-0.15 - 1.35 * raise_ - 0.5 * tap, 0, 0)},   # forearm folds, wrist before the chest
+        "foreL": {"rot": (-0.15 - 0.9 * raise_, 0, 0)},                # left hand comes across to it
         "legL": {"rot": (0, 0, 0)}, "legR": {"rot": (0, 0, 0)},
     }
 
 def lean_back(u):
-    # settles back onto one hip, weight on the right leg, one hand up at the chin and the other tucked in at the belt,
-    # head tipped; then comes upright again
+    # settles onto the right hip, a hand at the chin, the other at the belt, head tipped; then upright again
     k = pulse(u, 0.1, 0.3, 0.72, 0.9)
     breathe = 0.012 * math.sin(TAU * u * 3) * k
     return {
@@ -130,7 +127,7 @@ def lean_back(u):
     }
 
 def shake_out(u):
-    # a quick loosen-up: forearms up in front, hands flicked, then relaxed
+    # forearms up, hands flicked loose, relaxed
     k = pulse(u, 0.08, 0.2, 0.78, 0.92)
     f = math.sin(TAU * u * 9) * pulse(u, 0.2, 0.26, 0.7, 0.78)
     return {
@@ -146,19 +143,19 @@ def shake_out(u):
 
 # (name, pose function, frames in the loop at 30 fps)
 ANIMS = [
-    ("idle_breathe", breathe, 108),            # the default: a slow, steady breath
-    ("idle_look_around", look_around, 150),    # looks left, holds, back, right, holds, then a quick glance up
-    ("idle_weight_shift", weight_shift, 120),  # rocks from skate to skate, one foot easing up, arms counter-swinging
-    ("idle_stretch", stretch, 135),            # arms up over the head, leaning back with a quiver, then a shake-out
-    ("idle_check_wrist", check_wrist, 120),    # right arm across the chest, head down, taps at the wrist, lowers it
-    ("idle_lean_back", lean_back, 150),        # settles back onto one hip, a hand at the chin and one at the belt, then straightens
-    ("idle_shake_out", shake_out, 120),        # forearms up in front, hands flicked loose
+    ("idle_breathe", breathe, 108),            # default: slow breath
+    ("idle_look_around", look_around, 150),    # left, right, quick glance up
+    ("idle_weight_shift", weight_shift, 120),  # rocks skate to skate, arms counter-swinging
+    ("idle_stretch", stretch, 135),            # arms overhead, lean back, shake-out
+    ("idle_check_wrist", check_wrist, 120),    # taps at the wrist
+    ("idle_lean_back", lean_back, 150),        # onto one hip, then straightens
+    ("idle_shake_out", shake_out, 120),        # hands flicked loose
 ]
 
 FPS = 30
-STEP = 3                                       # keys every STEP frames; also what the game's file stores
+STEP = 3                                       # keys every STEP frames, as the game's file stores them
 NAMES = ["runner", "torso", "head", "armL", "armR", "foreL", "foreR", "legL", "legR"]
-GAME_NAME = {"runner": "body"}                 # the whole-figure pivot is `body` in models.js
+GAME_NAME = {"runner": "body"}                 # whole-figure pivot is `body` in models.js
 OBJ = {n: bpy.data.objects[n] for n in NAMES}
 REST = {n: OBJ[n].location.copy() for n in NAMES}
 for o in OBJ.values():
@@ -198,7 +195,7 @@ for name, fn, nframes in ANIMS:
             o.location = (REST[n].x + dx, REST[n].y - dz, REST[n].z + dy)
             o.keyframe_insert("rotation_quaternion", frame=f)
             o.keyframe_insert("location", frame=f)
-    # read the keys back out of the evaluated scene, so what the game plays is what Blender shows
+    # read keys back from the evaluated scene, so the game plays what Blender shows
     qs = {n: [] for n in NAMES}
     ps = {n: [] for n in NAMES}
     for f in range(1, nframes + 1, STEP):

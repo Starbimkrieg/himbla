@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// Checks a static outposts GLB against the contract in docs/outpost-glb.md, before it is committed.
+// Checks a static outposts GLB against docs/outpost-glb.md before it's committed.
 //
 //   npm run check:outposts                         checks src/assets/outposts.glb for the kinds the game uses
 //   node tools/check-outposts.mjs file.glb [--kind mast ...] [--all] [--json]
+//     --kind NAME   check this root (repeatable)    --all   every kind in the file    --json   machine-readable report
 //
-// Reads the GLB's JSON directly (no three.js) and follows the same rules as the game (src/staticContract.js,
-// src/staticBake.js): what it reports is what the game will do with the file. Errors (exit 1) are things the game
-// would mis-handle or fall back on; warnings are things it ignores or papers over. Exit 2: could not read the file
-// or bad arguments.
+// Reads the GLB's JSON directly (no three.js) using the game's rules (src/staticContract.js, src/staticBake.js), so it
+// reports what the game will do. Exit 1: errors (the game would mis-handle or fall back); warnings are things it ignores
+// or papers over. Exit 2: unreadable file or bad arguments.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { slotOf, roleOf, animOf, ROLES, SHAPES, stripSuffix, rootName, GLB_KINDS } from '../src/staticContract.js';
@@ -26,10 +26,10 @@ for (let i = 0; i < args.length; i++) {
   else file = a;
 }
 
-// GLTFLoader's node-name sanitising (PropertyBinding.sanitizeNodeName): the game sees these names
+// GLTFLoader's node-name sanitising (PropertyBinding.sanitizeNodeName), as the game sees names
 const gameName = (n) => String(n || '').replace(/\s/g, '_').replace(/[[\]./:]/g, '');
 
-// ---- 4x4 column-major helpers (only what a node-relative transform needs) ----
+// ---- 4x4 column-major helpers ----
 const ID = () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const mul = (a, b) => { const o = new Array(16).fill(0); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) o[c * 4 + r] += a[k * 4 + r] * b[c * 4 + k]; return o; };
 function local(n) {
@@ -51,7 +51,7 @@ function decompose(m) {
   return { pos: [m[12], m[13], m[14]], scale: s, xaxis: n(cx, s[0]), yaxis: n(cy, s[1]), zaxis: n(cz, s[2]) };
 }
 const yawOf = (z) => Math.atan2(z[0], z[2]);
-// can a position / turn / scale hold this matrix? (its axes must stay at right angles)
+// does this matrix decompose into TRS? (axes at right angles)
 const isPlainTRS = (d) => Math.abs(dot(d.xaxis, d.yaxis)) < 1e-3 && Math.abs(dot(d.xaxis, d.zaxis)) < 1e-3 && Math.abs(dot(d.yaxis, d.zaxis)) < 1e-3;
 
 // ---- load ----
@@ -60,13 +60,13 @@ try { buf = readFileSync(file); } catch (e) { die(`cannot read ${file}: ${e.code
 if (buf.length < 20 || buf.readUInt32LE(0) !== 0x46546c67 || buf.readUInt32LE(4) !== 2) die(`${file}: not a GLB 2.0 file`);
 try { j = JSON.parse(buf.subarray(20, 20 + buf.readUInt32LE(12)).toString('utf8')); } catch (e) { die(`${file}: unreadable JSON chunk (${e.message})`); }
 const nodes = j.nodes || [];
-// extras as the game sees them: GLTFLoader merges the mesh's extras under the node's
+// extras as the game sees them: GLTFLoader merges mesh extras under the node's
 const extrasOf = (n) => ({ ...(n.mesh !== undefined ? j.meshes?.[n.mesh]?.extras : {}), ...(n.extras || {}) });
 const roots = (j.scenes?.[j.scene ?? 0]?.nodes || []).map((i) => ({ i, name: gameName(nodes[i].name) }));
 const byRoot = new Map(roots.map((r) => [r.name, r.i]));
 
 const report = { file, kinds: {}, errors: [], warnings: [] };
-const errors = [], warns = new Map(); // (a repeated warning is shown once with a count)
+const errors = [], warns = new Map(); // repeated warnings shown once with a count
 const E = (m) => errors.push(m);
 const W = (m, key = m) => { const w = warns.get(key); if (w) w.n++; else warns.set(key, { m, n: 1 }); };
 
@@ -77,7 +77,7 @@ for (const x of j.extensionsRequired || []) {
 }
 if (!(j.extensionsRequired || []).length && j.extensionsUsed?.length) W(`extensions used: ${j.extensionsUsed.join(', ')}`);
 
-// which roots to check: the kinds the game uses (default), the ones named, or every kind in the file
+// roots to check: the game's kinds (default), those named, or all in the file
 const fileKinds = roots.map((r) => r.name).filter((n) => !n.endsWith('_wreck'));
 const wanted = kinds.length ? kinds : all ? fileKinds : [...GLB_KINDS];
 if (!kinds.length && !all) for (const n of fileKinds) if (!GLB_KINDS.has(n)) W(`root "${n}" is in the file but not in GLB_KINDS (src/staticContract.js): the game will not use it yet (--all checks it anyway)`);
@@ -102,7 +102,7 @@ function checkRoot(name, rootIdx, wreck) {
     if (Object.keys(x).length) st.anyExtras = true;
     if (nm) names.set(nm, (names.get(nm) || 0) + 1);
     const mm = mul(m, local(n));
-    let g = group; // (the bake group the meshes below land in: the static body, or one animated node)
+    let g = group; // bake group for meshes below: the static body or one animated node
     if (n.mesh !== undefined) {
       const stray = animOf(x) || roleOf(nm, x);
       if (stray) w(`mesh "${n.name}" is marked "${stray}": only empties can be gameplay nodes or moving parts, so it is drawn as ordinary geometry`);
@@ -110,7 +110,7 @@ function checkRoot(name, rootIdx, wreck) {
     } else {
       if (x.role !== undefined && !ROLES.includes(x.role)) e(`node "${n.name}": unknown role "${x.role}"`);
       if (x.anim !== undefined && !animOf(x)) e(`node "${n.name}": unknown anim "${x.anim}" (flag, blink or spin)`);
-      const anim = animOf(x), role = anim ? null : roleOf(nm, x); // (a moving part comes before a gameplay role, as in the game)
+      const anim = animOf(x), role = anim ? null : roleOf(nm, x); // moving part wins over a gameplay role, as in the game
       if (anim) {
         st.anims[anim]++;
         if (group !== 'body') w(`animated node "${n.name}" inside another animated node: treated as part of it`);
@@ -120,7 +120,7 @@ function checkRoot(name, rootIdx, wreck) {
         }
       } else if (role) gameplay(role, n, mm, x, e, w, st);
     }
-    for (const c of n.children || []) walk(c, mm, g); // (a gameplay empty's children are ordinary geometry)
+    for (const c of n.children || []) walk(c, mm, g); // a gameplay empty's children are ordinary geometry
   };
   for (const c of root.children || []) walk(c, ID(), 'body');
   for (const [nm, c] of names) if (c > 1) w(`${c} nodes named "${nm}" (names should be unique)`, `dup:${nm}`);

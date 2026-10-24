@@ -40,15 +40,15 @@ function createWindow() {
   });
 }
 
-// PlayStation gyro: the game reads the pad's motion sensors over WebHID. Electron shows no device picker, so
-// Sony controllers (vendor 0x054c) are allowed up front; the page then finds them with navigator.hid.getDevices().
+// PlayStation gyro over WebHID. Electron has no device picker, so Sony pads (vendor 0x054c) are allowed up front;
+// the page finds them with navigator.hid.getDevices().
 const SONY = 0x054c;
 function allowSonyPads() {
   const ses = session.defaultSession;
   ses.setDevicePermissionHandler((details) => details.deviceType === 'hid' && details.device.vendorId === SONY);
-  // (once a check handler exists it answers every permission check, so everything else stays allowed as before)
+  // a check handler answers every permission check, so allow the rest
   ses.setPermissionCheckHandler(() => true);
-  // a real navigator.hid.requestDevice() call picks the first Sony pad without a chooser
+  // navigator.hid.requestDevice() picks the first Sony pad without a chooser
   ses.on('select-hid-device', (event, details, callback) => {
     event.preventDefault();
     const d = details.deviceList.find((x) => x.vendorId === SONY);

@@ -4,11 +4,11 @@ export const PLANET = {
   faceCells: 1280, // finest terrain grid cells per cube-sphere face edge (~4.4 m)
   chunkCells: 80, // cells per terrain chunk edge (16 x 16 chunks per face)
   seed: 1969,
-  painted: true, // the painted Moon (maria, white crests, debris splatters): false brings back the one-tone Moon
+  painted: true, // painted Moon (maria, white crests, debris splatters); false: one-tone Moon
 };
 
 export const PHYS = {
-  // Lunar gravity, exaggerated slightly from 1.62 so arcs stay readable at speed.
+  // lunar gravity, raised from 1.62 so arcs stay readable at speed
   gravity: 6.0,
   radius: 0.9,
 
@@ -21,33 +21,33 @@ export const PHYS = {
   skatePush: 3.5,
   skatePushMax: 18,
   carve: 16,
-  // Ground steering on skates: max turn rate (rad/s) at full lateral input. Speed is kept.
+  // skate ground steering: max turn rate (rad/s) at full lateral input; speed is kept
   handling: 1.5,
   skateFriction: 0.004,
-  slopeAssist: 0.35, // extra downhill pull: the magnetic cushion "harvests" slope energy
-  // Magnetic grip: while the skates are in contact (or just left it) they pull toward the
-  // surface, so small bumps don't skip you off. Big launches still break free.
+  slopeAssist: 0.35, // extra downhill pull ("harvested" slope energy)
+  // magnetic grip: skates in (or just out of) contact pull to the surface so bumps don't skip you off;
+  // big launches still break free
   grip: 13,
-  skateBuffer: 0.6, // metres above the ground the locked skates still hold you (+2% of speed, up to +1.6 m)
-  skateLaunch: 3, // upward m/s (+10% of speed, up to +9) it takes to break free of that buffer: a real ramp
+  skateBuffer: 0.6, // m above ground the locked skates still hold you (+2% of speed, up to +1.6 m)
+  skateLaunch: 3, // upward m/s to break free of that buffer (+10% of speed, up to +9): a real ramp
   gripWindow: 0.45, // seconds after losing contact that grip still pulls
   gripRange: 3.5, // metres above the surface where grip still pulls
   airControl: 5,
   drag: 0.0002,
 
-  // Airborne: the Moon is small enough that at 100+ m/s the ground curves away beneath you and
-  // you nearly orbit. These keep big air big but bring you home.
-  orbitComp: 1, // extra pull equal to the "orbital lift" of your horizontal speed (v²/R)
-  airGrace: 1.0, // seconds of normal, floaty moon gravity after leaving the ground
+  // airborne: at 100+ m/s the small Moon curves away and you nearly orbit; these keep big air big
+  // but bring you home
+  orbitComp: 1, // extra pull equal to the "orbital lift" of horizontal speed (v²/R)
+  airGrace: 1.0, // seconds of normal floaty gravity after leaving the ground
   airGravRamp: 1.5, // ...then gravity ramps up by this much (to x2.5)
   airGravRampTime: 2.0, // ...over this many seconds
   diveGrav: 3, // holding Dive in the air
-  diveCatch: 22, // magnetic catch pulling a diving skater down in the last few metres
-  diveSafeImpact: 160, // a skated dive landing absorbs this much vertical speed safely
+  diveCatch: 22, // magnetic pull on a diving skater in the last few metres
+  diveSafeImpact: 160, // vertical speed a skated dive landing absorbs safely
 
   jumpSpeed: 10,
   jumpCost: 15,
-  // Thrusters push mostly forward; only a little lift or dive is allowed.
+  // thrusters push mostly forward, with a little lift or dive
   thrustAccel: 15,
   thrustVertical: 0.22,
   thrustDrain: 30,
@@ -59,5 +59,5 @@ export const PHYS = {
   impactDamage: 1.3,
 };
 
-// Distress events farther than this from the player (metres) stay out of the log above the speedometer, and don't pop up when they start
+// distress events farther than this (m) stay out of the log above the speedometer and don't pop up
 export const EVENT_RANGE = 3500;

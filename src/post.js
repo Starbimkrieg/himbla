@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 
-// Comic-book post pass: depth-based ink lines, halftone shadows, radial speed lines,
-// damage vignette, and a warm paper grade.
+// Comic-book post pass: depth ink lines, halftone shadows, speed lines, damage vignette, paper grade.
 export class ComicPost {
   constructor(renderer, camera, fixedSize = null) {
     this.renderer = renderer;
@@ -26,7 +25,7 @@ export class ComicPost {
         alert: { value: 0 },
         boost: { value: 0 },
         invert: { value: 0 },
-        fade: { value: 0 }, // the whole picture's dip to black (the council chamber's cutscene: chamber.js)
+        fade: { value: 0 }, // fade to black (council chamber cutscene, chamber.js)
         halftone: { value: 1 }, lines: { value: 1 }, inkK: { value: 1 }, // settings
       },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,

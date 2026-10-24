@@ -12,7 +12,7 @@ import { pixelFont } from './fonts.js';
 
 const _seg = new THREE.Vector3(), _seg2 = new THREE.Vector3();
 
-const HATCH_WAIT = 0.35, HATCH_GROW = 0.55, HATCH_LEAP = 0.75, HATCH_T = HATCH_WAIT + HATCH_GROW + HATCH_LEAP; // a new chimera's climb out of the reactor
+const HATCH_WAIT = 0.35, HATCH_GROW = 0.55, HATCH_LEAP = 0.75, HATCH_T = HATCH_WAIT + HATCH_GROW + HATCH_LEAP; // chimera hatch phases (s)
 
 // What can go in a containment jar.
 export const ITEMS = {
@@ -37,7 +37,7 @@ export const ITEMS = {
   voidling: { name: 'Void-Touched Person', icon: '☻', color: '#c77dff' },
 };
 
-// Slow reactions inside the jar (pairs that sit together for a while turn into something else).
+// Slow jar reactions: pairs left together turn into something else.
 const JAR_MIXES = [
   { a: 'dirt', b: 'water', into: 'mud', text: 'The dirt and the black water turned into MOON MUD.' },
   { a: 'rock', b: 'water', into: 'slickrock', text: 'The rock sample is coated in black slime. SLICK ROCK!' },
@@ -61,7 +61,7 @@ export const MUTATIONS = {
 };
 const MAX_MUTATIONS = 3;
 const MAX_FOLLOW = 3;
-// holding pen area behind the lab (lab-local coordinates) and how many pen residents get models
+// holding pen behind the lab (lab-local), and how many residents get models
 export const PEN = { x0: 28, z0: 22, x1: 62, z1: 64 };
 
 // the RETIRED tag that floats over a retired racer in the pen (one canvas, shared)
@@ -96,9 +96,9 @@ const NAMES = ['Gary', 'Priya', 'Tomasz', 'Little Juno', 'Ade', 'Wen', 'Marisol'
 
 const _v = new THREE.Vector3();
 
-// What a pickup looks like on the ground (dropLoot below; the Asset Row shows them too): a core in the item's colour (an octahedron;
-// a plating slab, a junk-bot box, or a pink crate), a halo ring and a thin light pillar. A salvaged engine and a credits briefcase are
-// Blender-built models (models.js engineModel / caseModel, once the models have loaded) and get no halo or pillar. Returns { root, core }.
+// A ground pickup (dropLoot; also the Asset Row): a core in the item's colour (octahedron, plating slab, junk-bot box or
+// pink crate), a halo and a light pillar. Engines and credit briefcases use the Blender models (engineModel / caseModel,
+// once loaded) with no halo or pillar. Returns { root, core }.
 export function makeLoot(kind, { credits = 0, crate = false } = {}) {
   const root = new THREE.Group();
   const color = crate ? 0xff7ad9 : credits && !kind ? 0xffd23f : new THREE.Color(ITEMS[kind].color).getHex();
@@ -111,15 +111,14 @@ export function makeLoot(kind, { credits = 0, crate = false } = {}) {
   const halo = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.06, 6, 20).rotateX(Math.PI / 2), glow(color));
   halo.position.y = -0.6;
   root.add(halo);
-  // a thin light pillar so it's easy to spot
+  // light pillar so it's easy to spot
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.25, 9, 6, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }));
   beam.position.y = 4;
   root.add(beam);
   return { root, core };
 }
 
-// Containment jar + Dr. Zbornak's reactor and splice pod: scoop things up, let them stew,
-// feed them to the antimatter, breed chimeras, and occasionally mutate yourself.
+// Containment jar, Dr. Zbornak's reactor and splice pod: scoop, stew, feed the antimatter, breed chimeras, mutate yourself.
 export class Alchemy {
   constructor(game) {
     this.game = game;
@@ -135,22 +134,22 @@ export class Alchemy {
     this.mutations = [];
     this.mutMeshes = [];
     this.pen = [];
-    this.loot = []; // salvage lying on the ground (engines from wrecks, depot wiring, farm saplings)
+    this.loot = []; // salvage on the ground (wreck engines, depot wiring, saplings)
     this.load();
-    installTips(); // (hover tips on the chimera cards)
+    installTips(); // chimera card hover tips
     this.buildMites();
   }
 
   get owned() { return (this.game.upgrades.jar || 0) > 0; }
   get slots() { return 2 + (this.game.upgrades.jar || 0); }
-  // the alien artifact rides in its own sealed compartment of the jar: it takes a slot but is never dumped or fed
+  // the alien artifact has a sealed compartment: takes a slot, never dumped or fed
   get used() { return this.jar.reduce((n, i) => n + (ITEMS[i.kind].slots || 1), 0) + (this.artifact ? 1 : 0); }
 
   load() {
     try {
       const d = JSON.parse(localStorage.getItem(KEY) || 'null');
       if (!d) return;
-      this.chimeras = (d.chimeras || []).filter(Boolean).map(ensureStats); // older saves get racing stats from their genes + seed
+      this.chimeras = (d.chimeras || []).filter(Boolean).map(ensureStats); // older saves: racing stats from genes + seed
       this.mutations = d.mutations || [];
       this.artifact = !!d.artifact;
     } catch { /* fresh lab */ }
@@ -168,8 +167,7 @@ export class Alchemy {
 
   // ---------- wild Moon Mites ----------
   buildMites() {
-    // herds of 3–6 mites across the sunlit side (about one herd per square kilometre), well away
-    // from settlements
+    // herds of 3–6 mites on the sunlit side (about one per km²), away from settlements
     const rr = mulberry32(8080);
     const g = this.game;
     this.mites = [];
@@ -189,7 +187,7 @@ export class Alchemy {
     }
   }
 
-  // Moon Mites can be squashed: by a blast, a shot or a ram. They come back to their patch later.
+  // Mites can be squashed (blast, shot or ram); they return to their patch later.
   blastMites(pos, radius, damage, owner) {
     if (owner !== 'player' || !(damage > 0)) return;
     for (const m of this.mites) if (m.model && !(m.gone > 0) && m.pos.distanceTo(pos) < radius + 0.8) this.squashMite(m);
@@ -300,7 +298,7 @@ export class Alchemy {
     let best = null, bd = 6;
     for (const f of g.world.figures) {
       if (!f.root.visible || f.captured || f.loc.restricted) continue;
-      if (f.civ && f.civ.state !== 'flee') continue; // mid-air, knocked down or cleared away (civilians.js)
+      if (f.civ && f.civ.state !== 'flee') continue; // airborne, knocked down or cleared (civilians.js)
       const d = f.root.getWorldPosition(_v).distanceTo(P.pos);
       if (d < bd) { bd = d; best = { kind: 'figure', f }; }
     }
@@ -332,10 +330,8 @@ export class Alchemy {
   }
 
   // ---------- salvage on the ground ----------
-  // Something worth scooping drops out of a wreck. Skate over it to bag it (needs jar room); credits
-  // are picked up whether or not you have a jar.
-  // to: optional landing point — the loot is flung out of the wreck along an arc and lands there,
-  // in the open where you can see it (with a beacon so it isn't lost in rubble).
+  // Loot dropped from a wreck: skate over it to bag it (needs jar room); credits need no jar.
+  // to: optional landing point; the loot arcs out of the wreck and lands there in the open.
   dropLoot(kind, pos, { name, credits = 0, to = null, crate = false } = {}) {
     const g = this.game;
     const up = pos.clone().normalize();
@@ -345,8 +341,7 @@ export class Alchemy {
     frameQuat(at.clone().normalize(), tangent(SUN.clone(), up).normalize(), root.quaternion);
     g.scene.add(root);
     if (kind === 'engine' && !to) {
-      // a salvaged engine is a heavy lump: it pops out in a random direction, thuds, skids and settles
-      // (updateEngine), and only then can it be scooped with G.
+      // engines pop out, thud, skid and settle (updateEngine); only then can G scoop them
       const dir = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
       const p0 = pos.clone().addScaledVector(up, 1.5);
       root.position.copy(p0);
@@ -391,8 +386,8 @@ export class Alchemy {
     }
   }
 
-  // Rigid-body step for a dropped engine: heavy gravity, a dull bounce, hard ground friction, so it
-  // lands near the wreck instead of skipping off. Once it stops it smokes and waits for the scoop.
+  // Rigid-body step for a dropped engine: heavy gravity, dull bounce, hard friction so it stays near the wreck.
+  // At rest it smokes and waits for the scoop.
   updateEngine(L, dt) {
     const g = this.game;
     const sub = Math.ceil(dt / 0.02);
@@ -408,8 +403,8 @@ export class Alchemy {
         const vr = L.vel.dot(up);
         if (vr < 0) {
           const hit = -vr;
-          L.vel.addScaledVector(up, -vr * (1 + (hit > 3 ? 0.12 : 0))); // (barely bounces; a soft landing just stops)
-          L.vel.multiplyScalar(Math.max(0, 1 - 6 * h)); // (grinding along the dirt)
+          L.vel.addScaledVector(up, -vr * (1 + (hit > 3 ? 0.12 : 0))); // barely bounces; soft landings just stop
+          L.vel.multiplyScalar(Math.max(0, 1 - 6 * h)); // ground friction
           L.spin.multiplyScalar(0.45);
           if (hit > 2) { g.audio.thud(Math.min(14, hit * 2.5)); g.fx.dust(L.pos, L.vel, 4, up); }
         } else L.vel.multiplyScalar(Math.max(0, 1 - 6 * h));
@@ -417,14 +412,14 @@ export class Alchemy {
           L.rest = true;
           L.vel.set(0, 0, 0);
           L.pos.setLength(g.planet.surface(L.pos) + 0.45);
-          // lie flat on the ground, whichever way it ended up facing
+          // lie flat, random facing
           frameQuat(L.pos.clone().normalize(), tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), L.pos.clone().normalize()).normalize(), L.root.quaternion);
         }
       }
     }
     L.root.position.copy(L.pos);
     if (!L.rest) return;
-    // resting: a thin wisp of smoke from the casing
+    // resting: a wisp of smoke
     L.smokeT -= dt;
     if (L.smokeT <= 0) {
       L.smokeT = 0.35 + Math.random() * 0.25;
@@ -433,7 +428,7 @@ export class Alchemy {
     }
   }
 
-  // Nearest resting engine within reach (a still-tumbling one can't be scooped yet)
+  // nearest resting engine in reach (tumbling ones can't be scooped)
   restingEngine() {
     const P = this.game.player;
     let best = null, bd = 7;
@@ -460,7 +455,7 @@ export class Alchemy {
       g.fx.pop(`CRATE: ${n} LUCKY CHIPS!`, null, { color: '#7dff6a', size: 50 });
       g.hud.toast('Lucky Chips spend at the Lucky Crater Casino prize counter.', 3);
     } else {
-      // jackpot: a big wad and a style splash
+      // jackpot
       const n = 900 + Math.floor(Math.random() * 600);
       g.addCredits(n, 'Mystery crate');
       g.fx.pop(`JACKPOT CRATE! +₵${n}`, null, { color: '#ff7ad9', size: 64 });
@@ -472,7 +467,7 @@ export class Alchemy {
   // outfit: a person's clothes (makeFigure's), so a chimera spliced from them wears them, and they wear them again when freed
   add(kind, name, outfit) {
     if (kind === 'transponder' && this.game.globe && this.game.globe.revealAround) {
-      // it pings as you bag it: the map around you lights up
+      // pings on pickup: reveals the map nearby
       this.game.globe.revealAround(this.game.player.up, 1400);
       this.game.fx.pop('SIGNAL PING: MAP REVEALED NEARBY', null, { color: '#2ec4ff', size: 34 });
     }
@@ -483,7 +478,7 @@ export class Alchemy {
   }
 
   // ---------- emptying ----------
-  // X: into the reactor if you're beside it, otherwise tip it out. Shift+X always tips it out.
+  // X: into the reactor if beside it, else tip it out. Shift+X always tips out.
   empty(forceDump = false) {
     const g = this.game;
     if (!this.jar.length) { g.hud.toast(this.owned ? (this.artifact ? 'Only the alien artifact is left, and its compartment is sealed.' : 'The jar is empty. Press G to scoop something.') : 'You don\'t have a jar yet.', 1.8); return; }
@@ -501,7 +496,7 @@ export class Alchemy {
       if (it.kind === 'person' || it.kind === 'voidling' || it.kind === 'pirate') this.spawnWanderer(it.name, it.kind === 'voidling', it.kind === 'pirate', null, false, it.outfit);
       else if (it.kind === 'alien') this.spawnWanderer(it.name, false, false, null, true);
       else if (it.kind === 'mite') {
-        // tipped out right here, and it scarpers (this spot becomes its new patch)
+        // tipped out here; it flees and this becomes its new patch
         const m = this.mites.find((x) => x.gone > 0);
         if (m) {
           const at = P.pos.clone().addScaledVector(g.cam.right, 2 + Math.random() * 2).addScaledVector(g.cam.fwd, Math.random() * 2);
@@ -519,7 +514,7 @@ export class Alchemy {
       else if (it.kind === 'engine') { this.dropLoot('engine', P.pos.clone().addScaledVector(g.cam.right, 3)); continue; }
       else if (it.kind === 'wiring') g.fx.spawn(P.pos.clone().addScaledVector(P.up, 1), P.up.clone().multiplyScalar(3), { color: 0xffb347, size: 0.3, life: 0.6, gravity: 2, count: 8, spread: 2 });
       else if (it.kind === 'car') {
-        // out it pops beside you, and it hovers off to find the nearest road
+        // pops out beside you and hovers off to the nearest road
         const v = this.game.world.vehicles.find((x) => x.captured > 0 && x.kind === 'car');
         if (v) {
           v.captured = 0;
@@ -576,7 +571,7 @@ export class Alchemy {
     else res = (RECIPES[key] || RECIPES._default).call(this, names);
     g.stats.experiments = (g.stats.experiments || 0) + 1;
     const show = () => g.dialog('DR. ZBORNAK', `<b>${res.title}</b><br>${res.text}`, [{ label: 'FOR SCIENCE!' }]);
-    // a new chimera climbs out of the reactor first: Dr. Zbornak has his say once it has landed
+    // a new chimera hatches first; the dialog waits until it lands
     if (res.delay) g.schedule(res.delay, show); else show();
   }
 
@@ -588,7 +583,7 @@ export class Alchemy {
     this.chimeras.push(genes);
     this.save();
     this.syncChimeras();
-    // it climbs out of the reactor (a follower: bursts through the glass and comes to you)
+    // followers hatch out through the glass and come to you
     const born = this.followers.find((f) => f.genes === genes);
     const hatching = born && g.world.reactor && this.hatch(born);
     if (items.some((i) => i.kind === 'person' || i.kind === 'voidling')) g.rep.add('kepler', -2, 'Spliced a resident', { silent: true });
@@ -612,7 +607,7 @@ export class Alchemy {
     g.world.reactor.flash = 4;
     g.fx.explosion(g.world.lab.reactor, 22, true);
     P.vel.addScaledVector(P.up, 70);
-    this.buffs.cushion = 25; // the reactor's field softens the landing
+    this.buffs.cushion = 25; // softens the landing
     P.body.grounded = false;
     P.body.sinceContact = 1;
     g.style(120, 'SINGULARITY');
@@ -630,7 +625,7 @@ export class Alchemy {
     const g = this.game;
     const lab = g.world.lab;
     const P = g.player;
-    // out by the lab door if you're there (it came out of the reactor), otherwise right in front of you
+    // by the lab door if you're there, else in front of you
     const atLab = lab && P.pos.distanceTo(lab.reactor) < 300;
     const spot = atLab ? g.world.toWorld(lab.loc, 0, 0, 60) : P.pos.clone().addScaledVector(P.heading, 70);
     const pos = g.planet.ground(spot, new THREE.Vector3());
@@ -656,7 +651,7 @@ export class Alchemy {
     e.hop += e.vy * dt; e.vy -= 8 * dt;
     if (e.hop <= 0) {
       if (e.vy < -6) {
-        // STOMP (only felt, seen and heard when you're nearby)
+        // STOMP (only when you're nearby)
         const dist = P.pos.distanceTo(e.body.pos);
         if (dist < 400) {
           g.fx.explosion(e.body.pos.clone().addScaledVector(up, 1), 10, true);
@@ -685,7 +680,7 @@ export class Alchemy {
   syncChimeras() {
     const g = this.game;
     const lab = g.world.lab;
-    // old saves: the newest three follow
+    // old saves without a follow flag: the newest three follow
     for (let i = this.chimeras.length - 1; i >= 0; i--) {
       const c = this.chimeras[i];
       if (c.follow === undefined) c.follow = this.followingCount() < MAX_FOLLOW;
@@ -703,7 +698,7 @@ export class Alchemy {
         g.scene.add(m.root);
         this.followers.push({ root: m.root, anim: m.anim, kind: 'chimera', genes, vy: 0, h: 0, t: Math.random() * 5 });
       } else if (lab && this.pen.length < PEN_SHOWN) {
-        // the pen holds any number; only the first few dozen are shown milling about
+        // the pen holds any number; only the first PEN_SHOWN get models
         const m = makeChimera(genes);
         const k = this.pen.length;
         m.root.position.set(PEN.x0 + 3 + (k % 6) * 5, 0, PEN.z0 + 3 + Math.floor(k / 6) * 5);
@@ -715,8 +710,7 @@ export class Alchemy {
     this.save();
   }
 
-  // Holding pen menu: at the lab terminal, or anywhere with the remote pen link.
-  // Each chimera is a stat card; number keys / clicks pick one.
+  // Holding pen menu (lab terminal or remote pen link): a stat card per chimera; number keys / clicks pick one.
   penMenu(page = 0) {
     const g = this.game;
     const list = this.chimeras;
@@ -807,7 +801,7 @@ export class Alchemy {
     this.applyMutations();
   }
 
-  // Mutations change both how you play and how you look.
+  // Mutations change handling and looks.
   applyMutations() {
     const g = this.game;
     const P = g.player;
@@ -833,7 +827,7 @@ export class Alchemy {
     const g = this.game;
     const P = g.player;
     for (const k of Object.keys(this.buffs)) this.buffs[k] = Math.max(0, this.buffs[k] - dt);
-    // buffs change how the skates and gravity behave
+    // buffs change skates and gravity
     P.params.gravity = this.buffs.lowGrav > 0 ? PHYS.gravity * 0.45 : PHYS.gravity;
     P.params.slopeAssist = this.buffs.slick > 0 ? 1.1 : PHYS.slopeAssist;
     P.params.skateFriction = this.buffs.slick > 0 ? 0 : PHYS.skateFriction;
@@ -886,12 +880,12 @@ export class Alchemy {
     this.updateMites(dt);
     this.updateLoot(dt);
     const lab = g.world.lab;
-    // pen residents roam the yard: wander to a spot, mill about there a while, wander on
+    // pen residents wander to a spot, idle a while, wander on
     if (lab && lab.loc.active) for (const p of this.pen) {
       p.t += dt;
       const r = p.root.position;
       if (p.idle > 0) {
-        // milling about where it got to: a look round, then off again
+        // idling: look round
         p.idle -= dt;
         p.anim(p.t * 0.3, 0.4);
         p.root.rotation.y += Math.sin(p.t * 0.7) * dt * 0.6;
@@ -923,8 +917,7 @@ export class Alchemy {
     this.followers.push({ root, kind, vy: 0, h: 0, t: 0 });
   }
 
-  // A new chimera hatching out of the reactor: it swells out of the core, bursts out through the
-  // glass in a leap and lands a few metres off toward you, then falls in behind you like any pet.
+  // A chimera hatching: swells out of the core, leaps through the glass towards you, lands, then follows like any pet.
   hatch(f) {
     const g = this.game, P = g.player;
     const core = g.world.reactor.orb.getWorldPosition(new THREE.Vector3());
@@ -932,7 +925,7 @@ export class Alchemy {
     let out = tangent(P.pos.clone().sub(core), up);
     if (out.lengthSq() < 1) out = tangent(P.heading.clone().negate(), up);
     out.normalize();
-    // it forms on the near face of the core, just inside the glass (where the flash doesn't hide it)
+    // forms on the core's near face, inside the glass (where the flash doesn't hide it)
     const from = core.clone().addScaledVector(out, 3.0).addScaledVector(up, -1.5);
     const to = g.planet.ground(core.clone().addScaledVector(out, 7.5), new THREE.Vector3());
     f.birth = { t: -HATCH_WAIT, from, to, out, burst: false };
@@ -947,20 +940,20 @@ export class Alchemy {
     const up = B.from.clone().normalize();
     if (B.t < 0) { f.root.scale.setScalar(0.01); return; } // the flash dies down first
     if (B.t < HATCH_GROW) {
-      // swelling out of the core, turning, wrapped in sparks
+      // swelling, turning, sparks
       const k = B.t / HATCH_GROW;
       f.root.position.copy(B.from);
       f.root.scale.setScalar(0.05 + 0.95 * k * k);
       f.root.rotateOnWorldAxis(up, dt * 9);
       if (Math.random() < dt * 30) g.fx.spawn(B.from, up.clone().multiplyScalar(2), { color: Math.random() < 0.5 ? 0xff2e88 : 0x7dff3a, size: 0.35, life: 0.5, spread: 5 });
     } else {
-      // the leap: an arc from the core out through the glass to the floor
+      // the leap: arc out through the glass to the floor
       const k = Math.min(1, (B.t - HATCH_GROW) / HATCH_LEAP);
       f.root.scale.setScalar(1);
       f.root.position.lerpVectors(B.from, B.to, k).addScaledVector(up, Math.sin(k * Math.PI) * 3);
       frameQuat(up, B.out, f.root.quaternion);
       if (!B.burst && k > 0.05) {
-        // through the tube wall: a shower of glass
+        // glass shower
         B.burst = true;
         g.fx.spawn(f.root.position, B.out.clone().multiplyScalar(6), { color: 0x9be7ff, size: 0.3, life: 0.9, gravity: 6, count: 16, spread: 6 });
         g.fx.pop('KSSHHH!', f.root.position.clone(), { color: '#9be7ff', size: 40, life: 0.7 });
@@ -1015,7 +1008,7 @@ export class Alchemy {
     }
   }
 
-  // Worn only if you own one and haven't hidden it in the wardrobe (Accessories tab).
+  // owned and not hidden in the wardrobe (Accessories tab)
   get jarVisible() { return this.owned && this.game.cosmetics?.jarShown !== false; }
 
   // The jar rides on your back and shows what's inside.
@@ -1042,15 +1035,14 @@ export class Alchemy {
       for (let i = used; i < this.slots; i++) cells.push('<span class="empty-slot">·</span>');
       parts.push(`JAR ${cells.join('')}${this.jar.length >= 2 ? ' <i>stewing…</i>' : ''}${this.jar.length ? ' <i>· X empty · ⇧X dump</i>' : ''}`);
     }
-    const buff = Object.entries(this.buffs).filter(([, v]) => v > 0).map(([k, v]) => `${BUFF_NAMES[k]} ${v >= 120 ? `${Math.floor(Math.ceil(v) / 60)}:${String(Math.ceil(v) % 60).padStart(2, '0')}` : `${Math.ceil(v)}s`}`).join(' · '); // (the long ones as m:ss)
+    const buff = Object.entries(this.buffs).filter(([, v]) => v > 0).map(([k, v]) => `${BUFF_NAMES[k]} ${v >= 120 ? `${Math.floor(Math.ceil(v) / 60)}:${String(Math.ceil(v) % 60).padStart(2, '0')}` : `${Math.ceil(v)}s`}`).join(' · '); // long ones as m:ss
     if (buff) parts.push(`<div class="buffs">${buff}</div>`);
     if (this.mutations.length) parts.push(`<div class="muts">${this.mutations.map((k) => MUTATIONS[k].name).join(' · ')}</div>`);
     return parts.join('');
   }
 }
 
-// A pet from the reactor: 'rock' = the slick rock with eyes, anything else the dirt golem.
-// (Alchemy.addFollower calls it; the Asset Row shows both without a game.)
+// Reactor pet: 'rock' = slick rock with eyes, else the dirt golem. Used by addFollower and the Asset Row.
 export function makeFollowerModel(kind) {
   let root;
   if (kind === 'rock') {
@@ -1067,8 +1059,7 @@ export function makeFollowerModel(kind) {
   return root;
 }
 
-// The look of the mutations: builds each owned mutation's meshes on the runner model M through add(parent, mesh).
-// (Alchemy.applyMutations calls it; the Asset Row shows each one without a game.)
+// Mutation meshes for each owned mutation on runner model M, via add(parent, mesh). Used by applyMutations and the Asset Row.
 export function buildMutationMeshes(M, has, add) {
   if (has('wheels')) for (const leg of [M.legL, M.legR]) {
     const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.22, 12).rotateZ(Math.PI / 2), toon(0x221d33));
@@ -1098,12 +1089,12 @@ export function buildMutationMeshes(M, has, add) {
   if (has('stone')) for (let i = 0; i < 4; i++) {
     const sp = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), glow(0x2ee6ff));
     sp.scale.set(0.6, 1.8, 0.6);
-    // along the flanks of the backpack, clear of the scarf, crate and jar
+    // backpack flanks, clear of scarf, crate and jar
     sp.position.set((i < 2 ? -1 : 1) * 0.36, 0.8 - (i % 2) * 0.26, -0.28);
     sp.rotation.z = (i < 2 ? 1 : -1) * 1.0;
     add(M.torso, sp);
   }
-  if (has('claws')) for (const arm of [M.foreL, M.foreR]) for (let k = 0; k < 3; k++) { // (on the forearms, so they follow the hands)
+  if (has('claws')) for (const arm of [M.foreL, M.foreR]) for (let k = 0; k < 3; k++) { // on the forearms so they follow the hands
     const c = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.22, 4), toon(0xfff4e0));
     c.position.set((k - 1) * 0.06, -0.47, 0.06);
     c.rotation.x = Math.PI;
@@ -1144,7 +1135,7 @@ export function buildMutationMeshes(M, has, add) {
   }
 }
 
-// The jar as it hangs on the pack (also the wardrobe's preview): glass, what's inside, the cap.
+// The jar on the pack (also the wardrobe preview): glass, contents, cap.
 export function makeJarMesh(jar = [], artifact = false) {
   const g = new THREE.Group();
   const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.8, 12), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.3 }));
@@ -1162,15 +1153,15 @@ export function makeJarMesh(jar = [], artifact = false) {
   const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.12, 12), toon(0x3a3550));
   cap.position.y = 0.45;
   g.add(cap);
-  // tucked against the right side of the backpack, a bit smaller
-  g.position.set(-0.5, -0.12, 0.22); // (on the right: the scarf hangs down the left)
+  // right side of the backpack (the scarf hangs down the left), a bit smaller
+  g.position.set(-0.5, -0.12, 0.22);
   g.scale.setScalar(0.78);
   return g;
 }
 
 const BUFF_NAMES = { lowGrav: 'LOW-G', slick: 'MOON MUD', bouncy: 'SPRINGY', invert: 'NEGATIVE', rain: 'BLACK RAIN', cushion: 'SOFT LANDING', dilate: 'TIME DILATION', echo: 'ECHO FOLLOWERS' };
 
-// Reactor recipes, keyed by the sorted item kinds fed in together.
+// Reactor recipes, keyed by sorted item kinds joined with '+'.
 const RECIPES = {
   sapling() { this.buffs.cushion = 40; return { title: 'MOON MOSS', text: '"The sapling went into the antimatter and came out as a fine green fuzz. It has settled on your boots. Landings will be very soft for a while."' }; },
   lens() {

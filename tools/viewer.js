@@ -6,7 +6,7 @@ import { outpostTemplate } from '../src/outpostModels.js';
 import { loadOutpostParts, GLB_KINDS } from '../src/outpostGlb.js';
 import { makeChimera, makeMite, LIVING, MODIFIERS, spliceGenes } from '../src/chimera.js';
 import { ComicPost } from '../src/post.js';
-import '../src/wardrobe.js'; // (first: wardrobe and cosmetics import each other, and only this order initialises OUTFITS in time)
+import '../src/wardrobe.js'; // (first: wardrobe and cosmetics import each other; only this order initialises OUTFITS in time)
 import { dressRunner } from '../src/cosmetics.js';
 import { slotCabinet, updateSlot, blackjackTable } from '../src/casinoWorld.js';
 import { KINDS } from '../src/clawSim.js';
@@ -34,7 +34,7 @@ ground.receiveShadow = true;
 scene.add(ground);
 const post = new ComicPost(renderer, camera);
 
-// ---- outposts: what a template holds, drawn: colliders, blast boxes and the gameplay points ----
+// ---- outposts: draw a template's colliders, blast boxes and gameplay points ----
 const lineMat = (c) => new THREE.LineBasicMaterial({ color: c, depthTest: false, transparent: true });
 function outpostOverlay(t) {
   const g = new THREE.Group();
@@ -55,8 +55,7 @@ function outpostOverlay(t) {
   mark(t.raid, 0x7dff3a, 1.2); mark(t.smoke, 0xff2a4a, 1.2); mark(t.drop, 0x5a8bff, 1.2);
   return g;
 }
-// Does template b hold the same gameplay data as template a (within tol metres)? A box may be written
-// as (hx, hz, yaw) or turned a quarter: both count as the same box.
+// Does template b hold a's gameplay data (within tol m)? A box as (hx, hz, yaw) or turned a quarter counts as the same.
 function outpostParity(a, b, tol = 0.01) {
   const same = (x, y) => Math.abs(x - y) <= tol;
   const turn = (p, q) => { const d = Math.abs(Math.sin(p - q)); return d <= tol; };
@@ -96,10 +95,10 @@ if (m === 'shuttle' || m === 'freighter') {
   model = rig.root;
   rig.setGear(num('gear', 1));
   rig.setRamp(num('ramp', 0));
-  if (Q.has('sign')) rig.setSign(Q.get('sign')); // (the shuttle's route board: &sign=TRANQ)
+  if (Q.has('sign')) rig.setSign(Q.get('sign')); // (shuttle route board: &sign=TRANQ)
   model.position.y = rig.gearH * num('gear', 1) + (num('gear', 1) < 1 ? 4 : 0);
   height = m === 'shuttle' ? 8 : 20;
-  // &cols=1 draws the freighter's collision boxes (the solid the world keeps round it: model.userData-free, straight from rig.decks)
+  // &cols=1 draws the freighter's collision boxes (straight from rig.decks)
   if (Q.get('cols') === '1' && rig.decks) {
     const cm = new THREE.LineBasicMaterial({ color: 0xff2e63, depthTest: false, transparent: true });
     for (const d of rig.decks) {
@@ -117,7 +116,7 @@ if (m === 'shuttle' || m === 'freighter') {
   anim = (t) => ic.anim(t, num('speed', 0));
   height = 3;
 } else if (m === 'apc') {
-  // &turret=<yaw rad>&barrel=<elevation rad> to pose it; the faction colours as in the game
+  // &turret=<yaw rad>&barrel=<elevation rad> to pose it; &color=hex &trim=hex (faction colours)
   const apc = makeApc({ color: Q.has('color') ? parseInt(Q.get('color'), 16) : 0x6b6f78, trim: Q.has('trim') ? parseInt(Q.get('trim'), 16) : 0xff3b5c });
   apc.turret.rotation.y = num('turret', 0);
   apc.barrel.rotation.x = -num('barrel', 0);
@@ -127,10 +126,10 @@ if (m === 'shuttle' || m === 'freighter') {
   height = 4;
 } else if (m === 'landtrain') {
   // &type=moonliner|prospector  &faction=spacecom|vostok|kepler|meridian  &cars=pax,pax,pax | tank,cargo,blast
-  // &unit=0 for the tractor alone, 1..n for that trailer alone
+  // &unit=0 tractor alone, 1..n that trailer alone
   const lt = makeLandTrain({ faction: Q.get('faction') || 'kepler', type: Q.get('type') || 'moonliner', cars: Q.has('cars') ? Q.get('cars').split(',').filter(Boolean) : undefined });
   model = new THREE.Group();
-  const only = Q.has('unit') ? num('unit', 0) : -1; // (alone: the camera frames just that unit)
+  const only = Q.has('unit') ? num('unit', 0) : -1; // (camera frames just that unit)
   if (only <= 0) model.add(lt.root);
   lt.trailers.forEach((t, i) => {
     t.root.position.set(0, 0, only > 0 ? 0 : -9.9 * (i + 1));
@@ -140,7 +139,7 @@ if (m === 'shuttle' || m === 'freighter') {
   });
   height = 3;
 } else if (m === 'crane') {
-  // &h=34 (the mast, m; the model is 34)  &slew=<rad>  &trolley=0..1 (along its run)  &rope=<m of rope>  &color=hex  &faction=kepler|meridian|spacecom|vostok (the cargo)
+  // &h=34 (mast m; the model is 34)  &slew=<rad>  &trolley=0..1 (along its run)  &rope=<m>  &color=hex  &faction=kepler|meridian|spacecom|vostok (cargo)
   const c = makeTowerCrane({ color: Q.has('color') ? parseInt(Q.get('color'), 16) : 0xffd23f, faction: Q.get('faction') || 'kepler', h: num('h', 34) });
   const sc = num('h', 34) / 34;
   c.slew.rotation.y = num('slew', 0);
@@ -150,7 +149,7 @@ if (m === 'shuttle' || m === 'freighter') {
   model = c.root;
   height = 25;
 } else if (m === 'gantry') {
-  // &trolley=0..1 (along the girder)  &rope=<m of rope>  &color=hex  &faction=kepler|meridian|spacecom|vostok (the cargo)
+  // &trolley=0..1 (along the girder)  &rope=<m>  &color=hex  &faction=kepler|meridian|spacecom|vostok (cargo)
   const c = makeGantryCrane({ color: Q.has('color') ? parseInt(Q.get('color'), 16) : 0xffd23f, faction: Q.get('faction') || 'meridian' });
   c.trolley.position.z = GANTRY_TROLLEY_SPAN * (2 * num('trolley', 0.5) - 1);
   c.cable.scale.y = num('rope', 6);
@@ -158,21 +157,21 @@ if (m === 'shuttle' || m === 'freighter') {
   model = c.root;
   height = 14;
 } else if (m === 'cargobox') {
-  // the yard's box container on its own: &faction=kepler|meridian|spacecom|vostok  &n=3 (a stack)
+  // yard box container alone: &faction=kepler|meridian|spacecom|vostok  &n=3 (a stack)
   model = new THREE.Group();
   const n = num('n', 1);
   for (let i = 0; i < n; i++) { const b = makeCargoBox({ faction: Q.get('faction') || 'meridian' }).root; b.position.y = i * 3.2; model.add(b); }
   height = 2;
 } else if (m === 'garage') {
-  // &kind=main|small  &open=101 (which bays are up, bay 0 first: 1 open, 0 shut)  &trim=hex
+  // &kind=main|small  &open=101 (bays up, bay 0 first: 1 open, 0 shut)  &trim=hex
   const o = (Q.get('open') || '101').padEnd(3, '0').split('').map((c) => c === '1');
   const gar = makeGarage({ open: o, kind: Q.get('kind') || 'main', trim: Q.has('trim') ? parseInt(Q.get('trim'), 16) : 0x2ec4ff });
   model = gar.root;
   anim = (t) => gar.update(t);
   height = 12;
 } else if (m === 'slots') {
-  // the casino's slot cabinet (build_slots.py). &n=4 in a row, &gap=3.2 apart  &ring=7 a carousel of them round a pillar at &rr=3.6  &idx=0 the first one's colour and name
-  // &pull=rad turns the lever  &play=1 works them like a patron (the lever, the lamp bar, the reels)
+  // casino slot cabinet (build_slots.py). &n=4 in a row, &gap=3.2 apart  &ring=7 a carousel round a pillar at &rr=3.6  &idx=0 first one's colour and name
+  // &pull=rad turns the lever  &play=1 plays them like a patron (lever, lamp bar, reels)
   const COLS = [0xff2e88, 0x2ee6ff, 0x7dff6a, 0xff9f1c, 0xc77dff, 0xffd23f, 0x4d7cff];
   const cabs = [];
   model = new THREE.Group();
@@ -202,7 +201,7 @@ if (m === 'shuttle' || m === 'freighter') {
     if (t > nextPull) nextPull = t + 3.2;
   };
 } else if (m === 'casino') {
-  // the casino's props (build_casino.py). &part=lamp|fountain|bouncer|chandelier|welcome|wall|blackjack|claw|clawthings|duckderby  &accent=hex (the lamp post's colour)  &n=3 lamps in a row
+  // casino props (build_casino.py). &part=lamp|fountain|bouncer|chandelier|welcome|wall|blackjack|claw|clawthings|duckderby  &accent=hex (lamp post colour)  &n=3 lamps in a row
   const part = Q.get('part') || 'lamp';
   model = new THREE.Group();
   if (part === 'lamp') {
@@ -210,7 +209,7 @@ if (m === 'shuttle' || m === 'freighter') {
     for (let i = 0; i < num('n', 1); i++) { const l = makeLampPost(i % 2 ? 0x2ee6ff : acc); l.position.x = i * 4; model.add(l); }
     height = 9;
   } else if (part === 'fountain') {
-    // &top=chip|dollar (the centrepiece)  &accent=hex (the dollar sign's colour)
+    // &top=chip|dollar (centrepiece)  &accent=hex (dollar sign colour)
     const f = makeFountain({ top: Q.get('top') || 'chip', accent: Q.has('accent') ? parseInt(Q.get('accent'), 16) : 0x2ec4ff });
     model.add(f.root);
     anim = (t, sp, dt) => f.update(t, dt);
@@ -222,7 +221,7 @@ if (m === 'shuttle' || m === 'freighter') {
     height = 2.5;
   } else if (part === 'chandelier') {
     const c = makeChandelier();
-    c.root.position.y = 3;   // (it hangs from the ceiling 3.3 m above its centre)
+    c.root.position.y = 3;   // (hangs from a ceiling 3.3 m above its centre)
     model.add(c.root);
     anim = (t, sp, dt) => { c.spin.rotation.y += dt * 0.3; };
     height = 6;
@@ -231,7 +230,7 @@ if (m === 'shuttle' || m === 'freighter') {
     [0xfff4e0, 0xff2a4a, 0x2ee6ff, 0x7dff6a, 0x16121f, 0xc77dff, 0xffd23f].forEach((c, i) => { const g = makeChipStack(c, 5); g.position.set(-1.5 + i * 0.5, 1.155, 1.7); model.add(g); });
     height = 5;
   } else if (part === 'duckderby') {
-    // the Duck Derby's pieces in a row (build_duck.py): the four racers, the kiosk, a rail post with its rope, the start gate with its grille and the finish arch
+    // Duck Derby pieces in a row (build_duck.py): four racers, kiosk, rail post and rope, start gate and grille, finish arch
     let x = 0;
     const put = (g, w, y = 0) => { g.position.x = x + w / 2; g.position.y = y; x += w + 1; model.add(g); };
     [0xffd23f, 0xff2e88, 0x2ee6ff, 0x7dff6a].forEach((c, i) => { const d = makeRacer(i + 1, c, 0xff9f1c); put(d.root, 1.8, 0.4); });
@@ -244,10 +243,10 @@ if (m === 'shuttle' || m === 'freighter') {
     model.position.x = -x / 2;
     height = 7;
   } else if (part === 'claw') {
-    model.add(makeClawMachine().stat);   // (the empty machine; the game fills it from clawSim.js through clawView.js)
+    model.add(makeClawMachine().stat);   // (empty; the game fills it via clawSim.js / clawView.js)
     height = 12;
   } else if (part === 'clawthings') {
-    // every kind of thing that floats in the claw's tank, at the size it floats, then the claw (build_claw.py)
+    // every claw-tank item kind at its floating size, then the claw (build_claw.py)
     let x = 0;
     const put = (g, w) => { g.position.x = x + w / 2; x += w + 0.4; model.add(g); };
     for (const kind of Object.keys(KINDS)) {
@@ -269,9 +268,9 @@ if (m === 'shuttle' || m === 'freighter') {
     height = 6;
   }
 } else if (m === 'dish') {
-  // &kind=cryo|gantry|field|head  &faction=kepler|meridian|spacecom|vostok|daedalus  &no=01..04 (the array dish's number)  &size=30 (the old dish's size: a 30 m mount scales to it)
-  // (field is makeDish, the small bases' dish, and head the light head alone that sits on masts and roofs; both take any faction, daedalus and the unclaimed 'none' too)
-  // &tilt=rad (the dish's elevation, as the game sweeps it: -0.35 to -0.85)  &az=rad (its azimuth)  &sweep=1 turns and nods it like the game; the lamps blink
+  // &kind=cryo|gantry|field|head  &faction=kepler|meridian|spacecom|vostok|daedalus  &no=01..04 (array dish number)  &size=30 (the 30 m mount scales to it)
+  // (field: makeDish, the small bases' dish; head: the light head alone for masts and roofs; both take any faction, incl. daedalus and unclaimed 'none')
+  // &tilt=rad (elevation; the game sweeps -0.35 to -0.85)  &az=rad (azimuth)  &sweep=1 turns and nods it like the game; lamps blink
   const st = makeDishStation({ kind: Q.get('kind') || 'cryo', faction: Q.get('faction') || 'meridian', no: Q.get('no') || '01', size: num('size', DISH_SIZE) });
   st.tilt.rotation.x = num('tilt', -0.6);
   st.yaw.rotation.y = num('az', 0);
@@ -286,15 +285,15 @@ if (m === 'shuttle' || m === 'freighter') {
   Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, far: 400 });
   sun.shadow.camera.updateProjectionMatrix();
 } else if (m === 'runner') {
-  // &outfit=courier|spacecom2|meridian2|daedalus2|rustmoon|rustmoon2|kepler2|vostok2...  &speed=m/s (the scarf and halo are simulated at that speed, forward)
-  // &cargo=1|2 (a crate, or the Twin Cradle's two, on the back)  &manual=1 (the page steps window.scarfSim itself)  &stop=s (the speed drops to 0 after this many simulated seconds)  &lean=rad (torso pitch)  &arms=rad (both arms' swing)  &fore=rad (both forearms' bend; negative bends the hand forward)  &armz=rad (arms out from the sides)
+  // &outfit=courier|spacecom2|meridian2|daedalus2|rustmoon|rustmoon2|kepler2|vostok2...  &speed=m/s (scarf and halo simulated at that forward speed)
+  // &cargo=1|2 (a crate, or the Twin Cradle's two, on the back)  &manual=1 (the page steps window.scarfSim)  &stop=s (speed drops to 0 after this many simulated s)  &lean=rad (torso pitch)  &arms=rad (arm swing)  &fore=rad (forearm bend; negative bends the hand forward)  &armz=rad (arms out from the sides)
   const R = makeRunner({ own: true });
   dressRunner(R, Q.get('outfit') || 'courier');
   R.torso.rotation.x = num('lean', 0);
   R.armL.rotation.set(num('arms', 0), 0, -num('armz', 0.15));
   R.armR.rotation.set(num('arms', 0), 0, num('armz', 0.15));
   if (R.foreL) { R.foreL.rotation.x = R.foreR.rotation.x = num('fore', 0); }
-  const cargo = num('cargo', 0); // &cargo=1 a crate on the back, 2 the Twin Cradle's two (as Player.setCargo)
+  const cargo = num('cargo', 0); // (as Player.setCargo)
   if (cargo) {
     const c = makeCrate(0xffd23f, 0.7);
     if (cargo > 1) { const t = makeCrate(0x2ec4ff, 0.62); t.position.y = 0.55; t.rotation.y = 0.25; c.add(t); }
@@ -309,7 +308,7 @@ if (m === 'shuttle' || m === 'freighter') {
   height = 2.2;
   window.runner = R;
 } else if (m === 'rover') {
-  // &style=civil|military|pirate|all (all three side by side)  &color=hex &trim=hex &flag=hex  &driver=1 (the road-traffic buggy, with its driver)
+  // &style=civil|military|pirate|all (all three side by side)  &color=hex &trim=hex &flag=hex  &driver=1 (road-traffic buggy with driver; &k=<n> picks it)
   // &gun=<yaw rad>
   const hex = (k, d) => (Q.has(k) ? parseInt(Q.get(k), 16) : d);
   const LOOKS = { civil: { color: 0x6a8f3a, trim: 0xff9f1c }, military: { color: 0x55607a, trim: 0x2ec4ff }, pirate: { color: 0x7b2ff7, trim: 0x7dff3a } };

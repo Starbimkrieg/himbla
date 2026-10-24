@@ -1,23 +1,23 @@
-# Blackjack table builder for Blender (4.2+ / 5.x): the Lucky Crater Casino's gilded blackjack table and its chip, exported to src/assets/blackjack.glb.
+# Blackjack table builder for Blender (4.2+ / 5.x): the Lucky Crater Casino's gilded table and its chip, exported to
+# src/assets/blackjack.glb.
 #
 # In Blender's Python console or via MCP:   exec(open(r"<repo>/tools/blender/build_blackjack.py").read())
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 build_blackjack.py
 #
-# Two roots, authored in three.js axes (x right, y up, +z toward the player) with the origin on the floor at the middle of the table's flat (dealer's) edge,
-# each mesh with ONE material named after a slot (see BJ_TOON / BJ_GLOW in src/models.js):
-#   bj_table   a half-disc table, R = 3.4 m (the felt's radius): a plum lacquer cabinet with a gold girdle and eight cream suit panels between gold pilasters,
-#              a padded leather rail on gold studs with a cyan line under it, the dealer's back counter (2 m deep, a pennant-jewel trim along its front) with a brass
-#              chip rack let into the shelf, a gold and plum card shoe with a lit mouth, a gold-rimmed discard well, and the player's stool at z = 4.3.
-#              The felt is a plane the game lays at y = 1.155 (its print is drawn in casinoWorld.js feltTex, to the layout below). Pivots (empties with a `role`):
-#              felt (extras w, h: the plane's size), shoe (where a dealt card leaves the shoe), rack (where chips come from and go back to), discard (where used
-#              cards go) and stool.
-#   bj_chip    one chip, 0.16 m by 0.07 m, standing on y = 0: a 14-sided body in the slot `chip` (the game tints it to the stake's tier), seven cream edge stripes,
-#              a gold ring and a cream diamond on the top face.
-# The rack's chips use their own fixed slots (chipwhite ... chipviolet) and the neon (`cyan`, `pink`) is glow.
+# Two roots in three.js axes (x right, y up, +z toward the player), origin on the floor at the middle of the flat (dealer's)
+# edge; each mesh has ONE material named after a slot (BJ_TOON / BJ_GLOW in src/models.js):
+#   bj_table   half-disc table, R = 3.4 m (felt radius): plum cabinet, gold girdle, eight suit panels between gold pilasters,
+#              padded leather rail, dealer's back counter with a brass chip rack in the shelf, card shoe, discard well, and
+#              the player's stool at z = 4.3. The felt is a plane the game lays at y = 1.155 (print: casinoWorld.js feltTex).
+#              Pivots (empties with a `role`): felt (extras w, h: plane size), shoe (where dealt cards leave), rack (chips
+#              come from and return to), discard (used cards) and stool.
+#   bj_chip    one chip, 0.16 m by 0.07 m, standing on y = 0: 14-sided body in slot `chip` (tinted to the stake's tier),
+#              cream edge stripes, gold ring and cream diamond on top.
+# The rack's chips use fixed slots (chipwhite ... chipviolet); the neon (`cyan`, `pink`) is glow.
 #
-# THE LAYOUT. The game lays cards, chips and the felt's lettering by table-local coordinates (casinoGames.js layoutCards / chipStack, casinoWorld.js feltTex), and nothing
-# of this model that stands above the felt may reach into those places: ZONES below is the list (the dealer's and the player's card rows with room for eleven cards, the
-# bet, double and payout stacks, and the band of lettering along the rim), and audit() stops the build if a part stands within 10 cm of one.
+# LAYOUT. The game places cards, chips and felt lettering by table-local coordinates (casinoGames.js layoutCards /
+# chipStack, casinoWorld.js feltTex); no part above the felt may reach into them. ZONES lists them (card rows with room
+# for eleven cards, bet / double / payout stacks, the lettering band) and audit() stops the build within 10 cm of one.
 
 import bpy, math, os
 
@@ -53,13 +53,13 @@ C = coll()
 for s in SLOT_COLORS:
     material(s)
 PI = math.pi
-R = 3.4          # the felt's radius (BJ.R in casinoWorld.js)
-SURF = 1.155     # the felt's height: cards lie 1.5 cm over it, chips stand on it
+R = 3.4          # felt radius (BJ.R in casinoWorld.js)
+SURF = 1.155     # felt height: cards lie 1.5 cm over it, chips stand on it
 RAIL_R = 3.46
 
 
 class Acc:
-    """Boxes, cylinders, spheres and tubes that share a material slot and a parent, merged into one mesh when flushed."""
+    """Primitives sharing a slot and parent, merged into one mesh on flush."""
     all = []
 
     def __init__(self, name, slot, parent, ink=0.03):
@@ -97,12 +97,12 @@ def flush_all():
 
 
 def halfdisc(r, z0=0.0, n=40):
-    """The outline (x, z) of a half disc: the flat edge along z = z0, bulging toward +z."""
+    """Half-disc outline (x, z): flat edge on z = z0, bulging toward +z."""
     return [(r * math.cos(PI * i / n), z0 + r * math.sin(PI * i / n)) for i in range(n + 1)]
 
 
 def slab(A, r, y0, h, back=0.0, n=40):
-    """A half-disc slab from y0 to y0 + h; a rectangle `back` deep is added behind the flat edge."""
+    """Half-disc slab from y0 to y0 + h, plus a rectangle `back` deep behind the flat edge."""
     pts = halfdisc(r, 0.0, n)
     if back:
         pts = pts + [(-r, -back), (r, -back)]
@@ -118,7 +118,7 @@ exec(open(os.path.join(REPO, "tools", "blender", "suits.py"), encoding="utf-8").
 # ---- the table ----
 table = pivot("bj_table", (0, 0, 0), None)
 
-# the body: a dark plinth, a plum lacquer cabinet with a gold girdle, a top slab; behind the flat edge the dealer's shelf
+# body: plinth, plum cabinet, gold girdle, top slab; the dealer's shelf behind the flat edge
 A = Acc("plinth", "dark", table, 0.03)
 slab(A, 3.3, 0.0, 0.1, 0.5)
 A.flush()
@@ -132,11 +132,11 @@ A.flush()
 A = Acc("topSlab", "plum2", table, 0.04)
 slab(A, 3.42, 1.06, 0.08, 0.52)
 A.flush()
-A = Acc("feltBed", "dark", table, 0.0)         # (the field the game's felt plane lies on, 7 mm under it)
+A = Acc("feltBed", "dark", table, 0.0)         # bed 7 mm under the game's felt plane
 slab(A, 3.4, 1.14, 0.008, 0.0)
 A.flush()
 
-# the padded rail: a leather armrest round the curved edge on a gold base with studs on its face, and a cyan line under it
+# padded rail: leather armrest on a studded gold base, cyan line under it
 A = Acc("railLeather", "leather", table, 0.04)
 A.path([(RAIL_R * math.cos(a), 1.255, RAIL_R * math.sin(a)) for a in [PI * i / 40 for i in range(41)]], [0.12] * 41, 8)
 A.flush()
@@ -150,7 +150,7 @@ A = Acc("railGlow", "cyan", table, 0.0)
 arc_tube(A, 3.285, 1.035, 0.012, 0.0, PI, 48, 4)
 A.flush()
 
-# the apron: eight recessed panels with the four suits (the prize counter's: tools/blender/suits.py), between gold pilasters
+# apron: eight suit panels (tools/blender/suits.py) between gold pilasters
 AF = Acc("apronFrames", "brass", table, 0.0)
 AP = Acc("apronPanels", "dark", table, 0.0)
 AR = Acc("apronRed", "suitred", table, 0.012)
@@ -164,7 +164,7 @@ for i in range(9):
     A3.add(cuboid(0.1, 0.84, 0.07), (3.2 * math.cos(a), 0.58, 3.2 * math.sin(a)), (0, PI / 2 - a, 0))
 AF.flush(); AP.flush(); AR.flush(); AC.flush(); A3.flush()
 
-# the dealer's side: a brass chip rack let into the shelf (behind z = 0.05: clear of the cards), five columns of chips between gold dividers
+# brass chip rack in the shelf (behind z = 0.05, clear of the cards): five chip columns between gold dividers
 A = Acc("rackTray", "brass", table, 0.03)
 A.boxc(-0.85, 1.145, -0.26, 1.7, 0.03, 0.46)
 A.boxc(-0.85, 1.2, -0.5, 1.7, 0.14, 0.04)
@@ -182,7 +182,7 @@ A = Acc("rackDividers", "gold", table, 0.0)
 for i in range(6):
     A.boxc(-1.5 + (i - 0.5) * 0.34, 1.27, -0.26, 0.018, 0.2, 0.3)
 A.flush()
-# the dealer's back counter: plum with a gold cap and a jewel trim (alternating cyan and pink pennants) along its front
+# back counter: plum, gold cap, cyan / pink pennant jewels along the front
 A = Acc("backCounter", "plum", table, 0.04)
 A.boxc(0, 0.5, -1.7, 6.2, 1.0, 0.6)
 A.flush()
@@ -195,7 +195,7 @@ for slot, off in (("pink", 0.0), ("cyan", 0.223)):
         A.add(cylinder(0.0, 0.11, 0.3, 3), (-2.9 + i * 0.446 + off, 0.9, -1.36), (PI, 0, 0), (1, 0.4, 1))
     A.flush()
 
-# the shoe: a gold and plum card shoe on the right with a lit mouth at (1.99, 1.51, 0.95), where the game deals from
+# card shoe on the right; the game deals from its lit mouth at (1.99, 1.51, 0.95)
 A = Acc("shoeBody", "plum2", table, 0.03)
 A.boxc(2.03, 1.31, 0.62, 0.5, 0.32, 0.7, rot=(0.12, 0, 0))
 A.flush()
@@ -210,7 +210,7 @@ A.flush()
 A = Acc("shoeCards", "cream", table, 0.0)
 A.boxc(2.03, 1.45, 0.58, 0.38, 0.04, 0.5, rot=(0.12, 0, 0))
 A.flush()
-# the discard well: a gold-rimmed dish let into the felt at the left edge where the used cards go (-2.38, 0.3)
+# discard well: gold-rimmed dish in the felt at (-2.38, 0.3)
 A = Acc("discardRim", "gold", table, 0.02)
 A.add(torus(0.34, 0.035, 20, 5), (-2.38, 1.17, 0.3))
 A.flush()
@@ -218,7 +218,7 @@ A = Acc("discardWell", "dark", table, 0.0)
 A.cylc(-2.38, 1.162, 0.3, 0.33, 0.01, 20)
 A.flush()
 
-# the player's stool: a leather cushion with gold studs on three gold legs and a foot ring (the stool is at z = 4.3)
+# player's stool at z = 4.3: studded cushion, three gold legs, foot ring
 A = Acc("stoolSeat", "leather", table, 0.03)
 A.cylc(0, 0.9, 4.3, 0.46, 0.14, 18)
 A.flush()
@@ -249,7 +249,7 @@ A = Acc("chipEdge", "cream", chip, 0.0)
 for i in range(7):
     a = 2 * PI * i / 7
     A.boxc(0.158 * math.sin(a), 0.035, 0.158 * math.cos(a), 0.06, 0.072, 0.014, rot=(0, a, 0))
-A.cylc(0, 0.0705, 0, 0.055, 0.003, 4, rot=(0, PI / 4, 0))     # a diamond medallion
+A.cylc(0, 0.0705, 0, 0.055, 0.003, 4, rot=(0, PI / 4, 0))     # diamond medallion
 A.flush()
 A = Acc("chipRing", "gold", chip, 0.0)
 A.add(torus(0.115, 0.006, 16, 4), (0, 0.0715, 0))
@@ -258,10 +258,10 @@ A.flush()
 flush_all()
 
 # ---------------------------------------------------------------------------------------------------------------
-# the check: nothing of the table stands over the felt where cards, chips or lettering go
+# check: nothing stands over the felt where cards, chips or lettering go
 # ---------------------------------------------------------------------------------------------------------------
-# table-local (x, z): the dealer's card row and the player's (the red areas the felt prints, with the brackets at their corners), the bet / double / payout stacks,
-# and the band of lettering along the rim (two arcs of one line: radius 3.02 to 3.22, angles in degrees from +x)
+# table-local (x, z): the two card rows (the felt's printed areas), bet / double / payout stacks, and the lettering band
+# (radius 3.02 to 3.22, angles in degrees from +x)
 ZONES = {
     "dealer's cards": ("rect", -1.6, 1.6, 0.26, 0.98),
     "player's cards": ("rect", -1.6, 1.6, 1.39, 2.26),
@@ -271,7 +271,7 @@ ZONES = {
 
 
 def zone_gap(zone, x, z):
-    """How far (x, z) is outside the zone (0 or less: inside)."""
+    """Distance of (x, z) outside the zone (<= 0: inside)."""
     if zone[0] == "rect":
         _, x0, x1, z0, z1 = zone
         dx, dz = max(x0 - x, 0, x - x1), max(z0 - z, 0, z - z1)
@@ -303,7 +303,7 @@ def audit(tol=0.10, over=0.004):
         mw = e.matrix_world
         for v in e.to_mesh().vertices:
             w = mw @ v.co
-            x, y, z = w.x, w.z, -w.y      # (three.js axes)
+            x, y, z = w.x, w.z, -w.y      # three.js axes
             if y <= SURF + over:
                 continue
             for k, zn in ZONES.items():

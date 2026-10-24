@@ -1,29 +1,34 @@
-# Casino hall kit for Blender (4.2+ / 5.x): the Lucky Crater Casino's walls, ceiling, floor inlay, bar, lounge, doors and roof, in the plum lacquer, gold, brass and cream suit
-# panels of the Duck Derby, the blackjack table and the Plinko cabinet. One file, src/assets/hall.glb, in three.js axes (x right, y up, +z forward) like the other builders.
-# The game is casinoWorld.js (it tiles the wall pieces along the plan's outline, casinoPlan.js) and models.js reads the file (makeHallPart).
+# Casino hall kit for Blender (4.2+ / 5.x): the Lucky Crater Casino's walls, ceiling, floor inlay, bar, lounge, doors and roof, in the
+# plum lacquer, gold, brass and cream suit panels of the Duck Derby, blackjack table and Plinko cabinet. One file, src/assets/hall.glb,
+# three.js axes (x right, y up, +z forward). casinoWorld.js tiles the wall pieces along the plan outline (casinoPlan.js); models.js
+# reads the file (makeHallPart).
 #
 # In Blender's Python console or via MCP:   exec(open(r"<repo>/tools/blender/build_hall.py").read())
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 tools/blender/build_hall.py
 #
-# THE WALL. The game builds the wall itself (an extruded band round the plan) and the long horizontal pieces (skirting, girdle, cornice, the neon in its channel, the wall's field of
-# damask, the outside's plinth, belt and cornice) as extruded rings that follow the outline, so they meet at a corner with a mitre and never lie on one another. The models below are
-# the vertical pieces that stand on that wall at every bay: they never share a plane with a ring (the file's audit_coplanar() checks it).
-#   hall_bay0..3    one wall bay 4.5 m wide and 16 m tall, centred on x 0, its back on the wall (z 0), its front toward +z (into the room): half a gold pilaster at each edge (two bays
-#                   side by side make a whole one), a lacquer wainscot with a framed cream suit panel (0 spade, 1 heart, 2 diamond, 3 club) and a lozenge each side of it, and a tall arched panel with a
-#                   cyan line in it. The game scales one by its x (the run's length over 4.5 m, at most 11% either way) and turns it to face the room.
-#   hall_filler     a 1 m wide plain lacquer wainscot, for the runs too short for a bay; the game scales it along x.
-#   hall_coffer     one 4.5 m ceiling tile, hung from y 0 down: a gold octagon ring round a brass one, a plum dish, a lit rosette in a brass bezel, spokes and jewels.
-#   hall_medallion  the crossing's floor inlay, 17.1 m across, lying on y 0 (the game puts it on the carpet): a gold ring, a plum disc, a brass ring, an eight-point cream star toward the
-#                   arms and the four suits between its points.
-#   hall_bar        the Chip Bar, r 4.65 with its stools: a plum 16-sided island with a cream suit panel on each face between gold posts, a pink top in a gold rim, a padded leather rail,
-#                   a back-bar counter, a gold pillar with a gilded halo and pendant lamps, and eight stools. Pivot `bar_spin` (at the top of the pillar) carries the casino's chip, which turns.
-#   hall_sofa       a lounge banquette 3.6 m long, its back on the wall: plum body, red velvet cushions, gold feet.  hall_table: a small round table, gold pedestal, pink top.
-#   hall_gate       the grand doors' frame, on the outside of the front wall (its back on the wall's outer face, z 0, front toward +z), the doors' opening 12 m wide and 10 m tall: gold piers,
-#                   an architrave, a frieze of five suit panels and a pediment with a gold chip, lamps either side.
-#   facade_panel0..3  a framed suit relief for the outside wall, 2.6 x 3.4 m, its back on the wall (z 0, front toward +z).
-#   facade_crown    the drum, dome and lantern over the crossing: a plum drum r 16 with 24 gold pilasters and lit windows, a plum dome r 13 with 24 gold ribs, a lantern; its origin at the
-#                   drum's foot, its top (the lantern's cap) 20.5 m up, where the game stands the sign's mast.
-# Every mesh has ONE material named after a slot (see HALL_TOON / HALL_GLOW in src/models.js); the glow slots are lit.
+# THE WALL. The game builds the wall band and the long horizontals (skirting, girdle, cornice, neon channel, damask field, outside
+# plinth, belt and cornice) as extruded rings along the outline, mitred at corners. The models below are the vertical pieces at each
+# bay; none shares a plane with a ring (audit_coplanar() checks).
+#   hall_bay0..3    a 4.5 x 16 m wall bay, centred on x 0, back on the wall (z 0), front +z into the room: half a gold pilaster each edge
+#                   (two bays make a whole one), a lacquer wainscot with a framed cream suit panel (0 spade, 1 heart, 2 diamond, 3 club)
+#                   and a lozenge each side, a tall arched panel with a cyan line. The game scales x (run length / 4.5 m, at most 11%
+#                   either way) and turns it to face the room.
+#   hall_filler     1 m plain lacquer wainscot for runs too short for a bay; scaled along x.
+#   hall_coffer     4.5 m ceiling tile hung from y 0 down: gold octagon ring round a brass one, plum dish, lit rosette in a brass bezel,
+#                   spokes and jewels.
+#   hall_medallion  the crossing's floor inlay, 17.1 m across, on y 0 (placed on the carpet): gold ring, plum disc, brass ring, eight-point
+#                   cream star toward the arms, the four suits between its points.
+#   hall_bar        the Chip Bar, r 4.65 with stools: plum 16-sided island with a suit panel per face between gold posts, pink top in a gold
+#                   rim, padded rail, back-bar counter, gold pillar with a gilded halo and pendant lamps, eight stools. Pivot `bar_spin`
+#                   (pillar top) carries the casino's turning chip.
+#   hall_sofa       3.6 m lounge banquette, back on the wall: plum body, red velvet cushions, gold feet.  hall_table: small round table,
+#                   gold pedestal, pink top.
+#   hall_gate       grand doors' frame on the front wall's outside (back on the outer face, z 0, front +z), opening 12 m wide, 10 m tall:
+#                   gold piers, architrave, frieze of five suit panels, pediment with a gold chip, lamps either side.
+#   facade_panel0..3  framed suit relief for the outside wall, 2.6 x 3.4 m, back on the wall (z 0, front +z).
+#   facade_crown    drum, dome and lantern over the crossing: plum drum r 16 with 24 gold pilasters and lit windows, plum dome r 13 with 24
+#                   gold ribs, a lantern; origin at the drum's foot, top (lantern cap) 20.5 m up, where the game stands the sign's mast.
+# Every mesh has ONE material named after a slot (HALL_TOON / HALL_GLOW in src/models.js); glow slots are lit.
 import bpy, bmesh, math, os
 
 
@@ -116,7 +121,7 @@ def flush_all():
         a.flush()
 
 
-exec(open(os.path.join(REPO, "tools", "blender", "suits.py"), encoding="utf-8").read(), globals())   # the card-suit panels, shared with the blackjack table, the Duck Derby and the claw
+exec(open(os.path.join(REPO, "tools", "blender", "suits.py"), encoding="utf-8").read(), globals())   # card-suit panels, shared with blackjack, the Duck Derby and the claw
 
 
 def ring_prof(r0, r1, y0, y1):
@@ -125,7 +130,7 @@ def ring_prof(r0, r1, y0, y1):
 
 
 def arch_pts(half, y0, ys, n=14):
-    """the outline of an arched panel: flat bottom at y0, straight sides up to the spring line ys, a round head of radius `half`"""
+    """arched panel outline: flat bottom at y0, straight sides to the spring line ys, round head of radius `half`"""
     pts = [(-half, y0), (half, y0), (half, ys)]
     for i in range(1, n):
         a = PI * i / n
@@ -135,7 +140,7 @@ def arch_pts(half, y0, ys, n=14):
 
 
 def arch_line(half, ys, n=14):
-    """points along the head and sides of an arch (for a neon line), from bottom left up and over to bottom right"""
+    """points along an arch's sides and head (for a neon line), bottom left over to bottom right"""
     return [(-half, 0.0), (-half, ys)] + [(half * math.cos(PI - PI * i / n), ys + half * math.sin(PI - PI * i / n)) for i in range(1, n)] + [(half, ys), (half, 0.0)]
 
 
@@ -156,14 +161,14 @@ def bay(kind):
     red = Acc(f"hall_bay{kind}_suitred", "suitred", root, 0.0)
     cream = Acc(f"hall_bay{kind}_suitcream", "suitcream", root, 0.0)
     cyan = Acc(f"hall_bay{kind}_cyan", "glowcyan", root, 0.0)
-    for s in (-1, 1):                                   # half a pilaster at each edge: plinth, collar, shaft, collar, capital, plate
+    for s in (-1, 1):                                   # half pilaster each edge: plinth, collar, shaft, collar, capital, plate
         plum.box(*sorted((s * 1.94, s * 2.25)), 0.0, 0.55, 0.0, 0.26)
         brass.box(*sorted((s * 1.96, s * 2.25)), 0.55, 0.70, 0.0, 0.24)
         gold.box(*sorted((s * 2.0, s * 2.25)), 0.70, 12.40, 0.0, 0.18)
         brass.box(*sorted((s * 1.96, s * 2.25)), 12.40, 12.55, 0.0, 0.24)
         brass.box(*sorted((s * 1.92, s * 2.25)), 12.55, 13.0, 0.0, 0.30)
         gold.box(*sorted((s * 1.90, s * 2.25)), 13.0, 13.12, 0.0, 0.34)
-    # the lacquer wainscot between the pilasters: a slab, a brass frame, the framed suit panel and a lozenge each side
+    # lacquer wainscot: slab, brass frame, framed suit panel, a lozenge each side
     plum.box(-1.92, 1.92, 0.30, 1.75, 0.0, 0.10)
     for x0, x1, y0, y1 in ((-1.87, 1.87, 0.35, 0.40), (-1.87, 1.87, 1.65, 1.70), (-1.87, -1.82, 0.40, 1.65), (1.82, 1.87, 0.40, 1.65)):
         brass.box(x0, x1, y0, y1, 0.10, 0.13)
@@ -172,12 +177,12 @@ def bay(kind):
         plum2.box(s * 1.3 - 0.45, s * 1.3 + 0.45, 0.58, 1.47, 0.10, 0.115)
         for x0, x1, y0, y1 in ((s * 1.3 - 0.45, s * 1.3 + 0.45, 0.58, 0.61), (s * 1.3 - 0.45, s * 1.3 + 0.45, 1.44, 1.47), (s * 1.3 - 0.45, s * 1.3 - 0.42, 0.61, 1.44), (s * 1.3 + 0.42, s * 1.3 + 0.45, 0.61, 1.44)):
             brass.box(x0, x1, y0, y1, 0.115, 0.14)
-    # the tall arched panel: a brass frame (the whole outline), the plum fill in front of it, a cyan line inset
+    # tall arched panel: brass frame, plum fill in front, inset cyan line
     outer = arch_pts(1.3, 3.2, 9.3)
     brass.poly(outer, 0.04, 0.14)
     plum2.poly(arch_pts(1.2, 3.3, 9.3), 0.05, 0.16)
-    cyan.path([(x, 3.55 + y, 0.19) for x, y in arch_line(1.0, 9.3 - 3.55)], 0.05, 6)         # (a 10 cm bead: a 3 cm one dropped out in pieces at a distance)
-    # a gold cap over the arch, and a lamp-brass boss either side of its spring line
+    cyan.path([(x, 3.55 + y, 0.19) for x, y in arch_line(1.0, 9.3 - 3.55)], 0.05, 6)         # 10 cm bead: thinner ones break up at a distance
+    # brass boss either side of the spring line
     for s in (-1, 1):
         brass.ball(s * 1.3, 9.3, 0.17, 0.09, 8, 6)
     return root
@@ -186,7 +191,7 @@ def bay(kind):
 for k in range(4):
     bay(k)
 
-# the filler: lacquer wainscot only, 1 m wide
+# filler: 1 m lacquer wainscot only
 root = pivot("hall_filler", (0, 0, 0))
 Acc("hall_filler_plum", "plum", root, 0.012).box(-0.5, 0.5, 0.30, 1.75, 0.0, 0.10)
 Acc("hall_filler_brass", "brass", root, 0.01).box(-0.5, 0.5, 1.75, 1.80, 0.0, 0.13)
@@ -199,10 +204,10 @@ gold = Acc("hall_coffer_gold", "gold", root, 0.015)
 brass = Acc("hall_coffer_brass", "brass", root, 0.01)
 plum2 = Acc("hall_coffer_plum2", "plum2", root, 0.0)
 lamp = Acc("hall_coffer_lamp", "lamp", root, 0.0)
-gold.lath(ring_prof(1.75, 1.95, -0.18, 0.0), segs=8)                                # the octagon ring (8 sides: the first vertex at +z, so its flat faces the grid)
+gold.lath(ring_prof(1.75, 1.95, -0.18, 0.0), segs=8)                                # octagon ring (first vertex at +z, so flats face the grid)
 brass.lath(ring_prof(1.50, 1.60, -0.14, -0.02), segs=8)
 plum2.lath([(0, -0.06), (1.75, -0.06), (1.75, -0.03), (0, -0.03)], segs=8)
-lamp.lath([(0, -0.12), (0.5, -0.12), (0.5, -0.08), (0, -0.08)], segs=16)             # the rosette
+lamp.lath([(0, -0.12), (0.5, -0.12), (0.5, -0.08), (0, -0.08)], segs=16)             # rosette
 brass.lath(ring_prof(0.5, 0.64, -0.17, -0.06), segs=16)
 for i in range(8):                                                                  # spokes and jewels
     a = i * PI / 4
@@ -224,12 +229,12 @@ gold.lath(ring_prof(8.2, 8.6, 0.0, 0.04), segs=64)
 gold.lath(ring_prof(4.9, 5.05, 0.015, 0.04), segs=64)
 brass.lath(ring_prof(6.15, 6.3, 0.015, 0.03), segs=64)
 star = []
-for i in range(16):                                                                 # eight points: long toward the arms, shorter between them
+for i in range(16):                                                                 # eight points: long toward the arms, shorter between
     a = i * PI / 8
     r = (7.9 if (i // 2) % 2 == 0 else 5.7) if i % 2 == 0 else 2.7
     star.append((math.sin(a) * r, math.cos(a) * r))
 gold.add(extrude(star, 0.02, "y"), (0, 0.035, 0))
-for i in range(8):                                                                  # the four suits twice, between the points, laid flat with their heads outward
+for i in range(8):                                                                  # four suits twice between the points, flat, heads outward
     phi = PI / 8 + i * PI / 4 if i % 2 == 0 else PI / 8 + i * PI / 4
     kind = i % 4
     for g in suit_geos(kind, 0.95, 0.02):
@@ -254,36 +259,36 @@ cyan = Acc("hall_bar_cyan", "glowcyan", root, 0.0)
 chip_gold = Acc("bar_chip_gold", "gold", spin, 0.02)
 chip_pink = Acc("bar_chip_pink", "pink", spin, 0.0)
 chip_cream = Acc("bar_chip_cream", "cream", spin, 0.0)
-dark.lath(ring_prof(1.9, 3.55, 0.0, 0.15), segs=16)                                # the kick plate
-plum.lath(ring_prof(1.9, 3.4, 0.15, 1.05), segs=16)                               # the island: a 16-sided ring (r 3.4 at the corners)
-cyan.lath(ring_prof(3.44, 3.47, 0.20, 0.23), segs=16)                             # a cyan line above the kick plate
+dark.lath(ring_prof(1.9, 3.55, 0.0, 0.15), segs=16)                                # kick plate
+plum.lath(ring_prof(1.9, 3.4, 0.15, 1.05), segs=16)                               # island: 16-sided ring (r 3.4 at the corners)
+cyan.lath(ring_prof(3.44, 3.47, 0.20, 0.23), segs=16)                             # cyan line above the kick plate
 for i in range(16):
     a = (i + 0.5) * PI / 8
     rf = 3.4 * math.cos(PI / 16)
     suit_panel(brass, dark, red, cream, i % 4, (math.sin(a) * rf, 0.64, math.cos(a) * rf), a, 0.95, 0.7, 0.5)
     b = i * PI / 8
-    gold.cylc(math.sin(b) * 3.4, 0.645, math.cos(b) * 3.4, 0.065, 0.79, 8)         # a gold post at each corner
-pink.lath(ring_prof(2.0, 3.5, 1.05, 1.12), segs=32)                               # the top
-gold.lath(ring_prof(3.5, 3.72, 1.05, 1.14), segs=32)                              # its rim
+    gold.cylc(math.sin(b) * 3.4, 0.645, math.cos(b) * 3.4, 0.065, 0.79, 8)         # gold corner posts
+pink.lath(ring_prof(2.0, 3.5, 1.05, 1.12), segs=32)                               # top
+gold.lath(ring_prof(3.5, 3.72, 1.05, 1.14), segs=32)                              # rim
 gold.lath(ring_prof(1.9, 2.0, 1.05, 1.16), segs=32)
-velvet.tor(3.88, 0.13, (0, 1.22, 0), n=48, rs=8)                                  # the padded rail, on gold brackets
+velvet.tor(3.88, 0.13, (0, 1.22, 0), n=48, rs=8)                                  # padded rail on gold brackets
 for i in range(32):
     a = i * PI / 16
     gold.ball(math.sin(a) * 3.88, 1.22 + 0.125, math.cos(a) * 3.88, 0.04, 6, 4)
     if i % 2 == 0:
         gold.cylc(math.sin(a) * 3.8, 1.13, math.cos(a) * 3.8, 0.03, 0.12, 6)
-plum2.lath(ring_prof(1.0, 1.9, 0.0, 1.4), segs=16)                                # the back bar: an inner ring with a gold top and a lamp ring
+plum2.lath(ring_prof(1.0, 1.9, 0.0, 1.4), segs=16)                                # back bar: inner ring, gold top, lamp ring
 gold.lath(ring_prof(1.0, 1.9, 1.4, 1.48), segs=16)
 for i in range(8):
     a = i * PI / 4
     lamp.ball(math.sin(a) * 1.45, 1.62, math.cos(a) * 1.45, 0.11, 8, 6)
     brass.cylc(math.sin(a) * 1.45, 1.52, math.cos(a) * 1.45, 0.025, 0.08, 6)
-plum.lath([(0.75, 0.0), (0.75, 0.3), (0.55, 0.45), (0.55, 0.5)], segs=16)           # the pillar: a plum foot, a gold shaft with brass bands
+plum.lath([(0.75, 0.0), (0.75, 0.3), (0.55, 0.45), (0.55, 0.5)], segs=16)           # pillar: plum foot, gold shaft, brass bands
 gold.lath([(0.55, 0.5), (0.4, 0.62), (0.4, 4.55), (0.5, 4.68), (0.5, 4.78)], segs=16)
 for y in (1.8, 3.1):
     brass.lath(ring_prof(0.4, 0.5, y, y + 0.14), segs=16)
 brass.lath(ring_prof(0.45, 0.6, 4.7, 4.86), segs=16)
-gold.tor(3.3, 0.09, (0, 5.6, 0), n=48, rs=6)                                      # the halo, hung from six spokes, with pendant lamps
+gold.tor(3.3, 0.09, (0, 5.6, 0), n=48, rs=6)                                      # halo on six spokes, with pendant lamps
 for i in range(6):
     a = i * PI / 3
     brass.tube((0, 4.95, 0), (math.sin(a) * 3.3, 5.6, math.cos(a) * 3.3), 0.035, 6)
@@ -291,33 +296,33 @@ for i in range(12):
     a = i * PI / 6
     brass.tube((math.sin(a) * 3.3, 5.55, math.cos(a) * 3.3), (math.sin(a) * 3.3, 5.2, math.cos(a) * 3.3), 0.018, 5)
     lamp.ball(math.sin(a) * 3.3, 5.1, math.cos(a) * 3.3, 0.14, 8, 6)
-for i in range(8):                                                               # the stools
+for i in range(8):                                                               # stools
     a = PI / 8 + i * PI / 4
     x, z = math.sin(a) * 4.4, math.cos(a) * 4.4
     brass.cylc(x, 0.33, z, 0.05, 0.54, 8)
     gold.cylc(x, 0.03, z, 0.26, 0.06, 12)
     velvet.cylc(x, 0.66, z, 0.23, 0.14, 12)
-gold.cylc(0, 5.08, 0, 0.14, 0.44, 12)                                              # a neck above the capital: the chip stands clear of the pillar and of the halo's spokes
-# the chip that turns on top (axis horizontal: it stands on edge, turned about y by the game)
+gold.cylc(0, 5.08, 0, 0.14, 0.44, 12)                                              # neck above the capital: chip clears the pillar and halo spokes
+# turning chip on top (on edge, horizontal axis; the game spins it about y)
 chip_gold.lath([(0, -0.1), (0.9, -0.1), (0.96, -0.05), (0.96, 0.05), (0.9, 0.1), (0, 0.1)], rot=(PI / 2, 0, 0), segs=24)
 chip_pink.lath([(0, -0.115), (0.62, -0.115), (0.62, 0.115), (0, 0.115)], rot=(PI / 2, 0, 0), segs=24)
 for i in range(8):
     a = i * PI / 4
     chip_cream.boxc(math.cos(a) * 0.9, math.sin(a) * 0.9, 0.0, 0.2, 0.16, 0.24, (0, 0, a))
-for g in suit_geos(1, 0.62, 0.02):                                               # a heart on each face
+for g in suit_geos(1, 0.62, 0.02):                                               # heart on each face
     for z in (0.125, -0.125):
         chip_cream.add(g[:2], (0, 0, z), (0, 0 if z > 0 else PI, 0))
 
 # =====================================================================================================
-# the lounge: a banquette and a small table
+# the lounge: banquette and small table
 # =====================================================================================================
 root = pivot("hall_sofa", (0, 0, 0))
 plum = Acc("hall_sofa_plum", "plum", root, 0.02)
 velvet = Acc("hall_sofa_velvet", "velvet", root, 0.02)
 gold = Acc("hall_sofa_gold", "gold", root, 0.015)
 brass = Acc("hall_sofa_brass", "brass", root, 0.01)
-plum.box(-1.8, 1.8, 0.14, 0.48, 0.0, 0.9)                                       # the base
-plum.box(-1.8, 1.8, 0.48, 1.08, 0.0, 0.24)                                      # the back
+plum.box(-1.8, 1.8, 0.14, 0.48, 0.0, 0.9)                                       # base
+plum.box(-1.8, 1.8, 0.48, 1.08, 0.0, 0.24)                                      # back
 for s in (-1, 1):
     plum.box(*sorted((s * 1.8, s * 1.68)), 0.48, 0.78, 0.0, 0.9)                # arms
     for z in (0.12, 0.78):
@@ -346,7 +351,7 @@ red = Acc("hall_gate_suitred", "suitred", root, 0.0)
 cream = Acc("hall_gate_suitcream", "suitcream", root, 0.0)
 lamp = Acc("hall_gate_lamp", "lamp", root, 0.0)
 pink = Acc("hall_gate_pink", "glowpink", root, 0.0)
-for s in (-1, 1):                                                                # the piers: a plum plinth, a gold shaft, a brass collar and capital
+for s in (-1, 1):                                                                # piers: plum plinth, gold shaft, brass collar and capital
     x0, x1 = sorted((s * 6.03, s * 7.3))
     plum.box(x0 - 0.05, x1 + 0.05, 0.0, 0.8, 0.0, 0.95)
     gold.box(x0, x1, 1.0, 9.2, 0.0, 0.8)
@@ -355,14 +360,14 @@ for s in (-1, 1):                                                               
     brass.box(x0 - 0.12, x1 + 0.12, 9.6, 10.0, 0.0, 0.95)
     for y in (3.2, 5.2, 7.2):
         suit_panel(brass, dark, red, cream, int((y - 3.2) / 2) + (0 if s < 0 else 2), (s * 6.65, y, 0.8), 0, 0.8, 1.2, 0.55)
-    lamp.ball(s * 7.85, 4.6, 0.35, 0.28, 10, 7)                                    # a lamp on a bracket outside each pier
+    lamp.ball(s * 7.85, 4.6, 0.35, 0.28, 10, 7)                                    # bracket lamp outside each pier
     brass.tube((s * 7.3, 4.6, 0.25), (s * 7.6, 4.6, 0.35), 0.04, 6)
-gold.box(-7.4, 7.4, 10.0, 10.6, 0.0, 0.95)                                       # the architrave
+gold.box(-7.4, 7.4, 10.0, 10.6, 0.0, 0.95)                                       # architrave
 brass.box(-7.5, 7.5, 10.6, 10.75, 0.0, 1.05)
-plum.box(-7.3, 7.3, 10.75, 12.25, 0.0, 0.7)                                     # the frieze, with five suit panels
+plum.box(-7.3, 7.3, 10.75, 12.25, 0.0, 0.7)                                     # frieze with five suit panels
 for i in range(5):
     suit_panel(brass, dark, red, cream, i % 4 if i != 4 else 0, (-5.6 + i * 2.8, 11.5, 0.7), 0, 1.7, 1.1, 0.8)
-gold.box(-7.6, 7.6, 12.25, 12.6, 0.0, 1.15)                                      # the pediment: a cornice, then the triangle with a gold chip
+gold.box(-7.6, 7.6, 12.25, 12.6, 0.0, 1.15)                                      # pediment: cornice, then the triangle with a gold chip
 tri = [(-7.4, 12.6), (7.4, 12.6), (0, 14.7)]
 gold.poly(tri, 0.0, 0.8)
 plum2.poly([(-6.6, 12.75), (6.6, 12.75), (0, 14.3)], 0.05, 0.85)
@@ -380,7 +385,7 @@ for k in range(4):
     red = Acc(f"facade_panel{k}_suitred", "suitred", root, 0.0)
     cream = Acc(f"facade_panel{k}_suitcream", "suitcream", root, 0.0)
     W, Hh = 2.6, 3.4
-    brass.box(-W / 2, W / 2, 6.3 - Hh / 2, 6.3 + Hh / 2, -0.05, 0.12)                 # centred at y 6.3, like the suit and the studs (the game stands it on the wall)
+    brass.box(-W / 2, W / 2, 6.3 - Hh / 2, 6.3 + Hh / 2, -0.05, 0.12)                 # centred at y 6.3 like the suit and studs (the game stands it on the wall)
     plum2.box(-W / 2 + 0.14, W / 2 - 0.14, 6.3 - Hh / 2 + 0.14, 6.3 + Hh / 2 - 0.14, -0.04, 0.17)
     for sx in (-1, 1):
         for sy in (-1, 1):
@@ -399,11 +404,11 @@ brass = Acc("facade_crown_brass", "brass", root, 0.02)
 lamp = Acc("facade_crown_lamp", "lamp", root, 0.0)
 glowp = Acc("facade_crown_pink", "glowpink", root, 0.0)
 DR, DH, DOME = 16.0, 3.0, 13.0
-plum.lath([(0, 0.0), (DR, 0.0), (DR, DH), (0, DH)], segs=48)                     # the drum
+plum.lath([(0, 0.0), (DR, 0.0), (DR, DH), (0, DH)], segs=48)                     # drum
 gold.lath(ring_prof(DR, DR + 0.5, DH - 0.35, DH), segs=48)                 # its cornice
 brass.lath(ring_prof(DR, DR + 0.25, 0.0, 0.4), segs=48)                    # and plinth
-glowp.lath(ring_prof(DR + 0.02, DR + 0.08, DH - 0.7, DH - 0.55), segs=48)       # a pink line under the cornice
-for i in range(24):                                                              # 24 pilasters and a lit window between each pair
+glowp.lath(ring_prof(DR + 0.02, DR + 0.08, DH - 0.7, DH - 0.55), segs=48)       # pink line under the cornice
+for i in range(24):                                                              # 24 pilasters, a lit window between each pair
     a = i * PI / 12
     x, z = math.sin(a) * (DR + 0.05), math.cos(a) * (DR + 0.05)
     gold.boxc(x, 1.7, z, 0.55, 2.0, 0.3, (0, a, 0))
@@ -413,13 +418,13 @@ rows = []
 for i in range(0, 13):
     phi = (PI / 2) * i / 12
     rows.append((DOME * math.cos(phi), DH + DOME * math.sin(phi)))
-plum2.lath(rows[:-1] + [(0.0, DH + DOME)], segs=24)                              # the dome
+plum2.lath(rows[:-1] + [(0.0, DH + DOME)], segs=24)                              # dome
 gold.lath(ring_prof(DOME - 0.1, DOME + 0.4, DH, DH + 0.35), segs=48)
-for i in range(24):                                                              # 24 gold ribs over it
+for i in range(24):                                                              # 24 gold ribs
     a = i * PI / 12
     gold.path([(math.sin(a) * (DOME + 0.1) * math.cos(p), DH + (DOME + 0.1) * math.sin(p), math.cos(a) * (DOME + 0.1) * math.cos(p)) for p in [(PI / 2 * 0.985) * j / 14 for j in range(15)]], 0.14, 6)
 TOP = DH + DOME
-gold.lath(ring_prof(1.0, 2.2, TOP - 0.1, TOP + 0.5), segs=24)                    # the lantern: a gold base, a plum drum with lit windows, a brass cornice, a gold cap
+gold.lath(ring_prof(1.0, 2.2, TOP - 0.1, TOP + 0.5), segs=24)                    # lantern: gold base, plum drum with lit windows, brass cornice, gold cap
 plum2.lath([(0, TOP + 0.5), (1.6, TOP + 0.5), (1.6, TOP + 2.7), (0, TOP + 2.7)], segs=16)
 for i in range(8):
     a = i * PI / 4

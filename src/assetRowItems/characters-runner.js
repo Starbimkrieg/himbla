@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { makeRunner, makeCrate } from '../models.js';
 import { OUTFITS, SKATES, dressRunner, dressSkates } from '../cosmetics.js';
-import '../casino.js'; // (adds the casino outfits and skate finishes to OUTFITS and SKATES)
-import '../secrets.js'; // (and the Xenoglide finish)
+import '../casino.js'; // adds the casino outfits and skate finishes
+import '../secrets.js'; // adds the Xenoglide finish
 import { ITEMS, MUTATIONS, makeJarMesh, buildMutationMeshes } from '../alchemy.js';
 import { CARGO, MIL_CARGO } from '../locations.js';
 import { holoMaterial } from '../monolith.js';
@@ -10,26 +10,25 @@ import { makeXenoSkates } from '../secrets.js';
 import { makeDrone } from '../tutorial.js';
 import { span, cell, line, restRunner } from './characters-util.js';
 
-// 01 · RUNNER & GEAR: the runner, what it wears and carries (outfits, skate finishes, mutations, cargo, the jar), the hologram,
-// the legendary skates and BOLT.
+// 01 · RUNNER & GEAR: the runner, outfits, skate finishes, mutations, cargo, the jar, the hologram, Xenoglide and BOLT.
 
-const RW = 2.6; // a runner's cell along the row (m), with its tag
+const RW = 2.6; // a runner's cell width along the row, with its tag (m)
 const RD = 3.2;
 
 const OUTFIT_TAGS = { loungelizard: 'LOUNGE LIZARD', highroller: 'HIGH ROLLER', moonroyal: 'MOON ROYAL' };
 const outfitTag = (id) => OUTFIT_TAGS[id] || id.replace(/2$/, ' ELITE').toUpperCase();
-const OUTFIT_N = 16; // (courier, six factions x base and elite = 13, and the three casino ones)
+const OUTFIT_N = 16; // courier + six factions x base/elite + three casino
 const SKATE_N = 11;
 const MUT_N = 10;
 const CRATE_NAMES = ['MEDICAL', 'FAMILY', 'CRYO', 'HELIUM-3', 'RADAR', 'COIL', 'CAKE', 'SPORE', 'ICE', 'MAIL', 'LAMPS', 'DIPLOMAT', 'DRIVE', 'RATIONS'];
 const JAR_N = 20;
 
-// ---- the runner, front and back
+// ---- runner, front and back
 function playerItem() {
   return {
     id: 'runner.player', label: 'RUNNER (FRONT, BACK)', w: span(2, RW), d: RD,
     make() {
-      // (the player's own: makeRunner with private materials, so the wardrobe can recolour it)
+      // own: private materials, so the wardrobe can recolour it
       const front = restRunner(makeRunner({ suit: 0xff4f2e, accent: 0x2ee6ff, scarf: 0xffd23f, own: true }));
       const back = restRunner(makeRunner({ suit: 0xff4f2e, accent: 0x2ee6ff, scarf: 0xffd23f, own: true }));
       back.root.rotation.y = Math.PI;
@@ -39,7 +38,7 @@ function playerItem() {
   };
 }
 
-// ---- the sixteen outfits
+// ---- outfits
 function outfitsItem() {
   return {
     id: 'runner.outfits', label: 'OUTFITS (16)', w: span(OUTFIT_N, RW), d: RD,
@@ -55,7 +54,7 @@ function outfitsItem() {
   };
 }
 
-// ---- the eleven skate finishes
+// ---- skate finishes
 function skatesItem() {
   return {
     id: 'runner.skates', label: 'SKATE FINISHES (11)', w: span(SKATE_N, RW), d: RD,
@@ -64,7 +63,7 @@ function skatesItem() {
         const M = makeRunner({ own: true });
         dressSkates(M, id);
         restRunner(M);
-        M.root.rotation.y = 0.9; // (turned three-quarters, so the boots and rails show)
+        M.root.rotation.y = 0.9; // three-quarter turn so the boots show
         return cell(M.root, id.toUpperCase(), RW, RD, { h: 0.6 });
       });
       return { root: line(cells).root };
@@ -72,7 +71,7 @@ function skatesItem() {
   };
 }
 
-// ---- the ten mutations
+// ---- mutations
 function mutationsItem() {
   return {
     id: 'runner.mutations', label: 'MUTATIONS (10)', w: span(MUT_N, 4.4), d: RD + 1,
@@ -86,14 +85,14 @@ function mutationsItem() {
       });
       return {
         root: line(cells).root,
-        // (the wings flap, as alchemy.update has them)
+        // wings flap as in alchemy.update
         update: (dt, t) => { for (const m of flaps) m.rotation.y = m.userData.flap * (0.5 + Math.sin(t * 3) * 0.35); },
       };
     },
   };
 }
 
-// ---- cargo: a crate on the back (from behind), the Kepler twin stack, and the contract colours
+// ---- cargo: a crate on the back, the Kepler twin stack, the contract colours
 function cargoItem() {
   const colours = [...CARGO, ...MIL_CARGO];
   return {
@@ -113,7 +112,7 @@ function cargoItem() {
       twin.cargoSlot.add(bottom);
       twin.root.rotation.y = Math.PI;
       cells.push(cell(twin.root, 'TWIN STACK', RW, RD, { h: 0.6 }));
-      // the fourteen cargo colours, crates of the size the runner carries
+      // the cargo colours, at carried size
       colours.forEach((c, i) => {
         const crate = makeCrate(c.color, 0.7);
         crate.position.y = 0.28;
@@ -124,7 +123,7 @@ function cargoItem() {
   };
 }
 
-// ---- the containment jar that hangs on the pack
+// ---- the containment jar on the pack
 function jarItem() {
   const kinds = Object.keys(ITEMS);
   return {
@@ -135,7 +134,7 @@ function jarItem() {
       R.cargoSlot.add(makeJarMesh([{ kind: 'rock' }, { kind: 'water' }, { kind: 'person' }], true));
       R.root.rotation.y = Math.PI;
       cells.push(cell(R.root, 'ON THE PACK', RW, RD, { h: 0.6 }));
-      // the same jar alone, at true size: empty, with the alien artifact, and holding one of each of the 18 things
+      // the jar alone at true size: empty, with the artifact, and with each of the 18 things
       const alone = (jar, artifact, label) => {
         const g = new THREE.Group();
         const m = makeJarMesh(jar, artifact);
@@ -151,7 +150,7 @@ function jarItem() {
   };
 }
 
-// ---- the echo hologram (monolith.js spawnEchoes): the runner in a flat translucent cyan, without ink
+// ---- echo hologram (monolith.js spawnEchoes): flat translucent cyan, no ink
 function echoItem() {
   return {
     id: 'runner.echo', label: 'ECHO HOLOGRAM', w: 2, d: 2,
@@ -169,7 +168,7 @@ function echoItem() {
   };
 }
 
-// ---- the legendary Xenoglide skates as they hover over the Fissure shrine
+// ---- Xenoglide skates, hovering as over the Fissure shrine
 function xenoItem() {
   return {
     id: 'runner.xenoskates', label: 'XENOGLIDE SKATES', w: 3.4, d: 3.4,

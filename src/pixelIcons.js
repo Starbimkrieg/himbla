@@ -1,7 +1,7 @@
-// Pixel-art sprites for the casino overlay (casino.js): the slot symbols, the pit boss's portrait and the small icons that used to be emoji.
-// Each sprite is rows of palette letters ('.' is clear), one letter per pixel, drawn with a 1 px ink outline. They are plain data: edit a row and
-// it shows next time. `px(name)` gives the markup; the size comes from the CSS custom property --s (the size of one sprite pixel, default 4px),
-// so `.reel .cell { --s: 6px }` scales a whole family at once, always in whole pixels (image-rendering: pixelated, see style.css .px).
+// Pixel-art sprites for the casino overlay (casino.js): slot symbols, the pit boss's portrait and small icons.
+// Each sprite is rows of palette letters ('.' clear), one per pixel, with a 1 px ink outline. `px(name)` gives the
+// markup; CSS --s sets one sprite pixel (default 4px), so `.reel .cell { --s: 6px }` scales a family, in whole pixels
+// (image-rendering: pixelated, style.css .px).
 
 const PAL = {
   k: '#1a1030',
@@ -321,9 +321,8 @@ const SPRITES = {
   ],
 };
 
-// One data-URL class per sprite, made the first time any icon is asked for (a canvas a pixel per cell, then toDataURL), and added to the page in
-// a single <style>: `.px-moon { background-image: url(...); --w: 16; --h: 16 }`. The canvases are kept for drawing sprites onto other canvases
-// (the prize wheel's labels).
+// On first use, one data-URL class per sprite goes into a single <style>: `.px-moon { background-image: url(...); --w: 16;
+// --h: 16 }`. Canvases are kept for drawing onto other canvases (prize wheel labels).
 const CANVAS = new Map();
 function canvasOf(name) {
   let cv = CANVAS.get(name);
@@ -359,12 +358,12 @@ function install() {
   document.head.appendChild(el);
 }
 
-// The markup for a sprite. `cls` adds classes (a size, a layout).
+// Sprite markup. `cls` adds classes (size, layout).
 export function px(name, cls = '') {
   if (!installed) install();
   if (!SPRITES[name]) return '';
   return `<span class="px px-${name}${cls ? ' ' + cls : ''}"></span>`;
 }
 
-// The sprite as a canvas (one pixel per cell) to draw onto another canvas with smoothing off, or null.
+// The sprite canvas (a pixel per cell) to draw with smoothing off, or null.
 export function pxCanvas(name) { return canvasOf(name); }

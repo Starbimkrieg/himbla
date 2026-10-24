@@ -1,32 +1,31 @@
 import * as THREE from 'three';
 
-// Road planning: where a road between two towns should run so that it keeps off craters, crater rims, rocky ground, rilles and steep slopes.
+// Road planning between two towns, keeping off craters, rims, rock, rilles and steep slopes.
 //
-// The road's two ends are fixed by the caller (the radial stubs out of each town's ring). In between this lays a grid of the ground over a corridor
-// round the great circle joining the ends (rows across the corridor, columns along it, every GRID metres), reads the real terrain at every node
-// (height and what the ground is: crater floor, rim, rock, rille...) and runs a shortest-path search (Dijkstra) over it, where a metre of road
-// costs more the steeper it climbs, the harder it leans across a slope, and the more it runs over something it should avoid. What comes back is
-// the cheapest line, smoothed. Nothing is random: the same terrain gives the same road on every load.
+// The caller fixes both ends (radial stubs out of each town's ring). Between them: a GRID-metre grid over a corridor round the
+// joining great circle (rows across, columns along), real terrain read at every node (height, floor / rim / rock / rille...), and
+// Dijkstra where a metre costs more the steeper it climbs, the more it leans across a slope and the worse the ground. Returns the
+// cheapest line, smoothed. Deterministic: same terrain, same road.
 
 const GRID = 8; // m between nodes
-const PAD = 48; // m the corridor reaches beyond each end along the great circle (room to swing out round a crater at the town's gate)
+const PAD = 48; // m the corridor reaches past each end (room to swing round a crater at the town's gate)
 const MOVES = [];
-for (let di = 0; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) { // (never back along the corridor: no hairpins)
+for (let di = 0; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) { // never back along the corridor: no hairpins
   if (!di && !dj) continue;
-  if ((Math.abs(di) === 2 && Math.abs(dj) === 2) || (Math.abs(di) === 2 && dj === 0) || (Math.abs(dj) === 2 && di === 0)) continue; // (16 moves: the knight's moves keep the lines from running along the grid's axes)
+  if ((Math.abs(di) === 2 && Math.abs(dj) === 2) || (Math.abs(di) === 2 && dj === 0) || (Math.abs(dj) === 2 && di === 0)) continue; // 16 moves: knight's moves keep lines off the grid axes
   MOVES.push([di, dj]);
 }
-// what a metre of road costs on bad ground (each is the extra, as a multiple of a metre on level, clear ground; the terrain's 0..1 attributes scale them)
+// extra cost per metre on bad ground, as multiples of a clear level metre (scaled by the terrain's 0..1 attributes)
 const PEN = { floor: 30, rim: 10, rock: 10, crest: 8, rille: 20, ejecta: 2 };
-const CURV_SOFT = 0.004, CURV_K = 500; // how sharply the ground bends (1/m: a crater rim, a ridge crest) beyond which a metre costs more
-const G_SOFT = 0.12; // the grade (rise over run) at which a metre costs GRADE_K more
+const CURV_SOFT = 0.004, CURV_K = 500; // ground bend (1/m: rim, ridge crest) beyond which a metre costs more
+const G_SOFT = 0.12; // grade (rise over run) at which a metre costs GRADE_K more
 const GRADE_K = 10;
-const G_MAX = 0.45; // steeper than this is not a road at all
-const X_SOFT = 0.15; // lean across the slope, likewise
+const G_MAX = 0.45; // steeper is no road at all
+const X_SOFT = 0.15; // cross-slope lean, likewise
 const X_K = 4;
-const END_FUNNEL = 0.8; // lateral freedom near an end: |offset| <= this * distance along from the end (keeps the join with the stub straight)
+const END_FUNNEL = 0.8; // near an end |offset| <= this * distance from the end (keeps the stub join straight)
 
-// A binary min-heap of node ids keyed by cost.
+// binary min-heap of node ids keyed by cost
 class Heap {
   constructor(n) { this.id = new Int32Array(n); this.k = new Float32Array(n); this.n = 0; }
   push(id, k) {
@@ -54,7 +53,7 @@ class Heap {
   }
 }
 
-// What the ground is worth to a road at a direction: the surface radius, and how much of each thing to avoid is there (this.attr after H()).
+// ground at a direction: surface radius and penalty from what's there to avoid (P.attr after H())
 function readGround(P, d, out) {
   out.h = P.H(d.x, d.y, d.z);
   const a = P.attr;
@@ -64,10 +63,11 @@ function readGround(P, d, out) {
 
 /**
  * Plan a road from `d0` to `d1` (unit directions).
- *   blocks: [{ d, r }]  places the road must not enter (r metres of ground arc round d): settlements' rings, military zones, lakes. A block that
- *                       holds an end of the road (a town's own ring) is opened up along the way in so the road can leave it.
- *   avoid:  [[Vector3 unit directions]] roads already laid: crossing one costs, running along one costs more
- * Returns { dirs: [unit Vector3...] (from d0 to d1, ~40 m apart), len, cost, maxGrade, rough } or null if no way through.
+ *   blocks: [{ d, r }]  no-go areas (r m of arc round d): settlement rings, military zones, lakes. A block holding an end
+ *                       (the town's own ring) is opened along the way in so the road can leave.
+ *   avoid:  [[Vector3 unit directions]] roads already laid: crossing costs, running along costs more
+ * Returns { dirs: [unit Vector3...] (from d0 to d1, ~56 m apart), len (great-circle m, d0 to d1), cost, ms, nodes } or null if
+ * no way through.
  */
 export function planRoad(P, d0, d1, blocks = [], avoid = []) {
   const t0 = performance.now();
@@ -100,13 +100,13 @@ export function planRoad(P, d0, d1, blocks = [], avoid = []) {
       hgt[n] = g.h; pen[n] = g.pen;
     }
   }
-  // how sharply the ground bends at every node: a real rim or ridge crest is a hard bend, a worn one is not (the terrain attributes alone call both a rim)
+  // ground bend per node: a real rim or crest bends hard, a worn one doesn't (the attributes alone call both a rim)
   for (let i = I0 + 1; i < I0 + NI - 1; i++) for (let j = -nT + 1; j < nT; j++) {
     const n = node(i, j);
     const cs = Math.abs(hgt[n - NJ] + hgt[n + NJ] - 2 * hgt[n]) / (ds * ds), ct = Math.abs(hgt[n - 1] + hgt[n + 1] - 2 * hgt[n]) / (GRID * GRID);
     pen[n] += CURV_K * Math.max(0, Math.max(cs, ct) - CURV_SOFT);
   }
-  // a thin rim or ditch can fall between two nodes: every node takes some of its neighbours' worst
+  // a thin rim or ditch can fall between nodes: each takes some of its neighbours' worst
   const pen2 = new Float32Array(pen);
   for (let i = I0; i < I0 + NI; i++) for (let j = -nT; j <= nT; j++) {
     const n = node(i, j);
@@ -117,7 +117,7 @@ export function planRoad(P, d0, d1, blocks = [], avoid = []) {
     if (i < I0 + NI - 1) m = Math.max(m, pen[n + NJ] * 0.7);
     pen2[n] = m;
   }
-  // the slope at every node: how fast the ground climbs along the columns (gs) and across them (gt)
+  // slope per node: along the columns (gs) and across them (gt)
   const gs = new Float32Array(N), gt = new Float32Array(N);
   for (let i = I0; i < I0 + NI; i++) for (let j = -nT; j <= nT; j++) {
     const n = node(i, j);
@@ -125,12 +125,12 @@ export function planRoad(P, d0, d1, blocks = [], avoid = []) {
     gs[n] = (hgt[b] - hgt[a]) / (((b - a) / NJ || 1) * ds);
     gt[n] = (hgt[d] - hgt[c]) / (((d - c) || 1) * GRID);
   }
-  // blocked nodes: inside a place the road must keep out of, outside the funnel at an end
+  // blocked nodes: inside a block, or outside the funnel at an end
   const blocked = new Uint8Array(N);
   const startN = node(0, 0), endN = node(nS, 0);
   const cosOf = (r) => Math.cos(r / R);
   const bl = blocks.map((b) => ({ d: b.d, c: cosOf(b.r), r: b.r }));
-  // (a block that holds an end: its radius is cut back to the end's own distance from it, less a margin, so the road can get out)
+  // a block holding an end shrinks to that end's distance less a margin, so the road can get out
   for (const b of bl) {
     for (const [e, n] of [[d0, startN], [d1, endN]]) {
       const dist = R * Math.acos(Math.min(1, e.x * b.d.x + e.y * b.d.y + e.z * b.d.z));
@@ -147,13 +147,13 @@ export function planRoad(P, d0, d1, blocks = [], avoid = []) {
       const x = dir[n * 3], y = dir[n * 3 + 1], z = dir[n * 3 + 2];
       let bad = false;
       for (const b of bl) if (x * b.d.x + y * b.d.y + z * b.d.z > b.c) { bad = true; break; }
-      // near an end the corridor funnels in to the stub: and beyond the end it is only a bay to swing out of, not a way round
+      // near an end the corridor funnels to the stub; past the end it's only a bay to swing out of, not a way round
       if (!bad && Math.abs(j) * GRID > END_FUNNEL * (outside ? Math.max(fromEnd, 0) + 40 : fromEnd) + 12) bad = true;
       blocked[n] = bad ? 1 : 0;
     }
   }
   blocked[startN] = blocked[endN] = 0;
-  // roads already laid: a crossing costs, but far from the ends only (the roads leaving a town's ring run close together)
+  // existing roads: crossing costs, but only far from the ends (roads leaving a town run close together)
   if (avoidD.length) {
     const near = cosOf(16), farFromEnds = cosOf(160);
     for (let n = 0; n < N; n++) {
@@ -186,7 +186,7 @@ export function planRoad(P, d0, d1, blocks = [], avoid = []) {
       const run = Math.sqrt(Math.max(1, len * len - dh * dh));
       const gr = Math.abs(dh) / run;
       if (gr > G_MAX) continue;
-      // how hard the road leans across the slope: the node's slope, taken across the direction of travel
+      // cross-slope lean: the slope across the direction of travel
       const ux = (di * ds) / run, uy = (dj * GRID) / run, un = Math.hypot(ux, uy) || 1;
       const sl = (gs[n] + gs[m]) * 0.5, tl = (gt[n] + gt[m]) * 0.5;
       const cross = Math.abs(sl * (uy / un) - tl * (ux / un));
@@ -198,7 +198,7 @@ export function planRoad(P, d0, d1, blocks = [], avoid = []) {
   }
   if (!reached) return null;
 
-  // the line: node by node back to the start, then smoothed (each point drawn toward its neighbours, ends held)
+  // trace back to the start, then smooth (each point toward its neighbours, ends held)
   const path = [];
   for (let n = endN; n >= 0; n = from[n]) { path.push(n); if (n === startN) break; }
   path.reverse();
@@ -208,7 +208,7 @@ export function planRoad(P, d0, d1, blocks = [], avoid = []) {
     for (let k = 1; k < pts.length - 1; k++) nx[k].copy(pts[k]).multiplyScalar(0.5).addScaledVector(pts[k - 1], 0.25).addScaledVector(pts[k + 1], 0.25).normalize();
     pts = nx;
   }
-  // thinned to a control point about every 56 m (the caller runs a spline through them)
+  // thin to a control point every ~56 m (the caller splines through them)
   const out = [pts[0]];
   let acc = 0;
   for (let k = 1; k < pts.length; k++) {
@@ -219,9 +219,8 @@ export function planRoad(P, d0, d1, blocks = [], avoid = []) {
   return { dirs: out, cost: dist[endN], len: L, ms: performance.now() - t0, nodes: N };
 }
 
-// How bad a finished centreline is (unit directions about 4 m apart, `cum` the arc length at each): over the part of it that is the town's
-// to shape (the first and last `skip` metres are the plateau's foot, which no choice of line changes), the share of its length steeper than
-// `steep` over ~16 m, and the share on ground a road should stay off (crater floor, rille, rock).
+// Quality of a finished centreline (unit directions ~4 m apart, `cum` = arc length at each), ignoring the first and last `skip`
+// metres (plateau foot, fixed whatever the line): share of length steeper than `steep` over ~16 m, and share on crater floor, rille, rock.
 export function roadQuality(P, pts, cum, skip = 130, steep = 0.25) {
   const R = P.R, n = pts.length;
   const h = new Float32Array(n), off = new Uint8Array(n);

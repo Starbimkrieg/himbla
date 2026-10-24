@@ -3,25 +3,23 @@ import { PHYS } from './config.js';
 import { FACTIONS } from './locations.js';
 import { frameQuat } from './geo.js';
 
-// Civilian harm. The only damageable people are the three "crowd" lists:
+// Civilian harm. Only three crowd lists can be hurt:
 //   - settlement residents  (world.figures,        src 'res')
 //   - traffic passengers    (world.traffic.walkers, src 'pax')
 //   - freed jar wanderers   (alchemy.wanderers,     src 'wand')
-// Everyone else (skywalk walkers, casino staff, Dr. Zbornak, leaders, statues) is never looked at.
+// Everyone else (skywalk walkers, casino staff, Dr. Zbornak, leaders, statues) is ignored.
 //
-// A blast from the player knocks a person into a cheap ragdoll (one point mass + a tumble, limbs
-// flailing), they bounce and lie flat; survivors get up, put their hands up and run, the dead lie
-// there with a K.O. and are cleared away later (residents come back after a few minutes). Hurting
-// anyone in sight of a settlement alerts its defenses and costs standing with its faction.
+// A player blast throws a person into a cheap ragdoll (point mass + tumble); survivors get up and run with hands up,
+// the K.O.'d are cleared later (residents respawn). Hurting anyone a settlement can see alerts it and costs faction standing.
 
-const HP = 55; // pulse disc: 34 dmg, ~34 on a direct hit, ~24 at 4 m -> 2-3 hits
+const HP = 55; // pulse disc: 34 dmg direct, ~24 at 4 m -> 2-3 hits
 const HP_SOLDIER = 80;
-const KO_LINGER = 30; // seconds a knocked-out body stays before it's cleared
-const RESPAWN = 150; // a cleared resident comes back after this (once nobody is looking)
-const ALERT = 75; // seconds a settlement stays alerted after you hurt a civilian (refreshes)
+const KO_LINGER = 30; // s a K.O.'d body stays
+const RESPAWN = 150; // s until a cleared resident returns (once unobserved)
+const ALERT = 75; // s a settlement stays alerted (refreshes)
 const PANIC_R = 25; // bystanders this close panic too
 const REP_HIT = -3, REP_KILL = -8;
-const HANDS_UP = -2.8; // arm bone rotation.x: straight up (arms hang along -Y, face is +Z)
+const HANDS_UP = -2.8; // arm rotation.x straight up (arms hang along -Y, face +Z)
 const LIE = 0.22, STAND = 0.9; // body-centre height above the root (x figure scale)
 
 const _v = new THREE.Vector3();
@@ -46,7 +44,7 @@ function segDist2(a, b, c) {
 export class Civilians {
   constructor(game) {
     this.g = game;
-    this.list = []; // people currently out of their scripted routine: { f, src, ref, ...state }
+    this.list = []; // people taken out of their scripted routine: { f, src, ref, ...state }
     this.gone = []; // cleared residents waiting to respawn
     this.byLoc = null;
     this.repT = {}; // faction -> time of the last 'attacked a civilian' penalty
@@ -67,8 +65,7 @@ export class Civilians {
     return this.byLoc;
   }
 
-  // Calls fn(fig, src, ref, centre) for every damageable person whose body centre may be within
-  // `reach` of p. Cheap: whole settlements are skipped by distance first.
+  // fn(fig, src, ref, centre) for every damageable person within `reach` of p (far settlements skipped first)
   each(p, reach, fn) {
     const W = this.world;
     for (const [loc, figs] of this.locFigures()) {
@@ -104,7 +101,7 @@ export class Civilians {
     }
   }
 
-  // Projectile direct hits (player shots only): does the segment a->b pass through a person?
+  // player shot direct hit: does segment a->b pass through a person?
   segHit(a, b) {
     let hit = false;
     const mid = _x.addVectors(a, b).multiplyScalar(0.5);
@@ -126,8 +123,7 @@ export class Civilians {
     }
   }
 
-  // A meteor lands (meteors.js): whoever is under it is killed, and the blast beyond hurts less the further it
-  // reaches. Nobody is blamed for it.
+  // meteor impact (meteors.js): kills inside core, falls off to reach; nobody is blamed
   meteorBlast(pos, core, reach) {
     const hits = [];
     this.each(pos, reach, (f, src, ref, c) => hits.push({ f, src, ref, d: c.distanceTo(pos) }));
@@ -137,7 +133,7 @@ export class Civilians {
     }
   }
 
-  // Take a person out of their scripted routine; returns the controller.
+  // take a person out of their scripted routine; returns the controller
   grab(f, src, ref) {
     if (f.civ) return f.civ;
     const scene = this.world.scene;
@@ -155,7 +151,7 @@ export class Civilians {
       axis: new THREE.Vector3(1, 0, 0), spin: 0, flee: 0, dir: new THREE.Vector3(), dirT: 0, s,
     };
     c.center.set(0, STAND * s, 0).applyQuaternion(c.quat).add(f.root.position);
-    c.support = f.root.position.length(); // standing on the ground, or on a pad deck / ramp
+    c.support = f.root.position.length(); // ground, or a pad deck / ramp
     f.civ = c;
     this.list.push(c);
     return c;
@@ -169,7 +165,7 @@ export class Civilians {
     f.hp = c.hp;
     c.hurt = true;
     const up = _u.copy(c.center).normalize();
-    // blast impulse: away from the centre, plus a big comic upward kick
+    // impulse away from the blast plus a big comic upward kick
     const away = _v.copy(c.center).sub(from);
     away.addScaledVector(up, -away.dot(up));
     if (away.lengthSq() < 0.01) away.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
@@ -188,12 +184,12 @@ export class Civilians {
     } else if (Math.random() < 0.7) {
       g.fx.pop(OOF[Math.floor(Math.random() * OOF.length)], c.center.clone().addScaledVector(up, 2), { color: '#fff4e0', size: 36, life: 0.8 });
     }
-    // reputation + settlement aggro: every knock-out counts, plain hits once per blast
-    if (blame) this.witnessed(c.center, killed ? REP_KILL : REP_HIT, killed, f.loc); // (not a meteor's doing)
+    // reputation + aggro: every K.O. counts, plain hits once per blast
+    if (blame) this.witnessed(c.center, killed ? REP_KILL : REP_HIT, killed, f.loc); // (false for meteors)
     this.panic(c.center, f);
   }
 
-  // Everybody nearby who saw it puts their hands up and runs.
+  // bystanders put their hands up and run
   panic(at, except) {
     const list = [];
     this.each(at, PANIC_R, (f, src, ref) => { if (f !== except) list.push([f, src, ref]); });
@@ -203,7 +199,7 @@ export class Civilians {
     }
   }
 
-  // Settlements (and pirate dens) that can see `at` get alerted, and their faction remembers.
+  // settlements and pirate dens that can see `at` are alerted; their faction docks standing
   witnessed(at, rep, killed, home = null) {
     const g = this.g;
     const P = g.planet;
@@ -213,14 +209,13 @@ export class Civilians {
       const range = loc.zoneR || (loc.defense ? loc.defense.ring + 40 : loc.r * 1.4);
       if (loc.pos.distanceTo(at) > range) continue;
       const base = g.enemies.bases.find((b) => b.loc === loc);
-      // line of sight from the settlement centre (raised), or from any standing turret
+      // line of sight from the raised centre or any standing turret
       let sees = P.visible(_v.copy(loc.pos).addScaledVector(loc.dir, 20), at, 16);
       if (!sees && base) for (const t of base.turrets) if (!t.dead && P.visible(t.center, at, 16)) { sees = true; break; }
       if (!sees) continue;
       if (!seen.has(loc.faction)) {
         seen.add(loc.faction);
-        // a plain hit costs standing once per blast (several people in one splash, or a rail beam's
-        // samples, count once); every knock-out counts
+        // plain hits count once per blast (one splash or a rail beam's samples); every K.O. counts
         const last = this.repT[loc.faction] ?? -9;
         if (killed || g.time - last > 0.3) {
           if (!killed) this.repT[loc.faction] = g.time;
@@ -230,8 +225,7 @@ export class Civilians {
       if (base) this.alertBase(base);
       else if (loc.type === 'pirate') this.alertDen(loc);
     }
-    // nobody saw it: it still costs you with the faction they belong to (their own settlement's, or
-    // the nearest real settlement's, for passengers and wanderers out on the road)
+    // unseen: still costs standing with their home faction (or the nearest settlement's, for people on the road)
     if (!seen.size) {
       let owner = home && home.faction && home.faction !== 'none' && home.type !== 'pirate' ? home : null;
       if (!owner) {
@@ -273,7 +267,7 @@ export class Civilians {
     if (!fresh) return;
     g.hud.alert('RUSTMOON PIRATES ALERTED!', '#7dff3a', 3);
     if (g.tutorial && g.tutorial.quiet()) return;
-    if (!E.lairActive(l) || E.denFull(2)) return; // (the den pool is full)
+    if (!E.lairActive(l) || E.denFull(2)) return; // den pool full
     for (let i = 0; i < 2; i++) {
       const a = Math.random() * Math.PI * 2;
       const e = E.spawnPirate(Math.random() < 0.5 ? 'skater' : 'rover', g.world.toWorld(l, Math.cos(a) * 50, 0, Math.sin(a) * 50), l);
@@ -293,11 +287,11 @@ export class Civilians {
     }
   }
 
-  // false = this controller is finished (handed back or cleared)
+  // false = finished (handed back or cleared)
   step(c, dt) {
     const g = this.g;
     const f = c.f;
-    // scooped up while running, or the wanderer list let go of it
+    // scooped up, or dropped from the wanderer list
     if (f.captured || (c.src === 'wand' && !f.root.parent)) { this.finish(c, false); return false; }
     const far = c.src === 'wand' ? c.center.distanceTo(g.camera.position) > 500 : (!c.ref.loc || !c.ref.loc.active || c.ref.loc.camDist > 450);
     if (far) { this.finish(c, c.dead); return false; }
@@ -329,7 +323,7 @@ export class Civilians {
         if (c.flee <= 0) c.state = 'calm';
       }
       if (c.state === 'calm') {
-        // residents and wanderers go back to their routine; passengers head off indoors
+        // residents and wanderers resume their routine; passengers head off indoors
         if (c.src !== 'pax') { this.finish(c, false); return false; }
         c.flee -= dt;
         if (c.center.distanceTo(g.camera.position) > 45 || c.flee < -20) { this.finish(c, false); return false; }
@@ -348,7 +342,7 @@ export class Civilians {
     c.quat.premultiply(_q.setFromAxisAngle(c.axis, c.spin * dt));
     this.limbs(c, 'flail', dt);
     let floorN = null;
-    // buildings (a roof or a pad deck facing up counts as floor)
+    // buildings (an upward roof or pad deck counts as floor)
     for (const col of g.colliders.query(c.center, 1.5, _near)) {
       if (col.platform) continue;
       const pen = g.colliders.contact(col, c.center, 0.45, _w);
@@ -393,7 +387,7 @@ export class Civilians {
     this.pose(c, null);
   }
 
-  // radius of whatever the person stands/lies on: the ground, or a deck/roof they landed on
+  // radius of what they stand/lie on: ground, or a deck/roof they landed on
   floorAt(c, p) {
     const g = this.g;
     const sr = g.planet.surface(p);
@@ -407,7 +401,7 @@ export class Civilians {
     return sr;
   }
 
-  // flat on the back (or front), head pointing wherever it was tumbling to
+  // flat on the back (or front), head where the tumble left it
   lying(c, up) {
     const head = _v.set(0, 1, 0).applyQuaternion(c.quat);
     head.addScaledVector(up, -head.dot(up));
@@ -420,7 +414,7 @@ export class Civilians {
     return new THREE.Quaternion().setFromRotationMatrix(_m);
   }
 
-  // place the root so the body centre sits at c.center (h: snap centre to h*scale above ground)
+  // root so the body centre sits at c.center (h: snap it h*scale above ground)
   pose(c, h) {
     if (h !== null) c.center.setLength(this.floorAt(c, c.center) + h * c.s);
     const r = c.f.root;
@@ -435,7 +429,7 @@ export class Civilians {
     if (d.lengthSq() < 0.01) d.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
     d.applyAxisAngle(up, (Math.random() - 0.5) * 0.8);
     d.addScaledVector(up, -d.dot(up)).normalize();
-    // residents stay in town: near the edge they veer back around
+    // residents veer back near the town edge
     const loc = c.ref && c.ref.loc;
     if (loc && c.center.distanceTo(loc.pos) > loc.r * 0.85) {
       const home = _v.copy(loc.pos).sub(c.center);
@@ -521,14 +515,14 @@ export class Civilians {
     }
   }
 
-  // hand the person back to whoever scripts them (or clear the body away)
+  // hand back to their script, or clear the body
   finish(c, clear) {
     const f = c.f;
     const W = this.world;
     delete f.civ;
     this.limbsReset(f);
     if (c.src === 'pax') {
-      // free the traffic pool slot (the walker itself was retired when we took it over)
+      // free the traffic pool slot (the walker was retired in grab)
       f.busy = false;
       f.hp = undefined;
       f.root.removeFromParent();
@@ -542,7 +536,7 @@ export class Civilians {
         if (A) A.wanderers = A.wanderers.filter((w) => w !== f);
         return;
       }
-      // updateWanderers takes over again (it re-grounds and re-orients them every frame)
+      // updateWanderers takes over (re-grounds and re-orients every frame)
       f.root.quaternion.copy(frameQuat(_u.copy(f.root.position).normalize(), f.dir || c.dir, _q));
       return;
     }
@@ -557,14 +551,14 @@ export class Civilians {
     }
     if (f.captured) { loc.group.add(f.root); f.root.visible = false; return; }
     loc.group.attach(f.root);
-    W.reseatFigure(f); // (a curved place's residents walk on flat coordinates, and are posed from them again below: world.js)
+    W.reseatFigure(f); // curved places' residents walk in flat coords and are re-posed below (world.js)
     const p = f.root.position;
     const fwd = _v.set(0, 0, 1).applyQuaternion(f.root.quaternion);
     f.root.rotation.set(0, Math.atan2(fwd.x, fwd.z), 0);
     p.y = 0;
     f.vy = 0;
     // amble back into town
-    if (f.area) f.area(f.target, f); // (back to its own patch: a vendor's post)
+    if (f.area) f.area(f.target, f); // back to its own patch (a vendor's post)
     else {
       const a = Math.random() * Math.PI * 2, rr = (0.25 + Math.random() * 0.5) * loc.r;
       f.target.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
@@ -580,7 +574,7 @@ export class Civilians {
     if (f.armL) { f.armL.rotation.set(0, 0, -0.07); f.armR.rotation.set(0, 0, 0.07); }
   }
 
-  // cleared residents come back as somebody new once nobody's watching
+  // cleared residents return as someone new once unobserved
   respawns() {
     const g = this.g;
     for (let i = this.gone.length - 1; i >= 0; i--) {

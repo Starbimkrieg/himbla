@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { TerrainField } from './terrainField.js';
 
-// A terrain worker: makes Moon chunks off the main thread (planet.js sends the jobs). It keeps its
-// own copy of the height field, built from the same seed and the same plateaus, and the main thread
-// forwards every plateau added later, so its chunks match the main thread's physics exactly.
+// Terrain worker: builds Moon chunks off the main thread (jobs from planet.js). Keeps its own height field (same seed and
+// plateaus; later plateaus are forwarded) so chunks match the main thread's physics exactly.
 let field = null;
 const v3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
 

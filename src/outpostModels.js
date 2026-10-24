@@ -6,12 +6,10 @@ import { bakeStatic } from './staticBake.js';
 import { outpostAsset } from './outpostGlb.js';
 import { bendPoint, bendQuat, bendGeometry } from './curve.js';
 
-// The small faction structures that dot the countryside (watchtowers, depots, farm domes, relay
-// masts, kiosks, scrap shacks, junk piles). Each is a ~50 m compound on its own flattened plateau.
-// A model is baked once per kind / faction colour / variant into a handful of merged meshes (one
-// per material plus a single ink hull) and every outpost of that look clones it, sharing geometry
-// and materials. Only flags, blinking lamps, spinning dishes and searchlights stay separate.
-export const FLAT_R = 30; // flattened core radius (the terrain blends back out to ~2x this)
+// Small faction outposts (watchtowers, depots, farm domes, relay masts, kiosks, scrap shacks, junk piles): ~50 m
+// compounds on flattened plateaus. Baked once per kind / faction colour / variant into a few merged meshes (one per
+// material plus one ink hull) that every outpost of that look clones. Flags, lamps, dishes, searchlights stay separate.
+export const FLAT_R = 30; // flattened core radius (terrain blends back out to ~2x this)
 export const SMALL_KINDS = new Set(['tower', 'depot', 'farm', 'mast', 'kiosk', 'shack', 'junk']);
 
 const STEEL = 0x55607a, DARK = 0x3a3550, LIGHT = 0xd8d4e8, CREAM = 0xfff4e0, CONC = 0x8a8698, YEL = 0xffd23f;
@@ -57,13 +55,13 @@ function prep(g) {
   return g;
 }
 
-// Dev audit (tools: the Downs z-fight audit): with `Kit.tags = []` every piece a kit bakes carries a `tag` attribute, an index into that list, naming the builder and
-// part it came from (`k.tag`). Off (null) in the game; the attribute is merged and bent along with the rest.
+// Dev audit (the Downs z-fight audit): with `Kit.tags = []` every baked piece gets a `tag` attribute indexing that list
+// (its builder and part, `k.tag`). Null in the game; the attribute is merged and bent with the rest.
 class Kit {
   static tags = globalThis.__kitTags ? (globalThis.__kitTagNames = []) : null;
   tag = '';
   instN = 0;
-  // (and the box each piece fills, in the kit's frame, for the near-miss audit: globalThis.__kitBoxes)
+  // each piece's box in the kit frame, for the near-miss audit (globalThis.__kitBoxes)
   boxOf(g, inst) {
     if (!Kit.tags || !this.tag) return;
     g.computeBoundingBox();
@@ -79,13 +77,13 @@ class Kit {
   }
   constructor(c, seed, wreck) {
     this.c = c;
-    // separate streams so the shared props come out the same whether or not the main building
-    // stands: rr for the yard, mr for the intact main building, wr for its wreckage
+    // separate streams so the yard props match whether or not the main building stands:
+    // rr yard, mr intact main building, wr its wreckage
     this.rr = mulberry32(seed); this.mr = mulberry32(seed + 1); this.wr = mulberry32(seed + 2);
     this.wreck = wreck;
-    this.curveR = 0; // a curved place's plateau radius (curve.js): the kit is drawn flat and bent onto the sphere at finish(), its moving parts and text planes as they are placed
-    this.onGround = false; // a settlement's kit (y = 0 is the ground): the undersides of what stands on it are never seen, and are left out (toon.dropFloorFaces)
-    this.drop = null; // open apron spot where loot can be thrown to
+    this.curveR = 0; // curved place's plateau radius (curve.js): drawn flat, bent onto the sphere at finish(); moving parts and text planes as placed
+    this.onGround = false; // settlement kit (y = 0 is ground): unseen undersides are dropped (toon.dropFloorFaces)
+    this.drop = null; // open apron spot loot can be thrown to
     this.byMat = new Map();
     this.ink = [];
     this.base = new THREE.Matrix4();
@@ -132,9 +130,9 @@ class Kit {
     return this;
   }
 
-  // A Blender-built part (models.js bakeShip: its geometry per material slot, and its outline hull, in the part's own frame)
-  // baked into the kit in the current frame, placed by the matrix `m` (the part's frame -> the kit frame: scale, turn, offset).
-  // `mat(slot)` picks the kit material for a slot. Only that node's own meshes go in, not its child pivots.
+  // Bake a Blender-built part (models.js bakeShip: geometry per material slot plus outline hull, in its own frame) into
+  // the current frame via matrix `m` (part frame -> kit frame). `mat(slot)` picks the kit material. Only the node's own
+  // meshes go in, not its child pivots.
   baked(node, mat, m) {
     this.instN++;
     const w = new THREE.Matrix4().multiplyMatrices(this.base, m);
@@ -176,7 +174,7 @@ class Kit {
 
   // separate (animated or textured) objects
   dyn(obj, x, y, z, ry = 0) {
-    if (this.curveR) { // (on a holder that stands on the sphere, so a moving part keeps turning in its own frame)
+    if (this.curveR) { // on a holder standing on the sphere, so moving parts turn in their own frame
       const p = this.P(x, y, z), h = new THREE.Group();
       bendPoint(this.curveR, p.x, p.y, p.z, h.position);
       h.quaternion.setFromAxisAngle(UP, this.yaw + ry).premultiply(bendQuat(this.curveR, p.x, p.z, _q));
@@ -212,7 +210,7 @@ class Kit {
     const geo = new THREE.PlaneGeometry(w, h, this.curveR ? Math.ceil(w / 5) : 1, 1);
     for (const side of back ? [0, 1] : [0]) {
       const lz = side ? -1 : 1;
-      if (this.curveR) { // (cut into short strips and bent with the wall behind it)
+      if (this.curveR) { // cut into strips, bent with the wall behind
         const g = geo.clone();
         _m.compose(_p.copy(this.P(x, y, z)).add(_d.set(Math.sin(this.yaw + ry), 0, Math.cos(this.yaw + ry)).multiplyScalar(off * lz)),
           _q.setFromEuler(_e.set(0, this.yaw + ry + (side ? Math.PI : 0), side ? -rz : rz)), _s);
@@ -227,7 +225,7 @@ class Kit {
     }
     return h;
   }
-  // a name board on two posts, face towards local +z (rotated by ry)
+  // name board on two posts, facing local +z (rotated by ry)
   sign(str, x, z, { ry = 0, w = 8, y = 3.4, rz = 0, fg, bg, stroke } = {}) {
     const mat = textMat(str, fg || '#ffd23f', bg || '#241a3a', stroke || '#120a1e');
     const pw = w - 0.5, ph = pw / mat.userData.aspect;
@@ -253,7 +251,7 @@ class Kit {
     this.cyl(r, r + 0.6, 0.3, 48, T(color), 0, 0, 0, { outline: 0.05 });
     this.ring(r - 0.3, 0.16, T(edge), 0, 0.3, 0);
   }
-  // little glowing marker posts round the apron edge, with a gap at the entrance (+z)
+  // glowing marker posts round the apron, gap at the entrance (+z)
   perimeter(r, step = 0.32, gap = 0.3, skip = () => false) {
     for (let a = gap; a < Math.PI * 2 - gap + 1e-3; a += step) {
       const x = Math.sin(a) * r, z = Math.cos(a) * r;
@@ -262,7 +260,7 @@ class Kit {
       this.box(0.32, 0.22, 0.32, G(this.c), x, 1.3, z, { outline: 0 });
     }
   }
-  // the raid marker: a glowing ring on the ground plus the stand point
+  // raid marker: glowing ground ring plus the stand point
   raidAt(x, z, color) {
     if (this.wreck) return; // nothing left to raid
     this.ring(1.7, 0.14, G(color), x, F + 0.04, z);
@@ -274,16 +272,16 @@ class Kit {
   solid(hx, hy, hz, x, z, ry = 0, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'box', hx, hy, hz, x: p.x, y: y0 + hy, z: p.z, yaw: this.yaw + ry, tag: this.tag }); }
   sphere(r, x, y, z) { const p = this.P(x, y, z); this.cols.push({ type: 'sphere', r, x: p.x, y: p.y, z: p.z, tag: this.tag }); }
   column(r, h, x, z, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'cyl', r, y0, y1: h, x: p.x, z: p.z, tag: this.tag }); }
-  // a lying-down cylinder (quonset huts, hangars, pipes): axis along local z (turned by ry), centre at height y
+  // lying cylinder (quonsets, hangars, pipes): axis along local z (turned by ry), centre at height y
   hcyl(r, len, x, z, ry = 0, y = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'hcyl', r, len, x: p.x, y, z: p.z, yaw: this.yaw + ry }); }
   hit(hx, hy, hz, x, z, ry = 0) { const p = this.P(x, 0, z); this.hits.push({ hx, hy, hz, x: p.x, y: hy, z: p.z, yaw: this.yaw + ry }); }
 
   finish() {
-    if (this.curveR) { // (long pieces cut every 8 m so they curve: curve.js)
+    if (this.curveR) { // long pieces cut every 8 m so they curve (curve.js)
       for (const list of this.byMat.values()) for (let i = 0; i < list.length; i++) list[i] = bendGeometry(list[i], this.curveR, 8);
       for (let i = 0; i < this.ink.length; i++) this.ink[i] = bendGeometry(this.ink[i], this.curveR, 8);
     }
-    // the shared plain colours all go in one vertex-coloured mesh per kind (toon / glow) and side
+    // shared plain colours: one vertex-coloured mesh per kind (toon / glow) and side
     const vc = new Map();
     for (const [mat, list] of [...this.byMat]) {
       if (!vcable(mat)) continue;
@@ -298,7 +296,7 @@ class Kit {
       const lit = mat.isMeshToonMaterial && !mat.transparent;
       m.castShadow = m.receiveShadow = lit;
       if (mat.transparent) m.renderOrder = 2;
-      m.userData.kitMesh = true; // (fixed in its kit's frame: world.mergeLocation may fold it in)
+      m.userData.kitMesh = true; // fixed in the kit frame: world.mergeLocation may fold it in
       this.root.add(m);
       for (const g of list) g.dispose();
     }
@@ -323,7 +321,7 @@ function sandbags(k, cx, cz, r, a0, a1, rows = 2) {
       k.add(new THREE.SphereGeometry(0.66, 6, 3).scale(1, 0.5, 0.62), T(0xb59f74), cx + Math.sin(a) * r, F + 0.28 + row * 0.5, cz + Math.cos(a) * r, { ry: a + Math.PI / 2, outline: 0.03 });
     }
   }
-  // the wall as a chain of blocks along the arc, as high as the stack
+  // wall: a chain of blocks along the arc, as high as the stack
   const n = Math.max(1, Math.ceil(((a1 - a0) * r) / 2.4)), da = (a1 - a0) / n;
   for (let i = 0; i < n; i++) {
     const a = a0 + (i + 0.5) * da;
@@ -354,7 +352,7 @@ function junkHeap(k, cx, cz, R, H, n, rr) {
   const put = (geo, mat, x, y, z, o) => k.add(geo.scale(sc, sc, sc), mat, x, y, z, o);
   const top = R * 0.22;
   k.add(new THREE.CylinderGeometry(top, R, H, 16, 1), T(0x75685a), cx, F + H / 2 - 0.05, cz, { outline: 0.06 });
-  // (a stepped core: the mound's middle to the top, its skirt half as high, so it reads as a heap)
+  // stepped core (middle to the top, skirt half as high) so it reads as a heap
   k.column(R * 0.55, F + H * 0.9, cx, cz);
   k.column(R * 0.85, F + H * 0.4, cx, cz);
   const hh = (r) => (r < top ? H : H * (R - r) / (R - top));
@@ -374,9 +372,8 @@ function junkHeap(k, cx, cz, R, H, n, rr) {
     }
   }
 }
-// Battle damage on a wall face of the current frame: face = 'z' (the +z face at `at`, spanning x)
-// or 'x' (the +x face, spanning z). A ragged blast hole with its sheet metal bent outward, a scorch
-// around it and a scatter of bullet pocks.
+// Battle damage on a wall face of the current frame: face 'z' (+z face at `at`, spanning x) or 'x' (+x face,
+// spanning z). Ragged blast hole with sheet metal bent out, scorch, bullet pocks.
 const HOLE = 0x140e10;
 function damage(k, face, at, u, v, r, rr, { scorch = true, pocks = 8 } = {}) {
   const put = (du, dv, w, h, mat, o, rot = {}) => face === 'z'
@@ -425,8 +422,7 @@ function scatterDebris(k, cx, cz, hx, hz, n, rr, colors = [CHAR, 0x3a3540, 0x4a3
 }
 
 // =====================================================================================
-// Watchtower: a lattice tower with a lit cab and a sweeping searchlight, a Quonset barracks,
-// a gun nest and a ring of concrete barriers with a gate arch.
+// Watchtower: lattice tower with lit cab and searchlight, Quonset barracks, gun nest, barrier ring, gate arch.
 // =====================================================================================
 function tower(k) {
   const c = k.c;
@@ -499,7 +495,7 @@ function tower(k) {
     k.solid(3.4, 1.8, 5.5, BX, BZ);
   } else {
     const wr = k.wr;
-    // the tower snapped above the first bay and folded over towards the gate
+    // tower snapped above the first bay, folded towards the gate
     k.box(8, 0.5, 8, T(CONC), TX, 0, TZ);
     k.box(9, 0.06, 9, T(CHAR), TX, 0.5, TZ, { outline: 0 });
     const cn = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
@@ -519,7 +515,7 @@ function tower(k) {
   k.hit(3.4, 1.8, 5.5, BX, BZ);
   k.smoke = new THREE.Vector3(TX, 2, TZ);
   k.drop = new THREE.Vector3(1, F, 8);
-  // ammo locker by the barracks door, with a crate of searchlight lenses: the raid spot
+  // ammo locker and lens crate by the barracks door: the raid spot
   k.box(1.4, 2.0, 0.8, T(0x4f5a42), BX + 2.6, F, BZ + 6.4, { outline: 0.05 });
   k.box(1.42, 0.25, 0.82, T(c), BX + 2.6, F + 1.5, BZ + 6.4, { outline: 0 });
   k.box(0.9, 0.5, 0.05, T(YEL), BX + 2.6, F + 0.8, BZ + 6.82, { outline: 0 });
@@ -540,8 +536,7 @@ function tower(k) {
 }
 
 // =====================================================================================
-// Supply depot: a warehouse with roll-up doors, a container yard under a gantry crane, fuel
-// tanks in a bund, a landing pad, and the wiring rack you raid.
+// Supply depot: warehouse, container yard under a gantry crane, bunded fuel tanks, landing pad, wiring rack (raid).
 // =====================================================================================
 function depot(k, wreck) {
   const c = k.c, rr = k.rr;
@@ -603,7 +598,7 @@ function depot(k, wreck) {
     const n = 1 + Math.floor(rr() * 3);
     top = Math.max(top, n);
     for (let s = 0; s < n; s++) container(k, -21 + col * 2.8, s * 2.62, z, colors[Math.floor(rr() * colors.length)]);
-    // each stack its own height (one box at the tallest made invisible walls over the short ones)
+    // a collider per stack height, so short stacks get no invisible wall
     k.solid(1.3, n * 1.31, 3.1, -21 + col * 2.8, z);
   }
   // gantry crane over it
@@ -652,8 +647,8 @@ function depot(k, wreck) {
 }
 
 // =====================================================================================
-// Farm dome: two glass greenhouse domes full of crop beds under magenta grow lights, joined by a
-// tube; irrigation tanks, a solar array, and the sapling nursery bench you raid.
+// Farm dome: two greenhouse domes (crop beds, magenta grow lights) joined by a tube; irrigation, solar array,
+// sapling nursery bench (raid).
 // =====================================================================================
 const FARM_DOMES = [[-11, -8, 10], [10, -10, 7]];
 function farm(k, wreck) {
@@ -763,8 +758,7 @@ function farm(k, wreck) {
 }
 
 // =====================================================================================
-// Relay mast: a 40 m guyed lattice mast in aviation red and white with dishes and beacons, an
-// equipment shed, a cable tray, and a big dish on the ground.
+// Relay mast: 40 m guyed red-and-white lattice mast with dishes and beacons, equipment shed, cable tray, ground dish.
 // =====================================================================================
 function mast(k) {
   const c = k.c;
@@ -786,7 +780,7 @@ function mast(k) {
     }
     k.cyl(0.08, 0.12, 2.6, 5, T(LIGHT), MX, H, MZ, { outline: 0.02 });
     k.blinker(MX, H + 2.9, MZ, 0xff2a4a, 0.45);
-    for (const [h, ry, rim] of [[17, 0.5, 1.1], [25, 2.6, 1.3], [28.5, 4.4, 0.95]]) { // (a dish head on an arm, in the outpost's faction paint: models.js)
+    for (const [h, ry, rim] of [[17, 0.5, 1.1], [25, 2.6, 1.3], [28.5, 4.4, 0.95]]) { // dish head on an arm, faction paint (models.js)
       k.at(MX, MZ, ry);
       k.beam([0, h - 0.7, 0.4], [0, h - 0.7, 1.5], 0.08, T(DARK));
       k.dishHead(0, h - 0.7, 1.5, rim, c, { az: Math.PI, el: -1.35 });
@@ -817,7 +811,7 @@ function mast(k) {
     k.solid(4, 1.9, 2.75, SX, SZ);
   } else {
     const wr = k.wr;
-    // the mast buckled at the base and came down in two folded lengths
+    // mast buckled at the base, down in two folded lengths
     k.box(3.6, 0.7, 3.6, T(CONC), MX, 0, MZ, { outline: 0.05 });
     k.box(5, 0.06, 5, T(CHAR), MX, 0.7, MZ, { outline: 0 });
     for (let i = 0; i < 3; i++) { const a = (i * Math.PI * 2) / 3 + 0.3; k.beam([MX + Math.cos(a) * 0.95, 0.7, MZ + Math.sin(a) * 0.95], [MX + Math.cos(a) * 1.3 + (wr() - 0.5), 2.5 + wr() * 3, MZ + Math.sin(a) * 1.3 + (wr() - 0.5)], 0.13, T(i % 2 ? 0xff4f2e : 0xf5f5f5), { outline: 0.03 }); }
@@ -833,7 +827,7 @@ function mast(k) {
     };
     lying([MX + 1, MZ - 2], [5, -20]);
     lying([5.5, -19], [17, -12]);
-    k.at(-8, -14, 0.7, F + 0.5, -0.9, 0.3); // (two heads thrown off the mast, on their sides)
+    k.at(-8, -14, 0.7, F + 0.5, -0.9, 0.3); // two heads thrown off, on their sides
     k.dishHead(0, 0, 0, 1.3, 'none', { el: -0.3 });
     k.at(9, -16, 2.1, F + 0.4, 0.8, -0.4);
     k.dishHead(0, 0, 0, 1.0, 'none', { el: -0.6 });
@@ -883,8 +877,8 @@ function mast(k) {
 }
 
 // =====================================================================================
-// Trading kiosk: a little market plaza round a planter, the kiosk with its striped awning and lit
-// billboard, three stalls, crates of goods, benches, a parked hover-cart and strings of lights.
+// Trading kiosk: market plaza round a planter; kiosk with striped awning and lit billboard, three stalls, crates,
+// benches, a hover-cart, strings of lights.
 // =====================================================================================
 function kiosk(k) {
   const c = k.c, rr = k.rr;
@@ -1003,8 +997,7 @@ function kiosk(k) {
 }
 
 // =====================================================================================
-// Scrap shack: welded huts patched from whatever was lying around, a scrap press, a derrick
-// crane with a hook, heaps of parts, a burning barrel and strings of pirate lights.
+// Scrap shack: patched welded huts, scrap press, derrick crane with hook, parts heaps, burning barrel, pirate lights.
 // =====================================================================================
 function shack(k) {
   const c = k.c, rr = k.rr;
@@ -1012,25 +1005,25 @@ function shack(k) {
   for (let i = 0; i < 6; i++) { const a = rr() * 6.3, r = 5 + rr() * 15; k.cyl(0.8 + rr() * 1.4, 0.8 + rr() * 1.4, 0.04, 12, T(0x584a48), Math.sin(a) * r, F - 0.02, Math.cos(a) * r, { outline: 0 }); }
   const patchCols = [0x8a8698, 0x5a6a5a, 0xa05a2a, 0x6b5a4a, 0x4a5a7a];
   if (!k.wreck) {
-    // hut A with the name board: bigger now, and it has been shot at. A blast hole in the front,
-    // half the roof peeled back, scorch up the side, and a timber shoring up the sagging corner
+    // hut A with the name board, shot up: blast hole in front, half the roof peeled back, scorch, a timber
+    // shoring the sagging corner
     const mr = k.mr;
     k.at(-9.5, -9.5, 0.2);
     k.box(11, 4.6, 8.4, T(RUST), 0, 0, 0, { outline: 0.1 });
     for (let i = 0; i < 7; i++) k.box(1 + mr() * 2.2, 0.8 + mr() * 1.6, 0.08, T(patchCols[i % 5]), -4.2 + mr() * 8.4, 0.5 + mr() * 2.6, 4.23, { rz: (mr() - 0.5) * 0.3, outline: 0.02 });
     for (let i = 0; i < 5; i++) k.box(0.08, 0.8 + mr() * 1.6, 1 + mr() * 2.2, T(patchCols[(i + 2) % 5]), 5.53, 0.5 + mr() * 2.6, -3.2 + mr() * 6.4, { rx: (mr() - 0.5) * 0.3, outline: 0.02 });
-    // the roof: the back half still on, the front-right quarter torn up and folded back
+    // roof: back half on, front-right quarter torn up and folded back
     k.box(11.8, 0.25, 4.6, T(0x8a7a6a), 0, 4.65, -2.3, { rx: 0.08, outline: 0.05 });
     k.box(6.2, 0.25, 4.6, T(0x8a7a6a), -2.8, 4.6, 2.3, { rx: 0.08, outline: 0.05 });
     for (let i = 0; i < 11; i++) k.box(0.14, 0.12, 4.6, T(0x6a5a4a), -5.4 + i * 1.08, 4.85, -2.3, { rx: 0.08, outline: 0 });
     for (let i = 0; i < 6; i++) k.box(0.14, 0.12, 4.6, T(0x6a5a4a), -5.4 + i * 1.08, 4.8, 2.3, { rx: 0.08, outline: 0 });
-    k.box(5.4, 0.04, 4.0, T(HOLE), 3.1, 4.55, 2.2, { outline: 0 }); // (the dark inside, seen through the gap)
+    k.box(5.4, 0.04, 4.0, T(HOLE), 3.1, 4.55, 2.2, { outline: 0 }); // dark inside, seen through the gap
     k.box(5.6, 0.2, 4.4, T(0x7a6a5a), 3.0, 5.1, -0.4, { rx: -1.15, outline: 0.04 }); // the torn sheet, folded up and back
     k.beam([0.3, 4.75, 0.2], [0.3, 4.75, 4.2], 0.06, T(DARK), { outline: 0 }); // a bare rafter
     k.beam([3.0, 4.75, 0.2], [3.4, 4.6, 4.2], 0.06, T(DARK), { outline: 0 });
     k.cyl(0.3, 0.3, 2.6, 8, T(DARK), -3.4, 4.7, -2.4, { outline: 0.03 });
     k.box(0.9, 0.12, 0.9, T(DARK), -3.4, 7.3, -2.4, { outline: 0.02 });
-    // the door hanging off one hinge, a boarded-up window beside the lit one
+    // door off one hinge, boarded window beside the lit one
     k.box(1.6, 2.8, 0.15, T(0x3a2a22), -2.2, F - 0.1, 4.28, { rz: 0.1, outline: 0.03 });
     k.box(2.1, 1.2, 0.1, G(0xffa040), 2.4, 1.8, 4.24, { outline: 0 });
     for (let i = 0; i < 4; i++) k.box(0.07, 1.2, 0.07, T(DARK), 1.6 + i * 0.55, 1.8, 4.32, { rz: i === 2 ? 0.35 : 0, outline: 0 });
@@ -1039,7 +1032,7 @@ function shack(k) {
     k.box(0.5, 0.2, 0.3, G(0xff7a1a), -2.2, 3.2, 4.4, { outline: 0 });
     damage(k, 'z', 4.2, 4.4, 2.2, 0.95, mr);
     damage(k, 'x', 5.5, 1.4, 2.4, 0.6, mr, { pocks: 10 });
-    // shoring: a timber propping the corner that buckled, and plates that fell off at its foot
+    // shoring timber at the buckled corner, fallen plates at its foot
     k.beam([6.6, 0, 5.2], [5.5, 4.4, 4.2], 0.13, T(WOOD), { outline: 0.03 });
     k.box(1.6, 0.1, 1.1, T(WOOD), 6.6, 0, 5.2, { ry: 0.6, outline: 0.02 });
     for (let i = 0; i < 3; i++) k.box(1.3 + mr(), 1.0 + mr() * 0.6, 0.08, T(patchCols[(i + 1) % 5]), 6.3 + i * 0.4, 0, -1.5 + i * 1.3, { ry: 1.4, rz: -0.6 - mr() * 0.4, outline: 0.02 });
@@ -1063,20 +1056,20 @@ function shack(k) {
   k.smoke = k.P(0, 1.5, 0);
   k.at();
   k.drop = new THREE.Vector3(-1, F, 3);
-  // hut B: two storeys, a ladder and a tarp (bigger; the top storey has lost a corner to a rocket)
+  // hut B: two storeys, ladder, tarp; the top storey has lost a corner to a rocket
   k.at(9.5, -12.5, -0.35);
   k.box(7.2, 4, 6, T(0x5a5f6e), 0, 0, 0, { outline: 0.1 });
   k.box(4.8, 2.8, 4.3, T(0x8a4a2a), -0.7, 4, -0.4, { outline: 0.08 });
-  k.box(5.4, 0.2, 4.9, T(0x7a6a5a), -1.0, 6.9, -0.4, { rz: -0.22, rx: 0.06, outline: 0.04 }); // (sagging where the corner went)
+  k.box(5.4, 0.2, 4.9, T(0x7a6a5a), -1.0, 6.9, -0.4, { rz: -0.22, rx: 0.06, outline: 0.04 }); // sagging where the corner went
   k.box(7.6, 0.2, 6.4, T(0x7a6a5a), 0, 4, 0, { outline: 0.04 });
   k.box(1.4, 0.9, 0.1, G(0x7dff6a), -1.4, 5.3, 1.78, { outline: 0 });
   k.box(1.4, 2.6, 0.12, T(0x2a2422), 1.9, F - 0.1, 3.05, { outline: 0.02 });
   damage(k, 'z', 1.75, 1.0, 6.0, 0.75, k.rr, { pocks: 6 });
   damage(k, 'z', 3.0, -2.2, 2.6, 0.5, k.rr, { scorch: false, pocks: 12 });
-  for (let i = 0; i < 4; i++) k.box(0.5 + k.rr() * 0.7, 0.08, 0.4 + k.rr() * 0.5, T(i % 2 ? 0x8a4a2a : HOLE), 2.6 + k.rr() * 2, F + 0.05, 1.5 + k.rr() * 2.5, { ry: k.rr() * 3, outline: 0.02 }); // rubble that came down
+  for (let i = 0; i < 4; i++) k.box(0.5 + k.rr() * 0.7, 0.08, 0.4 + k.rr() * 0.5, T(i % 2 ? 0x8a4a2a : HOLE), 2.6 + k.rr() * 2, F + 0.05, 1.5 + k.rr() * 2.5, { ry: k.rr() * 3, outline: 0.02 }); // rubble
   for (const s2 of [-0.4, 0.4]) k.beam([3.7, 0, 1.2 + s2], [3.7, 6.3, 0.7 + s2], 0.05, T(DARK), { outline: 0.02 });
   for (let y = 0.6; y < 6.1; y += 0.6) k.beam([3.7, y, 0.75 + 0.45 * (1 - y / 6.3)], [3.7, y, 1.6 + 0.45 * (1 - y / 6.3)], 0.035, T(DARK), { outline: 0 });
-  // the tarp awning, torn: one half still up, the other hanging down off its pole
+  // torn tarp awning: one half up, the other hanging off its pole
   k.box(2.2, 0.06, 2.9, T(c), -2.2, 3.3, 4.3, { rx: 0.25, outline: 0.03 });
   k.box(2.0, 0.06, 2.4, T(c), 0.0, 2.2, 4.6, { rx: 1.05, rz: 0.2, outline: 0.03 });
   for (const s2 of [-1, 1]) k.cyl(0.06, 0.06, 2.9, 4, T(DARK), -1.2 + s2 * 1.9, 0, 5.6, { rz: s2 > 0 ? 0.25 : 0, outline: 0 });
@@ -1105,7 +1098,7 @@ function shack(k) {
   const cubeCols = [0x7a3a2a, 0x5a5f6e, 0xa05a2a, 0x4a6a5a, 0x8a8698];
   for (let i = 0; i < 6; i++) k.box(1.2, 1.2, 1.2, T(cubeCols[i % 5]), -1.6 + (i % 3) * 1.3, F + Math.floor(i / 3) * 1.2, 3.2 + (rr() - 0.5) * 0.3, { ry: (rr() - 0.5) * 0.4, outline: 0.04 });
   k.solid(2.3, 3.9, 1.7, 0, 0);
-  // a pile of pressed scrap plates beside it: the raid spot
+  // pressed scrap plates beside it: the raid spot
   for (let i = 0; i < 7; i++) k.box(1.7, 0.1, 1.15, T(i % 2 ? STEEL : 0x8a8698), -3.4 + (rr() - 0.5) * 0.2, F + 0.05 + i * 0.11, -1.4 + (rr() - 0.5) * 0.2, { ry: (rr() - 0.5) * 0.5, outline: 0.02 });
   for (const s of [-1, 1]) k.box(1.6, 0.1, 1.1, T(0x6a6e80), -3.4 + s * 1.1, F + 0.55, -1.4, { rz: s * 1.1, outline: 0.02 });
   k.raidAt(-0.5, -3.6, 0xff9f1c);
@@ -1145,16 +1138,15 @@ function shack(k) {
 }
 
 // =====================================================================================
-// Junk pile: a big heap of wrecked hulls, containers and tyres (you can climb it), a rocket nose
-// sticking out, a half-buried rover, and a scavenger's tent with a campfire.
+// Junk pile: climbable heap of hulls, containers and tyres with a rocket nose; half-buried rover; scavenger's tent and campfire.
 // =====================================================================================
 function junk(k) {
   const c = k.c, rr = k.rr;
   k.apron(27, 0x8a8478, 0x5a5048);
   junkHeap(k, -17, 6, 6.5, 3, 18, rr);
-  k.sphere(8.54, -17, -5.29, 6); // a cap matching the mound, so you can climb it
+  k.sphere(8.54, -17, -5.29, 6); // cap matching the mound, so it's climbable
   if (!k.wreck) {
-    // the big heap, a rocket nose sticking out of it, a flag on top
+    // the heap, rocket nose, flag on top
     junkHeap(k, -10, -9, 12, 6, 56, k.mr);
     k.sphere(15, -10, -8.75, -9);
     k.add(new THREE.ConeGeometry(2.2, 6.5, 12), T(LIGHT), -7, 6.4, -11.5, { rx: 0.9, rz: -0.5, outline: 0.08 });
@@ -1162,7 +1154,7 @@ function junk(k) {
     k.box(0.2, 2.6, 2.2, T(0xff4f2e), -13, 5.6, -13, { rz: 0.4, ry: 0.6, outline: 0.04 });
     k.flag(-10, -9, 6, c, 6.1);
   } else {
-    // blown flat: a scorched low mound with burnt wreckage flung about
+    // blown flat: scorched low mound, burnt wreckage flung about
     const wr = k.wr;
     k.add(new THREE.CylinderGeometry(4, 13, 2, 16, 1), T(0x3e3638), -10, F + 0.95, -9, { outline: 0.06 });
     k.sphere(43.25, -10, -40.99, -9);
@@ -1203,7 +1195,7 @@ function junk(k) {
   k.add(prism(5.8, 4.6, 3.3), T(c), 0, F, 0, { outline: 0.06 });
   k.add(prism(0.06, 2.8, 2.2), T(0x1a1428), -2.92, F, 0, { outline: 0 });
   for (let i = 0; i < 3; i++) k.box(1.1, 0.9, 0.05, T(patch(i)), -1.3 + i * 1.15, F + 1.1 + (i % 2) * 0.4, 1.25 - (i % 2) * 0.4, { rx: -0.62, outline: 0 });
-  // rips: dark gashes through the canvas, a flap hanging loose
+  // rips: dark gashes, a loose flap
   for (const [x, y, r] of [[1.4, 1.9, 0.5], [-0.4, 0.9, -0.4], [2.2, 0.8, 0.2]]) k.box(0.9, 0.12, 0.05, T(HOLE), x, F + y, 1.62 - y * 0.5, { rx: -0.62, rz: r, outline: 0 });
   k.box(0.9, 0.8, 0.04, T(c), 1.4, F + 1.2, 1.95, { rx: -0.2, rz: 0.3, outline: 0.02 });
   for (const s of [-1, 1]) k.beam([-2.9, F + 3.3, 0], [-4.3, F, s * 2.0], 0.025, T(0xd8c8b0), { outline: 0 });
@@ -1234,11 +1226,11 @@ function junk(k) {
   k.beam([1.6, F + 0.1, 2.4], [0.2, F + 0.05, 1.1], 0.04, T(0x1a1428), { outline: 0, seg: 3 });
   k.raidAt(-1.4, 3.6, 0x2ee6ff);
   k.at();
-  // a lean-to of corrugated sheets against the heap: one sheet's fallen in, a hole punched in another
+  // corrugated lean-to against the heap: one sheet fallen in, a hole in another
   k.at(-3, 6, 0.3);
   for (const x of [-2.6, 2.6]) for (const z of [-1.6, 1.6]) k.beam([x, 0, z], [x, z < 0 ? 3.6 : 2.6, z], 0.09, T(DARK), { outline: 0.02 });
   k.box(2.7, 0.08, 3.6, T(0x8a8698), -1.35, 3.1, 0, { rx: 0.27, outline: 0.03 });
-  k.box(2.7, 0.08, 3.6, T(0x6b5a4a), 1.6, 1.6, 0.5, { rx: 0.27, rz: 0.75, outline: 0.03 }); // (fallen in)
+  k.box(2.7, 0.08, 3.6, T(0x6b5a4a), 1.6, 1.6, 0.5, { rx: 0.27, rz: 0.75, outline: 0.03 }); // fallen in
   for (const x of [-1.95, -0.65, 0.65, 1.95]) k.box(1.25, 2.6 + (x > 0 ? -0.6 : 0), 0.06, T(patch(Math.round(x * 3))), x, 0, -1.65, { rz: x > 1 ? 0.12 : 0, outline: 0.02 });
   damage(k, 'z', -1.6, -0.9, 1.9, 0.5, rr, { scorch: true, pocks: 6 });
   k.solid(2.7, 1.6, 1.8, 0, 0);
@@ -1247,25 +1239,24 @@ function junk(k) {
   k.flag(5.5, 23, 8);
   k.lamp(-20, 12, 6, 0xffd27a); k.lamp(20, -12, 6, 0xffd27a);
 }
-const patch = (i) => [0xa05a2a, 0x4a6a5a, 0xc9a227, 0x2b59c3, 0xff7ad9][((i % 5) + 5) % 5]; // (i may be negative: the junk shack's left sheets)
+const patch = (i) => [0xa05a2a, 0x4a6a5a, 0xc9a227, 0x2b59c3, 0xff7ad9][((i % 5) + 5) % 5]; // i may be negative (junk shack's left sheets)
 
 const BUILD = { tower, depot, farm, mast, kiosk, shack, junk };
-const VARIANTS = 1; // prop scatter variants per look (each one is a separate bake)
+const VARIANTS = 1; // prop scatter variants per look (each a separate bake)
 const KIND_SEED = { tower: 11, depot: 23, farm: 37, mast: 41, kiosk: 53, shack: 67, junk: 79 };
 const templates = new Map();
 
-// A baked model for one look, in the outpost's local frame (y up, ground at y = 0, the yard centre
-// at the origin kept clear). Clone root to place it. Fields:
+// Baked model for one look in the outpost's local frame (y up, ground y = 0, yard centre at the origin kept clear).
+// Clone root to place it. Fields:
 //   root  - THREE.Group to clone
 //   cols  - collider specs { type: 'box'|'sphere'|'cyl', ... } (box: x, y, z, hx, hy, hz, yaw)
 //   hits  - boxes { x, y, z, hx, hy, hz, yaw } a blast must reach to damage the main building
-//   raid  - Vector3 stand point for raiding (null on a wreck)
-//   smoke - Vector3 where the wreck smoulders (the main building's centre)
+//   raid  - Vector3 raid stand point (null on a wreck)
+//   smoke - Vector3 where the wreck smoulders (main building's centre)
 //   drop  - Vector3 open apron spot 10-16 m from the main building where loot can land
-// wreck = true gives the same compound with the main building reduced to rubble.
-// src: 'auto' (a Blender-authored GLB if one is switched on, loaded and has this kind: outpostGlb.js;
-// otherwise the Kit build), 'kit', or 'glb' (any kind in the file, switched on or not; throws if there isn't one:
-// for the viewer).
+// wreck = true: same compound, main building reduced to rubble.
+// src: 'auto' (Blender GLB if switched on, loaded and has this kind, outpostGlb.js; else Kit), 'kit', or 'glb'
+// (any kind in the file, switched on or not; throws if missing; for the viewer).
 export function outpostTemplate(kind, color, variant = 0, wreck = false, src = 'auto') {
   variant %= VARIANTS;
   const asset = src === 'kit' ? null : outpostAsset(kind, wreck, src === 'glb');
@@ -1292,6 +1283,6 @@ export function outpostTemplate(kind, color, variant = 0, wreck = false, src = '
   return t;
 }
 
-// The kit and its shared props also build the bigger settlements (settlements.js).
+// the kit and shared props also build the bigger settlements (settlements.js)
 export { Kit, T, G, D, GLASS, BEAM, prism, sandbags, crate, container, tank, junkHeap, lightString, scatterDebris };
 export const PALETTE = { STEEL, DARK, LIGHT, CREAM, CONC, YEL, WOOD, RUST, TYRE, CHAR };

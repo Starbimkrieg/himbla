@@ -1,15 +1,15 @@
-// Trailer director mode (?trailer). Plays the official ~77 s trailer from in-game footage: a list
-// of shots, each with a setup (teleport, spawn, stage), per-frame direction (held keys, steering)
-// and a camera, joined by transitions (whip-pans, flashes, ink wipes) with comic title cards on top.
+// Trailer director mode (?trailer): plays the ~72 s trailer from in-game footage. Shots each have a setup (teleport,
+// spawn, stage), per-frame direction (held keys, steering) and a camera, joined by transitions (whip-pans, flashes, ink
+// wipes) under comic title cards.
 //
 //   ?trailer            warm-up pass under a cover (builds terrain, compiles shaders), then rolls
-//   &auto               roll straight after the warm-up (no click needed: OBS browser source)
+//   &auto               roll straight after the warm-up (no click: OBS browser source)
 //   &nowarm             skip the warm-up (quick looks; expect hitches at the cuts)
 //   &shot=N             start from shot N (1-based); &only plays just that shot, looping
-//   &fixed              fixed 1/60 s timestep (identical runs; slows down if the GPU can't keep up)
+//   &fixed              fixed 1/60 s timestep (identical runs; slows if the GPU can't keep up)
+//   &pump               no animation frames: loading on timers, window.step(n) pumps frames (see below)
 //
-// The trailer never touches your saves: in this mode localStorage and sessionStorage are swapped
-// for in-memory stores before any game module reads them, so every run starts from a fresh game.
+// Saves are untouched: localStorage and sessionStorage are swapped for in-memory stores before any module reads them.
 import * as THREE from 'three';
 import { tangent, frameQuat, dirFromAngles } from './geo.js';
 import { mulberry32 } from './rng.js';
@@ -18,7 +18,7 @@ import { clearEchoes } from './monolith.js';
 import { DEV_TOOLS } from './devtools.js';
 
 const Q = new URLSearchParams(location.search);
-export const TRAILER = DEV_TOOLS && Q.has('trailer'); // (a director mode for making the trailer: a dev tool, so off in a release build)
+export const TRAILER = DEV_TOOLS && Q.has('trailer'); // dev tool: off in a release build
 
 if (TRAILER) {
   const mem = () => {
@@ -35,8 +35,7 @@ if (TRAILER) {
   for (const n of ['localStorage', 'sessionStorage']) {
     try { Object.defineProperty(window, n, { value: mem(), configurable: true }); } catch { /* keep the real one */ }
   }
-  // &pump: for a hidden or headless page that gets no animation frames. Loading runs on timers,
-  // and window.step(n) pumps n trailer frames by hand.
+  // &pump: for hidden or headless pages without animation frames. Loading runs on timers; window.step(n) pumps n frames.
   if (Q.has('pump')) {
     window.nativeRAF = window.requestAnimationFrame;
     window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 0);
@@ -45,7 +44,7 @@ if (TRAILER) {
       for (let i = 0; i < n; i++) { g.last = performance.now() - 1000 / 60; g.frame(); }
       return window.trailer && { shot: window.trailer.i + 1, t: +window.trailer.t.toFixed(3), mode: window.trailer.mode };
     };
-    // dbg(locId, [x,y,z] eye, [x,y,z] target, fov): park the camera somewhere for a look
+    // dbg(locId, [x,y,z] eye, [x,y,z] target, fov): park the camera for a look
     window.dbg = (id, e, l, fov = 55, n = 3) => {
       const T = window.trailer, g = window.game;
       T.shot = { dur: 1e9, cam(T) { T.at(id, ...e, T.eye); T.at(id, ...l, T.look); T.fov = fov; } };
@@ -56,9 +55,9 @@ if (TRAILER) {
       g.planet.updateRimInk(eye);
       return window.step(n);
     };
-    // seek(n, t): play shot n (1-based) from its start up to t seconds in
+    // seek(n, t): play shot n (1-based) from its start to t s in
     window.seek = (n, t = 0) => { const T = window.trailer; T.mode = 'play'; T.only = true; T.start(n - 1); return window.step(Math.max(1, Math.round(t * 60))); };
-    // findFlat([thetas], [phis], len): the smoothest straight runs of ground (for staging shots)
+    // findFlat([thetas], [phis], len): smoothest straight runs of ground (for staging shots)
     window.findFlat = (ths, phs, len = 130) => {
       const T = window.trailer, g = window.game, pl = g.planet;
       const rough = (p0, fwd) => {
@@ -81,7 +80,7 @@ if (TRAILER) {
       const score = (x) => x.bump + x.maxd * 0.1 + Math.abs(x.slope);
       return res.sort((x, y) => score(x) - score(y)).slice(0, 5);
     };
-    // local coordinates of a world point in a location's frame
+    // loc(id, p): a world point in a location's frame
     window.loc = (id, p) => p.clone().applyMatrix4(window.trailer.loc(id).group.matrixWorld.clone().invert()).toArray().map((v) => +v.toFixed(1));
   }
 }
@@ -96,11 +95,11 @@ const _a = V(), _b = V(), _c = V(), _q = new THREE.Quaternion();
 const SUN_DIR = dirFromAngles(0, 0);
 const _m4 = new THREE.Matrix4();
 
-const HUM = 0.2; // the Quantum-Lock hum's level in the trailer (it sits well under the music)
-const CRATE = 0xffd23f; // the courier's cargo, carried from the job board to the last shot
-const WHIP = 0.2; // seconds each side of a whip-pan cut
-const WIPE = 0.38; // the ink wipe's full sweep
-const MORE = (at = 0, dur = 99) => ({ key: 'more', at, dur, html: 'AND MORE.' }); // the montage's one header, held across its cuts
+const HUM = 0.2; // Quantum-Lock hum level (well under the music)
+const CRATE = 0xffd23f; // the courier's cargo, job board to the last shot
+const WHIP = 0.2; // s each side of a whip-pan cut
+const WIPE = 0.38; // s, the ink wipe's full sweep
+const MORE = (at = 0, dur = 99) => ({ key: 'more', at, dur, html: 'AND MORE.' }); // montage header, held across its cuts
 
 export class Trailer {
   constructor(game) {
@@ -133,12 +132,12 @@ export class Trailer {
   begin() {
     const g = this.g;
     document.body.classList.add('trailer');
-    document.getElementById('title').classList.add('hidden'); // (closes the main menu too)
+    document.getElementById('title').classList.add('hidden'); // closes the main menu too
     g.input.onKey = null;
     g.started = true;
     g.state = 'play';
     g.tour = null;
-    // a fresh runner with just what the shots need (nothing the trailer keeps secret)
+    // a fresh runner with just what the shots need (no secrets)
     g.cheats.god = true;
     g.upgrades.jar = 3;
     g.player.applyUpgrades(g.upgrades);
@@ -149,13 +148,13 @@ export class Trailer {
     g.meteors.next = 1e9;
     for (const k of Object.keys(g.race.postT)) g.race.postT[k] = 1e9;
     g.story.kade.nextAt = 1e9;
-    g.updateScanner = () => {}; // no red threat-scanner ink: the shots show the models as they are
+    g.updateScanner = () => {}; // no threat-scanner ink: models as they are
     const pop = g.fx.pop.bind(g.fx);
     g.fx.pop = (text, ...rest) => (this.popMute && this.popMute.test(text) ? undefined : pop(text, ...rest)); // shots can mute pops
-    if (g.secrets.shrine) g.secrets.shrine.skates.visible = false; // the Xenoglide skates stay a secret: only their glow shows
-    g.planet.keep = true; // keep every terrain mesh the shots build (no rebuild hitch at the cuts)
-    // no boulders or big shaped rocks on Kade's stretch of the terminator (his truck swings wide
-    // round the runner and once ploughed into a boulder mid-shot): kept bare before that ground is built
+    if (g.secrets.shrine) g.secrets.shrine.skates.visible = false; // Xenoglide skates stay secret: only the glow shows
+    g.planet.keep = true; // keep all terrain meshes (no rebuild hitch at cuts)
+    // no boulders or shaped rocks on Kade's stretch of the terminator (his truck swings wide round the runner and
+    // could plough into one): cleared before that ground is built
     const bare = [];
     for (let th = 86.6; th <= 90.4; th += 0.35) for (let ph = 29; ph <= 34.5; ph += 0.35) bare.push(dirFromAngles(th, ph));
     g.planet.clearDirs = [...(g.planet.clearDirs || []), ...bare];
@@ -166,17 +165,17 @@ export class Trailer {
     g.alchemy.syncChimeras();
     g.audio.init();
     if (g.audio.setMenu) g.audio.setMenu(false);
-    // the Quantum-Lock hum and glide rumble sit well under the music here (still there, not on top)
+    // hum and glide rumble well under the music
     g.audio.mix.hum = HUM;
     g.audio.mix.wind = 0.5;
-    g.audio.levelFloor = 0.7; // (the roaming groove would sink at low speed, leaving the skates on top)
-    if (Q.has('pump')) { g.renderer.setAnimationLoop(null); window.requestAnimationFrame = window.nativeRAF; } // frames only come from window.step()
+    g.audio.levelFloor = 0.7; // else the groove sinks at low speed, leaving the skates on top
+    if (Q.has('pump')) { g.renderer.setAnimationLoop(null); window.requestAnimationFrame = window.nativeRAF; } // frames only from window.step()
     this.cover(true, 'PREPARING THE TRAILER…');
     if (this.warmOn) { this.mode = 'warm'; this.start(this.only ? this.first : 0); }
     else this.ready();
   }
 
-  // warm-up done (or skipped): wait for a click unless &auto, then roll from the top
+  // warm-up done or skipped: wait for a click (unless &auto), then roll
   ready() {
     this.mode = 'wait';
     const go = () => {
@@ -203,16 +202,16 @@ export class Trailer {
     this.t = 0;
     this.reset();
     this.hideLabels();
-    Math.random = mulberry32(1969 + i * 101); // every shot plays the same way every run
+    Math.random = mulberry32(1969 + i * 101); // each shot plays the same every run
     const s = this.shots[i];
     this.shot = s;
     s.setup && s.setup(this);
-    // build the ground the camera will see before the first frame of the shot is drawn
+    // build the ground in view before the shot's first frame
     if (s.cam) s.cam(this, 0, 0);
     g.planet.update(this.eye, { budgetMs: 1e9 });
     if (g.planet.rimInkAt) g.planet.rimInkAt.set(1e9, 0, 0);
     g.planet.updateRimInk(this.eye);
-    // a card whose key the new shot also uses stays up across the cut; everything else goes
+    // cards whose key the new shot also uses stay up across the cut
     const keep = new Set((s.cards || []).map((c, n) => c.key || `${i}:${n}`));
     for (const el of [...this.ui.cards.children]) if (!keep.has(el.dataset.key)) el.remove();
     if (this.mode === 'warm') this.cover(true, `PREPARING THE TRAILER… ${i + 1}/${this.shots.length} · ${Math.round(this.fps || 0)} FPS`);
@@ -227,7 +226,7 @@ export class Trailer {
     window.trailerDone = true;
   }
 
-  // clear whatever the last shot left lying around
+  // clear what the last shot left
   reset() {
     const g = this.g, P = g.player;
     if (g.state === 'derby' || g.race.state !== 'idle') { g.race.clear(); g.race.gate.root.visible = false; }
@@ -251,7 +250,7 @@ export class Trailer {
     g.fx.clearPops();
     P.setCargo(null);
     P.resetTrick();
-    P.body.airTime = 0; // (or the next shot's first touchdown scores the last shot's jump)
+    P.body.airTime = 0; // else the next touchdown scores the last shot's jump
     P.dead = false;
     this.hold.clear();
     this.tap.clear();
@@ -272,24 +271,24 @@ export class Trailer {
     if (g.player) g.player.body.thrusting = false;
     if (g.player) g.player.weapon = 0;
     this.anchor = null;
-    g.lampForce = null; // the lamp back on automatic
+    g.lampForce = null; // lamp back on automatic
   }
 
-  // floating text (place names, signs, name tags) reads as HUD: the trailer goes without it
+  // floating text (place names, signs, name tags) reads as HUD: hide it
   hideLabels() {
-    // (the world toggles their visibility by distance, so they go on a layer the camera never draws)
-    // (sleeping settlements are out of the scene graph, so walk every location's group too)
+    // the world toggles visibility by distance, so use a layer the camera never draws; sleeping settlements are out of
+    // the scene graph, so walk every location's group too
     const hide = (o) => { if (o.isSprite && o.material.map && o.material.map.image instanceof HTMLCanvasElement) o.layers.set(31); };
     this.g.scene.traverse(hide);
     for (const l of this.g.locations) if (l.group) l.group.traverse(hide);
   }
 
   // ---------- per frame (main.js) ----------
-  // Before the simulation: advance the clock, run the shot's direction, feed the input.
+  // Before the simulation: advance the clock, run the shot's direction, feed input.
   pre(rdt) {
     const g = this.g;
     const dt = this.fixed ? 1 / 60 : rdt;
-    // frame rate (shown on the warm-up cover: under ~50 fps the recording will stutter)
+    // frame rate (on the warm-up cover: under ~50 fps the recording stutters)
     const now = performance.now();
     if (this.lastNow) this.fps = lerp(this.fps || 60, 1000 / Math.max(1, now - this.lastNow), 0.05);
     this.lastNow = now;
@@ -299,14 +298,14 @@ export class Trailer {
     const s = this.shot;
     s.update && s.update(this, this.t, dt);
     this.cards(s);
-    // input: only what the shot holds down
+    // input: only what the shot holds
     const I = g.input;
     I.keys.clear();
     for (const k of this.hold) I.keys.add(k);
     for (const k of this.tap) { I.keys.add(k); I.justPressed.add(k); }
     this.tap.clear();
     I.mouse = [this.fire, false, false];
-    I.ptrLocked = true; // (the game only fires with the mouse captured)
+    I.ptrLocked = true; // the game only fires with the mouse captured
     I.dx = I.dy = 0;
     if (this.steer) {
       const up = g.player.pos.clone().normalize();
@@ -314,7 +313,7 @@ export class Trailer {
       if (f.lengthSq() > 1e-6) g.cam.fwd.copy(f.normalize());
       g.cam.pitch = this.pitch ?? -0.1;
     }
-    g.lampForce = this.lampOn ?? null; // a shot can force the helmet lamp on or off
+    g.lampForce = this.lampOn ?? null; // shots can force the helmet lamp
     return dt;
   }
 
@@ -340,7 +339,7 @@ export class Trailer {
     this.g.cam.fov = this.fov;
   }
 
-  // speed lines and the like, just before the comic pass renders
+  // speed lines etc., just before the comic pass
   post(u) {
     if (this.speedLines != null) u.speed.value = Math.max(u.speed.value, this.speedLines);
     if (this.whipLines) u.speed.value = Math.max(u.speed.value, this.whipLines);
@@ -353,7 +352,7 @@ export class Trailer {
     const into = prev && prev.out;
     const out = s.out;
     let yaw = 0, blur = 0, flash = 0, black = 0, wipe = -1;
-    // whip-pan: swing hard out of this shot, and swing into the next from the other side
+    // whip-pan: swing out of this shot, into the next from the other side
     if (out && out.type === 'whip' && left < WHIP) { const k = easeIn(1 - left / WHIP); yaw += k * 1.1 * (out.dir || 1); blur += k; }
     if (into && into.type === 'whip' && t < WHIP) { const k = 1 - easeOut(t / WHIP); yaw -= k * 1.1 * (into.dir || 1); blur += k; }
     // white flash across the cut
@@ -362,7 +361,7 @@ export class Trailer {
     // dip to black
     if (out && out.type === 'black' && left < (out.len || 0.45)) black = Math.max(black, ease(1 - left / (out.len || 0.45)));
     if (into && into.type === 'black' && t < (into.in || 0.35)) black = Math.max(black, 1 - ease(t / (into.in || 0.35)));
-    // ink wipe: a slab of panel ink sweeps across, covering the frame at the cut
+    // ink wipe: a slab of ink sweeps across, covering the frame at the cut
     if (out && out.type === 'wipe' && left < WIPE / 2) wipe = 0.5 * (1 - left / (WIPE / 2));
     if (into && into.type === 'wipe' && t < WIPE / 2) wipe = 0.5 + 0.5 * (t / (WIPE / 2));
     this.whipYaw = yaw;
@@ -401,20 +400,20 @@ export class Trailer {
 
   // ---------- helpers for the shots ----------
   loc(id) { return this.g.locations.find((l) => l.id === id); }
-  // a point in a location's own frame (x east-ish, y up, z north-ish), like world.toWorld
+  // point in a location's frame (x east-ish, y up, z north-ish), like world.toWorld
   at(id, x, y, z, out = V()) { return this.g.world.toWorld(typeof id === 'string' ? this.loc(id) : id, x, y, z, out); }
-  // a point on the ground at sun angle theta (0 noon, 90 terminator) and azimuth phi, in degrees
+  // ground point at sun angle theta (0 noon, 90 terminator) and azimuth phi, degrees
   sky(theta, phi, lift = 0) { return this.ground(dirFromAngles(theta, phi).multiplyScalar(3600), lift); }
-  // a direction along the ground at p: angle a (radians) from world X projected onto the tangent plane
+  // ground direction at p: angle a (rad) from world X projected onto the tangent plane
   heading(p, a) {
     const up = p.clone().normalize();
     const t0 = V(1, 0, 0).addScaledVector(up, -up.x).normalize();
     const t1 = V().crossVectors(up, t0);
     return t0.multiplyScalar(Math.cos(a)).addScaledVector(t1, Math.sin(a));
   }
-  // a world point in a location's own frame (the inverse of at)
+  // world point in a location's frame (inverse of at)
   toLocal(id, p, out = V()) { return out.copy(p).applyMatrix4(_m4.copy(this.loc(id).group.matrixWorld).invert()); }
-  // nudge a camera point up out of the ground if the terrain rises under it
+  // lift a camera point out of rising ground
   aboveGround(p, min = 1.5) {
     const alt = this.g.planet.altitude(p);
     if (alt < min) p.addScaledVector(_b.copy(p).normalize(), min - alt);
@@ -422,7 +421,7 @@ export class Trailer {
   }
   // ground under a point (plus lift)
   ground(p, lift = 0, out = V()) { return this.g.planet.ground(p, out, lift); }
-  // a local frame at point p facing f: returns (x right, y up, z forward) -> world point
+  // local frame at p facing f: (x right, y up, z forward) -> world point
   frame(p, f) {
     const up = p.clone().normalize();
     const fwd = tangent(f, up, V()).normalize();
@@ -443,7 +442,7 @@ export class Trailer {
     this.steer = fwd.clone();
     return { pos, up, fwd, right: V().crossVectors(fwd, up).normalize() };
   }
-  // the runner's own frame right now (forward = where they're moving, or facing)
+  // the runner's frame now (forward = moving direction, or facing)
   playerFrame() {
     const P = this.g.player;
     const up = P.pos.clone().normalize();
@@ -452,7 +451,7 @@ export class Trailer {
     f.normalize();
     return { pos: P.pos.clone(), up, fwd: f, right: V().crossVectors(f, up).normalize() };
   }
-  // hold the runner's ground speed near v (skating), without touching the vertical
+  // hold ground speed near v (skating), vertical untouched
   keepSpeed(v, k = 0.08) {
     const b = this.g.player.body;
     const up = b.pos.clone().normalize();
@@ -468,7 +467,7 @@ export class Trailer {
     this.eye.lerp(eye, 1 - Math.exp(-dt * kEye));
     this.look.lerp(look, 1 - Math.exp(-dt * kLook));
   }
-  // a crater near p whose rim makes a good grind: { c, rail }
+  // a crater near p with a good rim grind: { c, rail }
   rimNear(p, minR = 24, maxR = 70, maxD = 900) {
     const pl = this.g.planet;
     const dir = p.clone().normalize();
@@ -492,7 +491,7 @@ export class Trailer {
     g.player.respawn(rail.pts[0].clone(), null);
     g.grind.active = { r: rail, s, dir, speed, t: 0, spark: 0 };
   }
-  // put the runner in a faction vehicle at p, rolling along f at speed
+  // runner in a faction vehicle at p, rolling along f at speed
   vehicle(id, p, f, speed) {
     const g = this.g;
     const F = this.place(p, f, 0);
@@ -504,33 +503,33 @@ export class Trailer {
     frameQuat(F.up, F.fwd, v.model.root.quaternion);
     v.model.root.position.copy(v.e.body.pos);
     g.garage.enter();
-    g.fx.clearPops(); // (no VEHICLE DROP! pop: it's already here)
+    g.fx.clearPops(); // no VEHICLE DROP! pop
     return { v, F };
   }
   music(z, hard = true, fadeIn = 0.15) {
     const A = this.g.audio;
-    this.zone = z === 'menu' ? null : z; // (main.musicZone defers to this, so the track holds all shot)
+    this.zone = z === 'menu' ? null : z; // main.musicZone defers to this, so the track holds all shot
     this.musicLevel(1, fadeIn);
     if (!A.ctx || !A.music) return;
-    if (z === 'menu') { A.setMenu(true); if (fadeIn > 1) A.fade = 0; return; } // (a slow rise: no downbeat kick slamming in)
+    if (z === 'menu') { A.setMenu(true); if (fadeIn > 1) A.fade = 0; return; } // slow rise: no downbeat slamming in
     A.setMenu(false);
     A.want = z;
     if (hard && A.track !== z) { A.switchTrack(z); A.fade = 1; }
   }
-  // fade the whole music bus to k (0..1) over about `secs`
+  // fade the music bus to k (0..1) over ~`secs`
   musicLevel(k, secs = 0.15) {
     const A = this.g.audio;
     if (!A.ctx || !A.musicBus) return;
     const G = A.musicBus.gain, now = A.ctx.currentTime, to = 0.5 * (A.vol ? A.vol.music : 1) * k;
     G.cancelScheduledValues(now);
     G.setValueAtTime(G.value, now);
-    G.linearRampToValueAtTime(to, now + Math.max(0.02, secs)); // (a straight ramp: a fade from silence stays quiet at the start)
+    G.linearRampToValueAtTime(to, now + Math.max(0.02, secs)); // linear: a fade from silence stays quiet at first
   }
   pop(text, color = '#ffd23f', size = 64, rot = 0) { this.g.fx.pop(text, null, { color, size, rot, life: 1.1, prio: 1 }); }
 }
 
 // ---------------------------------------------------------------------------------------------
-// The overlay: cover, cards, flash, dip to black, ink wipe
+// Overlay: cover, cards, flash, dip to black, ink wipe
 // ---------------------------------------------------------------------------------------------
 function buildUI() {
   const root = document.createElement('div');
@@ -549,17 +548,17 @@ function buildUI() {
 const LOGO = `<div class="tr-logo">MOON<span>-</span>RUNNER</div><div class="tr-tagline">QUANTUM-LOCK DELIVERY SERVICE</div><div class="tr-cta">COMING SOON</div>`;
 
 // ---------------------------------------------------------------------------------------------
-// The shot list (about 45 s). Times are per shot; `out` is how each one hands off to the next.
+// Shot list (about 72 s with FISSURE, HERO and SCOOP, spliced in at the end). Times are per shot; `out` is the hand-off to the next.
 // ---------------------------------------------------------------------------------------------
-// a transit ship by its route (first stop, second stop)
+// transit ship by route (first stop, second stop)
 function ship(T, a, b) {
   return T.g.world.traffic.vehicles.find((v) => (v.kind === 'ship' || v.kind === 'bus') && v.stops[0].loc.id === a && v.stops[1].loc.id === b);
 }
-// fly a ship along its route by hand: s metres from its first stop (the traffic sim adds a hair)
+// fly a ship by hand, s m from its first stop (the traffic sim adds a hair)
 function flyShip(v, s) {
   v.state = 'fly'; v.dir = 1; v.s = s; v.stop = null; v.timer = 0; v.closing = false; v.exchanged = false; v.open = 0;
 }
-// square a ship up to a heading at once (it normally turns slowly toward its route)
+// snap a ship to a heading (it normally turns slowly)
 function aimShip(v, heading) {
   const up = v.pos.clone().normalize();
   v.heading.copy(tangent(heading, up, V()).normalize());
@@ -567,8 +566,7 @@ function aimShip(v, heading) {
 }
 
 const SHOTS = [
-  // 1 · Cold open: a freighter lifts off an ILMB pad with Earth hanging over the base, climbs, and
-  // roars straight over the camera (its belly wipes the frame).
+  // 1 · Cold open: a freighter lifts off an ILMB pad under Earth and roars over the camera (its belly wipes the frame).
   {
     name: 'cold open',
     dur: 3.6,
@@ -586,7 +584,7 @@ const SHOTS = [
     cam(T, t) {
       const k = ease(t / 3.6);
       T.at('ilmb', lerp(-62, -80, k), lerp(4, 28, k), lerp(-228, -206, k), T.eye);
-      // look at the ship, lagging it a little, with the horizon kept low in frame
+      // look at the ship, lagging a little, horizon low in frame
       const target = T.fr.pos.clone();
       T.look.lerpVectors(T.at('ilmb', -86, 26, -150), target, ease(t / 2.4));
       T.fov = lerp(58, 66, k);
@@ -594,8 +592,7 @@ const SHOTS = [
     cards: [{ at: 0.35, dur: 2.5, html: 'THE MOON NEEDS ITS DELIVERIES.' }],
   },
 
-  // 2 · The courier at the ILMB job board: the crate lands on their back, they spin round and
-  // kick off straight past the camera.
+  // 2 · ILMB job board: the crate lands on the courier's back; they spin and kick off past the camera.
   {
     name: 'job board',
     dur: 3.4,
@@ -613,7 +610,7 @@ const SHOTS = [
         T.pop('PICKUP!', '#7dff6a', 52, -4);
       }
       if (t > 1.05) {
-        // spin round and kick off (a shove for the first stride, then skates and thrusters)
+        // kick off: a shove for the first stride, then skates and thrusters
         if (!T.kicked) { T.kicked = true; P.body.vel.copy(T.out).setLength(7); P.heading.copy(T.out).normalize(); g.audio.jump(); }
         T.steer = T.out;
         T.hold = new Set(['Space', 'KeyW', 'Thrust']);
@@ -622,7 +619,7 @@ const SHOTS = [
     cam(T, t) {
       const k = ease(t / 3.4);
       T.at('ilmb', lerp(7.5, 5.5, k), lerp(2.2, 1.6, k), lerp(93, 95, k), T.eye);
-      // hold on the runner, then whip the look round as they rush past
+      // hold on the runner, then whip round as they rush past
       const P = T.g.player;
       const want = P.pos.clone().addScaledVector(P.up, 1.2);
       if (T.t <= 1 / 30) T.look.copy(want); else T.look.lerp(want, t < 1.6 ? 0.25 : 0.4);
@@ -631,15 +628,15 @@ const SHOTS = [
     cards: [{ at: 0.5, dur: 2.6, kind: 'caption low right', html: 'QUANTUM-LOCK DELIVERY SERVICE' }],
   },
 
-  // 3 · Out on the plain: low chase cam at speed, carving toward a crater, Earth up ahead.
+  // 3 · The plain: low chase cam, carving toward a crater, Earth ahead.
   {
     name: 'chase',
     dur: 3.4,
     setup(T) {
       T.music('free');
-      T.g.audio.level = 0.9; // the roaming groove kicks in at full tilt
+      T.g.audio.level = 0.9; // groove at full tilt
       const R = rim(T);
-      // start 150 m out, aimed at a point just inside the lip so the run ends at the rim
+      // start 150 m out, aimed just inside the lip so the run ends at the rim
       const c = R.c.d.clone().multiplyScalar(3600);
       T.dest = c;
       const from = T.at('ilmb', 95, 0, 610);
@@ -649,7 +646,7 @@ const SHOTS = [
     update(T, t) {
       const P = T.g.player;
       const f = T.dest.clone().sub(P.pos);
-      // carve: swing the line left and right of the target
+      // carve either side of the target
       const up = P.pos.clone().normalize();
       f.applyAxisAngle(up, Math.sin(t * 3.1) * 0.35);
       T.steer = f;
@@ -658,7 +655,7 @@ const SHOTS = [
     },
     cam(T, t, dt) {
       const F = T.playerFrame();
-      // low behind, swinging from one side to the other through the carve
+      // low behind, swinging side to side with the carve
       const side = 2.2 + Math.sin(t * 3.1 - 0.6) * 1.2;
       const eye = F.pos.clone().addScaledVector(F.fwd, -5).addScaledVector(F.up, 1.9).addScaledVector(F.right, side);
       const look = F.pos.clone().addScaledVector(F.fwd, 16).addScaledVector(F.up, 3.2);
@@ -668,7 +665,7 @@ const SHOTS = [
     },
   },
 
-  // 4 · Rim grind: the runner catches the crater lip, sparks spraying, and the camera swings round.
+  // 4 · Rim grind: sparks spray as the camera swings round.
   {
     name: 'rim grind',
     dur: 2.8,
@@ -689,7 +686,7 @@ const SHOTS = [
       const P = T.g.player;
       const up = P.pos.clone().normalize();
       const F = T.playerFrame();
-      // orbit from the outside of the lip round to the front of the runner
+      // orbit from outside the lip to the runner's front
       const a = lerp(-2.2, 0.4, ease(t / 2.8));
       const off = F.fwd.clone().multiplyScalar(Math.cos(a) * 5.2).addScaledVector(F.right, Math.sin(a) * 5.2);
       const eye = P.pos.clone().add(off).addScaledVector(up, lerp(0.6, 1.8, t / 2.8));
@@ -699,7 +696,7 @@ const SHOTS = [
     },
   },
 
-  // 5 · Off the lip and into the air: a flip and a spin, stuck clean. "…MOSTLY."
+  // 5 · Off the lip: a flip and a spin, stuck clean. "…MOSTLY."
   {
     name: 'air trick',
     dur: 3.4,
@@ -707,7 +704,7 @@ const SHOTS = [
     setup(T) {
       const R = rim(T);
       const s = R.rail.len * 0.1 + 34 * 2.65;
-      // where the grind pops off, with its speed and hop (rails.js pop), plus a little extra lift
+      // the grind's pop-off point, speed and hop (rails.js pop), plus a little lift
       const p = railPoint(R.rail, s), q = railPoint(R.rail, s + 1);
       const up = p.clone().normalize();
       const along = tangent(q.clone().sub(p), up, V()).normalize();
@@ -722,7 +719,7 @@ const SHOTS = [
       P.setCargo(CRATE);
     },
     update(T, t) {
-      // flip, then spin, then let go and land it
+      // flip, spin, let go and land
       const keys = ['Space'];
       if (t > 0.15 && t < 0.72) keys.push('KeyQ', 'KeyW');
       else if (t > 0.72 && t < 1.25) keys.push('KeyQ', 'KeyD');
@@ -733,7 +730,7 @@ const SHOTS = [
       const P = T.g.player;
       const up = P.pos.clone().normalize();
       const F = T.playerFrame();
-      // a low side angle that holds the runner against the sky
+      // low side angle: runner against the sky
       const eye = P.pos.clone().addScaledVector(F.right, 6.5).addScaledVector(F.fwd, 2.5).addScaledVector(up, -0.4);
       const look = P.pos.clone().addScaledVector(up, 0.8).addScaledVector(F.fwd, 2);
       T.chase(eye, look, dt, 10, 18);
@@ -744,7 +741,7 @@ const SHOTS = [
     cards: [{ at: 1.85, dur: 1.5, kind: 'shout', html: '…MOSTLY.' }],
   },
 
-  // 6 · The dark side: lamp on, a pirate squad closes in and lights the night up.
+  // 6 · Dark side: lamp on, a pirate squad closes in.
   {
     name: 'pirates',
     dur: 4.0,
@@ -752,15 +749,13 @@ const SHOTS = [
     setup(T) {
       T.music('dark');
       const g = T.g;
-      // a flat stretch just past the terminator, where the night still holds some light (found by
-      // sampling the ground for bumps)
+      // a flat stretch just past the terminator, still with some light (found with findFlat)
       const p = T.sky(91, -10);
-      const F = T.place(p, T.heading(p, 1.18), 34); // (heading away from the Twilight Waystation)
+      const F = T.place(p, T.heading(p, 1.18), 34); // away from the Twilight Waystation
       g.player.setCargo(CRATE);
       T.lampOn = true;
       T.F0 = F;
-      // a war-rig coming up hard on the runner's left (the star of the shot), skaters behind; the
-      // runner just runs (no shots fired, nothing blows up going into the Kade cut)
+      // a war-rig closing on the runner's left (the star), skaters behind; no shots or explosions before the Kade cut
       T.pirates = [
         pirate(T, F, 'rover', -8, -16, 99),
         pirate(T, F, 'skater', 6, -14, 99),
@@ -770,12 +765,11 @@ const SHOTS = [
       T.pirates[0].body.vel.multiplyScalar(1.25);
     },
     update(T, t) {
-      // flat out on the skates, the pack hanging on behind
+      // flat out, the pack behind
       T.hold = new Set(['Space', 'KeyW']);
       T.steer = T.F0.fwd;
       T.keepSpeed(34, 0.2);
-      // the pack holds a loose formation on the runner (closing in a little over the shot): steered
-      // toward its slot each frame, so nobody rams, collides or blows up
+      // loose formation, closing a little: each steered to its slot per frame, so nobody rams or blows up
       const P = T.g.player, F = T.playerFrame();
       const slots = [[-7, lerp(-14, -6, t / 4)], [6, lerp(-14, -10, t / 4)], [-3, -22], [3, -30]];
       T.pirates.forEach((e, k) => {
@@ -786,13 +780,13 @@ const SHOTS = [
         e.body.vel.copy(P.body.vel).addScaledVector(want.sub(e.body.pos), 2.5);
         e.heading.copy(F.fwd);
       });
-      // (the Twilight Waystation's turrets are in range of the pack: they hold their fire)
+      // Twilight Waystation turrets in range hold fire
       for (const e of T.g.enemies.list) if (e.faction === 'mil') e.fireCd = 99;
     },
     cam(T, t, dt) {
       const F = T.playerFrame();
       const fwd = T.F0.fwd;
-      // tracking alongside, a little ahead, looking back down the chase
+      // alongside, a little ahead, looking back
       const eye = F.pos.clone().addScaledVector(F.right, -10).addScaledVector(fwd, 6.5).addScaledVector(F.up, 2.3);
       const look = F.pos.clone().addScaledVector(fwd, -7).addScaledVector(F.right, -3).addScaledVector(F.up, 1.4);
       T.chase(eye, look, dt, 30, 12);
@@ -801,8 +795,7 @@ const SHOTS = [
     cards: [{ at: 0.35, dur: 3.1, html: 'THE DARK SIDE.<br><span class="tr-sub">DANGEROUS DELIVERIES PAY MORE.</span>' }],
   },
 
-  // 7 · Captain Kade's gun truck rolls in at the terminator: slow-mo splash, gatling bursts, and
-  // flak as the runner jets up out of it.
+  // 7 · Captain Kade's gun truck at the terminator: slow-mo splash, gatling bursts, flak as the runner jets out.
   {
     name: 'kade',
     dur: 4.6,
@@ -815,12 +808,12 @@ const SHOTS = [
       g.player.setCargo(CRATE);
       T.F0 = F;
       const e = g.story.spawnKade(false);
-      // bring him in close, off the runner's left, swinging round toward them
+      // close, off the runner's left, swinging toward them
       const at = T.ground(F.pos.clone().addScaledVector(F.right, -34).addScaledVector(F.fwd, 22), 0.3);
       e.body.pos.copy(at);
       e.body.vel.copy(F.fwd).multiplyScalar(26);
       e.heading.copy(F.fwd);
-      // stand it upright on its wheels from the first frame (it otherwise slerps up out of the ground)
+      // upright from the first frame (else it slerps up out of the ground)
       e.body.groundN.copy(at).normalize();
       frameQuat(e.body.groundN, F.fwd, e.model.root.quaternion);
       e.model.root.position.copy(at);
@@ -830,27 +823,25 @@ const SHOTS = [
     },
     update(T, t) {
       const g = T.g, P = g.player;
-      // skate, then let go of the ground, mag-jump and jet up out of the gatling stream: straight
-      // into his flak (and its burning phosphor)
+      // skate, then mag-jump and jet up out of the gatling stream into his flak (and phosphor)
       T.hold = new Set(t < 1.7 ? ['Space', 'KeyW'] : ['KeyW', 'Thrust']);
       if (t >= 1.7 && !T.jumped) { T.jumped = true; T.tap.add('ShiftLeft'); }
       T.steer = T.F0.fwd;
       T.keepSpeed(30, 0.15);
       if (t > 1.75 && t < 2.7) {
-        // a firm climb whatever the slow-mo is doing to the sim
+        // firm climb whatever slow-mo does to the sim
         const up = P.pos.clone().normalize();
         const vu = P.body.vel.dot(up);
         if (vu < 15) P.body.vel.addScaledVector(up, 15 - vu);
         P.body.grounded = false;
       }
-      // he's quick on the flak once they're up there
+      // quick flak once they're up
       const e = T.kade;
       if (e.mode === 'flak' && e.flakCd > 0.5) e.flakCd = 0.5;
     },
     cam(T, t, dt) {
-      // Kade and his truck are the subject start to finish: the camera rides off its flank,
-      // turret and gatling big in frame, leaning up a touch as the runner climbs into the flak
-      // behind him (so the fire and the phosphor read past him)
+      // Kade's truck is the subject: ride off its flank, turret and gatling big in frame, tilting up as the runner
+      // climbs into the flak behind (so fire and phosphor read past him)
       const e = T.kade, P = T.g.player;
       const up = e.body.pos.clone().normalize();
       const fwd = tangent(e.body.vel.lengthSq() > 4 ? e.body.vel : e.heading, up, V()).normalize();
@@ -864,9 +855,8 @@ const SHOTS = [
     },
   },
 
-  // 8 · Vehicles: a fixed trackside camera set back from the run; the Daedalus Phase Skimmer
-  // screams past and the runner fires the Rail Lance from the seat, the beam punching through
-  // the pirates up ahead...
+  // 8 · Vehicles, fixed trackside camera: the Daedalus Phase Skimmer screams past, the Rail Lance punching through
+  // pirates ahead...
   {
     name: 'skimmer',
     dur: 3.4,
@@ -886,15 +876,15 @@ const SHOTS = [
     cards: [{ key: 'faction', at: 0.3, dur: 99, html: 'PICK A FACTION.<br><span class="tr-sub">UNLOCK UNIQUE WEAPONS AND VEHICLES.</span>' }],
   },
 
-  // 9 · ...and the Vostok APC ploughs past the same way, the runner working the Scattergun.
+  // 9 · ...and the Vostok APC ploughs past, working the Scattergun.
   {
     name: 'apc',
     dur: 3.2,
     out: { type: 'whip', dir: 1 },
     setup(T) {
       const p = T.sky(50, 20);
-      T.V = T.vehicle('apc', p, T.heading(p, 5.7), 30); // (a line clear of boulders)
-      gunRun(T, 1, [[6.5, 58], [-7, 72], [7, 90]]); // (off the line: shot down, not run over)
+      T.V = T.vehicle('apc', p, T.heading(p, 5.7), 30); // a line clear of boulders
+      gunRun(T, 1, [[6.5, 58], [-7, 72], [7, 90]]); // off the line: shot, not run over
     },
     update(T, t) {
       T.hold = new Set(['KeyW']);
@@ -906,9 +896,8 @@ const SHOTS = [
     cards: [{ key: 'faction', at: 0, dur: 2.7, html: 'PICK A FACTION.<br><span class="tr-sub">UNLOCK UNIQUE WEAPONS AND VEHICLES.</span>' }],
   },
 
-  // 9b · Big air: flat out up the outside wall of a big sunlit crater and off the rim, out over a
-  // 36 m bowl; flips and spins while the camera cranes up and back to show the crater, the plain
-  // and the Moon curving away
+  // 9b · Big air: up a sunlit crater's outer wall and off the rim over a 36 m bowl; flips and spins as the camera
+  // cranes back to show crater, plain and the curving Moon
   {
     name: 'big air',
     dur: 5.4,
@@ -918,7 +907,7 @@ const SHOTS = [
       const pl = T.g.planet;
       const c = pl.craters[26];
       const cen = c.d.clone().multiplyScalar(3600);
-      const f = T.heading(cen, 0.79); // (a clean run: flat outside, an 18 m kicker of a wall)
+      const f = T.heading(cen, 0.79); // clean run: flat outside, an 18 m kicker wall
       T.air = { cen, launched: false };
       T.place(cen.clone().addScaledVector(f, 245), f.clone().negate(), 52);
       T.g.player.setCargo(CRATE);
@@ -932,7 +921,7 @@ const SHOTS = [
         T.steer = T.dir;
         T.keepSpeed(52, 0.2);
         if (r < 134) {
-          // off the lip: let go of the ground and kick for height
+          // off the lip: kick for height
           A.launched = true;
           A.at = t;
           A.pos = P.pos.clone();
@@ -945,7 +934,7 @@ const SHOTS = [
         }
         return;
       }
-      // in the air: a double frontflip, then a spin, then a backflip, holding the line
+      // airborne: double frontflip, spin, backflip, holding the line
       const k = t - A.at;
       const keys = [];
       if (k > 0.2 && k < 1.35) keys.push('KeyQ', 'KeyW');
@@ -959,14 +948,13 @@ const SHOTS = [
       const up = P.pos.clone().normalize();
       const F = T.playerFrame();
       if (!A.launched || t - A.at < 0.15) {
-        // low and close behind, the rim rushing up
+        // low behind, the rim rushing up
         const eye = P.pos.clone().addScaledVector(T.dir, -7).addScaledVector(F.right, 3).addScaledVector(up, 1.8);
         T.chase(eye, P.pos.clone().addScaledVector(T.dir, 12).addScaledVector(up, 3), dt, 40, 20);
         T.fov = 76;
         return;
       }
-      // then it rides along with them out over the bowl, easing back, out and up as it goes, so they
-      // stay readable against the crater, the plain and the Moon's horizon curving away
+      // then ride along over the bowl, easing back, out and up, keeping them readable against crater, plain and horizon
       const k = ease((t - A.at) / 3.0);
       const u0 = A.pos.clone().normalize();
       const side = V().crossVectors(T.dir, u0).normalize();
@@ -977,8 +965,7 @@ const SHOTS = [
     cards: [{ key: 'terrain', at: 0.4, dur: 99, html: "MAKE DARING DELIVERIES<br><span class='tr-sub'>ACROSS THE MOON'S UNIQUE TERRAIN.</span>" }],
   },
 
-  // 10 · A meteor shower: rocks streak in on a slant and burst around the runner, who weaves
-  // through it at full tilt.
+  // 10 · Meteor shower: rocks slant in and burst round the runner, weaving at full tilt.
   {
     name: 'meteors',
     dur: 4.5,
@@ -988,11 +975,10 @@ const SHOTS = [
       const F = T.place(p, T.heading(p, 2.35), 34);
       g.player.setCargo(CRATE);
       T.F0 = F;
-      // a small shower parked over the run, coming in from the left of frame
+      // a small shower over the run, slanting in from frame left
       const c = F.pos.clone().addScaledVector(F.fwd, 75).normalize();
       M.zone = { dir: c, r: 70, t: 30, dur: 1e9, spawnT: 1e9, slant: F.right.clone() };
-      // rocks already on their way, timed to land through the shot (and twice as fast as usual)
-      // each one lands off to alternate sides of the line, further down the run as the shot goes
+      // rocks already inbound (2.4x speed), timed through the shot, alternating sides and further down the run
       for (let i = 0; i < 12; i++) {
         M.spawnRock();
         const rk = M.rocks[M.rocks.length - 1];
@@ -1014,7 +1000,7 @@ const SHOTS = [
     },
     cam(T, t, dt) {
       const F = T.playerFrame(), F0 = T.F0;
-      // high behind and to the right: the rocks cross the frame and burst ahead
+      // high behind right: rocks cross the frame and burst ahead
       const eye = F.pos.clone().addScaledVector(F0.fwd, -11).addScaledVector(F0.right, 5).addScaledVector(F.up, 5);
       const look = F.pos.clone().addScaledVector(F0.fwd, 30).addScaledVector(F.up, 4);
       T.chase(eye, look, dt, 30, 10);
@@ -1023,8 +1009,7 @@ const SHOTS = [
     cards: [{ key: 'terrain', at: 0, dur: 99, html: "MAKE DARING DELIVERIES<br><span class='tr-sub'>ACROSS THE MOON'S UNIQUE TERRAIN.</span>" }],
   },
 
-  // 11 · Hitching a ride: surfing the roof of a shuttle-bus as it sweeps in on the Helium-3
-  // Exchange's refinery stacks.
+  // 11 · Roof-surfing a shuttle-bus sweeping in on the Helium-3 Exchange's refinery stacks.
   {
     name: 'bus surf',
     dur: 3.0,
@@ -1033,7 +1018,7 @@ const SHOTS = [
       const g = T.g, W = g.world.traffic;
       const bus = ship(T, 'ilmb', 'mine');
       T.bus = bus;
-      // two samples of the route give its heading; then square the bus up to it
+      // heading from two route samples; square the bus to it
       const s0 = bus.path.len - 190;
       flyShip(bus, s0 + 30); W.updateFlyer(bus, 0, bus.pos);
       const ahead = bus.pos.clone();
@@ -1041,7 +1026,7 @@ const SHOTS = [
       bus.prevPos.copy(bus.pos);
       aimShip(bus, ahead.sub(bus.pos));
       W.syncDeck(bus, bus.pos);
-      // crouched on the roof: the ride system's seat carries the runner (rides.js / player.js)
+      // on the roof, carried by a ride seat (rides.js / player.js)
       const P = g.player;
       P.respawn(bus.pos.clone(), bus.heading);
       P.seat = { obj: bus.root, local: V(0, (bus.deckY || 0) + bus.deck[1] + 0.05, (bus.deckZ || 0) + 1), face: V(0, 0, 1), hidden: false };
@@ -1056,7 +1041,7 @@ const SHOTS = [
       const bus = T.bus;
       const up = bus.pos.clone().normalize();
       const right = V().crossVectors(bus.heading, up).normalize();
-      // over the tail, looking past the runner to the domes coming up ahead; drifting out wide
+      // over the tail, past the runner to the domes ahead, drifting wide
       const eye = bus.pos.clone().addScaledVector(bus.heading, lerp(-13, -16, t / 3)).addScaledVector(right, lerp(3, 9, ease(t / 3))).addScaledVector(up, lerp(5.5, 7.5, t / 3));
       const look = bus.pos.clone().addScaledVector(bus.heading, 50).addScaledVector(up, -6);
       T.chase(eye, look, dt, 20, 20);
@@ -1064,8 +1049,7 @@ const SHOTS = [
     },
   },
 
-  // 12a · Chimera Downs from the infield: a slow crane along the packed grandstand under its red roof, the dirt oval and the
-  // finish arch, before the race
+  // 12a · Chimera Downs pre-race: slow infield crane along the grandstand, dirt oval and finish arch
   {
     name: 'downs pan',
     dur: 3.0,
@@ -1083,16 +1067,14 @@ const SHOTS = [
     cards: [{ key: 'festive', at: 0.4, dur: 99, html: 'JOIN THE LOCAL FESTIVITIES.<br><span class="tr-sub">PLACE YOUR BETS. LET IT RIDE.</span>' }],
   },
 
-  // 12 · Chimera Downs: the gates spring, the field of splices thunders out under the crowd, and
-  // the camera snaps onto the leader.
+  // 12 · Chimera Downs: the gates spring, the splices thunder out, the camera snaps onto the leader.
   {
     name: 'downs',
     dur: 3.4,
     setup(T) {
       T.music('downs');
       const g = T.g, R = g.race;
-      // a fresh card under this shot's seed, so the field is the same every run (the one posted
-      // at load is random), with a wheeled racer in it
+      // a fresh card under this shot's seed (the load-time one is random), with a wheeled racer
       R.card = [];
       R.post('medium');
       T.place(R.booth.clone(), T.at('downs', 0, 0, 1).sub(T.at('downs', 0, 0, 0)));
@@ -1116,12 +1098,12 @@ const SHOTS = [
       const fwd = rs[0].fwd;
       const right = V().crossVectors(fwd, up).normalize();
       if (t < 1.6) {
-        // low on the track ahead of the stalls: the field bursts out toward the lens
+        // low ahead of the stalls: the field bursts toward the lens
         const eye = cen.clone().addScaledVector(fwd, lerp(20, 13, ease(t / 1.6))).addScaledVector(right, 6).addScaledVector(up, 1.4);
         T.chase(eye, cen.clone().addScaledVector(up, 1.6), dt, 30, 30);
         T.fov = 58;
       } else {
-        // snap onto the leader: a tight tracking close-up
+        // tight tracking close-up on the leader
         if (!T.snapped) { T.snapped = true; T.chased = false; }
         const p = lead.pos, k = lead.genes.size || 1;
         const eye = p.clone().addScaledVector(lead.fwd, 4 + 3 * k).addScaledVector(V().crossVectors(lead.fwd, up).normalize(), 3 + 2.5 * k).addScaledVector(up, 0.8 + k);
@@ -1132,13 +1114,12 @@ const SHOTS = [
     cards: [{ key: 'festive', at: 0, dur: 2.2, html: 'JOIN THE LOCAL FESTIVITIES.<br><span class="tr-sub">PLACE YOUR BETS. LET IT RIDE.</span>' }],
   },
 
-  // 13 · The Antimatter Lab (montage): beside the reactor, into it goes the jar. FLASH. Something
-  // with too many legs climbs out of the core and lands on the floor.
+  // 13 · Antimatter Lab (montage): the jar goes into the reactor. FLASH. Something with too many legs climbs out.
   {
     name: 'lab',
     dur: 3.0,
     setup(T) {
-      T.music('casino'); // (the montage keeps one groove)
+      T.music('casino'); // the montage keeps one groove
       const g = T.g;
       T.place(T.at('antimatter', 3, 0, 4), T.at('antimatter', -2, 0, -3).sub(T.at('antimatter', 3, 0, 4)));
       g.player.setCargo(CRATE);
@@ -1148,8 +1129,7 @@ const SHOTS = [
       const g = T.g;
       T.hold = new Set();
       if (t > 0.3 && !T.fed) {
-        // into the reactor go the finds: a mite and a settler make a chimera, which hatches out
-        // of the core and leaps clear (alchemy.js breed / hatch)
+        // a mite and a settler go in; the chimera hatches from the core and leaps clear (alchemy.js breed / hatch)
         T.fed = true;
         g.world.reactor.flash = 2.2;
         g.audio.boom(true);
@@ -1164,7 +1144,7 @@ const SHOTS = [
       if (t > 0.7) T.shake = Math.max(0, T.shake - 0.02);
     },
     cam(T, t) {
-      // over Dr. Zbornak's counter, pushing in on the reactor through the flash
+      // over Dr. Zbornak's counter, pushing in through the flash
       const j = ease(t / 3.0);
       T.at('antimatter', lerp(16, 13, j), lerp(6, 5.6, j), lerp(9, 7.5, j), T.eye);
       T.at('antimatter', lerp(0.5, -1, j), 2.6, lerp(-0.5, -2, j), T.look);
@@ -1174,7 +1154,7 @@ const SHOTS = [
     cards: [MORE()],
   },
 
-  // 14 · Lucky Crater Casino: skating up the slot-machine carpet into the neon...
+  // 14 · Lucky Crater Casino: up the slot-lined carpet into the neon...
   {
     name: 'casino',
     dur: 1.7,
@@ -1190,7 +1170,7 @@ const SHOTS = [
       T.keepSpeed(16, 0.3);
     },
     cam(T, t) {
-      // a low dolly up the carpet behind the runner, the hall's neon filling the frame
+      // low dolly behind the runner, neon filling the frame
       T.at('casino', -2.5, 1.2, lerp(62, 49, t / 1.7), T.eye);
       T.at('casino', 0, 7.5, 10, T.look);
       T.fov = 62;
@@ -1198,8 +1178,7 @@ const SHOTS = [
     cards: [MORE(0.2)],
   },
 
-  // 14b · ...through the doors into the hall: Plinko, the duck derby, a carpet you could lose a
-  // week on
+  // 14b · ...through the doors: Plinko, the duck derby, the carpet
   {
     name: 'casino hall',
     dur: 1.7,
@@ -1216,7 +1195,7 @@ const SHOTS = [
       T.keepSpeed(10, 0.3);
     },
     cam(T, t, dt) {
-      // in from the side of the doors, sweeping round with the runner as Plinko slides into view
+      // from beside the doors, sweeping round as Plinko slides into view
       const k = ease(t / 2.4);
       const eye = T.at('casino', lerp(15, 12, k), lerp(4.8, 4, k), lerp(5, -4, k));
       const look = T.g.player.pos.clone().addScaledVector(T.g.player.pos.clone().normalize(), 1.5).lerp(T.at('casino', 6, 5, -24), 0.3);
@@ -1227,8 +1206,8 @@ const SHOTS = [
   },
 ];
 
-// 17 · The tease: down the ramp into the Whispering Fissure, along the corridor and into the
-// chamber toward the sealed alien gate's mint glow: the montage's last beat, then black.
+// 17 · The tease: down into the Whispering Fissure toward the sealed alien gate's mint glow; the montage's last beat,
+// then black.
 const FISSURE = {
   name: 'fissure',
   dur: 3.6,
@@ -1236,7 +1215,7 @@ const FISSURE = {
   setup(T) {
     T.music('dark');
     const g = T.g;
-    // the runner skates down ahead of the camera, a silhouette against the gate's glow
+    // runner ahead of the camera, silhouetted against the glow
     T.place(T.at('fissure', 0, -20, -14), T.at('fissure', 0, 0, 1).sub(T.at('fissure', 0, 0, 0)), 20);
     g.player.setCargo(CRATE);
     T.lampOn = true;
@@ -1247,16 +1226,15 @@ const FISSURE = {
     T.hold = new Set(['Space']);
     T.steer = T.dir;
     if (t > FISSURE.dur - 0.9 && !T.faded) { T.faded = true; T.musicLevel(0, 0.8); } // out with the light
-    // (under 25 m/s: no skate dust in the lens), then easing up as the gate looms
+    // under 25 m/s (no skate dust in the lens), easing off as the gate looms
     const z = T.toLocal('fissure', T.g.player.pos).z;
     T.keepSpeed(z < 62 ? 20 : z < 92 ? lerp(20, 5, (z - 62) / 30) : 1.5, 0.12);
   },
   cam(T, t, dt) {
-    // behind the runner down the ramp, along the corridor and into the chamber; it stops halfway
-    // across and lets them skate on up to the gate
+    // follow down the ramp and corridor; stop halfway across the chamber as they skate on to the gate
     const r = T.toLocal('fissure', T.g.player.pos);
     const z = Math.min(r.z - 8, 78);
-    // (8 m back up the slope the ramp floor is higher than the runner: stay 2.4 m over it)
+    // 8 m back up the slope the floor is higher than the runner: stay 2.4 m over it
     const floor = z < 20 ? (-34 * (z + 70)) / 90 : -34;
     const y = Math.min(Math.max(r.y + 2.2, floor + 2.4), z > 16 ? -27.5 : 0);
     const eye = T.at('fissure', 0, y, z);
@@ -1266,17 +1244,17 @@ const FISSURE = {
   cards: [MORE(0, 2.8)],
 };
 
-// 18 · Hero shot and end card: at sunset on the terminator the courier grinds a crater lip, crate
-// on their back, and pops off straight out into the dark (never curling back into frame). MOON-RUNNER.
+// 18 · Hero shot and end card: sunset on the terminator, the courier grinds a crater lip and pops off straight into
+// the dark (never curling back into frame). MOON-RUNNER.
 const HERO = {
   name: 'hero',
   dur: 7.6,
   setup(T) {
-    T.music('menu', true, 2.2); // (rising back in from the Fissure's silence, not slamming in)
+    T.music('menu', true, 2.2); // rising from the Fissure's silence
     const g = T.g, pl = g.planet;
     const c = pl.craters[582];
     const rail = pl.rimRailsOf(c).find((r) => r.loop) || pl.rimRailsOf(c)[0];
-    // start where the lip runs most directly away from the sun, so the slide heads into the night
+    // start where the lip runs most directly away from the sun, so the slide heads into night
     let best = 0, bd = 1e9;
     for (let s = 0; s < rail.len; s += 4) {
       const a = railPoint(rail, s), b = railPoint(rail, s + 2);
@@ -1295,11 +1273,10 @@ const HERO = {
     if (t > 2.9 && !T.popped && T.g.grind.active) {
       T.popped = true;
       T.tap.add('ShiftLeft');
-      T.away = tangent(P.body.vel, P.pos.clone().normalize(), V()).normalize(); // the line they leave on
+      T.away = tangent(P.body.vel, P.pos.clone().normalize(), V()).normalize(); // the exit line
     }
     if (T.popped) {
-      // hold that line straight out into the night (no curling back round the crater into frame),
-      // and once they're a speck past the logo, they're gone
+      // hold the line into the night; once a speck past the logo, hide them
       T.hold = new Set(['Space', 'KeyW']);
       T.steer = T.away;
       if (t > 5.4 && P.pos.distanceTo(T.eye) > 45) T.hidePlayer = true;
@@ -1309,8 +1286,7 @@ const HERO = {
     const P = T.g.player;
     const up = P.pos.clone().normalize();
     const F = T.playerFrame();
-    // rides low alongside the grind, then holds as the courier pops off and sails away into the
-    // dusk, craning up for the logo
+    // low alongside the grind, then hold as they sail off, craning up for the logo
     let eye;
     if (t < 3.0 || !T.anchor) {
       eye = P.pos.clone().addScaledVector(F.fwd, -5.5).addScaledVector(F.right, 2.6).addScaledVector(up, 1.3);
@@ -1323,19 +1299,18 @@ const HERO = {
   cards: [{ at: 4.1, dur: 99, kind: 'end', html: LOGO }],
 };
 
-// 15b · Out collecting (montage): two quick beats, a glowing rock crystal and a wild moon mite, each
-// skated up to and scooped into the jar on the courier's back.
+// 15b · Collecting (montage): two beats, a glowing crystal and a wild moon mite, each scooped into the back jar.
 const SCOOP_BEAT = 1.8;
 const SCOOP = {
   name: 'scoop',
   dur: SCOOP_BEAT * 2,
   setup(T) {
-    T.music('casino'); // (the montage keeps one groove)
+    T.music('casino'); // the montage keeps one groove
     const g = T.g, A = g.alchemy;
     g.audio.mix.hum = HUM * 0.4;
     A.jar = [];
     A.refreshJarMesh();
-    g.player.setCargo(null); // (the jar rides where the crate does)
+    g.player.setCargo(null); // the jar rides where the crate does
     const S = dirFromAngles(0, 0);
     const sunny = (p) => { const th = Math.acos(p.clone().normalize().dot(S)) * 57.3; return th > 20 && th < 60; };
     T.scoop = {
@@ -1350,7 +1325,7 @@ const SCOOP = {
     const b = Math.min(1, Math.floor(t / SCOOP_BEAT)), bt = t - b * SCOOP_BEAT;
     const target = () => (b === 0 ? S.rock.pos.clone() : b === 1 ? (S.mite.model ? S.mite.model.root.position.clone() : g.planet.ground(S.mite.home, V())) : S.person.root.getWorldPosition(V()));
     if (b !== S.beat) {
-      // a hard cut to the next find: the courier rolls in from 6 m out, slow enough not to spook it
+      // hard cut to the next find: roll in from 6 m, slow enough not to spook it
       S.beat = b;
       S.scooped = false;
       T.chased = false;
@@ -1363,7 +1338,7 @@ const SCOOP = {
     const tp = target();
     const d = tp.distanceTo(P.pos);
     T.steer = tp.clone().sub(P.pos);
-    if (d > 2.6 && !S.scooped) { T.hold = new Set(['Space', 'KeyW']); T.keepSpeed(5.5, 0.3); } // (a mite bolts from anything over 6 m/s)
+    if (d > 2.6 && !S.scooped) { T.hold = new Set(['Space', 'KeyW']); T.keepSpeed(5.5, 0.3); } // mites bolt from anything over 6 m/s
     else { T.hold = new Set(); P.body.vel.multiplyScalar(0.85); }
     if (bt > 0.8 && !S.scooped) { S.scooped = true; T.tap.add('KeyG'); }
   },
@@ -1373,7 +1348,7 @@ const SCOOP = {
     const b = S.beat;
     const tp = b === 0 ? S.rock.pos.clone() : b === 1 ? (S.mite.model ? S.mite.model.root.position.clone() : P.pos.clone()) : S.person.root.getWorldPosition(V());
     const up = tp.clone().normalize();
-    // side on to the approach, framing the courier and the find together
+    // side-on, framing courier and find
     const mid = tp.clone().lerp(P.pos, 0.5);
     const eye = mid.clone().addScaledVector(S.side, 7.5).addScaledVector(up, 2.4);
     T.aboveGround(eye, 1.6);
@@ -1383,9 +1358,7 @@ const SCOOP = {
   cards: [MORE()],
 };
 
-// height of a world point in a location's frame
-
-// a pirate, already riding alongside: kind, offset (right, forward) from the runner's frame F
+// a pirate already alongside: kind, offset (right, forward) in the runner's frame F
 function pirate(T, F, kind, x, z, fireIn = 0.5) {
   const g = T.g;
   const p = F.pos.clone().addScaledVector(F.right, x).addScaledVector(F.fwd, z);
@@ -1397,30 +1370,28 @@ function pirate(T, F, kind, x, z, fireIn = 0.5) {
   return e;
 }
 
-// a vehicle gun run: the weapon in hand, and pirates standing in the line of fire ([side, ahead] m
-// from the start, along the run)
+// vehicle gun run: the weapon, and pirates in the line of fire ([side, ahead] m from the start)
 function gunRun(T, weapon, targets) {
   const g = T.g, F = T.V.F;
   g.player.weapon = weapon;
   g.player.fireCd = 0;
-  T.popMute = /PIRATES/; // (the targets' own "PIRATES!" shout would just clutter the run)
+  T.popMute = /PIRATES/; // their "PIRATES!" shout would clutter the run
   T.targets = targets.map(([x, z]) => pirate(T, F, 'skater', x, z, 99));
   for (const e of T.targets) {
-    e.pin = e.body.pos.clone(); // they stay put (a knocked one won't stagger into the road)
+    e.pin = e.body.pos.clone(); // stay put (no staggering into the road)
     e.hp = 30; // one good blast each
   }
 }
-// keep the vehicle at speed and the targets standing still, guns quiet, and the aim on the next
-// one standing (the game aims from its chase camera, behind and above the runner, through cam.look)
+// vehicle at speed, targets still and quiet, aim on the next one standing (the game aims from its chase camera
+// through cam.look)
 function holdRun(T, speed) {
   const g = T.g, b = T.V.v.e.body;
   if (b.vel.length() > speed) b.vel.setLength(speed);
   for (const e of T.targets) { if (e.dead) continue; e.body.vel.set(0, 0, 0); e.body.pos.copy(e.pin); e.fireCd = 99; e.ramCd = 99; }
   const next = T.targets.find((e) => !e.dead);
   if (!next) { T.steer = T.V.F.fwd; T.pitch = 0; return; }
-  // the shot leaves the muzzle (beside the runner) and the Scattergun's pellets inherit some of the
-  // vehicle's speed: aim so the pellets' actual path runs through the target, then express that as
-  // the look direction from the chase camera, which is what the game aims along
+  // shots leave the muzzle beside the runner and Scattergun pellets inherit some vehicle speed: aim the real path
+  // through the target, then express it as the chase camera's look direction (what the game aims along)
   const P = g.player, up = P.pos.clone().normalize();
   const muzzle = P.center.clone().addScaledVector(g.cam.right, 0.5).addScaledVector(up, 0.3);
   const u = next.center.clone().sub(muzzle).normalize();
@@ -1430,8 +1401,7 @@ function holdRun(T, speed) {
   T.steer = d.clone();
   T.pitch = Math.asin(Math.max(-1, Math.min(1, d.normalize().dot(up))));
 }
-// a fixed camera beside the run (ahead m along it, side m off it, up m high) that pans with the
-// vehicle as it goes by
+// fixed camera beside the run (ahead, side, up in m), panning with the vehicle
 function trackside(T, dt, ahead, side, up) {
   const F = T.V.F, e = T.V.v.e;
   const u = F.pos.clone().normalize();
@@ -1441,7 +1411,7 @@ function trackside(T, dt, ahead, side, up) {
   T.fov = 50;
 }
 
-// the crater whose lip the runner grinds (the first good one past the ILMB, toward Earth)
+// the grind crater (first good one past the ILMB, toward Earth)
 function rim(T) {
   if (!T._rim) T._rim = T.rimNear(T.at('ilmb', 136, 0, 778), 30, 45, 60);
   return T._rim;
@@ -1457,6 +1427,6 @@ function railPoint(r, s) {
 export { SHOTS };
 
 SHOTS.push(FISSURE, HERO);
-// running order tweak: the casino follows the Downs, then Dr. Zbornak's lab
+// running order: casino after the Downs, then scoop and Dr. Zbornak's lab
 const LAB = SHOTS.splice(SHOTS.findIndex((x) => x.name === 'lab'), 1)[0];
 SHOTS.splice(SHOTS.findIndex((x) => x.name === 'casino hall') + 1, 0, SCOOP, LAB);

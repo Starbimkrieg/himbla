@@ -4,21 +4,19 @@ import { ink, gradientMap } from './toon.js';
 import { mulberry32, createNoise3D } from './rng.js';
 import { patchRockMaterial } from './moonSkins.js';
 
-// Shaped rocks scattered over the Moon between the ordinary lumpy boulders: each has a feature
-// you can play with, and colliders that follow its shape.
-//   ramp    a weathered slab sloping up to a clean edge: a natural kicker
-//   arch    two legs and a lintel: skate through it (or over it)
-//   hoodoo  a tall eroded spire with a cap rock balanced on top
-//   snake   a long (35-50 m), gently winding ridge of steep rhombus section with a thin crest
-//           that follows the ground: land on the crest and you grind it (rails.js)
-// Built per terrain chunk (planet.buildBoulders), from the chunk's own seed, so they're always in
-// the same places.
+// Shaped rocks among the ordinary boulders, each with a playable feature and shape-following colliders.
+//   ramp    weathered slab sloping up to a clean edge: a natural kicker
+//   arch    two legs and a lintel: skate through (or over)
+//   hoodoo  tall eroded spire with a balanced cap rock
+//   snake   long (35-50 m) gently winding ridge, steep rhombus section, thin ground-following crest you
+//           can grind (rails.js)
+// Built per terrain chunk (planet.buildBoulders) from the chunk's seed, so placement is stable.
 
 const KINDS = ['ramp', 'ramp', 'arch', 'hoodoo', 'snake', 'snake'];
 let MATS = null;
 function mats() {
   if (MATS) return MATS;
-  const m = (c) => patchRockMaterial(new THREE.MeshToonMaterial({ color: c, gradientMap: gradientMap() })); // (moonSkins.js: grain and dust when ?moonskin=1)
+  const m = (c) => patchRockMaterial(new THREE.MeshToonMaterial({ color: c, gradientMap: gradientMap() })); // moonSkins.js: grain and dust with ?moonskin=1
   MATS = { grey: m(0x8d8898), basalt: m(0x6e6a7a), tan: m(0xa59886), pale: m(0xb8b2c4), dark: m(0x5f5a6c) };
   return MATS;
 }
@@ -29,8 +27,8 @@ const AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0), AZ = new
 
 // ---------------- geometry ----------------
 
-// Sweep a closed 2D profile through a list of stations. frame(i) gives { o, ax, ay } (origin and the
-// two axes the profile's (a, b) map onto) and prof(i) the profile there. Capped at both ends.
+// Sweep a closed 2D profile through n stations, capped at both ends. frame(i) gives { o, ax, ay } (origin and the
+// axes (a, b) map onto), prof(i) the profile there.
 function sweep(n, frame, prof) {
   const pos = [], idx = [];
   let m = 0;
@@ -54,7 +52,7 @@ function sweep(n, frame, prof) {
   return fixWinding(g);
 }
 
-// Make faces point outward (profiles can come in either winding).
+// Make faces point outward (profiles may come in either winding).
 function fixWinding(g) {
   g.computeBoundingBox();
   const c = g.boundingBox.getCenter(new THREE.Vector3());
@@ -70,10 +68,10 @@ function fixWinding(g) {
   return g;
 }
 
-// Rough it up: push each vertex along its normal by layered noise plus a little banding (strata
-// ledges), scaled by amp(v) (0 keeps a vertex exact). Returns flat-faceted geometry: chiselled rock.
+// Push each vertex along its normal by layered noise plus strata banding, scaled by amp(v) (0 keeps it exact).
+// Returns flat-faceted geometry.
 function roughen(geo, amp, seed, strata = 0.25) {
-  // positions only (uv / normal seams would split vertices and crack open when displaced)
+  // positions only (uv / normal seams would split vertices and crack when displaced)
   const bare = new THREE.BufferGeometry();
   bare.setAttribute('position', geo.attributes.position.clone());
   if (geo.index) bare.setIndex(geo.index.clone());
@@ -97,7 +95,7 @@ function roughen(geo, amp, seed, strata = 0.25) {
   return out;
 }
 
-// A few loose boulders (rubble) for the foot of a formation, already roughened. pts: [x, y, z, r]
+// Roughened rubble for a formation's foot. pts: [x, y, z, r]
 function rubble(pts, seed) {
   return pts.map(([x, y, z, r], i) => {
     const g = new THREE.IcosahedronGeometry(r, 1);
@@ -108,7 +106,7 @@ function rubble(pts, seed) {
 
 // ---------------- colliders ----------------
 
-// A collider box in the rock's local frame (centre lx,ly,lz, half sizes, optional pitch about x).
+// Collider box in the rock's local frame (centre lx,ly,lz, half sizes, optional pitch about x).
 function box(p, q, lx, ly, lz, hx, hy, hz, pitch = 0) {
   _q2.copy(q);
   if (pitch) _q2.multiply(_q.setFromAxisAngle(AX, pitch));
@@ -123,24 +121,23 @@ function cyl(p, q, lx, lz, y0, y1, r) {
 
 // ---------------- the rocks ----------------
 
-// Build one shaped rock (p = ground point, q = local frame): { mesh, cols, rail? } in world space.
+// One shaped rock (p = ground point, q = local frame): { mesh, cols, rail? } in world space.
 export function build(kind, rr, p, q, planet, dims = null) {
   const M = mats();
   const seed = rr() * 100;
   let geo, mat, cols = [], rail = null, worldGeo = false;
   if (kind === 'ramp') {
-    // a weathered slab: rough flanks, a broken lip, rubble at its feet; the riding middle stays smooth-ish
-    // (placed by its tail: p is the ground at the tail end, so you roll straight on; dims.drop is how
-    // far the ground falls away under the rest of it, which the front face reaches down to)
+    // rough flanks, broken lip, rubble; the riding middle stays smooth-ish. p is the ground at the tail so you roll
+    // straight on; dims.drop is how far the ground falls away ahead, which the front face reaches down to
     const { L, W, h, drop } = dims;
     const slope = (z) => h * (z / L + 0.5);
-    const tail = 4, under = Math.max(0.8 + drop, (h / L) * tail + 0.6); // the slope runs on back into the ground for a few metres
+    const tail = 4, under = Math.max(0.8 + drop, (h / L) * tail + 0.6); // slope runs a few metres back into the ground
     const prof = [[-L / 2 - tail, -under], [L / 2 + 0.4, -under], [L / 2 + 0.5, h * 0.45], [L / 2 + 0.15, slope(L / 2) - 0.1]];
     for (let k = 0; k <= 10; k++) { const z = L / 2 - (k / 10) * L; prof.push([z, slope(z)]); }
     prof.push([-L / 2 - tail, -(h / L) * tail]);
     const n = 11;
     geo = sweep(n, (i) => ({ o: _o.set(-W / 2 + (i / (n - 1)) * W, 0, 0), ax: AZ, ay: AY }), (i) => {
-      // shoulders fall away at the sides so it reads as a rock, not a block
+      // shoulders fall away so it reads as rock, not a block
       const t = Math.sin(Math.PI * (i / (n - 1)));
       const k = 0.55 + 0.45 * Math.pow(t, 0.45);
       return prof.map(([a, b]) => [a * (0.92 + 0.08 * t), b < 0 ? b : b * k]);
@@ -149,10 +146,10 @@ export function build(kind, rr, p, q, planet, dims = null) {
     geo = mergeGeometries([geo, ...rubble([[W * 0.45, 0.3 - drop * 0.5, L * 0.3, 1.2], [-W * 0.5, 0.2 - drop * 0.3, -L * 0.1, 1.5], [W * 0.15, 0.2 - drop, L / 2 + 1.6, 1.0], [-W * 0.3, 0.3 - drop, L / 2 + 1.2, 1.4]], seed)]);
     mat = rr() < 0.5 ? M.basalt : M.dark;
     const pitch = -Math.atan2(h, L), sl = Math.hypot(L, h) + tail * 1.02;
-    // the riding surface: a thin box whose top face is the slope, running on into the ground at the tail
+    // riding surface: a thin box topped by the slope, running into the ground at the tail
     const sa = Math.sin(-pitch), ca = Math.cos(-pitch), back = (tail * 1.02) / 2;
     cols.push(box(p, q, 0, h / 2 - 0.5 * ca - back * sa, 0.5 * sa - back * ca, W * 0.36, 0.5, sl / 2, pitch));
-    // the sheer front face, kept below the riding slope (its top used to poke up and act as a lip)
+    // sheer front face, kept below the riding slope so it doesn't form a lip
     cols.push(box(p, q, 0, (h - 0.7 - under) / 2, L / 2 - 0.1, W * 0.4, (h - 0.7 + under) / 2, 0.45));
   } else if (kind === 'arch') {
     const span = 7 + rr() * 5, H = 6 + rr() * 4, leg = 2.4 + rr() * 1.2, dep = 3 + rr() * 2, lt = 2 + rr() * 1.2;
@@ -174,8 +171,7 @@ export function build(kind, rr, p, q, planet, dims = null) {
     cols.push(cyl(p, q, 0, 0, H * 0.55, H - 0.2, r0 * 0.62));
     cols.push(cyl(p, q, r0 * 0.15, 0, H - 0.2, H + r0 * 0.8, r0 * 1.35));
   } else if (kind === 'snake') {
-    // a long ridge snaking gently over the ground (river-like bends, never doubling back), its
-    // crest a constant height above the terrain: the grind rail
+    // long ridge with gentle river-like bends (never doubling back), crest at constant height over the terrain: the grind rail
     const len = 35 + rr() * 15, H = 2.2 + rr() * 0.9, w = 1.3 + rr() * 0.3;
     const A = 2 + rr() * 2.5, kw = (Math.PI * 2) / (26 + rr() * 16), ph = rr() * 6.28;
     const right = AX.clone().applyQuaternion(q), fwd = AZ.clone().applyQuaternion(q);
@@ -190,8 +186,7 @@ export function build(kind, rr, p, q, planet, dims = null) {
     }
     const tang = (i) => base[Math.min(n - 1, i + 1)].clone().sub(base[Math.max(0, i - 1)]).normalize();
     const side = (i) => new THREE.Vector3().crossVectors(tang(i), ups[i]).normalize();
-    // the ends slope down to meet the ground over the last ~6 m: slide straight into a tip and
-    // you're on the rail
+    // ends slope down to the ground over ~6 m: ride into a tip and you're on the rail
     const taper = (i) => Math.min(1, Math.min(i, n - 1 - i) / 4);
     const crest = (i) => { const t = taper(i); return 0.12 + (H - 0.12) * t * t * (3 - 2 * t); };
     const prof = (i) => {
@@ -200,7 +195,7 @@ export function build(kind, rr, p, q, planet, dims = null) {
     };
     const railPts = base.map((b, i) => b.clone().addScaledVector(ups[i], crest(i)));
     geo = sweep(n, (i) => ({ o: base[i].clone().sub(p), ax: side(i), ay: ups[i] }), prof);
-    // rough flanks; the crest line (sloping tips included) stays exact: you ride it
+    // rough flanks; the crest line (tips included) stays exact for riding
     geo = roughen(geo, (v) => {
       _v.copy(v).add(p);
       for (const c of railPts) if (c.distanceToSquared(_v) < 0.5 * 0.5) return 0;
@@ -208,18 +203,17 @@ export function build(kind, rr, p, q, planet, dims = null) {
     }, seed, 0.12);
     worldGeo = true;
     mat = rr() < 0.5 ? M.grey : M.basalt;
-    // colliders: a box per segment around the body (below the crest), and the crest line as a rail
+    // colliders: a box per segment round the body (below the crest); the crest line is the rail
     for (let i = 0; i < n - 1; i++) {
-      // the sloping tips: a thin slab under the crest line itself, its top exactly on the slope, so
-      // they're solid (you can't run through them) but you roll straight up them onto the rail
+      // sloping tips: a slab topped exactly by the crest slope, solid but you roll straight up onto the rail
       if (taper(i) < 1 || taper(i + 1) < 1) {
         const a = railPts[i], b2 = railPts[i + 1];
         const t = b2.clone().sub(a), sl = t.length();
         t.normalize();
         const up0 = ups[i].clone().add(ups[i + 1]).normalize();
         const sd = new THREE.Vector3().crossVectors(t, up0).normalize();
-        const ay = new THREE.Vector3().crossVectors(sd, t).normalize(); // (square to the slope, upward)
-        // (solid right down to the ground: a thin slab let a fast rider slip under it and into the rock)
+        const ay = new THREE.Vector3().crossVectors(sd, t).normalize(); // square to the slope, upward
+        // solid down to the ground, or a fast rider slips under into the rock
         const k = 0.3 + 0.7 * Math.max(taper(i), taper(i + 1));
         const depth = Math.max(a.dot(up0), b2.dot(up0)) - Math.min(a.dot(up0), b2.dot(up0)) + H + 1;
         const c = a.clone().add(b2).multiplyScalar(0.5).addScaledVector(ay, -depth / 2);
@@ -235,7 +229,7 @@ export function build(kind, rr, p, q, planet, dims = null) {
       cols.push({ type: 'box', c, ax: sd, ay: new THREE.Vector3().crossVectors(t, sd).normalize(), az: t, hx: w * 1.2 + SKIN, hy: hh * 0.38 + 0.5, hz: sl / 2 + 0.05 });
     }
     rail = { pts: railPts };
-    for (const c of cols) c.rail = railPts; // (the rider on this crest doesn't collide with its own rock: rails.js)
+    for (const c of cols) c.rail = railPts; // a rider on this crest ignores its own rock (rails.js)
   }
   const mesh = new THREE.Mesh(geo, mat);
   mesh.userData.rockKind = kind;
@@ -247,10 +241,10 @@ export function build(kind, rr, p, q, planet, dims = null) {
   return { mesh, cols, rail };
 }
 const _o = new THREE.Vector3();
-const SKIN = 0.2; // m: a snake rock's colliders stand this far outside its flanks (which bulge to 1.2 x its half-width and are roughened)
+const SKIN = 0.2; // m: snake-rock colliders stand this far outside its flanks (bulged to 1.2 x half-width, roughened)
 
-// Shaped rocks for one terrain chunk. ok(p) says whether a spot is free (no settlement, plateau,
-// road or lake). More of them in rocky country (rock = 0..1 at the chunk centre).
+// Shaped rocks for one terrain chunk. ok(p): spot is free (no settlement, plateau, road or lake). More in rocky
+// country (rock = 0..1 at the chunk centre).
 export function shapedRocks(planet, ch, centreOf, ok, rock) {
   const rr = mulberry32((ch.f * 104729 + ch.cy * 1301 + ch.cx * 7) * 2246822519 ^ 0xb0b5);
   const n = (rr() < 0.42 ? 1 : 0) + (rr() < 0.12 ? 1 : 0) + Math.floor(rock * 2.5 + rr() * rock);
@@ -258,7 +252,7 @@ export function shapedRocks(planet, ch, centreOf, ok, rock) {
   const p = new THREE.Vector3(), up = new THREE.Vector3(), t = new THREE.Vector3(), q = new THREE.Quaternion();
   for (let tries = 0; tries < n * 6 && out.meshes.length < n; tries++) {
     centreOf(rr(), rr(), p);
-    p.multiplyScalar(planet.R); // (a unit direction: out to the surface, so metre offsets mean metres)
+    p.multiplyScalar(planet.R); // unit direction out to the surface, so offsets are in metres
     if (!ok(p)) continue;
     const kind = KINDS[Math.floor(rr() * KINDS.length)];
     up.copy(p).normalize();
@@ -267,7 +261,7 @@ export function shapedRocks(planet, ch, centreOf, ok, rock) {
     const m = new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(up, t).normalize(), up, t);
     q.setFromRotationMatrix(m);
     if (kind === 'snake') {
-      // it hugs the ground, so slopes are fine; just keep both ends clear too
+      // hugs the ground, so slopes are fine; keep both ends clear
       const e1 = p.clone().addScaledVector(t, 26), e2 = p.clone().addScaledVector(t, -26);
       if (!ok(e1) || !ok(e2)) continue;
       const r = build(kind, rr, p.clone().normalize().multiplyScalar(planet.surface(p)), q, planet);
@@ -275,15 +269,14 @@ export function shapedRocks(planet, ch, centreOf, ok, rock) {
       continue;
     }
     if (kind === 'ramp') {
-      // anchored at its tail (flush with the ground there, so you roll straight onto it); refuse
-      // spots where the ground climbs ahead of the tail (it would bury the slope)
+      // anchored flush at its tail; skip spots where the ground climbs ahead (it would bury the slope)
       const L = 12 + rr() * 9, W = 8 + rr() * 5, h = 3 + rr() * 2.5;
       const tailP = _v.set(0, 0, -L / 2).applyQuaternion(q).add(p).clone();
       const base = planet.surface(tailP) - 0.05;
       let lowest = base, highest = -Infinity;
       for (const [ox, oz] of [[0, 0], [0, L / 2], [W / 2, 0], [-W / 2, 0], [W / 2, L / 2], [-W / 2, L / 2], [0, -L / 4]]) {
         const hgt = planet.surface(_v.set(ox, 0, oz).applyQuaternion(q).add(p)) - base;
-        // the slope's own height there (it must stay above the ground)
+        // slope height there (must stay above the ground)
         const sh = h * (oz / L + 0.5);
         highest = Math.max(highest, hgt - sh * 0.6);
         lowest = Math.min(lowest, base + hgt);
@@ -295,7 +288,7 @@ export function shapedRocks(planet, ch, centreOf, ok, rock) {
       out.cols.push(...r.cols);
       continue;
     }
-    // only on fairly level ground (a slope would bury one side), sunk a little below its centre
+    // fairly level ground only (a slope buries one side), sunk a little
     let low = Infinity, high = -Infinity;
     for (const [ox, oz] of [[0, 0], [8, 0], [-8, 0], [0, 10], [0, -10], [7, 7], [-7, -7]]) {
       _v.set(ox, 0, oz).applyQuaternion(q).add(p);

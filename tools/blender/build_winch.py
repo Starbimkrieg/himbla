@@ -1,17 +1,17 @@
-# Hitch-Line Winch parts for Blender (4.2+ / 5.x): the grapple hook and a metre of steel cable, exported to
-# src/assets/winch.glb, and the tow-line marker for the HUD, rendered to src/assets/towmark.png.
+# Hitch-Line Winch parts for Blender (4.2+ / 5.x): grapple hook and a metre of steel cable, exported to src/assets/winch.glb,
+# and the HUD tow-line marker, rendered to src/assets/towmark.png.
 #
 # In Blender's Python console or via MCP:   exec(open(r"<repo>/tools/blender/build_winch.py").read())
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 build_winch.py
 #
 # Authored in three.js axes (see kit.py). Under the root `winch`:
-#   winch_hook    the grapple, its tip at the origin, biting toward -z; the eye the cable runs to is at +z (1.05 m out). The game
-#                 sets this pivot on the anchor and turns +z toward you. Slots: gold (claw and flukes), steel (shank, eye), dark (collar)
-#   winch_cable   one metre of cable along +z, its twist an exact two turns per metre, so copies butt end to end without a
-#                 seam. The game lays them along the line (an instance per metre, each stretched to fit its stretch of it):
-#                 `winch_strand` (the core and five strands, slot steel) and `winch_tracer` (the sixth, slot tracer)
-# The marker (towmark.png, 128 x 128, white on clear) is modelled flat as well - four corner brackets, a dashed ring and a
-# hook glyph - and rendered orthographically; the HUD tints it with a CSS mask (style.css #towmark).
+#   winch_hook    the grapple, tip at the origin biting toward -z; the cable eye is at +z (1.05 m out). The game sets this
+#                 pivot on the anchor and turns +z toward you. Slots: gold (claw, flukes), steel (shank, eye), dark (collar)
+#   winch_cable   one metre of cable along +z, twisted exactly two turns per metre so copies butt end to end seamlessly.
+#                 The game lays one instance per metre along the line, each stretched to fit:
+#                 `winch_strand` (core and five strands, slot steel) and `winch_tracer` (the sixth, slot tracer)
+# The marker (towmark.png, 128 x 128, white on clear) is modelled flat too (four corner brackets, a dashed ring, a hook
+# glyph) and rendered orthographically; the HUD tints it with a CSS mask (style.css #towmark).
 
 import bpy, math, os
 
@@ -55,7 +55,7 @@ def M(name, geo, slot, parent, ink=0.0):
 
 root = pivot("winch", (0, 0, 0), None)
 
-# ---- the grapple: a claw that bites (tip at the origin), three flukes swept back, a collar, the shank and the eye ----
+# ---- grapple: biting claw (tip at the origin), three swept-back flukes, collar, shank, eye ----
 hook = pivot("winch_hook", (0, 0, 0), root, role="hook", length=1.1)
 claw = [(0.0, 0.0), (0.05, 0.1), (0.14, 0.3), (0.2, 0.46), (0.21, 0.54), (0.15, 0.6), (0.1, 0.64)]
 M("claw", xf(lathe(claw, 10), r=(PI / 2, 0, 0)), "gold", hook, 0.03)
@@ -69,7 +69,7 @@ M("shank", beam((0, 0, 0.62), (0, 0, 0.95), 0.07, 8), "steel", hook, 0.02)
 M("eye", xf(torus(0.15, 0.045, 14, 6), (0, 0, 1.03), (0, 0, PI / 2)), "steel", hook, 0.02)
 M("thimble", xf(lathe([(0.0, 0.0), (0.09, 0.0), (0.1, 0.05), (0.09, 0.1), (0.0, 0.1)], 8), (0, 0, 0.9), (PI / 2, 0, 0)), "dark", hook, 0.0)
 
-# ---- a metre of cable: a straight core and six strands, two full turns round it ----
+# ---- a metre of cable: straight core and six strands, two full turns round it ----
 cable = pivot("winch_cable", (0, 0, 0), root, role="cable", length=1.0)
 TURNS, HELIX, SR, N = 2, 0.036, 0.027, 24
 
@@ -95,8 +95,8 @@ if os.environ.get("WINCH_BLEND"):
 
 
 # ---------------------------------------------------------------------------------------------------------------
-# the tow-line marker: flat parts in the XY plane (a 4 x 4 square), rendered straight down with an orthographic camera.
-# Nothing here is exported: the render is the asset.
+# tow-line marker: flat parts in the XY plane (a 4 x 4 square), rendered straight down by an ortho camera.
+# Nothing is exported: the render is the asset.
 
 MC = bpy.data.collections.get("MoonTowMark") or bpy.data.collections.new("MoonTowMark")
 if MC.name not in bpy.context.scene.collection.children:
@@ -137,7 +137,7 @@ def arc(r, a0, a1, w, n=8):
     return polys
 
 
-E, L, W = 1.85, 0.8, 0.2          # the corner brackets: how far out, how long an arm, how thick
+E, L, W = 1.85, 0.8, 0.2          # corner brackets: offset, arm length, thickness
 parts = []
 for sx in (-1, 1):
     for sy in (-1, 1):
@@ -145,11 +145,11 @@ for sx in (-1, 1):
         parts.append(bar((sx * (E - L), sy * E), (sx * E, sy * E), W))
 flat("brackets", parts)
 ring = []
-for k in range(12):                  # a dashed ring: twelve dashes
+for k in range(12):                  # dashed ring: twelve dashes
     a0 = 2 * PI * k / 12
     ring += arc(1.15, a0, a0 + 2 * PI / 12 * 0.55, 0.1, 4)
 flat("ring", ring)
-# the hook glyph in the middle: a stem with an eyelet on top and a J below
+# hook glyph in the middle: stem, eyelet on top, J below
 hk = [bar((0, 0.55), (0, -0.25), 0.16)] + arc(0.3, PI, 2 * PI + 0.2, 0.16, 12) + arc(0.18, 0, 2 * PI, 0.1, 12)
 hk = [[(x + 0, y - 0.0) for x, y in p] for p in hk[:1]] + [[(x, y - 0.25) for x, y in p] for p in hk[1:13]] + [[(x, y + 0.75) for x, y in p] for p in hk[13:]]
 flat("hook", hk)
@@ -163,7 +163,7 @@ cam.data.ortho_scale = 4.0
 cam.location = (0, 0, 5)
 cam.rotation_euler = (0, 0, 0)
 scn.camera = cam
-# (Cycles on the CPU with a flat white emission: Workbench needs a GPU context, which a headless box may not have)
+# (Cycles on CPU, flat white emission: Workbench needs a GPU context a headless box may lack)
 scn.render.engine = "CYCLES"
 scn.cycles.device = "CPU"
 scn.cycles.samples = 24
@@ -187,7 +187,7 @@ nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
 for o in MC.objects:
     o.data.materials.clear()
     o.data.materials.append(white)
-# render only the marker: hide the cable parts for this pass
+# render only the marker: hide everything else for this pass
 hidden = []
 for o in bpy.data.objects:
     if o.name != cam.name and MC.name not in [c.name for c in o.users_collection]:

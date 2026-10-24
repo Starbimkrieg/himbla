@@ -1,26 +1,25 @@
-# Casino props builder for Blender (4.2+ / 5.x): the Lucky Crater Casino's lamp post, fountain, bouncer, chandelier and signs,
+# Casino props builder for Blender (4.2+ / 5.x): Lucky Crater Casino lamp post, fountain, bouncer, chandelier and signs,
 # exported to src/assets/casino.glb.
 #
 # In Blender's Python console or via MCP:   exec(open(r"<repo>/tools/blender/build_casino.py").read())
 # or headless, with the bpy module:         MOONRUNNER_REPO=<repo> python3 build_casino.py
 #
-# Six roots, each authored in three.js axes (x right, y up, +z front) with its origin on the floor (the chandelier and the hung sign at
-# their centre), and each with ONE material per mesh named after a slot (see CASINO_TOON / CASINO_GLOW in src/models.js):
-#   lamp_post       the boulevard's lamp post, 8.6 m: a footing with a small lamp post of its own beside the base (toward +z, the road side), a
-#                   fluted pole with gold bands, two hovering rings (each over a gold lift coil) and a solid glowing lantern on top. The `accent`
-#                   slot (the rings, the lantern, the small lamp) is the colour the game picks for the post; the fountain's ring of posts is the
-#                   same model scaled down
-#   fountain        the plaza's basin, pedestal, bowl, stem with eight spigots and the spinning centrepiece: the chip, or the Meridian
-#                   Exchange's dollar sign (`spin` pivots `chip` and `dollar`, extra `kind`; the game builds one). The water is in pivots the game gives
-#                   shader materials: `water` (extra `tier` basin or bowl: a disc the game ripples), `curtain` (the sheet falling from the bowl's
-#                   lip into the basin) and `streams` (the eight arcs from the spigots into the bowl); the `chip` pivot spins about y
-#   bouncer         the door's bouncer: a buff alien in a tux, 2.5 m, arms crossed, no helmet. Pivot `head` (at the neck) turns to watch people
-#   chandelier      one of the hall's hanging chandeliers: a gold rose and chain from the ceiling (3.3 m above its centre), and a `spin` pivot
-#                   with the crystal tiers and candle lamps that the game turns slowly
-#   welcome_sign    the sign hung inside the door, 9.6 m by 2.5 m, on gold chains to the ceiling 6.4 m above its centre; pivot `face` (extras
-#                   w, h) is where the game puts the neon text plane
-#   wall_sign       the blackjack sign's frame for a wall (7.4 m by 1.95 m, its back flat on the wall), with the same `face` pivot
-# Every mesh carries an `ink` property (its outline shell's thickness in metres; 0: none), like the other models.
+# Six roots in three.js axes (x right, y up, +z front), origin on the floor (chandelier and hung sign: at their centre), ONE
+# material per mesh named after a slot (CASINO_TOON / CASINO_GLOW in src/models.js):
+#   lamp_post       boulevard lamp post, 8.6 m: footing with a small lamp post beside it (+z, road side), fluted pole with gold
+#                   bands, two hovering rings over gold lift coils, glowing lantern. `accent` slot (rings, lantern, small lamp) is
+#                   the game's chosen colour; the fountain's ring of posts is this model scaled down
+#   fountain        plaza basin, pedestal, bowl, stem with eight spigots, spinning centrepiece: chip or Meridian dollar sign
+#                   (`spin` pivots `chip` and `dollar`, extra `kind`; the game builds one). Water pivots get shader materials:
+#                   `water` (extra `tier` basin or bowl: a rippled disc), `curtain` (sheet from the bowl lip into the basin),
+#                   `streams` (eight arcs from the spigots into the bowl); `chip` spins about y
+#   bouncer         door bouncer: buff alien in a tux, 2.5 m, arms crossed, no helmet. Pivot `head` (at the neck) turns to watch
+#   chandelier      hall chandelier: gold rose and chain to the ceiling (3.3 m above its centre), `spin` pivot with crystal tiers
+#                   and candle lamps the game turns slowly
+#   welcome_sign    sign inside the door, 9.6 x 2.5 m, gold chains to the ceiling 6.4 m above its centre; pivot `face` (extras
+#                   w, h) holds the neon text plane
+#   wall_sign       blackjack sign frame for a wall (7.4 x 1.95 m, back flat on the wall), same `face` pivot
+# Every mesh has an `ink` property (outline thickness in metres; 0: none).
 
 import bpy, math, os
 
@@ -121,7 +120,7 @@ def spin_pts(R, y, n, phase=0.0):
 # =====================================================================================================================
 def lamp_post():
     root = pivot("lamp_post", (0, 0, 0), None)
-    # a round footing for both posts, flaring up into the collar of the tall one, and six bolts
+    # round footing for both posts, flaring into the tall one's collar, six bolts
     A = Acc("lampFooting", "base", root, 0.03)
     A.add(lathe([(0, 0), (1.0, 0), (1.0, 0.12), (0.92, 0.2), (0.62, 0.22), (0.5, 0.34), (0.4, 0.5)], 16))
     A.flush()
@@ -129,20 +128,20 @@ def lamp_post():
     for x, y, z in spin_pts(0.8, 0.22, 6, 0.3):
         A.cylc(x, y + 0.03, z, 0.05, 0.06, 6)
     A.flush()
-    # the pole: a long taper with a flare under the lantern, three gold bands
+    # pole: long taper, flare under the lantern, three gold bands
     A = Acc("lampPole", "post", root, 0.035)
     A.add(lathe([(0.4, 0.5), (0.3, 0.75), (0.26, 1.1), (0.23, 2.5), (0.2, 4.5), (0.18, 6.3), (0.22, 6.62), (0.3, 6.78), (0.1, 6.78)], 12))
     A.flush()
     A = Acc("lampBands", "gold", root, 0.0)
     for y, R in ((0.8, 0.3), (3.7, 0.215), (6.4, 0.2)):
         ring_around(A, R, 0.045, y, 14, 5)
-    # the lantern cup, the orb's gold belt and a finial
+    # lantern cup, orb's gold belt, finial
     A.add(lathe([(0.2, 6.7), (0.5, 6.95), (0.66, 7.2), (0.58, 7.22), (0.4, 7.06), (0.22, 6.92)], 14))
     ring_around(A, 0.69, 0.035, 7.78, 18, 5)
     A.cylc(0, 8.68, 0, 0.1, 0.5, 8, "y", rt=0.0)
     A.ball(0, 8.98, 0, 0.07, 6, 4)
     A.flush()
-    # the two hovering rings, each over a gold lift coil on the pole, and the solid lantern
+    # two hovering rings (over gold lift coils) and the solid lantern
     A = Acc("lampGlow", "accent", root, 0.0)
     for y in (2.4, 4.8):
         ring_around(A, 0.55, 0.1, y, 20, 6)
@@ -151,10 +150,10 @@ def lamp_post():
     A = Acc("lampCoils", "gold", root, 0.0)
     for y in (1.95, 4.35):
         ring_around(A, 0.24, 0.05, y, 12, 5)
-        for x, yy, z in spin_pts(0.3, y + 0.15, 3, 0.0):      # three little pins that hold the ring up
+        for x, yy, z in spin_pts(0.3, y + 0.15, 3, 0.0):      # three pins holding the ring
             A.tube((x * 0.55, yy - 0.12, z * 0.55), (x, yy + 0.05, z), 0.012, 4)
     A.flush()
-    # the small lamp post at the base, on the road side (+z): the same design, 1.5 m
+    # small lamp post at the base, road side (+z): same design, 1.5 m
     mz = 0.78
     A = Acc("miniPole", "post", root, 0.02)
     A.add(lathe([(0.16, 0.2), (0.09, 0.3), (0.06, 1.0), (0.08, 1.06), (0.03, 1.06)], 8), (0, 0, mz))
@@ -175,7 +174,7 @@ def lamp_post():
 # =====================================================================================================================
 def fountain():
     root = pivot("fountain", (0, 0, 0), None)
-    # the basin: a stepped foot, a flared wall with a flat gold-lipped top, studs and pilasters round the outside, and a floor
+    # basin: stepped foot, flared wall with flat gold-lipped top, outer studs and pilasters, floor
     A = Acc("basin", "cream", root, 0.07)
     A.add(lathe([(9.7, 0.0), (9.7, 0.16), (9.32, 0.2), (9.3, 0.5), (9.05, 0.92), (9.15, 0.98), (9.15, 1.04), (8.55, 1.04), (8.55, 0.9), (8.5, 0.3), (8.5, 0.0), (9.7, 0.0)], 48))
     A.flush()
@@ -193,7 +192,7 @@ def fountain():
         a = 2 * PI * (i + 0.5) / 16
         A.ball(math.sin(a) * 9.4, 0.7, math.cos(a) * 9.4, 0.1, 5, 3)
     A.flush()
-    # the pedestal and its bowl (an ogee column over a stepped plinth, a saucer with a gold rim)
+    # pedestal (ogee column on a stepped plinth) and bowl (gold-rimmed saucer)
     A = Acc("pedestal", "cream", root, 0.05)
     A.add(lathe([(0, 0.3), (2.5, 0.3), (2.5, 0.6), (2.1, 0.75), (1.7, 1.0), (1.4, 1.5), (1.3, 2.0), (1.3, 3.0), (1.5, 3.4), (1.9, 3.7), (2.6, 3.9), (0, 3.9)], 20))
     A.flush()
@@ -208,7 +207,7 @@ def fountain():
         a = 2 * PI * (i + 0.5) / 8
         A.ball(math.sin(a) * 3.55, 4.2, math.cos(a) * 3.55, 0.17, 6, 4, s=(1, 1.3, 1))
     A.flush()
-    # the stem with a gold collar, eight spigots near the top (below the chip) and the cradle the chip turns in
+    # stem with gold collar, eight spigots below the chip, and the chip's cradle
     A = Acc("stem", "cream", root, 0.04)
     A.add(lathe([(0, 4.4), (0.9, 4.4), (0.75, 4.75), (0.55, 5.1), (0.5, 5.6), (0.58, 6.0), (0.72, 6.2), (0, 6.2)], 16))
     A.flush()
@@ -218,11 +217,10 @@ def fountain():
     for i in range(8):
         a = 2 * PI * i / 8
         s, c = math.sin(a), math.cos(a)
-        A.path([(s * 0.45, 5.78, c * 0.45), (s * 0.85, 5.73, c * 0.85), (s * 0.98, 5.71, c * 0.98)], [0.08, 0.08, 0.125], 8)   # (a nozzle with a flared mouth)
+        A.path([(s * 0.45, 5.78, c * 0.45), (s * 0.85, 5.73, c * 0.85), (s * 0.98, 5.71, c * 0.98)], [0.08, 0.08, 0.125], 8)   # flared nozzle
     A.flush()
-    # the centrepiece turns in the cradle: the casino's chip, or the Meridian Exchange's dollar sign (one `spin` pivot each, extra `kind`;
-    # the game builds the one it wants)
-    # the chip: a pink disc standing on edge, cream inlays and rim notches, a gold ring on each face
+    # centrepiece in the cradle: casino chip or Meridian dollar sign (a `spin` pivot each, extra `kind`; the game builds one)
+    # chip: pink disc on edge, cream inlays and rim notches, a gold ring each face
     chip = pivot("chip", (0, 7.6, 0), root, role="spin", speed=0.7, kind="chip")
     A = Acc("chipBody", "chip", chip, 0.05)
     A.cylc(0, 0, 0, 1.5, 0.4, 28, "z")
@@ -238,15 +236,15 @@ def fountain():
         A.add(torus_arc(1.2, 0.04, 28, 5), (0, 0, zz), (PI / 2, 0, 0))
         A.add(torus_arc(0.82, 0.035, 22, 5), (0, 0, zz), (PI / 2, 0, 0))
     A.flush()
-    # the dollar sign: a glowing S (the `accent` slot, the caller's colour) standing on edge, a gold bar through it, 4 m tall
+    # dollar sign: glowing S on edge (`accent` slot, caller's colour), gold bar through it, 4 m tall
     dollar = pivot("dollar", (0, 8.3, 0), root, role="spin", speed=0.7, kind="dollar")
     A = Acc("dollarS", "accent", dollar, 0.03)
     R = 0.8
     pts = []
-    for k in range(25):                       # the top bowl: from the tail at the right, over the top, down to the middle
+    for k in range(25):                       # top bowl: right tail, over the top, to the middle
         a = math.radians(-30 + 300 * k / 24)
         pts.append((math.cos(a) * R, R + math.sin(a) * R, 0))
-    for k in range(1, 25):                    # the bottom bowl: from the middle, round the right, under, to the tail at the left
+    for k in range(1, 25):                    # bottom bowl: middle, round the right, under, to the left tail
         a = math.radians(90 - 300 * k / 24)
         pts.append((math.cos(a) * R, -R + math.sin(a) * R, 0))
     A.path(pts, 0.22, 10)
@@ -258,7 +256,7 @@ def fountain():
     A.ball(0, 2.2, 0, 0.14, 8, 6)
     A.ball(0, -2.2, 0, 0.14, 8, 6)
     A.flush()
-    # the water: discs for the two tiers (the game ripples them), the sheet falling from the bowl's lip, and the jets from the spigots
+    # water: tier discs (rippled by the game), sheet from the bowl lip, spigot jets
     w1 = pivot("water_basin", (0, 0.72, 0), root, role="water", tier="basin")
     A = Acc("waterBasin", "water", w1, 0.0)
     A.add(lathe([(0, 0), (8.5, 0)], 48))
@@ -272,7 +270,7 @@ def fountain():
     prof = [(3.76, 4.6), (3.84, 4.0), (3.92, 3.0), (4.0, 2.0), (4.05, 1.2), (4.07, 0.74)]
     g = lathe(prof, 40)
     A.geos.append(g)
-    A.geos.append((g[0], [tuple(reversed(f)) for f in g[1]]))     # (both faces)
+    A.geos.append((g[0], [tuple(reversed(f)) for f in g[1]]))     # both faces
     A.flush()
     st = pivot("streams", (0, 0, 0), root, role="streams")
     A = Acc("streamArcs", "stream", st, 0.0)
@@ -304,15 +302,15 @@ def bouncer():
         A.cylc(s * 0.24, 0.7, 0.0, 0.2, 1.1, 12, "y", rt=0.25)
     A.rb(0, 1.28, 0, 0.5, 0.18, 0.3, 0.3, nu=16)
     A.flush()
-    # the jacket: a tapering torso (waist, chest, a broad shoulder line), lapels, a cummerbund and a straining pair of sleeves
+    # jacket: tapering torso (waist, chest, broad shoulders), lapels, cummerbund, straining sleeves
     A = Acc("jacket", "suit", root, 0.035)
     A.rb(0, 1.52, 0.0, 0.46, 0.3, 0.29, 0.3, nu=16)            # waist and ribs
     A.rb(0, 1.93, 0.02, 0.7, 0.34, 0.36, 0.3, nu=18)           # chest and shoulders
     A.rb(0, 2.14, -0.04, 0.42, 0.11, 0.26, 0.3)                # traps
     for s in (-1, 1):
         A.ball(s * 0.74, 2.0, 0.0, 0.3, 12, 8, s=(1, 0.95, 1))     # deltoid
-        A.ball(s * 0.84, 1.66, 0.04, 0.27, 12, 8, s=(1, 1.3, 1))   # bicep bulging through the sleeve
-        A.cylc(s * 0.8, 1.42, 0.2, 0.21, 0.3, 10, "y", rt=0.24, rot=(-0.5, 0, s * 0.15))   # the sleeve's end at the elbow
+        A.ball(s * 0.84, 1.66, 0.04, 0.27, 12, 8, s=(1, 1.3, 1))   # bulging bicep
+        A.cylc(s * 0.8, 1.42, 0.2, 0.21, 0.3, 10, "y", rt=0.24, rot=(-0.5, 0, s * 0.15))   # sleeve end at the elbow
     A.flush()
     A = Acc("lapels", "suit2", root, 0.0)
     for s in (-1, 1):
@@ -333,7 +331,7 @@ def bouncer():
         A.ball(0.0, 1.8 - k * 0.12, 0.385, 0.02, 5, 3)
     A.boxc(0.3, 1.88, 0.38, 0.1, 0.03, 0.01)                  # a pin on the lapel
     A.flush()
-    # the arms crossed over the chest: bare alien forearms and fists, a cuff at each elbow
+    # arms crossed: bare alien forearms and fists, a cuff at each elbow
     A = Acc("forearms", "skin", root, 0.03)
     A.path([(0.7, 1.4, 0.3), (0.3, 1.52, 0.5), (-0.16, 1.62, 0.52)], [0.21, 0.2, 0.17], 8)
     A.path([(-0.7, 1.38, 0.3), (-0.3, 1.46, 0.44), (0.18, 1.52, 0.42)], [0.21, 0.2, 0.17], 8)
@@ -357,7 +355,7 @@ def bouncer():
     A = Acc("pocketSquare", "tie", root, 0.0)
     A.boxc(-0.42, 1.62, 0.375, 0.13, 0.07, 0.02, rot=(0, 0, 0.2))
     A.flush()
-    # the neck and the head (a pivot at the neck, turned by the game): a tall bald dome, huge black almond eyes, a heavy jaw with two tusks, little antennae
+    # neck and head (pivot at the neck, turned by the game): tall bald dome, big almond eyes, heavy tusked jaw, small antennae
     A = Acc("neck", "skin", root, 0.025)
     A.cylc(0, 2.2, 0.0, 0.22, 0.2, 10, "y", rt=0.19)
     A.flush()
@@ -385,11 +383,11 @@ def bouncer():
         A.boxc(s * 0.035, 0.13, 0.352, 0.03, 0.04, 0.02, rot=(0, 0, s * 0.2))                       # nostrils
     A.boxc(0, 0.04, 0.358, 0.27, 0.022, 0.02)                                                         # the mouth
     A.boxc(0.4, 0.26, -0.03, 0.05, 0.12, 0.09)                                                        # the earpiece
-    A.path([(0.41, 0.22, -0.05), (0.34, 0.0, -0.1), (0.22, -0.12, -0.08)], 0.012, 4)                  # and its coiled wire down into the collar
+    A.path([(0.41, 0.22, -0.05), (0.34, 0.0, -0.1), (0.22, -0.12, -0.08)], 0.012, 4)                  # its coiled wire into the collar
     A.flush()
     A = Acc("eyesGlint", "eye", head, 0.0)
     for s in (-1, 1):
-        A.ball(s * 0.19, 0.305, 0.385, 0.05, 6, 4, s=(0.5, 1.0, 0.4))                               # a slit iris glowing in each
+        A.ball(s * 0.19, 0.305, 0.385, 0.05, 6, 4, s=(0.5, 1.0, 0.4))                               # glowing slit iris
     A.flush()
     A = Acc("tusks", "tusk", head, 0.0)
     for s in (-1, 1):
@@ -402,14 +400,14 @@ def bouncer():
 # =====================================================================================================================
 def chandelier():
     root = pivot("chandelier", (0, 0, 0), None)
-    # the ceiling rose and the chain (the fixture hangs 3.3 m below the ceiling)
+    # ceiling rose and chain (fixture hangs 3.3 m below the ceiling)
     A = Acc("rose", "gold", root, 0.02)
     A.add(lathe([(0.8, 3.3), (0.8, 3.22), (0.45, 3.16), (0.14, 3.0), (0.14, 2.9), (0.0, 2.9)], 14))
     A.cylc(0, 1.75, 0, 0.035, 2.3, 6, "y")
     for k in range(7):
         ring_around(A, 0.06, 0.025, 2.9 - k * 0.32, 8, 4)
     A.flush()
-    # what turns: the hub, two tiers of gold ring with arms and candle lamps, crystal drops and swags
+    # spinning part: hub, two gold-ring tiers with arms and candle lamps, crystal drops and swags
     spin = pivot("spin", (0, 0, 0), root, role="spin", speed=0.3)
     A = Acc("chHub", "gold", spin, 0.025)
     A.add(lathe([(0.0, 0.62), (0.12, 0.6), (0.3, 0.45), (0.36, 0.25), (0.24, 0.08), (0.0, 0.0)], 12))
@@ -439,11 +437,11 @@ def chandelier():
     A.flush()
     for name, slot, parity in (("chCrystalA", "crystalA", 0), ("chCrystalB", "crystalB", 1)):
         A = Acc(name, slot, spin, 0.0)
-        for i in range(8):                                   # the long drops hung from the lower ring
+        for i in range(8):                                   # long drops from the lower ring
             if i % 2 == parity:
                 a = 2 * PI * i / 8 + PI / 8
                 A.ball(math.sin(a) * 1.75, -0.78, math.cos(a) * 1.75, 1.0, 4, 2, s=(0.11, 0.32, 0.11))
-        for i in range(6):                                   # the short ones on the upper ring
+        for i in range(6):                                   # short ones on the upper ring
             if i % 2 == parity:
                 a = 2 * PI * i / 6 + PI / 6 + PI / 6
                 A.ball(math.sin(a) * 0.95, -0.17, math.cos(a) * 0.95, 1.0, 4, 2, s=(0.07, 0.19, 0.07))
@@ -471,7 +469,7 @@ def chandelier():
 def sign_frame(root, W, H, depth, name):
     """A plum board with a gold frame, a neon line inside it, corner medallions and a row of bulbs along the top and bottom."""
     A = Acc(name + "Board", "plum", root, 0.04)
-    A.boxc(0, 0, 0, W - 0.04, H - 0.04, depth)      # (a hair inside the frame, so no face of the board shares a plane with the frame's)
+    A.boxc(0, 0, 0, W - 0.04, H - 0.04, depth)      # a hair inside the frame so no faces are coplanar
     A.flush()
     A = Acc(name + "Frame", "gold", root, 0.03)
     t = 0.18
@@ -501,7 +499,7 @@ def sign_frame(root, W, H, depth, name):
 def welcome_sign():
     root = pivot("welcome_sign", (0, 0, 0), None)
     sign_frame(root, 9.6, 2.5, 0.2, "wel")
-    # three finials on top and the chains up to the ceiling plates (6.4 m above)
+    # three finials, chains up to the ceiling plates (6.4 m above)
     A = Acc("welTop", "gold", root, 0.0)
     for x in (-3.0, 0.0, 3.0):
         A.cylc(x, 1.43, 0.0, 0.1, 0.34, 6, "y", rt=0.0)
@@ -519,7 +517,7 @@ def welcome_sign():
 def wall_sign():
     root = pivot("wall_sign", (0, 0, 0), None)
     sign_frame(root, 7.4, 1.95, 0.16, "wall")
-    # a cornice with downlights over it, and four brackets into the wall behind
+    # cornice with downlights, four brackets into the wall behind
     A = Acc("wallCornice", "gold", root, 0.03)
     A.boxc(0, 1.0, 0.04, 7.7, 0.12, 0.34)
     for x in (-2.6, 0.0, 2.6):

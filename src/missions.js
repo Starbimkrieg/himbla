@@ -26,7 +26,7 @@ const LINES = {
     (c, t) => `Get this ${c} into ${t} under their guns. The fence pays double for the nerve.`,
   ],
 };
-// illicit cargo for smuggling runs into the bright-side towns
+// illicit cargo for smuggling runs into bright-side towns
 const SMUGGLE = [
   { name: 'Untaxed Antimatter', fragile: 0.8, hot: 3, color: 0x7dff3a },
   { name: 'Stolen Rail Coils', fragile: 0.5, hot: 3, color: 0xc77dff },
@@ -58,8 +58,7 @@ export class Missions {
     const L = this.locs;
     let pickup = board, to, cargo, clearance = null, smuggle = false, payload = null;
     if (faction === 'vostok' || faction === 'daedalus') {
-      // military logistics between this faction's own installations (clearance granted)
-      // (bases the Moon Council's ceasefire stood down count too; they just don't need clearance)
+      // military logistics between the faction's own bases (clearance granted; ceasefire bases need none)
       const own = (l) => (l.restricted || l.ceasefire) && l.faction === faction;
       const bases = L.filter((l) => own(l) && l !== board);
       const base = pick(bases.length ? bases : L.filter(own)) || pick(this.civilianDestinations(board.id));
@@ -68,8 +67,7 @@ export class Missions {
       else if (board.restricted || Math.random() < 0.65) { to = base; clearance = base.restricted ? base.id : null; }
       else { pickup = base; to = board; clearance = base.restricted ? base.id : null; }
     } else if (faction === 'rustmoon') {
-      // mostly runs between the clans' own dens; now and then a smuggling run into a bright-side
-      // town, under its guns (each one counts towards the Rustmoon Hold black market)
+      // mostly den-to-den; sometimes a smuggling run into a defended bright-side town (feeds the Rustmoon Hold black market)
       const dens = L.filter((l) => l.type === 'pirate' && l !== board && !l.camp);
       const towns = L.filter((l) => !l.restricted && l.type !== 'pirate' && !l.poi && l.defense && !l.dark && l !== board);
       if (Math.random() < 0.32 && towns.length) { smuggle = true; cargo = pick(SMUGGLE); to = pick(towns); payload = this.pickPayload(); }
@@ -85,14 +83,14 @@ export class Missions {
     const d2 = arcDist(to.dir, pickup.dir);
     const dist = d1 + d2;
     const dark = !!(to.dark || pickup.dark);
-    // tight clocks: you need to ski well, not just survive
+    // tight clocks: you have to skate well
     const time = Math.ceil((dist / 36 + 20 + (dark ? 15 : 0)) / 5) * 5;
     let reward = 45 + dist * 0.05 + cargo.hot * 30 + cargo.fragile * 25;
     if (dark) reward *= 1.4; // hazard pay for the dark side
     if (clearance) reward += 60;
-    if (faction === 'rustmoon') reward = (reward + 40) * 1.5; // the clans' hazard pay
-    if (smuggle) reward *= 1.7; // ...and a smuggler's premium on top
-    if (payload) reward *= 1.2; // (a payload run is a hotter one)
+    if (faction === 'rustmoon') reward = (reward + 40) * 1.5; // clan hazard pay
+    if (smuggle) reward *= 1.7; // smuggler's premium
+    if (payload) reward *= 1.2; // payload runs are hotter
     reward *= this.game.rep.payMultiplier(faction) || 1;
     reward *= 1 + (this.game.upgrades.uplink || 0) * 0.1; // Meridian Market Uplink
     reward = Math.round(reward / 5) * 5;
@@ -101,15 +99,15 @@ export class Missions {
     return { id: this.nextId++, board, faction, client, cargo, pickup, to, dist, time, reward, clearance, text: payload ? `${text} <b>(Rides with: ${payload.name}.)</b>` : text, dark, smuggle, payload };
   }
 
-  // Now and then a smuggling run carries something for the Rustmoon Hold black market. Each item
-  // rides on one run at a time, and once it's delivered it's on sale for good (out of the pool).
+  // Sometimes a smuggling run carries a Rustmoon Hold black-market item. One run per item at a time; once delivered
+  // it's on sale for good (out of the pool).
   pickPayload() {
     if (Math.random() > 0.45) return null;
     const have = new Set(this.game.stats.blackMarket || []);
     const live = new Set();
     for (const list of Object.values(this.offers)) for (const o of list) if (o.payload) live.add(o.payload.key);
     for (const a of [this.active, this.extra && this.extra.a]) if (a && a.payload) live.add(a.payload.key);
-    for (const k of this.batch || []) live.add(k); // (and the board being dealt right now)
+    for (const k of this.batch || []) live.add(k); // and the board being dealt now
     const pool = (SHOPS.rustmoon || []).filter((u) => u.unlock && u.unlock.smuggle && !have.has(u.key) && !live.has(u.key));
     const u = pick(pool);
     if (!u) return null;
@@ -125,7 +123,7 @@ export class Missions {
       const rep = this.game.rep;
       // factions that hate you won't hire you
       const list = jobs.filter((f) => !rep.hostile(f)).map((f) => this.makeOffer(loc, f));
-      // well-liked runners get priority contracts: hotter cargo, bigger pay
+      // well-liked runners get a priority contract: hotter cargo, bigger pay
       const fav = jobs.find((f) => rep.get(f) >= 10);
       if (fav) {
         const o = this.makeOffer(loc, fav);
@@ -140,9 +138,8 @@ export class Missions {
     return this.offers[loc.id];
   }
 
-  // Kepler Twin Cradle: one more contract can ride on top of the first (its own pickup, drop-off,
-  // clock and condition). Pirates go for the bottom crate; when the first job ends either way, the
-  // second one moves down and carries on as the main contract.
+  // Kepler Twin Cradle: a second contract rides on top (own pickup, drop-off, clock, condition). Pirates go for the
+  // bottom crate; when the first job ends either way, the second becomes the main contract.
   canTake() { return !this.active || (!!this.game.upgrades.twin && !this.extra); }
 
   accept(offer) {
@@ -176,7 +173,7 @@ export class Missions {
     return true;
   }
 
-  // the crates on your back: the main contract's at the bottom, the second stacked on it
+  // crates on your back: main contract at the bottom, the second on top
   refreshCargo() {
     const x = this.extra;
     const bottom = this.active && this.cargoState === 'held' ? this.active.cargo.color : null;
@@ -196,7 +193,7 @@ export class Missions {
     return !!((this.active && this.active.clearance === locId) || (this.extra && this.extra.a.clearance === locId));
   }
 
-  // the second contract's waypoint (shown alongside the first)
+  // the second contract's waypoint
   objective2() {
     const x = this.extra;
     if (!x) return null;
@@ -238,7 +235,7 @@ export class Missions {
     const g = this.game;
     this.timer -= dt;
     if (this.timer <= 0 && !this.late) {
-      // missed the clock: the job still pays half when you finish it
+      // missed the clock: half pay on delivery
       this.late = true;
       g.hud.alert('OUT OF TIME — HALF PAY ON DELIVERY', '#ff9f1c', 3);
     }
@@ -311,7 +308,7 @@ export class Missions {
     this.fail(`Pirates fenced your cargo at ${lair ? lair.name : 'a pirate den'}.`);
   }
 
-  // credits the style pool is worth right now (capped at the contract's base reward unless raw)
+  // credits the style pool is worth (capped at the base reward unless raw)
   styleValue(capped = true) {
     const v = Math.round(this.stylePool * 0.6);
     return capped && this.active ? Math.min(v, this.active.reward) : v;
@@ -323,7 +320,7 @@ export class Missions {
     this.game.save();
   }
 
-  // the second contract delivered: it pays like any other (the style pool rides with the first)
+  // second contract delivered: pays normally (the style pool goes with the first)
   completeExtra() {
     const x = this.extra;
     this.extra = null;
@@ -345,8 +342,7 @@ export class Missions {
     const base = a.reward;
     const lateMult = late ? 0.5 : 1;
     const timeBonus = late ? 0 : Math.round(base * 0.3 * Math.max(0, timer / a.time));
-    // style pays half what it used to and can at most double the contract (₵400 job → ₵800 tops);
-    // the package's condition then scales the whole total
+    // style can at most double the contract (₵400 job → ₵800 tops); condition scales the total
     const style = Math.min(styleRaw, base);
     const condition = 0.5 + 0.5 * integrity;
     const total = Math.round((base + timeBonus + style) * condition * lateMult);
@@ -366,20 +362,20 @@ export class Missions {
     }
     g.audio.cash();
     g.hud.delivered({ a, integ, timeBonus, style, styleCapped: styleRaw > base, condition, late, total, integrity, faction: FACTIONS[a.faction].name, repGain });
-    // the contract's clearance ends with it: don't let the base you're standing in open up on you
+    // clearance ends with the contract: grace so the base you're in doesn't open fire
     if (a.clearance) { const L = this.game.locations.find((l) => l.id === a.clearance); if (L) g.enemies.grantGrace(L); }
   }
 
-  // quiet: the caller has its own message for it (an emergency recall lists everything it failed in one panel)
+  // quiet: the caller shows its own message (an emergency recall lists all failures in one panel)
   fail(reason, quiet = false) {
     const g = this.game;
     if (!quiet) { g.hud.failed(reason); g.audio.hurt(); }
     this.clear();
   }
 
-  // everything on your back is lost (you went down, an emergency recall)
+  // lose everything on your back (you went down, emergency recall)
   failAll(reason, quiet = false) {
-    this.extra = null; // (first, so clear() doesn't promote it to the main contract)
+    this.extra = null; // first, so clear() doesn't promote it
     if (this.active) this.fail(reason, quiet);
   }
 
