@@ -393,6 +393,7 @@ src/
     outposts.glb     Relay Mast and Watchtower (pilot, ?outpostGlb; spec in docs/outpost-glb.md)
 tools/
   optimize-glb.mjs         compresses src/assets models (npm run optimize:glb)
+  icons/faction_icons.py   faction emblem proposals as SVG (docs/icon-proposals/; `python3 tools/icons/faction_icons.py`)
   viewer.html              dev model viewer (/tools/viewer.html?m=<model>; options at the top of the file)
   casino-layouts.mjs       casino plan study and spacing check (docs/casino-layouts.md)
   casino-forecourt.mjs     forecourt plans and Valet Court check (docs/casino-forecourt.md)
