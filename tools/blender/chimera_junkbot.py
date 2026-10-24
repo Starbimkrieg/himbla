@@ -25,7 +25,7 @@ def junk_legs(root, rng):
     hip = 0.48
     fused(root.name + "_deck", soft(0.3, 0.08, 0.5, (0, 0.45, 0), e=0.3, n=20), "junkbot", root, 0.016, 400, remesh=False)
     chassis = fused(root.name + "_chassis", soft(0.42, 0.2, 0.6, (0, 0.34, 0), e=0.2, n=24), "junkbot", root, 0.02, 900, remesh=False,
-                    cuts=[box(0.006, 0.12, 0.004, (x, 0.34, 0.3)) for x in (-0.1, 0.1)] + [ell(0.01, 0.01, 0.01, (sx * 0.2, 0.34 + dy, dz), n=8) for sx in (-1, 1) for dy in (-0.05, 0.05) for dz in (-0.2, 0.0, 0.2)])
+                    cuts=[(box(0.008, 0.12, 0.012, (x, 0.34, 0.3)), "dark") for x in (-0.1, 0.1)] + [(ell(0.011, 0.011, 0.011, (sx * 0.2, 0.34 + dy, dz), n=8), "dark") for sx in (-1, 1) for dy in (-0.05, 0.05) for dz in (-0.2, 0.0, 0.2)])
     F.main(chassis, faces=("z", "-z"), crystals=1, mud=1, low=0.3)
     for sx in (-1, 1):
         name = f"{root.name}_tread{'L' if sx < 0 else 'R'}"
@@ -45,9 +45,10 @@ def junk_legs(root, rng):
 
 def junk_body(root, rng):
     F = Fit(rng)
-    cuts = [ring(0.075, 0.008, (0, 0.27, 0.21), (math.pi / 2, 0, 0), seg=40)]                       # (the hatch's seam)
-    cuts += [box(0.16, 0.012, 0.04, (0.0, 0.1 + 0.024 * k, 0.21)) for k in range(4)]                # (a vent grille under it)
-    cuts += [ell(0.07, 0.05, 0.03, (0.18, 0.4, 0.18), n=16)]                                        # (a dent)
+    # (the cuts are coloured inside, so they read: the hatch's seam, a vent grille under it dark; a dent down to bare steel)
+    cuts = [(ring(0.075, 0.009, (0, 0.27, 0.21), (math.pi / 2, 0, 0), seg=40), "dark")]
+    cuts += [(box(0.16, 0.012, 0.04, (0.0, 0.1 + 0.024 * k, 0.21)), "dark") for k in range(4)]
+    cuts += [(ell(0.07, 0.05, 0.03, (0.18, 0.4, 0.18), n=16), "steel")]
     torso = fused(root.name + "_torso", soft(0.5, 0.48, 0.42, (0, 0.24, 0), e=0.18, n=28), "junkbot", root, 0.02, 1600, cuts=cuts, remesh=False)
     fused(root.name + "_skirt", ell(0.14, 0.08, 0.16, (0, 0.0, 0)), "junkbot", root, 0.0, 300)
     f1 = pivot(f"{root.name}_form1", (0, 0, 0), root, role="form", form=1)                        # (one neck, or two forked from the shoulders)
@@ -85,9 +86,9 @@ def junk_body(root, rng):
 def junk_head(root, rng):
     F = Fit(rng)
     crt = fused(root.name + "_crt", soft(0.34, 0.27, 0.26, (0, 0.17, 0.0), e=0.22, n=28), "junkbot", root, 0.018, 1100, remesh=False,
-                cuts=[soft(0.27, 0.2, 0.06, (0, 0.17, 0.14), e=0.25, n=24)])                       # (the screen's well)
+                cuts=[(soft(0.27, 0.2, 0.06, (0, 0.17, 0.14), e=0.25, n=24), "dark")])             # (the screen's well, dark round the glass)
     fused(root.name + "_tube", soft(0.24, 0.2, 0.14, (0, 0.17, -0.14), e=0.3, n=20), "junkbot", root, 0.014, 500, remesh=False,
-          cuts=[box(0.008, 0.06, 0.02, (0.07 + 0.016 * k, 0.17, -0.21)) for k in range(4)])      # (the tube's housing, vents in it)
+          cuts=[(box(0.008, 0.06, 0.02, (0.07 + 0.016 * k, 0.17, -0.21)), "dark") for k in range(4)])   # (the tube's housing, vents in it)
     fused(root.name + "_stalk", cyl(0.05, 0.06, 0.12, (0, -0.01, -0.05), seg=20), "dark", root, 0.01, 200, remesh=False)
     screen = plain(root.name + "_screen", soft(0.25, 0.18, 0.02, (0, 0.17, 0.112), e=0.25), "screen", root, 0.0)
     px = [box(0.026, 0.026, 0.006, (sx * 0.055, 0.2, 0.124)) for sx in (-1, 1)] + [box(0.022, 0.012, 0.006, (x, 0.12 + (0.012 if abs(x) > 0.03 else 0), 0.124)) for x in (-0.044, -0.022, 0.0, 0.022, 0.044)]

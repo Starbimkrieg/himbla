@@ -1637,7 +1637,7 @@ function bakeShip(root, { near = false } = {}) {
           geo.applyMatrix4(rel);
           if (!slots.has(slot)) slots.set(slot, []);
           slots.get(slot).push(geo);
-          const t = c.userData.ink || 0;
+          const t = c.userData.ink || c.parent.userData.ink || 0;     // (a mesh of two materials loads as a group of two: its ink is the group's)
           if (t > 0) inks.push(inkShellGeo(geo, t));
           visit(c);
         } else if (isPivot(c)) kids.push(bake(c, inv));

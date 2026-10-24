@@ -137,7 +137,7 @@ function assemble(genes, kit, suffix) {
   inner.updateMatrixWorld(true);
   bleed(C);
   veins(C);
-  if (C.mods.has('void')) voidAura(C);
+  if (C.mods.has('void')) voidAura(C, 0.8 * (genes.size ?? 1.1) * CHIMERA_DRAWN);      // (the aura's push: deeper than the creature is thick)
   const k = (genes.size ?? 1.1) * CHIMERA_DRAWN;
   inner.scale.setScalar(k);
   root.updateMatrixWorld(true);
@@ -340,23 +340,45 @@ function devices(C, legs, body, heads) {
 }
 
 // void: the whole creature darkens toward violet, wrapped in a shadowy aura, with motes of void drifting round it
-function voidAura(C) {
+function voidAura(C, push) {
   for (const { mesh } of C.hides) {
     const col = mesh.geometry.attributes.color;
     if (!col) continue;
     for (let i = 0; i < col.count; i++) { _c.fromBufferAttribute(col, i).lerp(VOID_TINT, 0.35); col.setXYZ(i, _c.r, _c.g, _c.b); }
     col.needsUpdate = true;
   }
-  const aura = new THREE.MeshBasicMaterial({ color: 0x7b2ff7, transparent: true, opacity: 0.22, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending });
-  aura.userData.own = true;
+  // One aura, not a pile of shells. Every solid piece gets two shells (6 and 13 cm out: a bright glow and a dim outer one) and they blend
+  // by MAX (a pixel takes the brightest of the shells over it and the scene behind, never their sum), so where they overlap they read as one
+  // even glow. Each shell is drawn pushed back along the view (same place on screen, `push` metres deeper), so it only shows where nothing
+  // of the creature is in front of it: round the silhouette, never laid over the creature itself. Tiny pieces (bolts, bulbs) get none.
+  const auraMat = (color) => {
+    const m = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide, depthWrite: false, transparent: true,
+      blending: THREE.CustomBlending, blendEquation: THREE.MaxEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor });
+    m.userData.own = true;
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.push = { value: push };
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float push;').replace('#include <project_vertex>', `#include <project_vertex>
+        mvPosition.xyz *= (length(mvPosition.xyz) + push) / max(length(mvPosition.xyz), 1e-3);
+        gl_Position = projectionMatrix * mvPosition;`);
+    };
+    m.customProgramCacheKey = () => 'chimeraAura';
+    return m;
+  };
+  const layers = [[0.06, auraMat(0x7a3be8)], [0.13, auraMat(0x3c1a7c)]];
   const solid = [];
-  C.inner.traverse((o) => { if (o.isMesh && !o.userData.isInk && !o.material.isMeshBasicMaterial && !o.material.transparent) solid.push(o); });
+  C.inner.traverse((o) => {
+    if (!o.isMesh || o.userData.isInk || o.material.isMeshBasicMaterial || o.material.transparent) return;
+    if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+    if (o.geometry.boundingSphere.radius > 0.05) solid.push(o);
+  });
   for (const o of solid) {
-    const s = new THREE.Mesh(inkShell(o.geometry, 0.07), aura);       // (a shell 7 cm out round every solid piece)
-    s.geometry.userData.own = true;
-    s.renderOrder = 3;
-    s.position.copy(o.position); s.quaternion.copy(o.quaternion); s.scale.copy(o.scale);
-    o.parent.add(s);
+    for (const [d, mat] of layers) {
+      const s = new THREE.Mesh(inkShell(o.geometry, d), mat);
+      s.geometry.userData.own = true;
+      s.renderOrder = 3;
+      s.position.copy(o.position); s.quaternion.copy(o.quaternion); s.scale.copy(o.scale);
+      o.parent.add(s);
+    }
   }
   for (let i = 0; i < 5; i++) {
     const g = place(C, 'ch_mote', C.inner);

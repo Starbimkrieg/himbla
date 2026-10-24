@@ -34,7 +34,7 @@ The player's orange is never drawn.
 - **One surface per part.** Each colour region is built from overlapping shapes, voxel-remeshed into one watertight surface, smoothed and
   reduced to its triangle budget: limbs grow out of bodies with no seam and one outline goes round the whole part.
 - **Details cut in, not laid on.** Sockets, recesses, grooves, the zip, panel lines, tread and the bolt and rivet holes are Boolean cuts;
-  lamps, eyes and glass sit inside them. The outline is drawn from the surface before the cuts (an `inkonly` copy), and it is the
+  lamps, eyes and glass sit inside them. A cut can colour its own faces (a vent or a rivet hole dark, a dent bare steel) so it reads. The outline is drawn from the surface before the cuts (an `inkonly` copy), and it is the
   game's camera-scaled outline (`inkMatNear`): no thicker on screen up close than at the follow camera's distance.
 - **Joints built in.** A body's base is a skirt that wraps down over the legs and a head ends in a stub that goes into the body; the hides
   shade into each other's colours across the joint.
@@ -56,7 +56,8 @@ The player's orange is never drawn.
   seed pods), with arcs crackling on the flanks; **turbo** (a jet pack; three jet vents; an engine with its stacks; a smouldering hollow
   log); **radio** on the head (a field radio; a third feeler; an aerial and a dish; a leaf dish); **lens** on the eye (a jeweller's
   eyepiece; a big lensed headlamp; a glass eye bud). With two heads, the lens goes on the first and the radio on the second.
-- **Void** darkens the whole creature into a shadowy violet aura with shards drifting round it.
+- **Void** darkens the whole creature and wraps it in one violet aura (two shells round every piece, a bright one and a dim outer one,
+  blended by MAX so they merge, and drawn only outside the silhouette), with shards of void drifting round it.
 - **The Triple Crown**: gold laurels on the head.
 
 ## The files

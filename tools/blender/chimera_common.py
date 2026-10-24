@@ -163,19 +163,25 @@ def fused(name, geo, slot, parent, ink, budget, cuts=(), smooth=5, vox=VOX, reme
         k.data.validate()
         o["ink"] = 0
         o["ink_far"] = ink                                   # (the far LOD drops the copy and outlines the part itself)
-    for g in cuts:
-        cut(o, g)
+    for g in cuts:                                         # (a cut is a shape, or (shape, fill slot))
+        if len(g) == 2 and isinstance(g[1], str):
+            cut(o, g[0], g[1])
+        else:
+            cut(o, g)
     decimate(o, budget)
     o.data.validate()
     smooth_shade(o, 50 if remesh else 38)
     return o
 
 
-def cut(o, geo):
-    """a Boolean difference: geo (in o's frame) taken out of o"""
-    c = mesh(o.name + "_cutter", geo, o.data.materials[0].name, o.parent, 0, sharp=0)
+def cut(o, geo, fill=None):
+    """a Boolean difference: geo (in o's frame) taken out of o; fill: a slot for the faces the cut makes (the inside of a groove, a vent,
+    a rivet hole: a darker colour so the detail reads), else they take o's"""
+    c = mesh(o.name + "_cutter", geo, fill or o.data.materials[0].name, o.parent, 0, sharp=0)
     b = o.modifiers.new("cut", "BOOLEAN")
     b.operation, b.object, b.solver = "DIFFERENCE", c, "EXACT"
+    if fill:
+        b.material_mode = "TRANSFER"
     apply_mods(o)
     me = c.data
     bpy.data.objects.remove(c)
@@ -324,7 +330,7 @@ def plate(g, name, target, c, nn, pw, ph, slot, family, spin=0.0, th=None, rivet
     o.parent = g
     if rivets and family in ("car", "human") and pw > 0.07 and ph > 0.05:     # rivet holes, cut into the plate's face
         for (rx, ry) in ((-0.36, -0.36), (0.36, -0.36), (-0.36, 0.36), (0.36, 0.36)):
-            cut(o, ell(0.008, 0.008, 0.008, tuple(c + u * (rx * pw) + v * (ry * ph) + nn * 0.03), n=8))
+            cut(o, ell(0.008, 0.008, 0.008, tuple(c + u * (rx * pw) + v * (ry * ph) + nn * 0.03), n=8), "dark")
     elif rivets and family == "mite":                               # a ridge groove down the middle of the chitin
         q = c + nn * 0.03
         cut(o, ell_between(tuple(q - v * ph * 0.42), tuple(q + v * ph * 0.42), 0.006, 0.012, n=8))
