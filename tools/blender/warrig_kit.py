@@ -24,15 +24,16 @@ SLOT_COLORS = {
     "foil": (0.8, 0.82, 0.86), "bone": (0.91, 0.88, 0.78), "red": (0.84, 0.15, 0.24), "tank": (0.78, 0.84, 0.92),
     "lamp": (1.0, 0.96, 0.66), "led": (0.91, 0.96, 1.0), "plasma": (0.35, 0.85, 1.0), "ion": (0.6, 0.9, 1.0),
     "laser": (1.0, 0.16, 0.29), "beacon": (1.0, 0.16, 0.29), "underglow": (0.48, 0.18, 0.97),
+    "beam1": (1.0, 0.16, 0.29), "beam2": (1.0, 0.16, 0.29), "beam3": (1.0, 0.16, 0.29),
 }
 # the game's colours (hex) for the preview renders; body / stripe / lens are the Rustmoon livery, body as sun-faded paint
 HEX = {
     "body": 0x655682, "stripe": 0x7dff3a, "lens": 0x7dff3a, "dark": 0x2a2540, "steel": 0x55607a, "metal": 0x8a87a0,
     "tire": 0x1d1a29, "bleach": 0xc9c0b0, "primer": 0x6b6f78, "copper": 0xc8783e, "mli": 0xd9b25a, "foil": 0xcfd3dc,
     "bone": 0xe8e0c8, "red": 0xd7263d, "tank": 0xc6d6ea, "lamp": 0xfff6a8, "led": 0xe8f4ff, "plasma": 0x5ad8ff,
-    "ion": 0x9be7ff, "laser": 0xff2a4a, "beacon": 0xff2a4a, "underglow": 0x7b2ff7,
+    "ion": 0x9be7ff, "laser": 0xff2a4a, "beacon": 0xff2a4a, "underglow": 0x7b2ff7, "beam1": 0x7a1422, "beam2": 0x4a0c16, "beam3": 0x26060b,
 }
-GLOW_SLOTS = {"lens": 2.5, "lamp": 6.0, "led": 6.0, "plasma": 5.0, "ion": 7.0, "laser": 8.0, "beacon": 8.0, "underglow": 4.0}
+GLOW_SLOTS = {"lens": 2.5, "lamp": 6.0, "led": 6.0, "plasma": 5.0, "ion": 7.0, "laser": 8.0, "beacon": 8.0, "underglow": 4.0, "beam1": 3.0, "beam2": 3.0, "beam3": 3.0}
 
 
 def V(p):
@@ -408,12 +409,17 @@ def ledbar(acc, parent, c, n, cell=0.12, rot=(0, 0, 0), h=0.08):
 
 
 def laser_sight(acc, parent, c, fwd=(0, 0, 1), length=6.0, ink=0.01):
-    """IR target-lock emitter (stolen military kit) and its beam (the game can scale or hide `laser` meshes)"""
+    """IR target-lock emitter (stolen military kit) and its beam: three segments in slots beam1..beam3, each fainter (the
+    game draws them additive and see-through, without depth, so the edge ink leaves them alone)"""
     acc.add(frame_xf(bx((0, 0, 0), (0.05, 0.05, 0.12)), c, fwd), "dark", parent, ink)
     acc.add(frame_xf(cyl((0, 0, 0.13), 0.03, 0.04, 8, rot=(PI / 2, 0, 0)), c, fwd), "laser", parent, 0)
     keep = TAG[0]
     part(keep + "/laser")   # the beam passes through things by nature: clash_check leaves it out
-    acc.add(frame_xf(bx((0, 0, 0.15 + length / 2), (0.008, 0.008, length / 2)), c, fwd), "laser", parent, 0)
+    z = 0.15
+    for k, f in enumerate((0.25, 0.35, 0.4)):
+        ln = length * f
+        acc.add(frame_xf(bx((0, 0, z + ln / 2), (0.012, 0.012, ln / 2)), c, fwd), f"beam{k + 1}", parent, 0)
+        z += ln
     part(keep)
 
 

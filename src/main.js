@@ -215,7 +215,7 @@ class Game {
     this.spawnFacing = tangent(hub.pos.clone().sub(this.spawnPoint), this.spawnPoint.clone().normalize()).normalize();
     this.cam = {
       fwd: this.spawnFacing.clone(), right: new THREE.Vector3(), look: new THREE.Vector3(), up: this.spawnPoint.clone().normalize(),
-      pitch: -0.1, position: new THREE.Vector3(), dist: 8, shake: 0, fov: 72,
+      pitch: -0.1, position: new THREE.Vector3(), dist: 8, lift: 0, shake: 0, fov: 72,
     };
     this.player = new Player(this, this.spawnPoint);
     this.player.heading.copy(this.spawnFacing);
@@ -1624,9 +1624,11 @@ class Game {
     const sp = P.speed;
     const sv = this.settings ? this.settings.v : null; // settings
     const scoped = !!P.scoped;
-    const targetDist = scoped ? 0.2 : P.seat && P.seat.camDist ? P.seat.camDist : (7.5 + Math.min(7, sp * 0.06)) * (sv ? sv.camDist : 1); // settings
+    const vcam = P.vehicle && P.vehicle.def.cam; // a big vehicle's own follow camera: { lift (m higher), dist (m back) }
+    const targetDist = scoped ? 0.2 : P.seat && P.seat.camDist ? P.seat.camDist : ((vcam ? vcam.dist : 7.5) + Math.min(7, sp * 0.06)) * (sv ? sv.camDist : 1); // settings
     c.dist += (targetDist - c.dist) * Math.min(1, dt * (scoped ? 14 : 3));
-    const target = focus.clone().addScaledVector(up, 2.3);
+    c.lift += ((vcam ? vcam.lift : 0) - c.lift) * Math.min(1, dt * 3); // eases up on boarding, back down on leaving
+    const target = focus.clone().addScaledVector(up, 2.3 + c.lift);
     // past ~30° up the camera stops swinging lower and just tilts, so it doesn't bury itself in the ground
     const pp = Math.min(c.pitch, 0.55);
     const place = scoped || pp === c.pitch ? c.look : _v2.copy(c.fwd).multiplyScalar(Math.cos(pp)).addScaledVector(up, Math.sin(pp));

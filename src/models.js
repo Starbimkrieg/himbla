@@ -1808,15 +1808,18 @@ export const RIG_SCALE = 1.35;
 const RIG_TOON = { dark: 0x2a2540, steel: 0x55607a, metal: 0x8a87a0, tire: 0x1d1a29, bleach: 0xc9c0b0, primer: 0x6b6f78, copper: 0xc8783e, mli: 0xd9b25a, foil: 0xcfd3dc, bone: 0xe8e0c8, red: 0xd7263d, tank: 0xc6d6ea, flag: 0x1a1a1a };
 const RIG_GLOW = { lamp: 0xfff6a8, led: 0xe8f4ff, plasma: 0x5ad8ff, ion: 0x9be7ff, laser: 0xff2a4a, beacon: 0xff2a4a };
 const RIG_FADE = new THREE.Color(0x6b6f78); // paint left in the sun goes toward the primer under it
+// the gun's laser: three segments, each fainter, added onto the scene without depth (so the edge ink never outlines it)
+const RIG_BEAM = { beam1: 0.38, beam2: 0.2, beam3: 0.09 };
+const beamMat = (opacity) => new THREE.MeshBasicMaterial({ color: 0xff2a4a, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
 export function makeWarRig({ color = 0x7b2ff7, trim = 0x7dff3a } = {}) {
   const B = SHIP_PARTS.warrig;
   const matFor = perSlot((slot) => (slot === 'body' ? toon(new THREE.Color(color).lerp(RIG_FADE, 0.7).getHex()) : slot === 'stripe' ? toon(trim)
-    : slot === 'lens' ? glow(trim) : slot === 'underglow' ? glow(color) : RIG_GLOW[slot] !== undefined ? glow(RIG_GLOW[slot])
+    : slot === 'lens' ? glow(trim) : slot === 'underglow' ? glow(color) : RIG_BEAM[slot] !== undefined ? beamMat(RIG_BEAM[slot]) : RIG_GLOW[slot] !== undefined ? glow(RIG_GLOW[slot])
       : toon(RIG_TOON[slot] ?? 0xff00ff, slot === 'flag' ? { side: THREE.DoubleSide } : undefined)));
   const out = { wheels: [] };
   const root = buildPivots(B, {
     matFor,
-    shadow: (slot) => RIG_GLOW[slot] === undefined && slot !== 'lens' && slot !== 'underglow',
+    shadow: (slot) => RIG_GLOW[slot] === undefined && RIG_BEAM[slot] === undefined && slot !== 'lens' && slot !== 'underglow',
     onPivot(node, g) {
       const role = node.role;
       if (role === 'wheel') out.wheels.push(g);

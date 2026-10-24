@@ -415,7 +415,7 @@ for dx in (-0.05, 0.05):
     BA.add(cyl((-0.31 + dx, -0.02, -0.05), 0.245, 0.02, 14, rot=(0, 0, PI / 2)), "metal", BR, 0)
 for sx in (-1, 1):
     BA.add(tube([(sx * 0.1, 0.0, -0.36), (sx * 0.14, -0.04, -0.46), (sx * 0.14, -0.2, -0.46)], [0.03] * 3, 6), "dark", BR, 0.008)
-laser_sight(BA, BR, (0.21, 0.1, 0.3), (0, 0, 1), 5.0)
+laser_sight(BA, BR, (0.21, 0.1, 0.3), (0, 0, 1), 45.0)
 pivot(P + "muzzle", (0, 0, 1.62), BR, role="muzzle")
 pivot(P + "crew", (0, 0.08, -0.38), T, role="crew", pose="stand")
 
