@@ -28,69 +28,76 @@ rendered by `tools/blender/proposals/preview_warrig.py` at the game's 1.35 scale
 `warrig_b.glb`) for any viewer, e.g. `tools/viewer.html`. The gunner in the renders is the game's courier in the Rustmoon
 pirate colours, hung on the rig's `crew` point and posed by hand.
 
-## A: FURNACE (long-nose 4x4, the reactor in the hood)
+## A: FURNACE (a big-rig head on monster-truck legs, the reactor in the hood)
 
 ![A: hero, rear, side, close](a_sheet.jpg)
 
+Laid out like a conventional truck tractor: a long hood with a grille, the cab behind it, heat stacks behind the cab and a
+short rear deck, over two axles 4.9 m apart (6.6 m in the game).
+
 - **Running gear:** two solid axles on trailing links, each corner hung from one long coilover inside its own hoop (two
-  posts, a top bar and a brace on an outrigger from the frame), so the shocks stand clear beside the body. Bump stops
-  under the rails. Balloon tyres 2.8 m across in the game with **thick rubber lugs**: a chevron block on the crown and a
-  block wrapping each shoulder, by turns from either side, and chewed up: some torn off to a stub, some half gone, some
-  worn low. Beadlock hubs (a clamp ring of bolts, a cap with lug nuts); spiked hubs up front, for ramming.
-- **The fusion bay:** the hood is open. A stolen tokamak sits in it on a cradle: a ring of ion-blue plasma inside eight
-  copper field coils round a central solenoid, under a roll cage. Three open injector valves (red hand wheels) between the
-  coils spit blue sparks into the ring. Copper cooling coils run to radiator fin stacks on both cheeks; two glowing plasma
-  conduits run under the ring into the cab.
-- **Cockpit:** a tall bunker set off to the left. The driver's two mismatched slits sit high in the glacis, sunk in heavy
-  frames behind crossbar cages, and look out over the reactor cage. Angle iron on the corners, ribs on the back wall, a
-  green LED strip along the brow.
-- **The door** is on the left: an armour leaf in a heavy frame, three hinges, a lever latch, its own caged slit, a grab
-  handle, two steps under it, a wing mirror on the pillar.
-- **The utility shelf** is on the right: a pipe rack bolted to the bunker with three decks, two strapped coolant tanks
-  piped into the bay, a toolbox, a coiled hose, spare canisters, an extinguisher, a louvred vent box, the target-lock pod
-  and a small searchlight on top, and **a full-height ladder** on its back end from below the frame to grab rails over the
-  roof edge.
-- **Gun:** a ring mount on the roof, a **standing gunner** behind a drum-fed **five-barrel rotary** (two turns of the
-  cluster is the burst), a notched salvage-plate shield bolted to two arms with a slot to look through, an IR laser sight.
-- **Lights:** a brow rack with a long and a short LED bar, a big caged searchlight on the left pillar, a small one on the
-  shelf, three mismatched pod lamps on the bull bar.
-- **Front:** a ram of bleached plate with punched vents, a winch with its hook, ramming teeth; RCS quads on the frame ends.
-- **Back:** two He-3 tanks under frayed MLI blankets with silver patches, a relay dish on a mast, three antenna needles on
-  the left sideboard, the flag on the back corner, a rear bumper with two ramming spikes, RCS quads on the frame ends.
+  posts and a top bar on outriggers from the frame), so the shocks stand clear beside the body; bump stops under the rails.
+  Arched fenders over all four wheels (the front pair painted). Balloon tyres 2.8 m across in the game, **modelled whole**:
+  the carcass and its tread are one mesh with one outline, each lug swept as one piece from just past the centre line over
+  the shoulder and down the sidewall, raked into a chevron, with deep grooves between. Dished beadlock hubs; spiked front
+  hubs, for ramming.
+- **The hood:** truck-shaped (louvred sides with a green LED strip low down, a rounded nose, a grille of nine bars), open
+  in the middle over a stolen tokamak under two guard bars: a ring of ion-blue plasma inside eight copper field coils on a
+  cradle, the solenoid poking up through the bars, three injector valves (red hand wheels, each braced to a coil) spitting
+  blue sparks into the ring, copper cooling coils along the bay into the louvres, two plasma conduits under the ring into
+  the cab.
+- **Front:** a plow of raked blades with ramming teeth on a bumper beam, a bull bar with two mismatched pod lamps,
+  mismatched headlamps on stalks off the front fenders, RCS quads on the frame ends.
+- **Cab:** armoured. The windscreen is plated: the driver's two slits in the left half, caged, the right half plated over
+  round one caged porthole; the slits look out over the reactor's guard bars. A visor bar of LEDs over the windscreen, a
+  big searchlight on the left pillar, mirrors on both sides, a green LED strip along the brow, corner irons, ribs on the
+  back.
+- **The door** is on the left: a painted armour leaf in a heavy frame, hinges, a lever latch, a caged slit, a grab
+  handle, over a step box with two treads.
+- **The right side:** a coolant tank on the frame like a truck's fuel tank (piped into the bay), a utility rack on the cab
+  wall (canisters, a toolbox, a hose, an extinguisher, a small searchlight on top) and a full-height ladder from below
+  the frame to grab rails over the roof.
+- **Heat stacks:** two behind the cab, at different heights, with perforated heat shields; they dump the reactor's coolant
+  heat. Their tops are bent outward under the gun's sweep.
+- **Gun:** a ring mount on the cab roof, a **standing gunner** behind a drum-fed **five-barrel rotary** (two turns of
+  the cluster is the burst), a notched salvage-plate shield bolted to two arms with a slot to look through, an IR laser
+  sight.
+- **Rear deck:** two He-3 tanks under frayed MLI blankets with silver patches, a relay dish on a mast, three antenna
+  needles on the left sideboard, the flag on the back-left corner (nothing behind it, so the game's waving cloth streams
+  back; the renders use that cloth, ported from `makeWaveFlag`, at 24 m/s), a rear bumper with two ramming spikes, RCS
+  quads on the frame ends.
+- **Colour:** primer, sun-bleached plate and bare metal; only the door and the front fenders are painted, in sun-faded
+  faction violet. The faction's violet and green only glow: viewport slits, LED strips, the turret's LED ring, the RCS
+  lights, a violet underglow under the frame.
 
-### What changed in the revision round
+### Checked by the builder
 
-- **No weld beads** (they cost triangles and didn't pay off).
-- **No stray spikes**: the turret's and the ram's side spikes are gone, and the radar dish's centre spike. What is left
-  is for ramming: the teeth on the ram, two on the rear bumper, the front hub spikes.
-- **The flag** sits on its own pole at the back-left corner with nothing behind it, so it can stream back. The game hangs
-  the same waving cloth on it as on the other vehicles (`makeWaveFlag` in `src/models.js`, driven by speed through the
-  model's `anim`): limp at rest, flying level and rippling at speed. The renders use that cloth, ported vertex for vertex,
-  posed at 24 m/s.
-- **Nothing cuts through anything.** The builder ends with `clash_check()` (`warrig_kit.py`), which tests every part
-  against every other for intersecting triangles, and swings the turret round (every 30 degrees, barrel at both stops)
-  against the rest. It found the old shocks through the radiator fins and bed sideboards, the bed tanks through the cab's
-  back wall, the antenna needles in the tanks, the target-lock pod and the LED bars in the gun's sweep, the rear RCS arms
-  through the bumper. All fixed; the parts that are meant to meet (a link into its rail, a pipe into what it feeds) are
-  listed in the builder.
-- **The driver can see:** the bunker is 0.6 m taller (the roof at 4.25, 5.7 m in the game) and the slits sit over the
-  reactor cage; the tokamak sits 0.1 m lower and its cage under the sight line.
-- **Less broken:** a whole relay dish (rolled rim, four struts, a drive housing, a patch plate) instead of the torn one;
-  a clean shield plate; tidier blankets.
-- **RCS quads** are lander-style pods on arms off the four frame ends: an octagonal housing on a heat-shield plate, four
-  bells on collars (up, down, fore, aft), a domed cap with a status LED, copper propellant lines back along the rail.
-- **A real door** on the side without the tanks, and the **ladder and shelf** on the tank side (above).
-- **Colour:** the bunker is primer with bleached and bare-metal plates; only the door and a ram patch are painted, in
-  sun-faded violet. The faction's violet and green only glow: the viewport slits, the brow strip, the ring's LED ring, the
-  RCS lights, the gun shield's slot, and a violet **underglow** under the frame (a new livery glow slot).
-- **Tyres:** chunky, chewed rubber lugs instead of scrap paddles (above).
+`warrig_a.py` ends with three checks from the kit, and A passes all of them:
+
+- `audit_flips()`: no inside-out pieces.
+- `clash_check()`: no part cuts through another, with the turret also swung every 30 degrees with the barrel at both
+  stops. The parts meant to meet (a link into its rail, a pipe into what it feeds, armour on the cab) are listed in the
+  builder.
+- `float_check()`: every piece is joined to the frame through a chain of pieces touching each other, so nothing hangs
+  in the air. Only the sparks fly free, and the plasma ring (its magnetic field holds it).
+
+### Revision history
+
+1. **First pass:** a squat welded bunker over a monster-truck chassis, scrap-paddle tyres, weld beads on every plate.
+2. **Second round:** no weld beads or stray spikes; the flag on its own corner pole; shocks in hoops clear of the body
+   (the clash check found eleven clashes); a taller cab so the driver can see over the reactor; a whole relay dish; RCS
+   pods on the frame ends; a door and a utility shelf with a ladder; little paint, the faction colours only as glows;
+   chunky chewed rubber lugs.
+3. **This round:** reshaped as a big-rig head (a long truck hood with a grille and the reactor open in it, a conventional
+   cab, heat stacks, a rear deck, fenders), 0.85 m longer; a cleaner build under 20k triangles; tyres modelled whole with
+   the grooves cut in, instead of blocks sitting on the carcass; the float check.
 
 ## B: CRATERCRAB (six-wheeled cab-forward, the drive on its back)
 
 ![B: hero, rear, side, close](b_sheet.jpg)
 
 A new silhouette for the game: a six-legged crawler. (It shares A's kit, so it has the new tyres and no welds too, but it
-has not had A's revision round.)
+has not had A's revision rounds.)
 
 - **Running gear:** six wheels, each on its own swing arm (a lower wishbone and an upper link to an upright) with a tall
   coilover slanting in to a shoulder tower on the hull. It stands on six "crab legs" with a track wider than it is tall
@@ -137,14 +144,14 @@ we want the rigs to light the ground in the shadow zones. The renders do exactly
 
 | | A FURNACE | B CRATERCRAB |
 |---|---|---|
-| Triangles | 21.6k (17.5k of them inked) | 18.6k (15.4k inked) |
+| Triangles | 19.8k (16.4k of them inked) | 17.6k (14.8k inked) |
 | Wheels | 4, radius 1.05 (1.42 m in the game) | 6, radius 0.95 (1.28 m in the game) |
-| Length × width (game scale) | about 9.5 m × 7.1 m | about 10 m × 7.8 m |
-| Height (game scale) | about 8.1 m to the gunner's head (cab roof 5.7 m) | about 6.5 m to the cage roof |
+| Length × width (game scale) | about 10.9 m (11.7 m with the plow's teeth) × 7.3 m | about 10 m × 7.8 m |
+| Height (game scale) | about 7.9 m to the gunner's head (cab roof 5.5 m) | about 6.5 m to the cage roof |
 
-Both are well over the house budget for a vehicle (11k, `.claude/skills/blender/style.md`); that is accepted for the
-War-Rig. The tyres are the biggest single cost (about 1.6k triangles each on A). A passes `audit_flips` and
-`clash_check`; B passes `audit_flips`.
+Both are over the house budget for a vehicle (11k, `.claude/skills/blender/style.md`); for the War-Rig the cap is 20k.
+The tyres are the biggest single cost (about 0.9k triangles each). A passes `audit_flips`, `clash_check` and
+`float_check`; B passes `audit_flips`.
 
 ## What going in would take
 
@@ -156,5 +163,6 @@ War-Rig. The tyres are the biggest single cost (about 1.6k triangles each on A).
    renders. `color` becomes the faded violet if we keep the paint muted in the game too.
 3. Pirate rigs driven by the AI: they currently swing a `gun` pivot; they would swing the turret instead, and get a
    gunner too.
-4. The frame is bigger than the old one (wheels 1.05 against 0.85, a wider track, a taller cab), so `radius`, the ride
-   lift and the dust spots need checking in the game; the Asset Row item's footprint grows too.
+4. The frame is much bigger than the old one (wheels 1.05 against 0.85, a 4.9 m wheelbase against 3.6, a wider track, a
+   taller cab), so `radius` (4.0 on the root), the ride lift and the dust spots need checking in the game; the Asset
+   Row item's footprint grows too.

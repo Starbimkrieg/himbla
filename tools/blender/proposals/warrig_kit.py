@@ -92,7 +92,7 @@ class Acc:
 
     def add(self, geo, slot, parent, ink=0.0):
         self.d.setdefault((slot, parent.name, round(ink, 4)), [parent, []])[1].append(geo)
-        CLASH.append((TAG[0], parent, geo))
+        CLASH.append((TAG[0], parent, geo, slot))
 
     def flush(self):
         out = []
@@ -134,11 +134,11 @@ def coilover(acc, parent, a, b, r=0.16, turns=5, spring="metal"):
     """a long-travel shock: fat body from the top, chrome shaft to the bottom eye, spring round both"""
     A, Bv = V(a), V(b)
     d = Bv - A
-    acc.add(beam(tuple(Bv), tuple(A + d * 0.45), r * 0.55, 8), "dark", parent, 0.02)
+    acc.add(beam(tuple(Bv), tuple(A + d * 0.45), r * 0.55, 6), "dark", parent, 0.02)
     acc.add(beam(tuple(A), tuple(A + d * 0.5), r * 0.24, 6), "metal", parent, 0.012)
     for p in (A, Bv):
         acc.add(xf(torus(r * 0.42, r * 0.16, 6, 3), tuple(p), (0, 0, PI / 2)), "steel", parent, 0.01)
-    acc.add(coil_spring(a, b, r, turns), spring, parent, 0.012)
+    acc.add(coil_spring(a, b, r, turns, per=5), spring, parent, 0.012)
     acc.add(cyl(tuple(A + d * 0.1), r * 1.15, 0.05, 8, rot=_align(d)), "steel", parent, 0.01)
     acc.add(cyl(tuple(A + d * 0.9), r * 1.15, 0.05, 8, rot=_align(d)), "steel", parent, 0.01)
 
@@ -150,46 +150,59 @@ def _align(d):
 
 
 def monster_wheel(pfx, i, pos, side, R, hw, parent, lugs=13, spiked=False, seed=0):
-    """a tall balloon tyre with thick, chunky rubber lugs, chewed up: a chevron lug on the crown and a block wrapping each
-    shoulder, by turns from either side; some torn off, some half gone, some worn low. A beadlock hub. Pivot `role=wheel`,
-    spun about x by the game."""
+    """a tall balloon tyre modelled whole: a carcass and its tread lugs in one mesh (one outline), the lugs swept as one piece
+    from just past the centre line over the shoulder and down the sidewall, raked into a chevron, so the deep grooves
+    between them read as cut into the tyre. A dished beadlock hub. Pivot `role=wheel`, spun about x by the game."""
     W = pivot(f"{pfx}wheel{i}", pos, parent, role="wheel")
     keep_tag = TAG[0]
     part(f"wheel{i}")
     acc = Acc(f"{pfx}w{i}_")
-    Rc = R - 0.11   # the carcass under the lugs
-    prof = [(R * 0.55, -hw), (R * 0.84, -hw), (Rc - 0.05, -hw * 0.9), (Rc, -hw * 0.66), (Rc, hw * 0.66), (Rc - 0.05, hw * 0.9),
-            (R * 0.84, hw), (R * 0.55, hw)]
-    acc.add(xf(lathe(prof, 22), r=(0, 0, PI / 2)), "tire", W, 0.05)
-    acc.add(xf(cyl((0, 0, 0), R * 0.56, 0.04, 12), (-side * (hw - 0.03), 0, 0), (0, 0, PI / 2)), "dark", W, 0)
-
-    def lug(g, x, r, a):
-        return xf(xf(g, (x, r, 0.0)), (0, 0, 0), (a, 0, 0))
+    LH = 0.11              # lug height: the groove depth
+    Rg = R - LH            # the carcass (groove floor)
+    prof = [(R * 0.56, -hw), (Rg - 0.22, -hw), (Rg - 0.07, -hw * 0.93), (Rg, -hw * 0.72), (Rg, hw * 0.72), (Rg - 0.07, hw * 0.93),
+            (Rg - 0.22, hw), (R * 0.56, hw)]
+    tyre = [xf(lathe(prof, 24), r=(0, 0, PI / 2))]
+    # one lug's path across the profile: (axial |x|, radius, normal (axial, radial), height)
+    path = [(-0.05, Rg, (0.0, 1.0), LH), (hw * 0.8, Rg - 0.02, (0.4, 0.92), LH), (hw, Rg - 0.22, (1.0, 0.12), LH * 0.5)]
+    half = PI / lugs * 0.58          # lug half-width (angle): the grooves take the rest of the pitch
+    rake = 0.5                       # how far the lug sweeps round (rad) from the centre to the sidewall
     for sgn in (-1, 1):
         for k in range(lugs):
-            a = TAU * (k + (0.5 if sgn > 0 else 0.0)) / lugs
-            j = (k * 7 + seed * 5 + (3 if sgn > 0 else 0)) % 11
-            hgt = 0.07 if j in (5, 8) else (0.02 if j == 0 else 0.115)       # worn low / torn off to a stub / full
-            ln = hw * (0.2 if j == 3 else 0.4)                                # half the lug gone
-            cx = sgn * (hw * 0.86 - ln)
-            g = bx((0, 0, 0), (ln, hgt / 2 + 0.02, 0.09 if j != 9 else 0.06))
-            g = xf(g, (0, 0, 0), (0.12 * (j % 3 - 1), sgn * 0.32, 0))          # chevron, a ragged top
-            acc.add(lug(g, cx, Rc + hgt / 2 - 0.01, a), "tire", W, 0.02)
-            if j not in (6, 0):                                              # the shoulder block, down the sidewall
-                sh = xf(bx((0, 0, 0), (0.07, 0.12, 0.09)), (0, 0, 0), (0, 0, -sgn * 0.55))
-                acc.add(lug(sh, sgn * (hw * 0.86), Rc - 0.04, a), "tire", W, 0.02)
-    # beadlock hub: a deep dish, the clamp ring with its bolts, a cap with lug nuts
-    hub = [(0.0, 0.0), (R * 0.56, 0.0), (R * 0.54, 0.08), (R * 0.36, 0.14), (R * 0.22, 0.22), (0.0, 0.24)]
-    acc.add(xf(lathe(hub, 14), (side * (hw - 0.06), 0, 0), (0, 0, -side * PI / 2)), "steel" if seed % 2 else "primer", W, 0.02)
-    acc.add(xf(torus(R * 0.5, 0.04, 20, 4), (side * (hw + 0.03), 0, 0), (0, 0, PI / 2)), "dark", W, 0.01)
-    for k in range(12):
-        a = TAU * k / 12
-        acc.add(octa((side * (hw + 0.07), math.cos(a) * R * 0.5, math.sin(a) * R * 0.5), 0.035), "metal", W, 0)
+            a0 = TAU * (k + (0.5 if sgn > 0 else 0.0)) / lugs
+            verts = []
+            for ax, r, (nx, nr), h in path:
+                th = a0 + rake * max(0.0, ax) / hw
+                for d in (-0.02, h):        # base (sunk into the carcass), top
+                    x = sgn * (ax + nx * d)
+                    rr = r + nr * d
+                    for e in (-half, half):
+                        verts.append((x, rr * math.cos(th + e), rr * math.sin(th + e)))
+            n = len(path)
+            q = lambda i, top, right: i * 4 + top * 2 + right
+            faces = []
+            for i in range(n - 1):
+                faces.append((q(i, 1, 0), q(i, 1, 1), q(i + 1, 1, 1), q(i + 1, 1, 0)))   # top
+                faces.append((q(i, 0, 1), q(i, 0, 0), q(i + 1, 0, 0), q(i + 1, 0, 1)))   # base
+                faces.append((q(i, 0, 0), q(i, 1, 0), q(i + 1, 1, 0), q(i + 1, 0, 0)))   # one flank
+                faces.append((q(i, 1, 1), q(i, 0, 1), q(i + 1, 0, 1), q(i + 1, 1, 1)))   # the other
+            faces.append((q(0, 0, 0), q(0, 0, 1), q(0, 1, 1), q(0, 1, 0)))
+            m = n - 1
+            faces.append((q(m, 0, 1), q(m, 0, 0), q(m, 1, 0), q(m, 1, 1)))
+            tyre.append((verts, faces))
+    acc.add(join(tyre), "tire", W, 0.05)
+    acc.add(xf(cyl((0, 0, 0), R * 0.57, 0.04, 12), (-side * (hw - 0.03), 0, 0), (0, 0, PI / 2)), "dark", W, 0)
+    # hub: a deep steel dish with a lip, the beadlock ring and its bolts, a cap with lug nuts
+    hub = [(0.0, 0.0), (R * 0.57, 0.0), (R * 0.57, 0.06), (R * 0.5, 0.08), (R * 0.3, 0.16), (R * 0.2, 0.22), (0.0, 0.23)]
+    acc.add(xf(lathe(hub, 12), (side * (hw - 0.06), 0, 0), (0, 0, -side * PI / 2)), "steel" if seed % 2 else "primer", W, 0.02)
+    acc.add(xf(torus(R * 0.52, 0.035, 18, 3), (side * (hw + 0.02), 0, 0), (0, 0, PI / 2)), "dark", W, 0.01)
     for k in range(6):
         a = TAU * k / 6
-        acc.add(octa((side * (hw + 0.18), math.cos(a) * R * 0.15, math.sin(a) * R * 0.15), 0.035), "metal", W, 0)
+        acc.add(octa((side * (hw + 0.06), math.cos(a) * R * 0.52, math.sin(a) * R * 0.52), 0.035), "metal", W, 0)
+    for k in range(4):
+        a = TAU * k / 4
+        acc.add(octa((side * (hw + 0.17), math.cos(a) * R * 0.14, math.sin(a) * R * 0.14), 0.03), "metal", W, 0)
     if spiked:
-        acc.add(xf(lathe([(0.12, 0), (0.08, 0.15), (0, 0.55)], 6), (side * (hw + 0.17), 0, 0), (0, 0, -side * PI / 2)), "bone", W, 0.02)
+        acc.add(xf(lathe([(0.12, 0), (0.08, 0.15), (0, 0.55)], 6), (side * (hw + 0.16), 0, 0), (0, 0, -side * PI / 2)), "bone", W, 0.02)
     acc.flush()
     part(keep_tag)
     return W
@@ -204,7 +217,7 @@ def rcs_pod(acc, parent, c, out, up=(0, 1, 0), feed=None):
     acc.add(F(cyl((0, 0, 0.11), 0.15, 0.22, 8, rot=(PI / 2, 0, PI / 8))), "dark", parent, 0.02)
     acc.add(F(xf(lathe([(0.15, 0.0), (0.12, 0.05), (0.0, 0.07)], 8), (0, 0, 0.22), (PI / 2, 0, 0))), "metal", parent, 0.01)
     acc.add(F(bx((0.0, 0.06, 0.285), (0.025, 0.015, 0.006))), "lens", parent, 0)
-    bell = lathe([(0.035, 0.0), (0.048, 0.05), (0.085, 0.17), (0.072, 0.17), (0.035, 0.06), (0.0, 0.055)], 8)
+    bell = lathe([(0.035, 0.0), (0.085, 0.17), (0.07, 0.17), (0.0, 0.06)], 6)
     for ax, sg in ((1, 1), (1, -1), (0, 1), (0, -1)):
         if ax == 1:
             rot = (0 if sg > 0 else PI, 0, 0)
@@ -212,7 +225,7 @@ def rcs_pod(acc, parent, c, out, up=(0, 1, 0), feed=None):
         else:
             rot = (0, 0, -sg * PI / 2)
             pos = (sg * 0.15, 0, 0.11)
-        acc.add(F(xf(cyl((0, 0.02, 0), 0.05, 0.05, 8), pos, rot)), "steel", parent, 0.008)
+        acc.add(F(xf(cyl((0, 0.02, 0), 0.05, 0.05, 6), pos, rot)), "steel", parent, 0.008)
         acc.add(F(xf(bell, pos, rot)), "metal", parent, 0.01)
     if feed:
         Cw = V(c)
@@ -236,6 +249,59 @@ def dish(acc, parent, c, r, fwd, ink=0.02):
     acc.add(frame_xf(xf(lathe([(0.0, -0.04), (0.06, -0.04), (0.08, 0.1), (0.05, 0.14), (0.0, 0.14)], 8), tip, (PI / 2, 0, 0)), c, fwd), "dark", parent, 0.008)
     acc.add(frame_xf(cyl((0, 0, -0.16), 0.14, 0.24, 10, rot=(PI / 2, 0, 0)), c, fwd), "dark", parent, 0.012)
     acc.add(frame_xf(bx((r * 0.35, -r * 0.3, 0.02 * r - 0.07), (0.16, 0.12, 0.012), (0.08, -0.25, 0)), c, fwd), "bleach", parent, 0.008)
+
+
+def float_check(gap=0.02, skip_slots=("ion",), skip_tags=(), root="frame"):
+    """Print every group of pieces (each Acc.add is a piece) that is not joined to the `root` part through a chain of pieces
+    touching each other (a surface within `gap` of a vertex, or triangles cutting into each other): parts hanging in the
+    air. Glowing sparks (`skip_slots`) are meant to fly free."""
+    from mathutils.bvhtree import BVHTree
+    from fnmatch import fnmatch
+    verts, faces, owner, pieces = [], [], [], []
+
+    def off(o):
+        p = V((0, 0, 0))
+        while o is not None:
+            L = o.location
+            p = p + V((L.x, L.z, -L.y))
+            o = o.parent
+        return p
+    for i, (tag, par, (vs, fs), slot) in enumerate(CLASH):
+        base = len(verts)
+        o = off(par)
+        w = [tuple(V(v) + o) for v in vs]
+        verts.extend(w)
+        faces.extend(tuple(j + base for j in f) for f in fs)
+        owner.extend([i] * len(fs))
+        pieces.append((tag, w, fs, slot))
+    tree = BVHTree.FromPolygons(verts, faces)
+    up = list(range(len(pieces)))
+
+    def find(a):
+        while up[a] != a:
+            up[a] = up[up[a]]
+            a = up[a]
+        return a
+    for i, (tag, w, fs, slot) in enumerate(pieces):
+        near = {owner[j] for _, j in BVHTree.FromPolygons(w, fs).overlap(tree)}
+        for v in w:
+            near.update(owner[h[2]] for h in tree.find_nearest_range(V(v), gap))
+        for j in near:
+            up[find(j)] = find(i)
+    roots = {find(i) for i, p in enumerate(pieces) if p[0] == root}
+    groups = {}
+    for i, (tag, w, fs, slot) in enumerate(pieces):
+        if find(i) in roots or slot in skip_slots or any(fnmatch(tag, p) for p in skip_tags):
+            continue
+        groups.setdefault(find(i), []).append(i)
+    lone = []
+    for g in groups.values():
+        pts = [V(v) for i in g for v in pieces[i][1]]
+        c = sum(pts, V((0, 0, 0))) / len(pts)
+        tags = sorted({pieces[i][0] for i in g})
+        lone.append(f"{', '.join(tags)}: {len(g)} piece(s) round ({c.x:.2f}, {c.y:.2f}, {c.z:.2f})")
+    print("FLOAT ok" if not lone else f"FLOAT: {len(lone)} group(s) not joined to the {root}:\n  " + "\n  ".join(lone))
+    return lone
 
 
 def clash_check(allow=(), sweep=True):
@@ -266,7 +332,7 @@ def clash_check(allow=(), sweep=True):
         return p
 
     groups = {}
-    for tag, par, (verts, faces) in CLASH:
+    for tag, par, (verts, faces), _slot in CLASH:
         g = groups.setdefault(tag, [[], [], False])
         moving = any(o.get("role") in ("turret", "barrel") for o in chain(par))
         g[2] = g[2] or moving
@@ -432,15 +498,17 @@ def needle(acc, parent, base, length, lean=(0, 0), rings=3, tip="beacon"):
     acc.add(xf(lathe([(0.07, 0), (0.07, 0.12), (0.04, 0.2)], 8), tuple(B0)), "dark", parent, 0.008)
     acc.add(tube([tuple(B0 + V((0, 0.15, 0))), tuple(top)], [0.025, 0.008], 4), "steel", parent, 0.006)
     for k in range(rings):
-        p = B0.lerp(top, 0.3 + 0.18 * k)
-        acc.add(xf(torus(0.06 - 0.012 * k, 0.012, 8, 3), tuple(p)), "metal", parent, 0)
+        t = 0.3 + 0.18 * k
+        p = B0.lerp(top, t)
+        rw = 0.025 + (0.008 - 0.025) * t        # the whip's radius there: the ring is clamped on it
+        acc.add(xf(torus(rw + 0.012, 0.012, 8, 3), tuple(p)), "metal", parent, 0)
     acc.add(octa(tuple(top), 0.04), tip, parent, 0)
 
 
 def mli_blanket(acc, parent, c, r, length, arc=(-1.9, 1.9), seed=0, slot="mli", patch="foil"):
     """multi-layer insulation draped over a tank lying along z: a faceted (quilted) foil shell over `arc` (radians from the
     top), frayed into ragged tabs along both lower edges, a silver patch sewn on"""
-    segs = 9
+    segs = 7
     a0, a1 = arc
     t = 0.035
     verts, faces = [], []
@@ -476,7 +544,7 @@ def mli_blanket(acc, parent, c, r, length, arc=(-1.9, 1.9), seed=0, slot="mli", 
             acc.add(xf(xf(g, (0, 0, 0)), tuple(p0 + V(c)), (0, 0, -ang + PI)), slot if j % 2 else patch, parent, 0)
     # a sewn-on silver patch
     pa = (a0 + a1) / 2 + 0.5 * (1 if seed % 2 else -1)
-    acc.add(xf(bx((0, 0, 0), (0.2, 0.012, length * 0.18)), (math.sin(pa) * (r + t + 0.006) + c[0], math.cos(pa) * (r + t + 0.006) + c[1], c[2] + length * 0.15 * (1 if seed % 2 else -1)), (0, 0, -pa)), patch, parent, 0)
+    acc.add(xf(bx((0, 0, 0), (0.2, 0.012, length * 0.18)), (math.sin(pa) * (r + t - 0.006) + c[0], math.cos(pa) * (r + t - 0.006) + c[1], c[2] + length * 0.15 * (1 if seed % 2 else -1)), (0, 0, -pa)), patch, parent, 0)
 
 
 def spike(acc, parent, base, fwd, length=0.6, r=0.1, slot="bone"):
@@ -487,7 +555,7 @@ def railing_arc(acc, parent, c, R, y, a0, a1, posts=5, r=0.035):
     """a guard ring over an arc (angles about y from +z), posts down to y = 0 of `c`"""
     n = 14
     pts = [(c[0] + math.sin(a0 + (a1 - a0) * k / n) * R, c[1] + y, c[2] + math.cos(a0 + (a1 - a0) * k / n) * R) for k in range(n + 1)]
-    acc.add(tube(pts, [r] * len(pts), 6), "dark", parent, 0.012)
+    acc.add(tube(pts, [r] * len(pts), 5), "dark", parent, 0.012)
     for k in range(posts):
         a = a0 + (a1 - a0) * k / (posts - 1)
         p = (c[0] + math.sin(a) * R, c[1], c[2] + math.cos(a) * R)
