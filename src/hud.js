@@ -3,6 +3,7 @@ import { glyphHtml } from './glyphs.js';
 import { keepScroll } from './terminalUI.js';
 import { NAME_TAGS } from './toon.js';
 import { FACTIONS } from './locations.js';
+import { factionIcon } from './factionIcons.js';
 import { arcDist, darkness, upAt, toScreen, E1, E2 } from './geo.js';
 import { WEAPONS, APC_CANNON } from './weapons.js';
 import { EVENT_RANGE, PLANET } from './config.js';
@@ -879,12 +880,13 @@ export class HUD {
       if (f.enemy) status = `At war with ${FACTIONS[f.enemy].name}${rep.cleared(id) ? ' · CLEARANCE GRANTED' : ''}`;
       const ev = g.events.list.find((e) => e.faction === id);
       html += `<div class="rep-row" style="border-left-color:${f.color}">
-        <div class="rep-top"><span class="rep-name" style="color:${f.color}">${f.name}</span><span class="rep-kind">${f.kind}</span><span class="tierchip" style="background:${t.color}">${t.name} (${v > 0 ? '+' : ''}${v})</span></div>
+        <img class="rep-icon" src="${factionIcon(id)}" alt="${f.name} emblem" draggable="false">
+        <div class="rep-body"><div class="rep-top"><span class="rep-name" style="color:${f.color}">${f.name}</span><span class="rep-kind">${f.kind}</span><span class="tierchip" style="background:${t.color}">${t.name} (${v > 0 ? '+' : ''}${v})</span></div>
         <div class="track rep-bar"><div class="fill" style="width:${Math.round(((v + 100) / 200) * 100)}%;background:${f.color}"></div><div class="rep-zero"></div></div>
         <div class="rep-info">${f.blurb}</div>
         <div class="rep-meta">HQ: ${hq && hq.discovered ? hq.name : '???'} · Contract pay ×${(t.pay || 0).toFixed(2)}${nt ? ` · Next: ${nt.name} at ${nt.min}` : ''}${status ? ` · ${status}` : ''}</div>
         ${ev ? `<div class="rep-ev">📡 ${ev.state === 'active' ? 'ACTIVE' : 'OPEN'}: ${ev.title}</div>` : ''}
-      </div>`;
+      </div></div>`;
     }
     html += `</div><div class="board-foot">Deliveries and events raise standing. Shooting a faction's people lowers it — and helping Vostok angers Daedalus (and vice versa). J / ESC to close.</div>`;
     el.innerHTML = html;

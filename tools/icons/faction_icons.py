@@ -454,12 +454,15 @@ def final_sheet():
 
 
 def write_final(px=1024):
-    """The chosen six as docs/faction-icons/<faction>.svg, with export/<faction>.png (px) and .pdf when Inkscape is there."""
+    """The chosen six as docs/faction-icons/<faction>.svg (and src/assets/factions/<faction>.svg for the game), with export/<faction>.png (px) and .pdf when Inkscape is there."""
     d = os.path.join(OUT, '..', 'faction-icons')
     os.makedirs(d, exist_ok=True)
+    game = os.path.join(OUT, '..', '..', 'src', 'assets', 'factions')   # the copies the game imports (src/factionIcons.js)
+    os.makedirs(game, exist_ok=True)
     for fac, s_ in FINAL:
-        with open(os.path.join(d, f'{fac}.svg'), 'w') as fh:
-            fh.write(ICONS[(fac, s_)]())
+        for folder in (d, game):
+            with open(os.path.join(folder, f'{fac}.svg'), 'w') as fh:
+                fh.write(ICONS[(fac, s_)]())
     with open(os.path.join(d, 'sheet.svg'), 'w') as fh:
         fh.write(final_sheet())
     if not shutil.which('inkscape'):

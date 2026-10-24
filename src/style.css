@@ -395,7 +395,9 @@ body:has(#title:not(.hidden)) #hud { visibility: hidden; }
 .dlg-btns button:hover { background: var(--yellow); border-color: var(--yellow); color: #05030c; }
 #replog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(820px, 94vw); max-height: 90vh; overflow: auto; background: rgba(10, 8, 20, 0.95); }
 .rep-list { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
-.rep-row { background: var(--ui-bg2); border: 2px solid var(--ui-edge); border-left-width: 8px; padding: 9px 12px; }
+.rep-row { display: flex; align-items: flex-start; gap: 12px; background: var(--ui-bg2); border: 2px solid var(--ui-edge); border-left-width: 8px; padding: 9px 12px; }
+.rep-icon { flex: none; width: 72px; height: 72px; user-select: none; }
+.rep-body { flex: 1; min-width: 0; }
 .rep-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rep-name { font-family: var(--comic); font-size: 13px; line-height: 1.3; }
 .rep-kind { font-size: 14px; color: var(--ui-muted); }

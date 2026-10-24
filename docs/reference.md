@@ -333,6 +333,7 @@ src/
   clawSim.js       Zero-G claw rules and physics (clawView.js draws it, clawGame.js runs the seat)
   fountainFx.js    fountain water shaders
   pixelIcons.js    classic-games pixel sprites
+  factionIcons.js  the faction emblems (src/assets/factions/*.svg, from tools/icons/faction_icons.py): `factionIcon(id)`
   cosmetics.js     dresses the runner: outfit extras, skate finishes, halo
   cosmeticsData.js outfit, skate and laser tables, their shop entries (imports nothing)
   race.js          Chimera Downs racing, betting, cameras, crowd, podium
