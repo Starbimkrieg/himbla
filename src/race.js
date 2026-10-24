@@ -1005,11 +1005,13 @@ export class Race {
         fn: () => {
           if (genes.career.train <= 0) { this.trainMenu(); return; }
           genes.career.train--;
-          const got = train(genes, k);
+          const { gains: got, bonus } = train(genes, k);
           g.alchemy.save();
           g.audio.tone(660, 0.12, 'square', 0.1);
-          const txt = Object.entries(got).map(([s, v]) => `+${v} ${STAT_INFO[s].name}`).join(', ') || 'nothing (it is as good as it gets there)';
-          g.fx.pop(Object.entries(got).map(([s, v]) => `+${v} ${STAT_INFO[s].short}`).join(' ') || 'MAXED', null, { color: '#7dff3a', size: 40 });
+          // the growth's share of a gain shown apart: +7 SPEED (+2 growth)
+          const grow = (s) => (bonus[s] ? ` (+${bonus[s]} growth)` : '');
+          const txt = Object.entries(got).map(([s, v]) => `+${v} ${STAT_INFO[s].name}${grow(s)}`).join(', ') || 'nothing (it is as good as it gets there)';
+          g.fx.pop(Object.entries(got).map(([s, v]) => `+${v} ${STAT_INFO[s].short}${bonus[s] ? ` (+${bonus[s]})` : ''}`).join(' ') || 'MAXED', null, { color: '#7dff3a', size: 40 });
           g.dialog('TRAINING YARD', `${chimeraCard(g, genes, { big: true, full: true })}<p>${D.name}: ${genes.name} gains ${txt}.</p>`, [
             ...(genes.career.train > 0 ? [{ label: `1 · ANOTHER SESSION (${genes.career.train} left)`, fn: () => this.drillMenu(genes) }] : []),
             { label: `${genes.career.train > 0 ? 2 : 1} · BACK`, fn: () => this.trainMenu() },

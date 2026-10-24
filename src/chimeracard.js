@@ -80,7 +80,7 @@ export function portrait(renderer, genes) {
 export function statBars(st, big = false, growth = {}) {
   return `<div class="cc-stats${big ? ' big' : ''}">${STAT_KEYS.map((k) => {
     const v = st[k];
-    const gr = growth[k] ? `<span class="cc-grow" data-tip="${esc(`GROWTH: training gains in ${STAT_INFO[k].name} are ${Math.round(growth[k] * 100)}% bigger.`)}">+${Math.round(growth[k] * 100)}%</span>` : '<span class="cc-grow"></span>';
+    const gr = growth[k] ? `<span class="cc-grow" data-tip="${esc(`GROWTH: training gains in ${STAT_INFO[k].name} are ${Math.round(growth[k] * 100)}% bigger, and keep their full rate past 80.`)}">+${Math.round(growth[k] * 100)}%</span>` : '<span class="cc-grow"></span>';
     const on = Math.max(1, Math.round(v / 10));
     let seg = '';
     for (let i = 0; i < 10; i++) seg += `<i${i < on ? ' class="on"' : ''}></i>`;

@@ -27,7 +27,7 @@ extra head: WIT += (HeadWit(extra) - 40) x 0.22;  mutations add flat amounts (tu
 
 A stat is its base plus what training added, capped at 100. **Grade** from the total: S 260+, A 244+, B 220+, else C.
 
-**Growth** (rolled at birth): one stat (60%) or two (40%) train 5 to 15% faster. **Running style** (rolled at birth, leaning on the
+**Growth** (rolled at birth): one stat (60%) trains 25 to 40% faster, or two (40%) 15 to 25% each; a growth stat also keeps its full rate past 80. **Running style** (rolled at birth, leaning on the
 stats: a punchy, short-winded build leans Front Runner, a deep tank leans Late Surger):
 
 | Style | Cruises at (opening, middle, late; of top speed) | Final sprint from | Kicks to | Keeps to |
@@ -101,7 +101,9 @@ the Hall of Fame (at the race window).
 
 **Training:** every race banks one session, spent at the Training Yard (the trainer in the stable lane). Four drills: Sprints (SPD, a
 little POW), Hill Pulls (POW, a little STA), Long Laps (STA, a little SPD), Maze Run (WIT, a little POW). +4 to 7 on the main stat and +1
-to 2 on the side one, times (1 + growth), halved once a stat is past 80. Twelve sessions add about 85 to the total: about two grades.
+to 2 on the side one, times (1 + growth), halved once a stat is past 80 unless it is a growth stat. The training result shows the
+growth's share (`+7 SPEED (+2 growth)`). Twelve sessions add about 90 to the total: about two grades. Four sessions on one stat add about
+27 to a growth stat and 20 to any other; six take a growth stat to 90 or more three times in four.
 
 ## Balance (tools/race-sim.mjs, 1500 races of six per distance)
 

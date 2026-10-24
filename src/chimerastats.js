@@ -91,15 +91,18 @@ export function computeBase(genes) {
   return st;
 }
 
-// Growth (training gains on one or two stats are 5-15% bigger) and running style, rolled from the seed at birth.
+// Growth and running style, rolled from the seed at birth. Growth: training gains on one stat are 25-40 % bigger, or on two 15-25 % each,
+// and a growth stat trains at the full rate past 80 (any other halves there), so only growth stats really reach the 90s.
+export const GROWTH = { one: [0.25, 0.4], two: [0.15, 0.25] };
 function rollNature(genes, base) {
   const rr = mulberry32(((genes.seed | 0) ^ 0x9a0d5) >>> 0);
   rr();
   const keys = [...STAT_KEYS];
   const growth = {};
-  for (let n = rr() < 0.6 ? 1 : 2; n > 0; n--) {
+  const n0 = rr() < 0.6 ? 1 : 2, [lo, hi] = n0 === 1 ? GROWTH.one : GROWTH.two;
+  for (let n = n0; n > 0; n--) {
     const k = keys.splice(Math.floor(rr() * keys.length), 1)[0];
-    growth[k] = Math.round((0.05 + rr() * 0.1) * 100) / 100;
+    growth[k] = Math.round((lo + rr() * (hi - lo)) * 100) / 100;
   }
   // a punchy, short-winded build leans to the front; a deep tank leans to waiting
   const lean = (base.power - base.stamina) / 15;
@@ -131,7 +134,12 @@ export function ensureStats(genes) {
   if (!genes) return genes;
   if (!genes.base || !genes.stats || genes.stats.v !== STATS_V) genes.base = computeBase(genes);
   if (!genes.trained) genes.trained = { speed: 0, power: 0, stamina: 0, wit: 0 };
-  if (!genes.growth || !genes.style) Object.assign(genes, rollNature(genes, genes.base));
+  if (!genes.growth || !genes.style) Object.assign(genes, rollNature(genes, genes.base), { growthV: 2 });
+  if (!genes.growthV) {                       // (a chimera from before growth was raised: its old 5-15 % moved to the same place in the new range)
+    const ks = Object.keys(genes.growth), [lo, hi] = ks.length === 1 ? GROWTH.one : GROWTH.two;
+    for (const k of ks) genes.growth[k] = Math.round((lo + Math.max(0, Math.min(1, (genes.growth[k] - 0.05) / 0.1)) * (hi - lo)) * 100) / 100;
+    genes.growthV = 2;
+  }
   const st = { v: STATS_V };
   for (const k of STAT_KEYS) st[k] = Math.min(100, genes.base[k] + (genes.trained[k] || 0));
   genes.stats = st;
@@ -152,22 +160,26 @@ export const DRILLS = {
   laps: { name: 'LONG LAPS', main: 'stamina', side: 'speed', blurb: 'lap after lap of the training ring' },
   maze: { name: 'MAZE RUN', main: 'wit', side: 'power', blurb: 'the hay-bale maze, with a hot dog at the end' },
 };
+// Returns { gains: { stat: points }, bonus: { stat: how many of those points the growth gave } }.
 export function train(genes, drill, rnd = Math.random) {
   ensureStats(genes);
   const D = DRILLS[drill];
-  const gains = {};
+  const gains = {}, bonus = {};
   const add = (k, amt) => {
     const cur = genes.base[k] + genes.trained[k];
     if (cur >= 100) return;
-    const g = Math.max(1, Math.round(amt * (1 + (genes.growth[k] || 0)) * (cur >= 80 ? 0.5 : 1)));
-    const got = Math.min(g, 100 - cur);
+    const gr = genes.growth[k] || 0;
+    const soft = cur >= 80 && !gr ? 0.5 : 1;                  // (past 80 a stat trains at half the rate, unless it is a growth stat)
+    const plain = Math.max(1, Math.round(amt * soft));
+    const got = Math.min(Math.max(1, Math.round(amt * (1 + gr) * soft)), 100 - cur);
     genes.trained[k] += got;
     gains[k] = (gains[k] || 0) + got;
+    if (got > plain) bonus[k] = (bonus[k] || 0) + got - plain;
   };
   add(D.main, 4 + rnd() * 3);
   add(D.side, 1 + rnd() * 1.2);
   ensureStats(genes);
-  return gains;
+  return { gains, bonus };
 }
 
 // ---------------------------------------------------------------------------------------------
