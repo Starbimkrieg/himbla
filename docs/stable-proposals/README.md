@@ -30,6 +30,8 @@ leads out to the west and the east; fences close the gaps.
 
 ![A: the west wing and the clock tower](a_court.jpg)
 
+![A: the west gate, from outside](a_gate.jpg)
+
 ## B: The Twin Lanes
 
 ![Layout B](plan-b.png)
@@ -48,7 +50,7 @@ Between the two lanes is a fenced turnout paddock on grass with the lunge ring, 
 ![The stable yard's kit in the Asset Row](kit.jpg)
 
 - **`dn_stable_6`, `dn_stable_4`**: blocks of six and four boxes (the one block of six they replace had shut doors on a blank wall).
-  Each box's Dutch door has its lower leaf shut and its upper leaf swung back, opening on a lit stall: dark plank walls, a ceiling,
+  Each box's Dutch door has its lower leaf shut and its upper leaf swung back, opening on a lit stall: warm plank walls, a ceiling,
   straw, a hay rack, a lantern. Over each door a name board, beside it a lantern on a bracket; a feed trough on the porch, whose
   posts carry knee braces; Mint cladding on the end walls; louvred cupolas on the ridge.
 - **`dn_stable_corner`**: the knuckle of an L, a two-storey tack room with lit windows on its outer faces, a hip roof, a clock turret
@@ -61,4 +63,4 @@ Between the two lanes is a fenced turnout paddock on grass with the lunge ring, 
 **Chimeras in the boxes**: a third of the boxes have one, two kinds or three spliced (a rival's sort), sized so its head is over the
 shut lower door, looking out, idling while you are in the yard (`stable()` in `src/race.js`).
 
-![A chimera looking out of its box](a_box2.jpg)
+![A chimera looking out of its box](stall.jpg)

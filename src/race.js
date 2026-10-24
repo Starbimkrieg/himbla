@@ -186,7 +186,7 @@ export class Race {
     this.stabled = null;                  // the chimeras in the boxes: put in when the kit has loaded and you are at the course (stable())
   }
 
-  // A third of the boxes have a chimera in them, a rival's sort (two kinds or three), sized so its head is over the shut lower door (2.4 m tall, the
+  // A third of the boxes have a chimera in them, a rival's sort (two kinds or three), sized so its head is over the shut lower door (2.6 m tall, the
   // straw 0.58 m up), looking out. They idle while you are in the yard.
   stable() {
     const w = this.game.world, boxes = stallsOf(STABLES);
@@ -195,10 +195,10 @@ export class Race {
     for (const [x, z, yaw] of boxes.slice(0, Math.round(boxes.length / 3))) {
       const a = pick(LIVING), items = [{ kind: a }, { kind: pick(LIVING.filter((q) => q !== a)) }];
       if (Math.random() < 0.3) items.push({ kind: pick(LIVING) });
-      const m = makeChimera(spliceGenes(items));
-      m.root.scale.setScalar(THREE.MathUtils.clamp(2.4 / m.height, 0.7, 2.4));
+      const genes = spliceGenes(items), m = makeChimera(genes);
+      m.root.scale.setScalar(THREE.MathUtils.clamp(2.6 / m.height, 0.7, 2.6));
       w.put(m.root, this.loc, x, z, 0.58, yaw, true);
-      this.stabled.push({ m, t: Math.random() * 10 });
+      this.stabled.push({ m, genes, t: Math.random() * 10 });
     }
     this.stableAt = w.toWorld(this.loc, 0, 0, -130);
   }

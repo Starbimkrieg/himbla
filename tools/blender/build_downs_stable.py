@@ -6,7 +6,7 @@
 #
 # Authored in three.js axes (x right, y up, +z front), each model standing on y = 0. One material per mesh named after a slot (DOWNS_TOON / DOWNS_GLOW in src/models.js).
 #   dn_stable_4/6   a block of four or six loose boxes 5 m apart along x, front (+z) at z = 0, the body to z = -9, a 2.4 m porch on Saddle posts with knee braces: Barn Red walls, the end
-#                   walls clad in Mint, each box a Dutch door with its lower leaf shut and its upper leaf swung back against the wall, opening on a lit stall (dark plank walls, straw,
+#                   walls clad in Mint, each box a Dutch door with its lower leaf shut and its upper leaf swung back against the wall, opening on a lit stall (plank walls, straw,
 #                   a hay rack, a lantern) where the game stands a chimera; a blank name board over each door, a lantern on a bracket, a feed trough; a gable roof, a Mint ridge, louvred
 #                   cupolas, 7.4 m to the ridge
 #   dn_stable_corner the knuckle of an L of blocks: a two-storey tack room (lit windows on its two outer faces) under a hip roof and a clock turret with a chimera weathervane
@@ -99,16 +99,16 @@ def stable_block(name, n):
         P["glowgold"].box(lx - 0.08, lx + 0.08, 2.18, 2.48, 0.41, 0.57)
         P["black2"].box(lx - 0.13, lx + 0.13, 2.48, 2.58, 0.36, 0.62)
         P["saddle2"].box(x - 0.6, x + 0.6, 0.0, 0.45, 0.6, 1.3)                              # the feed trough, on the porch floor
-        # inside: plank lining on the back wall, a ceiling, straw, a hay rack, a lantern on the back wall
-        IN["black2"].box(x - 2.35, x + 2.35, 0.47, 3.6, -4.59, -4.54)                     # (1 cm off the back wall, its foot in the plinth)
+        # inside: warm plank lining on the back wall (light enough that a chimera in the dark of the box still reads), a ceiling, straw, a hay rack, a lantern
+        IN["saddle2"].box(x - 2.35, x + 2.35, 0.47, 3.6, -4.59, -4.54)                    # (1 cm off the back wall, its foot in the plinth)
         IN["black"].box(max(x - 2.4, -Lh + 0.32), min(x + 2.4, Lh - 0.32), 3.59, 4.14, -4.58, -0.31)   # (its top under the roof's soffit, its ends clear of the end walls)
         IN["saddle"].box(x - 2.32, x + 2.32, 0.44, 0.58, -4.53, -0.31)
-        IN["saddle2"].box(x - 1.3, x - 0.1, 1.9, 2.5, -4.54, -4.25)
+        IN["black2"].box(x - 1.3, x - 0.1, 1.9, 2.5, -4.54, -4.25)
         IN["glowgold"].box(x + 1.4, x + 1.7, 2.7, 3.05, -4.54, -4.46)
     for x in xs[:-1]:                                                                        # the partitions between the stalls
-        IN["black2"].box(x + 2.3, x + 2.7, 0.46, 3.6, -4.55, -0.3)
+        IN["saddle2"].box(x + 2.3, x + 2.7, 0.46, 3.6, -4.55, -0.3)
     for sx in (-1, 1):                                                                       # and a lining on the end walls' inner faces, 1 cm off them
-        IN["black2"].box(sx * (Lh - 0.31), sx * (Lh - 0.35), 0.46, 3.6, -4.55, -0.3)
+        IN["saddle2"].box(sx * (Lh - 0.31), sx * (Lh - 0.35), 0.46, 3.6, -4.55, -0.3)
     # the porch: posts, a beam with knee braces, a floor
     P["saddle2"].box(-Lh - 0.2, Lh + 0.2, 0.0, 0.12, 0.2, 2.4)
     for i in range(n + 1):

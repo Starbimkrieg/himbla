@@ -158,7 +158,7 @@ const DEV = typeof __DEV_TOOLS__ === 'undefined' ? true : __DEV_TOOLS__;     // 
 const asked = DEV && typeof location !== 'undefined' ? /[?&]stables=(a|b)\b/.exec(location.search) : null;
 export const STABLE = asked ? asked[1] : 'a';
 export const STABLES = STABLE_LAYOUTS[STABLE];
-// The boxes a layout's blocks hold: [x, z, yaw] of each stall's middle, 2.2 m in from the door, the way it looks out (the game stands a chimera in some)
+// The boxes a layout's blocks hold: [x, z, yaw] of where a chimera stands in each box, 1.6 m in from the door (its head over it), the way it looks out (the game stands a chimera in some)
 export const BOX_PITCH = 5;
 export function stallsOf(L) {
   const out = [];
@@ -167,7 +167,7 @@ export function stallsOf(L) {
     if (!m) continue;
     const k = +m[1], c = Math.cos(yaw), s = Math.sin(yaw);
     for (let i = 0; i < k; i++) {
-      const lx = -(k - 1) * BOX_PITCH / 2 + i * BOX_PITCH, lz = -2.2;
+      const lx = -(k - 1) * BOX_PITCH / 2 + i * BOX_PITCH, lz = -1.6;
       out.push([x + lx * c + lz * s, z - lx * s + lz * c, yaw]);
     }
   }
