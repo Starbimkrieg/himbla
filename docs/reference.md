@@ -180,7 +180,7 @@ Farm, Motor Pool, Militia Barracks, Roads, Radio Tower (charts fog) and Shuttle 
 Garage, plus a second turret by the gate.
 
 **Vehicles** (`V`): SPACECOM Lunar Interceptor, Vostok BTR-M APC (turret cannon), Daedalus Phase Skimmer (hover),
-Kepler Homestead Mule, Kepler Militia Carrier, Meridian Courier Light-Bike (light trail), Rustmoon Scrapjaw War-Rig.
+Kepler Homestead Mule, Kepler Militia Carrier, Meridian Courier Light-Bike (light trail), Rustmoon War-Rig.
 They have hull points, smoke when hurt, and take 90 s to rebuild if wrecked.
 
 **Captain Kade** sometimes (8%) rides with a dark-side squad in a monster truck with a gatling and flak turret.
@@ -452,7 +452,8 @@ tools/
     build_winch.py         -> winch.glb, towmark.png
     build_outposts.py      -> outposts.glb (check with npm run check:outposts)
     build_downs_*.py       -> downs-*.glb
-    proposals/             freighter and Kepler Habitat design studies, Cycles preview renders
+    proposals/             freighter, Kepler Habitat and War-Rig design studies, Cycles preview renders
+                           (warrig_a.py, warrig_b.py on warrig_kit.py; preview_warrig.py renders docs/warrig-proposals)
 ```
 
 **Blender models:** each builder runs in Blender's Scripting tab or headless (`tools/setup-blender.sh` installs

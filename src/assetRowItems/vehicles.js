@@ -143,7 +143,7 @@ const ground = {
       }),
     },
     {
-      id: 'veh.warrig', label: 'RUSTMOON SCRAPJAW WAR-RIG', w: 10, d: 9,
+      id: 'veh.warrig', label: 'RUSTMOON WAR-RIG', w: 10, d: 9,
       make: () => { const m = buildVehicleModel('warrig'); return { root: pose(m.root, YAW), update: flagUpdate(m) }; },
     },
     {

@@ -781,7 +781,7 @@ class Game {
       impact: 'You hit the ground way too hard with your skates off.',
       ram: 'Rammed into oblivion.',
       crash: 'You wrapped your vehicle round something solid.',
-      pirate: 'Scrapjaw pirates blasted you off your skates.',
+      pirate: 'Rustmoon pirates blasted you off your skates.',
       mil: 'Military defences turned you into a crater.',
       player: 'Your own Pulse Spinner. Classic.',
       kade: "Shredded by Captain Kade's gun truck. Should've stayed low.",
