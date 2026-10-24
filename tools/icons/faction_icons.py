@@ -8,6 +8,8 @@ and scales to any size. `sheet.png` needs `pip install cairosvg`; the SVGs need 
 """
 import math
 import os
+import shutil
+import subprocess
 import sys
 
 OUT = os.path.join(os.path.dirname(__file__), '..', '..', 'docs', 'icon-proposals')
@@ -252,16 +254,84 @@ def kepler_b():
     return svg(b, 'Kepler - Council Seal')
 
 
+# ---------------------------------------------------------------------------------------------------- DAEDALUS
+VIO, VIO_D, PLUM, PLUM_D = '#c77dff', '#8a45c9', '#2a2540', '#171329'
+
+
+def eye(cx, cy, w, h, lid, iris, pupil):
+    """Almond eye: lid colour, iris disc, slit pupil."""
+    a = f'<path d="M{f(cx - w)} {f(cy)} Q{f(cx)} {f(cy - h * 2)} {f(cx + w)} {f(cy)} Q{f(cx)} {f(cy + h * 2)} {f(cx - w)} {f(cy)} Z" fill="{lid}"/>'
+    return a + circle(cx, cy, h * 0.9, iris) + f'<ellipse cx="{f(cx)}" cy="{f(cy)}" rx="{f(h * 0.2)}" ry="{f(h * 0.82)}" fill="{pupil}"/>'
+
+
+def daedalus_a():
+    """WATCHING DELTA: the proto hollow delta and eye, with its corners notched and a lidded eye that never closes."""
+    b = circle(128, 128, 120, PLUM_D) + circle(128, 128, 112, 'none', VIO, 4)
+    outer = [(128, 26), (226, 196), (30, 196)]
+    inner = [(128, 70), (186, 172), (70, 172)]
+    b += poly(outer, VIO, 'stroke-linejoin="round"') + poly(inner, PLUM_D)
+    b += eye(128, 138, 40, 16, VIO, CREAM, PLUM_D)
+    b += ''.join(f'<line x1="{f(128 + 52 * math.cos(a))}" y1="{f(138 + 34 * math.sin(a))}" x2="{f(128 + 64 * math.cos(a))}" y2="{f(138 + 42 * math.sin(a))}" stroke="{VIO}" stroke-width="4" stroke-linecap="round"/>'
+                 for a in (math.radians(-60), math.radians(-90), math.radians(-120)))
+    return svg(b, 'Daedalus - Watching Delta')
+
+
+def daedalus_b():
+    """UMBRA: the dark side's black disc with a violet corona, one eye open at its heart."""
+    b = circle(128, 128, 120, PLUM_D)
+    rays = [polar(128, 128, 112 if i % 2 == 0 else 82, -math.pi / 2 + i * math.pi / 16) for i in range(32)]
+    b += poly(rays, VIO_D) + poly([polar(128, 128, 96 if i % 2 == 0 else 78, -math.pi / 2 + i * math.pi / 16 + math.pi / 32) for i in range(32)], VIO)
+    b += circle(128, 128, 70, PLUM_D) + circle(128, 128, 70, 'none', VIO, 4)
+    b += eye(128, 128, 50, 22, VIO, CREAM, PLUM_D)
+    return svg(b, 'Daedalus - Umbra')
+
+
+# ---------------------------------------------------------------------------------------------------- RUSTMOON
+RUST, RUST_D, ACID, ACID_D = '#6a5a48', '#463a2d', '#7dff3a', '#3fa81a'
+
+
+def rustmoon_a():
+    """COG AND CROWN OF TEETH: a rusted gear, the skull stencilled on it in acid green."""
+    teeth = []
+    n = 12
+    for i in range(n):
+        a = 2 * math.pi * i / n
+        for da, r in ((-0.17, 104), (-0.12, 120), (0.12, 120), (0.17, 104)):
+            teeth.append(polar(128, 128, r, a + da))
+    b = poly(teeth, RUST_D, 'stroke-linejoin="round"') + circle(128, 128, 104, RUST) + circle(128, 128, 90, 'none', RUST_D, 5)
+    b += circle(128, 128, 82, PLUM)
+    b += circle(128, 112, 44, ACID) + f'<rect x="100" y="140" width="56" height="30" rx="8" fill="{ACID}"/>'
+    b += f'<ellipse cx="111" cy="114" rx="11" ry="13" fill="{PLUM}"/><ellipse cx="145" cy="114" rx="11" ry="13" fill="{PLUM}"/>'
+    b += poly([(128, 124), (121, 140), (135, 140)], PLUM)
+    b += ''.join(f'<line x1="{x}" y1="150" x2="{x}" y2="168" stroke="{PLUM}" stroke-width="4"/>' for x in (114, 128, 142))
+    b += f'<path d="M92 184 L164 184" stroke="{ACID}" stroke-width="7" stroke-linecap="round"/>'
+    return svg(b, 'Rustmoon - Cog and Teeth')
+
+
+def rustmoon_b():
+    """SALVAGE PLATE: hand-cut scrap, four welded rivets, a torch-cut green bolt across it."""
+    plate = [(40, 30), (206, 22), (236, 74), (228, 196), (186, 238), (62, 230), (20, 176), (26, 76)]
+    b = poly(plate, RUST_D) + poly([(46, 40), (200, 34), (224, 78), (216, 190), (180, 226), (66, 220), (32, 172), (38, 80)], RUST)
+    b += ''.join(circle(x, y, 8, RUST_D) + circle(x - 1.5, y - 1.5, 3.2, '#8c7a63') for x, y in ((66, 64), (190, 58), (194, 198), (62, 192)))
+    bolt = [(150, 40), (82, 138), (118, 138), (96, 216), (176, 108), (136, 108), (166, 40)]
+    b += poly(bolt, PLUM, 'transform="translate(6 6)"') + poly(bolt, ACID, 'stroke-linejoin="miter"')
+    b += poly([(150, 40), (82, 138), (108, 138), (166, 40)], ACID_D, 'opacity=".0"')
+    return svg(b, 'Rustmoon - Salvage Plate')
+
+
 ICONS = {
     ('spacecom', 'a'): spacecom_a, ('spacecom', 'b'): spacecom_b,
     ('vostok', 'a'): vostok_a, ('vostok', 'b'): vostok_b,
+    ('daedalus', 'a'): daedalus_a, ('daedalus', 'b'): daedalus_b,
+    ('rustmoon', 'a'): rustmoon_a, ('rustmoon', 'b'): rustmoon_b,
     ('meridian', 'a'): meridian_a, ('meridian', 'b'): meridian_b,
     ('kepler', 'a'): kepler_a, ('kepler', 'b'): kepler_b,
 }
-ORDER = ['kepler', 'vostok', 'meridian', 'spacecom']
+ORDER = ['kepler', 'vostok', 'meridian', 'spacecom', 'daedalus', 'rustmoon']
 NAMES = {('kepler', 'a'): 'Capitol Dome', ('kepler', 'b'): 'Council Seal', ('vostok', 'a'): 'Eclipse Star',
          ('vostok', 'b'): 'Star Fort', ('meridian', 'a'): 'Exchange Globe', ('meridian', 'b'): 'Ticker M',
-         ('spacecom', 'a'): 'Peacekeeper Shield', ('spacecom', 'b'): 'Marshal Star'}
+         ('spacecom', 'a'): 'Peacekeeper Shield', ('spacecom', 'b'): 'Marshal Star',
+         ('daedalus', 'a'): 'Watching Delta', ('daedalus', 'b'): 'Umbra', ('rustmoon', 'a'): 'Cog and Teeth', ('rustmoon', 'b'): 'Salvage Plate'}
 
 
 def inner(markup):
@@ -290,6 +360,19 @@ def sheet():
     return ''.join(parts)
 
 
+def export_inkscape(px=1024):
+    """Inkscape renders: <name>.png at px x px and a vector <name>.pdf per icon in export/, plus sheet.png."""
+    ex = os.path.join(OUT, 'export')
+    os.makedirs(ex, exist_ok=True)
+    acts = []
+    for (fac, s_) in ICONS:
+        src = os.path.join(OUT, f'{fac}_{s_}.svg')
+        acts.append(f'file-open:{src};export-type:png;export-width:{px};export-height:{px};export-filename:{os.path.join(ex, f"{fac}_{s_}.png")};export-do;'
+                    f'export-type:pdf;export-filename:{os.path.join(ex, f"{fac}_{s_}.pdf")};export-do;file-close')
+    acts.append(f'file-open:{os.path.join(OUT, "sheet.svg")};export-type:png;export-dpi:144;export-filename:{os.path.join(OUT, "sheet.png")};export-do;file-close')
+    subprocess.run(['inkscape', '--actions=' + ';'.join(acts)], check=True, capture_output=True)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for (fac, s), fn in ICONS.items():
@@ -297,6 +380,9 @@ def main():
             fh.write(fn())
     with open(os.path.join(OUT, 'sheet.svg'), 'w') as fh:
         fh.write(sheet())
+    if shutil.which('inkscape'):
+        export_inkscape()
+        return
     try:
         import cairosvg
     except ImportError:
