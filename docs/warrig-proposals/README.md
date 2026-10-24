@@ -71,7 +71,7 @@ short rear deck, over two axles 4.9 m apart (6.6 m in the game).
   ![A from low down: the underbody between the wheels](a_under.jpg)
 - **Heat stacks:** two behind the cab, at different heights, with perforated heat shields; they dump the reactor's coolant
   heat. Their tops are bent outward under the gun's sweep.
-- **Gun:** a ring mount on the cab roof, a **standing gunner** behind a drum-fed **five-barrel rotary** (two turns of
+- **Gun:** a ring mount on the cab roof, a **standing gunner** behind a drum-fed **five-barrel rotary** (four turns of
   the cluster is the burst), a notched salvage-plate shield bolted to two arms with a slot to look through, an IR laser
   sight.
 - **Rear deck:** two He-3 tanks under frayed MLI blankets with silver patches, a relay dish on a mast, three antenna
@@ -181,10 +181,10 @@ The tyres are the biggest single cost (about 0.9k triangles each). A passes `aud
 - **You drive it from inside** (`hideRider`), like the APC. The gun works like the APC's turret (`vehicles.js
   aimTurret`): the turret, and the gunner on it, swing where the camera looks, and the barrel pitches to the point under
   your crosshair.
-- **Burst fire** (`vehicles.js burstFire`, numbers in `weapons.js RIG_GUN`): left mouse (RT on a pad) fires 10 rounds at
+- **Burst fire** (`vehicles.js burstFire`, numbers in `weapons.js RIG_GUN`): left mouse (RT on a pad) fires 20 rounds at
   12 a second, then the gun cools for 2 s; a burst, once started, runs out even if you let go, and holding fires burst
   after burst. Each round leaves the barrels up to 1 degree off their line (about 0.7 on average): it groups, it does not
-  hose. Rounds fly at 320 m/s, drop a little, do 14 damage (your damage upgrades count) and hit with a spark and a puff
+  hose. Rounds fly at 320 m/s, drop a little, do 7 damage each (your damage upgrades count) and hit with a spark and a puff
   of dust, not an explosion.
 - **Tracers** (`projectiles.js`, type `round`): each round is a white-hot streak in an orange glow that grows out behind
   it to 6 m and sheds embers as it flies.

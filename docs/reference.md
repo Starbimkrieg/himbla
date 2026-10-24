@@ -181,7 +181,7 @@ Garage, plus a second turret by the gate.
 
 **Vehicles** (`V`): SPACECOM Lunar Interceptor, Vostok BTR-M APC (turret cannon), Daedalus Phase Skimmer (hover),
 Kepler Homestead Mule, Kepler Militia Carrier, Meridian Courier Light-Bike (light trail), Rustmoon War-Rig (a pirate
-gunner on the roof turns its rotary gun where you look; left mouse fires a 10-round tracer burst, then it cools for 2 s).
+gunner on the roof turns its rotary gun where you look; left mouse fires a 20-round tracer burst, then it cools for 2 s).
 They have hull points, smoke when hurt, and take 90 s to rebuild if wrecked.
 
 **Captain Kade** sometimes (8%) rides with a dark-side squad in a monster truck with a gatling and flak turret.

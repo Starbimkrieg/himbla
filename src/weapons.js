@@ -15,7 +15,7 @@ export const APC_CANNON = { key: 'apccannon', name: 'BTR-M 30 mm Cannon', delay:
 // The Rustmoon War-Rig's rotary gun (vehicles.js burstFire): the pirate gunner on the roof turns it where the camera
 // points; left mouse fires a burst of `rounds` tracer rounds at `rate` a second, then the gun cools for `cool` s. Each round
 // leaves the barrels up to `spread` rad off their line (a tight cone, not a hose).
-export const RIG_GUN = { key: 'riggun', name: 'Scrap Rotary Gun', rounds: 10, rate: 12, cool: 2, spread: 0.018, speed: 320, damage: 14, desc: 'Ten-round tracer bursts from the roof gunner' };
+export const RIG_GUN = { key: 'riggun', name: 'Scrap Rotary Gun', rounds: 20, rate: 12, cool: 2, spread: 0.018, speed: 320, damage: 7, desc: 'Twenty-round tracer bursts from the roof gunner' };
 
 const _v = new THREE.Vector3();
 const _up = new THREE.Vector3();
