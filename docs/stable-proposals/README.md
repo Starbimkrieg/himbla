@@ -60,3 +60,5 @@ Between the two lanes is a fenced turnout paddock on grass with the lunge ring, 
 
 **Chimeras in the boxes**: a third of the boxes have one, two kinds or three spliced (a rival's sort), sized so its head is over the
 shut lower door, looking out, idling while you are in the yard (`stable()` in `src/race.js`).
+
+![A chimera looking out of its box](a_box2.jpg)
