@@ -143,9 +143,9 @@ function hitNormal(h, dir, out) {
 }
 
 // Where the sightline meets a model, else its spot nearest the reticle (snapped onto the surface). Fills and returns
-// `aim` (in the last drawn pose), or null.
-function modelHit(root, eye, look) {
-  const P = partsOf(root);
+// `aim` (in the last drawn pose), or null. `whole`: any of it can be hooked (a tumbling rock has no underside to leave out).
+function modelHit(root, eye, look, whole = false) {
+  const P = whole ? { list: partsOf(root).list, cutY: -Infinity } : partsOf(root);
   _rinv.copy(root.matrixWorld).invert();
   _hits.length = 0;
   _inside.length = 0;
@@ -291,7 +291,7 @@ function blocker(cols, a, b, skip = 0.35, only = null, endSkip = skip) {
     for (const c of cols.query(_v1, 1, _wq)) {
       if (c._ws === _ws) continue;
       c._ws = _ws;
-      if (c.platform || c.br < WRAP_MIN_R || thin(c) || (_ignore && _ignore.has(c))) continue;
+      if (c.platform || c.meteor || c.br < WRAP_MIN_R || thin(c) || (_ignore && _ignore.has(c))) continue;
       const t = rayCollider(c, a, _fd, L);
       if (t > skip && t < L - endSkip && t < bt) { bt = t; best = c; }
     }
@@ -302,7 +302,7 @@ function blocker(cols, a, b, skip = 0.35, only = null, endSkip = skip) {
 // p in the open (no structure within 0.3 m)? A bend point inside a wall can never be reached.
 const _fq = [];
 function pointFree(cols, p) {
-  for (const c of cols.query(p, 1, _fq)) if (!c.platform && cols.contact(c, p, 0.3, _nv) > 0) return false;
+  for (const c of cols.query(p, 1, _fq)) if (!c.platform && !c.meteor && cols.contact(c, p, 0.3, _nv) > 0) return false;
   return true;
 }
 
@@ -481,6 +481,11 @@ export class Winch {
         shift: (d) => e.body.pos.add(d),
       });
     }
+    // falling meteors: the hook rides the rock (its spinning body), which nothing you do slows
+    for (const rk of (g.meteors && g.meteors.rocks) || []) {
+      if (!near(rk.pos)) continue;
+      out.push({ obj: rk, mass: 1e6, flying: true, whole: true, root: rk.mesh, pos: () => rk.pos, vel: () => rk.vel, alive: () => g.meteors.rocks.includes(rk), push: () => {}, shift: () => {} });
+    }
     // SAT-7 in low orbit: an anchor that doesn't budge
     const S = g.secrets && g.secrets.sat;
     if (S && S.root && S.root.visible !== false && near(S.pos)) {
@@ -545,12 +550,12 @@ export class Winch {
     for (const T of this.targets()) {
       if (!T.alive()) continue;
       if (T.root) {
-        const hit = modelHit(T.root, eye, look);
+        const hit = modelHit(T.root, eye, look, T.whole);
         if (hit) { _pt.copy(hit.point); offer(T, null, hit.looked, hit.nrm); }
       } else { _pt.copy(T.pos()); offer(T, null, false, _nv.copy(eye).sub(_pt).normalize()); }
     }
     for (const c of g.colliders.query(P.pos, RANGE + 20, _cols)) {
-      if (c.platform || c.br < MIN_STRUCT_R) continue;
+      if (c.platform || c.meteor || c.br < MIN_STRUCT_R) continue;
       if (c.mid.distanceTo(P.pos) - c.br > RANGE) continue;
       const t = rayCollider(c, eye, look, RANGE + 80);
       const looked = t < Infinity;

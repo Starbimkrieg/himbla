@@ -282,6 +282,7 @@ export class Meteors {
     for (const c of this.spheres(rock)) {
       const col = C.add({ type: 'sphere', c, r: rock.minor });
       col.bouncy = true;
+      col.meteor = rock; // (rebuilt every frame: the winch hooks the rock itself, never these)
       rock.cols.push(col);
     }
   }

@@ -1481,7 +1481,7 @@ export class Enemies {
     for (let i = 0; i < n; i++) {
       if (len * (1 - i / n) < 2.5) break;
       _sv.lerpVectors(from, to, i / n);
-      for (const c of C.query(_sv, 0.4, _near)) if (!(ignore && c.platform === ignore) && C.contact(c, _sv, 0.3, _sn) > 0) return false;
+      for (const c of C.query(_sv, 0.4, _near)) if (!(ignore && (c.platform === ignore || c.meteor === ignore)) && C.contact(c, _sv, 0.3, _sn) > 0) return false;
     }
     return true;
   }
