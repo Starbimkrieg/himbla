@@ -50,24 +50,32 @@ CH = pivot(P + "chassis", (0, 0, 0), ROOT, role="chassis")
 A = Acc(P)
 
 
-def fender(c_z, a0, a1, slot, x0=1.74, x1=2.72, r=1.2, t=0.05, n=10):
-    """an arched fender over a wheel: a band of plate round the axle from angle a0 to a1 (from the top, + towards the nose)"""
-    verts, faces = [], []
-    for k in range(n + 1):
-        a = a0 + (a1 - a0) * k / n
-        for x in (x0, x1):
-            for rr in (r, r + t):
-                verts.append((x, WY + math.cos(a) * rr, c_z + math.sin(a) * rr))
-    o = lambda k, xi, ri: k * 4 + xi * 2 + ri
-    for k in range(n):
-        faces.append((o(k, 0, 1), o(k, 1, 1), o(k + 1, 1, 1), o(k + 1, 0, 1)))
-        faces.append((o(k, 1, 0), o(k, 0, 0), o(k + 1, 0, 0), o(k + 1, 1, 0)))
-        faces.append((o(k, 0, 0), o(k, 0, 1), o(k + 1, 0, 1), o(k + 1, 0, 0)))
-        faces.append((o(k, 1, 1), o(k, 1, 0), o(k + 1, 1, 0), o(k + 1, 1, 1)))
-    faces.append((o(0, 0, 0), o(0, 1, 0), o(0, 1, 1), o(0, 0, 1)))
-    faces.append((o(n, 0, 1), o(n, 1, 1), o(n, 1, 0), o(n, 0, 0)))
+def seg_plate(p, q, x0, x1, t=0.05, drop=0.0):
+    """a plate along the (z, y) segment p -> q, from x0 to x1; `drop` hangs it that far below the line (a lip)"""
+    (z0, y0), (z1, y1) = p, q
+    ang = math.atan2(y1 - y0, z1 - z0)
+    ln = math.hypot(z1 - z0, y1 - y0)
+    nz, ny = -math.sin(ang), math.cos(ang)                  # the normal towards the wheel (outlines run front to back)
+    c = ((x0 + x1) / 2, (y0 + y1) / 2 + ny * (drop / 2 + t / 2), (z0 + z1) / 2 + nz * (drop / 2 + t / 2))
+    return bx(c, ((x1 - x0) / 2, (t + drop) / 2, ln / 2), (-ang, 0, 0))
+
+
+def wheel_well(cz, prof, x0, slot, x1=2.75):
+    """an angular wheel well, full body width: flat plates along the (dz, y) outline round the wheel from x0 (the body) out
+    to x1, a hole in the top round the shock and its hoop, and a dropped lip along the outer edge"""
+    pts = [(cz + dz, y) for dz, y in prof]
+    top = (pts[1], pts[2])
     for sx in (-1, 1):
-        A.add(xf((verts, faces), s=(sx, 1, 1)), slot, CH, 0.03)
+        S = lambda g: xf(g, s=(sx, 1, 1))
+        for p, q in zip(pts, pts[1:]):
+            if (p, q) == top:
+                for a0, a1 in ((x0, 1.3), (1.7, x1)):
+                    A.add(S(seg_plate(p, q, a0, a1)), slot, CH, 0.03)
+                for zz in ((p[0], cz + 0.45), (cz - 0.45, q[0])):
+                    A.add(S(seg_plate((zz[0], p[1]), (zz[1], q[1]), 1.3, 1.7)), slot, CH, 0.03)
+            else:
+                A.add(S(seg_plate(p, q, x0, x1)), slot, CH, 0.03)
+            A.add(S(seg_plate(p, q, x1 - 0.03, x1, t=0.03, drop=0.13)), "dark", CH, 0.012)
 
 
 # ---------------- frame ----------------
@@ -78,8 +86,33 @@ for z in (3.85, 1.0, -0.8, -3.2):
     A.add(bx((0, 1.95, z), (0.62, 0.1, 0.08)), "dark", CH, 0.02)
 part("underglow")
 for sx in (-1, 1):
-    A.add(beam((sx * 0.45, 1.835, -1.0), (sx * 0.45, 1.835, 1.3), 0.025, 6), "underglow", CH, 0)
+    A.add(beam((sx * 0.62, 1.785, -0.7), (sx * 0.62, 1.785, 1.0), 0.025, 6), "underglow", CH, 0)
 
+# ---------------- underbody: a drive motor under the cab, shafts to both diffs, pipe and cable runs down the rails ----------------
+part("drive")
+A.add(bx((0.0, 1.36, 0.1), (0.3, 0.2, 0.42)), "steel", CH, 0.025)
+A.add(join([bx((0.0, 1.36, -0.24 + 0.08 * k), (0.32, 0.17, 0.012)) for k in range(7)]), "dark", CH, 0)
+for sx in (-1, 1):
+    for z in (-0.2, 0.4):
+        A.add(beam((sx * 0.28, 1.5, z), (sx * 0.58, 1.84, z), 0.03, 4), "dark", CH, 0.006)
+for a, b in (((0.0, 1.3, 0.52), (0.28, 1.12, ZF - 0.22)), ((0.0, 1.3, -0.32), (-0.28, 1.12, ZR + 0.22))):
+    A.add(beam(a, b, 0.055, 6), "metal", CH, 0.012)
+    for t in (0.04, 0.5, 0.96):
+        p = tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
+        A.add(xf(cyl((0, 0, 0), 0.085, 0.12, 8), p, _align((b[0] - a[0], b[1] - a[1], b[2] - a[2]))), "dark", CH, 0.008)
+part("pipes")
+for sx in (-1, 1):
+    for k, (y, r, slot) in enumerate(((1.88, 0.04, "dark"), (1.98, 0.035, "copper"))):
+        x = sx * (0.76 + 0.005 * k)
+        A.add(tube([(x, y, -0.9), (x, y, 1.2), (x, y + 0.03, 1.35), (x * 1.0, 2.2, 1.45)], [r] * 4, 4), slot, CH, 0.006)
+        A.add(beam((x, y, -0.9), (x, 2.15, -1.05), r, 4), slot, CH, 0.006)
+    for z in (-0.5, 0.15, 0.8):
+        A.add(bx((sx * 0.77, 1.95, z), (0.06, 0.13, 0.02)), "metal", CH, 0)
+    # a fat coolant hose sagging under the body from the bay to the deck, on hangers from the rail
+    A.add(tube([(sx * 0.42, 2.1, 1.25), (sx * 0.42, 1.55, 1.1), (sx * 0.44, 1.35, 0.6), (sx * 0.44, 1.35, -0.4), (sx * 0.42, 1.6, -0.95),
+                (sx * 0.42, 2.11, -1.1)], [0.06] * 6, 5), "copper" if sx < 0 else "dark", CH, 0.012)
+    for z in (0.75, -0.6):
+        A.add(beam((sx * 0.44, 1.41, z), (sx * 0.55, 1.83, z), 0.025, 4), "dark", CH, 0.006)
 # ---------------- axles and suspension: a coilover in its own hoop at each corner ----------------
 for z, nm in ((ZF, "F"), (ZR, "R")):
     sz = 1 if z > 0 else -1
@@ -97,13 +130,13 @@ for z, nm in ((ZF, "F"), (ZR, "R")):
         for dz in (-0.35, 0.35):
             A.add(bx((sx * 1.105, 2.0, z + dz), (0.395, 0.06, 0.05)), "dark", CH, 0.015)
             A.add(beam((sx * 1.5, 1.94, z + dz), (sx * 1.5, 3.26, z + dz), 0.065, 6), "dark", CH, 0.015)
-            A.add(bx((sx * 1.61, 2.2, z + dz), (0.11, 0.03, 0.04)), "dark", CH, 0.008)   # fender bracket
+            A.add(bx((sx * 1.61, 2.235, z + dz), (0.11, 0.03, 0.04)), "dark", CH, 0.008)   # wheel-well bracket
         A.add(beam((sx * 1.5, 3.2, z - 0.42), (sx * 1.5, 3.2, z + 0.42), 0.065, 6), "dark", CH, 0.015)
         part("shock" + c)
         coilover(A, CH, (sx * 1.5, WY + 0.14, z), (sx * 1.5, 3.13, z), 0.17, 5)
-part("fenders")
-fender(ZF, -0.62, 1.22, "body")
-fender(ZR, -1.22, 0.62, "metal")
+part("wells")
+wheel_well(ZF, [(1.25, 1.6), (0.8, 2.3), (-0.8, 2.3), (-1.2, 1.75)], 1.02, "body")
+wheel_well(ZR, [(1.2, 1.75), (0.8, 2.3), (-0.8, 2.3), (-1.15, 1.65)], 1.2, "primer")
 
 # ---------------- hood: a truck nose, open over the reactor ----------------
 part("hood")
@@ -111,7 +144,6 @@ side = [(CF, 2.2), (HOOD, 2.2), (HOOD, 2.9), (HOOD - 0.15, 3.07), (HOOD - 0.45, 
 for sx in (-1, 1):
     A.add(xf(extrude(side, 0.08, "x"), (sx * 0.98, 0, 0)), "primer", CH, 0.05)
     # coolant louvres down the hood side
-    A.add(join([bx((sx * 1.025, 2.82, 1.45 + 0.2 * k), (0.02, 0.16, 0.05), (0, 0, 0), ) for k in range(7)]), "dark", CH, 0)
     A.add(join([bx((sx * 1.04, 2.85, 1.45 + 0.2 * k), (0.015, 0.15, 0.025), (0.5, 0, 0)) for k in range(7)]), "metal", CH, 0)
     A.add(bx((sx * 1.025, 2.3, (CF + HOOD) / 2), (0.012, 0.03, (HOOD - CF) / 2 - 0.05)), "lens", CH, 0)   # a low LED strip
 A.add(bx((0, 3.11, 3.37), (1.02, 0.04, 0.38), (-0.12, 0, 0)), "primer", CH, 0.04)      # the nose's closed top
@@ -136,8 +168,8 @@ part("core")
 A.add(xf(torus(0.56, 0.13, 18, 6), CORE), "plasma", CH, 0)
 for k in range(8):
     f = TAU * k / 8 + PI / 8
-    A.add(xf(torus(0.24, 0.05, 10, 4), (cx + math.sin(f) * 0.56, cy, cz + math.cos(f) * 0.56), (PI / 2, f + PI / 2, 0)), "copper", CH, 0.012)
-A.add(xf(torus(0.56, 0.04, 24, 4), (cx, cy - 0.29, cz)), "dark", CH, 0.008)
+    A.add(xf(torus(0.24, 0.05, 8, 4), (cx + math.sin(f) * 0.56, cy, cz + math.cos(f) * 0.56), (PI / 2, f + PI / 2, 0)), "copper", CH, 0.012)
+A.add(xf(torus(0.56, 0.04, 16, 4), (cx, cy - 0.29, cz)), "dark", CH, 0.008)
 for k in range(4):
     f = TAU * k / 4 + PI / 4
     A.add(beam((cx + math.sin(f) * 0.56, cy - 0.29, cz + math.cos(f) * 0.56), (cx + math.sin(f) * 0.64, 2.2, cz + math.cos(f) * 0.64), 0.04, 4), "dark", CH, 0.008)
@@ -179,7 +211,7 @@ A.add(bx((0.75, 3.13, HOOD + 0.22), (0.16, 0.09, 0.07)), "dark", CH, 0.015)
 A.add(bx((0.75, 3.13, HOOD + 0.295), (0.13, 0.065, 0.008)), "lamp", CH, 0)
 A.add(beam((0.75, 3.04, HOOD + 0.22), (0.75, 2.98, HOOD + 0.22), 0.04, 4), "steel", CH, 0)
 part("plow")
-A.add(beam((-1.3, 2.05, 3.98), (1.3, 2.05, 3.98), 0.08, 6), "dark", CH, 0.02)
+A.add(beam((-1.4, 2.05, 3.98), (1.4, 2.05, 3.98), 0.08, 6), "dark", CH, 0.02)
 for k in range(7):
     x = -1.08 + 0.36 * k
     A.add(bx((x, 1.78, 4.12), (0.15, 0.46, 0.035), (-0.45, 0, 0)), "bleach" if k % 2 else "metal", CH, 0.02)
@@ -187,20 +219,19 @@ for k in range(7):
 for sx in (-1, 1):
     A.add(beam((sx * 0.62, 1.95, 3.9), (sx * 0.62, 1.5, 4.25), 0.05, 4), "dark", CH, 0.01)
 part("headlamps")
-# on stalks off the front fenders: a round one on the left, a square one on the right
+# on stalks off the front wheel wells: a round one on the left, a square one on the right
 for sx in (-1, 1):
-    A.add(beam((sx * 2.2, 2.16, 3.15), (sx * 2.2, 2.26, 3.15), 0.035, 6), "steel", CH, 0.006)
-A.add(xf(lathe([(0, -0.14), (0.15, -0.1), (0.17, 0.06), (0.15, 0.08), (0, 0.08)], 10), (-2.2, 2.4, 3.15), (PI / 2, 0, 0)), "dark", CH, 0.012)
-A.add(xf(cyl((0, 0, 0), 0.14, 0.02, 10), (-2.2, 2.4, 3.23), (PI / 2, 0, 0)), "lamp", CH, 0)
-A.add(bx((2.2, 2.35, 3.15), (0.15, 0.1, 0.1)), "dark", CH, 0.012)
-A.add(bx((2.2, 2.35, 3.25), (0.12, 0.075, 0.01)), "lamp", CH, 0)
-# RCS quads on the four frame ends, fed back along the rails
-for z, nm in ((3.72, "F"), (-3.2, "R")):
+    A.add(beam((sx * 2.2, 2.29, 3.15), (sx * 2.2, 2.4, 3.15), 0.035, 6), "steel", CH, 0.006)
+A.add(xf(lathe([(0, -0.14), (0.15, -0.1), (0.17, 0.06), (0.15, 0.08), (0, 0.08)], 10), (-2.2, 2.55, 3.15), (PI / 2, 0, 0)), "dark", CH, 0.012)
+A.add(xf(cyl((0, 0, 0), 0.14, 0.02, 10), (-2.2, 2.55, 3.23), (PI / 2, 0, 0)), "lamp", CH, 0)
+A.add(bx((2.2, 2.5, 3.15), (0.15, 0.1, 0.1)), "dark", CH, 0.012)
+A.add(bx((2.2, 2.5, 3.25), (0.12, 0.075, 0.01)), "lamp", CH, 0)
+# RCS quads on the ends of the plow beam and the rear bumper, fed back to the frame
+for z, nm in ((3.98, "F"), (-3.62, "R")):
     sz = 1 if z > 0 else -1
     for sx in (-1, 1):
         part("rcs" + nm + ("L" if sx < 0 else "R"))
-        A.add(bx((sx * 1.0, 1.95, z), (0.38, 0.07, 0.07)), "dark", CH, 0.015)
-        rcs_pod(A, CH, (sx * 1.42, 1.98, z), (sx, 0, 0), feed=(sx * 0.7, 1.98, z - sz * 0.25))
+        rcs_pod(A, CH, (sx * 1.42, 2.05, z), (sx, 0, 0), feed=(sx * 0.66, 1.95, z - sz * 0.4))
 
 # ---------------- cab: armoured, a slit windscreen ----------------
 part("cab")
@@ -250,46 +281,60 @@ for y in (2.55, 3.05, 3.55):
 A.add(tube([(-1.22, 3.0, -0.38), (-1.3, 3.0, -0.36), (-1.3, 2.8, -0.36)], [0.025] * 3, 4), "steel", CH, 0.006)
 viewport(A, CH, (-1.24, 3.58, 0.1), 0.15, 0.045, (-1, 0, 0), bars=(2, 1))
 A.add(tube([(-1.16, 2.5, -0.62), (-1.28, 2.52, -0.62), (-1.28, 3.5, -0.62), (-1.16, 3.52, -0.62)], [0.025] * 4, 4), "steel", CH, 0.006)
-part("stepbox")
-A.add(bx((-1.03, 1.78, 0.1), (0.3, 0.24, 0.55)), "primer", CH, 0.02)
-for y in (1.92, 1.6):
-    A.add(bx((-1.36, y, 0.1), (0.04, 0.02, 0.4)), "metal", CH, 0.008)
-    A.add(bx((-1.35, y - 0.06, 0.1), (0.012, 0.05, 0.4)), "dark", CH, 0)
-A.add(bx((-1.03, 2.03, 0.1), (0.31, 0.012, 0.56)), "metal", CH, 0)
+part("sill")
+# between the wheel wells: a running board (the step up to the door) over a skirt, a second tread in the skirt
+A.add(bx((-1.5, 1.905, 0.15), (0.3, 0.025, 1.25)), "metal", CH, 0.02)
+A.add(join([bx((-1.5, 1.932, -0.9 + 0.3 * k), (0.26, 0.004, 0.02)) for k in range(8)]), "dark", CH, 0)
+A.add(bx((-1.79, 1.74, 0.15), (0.025, 0.14, 1.25)), "primer", CH, 0.02)
+A.add(bx((-1.86, 1.62, 0.1), (0.06, 0.02, 0.36)), "metal", CH, 0.008)
+for z in (-0.12, 0.32):
+    A.add(bx((-1.84, 1.6, z), (0.04, 0.03, 0.02)), "dark", CH, 0)
+for z in (-0.6, 0.85):
+    A.add(beam((-0.66, 1.79, z), (-1.77, 1.65, z), 0.03, 4), "dark", CH, 0.006)
 
-# the right: a coolant tank on the frame, a utility rack on the cab wall, the ladder to the roof
-part("tank")
-A.add(cyl((1.05, 1.75, 0.15), 0.31, 0.9, 14, rot=(PI / 2, 0, 0)), "tank", CH, 0.03)
-for sz in (-1, 1):
-    A.add(xf(superquad(0.31, 0.31, 0.08, 1, 0.6, 14, 3), (1.05, 1.75, 0.15 + sz * 0.45)), "tank", CH, 0.015)
-for z in (-0.12, 0.42):
-    A.add(xf(torus(0.33, 0.025, 14, 3), (1.05, 1.75, z), (PI / 2, 0, 0)), "dark", CH, 0.006)
-    A.add(bx((0.8, 1.75, z), (0.1, 0.05, 0.04)), "dark", CH, 0)
-A.add(bx((1.05, 2.075, 0.15), (0.18, 0.012, 0.36)), "metal", CH, 0)
-A.add(tube([(1.05, 2.0, 0.6), (1.0, 2.15, 0.85), (0.8, 2.36, 1.15)], [0.035] * 3, 6), "copper", CH, 0.006)
-part("rack")
-for x in (1.19, 1.55):
-    for z in (-0.12, 0.72):
-        A.add(beam((x, 2.15, z), (x, 3.62, z), 0.03, 6), "dark", CH, 0.008)
-for y in (2.18, 2.92, 3.6):
-    A.add(bx((1.37, y, 0.3), (0.2, 0.022, 0.44)), "metal", CH, 0.012)
-part("rackgear")
-for k, z in enumerate((-0.0, 0.18)):
-    A.add(bx((1.36, 2.4, z), (0.14, 0.2, 0.07)), "primer", CH, 0.012)
-A.add(bx((1.36, 2.3, 0.5), (0.15, 0.1, 0.17)), "red", CH, 0.012)
-A.add(bx((1.36, 2.41, 0.5), (0.16, 0.012, 0.18)), "dark", CH, 0)
-A.add(xf(torus(0.15, 0.035, 12, 4), (1.36, 2.977, 0.12)), "dark", CH, 0.01)
-A.add(cyl((1.42, 3.12, 0.55), 0.07, 0.34, 8), "red", CH, 0.01)
-part("rackLight")
-searchlight(A, CH, (1.37, 3.81, 0.6), 0.14, (0.3, -0.3, 1))
-pivot(P + "spot1", (1.37, 3.81, 0.72), CH, role="spot", aim=(0.3, -0.3, 1.0), r=0.14)
+# the right: a bundle of three tanks strapped together between the wheels, a closed locker on the cab wall, the ladder
+part("bundle")
+TANKS = [((1.5, 1.7), 0.22, (-0.85, 1.15), "tank"), ((1.5, 2.05), 0.13, (-0.6, 1.0), "bleach"), ((1.16, 1.58), 0.14, (-0.8, 1.1), "primer")]
+for (x, y), r, (z0, z1), slot in TANKS:
+    A.add(cyl((x, y, (z0 + z1) / 2), r, z1 - z0, 12, rot=(PI / 2, 0, 0)), slot, CH, 0.025)
+    for z in (z0 + 0.05, z1 - 0.05):
+        A.add(cyl((x, y, z), r + 0.012, 0.04, 8, rot=(PI / 2, 0, 0)), "dark", CH, 0)   # end rings
+hull = []
+for (x, y), r, _, _ in TANKS:
+    hull += [(x + math.cos(TAU * k / 10) * (r + 0.02), y + math.sin(TAU * k / 10) * (r + 0.02)) for k in range(10)]
+hull.sort()
+lo, hi = [], []
+for pt in hull:                                   # convex hull (monotone chain): the strap's path round the bundle
+    for h in (lo, hi):
+        while len(h) >= 2 and ((h[-1][0] - h[-2][0]) * (pt[1] - h[-2][1]) - (h[-1][1] - h[-2][1]) * (pt[0] - h[-2][0])) * (1 if h is lo else -1) <= 0:
+            h.pop()
+        h.append(pt)
+loop = lo[:-1] + hi[::-1][:-1]
+for z in (-0.5, 0.2, 0.85):
+    A.add(tube([(x, y, z) for x, y in loop + loop[:1]], [0.02] * (len(loop) + 1), 3, cap=False), "steel", CH, 0.006)
+    A.add(beam((0.66, 1.8, z), (1.03, 1.58, z), 0.03, 4), "dark", CH, 0.006)
+A.add(cyl((1.5, 1.7, 1.18), 0.06, 0.08, 8, rot=(PI / 2, 0, 0)), "dark", CH, 0.006)
+A.add(xf(torus(0.07, 0.016, 8, 3), (1.5, 1.7, 1.23), (PI / 2, 0, 0)), "red", CH, 0)
+A.add(tube([(1.5, 2.05, 1.05), (1.5, 2.12, 1.3), (1.2, 2.3, 1.45), (1.02, 2.35, 1.45)], [0.035] * 4, 6), "copper", CH, 0.006)
+part("locker")
+A.add(bx((1.35, 2.91, 0.3), (0.2, 0.71, 0.42)), "primer", CH, 0.025)
+for (y0, y1), slot in (((2.24, 2.86), "metal"), ((2.92, 3.58), "bleach")):
+    A.add(bx((1.56, (y0 + y1) / 2, 0.3), (0.012, (y1 - y0) / 2, 0.38)), slot, CH, 0.008)
+    for y in (y0 + 0.1, y1 - 0.1):
+        A.add(cyl((1.58, y, 0.69), 0.025, 0.1, 6), "steel", CH, 0)
+    A.add(tube([(1.57, (y0 + y1) / 2, -0.02), (1.62, (y0 + y1) / 2, -0.02), (1.62, (y0 + y1) / 2 - 0.12, -0.02)], [0.018] * 3, 4), "steel", CH, 0)
+A.add(join([bx((1.575, 3.4 - 0.06 * k, 0.3), (0.006, 0.012, 0.22)) for k in range(5)]), "dark", CH, 0)
+A.add(bx((1.35, 3.64, 0.3), (0.23, 0.02, 0.45)), "dark", CH, 0.008)
+part("lockerLight")
+searchlight(A, CH, (1.37, 3.83, 0.6), 0.14, (0.3, -0.3, 1))
+pivot(P + "spot1", (1.37, 3.83, 0.72), CH, role="spot", aim=(0.3, -0.3, 1.0), r=0.14)
 part("ladder")
 for z in (-0.76, -0.42):
-    A.add(tube([(1.27, 1.35, z), (1.27, ROOF + 0.45, z), (1.05, ROOF + 0.55, z), (0.85, ROOF + 0.02, z)], [0.04] * 4, 6), "bleach", CH, 0.012)
+    A.add(tube([(1.27, 2.22, z), (1.27, ROOF + 0.45, z), (1.05, ROOF + 0.55, z), (0.85, ROOF + 0.02, z)], [0.04] * 4, 6), "bleach", CH, 0.012)
     for y in (2.4, 3.5):
         A.add(beam((1.27, y, z), (1.15, y, z), 0.02, 4), "dark", CH, 0)
-for k in range(10):
-    A.add(beam((1.27, 1.5 + 0.3 * k, -0.76), (1.27, 1.5 + 0.3 * k, -0.42), 0.025, 4), "steel", CH, 0.006)
+for k in range(7):
+    A.add(beam((1.27, 2.35 + 0.28 * k, -0.76), (1.27, 2.35 + 0.28 * k, -0.42), 0.025, 4), "steel", CH, 0.006)
 
 # heat stacks behind the cab (they dump the reactor's coolant heat), bent out at the top under the gun's sweep
 part("stacks")
@@ -297,7 +342,7 @@ for sx, top in ((-1, ROOF + 0.45), (1, ROOF + 0.3)):
     x = sx * 0.98
     A.add(tube([(x, 2.15, CB - 0.2), (x, top, CB - 0.2), (x + sx * 0.18, top + 0.12, CB - 0.2)], [0.11, 0.11, 0.11], 8), "steel", CH, 0.02)
     A.add(cyl((x, 3.1, CB - 0.2), 0.15, 0.9, 8), "metal", CH, 0.015)
-    A.add(join([bx((x + sx * 0.0, 2.75 + 0.12 * k, CB - 0.36), (0.1, 0.02, 0.012)) for k in range(6)]), "dark", CH, 0)
+    A.add(join([bx((x + sx * 0.0, 2.8 + 0.16 * k, CB - 0.36), (0.1, 0.02, 0.012)) for k in range(4)]), "dark", CH, 0)
     A.add(xf(torus(0.12, 0.02, 10, 3), (x + sx * 0.2, top + 0.13, CB - 0.2), (0, 0, sx * 1.2)), "dark", CH, 0)
     for y in (2.6, 3.65):
         A.add(beam((x, y, CB - 0.2), (x, y, CB), 0.025, 4), "dark", CH, 0)
@@ -308,22 +353,22 @@ A.add(bx((0, 2.17, -2.1), (1.2, 0.06, 1.25)), "dark", CH, 0.025)
 for sx in (-1, 1):
     plate(A, CH, (sx * 1.2, 2.42, -2.75), (0.035, 0.2, 0.55), (0, 0, 0), slot="bleach" if sx < 0 else "primer", ink=0.02, bolts=2, out=sx)
     plate(A, CH, (sx * 1.2, 2.4, -1.65), (0.035, 0.18, 0.5), (0.03, 0, 0), slot="metal", ink=0.02, out=sx)
-plate(A, CH, (0, 2.42, -3.37), (1.15, 0.2, 0.035), (0, 0, 0.0), slot="primer", ink=0.02, bolts=3, out=-1)
+plate(A, CH, (0, 2.42, -3.37), (1.15, 0.2, 0.035), (0, 0, 0.0), slot="primer", ink=0.02, out=-1)
 part("tanks")
 for i, sx in enumerate((-1, 1)):
     c = (sx * 0.56, 2.62, -2.15)
     A.add(cyl(c, 0.36, 1.3, 12, rot=(PI / 2, 0, 0)), "tank", CH, 0.03)
     for sz in (-1, 1):
-        A.add(xf(superquad(0.36, 0.36, 0.14, 1, 0.6, 12, 3), (c[0], c[1], c[2] + sz * 0.65)), "tank", CH, 0.02)
+        A.add(xf(superquad(0.36, 0.36, 0.14, 1, 0.6, 12, 2), (c[0], c[1], c[2] + sz * 0.65)), "tank", CH, 0.02)
     mli_blanket(A, CH, c, 0.36, 1.05, (-1.95, 1.95), seed=i)
     for z in (-0.4, 0.4):
         A.add(xf(torus(0.41, 0.025, 16, 4), (c[0], c[1], c[2] + z), (PI / 2, 0, 0)), "dark", CH, 0.006)
     A.add(bx((c[0], 2.3, c[2]), (0.3, 0.08, 0.45)), "dark", CH, 0.01)
 part("bumperR")
-A.add(beam((-1.2, 2.05, -3.55), (1.2, 2.05, -3.55), 0.08, 6), "dark", CH, 0.02)
+A.add(beam((-1.4, 2.05, -3.62), (1.4, 2.05, -3.62), 0.08, 6), "dark", CH, 0.02)
 for sx in (-1, 1):
-    A.add(bx((sx * 0.42, 1.95, -3.42), (0.06, 0.06, 0.14)), "dark", CH, 0)
-    spike(A, CH, (sx * 0.8, 2.05, -3.6), (sx * 0.2, 0, -1), 0.45, 0.09)
+    A.add(bx((sx * 0.42, 1.95, -3.44), (0.06, 0.06, 0.16)), "dark", CH, 0)
+    spike(A, CH, (sx * 0.8, 2.05, -3.67), (sx * 0.2, 0, -1), 0.45, 0.09)
 part("dishmast")
 A.add(beam((1.06, 2.23, -3.2), (1.06, 4.45, -3.2), 0.065, 6), "dark", CH, 0.015)
 A.add(beam((1.06, 2.8, -3.2), (1.06, 2.23, -2.9), 0.04, 4), "dark", CH, 0.008)
@@ -380,7 +425,7 @@ pivot(P + "crew", (0, 0.08, -0.38), T, role="crew", pose="stand")
 
 # ---------------- wheels ----------------
 for i, (sx, z) in enumerate(((-1, ZF), (1, ZF), (-1, ZR), (1, ZR))):
-    monster_wheel(P, i, (sx * WX, WY, z), sx, WR, HW, ROOT, lugs=13, spiked=z > 0, seed=i)
+    monster_wheel(P, i, (sx * WX, WY, z), sx, WR, HW, ROOT, lugs=12, spiked=z > 0, seed=i)
 
 A.flush()
 TA.flush()
@@ -394,16 +439,17 @@ audit_flips(C.objects)
 # parts meant to meet: links into the rails and axle, hoops on the frame, pipes into what they feed, armour on the cab
 CLASH_OK = [
     ("links*", "frame"), ("links*", "axle*"), ("bumpstop*", "frame"), ("hoop*", "frame"), ("shock*", "hoop*"),
-    ("shock*", "axle*"), ("hoop*", "fenders"), ("frame", "underglow"), ("frame", "axle*"), ("frame", "hood"),
-    ("frame", "cab"), ("frame", "deck"), ("frame", "bumperR"), ("frame", "plow"), ("frame", "stepbox"), ("frame", "tank"),
-    ("frame", "dishmast"), ("rcs*", "frame"), ("rcs*", "plow"), ("rcs*", "deck"), ("hood", "cab"), ("hood", "core"),
-    ("hood", "guard"), ("hood", "coolcoils"), ("hood", "bullbar"), ("core", "injectors"), ("core", "conduits"),
-    ("conduits", "cab"), ("conduits", "hood"), ("coolcoils", "cab"), ("guard", "cab"), ("plow", "bullbar"),
-    ("cab", "door"), ("cab", "visor"), ("cab", "pillarlight"), ("cab", "mirrors"), ("cab", "rack"), ("cab", "ladder"),
-    ("cab", "ringbase"), ("cab", "stacks"), ("cab", "deck"), ("cab", "stepbox"), ("cab", "tank"), ("rack", "rackgear"),
-    ("rack", "rackLight"), ("rack", "tank"), ("tank", "coolcoils"), ("tank", "hood"), ("door", "stepbox"),
+    ("shock*", "axle*"), ("hoop*", "wells"), ("frame", "underglow"), ("frame", "axle*"), ("frame", "hood"),
+    ("frame", "cab"), ("frame", "deck"), ("frame", "bumperR"), ("frame", "plow"), ("frame", "sill"), ("frame", "bundle"),
+    ("frame", "dishmast"), ("frame", "drive"), ("frame", "pipes"), ("drive", "axle*"), ("pipes", "hood"), ("pipes", "deck"),
+    ("rcs*", "frame"), ("rcs*", "plow"), ("rcs*", "bumperR"), ("hood", "cab"), ("hood", "core"), ("hood", "guard"),
+    ("hood", "coolcoils"), ("hood", "bullbar"), ("hood", "wells"), ("hood", "bundle"), ("core", "injectors"),
+    ("core", "conduits"), ("conduits", "cab"), ("conduits", "hood"), ("coolcoils", "cab"), ("guard", "cab"),
+    ("plow", "bullbar"), ("cab", "door"), ("cab", "visor"), ("cab", "pillarlight"), ("cab", "mirrors"), ("cab", "locker"),
+    ("cab", "ladder"), ("cab", "ringbase"), ("cab", "stacks"), ("cab", "deck"), ("cab", "sill"), ("cab", "bundle"),
+    ("locker", "lockerLight"), ("locker", "bundle"), ("bundle", "coolcoils"), ("sill", "wells"), ("bundle", "wells"),
     ("deck", "tanks"), ("deck", "bumperR"), ("deck", "dishmast"), ("deck", "needles"), ("deck", "flagpole"),
-    ("deck", "stacks"), ("fenders", "headlamps"), ("turret", "ringbase"), ("turret", "gun"), ("*/laser", "*"),
+    ("deck", "stacks"), ("deck", "wells"), ("wells", "headlamps"), ("turret", "ringbase"), ("turret", "gun"), ("*/laser", "*"),
 ]
 clash_check(CLASH_OK)
 float_check(skip_slots=("ion", "plasma"), skip_tags=("*/laser",))   # (the plasma ring is held by its field)

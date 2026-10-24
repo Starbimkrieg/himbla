@@ -194,13 +194,10 @@ def monster_wheel(pfx, i, pos, side, R, hw, parent, lugs=13, spiked=False, seed=
     # hub: a deep steel dish with a lip, the beadlock ring and its bolts, a cap with lug nuts
     hub = [(0.0, 0.0), (R * 0.57, 0.0), (R * 0.57, 0.06), (R * 0.5, 0.08), (R * 0.3, 0.16), (R * 0.2, 0.22), (0.0, 0.23)]
     acc.add(xf(lathe(hub, 12), (side * (hw - 0.06), 0, 0), (0, 0, -side * PI / 2)), "steel" if seed % 2 else "primer", W, 0.02)
-    acc.add(xf(torus(R * 0.52, 0.035, 18, 3), (side * (hw + 0.02), 0, 0), (0, 0, PI / 2)), "dark", W, 0.01)
+    acc.add(xf(torus(R * 0.52, 0.035, 14, 3), (side * (hw + 0.02), 0, 0), (0, 0, PI / 2)), "dark", W, 0.01)
     for k in range(6):
         a = TAU * k / 6
         acc.add(octa((side * (hw + 0.06), math.cos(a) * R * 0.52, math.sin(a) * R * 0.52), 0.035), "metal", W, 0)
-    for k in range(4):
-        a = TAU * k / 4
-        acc.add(octa((side * (hw + 0.17), math.cos(a) * R * 0.14, math.sin(a) * R * 0.14), 0.03), "metal", W, 0)
     if spiked:
         acc.add(xf(lathe([(0.12, 0), (0.08, 0.15), (0, 0.55)], 6), (side * (hw + 0.16), 0, 0), (0, 0, -side * PI / 2)), "bone", W, 0.02)
     acc.flush()
@@ -383,9 +380,9 @@ def clash_check(allow=(), sweep=True):
 
 def searchlight(acc, parent, c, r, fwd=(0, 0, 1), yoke=True, cage=True, ink=0.02):
     """a can light facing `fwd`: back dome, barrel, glowing lens set in its rim, a yoke and a wire guard"""
-    can = lathe([(0, -r * 1.1), (r * 0.8, -r * 0.95), (r, 0.2 * r), (r * 1.08, 0.42 * r), (r * 0.9, 0.42 * r)], 10)
+    can = lathe([(0, -r * 1.1), (r * 0.8, -r * 0.95), (r, 0.2 * r), (r * 1.08, 0.42 * r), (r * 0.9, 0.42 * r)], 8)
     acc.add(frame_xf(xf(can, r=(PI / 2, 0, 0)), c, fwd), "dark", parent, ink)
-    acc.add(frame_xf(xf(cyl((0, 0, 0), r * 0.9, 0.04, 10), (0, 0, 0.36 * r), (PI / 2, 0, 0)), c, fwd), "lamp", parent, 0)
+    acc.add(frame_xf(xf(cyl((0, 0, 0), r * 0.9, 0.04, 8), (0, 0, 0.36 * r), (PI / 2, 0, 0)), c, fwd), "lamp", parent, 0)
     if cage:
         for y in (-0.45, 0.0, 0.45):
             acc.add(frame_xf(beam((-r * 0.95, y * r, 0.5 * r), (r * 0.95, y * r, 0.5 * r), 0.012, 4), c, fwd), "steel", parent, 0)

@@ -55,6 +55,7 @@ VIEWS = {
     "side": orbit(-90, 4, 22.0, (0, 3.3, 0)),
     "close": None,   # on the gunner: set per rig from its crew empty
     "night": orbit(-150, 16, 24.0, (0, 2.0, 5.0)),
+    "under": orbit(-70, 3, 13.0, (0, 2.0, 0.5), 32),   # low, to see the underbody
 }
 
 
@@ -302,7 +303,7 @@ def sheet(name, views):
 
 
 for name in NAMES:
-    views = [v for v in VIEWS if (not ONLY or v in ONLY) and not (name == "current" and v in ("close",))]
+    views = [v for v in VIEWS if (not ONLY or v in ONLY) and not (name == "current" and v in ("close",)) and (v != "under" or v in ONLY or name == "a")]
     for night in (False, True):
         vs = [v for v in views if (v == "night") == night]
         if not vs:

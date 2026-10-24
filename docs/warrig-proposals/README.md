@@ -37,7 +37,9 @@ short rear deck, over two axles 4.9 m apart (6.6 m in the game).
 
 - **Running gear:** two solid axles on trailing links, each corner hung from one long coilover inside its own hoop (two
   posts and a top bar on outriggers from the frame), so the shocks stand clear beside the body; bump stops under the rails.
-  Arched fenders over all four wheels (the front pair painted). Balloon tyres 2.8 m across in the game, **modelled whole**:
+  **Angular wheel wells** the full width of the body over all four wheels (flat plates round each wheel from the body out
+  past the tyre, a dropped lip along the outer edge, a hole in the top where the shock and its hoop come through; the
+  front pair painted), which carry the body down to the wheels. Balloon tyres 2.8 m across in the game, **modelled whole**:
   the carcass and its tread are one mesh with one outline, each lug swept as one piece from just past the centre line over
   the shoulder and down the sidewall, raked into a chevron, with deep grooves between. Dished beadlock hubs; spiked front
   hubs, for ramming.
@@ -47,16 +49,23 @@ short rear deck, over two axles 4.9 m apart (6.6 m in the game).
   blue sparks into the ring, copper cooling coils along the bay into the louvres, two plasma conduits under the ring into
   the cab.
 - **Front:** a plow of raked blades with ramming teeth on a bumper beam, a bull bar with two mismatched pod lamps,
-  mismatched headlamps on stalks off the front fenders, RCS quads on the frame ends.
+  mismatched headlamps on stalks off the front wheel wells, RCS quads on the ends of the plow beam.
 - **Cab:** armoured. The windscreen is plated: the driver's two slits in the left half, caged, the right half plated over
   round one caged porthole; the slits look out over the reactor's guard bars. A visor bar of LEDs over the windscreen, a
   big searchlight on the left pillar, mirrors on both sides, a green LED strip along the brow, corner irons, ribs on the
   back.
 - **The door** is on the left: a painted armour leaf in a heavy frame, hinges, a lever latch, a caged slit, a grab
-  handle, over a step box with two treads.
-- **The right side:** a coolant tank on the frame like a truck's fuel tank (piped into the bay), a utility rack on the cab
-  wall (canisters, a toolbox, a hose, an extinguisher, a small searchlight on top) and a full-height ladder from below
-  the frame to grab rails over the roof.
+  handle. Under it, between the wheel wells, a sill: a tread-plate running board (the step up to the door) over a skirt
+  with a second tread.
+- **The right side:** a bundle of three tanks of different sizes strapped together between the wheels (bands round the
+  bundle, brackets to the frame, a valve, a line into the bay), a closed equipment locker on the cab wall (two doors with
+  hinges, T-handles and a louvred vent, a small searchlight on top), and a full-height ladder from the bundle to grab
+  rails over the roof.
+- **Underneath:** a finned drive motor hung under the cab with driveshafts (U-joints and a slip joint) to both diffs, and
+  lines down each frame rail (a cable and a copper coolant line), clamped, and a fat coolant hose on each side sagging
+  below the body line on hangers from the bay back to the deck.
+
+  ![A from low down: the underbody between the wheels](a_under.jpg)
 - **Heat stacks:** two behind the cab, at different heights, with perforated heat shields; they dump the reactor's coolant
   heat. Their tops are bent outward under the gun's sweep.
 - **Gun:** a ring mount on the cab roof, a **standing gunner** behind a drum-fed **five-barrel rotary** (two turns of
@@ -64,9 +73,9 @@ short rear deck, over two axles 4.9 m apart (6.6 m in the game).
   sight.
 - **Rear deck:** two He-3 tanks under frayed MLI blankets with silver patches, a relay dish on a mast, three antenna
   needles on the left sideboard, the flag on the back-left corner (nothing behind it, so the game's waving cloth streams
-  back; the renders use that cloth, ported from `makeWaveFlag`, at 24 m/s), a rear bumper with two ramming spikes, RCS
-  quads on the frame ends.
-- **Colour:** primer, sun-bleached plate and bare metal; only the door and the front fenders are painted, in sun-faded
+  back; the renders use that cloth, ported from `makeWaveFlag`, at 24 m/s), a rear bumper with two ramming spikes and RCS
+  quads on its ends.
+- **Colour:** primer, sun-bleached plate and bare metal; only the door and the front wheel wells are painted, in sun-faded
   faction violet. The faction's violet and green only glow: viewport slits, LED strips, the turret's LED ring, the RCS
   lights, a violet underglow under the frame.
 
@@ -88,9 +97,12 @@ short rear deck, over two axles 4.9 m apart (6.6 m in the game).
    (the clash check found eleven clashes); a taller cab so the driver can see over the reactor; a whole relay dish; RCS
    pods on the frame ends; a door and a utility shelf with a ladder; little paint, the faction colours only as glows;
    chunky chewed rubber lugs.
-3. **This round:** reshaped as a big-rig head (a long truck hood with a grille and the reactor open in it, a conventional
+3. **Third round:** reshaped as a big-rig head (a long truck hood with a grille and the reactor open in it, a conventional
    cab, heat stacks, a rear deck, fenders), 0.85 m longer; a cleaner build under 20k triangles; tyres modelled whole with
    the grooves cut in, instead of blocks sitting on the carcass; the float check.
+4. **This round:** angular full-width wheel wells instead of the round fenders, for depth low on the body; a sill and
+   running board on the door side; the open shelf replaced by a closed locker and a strapped tank bundle; a drive motor,
+   driveshafts and pipe runs underneath; the RCS quads moved to the bumper ends.
 
 ## B: CRATERCRAB (six-wheeled cab-forward, the drive on its back)
 
@@ -144,7 +156,7 @@ we want the rigs to light the ground in the shadow zones. The renders do exactly
 
 | | A FURNACE | B CRATERCRAB |
 |---|---|---|
-| Triangles | 19.8k (16.4k of them inked) | 17.6k (14.8k inked) |
+| Triangles | 19.9k (16.2k of them inked) | 17.2k (14.6k inked) |
 | Wheels | 4, radius 1.05 (1.42 m in the game) | 6, radius 0.95 (1.28 m in the game) |
 | Length × width (game scale) | about 10.9 m (11.7 m with the plow's teeth) × 7.3 m | about 10 m × 7.8 m |
 | Height (game scale) | about 7.9 m to the gunner's head (cab roof 5.5 m) | about 6.5 m to the cage roof |
