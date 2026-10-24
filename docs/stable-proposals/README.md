@@ -3,8 +3,8 @@
 The stables sit behind Chimera Downs' far stand, whose two tunnels (x = ±47.5) open out the back. They were four blocks of six boxes
 round a lane in the middle, short of the tunnels and open on every side. Both layouts below hang the yard off the stand's back wall
 (z = −96) so the tunnels come out into it, close it in with L-shaped wings of boxes and fences, and give it gates. Both are in the
-game: `STABLE_LAYOUTS` in `src/downsPlan.js`, `STABLE` picks the one built (A for now). In a dev build `?stables=a` or `?stables=b`
-shows the other.
+game: `STABLE_LAYOUTS` in `src/downsPlan.js`, `STABLE` picks the one built: **B was chosen**. In a dev build `?stables=a`
+shows A.
 
 `node tools/stable-layouts.mjs` checks both (pieces clear of the stand, the arcades and each other) and `node tools/stable-layouts.mjs docs`
 redraws the plans here.
@@ -17,7 +17,7 @@ redraws the plans here.
 
 ![Now](plan-current.png)
 
-## A: The Stable Court
+## A: The Stable Court (not built)
 
 ![Layout A](plan-a.png)
 
@@ -32,7 +32,7 @@ leads out to the west and the east; fences close the gaps.
 
 ![A: the west gate, from outside](a_gate.jpg)
 
-## B: The Twin Lanes
+## B: The Twin Lanes (built)
 
 ![Layout B](plan-b.png)
 

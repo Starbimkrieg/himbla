@@ -89,7 +89,7 @@ export const RING = { x: -96, z: 0, rx: 26, rz: 18 };                // the para
 export const PAVILION = { x: -62, z: 0 };                             // the weighing room's front wall (the porch stands 3.2 m west of it)
 export const LAWN = { x: 100, z: 0, r: 28, tables: [[84, -12, 0], [92, 12, 1], [104, -16, 2], [110, 6, 3], [96, -2, 4], [118, -6, 5]] };
 
-// ---- the stables behind the far stand (docs/stable-proposals/): two layouts, A and B; STABLE picks the one built. Both hang off the far stand's
+// ---- the stables behind the far stand (docs/stable-proposals/): two layouts, A and B; STABLE picks the one built (B, the Twin Lanes). Both hang off the far stand's
 // back wall (its outer face at z = -96), so its two tunnels (x = +-47.5) come out into the yard. Each is mirrored about x = 0.
 //   pieces  [name, x, z, yaw]: dn_stable_4 / dn_stable_6 (yaw 0: front +z; PI/2: front +x; -PI/2: front -x), dn_stable_corner (yaw 0: its inner corner toward
 //           +x +z; -PI/2: toward -x +z), dn_hay_barn (front +z), dn_lunge_ring, dn_trough, dn_tack
@@ -156,7 +156,7 @@ export const STABLE_LAYOUTS = {
 };
 const DEV = typeof __DEV_TOOLS__ === 'undefined' ? true : __DEV_TOOLS__;     // (in a dev build ?stables=a|b picks the layout, to compare them)
 const asked = DEV && typeof location !== 'undefined' ? /[?&]stables=(a|b)\b/.exec(location.search) : null;
-export const STABLE = asked ? asked[1] : 'a';
+export const STABLE = asked ? asked[1] : 'b';
 export const STABLES = STABLE_LAYOUTS[STABLE];
 // The boxes a layout's blocks hold: [x, z, yaw] of where a chimera stands in each box, 1.6 m in from the door (its head over it), the way it looks out (the game stands a chimera in some)
 export const BOX_PITCH = 5;
