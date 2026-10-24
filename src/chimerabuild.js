@@ -104,7 +104,7 @@ function assemble(genes, kit, suffix) {
   const inner = new THREE.Group();
   root.add(inner);
   const C = {
-    rr, kit, suffix, inner, joints: [], anims: { legs: [], wheels: [], arms: [], motes: [] }, hides: [], colors: {}, looks: {},
+    rr, kit, suffix, inner, joints: [], anims: { legs: [], wheels: [], arms: [] }, hides: [], colors: {}, looks: {},
     mods: new Set(genes.mods || []), style: genes.style || {},
   };
   // each kind's colour and, for the people, their outfit
@@ -151,7 +151,6 @@ function assemble(genes, kit, suffix) {
     for (const L of C.anims.legs) L.node.rotation.x = Math.sin(w + L.ph) * 0.55 * a + Math.sin(t * 1.7 + L.ph) * 0.04 * (1 - a);
     for (const A of C.anims.arms) A.node.rotation.x = Math.sin(w + A.ph) * 0.5 * a;
     for (const W of C.anims.wheels) W.node.rotation.x += (speed * dt) / (W.r * k);
-    for (const M of C.anims.motes) { const q = t * M.sp + M.ph; M.node.position.set(Math.cos(q) * M.r, M.y + Math.sin(q * 1.7) * 0.08, Math.sin(q) * M.r); M.node.rotation.y = q * 2; }
     inner.position.y = a > 0.1 ? Math.abs(Math.sin(w)) * 0.03 : 0;
   };
   anim(0, 0);
@@ -339,7 +338,7 @@ function devices(C, legs, body, heads) {
   }
 }
 
-// void: the whole creature darkens toward violet, wrapped in a shadowy aura, with motes of void drifting round it
+// void: the whole creature darkens toward violet, wrapped in a shadowy aura
 function voidAura(C, push) {
   for (const { mesh } of C.hides) {
     const col = mesh.geometry.attributes.color;
@@ -350,15 +349,16 @@ function voidAura(C, push) {
   // One aura, not a pile of shells. Every solid piece gets two shells (6 and 13 cm out: a bright glow and a dim outer one) and they blend
   // by MAX (a pixel takes the brightest of the shells over it and the scene behind, never their sum), so where they overlap they read as one
   // even glow. Each shell is drawn pushed back along the view (same place on screen, `push` metres deeper), so it only shows where nothing
-  // of the creature is in front of it: round the silhouette, never laid over the creature itself. Tiny pieces (bolts, bulbs) get none.
+  // of the creature is in front of it: round the silhouette, never laid over the creature itself. Near the feet the ground behind is closer
+  // than that, and would hide it: the push fades out toward the ground (aH: each vertex's height above the feet). Tiny pieces get none.
   const auraMat = (color) => {
     const m = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide, depthWrite: false, transparent: true,
       blending: THREE.CustomBlending, blendEquation: THREE.MaxEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor });
     m.userData.own = true;
     m.onBeforeCompile = (sh) => {
       sh.uniforms.push = { value: push };
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float push;').replace('#include <project_vertex>', `#include <project_vertex>
-        mvPosition.xyz *= (length(mvPosition.xyz) + push) / max(length(mvPosition.xyz), 1e-3);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float push;\nattribute float aH;').replace('#include <project_vertex>', `#include <project_vertex>
+        mvPosition.xyz *= (length(mvPosition.xyz) + push * smoothstep(0.04, 0.5, aH)) / max(length(mvPosition.xyz), 1e-3);
         gl_Position = projectionMatrix * mvPosition;`);
     };
     m.customProgramCacheKey = () => 'chimeraAura';
@@ -371,17 +371,18 @@ function voidAura(C, push) {
     if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
     if (o.geometry.boundingSphere.radius > 0.05) solid.push(o);
   });
+  const toInner = new THREE.Matrix4(), invInner = new THREE.Matrix4().copy(C.inner.matrixWorld).invert();
   for (const o of solid) {
+    toInner.multiplyMatrices(invInner, o.matrixWorld);
     for (const [d, mat] of layers) {
       const s = new THREE.Mesh(inkShell(o.geometry, d), mat);
       s.geometry.userData.own = true;
+      const P = s.geometry.attributes.position, h = new Float32Array(P.count);
+      for (let i = 0; i < P.count; i++) h[i] = _v.fromBufferAttribute(P, i).applyMatrix4(toInner).y;
+      s.geometry.setAttribute('aH', new THREE.BufferAttribute(h, 1));
       s.renderOrder = 3;
       s.position.copy(o.position); s.quaternion.copy(o.quaternion); s.scale.copy(o.scale);
       o.parent.add(s);
     }
-  }
-  for (let i = 0; i < 5; i++) {
-    const g = place(C, 'ch_mote', C.inner);
-    if (g) C.anims.motes.push({ node: g, r: 0.45 + C.rr() * 0.3, y: 0.3 + C.rr() * 0.8, sp: 0.6 + C.rr() * 0.8, ph: C.rr() * 6.28 });
   }
 }

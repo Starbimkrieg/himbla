@@ -57,7 +57,7 @@ The player's orange is never drawn.
   log); **radio** on the head (a field radio; a third feeler; an aerial and a dish; a leaf dish); **lens** on the eye (a jeweller's
   eyepiece; a big lensed headlamp; a glass eye bud). With two heads, the lens goes on the first and the radio on the second.
 - **Void** darkens the whole creature and wraps it in one violet aura (two shells round every piece, a bright one and a dim outer one,
-  blended by MAX so they merge, and drawn only outside the silhouette), with shards of void drifting round it.
+  blended by MAX so they merge, and drawn only outside the silhouette, down to the ground).
 - **The Triple Crown**: gold laurels on the head.
 
 ## The files

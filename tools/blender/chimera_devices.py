@@ -4,7 +4,7 @@
 #   turbo   human: a jet pack                      mite: three jet vents                car: an engine with its stacks   sapling: a hollow log, smouldering
 #   radio   human: a field radio with a whip aerial   mite: a third feeler with a receiver   car: an aerial and a dish   sapling: a leaf dish
 #   lens    human, mite: a jeweller's eyepiece     car: a big lensed headlamp           sapling: a glass eye bud on a stalk
-# and ch_arc (the spark's crackle on a flank), ch_mote (a shard of void drifting round a void creature), ch_crown (the Triple Crown's laurels).
+# and ch_arc (the spark's crackle on a flank), ch_crown (the Triple Crown's laurels).
 
 
 def dev(name):
@@ -88,12 +88,9 @@ def build_devices():
     fused(d.name + "_stalk", chain([(0, -0.02, 0), (0.01, 0.05, 0.02), (0.0, 0.09, 0.0)], [0.01, 0.009, 0.008], seg=8), "leaf", d, 0.006, 150)
     plain(d.name + "_bulb", ell(0.03, 0.03, 0.03, (0, 0.11, 0), n=14), "glass", d, 0.006)
     plain(d.name + "_pupil", ell(0.012, 0.008, 0.012, (0, 0.135, 0), n=10), "dark", d, 0.0)
-    # ---- the spark's arc, a void mote, the crown ----
+    # ---- the spark's arc, the crown ----
     d = dev("ch_arc")
     plain(d.name + "_zig", join([zigzag(4, 0.13, 0.025, rng), xf(zigzag(3, 0.09, 0.02, rng, 0.005), (0.02, 0, 0.01), (0, 0, -0.5))]), "spark", d, 0.0)
-    d = dev("ch_mote")
-    plain(d.name + "_shard", shard(0.04, 0.16, (0, -0.08, 0), (0, 1, 0)), "dark", d, 0.008, smooth=False)
-    plain(d.name + "_core", ell(0.02, 0.05, 0.02, (0, 0.0, 0), n=10), "voidglow", d, 0.0)
     d = dev("ch_crown")
     leaves = [ell_between((math.cos(a) * 0.1, 0.06, math.sin(a) * 0.1), (math.cos(a + 0.35) * 0.11, 0.1, math.sin(a + 0.35) * 0.11), 0.018, 0.006, roll=a, n=10) for a in [k * math.pi / 7 for k in range(14)]]
     fused(d.name + "_laurels", join([ring(0.1, 0.008, (0, 0.06, 0), seg=28)] + leaves), "gold", d, 0.008, 700)

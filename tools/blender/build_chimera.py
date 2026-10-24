@@ -5,8 +5,8 @@
 #   CHIMERA_ONLY=car,mite CHIMERA_OUT=/tmp/x.glb ...                         (just some kinds, to look at while working on them)
 #
 # The pipeline (fusing, cuts, fitted mutations, the far LOD) is chimera_common.py; the parts are chimera_people.py (settlers, pirate,
-# Vrill), chimera_mite.py, chimera_car.py, chimera_sapling.py, chimera_junkbot.py; the mutations' devices, the Triple Crown and the void
-# motes are chimera_devices.py.
+# Vrill), chimera_mite.py, chimera_car.py, chimera_sapling.py, chimera_junkbot.py; the mutations' devices, the Triple Crown
+# are chimera_devices.py.
 #
 # THE CONTRACT (chimerabuild.js):
 #   ch_<slot>_<kind>_<look>   a part: legs, body or head of a kind, in a look (mite, car, sapling: 0 to 2; person: legs suit, trousers;
@@ -23,7 +23,7 @@
 #                             part: extra mut = armor, crystal or mud; shown only on a chimera that has it)
 #   ch_mut_<mut>_<family>     a device (spark, turbo, radio, lens; families human, mite, car, sapling), built on its socket's frame: +y out of
 #                             the surface, its foot sunk 3 cm in
-#   ch_arc, ch_mote, ch_crown the spark's arc, a void mote, the Triple Crown
+#   ch_arc, ch_crown          the spark's arc, the Triple Crown
 # Slots: see HEX in chimera_common.py (hides, tinted slots, fixed and lit ones); `inkonly` meshes are outline sources, never drawn.
 import os
 
