@@ -109,7 +109,7 @@ export class Cheats {
     try {
       const r = await fetch(`/__dev/git/${act}`, { method: 'POST', headers: { 'X-Dev-Git': '1', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
       return await r.json();
-    } catch (e) { return { ok: false, err: String((e && e.message) || e) }; }
+    } catch (e) { return { ok: false, lost: true, err: String((e && e.message) || e) }; } // (no answer: the server is down or restarting)
   }
 
   // The upstream chip (HUD top left): commits upstream has that this checkout lacks. While on, fetches every GIT_POLL s (and
@@ -223,6 +223,13 @@ export class Cheats {
           const mine = show('<small>Switching…</small>', []);
           const r = await this.gitCall('switch', { branch: b.name });
           if (g.dialogButtons !== mine) return;
+          if (r.lost) {
+            // a branch whose dev-server config differs restarts the dev server mid-answer: the switch went through
+            show(`<small>The dev server restarted while switching to <b>${esc(b.name)}</b> (that branch changes its config).<br>Reloading when it is back…</small>`, [{ label: 'RELOAD NOW', fn: () => location.reload() }]);
+            const wait = async (n) => { try { await fetch('/', { cache: 'no-store' }); location.reload(); } catch { if (n) setTimeout(() => wait(n - 1), 1000); } };
+            setTimeout(() => wait(20), 2500);
+            return;
+          }
           if (!r.ok) { show(`<small>Switch stopped: ${esc((r.err || 'git said no').split('\n').filter((l) => l && !/^hint:/.test(l)).slice(0, 4).join(' · '))}</small>`, [{ label: 'BACK TO BRANCHES', fn: () => this.gitBranches(show, esc) }]); return; }
           const lines = [`Now on <b>${esc(r.branch)}</b> at ${esc(r.head)} · ${r.changed} file${r.changed === 1 ? '' : 's'} differ from ${esc(r.from)}.`];
           if (r.ffError) lines.push(`Your local copy of it could not fast-forward to origin's: ${esc(r.ffError.split('\n')[0])}`);
