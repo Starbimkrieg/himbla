@@ -100,7 +100,9 @@ player lights (skate colour, health), DualSense adaptive triggers, and a TEST bu
   2.5 s after you land; then it banks: the moves' sum times the multiplier (+0.5 per kind of move past the first, air
   time not counting) into the style pool. A wipeout or crash loses it (`src/combo.js`, `src/stylemeter.js`).
 - **Grinding:** snake rocks (35-50 m ridges) and firm crater lips are rails. Land on one or ride onto it at an angle
-  to grind; `Shift` pops off. Grinds pay style per second; a clean trick landed onto a rail counts.
+  to grind; `Shift` pops off. Grinds pay style per second; a clean trick landed onto a rail counts. At Chimera Downs the
+  buildings' edges grind too (LEDGE GRIND: roofs, canopies, parapets, walls, steps, counters): the top edges of their
+  colliders (`src/ledges.js`), taken only on skates, from the air, heading along the edge.
 - **Terrain:** cratered plains plus highlands, scarps, rolling hills and long rilles. Craters range from bowls to
   terraced giants. Ramp slabs, arches and hoodoos dot the plains.
 - **Deliveries:** contracts at job boards, each with cargo type, fragility, pirate risk, distance and a tight clock.
@@ -363,7 +365,8 @@ src/
   downsFair.js     ferris wheel, carousel, queue lines
   rides.js         transit-ship rides and fairground rides
   rocks.js         shaped rocks and colliders
-  rails.js         grinding rocks and crater rims
+  rails.js         grinding rocks, crater rims and building ledges
+  ledges.js        building ledges as grind rails (the top edges of a place's colliders)
   meteors.js       meteor showers
   chimerastats.js  chimera stats, growth, styles, careers, training, race model (docs/chimera-racing.md)
   chimeraskills.js the racing skills
@@ -421,7 +424,7 @@ tools/
   casino-zfight.mjs        lists coplanar faces in the running casino
   casino-shots.mjs         casino screenshots from fixed spots
   check-claw.mjs           bots play the claw to tune its payout
-  downs-audit.mjs          Chimera Downs audit: zfight, colliders, text, gaps
+  downs-audit.mjs          Chimera Downs audit: zfight, colliders, text, gaps; coverage, blocked (named only)
   downs-layouts.mjs        Chimera Downs layout study (docs/downs-layouts.md)
   stable-layouts.mjs       the stable yard's layouts: clearance and walk checks, plans (docs/stable-proposals/)
   race-sim.mjs             runs the race model headless and reports the balance

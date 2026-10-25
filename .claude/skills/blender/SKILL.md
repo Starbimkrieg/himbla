@@ -105,7 +105,8 @@ await page.evaluate(async () => {
 - **Pivot empties** are the animated parts (runner: legL, legR, torso, head, armL, armR, foreL, foreR (forearms, on the elbows, children of the arm pivots), scarfLinks). `padL`, `padR`, `band`, `crest` and `antenna` are outfit extras: baked apart from the always-worn parts and hung on by `cosmetics.js` only when an outfit asks (`runnerExtra` in `models.js`). Geometry is
   read in its pivot's frame. Vehicles have named pivots for wheels, turret, barrel, gear and so on; check the
   builder and `src/models.js` for the names before renaming anything.
-- **Colliders** are empties named `col.*` (outposts: `cols`, `hits`, `raid`, `smoke`, `drop`), never read from
+- **Colliders** are empties with role `col` (Chimera Downs parts write them from their own primitives with `parts(..., solid=True)`:
+  `docs/downs-layouts.md`, Colliders) or named `col.*` (outposts: `cols`, `hits`, `raid`, `smoke`, `drop`), never read from
   visible meshes. Full outpost contract, with its naming rules: `docs/outpost-glb.md`.
 - Object names are unique across a file; Blender's `.001` suffixes are stripped from material names only.
 - Renaming a slot, pivot or collider is a game-code change too: grep `src/` for the name.

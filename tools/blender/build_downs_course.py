@@ -60,7 +60,7 @@ P["gold"].cylc(0, 3.5, 0, 0.13, 0.12, 8)                                        
 # dn_finish_arch
 # =====================================================================================================
 root = pivot("dn_finish_arch", (0, 0, 0))
-P = parts(root, "dn_finish_arch", {"mint": 0.07, "mint2": 0.03, "gold": 0.02, "black": 0.03, "barn": 0.02, "black2": 0.03})
+P = parts(root, "dn_finish_arch", {"mint": 0.07, "mint2": 0.03, "gold": 0.02, "black": 0.03, "barn": 0.02, "black2": 0.03}, solid=True)
 CHECK = Acc("dn_finish_arch_check", "black", root, 0.0)                                 # chequer and word panel: flush skins, no ink
 for sx in (-1, 1):
     x = sx * 11.8
@@ -93,7 +93,7 @@ P["black"].cylc(0, 8.25, -1.0, 0.18, 0.5, 10, rot=(PI / 2, 0, 0))
 # dn_photo_tower
 # =====================================================================================================
 root = pivot("dn_photo_tower", (0, 0, 0))
-P = parts(root, "dn_photo_tower", {"mint": 0.05, "mint2": 0.02, "gold": 0.02, "black": 0.03, "glasswarm": 0.0, "black2": 0.015})
+P = parts(root, "dn_photo_tower", {"mint": 0.05, "mint2": 0.02, "gold": 0.02, "black": 0.03, "glasswarm": 0.0, "black2": 0.015}, solid=True)
 P["mint2"].box(-1.5, 1.5, 0.0, 0.5, -1.5, 1.5)                                          # footing
 P["mint"].box(-1.3, 1.3, 0.4, 5.0, -1.3, 1.3)                                           # shaft, 10 cm inside the footing to inside the band
 for sx in (-1, 1):
@@ -130,7 +130,7 @@ P["glowgold"].add(sphere(0.24, 12, 8), t=(0.7, 6.1, 0))
 # dn_mast
 # =====================================================================================================
 root = pivot("dn_mast", (0, 0, 0))
-P = parts(root, "dn_mast", {"mint": 0.025, "gold": 0.015, "mint2": 0.0, "cloth": 0.015})
+P = parts(root, "dn_mast", {"mint": 0.025, "gold": 0.015, "mint2": 0.0, "cloth": 0.015}, solid=True)
 P["mint2"].cylc(0, 0.25, 0, 0.3, 0.5, 8, rt=0.22)
 P["mint"].cylc(0, 5.475, 0, 0.11, 10.05, 8, rt=0.06)                                   # from 5 cm inside the plinth
 P["gold"].add(sphere(0.2, 10, 8), t=(0, 10.62, 0))

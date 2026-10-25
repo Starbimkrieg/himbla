@@ -18,7 +18,7 @@ import os
 exec(open(os.path.join(os.environ.get("MOONRUNNER_REPO") or os.path.abspath(os.path.join(os.path.dirname(globals().get("__file__", "")), "..", "..")), "tools", "blender", "downs_common.py"), encoding="utf-8").read(), globals())
 
 root = pivot("dn_club", (0, 0, 0))
-P = parts(root, "dn_club", {"mint": 0.07, "mint2": 0.02, "money2": 0.02, "gold": 0.02, "black": 0.025, "barn": 0.04, "saddle": 0.02, "glasswarm": 0.0, "black2": 0.012})
+P = parts(root, "dn_club", {"mint": 0.07, "mint2": 0.02, "money2": 0.02, "gold": 0.02, "black": 0.025, "barn": 0.04, "saddle": 0.02, "glasswarm": 0.0, "black2": 0.012}, solid=True)
 SKIN = Acc("dn_club_stripes", "mint", root, 0.0)          # awning stripes: 8 mm skins half sunk in the slabs (flush: no outline)
 
 ZF = -5.0                      # body's front face (the portico stands 5 m proud)

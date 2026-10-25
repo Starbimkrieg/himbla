@@ -270,6 +270,13 @@ class Kit {
 
   // colliders / blast boxes, given in the current frame
   solid(hx, hy, hz, x, z, ry = 0, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'box', hx, hy, hz, x: p.x, y: y0 + hy, z: p.z, yaw: this.yaw + ry, tag: this.tag }); }
+  // a box turned any way: centre (x, y, z) and turn q in the current frame (Blender-authored colliders: downsKit.bake). `extra`
+  // goes onto the collider spec (auto: true marks the ones from a part's geometry)
+  solidQ(hx, hy, hz, x, y, z, q, extra) {
+    const p = this.P(x, y, z);
+    _e.setFromQuaternion(_q.setFromRotationMatrix(_r.extractRotation(this.base)).multiply(q), 'YXZ');
+    this.cols.push({ type: 'box', hx, hy, hz, x: p.x, y: p.y, z: p.z, pitch: _e.x, yaw: _e.y, roll: _e.z, tag: this.tag, ...extra });
+  }
   sphere(r, x, y, z) { const p = this.P(x, y, z); this.cols.push({ type: 'sphere', r, x: p.x, y: p.y, z: p.z, tag: this.tag }); }
   column(r, h, x, z, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'cyl', r, y0, y1: h, x: p.x, z: p.z, tag: this.tag }); }
   // lying cylinder (quonsets, hangars, pipes): axis along local z (turned by ry), centre at height y

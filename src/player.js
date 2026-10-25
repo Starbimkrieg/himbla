@@ -8,6 +8,7 @@ import { Idle } from './idles.js';
 import { updateHalo } from './cosmetics.js';
 import { Combo } from './combo.js';
 import { archPass } from './rocks.js';
+import { grindLabel } from './rails.js';
 import { WEAPONS, weaponUnlocked, fireWeapon } from './weapons.js';
 
 const SPEED_MARKS = [
@@ -235,7 +236,7 @@ export class Player {
       this.idle.cancel(this.model);
       if (this.trick.active) this.landTrick(b.airTime, true); // a clean trick onto the rail counts; a crooked one is dropped (or it would flip you on pop-off)
       const A = g.grind.active; // (null on the frame you pop off: rails.js has committed it)
-      if (A) this.combo.addLive(A.r.rimOf ? 'RIM GRIND' : 'GRIND', Math.round(15 + A.t * 30), 'grind');
+      if (A) this.combo.addLive(grindLabel(A.r), Math.round(15 + A.t * 30), 'grind');
       return;
     }
 

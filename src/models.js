@@ -2635,6 +2635,7 @@ export function makeDownsFountain() {
   const node = SHIP_PARTS.dn_fountain, root = ddGroup(node, null, DOWNS_TOON, DOWNS_GLOW);
   const water = [];
   for (const k of node.kids) {
+    if (k.role === 'col') { root.getObjectByName(k.name)?.removeFromParent(); continue; }   // (its colliders: the game's, downsKit.bake)
     if (k.role === 'spin') continue;
     root.getObjectByName(k.name)?.removeFromParent();
     const m = waterMesh(k); root.add(m); water.push(m);

@@ -66,7 +66,7 @@ def stable_block(name, n):
     Lh = n * 2.5
     root = pivot(name, (0, 0, 0))
     P = parts(root, name, {"barn": 0.04, "barn2": 0.04, "mint": 0.03, "mint2": 0.02, "saddle": 0.02, "saddle2": 0.015, "black": 0.02, "gold": 0.012,
-                           "glowgold": 0.0, "black2": 0.012})
+                           "glowgold": 0.0, "black2": 0.012}, solid=True)
     IN = {k: Acc(f"{name}_in_{k}", k, root, 0.0) for k in ("black", "black2", "saddle", "saddle2", "glowgold")}     # (the stalls' insides: no outlines)
     xs = [-Lh + 2.5 + 5.0 * i for i in range(n)]
     P["mint2"].box(-Lh - 0.3, Lh + 0.3, 0.0, 0.5, -9.2, 0.2)                                 # plinth
@@ -141,7 +141,7 @@ stable_block("dn_stable_6", 6)
 # porch floors, so it is the one that shows), a post where the two porch beams cross, and a soffit under the two roofs' eaves.
 root = pivot("dn_stable_corner", (0, 0, 0))
 P = parts(root, "dn_stable_corner", {"barn": 0.05, "barn2": 0.045, "mint": 0.03, "mint2": 0.02, "saddle": 0.02, "saddle2": 0.015, "black": 0.025, "gold": 0.015,
-                                     "glasswarm": 0.0, "black2": 0.015})
+                                     "glasswarm": 0.0, "black2": 0.015}, solid=True)
 C0, C1, CH = -9.3, 0.3, 8.6
 P["mint2"].box(C0 - 0.3, C1 + 0.3, 0.0, 0.6, C0 - 0.3, C1 + 0.3)
 P["barn"].box(C0, C1, 0.6, CH, C0, C1)
@@ -216,7 +216,7 @@ def leaf(rails, stiles, h, d, L, ys, top):
 
 
 root = pivot("dn_yard_gate", (0, 0, 0))                                                 # the yard's gate: two Barn Red piers 6 m apart, two leaves swung in
-P = parts(root, "dn_yard_gate", {"barn": 0.04, "mint": 0.025, "mint2": 0.015, "gold": 0.015})
+P = parts(root, "dn_yard_gate", {"barn": 0.04, "mint": 0.025, "mint2": 0.015, "gold": 0.015}, solid=True)
 SW = math.radians(80)                                                                   # (how far the leaves stand open)
 for sx in (-1, 1):
     P["barn"].box(sx * 3.0 - 0.45, sx * 3.0 + 0.45, 0.3, 3.4, -0.45, 0.45)
@@ -248,7 +248,7 @@ gx, gz = math.cos(a1) * RR, math.sin(a1) * RR
 leaf(P["saddle"], P["saddle"], (gx - 0.15, gz + 0.12), (math.cos(math.radians(70)), math.sin(math.radians(70))), 2.3, (0.6, 1.2), 1.45)
 
 root = pivot("dn_trough", (0, 0, 0))                                                    # a water trough: a plank tub, dark water 6 cm under its rim
-P = parts(root, "dn_trough", {"saddle": 0.02, "saddle2": 0.0, "black2": 0.0, "gold": 0.0})
+P = parts(root, "dn_trough", {"saddle": 0.02, "saddle2": 0.0, "black2": 0.0, "gold": 0.0}, solid=True)
 P["saddle"].box(-1.2, 1.2, 0.1, 0.75, -0.45, 0.45)
 P["black2"].box(-1.12, 1.12, 0.62, 0.69, -0.37, 0.37)
 for x in (-0.9, 0.9):
@@ -272,7 +272,7 @@ for sz in (-1, 1):
 # dn_hay_barn
 # =====================================================================================================
 root = pivot("dn_hay_barn", (0, 0, 0))
-P = parts(root, "dn_hay_barn", {"barn": 0.05, "barn2": 0.04, "mint": 0.03, "mint2": 0.02, "saddle": 0.02, "black": 0.025, "gold": 0.012, "glasswarm": 0.0, "black2": 0.015})
+P = parts(root, "dn_hay_barn", {"barn": 0.05, "barn2": 0.04, "mint": 0.03, "mint2": 0.02, "saddle": 0.02, "black": 0.025, "gold": 0.012, "glasswarm": 0.0, "black2": 0.015}, solid=True)
 BR = Acc("dn_hay_barn_brace", "barn", root, 0.02)                                       # (door braces: Barn Red, thin line for a thin part)
 GAB = [(0.0, 6.0), (-1.6, 9.0), (-7.0, 11.6), (-12.4, 9.0), (-14.0, 6.0)]                 # wall top: gambrel knees and ridge
 P["mint2"].box(-12.2, 12.2, 0.0, 0.5, -14.2, 0.2)
@@ -321,7 +321,7 @@ P["gold"].bm((0, RY + 2.17, -7.0), (0, RY + 2.97, -7.0), 0.04)
 # dn_pavilion
 # =====================================================================================================
 root = pivot("dn_pavilion", (0, 0, 0))
-P = parts(root, "dn_pavilion", {"mint": 0.04, "mint2": 0.02, "money2": 0.0, "barn": 0.035, "gold": 0.015, "black": 0.025, "glasswarm": 0.0, "saddle2": 0.0})
+P = parts(root, "dn_pavilion", {"mint": 0.04, "mint2": 0.02, "money2": 0.0, "barn": 0.035, "gold": 0.015, "black": 0.025, "glasswarm": 0.0, "saddle2": 0.0}, solid=True)
 P["mint2"].box(-9.2, 9.2, 0.0, 0.4, -10.2, 3.2)
 P["saddle2"].box(-8.9, 8.9, 0.4, 0.405, 0.02, 3.0)                                       # porch boards, flush on the plinth
 P["mint"].box(-9.0, 9.0, 0.4, 4.75, -10.0, 0.0)                                         # hall, as tall as the porch beam so the roof rests on both
@@ -354,7 +354,7 @@ P["black2"].box(-1.75, 1.75, 2.2, 2.35, -0.06, 0.06)                            
 # dn_hay
 # =====================================================================================================
 root = pivot("dn_hay", (0, 0, 0))
-P = parts(root, "dn_hay", {"saddle": 0.02, "mint": 0.0})
+P = parts(root, "dn_hay", {"saddle": 0.02, "mint": 0.0}, solid=True)
 P["saddle"].box(-0.6, 0.6, 0.0, 0.6, -0.3, 0.3)
 for x in (-0.3, 0.3):
     P["mint"].box(x - 0.025, x + 0.025, 0.01, 0.605, -0.305, 0.305)                      # (5 mm proud: straps have no outline)
@@ -363,7 +363,7 @@ for x in (-0.3, 0.3):
 # dn_picnic
 # =====================================================================================================
 root = pivot("dn_picnic", (0, 0, 0))
-P = parts(root, "dn_picnic", {"saddle": 0.015, "black2": 0.012, "mint": 0.02, "accent": 0.025, "gold": 0.01})
+P = parts(root, "dn_picnic", {"saddle": 0.015, "black2": 0.012, "mint": 0.02, "accent": 0.025, "gold": 0.01}, solid=True)
 P["saddle"].box(-1.2, 1.2, 0.74, 0.8, -0.5, 0.5)
 for sz in (-1, 1):
     P["saddle"].box(-1.2, 1.2, 0.42, 0.47, sz * 0.9 - 0.18, sz * 0.9 + 0.18)

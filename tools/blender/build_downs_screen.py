@@ -70,7 +70,7 @@ def sleeve(xo, zo, xi, zi, y0, y1, holes=None):
 # dn_drum
 # =====================================================================================================
 root = pivot("dn_drum", (0, 0, 0))
-P = parts(root, "dn_drum", {"mint": 0.06, "mint2": 0.03, "money2": 0.03, "gold": 0.025, "black": 0.04, "black2": 0.03, "barn": 0.04, "glasswarm": 0.0, "glowgold": 0.0, "glowred": 0.0})
+P = parts(root, "dn_drum", {"mint": 0.06, "mint2": 0.03, "money2": 0.03, "gold": 0.025, "black": 0.04, "black2": 0.03, "barn": 0.04, "glasswarm": 0.0, "glowgold": 0.0, "glowred": 0.0}, solid=True)
 # core: a plinth (60 cm proud, so inked like any block), the pylon on it, a Black pilaster round each corner from plinth to soffit
 P["money2"].box(-5.6, 5.6, 0.0, 0.8, -5.6, 5.6)
 P["mint"].box(-5.0, 5.0, 0.8, 17.4, -5.0, 5.0)
@@ -120,7 +120,7 @@ P["glowred"].add(sphere(0.28, 10, 8), t=(0, 45.8, 0))
 # dn_podium
 # =====================================================================================================
 root = pivot("dn_podium", (0, 0, 0))
-P = parts(root, "dn_podium", {"mint": 0.03, "mint2": 0.02, "gold": 0.025, "saddle": 0.025, "black": 0.03, "black2": 0.02, "barn": 0.02, "glowgold": 0.012})
+P = parts(root, "dn_podium", {"mint": 0.03, "mint2": 0.02, "gold": 0.025, "saddle": 0.025, "black": 0.03, "black2": 0.02, "barn": 0.02, "glowgold": 0.012}, solid=True)
 P["mint2"].box(-9.6, 9.6, 0.0, 0.25, -2.65, 2.5)                                        # platform (steps 10 cm in from its ends, frame 15 cm in from its back)
 P["gold"].box(-9.65, 9.65, 0.2, 0.3, 2.4, 2.55)                                         # gold lip along the front edge
 for slot, x, h in (("mint", -6.5, 1.0), ("gold", 0.0, 1.4), ("saddle", 6.5, 0.7)):      # steps: 2nd, 1st, 3rd

@@ -8,11 +8,17 @@
 //   colliders  collider footprints inside each other (a mast through a stable, a column through a wall): over 25 cm deep with 0.5 m of shared height.
 //   text       every text plane (signs, numbers, name boards) needs a wall within 1.5 m behind and 1.5 m clear in front: none faces a wall or hangs in air.
 //   gaps       bare-ground strips under 0.7 m wide between ground slabs, or between a slab and a wall's foot: a terrain seam showing.
+//   coverage   solid surfaces nothing collides with (you'd run, fall or fly through them): points sampled over every opaque surface
+//              from 0.3 m up, each tested against the game's live colliders (world space, the physics' own contact test, 0.35 m
+//              tolerance). Listed by builder > part with the bare area and where it is (flat frame). Not in `all` (slow): name it.
+//   blocked    ground a walker could cross before the Blender parts' own colliders (downs_common.py Acc, `auto` in the kit's
+//              colliders) and now can't: walkBlocker (downsPlan.js) with and without them on a 0.5 m grid, by builder > part.
+//              Read each: a bench or a stall counter should block; a doorway, an arch or a passage shouldn't.
 // Blender side: build_downs_*.py run audit_coplanar (z-fight within a model) and audit_flips (inside-out primitives) on every build.
 const { chromium } = await import(process.env.PLAYWRIGHT || '/opt/node-tools/node_modules/playwright/index.mjs');
 const MODE = process.argv[2] || 'all';
 const SEP = Number(process.env.SEP || 0.0008);
-const run = (m) => MODE === 'all' || MODE === m;
+const run = (m) => (MODE === 'all' && m !== 'coverage') || MODE === m;
 
 const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 const pg = await b.newPage({ viewport: { width: 640, height: 360 } });
@@ -204,6 +210,82 @@ if (run('gaps')) {
   });
   console.log(`gaps: ${res.length} strips of bare ground under 0.7 m wide and over 1.5 m long (a hidden strip under a wall's thickness can show: look at the spot)`);
   for (const r of res) console.log(`  ${String(r.len).padStart(6)} m  x ${r.x[0]}..${r.x[1]}  z ${r.z[0]}..${r.z[1]}`);
+}
+
+if (run('blocked')) {
+  const res = await pg.evaluate(async () => {
+    const { walkBlocker } = await import('/src/downsPlan.js');
+    const loc = window.game.locations.find((l) => l.id === 'downs'), cols = loc._kitCols || [];
+    const before = walkBlocker(cols.filter((c) => !c.auto), 0.2), after = walkBlocker(cols, 0.2);
+    const autos = cols.filter((c) => c.auto && c.y - c.hy <= 1.5 && c.y + c.hy >= 0.4);
+    const by = new Map();
+    for (let x = -260; x <= 260; x += 0.5) for (let z = -200; z <= 220; z += 0.5) {
+      if (before(x, z) || !after(x, z)) continue;
+      // whose: the first walk-height auto box over the spot
+      const c = autos.find((o) => { const cs = Math.cos(o.yaw || 0), sn = Math.sin(o.yaw || 0), dx = x - o.x, dz = z - o.z; return Math.abs(dx * cs - dz * sn) <= o.hx + 0.2 && Math.abs(dx * sn + dz * cs) <= o.hz + 0.2; });
+      const key = c ? c.tag : '(cylinder)';
+      let e = by.get(key);
+      if (!e) by.set(key, (e = { n: 0, x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9 }));
+      e.n++; e.x0 = Math.min(e.x0, x); e.x1 = Math.max(e.x1, x); e.z0 = Math.min(e.z0, z); e.z1 = Math.max(e.z1, z);
+    }
+    return { n: cols.filter((c) => c.auto).length, out: [...by].sort((a, b) => b[1].n - a[1].n).map(([k, e]) => `${(e.n * 0.25).toFixed(1).padStart(8)} m2  ${k}   x ${e.x0}..${e.x1}  z ${e.z0}..${e.z1}`) };
+  });
+  console.log(`blocked: ${res.n} colliders from the parts' geometry; ground they newly block (walk height, 0.2 m pad), by builder > part:`);
+  for (const o of res.out) console.log('  ' + o);
+}
+
+if (run('coverage')) {
+  const res = await pg.evaluate(async () => {
+    const { unbendPoint } = await import('/src/curve.js');
+    const g = window.game, loc = g.locations.find((l) => l.id === 'downs'), R = g.world.curveR(loc), names = window.__kitTagNames || [];
+    const M4 = g.camera.matrixWorld.constructor, V3 = g.camera.position.constructor;
+    // stand the runner in the Downs so everything near is built and its colliders are live
+    g.player.body.pos.copy(loc.dir).multiplyScalar(g.planet.surface(loc.dir) + 2);
+    loc.group.updateMatrixWorld(true);
+    const inv = new M4().copy(loc.group.matrixWorld).invert(), M = new M4();
+    const cols = g.colliders, near = [], n = new V3(), w = [new V3(), new V3(), new V3()], f = [new V3(), new V3(), new V3()], p = new V3(), q = new V3();
+    const covered = (pt) => { for (const c of cols.query(pt, 1.5, near)) if (cols.contact(c, pt, 0.35, n) > 0) return true; return false; };
+    let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const by = new Map(), totBy = {}; let tot = 0, bare = 0;
+    loc.group.traverse((o) => {
+      if (!o.isMesh || o.isInstancedMesh || o.userData.isInk || o.visible === false) return;
+      for (let a = o; a && a !== loc.group; a = a.parent) if (a.userData && (a.userData.tick || a.userData.spin)) return;
+      const m = o.material;
+      if (!m || m.transparent || (m.userData && m.userData.aspect)) return;
+      const geo = o.geometry, pos = geo.attributes.position, tg = geo.attributes.tag, idx = geo.index;
+      if (!pos) return;
+      o.updateWorldMatrix(true, false); M.multiplyMatrices(inv, o.matrixWorld);
+      const N = idx ? idx.count : pos.count;
+      for (let t = 0; t < N; t += 3) {
+        const ii = [0, 1, 2].map((k) => (idx ? idx.getX(t + k) : t + k));
+        for (let k = 0; k < 3; k++) { w[k].set(pos.getX(ii[k]), pos.getY(ii[k]), pos.getZ(ii[k])); f[k].copy(w[k]).applyMatrix4(M); if (R) unbendPoint(R, f[k].x, f[k].y, f[k].z, f[k]); w[k].applyMatrix4(o.matrixWorld); }
+        if (Math.max(f[0].y, f[1].y, f[2].y) < 0.3) continue; // ground level: the terrain and the floor sheets
+        const area = q.subVectors(f[1], f[0]).cross(p.subVectors(f[2], f[0])).length() / 2;
+        if (area < 1e-4) continue;
+        const ns = Math.min(40, Math.max(1, Math.round(area / 0.25)));
+        const tag = tg ? Math.round(tg.getX(ii[0])) : -1, key = names[tag] || o.name || '(untagged)';
+        for (let s = 0; s < ns; s++) {
+          let a = rnd(), b = rnd(); if (a + b > 1) { a = 1 - a; b = 1 - b; }
+          const fy = f[0].y + (f[1].y - f[0].y) * a + (f[2].y - f[0].y) * b;
+          if (fy < 0.3) continue;
+          p.copy(w[0]).addScaledVector(q.subVectors(w[1], w[0]), a).addScaledVector(n.subVectors(w[2], w[0]), b);
+          tot += area / ns;
+          totBy[key] = (totBy[key] || 0) + area / ns;
+          if (covered(p)) continue;
+          bare += area / ns;
+          const fx = f[0].x + (f[1].x - f[0].x) * a + (f[2].x - f[0].x) * b, fz = f[0].z + (f[1].z - f[0].z) * a + (f[2].z - f[0].z) * b;
+          let e = by.get(key);
+          if (!e) by.set(key, (e = { area: 0, x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9, z0: 1e9, z1: -1e9 }));
+          e.area += area / ns; e.x0 = Math.min(e.x0, fx); e.x1 = Math.max(e.x1, fx); e.y0 = Math.min(e.y0, fy); e.y1 = Math.max(e.y1, fy); e.z0 = Math.min(e.z0, fz); e.z1 = Math.max(e.z1, fz);
+        }
+      }
+    });
+    const out = [...by].filter(([, e]) => e.area >= 0.5).sort((a, b) => b[1].area - a[1].area).map(([k, e]) =>
+      `${e.area.toFixed(1).padStart(8)} m2 of ${totBy[k].toFixed(0).padStart(6)}  ${k}   x ${e.x0.toFixed(1)}..${e.x1.toFixed(1)}  y ${e.y0.toFixed(1)}..${e.y1.toFixed(1)}  z ${e.z0.toFixed(1)}..${e.z1.toFixed(1)}`);
+    return { tot, bare, out };
+  });
+  console.log(`coverage: ${res.bare.toFixed(0)} of ${res.tot.toFixed(0)} m2 of solid surface (0.3 m up and over) has no collider within 0.35 m; by builder > part, 0.5 m2 and over:`);
+  for (const o of res.out) console.log('  ' + o);
 }
 
 console.log(errs.slice(0, 5).join('\n') || 'no page errors');

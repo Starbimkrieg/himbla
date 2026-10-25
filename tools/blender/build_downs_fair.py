@@ -57,7 +57,7 @@ def lerp3(a, b, t):
 # dn_wheel_frame
 # =====================================================================================================
 root = pivot("dn_wheel_frame", (0, 0, 0))
-P = parts(root, "dn_wheel_frame", {"mint": 0.05, "mint2": 0.03, "gold": 0.02, "barn": 0.025, "black2": 0.03, "money2": 0.0})
+P = parts(root, "dn_wheel_frame", {"mint": 0.05, "mint2": 0.03, "gold": 0.02, "barn": 0.025, "black2": 0.03, "money2": 0.0}, solid=True)
 P["mint2"].box(-8.0, 8.0, 0.0, 0.8, -5.0, 5.0)
 P["gold"].box(-8.1, 8.1, 0.55, 0.72, -5.1, 5.1)                                          # edge band, 8 cm under the deck
 P["money2"].box(-7.6, 7.6, 0.8, 0.805, -4.6, 4.6)                                        # deck inlay, flush
@@ -122,7 +122,7 @@ P["saddle"].box(-1.04, 1.04, -3.1, -2.98, -0.35, 0.35)                          
 # dn_carousel_base
 # =====================================================================================================
 root = pivot("dn_carousel_base", (0, 0, 0))
-P = parts(root, "dn_carousel_base", {"black2": 0.05, "gold": 0.025, "mint2": 0.03, "mint": 0.0})
+P = parts(root, "dn_carousel_base", {"black2": 0.05, "gold": 0.025, "mint2": 0.03, "mint": 0.0}, solid=True)
 P["black2"].cylc(0, 0.35, 0, 9.0, 0.7, 28, rt=8.6)
 P["gold"].tor(8.68, 0.1, t=(0, 0.62, 0), n=36, rs=5)                                     # sunk into the platform's sloping side
 for i in range(4):
@@ -196,7 +196,7 @@ for lx, lz in ((-0.6, -0.2), (-0.6, 0.2), (0.6, -0.2), (0.6, 0.2)):
 # dn_ticket_hall
 # =====================================================================================================
 root = pivot("dn_ticket_hall", (0, 0, 0))
-P = parts(root, "dn_ticket_hall", {"mint": 0.05, "mint2": 0.02, "barn": 0.03, "gold": 0.015, "black": 0.025, "black2": 0.012, "saddle": 0.02, "glasswarm": 0.0, "glowgold": 0.0})
+P = parts(root, "dn_ticket_hall", {"mint": 0.05, "mint2": 0.02, "barn": 0.03, "gold": 0.015, "black": 0.025, "black2": 0.012, "saddle": 0.02, "glasswarm": 0.0, "glowgold": 0.0}, solid=True)
 STR = Acc("dn_ticket_hall_stripe", "mint", root, 0.0)                                   # awning's Mint stripes: flush on the slab, no ink
 P["mint2"].box(-11.2, 11.2, 0.0, 0.3, -8.2, 0.4)
 P["mint"].box(-11.0, 11.0, 0.3, 3.6, -8.0, 0.0)
@@ -222,7 +222,7 @@ P["glowgold"].box(-10.6, 10.6, 3.3, 3.38, 0.0, 0.005)                           
 # dn_kiosk
 # =====================================================================================================
 root = pivot("dn_kiosk", (0, 0, 0))
-P = parts(root, "dn_kiosk", {"mint": 0.04, "mint2": 0.02, "gold": 0.015, "black": 0.025, "saddle": 0.02, "accent": 0.025, "glowgold": 0.0, "black2": 0.012})
+P = parts(root, "dn_kiosk", {"mint": 0.04, "mint2": 0.02, "gold": 0.015, "black": 0.025, "saddle": 0.02, "accent": 0.025, "glowgold": 0.0, "black2": 0.012}, solid=True)
 KS = Acc("dn_kiosk_stripe", "mint", root, 0.0)                                          # awning's Mint stripes, flush
 P["mint2"].box(-2.6, 2.6, 0.0, 0.2, -3.6, 0.3)                                           # plinth
 P["mint"].polyy([(-2.4, -3.4), (2.4, -3.4), (2.4, 0.0), (1.8, 0.0), (1.8, -1.0), (-1.8, -1.0), (-1.8, 0.0), (-2.4, 0.0)], 0.2, 2.9)   # lower walls with the serving bay in front
@@ -250,7 +250,7 @@ for x in (-1.2, 1.2):
 # dn_fair_gate
 # =====================================================================================================
 root = pivot("dn_fair_gate", (0, 0, 0))
-P = parts(root, "dn_fair_gate", {"mint": 0.045, "mint2": 0.02, "gold": 0.02, "barn": 0.03, "black": 0.025, "glowgold": 0.0})
+P = parts(root, "dn_fair_gate", {"mint": 0.045, "mint2": 0.02, "gold": 0.02, "barn": 0.03, "black": 0.025, "glowgold": 0.0}, solid=True)
 for sx in (-1, 1):                                                                       # pillars, tall enough that the lintel's top is under their caps
     x = sx * 5.2
     P["mint2"].boxc(x, 0.3, 0, 1.9, 0.6, 1.9)

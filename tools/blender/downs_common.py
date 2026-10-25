@@ -48,14 +48,57 @@ for s in SLOT_COLORS:
     material(s)
 
 
+# Colliders from the geometry: an Acc made with solid=True (parts(..., solid=True)) also writes a `col` empty for each
+# primitive big enough to stand on or run into (COL_MIN thick and COL_LONG long), glow and glass slots aside. A box is exact
+# (shape box: centre, half sizes hx hy hz, rotation rx ry rz as xf's euler: three.js axes, X then Y then Z); an upright
+# cylinder or lathe is a cylinder (shape cyl: base at the empty, r, h); an extruded outline is its bounding box in its own
+# frame, only if the outline fills COL_FILL of it (so an L or an arc doesn't block its own inside); anything else (add) is
+# the box round its vertices. Beams, tubes, tori and lettering never collide. downsKit.js bake() places them with the part.
+# A floor or plinth (an unturned box topping out under COL_FLOOR, COL_WIDE or more across both ways) gets none: the runner
+# steps up only about 0.4 m (physics.js: a walkable top's normal is over 0.55 up), so a 0.5 to 0.9 m slab would stop him dead
+# where he used to walk over its sunk-in top.
+COL_MIN, COL_LONG, COL_FILL, COL_FLOOR, COL_WIDE = 0.12, 1.0, 0.6, 0.9, 2.5
+_ncol = [0]
+
+
+def _fill(pts):
+    area = abs(sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts)))) / 2
+    us, vs = [p[0] for p in pts], [p[1] for p in pts]
+    box = (max(us) - min(us)) * (max(vs) - min(vs))
+    return area / box if box > 1e-9 else 0.0
+
+
 class Acc:
     all = []
 
-    def __init__(self, name, slot, parent, ink=0.015):
+    def __init__(self, name, slot, parent, ink=0.015, solid=False):
         self.name, self.slot, self.parent, self.ink, self.geos = name, slot, parent, ink, []
+        self.solid = solid and not slot.startswith("glow") and not slot.startswith("glass")
         Acc.all.append(self)
 
+    def _col(self, shape, pos, **props):
+        _ncol[0] += 1
+        pivot(f"{self.name}_col{_ncol[0]}", pos, self.parent, role="col", shape=shape, **props)
+
+    def col_box(self, cx, cy, cz, w, h, d, rot=(0, 0, 0)):
+        """a box collider placed like boxc (solid or not)"""
+        self._col("box", (cx, cy, cz), hx=w / 2, hy=h / 2, hz=d / 2, rx=rot[0], ry=rot[1], rz=rot[2])
+
+    def _cbox(self, cx, cy, cz, w, h, d, rot=(0, 0, 0)):
+        floor = not any(rot) and cy + h / 2 < COL_FLOOR and w >= COL_WIDE and d >= COL_WIDE
+        if self.solid and not floor and min(w, h, d) >= COL_MIN and max(w, h, d) >= COL_LONG:
+            self.col_box(cx, cy, cz, w, h, d, rot)
+
+    def _cverts(self, verts):
+        xs, ys, zs = [v[0] for v in verts], [v[1] for v in verts], [v[2] for v in verts]
+        self._cbox((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, (min(zs) + max(zs)) / 2, max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
+
+    def _ccyl(self, x, y0, z, r, h):
+        if self.solid and min(2 * r, h) >= COL_MIN and max(2 * r, h) >= COL_LONG:
+            self._col("cyl", (x, y0, z), r=r, h=h)
+
     def boxc(self, cx, cy, cz, w, h, d, rot=(0, 0, 0)):
+        self._cbox(cx, cy, cz, w, h, d, rot)
         self.geos.append(xf(cuboid(w, h, d)[:2], (cx, cy, cz), rot)); return self
 
     def box(self, x0, x1, y0, y1, z0, z1):
@@ -63,9 +106,15 @@ class Acc:
         return self.boxc((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0)
 
     def rbc(self, cx, cy, cz, w, h, d, e=0.3, rot=(0, 0, 0), nu=14, nv=8):
+        self._cbox(cx, cy, cz, w, h, d, rot)
         self.geos.append(xf(rbox(w / 2, h / 2, d / 2, e, nu, nv), (cx, cy, cz), rot)); return self
 
     def cylc(self, cx, cy, cz, r, h, seg=12, rt=None, rot=(0, 0, 0)):
+        rr = max(r, r if rt is None else rt)
+        if any(rot):
+            self._cbox(cx, cy, cz, 2 * rr, h, 2 * rr, rot)
+        else:
+            self._ccyl(cx, cy - h / 2, cz, rr, h)
         self.geos.append(xf(cylinder(r if rt is None else rt, r, h, seg)[:2], (cx, cy, cz), rot)); return self
 
     def tor(self, R, r, t=(0, 0, 0), rot=(0, 0, 0), n=24, rs=6, s=(1, 1, 1)):
@@ -80,10 +129,16 @@ class Acc:
 
     def poly(self, pts, z0, z1, t=(0, 0, 0)):
         """a flat outline [(x, y)] extruded from z0 to z1"""
+        if self.solid and _fill(pts) >= COL_FILL:
+            xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+            self._cbox((min(xs) + max(xs)) / 2 + t[0], (min(ys) + max(ys)) / 2 + t[1], (z0 + z1) / 2 + t[2], max(xs) - min(xs), max(ys) - min(ys), abs(z1 - z0))
         self.geos.append(xf(extrude(pts, z1 - z0, "z"), (t[0], t[1], (z0 + z1) / 2 + t[2]))); return self
 
     def polyx(self, pts, x0, x1):
         """a flat outline [(z, y)] extruded along x from x0 to x1 (a side profile)"""
+        if self.solid and _fill(pts) >= COL_FILL:
+            zs, ys = [p[0] for p in pts], [p[1] for p in pts]
+            self._cbox((x0 + x1) / 2, (min(ys) + max(ys)) / 2, (min(zs) + max(zs)) / 2, abs(x1 - x0), max(ys) - min(ys), max(zs) - min(zs))
         self.geos.append(xf(extrude(pts, x1 - x0, "x"), ((x0 + x1) / 2, 0, 0))); return self
 
     def polyy(self, pts, y0, y1, t=(0, 0, 0), rot=(0, 0, 0)):
@@ -91,40 +146,60 @@ class Acc:
         area = sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts)))
         if area > 0:                                                                        # clockwise on the x-right, z-up plan so the cap faces up
             pts = pts[::-1]
+        if self.solid and _fill(pts) >= COL_FILL:
+            xs, zs = [p[0] for p in pts], [p[1] for p in pts]
+            c = Euler(rot, "XYZ").to_matrix() @ Vector(((min(xs) + max(xs)) / 2, 0, (min(zs) + max(zs)) / 2))   # (xf turns about the extrusion's middle)
+            self._cbox(c.x + t[0], c.y + t[1] + (y0 + y1) / 2, c.z + t[2], max(xs) - min(xs), abs(y1 - y0), max(zs) - min(zs), rot)
         self.geos.append(xf(extrude(pts, y1 - y0, "y"), (t[0], t[1] + (y0 + y1) / 2, t[2]), rot)); return self
 
     def lath(self, profile, t=(0, 0, 0), segs=24, rot=(0, 0, 0)):
         """a solid of revolution: profile [(r, y)] bottom to top"""
-        self.geos.append(xf(lathe(profile, segs)[:2], t, rot)); return self
+        g = xf(lathe(profile, segs)[:2], t, rot)
+        if any(rot):
+            if self.solid:
+                self._cverts(g[0])
+        else:
+            ys = [p[1] for p in profile]
+            self._ccyl(t[0], min(ys) + t[1], t[2], max(p[0] for p in profile), max(ys) - min(ys))
+        self.geos.append(g); return self
 
     def add(self, geo, t=(0, 0, 0), rot=(0, 0, 0), s=(1, 1, 1)):
-        self.geos.append(xf(geo[:2], t, rot, s)); return self
+        g = xf(geo[:2], t, rot, s)
+        if self.solid:
+            self._cverts(g[0])
+        self.geos.append(g); return self
 
     def letters(self, text, cx, cy, z, pix, depth, ry=0.0):
         """raised 5 x 7 pixel lettering, each pixel a box `pix` square and `depth` deep on the plane z (+z face; ry = pi for
         a -z face), centred on (cx, cy)"""
+        solid, self.solid = self.solid, False                       # (lettering never collides)
         px, w = letter_pixels(text)
         for c, r in px:
             x = (c - (w - 1) / 2) * pix * (1 if ry == 0 else -1)
             self.boxc(cx + x, cy + (3 - r) * pix, z + (depth / 2 if ry == 0 else -depth / 2), pix * 1.03, pix * 1.03, depth)
+        self.solid = solid
         return self
 
     def letters_x(self, text, x, cy, cz, pix, depth, face=1):
         """raised lettering on a plane x = const facing +x (face = 1) or -x (-1), read from outside, centred on (cy, cz)"""
+        solid, self.solid = self.solid, False                       # (lettering never collides)
         px, w = letter_pixels(text)
         for c, r in px:
             u = (c - (w - 1) / 2) * pix * -face                  # facing +x, the viewer's right is -z
             self.boxc(x + face * depth / 2, cy + (3 - r) * pix, cz + u, depth, pix * 1.03, pix * 1.03)
+        self.solid = solid
         return self
 
     def letters_arc(self, text, yc, rm, pix, z, depth):
         """lettering along an arc round (0, yc) at radius rm, tops outward, centred on the crown, on the plane z (+z face)"""
+        solid, self.solid = self.solid, False                       # (lettering never collides)
         px, w = letter_pixels(text)
         for c, r in px:
             u = (c - (w - 1) / 2) * pix                      # arc length from the crown, + right
             th = u / rm
             rad = rm + (3 - r) * pix
             self.boxc(rad * math.sin(th), yc + rad * math.cos(th), z + depth / 2, pix * 1.03, pix * 1.03, depth, rot=(0, 0, -th))
+        self.solid = solid
         return self
 
     def flush(self):
@@ -177,9 +252,10 @@ def flush_all():
         a.flush()
 
 
-def parts(root, prefix, specs):
-    """accumulators for a model: specs is {slot: ink}; returns {slot: Acc} named <prefix>_<slot>"""
-    return {s: Acc(f"{prefix}_{s}", s, root, ink) for s, ink in specs.items()}
+def parts(root, prefix, specs, solid=False):
+    """accumulators for a model: specs is {slot: ink}; returns {slot: Acc} named <prefix>_<slot>. solid: its primitives also
+    write colliders (see Acc)"""
+    return {s: Acc(f"{prefix}_{s}", s, root, ink, solid) for s, ink in specs.items()}
 
 
 def audit_flips(objs, min_faces=6):

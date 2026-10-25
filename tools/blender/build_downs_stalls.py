@@ -108,7 +108,7 @@ def carve(geo, cutters):
 def base(name, label, shelf="jars"):
     """the alcove; shelf: what fills the back wall's two shelves ('jars', 'bottles', or 'none' when the stall dresses the wall itself)"""
     root = pivot(name, (0, 0, 0))
-    P = parts(root, name, SLOTS)
+    P = parts(root, name, SLOTS, solid=True)
     SPR, CRN, HC = 3.9, 5.45, 4.3                                                       # arch spring, crown, half-chord (piers 0.7 m wide)
     RR = (HC ** 2 + (CRN - SPR) ** 2) / (2 * (CRN - SPR))
     YC = CRN - RR

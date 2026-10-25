@@ -15,6 +15,7 @@ export const FG = { gold: '#cfb352', mint: '#f8fff8' }, BG = { black: '#3b393a',
 export const tw = (str, h) => h * (0.347 * str.length + 0.667);
 
 const _M = new THREE.Matrix4(), _P = new THREE.Vector3(), _Q = new THREE.Quaternion(), _S = new THREE.Vector3(), _Y = new THREE.Vector3(0, 1, 0);
+const _c = new THREE.Vector3(), _cq = new THREE.Quaternion(), _ce = new THREE.Euler();
 const matFor = (slot, over) => { const c = downsSlot(slot, over); return c.glow ? G(c.color) : T(c.color); };
 
 // Bake a kit part into `k`'s current frame at (x, y, z), turned `ry` about y, scaled (sx, sy, sz); `over` maps slot to replacement colour.
@@ -22,7 +23,19 @@ export function bake(k, name, x = 0, y = 0, z = 0, { ry = 0, sx = 1, sy = 1, sz 
   _M.compose(_P.set(x, y, z), _Q.setFromAxisAngle(_Y, ry), _S.set(sx, sy, sz));
   const tag = k.tag;
   k.tag = `${tag}>${name}`;
-  k.baked(downsNode(name), (slot) => matFor(slot, over), _M);
+  const node = downsNode(name);
+  k.baked(node, (slot) => matFor(slot, over), _M);
+  // its colliders, written by the Blender build from the part's own geometry (downs_common.py Acc, parts(..., solid=True))
+  for (const n of node.kids) {
+    if (n.role !== 'col') continue;
+    const d = n.data;
+    _c.copy(n.pos).applyMatrix4(_M);
+    if (d.shape === 'cyl') { const by = k.P(0, 0, 0).y; k.column(d.r * Math.max(sx, sz), by + _c.y + d.h * sy, _c.x, _c.z, by + _c.y); }   // (column takes heights unlifted by the frame; the part is lifted)
+    else {
+      _cq.setFromEuler(_ce.set(d.rx || 0, d.ry || 0, d.rz || 0, 'ZYX')).premultiply(_Q);   // (xf's euler: X, then Y, then Z)
+      k.solidQ(d.hx * sx, d.hy * sy, d.hz * sz, _c.x, _c.y, _c.z, _cq, { auto: true });
+    }
+  }
   k.tag = tag;
 }
 
@@ -37,7 +50,7 @@ export function fountain(k, x, z, y = 0) {
       const piece = part(0xffffff, (q) => q.baked(n, (slot) => matFor(slot), I));
       piece.userData.spin = n.data.speed || 0.7;
       k.dyn(piece, n.pos.x, n.pos.y, n.pos.z);
-    } else k.dyn(waterMesh(n), n.pos.x, n.pos.y, n.pos.z);
+    } else if (n.role !== 'col') k.dyn(waterMesh(n), n.pos.x, n.pos.y, n.pos.z);
   }
   k.at();
   k.column(9.8, 1.05 + y, x, z, y);
@@ -117,6 +130,24 @@ export const kitSink = (k) => (geo, color, ink) => {
   k.add(geo, T(color), 0, 0, 0, { outline: 0 });
 };
 
+// A box round a flat piece: outline `pts` [[x, z]...] on the plane y = yb(x, z) (linear), h thick above it, squared to its first edge.
+// Calls solid(hx, hy, hz, x, y, z, q) with the box's centre and turn.
+const _sx = new THREE.Vector3(), _sy = new THREE.Vector3(), _sz = new THREE.Vector3(), _sm = new THREE.Matrix4(), _sq = new THREE.Quaternion();
+function slabBox(pts, yb, h, solid) {
+  let ux = pts[1][0] - pts[0][0], uz = pts[1][1] - pts[0][1];
+  const l = Math.hypot(ux, uz); ux /= l; uz /= l;
+  const vx = -uz, vz = ux;
+  let u0 = 1e9, u1 = -1e9, v0 = 1e9, v1 = -1e9;
+  for (const [x, z] of pts) { const u = (x - pts[0][0]) * ux + (z - pts[0][1]) * uz, v = (x - pts[0][0]) * vx + (z - pts[0][1]) * vz; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
+  const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2, cx = pts[0][0] + ux * cu + vx * cv, cz = pts[0][1] + uz * cu + vz * cv;
+  const y = yb(cx, cz), gx = yb(cx + 1, cz) - y, gz = yb(cx, cz + 1) - y;                 // the plane's rise per metre in x and z
+  const su = gx * ux + gz * uz, sv = gx * vx + gz * vz;                                      // and along the box's two ground axes
+  _sx.set(ux, su, uz).normalize(); _sz.set(vx, sv, vz).normalize();
+  _sy.crossVectors(_sz, _sx).normalize(); _sz.crossVectors(_sx, _sy);
+  _sq.setFromRotationMatrix(_sm.makeBasis(_sx, _sy, _sz));
+  solid(((u1 - u0) / 2) * Math.hypot(1, su), h / 2, ((v1 - v0) / 2) * Math.hypot(1, sv), cx + _sy.x * h / 2, y + _sy.y * h / 2, cz + _sy.z * h / 2, _sq);
+}
+
 // Arcade parts that run across bays, one piece per run so bays show no seam: back wall (wainscot, string course, cornice), architrave
 // with gold band, walk-edge gold inlay, fascia with gold lip, roof with Mint ceiling. Per-bay fittings are the Blender wedge dn_arcade,
 // authored to these measures.
@@ -126,7 +157,9 @@ export const kitSink = (k) => (geo, color, ink) => {
 // diagonal shared with the return). Wedge local z runs outward from the inner chord: radius ri + z / cos(half step).
 // Roof underside rises 7.15 m at the front (z -0.8) to 8.38 m just past the back wall (z = d + 0.1), resting on the cornice (8.1 to 8.4).
 export const ROOF = { y0: 7.15, k: (8.38 - 7.15) / (WEDGE.d + 0.9) };
-export function arcadeShell(sink, { mir = 1, cx = ARCADE.cx, edges, stand = null }) {
+// `solid(hx, hy, hz, x, y, z, q)`, if given, takes a collider for each roof deck piece (a box on its raked plane; the walls have theirs
+// in downsWorld.js).
+export function arcadeShell(sink, { mir = 1, cx = ARCADE.cx, edges, stand = null, solid = null }) {
   const R = Math.PI / 180, ca = Math.cos(WEDGE.a2), D = WEDGE.d;
   const polar = (r, t) => [mir * (-cx + r * Math.cos(t * R)), r * Math.sin(t * R)];
   const Pz = (t, z) => polar(ARCADE.ri + z / ca, t);
@@ -193,7 +226,9 @@ export function arcadeShell(sink, { mir = 1, cx = ARCADE.cx, edges, stand = null
     } else if (J) polys.push({ pts: [Pz(J.te, zf), Pz(J.te, zb), J.at(J.back, zb - D, inWall(ov)), J.at(J.front, zf, inWall(ov))], yb: yOn(J.tm, dy) });
     return polys;
   };
-  sink(sheet(roof(-0.8, D + 0.2, 0, 0.18, true), 0.32), PAL.barn, 0.025);
+  const deck = roof(-0.8, D + 0.2, 0, 0.18, true);
+  sink(sheet(deck, 0.32), PAL.barn, 0.025);
+  if (solid) for (const p of deck) slabBox(p.pts, p.yb, 0.32, solid);
   // ceiling, one piece under the run: from inside the fascia to inside the cornice (back edge buried), at the stands into the end wall
   // and the return (not out to its outer face)
   sink(sheet(roof(-0.7, D - 0.3, -0.07, 0.2, false), 0.07), MINT2, 0);

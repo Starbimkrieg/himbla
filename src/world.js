@@ -491,6 +491,21 @@ export class World {
   }
 
   col(loc, spec) {
+    // On a curved place a long box goes in pieces of 8 m or less, each bent at its own middle as the Kit bends geometry (cut
+    // every 8 m): one straight box sags away from a bent roof or wall, nearly 2 m at the ends of the Downs' 230 m stand roof.
+    // The first piece is returned (all are in loc._cols).
+    if (spec.type === 'box' && (spec.hx > 4 || spec.hz > 4) && this.curveR(loc)) {
+      const n = Math.ceil(spec.hx / 4), m = Math.ceil(spec.hz / 4);
+      _q.setFromEuler(_e.set(spec.pitch || 0, spec.yaw || 0, spec.roll || 0, 'YXZ'));
+      const ax = new THREE.Vector3(1, 0, 0).applyQuaternion(_q), az = new THREE.Vector3(0, 0, 1).applyQuaternion(_q);
+      let first = null;
+      for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) {
+        const u = spec.hx * ((2 * i + 1) / n - 1), w = spec.hz * ((2 * j + 1) / m - 1);
+        const c = this.col(loc, { ...spec, hx: spec.hx / n, hz: spec.hz / m, x: spec.x + ax.x * u + az.x * w, y: spec.y + ax.y * u + az.y * w, z: spec.z + ax.z * u + az.z * w });
+        first ||= c;
+      }
+      return first;
+    }
     const c = this.colAdd(loc, spec);
     if (spec.stick) c.stick = true; // (landing pad deck and stairs: physics keeps walkers on them)
     (loc._cols ||= []).push(c); // (so a rebuild can remove them)

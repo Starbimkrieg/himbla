@@ -76,7 +76,7 @@ def roof(name, S, E, girders, cols, lamps, Eb, avoid=()):
     ridge cap, girders into beam) or stand at least 5 cm proud where they end side by side."""
     TIP, BACK, ZF, ZB, back, cap = S["tip"], S["rback"], S["zf"], S["zb"], S["back"], S["cap"]
     root = pivot(name, (0, 0, 0))
-    P = parts(root, name, {"barn": 0.03, "mint": 0.025, "mint2": 0.015, "gold": 0.015, "black": 0.03, "glowgold": 0.0})
+    P = parts(root, name, {"barn": 0.03, "mint": 0.025, "mint2": 0.015, "gold": 0.015, "black": 0.03, "glowgold": 0.0}, solid=True)
     s = (BACK - TIP) / (ZB - ZF)
     yr = lambda z: TIP + (z - ZF) * s                                                       # deck top line
     ang = -math.atan(s)                                                                     # negative: the back rises
@@ -148,7 +148,7 @@ roof("dn_roof_bay_s", FAR, 9.5, [0.0], [0.0], [-4.75, 4.75], 9.5)
 # =====================================================================================================
 def tower(name, W, D, H, bands, slit, banner):
     root = pivot(name, (0, 0, 0))
-    P = parts(root, name, {"mint": 0.045, "mint2": 0.02, "black": 0.025, "gold": 0.02, "money2": 0.0, "barn": 0.03, "glasswarm": 0.0})
+    P = parts(root, name, {"mint": 0.045, "mint2": 0.02, "black": 0.025, "gold": 0.02, "money2": 0.0, "barn": 0.03, "glasswarm": 0.0}, solid=True)
     zc = D / 2
     P["mint2"].boxc(0, 0.6, zc, W + 0.9, 1.2, D + 0.9)                                      # plinth, 10 cm past the pilasters (a step, not a seam)
     P["mint"].boxc(0, 1.2 + (H - 1.2) / 2, zc, W, H - 1.2, D)                               # shaft
@@ -195,7 +195,7 @@ tower("dn_tower_s", 7.0, 8.0, 18.0, (6.5, 12.0, 17.0), ((9.0, 3.6),), (6.0, 6.0)
 def suites(name, xa, xb, bays, cap_over=0.0):
     """Suites row from xa to xb (the game's runs into the end walls), three windows per 19 m bay; front z = 0, back 3.2 m behind"""
     root = pivot(name, (0, 0, 0))
-    P = parts(root, name, {"mint2": 0.04, "black": 0.015, "gold": 0.012, "money2": 0.02, "barn": 0.02, "glasswarm": 0.0})
+    P = parts(root, name, {"mint2": 0.04, "black": 0.015, "gold": 0.012, "money2": 0.02, "barn": 0.02, "glasswarm": 0.0}, solid=True)
     P["mint2"].box(xa, xb, 0.0, 3.4, 0.0, 3.2)
     P["money2"].box(xa - cap_over, xb + cap_over, 3.4, 3.72, -0.1, 3.3)                    # cap
     P["gold"].box(xa - cap_over, xb + cap_over, 0.86, 1.0, -0.22, 0.0)                     # sill
@@ -271,7 +271,7 @@ back_wall("dn_back_s_gate", FAR, -9.5, 9.5, (0.0,), [0.0], (-9.46, 9.46))
 # dn_entry
 # =====================================================================================================
 root = pivot("dn_entry", (0, 0, 0))
-P = parts(root, "dn_entry", {"black": 0.02, "gold": 0.015, "barn": 0.03, "mint2": 0.0, "glowgold": 0.0, "black2": 0.012})
+P = parts(root, "dn_entry", {"black": 0.02, "gold": 0.015, "barn": 0.03, "mint2": 0.0, "glowgold": 0.0, "black2": 0.012}, solid=True)
 P["mint2"].box(-3.4, -2.8, 0.0, 5.0, -0.12, 0.3)                                        # jambs, 10 cm into the opening
 P["mint2"].box(2.8, 3.4, 0.0, 5.0, -0.12, 0.3)
 P["gold"].box(-3.7, 3.7, 3.85, 4.3, -0.04, 0.4)                                         # lintel, 5 cm below the opening head (6 cm behind the jamb faces)

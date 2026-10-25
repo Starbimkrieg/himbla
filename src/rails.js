@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { frameQuat, upAt } from './geo.js';
+import { ledgeRailsJob } from './ledges.js';
 
 // Grinding snake-rock crests (rocks.js; crest lines in planet.rails). Land on one to lock on sideways, carried by your
 // speed (downhill speeds you up). Jump to pop off; near the end you pop off by yourself. Pays style per second.
@@ -9,6 +10,10 @@ const _p = new THREE.Vector3(), _t = new THREE.Vector3(), _u = new THREE.Vector3
 const _q = new THREE.Quaternion(), _z = new THREE.Vector3(0, 0, 1), _r = new THREE.Vector3(), _v = new THREE.Vector3();
 const _hp = new THREE.Vector3(), _ht = new THREE.Vector3(), _hu = new THREE.Vector3(), _hn = new THREE.Vector3(), _ts = new THREE.Vector3(), _tf = new THREE.Vector3();
 const _near = [];
+// places whose buildings' edges are rails (ledges.js), worked out when you first come near and again if their colliders change
+const LEDGE_PLACES = ['downs'];
+const LCELL = 12; // m: the ledge rails' lookup grid
+export const grindLabel = (r) => (r.ledge ? 'LEDGE GRIND' : r.rimOf ? 'RIM GRIND' : 'GRIND');
 const BODY = 0.45, BODY_UP = 0.5; // rider's shins-to-waist as a ball (radius, lift): what crest rocks must clear
 const TRAIL_LIFE = 2; // s a grind's skate trail lasts
 
@@ -43,12 +48,61 @@ export class Grinder {
     this.active = null;
     this.cool = 0;
     this.rimT = 0;
+    this.ledges = new Map(); // place -> { n (its collider count when worked out), rails, grid }
+    this.ledgeJob = null; // { loc, n, gen }: a place's ledge rails being worked out, a few ms a frame (ledgeStep)
+  }
+
+  // start working out the ledge rails of a LEDGE_PLACE within reach of p, if they're missing or its colliders changed
+  syncLedges(p) {
+    const g = this.game;
+    if (this.ledgeJob) return;
+    for (const id of LEDGE_PLACES) {
+      const loc = g.locations && g.locations.find((l) => l.id === id);
+      if (!loc || !loc.pos || !loc._cols || p.distanceTo(loc.pos) > (loc.r || 300) + 400) continue;
+      const have = this.ledges.get(loc);
+      if (have && have.n === loc._cols.length) continue;
+      this.ledgeJob = { loc, n: loc._cols.length, gen: ledgeRailsJob(loc._cols, g.colliders, g.planet) };
+      return;
+    }
+  }
+
+  // a few ms of the ledge job a frame; on the last, the rails go into their lookup grid
+  ledgeStep(budget = 3) {
+    const J = this.ledgeJob;
+    if (!J) return;
+    const t0 = performance.now();
+    let res;
+    do res = J.gen.next(); while (!res.done && performance.now() - t0 < budget);
+    if (!res.done) return;
+    this.ledgeJob = null;
+    const rails = res.value, grid = new Map();
+    for (const r of rails) for (let i = 0; i < r.pts.length - 1; i++) {
+      const a = r.pts[i], b = r.pts[i + 1], n = Math.ceil(a.distanceTo(b) / (LCELL / 2)) + 1;
+      for (let k = 0; k <= n; k++) {
+        _v.lerpVectors(a, b, k / n);
+        const key = `${Math.floor(_v.x / LCELL)},${Math.floor(_v.y / LCELL)},${Math.floor(_v.z / LCELL)}`;
+        (grid.get(key) || grid.set(key, new Set()).get(key)).add(r);
+      }
+    }
+    this.ledges.set(J.loc, { n: J.n, rails, grid });
+  }
+
+  // ledge rails in the grid cells round p
+  ledgesNear(p, out) {
+    const ix = Math.floor(p.x / LCELL), iy = Math.floor(p.y / LCELL), iz = Math.floor(p.z / LCELL);
+    for (const { grid } of this.ledges.values()) {
+      for (let x = ix - 1; x <= ix + 1; x++) for (let y = iy - 1; y <= iy + 1; y++) for (let z = iz - 1; z <= iz + 1; z++) {
+        const cell = grid.get(`${x},${y},${z}`);
+        if (cell) for (const r of cell) out.add(r);
+      }
+    }
+    return out;
   }
 
   // nearest crest point to p within reach: { r, s, p, d }
   nearest(p) {
     const pl = this.game.planet;
-    const rails = [...(pl.rails || []), ...(pl.rimRails ? [...pl.rimRails.values()].flat() : [])];
+    const rails = [...(pl.rails || []), ...(pl.rimRails ? [...pl.rimRails.values()].flat() : []), ...this.ledgesNear(p, new Set())];
     let best = null;
     for (const r of rails) {
       if (!r || p.distanceTo(r.c) > r.rad + 4) continue;
@@ -76,7 +130,7 @@ export class Grinder {
       upAt(_hp, _hu);
       _hp.addScaledVector(_hu, BODY_UP);
       for (const c of cols.query(_hp, BODY + 2, _near)) {
-        if (c.platform || c.rail === A.r.pts) continue;
+        if (c.platform || c.rail === A.r.pts || (A.r.owners && A.r.owners.has(c))) continue;
         if (cols.contact(c, _hp, BODY, _hn) > 0) return _hn;
       }
     }
@@ -87,7 +141,8 @@ export class Grinder {
   update(P, dt, input) {
     const g = this.game, b = P.body;
     if (this.cool > 0) this.cool -= dt;
-    if ((this.rimT -= dt) <= 0) { this.rimT = 0.5; g.planet.rimRailsNear(b.pos); }
+    if ((this.rimT -= dt) <= 0) { this.rimT = 0.5; g.planet.rimRailsNear(b.pos); this.syncLedges(b.pos); }
+    this.ledgeStep();
     // a limp ragdoll never grabs (and lets go)
     if (P.rag) { this.active = null; return false; }
     if (!this.active) {
@@ -105,19 +160,22 @@ export class Grinder {
       const hsp = Math.sqrt(Math.max(0, b.vel.lengthSq() - b.vel.dot(_u) ** 2));
       // heading along the line grabs from further; tips (meeting the ground) scoop up anything moving in.
       // Snake rocks want you within ~40 degrees; crater rims ~60 (the lip kicks you onto the crest)
-      const rim = !!n.r.rimOf;
+      const rim = !!n.r.rimOf, ledge = !!n.r.ledge;
       const lined = hsp > 4 && Math.abs(along) / hsp > (rim ? 0.5 : 0.75);
-      const tip = !n.r.loop && !rim && (n.s < 6 || n.s > n.r.len - 6);
+      // a building's edge only takes you on skates, in the air, heading along it: running past or along a roof, landing across
+      // its edge or stepping off a counter never snags
+      if (ledge && (!lined || b.grounded || !input.down('Space'))) return false;
+      const tip = !n.r.loop && !rim && !ledge && (n.s < 6 || n.s > n.r.len - 6);
       // crossing at an angle only grabs if dropping onto it (along it, a tip, or side-on at speed still do)
       const dropping = b.vel.dot(_u) < -3;
-      const reach = tip && lined ? 4 : lined ? (rim ? 3.4 : 2.8) : tip ? 1.8 : 1.5;
+      const reach = tip && lined ? 4 : lined ? (rim ? 3.4 : ledge ? 1.5 : 2.8) : tip ? 1.8 : 1.5;
       // rims only take you heading along them (crossing square-on mustn't snag)
       if (rim && !lined) return false;
       const above = _b.subVectors(b.pos, n.p).dot(_u);
       // snake rock, measured across the ground: skate into its side at speed and you hop onto the crest
       const flat = Math.sqrt(Math.max(0, n.d * n.d - above * above));
       const toward = -_b.dot(b.vel) + above * b.vel.dot(_u); // closing speed on the crest line, across the ground
-      const sideOn = !rim && hsp > 7 && above > -3.6 && above < 0 && flat < 2.5 && toward > 2 * Math.max(flat, 0.5);
+      const sideOn = !rim && !ledge && hsp > 7 && above > -3.6 && above < 0 && flat < 2.5 && toward > 2 * Math.max(flat, 0.5);
       if (n.d > reach && !sideOn) return false;
       if (!lined && !tip && !sideOn && !dropping) return false;
       if (above < (sideOn ? -3.6 : -1.6) || above > (rim ? 3 : 2.2) || b.vel.dot(_u) > 6 + 0.25 * hsp) return false; // a little rise is just the slope, at speed
@@ -230,7 +288,7 @@ export class Grinder {
     if (m.armR) m.armR.rotation.set(0, 0, 0);
     m.torso.rotation.x = 0;
     if (!knocked) {
-      P.combo.add(A.r.rimOf ? 'RIM GRIND' : 'GRIND', Math.round(15 + A.t * 30), 'grind'); // (the style meter showed it live: player.js)
+      P.combo.add(grindLabel(A.r), Math.round(15 + A.t * 30), 'grind'); // (the style meter showed it live: player.js)
     }
     if (jumped) { g.audio.jump(); g.haptics.play('jump'); }
     this.active = null;

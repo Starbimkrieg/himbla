@@ -529,6 +529,7 @@ function arcades(k, vendors) {
     // continuous parts, one piece per run (gate hall into the stand's end wall): arcadeShell
     k.at();
     ARCADE.runs.forEach((run, ri) => arcadeShell(kitSink(k), {
+      solid: (hx, hy, hz, x, y, z, q) => k.solidQ(hx, hy, hz, x, y, z, q),
       mir, edges: Array.from({ length: run.n + 1 }, (_, i) => run.a0 + ARCADE.step * i),
       stand: ri === 0 ? { atStart: true, wallU: -(STAND.x1 + 0.8), rearZ: null } : { atStart: false, wallU: -(FAR.x1 + 0.8), rearZ: -(FAR.z0 + FAR.tiers * FAR.depth + FAR.wall) },
     }));

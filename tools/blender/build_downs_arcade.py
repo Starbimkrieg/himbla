@@ -45,7 +45,7 @@ def trap(z0, z1, shrink=0.0):
 
 
 root = pivot("dn_arcade", (0, 0, 0))
-P = parts(root, "dn_arcade", {"saddle2": 0.0, "gold": 0.012, "mint": 0.03, "mint2": 0.012, "black": 0.02, "barn": 0.025, "glasswarm": 0.0, "glowgold": 0.0})
+P = parts(root, "dn_arcade", {"saddle2": 0.0, "gold": 0.012, "mint": 0.03, "mint2": 0.012, "black": 0.02, "barn": 0.025, "glasswarm": 0.0, "glowgold": 0.0}, solid=True)
 YF = 6.6                                                                                # fascia middle height (the game's fascia, z -0.92 to -0.68)
 RB = lambda z: 7.15 + (z + 0.8) * (8.38 - 7.15) / (D + 0.9)                             # roof underside (src/downsKit.js ROOF); ceiling 7 cm under it
 z0, z1 = -0.8, D + 0.2
@@ -86,7 +86,7 @@ for z in (3.0, 10.0):
 # roof are single solids. Hidden faces of touching pieces in different slots lie on different planes (audit_coplanar): buried backs 8 cm (Black), 10 cm (Mint2), 12 cm (Gold) in.
 # Arcade runs (src/downsKit.js arcadeShell) end on radial lines at local x 13 to 15.7, inside the towers' 16 m sides; their roof meets those sides below 8.9 m, under the side sills.
 root = pivot("dn_gate_hall", (0, 0, 0))
-P = parts(root, "dn_gate_hall", {"mint": 0.05, "mint2": 0.02, "money2": 0.012, "gold": 0.02, "black": 0.025, "barn": 0.035, "glasswarm": 0.0, "glowgold": 0.0, "saddle2": 0.0})
+P = parts(root, "dn_gate_hall", {"mint": 0.05, "mint2": 0.02, "money2": 0.012, "gold": 0.02, "black": 0.025, "barn": 0.035, "glasswarm": 0.0, "glowgold": 0.0, "saddle2": 0.0}, solid=True)
 PS = Acc("dn_gate_hall_lampMetal", "black", root, 0.012)                                # lamp metal (small-fitting ink)
 PF = Acc("dn_gate_hall_glazingBars", "black", root, 0.0)                                # glazing bars, 5 mm proud of the panes
 GF = Acc("dn_gate_hall_floorInlay", "gold", root, 0.0)                                  # floor inlays, 5 mm proud of the boards
@@ -237,7 +237,7 @@ for zf in (-1, 1):                                                              
 # dn_gate_main
 # =====================================================================================================
 root = pivot("dn_gate_main", (0, 0, 0))
-P = parts(root, "dn_gate_main", {"mint": 0.05, "mint2": 0.02, "gold": 0.02, "black": 0.025, "barn": 0.035, "glowgold": 0.0})
+P = parts(root, "dn_gate_main", {"mint": 0.05, "mint2": 0.02, "gold": 0.02, "black": 0.025, "barn": 0.035, "glowgold": 0.0}, solid=True)
 for sx in (-1, 1):
     x = sx * 12.5
     P["mint2"].boxc(x, 0.4, 0, 3.4, 0.8, 3.4)
@@ -296,7 +296,7 @@ letters_arc_solid(P["gold"], "CHIMERA DOWNS", YC, RR + 0.65, 0.17, 0.45, 0.14)
 # src/fountainFx.js shades its water: pivots `water_basin`, `water_bowl` (role water, tier basin / bowl: the ripple discs), `curtain` (sheet over the bowl lip), `streams` (eight
 # spigot jets); `trophy` (role spin) turns. Water pivots' slot (glowmint) isn't drawn: the game dresses them.
 root = pivot("dn_fountain", (0, 0, 0))
-P = parts(root, "dn_fountain", {"money2": 0.02, "money": 0.0, "mint2": 0.04, "mint": 0.03, "gold": 0.02, "barn": 0.02, "gold2": 0.02})
+P = parts(root, "dn_fountain", {"money2": 0.02, "money": 0.0, "mint2": 0.04, "mint": 0.03, "gold": 0.02, "barn": 0.02, "gold2": 0.02}, solid=True)
 P["money2"].lath([(12.0, 0.0), (12.0, 0.7), (10.4, 0.7), (10.4, 0.0)], segs=48)           # planter ring
 P["money"].lath([(10.5, 0.706), (11.9, 0.706)], segs=48)                                  # (turf, 6 mm above the rim's inside; higher floats)
 # basin: stepped foot, flared flat-topped wall, floor, a pilaster every 30 degrees, gold bead on the lip
@@ -383,7 +383,7 @@ P["gold"].box(-0.25, 0.25, 0.6, 0.95, -0.42, -0.38)                             
 # four slats 0.56 to 1.18 m, behind back and pack (hip joints 0.59 m up, shoulders 0.85 m above). On y = 0; the game sets it on its floor. Each cheek and the centre support is
 # one solid (legs, seat rail, armrest, back post); slats run through and 6 cm past the cheeks; the front slat stops 3 cm short of the cheeks' front so faces never share a plane.
 root = pivot("dn_bench", (0, 0, 0))
-P = parts(root, "dn_bench", {"saddle": 0.015, "black2": 0.015, "gold": 0.01})
+P = parts(root, "dn_bench", {"saddle": 0.015, "black2": 0.015, "gold": 0.01}, solid=True)
 SEAT = 0.44
 LZ = lambda y: -0.33 - (y - SEAT) * 0.15 / 0.66                                         # backrest line (z at height y): slats on it, back posts behind
 RAKE = math.atan(0.15 / 0.66)
@@ -402,7 +402,7 @@ P["black2"].polyx(MID, -0.025, 0.025)                                           
 # dn_planter
 # =====================================================================================================
 root = pivot("dn_planter", (0, 0, 0))
-P = parts(root, "dn_planter", {"money2": 0.02, "gold": 0.012, "money": 0.012})
+P = parts(root, "dn_planter", {"money2": 0.02, "gold": 0.012, "money": 0.012}, solid=True)
 P["money2"].box(-1.2, 1.2, 0.0, 0.9, -0.5, 0.5)
 P["gold"].box(-1.26, 1.26, 0.8, 0.92, -0.56, 0.56)
 for i, (x, r) in enumerate(((-0.6, 0.42), (0.1, 0.5), (0.75, 0.36))):
