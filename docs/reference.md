@@ -131,8 +131,8 @@ faction's people lowers it. Helping Vostok angers Daedalus and vice versa.
 - **Pay** scales with standing. FRIENDLY factions offer ★ PRIORITY contracts.
 - **Clearance:** FRIENDLY with Vostok or Daedalus stops their turrets and opens their shops. Deliveries into a
   restricted base give temporary clearance.
-- **Gear** by faction: SPACECOM Seeker Module, Meridian Gyro-Edges and Market Uplink, Kepler Twin Cradle, Shock
-  Cradle (cargo jostle) and Hitch-Line Winch, Vostok Flak Weave (+10 HP and 1 HP regen per 3 s tick, per level) and
+- **Gear** by faction: SPACECOM Seeker Module, Meridian Gyro-Edges and Market Uplink, Kepler Twin Cradle, Cargo
+  Foam (cargo jostle) and Hitch-Line Winch, Vostok Flak Weave (+10 HP and 1 HP regen per 3 s tick, per level) and
   Weapon Tuning Kit (+15% damage per level); three-level gear needs FRIENDLY, TRUSTED and REVERED standing, Daedalus Overcharger, Rustmoon Shadow Rig. Rustmoon's black market smuggles
   in other factions' kit.
 - **Hitch-Line Winch:** `E` fires a cable onto a vehicle or structure within 120 m and reels you in for up to 20 s.
