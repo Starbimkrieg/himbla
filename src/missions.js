@@ -1,6 +1,7 @@
-import { CARGO, MIL_CARGO, CLIENTS, FACTIONS, SHOPS } from './locations.js';
+import { CARGO, MIL_CARGO, CLIENTS, FACTIONS, SHOPS, TIERS } from './locations.js';
 import { pick } from './rng.js';
-import { arcDist } from './geo.js';
+import { arcDist, tangent, greatCircle, darkness } from './geo.js';
+import * as THREE from 'three';
 
 const LINES = {
   spacecom: [
@@ -34,6 +35,28 @@ const SMUGGLE = [
   { name: 'Forged Clearance Chips', fragile: 0.3, hot: 3, color: 0xff2e88 },
 ];
 
+// cosmetics a smuggling run may carry (w: weight)
+const RIDERS = [
+  { key: 'outfit_rustmoon', name: 'Rustmoon Scrapper Leathers', w: 2 },
+  { key: 'skates_survivor', name: 'Dark-Side Survivors (skates)', w: 1 },
+];
+const RIDER_CHANCE = 0.3;
+
+// Contract kinds beyond the standard run, and the standing each opens with its faction:
+//   express    FRIENDLY  a short clock and a steep speed bonus
+//   bounty     TRUSTED   no cargo: a pirate squad roams a patch of the bright side, marked on the map only roughly; take them all down
+//   showpiece  HONORED   fragile cargo and a style par to hit on the way (miss it and it pays less)
+const tierMin = (name) => TIERS.find((t) => t.name === name).min;
+const KIND_TIER = { express: tierMin('FRIENDLY'), bounty: tierMin('TRUSTED'), showpiece: tierMin('HONORED') };
+const KIND_FACTIONS = { express: ['spacecom', 'vostok', 'daedalus', 'kepler', 'meridian'], bounty: ['spacecom', 'vostok', 'daedalus', 'kepler', 'meridian'], showpiece: ['spacecom', 'kepler', 'meridian'] };
+export const KIND_INFO = {
+  express: { name: 'EXPRESS', blurb: 'Short clock, steep speed bonus' },
+  bounty: { name: 'BOUNTY', blurb: 'Hunt a pirate squad: the map marks the area only roughly' },
+  showpiece: { name: 'SHOWPIECE', blurb: 'Fragile cargo: hit the style par on the way for ×1.6, miss it for ×0.8' },
+};
+const BOUNTY_FUZZ = 450; // m: how far the map's marker can sit from the squad's true patch
+const BOUNTY_RADIUS = 700; // m: its drawn radius
+
 export class Missions {
   constructor(game) {
     this.game = game;
@@ -54,9 +77,10 @@ export class Missions {
     return this.locs.filter((l) => !l.restricted && !l.hostile && !l.poi && l.id !== exclude);
   }
 
-  makeOffer(board, faction) {
+  makeOffer(board, faction, kind = 'standard') {
+    if (kind === 'bounty') return this.makeBounty(board, faction);
     const L = this.locs;
-    let pickup = board, to, cargo, clearance = null, smuggle = false, payload = null;
+    let pickup = board, to, cargo, clearance = null, smuggle = false, payload = null, rider = null;
     if (faction === 'vostok' || faction === 'daedalus') {
       // military logistics between the faction's own bases (clearance granted; ceasefire bases need none)
       const own = (l) => (l.restricted || l.ceasefire) && l.faction === faction;
@@ -70,10 +94,10 @@ export class Missions {
       // mostly den-to-den; sometimes a smuggling run into a defended bright-side town (feeds the Rustmoon Hold black market)
       const dens = L.filter((l) => l.type === 'pirate' && l !== board && !l.camp);
       const towns = L.filter((l) => !l.restricted && l.type !== 'pirate' && !l.poi && l.defense && !l.dark && l !== board);
-      if (Math.random() < 0.32 && towns.length) { smuggle = true; cargo = pick(SMUGGLE); to = pick(towns); payload = this.pickPayload(); }
+      if (Math.random() < 0.32 && towns.length) { smuggle = true; cargo = pick(SMUGGLE); to = pick(towns); payload = this.pickPayload(); rider = this.pickRider(); }
       else { cargo = pick(CARGO.filter((c) => c.hot >= 1)); to = pick(dens.length ? dens : this.civilianDestinations(board.id)); }
     } else {
-      cargo = pick(CARGO);
+      cargo = kind === 'showpiece' ? pick(CARGO.filter((c) => c.fragile >= 0.8)) : pick(CARGO);
       if (Math.random() < 0.3) pickup = pick(this.civilianDestinations(board.id));
       let pool = this.civilianDestinations(pickup.id);
       if (faction === 'sci') pool = pool.filter((l) => l.type !== 'hub' || Math.random() < 0.5);
@@ -84,35 +108,82 @@ export class Missions {
     const dist = d1 + d2;
     const dark = !!(to.dark || pickup.dark);
     // tight clocks: you have to skate well
-    const time = Math.ceil((dist / 36 + 20 + (dark ? 15 : 0)) / 5) * 5;
-    let reward = 45 + dist * 0.05 + cargo.hot * 30 + cargo.fragile * 25;
+    let time = Math.ceil((dist / 36 + 20 + (dark ? 15 : 0)) / 5) * 5;
+    if (kind === 'express') time = Math.ceil((dist / 52 + 12 + (dark ? 10 : 0)) / 5) * 5; // a real sprint
+    // each skull is +15 % of the job (it was a flat ₵30: too much on a short hop, nothing on a long one)
+    let reward = (45 + dist * 0.05 + cargo.fragile * 25) * (1 + cargo.hot * 0.15);
     if (dark) reward *= 1.4; // hazard pay for the dark side
     if (clearance) reward += 60;
     if (faction === 'rustmoon') reward = (reward + 40) * 1.5; // clan hazard pay
     if (smuggle) reward *= 1.7; // smuggler's premium
     if (payload) reward *= 1.2; // payload runs are hotter
+    if (kind === 'express') reward *= 1.3;
+    if (kind === 'showpiece') reward *= 1.15;
     reward *= this.game.rep.payMultiplier(faction) || 1;
     reward *= 1 + (this.game.upgrades.uplink || 0) * 0.1; // Meridian Market Uplink
     reward = Math.round(reward / 5) * 5;
     const client = pick(CLIENTS[faction] || CLIENTS.spacecom);
     const text = pick(LINES[smuggle ? 'smuggle' : faction] || LINES.spacecom)(cargo.name, to.name);
-    return { id: this.nextId++, board, faction, client, cargo, pickup, to, dist, time, reward, clearance, text: payload ? `${text} <b>(Rides with: ${payload.name}.)</b>` : text, dark, smuggle, payload };
+    // showpiece: the style to land between pickup and drop (raw style points: tricks, big air, grinds)
+    const par = kind === 'showpiece' ? Math.min(400, Math.round((120 + dist / 60) / 10) * 10) : 0;
+    return { id: this.nextId++, kind, par, board, faction, client, cargo, pickup, to, dist, time, reward, clearance, text: payload ? `${text} <b>(Rides with: ${payload.name}.)</b>` : text, dark, smuggle, payload, rider };
   }
 
-  // Sometimes a smuggling run carries a Rustmoon Hold black-market item. One run per item at a time; once delivered
-  // it's on sale for good (out of the pool).
+  // A bounty: a squad of pirates holds a patch of the bright side 1.8 to 5 km from the board; take them all down. The map and the
+  // objective arrow point at a spot up to BOUNTY_FUZZ m off their true patch. Its squad is spawned when you accept (spawnBounty).
+  makeBounty(board, faction) {
+    const g = this.game;
+    let dir = null;
+    for (let i = 0; i < 40 && !dir; i++) {
+      const up = board.dir.clone().normalize();
+      const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+      const d = greatCircle(up, t, 1800 + Math.random() * 3200);
+      if (darkness(d) < 0.3 && !g.zoneAt(d, 2)) dir = d.normalize();
+    }
+    if (!dir) return null;
+    const n = this.game.rep.get(faction) >= tierMin('HONORED') ? 4 : 3;
+    const up = dir.clone();
+    const fuzzDir = greatCircle(up, tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize(), Math.random() * BOUNTY_FUZZ).normalize();
+    const dist = arcDist(dir, board.dir);
+    const time = Math.ceil((dist / 30 + 240) / 5) * 5;
+    let reward = 180 + n * 100 + dist * 0.03;
+    reward *= this.game.rep.payMultiplier(faction) || 1;
+    reward *= 1 + (this.game.upgrades.uplink || 0) * 0.1;
+    reward = Math.round(reward / 5) * 5;
+    const zone = { name: 'the marked area', short: 'ZONE', dir: fuzzDir, pos: g.planet.ground(fuzzDir, new THREE.Vector3()), r: BOUNTY_RADIUS };
+    const client = pick(CLIENTS[faction] || CLIENTS.spacecom);
+    const cargo = { name: `Bounty: ${n} pirates`, fragile: 0, hot: 0, color: 0xff2a4a };
+    const text = `Renegade pirates are working the bright side near ${zone.name}. ${n} of them. Find them and put them down: nobody here will miss them.`;
+    return { id: this.nextId++, kind: 'bounty', board, faction, client, cargo, pickup: board, to: zone, dist, time, reward, clearance: null, text, dark: false, smuggle: false, payload: null, rider: null, bounty: { dir, n, squad: [] } };
+  }
+
+  // Every smuggling run carries the next black-market item, in the Hold's order: the n-th run delivered unlocks the n-th item, so
+  // the whole stock is 13 runs, not luck. Runs on the boards at once carry different ones; one that fails or is dropped leaves its
+  // item for the next. (The kit the ILMB sells is on sale at the Hold from the start.)
   pickPayload() {
-    if (Math.random() > 0.45) return null;
     const have = new Set(this.game.stats.blackMarket || []);
     const live = new Set();
     for (const list of Object.values(this.offers)) for (const o of list) if (o.payload) live.add(o.payload.key);
     for (const a of [this.active, this.extra && this.extra.a]) if (a && a.payload) live.add(a.payload.key);
     for (const k of this.batch || []) live.add(k); // and the board being dealt now
-    const pool = (SHOPS.rustmoon || []).filter((u) => u.unlock && u.unlock.smuggle && !have.has(u.key) && !live.has(u.key));
-    const u = pick(pool);
+    const u = (SHOPS.rustmoon || []).find((x) => x.unlock && x.unlock.smuggle && !have.has(x.key) && !live.has(x.key));
     if (!u) return null;
     (this.batch ||= []).push(u.key);
     return { key: u.key, name: u.name };
+  }
+
+  // Cosmetics ride on top of the run, and are luck: a smuggling run may also have one tucked in the crate (the Scrapper Leathers a
+  // little likelier than the skates). Delivering it gives it to you.
+  pickRider() {
+    const up = this.game.upgrades;
+    const live = new Set();
+    for (const list of Object.values(this.offers)) for (const o of list) if (o.rider) live.add(o.rider.key);
+    for (const a of [this.active, this.extra && this.extra.a]) if (a && a.rider) live.add(a.rider.key);
+    const pool = RIDERS.filter((r) => !up[r.key] && !live.has(r.key));
+    if (!pool.length || Math.random() > RIDER_CHANCE) return null;
+    let roll = Math.random() * pool.reduce((t, r) => t + r.w, 0);
+    for (const r of pool) if ((roll -= r.w) <= 0) return r;
+    return pool[0];
   }
 
   offersFor(loc) {
@@ -133,6 +204,17 @@ export class Missions {
         o.client = `★ ${o.client}`;
         list.unshift(o);
       }
+      // the kinds your standing opens (at most two a board): express, bounty, showpiece
+      const extra = [];
+      for (const f of jobs) {
+        if (rep.hostile(f) || rep.aligned()) continue;
+        for (const k of Object.keys(KIND_TIER)) if (rep.get(f) >= KIND_TIER[k] && KIND_FACTIONS[k].includes(f)) extra.push([f, k]);
+      }
+      extra.sort(() => Math.random() - 0.5);
+      for (const [f, k] of extra.slice(0, 2)) {
+        const o = this.makeOffer(loc, f, k);
+        if (o) list.push(o);
+      }
       this.offers[loc.id] = list;
     }
     return this.offers[loc.id];
@@ -140,9 +222,14 @@ export class Missions {
 
   // Kepler Twin Cradle: a second contract rides on top (own pickup, drop-off, clock, condition). Pirates go for the
   // bottom crate; when the first job ends either way, the second becomes the main contract.
-  canTake() { return !this.active || (!!this.game.upgrades.twin && !this.extra); }
+  canTake() { return !this.active || (!!this.game.upgrades.twin && !this.extra && this.active.kind !== 'bounty'); }
 
   accept(offer) {
+    // a bounty needs your hands free, and a showpiece needs the style it counts on the main contract
+    if (this.active && (offer.kind === 'bounty' || offer.kind === 'showpiece' || this.active.kind === 'bounty')) {
+      this.game.hud.toast(offer.kind === 'bounty' ? 'Finish what you are carrying first: a bounty needs your hands free.' : offer.kind === 'showpiece' ? 'A showpiece rides alone: nothing else on your back.' : 'You are out on a bounty: nothing else until it is done.', 3);
+      return false;
+    }
     if (this.active && this.canTake()) return this.acceptExtra(offer);
     if (this.active) return false;
     this.active = offer;
@@ -150,12 +237,14 @@ export class Missions {
     this.late = false;
     this.integrity = 1;
     this.stylePool = 0;
-    this.cargoState = 'toPickup';
+    this.cargoState = offer.kind === 'bounty' ? 'hunt' : 'toPickup';
+    this.parHit = false;
+    this.parBase = 0;
     this.offers[offer.board.id] = this.offers[offer.board.id].filter((o) => o !== offer);
     const g = this.game;
-    g.hud.toast(`CONTRACT ACCEPTED — ${offer.cargo.name}`);
-    g.globe.discover(offer.to, true);
-    g.globe.discover(offer.pickup, true);
+    g.hud.toast(offer.kind === 'bounty' ? `BOUNTY ACCEPTED — ${offer.bounty.n} pirates, somewhere in the marked area` : `${KIND_INFO[offer.kind] ? KIND_INFO[offer.kind].name + ' ' : ''}CONTRACT ACCEPTED — ${offer.cargo.name}`);
+    if (offer.kind === 'bounty') offer.bounty.squad = g.enemies.spawnBountySquad(offer.bounty.dir, offer.bounty.n);
+    else { g.globe.discover(offer.to, true); g.globe.discover(offer.pickup, true); }
     if (offer.clearance) g.hud.alert(`TEMPORARY CLEARANCE: ${offer.to.restricted ? offer.to.name : offer.pickup.name}`, '#2ec4ff', 3);
     this.checkPickup();
     return true;
@@ -185,7 +274,7 @@ export class Missions {
   promote() {
     const x = this.extra;
     this.extra = null;
-    Object.assign(this, { active: x.a, timer: x.timer, late: x.late, integrity: x.integrity, stylePool: 0, cargoState: x.cargoState, thief: null, dropPos: null });
+    Object.assign(this, { active: x.a, timer: x.timer, late: x.late, integrity: x.integrity, stylePool: 0, cargoState: x.cargoState, thief: null, dropPos: null, parHit: false, parBase: 0 });
     this.game.hud.toast(`ON TO THE NEXT ONE — ${x.a.cargo.name}`, 2.5);
   }
 
@@ -204,6 +293,7 @@ export class Missions {
   objective() {
     const a = this.active;
     if (!a) return null;
+    if (a.kind === 'bounty') return { pos: a.to.pos, label: 'BOUNTY AREA (APPROX.)' };
     if (this.cargoState === 'toPickup') return { pos: a.pickup.pos, label: `PICK UP @ ${a.pickup.short}` };
     if (this.cargoState === 'held') return { pos: a.to.pos, label: `DELIVER @ ${a.to.short}` };
     if (this.cargoState === 'stolen' && this.thief && !this.thief.dead) return { pos: this.thief.body.pos, label: 'RECOVER STOLEN CARGO', thief: true };
@@ -216,6 +306,7 @@ export class Missions {
     const P = this.game.player;
     if (this.cargoState === 'toPickup' && arcDist(P.pos, a.pickup.dir) < a.pickup.r * 0.75) {
       this.cargoState = 'held';
+      this.parBase = this.stylePool; // a showpiece's par counts from here
       this.refreshCargo();
       this.game.audio.pickup();
       this.game.fx.pop('CARGO SECURED!', null, { color: '#2ee6ff', size: 58 });
@@ -239,7 +330,15 @@ export class Missions {
       this.late = true;
       g.hud.alert('OUT OF TIME — HALF PAY ON DELIVERY', '#ff9f1c', 3);
     }
+    if (a.kind === 'bounty') {
+      if (a.bounty.squad.every((e) => e.dead)) this.completeBounty();
+      return;
+    }
     this.checkPickup();
+    if (a.par && !this.parHit && this.cargoState === 'held' && this.parPts() >= a.par) {
+      this.parHit = true;
+      g.hud.alert(`PAR REACHED (${a.par})! NOW GET IT HOME`, '#ff7ad9', 3);
+    }
     const P = g.player;
     const x = this.extra;
     if (x) {
@@ -314,6 +413,19 @@ export class Missions {
     return capped && this.active ? Math.min(v, this.active.reward) : v;
   }
 
+  // style landed since the pickup (a showpiece's par)
+  parPts() { return this.cargoState === 'held' ? Math.max(0, this.stylePool - this.parBase) : 0; }
+
+  // bounties alive in the squad
+  bountyLeft() { const a = this.active; return a && a.bounty ? a.bounty.squad.filter((e) => !e.dead).length : 0; }
+
+  completeBounty() {
+    const a = this.active;
+    this.payOut(a, this.timer, this.late, 1, this.styleValue(false));
+    this.clear();
+    this.game.save();
+  }
+
   complete() {
     this.payOut(this.active, this.timer, this.late, this.integrity, this.styleValue(false));
     this.clear();
@@ -341,16 +453,20 @@ export class Missions {
     const g = this.game;
     const base = a.reward;
     const lateMult = late ? 0.5 : 1;
-    const timeBonus = late ? 0 : Math.round(base * 0.3 * Math.max(0, timer / a.time));
+    const timeBonus = late ? 0 : Math.round(base * (a.kind === 'express' ? 0.8 : 0.3) * Math.max(0, timer / a.time));
     // style can at most double the contract (₵400 job → ₵800 tops); condition scales the total
     const style = Math.min(styleRaw, base);
     const condition = 0.5 + 0.5 * integrity;
-    const total = Math.round((base + timeBonus + style) * condition * lateMult);
+    // showpiece: the par is the point (it counts only on the main contract)
+    const met = a.kind === 'showpiece' && a === this.active && this.parHit;
+    const showMult = a.kind === 'showpiece' ? (met ? 1.6 : 0.8) : 1;
+    const note = a.kind === 'showpiece' ? (met ? `Par ${a.par} made ×1.6` : `Par ${a.par} missed ×0.8`) : '';
+    const total = Math.round((base + timeBonus + style) * condition * lateMult * showMult);
     const integ = base;
     g.addCredits(total, null);
-    const repGain = late ? 1 : (a.premium ? 4 : 3) + (integrity > 0.8 ? 1 : 0);
-    g.rep.add(a.faction, repGain, `Delivered ${a.cargo.name}`);
-    g.stats.deliveries++;
+    const repGain = a.kind === 'bounty' ? (late ? 2 : 5) : late ? 1 : (a.premium ? 4 : 3) + (integrity > 0.8 ? 1 : 0);
+    g.rep.add(a.faction, repGain, a.kind === 'bounty' ? 'Collected a bounty' : `Delivered ${a.cargo.name}`);
+    if (a.kind === 'bounty') g.stats.bounties = (g.stats.bounties || 0) + 1; else g.stats.deliveries++;
     if (a.dark) g.stats.darkDeliveries = (g.stats.darkDeliveries || 0) + 1;
     if (a.smuggle) {
       g.stats.smuggled = (g.stats.smuggled || 0) + 1;
@@ -359,9 +475,13 @@ export class Missions {
         if (!bm.includes(a.payload.key)) bm.push(a.payload.key);
         g.hud.alert(`☠ BLACK MARKET: ${a.payload.name.toUpperCase()} NOW ON SALE AT RUSTMOON HOLD`, '#7dff3a', 4);
       } else g.hud.toast(`Smuggled! (${g.stats.smuggled} runs.)`, 3);
+      if (a.rider && !g.upgrades[a.rider.key]) {
+        g.upgrades[a.rider.key] = 1;
+        g.hud.alert(`☠ TUCKED IN THE CRATE: ${a.rider.name.toUpperCase()} (wardrobe: C)`, '#c77dff', 4);
+      }
     }
     g.audio.cash();
-    g.hud.delivered({ a, integ, timeBonus, style, styleCapped: styleRaw > base, condition, late, total, integrity, faction: FACTIONS[a.faction].name, repGain });
+    g.hud.delivered({ a, note, integ, timeBonus, style, styleCapped: styleRaw > base, condition, late, total, integrity, faction: FACTIONS[a.faction].name, repGain });
     // clearance ends with the contract: grace so the base you're in doesn't open fire
     if (a.clearance) { const L = this.game.locations.find((l) => l.id === a.clearance); if (L) g.enemies.grantGrace(L); }
   }
@@ -381,6 +501,7 @@ export class Missions {
 
   clear() {
     const g = this.game;
+    if (this.active && this.active.bounty) g.enemies.removeBounty(this.active.bounty.squad); // (a squad left standing goes with the contract)
     this.active = null;
     this.cargoState = 'none';
     this.thief = null;

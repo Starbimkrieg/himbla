@@ -349,7 +349,7 @@ src/
   cosmetics.js     outfits, skate finishes, laser colours
   race.js          Chimera Downs: card sections, tournaments, scouting, betting, the race, cameras, crowd, podium,
                    careers, Training Yard, stabled chimeras
-  downsPlan.js     Chimera Downs layout, the stable yard's layouts (no three.js)
+  downsPlan.js     Chimera Downs layout, the stable yard's layouts, the walkers' keep-out (`walkBlocker`) (no three.js)
   downsWorld.js    Chimera Downs scenery
   downsKit.js      shared Downs builders (bake, fountain, arcadeShell)
   curve.js         bends flat layouts onto the sphere

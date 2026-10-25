@@ -5,7 +5,6 @@ import { SEASON_RACES } from './chimerastats.js';
 import { SKILL_IDS } from './chimeraskills.js';
 import { pick } from './rng.js';
 import { VEHICLES } from './vehicles.js';
-import { BIKE_STYLES, getBikeStyle, setBikeStyle, SKIMMER_STYLES, getSkimmerStyle, setSkimmerStyle } from './models.js';
 import { TECH } from './story.js';
 import * as THREE from 'three';
 import { greatCircle } from './geo.js';
@@ -17,8 +16,6 @@ import { AssetRow } from './assetRow.js';
 const DEV_KEY = 'mr-dev-unlocked';
 const METEOR_KEY = 'mr-dev-meteor-power';
 const GITCHIP_KEY = 'mr-dev-git-chip';
-const BIKE_NAMES = { b: 'B · PARCEL RUNNER', a: 'A · SLIPSTREAM', classic: 'CLASSIC' };
-const SKIMMER_NAMES = { a: 'A · AEGIS', b: 'B · BULWARK', classic: 'CLASSIC' };
 const GIT_POLL = 90; // s between upstream checks while the upstream chip is on
 
 // Testing menu on ` (backtick). Uses the normal dialog: number keys pick, Esc closes.
@@ -63,46 +60,39 @@ export class Cheats {
     return false;
   }
 
-  // Hidden dev menu: F8, or B, B, X, Y on a controller (gamepad.js). Press F8 again to close.
+  // Hidden dev menu: F8, or B, B, X, Y on a controller (gamepad.js). Press F8 again to close. It is the cheat menu: open().
   dev() {
-    const g = this.game;
     if (!this.unlocked) {
       this.unlocked = true;
       try { localStorage.setItem(DEV_KEY, '1'); } catch { /* unavailable */ }
       this.showPauseButton();
     }
-    g.dialog('DEV MENU', '<small>Hidden. Toggles last until you reload.</small>', [
-      { label: '1 · UNLIMITED JET, HEALTH & SPEED…', fn: () => this.boostMenu() },
-      { label: '2 · SPAWN A METEOR ON ME', fn: () => this.meteorFromMenu() },
-      { label: `3 · DEBUG OVERLAY: ${this.overlay.on ? 'ON' : 'OFF'}  (F3)…`, fn: () => this.overlayMenu() },
-      { label: '4 · DISPLAY TESTS…', fn: () => this.displayMenu() },
-      { label: `5 · CLICK MAP TO TELEPORT: ${this.mapTeleport ? 'ON' : 'OFF'}`, fn: () => { this.mapTeleport = !this.mapTeleport; this.dev(); } },
-      { label: '6 · FULL CHEAT MENU…', fn: () => this.open() },
-      { label: `7 · RAGDOLL: ${this.ragdoll ? 'ON' : 'OFF'}`, fn: () => { this.toggleRagdoll(); this.dev(); } },
-      { label: '8 · GIT: FETCH & PULL UPSTREAM…', fn: () => this.gitMenu() },
-      { label: `9 · COURIER MODEL: ${BIKE_NAMES[getBikeStyle()]}`, fn: () => this.bikeModel() },
-      { label: `10 · SKIMMER MODEL: ${SKIMMER_NAMES[getSkimmerStyle()]}`, fn: () => this.skimmerModel() },
-      { label: 'CLOSE' },
-    ]);
-    g.dialogButtons.dev = true;
+    this.open();
   }
 
-  // Cycles the Courier light-bike model (models.js makeLightBike): B and A are the Blender redesigns (docs/courier-proposals).
-  // Remembered across launches; applies to the next bike called (V).
-  bikeModel() {
-    const next = BIKE_STYLES[(BIKE_STYLES.indexOf(getBikeStyle()) + 1) % BIKE_STYLES.length];
-    setBikeStyle(next);
-    this.game.hud.toast(`Courier light-bike: ${BIKE_NAMES[next]}. Put the bike away (V) and call it again to see it.`, 4);
-    this.dev();
-  }
-
-  // Cycles the Phase Skimmer model (models.js makeSkimmer): A and B are the Blender redesigns (docs/skimmer-proposals), runner
-  // inside. Remembered across launches; applies to the next skimmer called (V).
-  skimmerModel() {
-    const next = SKIMMER_STYLES[(SKIMMER_STYLES.indexOf(getSkimmerStyle()) + 1) % SKIMMER_STYLES.length];
-    setSkimmerStyle(next);
-    this.game.hud.toast(`Phase Skimmer: ${SKIMMER_NAMES[next]}. Put it away (V) and call it again to see it.`, 4);
-    this.dev();
+  // The icon grid every cheat page uses: 6 tiles across, 3 rows a page, the arrow turns the page.
+  //   tiles(): the tiles, rebuilt each time the page repaints. A tile is { icon, name, sub?, on?, fn, keep? }: `sub` a line under the name
+  //   (a state, a count), `on` lights it, `keep` runs fn and repaints the page in place instead of closing it.
+  //   opts: note (small text under the title), back (fn: a BACK button), page.
+  // Number keys 1 to 9 pick the first nine tiles, Esc closes (the last button).
+  grid(title, tiles, { note = '', back = null, page = 0, stay = false } = {}) {
+    const PER = 18;
+    const all = tiles();
+    const pages = Math.max(1, Math.ceil(all.length / PER));
+    page = ((page % pages) + pages) % pages;
+    const here = all.slice(page * PER, page * PER + PER);
+    const again = (extra = {}) => this.grid(title, tiles, { note, back, page, ...extra, stay: true });
+    const buttons = here.map((t) => (t.keep ? { label: t.name, keep: true, fn: () => { t.fn(); again(); } } : { label: t.name, fn: t.fn }));
+    const add = (b) => buttons.push(b) - 1;
+    const backI = back ? add({ label: 'BACK', fn: back }) : -1;
+    const nextI = pages > 1 ? add({ label: 'NEXT', keep: true, fn: () => again({ page: page + 1 }) }) : -1;
+    const closeI = add({ label: 'CLOSE' });
+    const tile = (t, i) => `<button class="cg-tile${t.on ? ' on' : ''}" data-i="${i}">${i < 9 ? `<i class="cg-n">${i + 1}</i>` : ''}<span class="cg-ico">${t.icon || '•'}</span><b>${t.name}</b>${t.sub ? `<small>${t.sub}</small>` : ''}</button>`;
+    const html = `<div class="cg-head"><span class="dlg-title">${title}</span>${backI >= 0 ? `<button class="cg-back" data-i="${backI}">BACK</button>` : ''}${note ? `<small>${note}</small>` : ''}<button class="cg-x" data-i="${closeI}">✕</button></div>
+      <div class="cg-grid">${here.map(tile).join('')}</div>
+      <div class="cg-foot"><small>${pages > 1 ? `PAGE ${page + 1} / ${pages} · ` : ''}CLICK OR 1-9 · ESC CLOSES</small>${nextI >= 0 ? `<button class="cg-next" data-i="${nextI}">→</button>` : ''}</div>`;
+    this.game.dialog(title, html, buttons, { raw: true, cls: 'cg', stay });
+    this.game.dialogButtons.dev = true; // F8 closes it
   }
 
   // ---- git: run by the dev server (tools/devGit.mjs: fetch and fast-forward pull only), so `npm run dev` only ----
@@ -347,29 +337,46 @@ export class Cheats {
     ]);
   }
 
-  open() {
+  open(page = 0) {
     const g = this.game;
-    g.dialog('CHEAT MENU', '<small>For testing. Changes are saved like normal progress.</small>', [
-      { label: '1 · +₵10,000', fn: () => { g.addCredits(10000, 'Cheat'); g.save(); this.open(); } },
-      { label: '2 · REVEAL WHOLE MAP', fn: () => { this.revealMap(); this.open(); } },
-      { label: '3 · REPUTATION…', fn: () => this.repMenu() },
-      { label: '4 · TELEPORT…', fn: () => this.teleportMenu(0) },
-      { label: `5 · GOD MODE: ${this.god ? 'ON' : 'OFF'}`, fn: () => { this.god = !this.god; g.player.health = g.player.maxHealth; this.open(); } },
-      { label: '6 · UNLOCK ALL GEAR, WEAPONS & COSMETICS', fn: () => { this.unlockAll(); this.open(); } },
-      { label: '7 · LAB & CHIMERAS… (lab kit, careers, skills)', fn: () => this.chimeraMenu() },
-      { label: '8 · MORE…', fn: () => this.moreMenu() },
-      { label: '9 · SPAWN A VEHICLE…', fn: () => this.vehicleMenu() },
-      { label: 'CLOSE' },
-    ]);
+    const on = (v) => (v ? 'ON' : 'OFF');
+    const stats = `${g.stats.events || 0} events · ${g.stats.meridianEvents || 0} Meridian · ${g.stats.darkDeliveries || 0} dark deliveries · ${g.stats.raceWins || 0} Derby wins`;
+    this.grid('CHEAT MENU', () => [
+      { icon: '💰', name: '+₵10,000', fn: () => { g.addCredits(10000, 'Cheat'); g.save(); }, keep: true },
+      { icon: '🗺️', name: 'REVEAL MAP', fn: () => this.revealMap(), keep: true },
+      { icon: '⭐', name: 'REPUTATION', fn: () => this.repMenu() },
+      { icon: '🚀', name: 'TELEPORT', fn: () => this.teleportMenu() },
+      { icon: '🛡️', name: 'GOD MODE', sub: on(this.god), on: this.god, fn: () => { this.god = !this.god; g.player.health = g.player.maxHealth; }, keep: true },
+      { icon: '🔓', name: 'UNLOCK ALL', sub: 'gear, weapons, cosmetics', fn: () => this.unlockAll(), keep: true },
+      { icon: '🧪', name: 'LAB & CHIMERAS', sub: 'lab kit, careers, skills', fn: () => this.chimeraMenu() },
+      { icon: '🛴', name: 'SPAWN VEHICLE', fn: () => this.vehicleMenu() },
+      { icon: '⚡', name: 'JET · HEALTH · SPEED', fn: () => this.boostMenu() },
+      { icon: '☄️', name: 'METEOR ON ME', fn: () => this.meteorFromMenu() },
+      { icon: '📡', name: 'SPAWN EVENT', sub: 'or a meteor shower', fn: () => this.eventMenu() },
+      { icon: '☠️', name: 'PIRATE SQUAD', fn: () => { if (this.notInRow()) g.enemies.spawnSquad(3); } },
+      { icon: '🐛', name: 'MEGA MITE', fn: () => { if (this.notInRow()) g.alchemy.spawnMegaMite(); } },
+      { icon: '🏴', name: 'JOIN RUSTMOON', sub: 'skips the Pirate Wreck', fn: () => this.joinRustmoon(), keep: true },
+      { icon: '📈', name: 'UNLOCK COUNTERS', sub: 'events, deliveries, wins', fn: () => { Object.assign(g.stats, { meridianEvents: Math.max(3, g.stats.meridianEvents || 0), darkDeliveries: Math.max(5, g.stats.darkDeliveries || 0), raceWins: Math.max(1, g.stats.raceWins || 0) }); g.save(); }, keep: true },
+      { icon: '🧬', name: 'SPLICE MUTATIONS', sub: `${g.alchemy.mutations.length} active`, fn: () => this.spliceMenu(0) },
+      { icon: '📖', name: 'STORY', sub: g.story.faction ? FACTIONS[g.story.faction].name : 'no faction yet', fn: () => this.storyMenu() },
+      { icon: '♻️', name: 'RESET PROGRESS', sub: 'story, gear, standing', fn: () => this.confirmResetProgress() },
+      // page 2: the dev tools
+      { icon: '🧭', name: 'CLICK MAP TO TELEPORT', sub: on(this.mapTeleport), on: this.mapTeleport, fn: () => { this.mapTeleport = !this.mapTeleport; }, keep: true },
+      { icon: '📊', name: 'DEBUG OVERLAY', sub: `${on(this.overlay.on)} (F3)`, on: this.overlay.on, fn: () => this.overlayMenu() },
+      { icon: '🖥️', name: 'DISPLAY TESTS', fn: () => this.displayMenu() },
+      { icon: '🤸', name: 'RAGDOLL', sub: on(this.ragdoll), on: this.ragdoll, fn: () => this.toggleRagdoll(), keep: true },
+      { icon: '🌿', name: 'GIT', sub: 'fetch & pull upstream', fn: () => this.gitMenu() },
+      { icon: '🗑️', name: 'WIPE SAVE SLOT', sub: 'back to the menu', fn: () => this.confirmReset() },
+    ], { note: stats, page });
   }
 
   // Drops any faction vehicle beside you and boards it (owned or not; doesn't unlock it for V)
   vehicleMenu() {
     if (!this.notInRow()) return;
     const g = this.game;
-    const ids = Object.keys(VEHICLES);
-    g.dialog('SPAWN A VEHICLE', '<small>Drops it beside you and hops you in. Replaces any vehicle already out.</small>', ids.map((k, i) => ({
-      label: `${i + 1} · ${VEHICLES[k].name}`,
+    this.grid('SPAWN A VEHICLE', () => Object.keys(VEHICLES).map((k) => ({
+      icon: '🚙',
+      name: VEHICLES[k].name.toUpperCase(),
       fn: () => {
         if (g.player.vehicle) g.garage.exit();
         g.garage.hp[k] = g.garage.maxHp(k); // fresh hull, not stuck in a rebuild
@@ -378,23 +385,7 @@ export class Cheats {
         g.garage.summon(k);
         g.garage.enter();
       },
-    })).concat([{ label: `${ids.length + 1} · BACK`, fn: () => this.open() }]));
-  }
-
-  moreMenu() {
-    const g = this.game;
-    g.dialog('CHEAT MENU · MORE', `<small>Stats: ${g.stats.events || 0} events, ${g.stats.meridianEvents || 0} Meridian events, ${g.stats.darkDeliveries || 0} dark deliveries, ${g.stats.raceWins || 0} Derby wins.</small>`, [
-      { label: '1 · JOIN RUSTMOON (skip the Pirate Wreck)', fn: () => { this.joinRustmoon(); this.moreMenu(); } },
-      { label: '2 · SPAWN PIRATE SQUAD', fn: () => { if (this.notInRow()) g.enemies.spawnSquad(3); } },
-      { label: '3 · SPAWN MEGA MITE', fn: () => { if (this.notInRow()) g.alchemy.spawnMegaMite(); } },
-      { label: '4 · SPAWN AN EVENT… (or a meteor shower)', fn: () => this.eventMenu() },
-      { label: '5 · UNLOCK-STAT COUNTERS (events, deliveries, wins)', fn: () => { Object.assign(g.stats, { meridianEvents: Math.max(3, g.stats.meridianEvents || 0), darkDeliveries: Math.max(5, g.stats.darkDeliveries || 0), raceWins: Math.max(1, g.stats.raceWins || 0) }); g.save(); this.moreMenu(); } },
-      { label: `6 · SPLICE MUTATIONS… (${g.alchemy.mutations.length} active)`, fn: () => this.spliceMenu(0) },
-      { label: '7 · RESET THIS SAVE SLOT (back to menu)', fn: () => this.confirmReset() },
-      { label: '8 · STORY…', fn: () => this.storyMenu() },
-      { label: '9 · BACK', fn: () => this.open() },
-      { label: 'CLOSE' },
-    ]);
+    })), { note: 'Drops it beside you and hops you in. Replaces any vehicle already out.', back: () => this.open() });
   }
 
   // Each splice-pod mutation as a toggle (ignores the 3-mutation cap), plus a cure-all. Paged: number keys stop at 9.
@@ -418,7 +409,7 @@ export class Cheats {
     });
     rows.push({ label: `${rows.length + 1} · NEXT PAGE (${page + 1}/${pages})`, fn: () => this.spliceMenu((page + 1) % pages) });
     rows.push({ label: `${rows.length + 1} · RESET ALL (cure)`, fn: () => { A.cure(); this.spliceMenu(page); } });
-    rows.push({ label: `${rows.length + 1} · BACK`, fn: () => this.moreMenu() });
+    rows.push({ label: `${rows.length + 1} · BACK`, fn: () => this.open() });
     const active = A.mutations.map((k) => MUTATIONS[k].name).join(', ') || 'none';
     g.dialog('CHEAT MENU · SPLICE', `<small>Toggles each pod mutation without the jar or the 3-mutation cap.<br>Active: ${active}</small>`, rows);
   }
@@ -428,19 +419,17 @@ export class Cheats {
     const g = this.game;
     const S = g.story;
     const A = S.active;
-    g.dialog('CHEAT MENU · STORY', `<small>Committed to: <b>${S.faction ? FACTIONS[S.faction].name : 'nobody yet'}</b>${A ? ` · active: ${A.def.title} (step ${A.si + 1}/${A.steps.length})` : ''}<br>Vehicles: ${S.vehicles.join(', ') || 'none'} · Tech: ${S.tech.join(', ') || 'none'}</small>`, [
-      { label: '1 · SKIP CURRENT STEP', fn: () => { if (S.active) S.skipStep(); this.storyMenu(); } },
-      { label: '2 · TELEPORT TO CURRENT OBJECTIVE', fn: () => { const o = S.objective(); if (o) { S.teleportTo(o.pos.clone().normalize()); } } },
-      { label: '3 · SPAWN CAPTAIN KADE (ambush)', fn: () => { S.spawnKade(false); } },
-      { label: '4 · ALL VEHICLES + TECH', fn: () => { S.vehicles = Object.keys(VEHICLES); S.tech = Object.keys(TECH); S.save(); this.storyMenu(); } },
-      { label: '5 · RESET STORY (keeps outposts)', fn: () => { if (S.active) S.fail('Reset.'); S.faction = null; S.progress = {}; S.kade.captured = false; S.save(); this.storyMenu(); } },
-      { label: '6 · DROP ME ON SAT-7 (matched speed)', fn: () => { const S = g.secrets; const o = S.sat; const up = o.pos.clone().normalize(); g.player.respawn(o.pos.clone().addScaledVector(up, 4)); g.player.body.vel.copy(o.vel); } },
-      { label: '7 · TELEPORT TO THE WHISPERING FISSURE', fn: () => { const L = g.secrets.loc; g.globe.discover(L, true); S.teleportTo(g.world.toWorld(L, 0, 0, -90).normalize()); } },
-      { label: '8 · GIVE ME THE ALIEN ARTIFACT', fn: () => { g.upgrades.jar = Math.max(1, g.upgrades.jar || 0); g.alchemy.artifact = true; g.secrets.state.artifactTaken = true; g.secrets.sat.artifact.visible = g.secrets.sat.aGlow.visible = false; g.secrets.save(); g.alchemy.save(); g.alchemy.refreshJarMesh(); this.storyMenu(); } },
-      { label: '9 · LAUNCH TO THE SPINDLE (Meridian finale)', fn: () => this.toSpindle() },
-      { label: 'BACK', fn: () => this.moreMenu() },
-      { label: 'CLOSE' },
-    ]);
+    this.grid('CHEAT MENU · STORY', () => [
+      { icon: '⏭️', name: 'SKIP STEP', sub: 'the current one', fn: () => { if (S.active) S.skipStep(); }, keep: true },
+      { icon: '📍', name: 'TO OBJECTIVE', fn: () => { const o = S.objective(); if (o) S.teleportTo(o.pos.clone().normalize()); } },
+      { icon: '👮', name: 'SPAWN KADE', sub: 'ambush', fn: () => S.spawnKade(false) },
+      { icon: '🧰', name: 'ALL VEHICLES + TECH', fn: () => { S.vehicles = Object.keys(VEHICLES); S.tech = Object.keys(TECH); S.save(); }, keep: true },
+      { icon: '↺', name: 'RESET STORY', sub: 'keeps outposts', fn: () => { if (S.active) S.fail('Reset.'); S.faction = null; S.progress = {}; S.kade.captured = false; S.save(); }, keep: true },
+      { icon: '🛰️', name: 'DROP ON SAT-7', sub: 'matched speed', fn: () => { const o = g.secrets.sat; const up = o.pos.clone().normalize(); g.player.respawn(o.pos.clone().addScaledVector(up, 4)); g.player.body.vel.copy(o.vel); } },
+      { icon: '🌀', name: 'WHISPERING FISSURE', fn: () => { const L = g.secrets.loc; g.globe.discover(L, true); S.teleportTo(g.world.toWorld(L, 0, 0, -90).normalize()); } },
+      { icon: '👽', name: 'ALIEN ARTIFACT', fn: () => { g.upgrades.jar = Math.max(1, g.upgrades.jar || 0); g.alchemy.artifact = true; g.secrets.state.artifactTaken = true; g.secrets.sat.artifact.visible = g.secrets.sat.aGlow.visible = false; g.secrets.save(); g.alchemy.save(); g.alchemy.refreshJarMesh(); }, keep: true },
+      { icon: '🌌', name: 'THE SPINDLE', sub: 'Meridian finale', fn: () => this.toSpindle() },
+    ], { note: `Committed to <b>${S.faction ? FACTIONS[S.faction].name : 'nobody yet'}</b>${A ? ` · ${A.def.title} (step ${A.si + 1}/${A.steps.length})` : ''} · vehicles: ${S.vehicles.length} · tech: ${S.tech.length}`, back: () => this.open() });
   }
 
   revealMap() {
@@ -469,10 +458,11 @@ export class Cheats {
       { label: '2 · −10', fn: () => { this.setRep(f, g.rep.get(f) - 10); this.repFaction(f); } },
       { label: '3 · FRIENDLY (10)', fn: () => { this.setRep(f, 10); this.repFaction(f); } },
       { label: '4 · TRUSTED (25)', fn: () => { this.setRep(f, 25); this.repFaction(f); } },
-      { label: '5 · HONORED (60)', fn: () => { this.setRep(f, 60); this.repFaction(f); } },
-      { label: '6 · NEUTRAL (0)', fn: () => { this.setRep(f, 0); this.repFaction(f); } },
-      { label: '7 · HOSTILE (−30)', fn: () => { this.setRep(f, -30); this.repFaction(f); } },
-      { label: '8 · BACK', fn: () => this.repMenu() },
+      { label: '5 · HONORED (50)', fn: () => { this.setRep(f, 50); this.repFaction(f); } },
+      { label: '6 · REVERED (80)', fn: () => { this.setRep(f, 80); this.repFaction(f); } },
+      { label: '7 · NEUTRAL (0)', fn: () => { this.setRep(f, 0); this.repFaction(f); } },
+      { label: '8 · HOSTILE (−30)', fn: () => { this.setRep(f, -30); this.repFaction(f); } },
+      { label: '9 · BACK', fn: () => this.repMenu() },
     ]);
   }
 
@@ -485,23 +475,15 @@ export class Cheats {
     g.rep.save();
   }
 
-  teleportMenu(page) {
+  teleportMenu(page = 0) {
     const g = this.game;
-    // option 1 is always the Asset Row (assetRow.js: flat showroom of every asset); settlements follow
-    const items = [
-      { name: this.inRow() ? 'LEAVE ASSET ROW' : 'ASSET ROW', fn: () => this.assetRow(!this.inRow()) },
-      ...g.locations.filter((l) => !l.camp).map((l) => ({ name: l.name, fn: () => this.teleport(l) })),
-    ];
-    const per = 7;
-    const slice = items.slice(page * per, page * per + per);
-    const pages = Math.ceil(items.length / per);
-    const buttons = slice.map((it, i) => ({ label: `${i + 1} · ${it.name}`, fn: it.fn }));
-    buttons.push({ label: `${buttons.length + 1} · NEXT PAGE (${page + 1}/${pages})`, fn: () => this.teleportMenu((page + 1) % pages) });
-    buttons.push({ label: `${buttons.length + 1} · BACK`, fn: () => this.open() });
-    g.dialog('TELEPORT', '<small>Drops you at the edge of the settlement. Option 1 is the Asset Row: every asset in the game, side by side.</small>', buttons);
+    // the first tile is always the Asset Row (assetRow.js: flat showroom of every asset); settlements follow
+    this.grid('TELEPORT', () => [
+      { icon: '🏛️', name: this.inRow() ? 'LEAVE ASSET ROW' : 'ASSET ROW', sub: 'every asset', fn: () => this.assetRow(!this.inRow()) },
+      ...g.locations.filter((l) => !l.camp).map((l) => ({ icon: '📍', name: l.name.toUpperCase(), sub: l.discovered ? '' : 'not charted', fn: () => this.teleport(l) })),
+    ], { note: 'Drops you at the edge of the settlement.', back: () => this.open(), page });
   }
 
-  // into the Asset Row, or back out to where you were
   assetRow(enter) {
     const g = this.game;
     if (enter) (g.assetRow ||= new AssetRow(g)).start();
@@ -599,16 +581,18 @@ export class Cheats {
     if (!this.notInRow()) return;
     const g = this.game;
     const fs = ['spacecom', 'vostok', 'meridian', 'kepler', 'daedalus', 'rustmoon'];
-    g.dialog('SPAWN EVENT', '<small>Creates a new event and teleports you to where it starts.</small>', fs.map((f, i) => ({
-      label: `${i + 1} · ${FACTIONS[f].name.toUpperCase()}`,
-      fn: () => {
-        const ev = g.events.create(f);
-        if (!ev) { g.hud.toast('No event fits right now; try again.', 2); return; }
-        g.planet.update(ev.start, { budgetMs: 1e9 });
-        g.player.respawn(g.planet.ground(ev.start.clone().addScaledVector(g.cam.right, 6), ev.start.clone(), 1.5));
-      },
-    })).concat([
-      { label: '7 · METEOR SHOWER (teleports you to its edge)', fn: () => {
+    this.grid('SPAWN EVENT', () => [
+      ...fs.map((f) => ({
+        icon: '📡',
+        name: FACTIONS[f].name.toUpperCase(),
+        fn: () => {
+          const ev = g.events.create(f);
+          if (!ev) { g.hud.toast('No event fits right now; try again.', 2); return; }
+          g.planet.update(ev.start, { budgetMs: 1e9 });
+          g.player.respawn(g.planet.ground(ev.start.clone().addScaledVector(g.cam.right, 6), ev.start.clone(), 1.5));
+        },
+      })),
+      { icon: '☄️', name: 'METEOR SHOWER', sub: 'teleports you to its edge', fn: () => {
         const M = g.meteors;
         if (M.zone) M.zone = null; // not end(): its 'has passed' toast would sit under the new banner
         M.begin();
@@ -619,8 +603,29 @@ export class Cheats {
         g.planet.update(edge, { budgetMs: 1e9 });
         g.player.respawn(g.planet.ground(edge, new THREE.Vector3(), 1.5));
       } },
-      { label: '8 · BACK', fn: () => this.moreMenu() },
-    ]));
+    ], { note: 'Creates a new event and teleports you to where it starts.', back: () => this.open() });
+  }
+
+  // Back to a new runner's base for testing: the story, gear, outfits, standing, unlock counters, the world's finale changes, outposts and the
+  // tutorial. Kept: credits, the charted map, the lab and its chimeras, settings. The saved keys are cleared and the game reloads, so
+  // nothing live (outposts, finale scenery) survives to be saved back.
+  confirmResetProgress() {
+    const g = this.game;
+    g.dialog('RESET PROGRESS?', 'Resets the story, every gear, weapon and cosmetic unlock, faction standing, unlock counters, outposts and finale changes, and offers the tutorial again. Keeps your credits, the charted map, the lab and chimeras, and settings. The game reloads.', [
+      { label: '1 · YES, RESET', fn: () => this.resetProgress() },
+      { label: '2 · NO', fn: () => this.open() },
+    ]);
+  }
+
+  resetProgress() {
+    const g = this.game;
+    for (const k of Object.keys(g.upgrades)) { if (/^(outfit|skates)_/.test(k) || k === 'alien') delete g.upgrades[k]; else g.upgrades[k] = 0; }
+    g.stats = { deliveries: 0, bestTrick: 0 };
+    try {
+      for (const k of ['story-v1', 'rep-v2', 'territory-v1', 'world-v1', 'secrets-v1', 'tutorial-v1', 'style-v1']) localStorage.removeItem('moonrunner-' + k);
+    } catch { /* unavailable */ }
+    g.save(); // credits and the zeroed upgrades and stats (and the slot's snapshot, now without the cleared keys)
+    location.reload();
   }
 
   confirmReset() {
@@ -632,7 +637,7 @@ export class Cheats {
         else { try { for (const k of Object.keys(localStorage)) if (k.startsWith('moonrunner-') && k !== 'moonrunner-settings-v1') localStorage.removeItem(k); } catch { /* unavailable */ } }
         location.reload();
       } },
-      { label: '2 · NO', fn: () => this.moreMenu() },
+      { label: '2 · NO', fn: () => this.open() },
     ]);
   }
 }

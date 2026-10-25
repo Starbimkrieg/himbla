@@ -72,7 +72,7 @@ export class Player {
     this.regen = up.flak || 0; // Flak Weave: HP per 3 s tick (main.js)
     this.damageMult = 1 + up.spinner * 0.15;
     this.fireDelay = 0.55 * (1 - 0.15 * (up.overcharge || 0)) * (this.mutFire || 1);
-    this.homing = 0.9 + (up.seeker || 0) * 1.3; // rad/s the disc can turn toward a target
+    this.homing = 1.5 + (up.seeker || 0) * 0.7; // rad/s the disc can turn toward its target (the mortar and scattergun use a fraction)
     this.knockResist = 1 - (up.flak || 0) * 0.15;
     // Xenoglide skates: big handling boost and an antimatter jet tank
     const alien = (up.alien || 0) > 0;
@@ -481,7 +481,7 @@ export class Player {
       const muzzle = this.center.clone().addScaledVector(cam.right, 0.5).addScaledVector(up, 0.3);
       const aim = cam.position.clone().addScaledVector(cam.look, 350);
       const dir = aim.sub(muzzle).normalize();
-      fireWeapon(g, w, muzzle, dir, b.vel, this.damageMult || 1, this.homing || 0.9);
+      fireWeapon(g, w, muzzle, dir, b.vel, this.damageMult || 1, this.homing || 1.5);
     }
 
   }

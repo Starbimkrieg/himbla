@@ -20,17 +20,18 @@ export const OUTFITS = {
   rustmoon2: { name: 'Rustmoon Dread Captain', faction: 'rustmoon', shop: 'rustmoon', req: 50, cost: 1800, elite: true, suit: 0x111111, accent: 0x7dff3a, helmet: 0x111111, visor: 0x7dff3a, scarf: 0x7dff3a, sc: [2.0, 0.34, 2], extras: ['band', 'pads'] },
 };
 
-// Quantum-Lock Skate finishes, all sold by Meridian; some need a deed as well as credits.
+// Quantum-Lock Skate finishes, spread round the map: shop is where it is sold (a faction HQ, or 'downs' for the Chimera Downs
+// betting office), faction + req the standing it needs there; some need a deed as well as credits.
 export const SKATES = {
   // tone: the skate hum's voice (audio.js setSkateTone): hum, glide or rumble (gold rollers: jackpot)
   stock: { name: 'Q-Lock Standard', color: 0x2ee6ff, trail: null, tone: 'hum' },
-  chrome: { name: 'Chrome Comets', cost: 900, req: 0, color: 0xffffff, trail: 0xe8f6ff, tone: 'hum' },
-  solar: { name: 'Solar Flares', cost: 1400, req: 10, color: 0xff7b1c, trail: 0xffb02e, flame: true, tone: 'rumble' },
-  seismic: { name: 'Seismic Striders', cost: 1200, req: 0, color: 0xffd23f, trail: 0xffd23f, unlock: { stat: 'meridianEvents', n: 3, text: 'Complete 3 Meridian events' }, tone: 'rumble' },
-  hooves: { name: 'Derby Hooves', cost: 800, req: 0, color: 0xa0612b, trail: 0xc9a06b, hooves: true, unlock: { stat: 'raceWins', n: 1, text: 'Win the Chimera Derby' }, tone: 'rumble' },
-  void: { name: 'Void Gliders', cost: 1600, req: 25, color: 0x9b4dff, trail: 0x7b2ff7, tone: 'glide' },
-  survivor: { name: 'Dark-Side Survivors', cost: 1500, req: 0, color: 0x7dff3a, trail: 0x7dff3a, unlock: { stat: 'darkDeliveries', n: 5, text: 'Deliver 5 contracts on the dark side' }, tone: 'hum' },
-  prism: { name: 'Prism Drive', cost: 2500, req: 50, color: 0xff2e88, trail: 'rainbow', rainbow: true, tone: 'glide' },
+  chrome: { name: 'Chrome Comets', shop: 'meridian', faction: 'meridian', cost: 900, req: 0, color: 0xffffff, trail: 0xe8f6ff, tone: 'hum' },
+  solar: { name: 'Solar Flares', shop: 'vostok', faction: 'vostok', cost: 1400, req: 10, color: 0xff7b1c, trail: 0xffb02e, flame: true, tone: 'rumble' },
+  seismic: { name: 'Seismic Striders', shop: 'meridian', faction: 'meridian', cost: 1200, req: 0, color: 0xffd23f, trail: 0xffd23f, unlock: { stat: 'meridianEvents', n: 3, text: 'Complete 3 Meridian events' }, tone: 'rumble' },
+  hooves: { name: 'Derby Hooves', shop: 'downs', cost: 800, color: 0xa0612b, trail: 0xc9a06b, hooves: true, unlock: { stat: 'raceWins', n: 1, text: 'Win the Chimera Derby' }, tone: 'rumble' },
+  void: { name: 'Void Gliders', shop: 'daedalus', faction: 'daedalus', cost: 1600, req: 25, color: 0x9b4dff, trail: 0x7b2ff7, tone: 'glide' },
+  survivor: { name: 'Dark-Side Survivors', shop: 'rustmoon', faction: 'rustmoon', cost: 1500, req: 0, color: 0x7dff3a, trail: 0x7dff3a, unlock: { stat: 'darkDeliveries', n: 5, text: 'Deliver 5 contracts on the dark side' }, tone: 'hum' },
+  prism: { name: 'Prism Drive', shop: 'meridian', faction: 'meridian', cost: 2500, req: 50, color: 0xff2e88, trail: 'rainbow', rainbow: true, tone: 'glide' },
 };
 
 export const LASERS = [
@@ -51,11 +52,9 @@ export function cosmeticShopItems(locId) {
     if (o.shop !== locId) continue;
     out.push({ key: 'outfit_' + id, name: `${o.elite ? '★ ' : ''}${o.name}`, desc: o.elite ? 'Elite outfit — HONORED standing only' : 'Faction outfit', cost: o.cost, max: 1, faction: o.faction, req: [o.req], cosmetic: true, swatch: [o.suit, o.accent, o.scarf] });
   }
-  if (locId === 'meridian') {
-    for (const [id, s] of Object.entries(SKATES)) {
-      if (!s.cost) continue;
-      out.push({ key: 'skates_' + id, name: `${s.name} (skates)`, desc: s.unlock ? `Unlock: ${s.unlock.text}` : 'Skate finish + glide trail', cost: s.cost, max: 1, faction: 'meridian', req: [s.req], unlock: s.unlock, cosmetic: true, swatch: [s.color] });
-    }
+  for (const [id, s] of Object.entries(SKATES)) {
+    if (s.shop !== locId || !s.cost) continue;
+    out.push({ key: 'skates_' + id, name: `${s.name} (skates)`, desc: s.unlock ? `Unlock: ${s.unlock.text}` : 'Skate finish + glide trail', cost: s.cost, max: 1, faction: s.faction, req: s.faction ? [s.req] : undefined, unlock: s.unlock, cosmetic: true, swatch: [s.color] });
   }
   return out;
 }

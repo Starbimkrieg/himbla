@@ -1603,3 +1603,42 @@ body.pad-on .otm-foot .foot-kb { display: none; }
   .otm.side .otm-d-art { width: 64px; height: 64px; }
   #dialog .dlg.otm-dlg.town { width: min(1000px, calc(100vw - 32px)); }
 }
+
+/* cheat menu: an icon grid (cheats.js grid) */
+#dialog .dlg.cg { width: min(960px, calc(100vw - 32px)); }
+.cg-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.cg-head small { flex: 1; min-width: 160px; font-family: var(--body); font-size: 15px; color: var(--ui-muted); }
+.cg-back, .cg-x, .cg-next { font-family: var(--comic); font-size: 11px; padding: 9px 12px 7px; color: var(--ui-text); background: var(--ui-bg2); border: 2px solid var(--ui-edge); cursor: pointer; }
+.cg-back { border-color: var(--yellow); color: var(--yellow); }
+.cg-grid { min-height: 344px; align-content: start; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.cg-tile { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 104px; padding: 8px 6px; text-align: center; color: var(--ui-text); background: var(--ui-bg2); border: 2px solid var(--ui-edge); cursor: pointer; font-family: var(--comic); }
+.cg-tile .cg-ico { font-size: 28px; line-height: 1.1; }
+.cg-tile b { font-weight: normal; font-size: 9px; line-height: 1.4; overflow-wrap: anywhere; }
+.cg-tile small { font-family: var(--body); font-size: 14px; line-height: 1.1; color: var(--ui-muted); }
+.cg-tile .cg-n { position: absolute; top: 3px; left: 5px; font-style: normal; font-size: 8px; color: var(--ui-dim); }
+.cg-tile.on { border-color: var(--green); }
+.cg-tile.on small { color: var(--green); }
+.cg-tile:hover, .cg-tile:focus-visible, .cg-back:hover, .cg-x:hover, .cg-next:hover { background: var(--yellow); border-color: var(--yellow); color: #05030c; outline: none; }
+.cg-tile:hover small, .cg-tile.on:hover small { color: #05030c; }
+.cg-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; min-height: 36px; }
+.cg-foot small { font-family: var(--body); font-size: 14px; color: var(--ui-dim); }
+.cg-next { font-size: 16px; padding: 8px 18px 6px; }
+@media (max-width: 720px) { .cg-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* reputation log: tier notches on the bar, their names beneath */
+.rep-notch { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ui-dim); }
+.rep-notch.got { background: #05030c; opacity: 0.55; }
+.rep-notch.bad { background: var(--red); }
+.rep-notch.next { background: var(--yellow); width: 3px; margin-left: -1.5px; }
+.rep-ticks { position: relative; height: 28px; margin-bottom: 4px; font-family: var(--comic); font-size: 7px; color: var(--ui-dim); }
+.rep-tick { position: absolute; top: 0; transform: translateX(-50%); text-align: center; white-space: nowrap; line-height: 1.5; }
+.rep-tick small { display: block; font-family: var(--body); font-size: 13px; line-height: 1; }
+.rep-tick.got { color: var(--ui-muted); }
+.rep-tick.bad { color: var(--red); }
+.rep-tick.next { color: var(--yellow); }
+
+/* contract kinds on the job board */
+.job-kind { font-family: var(--comic); font-size: 8px; padding: 3px 6px 1px; margin-left: 6px; color: #05030c; background: var(--yellow); }
+.job-kind.k-bounty { background: var(--red); color: #fff; }
+.job-kind.k-showpiece { background: var(--pink); color: #fff; }
+.job-blurb { font-family: var(--body); font-size: 15px; color: var(--ui-muted); margin: 2px 0 4px; }

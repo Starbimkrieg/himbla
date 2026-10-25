@@ -760,7 +760,8 @@ class Game {
     const P = this.player;
     if (P.dead || amount <= 0 || this.cheats.god) return;
     if (this.assetRow !== null && this.assetRow.active) return; // Asset Row is harmless
-    if (this.story.absorb(from)) return;
+    amount = this.story.absorb(amount, from);
+    if (amount <= 0) return;
     if (cause === 'ram' && this.grind) this.grind.knockOff(P);
     // vehicles soak hits (and can be wrecked); sniper rounds go through the glass
     if (P.vehicle && cause !== 'sniper') { amount = this.garage.hit(amount); if (amount <= 0) return; }
@@ -940,8 +941,9 @@ class Game {
     }
   }
 
-  buy(key) {
-    const u = (SHOPS[this.boardLoc.id] || []).find((s) => s.key === key);
+  // shop: the stock to buy from when not at a job board (the Chimera Downs betting office); done() repaints it
+  buy(key, shop = SHOPS[this.boardLoc.id], done = () => this.refreshBoard()) {
+    const u = (shop || []).find((s) => s.key === key);
     if (!u) return;
     const lvl = this.upgrades[key] || 0;
     const cost = u.cost * (lvl + 1);
@@ -957,7 +959,7 @@ class Game {
     if (key.startsWith('skates_')) { this.cosmetics.skates = key.slice(7); this.cosmetics.apply(); this.hud.toast('New skate finish fitted. Change it any time with C.', 3); }
     this.audio.cash();
     this.save();
-    this.refreshBoard();
+    done();
   }
 
   save() {

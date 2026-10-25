@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pickLock } from './projectiles.js';
 
 // Weapon roster. The Pulse Spinner is standard issue; the rest are bought at faction HQs.
 export const WEAPONS = [
@@ -14,24 +15,32 @@ export const APC_CANNON = { key: 'apccannon', name: 'BTR-M 30 mm Cannon', delay:
 
 const _v = new THREE.Vector3();
 
+// A player's shot leaves along `dir` at `base` m/s plus the part of the shooter's velocity `inherit` that points along `dir`: moving toward
+// the aim you can't outrun your own shots, moving away or sideways changes nothing, and it never drifts off the crosshair.
+function launch(dir, base, inherit) {
+  return dir.clone().multiplyScalar(base + Math.max(0, inherit.dot(dir)));
+}
+
 export function weaponUnlocked(w, upgrades) {
   return !w.unlock || (upgrades[w.unlock] || 0) > 0;
 }
 
 // Fires `w` from `muzzle` toward `dir` (unit). Returns nothing; spawns projectiles or a beam.
+// homing: the Seeker's turn rate for the pulse disc (rad/s); the mortar and the scattergun take a fraction of it.
 export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
   const P = g.player;
   if (w.key === 'pulse') {
-    g.projectiles.fire('player', muzzle, dir.clone().multiplyScalar(115).addScaledVector(inherit, 0.5), { damage: 34 * mult, splash: 7, color: g.cosmetics ? g.cosmetics.laserColor : 0x9be7ff, size: 0.45, knock: 1.6, homing });
+    g.projectiles.fire('player', muzzle, launch(dir, 115, inherit), { range: 115 * 4, damage: 34 * mult, splash: 7, color: g.cosmetics ? g.cosmetics.laserColor : 0x9be7ff, size: 0.45, knock: 1.6, homing, lock: pickLock(g, muzzle, dir) });
     g.audio.shoot();
     g.haptics.play('pulse');
   } else if (w.key === 'scatter') {
     const right = _v.crossVectors(dir, P.up).normalize().clone();
     const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+    const lock = pickLock(g, muzzle, dir, 0.8, 200);               // one target per volley, not one scan per pellet
     for (let i = 0; i < 7; i++) {
       const d = dir.clone().addScaledVector(right, (Math.random() - 0.5) * 0.13).addScaledVector(up, (Math.random() - 0.5) * 0.08).normalize();
       // ~200 m reach; 7 x 17 up close
-      g.projectiles.fire('player', muzzle, d.multiplyScalar(175).addScaledVector(inherit, 0.6), { damage: 17 * mult, splash: 3, color: 0xffb02e, size: 0.27, knock: 0.6, life: 1.15 });
+      g.projectiles.fire('player', muzzle, launch(d, 175, inherit), { range: 175 * 1.15, damage: 17 * mult, splash: 3, color: 0xffb02e, size: 0.27, knock: 0.6, life: 1.15, homing: homing * 0.12, lock });
     }
     g.audio.burst(0.25, 2400, 0.4);
     g.haptics.play('scatter');
@@ -73,7 +82,7 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
     g.cam.shake = Math.max(g.cam.shake, 0.35);
   } else if (w.key === 'mortar') {
     const d = dir.clone().addScaledVector(P.up, 0.28).normalize();
-    g.projectiles.fire('player', muzzle, d.multiplyScalar(100).addScaledVector(inherit, 0.5), { damage: 70 * mult, splash: 13, color: 0x7dff3a, size: 0.8, knock: 2.2, gravity: 20, life: 6 });
+    g.projectiles.fire('player', muzzle, launch(d, 100, inherit), { range: 100 * 6, damage: 70 * mult, splash: 13, color: 0x7dff3a, size: 0.8, knock: 2.2, gravity: 20, life: 6, homing: homing * 0.35, flat: true, lock: pickLock(g, muzzle, dir, 0.3, 300) });
     g.audio.tone(140, 0.3, 'square', 0.25, 0.5);
     g.haptics.play('mortar');
   }
@@ -82,8 +91,8 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
 // One APC cannon round: a tracer shell (projectiles.js type 'shell') plus muzzle flash.
 // `muzzle` = barrel mouth, `dir` = barrel direction, `inherit` = vehicle velocity.
 export function fireCannon(g, muzzle, dir, inherit, mult = 1) {
-  g.projectiles.fire('player', muzzle, dir.clone().multiplyScalar(170).addScaledVector(inherit, 0.6), {
-    type: 'shell', damage: 55 * mult, splash: 9, color: 0xff8a2a, size: 0.5, knock: 2, gravity: 3, life: 3.2, spare: true,
+  g.projectiles.fire('player', muzzle, launch(dir, 170, inherit), {
+    type: 'shell', range: 170 * 3.2, damage: 55 * mult, splash: 9, color: 0xff8a2a, size: 0.5, knock: 2, gravity: 3, life: 3.2, spare: true,
   });
   const up = g.player.up;
   g.fx.spawn(muzzle, dir.clone().multiplyScalar(14).add(inherit), { color: 0xffe08a, size: 0.8, life: 0.18, count: 5, spread: 3, drag: 4 });

@@ -84,6 +84,7 @@ export class Reputation {
   // enough standing for this level of a shop item?
   canBuy(item, level) {
     if (item.unlock && item.unlock.smuggle && !(this.game.stats.blackMarket || []).includes(item.key)) return false;
+    if (item.unlock && item.unlock.stat && (this.game.stats[item.unlock.stat] || 0) < item.unlock.n) return false;
     if (!item.faction) return true;
     if (item.faction === 'rustmoon' && !this.aligned()) return false;
     return this.get(item.faction) >= (item.req ? item.req[Math.min(level, item.req.length - 1)] : 0);

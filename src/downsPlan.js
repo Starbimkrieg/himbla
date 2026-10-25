@@ -181,3 +181,43 @@ export const ANNEX = {
   x0: 124, x1: 206, z0: 106, z1: 168, gate: [124, 139], wheel: [175, 156], carousel: [142, 134], ticket: [171, 118],
   kiosks: [[170, 133, 6], [194, 133, 8]],
 };
+
+// ---- foot traffic: where walkers may not go (world.js updateFigures asks loc.walkBlocked(x, z); downsWorld.js sets it) ----
+// Racegoers keep to the forecourt, the aprons, the arcades and the fairground: never onto the track (dirt, rails and 2.5 m beyond,
+// so the infield and crossings stay empty) and never through a solid (stands, stalls, columns, the fountain, rails).
+export const TRACK_KEEP = RAIL_OUT + 2.5;
+export const onTrack = (x, z) => Math.hypot(Math.max(Math.abs(x) - STRAIGHT / 2, 0), z) < TRACK_KEEP;
+
+// From a kit's colliders (flat local coordinates: box {x, y, z, hx, hy, hz, yaw}, cyl {x, z, r, y0, y1}) those a walker would bump
+// (feet below 1.5 m, top above 0.4 m), in a 6 m grid. Returns blocked(x, z): on the track or within `pad` of such a footprint.
+export function walkBlocker(cols, pad = 0.45) {
+  const CELL = 6, grid = new Map(), key = (i, j) => i * 4096 + j;
+  for (const c of cols) {
+    let o;
+    if (c.type === 'box') {
+      if (c.y - c.hy > 1.5 || c.y + c.hy < 0.4) continue;
+      const cs = Math.cos(c.yaw || 0), sn = Math.sin(c.yaw || 0);
+      o = { box: true, x: c.x, z: c.z, hx: c.hx + pad, hz: c.hz + pad, cs, sn, ex: Math.abs(cs) * c.hx + Math.abs(sn) * c.hz + pad, ez: Math.abs(sn) * c.hx + Math.abs(cs) * c.hz + pad };
+    } else if (c.type === 'cyl') {
+      if (c.y0 > 1.5 || c.y1 < 0.4) continue;
+      o = { x: c.x, z: c.z, r: c.r + pad, ex: c.r + pad, ez: c.r + pad };
+    } else continue;
+    for (let i = Math.floor((o.x - o.ex) / CELL); i <= Math.floor((o.x + o.ex) / CELL); i++)
+      for (let j = Math.floor((o.z - o.ez) / CELL); j <= Math.floor((o.z + o.ez) / CELL); j++) {
+        const k = key(i + 2048, j + 2048);
+        (grid.get(k) || grid.set(k, []).get(k)).push(o);
+      }
+  }
+  return (x, z) => {
+    if (onTrack(x, z)) return true;
+    const list = grid.get(key(Math.floor(x / CELL) + 2048, Math.floor(z / CELL) + 2048));
+    if (!list) return false;
+    for (const o of list) {
+      const dx = x - o.x, dz = z - o.z;
+      if (o.box) {
+        if (Math.abs(dx * o.cs - dz * o.sn) <= o.hx && Math.abs(dx * o.sn + dz * o.cs) <= o.hz) return true;
+      } else if (dx * dx + dz * dz <= o.r * o.r) return true;
+    }
+    return false;
+  };
+}

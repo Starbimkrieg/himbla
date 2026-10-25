@@ -2032,6 +2032,20 @@ export class World {
     }
   }
 
+  // A walker's new target must be reachable in a straight line: no solid or forbidden ground (loc.walkBlocked) along the way. Tries
+  // its patch again a few times, else it stays put.
+  clearWalk(f, p) {
+    const blocked = f.loc.walkBlocked;
+    for (let n = 0; n < 16; n++) {
+      const t = f.target, dx = t.x - p.x, dz = t.z - p.z, len = Math.hypot(dx, dz), steps = Math.ceil(len / 1.2);
+      let ok = !blocked(t.x, t.z);
+      for (let i = 1; ok && i < steps; i++) ok = !blocked(p.x + (dx * i) / steps, p.z + (dz * i) / steps);
+      if (ok) return;
+      f.area(t, f);
+    }
+    f.target.set(p.x, 0, p.z);
+  }
+
   updateFigures(dt) {
     for (const f of this.figures) {
       if (f.civ) continue; // knocked about, fleeing or cleared: civilians.js owns them
@@ -2069,6 +2083,7 @@ export class World {
       if (d < 1) {
         if (f.area) {
           f.area(f.target, f); // (elsewhere in its own patch)
+          if (loc.walkBlocked && !f.vendor) this.clearWalk(f, p);
           if (f.vendor) p.copy(f.target); // (a vendor's patch is its post, at its own height)
         } else {
           const a = Math.random() * Math.PI * 2, rr = (0.25 + Math.random() * 0.6) * loc.r;
@@ -2080,6 +2095,7 @@ export class World {
       }
       const sp = f.kind === 'kid' ? 2.5 : f.kind === 'soldier' ? 2.2 : 1.4;
       const k = Math.min(d, sp * dt) / d;
+      if (loc.walkBlocked && loc.walkBlocked(p.x + dx * k, p.z + dz * k)) { f.target.set(p.x, 0, p.z); continue; } // (a wall or the track in the way: look for another way)
       p.x += dx * k; p.z += dz * k;
       f.yaw = Math.atan2(dx, dz);
       if (!R) f.root.rotation.y = f.yaw;

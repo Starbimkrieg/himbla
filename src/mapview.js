@@ -3,7 +3,7 @@ import { faceDir } from './planet.js';
 import { PLANET } from './config.js';
 import { SUN, E1, E2, arcDist } from './geo.js';
 import { FACTIONS, SHOPS } from './locations.js';
-import { pixelFont } from './fonts.js';
+import { pixelFont, BODY } from './fonts.js';
 import { SWEEP } from './radio.js';
 
 const RES = 32; // exploration cells per cube-face edge (~180 m)
@@ -265,12 +265,23 @@ export class GlobeMap {
   clickAt(sx, sy) {
     if (this.mode === 'radio') return this.radioPick(sx, sy);
     const g = this.game;
-    if (!g.cheats.mapTeleport || !this.pins) return false;
-    let best = null, bd = 16;
-    for (const p of this.pins) { if (!p.loc) continue; const d = Math.hypot(p.x - sx, p.y - sy); if (d < bd) { bd = d; best = p; } }
+    if (!this.pins) return false;
+    const pick = (ok) => { let best = null, bd = 16; for (const p of this.pins) { if (!ok(p)) continue; const d = Math.hypot(p.x - sx, p.y - sy); if (d < bd) { bd = d; best = p; } } return best; };
+    if (g.cheats.mapTeleport) {
+      const best = pick((p) => p.loc);
+      if (!best) return false;
+      g.closeModal(false);
+      g.cheats.teleport(best.loc);
+      return true;
+    }
+    // the Personal Teleporter (story tech): a settlement or one of your outposts
+    if (!g.story.tech.includes('teleport')) return false;
+    const best = pick((p) => p.tele);
     if (!best) return false;
+    const why = g.story.teleportBlock();
+    if (why) { g.hud.toast(why, 2.5); g.audio.tone(180, 0.08, 'square', 0.05); return true; }
     g.closeModal(false);
-    g.cheats.teleport(best.loc);
+    g.story.teleportVia(best.tele.dir, best.tele.name);
     return true;
   }
 
@@ -464,6 +475,7 @@ export class GlobeMap {
     this.drawSweep(c, v);
     // pins
     this.pins = [];
+    const tele = g.story.tech.includes('teleport') && !g.story.teleportBlock(); // the Personal Teleporter is ready: pins take a click
     c.textAlign = 'center';
     for (const l of g.locations) {
       if (!l.discovered) continue;
@@ -483,7 +495,7 @@ export class GlobeMap {
       c.lineWidth = 3; c.strokeStyle = '#120a1e'; c.fillStyle = '#fff';
       c.strokeText(l.short, p.x, p.y - r - 4); c.fillText(l.short, p.x, p.y - r - 4);
       const feats = services(l);
-      this.pins.push({ loc: l, x: p.x, y: p.y, html: `<b>${l.name}</b><br><span style="color:${f.color}">${f.name}</span>${l.hq ? ' · HQ' : ''}${ruined ? ' · RUINED' : ''}<br>${l.blurb}${feats ? `<br><small style="color:#9be7ff">${feats}</small>` : ''}` });
+      this.pins.push({ loc: l, tele: l.camp ? null : { dir: l.dir, name: l.name }, x: p.x, y: p.y, html: `${tele && !l.camp ? '<b style="color:#ffd23f">CLICK TO TELEPORT</b><br>' : ''}<b>${l.name}</b><br><span style="color:${f.color}">${f.name}</span>${l.hq ? ' · HQ' : ''}${ruined ? ' · RUINED' : ''}<br>${l.blurb}${feats ? `<br><small style="color:#9be7ff">${feats}</small>` : ''}` });
     }
     // active meteor shower: pulsing red zone (shown through fog: a public warning)
     const mw = g.meteors && g.meteors.warning;
@@ -577,7 +589,7 @@ export class GlobeMap {
         c.beginPath(); c.moveTo(p.x, p.y - s2); c.lineTo(p.x + s2, p.y); c.lineTo(p.x, p.y + s2); c.lineTo(p.x - s2, p.y); c.closePath(); c.fill(); c.stroke();
         const nm = g.territory.name(o);
         if (own) { c.font = pixelFont(8); c.lineWidth = 3; c.strokeStyle = '#120a1e'; c.fillStyle = '#fff'; c.strokeText(nm, p.x, p.y - 9); c.fillText(nm, p.x, p.y - 9); }
-        this.pins.push({ x: p.x, y: p.y, html: `<b>${nm}</b><br><span style="color:${f.color}">${f.name}</span>${own ? ' · YOURS' : ''}` });
+        this.pins.push({ tele: own ? { dir: o.dir, name: nm } : null, x: p.x, y: p.y, html: `${tele && own ? '<b style="color:#ffd23f">CLICK TO TELEPORT</b><br>' : ''}<b>${nm}</b><br><span style="color:${f.color}">${f.name}</span>${own ? ' · YOURS' : ''}` });
       }
     }
     for (const ev of g.events.list) {
@@ -588,6 +600,19 @@ export class GlobeMap {
       c.beginPath(); c.moveTo(p.x, p.y - 11); c.lineTo(p.x + 9, p.y + 6); c.lineTo(p.x - 9, p.y + 6); c.closePath(); c.fill(); c.stroke();
       c.fillStyle = '#120a1e'; c.font = pixelFont(8); c.fillText('!', p.x, p.y + 4);
       this.pins.push({ x: p.x, y: p.y, html: `<b>${ev.title}</b><br><span style="color:${f.color}">${f.name} event</span><br>${ev.brief}` });
+    }
+    // a bounty: where the squad is, roughly (the marker is off by up to 450 m)
+    const bo = g.missions.active && g.missions.active.kind === 'bounty' ? g.missions.active : null;
+    if (bo) {
+      const p = this.project(bo.to.dir, v);
+      if (p.z > 0) {
+        const rr = Math.max(14, (bo.to.r / PLANET.radius) * p.Rp);
+        c.save(); c.strokeStyle = '#ff2a4a'; c.fillStyle = 'rgba(255,42,74,0.14)'; c.lineWidth = 2; c.setLineDash([6, 5]);
+        c.beginPath(); c.arc(p.x, p.y, rr, 0, Math.PI * 2); c.fill(); c.stroke(); c.restore();
+        c.font = pixelFont(8); c.textAlign = 'center'; c.fillStyle = '#ff2a4a'; c.lineWidth = 3; c.strokeStyle = '#120a1e';
+        c.strokeText(`☠ BOUNTY · ${g.missions.bountyLeft()} LEFT`, p.x, p.y - rr - 5); c.fillText(`☠ BOUNTY · ${g.missions.bountyLeft()} LEFT`, p.x, p.y - rr - 5);
+        this.pins.push({ x: p.x, y: p.y, html: `<b style="color:#ff2a4a">BOUNTY AREA</b><br>${bo.bounty.n} pirates hold a patch somewhere in this circle.` });
+      }
     }
     const goal = g.objective();
     if (goal) {
@@ -606,6 +631,14 @@ export class GlobeMap {
     const pct = Math.round((sum / this.explored.length) * 100);
     c.font = pixelFont(11); c.textAlign = 'left'; c.fillStyle = '#ffd23f';
     c.fillText(`CHARTED ${pct}% · ${this.game.locations.filter((l) => l.discovered).length} LOCATIONS`, 14, 24);
+    if (g.story.tech.includes('teleport') && this.mode !== 'radio') {
+      // bottom left: the Teleporter's state, in the Charted line's yellow when ready
+      const ready = !g.story.teleportBlock();
+      c.font = `26px ${BODY}`; c.fillStyle = ready ? '#ffd23f' : '#a39bc6';
+      c.fillText('Teleporter', 14, H - 46);
+      c.fillText(ready ? 'Ready' : g.story.techCd.teleport > 0 ? `Ready in ${Math.ceil(g.story.techCd.teleport)} s` : 'No contract out', 14, H - 18);
+      c.font = pixelFont(11);
+    }
     const sweep = g.town && g.town.radio;
     if (sweep && sweep.on) { c.fillStyle = '#7dffd4'; c.fillText(`RADIO SWEEP ${Math.round(sweep.frac * 100)}%`, 14, 42); }
     c.textAlign = 'right'; c.fillStyle = '#c9c3d9';

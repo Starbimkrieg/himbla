@@ -115,7 +115,8 @@ export function applyWorldState(ws, locations) {
 // Moon Council motions passed (hometown.js MOTIONS): open zones, new shop stock.
 function applyCouncil(ws, locations) {
   const passed = (ws.council && ws.council.passed) || [];
-  const sell = (shop, item) => { if (SHOPS[shop] && !SHOPS[shop].some((x) => x.key === item.key)) SHOPS[shop].push(item); };
+  // (an item the shop already lists behind REVERED standing is opened to everyone)
+  const sell = (shop, item) => { const had = (SHOPS[shop] || []).find((x) => x.key === item.key); if (had) { delete had.faction; delete had.req; } else if (SHOPS[shop]) SHOPS[shop].push(item); };
   const open = (shop, key) => { const it = (SHOPS[shop] || []).find((x) => x.key === key); if (it) { delete it.faction; delete it.req; } };
   if (passed.includes('ceasefire')) {
     // militarised zones stand down: Vostok and Daedalus bases become ordinary walled bases
@@ -130,7 +131,7 @@ function applyCouncil(ws, locations) {
   }
   if (passed.includes('openSkies')) {
     sell('ilmb', { key: 'v_interceptor', name: 'SPACECOM Lunar Interceptor', desc: 'VEHICLE: the fast one, yours to call with V', cost: 3500, max: 1, vehicle: 'interceptor' });
-    sell('ilmb', { key: 't_shield', name: 'SPACECOM Deflector Shield', desc: 'TECH: absorbs one hit every 12 s', cost: 3000, max: 1, tech: 'shield' });
+    sell('ilmb', { key: 't_shield', name: 'SPACECOM Deflector Shield', desc: 'TECH: soaks the first 25 damage, back 12 s after it breaks', cost: 3000, max: 1, tech: 'shield' });
   }
   if (passed.includes('freeTrade')) {
     for (const items of Object.values(SHOPS)) for (const it of items) if (!it.discounted) { it.cost = Math.round((it.cost * 0.9) / 10) * 10; it.discounted = true; }

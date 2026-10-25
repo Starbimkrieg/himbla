@@ -4,7 +4,7 @@ import { ferrisWheel, carousel, queue } from './downsFair.js';
 import { T, G } from './outpostModels.js';
 import { PAL, MINT2, MONEY2, SADDLE2, BLACK2, CONC, CONC2, FG, BG, tw, bake, fountain, sheet, kitSink, arcadeShell, ROOF } from './downsKit.js';
 import {
-  SEGS, RAIL_IN, RAIL_OUT, DIRT, FINISH_U, FINISH_X, STAND, FAR, CLUB, ENTRIES, ARCADE, WEDGE, STALLS, STALL_ORDER, CROSSINGS, CROSS_GAP, FORECOURT, DRUM, PODIUMS, RING, PAVILION, LAWN, STABLES, ANNEX, oval, lapLen,
+  SEGS, RAIL_IN, RAIL_OUT, DIRT, FINISH_U, FINISH_X, STAND, FAR, CLUB, ENTRIES, ARCADE, WEDGE, STALLS, STALL_ORDER, CROSSINGS, CROSS_GAP, FORECOURT, DRUM, PODIUMS, RING, PAVILION, LAWN, STABLES, ANNEX, oval, lapLen, walkBlocker,
 } from './downsPlan.js';
 
 // Chimera Downs' static scenery, from the Blender kits (tools/blender/build_downs_*.py) plus a few code-made surfaces. race.js builds
@@ -56,16 +56,21 @@ function course(k) {
   // hides inside its barrier post and its last rails end inside the far one, so all runs end alike. Bays are spaced by distance
   // round the rail itself, so they stay equal on the bends.
   const XP = CROSS_GAP / 2 + 0.3;                                                         // barrier post centre from its crossing's: its 0.5 m foot 5 cm off the road
-  for (const [r, h] of [[RAIL_IN, 1.0], [RAIL_OUT, 1.2]]) {
+  // the rail `r` from the home straight's start (u = 0): its length, the centre-line distance u at s m round it, and the four crossing gaps as [from, to] in s
+  // (home straight runs +x, far one -x), sorted
+  const railWalk = (r) => {
     const L = lapLen(r), C = Math.PI * r, S = SEGS[0];
-    const at = (s) => {                                                                   // point s m round the rail from the home straight's start (u = 0)
+    const uOf = (s) => {
       s = ((s % L) + L) % L;
-      const u = s < S ? s : s < S + C ? S + ((s - S) / C) * SEGS[1] : s < 2 * S + C ? S + SEGS[1] + (s - S - C) : 2 * S + SEGS[1] + ((s - 2 * S - C) / C) * SEGS[3];
-      return oval(u, r, {});
+      return s < S ? s : s < S + C ? S + ((s - S) / C) * SEGS[1] : s < 2 * S + C ? S + SEGS[1] + (s - S - C) : 2 * S + SEGS[1] + ((s - 2 * S - C) / C) * SEGS[3];
     };
-    const gaps = [];                                                                      // each crossing's gap as [from, to] round the rail (home straight runs +x, far one -x)
+    const gaps = [];
     for (const cx of CROSSINGS) gaps.push([S / 2 + cx - XP, S / 2 + cx + XP], [S + C + S / 2 - cx - XP, S + C + S / 2 - cx + XP]);
-    gaps.sort((a, b) => a[0] - b[0]);
+    return { L, uOf, gaps: gaps.sort((a, b) => a[0] - b[0]) };
+  };
+  for (const [r, h] of [[RAIL_IN, 1.0], [RAIL_OUT, 1.2]]) {
+    const { L, uOf, gaps } = railWalk(r);
+    const at = (s) => oval(uOf(s), r, {});                                                // point s m round the rail
     gaps.forEach(([, s0], i) => {
       const s1 = i < gaps.length - 1 ? gaps[i + 1][0] : gaps[0][0] + L, n = Math.max(1, Math.round((s1 - s0) / 5));
       for (let j = 0; j < n; j++) {
@@ -78,6 +83,19 @@ function course(k) {
         k.solid(0.15, h / 2, (l - a - b) / 2, p.x + dx * m, p.z + dz * m, Math.atan2(dx, dz));
       }
     });
+  }
+  // gold inlay along the boardwalk's inner edge, all the way round the track, as the arcades' walk-edge inlay (arcadeShell: 0.35 m wide, 5 cm
+  // proud of the deck). It stops at the crossings where the rails do, at the barrier posts.
+  {
+    const { L, uOf, gaps } = railWalk(RAIL_OUT), r0 = DIRT[1] - 0.05, r1 = r0 + 0.35, polys = [];
+    gaps.forEach(([, s0], i) => {
+      const s1 = i < gaps.length - 1 ? gaps[i + 1][0] : gaps[0][0] + L, n = Math.max(1, Math.ceil((s1 - s0) / 1.5));
+      for (let j = 0; j < n; j++) {
+        const ua = uOf(s0 + ((s1 - s0) * j) / n), ub = uOf(s0 + ((s1 - s0) * (j + 1)) / n), a0 = oval(ua, r0, {}), a1 = oval(ua, r1, {}), b0 = oval(ub, r0, {}), b1 = oval(ub, r1, {});
+        polys.push({ pts: [[a0.x, a0.z], [b0.x, b0.z], [b1.x, b1.z], [a1.x, a1.z]], yb: () => 0.14 });
+      }
+    });
+    kitSink(k)(sheet(polys, 0.03), PAL.gold, 0);
   }
   // the crossings: four, at x = +-70 on both straights. One deck as wide as the rails' gap (CROSS_GAP), from 0.5 m inside the
   // infield to 0.5 m onto the apron; top 16 cm up, clear of dirt (6 cm) and apron (12 cm) so no surfaces share a plane. Markings
@@ -815,6 +833,7 @@ export function buildDowns(w, loc) {
     as('paddock', () => paddock(k));
     as('annex', () => annex(w, loc, k));
   });
+  loc.walkBlocked = walkBlocker(kit.cols);                           // racegoers keep off the track and out of the solids (world.js updateFigures)
   // stall vendors behind their counters facing the walk (world.addFigures; `vendor` figures hold their post and gesture: world.updateFigures)
   if (w.addFigures && vendors.length) {
     let next = 0;
