@@ -102,8 +102,7 @@ export class Planet extends TerrainField {
       if (ch.center.distanceTo(c) > ch.radius + r * 2.2) continue;
       for (let l = 0; l < ch.meshes.length; l++) if (ch.meshes[l]) { this.scene.remove(ch.meshes[l]); ch.meshes[l].geometry.dispose(); ch.meshes[l] = null; }
       ch.shown = -1;
-      if (ch.boulders) { this.scene.remove(ch.boulders); ch.boulders = null; ch.boulderSpec = null; }
-      if (ch.boulderCols && this.colliders) { for (const col of ch.boulderCols) this.colliders.remove(col); ch.boulderCols = null; }
+      this.dropBoulders(ch);
       ch.ver++; // in-flight worker jobs for it are stale
       ch.pending = 0;
     }
@@ -252,7 +251,7 @@ export class Planet extends TerrainField {
           center: dir.clone().multiplyScalar(R),
           radius: corner.multiplyScalar(R).distanceTo(dir.clone().multiplyScalar(R)) + 40,
           meshes: [null, null, null, null, null],
-          shown: -1, want: -1, preWant: -1, queued: false, boulders: null, boulderCols: null, lastWanted: 0,
+          shown: -1, want: -1, preWant: -1, queued: false, boulders: null, boulderCols: null, rails: null, lastWanted: 0,
           ver: 0, pending: 0, hole: false, // worker jobs: LODs in progress, and for which version
         });
       }
@@ -419,9 +418,12 @@ ${SKIN_COLOR}`);
     return true;
   }
 
-  // Grind rails (the crests of snake rocks): polyline, arc lengths and a bounding sphere.
-  addRail(r) {
-    (this.rails ||= []).push(railOf(r.pts));
+  // Grind rails (the crests of snake rocks): polyline, arc lengths and a bounding sphere. this.rails holds every live
+  // chunk's; each chunk keeps its own in ch.rails so dropBoulders can take them out again.
+  addRail(r, ch) {
+    const rail = railOf(r.pts);
+    (this.rails ||= []).push(rail);
+    (ch.rails ||= []).push(rail);
   }
 
   // Crater lips: ink line and grind rail are one. A lip counts if it's a firm ridge most of the way round (not flattened
@@ -539,6 +541,13 @@ ${SKIN_COLOR}`);
     this.clearCos = Math.cos(r / R);
   }
 
+  // Take a chunk's boulders and shaped rocks down: meshes, colliders and its snake-rock rails (buildBoulders makes them anew).
+  dropBoulders(ch) {
+    if (ch.boulders) { this.scene.remove(ch.boulders); ch.boulders = null; ch.boulderSpec = null; }
+    if (ch.boulderCols && this.colliders) { for (const col of ch.boulderCols) this.colliders.remove(col); ch.boulderCols = null; }
+    if (ch.rails) { this.rails = this.rails.filter((r) => !ch.rails.includes(r)); ch.rails = null; }
+  }
+
   // One more rock-free spot (a story gate); nearby chunks re-roll their boulders.
   clearSpot(d) {
     (this.clearDirs ||= []).push(d.clone().normalize());
@@ -546,8 +555,7 @@ ${SKIN_COLOR}`);
     const c = d.clone().normalize().multiplyScalar(R);
     for (const ch of this.chunks) {
       if (ch.center.distanceTo(c) > ch.radius + 30) continue;
-      if (ch.boulders) { this.scene.remove(ch.boulders); ch.boulders = null; ch.boulderSpec = null; }
-      if (ch.boulderCols && this.colliders) { for (const col of ch.boulderCols) this.colliders.remove(col); ch.boulderCols = null; }
+      this.dropBoulders(ch);
     }
   }
 
@@ -624,7 +632,7 @@ ${SKIN_COLOR}`);
     }
     g.updateMatrixWorld(true);
     cols.push(...sr.cols);
-    for (const r of sr.rails) this.addRail(r);
+    for (const r of sr.rails) this.addRail(r, ch);
     g.matrixAutoUpdate = false;
     g.visible = false;
     this.scene.add(g);
