@@ -1213,7 +1213,7 @@ export class Story {
     const s = A.steps[A.si];
     if (s.t !== 'carry' && s.t !== 'build') return;
     const g = this.game;
-    // hauled loads take damage from knocks; the Kepler Shock Cradle softens it
+    // hauled loads take damage from knocks; the Kepler Cargo Foam softens it
     const shield = 1 - (g.upgrades.cradle || 0) * 0.25;
     let dmg;
     if (s.t === 'build') {

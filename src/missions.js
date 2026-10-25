@@ -351,7 +351,7 @@ export class Missions {
 
   jostle(amount, skates) {
     if (!this.active || this.cargoState !== 'held') return;
-    const soften = (skates ? 0.6 : 1.2) * (1 - (this.game.upgrades.cradle || 0) * 0.25); // Kepler Shock Cradle
+    const soften = (skates ? 0.6 : 1.2) * (1 - (this.game.upgrades.cradle || 0) * 0.25); // Kepler Cargo Foam
     const x = this.extra;
     if (x && x.cargoState === 'held') {
       x.integrity = Math.max(0, x.integrity - amount * 0.012 * x.a.cargo.fragile * soften);
