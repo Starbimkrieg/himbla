@@ -5,6 +5,9 @@ import { shatterEcho } from './monolith.js';
 const _seg = new THREE.Vector3();
 const _rel = new THREE.Vector3();
 const _near = [];
+const _pt = new THREE.Vector3();
+const STEP = 1; // m: the longest stretch of a frame's flight tested for walls and ground in one go (thin walls are under a metre through)
+const MAX_STEPS = 40;
 
 function segSphere(a, b, c, r) {
   _seg.subVectors(b, a);
@@ -26,10 +29,11 @@ export class Projectiles {
     this.shellGlow = new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
   }
 
+  // range: burst after this many metres of flight (a shot fired at speed keeps its reach);
   // fuse: burst after this many s; proxy: burst within this distance of the player; burst(pos): custom detonation
   // instead of the explosion (Kade's flak). type: 'bolt' (glowing ball stretched along its flight) or 'shell' (APC
   // tracer: fixed-length haloed capsule trailing sparks and smoke)
-  fire(owner, pos, vel, { damage = 20, splash = 5, color = 0x9be7ff, size = 0.45, life = 4, gravity = 0, knock = 1, homing = 0, spare = false, fuse = 0, proxy = 0, burst = null, type = 'bolt' } = {}) {
+  fire(owner, pos, vel, { damage = 20, splash = 5, color = 0x9be7ff, size = 0.45, life = 4, gravity = 0, knock = 1, homing = 0, spare = false, fuse = 0, proxy = 0, burst = null, type = 'bolt', range = 0 } = {}) {
     const shell = type === 'shell';
     const mesh = new THREE.Mesh(shell ? this.shellGeo : this.geo, new THREE.MeshBasicMaterial({ color: shell ? 0xfff1c0 : color }));
     const hull = new THREE.Mesh(shell ? this.shellGeo : this.geo, this.inkMat);
@@ -43,7 +47,7 @@ export class Projectiles {
     mesh.scale.setScalar(size);
     mesh.position.copy(pos);
     this.game.scene.add(mesh);
-    this.list.push({ owner, mesh, pos: pos.clone(), prev: pos.clone(), vel: vel.clone(), damage, splash, life, gravity, knock, size, color, homing, spare, age: 0, fuse, proxy, burst, type });
+    this.list.push({ owner, mesh, pos: pos.clone(), prev: pos.clone(), vel: vel.clone(), damage, splash, life, gravity, knock, size, color, homing, spare, age: 0, fuse, proxy, burst, type, range });
   }
 
   update(dt, wdt = dt) {
@@ -57,7 +61,13 @@ export class Projectiles {
       if (p.gravity) p.vel.addScaledVector(upAt(p.pos, _rel), -p.gravity * pdt);
       p.age += pdt;
       if (p.homing > 0 && p.age > 0.08) this.home(p, pdt);
-      p.pos.addScaledVector(p.vel, pdt);
+      let step = pdt, spent = false;
+      const flown = p.vel.length() * pdt;
+      if (p.range > 0) { // out of reach: stops where its range ends this frame
+        if (flown >= p.range) { step = flown > 0 ? (pdt * p.range) / flown : 0; spent = true; }
+        p.range -= flown;
+      }
+      p.pos.addScaledVector(p.vel, step);
       p.mesh.position.copy(p.pos);
       // stretch along velocity for a comic smear
       const sp = p.vel.length();
@@ -72,13 +82,16 @@ export class Projectiles {
 
       let hit = p.life <= 0 || (p.fuse > 0 && p.age >= p.fuse) || (p.proxy > 0 && !g.player.dead && p.pos.distanceTo(g.player.center) < p.proxy);
       if (!hit) {
-        const sr = planet.surface(p.pos);
-        if (radOf(p.pos) <= sr) { hit = true; setRad(p.pos, sr + 0.3); }
-      }
-      if (!hit) {
-        for (const c of g.colliders.query(p.pos, 2, _near)) {
-          if (g.colliders.contact(c, p.pos, 0.3, _seg) > 0) { hit = true; break; }
+        // swept: the frame's flight in steps of at most STEP metres, so a fast shot can't skip a thin wall or a ridge; it stops where it first touches
+        const span = p.prev.distanceTo(p.pos), n = Math.min(MAX_STEPS, Math.max(1, Math.ceil(span / STEP)));
+        const near = g.colliders.query(_pt.addVectors(p.prev, p.pos).multiplyScalar(0.5), span / 2 + 2, _near);
+        for (let j = 1; j <= n && !hit; j++) {
+          _pt.lerpVectors(p.prev, p.pos, j / n);
+          const sr = planet.surface(_pt);
+          if (radOf(_pt) <= sr) { hit = true; setRad(_pt, sr + 0.3); }
+          else for (const c of near) if (g.colliders.contact(c, _pt, 0.3, _seg) > 0) { hit = true; break; }
         }
+        if (hit) { p.pos.copy(_pt); p.mesh.position.copy(p.pos); }
       }
       if (!hit) {
         if (p.owner === 'player') {
@@ -111,6 +124,7 @@ export class Projectiles {
           }
         }
       }
+      if (spent) hit = true; // (after the swept tests: a wall or a target before the range ran out still takes it)
       if (hit) {
         if (p.burst) p.burst(p.pos.clone());
         else g.explode(p.pos, p.splash, p.damage, p.owner, p.knock, p.spare);
