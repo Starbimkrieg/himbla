@@ -6,14 +6,14 @@
 import { COMBO_WINDOW } from './combo.js';
 
 const RANKS = [
-  // min points, letters, the rest of the word, colour
+  // min points (a lone backflip is about 60; a five-kind run with the winch about 1000), letters, the rest of the word, colour
   [0, 'D', 'USTY', '#8f84c4'],
-  [50, 'C', 'OSMIC', '#2ee6ff'],
-  [100, 'B', 'LASTOFF', '#7dff6a'],
-  [175, 'A', 'POLLO', '#ffd23f'],
-  [275, 'S', 'TELLAR', '#ff7b4f'],
-  [400, 'SS', 'TARBURST', '#ff2e88'],
-  [600, 'SSS', 'UPERMOON', '#ff2a4a'],
+  [150, 'C', 'OSMIC', '#2ee6ff'],
+  [350, 'B', 'LASTOFF', '#7dff6a'],
+  [700, 'A', 'POLLO', '#ffd23f'],
+  [1200, 'S', 'TELLAR', '#ff7b4f'],
+  [2000, 'SS', 'TARBURST', '#ff2e88'],
+  [3200, 'SSS', 'UPERMOON', '#ff2a4a'],
 ];
 const MOVE_COLORS = ['#2ee6ff', '#ff4f6a', '#7dff6a', '#ffb43f'];
 const RESULT_TIME = 3.2; // s the end of a run stays up (its last 0.35 s fading)
