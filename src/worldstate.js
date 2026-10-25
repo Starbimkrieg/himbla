@@ -115,7 +115,8 @@ export function applyWorldState(ws, locations) {
 // Moon Council motions passed (hometown.js MOTIONS): open zones, new shop stock.
 function applyCouncil(ws, locations) {
   const passed = (ws.council && ws.council.passed) || [];
-  const sell = (shop, item) => { if (SHOPS[shop] && !SHOPS[shop].some((x) => x.key === item.key)) SHOPS[shop].push(item); };
+  // (an item the shop already lists behind REVERED standing is opened to everyone)
+  const sell = (shop, item) => { const had = (SHOPS[shop] || []).find((x) => x.key === item.key); if (had) { delete had.faction; delete had.req; } else if (SHOPS[shop]) SHOPS[shop].push(item); };
   const open = (shop, key) => { const it = (SHOPS[shop] || []).find((x) => x.key === key); if (it) { delete it.faction; delete it.req; } };
   if (passed.includes('ceasefire')) {
     // militarised zones stand down: Vostok and Daedalus bases become ordinary walled bases

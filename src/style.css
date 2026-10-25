@@ -1624,3 +1624,21 @@ body.pad-on .otm-foot .foot-kb { display: none; }
 .cg-foot small { font-family: var(--body); font-size: 14px; color: var(--ui-dim); }
 .cg-next { font-size: 16px; padding: 8px 18px 6px; }
 @media (max-width: 720px) { .cg-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* reputation log: tier notches on the bar, their names beneath */
+.rep-notch { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ui-dim); }
+.rep-notch.got { background: #05030c; opacity: 0.55; }
+.rep-notch.bad { background: var(--red); }
+.rep-notch.next { background: var(--yellow); width: 3px; margin-left: -1.5px; }
+.rep-ticks { position: relative; height: 28px; margin-bottom: 4px; font-family: var(--comic); font-size: 7px; color: var(--ui-dim); }
+.rep-tick { position: absolute; top: 0; transform: translateX(-50%); text-align: center; white-space: nowrap; line-height: 1.5; }
+.rep-tick small { display: block; font-family: var(--body); font-size: 13px; line-height: 1; }
+.rep-tick.got { color: var(--ui-muted); }
+.rep-tick.bad { color: var(--red); }
+.rep-tick.next { color: var(--yellow); }
+
+/* contract kinds on the job board */
+.job-kind { font-family: var(--comic); font-size: 8px; padding: 3px 6px 1px; margin-left: 6px; color: #05030c; background: var(--yellow); }
+.job-kind.k-bounty { background: var(--red); color: #fff; }
+.job-kind.k-showpiece { background: var(--pink); color: #fff; }
+.job-blurb { font-family: var(--body); font-size: 15px; color: var(--ui-muted); margin: 2px 0 4px; }

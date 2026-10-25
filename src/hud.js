@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { glyphHtml } from './glyphs.js';
 import { keepScroll } from './terminalUI.js';
 import { NAME_TAGS } from './toon.js';
-import { FACTIONS } from './locations.js';
+import { FACTIONS, TIERS } from './locations.js';
+import { KIND_INFO } from './missions.js';
 import { arcDist, darkness, upAt, E1, E2 } from './geo.js';
 import { WEAPONS, APC_CANNON } from './weapons.js';
 import { EVENT_RANGE, PLANET } from './config.js';
@@ -284,13 +285,14 @@ export class HUD {
     const el = $('result');
     el.className = 'panel result win';
     el.innerHTML = `
-      <div class="r-title">DELIVERED!</div>
-      <div class="r-sub">${info.a.cargo.name} → ${info.a.to.name}</div>
+      <div class="r-title">${info.a.kind === 'bounty' ? 'BOUNTY CLAIMED!' : 'DELIVERED!'}</div>
+      <div class="r-sub">${info.a.kind === 'bounty' ? `${info.a.bounty.n} pirates down` : `${info.a.cargo.name} → ${info.a.to.name}`}</div>
       <table>
         <tr><td>Contract</td><td>₵${info.integ}</td></tr>
         <tr><td>${info.late ? 'Late — half pay' : 'Speed bonus'}</td><td>₵${info.timeBonus}</td></tr>
         <tr><td>Style${info.styleCapped ? ' (MAX ×2)' : ''}</td><td>₵${info.style}</td></tr>
-        <tr><td>Package condition</td><td>×${info.condition.toFixed(2)}</td></tr>
+        ${info.note ? `<tr><td>Showpiece</td><td>${info.note}</td></tr>` : ''}
+        <tr><td>${info.a.kind === 'bounty' ? 'Condition' : 'Package condition'}</td><td>×${info.condition.toFixed(2)}</td></tr>
         <tr class="tot"><td>TOTAL</td><td>₵${info.total}</td></tr>
       </table>
       <div class="r-rep">+${info.repGain} rep with ${info.faction}</div>`;
@@ -368,10 +370,13 @@ export class HUD {
         const fc = FACTIONS[o.faction];
         const fr = '●'.repeat(Math.round(o.cargo.fragile * 3)) || '–';
         const hot = '☠'.repeat(o.cargo.hot) || '–';
+        const kind = KIND_INFO[o.kind];
+        const route = o.kind === 'bounty' ? `<b>${o.bounty.n} pirates</b> · about ${(o.dist / 1000).toFixed(1)} km away · ${o.time}s` : `${o.pickup === o.board ? 'HERE' : o.pickup.name} → <b>${o.to.name}</b> · ${(o.dist / 1000).toFixed(1)} km · ${o.time}s`;
         html += `<div class="job ${canTake === false || (canTake == null && active) ? 'disabled' : ''} ${o.premium ? 'premium' : ''}" data-i="${i}">
-          <div class="job-top"><span class="job-key">${i + 1}</span><span class="job-fac" style="background:${fc.color}">${fc.name}</span><span class="job-pay">₵${o.reward}</span></div>
-          <div class="job-cargo">${o.cargo.name}</div>
-          <div class="job-route">${o.pickup === o.board ? 'HERE' : o.pickup.name} → <b>${o.to.name}</b> · ${(o.dist / 1000).toFixed(1)} km · ${o.time}s</div>
+          <div class="job-top"><span class="job-key">${i + 1}</span><span class="job-fac" style="background:${fc.color}">${fc.name}</span>${kind ? `<span class="job-kind k-${o.kind}">${kind.name}</span>` : ''}<span class="job-pay">₵${o.reward}</span></div>
+          <div class="job-cargo">${o.cargo.name}${o.par ? ` · PAR ${o.par} STYLE` : ''}</div>
+          <div class="job-route">${route}</div>
+          ${kind ? `<div class="job-blurb">${kind.blurb}</div>` : ''}
           <div class="bubble"><b>${o.client}:</b> “${o.text}”</div>
           <div class="job-tags">Fragile ${fr} &nbsp; Pirate risk ${hot}${o.clearance ? ' &nbsp; <span class="clr">MILITARY CLEARANCE</span>' : ''}${o.dark ? ' &nbsp; <span class="darktag">☾ DARK SIDE · HAZARD PAY</span>' : ''}${o.payload ? ` &nbsp; <span class="paytag">☠ PAYLOAD: ${o.payload.name.toUpperCase()}</span>` : ''}${o.rider ? ` &nbsp; <span class="paytag">✦ RIDER: ${o.rider.name.toUpperCase()}</span>` : ''}</div>
         </div>`;
@@ -529,11 +534,13 @@ export class HUD {
       mp.classList.remove('hidden');
       const t = Math.abs(ms.timer);
       const dist = obj ? arcDist(obj.pos, P.pos) : 0;
-      mp.innerHTML = `<div class="m-head" style="background:${FACTIONS[a.faction].color}">CONTRACT · ${a.client}</div>
+      const kindName = a.kind && a.kind !== 'standard' ? a.kind.toUpperCase() : 'CONTRACT';
+      const stat = a.kind === 'bounty' ? `SQUAD ${ms.bountyLeft()} / ${a.bounty.n} LEFT` : `CARGO ${Math.round(ms.integrity * 100)}%${a.par ? ` · PAR ${Math.min(a.par, Math.round(ms.parPts()))}/${a.par}${ms.parHit ? ' ✓' : ''}` : ''}`;
+      mp.innerHTML = `<div class="m-head" style="background:${FACTIONS[a.faction].color}">${kindName} · ${a.client}</div>
         <div class="m-cargo">${a.cargo.name}</div>
         <div class="m-obj">${obj ? obj.label : ''} <span>${(dist / 1000).toFixed(2)} km</span></div>
         <div class="m-row"><span class="m-timer ${ms.late || t < 15 ? 'low' : ''}">${ms.late ? 'LATE +' : ''}${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}</span>
-        <span class="m-int">CARGO ${Math.round(ms.integrity * 100)}%</span></div>`;
+        <span class="m-int">${stat}</span></div>`;
       // Twin Cradle second contract, below the first
       const x = ms.extra;
       if (x) {
@@ -895,6 +902,14 @@ export class HUD {
 
   // ---- reputation log ----
   openRepLog(g) {
+    // the tier boundaries along a -100..100 bar: a notch each (reached ones lit, the next one bright), and under the bar the tier you
+    // enter there; the red -20 notch is HOSTILE's edge (below it they will not deal with you)
+    const notches = (v, next, labels) => TIERS.filter((t) => t.min > -Infinity).map((t) => {
+      const hostile = t.min === -20;
+      const cls = `${v >= t.min ? 'got' : ''} ${next && next.min === t.min ? 'next' : ''} ${hostile ? 'bad' : ''}`;
+      const at = ((t.min + 100) / 200) * 100;
+      return labels ? `<span class="rep-tick ${cls}" style="left:${at}%">${t.name}<small>${t.min}</small></span>` : `<i class="rep-notch ${cls}" style="left:${at}%"></i>`;
+    }).join('');
     const el = $('replog');
     const rep = g.rep;
     let html = `<div class="board-head" style="background:#ffd23f"><span>REPUTATION LOG</span><span class="board-right"><button class="board-close" data-close="1">✕ CLOSE</button></span></div><div class="rep-list">`;
@@ -911,9 +926,10 @@ export class HUD {
       const ev = g.events.list.find((e) => e.faction === id);
       html += `<div class="rep-row" style="border-left-color:${f.color}">
         <div class="rep-top"><span class="rep-name" style="color:${f.color}">${f.name}</span><span class="rep-kind">${f.kind}</span><span class="tierchip" style="background:${t.color}">${t.name} (${v > 0 ? '+' : ''}${v})</span></div>
-        <div class="track rep-bar"><div class="fill" style="width:${pct}%;background:${f.color}"></div><div class="rep-zero"></div></div>
+        <div class="track rep-bar"><div class="fill" style="width:${pct}%;background:${f.color}"></div>${notches(v, nt, false)}</div>
+        <div class="rep-ticks">${notches(v, nt, true)}</div>
         <div class="rep-info">${f.blurb}</div>
-        <div class="rep-meta">HQ: ${hq && hq.discovered ? hq.name : '???'} · Contract pay ×${(t.pay || 0).toFixed(2)}${nt ? ` · Next: ${nt.name} at ${nt.min}` : ''}${status ? ` · ${status}` : ''}</div>
+        <div class="rep-meta">HQ: ${hq && hq.discovered ? hq.name : '???'} · Contract pay ×${(t.pay || 0).toFixed(2)}${nt ? ` · Next: ${nt.name} at ${nt.min}` : ' · Top tier'}${v >= -20 ? ` · Hostile below −20 (${v + 20} to spare)` : ''}${status ? ` · ${status}` : ''}</div>
         ${ev ? `<div class="rep-ev">📡 ${ev.state === 'active' ? 'ACTIVE' : 'OPEN'}: ${ev.title}</div>` : ''}
       </div>`;
     }

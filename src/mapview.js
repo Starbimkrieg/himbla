@@ -601,6 +601,19 @@ export class GlobeMap {
       c.fillStyle = '#120a1e'; c.font = pixelFont(8); c.fillText('!', p.x, p.y + 4);
       this.pins.push({ x: p.x, y: p.y, html: `<b>${ev.title}</b><br><span style="color:${f.color}">${f.name} event</span><br>${ev.brief}` });
     }
+    // a bounty: where the squad is, roughly (the marker is off by up to 450 m)
+    const bo = g.missions.active && g.missions.active.kind === 'bounty' ? g.missions.active : null;
+    if (bo) {
+      const p = this.project(bo.to.dir, v);
+      if (p.z > 0) {
+        const rr = Math.max(14, (bo.to.r / PLANET.radius) * p.Rp);
+        c.save(); c.strokeStyle = '#ff2a4a'; c.fillStyle = 'rgba(255,42,74,0.14)'; c.lineWidth = 2; c.setLineDash([6, 5]);
+        c.beginPath(); c.arc(p.x, p.y, rr, 0, Math.PI * 2); c.fill(); c.stroke(); c.restore();
+        c.font = pixelFont(8); c.textAlign = 'center'; c.fillStyle = '#ff2a4a'; c.lineWidth = 3; c.strokeStyle = '#120a1e';
+        c.strokeText(`☠ BOUNTY · ${g.missions.bountyLeft()} LEFT`, p.x, p.y - rr - 5); c.fillText(`☠ BOUNTY · ${g.missions.bountyLeft()} LEFT`, p.x, p.y - rr - 5);
+        this.pins.push({ x: p.x, y: p.y, html: `<b style="color:#ff2a4a">BOUNTY AREA</b><br>${bo.bounty.n} pirates hold a patch somewhere in this circle.` });
+      }
+    }
     const goal = g.objective();
     if (goal) {
       const p = this.project(goal.pos, v);

@@ -552,7 +552,7 @@ export class Enemies {
 
   // roaming hunters of a kind (not den guards or event raiders). Skaters and rovers only: lair cores also lack
   // home/target and would keep the dark-side spawn gate shut.
-  hunterList(kind) { return this.list.filter((e) => e.faction === 'pirate' && !e.dead && !e.home && !e.targetObj && (kind ? e.kind === kind : e.kind === 'skater' || e.kind === 'rover')); }
+  hunterList(kind) { return this.list.filter((e) => e.faction === 'pirate' && !e.dead && !e.home && !e.targetObj && !e.bounty && (kind ? e.kind === kind : e.kind === 'skater' || e.kind === 'rover')); }
   hunters(kind) { return this.hunterList(kind).length; }
 
   // next hunter kind: coin flip among kinds under cap; a squad's first is a rover if there's room
@@ -595,6 +595,24 @@ export class Enemies {
       }
     }
     return spawned;
+  }
+
+  // A bounty squad (missions.js makeBounty): a rover and skaters round a point of the bright side, held there until you come looking
+  // (targetFor). Not counted among the roaming hunters, never given up on; removeBounty clears what is left of it.
+  spawnBountySquad(dir, n) {
+    const up = dir.clone().normalize(), out = [];
+    const center = this.ground(up);
+    for (let i = 0; i < n; i++) {
+      const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+      const e = this.spawnPirate(i === 0 ? 'rover' : 'skater', greatCircle(up, t, 10 + Math.random() * 50), null, { rogue: true });
+      Object.assign(e, { bounty: { center }, aware: false });
+      out.push(e);
+    }
+    return out;
+  }
+
+  removeBounty(squad) {
+    for (const e of squad) if (!e.dead) { e.dead = true; e.model.root.removeFromParent(); }
   }
 
   // Event waves: spawn around a point and go after something you're protecting.
@@ -867,7 +885,7 @@ export class Enemies {
 
       // beyond threat range hunters soon give up (den guards head home and vanish much further out;
       // cargo thieves and event raiders never give up)
-      if (e.faction === 'pirate' && !e.carrying && !e.final && !(e.targetObj && !e.targetObj.dead)) {
+      if (e.faction === 'pirate' && !e.carrying && !e.final && !e.bounty && !(e.targetObj && !e.targetObj.dead)) {
         const far = e.body.pos.distanceTo(P.pos) > (e.home ? 1300 : THREAT_RANGE);
         e.lost = far ? (e.lost || 0) + dt : 0;
         if (e.lost > 2.5) {
@@ -1150,6 +1168,18 @@ export class Enemies {
       return e.wander;
     }
     const dist = e.body.pos.distanceTo(P.pos);
+    if (e.bounty) {
+      // a bounty squad loafs about its patch until you come near (or hurt one of them), and goes back to it once you are well clear
+      if (dist < 320 || e.hp < e.maxHp) e.aware = true; else if (dist > 900) e.aware = false;
+      if (!e.aware) {
+        if (!e.wander || e.body.pos.distanceTo(e.wander) < 15) {
+          const up = e.bounty.center.clone().normalize();
+          const t = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
+          e.wander = this.ground(greatCircle(up, t, 20 + Math.random() * 90));
+        }
+        return e.wander;
+      }
+    }
     return P.pos.clone().addScaledVector(P.vel, Math.min(lead, dist / 60));
   }
 
