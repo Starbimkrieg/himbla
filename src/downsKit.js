@@ -131,10 +131,12 @@ export const kitSink = (k) => (geo, color, ink) => {
 };
 
 // Boxes filling a flat convex piece: outline `pts` [[x, z]...] on the plane y = yb(x, z) (linear), h thick above it, squared to its
-// first edge, in STRIPS across it from that edge back, each as wide as the piece is at the strip's narrower end. So no box reaches
-// past the piece's edges: a wedge-shaped bay's front edge is exactly its own (one box round the wedge stuck out past both front
-// corners, and neighbouring bays' front edges crossed instead of meeting, which broke the ledge rail along them). The slivers left
-// between neighbours are under half a metre wide. Calls solid(hx, hy, hz, x, y, z, q) with each box's centre and turn.
+// first edge, in STRIPS across it from that edge back. The first strip is exactly as wide as the piece's first edge and the last as its
+// far edge, so a wedge-shaped bay's front and back edges are exactly its own and meet its neighbours' at the corners (the ledge rails
+// along the arcade's front and its outer rim run round the turn; one box round the wedge stuck out past the corners and the edges
+// crossed, a strip as wide as the wedge's narrower end stopped short of them). Strips between are as wide as the piece at their
+// narrower end. An end strip overhangs the piece's sides by its depth times the sides' splay (about 20 cm for an arcade bay), into the
+// neighbour, whose deck is all but in the same plane. Calls solid(hx, hy, hz, x, y, z, q) with each box's centre and turn.
 const _sx = new THREE.Vector3(), _sy = new THREE.Vector3(), _sz = new THREE.Vector3(), _sm = new THREE.Matrix4(), _sq = new THREE.Quaternion();
 const STRIPS = 3;
 function slabBox(pts, yb, h, solid) {
@@ -160,7 +162,7 @@ function slabBox(pts, yb, h, solid) {
     const va = v0 + ((v1 - v0) * j) / STRIPS, vb = v0 + ((v1 - v0) * (j + 1)) / STRIPS;
     const sa = span(va + 1e-6), sb = span(vb - 1e-6);
     if (!sa || !sb) continue;
-    const u0 = Math.max(sa[0], sb[0]), u1 = Math.min(sa[1], sb[1]);
+    const [u0, u1] = j === 0 ? sa : j === STRIPS - 1 ? sb : [Math.max(sa[0], sb[0]), Math.min(sa[1], sb[1])];
     if (u1 <= u0) continue;
     const cu = (u0 + u1) / 2, cv = (va + vb) / 2, cx = pts[0][0] + ux * cu + vx * cv, cz = pts[0][1] + uz * cu + vz * cv, y = yb(cx, cz);
     solid(((u1 - u0) / 2) * Math.hypot(1, su), h / 2, ((vb - va) / 2) * Math.hypot(1, sv), cx + _sy.x * h / 2, y + _sy.y * h / 2, cz + _sy.z * h / 2, _sq);
