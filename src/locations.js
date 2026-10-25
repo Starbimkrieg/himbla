@@ -236,7 +236,7 @@ export const SHOPS = {
     { key: 'seeker', name: 'Black-Market Seeker Module', desc: 'Pulse discs, mortar shells and scattergun pellets steer harder onto the target you aimed at (the disc most)', cost: 1050, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 5 } },
     { key: 'flak', name: 'Black-Market Flak Weave', desc: '+20 max health, less blast knockback', cost: 950, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 5 } },
     { key: 'v_interceptor', name: 'Hot-Wired Interceptor', desc: 'VEHICLE: a SPACECOM Interceptor, liberated', cost: 4200, max: 1, faction: 'rustmoon', req: [0], vehicle: 'interceptor', unlock: { smuggle: true, n: 5 } },
-    { key: 't_shield', name: 'Black-Market Deflector', desc: 'TECH: absorbs one hit every 12 s', cost: 3600, max: 1, faction: 'rustmoon', req: [0], tech: 'shield', unlock: { smuggle: true, n: 6 } },
+    { key: 't_shield', name: 'Black-Market Deflector', desc: 'TECH: soaks the first 25 damage, back 12 s after it breaks', cost: 3600, max: 1, faction: 'rustmoon', req: [0], tech: 'shield', unlock: { smuggle: true, n: 6 } },
     { key: 'uplink', name: 'Black-Market Market Uplink', desc: '+10% pay on every contract (per level)', cost: 1150, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 6 } },
     { key: 'v_skimmer', name: 'Hot-Wired Phase Skimmer', desc: 'VEHICLE: a Daedalus skimmer, liberated', cost: 4800, max: 1, faction: 'rustmoon', req: [0], vehicle: 'skimmer', unlock: { smuggle: true, n: 7 } },
     { key: 't_dash', name: 'Black-Market Phase Dash', desc: 'TECH (E): swing all your momentum to wherever you look', cost: 4200, max: 1, faction: 'rustmoon', req: [0], tech: 'dash', unlock: { smuggle: true, n: 8 } },

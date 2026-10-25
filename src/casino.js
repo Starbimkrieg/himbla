@@ -104,7 +104,7 @@ const SHOP = [
   { key: 'outfit_highroller', kind: 'outfit', id: 'highroller', chips: 250, tier: 2, desc: 'Gold lamé suit, a halo and a long twin-tailed scarf. Subtle it is not.' },
   { key: 'outfit_moonroyal', kind: 'outfit', id: 'moonroyal', chips: 500, tier: 4, desc: 'Purple and gold regalia for Moon Royalty only.' },
 ];
-const EXCHANGE = { chips: 10, credits: 150 };
+const EXCHANGE = { chips: 10, credits: 20 }; // a chip costs ₵50 wagered, so 10 are ₵500 of play: ₵20 is under what the house edge takes from that
 
 // ---------- the pit boss ----------
 const LINES = {

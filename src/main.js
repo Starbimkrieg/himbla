@@ -760,7 +760,8 @@ class Game {
     const P = this.player;
     if (P.dead || amount <= 0 || this.cheats.god) return;
     if (this.assetRow !== null && this.assetRow.active) return; // Asset Row is harmless
-    if (this.story.absorb(from)) return;
+    amount = this.story.absorb(amount, from);
+    if (amount <= 0) return;
     if (cause === 'ram' && this.grind) this.grind.knockOff(P);
     // vehicles soak hits (and can be wrecked); sniper rounds go through the glass
     if (P.vehicle && cause !== 'sniper') { amount = this.garage.hit(amount); if (amount <= 0) return; }

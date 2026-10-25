@@ -28,9 +28,9 @@ export const LEADERS = {
 // Tech unlocked by the research-minded stories.
 export const TECH = {
   dash: { name: 'Phase Dash', key: 'E', desc: 'Swing all your momentum (plus a kick) towards wherever you are looking: a mid-air turn, climb or dive, leaving a violet ghost trail of you along the way. 4 s cooldown.' },
-  shield: { name: 'Deflector Shield', key: '—', desc: 'An invisible field that absorbs one hit or hard knock every 12 s (you see it when it takes one).' },
+  shield: { name: 'Deflector Shield', key: '—', desc: 'An invisible field that soaks the first 25 damage you take, then needs 12 s to come back (you see it when it takes a hit).' },
   vanes: { name: 'Quantum Slipstream Vanes', key: 'E', desc: 'Switch on to let your skates keep a share of their grip on the air for 10 s: steer while you fly. 30 s cooldown.' },
-  teleport: { name: 'Personal Teleporter', key: 'T', desc: 'Jump to any discovered settlement or your outposts. 90 s cooldown.' },
+  teleport: { name: 'Personal Teleporter', key: 'T', desc: 'Open the map (T) and click any discovered settlement or one of your outposts to jump there. Keeps your health and jet; not while a contract is out. 3 min cooldown.' },
 };
 
 // Modules for outposts you found (base building).
@@ -329,6 +329,10 @@ const _v = new THREE.Vector3();
 
 // Phase Dash: your speed (at least 30 m/s) times DASH_BOOST plus DASH_KICK, up to DASH_MAX; 4 s cooldown
 const DASH_BOOST = 1.12, DASH_KICK = 16, DASH_MAX = 112;
+// Personal Teleporter: 3 min between jumps; it keeps your health and jet (the Monolith's jump does too) and won't lock on while a contract is out
+const TELE_CD = 180;
+// Deflector Shield: soaks the first SHIELD_POOL damage, then needs SHIELD_CD s to come back
+const SHIELD_POOL = 25, SHIELD_CD = 12;
 const VANES_ON = 10; // s the Slipstream Vanes stay on once used
 const VANES_CD = 30; // s from use until reusable (20 s after they go off)
 const KADE_BASE = 0.08; // chance Kade rides with a squad
@@ -1847,7 +1851,8 @@ export class Story {
     G.save();
   }
 
-  teleportTo(dir, quiet = false) {
+  // keep: arrive with the health and jet you had (respawn refills them)
+  teleportTo(dir, quiet = false, keep = false) {
     const g = this.game;
     const P = g.player;
     if (g.assetRow && g.assetRow.active) g.assetRow.exit(true); // leave the dev Asset Row for the Moon first
@@ -1857,7 +1862,9 @@ export class Story {
     g.planet.update(g.planet.ground(d, new THREE.Vector3()), { budgetMs: 1e9 });
     const pos = g.planet.ground(d, new THREE.Vector3(), 1.5);
     const fwd = tangent(dir.clone().sub(d), d).normalize();
+    const hp = P.health, en = P.body.energy;
     P.respawn(pos, fwd);
+    if (keep) { P.health = hp; P.body.energy = en; }
     g.cam.fwd.copy(fwd);
     if (quiet) return; // arrived some other way (recovery shuttle)
     g.fx.explosion(pos, 4, false);
@@ -1913,11 +1920,11 @@ export class Story {
     if (this.techCd[k] > 0) { g.hud.toast(`${TECH[k].name}: ${Math.ceil(this.techCd[k])} s`, 1); return; }
     if (k === 'dash') {
       // momentum redirect, not a blink: all your speed (plus a kick) swings to where you look, pitch included
-      if (P.vehicle) return;
+      if (P.vehicle) { g.hud.toast('Phase Dash swings your skates\' momentum: not from a vehicle.', 1.5); return; }
       const dir = g.cam.look.clone().normalize();
       // on the ground, don't aim into it
       if (P.body.grounded && dir.dot(P.up) < 0.08) dir.addScaledVector(P.up, 0.08 - dir.dot(P.up)).normalize();
-      const sp = Math.min(Math.max(P.vel.length(), 30) * DASH_BOOST + DASH_KICK, DASH_MAX);
+      const sp = Math.max(P.vel.length(), Math.min(Math.max(P.vel.length(), 30) * DASH_BOOST + DASH_KICK, DASH_MAX)); // never slower than you were
       const from = P.center.clone();
       P.vel.copy(dir).multiplyScalar(sp);
       g.fx.startGhosts(P.model, 0.6); // purple afterimages along the path
@@ -1927,15 +1934,10 @@ export class Story {
       g.audio.tone(900, 0.2, 'sine', 0.2, 0.3);
       this.techCd.dash = 4;
     } else if (k === 'teleport') {
-      const places = g.locations.filter((l) => l.discovered && !l.camp).map((l) => ({ name: l.name, dir: l.dir }))
-        .concat(this.myOutposts().map((o) => ({ name: g.territory.name(o), dir: o.dir })));
-      const page = (n) => {
-        const per = 7, sl = places.slice(n * per, n * per + per), pages = Math.ceil(places.length / per);
-        g.dialog('PERSONAL TELEPORTER', 'Pick a destination. (90 s recharge)', sl.map((p, i) => ({ label: `${i + 1} · ${p.name}`, fn: () => { this.techCd.teleport = 90; this.teleportTo(p.dir); } }))
-          .concat(pages > 1 ? [{ label: `${sl.length + 1} · MORE (${n + 1}/${pages})`, fn: () => page((n + 1) % pages) }] : [])
-          .concat([{ label: 'CANCEL' }]));
-      };
-      page(0);
+      const why = this.teleportBlock();
+      if (why) { g.hud.toast(why, 2.5); return; }
+      g.hud.toast('Teleporter: click a settlement on the map.', 2);
+      g.openMap();
     } else if (k === 'vanes') {
       // skate grip works in the air for a while (player.js reads vanesActive())
       if (P.vehicle) { g.hud.toast('The Vanes work through your skates: not from a vehicle.', 1.5); return; }
@@ -1946,21 +1948,39 @@ export class Story {
     }
   }
 
+  // Why the Teleporter can't jump right now (null: it can). The map's click calls this, and teleportVia() to go.
+  teleportBlock() {
+    const g = this.game;
+    if (!this.tech.includes('teleport')) return `${TECH.teleport.name} isn't yours yet.`;
+    if (this.techCd.teleport > 0) return `Teleporter recharging: ${Math.ceil(this.techCd.teleport)} s`;
+    if (g.missions.active || (g.missions.extra && g.missions.extra.a)) return "The Teleporter won't lock on with a contract out: the cargo's tracker jams it.";
+    return null;
+  }
+
+  teleportVia(dir, name) {
+    this.techCd.teleport = TELE_CD;
+    this.teleportTo(dir, false, true);
+    this.game.hud.toast(`Teleported to ${name}.`, 2);
+  }
+
   // Vanes running (and still owned)
   vanesActive() { return this.vanesT > 0 && this.tech.includes('vanes'); }
 
-  // Deflector Shield: called from damagePlayer; returns true if the hit was absorbed.
-  absorb(from = null) {
-    if (!this.tech.includes('shield') || this.techCd.shield > 0) return false;
-    this.techCd.shield = 12;
+  // Deflector Shield: called from damagePlayer with the hit's damage; returns what gets through (0 when the shield took it all).
+  absorb(amount, from = null) {
+    if (!this.tech.includes('shield') || this.techCd.shield > 0) return amount;
     const g = this.game;
+    const pool = this.shieldHp ?? SHIELD_POOL;
+    const soaked = Math.min(pool, amount);
+    this.shieldHp = pool - soaked;
+    if (this.shieldHp <= 0) { this.techCd.shield = SHIELD_CD; this.shieldHp = SHIELD_POOL; g.fx.pop('SHIELD DOWN', null, { color: '#ff7ad9', size: 40 }); }
     // invisible until hit: the field lights up and the hit side burns away
     g.fx.shieldHit(() => g.player.center, from);
-    g.fx.pop('DEFLECTED!', null, { color: '#2ee6ff', size: 50 });
+    if (this.techCd.shield <= 0) g.fx.pop('DEFLECTED!', null, { color: '#2ee6ff', size: 50 });
     g.audio.tone(1400, 0.15, 'triangle', 0.2, 0.5);
     g.audio.tone(520, 0.35, 'sawtooth', 0.08, 0.15);
     g.audio.burst(0.18, 5200, 0.25);
-    return true;
+    return amount - soaked;
   }
 
   // ---------- Captain Kade, the sniper ----------
@@ -2083,7 +2103,7 @@ export class Story {
       const on = k === 'vanes' && this.vanesActive();
       const cd = on ? 0 : this.techCd[k];
       const key = TECH[k].key !== '—' ? `[${TECH[k].key}] ` : '';
-      return `<span class="${cd > 0 ? 'cd' : 'ready'}">${key}${TECH[k].name}${on ? ` ON ${Math.ceil(this.vanesT)}s` : cd > 0 ? ` ${Math.ceil(cd)}s` : ''}</span>`;
+      return `<span class="${cd > 0 ? 'cd' : 'ready'}">${key}${TECH[k].name}${on ? ` ON ${Math.ceil(this.vanesT)}s` : cd > 0 ? ` ${Math.ceil(cd)}s` : k === 'shield' && (this.shieldHp ?? SHIELD_POOL) < SHIELD_POOL ? ` ${Math.ceil(this.shieldHp)}` : ''}</span>`;
     }).join(' · ');
   }
 }

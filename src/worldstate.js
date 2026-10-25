@@ -130,7 +130,7 @@ function applyCouncil(ws, locations) {
   }
   if (passed.includes('openSkies')) {
     sell('ilmb', { key: 'v_interceptor', name: 'SPACECOM Lunar Interceptor', desc: 'VEHICLE: the fast one, yours to call with V', cost: 3500, max: 1, vehicle: 'interceptor' });
-    sell('ilmb', { key: 't_shield', name: 'SPACECOM Deflector Shield', desc: 'TECH: absorbs one hit every 12 s', cost: 3000, max: 1, tech: 'shield' });
+    sell('ilmb', { key: 't_shield', name: 'SPACECOM Deflector Shield', desc: 'TECH: soaks the first 25 damage, back 12 s after it breaks', cost: 3000, max: 1, tech: 'shield' });
   }
   if (passed.includes('freeTrade')) {
     for (const items of Object.values(SHOPS)) for (const it of items) if (!it.discounted) { it.cost = Math.round((it.cost * 0.9) / 10) * 10; it.discounted = true; }
