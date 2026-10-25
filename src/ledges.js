@@ -5,6 +5,8 @@ import { railOf } from './rails.js';
 // benches), ground like snake-rock crests by rails.js (grabbed only on skates, from the air, heading along them).
 // A box with a level top gives its four top edges. Each is sampled every SAMPLE m and a stretch counts where
 //   - nothing sits on it (just above it is clear, so a cap 5 cm thick or more takes the edge over),
+//   - there's room to ride it (the grind's own clearance ball over it hits nothing that would push you back: a tower beside a
+//     parapet, a beam over a canopy),
 //   - nothing stands against it (just outside and above it is clear: not the foot of a wall),
 //   - it is an edge, not a seam (just outside and below it is clear: no neighbouring box carries the surface on),
 // and the stretch is at least MIN_TOP over the ground. Stretches whose ends meet (within GAP) and that carry on turning at most
@@ -39,10 +41,11 @@ export function* ledgeRailsJob(cols, colliders, planet) {
           (hash.get(k) || hash.set(k, []).get(k)).push(c);
         }
   }
-  // is p inside (or within r of) any of the place's colliders but `own`?
-  const blocked = (p, r, own) => {
+  // is p inside (or within r of) any of the place's colliders but `own`? With `up`: only one that would push a ball there mostly
+  // sideways or down (rails.js hit(): the grind rides over what pushes up)
+  const blocked = (p, r, own, up = null) => {
     const cell = hash.get(hkey(Math.floor(p.x / HCELL), Math.floor(p.y / HCELL), Math.floor(p.z / HCELL)));
-    if (cell) for (const c of cell) if (c !== own && colliders.contact(c, p, r, _n) > 0) return true;
+    if (cell) for (const c of cell) if (c !== own && colliders.contact(c, p, r, _n) > 0 && (!up || _n.dot(up) < 0.6)) return true;
     return false;
   };
   yield;
@@ -65,6 +68,7 @@ export function* ledgeRailsJob(cols, colliders, planet) {
         const up = _q.copy(p).normalize();
         const free = !blocked(_a.copy(p).addScaledVector(up, -0.35).addScaledVector(out, 0.45), 0.2, c)
           && !blocked(_a.copy(p).addScaledVector(up, 0.3).addScaledVector(out, -0.15), 0.25, c)       // (from 5 cm up: a cap on it counts)
+          && !blocked(_a.copy(p).addScaledVector(up, 0.5), 0.45, c, up)                                // room for the rider: the grind's own clearance (rails.js BODY, BODY_UP)
           && !blocked(_a.copy(p).addScaledVector(up, 0.3).addScaledVector(out, 0.45), 0.25, c)
           && p.length() - planet.surface(p) >= MIN_TOP;
         if (free) { if (run) run.pts[1] = p; else run = { pts: [p, p], owner: c }; }

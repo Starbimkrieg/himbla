@@ -355,7 +355,6 @@ function clubhouse(k) {
   k.solid(30.3, 0.4, 0.15, 0, -27.15);                             // plinth, 0.3 m proud at the back and sides
   for (const s of [-1, 1]) k.solid(0.15, 0.4, 11.15, s * 30.15, -16.15);
   for (let i = 0; i < 10; i++) k.column(0.62, 9, -27 + i * 6, -0.8);
-  k.solid(6, 12, 6, 0, -13, 0, 18);                                // tower's foot, on the roof
   k.at();
 }
 
@@ -616,8 +615,7 @@ function forecourt(k) {
 // ---- infield screen drum (the winners' podiums stand in front of it) ----
 function drum(k) {
   k.at(DRUM.x, DRUM.z, 0);
-  bake(k, 'dn_drum');
-  k.solid(5.4, 9, 5.4, 0, 0);
+  bake(k, 'dn_drum');                                                // (its colliders are the part's own: a box to 18 m stood in the air round its pillar)
   k.at();
 }
 
@@ -648,13 +646,13 @@ function stables(k) {
     const boxes = /^dn_stable_(\d)$/.exec(n);
     if (boxes) {
       const Lh = +boxes[1] * 2.5;
-      k.solid(Lh + 0.2, 3.7, 4.6, 0, -4.4);                                                          // (the body to its ridge, the boxes shut: you look in over the doors)
+      k.solid(Lh + 0.2, 2.0, 4.6, 0, -4.4);                                                          // (the body to its eaves, the boxes shut: you look in over the doors; the gable roof has the part's own colliders)
       for (let i = 0; i <= +boxes[1]; i++) k.column(0.2, 4.0, -Lh + i * 5, 2.18);                      // the porch posts
       for (let i = 0; i < +boxes[1]; i++) k.solid(0.6, 0.23, 0.35, -Lh + 2.5 + i * 5, 0.95);           // and each box's feed trough
     } else if (n === 'dn_stable_corner') {
       k.solid(4.8, 4.3, 4.8, -4.5, -4.5);
       k.column(0.2, 4.0, 2.18, 2.18);                                                                // (the post where the porch beams cross)
-    } else if (n === 'dn_hay_barn') k.solid(12.2, 6.2, 7.2, 0, -7);
+    } else if (n === 'dn_hay_barn') k.solid(12.2, 3.0, 7.2, 0, -7);                                  // (to the eaves: the gambrel roof has the part's own colliders)
     else if (n === 'dn_trough') k.solid(1.2, 0.38, 0.45, 0, 0);
     else if (n === 'dn_tack') k.column(0.5, 1.2, 0, 0);
     else if (n === 'dn_lunge_ring') {
@@ -662,7 +660,7 @@ function stables(k) {
       const R = 9, N = 22, at = (i) => { const a = (2 * Math.PI * (i + 0.5)) / N + Math.PI / 2; return [Math.cos(a) * R, Math.sin(a) * R]; };
       for (let i = 0; i < N - 1; i++) {
         const [ax, az] = at(i), [bx, bz] = at(i + 1);
-        k.solid(0.12, 0.8, Math.hypot(bx - ax, bz - az) / 2, (ax + bx) / 2, (az + bz) / 2, Math.atan2(bx - ax, bz - az));
+        k.solid(0.12, 0.635, Math.hypot(bx - ax, bz - az) / 2, (ax + bx) / 2, (az + bz) / 2, Math.atan2(bx - ax, bz - az));   // (to the top rail's top, 1.27 m: grindable)
       }
       k.cyl(R - 0.15, R - 0.15, 0.15, 48, T(PAL.saddle), 0, 0, 0, { outline: 0 });
     }

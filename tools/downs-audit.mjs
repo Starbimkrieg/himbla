@@ -14,8 +14,9 @@
 //   blocked    ground a walker could cross before the Blender parts' own colliders (downs_common.py Acc, `auto` in the kit's
 //              colliders) and now can't: walkBlocker (downsPlan.js) with and without them on a 0.5 m grid, by builder > part.
 //              Read each: a bench or a stall counter should block; a doorway, an arch or a passage shouldn't.
-//   floating   the reverse of coverage: the standable top of each of those colliders sampled every 0.5 m, and any spot with no
-//              drawn surface within 0.3 m listed by builder > part (you'd stand on air there).
+//   floating   the reverse of coverage: the standable top of every box collider (the parts' own and the hand-placed ones, marked
+//              `(hand)`) sampled every 0.5 m, and any spot with no drawn surface within 0.3 m listed by builder > part (you'd stand
+//              on air there).
 // Blender side: build_downs_*.py run audit_coplanar (z-fight within a model) and audit_flips (inside-out primitives) on every build.
 const { chromium } = await import(process.env.PLAYWRIGHT || '/opt/node-tools/node_modules/playwright/index.mjs');
 const MODE = process.argv[2] || 'all';
@@ -32,6 +33,12 @@ await pg.waitForFunction('window.game && window.game.world', null, { timeout: 18
 await pg.keyboard.press('Enter'); await pg.waitForTimeout(4000);
 for (let i = 0; i < 14; i++) { let st = null; try { st = await pg.evaluate('window.game.state'); } catch (e) { await pg.waitForTimeout(2500); continue; } if (st === 'play') break; await pg.keyboard.press('Enter'); await pg.waitForTimeout(1500); }
 await pg.waitForTimeout(3000);
+// the Downs is built (and rebuilt as its Blender kits arrive) after play starts: wait until its meshes and colliders stop changing
+for (let last = '', same = 0; same < 3;) {
+  const now = await pg.evaluate(() => { const l = window.game.locations.find((x) => x.id === 'downs'); let n = 0; if (l.group) l.group.traverse((o) => { if (o.isMesh) n++; }); return `${n}/${(l._kitCols || []).length}`; });
+  same = now === last ? same + 1 : 0; last = now;
+  await pg.waitForTimeout(2000);
+}
 
 // The Downs' triangles in its flat frame: { P: [x,y,z ×3 per triangle], C: per-triangle colour (vertex or material), T: tag id, text: [text plane triangles] }
 await pg.evaluate(async () => {
@@ -40,9 +47,9 @@ await pg.evaluate(async () => {
   const M4 = g.camera.matrixWorld.constructor, V3 = g.camera.position.constructor;
   loc.group.updateMatrixWorld(true);
   const inv = new M4().copy(loc.group.matrixWorld).invert(), M = new M4(), v = new V3();
-  const S = { P: [], C: [], T: [], text: [], names: window.__kitTagNames || [] };
+  const S = { P: [], C: [], T: [], text: [], names: window.__kitTagNames || [] }, culled = new Set(loc.detail || []);
   loc.group.traverse((o) => {
-    if (!o.isMesh || o.isInstancedMesh || o.userData.isInk || o.visible === false) return;
+    if (!o.isMesh || o.isInstancedMesh || o.userData.isInk || (o.visible === false && !culled.has(o))) return;   // (distance culling hides much of the place from where the game starts: loc.detail)
     for (let a = o; a && a !== loc.group; a = a.parent) if (a.userData && (a.userData.tick || a.userData.spin)) return;
     const geo = o.geometry, pos = geo.attributes.position, col = geo.attributes.color, tg = geo.attributes.tag, idx = geo.index, m = o.material;
     if (!pos) return;
@@ -238,7 +245,7 @@ if (run('blocked')) {
 
 if (run('floating')) {
   const res = await pg.evaluate(() => {
-    const { P } = window.__downs, N = P.length / 9, loc = window.game.locations.find((l) => l.id === 'downs'), cols = (loc._kitCols || []).filter((c) => c.auto && c.type === 'box');
+    const { P } = window.__downs, N = P.length / 9, loc = window.game.locations.find((l) => l.id === 'downs'), cols = (loc._kitCols || []).filter((c) => c.type === 'box');
     // triangles by the 2 m (x, z) cells their footprint touches
     const C = 2, grid = new Map(), k2 = (i, j) => i * 100003 + j;
     for (let t = 0; t < N; t++) {
@@ -262,7 +269,8 @@ if (run('floating')) {
         else { const den = 1 / (va + vb + vc); u = vb * den; v = vc * den; }
       }
       const qx = bx * u + cx * v - px, qy = by * u + cy * v - py, qz = bz * u + cz * v - pz;
-      return Math.sqrt(qx * qx + qy * qy + qz * qz);
+      const d = Math.sqrt(qx * qx + qy * qy + qz * qz);
+      return d === d ? d : 1e9;   // (a degenerate triangle gives NaN, which would poison every comparison after it)
     };
     const near = (x, y, z) => { let best = 1e9; for (let i = Math.floor(x / C) - 1; i <= Math.floor(x / C) + 1; i++) for (let j = Math.floor(z / C) - 1; j <= Math.floor(z / C) + 1; j++) for (const t of grid.get(k2(i, j)) || []) { best = Math.min(best, dist(t, x, y, z)); if (best < 0.3) return best; } return best; };
     const E = window.game.camera.rotation.constructor, Q = window.game.camera.quaternion.constructor, V = window.game.camera.position.constructor;
@@ -280,14 +288,15 @@ if (run('floating')) {
         const x = c.x + n.x * h * s + u.x * a + w.x * b, y = c.y + n.y * h * s + u.y * a + w.y * b, z = c.z + n.z * h * s + u.z * a + w.z * b;
         total += cell;
         if (near(x, y, z) < 0.3) continue;
-        let e = by.get(c.tag);
-        if (!e) by.set(c.tag, (e = { area: 0, x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9, z0: 1e9, z1: -1e9 }));
+        const key = `${c.tag}${c.auto ? '' : ' (hand)'}`;
+        let e = by.get(key);
+        if (!e) by.set(key, (e = { area: 0, x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9, z0: 1e9, z1: -1e9 }));
         e.area += cell; e.x0 = Math.min(e.x0, x); e.x1 = Math.max(e.x1, x); e.y0 = Math.min(e.y0, y); e.y1 = Math.max(e.y1, y); e.z0 = Math.min(e.z0, z); e.z1 = Math.max(e.z1, z);
       }
     }
     return { total, out: [...by].sort((a, b) => b[1].area - a[1].area).map(([k, e]) => `${e.area.toFixed(1).padStart(8)} m2  ${k}   x ${e.x0.toFixed(1)}..${e.x1.toFixed(1)}  y ${e.y0.toFixed(1)}..${e.y1.toFixed(1)}  z ${e.z0.toFixed(1)}..${e.z1.toFixed(1)}`) };
   });
-  console.log(`floating: of ${res.total.toFixed(0)} m2 of standable collider tops (the parts' own), spots with nothing drawn within 0.3 m, by builder > part:`);
+  console.log(`floating: of ${res.total.toFixed(0)} m2 of standable collider tops, spots with nothing drawn within 0.3 m, by builder > part:`);
   for (const o of res.out.slice(0, 40)) console.log('  ' + o);
 }
 
@@ -303,9 +312,9 @@ if (run('coverage')) {
     const cols = g.colliders, near = [], n = new V3(), w = [new V3(), new V3(), new V3()], f = [new V3(), new V3(), new V3()], p = new V3(), q = new V3();
     const covered = (pt) => { for (const c of cols.query(pt, 1.5, near)) if (cols.contact(c, pt, 0.35, n) > 0) return true; return false; };
     let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    const by = new Map(), totBy = {}; let tot = 0, bare = 0;
+    const by = new Map(), totBy = {}, culled = new Set(loc.detail || []); let tot = 0, bare = 0;
     loc.group.traverse((o) => {
-      if (!o.isMesh || o.isInstancedMesh || o.userData.isInk || o.visible === false) return;
+      if (!o.isMesh || o.isInstancedMesh || o.userData.isInk || (o.visible === false && !culled.has(o))) return;   // (distance culling hides much of the place from where the game starts: loc.detail)
       for (let a = o; a && a !== loc.group; a = a.parent) if (a.userData && (a.userData.tick || a.userData.spin)) return;
       const m = o.material;
       if (!m || m.transparent || (m.userData && m.userData.aspect)) return;

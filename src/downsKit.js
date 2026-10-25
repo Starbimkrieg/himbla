@@ -130,22 +130,41 @@ export const kitSink = (k) => (geo, color, ink) => {
   k.add(geo, T(color), 0, 0, 0, { outline: 0 });
 };
 
-// A box round a flat piece: outline `pts` [[x, z]...] on the plane y = yb(x, z) (linear), h thick above it, squared to its first edge.
-// Calls solid(hx, hy, hz, x, y, z, q) with the box's centre and turn.
+// Boxes filling a flat convex piece: outline `pts` [[x, z]...] on the plane y = yb(x, z) (linear), h thick above it, squared to its
+// first edge, in STRIPS across it from that edge back, each as wide as the piece is at the strip's narrower end. So no box reaches
+// past the piece's edges: a wedge-shaped bay's front edge is exactly its own (one box round the wedge stuck out past both front
+// corners, and neighbouring bays' front edges crossed instead of meeting, which broke the ledge rail along them). The slivers left
+// between neighbours are under half a metre wide. Calls solid(hx, hy, hz, x, y, z, q) with each box's centre and turn.
 const _sx = new THREE.Vector3(), _sy = new THREE.Vector3(), _sz = new THREE.Vector3(), _sm = new THREE.Matrix4(), _sq = new THREE.Quaternion();
+const STRIPS = 3;
 function slabBox(pts, yb, h, solid) {
   let ux = pts[1][0] - pts[0][0], uz = pts[1][1] - pts[0][1];
   const l = Math.hypot(ux, uz); ux /= l; uz /= l;
   const vx = -uz, vz = ux;
-  let u0 = 1e9, u1 = -1e9, v0 = 1e9, v1 = -1e9;
-  for (const [x, z] of pts) { const u = (x - pts[0][0]) * ux + (z - pts[0][1]) * uz, v = (x - pts[0][0]) * vx + (z - pts[0][1]) * vz; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
-  const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2, cx = pts[0][0] + ux * cu + vx * cv, cz = pts[0][1] + uz * cu + vz * cv;
-  const y = yb(cx, cz), gx = yb(cx + 1, cz) - y, gz = yb(cx, cz + 1) - y;                 // the plane's rise per metre in x and z
-  const su = gx * ux + gz * uz, sv = gx * vx + gz * vz;                                      // and along the box's two ground axes
+  const P = pts.map(([x, z]) => [(x - pts[0][0]) * ux + (z - pts[0][1]) * uz, (x - pts[0][0]) * vx + (z - pts[0][1]) * vz]);
+  const v0 = Math.min(...P.map((p) => p[1])), v1 = Math.max(...P.map((p) => p[1]));
+  const span = (vq) => {                                                                     // the piece's u extent on the line v = vq
+    const xs = [];
+    for (let i = 0; i < P.length; i++) {
+      const a = P[i], b = P[(i + 1) % P.length];
+      if ((a[1] - vq) * (b[1] - vq) <= 0 && a[1] !== b[1]) xs.push(a[0] + ((vq - a[1]) / (b[1] - a[1])) * (b[0] - a[0]));
+    }
+    return xs.length ? [Math.min(...xs), Math.max(...xs)] : null;
+  };
+  // the plane's rise per metre along the two ground axes (it's linear: any point will do)
+  const y0 = yb(pts[0][0], pts[0][1]), su = yb(pts[0][0] + ux, pts[0][1] + uz) - y0, sv = yb(pts[0][0] + vx, pts[0][1] + vz) - y0;
   _sx.set(ux, su, uz).normalize(); _sz.set(vx, sv, vz).normalize();
   _sy.crossVectors(_sz, _sx).normalize(); _sz.crossVectors(_sx, _sy);
   _sq.setFromRotationMatrix(_sm.makeBasis(_sx, _sy, _sz));
-  solid(((u1 - u0) / 2) * Math.hypot(1, su), h / 2, ((v1 - v0) / 2) * Math.hypot(1, sv), cx + _sy.x * h / 2, y + _sy.y * h / 2, cz + _sy.z * h / 2, _sq);
+  for (let j = 0; j < STRIPS; j++) {
+    const va = v0 + ((v1 - v0) * j) / STRIPS, vb = v0 + ((v1 - v0) * (j + 1)) / STRIPS;
+    const sa = span(va + 1e-6), sb = span(vb - 1e-6);
+    if (!sa || !sb) continue;
+    const u0 = Math.max(sa[0], sb[0]), u1 = Math.min(sa[1], sb[1]);
+    if (u1 <= u0) continue;
+    const cu = (u0 + u1) / 2, cv = (va + vb) / 2, cx = pts[0][0] + ux * cu + vx * cv, cz = pts[0][1] + uz * cu + vz * cv, y = yb(cx, cz);
+    solid(((u1 - u0) / 2) * Math.hypot(1, su), h / 2, ((vb - va) / 2) * Math.hypot(1, sv), cx + _sy.x * h / 2, y + _sy.y * h / 2, cz + _sy.z * h / 2, _sq);
+  }
 }
 
 // Arcade parts that run across bays, one piece per run so bays show no seam: back wall (wainscot, string course, cornice), architrave

@@ -61,13 +61,13 @@ cx = -WI + 0.55
 P["mint2"].cylc(cx, 0.30, 0.55, 0.52, 0.34, 14)                                        # (base from 1 cm under the floor top to 1 cm up the shaft)
 P["mint"].cylc(cx, 0.46 + 3.1, 0.55, 0.36, 6.2, 14, rt=0.3)
 P["gold"].cylc(cx, 6.5, 0.55, 0.5, 0.22, 14)
-# seams painted on the roof top (underside RB, 0.32 thick), tilted with it: 8 mm strips half sunk, no ink, so a grind along the
-# roof isn't stopped by them
+# seams painted on the roof top (underside RB, 0.32 thick), tilted with it: no ink, so a grind along the roof isn't stopped by them;
+# 4 mm into the deck and 1.5 cm proud, as on the stands' roofs (build_downs_stand.py roof(): thinner, the bent Downs sank them in patches)
 zm = (z0 + z1) / 2
 ang = -math.atan(RB(1.0) - RB(0.0))
 seam = Acc("dn_arcade_seam", "mint", root, 0.0)
 for x in (-2.6, 0.0, 2.6):
-    seam.boxc(x, RB(zm) + 0.32, zm, 0.16, 0.008, z1 - z0 - 0.4, rot=(ang, 0, 0))
+    seam.boxc(x, RB(zm) + 0.32 + 0.0055, zm, 0.16, 0.019, z1 - z0 - 0.4, rot=(ang, 0, 0))
 for i, x in enumerate((-2.2, 2.2)):                                                     # pennants under the fascia's gold lip (6.05 to 6.15), tops 2 cm up into it
     (P["barn"] if i == 0 else P["gold"]).poly([(-0.4, 0), (0.4, 0), (0, -1.0)], z0 - 0.04, z0 + 0.04, t=(x, YF - 0.53, 0))
 P["black"].bm((-WI + 0.4, RB(0.6) - 0.15, 0.6), (-WO + 0.25, RB(D - 0.8) - 0.15, D - 0.8), 0.1)  # rafter from column to wall under the ceiling (end 0.25 m
