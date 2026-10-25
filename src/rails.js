@@ -13,6 +13,7 @@ const _near = [];
 // places whose buildings' edges are rails (ledges.js), worked out when you first come near and again if their colliders change
 const LEDGE_PLACES = ['downs'];
 const LCELL = 12; // m: the ledge rails' lookup grid
+const GRIND_MIN = 5; // m/s: slower than this on a rail and you lose your balance (bail)
 export const grindLabel = (r) => (r.ledge ? 'LEDGE GRIND' : r.rimOf ? 'RIM GRIND' : 'GRIND');
 const BODY = 0.45, BODY_UP = 0.5; // rider's shins-to-waist as a ball (radius, lift): what crest rocks must clear
 const TRAIL_LIFE = 2; // s a grind's skate trail lasts
@@ -119,8 +120,8 @@ export class Grinder {
     return best;
   }
 
-  // First solid thing (boulder or rock on the crest) within ds along the rail: its push-out normal, or null.
-  // The rail's own rock doesn't count.
+  // First solid thing in the way (boulder or rock on the crest, a post, a wall) within ds along the rail: its push-out normal, or
+  // null. The rail's own rock or colliders don't count, nor anything you'd ride over (pushing you mostly up).
   hit(A, ds) {
     const cols = this.game.colliders;
     if (!cols) return null;
@@ -131,7 +132,7 @@ export class Grinder {
       _hp.addScaledVector(_hu, BODY_UP);
       for (const c of cols.query(_hp, BODY + 2, _near)) {
         if (c.platform || c.rail === A.r.pts || (A.r.owners && A.r.owners.has(c))) continue;
-        if (cols.contact(c, _hp, BODY, _hn) > 0) return _hn;
+        if (cols.contact(c, _hp, BODY, _hn) > 0 && _hn.dot(_hu) < 0.6) return _hn;   // (a push mostly up is ground you ride over: a joint between a long roof's 8 m pieces)
       }
     }
     return null;
@@ -192,7 +193,8 @@ export class Grinder {
     upAt(_p, _u);
     // gravity along the rail, a little friction
     A.speed += -GRAV * _t.dot(_u) * A.dir * dt;
-    A.speed = Math.max(3, Math.min(85, A.speed - 0.5 * dt));
+    A.speed = Math.min(85, A.speed - 0.5 * dt);
+    if (A.speed < GRIND_MIN) { this.bail(P); return true; }
     // a rock on the crest throws you off
     const bump = this.hit(A, A.dir * A.speed * dt);
     if (bump) { this.knockOff(P, bump); return true; }
@@ -259,6 +261,21 @@ export class Grinder {
       }
     }
     return true;
+  }
+
+  // Too slow to balance (GRIND_MIN): you topple off the side, the style run is lost and you tumble (a ragdoll where one is allowed)
+  bail(P) {
+    const g = this.game, b = P.body, A = this.active;
+    railAt(A.r, A.s, _p, _t);
+    upAt(_p, _u);
+    this.pop(P, false, true);
+    const side = Math.random() < 0.5 ? -1 : 1;
+    b.vel.copy(_t).multiplyScalar(A.dir * A.speed).addScaledVector(_v.crossVectors(_u, _t), side * 2.5).addScaledVector(_u, 1.5);
+    this.cool = 1;
+    P.combo.wipe();
+    g.audio.thud(18);
+    g.haptics.play('wipeout');
+    P.startRagdoll(side);
   }
 
   // Struck by something solid (rover, road vehicle, ram): thrown off, away from the hit if known, briefly no re-grab.

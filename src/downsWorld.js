@@ -376,7 +376,7 @@ function aprons(k) {
     for (const e of ex) polys.push({ pts: [[e - W, zs], [e + W, zs], [e + W, zt], [e - W, zt]], yb: () => 0 });
     kitSink(k)(sheet(polys, 0.12), SADDLE2, 0);
     for (let x = -100; x <= 100; x += 20) {
-      if (Math.abs(x - FINISH_X) < 7) continue;
+      if (Math.abs(x - FINISH_X) < 7 || Math.abs(x) > S.x1) continue;   // (the far stand is shorter: none past its ends)
       lamp(k, x, s * (STAND.z0 - 3), x, 0);                                  // head toward the track
       k.column(0.4, 6.5, x, s * (STAND.z0 - 3));
     }

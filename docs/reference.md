@@ -102,7 +102,8 @@ player lights (skate colour, health), DualSense adaptive triggers, and a TEST bu
 - **Grinding:** snake rocks (35-50 m ridges) and firm crater lips are rails. Land on one or ride onto it at an angle
   to grind; `Shift` pops off. Grinds pay style per second; a clean trick landed onto a rail counts. At Chimera Downs the
   buildings' edges grind too (LEDGE GRIND: roofs, canopies, parapets, walls, steps, counters): the top edges of their
-  colliders (`src/ledges.js`), taken only on skates, from the air, heading along the edge.
+  colliders (`src/ledges.js`), taken only on skates, from the air, heading along the edge; stretches join round gentle bends
+  (30 degrees), so a round pen's fence grinds all the way. Under 5 m/s on any rail you lose your balance and bail.
 - **Terrain:** cratered plains plus highlands, scarps, rolling hills and long rilles. Craters range from bowls to
   terraced giants. Ramp slabs, arches and hoodoos dot the plains.
 - **Deliveries:** contracts at job boards, each with cargo type, fragility, pirate risk, distance and a tight clock.
@@ -424,7 +425,7 @@ tools/
   casino-zfight.mjs        lists coplanar faces in the running casino
   casino-shots.mjs         casino screenshots from fixed spots
   check-claw.mjs           bots play the claw to tune its payout
-  downs-audit.mjs          Chimera Downs audit: zfight, colliders, text, gaps; coverage, blocked (named only)
+  downs-audit.mjs          Chimera Downs audit: zfight, colliders, text, gaps; coverage, blocked, floating (named only)
   downs-layouts.mjs        Chimera Downs layout study (docs/downs-layouts.md)
   stable-layouts.mjs       the stable yard's layouts: clearance and walk checks, plans (docs/stable-proposals/)
   race-sim.mjs             runs the race model headless and reports the balance

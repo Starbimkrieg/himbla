@@ -91,7 +91,8 @@ def roof(name, S, E, girders, cols, lamps, Eb, avoid=()):
     slab(P["barn"], -E, E, ZF, ZB, -0.45, 0.0)                                              # deck
     slab(P["mint2"], -(E - 0.2), E - 0.2, ZF + 0.2, ZB - 0.1, -0.51, -0.44)                 # soffit, 6 cm proud below (ends in fascia and barge boards)
     n = max(2, round(2 * (E - 0.6) / 2.14) + 1)
-    # ribs: mint standing seams down the fall. Near a tower flank (d: rib middle out of the flank) a seam would leave a slot,
+    seam = Acc(f"{name}_seam", "mint", root, 0.0)                                           # painted on: 8 mm half sunk, no ink (a grind along the roof isn't stopped)
+    # seams: mint stripes down the fall. Near a tower flank (d: rib middle out of the flank) a seam would leave a slot,
     # shimmer in a face, or a sliver by a pilaster, so it moves to 35 cm out of the flank (20 cm clear of the pilasters),
     # 10 cm inside them through the tower, or 5 cm inside the flank through the pilasters
     for i in range(n):
@@ -100,7 +101,7 @@ def roof(name, S, E, girders, cols, lamps, Eb, avoid=()):
             d = (x - p) * o
             if -0.53 < d < 0.63:
                 x = p + o * min((-0.53, -0.135, 0.63), key=lambda t: abs(t - d))
-        slab(P["mint"], x - 0.08, x + 0.08, ZF + 0.25, ZB - 0.45, -0.04, 0.10)
+        slab(seam, x - 0.08, x + 0.08, ZF + 0.25, ZB - 0.45, -0.004, 0.004)
     for sx in (-1, 1):                                                                      # barge boards: 6 cm past the deck end, 12 cm above it
         a, b = sx * (E - 0.24), sx * (E + 0.06)
         slab(P["mint"], min(a, b), max(a, b), ZF + 0.03, ZB + 0.12, -0.95, 0.12)            # front end in the fascia, not flush with the deck's end face

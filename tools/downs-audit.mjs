@@ -14,11 +14,13 @@
 //   blocked    ground a walker could cross before the Blender parts' own colliders (downs_common.py Acc, `auto` in the kit's
 //              colliders) and now can't: walkBlocker (downsPlan.js) with and without them on a 0.5 m grid, by builder > part.
 //              Read each: a bench or a stall counter should block; a doorway, an arch or a passage shouldn't.
+//   floating   the reverse of coverage: the standable top of each of those colliders sampled every 0.5 m, and any spot with no
+//              drawn surface within 0.3 m listed by builder > part (you'd stand on air there).
 // Blender side: build_downs_*.py run audit_coplanar (z-fight within a model) and audit_flips (inside-out primitives) on every build.
 const { chromium } = await import(process.env.PLAYWRIGHT || '/opt/node-tools/node_modules/playwright/index.mjs');
 const MODE = process.argv[2] || 'all';
 const SEP = Number(process.env.SEP || 0.0008);
-const run = (m) => (MODE === 'all' && m !== 'coverage') || MODE === m;
+const run = (m) => (MODE === 'all' && !['coverage', 'blocked', 'floating'].includes(m)) || MODE === m;
 
 const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 const pg = await b.newPage({ viewport: { width: 640, height: 360 } });
@@ -232,6 +234,61 @@ if (run('blocked')) {
   });
   console.log(`blocked: ${res.n} colliders from the parts' geometry; ground they newly block (walk height, 0.2 m pad), by builder > part:`);
   for (const o of res.out) console.log('  ' + o);
+}
+
+if (run('floating')) {
+  const res = await pg.evaluate(() => {
+    const { P } = window.__downs, N = P.length / 9, loc = window.game.locations.find((l) => l.id === 'downs'), cols = (loc._kitCols || []).filter((c) => c.auto && c.type === 'box');
+    // triangles by the 2 m (x, z) cells their footprint touches
+    const C = 2, grid = new Map(), k2 = (i, j) => i * 100003 + j;
+    for (let t = 0; t < N; t++) {
+      const p = t * 9, x0 = Math.min(P[p], P[p + 3], P[p + 6]), x1 = Math.max(P[p], P[p + 3], P[p + 6]), z0 = Math.min(P[p + 2], P[p + 5], P[p + 8]), z1 = Math.max(P[p + 2], P[p + 5], P[p + 8]);
+      for (let i = Math.floor(x0 / C); i <= Math.floor(x1 / C); i++) for (let j = Math.floor(z0 / C); j <= Math.floor(z1 / C); j++) { const k = k2(i, j); (grid.get(k) || grid.set(k, []).get(k)).push(t); }
+    }
+    // distance from (x, y, z) to triangle t (closest point on a triangle, Ericson)
+    const dist = (t, x, y, z) => {
+      const p = t * 9, ax = P[p], ay = P[p + 1], az = P[p + 2], bx = P[p + 3] - ax, by = P[p + 4] - ay, bz = P[p + 5] - az, cx = P[p + 6] - ax, cy = P[p + 7] - ay, cz = P[p + 8] - az;
+      const px = x - ax, py = y - ay, pz = z - az;
+      const d1 = bx * px + by * py + bz * pz, d2 = cx * px + cy * py + cz * pz;
+      let u, v;
+      if (d1 <= 0 && d2 <= 0) { u = 0; v = 0; } else {
+        const bp = [px - bx, py - by, pz - bz], d3 = bx * bp[0] + by * bp[1] + bz * bp[2], d4 = cx * bp[0] + cy * bp[1] + cz * bp[2];
+        const cp = [px - cx, py - cy, pz - cz], d5 = bx * cp[0] + by * cp[1] + bz * cp[2], d6 = cx * cp[0] + cy * cp[1] + cz * cp[2];
+        const vc = d1 * d4 - d3 * d2, vb = d5 * d2 - d1 * d6, va = d3 * d6 - d5 * d4;
+        if (d3 >= 0 && d4 <= d3) { u = 1; v = 0; } else if (d6 >= 0 && d5 <= d6) { u = 0; v = 1; }
+        else if (vc <= 0 && d1 >= 0 && d3 <= 0) { u = d1 / (d1 - d3); v = 0; }
+        else if (vb <= 0 && d2 >= 0 && d6 <= 0) { u = 0; v = d2 / (d2 - d6); }
+        else if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) { const w = (d4 - d3) / ((d4 - d3) + (d5 - d6)); u = 1 - w; v = w; }
+        else { const den = 1 / (va + vb + vc); u = vb * den; v = vc * den; }
+      }
+      const qx = bx * u + cx * v - px, qy = by * u + cy * v - py, qz = bz * u + cz * v - pz;
+      return Math.sqrt(qx * qx + qy * qy + qz * qz);
+    };
+    const near = (x, y, z) => { let best = 1e9; for (let i = Math.floor(x / C) - 1; i <= Math.floor(x / C) + 1; i++) for (let j = Math.floor(z / C) - 1; j <= Math.floor(z / C) + 1; j++) for (const t of grid.get(k2(i, j)) || []) { best = Math.min(best, dist(t, x, y, z)); if (best < 0.3) return best; } return best; };
+    const E = window.game.camera.rotation.constructor, Q = window.game.camera.quaternion.constructor, V = window.game.camera.position.constructor;
+    const by = new Map(); let total = 0;
+    for (const c of cols) {
+      const q = new Q().setFromEuler(new E(c.pitch || 0, c.yaw || 0, c.roll || 0, 'YXZ'));
+      const ax = new V(1, 0, 0).applyQuaternion(q), ay = new V(0, 1, 0).applyQuaternion(q), az = new V(0, 0, 1).applyQuaternion(q);
+      // the face whose normal is most upward
+      const faces = [[ay, c.hy, ax, c.hx, az, c.hz], [ax, c.hx, ay, c.hy, az, c.hz], [az, c.hz, ax, c.hx, ay, c.hy]].flatMap(([n, h, u, hu, w, hw]) => [[n, h, u, hu, w, hw, 1], [n, h, u, hu, w, hw, -1]]);
+      const [n, h, u, hu, w, hw, s] = faces.sort((a, b) => b[0].y * b[6] - a[0].y * a[6])[0];
+      if (n.y * s < 0.5) continue;
+      const nu = Math.max(1, Math.round(hu * 2 / 0.5)), nw = Math.max(1, Math.round(hw * 2 / 0.5)), cell = (hu * 2 / nu) * (hw * 2 / nw);
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nw; j++) {
+        const a = -hu + (2 * hu * (i + 0.5)) / nu, b = -hw + (2 * hw * (j + 0.5)) / nw;
+        const x = c.x + n.x * h * s + u.x * a + w.x * b, y = c.y + n.y * h * s + u.y * a + w.y * b, z = c.z + n.z * h * s + u.z * a + w.z * b;
+        total += cell;
+        if (near(x, y, z) < 0.3) continue;
+        let e = by.get(c.tag);
+        if (!e) by.set(c.tag, (e = { area: 0, x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9, z0: 1e9, z1: -1e9 }));
+        e.area += cell; e.x0 = Math.min(e.x0, x); e.x1 = Math.max(e.x1, x); e.y0 = Math.min(e.y0, y); e.y1 = Math.max(e.y1, y); e.z0 = Math.min(e.z0, z); e.z1 = Math.max(e.z1, z);
+      }
+    }
+    return { total, out: [...by].sort((a, b) => b[1].area - a[1].area).map(([k, e]) => `${e.area.toFixed(1).padStart(8)} m2  ${k}   x ${e.x0.toFixed(1)}..${e.x1.toFixed(1)}  y ${e.y0.toFixed(1)}..${e.y1.toFixed(1)}  z ${e.z0.toFixed(1)}..${e.z1.toFixed(1)}`) };
+  });
+  console.log(`floating: of ${res.total.toFixed(0)} m2 of standable collider tops (the parts' own), spots with nothing drawn within 0.3 m, by builder > part:`);
+  for (const o of res.out.slice(0, 40)) console.log('  ' + o);
 }
 
 if (run('coverage')) {

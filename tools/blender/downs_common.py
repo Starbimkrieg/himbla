@@ -43,6 +43,7 @@ HEX = {
 }
 SLOT_COLORS = {k: S(v) for k, v in HEX.items()}
 exec(open(os.path.join(REPO, "tools", "blender", "kit.py"), encoding="utf-8").read(), globals())
+from mathutils import Matrix, geometry as mgeo
 C = coll()
 for s in SLOT_COLORS:
     material(s)
@@ -50,14 +51,16 @@ for s in SLOT_COLORS:
 
 # Colliders from the geometry: an Acc made with solid=True (parts(..., solid=True)) also writes a `col` empty for each
 # primitive big enough to stand on or run into (COL_MIN thick and COL_LONG long), glow and glass slots aside. A box is exact
-# (shape box: centre, half sizes hx hy hz, rotation rx ry rz as xf's euler: three.js axes, X then Y then Z); an upright
-# cylinder or lathe is a cylinder (shape cyl: base at the empty, r, h); an extruded outline is its bounding box in its own
-# frame, only if the outline fills COL_FILL of it (so an L or an arc doesn't block its own inside); anything else (add) is
-# the box round its vertices. Beams, tubes, tori and lettering never collide. downsKit.js bake() places them with the part.
+# (shape box: centre, half sizes hx hy hz, rotation rx ry rz as xf's euler: three.js axes, X then Y then Z), as is an
+# extruded rectangle; an upright cylinder is a cylinder (shape cyl: base at the empty, r, h) and a lathe a stack of them,
+# each as wide as its narrowest end. Any other shape (an extruded gable or arch, a hip roof from add) gets a slab under each
+# face (`_cslabs`): COL_SLAB thick inward (less in a thinner part), and a face that isn't a rectangle is filled with strips
+# that never reach past its edges, so no collider stands in the air above a slope. Beams, tubes, tori and lettering never
+# collide. downsKit.js bake() places them with the part.
 # A floor or plinth (an unturned box topping out under COL_FLOOR, COL_WIDE or more across both ways) gets none: the runner
 # steps up only about 0.4 m (physics.js: a walkable top's normal is over 0.55 up), so a 0.5 to 0.9 m slab would stop him dead
 # where he used to walk over its sunk-in top.
-COL_MIN, COL_LONG, COL_FILL, COL_FLOOR, COL_WIDE = 0.12, 1.0, 0.6, 0.9, 2.5
+COL_MIN, COL_LONG, COL_FLOOR, COL_WIDE, COL_SLAB, COL_RECT = 0.12, 1.0, 0.9, 2.5, 0.25, 0.98
 _ncol = [0]
 
 
@@ -66,6 +69,43 @@ def _fill(pts):
     us, vs = [p[0] for p in pts], [p[1] for p in pts]
     box = (max(us) - min(us)) * (max(vs) - min(vs))
     return area / box if box > 1e-9 else 0.0
+
+
+def _convex(poly):
+    sgn = 0
+    for i in range(len(poly)):
+        a, b, c = poly[i], poly[(i + 1) % len(poly)], poly[(i + 2) % len(poly)]
+        cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+        if abs(cr) < 1e-9:
+            continue
+        if sgn and (cr > 0) != (sgn > 0):
+            return False
+        sgn = cr
+    return True
+
+
+def _strips(poly, k=4):
+    """rectangles [(u0, u1, v0, v1)] inside a convex polygon [(u, v)]: the polygon itself if it is (nearly) a rectangle, else k
+    strips across v, each as wide as the polygon is at its narrower end"""
+    us, vs = [p[0] for p in poly], [p[1] for p in poly]
+    u0, u1, v0, v1 = min(us), max(us), min(vs), max(vs)
+    if _fill(poly) >= COL_RECT:
+        return [(u0, u1, v0, v1)]
+
+    def span(vq):
+        xs = []
+        for i in range(len(poly)):
+            a, b = poly[i], poly[(i + 1) % len(poly)]
+            if (a[1] - vq) * (b[1] - vq) <= 0 and a[1] != b[1]:
+                xs.append(a[0] + (vq - a[1]) / (b[1] - a[1]) * (b[0] - a[0]))
+        return (min(xs), max(xs)) if xs else None
+    out = []
+    for j in range(k):
+        va, vb = v0 + (v1 - v0) * j / k, v0 + (v1 - v0) * (j + 1) / k
+        sa, sb = span(va + 1e-6), span(vb - 1e-6)
+        if sa and sb and min(sa[1], sb[1]) > max(sa[0], sb[0]):
+            out.append((max(sa[0], sb[0]), min(sa[1], sb[1]), va, vb))
+    return out
 
 
 class Acc:
@@ -89,9 +129,52 @@ class Acc:
         if self.solid and not floor and min(w, h, d) >= COL_MIN and max(w, h, d) >= COL_LONG:
             self.col_box(cx, cy, cz, w, h, d, rot)
 
-    def _cverts(self, verts):
+    def _cslabs(self, verts, faces):
+        """a slab under each face of a primitive (verts, faces in the model frame); see the notes above Acc"""
+        if not self.solid:
+            return
         xs, ys, zs = [v[0] for v in verts], [v[1] for v in verts], [v[2] for v in verts]
-        self._cbox((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, (min(zs) + max(zs)) / 2, max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
+        if max(ys) < COL_FLOOR and max(xs) - min(xs) >= COL_WIDE and max(zs) - min(zs) >= COL_WIDE:
+            return                                                                          # a floor or plinth (Acc notes)
+        V = [Vector(v) for v in verts]
+        tris = []                                                                           # (face index, triangle) for the inside test
+        for fi, f in enumerate(faces):
+            pts = [V[i] for i in f]
+            for t in (mgeo.tessellate_polygon([pts]) if len(pts) > 3 else [(0, 1, 2)]):
+                tris.append((fi, (pts[t[0]], pts[t[1]], pts[t[2]])))
+        for fi, f in enumerate(faces):
+            pts = [V[i] for i in f]
+            n = Vector((0, 0, 0))
+            for i in range(len(pts)):                                                       # Newell's normal
+                a, b = pts[i], pts[(i + 1) % len(pts)]
+                n += Vector(((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y)))
+            if n.length < 0.4:                                                              # (twice the area: faces under 0.2 m2)
+                continue
+            n.normalize()
+            c = sum(pts, Vector((0, 0, 0))) / len(pts)
+            o = c + n * 1e-3                                                                # outward: a ray out of the face crosses the rest evenly
+            if sum(1 for fj, t in tris if fj != fi and mgeo.intersect_ray_tri(t[0], t[1], t[2], n, o, True)) % 2:
+                n = -n
+            if n.y < -0.7:
+                continue                                                                    # undersides: what's above them carries you
+            depth = max((c - v).dot(n) for v in V)                                          # how far the part goes in behind the face
+            T = min(COL_SLAB, depth)
+            if T < COL_MIN:
+                continue
+            e = max(range(len(pts)), key=lambda i: (pts[(i + 1) % len(pts)] - pts[i]).length)
+            u = pts[(e + 1) % len(pts)] - pts[e]
+            u = (u - n * u.dot(n)).normalized()
+            v = u.cross(n)                                                                  # (u, n, v) right-handed: the box's x, y, z
+            poly = [((p - c).dot(u), (p - c).dot(v)) for p in pts]
+            pieces = [poly] if _convex(poly) else [[poly[t[0]], poly[t[1]], poly[t[2]]] for t in mgeo.tessellate_polygon([pts])]
+            rot = Matrix((u, n, v)).transposed().to_euler("XYZ")
+            for piece in pieces:
+                for u0, u1, v0, v1 in _strips(piece):
+                    du, dv = u1 - u0, v1 - v0
+                    if max(du, dv) < COL_LONG or min(du, dv) < 0.2:
+                        continue
+                    m = c + u * ((u0 + u1) / 2) + v * ((v0 + v1) / 2) - n * (T / 2)
+                    self.col_box(m.x, m.y, m.z, du, T, dv, (rot.x, rot.y, rot.z))
 
     def _ccyl(self, x, y0, z, r, h):
         if self.solid and min(2 * r, h) >= COL_MIN and max(2 * r, h) >= COL_LONG:
@@ -110,12 +193,12 @@ class Acc:
         self.geos.append(xf(rbox(w / 2, h / 2, d / 2, e, nu, nv), (cx, cy, cz), rot)); return self
 
     def cylc(self, cx, cy, cz, r, h, seg=12, rt=None, rot=(0, 0, 0)):
-        rr = max(r, r if rt is None else rt)
-        if any(rot):
-            self._cbox(cx, cy, cz, 2 * rr, h, 2 * rr, rot)
-        else:
-            self._ccyl(cx, cy - h / 2, cz, rr, h)
-        self.geos.append(xf(cylinder(r if rt is None else rt, r, h, seg)[:2], (cx, cy, cz), rot)); return self
+        g = xf(cylinder(r if rt is None else rt, r, h, seg)[:2], (cx, cy, cz), rot)
+        if seg >= 8 and not rot[0] and not rot[2]:                                         # round and upright: a cylinder, a cone at its narrower end
+            self._ccyl(cx, cy - h / 2, cz, min(r, r if rt is None else rt), h)
+        else:                                                                               # faceted (a hip roof is a four-sided cone) or tipped over
+            self._cslabs(*g)
+        self.geos.append(g); return self
 
     def tor(self, R, r, t=(0, 0, 0), rot=(0, 0, 0), n=24, rs=6, s=(1, 1, 1)):
         self.geos.append(xf(torus(R, r, n, rs), t, rot, s)); return self
@@ -129,44 +212,52 @@ class Acc:
 
     def poly(self, pts, z0, z1, t=(0, 0, 0)):
         """a flat outline [(x, y)] extruded from z0 to z1"""
-        if self.solid and _fill(pts) >= COL_FILL:
+        g = xf(extrude(pts, z1 - z0, "z"), (t[0], t[1], (z0 + z1) / 2 + t[2]))
+        if self.solid and _fill(pts) >= COL_RECT:
             xs, ys = [p[0] for p in pts], [p[1] for p in pts]
             self._cbox((min(xs) + max(xs)) / 2 + t[0], (min(ys) + max(ys)) / 2 + t[1], (z0 + z1) / 2 + t[2], max(xs) - min(xs), max(ys) - min(ys), abs(z1 - z0))
-        self.geos.append(xf(extrude(pts, z1 - z0, "z"), (t[0], t[1], (z0 + z1) / 2 + t[2]))); return self
+        else:
+            self._cslabs(*g)
+        self.geos.append(g); return self
 
     def polyx(self, pts, x0, x1):
         """a flat outline [(z, y)] extruded along x from x0 to x1 (a side profile)"""
-        if self.solid and _fill(pts) >= COL_FILL:
+        g = xf(extrude(pts, x1 - x0, "x"), ((x0 + x1) / 2, 0, 0))
+        if self.solid and _fill(pts) >= COL_RECT:
             zs, ys = [p[0] for p in pts], [p[1] for p in pts]
             self._cbox((x0 + x1) / 2, (min(ys) + max(ys)) / 2, (min(zs) + max(zs)) / 2, abs(x1 - x0), max(ys) - min(ys), max(zs) - min(zs))
-        self.geos.append(xf(extrude(pts, x1 - x0, "x"), ((x0 + x1) / 2, 0, 0))); return self
+        else:
+            self._cslabs(*g)
+        self.geos.append(g); return self
 
     def polyy(self, pts, y0, y1, t=(0, 0, 0), rot=(0, 0, 0)):
         """a flat outline [(x, z)] extruded up from y0 to y1 (a floor, a roof deck); `t` and `rot` move it afterwards"""
         area = sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts)))
         if area > 0:                                                                        # clockwise on the x-right, z-up plan so the cap faces up
             pts = pts[::-1]
-        if self.solid and _fill(pts) >= COL_FILL:
+        g = xf(extrude(pts, y1 - y0, "y"), (t[0], t[1] + (y0 + y1) / 2, t[2]), rot)
+        if self.solid and _fill(pts) >= COL_RECT:
             xs, zs = [p[0] for p in pts], [p[1] for p in pts]
             c = Euler(rot, "XYZ").to_matrix() @ Vector(((min(xs) + max(xs)) / 2, 0, (min(zs) + max(zs)) / 2))   # (xf turns about the extrusion's middle)
             self._cbox(c.x + t[0], c.y + t[1] + (y0 + y1) / 2, c.z + t[2], max(xs) - min(xs), abs(y1 - y0), max(zs) - min(zs), rot)
-        self.geos.append(xf(extrude(pts, y1 - y0, "y"), (t[0], t[1] + (y0 + y1) / 2, t[2]), rot)); return self
+        else:
+            self._cslabs(*g)
+        self.geos.append(g); return self
 
     def lath(self, profile, t=(0, 0, 0), segs=24, rot=(0, 0, 0)):
         """a solid of revolution: profile [(r, y)] bottom to top"""
         g = xf(lathe(profile, segs)[:2], t, rot)
         if any(rot):
-            if self.solid:
-                self._cverts(g[0])
+            self._cslabs(*g)
         else:
-            ys = [p[1] for p in profile]
-            self._ccyl(t[0], min(ys) + t[1], t[2], max(p[0] for p in profile), max(ys) - min(ys))
+            for (ra, ya), (rb, yb) in zip(profile, profile[1:]):                          # a cylinder per step of the profile, its narrower end wide
+                if yb - ya > 0.05:
+                    self._ccyl(t[0], ya + t[1], t[2], min(ra, rb), yb - ya)
         self.geos.append(g); return self
 
     def add(self, geo, t=(0, 0, 0), rot=(0, 0, 0), s=(1, 1, 1)):
         g = xf(geo[:2], t, rot, s)
-        if self.solid:
-            self._cverts(g[0])
+        self._cslabs(*g)
         self.geos.append(g); return self
 
     def letters(self, text, cx, cy, z, pix, depth, ry=0.0):
