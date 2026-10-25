@@ -464,7 +464,7 @@ export class Secrets {
     g.style(250, 'LEGENDARY');
     g.audio.cash();
     g.fx.explosion(this.points.skates.clone(), 6, false);
-    g.dialog('✧ XENOGLIDE QUANTUM-LOCK SKATES ✧', 'The skates fold themselves around your boots and hum in a key you can feel in your teeth.<br><br><b>Unrivalled handling</b>: carve tighter than anything on the Moon.<br><b>Antimatter propellant</b>: your jet tank now burns antimatter. Thrusters push more than twice as hard and refill far faster.<br><br><small>The finish is in your wardrobe (C) as "Xenoglide (Legendary)".</small>', [{ label: 'WHOA' }]);
+    g.dialog('✧ XENOGLIDE QUANTUM-LOCK SKATES ✧', 'The skates fold themselves around your boots and hum in a key you can feel in your teeth.<br><br><b>Unrivalled handling</b>: carve tighter than anything on the Moon.<br><b>Antimatter propellant</b>: your jet tank now burns antimatter. Thrusters push half again as hard and refill far faster.<br><br><small>The finish is in your wardrobe (C) as "Xenoglide (Legendary)".</small>', [{ label: 'WHOA' }]);
   }
 
   // =====================================================================================

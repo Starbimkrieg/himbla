@@ -17,6 +17,9 @@ const SPEED_MARKS = [
 const TAU = Math.PI * 2;
 const FLIP_RATE = 11; // rad/s ≈ 1.75 rotations per second
 const SPIN_RATE = 12;
+// trick thrust: with the body turned in a trick the pack pushes where the body faces, at this share of the thrusters' power
+const TRICK_THRUST = 0.5;
+const TRICK_LIFT_TIME = 1.2; // s per air of lift past the usual cap: a second or two of extra air, not flight
 const NUMS = ['', '', 'DOUBLE ', 'TRIPLE ', 'QUAD ', 'QUINT '];
 const BIG_AIR_MIN = 5; // s airborne before BIG AIR! is called (shorter hops still pay style, quietly)
 const SKY_HIGH_GAIN = 40; // m climbed (radially) above a jump's start before SKY-HIGH! is called
@@ -25,6 +28,7 @@ const _q = new THREE.Quaternion();
 const _Z = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3();
 const _sp = new THREE.Vector3(), _sf = new THREE.Vector3();
+const _tp = new THREE.Vector3(), _tl = new THREE.Vector3();
 
 export class Player {
   constructor(game, spawn) {
@@ -49,6 +53,7 @@ export class Player {
     this.impacts = [];
     this.params = { ...PHYS };
     this.trick = { flip: 0, spin: 0, active: false, tucked: false };
+    this.trickLift = TRICK_LIFT_TIME; // what's left of this air's trick-thrust lift (refilled on the ground or a rail)
     this.idle = new Idle(); // breathing and idles when stopped (idles.js)
 
     // helmet lamp + faint suit glow; intensities follow how dark it is
@@ -77,7 +82,7 @@ export class Player {
     // Xenoglide skates: big handling boost and an antimatter jet tank
     const alien = (up.alien || 0) > 0;
     if (alien) this.params.handling += 2;
-    this.params.thrustAccel = alien ? PHYS.thrustAccel * 2.2 : PHYS.thrustAccel;
+    this.params.thrustAccel = alien ? PHYS.thrustAccel * 1.5 : PHYS.thrustAccel;
     this.params.energyRegen = alien ? PHYS.energyRegen * 2 : PHYS.energyRegen;
     if (alien) this.body.maxEnergy += 50;
     // Dr. Zbornak's rewound coils (3 depot wiring, once; old saves may hold up to 3), plus the Root Grip mutation
@@ -196,7 +201,7 @@ export class Player {
     // grinding a snake-rock crest (rails.js): the rail carries you
     const grinding = g.grind && g.grind.update(this, dt, input);
     g.devOverlay.lap('rail');
-    if (grinding) { this.idle.cancel(this.model); if (this.trick.active) this.clearTrick(); return; } // drop a half-done trick so it can't flip you on pop-off
+    if (grinding) { this.idle.cancel(this.model); if (this.trick.active) this.clearTrick(); this.trickLift = TRICK_LIFT_TIME; return; } // drop a half-done trick so it can't flip you on pop-off
 
     // riding (transit ship, carousel horse, gondola: rides.js): the seat carries you, no physics; the ride decides where you get off
     if (this.seat) {
@@ -251,6 +256,28 @@ export class Player {
     // lift stays limited, but looking down lets the thrusters drive you down hard
     const pitchK = Math.sin(cam.pitch) * 0.6 + 0.06;
     thrustDir.addScaledVector(up, pitchK > 0 ? Math.min(pitchK, tv) : Math.max(pitchK * 2.2, -1.2)).normalize();
+    // with the Rail Lance out, right mouse scopes instead of thrusting (pad L3 still thrusts)
+    const jets = input.down('Thrust') || (input.mouse[2] && WEAPONS[this.weapon || 0].key !== 'rail');
+
+    // Trick thrust: turned in a trick, the pack pushes along the body's forward axis instead (a quarter backflip points
+    // it up, a half spin is an air brake), at TRICK_THRUST power. Lift past the usual cap spends trickLift; once that's
+    // gone, only the usual lift is left.
+    if (b.grounded) this.trickLift = TRICK_LIFT_TIME;
+    else if (this.trick.active && !this.rag) {
+      const rq = this.model.root.quaternion; // last frame's pose, the one on screen
+      const level = _tl.copy(_Z).applyQuaternion(rq);
+      const pack = _tp.copy(_Z).applyQuaternion(this.model.trick.quaternion).applyQuaternion(rq);
+      const k = Math.min(1, (1 - pack.dot(level)) * 2); // 0 upright, all the pack's way by 60° off
+      if (k > 0) {
+        const lift = pack.dot(up);
+        if (lift > tv) {
+          if (this.trickLift > 0) {
+            if (jets && b.energy > 0 && !b.jetLocked) this.trickLift -= dt * k * (lift - tv) / (1 - tv);
+          } else pack.addScaledVector(up, tv - lift);
+        }
+        thrustDir.multiplyScalar(1 - k).addScaledVector(pack, k * TRICK_THRUST);
+      }
+    }
 
     // jump presses are buffered briefly (pressed just before landing still jumps) and count within the floor buffer (stepSkater)
     const jumpKey = input.pressed('ShiftLeft') || input.pressed('ShiftRight');
@@ -261,8 +288,7 @@ export class Player {
     const ctrl = {
       wish,
       skates: input.down('Space'),
-      // with the Rail Lance out, right mouse scopes instead of thrusting (pad L3 still thrusts)
-      thrust: input.down('Thrust') || (input.mouse[2] && WEAPONS[this.weapon || 0].key !== 'rail'),
+      thrust: jets,
       jump: jumpNow,
       // dive: a fresh jump press while airborne, held (so the jump itself never dives)
       dive: this.diveLatch = !b.grounded && !jumpNow && (this.diveLatch || (jumpKey && b.airTime > 0.15)) && (input.down('ShiftLeft') || input.down('ShiftRight')),
@@ -447,7 +473,7 @@ export class Player {
     }
     if (b.thrusting && Math.random() < dt * 40) {
       const back = this.model.cargoSlot.getWorldPosition(new THREE.Vector3());
-      g.fx.spawn(back, thrustDir.clone().multiplyScalar(-12).add(b.vel), { color: (g.upgrades.alien ? [0x7dffd4, 0xc77dff] : [0x2ee6ff, 0xffffff])[Math.random() < 0.5 ? 0 : 1], size: g.upgrades.alien ? 0.5 : 0.35, life: 0.35, spread: 2 });
+      g.fx.spawn(back, thrustDir.clone().normalize().multiplyScalar(-12).add(b.vel), { color: (g.upgrades.alien ? [0x7dffd4, 0xc77dff] : [0x2ee6ff, 0xffffff])[Math.random() < 0.5 ? 0 : 1], size: g.upgrades.alien ? 0.5 : 0.35, life: 0.35, spread: 2 });
     }
 
     this.center.copy(b.pos).addScaledVector(up, 1.3);
