@@ -458,10 +458,11 @@ export class Cheats {
       { label: '2 · −10', fn: () => { this.setRep(f, g.rep.get(f) - 10); this.repFaction(f); } },
       { label: '3 · FRIENDLY (10)', fn: () => { this.setRep(f, 10); this.repFaction(f); } },
       { label: '4 · TRUSTED (25)', fn: () => { this.setRep(f, 25); this.repFaction(f); } },
-      { label: '5 · HONORED (60)', fn: () => { this.setRep(f, 60); this.repFaction(f); } },
-      { label: '6 · NEUTRAL (0)', fn: () => { this.setRep(f, 0); this.repFaction(f); } },
-      { label: '7 · HOSTILE (−30)', fn: () => { this.setRep(f, -30); this.repFaction(f); } },
-      { label: '8 · BACK', fn: () => this.repMenu() },
+      { label: '5 · HONORED (50)', fn: () => { this.setRep(f, 50); this.repFaction(f); } },
+      { label: '6 · REVERED (80)', fn: () => { this.setRep(f, 80); this.repFaction(f); } },
+      { label: '7 · NEUTRAL (0)', fn: () => { this.setRep(f, 0); this.repFaction(f); } },
+      { label: '8 · HOSTILE (−30)', fn: () => { this.setRep(f, -30); this.repFaction(f); } },
+      { label: '9 · BACK', fn: () => this.repMenu() },
     ]);
   }
 

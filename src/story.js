@@ -30,7 +30,7 @@ export const TECH = {
   dash: { name: 'Phase Dash', key: 'E', desc: 'Swing all your momentum (plus a kick) towards wherever you are looking: a mid-air turn, climb or dive, leaving a violet ghost trail of you along the way. 4 s cooldown.' },
   shield: { name: 'Deflector Shield', key: '—', desc: 'An invisible field that soaks the first 25 damage you take, then needs 12 s to come back (you see it when it takes a hit).' },
   vanes: { name: 'Quantum Slipstream Vanes', key: 'E', desc: 'Switch on to let your skates keep a share of their grip on the air for 10 s: steer while you fly. 30 s cooldown.' },
-  teleport: { name: 'Personal Teleporter', key: 'T', desc: 'Open the map (T) and click any discovered settlement or one of your outposts to jump there. Keeps your health and jet; not while a contract is out. 3 min cooldown.' },
+  teleport: { name: 'Personal Teleporter', key: 'T', desc: 'Open the map (T) and click any discovered settlement or one of your outposts to jump there. Keeps your health and jet; jammed while you carry cargo. 3 min cooldown.' },
 };
 
 // Modules for outposts you found (base building).
@@ -1953,7 +1953,9 @@ export class Story {
     const g = this.game;
     if (!this.tech.includes('teleport')) return `${TECH.teleport.name} isn't yours yet.`;
     if (this.techCd.teleport > 0) return `Teleporter recharging: ${Math.ceil(this.techCd.teleport)} s`;
-    if (g.missions.active || (g.missions.extra && g.missions.extra.a)) return "The Teleporter won't lock on with a contract out: the cargo's tracker jams it.";
+    // (a contract you have yet to collect is fine: going to the pickup isn't the delivery)
+    const m = g.missions;
+    if ((m.active && m.cargoState === 'held') || (m.extra && m.extra.cargoState === 'held')) return "TELEPORTER JAMMED: the cargo's tracker is on. Deliver it first.";
     return null;
   }
 

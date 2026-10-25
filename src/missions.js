@@ -34,6 +34,13 @@ const SMUGGLE = [
   { name: 'Forged Clearance Chips', fragile: 0.3, hot: 3, color: 0xff2e88 },
 ];
 
+// cosmetics a smuggling run may carry (w: weight)
+const RIDERS = [
+  { key: 'outfit_rustmoon', name: 'Rustmoon Scrapper Leathers', w: 2 },
+  { key: 'skates_survivor', name: 'Dark-Side Survivors (skates)', w: 1 },
+];
+const RIDER_CHANCE = 0.3;
+
 export class Missions {
   constructor(game) {
     this.game = game;
@@ -56,7 +63,7 @@ export class Missions {
 
   makeOffer(board, faction) {
     const L = this.locs;
-    let pickup = board, to, cargo, clearance = null, smuggle = false, payload = null;
+    let pickup = board, to, cargo, clearance = null, smuggle = false, payload = null, rider = null;
     if (faction === 'vostok' || faction === 'daedalus') {
       // military logistics between the faction's own bases (clearance granted; ceasefire bases need none)
       const own = (l) => (l.restricted || l.ceasefire) && l.faction === faction;
@@ -70,7 +77,7 @@ export class Missions {
       // mostly den-to-den; sometimes a smuggling run into a defended bright-side town (feeds the Rustmoon Hold black market)
       const dens = L.filter((l) => l.type === 'pirate' && l !== board && !l.camp);
       const towns = L.filter((l) => !l.restricted && l.type !== 'pirate' && !l.poi && l.defense && !l.dark && l !== board);
-      if (Math.random() < 0.32 && towns.length) { smuggle = true; cargo = pick(SMUGGLE); to = pick(towns); payload = this.pickPayload(); }
+      if (Math.random() < 0.32 && towns.length) { smuggle = true; cargo = pick(SMUGGLE); to = pick(towns); payload = this.pickPayload(); rider = this.pickRider(); }
       else { cargo = pick(CARGO.filter((c) => c.hot >= 1)); to = pick(dens.length ? dens : this.civilianDestinations(board.id)); }
     } else {
       cargo = pick(CARGO);
@@ -96,23 +103,36 @@ export class Missions {
     reward = Math.round(reward / 5) * 5;
     const client = pick(CLIENTS[faction] || CLIENTS.spacecom);
     const text = pick(LINES[smuggle ? 'smuggle' : faction] || LINES.spacecom)(cargo.name, to.name);
-    return { id: this.nextId++, board, faction, client, cargo, pickup, to, dist, time, reward, clearance, text: payload ? `${text} <b>(Rides with: ${payload.name}.)</b>` : text, dark, smuggle, payload };
+    return { id: this.nextId++, board, faction, client, cargo, pickup, to, dist, time, reward, clearance, text: payload ? `${text} <b>(Rides with: ${payload.name}.)</b>` : text, dark, smuggle, payload, rider };
   }
 
-  // Sometimes a smuggling run carries a Rustmoon Hold black-market item. One run per item at a time; once delivered
-  // it's on sale for good (out of the pool).
+  // Every smuggling run carries the next black-market item, in the Hold's order: the n-th run delivered unlocks the n-th item, so
+  // the whole stock is 13 runs, not luck. Runs on the boards at once carry different ones; one that fails or is dropped leaves its
+  // item for the next. (The kit the ILMB sells is on sale at the Hold from the start.)
   pickPayload() {
-    if (Math.random() > 0.45) return null;
     const have = new Set(this.game.stats.blackMarket || []);
     const live = new Set();
     for (const list of Object.values(this.offers)) for (const o of list) if (o.payload) live.add(o.payload.key);
     for (const a of [this.active, this.extra && this.extra.a]) if (a && a.payload) live.add(a.payload.key);
     for (const k of this.batch || []) live.add(k); // and the board being dealt now
-    const pool = (SHOPS.rustmoon || []).filter((u) => u.unlock && u.unlock.smuggle && !have.has(u.key) && !live.has(u.key));
-    const u = pick(pool);
+    const u = (SHOPS.rustmoon || []).find((x) => x.unlock && x.unlock.smuggle && !have.has(x.key) && !live.has(x.key));
     if (!u) return null;
     (this.batch ||= []).push(u.key);
     return { key: u.key, name: u.name };
+  }
+
+  // Cosmetics ride on top of the run, and are luck: a smuggling run may also have one tucked in the crate (the Scrapper Leathers a
+  // little likelier than the skates). Delivering it gives it to you.
+  pickRider() {
+    const up = this.game.upgrades;
+    const live = new Set();
+    for (const list of Object.values(this.offers)) for (const o of list) if (o.rider) live.add(o.rider.key);
+    for (const a of [this.active, this.extra && this.extra.a]) if (a && a.rider) live.add(a.rider.key);
+    const pool = RIDERS.filter((r) => !up[r.key] && !live.has(r.key));
+    if (!pool.length || Math.random() > RIDER_CHANCE) return null;
+    let roll = Math.random() * pool.reduce((t, r) => t + r.w, 0);
+    for (const r of pool) if ((roll -= r.w) <= 0) return r;
+    return pool[0];
   }
 
   offersFor(loc) {
@@ -359,6 +379,10 @@ export class Missions {
         if (!bm.includes(a.payload.key)) bm.push(a.payload.key);
         g.hud.alert(`☠ BLACK MARKET: ${a.payload.name.toUpperCase()} NOW ON SALE AT RUSTMOON HOLD`, '#7dff3a', 4);
       } else g.hud.toast(`Smuggled! (${g.stats.smuggled} runs.)`, 3);
+      if (a.rider && !g.upgrades[a.rider.key]) {
+        g.upgrades[a.rider.key] = 1;
+        g.hud.alert(`☠ TUCKED IN THE CRATE: ${a.rider.name.toUpperCase()} (wardrobe: C)`, '#c77dff', 4);
+      }
     }
     g.audio.cash();
     g.hud.delivered({ a, integ, timeBonus, style, styleCapped: styleRaw > base, condition, late, total, integrity, faction: FACTIONS[a.faction].name, repGain });

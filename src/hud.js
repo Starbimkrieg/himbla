@@ -373,7 +373,7 @@ export class HUD {
           <div class="job-cargo">${o.cargo.name}</div>
           <div class="job-route">${o.pickup === o.board ? 'HERE' : o.pickup.name} → <b>${o.to.name}</b> · ${(o.dist / 1000).toFixed(1)} km · ${o.time}s</div>
           <div class="bubble"><b>${o.client}:</b> “${o.text}”</div>
-          <div class="job-tags">Fragile ${fr} &nbsp; Pirate risk ${hot}${o.clearance ? ' &nbsp; <span class="clr">MILITARY CLEARANCE</span>' : ''}${o.dark ? ' &nbsp; <span class="darktag">☾ DARK SIDE · HAZARD PAY</span>' : ''}${o.payload ? ` &nbsp; <span class="paytag">☠ PAYLOAD: ${o.payload.name.toUpperCase()}</span>` : ''}</div>
+          <div class="job-tags">Fragile ${fr} &nbsp; Pirate risk ${hot}${o.clearance ? ' &nbsp; <span class="clr">MILITARY CLEARANCE</span>' : ''}${o.dark ? ' &nbsp; <span class="darktag">☾ DARK SIDE · HAZARD PAY</span>' : ''}${o.payload ? ` &nbsp; <span class="paytag">☠ PAYLOAD: ${o.payload.name.toUpperCase()}</span>` : ''}${o.rider ? ` &nbsp; <span class="paytag">✦ RIDER: ${o.rider.name.toUpperCase()}</span>` : ''}</div>
         </div>`;
       });
       html += `</div>`;
@@ -386,7 +386,7 @@ export class HUD {
           const ok = rep.canBuy(u, lvl);
           const unlockMissing = u.unlock && u.unlock.smuggle && !(rep.game.stats.blackMarket || []).includes(u.key);
           const unlockDeed = u.unlock && u.unlock.stat && (rep.game.stats[u.unlock.stat] || 0) < u.unlock.n;
-          const need = !maxed && !ok ? (unlockDeed ? `Unlock: ${u.unlock.text} (${rep.game.stats[u.unlock.stat] || 0}/${u.unlock.n})` : unlockMissing ? 'Comes in on a smuggling run: watch the boards for a PAYLOAD tag' : u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
+          const need = !maxed && !ok ? (unlockDeed ? `Unlock: ${u.unlock.text} (${rep.game.stats[u.unlock.stat] || 0}/${u.unlock.n})` : unlockMissing ? 'Comes in on a smuggling run, in order: watch the Rustmoon board for a PAYLOAD tag' : u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
           const sw = u.swatch ? u.swatch.map((c) => `<span class="swatch" style="background:#${c.toString(16).padStart(6, '0')}"></span>`).join('') : '';
           html += `<div class="shop-item ${maxed || credits < cost || !ok ? 'disabled' : ''} ${u.faction ? 'unique' : ''}" data-buy="${u.key}">
             <div class="job-top"><span>${sw}${u.name}</span><span class="job-pay">${maxed ? (u.cosmetic ? 'OWNED' : 'MAX') : '₵' + cost}</span></div>
