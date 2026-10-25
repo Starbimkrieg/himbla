@@ -80,10 +80,13 @@ export class Wardrobe {
       return { tag: known && loc ? `${loc.short} · ${tierFor(d.req).name}` : 'HIDDEN SHOP', lines };
     }
     if (it.kind === 'skates' && d.cost) {
-      const lines = [`Sold at Meridian Exchange for ₵${fmt(d.cost)}.`];
-      if (d.req) lines.push(repLine('meridian', d.req));
+      const loc = LOCATIONS.find((l) => l.id === d.shop);
+      const known = !d.faction || !g.rep || g.rep.visible(d.faction);
+      const lines = [`Sold at ${known ? (d.faction ? loc.name : 'the Chimera Downs betting office') : 'a hidden headquarters'} for ₵${fmt(d.cost)}.`];
+      if (d.faction && d.req) lines.push(repLine(d.faction, d.req));
       if (d.unlock) lines.push(`Unlock first: ${d.unlock.text} (${Math.min(d.unlock.n, g.stats[d.unlock.stat] || 0)}/${d.unlock.n}).`);
-      return { tag: d.unlock ? 'MERIDIAN · TASK' : d.req ? `MERIDIAN · ${tierFor(d.req).name}` : 'MERIDIAN', lines };
+      const tag = !known ? 'HIDDEN SHOP' : d.faction ? loc.short : 'DOWNS';
+      return { tag: d.unlock ? `${tag} · TASK` : d.req ? `${tag} · ${tierFor(d.req).name}` : tag, lines };
     }
     if (d.alien) return { tag: 'LEGENDARY', lines: ['Not sold anywhere. One pair lies sealed behind an ancient gate, and the socket wants an artifact.'] };
     return { tag: 'SECRET', lines: ['Not sold anywhere. Keep exploring.'] };
@@ -438,6 +441,9 @@ export class Wardrobe {
     const torus = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.035, 6, 24), discM);
     const core = new THREE.Mesh(new THREE.CircleGeometry(0.11, 20), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
     const halo = new THREE.Mesh(new THREE.CircleGeometry(0.3, 24), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+    // core and halo share a plane: the halo draws first (it writes no depth) and the core sits a hair in front, so they never fight
+    core.material.depthWrite = false;
+    halo.renderOrder = 1; core.renderOrder = 2; core.position.z = 0.004; halo.position.z = -0.004;
     disc.add(torus, core, halo);
     disc.position.set(0.95, 1.05, 0.25);
     model.root.add(disc);

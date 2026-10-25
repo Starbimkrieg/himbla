@@ -248,3 +248,5 @@ export const SHOPS = {
 
 // faction outfits and skate finishes
 for (const id of Object.keys(SHOPS)) SHOPS[id].push(...cosmeticShopItems(id));
+// the Chimera Downs betting office's shop tab (race.js): no faction, so only the deed gates it
+export const DOWNS_SHOP = cosmeticShopItems('downs');

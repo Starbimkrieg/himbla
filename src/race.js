@@ -9,8 +9,9 @@ import { SKILLS, skillPool, rollSkill } from './chimeraskills.js';
 import { chimeraCard, cardList } from './chimeracard.js';
 import { makeDownsPart, downsNode, downsSlot, makeFigure } from './models.js';
 import { buildDowns } from './downsWorld.js';
-import { LAP, LANES, RAIL_IN, RAIL_OUT, FINISH_U, STAND, FAR, CLUB, WINDOW, BOARD, DRUM, PODIUMS, ENTRIES, STABLES, stallsOf, oval } from './downsPlan.js';
+import { LAP, LANES, RAIL_IN, RAIL_OUT, FINISH_U, STAND, FAR, CLUB, WINDOW, BOARD, DRUM, PODIUMS, ENTRIES, STABLES, ARCADE, stallsOf, oval } from './downsPlan.js';
 import { pixelFont } from './fonts.js';
+import { DOWNS_SHOP } from './locations.js';
 import { bendPoint, bendQuat } from './curve.js';
 
 // Chimera Downs: a proper racecourse for the things that crawl out of Dr. Zbornak's reactor.
@@ -156,21 +157,26 @@ export class Race {
     w.put(this.gate.root, loc, 0, 0, 0, 0, true);
     // crowd: outlined spectators in both stands
     this.buildCrowd();
-    // foot traffic: racegoers on the forecourt, apron and infield
+    // foot traffic: racegoers on the forecourt, the aprons, round the arcades and at the fairground, never on the track or the infield (loc.walkBlocked,
+    // set by buildDowns, also keeps them out of the stands, stalls and fountain; world.js clearWalk)
     w.addFigures(loc, 40, {
       kind: 'worker',
       look: (i) => (i % 7 === 6 ? { kind: 'kid', scale: 0.6 } : { look: ['casual', 'casual', 'trader', 'elder'][i % 4] }),
-      // each walker keeps to one patch: forecourt, apron, arcade rail walk, fairground or infield
+      // each walker keeps to one patch: forecourt, apron, arcade walk, fairground or the gates
       area: (out, f) => {
-        if (f.zone === undefined) { const q = Math.random(); f.zone = q < 0.3 ? 0 : q < 0.45 ? 1 : q < 0.75 ? 2 : q < 0.88 ? 3 : 4; }
-        if (f.zone === 0) out.set(-60 + Math.random() * 120, 0, CLUB.z1 + 6 + Math.random() * 36);
-        else if (f.zone === 1) out.set(-100 + Math.random() * 200, 0, (Math.random() < 0.5 ? 1 : -1) * (RAIL_OUT + 3 + Math.random() * 5));
-        else if (f.zone === 2) {
-          // rail walk round the west or east turn, between rail and arcade
-          const a = (125 + Math.random() * 120) * Math.PI / 180, r = RAIL_OUT + 3 + Math.random() * 14, s = f.side ?? (f.side = Math.random() < 0.5 ? -1 : 1);
-          out.set(s * (-90 + r * Math.cos(a)), 0, r * Math.sin(a));
-        } else if (f.zone === 3) out.set(136 + Math.random() * 66, 0, 112 + Math.random() * 50);
-        else out.set(-80 + Math.random() * 160, 0, -30 + Math.random() * 60);
+        if (f.zone === undefined) { const q = Math.random(); f.zone = q < 0.35 ? 0 : q < 0.5 ? 1 : q < 0.8 ? 2 : q < 0.95 ? 3 : 4; f.side = Math.random() < 0.5 ? -1 : 1; f.arc = 114 + Math.random() * 144; }
+        for (let n = 0; n < 24; n++) {
+          if (f.zone === 0) out.set(-60 + Math.random() * 120, 0, CLUB.z1 + 6 + Math.random() * 36);
+          else if (f.zone === 1) out.set(-100 + Math.random() * 200, 0, (f.side > 0 ? 1 : -1) * (RAIL_OUT + 4 + Math.random() * 5));
+          else if (f.zone === 2) {
+            // paces round its own turn's arcade (between the turn and the stands): a few metres along it at a time
+            f.arc = THREE.MathUtils.clamp(f.arc + (Math.random() - 0.5) * 30, ARCADE.walk[0] + 2, ARCADE.walk[1] - 2);
+            const a = f.arc * Math.PI / 180, r = ARCADE.ri + 1 + Math.random() * (ARCADE.ro - ARCADE.ri - 2);
+            out.set(f.side * (90 - r * Math.cos(a)), 0, r * Math.sin(a));
+          } else if (f.zone === 3) out.set(136 + Math.random() * 66, 0, 112 + Math.random() * 50);
+          else out.set(f.side * (198 + Math.random() * 18), 0, -24 + Math.random() * 48);
+          if (!loc.walkBlocked(out.x, out.z)) break;
+        }
         return out;
       },
     });
@@ -496,7 +502,7 @@ export class Race {
     if (this.state !== 'idle') { g.hud.toast('A race is already running! Watch the track.', 2); return; }
     const ch = g.alchemy.chimeras;
     if (!ch.length) {
-      g.dialog('CHIMERA DOWNS', '"No chimera, no race, pal. Go see the egghead at the Antimatter Lab, put two living things in his reactor, and bring me whatever crawls out. Cars count. Mites count. People… legally count."', [{ label: 'FINE' }]);
+      g.dialog('CHIMERA DOWNS', '"No chimera, no race, pal. Go see the egghead at the Antimatter Lab, put two living things in his reactor, and bring me whatever crawls out. Cars count. Mites count. People… legally count."', [{ label: '1 · SHOP', fn: () => this.shop() }, { label: '2 · FINE' }]);
       return;
     }
     ch.forEach(ensureStats);
@@ -508,9 +514,23 @@ export class Race {
     const buttons = this.card.map((r) => ({ label: `${SECTIONS[r.sec].name} · ${r.name.toUpperCase()} (${fmt(r.dist)} m)`, fn: () => this.pickRunner(r) }));
     buttons.push({ label: `TOURNAMENTS${due.length ? ` (${due.length} DUE)` : ''}`, fn: () => this.cupMenu() });
     buttons.push({ label: 'HALL OF FAME', fn: () => this.hallOfFame() });
+    buttons.push({ label: 'SHOP', fn: () => this.shop() });
     buttons.push({ label: 'NEVER MIND' });
     buttons.forEach((b, i) => { b.label = `${i + 1} · ${b.label}`; });
     g.dialog('RACE CARD', `<small>EASY: grades C, B · MEDIUM: up to A · HARD: anyone · record ${g.stats.raceWins || 0} wins from ${g.stats.raceStarts || 0} starts</small>${rows}`, buttons);
+  }
+
+  // the shop at the end of the counter: racing gear, bought with credits once the deed is done. Skates so far (cosmetics.js SKATES, shop 'downs')
+  shop() {
+    const g = this.game;
+    const rows = DOWNS_SHOP.map((u) => {
+      const owned = (g.upgrades[u.key] || 0) >= u.max, ok = g.rep.canBuy(u, 0), can = !owned && ok && g.credits >= u.cost;
+      const note = owned ? 'OWNED' : ok ? `₵${fmt(u.cost)}` : `🔒 ${u.unlock.text} (${Math.min(u.unlock.n, g.stats[u.unlock.stat] || 0)}/${u.unlock.n})`;
+      return { u, can, html: `<p class="race-card"><b>${u.name}</b> · ${note}<br><small>${u.desc}</small></p>` };
+    });
+    const buttons = rows.map(({ u, can }, i) => ({ label: `${i + 1} · ${u.name.toUpperCase()}`, keep: true, fn: () => { if (can) g.buy(u.key, DOWNS_SHOP, () => this.shop()); } }));
+    buttons.push({ label: `${rows.length + 1} · BACK`, fn: () => this.open() });
+    g.dialog('DOWNS SHOP', `"Racing gear, tack and trinkets. Credits only; the tote doesn't take IOUs." <small>You have ₵${fmt(g.credits)}.</small>${rows.map((r) => r.html).join('')}`, buttons, { stay: true });
   }
 
   // the tournaments: one per season, for chimeras that have run their three races

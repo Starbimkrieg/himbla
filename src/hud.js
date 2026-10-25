@@ -385,7 +385,8 @@ export class HUD {
           const cost = u.cost * (lvl + 1);
           const ok = rep.canBuy(u, lvl);
           const unlockMissing = u.unlock && u.unlock.smuggle && !(rep.game.stats.blackMarket || []).includes(u.key);
-          const need = !maxed && !ok ? (unlockMissing ? 'Comes in on a smuggling run: watch the boards for a PAYLOAD tag' : u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
+          const unlockDeed = u.unlock && u.unlock.stat && (rep.game.stats[u.unlock.stat] || 0) < u.unlock.n;
+          const need = !maxed && !ok ? (unlockDeed ? `Unlock: ${u.unlock.text} (${rep.game.stats[u.unlock.stat] || 0}/${u.unlock.n})` : unlockMissing ? 'Comes in on a smuggling run: watch the boards for a PAYLOAD tag' : u.faction === 'rustmoon' && !rep.aligned() ? 'Rustmoon members only' : `Needs ${u.req[Math.min(lvl, u.req.length - 1)]} rep with ${FACTIONS[u.faction].name}`) : '';
           const sw = u.swatch ? u.swatch.map((c) => `<span class="swatch" style="background:#${c.toString(16).padStart(6, '0')}"></span>`).join('') : '';
           html += `<div class="shop-item ${maxed || credits < cost || !ok ? 'disabled' : ''} ${u.faction ? 'unique' : ''}" data-buy="${u.key}">
             <div class="job-top"><span>${sw}${u.name}</span><span class="job-pay">${maxed ? (u.cosmetic ? 'OWNED' : 'MAX') : '₵' + cost}</span></div>
