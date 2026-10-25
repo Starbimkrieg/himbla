@@ -1805,7 +1805,7 @@ export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff, style = getSkim
 // glows in `trim`, the underglow in `color`; the rest fixed. Build at frame size: callers scale the root (RIG_SCALE).
 export const RUSTMOON_LOOK = { suit: 0x3a2b4f, accent: 0x7dff3a, helmet: 0x2b2b2b, visor: 0x7dff3a, scarf: 0xd7263d, pirate: true };
 export const RIG_SCALE = 1.35;
-const RIG_TOON = { dark: 0x2a2540, steel: 0x55607a, metal: 0x8a87a0, tire: 0x1d1a29, bleach: 0xc9c0b0, primer: 0x6b6f78, copper: 0xc8783e, mli: 0xd9b25a, foil: 0xcfd3dc, bone: 0xe8e0c8, red: 0xd7263d, tank: 0xc6d6ea, flag: 0x1a1a1a };
+const RIG_TOON = { dark: 0x2a2540, steel: 0x55607a, metal: 0x8a87a0, tire: 0x1d1a29, bleach: 0xc9c0b0, primer: 0x6b6f78, copper: 0xc8783e, mli: 0xd9b25a, foil: 0xcfd3dc, bone: 0xe8e0c8, red: 0xd7263d, tank: 0xc6d6ea, flag: 0x1a1a1a, mcream: 0xfff4e0, mcyan: 0x2ec4ff, mgold: 0xffd23f, mnavy: 0x1b3a8f };
 const RIG_GLOW = { lamp: 0xfff6a8, led: 0xe8f4ff, plasma: 0x5ad8ff, ion: 0x9be7ff, laser: 0xff2a4a, beacon: 0xff2a4a };
 const RIG_FADE = new THREE.Color(0x6b6f78); // paint left in the sun goes toward the primer under it
 // the gun's laser: three segments, each fainter, added onto the scene without depth (so the edge ink never outlines it)

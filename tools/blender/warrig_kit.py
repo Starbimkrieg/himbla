@@ -5,10 +5,12 @@
 # Everything static goes through an Acc (one mesh per slot, parent and ink); wheels are pivots of their own.
 #
 # Slots: livery `body` (faction colour: a few painted panels), `stripe` (trim), `lens` (glows in the trim colour: viewport
-# slits, LED strips), `underglow` (glows in the faction colour). Fixed toons: `dark`, `steel`, `metal`, `tire`, `bleach` (sun-bleached plate), `primer`, `copper` (cooling coils
-# and magnet windings), `mli` (gold multi-layer insulation), `foil` (silver MLI), `bone` (spikes), `red` (hand wheels),
-# `tank`. Glows: `lamp` (warm searchlights), `led` (cold white LED bars), `plasma` (the reactor's ion blue), `ion`
-# (injector sparks), `laser` (IR sights, drawn red), `beacon` (antenna tips).
+# slits, LED strips), `underglow` (glows in the faction colour). Fixed toons: `dark`, `steel`, `metal`, `tire`, `bleach`
+# (sun-bleached plate), `primer`, `copper` (cooling coils and magnet windings), `mli` (gold multi-layer insulation), `foil`
+# (silver MLI), `bone` (spikes), `red` (hand wheels), `tank`, and Meridian's colours on the stolen He-3 canisters:
+# `mcream`, `mcyan`, `mgold`, `mnavy`. Glows: `lamp` (warm searchlights), `led` (cold white LED bars), `plasma` (the
+# reactor's ion blue), `ion` (injector sparks), `laser` (IR sight lenses, drawn red), `beam1`..`beam3` (the laser's beam,
+# drawn see-through by the game), `beacon` (antenna tips).
 # No rust: there is no oxygen on the Moon. Age shows as bleached paint, scuffed bare metal and frayed foil.
 
 import math
@@ -24,6 +26,7 @@ SLOT_COLORS = {
     "foil": (0.8, 0.82, 0.86), "bone": (0.91, 0.88, 0.78), "red": (0.84, 0.15, 0.24), "tank": (0.78, 0.84, 0.92),
     "lamp": (1.0, 0.96, 0.66), "led": (0.91, 0.96, 1.0), "plasma": (0.35, 0.85, 1.0), "ion": (0.6, 0.9, 1.0),
     "laser": (1.0, 0.16, 0.29), "beacon": (1.0, 0.16, 0.29), "underglow": (0.48, 0.18, 0.97),
+    "mcream": (1.0, 0.96, 0.88), "mcyan": (0.18, 0.77, 1.0), "mgold": (1.0, 0.82, 0.25), "mnavy": (0.11, 0.23, 0.56),
     "beam1": (1.0, 0.16, 0.29), "beam2": (1.0, 0.16, 0.29), "beam3": (1.0, 0.16, 0.29),
 }
 # the game's colours (hex) for the preview renders; body / stripe / lens are the Rustmoon livery, body as sun-faded paint
@@ -31,7 +34,7 @@ HEX = {
     "body": 0x655682, "stripe": 0x7dff3a, "lens": 0x7dff3a, "dark": 0x2a2540, "steel": 0x55607a, "metal": 0x8a87a0,
     "tire": 0x1d1a29, "bleach": 0xc9c0b0, "primer": 0x6b6f78, "copper": 0xc8783e, "mli": 0xd9b25a, "foil": 0xcfd3dc,
     "bone": 0xe8e0c8, "red": 0xd7263d, "tank": 0xc6d6ea, "lamp": 0xfff6a8, "led": 0xe8f4ff, "plasma": 0x5ad8ff,
-    "ion": 0x9be7ff, "laser": 0xff2a4a, "beacon": 0xff2a4a, "underglow": 0x7b2ff7, "beam1": 0x7a1422, "beam2": 0x4a0c16, "beam3": 0x26060b,
+    "ion": 0x9be7ff, "laser": 0xff2a4a, "beacon": 0xff2a4a, "underglow": 0x7b2ff7, "mcream": 0xfff4e0, "mcyan": 0x2ec4ff, "mgold": 0xffd23f, "mnavy": 0x1b3a8f, "beam1": 0x7a1422, "beam2": 0x4a0c16, "beam3": 0x26060b,
 }
 GLOW_SLOTS = {"lens": 2.5, "lamp": 6.0, "led": 6.0, "plasma": 5.0, "ion": 7.0, "laser": 8.0, "beacon": 8.0, "underglow": 4.0, "beam1": 3.0, "beam2": 3.0, "beam3": 3.0}
 

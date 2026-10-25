@@ -15,8 +15,8 @@
 # diffs, lines down the rails and two coolant hoses. Over the cab a ring mount carries a standing pirate gunner behind a
 # drum-fed five-barrel rotary, with a notched salvage-plate shield and an IR laser sight. Lights: a visor bar of LEDs over
 # the windscreen, a big searchlight on the left pillar, a small one on the locker, mismatched headlamps on the front wells,
-# pod lamps on the bull bar. A plow of raked blades with ramming teeth leads. The deck carries two He-3 tanks under frayed
-# MLI blankets, a relay dish and antenna needles; the flag flies from the back corner. Little paint: bleached plate, primer
+# pod lamps on the bull bar. A plow of raked blades with ramming teeth leads. The deck carries two He-3 canisters stolen
+# from Meridian (cream, cyan bands, gold collars, the Meridian globe), a relay dish and antenna needles; the flag flies from the back corner. Little paint: bleached plate, primer
 # and bare metal, the door and front wells in faction paint; the faction's green and violet only glow (viewports, LED
 # strips, the underglow).
 #
@@ -289,13 +289,12 @@ for y in (2.55, 3.05, 3.55):
 A.add(tube([(-1.22, 3.0, -0.38), (-1.3, 3.0, -0.36), (-1.3, 2.8, -0.36)], [0.025] * 3, 4), "steel", CH, 0.006)
 viewport(A, CH, (-1.24, 3.58, 0.1), 0.15, 0.045, (-1, 0, 0), bars=(2, 1))
 A.add(tube([(-1.16, 2.5, -0.62), (-1.28, 2.52, -0.62), (-1.28, 3.5, -0.62), (-1.16, 3.52, -0.62)], [0.025] * 4, 4), "steel", CH, 0.006)
-# the right: a bundle of three tanks strapped together on the step plate, a closed locker on the cab wall, the ladder
+# the right: a bundle of three tanks strapped together across the step plate behind the front wheel well, a closed locker on the cab wall, the ladder
 part("bundle")
-TANKS = [((2.3, 1.97), 0.22, (-0.85, 1.15), "tank"), ((2.3, 2.32), 0.13, (-0.6, 1.0), "bleach"), ((1.92, 1.89), 0.14, (-0.8, 1.1), "primer")]
-for (x, y), r, (z0, z1), slot in TANKS:
-    A.add(cyl((x, y, (z0 + z1) / 2), r, z1 - z0, 12, rot=(PI / 2, 0, 0)), slot, CH, 0.025)
-    for z in (z0 + 0.05, z1 - 0.05):
-        A.add(cyl((x, y, z), r + 0.012, 0.04, 8, rot=(PI / 2, 0, 0)), "dark", CH, 0)   # end rings
+# (lying across the rig, x from the cab out, its section in (z, y))
+TANKS = [((1.08, 1.97), 0.22, (1.2, 2.65), "tank"), ((1.08, 2.32), 0.13, (1.2, 2.3), "bleach"), ((0.7, 1.89), 0.14, (1.25, 2.5), "primer")]
+for (z, y), r, (x0, x1), slot in TANKS:
+    A.add(cyl(((x0 + x1) / 2, y, z), r, x1 - x0, 12, rot=(0, 0, PI / 2)), slot, CH, 0.025)
 hull = []
 for (x, y), r, _, _ in TANKS:
     hull += [(x + math.cos(TAU * k / 10) * (r + 0.02), y + math.sin(TAU * k / 10) * (r + 0.02)) for k in range(10)]
@@ -307,11 +306,11 @@ for pt in hull:                                   # convex hull (monotone chain)
             h.pop()
         h.append(pt)
 loop = lo[:-1] + hi[::-1][:-1]
-for z in (-0.5, 0.2, 0.85):
-    A.add(tube([(x, y, z) for x, y in loop + loop[:1]], [0.02] * (len(loop) + 1), 3, cap=False), "steel", CH, 0.006)
-A.add(cyl((2.3, 1.97, 1.18), 0.06, 0.08, 8, rot=(PI / 2, 0, 0)), "dark", CH, 0.006)
-A.add(xf(torus(0.07, 0.016, 8, 3), (2.3, 1.97, 1.23), (PI / 2, 0, 0)), "red", CH, 0)
-A.add(tube([(2.3, 2.32, 0.98), (2.3, 2.45, 1.1), (1.6, 2.45, 1.2), (1.0, 2.4, 1.2)], [0.035] * 4, 6), "copper", CH, 0.006)
+for xs in (1.5, 1.95, 2.35):
+    A.add(tube([(xs, y, z) for z, y in loop + loop[:1]], [0.02] * (len(loop) + 1), 3, cap=False), "steel", CH, 0.006)
+A.add(cyl((2.68, 1.97, 1.08), 0.06, 0.08, 8, rot=(0, 0, PI / 2)), "dark", CH, 0.006)
+A.add(xf(torus(0.07, 0.016, 8, 3), (2.73, 1.97, 1.08), (0, 0, PI / 2)), "red", CH, 0)
+A.add(tube([(1.22, 2.32, 1.08), (1.12, 2.36, 1.12), (1.01, 2.4, 1.2)], [0.035] * 3, 6), "copper", CH, 0.006)   # into the bay
 part("locker")
 A.add(bx((1.35, 2.91, 0.3), (0.2, 0.71, 0.42)), "primer", CH, 0.025)
 for (y0, y1), slot in (((2.24, 2.86), "metal"), ((2.92, 3.58), "bleach")):
@@ -336,14 +335,20 @@ for k in range(8):
 part("stacks")
 for sx, top in ((-1, ROOF + 0.45), (1, ROOF + 0.3)):
     x = sx * 0.98
-    A.add(tube([(x, 2.15, CB - 0.2), (x, top, CB - 0.2), (x + sx * 0.18, top + 0.12, CB - 0.2)], [0.11, 0.11, 0.11], 8), "steel", CH, 0.02)
-    A.add(cyl((x, 3.1, CB - 0.2), 0.15, 0.9, 8), "metal", CH, 0.015)
-    A.add(join([bx((x + sx * 0.0, 2.8 + 0.16 * k, CB - 0.36), (0.1, 0.02, 0.012)) for k in range(4)]), "dark", CH, 0)
-    A.add(xf(torus(0.12, 0.02, 10, 3), (x + sx * 0.2, top + 0.13, CB - 0.2), (0, 0, sx * 1.2)), "dark", CH, 0)
+    z = CB - 0.2
+    # a straight pipe, a ball knee, a short elbow bent outward, its mouth ringed (each piece aligned on its own axis)
+    A.add(cyl((x, (2.15 + top) / 2, z), 0.11, top - 2.15, 8), "steel", CH, 0.02)
+    A.add(xf(superquad(0.115, 0.115, 0.115, 1, 1, 8, 4), (x, top, z)), "steel", CH, 0.015)
+    d = (sx * 0.2, 0.12, 0.0)
+    L = math.hypot(d[0], d[1])
+    A.add(cyl((x + d[0] / 2, top + d[1] / 2, z), 0.11, L, 8, rot=_align(d)), "steel", CH, 0.02)
+    A.add(xf(torus(0.11, 0.022, 10, 3), (x + d[0], top + d[1], z), _align(d)), "dark", CH, 0.006)
+    A.add(cyl((x, 3.1, z), 0.15, 0.9, 8), "metal", CH, 0.015)
+    A.add(join([bx((x, 2.8 + 0.16 * k, CB - 0.36), (0.1, 0.02, 0.012)) for k in range(4)]), "dark", CH, 0)
     for y in (2.6, 3.65):
         A.add(beam((x, y, CB - 0.2), (x, y, CB), 0.025, 4), "dark", CH, 0)
 
-# ---------------- rear deck: He-3 tanks under MLI, comms, flag ----------------
+# ---------------- rear deck: He-3 canisters stolen from Meridian, comms, flag ----------------
 part("deck")
 A.add(bx((0, 2.17, -2.1), (1.2, 0.06, 1.25)), "dark", CH, 0.025)
 for sx in (-1, 1):
@@ -353,13 +358,31 @@ plate(A, CH, (0, 2.42, -3.37), (1.15, 0.2, 0.035), (0, 0, 0.0), slot="primer", i
 part("tanks")
 for i, sx in enumerate((-1, 1)):
     c = (sx * 0.56, 2.62, -2.15)
-    A.add(cyl(c, 0.36, 1.3, 12, rot=(PI / 2, 0, 0)), "tank", CH, 0.03)
+    # Meridian's cream He-3 canister: cyan bands, gold collars at the shoulders, steel domes, a navy plate with the
+    # Meridian globe in gold, and at the back a valve block with a gauge and a red hand wheel
+    A.add(cyl(c, 0.36, 1.3, 12, rot=(PI / 2, 0, 0)), "mcream", CH, 0.03)
     for sz in (-1, 1):
-        A.add(xf(superquad(0.36, 0.36, 0.14, 1, 0.6, 12, 2), (c[0], c[1], c[2] + sz * 0.65)), "tank", CH, 0.02)
-    mli_blanket(A, CH, c, 0.36, 1.05, (-1.95, 1.95), seed=i)
-    for z in (-0.4, 0.4):
-        A.add(xf(torus(0.41, 0.025, 16, 4), (c[0], c[1], c[2] + z), (PI / 2, 0, 0)), "dark", CH, 0.006)
+        A.add(xf(superquad(0.36, 0.36, 0.14, 1, 0.6, 12, 2), (c[0], c[1], c[2] + sz * 0.65)), "steel", CH, 0.02)
+        A.add(cyl((c[0], c[1], c[2] + sz * 0.6), 0.375, 0.08, 12, rot=(PI / 2, 0, 0)), "mgold", CH, 0.008)
+    for z in (-0.32, 0.32):
+        A.add(cyl((c[0], c[1], c[2] + z), 0.37, 0.12, 12, rot=(PI / 2, 0, 0)), "mcyan", CH, 0)
+    for z in (-0.12, 0.12):
+        A.add(xf(torus(0.405, 0.025, 16, 4), (c[0], c[1], c[2] + z), (PI / 2, 0, 0)), "dark", CH, 0.006)
     A.add(bx((c[0], 2.3, c[2]), (0.3, 0.08, 0.45)), "dark", CH, 0.01)
+    a = -sx * 0.5                                   # the plate on the canister's outboard shoulder
+    pc = (c[0] + math.sin(-a) * 0.372, c[1] + math.cos(a) * 0.372, c[2])
+    A.add(xf(bx((0, 0, 0), (0.15, 0.01, 0.2)), pc, (0, 0, a)), "mnavy", CH, 0)
+    A.add(xf(xf(torus(0.07, 0.012, 12, 3), (0, 0.012, 0)), pc, (0, 0, a)), "mgold", CH, 0)
+    A.add(xf(xf(torus(0.07, 0.01, 12, 3), (0, 0.012, 0), (0, 0, PI / 2)), pc, (0, 0, a)), "mgold", CH, 0)
+    A.add(xf(xf(bx((0, 0, 0), (0.07, 0.006, 0.01)), (0, 0.016, 0)), pc, (0, 0, a)), "mgold", CH, 0)
+    vb = (c[0], c[1] + 0.06, c[2] - 0.84)
+    A.add(bx(vb, (0.09, 0.08, 0.06)), "steel", CH, 0.01)
+    A.add(cyl((vb[0], vb[1] + 0.13, vb[2]), 0.025, 0.1, 6), "steel", CH, 0)
+    A.add(xf(torus(0.065, 0.015, 8, 3), (vb[0], vb[1] + 0.18, vb[2])), "red", CH, 0)
+    A.add(join([beam((vb[0] - 0.065, vb[1] + 0.18, vb[2]), (vb[0] + 0.065, vb[1] + 0.18, vb[2]), 0.012, 3),
+                beam((vb[0], vb[1] + 0.18, vb[2] - 0.065), (vb[0], vb[1] + 0.18, vb[2] + 0.065), 0.012, 3)]), "red", CH, 0)   # spokes
+    A.add(cyl((vb[0] + sx * 0.12, vb[1], vb[2]), 0.05, 0.03, 8, rot=(0, 0, PI / 2)), "dark", CH, 0.006)
+    A.add(cyl((vb[0] + sx * 0.138, vb[1], vb[2]), 0.04, 0.006, 8, rot=(0, 0, PI / 2)), "lamp", CH, 0)
 part("bumperR")
 A.add(beam((-1.2, 2.05, -3.62), (1.2, 2.05, -3.62), 0.08, 6), "dark", CH, 0.02)
 for sx in (-1, 1):

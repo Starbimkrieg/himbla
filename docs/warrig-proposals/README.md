@@ -61,9 +61,9 @@ short rear deck, over two axles 4.9 m apart (6.6 m in the game).
   handle. Under it, joining the wheel wells, a step plate the same width with the same lip, riveted round its edges and
   across (the step up to the door).
 - **The right side:** the same riveted step plate between the wells, with a bundle of three tanks of different sizes
-  strapped together on it (bands round the bundle, a valve, a line into the bay), a closed equipment locker on the cab wall (two doors with
-  hinges, T-handles and a louvred vent, a small searchlight on top), and a full-height ladder from the bundle to grab
-  rails over the roof, down to the step plate.
+  strapped together lying across it, tucked behind the front wheel well (bands round the bundle, a valve on the outer end,
+  a line from the inner end into the bay), a closed equipment locker on the cab wall (two doors with hinges, T-handles and
+  a louvred vent, a small searchlight on top), and a full-height ladder from the step plate to grab rails over the roof.
 - **Underneath:** a finned drive motor hung under the cab with driveshafts (U-joints and a slip joint) to both diffs, and
   lines down each frame rail (a cable and a copper coolant line), clamped, and a fat coolant hose on each side sagging
   below the body line on hangers from the bay back to the deck.
@@ -74,7 +74,8 @@ short rear deck, over two axles 4.9 m apart (6.6 m in the game).
 - **Gun:** a ring mount on the cab roof, a **standing gunner** behind a drum-fed **five-barrel rotary** (four turns of
   the cluster is the burst), a notched salvage-plate shield bolted to two arms with a slot to look through, an IR laser
   sight.
-- **Rear deck:** two He-3 tanks under frayed MLI blankets with silver patches, a relay dish on a mast, three antenna
+- **Rear deck:** two He-3 canisters stolen from Meridian (cream with cyan bands and gold collars, a navy plate with the
+  Meridian globe in gold, steel domes, a valve block with a gauge and a red hand wheel at the back), a relay dish on a mast, three antenna
   needles on the left sideboard, the flag on the back-left corner (nothing behind it, so the game's waving cloth streams
   back; the renders use that cloth, ported from `makeWaveFlag`, at 24 m/s), a rear bumper with two ramming spikes.
 - **Colour:** primer, sun-bleached plate and bare metal; only the door and the front wheel wells are painted, in sun-faded
