@@ -157,17 +157,19 @@ export class Missions {
     return { id: this.nextId++, kind: 'bounty', board, faction, client, cargo, pickup: board, to: zone, dist, time, reward, clearance: null, text, dark: false, smuggle: false, payload: null, rider: null, bounty: { dir, n, squad: [] } };
   }
 
-  // Every smuggling run carries the next black-market item, in the Hold's order: the n-th run delivered unlocks the n-th item, so
-  // the whole stock is 13 runs, not luck. Runs on the boards at once carry different ones; one that fails or is dropped leaves its
-  // item for the next. (The kit the ILMB sells is on sale at the Hold from the start.)
+  // Every smuggling run carries a black-market item, drawn at random from what isn't unlocked yet: the cheap ones are likelier
+  // (weight 1 / cost), so the Hold fills up from the small kit to the vehicles, but not in a fixed order. Runs on the boards at once
+  // carry different ones; one that fails or is dropped leaves its item in the pool. (The kit the ILMB sells is on sale from the start.)
   pickPayload() {
     const have = new Set(this.game.stats.blackMarket || []);
     const live = new Set();
     for (const list of Object.values(this.offers)) for (const o of list) if (o.payload) live.add(o.payload.key);
     for (const a of [this.active, this.extra && this.extra.a]) if (a && a.payload) live.add(a.payload.key);
     for (const k of this.batch || []) live.add(k); // and the board being dealt now
-    const u = (SHOPS.rustmoon || []).find((x) => x.unlock && x.unlock.smuggle && !have.has(x.key) && !live.has(x.key));
-    if (!u) return null;
+    const pool = (SHOPS.rustmoon || []).filter((x) => x.unlock && x.unlock.smuggle && !have.has(x.key) && !live.has(x.key));
+    if (!pool.length) return null;
+    let roll = Math.random() * pool.reduce((t, x) => t + 1 / x.cost, 0);
+    const u = pool.find((x) => (roll -= 1 / x.cost) <= 0) || pool[pool.length - 1];
     (this.batch ||= []).push(u.key);
     return { key: u.key, name: u.name };
   }

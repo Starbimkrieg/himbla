@@ -191,18 +191,19 @@ export const TIERS = [
   { min: 80, name: 'REVERED', color: '#ff7ad9', pay: 1.8 },
 ];
 
-// faction gear at each HQ; each level needs more reputation: level 1 FRIENDLY, 2 TRUSTED, 3 REVERED (single-level gear sits on one tier)
+// faction gear at each HQ; each level needs more reputation: level 1 FRIENDLY, 2 TRUSTED, 3 HONORED (ILMB: NEUTRAL, FRIENDLY, TRUSTED); weapons HONORED (or the story hands them out)
 const REP = Object.fromEntries(TIERS.map((t) => [t.name.toLowerCase(), t.min]));
-const LADDER = [REP.friendly, REP.trusted, REP.revered];
+const LADDER = [REP.friendly, REP.trusted, REP.honored]; // other factions' three-level gear
+const ILMB_LADDER = [REP.neutral, REP.friendly, REP.trusted]; // SPACECOM's own kit starts at NEUTRAL
 import { cosmeticShopItems } from './cosmetics.js';
 
 export const SHOPS = {
   ilmb: [
-    { key: 'capacitor', name: 'Flux Capacitor', desc: '+25 thruster energy', cost: 600, max: 3 },
-    { key: 'armor', name: 'Ablative Suit Plating', desc: '+15 max health', cost: 550, max: 3 },
-    { key: 'dampers', name: 'Mag-Cushion Dampers', desc: 'Safer hard landings', cost: 650, max: 3 },
-    { key: 'scanner', name: 'Threat Scanner', desc: 'Look at pirates to mark them with a red outline; warns of inbound squads', cost: 700, max: 2 },
-    { key: 'seeker', name: 'SPACECOM Seeker Module', desc: 'Pulse discs, mortar shells and scattergun pellets steer harder onto the target you aimed at (the disc most)', cost: 800, max: 3, faction: 'spacecom', req: LADDER },
+    { key: 'capacitor', name: 'Flux Capacitor', desc: '+25 thruster energy', cost: 600, max: 3, faction: 'spacecom', req: ILMB_LADDER },
+    { key: 'armor', name: 'Ablative Suit Plating', desc: '+15 max health', cost: 550, max: 3, faction: 'spacecom', req: ILMB_LADDER },
+    { key: 'dampers', name: 'Mag-Cushion Dampers', desc: 'Safer hard landings', cost: 650, max: 3, faction: 'spacecom', req: ILMB_LADDER },
+    { key: 'scanner', name: 'Threat Scanner', desc: 'Look at pirates to mark them with a red outline; warns of inbound squads', cost: 700, max: 2, faction: 'spacecom', req: ILMB_LADDER },
+    { key: 'seeker', name: 'SPACECOM Seeker Module', desc: 'Pulse discs, mortar shells and scattergun pellets steer harder onto the target you aimed at (the disc most)', cost: 800, max: 3, faction: 'spacecom', req: ILMB_LADDER },
     { key: 'v_interceptor', name: 'SPACECOM Lunar Interceptor', desc: 'VEHICLE: the fast one, yours to call with V', cost: 3500, max: 1, faction: 'spacecom', req: [REP.revered], vehicle: 'interceptor' },
   ],
   meridian: [
@@ -218,22 +219,23 @@ export const SHOPS = {
     { key: 'v_carrier', name: 'Kepler Militia Carrier', desc: 'VEHICLE: the armoured militia hauler with a turret cannon, yours to call with V', cost: 3500, max: 1, faction: 'kepler', req: [REP.revered], vehicle: 'carrier' },
   ],
   vostok: [
-    { key: 'scatter', name: 'Vostok Scattergun', desc: 'WEAPON (key 2): seven-pellet close-range blast', cost: 1400, max: 1, faction: 'vostok', req: [REP.friendly], weapon: true },
+    { key: 'scatter', name: 'Vostok Scattergun', desc: 'WEAPON (key 2): seven-pellet close-range blast', cost: 1400, max: 1, faction: 'vostok', req: [REP.honored], weapon: true },
     { key: 'flak', name: 'Vostok Flak Weave', desc: '+10 max health, +1 HP regen per level (a tick every 3 s), less blast knockback', cost: 750, max: 3, faction: 'vostok', req: LADDER },
     { key: 'spinner', name: 'Vostok Weapon Tuning Kit', desc: '+15% damage for every weapon', cost: 750, max: 3, faction: 'vostok', req: LADDER },
     { key: 'v_apc', name: 'Vostok BTR-M APC', desc: 'VEHICLE: the Moon APC, yours to call with V', cost: 4000, max: 1, faction: 'vostok', req: [REP.revered], vehicle: 'apc' },
   ],
   daedalus: [
-    { key: 'rail', name: 'Daedalus Rail Lance', desc: 'WEAPON (key 3): instant piercing beam, long range', cost: 1600, max: 1, faction: 'daedalus', req: [REP.friendly], weapon: true },
+    { key: 'rail', name: 'Daedalus Rail Lance', desc: 'WEAPON (key 3): instant piercing beam, long range', cost: 1600, max: 1, faction: 'daedalus', req: [REP.honored], weapon: true },
     { key: 'overcharge', name: 'Daedalus Overcharger', desc: 'Faster fire rate for every weapon', cost: 800, max: 3, faction: 'daedalus', req: LADDER },
     { key: 'cloak', name: 'Daedalus Dark-Side Cloak', desc: 'Roaming pirates check for you less often on the dark side: +5 s per level (doubled on Daedalus ground). Den guards unaffected', cost: 900, max: 3, faction: 'daedalus', req: LADDER },
     { key: 'v_skimmer', name: 'Daedalus Phase Skimmer', desc: 'VEHICLE: the hover skimmer, yours to call with V', cost: 4000, max: 1, faction: 'daedalus', req: [REP.revered], vehicle: 'skimmer' },
   ],
   rustmoon: [
-    { key: 'mortar', name: 'Rustmoon Junk Mortar', desc: 'WEAPON (key 4): lobbed scrap bomb, huge blast', cost: 1200, max: 1, faction: 'rustmoon', req: [REP.friendly], weapon: true },
+    { key: 'mortar', name: 'Rustmoon Junk Mortar', desc: 'WEAPON (key 4): lobbed scrap bomb, huge blast', cost: 1200, max: 1, faction: 'rustmoon', req: [REP.honored], weapon: true },
     { key: 'shadow', name: 'Rustmoon Shadow Rig', desc: 'Lawmen and turrets have a harder time hitting you', cost: 750, max: 3, faction: 'rustmoon', req: LADDER },
     // black market: the SPACECOM kit is on sale from the start; the rest comes in on smuggling runs to bright-side towns, one a run,
-    // in this order (the board names it: missions.js pickPayload). Deliver it and it's on sale here for good
+    // drawn at random, cheaper items likelier (the board names it: missions.js pickPayload). Deliver it and it's on sale here for good.
+    // `n` is only the legacy order, used to credit old saves that counted deliveries (main.js load)
     { key: 'armor', name: 'Black-Market Suit Plating', desc: '+15 max health', cost: 700, max: 3, faction: 'rustmoon', req: [0] },
     { key: 'dampers', name: 'Black-Market Dampers', desc: 'Safer hard landings', cost: 800, max: 3, faction: 'rustmoon', req: [0] },
     { key: 'scatter', name: 'Black-Market Scattergun', desc: 'WEAPON (key 2): a Vostok scattergun, serial filed off', cost: 1800, max: 1, faction: 'rustmoon', req: [0], weapon: true, unlock: { smuggle: true, n: 1 } },
