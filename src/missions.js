@@ -423,12 +423,14 @@ export class Missions {
 
   completeBounty() {
     const a = this.active;
+    this.game.player.combo.bank(); // a style run still open counts toward this job
     this.payOut(a, this.timer, this.late, 1, this.styleValue(false));
     this.clear();
     this.game.save();
   }
 
   complete() {
+    this.game.player.combo.bank(); // a style run still open counts toward this job
     this.payOut(this.active, this.timer, this.late, this.integrity, this.styleValue(false));
     this.clear();
     this.game.save();

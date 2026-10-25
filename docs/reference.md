@@ -92,11 +92,15 @@ player lights (skate colour, health), DualSense adaptive triggers, and a TEST bu
   full jolt.
 - **Tricks:** flips and spins score style if you land upright; crooked landings **WIPE OUT**. Thrusters fired while
   turned in a trick push along the body at 70% power (a quarter backflip lifts you, a half spin brakes; `TRICK_THRUST`
-  in `src/player.js`). A trick meter shows what the trick in the air would score if landed now, and whether you'd
-  stick it (`src/trickhud.js`; two drafts: `?trickhud=a`, the style meter, or `b`, the ticker). Vehicles have solid
-  decks you can ride. **SKY-HIGH!** at 40 m up, **BIG AIR** after 5 s in the air.
+  in `src/player.js`). Vehicles have solid decks you can ride. **SKY-HIGH!** at 40 m up, **BIG AIR** after 5 s in the
+  air.
+- **Style combos:** flips, spins, air, dive landings, grinds, meteor bounces, threading a rock arch and riding the
+  Hitch-Line at 50+ m/s all feed one run, shown live on the **style meter** (bottom right: rank, moves, multiplier,
+  total, CLEAN / CROOKED while a trick is in the air). The run stays open in the air, on a rail or hitched, and for
+  2.5 s after you land; then it banks: the moves' sum times the multiplier (+0.5 per kind of move past the first, air
+  time not counting) into the style pool. A wipeout or crash loses it (`src/combo.js`, `src/stylemeter.js`).
 - **Grinding:** snake rocks (35-50 m ridges) and firm crater lips are rails. Land on one or ride onto it at an angle
-  to grind; `Shift` pops off. Grinds pay style per second.
+  to grind; `Shift` pops off. Grinds pay style per second; a clean trick landed onto a rail counts.
 - **Terrain:** cratered plains plus highlands, scarps, rolling hills and long rilles. Craters range from bowls to
   terraced giants. Ramp slabs, arches and hoodoos dot the plains.
 - **Deliveries:** contracts at job boards, each with cargo type, fragility, pirate risk, distance and a tight clock.
@@ -366,7 +370,8 @@ src/
   fonts.js         the bundled pixel faces (Press Start 2P, Jersey 15) and the credit sign (assets/fonts/)
   physics.js       collider hash and shared skater movement
   player.js        input, movement, weapons, animation, style
-  trickhud.js      the trick meter: the live score of a trick in the air (two drafts, ?trickhud=a|b)
+  combo.js         the style run: moves, multiplier, landing window, bank or wipe
+  stylemeter.js    the style meter (the run, live, bottom right)
   idles.js         standing idle animations
   enemies.js       pirates, bases, turrets, artillery, theft
   missions.js      contracts, pickup and delivery, payouts

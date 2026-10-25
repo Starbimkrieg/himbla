@@ -126,7 +126,6 @@ export class Grinder {
       if (tip) dir = n.s < n.r.len / 2 ? 1 : -1;
       else dir = Math.abs(along) > 2 ? Math.sign(along) : Math.sign(P.heading.dot(_t)) || 1;
       this.active = { r: n.r, s: n.s, dir, speed: Math.max(Math.abs(along), hsp * 0.85, 9), t: 0, spark: 0 };
-      g.fx.pop('GRIND!', null, { color: '#ffd23f', size: 44 });
       g.audio.tone(1400, 0.08, 'square', 0.08);
       g.haptics.play('grind');
     }
@@ -231,8 +230,7 @@ export class Grinder {
     if (m.armR) m.armR.rotation.set(0, 0, 0);
     m.torso.rotation.x = 0;
     if (!knocked) {
-      const pts = Math.round(15 + A.t * 30);
-      g.style(pts, 'GRIND');
+      P.combo.add(A.r.rimOf ? 'RIM GRIND' : 'GRIND', Math.round(15 + A.t * 30), 'grind'); // (the style meter showed it live: player.js)
     }
     if (jumped) { g.audio.jump(); g.haptics.play('jump'); }
     this.active = null;

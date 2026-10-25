@@ -264,8 +264,7 @@ export class Meteors {
     this.lastBounce = g.time;
     const n = this.chain;
     const pts = 45 + 25 * (n - 1);
-    g.style(pts, null);
-    g.fx.pop(`${n > 1 ? `METEOR CHAIN ×${n}` : 'METEOR BOUNCE'}!${g.missions.active ? ` +${pts}` : ''}`, null, { color: '#ff9f1c', size: 56, prio: 1 }); // +points only when they count
+    P.combo.add('METEOR BOUNCE', pts, 'meteor'); // a chain shows on the style meter as METEOR BOUNCE ×n
     g.audio.tone(520 + 70 * Math.min(n - 1, 6), 0.25, 'square', 0.18, 2);
   }
 

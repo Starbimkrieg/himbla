@@ -6,6 +6,8 @@ import { frameQuat, upAt } from './geo.js';
 import { Ragdoll } from './ragdoll.js';
 import { Idle } from './idles.js';
 import { updateHalo } from './cosmetics.js';
+import { Combo } from './combo.js';
+import { archPass } from './rocks.js';
 import { WEAPONS, weaponUnlocked, fireWeapon } from './weapons.js';
 
 const SPEED_MARKS = [
@@ -20,30 +22,39 @@ const SPIN_RATE = 12;
 // trick thrust: with the body turned in a trick the pack pushes where the body faces, at this share of the thrusters' power
 const TRICK_THRUST = 0.7;
 const NUMS = ['', '', 'DOUBLE ', 'TRIPLE ', 'QUAD ', 'QUINT '];
-const BIG_AIR_MIN = 5; // s airborne before BIG AIR! is called (shorter hops still pay style, quietly)
+const BIG_AIR_MIN = 5; // s airborne before an air is called BIG AIR (shorter ones over 1.8 s still pay, as AIR)
+const WINCH_FAST = 50; // m/s on the Hitch-Line before it pays style...
+const WINCH_RATE = 7; // ...at this many points a second (a trick's air time pays 5)
+const ARCH_PTS = 35; // threading a rock arch
 const SKY_HIGH_GAIN = 40; // m climbed (radially) above a jump's start before SKY-HIGH! is called
 
-// What a trick scores if you land it now: whole flips and spins (+50% per extra kind), plus air time. clean: upright
-// enough to stick it; tilt: how far off that is (1 = the wipeout edge). The landing and the trick meter (trickhud.js) both use this.
+// What a trick scores if you land it now: whole flips and spins, plus air time (the combo applies the multiplier).
+// clean: upright enough to stick it; tilt: how far off that is (1 = the wipeout edge). Live and on landing.
 export function trickScore(t, air) {
   const flips = Math.round(Math.abs(t.flip) / TAU), spins = Math.round(Math.abs(t.spin) / TAU);
   const rf = Math.abs(t.flip - Math.round(t.flip / TAU) * TAU), rs = Math.abs(t.spin - Math.round(t.spin / TAU) * TAU);
   const parts = [];
   if (flips) parts.push(`${flips < NUMS.length ? NUMS[flips] : flips + 'x '}${t.flip > 0 ? 'FRONTFLIP' : 'BACKFLIP'}`);
   if (spins) parts.push(`${spins * 360} SPIN`);
-  const combo = 1 + 0.5 * Math.max(0, parts.length - 1);
-  const base = flips * 45 + spins * 25;
-  const airPts = Math.round(air * 5);
-  const pts = parts.length ? Math.round(base * combo) + airPts : 0;
   const tilt = Math.max(rf / 0.75, rs / 0.95);
-  return { flips, spins, parts, name: parts.join(' + '), flipPts: flips * 45, spinPts: spins * 25, combo, airPts, pts, tilt, clean: tilt < 1 };
+  return { flips, spins, parts, flipPts: flips * 45, spinPts: spins * 25, airPts: Math.round(air * 5), tilt, clean: tilt < 1 };
 }
+
+// a scored trick as combo moves: [label, points, kind]
+function trickMoves(sc, air) {
+  const out = [];
+  if (sc.flips) out.push([sc.parts[0], sc.flipPts, 'flip']);
+  if (sc.spins) out.push([sc.parts[sc.flips ? 1 : 0], sc.spinPts, 'spin']);
+  out.push([`AIR ${air.toFixed(1)}s`, sc.airPts, 'air']);
+  return out;
+}
+const airLabel = (s) => `${s >= BIG_AIR_MIN ? 'BIG AIR' : 'AIR'} ${s.toFixed(1)}s`;
 
 const _q = new THREE.Quaternion();
 const _Z = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3();
 const _sp = new THREE.Vector3(), _sf = new THREE.Vector3();
-const _tp = new THREE.Vector3(), _tl = new THREE.Vector3();
+const _tp = new THREE.Vector3(), _tl = new THREE.Vector3(), _ap = new THREE.Vector3();
 
 export class Player {
   constructor(game, spawn) {
@@ -68,6 +79,8 @@ export class Player {
     this.impacts = [];
     this.params = { ...PHYS };
     this.trick = { flip: 0, spin: 0, active: false, tucked: false };
+    this.combo = new Combo(game, this); // the style run (combo.js), shown by the style meter
+    this.winchT = 0; // s on the Hitch-Line at WINCH_FAST this hitch
     this.idle = new Idle(); // breathing and idles when stopped (idles.js)
 
     // helmet lamp + faint suit glow; intensities follow how dark it is
@@ -188,12 +201,14 @@ export class Player {
     const downs = this.game.race && this.game.race.loc;
     if (downs && this.game.currentZone === downs) return;                   // (nor at Chimera Downs: a crowd, a rail, a race to watch)
     if (this.game.cheats && !this.game.cheats.ragdoll) return; // (the dev menu's RAGDOLL switch)
+    this.combo.wipe(); // a crash loses the style run
     this.rag = new Ragdoll(this.game, this.model, this.body, sign);
   }
 
   // dev overlay laps each stage; every path out of step() ends in the 'animate' lap below
   update(dt, input, cam) {
     this.step(dt, input, cam);
+    this.combo.update(dt);
     this.updateLamp(cam);
     this.game.devOverlay.lap('animate');
   }
@@ -216,7 +231,13 @@ export class Player {
     // grinding a snake-rock crest (rails.js): the rail carries you
     const grinding = g.grind && g.grind.update(this, dt, input);
     g.devOverlay.lap('rail');
-    if (grinding) { this.idle.cancel(this.model); if (this.trick.active) this.clearTrick(); return; } // drop a half-done trick so it can't flip you on pop-off
+    if (grinding) {
+      this.idle.cancel(this.model);
+      if (this.trick.active) this.landTrick(b.airTime, true); // a clean trick onto the rail counts; a crooked one is dropped (or it would flip you on pop-off)
+      const A = g.grind.active; // (null on the frame you pop off: rails.js has committed it)
+      if (A) this.combo.addLive(A.r.rimOf ? 'RIM GRIND' : 'GRIND', Math.round(15 + A.t * 30), 'grind');
+      return;
+    }
 
     // riding (transit ship, carousel horse, gondola: rides.js): the seat carries you, no physics; the ride decides where you get off
     if (this.seat) {
@@ -387,6 +408,7 @@ export class Player {
     const pr = sm > 1 ? { ...this.params } : this.params;
     if (sm > 1) for (const k of ['runSpeed', 'runAccel', 'brakeDecel', 'skatePush', 'skatePushMax', 'airControl', 'thrustAccel', 'skateSafeImpact', 'bootSafeImpact']) pr[k] *= sm;
     let landed = false;
+    _ap.copy(b.pos);
     for (let i = 0; i < steps; i++) {
       const before = b.grounded;
       const imp = stepSkater(b, ctrl, h, g.planet, g.colliders, pr, this.impacts);
@@ -402,6 +424,16 @@ export class Player {
       ctrl.jump = false;
     }
     g.devOverlay.lap('physics');
+    if (archPass(g.planet, _ap, b.pos)) this.combo.add('ARCH THREAD', ARCH_PTS, 'arch');
+    // Hitch-Line at speed: style builds while hitched at WINCH_FAST or more, committed when you let go
+    const winchLabel = () => `HITCH-LINE ${this.winchT.toFixed(1)}s`;
+    if (hitched) {
+      if (this.speed >= WINCH_FAST) this.winchT += dt;
+      if (this.winchT > 0) this.combo.addLive(winchLabel(), Math.round(this.winchT * WINCH_RATE), 'winch');
+    } else if (this.winchT > 0) {
+      this.combo.add(winchLabel(), Math.round(this.winchT * WINCH_RATE), 'winch');
+      this.winchT = 0;
+    }
     if (b.jumped) { g.audio.jump(); g.haptics.play('jump'); g.fx.dust(b.pos, b.vel, 6, up); }
     // Vanes active: teal and violet sparks off the skates
     this.vaneCarve = vanes && !b.grounded ? b.airCarve || 0 : 0;
@@ -433,12 +465,10 @@ export class Player {
 
     if (b.diveLanded) {
       g.fx.dust(b.pos, b.vel, 14, up);
-      if (b.diveLanded > 20) { g.fx.pop('STUCK IT!', null, { color: '#2ee6ff', size: 46, prio: 1 }); g.style(Math.round(b.diveLanded / 3), 'DIVE LANDING'); }
+      if (b.diveLanded > 20) this.combo.add('DIVE LANDING', Math.round(b.diveLanded / 3), 'dive');
       b.diveLanded = 0;
     }
-    if (!wasGrounded && b.grounded && airBefore > 1.8 && !this.trickLanding) {
-      g.style(Math.round(airBefore * 15), airBefore >= BIG_AIR_MIN ? `BIG AIR ${airBefore.toFixed(1)}s` : null);
-    }
+    if (!wasGrounded && b.grounded && airBefore > 1.8 && !this.trickLanding) this.combo.add(airLabel(airBefore), Math.round(airBefore * 15), 'air');
     this.trickLanding = false;
     if (wasGrounded && !b.grounded && this.speed > 40 && b.vel.dot(up) > 6) this.launchCheck = 0.6;
     if (this.launchCheck > 0) {
@@ -538,38 +568,41 @@ export class Player {
       t.tucked = t.active && (held || lf > 0.2 || ls > 0.2);
       this.model.trick.rotation.set(t.flip, t.spin, 0, 'YXZ');
     }
-    // the trick meter reads this every frame (null: no trick going)
+    // the style meter reads trickLive every frame (null: no trick going); the air so far goes in as live moves
     this.trickLive = t.active && !b.grounded ? trickScore(t, b.airTime) : null;
-    let wiped = false;
-    if (landedAfter >= 0 && t.active) {
-      const sc = trickScore(t, landedAfter);
-      const { pts, name } = sc;
-      if (sc.clean && pts) {
-        g.style(pts, name);
-        this.trickDone = { pts, name, wiped: false }; // (a new object per landing: the meter spots it by identity)
-        g.haptics.play('stick');
-        g.fx.pop('STUCK IT!', null, { color: '#7dff6a', size: 70, rot: 6, prio: 1 });
-        this.trickLanding = true;
-        g.stats.bestTrick = Math.max(g.stats.bestTrick || 0, pts);
-      } else if (!sc.clean) {
-        this.trickDone = { pts, name, wiped: true };
-        g.fx.pop('WIPEOUT!', null, { color: '#ff2a4a', size: 84, rot: -8, prio: 1 });
-        g.damagePlayer(8, 'impact');
-        b.vel.multiplyScalar(0.55);
-        g.missions.jostle(18, true);
-        g.audio.thud(30);
-        g.haptics.play('wipeout');
-        this.trickLanding = true;
-        wiped = true;
-      }
-      const ragFlip = t.flip;
-      this.resetTrick();
-      if (wiped) this.startRagdoll(ragFlip < 0 ? -1 : 1);
-    } else if (b.grounded) {
+    if (this.trickLive && this.trickLive.parts.length) for (const m of trickMoves(this.trickLive, b.airTime)) this.combo.addLive(...m);
+    else if (!b.grounded && b.airTime > 1.8) this.combo.addLive(airLabel(b.airTime), Math.round(b.airTime * 15), 'air');
+    if (landedAfter >= 0 && t.active) this.landTrick(landedAfter, false);
+    else if (b.grounded) {
       // grounded with a trick still active (a landing updateTricks missed): nothing to score
       if (t.active || t.flip || t.spin) this.clearTrick();
       else this.model.trick.rotation.set(0, 0, 0);
     }
+  }
+
+  // A trick ends, on the ground (air: its air time) or on a rail. Clean, its moves join the combo; crooked on the ground
+  // it's a wipeout and the combo is lost; crooked onto a rail, it's just dropped.
+  landTrick(air, rail) {
+    const t = this.trick, b = this.body, g = this.game;
+    const sc = trickScore(t, air);
+    let wiped = false;
+    if (sc.clean && sc.parts.length) {
+      for (const m of trickMoves(sc, air)) this.combo.add(...m);
+      g.haptics.play('stick');
+      this.trickLanding = true;
+    } else if (!sc.clean && !rail) {
+      this.combo.wipe();
+      g.damagePlayer(8, 'impact');
+      b.vel.multiplyScalar(0.55);
+      g.missions.jostle(18, true);
+      g.audio.thud(30);
+      g.haptics.play('wipeout');
+      this.trickLanding = true;
+      wiped = true;
+    }
+    const ragFlip = t.flip;
+    this.resetTrick();
+    if (wiped) this.startRagdoll(ragFlip < 0 ? -1 : 1);
   }
 
   onImpact(it, skates) {

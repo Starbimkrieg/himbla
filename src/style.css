@@ -204,41 +204,36 @@ body.pad-on #free-cam .fc-kb { display: none; }
 @keyframes hbin { from { opacity: 0; } to { opacity: 1; } }
 @media (max-width: 860px) { #holdbars { left: calc(50% + 80px); width: min(320px, calc(100vw - 300px)); } } /* clear of the (scaled-down) speedometer */
 
-/* ---------- trick meter (trickhud.js): A, the style meter (bottom right); B, the ticker beside the runner ---------- */
-#trickmeter { position: absolute; right: 16px; bottom: 16px; width: 270px; padding: 8px 12px 10px; background: var(--ui-bg); border: 2px solid var(--ui-edge); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); font-family: var(--comic); transition: opacity 0.35s, border-color 0.15s; }
-#trickmeter .tm-rank { display: flex; align-items: baseline; line-height: 1; white-space: nowrap; }
-#trickmeter .tm-letter { display: inline-block; font-size: 30px; font-weight: normal; text-shadow: 3px 3px 0 #05030c; transform-origin: left bottom; }
-#trickmeter .tm-word { font-size: 14px; color: var(--ui-text); margin-left: 1px; text-shadow: 2px 2px 0 #05030c; }
-#trickmeter .tm-bar { height: 6px; margin: 8px 0 7px; background: var(--ui-bg2); border: 1px solid var(--ui-edge); overflow: hidden; }
-#trickmeter .tm-bar i { display: block; height: 100%; width: 0; transition: width 0.12s; }
-#trickmeter .tm-moves { font-size: 10px; line-height: 1.7; }
-#trickmeter .tm-move { display: flex; justify-content: space-between; gap: 8px; white-space: nowrap; }
-#trickmeter .tm-move.tk-in { animation: crpop 0.25s ease-out; }
-#trickmeter .tm-pts { color: var(--ui-muted); }
-#trickmeter .tm-combo { font-size: 10px; line-height: 1.7; color: var(--yellow); }
-#trickmeter .tm-combo:empty { display: none; }
-#trickmeter .tm-foot { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; padding-top: 7px; border-top: 2px solid var(--ui-edge); }
-#trickmeter .tm-land { font-size: 9px; }
-#trickmeter .tm-total { display: inline-block; font-size: 20px; font-weight: normal; color: var(--paper); text-shadow: 2px 2px 0 #05030c; transform-origin: right bottom; }
-#trickmeter.tk-stuck { border-color: var(--green); }
-#trickmeter.tk-wiped { border-color: var(--red); }
-#trickmeter.tk-wiped .tm-moves, #trickmeter.tk-wiped .tm-total { text-decoration: line-through; opacity: 0.6; }
-#trickticker { position: absolute; left: calc(50% + 110px); top: 44%; max-width: calc(50% - 130px); font-family: var(--comic); line-height: 1; text-shadow: 2px 2px 0 #05030c, -2px -2px 0 #05030c, 2px -2px 0 #05030c, -2px 2px 0 #05030c, 3px 3px 0 #05030c; transition: opacity 0.35s; }
-#trickticker .tt-pts { display: inline-block; font-size: 28px; font-weight: normal; color: var(--yellow); transform-origin: left center; white-space: nowrap; }
-#trickticker .tt-pts.tt-zero { color: var(--ui-muted); }
-#trickticker .tt-name { margin-top: 7px; font-size: 10px; line-height: 1.4; color: #ff7ad9; }
-#trickticker .tt-gauge { position: relative; width: 128px; height: 8px; margin-top: 8px; background: rgba(5, 3, 12, 0.6); border: 1px solid var(--ui-edge); box-shadow: 0 0 0 1px #05030c; }
-#trickticker .tt-zone { position: absolute; left: 0; top: 0; bottom: 0; width: 62.5%; background: rgba(125, 255, 106, 0.3); }
-#trickticker .tt-mark { position: absolute; top: -4px; width: 4px; height: 14px; margin-left: -2px; background: var(--paper); box-shadow: 0 0 0 1px #05030c; }
-#trickticker .tt-mark.ok { background: var(--green); }
-#trickticker .tt-mark.bad { background: var(--red); }
-#trickticker.tk-stuck .tt-pts { color: var(--green); }
-#trickticker.tk-wiped .tt-pts { color: var(--red); }
-#trickticker.tk-wiped .tt-name { text-decoration: line-through; opacity: 0.6; }
-#trickmeter.tk-out, #trickticker.tk-out { opacity: 0; }
-.tk-bump { animation: tkbump 0.24s steps(3); }
-@keyframes tkbump { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
-@media (max-width: 800px) { #trickmeter { transform: scale(0.8); transform-origin: bottom right; } #trickticker { left: calc(50% + 80px); max-width: calc(50% - 96px); } }
+/* ---------- style meter (stylemeter.js): the style run, bottom right ---------- */
+#stylemeter { position: absolute; right: 16px; bottom: 16px; width: 270px; padding: 8px 12px 10px; background: var(--ui-bg); border: 2px solid var(--ui-edge); box-shadow: 0 0 0 2px #05030c, var(--ui-shadow); font-family: var(--comic); transition: opacity 0.35s, border-color 0.15s; }
+#stylemeter .sm-rank { display: flex; align-items: baseline; line-height: 1; white-space: nowrap; }
+#stylemeter .sm-letter { display: inline-block; font-size: 30px; font-weight: normal; text-shadow: 3px 3px 0 #05030c; transform-origin: left bottom; }
+#stylemeter .sm-word { font-size: 14px; color: var(--ui-text); margin-left: 1px; text-shadow: 2px 2px 0 #05030c; }
+#stylemeter .sm-bar { height: 6px; margin: 8px 0 7px; background: var(--ui-bg2); border: 1px solid var(--ui-edge); overflow: hidden; }
+#stylemeter .sm-bar i { display: block; height: 100%; width: 0; transition: width 0.12s; }
+#stylemeter .sm-moves { font-size: 10px; line-height: 1.7; }
+#stylemeter .sm-move { display: flex; justify-content: space-between; gap: 8px; white-space: nowrap; }
+#stylemeter .sm-move > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+#stylemeter .sm-move.sm-in { animation: crpop 0.25s ease-out; }
+#stylemeter .sm-more { color: var(--ui-dim); }
+#stylemeter .sm-pts { color: var(--ui-muted); }
+#stylemeter .sm-mult { font-size: 10px; line-height: 1.7; color: var(--yellow); }
+#stylemeter .sm-mult:empty { display: none; }
+#stylemeter .sm-foot { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; padding-top: 7px; border-top: 2px solid var(--ui-edge); }
+#stylemeter .sm-land { font-size: 9px; }
+#stylemeter .sm-land.ok { color: var(--green); }
+#stylemeter .sm-land.bad { color: var(--red); animation: blink 0.4s steps(2) infinite; }
+#stylemeter .sm-total { display: inline-block; font-size: 20px; font-weight: normal; color: var(--paper); text-shadow: 2px 2px 0 #05030c; transform-origin: right bottom; }
+#stylemeter .sm-window { height: 3px; margin-top: 7px; background: var(--ui-bg2); overflow: hidden; }
+#stylemeter .sm-window i { display: block; height: 100%; width: 100%; background: var(--yellow); }
+#stylemeter.sm-banked { border-color: var(--green); }
+#stylemeter.sm-wiped { border-color: var(--red); }
+#stylemeter.sm-wiped .sm-land.bad { animation: none; }
+#stylemeter.sm-wiped .sm-moves, #stylemeter.sm-wiped .sm-total { text-decoration: line-through; opacity: 0.6; }
+#stylemeter.sm-out { opacity: 0; }
+.sm-bump { animation: smbump 0.24s steps(3); }
+@keyframes smbump { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
+@media (max-width: 800px) { #stylemeter { transform: scale(0.8); transform-origin: bottom right; } }
 
 #banner { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); text-align: center; width: min(760px, calc(100vw - 32px)); }
 #banner.slam { animation: slam 0.45s cubic-bezier(.2,1.4,.4,1); }

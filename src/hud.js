@@ -9,7 +9,7 @@ import { WEAPONS, APC_CANNON } from './weapons.js';
 import { EVENT_RANGE, PLANET } from './config.js';
 import { pixelFont } from './fonts.js';
 import { mulberry32 } from './rng.js';
-import { TrickHud } from './trickhud.js';
+import { StyleMeter } from './stylemeter.js';
 
 const $ = (id) => document.getElementById(id);
 // per-frame lookups: HUD elements are static, so each is found once
@@ -32,7 +32,7 @@ export class HUD {
     this.v = new THREE.Vector3();
     this.lastSpeedTxt = '';
     this.buildCracks();
-    this.trick = new TrickHud(game, $('hud'));
+    this.styleMeter = new StyleMeter(game, $('hud'));
   }
 
   // Cracked visor: cracks spread over the screen (above the HUD) as hull drops. Five impacts, each a star of jagged
@@ -493,7 +493,7 @@ export class HUD {
     if (this.resultT > 0) { $c('result').classList.remove('hidden'); if ((this.resultT -= dt) <= 0) $c('result').classList.add('hidden'); }
 
     this.drawSpeedo(P.speed * 3.6);
-    this.trick.update(dt);
+    this.styleMeter.update(dt);
     this.distressLog(dt);
     $c('hp-fill').style.width = (P.health / P.maxHealth) * 100 + '%';
     this.updateCracks(Math.max(0, P.health / P.maxHealth));
