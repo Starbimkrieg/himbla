@@ -84,7 +84,7 @@ export class Player {
   get up() { return this.body.up; }
 
   applyUpgrades(up) {
-    this.params.skateSafeImpact = PHYS.skateSafeImpact + up.dampers * 8;
+    this.params.skateSafeImpact = PHYS.skateSafeImpact + up.dampers * 12;
     this.params.handling = PHYS.handling + (up.gyro || 0) * 0.55;
     this.body.maxEnergy = PHYS.maxEnergy + up.capacitor * 25;
     this.maxHealth = 100 + up.armor * 15 + (up.flak || 0) * 10 + (up.plating || 0) * 10 + (this.mutHealth || 0);

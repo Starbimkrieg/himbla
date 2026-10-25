@@ -201,7 +201,7 @@ export const SHOPS = {
   ilmb: [
     { key: 'capacitor', name: 'Flux Capacitor', desc: '+25 thruster energy', cost: 600, max: 3, faction: 'spacecom', req: ILMB_LADDER },
     { key: 'armor', name: 'Ablative Suit Plating', desc: '+15 max health', cost: 550, max: 3, faction: 'spacecom', req: ILMB_LADDER },
-    { key: 'dampers', name: 'Mag-Cushion Dampers', desc: 'Safer hard landings', cost: 650, max: 3, faction: 'spacecom', req: ILMB_LADDER },
+    { key: 'dampers', name: 'Mag-Cushion Dampers', desc: 'Safer hard landings on skates: +12 m/s safe impact per level', cost: 650, max: 3, faction: 'spacecom', req: ILMB_LADDER },
     { key: 'scanner', name: 'Threat Scanner', desc: 'Look at pirates to mark them with a red outline; warns of inbound squads', cost: 700, max: 2, faction: 'spacecom', req: ILMB_LADDER },
     { key: 'seeker', name: 'SPACECOM Seeker Module', desc: 'Pulse discs, mortar shells and scattergun pellets steer harder onto the target you aimed at (the disc most)', cost: 800, max: 3, faction: 'spacecom', req: ILMB_LADDER },
     { key: 'v_interceptor', name: 'SPACECOM Lunar Interceptor', desc: 'VEHICLE: the fast one, yours to call with V', cost: 3500, max: 1, faction: 'spacecom', req: [REP.revered], vehicle: 'interceptor' },
@@ -237,7 +237,7 @@ export const SHOPS = {
     // drawn at random, cheaper items likelier (the board names it: missions.js pickPayload). Deliver it and it's on sale here for good.
     // `n` is only the legacy order, used to credit old saves that counted deliveries (main.js load)
     { key: 'armor', name: 'Black-Market Suit Plating', desc: '+15 max health', cost: 700, max: 3, faction: 'rustmoon', req: [0] },
-    { key: 'dampers', name: 'Black-Market Dampers', desc: 'Safer hard landings', cost: 800, max: 3, faction: 'rustmoon', req: [0] },
+    { key: 'dampers', name: 'Black-Market Dampers', desc: 'Safer hard landings on skates: +12 m/s safe impact per level', cost: 800, max: 3, faction: 'rustmoon', req: [0] },
     { key: 'scatter', name: 'Black-Market Scattergun', desc: 'WEAPON (key 2): a Vostok scattergun, serial filed off', cost: 1800, max: 1, faction: 'rustmoon', req: [0], weapon: true, unlock: { smuggle: true, n: 1 } },
     { key: 'capacitor', name: 'Black-Market Flux Capacitor', desc: '+25 thruster energy', cost: 750, max: 3, faction: 'rustmoon', req: [0] },
     { key: 'overcharge', name: 'Black-Market Overcharger', desc: 'Faster fire rate for every weapon', cost: 1000, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 2 } },
