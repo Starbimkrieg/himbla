@@ -91,9 +91,8 @@ player lights (skate colour, health), DualSense adaptive triggers, and a TEST bu
 - **Landings:** boots hurt on hard landings; skates absorb most. Fast glancing landings hurt less. Cargo takes the
   full jolt.
 - **Tricks:** flips and spins score style if you land upright; crooked landings **WIPE OUT**. Thrusters fired while
-  turned in a trick push along the body at half power (a quarter backflip lifts you, a half spin brakes); lift past
-  the usual cap lasts 1.2 s per air (`TRICK_THRUST`, `TRICK_LIFT_TIME` in `src/player.js`). Vehicles have solid
-  decks you can ride. **SKY-HIGH!** at 40 m up, **BIG AIR** after 5 s in the air.
+  turned in a trick push along the body at half power (a quarter backflip lifts you, a half spin brakes; `TRICK_THRUST`
+  in `src/player.js`). Vehicles have solid decks you can ride. **SKY-HIGH!** at 40 m up, **BIG AIR** after 5 s in the air.
 - **Grinding:** snake rocks (35-50 m ridges) and firm crater lips are rails. Land on one or ride onto it at an angle
   to grind; `Shift` pops off. Grinds pay style per second.
 - **Terrain:** cratered plains plus highlands, scarps, rolling hills and long rilles. Craters range from bowls to
