@@ -18,7 +18,7 @@ const TAU = Math.PI * 2;
 const FLIP_RATE = 11; // rad/s ≈ 1.75 rotations per second
 const SPIN_RATE = 12;
 // trick thrust: with the body turned in a trick the pack pushes where the body faces, at this share of the thrusters' power
-const TRICK_THRUST = 0.5;
+const TRICK_THRUST = 0.7;
 const NUMS = ['', '', 'DOUBLE ', 'TRIPLE ', 'QUAD ', 'QUINT '];
 const BIG_AIR_MIN = 5; // s airborne before BIG AIR! is called (shorter hops still pay style, quietly)
 const SKY_HIGH_GAIN = 40; // m climbed (radially) above a jump's start before SKY-HIGH! is called

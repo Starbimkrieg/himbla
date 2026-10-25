@@ -5,7 +5,7 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
-- **Trick thrust: the jetpack pushes the way your body faces mid-trick.** Turned in a trick (hold `Q`), the thrusters push along the body's own forward axis instead of where you aim: a quarter backflip (lying face up) pushes you up, a quarter frontflip drives you down, a half spin is an air brake. The push follows the pose, blending in from upright to all the pack's way by 60° off, at half the thrusters' power (`TRICK_THRUST` in `src/player.js`). The jet tank is the only limit: measured in the game at 60 Hz, one second of thrust in a quarter backflip leaves you rising 1.5 m/s where you would have fallen 6, and a full tank (3.3 s) adds about 25 m/s of upward speed. The jet sparks follow the push.
+- **Trick thrust: the jetpack pushes the way your body faces mid-trick.** Turned in a trick (hold `Q`), the thrusters push along the body's own forward axis instead of where you aim: a quarter backflip (lying face up) pushes you up, a quarter frontflip drives you down, a half spin is an air brake. The push follows the pose, blending in from upright to all the pack's way by 60° off, at 70% of the thrusters' power (`TRICK_THRUST` in `src/player.js`). The jet tank is the only limit: measured in the game at 60 Hz, one second of thrust in a quarter backflip leaves you rising 4.5 m/s where you would have fallen 6, and a full tank (3.3 s) adds about 35 m/s of upward speed. The jet sparks follow the push.
 
 - **Xenoglide skates: thrusters push 1.5x as hard (was 2.2x).** The tank (+50, double refill) is unchanged; the pickup dialog says so.
 
