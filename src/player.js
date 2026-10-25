@@ -23,6 +23,22 @@ const NUMS = ['', '', 'DOUBLE ', 'TRIPLE ', 'QUAD ', 'QUINT '];
 const BIG_AIR_MIN = 5; // s airborne before BIG AIR! is called (shorter hops still pay style, quietly)
 const SKY_HIGH_GAIN = 40; // m climbed (radially) above a jump's start before SKY-HIGH! is called
 
+// What a trick scores if you land it now: whole flips and spins (+50% per extra kind), plus air time. clean: upright
+// enough to stick it; tilt: how far off that is (1 = the wipeout edge). The landing and the trick meter (trickhud.js) both use this.
+export function trickScore(t, air) {
+  const flips = Math.round(Math.abs(t.flip) / TAU), spins = Math.round(Math.abs(t.spin) / TAU);
+  const rf = Math.abs(t.flip - Math.round(t.flip / TAU) * TAU), rs = Math.abs(t.spin - Math.round(t.spin / TAU) * TAU);
+  const parts = [];
+  if (flips) parts.push(`${flips < NUMS.length ? NUMS[flips] : flips + 'x '}${t.flip > 0 ? 'FRONTFLIP' : 'BACKFLIP'}`);
+  if (spins) parts.push(`${spins * 360} SPIN`);
+  const combo = 1 + 0.5 * Math.max(0, parts.length - 1);
+  const base = flips * 45 + spins * 25;
+  const airPts = Math.round(air * 5);
+  const pts = parts.length ? Math.round(base * combo) + airPts : 0;
+  const tilt = Math.max(rf / 0.75, rs / 0.95);
+  return { flips, spins, parts, name: parts.join(' + '), flipPts: flips * 45, spinPts: spins * 25, combo, airPts, pts, tilt, clean: tilt < 1 };
+}
+
 const _q = new THREE.Quaternion();
 const _Z = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3();
@@ -154,6 +170,7 @@ export class Player {
   clearTrick() {
     const t = this.trick;
     t.flip = t.spin = 0;
+    this.trickLive = null;
     t.active = t.tucked = false;
     this.model.trick.rotation.set(0, 0, 0);
     this.model.trick.position.y = 1.2;
@@ -521,27 +538,21 @@ export class Player {
       t.tucked = t.active && (held || lf > 0.2 || ls > 0.2);
       this.model.trick.rotation.set(t.flip, t.spin, 0, 'YXZ');
     }
+    // the trick meter reads this every frame (null: no trick going)
+    this.trickLive = t.active && !b.grounded ? trickScore(t, b.airTime) : null;
     let wiped = false;
     if (landedAfter >= 0 && t.active) {
-      const flips = Math.round(Math.abs(t.flip) / TAU);
-      const spins = Math.round(Math.abs(t.spin) / TAU);
-      const rf = Math.abs(t.flip - Math.round(t.flip / TAU) * TAU);
-      const rs = Math.abs(t.spin - Math.round(t.spin / TAU) * TAU);
-      const clean = rf < 0.75 && rs < 0.95;
-      if (clean && (flips || spins)) {
-        const parts = [];
-        if (flips) parts.push(`${NUMS[Math.min(flips, 5)] || flips + 'x '}${t.flip > 0 ? 'FRONTFLIP' : 'BACKFLIP'}`);
-        if (spins) parts.push(`${spins * 360} SPIN`);
-        let pts = flips * 45 + spins * 25;
-        if (parts.length > 1) pts = Math.round(pts * (1 + 0.5 * (parts.length - 1)));
-        pts += Math.round(landedAfter * 5);
-        const name = parts.join(' + ');
+      const sc = trickScore(t, landedAfter);
+      const { pts, name } = sc;
+      if (sc.clean && pts) {
         g.style(pts, name);
+        this.trickDone = { pts, name, wiped: false }; // (a new object per landing: the meter spots it by identity)
         g.haptics.play('stick');
         g.fx.pop('STUCK IT!', null, { color: '#7dff6a', size: 70, rot: 6, prio: 1 });
         this.trickLanding = true;
         g.stats.bestTrick = Math.max(g.stats.bestTrick || 0, pts);
-      } else if (!clean) {
+      } else if (!sc.clean) {
+        this.trickDone = { pts, name, wiped: true };
         g.fx.pop('WIPEOUT!', null, { color: '#ff2a4a', size: 84, rot: -8, prio: 1 });
         g.damagePlayer(8, 'impact');
         b.vel.multiplyScalar(0.55);

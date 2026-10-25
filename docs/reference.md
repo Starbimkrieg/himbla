@@ -92,7 +92,9 @@ player lights (skate colour, health), DualSense adaptive triggers, and a TEST bu
   full jolt.
 - **Tricks:** flips and spins score style if you land upright; crooked landings **WIPE OUT**. Thrusters fired while
   turned in a trick push along the body at 70% power (a quarter backflip lifts you, a half spin brakes; `TRICK_THRUST`
-  in `src/player.js`). Vehicles have solid decks you can ride. **SKY-HIGH!** at 40 m up, **BIG AIR** after 5 s in the air.
+  in `src/player.js`). A trick meter shows what the trick in the air would score if landed now, and whether you'd
+  stick it (`src/trickhud.js`; two drafts: `?trickhud=a`, the style meter, or `b`, the ticker). Vehicles have solid
+  decks you can ride. **SKY-HIGH!** at 40 m up, **BIG AIR** after 5 s in the air.
 - **Grinding:** snake rocks (35-50 m ridges) and firm crater lips are rails. Land on one or ride onto it at an angle
   to grind; `Shift` pops off. Grinds pay style per second.
 - **Terrain:** cratered plains plus highlands, scarps, rolling hills and long rilles. Craters range from bowls to
@@ -364,6 +366,7 @@ src/
   fonts.js         the bundled pixel faces (Press Start 2P, Jersey 15) and the credit sign (assets/fonts/)
   physics.js       collider hash and shared skater movement
   player.js        input, movement, weapons, animation, style
+  trickhud.js      the trick meter: the live score of a trick in the air (two drafts, ?trickhud=a|b)
   idles.js         standing idle animations
   enemies.js       pirates, bases, turrets, artillery, theft
   missions.js      contracts, pickup and delivery, payouts
