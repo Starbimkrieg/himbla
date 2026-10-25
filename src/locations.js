@@ -200,7 +200,7 @@ export const SHOPS = {
     { key: 'dampers', name: 'Mag-Cushion Dampers', desc: 'Safer hard landings, less cargo jostle', cost: 650, max: 3 },
     { key: 'spinner', name: 'Weapon Tuning Kit', desc: '+20% damage for every weapon', cost: 750, max: 3 },
     { key: 'scanner', name: 'Threat Scanner', desc: 'Look at pirates to mark them with a red outline; warns of inbound squads', cost: 700, max: 2 },
-    { key: 'seeker', name: 'SPACECOM Seeker Module', desc: 'Pulse discs home in harder on targets', cost: 800, max: 3, faction: 'spacecom', req: [0, 10, 25] },
+    { key: 'seeker', name: 'SPACECOM Seeker Module', desc: 'Pulse discs, mortar shells and scattergun pellets steer harder onto the target you aimed at (the disc most)', cost: 800, max: 3, faction: 'spacecom', req: [0, 10, 25] },
   ],
   meridian: [
     { key: 'gyro', name: 'Meridian Gyro-Edges', desc: 'Sharper ground steering on skates', cost: 700, max: 3, faction: 'meridian', req: [0, 10, 25] },
@@ -233,7 +233,7 @@ export const SHOPS = {
     { key: 'scanner', name: 'Black-Market Threat Scanner', desc: 'Look at lawmen and pirates to mark them; warns of inbound squads', cost: 900, max: 2, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 3 } },
     { key: 'rail', name: 'Black-Market Rail Lance', desc: 'WEAPON (key 3): a Daedalus rail lance, borrowed forever', cost: 2200, max: 1, faction: 'rustmoon', req: [0], weapon: true, unlock: { smuggle: true, n: 4 } },
     { key: 'gyro', name: 'Black-Market Gyro-Edges', desc: 'Sharper ground steering on skates', cost: 900, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 4 } },
-    { key: 'seeker', name: 'Black-Market Seeker Module', desc: 'Pulse discs home in harder on targets', cost: 1050, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 5 } },
+    { key: 'seeker', name: 'Black-Market Seeker Module', desc: 'Pulse discs, mortar shells and scattergun pellets steer harder onto the target you aimed at (the disc most)', cost: 1050, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 5 } },
     { key: 'flak', name: 'Black-Market Flak Weave', desc: '+20 max health, less blast knockback', cost: 950, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 5 } },
     { key: 'v_interceptor', name: 'Hot-Wired Interceptor', desc: 'VEHICLE: a SPACECOM Interceptor, liberated', cost: 4200, max: 1, faction: 'rustmoon', req: [0], vehicle: 'interceptor', unlock: { smuggle: true, n: 5 } },
     { key: 't_shield', name: 'Black-Market Deflector', desc: 'TECH: absorbs one hit every 12 s', cost: 3600, max: 1, faction: 'rustmoon', req: [0], tech: 'shield', unlock: { smuggle: true, n: 6 } },

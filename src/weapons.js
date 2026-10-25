@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pickLock } from './projectiles.js';
 
 // Weapon roster. The Pulse Spinner is standard issue; the rest are bought at faction HQs.
 export const WEAPONS = [
@@ -25,19 +26,21 @@ export function weaponUnlocked(w, upgrades) {
 }
 
 // Fires `w` from `muzzle` toward `dir` (unit). Returns nothing; spawns projectiles or a beam.
+// homing: the Seeker's turn rate for the pulse disc (rad/s); the mortar and the scattergun take a fraction of it.
 export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
   const P = g.player;
   if (w.key === 'pulse') {
-    g.projectiles.fire('player', muzzle, launch(dir, 115, inherit), { range: 115 * 4, damage: 34 * mult, splash: 7, color: g.cosmetics ? g.cosmetics.laserColor : 0x9be7ff, size: 0.45, knock: 1.6, homing });
+    g.projectiles.fire('player', muzzle, launch(dir, 115, inherit), { range: 115 * 4, damage: 34 * mult, splash: 7, color: g.cosmetics ? g.cosmetics.laserColor : 0x9be7ff, size: 0.45, knock: 1.6, homing, lock: pickLock(g, muzzle, dir) });
     g.audio.shoot();
     g.haptics.play('pulse');
   } else if (w.key === 'scatter') {
     const right = _v.crossVectors(dir, P.up).normalize().clone();
     const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+    const lock = pickLock(g, muzzle, dir, 0.8, 200);               // one target per volley, not one scan per pellet
     for (let i = 0; i < 7; i++) {
       const d = dir.clone().addScaledVector(right, (Math.random() - 0.5) * 0.13).addScaledVector(up, (Math.random() - 0.5) * 0.08).normalize();
       // ~200 m reach; 7 x 17 up close
-      g.projectiles.fire('player', muzzle, launch(d, 175, inherit), { range: 175 * 1.15, damage: 17 * mult, splash: 3, color: 0xffb02e, size: 0.27, knock: 0.6, life: 1.15 });
+      g.projectiles.fire('player', muzzle, launch(d, 175, inherit), { range: 175 * 1.15, damage: 17 * mult, splash: 3, color: 0xffb02e, size: 0.27, knock: 0.6, life: 1.15, homing: homing * 0.12, lock });
     }
     g.audio.burst(0.25, 2400, 0.4);
     g.haptics.play('scatter');
@@ -79,7 +82,7 @@ export function fireWeapon(g, w, muzzle, dir, inherit, mult, homing) {
     g.cam.shake = Math.max(g.cam.shake, 0.35);
   } else if (w.key === 'mortar') {
     const d = dir.clone().addScaledVector(P.up, 0.28).normalize();
-    g.projectiles.fire('player', muzzle, launch(d, 100, inherit), { range: 100 * 6, damage: 70 * mult, splash: 13, color: 0x7dff3a, size: 0.8, knock: 2.2, gravity: 20, life: 6 });
+    g.projectiles.fire('player', muzzle, launch(d, 100, inherit), { range: 100 * 6, damage: 70 * mult, splash: 13, color: 0x7dff3a, size: 0.8, knock: 2.2, gravity: 20, life: 6, homing: homing * 0.35, flat: true, lock: pickLock(g, muzzle, dir, 0.3, 300) });
     g.audio.tone(140, 0.3, 'square', 0.25, 0.5);
     g.haptics.play('mortar');
   }
