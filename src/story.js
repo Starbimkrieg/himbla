@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FACTIONS } from './locations.js';
+import { FACTIONS, SHOPS } from './locations.js';
 import { makeRunner, makeCrate } from './models.js';
 import { toon, glow, ink, textSprite, nameTag } from './toon.js';
 import { arcDist, tangent, greatCircle, darkness, collectNodes } from './geo.js';
@@ -731,7 +731,11 @@ export class Story {
     if (r.upgrade) {
       const [key, lvl] = r.upgrade;
       const UNAME = { seeker: 'SPACECOM Seeker Module', flak: 'Vostok Flak Weave', overcharge: 'Daedalus Overcharger', dampers: 'Mag-Cushion Dampers', uplink: 'Meridian Market Uplink', gyro: 'Meridian Gyro-Edges', shadow: 'Rustmoon Shadow Rig' };
-      if ((g.upgrades[key] || 0) < lvl) { g.upgrades[key] = lvl; g.player.applyUpgrades(g.upgrades); unlocks.push(`Upgrade: ${UNAME[key] || key} (level ${lvl})`); }
+      // first time: the listed level. Already own it (bought or black-market): the next tier, free, up to the shop's max
+      const cur = g.upgrades[key] || 0;
+      const max = Object.values(SHOPS).flat().find((u) => u.key === key)?.max ?? lvl;
+      const next = cur >= 1 ? Math.min(max, cur + 1) : lvl;
+      if (next > cur) { g.upgrades[key] = next; g.player.applyUpgrades(g.upgrades); unlocks.push(`Upgrade: ${UNAME[key] || key} (level ${next})`); }
     }
     const dawn = this.worldReward(r, unlocks);
     this.save();
@@ -1205,9 +1209,8 @@ export class Story {
     const s = A.steps[A.si];
     if (s.t !== 'carry' && s.t !== 'build') return;
     const g = this.game;
-    // hauled loads take damage from knocks. Mag-Cushion Dampers soften it; a Kepler Cargo Cradle (legacy upgrade in old saves) takes a share
-    const up = g.upgrades;
-    const shield = (1 - (up.dampers || 0) * 0.15) * (1 - (up.cradle || 0) * 0.2);
+    // hauled loads take damage from knocks; the Kepler Shock Cradle softens it
+    const shield = 1 - (g.upgrades.cradle || 0) * 0.25;
     let dmg;
     if (s.t === 'build') {
       // undo the dev speed multiplier's inflated impact speeds; `!(v > …)` treats NaN as nothing

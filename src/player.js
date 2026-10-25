@@ -68,21 +68,22 @@ export class Player {
     this.params.skateSafeImpact = PHYS.skateSafeImpact + up.dampers * 8;
     this.params.handling = PHYS.handling + (up.gyro || 0) * 0.55;
     this.body.maxEnergy = PHYS.maxEnergy + up.capacitor * 25;
-    this.maxHealth = 100 + up.armor * 25 + (up.flak || 0) * 20 + (up.plating || 0) * 10 + (this.mutHealth || 0);
-    this.damageMult = 1 + up.spinner * 0.2;
+    this.maxHealth = 100 + up.armor * 15 + (up.flak || 0) * 10 + (up.plating || 0) * 10 + (this.mutHealth || 0);
+    this.regen = up.flak || 0; // Flak Weave: HP per 3 s tick (main.js)
+    this.damageMult = 1 + up.spinner * 0.15;
     this.fireDelay = 0.55 * (1 - 0.15 * (up.overcharge || 0)) * (this.mutFire || 1);
     this.homing = 0.9 + (up.seeker || 0) * 1.3; // rad/s the disc can turn toward a target
     this.knockResist = 1 - (up.flak || 0) * 0.15;
     // Xenoglide skates: big handling boost and an antimatter jet tank
     const alien = (up.alien || 0) > 0;
-    if (alien) this.params.handling += 4;
+    if (alien) this.params.handling += 2;
     this.params.thrustAccel = alien ? PHYS.thrustAccel * 2.2 : PHYS.thrustAccel;
     this.params.energyRegen = alien ? PHYS.energyRegen * 2 : PHYS.energyRegen;
     if (alien) this.body.maxEnergy += 50;
-    // Dr. Zbornak's rewound coils (3 depot wiring per tune), plus the Root Grip mutation
-    const gw = up.gripwire || 0;
+    // Dr. Zbornak's rewound coils (3 depot wiring, once; old saves may hold up to 3), plus the Root Grip mutation
+    const gw = Math.min(1, up.gripwire || 0);
     this.params.grip = PHYS.grip * (1 + gw * 0.15 + (this.mutGrip || 0));
-    this.params.handling += gw * 0.3;
+    this.params.handling += gw * 0.15;
   }
 
   // Ride the deck you stand on. Called after the world has moved it this frame (main.js), so you, the model and the camera follow

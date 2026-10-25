@@ -540,7 +540,7 @@ class Game {
     trade('plating', 'plating', 3, 'HAND OVER 3 SCRAP PLATES — BOLT-ON ARMOUR', (lv) => `"Riveted to your suit and to every vehicle you own. Ten more hull for you and fifteen percent more for your rides (armour ${lv}/3). Do not ask what holds it on."`);
     const wires = this.alchemy.jar.filter((i) => i.kind === 'wiring').length;
     const gw = this.upgrades.gripwire || 0;
-    if (wires >= 3 && gw < 3) buttons.push({ label: `${buttons.length + 1} · HAND OVER 3 ELECTRICAL WIRING — SKATE GRIP TUNE (${gw + 1}/3)`, fn: () => {
+    if (wires >= 3 && gw < 1) buttons.push({ label: `${buttons.length + 1} · HAND OVER 3 ELECTRICAL WIRING — SKATE GRIP TUNE`, fn: () => {
       let n = 0;
       this.alchemy.jar = this.alchemy.jar.filter((i) => !(i.kind === 'wiring' && n++ < 3));
       this.alchemy.refreshJarMesh();
@@ -549,7 +549,7 @@ class Game {
       this.audio.cash();
       this.save();
       this.fx.pop('GRIP TUNED!', null, { color: '#ffd23f', size: 50 });
-      this.dialog('DR. ZBORNAK', `"Copper! Lovely, stolen copper. I have rewound the magnetic coils in your skates. They will hug the ground a little harder now (grip tune ${gw + 1}/3). ${gw + 1 < 3 ? 'Bring more wire and I can wind them tighter.' : 'Any tighter and you would be welded to the Moon.'}"`, [{ label: 'STICKY!' }]);
+      this.dialog('DR. ZBORNAK', `"Copper! Lovely, stolen copper. I have rewound the magnetic coils in your skates. They will hug the ground a little harder now, and steer a touch sharper. Any tighter and you would be welded to the Moon."`, [{ label: 'STICKY!' }]);
     } });
     else if (wires >= 3) buttons.push({ label: `${buttons.length + 1} · MORE WIRING?`, fn: () => this.dialog('DR. ZBORNAK', '"Your coils are already wound as tight as physics allows. Throw the wire in the reactor if you must."', [{ label: 'OK' }]) });
     const chims = this.alchemy.chimeras.length;
@@ -1560,6 +1560,11 @@ class Game {
     const zBase = z && this.enemies.bases.find((b) => b.loc === z);
     const engaged = zBase && (zBase.hostile || zBase.aggro > 0);
     if (this.isSafe(z) && !P.dead && !engaged) P.health = Math.min(P.maxHealth, P.health + (z.repair || 6) * dt);
+    // Flak Weave regen: P.regen HP every 3 s while hurt
+    if (P.regen && !P.dead && P.health < P.maxHealth) {
+      P.regenT = (P.regenT || 0) + dt;
+      if (P.regenT >= 3) { P.regenT -= 3; P.health = Math.min(P.maxHealth, P.health + P.regen); }
+    } else P.regenT = 0;
     const canBoard = z && (this.jobsAt(z).length || (SHOPS[z.id] && (z.type !== 'pirate' || this.rep.aligned())));
     const canSwear = z && z.id === 'rustmoon' && z.type === 'pirate' && this.rep.rustmoon === 'known' && !FACTIONS.rustmoon.gone && !(this.story && this.story.kade.captured);
     const lab = this.world.lab;

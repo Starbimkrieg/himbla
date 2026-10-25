@@ -196,9 +196,8 @@ import { cosmeticShopItems } from './cosmetics.js';
 export const SHOPS = {
   ilmb: [
     { key: 'capacitor', name: 'Flux Capacitor', desc: '+25 thruster energy', cost: 600, max: 3 },
-    { key: 'armor', name: 'Ablative Suit Plating', desc: '+25 max health', cost: 550, max: 3 },
-    { key: 'dampers', name: 'Mag-Cushion Dampers', desc: 'Safer hard landings, less cargo jostle', cost: 650, max: 3 },
-    { key: 'spinner', name: 'Weapon Tuning Kit', desc: '+20% damage for every weapon', cost: 750, max: 3 },
+    { key: 'armor', name: 'Ablative Suit Plating', desc: '+15 max health', cost: 550, max: 3 },
+    { key: 'dampers', name: 'Mag-Cushion Dampers', desc: 'Safer hard landings', cost: 650, max: 3 },
     { key: 'scanner', name: 'Threat Scanner', desc: 'Look at pirates to mark them with a red outline; warns of inbound squads', cost: 700, max: 2 },
     { key: 'seeker', name: 'SPACECOM Seeker Module', desc: 'Pulse discs home in harder on targets', cost: 800, max: 3, faction: 'spacecom', req: [0, 10, 25] },
   ],
@@ -209,10 +208,12 @@ export const SHOPS = {
   kepler: [
     { key: 'winch', name: 'Kepler Hitch-Line Winch', desc: 'POWER (E, again to let go): steel cable onto a vehicle or a structure within 120 m; the drum reels you in to 2 m. Swing under shuttles, trail behind rovers. Up to 20 s', cost: 2400, max: 1, faction: 'kepler', req: [15] },
     { key: 'twin', name: 'Kepler Twin Cradle', desc: 'Carry two contracts at once: the second crate stacks on top of the first', cost: 2600, max: 1, faction: 'kepler', req: [10] },
+    { key: 'cradle', name: 'Kepler Shock Cradle', desc: 'Cargo takes 25% less jostle damage per level (hauled loads, fragile crates)', cost: 700, max: 3, faction: 'kepler', req: [5, 15, 30] },
   ],
   vostok: [
     { key: 'scatter', name: 'Vostok Scattergun', desc: 'WEAPON (key 2): seven-pellet close-range blast', cost: 1400, max: 1, faction: 'vostok', req: [10], weapon: true },
-    { key: 'flak', name: 'Vostok Flak Weave', desc: '+20 max health, less blast knockback', cost: 750, max: 3, faction: 'vostok', req: [5, 15, 30] },
+    { key: 'flak', name: 'Vostok Flak Weave', desc: '+10 max health, +1 HP regen per level (a tick every 3 s), less blast knockback', cost: 750, max: 3, faction: 'vostok', req: [5, 15, 30] },
+    { key: 'spinner', name: 'Vostok Weapon Tuning Kit', desc: '+15% damage for every weapon', cost: 750, max: 3, faction: 'vostok', req: [10, 20, 35] },
   ],
   daedalus: [
     { key: 'rail', name: 'Daedalus Rail Lance', desc: 'WEAPON (key 3): instant piercing beam, long range', cost: 1600, max: 1, faction: 'daedalus', req: [10], weapon: true },
@@ -224,20 +225,21 @@ export const SHOPS = {
     { key: 'shadow', name: 'Rustmoon Shadow Rig', desc: 'Lawmen and turrets have a harder time hitting you', cost: 750, max: 3, faction: 'rustmoon', req: [0, 15, 35] },
     // black market: a smuggling run to a bright-side town may carry one of these (named on the job board);
     // deliver it and it's on sale here for good
-    { key: 'armor', name: 'Black-Market Suit Plating', desc: '+25 max health', cost: 700, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 1 } },
-    { key: 'dampers', name: 'Black-Market Dampers', desc: 'Safer hard landings, less cargo jostle', cost: 800, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 1 } },
+    { key: 'armor', name: 'Black-Market Suit Plating', desc: '+15 max health', cost: 700, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 1 } },
+    { key: 'dampers', name: 'Black-Market Dampers', desc: 'Safer hard landings', cost: 800, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 1 } },
     { key: 'scatter', name: 'Black-Market Scattergun', desc: 'WEAPON (key 2): a Vostok scattergun, serial filed off', cost: 1800, max: 1, faction: 'rustmoon', req: [0], weapon: true, unlock: { smuggle: true, n: 2 } },
     { key: 'capacitor', name: 'Black-Market Flux Capacitor', desc: '+25 thruster energy', cost: 750, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 2 } },
     { key: 'overcharge', name: 'Black-Market Overcharger', desc: 'Faster fire rate for every weapon', cost: 1000, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 3 } },
-    { key: 'spinner', name: 'Black-Market Tuning Kit', desc: '+20% damage for every weapon', cost: 950, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 3 } },
+    { key: 'spinner', name: 'Black-Market Tuning Kit', desc: '+15% damage for every weapon', cost: 950, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 3 } },
     { key: 'scanner', name: 'Black-Market Threat Scanner', desc: 'Look at lawmen and pirates to mark them; warns of inbound squads', cost: 900, max: 2, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 3 } },
     { key: 'rail', name: 'Black-Market Rail Lance', desc: 'WEAPON (key 3): a Daedalus rail lance, borrowed forever', cost: 2200, max: 1, faction: 'rustmoon', req: [0], weapon: true, unlock: { smuggle: true, n: 4 } },
     { key: 'gyro', name: 'Black-Market Gyro-Edges', desc: 'Sharper ground steering on skates', cost: 900, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 4 } },
     { key: 'seeker', name: 'Black-Market Seeker Module', desc: 'Pulse discs home in harder on targets', cost: 1050, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 5 } },
-    { key: 'flak', name: 'Black-Market Flak Weave', desc: '+20 max health, less blast knockback', cost: 950, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 5 } },
+    { key: 'flak', name: 'Black-Market Flak Weave', desc: '+10 max health, +1 HP regen per level (a tick every 3 s), less blast knockback', cost: 950, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 5 } },
     { key: 'v_interceptor', name: 'Hot-Wired Interceptor', desc: 'VEHICLE: a SPACECOM Interceptor, liberated', cost: 4200, max: 1, faction: 'rustmoon', req: [0], vehicle: 'interceptor', unlock: { smuggle: true, n: 5 } },
     { key: 't_shield', name: 'Black-Market Deflector', desc: 'TECH: absorbs one hit every 12 s', cost: 3600, max: 1, faction: 'rustmoon', req: [0], tech: 'shield', unlock: { smuggle: true, n: 6 } },
     { key: 'uplink', name: 'Black-Market Market Uplink', desc: '+10% pay on every contract (per level)', cost: 1150, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 6 } },
+    { key: 'cradle', name: 'Black-Market Shock Cradle', desc: 'Cargo takes 25% less jostle damage per level (hauled loads, fragile crates)', cost: 850, max: 3, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 6 } },
     { key: 'v_skimmer', name: 'Hot-Wired Phase Skimmer', desc: 'VEHICLE: a Daedalus skimmer, liberated', cost: 4800, max: 1, faction: 'rustmoon', req: [0], vehicle: 'skimmer', unlock: { smuggle: true, n: 7 } },
     { key: 't_dash', name: 'Black-Market Phase Dash', desc: 'TECH (E): swing all your momentum to wherever you look', cost: 4200, max: 1, faction: 'rustmoon', req: [0], tech: 'dash', unlock: { smuggle: true, n: 8 } },
     { key: 'winch', name: 'Black-Market Hitch-Line', desc: 'POWER (E, again to let go): steel cable onto a vehicle or a structure within 120 m and reel in', cost: 3000, max: 1, faction: 'rustmoon', req: [0], unlock: { smuggle: true, n: 9 } },

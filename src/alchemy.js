@@ -49,13 +49,13 @@ const MIX_TIME = 12;
 // What splicing yourself in the pod does, by jar item.
 export const MUTATIONS = {
   wheels: { name: 'WHEEL FEET', from: ['car'], desc: 'Run at 22 m/s in boots' },
-  wings: { name: 'MITE WINGS', from: ['mite'], desc: 'Fall slowly: 60% gravity while airborne' },
-  arms: { name: 'EXTRA ARMS', from: ['person'], desc: 'Fire 30% faster' },
+  wings: { name: 'MITE WINGS', from: ['mite'], desc: 'Fall slowly: 80% gravity while airborne' },
+  arms: { name: 'EXTRA ARMS', from: ['person'], desc: 'Fire 10% faster' },
   void: { name: 'VOID SKIN', from: ['water', 'voidling'], desc: 'See in the dark; harder to hit' },
-  stone: { name: 'STONE HIDE', from: ['rock', 'slickrock'], desc: '+40 max hull, a bit more drag' },
-  claws: { name: 'BURROWER CLAWS', from: ['dirt', 'mud'], desc: 'Painless landings in boots' },
+  stone: { name: 'STONE HIDE', from: ['rock', 'slickrock'], desc: '+10 max hull, a touch more drag' },
+  claws: { name: 'BURROWER CLAWS', from: ['dirt', 'mud'], desc: 'Softer landings in boots (+20 m/s safe impact)' },
   blood: { name: 'PIRATE BLOOD', from: ['pirate'], desc: 'Pirates hunt you far less' },
-  roots: { name: 'ROOT GRIP', from: ['sapling'], desc: 'Skates grip 30% harder' },
+  roots: { name: 'ROOT GRIP', from: ['sapling'], desc: 'Skates grip 10% harder' },
   psi: { name: 'PSI ANTENNAE', from: ['alien'], desc: 'Red enemy outlines show through buildings' },
   hawk: { name: 'HAWK EYE', from: ['lens'], desc: 'Red enemy outlines reach 50% farther; sharper scope' },
 };
@@ -808,12 +808,12 @@ export class Alchemy {
     const has = (k) => this.mutations.includes(k);
     P.params.runSpeed = has('wheels') ? 22 : PHYS.runSpeed;
     P.params.runAccel = has('wheels') ? 60 : PHYS.runAccel;
-    P.params.airGravMult = has('wings') ? 0.6 : 1;
-    P.params.drag = has('stone') ? PHYS.drag * 1.4 : PHYS.drag;
-    P.params.bootSafeImpact = has('claws') ? 60 : PHYS.bootSafeImpact;
-    P.mutFire = has('arms') ? 0.7 : 1;
-    P.mutHealth = has('stone') ? 40 : 0;
-    P.mutGrip = has('roots') ? 0.3 : 0;
+    P.params.airGravMult = has('wings') ? 0.8 : 1;
+    P.params.drag = has('stone') ? PHYS.drag * 1.1 : PHYS.drag;
+    P.params.bootSafeImpact = has('claws') ? PHYS.bootSafeImpact + 20 : PHYS.bootSafeImpact;
+    P.mutFire = has('arms') ? 0.9 : 1;
+    P.mutHealth = has('stone') ? 10 : 0;
+    P.mutGrip = has('roots') ? 0.1 : 0;
     g.player.applyUpgrades(g.upgrades);
     for (const m of this.mutMeshes) m.removeFromParent();
     this.mutMeshes = [];

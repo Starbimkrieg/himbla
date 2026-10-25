@@ -789,7 +789,7 @@ export class Enemies {
     const dark = darkness(P.up);
     if (dark < 0.5 && g.story && g.story.kadeChance != null) g.story.kadeChance = null; // back in the light: Kade's odds reset
     const aligned = g.rep.aligned();
-    const shadow = 1 + (g.upgrades.shadow || 0) * 0.35;
+    const shadow = 1 + (g.upgrades.shadow || 0) * 0.15;
     // pirate blood (lab mutation): hunters mostly lose interest
     const blood = g.alchemy && g.alchemy.mutations.includes('blood') ? 0.35 : 1;
 
@@ -1125,7 +1125,7 @@ export class Enemies {
     if (!obj) {
       // in the dark, a lamp-less runner is much harder to hit
       if (darkness(P.up) > 0.5 && P.lamp.intensity < 1) inaccuracy *= 2.4;
-      inaccuracy *= 1 + (g.upgrades.shadow || 0) * 0.35;
+      inaccuracy *= 1 + (g.upgrades.shadow || 0) * 0.15;
       if (g.alchemy && g.alchemy.mutations.includes('void')) inaccuracy *= 1.6;
     }
     const dir = this.aimLead(from, speed, inaccuracy, center, vel);

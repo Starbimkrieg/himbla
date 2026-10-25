@@ -537,7 +537,7 @@ export class Events {
   onImpact(speed) {
     const f = this.fluid;
     if (!f) return;
-    const cradle = 1 - (this.game.upgrades.cradle || 0) * 0.3;
+    const cradle = 1 - (this.game.upgrades.cradle || 0) * 0.25;
     f.vy += speed * 0.05;
     f.vx += (Math.random() - 0.5) * speed * 0.05;
     if (speed > 16) {
