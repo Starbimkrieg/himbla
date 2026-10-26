@@ -1,8 +1,8 @@
 // Style meter (bottom right, mirroring the speedometer; after Ultrakill's): the style run (combo.js) as it builds. A rank
 // letter that climbs with the total and a bar to the next rank, the moves (the newest six, live ones included), the
-// multiplier, the total, a CLEAN / CROOKED light while a trick is in the air, and a bar draining through the landing
-// window. When the run ends it shows BANKED or WIPEOUT for RESULT_TIME s, then fades.
-// DOM writes only when a value changes.
+// multiplier, the total and a bar draining through the landing window. A new move slides in and bumps the total; points
+// ticking up on a live one (air time, a grind, the winch) don't. When the run ends it shows BANKED or WIPEOUT for
+// RESULT_TIME s, then fades. DOM writes only when a value changes.
 import { COMBO_WINDOW } from './combo.js';
 
 const RANKS = [
@@ -74,7 +74,7 @@ export class StyleMeter {
     if (C.open) {
       if (this.resultT > 0) { this.resultT = 0; this.last = {}; }
       box.classList.remove('hidden', 'sm-out', 'sm-banked', 'sm-wiped');
-      this.showRun(C.view(), P.trickLive, C.window / COMBO_WINDOW);
+      this.showRun(C.view(), C.window / COMBO_WINDOW);
     } else if (this.resultT > 0) {
       this.resultT -= dt;
       if (this.resultT <= 0.35) box.classList.add('sm-out');
@@ -91,34 +91,32 @@ export class StyleMeter {
     this.bar.style.background = R[3];
   }
 
+  // the rows; true if a move came in that wasn't there before (by its id: a live one's label changes as it counts)
   showMoves(moves, more) {
     const key = more + '|' + moves.map((m) => `${m.label}:${m.n}:${m.pts}`).join('|');
-    if (this.last.M === key) return;
-    const fresh = moves.length && (!this.last.top || this.last.top !== moves[moves.length - 1].label);
+    if (this.last.M === key) return false;
+    const was = this.last.ids || new Set(), ids = new Set(moves.map((m) => m.id));
+    let fresh = false;
     this.movesEl.textContent = '';
     if (more) el('div', 'sm-move sm-more', this.movesEl, `+ ${more} MORE`);
     moves.forEach((m, i) => {
       const row = el('div', 'sm-move', this.movesEl);
       el('span', '', row, `+ ${m.label}${m.n > 1 ? ` ×${m.n}` : ''}`).style.color = MOVE_COLORS[(i + more) % MOVE_COLORS.length];
       el('span', 'sm-pts', row, m.pts);
-      if (fresh && i === moves.length - 1) row.classList.add('sm-in');
+      if (!was.has(m.id)) { row.classList.add('sm-in'); fresh = true; }
     });
     this.last.M = key;
-    this.last.top = moves.length ? moves[moves.length - 1].label : null;
+    this.last.ids = ids;
+    return fresh;
   }
 
-  showRun(v, trick, win) {
+  showRun(v, win) {
     this.showRank(v.total);
-    this.showMoves(v.moves, v.more);
+    const fresh = this.showMoves(v.moves, v.more);
     this.put('X', this.multEl, v.mult > 1 ? `MULTIPLIER ×${v.mult.toFixed(1)}` : '');
-    if (this.put('T', this.totalEl, v.total ? '+' + v.total : '')) kick(this.totalEl, 'sm-bump');
-    // the light while a trick is in the air, else nothing; the window bar drains on the ground
-    const land = trick ? (trick.clean ? 'ok' : 'bad') : '';
-    if (this.last.land !== land) {
-      this.land.className = 'sm-land ' + land;
-      this.land.textContent = trick ? (trick.clean ? '▲ CLEAN' : '▼ CROOKED') : '';
-      this.last.land = land;
-    }
+    if (this.put('T', this.totalEl, v.total ? '+' + v.total : '') && fresh) kick(this.totalEl, 'sm-bump');
+    // the landing line is empty while the run builds (BANKED or WIPEOUT at its end); the window bar drains on the ground
+    if (this.last.land !== '') { this.land.className = 'sm-land'; this.land.textContent = ''; this.last.land = ''; }
     this.win.style.width = Math.round(Math.max(0, Math.min(1, win)) * 100) + '%';
   }
 

@@ -36,8 +36,13 @@ export class Combo {
   view() {
     const all = this.moves.concat(this.live);
     const kinds = new Set();
+    const seen = {};
     let sum = 0;
-    for (const m of all) { sum += m.pts; if (m.kind !== 'air') kinds.add(m.kind); }
+    for (const m of all) {
+      sum += m.pts;
+      if (m.kind !== 'air') kinds.add(m.kind);
+      m.id = m.kind + (seen[m.kind] = (seen[m.kind] || 0) + 1); // which move it is (air2: the run's second air), for the meter: a live label changes as it counts
+    }
     const mult = 1 + 0.5 * Math.max(0, kinds.size - 1);
     return { moves: all.slice(-MAX_MOVES), more: Math.max(0, all.length - MAX_MOVES), mult, sum, total: Math.round(sum * mult) };
   }

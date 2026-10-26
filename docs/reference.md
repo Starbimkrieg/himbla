@@ -96,7 +96,7 @@ player lights (skate colour, health), DualSense adaptive triggers, and a TEST bu
   air.
 - **Style combos:** flips, spins, air, dive landings, grinds, meteor bounces, threading a rock arch and riding the
   Hitch-Line at 50+ m/s all feed one run, shown live on the **style meter** (bottom right: rank, moves, multiplier,
-  total, CLEAN / CROOKED while a trick is in the air). The run stays open in the air, on a rail or hitched, and for
+  total). The run stays open in the air, on a rail or hitched, and for
   2.5 s after you land; then it banks: the moves' sum times the multiplier (+0.5 per kind of move past the first, air
   time not counting) into the style pool. A wipeout or crash loses it (`src/combo.js`, `src/stylemeter.js`).
 - **Grinding:** snake rocks (35-50 m ridges) and firm crater lips are rails. Land on one or ride onto it at an angle

@@ -222,13 +222,12 @@ body.pad-on #free-cam .fc-kb { display: none; }
 #stylemeter .sm-foot { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; padding-top: 7px; border-top: 2px solid var(--ui-edge); }
 #stylemeter .sm-land { font-size: 9px; }
 #stylemeter .sm-land.ok { color: var(--green); }
-#stylemeter .sm-land.bad { color: var(--red); animation: blink 0.4s steps(2) infinite; }
+#stylemeter .sm-land.bad { color: var(--red); }
 #stylemeter .sm-total { display: inline-block; font-size: 20px; font-weight: normal; color: var(--paper); text-shadow: 2px 2px 0 #05030c; transform-origin: right bottom; }
 #stylemeter .sm-window { height: 3px; margin-top: 7px; background: var(--ui-bg2); overflow: hidden; }
 #stylemeter .sm-window i { display: block; height: 100%; width: 100%; background: var(--yellow); }
 #stylemeter.sm-banked { border-color: var(--green); }
 #stylemeter.sm-wiped { border-color: var(--red); }
-#stylemeter.sm-wiped .sm-land.bad { animation: none; }
 #stylemeter.sm-wiped .sm-moves, #stylemeter.sm-wiped .sm-total { text-decoration: line-through; opacity: 0.6; }
 #stylemeter.sm-out { opacity: 0; }
 .sm-bump { animation: smbump 0.24s steps(3); }
