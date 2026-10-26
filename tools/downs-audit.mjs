@@ -1,9 +1,9 @@
 // Dev-only audit of a place's build: Chimera Downs by default, any other with PLACE=<location id> (docs/downs-layouts.md, "Audit";
 // the collision and grind rules it checks: docs/collision.md). Not part of the build.
 //   npx vite --port 5199 --host 127.0.0.1                       (in one shell)
-//   node tools/downs-audit.mjs [zfight|colliders|text|gaps|all|coverage|blocked|floating|rails]  (Playwright from PLAYWRIGHT, default /opt/node-tools/node_modules/playwright/index.mjs; the game from GAME_URL)
+//   node tools/downs-audit.mjs [zfight|colliders|text|gaps|all|coverage|blocked|floating|sunk|rails]  (Playwright from PLAYWRIGHT, default /opt/node-tools/node_modules/playwright/index.mjs; the game from GAME_URL)
 //   PLACE=meridian node tools/downs-audit.mjs coverage           (zfight, colliders, text and gaps are tuned to the Downs; coverage and rails work
-//                                                                 anywhere; blocked and floating need a place built with settle(): its kit colliders)
+//                                                                 anywhere, as does sunk; blocked and floating need a place built with settle(): its kit colliders)
 //   SEP=0.0008: plane distance under which two surfaces count as one (zfight). Under 1 mm is safe only on the reversed-Z depth buffer (main.js); 2 cm is safe on any.
 // All checks run in the place's FLAT design frame (its builders' frame; src/curve.js bends it onto the Moon), with the static merge off (localStorage mr-nomerge)
 // and kit dev tags on (globalThis.__kitTags: outpostModels.js Kit.tags), so findings name the builder and Blender part.
@@ -17,6 +17,9 @@
 //   blocked    ground a walker could cross before the Blender parts' own colliders (downs_common.py Acc, `auto` in the kit's
 //              colliders) and now can't: walkBlocker (downsPlan.js) with and without them on a 0.5 m grid, by builder > part.
 //              Read each: a bench or a stall counter should block; a doorway, an arch or a passage shouldn't.
+//   sunk       walking surfaces the feet sink into: every drawn floor (facing up, under 1 m) on a 0.5 m grid, against what the
+//              physics stands you on there (the terrain, or a collider just under the floor). Where the floor is 3 cm or more
+//              above it, by builder > part with the area and the depth.
 //   rails      the ledge rails ledges.js finds on the place (whether or not it's in rails.js LEDGE_PLACES yet), each 20 m or longer
 //              ridden from one end at 15 m/s by the grind itself: lists every one that throws you off before its end (a knock, with
 //              what's there) and where. Every long rail should ride end to end.
@@ -27,7 +30,7 @@
 const { chromium } = await import(process.env.PLAYWRIGHT || '/opt/node-tools/node_modules/playwright/index.mjs');
 const MODE = process.argv[2] || 'all';
 const SEP = Number(process.env.SEP || 0.0008);
-const run = (m) => (MODE === 'all' && !['coverage', 'blocked', 'floating', 'rails'].includes(m)) || MODE === m;
+const run = (m) => (MODE === 'all' && !['coverage', 'blocked', 'floating', 'rails', 'sunk'].includes(m)) || MODE === m;
 
 const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 const pg = await b.newPage({ viewport: { width: 640, height: 360 } });
@@ -305,6 +308,64 @@ if (run('floating')) {
     return { total, out: [...by].sort((a, b) => b[1].area - a[1].area).map(([k, e]) => `${e.area.toFixed(1).padStart(8)} m2  ${k}   x ${e.x0.toFixed(1)}..${e.x1.toFixed(1)}  y ${e.y0.toFixed(1)}..${e.y1.toFixed(1)}  z ${e.z0.toFixed(1)}..${e.z1.toFixed(1)}`) };
   });
   console.log(`floating: of ${res.total.toFixed(0)} m2 of standable collider tops, spots with nothing drawn within 0.3 m, by builder > part:`);
+  for (const o of res.out.slice(0, 40)) console.log('  ' + o);
+}
+
+if (run('sunk')) {
+  const res = await pg.evaluate(async () => {
+    const { unbendPoint } = await import('/src/curve.js');
+    const { P, T: TG, names } = window.__downs, N = P.length / 9;
+    const g = window.game, loc = g.locations.find((l) => l.id === window.__place), R = g.world.curveR(loc), cols = g.colliders;
+    const V = g.camera.position.constructor, w = new V(), n = new V(), near = [];
+    // up-facing triangles under 1 m, by the 1 m (x, z) cells their footprint touches
+    const C = 1, grid = new Map(), k2 = (i, j) => i * 100003 + j;
+    for (let t = 0; t < N; t++) {
+      const p = t * 9;
+      const ux = P[p + 3] - P[p], uy = P[p + 4] - P[p + 1], uz = P[p + 5] - P[p + 2], vx = P[p + 6] - P[p], vy = P[p + 7] - P[p + 1], vz = P[p + 8] - P[p + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz);
+      if (l < 1e-9 || ny / l < 0.7 || Math.max(P[p + 1], P[p + 4], P[p + 7]) > 1.0) continue;
+      const x0 = Math.min(P[p], P[p + 3], P[p + 6]), x1 = Math.max(P[p], P[p + 3], P[p + 6]), z0 = Math.min(P[p + 2], P[p + 5], P[p + 8]), z1 = Math.max(P[p + 2], P[p + 5], P[p + 8]);
+      for (let i = Math.floor(x0 / C); i <= Math.floor(x1 / C); i++) for (let j = Math.floor(z0 / C); j <= Math.floor(z1 / C); j++) { const k = k2(i, j); (grid.get(k) || grid.set(k, []).get(k)).push(t); }
+    }
+    // the drawn floor's height at (x, z): the highest of those triangles over it, and its tag
+    const floorAt = (x, z) => {
+      let best = -1e9, tag = -1;
+      for (const t of grid.get(k2(Math.floor(x / C), Math.floor(z / C))) || []) {
+        const p = t * 9, ax = P[p], az = P[p + 2], bx = P[p + 3], bz = P[p + 5], cx = P[p + 6], cz = P[p + 8];
+        const d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz); if (Math.abs(d) < 1e-12) continue;
+        const l1 = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / d, l2 = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / d, l3 = 1 - l1 - l2;
+        if (l1 < 0 || l2 < 0 || l3 < 0) continue;
+        const y = l1 * P[p + 1] + l2 * P[p + 4] + l3 * P[p + 7];
+        if (y > best) { best = y; tag = TG[t]; }
+      }
+      return [best, tag];
+    };
+    const flatY = (wp) => { const f = loc.group.worldToLocal(wp.clone()); if (R) unbendPoint(R, f.x, f.y, f.z, f); return f.y; };
+    let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+    for (let t = 0; t < N; t++) { const p = t * 9; x0 = Math.min(x0, P[p]); x1 = Math.max(x1, P[p]); z0 = Math.min(z0, P[p + 2]); z1 = Math.max(z1, P[p + 2]); }
+    const by = new Map(); let tot = 0, sunk = 0;
+    for (let x = Math.ceil(x0) + 0.25; x < x1; x += 0.5) for (let z = Math.ceil(z0) + 0.25; z < z1; z += 0.5) {
+      const [F, tag] = floorAt(x, z);
+      if (F < -1e8) continue;
+      tot += 0.25;
+      // the terrain there (flat frame), and whether a collider holds you up just under the drawn floor
+      g.world.toWorld(loc, x, 0, z, w);
+      const ground = flatY(w.normalize().multiplyScalar(g.planet.surface(w)));
+      if (F - ground < 0.03) continue;
+      g.world.toWorld(loc, x, F - 0.03, z, w);
+      let held = false;
+      for (const c of cols.query(w, 1, near)) if (cols.contact(c, w, 0.01, n) > 0) { held = true; break; }
+      if (held) continue;
+      sunk += 0.25;
+      const key = (names && names[tag]) || '(untagged)';
+      let e = by.get(key);
+      if (!e) by.set(key, (e = { area: 0, depth: 0, max: 0, x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9 }));
+      e.area += 0.25; e.depth += (F - ground) * 0.25; e.max = Math.max(e.max, F - ground);
+      e.x0 = Math.min(e.x0, x); e.x1 = Math.max(e.x1, x); e.z0 = Math.min(e.z0, z); e.z1 = Math.max(e.z1, z);
+    }
+    return { tot, sunk, out: [...by].sort((a, b) => b[1].area - a[1].area).map(([k, e]) => `${e.area.toFixed(0).padStart(8)} m2  ${k}   feet ${(e.depth / e.area * 100).toFixed(0)} cm under (up to ${(e.max * 100).toFixed(0)})   x ${e.x0.toFixed(0)}..${e.x1.toFixed(0)}  z ${e.z0.toFixed(0)}..${e.z1.toFixed(0)}`) };
+  });
+  console.log(`sunk: ${res.sunk.toFixed(0)} of ${res.tot.toFixed(0)} m2 of drawn floor stands 3 cm or more over what holds you up; by builder > part:`);
   for (const o of res.out.slice(0, 40)) console.log('  ' + o);
 }
 

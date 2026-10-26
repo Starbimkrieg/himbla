@@ -9,9 +9,12 @@ grind rails. `CLAUDE.md` has the short version; this is the long one, with the r
 - The runner is a 0.9 m sphere (`PHYS.radius`, feet to about 1.8 m). A top counts as walkable when the contact pushes him
   more than 0.55 up (`physics.js`), which is a step of about **0.4 m**. A 0.5 to 0.9 m ledge stops him dead, or bounces him
   off at skating speed.
+- The physics stands the runner on the **terrain or a collider**, never on drawn geometry: a paved walk 12 cm over the
+  ground with no collider under it leaves his feet 12 cm down in it.
 - Colliders are boxes (turned any way: `pitch`, `yaw`, `roll` in `world.colAdd`; `Kit.solidQ` from a kit), upright
-  cylinders, spheres and lying cylinders (`hcyl`). They live in one hash with **64 m cells**, so a dense place costs every
-  query there: the Downs has about 6,800 colliders and a player step there takes about 0.23 ms (0.07 ms in the open).
+  cylinders, spheres and lying cylinders (`hcyl`). They live in one hash with **16 m cells** (`physics.js`; it was 64 m,
+  and the Downs paid for hundreds of colliders on every query). The Downs has about 12,300 colliders with its floors; a
+  player step there takes 0.1 to 0.25 ms (0.08 ms in the open).
 - **Curved places** (`curved` in `locations.js`; the Downs) are drawn flat and bent onto the Moon in 8 m pieces.
   `world.col` cuts any box longer than 8 m into pieces bent at their own middles. A single straight 230 m box sagged
   nearly 2 m off the stand roof at its ends. The straight chords of bent geometry also sag 2 to 3 mm apart, which matters
@@ -23,8 +26,16 @@ grind rails. `CLAUDE.md` has the short version; this is the long one, with the r
   fountains. Roofs count.
 - **Not**: seats in rows (the Downs' 1,650), crowds, moving rides, lamp heads, festoons, ropes, lettering, glow and glass,
   thin trims (under 12 cm), beams and tubes.
-- **Floors and plinths** under 0.9 m high and 2.5 m or more across both ways get **none**: with a 0.4 m step they would stop
-  the runner where he used to walk across their sunk-in tops. A step-up in the physics would lift this rule.
+- **Walking floors** (paving, decks, the track, walks, bay floors, anything up to 0.42 m) collide at their drawn height. A
+  kit with `floorCols` set (`k.floorCols = true` inside a place's `settle()` builder) does it at `finish()`
+  (`Kit.floorColliders`): every up-facing surface 3 cm to 0.42 m over the ground, rasterized on a 0.5 m grid at its height,
+  cells of one height (to the centimetre) merged into boxes, marked `floor` (the racegoers' walk map passes over them; on a
+  curved place they bend in 16 m pieces, a flat floor sagging under 1 cm over that). At the Downs: 3,600 boxes under
+  84,000 m2 of floor, where the feet had stood up to 26 cm down in it. Drawn floors want nothing else.
+- **Platforms of 0.42 to 0.9 m** (a portico, a stable's box floor, a ride's platform, a plinth) get **none**: with a 0.4 m
+  step they would stop the runner dead where he used to walk across their sunk-in tops. The Blender parts' emitter skips
+  every floor and plinth under 0.9 m and 2.5 m across (the floor pass covers those up to 0.42 m). A step-up in the physics,
+  or steps and ramps up to them, would lift this rule.
 - **Raised details on a surface you stand or grind on** (roof seams, ribs, stripes) are **painted on**: at most 2 cm proud,
   no ink, so they get no collider and never stop a grind. On a curved place make them at least **1.5 cm** proud, or they
   sink into the surface in patches (the bent chords above). They may stand more than the usual 6 mm of an unoutlined detail
@@ -90,19 +101,22 @@ grind rails. `CLAUDE.md` has the short version; this is the long one, with the r
 2. `PLACE=<id> node tools/downs-audit.mjs coverage`: solid surface with no collider, by part. Fix it from the list above
    (Blender parts `solid=True`, then rebuild and `npm run optimize:glb`; code colliders; hand boxes).
 3. `floating`: no collider top in the air, hand-placed ones included.
-4. `blocked`: walk-height ground the parts' new colliders take. Only real obstacles should be listed, never a doorway or a
+4. `k.floorCols = true` in the place's `settle()` builder, then `sunk`: drawn floor standing over what holds the feet up
+   (should be only the 0.42 to 0.9 m platforms, and seat tops under 1 m, which it also lists).
+5. `blocked`: walk-height ground the parts' new colliders take. Only real obstacles should be listed, never a doorway or a
    passage. (`blocked` and `floating` need a place built with `settle()`.)
-5. Add the place to `LEDGE_PLACES`, then `rails`: every rail 20 m or longer should ride end to end. Fix what throws you off.
-6. In the game: drop onto the roofs (you should land on them), grind a few edges, take a screenshot, and check that the
+6. Add the place to `LEDGE_PLACES`, then `rails`: every rail 20 m or longer should ride end to end. Fix what throws you off.
+7. In the game: walk the floors (feet on them), drop onto the roofs (you should land on them), grind a few edges, take a screenshot, and check that the
    Asset Row still builds (the `blender` skill has the check).
-7. Put the numbers in CHANGELOG.md, and keep this file in step with any rule you change.
+8. Put the numbers in CHANGELOG.md, and keep this file in step with any rule you change.
 
-Where they stand: the Downs has about 4% of its solid surface bare (its seats), nothing floating, and 138 of 138 long rails
-riding end to end. Meridian, before any work: 9.9% bare (untagged), and 20 of 20 long rails ride.
+Where they stand: the Downs has about 4% of its solid surface bare (its seats), nothing floating, 542 m2 of floor sunk
+(the 0.42 to 0.9 m platforms) and 138 of 138 long rails riding end to end. Meridian, before any work: 9.9% bare
+(untagged), and 20 of 20 long rails ride.
 
 ## Files
 
 `src/physics.js` (colliders, the step), `src/world.js` (`col`, `colAdd`: placing and bending), `src/outpostModels.js`
-(`Kit.solid`, `solidQ`, `column`), `src/downsKit.js` (`bake`, `slabBox`), `tools/blender/downs_common.py` (`Acc`: colliders
+(`Kit.solid`, `solidQ`, `column`, `floorColliders`), `src/downsKit.js` (`bake`, `slabBox`), `tools/blender/downs_common.py` (`Acc`: colliders
 from the geometry), `src/ledges.js` (rails from colliders), `src/rails.js` (`Grinder`: grabbing, riding, `LEDGE_PLACES`,
-`GRIND_MIN`), `tools/downs-audit.mjs` (`coverage`, `blocked`, `floating`, `rails`; `PLACE=`).
+`GRIND_MIN`), `tools/downs-audit.mjs` (`coverage`, `blocked`, `floating`, `sunk`, `rails`; `PLACE=`).

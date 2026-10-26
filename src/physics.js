@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { upAt, radOf, setRad, GRAV } from './geo.js';
 
-const CELL = 64;
+const CELL = 16; // m: a dense place has hundreds of colliders per 64 m cell (Chimera Downs about 6,000 in 0.3 km2), and every query paid for them
 const OFF = 512;
 
 // Static obstacles (domes, buildings, boulders) in a 3D spatial hash.

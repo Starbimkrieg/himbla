@@ -195,7 +195,7 @@ export function walkBlocker(cols, pad = 0.45) {
   for (const c of cols) {
     let o;
     if (c.type === 'box') {
-      if (c.y - c.hy > 1.5 || c.y + c.hy < 0.4) continue;
+      if (c.floor || c.y - c.hy > 1.5 || c.y + c.hy < 0.4) continue;   // (a floor under a walk is walked on: Kit.floorColliders)
       const cs = Math.cos(c.yaw || 0), sn = Math.sin(c.yaw || 0);
       o = { box: true, x: c.x, z: c.z, hx: c.hx + pad, hz: c.hz + pad, cs, sn, ex: Math.abs(cs) * c.hx + Math.abs(sn) * c.hz + pad, ez: Math.abs(sn) * c.hx + Math.abs(cs) * c.hz + pad };
     } else if (c.type === 'cyl') {

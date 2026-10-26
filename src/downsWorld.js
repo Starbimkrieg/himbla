@@ -818,6 +818,7 @@ function annex(w, loc, k) {
 export function buildDowns(w, loc) {
   const vendors = [];
   const kit = settle(w, loc, 9091, (k) => {
+    k.floorCols = true;                                               // colliders under the drawn walks, track and decks (Kit.floorColliders)
     const as = (name, f) => { k.tag = name; f(); k.tag = ''; };      // dev audit names each triangle's builder (outpostModels.js Kit.tags)
     as('course', () => course(k));
     as('aprons', () => aprons(k));

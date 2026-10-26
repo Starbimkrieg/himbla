@@ -26,14 +26,16 @@ Trick thrust reaches every roof, and the top edges of colliders are grind rails,
 
 - Anything solid the runner can reach gets a collider whose top is the drawn top: roofs too, never a box "to the ridge"
   over a pitched roof. Thin decoration (lamp heads, festoons, ropes, lettering, glow, seats in rows) stays open.
-- No collider on floors or plinths under 0.9 m and 2.5 m+ across (the runner steps up only about 0.4 m). Raised details
-  on surfaces you stand or grind on are painted on (at most 2 cm proud, no ink; at least 1.5 cm on a curved place).
+- Walking floors collide at their drawn height: `k.floorCols = true` in a place's `settle()` builds colliders under every
+  drawn floor up to 0.42 m (`Kit.floorColliders`), or the feet sink to the ground under it. Platforms of 0.42 to 0.9 m
+  get none (the runner steps up only about 0.4 m: they'd stop him dead). Raised details on surfaces you stand or grind on
+  are painted on (at most 2 cm proud, no ink; at least 1.5 cm on a curved place).
 - Blender parts make their own colliders (`parts(..., solid=True)`, `tools/blender/downs_common.py`); code-made geometry
   has them in code beside it (`k.solid`, `k.solidQ`, `slabBox`); hand boxes only where a part's own can't (openings).
 - Ledges grind on places in `LEDGE_PLACES` (`src/rails.js`), only on skates, from the air and heading along; rails are
   found by `src/ledges.js`.
-- Check a place with `PLACE=<id> node tools/downs-audit.mjs coverage|floating|blocked|rails`: every long rail should ride
-  end to end.
+- Check a place with `PLACE=<id> node tools/downs-audit.mjs coverage|floating|blocked|sunk|rails`: no floor the feet sink
+  into, and every long rail should ride end to end.
 
 ## Screenshots in dev sessions
 

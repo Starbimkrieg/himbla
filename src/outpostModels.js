@@ -90,6 +90,7 @@ class Kit {
     this.yaw = 0;
     this.root = new THREE.Group();
     this.cols = []; // collider specs in the outpost frame
+    this.floorCols = false; // settlement kit: colliders under its drawn floors at finish() (floorColliders)
     this.hits = []; // boxes a blast has to reach to damage the main building
     this.raid = null; // where you stand to raid it
     this.smoke = null; // where a wreck smoulders
@@ -283,7 +284,69 @@ class Kit {
   hcyl(r, len, x, z, ry = 0, y = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'hcyl', r, len, x: p.x, y, z: p.z, yaw: this.yaw + ry }); }
   hit(hx, hy, hz, x, z, ry = 0) { const p = this.P(x, 0, z); this.hits.push({ hx, hy, hz, x: p.x, y: hy, z: p.z, yaw: this.yaw + ry }); }
 
+  // Colliders under the drawn floors (docs/collision.md): every up-facing surface whose top stands FLOOR_MIN to FLOOR_MAX over the
+  // ground (a step the runner takes, so it never stops him) rasterized onto a FLOOR_CELL grid at its height, cells of one height
+  // (to the cm) merged into boxes. Without them the feet stand on the ground under a paved walk, a track or a deck, sunk to the
+  // ankles. Higher platforms need a way up, not this. In the kit frame (flat), before finish() bends anything.
+  floorColliders() {
+    const FLOOR_CELL = 0.5, FLOOR_MIN = 0.03, FLOOR_MAX = 0.42;
+    const tris = [];
+    let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+    for (const [mat, list] of this.byMat) {
+      if (mat.transparent) continue;
+      for (const g of list) {
+        const pos = g.attributes.position, idx = g.index, n = idx ? idx.count : pos.count;
+        for (let t = 0; t < n; t += 3) {
+          const a = idx ? idx.getX(t) : t, b = idx ? idx.getX(t + 1) : t + 1, c = idx ? idx.getX(t + 2) : t + 2;
+          const ax = pos.getX(a), ay = pos.getY(a), az = pos.getZ(a), bx = pos.getX(b), by = pos.getY(b), bz = pos.getZ(b), cx = pos.getX(c), cy = pos.getY(c), cz = pos.getZ(c);
+          const top = Math.max(ay, by, cy);
+          if (top < FLOOR_MIN || top > FLOOR_MAX) continue;
+          const ux = bx - ax, uy = by - ay, uz = bz - az, vx = cx - ax, vy = cy - ay, vz = cz - az;
+          const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz);
+          if (l < 1e-9 || ny / l < 0.85) continue;                       // facing up (gentle ramps too)
+          tris.push(ax, ay, az, bx, by, bz, cx, cy, cz);
+          x0 = Math.min(x0, ax, bx, cx); x1 = Math.max(x1, ax, bx, cx); z0 = Math.min(z0, az, bz, cz); z1 = Math.max(z1, az, bz, cz);
+        }
+      }
+    }
+    if (!tris.length) return;
+    const C = FLOOR_CELL, nx = Math.ceil((x1 - x0) / C) + 1, nz = Math.ceil((z1 - z0) / C) + 1;
+    const H = new Int16Array(nx * nz).fill(-1);                        // cm, -1: no floor
+    for (let p = 0; p < tris.length; p += 9) {
+      const ax = tris[p], az = tris[p + 2], bx = tris[p + 3], bz = tris[p + 5], cx = tris[p + 6], cz = tris[p + 8];
+      const d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+      if (Math.abs(d) < 1e-12) continue;
+      const i0 = Math.max(0, Math.floor((Math.min(ax, bx, cx) - x0) / C)), i1 = Math.min(nx - 1, Math.floor((Math.max(ax, bx, cx) - x0) / C));
+      const j0 = Math.max(0, Math.floor((Math.min(az, bz, cz) - z0) / C)), j1 = Math.min(nz - 1, Math.floor((Math.max(az, bz, cz) - z0) / C));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const x = x0 + (i + 0.5) * C, z = z0 + (j + 0.5) * C;
+        const l1 = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / d, l2 = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / d, l3 = 1 - l1 - l2;
+        if (l1 < 0 || l2 < 0 || l3 < 0) continue;
+        const h = Math.round((l1 * tris[p + 1] + l2 * tris[p + 4] + l3 * tris[p + 7]) * 100);
+        if (h > H[j * nx + i]) H[j * nx + i] = h;                        // the highest surface over the cell
+      }
+    }
+    // greedy: a run along x, then as many rows as match it
+    const used = new Uint8Array(nx * nz);
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+      const h = H[j * nx + i];
+      if (h < 0 || used[j * nx + i]) continue;
+      let w = 1;
+      while (i + w < nx && H[j * nx + i + w] === h && !used[j * nx + i + w]) w++;
+      let dz = 1;
+      for (; j + dz < nz; dz++) {
+        let ok = true;
+        for (let k = 0; k < w && ok; k++) ok = H[(j + dz) * nx + i + k] === h && !used[(j + dz) * nx + i + k];
+        if (!ok) break;
+      }
+      for (let jj = j; jj < j + dz; jj++) used.fill(1, jj * nx + i, jj * nx + i + w);
+      const top = h / 100;
+      this.cols.push({ type: 'box', hx: (w * C) / 2, hy: 0.2, hz: (dz * C) / 2, x: x0 + (i + w / 2) * C, y: top - 0.2, z: z0 + (j + dz / 2) * C, yaw: 0, tag: 'floor', floor: true });
+    }
+  }
+
   finish() {
+    if (this.floorCols) this.floorColliders();
     if (this.curveR) { // long pieces cut every 8 m so they curve (curve.js)
       for (const list of this.byMat.values()) for (let i = 0; i < list.length; i++) list[i] = bendGeometry(list[i], this.curveR, 8);
       for (let i = 0; i < this.ink.length; i++) this.ink[i] = bendGeometry(this.ink[i], this.curveR, 8);

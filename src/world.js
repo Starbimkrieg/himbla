@@ -491,11 +491,12 @@ export class World {
   }
 
   col(loc, spec) {
-    // On a curved place a long box goes in pieces of 8 m or less, each bent at its own middle as the Kit bends geometry (cut
-    // every 8 m): one straight box sags away from a bent roof or wall, nearly 2 m at the ends of the Downs' 230 m stand roof.
+    // On a curved place a long box goes in pieces of 8 m or less (16 m for a floor), each bent at its own middle as the Kit bends
+    // geometry (cut every 8 m): one straight box sags away from a bent roof or wall, nearly 2 m at the ends of the Downs' 230 m stand roof.
     // The first piece is returned (all are in loc._cols).
-    if (spec.type === 'box' && (spec.hx > 4 || spec.hz > 4) && this.curveR(loc)) {
-      const n = Math.ceil(spec.hx / 4), m = Math.ceil(spec.hz / 4);
+    const half = spec.floor ? 8 : 4;                                  // (a flat floor sags under 1 cm over 16 m: Kit.floorColliders)
+    if (spec.type === 'box' && (spec.hx > half || spec.hz > half) && this.curveR(loc)) {
+      const n = Math.ceil(spec.hx / half), m = Math.ceil(spec.hz / half);
       _q.setFromEuler(_e.set(spec.pitch || 0, spec.yaw || 0, spec.roll || 0, 'YXZ'));
       const ax = new THREE.Vector3(1, 0, 0).applyQuaternion(_q), az = new THREE.Vector3(0, 0, 1).applyQuaternion(_q);
       let first = null;
