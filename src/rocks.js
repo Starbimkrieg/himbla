@@ -6,13 +6,12 @@ import { patchRockMaterial } from './moonSkins.js';
 
 // Shaped rocks among the ordinary boulders, each with a playable feature and shape-following colliders.
 //   ramp    weathered slab sloping up to a clean edge: a natural kicker
-//   arch    two legs and a lintel: skate through (or over)
 //   hoodoo  tall eroded spire with a balanced cap rock
 //   snake   long (35-50 m) gently winding ridge, steep rhombus section, thin ground-following crest you
 //           can grind (rails.js)
 // Built per terrain chunk (planet.buildBoulders) from the chunk's seed, so placement is stable.
 
-const KINDS = ['ramp', 'ramp', 'arch', 'hoodoo', 'snake', 'snake'];
+const KINDS = ['ramp', 'ramp', 'hoodoo', 'snake', 'snake'];
 let MATS = null;
 function mats() {
   if (MATS) return MATS;
@@ -151,15 +150,6 @@ export function build(kind, rr, p, q, planet, dims = null) {
     cols.push(box(p, q, 0, h / 2 - 0.5 * ca - back * sa, 0.5 * sa - back * ca, W * 0.36, 0.5, sl / 2, pitch));
     // sheer front face, kept below the riding slope so it doesn't form a lip
     cols.push(box(p, q, 0, (h - 0.7 - under) / 2, L / 2 - 0.1, W * 0.4, (h - 0.7 + under) / 2, 0.45));
-  } else if (kind === 'arch') {
-    const span = 7 + rr() * 5, H = 6 + rr() * 4, leg = 2.4 + rr() * 1.2, dep = 3 + rr() * 2, lt = 2 + rr() * 1.2;
-    const parts = [];
-    for (const s of [-1, 1]) parts.push(new THREE.BoxGeometry(leg, H, dep, 2, 6, 2).translate(s * (span / 2 + leg / 2), H / 2, 0));
-    parts.push(new THREE.BoxGeometry(span + leg * 2 + 1, lt, dep * 0.9, 8, 2, 2).translate(0, H + lt / 2 - 0.3, 0));
-    geo = roughen(mergeGeometries(parts), () => 0.45, seed, 0.2);
-    mat = rr() < 0.5 ? M.tan : M.grey;
-    for (const s of [-1, 1]) cols.push(box(p, q, s * (span / 2 + leg / 2), H / 2, 0, leg / 2 + 0.2, H / 2, dep / 2 + 0.2));
-    cols.push(box(p, q, 0, H + lt / 2 - 0.3, 0, span / 2 + leg + 0.5, lt / 2 + 0.2, dep * 0.45 + 0.2));
   } else if (kind === 'hoodoo') {
     const H = 8 + rr() * 7, r0 = 2.2 + rr() * 1.2;
     const prof = [[r0 * 1.25, -0.5], [r0, H * 0.2], [r0 * 0.62, H * 0.5], [r0 * 0.5, H * 0.75], [r0 * 0.7, H * 0.92], [r0 * 0.6, H]];

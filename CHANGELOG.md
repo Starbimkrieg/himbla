@@ -5,6 +5,8 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **No more rock arches.** The two-legged arch rocks are gone from the plains (`src/rocks.js` builds ramps, hoodoos and snake ridges now) and from the Asset Row (227 items). The other shaped rocks land in different spots as a result: the kind is drawn from the chunk's seed.
+
 - **Air scores only as BIG AIR.** The style meter put an AIR line up the moment you left the ground with a trick, and plain air paid from 1.8 s, so every jump scored and kept the run going. Now air time scores only once it's a **BIG AIR** (5 s up, `BIG_AIR` in `src/combo.js`): at the trick rate (5 a second) with a trick, 15 a second without one, the line appearing at 5 s. Shorter air pays nothing and doesn't start the meter (flips and spins still score from the first rotation). Only a BIG AIR holds the run open in the air (with rails, the winch and the moves that fill the window); in ordinary air the 0.7 s window runs on and the run banks as you land, which replaces the jump-link rule above. In the game: a plain 4.6 s jump leaves the meter shut; a drop with a flip shows only FRONTFLIP until BIG AIR 6.0s joins it at 5 s.
 
 - **Style runs: a short landing window, no chaining ordinary jumps, no arch threading.** Landing and jumping again kept a run going for ever, so strings of simple flips added up to the top ranks. Now (`src/combo.js`):

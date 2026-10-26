@@ -65,7 +65,6 @@ const ramps = () => rockRow([
   rockPart('ramp', 11, { 1: 0.2 }, { L: 16, W: 10, h: 4, drop: 0 }, Math.PI / 2), // basalt; turned so the slope faces the walkway
   rockPart('ramp', 12, { 1: 0.8 }, { L: 20, W: 12, h: 5.2, drop: 0 }, Math.PI / 2), // (dark)
 ], 6);
-const arches = () => rockRow([rockPart('arch', 21, { 6: 0.2 }), rockPart('arch', 22, { 6: 0.8 })], 6); // (tan, grey)
 const hoodoos = () => rockRow([rockPart('hoodoo', 31, {}), rockPart('hoodoo', 32, {}), rockPart('hoodoo', 33, {})], 5);
 const snakes = () => rockRow([rockPart('snake', 41, { 7: 0.2 }), rockPart('snake', 42, { 7: 0.8 })], 8); // (grey, basalt)
 
@@ -163,7 +162,6 @@ export default {
   title: '11 · NATURE',
   items: [
     { id: 'rock.ramp', label: 'RAMP ROCKS', w: 56, d: 15, make: ramps },
-    { id: 'rock.arch', label: 'ARCH ROCKS', w: 38, d: 5, make: arches },
     { id: 'rock.hoodoo', label: 'HOODOOS', w: 36, d: 9, make: hoodoos },
     { id: 'rock.snake-rail', label: 'SNAKE RAIL ROCKS', w: 28, d: 43, make: snakes },
     { id: 'rock.boulder', label: 'BOULDERS (2.4 – 16 M)', w: 52, d: 22, make: boulders },
