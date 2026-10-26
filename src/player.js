@@ -22,7 +22,7 @@ const SPIN_RATE = 12;
 // trick thrust: with the body turned in a trick the pack pushes where the body faces, at this share of the thrusters' power
 const TRICK_THRUST = 0.7;
 const NUMS = ['', '', 'DOUBLE ', 'TRIPLE ', 'QUAD ', 'QUINT '];
-const BIG_AIR_MIN = BIG_AIR; // s airborne before an air is called BIG AIR (shorter ones over 1.8 s still pay, as AIR); it keeps a style run open
+const BIG_AIR_MIN = BIG_AIR; // s airborne before an air scores, as BIG AIR (shorter air scores nothing); it keeps a style run open
 const WINCH_FAST = 50; // m/s on the Hitch-Line before it pays style...
 const WINCH_RATE = 7; // ...at this many points a second (a trick's air time pays 5)
 const SKY_HIGH_GAIN = 40; // m climbed (radially) above a jump's start before SKY-HIGH! is called
@@ -44,10 +44,10 @@ function trickMoves(sc, air) {
   const out = [];
   if (sc.flips) out.push([sc.parts[0], sc.flipPts, 'flip']);
   if (sc.spins) out.push([sc.parts[sc.flips ? 1 : 0], sc.spinPts, 'spin']);
-  out.push([`AIR ${air.toFixed(1)}s`, sc.airPts, 'air']);
+  if (air >= BIG_AIR_MIN) out.push([airLabel(air), sc.airPts, 'air']);
   return out;
 }
-const airLabel = (s) => `${s >= BIG_AIR_MIN ? 'BIG AIR' : 'AIR'} ${s.toFixed(1)}s`;
+const airLabel = (s) => `BIG AIR ${s.toFixed(1)}s`;
 
 const _q = new THREE.Quaternion();
 const _Z = new THREE.Vector3(0, 0, 1);
@@ -465,7 +465,7 @@ export class Player {
       if (b.diveLanded > 20) this.combo.add('DIVE LANDING', Math.round(b.diveLanded / 3), 'dive', true);
       b.diveLanded = 0;
     }
-    if (!wasGrounded && b.grounded && airBefore > 1.8 && !this.trickLanding) this.combo.add(airLabel(airBefore), Math.round(airBefore * 15), 'air', true);
+    if (!wasGrounded && b.grounded && airBefore >= BIG_AIR_MIN && !this.trickLanding) this.combo.add(airLabel(airBefore), Math.round(airBefore * 15), 'air', true);
     this.trickLanding = false;
     if (wasGrounded && !b.grounded && this.speed > 40 && b.vel.dot(up) > 6) this.launchCheck = 0.6;
     if (this.launchCheck > 0) {
@@ -568,7 +568,7 @@ export class Player {
     // the style meter reads trickLive every frame (null: no trick going); the air so far goes in as live moves
     this.trickLive = t.active && !b.grounded ? trickScore(t, b.airTime) : null;
     if (this.trickLive && this.trickLive.parts.length) for (const m of trickMoves(this.trickLive, b.airTime)) this.combo.addLive(...m);
-    else if (!b.grounded && b.airTime > 1.8) this.combo.addLive(airLabel(b.airTime), Math.round(b.airTime * 15), 'air');
+    else if (!b.grounded && b.airTime >= BIG_AIR_MIN) this.combo.addLive(airLabel(b.airTime), Math.round(b.airTime * 15), 'air');
     if (landedAfter >= 0 && t.active) this.landTrick(landedAfter, false);
     else if (b.grounded) {
       // grounded with a trick still active (a landing updateTricks missed): nothing to score

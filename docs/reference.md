@@ -94,12 +94,13 @@ player lights (skate colour, health), DualSense adaptive triggers, and a TEST bu
   turned in a trick push along the body at 70% power (a quarter backflip lifts you, a half spin brakes; `TRICK_THRUST`
   in `src/player.js`). Vehicles have solid decks you can ride. **SKY-HIGH!** at 40 m up, **BIG AIR** after 5 s in the
   air.
-- **Style combos:** flips, spins, air, dive landings, grinds, meteor bounces and riding the Hitch-Line at 50+ m/s all
-  feed one run, shown live on the **style meter** (bottom right: rank, moves, multiplier, total). The run stays open in
-  the air, on a rail or hitched, and for 0.7 s after you land, long enough to get onto a rail or the winch; then it banks:
-  the moves' sum times the multiplier (+0.5 per kind of move past the first, air time not counting) into the style pool.
-  Jumping again inside those 0.7 s keeps the run only if the jump turns into a BIG AIR (5 s up) or meets a rail or a
-  meteor; an ordinary jump's landing banks it (its trick counts), so a big run takes a big jump, not a string of hops.
+- **Style combos:** flips, spins, BIG AIR, dive landings, grinds, meteor bounces and riding the Hitch-Line at 50+ m/s
+  all feed one run, shown live on the **style meter** (bottom right: rank, moves, multiplier, total). Air time scores only
+  as BIG AIR (5 s up); shorter air scores nothing and doesn't start the meter. The run stays open on a rail, hitched and
+  in a BIG AIR, and banks 0.7 s after its last move (long enough to land onto a rail or fire the winch): the moves' sum
+  times the multiplier (+0.5 per kind of move past the first, air time not counting) into the style pool. Ordinary air
+  doesn't hold it, so jumping straight off a landing banks the run as you land (that jump's trick counts): a big run
+  takes a big jump, not a string of hops.
   A wipeout or crash loses it (`src/combo.js`, `src/stylemeter.js`).
 - **Grinding:** snake rocks (35-50 m ridges) and firm crater lips are rails. Land on one or ride onto it at an angle
   to grind; `Shift` pops off. Grinds pay style per second; a clean trick landed onto a rail counts. At Chimera Downs the

@@ -5,6 +5,8 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Air scores only as BIG AIR.** The style meter put an AIR line up the moment you left the ground with a trick, and plain air paid from 1.8 s, so every jump scored and kept the run going. Now air time scores only once it's a **BIG AIR** (5 s up, `BIG_AIR` in `src/combo.js`): at the trick rate (5 a second) with a trick, 15 a second without one, the line appearing at 5 s. Shorter air pays nothing and doesn't start the meter (flips and spins still score from the first rotation). Only a BIG AIR holds the run open in the air (with rails, the winch and the moves that fill the window); in ordinary air the 0.7 s window runs on and the run banks as you land, which replaces the jump-link rule above. In the game: a plain 4.6 s jump leaves the meter shut; a drop with a flip shows only FRONTFLIP until BIG AIR 6.0s joins it at 5 s.
+
 - **Style runs: a short landing window, no chaining ordinary jumps, no arch threading.** Landing and jumping again kept a run going for ever, so strings of simple flips added up to the top ranks. Now (`src/combo.js`):
   - the run banks **0.7 s** after you land (was 2.5 s): long enough to get onto a rail or fire the winch, not to set up another jump;
   - taking off from the ground with the run open is a **jump link**, and it only keeps the run if the jump turns into a **BIG AIR** (5 s up, `BIG_AIR`; a standing jump is 4.6 s, a skating one about 3 s) or meets a rail or a meteor. Till then the window runs on in the air; an ordinary jump's landing banks the run, its trick counted. Air off a rail, a meteor or a run that starts in the air still holds the window, and landing from it gives the full 0.7 s;
