@@ -13,7 +13,11 @@ const _near = [];
 // places whose buildings' edges are rails (ledges.js), worked out when you first come near and again if their colliders change
 const LEDGE_PLACES = ['downs'];
 const LCELL = 12; // m: the ledge rails' lookup grid
-const GRIND_MIN = 5; // m/s: slower than this on a rail and you lose your balance (bail)
+const GRIND_MIN = 5; // m/s: slower than this on a rail and you lose your balance (bail); slower than this you don't get on
+// Friction on a rail: GRIND_DRAG m/s2, plus GRIND_BLEED of every m/s over GRIND_CRUISE each second. A fast entry (trick thrust,
+// a long drop) keeps its speed and bleeds it off slowly (120 m/s loses about 3.5 m/s a second) instead of being cut to a cap; a long
+// downhill finds its own top speed where gravity meets the bleed (about 100 m/s on a 30 degree slope).
+const GRIND_DRAG = 0.5, GRIND_BLEED = 0.03, GRIND_CRUISE = 20;
 export const grindLabel = (r) => (r.ledge ? 'LEDGE GRIND' : r.rimOf ? 'RIM GRIND' : 'GRIND');
 const BODY = 0.45, BODY_UP = 0.5; // rider's shins-to-waist as a ball (radius, lift): what crest rocks must clear
 const TRAIL_LIFE = 2; // s a grind's skate trail lasts
@@ -184,7 +188,9 @@ export class Grinder {
       let dir;
       if (tip) dir = n.s < n.r.len / 2 ? 1 : -1;
       else dir = Math.abs(along) > 2 ? Math.sign(along) : Math.sign(P.heading.dot(_t)) || 1;
-      this.active = { r: n.r, s: n.s, dir, speed: Math.max(Math.abs(along), hsp * 0.85, 9), t: 0, spark: 0 };
+      const speed = Math.max(Math.abs(along), hsp * 0.85);                                    // you ride on at the speed you came in with
+      if (speed < GRIND_MIN) return false;                                                     // (too slow to balance on it at all)
+      this.active = { r: n.r, s: n.s, dir, speed, t: 0, spark: 0 };
       g.audio.tone(1400, 0.08, 'square', 0.08);
       g.haptics.play('grind');
     }
@@ -193,7 +199,7 @@ export class Grinder {
     upAt(_p, _u);
     // gravity along the rail, a little friction
     A.speed += -GRAV * _t.dot(_u) * A.dir * dt;
-    A.speed = Math.min(85, A.speed - 0.5 * dt);
+    A.speed -= (GRIND_DRAG + GRIND_BLEED * Math.max(0, A.speed - GRIND_CRUISE)) * dt;
     if (A.speed < GRIND_MIN) { this.bail(P); return true; }
     // a rock on the crest throws you off
     const bump = this.hit(A, A.dir * A.speed * dt);

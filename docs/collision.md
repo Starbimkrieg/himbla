@@ -92,7 +92,8 @@ grind rails. `CLAUDE.md` has the short version; this is the long one, with the r
 - **Grabbing a ledge**: only on skates, from the air, heading along it (within about 40 degrees), within 1.5 m; no
   scooping up at a tip and no hop on from the side. Running along a roof, landing across an edge or stepping off a counter
   never snags. Snake rocks and crater rims keep their own, looser rules.
-- **Riding**: anything that pushes the rider mostly up (0.6 or more) is ridden over (the joints of a long roof's 8 m
+- **Riding**: you ride on at the speed you came in with (no floor, no cap) and friction bleeds it off, slowly when you're fast
+  (`GRIND_DRAG`, `GRIND_BLEED`, `GRIND_CRUISE`: 120 m/s loses about 3.5 m/s a second); anything that pushes the rider mostly up (0.6 or more) is ridden over (the joints of a long roof's 8 m
   pieces); posts, walls and rocks knock you off. Under 5 m/s (`GRIND_MIN`) you lose your balance: you topple off, the style
   run is lost, and you ragdoll where ragdolls are allowed. It scores as LEDGE GRIND, a grind like the rocks' and rims'.
 - **Building for it**: an edge people should grind needs a collider top that is the drawn top and a clean run along it.

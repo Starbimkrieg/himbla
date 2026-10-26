@@ -104,7 +104,8 @@ player lights (skate colour, health), DualSense adaptive triggers, and a TEST bu
   buildings' edges grind too (LEDGE GRIND: roofs, canopies, parapets, walls, steps, counters): the top edges of their
   colliders (`src/ledges.js`), taken only on skates, from the air, heading along the edge; stretches join round gentle bends
   (30 degrees), so a round pen's fence grinds all the way, and only where the rider fits (nothing beside or over the edge
-  to knock him off). Under 5 m/s on any rail you lose your balance and bail.
+  to knock him off). You ride on at the speed you came in with, bled off slowly by friction; under 5 m/s on any rail you
+  lose your balance and bail (and slower than that you don't get on).
 - **Terrain:** cratered plains plus highlands, scarps, rolling hills and long rilles. Craters range from bowls to
   terraced giants. Ramp slabs, arches and hoodoos dot the plains.
 - **Deliveries:** contracts at job boards, each with cargo type, fragility, pirate risk, distance and a tight clock.
