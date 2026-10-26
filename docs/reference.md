@@ -426,7 +426,8 @@ tools/
   casino-zfight.mjs        lists coplanar faces in the running casino
   casino-shots.mjs         casino screenshots from fixed spots
   check-claw.mjs           bots play the claw to tune its payout
-  downs-audit.mjs          Chimera Downs audit: zfight, colliders, text, gaps; coverage, blocked, floating (named only)
+  downs-audit.mjs          a place's audit (Chimera Downs, or PLACE=<id>): zfight, colliders, text, gaps; coverage, blocked,
+                           floating, rails (named only; the rules they check: docs/collision.md)
   downs-layouts.mjs        Chimera Downs layout study (docs/downs-layouts.md)
   stable-layouts.mjs       the stable yard's layouts: clearance and walk checks, plans (docs/stable-proposals/)
   race-sim.mjs             runs the race model headless and reports the balance

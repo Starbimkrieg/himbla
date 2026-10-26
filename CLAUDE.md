@@ -19,6 +19,22 @@ Models are built from code by `tools/blender/build_*.py` and exported to `src/as
 missing, run that script. Use the `blender` skill (`.claude/skills/blender/SKILL.md`) for conventions and the
 build, compress and check workflow.
 
+## Collision and ledge grinds (every place)
+
+Trick thrust reaches every roof, and the top edges of colliders are grind rails, so each place follows the same rules.
+`docs/collision.md` has them in full, with the reasons and a checklist. In short:
+
+- Anything solid the runner can reach gets a collider whose top is the drawn top: roofs too, never a box "to the ridge"
+  over a pitched roof. Thin decoration (lamp heads, festoons, ropes, lettering, glow, seats in rows) stays open.
+- No collider on floors or plinths under 0.9 m and 2.5 m+ across (the runner steps up only about 0.4 m). Raised details
+  on surfaces you stand or grind on are painted on (at most 2 cm proud, no ink; at least 1.5 cm on a curved place).
+- Blender parts make their own colliders (`parts(..., solid=True)`, `tools/blender/downs_common.py`); code-made geometry
+  has them in code beside it (`k.solid`, `k.solidQ`, `slabBox`); hand boxes only where a part's own can't (openings).
+- Ledges grind on places in `LEDGE_PLACES` (`src/rails.js`), only on skates, from the air and heading along; rails are
+  found by `src/ledges.js`.
+- Check a place with `PLACE=<id> node tools/downs-audit.mjs coverage|floating|blocked|rails`: every long rail should ride
+  end to end.
+
 ## Screenshots in dev sessions
 
 When you start a game to test visuals or gameplay (headless or in the browser pane), skip the tutorial first, or BOLT's

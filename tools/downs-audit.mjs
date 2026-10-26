@@ -1,6 +1,9 @@
-// Dev-only audit of Chimera Downs' build (docs/downs-layouts.md, "Audit"). Not part of the build.
+// Dev-only audit of a place's build: Chimera Downs by default, any other with PLACE=<location id> (docs/downs-layouts.md, "Audit";
+// the collision and grind rules it checks: docs/collision.md). Not part of the build.
 //   npx vite --port 5199 --host 127.0.0.1                       (in one shell)
-//   node tools/downs-audit.mjs [zfight|colliders|text|gaps|all]  (Playwright from PLAYWRIGHT, default /opt/node-tools/node_modules/playwright/index.mjs; the game from GAME_URL)
+//   node tools/downs-audit.mjs [zfight|colliders|text|gaps|all|coverage|blocked|floating|rails]  (Playwright from PLAYWRIGHT, default /opt/node-tools/node_modules/playwright/index.mjs; the game from GAME_URL)
+//   PLACE=meridian node tools/downs-audit.mjs coverage           (zfight, colliders, text and gaps are tuned to the Downs; coverage and rails work
+//                                                                 anywhere; blocked and floating need a place built with settle(): its kit colliders)
 //   SEP=0.0008: plane distance under which two surfaces count as one (zfight). Under 1 mm is safe only on the reversed-Z depth buffer (main.js); 2 cm is safe on any.
 // All checks run in the place's FLAT design frame (its builders' frame; src/curve.js bends it onto the Moon), with the static merge off (localStorage mr-nomerge)
 // and kit dev tags on (globalThis.__kitTags: outpostModels.js Kit.tags), so findings name the builder and Blender part.
@@ -14,6 +17,9 @@
 //   blocked    ground a walker could cross before the Blender parts' own colliders (downs_common.py Acc, `auto` in the kit's
 //              colliders) and now can't: walkBlocker (downsPlan.js) with and without them on a 0.5 m grid, by builder > part.
 //              Read each: a bench or a stall counter should block; a doorway, an arch or a passage shouldn't.
+//   rails      the ledge rails ledges.js finds on the place (whether or not it's in rails.js LEDGE_PLACES yet), each 20 m or longer
+//              ridden from one end at 15 m/s by the grind itself: lists every one that throws you off before its end (a knock, with
+//              what's there) and where. Every long rail should ride end to end.
 //   floating   the reverse of coverage: the standable top of every box collider (the parts' own and the hand-placed ones, marked
 //              `(hand)`) sampled every 0.5 m, and any spot with no drawn surface within 0.3 m listed by builder > part (you'd stand
 //              on air there).
@@ -21,12 +27,14 @@
 const { chromium } = await import(process.env.PLAYWRIGHT || '/opt/node-tools/node_modules/playwright/index.mjs');
 const MODE = process.argv[2] || 'all';
 const SEP = Number(process.env.SEP || 0.0008);
-const run = (m) => (MODE === 'all' && !['coverage', 'blocked', 'floating'].includes(m)) || MODE === m;
+const run = (m) => (MODE === 'all' && !['coverage', 'blocked', 'floating', 'rails'].includes(m)) || MODE === m;
 
 const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'] });
 const pg = await b.newPage({ viewport: { width: 640, height: 360 } });
 pg.setDefaultTimeout(900000);
 const errs = []; pg.on('pageerror', (e) => errs.push(e.message));
+const PLACE = process.env.PLACE || 'downs';
+await pg.addInitScript((p) => { window.__place = p; }, PLACE);
 await pg.addInitScript(() => { window.__kitTags = true; try { localStorage.setItem('mr-nomerge', '1'); } catch (e) { /* unavailable */ } });
 await pg.goto(process.env.GAME_URL || 'http://127.0.0.1:5199/', { waitUntil: 'load' });
 await pg.waitForFunction('window.game && window.game.world', null, { timeout: 180000 });
@@ -35,7 +43,7 @@ for (let i = 0; i < 14; i++) { let st = null; try { st = await pg.evaluate('wind
 await pg.waitForTimeout(3000);
 // the Downs is built (and rebuilt as its Blender kits arrive) after play starts: wait until its meshes and colliders stop changing
 for (let last = '', same = 0; same < 3;) {
-  const now = await pg.evaluate(() => { const l = window.game.locations.find((x) => x.id === 'downs'); let n = 0; if (l.group) l.group.traverse((o) => { if (o.isMesh) n++; }); return `${n}/${(l._kitCols || []).length}`; });
+  const now = await pg.evaluate(() => { const l = window.game.locations.find((x) => x.id === window.__place); let n = 0; if (l.group) l.group.traverse((o) => { if (o.isMesh) n++; }); return `${n}/${(l._kitCols || []).length}`; });
   same = now === last ? same + 1 : 0; last = now;
   await pg.waitForTimeout(2000);
 }
@@ -43,7 +51,7 @@ for (let last = '', same = 0; same < 3;) {
 // The Downs' triangles in its flat frame: { P: [x,y,z ×3 per triangle], C: per-triangle colour (vertex or material), T: tag id, text: [text plane triangles] }
 await pg.evaluate(async () => {
   const { unbendPoint } = await import('/src/curve.js');
-  const g = window.game, loc = g.locations.find((l) => l.id === 'downs'), R = g.world.curveR(loc);
+  const g = window.game, loc = g.locations.find((l) => l.id === window.__place), R = g.world.curveR(loc);
   const M4 = g.camera.matrixWorld.constructor, V3 = g.camera.position.constructor;
   loc.group.updateMatrixWorld(true);
   const inv = new M4().copy(loc.group.matrixWorld).invert(), M = new M4(), v = new V3();
@@ -130,7 +138,7 @@ if (run('zfight')) {
 
 if (run('colliders')) {
   const res = await pg.evaluate(() => {
-    const loc = window.game.locations.find((l) => l.id === 'downs'), cols = loc._kitCols || [];
+    const loc = window.game.locations.find((l) => l.id === window.__place), cols = loc._kitCols || [];
     const poly = (c) => {
       if (c.type === 'box') { const s = Math.sin(c.yaw || 0), k = Math.cos(c.yaw || 0); return { P: [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [c.x + a * c.hx * k + b * c.hz * s, c.z - a * c.hx * s + b * c.hz * k]), y0: c.y - c.hy, y1: c.y + c.hy }; }
       if (c.type === 'cyl') return { P: Array.from({ length: 12 }, (_, i) => [c.x + Math.cos(i / 12 * 2 * Math.PI) * c.r, c.z + Math.sin(i / 12 * 2 * Math.PI) * c.r]), y0: c.y0 ?? 0, y1: c.y1 };
@@ -224,7 +232,7 @@ if (run('gaps')) {
 if (run('blocked')) {
   const res = await pg.evaluate(async () => {
     const { walkBlocker } = await import('/src/downsPlan.js');
-    const loc = window.game.locations.find((l) => l.id === 'downs'), cols = loc._kitCols || [];
+    const loc = window.game.locations.find((l) => l.id === window.__place), cols = loc._kitCols || [];
     const before = walkBlocker(cols.filter((c) => !c.auto), 0.2), after = walkBlocker(cols, 0.2);
     const autos = cols.filter((c) => c.auto && c.y - c.hy <= 1.5 && c.y + c.hy >= 0.4);
     const by = new Map();
@@ -245,7 +253,7 @@ if (run('blocked')) {
 
 if (run('floating')) {
   const res = await pg.evaluate(() => {
-    const { P } = window.__downs, N = P.length / 9, loc = window.game.locations.find((l) => l.id === 'downs'), cols = (loc._kitCols || []).filter((c) => c.type === 'box');
+    const { P } = window.__downs, N = P.length / 9, loc = window.game.locations.find((l) => l.id === window.__place), cols = (loc._kitCols || []).filter((c) => c.type === 'box');
     // triangles by the 2 m (x, z) cells their footprint touches
     const C = 2, grid = new Map(), k2 = (i, j) => i * 100003 + j;
     for (let t = 0; t < N; t++) {
@@ -300,10 +308,44 @@ if (run('floating')) {
   for (const o of res.out.slice(0, 40)) console.log('  ' + o);
 }
 
+if (run('rails')) {
+  const res = await pg.evaluate(async () => {
+    const { unbendPoint } = await import('/src/curve.js');
+    const { ledgeRails } = await import('/src/ledges.js');
+    const g = window.game, P = g.player, b = P.body, I = g.input, G = g.grind, cols = g.colliders, loc = g.locations.find((l) => l.id === window.__place), R = g.world.curveR(loc);
+    const flat = (p) => { const f = loc.group.worldToLocal(p.clone()); if (R) unbendPoint(R, f.x, f.y, f.z, f); return f; };
+    const fs = (f) => `(${f.x.toFixed(1)}, ${f.y.toFixed(1)}, ${f.z.toFixed(1)})`;
+    g.renderer.setAnimationLoop(null);                                         // (the grind is stepped by hand below)
+    const rails = ledgeRails(loc._cols || [], cols, g.planet), long = rails.filter((r) => r.len >= 20);
+    let ev = null;
+    const origHit = G.hit.bind(G), origBail = G.bail.bind(G);
+    G.hit = (A, ds) => { const r = origHit(A, ds); if (r && !ev) ev = { kind: 'knock', s: A.s }; return r; };
+    G.bail = (PP) => { if (!ev) ev = { kind: 'bail', s: G.active.s }; return origBail(PP); };
+    const out = [], n = b.pos.clone();
+    for (const r of long) {
+      if (P.rag) { P.rag.release(); P.rag = null; }
+      ev = null; G.cool = 0;
+      G.active = { r, s: 1.5, dir: 1, speed: 15, t: 0, spark: 0 };
+      for (let k = 0; G.active && k < 60 * 40; k++) { G.active.speed = 15; G.update(P, 1 / 60, I); I.endFrame(); }
+      G.active = null;
+      if (!ev) continue;                                                       // rode to the end
+      let i = 0; while (i < r.pts.length - 2 && r.cum[i + 1] < ev.s) i++;
+      const at = r.pts[i].clone().lerp(r.pts[i + 1], Math.min(1, Math.max(0, (ev.s - r.cum[i]) / (r.cum[i + 1] - r.cum[i]))));
+      const hp = at.clone().addScaledVector(at.clone().normalize(), 0.5);
+      const what = cols.query(hp, 3).filter((c) => !r.owners.has(c) && cols.contact(c, hp, 0.45, n) > 0).map((c) => `${c.type} at ${fs(flat(c.c))}`);
+      out.push(`${ev.kind} ${ev.s.toFixed(1)} m into a ${r.len.toFixed(0)} m rail ${fs(flat(r.pts[0]))} -> ${fs(flat(r.pts[r.pts.length - 1]))} at ${fs(flat(at))}: ${what.slice(0, 3).join('; ') || '-'}`);
+    }
+    G.hit = origHit; G.bail = origBail;
+    return { n: rails.length, m: rails.reduce((a, r) => a + r.len, 0), long: long.length, out };
+  });
+  console.log(`rails: ${res.n} ledge rails, ${res.m.toFixed(0)} m in all; of the ${res.long} 20 m or longer, ${res.long - res.out.length} ride end to end${res.out.length ? '; these throw you off:' : ''}`);
+  for (const o of res.out) console.log('  ' + o);
+}
+
 if (run('coverage')) {
   const res = await pg.evaluate(async () => {
     const { unbendPoint } = await import('/src/curve.js');
-    const g = window.game, loc = g.locations.find((l) => l.id === 'downs'), R = g.world.curveR(loc), names = window.__kitTagNames || [];
+    const g = window.game, loc = g.locations.find((l) => l.id === window.__place), R = g.world.curveR(loc), names = window.__kitTagNames || [];
     const M4 = g.camera.matrixWorld.constructor, V3 = g.camera.position.constructor;
     // stand the runner in the Downs so everything near is built and its colliders are live
     g.player.body.pos.copy(loc.dir).multiplyScalar(g.planet.surface(loc.dir) + 2);
