@@ -26,8 +26,9 @@ function mats() {
   MATS = { grey: m(0x8d8898), basalt: m(0x6e6a7a), tan: m(0xa59886), pale: m(0xb8b2c4), dark: m(0x5f5a6c) };
   return MATS;
 }
-// pushed-up regolith round a rock (near the ground's colour)
-const soil = () => (SOIL ||= patchRockMaterial(new THREE.MeshToonMaterial({ color: 0xa597a9, gradientMap: gradientMap() })));
+// pushed-up regolith round a rock, in the ground's colour where it lies (vertex colours: build), SOIL_DEF without a planet
+const soil = () => (SOIL ||= patchRockMaterial(new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: gradientMap() })));
+const SOIL_DEF = new THREE.Color(0xa597a9);
 
 const N3 = createNoise3D(mulberry32(4242));
 const _v = new THREE.Vector3(), _n = new THREE.Vector3();
@@ -235,14 +236,18 @@ function domeBoxes(p, q, pts) {
   return [obox(p, q, V(c.x, lo.y + H * 0.3, c.z), I, hx * 0.82, H * 0.3, hz * 0.82), obox(p, q, V(c.x, lo.y + H * 0.5, c.z), I, hx * 0.5, H * 0.5 - 0.15, hz * 0.5)];
 }
 
+const paint = (geo, c) => { const a = geo.attributes.color; for (let i = 0; i < a.count; i++) a.setXYZ(i, c.r, c.g, c.b); a.needsUpdate = true; };
+
 // rock pieces and soil pieces as one object at p, turned by q
 function finish(p, q, rockGeos, soilGeos, mat, cols, kind) {
   const root = new THREE.Group();
-  for (const [geos, m, w] of [[rockGeos, mat, 0.12], [soilGeos, soil(), 0.07]]) {
+  for (const [geos, m, w] of [[rockGeos, mat, 0.12], [soilGeos, soil(), 0]]) { // (soil un-inked, like the ground it's heaped from)
     if (!geos.length) continue;
-    const mesh = new THREE.Mesh(mergeGeometries(geos.map(clean)), m);
+    const geo = mergeGeometries(geos.map(clean));
+    if (m === soil()) { geo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3)); paint(geo, SOIL_DEF); root.userData.soil = geo; }
+    const mesh = new THREE.Mesh(geo, m);
     mesh.castShadow = mesh.receiveShadow = true;
-    ink(mesh, w);
+    if (w) ink(mesh, w);
     root.add(mesh);
   }
   root.userData.rockKind = kind;
@@ -467,6 +472,12 @@ export function build(kind, rr, p, q, planet, dims) {
   if (kind === 'snake') return snake(rr, p, q, planet, dims.path);
   const r = kind === 'ramp' ? ramp(rr, p, q, dims, gy) : MONOLITH_MAKERS[dims.variant](rr, p, q, gy);
   r.mesh.userData.variant = dims.variant;
+  // its regolith the ground's colour there (terrainField.groundColour; it changes over hundreds of metres, so one sample)
+  if (planet && planet.groundColour && r.mesh.userData.soil) {
+    const d = p.clone().normalize();
+    planet.H(d.x, d.y, d.z);
+    paint(r.mesh.userData.soil, planet.groundColour(d, new THREE.Color()));
+  }
   return r;
 }
 

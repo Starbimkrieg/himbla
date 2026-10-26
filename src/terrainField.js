@@ -61,6 +61,16 @@ function tint(c, t, k) {
   c.r *= 1 + (t[0] - 1) * k; c.g *= 1 + (t[1] - 1) * k; c.b *= 1 + (t[2] - 1) * k;
 }
 
+// the ground's classic colours (groundColour)
+const highland = new THREE.Color(0.84, 0.78, 0.70);
+const mare = new THREE.Color(0.46, 0.45, 0.62);
+const floorC = new THREE.Color(0.34, 0.31, 0.50);
+const rimC = new THREE.Color(1.0, 0.95, 0.84);
+const rayC = new THREE.Color(1.0, 0.98, 0.92);
+const darkTint = new THREE.Color(0.55, 0.58, 0.75);
+const rockC = new THREE.Color(0.6, 0.56, 0.6);
+const rilleC = new THREE.Color(0.38, 0.36, 0.52);
+
 export class TerrainField {
   constructor(zones, seed = PLANET.seed) {
     const rand = mulberry32(seed);
@@ -421,6 +431,45 @@ export class TerrainField {
     return r;
   }
 
+  // The ground's colour at unit direction d, from this.attr as H(d) left it: the classic colours, the mineral tints (their part
+  // alone into tintOut, which the terrain shader can strengthen) and the dark side's tint. computeChunk's vertex colours (before
+  // their speckle and slope shading); rocks.js colours its regolith berms with it.
+  groundColour(d, c, tintOut = [0, 0, 0]) {
+    tintOut[0] = tintOut[1] = tintOut[2] = 0;
+    const x = d.x * R, y = d.y * R, z = d.z * R;
+    const mm = smoothstep(-0.25, 0.35, this.nB(x * 0.0007 + 11, y * 0.0007, z * 0.0007 - 5));
+    // classic colours first, same in both looks
+    c.copy(highland).lerp(mare, mm);
+    c.lerp(floorC, this.attr.floor * 0.7);
+    c.lerp(rimC, this.attr.rim * 0.6);
+    c.lerp(rayC, this.attr.ray * 0.7);
+    c.lerp(rockC, this.attr.rock * 0.55);
+    c.lerp(rilleC, this.attr.rille * 0.5);
+    if (this.painted) {
+      // mineral tints: hue only, brightness kept (a tint never reads as shadow; shadows keep contrast)
+      const lum0 = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
+      const c0r = c.r, c0g = c.g, c0b = c.b;
+      // (A) broad regions a touch cooler (blue-grey maria) or warmer (tan, iron-bearing)
+      const reg = this.nC(x * 0.00042 - 31, y * 0.00042 + 7, z * 0.00042 + 19) + 0.35 * this.nA(x * 0.0016 + 5, y * 0.0016, z * 0.0016 - 9);
+      const cool = smoothstep(0.12, 0.45, reg), warm = smoothstep(0.12, 0.45, -reg);
+      tint(c, TINT_COOL, cool * 0.75);
+      tint(c, TINT_TAN, warm * 0.8);
+      // (C) by ground type: buff ridges and scarp steps, rusty rilles, cleaner grey on fresh rims and
+      // gravel, dull brown in old craters
+      tint(c, TINT_BUFF, this.attr.rock * 0.9);
+      tint(c, TINT_RUST, this.attr.rille * 0.9);
+      tint(c, TINT_OLD, this.attr.old * 0.85);
+      const fresh = Math.max(this.attr.rim * 0.7, this.attr.ejecta * 0.45);
+      if (fresh > 0) { const g = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722; c.r += (g - c.r) * fresh; c.g += (g - c.g) * fresh; c.b += (g - c.b) * fresh; }
+      // restore brightness exactly
+      const lum1 = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
+      if (lum1 > 1e-4) c.multiplyScalar(lum0 / lum1);
+      tintOut[0] = c.r - c0r; tintOut[1] = c.g - c0g; tintOut[2] = c.b - c0b;
+    }
+    c.lerp(darkTint, darkness(d) * 0.35);
+    return c;
+  }
+
   // One chunk's mesh data at a LOD as plain arrays, so a worker builds it (terrainWorker.js) and the
   // main thread only uploads. `inside`: the grid's exact radii (physics cache: Planet.fillCache).
   computeChunk(f, cx, cy, flip, lod) {
@@ -439,14 +488,7 @@ export class TerrainField {
     const radii = new Float32Array((vn + 2) * (vn + 2));
     const dirs = new Float32Array((vn + 2) * (vn + 2) * 3);
     const c = new THREE.Color();
-    const highland = new THREE.Color(0.84, 0.78, 0.70);
-    const mare = new THREE.Color(0.46, 0.45, 0.62);
-    const floorC = new THREE.Color(0.34, 0.31, 0.50);
-    const rimC = new THREE.Color(1.0, 0.95, 0.84);
-    const rayC = new THREE.Color(1.0, 0.98, 0.92);
-    const darkTint = new THREE.Color(0.55, 0.58, 0.75);
-    const rockC = new THREE.Color(0.6, 0.56, 0.6);
-    const rilleC = new THREE.Color(0.38, 0.36, 0.52);
+    const tn = [0, 0, 0];
     // sample a (vn+2)^2 grid including a one-step border for normals
     for (let b = -1; b <= vn; b++) {
       for (let a = -1; a <= vn; a++) {
@@ -460,37 +502,9 @@ export class TerrainField {
           const li = b * vn + a;
           radiiIn[li] = r;
           rim[li] = this.attr.rim;
+          this.groundColour(_d, c, tn);
+          tintA[li * 3] = tn[0]; tintA[li * 3 + 1] = tn[1]; tintA[li * 3 + 2] = tn[2];
           const x = _d.x * R, y = _d.y * R, z = _d.z * R;
-          const mm = smoothstep(-0.25, 0.35, this.nB(x * 0.0007 + 11, y * 0.0007, z * 0.0007 - 5));
-          // classic colours first, same in both looks
-          c.copy(highland).lerp(mare, mm);
-          c.lerp(floorC, this.attr.floor * 0.7);
-          c.lerp(rimC, this.attr.rim * 0.6);
-          c.lerp(rayC, this.attr.ray * 0.7);
-          c.lerp(rockC, this.attr.rock * 0.55);
-          c.lerp(rilleC, this.attr.rille * 0.5);
-          if (this.painted) {
-            // mineral tints: hue only, brightness kept (a tint never reads as shadow; shadows keep contrast)
-            const lum0 = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
-            const c0r = c.r, c0g = c.g, c0b = c.b;
-            // (A) broad regions a touch cooler (blue-grey maria) or warmer (tan, iron-bearing)
-            const reg = this.nC(x * 0.00042 - 31, y * 0.00042 + 7, z * 0.00042 + 19) + 0.35 * this.nA(x * 0.0016 + 5, y * 0.0016, z * 0.0016 - 9);
-            const cool = smoothstep(0.12, 0.45, reg), warm = smoothstep(0.12, 0.45, -reg);
-            tint(c, TINT_COOL, cool * 0.75);
-            tint(c, TINT_TAN, warm * 0.8);
-            // (C) by ground type: buff ridges and scarp steps, rusty rilles, cleaner grey on fresh rims and
-            // gravel, dull brown in old craters
-            tint(c, TINT_BUFF, this.attr.rock * 0.9);
-            tint(c, TINT_RUST, this.attr.rille * 0.9);
-            tint(c, TINT_OLD, this.attr.old * 0.85);
-            const fresh = Math.max(this.attr.rim * 0.7, this.attr.ejecta * 0.45);
-            if (fresh > 0) { const g = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722; c.r += (g - c.r) * fresh; c.g += (g - c.g) * fresh; c.b += (g - c.b) * fresh; }
-            // restore brightness exactly
-            const lum1 = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
-            if (lum1 > 1e-4) c.multiplyScalar(lum0 / lum1);
-            tintA[li * 3] = c.r - c0r; tintA[li * 3 + 1] = c.g - c0g; tintA[li * 3 + 2] = c.b - c0b;
-          }
-          c.lerp(darkTint, darkness(_d) * 0.35);
           const speck = this.nC(x * 0.08, y * 0.08, z * 0.08) * 0.05;
           col[li * 3] = c.r * (1 + speck); col[li * 3 + 1] = c.g * (1 + speck); col[li * 3 + 2] = c.b * (1 + speck);
         } else r = this.vr(f, gi, gj);
