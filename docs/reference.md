@@ -308,7 +308,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (227 in 26 sections) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (233 in 27 sections, the 6 ROCK DRAFTS included while they're up) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).
@@ -371,6 +371,7 @@ src/
   downsFair.js     ferris wheel, carousel, queue lines
   rides.js         transit-ship rides and fairground rides
   rocks.js         shaped rocks and colliders
+  rockDrafts.js    candidate replacements for the hoodoo, ramp and snake rocks (dev only: the Asset Row's ROCK DRAFTS)
   rails.js         grinding rocks, crater rims and building ledges
   ledges.js        building ledges as grind rails (the top edges of a place's colliders)
   meteors.js       meteor showers

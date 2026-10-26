@@ -293,3 +293,6 @@ export function shapedRocks(planet, ch, centreOf, ok, rock) {
   }
   return out;
 }
+
+// for the drafts (rockDrafts.js, dev only)
+export { mats, sweep, roughen, rubble };
