@@ -102,7 +102,7 @@ export class Planet extends TerrainField {
       if (ch.center.distanceTo(c) > ch.radius + r * 2.2) continue;
       for (let l = 0; l < ch.meshes.length; l++) if (ch.meshes[l]) { this.scene.remove(ch.meshes[l]); ch.meshes[l].geometry.dispose(); ch.meshes[l] = null; }
       ch.shown = -1;
-      if (ch.boulders) { this.scene.remove(ch.boulders); ch.boulders = null; ch.boulderSpec = null; if (this.arches) this.arches.delete(ch); }
+      if (ch.boulders) { this.scene.remove(ch.boulders); ch.boulders = null; ch.boulderSpec = null; }
       if (ch.boulderCols && this.colliders) { for (const col of ch.boulderCols) this.colliders.remove(col); ch.boulderCols = null; }
       ch.ver++; // in-flight worker jobs for it are stale
       ch.pending = 0;
@@ -546,7 +546,7 @@ ${SKIN_COLOR}`);
     const c = d.clone().normalize().multiplyScalar(R);
     for (const ch of this.chunks) {
       if (ch.center.distanceTo(c) > ch.radius + 30) continue;
-      if (ch.boulders) { this.scene.remove(ch.boulders); ch.boulders = null; ch.boulderSpec = null; if (this.arches) this.arches.delete(ch); }
+      if (ch.boulders) { this.scene.remove(ch.boulders); ch.boulders = null; ch.boulderSpec = null; }
       if (ch.boulderCols && this.colliders) { for (const col of ch.boulderCols) this.colliders.remove(col); ch.boulderCols = null; }
     }
   }
@@ -625,7 +625,6 @@ ${SKIN_COLOR}`);
     g.updateMatrixWorld(true);
     cols.push(...sr.cols);
     for (const r of sr.rails) this.addRail(r);
-    if (sr.arches.length) (this.arches ||= new Map()).set(ch, sr.arches); // rock arches you can thread (rocks.js archPass); go with the boulders
     g.matrixAutoUpdate = false;
     g.visible = false;
     this.scene.add(g);

@@ -121,11 +121,11 @@ function cyl(p, q, lx, lz, y0, y1, r) {
 
 // ---------------- the rocks ----------------
 
-// One shaped rock (p = ground point, q = local frame): { mesh, cols, rail?, arch? } in world space.
+// One shaped rock (p = ground point, q = local frame): { mesh, cols, rail? } in world space.
 export function build(kind, rr, p, q, planet, dims = null) {
   const M = mats();
   const seed = rr() * 100;
-  let geo, mat, cols = [], rail = null, arch = null, worldGeo = false;
+  let geo, mat, cols = [], rail = null, worldGeo = false;
   if (kind === 'ramp') {
     // rough flanks, broken lip, rubble; the riding middle stays smooth-ish. p is the ground at the tail so you roll
     // straight on; dims.drop is how far the ground falls away ahead, which the front face reaches down to
@@ -160,7 +160,6 @@ export function build(kind, rr, p, q, planet, dims = null) {
     mat = rr() < 0.5 ? M.tan : M.grey;
     for (const s of [-1, 1]) cols.push(box(p, q, s * (span / 2 + leg / 2), H / 2, 0, leg / 2 + 0.2, H / 2, dep / 2 + 0.2));
     cols.push(box(p, q, 0, H + lt / 2 - 0.3, 0, span / 2 + leg + 0.5, lt / 2 + 0.2, dep * 0.45 + 0.2));
-    arch = { c: p.clone(), qi: q.clone().invert(), span, H }; // the opening, for archPass
   } else if (kind === 'hoodoo') {
     const H = 8 + rr() * 7, r0 = 2.2 + rr() * 1.2;
     const prof = [[r0 * 1.25, -0.5], [r0, H * 0.2], [r0 * 0.62, H * 0.5], [r0 * 0.5, H * 0.75], [r0 * 0.7, H * 0.92], [r0 * 0.6, H]];
@@ -239,7 +238,7 @@ export function build(kind, rr, p, q, planet, dims = null) {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   ink(mesh, kind === 'snake' ? 0.06 : 0.12);
-  return { mesh, cols, rail, arch };
+  return { mesh, cols, rail };
 }
 const _o = new THREE.Vector3();
 const SKIN = 0.2; // m: snake-rock colliders stand this far outside its flanks (bulged to 1.2 x half-width, roughened)
@@ -249,7 +248,7 @@ const SKIN = 0.2; // m: snake-rock colliders stand this far outside its flanks (
 export function shapedRocks(planet, ch, centreOf, ok, rock) {
   const rr = mulberry32((ch.f * 104729 + ch.cy * 1301 + ch.cx * 7) * 2246822519 ^ 0xb0b5);
   const n = (rr() < 0.42 ? 1 : 0) + (rr() < 0.12 ? 1 : 0) + Math.floor(rock * 2.5 + rr() * rock);
-  const out = { meshes: [], cols: [], rails: [], arches: [] };
+  const out = { meshes: [], cols: [], rails: [] };
   const p = new THREE.Vector3(), up = new THREE.Vector3(), t = new THREE.Vector3(), q = new THREE.Quaternion();
   for (let tries = 0; tries < n * 6 && out.meshes.length < n; tries++) {
     centreOf(rr(), rr(), p);
@@ -301,24 +300,6 @@ export function shapedRocks(planet, ch, centreOf, ok, rock) {
     const r = build(kind, rr, g, q, planet);
     out.meshes.push(r.mesh);
     out.cols.push(...r.cols);
-    if (r.arch) out.arches.push(r.arch);
   }
   return out;
-}
-
-// Did a move from a to b pass through a rock arch's opening (planet.arches: per chunk)? It crosses the arch's plane between the
-// legs and under the lintel. Either way through counts, so a pass back is another one.
-const _la = new THREE.Vector3(), _lb = new THREE.Vector3();
-export function archPass(planet, a, b) {
-  if (!planet.arches) return false;
-  for (const list of planet.arches.values()) for (const A of list) {
-    if (b.distanceToSquared(A.c) > 900) continue; // 30 m
-    _la.copy(a).sub(A.c).applyQuaternion(A.qi);
-    _lb.copy(b).sub(A.c).applyQuaternion(A.qi);
-    if ((_la.z > 0) === (_lb.z > 0) || _la.z === _lb.z) continue;
-    const k = _la.z / (_la.z - _lb.z);
-    const x = _la.x + (_lb.x - _la.x) * k, y = _la.y + (_lb.y - _la.y) * k;
-    if (Math.abs(x) < A.span / 2 && y > -1 && y < A.H) return true;
-  }
-  return false;
 }

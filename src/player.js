@@ -6,8 +6,7 @@ import { frameQuat, upAt } from './geo.js';
 import { Ragdoll } from './ragdoll.js';
 import { Idle } from './idles.js';
 import { updateHalo } from './cosmetics.js';
-import { Combo } from './combo.js';
-import { archPass } from './rocks.js';
+import { Combo, BIG_AIR } from './combo.js';
 import { grindLabel } from './rails.js';
 import { WEAPONS, weaponUnlocked, fireWeapon } from './weapons.js';
 
@@ -23,10 +22,9 @@ const SPIN_RATE = 12;
 // trick thrust: with the body turned in a trick the pack pushes where the body faces, at this share of the thrusters' power
 const TRICK_THRUST = 0.7;
 const NUMS = ['', '', 'DOUBLE ', 'TRIPLE ', 'QUAD ', 'QUINT '];
-const BIG_AIR_MIN = 5; // s airborne before an air is called BIG AIR (shorter ones over 1.8 s still pay, as AIR)
+const BIG_AIR_MIN = BIG_AIR; // s airborne before an air is called BIG AIR (shorter ones over 1.8 s still pay, as AIR); it keeps a style run open
 const WINCH_FAST = 50; // m/s on the Hitch-Line before it pays style...
 const WINCH_RATE = 7; // ...at this many points a second (a trick's air time pays 5)
-const ARCH_PTS = 35; // threading a rock arch
 const SKY_HIGH_GAIN = 40; // m climbed (radially) above a jump's start before SKY-HIGH! is called
 
 // What a trick scores if you land it now: whole flips and spins, plus air time (the combo applies the multiplier).
@@ -55,7 +53,7 @@ const _q = new THREE.Quaternion();
 const _Z = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3();
 const _sp = new THREE.Vector3(), _sf = new THREE.Vector3();
-const _tp = new THREE.Vector3(), _tl = new THREE.Vector3(), _ap = new THREE.Vector3();
+const _tp = new THREE.Vector3(), _tl = new THREE.Vector3();
 
 export class Player {
   constructor(game, spawn) {
@@ -409,7 +407,6 @@ export class Player {
     const pr = sm > 1 ? { ...this.params } : this.params;
     if (sm > 1) for (const k of ['runSpeed', 'runAccel', 'brakeDecel', 'skatePush', 'skatePushMax', 'airControl', 'thrustAccel', 'skateSafeImpact', 'bootSafeImpact']) pr[k] *= sm;
     let landed = false;
-    _ap.copy(b.pos);
     for (let i = 0; i < steps; i++) {
       const before = b.grounded;
       const imp = stepSkater(b, ctrl, h, g.planet, g.colliders, pr, this.impacts);
@@ -425,7 +422,6 @@ export class Player {
       ctrl.jump = false;
     }
     g.devOverlay.lap('physics');
-    if (archPass(g.planet, _ap, b.pos)) this.combo.add('ARCH THREAD', ARCH_PTS, 'arch');
     // Hitch-Line at speed: style builds while hitched at WINCH_FAST or more, committed when you let go
     const winchLabel = () => `HITCH-LINE ${this.winchT.toFixed(1)}s`;
     if (hitched) {
@@ -466,10 +462,10 @@ export class Player {
 
     if (b.diveLanded) {
       g.fx.dust(b.pos, b.vel, 14, up);
-      if (b.diveLanded > 20) this.combo.add('DIVE LANDING', Math.round(b.diveLanded / 3), 'dive');
+      if (b.diveLanded > 20) this.combo.add('DIVE LANDING', Math.round(b.diveLanded / 3), 'dive', true);
       b.diveLanded = 0;
     }
-    if (!wasGrounded && b.grounded && airBefore > 1.8 && !this.trickLanding) this.combo.add(airLabel(airBefore), Math.round(airBefore * 15), 'air');
+    if (!wasGrounded && b.grounded && airBefore > 1.8 && !this.trickLanding) this.combo.add(airLabel(airBefore), Math.round(airBefore * 15), 'air', true);
     this.trickLanding = false;
     if (wasGrounded && !b.grounded && this.speed > 40 && b.vel.dot(up) > 6) this.launchCheck = 0.6;
     if (this.launchCheck > 0) {
@@ -588,7 +584,7 @@ export class Player {
     const sc = trickScore(t, air);
     let wiped = false;
     if (sc.clean && sc.parts.length) {
-      for (const m of trickMoves(sc, air)) this.combo.add(...m);
+      for (const m of trickMoves(sc, air)) this.combo.add(...m, true);
       g.haptics.play('stick');
       this.trickLanding = true;
     } else if (!sc.clean && !rail) {

@@ -94,11 +94,13 @@ player lights (skate colour, health), DualSense adaptive triggers, and a TEST bu
   turned in a trick push along the body at 70% power (a quarter backflip lifts you, a half spin brakes; `TRICK_THRUST`
   in `src/player.js`). Vehicles have solid decks you can ride. **SKY-HIGH!** at 40 m up, **BIG AIR** after 5 s in the
   air.
-- **Style combos:** flips, spins, air, dive landings, grinds, meteor bounces, threading a rock arch and riding the
-  Hitch-Line at 50+ m/s all feed one run, shown live on the **style meter** (bottom right: rank, moves, multiplier,
-  total). The run stays open in the air, on a rail or hitched, and for
-  2.5 s after you land; then it banks: the moves' sum times the multiplier (+0.5 per kind of move past the first, air
-  time not counting) into the style pool. A wipeout or crash loses it (`src/combo.js`, `src/stylemeter.js`).
+- **Style combos:** flips, spins, air, dive landings, grinds, meteor bounces and riding the Hitch-Line at 50+ m/s all
+  feed one run, shown live on the **style meter** (bottom right: rank, moves, multiplier, total). The run stays open in
+  the air, on a rail or hitched, and for 0.7 s after you land, long enough to get onto a rail or the winch; then it banks:
+  the moves' sum times the multiplier (+0.5 per kind of move past the first, air time not counting) into the style pool.
+  Jumping again inside those 0.7 s keeps the run only if the jump turns into a BIG AIR (5 s up) or meets a rail or a
+  meteor; an ordinary jump's landing banks it (its trick counts), so a big run takes a big jump, not a string of hops.
+  A wipeout or crash loses it (`src/combo.js`, `src/stylemeter.js`).
 - **Grinding:** snake rocks (35-50 m ridges) and firm crater lips are rails. Land on one or ride onto it at an angle
   to grind; `Shift` pops off. Grinds pay style per second; a clean trick landed onto a rail counts. At Chimera Downs the
   buildings' edges grind too (LEDGE GRIND: roofs, canopies, parapets, walls, steps, counters): the top edges of their
