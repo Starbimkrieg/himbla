@@ -56,7 +56,7 @@ function rockRow(parts, gap) {
 // turned so the slopes face the walkway
 const ramps = () => rockRow(RAMPS.map((variant, i) => rockPart('ramp', 11 + i, { ...rampDims(mulberry32(70 + i), variant), drop: 0 }, Math.PI / 2)), 6);
 const monoliths = () => rockRow(MONOLITHS.map((variant, i) => rockPart('monolith', 31 + i, { variant })), 6);
-const snakes = () => rockRow([rockPart('snake', 41, null, Math.PI / 2), rockPart('snake', 47, null, Math.PI / 2)], 8);
+const snakes = () => rockRow([rockPart('snake', 59, null, Math.PI / 2), rockPart('snake', 63, null, Math.PI / 2)], 8); // (a 63 m one, and a 48 m one that winds more)
 
 // ---- boulders (planet.js buildBoulders: dodecahedron, s x 0.8s x s, half sunk, ink hull) ----
 function boulders() {
@@ -151,9 +151,9 @@ export default {
   id: 'props.nature',
   title: '11 · NATURE',
   items: [
-    { id: 'rock.ramp', label: 'RAMP ROCKS: STRATA SLAB · CURVED KICKER · WHALEBACK', w: 80, d: 14, make: ramps },
-    { id: 'rock.monolith', label: 'MONOLITHS: SHEARED SPIRE · TOPPLED HALF · HOUSE ROCK · CRACKED BOULDER', w: 70, d: 20, make: monoliths },
-    { id: 'rock.snake-rail', label: 'SNAKE RAIL ROCKS', w: 90, d: 20, make: snakes },
+    { id: 'rock.ramp', label: 'RAMP ROCKS: STRATA SLAB · CURVED KICKER · WHALEBACK', w: 87, d: 13, make: ramps },
+    { id: 'rock.monolith', label: 'MONOLITHS: SHEARED SPIRE · TOPPLED HALF · HOUSE ROCK · CRACKED BOULDER', w: 74, d: 13, make: monoliths },
+    { id: 'rock.snake-rail', label: 'SNAKE RAIL ROCKS', w: 104, d: 26, make: snakes },
     { id: 'rock.boulder', label: 'BOULDERS (2.4 – 16 M)', w: 52, d: 22, make: boulders },
     { id: 'nature.crystal-cluster', label: 'ROCK SAMPLES', w: 17, d: 4, solid: false, make: crystals },
     { id: 'nature.black-lake', label: 'BLACK LAKE', w: 90, d: 90, solid: false, make: blackLake },
