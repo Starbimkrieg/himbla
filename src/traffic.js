@@ -199,7 +199,8 @@ function roadMaterial() {
         float sh = 1.0;
         #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
           DirectionalLightShadow dls = directionalLightShadows[ 0 ];
-          if ( receiveShadow ) sh = getShadow( directionalShadowMap[ 0 ], dls.shadowMapSize, dls.shadowIntensity, dls.shadowBias, dls.shadowRadius, vDirectionalShadowCoord[ 0 ] );
+          if ( receiveShadow ) sh = getShadow( directionalShadowMap[ 0 ], dls.shadowMapSize, dls.shadowIntensity, dls.shadowBias, abs( dls.shadowRadius ), vDirectionalShadowCoord[ 0 ] );
+          if ( dls.shadowRadius < 0.0 ) sh = smoothstep( 0.38, 0.62, sh ); // (lunar light: toon.js)
         #endif
         col *= 0.22 + 0.85 * vLit * sh;
         gl_FragColor = vec4(col, a * vFade);

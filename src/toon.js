@@ -10,7 +10,10 @@ import { pixelFont } from './fonts.js';
   const chunk = THREE.ShaderChunk.lights_fragment_begin;
   if (chunk.includes(SHADOW_LINE)) {
     THREE.ShaderChunk.lights_fragment_begin = chunk.replace(SHADOW_LINE, `{
-		float grazeSh = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;
+		float grazeSh = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, abs( directionalLightShadow.shadowRadius ), vDirectionalShadowCoord[ i ] ) : 1.0;
+		// lunar light (a negative shadow radius, main.js updateLighting): no air to soften a shadow, so the filtered edge is
+		// cut hard. It stays anti-aliased (a narrow ramp across the soft PCF edge, never the raw texels' stair-steps)
+		if ( directionalLightShadow.shadowRadius < 0.0 ) grazeSh = smoothstep( 0.38, 0.62, grazeSh );
 		#ifndef KEEP_GRAZE_SHADOW
 		float grazeD = dot( geometryNormal, directLight.direction );
 		float grazeRamp = smoothstep( -0.2, 0.2, grazeD );

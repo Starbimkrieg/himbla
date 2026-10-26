@@ -71,6 +71,7 @@ export const SCHEMA = {
     { key: 'terrainDetail', label: 'Terrain detail', type: 'range', min: 0.6, max: 1.6, step: 0.05, def: 1, fmt: pct, hint: 'How far the detailed ground reaches' },
     { key: 'shadows', label: 'Shadows', type: 'toggle', def: true },
     { key: 'shadowRes', label: 'Shadow quality', type: 'choice', def: 2048, options: [[1024, 'LOW'], [2048, 'MEDIUM'], [4096, 'HIGH']] },
+    { key: 'lunarLight', label: 'Lunar light', type: 'toggle', def: true, hint: 'Crisp shadows and deep shade, as under a sun with no air. Off: softer shadows, brighter shade' },
     // (regolith ground texture, moonSkins.js: dev builds only, off by default)
     ...(DEV_TOOLS ? [
       { key: 'regolith', label: 'Regolith ground texture', type: 'toggle', def: false, hint: 'Lunar dust, pebbles and craters on the ground, and grain and dust on the rocks' },

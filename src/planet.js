@@ -615,7 +615,7 @@ ${SKIN_COLOR}`);
     im.matrixAutoUpdate = hull.matrixAutoUpdate = false; // static: the shadow cache takes them at once
     const g = new THREE.Group();
     g.add(im, hull);
-    // shaped rocks: ramps, hoodoos and snake ridges (rocks.js)
+    // shaped rocks: ramps, monoliths and snake ridges (rocks.js)
     const sr = shapedRocks(this, ch, (u, v, out) => faceDir(ch.f, ch.cx * CH + (0.1 + 0.8 * u) * CH, ch.cy * CH + (0.1 + 0.8 * v) * CH, out), (pt) => this.spotFree(pt), rock);
     for (const m of sr.meshes) {
       g.add(m);

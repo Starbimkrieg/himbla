@@ -1,16 +1,15 @@
-// Asset Row catalogue: props & markers, weapons & effects, nature, the rock drafts, secrets & the Spindle's props. Items: see index.js.
+// Asset Row catalogue: props & markers, weapons & effects, nature, secrets & the Spindle's props. Items: see index.js.
 // One file per category (props-*.js); props-util.js has the helpers they share.
 import markers from './props-markers.js';
 import weapons from './props-weapons.js';
 import nature from './props-nature.js';
 import secrets from './props-secrets.js';
-import rockDrafts from './rock-drafts.js';
 
 // shown with the vehicles instead (vehicles.js)
 const SHOWN_WITH_VEHICLES = new Set(['prop.turret', 'prop.rocket', 'spindle.mothership']);
 for (const g of [markers, weapons, nature, secrets]) g.items = g.items.filter((it) => !SHOWN_WITH_VEHICLES.has(it.id));
 
-export default [markers, weapons, nature, rockDrafts, secrets];
+export default [markers, weapons, nature, secrets];
 
 /*
 SKIPPED on purpose

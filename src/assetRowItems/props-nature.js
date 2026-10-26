@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { lineUp } from './common.js';
-import { seat, rngWith } from './props-util.js';
+import { seat } from './props-util.js';
 import { toon, glow, inkMat } from '../toon.js';
 import { mulberry32 } from '../rng.js';
-import { build as buildRock } from '../rocks.js';
+import { build as buildRock, RAMPS, MONOLITHS, rampDims, snakePath } from '../rocks.js';
 import { KINDS as METEOR_KINDS, meteorMats, makeMeteorRock } from '../meteors.js';
 
 // 11 · NATURE: shaped rocks, boulders, crystal samples, meteors and the black lake.
@@ -12,40 +12,32 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // ---- shaped rocks (rocks.js build) ----
 // Only the snake needs a planet (it drapes over planet.ground() and takes "up" from the centre, so a plane won't do): a
-// 1e5 m sphere curves under 1 cm over a 40 m rail. The Row takes yaw-only colliders, so the tilted ramp slab becomes steps.
-// A snake keeps its boxes whole (you roll up its sloping tips) and brings its crest as the item's `rails`, which the flat
-// world registers so it grinds like the Moon's (rails.js).
+// 1e5 m sphere curves under 1 cm over a 120 m rail. Colliders go in whole (the Row takes turned boxes), and a snake brings
+// its crest as the item's `rails`, which the flat world registers so it grinds like the Moon's (rails.js).
 const R_BIG = 1e5;
 const bigSphere = { ground: (v, out) => out.copy(v).normalize().multiplyScalar(R_BIG) };
 
 // one rock as a lineUp part { root, w, d, cols, rails }, colliders and rail in the part's frame; `turn`: its yaw
-function rockPart(kind, seed, over, dims, turn = 0) {
-  const rr = rngWith(mulberry32(seed), over);
+function rockPart(kind, seed, dims, turn = 0) {
+  const rr = mulberry32(seed);
   const snake = kind === 'snake';
   const p = snake ? V(0, R_BIG, 0) : V(0, 0, 0);
-  const r = buildRock(kind, rr, p.clone(), new THREE.Quaternion(), snake ? bigSphere : null, dims);
-  if (snake) r.mesh.position.set(0, 0, 0); // geometry is already relative to p
+  const r = buildRock(kind, rr, p.clone(), new THREE.Quaternion(), snake ? bigSphere : null, snake ? { path: snakePath(rr) } : dims);
+  r.mesh.position.set(0, 0, 0); // (a snake's geometry is already relative to p)
   r.mesh.rotation.y = turn;
   const ct = Math.cos(turn), st = Math.sin(turn);
   const turned = (x, z) => [x * ct + z * st, -x * st + z * ct]; // point rotated by `turn` (as rotation.y)
-  const turnedDir = (v) => { const [x, z] = turned(v.x, v.z); return V(x, v.y, z); };
-  const cols = [];
-  const box = (x, y, z, hx, hy, hz, yaw) => { const [tx, tz] = turned(x, z); cols.push({ type: 'box', x: tx, y, z: tz, hx, hy, hz, yaw: yaw + turn }); };
-  for (const c of r.cols) {
-    const x = c.c.x - p.x, y = c.c.y - p.y, z = c.c.z - p.z;
-    if (c.type === 'cyl') { const [tx, tz] = turned(x, z); cols.push({ type: 'cyl', x: tx, z: tz, y0: c.y0, y1: c.y1, r: c.r }); }
-    else if (c.rail) { const [tx, tz] = turned(x, z); cols.push({ type: 'box', x: tx, y, z: tz, hx: c.hx, hy: c.hy, hz: c.hz, ax: turnedDir(c.ax), ay: turnedDir(c.ay), az: turnedDir(c.az), rail: 0 }); } // snake box: whole, part of its rail
-    else if (Math.abs(c.ay.y) > 0.999) box(x, y, z, c.hx, c.hy, c.hz, Math.atan2(c.az.x, c.az.z));
-    else if (kind === 'ramp') { // tilted slab as steps of h / 10 (rocks.js ramp: slope(z) = h * (z / L + 0.5))
-      const { L, W, h } = dims, N = 10, dz = L / N;
-      for (let j = 0; j < N; j++) { const top = h * ((j + 1) / N) + 0.2; box(0, top / 2, -L / 2 + dz * (j + 0.5), W * 0.36, top / 2, dz / 2, 0); }
-    }
-  }
-  const rails = r.rail ? [r.rail.pts.map((q) => { const [tx, tz] = turned(q.x - p.x, q.z - p.z); return V(tx, q.y - p.y, tz); })] : [];
+  const dir = (v) => { const [x, z] = turned(v.x, v.z); return V(x, v.y, z); };
+  const cols = r.cols.map((c) => {
+    const [x, z] = turned(c.c.x - p.x, c.c.z - p.z), y = c.c.y - p.y;
+    if (c.type === 'sphere') return { type: 'sphere', x, y, z, r: c.r };
+    return { type: 'box', x, y, z, hx: c.hx, hy: c.hy, hz: c.hz, ax: dir(c.ax), ay: dir(c.ay), az: dir(c.az), ...(c.rail ? { rail: 0 } : {}) };
+  });
+  const rails = r.rail ? [r.rail.pts.map((q) => { const [x, z] = turned(q.x - p.x, q.z - p.z); return V(x, q.y - p.y, z); })] : [];
   const part = seat(r.mesh, { lift: false });
-  const dx = r.mesh.position.x, dz2 = r.mesh.position.z; // seat's centring shift; colliders and rail follow
-  for (const c of cols) { c.x += dx; c.z += dz2; }
-  for (const pts of rails) for (const q of pts) { q.x += dx; q.z += dz2; }
+  const dx = r.mesh.position.x, dz = r.mesh.position.z; // seat's centring shift; colliders and rail follow
+  for (const c of cols) { c.x += dx; c.z += dz; }
+  for (const pts of rails) for (const q of pts) { q.x += dx; q.z += dz; }
   return { root: part.root, w: part.w, d: part.d, cols, rails };
 }
 
@@ -61,12 +53,10 @@ function rockRow(parts, gap) {
   return { root: row.root, cols, rails };
 }
 
-const ramps = () => rockRow([
-  rockPart('ramp', 11, { 1: 0.2 }, { L: 16, W: 10, h: 4, drop: 0 }, Math.PI / 2), // basalt; turned so the slope faces the walkway
-  rockPart('ramp', 12, { 1: 0.8 }, { L: 20, W: 12, h: 5.2, drop: 0 }, Math.PI / 2), // (dark)
-], 6);
-const hoodoos = () => rockRow([rockPart('hoodoo', 31, {}), rockPart('hoodoo', 32, {}), rockPart('hoodoo', 33, {})], 5);
-const snakes = () => rockRow([rockPart('snake', 41, { 7: 0.2 }), rockPart('snake', 42, { 7: 0.8 })], 8); // (grey, basalt)
+// turned so the slopes face the walkway
+const ramps = () => rockRow(RAMPS.map((variant, i) => rockPart('ramp', 11 + i, { ...rampDims(mulberry32(70 + i), variant), drop: 0 }, Math.PI / 2)), 6);
+const monoliths = () => rockRow(MONOLITHS.map((variant, i) => rockPart('monolith', 31 + i, { variant })), 6);
+const snakes = () => rockRow([rockPart('snake', 41, null, Math.PI / 2), rockPart('snake', 47, null, Math.PI / 2)], 8);
 
 // ---- boulders (planet.js buildBoulders: dodecahedron, s x 0.8s x s, half sunk, ink hull) ----
 function boulders() {
@@ -161,9 +151,9 @@ export default {
   id: 'props.nature',
   title: '11 · NATURE',
   items: [
-    { id: 'rock.ramp', label: 'RAMP ROCKS', w: 56, d: 15, make: ramps },
-    { id: 'rock.hoodoo', label: 'HOODOOS', w: 36, d: 9, make: hoodoos },
-    { id: 'rock.snake-rail', label: 'SNAKE RAIL ROCKS', w: 28, d: 43, make: snakes },
+    { id: 'rock.ramp', label: 'RAMP ROCKS: STRATA SLAB · CURVED KICKER · WHALEBACK', w: 80, d: 14, make: ramps },
+    { id: 'rock.monolith', label: 'MONOLITHS: SHEARED SPIRE · TOPPLED HALF · HOUSE ROCK · CRACKED BOULDER', w: 70, d: 20, make: monoliths },
+    { id: 'rock.snake-rail', label: 'SNAKE RAIL ROCKS', w: 90, d: 20, make: snakes },
     { id: 'rock.boulder', label: 'BOULDERS (2.4 – 16 M)', w: 52, d: 22, make: boulders },
     { id: 'nature.crystal-cluster', label: 'ROCK SAMPLES', w: 17, d: 4, solid: false, make: crystals },
     { id: 'nature.black-lake', label: 'BLACK LAKE', w: 90, d: 90, solid: false, make: blackLake },

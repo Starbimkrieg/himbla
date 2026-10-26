@@ -110,7 +110,8 @@ player lights (skate colour, health), DualSense adaptive triggers, and a TEST bu
   to knock him off). You ride on at the speed you came in with, bled off slowly by friction; under 5 m/s on any rail you
   lose your balance and bail (and slower than that you don't get on).
 - **Terrain:** cratered plains plus highlands, scarps, rolling hills and long rilles. Craters range from bowls to
-  terraced giants. Ramp slabs, hoodoos and snake ridges dot the plains.
+  terraced giants. Ramp rocks (strata slabs, curved kickers, whalebacks), monoliths (sheared spires, toppled halves, house rocks, cracked
+  boulders) and meandering snake ridges dot the plains.
 - **Deliveries:** contracts at job boards, each with cargo type, fragility, pirate risk, distance and a tight clock.
   Pay depends on condition, time and style (style can at most double the base). Late jobs still pay 50%.
 - **Events:** each faction keeps one beacon open (start with `F`). The distress log lists open signals by distance.
@@ -308,7 +309,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (233 in 27 sections, the 6 ROCK DRAFTS included while they're up) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (227 in 26 sections) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).
@@ -371,7 +372,6 @@ src/
   downsFair.js     ferris wheel, carousel, queue lines
   rides.js         transit-ship rides and fairground rides
   rocks.js         shaped rocks and colliders
-  rockDrafts.js    candidate replacements for the hoodoo, ramp and snake rocks (dev only: the Asset Row's ROCK DRAFTS)
   rails.js         grinding rocks, crater rims and building ledges
   ledges.js        building ledges as grind rails (the top edges of a place's colliders)
   meteors.js       meteor showers

@@ -1366,10 +1366,17 @@ class Game {
     const e = up.dot(SUN);
     const day = THREE.MathUtils.smoothstep(e, -0.06, 0.12);
     const dark = darkness(up);
-    this.sun.intensity = 1.6 * day;
+    // lunar light (Settings, on by default): no air to scatter light into the shade, so the sky fill is cut to under half
+    // (shade and shadows a deep indigo, never black: ink and shape still read), and the sun brightened and tinted with the
+    // violet the fill gave lit ground, so sunlit ground keeps its colour; shadow edges are cut hard (a negative shadow
+    // radius: toon.js). Off: the old soft look.
+    const lunar = !this.settings || this.settings.v.lunarLight !== false;
+    this.sun.intensity = (lunar ? 1.88 : 1.6) * day;
+    this.sun.color.setHex(lunar ? 0xfff0f5 : 0xfff1d6);
+    this.sun.shadow.radius = lunar ? -2.5 : 2.5;
     this.hemi.position.copy(up);
-    this.hemi.intensity = 0.06 + 0.8 * THREE.MathUtils.smoothstep(e, -0.25, 0.15);
-    this.earthLight.intensity = 0.3 * THREE.MathUtils.smoothstep(up.dot(this.world.earthDir), -0.1, 0.3);
+    this.hemi.intensity = 0.06 + (lunar ? 0.34 : 0.8) * THREE.MathUtils.smoothstep(e, -0.25, 0.15);
+    this.earthLight.intensity = (lunar ? 0.18 : 0.3) * THREE.MathUtils.smoothstep(up.dot(this.world.earthDir), -0.1, 0.3);
     // shadows only where the sun is up. The shadow map is the heaviest pass (casters within 160 m into 2048²), so at
     // 50+ fps while moving slowly it refreshes every other frame (the old map stays valid; a frame-old shadow is
     // invisible at that speed). Fast skating, a teleport or a slow frame rate redraw it every frame.
