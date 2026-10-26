@@ -509,6 +509,7 @@ export class World {
     }
     const c = this.colAdd(loc, spec);
     if (spec.stick) c.stick = true; // (landing pad deck and stairs: physics keeps walkers on them)
+    if (spec.floor) c.floor = true; // (a walking floor: physics stands you on it as ground, physics.js floorUnder)
     (loc._cols ||= []).push(c); // (so a rebuild can remove them)
     return c;
   }

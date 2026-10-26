@@ -27,7 +27,8 @@ Trick thrust reaches every roof, and the top edges of colliders are grind rails,
 - Anything solid the runner can reach gets a collider whose top is the drawn top: roofs too, never a box "to the ridge"
   over a pitched roof. Thin decoration (lamp heads, festoons, ropes, lettering, glow, seats in rows) stays open.
 - Walking floors collide at their drawn height: `k.floorCols = true` in a place's `settle()` builds colliders under every
-  drawn floor up to 0.42 m (`Kit.floorColliders`), or the feet sink to the ground under it. Platforms of 0.42 to 0.9 m
+  drawn floor up to 0.42 m (`Kit.floorColliders`), or the feet sink to the ground under it; the physics treats them as
+  ground, not obstacles (`floorUnder`), so their edges never bump you. Platforms of 0.42 to 0.9 m
   get none (the runner steps up only about 0.4 m: they'd stop him dead). Raised details on surfaces you stand or grind on
   are painted on (at most 2 cm proud, no ink; at least 1.5 cm on a curved place).
 - Blender parts make their own colliders (`parts(..., solid=True)`, `tools/blender/downs_common.py`); code-made geometry

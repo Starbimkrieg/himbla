@@ -196,6 +196,25 @@ const _lat = new THREE.Vector3();
 const _tgt = new THREE.Vector3();
 const _cp = new THREE.Vector3();
 const _near = [];
+const _fl = [], _f1 = new THREE.Vector3(), _f2 = new THREE.Vector3();
+
+// Walking floors (boxes marked `floor`: Kit.floorColliders) are ground, not obstacles: the highest one under p whose top is no
+// more than FLOOR_STEP over the feet, as a radius from the Moon's centre (-Infinity: none). Stepping onto one, or from one to
+// the next a centimetre higher, is the ground rising under you; as obstacles their edges tilted the contact and every seam
+// bounced you up a little (a stutter along a boardwalk), and the ground snaps dragged you down to the terrain beneath.
+const FLOOR_STEP = 0.45;
+function floorUnder(colliders, p, up) {
+  let best = -Infinity;
+  if (!colliders) return best;
+  for (const c of colliders.query(p, 1, _fl)) {
+    if (!c.floor) continue;
+    _f1.subVectors(p, c.c);
+    if (Math.abs(_f1.dot(c.ax)) > c.hx || Math.abs(_f1.dot(c.az)) > c.hz) continue;
+    const h = _f2.copy(c.c).addScaledVector(c.ay, c.hy * Math.sign(c.ay.dot(up))).sub(p).dot(up);   // its top over the feet
+    if (h <= FLOOR_STEP) best = Math.max(best, radOf(p) + h);
+  }
+  return best;
+}
 
 // squared speed that curves over the world (all of it on a sphere; on the Spindle's cylinder only the part round the
 // girth, since along the axis is straight)
@@ -367,8 +386,10 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
 
   b.pos.addScaledVector(v, dt);
 
-  // terrain contact
-  const sr = planet.surface(b.pos, _sn);
+  // terrain contact (a walking floor under you is the ground there)
+  let sr = planet.surface(b.pos, _sn);
+  const fr = floorUnder(colliders, b.pos, up);
+  if (fr > sr) { sr = fr; _sn.copy(up); }
   const alt = radOf(b.pos) - sr;
   const wasGrounded = b.grounded;
   // on a structure (ramp, rooftop) last step: ground snaps must not drag you through it (low ramps would stop you dead)
@@ -432,6 +453,7 @@ export function stepSkater(b, input, dt, planet, colliders, params = PHYS, impac
     const cp = _cp.copy(b.pos).addScaledVector(up, r);
     const near = colliders.query(cp, r + 2, _near);
     for (const c of near) {
+      if (c.floor) continue;                                           // (ground: floorUnder)
       const pen = colliders.contact(c, cp, r, _n);
       if (pen <= 0) continue;
       if (c.stick && _n.dot(up) > 0.55) b.stuck = true;

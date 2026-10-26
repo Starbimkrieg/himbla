@@ -29,7 +29,12 @@ grind rails. `CLAUDE.md` has the short version; this is the long one, with the r
 - **Walking floors** (paving, decks, the track, walks, bay floors, anything up to 0.42 m) collide at their drawn height. A
   kit with `floorCols` set (`k.floorCols = true` inside a place's `settle()` builder) does it at `finish()`
   (`Kit.floorColliders`): every up-facing surface 3 cm to 0.42 m over the ground, rasterized on a 0.5 m grid at its height,
-  cells of one height (to the centimetre) merged into boxes, marked `floor` (the racegoers' walk map passes over them; on a
+  cells of one height (to the centimetre) merged into boxes, marked `floor`. **Floors are ground, not obstacles**: the physics
+  stands you on the highest floor under your feet within 0.45 m (`floorUnder` in `physics.js`) and leaves them out of the
+  obstacle contacts, so stepping onto a floor, or across the centimetre steps between its boxes, is the ground rising under
+  you; the ground snaps, landings and dive landings work on them as on terrain. (As obstacles, every box edge tilted the
+  contact and threw you up a little, a stutter along the boardwalk, and the snaps dragged you to the terrain beneath.) The
+  racegoers' walk map passes over them too; on a
   curved place they bend in 16 m pieces, a flat floor sagging under 1 cm over that). At the Downs: 3,600 boxes under
   84,000 m2 of floor, where the feet had stood up to 26 cm down in it. Drawn floors want nothing else.
 - **Platforms of 0.42 to 0.9 m** (a portico, a stable's box floor, a ride's platform, a plinth) get **none**: with a 0.4 m
