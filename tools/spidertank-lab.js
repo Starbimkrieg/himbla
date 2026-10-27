@@ -1,14 +1,13 @@
-// Dev-only: Zbornak's spider tank lab (src/spidertank.js; the proposals: docs/spidertank-proposals/). One proposal drives round a
-// circle over rolling ground with crates, low walls and a few tall blocks on it: walking on its eight legs (src/gait.js), running,
-// folding into the skimming frame and back, stopping to fire the reactor beam. It drives itself until you press a key: W/S speed,
+// Dev-only: Zbornak's spider tank lab (src/spidertank.js; docs/spidertank/). It drives round a circle over rolling ground with
+// crates, low walls and a few tall blocks on it: walking on its eight legs (src/gait.js), running, closing up into its skimming bead
+// and back, stopping to fire the reactor beam. It drives itself until you press a key: W/S speed,
 // A/D turn, SHIFT overdrive, hold SPACE for the beam. Query parameters are in the HTML file.
 import * as THREE from 'three';
 import { ComicPost } from '../src/post.js';
-import { loadSpiderTanks, makeSpiderTank } from '../src/spidertank.js';
+import { loadSpiderTank, makeSpiderTank } from '../src/spidertank.js';
 
 const Q = new URLSearchParams(location.search);
 const num = (k, d) => (Q.has(k) ? parseFloat(Q.get(k)) : d);
-const WHICH = Q.get('v') === 'b' ? 'b' : 'a';
 const DEMO = Q.get('demo') || '';
 const CAM = Q.get('cam') || 'chase';
 
@@ -96,8 +95,8 @@ function script(t) {
   return [p[1], p[2], p[3]];
 }
 
-const kit = await loadSpiderTanks();
-const tank = makeSpiderTank(kit, WHICH);
+const kit = await loadSpiderTank();
+const tank = makeSpiderTank(kit);
 scene.add(tank.root);
 const S = { x: R, z: 0, yaw: 0, v: 0, y: terrain(R, 0), lap: 0 };
 const fwd = new THREE.Vector3(), side = new THREE.Vector3(), camAt = new THREE.Vector3(), camLook = new THREE.Vector3(), _p = new THREE.Vector3();
@@ -183,7 +182,7 @@ function frame() {
   sun.position.copy(P).add(_p.set(14, 26, 10));
   sun.target.position.copy(P);
   const B = tank.beam;
-  info.innerHTML = `<b>${WHICH.toUpperCase()}: ${tank.model.userData.title}</b>  ${auto ? 'driving itself (press a key to drive)' : 'W/S speed, A/D turn, SHIFT overdrive, SPACE beam'}\n`
+  info.innerHTML = `<b>${tank.model.userData.title}</b>  ${auto ? 'driving itself (press a key to drive)' : 'W/S speed, A/D turn, SHIFT overdrive, SPACE beam'}\n`
     + `${S.v.toFixed(1)} m/s  ${tank.form.toUpperCase()}${B.state !== 'idle' ? `  BEAM ${B.state.toUpperCase()} ${B.t.toFixed(1)} s` : ''}  (folds past ${tank.walkMax.toFixed(0)} m/s)`;
   post.material.uniforms.time.value = t;
   post.render(scene, camera);

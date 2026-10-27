@@ -5,7 +5,17 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
-- **Zbornak's spider tank: two proposals** (the Triple Crown's reward; `docs/spidertank-proposals/`). Not in the game yet: one gets picked.
+- **Zbornak's spider tank, round two: ARACHNE, closing up into a bead** (`docs/spidertank/`; not in the game yet). A was picked and B
+  dropped. Rebuilt bulkier and more mechanical, without the abdomen (`build_spidertank.py`, 10.7k triangles, 318 KB compressed): a
+  faceted armoured bead of off-white and pale grey plates over a dark frame (the lab's colours) with the frame showing in the seams
+  and as a belt round the waist, an octagonal face with a visor slit, the cannon under it in a collar, the reactor glowing violet
+  through a grilled window in the spine, and Zbornak's green only as small LEDs (belt strips, by the visor, on the thighs and fins).
+  Eight angular legs: octagonal struts, faceted ridged shields, drums, rams, hoof-claws. **Overdrive closes it up in stages** past 28
+  m/s: the legs zigzag against the hull, slide in through their ports (collars too), the hatches swing shut over the ports, the cannon
+  draws into the nose, a dorsal and a ventral fin and the jets come out, and it rides 0.6 m up on its jets; slowing, it opens out and
+  the legs stand it up. Each piece's share of the fold is in the model (`fold`, `foldPos`, `foldScale` and their spans), read
+  generically by `src/spidertank.js`. Strides of 5.4 m at 27 m/s, planted feet exact. The lab and the Asset Row show the one design.
+- **Zbornak's spider tank: two proposals** (the Triple Crown's reward; `docs/spidertank/`). Not in the game yet: one gets picked.
   - **Built in Blender** (`tools/blender/build_spidertank.py` -> `spidertank.glb`, 15.0k and 13.8k triangles): A ARACHNE, a round
     spider with the reactor in a ribbed abdomen and the cannon under its brow, and B STRIDER, a long wedge with its legs down the flanks,
     the reactor in a ring at the tail and the cannon down its spine. Eight armoured legs each, three bones on `leg` and `knee` pivots
