@@ -13,8 +13,11 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
   - **Walking** (`src/gait.js`). Given the ground, each foot stays planted until the body has carried its rest spot a stride away, then
     steps in an arc to just ahead of it; the legs step in two sets that take turns (a tripod on six legs, every other root), standing feet
     step back under the body, the legs reach their feet by IK (FABRIK) and the body rides on them, raised and pitched and rolled to the
-    slope. In the air, or faster than the legs can step, they ease back to the old swing. Wild mites use it, and wander on foot more (they
-    hop an eighth as often, unless scared). Chimeras with other legs, the far LOD and anything not given the ground swing as before.
+    slope. Running, the strides lengthen with the speed as far as each creature's legs reach (a wild mite fleeing at 9 m/s takes 0.7 to
+    1.3 m strides), then the steps quicken, with a moment when every foot is off the ground, like a running bug; past the fastest the
+    feet can touch down (15 m/s for the mandrake, 17 to 26 for the mites), or in the air, they ease back to the old swing. Wild mites
+    use it, and stay on their feet more (they hop an eighth as often wandering, and under a third as often fleeing). Chimeras with other
+    legs, the far LOD and anything not given the ground swing as before.
   - **Chimera lab:** `&walk=1` walks one chimera round a circle over bumps, stopping now and then.
   - **Rebuilding a few parts of the kit.** A full build re-rolls every part's random details, which changes chimeras players own; the
     new `CHIMERA_PARTS` builds just some parts and `tools/splice-chimera.mjs` puts them into `chimera.glb`, the rest kept as it was. The

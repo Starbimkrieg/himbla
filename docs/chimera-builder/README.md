@@ -42,8 +42,9 @@ The player's orange is never drawn.
   pivot, with a `foot` at the ground contact (`limb_chain`): the bone above a joint ends in its knee ball or knot, which the bone below
   starts inside, so it bends without a seam. Given the ground (wild mites, the lab's `&walk=1`), `src/gait.js` plants each foot, steps it
   when the body has carried its rest spot a stride away (tripods on six legs, every other root), reaches it by IK and rides the body on
-  the feet, pitched and rolled to their slope; in the air or faster than the legs can step (about 3 m/s for a wild mite) they swing as
-  before.
+  the feet, pitched and rolled to their slope. Running, the strides lengthen with the speed as far as the legs reach (0.7 to 1.3 m for a
+  wild mite at 9 m/s), then the steps quicken, with a moment with every foot in the air; in the air, or past the fastest the feet can
+  touch down (17 to 26 m/s for a mite), they swing as before.
 - **Two heads**: each body has a second, forked form with a neck for each head (the trunk splits, the necks grow from the shoulders, the
   car's nose grows two pods).
 - **Machines are built as machines**: the junkbot's boxes skip the organic remesh, so their panels stay flat and their edges and cuts crisp.

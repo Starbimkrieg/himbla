@@ -240,7 +240,7 @@ export class Alchemy {
       if (arcDist(m.pos, m.home) > 35) m.dir = tangent(m.home.clone().sub(up), up).normalize();
       const next = greatCircle(up, m.dir, speed * dt);
       m.hop += m.vy * dt; m.vy -= 4 * dt;
-      if (m.hop <= 0) { m.hop = 0; m.vy = Math.random() < dt * (fleeing ? 2 : 0.25) ? 2.5 : 0; }   // (bounding away when scared; else mostly walking)
+      if (m.hop <= 0) { m.hop = 0; m.vy = Math.random() < dt * (fleeing ? 0.6 : 0.25) ? 2.5 : 0; }   // (mostly on foot: running when scared, a bound now and then)
       m.pos.copy(g.planet.ground(next, new THREE.Vector3()));
       m.model.root.position.copy(m.pos).addScaledVector(next, m.hop);
       frameQuat(next, m.dir, m.model.root.quaternion);

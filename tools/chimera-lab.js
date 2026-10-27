@@ -182,7 +182,7 @@ addEventListener('pointermove', (e) => {
 renderer.domElement.addEventListener('wheel', (e) => { dist *= Math.exp(e.deltaY * 0.001); }, { passive: true });
 
 let t = 0, last = performance.now(), lap = 0;
-const R = 2.6;
+const R = Math.max(2.6, num('speed', 1.2) * 1.2);                   // (a wider circle for a faster pace)
 // a lap of the circle at &speed (default 1.2 m/s), easing to a stop for a moment every few seconds
 function walk(c, dt) {
   const v = num('speed', 1.2) * THREE.MathUtils.smoothstep(Math.sin(t * 0.45) + 0.35, 0, 0.5);
