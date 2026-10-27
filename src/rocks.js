@@ -5,18 +5,17 @@ import { ink, gradientMap } from './toon.js';
 import { mulberry32, createNoise3D } from './rng.js';
 import { patchRockMaterial } from './moonSkins.js';
 
-// Shaped rocks among the ordinary boulders, each with shape-following colliders.
+// Shaped rocks among the ordinary boulders, each with shape-following colliders. (The snake ridges are gone: with building
+// ledges to grind, they were mostly low barriers across the plains at speed.)
 //   ramp      a natural kicker, three ways (RAMPS): a terraced strata slab and a curved kicker (both ridden up from their
 //             tail to a lip), and a whaleback hump ridden from either end. Solid from the ground up to just under the
 //             riding surface, with soil berms along the sides you don't ride in from.
 //   monolith  scenery, four ways (MONOLITHS): a sheared spire (a flat cut down its length, a slice off the top, leaning),
 //             a toppled half (a stump and its broken-off top lying beside it), a house rock (a big half-buried boulder with
 //             a sheer face) and a cracked boulder (one piece slid away). Each sits in a tight berm of pushed-up soil.
-//   snake     a meandering ridge (25 to 120 m): its heading wanders (no tighter than a 9 m radius), its crest rises in
-//             humps and the body swells under them; the thin crest follows the ground and grinds (rails.js)
 // Built per terrain chunk (planet.buildBoulders) from the chunk's seed, so placement is stable.
 
-const KINDS = ['ramp', 'ramp', 'monolith', 'snake', 'snake'];
+const KINDS = ['ramp', 'ramp', 'ramp', 'monolith', 'monolith']; // (ramps need gentler ground, so more of them are tried)
 export const RAMPS = ['strata', 'curved', 'whaleback'];
 export const MONOLITHS = ['sheared', 'toppled', 'house', 'cracked'];
 let MATS = null, SOIL = null;
@@ -253,7 +252,7 @@ function finish(p, q, rockGeos, soilGeos, mat, cols, kind) {
   root.userData.rockKind = kind;
   root.position.copy(p);
   root.quaternion.copy(q);
-  return { mesh: root, cols, rail: null };
+  return { mesh: root, cols };
 }
 
 // ---------------- monoliths ----------------
@@ -324,25 +323,35 @@ const MONOLITH_MAKERS = { sheared: shearedSpire, toppled: toppledHalf, house: ho
 
 // ---------------- ramps ----------------
 
-// The riding profile of a ramp, [z, y] from its back to its front, in its frame (p at the ground at its back end):
-// strata and curved run up to a lip at +L/2, the whaleback rises and falls back to the ground.
+// The riding profile of a ramp, [z, y] from its back to its front, in its frame (p at the ground at its entry): strata and
+// curved run up to a lip at +L/2, the whaleback rises and falls back to the ground. Every entry comes up out of the ground
+// (a lead-in 3 or 4 m long, from 0.75 m under), so it meets the ground flush wherever the ground is a little uneven.
 export function rampProfile(dims) {
   const { variant, L, h } = dims;
   const curve = (z0, z1, n, f) => Array.from({ length: n + 1 }, (_, i) => { const z = z0 + ((z1 - z0) * i) / n; return [z, f(z)]; });
+  const lead = (z0, z1, y0, y1) => curve(z0, z1, 3, (z) => y0 + ((y1 - y0) * (z - z0)) / (z1 - z0));
   if (variant === 'strata') return curve(-L / 2 - 4, L / 2, 12, (z) => h * (z / L + 0.5)); // (its slope runs 4 m back into the ground)
-  if (variant === 'curved') return curve(-L / 2, L / 2, 16, (z) => h * Math.pow((z + L / 2) / L, dims.e) - 0.15);
-  return curve(-L / 2, L / 2, 20, (z) => h * Math.pow(Math.sin(Math.PI * (z / L + 0.5)), 1.3) - 0.2);
+  if (variant === 'curved') return [...lead(-L / 2 - 3, -L / 2, -0.75, -0.15).slice(0, -1), ...curve(-L / 2, L / 2, 16, (z) => h * Math.pow((z + L / 2) / L, dims.e) - 0.15)];
+  return [...lead(-L / 2 - 3, -L / 2, -0.75, -0.2).slice(0, -1), ...curve(-L / 2, L / 2, 20, (z) => h * Math.pow(Math.sin(Math.PI * (z / L + 0.5)), 1.3) - 0.2), ...lead(L / 2, L / 2 + 3, -0.2, -0.75).slice(1)];
 }
 export const profileAt = (prof, z) => {
   if (z <= prof[0][0]) return prof[0][1];
   for (let i = 1; i < prof.length; i++) if (z <= prof[i][0]) { const [z0, y0] = prof[i - 1], [z1, y1] = prof[i]; return y0 + ((y1 - y0) * (z - z0)) / (z1 - z0); }
   return prof[prof.length - 1][1];
 };
+// the top of a ramp at (x, z) in its frame: its profile, the shoulders falling away to 0.55 of it at the sides (ramp(); the
+// strata slab's terraces only lower them further)
+export function rampTop(prof, W, x, z) {
+  const y = profileAt(prof, z);
+  if (y <= 0) return y;
+  const t = Math.sin(Math.PI * Math.min(1, Math.max(0, x / W + 0.5)));
+  return y * (0.55 + 0.45 * Math.pow(t, 0.45));
+}
 // dims for a ramp of the given variant
 export function rampDims(rr, variant) {
   if (variant === 'strata') return { variant, L: 14 + rr() * 6, W: 9 + rr() * 3, h: 3.5 + rr() * 1.5 };
   if (variant === 'curved') return { variant, L: 12 + rr() * 4, W: 8 + rr() * 3, h: 3.5 + rr() * 1, e: 2.1 + rr() * 0.3 };
-  return { variant, L: 22 + rr() * 8, W: 9 + rr() * 3, h: 3 + rr() * 1.5 };
+  return { variant, L: 12 + rr() * 6, W: 9 + rr() * 3, h: 2.6 + rr() * 1.2 }; // (short enough for both ends to find ground)
 }
 
 // A ramp under its riding profile, W wide: a ground-high end (y under 0.3) runs into the ground, a raised one (a lip) stands as
@@ -365,7 +374,9 @@ function ramp(rr, p, q, dims, gy) {
     if (terraces) k = 0.4 + (Math.round(((k - 0.4) / 0.6) * terraces) / terraces) * 0.6;
     return loop.map(([a, b]) => [a * (0.94 + 0.06 * t), b < 0 ? b : b * k]);
   });
-  geo = roughen(geo, (v) => (Math.abs(v.x) < W * 0.32 && v.y > profileAt(prof, v.z) - 0.8 ? 0.06 : 0.5), seed, terraces ? 0.45 : 0.3);
+  // rough flanks, but a smooth riding middle, and smooth wherever it's low (the lead-ins and the ends): roughened there, the flanks'
+  // bumps stood up out of the ground beside the entry
+  geo = roughen(geo, (v) => (profileAt(prof, v.z) < 0.5 || (Math.abs(v.x) < W * 0.32 && v.y > profileAt(prof, v.z) - 0.8) ? 0.06 : 0.5), seed, terraces ? 0.45 : 0.3);
   // colliders, stretch by stretch (about 2.5 m along the surface)
   const cols = [];
   for (let i = 0; i < prof.length - 1;) {
@@ -385,91 +396,14 @@ function ramp(rr, p, q, dims, gy) {
   return finish(p, q, rocks, soilG, variant === 'strata' ? mats().basalt : mats().dark, cols, 'ramp');
 }
 
-// ---------------- snakes ----------------
-
-// A meandering snake ridge's path: { len, at(s) -> [x, z] (from its middle, in the frame), H(s) crest, w(s) half width }
-export function snakePath(rr) {
-  const len = 25 + rr() * 95, k = 0.05 + rr() * 0.03, f1 = 7 + rr() * 5, f2 = 3 + rr() * 2, ph1 = rr() * TAU, ph2 = rr() * TAU, drift = (rr() - 0.5) * 0.03;
-  // heading: the integral of a wandering curvature (radius 9 m at the tightest)
-  const curv = (s) => Math.max(-0.11, Math.min(0.11, k * (Math.sin(s / f1 + ph1) + 0.5 * Math.sin(s / f2 + ph2)) + drift));
-  const ds = 0.4, pts = [[0, 0]];
-  let hd = 0, x = 0, z = 0;
-  for (let s = ds; s <= len + ds; s += ds) { hd += curv(s) * ds; x += Math.sin(hd) * ds; z += Math.cos(hd) * ds; pts.push([x, z]); }
-  const raw = (s) => pts[Math.min(pts.length - 1, Math.max(0, Math.round(s / ds)))], mid = raw(len / 2);
-  const H0 = 2 + rr() * 0.6, w0 = 1.2 + rr() * 0.25, lh = 14 + rr() * 10, ph3 = rr() * TAU;
-  const hump = (s) => Math.pow(Math.max(0, Math.sin((TAU * s) / lh + ph3)), 2);
-  return { len, at: (s) => { const r = raw(s); return [r[0] - mid[0], r[1] - mid[1]]; }, H: (s) => H0 * (0.85 + 0.55 * hump(s)), w: (s) => w0 * (0.85 + 0.35 * hump(s)), Hmax: H0 * 1.4 };
-}
-
-// A snake ridge along `path` from p (the ground at its middle), its steep rhombus section draped over planet.ground, the crest
-// line exact (the rail) and the flanks rough; colliders a box per segment round the body, the sloping tips solid slabs topped
-// by the crest so you roll straight up onto the rail.
-function snake(rr, p, q, planet, path) {
-  const seed = rr() * 100, { len, at, H, w } = path;
-  const right = AX.clone().applyQuaternion(q), fwd = AZ.clone().applyQuaternion(q);
-  const n = Math.ceil(len / 1.6) + 1, base = [], ups = [], ss = [];
-  for (let i = 0; i < n; i++) {
-    const s = (i / (n - 1)) * len, [x, z] = at(s);
-    const gp = planet.ground(p.clone().addScaledVector(right, x).addScaledVector(fwd, z), V());
-    base.push(gp); ups.push(gp.clone().normalize()); ss.push(s);
-  }
-  const tang = (i) => base[Math.min(n - 1, i + 1)].clone().sub(base[Math.max(0, i - 1)]).normalize();
-  const side = (i) => V().crossVectors(tang(i), ups[i]).normalize();
-  // ends slope down to the ground over ~6 m: ride into a tip and you're on the rail
-  const taper = (i) => Math.min(1, Math.min(i, n - 1 - i) / 4);
-  const crest = (i) => { const t = taper(i), h = H(ss[i]); return 0.12 + (h - 0.12) * t * t * (3 - 2 * t); };
-  const half = (i) => (0.3 + 0.7 * taper(i)) * w(ss[i]);
-  const prof = (i) => { const k = half(i), hh = crest(i); return [[-k, -0.6], [k, -0.6], [k * 1.2, hh * 0.38], [0.12, hh], [-0.12, hh], [-k * 1.2, hh * 0.38]]; };
-  const railPts = base.map((b, i) => b.clone().addScaledVector(ups[i], crest(i)));
-  let geo = sweep(n, (i) => ({ o: base[i].clone().sub(p), ax: side(i), ay: ups[i] }), prof);
-  // rough flanks; the crest line (tips included) stays exact for riding
-  const near = 0.5 * 0.5;
-  geo = roughen(geo, (v) => {
-    _v.copy(v).add(p);
-    for (const c of railPts) if (c.distanceToSquared(_v) < near) return 0;
-    return 0.16;
-  }, seed, 0.12);
-  const cols = [];
-  for (let i = 0; i < n - 1; i++) {
-    if (taper(i) < 1 || taper(i + 1) < 1) {
-      // sloping tips: a slab topped exactly by the crest slope, solid down to the ground (or a fast rider slips under into the rock)
-      const a = railPts[i], b2 = railPts[i + 1];
-      const t = b2.clone().sub(a), sl = t.length();
-      t.normalize();
-      const up0 = ups[i].clone().add(ups[i + 1]).normalize();
-      const sd = V().crossVectors(t, up0).normalize();
-      const ay = V().crossVectors(sd, t).normalize(); // square to the slope, upward
-      const depth = Math.max(a.dot(up0), b2.dot(up0)) - Math.min(a.dot(up0), b2.dot(up0)) + Math.max(crest(i), crest(i + 1)) + 1;
-      const c = a.clone().add(b2).multiplyScalar(0.5).addScaledVector(ay, -depth / 2);
-      cols.push({ type: 'box', c, ax: sd, ay, az: t, hx: Math.max(half(i), half(i + 1)) * 1.2 + SKIN, hy: depth / 2, hz: sl / 2 + 0.05 });
-      continue;
-    }
-    const t = base[i + 1].clone().sub(base[i]), sl = t.length();
-    t.normalize();
-    const up = ups[i].clone().add(ups[i + 1]).normalize();
-    const sd = V().crossVectors(t, up).normalize();
-    const hh = Math.min(crest(i), crest(i + 1));
-    const c = base[i].clone().add(base[i + 1]).multiplyScalar(0.5).addScaledVector(up, hh * 0.38);
-    cols.push({ type: 'box', c, ax: sd, ay: V().crossVectors(t, sd).normalize(), az: t, hx: Math.max(half(i), half(i + 1)) * 1.2 + SKIN, hy: hh * 0.38 + 0.5, hz: sl / 2 + 0.05 });
-  }
-  for (const c of cols) c.rail = railPts; // a rider on this crest ignores its own rock (rails.js)
-  const mesh = new THREE.Mesh(geo, rr() < 0.5 ? mats().grey : mats().basalt);
-  mesh.userData.rockKind = 'snake';
-  mesh.position.copy(p);
-  mesh.castShadow = mesh.receiveShadow = true;
-  ink(mesh, 0.06);
-  return { mesh, cols, rail: { pts: railPts } };
-}
-const SKIN = 0.2; // m: snake-rock colliders stand this far outside its flanks (bulged to 1.2 x half-width, roughened)
-
 // ---------------- building and placing ----------------
 
-// One shaped rock (p = its ground point, q = its frame): { mesh, cols, rail } in world space. dims: a ramp's (rampDims, plus
-// drop), a monolith's { variant }, a snake's { path } (snakePath).
+// One shaped rock (p = its ground point, q = its frame): { mesh, cols } in world space. dims: a ramp's (rampDims, plus drop),
+// a monolith's { variant }.
 export function build(kind, rr, p, q, planet, dims) {
-  const r0 = p.length(), _g = V();
-  const gy = planet && kind !== 'snake' ? (x, z) => planet.surface(_g.set(x, 0, z).applyQuaternion(q).add(p)) - r0 : FLAT;
-  if (kind === 'snake') return snake(rr, p, q, planet, dims.path);
+  const _g = V();
+  // the ground's height over the rock's own (x, z) plane (radially: a pitched whaleback's plane follows the slope)
+  const gy = planet ? (x, z) => { _g.set(x, 0, z).applyQuaternion(q).add(p); return planet.surface(_g) - _g.length(); } : FLAT;
   const r = kind === 'ramp' ? ramp(rr, p, q, dims, gy) : MONOLITH_MAKERS[dims.variant](rr, p, q, gy);
   r.mesh.userData.variant = dims.variant;
   // its regolith the ground's colour there (terrainField.groundColour; it changes over hundreds of metres, so one sample)
@@ -481,16 +415,17 @@ export function build(kind, rr, p, q, planet, dims) {
   return r;
 }
 
-// Shaped rocks for one terrain chunk. ok(p): spot is free (no settlement, plateau, road or lake). More in rocky
-// country (rock = 0..1 at the chunk centre).
+// Shaped rocks for one terrain chunk. ok(p): spot is free (no settlement, plateau, road or lake). One or two in most chunks
+// (more than the ordinary boulders' share of the scenery used to leave them), more in rocky country (rock = 0..1 at the
+// chunk centre).
 export function shapedRocks(planet, ch, centreOf, ok, rock) {
   const rr = mulberry32((ch.f * 104729 + ch.cy * 1301 + ch.cx * 7) * 2246822519 ^ 0xb0b5);
-  const n = (rr() < 0.42 ? 1 : 0) + (rr() < 0.12 ? 1 : 0) + Math.floor(rock * 2.5 + rr() * rock);
-  const out = { meshes: [], cols: [], rails: [] };
+  const n = (rr() < 0.8 ? 1 : 0) + (rr() < 0.45 ? 1 : 0) + (rr() < 0.15 ? 1 : 0) + Math.floor(rock * 3 + rr() * rock);
+  const out = { meshes: [], cols: [] };
   const p = V(), up = V(), t = V(), q = new THREE.Quaternion();
   const at = (ox, oz) => _v.set(ox, 0, oz).applyQuaternion(q).add(p);
-  const add = (r) => { out.meshes.push(r.mesh); out.cols.push(...r.cols); if (r.rail) out.rails.push(r.rail); };
-  for (let tries = 0; tries < n * 6 && out.meshes.length < n; tries++) {
+  const add = (r) => { out.meshes.push(r.mesh); out.cols.push(...r.cols); };
+  for (let tries = 0; tries < n * 8 && out.meshes.length < n; tries++) {
     centreOf(rr(), rr(), p);
     p.multiplyScalar(planet.R); // unit direction out to the surface, so offsets are in metres
     if (!ok(p)) continue;
@@ -499,30 +434,53 @@ export function shapedRocks(planet, ch, centreOf, ok, rock) {
     t.set(rr() - 0.5, rr() - 0.5, rr() - 0.5);
     t.addScaledVector(up, -t.dot(up)).normalize();
     q.setFromRotationMatrix(new THREE.Matrix4().makeBasis(V().crossVectors(up, t).normalize(), up, t));
-    if (kind === 'snake') {
-      // hugs the ground, so slopes are fine; the whole path clear
-      const path = snakePath(rr);
-      let clear = true;
-      for (let s = 0; s <= path.len && clear; s += 8) { const [x, z] = path.at(s); if (!ok(at(x, z).clone())) clear = false; }
-      if (!clear) continue;
-      add(build(kind, rr, p.clone().normalize().multiplyScalar(planet.surface(p)), q, planet, { path }));
-      continue;
-    }
     if (kind === 'ramp') {
-      // anchored flush at its back end; skip spots where the ground climbs ahead (it would bury the slope). A lip's face reaches
-      // down to where the ground falls away ahead; a whaleback's far end has to meet the ground too.
-      const dims = rampDims(rr, RAMPS[Math.floor(rr() * RAMPS.length)]);
+      // Turned to the ground: of 8 headings, the one whose entry sinks least. Its lead-in has to lie at or under the ground, and
+      // over its first 2.5 m of slope its base mustn't stand above the ground (or a gap opens under the slope), so it's set as high
+      // as the lowest ground there allows and nothing of the entry stands proud; how deep that sinks its base where the ground is
+      // highest is the score.
+      // Skipped where the ground climbs ahead (it would bury the slope). A lip's face reaches down to where the ground falls
+      // away ahead; a whaleback's far end is an entry too.
+      const dims = rampDims(rr, RAMPS[Math.floor(rr() * RAMPS.length)]), W = dims.W, whale = dims.variant === 'whaleback';
       const prof = rampProfile(dims), z0 = prof[0][0], z1 = prof[prof.length - 1][0];
-      const base = planet.surface(at(0, z0 + 0.5).clone()) - 0.05;
-      let lowest = 0, buried = -Infinity;
-      for (const fz of [0.25, 0.5, 0.75, 1]) for (const fx of [-0.5, 0, 0.5]) {
-        const oz = z0 + (z1 - z0) * fz, hgt = planet.surface(at(fx * dims.W, oz).clone()) - base;
-        buried = Math.max(buried, hgt - Math.max(0, profileAt(prof, oz)) * 0.6);
-        lowest = Math.min(lowest, hgt);
+      const ze = prof.find(([, y]) => y >= -0.25)[0]; // (where the riding surface comes out of the ground)
+      // (heights over the ramp's own plane: a whaleback is pitched to the slope between its ends, up to 11 degrees)
+      let sp = 0;
+      const g = (ox, oz) => planet.surface(at(ox, oz).clone()) - oz * sp;
+      const t0 = t.clone(), yaw0 = rr() * TAU;
+      let best = null;
+      for (let k = 0; k < 8; k++) {
+        const tk = t0.clone().applyAxisAngle(up, yaw0 + (k * TAU) / 8);
+        q.setFromRotationMatrix(new THREE.Matrix4().makeBasis(V().crossVectors(up, tk).normalize(), up, tk));
+        sp = 0;
+        if (whale) {
+          const pitch = Math.atan2(g(0, -ze) - g(0, ze), -2 * ze);
+          if (Math.abs(pitch) > 0.2) continue;
+          q.multiply(qAxis(AX, -pitch));
+          sp = Math.sin(pitch);
+        }
+        // (z from the end's tip to 2.5 m up its slope; s = +1 the back end, -1 a whaleback's far end)
+        let base = Infinity, high = -Infinity;
+        for (const s of whale ? [1, -1] : [1]) for (let i = 0; i <= 6; i++) for (const fx of [-0.5, -0.25, 0, 0.25, 0.5]) {
+          const oz = s * (z0 + ((ze + 2.5 - z0) * i) / 6), top = Math.min(0, rampTop(prof, W, fx * W, oz)), gr = g(fx * W, oz);
+          base = Math.min(base, gr - top); // (top under 0: the lead-in, else the base itself)
+          high = Math.max(high, gr);
+        }
+        base -= 0.02;
+        const deep = high - base;
+        let lowest = 0, buried = -Infinity;
+        for (const fz of [0.25, 0.5, 0.75, 1]) for (const fx of [-0.5, 0, 0.5]) {
+          const oz = z0 + (z1 - z0) * fz, hgt = g(fx * W, oz) - base;
+          buried = Math.max(buried, hgt - Math.max(0, profileAt(prof, oz)) * 0.6);
+          lowest = Math.min(lowest, hgt);
+        }
+        if (buried > 0.8 || deep > (whale ? 1.4 : 1.2)) continue; // (buried that deep, an entry just starts a little further up its slope)
+        if (!best || deep < best.deep) best = { deep, q: q.clone(), base, drop: -lowest };
       }
-      if (buried > 0.6 || (dims.variant === 'whaleback' && lowest < -0.5)) continue;
-      dims.drop = -lowest;
-      add(build(kind, rr, up.clone().multiplyScalar(base), q, planet, dims));
+      if (!best) continue;
+      q.copy(best.q);
+      dims.drop = best.drop;
+      add(build(kind, rr, up.clone().multiplyScalar(best.base), q, planet, dims));
       continue;
     }
     // monoliths: fairly level ground only (their berms and crumbs lie on the ground, but a steep slope would bare the rock's

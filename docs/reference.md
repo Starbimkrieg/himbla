@@ -102,7 +102,7 @@ player lights (skate colour, health), DualSense adaptive triggers, and a TEST bu
   doesn't hold it, so jumping straight off a landing banks the run as you land (that jump's trick counts): a big run
   takes a big jump, not a string of hops.
   A wipeout or crash loses it (`src/combo.js`, `src/stylemeter.js`).
-- **Grinding:** snake rocks (35-50 m ridges) and firm crater lips are rails. Land on one or ride onto it at an angle
+- **Grinding:** firm crater lips are rails. Land on one or ride onto it at an angle
   to grind; `Shift` pops off. Grinds pay style per second; a clean trick landed onto a rail counts. At Chimera Downs the
   buildings' edges grind too (LEDGE GRIND: roofs, canopies, parapets, walls, steps, counters): the top edges of their
   colliders (`src/ledges.js`), taken only on skates, from the air, heading along the edge; stretches join round gentle bends
@@ -110,8 +110,8 @@ player lights (skate colour, health), DualSense adaptive triggers, and a TEST bu
   to knock him off). You ride on at the speed you came in with, bled off slowly by friction; under 5 m/s on any rail you
   lose your balance and bail (and slower than that you don't get on).
 - **Terrain:** cratered plains plus highlands, scarps, rolling hills and long rilles. Craters range from bowls to
-  terraced giants. Ramp rocks (strata slabs, curved kickers, whalebacks), monoliths (sheared spires, toppled halves, house rocks, cracked
-  boulders) and meandering snake ridges dot the plains.
+  terraced giants. Ramp rocks (strata slabs, curved kickers, whalebacks, each turned so its entry meets the ground flush) and
+  monoliths (sheared spires, toppled halves, house rocks, cracked boulders) dot the plains among the boulders.
 - **Deliveries:** contracts at job boards, each with cargo type, fragility, pirate risk, distance and a tight clock.
   Pay depends on condition, time and style (style can at most double the base). Late jobs still pay 50%.
 - **Events:** each faction keeps one beacon open (start with `F`). The distress log lists open signals by distance.
@@ -309,7 +309,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (227 in 26 sections) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (226 in 26 sections) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).

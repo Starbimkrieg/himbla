@@ -3,7 +3,6 @@ import { PLANET } from './config.js';
 import { mulberry32, smoothstep, clamp } from './rng.js';
 import { gradientMap } from './toon.js';
 import { shapedRocks } from './rocks.js';
-import { railOf } from './rails.js';
 import { rayCollider } from './physics.js';
 import { TerrainField, faceDir, dirToGrid, N, CH, CPF, N1, R, MAX_LOD } from './terrainField.js';
 import { skinUniforms, patchRockMaterial, SKIN_COMMON, SKIN_NORMAL, SKIN_COLOR, SKIN_LIGHT } from './moonSkins.js';
@@ -419,11 +418,6 @@ ${SKIN_COLOR}`);
     return true;
   }
 
-  // Grind rails (the crests of snake rocks): polyline, arc lengths and a bounding sphere.
-  addRail(r) {
-    (this.rails ||= []).push(railOf(r.pts));
-  }
-
   // Crater lips: ink line and grind rail are one. A lip counts if it's a firm ridge most of the way round (not flattened
   // by a settlement, swallowed, worn or a giant); its crest is inked and grindable. Overlapping craters share one outline
   // (each lip runs only outside its neighbours). A crater wholly on the floor of one at least twice its size keeps its lip.
@@ -567,11 +561,11 @@ ${SKIN_COLOR}`);
 
   buildBoulders(ch) {
     const rr = mulberry32((ch.f * 7919 + ch.cy * 131 + ch.cx) * 2654435761);
-    const count = 4 + Math.floor(rr() * 6);
+    const count = 3 + Math.floor(rr() * 5); // (3 to 7: the shaped rocks are more of the scenery now)
     // rocky country (ridged highlands, scarps) gets extra boulders, from their own generator
     this.H(ch.dir.x, ch.dir.y, ch.dir.z);
     const rock = this.attr.rock;
-    const extra = Math.floor(rock * 12);
+    const extra = Math.floor(rock * 9);
     const rx = mulberry32((ch.f * 7919 + ch.cy * 131 + ch.cx) * 2246822519 ^ 0x7ee);
     // one lumpy shape per chunk, each boulder stretched its own way (own sequence rv, so rr and rx placements are unaffected)
     const seed = ch.f * 7919 + ch.cy * 131 + ch.cx;
@@ -615,7 +609,7 @@ ${SKIN_COLOR}`);
     im.matrixAutoUpdate = hull.matrixAutoUpdate = false; // static: the shadow cache takes them at once
     const g = new THREE.Group();
     g.add(im, hull);
-    // shaped rocks: ramps, monoliths and snake ridges (rocks.js)
+    // shaped rocks: ramps and monoliths (rocks.js)
     const sr = shapedRocks(this, ch, (u, v, out) => faceDir(ch.f, ch.cx * CH + (0.1 + 0.8 * u) * CH, ch.cy * CH + (0.1 + 0.8 * v) * CH, out), (pt) => this.spotFree(pt), rock);
     for (const m of sr.meshes) {
       g.add(m);
@@ -624,7 +618,6 @@ ${SKIN_COLOR}`);
     }
     g.updateMatrixWorld(true);
     cols.push(...sr.cols);
-    for (const r of sr.rails) this.addRail(r);
     g.matrixAutoUpdate = false;
     g.visible = false;
     this.scene.add(g);
@@ -692,7 +685,7 @@ ${SKIN_COLOR}`);
     }
     this.queue.length = 0;
     const pre = [];
-    let visible = 0;
+    let visible = 0, rocksBuilt = 0;
     for (const ch of this.chunks) {
       const want = this.lodAt(camPos.distanceTo(ch.center) - ch.radius, limit);
       ch.want = want;
@@ -723,10 +716,11 @@ ${SKIN_COLOR}`);
       if (show >= 0) visible++;
       // boulders drawn for near chunks; colliders only where you can hit them
       const near = want >= 0 && want <= 2;
-      if (near && !ch.boulders) this.buildBoulders(ch);
+      // (one chunk's boulders a frame: shaped rocks cost a few ms each, and a chunk can hold several)
+      if (near && !ch.boulders && rocksBuilt++ < 1) this.buildBoulders(ch);
       if (ch.boulders) ch.boulders.visible = near;
       const active = want >= 0 && want <= 1;
-      if (active && !ch.boulderCols && this.colliders) ch.boulderCols = ch.boulderSpec.map((c) => this.colliders.add(c));
+      if (active && !ch.boulderCols && ch.boulderSpec && this.colliders) ch.boulderCols = ch.boulderSpec.map((c) => this.colliders.add(c));
       if (!active && ch.boulderCols) { for (const c of ch.boulderCols) this.colliders.remove(c); ch.boulderCols = null; }
       // free unneeded detailed meshes, except build-ahead ones (the trailer keeps all: no rebuilds at its cuts)
       const keepAt = preWant >= 0 && (want < 0 || preWant < want) ? preWant : want;

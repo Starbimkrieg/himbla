@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { frameQuat, upAt } from './geo.js';
 import { ledgeRailsJob } from './ledges.js';
 
-// Grinding snake-rock crests (rocks.js; crest lines in planet.rails). Land on one to lock on sideways, carried by your
-// speed (downhill speeds you up). Jump to pop off; near the end you pop off by yourself. Pays style per second.
+// Grinding crater lips (planet.rimRails) and building ledges (ledges.js); planet.rails holds any other loose rail (none since
+// the snake rocks went: the tip and side-on grabs below were theirs). Land on one to lock on, carried by your speed (downhill
+// speeds you up). Jump to pop off; near the end you pop off by yourself. Pays style per second.
 
 const GRAV = 6;
 const _p = new THREE.Vector3(), _t = new THREE.Vector3(), _u = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
@@ -164,7 +165,7 @@ export class Grinder {
       const along = b.vel.dot(_t);
       const hsp = Math.sqrt(Math.max(0, b.vel.lengthSq() - b.vel.dot(_u) ** 2));
       // heading along the line grabs from further; tips (meeting the ground) scoop up anything moving in.
-      // Snake rocks want you within ~40 degrees; crater rims ~60 (the lip kicks you onto the crest)
+      // A loose rail wants you within ~40 degrees; crater rims ~60 (the lip kicks you onto the crest)
       const rim = !!n.r.rimOf, ledge = !!n.r.ledge;
       const lined = hsp > 4 && Math.abs(along) / hsp > (rim ? 0.5 : 0.75);
       // a building's edge only takes you on skates, in the air, heading along it: running past or along a roof, landing across
@@ -177,7 +178,7 @@ export class Grinder {
       // rims only take you heading along them (crossing square-on mustn't snag)
       if (rim && !lined) return false;
       const above = _b.subVectors(b.pos, n.p).dot(_u);
-      // snake rock, measured across the ground: skate into its side at speed and you hop onto the crest
+      // a loose rail, measured across the ground: skate into its side at speed and you hop onto the crest
       const flat = Math.sqrt(Math.max(0, n.d * n.d - above * above));
       const toward = -_b.dot(b.vel) + above * b.vel.dot(_u); // closing speed on the crest line, across the ground
       const sideOn = !rim && !ledge && hsp > 7 && above > -3.6 && above < 0 && flat < 2.5 && toward > 2 * Math.max(flat, 0.5);

@@ -91,7 +91,7 @@ grind rails. `CLAUDE.md` has the short version; this is the long one, with the r
   building's corner is an end. Rails 2.5 m or longer are kept; the same edge twice (within 5 cm) is kept once.
 - **Grabbing a ledge**: only on skates, from the air, heading along it (within about 40 degrees), within 1.5 m; no
   scooping up at a tip and no hop on from the side. Running along a roof, landing across an edge or stepping off a counter
-  never snags. Snake rocks and crater rims keep their own, looser rules.
+  never snags. Crater rims keep their own, looser rules.
 - **Riding**: you ride on at the speed you came in with (no floor, no cap) and friction bleeds it off, slowly when you're fast
   (`GRIND_DRAG`, `GRIND_BLEED`, `GRIND_CRUISE`: 120 m/s loses about 3.5 m/s a second); anything that pushes the rider mostly up (0.6 or more) is ridden over (the joints of a long roof's 8 m
   pieces); posts, walls and rocks knock you off. Under 5 m/s (`GRIND_MIN`) you lose your balance: you topple off, the style

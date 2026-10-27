@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { railOf } from './rails.js';
 
 // Ledge rails: the grindable top edges of a place's box colliders (roof edges, canopies, parapets, walls, steps, counters,
-// benches), ground like snake-rock crests by rails.js (grabbed only on skates, from the air, heading along them).
+// benches), ground like crater lips by rails.js (grabbed only on skates, from the air, heading along them).
 // A box with a level top gives its four top edges. Each is sampled every SAMPLE m and a stretch counts where
 //   - nothing sits on it (just above it is clear, so a cap 5 cm thick or more takes the edge over),
 //   - there's room to ride it (the grind's own clearance ball over it hits nothing that would push you back: a tower beside a

@@ -219,7 +219,7 @@ export class AssetRow {
       const specs = [];
       // specs are in obj's frame, which differs from inst's only by obj.position (a translation)
       const at = (x, y, z) => new THREE.Vector3(e.x + obj.position.x + x, y, e.z + obj.position.z + z);
-      // grind rails (snake-rock crests, rails.js): polylines in obj's frame. A collider's `rail` is the index of its rail
+      // grind rails (rails.js): polylines in obj's frame. A collider's `rail` is the index of its rail
       // (a rider on a crest doesn't collide with its own rock).
       e.rails = (made.rails || []).map((pts) => this.world.addRail(pts.map((p) => at(p.x, p.y, p.z))));
       const own = (b) => (b.rail === undefined ? {} : { rail: e.rails[b.rail].pts });

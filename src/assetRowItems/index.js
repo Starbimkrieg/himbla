@@ -17,7 +17,7 @@
 //                                                  outpostTemplate gives them (box: x y z hx hy hz yaw; cyl: x z y0 y1 r;
 //                                                  sphere: x y z r); a box may carry its whole frame instead of a yaw (ax ay az: unit
 //                                                  axes, for a tilted one) and a `rail`: index into `rails` of its grind rail
-//                                 rails?,          grind rails (rails.js): [[Vector3, ...], ...], each snake rock's crest line in root's
+//                                 rails?,          grind rails (rails.js): [[Vector3, ...], ...], a crest line in root's
 //                                                  frame; placed in the flat world while the item is built, so it grinds like the Moon's
 //                                 update?(dt, t),  called every frame while built (spinner, blinker, lifted gear); one that throws is switched off
 //                                 dispose?() }     anything beyond the geometry and materials under root

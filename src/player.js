@@ -227,7 +227,7 @@ export class Player {
     if (this.dead) return;
     const up = b.up;
 
-    // grinding a snake-rock crest (rails.js): the rail carries you
+    // grinding a rail (rails.js): the rail carries you
     const grinding = g.grind && g.grind.update(this, dt, input);
     g.devOverlay.lap('rail');
     if (grinding) {

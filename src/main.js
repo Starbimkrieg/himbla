@@ -1374,6 +1374,10 @@ class Game {
     this.sun.intensity = (lunar ? 1.88 : 1.6) * day;
     this.sun.color.setHex(lunar ? 0xfff0f5 : 0xfff1d6);
     this.sun.shadow.radius = lunar ? -2.5 : 2.5;
+    // the depth and normal bias push a shadow off its caster (old: about 1.1 m along the light and 0.6 m off the ground, 1 to 2 m
+    // of lit ground round a rock's foot under a low sun); a crisp edge shows that gap, so lunar light keeps them tight
+    this.sun.shadow.bias = lunar ? -0.0001 : -0.0008;
+    this.sun.shadow.normalBias = lunar ? 0.12 : 0.6;
     this.hemi.position.copy(up);
     this.hemi.intensity = 0.06 + (lunar ? 0.34 : 0.8) * THREE.MathUtils.smoothstep(e, -0.25, 0.15);
     this.earthLight.intensity = (lunar ? 0.18 : 0.3) * THREE.MathUtils.smoothstep(up.dot(this.world.earthDir), -0.1, 0.3);
