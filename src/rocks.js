@@ -239,7 +239,7 @@ function domeBoxes(p, q, pts) {
 const paint = (geo, c) => { const a = geo.attributes.color; for (let i = 0; i < a.count; i++) a.setXYZ(i, c.r, c.g, c.b); a.needsUpdate = true; };
 
 // rock pieces and soil pieces as one object at p, turned by q
-function finish(p, q, rockGeos, soilGeos, mat, cols, kind) {
+function finish(p, q, rockGeos, soilGeos, mat, cols, kind, gy = FLAT) {
   const root = new THREE.Group();
   for (const [geos, m, w] of [[rockGeos, mat, 0.12], [soilGeos, soil(), 0]]) { // (soil un-inked, like the ground it's heaped from)
     if (!geos.length) continue;
@@ -250,7 +250,7 @@ function finish(p, q, rockGeos, soilGeos, mat, cols, kind) {
     mesh.receiveShadow = true;
     // (the ink: each piece's shell pulled toward its own middle and kept off the rock, so the ground at its foot can't show
     // through the line: toon.js solidShell, inkMarks)
-    if (w) { const hull = new THREE.Mesh(solidShell(pieces, w), inkMatSolid); hull.userData.isInk = true; mesh.add(hull); inkMarks(mesh, hull); }
+    if (w) { const hull = new THREE.Mesh(solidShell(pieces, w, gy), inkMatSolid); hull.userData.isInk = true; mesh.add(hull); inkMarks(mesh, hull); }
     root.add(mesh);
   }
   root.userData.rockKind = kind;
@@ -273,7 +273,7 @@ function shearedSpire(rr, p, q, gy) {
   const g = hullRock(pts, [[n, dist], [n2, d2]], 0.12, seed).applyQuaternion(lq);
   const low = pts.filter((v) => v.y < H * 0.45), high = pts.filter((v) => v.y >= H * 0.45 - 0.5);
   const cols = [hullBox(p, q, low, lq), hullBox(p, q, high, lq, 0.75)];
-  return finish(p, q, [g, ...crumbs(rr, 0, 0, w * 0.6 + 1.5, w * 0.6 + 6, 10, 0.3, 0.9, gy)], [berm(rr, 0, 0, w * 0.47, d * 0.47, yaw, 0.55, seed, gy)], mats().tan, cols, 'monolith');
+  return finish(p, q, [g, ...crumbs(rr, 0, 0, w * 0.6 + 1.5, w * 0.6 + 6, 10, 0.3, 0.9, gy)], [berm(rr, 0, 0, w * 0.47, d * 0.47, yaw, 0.55, seed, gy)], mats().tan, cols, 'monolith', gy);
 }
 
 function toppledHalf(rr, p, q, gy) {
@@ -294,7 +294,7 @@ function toppledHalf(rr, p, q, gy) {
   const cols = [hullBox(p, q, stump, yq), hullBox(p, q, top, lq, 0.85, at)];
   const mid = V(H * 0.3 + 1.5, 0, 0).applyQuaternion(yq), lie = V(0, L / 2, 0).applyQuaternion(lq).add(at);
   const soilG = [berm(rr, 0, 0, w * 0.47, d * 0.47, dir, 0.5, seed, gy), berm(rr, lie.x, lie.z, L * 0.48, d * 0.45, dir, 0.3, seed + 9, gy, 1.0)];
-  return finish(p, q, [...geos, ...crumbs(rr, mid.x, mid.z, 0, 4.5, 12, 0.3, 0.9, gy)], soilG, mats().tan, cols, 'monolith');
+  return finish(p, q, [...geos, ...crumbs(rr, mid.x, mid.z, 0, 4.5, 12, 0.3, 0.9, gy)], soilG, mats().tan, cols, 'monolith', gy);
 }
 
 function houseRock(rr, p, q, gy) {
@@ -306,7 +306,7 @@ function houseRock(rr, p, q, gy) {
   const g = hullRock(pts, [[n, dist]], 0.3, seed);
   // the footprint at the ground: the blob's section 0.45 sy below its middle (cos 63 deg of each radius)
   const k = Math.sqrt(1 - 0.55 * 0.55);
-  return finish(p, q, [g, ...crumbs(rr, Math.cos(a) * sx * 0.75, Math.sin(a) * sx * 0.75, 1, 4, 8, 0.4, 1.1, gy)], [berm(rr, 0, 0, sx * k * 0.95, sz * k * 0.95, 0, 0.6, seed, gy, 1.8)], mats().grey, domeBoxes(p, q, pts), 'monolith');
+  return finish(p, q, [g, ...crumbs(rr, Math.cos(a) * sx * 0.75, Math.sin(a) * sx * 0.75, 1, 4, 8, 0.4, 1.1, gy)], [berm(rr, 0, 0, sx * k * 0.95, sz * k * 0.95, 0, 0.6, seed, gy, 1.8)], mats().grey, domeBoxes(p, q, pts), 'monolith', gy);
 }
 
 function crackedBoulder(rr, p, q, gy) {
@@ -321,7 +321,7 @@ function crackedBoulder(rr, p, q, gy) {
   const gap = n.clone().setY(0).normalize().multiplyScalar(dist + 0.6);
   const cols = [...domeBoxes(p, q, a), hullBox(p, q, b, lq, 0.75, shift)];
   const k = Math.sqrt(1 - 0.6 * 0.6), rot = -Math.atan2(n.z, n.x);
-  return finish(p, q, [...geos, ...crumbs(rr, gap.x, gap.z, 0, 2, 8, 0.25, 0.7, gy)], [berm(rr, gap.x * 0.6, gap.z * 0.6, sx * k + 0.8, sz * k, rot, 0.45, seed, gy)], mats().basalt, cols, 'monolith');
+  return finish(p, q, [...geos, ...crumbs(rr, gap.x, gap.z, 0, 2, 8, 0.25, 0.7, gy)], [berm(rr, gap.x * 0.6, gap.z * 0.6, sx * k + 0.8, sz * k, rot, 0.45, seed, gy)], mats().basalt, cols, 'monolith', gy);
 }
 const MONOLITH_MAKERS = { sheared: shearedSpire, toppled: toppledHalf, house: houseRock, cracked: crackedBoulder };
 
@@ -397,7 +397,7 @@ function ramp(rr, p, q, dims, gy) {
   const soilG = [-1, 1].map((s) => bermLine(s * W * 0.5, zs, s * W * 0.5, ze, s, Math.min(0.6, dims.h * 0.15), seed + s, gy));
   if (lip) soilG.push(bermLine(W * 0.45, front[0] + 0.5, -W * 0.45, front[0] + 0.5, 1, 0.45, seed + 3, gy));
   const rocks = [geo, ...crumbs(rr, 0, front[0] + 2.5, 0, 3, lip ? 6 : 3, 0.4, 1.2, gy)];
-  return finish(p, q, rocks, soilG, variant === 'strata' ? rampMats().basalt : rampMats().dark, cols, 'ramp');
+  return finish(p, q, rocks, soilG, variant === 'strata' ? rampMats().basalt : rampMats().dark, cols, 'ramp', gy);
 }
 
 // ---------------- building and placing ----------------

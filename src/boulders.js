@@ -64,7 +64,18 @@ export function makeBoulderInk() {
 #else
   return 1.0;
 #endif
-}`, 'vec4(0.0, 0.0, 0.0, 0.7 * inkSc())'); // (its far side pulled toward its middle: toon.js inkCompile; planet.js gives it inkMarks)
+}
+// a point's height over the ground: a boulder's middle stands 0.3 of its size over the ground (planet.js), up being away from
+// the moon's centre
+float inkOver(vec3 w) {
+#ifdef USE_INSTANCING
+  vec3 c = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+#else
+  vec3 c = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+#endif
+  return dot(w - c, normalize(c)) + 0.3 * inkSc();
+}`, 'vec4(0.0, 0.0, 0.0, 0.7 * inkSc())', 'smoothstep(0.0, 0.3, inkOver(inkW.xyz))');
+  // (its far side pulled toward its middle, none of it from under the ground: toon.js inkCompile; planet.js gives it inkMarks)
   m.customProgramCacheKey = () => 'boulderInk';
   return m;
 }

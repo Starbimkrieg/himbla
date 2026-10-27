@@ -110,8 +110,10 @@ export const inkMat = new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THRE
 // no more than 1.5 times them. What shows of a shell past its object's edge is its far side, up to a metre behind the edge on a
 // rounded rock: the ground at a rock's foot is nearer than that, so it showed through the line, a hollow between the outline and
 // the rock. Pulled forward, the far side can come in front of the object's own near side (a faceted rock's edges): a pulled
-// shell needs inkMarks, which keep it off its own object.
-export function inkCompile(sh, push, decl = '', pull = null) {
+// shell needs inkMarks, which keep it off its own object. `pullK` (GLSL, 0 to 1, given inkW the vertex in the world) scales the
+// pull: 0 under the ground, where a buried part's shell (a ramp's lead-in, a monolith's driven-in foot) pulled toward a camera
+// overhead would come up through the ground, a black sheet over it (the marks keep a shell off its own rock, not the ground).
+export function inkCompile(sh, push, decl = '', pull = null, pullK = '1.0') {
   Object.assign(sh.uniforms, INK_U);
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', `#include <common>\n${decl}\nuniform float uInkK;\nvarying float vInkD;\n${INK_SCALE_GLSL}`)
@@ -130,6 +132,7 @@ export function inkCompile(sh, push, decl = '', pull = null) {
   inkC = instanceMatrix * inkC;
   #endif
   float inkDc = -(modelViewMatrix * inkC).z, inkDv = -mvPosition.z, inkTo = max(inkDc - inkP.w * 0.5, inkDv - inkP.w * 1.5);
+  inkTo = mix(inkDv, inkTo, clamp(${pullK}, 0.0, 1.0));
   if (inkTo < inkDv && inkTo > 0.05) { mvPosition.xyz *= inkTo / inkDv; gl_Position = projectionMatrix * mvPosition; }`);
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', `#include <common>\nvarying float vInkD;\n${INK_SCALE_GLSL}`)
@@ -156,7 +159,7 @@ export function inkMarkTest(m) {
 }
 // shells of solid pieces, their far side pulled forward (inkCompile's pull; solidShell gives them inkC; inkMarks)
 export const inkMatSolid = inkMarkTest(new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide }));
-inkMatSolid.onBeforeCompile = (sh) => inkCompile(sh, 'normalize(normal) * inkPush(inkT, vInkD) * inkK', 'attribute float inkT; attribute vec4 inkC;', 'inkC');
+inkMatSolid.onBeforeCompile = (sh) => inkCompile(sh, 'normalize(normal) * inkPush(inkT, vInkD) * inkK', 'attribute float inkT; attribute vec4 inkC; attribute float inkH;', 'inkC', 'smoothstep(0.0, 0.3, inkH)');
 inkMatSolid.customProgramCacheKey = () => 'inkShellSolid';
 export const inkMatNear = inkMat; // (was the runner's own distance-scaled outline: every shell is now)
 // a shell whose push is baked into its positions (the skinned figures' hulls): no distance rule, no Ink setting
@@ -214,21 +217,27 @@ export function shellGeo(geo, t) {
   byT.set(t, g);
   return g;
 }
-// grow a shell's bounding sphere by its widest reach (inkT x INK_GROW), so it isn't culled while it shows
 // One shell for several solid pieces (a rock and its crumbs), each pulled toward its own middle (inkMatSolid): `inkC` is the
-// piece's bounding-box centre and half its smallest size (inkCompile's pull).
+// piece's bounding-box centre and half its smallest size (inkCompile's pull), `inkH` each point's height over the ground
+// (`ground(x, z)`, in the pieces' frame, y up: none pulled under it).
 const _sbx = new THREE.Box3(), _sc = new THREE.Vector3(), _ss = new THREE.Vector3();
-export function solidShell(geos, t) {
+export function solidShell(geos, t, ground = () => 0) {
   const parts = geos.map((geo) => {
-    const g = shellGeo(geo, t).clone(), n = g.attributes.position.count, a = new Float32Array(n * 4);
+    const g = shellGeo(geo, t).clone(), P = g.attributes.position, n = P.count, a = new Float32Array(n * 4), h = new Float32Array(n);
     _sbx.setFromBufferAttribute(geo.attributes.position).getCenter(_sc); _sbx.getSize(_ss);
     const m = Math.min(_ss.x, _ss.y, _ss.z) * 0.5;
-    for (let i = 0; i < n; i++) { a[i * 4] = _sc.x; a[i * 4 + 1] = _sc.y; a[i * 4 + 2] = _sc.z; a[i * 4 + 3] = m; }
+    for (let i = 0; i < n; i++) {
+      a[i * 4] = _sc.x; a[i * 4 + 1] = _sc.y; a[i * 4 + 2] = _sc.z; a[i * 4 + 3] = m;
+      h[i] = P.getY(i) - ground(P.getX(i), P.getZ(i));
+    }
     g.setAttribute('inkC', new THREE.BufferAttribute(a, 4));
+    g.setAttribute('inkH', new THREE.BufferAttribute(h, 1));
     return g;
   });
   return shellBounds(parts.length > 1 ? mergeGeometries(parts) : parts[0]);
 }
+
+// grow a shell's bounding sphere by its widest reach (inkT x INK_GROW), so it isn't culled while it shows
 
 export function shellBounds(g) {
   g.computeBoundingSphere();
