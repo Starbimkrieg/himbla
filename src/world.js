@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces } from './toon.js';
+import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds, INK_DIST } from './toon.js';
 import { makeDish, makeDishHead, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar } from './models.js';
 import { mulberry32 } from './rng.js';
 import { FACTIONS } from './locations.js';
@@ -38,7 +38,6 @@ const DETAIL_DIST = 260; // detail cells beyond this: props off
 // carry the silhouette. A place's merged ink is cut into INK_CELL chunks (by triangle, so huge hulls split
 // too; small-prop ink is already in small cells), each off beyond INK_DIST.
 const INK_CELL = 60;
-const INK_DIST = 110;
 const FIG_INK_DIST = 50; // resident outline hulls (a few cm) off past this (a skinned hull is a second full body)
 let NO_MERGE = false; try { NO_MERGE = localStorage.getItem('mr-nomerge') === '1'; } catch { /* unavailable */ } // (debug: compare with the originals)
 const MERGE_CELL = 80;   // merged static geometry chunk grid (keeps frustum culling useful)
@@ -51,8 +50,8 @@ const _los = new THREE.Vector3(), _lp = new THREE.Vector3();
 
 // Static-geometry batcher: one merged mesh per material plus one merged ink shell, so a compound
 // costs a handful of draw calls.
-const _bm = new THREE.Matrix4(), _bh = new THREE.Matrix4(), _bt = new THREE.Matrix4();
-const _bp = new THREE.Vector3(), _bs = new THREE.Vector3(), _bc = new THREE.Vector3(), _bz = new THREE.Vector3();
+const _bm = new THREE.Matrix4();
+const _bp = new THREE.Vector3(), _bs = new THREE.Vector3();
 const _bq = new THREE.Quaternion(), _be = new THREE.Euler();
 // Splits a geometry (made non-indexed) per `cell`-metre grid cell by triangle centre (big triangles stay
 // whole). One cell: the geometry itself.
@@ -106,15 +105,8 @@ class Batch {
     if (!list) this.byMat.set(mat, (list = []));
     const placed = prepGeo(geo).applyMatrix4(_bm);
     list.push(mat.side === THREE.FrontSide ? dropFloorFaces(placed) : placed); // (only one-sided pieces lose floors: double-sided ones show undersides from above)
-    if (outline) {
-      if (!geo.boundingBox) geo.computeBoundingBox();
-      geo.boundingBox.getSize(_bz);
-      geo.boundingBox.getCenter(_bc);
-      // same inflated-hull rule as toon.ink(), sized in post-scale units
-      const kx = 1 + (2 * outline) / Math.max(_bz.x * sx, 0.02), ky = 1 + (2 * outline) / Math.max(_bz.y * sy, 0.02), kz = 1 + (2 * outline) / Math.max(_bz.z * sz, 0.02);
-      _bh.makeTranslation(_bc.x, _bc.y, _bc.z).multiply(_bt.makeScale(kx, ky, kz)).multiply(_bt.makeTranslation(-_bc.x, -_bc.y, -_bc.z)).premultiply(_bm);
-      this.ink.push(dropFloorFaces(prepGeo(geo).applyMatrix4(_bh)));
-    }
+    // the outline: toon.js shellGeo, placed (its thickness stays `outline`: placing turns its way out, not its length)
+    if (outline) this.ink.push(dropFloorFaces(shellGeo(geo, outline).clone().applyMatrix4(_bm)));
     return this;
   }
 
@@ -127,7 +119,7 @@ class Batch {
       g.add(m);
     }
     if (this.ink.length) {
-      const h = new THREE.Mesh(mergeGeometries(this.ink), inkMat);
+      const h = new THREE.Mesh(shellBounds(mergeGeometries(this.ink)), inkMat);
       h.userData.isInk = true;
       g.add(h);
     }
@@ -293,7 +285,7 @@ export class World {
       gr.objs.push(o);
       const keepUv = !!o.material.map, keepCol = !!o.material.vertexColors && !vc;
       const g = geo.index ? geo.toNonIndexed() : geo.clone();
-      for (const k of Object.keys(g.attributes)) if (!(k === 'position' || k === 'normal' || (k === 'uv' && keepUv) || (k === 'color' && keepCol))) g.deleteAttribute(k);
+      for (const k of Object.keys(g.attributes)) if (!(k === 'position' || k === 'normal' || (k === 'uv' && keepUv) || (k === 'color' && keepCol) || (k === 'inkT' && ink))) g.deleteAttribute(k);
       g.morphAttributes = {};
       g.clearGroups();
       if (!g.attributes.normal) g.computeVertexNormals();
@@ -312,6 +304,7 @@ export class World {
       // (detail chunks are already in small cells; other ink is cut up here)
       const parts = gr.mat === inkMat && !gr.small ? splitByCell(geo, INK_CELL) : [geo];
       for (const pg of parts) {
+        if (gr.mat === inkMat) shellBounds(pg);
         const m = new THREE.Mesh(pg, gr.mat);
         m.castShadow = gr.cast; m.receiveShadow = gr.recv; m.renderOrder = gr.order;
         if (gr.mat === inkMat) { m.userData.isInk = true; m.castShadow = m.receiveShadow = false; }

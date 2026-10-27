@@ -4,7 +4,7 @@ import { downsNode, downsSlot } from './models.js';
 import { waterMesh } from './fountainFx.js';
 import { part } from './settlements.js';
 import { ARCADE, WEDGE } from './downsPlan.js';
-import { inkMat } from './toon.js';
+import { inkMat, shellGeo, shellBounds } from './toon.js';
 
 // Shared by Chimera Downs' builders: palette, text widths, baking a Blender kit part into a settlement kit (docs/downs-layouts.md).
 // Palette: Gold Gleam, Saddle Brown, Black, Money, Barn Red, Touch of Mint (darker tints for shading).
@@ -91,37 +91,10 @@ export function sheet(polys, h = 0) {
   return g;
 }
 
-// Outline shell of a flat-faced solid (a sheet): each corner moves to where its surrounding face planes, offset by `ink`, meet.
-// Kit.add's outline scales about the middle, fine for compact parts; long curved ones need a per-face offset.
+// Outline shell of a flat-faced solid (a sheet): toon.js shellGeo (each corner where its face planes, pushed out by `ink`, meet),
+// a copy the caller may place and bend.
 export function inkShell(geo, ink) {
-  const p = geo.attributes.position.array, key = (i) => `${Math.round(p[i] * 1e3)},${Math.round(p[i + 1] * 1e3)},${Math.round(p[i + 2] * 1e3)}`;
-  const planes = new Map();
-  for (let t = 0; t < p.length; t += 9) {
-    const ax = p[t + 3] - p[t], ay = p[t + 4] - p[t + 1], az = p[t + 5] - p[t + 2], bx = p[t + 6] - p[t], by = p[t + 7] - p[t + 1], bz = p[t + 8] - p[t + 2];
-    let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
-    const l = Math.hypot(nx, ny, nz);
-    if (l < 1e-9) continue;
-    nx /= l; ny /= l; nz /= l;
-    for (let v = 0; v < 9; v += 3) {
-      const k = key(t + v), list = planes.get(k) || [];
-      if (!list.some((n) => n[0] * nx + n[1] * ny + n[2] * nz > 0.99999)) list.push([nx, ny, nz]);
-      planes.set(k, list);
-    }
-  }
-  const off = new Map();
-  for (const [k, list] of planes) {                                             // least squares for o . n = ink over the corner's planes (damped for near-equal planes)
-    const a = [1e-4, 0, 0, 0, 1e-4, 0, 0, 0, 1e-4], b = [0, 0, 0];
-    for (const n of list) for (let r = 0; r < 3; r++) { b[r] += ink * n[r]; for (let c = 0; c < 3; c++) a[r * 3 + c] += n[r] * n[c]; }
-    const o = new THREE.Vector3(...b).applyMatrix3(new THREE.Matrix3().set(...a).invert());
-    if (o.length() > 4 * ink) o.setLength(4 * ink);
-    off.set(k, o);
-  }
-  const q = new Float32Array(p.length);
-  for (let i = 0; i < p.length; i += 3) { const o = off.get(key(i)) || _P.set(0, 0, 0); q[i] = p[i] + o.x; q[i + 1] = p[i + 1] + o.y; q[i + 2] = p[i + 2] + o.z; }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(q, 3));
-  g.setIndex(Array.from({ length: q.length / 3 }, (_, i) => i));                // kit shells are indexed: curve.js bends them by index
-  return g;
+  return shellGeo(geo, ink).clone();
 }
 
 // arcadeShell sink into a kit (plain frame: k.at() first), with inkShell as the outline.

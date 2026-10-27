@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { toon, glow, inkMat, textSprite, vcMaterial, vcable, paintVertices, dropFloorFaces } from './toon.js';
+import { toon, glow, inkMat, textSprite, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds } from './toon.js';
 import { mulberry32 } from './rng.js';
 import { bakeStatic } from './staticBake.js';
 import { outpostAsset } from './outpostGlb.js';
@@ -43,8 +43,8 @@ function prism(len, width, height) {
 }
 
 // ---------- static-geometry kit ----------
-const _m = new THREE.Matrix4(), _h = new THREE.Matrix4(), _t = new THREE.Matrix4(), _r = new THREE.Matrix4();
-const _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _c = new THREE.Vector3(), _z = new THREE.Vector3(), _d = new THREE.Vector3();
+const _m = new THREE.Matrix4(), _r = new THREE.Matrix4();
+const _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _d = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _e = new THREE.Euler();
 const UP = new THREE.Vector3(0, 1, 0);
 // in place: indexed, position + normal only, no groups (so everything merges)
@@ -112,16 +112,8 @@ class Kit {
     let list = this.byMat.get(mat);
     if (!list) this.byMat.set(mat, (list = []));
     prep(geo);
-    if (outline) {
-      if (!geo.boundingBox) geo.computeBoundingBox();
-      geo.boundingBox.getSize(_z);
-      geo.boundingBox.getCenter(_c);
-      const kx = 1 + (2 * outline) / Math.max(_z.x, 0.02), ky = 1 + (2 * outline) / Math.max(_z.y, 0.02), kz = 1 + (2 * outline) / Math.max(_z.z, 0.02);
-      _h.makeTranslation(_c.x, _c.y, _c.z).multiply(_t.makeScale(kx, ky, kz)).multiply(_t.makeTranslation(-_c.x, -_c.y, -_c.z)).premultiply(_m);
-      const hg = new THREE.BufferGeometry();
-      hg.setAttribute('position', geo.attributes.position.clone());
-      hg.setIndex(geo.index);
-      hg.applyMatrix4(_h);
+    if (outline) { // (toon.js shellGeo, placed: its thickness stays `outline`)
+      const hg = shellGeo(geo, outline).clone().applyMatrix4(_m);
       this.ink.push(this.onGround ? dropFloorFaces(hg) : hg);
     }
     geo.applyMatrix4(_m);
@@ -145,9 +137,9 @@ class Kit {
       this.boxOf(g, this.instN);
       list.push(km.side === THREE.FrontSide && this.onGround ? dropFloorFaces(g) : g);
     }
-    if (node.ink) {
+    if (node.ink) { // (models.js shellOff: inkMat's form, carried whole)
       const hg = new THREE.BufferGeometry();
-      hg.setAttribute('position', node.ink.attributes.position.clone());
+      for (const k of ['position', 'normal', 'inkT']) hg.setAttribute(k, node.ink.attributes[k].clone());
       hg.setIndex(node.ink.index.clone());
       hg.applyMatrix4(w);
       this.ink.push(this.onGround ? dropFloorFaces(hg) : hg);
@@ -371,7 +363,7 @@ class Kit {
       for (const g of list) g.dispose();
     }
     if (this.ink.length) {
-      const h = new THREE.Mesh(mergeGeometries(this.ink), inkMat);
+      const h = new THREE.Mesh(shellBounds(mergeGeometries(this.ink)), inkMat);
       h.userData.isInk = true;
       h.userData.kitMesh = true;
       this.root.add(h);

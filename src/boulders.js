@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32, createNoise3D } from './rng.js';
-import { INK_FULL, INK_MIN } from './toon.js';
+import { inkCompile, INK_COLOR } from './toon.js';
 
 // The Moon's boulders (planet.buildBoulders): a few lumpy shapes shared by every chunk, each an icosphere pushed out by two
 // noise octaves and chiselled flat in places, then scaled to unit RMS radius so the colliders (BOULDER_COLLIDER_K) fit.
@@ -54,22 +54,17 @@ export function makeBoulderShapes() {
   return Array.from({ length: BOULDER_SHAPES }, (_, i) => lumpy(11 + i * 17));
 }
 
-// Boulder ink: the back-faced shell pushed out by BOULDER_INK_M. The push is in local space, so it's divided by instance
-// scale to stay in metres, and it thins up close (INK_FULL/INK_MIN as the runner's outline, toon.js); a full 15 cm line
-// beside you covers a quarter of the screen.
+// Boulder ink: the back-faced shell pushed out by BOULDER_INK_M along its normals, by toon.js's ink rule (inkCompile: the distance
+// scale, the Ink setting). The push is in local space, so it's divided by the instance's scale to stay in metres.
 export function makeBoulderInk() {
-  const m = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
-  m.onBeforeCompile = (sh) => {
-    sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+  const m = new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide });
+  m.onBeforeCompile = (sh) => inkCompile(sh, `normalize(normal) * ${BOULDER_INK_M.toFixed(2)} * inkK / inkSc()`, `float inkSc() {
 #ifdef USE_INSTANCING
-  float inkSc = pow(abs(determinant(mat3(instanceMatrix))), 1.0 / 3.0);
-  vec3 inkW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+  return pow(abs(determinant(mat3(instanceMatrix))), 1.0 / 3.0);
 #else
-  float inkSc = 1.0;
-  vec3 inkW = (modelMatrix * vec4(transformed, 1.0)).xyz;
+  return 1.0;
 #endif
-transformed += normalize(normal) * ${BOULDER_INK_M.toFixed(2)} * clamp(distance(cameraPosition, inkW) / ${INK_FULL.toFixed(1)}, ${INK_MIN.toFixed(2)}, 1.0) / inkSc;`);
-  };
+}`);
   m.customProgramCacheKey = () => 'boulderInk';
   return m;
 }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { lineUp } from './common.js';
 import { seat } from './props-util.js';
-import { toon, glow, inkMat } from '../toon.js';
+import { toon, glow, inkMat, shellGeo } from '../toon.js';
 import { mulberry32 } from '../rng.js';
 import { build as buildRock, RAMPS, MONOLITHS, rampDims } from '../rocks.js';
 import { KINDS as METEOR_KINDS, meteorMats, makeMeteorRock } from '../meteors.js';
@@ -52,10 +52,10 @@ function boulders() {
   const root = new THREE.Group();
   let x = 0;
   for (const s of [1.2, 2.4, 4, 6, 8.2]) { // s = 1.2 + g^3 * 7
-    const m = new THREE.Mesh(geo, mat), h = new THREE.Mesh(geo, inkMat);
+    const m = new THREE.Mesh(geo, mat), h = new THREE.Mesh(shellGeo(geo, 0.15 / s), inkMat); // (a 15 cm line: the shell scales with it)
     const e = new THREE.Euler(rr() * 3, rr() * 3, rr() * 3);
     x += s;
-    for (const [o, k] of [[m, 0], [h, 0.15]]) {
+    for (const [o, k] of [[m, 0], [h, 0]]) {
       o.position.set(x, s * 0.3, 0); // the game sits it at surface + 0.3 s
       o.rotation.copy(e);
       o.scale.set(s + k, s * 0.8 + k, s + k);

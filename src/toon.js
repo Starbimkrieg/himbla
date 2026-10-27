@@ -78,33 +78,129 @@ export function toon(color, opts) {
   return new THREE.MeshToonMaterial({ color, gradientMap: gradientMap(), ...opts });
 }
 
-export const inkMat = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
-
-// Outline for shells carrying their offset in an `off` attribute (`position` is the surface, `off` the full-thickness push:
-// models.js shellOff, for the Blender-built runner). Full thickness in metres beyond INK_FULL from the camera (the follow cam
-// is 7.5 m+ away); closer in it thins to keep its on-screen width, down to INK_MIN of full (a 3 cm shell is 6 px at 8 m but
-// 40 px at 1 m, swallowing small details in the wardrobe, cutscenes and close cameras).
-// (Separate from inkMat so shells without `off` never run it: a missing attribute reads the last program's slot.)
-export const INK_FULL = 7, INK_MIN = 0.3;
-export const inkMatNear = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
-inkMatNear.onBeforeCompile = (sh) => {
+// ---------------- ink shells ----------------
+// An outline is a shell drawn back faces only: where it shows past the object, a line. A shell's geometry is the surface itself,
+// its `normal` the way the outline grows (unit) and its `inkT` how far (m) at the follow camera's distance; inkMat pushes it out
+// in the vertex shader by inkT x inkScale(distance) x the Ink setting:
+//   - inside INK_REF it thins to keep its on-screen width (to INK_MIN of inkT: a 6 cm line up close would swallow small details);
+//   - beyond it grows with distance to hold that width, up to INK_GROW x inkT, so far props keep a line, not a hairline;
+//   - from INK_EASE to INK_DIST it eases to INK_FAR of that, near the post pass's depth line (post.js), which carries the
+//     silhouettes where a place's merged shells stop drawing (world.js INK_DIST); props out in the open keep theirs, thinning.
+// Every shell (toon.ink, the Kit's, world.js's batches, models.js's Blender ones, downsKit, staticBake) is made this way, so
+// one weight rule holds for all. The skinned figures' hulls (models.js bakeFigure) stay baked: inkMatBaked.
+export const INK_REF = 9, INK_MIN = 0.3, INK_GROW = 4, INK_EASE = 60, INK_DIST = 110, INK_FAR = 0.45;
+// (live uniforms: settings.js) uInkK the Ink strength; uInkVary and uInkTint the two style tests (dev builds' Settings)
+export const INK_U = { uInkK: { value: 1 }, uInkVary: { value: 0 }, uInkTint: { value: 0 } };
+export const INK_SCALE_GLSL = `
+float inkScale(float d) {
+  return clamp(d / ${INK_REF.toFixed(1)}, ${INK_MIN.toFixed(2)}, ${INK_GROW.toFixed(1)}) * mix(1.0, ${INK_FAR.toFixed(2)}, smoothstep(${INK_EASE.toFixed(1)}, ${INK_DIST.toFixed(1)}, d));
+}
+// (style test: line weight) a brush's swell along the line, anchored to the world so it doesn't crawl: 0.7 to 1.3
+float inkWobble(vec3 w) {
+  vec3 i = floor(w), f = fract(w); f = f * f * (3.0 - 2.0 * f);
+  #define IH(o) fract(sin(dot(i + o, vec3(127.1, 311.7, 74.7))) * 43758.5453)
+  float n = mix(mix(mix(IH(vec3(0,0,0)), IH(vec3(1,0,0)), f.x), mix(IH(vec3(0,1,0)), IH(vec3(1,1,0)), f.x), f.y),
+                mix(mix(IH(vec3(0,0,1)), IH(vec3(1,0,1)), f.x), mix(IH(vec3(0,1,1)), IH(vec3(1,1,1)), f.x), f.y), f.z);
+  #undef IH
+  return 0.7 + 0.6 * n;
+}
+// (style test: distance tint) far ink shifts from near-black toward the shade's deep indigo, so far shapes recede
+vec3 inkTint(vec3 c, float d, float on) { return mix(c, vec3(0.16, 0.13, 0.30), on * 0.75 * smoothstep(40.0, 420.0, d)); }`;
+export const INK_COLOR = 0x0b0612;
+export const inkMat = new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide });
+// An ink shell material's shader: the vertex pushed out by `push` (GLSL, a vec3 in object space, given inkK = inkScale x the Ink
+// setting [x the wobble], inkW the vertex in the world), the colour tinted with distance; `decl` adds declarations.
+export function inkCompile(sh, push, decl = '') {
+  Object.assign(sh.uniforms, INK_U);
   sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', `#include <common>\nattribute vec3 off;\nconst float INK_FULL = ${INK_FULL.toFixed(1)}; const float INK_MIN = ${INK_MIN.toFixed(2)};`)
+    .replace('#include <common>', `#include <common>\n${decl}\nuniform float uInkK; uniform float uInkVary;\nvarying float vInkD;\n${INK_SCALE_GLSL}`)
     .replace('#include <begin_vertex>', `#include <begin_vertex>
-      transformed += off * clamp(-(modelViewMatrix * vec4(position, 1.0)).z / INK_FULL, INK_MIN, 1.0);`);
-};
-inkMatNear.customProgramCacheKey = () => 'inkNear';
+  vec4 inkW = vec4(transformed, 1.0);
+  #ifdef USE_INSTANCING
+  inkW = instanceMatrix * inkW;
+  #endif
+  inkW = modelMatrix * inkW;
+  vInkD = distance(cameraPosition, inkW.xyz);
+  float inkK = inkScale(vInkD) * uInkK;
+  if (uInkVary > 0.5) inkK *= inkWobble(inkW.xyz * 0.6);
+  transformed += ${push};`);
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', `#include <common>\nuniform float uInkTint;\nvarying float vInkD;\n${INK_SCALE_GLSL}`)
+    .replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb = inkTint(diffuseColor.rgb, vInkD, uInkTint);');
+}
+inkMat.onBeforeCompile = (sh) => inkCompile(sh, 'normalize(normal) * inkT * inkK', 'attribute float inkT;');
+inkMat.customProgramCacheKey = () => 'inkShell';
+export const inkMatNear = inkMat; // (was the runner's own distance-scaled outline: every shell is now)
+// a shell whose push is baked into its positions (the skinned figures' hulls): no distance rule, no Ink setting
+export const inkMatBaked = new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide });
 
-// Inverted-hull outline: a slightly larger black back-face shell for bold silhouettes.
+// A shell for `geo` (indexed or not, any attributes): its positions and index (always indexed), `normal` = the outline's way out and `inkT` its
+// thickness t. Each corner moves to where its surrounding face planes, pushed out by t, meet (least squares over the planes,
+// damped for near-equal ones, at most 4 t), so a box's faces all stand off by exactly t and a curved part's by about t.
+// Cached per geometry and t (ink() is called on many meshes sharing one geometry).
+const shellCache = new WeakMap();
+const _sa = new THREE.Vector3(), _sb = new THREE.Vector3(), _sm = new THREE.Matrix3();
+export function shellGeo(geo, t) {
+  let byT = shellCache.get(geo);
+  if (byT && byT.has(t)) return byT.get(t);
+  const P = geo.attributes.position, p = P.array, idx = geo.index ? geo.index.array : null;
+  const tris = (idx ? idx.length : P.count) / 3;
+  const key = (i) => `${Math.round(p[i * 3] * 1e3)},${Math.round(p[i * 3 + 1] * 1e3)},${Math.round(p[i * 3 + 2] * 1e3)}`;
+  const planes = new Map();
+  for (let f = 0; f < tris; f++) {
+    const a = idx ? idx[f * 3] : f * 3, b = idx ? idx[f * 3 + 1] : f * 3 + 1, c = idx ? idx[f * 3 + 2] : f * 3 + 2;
+    _sa.set(p[b * 3] - p[a * 3], p[b * 3 + 1] - p[a * 3 + 1], p[b * 3 + 2] - p[a * 3 + 2]);
+    _sb.set(p[c * 3] - p[a * 3], p[c * 3 + 1] - p[a * 3 + 1], p[c * 3 + 2] - p[a * 3 + 2]);
+    _sa.cross(_sb);
+    const l = _sa.length();
+    if (l < 1e-12) continue;
+    const nx = _sa.x / l, ny = _sa.y / l, nz = _sa.z / l;
+    for (const v of [a, b, c]) {
+      const k = key(v), list = planes.get(k) || [];
+      if (!list.some((n) => n[0] * nx + n[1] * ny + n[2] * nz > 0.99999)) list.push([nx, ny, nz]);
+      planes.set(k, list);
+    }
+  }
+  const offs = new Map();
+  for (const [k, list] of planes) {
+    const m = [1e-4, 0, 0, 0, 1e-4, 0, 0, 0, 1e-4], b = [0, 0, 0];
+    for (const n of list) for (let r = 0; r < 3; r++) { b[r] += n[r]; for (let c = 0; c < 3; c++) m[r * 3 + c] += n[r] * n[c]; }
+    const o = new THREE.Vector3(...b).applyMatrix3(_sm.set(...m).invert()); // (the offset for t = 1)
+    if (o.length() > 4) o.setLength(4);
+    offs.set(k, o);
+  }
+  const nor = new Float32Array(P.count * 3), th = new Float32Array(P.count);
+  for (let i = 0; i < P.count; i++) {
+    const o = offs.get(key(i));
+    const l = o ? o.length() : 0;
+    if (l > 1e-6) { nor[i * 3] = o.x / l; nor[i * 3 + 1] = o.y / l; nor[i * 3 + 2] = o.z / l; th[i] = l * t; } else nor[i * 3 + 1] = 1;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(p), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  g.setAttribute('inkT', new THREE.BufferAttribute(th, 1));
+  // (always indexed: the Kit bends shells by index, curve.js, and merges them with others)
+  if (idx) g.setIndex(new THREE.BufferAttribute(new idx.constructor(idx), 1));
+  else { const ix = new (P.count > 65535 ? Uint32Array : Uint16Array)(P.count); for (let i = 0; i < P.count; i++) ix[i] = i; g.setIndex(new THREE.BufferAttribute(ix, 1)); }
+  if (!byT) shellCache.set(geo, (byT = new Map()));
+  byT.set(t, g);
+  return g;
+}
+// grow a shell's bounding sphere by its widest reach (inkT x INK_GROW), so it isn't culled while it shows
+export function shellBounds(g) {
+  g.computeBoundingSphere();
+  const T = g.attributes.inkT;
+  let mx = 0;
+  if (T) for (let i = 0; i < T.count; i++) mx = Math.max(mx, T.getX(i));
+  g.boundingSphere.radius += mx * INK_GROW * 1.5;
+  return g;
+}
+
+// Inverted-hull outline: a shell (shellGeo) t thick at the follow camera's distance, as a child of the mesh.
 export function ink(mesh, t = 0.06) {
-  const g = mesh.geometry;
-  if (!g.boundingBox) g.computeBoundingBox();
-  const bb = g.boundingBox;
-  const size = new THREE.Vector3(), center = new THREE.Vector3();
-  bb.getSize(size); bb.getCenter(center);
+  const g = shellGeo(mesh.geometry, t);
+  if (!g.boundingSphere) shellBounds(g);
   const hull = new THREE.Mesh(g, inkMat);
-  hull.scale.set(1 + (2 * t) / Math.max(size.x, 0.02), 1 + (2 * t) / Math.max(size.y, 0.02), 1 + (2 * t) / Math.max(size.z, 0.02));
-  hull.position.set(center.x * (1 - hull.scale.x), center.y * (1 - hull.scale.y), center.z * (1 - hull.scale.z));
   hull.castShadow = false;
   hull.receiveShadow = false;
   hull.userData.isInk = true;

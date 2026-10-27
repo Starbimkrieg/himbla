@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { inkMat, vcMaterial, paintVertices, dropFloorFaces } from './toon.js';
+import { inkMat, vcMaterial, paintVertices, dropFloorFaces, shellBounds } from './toon.js';
 import { slotOf, roleOf, animOf, SHAPES } from './staticContract.js';
 
 // Static GLBs (outposts.glb): a Blender structure -> what the Kit (outpostModels.js) makes: { root, cols, hits, raid,
@@ -146,9 +146,9 @@ function gameplay(asset, role, node, inv, warn) {
 }
 
 // ---------------------------------------------------------------- bake
-// Outline shell: the geometry pushed out along normals averaged per shared position (seams stay closed), as models.js
-// does for the runner. Hard edges and corners are mitred (at most 2x) so each face moves the full `t` like the Kit's
-// hull; the plain average would move only t/sqrt(3) (corner) or t/sqrt(2) (edge), giving a thinner line.
+// Outline shell in inkMat's form (toon.js: the surface, `normal` the way out, `inkT` how far): out along normals averaged per
+// shared position (seams stay closed), as models.js does for the runner. Hard edges and corners are mitred (at most 2x) so
+// each face moves the full `t`; the plain average would move only t/sqrt(3) (corner) or t/sqrt(2) (edge), a thinner line.
 const MITRE_MIN = 0.5;
 function inkShell(geo, t) {
   const pos = geo.attributes.position, nor = geo.attributes.normal, n = pos.count;
@@ -165,13 +165,16 @@ function inkShell(geo, t) {
     const s = sum.get(key(i)), l = Math.hypot(nor.getX(i), nor.getY(i), nor.getZ(i)) || 1;
     s[3] = Math.min(s[3], (s[0] * nor.getX(i) + s[1] * nor.getY(i) + s[2] * nor.getZ(i)) / (s[4] * l));
   }
-  const out = new Float32Array(n * 3);
+  const dir = new Float32Array(n * 3), th = new Float32Array(n);
   for (let i = 0; i < n; i++) {
-    const s = sum.get(key(i)), d = t / (s[4] * Math.max(MITRE_MIN, s[3]));
-    out[i * 3] = pos.getX(i) + s[0] * d; out[i * 3 + 1] = pos.getY(i) + s[1] * d; out[i * 3 + 2] = pos.getZ(i) + s[2] * d;
+    const s = sum.get(key(i));
+    dir[i * 3] = s[0] / s[4]; dir[i * 3 + 1] = s[1] / s[4]; dir[i * 3 + 2] = s[2] / s[4];
+    th[i] = t / Math.max(MITRE_MIN, s[3]);
   }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(out, 3));
+  g.setAttribute('position', pos.clone());
+  g.setAttribute('normal', new THREE.BufferAttribute(dir, 3));
+  g.setAttribute('inkT', new THREE.BufferAttribute(th, 1));
   g.setIndex(geo.index.clone());
   return g;
 }
@@ -228,7 +231,7 @@ function bakeParts(parts, faction, fixed) {
     out.push(m);
   }
   if (shells.length) {
-    const h = new THREE.Mesh(mergeGeometries(shells), inkMat);
+    const h = new THREE.Mesh(shellBounds(mergeGeometries(shells)), inkMat);
     h.userData.isInk = true;
     if (fixed) h.userData.kitMesh = true;
     h.castShadow = h.receiveShadow = false;

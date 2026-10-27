@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toon, ink, glow, glowShared, inkMat, inkMatNear } from './toon.js';
+import { toon, ink, glow, glowShared, inkMat, inkMatNear, inkMatBaked, shellBounds } from './toon.js';
 import { pixelFont } from './fonts.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -201,8 +201,8 @@ function bakeRunnerParts(scene) {
     let ink = null;
     if (g.ink.length) {
       const base = mergeGeometries(g.ink);
-      // thin/fat keep the offset separate (inkMatNear scales it with camera distance); scan is a baked surface+offset shell
-      // for the threat scanner's red line (main.js scanGeo)
+      // thin/fat in inkMat's form (it scales them with camera distance); scan is a baked surface+offset shell for the threat
+      // scanner's red line (main.js scanGeo)
       ink = { thin: shellOff(base, 1), fat: shellOff(base, 4), scan: shellAt(base, 1) };
     }
     out[key] = { parts, ink };
@@ -235,22 +235,19 @@ function inkShellGeo(geo, t) {
   return g;
 }
 
-// the shell with `position` = surface and `off` = k * offset (inkMatNear adds it, scaled by camera distance); bounding
-// sphere grown by the longest offset
+// the shell in inkMat's form (toon.js): `position` = surface, `normal` = the way out, `inkT` = k x its thickness
 function shellOff(base, k) {
-  const o = base.attributes.off.array, off = new Float32Array(o.length);
-  let mx = 0;
-  for (let i = 0; i < o.length; i += 3) {
-    off[i] = o[i] * k; off[i + 1] = o[i + 1] * k; off[i + 2] = o[i + 2] * k;
-    mx = Math.max(mx, Math.hypot(off[i], off[i + 1], off[i + 2]));
+  const o = base.attributes.off.array, n = base.attributes.position.count, nor = new Float32Array(n * 3), th = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = o[i * 3], y = o[i * 3 + 1], z = o[i * 3 + 2], l = Math.hypot(x, y, z);
+    if (l > 1e-9) { nor[i * 3] = x / l; nor[i * 3 + 1] = y / l; nor[i * 3 + 2] = z / l; th[i] = l * k; } else nor[i * 3 + 1] = 1;
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', base.attributes.position);
-  g.setAttribute('off', new THREE.BufferAttribute(off, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  g.setAttribute('inkT', new THREE.BufferAttribute(th, 1));
   g.setIndex(base.index);
-  g.computeBoundingSphere();
-  g.boundingSphere.radius += mx;
-  return g;
+  return shellBounds(g);
 }
 
 // the shell pushed out k * thickness (k = 4: a marked enemy's fat red outline)
@@ -265,8 +262,8 @@ function shellAt(base, k) {
   return g;
 }
 
-// Outline shell for any indexed geometry, along smoothed normals (hugs bent tubes and squashed spheres, unlike ink()'s
-// bbox scaling). Used by the chimeras.
+// Outline shell for any indexed geometry, along smoothed normals, its push baked into its positions (the chimeras' layered
+// shells, chimerabuild.js, which draw with their own materials).
 export function inkShell(geo, t) {
   return shellAt(inkShellGeo(geo, t), 1);
 }
@@ -418,7 +415,7 @@ export class ScarfSim {
       const len = st.len * (k ? 0.8 : 1);
       const { geo, ink: ig } = scarfStrip(SCARF_PTS);
       const mesh = new THREE.Mesh(geo, mat);
-      const inkMesh = new THREE.Mesh(ig, inkMat);
+      const inkMesh = new THREE.Mesh(ig, inkMatBaked); // (the scarf's outline is rebuilt every frame, its push baked)
       inkMesh.userData.isInk = true;
       inkMesh.castShadow = false;
       mesh.add(inkMesh);
@@ -819,7 +816,7 @@ function figGeo() {
 function figMats() {
   if (!FIG_M) {
     FIG_M = new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: toon(0xffffff).gradientMap });
-    FIG_INK = inkMat;
+    FIG_INK = inkMatBaked; // (skinned hulls, their push baked: bakeFigure)
     FIG_GLASS = new THREE.MeshToonMaterial({ color: 0xbfefff, gradientMap: toon(0xffffff).gradientMap, transparent: true, opacity: 0.28, depthWrite: false });
   }
   return FIG_M;
@@ -1621,8 +1618,8 @@ function bakeShip(root, { near = false } = {}) {
     return {
       name: pivot.name, role: pivot === root ? 'root' : pivot.userData.role, data: pivot.userData, pos, quat,
       parts: [...slots].map(([slot, geos]) => ({ slot, geo: mergeGeometries(geos) })),
-      // near: the outline as a shellOff geometry for inkMatNear (no thicker on screen up close than at the follow camera's distance)
-      ink: inks.length ? (near ? shellOff(mergeGeometries(inks), 1) : shellAt(mergeGeometries(inks), 1)) : null, inkNear: near, kids,
+      // the outline in inkMat's form (toon.js: distance-scaled, the Ink setting); `inkNear` is kept for callers that ask
+      ink: inks.length ? shellOff(mergeGeometries(inks), 1) : null, inkNear: near, kids,
     };
   };
   return bake(root, new THREE.Matrix4().copy(root.matrixWorld).invert());
@@ -2462,7 +2459,7 @@ export function makeChipStack(color, n) {
       }
     }
     G = new Map([...by].map(([slot, list]) => [slot, mergeGeometries(list)]));
-    G.ink = shellAt(inkShellGeo(G.get('chip'), 0.012), 1);
+    G.ink = shellOff(inkShellGeo(G.get('chip'), 0.012), 1);
     chipStacks.set(n, G);
   }
   const g = new THREE.Group();

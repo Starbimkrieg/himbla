@@ -604,12 +604,12 @@ class Game {
         if (!e.inkHulls) { e.inkHulls = []; e.model.root.traverse((o) => { if (o.userData.isInk) e.inkHulls.push(o); }); }
         for (const h of e.inkHulls) {
           if (on) {
-            if (!h.userData.geo0) h.userData.geo0 = h.geometry;
+            if (!h.userData.geo0) { h.userData.geo0 = h.geometry; h.userData.mat0 = h.material; }
             h.geometry = scanGeo(h.userData.inkGeo ? h.userData.inkGeo.scan || h.userData.inkGeo.thin : h.userData.geo0);
             h.material = SCAN_INK;
           } else {
             h.geometry = h.userData.inkGeo ? h.userData.inkGeo.thin : h.userData.geo0 || h.geometry;
-            h.material = h.userData.inkMat || inkMat;
+            h.material = h.userData.mat0 || h.userData.inkMat || inkMat; // (its own: a figure's hull is baked, inkMatBaked)
           }
         }
       }
