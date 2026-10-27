@@ -5,9 +5,9 @@ import * as THREE from 'three';
 // carried its rest spot a stride away, then steps to just ahead of that spot in an arc. The legs step in two sets that take turns (the
 // builder's two swing phases: a tripod on six legs, every other root round a tuber). Each leg reaches its foot by IK (FABRIK along its
 // joints, started from the rest pose each frame so the knees bend the way they were built), and the body rides on its feet: raised or
-// lowered to them, pitched and rolled to their slope. Running, the strides lengthen with the speed (the steps no quicker than DUR_MIN)
-// until the legs reach as far as they go, then the steps quicken. In the air, faster than that, or not given the ground, it eases back
-// to the plain swing (chimerabuild.js anim).
+// lowered to them, pitched and rolled to their slope. Trotting, the strides lengthen with the speed (the steps no quicker than DUR_MIN)
+// as far as the legs reach. Past a trot (RUN), in the air, or not given the ground, it eases back to the plain swing (chimerabuild.js
+// anim): stepping any faster looks like a gallop or a twitch.
 //
 // makeGait(root, inner, legs) -> null (no jointed legs) or { update(dt, ground, gap) }, called by anim after the swing is set (each
 // jointed leg's swing angle in L.swing). ground(p, out) puts the ground point under world point p in out. The root's world transform
@@ -17,12 +17,11 @@ const STRIDE = 0.5;     // a foot steps once its rest spot is this far from it (
 const LEAD = 0.55;      // walking, it lands this far ahead of its rest spot (of the stride)
 const LIFT = 0.35;      // the step's arc (of the span)
 const SETTLE = 0.3;     // standing, a set further than this from its spots (of the stride) steps back under the body
-const STRIDE_MAX = 2.2; // running, the stride stretches up to this (of the span), or as far as the legs reach: feet land far ahead
+const STRIDE_MAX = 2.2; // trotting, the stride stretches up to this (of the span), or as far as the legs reach: feet land far ahead
 const REACH = 0.94;     // of a leg's length, the furthest it stretches to a foot
-const DUR_MIN = 0.075, DUR_MAX = 0.22;    // s a step takes: quick at a scurry, slower at a stroll (running, the stride grows instead)
-const DUR_FAST = 0.045; // s the quickest step: at the longest stride, steps first take as long as a foot is down, then quicken, and a set
-                        // may lift once the other is half way through its step (a moment with every foot in the air, as a running bug)
-const DOWN_MIN = 0.025; // s the least a foot is down for: faster than that, the swing takes over
+const DUR_MIN = 0.075, DUR_MAX = 0.22;    // s a step takes: quick at a scurry, slower at a stroll (trotting, the stride grows instead)
+const DUR_FAST = 0.05;  // s the quickest step, once the stride is at its longest
+const RUN = 13.5;       // spans a second past which it runs on the plain swing (5.4 m/s on the lab's mite; back on its feet under 0.85 of it)
 const AIR = 0.04;       // m above the ground (of the span) that counts as off it
 const BLEND = 7;        // 1/s the ease between the IK and the plain swing
 const FOLLOW = 12;      // 1/s the body follows its feet
@@ -78,9 +77,9 @@ export function makeGait(root, inner, legs) {
   const span = chains.reduce((s, c) => s + c.span, 0) / chains.length;
   const thr = STRIDE * span;
   const growMax = THREE.MathUtils.clamp(Math.min(...chains.map((c) => c.grow)), 1, STRIDE_MAX / STRIDE);
-  const vmax = (thr * growMax * (1 + LEAD)) / DOWN_MIN;              // m/s past which the legs can't keep up: the swing takes over
+  const vmax = RUN * span;                                           // m/s past which it runs on the swing (it scales with the legs)
   const hipY = chains.reduce((s, c) => s + c.hipY, 0) / chains.length;
-  const G = { w: 0, planted: false, seen: false, prev: new THREE.Vector3(), vel: new THREE.Vector3(), lift: 0, pitch: 0, roll: 0 };
+  const G = { w: 0, run: false, planted: false, seen: false, prev: new THREE.Vector3(), vel: new THREE.Vector3(), lift: 0, pitch: 0, roll: 0 };
 
   const stepping = (group) => chains.some((c) => c.group === group && c.stepping);
   const restSpot = (c, out) => out.copy(c.rest).applyMatrix4(root.matrixWorld);
@@ -96,8 +95,9 @@ export function makeGait(root, inner, legs) {
     G.seen = true;
     G.prev.copy(_p);
     const speed = along(_vh.copy(G.vel)).length();
+    G.run = speed > (G.run ? 0.85 : 1) * vmax;                          // (a little either way, so it doesn't flicker at the edge)
     let want = 0;
-    if (ground && speed < vmax) {
+    if (ground && !G.run) {
       ground(_p, _g);
       if (_a.subVectors(_p, _g).dot(_up) < AIR * span) want = 1;
     }
@@ -113,19 +113,15 @@ export function makeGait(root, inner, legs) {
       for (const c of chains) { ground(restSpot(c, c.F), c.F); c.stepping = false; }
       G.planted = true;
     }
-    // which set steps: the one whose feet are furthest behind, once the other set is down (or half way through its step, at full stretch;
-    // or at once, if it is stretched past reach)
+    // which set steps: the one whose feet are furthest behind, once the other set is down (or at once, if it is stretched past reach)
     const moving = speed > 0.1 * thr / DUR_MAX;
     const grow = THREE.MathUtils.clamp((speed * DUR_MIN) / (0.8 * thr), 1, growMax);   // (the stride, running: of a walk's)
     for (const group of [0, 1]) {
       if (stepping(group)) continue;
       let worst = 0;
       for (const c of chains) if (c.group === group) worst = Math.max(worst, along(_a.subVectors(c.F, restSpot(c, _b))).length() / (c.thr * grow));
-      const other = chains.find((c) => c.group !== group && c.stepping);
-      if (!(worst > 1 || (!moving && worst > SETTLE)) || (other && worst < 2 && !(grow >= growMax && other.s >= 0.5))) continue;
-      // (a step takes the time to carry the foot a stride; at the longest stride, up to as long as a foot is down, then less)
-      const v = Math.max(speed, 1e-3), down = (thr * grow * (1 + LEAD)) / v;
-      const dur = THREE.MathUtils.clamp(Math.max((0.8 * thr * grow) / v, Math.min(DUR_MIN, 0.95 * down)), DUR_FAST, DUR_MAX);
+      if (!(worst > 1 || (!moving && worst > SETTLE)) || (stepping(1 - group) && worst < 2)) continue;
+      const dur = THREE.MathUtils.clamp((0.8 * thr * grow) / Math.max(speed, 1e-3), DUR_FAST, DUR_MAX);
       const lift = LIFT * Math.sqrt(grow);                            // (a longer stride, a higher arc)
       for (const c of chains) if (c.group === group) { c.stepping = true; c.s = 0; c.dur = dur; c.lift = lift * c.span; c.S0.copy(c.F); }
     }
