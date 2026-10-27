@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ink, gradientMap } from './toon.js';
+import { ink, gradientMap, frontCaster } from './toon.js';
 import { mulberry32, createNoise3D } from './rng.js';
 import { patchRockMaterial } from './moonSkins.js';
 
@@ -18,13 +18,14 @@ import { patchRockMaterial } from './moonSkins.js';
 const KINDS = ['ramp', 'ramp', 'ramp', 'monolith', 'monolith']; // (ramps need gentler ground, so more of them are tried)
 export const RAMPS = ['strata', 'curved', 'whaleback'];
 export const MONOLITHS = ['sheared', 'toppled', 'house', 'cracked'];
-let MATS = null, SOIL = null;
+let MATS = null, RAMP_MATS = null, SOIL = null;
+const rockMat = (c) => patchRockMaterial(new THREE.MeshToonMaterial({ color: c, gradientMap: gradientMap() })); // moonSkins.js: grain and dust with ?moonskin=1
+// monoliths cast their sun-facing sides (toon.js frontCaster: no lit line between a rock and its shadow); a ramp's long, gently
+// sloping top would shadow itself in stripes that way, so ramps keep the default (their far sides cast) and sit flush instead
 function mats() {
-  if (MATS) return MATS;
-  const m = (c) => patchRockMaterial(new THREE.MeshToonMaterial({ color: c, gradientMap: gradientMap() })); // moonSkins.js: grain and dust with ?moonskin=1
-  MATS = { grey: m(0x8d8898), basalt: m(0x6e6a7a), tan: m(0xa59886), pale: m(0xb8b2c4), dark: m(0x5f5a6c) };
-  return MATS;
+  return (MATS ||= { grey: frontCaster(rockMat(0x8d8898)), basalt: frontCaster(rockMat(0x6e6a7a)), tan: frontCaster(rockMat(0xa59886)) });
 }
+const rampMats = () => (RAMP_MATS ||= { basalt: rockMat(0x6e6a7a), dark: rockMat(0x5f5a6c) });
 // pushed-up regolith round a rock, in the ground's colour where it lies (vertex colours: build), SOIL_DEF without a planet
 const soil = () => (SOIL ||= patchRockMaterial(new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: gradientMap() })));
 const SOIL_DEF = new THREE.Color(0xa597a9);
@@ -245,7 +246,8 @@ function finish(p, q, rockGeos, soilGeos, mat, cols, kind) {
     const geo = mergeGeometries(geos.map(clean));
     if (m === soil()) { geo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3)); paint(geo, SOIL_DEF); root.userData.soil = geo; }
     const mesh = new THREE.Mesh(geo, m);
-    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.castShadow = m !== soil(); // (the soil only takes shadows: too low to cast any worth its stripes on itself)
+    mesh.receiveShadow = true;
     if (w) ink(mesh, w);
     root.add(mesh);
   }
@@ -393,7 +395,7 @@ function ramp(rr, p, q, dims, gy) {
   const soilG = [-1, 1].map((s) => bermLine(s * W * 0.5, zs, s * W * 0.5, ze, s, Math.min(0.6, dims.h * 0.15), seed + s, gy));
   if (lip) soilG.push(bermLine(W * 0.45, front[0] + 0.5, -W * 0.45, front[0] + 0.5, 1, 0.45, seed + 3, gy));
   const rocks = [geo, ...crumbs(rr, 0, front[0] + 2.5, 0, 3, lip ? 6 : 3, 0.4, 1.2, gy)];
-  return finish(p, q, rocks, soilG, variant === 'strata' ? mats().basalt : mats().dark, cols, 'ramp');
+  return finish(p, q, rocks, soilG, variant === 'strata' ? rampMats().basalt : rampMats().dark, cols, 'ramp');
 }
 
 // ---------------- building and placing ----------------

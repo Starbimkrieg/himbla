@@ -34,6 +34,24 @@ import { pixelFont } from './fonts.js';
   } else console.warn('[toon] shadow line not found: grazing-shadow fade is off');
 }
 
+// Rocks cast their sun-facing sides into the shadow map (shadowSide FrontSide; by default a front-sided material casts its far
+// side, which comes down to the ground at a rock's foot level with it, so the bias let the ground there through: a lit line
+// between a rock and its shadow). Their own lit faces then shadow themselves in a fine hatch at the light's normal bias, so as
+// receivers they get FRONT_NB more (in the shader); the ground round them keeps the light's own.
+const FRONT_NB = 0.25; // m
+const NB_LINE = 'shadowWorldNormal * directionalLightShadows[ i ].shadowNormalBias';
+export function frontCaster(mat) {
+  mat.shadowSide = THREE.FrontSide;
+  const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey;
+  mat.onBeforeCompile = (sh, r) => {
+    if (prev) prev.call(mat, sh, r);
+    if (!THREE.ShaderChunk.shadowmap_vertex.includes(NB_LINE)) { console.warn('[toon] shadow normal bias line not found: rocks keep the light\'s'); return; }
+    sh.vertexShader = sh.vertexShader.replace('#include <shadowmap_vertex>', THREE.ShaderChunk.shadowmap_vertex.replace(NB_LINE, `shadowWorldNormal * ( directionalLightShadows[ i ].shadowNormalBias + ${FRONT_NB.toFixed(2)} )`));
+  };
+  mat.customProgramCacheKey = () => `${prevKey.call(mat)}|frontCaster`;
+  return mat;
+}
+
 let grad = null;
 export function gradientMap() {
   if (!grad) {

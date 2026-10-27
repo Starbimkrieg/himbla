@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PLANET } from './config.js';
 import { mulberry32, smoothstep, clamp } from './rng.js';
-import { gradientMap } from './toon.js';
+import { gradientMap, frontCaster } from './toon.js';
 import { shapedRocks } from './rocks.js';
 import { rayCollider } from './physics.js';
 import { TerrainField, faceDir, dirToGrid, N, CH, CPF, N1, R, MAX_LOD } from './terrainField.js';
@@ -54,7 +54,8 @@ export class Planet extends TerrainField {
     this.material.shadowSide = THREE.BackSide;
     this.material.defines = { ...(this.material.defines || {}), KEEP_GRAZE_SHADOW: '' }; // toon.js: keep long dusk shadows
     this.boulderShapes = makeBoulderShapes(); // boulders.js: lumpy shapes (one per chunk), unit RMS radius
-    this.boulderMat = patchRockMaterial(new THREE.MeshToonMaterial({ color: 0x8d8898, gradientMap: gradientMap() })); // grain and dust with ?moonskin=1
+    // grain and dust with ?moonskin=1; casting its sun-facing side (toon.js frontCaster: no lit line at a boulder's foot)
+    this.boulderMat = frontCaster(patchRockMaterial(new THREE.MeshToonMaterial({ color: 0x8d8898, gradientMap: gradientMap() })));
     this.boulderInk = makeBoulderInk();
     this.colliders = null;
     // dark backing sphere hides sub-pixel cracks between LODs
