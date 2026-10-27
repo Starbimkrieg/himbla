@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PLANET } from './config.js';
 import { mulberry32, smoothstep, clamp } from './rng.js';
-import { gradientMap, frontCaster } from './toon.js';
+import { gradientMap, frontCaster, inkMarks } from './toon.js';
 import { shapedRocks } from './rocks.js';
 import { rayCollider } from './physics.js';
 import { TerrainField, faceDir, dirToGrid, N, CH, CPF, N1, R, MAX_LOD } from './terrainField.js';
@@ -608,6 +608,7 @@ ${SKIN_COLOR}`);
     im.frustumCulled = hull.frustumCulled = false;
     im.updateMatrix(); hull.updateMatrix();
     im.matrixAutoUpdate = hull.matrixAutoUpdate = false; // static: the shadow cache takes them at once
+    inkMarks(im, hull); // (the shell pulled forward, kept off its boulders: toon.js)
     const g = new THREE.Group();
     g.add(im, hull);
     // shaped rocks: ramps and monoliths (rocks.js)

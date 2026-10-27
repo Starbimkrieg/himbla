@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32, createNoise3D } from './rng.js';
-import { inkCompile, INK_COLOR } from './toon.js';
+import { inkCompile, inkMarkTest, INK_COLOR } from './toon.js';
 
 // The Moon's boulders (planet.buildBoulders): a few lumpy shapes shared by every chunk, each an icosphere pushed out by two
 // noise octaves and chiselled flat in places, then scaled to unit RMS radius so the colliders (BOULDER_COLLIDER_K) fit.
@@ -55,16 +55,16 @@ export function makeBoulderShapes() {
 }
 
 // Boulder ink: the back-faced shell pushed out by BOULDER_INK_M along its normals, by toon.js's ink rule (inkCompile: the distance
-// scale, the Ink setting). The push is in local space, so it's divided by the instance's scale to stay in metres.
+// scale, the Ink setting, the far side pulled forward). The push is in local space, so it's divided by the instance's scale to stay in metres.
 export function makeBoulderInk() {
-  const m = new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide });
+  const m = inkMarkTest(new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide }));
   m.onBeforeCompile = (sh) => inkCompile(sh, `normalize(normal) * inkPush(${BOULDER_INK_M.toFixed(2)}, vInkD) * inkK / inkSc()`, `float inkSc() {
 #ifdef USE_INSTANCING
   return pow(abs(determinant(mat3(instanceMatrix))), 1.0 / 3.0);
 #else
   return 1.0;
 #endif
-}`);
+}`, 'vec4(0.0, 0.0, 0.0, 0.7 * inkSc())'); // (its far side pulled toward its middle: toon.js inkCompile; planet.js gives it inkMarks)
   m.customProgramCacheKey = () => 'boulderInk';
   return m;
 }

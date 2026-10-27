@@ -5,7 +5,7 @@ import { glyphHtml, glyphState, tokensFor } from './glyphs.js';
 import { gyroSupported } from './gyro.js';
 import { DEV_TOOLS } from './devtools.js';
 import { SKIN_FROM_URL } from './moonSkins.js';
-import { INK_U, inkMat, inkMatBaked } from './toon.js';
+import { INK_U, inkMat, inkMatBaked, inkMatSolid } from './toon.js';
 
 const KEY = 'moonrunner-settings-v1';
 const BINDS_V = 2; // 2: no thruster key (right mouse only); power on E, not Z
@@ -80,12 +80,7 @@ export const SCHEMA = {
     ] : []),
     { key: 'halftone', label: 'Comic halftone dots', type: 'toggle', def: true },
     { key: 'speedLines', label: 'Speed lines', type: 'toggle', def: true },
-    { key: 'ink', label: 'Ink outline strength', type: 'range', min: 0, max: 2, step: 0.1, def: 1, fmt: pct, hint: 'Outlines and creases alike' },
-    // (ink style tests, toon.js and post.js: dev builds only, off by default)
-    ...(DEV_TOOLS ? [
-      { key: 'inkVary', label: 'Ink: brush weight (test)', type: 'toggle', def: false, hint: 'Outlines swell and thin along their length; silhouettes heavier than creases' },
-      { key: 'inkTint', label: 'Ink: distance tint (test)', type: 'toggle', def: false, hint: 'Far ink fades toward the shade\'s indigo' },
-    ] : []),
+    { key: 'ink', label: 'Ink outline strength', type: 'range', min: 0, max: 2, step: 0.1, def: 1, fmt: pct },
     { key: 'particles', label: 'Particle density', type: 'range', min: 0, max: 2, step: 0.1, def: 1, fmt: pct },
     { key: 'shake', label: 'Screen shake', type: 'range', min: 0, max: 2, step: 0.1, def: 1, fmt: pct },
     { key: 'damageFlash', label: 'Damage flash', type: 'range', min: 0, max: 1.5, step: 0.1, def: 1, fmt: pct },
@@ -337,14 +332,10 @@ export class Settings {
       if (u.halftone) u.halftone.value = v.halftone ? 1 : 0;
       if (u.lines) u.lines.value = v.speedLines ? 1 : 0;
       if (u.inkK) u.inkK.value = v.ink;
-      if (u.inkVary) u.inkVary.value = v.inkVary ? 1 : 0;
-      if (u.inkTint) u.inkTint.value = v.inkTint ? 1 : 0;
     }
-    // every outline shell (toon.js inkMat, the boulders' ink) reads these; at 0 they aren't drawn at all
+    // every outline shell (toon.js inkMat and inkMatSolid, the boulders' ink) reads it; at 0 they aren't drawn at all
     INK_U.uInkK.value = v.ink;
-    INK_U.uInkVary.value = v.inkVary ? 1 : 0;
-    INK_U.uInkTint.value = v.inkTint ? 1 : 0;
-    inkMat.visible = inkMatBaked.visible = v.ink > 0;
+    inkMat.visible = inkMatBaked.visible = inkMatSolid.visible = v.ink > 0;
     if (g.planet && g.planet.boulderInk) g.planet.boulderInk.visible = v.ink > 0;
     if (g.haptics) g.haptics.configure(v.rumble, v.rumbleLevel, v.padLight, v.padTriggers);
     if (g.audio && g.audio.setVolumes) g.audio.setVolumes(v.master, v.music, v.sfx, v.mute);

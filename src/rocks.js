@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ink, gradientMap, frontCaster } from './toon.js';
+import { gradientMap, frontCaster, solidShell, inkMatSolid, inkMarks } from './toon.js';
 import { mulberry32, createNoise3D } from './rng.js';
 import { patchRockMaterial } from './moonSkins.js';
 
@@ -243,12 +243,14 @@ function finish(p, q, rockGeos, soilGeos, mat, cols, kind) {
   const root = new THREE.Group();
   for (const [geos, m, w] of [[rockGeos, mat, 0.12], [soilGeos, soil(), 0]]) { // (soil un-inked, like the ground it's heaped from)
     if (!geos.length) continue;
-    const geo = mergeGeometries(geos.map(clean));
+    const pieces = geos.map(clean), geo = mergeGeometries(pieces);
     if (m === soil()) { geo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3)); paint(geo, SOIL_DEF); root.userData.soil = geo; }
     const mesh = new THREE.Mesh(geo, m);
     mesh.castShadow = m !== soil(); // (the soil only takes shadows: too low to cast any worth its stripes on itself)
     mesh.receiveShadow = true;
-    if (w) ink(mesh, w);
+    // (the ink: each piece's shell pulled toward its own middle and kept off the rock, so the ground at its foot can't show
+    // through the line: toon.js solidShell, inkMarks)
+    if (w) { const hull = new THREE.Mesh(solidShell(pieces, w), inkMatSolid); hull.userData.isInk = true; mesh.add(hull); inkMarks(mesh, hull); }
     root.add(mesh);
   }
   root.userData.rockKind = kind;

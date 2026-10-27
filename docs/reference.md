@@ -321,9 +321,9 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 - **Sleeping world:** settlements, bases, people and boulders only exist or animate near you.
 - **Cheap darkness:** fake light decals instead of real lights, so shaders never recompile.
 - **Comic look:** toon shading, inverted-hull outlines (pushed out along each vertex's face planes, `toon.js` shellGeo,
-  in the vertex shader so they hold their on-screen width at any distance and follow the Ink setting), a post pass
-  (`src/post.js`) for ink lines (silhouettes, creases and folds rebuilt from depth), halftone and speed lines, rocky
-  crater rims drawn per pixel, and onomatopoeia pop-ups.
+  in the vertex shader so they hold their on-screen width at any distance and follow the Ink setting; far ink fades to
+  indigo), a post pass (`src/post.js`) for ink lines, halftone and speed lines, rocky crater rims drawn per pixel, and
+  onomatopoeia pop-ups.
 
 ## Source map
 

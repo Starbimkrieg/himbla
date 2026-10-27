@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { pixelFont } from './fonts.js';
 
 // Grazing sunlight: faces edge-on to the sun (dot(N, L) near 0; every settlement's east and west walls)
@@ -91,33 +92,29 @@ export function toon(color, opts) {
 // Every shell (toon.ink, the Kit's, world.js's batches, models.js's Blender ones, downsKit, staticBake) is made this way, so
 // one weight rule holds for all. The skinned figures' hulls (models.js bakeFigure) stay baked: inkMatBaked.
 export const INK_REF = 9, INK_MIN = 0.3, INK_GROW = 4, INK_CAP = 0.012, INK_EASE = 60, INK_DIST = 110, INK_FAR = 0.45;
-// (live uniforms: settings.js) uInkK the Ink strength; uInkVary and uInkTint the two style tests (dev builds' Settings)
-export const INK_U = { uInkK: { value: 1 }, uInkVary: { value: 0 }, uInkTint: { value: 0 } };
+// (live uniform: settings.js) the Ink strength
+export const INK_U = { uInkK: { value: 1 } };
 export const INK_SCALE_GLSL = `
 float inkPush(float t, float d) {
   return min(t * clamp(d / ${INK_REF.toFixed(1)}, ${INK_MIN.toFixed(2)}, ${INK_GROW.toFixed(1)}), ${INK_CAP.toFixed(3)} * d)
     * mix(1.0, ${INK_FAR.toFixed(2)}, smoothstep(${INK_EASE.toFixed(1)}, ${INK_DIST.toFixed(1)}, d));
 }
-// (style test: line weight) a brush's swell along the line, anchored to the world so it doesn't crawl: 0.7 to 1.3
-float inkWobble(vec3 w) {
-  vec3 i = floor(w), f = fract(w); f = f * f * (3.0 - 2.0 * f);
-  #define IH(o) fract(sin(dot(i + o, vec3(127.1, 311.7, 74.7))) * 43758.5453)
-  float n = mix(mix(mix(IH(vec3(0,0,0)), IH(vec3(1,0,0)), f.x), mix(IH(vec3(0,1,0)), IH(vec3(1,1,0)), f.x), f.y),
-                mix(mix(IH(vec3(0,0,1)), IH(vec3(1,0,1)), f.x), mix(IH(vec3(0,1,1)), IH(vec3(1,1,1)), f.x), f.y), f.z);
-  #undef IH
-  return 0.7 + 0.6 * n;
-}
-// (style test: distance tint) far ink shifts from near-black toward the shade's deep indigo, so far shapes recede
-vec3 inkTint(vec3 c, float d, float on) { return mix(c, vec3(0.16, 0.13, 0.30), on * 0.75 * smoothstep(40.0, 420.0, d)); }`;
+// far ink shifts from near-black toward the shade's deep indigo, so far shapes recede (the post pass's lines do too: post.js)
+vec3 inkTint(vec3 c, float d) { return mix(c, vec3(0.16, 0.13, 0.30), 0.75 * smoothstep(40.0, 420.0, d)); }`;
 export const INK_COLOR = 0x0b0612;
 export const inkMat = new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide });
 // An ink shell material's shader: the vertex pushed out by `push` (GLSL, a vec3 in object space, given vInkD the distance,
-// inkK the Ink setting [x the wobble] and inkPush(t, vInkD) the metres for a t m line), the colour tinted with distance; `decl`
-// adds declarations.
-export function inkCompile(sh, push, decl = '') {
+// inkK the Ink setting and inkPush(t, vInkD) the metres for a t m line), the colour tinted with distance; `decl`
+// adds declarations. `pull` (GLSL, a vec4: a centre in object space and metres) pulls the shell's far side toward the camera,
+// along each vertex's own line of sight (so nothing moves on screen), to half those metres in front of the centre's depth but by
+// no more than 1.5 times them. What shows of a shell past its object's edge is its far side, up to a metre behind the edge on a
+// rounded rock: the ground at a rock's foot is nearer than that, so it showed through the line, a hollow between the outline and
+// the rock. Pulled forward, the far side can come in front of the object's own near side (a faceted rock's edges): a pulled
+// shell needs inkMarks, which keep it off its own object.
+export function inkCompile(sh, push, decl = '', pull = null) {
   Object.assign(sh.uniforms, INK_U);
   sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', `#include <common>\n${decl}\nuniform float uInkK; uniform float uInkVary;\nvarying float vInkD;\n${INK_SCALE_GLSL}`)
+    .replace('#include <common>', `#include <common>\n${decl}\nuniform float uInkK;\nvarying float vInkD;\n${INK_SCALE_GLSL}`)
     .replace('#include <begin_vertex>', `#include <begin_vertex>
   vec4 inkW = vec4(transformed, 1.0);
   #ifdef USE_INSTANCING
@@ -126,14 +123,41 @@ export function inkCompile(sh, push, decl = '') {
   inkW = modelMatrix * inkW;
   vInkD = distance(cameraPosition, inkW.xyz);
   float inkK = uInkK;
-  if (uInkVary > 0.5) inkK *= inkWobble(inkW.xyz * 0.6);
   transformed += ${push};`);
+  if (pull) sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+  vec4 inkP = ${pull}, inkC = vec4(inkP.xyz, 1.0);
+  #ifdef USE_INSTANCING
+  inkC = instanceMatrix * inkC;
+  #endif
+  float inkDc = -(modelViewMatrix * inkC).z, inkDv = -mvPosition.z, inkTo = max(inkDc - inkP.w * 0.5, inkDv - inkP.w * 1.5);
+  if (inkTo < inkDv && inkTo > 0.05) { mvPosition.xyz *= inkTo / inkDv; gl_Position = projectionMatrix * mvPosition; }`);
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', `#include <common>\nuniform float uInkTint;\nvarying float vInkD;\n${INK_SCALE_GLSL}`)
-    .replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb = inkTint(diffuseColor.rgb, vInkD, uInkTint);');
+    .replace('#include <common>', `#include <common>\nvarying float vInkD;\n${INK_SCALE_GLSL}`)
+    .replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb = inkTint(diffuseColor.rgb, vInkD);');
 }
 inkMat.onBeforeCompile = (sh) => inkCompile(sh, 'normalize(normal) * inkPush(inkT, vInkD) * inkK', 'attribute float inkT;');
 inkMat.customProgramCacheKey = () => 'inkShell';
+// Ink marks (the stencil): a solid object writes its mark where it's drawn, and its shell, drawn after, only where that mark
+// isn't, so a shell pulled forward (inkCompile's pull) never covers its own object. A mark per object, cycling through 1 to 255:
+// two sharing one only lose the shell's line where they overlap (the post pass's line stays). Needs the stencil in the post
+// pass's target (post.js); without one the test always passes.
+let inkMarkN = 0;
+export function inkMarks(solid, shell) {
+  const mark = (inkMarkN = (inkMarkN % 255) + 1);
+  for (const o of [solid, shell]) o.onBeforeRender = (r, s, c, g, m) => { m.stencilRef = mark; };
+  const sm = solid.material;
+  sm.stencilWrite = true; sm.stencilFunc = THREE.AlwaysStencilFunc; sm.stencilZPass = THREE.ReplaceStencilOp;
+  shell.renderOrder = 1; // after every solid has marked its pixels
+}
+// a shell material's side of it: drawn where the stencil isn't its object's mark, writing nothing
+export function inkMarkTest(m) {
+  m.stencilWrite = true; m.stencilWriteMask = 0; m.stencilFunc = THREE.NotEqualStencilFunc;
+  return m;
+}
+// shells of solid pieces, their far side pulled forward (inkCompile's pull; solidShell gives them inkC; inkMarks)
+export const inkMatSolid = inkMarkTest(new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide }));
+inkMatSolid.onBeforeCompile = (sh) => inkCompile(sh, 'normalize(normal) * inkPush(inkT, vInkD) * inkK', 'attribute float inkT; attribute vec4 inkC;', 'inkC');
+inkMatSolid.customProgramCacheKey = () => 'inkShellSolid';
 export const inkMatNear = inkMat; // (was the runner's own distance-scaled outline: every shell is now)
 // a shell whose push is baked into its positions (the skinned figures' hulls): no distance rule, no Ink setting
 export const inkMatBaked = new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide });
@@ -191,6 +215,21 @@ export function shellGeo(geo, t) {
   return g;
 }
 // grow a shell's bounding sphere by its widest reach (inkT x INK_GROW), so it isn't culled while it shows
+// One shell for several solid pieces (a rock and its crumbs), each pulled toward its own middle (inkMatSolid): `inkC` is the
+// piece's bounding-box centre and half its smallest size (inkCompile's pull).
+const _sbx = new THREE.Box3(), _sc = new THREE.Vector3(), _ss = new THREE.Vector3();
+export function solidShell(geos, t) {
+  const parts = geos.map((geo) => {
+    const g = shellGeo(geo, t).clone(), n = g.attributes.position.count, a = new Float32Array(n * 4);
+    _sbx.setFromBufferAttribute(geo.attributes.position).getCenter(_sc); _sbx.getSize(_ss);
+    const m = Math.min(_ss.x, _ss.y, _ss.z) * 0.5;
+    for (let i = 0; i < n; i++) { a[i * 4] = _sc.x; a[i * 4 + 1] = _sc.y; a[i * 4 + 2] = _sc.z; a[i * 4 + 3] = m; }
+    g.setAttribute('inkC', new THREE.BufferAttribute(a, 4));
+    return g;
+  });
+  return shellBounds(parts.length > 1 ? mergeGeometries(parts) : parts[0]);
+}
+
 export function shellBounds(g) {
   g.computeBoundingSphere();
   const T = g.attributes.inkT;
