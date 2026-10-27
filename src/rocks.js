@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
-import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { gradientMap, frontCaster, solidShell, inkMatSolid, inkMarks } from './toon.js';
 import { mulberry32, createNoise3D } from './rng.js';
 import { patchRockMaterial } from './moonSkins.js';
@@ -35,6 +35,7 @@ const _v = new THREE.Vector3(), _n = new THREE.Vector3();
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const AX = V(1, 0, 0), AY = V(0, 1, 0), AZ = V(0, 0, 1);
 const TAU = Math.PI * 2;
+const RAMP_CREASE = (40 * Math.PI) / 180; // (finish: a ramp's smooth shading stops at folds sharper than this)
 const FLAT = () => 0; // the ground's height in a rock's frame where there's no planet (the Asset Row)
 const qAxis = (ax, a) => new THREE.Quaternion().setFromAxisAngle(ax, a);
 const qYaw = (a) => qAxis(AY, a);
@@ -243,7 +244,12 @@ function finish(p, q, rockGeos, soilGeos, mat, cols, kind, gy = FLAT) {
   const root = new THREE.Group();
   for (const [geos, m, w] of [[rockGeos, mat, 0.12], [soilGeos, soil(), 0]]) { // (soil un-inked, like the ground it's heaped from)
     if (!geos.length) continue;
-    const pieces = geos.map(clean), geo = mergeGeometries(pieces);
+    const pieces = geos.map(clean);
+    // a ramp's body shaded smooth across its folds, sharp past 40 degrees (its terraces, a lip's face, the sides): faceted, its
+    // broad gentle surfaces took the toon steps triangle by triangle, a checkerboard of the build grid (crumbs and monoliths
+    // stay faceted, as cut stone)
+    if (kind === 'ramp' && m !== soil()) pieces[0] = toCreasedNormals(pieces[0], RAMP_CREASE);
+    const geo = mergeGeometries(pieces);
     if (m === soil()) { geo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3)); paint(geo, SOIL_DEF); root.userData.soil = geo; }
     const mesh = new THREE.Mesh(geo, m);
     mesh.castShadow = m !== soil(); // (the soil only takes shadows: too low to cast any worth its stripes on itself)
