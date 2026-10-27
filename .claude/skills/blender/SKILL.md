@@ -31,7 +31,7 @@ MOONRUNNER_REPO=. python3 tools/blender/build_idles.py    # -> src/assets/idles.
 ```
 
 Each run takes 1 to 3 s. Builders: runner, idles, ships, skimmer, warrig, rover, interceptor, apc, landtrain, crane, garage, slots, casino, blackjack, claw, duck, dish,
-outposts, hall, lot, chimera (the chimera kit: about 6 minutes, it remeshes every part; `CHIMERA_ONLY=car,mite CHIMERA_OUT=<file>` builds some kinds to look at) and the Chimera Downs' nine (`build_downs_stand`, `_club`, `_course`, `_stalls`, `_arcade`, `_screen`, `_fair`, `_stable`, `_crowd`, which share `downs_common.py`). In the Blender app they run with `exec(open(r"<repo>/tools/blender/build_x.py").read())`.
+outposts, hall, lot, chimera (the chimera kit: about 6 minutes, it remeshes every part; `CHIMERA_ONLY=car,mite CHIMERA_OUT=<file>` builds some kinds to look at; a full build re-rolls every part's random details, so to change a few parts build them with `CHIMERA_PARTS=legs_mite_0,... CHIMERA_OUT=<file>` and put them in with `tools/splice-chimera.mjs`, which keeps the rest of the kit as it was) and the Chimera Downs' nine (`build_downs_stand`, `_club`, `_course`, `_stalls`, `_arcade`, `_screen`, `_fair`, `_stable`, `_crowd`, which share `downs_common.py`). In the Blender app they run with `exec(open(r"<repo>/tools/blender/build_x.py").read())`.
 
 ## After a build
 

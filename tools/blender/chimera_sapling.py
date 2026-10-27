@@ -1,6 +1,6 @@
 # The chimera kit's saplings (exec'd by build_chimera.py after chimera_common.py), three looks of each part:
 #   legs   0 a mossy, sprouting bulb on six gnarled roots, 1 a stump: ridged bark, four thick roots, toadstools and moss, 2 a mandrake's
-#          knobbly tuber on six long spidery roots
+#          knobbly tuber on six long spidery roots, jointed (limb_chain) for the builder's IK
 #   body   0 a leaning, knotted trunk with a hollow and three leafy branches, 1 a conifer: a straight trunk in three tiers of needles, 2 a
 #          blossom tree: a twisting trunk, its branches heavy with pink blossom
 #   head   0 a daisy (a face on the seed disc, petals round it), 1 a tulip (a cup of petals round a face), 2 a leafy bud with a face, two
@@ -77,6 +77,10 @@ def sapling_legs(root, rng, look):
                 w = rng.uniform(-0.05, 0.05)
                 path.append((c * d - s * w, y0 * (0.35 + 0.65 * f ** 1.5) + (0.03 if f < 1 else 0.012) + rng.uniform(0, 0.03) * (1 - f), s * d + c * w))
             radii = [0.06, 0.047 * rng.uniform(0.85, 1.15), 0.038 * rng.uniform(0.85, 1.2), 0.026, 0.013] if look == 0 else [0.085, 0.07, 0.055, 0.04, 0.022]
+        if look == 2:                                                                          # jointed (limb_chain), a knot over each joint
+            bones, _ = limb_chain(p, path, radii, "bark", 0.014, 300, lambda q, r: ell(r * 1.12, r * 1.12, r * 1.12, q, n=10), (path[-1][0], y0, path[-1][2]))
+            F.limb(bones[-1], (c, 0.4, s), at=0.6, plate=False, crystal=0.2, mud=1 if i % 2 == 0 else 0)
+            continue
         geo = [chain(path, radii)]
         if look == 0:
             mid = Vector(path[2])

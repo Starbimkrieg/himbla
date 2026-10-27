@@ -1,5 +1,6 @@
 # The chimera kit's mites (exec'd by build_chimera.py after chimera_common.py), three looks of each part:
-#   legs   0 a dark thorax on six long legs, 1 a beetle's: stout spiny legs, 2 a strider's: six very long legs with two knees each
+#   legs   0 a dark thorax on six long legs, 1 a beetle's: stout spiny legs, 2 a strider's: six very long legs with two knees each; each
+#          leg jointed at its knees (limb_chain) for the builder's IK
 #   body   0 a segmented abdomen with glassy wing cases raised in a V, 1 a beetle's domed shell, split down the middle, 2 a wasp's: thorax,
 #          waist, a banded sting-tipped gaster, small wings
 #   head   0 great compound eyes, jaws and feelers, 1 a rhinoceros beetle's horn, 2 an ant's: long head, big curved mandibles, elbowed feelers
@@ -27,16 +28,17 @@ def mite_legs(root, rng, look):
                 pts, rad = [(0, 0, 0), (sx * 0.22, 0.12, k * 0.07), (sx * 0.3, y0 + 0.025, k * 0.16)], [0.042, 0.036, 0.022]
             else:
                 pts, rad = [(0, 0, 0), (sx * 0.22, 0.16, k * 0.08), (sx * 0.42, 0.0, k * 0.2), (sx * 0.5, y0 + 0.02, k * 0.27)], [0.026, 0.022, 0.016, 0.01]
-            geo = [chain(pts, rad, seg=10)] + [ell(rad[i] * 1.2, rad[i] * 1.1, rad[i] * 1.1, pts[i], n=10) for i in range(1, len(pts) - 1)]
-            if look == 1:                                                                    # spines down the shin
+            def spines(i, pts=pts, sx=sx):                                                    # spines down the shin
+                if look != 1 or i != 1:
+                    return []
                 a, b = Vector(pts[1]), Vector(pts[2])
-                for t in (0.3, 0.55, 0.8):
-                    q = a.lerp(b, t)
-                    geo.append(along(lathe([(0.011, 0), (0, 0.04)], 6), (sx * 0.8, 0.5, 0), tuple(q)))
-            seg = fused(p.name + "_seg", join(geo), "mite", p, 0.012, (280, 320, 340)[look])
+                return [along(lathe([(0.011, 0), (0, 0.04)], 6), (sx * 0.8, 0.5, 0), tuple(a.lerp(b, t))) for t in (0.3, 0.55, 0.8)]
             foot = pts[-1]
-            fused(p.name + "_claw", join([ell(0.022, 0.018, 0.022, foot), xf(lathe([(0.014, 0), (0, -0.035)], 8), foot)]), "dark", p, 0.006, 70)
-            F.limb(seg, (sx, 0.3, 0), at=0.75, plate=False, crystal=0.15, mud=1 if k == 0 else 0)
+            bones, joints = limb_chain(p, pts, rad, "mite", 0.012, (280, 320, 340)[look], lambda q, r: ell(r * 1.2, r * 1.1, r * 1.1, q, n=10),
+                                       (foot[0], y0, foot[2]), extra=spines, seg=10)
+            at = tuple(Vector(foot) - Vector(pts[-2]))
+            fused(p.name + "_claw", join([ell(0.022, 0.018, 0.022, at), xf(lathe([(0.014, 0), (0, -0.035)], 8), at)]), "dark", joints[-1], 0.006, 70)
+            F.limb(bones[-1], (sx, 0.3, 0), at=0.75, plate=False, crystal=0.15, mud=1 if k == 0 else 0)
     point(root, "flankL", (-0.15, hip - 0.07, 0), (-1, 0.3, 0), "side", 0.7)
     point(root, "flankR", (0.15, hip - 0.07, 0), (1, 0.3, 0), "side", 0.7)
     socket(root, "hip", (0, hip, 0), jrx=0.12, jrz=0.15)

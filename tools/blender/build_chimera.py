@@ -3,6 +3,12 @@
 #
 #   MOONRUNNER_REPO=<repo> python3 tools/blender/build_chimera.py            (about 5 minutes: it remeshes every part)
 #   CHIMERA_ONLY=car,mite CHIMERA_OUT=/tmp/x.glb ...                         (just some kinds, to look at while working on them)
+#   CHIMERA_PARTS=legs_mite_0,legs_sapling_2 CHIMERA_OUT=/tmp/x.glb ...       (just some parts: splice them into chimera.glb with
+#                                                                             tools/splice-chimera.mjs, which keeps the rest as it was)
+#
+# Each part's random details come from a seed. Python salts hash() per run, so an unpinned part comes out different on every build;
+# SEED pins the parts that were rebuilt on their own and spliced in: the mandrake legs' is the seed their roots came from (found from the
+# committed file), the mite legs' give the same legs their crystals as before.
 #
 # The pipeline (fusing, cuts, fitted mutations, the far LOD) is chimera_common.py; the parts are chimera_people.py (settlers, pirate,
 # Vrill), chimera_mite.py, chimera_car.py, chimera_sapling.py, chimera_junkbot.py; the mutations' devices, the Triple Crown
@@ -17,7 +23,8 @@
 #                             leaning out), `spark` and `turbo` (on the surface, +y out of it: where those devices go)
 #     head                    origin at the neck, a stub going down into the body; sockets `top` (the crown), `eye`, `radio` and `lens`
 #   ..._far                   the part again for far away: about a third of the triangles, no outline sources
-#   pivots                    role `leg` (swings), `wheel` (rolls, extra r), `arm` (swings), `socket`, `graft` (where the spark's arcs
+#   pivots                    role `leg` (swings; a jointed one has `knee` pivots down it and a `foot` at its ground contact, for the
+#                             IK), `wheel` (rolls, extra r), `arm` (swings), `socket`, `graft` (where the spark's arcs
 #                             crackle: tag, size, nx/ny/nz), `form` (a body's surface with one neck, form 1, or forked for two heads, form
 #                             2: the builder shows one), `extra` (pieces only some looks wear: extra looks), `mut` (a mutation fitted to the
 #                             part: extra mut = armor, crystal or mud; shown only on a chimera that has it)
@@ -37,12 +44,14 @@ for _f in ("chimera_people.py", "chimera_mite.py", "chimera_car.py", "chimera_sa
         exec(open(os.path.join(_here, _f), encoding="utf-8").read(), globals())
 
 ONLY = [k for k in os.environ.get("CHIMERA_ONLY", "").split(",") if k]
+PARTS = [k for k in os.environ.get("CHIMERA_PARTS", "").split(",") if k]
+SEED = {("legs", "mite", "0"): 3, ("legs", "mite", "1"): 22, ("legs", "mite", "2"): 143, ("legs", "sapling", "2"): 49618}
 OUT = os.environ.get("CHIMERA_OUT") or os.path.join(REPO, "src", "assets", "chimera.glb")
 roots = []
 for (slot, kind, look), fn in BUILD.items():
-    if ONLY and kind not in ONLY:
+    if (ONLY and kind not in ONLY) or (PARTS and f"{slot}_{kind}_{look}" not in PARTS):
         continue
-    rng = random.Random(hash((slot, kind, look)) & 0xffff)
+    rng = random.Random(SEED.get((slot, kind, look), hash((slot, kind, look)) & 0xffff))
     root = pivot(f"ch_{slot}_{kind}_{look}", (0, 0, 0), None, kind=kind, part=slot, look=look)
     F = fn(root, rng)
     if F:
@@ -52,7 +61,7 @@ for (slot, kind, look), fn in BUILD.items():
     roots.append(root)
 for root in roots:
     far_copy(root)
-if os.path.isfile(os.path.join(_here, "chimera_devices.py")) and not ONLY:
+if os.path.isfile(os.path.join(_here, "chimera_devices.py")) and not ONLY and not PARTS:
     exec(open(os.path.join(_here, "chimera_devices.py"), encoding="utf-8").read(), globals())
 for hide in (2, 1):                                                       # (a body's two forms are never shown together; nor a part's armour and what it covers)
     audit_coplanar([o for o in C.objects if o.get("slot") != "inkonly" and not o.name.endswith("_far") and not any(q.name.endswith("_far") for q in parents(o))

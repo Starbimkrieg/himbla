@@ -122,6 +122,7 @@ export function makeLoot(kind, { credits = 0, crate = false } = {}) {
 export class Alchemy {
   constructor(game) {
     this.game = game;
+    this.onGround = (p, out) => game.planet.ground(p, out);           // (the ground under a point, for the mites' feet)
     this.jar = [];
     this.mixT = 0;
     this.followers = [];
@@ -233,16 +234,17 @@ export class Alchemy {
       const d = m.pos.distanceTo(P.pos);
       let speed = 2.5;
       if (m.flee > 0) m.flee -= dt;
-      if ((d < 14 && P.speed > 6) || (m.flee > 0 && d < 30)) { m.dir = tangent(m.pos.clone().sub(P.pos), up).normalize(); speed = 9; }
+      const fleeing = (d < 14 && P.speed > 6) || (m.flee > 0 && d < 30);
+      if (fleeing) { m.dir = tangent(m.pos.clone().sub(P.pos), up).normalize(); speed = 9; }
       else if (Math.random() < dt * 0.5) m.dir = tangent(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up).normalize();
       if (arcDist(m.pos, m.home) > 35) m.dir = tangent(m.home.clone().sub(up), up).normalize();
       const next = greatCircle(up, m.dir, speed * dt);
       m.hop += m.vy * dt; m.vy -= 4 * dt;
-      if (m.hop <= 0) { m.hop = 0; m.vy = Math.random() < dt * 2 ? 2.5 : 0; }
+      if (m.hop <= 0) { m.hop = 0; m.vy = Math.random() < dt * (fleeing ? 2 : 0.25) ? 2.5 : 0; }   // (bounding away when scared; else mostly walking)
       m.pos.copy(g.planet.ground(next, new THREE.Vector3()));
       m.model.root.position.copy(m.pos).addScaledVector(next, m.hop);
       frameQuat(next, m.dir, m.model.root.quaternion);
-      m.model.anim(m.t, speed);
+      m.model.anim(m.t, speed, this.onGround);                        // (its legs step on the ground: gait.js)
     }
   }
 

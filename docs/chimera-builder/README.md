@@ -38,6 +38,12 @@ The player's orange is never drawn.
   game's camera-scaled outline (`inkMatNear`): no thicker on screen up close than at the follow camera's distance.
 - **Joints built in.** A body's base is a skirt that wraps down over the legs and a head ends in a stub that goes into the body; the hides
   shade into each other's colours across the joint.
+- **Jointed legs walk on the ground.** The mites' legs and the mandrake's roots are a bone per segment, each after the first on a `knee`
+  pivot, with a `foot` at the ground contact (`limb_chain`): the bone above a joint ends in its knee ball or knot, which the bone below
+  starts inside, so it bends without a seam. Given the ground (wild mites, the lab's `&walk=1`), `src/gait.js` plants each foot, steps it
+  when the body has carried its rest spot a stride away (tripods on six legs, every other root), reaches it by IK and rides the body on
+  the feet, pitched and rolled to their slope; in the air or faster than the legs can step (about 3 m/s for a wild mite) they swing as
+  before.
 - **Two heads**: each body has a second, forked form with a neck for each head (the trunk splits, the necks grow from the shoulders, the
   car's nose grows two pods).
 - **Machines are built as machines**: the junkbot's boxes skip the organic remesh, so their panels stay flat and their edges and cuts crisp.
@@ -63,8 +69,13 @@ The player's orange is never drawn.
 ## The files
 
 - `src/chimerabuild.js`: the builder (`makeChimera(genes)`, `preloadChimeras()` at boot, `chimeraBuilder()` for the lab)
+- `src/gait.js`: walking on jointed legs (planted feet, stepping in two sets, FABRIK, the body on its feet)
 - `src/chimera.js`: `makeChimera`, `makeMite` and the splicing and stats re-exports (the old procedural models are gone)
 - `tools/blender/build_chimera.py` (the contract is in its header), with `chimera_common.py` (the pipeline, the fitting, the far LOD),
   `chimera_people.py`, `chimera_mite.py`, `chimera_car.py`, `chimera_sapling.py`, `chimera_junkbot.py` and `chimera_devices.py`
 - `tools/chimera-lab.html`: the lab (parts, a settler's outfit and headgear, mutations, seed, size, the crown, the far LOD; a random
-  chimera, a grid of twelve, each mutation, every kind, the showcase). Query parameters for screenshots are in the file.
+  chimera, a grid of twelve, each mutation, every kind, the showcase; `&walk=1`, one chimera walking over bumps). Query parameters for
+  screenshots are in the file.
+- `tools/splice-chimera.mjs`: puts parts built on their own (`CHIMERA_PARTS=...`) into `chimera.glb` and keeps the rest as it was. A full
+  build rolls every part's random details afresh (the seeds come from Python's salted `hash()`), which changes chimeras players own;
+  `SEED` in `build_chimera.py` pins the parts rebuilt that way.

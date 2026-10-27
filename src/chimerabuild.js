@@ -3,6 +3,7 @@ import { toon, glowShared, inkMat, inkMatNear, gradientMap } from './toon.js';
 import { loadChimeraKit, figureGlass, inkShell } from './models.js';
 import { mulberry32 } from './rng.js';
 import { PALETTE, CHIMERA_DRAWN } from './chimeragenes.js';
+import { makeGait } from './gait.js';
 
 // The chimera builder: puts every chimera in the game together from its gene sheet (the races, the pen, followers, cards, wild mites, the
 // Mega Mite). Its parts come from the chimera kit (tools/blender/build_chimera.py -> chimera.glb): legs, body and head for each kind, in
@@ -12,8 +13,10 @@ import { PALETTE, CHIMERA_DRAWN } from './chimeragenes.js';
 // parts in Blender (armour, crystal, mud: shown on a chimera that has them) or grow on their sockets in each family's form (spark,
 // turbo, radio, lens); void wraps the whole creature in a shadowy aura. Far away, each part is swapped for its lighter copy.
 //
-// makeChimera(genes) -> { root, anim(t, speed), height }: once the kit is loaded (preloadChimeras(), at boot) it builds at once; before,
-// it hands back an empty root that fills in when the kit arrives. chimeraBuilder() resolves to the same, for the lab and the Asset Row.
+// makeChimera(genes) -> { root, anim(t, speed, ground), height }: once the kit is loaded (preloadChimeras(), at boot) it builds at once;
+// before, it hands back an empty root that fills in when the kit arrives. chimeraBuilder() resolves to the same, for the lab and the Asset
+// Row. Legs swing in a walk cycle; jointed ones (the mites', the mandrake's roots) walk on the ground instead when anim is given it
+// (ground(p, out): the ground point under world point p; gait.js), once the root is placed for the frame.
 
 export const FAMILY = { person: 'human', pirate: 'human', voidling: 'human', alien: 'human', mite: 'mite', car: 'car', sapling: 'sapling', junkbot: 'car' };
 export const KINDS = ['person', 'pirate', 'voidling', 'alien', 'mite', 'car', 'sapling', 'junkbot'];
@@ -74,7 +77,7 @@ export function makeChimera(genes, opts) {
   const root = new THREE.Group();
   let built = null;
   preloadChimeras().then(() => { built = buildChimera(genes, KIT, opts); root.add(built.root); });
-  return autoDispose({ root, anim: (t, speed) => built && built.anim(t, speed), get height() { return built ? built.height : 1.4 * (genes.size ?? 1.1) * CHIMERA_DRAWN; } });
+  return autoDispose({ root, anim: (t, speed, ground) => built && built.anim(t, speed, ground), get height() { return built ? built.height : 1.4 * (genes.size ?? 1.1) * CHIMERA_DRAWN; } });
 }
 // A chimera's own geometry (its hides, recoloured for it; a void aura) is freed once it is taken out of the scene for good (not just moved
 // to another parent: that removes and adds it again at once).
@@ -94,7 +97,7 @@ export function buildChimera(genes, kit = KIT, { lod = true } = {}) {
   const root = new THREE.LOD();
   root.addLevel(near.root, 0);
   root.addLevel(far.root, FAR_AT * (genes.size ?? 1.1));
-  const anim = (t, speed) => { if (near.root.visible) near.anim(t, speed); else far.anim(t, speed); };
+  const anim = (t, speed, ground) => { if (near.root.visible) near.anim(t, speed, ground); else far.anim(t, speed); };      // (far away, the plain swing)
   return { root, anim, height: near.height };
 }
 
@@ -142,19 +145,26 @@ function assemble(genes, kit, suffix) {
   inner.scale.setScalar(k);
   root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(inner);
+  const gait = makeGait(root, inner, C.anims.legs);                  // (jointed legs: they can walk on the ground)
   let lastT = null;
-  const anim = (t, speed = 0) => {
+  const anim = (t, speed = 0, ground = null) => {
+    const gap = lastT === null || t - lastT > 0.25;                   // (not animated for a while: off screen, or far)
     const dt = lastT === null ? 0 : Math.max(0, Math.min(0.1, t - lastT));
     lastT = t;
     const a = Math.min(1, speed / 6);
     const w = t * (4 + speed * 0.9);
-    for (const L of C.anims.legs) L.node.rotation.x = Math.sin(w + L.ph) * 0.55 * a + Math.sin(t * 1.7 + L.ph) * 0.04 * (1 - a);
+    for (const L of C.anims.legs) {
+      const r = Math.sin(w + L.ph) * 0.55 * a + Math.sin(t * 1.7 + L.ph) * 0.04 * (1 - a);
+      if (L.chain) L.swing = r;                                       // (the gait poses a jointed leg, from this swing or by IK)
+      else L.node.rotation.x = r;
+    }
     for (const A of C.anims.arms) A.node.rotation.x = Math.sin(w + A.ph) * 0.5 * a;
     for (const W of C.anims.wheels) W.node.rotation.x += (speed * dt) / (W.r * k);
     inner.position.y = a > 0.1 ? Math.abs(Math.sin(w)) * 0.03 : 0;
+    if (gait) gait.update(dt, ground, gap);
   };
   anim(0, 0);
-  return { root, anim, height: box.max.y - box.min.y };
+  return { root, anim, gait, height: box.max.y - box.min.y };
 }
 
 // A person's outfit: the NPC's own (remembered when it was scooped: alchemy.js), else drawn from the seed.

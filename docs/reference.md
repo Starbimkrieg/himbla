@@ -341,6 +341,7 @@ src/
   alchemy.js       jar, reactor, mites, followers, mutations, Mega Mite
   chimera.js       makeChimera, makeMite, splicing and stats re-exports
   chimerabuild.js  the chimera builder: every chimera from the kit (chimera.glb), looks, outfits, mutations, far LOD
+  gait.js          walking on the kit's jointed legs (mites, mandrake roots): planted feet, steps, IK, the body on its feet
   chimeragenes.js  splicing (no three.js)
   cheats.js        cheat menu
   devoverlay.js    F3 dev overlay (perfgraph.js draws its graphs)
@@ -427,6 +428,7 @@ src/
     outposts.glb     Relay Mast and Watchtower (pilot, ?outpostGlb; spec in docs/outpost-glb.md)
 tools/
   optimize-glb.mjs         compresses src/assets models (npm run optimize:glb)
+  splice-chimera.mjs       puts chimera kit parts built on their own into chimera.glb, the rest untouched
   viewer.html              dev model viewer (/tools/viewer.html?m=<model>; options at the top of the file)
   casino-layouts.mjs       casino plan study and spacing check (docs/casino-layouts.md)
   casino-forecourt.mjs     forecourt plans and Valet Court check (docs/casino-forecourt.md)
@@ -481,7 +483,8 @@ tools/
     build_winch.py         -> winch.glb, towmark.png
     build_outposts.py      -> outposts.glb (check with npm run check:outposts)
     build_downs_*.py       -> downs-*.glb
-    build_chimera.py       -> chimera.glb (about 6 min; CHIMERA_ONLY=car,mite; chimera_common.py and chimera_*.py)
+    build_chimera.py       -> chimera.glb (about 6 min; CHIMERA_ONLY=car,mite; CHIMERA_PARTS=legs_mite_0 to splice with
+                           tools/splice-chimera.mjs; chimera_common.py and chimera_*.py)
     proposals/             freighter design study and Cycles preview renders
 ```
 

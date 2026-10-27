@@ -76,6 +76,29 @@ def chain(pts, radii, seg=12):
     return join([capsule(pts[i], pts[i + 1], radii[i], radii[i + 1], seg) for i in range(len(pts) - 1)])
 
 
+def limb_chain(leg, pts, radii, slot, ink, budget, knob, contact, extra=None, seg=12):
+    """a jointed limb from pts (in the leg pivot's frame; radii at each): one fused bone from each point to the next, each bone after the
+    first on a pivot (role `knee`) at its joint, so the builder's IK can bend it. knob(p, r): the joint's cover (a knee's ball, a root's
+    knot), fused into the bone above, which the bone below starts inside of: it turns without a seam. contact: where the foot meets the
+    ground (an empty with role `foot` on the last bone). extra(i): more primitives for bone i, in the leg's frame. The bones share the
+    leg's budget by length. Returns the bones and their pivots (the leg's first)."""
+    P = [Vector(p) for p in pts]
+    total = sum((P[i + 1] - P[i]).length for i in range(len(P) - 1))
+    joints, bones = [leg], []
+    for i in range(len(P) - 1):
+        if i:
+            joints.append(pivot(f"{leg.name}_knee{i}", tuple(P[i] - P[i - 1]), joints[-1], role="knee"))
+        geo = [capsule(pts[i], pts[i + 1], radii[i], radii[i + 1], seg)]
+        if i < len(P) - 2:
+            geo.append(knob(pts[i + 1], radii[i + 1]))
+        if extra:
+            geo += extra(i)
+        share = (P[i + 1] - P[i]).length / total
+        bones.append(fused(f"{leg.name}_bone{i}", xf(join(geo), tuple(-P[i])), slot, joints[-1], ink, max(80, int(budget * share * 1.15))))
+    pivot(f"{leg.name}_foot", tuple(Vector(contact) - P[-2]), joints[-1], role="foot")
+    return bones, joints
+
+
 def turn_to(d):
     d = Vector(d).normalized()
     return d.to_track_quat("Z", "Y" if abs(d.y) < 0.98 else "X")

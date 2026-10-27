@@ -5,6 +5,21 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Mites walk on their legs: jointed legs, planted feet, IK.**
+  - **Jointed legs in the chimera kit.** The mites' legs (all three looks) and the mandrake's roots are now a bone per segment on `knee`
+    pivots, with a `foot` at the ground contact (`limb_chain` in `tools/blender/chimera_common.py`). The bone above each joint ends in its
+    knee ball (a knot on the roots) and the bone below starts inside it, so a leg bends without a gap; at rest they look as before. About
+    40 more triangles a leg. Mud on a mite's middle legs now fits (it used to miss the whole-leg target and never showed).
+  - **Walking** (`src/gait.js`). Given the ground, each foot stays planted until the body has carried its rest spot a stride away, then
+    steps in an arc to just ahead of it; the legs step in two sets that take turns (a tripod on six legs, every other root), standing feet
+    step back under the body, the legs reach their feet by IK (FABRIK) and the body rides on them, raised and pitched and rolled to the
+    slope. In the air, or faster than the legs can step, they ease back to the old swing. Wild mites use it, and wander on foot more (they
+    hop an eighth as often, unless scared). Chimeras with other legs, the far LOD and anything not given the ground swing as before.
+  - **Chimera lab:** `&walk=1` walks one chimera round a circle over bumps, stopping now and then.
+  - **Rebuilding a few parts of the kit.** A full build re-rolls every part's random details, which changes chimeras players own; the
+    new `CHIMERA_PARTS` builds just some parts and `tools/splice-chimera.mjs` puts them into `chimera.glb`, the rest kept as it was. The
+    four rebuilt leg parts are pinned (`SEED`); the mandrake's roots come from the seed their committed shape came from.
+
 - **Ramps: tight berms, nothing showing or hookable under the ground.** The soil berms along a ramp's sides ran 1.4 m out from the rock and the length of it, ends included, and lay on the ground like drag marks; they're low heaps 0.6 m out now (at most 0.35 m high), only along the stretch of each side that stands 0.4 m out of the ground and across a lip's foot, never round an end you ride in from (`src/rocks.js` ramp). A lead-in lies just under the ground, and its outline, pushed out 12 cm or more, came up through the ground in thin black lines beside the entry: a rock's shell doesn't grow out under the ground any more (`toon.js` inkMatSolid, by `inkH`). And the colliders under the lead-ins, wholly underground, are gone: the ground holds you there, and the Hitch-Line could hook them.
 
 - **Ink outlines: one line weight near and far, no hollow lines round rocks, far ink fading to indigo, and the Ink setting drives it all.**

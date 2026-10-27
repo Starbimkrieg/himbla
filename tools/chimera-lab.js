@@ -25,7 +25,17 @@ sun.position.set(6, 12, 8);
 sun.castShadow = true;
 sun.shadow.camera.left = sun.shadow.camera.bottom = -14; sun.shadow.camera.right = sun.shadow.camera.top = 14;
 scene.add(sun, new THREE.HemisphereLight(0x9a8cff, 0x40305a, 0.85));
-const ground = new THREE.Mesh(new THREE.CircleGeometry(80, 48).rotateX(-Math.PI / 2), new THREE.MeshToonMaterial({ color: 0x8a8398 }));
+// &walk=1: the chimera walks a circle over bumpy ground (stopping now and then), its jointed legs on it (src/gait.js)
+const WALK = Q.get('walk') === '1';
+const bump = (x, z) => (WALK ? 0.14 * Math.sin(x * 1.1 + 0.4) * Math.cos(z * 0.9) + 0.06 * Math.sin(x * 2.7 + z * 1.9) + 0.03 * Math.cos(x * 5.3 - z * 4.1) : 0);
+const groundAt = (p, out) => out.set(p.x, bump(p.x, p.z), p.z);
+const groundGeo = WALK ? new THREE.PlaneGeometry(40, 40, 240, 240).rotateX(-Math.PI / 2) : new THREE.CircleGeometry(80, 48).rotateX(-Math.PI / 2);
+if (WALK) {
+  const P = groundGeo.attributes.position;
+  for (let i = 0; i < P.count; i++) P.setY(i, bump(P.getX(i), P.getZ(i)));
+  groundGeo.computeVertexNormals();
+}
+const ground = new THREE.Mesh(groundGeo, new THREE.MeshToonMaterial({ color: 0x8a8398 }));
 ground.receiveShadow = true;
 scene.add(ground);
 const post = new ComicPost(renderer, camera);
@@ -171,7 +181,18 @@ addEventListener('pointermove', (e) => {
 });
 renderer.domElement.addEventListener('wheel', (e) => { dist *= Math.exp(e.deltaY * 0.001); }, { passive: true });
 
-let t = 0, last = performance.now();
+let t = 0, last = performance.now(), lap = 0;
+const R = 2.6;
+// a lap of the circle at &speed (default 1.2 m/s), easing to a stop for a moment every few seconds
+function walk(c, dt) {
+  const v = num('speed', 1.2) * THREE.MathUtils.smoothstep(Math.sin(t * 0.45) + 0.35, 0, 0.5);
+  lap += (v * dt) / R;
+  const x = Math.cos(lap) * R, z = Math.sin(lap) * R;
+  c.root.position.set(x, bump(x, z), z);
+  c.root.rotation.set(0, -lap, 0);                                  // (+z, its front, along the way it goes)
+  target.set(x, 0.4, z);
+  c.anim(t, v, groundAt);
+}
 function frame() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - last) / 1000);
@@ -188,7 +209,8 @@ function frame() {
   camera.position.set(target.x + Math.sin(yaw) * Math.cos(pitch) * dist, target.y + Math.sin(pitch) * dist, target.z + Math.cos(yaw) * Math.cos(pitch) * dist);
   camera.lookAt(target);
   for (const c of shown) {
-    c.anim(t, num('speed', 0));
+    if (WALK && shown.length === 1) walk(c, dt);
+    else c.anim(t, num('speed', 0));
     if (c.tag) {
       const p = c.root.position.clone().add(new THREE.Vector3(0, c.tagY, 0)).project(camera);
       c.tag.style.left = `${(p.x * 0.5 + 0.5) * innerWidth}px`; c.tag.style.top = `${(-p.y * 0.5 + 0.5) * innerHeight}px`;
