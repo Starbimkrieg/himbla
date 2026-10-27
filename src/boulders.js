@@ -58,7 +58,7 @@ export function makeBoulderShapes() {
 // scale, the Ink setting). The push is in local space, so it's divided by the instance's scale to stay in metres.
 export function makeBoulderInk() {
   const m = new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide });
-  m.onBeforeCompile = (sh) => inkCompile(sh, `normalize(normal) * ${BOULDER_INK_M.toFixed(2)} * inkK / inkSc()`, `float inkSc() {
+  m.onBeforeCompile = (sh) => inkCompile(sh, `normalize(normal) * inkPush(${BOULDER_INK_M.toFixed(2)}, vInkD) * inkK / inkSc()`, `float inkSc() {
 #ifdef USE_INSTANCING
   return pow(abs(determinant(mat3(instanceMatrix))), 1.0 / 3.0);
 #else

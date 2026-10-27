@@ -81,19 +81,22 @@ export function toon(color, opts) {
 // ---------------- ink shells ----------------
 // An outline is a shell drawn back faces only: where it shows past the object, a line. A shell's geometry is the surface itself,
 // its `normal` the way the outline grows (unit) and its `inkT` how far (m) at the follow camera's distance; inkMat pushes it out
-// in the vertex shader by inkT x inkScale(distance) x the Ink setting:
+// in the vertex shader by inkPush(inkT, distance) x the Ink setting:
 //   - inside INK_REF it thins to keep its on-screen width (to INK_MIN of inkT: a 6 cm line up close would swallow small details);
 //   - beyond it grows with distance to hold that width, up to INK_GROW x inkT, so far props keep a line, not a hairline;
+//   - never wider on screen than INK_CAP (radians, about 7 px at 720p): thick shells (boulders' 15 cm, buildings' 20 to 25)
+//     would otherwise hold 11 to 18 px out to 36 m, heavier than everything round them;
 //   - from INK_EASE to INK_DIST it eases to INK_FAR of that, near the post pass's depth line (post.js), which carries the
 //     silhouettes where a place's merged shells stop drawing (world.js INK_DIST); props out in the open keep theirs, thinning.
 // Every shell (toon.ink, the Kit's, world.js's batches, models.js's Blender ones, downsKit, staticBake) is made this way, so
 // one weight rule holds for all. The skinned figures' hulls (models.js bakeFigure) stay baked: inkMatBaked.
-export const INK_REF = 9, INK_MIN = 0.3, INK_GROW = 4, INK_EASE = 60, INK_DIST = 110, INK_FAR = 0.45;
+export const INK_REF = 9, INK_MIN = 0.3, INK_GROW = 4, INK_CAP = 0.012, INK_EASE = 60, INK_DIST = 110, INK_FAR = 0.45;
 // (live uniforms: settings.js) uInkK the Ink strength; uInkVary and uInkTint the two style tests (dev builds' Settings)
 export const INK_U = { uInkK: { value: 1 }, uInkVary: { value: 0 }, uInkTint: { value: 0 } };
 export const INK_SCALE_GLSL = `
-float inkScale(float d) {
-  return clamp(d / ${INK_REF.toFixed(1)}, ${INK_MIN.toFixed(2)}, ${INK_GROW.toFixed(1)}) * mix(1.0, ${INK_FAR.toFixed(2)}, smoothstep(${INK_EASE.toFixed(1)}, ${INK_DIST.toFixed(1)}, d));
+float inkPush(float t, float d) {
+  return min(t * clamp(d / ${INK_REF.toFixed(1)}, ${INK_MIN.toFixed(2)}, ${INK_GROW.toFixed(1)}), ${INK_CAP.toFixed(3)} * d)
+    * mix(1.0, ${INK_FAR.toFixed(2)}, smoothstep(${INK_EASE.toFixed(1)}, ${INK_DIST.toFixed(1)}, d));
 }
 // (style test: line weight) a brush's swell along the line, anchored to the world so it doesn't crawl: 0.7 to 1.3
 float inkWobble(vec3 w) {
@@ -108,8 +111,9 @@ float inkWobble(vec3 w) {
 vec3 inkTint(vec3 c, float d, float on) { return mix(c, vec3(0.16, 0.13, 0.30), on * 0.75 * smoothstep(40.0, 420.0, d)); }`;
 export const INK_COLOR = 0x0b0612;
 export const inkMat = new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide });
-// An ink shell material's shader: the vertex pushed out by `push` (GLSL, a vec3 in object space, given inkK = inkScale x the Ink
-// setting [x the wobble], inkW the vertex in the world), the colour tinted with distance; `decl` adds declarations.
+// An ink shell material's shader: the vertex pushed out by `push` (GLSL, a vec3 in object space, given vInkD the distance,
+// inkK the Ink setting [x the wobble] and inkPush(t, vInkD) the metres for a t m line), the colour tinted with distance; `decl`
+// adds declarations.
 export function inkCompile(sh, push, decl = '') {
   Object.assign(sh.uniforms, INK_U);
   sh.vertexShader = sh.vertexShader
@@ -121,14 +125,14 @@ export function inkCompile(sh, push, decl = '') {
   #endif
   inkW = modelMatrix * inkW;
   vInkD = distance(cameraPosition, inkW.xyz);
-  float inkK = inkScale(vInkD) * uInkK;
+  float inkK = uInkK;
   if (uInkVary > 0.5) inkK *= inkWobble(inkW.xyz * 0.6);
   transformed += ${push};`);
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', `#include <common>\nuniform float uInkTint;\nvarying float vInkD;\n${INK_SCALE_GLSL}`)
     .replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb = inkTint(diffuseColor.rgb, vInkD, uInkTint);');
 }
-inkMat.onBeforeCompile = (sh) => inkCompile(sh, 'normalize(normal) * inkT * inkK', 'attribute float inkT;');
+inkMat.onBeforeCompile = (sh) => inkCompile(sh, 'normalize(normal) * inkPush(inkT, vInkD) * inkK', 'attribute float inkT;');
 inkMat.customProgramCacheKey = () => 'inkShell';
 export const inkMatNear = inkMat; // (was the runner's own distance-scaled outline: every shell is now)
 // a shell whose push is baked into its positions (the skinned figures' hulls): no distance rule, no Ink setting
