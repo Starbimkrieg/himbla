@@ -361,7 +361,7 @@ export function rampDims(rr, variant) {
 // A ramp under its riding profile, W wide: a ground-high end (y under 0.3) runs into the ground, a raised one (a lip) stands as
 // a face reaching dims.drop below the back (where the ground falls away ahead). Shoulders fall away, in terraces on the strata
 // slab. Colliders: a 1 m slab under each stretch of the riding surface, and solid fill from the ground up to 0.4 m under it,
-// so nothing is hollow from the side. Soil berms along both sides, and across the foot of a lip.
+// so nothing is hollow from the side. Low soil berms tight along both sides, and across the foot of a lip.
 function ramp(rr, p, q, dims, gy) {
   const seed = rr() * 100, { W, variant } = dims, drop = dims.drop || 0;
   const prof = rampProfile(dims), back = prof[0], front = prof[prof.length - 1];
@@ -381,21 +381,33 @@ function ramp(rr, p, q, dims, gy) {
   // rough flanks, but a smooth riding middle, and smooth wherever it's low (the lead-ins and the ends): roughened there, the flanks'
   // bumps stood up out of the ground beside the entry
   geo = roughen(geo, (v) => (profileAt(prof, v.z) < 0.5 || (Math.abs(v.x) < W * 0.32 && v.y > profileAt(prof, v.z) - 0.8) ? 0.06 : 0.5), seed, terraces ? 0.45 : 0.3);
-  // colliders, stretch by stretch (about 2.5 m along the surface)
+  // colliders, stretch by stretch (about 2.5 m along the surface); none for a stretch wholly under the ground (the lead-ins: the
+  // ground holds you there, and the Hitch-Line hooked the buried boxes)
   const cols = [];
   for (let i = 0; i < prof.length - 1;) {
     let j = i + 1;
     while (j < prof.length - 1 && Math.hypot(prof[j][0] - prof[i][0], prof[j][1] - prof[i][1]) < 2.5) j++;
     const [z0, y0] = prof[i], [z1, y1] = prof[j], len = Math.hypot(z1 - z0, y1 - y0), lq = qAxis(AX, -Math.atan2(y1 - y0, z1 - z0));
+    if (Math.max(y0, y1) < Math.max(gy(0, z0), gy(0, z1)) + 0.05) { i = j; continue; }
     cols.push(obox(p, q, V(0, (y0 + y1) / 2, (z0 + z1) / 2).addScaledVector(AY.clone().applyQuaternion(lq), -0.5), lq, W * 0.36, 0.5, len / 2 + 0.05));
     const top = Math.min(y0, y1) - 0.4;
     if (top > 0.2) cols.push(obox(p, q, V(0, (top - under) / 2, (z0 + z1) / 2), new THREE.Quaternion(), W * 0.4, (top + under) / 2, Math.abs(z1 - z0) / 2 + 0.05));
     i = j;
   }
-  // soil along the sides (from where the rock stands out of the ground to its front), and across a lip's foot
-  const lip = front[1] > 0.3, zs = prof.find(([, y]) => y > 0.3)?.[0] ?? back[0], ze = front[0] + (lip ? 0.3 : 0);
-  const soilG = [-1, 1].map((s) => bermLine(s * W * 0.5, zs, s * W * 0.5, ze, s, Math.min(0.6, dims.h * 0.15), seed + s, gy));
-  if (lip) soilG.push(bermLine(W * 0.45, front[0] + 0.5, -W * 0.45, front[0] + 0.5, 1, 0.45, seed + 3, gy));
+  // soil tight along each side where that side stands 0.4 m out of the ground, and across a lip's foot: a low heap 0.6 m out,
+  // never round the ends you ride in from (it ran 1.4 m out along the whole length, where the side is still under the ground
+  // too: flat strips on the ground like drag marks)
+  const lip = front[1] > 0.3, soilG = [];
+  for (const s of [-1, 1]) {
+    let run = null, best = null;
+    for (let z = back[0]; z <= front[0] + 0.01; z += 0.5) {
+      const up = profileAt(prof, z) * 0.55 - gy(s * W * 0.5, z) > 0.4; // (a side stands at 0.55 of the profile: rampTop)
+      if (up) run = run ? [run[0], z] : [z, z];
+      if (run && (!up || z + 0.5 > front[0] + 0.01)) { if (!best || run[1] - run[0] > best[1] - best[0]) best = run; if (!up) run = null; }
+    }
+    if (best && best[1] - best[0] > 1.5) soilG.push(bermLine(s * W * 0.5, best[0], s * W * 0.5, best[1], s, Math.min(0.35, dims.h * 0.1), seed + s, gy, 0.6));
+  }
+  if (lip) soilG.push(bermLine(W * 0.45, front[0] + 0.4, -W * 0.45, front[0] + 0.4, 1, 0.3, seed + 3, gy, 0.6));
   const rocks = [geo, ...crumbs(rr, 0, front[0] + 2.5, 0, 3, lip ? 6 : 3, 0.4, 1.2, gy)];
   return finish(p, q, rocks, soilG, variant === 'strata' ? rampMats().basalt : rampMats().dark, cols, 'ramp', gy);
 }

@@ -159,7 +159,9 @@ export function inkMarkTest(m) {
 }
 // shells of solid pieces, their far side pulled forward (inkCompile's pull; solidShell gives them inkC; inkMarks)
 export const inkMatSolid = inkMarkTest(new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide }));
-inkMatSolid.onBeforeCompile = (sh) => inkCompile(sh, 'normalize(normal) * inkPush(inkT, vInkD) * inkK', 'attribute float inkT; attribute vec4 inkC; attribute float inkH;', 'inkC', 'smoothstep(0.0, 0.3, inkH)');
+// (nothing under the ground grows out either: a ramp's lead-in lies just under it, and its shell pushed out came up through the
+// ground in thin black lines)
+inkMatSolid.onBeforeCompile = (sh) => inkCompile(sh, 'normalize(normal) * inkPush(inkT, vInkD) * inkK * smoothstep(0.0, 0.15, inkH)', 'attribute float inkT; attribute vec4 inkC; attribute float inkH;', 'inkC', 'smoothstep(0.0, 0.3, inkH)');
 inkMatSolid.customProgramCacheKey = () => 'inkShellSolid';
 export const inkMatNear = inkMat; // (was the runner's own distance-scaled outline: every shell is now)
 // a shell whose push is baked into its positions (the skinned figures' hulls): no distance rule, no Ink setting
