@@ -13,6 +13,7 @@ import { buildBuggyRig } from '../traffic.js';
 import { BOSS_MODELS, FOES } from '../storyAssets.js';
 import { makeMothership } from '../spindle.js';
 import { lineUp, together } from './common.js';
+import { loadSpiderTanks, makeSpiderTank } from '../spidertank.js';
 
 const FACTION_COLOR = { spacecom: 0xffd23f, vostok: 0xff3b5c, meridian: 0x2ec4ff, kepler: 0xff9f1c, daedalus: 0xc77dff };
 
@@ -220,6 +221,18 @@ const ground = {
         ts[5].root.scale.setScalar(1.35);
         const row = lineUp(ts.map((t, i) => part(pose(t.root, 0.5), i === 5 ? 8 : 6.5, i === 5 ? 8 : 6.5)), 0.5);
         return { root: row.root };
+      },
+    },
+    {
+      // Zbornak's spider tank, the Triple Crown's reward: the two proposals (docs/spidertank-proposals/), each walking and folded to skim
+      id: 'veh.spidertank', label: 'SPIDER TANK PROPOSALS · A ARACHNE, B STRIDER · WALK, OVERDRIVE', w: 52, d: 12,
+      make: () => {
+        const root = new THREE.Group();
+        loadSpiderTanks().then((kit) => {
+          const cells = [['a', 0, 14], ['a', 1, 8], ['b', 0, 13], ['b', 1, 8]].map(([v, f, w]) => part(pose(makeSpiderTank(kit, v).folded(f).root, YAW), w, 12));
+          root.add(lineUp(cells).root);
+        });
+        return { root };
       },
     },
   ],

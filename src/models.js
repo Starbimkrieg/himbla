@@ -2615,6 +2615,16 @@ export async function loadChimeraKit() {
   return CHIMERA_KIT;
 }
 
+// ---- Zbornak's spider tank, two proposals (build_spidertank.py; src/spidertank.js; docs/spidertank-proposals/) ----
+// Loaded from the URL its module hands in, so the proposals stay out of builds that don't use them: { spider_a, spider_b }, baked as
+// the ships are (parts per slot, an ink shell, the pivots as kids with their extras in `data`).
+export async function loadSpiderTankKit(url) {
+  const gltf = await loadGlb('spidertank', url);
+  const kit = {};
+  for (const o of gltf.scene.children) if (o.name.startsWith('spider_')) kit[o.name] = bakeShip(o);
+  return kit;
+}
+
 // ---- Chimera Downs' kits (built in Blender, see build_downs_*.py and downs_common.py; docs/downs-layouts.md) ----
 // One file per family, each `dn_*` node standing on y = 0. downsNode / downsSlot are for baking into the Downs' kit (race.js build); makeDownsPart gives a piece as a Group (the Asset Row's).
 // The palette is Gold Gleam, Saddle Brown, Black, Money, Barn Red and Touch of Mint (a darker tint of each for shading); slots named glow* and glass* are lit.

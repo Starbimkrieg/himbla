@@ -9,7 +9,7 @@ import * as THREE from 'three';
 // as far as the legs reach. Past a trot (RUN), in the air, or not given the ground, it eases back to the plain swing (chimerabuild.js
 // anim): stepping any faster looks like a gallop or a twitch.
 //
-// makeGait(root, inner, legs) -> null (no jointed legs) or { update(dt, ground, gap) }, called by anim after the swing is set (each
+// makeGait(root, inner, legs, { lift }) -> null (no jointed legs) or { update(dt, ground, gap) }, called by anim after the swing is set (each
 // jointed leg's swing angle in L.swing). ground(p, out) puts the ground point under world point p in out. The root's world transform
 // must be this frame's (the caller places it before calling anim).
 
@@ -32,8 +32,9 @@ const _p = new THREE.Vector3(), _up = new THREE.Vector3(), _g = new THREE.Vector
 const _vh = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4(), _inv = new THREE.Matrix4(), _q = new THREE.Quaternion();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _e = new THREE.Euler(), _X = new THREE.Vector3(1, 0, 0);
 const _t = new THREE.Vector3(), _d = new THREE.Vector3(), _r = new THREE.Matrix4();
+const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3();
 
-export function makeGait(root, inner, legs) {
+export function makeGait(root, inner, legs, { lift: follow = 0.4 } = {}) {   // (follow: how far the feet raise or lower the body, of the hip height)
   root.updateMatrixWorld(true);
   const rootInv = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const chains = [];
@@ -70,7 +71,7 @@ export function makeGait(root, inner, legs) {
       L, joints, space, pts, len, dir, W, nRest, basis, rest, span, grow, thr: STRIDE * span, hipY: hip.y, group: L.ph ? 1 : 0,
       bind: joints.map((j) => j.quaternion.clone()), work: pts.map((p) => p.clone()), ik: joints.map(() => new THREE.Quaternion()),
       turned: joints.map(() => new THREE.Quaternion()),
-      F: new THREE.Vector3(), S0: new THREE.Vector3(), T: new THREE.Vector3(), at: new THREE.Vector3(), base: new THREE.Vector3(), s: 0, dur: DUR_MAX, lift: 0, stepping: false,
+      F: new THREE.Vector3(), S0: new THREE.Vector3(), T: new THREE.Vector3(), at: new THREE.Vector3(), base: new THREE.Vector3(), s: 0, dur: DUR_MAX, lift: 0, over: 0, stepping: false,
     });
   }
   if (!chains.length) return null;
@@ -82,6 +83,20 @@ export function makeGait(root, inner, legs) {
   const G = { w: 0, run: false, planted: false, seen: false, prev: new THREE.Vector3(), vel: new THREE.Vector3(), lift: 0, pitch: 0, roll: 0 };
 
   const stepping = (group) => chains.some((c) => c.group === group && c.stepping);
+  const lead0 = (grow) => Math.min(1, along(_d.copy(G.vel)).length() / (2 * thr * grow)) * LEAD * grow;
+  // what stands between a foot and where it will land (a crate, a wall top, a hump): the step goes over it, high early and late
+  function clear(c, ground, dur, lead) {
+    restSpot(c, _r1).addScaledVector(_vh, dur);
+    const v = _vh.length();
+    if (v > 1e-3) _r1.addScaledVector(_vh, (lead * c.thr) / v);
+    let top = 0;
+    for (let k = 1; k <= 4; k++) {
+      _r2.lerpVectors(c.F, _r1, k / 5);
+      ground(_r2, _r3);
+      top = Math.max(top, _r3.sub(_r2).dot(_up));
+    }
+    c.over = top > 0.05 * c.span ? top + 0.15 * c.span : 0;
+  }
   const restSpot = (c, out) => out.copy(c.rest).applyMatrix4(root.matrixWorld);
   const along = (v) => v.addScaledVector(_up, -v.dot(_up));          // (its part along the ground)
 
@@ -123,7 +138,7 @@ export function makeGait(root, inner, legs) {
       if (!(worst > 1 || (!moving && worst > SETTLE)) || (stepping(1 - group) && worst < 2)) continue;
       const dur = THREE.MathUtils.clamp((0.8 * thr * grow) / Math.max(speed, 1e-3), DUR_FAST, DUR_MAX);
       const lift = LIFT * Math.sqrt(grow);                            // (a longer stride, a higher arc)
-      for (const c of chains) if (c.group === group) { c.stepping = true; c.s = 0; c.dur = dur; c.lift = lift * c.span; c.S0.copy(c.F); }
+      for (const c of chains) if (c.group === group) { c.stepping = true; c.s = 0; c.dur = dur; c.lift = lift * c.span; c.S0.copy(c.F); clear(c, ground, dur, lead0(grow)); }
     }
     // the feet: planted, or along their arcs (each step's landing kept up to date as the body goes on)
     const lead = Math.min(1, speed / (2 * thr * grow)) * LEAD * grow;
@@ -135,7 +150,8 @@ export function makeGait(root, inner, legs) {
       ground(c.T, c.T);
       const e = c.s * c.s * (3 - 2 * c.s);
       c.base.lerpVectors(c.S0, c.T, e);
-      c.at.copy(c.base).addScaledVector(_up, c.lift * Math.sin(Math.PI * c.s));
+      const arc = Math.sin(Math.PI * c.s);
+      c.at.copy(c.base).addScaledVector(_up, c.over ? Math.max(c.lift * arc, c.over * Math.min(1, arc * 2.5)) : c.lift * arc);
       if (c.s >= 1) { c.F.copy(c.T); c.stepping = false; }
     }
     // the body on its feet: their mean height off their rest spots lifts it, their slope across and along it rolls and pitches it
@@ -150,7 +166,7 @@ export function makeGait(root, inner, legs) {
       sx += x * d; sz += z * d; sxx += x * x; szz += z * z;
     }
     const k = Math.min(1, dt * FOLLOW);                               // (leaving the ground, it eases back level)
-    G.lift += (want ? THREE.MathUtils.clamp(h, -0.4 * hipY, 0.4 * hipY) - G.lift : -G.lift) * k;
+    G.lift += (want ? THREE.MathUtils.clamp(h, -follow * hipY, follow * hipY) - G.lift : -G.lift) * k;
     G.pitch += (want ? THREE.MathUtils.clamp(-Math.atan(szz > 1e-6 ? sz / szz : 0), -TILT, TILT) - G.pitch : -G.pitch) * k;
     G.roll += (want ? THREE.MathUtils.clamp(Math.atan(sxx > 1e-6 ? sx / sxx : 0), -TILT, TILT) - G.roll : -G.roll) * k;
     inner.position.y += (G.lift - inner.position.y) * G.w;

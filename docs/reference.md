@@ -309,7 +309,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (226 in 26 sections) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (227 in 26 sections) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).
@@ -342,6 +342,7 @@ src/
   chimera.js       makeChimera, makeMite, splicing and stats re-exports
   chimerabuild.js  the chimera builder: every chimera from the kit (chimera.glb), looks, outfits, mutations, far LOD
   gait.js          walking on the kit's jointed legs (mites, mandrake roots): planted feet, steps, IK, the body on its feet
+  spidertank.js    Zbornak's spider tank, two proposals (docs/spidertank-proposals/): eight-legged gait, overdrive fold, reactor beam
   chimeragenes.js  splicing (no three.js)
   cheats.js        cheat menu
   devoverlay.js    F3 dev overlay (perfgraph.js draws its graphs)
@@ -420,6 +421,7 @@ src/
     lot.glb          casino forecourt kit
     downs-*.glb      Chimera Downs kits (stand, club, course, stalls, arcade, screen, fair, stable, crowd)
     chimera.glb      the chimera kit: every kind's parts in their looks, fitted mutations, far copies, devices
+    spidertank.glb   the spider tank proposals A and B (loaded by spidertank.js, not at boot)
     duck.glb         Duck Derby racers and track
     blackjack.glb    blackjack table and chip
     dish.glb         dish stations and dish heads
@@ -441,6 +443,7 @@ tools/
   stable-layouts.mjs       the stable yard's layouts: clearance and walk checks, plans (docs/stable-proposals/)
   race-sim.mjs             runs the race model headless and reports the balance
   chimera-lab.html         the chimera builder's lab (/tools/chimera-lab.html; docs/chimera-builder/)
+  spidertank-lab.html      the spider tank proposals driving: walk, run, overdrive, the beam (/tools/spidertank-lab.html)
   make-credit-glyph.py     draws the credit sign for both pixel faces -> assets/fonts/credit-*.woff2
   meridian-layouts.mjs     Meridian Exchange layout study (docs/meridian-layouts.md)
   winch-ride.mjs           headless winch test; run --gate ring after touching src/winch.js
@@ -483,6 +486,7 @@ tools/
     build_winch.py         -> winch.glb, towmark.png
     build_outposts.py      -> outposts.glb (check with npm run check:outposts)
     build_downs_*.py       -> downs-*.glb
+    build_spidertank.py    -> spidertank.glb (the spider tank's two proposals; docs/spidertank-proposals/)
     build_chimera.py       -> chimera.glb (about 6 min; CHIMERA_ONLY=car,mite; CHIMERA_PARTS=legs_mite_0 to splice with
                            tools/splice-chimera.mjs; chimera_common.py and chimera_*.py)
     proposals/             freighter design study and Cycles preview renders

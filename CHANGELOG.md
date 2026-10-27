@@ -5,6 +5,19 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Zbornak's spider tank: two proposals** (the Triple Crown's reward; `docs/spidertank-proposals/`). Not in the game yet: one gets picked.
+  - **Built in Blender** (`tools/blender/build_spidertank.py` -> `spidertank.glb`, 15.0k and 13.8k triangles): A ARACHNE, a round
+    spider with the reactor in a ribbed abdomen and the cannon under its brow, and B STRIDER, a long wedge with its legs down the flanks,
+    the reactor in a ring at the tail and the cannon down its spine. Eight armoured legs each, three bones on `leg` and `knee` pivots
+    with a `foot`, as the chimera kit's jointed legs are; each joint stores its overdrive pose (`fold`).
+  - **Driven by `src/spidertank.js`:** the mites' gait on eight legs (a tetrapod), with strides to 6.4 m at 32 m/s and the feet planted
+    to the centimetre; past 33 m/s it folds its legs into its armour and skims (A a round pod, B a dart); the reactor beam charges for a
+    second while fire is held, then channels for four, walking only and at 30% speed.
+  - **Steps go over things** (`gait.js`): a step whose path crosses something taller arcs over it, high early and late (the mites too).
+    `makeGait` takes how far the feet may move the body (`lift`).
+  - **`tools/spidertank-lab.html`** drives either one round crates and walls (or press a key and drive it), and the Asset Row shows both,
+    walking and folded (227 items).
+
 - **Mites walk on their legs: jointed legs, planted feet, IK.**
   - **Jointed legs in the chimera kit.** The mites' legs (all three looks) and the mandrake's roots are now a bone per segment on `knee`
     pivots, with a `foot` at the ground contact (`limb_chain` in `tools/blender/chimera_common.py`). The bone above each joint ends in its
