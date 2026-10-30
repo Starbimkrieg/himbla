@@ -21,6 +21,8 @@ import * as THREE from 'three';
 //   air         false: never off the ground (the caller says when it is: the spider tank sets its own ride height)
 //   body(h)     the body's lift, given its feet's mean height off their rest spots (replaces lift's clamp)
 //   followRate  1/s the body follows (FOLLOW)
+//   bodyPose(dt)   sets the body (inner) itself, from the feet as they are this frame, in place of the lift, pitch and roll above
+//               (the spider tank's climb)
 //   pitchMax, rollMax   rad the most the body pitches and rolls to its feet (TILT; the tank's climbs at a steeper pitch)
 //   foothold(c, p, out, ground)   where foot c may stand near p (null: nowhere); the tank's keeps to what the leg can reach
 //   strain(c)   how badly planted foot c wants to step, besides its stride (past 1 it is due; past 2 it goes even while the other set
@@ -78,7 +80,7 @@ const _vt = new THREE.Vector3(), _vs = new THREE.Vector3(), _vw = new THREE.Vect
 const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3();
 const smooth = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
 
-export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, body = null, followRate = FOLLOW, foothold = null, strain = null, urge = null, solid = null, long = false, wave = false, pole = false, pitchMax = TILT, rollMax = TILT } = {}) {
+export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, body = null, followRate = FOLLOW, foothold = null, strain = null, urge = null, solid = null, bodyPose = null, long = false, wave = false, pole = false, pitchMax = TILT, rollMax = TILT } = {}) {
   root.updateMatrixWorld(true);
   const rootInv = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const chains = [];
@@ -343,7 +345,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       // (the landing follows the body; past SETTLED it keeps its height, unless the ground under it only rises or falls a little)
       if (footAt(c, wave ? landWave(c, _r2) : landing(c, speed, _r2), _r3)) {
         const jump = _r3.dot(_up) - c.T.dot(_up);
-        if (c.s < SETTLED || Math.abs(jump) < 0.15 * c.span || (wave && jump > 0)) c.T.copy(_r3);   // (wave: up onto something, always)
+        if (c.s < SETTLED || Math.abs(jump) < 0.15 * c.span || wave) c.T.copy(_r3);   // (wave: always where it will stand, up or down)
         else c.T.copy(_r3).addScaledVector(_up, -jump);
       }
       const hS = c.S0.dot(_up), hT = c.T.dot(_up), rise = hT - hS, step = 0.1 * c.span;
@@ -359,6 +361,8 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       if (c.s >= 1) { c.F.copy(c.T); c.stepping = false; }
     }
     // the body on its feet: their mean height off their rest spots lifts it, their slope across and along it rolls and pitches it
+    if (bodyPose) bodyPose(dt);
+    else {
     _inv.copy(root.matrixWorld).invert();
     let h = 0, sx = 0, sz = 0, sxx = 0, szz = 0, mx = 0, mz = 0;
     for (const c of chains) { mx += c.rest.x; mz += c.rest.z; }
@@ -377,6 +381,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     G.roll += (want ? THREE.MathUtils.clamp(Math.atan(sxx > 1e-6 ? sx / sxx : 0), -rollMax, rollMax) - G.roll : -G.roll) * k;
     inner.position.y += (G.lift - inner.position.y) * G.w;
     inner.quaternion.setFromEuler(_e.set(G.pitch * G.w, 0, G.roll * G.w));
+    }
     // the legs reach their feet
     let space = null;
     for (const c of chains) {

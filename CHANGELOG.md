@@ -5,6 +5,16 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Zbornak's spider tank climbs twice its height** (`docs/spidertank/`; not in the game yet). The hull is now posed on its feet by a
+  search each frame (`bodyPose`, gait.js's new hook): height, pitch (to 83 degrees nose up) and roll (to 69) round the pose it has, for
+  every planted foot in reach, no point of the hull (`HULL3`) inside anything, sat on its feet, and, driven on, clear a step further:
+  pushed at something it rears up and hoists itself over, at the pace its legs allow, and rests at any angle. Footholds need leverage
+  (no hooking a lip), grip faces where a top is out of reach or blocked by its own edge, and find the face below an edge going down; a
+  foot always lands where it will stand (no more feet planted in mid-air). Up to 9.5 m over its lowest foot on a top, hips kept under
+  that: it climbs 7 to 9.5 m blocks head on and at 30 degrees, climbs down off them, drops with too few feet holding it, and grips
+  taller walls as high as it can. Its height is kept in the world (the root may be anywhere under it), and the caller's collision asks
+  `tank.hits` (the old `clearAt` is gone), so it turns while face-planted. The lab: a 9.5 m block and a 12 m wall on the lane,
+  platforms to 9.5 m round the circle, the camera following the hull up, and quicker turning on its feet.
 - **Spider tank: fire only in spider form.** Holding fire in the bead no longer opens it out (it does nothing there), and held while
   walking it keeps the tank a spider under 25 m/s (`tank.speedMax`) so it never closes up mid-beam.
 - **Zbornak's spider tank walks like a spider, climbs harder, and closes up at 25 m/s** (`docs/spidertank/`; not in the game yet).

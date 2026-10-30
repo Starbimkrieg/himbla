@@ -13,12 +13,12 @@ off. Round four smoothed its run, solved its legs exactly, kept its feet below i
 among, and made the bead float higher on glowing jet trails. Not in the game yet.
 
 - **The lab:** `npm run dev`, then `/tools/spidertank-lab.html`. It drives itself round a circle of crates and low walls: walking,
-  running, closing up past 25 m/s and skimming, opening out, stopping to fire the beam. Press a key to drive it: W/S speed, A/D turn,
-  hold SPACE for the beam; S also backs it up, to 18 m/s. **Look round** with the mouse: drag to turn the camera round the tank, right-drag (or shift-drag) to slide
+  running, closing up past 25 m/s and skimming, opening out, stopping to fire the beam. Press a key to drive it: W ahead, S back (to 18 m/s),
+  A/D turn, hold SPACE for the beam. **Look round** with the mouse: drag to turn the camera round the tank, right-drag (or shift-drag) to slide
   what it looks at, wheel to zoom, H to stop it turning with the tank, R or double-click to put it back. **P** pauses, **.** steps a
   frame, **[ ]** slow the clock down to a tenth and back. `&demo=walk|climb|wall|run|skim|fold|beam` loops one part (`wall` walks
-  down the test lane: a 2.3 m crate, a 3.2 m step and a 4.6 m block it climbs onto and down off, then an 8 m block it stops at, gripping
-  its face); `&speed=` sets it; the blocks round the circle are platforms to climb (3 to 5 m) and taller ones;
+  down the test lane: a 2.3 m crate, a 3.2 m step, a 4.6 m block and a 9.5 m one it climbs onto and down off, then a 12 m wall it gets
+  as high up as it can and stops at); `&speed=` sets it; the blocks round the circle are platforms to climb (3 to 9.5 m) and walls;
   `&cam=chase|side|front|rear|top|orbit` is where the camera starts.
 - **The Asset Row**, Ground Vehicles: walking, and closed up.
 
@@ -74,28 +74,31 @@ tuned in Blender.
   reach ahead and the back ones behind, as a spider's do. Measured from above: no two neighbours cross at any pace, turning on the
   spot, circling or backing up. The cost is the stride: 2.96 m at most, so 1 step a second per leg walking at 3 m/s, 2 at 12 m/s, 3 at
   18 and nearly 4 at 24, just under where it closes up. Feet stay planted to the centimetre.
-- **It climbs:** each foot looks round where it would land, out to its leg's full reach and a little ahead the way it is going, and
-  takes the highest spot it reaches: a top on a clear line from the hip, up to 0.6 m above the hip (the knee still bends up over it),
-  or, where what is there is too tall to stand on, its face, gripped as high as the leg reaches. Feet on a face tilt the hull nose-up (to 57
-  degrees; it rolls to 23 at most); the nose up, the front hips are higher and the next holds higher, and the hull rises to clear what
-  is ahead (looking at least 1.5 m on, its tilt counted), until the front feet stand on the top and it walks up. Pushed on but held
-  up, the legs keep stepping, landing at the front of their lanes and reaching past them for the face or the top of what holds it:
-  they gather under the hull and hoist it, nose up as steeply as it takes. Nothing more than **5.5 m** over its lowest foot standing on a
-  top: taller, it only grips the face, as it stands at the foot of a sheer wall, and walking along one its legs grip it. A foot left
-  at full stretch below a risen hull, or with something come between it and its hip, steps at once; a knee or ankle that would be
-  inside something turns about the leg to a clear way (`solid`). Measured in the lab: it walks up a 3.2 m step, a 4.5 m block (at a
-  walk and at 8 m/s) and a 4.8 m one, and down off them; at a 6 m block and an 8 m one it stands with its front feet high on their
-  faces. Cresting an edge the hull can touch it (0.2 m, 0.4 m at 8 m/s) and a leg can brush it for a moment.
-- **The hull never goes into things:** at least 0.5 m over whatever is under its outline (`HULL`), as tilted as it is, as high as the
-  planted legs can hold it and no lower than resting on what is under it. Feet gripping a face don't lift it (it would climb the
-  wall). Each point of its outline has the highest top it can pass over (`tank.clearAt`); the caller never moves or turns it further
-  into anything (the lab, driven, slides it along). Cresting a block's edge it can scrape it, by up to 0.2 m.
+- **It climbs, up to twice its own height (9.5 m):** each foot looks round where it would land, out to its leg's full reach and a
+  little ahead, and takes the highest spot it reaches: a top on a clear line from the hip, up to 0.6 m over the hip, with **leverage**
+  (the top goes on at least 0.7 m past the foot, away from the hip, so no foot hooks a lip), or, where what is there is too tall to
+  stand on, its face, gripped as high as the leg reaches. Then **the hull is posed on them**, each frame (`bodyPose`): its height,
+  pitch (nose up to 83 degrees) and roll (to 69) are searched round the pose it has for one where every planted foot is in its leg's
+  reach (and no closer than the leg folds), no point of the hull is inside anything (`HULL3`: its bottom, three rings up its sides,
+  the cannon), it sits at its height on its feet and tilts with them, and, driven on, the hull would be clear a step further that way.
+  So pushed at something it rears up against it, legs on the face, and hoists itself over the edge as fast as its legs let it,
+  stopping wherever the driver stops (it rests at any angle, gripping tops, sides and faces); held up, the legs keep reaching for
+  better holds, landing at the front of their lanes and past them, so the rear legs come up the face behind it. Nothing over 9.5 m
+  above its lowest foot standing on a top (and its hips kept under that): a wall taller, it gets as high up the face as it can and
+  stops there, and turns there if steered. Walking off something tall, the feet find the face below the edge and it climbs down; with
+  too few feet holding it, it drops. Measured in the lab, at a walk and at 8 to 10 m/s: up a 3.2 m step and 4.5, 4.8, 7, 8 and 9.5 m
+  blocks (head on, and at 30 degrees), down off a 9.5 m block and a 16 m cliff, and stopped by 12 m walls; the hull touches nothing
+  (a few centimetres at most), though a leg can pass through an edge for a moment, cresting.
+- **Its height is its own:** kept in the world, so the caller can put the root on the ground under it or anything else; the caller's
+  collision asks the tank (`tank.hits(x, y, z, yaw)`: how far into things the hull would be with the root there) and never moves or
+  turns it deeper in, so it turns on the spot even face-down against a wall. In the lab it spins quick on its feet (2.6 rad/s at a
+  standstill, slower as it speeds up).
 - **It backs up**, to 18 m/s (`tank.reverseMax`): the gait's strides mirror, the rear legs leading.
 - **The reactor beam:** hold fire. The reactor and the muzzle brighten for a second (let go and it fizzles), then a condensed beam
   channels for four seconds, 420 m long. In spider form only: held in the bead, fire does nothing; held walking, it keeps it a spider
   (under 25 m/s, so it never closes up). While charging and firing it keeps 30% of its speed.
 
-![Down the test lane: up onto the 4.6 m block](wall.jpg)
+![Up the 9.5 m block: nose up against the face, front feet over the edge, the rear legs following up the face](wall.jpg)
 
 ![The beam](beam.jpg)
 
@@ -106,8 +109,8 @@ tuned in Blender.
 2. **Footholds on structures.** The lab's ground knows its crates; the game's would cast down onto the place's colliders (their tops are
    the drawn tops: `docs/collision.md`; `rayCollider`, `colliders.query`) and fall back to `planet.ground`, keep feet off edges (try a
    few spots near the wanted one: `spidertank.js` does, given a `ground(p, out, ceil)` that skips what is taller than `ceil`, and a
-   `ray(from, dir, far, out)` for faces), and set the ride height from what is under the hull, as the lab does. The hull collides only
-   with what stands above `tank.clearAt` under `HULL`; the legs never block it. The drive passes `push` (what the driver asks for).
+   `ray(from, dir, far, out)` for faces); the tank poses its own hull. The drive moves the root only where `tank.hits` says the hull
+   goes no deeper into things (the legs never block it), and passes `push` (what the driver asks for).
 3. **The mount.** A `VEHICLES` entry for it (`hideRider`), summoned and entered from the Garage like the others, with its own drive:
    walking (its acceleration, turning that slows as it speeds up), closing up past 25 m/s, and overdrive on the Skimmer's hover drive.
    Outdoors only: it is too big for the casino or the Downs' halls.

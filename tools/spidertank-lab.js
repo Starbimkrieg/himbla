@@ -54,17 +54,19 @@ for (let k = 0; k < 4; k++) {                                          // low wa
   const a = (k / 4) * Math.PI * 2 + 1.0;
   addBox(Math.cos(a) * R, Math.sin(a) * R, -a, 14, 0.7, 0.9, wallMat);
 }
-for (let k = 0; k < 9; k++) {                                           // blocks round about: platforms to climb (to 5.5 m), and taller
+for (let k = 0; k < 9; k++) {                                           // blocks round about: platforms to climb (to 9.5 m), and walls taller
   const a = (k / 9) * Math.PI * 2, rad = R + 22 + rr() * 30;
-  addBox(Math.cos(a) * rad, Math.sin(a) * rad, rr() * 3, 6 + rr() * 8, 6 + rr() * 8, k % 2 ? 3 + rr() * 2.5 : 8 + rr() * 10, blockMat);
+  addBox(Math.cos(a) * rad, Math.sin(a) * rad, rr() * 3, 6 + rr() * 8, 6 + rr() * 8, k % 2 ? 3 + rr() * 6.5 : 12 + rr() * 8, blockMat);
 }
-// the test lane, south of the circle: a crate it walks over, a 3.2 m step and a 4.6 m block it climbs (nose up, its front feet on the
-// face and then the top) and down off, then an 8 m block too tall to climb: it stops at it, its front feet gripping its face
-const LANE = { x: 0, z0: -185 };
-addBox(LANE.x, -165, 0, 6, 3.5, 2.3, boxMat);
-addBox(LANE.x, -132, 0, 16, 16, 3.2, blockMat);
-addBox(LANE.x, -100, 0, 14, 9, 4.6, blockMat);
-addBox(LANE.x, -70, 0, 14, 6, 8, blockMat);
+// the test lane, south of the circle: a crate it walks over, a 3.2 m step and a 4.6 m block it climbs, a 9.5 m block (twice its own
+// height: nose up, feet on the face and then the top, hoisting itself over) and down off each, then a 12 m wall too tall to climb: it
+// gets as high up its face as it can and stops there
+const LANE = { x: 0, z0: -205 };
+addBox(LANE.x, -185, 0, 6, 3.5, 2.3, boxMat);
+addBox(LANE.x, -155, 0, 16, 16, 3.2, blockMat);
+addBox(LANE.x, -122, 0, 14, 9, 4.6, blockMat);
+addBox(LANE.x, -88, 0, 18, 14, 9.5, blockMat);
+addBox(LANE.x, -50, 0, 20, 8, 12, blockMat);
 const groundGeo = new THREE.PlaneGeometry(420, 420, 300, 300).rotateX(-Math.PI / 2);
 {
   const P = groundGeo.attributes.position;
@@ -152,14 +154,9 @@ const tank = makeSpiderTank(kit);
 scene.add(tank.root);
 const S = DEMO === 'wall' ? { x: LANE.x, z: LANE.z0, yaw: 0, v: 0 } : { x: R, z: 0, yaw: 0, v: 0 };
 if (DEMO === 'skim') { tank.fold = 1; S.v = num('speed', 70); }                    // (skimming from the start)
-// how far into what it can't clear its hull would be, at x, z, turned yaw (0: clear). It never moves or turns deeper in than it is:
+// how far into things its hull, posed as it is, would be at x, z, turned yaw (tank.hits). It never moves or turns deeper in than it is:
 // driving, it slides along what it meets; driving itself, it stops.
-function sink(x, z, yaw) {
-  const c = Math.cos(yaw), s = Math.sin(yaw);
-  let deep = 0;
-  HULL.forEach(([hx, hz], i) => { deep = Math.max(deep, topAt(x + hx * c + hz * s, z - hx * s + hz * c) - tank.clearAt[i]); });
-  return deep;
-}
+const sink = (x, z, yaw) => tank.hits(x, terrain(x, z), z, yaw);
 const _p = new THREE.Vector3();
 let t = 0, last = performance.now(), auto = true;
 const info = document.getElementById('info');
@@ -231,7 +228,7 @@ function step(dt, now) {
     const a = Math.atan2(S.z, S.x) + (S.v * dt) / R;
     nx = Math.cos(a) * R; nz = Math.sin(a) * R; nyaw = -a;
   } else {
-    nyaw += turn * dt * (1.1 - 0.7 * Math.min(1, S.v / 60));
+    nyaw += turn * dt * (tank.form === 'walk' ? 2.6 - 1.6 * Math.min(1, Math.abs(S.v) / 25) : 1.1 - 0.7 * Math.min(1, S.v / 60));   // (a spider spins quick)
     nx = S.x + Math.sin(nyaw) * S.v * dt; nz = S.z + Math.cos(nyaw) * S.v * dt;
   }
   const deep = sink(S.x, S.z, S.yaw) + 1e-3, ok = (x, z, yaw) => sink(x, z, yaw) <= deep;
@@ -265,7 +262,7 @@ function frame() {
   const P = tank.root.position;
   cam.head += (THREE.MathUtils.euclideanModulo(S.yaw - cam.head + Math.PI, Math.PI * 2) - Math.PI) * (cam.set ? 1 - Math.exp(-real * 4) : 1);
   const k = cam.set ? 1 - Math.exp(-real * 20) : 1;                 // (a touch of smoothing: the hull bobs)
-  cam.at.lerp(_p.set(P.x, P.y + 2.8, P.z).add(_r.copy(cam.pan).applyAxisAngle(THREE.Object3D.DEFAULT_UP, cam.follow ? cam.head : 0)), k);
+  cam.at.lerp(_p.set(P.x, Math.max(P.y, tank.pose.W - tank.hipY) + 2.8, P.z).add(_r.copy(cam.pan).applyAxisAngle(THREE.Object3D.DEFAULT_UP, cam.follow ? cam.head : 0)), k);
   cam.set = true;
   const yaw = cam.yaw + (cam.follow ? cam.head : 0), d = (cam.dist + (CAM === 'chase' && !Q.has('dist') ? S.v * 0.12 : 0)) * cam.zoom;
   camera.position.set(Math.sin(yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(yaw) * Math.cos(cam.pitch)).multiplyScalar(d).add(cam.at);
