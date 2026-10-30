@@ -53,6 +53,7 @@ const CLIMB = 9.5;              // m a foot stands at most above the lowest foot
 const PITCH_MAX = 1.45, ROLL_MAX = 1.2;   // rad the hull tilts at most: nose up (near upright) a climb, and over sideways
 const LIFT_RATE = 6, PITCH_RATE = 2.2, ROLL_RATE = 1.6;   // m/s and rad/s the hull's pose changes at most (a spider's: quick)
 const FALL = 6;                 // m/s/s it drops at, with too few feet holding it
+const HIPS_OVER = 1.6;          // m the hips may stand over the climb's limit at most (reaching a top at it, never over a wall taller)
 const LEVER = 0.7;              // m a top must go on past a foot (away from its hip) for it to stand there: no hooking a lip
 const REVERSE = 18;             // m/s the most it backs up at
 const STRETCH = 1;              // of a leg's reach, past which a trailing foot is due to step (the stride plans to 0.97; at 1.06 it goes at once)
@@ -221,23 +222,28 @@ export function makeSpiderTank(kit) {
       heading(_probe).multiplyScalar(Math.max(PROBE, vel.length() * 0.25));
       _ahead4.copy(root.matrixWorld).setPosition(_w.setFromMatrixPosition(root.matrixWorld).add(_probe));
     }
+    const hipsTop = ref - rootUp + CLIMB + HIPS_OVER;
     const cost = (H, P, R) => {
       poseOf(H, P, R);
       let miss = 0;
       for (let i = 0; i < chs.length; i++) {
         const c = chs[i];
+        // (every hip kept under the top of anything too tall to climb, nose up or not, so no leg ever reaches over one)
+        if (_w.copy(c.hip).applyQuaternion(_q).add(_pos).y > Math.max(hipsTop, body.top)) return Infinity;
         if (c.stepping) continue;
-        const d = _w.copy(c.hip).applyQuaternion(_q).add(_pos).distanceTo(footL[i]);
+        const d = _w.distanceTo(footL[i]);
         miss += Math.max(0, d - 0.97 * c.reach) + Math.max(0, 0.95 * NEAR * c.reach - d);
       }
       const into = hullDepth(root.matrixWorld), on = going ? hullDepth(_ahead4) : 0;
       return 400 * miss + 2000 * into + 40 * on + 0.3 * (H - Hn) ** 2 + 3 * ((P - Pn) ** 2 + (R - Rn) ** 2);
     };
     const dH = LIFT_RATE * dt, dP = PITCH_RATE * dt, dR = ROLL_RATE * dt;
+    poseOf(body.H, body.P, body.R);                                    // (over the cap already, as a foot stood up on something: no higher)
+    body.top = -Infinity;
+    for (const c of chs) body.top = Math.max(body.top, _w.copy(c.hip).applyQuaternion(_q).add(_pos).y);
     let best = Infinity, bH = body.H, bP = body.P, bR = body.R;
     for (const a of [0, -1, 1]) for (const b of [0, -1, 1]) for (const r of [0, -1, 1]) {
-      // (the hips kept under the top of anything too tall to climb, so it never reaches over one)
-      const H = Math.min(body.H + a * dH, ref - rootUp + CLIMB + hipY - 1.5), P = THREE.MathUtils.clamp(body.P + b * dP, -PITCH_MAX, PITCH_MAX), R = THREE.MathUtils.clamp(body.R + r * dR, -ROLL_MAX, ROLL_MAX);
+      const H = body.H + a * dH, P = THREE.MathUtils.clamp(body.P + b * dP, -PITCH_MAX, PITCH_MAX), R = THREE.MathUtils.clamp(body.R + r * dR, -ROLL_MAX, ROLL_MAX);
       const k = cost(H, P, R);
       if (k < best - 1e-6) { best = k; bH = H; bP = P; bR = R; }
     }
