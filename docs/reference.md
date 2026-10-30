@@ -443,7 +443,7 @@ tools/
   stable-layouts.mjs       the stable yard's layouts: clearance and walk checks, plans (docs/stable-proposals/)
   race-sim.mjs             runs the race model headless and reports the balance
   chimera-lab.html         the chimera builder's lab (/tools/chimera-lab.html; docs/chimera-builder/)
-  spidertank-lab.html      the spider tank driving: walk, run, close up and skim, the beam (/tools/spidertank-lab.html)
+  spidertank-lab.html      the spider tank driving: walk, climb, run, close up and skim, the beam (/tools/spidertank-lab.html)
   make-credit-glyph.py     draws the credit sign for both pixel faces -> assets/fonts/credit-*.woff2
   meridian-layouts.mjs     Meridian Exchange layout study (docs/meridian-layouts.md)
   winch-ride.mjs           headless winch test; run --gate ring after touching src/winch.js

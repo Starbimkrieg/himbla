@@ -5,6 +5,18 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Zbornak's spider tank, round three: it closes up by itself, strides long, grips and climbs** (`docs/spidertank/`; not in the game
+  yet). **Overdrive is automatic:** it closes up at 40 m/s and opens out under 34 (no key). **Longer, calmer strides** to get there
+  (`makeGait`'s `long` option): each leg reaches as far fore and aft as its hip allows, the next foot lifts just before the last lands at
+  the top, and a big leg's steps take longer (pendulum timing): 10.5 m at 20 m/s, 12.7 m at 38 m/s, three steps a second at most.
+  **No more gliding on turns:** the walk no longer drops out when the hull is lifted, the step trigger knows ahead from behind, and the
+  IK solves more passes, so planted feet hold to the centimetre turning in place or round a crate. **Grip and clearance:** a foot only
+  lands where its leg reaches (else the nearest spot toward the hip or beside: `foothold`), steps up lift first and then reach over and
+  plant, the hull keeps 0.5 m over whatever is under it (looking ahead) and only as high as the planted legs hold it, and what it can't
+  clear stops it with its front feet up on it (`tank.clearTop`), instead of popping it up on top of the 4.8 m block. **The model:** the
+  rams work (a barrel and a rod per ram, hull to thigh and thigh to shin, aimed at each other every frame), and the fins are gone from
+  the bead (12.0k triangles, 312 KB). The lab's test lane (`&demo=wall`) walks over a 2.3 m crate and stops at the block; `&demo=climb`.
+  The mites' and chimeras' walk is unchanged (measured).
 - **Zbornak's spider tank, round two: ARACHNE, closing up into a bead** (`docs/spidertank/`; not in the game yet). A was picked and B
   dropped. Rebuilt bulkier and more mechanical, without the abdomen (`build_spidertank.py`, 10.7k triangles, 318 KB compressed): a
   faceted armoured bead of off-white and pale grey plates over a dark frame (the lab's colours) with the frame showing in the seams

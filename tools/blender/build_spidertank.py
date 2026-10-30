@@ -8,7 +8,8 @@
 # legs bolted to a belt round its waist, a visor in the blunt nose, the beam cannon under it, the antimatter reactor glowing violet
 # through a grilled window in the spine, and Zbornak's green LEDs here and there. For overdrive it closes up into the bead: each leg
 # folds into a tight zigzag against the hull, slides in through its hip port, and a hatch swings shut over the port; the cannon draws
-# back into the nose; tail fins and jets come out. Slowing down, it all runs backwards and the legs stand it up.
+# back into the nose; the jets come out. Slowing down, it all runs backwards and the legs stand it up. Each leg's rams work: one lifts
+# the thigh from the hull, one bends the knee.
 #
 # Frame: three.js axes (x right, y up, +z forward), metres, origin on the ground under the middle of the hull, legs at their walking
 # rest pose with the feet on y = 0.
@@ -19,15 +20,18 @@
 #   cannon  the beam cannon's base; `muzzle` at its tip, the beam leaves along +z
 #   port    the steel collar round a hip, sliding in with its leg
 #   hatch   a hip port's door, authored open (swung into the hull, out of sight)
-#   skim    a fin or a jet, shown only when skimming (grown from nothing)
+#   ram     a hydraulic ram's barrel, extra `to`: the name of its `rod` pivot on the next bone (or the leg) along; the game turns
+#           each to face the other every frame, so the ram stretches and shortens as the joint moves
+#   skim    a jet, shown only when skimming (grown from nothing)
 #   seat    where the runner sits (hidden)
 # The overdrive: a pivot with extra `fold` ([x, y, z, w], three.js axes) turns to that local quaternion over `foldSpan` ([start, end]
 # of the fold, 0 to 1); one with `foldPos` ([x, y, z]) moves there over `foldPosSpan` (else `foldSpan`); one with `foldScale` ([from,
 # to]) grows over `foldSpan`. Legs zigzag over 0 to 0.5 and slide in over 0.4 to 0.85, the hatches shut over 0.8 to 1, the cannon draws
-# in over 0.05 to 0.45, the fins and jets grow over 0.65 to 1.
+# in over 0.05 to 0.45, the jets grow over 0.7 to 1.
 # Slots (palette: src/spidertank.js): armor (the plates), armor2 (the lower plates), frame (the dark structure), steel (joints,
 # collars), metal (rams), and lit: core (the antimatter violet), visor, led (Zbornak's green), thrust (the jets).
-# Root extras: hipY (hip height), span (hip to foot along the ground), skimDrop (how far the folded hull settles), radius.
+# Root extras: hipY (hip height), span (hip to foot along the ground), belly (the hull's underside over the ground, standing), skimDrop
+# (how far the folded hull settles), radius.
 import bpy, math, os
 from mathutils import Vector, Matrix
 
@@ -163,7 +167,7 @@ def plate_geo(L, p0, p1, pw, pt, yc, tip=0.55, root=0.8):
 
 
 def bone(name, parent, a, b, out, s, last=False):
-    """a leg bone from a to b (in its joint's frame), armour on the `out` side: a strut, a drum at its joint, a shield, a ram, LEDs"""
+    """a leg bone from a to b (in its joint's frame), armour on the `out` side: a strut, a drum at its joint, a shield, LEDs"""
     L = (Vector(b) - Vector(a)).length
     m = frame(Vector(b) - Vector(a), out)
     facet_mesh(name + "_frame", put(slab(0.0, L, s["sw0"], s["sw1"], s["st"], s["st"], e=6.0, wmid=s.get("swm")), m, a), "frame", parent, 0.035)
@@ -176,10 +180,6 @@ def bone(name, parent, a, b, out, s, last=False):
                    "armor", parent, 0.04)
         if s.get("leds"):                                            # (two of Zbornak's green LEDs near the far end, on the ridge)
             facet_mesh(name + "_leds", put(join([xf(cuboid(0.06, 0.03, 0.09)[:2], (0, top + s["pt"] - 0.012, L * f)) for f in (0.74, 0.8)]), m, a), "led", parent, 0)
-    if s.get("ram"):                                                 # (a hydraulic ram under the bone: barrel and rod)
-        y = -s["st"] - 0.07
-        facet_mesh(name + "_ram", put(join([xf(cylinder(0.085, 0.085, L * 0.42, 8)[:2], (0, y, L * 0.33), (math.pi / 2, 0, 0)),
-                                            xf(cylinder(0.045, 0.045, L * 0.4, 6)[:2], (0, y, L * 0.66), (math.pi / 2, 0, 0))]), m, a), "metal", parent, 0.015)
     if last:                                                         # (an angular hoof-claw, its tip on the contact)
         facet_mesh(name + "_hoof", put(lathe([(0, 0), (s["sw1"] * 1.5, 0.08), (s["sw1"] * 1.7, 0.32), (s["sw1"] * 1.1, 0.6), (0, 0.66)], 6), m @ Matrix.Rotation(math.pi / 2, 3, "X"),
                                            Vector(a) + (Vector(b) - Vector(a)) * (1 - 0.66 / L)), "steel", parent, 0.025)
@@ -188,6 +188,30 @@ def bone(name, parent, a, b, out, s, last=False):
 def quat(m):
     q = m.to_quaternion()
     return [q.x, q.y, q.z, q.w]
+
+
+T3B = Matrix(((1, 0, 0), (0, 0, -1), (0, 1, 0)))                     # (three.js axes -> Blender's)
+
+
+def facing(e, d):
+    """turn an empty so its +z (three.js axes) points along d"""
+    q = Vector((0, 0, 1)).rotation_difference(Vector(d).normalized())
+    e.rotation_mode = "QUATERNION"
+    e.rotation_quaternion = (T3B @ q.to_matrix() @ T3B.transposed()).to_quaternion()
+
+
+def ram(name, pa, a_local, a_world, pb, b_local, b_world, rb, rr):
+    """a hydraulic ram from a (on pivot pa) to b (on pivot pb): a barrel pivot at a and a rod pivot at b, each built along its +z and
+    facing the other (the game keeps them facing); each 0.7 of the rest length, so it reaches from 0.7 to 1.4 of it"""
+    D = (Vector(b_world) - Vector(a_world)).length
+    rod = pivot(name + "_rod", tuple(b_local), pb, role="rod")
+    barrel = pivot(name + "_barrel", tuple(a_local), pa, role="ram", to=rod.name)
+    facing(barrel, Vector(b_world) - Vector(a_world))
+    facing(rod, Vector(a_world) - Vector(b_world))
+    eye = lambda r: xf(lathe([(0, -r * 0.7), (r * 1.25, -r * 0.7), (r * 1.25, r * 0.7), (0, r * 0.7)], 8), r=(0, 0, math.pi / 2))
+    facet_mesh(name + "_barrel", join([xf(lathe([(0, 0.0), (rb, 0.0), (rb, 0.7 * D), (rb * 0.7, 0.7 * D + 0.03), (0, 0.7 * D + 0.03)], 8), r=(math.pi / 2, 0, 0)),
+                                       eye(rb)]), "metal", barrel, 0.015)
+    facet_mesh(name + "_rod", join([xf(lathe([(0, 0.0), (rr, 0.0), (rr, 0.7 * D), (0, 0.7 * D)], 6), r=(math.pi / 2, 0, 0)), eye(rr)]), "steel", rod, 0.012)
 
 
 def leg(root, name, pts, outs, folds, specs, side, n, retract):
@@ -260,12 +284,7 @@ facet_mesh("emitter", xf(lathe([(0, 2.42), (0.14, 2.44), (0.11, 2.57), (0, 2.59)
 pivot("muzzle", (0, 0, 2.6), gun, role="muzzle")
 pivot("seat", (0, HY + 0.4, 1.2), R, role="seat")
 
-# overdrive pieces, grown from nothing: a dorsal and a ventral fin at the tail (each with an LED), three jets down the belly and the
-# tail jet's flame
-for k, (y, flip) in enumerate(((HY + 0.82, 1), (HY - 0.7, -1))):
-    fin = pivot(f"fin{k}", (0, y, -2.45), R, role="skim", foldScale=[0.001, 1.0], foldSpan=[0.65, 1.0])
-    facet_mesh(f"fin{k}_blade", xf(extrude([(0.45, 0.0), (-0.75, 0.0), (-1.0, 0.62), (-0.45, 0.66)], 0.12, "x"), s=(1, flip, 1)), "armor", fin, 0.03)
-    facet_mesh(f"fin{k}_led", xf(cuboid(0.13, 0.04, 0.3)[:2], (0, flip * 0.5, -0.62)), "led", fin, 0.008)
+# overdrive pieces, grown from nothing: three jets down the belly and the tail jet's flame
 for k, z in enumerate((1.3, 0.0, -1.3)):
     jet = pivot(f"jet{k}", tuple(surf(z, 1.5 * math.pi, 0.07)), R, role="skim", foldScale=[0.001, 1.0], foldSpan=[0.7, 1.0])
     facet_mesh(f"jet{k}_glow", lathe([(0, 0.0), (0.5, 0.0), (0.4, -0.06), (0, -0.07)], 6), "thrust", jet, 0)
@@ -277,8 +296,8 @@ HIPS = [1.65, 0.55, -0.55, -1.65]
 
 
 def specs():
-    return [dict(sw0=0.25, sw1=0.21, swm=0.29, st=0.22, dr=0.38, dw=0.66, pw=0.52, pt=0.13, ram=True, leds=True),
-            dict(sw0=0.21, sw1=0.15, st=0.18, dr=0.32, dw=0.56, pw=0.4, pt=0.1, tip=0.45, ram=True),
+    return [dict(sw0=0.25, sw1=0.21, swm=0.29, st=0.22, dr=0.38, dw=0.66, pw=0.52, pt=0.13, leds=True),
+            dict(sw0=0.21, sw1=0.15, st=0.18, dr=0.32, dw=0.56, pw=0.4, pt=0.1, tip=0.45),
             dict(sw0=0.15, sw1=0.09, st=0.13, dr=0.25, dw=0.44, pw=0.25, pt=0.07, p0=0.06, p1=0.62, tip=0.4)]
 
 
@@ -297,11 +316,21 @@ for n, hz in enumerate(HIPS):
         dz = -1 if hz > 0 else 1
         rise = 0.2 if n in (0, 3) else -0.2
         folds = [(-sx * 0.12, rise, dz), (-sx * 0.04, -0.12, -dz), (0.0, -0.08, dz)]
-        leg(R, nm, [hip, k1, k2, ft], outs, folds, specs(), sx, n, (sx * (w - 1.6), HY, hz))
-        # the port: a steel collar round the hip (it slides in with the leg), and its hatch: a plate on the bead's own facets, hinged along its top edge, authored
-        # swung in (out of sight) and turned shut for overdrive
+        joints = leg(R, nm, [hip, k1, k2, ft], outs, folds, specs(), sx, n, (sx * (w - 1.6), HY, hz))
+        # the port: a steel collar round the hip (it slides in with the leg), and its hatch: a plate on the bead's own facets, hinged
+        # along its top edge, authored swung in (out of sight) and turned shut for overdrive
         cp = pivot(f"{nm}_port", (sx * (w - 0.06), HY, hz), R, role="port", foldPos=[sx * (w - 1.6), HY, hz], foldSpan=[0.4, 0.85])
         facet_mesh(f"{nm}_collar", xf(lathe([(0.4, 0), (0.5, 0.0), (0.5, 0.1), (0.4, 0.1)], 8), r=(0, 0, -sx * math.pi / 2)), "steel", cp, 0.025)
+        # the rams, under the leg: the lift ram from the hull below the port to the thigh, the knee ram from the thigh to the shin
+        sp_ = specs()
+        m0, m1 = frame(k1 - hip, outs[0]), frame(k2 - k1, outs[1])
+        L0, L1 = (k1 - hip).length, (k2 - k1).length
+        hull_pt = surf(hz, math.radians(-30 if sx > 0 else 210), -0.04)
+        thigh_lo = m0 @ Vector((0, -(sp_[0]["st"] + 0.12), 0.38 * L0))
+        thigh_hi = m0 @ Vector((0, -(sp_[0]["st"] + 0.1), 0.72 * L0))
+        shin_pt = m1 @ Vector((0, -(sp_[1]["st"] + 0.1), 0.3 * L1))
+        ram(f"{nm}_lift", cp, hull_pt - Vector((sx * (w - 0.06), HY, hz)), hull_pt, joints[0], thigh_lo, hip + thigh_lo, 0.1, 0.055)
+        ram(f"{nm}_knee", joints[0], thigh_hi, hip + thigh_hi, joints[1], shin_pt, k1 + shin_pt, 0.085, 0.05)
         a_c = 0 if sx > 0 else 180
         top = surf(hz, math.radians(a_c + (21 if sx > 0 else -21)), 0.0)
         shut = panel(hz - 0.48, hz + 0.48, a_c - 21, a_c + 21, o0=0.01, o1=0.07, gap=0.0)
@@ -319,6 +348,7 @@ for o in C.objects:
         f, h = o.matrix_world.translation, hipo.matrix_world.translation
         sp.append(math.hypot(f.x - h.x, f.y - h.y))
 R["hipY"], R["span"], R["skimDrop"], R["radius"] = HY, sum(sp) / len(sp), 1.15, 6.0
+R["belly"] = HY - SECS[3][3]                                          # (the hull's underside, standing: its waist less the widest bottom)
 print(f"spidertank: {tris(list(C.objects))} triangles, span {R['span']:.2f} m")
 audit_coplanar([o for o in C.objects])
 if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":

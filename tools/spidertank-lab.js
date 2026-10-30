@@ -1,7 +1,7 @@
 // Dev-only: Zbornak's spider tank lab (src/spidertank.js; docs/spidertank/). It drives round a circle over rolling ground with
 // crates, low walls and a few tall blocks on it: walking on its eight legs (src/gait.js), running, closing up into its skimming bead
-// and back, stopping to fire the reactor beam. It drives itself until you press a key: W/S speed,
-// A/D turn, SHIFT overdrive, hold SPACE for the beam. Query parameters are in the HTML file.
+// past 40 m/s and back, stopping to fire the reactor beam. It drives itself until you press a key: W/S speed, A/D turn, hold SPACE
+// for the beam. A test lane off the circle (&demo=wall) has a crate it climbs and a block it can't. Query parameters are in the HTML.
 import * as THREE from 'three';
 import { ComicPost } from '../src/post.js';
 import { loadSpiderTank, makeSpiderTank } from '../src/spidertank.js';
@@ -47,7 +47,7 @@ function addBox(cx, cz, yaw, w, d, h, mat) {
 }
 for (let k = 0; k < 16; k++) {                                         // crates on the way round, some under the feet, some under the hull
   const a = (k / 16) * Math.PI * 2 + 0.25, off = (rr() - 0.5) * 9;
-  addBox(Math.cos(a) * (R + off), Math.sin(a) * (R + off), rr() * 3, 1.8 + rr() * 2.4, 1.8 + rr() * 2.4, 0.7 + rr() * 1.9, boxMat);
+  addBox(Math.cos(a) * (R + off), Math.sin(a) * (R + off), rr() * 3, 1.8 + rr() * 2.4, 1.8 + rr() * 2.4, 0.7 + rr() * 1.3, boxMat);
 }
 for (let k = 0; k < 4; k++) {                                          // low walls across the way
   const a = (k / 4) * Math.PI * 2 + 1.0;
@@ -57,6 +57,10 @@ for (let k = 0; k < 9; k++) {                                          // tall b
   const a = (k / 9) * Math.PI * 2, rad = R + 22 + rr() * 30;
   addBox(Math.cos(a) * rad, Math.sin(a) * rad, rr() * 3, 6 + rr() * 8, 6 + rr() * 8, 6 + rr() * 12, blockMat);
 }
+// the test lane, south of the circle: a crate it climbs over, then a block too tall to clear (its legs reach up onto it; it stops)
+const LANE = { x: 0, z0: -175 };
+addBox(LANE.x, -152, 0, 6, 3.5, 2.3, boxMat);
+addBox(LANE.x, -128, 0, 12, 6, 4.8, blockMat);
 const groundGeo = new THREE.PlaneGeometry(420, 420, 300, 300).rotateX(-Math.PI / 2);
 {
   const P = groundGeo.attributes.position;
@@ -66,39 +70,55 @@ const groundGeo = new THREE.PlaneGeometry(420, 420, 300, 300).rotateX(-Math.PI /
 const ground = new THREE.Mesh(groundGeo, new THREE.MeshToonMaterial({ color: 0x8a8398 }));
 ground.receiveShadow = true;
 scene.add(ground);
-// the highest thing under a point: a box's top, or the ground
-function topAt(x, z) {
+// the highest thing under a point: a box's top, or the ground; with ceil, the highest no higher than ceil (NaN: inside a box taller)
+function topAt(x, z, ceil = Infinity) {
   let y = terrain(x, z);
   for (const b of boxes) {
     const dx = x - b.cx, dz = z - b.cz, lx = dx * b.c - dz * b.s, lz = dx * b.s + dz * b.c;
-    if (Math.abs(lx) <= b.hx && Math.abs(lz) <= b.hz && b.top > y) y = b.top;
+    if (Math.abs(lx) > b.hx || Math.abs(lz) > b.hz) continue;
+    if (b.top > ceil) return NaN;
+    if (b.top > y) y = b.top;
   }
   return y;
 }
-const groundAt = (p, out) => out.set(p.x, topAt(p.x, p.z), p.z);
+// gait.js's ground: the point under p, or null where p is inside something taller than ceil
+const groundAt = (p, out, ceil) => {
+  const y = topAt(p.x, p.z, ceil);
+  return Number.isNaN(y) ? null : out.set(p.x, y, p.z);
+};
 
 // ---- the drive: scripted until a key is pressed (and again a few seconds after the last) ----
 const keys = new Set();
 let lastKey = Q.get('auto') === '0' ? 0 : -1e9;
 addEventListener('keydown', (e) => { keys.add(e.code); lastKey = performance.now(); if (e.code === 'Space') e.preventDefault(); });
 addEventListener('keyup', (e) => keys.delete(e.code));
-// the whole drive, looped: [until (s), speed (m/s), overdrive, trigger]
-const DRIVE = [[5, 5, 0, 0], [10, 14, 0, 0], [14, 26, 0, 0], [20, 70, 1, 0], [23, 22, 0, 0], [26, 6, 0, 0], [27, 1.5, 0, 0], [32.5, 1.5, 0, 1], [35, 4, 0, 0]];
+// the whole drive, looped: [until (s), speed (m/s), trigger]; it closes up by itself past 40 m/s and opens out under 34
+const DRIVE = [[5, 5, 0], [10, 14, 0], [15, 28, 0], [19, 38, 0], [25, 70, 0], [30, 20, 0], [33, 6, 0], [34, 1.5, 0], [39.5, 1.5, 1], [42, 4, 0]];
 function script(t) {
-  if (DEMO === 'walk') return [num('speed', 4), 0, 0];
-  if (DEMO === 'run') return [num('speed', 24), 0, 0];
-  if (DEMO === 'skim') return [70, 1, 0];
-  if (DEMO === 'beam') return [0.8, 0, t % 7 < 6 ? 1 : 0];
-  if (DEMO === 'fold') return [5, t % 5 < 2.5 ? 1 : 0, 0];
+  if (DEMO === 'walk' || DEMO === 'climb') return [num('speed', 4), 0];
+  if (DEMO === 'wall') return [num('speed', 3), 0];
+  if (DEMO === 'run') return [num('speed', 24), 0];
+  if (DEMO === 'skim') return [num('speed', 70), 0];
+  if (DEMO === 'beam') return [0.8, t % 7 < 6 ? 1 : 0];
+  if (DEMO === 'fold') return [t % 10 < 5 ? 46 : 26, 0];
   const s = t % DRIVE[DRIVE.length - 1][0];
   const p = DRIVE.find((d) => s < d[0]);
-  return [p[1], p[2], p[3]];
+  return [p[1], p[2]];
 }
 
 const kit = await loadSpiderTank();
 const tank = makeSpiderTank(kit);
 scene.add(tank.root);
-const S = { x: R, z: 0, yaw: 0, v: 0, y: terrain(R, 0), lap: 0 };
+const S = DEMO === 'wall' ? { x: LANE.x, z: LANE.z0, yaw: 0, v: 0 } : { x: R, z: 0, yaw: 0, v: 0 };
+if (DEMO === 'skim') { tank.fold = 1; S.v = num('speed', 70); }                    // (skimming from the start)
+const hull = [-1.9, 0, 1.9].flatMap((x) => [-2.8, 0, 2.8].map((z) => [x, z]));
+// the highest thing under its hull at x, z
+function underHull(x, z, yaw) {
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  return Math.max(...hull.map(([hx, hz]) => topAt(x + hx * c + hz * s, z - hx * s + hz * c)));
+}
+// what it can't clear stops it: moving onto something higher than what its legs can lift it over (never stuck where it already is)
+const blocked = (x, z, yaw) => { const top = underHull(x, z, yaw); return top > tank.clearTop && top > underHull(S.x, S.z, S.yaw) + 0.05; };
 const fwd = new THREE.Vector3(), side = new THREE.Vector3(), camAt = new THREE.Vector3(), camLook = new THREE.Vector3(), _p = new THREE.Vector3();
 let t = 0, last = performance.now(), auto = true;
 const info = document.getElementById('info');
@@ -128,39 +148,35 @@ function frame() {
     post.setSize();
   }
   auto = now - lastKey > 6000;
-  let want, overdrive, trigger, turn = 0;
+  let want, trigger, turn = 0;
   if (auto) {
-    [want, overdrive, trigger] = script(t);
+    [want, trigger] = script(t);
   } else {
-    const top = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 85 : tank.walkMax;
-    want = keys.has('KeyW') ? top : keys.has('KeyS') ? 0 : Math.min(S.v, top);
-    overdrive = top > tank.walkMax && S.v > tank.walkMax * 0.6;
+    want = keys.has('KeyW') ? 90 : keys.has('KeyS') ? 0 : S.v;
     trigger = keys.has('Space');
     turn = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
   }
-  if (overdrive && tank.form === 'walk' && S.v < tank.walkMax * 0.6) overdrive = auto;      // (it folds once it's going)
-  want = Math.min(want, tank.form === 'skim' ? 90 : tank.walkMax) * tank.speedCap;
-  const acc = tank.form === 'skim' ? 22 : 9;
+  want = Math.min(want, 90) * tank.speedCap;
+  const acc = tank.form === 'walk' ? 7 : 20;
   S.v += THREE.MathUtils.clamp(want - S.v, -14 * dt, acc * dt);
-  // round the circle (auto) or where it's steered
-  if (auto) {
-    const r = Math.hypot(S.x, S.z), a = Math.atan2(S.z, S.x) + (S.v * dt) / R;
-    S.x = Math.cos(a) * R; S.z = Math.sin(a) * R; S.yaw = -a;
-    if (Math.abs(r - R) > 1) { S.x = Math.cos(a) * R; S.z = Math.sin(a) * R; }
+  // round the circle (auto), down the test lane, or where it's steered; not into what it can't clear
+  let nx, nz, nyaw = S.yaw;
+  if (auto && DEMO === 'wall') { nx = LANE.x; nz = S.z + S.v * dt; nyaw = 0; }
+  else if (auto) {
+    const a = Math.atan2(S.z, S.x) + (S.v * dt) / R;
+    nx = Math.cos(a) * R; nz = Math.sin(a) * R; nyaw = -a;
   } else {
-    S.yaw += turn * dt * (1.1 - 0.7 * Math.min(1, S.v / 60));
-    S.x += Math.sin(S.yaw) * S.v * dt; S.z += Math.cos(S.yaw) * S.v * dt;
+    nyaw += turn * dt * (1.1 - 0.7 * Math.min(1, S.v / 60));
+    nx = S.x + Math.sin(nyaw) * S.v * dt; nz = S.z + Math.cos(nyaw) * S.v * dt;
   }
-  // its height: the ground under the hull, or what stands under it taller than its belly clears
+  S.yaw = nyaw;
+  if (blocked(nx, nz, nyaw)) S.v = 0;
+  else { S.x = nx; S.z = nz; }
   fwd.set(Math.sin(S.yaw), 0, Math.cos(S.yaw)); side.set(fwd.z, 0, -fwd.x);
-  let top = -Infinity;
-  for (const a of [-1, 0, 1]) for (const b of [-1, 0, 1]) top = Math.max(top, topAt(S.x + side.x * a * 1.8 + fwd.x * b * 2.8, S.z + side.z * a * 1.8 + fwd.z * b * 2.8));
-  const belly = tank.hipY * (tank.form === 'skim' ? 0.35 : 0.62);
-  const y = Math.max(terrain(S.x, S.z), top - belly);
-  S.y += (y - S.y) * Math.min(1, dt * (y > S.y ? 6 : 3));
-  tank.root.position.set(S.x, S.y, S.z);
+  // on the terrain under its middle: it rides up over crates on its own legs (spidertank.js)
+  tank.root.position.set(S.x, terrain(S.x, S.z), S.z);
   tank.root.rotation.set(0, S.yaw, 0);
-  tank.update(dt, { speed: S.v, ground: groundAt, overdrive: !!overdrive, trigger: !!trigger });
+  tank.update(dt, { speed: S.v, ground: groundAt, trigger: !!trigger });
   // the camera
   const P = tank.root.position;
   if (CAM === 'orbit') {
@@ -182,8 +198,8 @@ function frame() {
   sun.position.copy(P).add(_p.set(14, 26, 10));
   sun.target.position.copy(P);
   const B = tank.beam;
-  info.innerHTML = `<b>${tank.model.userData.title}</b>  ${auto ? 'driving itself (press a key to drive)' : 'W/S speed, A/D turn, SHIFT overdrive, SPACE beam'}\n`
-    + `${S.v.toFixed(1)} m/s  ${tank.form.toUpperCase()}${B.state !== 'idle' ? `  BEAM ${B.state.toUpperCase()} ${B.t.toFixed(1)} s` : ''}  (folds past ${tank.walkMax.toFixed(0)} m/s)`;
+  info.innerHTML = `<b>${tank.model.userData.title}</b>  ${auto ? 'driving itself (press a key to drive)' : 'W/S speed, A/D turn, SPACE beam'}\n`
+    + `${S.v.toFixed(1)} m/s  ${tank.form.toUpperCase()}${B.state !== 'idle' ? `  BEAM ${B.state.toUpperCase()} ${B.t.toFixed(1)} s` : ''}  (closes up past ${tank.walkMax.toFixed(0)} m/s)`;
   post.material.uniforms.time.value = t;
   post.render(scene, camera);
   requestAnimationFrame(frame);

@@ -5,14 +5,18 @@ import { makeGait } from './gait.js';
 
 // Zbornak's spider tank, ARACHNE: the Triple Crown's reward (tools/blender/build_spidertank.py; docs/spidertank/; reviewed in
 // tools/spidertank-lab.html). Eight armoured legs walk it by the chimeras' gait (src/gait.js: planted feet, two sets of four that take
-// turns, IK). Past a run it closes up into a skimming bead (overdrive): each leg zigzags against the hull, slides in through its port and
-// a hatch shuts over it, the cannon draws into the nose, fins and jets come out; every piece follows its own share of the fold (the
-// model's `fold`, `foldPos`, `foldScale` and their spans). Its reactor beam charges for a second while the trigger is held, then
-// channels for four from the cannon; walking only, and slow while it does.
+// turns, IK), striding longer the faster it goes. Its hull rides on its feet: at least CLEAR over whatever is under it, never higher
+// than its planted legs can hold it (what it can't clear, tank.clearTop, is a wall to the caller), and each foot only steps where its
+// leg can reach. Past SKIM_AT it closes up into a skimming bead (overdrive) and back under SKIM_OFF: each leg zigzags against the hull,
+// slides in through its port and a hatch shuts over it, the cannon draws into the nose, the jets come out; every piece follows its own
+// share of the fold (the model's `fold`, `foldPos`, `foldScale` and their spans). Its rams (barrel and rod pivots) aim at each other
+// every frame, so they stretch as the legs move. The reactor beam charges for a second while the trigger is held, then channels for
+// four from the cannon; walking only, and slow while it does.
 //
-// loadSpiderTank() -> kit; makeSpiderTank(kit) -> tank: { root, update(dt, { speed, ground, overdrive, trigger }), folded(f) }. The
-// caller places root (on the ground under the hull, +z ahead) before update. tank.form ('walk', 'folding', 'skim'), tank.beam
-// ({ state: 'idle' | 'charge' | 'fire', t }) and tank.speedCap (a fraction of the asked-for speed, while the beam is up) read back.
+// loadSpiderTank() -> kit; makeSpiderTank(kit) -> tank: { root, update(dt, { speed, ground, trigger }), folded(f) }. The caller places
+// root (on the terrain under the hull's middle, +z ahead) before update; ground(p, out[, ceil]) as gait.js has it. tank.form ('walk',
+// 'folding', 'skim'), tank.beam ({ state: 'idle' | 'charge' | 'fire', t }), tank.speedCap (a fraction of the asked-for speed, while the
+// beam is up) and tank.clearTop (the highest top, along up, the hull can pass over now) read back.
 
 const URL_GLB = new URL('./assets/spidertank.glb', import.meta.url).href;
 let KIT = null;
@@ -25,10 +29,18 @@ export const PALETTE = {
   beam: 0xc77dff, hot: 0xf4e6ff,
 };
 
+const SKIM_AT = 40, SKIM_OFF = 34; // m/s: it closes up past the first, opens out under the second
 const FOLD_TIME = 1.3;          // s to close up into the bead, or open out of it
+const CLEAR = 0.5;              // m the hull keeps over whatever is under it (and what it will be over in LOOK s)
+const LOOK = 0.6;               // s ahead it looks for what it will be over
+const SKIM_RISE = 2.5;          // m the folded hull rises on its jets over what is under it, at most
+const RIDE = 4;                 // 1/s the hull follows its feet
 const CHARGE = 1.0, FIRE = 4.0; // s: the beam's charge (the trigger held) and its channel
 const BEAM_RANGE = 420;         // m
 const BEAM_SLOW = 0.3;          // the speed it may keep while charging and firing (of what is asked)
+
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _up = new THREE.Vector3();
+const _inv = new THREE.Matrix4();
 
 function group(node, pal, mats) {
   const g = new THREE.Group();
@@ -59,8 +71,9 @@ export function makeSpiderTank(kit) {
   root.add(inner);
   inner.add(model);
   const find = (role) => { let o = null; model.traverse((c) => { if (!o && c.userData.role === role) o = c; }); return o; };
-  const legs = [];
+  const legs = [], rams = [];
   model.traverse((c) => {
+    if (c.userData.role === 'ram') rams.push({ barrel: c, rod: model.getObjectByName(c.userData.to) });
     if (c.userData.role !== 'leg') return;
     // a tetrapod: the left front, right second, left third and right back legs step together, then the other four
     const set = (c.userData.n + (c.userData.side > 0 ? 1 : 0)) % 2;
@@ -77,8 +90,59 @@ export function makeSpiderTank(kit) {
       p0: o.position.clone(), p1: d.foldPos && new THREE.Vector3().fromArray(d.foldPos), scale: d.foldScale,
     });
   });
-  const gait = makeGait(root, inner, legs, { lift: 0.12 });
-  const { hipY, skimDrop } = node.data;
+  const { hipY, skimDrop, belly } = node.data;
+  let ground = null;
+
+  // the highest thing under the hull (now, and where it will be in LOOK s), over the root, along up
+  const vel = new THREE.Vector3(), prev = new THREE.Vector3();
+  function under() {
+    _up.setFromMatrixColumn(root.matrixWorld, 1).normalize();
+    _d.setFromMatrixPosition(root.matrixWorld);
+    let top = -Infinity;
+    for (const ahead of [0, LOOK]) {
+      for (const x of [-1.9, 0, 1.9]) for (const z of [-2.8, 0, 2.8]) {
+        _a.set(x, 0, z).applyMatrix4(root.matrixWorld).addScaledVector(vel, ahead);
+        if (ground(_a, _b)) top = Math.max(top, _b.sub(_d).dot(_up));
+      }
+    }
+    return top;
+  }
+  // the hull's lift, given its feet's mean height h: as the feet go, but CLEAR over what is under it, and no higher than every planted
+  // leg can still reach down from (what it can't clear past that, it won't walk onto: clearTop)
+  function rideHeight(h) {
+    const need = under() - belly + CLEAR;
+    _inv.copy(root.matrixWorld).invert();
+    let cap = Infinity;
+    for (const c of tank.gait.chains) {
+      if (c.stepping) continue;                                       // (the planted feet hold it up)
+      const f = _a.copy(c.F).applyMatrix4(_inv);
+      const dh = Math.hypot(f.x - c.hip.x, f.z - c.hip.z);
+      cap = Math.min(cap, f.y - c.hipY + Math.sqrt(Math.max(0, c.reach * c.reach - dh * dh)));
+    }
+    // it passes over what's under its hull now, or what it can rise to clear (a low wall at speed, crouched on long strides, is no wall)
+    tank.clearTop = _d.dot(_up) + Math.max(cap - CLEAR, inner.position.y) + belly;
+    return need <= cap ? Math.max(h, need) : Math.min(h, cap);      // (facing what it can't clear, it doesn't strain up at it)
+  }
+  // where foot c may stand near p: the highest thing there its leg reaches up to; else the nearest spot toward the hip, or beside it
+  const hipW = new THREE.Vector3();
+  function foothold(c, p, out, groundFn) {
+    c.joints[0].getWorldPosition(hipW);
+    const up = _up.setFromMatrixColumn(root.matrixWorld, 1).normalize();
+    for (let k = 0; k <= 9; k++) {
+      _c.copy(p);
+      if (k) {
+        _b.subVectors(hipW, p).addScaledVector(up, -_b.subVectors(hipW, p).dot(up));
+        const toHip = _b.normalize();
+        if (k <= 6) _c.addScaledVector(toHip, 0.5 * k);
+        else _c.addScaledVector(_b.crossVectors(toHip, up), (k - 7.5) * 1.6);          // (beside it: -0.8, 0.8, 2.4)
+      }
+      const dh = _a.subVectors(_c, hipW).addScaledVector(up, -_a.subVectors(_c, hipW).dot(up)).length();
+      const ceil = hipW.dot(up) + 0.92 * Math.sqrt(Math.max(0, c.reach * c.reach - dh * dh));
+      if (groundFn(_c, out, ceil)) return out;
+    }
+    return null;
+  }
+  const gait = makeGait(root, inner, legs, { air: false, body: rideHeight, followRate: RIDE, foothold, long: true });
   const muzzle = find('muzzle');
   const core0 = new THREE.Color(pal.glow.core), hot = new THREE.Color(pal.hot);
 
@@ -97,8 +161,8 @@ export function makeSpiderTank(kit) {
 
   const tank = {
     root, model, inner, gait, legs, muzzle, hipY, span: node.data.span,
-    form: 'walk', fold: 0, beam: { state: 'idle', t: 0 }, speedCap: 1,
-    walkMax: 0.55 * gait.vmax,                                         // m/s past which it closes up to skim (overdrive), at a run's end
+    form: 'walk', fold: 0, beam: { state: 'idle', t: 0 }, speedCap: 1, clearTop: Infinity, skimLift: 0,
+    walkMax: SKIM_AT,                                                // m/s past which it closes up to skim (overdrive)
     t: 0,
     // the pieces f of the way into the bead (the legs from where the gait left them, or, still, from as built), the hull settled
     folded(f, still = true) {
@@ -118,10 +182,24 @@ export function makeSpiderTank(kit) {
       }
       if (still) inner.position.set(0, 0, 0);
       inner.position.y -= skimDrop * share(f, [0.3, 1]);
+      this.aimRams();
       return this;
     },
-    update(dt, { speed = 0, ground = null, overdrive = false, trigger = false } = {}) {
+    // each ram's barrel and rod turned to face each other, so it stretches and shortens as its joint moves
+    aimRams() {
+      inner.updateMatrixWorld(true);
+      for (const R of rams) {
+        R.barrel.lookAt(R.rod.getWorldPosition(_a));
+        R.rod.lookAt(R.barrel.getWorldPosition(_b));
+      }
+    },
+    update(dt, { speed = 0, ground: g = null, trigger = false } = {}) {
+      ground = g;
       this.t += dt;
+      root.updateWorldMatrix(true, false);
+      _a.setFromMatrixPosition(root.matrixWorld);
+      if (dt > 0 && this.t > dt) vel.lerp(_b.subVectors(_a, prev).divideScalar(dt), 1 - Math.exp(-dt * 8));
+      prev.copy(_a);
       const B = this.beam;
       // the beam: hold to charge (walking only: it opens up first), let go early and it fizzles; charged, it channels FIRE seconds
       if (B.state === 'idle' && trigger && this.fold === 0) Object.assign(B, { state: 'charge', t: 0 });
@@ -129,15 +207,23 @@ export function makeSpiderTank(kit) {
       else if (B.state === 'fire') { B.t += dt; if (B.t >= FIRE) B.state = 'idle'; }
       const firing = B.state !== 'idle';
       this.speedCap = firing ? BEAM_SLOW : 1;
-      // overdrive: close up when asked (the caller asks past walkMax; never while the beam is up), open out when not
-      const skimWant = overdrive && !firing && !trigger;
+      // overdrive: close up past SKIM_AT, open out under SKIM_OFF (never while the beam is up)
+      const skimWant = (this.fold > 0.5 ? speed > SKIM_OFF : speed >= SKIM_AT) && !firing && !trigger;
       this.fold = THREE.MathUtils.clamp(this.fold + (skimWant ? dt : -dt) / FOLD_TIME, 0, 1);
       this.form = this.fold <= 0 ? 'walk' : this.fold >= 1 ? 'skim' : 'folding';
       // the legs: walk (IK) until they start to fold, and again as they finish opening
       inner.position.set(0, 0, 0);
-      gait.update(dt, this.fold < 0.15 ? ground : null, false);
-      this.folded(this.fold, false);
+      gait.update(dt, ground && this.fold < 0.15 ? ground : null, false);
+      if (this.fold >= 0.15) this.clearTop = Infinity;
+      // folded, the hull rides its jets over what is under it
       const f = share(this.fold, [0.5, 1]);
+      if (ground && this.fold > 0) {
+        const rise = THREE.MathUtils.clamp(under() - (belly - skimDrop) + CLEAR, 0, SKIM_RISE);
+        this.skimLift += (rise - this.skimLift) * Math.min(1, dt * 6);
+        if (this.fold >= 0.15) this.clearTop = _d.dot(_up) + SKIM_RISE + belly - skimDrop - CLEAR;
+      } else this.skimLift = 0;
+      inner.position.y += this.skimLift * share(this.fold, [0.3, 1]);
+      this.folded(this.fold, false);
       if (f > 0) inner.position.y += (1 + Math.sin(this.t * 3.1)) * 0.05 * f;               // (riding its jets, never lower)
       // the reactor and the cannon: brighter as it charges, flickering as it fires
       const heat = B.state === 'charge' ? B.t / CHARGE : B.state === 'fire' ? 1 : 0;
@@ -155,6 +241,7 @@ export function makeSpiderTank(kit) {
       return this;
     },
   };
+  tank.gait = gait;
   tank.folded(0);
   return tank;
 }
