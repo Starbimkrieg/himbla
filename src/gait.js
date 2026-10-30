@@ -52,8 +52,8 @@ const STANCE = 0.3;     // s (of the pendulum's scale) a long stride's foot stay
 const DUTY_WALK = 0.65, DUTY_RUN = 0.5, DUTY_TOP = 0.42;   // long: a foot's share of the stride down, walking, at full stride, flat out
 const FLAT_OUT = 3;     // long: of the speed the stride is full at, where the duty reaches DUTY_TOP
 const LONG_REACH = 0.82; // long: of the room a foot has ahead and behind, the most a stride uses (the legs stay bent at its ends)
-const LOW = 0.4;
-const SLACK = 0.85;     // long: of a foot's room behind its rest spot, how much a stride plans to use        // long: how much flatter the arc gets per full-stride speed past it
+const LOW = 0.4;        // long: how much flatter the arc gets per full-stride speed past it
+const SLACK = 0.85;     // long: of a foot's room behind its rest spot, how much a stride plans to use
 const SWIVELS = [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.2, -2.2];   // pole, solid: rad a leg may turn about its hip-to-foot line, nearest first
 const SWIVEL_RATE = 9;  // rad/s it eases to a new one
 const FOLD = 0.55;      // pole: the ankle's bend at the shortest reach (of its rest angle; straighter out to 1.15 of it)
@@ -349,7 +349,9 @@ function solveBent(c, t, swivel = c.swivel) {
   p[1].copy(p[0]).addScaledVector(a, L0 * Math.cos(A)).addScaledVector(b, L0 * Math.sin(A));
   const end = _t.copy(p[0]).addScaledVector(a, dd);
   if (n === 3) {
-    const L2 = c.len[2], kf = _d.subVectors(end, p[1]).normalize(), e = _x.copy(b).addScaledVector(kf, -b.dot(kf)).normalize();
+    const L2 = c.len[2], kf = _d.subVectors(end, p[1]).normalize(), e = _x.copy(b).addScaledVector(kf, -b.dot(kf));
+    if (e.lengthSq() < 1e-8) e.crossVectors(kf, a).cross(kf);                            // (the shin along the pole: any way across)
+    e.normalize();
     const Bk = Math.acos(THREE.MathUtils.clamp((L1 * L1 + Lv * Lv - L2 * L2) / (2 * L1 * Lv), -1, 1));
     p[2].copy(p[1]).addScaledVector(kf, L1 * Math.cos(Bk)).addScaledVector(e, B.side * L1 * Math.sin(Bk));
     p[3].copy(end);
