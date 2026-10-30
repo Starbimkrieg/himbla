@@ -14,7 +14,8 @@ import { makeGait } from './gait.js';
 // four from the cannon; walking only, and slow while it does.
 //
 // loadSpiderTank() -> kit; makeSpiderTank(kit) -> tank: { root, update(dt, { speed, ground, trigger }), folded(f) }. The caller places
-// root (on the terrain under the hull's middle, +z ahead) before update; ground(p, out[, ceil]) as gait.js has it. tank.form ('walk',
+// root (on the terrain under the hull's middle, +z ahead) before update; ground(p, out[, ceil]) as gait.js has it, and (optional)
+// ray(from, dir, far, out): the first thing on that line within far, into out (or null), for feet on the faces of things. tank.form ('walk',
 // 'folding', 'skim'), tank.beam ({ state: 'idle' | 'charge' | 'fire', t }), tank.speedCap (a fraction of the asked-for speed, while the
 // beam is up) and tank.clearTop (the highest top, along up, the hull can pass over now) read back.
 
@@ -34,12 +35,25 @@ const FOLD_TIME = 1.3;          // s to close up into the bead, or open out of i
 const CLEAR = 0.5;              // m the hull keeps over whatever is under it (and what it will be over in LOOK s)
 const LOOK = 0.6;               // s ahead it looks for what it will be over
 const SKIM_RISE = 2.5;          // m the folded hull rises on its jets over what is under it, at most
+const HOVER = 0.9;              // m higher the folded hull floats than its jets alone would hold it (1.5 m off the ground)
+const BOB = 0.14;               // m it rises and falls on its jets, floating (and a little roll and pitch with it)
+const BANK = 0.5;               // rad of roll per rad/s of turn, floating (at most 0.3)
+const TRAIL = 0.34, TRAIL_W = 0.32;   // s a jet's trail lasts, m its width at the nozzle (the belly jets': 0.6 of both)
 const RIDE = 4;                 // 1/s the hull follows its feet
+const DROP = 0.9;               // m a foot stands below its hip at least (the knee bends up over it; higher, the hull rises first)
+const STRETCH = 1;              // of a leg's reach, past which a trailing foot is due to step (the stride plans to 0.97; at 1.06 it goes at once)
+const NEAR = 0.45;              // of a leg's reach, the closest to its hip a foot stands (on the face of something beside it)
 const CHARGE = 1.0, FIRE = 4.0; // s: the beam's charge (the trigger held) and its channel
 const BEAM_RANGE = 420;         // m
 const BEAM_SLOW = 0.3;          // the speed it may keep while charging and firing (of what is asked)
 
+// the hull's outline over the ground (x across, z ahead, in the root's frame: the bead and the cannon's tip), where it looks for what is
+// under it; the caller can test it against what it drives into (the lab does)
+export const HULL = [[0, 4.8]];
+for (const x of [-2.1, -1.05, 0, 1.05, 2.1]) for (const z of [-3.4, -1.7, 0, 1.7, 3.3]) if ((x / 2.3) ** 2 + (z / 3.6) ** 2 <= 1.05) HULL.push([x, z]);
+
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _up = new THREE.Vector3();
+const _e = new THREE.Vector3(), _f = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
 
 function group(node, pal, mats) {
@@ -91,43 +105,55 @@ export function makeSpiderTank(kit) {
     });
   });
   const { hipY, skimDrop, belly } = node.data;
-  let ground = null;
+  let ground = null, ray = null, lastCap = 0, underNow = 0;
 
-  // the highest thing under the hull (now, and where it will be in LOOK s), over the root, along up
+  // the highest thing under the hull (now, and where it will be in LOOK s), over the root, along up (now alone: underNow)
   const vel = new THREE.Vector3(), prev = new THREE.Vector3();
   function under() {
     _up.setFromMatrixColumn(root.matrixWorld, 1).normalize();
     _d.setFromMatrixPosition(root.matrixWorld);
     let top = -Infinity;
     for (const ahead of [0, LOOK]) {
-      for (const x of [-1.9, 0, 1.9]) for (const z of [-2.8, 0, 2.8]) {
+      for (const [x, z] of HULL) {
         _a.set(x, 0, z).applyMatrix4(root.matrixWorld).addScaledVector(vel, ahead);
         if (ground(_a, _b)) top = Math.max(top, _b.sub(_d).dot(_up));
       }
+      if (!ahead) underNow = top;
     }
     return top;
   }
-  // the hull's lift, given its feet's mean height h: as the feet go, but CLEAR over what is under it, and no higher than every planted
-  // leg can still reach down from (what it can't clear past that, it won't walk onto: clearTop)
-  function rideHeight(h) {
+  // the hull's lift: as its feet go, but CLEAR over what is under it, and no higher than every planted leg can still reach down from
+  // (what it can't clear past that, it won't walk onto: clearTop)
+  function rideHeight() {
     const need = under() - belly + CLEAR;
     _inv.copy(root.matrixWorld).invert();
-    let cap = Infinity;
+    let cap = Infinity, h = 0;
     for (const c of tank.gait.chains) {
+      // (its feet's mean height lifts it, but not a foot on the face of something, under the top just past it: it would climb the wall)
+      c.joints[0].getWorldPosition(_b);
+      _e.subVectors(c.base, _b).addScaledVector(_up, -_e.subVectors(c.base, _b).dot(_up)).setLength(0.1).add(c.base);
+      if (!(ground(_e, _c) && _c.sub(c.base).dot(_up) > 0.05)) h += _a.copy(c.base).applyMatrix4(_inv).y - c.rest.y;
       if (c.stepping) continue;                                       // (the planted feet hold it up)
       const f = _a.copy(c.F).applyMatrix4(_inv);
       const dh = Math.hypot(f.x - c.hip.x, f.z - c.hip.z);
       cap = Math.min(cap, f.y - c.hipY + Math.sqrt(Math.max(0, c.reach * c.reach - dh * dh)));
     }
+    h /= tank.gait.chains.length;
+    if (cap === Infinity) cap = lastCap;                              // (every foot up at once: as far as they last held it)
+    lastCap = cap;
     // it passes over what's under its hull now, or what it can rise to clear (a low wall at speed, crouched on long strides, is no wall)
     tank.clearTop = _d.dot(_up) + Math.max(cap - CLEAR, inner.position.y) + belly;
-    return need <= cap ? Math.max(h, need) : Math.min(h, cap);      // (facing what it can't clear, it doesn't strain up at it)
+    // (facing what it can't clear, it doesn't strain up at it; over it already, it never sinks into it, at worst resting on it)
+    return need <= cap ? Math.max(h, need) : Math.max(Math.min(h, cap), underNow - belly);
   }
-  // where foot c may stand near p: the highest thing there its leg reaches up to; else the nearest spot toward the hip, or beside it
+  // where foot c may stand near p: the highest thing there at least DROP below its hip (its knee bends up over it, as built), or where
+  // the line from its hip down to that first meets something (the face of a crate or a wall: the foot grips its side); else the nearest
+  // such spot toward its hip, or beside it (a face no closer to its hip than NEAR of its reach, nor past it).
   const hipW = new THREE.Vector3();
   function foothold(c, p, out, groundFn) {
     c.joints[0].getWorldPosition(hipW);
     const up = _up.setFromMatrixColumn(root.matrixWorld, 1).normalize();
+    const ceil = hipW.dot(up) - DROP;
     for (let k = 0; k <= 9; k++) {
       _c.copy(p);
       if (k) {
@@ -136,13 +162,32 @@ export function makeSpiderTank(kit) {
         if (k <= 6) _c.addScaledVector(toHip, 0.5 * k);
         else _c.addScaledVector(_b.crossVectors(toHip, up), (k - 7.5) * 1.6);          // (beside it: -0.8, 0.8, 2.4)
       }
-      const dh = _a.subVectors(_c, hipW).addScaledVector(up, -_a.subVectors(_c, hipW).dot(up)).length();
-      const ceil = hipW.dot(up) + 0.92 * Math.sqrt(Math.max(0, c.reach * c.reach - dh * dh));
-      if (groundFn(_c, out, ceil)) return out;
+      const top = groundFn(_c, _e, ceil);                                         // (null: inside something taller)
+      const aim = top || _c;
+      const far = _f.subVectors(aim, hipW).length();
+      if (ray && far > 1e-3 && ray(hipW, _f.divideScalar(far), far - 0.05, _d)) {  // (something in the way: the foot stands on it)
+        const at = _d.distanceTo(hipW);
+        if (_d.dot(up) <= ceil + 1e-3 && at >= NEAR * c.reach && at <= 1.1 * c.reach) return out.copy(_d);
+        continue;
+      }
+      if (top) return out.copy(top);
     }
     return null;
   }
-  const gait = makeGait(root, inner, legs, { air: false, body: rideHeight, followRate: RIDE, foothold, long: true });
+  // how badly planted foot c wants to step: as its leg, trailing below a risen hull, nears its full stretch, or at once if something has
+  // come between its hip and its foot (the hull has gone on past an edge)
+  function strain(c) {
+    c.joints[0].getWorldPosition(hipW);
+    const far = _f.subVectors(c.F, hipW).length();
+    const raised = -_f.dot(_up.setFromMatrixColumn(root.matrixWorld, 1).normalize()) > c.hipY - c.rest.y + 0.3;
+    let k = raised && (_f.dot(vel) < 0 || vel.lengthSq() < 0.01) ? 1 + (far - STRETCH * c.reach) / (0.06 * c.reach) : 0;
+    if (ray && far > 0.2 && ray(hipW, _f.divideScalar(far), far - 0.15, _e)) k = Math.max(k, 2);
+    return k;
+  }
+  // is world point p inside something (under the top of what is there): a knee or ankle there turns aside (gait.js)
+  const _s = new THREE.Vector3();
+  const solid = (p) => !!ground && !!ground(p, _s) && _s.sub(p).dot(_up) > 0.05;
+  const gait = makeGait(root, inner, legs, { air: false, body: rideHeight, followRate: RIDE, foothold, strain, solid, long: true, pole: true });
   const muzzle = find('muzzle');
   const core0 = new THREE.Color(pal.glow.core), hot = new THREE.Color(pal.hot);
 
@@ -159,9 +204,60 @@ export function makeSpiderTank(kit) {
   flare.visible = false;
   for (const m of [outer, core, flare]) m.renderOrder = 3;
 
+  // the jets' trails: in the world (tank.fx, put beside the root), a ribbon each, crossed with a second so it reads from any side, from
+  // white-hot at the nozzle to the thrust's violet, thinning and fading as it ages
+  const fx = new THREE.Group();
+  fx.name = 'spidertank-fx';
+  const thrust = new THREE.Color(pal.glow.thrust), _col = new THREE.Color();
+  const trails = [];
+  model.traverse((o) => {
+    if (!/^(jet\d|tailjet)$/.test(o.name)) return;
+    const tail = o.name === 'tailjet', N = 48;               // (points at most: 0.34 s at 140 frames a second)
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 4 * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(N * 4 * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    const idx = [];
+    for (let i = 0; i + 1 < N; i++) for (const r of [0, 2]) { const a = i * 4 + r, b = a + 4; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 3;
+    fx.add(mesh);
+    trails.push({ jet: o, mesh, pts: [], life: TRAIL * (tail ? 1 : 0.6), width: TRAIL_W * (tail ? 1 : 0.6), at: new THREE.Vector3(0, tail ? 0 : -0.08, tail ? -0.45 : 0) });
+  });
+  const _side = new THREE.Vector3(), _top = new THREE.Vector3(), _n2 = new THREE.Vector3();
+  // each trail's newest point at its nozzle (k: how lit the jets are; t flickers them), the old ones aged out, and its ribbons rebuilt
+  function trailsTo(dt, k, t) {
+    if (!fx.parent && root.parent) root.parent.add(fx);
+    _side.setFromMatrixColumn(root.matrixWorld, 0).normalize();
+    _top.setFromMatrixColumn(root.matrixWorld, 1).normalize();
+    for (const T of trails) {
+      for (const q of T.pts) q.age += dt;
+      while (T.pts.length && T.pts[0].age > T.life) T.pts.shift();
+      if (k > 0.01) {
+        const q = T.pts.length >= 48 ? T.pts.shift() : { p: new THREE.Vector3(), age: 0, k: 0 };
+        q.p.copy(T.at).applyMatrix4(T.jet.matrixWorld); q.age = 0; q.k = k;
+        T.pts.push(q);
+      }
+      const P = T.mesh.geometry.attributes.position, C = T.mesh.geometry.attributes.color, n = T.pts.length;
+      for (let i = 0; i < n; i++) {
+        const q = T.pts[n - 1 - i], a = q.age / T.life, w = T.width * q.k * (1 - a) ** 0.6 * (0.85 + 0.15 * Math.sin(t * 47 + i));
+        _col.copy(hot).lerp(thrust, Math.min(1, a * 2.2)).multiplyScalar(q.k * (1 - a) ** 1.6);
+        for (let r = 0; r < 4; r++) {
+          _n2.copy(r < 2 ? _top : _side).multiplyScalar(r % 2 ? -w : w).add(q.p);
+          P.setXYZ(i * 4 + r, _n2.x, _n2.y, _n2.z);
+          C.setXYZ(i * 4 + r, _col.r, _col.g, _col.b);
+        }
+      }
+      T.mesh.geometry.setDrawRange(0, Math.max(0, n - 1) * 12);
+      P.needsUpdate = C.needsUpdate = true;
+      T.mesh.visible = n > 1;
+    }
+  }
+
   const tank = {
-    root, model, inner, gait, legs, muzzle, hipY, span: node.data.span,
-    form: 'walk', fold: 0, beam: { state: 'idle', t: 0 }, speedCap: 1, clearTop: Infinity, skimLift: 0,
+    root, model, inner, gait, legs, muzzle, hipY, span: node.data.span, fx,
+    form: 'walk', fold: 0, beam: { state: 'idle', t: 0 }, speedCap: 1, clearTop: Infinity, skimLift: 0, yaw: 0, bank: 0,
     walkMax: SKIM_AT,                                                // m/s past which it closes up to skim (overdrive)
     t: 0,
     // the pieces f of the way into the bead (the legs from where the gait left them, or, still, from as built), the hull settled
@@ -193,8 +289,8 @@ export function makeSpiderTank(kit) {
         R.rod.lookAt(R.barrel.getWorldPosition(_b));
       }
     },
-    update(dt, { speed = 0, ground: g = null, trigger = false } = {}) {
-      ground = g;
+    update(dt, { speed = 0, ground: g = null, ray: r = null, trigger = false } = {}) {
+      ground = g; ray = r;
       this.t += dt;
       root.updateWorldMatrix(true, false);
       _a.setFromMatrixPosition(root.matrixWorld);
@@ -212,19 +308,31 @@ export function makeSpiderTank(kit) {
       this.fold = THREE.MathUtils.clamp(this.fold + (skimWant ? dt : -dt) / FOLD_TIME, 0, 1);
       this.form = this.fold <= 0 ? 'walk' : this.fold >= 1 ? 'skim' : 'folding';
       // the legs: walk (IK) until they start to fold, and again as they finish opening
-      inner.position.set(0, 0, 0);
+      // (the hull where the gait left it, so its hips are where they are while it looks for footholds; folding, it settles)
+      inner.position.set(0, this.fold < 0.15 ? gait.lift * gait.weight : 0, 0);
       gait.update(dt, ground && this.fold < 0.15 ? ground : null, false);
       if (this.fold >= 0.15) this.clearTop = Infinity;
       // folded, the hull rides its jets over what is under it
       const f = share(this.fold, [0.5, 1]);
       if (ground && this.fold > 0) {
-        const rise = THREE.MathUtils.clamp(under() - (belly - skimDrop) + CLEAR, 0, SKIM_RISE);
+        const rise = THREE.MathUtils.clamp(under() - (belly - skimDrop + HOVER) + CLEAR, 0, SKIM_RISE);
         this.skimLift += (rise - this.skimLift) * Math.min(1, dt * 6);
-        if (this.fold >= 0.15) this.clearTop = _d.dot(_up) + SKIM_RISE + belly - skimDrop - CLEAR;
+        if (this.fold >= 0.15) this.clearTop = _d.dot(_up) + SKIM_RISE + HOVER + belly - skimDrop - CLEAR;
       } else this.skimLift = 0;
       inner.position.y += this.skimLift * share(this.fold, [0.3, 1]);
       this.folded(this.fold, false);
-      if (f > 0) inner.position.y += (1 + Math.sin(this.t * 3.1)) * 0.05 * f;               // (riding its jets, never lower)
+      // floating: higher on its jets, bobbing (never lower than HOVER), rolling into its turns and swaying a little
+      const yawNow = Math.atan2(_a.setFromMatrixColumn(root.matrixWorld, 2).x, _a.z);
+      const turn = dt > 0 ? (THREE.MathUtils.euclideanModulo(yawNow - this.yaw + Math.PI, Math.PI * 2) - Math.PI) / dt : 0;
+      this.yaw = yawNow;
+      this.bank += (THREE.MathUtils.clamp(-turn * BANK, -0.3, 0.3) - this.bank) * Math.min(1, dt * 3);
+      if (f > 0) {
+        inner.position.y += (HOVER + (1 + Math.sin(this.t * 2.3)) * BOB) * f;
+        inner.rotation.set(Math.sin(this.t * 1.7) * 0.025 * f, 0, (this.bank + Math.sin(this.t * 1.3) * 0.02) * f);
+      }
+      // the jets' trails, as lit as the jets are out
+      root.updateMatrixWorld(true);
+      trailsTo(dt, share(this.fold, [0.7, 1]) * (0.75 + 0.25 * Math.min(1, speed / 60)), this.t);
       // the reactor and the cannon: brighter as it charges, flickering as it fires
       const heat = B.state === 'charge' ? B.t / CHARGE : B.state === 'fire' ? 1 : 0;
       mats.core.color.copy(core0).lerp(hot, heat * (0.6 + 0.4 * Math.sin(this.t * 40)));

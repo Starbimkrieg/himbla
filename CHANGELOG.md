@@ -5,6 +5,19 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Zbornak's spider tank, round four: a smoother run, legs that keep their shape and stay out of things, a floating bead on jet
+  trails** (`docs/spidertank/`; not in the game yet). **Smoother at speed:** its legs are solved exactly (`makeGait`'s `pole`: knee up
+  in the plane through hip and foot, the ankle folding with the reach), where FABRIK flipped three-bone legs between shapes mid-step
+  (up to 10,000 degrees a second); and it runs on a duty factor (`long`): a foot's share of the stride down goes from 0.65 to 0.5 at
+  full stride and 0.42 flat out (a short jet-carried float), stances use 82% of the legs' reach, and the arc flattens with speed. 1.4
+  steps a second per leg at 23 m/s and 2.1 at 38 (from 1.9 and 3.0), joints at most about 1,800 degrees a second. **Footholds:** at
+  least 0.9 m below the hip (the hull rises to reach higher tops), on the face of a crate or wall where the line from the hip meets it
+  (`ray`), and a foot steps early when a risen hull leaves it at full stretch or something comes between it and its hip (`strain`);
+  a knee or ankle that would be inside something turns about the leg to a clear way (`solid`). **The hull never goes into things:**
+  clearance and collision over its outline (`HULL`), never lower than resting on what is under it, feet on faces don't lift it, and the
+  lift no longer resets before the gait looks for footholds (it was hunting them from hips 1.7 m too low). **Floating:** the bead rides
+  1.5 m up, bobbing and banking, with glowing trails from its jets (`tank.fx`). **The lab:** look round with the mouse (drag, right-drag,
+  wheel, H, R), pause, step and slow the clock (P . [ ]), and the test lane gains a 3.2 m step to climb and an 8 m block.
 - **Zbornak's spider tank, round three: it closes up by itself, strides long, grips and climbs** (`docs/spidertank/`; not in the game
   yet). **Overdrive is automatic:** it closes up at 40 m/s and opens out under 34 (no key). **Longer, calmer strides** to get there
   (`makeGait`'s `long` option): each leg reaches as far fore and aft as its hip allows, the next foot lifts just before the last lands at

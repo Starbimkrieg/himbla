@@ -7,6 +7,7 @@
     html, body { margin: 0; height: 100%; background: #05030c; color: #fff4e0; font: 12px monospace; overflow: hidden; }
     #info { position: fixed; left: 8px; top: 8px; background: #120a1ecc; padding: 6px 8px; border: 2px solid #ff2e88; white-space: pre-wrap; line-height: 1.5; }
     #info b { color: #ffd23f; }
+    #info .dim { color: #b8a8d8; }
   </style>
 </head>
 <body>
@@ -15,9 +16,11 @@
                                               after a few seconds without one): W/S speed (it closes up past 40 m/s), A/D turn, hold SPACE: the beam
               &demo=walk|run|skim|beam|fold   one part of the drive, looped, for screenshots (else the whole drive: walk, run, close
                                               up and skim, open out, stop and fire)
-              &demo=climb|wall                round the crates on the circle; down the test lane, over a crate to a block too tall
+              &demo=climb|wall                round the crates on the circle; down the test lane: a crate, a 3.2 m step up and down, an 8 m block
               &speed=m/s                      the pace for &demo=walk|run|climb|wall
-              &cam=chase|side|front|rear|top|orbit     the camera (orbit: drag to turn, wheel to zoom) &dist=m &yaw=deg &pitch=deg &ui=0 -->
+              &cam=chase|side|front|rear|top|orbit     where the camera starts &dist=m &yaw=deg (from straight ahead) &pitch=deg &ui=0
+       Looking round: drag to turn the camera round the tank, right-drag (or shift-drag) to slide what it looks at, wheel to zoom,
+       H to stop it turning with the tank, R or double-click to put it back. P pauses, . steps one frame, [ and ] slow the clock. -->
   <div id="info"></div>
   <script type="module" src="./spidertank-lab.js"></script>
 </body>

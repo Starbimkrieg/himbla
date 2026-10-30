@@ -1,10 +1,11 @@
 // Dev-only: Zbornak's spider tank lab (src/spidertank.js; docs/spidertank/). It drives round a circle over rolling ground with
 // crates, low walls and a few tall blocks on it: walking on its eight legs (src/gait.js), running, closing up into its skimming bead
 // past 40 m/s and back, stopping to fire the reactor beam. It drives itself until you press a key: W/S speed, A/D turn, hold SPACE
-// for the beam. A test lane off the circle (&demo=wall) has a crate it climbs and a block it can't. Query parameters are in the HTML.
+// for the beam. A test lane off the circle (&demo=wall) has a crate, a step to climb and a block it can't. Look round with the mouse;
+// pause and slow it down. Query parameters and keys are in the HTML.
 import * as THREE from 'three';
 import { ComicPost } from '../src/post.js';
-import { loadSpiderTank, makeSpiderTank } from '../src/spidertank.js';
+import { loadSpiderTank, makeSpiderTank, HULL } from '../src/spidertank.js';
 
 const Q = new URLSearchParams(location.search);
 const num = (k, d) => (Q.has(k) ? parseFloat(Q.get(k)) : d);
@@ -43,7 +44,7 @@ function addBox(cx, cz, yaw, w, d, h, mat) {
   const ink = new THREE.Mesh(m.geometry, new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide }));
   ink.scale.setScalar(1.02);
   m.add(ink);
-  boxes.push({ cx, cz, c: Math.cos(yaw), s: Math.sin(yaw), hx: w / 2, hz: d / 2, top });
+  boxes.push({ cx, cz, c: Math.cos(yaw), s: Math.sin(yaw), hx: w / 2, hz: d / 2, top, bot: base - 0.5 });
 }
 for (let k = 0; k < 16; k++) {                                         // crates on the way round, some under the feet, some under the hull
   const a = (k / 16) * Math.PI * 2 + 0.25, off = (rr() - 0.5) * 9;
@@ -57,10 +58,12 @@ for (let k = 0; k < 9; k++) {                                          // tall b
   const a = (k / 9) * Math.PI * 2, rad = R + 22 + rr() * 30;
   addBox(Math.cos(a) * rad, Math.sin(a) * rad, rr() * 3, 6 + rr() * 8, 6 + rr() * 8, 6 + rr() * 12, blockMat);
 }
-// the test lane, south of the circle: a crate it climbs over, then a block too tall to clear (its legs reach up onto it; it stops)
-const LANE = { x: 0, z0: -175 };
-addBox(LANE.x, -152, 0, 6, 3.5, 2.3, boxMat);
-addBox(LANE.x, -128, 0, 12, 6, 4.8, blockMat);
+// the test lane, south of the circle: a crate it walks over, a 3.2 m step it climbs onto (the hull rises first, so the feet reach the
+// top) and down off, then an 8 m block too tall to clear: it stops at it, feet on the ground and against its face
+const LANE = { x: 0, z0: -185 };
+addBox(LANE.x, -165, 0, 6, 3.5, 2.3, boxMat);
+addBox(LANE.x, -128, 0, 16, 18, 3.2, blockMat);
+addBox(LANE.x, -88, 0, 12, 6, 8, blockMat);
 const groundGeo = new THREE.PlaneGeometry(420, 420, 300, 300).rotateX(-Math.PI / 2);
 {
   const P = groundGeo.attributes.position;
@@ -87,10 +90,47 @@ const groundAt = (p, out, ceil) => {
   return Number.isNaN(y) ? null : out.set(p.x, y, p.z);
 };
 
+// the first thing on the line from o along unit dir within far (a box's top or face, or the ground), into out; or null
+const _q = new THREE.Vector3();
+function rayAt(o, dir, far, out) {
+  let best = far;
+  for (const b of boxes) {                                             // (in the box's frame: a slab test)
+    const dx = o.x - b.cx, dz = o.z - b.cz;
+    const lo = [dx * b.c - dz * b.s, o.y, dx * b.s + dz * b.c], ld = [dir.x * b.c - dir.z * b.s, dir.y, dir.x * b.s + dir.z * b.c];
+    const lo3 = [-b.hx, b.bot, -b.hz], hi3 = [b.hx, b.top, b.hz];
+    let t0 = 0, t1 = best;
+    for (let k = 0; k < 3 && t0 <= t1; k++) {
+      if (Math.abs(ld[k]) < 1e-9) { if (lo[k] < lo3[k] || lo[k] > hi3[k]) t1 = -1; continue; }
+      let a = (lo3[k] - lo[k]) / ld[k], c = (hi3[k] - lo[k]) / ld[k];
+      if (a > c) [a, c] = [c, a];
+      t0 = Math.max(t0, a); t1 = Math.min(t1, c);
+    }
+    if (t0 <= t1 && t0 > 1e-4) best = t0;
+  }
+  let prevT = 0;                                                       // (the ground: stepped along, then halved down to it)
+  for (let tt = 0.25; tt < best; tt += 0.25) {
+    _q.copy(o).addScaledVector(dir, tt);
+    if (_q.y < terrain(_q.x, _q.z)) {
+      let a = prevT, c = tt;
+      for (let k = 0; k < 8; k++) { const m = (a + c) / 2; _q.copy(o).addScaledVector(dir, m); if (_q.y < terrain(_q.x, _q.z)) c = m; else a = m; }
+      best = c;
+      break;
+    }
+    prevT = tt;
+  }
+  return best < far ? out.copy(o).addScaledVector(dir, best) : null;
+}
+
 // ---- the drive: scripted until a key is pressed (and again a few seconds after the last) ----
 const keys = new Set();
 let lastKey = Q.get('auto') === '0' ? 0 : -1e9;
-addEventListener('keydown', (e) => { keys.add(e.code); lastKey = performance.now(); if (e.code === 'Space') e.preventDefault(); });
+const DRIVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space']);
+addEventListener('keydown', (e) => {
+  keys.add(e.code);
+  if (DRIVE_KEYS.has(e.code)) lastKey = performance.now();
+  if (e.code === 'Space') e.preventDefault();
+  view(e.code);
+});
 addEventListener('keyup', (e) => keys.delete(e.code));
 // the whole drive, looped: [until (s), speed (m/s), trigger]; it closes up by itself past 40 m/s and opens out under 34
 const DRIVE = [[5, 5, 0], [10, 14, 0], [15, 28, 0], [19, 38, 0], [25, 70, 0], [30, 20, 0], [33, 6, 0], [34, 1.5, 0], [39.5, 1.5, 1], [42, 4, 0]];
@@ -111,42 +151,66 @@ const tank = makeSpiderTank(kit);
 scene.add(tank.root);
 const S = DEMO === 'wall' ? { x: LANE.x, z: LANE.z0, yaw: 0, v: 0 } : { x: R, z: 0, yaw: 0, v: 0 };
 if (DEMO === 'skim') { tank.fold = 1; S.v = num('speed', 70); }                    // (skimming from the start)
-const hull = [-1.9, 0, 1.9].flatMap((x) => [-2.8, 0, 2.8].map((z) => [x, z]));
-// the highest thing under its hull at x, z
-function underHull(x, z, yaw) {
+// how far into what it can't clear its hull would be, at x, z, turned yaw (0: clear). It never moves or turns deeper in than it is:
+// driving, it slides along what it meets; driving itself, it stops.
+function sink(x, z, yaw) {
   const c = Math.cos(yaw), s = Math.sin(yaw);
-  return Math.max(...hull.map(([hx, hz]) => topAt(x + hx * c + hz * s, z - hx * s + hz * c)));
+  let top = -Infinity;
+  for (const [hx, hz] of HULL) top = Math.max(top, topAt(x + hx * c + hz * s, z - hx * s + hz * c));
+  return Math.max(0, top - tank.clearTop);
 }
-// what it can't clear stops it: moving onto something higher than what its legs can lift it over (never stuck where it already is)
-const blocked = (x, z, yaw) => { const top = underHull(x, z, yaw); return top > tank.clearTop && top > underHull(S.x, S.z, S.yaw) + 0.05; };
-const fwd = new THREE.Vector3(), side = new THREE.Vector3(), camAt = new THREE.Vector3(), camLook = new THREE.Vector3(), _p = new THREE.Vector3();
+const _p = new THREE.Vector3();
 let t = 0, last = performance.now(), auto = true;
 const info = document.getElementById('info');
 if (Q.get('ui') === '0') info.style.display = 'none';
 
-// the orbit camera
-let oyaw = THREE.MathUtils.degToRad(num('yaw', 35)), opitch = THREE.MathUtils.degToRad(num('pitch', 16)), odist = num('dist', 24), drag = null;
-renderer.domElement.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; });
+// the camera: an orbit round the tank, turning with it, from where &cam puts it (yaw from straight ahead, pitch, distance); drag to
+// turn it, right-drag (or shift-drag) to slide what it looks at, wheel to zoom, H to stop it turning with the tank, R or double-click
+// to put it back. P pauses, . steps a frame while paused, [ and ] slow the clock down and back up (1, 1/2, 1/4, 1/10).
+const deg = THREE.MathUtils.degToRad;
+const PRESET = {
+  chase: [-160, 14, 17], side: [-84, 5, 20], front: [-24, 6, 20], rear: [-161, 4, 20], top: [180, 80, 20], orbit: [35, 16, 24],
+}[CAM] || [-160, 14, 17];
+const cam = { yaw: 0, pitch: 0, dist: 0, zoom: 1, pan: new THREE.Vector3(), follow: true, head: 0, at: new THREE.Vector3(), set: false };
+const home = () => {
+  Object.assign(cam, { yaw: deg(num('yaw', PRESET[0])), pitch: deg(num('pitch', PRESET[1])), dist: num('dist', PRESET[2]), zoom: 1, follow: true });
+  cam.pan.set(0, 0, 0);
+};
+home();
+const SLOW = [1, 0.5, 0.25, 0.1];
+const clock = { paused: false, step: false, slow: 0 };
+function view(code) {
+  if (code === 'KeyP') clock.paused = !clock.paused;
+  else if (code === 'Period') clock.step = true;
+  else if (code === 'BracketLeft') clock.slow = Math.min(SLOW.length - 1, clock.slow + 1);
+  else if (code === 'BracketRight') clock.slow = Math.max(0, clock.slow - 1);
+  else if (code === 'KeyH') { cam.follow = !cam.follow; if (!cam.follow) cam.yaw += cam.head; else cam.yaw -= cam.head; }
+  else if (code === 'KeyR') home();
+}
+let drag = null;
+renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+renderer.domElement.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey }; });
+renderer.domElement.addEventListener('dblclick', home);
 addEventListener('pointerup', () => { drag = null; });
+const _r = new THREE.Vector3(), _u = new THREE.Vector3();
 addEventListener('pointermove', (e) => {
   if (!drag) return;
-  oyaw -= (e.clientX - drag[0]) * 0.008; opitch = Math.max(-0.1, Math.min(1.3, opitch + (e.clientY - drag[1]) * 0.006));
-  drag = [e.clientX, e.clientY];
-});
-renderer.domElement.addEventListener('wheel', (e) => { odist *= Math.exp(e.deltaY * 0.001); }, { passive: true });
-
-function frame() {
-  const now = performance.now();
-  const dt = Math.min(0.05, (now - last) / 1000);
-  last = now;
-  t += dt;
-  const sz = renderer.getSize(new THREE.Vector2());
-  if (innerWidth > 0 && (sz.x !== innerWidth || sz.y !== innerHeight)) {
-    renderer.setSize(innerWidth, innerHeight);
-    camera.aspect = innerWidth / innerHeight;
-    camera.updateProjectionMatrix();
-    post.setSize();
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (drag.pan) {                                                      // (in the tank's frame, so it stays on the same leg)
+    const k = cam.dist * cam.zoom * 0.0016;
+    _r.setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(-dx * k);
+    _u.setFromMatrixColumn(camera.matrixWorld, 1).multiplyScalar(dy * k);
+    cam.pan.add(_r.add(_u).applyAxisAngle(THREE.Object3D.DEFAULT_UP, cam.follow ? -cam.head : 0));
+  } else {
+    cam.yaw -= dx * 0.008;
+    cam.pitch = THREE.MathUtils.clamp(cam.pitch + dy * 0.006, -0.25, 1.5);
   }
+  drag.x = e.clientX; drag.y = e.clientY;
+});
+renderer.domElement.addEventListener('wheel', (e) => { cam.zoom = THREE.MathUtils.clamp(cam.zoom * Math.exp(e.deltaY * 0.001), 0.15, 6); }, { passive: true });
+
+// the drive and the tank, one tick of dt (the lab's clock: paused, slowed or stepped)
+function step(dt, now) {
   auto = now - lastKey > 6000;
   let want, trigger, turn = 0;
   if (auto) {
@@ -169,37 +233,50 @@ function frame() {
     nyaw += turn * dt * (1.1 - 0.7 * Math.min(1, S.v / 60));
     nx = S.x + Math.sin(nyaw) * S.v * dt; nz = S.z + Math.cos(nyaw) * S.v * dt;
   }
-  S.yaw = nyaw;
-  if (blocked(nx, nz, nyaw)) S.v = 0;
-  else { S.x = nx; S.z = nz; }
-  fwd.set(Math.sin(S.yaw), 0, Math.cos(S.yaw)); side.set(fwd.z, 0, -fwd.x);
+  const deep = sink(S.x, S.z, S.yaw) + 1e-3, ok = (x, z, yaw) => sink(x, z, yaw) <= deep;
+  if (ok(nx, nz, nyaw)) { S.x = nx; S.z = nz; S.yaw = nyaw; }
+  else if (!auto && ok(nx, nz, S.yaw)) { S.x = nx; S.z = nz; }
+  else if (!auto && ok(nx, S.z, S.yaw)) S.x = nx;
+  else if (!auto && ok(S.x, nz, S.yaw)) S.z = nz;
+  else { S.v = 0; if (ok(S.x, S.z, nyaw)) S.yaw = nyaw; }
   // on the terrain under its middle: it rides up over crates on its own legs (spidertank.js)
   tank.root.position.set(S.x, terrain(S.x, S.z), S.z);
   tank.root.rotation.set(0, S.yaw, 0);
-  tank.update(dt, { speed: S.v, ground: groundAt, trigger: !!trigger });
-  // the camera
-  const P = tank.root.position;
-  if (CAM === 'orbit') {
-    camera.position.set(P.x + Math.sin(oyaw) * Math.cos(opitch) * odist, P.y + 3 + Math.sin(opitch) * odist, P.z + Math.cos(oyaw) * Math.cos(opitch) * odist);
-    camera.lookAt(P.x, P.y + 3, P.z);
-  } else {
-    const d = num('dist', CAM === 'chase' ? 17 + S.v * 0.12 : 20);
-    if (CAM === 'side') camAt.copy(P).addScaledVector(side, -d).addScaledVector(fwd, 2).setY(P.y + 4);
-    else if (CAM === 'top') camAt.copy(P).addScaledVector(fwd, -0.5).setY(P.y + d * 1.2);
-    else if (CAM === 'rear') camAt.copy(P).addScaledVector(fwd, -d).addScaledVector(side, -d * 0.35).setY(P.y + 3);
-    else if (CAM === 'front') camAt.copy(P).addScaledVector(fwd, d).addScaledVector(side, -d * 0.45).setY(P.y + 3.5);
-    else camAt.copy(P).addScaledVector(fwd, -d).addScaledVector(side, -d * 0.35).setY(P.y + 6.5 + S.v * 0.03);
-    camAt.y = Math.max(camAt.y, terrain(camAt.x, camAt.z) + 1.5);
-    if (t < 0.1) camera.position.copy(camAt);
-    camera.position.lerp(camAt, 1 - Math.exp(-dt * 5));
-    camLook.lerp(_p.copy(P).setY(P.y + 2.8), t < 0.1 ? 1 : 1 - Math.exp(-dt * 8));
-    camera.lookAt(camLook);
+  tank.update(dt, { speed: S.v, ground: groundAt, ray: rayAt, trigger: !!trigger });
+}
+
+function frame() {
+  const now = performance.now();
+  const real = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  const dt = clock.paused ? (clock.step ? 1 / 30 : 0) : real * SLOW[clock.slow];
+  clock.step = false;
+  t += dt;
+  const sz = renderer.getSize(new THREE.Vector2());
+  if (innerWidth > 0 && (sz.x !== innerWidth || sz.y !== innerHeight)) {
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    post.setSize();
   }
+  if (dt > 0) step(dt, now);
+  // the camera: round the tank (turning with it, smoothly), at what it looks at plus the slide
+  const P = tank.root.position;
+  cam.head += (THREE.MathUtils.euclideanModulo(S.yaw - cam.head + Math.PI, Math.PI * 2) - Math.PI) * (cam.set ? 1 - Math.exp(-real * 4) : 1);
+  const k = cam.set ? 1 - Math.exp(-real * 20) : 1;                 // (a touch of smoothing: the hull bobs)
+  cam.at.lerp(_p.set(P.x, P.y + 2.8, P.z).add(_r.copy(cam.pan).applyAxisAngle(THREE.Object3D.DEFAULT_UP, cam.follow ? cam.head : 0)), k);
+  cam.set = true;
+  const yaw = cam.yaw + (cam.follow ? cam.head : 0), d = (cam.dist + (CAM === 'chase' && !Q.has('dist') ? S.v * 0.12 : 0)) * cam.zoom;
+  camera.position.set(Math.sin(yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(yaw) * Math.cos(cam.pitch)).multiplyScalar(d).add(cam.at);
+  camera.position.y = Math.max(camera.position.y, terrain(camera.position.x, camera.position.z) + 0.6);
+  camera.lookAt(cam.at);
   sun.position.copy(P).add(_p.set(14, 26, 10));
   sun.target.position.copy(P);
   const B = tank.beam;
+  const tick = clock.paused ? '  PAUSED (P, . a frame)' : clock.slow ? `  x${SLOW[clock.slow]}` : '';
   info.innerHTML = `<b>${tank.model.userData.title}</b>  ${auto ? 'driving itself (press a key to drive)' : 'W/S speed, A/D turn, SPACE beam'}\n`
-    + `${S.v.toFixed(1)} m/s  ${tank.form.toUpperCase()}${B.state !== 'idle' ? `  BEAM ${B.state.toUpperCase()} ${B.t.toFixed(1)} s` : ''}  (closes up past ${tank.walkMax.toFixed(0)} m/s)`;
+    + `${S.v.toFixed(1)} m/s  ${tank.form.toUpperCase()}${B.state !== 'idle' ? `  BEAM ${B.state.toUpperCase()} ${B.t.toFixed(1)} s` : ''}  (closes up past ${tank.walkMax.toFixed(0)} m/s)${tick}\n`
+    + `<span class="dim">drag: look round  right-drag: slide  wheel: zoom  H: ${cam.follow ? 'turning with it' : 'fixed'}  R: reset  P: pause  [ ]: slow</span>`;
   post.material.uniforms.time.value = t;
   post.render(scene, camera);
   requestAnimationFrame(frame);
