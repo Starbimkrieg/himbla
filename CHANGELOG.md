@@ -5,6 +5,8 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Spider tank: fire only in spider form.** Holding fire in the bead no longer opens it out (it does nothing there), and held while
+  walking it keeps the tank a spider under 25 m/s (`tank.speedMax`) so it never closes up mid-beam.
 - **Zbornak's spider tank walks like a spider, climbs harder, and closes up at 25 m/s** (`docs/spidertank/`; not in the game yet).
   `makeGait`'s `wave`: one rhythm for all eight legs, a ripple up each side from the back leg to the front walking, blending into two
   sets of four running; each foot in its own lane along the body (the side's reach cut into four, with gaps), swinging carried with the

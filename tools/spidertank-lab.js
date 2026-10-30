@@ -221,7 +221,7 @@ function step(dt, now) {
     trigger = keys.has('Space');
     turn = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
   }
-  want = THREE.MathUtils.clamp(want, -tank.reverseMax, 90) * tank.speedCap;
+  want = THREE.MathUtils.clamp(want, -tank.reverseMax, Math.min(90, tank.speedMax)) * tank.speedCap;
   const acc = tank.form === 'walk' ? 7 : 20;                           // (braking, and backing up, at 14)
   S.v += THREE.MathUtils.clamp(want - S.v, want < S.v ? -14 * dt : 0, want > S.v ? (S.v < 0 ? 14 : acc) * dt : 0);
   // round the circle (auto), down the test lane, or where it's steered; not into what it can't clear

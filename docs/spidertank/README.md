@@ -92,8 +92,8 @@ tuned in Blender.
   into anything (the lab, driven, slides it along). Cresting a block's edge it can scrape it, by up to 0.2 m.
 - **It backs up**, to 18 m/s (`tank.reverseMax`): the gait's strides mirror, the rear legs leading.
 - **The reactor beam:** hold fire. The reactor and the muzzle brighten for a second (let go and it fizzles), then a condensed beam
-  channels for four seconds, 420 m long. Walking only: holding fire while skimming opens it out first. While charging and firing it
-  keeps 30% of its speed.
+  channels for four seconds, 420 m long. In spider form only: held in the bead, fire does nothing; held walking, it keeps it a spider
+  (under 25 m/s, so it never closes up). While charging and firing it keeps 30% of its speed.
 
 ![Down the test lane: up onto the 4.6 m block](wall.jpg)
 

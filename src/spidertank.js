@@ -13,14 +13,14 @@ import { makeGait } from './gait.js';
 // gripping something, and opens out under SKIM_OFF: each leg zigzags against the hull, slides in through its port and a hatch shuts
 // over it, the cannon draws into the nose, the jets come out; every piece follows its own share of the fold (the model's `fold`,
 // `foldPos`, `foldScale` and their spans). Its rams (barrel and rod pivots) aim at each other every frame, so they stretch as the legs
-// move. The reactor beam charges for a second while the trigger is held, then channels for four from the cannon; walking only, and
-// slow while it does.
+// move. The reactor beam charges for a second while the trigger is held, then channels for four from the cannon; in spider form only
+// (held in the bead, it does nothing), slow while it does, and while fire is held it stays a spider (under SKIM_AT).
 //
 // loadSpiderTank() -> kit; makeSpiderTank(kit) -> tank: { root, update(dt, { speed, ground, trigger }), folded(f) }. The caller places
 // root (on the terrain under the hull's middle, +z ahead) before update; ground(p, out[, ceil]) as gait.js has it, and (optional)
 // ray(from, dir, far, out): the first thing on that line within far, into out (or null), for feet on the faces of things. tank.form ('walk',
 // 'folding', 'skim'), tank.beam ({ state: 'idle' | 'charge' | 'fire', t }), tank.speedCap (a fraction of the asked-for speed, while the
-// beam is up) and tank.clearAt (for each point of HULL, the highest top, along up, the hull can pass over there now) read back. speed may
+// beam is up), tank.speedMax (m/s it keeps under while fire is held, walking) and tank.clearAt (for each point of HULL, the highest top, along up, the hull can pass over there now) read back. speed may
 // be negative, backing up (to tank.reverseMax); push (speed, unless said) is what the driver asks for: pushed on but held up, it climbs.
 
 const URL_GLB = new URL('./assets/spidertank.glb', import.meta.url).href;
@@ -332,7 +332,7 @@ export function makeSpiderTank(kit) {
 
   const tank = {
     root, model, inner, gait, legs, muzzle, hipY, span: node.data.span, fx,
-    form: 'walk', fold: 0, beam: { state: 'idle', t: 0 }, speedCap: 1, clearAt: new Float32Array(HULL.length).fill(Infinity),
+    form: 'walk', fold: 0, beam: { state: 'idle', t: 0 }, speedCap: 1, speedMax: Infinity, clearAt: new Float32Array(HULL.length).fill(Infinity),
     skimLift: 0, yaw: 0, bank: 0, climbing: false,
     walkMax: SKIM_AT,                                                // m/s past which it closes up to skim (overdrive)
     reverseMax: REVERSE,                                             // m/s the most it backs up at
@@ -375,14 +375,18 @@ export function makeSpiderTank(kit) {
       prev.copy(_a);
       stuck = Math.abs(push) > 0.5 && vel.length() < 0.5;
       const B = this.beam;
-      // the beam: hold to charge (walking only: it opens up first), let go early and it fizzles; charged, it channels FIRE seconds
+      // the beam: hold to charge (in spider form only), let go early and it fizzles; charged, it channels FIRE seconds
       if (B.state === 'idle' && trigger && this.fold === 0) Object.assign(B, { state: 'charge', t: 0 });
       else if (B.state === 'charge') { B.t += dt; if (!trigger) B.state = 'idle'; else if (B.t >= CHARGE) Object.assign(B, { state: 'fire', t: 0 }); }
       else if (B.state === 'fire') { B.t += dt; if (B.t >= FIRE) B.state = 'idle'; }
       const firing = B.state !== 'idle';
       this.speedCap = firing ? BEAM_SLOW : 1;
-      // overdrive: close up past SKIM_AT, open out under SKIM_OFF (never while the beam is up, nor start while it climbs or grips)
-      const skimWant = (this.fold > 0.5 ? speed > SKIM_OFF : speed >= SKIM_AT && !(this.fold === 0 && this.climbing)) && !firing && !trigger;
+      // (fire counts in spider form only: in the bead it does nothing; held walking, it stays a spider, under SKIM_AT)
+      const hold = trigger && this.fold === 0;
+      this.speedMax = hold || firing ? SKIM_AT - 0.5 : Infinity;
+      // overdrive: close up past SKIM_AT, open out under SKIM_OFF (never while the beam is up or fire is held, nor start while it climbs
+      // or grips)
+      const skimWant = (this.fold > 0.5 ? speed > SKIM_OFF : speed >= SKIM_AT && !(this.fold === 0 && this.climbing)) && !firing && !hold;
       this.fold = THREE.MathUtils.clamp(this.fold + (skimWant ? dt : -dt) / FOLD_TIME, 0, 1);
       this.form = this.fold <= 0 ? 'walk' : this.fold >= 1 ? 'skim' : 'folding';
       // the legs: walk (IK) until they start to fold, and again as they finish opening
