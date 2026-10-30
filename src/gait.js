@@ -71,6 +71,7 @@ const DUTY_RIPPLE = 0.75, DUTY_SETS = 0.5, DUTY_FAST = 0.45;   // wave: a foot's
 const WALK_SPANS = 1, RUN_SPANS = 2.4;   // wave: spans a second under which it ripples, and past which it runs in sets (blending between)
 const WAVE_STANCE = 0.75; // wave: s a foot stays down, walking, as long as its lane allows
 const SETTLE_SPEED = 0.3; // wave: of a span a second, the pace it steps at to settle its feet, standing      // pole: the ankle's bend at the shortest reach (of its rest angle; straighter out to 1.15 of it)
+const SAME_HOLD = 0.12;   // wave, settling: of its span, the nearest to where a foot stands that a step may land (nearer: it stays put)
 
 const _p = new THREE.Vector3(), _up = new THREE.Vector3(), _g = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 const _vh = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4(), _inv = new THREE.Matrix4(), _q = new THREE.Quaternion();
@@ -201,7 +202,8 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     }
     // (standing: it steps its feet back under it, or on to better holds the caller wants)
     const settle = SETTLE_SPEED * span;
-    if (drive < 0.5 * settle && (far > 0.3 * strideMax || (strain && chains.some((c) => !c.stepping && strain(c) >= 1)))) drive = settle;
+    const settling = drive < 0.5 * settle && (far > 0.3 * strideMax || (strain && chains.some((c) => !c.stepping && strain(c) >= 1)));
+    if (settling) drive = settle;
     const run = smooth((drive - WALK_SPANS * span) / ((RUN_SPANS - WALK_SPANS) * span));
     const duty = THREE.MathUtils.lerp(DUTY_RIPPLE, DUTY_SETS, run) - (DUTY_SETS - DUTY_FAST) * THREE.MathUtils.clamp((drive - RUN_SPANS * span) / (4 * RUN_SPANS * span), 0, 1);
     G.stride = THREE.MathUtils.clamp(drive * WAVE_STANCE, 0.35 * strideMax, strideMax);
@@ -217,11 +219,12 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       if (!c.stepping && f > 0 && !(at < swing)) {
         const z = _vw.copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert()).z;
         if (z < c.zLo - 0.05 || z > c.zHi + 0.05) {
+          const to = footAt(c, landWave(c, _r2), _r3);
+          if (settling && to && to.distanceTo(c.F) < 0.5 * SAME_HOLD * c.span && !(strain && strain(c) >= 2)) continue;   // (standing: back where it is, no step)
           Object.assign(c, { stepping: true, own: true, s: 0, dur: Math.max(0.25, Math.min(swing / f, 0.6)), lift: LIFT * c.span * (1 - 0.45 * run) });
           c.S0.copy(c.F);
           (c.S0L ||= new THREE.Vector3()).copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert());
-          c.T.copy(c.F);
-          if (footAt(c, landWave(c, _r2), _r3)) c.T.copy(_r3);
+          c.T.copy(to || c.F);
           clear(c, c.T);
           continue;
         }
@@ -230,11 +233,14 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       if (f > 0 && at < swing) {
         if (!c.stepping) {
           if (at > 0.3 * swing) continue;                            // (come into its swing late, as the rhythm changed: next time)
+          const to = footAt(c, landWave(c, _r2), _r3);
+          // (settling, standing: a foot that would land where it stands stays put, so one on a hold it keeps, a wall's face, never
+          // shuffles on it; the others still come back under it)
+          if (settling && (!to || to.distanceTo(c.F) < SAME_HOLD * c.span) && !(strain && strain(c) >= 2)) continue;
           Object.assign(c, { stepping: true, s: at / swing, dur: swing / f, lift: LIFT * c.span * (1 - 0.45 * run) });
           c.S0.copy(c.F);
           (c.S0L ||= new THREE.Vector3()).copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert());
-          c.T.copy(c.F);
-          if (footAt(c, landWave(c, _r2), _r3)) c.T.copy(_r3);
+          c.T.copy(to || c.F);
           clear(c, c.T);
         }
         c.dur = swing / f;

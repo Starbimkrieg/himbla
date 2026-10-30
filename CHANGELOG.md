@@ -5,6 +5,15 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Zbornak's spider tank climbs as high as its legs reach, 13 m, and stands still beside walls** (`docs/spidertank/`; not in the
+  game yet). Beside a structure it no longer shuffles (a step back onto the hold a foot has is skipped, the hold it has counts more,
+  and standing, the hull doesn't bob to its feet). Leverage now only asks that a foot stand 0.7 m in from an edge on its hip's side, so
+  it straddles narrow blocks; each hip looks round itself for faces, so side legs grip the sides of a block narrower than the tank. A
+  foot out of reach holds nothing and steps, the hull never trades going into something for reach, nor reach for a clear step ahead
+  (it used to rear up vertical with its legs out of reach and freeze), and each leg's lane goes with its hip, so pitched up the back
+  feet come in under the hull. Climb limit 13 m (was 9.5) over its anchor, the second lowest foot on a top; feet to 3 m over their
+  hips, nose up to 88 degrees. The lab sweep: 25 cases wrong of 585 (was 83), hull in nothing, 39 of 41 standing cases still (was 1);
+  both recorded flights stuck at the lane's 9.5 m block now get onto it. The lab's lane ends in a 16 m wall it can't climb.
 - **Spider tank lab: a flight recorder and an obstacle sweep** (`tools/spidertank-lab.html`). F9 saves the session (every tick's time
   and input from the page's load, and the last 15 s of the tank's state); dropping the file on the lab replays it exactly, with pause,
   slow motion and `&at=` to jump in. `?sweep` (`?sweep=quick`: the blocks, about a minute) drives fresh tanks, unseen, at every box from

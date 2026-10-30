@@ -55,19 +55,20 @@ for (let k = 0; k < 4; k++) {                                          // low wa
   const a = (k / 4) * Math.PI * 2 + 1.0;
   addBox(Math.cos(a) * R, Math.sin(a) * R, -a, 14, 0.7, 0.9, wallMat);
 }
-for (let k = 0; k < 9; k++) {                                           // blocks round about: platforms to climb (to 9.5 m), and walls taller
+for (let k = 0; k < 9; k++) {                                           // blocks round about: platforms to climb (3 to 13 m), and walls taller
   const a = (k / 9) * Math.PI * 2, rad = R + 22 + rr() * 30;
   addBox(Math.cos(a) * rad, Math.sin(a) * rad, rr() * 3, 6 + rr() * 8, 6 + rr() * 8, k % 2 ? 3 + rr() * 6.5 : 12 + rr() * 8, blockMat);
 }
-// the test lane, south of the circle: a crate it walks over, a 3.2 m step and a 4.6 m block it climbs, a 9.5 m block (twice its own
-// height: nose up, feet on the face and then the top, hoisting itself over) and down off each, then a 12 m wall too tall to climb: it
-// gets as high up its face as it can and stops there
+// the test lane, south of the circle: a crate it walks over, a 3.2 m step and a 4.6 m block it climbs, a 9.5 m block and a 12 m wall
+// (nose up, all but upright, feet on the face and then the top, hoisting itself over) and down off each, then a 16 m wall too tall to
+// climb: it gets as high up its face as it can and stops there
 const LANE = { x: 0, z0: -205 };
 addBox(LANE.x, -185, 0, 6, 3.5, 2.3, boxMat);
 addBox(LANE.x, -155, 0, 16, 16, 3.2, blockMat);
 addBox(LANE.x, -122, 0, 14, 9, 4.6, blockMat);
 addBox(LANE.x, -88, 0, 18, 14, 9.5, blockMat);
 addBox(LANE.x, -50, 0, 20, 8, 12, blockMat);
+addBox(LANE.x, -22, 0, 20, 6, 16, wallMat);
 const groundGeo = new THREE.PlaneGeometry(420, 420, 300, 300).rotateX(-Math.PI / 2);
 {
   const P = groundGeo.attributes.position;
@@ -466,5 +467,6 @@ function frame() {
   post.render(scene, camera);
   requestAnimationFrame(frame);
 }
+Object.assign(window.__lab, { drive, sweepCase, runCase, makeTank: () => makeSpiderTank(kit) });   // (for scripts: cases by hand)
 if (Q.has('sweep')) runSweep();
 else { await loadReplay(); frame(); }

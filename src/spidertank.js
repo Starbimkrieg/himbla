@@ -9,8 +9,9 @@ import { makeGait } from './gait.js';
 // cross. Each foot reaches for the highest spot near where it would land that its leg reaches and stands on with leverage, or grips the
 // face of what is too tall; the hull is posed on them each frame (bodyPose: its height, pitch and roll, searched round the pose it has
 // for every planted foot in reach, no point of the hull in anything, and, driven on, the hull clear a step further on), so pushed at
-// something it rears up, nose up as steeply as it takes, and hoists itself over: up to CLIMB (twice its height) over its lowest foot
-// on a top; taller, it gets as high up the face as it can and stops. With too few feet holding it, it drops. Past SKIM_AT it closes up
+// something it rears up, nose up as steeply as it takes (to 88 degrees), as high as its legs reach (a foot out of reach holds nothing),
+// and hoists itself over: up to CLIMB (13 m) over its anchor, the second lowest foot on a top; taller, it gets as high up the face as
+// it can and stops. Standing, it keeps its holds (no shuffling between two as good). With too few feet holding it, it drops. Past SKIM_AT it closes up
 // into a skimming bead (overdrive), unless it is climbing or gripping something, and opens out under SKIM_OFF: each leg zigzags
 // against the hull, slides in through its port and a hatch shuts over it, the cannon draws into the nose, the jets come out; every piece
 // follows its own share of the fold (the model's `fold`, `foldPos`, `foldScale` and their spans). Its rams (barrel and rod pivots) aim
@@ -48,15 +49,17 @@ const HOVER = 0.9;              // m higher the folded hull floats than its jets
 const BOB = 0.14;               // m it rises and falls on its jets, floating (and a little roll and pitch with it)
 const BANK = 0.5;               // rad of roll per rad/s of turn, floating (at most 0.3)
 const TRAIL = 0.34, TRAIL_W = 0.32;   // s a jet's trail lasts, m its width at the nozzle (the belly jets': 0.6 of both)
-const ABOVE = 0.6;              // m a foot may stand above its hip at most, reaching up over an edge (its knee still bends up over it)
-const CLIMB = 9.5;              // m a foot stands at most above the lowest foot standing on top of something: taller, it only grips the face
-const PITCH_MAX = 1.45, ROLL_MAX = 1.2;   // rad the hull tilts at most: nose up (near upright) a climb, and over sideways
+const ABOVE = 3;                // m a foot may stand above its hip at most, reaching up over an edge (its knee still bends up over it)
+const CLIMB = 13;               // m a foot stands at most above its anchor (the second lowest foot on a top): taller, it only grips the face
+const PITCH_MAX = 1.53, ROLL_MAX = 1.2;   // rad the hull tilts at most: nose up (all but upright, 88 degrees) a climb, and over sideways
 const LIFT_RATE = 6, PITCH_RATE = 2.2, ROLL_RATE = 1.6;   // m/s and rad/s the hull's pose changes at most (a spider's: quick)
 const FALL = 6;                 // m/s/s it drops at, with too few feet holding it
 const HIPS_OVER = 1.6;          // m the hips may stand over the climb's limit at most (reaching a top at it, never over a wall taller)
-const LEVER = 0.7;              // m a top must go on past a foot (away from its hip) for it to stand there: no hooking a lip
+const STILL_H = 0.6, STILL_A = 0.15;   // m and rad the hull, standing, may be off the pose its feet would give it before it moves to it
+const LEVER = 0.7;              // m in from an edge on its hip's side a foot must stand on a top: no hooking a lip (the far side may end)
 const REVERSE = 18;             // m/s the most it backs up at
 const STRETCH = 1;              // of a leg's reach, past which a trailing foot is due to step (the stride plans to 0.97; at 1.06 it goes at once)
+const LOOSE = 1.02;             // of a leg's reach, past which a planted foot holds nothing (it steps, and the hull isn't held to it)
 const NEAR = 0.45;              // of a leg's reach, the closest to its hip a foot stands (on the face of something beside it)
 // the spots a foot looks at round where it would land (m toward its hip, m across), out to the leg's full reach: it takes the highest,
 // less REACH_COST a metre away (a face counts FACE_COST less than a top)
@@ -64,6 +67,10 @@ const AROUND = [[0, 0], [0, 1], [0, -1], [1, 0], [-1, 0], [0.8, 0.8], [0.8, -0.8
   [-3, 0], [-2.4, 1.2], [-2.4, -1.2], [1.8, 0], [2.6, 0], [3.4, 0]];
 const AHEAD = [1.5, 3, 4.5, 6, 7.5];    // m further ahead (the way it is going) it looks too, for something to climb before its nose gets there
 const REACH_COST = 0.25, FACE_COST = 0.3;
+// the ways each hip looks for a face to grip (across: out from its own side, so -1 is in under the body; down; ahead)
+const FACE_RAYS = [[1, -0.3, 0], [1, -1, 0], [1, -0.3, 0.6], [1, -0.3, -0.6], [-1, -0.3, 0], [-1, -1, 0], [-1, -0.3, 0.6], [-1, -0.3, -0.6],
+  [0, -0.3, 1], [0, -1, 1]];
+const HOLD = 0.3;               // m more the hold a foot has counts for, standing (so it doesn't shuffle between two as good)
 const CHARGE = 1.0, FIRE = 4.0; // s: the beam's charge (the trigger held) and its channel
 const BEAM_RANGE = 420;         // m
 const BEAM_SLOW = 0.3;          // the speed it may keep while charging and firing (of what is asked)
@@ -169,7 +176,7 @@ export function makeSpiderTank(kit) {
   const PIVOT = new THREE.Vector3(0, hipY, 0);
   const body = { H: hipY, W: hipY, P: 0, R: 0, vy: 0, held: 0, set: false };   // (H: over the root; W: the same, in the world)
   const _q = new THREE.Quaternion(), _eu = new THREE.Euler(), _pos = new THREE.Vector3(), _w = new THREE.Vector3(), _m4 = new THREE.Matrix4();
-  let footL = null;
+  let footL = null, loose = null;
   const poseOf = (H, P, R) => { _q.setFromEuler(_eu.set(P, 0, R)); _pos.set(0, H, 0).sub(_w.copy(PIVOT).applyQuaternion(_q)); };
   // how far the hull, posed (_pos, _q in the root's frame), is into things, the root placed by matrix M: each of its points' depth under
   // the top over it, summed (m; more of it in, deeper)
@@ -190,16 +197,22 @@ export function makeSpiderTank(kit) {
     // the feet that hold it, in the root's frame; the plane through them tilts it; those standing on tops (not gripping faces) seat it
     let n = 0, sy = 0, nTop = 0, sx = 0, sz = 0, sxx = 0, szz = 0, sxy = 0, szy = 0, my = 0, mx = 0, mz = 0;
     gripping = false;
-    let low = Infinity;
+    let low = Infinity, low2 = Infinity;
     for (let i = 0; i < chs.length; i++) {
       const c = chs[i];
       if (c.stepping) continue;
       footL[i].copy(c.F).applyMatrix4(_inv);
       n++; mx += footL[i].x; mz += footL[i].z; my += footL[i].y;
       if (onFace(c, c.F)) gripping = true;
-      else { nTop++; sy += footL[i].y; low = Math.min(low, c.F.dot(_up)); }
+      else {
+        nTop++; sy += footL[i].y;
+        const y = c.F.dot(_up);
+        if (y < low) { low2 = low; low = y; } else if (y < low2) low2 = y;
+      }
     }
-    if (low < Infinity) ref = low;
+    // (its anchor: the second lowest foot on a top, so two feet stand at it or higher; one foot in a hole doesn't lower its reach, nor
+    // one up on a ledge raise it)
+    if (low2 < Infinity) ref = low2;
     const rootUp = _up.dot(_d.setFromMatrixPosition(root.matrixWorld));
     if (body.set) body.H = body.W - rootUp;                            // (its height is kept in the world: the root may be anywhere under it)
     if (!body.set && ref === null) ref = rootUp;
@@ -223,6 +236,10 @@ export function makeSpiderTank(kit) {
       _ahead4.copy(root.matrixWorld).setPosition(_w.setFromMatrixPosition(root.matrixWorld).add(_probe));
     }
     const hipsTop = ref - rootUp + CLIMB + HIPS_OVER;
+    // (a planted foot already out of its leg's reach holds nothing: it doesn't hold the hull back either, and it steps: strain)
+    poseOf(body.H, body.P, body.R);
+    loose ||= chs.map(() => false);
+    for (let i = 0; i < chs.length; i++) loose[i] = !chs[i].stepping && _w.copy(chs[i].hip).applyQuaternion(_q).add(_pos).distanceTo(footL[i]) > LOOSE * chs[i].reach;
     const cost = (H, P, R) => {
       poseOf(H, P, R);
       let miss = 0;
@@ -230,12 +247,16 @@ export function makeSpiderTank(kit) {
         const c = chs[i];
         // (every hip kept under the top of anything too tall to climb, nose up or not, so no leg ever reaches over one)
         if (_w.copy(c.hip).applyQuaternion(_q).add(_pos).y > Math.max(hipsTop, body.top)) return Infinity;
-        if (c.stepping) continue;
+        if (c.stepping || loose[i]) continue;
         const d = _w.distanceTo(footL[i]);
         miss += Math.max(0, d - 0.97 * c.reach) + Math.max(0, 0.95 * NEAR * c.reach - d);
       }
       const into = hullDepth(root.matrixWorld), on = going ? hullDepth(_ahead4) : 0;
-      return 400 * miss + 2000 * into + 40 * on + 0.3 * (H - Hn) ** 2 + 3 * ((P - Pn) ** 2 + (R - Rn) ** 2);
+      // (standing, near enough is as it is: a foot lifting to step moves where the rest stand on average, and the hull mustn't bob to it)
+      const eH = going ? 0 : STILL_H, eA = going ? 0 : STILL_A;
+      const dz = (d, e) => Math.max(0, Math.abs(d) - e) ** 2;
+      // (in order: the hull never into anything, then no foot out of reach (the legs set how high it gets), then clear a step on)
+      return 4000 * miss + 40000 * into + 40 * on + 0.3 * dz(H - Hn, eH) + 3 * (dz(P - Pn, eA) + dz(R - Rn, eA));
     };
     const dH = LIFT_RATE * dt, dP = PITCH_RATE * dt, dR = ROLL_RATE * dt;
     poseOf(body.H, body.P, body.R);                                    // (over the cap already, as a foot stood up on something: no higher)
@@ -265,6 +286,14 @@ export function makeSpiderTank(kit) {
     poseOf(bH, bP, bR);
     inner.position.copy(_pos);
     inner.quaternion.copy(_q);
+    // (each leg's lane along the body goes with its hip: pitched up a climb, the hips close in over the middle, and the feet with them, so
+    // the back ones can come in under the hull to hoist it; they keep their order, so the legs still never cross)
+    for (const c of chs) {
+      if (c.zLo === undefined) continue;
+      c.lane0 ||= [c.zLo, c.zHi, c.home.z];
+      const shift = _w.copy(c.hip).applyQuaternion(_q).add(_pos).z - c.hip.z;
+      c.zLo = c.lane0[0] + shift; c.zHi = c.lane0[1] + shift; c.home.z = c.lane0[2] + shift;
+    }
     // (climbing: a foot on a face, or standing up on something, or the hull tilted or hoisted: it won't close up)
     for (const c of chs) if (!c.stepping && c.F.dot(_up) > ref + 0.8) gripping = true;
     if (Math.abs(bP) > 0.2 || Math.abs(bR) > 0.2 || bH > hipY + 1) gripping = true;
@@ -296,6 +325,11 @@ export function makeSpiderTank(kit) {
     heading(_ahead);
     _inv.copy(root.matrixWorld).invert();
     let best = -Infinity, far0 = -Infinity;
+    // (standing, the hold it has (or stepped off) counts HOLD more: it moves for a clearly better one, not one as good)
+    if (Math.abs(push) < 0.5 && vel.lengthSq() < 0.25) {
+      const h = c.stepping ? c.S0 : c.F, d = h.distanceTo(hipW), z = _f.copy(h).applyMatrix4(_inv).z;
+      if (d < 0.98 * c.reach && d > NEAR * c.reach && (c.zLo === undefined || (z > c.zLo - 0.1 && z < c.zHi + 0.1))) { best = h.dot(up) + HOLD; _best.copy(h); }
+    }
     for (let k = 0; k < AROUND.length + AHEAD.length; k++) {
       const [a, s] = AROUND[k] || [0, 0], f = k < AROUND.length ? 0 : AHEAD[k - AROUND.length];
       _c.copy(p).addScaledVector(toHip, a).addScaledVector(across, s).addScaledVector(_ahead, f);
@@ -326,16 +360,36 @@ export function makeSpiderTank(kit) {
         continue;
       }
       if (far < NEAR * c.reach) continue;                                          // (too close to fold to)
-      // (leverage: the top goes on LEVER past the foot, away from its hip, and doesn't drop away just behind it: no hooking a lip)
-      const away = _l1.subVectors(_e, hipW).addScaledVector(up, -_l1.dot(up)).normalize(), y = _e.dot(up);
-      if (!groundFn(_l2.copy(_e).addScaledVector(away, LEVER), _l2) || Math.abs(_l2.dot(up) - y) > 0.25) continue;
-      if (!groundFn(_l2.copy(_e).addScaledVector(away, -0.3), _l2) || _l2.dot(up) < y - 0.25) continue;
+      // (leverage: the foot stands LEVER in from any edge between it and its hip, so it pulls on the top, never hooks a lip; past it, away
+      // from its hip, the top may end where it likes: it straddles a narrow block. Something higher on the hip's side is a corner: fine)
+      const toward = _l1.subVectors(hipW, _e).addScaledVector(up, -_l1.dot(up)), y = _e.dot(up);
+      if (toward.lengthSq() > 1e-6) {
+        toward.normalize();
+        let lip = false;
+        for (const d of [0.25, 0.5, LEVER]) if (groundFn(_l2.copy(_e).addScaledVector(toward, d), _l2, ceil) && _l2.dot(up) < y - 0.25) { lip = true; break; }
+        if (lip) continue;
+      }
       if (ray && far > 1e-3 && ray(hipW, _f.divideScalar(far), far - 0.05, _d)) {     // (something between: its face, then)
         if (grip(c, _c, ceil, _l1) && _l1.dot(up) - cost - FACE_COST > best) { best = _l1.dot(up) - cost - FACE_COST; _best.copy(_l1); }
         continue;
       }
       best = score;
       _best.copy(_e);
+    }
+    // (faces round it: looked for from its hip, out and in, down, a little ahead and behind; the face of a narrow block beside it, say,
+    // that none of the spots round its lane is over. Each found is gripped as high as it reaches, if it is in its lane)
+    if (ray) {
+      const side = Math.sign(c.rest.x) || 1;
+      for (const [x, y, z] of FACE_RAYS) {
+        _l1.set(x * side, y, z).normalize().transformDirection(root.matrixWorld);
+        if (!ray(hipW, _l1, 0.95 * c.reach, _d)) continue;
+        if (groundFn(_l2.copy(_d).addScaledVector(_l1, 0.1), _l2, ceil) && _l2.dot(up) < _d.dot(up) + 0.1) continue;   // (a top: not a face)
+        if (!grip(c, _l2.copy(_d).addScaledVector(_l1, 0.3), ceil, _e)) continue;
+        const z0 = _f.copy(_e).applyMatrix4(_inv).z;
+        if (c.zLo !== undefined && (z0 < c.zLo - 0.1 || z0 > c.zHi + 0.1)) continue;
+        const k = _e.dot(up) - FACE_COST - REACH_COST * _f.subVectors(_e, p).addScaledVector(up, -_f.dot(up)).length();
+        if (k > best) { best = k; _best.copy(_e); }
+      }
     }
     // (nothing in reach, the hull too high over the ground, coming off something: the best out of it, and the hull comes down to it)
     return best > -Infinity ? out.copy(_best) : far0 > -Infinity ? out.copy(_far) : null;
@@ -361,12 +415,12 @@ export function makeSpiderTank(kit) {
   // how badly planted foot c wants to step: as its leg, trailing below a risen hull, nears its full stretch, or at once if something has
   // come between its hip and its foot (the hull has gone on past an edge)
   function strain(c) {
+    if (c.joints[0].getWorldPosition(hipW).distanceTo(c.F) > LOOSE * c.reach) return 2;   // (out of reach: holding nothing, it goes)
     // (pushed on but held up, the legs on the side it is pushed toward step to anything better in reach: it climbs, or grips the face)
     if (stuck && c.hip.z * push > 0.3) {
       const want = foothold(c, _a.copy(c.rest).applyMatrix4(root.matrixWorld), _g, ground);
       if (want && (want.dot(_up) > c.F.dot(_up) + 0.3 || want.distanceTo(c.F) > 1)) return 1.5;
     }
-    c.joints[0].getWorldPosition(hipW);
     const far = _f.subVectors(c.F, hipW).length();
     const raised = -_f.dot(_up.setFromMatrixColumn(root.matrixWorld, 1).normalize()) > c.hipY - c.rest.y + 0.3;
     let k = raised && (_f.dot(vel) < 0 || vel.lengthSq() < 0.01) ? 1 + (far - STRETCH * c.reach) / (0.06 * c.reach) : 0;
