@@ -20,7 +20,17 @@
               &speed=m/s                      the pace for &demo=walk|run|climb|wall
               &cam=chase|side|front|rear|top|orbit     where the camera starts &dist=m &yaw=deg (from straight ahead) &pitch=deg &ui=0
        Looking round: drag to turn the camera round the tank, right-drag (or shift-drag) to slide what it looks at, wheel to zoom,
-       H to stop it turning with the tank, R or double-click to put it back. P pauses, . steps one frame, [ and ] slow the clock. -->
+       H to stop it turning with the tank, R or double-click to put it back. P pauses, . steps one frame, [ and ] slow the clock.
+       The flight recorder: every tick's time and input is kept from the page's load; F9 saves it as a .json (with the last 15 s of the
+       tank's state, to read). Drop the file on the page to replay it, exactly, in the same lab (the camera, pause and slow still work):
+              &replay=url                     replay a saved flight from a url (&replay=session: the one dropped on the page)
+              &at=s                           start the replay there (run up to it unseen)
+       The obstacle sweep, unseen and with fresh tanks, as a table (window.__sweep too); each row's link replays that case here:
+              ?sweep                          every box from 8 sides at 4 and 12 m/s, and standing beside the tall ones
+              ?sweep=quick                    the blocks only (20 on), from 4 sides at 10 m/s, one stand each (about a minute)
+              &box=i,j                        only those boxes
+              ?case=box,side,speed            one approach (side: eighths round from the box's own facing; it starts 14 m out from it)
+              ?case=stand,box,side[,out]      standing beside a side, facing along it, out m from it (4.2) -->
   <div id="info"></div>
   <script type="module" src="./spidertank-lab.js"></script>
 </body>

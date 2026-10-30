@@ -5,6 +5,12 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Spider tank lab: a flight recorder and an obstacle sweep** (`tools/spidertank-lab.html`). F9 saves the session (every tick's time
+  and input from the page's load, and the last 15 s of the tank's state); dropping the file on the lab replays it exactly, with pause,
+  slow motion and `&at=` to jump in. `?sweep` (`?sweep=quick`: the blocks, about a minute) drives fresh tanks, unseen, at every box from
+  8 sides at 4 and 12 m/s and parks them beside the tall ones, and tables what each did against what it should (over, round or stopped;
+  over anything up to `tank.climbMax`), with hull and leg bones in things and the last 6 s of steps and pose change; each row replays in
+  the lab (`?case=`). The lab's drive is one function for the page, the replay and the sweep.
 - **Zbornak's spider tank climbs twice its height** (`docs/spidertank/`; not in the game yet). The hull is now posed on its feet by a
   search each frame (`bodyPose`, gait.js's new hook): height, pitch (to 83 degrees nose up) and roll (to 69) round the pose it has, for
   every planted foot in reach, no point of the hull (`HULL3`) inside anything, sat on its feet, and, driven on, clear a step further:

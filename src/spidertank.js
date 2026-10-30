@@ -450,6 +450,7 @@ export function makeSpiderTank(kit) {
     skimLift: 0, yaw: 0, bank: 0, climbing: false,
     walkMax: SKIM_AT,                                                // m/s past which it closes up to skim (overdrive)
     reverseMax: REVERSE,                                             // m/s the most it backs up at
+    climbMax: CLIMB,                                                 // m the most it climbs, over its lowest foot on a top (lab sweep)
     t: 0,
     // the pieces f of the way into the bead (the legs from where the gait left them, or, still, from as built), the hull settled
     folded(f, still = true) {

@@ -2,10 +2,11 @@
 // crates, low walls and a few tall blocks on it: walking on its eight legs (src/gait.js), running, closing up into its skimming bead
 // past 25 m/s and back, stopping to fire the reactor beam. It drives itself until you press a key: W ahead, S back (to 18 m/s), A/D
 // turn, hold SPACE for the beam. A test lane off the circle (&demo=wall) has things to climb and a block it can't. Look round with the
-// mouse; pause and slow it down. Query parameters and keys are in the HTML.
+// mouse; pause and slow it down. F9 saves the session's flight (every tick's input) to replay exactly; &sweep drives fresh tanks at
+// every box, unseen, and tables what each did. Query parameters and keys are in the HTML.
 import * as THREE from 'three';
 import { ComicPost } from '../src/post.js';
-import { loadSpiderTank, makeSpiderTank, HULL } from '../src/spidertank.js';
+import { loadSpiderTank, makeSpiderTank, HULL, HULL3 } from '../src/spidertank.js';
 
 const Q = new URLSearchParams(location.search);
 const num = (k, d) => (Q.has(k) ? parseFloat(Q.get(k)) : d);
@@ -154,9 +155,6 @@ const tank = makeSpiderTank(kit);
 scene.add(tank.root);
 const S = DEMO === 'wall' ? { x: LANE.x, z: LANE.z0, yaw: 0, v: 0 } : { x: R, z: 0, yaw: 0, v: 0 };
 if (DEMO === 'skim') { tank.fold = 1; S.v = num('speed', 70); }                    // (skimming from the start)
-// how far into things its hull, posed as it is, would be at x, z, turned yaw (tank.hits). It never moves or turns deeper in than it is:
-// driving, it slides along what it meets; driving itself, it stops.
-const sink = (x, z, yaw) => tank.hits(x, terrain(x, z), z, yaw);
 const _p = new THREE.Vector3();
 let t = 0, last = performance.now(), auto = true;
 const info = document.getElementById('info');
@@ -207,40 +205,208 @@ addEventListener('pointermove', (e) => {
 });
 renderer.domElement.addEventListener('wheel', (e) => { cam.zoom = THREE.MathUtils.clamp(cam.zoom * Math.exp(e.deltaY * 0.001), 0.15, 6); }, { passive: true });
 
-// the drive and the tank, one tick of dt (the lab's clock: paused, slowed or stepped)
-function step(dt, now) {
-  auto = now - lastKey > 6000 && ![...keys].some((k) => DRIVE_KEYS.has(k));   // (not while a key is held)
-  let want, trigger, turn = 0;
-  if (auto) {
-    [want, trigger] = script(t);
-  } else {
-    want = keys.has('KeyW') ? 90 : keys.has('KeyS') ? -tank.reverseMax : S.v;
-    trigger = keys.has('Space');
-    turn = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
-  }
-  want = THREE.MathUtils.clamp(want, -tank.reverseMax, Math.min(90, tank.speedMax)) * tank.speedCap;
+// ---- the drive: what is asked of it each tick (the keys, the script, or a replay), and the tank driven by it ----
+function readInput(now) {
+  const self = now - lastKey > 6000 && ![...keys].some((k) => DRIVE_KEYS.has(k));   // (not while a key is held)
+  if (self) { const [want, trigger] = script(t); return [self, want, trigger ? 1 : 0, 0]; }
+  return [false, keys.has('KeyW') ? 90 : keys.has('KeyS') ? -tank.reverseMax : S.v, keys.has('Space') ? 1 : 0,
+    (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0)];
+}
+// one tick of dt for sim ({ S, tank }), given [driving itself, the speed asked, trigger, turn]: its speed eased to what is asked, moved
+// (round the circle or down the lane driving itself, else where it's steered), never deeper into anything (driven, it slides along what
+// it meets; driving itself, it stops), and the tank updated
+function drive(sim, dt, [self, ask, trigger, turn]) {
+  const { S, tank } = sim;
+  const want = THREE.MathUtils.clamp(ask, -tank.reverseMax, Math.min(90, tank.speedMax)) * tank.speedCap;
   const acc = tank.form === 'walk' ? 7 : 20;                           // (braking, and backing up, at 14)
   S.v += THREE.MathUtils.clamp(want - S.v, want < S.v ? -14 * dt : 0, want > S.v ? (S.v < 0 ? 14 : acc) * dt : 0);
-  // round the circle (auto), down the test lane, or where it's steered; not into what it can't clear
   let nx, nz, nyaw = S.yaw;
-  if (auto && DEMO === 'wall') { nx = LANE.x; nz = S.z + S.v * dt; nyaw = 0; }
-  else if (auto) {
+  if (self && DEMO === 'wall') { nx = LANE.x; nz = S.z + S.v * dt; nyaw = 0; }
+  else if (self) {
     const a = Math.atan2(S.z, S.x) + (S.v * dt) / R;
     nx = Math.cos(a) * R; nz = Math.sin(a) * R; nyaw = -a;
   } else {
     nyaw += turn * dt * (tank.form === 'walk' ? 2.6 - 1.6 * Math.min(1, Math.abs(S.v) / 25) : 1.1 - 0.7 * Math.min(1, S.v / 60));   // (a spider spins quick)
     nx = S.x + Math.sin(nyaw) * S.v * dt; nz = S.z + Math.cos(nyaw) * S.v * dt;
   }
+  const sink = (x, z, yaw) => tank.hits(x, terrain(x, z), z, yaw);
   const deep = sink(S.x, S.z, S.yaw) + 1e-3, ok = (x, z, yaw) => sink(x, z, yaw) <= deep;
   if (ok(nx, nz, nyaw)) { S.x = nx; S.z = nz; S.yaw = nyaw; }
-  else if (!auto && ok(nx, nz, S.yaw)) { S.x = nx; S.z = nz; }
-  else if (!auto && ok(nx, S.z, S.yaw)) S.x = nx;
-  else if (!auto && ok(S.x, nz, S.yaw)) S.z = nz;
+  else if (!self && ok(nx, nz, S.yaw)) { S.x = nx; S.z = nz; }
+  else if (!self && ok(nx, S.z, S.yaw)) S.x = nx;
+  else if (!self && ok(S.x, nz, S.yaw)) S.z = nz;
   else { S.v = 0; if (ok(S.x, S.z, nyaw)) S.yaw = nyaw; }
-  // on the terrain under its middle: it rides up over crates on its own legs (spidertank.js)
+  // on the terrain under its middle: it climbs over things on its own legs (spidertank.js); how far into things its hull, posed as it is,
+  // would be at x, z, turned yaw is tank.hits
   tank.root.position.set(S.x, terrain(S.x, S.z), S.z);
   tank.root.rotation.set(0, S.yaw, 0);
   tank.update(dt, { speed: S.v, push: want, ground: groundAt, ray: rayAt, trigger: !!trigger });   // (push: held up, it climbs)
+}
+const sim = { S, tank };
+
+// ---- the obstacle sweep (&sweep, or &sweep=quick): fresh tanks, unseen, driven straight at every box in the lab from 8 sides (box-on,
+// corner-on) at a walk and a run, and parked beside the sides of the tall blocks; each one over it, round it or stopped, against what
+// it should do (over anything up to tank.climbMax tall), with its hull and legs in things, steps and shuffling. Any row opens in the
+// lab as a replay (&case=box,side,speed; or stand,box,side), to watch. The table is in window.__sweep too.
+const BLOCKS = boxes.map((b, i) => i).filter((i) => i >= 20);          // (the blocks round about, and the lane's; quick: only these)
+// a case as a flight the lab replays: where it starts (out from the box, facing it, its middle on the line through the box's middle),
+// and its ticks, each asking the same speed, steering nowhere
+function sweepCase(spec) {
+  const [kind, ...rest] = spec.split(','), stand = kind === 'stand';
+  const [i, side, speed, out = 4.2] = (stand ? [...rest.slice(0, 2), 0, ...rest.slice(2)] : [kind, ...rest]).map(Number);
+  const b = boxes[i], ang = Math.atan2(b.s, b.c) + side * Math.PI / 4;  // (the box's yaw, and on round by eighths)
+  const dx = Math.sin(ang), dz = Math.cos(ang);                         // (the way it heads: into the box)
+  const ax = b.c * dx - b.s * dz, az = b.s * dx + b.c * dz;              // (that way in the box's frame)
+  const reach = Math.abs(ax) * b.hx + Math.abs(az) * b.hz;              // m from the box's middle to its side, along the way
+  let start, frames, dur;
+  if (stand) {                                                          // beside a side, facing along it, 4.2 m out (its legs against it), or out
+    start = { x: b.cx - dx * (reach + out), z: b.cz - dz * (reach + out), yaw: ang + Math.PI / 2, v: 0 };
+    dur = 10;
+    frames = Array.from({ length: dur * 30 }, () => [1 / 30, 0, 0, 0, 0]);
+  } else {
+    const back = reach + 14;
+    start = { x: b.cx - dx * back, z: b.cz - dz * back, yaw: ang, v: 0 };
+    dur = Math.min(45, 2 + (2 * back) / speed + 14);
+    frames = Array.from({ length: Math.round(dur * 30) }, (_, f) => [1 / 30, 0, f < 60 ? 0 : speed, 0, 0]);   // (2 s to settle)
+  }
+  // rise: the box's top over the ground round it (where its feet start)
+  const rise = b.top - Math.min(...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([p, q]) => terrain(b.cx + (p * b.hx * b.c + q * b.hz * b.s), b.cz + (-p * b.hx * b.s + q * b.hz * b.c))));
+  return { spec, i, side, speed, out, stand, b, dx, dz, reach, rise, flight: { kind: 'spidertank-flight', version: 1, query: '', start, frames } };
+}
+const _w = new THREE.Vector3(), _j0 = new THREE.Vector3(), _j1 = new THREE.Vector3();
+function inBoxes(p, near) {                                             // m deep the point is inside a box, or under the ground (0: not)
+  let worst = Math.max(0, terrain(p.x, p.z) - p.y);
+  for (const b of near) {
+    const dx = p.x - b.cx, dz = p.z - b.cz, lx = dx * b.c - dz * b.s, lz = dx * b.s + dz * b.c;
+    worst = Math.max(worst, Math.min(b.hx - Math.abs(lx), b.hz - Math.abs(lz), b.top - p.y, p.y - b.bot));
+  }
+  return worst;
+}
+function runCase(spec) {
+  const C = sweepCase(spec), T = makeSpiderTank(kit), s = { ...C.flight.start }, me = { S: s, tank: T };
+  const near = boxes.filter((b) => Math.hypot(b.cx - C.b.cx, b.cz - C.b.cz) < 60);
+  const r = { spec, box: C.i, side: C.side, speed: C.speed, rise: C.rise, hull: 0, hullWorst: 0, bones: 0, bonesWorst: 0, steps: 0, roll: 0, pitch: 0, topW: -Infinity, inside: false };
+  const along = () => (s.x - C.b.cx) * C.dx + (s.z - C.b.cz) * C.dz;    // m past the box's middle, along the way
+  const was = T.gait.chains.map(() => false);
+  const end = C.flight.frames.length / 30;
+  let last = null, tail = 0, tailSteps = 0, t = 0;
+  for (const f of C.flight.frames) {
+    if (!C.stand && along() > C.reach + 10) break;                      // (well past it: done)
+    t += f[0];
+    drive(me, f[0], [false, f[2], f[3], f[4]]);
+    T.root.updateMatrixWorld(true);
+    if (t < 2) continue;                                                // (settling)
+    let hc = 0;
+    for (const v of HULL3) hc = Math.max(hc, inBoxes(_w.copy(v).applyMatrix4(T.inner.matrixWorld), near));
+    if (hc > 0.05) r.hull++;
+    r.hullWorst = Math.max(r.hullWorst, hc);
+    T.gait.chains.forEach((c, k) => {
+      let worst = 0;
+      for (let j = 0; j < c.joints.length; j++) {
+        c.joints[j].getWorldPosition(_j0);
+        const next = c.joints[j + 1] || c.joints[j].children.find((o) => o.userData.role === 'foot');
+        next.getWorldPosition(_j1);
+        for (let q = 1; q <= 6; q++) worst = Math.max(worst, inBoxes(_w.lerpVectors(_j0, _j1, q / 7), near));
+      }
+      if (worst > 0.15) r.bones++;
+      r.bonesWorst = Math.max(r.bonesWorst, worst);
+      if (c.stepping && !was[k]) { r.steps++; if (t > end - 6) tailSteps++; }
+      was[k] = c.stepping;
+    });
+    const p = T.pose;
+    if (last && t > end - 6) tail += Math.abs(p.W - last[0]) + Math.abs(p.P - last[1]) + Math.abs(p.R - last[2]);
+    last = [p.W, p.P, p.R];
+    r.roll = Math.max(r.roll, Math.abs(p.R));
+    r.pitch = Math.max(r.pitch, -p.P);
+    r.topW = Math.max(r.topW, p.W - T.hipY);
+    const dx = s.x - C.b.cx, dz = s.z - C.b.cz;
+    if (Math.abs(dx * C.b.c - dz * C.b.s) < C.b.hx && Math.abs(dx * C.b.s + dz * C.b.c) < C.b.hz) r.inside = true;
+  }
+  const past = along() > C.reach + 1;
+  r.tailSteps = tailSteps;                                              // steps begun in its last 6 s
+  r.tailJitter = tail / 180;                                            // pose change a frame, its last 6 s (m and rad)
+  r.result = C.stand ? (r.tailSteps > 8 || r.tailJitter > 0.01 ? 'shuffles' : 'still') : past ? (r.inside ? 'over' : 'round') : 'stopped';
+  // m past its near side (negative: short of it); standing, m it has drifted
+  r.at = +(C.stand ? Math.hypot(s.x - C.flight.start.x, s.z - C.flight.start.z) : along() - C.reach).toFixed(1);
+  // (within half a metre of its limit, either is right: the ground round a box isn't level)
+  r.should = C.stand ? 'still' : Math.abs(C.rise - T.climbMax) < 0.5 ? 'either' : C.rise < T.climbMax ? 'over' : 'stopped';
+  r.ok = r.result === r.should || (r.should === 'either' && r.result !== 'round') || (r.should === 'stopped' && r.result === 'round');
+  r.form = T.form;
+  return r;
+}
+async function runSweep() {
+  const quick = Q.get('sweep') === 'quick', only = Q.has('box') ? Q.get('box').split(',').map(Number) : null;
+  const specs = [];
+  const open = `stand,${BLOCKS[0]},0,30`;                               // (the same, out in the open: what standing still looks like)
+  if (!only) specs.push(open);
+  for (const i of only || (quick ? BLOCKS : boxes.map((b, k) => k))) {
+    for (const side of quick ? [0, 2, 4, 6] : [0, 1, 2, 3, 4, 5, 6, 7]) for (const v of quick ? [10] : [4, 12]) specs.push(`${i},${side},${v}`);
+    if (boxes[i].top - terrain(boxes[i].cx, boxes[i].cz) > 5) for (const side of quick ? [0] : [0, 2, 4, 6]) specs.push(`stand,${i},${side}`);
+  }
+  info.style.display = 'none';
+  renderer.domElement.style.display = 'none';
+  const pre = document.createElement('pre');
+  pre.style.cssText = 'margin:0;padding:12px;color:#e8e4f0;font:12px/1.35 monospace;white-space:pre';
+  document.body.append(pre);
+  const rows = [], head = `case            rise   should   got       at m   hull in  worst  bones in worst  steps  last6s  jit6s  roll  pitch  top W  form`;
+  const line = (r) => `<a href="?case=${r.spec}" style="color:${r.ok ? '#9fd39b' : '#ff8a7a'}">${r.spec.padEnd(14)}</a>  ${r.rise.toFixed(1).padStart(4)}  ${r.should.padEnd(7)}  ${r.result.padEnd(8)}  ${String(r.at).padStart(5)}  ${String(r.hull).padStart(7)}  ${r.hullWorst.toFixed(2)}  ${String(r.bones).padStart(8)}  ${r.bonesWorst.toFixed(2)}  ${String(r.steps).padStart(5)}  ${String(r.tailSteps).padStart(6)}  ${r.tailJitter.toFixed(3)}  ${(r.roll * 57.3).toFixed(0).padStart(4)}  ${(r.pitch * 57.3).toFixed(0).padStart(5)}  ${r.topW.toFixed(1).padStart(5)}  ${r.form}`;
+  window.__sweep = { done: false, rows };
+  for (const spec of specs) {
+    rows.push(runCase(spec));
+    const bad = rows.filter((r) => !r.ok).length;
+    pre.innerHTML = `SPIDER TANK SWEEP${quick ? ' (quick)' : ''}: ${rows.length} / ${specs.length}, ${bad} not as they should be  (climbs up to ${tank.climbMax} m)\n\n${head}\n${rows.map(line).join('\n')}`;
+    await new Promise((res) => setTimeout(res, 0));
+  }
+  window.__sweep.done = true;
+}
+
+// ---- the flight recorder: every tick's dt and input from the page's load, so a session can be run again exactly; F9 saves it (with
+// the last 15 s of the tank's state, to read), and dropping the file on the page (or &replay=url, or window.__replay) runs it again,
+// in this same lab (&at=s jumps to a time). Nothing else moves the tank, so the replay is the session, frame for frame.
+const rec = { kind: 'spidertank-flight', version: 1, query: location.search.replace(/[?&](replay|at)=[^&]*/g, ''), start: { ...S }, frames: [], last: [] };
+let replay = null;
+window.__lab = { S, tank, rec, time: () => t, replaying: () => replay && replay.i < replay.data.frames.length };   // (for scripts driving the lab)
+function remember(dt, input) {
+  rec.frames.push([dt, input[0] ? 1 : 0, input[1], input[2], input[3]]);
+  rec.last.push({ t: +t.toFixed(3), S: { x: +S.x.toFixed(2), z: +S.z.toFixed(2), yaw: +S.yaw.toFixed(3), v: +S.v.toFixed(2) }, form: tank.form,
+    pose: { W: +tank.pose.W.toFixed(2), P: +tank.pose.P.toFixed(3), R: +tank.pose.R.toFixed(3) }, climbing: tank.climbing,
+    feet: tank.gait.chains.map((c) => [+c.F.x.toFixed(2), +c.F.y.toFixed(2), +c.F.z.toFixed(2), c.stepping ? 1 : 0]) });
+  while (rec.last.length && rec.last[0].t < t - 15) rec.last.shift();
+}
+function save() {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(rec)], { type: 'application/json' }));
+  a.download = `spidertank-flight-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  a.click();
+  flash = 'SAVED (F9)';
+  flashT = 2;
+}
+let flash = '', flashT = 0;
+addEventListener('keydown', (e) => { if (e.code === 'F9') { e.preventDefault(); if (!replay) save(); } });
+addEventListener('dragover', (e) => e.preventDefault());
+addEventListener('drop', async (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const data = JSON.parse(await file.text());
+  sessionStorage.setItem('spidertankReplay', JSON.stringify(data));
+  const q = new URLSearchParams(data.query || '');
+  q.set('replay', 'session');
+  location.search = q;
+});
+async function loadReplay() {
+  const src = Q.get('replay');
+  const data = window.__replay || (Q.has('case') ? sweepCase(Q.get('case')).flight : src === 'session' ? JSON.parse(sessionStorage.getItem('spidertankReplay') || 'null') : src ? await (await fetch(src)).json() : null);
+  if (!data) return;
+  replay = { data, i: 0, clock: 0 };
+  Object.assign(S, data.start);
+  const at = num('at', 0);
+  while (replay.i < data.frames.length && t < at) replayTick();         // (jumped to: run there unseen)
+}
+function replayTick() {
+  const f = replay.data.frames[replay.i++];
+  t += f[0];
+  drive(sim, f[0], [!!f[1], f[2], f[3], f[4]]);
 }
 
 function frame() {
@@ -249,7 +415,6 @@ function frame() {
   last = now;
   const dt = clock.paused ? (clock.step ? 1 / 30 : 0) : real * SLOW[clock.slow];
   clock.step = false;
-  t += dt;
   const sz = renderer.getSize(new THREE.Vector2());
   if (innerWidth > 0 && (sz.x !== innerWidth || sz.y !== innerHeight)) {
     renderer.setSize(innerWidth, innerHeight);
@@ -257,7 +422,19 @@ function frame() {
     camera.updateProjectionMatrix();
     post.setSize();
   }
-  if (dt > 0) step(dt, now);
+  if (replay) {                                                         // (the recorded ticks, at the lab's clock)
+    replay.clock += dt;
+    if (clock.paused && dt > 0) replay.clock = replay.data.frames[replay.i]?.[0] ?? 0;
+    while (replay.i < replay.data.frames.length && replay.clock >= replay.data.frames[replay.i][0]) { replay.clock -= replay.data.frames[replay.i][0]; replayTick(); }
+    if (replay.i >= replay.data.frames.length) clock.paused = true;
+  } else if (dt > 0) {
+    const input = readInput(now);
+    auto = input[0];
+    t += dt;
+    drive(sim, dt, input);
+    remember(dt, input);
+  }
+  flashT -= real;
   // the camera: round the tank (turning with it, smoothly), at what it looks at plus the slide
   const P = tank.root.position;
   cam.head += (THREE.MathUtils.euclideanModulo(S.yaw - cam.head + Math.PI, Math.PI * 2) - Math.PI) * (cam.set ? 1 - Math.exp(-real * 4) : 1);
@@ -272,11 +449,14 @@ function frame() {
   sun.target.position.copy(P);
   const B = tank.beam;
   const tick = clock.paused ? '  PAUSED (P, . a frame)' : clock.slow ? `  x${SLOW[clock.slow]}` : '';
-  info.innerHTML = `<b>${tank.model.userData.title}</b>  ${auto ? 'driving itself (press a key to drive)' : 'W ahead, S back, A/D turn, SPACE beam'}\n`
+  const mode = replay ? `REPLAY ${t.toFixed(1)} / ${replay.data.frames.reduce((a, f) => a + f[0], 0).toFixed(1)} s${replay.i >= replay.data.frames.length ? ' (end)' : ''}`
+    : auto ? 'driving itself (press a key to drive)' : 'W ahead, S back, A/D turn, SPACE beam';
+  info.innerHTML = `<b>${tank.model.userData.title}</b>  ${mode}${flashT > 0 ? `  ${flash}` : ''}\n`
     + `${S.v.toFixed(1)} m/s  ${tank.form.toUpperCase()}${B.state !== 'idle' ? `  BEAM ${B.state.toUpperCase()} ${B.t.toFixed(1)} s` : ''}  (closes up past ${tank.walkMax.toFixed(0)} m/s${tank.climbing ? ': not while climbing' : ''})${tick}\n`
-    + `<span class="dim">drag: look round  right-drag: slide  wheel: zoom  H: ${cam.follow ? 'turning with it' : 'fixed'}  R: reset  P: pause  [ ]: slow</span>`;
+    + `<span class="dim">drag: look round  right-drag: slide  wheel: zoom  H: ${cam.follow ? 'turning with it' : 'fixed'}  R: reset  P: pause  [ ]: slow  F9: save the flight (drop it here to replay)</span>`;
   post.material.uniforms.time.value = t;
   post.render(scene, camera);
   requestAnimationFrame(frame);
 }
-frame();
+if (Q.has('sweep')) runSweep();
+else { await loadReplay(); frame(); }

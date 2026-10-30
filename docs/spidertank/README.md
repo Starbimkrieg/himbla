@@ -19,7 +19,12 @@ among, and made the bead float higher on glowing jet trails. Not in the game yet
   frame, **[ ]** slow the clock down to a tenth and back. `&demo=walk|climb|wall|run|skim|fold|beam` loops one part (`wall` walks
   down the test lane: a 2.3 m crate, a 3.2 m step, a 4.6 m block and a 9.5 m one it climbs onto and down off, then a 12 m wall it gets
   as high up as it can and stops at); `&speed=` sets it; the blocks round the circle are platforms to climb (3 to 9.5 m) and walls;
-  `&cam=chase|side|front|rear|top|orbit` is where the camera starts.
+  `&cam=chase|side|front|rear|top|orbit` is where the camera starts. **F9** saves the flight (every tick's time and input since
+  the page loaded, and the last 15 s of the tank's state); drop the file on the lab page to replay it frame for frame (pause, slow and
+  look round as it plays; `&at=s` jumps in). `?sweep` (or `?sweep=quick`, about a minute) drives fresh tanks, unseen, straight at every
+  box from 8 sides at a walk and a run, and parks them beside the tall ones, then tables each: over it, round it or stopped against
+  what it should do (over anything up to `tank.climbMax`), its hull and leg bones in things, and the steps and pose change of its last
+  6 s (shuffling); each row's link (`?case=...`) replays it in the lab.
 - **The Asset Row**, Ground Vehicles: walking, and closed up.
 
 ![Walking](walk.jpg)
