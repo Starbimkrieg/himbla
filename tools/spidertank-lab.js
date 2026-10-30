@@ -1,8 +1,8 @@
 // Dev-only: Zbornak's spider tank lab (src/spidertank.js; docs/spidertank/). It drives round a circle over rolling ground with
 // crates, low walls and a few tall blocks on it: walking on its eight legs (src/gait.js), running, closing up into its skimming bead
-// past 40 m/s and back, stopping to fire the reactor beam. It drives itself until you press a key: W/S speed, A/D turn, hold SPACE
-// for the beam. A test lane off the circle (&demo=wall) has a crate, a step to climb and a block it can't. Look round with the mouse;
-// pause and slow it down. Query parameters and keys are in the HTML.
+// past 40 m/s and back, stopping to fire the reactor beam. It drives itself until you press a key: W ahead, S back (to 18 m/s), A/D
+// turn, hold SPACE for the beam. A test lane off the circle (&demo=wall) has things to climb and a block it can't. Look round with the
+// mouse; pause and slow it down. Query parameters and keys are in the HTML.
 import * as THREE from 'three';
 import { ComicPost } from '../src/post.js';
 import { loadSpiderTank, makeSpiderTank, HULL } from '../src/spidertank.js';
@@ -54,16 +54,17 @@ for (let k = 0; k < 4; k++) {                                          // low wa
   const a = (k / 4) * Math.PI * 2 + 1.0;
   addBox(Math.cos(a) * R, Math.sin(a) * R, -a, 14, 0.7, 0.9, wallMat);
 }
-for (let k = 0; k < 9; k++) {                                          // tall blocks round about, for scale
+for (let k = 0; k < 9; k++) {                                           // blocks round about: platforms to climb (to 5 m), and taller
   const a = (k / 9) * Math.PI * 2, rad = R + 22 + rr() * 30;
-  addBox(Math.cos(a) * rad, Math.sin(a) * rad, rr() * 3, 6 + rr() * 8, 6 + rr() * 8, 6 + rr() * 12, blockMat);
+  addBox(Math.cos(a) * rad, Math.sin(a) * rad, rr() * 3, 6 + rr() * 8, 6 + rr() * 8, k % 2 ? 3 + rr() * 2 : 6 + rr() * 12, blockMat);
 }
-// the test lane, south of the circle: a crate it walks over, a 3.2 m step it climbs onto (the hull rises first, so the feet reach the
-// top) and down off, then an 8 m block too tall to clear: it stops at it, feet on the ground and against its face
+// the test lane, south of the circle: a crate it walks over, a 3.2 m step and a 4.6 m block it climbs (nose up, its front feet on the
+// face and then the top) and down off, then an 8 m block too tall to climb: it stops at it, its front feet gripping its face
 const LANE = { x: 0, z0: -185 };
 addBox(LANE.x, -165, 0, 6, 3.5, 2.3, boxMat);
-addBox(LANE.x, -128, 0, 16, 18, 3.2, blockMat);
-addBox(LANE.x, -88, 0, 12, 6, 8, blockMat);
+addBox(LANE.x, -132, 0, 16, 16, 3.2, blockMat);
+addBox(LANE.x, -100, 0, 14, 9, 4.6, blockMat);
+addBox(LANE.x, -70, 0, 14, 6, 8, blockMat);
 const groundGeo = new THREE.PlaneGeometry(420, 420, 300, 300).rotateX(-Math.PI / 2);
 {
   const P = groundGeo.attributes.position;
@@ -155,9 +156,9 @@ if (DEMO === 'skim') { tank.fold = 1; S.v = num('speed', 70); }                 
 // driving, it slides along what it meets; driving itself, it stops.
 function sink(x, z, yaw) {
   const c = Math.cos(yaw), s = Math.sin(yaw);
-  let top = -Infinity;
-  for (const [hx, hz] of HULL) top = Math.max(top, topAt(x + hx * c + hz * s, z - hx * s + hz * c));
-  return Math.max(0, top - tank.clearTop);
+  let deep = 0;
+  HULL.forEach(([hx, hz], i) => { deep = Math.max(deep, topAt(x + hx * c + hz * s, z - hx * s + hz * c) - tank.clearAt[i]); });
+  return deep;
 }
 const _p = new THREE.Vector3();
 let t = 0, last = performance.now(), auto = true;
@@ -211,18 +212,18 @@ renderer.domElement.addEventListener('wheel', (e) => { cam.zoom = THREE.MathUtil
 
 // the drive and the tank, one tick of dt (the lab's clock: paused, slowed or stepped)
 function step(dt, now) {
-  auto = now - lastKey > 6000;
+  auto = now - lastKey > 6000 && ![...keys].some((k) => DRIVE_KEYS.has(k));   // (not while a key is held)
   let want, trigger, turn = 0;
   if (auto) {
     [want, trigger] = script(t);
   } else {
-    want = keys.has('KeyW') ? 90 : keys.has('KeyS') ? 0 : S.v;
+    want = keys.has('KeyW') ? 90 : keys.has('KeyS') ? -tank.reverseMax : S.v;
     trigger = keys.has('Space');
     turn = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
   }
-  want = Math.min(want, 90) * tank.speedCap;
-  const acc = tank.form === 'walk' ? 7 : 20;
-  S.v += THREE.MathUtils.clamp(want - S.v, -14 * dt, acc * dt);
+  want = THREE.MathUtils.clamp(want, -tank.reverseMax, 90) * tank.speedCap;
+  const acc = tank.form === 'walk' ? 7 : 20;                           // (braking, and backing up, at 14)
+  S.v += THREE.MathUtils.clamp(want - S.v, want < S.v ? -14 * dt : 0, want > S.v ? (S.v < 0 ? 14 : acc) * dt : 0);
   // round the circle (auto), down the test lane, or where it's steered; not into what it can't clear
   let nx, nz, nyaw = S.yaw;
   if (auto && DEMO === 'wall') { nx = LANE.x; nz = S.z + S.v * dt; nyaw = 0; }
@@ -242,7 +243,7 @@ function step(dt, now) {
   // on the terrain under its middle: it rides up over crates on its own legs (spidertank.js)
   tank.root.position.set(S.x, terrain(S.x, S.z), S.z);
   tank.root.rotation.set(0, S.yaw, 0);
-  tank.update(dt, { speed: S.v, ground: groundAt, ray: rayAt, trigger: !!trigger });
+  tank.update(dt, { speed: S.v, push: want, ground: groundAt, ray: rayAt, trigger: !!trigger });   // (push: held up, it climbs)
 }
 
 function frame() {
@@ -274,7 +275,7 @@ function frame() {
   sun.target.position.copy(P);
   const B = tank.beam;
   const tick = clock.paused ? '  PAUSED (P, . a frame)' : clock.slow ? `  x${SLOW[clock.slow]}` : '';
-  info.innerHTML = `<b>${tank.model.userData.title}</b>  ${auto ? 'driving itself (press a key to drive)' : 'W/S speed, A/D turn, SPACE beam'}\n`
+  info.innerHTML = `<b>${tank.model.userData.title}</b>  ${auto ? 'driving itself (press a key to drive)' : 'W ahead, S back, A/D turn, SPACE beam'}\n`
     + `${S.v.toFixed(1)} m/s  ${tank.form.toUpperCase()}${B.state !== 'idle' ? `  BEAM ${B.state.toUpperCase()} ${B.t.toFixed(1)} s` : ''}  (closes up past ${tank.walkMax.toFixed(0)} m/s)${tick}\n`
     + `<span class="dim">drag: look round  right-drag: slide  wheel: zoom  H: ${cam.follow ? 'turning with it' : 'fixed'}  R: reset  P: pause  [ ]: slow</span>`;
   post.material.uniforms.time.value = t;

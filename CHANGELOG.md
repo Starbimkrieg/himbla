@@ -5,6 +5,14 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Zbornak's spider tank climbs, and backs up** (`docs/spidertank/`; not in the game yet). Each foot takes the highest spot near
+  where it would land (and a little ahead) that its leg reaches: a top 0.9 m below its hip on a clear line, or the face of what is too
+  tall, gripped as high as it reaches. The hull tilts to its feet nose-up to 43 degrees (roll to 20), rises to clear what is ahead with
+  its tilt counted (`tank.clearAt` per point of `HULL`), and, pushed on but held up (`push`), the leading legs keep reaching for better
+  holds, so it walks up a 3.2 m step and 4.5 to 4.8 m blocks; nothing over 5 m above its lowest foot on a top: a sheer wall it only
+  grips, standing at it or walking along it. A standing set that would land where it is no longer steps forever. It backs up to 18 m/s
+  (S in the lab; the gait's strides mirror). The lab's lane gains a 4.6 m block, its circle platforms of 3 to 5 m, and a held key keeps
+  the autopilot off.
 - **Zbornak's spider tank, round four: a smoother run, legs that keep their shape and stay out of things, a floating bead on jet
   trails** (`docs/spidertank/`; not in the game yet). **Smoother at speed:** its legs are solved exactly (`makeGait`'s `pole`: knee up
   in the plane through hip and foot, the ankle folding with the reach), where FABRIK flipped three-bone legs between shapes mid-step

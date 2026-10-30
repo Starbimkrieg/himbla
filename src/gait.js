@@ -21,6 +21,7 @@ import * as THREE from 'three';
 //   air         false: never off the ground (the caller says when it is: the spider tank sets its own ride height)
 //   body(h)     the body's lift, given its feet's mean height off their rest spots (replaces lift's clamp)
 //   followRate  1/s the body follows (FOLLOW)
+//   pitchMax, rollMax   rad the most the body pitches and rolls to its feet (TILT; the tank's climbs at a steeper pitch)
 //   foothold(c, p, out, ground)   where foot c may stand near p (null: nowhere); the tank's keeps to what the leg can reach
 //   strain(c)   how badly planted foot c wants to step, besides its stride (past 1 it is due; past 2 it goes even while the other set
 //               is stepping): the tank's, when a leg nears its full stretch or something comes between its hip and its foot
@@ -66,7 +67,7 @@ const _vt = new THREE.Vector3(), _vs = new THREE.Vector3();
 const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3();
 const smooth = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
 
-export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, body = null, followRate = FOLLOW, foothold = null, strain = null, solid = null, long = false, pole = false } = {}) {
+export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, body = null, followRate = FOLLOW, foothold = null, strain = null, solid = null, long = false, pole = false, pitchMax = TILT, rollMax = TILT } = {}) {
   root.updateMatrixWorld(true);
   const rootInv = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const chains = [];
@@ -191,10 +192,13 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       ? THREE.MathUtils.lerp(DUTY_WALK, DUTY_RUN, (grow - 1) / Math.max(1e-6, growMax - 1))
       : THREE.MathUtils.lerp(DUTY_RUN, DUTY_TOP, THREE.MathUtils.clamp((speed / vFull - 1) / (FLAT_OUT - 1), 0, 1));
     const slow = Math.min(1, speed / (2 * thr * grow));                // (barely moving, it lands on its rest spot, not ahead)
+    const back = moving && _vh.dot(_a.setFromMatrixColumn(root.matrixWorld, 2)) < 0;   // (backing up)
     for (const c of chains) {
       const D = c.thr * grow * (1 + LEAD);                             // (how far the body carries a planted foot between steps)
-      // (long: landing far enough ahead that it trails no further than SLACK of its room behind, left for waiting on the other set)
-      const lead = long ? THREE.MathUtils.clamp(LEAD * c.thr * grow, D - SLACK * c.back, c.fwd) : LEAD * c.thr * grow;
+      // (long: landing far enough ahead that it trails no further than SLACK of its room behind, left for waiting on the other set;
+      // backing up, ahead is behind it, and the other way round)
+      const [ahead, behind] = back ? [c.back, c.fwd] : [c.fwd, c.back];
+      const lead = long ? THREE.MathUtils.clamp(LEAD * c.thr * grow, D - SLACK * behind, ahead) : LEAD * c.thr * grow;
       c.trip = D - lead;
       c.lead = lead * slow;
     }
@@ -221,14 +225,18 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
         : THREE.MathUtils.clamp((0.8 * thr * grow) / Math.max(speed, 1e-3), durFast, durMax);
       // (a longer stride, a higher arc; long, running, a flatter one: the feet skim forward rather than climb)
       const lift = long ? (LIFT * Math.min(Math.sqrt(grow), 1.3)) / (1 + LOW * Math.max(0, speed / vFull - 1)) : LIFT * Math.sqrt(grow);
+      let moves = moving;
       for (const c of chains) {
         if (c.group !== group) continue;
         Object.assign(c, { stepping: true, s: 0, dur, lift: lift * c.span });
         c.S0.copy(c.F);
         c.T.copy(c.F);
         if (footAt(c, landing(c, speed, _r2), _r3)) c.T.copy(_r3);
+        if (c.T.distanceTo(c.F) > 0.1 * c.thr) moves = true;
         clear(c, dur, c.lead);
       }
+      // (standing, a set whose feet would only land where they are doesn't step: it would never stop, nor let the other set go)
+      if (!moves) for (const c of chains) if (c.group === group) c.stepping = false;
     }
     // the feet: planted, or along their arcs: up first onto something higher, over first and then down onto something lower
     for (const c of chains) {
@@ -263,8 +271,8 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     const k = Math.min(1, dt * followRate);                           // (leaving the ground, it eases back level)
     const target = body ? body(h) : THREE.MathUtils.clamp(h, -follow * hipY, follow * hipY);
     G.lift += (want ? target - G.lift : -G.lift) * k;
-    G.pitch += (want ? THREE.MathUtils.clamp(-Math.atan(szz > 1e-6 ? sz / szz : 0), -TILT, TILT) - G.pitch : -G.pitch) * k;
-    G.roll += (want ? THREE.MathUtils.clamp(Math.atan(sxx > 1e-6 ? sx / sxx : 0), -TILT, TILT) - G.roll : -G.roll) * k;
+    G.pitch += (want ? THREE.MathUtils.clamp(-Math.atan(szz > 1e-6 ? sz / szz : 0), -pitchMax, pitchMax) - G.pitch : -G.pitch) * k;
+    G.roll += (want ? THREE.MathUtils.clamp(Math.atan(sxx > 1e-6 ? sx / sxx : 0), -rollMax, rollMax) - G.roll : -G.roll) * k;
     inner.position.y += (G.lift - inner.position.y) * G.w;
     inner.quaternion.setFromEuler(_e.set(G.pitch * G.w, 0, G.roll * G.w));
     // the legs reach their feet
@@ -298,7 +306,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     return false;
   }
 
-  return { update, chains, vmax, growMax, vFull, get weight() { return G.w; }, get lift() { return G.lift; } };
+  return { update, chains, vmax, growMax, vFull, get weight() { return G.w; }, get lift() { return G.lift; }, get pitch() { return G.pitch * G.w; }, get roll() { return G.roll * G.w; } };
 }
 
 // the frame of a bone along d, across it toward the leg's plane normal n (columns: along, across, their cross)

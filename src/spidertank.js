@@ -6,8 +6,8 @@ import { makeGait } from './gait.js';
 // Zbornak's spider tank, ARACHNE: the Triple Crown's reward (tools/blender/build_spidertank.py; docs/spidertank/; reviewed in
 // tools/spidertank-lab.html). Eight armoured legs walk it by the chimeras' gait (src/gait.js: planted feet, two sets of four that take
 // turns, IK), striding longer the faster it goes. Its hull rides on its feet: at least CLEAR over whatever is under it, never higher
-// than its planted legs can hold it (what it can't clear, tank.clearTop, is a wall to the caller), and each foot only steps where its
-// leg can reach. Past SKIM_AT it closes up into a skimming bead (overdrive) and back under SKIM_OFF: each leg zigzags against the hull,
+// than its planted legs can hold it (what it can't clear, tank.clearAt, is a wall to the caller), and each foot steps to the highest spot
+// near where it would land that its leg can reach, so it climbs what is low enough (CLIMB) and grips the faces of what isn't. Past SKIM_AT it closes up into a skimming bead (overdrive) and back under SKIM_OFF: each leg zigzags against the hull,
 // slides in through its port and a hatch shuts over it, the cannon draws into the nose, the jets come out; every piece follows its own
 // share of the fold (the model's `fold`, `foldPos`, `foldScale` and their spans). Its rams (barrel and rod pivots) aim at each other
 // every frame, so they stretch as the legs move. The reactor beam charges for a second while the trigger is held, then channels for
@@ -17,7 +17,8 @@ import { makeGait } from './gait.js';
 // root (on the terrain under the hull's middle, +z ahead) before update; ground(p, out[, ceil]) as gait.js has it, and (optional)
 // ray(from, dir, far, out): the first thing on that line within far, into out (or null), for feet on the faces of things. tank.form ('walk',
 // 'folding', 'skim'), tank.beam ({ state: 'idle' | 'charge' | 'fire', t }), tank.speedCap (a fraction of the asked-for speed, while the
-// beam is up) and tank.clearTop (the highest top, along up, the hull can pass over now) read back.
+// beam is up) and tank.clearAt (for each point of HULL, the highest top, along up, the hull can pass over there now) read back. speed may
+// be negative, backing up (to tank.reverseMax); push (speed, unless said) is what the driver asks for: pushed on but held up, it climbs.
 
 const URL_GLB = new URL('./assets/spidertank.glb', import.meta.url).href;
 let KIT = null;
@@ -34,6 +35,7 @@ const SKIM_AT = 40, SKIM_OFF = 34; // m/s: it closes up past the first, opens ou
 const FOLD_TIME = 1.3;          // s to close up into the bead, or open out of it
 const CLEAR = 0.5;              // m the hull keeps over whatever is under it (and what it will be over in LOOK s)
 const LOOK = 0.6;               // s ahead it looks for what it will be over
+const PROBE = 1.5;              // m ahead it looks at least (standing at the foot of something, it rears up to climb it)
 const SKIM_RISE = 2.5;          // m the folded hull rises on its jets over what is under it, at most
 const HOVER = 0.9;              // m higher the folded hull floats than its jets alone would hold it (1.5 m off the ground)
 const BOB = 0.14;               // m it rises and falls on its jets, floating (and a little roll and pitch with it)
@@ -41,8 +43,16 @@ const BANK = 0.5;               // rad of roll per rad/s of turn, floating (at m
 const TRAIL = 0.34, TRAIL_W = 0.32;   // s a jet's trail lasts, m its width at the nozzle (the belly jets': 0.6 of both)
 const RIDE = 4;                 // 1/s the hull follows its feet
 const DROP = 0.9;               // m a foot stands below its hip at least (the knee bends up over it; higher, the hull rises first)
+const CLIMB = 5;                // m a foot stands at most above the lowest foot standing on top of something: taller, it only grips the face
+const PITCH_MAX = 0.75, ROLL_MAX = 0.35;   // rad the hull tilts to its feet at most: nose up a climb, and over sideways
+const REVERSE = 18;             // m/s the most it backs up at
 const STRETCH = 1;              // of a leg's reach, past which a trailing foot is due to step (the stride plans to 0.97; at 1.06 it goes at once)
-const NEAR = 0.45;              // of a leg's reach, the closest to its hip a foot stands (on the face of something beside it)
+const NEAR = 0.45;
+// the spots a foot looks at round where it would land (m toward its hip, m across): it takes the highest, less REACH_COST a metre away
+const AROUND = [[0, 0], [0, 1], [0, -1], [1, 0], [-1, 0], [0.8, 0.8], [0.8, -0.8], [-0.8, 0.8], [-0.8, -0.8], [0, 2], [0, -2], [-1.8, 0],
+  [1.8, 0], [2.6, 0], [3.4, 0]];
+const AHEAD = [1.5, 3];         // m further ahead (the way it is going) it looks too, for something to climb before its nose gets there
+const REACH_COST = 0.45, FACE_COST = 0.3;              // of a leg's reach, the closest to its hip a foot stands (on the face of something beside it)
 const CHARGE = 1.0, FIRE = 4.0; // s: the beam's charge (the trigger held) and its channel
 const BEAM_RANGE = 420;         // m
 const BEAM_SLOW = 0.3;          // the speed it may keep while charging and firing (of what is asked)
@@ -53,7 +63,7 @@ export const HULL = [[0, 4.8]];
 for (const x of [-2.1, -1.05, 0, 1.05, 2.1]) for (const z of [-3.4, -1.7, 0, 1.7, 3.3]) if ((x / 2.3) ** 2 + (z / 3.6) ** 2 <= 1.05) HULL.push([x, z]);
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _up = new THREE.Vector3();
-const _e = new THREE.Vector3(), _f = new THREE.Vector3();
+const _e = new THREE.Vector3(), _f = new THREE.Vector3(), _g = new THREE.Vector3(), _side = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
 
 function group(node, pal, mats) {
@@ -105,78 +115,125 @@ export function makeSpiderTank(kit) {
     });
   });
   const { hipY, skimDrop, belly } = node.data;
-  let ground = null, ray = null, lastCap = 0, underNow = 0;
+  let ground = null, ray = null, lastCap = 0, underNow = 0, ref = 0, push = 0, stuck = false;
 
-  // the highest thing under the hull (now, and where it will be in LOOK s), over the root, along up (now alone: underNow)
-  const vel = new THREE.Vector3(), prev = new THREE.Vector3();
+  const vel = new THREE.Vector3(), prev = new THREE.Vector3();         // (how fast it goes, measured)
+  // the hull's bottom over the root at each point of its outline, tilted as it is now (its lift aside): the climb noses it up
+  const tiltY = new Float32Array(HULL.length);
+  function tilts() {
+    const p = gait.pitch, r = gait.roll;
+    HULL.forEach(([x, z], i) => { tiltY[i] = (x * Math.sin(r) + belly * Math.cos(r)) * Math.cos(p) - z * Math.sin(p); });
+  }
+  // the lift that would rest the hull's bottom on what is under it (now, and where it will be in LOOK s; now alone: underNow), leaving
+  // out what is too tall to climb (a wall: it stops at it)
   function under() {
     _up.setFromMatrixColumn(root.matrixWorld, 1).normalize();
     _d.setFromMatrixPosition(root.matrixWorld);
-    let top = -Infinity;
-    for (const ahead of [0, LOOK]) {
-      for (const [x, z] of HULL) {
-        _a.set(x, 0, z).applyMatrix4(root.matrixWorld).addScaledVector(vel, ahead);
-        if (ground(_a, _b)) top = Math.max(top, _b.sub(_d).dot(_up));
-      }
-      if (!ahead) underNow = top;
+    const wall = ref + CLIMB - _d.dot(_up);
+    let need = -Infinity;
+    underNow = -Infinity;
+    const probe = heading(_c).multiplyScalar(PROBE);
+    if (vel.length() * LOOK > PROBE) probe.copy(vel).multiplyScalar(LOOK);
+    for (const ahead of [0, 1]) {
+      HULL.forEach(([x, z], i) => {
+        _a.set(x, 0, z).applyMatrix4(root.matrixWorld).addScaledVector(probe, ahead);
+        if (!ground(_a, _b)) return;
+        const top = _b.sub(_d).dot(_up);
+        if (top > wall) return;
+        need = Math.max(need, top - tiltY[i]);
+        if (!ahead) underNow = Math.max(underNow, top - tiltY[i]);
+      });
     }
-    return top;
+    return need;
   }
-  // the hull's lift: as its feet go, but CLEAR over what is under it, and no higher than every planted leg can still reach down from
-  // (what it can't clear past that, it won't walk onto: clearTop)
+  // is a foot at base on the face of something (under the top just past it, away from its hip)
+  function onFace(c, base) {
+    c.joints[0].getWorldPosition(_b);
+    _e.subVectors(base, _b).addScaledVector(_up, -_e.subVectors(base, _b).dot(_up)).setLength(0.1).add(base);
+    return !!ground(_e, _c) && _c.sub(base).dot(_up) > 0.05;
+  }
+  // the hull's lift: as its feet go, but CLEAR over what is under it (tilted as it is), and no higher than every planted leg can still
+  // reach down from. What it can't clear it won't walk into: clearAt, the highest top each point of its outline can pass over.
   function rideHeight() {
-    const need = under() - belly + CLEAR;
+    tilts();
+    const need = under() + CLEAR;
     _inv.copy(root.matrixWorld).invert();
-    let cap = Infinity, h = 0;
+    let cap = Infinity, h = 0, low = Infinity;
+    const sp = Math.sin(gait.pitch), cp = Math.cos(gait.pitch), sr = Math.sin(gait.roll), cr = Math.cos(gait.roll);
     for (const c of tank.gait.chains) {
-      // (its feet's mean height lifts it, but not a foot on the face of something, under the top just past it: it would climb the wall)
-      c.joints[0].getWorldPosition(_b);
-      _e.subVectors(c.base, _b).addScaledVector(_up, -_e.subVectors(c.base, _b).dot(_up)).setLength(0.1).add(c.base);
-      if (!(ground(_e, _c) && _c.sub(c.base).dot(_up) > 0.05)) h += _a.copy(c.base).applyMatrix4(_inv).y - c.rest.y;
+      // (its feet's mean height lifts it, but not a foot gripping a face: it would climb the wall; their slope still tilts it)
+      if (!onFace(c, c.base)) h += _a.copy(c.base).applyMatrix4(_inv).y - c.rest.y;
       if (c.stepping) continue;                                       // (the planted feet hold it up)
-      const f = _a.copy(c.F).applyMatrix4(_inv);
+      if (!onFace(c, c.F)) low = Math.min(low, c.F.dot(_up));
+      // (how much higher its hip, tilted as the hull is, can go with the foot still in reach)
+      const f = _a.copy(c.F).applyMatrix4(_inv), hy = (c.hip.x * sr + c.hipY * cr) * cp - c.hip.z * sp;
       const dh = Math.hypot(f.x - c.hip.x, f.z - c.hip.z);
-      cap = Math.min(cap, f.y - c.hipY + Math.sqrt(Math.max(0, c.reach * c.reach - dh * dh)));
+      cap = Math.min(cap, f.y - hy + Math.sqrt(Math.max(0, c.reach * c.reach - dh * dh)));
     }
     h /= tank.gait.chains.length;
     if (cap === Infinity) cap = lastCap;                              // (every foot up at once: as far as they last held it)
     lastCap = cap;
-    // it passes over what's under its hull now, or what it can rise to clear (a low wall at speed, crouched on long strides, is no wall)
-    tank.clearTop = _d.dot(_up) + Math.max(cap - CLEAR, inner.position.y) + belly;
+    if (low < Infinity) ref = low;
+    // each outline point passes over what is under it now, or what the hull can rise to clear, and nothing too tall to climb
+    const rootUp = _d.dot(_up), rise = Math.max(cap - CLEAR, inner.position.y);
+    for (let i = 0; i < HULL.length; i++) tank.clearAt[i] = Math.min(rootUp + rise + tiltY[i], ref + CLIMB);
     // (facing what it can't clear, it doesn't strain up at it; over it already, it never sinks into it, at worst resting on it)
-    return need <= cap ? Math.max(h, need) : Math.max(Math.min(h, cap), underNow - belly);
+    return need <= cap ? Math.max(h, need) : Math.max(Math.min(h, cap), underNow);
   }
-  // where foot c may stand near p: the highest thing there at least DROP below its hip (its knee bends up over it, as built), or where
-  // the line from its hip down to that first meets something (the face of a crate or a wall: the foot grips its side); else the nearest
-  // such spot toward its hip, or beside it (a face no closer to its hip than NEAR of its reach, nor past it).
-  const hipW = new THREE.Vector3();
+  // where foot c may stand near p: of the spots round it and a little ahead, the highest it reaches. A top counts if it is at least DROP
+  // below its hip (so its knee bends up over it), no more than CLIMB over the lowest foot standing on a top, and on a clear line from its
+  // hip; at a spot too tall for that, the face it would grip (grip) counts for a little less. Nearer ones win among equals.
+  const hipW = new THREE.Vector3(), _best = new THREE.Vector3(), _ahead = new THREE.Vector3();
   function foothold(c, p, out, groundFn) {
     c.joints[0].getWorldPosition(hipW);
     const up = _up.setFromMatrixColumn(root.matrixWorld, 1).normalize();
-    const ceil = hipW.dot(up) - DROP;
-    for (let k = 0; k <= 9; k++) {
-      _c.copy(p);
-      if (k) {
-        _b.subVectors(hipW, p).addScaledVector(up, -_b.subVectors(hipW, p).dot(up));
-        const toHip = _b.normalize();
-        if (k <= 6) _c.addScaledVector(toHip, 0.5 * k);
-        else _c.addScaledVector(_b.crossVectors(toHip, up), (k - 7.5) * 1.6);          // (beside it: -0.8, 0.8, 2.4)
-      }
-      const top = groundFn(_c, _e, ceil);                                         // (null: inside something taller)
-      const aim = top || _c;
-      const far = _f.subVectors(aim, hipW).length();
-      if (ray && far > 1e-3 && ray(hipW, _f.divideScalar(far), far - 0.05, _d)) {  // (something in the way: the foot stands on it)
-        const at = _d.distanceTo(hipW);
-        if (_d.dot(up) <= ceil + 1e-3 && at >= NEAR * c.reach && at <= 1.1 * c.reach) return out.copy(_d);
+    const ceil = Math.min(hipW.dot(up) - DROP, ref + CLIMB);
+    const toHip = _b.subVectors(hipW, p).addScaledVector(up, -_b.subVectors(hipW, p).dot(up)).normalize();
+    const across = _side.crossVectors(toHip, up);
+    heading(_ahead);
+    let best = -Infinity;
+    for (let k = 0; k < AROUND.length + AHEAD.length; k++) {
+      const [a, s] = AROUND[k] || [0, 0], f = k < AROUND.length ? 0 : AHEAD[k - AROUND.length];
+      _c.copy(p).addScaledVector(toHip, a).addScaledVector(across, s).addScaledVector(_ahead, f);
+      const cost = REACH_COST * Math.hypot(a, s, f);
+      if (!groundFn(_c, _e, ceil)) {                                              // (too tall for it: its face)
+        if (grip(c, _c, ceil, _e) && _e.dot(up) - cost - FACE_COST > best) { best = _e.dot(up) - cost - FACE_COST; _best.copy(_e); }
         continue;
       }
-      if (top) return out.copy(top);
+      const score = _e.dot(up) - cost;
+      if (score <= best) continue;
+      const far = _f.subVectors(_e, hipW).length();
+      if (ray && far > 1e-3 && ray(hipW, _f.divideScalar(far), far - 0.05, _d)) continue;   // (something between: not that one)
+      best = score;
+      _best.copy(_e);
     }
-    return null;
+    return best > -Infinity ? out.copy(_best) : null;
+  }
+  // which way it is going along the ground (ahead, standing still)
+  function heading(out) {
+    out.copy(vel).addScaledVector(_up, -vel.dot(_up));
+    if (out.lengthSq() < 0.25) out.setFromMatrixColumn(root.matrixWorld, 2).multiplyScalar(push < 0 ? -1 : 1).addScaledVector(_up, -out.dot(_up));
+    return out.normalize();
+  }
+  // foot c on the face of what stands where it would land (p): where the line from its hip down to p meets it, then up the face as high as
+  // it reaches (to ceil, and far enough from its hip for the leg to fold to); or null
+  function grip(c, p, ceil, out) {
+    if (!ray) return null;
+    const up = _up, far = _f.subVectors(p, hipW).length();
+    if (far < 1e-3 || !ray(hipW, _f.divideScalar(far), far + 0.05, _d)) return null;
+    const dh = _f.subVectors(_d, hipW).addScaledVector(up, -_f.dot(up)).length(), hip = hipW.dot(up), base = _d.dot(up);
+    const y = Math.max(base, Math.min(ceil, hip - Math.sqrt(Math.max(0, (NEAR * c.reach) ** 2 - dh * dh))));
+    if (_f.copy(_d).addScaledVector(up, y - base).distanceTo(hipW) > 1.1 * c.reach) return null;
+    return out.copy(_d).addScaledVector(up, y - base);
   }
   // how badly planted foot c wants to step: as its leg, trailing below a risen hull, nears its full stretch, or at once if something has
   // come between its hip and its foot (the hull has gone on past an edge)
   function strain(c) {
+    // (pushed on but held up, the legs on the side it is pushed toward step to anything better in reach: it climbs, or grips the face)
+    if (stuck && c.hip.z * push > 0.3) {
+      const want = foothold(c, _a.copy(c.rest).applyMatrix4(root.matrixWorld), _g, ground);
+      if (want && (want.dot(_up) > c.F.dot(_up) + 0.3 || want.distanceTo(c.F) > 1)) return 1.5;
+    }
     c.joints[0].getWorldPosition(hipW);
     const far = _f.subVectors(c.F, hipW).length();
     const raised = -_f.dot(_up.setFromMatrixColumn(root.matrixWorld, 1).normalize()) > c.hipY - c.rest.y + 0.3;
@@ -187,7 +244,8 @@ export function makeSpiderTank(kit) {
   // is world point p inside something (under the top of what is there): a knee or ankle there turns aside (gait.js)
   const _s = new THREE.Vector3();
   const solid = (p) => !!ground && !!ground(p, _s) && _s.sub(p).dot(_up) > 0.05;
-  const gait = makeGait(root, inner, legs, { air: false, body: rideHeight, followRate: RIDE, foothold, strain, solid, long: true, pole: true });
+  const gait = makeGait(root, inner, legs, { air: false, body: rideHeight, followRate: RIDE, foothold, strain, solid, long: true, pole: true,
+    pitchMax: PITCH_MAX, rollMax: ROLL_MAX });
   const muzzle = find('muzzle');
   const core0 = new THREE.Color(pal.glow.core), hot = new THREE.Color(pal.hot);
 
@@ -257,8 +315,10 @@ export function makeSpiderTank(kit) {
 
   const tank = {
     root, model, inner, gait, legs, muzzle, hipY, span: node.data.span, fx,
-    form: 'walk', fold: 0, beam: { state: 'idle', t: 0 }, speedCap: 1, clearTop: Infinity, skimLift: 0, yaw: 0, bank: 0,
+    form: 'walk', fold: 0, beam: { state: 'idle', t: 0 }, speedCap: 1, clearAt: new Float32Array(HULL.length).fill(Infinity),
+    skimLift: 0, yaw: 0, bank: 0,
     walkMax: SKIM_AT,                                                // m/s past which it closes up to skim (overdrive)
+    reverseMax: REVERSE,                                             // m/s the most it backs up at
     t: 0,
     // the pieces f of the way into the bead (the legs from where the gait left them, or, still, from as built), the hull settled
     folded(f, still = true) {
@@ -289,13 +349,14 @@ export function makeSpiderTank(kit) {
         R.rod.lookAt(R.barrel.getWorldPosition(_b));
       }
     },
-    update(dt, { speed = 0, ground: g = null, ray: r = null, trigger = false } = {}) {
-      ground = g; ray = r;
+    update(dt, { speed = 0, push: want = speed, ground: g = null, ray: r = null, trigger = false } = {}) {
+      ground = g; ray = r; push = want;
       this.t += dt;
       root.updateWorldMatrix(true, false);
       _a.setFromMatrixPosition(root.matrixWorld);
       if (dt > 0 && this.t > dt) vel.lerp(_b.subVectors(_a, prev).divideScalar(dt), 1 - Math.exp(-dt * 8));
       prev.copy(_a);
+      stuck = Math.abs(push) > 0.5 && vel.length() < 0.5;
       const B = this.beam;
       // the beam: hold to charge (walking only: it opens up first), let go early and it fizzles; charged, it channels FIRE seconds
       if (B.state === 'idle' && trigger && this.fold === 0) Object.assign(B, { state: 'charge', t: 0 });
@@ -311,13 +372,14 @@ export function makeSpiderTank(kit) {
       // (the hull where the gait left it, so its hips are where they are while it looks for footholds; folding, it settles)
       inner.position.set(0, this.fold < 0.15 ? gait.lift * gait.weight : 0, 0);
       gait.update(dt, ground && this.fold < 0.15 ? ground : null, false);
-      if (this.fold >= 0.15) this.clearTop = Infinity;
+      if (this.fold >= 0.15) this.clearAt.fill(Infinity);
       // folded, the hull rides its jets over what is under it
       const f = share(this.fold, [0.5, 1]);
       if (ground && this.fold > 0) {
-        const rise = THREE.MathUtils.clamp(under() - (belly - skimDrop + HOVER) + CLEAR, 0, SKIM_RISE);
+        tilts();
+        const rise = THREE.MathUtils.clamp(under() + skimDrop - HOVER + CLEAR, 0, SKIM_RISE);
         this.skimLift += (rise - this.skimLift) * Math.min(1, dt * 6);
-        if (this.fold >= 0.15) this.clearTop = _d.dot(_up) + SKIM_RISE + HOVER + belly - skimDrop - CLEAR;
+        if (this.fold >= 0.15) this.clearAt.fill(_d.dot(_up) + SKIM_RISE + HOVER + belly - skimDrop - CLEAR);
       } else this.skimLift = 0;
       inner.position.y += this.skimLift * share(this.fold, [0.3, 1]);
       this.folded(this.fold, false);
