@@ -264,14 +264,21 @@ function sweepCase(spec) {
     dur = 10;
     frames = Array.from({ length: dur * 30 }, () => [1 / 30, 0, 0, 0, 0]);
   } else {
-    const back = reach + 14;
+    let back = reach + 14;                                              // (further back while its hull, a metre round, would start in something)
+    const clear = (k) => HULL.every(([hx, hz]) => [1, 1.25].every((m) => {
+      const lx = hx * m * (1 + 1 / 2.3), lz = hz * m * (1 + 1 / 3.6), x = b.cx - dx * k + Math.cos(ang) * lx + dx * lz, z = b.cz - dz * k - Math.sin(ang) * lx + dz * lz;
+      return topAt(x, z) - terrain(x, z) < 0.3;
+    }));
+    while (back < reach + 44 && !clear(back)) back += 2;
     start = { x: b.cx - dx * back, z: b.cz - dz * back, yaw: ang, v: 0 };
     dur = Math.min(45, 2 + (2 * back) / speed + 14);
     frames = Array.from({ length: Math.round(dur * 30) }, (_, f) => [1 / 30, 0, f < 60 ? 0 : speed, 0, 0]);   // (2 s to settle)
   }
   // rise: the box's top over the ground round it (where its feet start)
   const rise = b.top - Math.min(...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([p, q]) => terrain(b.cx + (p * b.hx * b.c + q * b.hz * b.s), b.cz + (-p * b.hx * b.s + q * b.hz * b.c))));
-  return { spec, i, side, speed, out, stand, b, dx, dz, reach, rise, flight: { kind: 'spidertank-flight', version: 1, query: '', start, frames } };
+  // crowded: something it can't climb within 4 m of it (crates 11 and 12 lean on the lane's 12 m wall), so stopping or going round is right
+  const crowded = boxes.some((o) => o !== b && o.top - b.top > 3 && Math.hypot(o.cx - b.cx, o.cz - b.cz) < Math.hypot(o.hx, o.hz) + Math.hypot(b.hx, b.hz) + 4);
+  return { spec, i, side, speed, out, stand, b, crowded, dx, dz, reach, rise, flight: { kind: 'spidertank-flight', version: 1, query: '', start, frames } };
 }
 const _w = new THREE.Vector3(), _j0 = new THREE.Vector3(), _j1 = new THREE.Vector3();
 function inBoxes(p, near) {                                             // m deep the point is inside a box, or under the ground (0: not)
@@ -329,8 +336,9 @@ function runCase(spec) {
   // m past its near side (negative: short of it); standing, m it has drifted
   r.at = +(C.stand ? Math.hypot(s.x - C.flight.start.x, s.z - C.flight.start.z) : along() - C.reach).toFixed(1);
   // (within half a metre of its limit, either is right: the ground round a box isn't level)
-  r.should = C.stand ? 'still' : Math.abs(C.rise - T.climbMax) < 0.5 ? 'either' : C.rise < T.climbMax ? 'over' : 'stopped';
-  r.ok = r.result === r.should || (r.should === 'either' && r.result !== 'round') || (r.should === 'stopped' && r.result === 'round');
+  r.should = C.stand ? 'still' : Math.abs(C.rise - T.climbMax) < 0.5 || C.crowded ? 'either' : C.rise < T.climbMax ? 'over' : 'stopped';
+  r.crowded = C.crowded;
+  r.ok = r.result === r.should || (r.should === 'either' && (C.crowded || r.result !== 'round')) || (r.should === 'stopped' && r.result === 'round');
   r.form = T.form;
   return r;
 }
