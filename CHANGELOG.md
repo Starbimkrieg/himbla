@@ -5,6 +5,16 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Zbornak's spider tank walks like a spider, climbs harder, and closes up at 25 m/s** (`docs/spidertank/`; not in the game yet).
+  `makeGait`'s `wave`: one rhythm for all eight legs, a ripple up each side from the back leg to the front walking, blending into two
+  sets of four running; each foot in its own lane along the body (the side's reach cut into four, with gaps), swinging carried with the
+  body, so the legs never cross (measured from above at every pace, turning, circling and backing). Strides are 2.96 m at most: 1 step
+  a second per leg at 3 m/s, about 4 at 24. It closes up past 25 m/s and opens under 21, never starting while it climbs or grips
+  (`tank.climbing`). Climbing: feet reach out to full reach and up to 0.6 m over the hip for the highest hold, the hull pitches to 57
+  degrees, and pushed on but held up the legs land at the front of their lanes and reach past them (`urge`) to gather under it and
+  hoist it: up 3.2 m, 4.5 m and 4.8 m blocks, not over 5.5 m (it grips the face). A rising landing is always taken (a foot no longer
+  plants inside a block), a foot never stands closer to its hip than it can fold, and with nothing in reach it takes the best spot
+  anyway (it used to stay up on the top of what it had walked off). The lab: platforms of 3 to 5.5 m round the circle, blocks over 8 m.
 - **Zbornak's spider tank climbs, and backs up** (`docs/spidertank/`; not in the game yet). Each foot takes the highest spot near
   where it would land (and a little ahead) that its leg reaches: a top 0.9 m below its hip on a clear line, or the face of what is too
   tall, gripped as high as it reaches. The hull tilts to its feet nose-up to 43 degrees (roll to 20), rises to clear what is ahead with

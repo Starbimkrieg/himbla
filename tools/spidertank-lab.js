@@ -1,6 +1,6 @@
 // Dev-only: Zbornak's spider tank lab (src/spidertank.js; docs/spidertank/). It drives round a circle over rolling ground with
 // crates, low walls and a few tall blocks on it: walking on its eight legs (src/gait.js), running, closing up into its skimming bead
-// past 40 m/s and back, stopping to fire the reactor beam. It drives itself until you press a key: W ahead, S back (to 18 m/s), A/D
+// past 25 m/s and back, stopping to fire the reactor beam. It drives itself until you press a key: W ahead, S back (to 18 m/s), A/D
 // turn, hold SPACE for the beam. A test lane off the circle (&demo=wall) has things to climb and a block it can't. Look round with the
 // mouse; pause and slow it down. Query parameters and keys are in the HTML.
 import * as THREE from 'three';
@@ -54,9 +54,9 @@ for (let k = 0; k < 4; k++) {                                          // low wa
   const a = (k / 4) * Math.PI * 2 + 1.0;
   addBox(Math.cos(a) * R, Math.sin(a) * R, -a, 14, 0.7, 0.9, wallMat);
 }
-for (let k = 0; k < 9; k++) {                                           // blocks round about: platforms to climb (to 5 m), and taller
+for (let k = 0; k < 9; k++) {                                           // blocks round about: platforms to climb (to 5.5 m), and taller
   const a = (k / 9) * Math.PI * 2, rad = R + 22 + rr() * 30;
-  addBox(Math.cos(a) * rad, Math.sin(a) * rad, rr() * 3, 6 + rr() * 8, 6 + rr() * 8, k % 2 ? 3 + rr() * 2 : 6 + rr() * 12, blockMat);
+  addBox(Math.cos(a) * rad, Math.sin(a) * rad, rr() * 3, 6 + rr() * 8, 6 + rr() * 8, k % 2 ? 3 + rr() * 2.5 : 8 + rr() * 10, blockMat);
 }
 // the test lane, south of the circle: a crate it walks over, a 3.2 m step and a 4.6 m block it climbs (nose up, its front feet on the
 // face and then the top) and down off, then an 8 m block too tall to climb: it stops at it, its front feet gripping its face
@@ -133,15 +133,15 @@ addEventListener('keydown', (e) => {
   view(e.code);
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
-// the whole drive, looped: [until (s), speed (m/s), trigger]; it closes up by itself past 40 m/s and opens out under 34
-const DRIVE = [[5, 5, 0], [10, 14, 0], [15, 28, 0], [19, 38, 0], [25, 70, 0], [30, 20, 0], [33, 6, 0], [34, 1.5, 0], [39.5, 1.5, 1], [42, 4, 0]];
+// the whole drive, looped: [until (s), speed (m/s), trigger]; it closes up by itself past 25 m/s and opens out under 21 (not while it climbs)
+const DRIVE = [[5, 4, 0], [10, 10, 0], [15, 16, 0], [19, 22, 0], [25, 60, 0], [30, 14, 0], [33, 6, 0], [34, 1.5, 0], [39.5, 1.5, 1], [42, 4, 0]];
 function script(t) {
   if (DEMO === 'walk' || DEMO === 'climb') return [num('speed', 4), 0];
   if (DEMO === 'wall') return [num('speed', 3), 0];
-  if (DEMO === 'run') return [num('speed', 24), 0];
+  if (DEMO === 'run') return [num('speed', 18), 0];
   if (DEMO === 'skim') return [num('speed', 70), 0];
   if (DEMO === 'beam') return [0.8, t % 7 < 6 ? 1 : 0];
-  if (DEMO === 'fold') return [t % 10 < 5 ? 46 : 26, 0];
+  if (DEMO === 'fold') return [t % 10 < 5 ? 32 : 14, 0];
   const s = t % DRIVE[DRIVE.length - 1][0];
   const p = DRIVE.find((d) => s < d[0]);
   return [p[1], p[2]];
@@ -276,7 +276,7 @@ function frame() {
   const B = tank.beam;
   const tick = clock.paused ? '  PAUSED (P, . a frame)' : clock.slow ? `  x${SLOW[clock.slow]}` : '';
   info.innerHTML = `<b>${tank.model.userData.title}</b>  ${auto ? 'driving itself (press a key to drive)' : 'W ahead, S back, A/D turn, SPACE beam'}\n`
-    + `${S.v.toFixed(1)} m/s  ${tank.form.toUpperCase()}${B.state !== 'idle' ? `  BEAM ${B.state.toUpperCase()} ${B.t.toFixed(1)} s` : ''}  (closes up past ${tank.walkMax.toFixed(0)} m/s)${tick}\n`
+    + `${S.v.toFixed(1)} m/s  ${tank.form.toUpperCase()}${B.state !== 'idle' ? `  BEAM ${B.state.toUpperCase()} ${B.t.toFixed(1)} s` : ''}  (closes up past ${tank.walkMax.toFixed(0)} m/s${tank.climbing ? ': not while climbing' : ''})${tick}\n`
     + `<span class="dim">drag: look round  right-drag: slide  wheel: zoom  H: ${cam.follow ? 'turning with it' : 'fixed'}  R: reset  P: pause  [ ]: slow</span>`;
   post.material.uniforms.time.value = t;
   post.render(scene, camera);

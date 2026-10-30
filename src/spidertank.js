@@ -4,14 +4,17 @@ import { loadSpiderTankKit } from './models.js';
 import { makeGait } from './gait.js';
 
 // Zbornak's spider tank, ARACHNE: the Triple Crown's reward (tools/blender/build_spidertank.py; docs/spidertank/; reviewed in
-// tools/spidertank-lab.html). Eight armoured legs walk it by the chimeras' gait (src/gait.js: planted feet, two sets of four that take
-// turns, IK), striding longer the faster it goes. Its hull rides on its feet: at least CLEAR over whatever is under it, never higher
-// than its planted legs can hold it (what it can't clear, tank.clearAt, is a wall to the caller), and each foot steps to the highest spot
-// near where it would land that its leg can reach, so it climbs what is low enough (CLIMB) and grips the faces of what isn't. Past SKIM_AT it closes up into a skimming bead (overdrive) and back under SKIM_OFF: each leg zigzags against the hull,
-// slides in through its port and a hatch shuts over it, the cannon draws into the nose, the jets come out; every piece follows its own
-// share of the fold (the model's `fold`, `foldPos`, `foldScale` and their spans). Its rams (barrel and rod pivots) aim at each other
-// every frame, so they stretch as the legs move. The reactor beam charges for a second while the trigger is held, then channels for
-// four from the cannon; walking only, and slow while it does.
+// tools/spidertank-lab.html). Eight armoured legs walk it by the chimeras' gait (src/gait.js), to a spider's rhythm: walking, a ripple
+// up each side from the back leg to the front; running, two sets of four that take turns; each foot in its own lane, so the legs never
+// cross. Its hull rides on its feet: at least CLEAR over whatever is under it, never higher than its planted legs can hold it (what it
+// can't clear, tank.clearAt, is a wall to the caller). Each foot reaches for the highest spot near where it would land that its leg
+// can reach, or grips the face of what is too tall, and the hull tilts and hoists itself after them, so it climbs what is low enough
+// (CLIMB) and grips the faces of what isn't. Past SKIM_AT it closes up into a skimming bead (overdrive), unless it is climbing or
+// gripping something, and opens out under SKIM_OFF: each leg zigzags against the hull, slides in through its port and a hatch shuts
+// over it, the cannon draws into the nose, the jets come out; every piece follows its own share of the fold (the model's `fold`,
+// `foldPos`, `foldScale` and their spans). Its rams (barrel and rod pivots) aim at each other every frame, so they stretch as the legs
+// move. The reactor beam charges for a second while the trigger is held, then channels for four from the cannon; walking only, and
+// slow while it does.
 //
 // loadSpiderTank() -> kit; makeSpiderTank(kit) -> tank: { root, update(dt, { speed, ground, trigger }), folded(f) }. The caller places
 // root (on the terrain under the hull's middle, +z ahead) before update; ground(p, out[, ceil]) as gait.js has it, and (optional)
@@ -31,7 +34,7 @@ export const PALETTE = {
   beam: 0xc77dff, hot: 0xf4e6ff,
 };
 
-const SKIM_AT = 40, SKIM_OFF = 34; // m/s: it closes up past the first, opens out under the second
+const SKIM_AT = 25, SKIM_OFF = 21; // m/s: it closes up past the first, opens out under the second
 const FOLD_TIME = 1.3;          // s to close up into the bead, or open out of it
 const CLEAR = 0.5;              // m the hull keeps over whatever is under it (and what it will be over in LOOK s)
 const LOOK = 0.6;               // s ahead it looks for what it will be over
@@ -42,17 +45,18 @@ const BOB = 0.14;               // m it rises and falls on its jets, floating (a
 const BANK = 0.5;               // rad of roll per rad/s of turn, floating (at most 0.3)
 const TRAIL = 0.34, TRAIL_W = 0.32;   // s a jet's trail lasts, m its width at the nozzle (the belly jets': 0.6 of both)
 const RIDE = 4;                 // 1/s the hull follows its feet
-const DROP = 0.9;               // m a foot stands below its hip at least (the knee bends up over it; higher, the hull rises first)
-const CLIMB = 5;                // m a foot stands at most above the lowest foot standing on top of something: taller, it only grips the face
-const PITCH_MAX = 0.75, ROLL_MAX = 0.35;   // rad the hull tilts to its feet at most: nose up a climb, and over sideways
+const ABOVE = 0.6;              // m a foot may stand above its hip at most, reaching up over an edge (its knee still bends up over it)
+const CLIMB = 5.5;              // m a foot stands at most above the lowest foot standing on top of something: taller, it only grips the face
+const PITCH_MAX = 1, ROLL_MAX = 0.4;   // rad the hull tilts to its feet at most: nose up a climb, and over sideways
 const REVERSE = 18;             // m/s the most it backs up at
 const STRETCH = 1;              // of a leg's reach, past which a trailing foot is due to step (the stride plans to 0.97; at 1.06 it goes at once)
-const NEAR = 0.45;
-// the spots a foot looks at round where it would land (m toward its hip, m across): it takes the highest, less REACH_COST a metre away
+const NEAR = 0.45;              // of a leg's reach, the closest to its hip a foot stands (on the face of something beside it)
+// the spots a foot looks at round where it would land (m toward its hip, m across), out to the leg's full reach: it takes the highest,
+// less REACH_COST a metre away (a face counts FACE_COST less than a top)
 const AROUND = [[0, 0], [0, 1], [0, -1], [1, 0], [-1, 0], [0.8, 0.8], [0.8, -0.8], [-0.8, 0.8], [-0.8, -0.8], [0, 2], [0, -2], [-1.8, 0],
-  [1.8, 0], [2.6, 0], [3.4, 0]];
-const AHEAD = [1.5, 3];         // m further ahead (the way it is going) it looks too, for something to climb before its nose gets there
-const REACH_COST = 0.45, FACE_COST = 0.3;              // of a leg's reach, the closest to its hip a foot stands (on the face of something beside it)
+  [-3, 0], [-2.4, 1.2], [-2.4, -1.2], [1.8, 0], [2.6, 0], [3.4, 0]];
+const AHEAD = [1.5, 3, 4.5];    // m further ahead (the way it is going) it looks too, for something to climb before its nose gets there
+const REACH_COST = 0.25, FACE_COST = 0.3;
 const CHARGE = 1.0, FIRE = 4.0; // s: the beam's charge (the trigger held) and its channel
 const BEAM_RANGE = 420;         // m
 const BEAM_SLOW = 0.3;          // the speed it may keep while charging and firing (of what is asked)
@@ -115,7 +119,7 @@ export function makeSpiderTank(kit) {
     });
   });
   const { hipY, skimDrop, belly } = node.data;
-  let ground = null, ray = null, lastCap = 0, underNow = 0, ref = 0, push = 0, stuck = false;
+  let ground = null, ray = null, lastCap = 0, underNow = 0, ref = 0, push = 0, stuck = false, gripping = false;
 
   const vel = new THREE.Vector3(), prev = new THREE.Vector3();         // (how fast it goes, measured)
   // the hull's bottom over the root at each point of its outline, tilted as it is now (its lift aside): the climb noses it up
@@ -159,12 +163,14 @@ export function makeSpiderTank(kit) {
     const need = under() + CLEAR;
     _inv.copy(root.matrixWorld).invert();
     let cap = Infinity, h = 0, low = Infinity;
+    gripping = false;
     const sp = Math.sin(gait.pitch), cp = Math.cos(gait.pitch), sr = Math.sin(gait.roll), cr = Math.cos(gait.roll);
     for (const c of tank.gait.chains) {
       // (its feet's mean height lifts it, but not a foot gripping a face: it would climb the wall; their slope still tilts it)
       if (!onFace(c, c.base)) h += _a.copy(c.base).applyMatrix4(_inv).y - c.rest.y;
       if (c.stepping) continue;                                       // (the planted feet hold it up)
       if (!onFace(c, c.F)) low = Math.min(low, c.F.dot(_up));
+      else gripping = true;
       // (how much higher its hip, tilted as the hull is, can go with the foot still in reach)
       const f = _a.copy(c.F).applyMatrix4(_inv), hy = (c.hip.x * sr + c.hipY * cr) * cp - c.hip.z * sp;
       const dh = Math.hypot(f.x - c.hip.x, f.z - c.hip.z);
@@ -174,28 +180,36 @@ export function makeSpiderTank(kit) {
     if (cap === Infinity) cap = lastCap;                              // (every foot up at once: as far as they last held it)
     lastCap = cap;
     if (low < Infinity) ref = low;
+    // (climbing: a foot on a face, or standing up on something, or the hull tilted or hoisted: it won't close up)
+    for (const c of tank.gait.chains) if (!c.stepping && c.F.dot(_up) > ref + 0.8) gripping = true;
+    if (Math.abs(gait.pitch) > 0.2 || Math.abs(gait.roll) > 0.2 || inner.position.y > 1) gripping = true;
+    tank.climbing = gripping;
     // each outline point passes over what is under it now, or what the hull can rise to clear, and nothing too tall to climb
     const rootUp = _d.dot(_up), rise = Math.max(cap - CLEAR, inner.position.y);
     for (let i = 0; i < HULL.length; i++) tank.clearAt[i] = Math.min(rootUp + rise + tiltY[i], ref + CLIMB);
     // (facing what it can't clear, it doesn't strain up at it; over it already, it never sinks into it, at worst resting on it)
     return need <= cap ? Math.max(h, need) : Math.max(Math.min(h, cap), underNow);
   }
-  // where foot c may stand near p: of the spots round it and a little ahead, the highest it reaches. A top counts if it is at least DROP
-  // below its hip (so its knee bends up over it), no more than CLIMB over the lowest foot standing on a top, and on a clear line from its
-  // hip; at a spot too tall for that, the face it would grip (grip) counts for a little less. Nearer ones win among equals.
-  const hipW = new THREE.Vector3(), _best = new THREE.Vector3(), _ahead = new THREE.Vector3();
+  // where foot c may stand near p: of the spots round it, out to its leg's reach and a little ahead, and in its lane (gait.js: zLo..zHi
+  // along the body, so it never crosses its neighbours), the highest it reaches. A top counts if it is no more than ABOVE over its hip,
+  // nor CLIMB over the lowest foot standing on a top, and on a clear line from its hip; at a spot too tall for that, the face it would grip
+  // (grip) counts for a little less. Nearer ones win among equals.
+  const hipW = new THREE.Vector3(), _best = new THREE.Vector3(), _far = new THREE.Vector3(), _ahead = new THREE.Vector3();
   function foothold(c, p, out, groundFn) {
     c.joints[0].getWorldPosition(hipW);
     const up = _up.setFromMatrixColumn(root.matrixWorld, 1).normalize();
-    const ceil = Math.min(hipW.dot(up) - DROP, ref + CLIMB);
+    const ceil = Math.min(hipW.dot(up) + ABOVE, ref + CLIMB);
     const toHip = _b.subVectors(hipW, p).addScaledVector(up, -_b.subVectors(hipW, p).dot(up)).normalize();
     const across = _side.crossVectors(toHip, up);
     heading(_ahead);
-    let best = -Infinity;
+    _inv.copy(root.matrixWorld).invert();
+    let best = -Infinity, far0 = -Infinity;
     for (let k = 0; k < AROUND.length + AHEAD.length; k++) {
       const [a, s] = AROUND[k] || [0, 0], f = k < AROUND.length ? 0 : AHEAD[k - AROUND.length];
       _c.copy(p).addScaledVector(toHip, a).addScaledVector(across, s).addScaledVector(_ahead, f);
-      const cost = REACH_COST * Math.hypot(a, s, f);
+      const cost = REACH_COST * Math.hypot(a, s, f), z = _f.copy(_c).applyMatrix4(_inv).z;
+      // (in its lane; pushed on and held up, it may reach on past it, for the face or the top of what holds it: the legs gather to climb)
+      if (c.zLo !== undefined && ((z < c.zLo - 0.1 && !(stuck && push < 0)) || (z > c.zHi + 0.1 && !(stuck && push > 0)))) continue;
       if (!groundFn(_c, _e, ceil)) {                                              // (too tall for it: its face)
         if (grip(c, _c, ceil, _e) && _e.dot(up) - cost - FACE_COST > best) { best = _e.dot(up) - cost - FACE_COST; _best.copy(_e); }
         continue;
@@ -203,11 +217,14 @@ export function makeSpiderTank(kit) {
       const score = _e.dot(up) - cost;
       if (score <= best) continue;
       const far = _f.subVectors(_e, hipW).length();
+      if (far > 0.98 * c.reach) { if (score > far0) { far0 = score; _far.copy(_e); } continue; }   // (out of reach: kept, if nothing is in it)
+      if (far < NEAR * c.reach) continue;                                          // (too close to fold to)
       if (ray && far > 1e-3 && ray(hipW, _f.divideScalar(far), far - 0.05, _d)) continue;   // (something between: not that one)
       best = score;
       _best.copy(_e);
     }
-    return best > -Infinity ? out.copy(_best) : null;
+    // (nothing in reach, the hull too high over the ground, coming off something: the best out of it, and the hull comes down to it)
+    return best > -Infinity ? out.copy(_best) : far0 > -Infinity ? out.copy(_far) : null;
   }
   // which way it is going along the ground (ahead, standing still)
   function heading(out) {
@@ -244,7 +261,7 @@ export function makeSpiderTank(kit) {
   // is world point p inside something (under the top of what is there): a knee or ankle there turns aside (gait.js)
   const _s = new THREE.Vector3();
   const solid = (p) => !!ground && !!ground(p, _s) && _s.sub(p).dot(_up) > 0.05;
-  const gait = makeGait(root, inner, legs, { air: false, body: rideHeight, followRate: RIDE, foothold, strain, solid, long: true, pole: true,
+  const gait = makeGait(root, inner, legs, { air: false, body: rideHeight, followRate: RIDE, foothold, strain, solid, urge: () => (stuck ? Math.sign(push) : 0), wave: true, pole: true,
     pitchMax: PITCH_MAX, rollMax: ROLL_MAX });
   const muzzle = find('muzzle');
   const core0 = new THREE.Color(pal.glow.core), hot = new THREE.Color(pal.hot);
@@ -316,7 +333,7 @@ export function makeSpiderTank(kit) {
   const tank = {
     root, model, inner, gait, legs, muzzle, hipY, span: node.data.span, fx,
     form: 'walk', fold: 0, beam: { state: 'idle', t: 0 }, speedCap: 1, clearAt: new Float32Array(HULL.length).fill(Infinity),
-    skimLift: 0, yaw: 0, bank: 0,
+    skimLift: 0, yaw: 0, bank: 0, climbing: false,
     walkMax: SKIM_AT,                                                // m/s past which it closes up to skim (overdrive)
     reverseMax: REVERSE,                                             // m/s the most it backs up at
     t: 0,
@@ -364,8 +381,8 @@ export function makeSpiderTank(kit) {
       else if (B.state === 'fire') { B.t += dt; if (B.t >= FIRE) B.state = 'idle'; }
       const firing = B.state !== 'idle';
       this.speedCap = firing ? BEAM_SLOW : 1;
-      // overdrive: close up past SKIM_AT, open out under SKIM_OFF (never while the beam is up)
-      const skimWant = (this.fold > 0.5 ? speed > SKIM_OFF : speed >= SKIM_AT) && !firing && !trigger;
+      // overdrive: close up past SKIM_AT, open out under SKIM_OFF (never while the beam is up, nor start while it climbs or grips)
+      const skimWant = (this.fold > 0.5 ? speed > SKIM_OFF : speed >= SKIM_AT && !(this.fold === 0 && this.climbing)) && !firing && !trigger;
       this.fold = THREE.MathUtils.clamp(this.fold + (skimWant ? dt : -dt) / FOLD_TIME, 0, 1);
       this.form = this.fold <= 0 ? 'walk' : this.fold >= 1 ? 'skim' : 'folding';
       // the legs: walk (IK) until they start to fold, and again as they finish opening

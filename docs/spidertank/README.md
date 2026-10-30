@@ -2,8 +2,9 @@
 
 The end-game reward. Win the Triple Crown, bring the champion to Dr. Zbornak, and he keeps it "for research"; in return he hands over
 the walking tank he has been building round a mini antimatter reactor. It walks on eight armoured legs by the same IK the mites and
-chimeras use (`src/gait.js`), its strides lengthening up to 40 m/s; past that it closes up by itself into a hovering bead (overdrive),
-and when it slows under 34 m/s the legs come back out and stand it up. It fires a reactor beam from a central cannon. The runner rides inside, out of sight.
+chimeras use (`src/gait.js`), to a spider's rhythm: a ripple walking, two sets of four running, the legs never crossing. It climbs what
+its legs can reach the top of. Past 25 m/s it closes up by itself into a hovering bead (overdrive; never while it climbs), and when it
+slows under 21 m/s the legs come back out and stand it up. It fires a reactor beam from a central cannon. The runner rides inside, out of sight.
 
 Built in Blender (`tools/blender/build_spidertank.py` -> `src/assets/spidertank.glb`, 12.0k triangles, 312 KB) and driven by
 `src/spidertank.js`. Revision 4: of the two first proposals the white one (A) was kept, bulkier and more mechanical, without its
@@ -12,7 +13,7 @@ off. Round four smoothed its run, solved its legs exactly, kept its feet below i
 among, and made the bead float higher on glowing jet trails. Not in the game yet.
 
 - **The lab:** `npm run dev`, then `/tools/spidertank-lab.html`. It drives itself round a circle of crates and low walls: walking,
-  running, closing up past 40 m/s and skimming, opening out, stopping to fire the beam. Press a key to drive it: W/S speed, A/D turn,
+  running, closing up past 25 m/s and skimming, opening out, stopping to fire the beam. Press a key to drive it: W/S speed, A/D turn,
   hold SPACE for the beam; S also backs it up, to 18 m/s. **Look round** with the mouse: drag to turn the camera round the tank, right-drag (or shift-drag) to slide
   what it looks at, wheel to zoom, H to stop it turning with the tank, R or double-click to put it back. **P** pauses, **.** steps a
   frame, **[ ]** slow the clock down to a tenth and back. `&demo=walk|climb|wall|run|skim|fold|beam` loops one part (`wall` walks
@@ -42,8 +43,9 @@ among, and made the bead float higher on glowing jet trails. Not in the game yet
 
 ![Closing up: the legs zigzag in against the hull, slide in through their ports, the hatches shut, the jets come out](fold.jpg)
 
-It closes up by itself at 40 m/s, over 1.3 s, in stages, and opens out again under 34 m/s (the gap keeps it from flickering between
-the two); slowing down, it runs backwards:
+It closes up by itself at 25 m/s, over 1.3 s, in stages, and opens out again under 21 m/s (the gap keeps it from flickering between
+the two). It won't start to while it is climbing or gripping something (a foot on a face or up on something, the hull tilted or
+hoisted: `tank.climbing`), so a climb never turns into a bead on the wall; slowing down, it runs backwards:
 
 1. **The legs zigzag** against the hull, toward its middle (thigh along the hull, shin folded back, foot forward again).
 2. **They slide in** through their hip ports, collars and all, into the hull.
@@ -59,28 +61,31 @@ tuned in Blender.
 
 ## Walking and the beam
 
-- **Eight legs in fours** (a tetrapod: left front, right second, left third and right back together, then the other four), so four
-  feet are always down and the hull rides level and tilts with the ground under them.
 - **Its legs are solved exactly** (`makeGait`'s `pole`): each three-bone leg bends its knee up, as built, in the upright plane
-  through its hip and foot, the ankle folding as the foot comes in. The general IK the mites use (FABRIK) can find a different shape
-  for a three-bone leg from one frame to the next, and did, mid-step: that flip, at up to 10,000 degrees a second, was much of the
-  twitch at speed.
-- **It runs on a duty factor** (`long`): each foot's share of the stride on the ground, from 0.65 walking to 0.5 by the time the
-  stride is full (about 10 m/s; each foot swings as long as it stands) and 0.42 flat out, a short float with no foot down that its jets
-  carry. Each stance uses the leg's reach, to 82% of it so the legs stay bent at the ends; a stepping foot skims lower the faster it
-  goes. Per leg: 0.7 steps a second at 10 m/s, 1.4 at 23, 2.1 at 38 (it was 1.9 and 3.0); joints turn at most about 1,800 degrees a
-  second in a stride (from 6,000 to 10,000), and a swinging foot moves at half the speed it did. Feet stay planted to the centimetre at
-  every speed and through turns, and the walk never drops out into a glide.
-- **It climbs:** each foot looks round where it would land, and a little ahead the way it is going, and takes the highest spot its
-  leg reaches: a top at least 0.9 m below its hip (so the knee always bends up over it) and on a clear line from the hip, or, where
-  what is there is too tall to stand on, its face, gripped as high as the leg reaches. Feet on a face tilt the hull nose-up (to 43
-  degrees; it rolls to 20 at most); the nose up, the front hips are higher and the next holds higher, and the hull rises to clear what
+  through its hip and foot, the ankle folding as the foot comes in, so a leg never flips from one shape to another.
+- **A spider's rhythm** (`wave`): one beat for all eight legs, each at its own place in it. Walking, a **ripple** runs up each side
+  from the back leg to the front, a quarter of a stride apart, the two sides half a stride out (three quarters of each stride a foot
+  is down, so six or seven feet hold it at once). From 3.8 m/s to 9 m/s it blends into the **run**: two sets of four (left front,
+  right second, left third, right back; then the others) that take turns, half the stride down, a little less flat out. Turning on
+  the spot drives the same beat.
+- **The legs never cross:** each side's reach, from its front leg's furthest ahead to its back leg's furthest behind, is cut into four
+  even lanes along the body with a gap between them, and each foot lands in, stands in and swings within its own (a stepping foot is
+  carried with the body, so it only ever goes forward in its lane; one carried out of it by a turn steps at once). The front legs
+  reach ahead and the back ones behind, as a spider's do. Measured from above: no two neighbours cross at any pace, turning on the
+  spot, circling or backing up. The cost is the stride: 2.96 m at most, so 1 step a second per leg walking at 3 m/s, 2 at 12 m/s, 3 at
+  18 and nearly 4 at 24, just under where it closes up. Feet stay planted to the centimetre.
+- **It climbs:** each foot looks round where it would land, out to its leg's full reach and a little ahead the way it is going, and
+  takes the highest spot it reaches: a top on a clear line from the hip, up to 0.6 m above the hip (the knee still bends up over it),
+  or, where what is there is too tall to stand on, its face, gripped as high as the leg reaches. Feet on a face tilt the hull nose-up (to 57
+  degrees; it rolls to 23 at most); the nose up, the front hips are higher and the next holds higher, and the hull rises to clear what
   is ahead (looking at least 1.5 m on, its tilt counted), until the front feet stand on the top and it walks up. Pushed on but held
-  up, the legs on that side keep stepping to anything better in reach. Nothing more than **5 m** over its lowest foot standing on a
+  up, the legs keep stepping, landing at the front of their lanes and reaching past them for the face or the top of what holds it:
+  they gather under the hull and hoist it, nose up as steeply as it takes. Nothing more than **5.5 m** over its lowest foot standing on a
   top: taller, it only grips the face, as it stands at the foot of a sheer wall, and walking along one its legs grip it. A foot left
   at full stretch below a risen hull, or with something come between it and its hip, steps at once; a knee or ankle that would be
   inside something turns about the leg to a clear way (`solid`). Measured in the lab: it walks up a 3.2 m step, a 4.5 m block (at a
-  walk and at 8 m/s) and a 4.8 m one, and stops at a 6 m block and an 8 m one with its front feet on their faces.
+  walk and at 8 m/s) and a 4.8 m one, and down off them; at a 6 m block and an 8 m one it stands with its front feet high on their
+  faces. Cresting an edge the hull can touch it (0.2 m, 0.4 m at 8 m/s) and a leg can brush it for a moment.
 - **The hull never goes into things:** at least 0.5 m over whatever is under its outline (`HULL`), as tilted as it is, as high as the
   planted legs can hold it and no lower than resting on what is under it. Feet gripping a face don't lift it (it would climb the
   wall). Each point of its outline has the highest top it can pass over (`tank.clearAt`); the caller never moves or turns it further
@@ -104,7 +109,7 @@ tuned in Blender.
    `ray(from, dir, far, out)` for faces), and set the ride height from what is under the hull, as the lab does. The hull collides only
    with what stands above `tank.clearAt` under `HULL`; the legs never block it. The drive passes `push` (what the driver asks for).
 3. **The mount.** A `VEHICLES` entry for it (`hideRider`), summoned and entered from the Garage like the others, with its own drive:
-   walking (its acceleration, turning that slows as it speeds up), closing up past 40 m/s, and overdrive on the Skimmer's hover drive.
+   walking (its acceleration, turning that slows as it speeds up), closing up past 25 m/s, and overdrive on the Skimmer's hover drive.
    Outdoors only: it is too big for the casino or the Downs' halls.
 4. **The beam in play.** A long ray from the muzzle against enemies, meteors, colliders and the ground (stopping where it hits, with a
    splash there), its damage, a charge meter on the HUD, sound, and the slowdown; the fire button as the turrets' (left mouse).
@@ -114,6 +119,6 @@ tuned in Blender.
 
 ## To decide
 
-- Where it closes up (40 m/s, opening under 34) and how fast it skims (90 m/s in the lab; the Skimmer's top is 100).
+- Where it closes up (25 m/s, opening under 21) and how fast it skims (90 m/s in the lab; the Skimmer's top is 100).
 - The beam's damage, and whether it stops at the first thing it hits or burns through.
 - Whether the champion is seen again (in a specimen tank in Zbornak's lab, say).
