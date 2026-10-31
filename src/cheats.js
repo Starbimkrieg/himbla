@@ -252,7 +252,8 @@ export class Cheats {
       { label: `2 · SHOW EACH POLYGON: ${on(this.debugView === 'poly')}`, fn: () => { this.setDebugView(this.debugView === 'poly' ? null : 'poly'); this.displayMenu(); } },
       { label: `3 · SHOW EACH DRAW CALL: ${on(this.debugView === 'draw')}`, fn: () => { this.setDebugView(this.debugView === 'draw' ? null : 'draw'); this.displayMenu(); } },
       { label: `4 · STATIC SHADOW CACHE: ${g.shadowCache.failed ? 'FAILED (see console)' : on(g.shadowCache.enabled)}`, fn: () => { g.shadowCache.enabled = !g.shadowCache.enabled; g.shadowCache.failed = false; g.shadowCache.invalidate(); this.displayMenu(); } },
-      { label: '5 · BACK', fn: () => this.dev() },
+      { label: `5 · FAR SHADOWS: ${on(g.farShadow.enabled)}`, fn: () => { g.farShadow.enabled = !g.farShadow.enabled; g.farShadow.invalidate(); this.displayMenu(); } },
+      { label: '6 · BACK', fn: () => this.dev() },
       { label: 'CLOSE' },
     ]);
   }

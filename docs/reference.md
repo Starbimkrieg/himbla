@@ -320,6 +320,10 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 - **Physics without meshes:** collisions sample the height function directly.
 - **Sleeping world:** settlements, bases, people and boulders only exist or animate near you.
 - **Cheap darkness:** fake light decals instead of real lights, so shaders never recompile.
+- **Shadows at every distance:** the sun's own shadow map is a 320 m box (`shadowcache.js` keeps its static casters between
+  refreshes); two wider, coarser maps of the same light (`src/farshadow.js`: 600 m and 3,300 m half-widths, terrain and static
+  casters, terrain only) carry hill and rock shadows out to the horizon. Lit toon materials and the terrain read the finest map
+  that holds them and blend at the seams. They redraw only when their box steps, the sun turns or chunks change.
 - **Comic look:** toon shading, inverted-hull outlines (pushed out along each vertex's face planes, `toon.js` shellGeo,
   in the vertex shader so they hold their on-screen width at any distance and follow the Ink setting; far ink fades to
   indigo), a post pass (`src/post.js`) for ink lines, halftone and speed lines, rocky crater rims drawn per pixel, and
@@ -399,6 +403,7 @@ src/
   trailer.js       trailer director (?trailer)
   models.js        characters and vehicles; loads the Blender models
   post.js          comic post-processing
+  farshadow.js     the wide sun shadow maps (600 m and 3.3 km) and the receiving shader code
   fx.js, hud.js, audio.js, input.js, toon.js, locations.js, rng.js
   assets/
     runner.glb       the runner (player, pirate skaters, leaders)

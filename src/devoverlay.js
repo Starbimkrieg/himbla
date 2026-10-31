@@ -374,7 +374,7 @@ export class DevOverlay {
     const sc = G.shadowCache;
     const mem = performance.memory;
     el.textContent = [
-      `${n0(Math.max(0, info.render.calls - (dbg ? 0 : 1)))} DRAWS · ${tris >= 1e6 ? `${(tris / 1e6).toFixed(2)}M` : n0(tris)} POLYS${sc.failed ? ' · SHADOW CACHE FAILED' : sc.enabled ? ` · SHADOWS ${sc.stats.mode.toUpperCase()}` : ''}`,
+      `${n0(Math.max(0, info.render.calls - (dbg ? 0 : 1)))} DRAWS · ${tris >= 1e6 ? `${(tris / 1e6).toFixed(2)}M` : n0(tris)} POLYS${sc.failed ? ' · SHADOW CACHE FAILED' : sc.enabled ? ` · SHADOWS ${sc.stats.mode.toUpperCase()}` : ''}${G.farShadow.on ? ` · FAR ${G.farShadow.stats.passes[0]}/${G.farShadow.stats.passes[1]}` : ''}`,
       `geometries ${n0(info.memory.geometries)} · textures ${n0(info.memory.textures)} · programs ${info.programs ? info.programs.length : '?'}`,
       `buffer ${size.x}×${size.y} (pixel ratio ${R.getPixelRatio().toFixed(2)})${mem ? ` · JS heap ${(mem.usedJSHeapSize / 1048576).toFixed(0)} of ${(mem.jsHeapSizeLimit / 1048576).toFixed(0)} MB` : ''}`,
     ].join('\n');

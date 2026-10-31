@@ -56,6 +56,7 @@ import { WEAPONS } from './weapons.js';
 import { clamp, pick, mulberry32 } from './rng.js';
 import { inkMat } from './toon.js';
 import { ShadowCache } from './shadowcache.js';
+import { FarShadow } from './farshadow.js';
 import { SUN, dirFromAngles, darkness, arcDist, tangent, upAt, greatCircle } from './geo.js';
 
 // package.json version (injected by vite.config.js), bottom right on the title and pause screens
@@ -187,6 +188,7 @@ class Game {
     this.scene.add(this.sun, this.sun.target);
     this.shadowCache = new ShadowCache(this); // static casters drawn once (shadowcache.js)
     this.shadowCache.install();
+    this.farShadow = this.shadowCache.far = new FarShadow(this); // wide, coarse sun maps for the distance (farshadow.js)
     this.hemi = new THREE.HemisphereLight(0x9a8cff, 0x40305a, 0.85);
     this.scene.add(this.hemi);
     this.earthLight = new THREE.DirectionalLight(0x6fb8ff, 0.3);
@@ -1399,6 +1401,7 @@ class Game {
     this.shadowCache.centre(P.pos, _v);
     this.sun.target.position.copy(_v);
     this.sun.position.copy(_v).addScaledVector(SUN, 600);
+    this.farShadow.update(P.pos, day); // (after the sun's own position: it reads the light's direction)
     this.earthLight.target.position.copy(_v);
     this.earthLight.position.copy(_v).addScaledVector(this.world.earthDir, 600);
     // helmet lamp: on in the dark and underground, off in the sun (the trailer can force it: lampForce)

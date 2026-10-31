@@ -312,6 +312,7 @@ export class Settings {
         sh.mapSize.set(v.shadowRes, v.shadowRes);
         if (sh.map) { sh.map.dispose(); sh.map = null; }
       }
+      if (g.farShadow) g.farShadow.setRes(v.shadowRes);
     }
     if (g.planet) {
       g.planet.lodScale = v.terrainDetail;

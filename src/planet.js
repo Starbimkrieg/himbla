@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PLANET } from './config.js';
 import { mulberry32, smoothstep, clamp } from './rng.js';
 import { gradientMap, frontCaster, inkMarks } from './toon.js';
+import { receiveFar, TERRAIN_LAYER } from './farshadow.js';
 import { shapedRocks } from './rocks.js';
 import { rayCollider } from './physics.js';
 import { TerrainField, faceDir, dirToGrid, N, CH, CPF, N1, R, MAX_LOD } from './terrainField.js';
@@ -52,10 +53,11 @@ export class Planet extends TerrainField {
     this.tunnel = null; // secrets system: overrides the floor underground
     this.material = this.makeMaterial();
     this.material.shadowSide = THREE.BackSide;
+    receiveFar(this.material); // farshadow.js: hill shadows beyond the sun map's box
     this.material.defines = { ...(this.material.defines || {}), KEEP_GRAZE_SHADOW: '' }; // toon.js: keep long dusk shadows
     this.boulderShapes = makeBoulderShapes(); // boulders.js: lumpy shapes (one per chunk), unit RMS radius
     // grain and dust with ?moonskin=1; casting its sun-facing side (toon.js frontCaster: no lit line at a boulder's foot)
-    this.boulderMat = frontCaster(patchRockMaterial(new THREE.MeshToonMaterial({ color: 0x8d8898, gradientMap: gradientMap() })));
+    this.boulderMat = receiveFar(frontCaster(patchRockMaterial(new THREE.MeshToonMaterial({ color: 0x8d8898, gradientMap: gradientMap() }))));
     this.boulderInk = makeBoulderInk();
     this.colliders = null;
     // dark backing sphere hides sub-pixel cracks between LODs
@@ -63,6 +65,8 @@ export class Planet extends TerrainField {
     scene.add(this.core);
     this.queue = [];
     this.stats = { built: 0, visible: 0 };
+    this.shadowVer = 0; // counts changes to which chunk meshes are shown (the far sun maps redraw on it: farshadow.js)
+    this._farList = [];
     this.lakes = []; // black lakes: { d, cos, level }, flat liquid in crater floors
     this.lastLake = null;
   }
@@ -397,6 +401,7 @@ ${SKIN_COLOR}`);
     // don't self-shadow into blotches. Only the two detailed LODs cast: coarse tiles' big triangles throw hard polygon
     // shadows (and low-sun "spider-web" streaks) no visible hill has
     mesh.castShadow = lod <= 1;
+    mesh.layers.enable(TERRAIN_LAYER); // (farCasters: the far sun maps draw every LOD)
     // ...but not the skirt (computeChunk: drawn after the grid). Double-sided at ground level, PCF smeared it into a dark
     // line along every chunk seam; it hangs below ground, so it has nothing to shade
     mesh.userData.gridIdx = (CH >> lod) * (CH >> lod) * 6;
@@ -657,6 +662,22 @@ ${SKIN_COLOR}`);
     if (done) this.rimInkAt.copy(camPos);
   }
 
+  // The far sun maps (farshadow.js) take every shown chunk as a caster, coarse LODs too (the near map leaves those out: big
+  // triangles throw hard polygon shadows into a 320 m box, and nothing that coarse is ever inside it). on: switch them on,
+  // then off again after the pass.
+  farCasters(on) {
+    const list = this._farList;
+    if (on) {
+      for (const ch of this.chunks) {
+        const m = ch.shown >= 0 ? ch.meshes[ch.shown] : null;
+        if (m && m.visible && !m.castShadow) { m.castShadow = true; list.push(m); }
+      }
+    } else {
+      for (const m of list) m.castShadow = false;
+      list.length = 0;
+    }
+  }
+
   // LOD for a chunk this far (m) from the eye, or -1 past the limit.
   lodAt(d, limit) {
     if (d >= limit) return -1;
@@ -714,6 +735,7 @@ ${SKIN_COLOR}`);
         if (ch.shown >= 0 && ch.meshes[ch.shown]) ch.meshes[ch.shown].visible = false;
         if (show >= 0) ch.meshes[show].visible = true;
         ch.shown = show;
+        this.shadowVer++;
       }
       if (show >= 0) visible++;
       // boulders drawn for near chunks; colliders only where you can hit them
@@ -746,6 +768,7 @@ ${SKIN_COLOR}`);
         if (ch.shown >= 0 && ch.meshes[ch.shown]) ch.meshes[ch.shown].visible = false;
         ch.meshes[ch.want].visible = true;
         ch.shown = ch.want;
+        this.shadowVer++;
       }
       return this.queue.length;
     }

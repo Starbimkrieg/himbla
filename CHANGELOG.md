@@ -5,6 +5,12 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Shadows hold out to the horizon** (`src/farshadow.js`). The sun's shadow map only covered a 320 m box round you, so a
+  hill's or crater rim's shadow ended where the box did, in ragged blobs that shifted as you moved. Two coarser maps of the
+  same sun now cover 600 m (terrain, boulders and settlements) and 3.3 km (terrain), drawn rarely (when their box steps, the sun
+  turns or terrain chunks change) and blended into the sharp near map over its outer 16% so there is no visible seam. Terrain,
+  boulders and every toon material read them; coarse terrain LODs cast into them (the near map still leaves those out). Shadow
+  quality sets their size. Dev menu: Display tests, "Far shadows" switch; the F3 overlay counts their redraws.
 - **Spider tank: a staged rear-up, leaning on what is beside it, no trailing legs at a run** (`docs/spidertank/`). Rearing up a
   tall face is no longer a leap with every leg in the air: it pitches up at 1 rad/s and rises at 3 m/s at most, creeping meanwhile;
   its tail stays down on its back legs and only its front rises while the face is still ahead, and once its nose is at the face it

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { pixelFont } from './fonts.js';
+import { receiveFar } from './farshadow.js';
 
 // Grazing sunlight: faces edge-on to the sun (dot(N, L) near 0; every settlement's east and west walls)
 // pick up shadow-map self-shadowing noise as streaks. There the shadow map gives way to a smooth lit-to-dark
@@ -12,6 +13,10 @@ import { pixelFont } from './fonts.js';
   if (chunk.includes(SHADOW_LINE)) {
     THREE.ShaderChunk.lights_fragment_begin = chunk.replace(SHADOW_LINE, `{
 		float grazeSh = ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, abs( directionalLightShadow.shadowRadius ), vDirectionalShadowCoord[ i ] ) : 1.0;
+		#ifdef FAR_SHADOW_READY
+		// past the sun map's box: the wider, coarser maps (farshadow.js), blended in from its edge
+		if ( directLight.visible && receiveShadow ) grazeSh = farShadowBlend( grazeSh, vDirectionalShadowCoord[ i ], geometryNormal );
+		#endif
 		// lunar light (a negative shadow radius, main.js updateLighting): no air to soften a shadow, so the filtered edge is
 		// cut hard. It stays anti-aliased (a narrow ramp across the soft PCF edge, never the raw texels' stair-steps)
 		if ( directionalLightShadow.shadowRadius < 0.0 ) grazeSh = smoothstep( 0.38, 0.62, grazeSh );
@@ -70,13 +75,13 @@ export function toon(color, opts) {
   if (!opts) {
     const key = typeof color === 'number' ? color : String(color);
     if (!cache.has(key)) {
-      const m = new THREE.MeshToonMaterial({ color, gradientMap: gradientMap() });
+      const m = receiveFar(new THREE.MeshToonMaterial({ color, gradientMap: gradientMap() }));
       m.userData.shared = true; // (cached, never animated: world.mergeLocation may bake it to vertex colours)
       cache.set(key, m);
     }
     return cache.get(key);
   }
-  return new THREE.MeshToonMaterial({ color, gradientMap: gradientMap(), ...opts });
+  return receiveFar(new THREE.MeshToonMaterial({ color, gradientMap: gradientMap(), ...opts }));
 }
 
 // ---------------- ink shells ----------------

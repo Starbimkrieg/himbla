@@ -235,6 +235,7 @@ export class ShadowCache {
 
   render(lights, scene, camera) {
     const g = this.g, r = g.renderer, sm = r.shadowMap, orig = this._orig, st = this.stats, cfg = this.cfg;
+    if (this.far && sm.enabled && lights.length && lights[0] === g.sun) this.far.run(sm, orig, scene); // the wide sun maps (farshadow.js), when one is due
     if (!sm.enabled || (sm.autoUpdate === false && sm.needsUpdate === false) || lights.length === 0) return orig.call(sm, lights, scene, camera);
     const light = lights[0], sh = light.shadow, M = sh.map;
     const plain = (why) => { this.valid = false; st.mode = why; st.plain++; return orig.call(sm, lights, scene, camera); };
