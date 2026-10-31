@@ -355,7 +355,7 @@ export class Enemies {
       const m = foeRover(F);
       m.root.scale.setScalar(F.rover ? 1.3 : 1.35); // (a war-rig 1.35: Captain Kade's truck is the big one)
       g.scene.add(m.root);
-      e = { kind: 'rover', model: m, hp: 210, maxHp: 210, body: makeBody(pos), radius: F.rover ? 3.8 : 4.0 };
+      e = { kind: 'rover', model: m, hp: 210, maxHp: 210, body: makeBody(pos), radius: F.rover ? 3.8 : 4.6, ...(F.rover ? {} : { rideH: m.rideH * 1.35 }) }; // (the War-Rig is bigger and taller)
     }
     const toP = tangent(g.player.pos.clone().sub(pos), up);
     if (toP.lengthSq() < 1e-4) toP.copy(tangent(new THREE.Vector3(1, 0, 0), up));
@@ -1433,7 +1433,7 @@ export class Enemies {
     const q = frameQuat(b.groundN, e.heading, new THREE.Quaternion());
     m.root.quaternion.slerp(q, Math.min(1, dt * 8));
     const sp = b.vel.length();
-    for (const w of m.wheels) w.rotation.x += sp * dt / 0.85;
+    for (const w of m.wheels) w.rotation.x += sp * dt / (m.wheelR || 0.85);
     e.center.copy(b.pos).addScaledVector(b.up, e.rideH || (e.kind === 'rover' ? 2.6 : 1.8));
     m.root.updateMatrixWorld();
     const obj = e.faction === 'pirate' ? this.victim(e) : e.faction === 'ally' ? e.target : null;

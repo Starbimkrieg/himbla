@@ -85,14 +85,15 @@ when in doubt:
 - **Authoring frame:** three.js axes (x right, y up, +z forward), metres, origin on the ground in the middle of the
   footprint. `tb()` converts. Doors, noses and cab windows face +z unless the model's header says otherwise (the crane's jib
   points +x).
-- **The rover frame,** shared by the civil buggy, the patrol car, the Interceptor and the war-rig, so the vehicle, AI and
-  traffic code drive any of them unchanged:
+- **The rover frame,** shared by the civil buggy, the patrol car and the Interceptor, so the vehicle, AI and traffic code
+  drive any of them unchanged (the War-Rig keeps the same pivot contract on a bigger frame of its own, below):
   - wheels at **(±1.85, 0.85, ±1.8)**, radius **0.85**, spun about x (`WX, WY, WZ, WR` in `build_rover.py`)
   - gun pivot at **(0, 3, 0.8)**, a child of the chassis (a searchlight on the buggy, a weapon station on the patrol car)
   - body about 5.6 to 6.4 m long and 2.9 m wide; roof about 2.5 m (patrol car); the seat cushion about 1.6 to 1.75 m up, where
     the runner sits
   - root extras `radius` (3.2; 3.4 for the Interceptor) and `wheelRadius` when it differs from 0.85
-- **Other frames are their own and fixed:** the APC has eight wheels at x ±1.72, y 0.62, z ±0.75 / ±2.15, radius 0.62, with
+- **Other frames are their own and fixed:** the War-Rig has wheels at (±2.2, 1.05, 2.6 / -2.3), radius 1.05, a turret on
+  the cab roof at (0, 4.12, -0.05) with a `crew` empty for its gunner (`build_warrig.py`). The APC has eight wheels at x ±1.72, y 0.62, z ±0.75 / ±2.15, radius 0.62, with
   the hull on a chassis pivot lifted 0.35. The tower crane has a 34 m mast and a 30 m jib. The garage floor is 0.08 up
   (`GARAGE_FLOOR`). Read the header of the builder you are changing before you move a wheel, a pivot or a footprint: game
   code depends on them.
@@ -103,7 +104,8 @@ when in doubt:
   and 0.75 m of climbing space in front (`ladder()`); a personnel door about 1.2 × 2.45 m; land-train bays about 7 m wide and
   5.6 m high.
 - **Share parts, don't copy them.** Parts used by more than one model live in one module: `spreader.py` (both cranes),
-  `hookblock.py` (the hook block of both cranes and the Vostok Hangar's bridge crane), `decals.py` (`container_doors`, faction
+  `hookblock.py` (the hook block of both cranes and the Vostok Hangar's bridge crane), `warrig_kit.py` (the War-Rig and its
+  runner-up study), `decals.py` (`container_doors`, faction
   marks), `cargo.py` (the land-train's container), `dishkit.py`, `wing_kit.py` (the ILMB's wing buildings: the skywalk lobby,
   ladders, railings, colliders). The gantry reuses the tower crane's trolley.
 

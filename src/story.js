@@ -303,7 +303,7 @@ const CHAPTERS = {
       brief: '"SPACECOM holds the dark side from three towns: the Farside listening post and the waystations at Twilight and Hertzsprung. Plant a charge in the heart of each. Their guns will wake up, so be quick. When they go up, my clans move in and those towns are ours."',
       steps: [{ t: 'relays', sites: [{ locOpen: 'farside' }, { locOpen: 'twilight' }, { locOpen: 'hertz' }], hold: 4, guards: 3, foe: 'spacecom', prop: 'charge', label: 'Plant charges in the three towns', charge: true, rouse: true }],
       reward: { credits: 900, rep: 10, vehicle: 'warrig', tech: 'shield', world: 'pirateTowns', towns: ['farside', 'twilight', 'hertz'] },
-      outro: '"Boom, boom, boom. Beautiful. The clans are already moving in: Farside, Twilight and Hertzsprung fly our colours now. Take a Scrapjaw War-Rig: it rams. Press V. And a Deflector we lifted off a SPACECOM convoy. One more job, Runner. The big one."',
+      outro: '"Boom, boom, boom. Beautiful. The clans are already moving in: Farside, Twilight and Hertzsprung fly our colours now. Take a Rustmoon War-Rig: it rams. Press V. And a Deflector we lifted off a SPACECOM convoy. One more job, Runner. The big one."',
     },
     {
       title: 'The Big Score',

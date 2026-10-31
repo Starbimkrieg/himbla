@@ -39,6 +39,7 @@ const PRESETS = {
   rail:    [1.0, 0.55, 0.28],
   mortar:  [0.8, 0.3, 0.2],
   cannon:  [1.0, 0.7, 0.3],    // APC turret
+  rotary:  [0.3, 0.55, 0.05],  // War-Rig gun, a round
   pickup:  [0.0, 0.5, 0.09],
   cash:    [0.0, 0.45, 0.07],  // twice (ECHO)
   tick:    [0.0, 0.22, 0.04],  // menu highlight moves
