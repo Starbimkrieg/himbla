@@ -5,6 +5,16 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Spider tank: climbs in half the time, rides up on stretched legs, calm at the crest** (`docs/spidertank/`). The hull's lower
+  half now rides up to 3 m toward the higher, on stretched legs, so at a step or a low block it lifts level with room under it
+  instead of pitching its nose at it and scraping over. Climbing legs step by need from a run too while it is steep or rearing, up to
+  four at once, their feet at 9 m/s (up to 0.9 s a step), and a far hold up a face costs a third of what it does walking, so the back
+  legs follow the front ones up. It slows for a face only as much as it must: no faster than lets its hull rise clear of what is
+  ahead (it looks 1, 2.5 and 4.5 m on), braking short of what even the pose it wants would meet. Cresting, a step up or down arcs no
+  more than 0.4 m over what is between (the legs swung out metres into the air), and a planted foot no longer re-steps onto the spot
+  it is on (standing beside a wall, one did every third of a second). Up the lab's climbing set it takes 2.9 s on average from the
+  face to the top, from 5.9 s, with the feet's worst jolts at the crest about halved. Sweep: 742 cases, 4 wrong (from 5), feet across the
+  body in 0.09% of frames (from 0.35%), legs into the hull in 3.4% (from 2.6%, mostly against 12 to 14 m walls).
 - **Spider tank: smoother climbing legs, no snag at faces, front legs back in step** (`docs/spidertank/`). A climbing or out-of-lane
   step now takes as long as its foot needs at 6 m/s (up to 1.1 s) instead of flinging it up a face in a quarter second, and once a
   fifth of the way it no longer jumps to another hold: the stepping feet's worst jolts fell to a quarter, about walking's. Climbing it
