@@ -5,6 +5,17 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Spider tank: the body leads, the legs follow** (`docs/spidertank/`). Till now the hull could only rise as far as its planted feet
+  let it, so any leg out of reach, any missing hold, any slow step stalled the climb (and the caller's collision then stopped it
+  dead). Now the hull goes straight for the pose it wants from the ground ahead, at its own rates (6 m/s up, 2.2 rad/s of pitch),
+  only never into anything, and the legs follow: a foot it leaves out of reach steps at once, out of turn and whatever else is
+  stepping. It slows only for its own body: 5 m/s up a steep face, and no faster than lets its hull rise clear of what is ahead
+  (braking short of a wall it can't climb). Its climb limit is now measured from the ground under it rather than from its feet (two
+  feet up on a top while the others stepped let it over a 13.9 m wall), and its hull collision has 83 points instead of 27, so an
+  edge can't slip between them. Up the lab's climbing set: 1.3 s face to top on average, from 2.9 s (5.9 s two rounds ago); a 3.5 m
+  step at 10 m/s without slowing; the lane at an unbroken 3 m/s. Sweep: 742 cases, 2 wrong (from 4), every too-tall wall stopped
+  at, legs into the hull 2.4% of frames (from 3.4%), feet across 0.06%. The cost: a foot is now and then briefly past its leg's
+  full length before it steps (about 1% of planted-foot frames climbing).
 - **Spider tank: climbs in half the time, rides up on stretched legs, calm at the crest** (`docs/spidertank/`). The hull's lower
   half now rides up to 3 m toward the higher, on stretched legs, so at a step or a low block it lifts level with room under it
   instead of pitching its nose at it and scraping over. Climbing legs step by need from a run too while it is steep or rearing, up to

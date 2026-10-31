@@ -41,6 +41,7 @@ import * as THREE from 'three';
 //               (forward, back, further) to the nearest way that is clear, and eases there
 //   free(), need(c), canLift(c)   (wave) while free() (the tank: climbing, slow), no rhythm: each planted leg steps as it needs to
 //               (need(c) past 0, the neediest first; FREE_MAX at once, never two neighbours), if the rest still hold the body
+//               (need(c) 3 or more, out of reach and holding nothing: at once, whatever else is stepping)
 //               (canLift(c)), and lands where it would in its lane, taking FREE_DUR; one needing to go (need(c) 3) with nowhere to go
 //               hangs (c.hang: the caller holds its foot where it hangs)
 //   liftDir(c, out)   the way a stepping foot lifts (world up, without it): the tank's, off the hull when it is steep
@@ -234,10 +235,11 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     for (const c of chains) {
       const d = THREE.MathUtils.euclideanModulo(c.sets - c.ripple + 0.5, 1) - 0.5;   // (its place, eased from ripple to sets)
       const at = THREE.MathUtils.euclideanModulo(G.phase - (c.ripple + d * run), 1);
-      // (a planted foot carried out of its lane, by a turn or a change of pace, steps at once, timed by itself)
+      // (a planted foot carried out of its lane, by a turn or a change of pace, or left out of its leg's reach as the body goes on up,
+      // steps at once, timed by itself)
       if (!c.stepping && f > 0 && !(at < swing)) {
         const z = _vw.copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert()).z;
-        if (z < c.zLo - 0.05 || z > c.zHi + 0.05) {
+        if (z < c.zLo - 0.05 || z > c.zHi + 0.05 || (strain && strain(c) >= 2)) {
           const to = footAt(c, landWave(c, _r2), _r3);
           // (standing: back where it is, no step; nor, strained, one that would put it down where it stands: that eases nothing)
           if (settling && to && to.distanceTo(c.F) < 0.5 * SAME_HOLD * c.span && (!(strain && strain(c) >= 2) || to.distanceTo(c.F) < 0.02 * c.span)) continue;
@@ -279,9 +281,11 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     for (const c of chains) if (c.stepping) { c.s = Math.min(1, c.s + dt / c.dur); if (c.s >= 1) c.own = c.free = false; }
     let lifted = chains.filter((c) => c.stepping && c.s < 1).length;
     const want = chains.filter((c) => !c.stepping).map((c) => [c, need(c)]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
-    for (const [c] of want) {
-      if (lifted >= FREE_MAX) break;
-      if (chains.some((o) => o.stepping && o.s < 1 && nextTo(o, c)) || !canLift(c)) continue;
+    for (const [c, n] of want) {
+      // (one out of reach holds nothing: it goes whatever else is stepping)
+      const gone = n >= 3;
+      if (lifted >= FREE_MAX && !gone) continue;
+      if (!gone && (chains.some((o) => o.stepping && o.s < 1 && nextTo(o, c)) || !canLift(c))) continue;
       const to = footAt(c, landFree(c, _r2), _r3);
       // (nothing to hold, or nothing in its reach: it hangs, and keeps looking)
       if (!to || (need(c) >= 3 && to.distanceTo(c.joints[0].getWorldPosition(_r1)) > c.reach)) { if (need(c) >= 3) c.hang = true; continue; }

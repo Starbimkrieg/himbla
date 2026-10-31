@@ -2,8 +2,8 @@
 
 The end-game reward. Win the Triple Crown, bring the champion to Dr. Zbornak, and he keeps it "for research"; in return he hands over
 the walking tank he has been building round a mini antimatter reactor. It walks on eight armoured legs by the same IK the mites and
-chimeras use (`src/gait.js`), to a spider's rhythm: a ripple walking, two sets of four running, the legs never crossing. It climbs what
-its legs can reach the top of. Past 25 m/s it closes up by itself into a hovering bead (overdrive; never while it climbs), and when it
+chimeras use (`src/gait.js`), to a spider's rhythm: a ripple walking, two sets of four running, the legs never crossing. It climbs
+anything up to 13 m, its body gliding up and over and its legs stepping after it. Past 25 m/s it closes up by itself into a hovering bead (overdrive; never while it climbs), and when it
 slows under 21 m/s the legs come back out and stand it up. It fires a reactor beam from a central cannon. The runner rides inside, out of sight.
 
 Built in Blender (`tools/blender/build_spidertank.py` -> `src/assets/spidertank.glb`, 12.0k triangles, 312 KB) and driven by
@@ -81,52 +81,54 @@ tuned in Blender.
   reach ahead and the back ones behind, as a spider's do. Measured from above: no two neighbours cross at any pace, turning on the
   spot, circling or backing up. The cost is the stride: 2.96 m at most, so 1 step a second per leg walking at 3 m/s, 2 at 12 m/s, 3 at
   18 and nearly 4 at 24, just under where it closes up. Feet stay planted to the centimetre.
-- **It climbs as high as its legs reach (13 m), body first, then feet, then steps:**
+- **It climbs up to 13 m. The body leads and the legs follow:**
   - **The hull's pose comes from the ground, not its feet** (`target`): each half of its outline (front and back, left and right)
     wants its hips its standing height over most of what is under it, and at least 1.65 m over the highest thing there; going, the
-    leading half looks 2.5 to 6 m ahead and the trailing half as far as it is long. So over a crate it rises just enough to clear it,
+    leading half looks 2.5 to 8 m ahead and the trailing half as far as it is long. So over a crate it rises just enough to clear it,
     over a gap it keeps level with the tops either side, and at a wall it rears up toward the wall's top before its nose is there.
-    **The lower half rides up on stretched legs** toward the higher, by up to 3 m: so at a step or a low block it lifts level, with
-    room under it, rather than pitching its nose up at it and scraping over (not at a wall taller than it can climb, where it only
-    rears as far as it can).
-    Each frame it goes as far toward that pose as it may (`bodyPose`): never deeper into anything (`HULL3`), and no planted foot
-    further out of reach, or folded in closer, than it is. The legs set how high it gets; the pose eases, so nothing jolts it.
+    **The lower half rides up** toward the higher, by up to 3 m: so at a step or a low block it lifts level, with room under it,
+    rather than pitching its nose up at it and scraping over (not at a wall taller than it can climb, where it only rears as far as
+    it can).
+  - **The body goes there on its own** (`bodyPose`): each frame toward that pose at its own rates (6 m/s up or down, 2.2 rad/s of
+    pitch), only never deeper into anything (`HULL3`, 83 points round the bead, close enough that an edge can't slip between them).
+    The legs don't hold it back, so it never waits on a foothold: the earlier climbs, where the body could only go as far as its
+    planted feet let it, stalled whenever a leg ran out of reach or a step took too long.
   - **Each foot takes the hold nearest the height that pose puts it at** (`foothold`), with some stretch and some fold left in hand,
     among the spots round its lane, ahead of it (in line, to either side, and in line with its hip, for a narrow block), the faces
     round its hip and the face below an edge going down. It may only take one in its leg's reach, in its lane, **on its own side of the
     body**, with its foot and shin clear of the hull, no more than 3 m over its hip, and on a top with leverage (0.7 m in from any edge
     on its hip's side; past it the top may end, so it straddles a narrow block). Over an edge above its hip it reaches knee-up, as a
     leg does. A grip on a face is never higher than the face's top.
+  - **The legs keep up:** a planted foot the body has left out of its leg's reach holds nothing and steps at once, out of turn and
+    whatever else is stepping. Climbing (steep, or still rising to the pose it wants), the legs step by need (`gait.js` `free`): the
+    neediest first (past 80% of their reach, 0.6 m off the height their hold should be, carried out of their lane or in toward the
+    body's middle), up to four at once but never two neighbours along a side, and while every corner of the body keeps a foot down.
+    A step takes as long as its foot needs at 9 m/s (up to 0.9 s), and once a fifth of the way it no longer jumps to another hold, nor
+    back down where it lifted from. A step up or down, or from or to a face, arcs no more than 0.4 m over what is between (it goes up
+    first, then over), so cresting a block the legs don't swing out into the air. A leg with nothing it can reach to hold **hangs**
+    off the hull, clear of what it is against, and keeps looking. Walking, feet land where the rhythm asks.
   - **The legs keep clear of the hull:** a thigh never rises more than 69 degrees over the level (closer in, the ankle folds instead),
     so the knee stays up and out over its foot; the leg solve turns a knee aside from the hull as from anything else; and with the
     hull steep, a stepping foot lifts off the hull and out to its side rather than straight up along it.
-  - **Climbing, the legs step by need** (`gait.js` `free`: under 1.5 m/s, or at any pace while it is steep or rearing up at something,
-    and not turning): the neediest first (past 80% of their reach, 0.6 m off the height their hold should be, carried out of their lane
-    or in toward the body's middle), up to four at once but never two neighbours along a side, and only while every corner of the
-    body keeps a foot down (or five other feet hold). A step takes as long as its foot needs at 9 m/s (up to 0.9 s, rather than
-    flinging the foot there), and once a fifth of the way it no longer jumps to another hold, nor back down where it lifted from. A step
-    up or down, or from or to a face, arcs no more than 0.4 m over what is between (it goes up first, then over), so cresting a block
-    the legs no longer swing out metres into the air. Climbing, a far hold up the face costs a third of what it does walking, so
-    the back legs follow the front ones up rather than staying on the ground. A leg with nothing it can reach to hold **hangs** off the hull, clear of what it is against, and keeps looking.
-    Turning or moving faster, the walking rhythm takes over; walking, feet land where the rhythm asks (the climbing preferences for
-    stretch in hand and wider looks are for climbing only, so the front legs keep the rhythm).
-  - **It slows into a climb only as much as it must:** climbing, it goes no faster than 5 m/s, and rearing up at something ahead
-    slower still, down to a 1.5 m/s creep while its pose is well behind the one it wants (3 m of height or 0.5 rad of pitch). It looks
-    1, 2.5 and 4.5 m ahead: what even the pose it wants would meet there, it brakes short of (at 10 m/s/s, the last metre at 0.6 m/s);
-    what it only has to rise to clear, no faster than lets its hull get that much higher first (at 2 m/s, about what its restepping
-    legs lift it at). So a crate or a step it takes at a run, and a block it meets gently.
-  - Nothing over 13 m above its **anchor**, the second lowest foot standing on a top; a wall taller, it gets as high up the face as it
-    can and stops there. Walking off something tall, it climbs down nose first; with too few feet holding it, it drops. Standing beside a
-    wall it stands still (no shuffling between two holds as good).
+  - **It slows only for its own body:** climbing a face steeply, it goes no faster than 5 m/s. It looks 1, 2.5 and 4.5 m ahead: what
+    even the pose it wants would meet there (a wall taller than it climbs), it brakes short of (at 10 m/s/s, the last metre at
+    0.6 m/s); what it only has to rise to clear, no faster than lets its hull get that much higher first, at its own rates. So a crate
+    or a step it takes at a run, and a tall block at 5 m/s.
+  - Nothing over 13 m above its **anchor**, the ground under its outline (as high as 30% of it is lower, so a hole under a corner
+    doesn't lower it, nor its nose over a top raise it); its hips never more than 1.45 m over that, so at a wall taller it rears up the
+    face as far as it can and stops there. Walking off something tall, it climbs down nose first. Standing beside a wall it stands
+    still (no shuffling between two holds as good, nor stepping back onto the spot a foot is on).
   - **Measured** (the lab's sweep, 742 cases, every box from 8 sides at 4 and 12 m/s, gaps, turning on tops, standing): blocks it
     should climb, 510 of 512 approaches (255 of 256 at each speed, corner-first too); every gap of 3 to 7 m crossed both ways; too-tall
-    walls stopped at in 47 of 48; standing beside tall blocks, still in all 69; 4 cases wrong in all. The hull is in nothing in any of
-    them and no planted foot over nothing; a leg passes into the hull in 3.4% of frames (most of them a thigh grazing its side, steep
-    against a 12 to 14 m wall), and a foot is across the body's middle in 0.09%. Up the lab's climbing set (2.4 to 9 m blocks, at 4
-    and 10 m/s) it takes 2.9 s on average from meeting the face to standing on top, from 5.9 s. What it still does wrong: block 18
-    from one side stops at the face, block 28 (13.9 m) from one corner at walking pace it gets up, turning on the spot on top of
-    block 21 a leg shuffles; and at a run the hull still grazes the edge of a 3.5 m step and stops dead for half a second (its legs
-    can't lift it as fast as it wants until the front feet are up on the top).
+    walls stopped at in all 48; standing beside tall blocks, still in all 69; 2 cases wrong in all. The hull is in nothing in any of
+    them and no planted foot over nothing; a leg passes into the hull in 2.4% of frames (most of them a thigh grazing its side, steep
+    against a 12 to 14 m wall), and a foot is across the body's middle in 0.06%. Up the lab's climbing set (2.4 to 9 m blocks, at 4
+    and 10 m/s) it takes 1.3 s on average from meeting the face to standing on top (5.9 s when the legs led the body, 2.9 s just
+    before): a 3.5 m step at 10 m/s without slowing, a 9 m block at a steady 5 m/s. The lab's lane (a crate, a step, 4.6 and 9.5 m
+    blocks, a 12 m wall on and off, then a 16 m wall it stops at) goes at an unbroken 3 m/s. The cost: the body doesn't wait for its
+    feet, so now and then a foot is briefly past its leg's full length before it steps (about 1% of planted-foot frames on the climbing
+    set), and climbing tall blocks a leg with nothing in reach hangs more. What it still does wrong: a 1.2 m crate with a tall block just
+    behind it, from that side, it rears at the tall one and slides along it.
 - **Its height is its own:** kept in the world, so the caller can put the root on the ground under it or anything else; the caller's
   collision asks the tank (`tank.hits(x, y, z, yaw)`: how far into things the hull would be with the root there) and never moves or
   turns it deeper in, so it turns on the spot even face-down against a wall. In the lab it spins quick on its feet (2.6 rad/s at a
