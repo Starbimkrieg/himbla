@@ -9,7 +9,7 @@ const OUT = process.argv[2] || 'casino-shots';
 const ONLY = process.argv.slice(3);
 mkdirSync(OUT, { recursive: true });
 
-export const VIEWS = [
+const VIEWS = [
   ['in-door-nave', [0, 2.2, 13], [0, 5, -18]],           // from the doors down the foyer, into the crossing and Plinko arm
   ['in-foyer-left', [-6, 2.2, 12], [8, 3, 4]],           // foyer east wall: prize counter
   ['in-crossing-n', [0, 2.2, -4], [0, 8, -40]],          // crossing south, up the Plinko arm

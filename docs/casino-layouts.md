@@ -215,6 +215,14 @@ overlap. The game's depth buffer is 24 bits with near 0.5 and far 9000, which se
 **Result** (see the CHANGELOG): the hall as it was had 812 overlapping pairs; the Crater Cross, with the kit, has a handful, none over
 1 m2 in the new work. `audit_coplanar()` in `kit.py` is the build-time half, and `build_hall.py` passes it.
 
+**Model quality pass** (CHANGELOG): every casino builder (`build_casino`, `_claw`, `_plinko`, `_blackjack`, `_duck`, `_slots`, `_hall`,
+`_lot`) now ends with `audit_coplanar()` and `audit_flips()` and passes both. In the running casino, different-colour overlaps went
+from 231 pairs to 89 (the second count with the stricter test in `tools/casino-audit.js`), and what is left is hidden: faces against the wall or
+under the roof, the drum crown sitting on the roof,
+the undersides of the parked hover-cars and a few under 0.01 m2. Nothing hangs free (the tumbling die hovers on purpose).
+`tools/casino-audit.js` is the in-page version with a colour filter and two more checks (`floating()`, `near()`); it runs in
+the browser pane or devtools, no Playwright needed (instructions at the top of the file).
+
 `tools/casino-zfight.mjs` runs against the game (`npx vite --port 5199 --host 127.0.0.1`, then `node tools/casino-zfight.mjs`).
 It walks every mesh near the casino, brings every triangle into the casino's frame, files them by plane and lists each pair
 from different meshes on one plane (normals within 1 degree, offsets within 2 mm) that overlaps by more than 1 cm2. It

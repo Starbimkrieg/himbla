@@ -59,7 +59,7 @@ function sweep(n, frame, prof) {
   }
   for (const i of [0, n - 1]) {
     const tri = THREE.ShapeUtils.triangulateShape(prof(i).map(([a, b]) => new THREE.Vector2(a, b)), []);
-    for (const [a, b, c] of tri) { if (i === 0) idx.push(i * m + a, i * m + c, i * m + b); else idx.push(i * m + a, i * m + b, i * m + c); }
+    for (const [a, b, c] of tri) { if (i === 0) idx.push(a, c, b); else idx.push(i * m + a, i * m + b, i * m + c); }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

@@ -3,10 +3,12 @@ import { toon } from '../toon.js';
 
 // Helpers shared by the props-*.js catalogue files.
 
+export const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
 const _box = new THREE.Box3();
 
 // World-space box of an object whose parent chain is just its own wrapper (matrices updated first).
-export function boxOf(obj) {
+function boxOf(obj) {
   obj.updateMatrixWorld(true);
   return _box.makeEmpty().setFromObject(obj).clone();
 }
@@ -38,6 +40,3 @@ export function plate(w, d, color = 0x2a2540, h = 0.12) {
   m.receiveShadow = true;
   return m;
 }
-
-// faction colours as hex numbers (locations.js FACTIONS has CSS strings)
-export const hexOf = (css) => new THREE.Color(css).getHex();

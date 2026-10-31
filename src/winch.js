@@ -17,7 +17,7 @@
 // the last. If the drum runs but you aren't coming in, the cable strains (creaking louder and higher, pull rising to
 // yank you free) and slips off after STRAIN_MAX s.
 import * as THREE from 'three';
-import { upAt } from './geo.js';
+import { upAt, toScreen } from './geo.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { rayCollider } from './physics.js';
@@ -66,10 +66,8 @@ const _lo = new THREE.Vector3();
 const _ld = new THREE.Vector3();
 const _hp = new THREE.Vector3();
 const _q = new THREE.Quaternion();
-const _inv = new THREE.Matrix4();
 const _ray = new THREE.Ray();
 const _cols = [];
-const _eye = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _s = new THREE.Vector3(1, 1, 1);
 const _z = new THREE.Vector3(0, 0, 1);
@@ -621,7 +619,7 @@ export class Winch {
 
   hand(out) { const P = this.game.player; return out.copy(P.center).addScaledVector(P.up, 0.4); }
 
-  // the cable's path into this.path (hand, wrap points, hook); returns the point count. pathLen(): its length
+  // the cable's path into this.path (hand, wrap points, hook), its point count into pathN. pathLen(): its length
   buildPath(o, hand, anchor) {
     const P = this.path;
     P[0].copy(hand);
@@ -629,7 +627,6 @@ export class Winch {
     const k = o.wraps.length + 1;
     P[k].copy(anchor);
     this.pathN = k + 1;
-    return k + 1;
   }
 
   pathLen() {
@@ -700,7 +697,6 @@ export class Winch {
       o.len += Math.max(0, this.pathLen() - before); // pay out the extra so a new wrap doesn't jerk you
       return 'changed';
     }
-    _ignore = null;
     return null;
   }
 
@@ -941,8 +937,8 @@ export class Winch {
       document.getElementById('hud').appendChild(el);
     }
     this.anchorOf(h, _pt);
-    const v = _to.copy(_pt).project(g.camera);
-    if (v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) { el.classList.add('hidden'); return; }
+    const v = _to.copy(_pt);
+    if (!toScreen(v, g.camera) || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) { el.classList.add('hidden'); return; }
     const W = window.innerWidth, H = window.innerHeight;
     el.classList.remove('hidden');
     el.classList.toggle('looked', !!h.looked && !this.on);

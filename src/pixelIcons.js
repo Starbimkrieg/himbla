@@ -324,7 +324,8 @@ const SPRITES = {
 // On first use, one data-URL class per sprite goes into a single <style>: `.px-moon { background-image: url(...); --w: 16;
 // --h: 16 }`. Canvases are kept for drawing onto other canvases (prize wheel labels).
 const CANVAS = new Map();
-function canvasOf(name) {
+// The sprite canvas (a pixel per cell) to draw with smoothing off, or null.
+export function pxCanvas(name) {
   let cv = CANVAS.get(name);
   if (cv || !SPRITES[name]) return cv || null;
   const rows = SPRITES[name], w = rows[0].length, h = rows.length;
@@ -348,7 +349,7 @@ function install() {
   installed = true;
   let css = '';
   for (const name of Object.keys(SPRITES)) {
-    const cv = canvasOf(name);
+    const cv = pxCanvas(name);
     css += `.px-${name}{--w:${cv.width};--h:${cv.height};background-image:url(${cv.toDataURL()})}
 `;
   }
@@ -364,6 +365,3 @@ export function px(name, cls = '') {
   if (!SPRITES[name]) return '';
   return `<span class="px px-${name}${cls ? ' ' + cls : ''}"></span>`;
 }
-
-// The sprite canvas (a pixel per cell) to draw with smoothing off, or null.
-export function pxCanvas(name) { return canvasOf(name); }

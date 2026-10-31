@@ -4,7 +4,8 @@ import { keepScroll } from './terminalUI.js';
 import { NAME_TAGS } from './toon.js';
 import { FACTIONS, TIERS } from './locations.js';
 import { KIND_INFO } from './missions.js';
-import { arcDist, darkness, upAt, E1, E2 } from './geo.js';
+import { factionIcon } from './factionIcons.js';
+import { arcDist, darkness, upAt, toScreen, E1, E2 } from './geo.js';
 import { WEAPONS, APC_CANNON } from './weapons.js';
 import { EVENT_RANGE, PLANET } from './config.js';
 import { pixelFont } from './fonts.js';
@@ -136,8 +137,7 @@ export class HUD {
     if (key === this.crackKey) return;
     this.crackKey = key;
     if (off) { this.crackEl.style.display = 'none'; return; }
-    const any = this.paintCracks(frac);
-    this.crackEl.style.display = any ? '' : 'none'; // nothing to composite while healthy
+    this.crackEl.style.display = this.paintCracks(frac) ? '' : 'none'; // nothing to composite while healthy
     this.crackEl.style.opacity = String(0.6 + 0.4 * (1 - frac));
   }
 
@@ -177,8 +177,7 @@ export class HUD {
           setTimeout(() => row.classList.remove('dl-new'), 1200);
         }
         row.ev = ev;
-        const col = (FACTIONS[ev.faction] && FACTIONS[ev.faction].color) || '#ffffff';
-        row.style.setProperty('--c', col);
+        row.style.setProperty('--c', (FACTIONS[ev.faction] && FACTIONS[ev.faction].color) || '#ffffff');
         row.classList.toggle('dl-active', ev.state === 'active');
         const left = g.events.timeLeft(ev);
         row.classList.toggle('dl-expiring', left !== null && left <= 30); // about to expire: slow flash
@@ -198,8 +197,7 @@ export class HUD {
   }
 
   logTarget(ev) {
-    const g = this.game;
-    const obj = ev.state === 'active' && g.events.objective();
+    const obj = ev.state === 'active' && this.game.events.objective();
     return obj ? obj.pos : ev.stage || ev.start;
   }
 
@@ -218,12 +216,11 @@ export class HUD {
       this.recallEl = document.createElement('div');
       this.recallEl.id = 'recallhold';
       this.recallEl.innerHTML = '<div class="hb-label"></div><div class="hb-track"><div class="hb-fill"></div></div>';
-      document.getElementById('holdbars').appendChild(this.recallEl); // bottom-centre bar stack
+      $('holdbars').appendChild(this.recallEl); // bottom-centre bar stack
     }
     this.recallEl.classList.toggle('show', k > 0);
     if (k <= 0) return;
-    if (label) this.recallEl.querySelector('.hb-label').textContent = label;
-    else if (loc) this.recallEl.querySelector('.hb-label').textContent = `HOLD R · RECALL TO ${loc.short || loc.name.toUpperCase()} · 100 CR`;
+    if (label || loc) this.recallEl.querySelector('.hb-label').textContent = label || `HOLD R · RECALL TO ${loc.short || loc.name.toUpperCase()} · 100 CR`;
     this.recallEl.querySelector('.hb-fill').style.width = `${Math.min(1, k) * 100}%`;
   }
 
@@ -362,9 +359,7 @@ export class HUD {
         html += `<div class="board-active"><span><span class="term-dim">ACTIVE CONTRACT ›</span> ${active.cargo.name} → ${active.to.name}${extra ? ` <span class="term-dim">+ ON TOP ›</span> ${extra.cargo.name} → ${extra.to.name}` : ''}</span><button data-abandon="1">ABANDON</button></div>`;
         if (canTake) html += `<div class="board-active"><span><span class="term-dim">TWIN CRADLE ›</span> room for one more contract on top</span></div>`;
       }
-      if (event) {
-        html += `<div class="board-active"><span><span class="term-dim">ACTIVE EVENT ›</span> ${event.title}</span><button data-evabandon="1">ABANDON</button></div>`;
-      }
+      if (event) html += `<div class="board-active"><span><span class="term-dim">ACTIVE EVENT ›</span> ${event.title}</span><button data-evabandon="1">ABANDON</button></div>`;
       html += `<div class="board-cols">`;
       html += `<div class="board-jobs screen"><h3><span>SCR-01 · CONTRACTS</span><span class="term-dim">${offers.length ? 'SELECT 1-' + offers.length : 'NO DATA'}</span></h3>`;
       if (!offers.length) html += `<div class="empty">${rep.hostile(loc.faction) ? `${f.name} won't deal with you. Raise your reputation first.` : 'No contracts right now. Check back after your next run!'}</div>`;
@@ -441,7 +436,7 @@ export class HUD {
     const cam = g.camera;
     cam.updateMatrixWorld(); // this frame's camera
     let box = this.tagBox;
-    if (!box) { box = this.tagBox = document.createElement('div'); box.id = 'nametags'; document.getElementById('hud').appendChild(box); }
+    if (!box) { box = this.tagBox = document.createElement('div'); box.id = 'nametags'; $('hud').appendChild(box); }
     const W = window.innerWidth, H = window.innerHeight;
     const playing = g.state === 'play';
     for (let n = NAME_TAGS.length - 1; n >= 0; n--) {
@@ -467,10 +462,7 @@ export class HUD {
         if (t.losT <= 0) { t.losT = 0.25; t.seen = g.enemies.clearShot(cam.position, p); } // terrain and walls
         on = t.seen;
       }
-      if (on) {
-        p.project(cam);
-        if (p.z > 1 || Math.abs(p.x) > 1.05 || Math.abs(p.y) > 1.05) on = false;
-      }
+      if (on && (!toScreen(p, cam) || Math.abs(p.x) > 1.05 || Math.abs(p.y) > 1.05)) on = false;
       if (!on) { if (!t.el.classList.contains('off')) t.el.classList.add('off'); continue; }
       t.el.classList.remove('off');
       const s = Math.max(0.6, Math.min(1, 0.6 + (d - 4) / 36 * 0.4)); // smaller up close
@@ -524,40 +516,27 @@ export class HUD {
     crEl.classList.toggle('cr-show', this.crT > 0 || g.state === 'board');
     const wi = P.weapon || 0;
     const wtxt = P.vehicle && P.vehicle.def.turret ? `<span class="on">1</span> ${(P.vehicle.def.cannon || APC_CANNON.name).toUpperCase()}` : WEAPONS.map((w, i) => `<span class="${i === wi ? 'on' : ''} ${(!w.unlock || g.upgrades[w.unlock]) ? '' : 'locked'}">${i + 1}</span>`).join('') + ` ${WEAPONS[wi].name.toUpperCase()}`;
-    if (wtxt !== this.lastW) { $c('weaponchip').innerHTML = wtxt; this.lastW = wtxt; }
+    if (wtxt !== this.lastW) $c('weaponchip').innerHTML = this.lastW = wtxt;
     const jt = g.alchemy ? g.alchemy.hudText() : '';
     if (jt !== this.lastJar) { $c('jarchip').innerHTML = jt; $c('jarchip').classList.toggle('hidden', !jt); this.lastJar = jt; }
     const styleTxt = ms.active ? `STYLE +₵${ms.styleValue()}${ms.styleValue(false) >= ms.active.reward ? ' MAX' : ''}` : '';
-    if (styleTxt !== this.lastStyle) { $c('style').textContent = styleTxt; this.lastStyle = styleTxt; }
+    if (styleTxt !== this.lastStyle) $c('style').textContent = this.lastStyle = styleTxt;
 
     const mp = $c('mission');
-    if (ms.active) {
-      const a = ms.active;
-      const obj = ms.objective();
-      mp.classList.remove('hidden');
-      const t = Math.abs(ms.timer);
-      const dist = obj ? arcDist(obj.pos, P.pos) : 0;
-      const kindName = a.kind && a.kind !== 'standard' ? a.kind.toUpperCase() : 'CONTRACT';
-      const stat = a.kind === 'bounty' ? `SQUAD ${ms.bountyLeft()} / ${a.bounty.n} LEFT` : `CARGO ${Math.round(ms.integrity * 100)}%${a.par ? ` · PAR ${Math.min(a.par, Math.round(ms.parPts()))}/${a.par}${ms.parHit ? ' ✓' : ''}` : ''}`;
-      mp.innerHTML = `<div class="m-head" style="background:${FACTIONS[a.faction].color}">${kindName} · ${a.client}</div>
+    // a contract's card (a: the contract, s: its run state: ms itself, or ms.extra for the Twin Cradle's second, below)
+    const card = (a, s, obj, head, cls) => {
+      const t = Math.abs(s.timer);
+      const stat = a.kind === 'bounty' ? `SQUAD ${ms.bountyLeft()} / ${a.bounty.n} LEFT` : `CARGO ${Math.round(s.integrity * 100)}%${a.par ? ` · PAR ${Math.min(a.par, Math.round(ms.parPts()))}/${a.par}${ms.parHit ? ' ✓' : ''}` : ''}`;
+      return `<div class="m-head${cls}" style="background:${FACTIONS[a.faction].color}">${head} · ${a.client}</div>
         <div class="m-cargo">${a.cargo.name}</div>
-        <div class="m-obj">${obj ? obj.label : ''} <span>${(dist / 1000).toFixed(2)} km</span></div>
-        <div class="m-row"><span class="m-timer ${ms.late || t < 15 ? 'low' : ''}">${ms.late ? 'LATE +' : ''}${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}</span>
+        <div class="m-obj">${obj ? obj.label : ''} <span>${((obj ? arcDist(obj.pos, P.pos) : 0) / 1000).toFixed(2)} km</span></div>
+        <div class="m-row"><span class="m-timer ${s.late || t < 15 ? 'low' : ''}">${s.late ? 'LATE +' : ''}${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}</span>
         <span class="m-int">${stat}</span></div>`;
-      // Twin Cradle second contract, below the first
-      const x = ms.extra;
-      if (x) {
-        const o2 = ms.objective2();
-        const t2 = Math.abs(x.timer);
-        mp.innerHTML += `<div class="m-head m-second" style="background:${FACTIONS[x.a.faction].color}">ON TOP · ${x.a.client}</div>
-        <div class="m-cargo">${x.a.cargo.name}</div>
-        <div class="m-obj">${o2 ? o2.label : ''} <span>${o2 ? (arcDist(o2.pos, P.pos) / 1000).toFixed(2) : '0.00'} km</span></div>
-        <div class="m-row"><span class="m-timer ${x.late || t2 < 15 ? 'low' : ''}">${x.late ? 'LATE +' : ''}${Math.floor(t2 / 60)}:${String(Math.floor(t2 % 60)).padStart(2, '0')}</span>
-        <span class="m-int">CARGO ${Math.round(x.integrity * 100)}%</span></div>`;
-      }
-    } else {
-      mp.classList.add('hidden');
-    }
+    };
+    if (ms.active) {
+      mp.classList.remove('hidden');
+      mp.innerHTML = card(ms.active, ms, ms.objective(), ms.active.kind && ms.active.kind !== 'standard' ? ms.active.kind.toUpperCase() : 'CONTRACT', '') + (ms.extra ? card(ms.extra.a, ms.extra, ms.objective2(), 'ON TOP', ' m-second') : '');
+    } else mp.classList.add('hidden');
 
     this.drawMinimap(dt);
     this.updateArrow();
@@ -596,10 +575,7 @@ export class HUD {
     c.lineWidth = 3; c.strokeStyle = '#ff4f2e';
     c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(na) * (R - 8), cy + Math.sin(na) * (R - 8)); c.stroke();
     const txt = String(Math.round(this.game.settings && this.game.settings.v.units === 'ms' ? kmh / 3.6 : kmh)); // settings
-    if (txt !== this.lastSpeedTxt) {
-      $('speed-num').textContent = txt;
-      this.lastSpeedTxt = txt;
-    }
+    if (txt !== this.lastSpeedTxt) $('speed-num').textContent = this.lastSpeedTxt = txt;
   }
 
   // Heading-up local map, projected onto your tangent plane.
@@ -642,10 +618,9 @@ export class HUD {
       c.restore();
     }
     // terminator and SAT-7's orbit in the globe map's colours, under the markers; kept when zoomed out
-    const cv = this.mmCurves();
     c.save();
     c.lineJoin = c.lineCap = 'round';
-    this.mmLine(c, proj, up, range, cv.term, [8, 5], '#180c33', '#a070ff');
+    this.mmLine(c, proj, up, range, this.mmCurves().term, [8, 5], '#180c33', '#a070ff');
     if (g.secrets && g.secrets.sat) this.mmLine(c, proj, up, range, this.mmOrbit(g.secrets), [6, 5], '#120a1e', '#00ffa8');
     c.restore();
     c.globalAlpha = fade;
@@ -702,7 +677,6 @@ export class HUD {
       c.strokeText(l.short, x, y - 10); c.fillText(l.short, x, y - 10);
     }
     c.globalAlpha = fade;
-    c.fillStyle = '#9be7ff';
     // wild mites: green specks
     if (g.alchemy && fade > 0.02) {
       c.fillStyle = '#b8e986';
@@ -727,9 +701,7 @@ export class HUD {
     }
     for (const d of fade > 0.02 ? g.enemies.drops : []) { const [x, y] = proj(d.pos); c.fillStyle = '#2ee6ff'; c.fillRect(x - 4, y - 4, 8, 8); }
     c.globalAlpha = 1; // player and objectives stay too
-    const obj = g.objective();
-    const obj2 = g.missions.objective2();
-    for (const [o, col] of [[obj, '#ffd23f'], [obj2, '#7dff6a']]) {
+    for (const [o, col] of [[g.objective(), '#ffd23f'], [g.missions.objective2(), '#7dff6a']]) {
       if (!o) continue;
       let [x, y] = proj(o.pos);
       x = Math.max(8, Math.min(W - 8, x)); y = Math.max(8, Math.min(H - 8, y));
@@ -794,8 +766,8 @@ export class HUD {
     if (!obj || g.player.dead) { el.classList.add('hidden'); mk.classList.add('hidden'); return; }
     const up = upAt(obj.pos);
     const away = g.spindle && g.spindle.active;
-    this.v.copy(g.planet.ground(obj.pos)).addScaledVector(up, away ? 6 : 25).project(g.camera);
-    const onScreen = this.v.z < 1 && Math.abs(this.v.x) < 0.95 && Math.abs(this.v.y) < 0.92;
+    this.v.copy(g.planet.ground(obj.pos)).addScaledVector(up, away ? 6 : 25);
+    const onScreen = toScreen(this.v, g.camera) && Math.abs(this.v.x) < 0.95 && Math.abs(this.v.y) < 0.92;
     const dist = away ? obj.pos.distanceTo(g.player.pos) : arcDist(obj.pos, g.player.pos);
     if (onScreen) {
       el.classList.add('hidden');
@@ -815,8 +787,7 @@ export class HUD {
       const P = g.player;
       const t = obj.pos.clone().sub(P.pos);
       t.addScaledVector(P.up, -t.dot(P.up));
-      let x = t.dot(g.cam.right), yy = t.dot(g.cam.fwd);
-      const a = Math.atan2(yy, x);
+      const a = Math.atan2(t.dot(g.cam.fwd), t.dot(g.cam.right));
       const ex = Math.cos(a), ey = Math.sin(a);
       el.style.left = ((ex * 0.62 + 1) / 2) * 100 + '%';
       el.style.top = ((1 - ey * 0.56) / 2) * 100 + '%';
@@ -848,7 +819,7 @@ export class HUD {
       <div class="m-cargo">${ev.title}</div>
       <div class="m-obj${ev.warn ? ' warn' : ''}">${ev.status || ''}</div>${(ev.list || []).map((r) => `<div class="ev-row ${r.state}"><b>${r.state === 'done' ? '✔' : r.state === 'next' ? '►' : '○'}</b>${r.label}<span>${r.note || ''}</span></div>`).join('')}
       <div class="m-row">${t}<div class="track ev-bar"><div class="fill" style="width:${Math.round((ev.bar ?? 0) * 100)}%;background:${f.color}"></div></div></div>`;
-    if (html !== this.lastEventHtml) { el.innerHTML = html; this.lastEventHtml = html; }
+    if (html !== this.lastEventHtml) el.innerHTML = this.lastEventHtml = html;
     const fc = $('fluid');
     if (fluid) { fc.classList.remove('hidden'); this.drawFluid(fc, fluid); } else fc.classList.add('hidden');
   }
@@ -921,20 +892,20 @@ export class HUD {
       const v = rep.get(id);
       const t = rep.tier(id);
       const nt = rep.nextTier(id);
-      const pct = Math.round(((v + 100) / 200) * 100);
       const hq = g.locations.find((l) => l.id === f.hq);
       let status = '';
       if (id === 'rustmoon') status = rep.rustmoon === 'aligned' ? 'SWORN IN — pirates treat you as crew' : rep.rustmoon === 'locked' ? 'LOCKED OUT — they remember the wreck' : 'Known contact';
       if (f.enemy) status = `At war with ${FACTIONS[f.enemy].name}${rep.cleared(id) ? ' · CLEARANCE GRANTED' : ''}`;
       const ev = g.events.list.find((e) => e.faction === id);
       html += `<div class="rep-row" style="border-left-color:${f.color}">
-        <div class="rep-top"><span class="rep-name" style="color:${f.color}">${f.name}</span><span class="rep-kind">${f.kind}</span><span class="tierchip" style="background:${t.color}">${t.name} (${v > 0 ? '+' : ''}${v})</span></div>
-        <div class="track rep-bar"><div class="fill" style="width:${pct}%;background:${f.color}"></div>${notches(v, nt, false)}</div>
+        <img class="rep-icon" src="${factionIcon(id)}" alt="${f.name} emblem" draggable="false">
+        <div class="rep-body"><div class="rep-top"><span class="rep-name" style="color:${f.color}">${f.name}</span><span class="rep-kind">${f.kind}</span><span class="tierchip" style="background:${t.color}">${t.name} (${v > 0 ? '+' : ''}${v})</span></div>
+        <div class="track rep-bar"><div class="fill" style="width:${Math.round(((v + 100) / 200) * 100)}%;background:${f.color}"></div>${notches(v, nt, false)}</div>
         <div class="rep-ticks">${notches(v, nt, true)}</div>
         <div class="rep-info">${f.blurb}</div>
         <div class="rep-meta">HQ: ${hq && hq.discovered ? hq.name : '???'} · Contract pay ×${(t.pay || 0).toFixed(2)}${nt ? ` · Next: ${nt.name} at ${nt.min}` : ' · Top tier'}${v >= -20 ? ` · Hostile below −20 (${v + 20} to spare)` : ''}${status ? ` · ${status}` : ''}</div>
         ${ev ? `<div class="rep-ev">📡 ${ev.state === 'active' ? 'ACTIVE' : 'OPEN'}: ${ev.title}</div>` : ''}
-      </div>`;
+      </div></div>`;
     }
     html += `</div><div class="board-foot">Deliveries and events raise standing. Shooting a faction's people lowers it — and helping Vostok angers Daedalus (and vice versa). J / ESC to close.</div>`;
     el.innerHTML = html;

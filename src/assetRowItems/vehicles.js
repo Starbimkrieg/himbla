@@ -4,12 +4,9 @@
 // no thrust. Only cheap cosmetic updates run (flag cloth, gatling, phase coils, land-train beacon). Built with the pure
 // model factories, never through Garage, Traffic or Enemies.
 import * as THREE from 'three';
-import {
-  makeLightBike, makeSkimmer, makeRover, makeHoverCar, makeKadeTruck, makeTurret, makeLandTrain, makeShuttle, makeFreighter, makeRocket,
-  LAND_TRAIN_FACTIONS,
-} from '../models.js';
+import { makeLightBike, makeSkimmer, makeRover, makeHoverCar, makeKadeTruck, makeTurret, makeLandTrain, makeShuttle, makeFreighter, makeRocket } from '../models.js';
 import { buildVehicleModel, VEHICLES } from '../vehicles.js';
-import { buildBuggyRig } from '../traffic.js';
+import { buildBuggyRig, linkBar } from '../traffic.js';
 import { BOSS_MODELS, FOES } from '../storyAssets.js';
 import { makeMothership } from '../spindle.js';
 import { lineUp, together } from './common.js';
@@ -84,17 +81,6 @@ function troopRover(faction) {
 
 // Land-trains: tractor (nose +z) and cars behind it along z at traffic.js spacings, drawbars aimed at each coupling pin,
 // then the whole train turned to run along the row (+x).
-const _z = new THREE.Vector3(0, 0, 1), _b = new THREE.Vector3();
-function linkBar(t, ahead, pinZ) {
-  ahead.updateMatrixWorld();
-  t.root.updateMatrixWorld();
-  _b.set(0, 1.4, pinZ).applyMatrix4(ahead.matrixWorld);
-  t.root.worldToLocal(_b).sub(t.bar.position);
-  const len = Math.max(0.3, _b.length());
-  t.bar.quaternion.setFromUnitVectors(_z, _b.divideScalar(len));
-  t.rod.scale.z = len;
-  t.eye.position.z = len;
-}
 function landTrain(spec) {
   const lt = makeLandTrain(spec);
   const train = new THREE.Group();
@@ -143,8 +129,7 @@ const ground = {
       make: () => {
         const mule = buildVehicleModel('mule');
         const home = rover({ color: 0x7dff6a, trim: 0xff9f1c, flag: 0xff9f1c, style: 'civil' });
-        const row = lineUp([part(pose(mule.root, YAW), 8, 8), part(pose(home.root, YAW), 7, 7)]);
-        return { root: row.root, update: together(flagUpdate(mule), flagUpdate(home)) };
+        return { root: lineUp([part(pose(mule.root, YAW), 8, 8), part(pose(home.root, YAW), 7, 7)]).root, update: together(flagUpdate(mule), flagUpdate(home)) };
       },
     },
     {
@@ -159,7 +144,7 @@ const ground = {
       }),
     },
     {
-      id: 'veh.warrig', label: 'RUSTMOON SCRAPJAW WAR-RIG', w: 10, d: 9,
+      id: 'veh.warrig', label: 'RUSTMOON WAR-RIG', w: 13, d: 12,
       make: () => { const m = buildVehicleModel('warrig'); return { root: pose(m.root, YAW), update: flagUpdate(m) }; },
     },
     {
@@ -180,8 +165,7 @@ const ground = {
       id: 'veh.road-buggies', label: 'ROAD BUGGIES · 3 PAINTS', w: 28, d: 9,
       make: () => {
         const ms = [0, 1, 2].map(buildBuggyRig);
-        const row = lineUp(ms.map((m) => part(pose(m.root, YAW_ROW), 9.4, 9)), 0);
-        return { root: row.root, update: together(...ms.map(flagUpdate)) };
+        return { root: lineUp(ms.map((m) => part(pose(m.root, YAW_ROW), 9.4, 9)), 0).root, update: together(...ms.map(flagUpdate)) };
       },
     },
     {
@@ -219,8 +203,7 @@ const ground = {
       make: () => {
         const ts = [...Object.values(FACTION_COLOR).map((c) => makeTurret({ color: c })), makeTurret({ color: FACTION_COLOR.spacecom })];
         ts[5].root.scale.setScalar(1.35);
-        const row = lineUp(ts.map((t, i) => part(pose(t.root, 0.5), i === 5 ? 8 : 6.5, i === 5 ? 8 : 6.5)), 0.5);
-        return { root: row.root };
+        return { root: lineUp(ts.map((t, i) => part(pose(t.root, 0.5), i === 5 ? 8 : 6.5, i === 5 ? 8 : 6.5)), 0.5).root };
       },
     },
     {
@@ -242,25 +225,18 @@ const ground = {
 // 07 SHIPS
 // ---------------------------------------------------------------------------------------------------------------------------
 // Transit ships' origin is their flight point; on a pad their feet are gearH below it. pose() puts the feet on y = 0.
+const park = (s, gear = 1) => { s.setGear(gear); s.setRamp(0); s.setThrust(0, 0, 0); return s; };
 const ships = {
   id: 'vehicles.ships',
   title: '07 · SHIPS',
   items: [
     {
       id: 'ship.shuttle-bus', label: 'SHUTTLE-BUS', w: 26, d: 24,
-      make: () => {
-        const s = makeShuttle({ color: 0xfff4e0, stripe: 0x2ec4ff });
-        s.setGear(1); s.setRamp(0); s.setThrust(0, 0, 0);
-        return { root: pose(pruneHidden(s.root), YAW, 0) };
-      },
+      make: () => ({ root: pose(pruneHidden(park(makeShuttle({ color: 0xfff4e0, stripe: 0x2ec4ff })).root), YAW, 0) }),
     },
     {
       id: 'ship.freighter', label: 'DEEP-HAUL FREIGHTER', w: 86, d: 79,
-      make: () => {
-        const s = makeFreighter({ stripe: 0xff9f1c });
-        s.setGear(1); s.setRamp(0); s.setThrust(0, 0, 0);
-        return { root: pose(pruneHidden(s.root), YAW, 0) };
-      },
+      make: () => ({ root: pose(pruneHidden(park(makeFreighter({ stripe: 0xff9f1c })).root), YAW, 0) }),
     },
     {
       // pirate wreck event's ship: small, dark, bay doors hanging, tipped on one leg (events.js spawnWreck)
@@ -268,7 +244,7 @@ const ships = {
       make: () => {
         const s = makeFreighter({ color: 0x3a2b4f, stripe: 0x7dff3a });
         s.root.scale.setScalar(0.45);
-        s.setGear(0.15); s.setRamp(0); s.setThrust(0, 0, 0);
+        park(s, 0.15);
         s.root.rotateZ(0.35);
         s.root.rotateX(0.2);
         return { root: pose(pruneHidden(s.root), YAW, 0) };

@@ -25,8 +25,8 @@ export const grindLabel = (r) => (r.ledge ? 'LEDGE GRIND' : r.rimOf ? 'RIM GRIND
 const BODY = 0.45, BODY_UP = 0.5; // rider's shins-to-waist as a ball (radius, lift): what crest rocks must clear
 const TRAIL_LIFE = 2; // s a grind's skate trail lasts
 
-// point and unit tangent at arc length s along a rail (crater rims are closed loops)
-function railAt(r, s, outP, outT) {
+// point and unit tangent at arc length s along a rail (crater rims are closed loops); returns outP (trailer.js too)
+export function railAt(r, s, outP, outT) {
   const cum = r.cum, n = cum.length;
   s = r.loop ? ((s % r.len) + r.len) % r.len : Math.max(0, Math.min(r.len, s));
   let i = 0;
@@ -188,9 +188,7 @@ export class Grinder {
       if (!lined && !tip && !sideOn && !dropping) return false;
       if (above < (sideOn ? -3.6 : -1.6) || above > (rim ? 3 : 2.2) || b.vel.dot(_u) > 6 + 0.25 * hsp) return false; // a little rise is just the slope, at speed
       // direction: inward at a tip, else the way you're moving
-      let dir;
-      if (tip) dir = n.s < n.r.len / 2 ? 1 : -1;
-      else dir = Math.abs(along) > 2 ? Math.sign(along) : Math.sign(P.heading.dot(_t)) || 1;
+      const dir = tip ? (n.s < n.r.len / 2 ? 1 : -1) : Math.abs(along) > 2 ? Math.sign(along) : Math.sign(P.heading.dot(_t)) || 1;
       const speed = Math.max(Math.abs(along), hsp * 0.85);                                    // you ride on at the speed you came in with
       if (speed < GRIND_MIN) return false;                                                     // (too slow to balance on it at all)
       this.active = { r: n.r, s: n.s, dir, speed, t: 0, spark: 0 };

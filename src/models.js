@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { toon, ink, glow, glowShared, inkMat, inkMatNear, inkMatBaked, shellBounds } from './toon.js';
 import { pixelFont } from './fonts.js';
+import { mulberry32, smoothstep } from './rng.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -46,6 +47,13 @@ const GLB = {
   'downs-fair': () => import('./assets/downs-fair.glb?inline'),
   'downs-stable': () => import('./assets/downs-stable.glb?inline'),
   'downs-crowd': () => import('./assets/downs-crowd.glb?inline'),
+  'downs-dome': () => import('./assets/downs-dome.glb?inline'),
+  power:() => import('./assets/power.glb?inline'),
+  habitat: () => import('./assets/habitat.glb?inline'),
+  hydroponics: () => import('./assets/hydroponics.glb?inline'),
+  labs: () => import('./assets/labs.glb?inline'),
+  hangar: () => import('./assets/hangar.glb?inline'),
+  relay: () => import('./assets/relay.glb?inline'),
   chimera: () => import('./assets/chimera.glb?inline'),
 };
 
@@ -71,7 +79,7 @@ const loadGlb = async (name, url) => { // (url: load this instead of the bundled
 import { Kit, T as KT, G as KG } from './outpostModels.js';
 import { FACTIONS } from './locations.js';
 
-function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
+export function part(geo, mat, x = 0, y = 0, z = 0, outline = 0.05) {
   const m = new THREE.Mesh(geo, mat);
   m.position.set(x, y, z);
   m.castShadow = true;
@@ -95,12 +103,8 @@ function runnerGeo() {
   }
   scarf.computeVertexNormals();
   // scarf chain links (see ScarfSim): tapered ribbons from z=0 to z=-L
-  const links = [0, 1, 2, 3].map((k) => {
-    const g = new THREE.BoxGeometry(0.22 * (1 - k * 0.1), 0.035, SCARF_LINK + 0.04, 1, 1, 2).translate(0, 0, -SCARF_LINK / 2);
-    return g;
-  });
   RUNNER_GEO = {
-    scarfLinks: links,
+    scarfLinks: [0, 1, 2, 3].map((k) => new THREE.BoxGeometry(0.22 * (1 - k * 0.1), 0.035, SCARF_LINK + 0.04, 1, 1, 2).translate(0, 0, -SCARF_LINK / 2)),
     // one smooth lathe per limb: hip/thigh/knee/calf/ankle, shoulder/bicep/elbow/forearm/wrist
     leg: new THREE.LatheGeometry(v2([[0, -0.8], [0.085, -0.79], [0.105, -0.72], [0.118, -0.62], [0.122, -0.54], [0.11, -0.45], [0.124, -0.36], [0.145, -0.2], [0.155, -0.06], [0.14, 0.04], [0.09, 0.1], [0, 0.12]]), 10),
     // the courier's leg in two, at the knee (0.45 below the hip): thigh to the knee, calf from it (knee frame)
@@ -185,13 +189,7 @@ function bakeRunnerParts(scene) {
       // scarf parts go to the link their name starts with (scarf3_tassel0 -> link 3)
       const key = name === 'scarfLinks' ? 'scarf' + (/^scarf(\d)/.exec(o.name) || [0, 0])[1] : name;
       const slot = o.material.name;
-      rel.multiplyMatrices(inv, o.matrixWorld);
-      const src = o.geometry; // (glTF export is always indexed triangles)
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', src.attributes.position.clone());
-      geo.setAttribute('normal', src.attributes.normal.clone());
-      geo.setIndex(src.index.clone());
-      geo.applyMatrix4(rel);
+      const geo = bakedGeo(o.geometry, rel.multiplyMatrices(inv, o.matrixWorld));
       const g = group(key);
       if (!g.slots.has(slot)) g.slots.set(slot, []);
       g.slots.get(slot).push(geo);
@@ -212,6 +210,15 @@ function bakeRunnerParts(scene) {
     out[key] = { parts, ink };
   }
   return out;
+}
+
+// a mesh's positions, normals and index (glTF export is always indexed triangles), moved by m
+function bakedGeo(src, m) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', src.attributes.position.clone());
+  geo.setAttribute('normal', src.attributes.normal.clone());
+  geo.setIndex(src.index.clone());
+  return geo.applyMatrix4(m);
 }
 
 // A part's outline shell: its triangles plus `off` = smoothed normal * thickness. Normals are averaged over shared
@@ -285,14 +292,7 @@ export function runnerExtra(key, mats, fallback = null) {
     m.castShadow = true;
     g.add(m);
   }
-  if (B.ink) {
-    const h = new THREE.Mesh(B.ink.thin, inkMatNear);
-    h.castShadow = false;
-    h.userData.isInk = true;
-    h.userData.inkGeo = B.ink;
-    h.userData.inkMat = inkMatNear;
-    g.add(h);
-  }
+  addBakedInk(g, B);
   return g;
 }
 
@@ -304,15 +304,16 @@ function addBaked(target, key, mats) {
     m.castShadow = !NO_SHADOW.has(slot);
     target.add(m);
   }
-  if (B.ink) {
-    const h = new THREE.Mesh(B.ink.thin, inkMatNear);
-    h.castShadow = false;
-    h.userData.isInk = true;
-    // the threat scanner swaps in the fat shell (main.js), then puts inkMat back
-    h.userData.inkGeo = B.ink;
-    h.userData.inkMat = inkMatNear;
-    target.add(h);
-  }
+  addBakedInk(target, B);
+}
+// a baked pivot's thin outline shell (the threat scanner swaps in the fat shell (main.js), then puts inkMat back)
+function addBakedInk(target, B) {
+  if (!B.ink) return;
+  const h = new THREE.Mesh(B.ink.thin, inkMatNear);
+  h.userData.isInk = true;
+  h.userData.inkGeo = B.ink;
+  h.userData.inkMat = inkMatNear;
+  target.add(h);
 }
 
 // The Moon-runner (also pirate skaters and story NPCs). Pivot at the feet. Keep the pivots (legL/legR at the hips,
@@ -321,7 +322,7 @@ function addBaked(target, key, mats) {
 // of your back gear, not over it. Gravity, airflow, body acceleration and a flutter at speed move it; it stays behind your
 // back and out of the pack and crates. model.scarfStyle (dressRunner) sets length, width, one or two tails. Unsimulated
 // runners (distant figures) keep the baked link chain; a simulated one hides it.
-export const SCARF_STYLE = { len: 1.3, w: 0.22, tails: 1 };
+const SCARF_STYLE = { len: 1.3, w: 0.22, tails: 1 };
 const _sq = new THREE.Quaternion(), _sg = new THREE.Vector3(), _sw = new THREE.Vector3(), _sa = new THREE.Vector3();
 const _st = new THREE.Vector3(), _ss = new THREE.Vector3(), _sn = new THREE.Vector3(), _sx = new THREE.Vector3(1, 0, 0), _sy = new THREE.Vector3(0, 1, 0);
 const SCARF_PTS = 12;
@@ -329,7 +330,6 @@ const SCARF_GAP = 0.034; // two stacked ribbons: 2 x 0.018 thick, less a hair
 // The scarf's rest channel (torso frame; +x = runner's left, as seen from behind). Tails leave the neck's left-back under the
 // helmet rim, cross the top of the shoulder, slip off behind the arm and hang down the left of the back, the second on the
 // first. A soft spring holds them in it at rest and walking, letting go as airflow rises so a skater's scarf streams out.
-const ease01 = (t) => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 const SCARF_GUIDES = [0, 1].map((k) => {
   // from the collar's left-back (50° from straight back, under the helmet rim) over the top of the shoulder...
   const rho = 0.29, rad = Math.PI / 180, g = [];
@@ -473,7 +473,7 @@ export class ScarfSim {
     const boxes = cargo ? [PACK_BOX, cargo > 1 ? TWIN_BOX : CRATE_BOX] : [PACK_BOX];
     // channel pull: full standing or walking, gone by ~9 m/s; eased over ~1/3 s so stopping from a sprint settles, not snaps
     this.rw = this.rw ?? 1;
-    this.rw += ((1 - ease01((ws - 2.5) / 6.5)) - this.rw) * Math.min(1, dt * 3);
+    this.rw += ((1 - smoothstep(2.5, 9, ws)) - this.rw) * Math.min(1, dt * 3);
     const rest = this.rw;
     const steps = Math.min(4, Math.ceil(dt / (1 / 120)));
     const h2 = (dt / steps) ** 2;
@@ -560,7 +560,7 @@ export class ScarfSim {
       _sn.crossVectors(_st, _sy); // (horizontal, across the tail)
       if (_sn.lengthSq() > 0.01) {
         _sn.normalize();
-        const flat = 1 - ease01((Math.abs(_st.y) - 0.35) / 0.45);
+        const flat = 1 - smoothstep(0, 1, (Math.abs(_st.y) - 0.35) / 0.45);
         if (_sn.dot(_ss) < 0) _sn.negate();
         _ss.lerp(_sn, flat).normalize();
       }
@@ -773,7 +773,7 @@ export function makeRunner({
 // Looks are random (or opts.seed); explicit colours win: suit = main clothing, helmet = headgear, visor = sealed helmet.
 let FIG_GEO = null;
 const FIG_CACHE = new Map();
-let FIG_M = null, FIG_INK = null, FIG_GLASS = null;
+let FIG_M = null, FIG_GLASS = null;
 function figGeo() {
   if (FIG_GEO) return FIG_GEO;
   const sph = (r, w, h, ps, pl, ts, tl) => new THREE.SphereGeometry(r, w, h, ps, pl, ts, tl);
@@ -856,7 +856,7 @@ function figGeo() {
 function figMats() {
   if (!FIG_M) {
     FIG_M = new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: toon(0xffffff).gradientMap });
-    FIG_INK = inkMatBaked; // (skinned hulls, their push baked: bakeFigure)
+
     FIG_GLASS = new THREE.MeshToonMaterial({ color: 0xbfefff, gradientMap: toon(0xffffff).gradientMap, transparent: true, opacity: 0.28, depthWrite: false });
   }
   return FIG_M;
@@ -875,15 +875,13 @@ const PAL = {
   coat: [0xffffff, 0xfff4e0, 0xe6f4ff, 0xffffff],
   jacket: [0x2b3a5c, 0x55607a, 0x3a3550, 0x6b5a3a, 0xd7263d, 0x2b8f6a, 0xfff4e0, 0x7a4b9a],
   knit: [0xb5482f, 0x8a6a3a, 0x6b8f71, 0xc9a227, 0x7a6b9a, 0xd98a6a],
-  hard: [0xffd23f, 0xff9f1c, 0xfff4e0, 0x2ec4ff],
   visor: [0x241a5c, 0x2b59c3, 0x1a1a2e, 0xc9a227],
 };
 const ARCH = ['coveralls', 'coveralls', 'lab', 'engineer', 'engineer', 'trader', 'trader', 'elder', 'eva', 'casual', 'casual'];
 function figRng(seed) {
   if (seed === undefined) return Math.random;
-  let a = Math.imul((Math.floor(seed * 1000) ^ 0x9e3779b9) | 0, 0x85ebca6b);
-  a = (a ^ (a >>> 13)) >>> 0;
-  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const a = Math.imul((Math.floor(seed * 1000) ^ 0x9e3779b9) | 0, 0x85ebca6b);
+  return mulberry32((a ^ (a >>> 13)) >>> 0);
 }
 
 // Bake parts (geometry, bone, colour or colour(local y), bind-space matrix, ink thickness) into one skinned geometry
@@ -989,7 +987,7 @@ export function figureSpec({ suit, helmet, visor, scale = 1, seed, kind, look, a
   const skin = alien ? pick(PAL.alien) : pick(PAL.skin);
   const hair = arch === 'elder' ? pick(PAL.grey) : pick(PAL.hair);
   const hairStyle = arch === 'elder' ? pick(['fringe', 'fringe', 'bun', 'short']) : pick(['short', 'short', 'bun', 'long', 'long', 'fringe']);
-  const hatC = helmet !== undefined ? helmet : headgear === 'hardhat' ? pick(PAL.hard) : headgear === 'sealed' || headgear === 'bubble' ? 0xfff4e0 : pick(PAL.hat);
+  const hatC = helmet !== undefined ? helmet : headgear === 'sealed' || headgear === 'bubble' ? 0xfff4e0 : pick(PAL.hat);
   const visorC = visor !== undefined ? visor : pick(PAL.visor);
   const inner = pick(PAL.pastel);
   const pants = arch === 'coveralls' || arch === 'engineer' || arch === 'eva' || arch === 'trooper' ? C : pick(PAL.trousers);
@@ -1006,7 +1004,6 @@ export function figureSpec({ suit, helmet, visor, scale = 1, seed, kind, look, a
   const stoop = arch === 'elder' ? 0.16 : 0;
   // accessories
   const acc = {
-    glasses: !sealed && !alien && headgear !== 'bowl' && headgear !== 'bubble' && (arch === 'elder' ? chance(0.7) : arch === 'lab' ? chance(0.6) : chance(0.15)),
     bag: (arch === 'trader' || arch === 'casual') && chance(0.4),
     scarf: (arch === 'casual' || arch === 'elder' || arch === 'trader') && chance(0.3),
     hand: arch === 'lab' ? pick(['clipboard', 'tablet', 'clipboard']) : arch === 'trader' ? pick(['tablet', 'briefcase', 'none']) : arch === 'elder' ? (chance(0.5) ? 'cane' : 'none') : arch === 'kid' ? pick(['toy', 'none']) : arch === 'casual' ? pick(['tablet', 'none', 'none']) : 'none',
@@ -1035,10 +1032,8 @@ export function figureSpec({ suit, helmet, visor, scale = 1, seed, kind, look, a
     // torso garment (torso frame: y 0 = hips, 0.97 = neck base)
     const flat = 0.74;
     if (arch === 'lab') add(G.coat, 'torso', C, figMat([0, 0, 0], [0, 0, 0], [1, 1, flat]), 0.035);
-    else if (arch === 'eva') {
-      add(G.torso, 'torso', C, figMat([0, 0, 0], [0, 0, 0], [1.04, 1, flat * 1.08]), 0.04);
-    } else add(G.torso, 'torso', arch === 'kid' ? (y) => (y < 0.1175 ? pants : C) : C, figMat([0, 0, 0], [0, 0, 0], [1, 1, flat]), 0.035);
-    const front = (y, x = 0) => [x, y, 0.2 + 0.02];
+    else if (arch === 'eva') add(G.torso, 'torso', C, figMat([0, 0, 0], [0, 0, 0], [1.04, 1, flat * 1.08]), 0.04);
+    else add(G.torso, 'torso', arch === 'kid' ? (y) => (y < 0.1175 ? pants : C) : C, figMat([0, 0, 0], [0, 0, 0], [1, 1, flat]), 0.035);
     if (arch === 'coveralls' || arch === 'engineer') {
       add(G.strip, 'torso', dark, figMat([0, 0.5, 0.196], [-0.03, 0, 0], [1 / w, 1, 1]));
       add(G.pocket, 'torso', dark, figMat([-0.12, 0.66, 0.2], [-0.14, 0, 0], [1 / w, 1, 1]));
@@ -1056,7 +1051,7 @@ export function figureSpec({ suit, helmet, visor, scale = 1, seed, kind, look, a
       for (const x of [-0.16, 0.16]) add(G.pouch, 'torso', 0x3a3f50, figMat([x, 0.12, 0.19], [0, 0, 0], [1 / w, 1, 1]), 0.02);
     }
     if (arch === 'lab' || arch === 'trader') {
-      add(G.vee, 'torso', arch === 'lab' ? inner : 0xfff4e0, figMat(front(0.76), [-0.18, 0, 0], [1 / w, 1, 1]));
+      add(G.vee, 'torso', arch === 'lab' ? inner : 0xfff4e0, figMat([0, 0.76, 0.2 + 0.02], [-0.18, 0, 0], [1 / w, 1, 1]));
       for (const s of [-1, 1]) add(G.lapel, 'torso', C, figMat([s * 0.085, 0.72, 0.215], [-0.15, 0, s * 0.35], [1 / w, 1, 1]), 0.012);
       if (arch === 'trader') add(G.tie, 'torso', pick([0xd7263d, 0x2b59c3, 0xffd23f, 0x221d33]), figMat([0, 0.7, 0.215], [-0.12, 0, 0], [1 / w, 1, 1]), 0.01);
       if (arch === 'lab') {
@@ -1110,35 +1105,15 @@ export function figureSpec({ suit, helmet, visor, scale = 1, seed, kind, look, a
         add(G.ear, 'head', skin, figMat([s * 0.22, 0, 0], [0, 0, 0], [0.5, 1, 0.8]), 0.012);
       }
       add(G.nose, 'head', skin, figMat([0, -0.03, 0.235], [0, 0, 0], [0.9, 1.1, 1]), 0.01);
-      if (acc.glasses) {
-        for (const s of [-1, 1]) add(G.lens, 'head', dark, figMat([s * 0.085, 0.035, 0.235], [0, 0, 0], [1, 0.85, 1]));
-        add(G.bridge, 'head', dark, figMat([0, 0.045, 0.245]));
+      // hair, under the fishbowl or bubble
+      if (hairStyle === 'fringe') add(G.hairFringe, 'head', hair, figMat([0, 0, -0.005]), 0.015);
+      else {
+        add(G.hairBack, 'head', hair, figMat([0, 0.012, -0.012]), 0.02);
+        add(G.hairTop, 'head', hair, figMat([0, 0.02, 0.0], [-0.12, 0, 0]), 0.02);
       }
-      const hatOn = headgear === 'cap' || headgear === 'beanie' || headgear === 'hardhat';
-      // hair (under a hat only the back shows)
-      if (!(arch === 'kid' && headgear === 'cap' && false)) {
-        if (hairStyle === 'fringe') add(G.hairFringe, 'head', hair, figMat([0, 0, -0.005]), 0.015);
-        else {
-          add(G.hairBack, 'head', hair, figMat([0, 0.012, -0.012]), 0.02);
-          if (!hatOn) add(G.hairTop, 'head', hair, figMat([0, 0.02, 0.0], [-0.12, 0, 0]), 0.02);
-        }
-        if (hairStyle === 'bun' && !hatOn) add(G.bun, 'head', hair, figMat([0, 0.2, -0.17]), 0.02);
-        if (hairStyle === 'long') add(G.hairLong, 'head', hair, figMat([0, -0.2, -0.15], [0.1, 0, 0]), 0.025);
-      }
-      if (headgear === 'cap') {
-        add(G.capCrown, 'head', hatC, figMat([0, 0.025, -0.01]), 0.025);
-        add(G.capBrim, 'head', hatC, figMat([0, 0.075, 0.13], [0.12, 0, 0], [1, 1, 1.15]), 0.015);
-      } else if (headgear === 'beanie') {
-        add(G.beanie, 'head', hatC, figMat([0, 0.06, -0.01]), 0.025);
-        add(G.beanieFold, 'head', hatC, figMat([0, 0.1, -0.01], [-0.12, 0, 0], [1.05, 1, 1.05]), 0.015);
-        add(G.pompom, 'head', 0xfff4e0, figMat([0, 0.33, -0.04]), 0.015);
-      } else if (headgear === 'hardhat') {
-        add(G.hardHat, 'head', hatC, figMat([0, 0.07, 0]), 0.025);
-        add(G.hardBrim, 'head', hatC, figMat([0, 0.08, 0.02], [0, 0, 0], [0.92, 1, 1]), 0.015);
-        add(G.ridge, 'head', hatC, figMat([0, 0.34, 0], [0, 0, 0], [1, 1, 0.9]));
-      } else if (headgear === 'bowl' || headgear === 'bubble') {
-        add(G.bowlRing, 'head', headgear === 'bowl' ? (helmet !== undefined ? hatC : metal) : hatC, figMat([0, -0.27, 0]), 0.02);
-      }
+      if (hairStyle === 'bun') add(G.bun, 'head', hair, figMat([0, 0.2, -0.17]), 0.02);
+      if (hairStyle === 'long') add(G.hairLong, 'head', hair, figMat([0, -0.2, -0.15], [0.1, 0, 0]), 0.025);
+      add(G.bowlRing, 'head', headgear === 'bowl' ? (helmet !== undefined ? hatC : metal) : hatC, figMat([0, -0.27, 0]), 0.02);
     } else {
       add(G.helmet, 'head', hatC, figMat([0, 0, 0]), 0.04);
       add(G.visorFrame, 'head', dark, figMat([0, 0, 0]));
@@ -1151,17 +1126,15 @@ export function figureSpec({ suit, helmet, visor, scale = 1, seed, kind, look, a
     for (const b of [1, 2]) {
       const legC = arch === 'kid' ? (y) => (y > -0.3025 ? pants : y > -0.5625 ? skin : 0xfff4e0) : booted ? (y) => (y > -0.5625 ? pants : 0x3a3550) : pants;
       add(G.leg, b, legC, figMat([0, 0, 0], [0, 0, 0], [limb, legLen === 1 ? 1 : 0.84, limb]), 0.035);
-      const shoeY = -hip + 0.065 * (booted ? 1.5 : 1);
       if (booted) add(G.boot, b, arch === 'eva' ? 0xfff4e0 : 0x3a3550, figMat([0, -hip + 0.1, 0.04], [0, 0, 0], [limb * 0.95, 1, 1.02]), 0.03);
-      else add(G.shoe, b, arch === 'kid' ? 0xfff4e0 : shoeC, figMat([0, shoeY, 0.05]), 0.03);
+      else add(G.shoe, b, arch === 'kid' ? 0xfff4e0 : shoeC, figMat([0, -hip + 0.065, 0.05]), 0.03);
     }
     // arms (bones 3, 4: y 0 = shoulder)
     const sleeve = arch === 'kid' ? -0.2225 : arch === 'engineer' && !sealed ? -0.3625 : -9;
-    const sleeveC = C;
     for (const b of [3, 4]) {
       const side = b === 3 ? -1 : 1;
-      add(G.arm, b, sleeve > -9 ? (y) => (y > sleeve ? sleeveC : skin) : sleeveC, figMat([0, 0, 0], [0, 0, 0], [limb, kid ? 0.88 : 1, limb]), 0.03);
-      add(G.shoulder, b, sleeveC, figMat([side * 0.01, 0, 0], [0, 0, 0], limb * (arch === 'trooper' ? 1.15 : 1)), 0.02);
+      add(G.arm, b, sleeve > -9 ? (y) => (y > sleeve ? C : skin) : C, figMat([0, 0, 0], [0, 0, 0], [limb, kid ? 0.88 : 1, limb]), 0.03);
+      add(G.shoulder, b, C, figMat([side * 0.01, 0, 0], [0, 0, 0], limb * (arch === 'trooper' ? 1.15 : 1)), 0.02);
       const hy = kid ? -0.56 : -0.63;
       add(G.hand, b, handC, figMat([0, hy, 0.01], [0, 0, 0], [0.9 * limb, 1.15 * limb, 0.8 * limb]), 0.02);
       if (b !== 4) continue;
@@ -1212,7 +1185,7 @@ export function makeFigure(opts = {}) {
   const body = new THREE.SkinnedMesh(baked.geo, mat);
   body.castShadow = true;
   body.bind(skeleton);
-  const hull = new THREE.SkinnedMesh(baked.hull, FIG_INK);
+  const hull = new THREE.SkinnedMesh(baked.hull, inkMat);
   hull.userData.isInk = true;
   hull.bind(skeleton);
   root.add(body, hull);
@@ -1246,7 +1219,7 @@ function baked(key, fn) {
   }
   return r.clone();
 }
-const VDARK = 0x1d1a29, VSTEEL = 0x55607a, VMETAL = 0x8a87a0;
+const VDARK = 0x1d1a29, VMETAL = 0x8a87a0;
 
 // tyre with hub, rim and tread, centred on its axle (x): spins with rotation.x
 export function rWheel(r, w, hub = VMETAL) {
@@ -1305,8 +1278,93 @@ function makeWaveFlag({ w, h, mat, ragged = false }) {
   return { mesh, update };
 }
 
-// Rovers: pirate war-rig, military patrol car, civilian buggy share one layout (body 3.2 x 5.2, wheels at
-// (±1.85, 0.85, ±1.8), gun mount (0, 3, 0.8), loot slot on the chassis) so AI, traffic and faction code drive them alike.
+// A Group placed and named like a baked pivot (bakeShip).
+function pivotGroup(node) {
+  const g = new THREE.Group();
+  g.name = node.name;
+  g.position.copy(node.pos);
+  g.quaternion.copy(node.quat);
+  return g;
+}
+// A baked node's outline shell on g, if it has one.
+function addInk(g, node) {
+  if (!node.ink) return;
+  const m = new THREE.Mesh(node.ink, inkMat);
+  m.userData.isInk = true;
+  g.add(m);
+}
+// A baked node's parts on g, painted by matFor(slot) and casting shadow(slot), then its outline shell.
+function dressNode(node, g, matFor, shadow) {
+  for (const { slot, geo } of node.parts) {
+    const m = new THREE.Mesh(geo, matFor(slot));
+    m.castShadow = shadow(slot);
+    g.add(m);
+  }
+  addInk(g, node);
+}
+// slot -> material, made by make(slot) the first time a slot is asked for
+function perSlot(make) {
+  const mats = new Map();
+  return (slot) => {
+    if (!mats.has(slot)) mats.set(slot, make(slot));
+    return mats.get(slot);
+  };
+}
+const slotMat = (c) => (c.glow ? glow(c.color) : toon(c.color)); // a { color, glow } slot's material
+const plumeMat = (color, opacity) => new THREE.MeshBasicMaterial({ color, opacity, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+
+// A baked pivot tree (bakeShip) as Groups, placed and named like its pivots, each with its parts and one outline shell;
+// the root comes back at the origin. matFor(slot) paints a part (null leaves it out), shadow(slot, node) says whether it
+// casts one, keep(node) can refuse a pivot and everything under it, and onPivot(node, g) sees each Group before its
+// children so the factory can pick out the ones it drives. flames: plume slots draw after the hull (renderOrder 2).
+function buildPivots(B, { matFor, shadow, keep = () => true, onPivot = () => {}, flames = false }) {
+  const build = (node) => {
+    if (!keep(node)) return null;
+    const g = pivotGroup(node);
+    for (const { slot, geo } of node.parts) {
+      const mat = matFor(slot);
+      if (!mat) continue;
+      const m = new THREE.Mesh(geo, mat);
+      m.castShadow = shadow(slot, node);
+      if (flames && FLAMES.has(slot)) m.renderOrder = 2;
+      g.add(m);
+    }
+    addInk(g, node);
+    onPivot(node, g);
+    for (const k of node.kids) {
+      const c = build(k);
+      if (c) g.add(c);
+    }
+    return g;
+  };
+  const root = build(B);
+  root.position.set(0, 0, 0);
+  root.quaternion.identity();
+  return root;
+}
+
+// Whip antennas that lie back with speed: a damped spring on each, so they lag, overshoot a little when you floor it and
+// flutter flat out. step(t, k, lay, flutter): k is the drive (1 flat out, negative leans them forward), lay the tip's
+// angle back at k = 1, flutter its shake. (+z is forward: a negative turn about x lays a tip back.)
+function whipSprings(antennas) {
+  const whips = antennas.map((g, i) => ({ g, a: 0, v: 0, ph: i * 2.1 }));
+  let lastT = null;
+  return (t, k, lay, flutter) => {
+    const dt = lastT == null ? 0 : Math.min(0.05, Math.max(0, t - lastT));
+    lastT = t;
+    if (!dt) return;
+    for (const w of whips) {
+      const target = -lay * k - flutter * Math.abs(k) * Math.sin(t * 17 + w.ph);
+      w.v += (90 * (target - w.a) - 9 * w.v) * dt;
+      w.a += w.v * dt;
+      w.g.rotation.x = w.a;
+    }
+  };
+}
+
+// Rovers: military patrol car and civilian buggy share one layout (body 3.2 x 5.2, wheels at (±1.85, 0.85, ±1.8), gun
+// mount (0, 3, 0.8), loot slot on the chassis) so AI, traffic and faction code drive them alike; style 'pirate' is the
+// Rustmoon War-Rig (makeWarRig: its own, bigger frame, the same chassis / gun / wheels contract).
 // style: pirate | military | civil. Blender: war-rig build_warrig.py, buggy and patrol car build_rover.py (rover.glb).
 // Body takes `color`, stripe `trim` (light-bar lenses glow in it); the rest fixed. The buggy has its own seat and wheel
 // (ownSeat); the patrol car's whip antennas lie back with speed.
@@ -1328,51 +1386,24 @@ export function makeRover({ color = 0x7b2ff7, trim = 0xffd23f, pirate = true, fl
   if (style === 'pirate') return makeWarRig({ color, trim });
   const B = SHIP_PARTS[style === 'military' ? 'rover_military' : 'rover_civil'];
   const out = { chassis: null, gun: null, wheels: [], antennas: [], cloth: null };
-  const build = (node) => {
-    const g = new THREE.Group();
-    g.name = node.name;
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, roverMat(slot, color, trim));
-      m.castShadow = ROVER_GLOW[slot] === undefined && slot !== 'lens';
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'flag') {
-      // cloth from the pole tip; vehicle code drives it via anim
-      out.cloth = makeWaveFlag({ w: 1.4, h: 0.9, mat: toon(flag, { side: THREE.DoubleSide }) });
-      g.add(out.cloth.mesh);
-    } else if (node.role === 'wheel') out.wheels.push(g);
-    else if (node.role === 'antenna') out.antennas.push(g);
-    else if (node.role === 'chassis') out.chassis = g;
-    else if (node.role === 'gun') out.gun = g;
-    for (const k of node.kids) g.add(build(k));
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
-  // whips follow speed as a damped spring, fluttering flat out
-  const whips = out.antennas.map((g, i) => ({ g, a: 0, v: 0, ph: i * 2.1 }));
-  let lastT = null;
+  const root = buildPivots(B, {
+    matFor: (slot) => roverMat(slot, color, trim),
+    shadow: (slot) => ROVER_GLOW[slot] === undefined && slot !== 'lens',
+    onPivot(node, g) {
+      if (node.role === 'flag') {
+        // cloth from the pole tip; vehicle code drives it via anim
+        out.cloth = makeWaveFlag({ w: 1.4, h: 0.9, mat: toon(flag, { side: THREE.DoubleSide }) });
+        g.add(out.cloth.mesh);
+      } else if (node.role === 'wheel') out.wheels.push(g);
+      else if (node.role === 'antenna') out.antennas.push(g);
+      else if (node.role === 'chassis') out.chassis = g;
+      else if (node.role === 'gun') out.gun = g;
+    },
+  });
+  const whips = whipSprings(out.antennas);
   const anim = (t, sp = 0) => {
     out.cloth.update(t, sp);
-    const dt = lastT == null ? 0 : Math.min(0.05, Math.max(0, t - lastT));
-    lastT = t;
-    if (!dt) return;
-    const k = Math.min(1, Math.abs(sp) / 40);
-    for (const w of whips) {
-      const target = -0.5 * k - 0.03 * k * Math.sin(t * 17 + w.ph);
-      w.v += (90 * (target - w.a) - 9 * w.v) * dt;
-      w.a += w.v * dt;
-      w.g.rotation.x = w.a; // (+z forward: negative x turn lays the tip back)
-    }
+    whips(t, Math.min(1, Math.abs(sp) / 40), 0.5, 0.03);
   };
   return { root, chassis: out.chassis, gun: out.gun, wheels: out.wheels, antennas: out.antennas, anim, ownSeat: style === 'civil' };
 }
@@ -1384,52 +1415,25 @@ const INTERCEPTOR_TOON = { navy: 0x2a3a6b, dark: 0x2a2540, steel: 0x8a87a0, tire
 const INTERCEPTOR_GLOW = { glass: 0xcfefff, lamp: 0xfff6a8, tail: 0xff2a4a, hot: 0xff9f1c, red: 0xff2a4a, blue: 0x2ec4ff };
 export function makeInterceptor({ color = 0xfff4e0, trim = 0xffd23f, flag = trim } = {}) {
   const B = SHIP_PARTS.interceptor;
-  const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
-  const fx = {
-    plume: new THREE.MeshBasicMaterial({ color: 0xff9f1c, opacity: 0.6, ...add }),
-    plumeCore: new THREE.MeshBasicMaterial({ color: 0xfff1c0, opacity: 0.85, ...add }),
-  };
-  const mats = new Map();
-  const matFor = (slot) => {
-    if (fx[slot]) return fx[slot];
-    if (!mats.has(slot)) {
-      mats.set(slot, slot === 'body' ? toon(color) : slot === 'stripe' ? toon(trim) : INTERCEPTOR_GLOW[slot] !== undefined ? glow(INTERCEPTOR_GLOW[slot]) : toon(INTERCEPTOR_TOON[slot] ?? 0xff00ff));
-    }
-    return mats.get(slot);
-  };
+  const fx = { plume: plumeMat(0xff9f1c, 0.6), plumeCore: plumeMat(0xfff1c0, 0.85) };
+  const mat = perSlot((slot) => (slot === 'body' ? toon(color) : slot === 'stripe' ? toon(trim) : INTERCEPTOR_GLOW[slot] !== undefined ? glow(INTERCEPTOR_GLOW[slot]) : toon(INTERCEPTOR_TOON[slot] ?? 0xff00ff)));
+  const matFor = (slot) => fx[slot] || mat(slot);
   const out = { chassis: null, wheels: [], antennas: [], plumes: [], cloth: null };
-  const build = (node) => {
-    const g = new THREE.Group();
-    g.name = node.name;
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = !FLAMES.has(slot) && INTERCEPTOR_GLOW[slot] === undefined;
-      if (FLAMES.has(slot)) m.renderOrder = 2;
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'flag') {
-      out.cloth = makeWaveFlag({ w: 1.4, h: 0.9, mat: toon(flag, { side: THREE.DoubleSide }) });
-      g.add(out.cloth.mesh);
-    } else if (node.role === 'wheel') out.wheels.push(g);
-    else if (node.role === 'antenna') out.antennas.push(g);
-    else if (node.role === 'plume') out.plumes.push({ g, phase: out.plumes.length * 1.7 });
-    else if (node.role === 'chassis') out.chassis = g;
-    for (const k of node.kids) g.add(build(k));
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
-  const whips = out.antennas.map((g, i) => ({ g, a: 0, v: 0, ph: i * 2.1 }));
-  let lastT = null;
+  const root = buildPivots(B, {
+    matFor,
+    shadow: (slot) => !FLAMES.has(slot) && INTERCEPTOR_GLOW[slot] === undefined,
+    flames: true,
+    onPivot(node, g) {
+      if (node.role === 'flag') {
+        out.cloth = makeWaveFlag({ w: 1.4, h: 0.9, mat: toon(flag, { side: THREE.DoubleSide }) });
+        g.add(out.cloth.mesh);
+      } else if (node.role === 'wheel') out.wheels.push(g);
+      else if (node.role === 'antenna') out.antennas.push(g);
+      else if (node.role === 'plume') out.plumes.push({ g, phase: out.plumes.length * 1.7 });
+      else if (node.role === 'chassis') out.chassis = g;
+    },
+  });
+  const whips = whipSprings(out.antennas);
   const anim = (t, sp = 0) => {
     out.cloth.update(t, sp);
     // flames: short at idle, full length flat out, flickering
@@ -1439,16 +1443,7 @@ export function makeInterceptor({ color = 0xfff4e0, trim = 0xffd23f, flag = trim
       P.g.scale.set(0.85 + 0.15 * s, 0.85 + 0.15 * s, s);
     }
     fx.plume.opacity = 0.35 + 0.35 * k;
-    const dt = lastT == null ? 0 : Math.min(0.05, Math.max(0, t - lastT));
-    lastT = t;
-    if (!dt) return;
-    const kw = Math.min(1, Math.abs(sp) / 40);
-    for (const w of whips) {
-      const target = -0.5 * kw - 0.03 * kw * Math.sin(t * 17 + w.ph);
-      w.v += (90 * (target - w.a) - 9 * w.v) * dt;
-      w.a += w.v * dt;
-      w.g.rotation.x = w.a; // (+z forward: negative x turn lays the tip back)
-    }
+    whips(t, Math.min(1, Math.abs(sp) / 40), 0.5, 0.03);
   };
   return { root, chassis: out.chassis, gun: new THREE.Group(), wheels: out.wheels, antennas: out.antennas, anim, ownSeat: true };
 }
@@ -1465,130 +1460,71 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lba, lbb, ska, skb, ...dn] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike_a', 'lightbike_b', 'skimmer_a', 'skimmer_b', ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lba, lbb, ska, skb, pw, hb, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike_a', 'lightbike_b', 'skimmer_a', 'skimmer_b', 'power', 'habitat', ...ILMB_WINGS, ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  // a root node in a loaded file (`file`.glb), or a load error
+  const named = (g, file, name) => {
+    const o = g.scene.getObjectByName(name);
+    if (!o) throw new Error(`${file}.glb has no ${name}`);
+    return o;
+  };
   SHIP_PARTS = {};
-  for (const name of ['shuttle', 'freighter']) {
-    const root = gltf.scene.getObjectByName(name);
-    if (!root) throw new Error('ships.glb has no ' + name);
-    SHIP_PARTS[name] = bakeShip(root);
-  }
+  for (const name of ['shuttle', 'freighter']) SHIP_PARTS[name] = bakeShip(named(gltf, 'ships', name));
   // the Daedalus Phase Skimmer (tools/blender/build_skimmer.py)
-  const root = sk.scene.getObjectByName('skimmer');
-  if (!root) throw new Error('skimmer.glb has no skimmer');
-  SHIP_PARTS.skimmer = bakeShip(root);
+  SHIP_PARTS.skimmer = bakeShip(named(sk, 'skimmer', 'skimmer'));
   // the Rustmoon pirate war-rig (tools/blender/build_warrig.py)
-  const rig = wr.scene.getObjectByName('warrig');
-  if (!rig) throw new Error('warrig.glb has no warrig');
-  SHIP_PARTS.warrig = bakeShip(rig);
+  SHIP_PARTS.warrig = bakeShip(named(wr, 'warrig', 'warrig'));
   // civil buggy, military patrol car (tools/blender/build_rover.py)
-  for (const name of ['rover_civil', 'rover_military']) {
-    const r = rv.scene.getObjectByName(name);
-    if (!r) throw new Error('rover.glb has no ' + name);
-    SHIP_PARTS[name] = bakeShip(r);
-  }
+  for (const name of ['rover_civil', 'rover_military']) SHIP_PARTS[name] = bakeShip(named(rv, 'rover', name));
   // SPACECOM Lunar Interceptor (tools/blender/build_interceptor.py)
-  const icp = ic.scene.getObjectByName('interceptor');
-  if (!icp) throw new Error('interceptor.glb has no interceptor');
-  SHIP_PARTS.interceptor = bakeShip(icp);
+  SHIP_PARTS.interceptor = bakeShip(named(ic, 'interceptor', 'interceptor'));
   // Courier light-bike redesigns A and B (tools/blender/build_courier.py)
-  for (const [v, g] of [['a', lba], ['b', lbb]]) {
-    const bike = g.scene.getObjectByName('courier');
-    if (!bike) throw new Error(`lightbike_${v}.glb has no courier`);
-    SHIP_PARTS['bike_' + v] = bakeShip(bike);
-  }
+  for (const [v, g] of [['a', lba], ['b', lbb]]) SHIP_PARTS['bike_' + v] = bakeShip(named(g, 'lightbike_' + v, 'courier'));
   // Phase Skimmer redesigns A Aegis and B Bulwark (tools/blender/build_skimmer_redesign.py)
-  for (const [v, g] of [['a', ska], ['b', skb]]) {
-    const sk2 = g.scene.getObjectByName('skimmer');
-    if (!sk2) throw new Error(`skimmer_${v}.glb has no skimmer`);
-    SHIP_PARTS['skimmer_' + v] = bakeShip(sk2);
-  }
+  for (const [v, g] of [['a', ska], ['b', skb]]) SHIP_PARTS['skimmer_' + v] = bakeShip(named(g, 'skimmer_' + v, 'skimmer'));
   // the Vostok BTR-M Moon APC (tools/blender/build_apc.py)
-  const apc = ap.scene.getObjectByName('apc');
-  if (!apc) throw new Error('apc.glb has no apc');
-  SHIP_PARTS.apc = bakeShip(apc);
+  SHIP_PARTS.apc = bakeShip(named(ap, 'apc', 'apc'));
   // land-trains: Moonliner passenger express, Prospector freight rig (tools/blender/build_landtrain.py)
-  for (const name of LT_UNITS) {
-    const unit = lt.scene.getObjectByName(name);
-    if (!unit) throw new Error('landtrain.glb has no ' + name);
-    SHIP_PARTS['lt_' + name] = bakeShip(unit);
-  }
+  for (const name of LT_UNITS) SHIP_PARTS['lt_' + name] = bakeShip(named(lt, 'landtrain', name));
   // the tower crane (tools/blender/build_crane.py)
-  const crane = cr.scene.getObjectByName('crane');
-  if (!crane) throw new Error('crane.glb has no crane');
-  SHIP_PARTS.crane = bakeShip(crane);
+  SHIP_PARTS.crane = bakeShip(named(cr, 'crane', 'crane'));
   // gantry crane and yard box (tools/blender/build_gantry.py)
-  const gantry = gy.scene.getObjectByName('gantry'), yardBox = gy.scene.getObjectByName('gantry_box');
-  if (!gantry || !yardBox) throw new Error('gantry.glb has no gantry / gantry_box');
+  const gantry = named(gy, 'gantry', 'gantry'), yardBox = named(gy, 'gantry', 'gantry_box');
   SHIP_PARTS.gantry = bakeShip(gantry);
   SHIP_PARTS.gantryBox = bakeShip(yardBox);
   // the Meridian motor pool garage (tools/blender/build_garage.py)
-  const garage = ga.scene.getObjectByName('garage');
-  if (!garage) throw new Error('garage.glb has no garage');
-  SHIP_PARTS.garage = bakeShip(garage);
-  const shed = ga.scene.getObjectByName('garage_small');
-  if (!shed) throw new Error('garage.glb has no garage_small');
-  SHIP_PARTS.garage_small = bakeShip(shed);
+  SHIP_PARTS.garage = bakeShip(named(ga, 'garage', 'garage'));
+  SHIP_PARTS.garage_small = bakeShip(named(ga, 'garage', 'garage_small'));
+  // the ILMB's Power Block, a D-He3 fusion plant (tools/blender/build_power.py, proposal B)
+  SHIP_PARTS.power = bakeShip(named(pw, 'power', 'power_b'));
+  // the ILMB's Kepler Habitat, "Orrery" (tools/blender/build_habitat.py)
+  SHIP_PARTS.habitat = bakeShip(named(hb, 'habitat', 'habitat'));
+  // the ILMB's other wings (tools/blender/build_<name>.py)
+  ILMB_WINGS.forEach((name, i) => { SHIP_PARTS[name] = bakeShip(named(more[i], name, name)); });
+  const dn = more.slice(ILMB_WINGS.length);
   // the casino's slot-machine cabinet (tools/blender/build_slots.py)
-  const slot = sl.scene.getObjectByName('slot');
-  if (!slot) throw new Error('slots.glb has no slot');
-  SHIP_PARTS.slot = bakeShip(slot);
+  SHIP_PARTS.slot = bakeShip(named(sl, 'slots', 'slot'));
   // casino lamp post, fountain, bouncer, chandelier, signs (tools/blender/build_casino.py)
-  for (const name of CASINO_PROPS) {
-    const root = cs.scene.getObjectByName(name);
-    if (!root) throw new Error('casino.glb has no ' + name);
-    SHIP_PARTS['casino_' + name] = bakeShip(root);
-  }
+  for (const name of CASINO_PROPS) SHIP_PARTS['casino_' + name] = bakeShip(named(cs, 'casino', name));
   // the blackjack table and its chip (tools/blender/build_blackjack.py)
-  for (const name of ['bj_table', 'bj_chip']) {
-    const root = bj.scene.getObjectByName(name);
-    if (!root) throw new Error('blackjack.glb has no ' + name);
-    SHIP_PARTS[name] = bakeShip(root);
-  }
+  for (const name of ['bj_table', 'bj_chip']) SHIP_PARTS[name] = bakeShip(named(bj, 'blackjack', name));
   // radio-dish array stations and field dish (tools/blender/build_dish.py)
-  for (const kind of [...DISH_KINDS, DISH_FIELD, DISH_HEAD]) {
-    const station = di.scene.getObjectByName('dish_' + kind);
-    if (!station) throw new Error('dish.glb has no dish_' + kind);
-    SHIP_PARTS['dish_' + kind] = bakeShip(station);
-  }
+  for (const kind of [...DISH_KINDS, DISH_FIELD, DISH_HEAD]) SHIP_PARTS['dish_' + kind] = bakeShip(named(di, 'dish', 'dish_' + kind));
   // salvaged engine dropped by wrecks (tools/blender/build_engine.py)
-  ENGINE_MODEL = en.scene.getObjectByName('engine');
-  if (!ENGINE_MODEL) throw new Error('engine.glb has no engine');
+  ENGINE_MODEL = named(en, 'engine', 'engine');
   // hover-cars, faction and civilian (tools/blender/build_hovercar.py)
-  for (const name of ['car_faction', 'car_civilian']) {
-    const car = hc.scene.getObjectByName(name);
-    if (!car) throw new Error('hovercar.glb has no ' + name);
-    SHIP_PARTS[name] = bakeShip(car);
-  }
-  CASE_MODEL = bc.scene.getObjectByName('briefcase');
-  if (!CASE_MODEL) throw new Error('briefcase.glb has no briefcase');
+  for (const name of ['car_faction', 'car_civilian']) SHIP_PARTS[name] = bakeShip(named(hc, 'hovercar', name));
+  CASE_MODEL = named(bc, 'briefcase', 'briefcase');
   // Plinko booth and the cabinet frame joining board to back wall (tools/blender/build_plinko.py)
-  PLINKO_CONSOLE = pk.scene.getObjectByName('plinko_console');
-  PLINKO_FRAME = pk.scene.getObjectByName('plinko_frame');
-  if (!PLINKO_CONSOLE || !PLINKO_FRAME) throw new Error('plinko.glb has no plinko_console / plinko_frame');
+  PLINKO_CONSOLE = named(pk, 'plinko', 'plinko_console');
+  PLINKO_FRAME = named(pk, 'plinko', 'plinko_frame');
   // zero-g claw machine, claw and tank contents (tools/blender/build_claw.py); its engine and case are the salvage models
-  for (const name of CLAW_PROPS) {
-    const root = cl.scene.getObjectByName(name);
-    if (!root) throw new Error('claw.glb has no ' + name);
-    SHIP_PARTS[name] = bakeShip(root);
-  }
+  for (const name of CLAW_PROPS) SHIP_PARTS[name] = bakeShip(named(cl, 'claw', name));
   // Duck Derby racers and track (tools/blender/build_duck.py)
-  for (const name of DUCK_PROPS) {
-    const root = dd.scene.getObjectByName(name);
-    if (!root) throw new Error('duck.glb has no ' + name);
-    SHIP_PARTS[name] = bakeShip(root);
-  }
+  for (const name of DUCK_PROPS) SHIP_PARTS[name] = bakeShip(named(dd, 'duck', name));
   // casino hall kit: wall bays, ceiling tiles, floor inlay, bar, lounge, door frame, roof crown (tools/blender/build_hall.py)
-  for (const name of HALL_PROPS) {
-    const root = hl.scene.getObjectByName(name);
-    if (!root) throw new Error('hall.glb has no ' + name);
-    SHIP_PARTS[name] = bakeShip(root);
-  }
+  for (const name of HALL_PROPS) SHIP_PARTS[name] = bakeShip(named(hl, 'hall', name));
   // forecourt kit: card wall, posts, chip bollards, P pylon, bay studs (tools/blender/build_lot.py)
-  for (const name of LOT_PROPS) {
-    const root = lo.scene.getObjectByName(name);
-    if (!root) throw new Error('lot.glb has no ' + name);
-    SHIP_PARTS[name] = bakeShip(root);
-  }
+  for (const name of LOT_PROPS) SHIP_PARTS[name] = bakeShip(named(lo, 'lot', name));
   // Chimera Downs kits (tools/blender/build_downs_*.py): every top-level `dn_*` node
   for (const g of dn) for (const root of g.scene.children) if (root.name.startsWith('dn_')) SHIP_PARTS[root.name] = bakeShip(root);
   SHIP_PARTS.claw_engine = bakeShip(ENGINE_MODEL);
@@ -1637,12 +1573,7 @@ function bakeShip(root, { near = false } = {}) {
       for (const c of o.children) {
         if (c.isMesh) {
           const slot = c.material.name;
-          rel.multiplyMatrices(inv, c.matrixWorld);
-          const geo = new THREE.BufferGeometry();
-          geo.setAttribute('position', c.geometry.attributes.position.clone());
-          geo.setAttribute('normal', c.geometry.attributes.normal.clone());
-          geo.setIndex(c.geometry.index.clone());
-          geo.applyMatrix4(rel);
+          const geo = bakedGeo(c.geometry, rel.multiplyMatrices(inv, c.matrixWorld));
           if (!slots.has(slot)) slots.set(slot, []);
           slots.get(slot).push(geo);
           const t = c.userData.ink || c.parent.userData.ink || 0;     // (a mesh of two materials loads as a group of two: its ink is the group's)
@@ -1691,14 +1622,13 @@ function drawBoard(c, text) {
 const _shipHot = new THREE.Color();
 function makeShip(kind, { color, stripe, faction = 'kepler' }) {
   const B = SHIP_PARTS[kind];
-  const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
   const fx = {
-    plume: new THREE.MeshBasicMaterial({ color: 0xff8a2a, opacity: 0.7, ...add }),
-    plumeCore: new THREE.MeshBasicMaterial({ color: 0xfff1c0, opacity: 0.9, ...add }),
-    lift: new THREE.MeshBasicMaterial({ color: 0x8fd8ff, opacity: 0.6, ...add }),
+    plume: plumeMat(0xff8a2a, 0.7),
+    plumeCore: plumeMat(0xfff1c0, 0.9),
+    lift: plumeMat(0x8fd8ff, 0.6),
     engine: new THREE.MeshBasicMaterial({ color: 0xff9f1c }),
     core: new THREE.MeshBasicMaterial({ color: 0xfff3c0 }),
-    beacon: new THREE.MeshBasicMaterial({ color: 0xff4a3a, opacity: 0.4, ...add }), // (glow round the mast light)
+    beacon: plumeMat(0xff4a3a, 0.4), // (glow round the mast light)
   };
   const matFor = (slot) => {
     if (SHIP_FX.has(slot)) return fx[slot];
@@ -1711,31 +1641,19 @@ function makeShip(kind, { color, stripe, faction = 'kepler' }) {
   // cargo.py). Under a `cargo` pivot slots take the land-train palette of the freighter's faction; only that faction's
   // `livery` pivots (plates, numbers, marks) are built.
   const fac = LAND_TRAIN_FACTIONS[faction] ? faction : 'kepler';
-  const cargoMats = new Map();
-  const cargoMat = (slot) => {
-    if (!cargoMats.has(slot)) { const c = cargoSlot(slot, fac); cargoMats.set(slot, c.glow ? glow(c.color) : toon(c.color)); }
-    return cargoMats.get(slot);
-  };
+  const cargoMat = perSlot((slot) => slotMat(cargoSlot(slot, fac)));
   const rig = { legs: [], doors: [], ramps: [], hatches: [], plumes: [], lifts: [], boards: [], blinkers: [], cranes: [] };
   const build = (node, cargo = false) => {
     if (node.role === 'livery' && node.data.faction !== fac) return null; // (other factions' marks aren't built)
     cargo = cargo || node.role === 'cargo';
-    const g = new THREE.Group();
-    g.name = node.name;
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
+    const g = pivotGroup(node);
     for (const { slot, geo } of node.parts) {
       const m = new THREE.Mesh(geo, cargo ? cargoMat(slot) : matFor(slot));
       m.castShadow = cargo ? LT_GLOW[slot] === undefined && node.role !== 'livery' : !SHIP_FX.has(slot) && SHIP_GLOW[slot] === undefined;
       if (!cargo && FLAMES.has(slot)) m.renderOrder = 2;
       g.add(m);
     }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
+    addInk(g, node);
     const d = node.data;
     let leg = null, crane = null;
     if (node.role === 'blinker') rig.blinkers.push({ g, phase: d.phase || 0 }); // (mast flasher)
@@ -1783,7 +1701,7 @@ function makeShip(kind, { color, stripe, faction = 'kepler' }) {
     }
   }
   const d = B.data;
-  const v3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+  const v3 = (a) => new THREE.Vector3(...a);
   const ship = {
     root, kind, size: kind === 'freighter' ? 30 : 10, sign: null,
     // route board text (a place's short name: "> TRANQ"); no-op if unchanged
@@ -1874,13 +1792,18 @@ function makeShip(kind, { color, stripe, faction = 'kepler' }) {
 // gunship) (docs/skimmer-proposals, tools/blender/build_skimmer_redesign.py), or 'classic' (skimmer.glb). Redesigns carry
 // the runner inside, undrawn (like the APC crew). Saved; the dev menu's SKIMMER MODEL switches it for the next skimmer.
 export const SKIMMER_STYLES = ['b', 'a', 'classic'];
-const SKIMMER_KEY = 'mr-skimmer-model';
-let skimmerStyle = 'b';
-try { const k = localStorage.getItem(SKIMMER_KEY); if (SKIMMER_STYLES.includes(k)) skimmerStyle = k; } catch { /* unavailable */ }
-export const getSkimmerStyle = () => skimmerStyle;
-export function setSkimmerStyle(k) {
-  skimmerStyle = SKIMMER_STYLES.includes(k) ? k : 'b';
-  try { localStorage.setItem(SKIMMER_KEY, skimmerStyle); } catch { /* unavailable */ }
+export const { get: getSkimmerStyle, set: setSkimmerStyle } = savedStyle('mr-skimmer-model', SKIMMER_STYLES);
+// A model choice saved in localStorage[key]: { get, set }; the first of `styles` when unset or unknown.
+function savedStyle(key, styles) {
+  let style = styles[0];
+  try { const k = localStorage.getItem(key); if (styles.includes(k)) style = k; } catch { /* unavailable */ }
+  return {
+    get: () => style,
+    set(k) {
+      style = styles.includes(k) ? k : styles[0];
+      try { localStorage.setItem(key, style); } catch { /* unavailable */ }
+    },
+  };
 }
 // redesigns' third colour (`accent`, a glow) beside the livery's near-black and violet; armour (`plate`, toon)
 const SKIMMER_ACCENT = { a: 0xffb62e, b: 0x2ee6c0 };
@@ -1888,14 +1811,13 @@ const SKIMMER_PLATE = 0x514a73;
 
 // Daedalus Phase Skimmer: wheel-less hover-racer (build_skimmer.py). Body and stripe take the livery; nacelle coils spin,
 // thrusters and hover emitters glow with speed. Call anim(t, speed) every frame.
-export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff, style = skimmerStyle } = {}) {
+export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff, style = getSkimmerStyle() } = {}) {
   const key = style !== 'classic' && SHIP_PARTS['skimmer_' + style] ? style : 'classic';
   const B = key === 'classic' ? SHIP_PARTS.skimmer : SHIP_PARTS['skimmer_' + key];
-  const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
   const fx = {
-    plume: new THREE.MeshBasicMaterial({ color: trim, opacity: 0.6, ...add }),
-    plumeCore: new THREE.MeshBasicMaterial({ color: 0xfff4ff, opacity: 0.85, ...add }),
-    lift: new THREE.MeshBasicMaterial({ color: trim, opacity: 0.45, ...add }),
+    plume: plumeMat(trim, 0.6),
+    plumeCore: plumeMat(0xfff4ff, 0.85),
+    lift: plumeMat(trim, 0.45),
     engine: new THREE.MeshBasicMaterial({ color: 0xff9f1c }),
   };
   const matFor = (slot) => {
@@ -1910,31 +1832,16 @@ export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff, style = skimmer
     return toon(SHIP_TOON[slot] ?? 0xff00ff);
   };
   const coils = [], plumes = [], lifts = [];
-  const build = (node) => {
-    const g = new THREE.Group();
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = !FLAMES.has(slot) && slot !== 'glow' && slot !== 'accent';
-      if (FLAMES.has(slot)) m.renderOrder = 2;
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'coil') coils.push({ g, spin: node.data.spin || 2 });
-    else if (node.role === 'plume') plumes.push({ g, phase: plumes.length * 1.7 });
-    else if (node.role === 'lift') lifts.push({ g, phase: lifts.length * 2.3 });
-    for (const k of node.kids) g.add(build(k));
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
+  const root = buildPivots(B, {
+    matFor,
+    shadow: (slot) => !FLAMES.has(slot) && slot !== 'glow' && slot !== 'accent',
+    flames: true,
+    onPivot(node, g) {
+      if (node.role === 'coil') coils.push({ g, spin: node.data.spin || 2 });
+      else if (node.role === 'plume') plumes.push({ g, phase: plumes.length * 1.7 });
+      else if (node.role === 'lift') lifts.push({ g, phase: lifts.length * 2.3 });
+    },
+  });
   // redesigns give dust spots (x, z pairs) and hide_rider (runner rides inside)
   const dust = B.data.dust;
   const dustSpots = dust ? Array.from({ length: dust.length / 2 }, (_, i) => [dust[i * 2], dust[i * 2 + 1]]) : null;
@@ -1952,53 +1859,59 @@ export function makeSkimmer({ color = 0x1a1426, trim = 0xc77dff, style = skimmer
   };
 }
 
-// Rustmoon pirate war-rig (build_warrig.py): scrap buggy with a spiked ram plow, makeRover's layout (wheels at
-// (+-1.85, 0.85, +-1.8), gun mount (0, 3, 0.8)). Body and stripe take the colours; patches, rust, bone spikes are fixed.
-const RIG_TOON = { rust: 0x7a4a32, primer: 0x6b6f78, olive: 0x5a6a3a, scrap: 0x3a5a7a, dark: 0x2a2540, steel: 0x55607a, tire: 0x1d1a29, bone: 0xe8e0c8, seat: 0x3a2a22, red: 0xd7263d, flag: 0x1a1a1a };
-const RIG_GLOW = { lamp: 0xfff6a8, hot: 0xff9f1c };
+// Rustmoon War-Rig (build_warrig.py): a big-rig head on monster-truck legs, its own frame (wheels at (+-2.2, 1.05, 2.6 /
+// -2.3), radius 1.05). Driven pivots: chassis, turret (yawed to the aim, or at the AI's target; also `gun`), barrel
+// (pitch about x), muzzle (empty at the barrels' mouth), four wheels. The `crew` empty gets the pirate gunner (a runner in
+// Rustmoon colours, posed at the grips; he turns with the turret and leans with the barrel through aimPose), the `flag`
+// empty the waving cloth (streams back with speed through anim). Body is painted panels, sun-faded from `color`; lens
+// glows in `trim`, the underglow in `color`; the rest fixed. Build at frame size: callers scale the root (RIG_SCALE).
+export const RUSTMOON_LOOK = { suit: 0x3a2b4f, accent: 0x7dff3a, helmet: 0x2b2b2b, visor: 0x7dff3a, scarf: 0xd7263d, pirate: true };
+export const RIG_SCALE = 1.35;
+const RIG_TOON = { dark: 0x2a2540, steel: 0x55607a, metal: 0x8a87a0, tire: 0x1d1a29, bleach: 0xc9c0b0, primer: 0x6b6f78, copper: 0xc8783e, mli: 0xd9b25a, foil: 0xcfd3dc, bone: 0xe8e0c8, red: 0xd7263d, tank: 0xc6d6ea, flag: 0x1a1a1a, mcream: 0xfff4e0, mcyan: 0x2ec4ff, mgold: 0xffd23f, mnavy: 0x1b3a8f };
+const RIG_GLOW = { lamp: 0xfff6a8, led: 0xe8f4ff, plasma: 0x5ad8ff, ion: 0x9be7ff, laser: 0xff2a4a, beacon: 0xff2a4a };
+const RIG_FADE = new THREE.Color(0x6b6f78); // paint left in the sun goes toward the primer under it
+// the gun's laser: three segments, each fainter, added onto the scene without depth (so the edge ink never outlines it)
+const RIG_BEAM = { beam1: 0.38, beam2: 0.2, beam3: 0.09 };
+const beamMat = (opacity) => new THREE.MeshBasicMaterial({ color: 0xff2a4a, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
 export function makeWarRig({ color = 0x7b2ff7, trim = 0x7dff3a } = {}) {
   const B = SHIP_PARTS.warrig;
-  const mats = new Map();
-  const matFor = (slot) => {
-    if (!mats.has(slot)) {
-      mats.set(slot, slot === 'body' ? toon(color) : slot === 'stripe' ? toon(trim) : RIG_GLOW[slot] !== undefined ? glow(RIG_GLOW[slot])
-        : toon(RIG_TOON[slot] ?? 0xff00ff, slot === 'flag' ? { side: THREE.DoubleSide } : undefined));
-    }
-    return mats.get(slot);
+  const matFor = perSlot((slot) => (slot === 'body' ? toon(new THREE.Color(color).lerp(RIG_FADE, 0.7).getHex()) : slot === 'stripe' ? toon(trim)
+    : slot === 'lens' ? glow(trim) : slot === 'underglow' ? glow(color) : RIG_BEAM[slot] !== undefined ? beamMat(RIG_BEAM[slot]) : RIG_GLOW[slot] !== undefined ? glow(RIG_GLOW[slot])
+      : toon(RIG_TOON[slot] ?? 0xff00ff, slot === 'flag' ? { side: THREE.DoubleSide } : undefined)));
+  const out = { wheels: [] };
+  const root = buildPivots(B, {
+    matFor,
+    shadow: (slot) => RIG_GLOW[slot] === undefined && RIG_BEAM[slot] === undefined && slot !== 'lens' && slot !== 'underglow',
+    onPivot(node, g) {
+      const role = node.role;
+      if (role === 'wheel') out.wheels.push(g);
+      else if (role === 'flag') {
+        out.cloth = makeWaveFlag({ w: node.data.w || 1.1, h: node.data.h || 0.75, mat: matFor('flag'), ragged: true });
+        g.add(out.cloth.mesh);
+      } else if (role === 'crew') {
+        const p = makeRunner(RUSTMOON_LOOK);
+        p.root.scale.setScalar(1 / RIG_SCALE); // (the rig is scaled up; the gunner stays runner-sized)
+        p.legL.rotation.set(0.12, 0, 0.06);
+        p.legR.rotation.set(-0.18, 0, -0.06);
+        p.head.rotation.x = -0.1;
+        p.foreL.rotation.x = p.foreR.rotation.x = -0.55;
+        g.add(p.root);
+        out.gunner = p;
+      } else if (role) out[role] = g;
+    },
+  });
+  const gunner = out.gunner;
+  const aimPose = (pitch) => {
+    // leans back and raises the grips as the barrel climbs
+    gunner.torso.rotation.x = 0.18 - 0.45 * pitch;
+    gunner.armL.rotation.set(-0.95 - 0.6 * pitch, 0, 0.18);
+    gunner.armR.rotation.set(-0.95 - 0.6 * pitch, 0, -0.18);
   };
-  const out = { chassis: null, gun: null, wheels: [] };
-  const build = (node) => {
-    const g = new THREE.Group();
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      if (slot === 'flag') continue; // (the rag is cloth: below)
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = RIG_GLOW[slot] === undefined;
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'chassis') {
-      // tattered rag on its whip pole
-      out.cloth = makeWaveFlag({ w: 1.3, h: 0.9, mat: matFor('flag'), ragged: true });
-      out.cloth.mesh.position.set(-1.2, 4.55, -2.25);
-      g.add(out.cloth.mesh);
-    }
-    if (node.role === 'chassis') out.chassis = g;
-    else if (node.role === 'gun') out.gun = g;
-    else if (node.role === 'wheel') out.wheels.push(g);
-    for (const k of node.kids) g.add(build(k));
-    return g;
+  aimPose(0);
+  return {
+    root, chassis: out.chassis, gun: out.turret, turret: out.turret, barrel: out.barrel, barrelRest: out.barrel.position.clone(), muzzle: out.muzzle,
+    wheels: out.wheels, wheelR: B.data.wheelRadius || 1.05, rideH: B.data.rideH, gunner, aimPose, anim: out.cloth.update,
   };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
-  return { root, chassis: out.chassis, gun: out.gun, wheels: out.wheels, anim: out.cloth.update };
 }
 
 // Vostok BTR-M Moon APC (build_apc.py): eight wheels, sloped hull, roof turret. Driven pivots: chassis, turret (yaw
@@ -2008,60 +1921,27 @@ const APC_TOON = { dark: 0x2a2540, steel: 0x55607a, tire: 0x1d1a29, olive: 0x5a6
 const APC_GLOW = { glass: 0xcfefff, lamp: 0xfff6a8, tail: 0xff2a4a, hot: 0xff9f1c };
 export function makeApc({ color = 0x6b6f78, trim = 0xff3b5c } = {}) {
   const B = SHIP_PARTS.apc;
-  const mats = new Map();
-  const matFor = (slot) => {
-    if (!mats.has(slot)) {
-      mats.set(slot, slot === 'body' ? toon(color) : slot === 'stripe' ? toon(trim) : APC_GLOW[slot] !== undefined ? glow(APC_GLOW[slot]) : toon(APC_TOON[slot] ?? 0xff00ff));
-    }
-    return mats.get(slot);
-  };
+  const matFor = perSlot((slot) => (slot === 'body' ? toon(color) : slot === 'stripe' ? toon(trim) : APC_GLOW[slot] !== undefined ? glow(APC_GLOW[slot]) : toon(APC_TOON[slot] ?? 0xff00ff)));
   const out = { chassis: null, turret: null, barrel: null, muzzle: null, exhaust: null, wheels: [], antennas: [] };
-  const build = (node) => {
-    const g = new THREE.Group();
-    g.name = node.name;
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = APC_GLOW[slot] === undefined;
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'wheel') out.wheels.push(g);
-    else if (node.role === 'antenna') out.antennas.push(g);
-    else if (node.role && node.role in out) out[node.role] = g;
-    for (const k of node.kids) g.add(build(k));
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
+  const root = buildPivots(B, {
+    matFor,
+    shadow: (slot) => APC_GLOW[slot] === undefined,
+    onPivot(node, g) {
+      if (node.role === 'wheel') out.wheels.push(g);
+      else if (node.role === 'antenna') out.antennas.push(g);
+      else if (node.role && node.role in out) out[node.role] = g;
+    },
+  });
   out.barrelRest = out.barrel.position.clone(); // (recoil slides back from here)
   // dust from the four corners, not all eight wheels
   const dustSpots = [[-1.72, 2.15], [1.72, 2.15], [-1.72, -2.15], [1.72, -2.15]];
-  // whip antennas lie back with speed: a damped spring each, driven by speed along the hull (vehicles.js sets `along`
-  // before anim; reversing leans them forward)
-  const whips = out.antennas.map((g, i) => ({ g, a: 0, v: 0, ph: i * 2.1 }));
-  let lastT = null;
+  // the whips are driven by the speed along the hull (vehicles.js sets `along` before anim; reversing leans them forward)
+  const whips = whipSprings(out.antennas);
   const model = {
     root, chassis: out.chassis, gun: out.turret, turret: out.turret, barrel: out.barrel, barrelRest: out.barrelRest, muzzle: out.muzzle, exhaust: out.exhaust,
     wheels: out.wheels, wheelR: 0.62, dustSpots, antennas: out.antennas, along: 0,
     anim(t, sp) {
-      const dt = lastT == null ? 0 : Math.min(0.05, Math.max(0, t - lastT));
-      lastT = t;
-      if (!dt) return;
-      const k = sp < 0.5 ? 0 : Math.max(-0.3, Math.min(1, model.along / 60)); // (1 = flat out)
-      for (const w of whips) {
-        const target = -(0.45 * k) - 0.02 * Math.abs(k) * Math.sin(t * 17 + w.ph); // (flutter at speed)
-        w.v += (90 * (target - w.a) - 9 * w.v) * dt; // spring + damping: lag, small overshoot when floored
-        w.a += w.v * dt;
-        w.g.rotation.x = w.a; // (+z forward: negative x turn lays the tip back)
-      }
+      whips(t, sp < 0.5 ? 0 : Math.max(-0.3, Math.min(1, model.along / 60)), 0.45, 0.02);
     },
   };
   return model;
@@ -2092,42 +1972,19 @@ export function cargoSlot(slot, faction = 'kepler') {
 }
 
 // One painted train unit: its root and the pivots traffic code drives.
-function ltUnit(name, pal, faction) {
-  const B = SHIP_PARTS['lt_' + name];
-  const mats = new Map();
-  const matFor = (slot) => {
-    if (!mats.has(slot)) mats.set(slot, slot in pal ? toon(pal[slot]) : LT_GLOW[slot] !== undefined ? glow(LT_GLOW[slot]) : toon(LT_TOON[slot] ?? 0xff00ff));
-    return mats.get(slot);
-  };
+function ltUnit(name, faction) {
+  const B = SHIP_PARTS['lt_' + name], pal = LAND_TRAIN_FACTIONS[faction];
+  const matFor = perSlot((slot) => (slot in pal ? toon(pal[slot]) : LT_GLOW[slot] !== undefined ? glow(LT_GLOW[slot]) : toon(LT_TOON[slot] ?? 0xff00ff)));
   const out = { wheels: [], beacon: null, bar: null, rod: null, eye: null };
-  const build = (node) => {
-    if (node.role === 'livery' && node.data.faction !== faction) return null; // (other factions' marks aren't built)
-    const g = new THREE.Group();
-    g.name = node.name;
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = LT_GLOW[slot] === undefined && node.role !== 'livery';
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'wheel') out.wheels.push(g);
-    else if (node.role && node.role in out) out[node.role] = g;
-    for (const k of node.kids) {
-      const c = build(k);
-      if (c) g.add(c);
-    }
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
+  const root = buildPivots(B, {
+    matFor,
+    shadow: (slot, node) => LT_GLOW[slot] === undefined && node.role !== 'livery',
+    keep: (node) => node.role !== 'livery' || node.data.faction === faction, // (other factions' marks aren't built)
+    onPivot(node, g) {
+      if (node.role === 'wheel') out.wheels.push(g);
+      else if (node.role && node.role in out) out[node.role] = g;
+    },
+  });
   // standable solid boxes: (hx, hy, hz, y, z) groups in the unit frame
   const flat = B.data.decks || [];
   const decks = [];
@@ -2138,11 +1995,10 @@ function ltUnit(name, pal, faction) {
 // type: 'moonliner' (passenger) or 'prospector' (freight); cars: 'pax' (Moonliner coaches), 'tank' (Helium-3), 'cargo',
 // 'blast' (explosives) (Prospector trailers)
 export function makeLandTrain({ faction = 'kepler', type = 'moonliner', cars } = {}) {
-  const pal = LAND_TRAIN_FACTIONS[faction] || LAND_TRAIN_FACTIONS.kepler;
   const fac = LAND_TRAIN_FACTIONS[faction] ? faction : 'kepler';
   cars = cars || (type === 'prospector' ? ['tank', 'cargo', 'blast'] : ['pax', 'pax', 'pax']);
-  const tractor = ltUnit(type, pal, fac);
-  const trailers = cars.map((kind) => ({ ...ltUnit(LT_CAR[kind], pal, fac), kind }));
+  const tractor = ltUnit(type, fac);
+  const trailers = cars.map((kind) => ({ ...ltUnit(LT_CAR[kind], fac), kind }));
   return { root: tractor.root, wheels: tractor.wheels, beacon: tractor.beacon, decks: tractor.decks, trailers, type, faction: fac };
 }
 
@@ -2151,7 +2007,7 @@ export function makeLandTrain({ faction = 'kepler', type = 'moonliner', cars } =
 // about y) = head, jib, counter-jib, cab, lamps, `blinker` warning lights; its `trolley` (slides along the jib) holds
 // `cable` (two 1 m rope falls, stretched to the hook) and `hook` (lowered with it), carrying `load`: the Prospector
 // container on a spreader, one `livery` pivot per faction (only the crane cargo's is built).
-export const CRANE_H = 34, CRANE_JIB = 30;
+export const CRANE_H = 34;
 export const CRANE_LOAD_DROP = 8.65; // hook origin to container bottom
 // trolley range (m along the jib): any nearer the mast and the 7.2 m container hits ballast and platforms
 export const CRANE_TROLLEY_MIN = 7.9, CRANE_TROLLEY_SPAN = 19.1;
@@ -2169,11 +2025,11 @@ export function craneSlot(slot, color, faction = 'kepler') {
   return { color: CRANE_COLORS[slot] ?? 0xff00ff, glow: CRANE_GLOW.has(slot) };
 }
 
+const kidOf = (n, role) => n.kids.find((k) => k.role === role); // a baked node's first child pivot with `role`
 export function craneModel() {
   const root = SHIP_PARTS.crane;
-  const find = (n, role) => n.kids.find((k) => k.role === role);
-  const slew = find(root, 'slew'), trolley = find(slew, 'trolley'), hook = find(trolley, 'hook');
-  return { root, slew, trolley, cable: find(trolley, 'cable'), hook, load: find(hook, 'load'), blinkers: slew.kids.filter((k) => k.role === 'blinker') };
+  const slew = kidOf(root, 'slew'), trolley = kidOf(slew, 'trolley'), hook = kidOf(trolley, 'hook');
+  return { root, slew, trolley, cable: kidOf(trolley, 'cable'), hook, load: kidOf(hook, 'load'), blinkers: slew.kids.filter((k) => k.role === 'blinker') };
 }
 
 // A whole crane as plain meshes (model viewer, Asset Row): root plus driven pivots (slew, trolley, cable, hook, blinker
@@ -2184,20 +2040,8 @@ function craneRig(root, matFor, faction) {
   const build = (node, cargo = false) => {
     if (node.role === 'livery' && node.data.faction !== faction) return null; // (other factions' marks aren't built)
     cargo = cargo || node.role === 'cargo';
-    const g = new THREE.Group();
-    g.name = node.name;
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot, cargo));
-      m.castShadow = !(cargo ? cargoSlot(slot, faction).glow : CRANE_GLOW.has(slot)) && node.role !== 'livery';
-      g.add(m);
-    }
-    if (node.ink) {
-      const m = new THREE.Mesh(node.ink, inkMat);
-      m.userData.isInk = true;
-      g.add(m);
-    }
+    const g = pivotGroup(node);
+    dressNode(node, g, (slot) => matFor(slot, cargo), (slot) => !(cargo ? cargoSlot(slot, faction).glow : CRANE_GLOW.has(slot)) && node.role !== 'livery');
     if (node.role === 'blinker') {
       const lamp = new THREE.Mesh(new THREE.SphereGeometry(node.data.radius || 0.3, 8, 6), glow(0xff2a4a));
       lamp.userData.blink = true;
@@ -2217,15 +2061,8 @@ function craneRig(root, matFor, faction) {
 
 // crane slot painter: crane slots in `color` (body) and fixed colours, cargo slots in `faction`'s livery
 function cranePainter(color, faction) {
-  const mats = new Map();
-  return (slot, cargo = false) => {
-    const key = (cargo ? 'cargo:' : '') + slot;
-    if (!mats.has(key)) {
-      const c = cargo ? cargoSlot(slot, faction) : craneSlot(slot, color, faction);
-      mats.set(key, c.glow ? glow(c.color) : toon(c.color));
-    }
-    return mats.get(key);
-  };
+  const crane = perSlot((slot) => slotMat(craneSlot(slot, color, faction))), cargo = perSlot((slot) => slotMat(cargoSlot(slot, faction)));
+  return (slot, isCargo = false) => (isCargo ? cargo(slot) : crane(slot));
 }
 
 export function makeTowerCrane({ color = 0xffd23f, faction = 'kepler', h = CRANE_H } = {}) {
@@ -2240,15 +2077,13 @@ export function makeTowerCrane({ color = 0xffd23f, faction = 'kepler', h = CRANE
 // a `cargo` pivot (cargo.py box container, along the girder, `livery` per faction, only the crane cargo's built).
 // `blinker` pivots at girder ends and leg tops. `gantryBox`: one container alone (a `cargo` pivot, origin at the middle of
 // its ground footprint), baked per stack by the settlements in a faction's colours.
-export const GANTRY_H = 23, GANTRY_LEG = 15; // trolley rail height; legs (and crane rails) at z = +-LEG
 export const GANTRY_TROLLEY_SPAN = 10; // trolley z in [-span, span] (clear of the knees at the legs)
 export const CARGO_BOX = { hx: 1.75, hz: 3.95, h: 3.2 }; // yard box footprint (its rack) and height (stacking pitch)
 
 export function gantryModel() {
   const root = SHIP_PARTS.gantry;
-  const find = (n, role) => n.kids.find((k) => k.role === role);
-  const trolley = find(root, 'trolley'), hook = find(trolley, 'hook'), load = find(hook, 'load');
-  return { root, trolley, cable: find(trolley, 'cable'), hook, load, cargo: find(load, 'cargo'), box: SHIP_PARTS.gantryBox, blinkers: root.kids.filter((k) => k.role === 'blinker') };
+  const trolley = kidOf(root, 'trolley'), hook = kidOf(trolley, 'hook'), load = kidOf(hook, 'load');
+  return { root, trolley, cable: kidOf(trolley, 'cable'), hook, load, cargo: kidOf(load, 'cargo'), box: SHIP_PARTS.gantryBox, blinkers: root.kids.filter((k) => k.role === 'blinker') };
 }
 
 export function makeGantryCrane({ color = 0xffd23f, faction = 'kepler' } = {}) {
@@ -2306,19 +2141,8 @@ export function garageModel(open = [true, false, true], kind = 'main') {
 // A whole garage as plain meshes (model viewer): `open` bays up, vent heads turning with `t`.
 export function makeGarage({ open = [true, false, true], kind = 'main', trim = 0x2ec4ff } = {}) {
   const G = garageModel(open, kind);
-  const mats = new Map();
-  const matFor = (slot) => {
-    if (!mats.has(slot)) { const c = garageSlot(slot, trim); mats.set(slot, c.glow ? glow(c.color) : toon(c.color)); }
-    return mats.get(slot);
-  };
-  const dress = (node, g) => {
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = !(slot in GARAGE_GLOW);
-      g.add(m);
-    }
-    if (node.ink) { const m = new THREE.Mesh(node.ink, inkMat); m.userData.isInk = true; g.add(m); }
-  };
+  const matFor = perSlot((slot) => slotMat(garageSlot(slot, trim)));
+  const dress = (node, g) => dressNode(node, g, matFor, (slot) => !(slot in GARAGE_GLOW));
   const root = new THREE.Group();
   for (const n of G.flat) dress(n, root); // (static pivots all sit at the origin)
   const heads = G.fans.map((n) => {
@@ -2335,6 +2159,86 @@ export function makeGarage({ open = [true, false, true], kind = 'main', trim = 0
     root.add(lamp);
   }
   return { root, heads, update(t) { for (const h of heads) h.rotation.y = t * h.userData.spin; } };
+}
+
+// ---- ILMB Power Block (build_power.py, proposal B) ----
+// A D-He3 fusion plant in the power wing's frame (+x away from the hub; the skywalk docks at x -12.6): hall with a control
+// bridge, a 44 m magnetic bottle on trestles along z at x 16, injectors, cryoplant, fuel spheres. Tree: root meshes =
+// everything static; `blinker` = aircraft lamps; `col` = colliders (extras `shape` box / cyl / hcyl / sphere and sizes).
+// The `plasma` and `plasmaCore` glows are POWER_PULSE: settlements.js powerBlock gives them their own breathing material.
+const POWER_TOON = {
+  cream: 0xfff4e0, yellow: 0xffd23f, navy: 0x2a3a6b, hall: 0x5b5870, light: 0xd8d4e8, dark: 0x2a2540, steel: 0x55607a, metal: 0x8a87a0,
+  white: 0xf3eee4, concrete: 0x8a8698, regolith: 0xb7b0c3, he3: 0x7dff6a, deut: 0x2ec4ff,
+};
+const POWER_GLOW = { lamp: 0xfff6a8, cyan: 0x2ee6ff, hot: 0xff9f1c, red: 0xff2a4a, plasma: 0xff5cf0, plasmaCore: 0xffe6ff };
+export const POWER_PULSE = ['plasma', 'plasmaCore'];
+export const POWER_DOCK = 12.6; // wing centre to the vestibule face the skywalk docks into
+
+export function powerSlot(slot) {
+  if (slot in POWER_GLOW) return { color: POWER_GLOW[slot], glow: true };
+  return { color: POWER_TOON[slot] ?? 0xff00ff, glow: false };
+}
+
+// The baked plant: static root, lamps, colliders.
+export function powerModel() {
+  const root = SHIP_PARTS.power;
+  if (!root) throw new Error('power.glb not loaded');
+  return { root, blinkers: root.kids.filter((k) => k.role === 'blinker'), cols: root.kids.filter((k) => k.role === 'col') };
+}
+
+// ---- ILMB Kepler Habitat, "Orrery" (build_habitat.py; docs/habitat-proposals) ----
+// The family wing in its frame (+x away from the hub; the skywalk docks at x -28.6): a 12-module ring on lander legs (7 m clear
+// underneath), three glazed spokes to the hub tower, a park inside. Tree: root meshes = everything static; `fan` = the orbit
+// ring round the crown (extra `spin`, rad/s); `col` = colliders (extras `shape` box / cyl / hcyl and sizes; boxes may `pitch`).
+const HABITAT_TOON = {
+  wall: 0xfff4e0, trim: 0xff9f1c, roof: 0x3a3550, dark: 0x2a2540, panel: 0x5b5870, metal: 0x8a87a0, steel: 0x55607a, solar: 0x1d2f6b,
+  door: 0x2a2540, lawn: 0x3ad15a, concrete: 0xb8b2cc, path: 0xd8c9a8, bark: 0x6b4a2a, leaf: 0x1f8a3a, leaf2: 0x5cc94a, stone: 0x6f6878,
+  wood: 0x8a5a3a, hazard: 0xffd23f,
+};
+const HABITAT_GLOW = { window: 0xfff6a8, lamp: 0xfff6a8, beacon: 0xff9f1c, water: 0x5ad8ff };
+export const HABITAT_DOCK = 28.6; // wing centre to the lobby face the skywalk docks into
+
+// a slot's { color, glow }; `glass` is the see-through panes (the caller's glass material)
+export function habitatSlot(slot) {
+  if (slot in HABITAT_GLOW) return { color: HABITAT_GLOW[slot], glow: true };
+  return { color: HABITAT_TOON[slot] ?? 0xff00ff, glow: false };
+}
+
+// The baked habitat: static root, the orbit ring's pivot, colliders.
+export function habitatModel() {
+  const root = SHIP_PARTS.habitat;
+  if (!root) throw new Error('habitat.glb not loaded');
+  return { root, orbit: root.kids.find((k) => k.role === 'fan'), cols: root.kids.filter((k) => k.role === 'col') };
+}
+
+// ---- the ILMB's other wings: Hydroponics, Meridian Labs, Vostok Hangar, Daedalus Relay (build_hydroponics.py, build_labs.py,
+// build_hangar.py, build_relay.py) ----
+// Each in its wing's frame (+x away from the hub; the skywalk docks into the lobby face at x = -dock, the root's `dock` extra).
+// Tree: root meshes = everything static; `blinker` = aircraft lamps (extra `radius`); `fan` = parts that turn about y (extra
+// `spin`, rad/s); `col` = colliders (extras `shape` box / cyl / hcyl / sphere and sizes; boxes may `pitch`). One palette serves
+// the four files; `glass` is see-through, tinted per wing (WING_GLASS).
+export const ILMB_WINGS = ['hydroponics', 'labs', 'hangar', 'relay'];
+const WING_TOON = {
+  wall: 0xfff4e0, white: 0xf3eee4, light: 0xd8d4e8, panel: 0x5b5870, roof: 0x3a3550, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55607a,
+  concrete: 0xb8b2cc, pave: 0x9d97b0, planter: 0x6f6878, soil: 0x4a3326, leaf: 0x1f8a3a, leaf2: 0x5cc94a, crop: 0x9be35a, fruit: 0xff4f2e,
+  wheat: 0xd8c25a, mirror: 0xd8f0ff, tank: 0xf3eee4, water: 0x2ec4ff, door: 0x2a2540, hazard: 0xffd23f, green: 0x3ad15a,
+  cyan: 0x2ec4ff, navy: 0x1b3a8f, gold: 0xffd23f, slate: 0x6b6f78, slateDark: 0x2c2f38, red: 0xff3b5c, regolith: 0xb7b0c3, sand: 0x8f8577,
+  plum: 0x4a4660, violet: 0xc77dff,
+};
+const WING_GLOW = { window: 0xfff6a8, lamp: 0xfff6a8, grow: 0xff5cd6, pane: 0xbfefff, bay: 0x7a7698, redlamp: 0xff2a4a, element: 0xb98cff, iris: 0xf4e6ff };
+export const WING_GLASS = { hydroponics: 0x8dffb0, labs: 0x9be7ff };
+
+export function wingSlot(slot) {
+  if (slot in WING_GLOW) return { color: WING_GLOW[slot], glow: true };
+  return { color: WING_TOON[slot] ?? 0xff00ff, glow: false };
+}
+
+// A baked wing: static root, the dock distance, lamps, turning parts, colliders.
+export function wingModel(name) {
+  const root = SHIP_PARTS?.[name];
+  if (!root) throw new Error(`${name}.glb not loaded`);
+  const kids = (role) => root.kids.filter((k) => k.role === role);
+  return { root, dock: root.data.dock, blinkers: kids('blinker'), fans: kids('fan'), cols: kids('col') };
 }
 
 // ---- casino slot-machine cabinet (build_slots.py) ----
@@ -2360,7 +2264,7 @@ export function makeSlotCabinet(color) {
       g.add(m);
       if (lamp) bar = m;
     }
-    if (node.ink) { const m = new THREE.Mesh(node.ink, inkMat); m.userData.isInk = true; g.add(m); }
+    addInk(g, node);
     return bar;
   };
   const stat = new THREE.Group(), dyn = new THREE.Group();
@@ -2389,7 +2293,7 @@ export function makeSlotCabinet(color) {
 // `fountain` (plaza basin; `water`, `curtain`, `streams` pivots get fountainFx.js shaders; `spin` centrepieces `chip` and
 // `dollar`, one built), `bouncer` (buff alien in a tux, `head` pivot), `chandelier` (`spin` pivot), `welcome_sign` and
 // `wall_sign` (`face` pivot for the text plane).
-export const CASINO_PROPS = ['lamp_post', 'fountain', 'bouncer', 'chandelier', 'welcome_sign', 'wall_sign'];
+const CASINO_PROPS = ['lamp_post', 'fountain', 'bouncer', 'chandelier', 'welcome_sign', 'wall_sign'];
 const CASINO_TOON = {
   post: 0x2a1450, base: 0x3a3550, gold: 0xffd23f, dark: 0x120a1e, plum: 0x2a1450, cream: 0xd8d4e8, creamshade: 0xaaa6c0, floor: 0x7a93b0, chip: 0xff2e88, white: 0xfff4e0,
   skin: 0xa58cff, skin2: 0x6c52c8, suit: 0x16121f, suit2: 0x2e2a40, shirt: 0xfff4e0, tie: 0xd7263d, tusk: 0xf2ecd8, shoe: 0x0c0a12,
@@ -2408,18 +2312,9 @@ export const casinoNode = (name) => SHIP_PARTS['casino_' + name];
 // A baked node as a Group: meshes dressed by `matFor` plus outline, a child Group per pivot (placed, named, role and
 // extras in userData), except the fountain water (the caller's, fountainFx.js) and pivots `keep` refuses.
 function casinoGroup(node, matFor, accent, keep = () => true) {
-  const g = new THREE.Group();
-  g.name = node.name;
-  g.position.copy(node.pos);
-  g.quaternion.copy(node.quat);
+  const g = pivotGroup(node);
   Object.assign(g.userData, node.data);
-  for (const { slot, geo } of node.parts) {
-    const c = casinoSlot(slot, accent);
-    const m = new THREE.Mesh(geo, matFor(c));
-    m.castShadow = !c.glow;
-    g.add(m);
-  }
-  if (node.ink) { const m = new THREE.Mesh(node.ink, inkMat); m.userData.isInk = true; g.add(m); }
+  dressNode(node, g, (slot) => matFor(casinoSlot(slot, accent)), (slot) => !casinoSlot(slot, accent).glow);
   for (const k of node.kids) if (!CASINO_WATER.has(k.role) && keep(k)) g.add(casinoGroup(k, matFor, accent, keep));
   return g;
 }
@@ -2444,7 +2339,7 @@ export function makeChandelier() {
 // { root, face } with `face` = { pos, w, h } for the text plane.
 export function makeCasinoSign(kind) {
   const node = casinoNode(kind), root = casinoGroup(node, casinoMat);
-  const f = node.kids.find((k) => k.role === 'face');
+  const f = kidOf(node, 'face');
   return { root, face: { pos: f.pos, w: f.data.w, h: f.data.h } };
 }
 
@@ -2472,12 +2367,7 @@ const BJ_GLOW = { cyan: 0x2ee6ff, pink: 0xff2e88, suitred: 0xff2a4a, suitcream: 
 // The table (frozen and merged by the casino) and its hooks: { stat, spots: { felt: { pos, w, h }, shoe, rack, discard } }.
 export function makeBlackjackTable() {
   const node = SHIP_PARTS.bj_table, stat = new THREE.Group(), spots = {};
-  for (const { slot, geo } of node.parts) {
-    const m = new THREE.Mesh(geo, slot in BJ_GLOW ? glowShared(BJ_GLOW[slot]) : toon(BJ_TOON[slot] ?? 0xff00ff));
-    m.castShadow = !(slot in BJ_GLOW);
-    stat.add(m);
-  }
-  if (node.ink) { const m = new THREE.Mesh(node.ink, inkMat); m.userData.isInk = true; stat.add(m); }
+  dressNode(node, stat, (slot) => (slot in BJ_GLOW ? glowShared(BJ_GLOW[slot]) : toon(BJ_TOON[slot] ?? 0xff00ff)), (slot) => !(slot in BJ_GLOW));
   for (const k of node.kids) spots[k.role] = { pos: k.pos, w: k.data.w, h: k.data.h };
   return { stat, spots };
 }
@@ -2508,9 +2398,7 @@ export function makeChipStack(color, n) {
     mesh.castShadow = true;
     g.add(mesh);
   }
-  const h = new THREE.Mesh(G.ink, inkMat);
-  h.userData.isInk = true;
-  g.add(h);
+  addInk(g, G);
   return g;
 }
 
@@ -2518,7 +2406,7 @@ export function makeChipStack(color, n) {
 // `claw_machine`: 16.4 m glass tank on the hall's front wall (back at z = 0, front +z; `glass` slot = panes; pivots mark
 // marquee, console screen, DROP hole, ten ceiling jets). `claw_claw`: energy claw. `claw_link`: one chain link. One model
 // per tank item (engine and case are the salvage models). clawKindParts() gives what an InstancedMesh needs.
-export const CLAW_PROPS = ['claw_machine', 'claw_claw', 'claw_link', 'claw_crate', 'claw_canister', 'claw_gear', 'claw_girder', 'claw_mine', 'claw_magnet', 'claw_tyre', 'claw_hullplate',
+const CLAW_PROPS = ['claw_machine', 'claw_claw', 'claw_link', 'claw_crate', 'claw_canister', 'claw_gear', 'claw_girder', 'claw_mine', 'claw_magnet', 'claw_tyre', 'claw_hullplate',
   'claw_chip', 'claw_lockbox', 'claw_gem'];
 const CLAW_TOON = {
   plum: 0x7c50a0, plum2: 0x9561bc, gold: 0xffd23f, brass: 0xd8aa2e, steel: 0x8a87a0, dark: 0x2a2540, hazard: 0xffd23f, red: 0xd7263d, crate: 0xffffff, cream: 0xfff4e0,
@@ -2555,7 +2443,7 @@ export function makeClawMachine() {
     m.castShadow = !(slot in CLAW_GLOW);
     stat.add(m);
   }
-  if (node.ink) { const m = new THREE.Mesh(node.ink, inkMat); m.userData.isInk = true; stat.add(m); }
+  addInk(stat, node);
   for (const k of node.kids) {
     const spot = { pos: k.pos, w: k.data.w, h: k.data.h, tilt: k.data.tilt || 0, r: k.data.r };
     if (k.role === 'jet') spots.jets.push(spot); else spots[k.role] = spot;
@@ -2578,8 +2466,7 @@ export const clawNode = (name) => SHIP_PARTS[name];
 // the claw as a Group (parts and outline)
 export function makeClawHead() {
   const node = SHIP_PARTS.claw_claw, g = new THREE.Group();
-  for (const { slot, geo } of node.parts) { const m = new THREE.Mesh(geo, CLAW_ITEM_SLOT(slot)); m.castShadow = false; g.add(m); }
-  if (node.ink) { const m = new THREE.Mesh(node.ink, inkMat); m.userData.isInk = true; g.add(m); }
+  dressNode(node, g, CLAW_ITEM_SLOT, () => false);
   return g;
 }
 
@@ -2589,7 +2476,7 @@ export function makeClawHead() {
 // startSign), `dd_grille`, `dd_finish` (banner), `dd_board` (face), `dd_kiosk` (screen), `dd_railpost`, `dd_rope`.
 // makeDerbyPart(name): a Group, pivots as named children (role, extras in userData); makeRacer(i, color, bill): { root,
 // bob, head, wings }.
-export const DUCK_PROPS = ['dd_duck1', 'dd_duck2', 'dd_duck3', 'dd_duck4', 'dd_trough', 'dd_gate', 'dd_grille', 'dd_finish', 'dd_board', 'dd_kiosk', 'dd_railpost', 'dd_rope'];
+const DUCK_PROPS = ['dd_duck1', 'dd_duck2', 'dd_duck3', 'dd_duck4', 'dd_trough', 'dd_gate', 'dd_grille', 'dd_finish', 'dd_board', 'dd_kiosk', 'dd_railpost', 'dd_rope'];
 const DD_TOON = {
   plum: 0x4a1766, plum2: 0x6a2a8f, gold: 0xffd23f, brass: 0xc79a1f, cream: 0xfff4e0, red: 0xd7263d, dark: 0x1a1030, tile: 0x2aa3c0, velvet: 0xb3123a, steel: 0xc9c3d9, foam: 0xffffff,
   body: 0xffd23f, wing: 0xe0b72f, bill: 0xff9f1c, silk: 0xff2e88,
@@ -2597,22 +2484,11 @@ const DD_TOON = {
 const DD_GLOW = { suitred: 0xff2a4a, suitcream: 0xfff4e0, lamp: 0xfff6a8, shine: 0xffffff, glowred: 0xff2a4a, glowamber: 0xff9f1c, glowgreen: 0x7dff6a, lane1: 0xffd23f, lane2: 0xff2e88, lane3: 0x2ee6ff, lane4: 0x7dff6a };
 let ddGlass = null;
 function ddGroup(node, tint, toonMap = DD_TOON, glowMap = DD_GLOW) {
-  const g = new THREE.Group();
-  g.name = node.name;
-  g.position.copy(node.pos);
-  g.quaternion.copy(node.quat);
+  const g = pivotGroup(node);
   Object.assign(g.userData, node.data);
   if (node.role) g.userData.role = node.role;
-  for (const { slot, geo } of node.parts) {
-    const glowing = slot in glowMap;
-    let mat;
-    if (slot === 'glass') mat = ddGlass || (ddGlass = new THREE.MeshToonMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }));
-    else mat = glowing ? glowShared(glowMap[slot]) : toon(tint?.[slot] ?? toonMap[slot] ?? 0xff00ff);
-    const m = new THREE.Mesh(geo, mat);
-    m.castShadow = !glowing && slot !== 'glass';
-    g.add(m);
-  }
-  if (node.ink) { const m = new THREE.Mesh(node.ink, inkMat); m.userData.isInk = true; g.add(m); }
+  dressNode(node, g, (slot) => (slot === 'glass' || slot === 'domeglass' ? ddGlass || (ddGlass = new THREE.MeshToonMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }))
+    : slot in glowMap ? glowShared(glowMap[slot]) : toon(tint?.[slot] ?? toonMap[slot] ?? 0xff00ff)), (slot) => !(slot in glowMap) && slot !== 'glass' && slot !== 'domeglass');
   for (const k of node.kids) g.add(ddGroup(k, tint, toonMap, glowMap));
   return g;
 }
@@ -2623,7 +2499,7 @@ export const makeDerbyPart = (name) => ddGroup(SHIP_PARTS[name]);
 // ceiling tile `hall_coffer`, floor inlay `hall_medallion`, Chip Bar `hall_bar` (`bar_spin` turns the chip), `hall_sofa`,
 // `hall_table`, door frame `hall_gate`, outside suit panels `facade_panel0..3`, roof drum/dome/lantern `facade_crown`.
 // makeHallPart(name): a Group, pivots as named children (role, extras in userData); fixed palette, never recoloured.
-export const HALL_PROPS = ['hall_bay0', 'hall_bay1', 'hall_bay2', 'hall_bay3', 'hall_filler', 'hall_coffer', 'hall_medallion', 'hall_bar', 'hall_sofa', 'hall_table', 'hall_gate', 'facade_panel0', 'facade_panel1', 'facade_panel2', 'facade_panel3', 'facade_crown'];
+const HALL_PROPS = ['hall_bay0', 'hall_bay1', 'hall_bay2', 'hall_bay3', 'hall_filler', 'hall_coffer', 'hall_medallion', 'hall_bar', 'hall_sofa', 'hall_table', 'hall_gate', 'facade_panel0', 'facade_panel1', 'facade_panel2', 'facade_panel3', 'facade_crown'];
 const HALL_TOON = { plum: 0x4a1766, plum2: 0x6a2a8f, gold: 0xffd23f, brass: 0xc79a1f, cream: 0xfff4e0, dark: 0x1a1030, velvet: 0xb3123a, red: 0xd7263d, pink: 0xff2e88 };
 const HALL_GLOW = { suitred: 0xff2a4a, suitcream: 0xfff4e0, lamp: 0xfff6a8, glowcyan: 0x2ee6ff, glowpink: 0xff2e88 };
 export const makeHallPart = (name) => ddGroup(SHIP_PARTS[name], null, HALL_TOON, HALL_GLOW);
@@ -2632,7 +2508,7 @@ export const makeHallPart = (name) => ddGroup(SHIP_PARTS[name], null, HALL_TOON,
 // `lot_card_wall` (2.4 m of barrier, 0.6 m deep), `lot_card_post` (end / corner post), `lot_chip_bollard` (walkway),
 // `lot_pylon_p` (parking sign, facing +z), `lot_bay_stud` (bay head stop), all on y = 0. makeLotPart(name): a Group
 // (Asset Row); lotNode / lotSlot: for baking into a settlement kit (settlements.js dressCasinoLot).
-export const LOT_PROPS = ['lot_card_wall', 'lot_card_post', 'lot_chip_bollard', 'lot_pylon_p', 'lot_bay_stud'];
+const LOT_PROPS = ['lot_card_wall', 'lot_card_post', 'lot_chip_bollard', 'lot_pylon_p', 'lot_bay_stud'];
 const LOT_TOON = { plum: 0x4a1766, plum2: 0x6a2a8f, gold: 0xffd23f, brass: 0xc79a1f, cream: 0xfff4e0, dark: 0x1a1030, red: 0xd7263d, pink: 0xff2e88 };
 const LOT_GLOW = { suitred: 0xff2a4a, suitcream: 0xfff4e0, lamp: 0xfff6a8, glowcyan: 0x2ee6ff, cardface: 0xd9d2ee };
 export const makeLotPart = (name) => ddGroup(SHIP_PARTS[name], null, LOT_TOON, LOT_GLOW);
@@ -2666,15 +2542,19 @@ export async function loadSpiderTankKit(url) {
 // ---- Chimera Downs' kits (built in Blender, see build_downs_*.py and downs_common.py; docs/downs-layouts.md) ----
 // One file per family, each `dn_*` node standing on y = 0. downsNode / downsSlot are for baking into the Downs' kit (race.js build); makeDownsPart gives a piece as a Group (the Asset Row's).
 // The palette is Gold Gleam, Saddle Brown, Black, Money, Barn Red and Touch of Mint (a darker tint of each for shading); slots named glow* and glass* are lit.
-const DOWNS_FILES = ['downs-stand', 'downs-club', 'downs-course', 'downs-stalls', 'downs-arcade', 'downs-screen', 'downs-fair', 'downs-stable', 'downs-crowd'];
+const DOWNS_FILES = ['downs-stand', 'downs-club', 'downs-course', 'downs-stalls', 'downs-arcade', 'downs-screen', 'downs-fair', 'downs-stable', 'downs-crowd', 'downs-dome'];
 export const DOWNS_TOON = {
   mint: 0xf8fff8, mint2: 0xdfe8dd, gold: 0xcfb352, gold2: 0xa8903a, saddle: 0xb07c57, saddle2: 0x8c5f3f, black: 0x3b393a, black2: 0x5a5760,
   money: 0x7b9a6e, money2: 0x5b7a52, barn: 0x8b4044, barn2: 0x6a2e33, seat: 0x7b9a6e, cloth: 0x8b4044, accent: 0x8b4044,
   // spectator slots (downs-crowd), tinted per spectator by race.js; these are defaults for untinted draws
   coat: 0x3b393a, shirt: 0xf8fff8, legs: 0x5a5760, skin: 0xe9b98f, hair: 0x5a3a22, hat: 0x3b393a, band: 0x8b4044,
+  // the dome's lattice (downs-dome); baked into the Downs it gets its own material (downsDome.js), this is the plain draw
+  domeframe: 0xf8fff8,
 };
-export const DOWNS_GLOW = { glasswarm: 0xfff0c0, glowgold: 0xffe9a0, glowmint: 0xe8fff0, glowred: 0xff5a4a };
+const DOWNS_GLOW = { glasswarm: 0xfff0c0, glowgold: 0xffe9a0, glowmint: 0xe8fff0, glowred: 0xff5a4a, glowgreen: 0x7dff9a };
 export const makeDownsPart = (name, tint) => ddGroup(SHIP_PARTS[name], tint || null, DOWNS_TOON, DOWNS_GLOW);
+// a pivot of a Downs node (a door leaf, a lamp: node.kids) as a Group of its own, painted like makeDownsPart
+export const makeDownsKid = (kid, tint) => ddGroup(kid, tint || null, DOWNS_TOON, DOWNS_GLOW);
 // Forecourt fountain as plain meshes (Asset Row), like makeFountain: { root, update(t, dt) }; cup turns, water runs with `t`.
 export function makeDownsFountain() {
   const node = SHIP_PARTS.dn_fountain, root = ddGroup(node, null, DOWNS_TOON, DOWNS_GLOW);
@@ -2692,7 +2572,6 @@ export const downsNode = (name) => {
   if (!SHIP_PARTS[name]) throw new Error('no Downs model ' + name);
   return SHIP_PARTS[name];
 };
-export const downsParts = () => Object.keys(SHIP_PARTS).filter((n) => n.startsWith('dn_'));
 export function downsSlot(slot, over = {}) {
   if (slot in over) return { color: over[slot], glow: false };
   return slot in DOWNS_GLOW ? { color: DOWNS_GLOW[slot], glow: true } : { color: DOWNS_TOON[slot] ?? 0xff00ff, glow: false };
@@ -2715,7 +2594,7 @@ export function makeRacer(i = 1, color = 0xffd23f, bill = 0xff9f1c) {
 export const DISH_SIZE = 30;
 export const DISH_KINDS = ['cryo', 'gantry'];
 const DISH_FIELD = 'field'; // small bases' dish (makeDish), not an array station
-const DISH_HEAD = 'head'; // field dish head alone, light, for small dishes on masts and roofs (makeDishHead, Kit.dishHead)
+const DISH_HEAD = 'head'; // field dish head alone, light, for small dishes on masts and roofs (Kit.dishHead)
 const DISH_TOON = { dark: 0x2a2540, steel: 0x55607a, metal: 0x8a87a0, concrete: 0x8a8698, white: 0xf3eee4, dish: 0xfff4e0, seam: 0x8a87a0, tank: 0xc6d6ea, hazard: 0xffd23f, brand: 0x14a3b8, redsafe: 0xc9202e, blue: 0x1d63d6 };
 const DISH_GLOW = { glass: 0x9be7ff, window: 0xfff6a8, lamp: 0xfff6a8, tail: 0xff2a4a, green: 0x7dff6a, hot: 0xff9f1c };
 
@@ -2743,8 +2622,7 @@ export function dishSlot(slot, faction = 'meridian') {
 export function dishModel(kind, faction = 'meridian', no = '01') {
   const root = SHIP_PARTS['dish_' + kind];
   if (!root) throw new Error('no dish station ' + kind);
-  const find = (n, role) => n.kids.find((k) => k.role === role);
-  const yaw = find(root, 'yaw'), tilt = find(yaw, 'tilt');
+  const yaw = kidOf(root, 'yaw'), tilt = kidOf(yaw, 'tilt');
   const fac = DISH_FACTIONS[faction] ? faction : 'meridian';
   const fixed = [root, ...root.kids.filter((k) => (k.role === 'livery' && k.data.faction === fac) || (k.role === 'number' && k.data.no === no))];
   return { root, fixed, yaw, tilt, blinkers: root.kids.filter((k) => k.role === 'blinker'), tiltBlinkers: tilt.kids.filter((k) => k.role === 'blinker'), size: root.data.size || DISH_SIZE, radius: root.data.radius };
@@ -2752,21 +2630,10 @@ export function dishModel(kind, faction = 'meridian', no = '01') {
 
 // A whole station as plain meshes (model viewer, field dish): root, driven pivots and aircraft lamps (userData.blink).
 // Array sites bake the parts into their kit instead (settlements.js dishStation).
-export function makeDishStation({ kind = 'cryo', faction = 'meridian', no = '01', size = DISH_SIZE, head = false } = {}) {
+export function makeDishStation({ kind = 'cryo', faction = 'meridian', no = '01', size = DISH_SIZE } = {}) {
   const D = dishModel(kind, faction, no);
-  const mats = new Map();
-  const matFor = (slot) => {
-    if (!mats.has(slot)) { const c = dishSlot(slot, faction); mats.set(slot, c.glow ? glow(c.color) : toon(c.color)); }
-    return mats.get(slot);
-  };
-  const dress = (node, g) => {
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = !(slot in DISH_GLOW);
-      g.add(m);
-    }
-    if (node.ink) { const m = new THREE.Mesh(node.ink, inkMat); m.userData.isInk = true; g.add(m); }
-  };
+  const matFor = perSlot((slot) => slotMat(dishSlot(slot, faction)));
+  const dress = (node, g) => dressNode(node, g, matFor, (slot) => !(slot in DISH_GLOW));
   const lamps = [];
   const lamp = (b) => {
     const m = new THREE.Mesh(new THREE.SphereGeometry(b.data.radius || 0.4, 8, 6), glow(0xff2a4a));
@@ -2777,16 +2644,14 @@ export function makeDishStation({ kind = 'cryo', faction = 'meridian', no = '01'
     return m;
   };
   const root = new THREE.Group();
-  if (!head) { // (head: yaw and tilt parts only, no tower or lamps)
-    for (const n of D.fixed) dress(n, root);
-    for (const b of D.blinkers) root.add(lamp(b));
-  }
+  for (const n of D.fixed) dress(n, root);
+  for (const b of D.blinkers) root.add(lamp(b));
   const yaw = new THREE.Group(), tilt = new THREE.Group();
   yaw.position.copy(D.yaw.pos);
   tilt.position.copy(D.tilt.pos);
   dress(D.yaw, yaw);
   dress(D.tilt, tilt);
-  if (!head) for (const b of D.tiltBlinkers) tilt.add(lamp(b));
+  for (const b of D.tiltBlinkers) tilt.add(lamp(b));
   yaw.add(tilt);
   root.add(yaw);
   root.scale.setScalar(size / D.size);
@@ -2803,14 +2668,7 @@ export function makeShuttle({ color = 0xfff4e0, stripe = 0x2ec4ff } = {}) {
 // tools/blender/build_courier.py), or 'classic' (primitives, below). Saved; the dev menu's COURIER MODEL switches it for
 // the next bike.
 export const BIKE_STYLES = ['b', 'a', 'classic'];
-const BIKE_KEY = 'mr-courier-model';
-let bikeStyle = 'b';
-try { const k = localStorage.getItem(BIKE_KEY); if (BIKE_STYLES.includes(k)) bikeStyle = k; } catch { /* unavailable */ }
-export const getBikeStyle = () => bikeStyle;
-export function setBikeStyle(k) {
-  bikeStyle = BIKE_STYLES.includes(k) ? k : 'b';
-  try { localStorage.setItem(BIKE_KEY, bikeStyle); } catch { /* unavailable */ }
-}
+export const { get: getBikeStyle, set: setBikeStyle } = savedStyle('mr-courier-model', BIKE_STYLES);
 
 // A Blender light-bike (build_courier.py): shell, forks, fittings on a chassis, two wheels spun about x. Slots: glowing
 // livery `stripe` (bike colour) and `trim` (gold), fixed toons and glows below, `bag` (saddle bags, trim as toon). The
@@ -2828,26 +2686,13 @@ function makeBlenderBike(B, { color, trim }) {
     if (BIKE_GLOW[slot] !== undefined) return glow(BIKE_GLOW[slot]);
     return toon(BIKE_TOON[slot] ?? 0xff00ff);
   };
-  const lit = (slot) => slot === 'stripe' || slot === 'trim' || BIKE_GLOW[slot] !== undefined;
-  const dress = (node, g) => {
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = !lit(slot);
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-  };
-  const chassis = new THREE.Group();
-  dress(B.kids.find((k) => k.role === 'chassis'), chassis);
+  const dress = (node, g) => dressNode(node, g, matFor, (slot) => !(slot === 'stripe' || slot === 'trim' || BIKE_GLOW[slot] !== undefined));
+  const chassis = new THREE.Group(), chassisNode = kidOf(B, 'chassis');
+  dress(chassisNode, chassis);
   root.add(chassis);
   // wheels hang off the root (as on the classic) so the chassis moves without them
   const wheels = [];
-  for (const k of B.kids.find((n) => n.role === 'chassis').kids.filter((n) => n.role === 'wheel')) {
+  for (const k of chassisNode.kids.filter((n) => n.role === 'wheel')) {
     const w = new THREE.Group();
     w.position.copy(k.pos);
     dress(k, w);
@@ -2858,9 +2703,9 @@ function makeBlenderBike(B, { color, trim }) {
   const P = (k) => d['pose_' + k];
   return {
     root, chassis, wheels, gun: new THREE.Group(),
-    trailFrom: B.kids.find((k) => k.role === 'trail').pos.clone(), trailColor: color, wheelR: 0.78 * BIKE_SCALE,
+    trailFrom: kidOf(B, 'trail').pos.clone(), trailColor: color, wheelR: 0.78 * BIKE_SCALE,
     // rider hip (bike frame, scaled) and the pose that puts hands on the grips and legs clear of the shell
-    seat: new THREE.Vector3(d.seat[0], d.seat[1], d.seat[2]).multiplyScalar(BIKE_SCALE),
+    seat: new THREE.Vector3(...d.seat).multiplyScalar(BIKE_SCALE),
     pose: { lean: P('lean'), thigh: P('thigh'), spread: P('spread'), armX: P('arm_x'), armZ: P('arm_z'), elbow: P('elbow') },
   };
 }
@@ -2869,7 +2714,7 @@ function makeBlenderBike(B, { color, trim }) {
 // the fairings over two hubless wheels (wells sweep over each wheel down to the axle), rider hump between. Flanks: side
 // panels, vents, glowing well arcs, a length seam; canopy, seat, clip-ons, pegs. Built 1:1, shown at 1.2x, +z forward.
 // Returns { root, chassis, wheels, gun, trailFrom, trailColor } (trailFrom: light-trail origin, bike frame).
-export function makeLightBike({ color = 0x2ec4ff, trim = 0xffd23f, style = bikeStyle } = {}) {
+export function makeLightBike({ color = 0x2ec4ff, trim = 0xffd23f, style = getBikeStyle() } = {}) {
   const B = style !== 'classic' && SHIP_PARTS && SHIP_PARTS['bike_' + style];
   if (B) return makeBlenderBike(B, { color, trim });
   const root = new THREE.Group();
@@ -3008,13 +2853,13 @@ const _tr = new THREE.Vector3();
 // (only SPACECOM's has the roof light bar). CIVILIAN car: rounder two-tone, rack and luggage on a longer trunk, in one of
 // CAR_PAINTS (none black or a faction colour). Slots: body, roof (civilian plate; the paints' cream), stripe (faction trim
 // / civilian accent), trim, dark; glowing glass, lamp, tail, lift (four hover pads), beaconA / beaconB (light-bar lamps).
-export const CAR_FACTIONS = {
+const CAR_FACTIONS = {
   spacecom: { body: 0xf2ecdc, stripe: 0xffd23f }, // white and yellow
   vostok: { body: 0x6b6f78, stripe: 0xff3b5c }, // slate and red
   kepler: { body: 0xff9f1c, stripe: 0x6a8f3a }, // orange and the Mule's green (cream would hide the headlamps)
   meridian: { body: 0x2ec4ff, stripe: 0x16385e }, // cyan and navy
 };
-export const CAR_PAINTS = [
+const CAR_PAINTS = [
   { name: 'Bubblegum', body: 0xff7ad9, roof: 0xfff4e0, stripe: 0xffd0ee },
   { name: 'Turquoise', body: 0x1fc7b0, roof: 0xf0dfb8, stripe: 0xfff4e0 },
   { name: 'Periwinkle', body: 0x7b8cff, roof: 0xf4f0ff, stripe: 0xffe08a },
@@ -3028,39 +2873,15 @@ export function makeHoverCar({ faction = null, paint = 0 } = {}) {
   const fac = CAR_FACTIONS[faction];
   const B = SHIP_PARTS[fac ? 'car_faction' : 'car_civilian'];
   const pal = fac ? { ...fac, trim: 0x8a87a0, dark: 0x2a2540, lift: 0x7be0ff } : { ...CAR_PAINTS[((paint % CAR_PAINTS.length) + CAR_PAINTS.length) % CAR_PAINTS.length], trim: 0xd8d4e8, dark: 0x5b5870, lift: 0xffe6a8 };
-  const mats = new Map();
-  const matFor = (slot) => {
-    if (!mats.has(slot)) mats.set(slot, slot === 'lift' || slot in CAR_GLOW ? glow(pal[slot] ?? CAR_GLOW[slot]) : toon(pal[slot] ?? 0xff00ff));
-    return mats.get(slot);
-  };
   const beacons = [];
-  const build = (node) => {
-    if (node.role === 'livery' && node.data.faction !== faction) return null; // (only livery part: SPACECOM's light bar)
-    const g = new THREE.Group();
-    g.name = node.name;
-    g.position.copy(node.pos);
-    g.quaternion.copy(node.quat);
-    for (const { slot, geo } of node.parts) {
-      const m = new THREE.Mesh(geo, matFor(slot));
-      m.castShadow = !(slot === 'lift' || slot in CAR_GLOW);
-      g.add(m);
-    }
-    if (node.ink) {
-      const h = new THREE.Mesh(node.ink, inkMat);
-      h.castShadow = false;
-      h.userData.isInk = true;
-      g.add(h);
-    }
-    if (node.role === 'beacon') { g.userData.phase = node.data.phase || 0; beacons.push(g); }
-    for (const k of node.kids) {
-      const c = build(k);
-      if (c) g.add(c);
-    }
-    return g;
-  };
-  const root = build(B);
-  root.position.set(0, 0, 0);
-  root.quaternion.identity();
+  const root = buildPivots(B, {
+    matFor: perSlot((slot) => (slot === 'lift' || slot in CAR_GLOW ? glow(pal[slot] ?? CAR_GLOW[slot]) : toon(pal[slot] ?? 0xff00ff))),
+    shadow: (slot) => !(slot === 'lift' || slot in CAR_GLOW),
+    keep: (node) => node.role !== 'livery' || node.data.faction === faction, // (only livery part: SPACECOM's light bar)
+    onPivot(node, g) {
+      if (node.role === 'beacon') { g.userData.phase = node.data.phase || 0; beacons.push(g); }
+    },
+  });
   return { root, size: 3 * 1.15 * 1.18, beacons };
 }
 
@@ -3124,8 +2945,7 @@ export function makeKadeTruck() {
   kade.root.position.set(-0.9, 4.0, 0.2);
   kade.legL.rotation.x = kade.legR.rotation.x = -1.4;
   kade.shinL.rotation.x = kade.shinR.rotation.x = 1.1; // knees bent, feet to the pedals
-  if (kade.armL) kade.armL.rotation.x = -1.2;
-  if (kade.armR) kade.armR.rotation.x = -1.2;
+  kade.armL.rotation.x = kade.armR.rotation.x = -1.2;
   chassis.add(kade.root);
   // turret: a yawing mount, an elevating cradle with both guns, the gunner standing behind it
   const turret = new THREE.Group();
@@ -3138,8 +2958,7 @@ export function makeKadeTruck() {
   }));
   const gunner = makeRunner({ suit: 0x3a2b4f, accent: 0x7dff3a, helmet: 0x2b2b2b, visor: 0x7dff3a, scarf: 0xd7263d, pirate: true });
   gunner.root.position.set(0, 0.6, -1.2);
-  if (gunner.armL) gunner.armL.rotation.x = -1.3;
-  if (gunner.armR) gunner.armR.rotation.x = -1.3;
+  gunner.armL.rotation.x = gunner.armR.rotation.x = -1.3;
   turret.add(gunner.root);
   const pitch = new THREE.Group();
   pitch.position.set(0, 1.6, 0.4);
@@ -3237,20 +3056,10 @@ export function makeCrate(color = 0xffd23f, size = 0.9) {
   return g;
 }
 
-// A dish head alone for a roof or post: the field dish's reflector, trunnions, neck and feed, no tower, lamps or colliders;
-// rim `rim` m from the axis, `faction` paint. Origin at the neck's foot. Returns pivots to aim it (yaw about the vertical;
-// tilt -0.5, yaw 0 opens up and towards -z).
 const DISH_RIM = 14.1, DISH_NECK = 21.2, DISH_PIVOT = 28.5; // field dish rim radius, neck-foot height, pivot height, at size 30
-export function makeDishHead(rim, faction = 'none') {
-  const k = rim / DISH_RIM;
-  const d = makeDishStation({ kind: DISH_HEAD, faction, size: DISH_SIZE * k, head: true });
-  d.root.position.y = -DISH_NECK * k;
-  const root = new THREE.Group();
-  root.add(d.root);
-  return { root, yaw: d.yaw, tilt: d.tilt };
-}
 
-// The same head baked into a kit (outposts, settlements, founded bases): neck foot at (x, y, z) in the current frame,
+// A dish head alone (the field dish's reflector, trunnions, neck and feed; no tower, lamps or colliders) baked into a kit
+// (outposts, settlements, founded bases): rim `rim` m from the axis, neck foot at (x, y, z) in the current frame,
 // `faction` a key or colour. `az` turns about the vertical (0: opens towards -z, PI: +z); `el` nods (-0.5: a bit over 45°
 // up; -1.4: nearly sideways). With `spin` (rad/s) it's a returned moving piece turning about the vertical through
 // (x, y, z) on an `arm` m boom (head at the end, facing out for az PI).
@@ -3301,8 +3110,7 @@ export function makeRocket({ color = 0xfff4e0, stripe = 0xff4f2e } = {}) {
     const fin = part(new THREE.BoxGeometry(0.6, 9, 5), stripeM, Math.cos(a) * 5, 6, Math.sin(a) * 5, 0.1);
     fin.rotation.y = -a;
     root.add(fin);
-    const leg = part(new THREE.CylinderGeometry(0.3, 0.3, 6), toon(0x4a4660), Math.cos(a + 0.78) * 5.5, 2.5, Math.sin(a + 0.78) * 5.5, 0.05);
-    root.add(leg);
+    root.add(part(new THREE.CylinderGeometry(0.3, 0.3, 6), toon(0x4a4660), Math.cos(a + 0.78) * 5.5, 2.5, Math.sin(a + 0.78) * 5.5, 0.05));
   }
   const flame = new THREE.Mesh(new THREE.ConeGeometry(3.2, 14, 14, 1, true).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85, depthWrite: false }));
   flame.position.y = -4;
@@ -3321,8 +3129,7 @@ export function makePylon() {
   const orb = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 10), glow(0x7dff3a));
   orb.position.y = 14;
   root.add(orb);
-  const flag = part(new THREE.PlaneGeometry(3, 2), toon(0x111111, { side: THREE.DoubleSide }), 1.6, 11, 0, 0);
-  root.add(flag);
+  root.add(part(new THREE.PlaneGeometry(3, 2), toon(0x111111, { side: THREE.DoubleSide }), 1.6, 11, 0, 0));
   return { root, orb };
 }
 
@@ -3345,8 +3152,7 @@ export function makeSeismo() {
 // Vacuum tube for black-lake fluid (carried on the back).
 export function makeTube() {
   const root = new THREE.Group();
-  const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 12), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.35 }));
-  root.add(glass);
+  root.add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 12), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.35 })));
   const fluid = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1, 12), new THREE.MeshBasicMaterial({ color: 0x2a1f4f }));
   root.add(fluid);
   for (const s of [-1, 1]) root.add(part(new THREE.CylinderGeometry(0.26, 0.26, 0.14, 12), toon(0x3a3550), 0, s * 0.58, 0, 0.03));
@@ -3366,7 +3172,7 @@ function planetTexture(draw, w = 256, h = 128) {
 }
 export function makePlanets(sunDir, R = 6700) {
   const root = new THREE.Group();
-  const rr = mulberry32Local(4242);
+  const rr = mulberry32(4242);
   const n = new THREE.Vector3().crossVectors(sunDir, new THREE.Vector3(0, 1, 0)).normalize(); // the ecliptic's pole
   const e2 = new THREE.Vector3().crossVectors(n, sunDir).normalize();
   const along = (deg, tilt) => {
@@ -3446,9 +3252,3 @@ export function makePlanets(sunDir, R = 6700) {
   return root;
 }
 const _pq = new THREE.Quaternion();
-const mulberry32Local = (a) => () => {
-  a |= 0; a = (a + 0x6d2b79f5) | 0;
-  let t = Math.imul(a ^ (a >>> 15), 1 | a);
-  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-};

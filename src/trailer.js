@@ -12,10 +12,11 @@
 // Saves are untouched: localStorage and sessionStorage are swapped for in-memory stores before any module reads them.
 import * as THREE from 'three';
 import { tangent, frameQuat, dirFromAngles } from './geo.js';
-import { mulberry32 } from './rng.js';
+import { mulberry32, clamp01, lerp, smoothstep } from './rng.js';
 import { spliceGenes } from './chimera.js';
 import { clearEchoes } from './monolith.js';
 import { DEV_TOOLS } from './devtools.js';
+import { railAt } from './rails.js';
 
 const Q = new URLSearchParams(location.search);
 export const TRAILER = DEV_TOOLS && Q.has('trailer'); // dev tool: off in a release build
@@ -86,12 +87,10 @@ if (TRAILER) {
 }
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
-const clamp01 = (x) => Math.max(0, Math.min(1, x));
-const ease = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); };
+const ease = (x) => smoothstep(0, 1, x);
 const easeIn = (x) => { x = clamp01(x); return x * x * x; };
 const easeOut = (x) => { x = clamp01(x); return 1 - (1 - x) ** 3; };
-const lerp = (a, b, k) => a + (b - a) * k;
-const _a = V(), _b = V(), _c = V(), _q = new THREE.Quaternion();
+const _a = V(), _b = V(), _c = V();
 const SUN_DIR = dirFromAngles(0, 0);
 const _m4 = new THREE.Matrix4();
 
@@ -268,8 +267,8 @@ export class Trailer {
     this.popMute = null;
     this.pitch = null;
     g.audio.mix.hum = HUM;
-    if (g.player) g.player.body.thrusting = false;
-    if (g.player) g.player.weapon = 0;
+    P.body.thrusting = false;
+    P.weapon = 0;
     this.anchor = null;
     g.lampForce = null; // lamp back on automatic
   }
@@ -411,6 +410,8 @@ export class Trailer {
     const t1 = V().crossVectors(up, t0);
     return t0.multiplyScalar(Math.cos(a)).addScaledVector(t1, Math.sin(a));
   }
+  // direction (x, y, z) in a location's frame
+  along(id, x, y, z) { return this.at(id, x, y, z).sub(this.at(id, 0, 0, 0)); }
   // world point in a location's frame (inverse of at)
   toLocal(id, p, out = V()) { return out.copy(p).applyMatrix4(_m4.copy(this.loc(id).group.matrixWorld).invert()); }
   // lift a camera point out of rising ground
@@ -578,15 +579,14 @@ const SHOTS = [
       T.fr = ship(T, 'ilmb', 'farside');
       flyShip(T.fr, 6);
       T.g.world.traffic.updateFlyer(T.fr, 0, T.eye);
-      aimShip(T.fr, T.at('ilmb', 0, 0, -1).sub(T.at('ilmb', 0, 0, 0)));
+      aimShip(T.fr, T.along('ilmb', 0, 0, -1));
     },
     update(T, t) { flyShip(T.fr, 6 + 5 * t + 8.2 * t * t); },
     cam(T, t) {
       const k = ease(t / 3.6);
       T.at('ilmb', lerp(-62, -80, k), lerp(4, 28, k), lerp(-228, -206, k), T.eye);
       // look at the ship, lagging a little, horizon low in frame
-      const target = T.fr.pos.clone();
-      T.look.lerpVectors(T.at('ilmb', -86, 26, -150), target, ease(t / 2.4));
+      T.look.lerpVectors(T.at('ilmb', -86, 26, -150), T.fr.pos, ease(t / 2.4));
       T.fov = lerp(58, 66, k);
     },
     cards: [{ at: 0.35, dur: 2.5, html: 'THE MOON NEEDS ITS DELIVERIES.' }],
@@ -598,8 +598,8 @@ const SHOTS = [
     dur: 3.4,
     setup(T) {
       T.music('menu');
-      T.place(T.at('ilmb', 0, 0, 84), T.at('ilmb', 0, 0, -1).sub(T.at('ilmb', 0, 0, 0)));
-      T.out = T.at('ilmb', 0.12, 0, 1).sub(T.at('ilmb', 0, 0, 0));
+      T.place(T.at('ilmb', 0, 0, 84), T.along('ilmb', 0, 0, -1));
+      T.out = T.along('ilmb', 0.12, 0, 1);
       T.kicked = false;
     },
     update(T, t) {
@@ -684,8 +684,7 @@ const SHOTS = [
     cards: [{ at: 0.3, dur: 2.4, html: 'GRIND. FLIP. SHOW OFF.<br><span class="tr-sub">GNARLY TRICKS PAY CASH BONUSES.</span>' }],
     cam(T, t, dt) {
       const P = T.g.player;
-      const up = P.pos.clone().normalize();
-      const F = T.playerFrame();
+      const F = T.playerFrame(), up = F.up;
       // orbit from outside the lip to the runner's front
       const a = lerp(-2.2, 0.4, ease(t / 2.8));
       const off = F.fwd.clone().multiplyScalar(Math.cos(a) * 5.2).addScaledVector(F.right, Math.sin(a) * 5.2);
@@ -728,8 +727,7 @@ const SHOTS = [
     },
     cam(T, t, dt) {
       const P = T.g.player;
-      const up = P.pos.clone().normalize();
-      const F = T.playerFrame();
+      const F = T.playerFrame(), up = F.up;
       // low side angle: runner against the sky
       const eye = P.pos.clone().addScaledVector(F.right, 6.5).addScaledVector(F.fwd, 2.5).addScaledVector(up, -0.4);
       const look = P.pos.clone().addScaledVector(up, 0.8).addScaledVector(F.fwd, 2);
@@ -945,8 +943,7 @@ const SHOTS = [
     },
     cam(T, t, dt) {
       const P = T.g.player, A = T.air;
-      const up = P.pos.clone().normalize();
-      const F = T.playerFrame();
+      const F = T.playerFrame(), up = F.up;
       if (!A.launched || t - A.at < 0.15) {
         // low behind, the rim rushing up
         const eye = P.pos.clone().addScaledVector(T.dir, -7).addScaledVector(F.right, 3).addScaledVector(up, 1.8);
@@ -1055,7 +1052,7 @@ const SHOTS = [
     dur: 3.0,
     setup(T) {
       T.music('downs');
-      T.place(T.g.race.booth.clone(), T.at('downs', 0, 0, 1).sub(T.at('downs', 0, 0, 0)));
+      T.place(T.g.race.booth.clone(), T.along('downs', 0, 0, 1));
       T.hidePlayer = true;
     },
     cam(T, t) {
@@ -1077,7 +1074,7 @@ const SHOTS = [
       // a fresh card under this shot's seed (the load-time one is random), with a wheeled racer
       R.card = [];
       R.post('medium');
-      T.place(R.booth.clone(), T.at('downs', 0, 0, 1).sub(T.at('downs', 0, 0, 0)));
+      T.place(R.booth.clone(), T.along('downs', 0, 0, 1));
       T.hidePlayer = true;
       const race = R.card[0];
       if (!race.field.some((f) => f.legs === 'car')) race.field[0].legs = 'car';
@@ -1087,8 +1084,7 @@ const SHOTS = [
       g.audio.roar(1);
     },
     cam(T, t, dt) {
-      const R = T.g.race;
-      const rs = R.racers;
+      const rs = T.g.race.racers;
       if (!rs.length || !rs[0].pos) return;
       const lead = [...rs].sort((a, b) => b.s - a.s)[0];
       const cen = V();
@@ -1160,9 +1156,9 @@ const SHOTS = [
     dur: 1.7,
     setup(T) {
       T.music('casino');
-      T.place(T.at('casino', 1.5, 0, 52), T.at('casino', 0, 0, 0).sub(T.at('casino', 0, 0, 52)), 16);
-      T.g.player.setCargo(CRATE);
       T.in = T.at('casino', 0, 0, 0).sub(T.at('casino', 0, 0, 52));
+      T.place(T.at('casino', 1.5, 0, 52), T.in, 16);
+      T.g.player.setCargo(CRATE);
     },
     update(T) {
       T.hold = new Set(['Space', 'KeyW']);
@@ -1216,10 +1212,10 @@ const FISSURE = {
     T.music('dark');
     const g = T.g;
     // runner ahead of the camera, silhouetted against the glow
-    T.place(T.at('fissure', 0, -20, -14), T.at('fissure', 0, 0, 1).sub(T.at('fissure', 0, 0, 0)), 20);
+    T.dir = T.along('fissure', 0, 0, 1);
+    T.place(T.at('fissure', 0, -20, -14), T.dir, 20);
     g.player.setCargo(CRATE);
     T.lampOn = true;
-    T.dir = T.at('fissure', 0, 0, 1).sub(T.at('fissure', 0, 0, 0));
     T.faded = false;
   },
   update(T, t) {
@@ -1237,8 +1233,7 @@ const FISSURE = {
     // 8 m back up the slope the floor is higher than the runner: stay 2.4 m over it
     const floor = z < 20 ? (-34 * (z + 70)) / 90 : -34;
     const y = Math.min(Math.max(r.y + 2.2, floor + 2.4), z > 16 ? -27.5 : 0);
-    const eye = T.at('fissure', 0, y, z);
-    T.chase(eye, T.at('fissure', 0, -27, 110), dt, 6, 10);
+    T.chase(T.at('fissure', 0, y, z), T.at('fissure', 0, -27, 110), dt, 6, 10);
     T.fov = lerp(60, 46, ease(t / 5));
   },
   cards: [MORE(0, 2.8)],
@@ -1284,8 +1279,7 @@ const HERO = {
   },
   cam(T, t, dt) {
     const P = T.g.player;
-    const up = P.pos.clone().normalize();
-    const F = T.playerFrame();
+    const F = T.playerFrame(), up = F.up;
     // low alongside the grind, then hold as they sail off, craning up for the logo
     let eye;
     if (t < 3.0 || !T.anchor) {
@@ -1311,8 +1305,7 @@ const SCOOP = {
     A.jar = [];
     A.refreshJarMesh();
     g.player.setCargo(null); // the jar rides where the crate does
-    const S = dirFromAngles(0, 0);
-    const sunny = (p) => { const th = Math.acos(p.clone().normalize().dot(S)) * 57.3; return th > 20 && th < 60; };
+    const sunny = (p) => { const th = Math.acos(p.clone().normalize().dot(SUN_DIR)) * 57.3; return th > 20 && th < 60; };
     T.scoop = {
       beat: -1,
       rock: g.world.crystals.find((c) => !c.taken && sunny(c.pos) && !g.zoneAt(c.pos, 1.3)),
@@ -1416,15 +1409,7 @@ function rim(T) {
   if (!T._rim) T._rim = T.rimNear(T.at('ilmb', 136, 0, 778), 30, 45, 60);
   return T._rim;
 }
-// point at arc length s along a rail
-function railPoint(r, s) {
-  s = r.loop ? ((s % r.len) + r.len) % r.len : Math.max(0, Math.min(r.len, s));
-  let i = 0;
-  while (i < r.cum.length - 2 && r.cum[i + 1] < s) i++;
-  const f = (s - r.cum[i]) / Math.max(1e-6, r.cum[i + 1] - r.cum[i]);
-  return r.pts[i].clone().lerp(r.pts[i + 1], f);
-}
-export { SHOTS };
+function railPoint(r, s) { return railAt(r, s, V(), V()); } // point at arc length s along a rail
 
 SHOTS.push(FISSURE, HERO);
 // running order: casino after the Downs, then scoop and Dr. Zbornak's lab

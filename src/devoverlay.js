@@ -144,8 +144,7 @@ export class DevOverlay {
       this.dom.root.classList.toggle('hidden', !this.on);
       this.dom.root.style.right = `${12 + (this.shows('input') ? MON_W : 0)}px`; // (clear of the input monitor)
     }
-    const now = performance.now();
-    this.pubAt = this.sampleAt = now; // (first numbers after a clean half second)
+    this.pubAt = this.sampleAt = performance.now(); // (first numbers after a clean half second)
     this.winMs = this.winN = this.winFrames = this.sFrames = this.cpuSum = this.cpuN = 0;
     this.sum.fill(0); this.max.fill(0);
     if (this.dom && this.dom.frame.graph) { this.fpsG.clear(); this.loadG.cpu.g.clear(); this.loadG.gpu.g.clear(); }
@@ -186,11 +185,7 @@ export class DevOverlay {
       ld.rows.appendChild(r);
       this.loadG[k] = { val: r.querySelector('.perf-val'), g: new TimeGraph(r.querySelector('canvas'), 420, 56) };
     }
-    sec('stages', [['t', 'pre']]);
-    sec('render', [['t', 'pre']]);
-    sec('world', [['t', 'pre']]);
-    sec('where', [['t', 'pre']]);
-    sec('pirates', [['t', 'pre']]);
+    for (const k of ['stages', 'render', 'world', 'where', 'pirates']) sec(k, [['t', 'pre']]);
     dom.none.textContent = 'No sections on. Dev menu → Debug overlay.';
     document.body.appendChild(root);
   }

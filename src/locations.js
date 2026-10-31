@@ -30,11 +30,24 @@ export const FACTIONS = {
   },
 };
 
+// The ILMB's six wings round its dome, in the order world.js buildIlmbWings builds them (Hydroponics, Meridian Labs, Vostok
+// Hangar, Daedalus Relay, Power Block, Kepler Habitat): [angle in the hub's x-z plane (as Math.atan2(z, x)), distance out to
+// the wing's centre]. settlements.js dressIlmb cuts the dome's berm where their skywalks dock.
+export const ILMB_WINGS_AT = [[0.0, 116], [0.62, 122], [2.2, 124], [3.8, 120], [4.5, 110], [5.2, 120]];
+// Its inner guns: one in each gap between neighbouring wings, on the gap's bisector at the pair's mean distance, unless a
+// shuttle pad (world.js buildHub) holds that spot: then nearer the dome (Hangar-Relay, the pad at (-120, 40)) or out past
+// the pad (Habitat-Hydroponics, the pad at (95, -60)).
+const ILMB_GUN_R = [null, null, 100, null, null, 140];
+const ILMB_GUNS = ILMB_WINGS_AT.map(([a, d], i) => {
+  const [a2, d2] = ILMB_WINGS_AT[(i + 1) % ILMB_WINGS_AT.length];
+  return [a + ((a2 - a + Math.PI * 2) % (Math.PI * 2)) / 2, ILMB_GUN_R[i] ?? (d + d2) / 2];
+});
+
 export const LOCATIONS = [
   {
     id: 'ilmb', name: 'International Moon Base', short: 'ILMB', type: 'hub', faction: 'spacecom', hq: true,
     theta: 45, phi: 0, r: 280, jobs: ['spacecom', 'spacecom', 'meridian', 'kepler', 'vostok'], safe: true, repair: 14,
-    defense: { ring: 240, turrets: 10, inner: 4, patrols: 3 },
+    defense: { ring: 240, turrets: 10, inner: ILMB_GUNS, patrols: 3 },
     blurb: 'SPACECOM headquarters: the largest, most heavily defended place on the Moon.',
   },
   {
@@ -147,9 +160,22 @@ export const LOCATIONS = [
   {
     id: 'downs', name: 'Chimera Downs', short: 'DOWNS', type: 'derby', faction: 'none', poi: true, late: true,
     theta: 22, phi: 160, r: 280, curved: true, safe: true, repair: 6,
+    arrive: [0, 290], // teleports land here (local x, z), facing the centre: in front of the main lock, past its apron's end
+    // (tools/blender/build_downs_dome.py: outer door at z 274.6, apron to 280)
     blurb: "A proper racecourse for the things that crawl out of Dr. Zbornak's reactor: a roofed grandstand, a screen the size of a barn and a race card that never sleeps.",
   },
 ];
+
+// Turret spots on a location's defence rings, [angle, radius from the centre] (enemies.js arms them, world.js builds their
+// pylons, traffic.js keeps roads off them): a restricted site's fixed inner and outer rings, else loc.defense's ring and its
+// inner spots (the ILMB's, between its wings).
+export function defenseSpots(loc) {
+  const spots = [];
+  const ring = (n, a0, r) => { for (let i = 0; i < n; i++) spots.push([(i / n) * Math.PI * 2 + a0, r]); };
+  if (loc.restricted) { const small = !!loc.small; ring(small ? 3 : 4, 0.4, small ? 68 : 112); ring(small ? 2 : 4, 1.2, small ? 180 : 290); }
+  else if (loc.defense) { const d = loc.defense; ring(d.turrets, 0.2, d.ring); spots.push(...(d.inner || [])); }
+  return spots;
+}
 
 export const CARGO = [
   { name: 'Medical Supplies', fragile: 0.5, hot: 1, color: 0xff3b5c },
@@ -190,12 +216,14 @@ export const TIERS = [
   { min: 50, name: 'HONORED', color: '#ffd23f', pay: 1.6 },
   { min: 80, name: 'REVERED', color: '#ff7ad9', pay: 1.8 },
 ];
+// the standing tier a reputation value v falls in
+export const tierFor = (v) => { let t = TIERS[0]; for (const x of TIERS) if (v >= x.min) t = x; return t; };
 
 // faction gear at each HQ; each level needs more reputation: level 1 FRIENDLY, 2 TRUSTED, 3 HONORED (ILMB: NEUTRAL, FRIENDLY, TRUSTED); weapons HONORED (or the story hands them out)
 const REP = Object.fromEntries(TIERS.map((t) => [t.name.toLowerCase(), t.min]));
 const LADDER = [REP.friendly, REP.trusted, REP.honored]; // other factions' three-level gear
 const ILMB_LADDER = [REP.neutral, REP.friendly, REP.trusted]; // SPACECOM's own kit starts at NEUTRAL
-import { cosmeticShopItems } from './cosmetics.js';
+import { cosmeticShopItems } from './cosmeticsData.js';
 
 export const SHOPS = {
   ilmb: [

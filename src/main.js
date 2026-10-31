@@ -35,6 +35,7 @@ import { Gamepad } from './gamepad.js';
 import { Haptics } from './haptics.js';
 import { DILATE_RATE } from './monolith.js';
 import { Cosmetics } from './cosmetics.js';
+import { Wardrobe } from './wardrobe.js';
 import { Cheats, DEV_TOOLS, loadDevTools } from './devtools.js';
 import { Territory, locationAnchors, holderOf } from './territory.js';
 import { Civilians } from './civilians.js';
@@ -212,13 +213,12 @@ class Game {
     this.fx.ground = (p, out, lift) => this.planet.ground(p, out, lift); // whichever world you're on
     this.hud = new HUD(this);
 
-    const hub = this.locations[0];
-    this.hub = hub;
+    const hub = this.hub = this.locations[0];
     this.spawnPoint = this.world.toWorld(hub, 0, 0.5, 108);
     this.spawnFacing = tangent(hub.pos.clone().sub(this.spawnPoint), this.spawnPoint.clone().normalize()).normalize();
     this.cam = {
       fwd: this.spawnFacing.clone(), right: new THREE.Vector3(), look: new THREE.Vector3(), up: this.spawnPoint.clone().normalize(),
-      pitch: -0.1, position: new THREE.Vector3(), dist: 8, shake: 0, fov: 72,
+      pitch: -0.1, position: new THREE.Vector3(), dist: 8, lift: 0, shake: 0, fov: 72,
     };
     this.player = new Player(this, this.spawnPoint);
     this.player.heading.copy(this.spawnFacing);
@@ -411,7 +411,7 @@ class Game {
       } else if (this.state === 'casino') { // casino
         if (esc) this.casino.close(true); else this.casino.onKey(code);
       } else if (this.state === 'wardrobe') { // wardrobe
-        if (esc || code === 'KeyC') this.cosmetics.ui.close(esc); else this.cosmetics.ui.onKey(code);
+        if (esc || code === 'KeyC') this.wardrobe.close(esc); else this.wardrobe.onKey(code);
       } else if (this.state === 'play') {
         if (code === 'KeyM') this.openMap();
         if (code === 'KeyJ') this.openLog();
@@ -523,7 +523,7 @@ class Game {
       this.dialog('DR. ZBORNAK', '"A quantum tether to the holding pen. Press <b>P</b> anywhere and your creatures will be… relocated. Don\'t think about how. I don\'t."', [{ label: 'NEAT' }]);
     } });
     // three of a salvage kind for a permanent upgrade
-    const trade = (kind, key, max, label, done) => {
+    const trade = (kind, key, max, label, done, ok = 'NICE') => {
       const have = this.alchemy.jar.filter((i) => i.kind === kind).length;
       const lv = this.upgrades[key] || 0;
       if (have < 3 || lv >= max) return;
@@ -535,25 +535,16 @@ class Game {
         this.player.applyUpgrades(this.upgrades);
         this.audio.cash();
         this.save();
-        this.dialog('DR. ZBORNAK', done(lv + 1), [{ label: 'NICE' }]);
+        this.dialog('DR. ZBORNAK', done(lv + 1), [{ label: ok }]);
       } });
     };
     trade('transponder', 'radar', 1, 'HAND OVER 3 TRANSPONDERS — EVENT RADAR', () => '"I have tuned your helmet to their frequencies. Faction events up to two and a half kilometres away now show on the edge of your minimap. You are welcome."');
     trade('plating', 'plating', 3, 'HAND OVER 3 SCRAP PLATES — BOLT-ON ARMOUR', (lv) => `"Riveted to your suit and to every vehicle you own. Ten more hull for you and fifteen percent more for your rides (armour ${lv}/3). Do not ask what holds it on."`);
-    const wires = this.alchemy.jar.filter((i) => i.kind === 'wiring').length;
-    const gw = this.upgrades.gripwire || 0;
-    if (wires >= 3 && gw < 1) buttons.push({ label: `${buttons.length + 1} · HAND OVER 3 ELECTRICAL WIRING — SKATE GRIP TUNE`, fn: () => {
-      let n = 0;
-      this.alchemy.jar = this.alchemy.jar.filter((i) => !(i.kind === 'wiring' && n++ < 3));
-      this.alchemy.refreshJarMesh();
-      this.upgrades.gripwire = gw + 1;
-      this.player.applyUpgrades(this.upgrades);
-      this.audio.cash();
-      this.save();
+    trade('wiring', 'gripwire', 1, 'HAND OVER 3 ELECTRICAL WIRING — SKATE GRIP TUNE', () => {
       this.fx.pop('GRIP TUNED!', null, { color: '#ffd23f', size: 50 });
-      this.dialog('DR. ZBORNAK', `"Copper! Lovely, stolen copper. I have rewound the magnetic coils in your skates. They will hug the ground a little harder now, and steer a touch sharper. Any tighter and you would be welded to the Moon."`, [{ label: 'STICKY!' }]);
-    } });
-    else if (wires >= 3) buttons.push({ label: `${buttons.length + 1} · MORE WIRING?`, fn: () => this.dialog('DR. ZBORNAK', '"Your coils are already wound as tight as physics allows. Throw the wire in the reactor if you must."', [{ label: 'OK' }]) });
+      return `"Copper! Lovely, stolen copper. I have rewound the magnetic coils in your skates. They will hug the ground a little harder now, and steer a touch sharper. Any tighter and you would be welded to the Moon."`;
+    }, 'STICKY!');
+    if ((this.upgrades.gripwire || 0) >= 1 && this.alchemy.jar.filter((i) => i.kind === 'wiring').length >= 3) buttons.push({ label: `${buttons.length + 1} · MORE WIRING?`, fn: () => this.dialog('DR. ZBORNAK', '"Your coils are already wound as tight as physics allows. Throw the wire in the reactor if you must."', [{ label: 'OK' }]) });
     const chims = this.alchemy.chimeras.length;
     if (chims) buttons.push({ label: `${buttons.length + 1} · HOLDING PEN (${chims})`, fn: () => this.alchemy.penMenu() });
     buttons.push({ label: `${buttons.length + 1} · HEARD ANY RUMOURS?`, fn: () => this.dialog('DR. ZBORNAK', '"Rumours? Science does not deal in rumours. But… <br><br>• <b>Moon Mites</b> herd together in the sunny craters, well away from settlements. Green dots on your minimap, if you\'re close.<br>• That old satellite, <b>SAT-7 \"Lantern\"</b>, swoops low over the ground just past the ILMB once a lap. Something on its deck glows. You would have to match its speed exactly to land on it. Ha!<br>• Bring me <b>three lengths of electrical wiring</b> from a supply depot, in your jar, and I will rewind your skate coils for extra grip.<br>• Saplings from the farm domes are alive, technically. They splice beautifully.<br>• On the twilight side there is a trench nobody dug: the <b>Whispering Fissure</b>. My instruments go strange near it. Something down there wants a key."', [{ label: 'SPOOKY', fn: back }]) });
@@ -796,7 +787,7 @@ class Game {
       impact: 'You hit the ground way too hard with your skates off.',
       ram: 'Rammed into oblivion.',
       crash: 'You wrapped your vehicle round something solid.',
-      pirate: 'Scrapjaw pirates blasted you off your skates.',
+      pirate: 'Rustmoon pirates blasted you off your skates.',
       mil: 'Military defences turned you into a crater.',
       player: 'Your own Pulse Spinner. Classic.',
       kade: "Shredded by Captain Kade's gun truck. Should've stayed low.",
@@ -816,34 +807,38 @@ class Game {
 
   respawn() {
     if (this.state !== 'dead') return;
+    this.hud.show('death', false);
+    this.projectiles.clear();
     if (this.spindle && this.spindle.active) {
       // on the Spindle: a recovery transit cutscene back to the Monolith
-      this.hud.show('death', false);
-      this.projectiles.clear();
       this.input.lock(); // now, on the click: pointer lock needs a gesture
       this.spindle.recover();
       return;
     }
-    this.hud.show('death', false);
     this.enemies.clearPirates();
     this.enemies.forgive();
-    this.projectiles.clear();
     // your clinic HQ, else the nearest clinic, else home (respawn.js)
     this.respawnPt.deploy(this.respawnPt.plan(this.player.pos.clone().normalize()));
     this.state = 'play';
     this.input.lock();
   }
 
-  explode(pos, radius, damage, owner, knock = 1, spare = false) {
+  // impact: a bullet's hit (a spark and a puff of dust, no blast, no boom); the damage works the same
+  explode(pos, radius, damage, owner, knock = 1, spare = false, impact = false) {
     const big = radius > 10;
     const up = upAt(pos);
-    this.fx.explosion(pos, radius * 0.7, big);
     const P = this.player;
     const dCam = pos.distanceTo(this.camera.position);
-    if (dCam < 600) this.audio.boom(big);
-    this.haptics.boom(dCam, big);
+    if (impact) {
+      this.fx.spawn(pos, up.clone().multiplyScalar(4), { color: 0xffd28a, size: 0.35, life: 0.18, count: 4, spread: 5, drag: 4 });
+      this.fx.spawn(pos, up.clone().multiplyScalar(1.5), { color: 0xc9c1d8, size: 0.7, life: 0.5, count: 2, spread: 1.5, drag: 2 });
+    } else {
+      this.fx.explosion(pos, radius * 0.7, big);
+      if (dCam < 600) this.audio.boom(big);
+      this.haptics.boom(dCam, big);
+    }
     if (big && dCam < 200) this.cam.shake = Math.min(1.5, this.cam.shake + (1 - dCam / 200));
-    if (owner !== 'player' && Math.random() < 0.5 && dCam < 150) this.fx.pop(pick(['BLAM!', 'ZAKK!', 'FWOOM!']), pos.clone().addScaledVector(up, 2), { color: '#ff4f2e', size: 46, life: 0.7 });
+    if (!impact && owner !== 'player' && Math.random() < 0.5 && dCam < 150) this.fx.pop(pick(['BLAM!', 'ZAKK!', 'FWOOM!']), pos.clone().addScaledVector(up, 2), { color: '#ff4f2e', size: 46, life: 0.7 });
     if (!P.dead && !spare) {
       const d = pos.distanceTo(P.center);
       if (d < radius + 1) {
@@ -1035,11 +1030,7 @@ class Game {
       if (this.player.vehicle) this.garage.exit();
       this.enemies.clearPirates();
       this.projectiles.clear();
-      const h = this.home();
-      this.player.respawn(h.point, h.facing);
-      this.cam.fwd.copy(h.facing);
-      this.cam.pitch = -0.1;
-      this.updateCamera(0.016, true);
+      this.placeRunner(this.home());
       this.story.save();
       this.save();
     }, 1400);
@@ -1083,6 +1074,14 @@ class Game {
     this._homes = {};
   }
 
+  // the runner to a { point, facing } spot, the camera snapped behind
+  placeRunner(h) {
+    this.player.respawn(h.point, h.facing);
+    this.cam.fwd.copy(h.facing);
+    this.cam.pitch = -0.1;
+    this.updateCamera(0.016, true);
+  }
+
   // called by the main menu (from a click or key, so pointer lock is allowed)
   startPlay() {
     if (this.started) return;
@@ -1092,22 +1091,10 @@ class Game {
     // back from the title tour: runner home, camera behind
     if (this.tour) {
       if (this.tour.fade) this.tour.fade.style.opacity = '0';
-      const h = this.ws.bulletin ? this.home() : this.resumeSpot(); // a finale's new dawn starts at home
-      this.player.respawn(h.point, h.facing);
-      this.player.model.root.visible = true;
-      this.cam.fwd.copy(h.facing);
-      this.cam.pitch = -0.1;
       this.camera.fov = 72; this.camera.updateProjectionMatrix();
-      this.updateCamera(0.016, true);
+      this.placeRunner(this.ws.bulletin ? this.home() : this.resumeSpot()); // a finale's new dawn starts at home
       this.tour = null;
-    } else if (this.savedNear && !this.ws.bulletin) {
-      // no title tour (straight into play after a reload)
-      const h = this.resumeSpot();
-      this.player.respawn(h.point, h.facing);
-      this.cam.fwd.copy(h.facing);
-      this.cam.pitch = -0.1;
-      this.updateCamera(0.016, true);
-    }
+    } else if (this.savedNear && !this.ws.bulletin) this.placeRunner(this.resumeSpot()); // no title tour (straight into play after a reload)
     document.getElementById('title').classList.add('hidden');
     this.state = 'play';
     this.input.lock();
@@ -1346,9 +1333,8 @@ class Game {
 
   // on the Spindle: you, your shots, the story step and the asteroid; the Moon waits
   updateAway(dt, c) {
-    const P = this.player;
     this.cheats.tick();
-    P.update(dt, this.input, c);
+    this.player.update(dt, this.input, c);
     this.story.update(dt);
     this.spindle.update(dt);
     this.hud.eventPanel(this.story.panel());
@@ -1477,7 +1463,7 @@ class Game {
     this.garage.update(dt);
     dbg.lap('garage');
     const tech = this.story.hudTech();
-    if (tech !== this.lastTech) { document.getElementById('techchip').innerHTML = tech; this.lastTech = tech; }
+    if (tech !== this.lastTech) document.getElementById('techchip').innerHTML = this.lastTech = tech;
     dbg.lap('techchip');
     this.alchemy.update(dt);
     dbg.lap('alchemy');
@@ -1501,7 +1487,7 @@ class Game {
     } else if (this.jarHold) { this.jarHold = 0; this.hud.recallHold(0); }
     if (!this.input.down('KeyX')) this.jarHoldDone = false;
     if (this.input.pressed('KeyX') && !A.jar.length) A.empty();
-    if (this.input.pressed('KeyC') && this.boardCooldown <= 0) this.cosmetics.wardrobe();
+    if (this.input.pressed('KeyC') && this.boardCooldown <= 0) (this.wardrobe ||= new Wardrobe(this, this.cosmetics)).open(); // the wardrobe screen, built on first use
     if (this.input.pressed('KeyP') && this.boardCooldown <= 0 && !this.player.rag) {
       if (this.upgrades.penlink) this.alchemy.penMenu();
       else this.hud.toast('No pen link. Dr. Zbornak sells a remote holding-pen link at the Antimatter Lab.', 3);
@@ -1560,16 +1546,15 @@ class Game {
     if (base && !base.restricted) {
       zwText = `⚠ ${FACTIONS[base.faction].name.toUpperCase()} DEFENSES ARE FIRING ON YOU ⚠`;
     } else if (base && !base.authorized) {
-      const left = Math.max(0, 4 - base.time);
       zwText = base.hostile
         ? `⚠ ${base.loc.name.toUpperCase()}: WEAPONS FREE${base.time > 9 ? ' — ARTILLERY INBOUND' : ''} ⚠`
-        : `⚠ RESTRICTED ZONE — ${base.loc.name.toUpperCase()} — LEAVE IN ${left.toFixed(1)}s ⚠`;
+        : `⚠ RESTRICTED ZONE — ${base.loc.name.toUpperCase()} — LEAVE IN ${Math.max(0, 4 - base.time).toFixed(1)}s ⚠`;
     } else if (base) {
       zwText = base.grace ? `✔ ${(base.graceWhy || 'delivery signed for').toUpperCase()} — ${base.loc.name.toUpperCase()} · CLEARED UNTIL YOU LEAVE` : `✔ CLEARANCE ACCEPTED — ${base.loc.name.toUpperCase()}`;
     }
     if (zwText) {
       zw.classList.remove('hidden');
-      if (zwText !== this.lastZoneWarn) { zw.innerHTML = zwText; this.lastZoneWarn = zwText; }
+      if (zwText !== this.lastZoneWarn) zw.innerHTML = this.lastZoneWarn = zwText;
     } else zw.classList.add('hidden');
 
     // settlements heal you, unless their defences are shooting at you
@@ -1667,9 +1652,11 @@ class Game {
     const sp = P.speed;
     const sv = this.settings ? this.settings.v : null; // settings
     const scoped = !!P.scoped;
-    const targetDist = scoped ? 0.2 : P.seat && P.seat.camDist ? P.seat.camDist : (7.5 + Math.min(7, sp * 0.06)) * (sv ? sv.camDist : 1); // settings
+    const vcam = P.vehicle && P.vehicle.def.cam; // a big vehicle's own follow camera: { lift (m higher), dist (m back) }
+    const targetDist = scoped ? 0.2 : P.seat && P.seat.camDist ? P.seat.camDist : ((vcam ? vcam.dist : 7.5) + Math.min(7, sp * 0.06)) * (sv ? sv.camDist : 1); // settings
     c.dist += (targetDist - c.dist) * Math.min(1, dt * (scoped ? 14 : 3));
-    const target = focus.clone().addScaledVector(up, 2.3);
+    c.lift += ((vcam ? vcam.lift : 0) - c.lift) * Math.min(1, dt * 3); // eases up on boarding, back down on leaving
+    const target = focus.clone().addScaledVector(up, 2.3 + c.lift);
     // past ~30° up the camera stops swinging lower and just tilts, so it doesn't bury itself in the ground
     const pp = Math.min(c.pitch, 0.55);
     const place = scoped || pp === c.pitch ? c.look : _v2.copy(c.fwd).multiplyScalar(Math.cos(pp)).addScaledVector(up, Math.sin(pp));

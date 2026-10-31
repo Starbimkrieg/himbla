@@ -200,7 +200,8 @@ Farm, Motor Pool, Militia Barracks, Roads, Radio Tower (charts fog) and Shuttle 
 Garage, plus a second turret by the gate.
 
 **Vehicles** (`V`): SPACECOM Lunar Interceptor, Vostok BTR-M APC (turret cannon), Daedalus Phase Skimmer (hover),
-Kepler Homestead Mule, Kepler Militia Carrier, Meridian Courier Light-Bike (light trail), Rustmoon Scrapjaw War-Rig.
+Kepler Homestead Mule, Kepler Militia Carrier, Meridian Courier Light-Bike (light trail), Rustmoon War-Rig (a pirate
+gunner on the roof turns its rotary gun where you look; left mouse fires a 20-round tracer burst, then it cools for 2 s).
 They have hull points, smoke when hurt, and take 90 s to rebuild if wrecked.
 
 **Captain Kade** sometimes (8%) rides with a dark-side squad in a monster truck with a gatling and flak turret.
@@ -210,7 +211,7 @@ Wreck it for ₵800 and, the first time, his Junk Mortar. Not while you ride wit
 
 | Location | Faction | Notes |
 | --- | --- | --- |
-| International Moon Base (ILMB) | SPACECOM | Fortress, job board, repair bay, launch pad, six buildings joined by skywalks |
+| International Moon Base (ILMB) | SPACECOM | Fortress, job board, repair bay, launch pad, six buildings joined by skywalks: Hydroponics (a greenhouse dome lit by heliostats), Meridian Labs (a sky lab on a leaning pylon), the Vostok Hangar (open to skate into), the Daedalus Relay (phased arrays), the Power Block (a D-He3 fusion plant you can drive under) and the Kepler Habitat (the Orrery ring) |
 | Meridian Exchange · Shackleton Radar Array · Helium-3 Exchange | Meridian | Trade hub with live ticker and motor pool; radar dishes; strip-mine |
 | Kepler Civic Center · Tranquility Commons · Aldrin Heights · Twilight Waystation · Hertzsprung Refuge | Kepler | Towns, rest and repair |
 | Farside Listening Post | SPACECOM (dark side) | Hazard-pay dish array |
@@ -251,7 +252,10 @@ A walk-in hall with slot carousels out front. Press `F` at a station:
 
 A racecourse with grandstands, clubhouse, screen drum, podiums, arcades, a stable yard behind the far stand
 (docs/stable-proposals/: two lanes of boxes with chimeras looking out, a paddock and lunge ring, the hay barn) and a
-fairground (rideable ferris wheel and carousel). The race office keeps one race posted in each of three sections
+fairground (rideable ferris wheel and carousel), all under a glass dome 544 m across. The way in is through one of three
+airlocks, on the forecourt gate's axis (teleports land in front of this one) and the west and east gates'. Walk or drive up
+and the door opens. Go 6 m in and it shuts behind you; the chamber cycles (red lamps, an amber light, a hiss) and the far
+door opens. The race office keeps one race posted in each of three sections
 (EASY, MEDIUM, HARD), each with a distance, going, purse and five rivals; a scouting screen shows every runner's card.
 No odds: a win pays the section's flat multiple. Chimeras have SPEED, POWER, STAMINA and WIT; six runners fight for the
 rail, draft, pass and kick on what is left in the tank, and fire **skills** learned from wins. **Careers:** three
@@ -289,7 +293,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
   | Scrap Shack | Scrap Plating | 3 to Zbornak: more hull |
   | Junk Pile | Junk Bot | Chimera part |
 
-- **Traffic:** shuttle-buses and freighters fly between landing pads; press `F` to ride free, or bail mid-flight.
+- **Traffic:** shuttle-buses and freighters fly between landing pads (their stairs come down toward the nearest road); press `F` to ride free, or bail mid-flight.
   13 roads (planned over the terrain by `roadplan.js`) join the towns, with ring roads round each. **Moonliner**
   passenger and **Prospector** freight land-trains run in faction liveries. Wreck one for a salvaged engine (-3 rep).
 - **People:** humans wear helmets; the bare-headed **Vrill** breathe vacuum (jar one for the PSI ANTENNAE mutation).
@@ -309,7 +313,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (227 in 26 sections) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (233 in 26 sections) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).
@@ -370,7 +374,9 @@ src/
   clawSim.js       Zero-G claw rules and physics (clawView.js draws it, clawGame.js runs the seat)
   fountainFx.js    fountain water shaders
   pixelIcons.js    classic-games pixel sprites
-  cosmetics.js     outfits, skate finishes, laser colours
+  factionIcons.js  the faction emblems (src/assets/factions/*.svg, from tools/icons/faction_icons.py): `factionIcon(id)`
+  cosmetics.js     dresses the runner: outfit extras, skate finishes, halo
+  cosmeticsData.js outfit, skate and laser tables, their shop entries (imports nothing)
   race.js          Chimera Downs: card sections, tournaments, scouting, betting, the race, cameras, crowd, podium,
                    careers, Training Yard, stabled chimeras
   downsPlan.js     Chimera Downs layout, the stable yard's layouts, the walkers' keep-out (`walkBlocker`) (no three.js)
@@ -378,6 +384,7 @@ src/
   downsKit.js      shared Downs builders (bake, fountain, arcadeShell)
   curve.js         bends flat layouts onto the sphere
   downsFair.js     ferris wheel, carousel, queue lines
+  downsDome.js     the glass dome over the Downs: its colliders, the airlocks' doors, lamps and cycling
   rides.js         transit-ship rides and fairground rides
   rocks.js         shaped rocks and colliders
   rails.js         grinding rocks, crater rims and building ledges
@@ -399,7 +406,7 @@ src/
   traffic.js       pads, flights, passengers, roads, land-trains, cars
   landingPad.js    landing pad geometry and waypoints
   roadplan.js      least-cost road routing
-  wardrobe.js      wardrobe screen
+  wardrobe.js      wardrobe screen (main.js builds it on the first C)
   trailer.js       trailer director (?trailer)
   models.js        characters and vehicles; loads the Blender models
   post.js          comic post-processing
@@ -411,7 +418,7 @@ src/
     ships.glb        shuttle-bus and freighter
     skimmer.glb      Phase Skimmer classic; skimmer_a.glb, skimmer_b.glb the redesigns (dev menu picks)
     lightbike_a.glb, lightbike_b.glb  Courier light-bike redesigns (dev menu picks)
-    warrig.glb       pirate war-rig
+    warrig.glb       Rustmoon War-Rig (and the pirates' rigs)
     rover.glb        civil buggy and military patrol car
     interceptor.glb  SPACECOM Lunar Interceptor
     apc.glb          Vostok APC
@@ -419,12 +426,16 @@ src/
     crane.glb        tower crane
     gantry.glb       container gantry and box container
     garage.glb       Meridian motor-pool garages (colliders as pivots)
+    power.glb        ILMB Power Block, the D-He3 fusion plant (colliders and lamps as pivots)
+    habitat.glb      ILMB Kepler Habitat, the Orrery ring (colliders and the turning orbit ring as pivots)
+    hydroponics.glb, labs.glb, hangar.glb, relay.glb  the ILMB's other wings: Hydroponics, Meridian Labs, Vostok Hangar,
+                     Daedalus Relay (colliders, lamps and turning parts as pivots; models.js ILMB_WINGS)
     slots.glb        slot-machine cabinet
     casino.glb       lamp post, fountain, bouncer, chandelier, sign frames
     claw.glb         Zero-G claw machine and its contents
     hall.glb         casino hall kit
     lot.glb          casino forecourt kit
-    downs-*.glb      Chimera Downs kits (stand, club, course, stalls, arcade, screen, fair, stable, crowd)
+    downs-*.glb      Chimera Downs kits (stand, club, course, stalls, arcade, screen, fair, stable, crowd, dome)
     chimera.glb      the chimera kit: every kind's parts in their looks, fitted mutations, far copies, devices
     spidertank.glb   Zbornak's spider tank (loaded by spidertank.js, not at boot)
     duck.glb         Duck Derby racers and track
@@ -436,10 +447,12 @@ src/
 tools/
   optimize-glb.mjs         compresses src/assets models (npm run optimize:glb)
   splice-chimera.mjs       puts chimera kit parts built on their own into chimera.glb, the rest untouched
+  icons/faction_icons.py   faction emblem proposals as SVG (docs/icon-proposals/; `python3 tools/icons/faction_icons.py`)
   viewer.html              dev model viewer (/tools/viewer.html?m=<model>; options at the top of the file)
   casino-layouts.mjs       casino plan study and spacing check (docs/casino-layouts.md)
   casino-forecourt.mjs     forecourt plans and Valet Court check (docs/casino-forecourt.md)
   casino-zfight.mjs        lists coplanar faces in the running casino
+  casino-audit.js          in-page casino audit: z-fights by colour, pieces touching nothing, what is at a spot
   casino-shots.mjs         casino screenshots from fixed spots
   check-claw.mjs           bots play the claw to tune its payout
   downs-audit.mjs          a place's audit (Chimera Downs, or PLACE=<id>): zfight, colliders, text, gaps; coverage, blocked,
@@ -460,7 +473,10 @@ tools/
     decals.py              lettering, emblems, hazard stripes, container markings
     cargo.py               land-train cargo units for other models to carry
     spreader.py            crane container spreader
+    hookblock.py           the cranes' hook block (tower crane, gantry, the Vostok Hangar's bridge crane)
     suits.py               card-suit trim (blackjack, claw, duck)
+    wing_kit.py            ILMB wing parts: accumulator, frames and frusta, railings, ladders, the skywalk lobby, colliders
+    habitat_kit.py         Kepler Habitat palette and orbit mark, on wing_kit.py (build_habitat.py, proposals/habitat_b.py)
     downs_common.py        Downs palette, merging, export, coplanar audit
     audit_outline.py       lists runner parts missing an outline
     build_runner.py        -> runner.glb
@@ -473,7 +489,7 @@ tools/
     build_briefcase.py     -> briefcase.glb (wreck drop)
     build_hovercar.py      -> hovercar.glb
     build_plinko.py        -> plinko.glb
-    build_warrig.py        -> warrig.glb
+    build_warrig.py        -> warrig.glb (shared parts and the clash / float checks: warrig_kit.py)
     build_rover.py         -> rover.glb
     build_interceptor.py   -> interceptor.glb
     build_apc.py           -> apc.glb
@@ -481,6 +497,12 @@ tools/
     build_crane.py         -> crane.glb
     build_gantry.py        -> gantry.glb
     build_garage.py        -> garage.glb
+    build_power.py         -> power.glb (MOONRUNNER_POWER=a|b: B is the game's; preview_power.py renders docs/power-proposals)
+    build_habitat.py       -> habitat.glb (proposals/preview_habitat.py renders docs/habitat-proposals)
+    build_hydroponics.py   -> hydroponics.glb
+    build_labs.py          -> labs.glb
+    build_hangar.py        -> hangar.glb
+    build_relay.py         -> relay.glb
     build_slots.py         -> slots.glb
     build_casino.py        -> casino.glb
     build_claw.py          -> claw.glb
@@ -491,11 +513,13 @@ tools/
     build_dish.py          -> dish.glb
     build_winch.py         -> winch.glb, towmark.png
     build_outposts.py      -> outposts.glb (check with npm run check:outposts)
-    build_downs_*.py       -> downs-*.glb
+    build_downs_*.py       -> downs-*.glb (build_downs_dome.py -> downs-dome.glb; preview_dome.py renders it over a block model
+                              of the Downs)
     build_spidertank.py    -> spidertank.glb (Zbornak's spider tank; docs/spidertank/)
     build_chimera.py       -> chimera.glb (about 6 min; CHIMERA_ONLY=car,mite; CHIMERA_PARTS=legs_mite_0 to splice with
                            tools/splice-chimera.mjs; chimera_common.py and chimera_*.py)
-    proposals/             freighter design study and Cycles preview renders
+    proposals/             freighter, Kepler Habitat and War-Rig design studies, Cycles preview renders
+                           (warrig_b.py, the War-Rig's runner-up; preview_warrig.py renders both to docs/warrig-proposals)
 ```
 
 **Blender models:** each builder runs in Blender's Scripting tab or headless (`tools/setup-blender.sh` installs

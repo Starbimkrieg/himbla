@@ -5,7 +5,7 @@ import { lineUp } from './common.js';
 
 // Helpers for characters.js: a tagged variant, a line of them, a runner's rest pose.
 
-export const UP = new THREE.Vector3(0, 1, 0);
+const UP = new THREE.Vector3(0, 1, 0);
 const ZERO = new THREE.Vector3();
 
 // width of a line of n cells (cell width pw), for an item's declared footprint

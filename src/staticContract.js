@@ -7,7 +7,7 @@ export const GLB_KINDS = new Set(['mast', 'tower']);
 
 export const ROLES = ['col', 'hit', 'raid', 'smoke', 'drop', 'text'];
 export const SHAPES = ['box', 'cyl', 'sphere'];
-export const ANIMS = ['flag', 'blink', 'spin'];
+const ANIMS = ['flag', 'blink', 'spin'];
 
 // Blender appends .001, .002... to duplicate names: ignore it on materials.
 export const stripSuffix = (name) => String(name || '').replace(/\.\d{3,}$/, '');

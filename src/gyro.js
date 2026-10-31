@@ -120,9 +120,7 @@ export class GyroPad {
 
   report(e) {
     const d = e.data, id = e.reportId;
-    let off = -1;
-    if (this.model === 'ds5') off = id === 0x31 ? 16 : id === 0x01 ? 15 : -1;
-    else off = id === 0x11 ? 14 : id === 0x01 ? 12 : -1;
+    const off = this.model === 'ds5' ? (id === 0x31 ? 16 : id === 0x01 ? 15 : -1) : id === 0x11 ? 14 : id === 0x01 ? 12 : -1;
     if (off < 0 || d.byteLength < off + 6 || (id === 0x01 && d.byteLength < 24)) return; // short Bluetooth report: no motion
     // receive time, not handler time, so reports queued behind a stalled frame still count
     const t = typeof e.timeStamp === 'number' && e.timeStamp > 0 ? e.timeStamp : performance.now();
@@ -161,10 +159,8 @@ export class GyroPad {
       const m = Math.max(0, Math.abs(a) - deadDeg) / Math.max(1, fullDeg - deadDeg);
       return Math.sign(a) * Math.min(1, m);
     };
-    let x = ramp(-this.theta.z), y = ramp(this.theta.x);
-    if (invX) x = -x;
-    if (invY) y = -y;
-    return { x, y };
+    const x = ramp(-this.theta.z), y = ramp(this.theta.x);
+    return { x: invX ? -x : x, y: invY ? -y : y };
   }
 
   // a line for the dev overlay

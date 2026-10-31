@@ -104,7 +104,7 @@ W, D, H0, H1 = 16.4, 5.2, 1.3, 6.6          # width, depth, tank floor (base top
 DROP = (-3.4, 2.3)                           # drop hole (x, z): centre-left, mid-depth
 m = pivot("claw_machine", (0, 0, 0), None)
 A = Acc("base", "plum", m, 0.05)
-A.boxc(0, H0 / 2, D / 2 - 0.55, W, H0, D - 1.1)
+A.boxc(0, (H0 + 0.1) / 2, D / 2 - 0.54, W, H0 - 0.1, D - 1.12)                    # foot and back inside the trims
 A.flush()
 A = Acc("baseTrim", "gold", m, 0.03)
 A.boxc(0, H0 + 0.05, 2.1, W + 0.2, 0.12, 4.2)
@@ -136,23 +136,23 @@ A.flush()
 pivot("marquee", (0, H1 + 1.15, 3.77), m, role="marquee", w=8.6, h=1.0)
 # floor: dark grate, cyan vents, and the DROP hole (lit ring round a dark well) where banked prizes go down
 A = Acc("floorGrate", "dark", m, 0.0)
-A.boxc(0, H0 + 0.08, 1.9, W - 0.7, 0.06, 3.3)
+A.boxc(0, H0 + 0.10, 1.9, W - 0.7, 0.06, 3.3)                                  # top 2 cm over the gold trim round it
 A.flush()
 A = Acc("vents", "neoncyan", m, 0.0)
 for i in range(24):
     x = -W / 2 + 1.0 + i * (W - 2.0) / 23
     if abs(x - DROP[0]) < 1.0:
         continue
-    A.boxc(x, H0 + 0.12, 1.9, 0.5, 0.03, 2.8)
+    A.boxc(x, H0 + 0.14, 1.9, 0.5, 0.03, 2.8)
 A.flush()
 A = Acc("dropWell", "dark", m, 0.0)
-A.cylc(DROP[0], H0 + 0.14, DROP[1], 0.72, 0.04, 20)
+A.cylc(DROP[0], H0 + 0.15, DROP[1], 0.72, 0.04, 20)
 A.flush()
 A = Acc("dropRim", "glowred", m, 0.0)
-A.tor(0.78, 0.05, (DROP[0], H0 + 0.16, DROP[1]), (0, 0, 0), 28, 5)
-A.tor(0.52, 0.03, (DROP[0], H0 + 0.165, DROP[1]), (0, 0, 0), 22, 5)
+A.tor(0.78, 0.05, (DROP[0], H0 + 0.17, DROP[1]), (0, 0, 0), 28, 5)
+A.tor(0.52, 0.03, (DROP[0], H0 + 0.175, DROP[1]), (0, 0, 0), 22, 5)
 A.flush()
-pivot("drop", (DROP[0], H0 + 0.16, DROP[1]), m, role="drop", r=0.72)
+pivot("drop", (DROP[0], H0 + 0.17, DROP[1]), m, role="drop", r=0.72)
 # glass: one flat quad each for front and ends (drawn see-through and double-sided; a box would stack four tint layers per pane)
 A = Acc("glassFront", "glass", m, 0.0)
 A.add(plane(W - 0.8, H1 - H0), (0, (H0 + H1) / 2, 3.62))
@@ -353,6 +353,9 @@ for f in (claw, crate, canister, gear, girder, mine, magnet, tyre, hullplate, ch
     f()
 flush_all()
 
+audit_coplanar(C.objects)        # kit.py: same-plane faces of two parts would z-fight (raises)
+audit_flips(C.objects)
+
 _dg = bpy.context.evaluated_depsgraph_get()
 _tris = {}
 for _o in C.objects:
@@ -363,4 +366,5 @@ for _o in C.objects:
         _p = _p.parent
     _tris[_p.name] = _tris.get(_p.name, 0) + sum(len(q.vertices) - 2 for q in _o.evaluated_get(_dg).to_mesh().polygons)
 print("built", len(C.objects), "objects; triangles per root:", _tris)
-export(OUT, list(C.objects))
+if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
+    export(OUT, list(C.objects))

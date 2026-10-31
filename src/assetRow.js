@@ -48,9 +48,7 @@ class FlatWorld {
   surface(p, outN) { if (outN) outN.copy(UP); return this.onPlinth(p) ? 0 : VOID_Y; }
   ground(v, out = new THREE.Vector3(), lift = 0) { return out.set(v.x, lift, v.z); }
   altitude(p) { return p.y - this.surface(p); }
-  meshLift() { return 0; }
   visible() { return true; }
-  inLake() { return null; }
   rimRailsNear() { return []; }
   // grind rails (rails.js): an item's crest lines, while it is built
   addRail(pts) { const r = railOf(pts); this.rails.push(r); return r; }
@@ -165,15 +163,15 @@ export class AssetRow {
     const title = board('ASSET ROW', 9, '#2ee6ff'); title.position.set(0, 12, 20); root.add(title);
     const note = board(`${this.items.length} ASSETS · LANE A (YELLOW): EVERYTHING UNDER 100 M · LANE B (CYAN, ${LANE_Z.B} M OVER): THE BIG PLACES`, 1.6, '#ffffff'); note.position.set(0, 5.5, 20); root.add(note);
     // terminals: F jumps to any section (terminalMenu)
-    const addTerminal = (name, x, z, color, hex) => {
-      const t = makeTerminal(color);
+    const addTerminal = (name, x, z, hex) => {
+      const t = makeTerminal(parseInt(hex.slice(1), 16));
       t.position.set(x, 0, z);
       root.add(t);
       this.terminals.push({ name, x, z, color: hex });
     };
-    addTerminal('PLAZA', 8, 52, 0x2ee6ff, '#2ee6ff');
+    addTerminal('PLAZA', 8, 52, '#2ee6ff');
     for (const s of [...this.sections].sort((a, b) => a.lane.localeCompare(b.lane) || a.x - b.x)) { // menu order: yellow lane down the row, then cyan
-      addTerminal(`${s.lane} · ${s.title}`, s.x + 4, LANE_Z[s.lane] + 34, s.lane === 'A' ? 0xffd23f : 0x2ee6ff, COLOR[s.lane]);
+      addTerminal(`${s.lane} · ${s.title}`, s.x + 4, LANE_Z[s.lane] + 34, COLOR[s.lane]);
       const b = board(s.title, 6, COLOR[s.lane]);
       b.position.set(s.x + 8, 13, LANE_Z[s.lane]);
       root.add(b);
@@ -228,9 +226,9 @@ export class AssetRow {
           if (b.type === 'sphere') specs.push({ type: 'sphere', c: at(b.x, b.y, b.z), r: b.r });
           else if (b.type === 'cyl') specs.push({ type: 'cyl', c: at(b.x, 0, b.z), axis: UP.clone(), y0: b.y0, y1: b.y1, r: b.r });
           else if ((b.type === 'box' || b.type === undefined) && b.ax) specs.push({ type: 'box', c: at(b.x, b.y, b.z), hx: b.hx, hy: b.hy, hz: b.hz, ax: b.ax.clone(), ay: b.ay.clone(), az: b.az.clone(), ...own(b) }); // full spec: tilted ramp, sloping snake tip
-          else if (b.type === 'box' || b.type === undefined) {
-            const q = new THREE.Quaternion().setFromAxisAngle(UP, b.yaw || 0);
-            specs.push({ type: 'box', c: at(b.x, b.y, b.z), hx: b.hx, hy: b.hy, hz: b.hz, ax: new THREE.Vector3(1, 0, 0).applyQuaternion(q), ay: UP.clone(), az: new THREE.Vector3(0, 0, 1).applyQuaternion(q), ...own(b) });
+          else if (b.type === 'box' || b.type === undefined) { // (yaw, then pitch about the box's x, as World.colAdd)
+            const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(b.pitch || 0, b.yaw || 0, b.roll || 0, 'YXZ'));
+            specs.push({ type: 'box', c: at(b.x, b.y, b.z), hx: b.hx, hy: b.hy, hz: b.hz, ax: new THREE.Vector3(1, 0, 0).applyQuaternion(q), ay: UP.clone().applyQuaternion(q), az: new THREE.Vector3(0, 0, 1).applyQuaternion(q), ...own(b) });
           }
         }
       } else if (!box.isEmpty()) {

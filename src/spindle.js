@@ -98,12 +98,6 @@ function bandFrame(s, w, obj, lift = 0) {
   const m = new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(up, AX), up, AX);
   obj.position.copy(p);
   obj.quaternion.setFromRotationMatrix(m);
-  return obj;
-}
-// a glowing tube through points on the rock
-function groundLine(pts, r, color, closed = false) {
-  const curve = new THREE.CatmullRomCurve3(pts, closed);
-  return new THREE.Mesh(new THREE.TubeGeometry(curve, pts.length * 2, r, 4, closed), glow(color));
 }
 
 // ---------- kit pieces ----------
@@ -259,7 +253,6 @@ export class Spindle {
     geo.setAttribute('normal', new THREE.BufferAttribute(R.nor, 3));
     geo.setIndex(new THREE.BufferAttribute(R.idx, 1));
     geo.computeBoundingSphere();
-    const S0 = ROCK_S0, S1 = ROCK_S1;
     // double-sided: the rock is never a window onto the stars
     // toon bands with softened edges: hard ones traced the 7 m triangles as pale polygons under a low sun, a fully
     // smooth ramp made every bump a soft stain. A dark band then one gentle rise to full sun: a mid-to-bright step
@@ -278,7 +271,7 @@ export class Spindle {
     rock.castShadow = false;
     root.add(rock);
     // the blunt tips, capped
-    for (const [sx, dir] of [[S0, -1], [S1, 1]]) {
+    for (const [sx, dir] of [[ROCK_S0, -1], [ROCK_S1, 1]]) {
       const cap = new THREE.Mesh(new THREE.CircleGeometry(26, 24), new THREE.MeshToonMaterial({ color: 0x3e3656, gradientMap: toon(0).gradientMap, side: THREE.DoubleSide }));
       cap.position.set(sx, 0, 0);
       cap.rotation.y = dir * Math.PI / 2;
@@ -288,7 +281,7 @@ export class Spindle {
     for (const off of [0, CIRC / 2]) {
       const vp = [];
       for (let s = 30; s < L - 30; s += 12) vp.push(bandPoint(s, off + (s / L) * CIRC * 1.5 + Math.sin(s / 97) * 18, 0.25));
-      root.add(groundLine(vp, 0.35, TEAL));
+      root.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(vp), vp.length * 2, 0.35, 4), glow(TEAL)));
     }
     // props: lander, crystal spires, shrine, extraction pad
     this.cols = [];
@@ -395,7 +388,6 @@ export class Spindle {
     // the mothership's eyes are targets (each powers an attack; knock one out to stop it)
     this.eyes = this.ship.eyes.map((m, i) => ({ kind: 'alieneye', faction: 'beast', model: { root: m }, hp: 380, maxHp: 380, center: new THREE.Vector3(), radius: 4, dead: false, eye: i }));
     for (const e of this.eyes) g.enemies.list.push(e);
-    this.ship.root.visible = true;
     this.shipS = 0;
     this.shipW = 0;
     this.pod.root.visible = false;
@@ -417,9 +409,8 @@ export class Spindle {
     const s = i < 0 ? PAD_S - 30 : START_S + 60;
     const p = bandPoint(s, 0, 1.5);
     const up = radial(p);
-    const fwd = AX.clone();
-    g.player.respawn(p, fwd);
-    g.cam.fwd.copy(fwd);
+    g.player.respawn(p, AX);
+    g.cam.fwd.copy(AX);
     g.cam.up.copy(up);
     g.cam.pitch = -0.1;
     g.updateCamera(0.016, true); // snap behind you (else it swings in from the Moon, through the rock)
@@ -542,11 +533,8 @@ export class Spindle {
     if (!this.active) return;
     const P = g.player;
     const [s, w] = this.world.sw(P.pos);
-    this.spin += dt;
-    // the roll: the sky (and sun) turns round the rock's axis
-    const q = new THREE.Quaternion().setFromAxisAngle(AX, this.spin * ((Math.PI * 2) / 140));
-    this.sky.quaternion.copy(q);
-    this.sky.position.copy(g.camera.position);
+    this.rollSky(dt);
+    const q = this.sky.quaternion;
     const sunDir = SUN.clone().applyQuaternion(q);
     const up = P.up;
     const day = THREE.MathUtils.smoothstep(up.dot(sunDir), -0.15, 0.2);
@@ -874,14 +862,13 @@ export class Spindle {
     const C = this.game.colliders;
     const p = bandPoint(PAD_S, 0, 0);
     const up = radial(p);
-    const fwd = AX.clone();
-    const right = new THREE.Vector3().crossVectors(up, fwd);
+    const right = new THREE.Vector3().crossVectors(up, AX);
     this.cols.push(C.add({ type: 'cyl', c: p.clone(), axis: up.clone(), y0: -3, y1: PAD_DECK, r: PAD_R }));
     const slope = Math.atan2(PAD_DECK, RAMP_L), hyp = Math.hypot(PAD_DECK, RAMP_L);
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2;
       // ramp run (outward) and surface normal
-      const out = fwd.clone().multiplyScalar(Math.cos(a)).addScaledVector(right, Math.sin(a));
+      const out = AX.clone().multiplyScalar(Math.cos(a)).addScaledVector(right, Math.sin(a));
       const along = out.clone().multiplyScalar(Math.cos(slope)).addScaledVector(up, -Math.sin(slope)); // down the ramp
       const n = new THREE.Vector3().crossVectors(along, new THREE.Vector3().crossVectors(up, out)).normalize();
       if (n.dot(up) < 0) n.negate();

@@ -18,7 +18,7 @@ export { GLB_KINDS };
 
 let ASSETS = null; // Map(root name -> parsed asset), null until loaded
 
-export function outpostGlbOn() {
+function outpostGlbOn() {
   try {
     const v = new URLSearchParams(location.search).get('outpostGlb');
     if (v !== null) return !['0', 'false', 'off', 'no'].includes(v.toLowerCase());

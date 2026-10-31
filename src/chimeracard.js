@@ -13,10 +13,8 @@ const PS = 72; // portrait render size (shown scaled up, pixelated)
 const cache = new Map();
 let rt = null, scene, cam, canvas, ctx, pixels;
 
-const PART_NAME = { person: 'PERSON', voidling: 'VOIDLING', mite: 'MITE', car: 'CAR', pirate: 'PIRATE', sapling: 'SAPLING', junkbot: 'JUNKBOT', alien: 'ALIEN' };
-const MOD_NAME = { void: 'VOID', crystal: 'CRYSTAL', mud: 'MUD', spark: 'SPARK', turbo: 'TURBO', lens: 'LENS', radio: 'RADIO', armor: 'ARMOR' };
-const hex = (c) => '#' + (c >>> 0).toString(16).padStart(6, '0').slice(-6);
-const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+export const hex = (c) => '#' + (c >>> 0).toString(16).padStart(6, '0').slice(-6);
+export const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
 // 3D snapshot of the creature, rendered once per chimera, cached as a data URL.
 export function portrait(renderer, genes) {
@@ -82,8 +80,7 @@ export function statBars(st, big = false, growth = {}) {
     const v = st[k];
     const gr = growth[k] ? `<span class="cc-grow" data-tip="${esc(`GROWTH: training gains in ${STAT_INFO[k].name} are ${Math.round(growth[k] * 100)}% bigger, and keep their full rate past 80.`)}">+${Math.round(growth[k] * 100)}%</span>` : '<span class="cc-grow"></span>';
     const on = Math.max(1, Math.round(v / 10));
-    let seg = '';
-    for (let i = 0; i < 10; i++) seg += `<i${i < on ? ' class="on"' : ''}></i>`;
+    const seg = Array.from({ length: 10 }, (_, i) => `<i${i < on ? ' class="on"' : ''}></i>`).join('');
     const tip = ` data-tip="${esc(STAT_TIPS[k])}"`;
     return `<div class="cc-stat s-${k}"><span class="cc-lbl"${tip}>${big ? STAT_INFO[k].name : STAT_INFO[k].short}</span><span class="cc-bar"${tip}>${seg}</span><span class="cc-num">${v}</span>${gr}${big ? `<span class="cc-blurb">${STAT_INFO[k].blurb}</span>` : ''}</div>`;
   }).join('')}</div>`;
@@ -98,7 +95,7 @@ const SLOT_TIP = {
 };
 const lean = (o) => `SPD ${o.speed} · POW ${o.power} · STA ${o.stamina} · WIT ${o.wit}`;
 function partTip(lbl, kind) {
-  const name = PART_NAME[kind] || String(kind).toUpperCase();
+  const name = String(kind).toUpperCase();
   if (lbl === 'LEGS' && LEGS[kind]) return `${SLOT_TIP.LEGS} ${name} legs lean ${lean(LEGS[kind])}.`;
   if (lbl === 'BODY' && BODY[kind]) return `${SLOT_TIP.BODY} A ${name} body leans ${lean(BODY[kind])}.`;
   if (HEAD_WIT[kind] != null) return `${SLOT_TIP[lbl]} A ${name} head is worth ${HEAD_WIT[kind]} wit.`;
@@ -106,14 +103,14 @@ function partTip(lbl, kind) {
 }
 function modTip(m) {
   const fx = Object.entries(MOD_FX[m] || {}).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${STAT_INFO[k].short}`).join(', ');
-  return `${MOD_NAME[m] || m.toUpperCase()} TOUCH: a trait picked up in the reactor${fx ? ` (${fx})` : ''}.`;
+  return `${m.toUpperCase()} TOUCH: a trait picked up in the reactor${fx ? ` (${fx})` : ''}.`;
 }
 
-export function partsLine(genes) {
-  const p = (lbl, kind) => `<span class="cc-part" data-tip="${esc(partTip(lbl, kind))}"><em>${lbl}</em>${PART_NAME[kind] || String(kind).toUpperCase()}</span>`;
+function partsLine(genes) {
+  const p = (lbl, kind) => `<span class="cc-part" data-tip="${esc(partTip(lbl, kind))}"><em>${lbl}</em>${String(kind).toUpperCase()}</span>`;
   let s = p('BODY', genes.body) + p('LEGS', genes.legs) + p('HEAD', genes.head);
   if (genes.extraHead) s += p('+HEAD', genes.extraHead);
-  for (const m of genes.mods || []) s += `<span class="cc-part mod" data-tip="${esc(modTip(m))}">${MOD_NAME[m] || m.toUpperCase()}</span>`;
+  for (const m of genes.mods || []) s += `<span class="cc-part mod" data-tip="${esc(modTip(m))}">${m.toUpperCase()}</span>`;
   return `<div class="cc-parts">${s}</div>`;
 }
 

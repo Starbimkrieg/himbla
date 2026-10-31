@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { toon, inkMat } from './toon.js';
 import { frameQuat } from './geo.js';
-import { pick } from './rng.js';
+import { pick, clamp, randRange as rand } from './rng.js';
 import { spliceGenes, makeChimera, LIVING, DRAWN } from './chimera.js';
 import { chimeraReady } from './chimerabuild.js';
 import { ensureStats, statTotal, newRace, stepRace, CONDITIONS, CATS, DRILLS, train, careerNext, SEASONS, SEASON_RACES, STAT_INFO } from './chimerastats.js';
@@ -9,7 +9,8 @@ import { SKILLS, skillPool, rollSkill } from './chimeraskills.js';
 import { chimeraCard, cardList } from './chimeracard.js';
 import { makeDownsPart, downsNode, downsSlot, makeFigure } from './models.js';
 import { buildDowns } from './downsWorld.js';
-import { LAP, LANES, RAIL_IN, RAIL_OUT, FINISH_U, STAND, FAR, CLUB, WINDOW, BOARD, DRUM, PODIUMS, ENTRIES, STABLES, ARCADE, stallsOf, oval } from './downsPlan.js';
+import { buildDome } from './downsDome.js';
+import { LANES, RAIL_IN, RAIL_OUT, FINISH_U, STAND, FAR, CLUB, WINDOW, BOARD, DRUM, PODIUMS, ENTRIES, STABLES, ARCADE, stallsOf, oval } from './downsPlan.js';
 import { pixelFont } from './fonts.js';
 import { DOWNS_SHOP } from './locations.js';
 import { bendPoint, bendQuat } from './curve.js';
@@ -72,7 +73,7 @@ const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _up = new THREE.Vector
 const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _Y = new THREE.Vector3(0, 1, 0);
 const _o = {}, _bq = new THREE.Quaternion();
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
-const rand = (a, b) => a + Math.random() * (b - a);
+const above = (p, h) => p.clone().addScaledVector(p.clone().normalize(), h);   // h m up from a point on the Moon
 // Canvas text fitted to `maxW`: at `size` px if it fits, else the largest whole size that does (not under `min`), else ellipsised.
 // The pixel face is wide (full-em glyphs), so long names would run into neighbours. Uses the context's fill, align and baseline
 // at (px, py); returns the size used.
@@ -133,6 +134,7 @@ export class Race {
     const w = this.game.world;
     const loc = this.loc;
     buildDowns(w, loc);
+    this.dome = buildDome(w, loc); // the glass dome over it all, and its airlocks
 
     // ---- moving parts ----
     // live canvases: drum screens (dn_drum; one for both long faces, one for both ends), the race card board in the
@@ -319,14 +321,13 @@ export class Race {
     const HAT = [0x3b393a, 0xdfe8dd, 0x8b4044, 0x5b7a52, 0xcfb352, 0xf8fff8, 0xb07c57];
     const HAIR = [0x2a1d18, 0x5a3a22, 0x9a6a3a, 0xd8b56a, 0x8a8698, 0x1d1a29];
     const BAND = [0x8b4044, 0xcfb352, 0x7b9a6e, 0xf8fff8, 0x6a2e33];
-    const any = (a) => a[Math.floor(Math.random() * a.length)];
-    const other = (a, not) => { let v; do v = any(a); while (not.includes(v)); return v; };    // contrast: shirt vs jacket; favour vs shirt, jacket and hat
+    const other = (a, not) => { let v; do v = pick(a); while (not.includes(v)); return v; };    // contrast: shirt vs jacket; favour vs shirt, jacket and hat
     const pickw = (w) => { let r = Math.random() * w.reduce((s, e) => s + e[1], 0); for (const [n, k] of w) if ((r -= k) < 0) return n; return w[0][0]; };
     this.crowd = seats.map((s) => {
       const suit = Math.random() < 0.55;
       const rest = pickw([['dn_fan_lap', 70], ['dn_fan_prog', 18], ['dn_fan_bino', 12]]);
       const wave = rest !== 'dn_fan_bino' && Math.random() < 0.6;                                  // binocular fans keep watching
-      const coat = suit ? any(COAT) : any(FROCK), hat = any(HAT);
+      const coat = suit ? pick(COAT) : pick(FROCK), hat = pick(HAT);
       const p = {
         ...s, ph: Math.random() * 10, f: 6 + Math.random() * 5, jump: Math.random(), sc: 0.92 + Math.random() * 0.2, wave,
         body: suit ? 'dn_fan_body' : 'dn_fan_body2', rest, cheer: wave ? (Math.random() < 0.35 ? 'dn_fan_arm1' : 'dn_fan_arms') : null,
@@ -337,7 +338,7 @@ export class Race {
         favour: Math.random() < 0.22 ? 'dn_fan_rosette' : Math.random() < 0.12 ? 'dn_fan_scarf' : null,
       };
       const shirt = other(SHIRT, [coat]);
-      p.tint = { coat, shirt, legs: suit ? any(LEGS) : coat, skin: any(SKIN), hair: any(HAIR), hat, band: other(BAND, [shirt, coat, hat]) };
+      p.tint = { coat, shirt, legs: suit ? pick(LEGS) : coat, skin: pick(SKIN), hair: pick(HAIR), hat, band: other(BAND, [shirt, coat, hat]) };
       return p;
     });
     // one layer per part: its wearers (resting-arm wavers last, so a cheer hides them by count), in the body frame or the head's (0.66 m up)
@@ -649,16 +650,20 @@ export class Race {
   }
 
   place(r) {
-    const g = this.game;
-    const w = g.world;
+    const w = this.game.world;
     const u = this.startU + r.s;
     oval(u, RAIL_IN + r.x, _o);
     w.toWorld(this.loc, _o.x, 0, _o.z, _v);
-    g.planet.ground(_v, _v);
-    _up.copy(_v).normalize();
     w.toWorld(this.loc, _o.x + _o.hx, 0, _o.z + _o.hz, _f);
     _f.sub(w.toWorld(this.loc, _o.x, 0, _o.z, _w));
-    r.m.root.position.copy(_v).addScaledVector(_up, r.hop + 0.1);
+    this.pose(r, r.hop + 0.1);
+  }
+
+  // stand runner r on the ground under _v, h up, facing _f
+  pose(r, h) {
+    this.game.planet.ground(_v, _v);
+    _up.copy(_v).normalize();
+    r.m.root.position.copy(_v).addScaledVector(_up, h);
     frameQuat(_up, _f, r.m.root.quaternion);
     r.pos = r.m.root.position;
     r.fwd = (r.fwd || new THREE.Vector3()).copy(_f).normalize();
@@ -669,7 +674,7 @@ export class Race {
   eventFx(e) {
     const g = this.game, r = e.r;
     if (!r.pos) return;
-    const at = r.pos.clone().addScaledVector(r.pos.clone().normalize(), 4 + (r.genes.size || 1) * DRAWN);
+    const at = above(r.pos, 4 + (r.genes.size || 1) * DRAWN);
     const mine = r.mine;
     if (e.kind === 'skill') {
       const S = SKILLS[e.id];
@@ -699,21 +704,13 @@ export class Race {
         if ((this.postT[k] -= dt) <= 0) this.post(k);
       }
     }
-    // crowd audio: murmur at the course, roar in a race, louder while you lead
-    const racing = this.state === 'countdown' || this.state === 'run';
-    const here = this.loc && (racing || (this.loc.active && g.player.pos.distanceTo(this.booth) < 260));
-    let crowd = 0;
-    if (here) {
-      crowd = 0.08;
-      if (racing) {
-        const lead = this.order()[0];
-        const leading = this.state === 'run' && lead && lead.mine;
-        if (leading && !this.wasLeading && this.racers[0].s > 30) g.audio.roar(0.6);
-        this.wasLeading = leading;
-        crowd = 0.42 + this.excite * 0.3 + (leading ? 0.28 : 0);
-      }
+    // crowd audio: a roar when your runner takes the lead
+    if (this.loc && (this.state === 'countdown' || this.state === 'run')) {
+      const lead = this.order()[0];
+      const leading = this.state === 'run' && lead && lead.mine;
+      if (leading && !this.wasLeading && this.racers[0].s > 30) g.audio.roar(0.6);
+      this.wasLeading = leading;
     }
-    g.audio.setCrowd(crowd);
     if (this.loc && this.loc.active) {
       this.excite = Math.max(this.state === 'run' ? 0.25 : 0, this.excite - dt * 0.25);
       this.updateCrowd(this.t);
@@ -723,14 +720,14 @@ export class Race {
       if (this.gate.root.visible && this.state === 'run') this.towGate(dt);
       if (!this.stabled && chimeraReady()) this.stable();
       if (this.stabled && g.player.pos.distanceTo(this.stableAt) < 110) for (const s of this.stabled) s.m.anim((s.t += dt), 0);
+      this.dome.update(dt, g); // airlocks: doors, lamps, cycling
     }
     if (this.state === 'idle') { this.panel.classList.add('hidden'); return; }
     if (this.state === 'countdown') {
       const before = Math.ceil(this.timer);
       this.timer -= dt;
       const now = Math.ceil(this.timer);
-      const r0 = this.racers[0];
-      if (now !== before && now > 0 && now <= 3) { g.fx.pop(String(now), r0.pos.clone().addScaledVector(r0.pos.clone().normalize(), 6), { color: '#ffd23f', size: 80, prio: 1 }); g.audio.tone(440, 0.2, 'square', 0.08); }
+      if (now !== before && now > 0 && now <= 3) { g.fx.pop(String(now), above(this.racers[0].pos, 6), { color: '#ffd23f', size: 80, prio: 1 }); g.audio.tone(440, 0.2, 'square', 0.08); }
       if (this.timer <= 0) {
         this.state = 'run';
         this.excite = 1;
@@ -773,18 +770,13 @@ export class Race {
 
   // stand a finisher on step `n` (1 to 3) of podium set `slot`, facing the main stand
   toPodium(r, n, slot) {
-    const g = this.game, w = g.world;
+    const w = this.game.world;
     const [dx, h] = PODIUMS.steps[n], px = PODIUMS.xs[slot] + dx;
     w.toWorld(this.loc, px, 0, PODIUMS.z, _v);
-    g.planet.ground(_v, _v);
-    _up.copy(_v).normalize();
     w.toWorld(this.loc, px, 0, PODIUMS.z + 1, _f).sub(w.toWorld(this.loc, px, 0, PODIUMS.z, _w));
     r.podium = n;
     r.m.root.visible = true;
-    r.m.root.position.copy(_v).addScaledVector(_up, h + 0.1);
-    frameQuat(_up, _f, r.m.root.quaternion);
-    r.pos = r.m.root.position;
-    r.fwd = (r.fwd || new THREE.Vector3()).copy(_f).normalize();
+    this.pose(r, h + 0.1);
     r.m.anim(r.t, 0);
   }
 
@@ -804,7 +796,7 @@ export class Race {
     this.orbit[0] = this.orbit[1] = 0;
     const sens = 0.0022 * (g.settings ? g.settings.v.sensitivity : 1);
     this.camYaw -= mx * sens;
-    this.camPitch = Math.max(-0.1, Math.min(1.2, this.camPitch + my * sens));
+    this.camPitch = clamp(this.camPitch + my * sens, -0.1, 1.2);
     this.update(dt);
     if (this.state === 'idle' || !this.racers.length) return;
     this.updateCam(dt);
@@ -898,7 +890,7 @@ export class Race {
     } else if (this.camMode === 'stands') {
       // high in the stands, sliding along with the runner
       oval(this.startU + subject.s, 0, _o);
-      w.toWorld(this.loc, Math.max(-60, Math.min(60, _o.x * 0.6)), 17, STAND.z0 + 14, want);
+      w.toWorld(this.loc, clamp(_o.x * 0.6, -60, 60), 17, STAND.z0 + 14, want);
       look.copy(P).addScaledVector(up, 1);
     } else {
       // blimp: high over the pack, trailing it

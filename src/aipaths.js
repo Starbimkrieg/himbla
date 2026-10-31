@@ -11,39 +11,59 @@ const COLORS = {
   pirate: 0xff3b3b, ally: 0x2ee6ff, base: 0xffd23f, boss: 0xff2e88,
   road: 0xffffff, flyer: 0xc77dff, walker: 0x7dff3a,
 };
+// index of the first path point at or past arc length s (cum: the path's arc lengths)
+const pointAt = (cum, s) => { let i = 0; while (i < cum.length - 1 && cum[i] < s) i++; return i; };
 
-export class AIPaths {
-  constructor(game) {
+// The overlays' line batch, drawn over everything: seg() fills it each frame (up to `max` vertices), flush() shows it.
+class Lines {
+  constructor(game, max, renderOrder, opacity = 1) {
     this.game = game;
-    this.pos = new Float32Array(MAX_VERTS * 3);
-    this.col = new Float32Array(MAX_VERTS * 3);
+    this.max = max;
+    this.pos = new Float32Array(max * 3);
+    this.col = new Float32Array(max * 3);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setDrawRange(0, 0);
-    const mat = new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true, opacity: 0.9 });
-    this.lines = new THREE.LineSegments(geo, mat);
+    this.lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true, opacity }));
     this.lines.frustumCulled = false;
-    this.lines.renderOrder = 999;
+    this.lines.renderOrder = renderOrder;
     this.lines.visible = false;
     game.scene.add(this.lines);
     this.n = 0;
     this._c = new THREE.Color();
-    this._u = new THREE.Vector3();
   }
 
   hide() { this.lines.visible = false; }
 
-  seg(a, b, color) {
-    if (this.n + 2 > MAX_VERTS) return;
-    const i = this.n * 3, c = this._c.setHex(color), u = this._u;
-    // lifted a little off the ground against z-fighting
-    u.copy(a).normalize().multiplyScalar(0.8);
-    this.pos[i] = a.x + u.x; this.pos[i + 1] = a.y + u.y; this.pos[i + 2] = a.z + u.z;
-    u.copy(b).normalize().multiplyScalar(0.8);
-    this.pos[i + 3] = b.x + u.x; this.pos[i + 4] = b.y + u.y; this.pos[i + 5] = b.z + u.z;
+  // a -> b in colour c (a THREE.Color)
+  seg(a, b, c) {
+    if (this.n + 2 > this.max) return;
+    const i = this.n * 3;
+    this.pos[i] = a.x; this.pos[i + 1] = a.y; this.pos[i + 2] = a.z;
+    this.pos[i + 3] = b.x; this.pos[i + 4] = b.y; this.pos[i + 5] = b.z;
     this.col[i] = this.col[i + 3] = c.r; this.col[i + 1] = this.col[i + 4] = c.g; this.col[i + 2] = this.col[i + 5] = c.b;
     this.n += 2;
+  }
+
+  flush() {
+    const geo = this.lines.geometry;
+    geo.setDrawRange(0, this.n);
+    geo.attributes.position.needsUpdate = true;
+    geo.attributes.color.needsUpdate = true;
+    this.lines.visible = this.n > 0;
+  }
+}
+
+export class AIPaths extends Lines {
+  constructor(game) {
+    super(game, MAX_VERTS, 999, 0.9);
+    this._a = new THREE.Vector3(); this._b = new THREE.Vector3();
+  }
+
+  // colour as hex; lifted a little off the ground against z-fighting
+  seg(a, b, color) {
+    super.seg(this._a.copy(a).normalize().multiplyScalar(0.8).add(a), this._b.copy(b).normalize().multiplyScalar(0.8).add(b), this._c.setHex(color));
   }
 
   // a polyline through pts[from..] (Vector3s), optionally starting at `start`
@@ -71,20 +91,15 @@ export class AIPaths {
     if (T) {
       for (const v of T.roadVehicles || []) {
         if (!v.piece || !v.root.visible || v.hp <= 0 || v.pos.distanceTo(cam) > RANGE) continue;
-        const cum = v.piece.path.cum;
-        let i = 0;
-        while (i < cum.length - 1 && cum[i] < v.s) i++;
-        let at = this.poly(v.piece.path.pts, i, COLORS.road, v.pos);
+        let at = this.poly(v.piece.path.pts, pointAt(v.piece.path.cum, v.s), COLORS.road, v.pos);
         const plan = v.plan || [];
         for (let k = 0; k < plan.length && k < PLAN_PIECES; k++) at = this.poly(plan[k].path.pts, 0, COLORS.road, at);
       }
       for (const v of T.vehicles || []) {
         if (v.piece || v.offroad || !v.path || !v.root.visible || v.pos.distanceTo(cam) > RANGE * 2) continue;
-        const cum = v.path.cum, pts = v.path.pts;
-        let i = 0;
-        while (i < cum.length - 1 && cum[i] < v.s) i++;
+        const pts = v.path.pts, i = pointAt(v.path.cum, v.s);
         if (v.dir > 0) this.poly(pts, i, COLORS.flyer, v.pos);
-        else { let at = v.pos; for (let k = i - 1; k >= 0; k--) { this.seg(at, pts[k], COLORS.flyer); at = pts[k]; } }
+        else this.poly(pts.slice(0, i).reverse(), 0, COLORS.flyer, v.pos);
       }
       for (const wk of T.walkers || []) {
         if (wk.done || wk.idle || !wk.loc.group || !wk.fig.root.visible) continue;
@@ -99,11 +114,7 @@ export class AIPaths {
         }
       }
     }
-    const geo = this.lines.geometry;
-    geo.setDrawRange(0, this.n);
-    geo.attributes.position.needsUpdate = true;
-    geo.attributes.color.needsUpdate = true;
-    this.lines.visible = this.n > 0;
+    this.flush();
   }
 }
 
@@ -113,34 +124,10 @@ const MARK_VERTS = 16000;
 const RING = 24;
 const MARK_COLORS = { roaming: 0xff3b3b, den: 0xff9f1c, raider: 0xff2e88, core: 0xffffff, other: 0xffd23f, ally: 0x2ee6ff };
 
-export class EnemyMarkers {
+export class EnemyMarkers extends Lines {
   constructor(game) {
-    this.game = game;
-    this.pos = new Float32Array(MARK_VERTS * 3);
-    this.col = new Float32Array(MARK_VERTS * 3);
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
-    geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
-    geo.setDrawRange(0, 0);
-    this.lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true }));
-    this.lines.frustumCulled = false;
-    this.lines.renderOrder = 998;
-    this.lines.visible = false;
-    game.scene.add(this.lines);
-    this.n = 0;
-    this._c = new THREE.Color();
+    super(game, MARK_VERTS, 998);
     this._up = new THREE.Vector3(); this._a = new THREE.Vector3(); this._b = new THREE.Vector3(); this._p = new THREE.Vector3(); this._q = new THREE.Vector3();
-  }
-
-  hide() { this.lines.visible = false; }
-
-  seg(a, b, c) {
-    if (this.n + 2 > MARK_VERTS) return;
-    const i = this.n * 3;
-    this.pos[i] = a.x; this.pos[i + 1] = a.y; this.pos[i + 2] = a.z;
-    this.pos[i + 3] = b.x; this.pos[i + 4] = b.y; this.pos[i + 5] = b.z;
-    this.col[i] = this.col[i + 3] = c.r; this.col[i + 1] = this.col[i + 4] = c.g; this.col[i + 2] = this.col[i + 5] = c.b;
-    this.n += 2;
   }
 
   update() {
@@ -168,16 +155,11 @@ export class EnemyMarkers {
         this.seg(p, q, c);
       }
       const h = 12 + Math.min(60, c0.distanceTo(cam) * 0.04);
-      p.copy(c0); q.copy(c0).addScaledVector(up, h);
-      this.seg(p, q, c);
+      this.seg(c0, q.copy(c0).addScaledVector(up, h), c);
       // a small cross on top of the beacon
       p.copy(q).addScaledVector(a, 2); q.copy(q).addScaledVector(a, -2);
       this.seg(p, q, c);
     }
-    const geo = this.lines.geometry;
-    geo.setDrawRange(0, this.n);
-    geo.attributes.position.needsUpdate = true;
-    geo.attributes.color.needsUpdate = true;
-    this.lines.visible = this.n > 0;
+    this.flush();
   }
 }

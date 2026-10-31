@@ -38,8 +38,7 @@ export class MainMenu {
   // ---------- input ----------
   onKey(e) {
     if (!this.open || !this.ready) return;
-    const g = this.game;
-    if (g.settings && g.settings.open) return;
+    if (this.game.settings && this.game.settings.open) return;
     const c = e.code;
     if (this.screen === 'autostart') {
       if (c === 'Enter' || c === 'Space' || c === 'NumpadEnter') { e.preventDefault(); e.stopImmediatePropagation(); this.startNow(); }
@@ -89,8 +88,10 @@ export class MainMenu {
 
   back() {
     if (this.confirm) { this.confirm = null; this.render(); return; }
-    if (this.screen !== 'main') { this.go('main'); }
+    if (this.screen !== 'main') this.go('main');
   }
+
+  ask(kind, n) { this.confirm = { kind, n }; this.focus = 0; this.col = 0; this.render(); }
 
   go(screen, focus = 0) {
     this.note = null;
@@ -111,8 +112,7 @@ export class MainMenu {
     const g = this.game;
     if (g.audio && g.audio.click) { try { g.audio.click(); } catch { /* audio not started */ } }
     if (act === 'continue') this.choose(S.lastSlot(), false);
-    else if (act === 'new') this.go('new', 0);
-    else if (act === 'load') this.go('load', 0);
+    else if (act === 'new' || act === 'load') this.go(act);
     else if (act === 'settings') g.settings.show('title');
     else if (act === 'quit') window.close();
     else if (act === 'back') this.back();
@@ -120,20 +120,20 @@ export class MainMenu {
       const empty = !S.read(n);
       if (this.screen === 'new') {
         if (empty) this.choose(n, true);
-        else { this.confirm = { kind: 'overwrite', n }; this.focus = 0; this.col = 0; this.render(); }
+        else this.ask('overwrite', n);
       } else if (!empty) this.choose(n, false);
-    } else if (act === 'del') { this.confirm = { kind: 'delete', n }; this.focus = 0; this.col = 0; this.render(); }
+    } else if (act === 'del') this.ask('delete', n);
     else if (act === 'export') this.exportSlot(n);
     else if (act === 'import') {
-      if (S.read(n) || S.damaged(n)) { this.confirm = { kind: 'import', n }; this.focus = 0; this.col = 0; this.render(); } else this.pickFile(n);
-    } else if (act === 'restore') { this.confirm = { kind: 'restore', n }; this.focus = 0; this.col = 0; this.render(); }
+      if (S.read(n) || S.damaged(n)) this.ask('import', n); else this.pickFile(n);
+    } else if (act === 'restore') this.ask('restore', n);
     else if (act === 'yes') {
       const c = this.confirm;
       this.confirm = null;
       if (c.kind === 'overwrite') this.choose(c.n, true);
       else if (c.kind === 'import') { this.pickFile(c.n); this.render(); }
       else if (c.kind === 'restore') {
-        if (S.restore(c.n)) this.note = `SLOT ${c.n} RESTORED FROM ITS BACKUP`; else this.note = 'COULDN\'T RESTORE THAT BACKUP';
+        this.note = S.restore(c.n) ? `SLOT ${c.n} RESTORED FROM ITS BACKUP` : 'COULDN\'T RESTORE THAT BACKUP';
         this.render();
       }
       else if (c.kind === 'delete') {
@@ -150,8 +150,7 @@ export class MainMenu {
   exportSlot(n) {
     const text = this.saves.exportText(n);
     if (!text) return;
-    const d = new Date();
-    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const stamp = fmtDate(Date.now()).slice(0, 10); // YYYY-MM-DD
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
     a.download = `moon-runner-slot${n}-${stamp}.json`;
@@ -198,8 +197,9 @@ export class MainMenu {
     const fac = m.faction && FACTIONS[m.faction];
     const canPick = this.screen === 'new' || !s.empty;
     const head = `<span class="sv-n">SLOT ${s.n}</span>${s.active ? '<span class="sv-tag">CURRENT</span>' : ''}`;
-    const inner = s.empty
-      ? `<div class="sv-head">${head}</div><div class="sv-empty">EMPTY</div>`
+    const card = s.damaged
+      ? `<div class="sv-head">${head}</div><div class="sv-empty sv-bad">DAMAGED${s.hasBackup ? ' · RESTORE THE BACKUP →' : ''}</div>`
+      : s.empty ? `<div class="sv-head">${head}</div><div class="sv-empty">EMPTY</div>`
       : `<div class="sv-head">${head}<span class="sv-cred">₵${(m.credits ?? 0).toLocaleString('en-US')}</span></div>
          <div class="sv-grid">
            <span>DELIVERIES</span><b>${m.deliveries || 0}</b>
@@ -216,9 +216,6 @@ export class MainMenu {
       if (s.hasBackup) btn('restore', 'RESTORE', `Put back slot ${s.n} as it was when you last stopped playing`, s.damaged ? 'warn' : '');
     }
     if (!s.empty || s.damaged) btn('del', 'DELETE', `Delete slot ${s.n}`, 'danger');
-    const card = s.damaged
-      ? `<div class="sv-head">${head}</div><div class="sv-empty sv-bad">DAMAGED${s.hasBackup ? ' · RESTORE THE BACKUP →' : ''}</div>`
-      : inner;
     return `<div class="sv-row"><button class="sv-card ${s.empty ? 'is-empty' : ''}" data-act="slot" data-n="${s.n}" data-f="${f}" data-c="0" ${canPick && !s.damaged ? '' : 'disabled'}>${card}</button>${tools.length ? `<div class="sv-tools">${tools.join('')}</div>` : ''}</div>`;
   }
 
@@ -249,18 +246,14 @@ export class MainMenu {
         <button class="mm-item" data-act="no" data-f="1" data-c="0">NO, GO BACK</button></div></div>`;
     } else if (this.screen === 'main') {
       const last = S.lastSlot();
-      const any = this.anySaves();
       const items = [];
       if (last) items.push(['continue', `CONTINUE`, `SLOT ${last}`]);
-      items.push(['new', 'NEW GAME', '']);
-      items.push(['load', 'LOAD GAME', any ? '' : 'IMPORT A SAVE']);
-      items.push(['settings', 'SETTINGS', '']);
+      items.push(['new', 'NEW GAME', ''], ['load', 'LOAD GAME', this.anySaves() ? '' : 'IMPORT A SAVE'], ['settings', 'SETTINGS', '']);
       if (isElectron) items.push(['quit', 'QUIT', '']);
-      html = `<nav class="mm-list">${items.map(([act, label, sub, dis], i) => `<button class="mm-item" data-act="${act}" data-f="${i}" data-c="0" ${dis || !this.ready ? 'disabled' : ''}><span class="mm-caret">&gt;</span>${label}${sub ? `<small>${sub}</small>` : ''}</button>`).join('')}</nav>`;
+      html = `<nav class="mm-list">${items.map(([act, label, sub], i) => `<button class="mm-item" data-act="${act}" data-f="${i}" data-c="0" ${this.ready ? '' : 'disabled'}><span class="mm-caret">&gt;</span>${label}${sub ? `<small>${sub}</small>` : ''}</button>`).join('')}</nav>`;
     } else {
       const title = this.screen === 'new' ? 'NEW GAME · CHOOSE A SLOT' : 'LOAD GAME';
-      const slots = S.list();
-      html = `<div class="mm-sub">${title}</div>${this.note ? `<div class="mm-note">${esc(this.note)}</div>` : ''}<div class="sv-list">${slots.map((s, i) => this.card(s, i)).join('')}</div>
+      html = `<div class="mm-sub">${title}</div>${this.note ? `<div class="mm-note">${esc(this.note)}</div>` : ''}<div class="sv-list">${S.list().map((s, i) => this.card(s, i)).join('')}</div>
         <button class="mm-item mm-back" data-act="back" data-f="${SLOT_COUNT}" data-c="0"><span class="mm-caret">&lt;</span>BACK</button>`;
     }
     this.body.innerHTML = html;

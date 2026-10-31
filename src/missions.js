@@ -71,15 +71,13 @@ export class Missions {
     this.dropPos = null;
   }
 
-  get locs() { return this.game.locations; }
-
   civilianDestinations(exclude) {
-    return this.locs.filter((l) => !l.restricted && !l.hostile && !l.poi && l.id !== exclude);
+    return this.game.locations.filter((l) => !l.restricted && !l.hostile && !l.poi && l.id !== exclude);
   }
 
   makeOffer(board, faction, kind = 'standard') {
     if (kind === 'bounty') return this.makeBounty(board, faction);
-    const L = this.locs;
+    const L = this.game.locations;
     let pickup = board, to, cargo, clearance = null, smuggle = false, payload = null, rider = null;
     if (faction === 'vostok' || faction === 'daedalus') {
       // military logistics between the faction's own bases (clearance granted; ceasefire bases need none)
@@ -226,39 +224,21 @@ export class Missions {
   // bottom crate; when the first job ends either way, the second becomes the main contract.
   canTake() { return !this.active || (!!this.game.upgrades.twin && !this.extra && this.active.kind !== 'bounty'); }
 
+  // the main contract, or (with one on already) the second
   accept(offer) {
     // a bounty needs your hands free, and a showpiece needs the style it counts on the main contract
     if (this.active && (offer.kind === 'bounty' || offer.kind === 'showpiece' || this.active.kind === 'bounty')) {
       this.game.hud.toast(offer.kind === 'bounty' ? 'Finish what you are carrying first: a bounty needs your hands free.' : offer.kind === 'showpiece' ? 'A showpiece rides alone: nothing else on your back.' : 'You are out on a bounty: nothing else until it is done.', 3);
       return false;
     }
-    if (this.active && this.canTake()) return this.acceptExtra(offer);
-    if (this.active) return false;
-    this.active = offer;
-    this.timer = offer.time;
-    this.late = false;
-    this.integrity = 1;
-    this.stylePool = 0;
-    this.cargoState = offer.kind === 'bounty' ? 'hunt' : 'toPickup';
-    this.parHit = false;
-    this.parBase = 0;
+    if (this.active && !this.canTake()) return false;
+    const g = this.game, second = !!this.active;
+    if (second) this.extra = { a: offer, timer: offer.time, late: false, integrity: 1, cargoState: 'toPickup' };
+    else Object.assign(this, { active: offer, timer: offer.time, late: false, integrity: 1, stylePool: 0, cargoState: offer.kind === 'bounty' ? 'hunt' : 'toPickup', parHit: false, parBase: 0 });
     this.offers[offer.board.id] = this.offers[offer.board.id].filter((o) => o !== offer);
-    const g = this.game;
-    g.hud.toast(offer.kind === 'bounty' ? `BOUNTY ACCEPTED — ${offer.bounty.n} pirates, somewhere in the marked area` : `${KIND_INFO[offer.kind] ? KIND_INFO[offer.kind].name + ' ' : ''}CONTRACT ACCEPTED — ${offer.cargo.name}`);
+    g.hud.toast(second ? `SECOND CONTRACT ON THE CRADLE — ${offer.cargo.name}` : offer.kind === 'bounty' ? `BOUNTY ACCEPTED — ${offer.bounty.n} pirates, somewhere in the marked area` : `${KIND_INFO[offer.kind] ? KIND_INFO[offer.kind].name + ' ' : ''}CONTRACT ACCEPTED — ${offer.cargo.name}`);
     if (offer.kind === 'bounty') offer.bounty.squad = g.enemies.spawnBountySquad(offer.bounty.dir, offer.bounty.n);
     else { g.globe.discover(offer.to, true); g.globe.discover(offer.pickup, true); }
-    if (offer.clearance) g.hud.alert(`TEMPORARY CLEARANCE: ${offer.to.restricted ? offer.to.name : offer.pickup.name}`, '#2ec4ff', 3);
-    this.checkPickup();
-    return true;
-  }
-
-  acceptExtra(offer) {
-    const g = this.game;
-    this.extra = { a: offer, timer: offer.time, late: false, integrity: 1, cargoState: 'toPickup' };
-    this.offers[offer.board.id] = this.offers[offer.board.id].filter((o) => o !== offer);
-    g.hud.toast(`SECOND CONTRACT ON THE CRADLE — ${offer.cargo.name}`);
-    g.globe.discover(offer.to, true);
-    g.globe.discover(offer.pickup, true);
     if (offer.clearance) g.hud.alert(`TEMPORARY CLEARANCE: ${offer.to.restricted ? offer.to.name : offer.pickup.name}`, '#2ec4ff', 3);
     this.checkPickup();
     return true;
@@ -466,7 +446,6 @@ export class Missions {
     const showMult = a.kind === 'showpiece' ? (met ? 1.6 : 0.8) : 1;
     const note = a.kind === 'showpiece' ? (met ? `Par ${a.par} made ×1.6` : `Par ${a.par} missed ×0.8`) : '';
     const total = Math.round((base + timeBonus + style) * condition * lateMult * showMult);
-    const integ = base;
     g.addCredits(total, null);
     const repGain = a.kind === 'bounty' ? (late ? 2 : 5) : late ? 1 : (a.premium ? 4 : 3) + (integrity > 0.8 ? 1 : 0);
     g.rep.add(a.faction, repGain, a.kind === 'bounty' ? 'Collected a bounty' : `Delivered ${a.cargo.name}`);
@@ -485,9 +464,9 @@ export class Missions {
       }
     }
     g.audio.cash();
-    g.hud.delivered({ a, note, integ, timeBonus, style, styleCapped: styleRaw > base, condition, late, total, integrity, faction: FACTIONS[a.faction].name, repGain });
+    g.hud.delivered({ a, note, integ: base, timeBonus, style, styleCapped: styleRaw > base, condition, late, total, integrity, faction: FACTIONS[a.faction].name, repGain });
     // clearance ends with the contract: grace so the base you're in doesn't open fire
-    if (a.clearance) { const L = this.game.locations.find((l) => l.id === a.clearance); if (L) g.enemies.grantGrace(L); }
+    if (a.clearance) { const L = g.locations.find((l) => l.id === a.clearance); if (L) g.enemies.grantGrace(L); }
   }
 
   // quiet: the caller shows its own message (an emergency recall lists all failures in one panel)

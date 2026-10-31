@@ -3,15 +3,15 @@
 // Layout: a peg triangle (row r has r + 3 pegs), slanted guard rails just outside the outer pegs, and ROWS + 1 slots
 // between the bottom-row pegs, split by short dividers.
 
-export const ROWS = 12;
+const ROWS = 12;
 export const SPACING = 0.9; // peg pitch along a row
-export const ROW_H = 0.78; // vertical distance between rows
-export const PEG_R = 0.13;
+const ROW_H = 0.78; // vertical distance between rows
+const PEG_R = 0.13;
 export const BALL_R = 0.22;
-export const GRAVITY = 20;
-export const TOP_Y = ROWS * ROW_H + 0.4; // top peg row y (slot floor at y = 0)
+const GRAVITY = 20;
+const TOP_Y = ROWS * ROW_H + 0.4; // top peg row y (slot floor at y = 0)
 export const DROP_Y = TOP_Y + 1.1;
-export const DROP_RANGE = SPACING * 0.85; // chute half-width (physics)
+const DROP_RANGE = SPACING * 0.85; // chute half-width (physics)
 export const AIM_RANGE = DROP_RANGE * 0.75; // player's off-centre aim limit
 export const SLOTS = ROWS + 1;
 const REST = 0.42; // restitution off pegs
@@ -20,35 +20,35 @@ const FRICTION = 0.08; // fraction of tangential speed lost per hit
 const JITTER = 0.32; // random tangential kick (m/s) per peg hit, for unpredictability
 const BALL_REST = 0.6;
 const REAL_HIT = 0.8; // m/s into a peg: above is a hit, below is resting / rolling
-export const FLOOR_Y = 0;
+const FLOOR_Y = 0;
 export const DIVIDER_TOP = 1.1;
 
 // Measured headless (20k drops per aim point): RTP ~97% at centre and half-way out, ~94% over random aim (the 50x slots
 // take ~0.35-0.4% of drops, so a few thousand drops swing it by points; hit about once in 250). Median fall ~6.7 s (p95 7.5 s).
 export const MULTS = [50, 8, 3, 1.2, 0.6, 0.3, 0.2, 0.3, 0.6, 1.2, 3, 8, 50];
 
-export const rowY = (r) => TOP_Y - r * ROW_H;
-export const pegX = (r, i) => (i - (r + 2) / 2) * SPACING;
+const rowY = (r) => TOP_Y - r * ROW_H;
+const pegX = (r, i) => (i - (r + 2) / 2) * SPACING;
 
 export const PEGS = [];
 for (let r = 0; r < ROWS; r++) for (let i = 0; i < r + 3; i++) PEGS.push({ x: pegX(r, i), y: rowY(r), row: r, flash: 0 });
 
 const lastRowY = rowY(ROWS - 1);
 // slot boundaries: the bottom-row pegs
-export const slotEdge = (k) => pegX(ROWS - 1, k);
+const slotEdge = (k) => pegX(ROWS - 1, k);
 export const slotCentre = (k) => (slotEdge(k) + slotEdge(k + 1)) / 2;
-export const slotOf = (x) => Math.max(0, Math.min(SLOTS - 1, Math.floor((x - slotEdge(0)) / SPACING)));
+const slotOf = (x) => Math.max(0, Math.min(SLOTS - 1, Math.floor((x - slotEdge(0)) / SPACING)));
 
 // segments: guard rails (chute down to the outer slot walls), slot dividers, chute
-const SEGS = [];
+export const SEGS = [];
 {
   const botL = slotEdge(0), botR = slotEdge(SLOTS);
   // rails tangent to the outer pegs so a ball can't wedge between rail and peg
-  const ox = pegX(ROWS - 1, 0) - pegX(0, 0), oy = rowY(ROWS - 1) - rowY(0);
+  const ox = pegX(ROWS - 1, 0) - pegX(0, 0), oy = lastRowY - rowY(0);
   const ol = Math.hypot(ox, oy), px = oy / ol, py = -ox / ol; // outward normal (left side)
   const off = PEG_R + 0.03;
   const lAx = pegX(0, 0) + px * off, lAy = rowY(0) + py * off;
-  const lBx = pegX(ROWS - 1, 0) + px * off, lBy = rowY(ROWS - 1) + py * off;
+  const lBx = pegX(ROWS - 1, 0) + px * off, lBy = lastRowY + py * off;
   SEGS.push({ ax: lAx, ay: lAy, bx: lBx, by: lBy });
   SEGS.push({ ax: -lAx, ay: lAy, bx: -lBx, by: lBy });
   SEGS.push({ ax: lBx, ay: lBy, bx: botL - 0.05, by: lastRowY - 0.3 });
@@ -62,9 +62,8 @@ const SEGS = [];
     SEGS.push({ ax: sx * cw, ay: rowY(0) + 0.45, bx: -sx * lAx, by: lAy });
   }
   for (let k = 1; k < SLOTS; k++) SEGS.push({ ax: slotEdge(k), ay: FLOOR_Y, bx: slotEdge(k), by: DIVIDER_TOP, divider: true });
-  SEGS.push({ ax: slotEdge(0) - 0.1, ay: FLOOR_Y, bx: slotEdge(SLOTS) + 0.1, by: FLOOR_Y, floor: true });
+  SEGS.push({ ax: botL - 0.1, ay: FLOOR_Y, bx: botR + 0.1, by: FLOOR_Y, floor: true });
 }
-export { SEGS };
 
 export class PlinkoSim {
   constructor(rand = Math.random) {

@@ -1,24 +1,21 @@
 import * as THREE from 'three';
-import { Kit, T, G, outpostTemplate, container, crate, tank, junkHeap, sandbags, lightString } from '../outpostModels.js';
+import { Kit, T, outpostTemplate, container, crate, tank, junkHeap, sandbags, lightString } from '../outpostModels.js';
 import { foundedTemplate } from '../storyAssets.js';
 import { rubbleModel } from '../territory.js';
-import { FACTIONS } from '../locations.js';
 import { mulberry32 } from '../rng.js';
 import { World } from '../world.js';
 import { DISH_SIZE } from '../models.js';
 import { buildHomeTown, addBuilding, slotAt } from '../hometown.js';
 import {
   habDome, cabin, warehouse, quonset, lattice, hortonSphere, floodMast, stack, ticker, conveyor, pipe, radar, searchlight, shanty,
-  wreckHull, penTerminal, jobTerminal, playground, waterTower, greenhouse, commsMast, townHall, towerCrane, gantryCrane, cargoStack, garage, dishStation,
+  wreckHull, penTerminal, jobTerminal, playground, waterTower, greenhouse, commsMast, townHall, towerCrane, gantryCrane, cargoStack, garage, dishStation, powerBlock, keplerHabitat, ilmbWing,
 } from '../settlements.js';
 import { ferrisWheel, carousel } from '../downsFair.js';
-import { animate, together, lineUp } from './common.js';
+import { animate, together, lineUp, factionHex } from './common.js';
 
 // Asset Row group: faction outposts (intact and wreck), settlement building parts, hometown buildings. Items: see index.js.
 // Every make() builds fresh (new Kit, new stand-in world) or clones a baked template; nothing is kept between calls.
 
-const hex = (c) => new THREE.Color(c).getHex();
-const fc = (f) => hex(FACTIONS[f].color);
 const YEL = 0xffd23f;
 
 // ---------------------------------------------------------------------------------------------
@@ -122,7 +119,7 @@ const OUTPOSTS = [
 
 function outpostItem(kind, label, faction, w, d, wreck) {
   return item(`outpost.${kind}${wreck ? '.wreck' : ''}`, `${label}${wreck ? ' (WRECK)' : ''}`, w, d, () => {
-    const t = outpostTemplate(kind, fc(faction), 0, wreck, 'kit');
+    const t = outpostTemplate(kind, factionHex(faction), 0, wreck, 'kit');
     const root = t.root.clone();
     return { root, cols: fixCols(t.cols), update: animate(root) };
   });
@@ -132,7 +129,7 @@ function outpostItem(kind, label, faction, w, d, wreck) {
 const MODULES = ['greenhouse', 'clinic', 'beacon', 'turret', 'market', 'garage', 'turret2'];
 function foundedItem(kind, label, modules, w, d) {
   return item(`outpost.founded.${kind}${modules.length ? '.built' : ''}`, `${label}${modules.length ? ' (ALL MODULES)' : ' (BARE)'}`, w, d, () => {
-    const t = foundedTemplate(kind, fc('kepler'), modules);
+    const t = foundedTemplate(kind, factionHex('kepler'), modules);
     const root = t.root.clone();
     // militia guns sweep idly, like territory.updateGuns with no target
     const guns = [];
@@ -151,10 +148,7 @@ const outposts = {
     foundedItem('homestead', 'FOUNDED HOMESTEAD', MODULES, 74, 74),
     foundedItem('lab', 'FOUNDED FIELD LAB', [], 74, 74),
     foundedItem('lab', 'FOUNDED FIELD LAB', MODULES, 74, 74),
-    item('outpost.founded.rubble', 'FOUNDED OUTPOST RUBBLE', 11, 9, () => {
-      const root = rubbleModel('homestead', 1234);
-      return { root };
-    }, { solid: false }),
+    item('outpost.founded.rubble', 'FOUNDED OUTPOST RUBBLE', 11, 9, () => ({ root: rubbleModel('homestead', 1234) }), { solid: false }),
   ],
 };
 
@@ -230,6 +224,19 @@ const parts = {
     // motor pool plus compound (61 x 45 m), shifted so the compound, not the hall, is centred
     item('part.garage.main', 'MOTOR POOL GARAGE', 62, 46, () => kitPart((k) => garage(k, -2.8, 5.5, 0, [true, false, true], 'main'))),
     item('part.garage.small', 'SMALL GARAGE', 34, 20, () => kitPart((k) => garage(k, 0, 0, 0, [true, true], 'small'))),
+    // the ILMB's power wing (40 x 45 m, its frame's origin 7.25 m behind the middle): fusion plant, skywalk vestibule at -x
+    item('part.power-block', 'ILMB POWER BLOCK (FUSION)', 40, 45, () => kitPart((k) => powerBlock(k, -7.25, 0, 0))),
+    // the ILMB's family wing (57 x 55 m, its lobby out to x -28.9, so shifted 0.7 m): the Orrery ring, its orbit ring turning
+    item('part.kepler-habitat', 'ILMB KEPLER HABITAT (ORRERY)', 57, 55, () => kitPart((k) => keplerHabitat(k, 0.7, 0, 0))),
+    // the ILMB's farm wing (62 x 57 m, heliostats out to x -26.3, tank pad to x 36): greenhouse dome, heliostats, tank farm
+    item('part.hydroponics', 'ILMB HYDROPONICS', 62, 57, () => kitPart((k) => ilmbWing(k, 'hydroponics', -4.85, 0, 0))),
+    // Meridian's research wing (70 x 29 m: plaza bollards at x -29.8, the sky lab out to x 39.8 from 50 m up, the loading ramp
+    // to z -16): lab block, leaning pylon
+    item('part.labs', 'ILMB MERIDIAN LABS', 70, 29, () => kitPart((k) => ilmbWing(k, 'labs', -5.0, 1.75, 0))),
+    // Vostok's wing (67 x 50 m, lobby at x -21.9, apron to x 45, the tower out to z -26.5): bermed hangar, blast doors, tower
+    item('part.hangar', 'ILMB VOSTOK HANGAR', 67, 50, () => kitPart((k) => ilmbWing(k, 'hangar', -11.55, 2.0, 0))),
+    // Daedalus's wing (41 x 34 m, lobby at x -14.3, the fence out to x 26): the delta array station (the game adds the dish)
+    item('part.relay', 'ILMB DAEDALUS RELAY', 41, 34, () => kitPart((k) => ilmbWing(k, 'relay', -6.0, 0, 0))),
     item('part.dish-stations', 'DISH STATIONS (CRYO · GANTRY)', 66, 30, () => row([
       kitPart((k) => dishStation(k, 0, 0, DISH_SIZE, 'cryo', 'meridian', '01', { speed: 0.1 })),
       kitPart((k) => dishStation(k, 0, 0, DISH_SIZE, 'gantry', 'kepler', '02', { speed: 0.1, phase: 1 })),
@@ -288,10 +295,8 @@ const hometown = {
   title: '10 · HOMETOWN',
   items: [
     // Shuttle Pad deck is 28.6 m across; its stairs run 6 m further toward the hall
-    ...HOME.map(([type, label]) => item(`hometown.${type}`, label, type === 'pad' ? 31 : 27, type === 'pad' ? 37 : 27, () => {
-      const slot = slotAt(0);
-      return viaWorld((world, loc) => addBuilding(world, loc, 0, type), { faction: 'kepler', frame: slot });
-    })),
+    ...HOME.map(([type, label]) => item(`hometown.${type}`, label, type === 'pad' ? 31 : 27, type === 'pad' ? 37 : 27,
+      () => viaWorld((world, loc) => addBuilding(world, loc, 0, type), { faction: 'kepler', frame: slotAt(0) }))),
     item('hometown.hall', 'MOON COUNCIL HALL (EMPTY PLOTS)', 139, 188, () => viaWorld((world, loc) => buildHomeTown(world, loc), { faction: 'kepler' }), { big: true }),
   ],
 };

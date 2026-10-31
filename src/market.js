@@ -9,8 +9,8 @@
 //
 // The Composite is an index of the others, not a walk of its own.
 
-export const REFRESH = 15;   // s of game time between price updates
-export const HIST = 48;      // refreshes kept (48 x 15 s = 12-minute session)
+const REFRESH = 15;   // s of game time between price updates
+const HIST = 48;      // refreshes kept (48 x 15 s = 12-minute session)
 
 // [symbol, name, start price, volatility per refresh, typical volume per refresh]
 const SEED = [
@@ -27,7 +27,7 @@ const PULL = 0.04;   // tug back towards the start price so nothing runs away
 const SHOCK = 0.035; // chance per refresh, per stock, of a news jump
 const gauss = (rng) => Math.sqrt(-2 * Math.log(1 - rng())) * Math.cos(2 * Math.PI * rng());
 
-export function createMarket(rng = Math.random) {
+function createMarket(rng = Math.random) {
   const stocks = SEED.map(([sym, name, p0, vol, v0]) => ({
     sym, name, p0, vol, v0, price: p0, last: 0, hist: [p0], vols: [], open: p0, high: p0, low: p0, volume: 0, change: 0, pct: 0, tick: 0, index: sym === 'MRC',
   }));
@@ -77,13 +77,6 @@ export function createMarket(rng = Math.random) {
       m.nextAt = t + REFRESH - ((t - m.nextAt) % REFRESH);
       return true;
     },
-    // seconds until the next refresh, as of game time t
-    countdown(t) { return m.nextAt === null ? REFRESH : Math.max(0, m.nextAt - t); },
-    // [gainer, loser] over the window (index excluded)
-    movers() {
-      const a = parts.slice().sort((x, y) => y.pct - x.pct);
-      return [a[0], a[a.length - 1]];
-    },
   };
   // start with a full window of history
   for (let i = 0; i < HIST; i++) m.step();
@@ -94,6 +87,6 @@ export function createMarket(rng = Math.random) {
 export const market = createMarket();
 
 // Number formats shared by the board and the ticker.
-export const fmtPrice = (p) => p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtPrice = (p) => p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // ticker line: one entry per stock, arrow for the session move
 export const tickerText = (m = market) => m.stocks.map((s) => `${s.name} ${s.change >= 0 ? '▲' : '▼'} ${fmtPrice(s.price)}`).join(' | ');

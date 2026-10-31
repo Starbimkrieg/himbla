@@ -76,7 +76,7 @@ export function tokensFor(text) {
 
 const SKIP = '#settings, #help, .controls-mini, #padradial, #vradial, #powradial, .pgx, script, style, textarea, input, select, canvas';
 const KEY_IN_TEXT = /\b(Press|press|PRESS|Hold|hold|HOLD) (ENTER|SPACE|SHIFT|[A-Z])(?![A-Za-z0-9'’])/g;
-const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+export const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 export class Glyphs {
   constructor() {
@@ -131,16 +131,15 @@ export class Glyphs {
     const p = n.parentElement;
     const s = n.nodeValue;
     if (!p || p.closest(SKIP) || !/(?:ress|old) [A-Z]/.test(s)) return;
-    let html = '', last = 0, hit = false;
+    let html = '', last = 0;
     for (const m of s.matchAll(KEY_IN_TEXT)) {
       let toks = WORDS[m[2]];
       if (!toks) continue;
       if (/^hold$/i.test(m[1]) && m[2] === 'R') toks = ['VIEW']; // ("hold" is already said)
       html += esc(s.slice(last, m.index)) + `${m[1]} ${glyphHtml(toks)}`;
       last = m.index + m[0].length;
-      hit = true;
     }
-    if (!hit) return;
+    if (!last) return; // (no key swapped)
     html += esc(s.slice(last));
     const span = document.createElement('span');
     span.className = 'pgx';

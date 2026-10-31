@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { toon, glow, ink, textSprite } from './toon.js';
 import { frameQuat, tangent, arcDist } from './geo.js';
-import { SKATES } from './cosmetics.js';
+import { SKATES } from './cosmeticsData.js';
 
 // The Moon's two big secrets.
 // 1. SAT-7 "Lantern": a derelict satellite on a low inclined orbit, skimming the ground near the ILMB once per lap.
@@ -31,6 +31,19 @@ const N_ORBIT = 1440;
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+
+// The alien artifact over its cradle (cradle at height y, z: SAT-7's deck, the Asset Row's stand), added to parent: { artifact, aGlow }
+export function artifactCradle(parent, y, z = 0) {
+  const cradle = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.18, 8, 20), toon(0x2a2440));
+  cradle.rotation.x = Math.PI / 2;
+  cradle.position.set(0, y, z);
+  const artifact = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), glow(0x7dffd4));
+  artifact.position.set(0, y + 0.9, z);
+  const aGlow = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 8), new THREE.MeshBasicMaterial({ color: 0x7dffd4, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }));
+  aGlow.position.copy(artifact.position);
+  parent.add(cradle, artifact, aGlow);
+  return { artifact, aGlow };
+}
 
 // SAT-7 "Lantern" as a pure model (buildSatellite flies it; the Asset Row shows it at rest): { root, inner, nameSign,
 // artifact, aGlow, lights, halo }. `inner` carries SAT_SCALE; withArtifact: the artifact still sits on the deck.
@@ -118,18 +131,8 @@ export function makeSat7(withArtifact = true) {
   const halo = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
   inner.add(halo);
   // the artifact cradle on deck
-  const cradle = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.18, 8, 20), toon(0x2a2440));
-  cradle.rotation.x = Math.PI / 2;
-  cradle.position.set(0, 2.0, 2);
-  inner.add(cradle);
-  const artifact = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), glow(0x7dffd4));
-  artifact.position.set(0, 2.9, 2);
-  artifact.visible = withArtifact;
-  inner.add(artifact);
-  const aGlow = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 8), new THREE.MeshBasicMaterial({ color: 0x7dffd4, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }));
-  aGlow.position.copy(artifact.position);
-  aGlow.visible = artifact.visible;
-  inner.add(aGlow);
+  const { artifact, aGlow } = artifactCradle(inner, 2.0, 2);
+  artifact.visible = aGlow.visible = withArtifact;
   return { root, inner, nameSign, artifact, aGlow, lights, halo };
 }
 
@@ -213,8 +216,7 @@ export class Secrets {
       return b;
     };
     // trench wall colliders and rough faces, a little proud of the ground as a lip
-    W.col(loc, { type: 'box', x: -RAMP.x - 0.5, y: FLOOR / 2 - 1, z: (RAMP.z0 + RAMP.z1) / 2, hx: 0.5, hy: -FLOOR / 2 + 0.7, hz: (RAMP.z1 - RAMP.z0) / 2 });
-    W.col(loc, { type: 'box', x: RAMP.x + 0.5, y: FLOOR / 2 - 1, z: (RAMP.z0 + RAMP.z1) / 2, hx: 0.5, hy: -FLOOR / 2 + 0.7, hz: (RAMP.z1 - RAMP.z0) / 2 });
+    for (const sx of [-1, 1]) W.col(loc, { type: 'box', x: sx * (RAMP.x + 0.5), y: FLOOR / 2 - 1, z: (RAMP.z0 + RAMP.z1) / 2, hx: 0.5, hy: -FLOOR / 2 + 0.7, hz: (RAMP.z1 - RAMP.z0) / 2 });
     rough(-RAMP.x - 2.4, -RAMP.x + 0.1, FLOOR - 2, 0.9, RAMP.z0, RAMP.z1, rockT, 0.65);
     rough(RAMP.x - 0.1, RAMP.x + 2.4, FLOOR - 2, 0.9, RAMP.z0, RAMP.z1, rockT, 0.65);
     // rim outcrops (break up the straight edges), heaped over the mouth
@@ -482,12 +484,12 @@ export class Secrets {
     this.orbit = { a, b, n };
     // altitude: high everywhere, dipping low once per lap near the ILMB
     const ground = new Float32Array(N_ORBIT);
+    let maxG = 0;
     for (let i = 0; i < N_ORBIT; i++) {
       const th = (i / N_ORBIT) * Math.PI * 2;
       ground[i] = P.surface(_v.copy(a).multiplyScalar(Math.cos(th)).addScaledVector(b, Math.sin(th)).multiplyScalar(P.R));
+      maxG = Math.max(maxG, ground[i]);
     }
-    let maxG = 0;
-    for (let i = 0; i < N_ORBIT; i++) maxG = Math.max(maxG, ground[i]);
     const high = maxG + 160;
     const lowAt = 0.32; // radians past the ILMB
     this.radius = new Float32Array(N_ORBIT);
@@ -528,7 +530,7 @@ export class Secrets {
     const th = this.satTheta();
     S.prevPos.copy(S.pos);
     this.orbitPoint(th, S.pos);
-    const ahead = this.orbitPoint(th + 0.002, new THREE.Vector3());
+    const ahead = this.orbitPoint(th + 0.002);
     const up = S.pos.clone().normalize();
     // velocity from the orbit, so a time skip can't fling you off the deck
     S.vel.copy(ahead).sub(S.pos).multiplyScalar(SAT_SPEED / 3750 / 0.002);

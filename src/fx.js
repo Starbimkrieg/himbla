@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { upAt } from './geo.js';
+import { upAt, toScreen } from './geo.js';
 
 const MAX_P = 1200;
 // skate trail ribbons: a point every 1/60 s, tail 40 points (2/3 s), up to 2 s while grinding
@@ -37,6 +37,7 @@ export class FX {
     this.booms = [];
     this.rings = [];
     this.embers = []; // burning phosphor fragments, each trailing smoke
+    this.shells = []; // Deflector Shield hits
     this.ghosts = []; // Phase Dash afterimages
     this.ghostRun = null; // the dash laying them: { model, left, last }
     this.popLayer = document.getElementById('popups');
@@ -229,14 +230,13 @@ export class FX {
     g.add(shell, wire, cap);
     g.position.copy(c);
     this.scene.add(g);
-    this.shells = this.shells || [];
     this.shells.push({ g, follow, t: 0, dur: 0.55, mats: [shell.material, wire.material, cap.material], base: [0.32, 0.9, 0.9] });
     this.spawn(c.clone().addScaledVector(dir, 2.1), dir.clone().multiplyScalar(9), { color: 0x9be7ff, size: 0.2, life: 0.5, count: 14, spread: 7, drag: 2 });
     this.spawn(c.clone().addScaledVector(dir, 2.1), dir.clone().multiplyScalar(5), { color: 0xffffff, size: 0.14, life: 0.35, count: 8, spread: 4, drag: 2 });
   }
 
   updateShells(dt) {
-    for (let i = (this.shells || []).length - 1; i >= 0; i--) {
+    for (let i = this.shells.length - 1; i >= 0; i--) {
       const s = this.shells[i];
       s.t += dt;
       const k = s.t / s.dur;
@@ -340,8 +340,7 @@ export class FX {
   placePop(p) {
     if (p.pos) {
       this.camera.updateMatrixWorld();
-      this.v.copy(p.pos).project(this.camera);
-      if (this.v.z > 1 || Math.abs(this.v.x) > 1.2 || Math.abs(this.v.y) > 1.2) return false;
+      if (!toScreen(this.v.copy(p.pos), this.camera) || Math.abs(this.v.x) > 1.2 || Math.abs(this.v.y) > 1.2) return false;
       p.lp = ((this.v.x + 1) / 2) * 100;
       p.tp = ((1 - this.v.y) / 2) * 100;
     }
@@ -412,8 +411,7 @@ export class FX {
         this.booms.splice(i, 1);
         continue;
       }
-      const s = b.radius * (0.3 + Math.pow(k, 0.4) * 0.9);
-      b.g.scale.setScalar(s);
+      b.g.scale.setScalar(b.radius * (0.3 + Math.pow(k, 0.4) * 0.9));
       b.mats.forEach((m) => (m.opacity = 1 - k * k));
     }
 
@@ -443,8 +441,7 @@ export class FX {
     for (let i = this.pops.length - 1; i >= 0; i--) {
       const p = this.pops[i];
       p.t += popDt;
-      if (p.t >= p.life || p.done) { p.el.remove(); this.pops.splice(i, 1); }
-      else if (p.pos && !this.placePop(p)) { p.el.remove(); this.pops.splice(i, 1); } // its spot left the screen
+      if (p.t >= p.life || p.done || (p.pos && !this.placePop(p))) { p.el.remove(); this.pops.splice(i, 1); } // ended, or its spot left the screen
     }
     this.pumpPops();
     this.separatePops(popDt);

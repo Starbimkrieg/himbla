@@ -225,6 +225,8 @@ F.box("plum", 0.02, (0, SY, (ZB - 0.2) / 2), (4.42, 1.02, (-0.2 - ZB) / 2), 0.08
 F.build()
 F.root["radius"] = 9.0
 
+audit_coplanar(C.objects)        # kit.py: same-plane faces of two parts would z-fight (raises)
+audit_flips(C.objects)
 print("built", len(C.objects), "objects")
 
 if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":

@@ -24,6 +24,26 @@ const POWERS = {
   ...(DEV_TOOLS ? { meteor: { name: 'Meteor Spawn (dev)', has: (g) => !!(g.cheats && g.cheats.meteorPower), cd: () => 0 } } : {}),
 };
 
+// Shared with the vehicle wheel (vehicles.js): a wheel's element `el` (made under #hud with `id` if null) filled with the
+// ring, the hub and a wedge per item round it, and shown. wedge(k): [extra classes, inner HTML].
+export function radialFill(el, id, items, wedge) {
+  if (!el) {
+    el = document.createElement('div');
+    el.id = id;
+    document.getElementById('hud').appendChild(el);
+  }
+  const n = items.length;
+  el.innerHTML = '<div class="pr-ring"></div><div class="pr-hub"></div>' + items.map((k, i) => {
+    const a = (i / n) * Math.PI * 2 - Math.PI / 2, [cls, html] = wedge(k);
+    return `<div class="pr-item${cls}" data-i="${i}" style="left:${50 + Math.cos(a) * 38}%;top:${50 + Math.sin(a) * 38}%">${html}</div>`;
+  }).join('');
+  el.classList.remove('hidden');
+  return el;
+}
+
+// which of n wedges angle a falls in (0 at the top, clockwise)
+export const wedgeAt = (a, n) => ((Math.round((a / (Math.PI * 2)) * n) % n) + n) % n;
+
 export class Powers {
   constructor(game) {
     this.game = game;
@@ -71,18 +91,8 @@ export class Powers {
   openRadial() {
     const items = this.owned();
     if (!items.length) return;
-    if (!this.radialEl) {
-      this.radialEl = document.createElement('div');
-      this.radialEl.id = 'powradial';
-      document.getElementById('hud').appendChild(this.radialEl);
-    }
     this.radial = { sel: -1, items, hub: '', t: 0 };
-    const n = items.length;
-    this.radialEl.innerHTML = '<div class="pr-ring"></div><div class="pr-hub"></div>' + items.map((k, i) => {
-      const a = (i / n) * Math.PI * 2 - Math.PI / 2;
-      return `<div class="pr-item" data-i="${i}" style="left:${50 + Math.cos(a) * 38}%;top:${50 + Math.sin(a) * 38}%"><b>${POWERS[k].name}</b><small></small></div>`;
-    }).join('');
-    this.radialEl.classList.remove('hidden');
+    this.radialEl = radialFill(this.radialEl, 'powradial', items, (k) => ['', `<b>${POWERS[k].name}</b><small></small>`]);
     this.radialDraw();
     this.game.audio.tone(520, 0.08, 'triangle', 0.12);
   }
@@ -124,11 +134,8 @@ export class Powers {
 
   // right stick picks a wedge; the pick stays until you push to another
   radialStick(rx, ry) {
-    const R = this.radial;
-    if (!R || Math.hypot(rx, ry) <= 0.55) return;
-    const n = R.items.length;
-    const a = Math.atan2(rx, -ry); // 0 at the top, clockwise
-    this.radialSelect(((Math.round((a / (Math.PI * 2)) * n) % n) + n) % n);
+    if (!this.radial || Math.hypot(rx, ry) <= 0.55) return;
+    this.radialSelect(wedgeAt(Math.atan2(rx, -ry), this.radial.items.length));
   }
 
   // the picked power, or null for none
@@ -189,10 +196,8 @@ export class Powers {
     const k = this.current();
     if (!k) { el.classList.add('hidden'); return; }
     el.classList.remove('hidden');
-    const cd = POWERS[k].cd(g);
-    const extra = this.status(k);
-    const many = this.owned().length > 1;
+    const own = this.owned();
     el.classList.toggle('swap', this.flash > 0);
-    el.innerHTML = `<b>E</b> ${POWERS[k].name.toUpperCase()} <span class="${cd > 0 ? 'pc-cd' : 'pc-ok'}">${extra}</span>${many ? ` <small>WHEEL: ${this.owned().indexOf(k) + 1}/${this.owned().length}</small>` : ''}`;
+    el.innerHTML = `<b>E</b> ${POWERS[k].name.toUpperCase()} <span class="${POWERS[k].cd(g) > 0 ? 'pc-cd' : 'pc-ok'}">${this.status(k)}</span>${own.length > 1 ? ` <small>WHEEL: ${own.indexOf(k) + 1}/${own.length}</small>` : ''}`;
   }
 }

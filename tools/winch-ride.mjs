@@ -165,6 +165,7 @@ const expand = (args) => {
 // ---------------------------------------------------------------------------------------------------------------------------------
 // node side: one scenario's summary (the page only records; judgements live here so they change without a rerun)
 // ---------------------------------------------------------------------------------------------------------------------------------
+const fix = (v, d = 2) => (v === null || v === undefined ? '-' : (+v).toFixed(d)); // a number to d places, '-' when missing
 const summarize = (r) => {
   const S = { name: r.name, end: r.end, why: r.why || '', settled: r.settled, notes: r.notes || [], dialogFrames: r.dialogFrames || 0 };
   if (r.end === 'no-target' || r.end === 'not-fired') {
@@ -188,11 +189,10 @@ const summarize = (r) => {
     grounded: R.length ? Math.round((100 * R.filter((q) => q.gr).length) / R.length) : 0, ms: R.length ? R.reduce((a, q) => a + q.ms, 0) / R.length : 0,
     hook: r.hook, hookMode: r.hookMode, sig: r.sig, settleTrace: r.settleTrace, zPos: r.arm.posCasino, armSpeed: r.arm.speed, armDist: r.hook.dist0, armTicks: r.arm.ticks, endPos: r.endPos, frames: R.length,
   });
-  const f = (v, d = 2) => (v === null || v === undefined ? '-' : (+v).toFixed(d));
   S.line = `real(${r.name}): end=${r.end}${r.why && r.end !== 'held' ? ' (' + r.why + ')' : ''} dist-to-hook=${r.distHook} maxWraps=${S.maxWraps} firstIgnored=${S.firstIgnored} `
-    + `frames-through-sign=${S.framesThroughSign} streak=${S.maxStreak}${worst ? ' worst ' + S.worstThrough : ''} | maxWinchStep=${f(S.maxWinchStep)}m kick=${S.kick} FLING=${S.fling} maxOver=${f(S.maxOver)} minCos=${f(S.minCos)} `
-    + `bend4=${f(S.bend4)} bend5=${f(S.bend5)} maxSpeed=${f(S.maxSpeed, 1)} maxPhysStep=${f(S.maxPhysStep)} postTouch=${S.postTouch} minShellClr=${f(S.minShellClr)} | `
-    + `Z at casino(${S.zPos.map((v) => v.toFixed(1))}) speed=${f(S.armSpeed, 1)} hookDist=${f(S.armDist, 1)} hookMode=${S.hookMode} hook=${JSON.stringify(r.hook.casino)} on ${r.hook.col.split(' at ')[0]} dialogFrames=${S.dialogFrames} winch-ms=${f(S.ms, 3)}`;
+    + `frames-through-sign=${S.framesThroughSign} streak=${S.maxStreak}${worst ? ' worst ' + S.worstThrough : ''} | maxWinchStep=${fix(S.maxWinchStep)}m kick=${S.kick} FLING=${S.fling} maxOver=${fix(S.maxOver)} minCos=${fix(S.minCos)} `
+    + `bend4=${fix(S.bend4)} bend5=${fix(S.bend5)} maxSpeed=${fix(S.maxSpeed, 1)} maxPhysStep=${fix(S.maxPhysStep)} postTouch=${S.postTouch} minShellClr=${fix(S.minShellClr)} | `
+    + `Z at casino(${S.zPos.map((v) => v.toFixed(1))}) speed=${fix(S.armSpeed, 1)} hookDist=${fix(S.armDist, 1)} hookMode=${S.hookMode} hook=${JSON.stringify(r.hook.casino)} on ${r.hook.col.split(' at ')[0]} dialogFrames=${S.dialogFrames} winch-ms=${fix(S.ms, 3)}`;
   return S;
 };
 const toCsv = (rows) => { const keys = [...new Set(rows.flatMap((q) => Object.keys(q)))]; return keys.join(',') + '\n' + rows.map((q) => keys.map((k) => (q[k] === undefined ? '' : q[k])).join(',')).join('\n') + '\n'; };
@@ -209,9 +209,8 @@ if (argv.includes('--list')) {
 }
 if (argv[0] === '--table') { // --table a.jsonl [b.jsonl ...]: a row per scenario, counts by policy
   const rows = argv.slice(1).flatMap((f) => fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)));
-  const f2 = (v, d = 2) => (v === null || v === undefined ? '-' : (+v).toFixed(d));
   console.log('scenario                          end    why                    dist   wr thru  step  kick  FLG  over  minCos  bend4 bend5');
-  for (const r of rows) console.log(r.maxWinchStep === undefined ? `${r.name.padEnd(32)} ${r.end} ${r.why}` : `${r.name.padEnd(32)} ${String(r.end).padStart(6)} ${String(r.why).slice(0, 22).padEnd(22)} ${f2(r.distHook, 1).padStart(6)} ${String(r.maxWraps).padStart(3)} ${String(r.framesThroughSign).padStart(3)} ${f2(r.maxWinchStep).padStart(6)} ${String(r.kick).padStart(4)} ${String(r.fling).padStart(4)} ${f2(r.maxOver, 1).padStart(6)} ${f2(r.minCos).padStart(6)} ${f2(r.bend4).padStart(6)} ${f2(r.bend5).padStart(5)}`);
+  for (const r of rows) console.log(r.maxWinchStep === undefined ? `${r.name.padEnd(32)} ${r.end} ${r.why}` : `${r.name.padEnd(32)} ${String(r.end).padStart(6)} ${String(r.why).slice(0, 22).padEnd(22)} ${fix(r.distHook, 1).padStart(6)} ${String(r.maxWraps).padStart(3)} ${String(r.framesThroughSign).padStart(3)} ${fix(r.maxWinchStep).padStart(6)} ${String(r.kick).padStart(4)} ${String(r.fling).padStart(4)} ${fix(r.maxOver, 1).padStart(6)} ${fix(r.minCos).padStart(6)} ${fix(r.bend4).padStart(6)} ${fix(r.bend5).padStart(5)}`);
   const by = {};
   for (const r of rows.filter((q) => q.maxWinchStep !== undefined)) (by[r.name.split('-')[0]] ||= []).push(r);
   for (const [p, rs] of Object.entries(by)) console.log(`${p.padEnd(8)} n=${rs.length} runaway(>2 m/frame)=${rs.filter((r) => r.fling > 0).length} snapped=${rs.filter((r) => /snapped/.test(r.why)).length} through-sign=${rs.filter((r) => r.framesThroughSign > 0).length} kick(>0.5 m)=${rs.filter((r) => r.kick > 0).length} reached-5-bends=${rs.filter((r) => r.bend5 !== null).length}`);

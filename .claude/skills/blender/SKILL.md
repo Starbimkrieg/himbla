@@ -30,12 +30,12 @@ MOONRUNNER_REPO=. python3 tools/blender/build_crane.py    # -> src/assets/crane.
 MOONRUNNER_REPO=. python3 tools/blender/build_idles.py    # -> src/assets/idles.json
 ```
 
-Each run takes 1 to 3 s. Builders: runner, idles, ships, skimmer, warrig, rover, interceptor, apc, landtrain, crane, garage, slots, casino, blackjack, claw, duck, dish,
-outposts, hall, lot, chimera (the chimera kit: about 6 minutes, it remeshes every part; `CHIMERA_ONLY=car,mite CHIMERA_OUT=<file>` builds some kinds to look at; a full build re-rolls every part's random details, so to change a few parts build them with `CHIMERA_PARTS=legs_mite_0,... CHIMERA_OUT=<file>` and put them in with `tools/splice-chimera.mjs`, which keeps the rest of the kit as it was) and the Chimera Downs' nine (`build_downs_stand`, `_club`, `_course`, `_stalls`, `_arcade`, `_screen`, `_fair`, `_stable`, `_crowd`, which share `downs_common.py`). In the Blender app they run with `exec(open(r"<repo>/tools/blender/build_x.py").read())`.
+Each run takes 1 to 3 s. Builders: runner, idles, ships, skimmer, warrig (with `warrig_kit.py`, whose `clash_check()` and `float_check()` find parts cutting through each other or hanging free), rover, interceptor, apc, landtrain, crane, garage, slots, casino, blackjack, claw, duck, dish,
+outposts, hall, lot, power, habitat (with `habitat_kit.py`), chimera (the chimera kit: about 6 minutes, it remeshes every part; `CHIMERA_ONLY=car,mite CHIMERA_OUT=<file>` builds some kinds to look at; a full build re-rolls every part's random details, so to change a few parts build them with `CHIMERA_PARTS=legs_mite_0,... CHIMERA_OUT=<file>` and put them in with `tools/splice-chimera.mjs`, which keeps the rest of the kit as it was), the ILMB's other wings (hydroponics, labs, hangar, relay; they and habitat_kit share `wing_kit.py`) and the Chimera Downs' ten (`build_downs_stand`, `_club`, `_course`, `_stalls`, `_arcade`, `_screen`, `_fair`, `_stable`, `_crowd`, `_dome`, which share `downs_common.py`). In the Blender app they run with `exec(open(r"<repo>/tools/blender/build_x.py").read())`.
 
 ## After a build
 
-1. `npm run optimize:glb` for the compressed models (ships, skimmer, warrig, rover, interceptor, apc, landtrain, crane, garage, slots, casino, blackjack, claw, duck, dish, hall, lot, the `downs-*` files, chimera).
+1. `npm run optimize:glb` for the compressed models (ships, skimmer, warrig, rover, interceptor, apc, landtrain, crane, garage, slots, casino, blackjack, claw, duck, dish, hall, lot, power, habitat, hydroponics, labs, hangar, relay, the `downs-*` files, chimera).
    `runner.glb` and `outposts.glb` stay plain. A build overwrites a compressed file with a plain one, so a
    model you did not change shows as modified if you rebuilt it: `git checkout` it.
 2. `npm run check:outposts` after touching outposts.

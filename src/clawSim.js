@@ -48,6 +48,8 @@ const CHAINABLE = ['crate', 'canister', 'gear', 'tyre', 'hullplate'];
 const CRATE_TINTS = [0xff9f1c, 0x2ee6ff, 0x7dff6a, 0xff2e88, 0xc77dff, 0xffd23f];
 
 let nextId = 1;
+// renormalise a thing's orientation quaternion (qx, qy, qz, qw) in place
+export function normQ(o) { const n = Math.hypot(o.qx, o.qy, o.qz, o.qw) || 1; o.qx /= n; o.qy /= n; o.qz /= n; o.qw /= n; }
 
 export class ClawSim {
   constructor(seed = 1) {
@@ -58,17 +60,11 @@ export class ClawSim {
     this.claw = { x: CLAW_HOME.x, y: CLAW_HOME.y, z: CLAW_HOME.z, vx: 0, vy: 0, vz: 0, stun: 0, beam: false, energy: 1, spin: 0 };
     this.state = 'idle';  // 'idle' | 'play' | 'over'
     this.timeLeft = CLAW_TIME;
-    this.t = 0;
     this.acc = 0;
     this.bank = 0;
     this.combo = 0;
     this.comboT = 0;
     this.recent = [];     // last kinds banked, newest first
-    this.banked = [];     // this round's banks: { kind, value }
-    this.mood = 0;
-    this.moodT = 0;
-    this.seed = seed;
-    this.tank = 0;
     this.shuffle(seed);
   }
 
@@ -79,7 +75,6 @@ export class ClawSim {
   shuffle(seed = (Math.random() * 1e9) | 0, intro = false) {
     const old = this.items.filter((i) => i.st !== 'out');
     const rng = mulberry32(seed);
-    this.seed = seed;
     this.rng = rng;
     this.tank = 1000 + (seed % 9000);
     this.mood = Math.floor(rng() * MOODS.length);
@@ -90,8 +85,7 @@ export class ClawSim {
     const want = [];
     for (const [kind, lo, hi, p] of MIX) if (rng() < p) for (let n = lo + Math.floor(rng() * (hi - lo + 1)); n > 0; n--) want.push(kind);
     // jackpot: in a lockbox if there is one, else loose
-    const boxes = want.filter((k) => k === 'lockbox').length;
-    const inBox = boxes > 0;
+    const inBox = want.includes('lockbox');
     if (!inBox) want.push('chip');
     for (let i = want.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [want[i], want[j]] = [want[j], want[i]]; }
     for (const kind of want) this.spawn(kind, this.place(KINDS[kind].r), { rng });
@@ -122,19 +116,19 @@ export class ClawSim {
     return { x: TANK.x0 + r + rng() * (TANK.x1 - TANK.x0 - 2 * r), y: TANK.y0 + 1 + rng() * 3, z: TANK.z0 + r + rng() * (TANK.z1 - TANK.z0 - 2 * r) };
   }
 
-  spawn(kind, p, { rng = this.rng, v = null, scale = 1 } = {}) {
+  spawn(kind, p, { rng = this.rng, v = null } = {}) {
     const K = KINDS[kind];
     const it = {
       id: nextId++, kind, r: K.r, mass: K.mass, x: p.x, y: p.y, z: p.z,
       vx: v ? v.x : (rng() - 0.5) * 0.5, vy: v ? v.y : (rng() - 0.5) * 0.5, vz: v ? v.z : (rng() - 0.5) * 0.5,
       qx: 0, qy: 0, qz: 0, qw: 1, wx: (rng() - 0.5) * 0.8, wy: (rng() - 0.5) * 0.8, wz: (rng() - 0.5) * 0.8,
-      st: 'free', slot: -1, fuse: -1, spin: 0, tint: kind === 'crate' ? CRATE_TINTS[Math.floor(rng() * CRATE_TINTS.length)] : 0, inside: null, born: scale, age: 0,
+      st: 'free', slot: -1, fuse: -1, spin: 0, tint: kind === 'crate' ? CRATE_TINTS[Math.floor(rng() * CRATE_TINTS.length)] : 0, inside: null, age: 0,
     };
     // random orientation
     const a = rng() * 6.283, b = Math.acos(2 * rng() - 1), c = rng() * 6.283;
     const s1 = Math.sin(b / 2), c1 = Math.cos(b / 2);
     it.qx = s1 * Math.cos(a); it.qy = s1 * Math.sin(a); it.qz = c1 * Math.sin(c); it.qw = c1 * Math.cos(c);
-    const n = Math.hypot(it.qx, it.qy, it.qz, it.qw) || 1; it.qx /= n; it.qy /= n; it.qz /= n; it.qw /= n;
+    normQ(it);
     this.items.push(it);
     return it;
   }
@@ -144,7 +138,7 @@ export class ClawSim {
     if (this.state === 'play') return;
     this.state = 'play';
     this.timeLeft = CLAW_TIME;
-    this.bank = 0; this.combo = 0; this.comboT = 0; this.recent = []; this.banked = [];
+    this.bank = 0; this.combo = 0; this.comboT = 0; this.recent = [];
     this.claw.energy = 1;
     this.surged = false; this.surgeT = 0;
     this.emit({ type: 'start' });
@@ -153,13 +147,13 @@ export class ClawSim {
   end() {
     this.state = 'over';
     this.claw.beam = false;
-    for (const it of this.items) if (it.st === 'held') this.release(it);
-    this.emit({ type: 'end', bank: Math.max(0, Math.round(this.bank)) });
+    for (const it of this.holding) this.release(it);
+    this.emit({ type: 'end', bank: this.payout });
   }
 
   get payout() { return Math.max(0, Math.round(this.bank)); }
   get holding() { return this.items.filter((i) => i.st === 'held'); }
-  get heldWeight() { let w = 0; for (const i of this.items) if (i.st === 'held') w += KINDS[i.kind].w; return w; }
+  get heldWeight() { return this.holding.reduce((w, i) => w + KINDS[i.kind].w, 0); }
   get comboMult() { return Math.min(COMBO_MAX, 1 + COMBO_STEP * Math.max(0, this.combo - 1)); }
 
   // ---------- the step ----------
@@ -171,7 +165,6 @@ export class ClawSim {
 
   step(dt, input) {
     const c = this.claw;
-    this.t += dt;
     const playing = this.state === 'play';
     if (playing) {
       this.timeLeft -= dt;
@@ -192,9 +185,9 @@ export class ClawSim {
     if (c.z < TANK.z0 + 0.55) { c.z = TANK.z0 + 0.55; c.vz = Math.max(0, c.vz); } else if (c.z > TANK.z1 - 0.5) { c.z = TANK.z1 - 0.5; c.vz = Math.min(0, c.vz); }
     if (c.stun > 0) { c.stun -= dt; c.spin += dt * 9; }
     const wantBeam = !!ctl.beam && playing && c.energy > 0.02;
-    if (wantBeam !== c.beam) { c.beam = wantBeam; this.emit({ type: wantBeam ? 'beamOn' : 'beamOff' }); if (!wantBeam) for (const it of this.items) if (it.st === 'held') this.release(it); }
+    if (wantBeam !== c.beam) { c.beam = wantBeam; this.emit({ type: wantBeam ? 'beamOn' : 'beamOff' }); if (!wantBeam) for (const it of this.holding) this.release(it); }
     c.energy = Math.max(0, Math.min(1, c.energy + (c.beam ? -0.09 : 0.35) * dt));
-    if (c.beam && c.energy <= 0) { c.beam = false; this.emit({ type: 'overheat' }); for (const it of this.items) if (it.st === 'held') this.release(it); }
+    if (c.beam && c.energy <= 0) { c.beam = false; this.emit({ type: 'overheat' }); for (const it of this.holding) this.release(it); }
     // ---- the mood ----
     const damp = this.mood === 1 ? 1.1 : 0.2;
     if (playing && this.mood === 2) { this.stormT = (this.stormT || 0) - dt; if (this.stormT <= 0) { this.stormT = 2.2; this.storm(); } }
@@ -260,7 +253,7 @@ export class ClawSim {
     const hx = it.wx * dt * 0.5, hy = it.wy * dt * 0.5, hz = it.wz * dt * 0.5;
     const qx = it.qx, qy = it.qy, qz = it.qz, qw = it.qw;
     it.qx += hx * qw + hy * qz - hz * qy; it.qy += -hx * qz + hy * qw + hz * qx; it.qz += hx * qy - hy * qx + hz * qw; it.qw += -hx * qx - hy * qy - hz * qz;
-    const n = Math.hypot(it.qx, it.qy, it.qz, it.qw) || 1; it.qx /= n; it.qy /= n; it.qz /= n; it.qw /= n;
+    normQ(it);
   }
 
   // ---------- the beam ----------
@@ -295,7 +288,6 @@ export class ClawSim {
       it.vx += (c.vx - it.vx) * rv * 0.5; it.vy += (c.vy - it.vy) * rv * 0.5; it.vz += (c.vz - it.vz) * rv * 0.5;
       const ps = Math.hypot(it.vx - c.vx, it.vy - c.vy, it.vz - c.vz);       // cap relative speed: the beam doesn't fling
       if (ps > 3.4) { const k = 3.4 / ps; it.vx = c.vx + (it.vx - c.vx) * k; it.vy = c.vy + (it.vy - c.vy) * k; it.vz = c.vz + (it.vz - c.vz) * k; }
-      it.pulled = this.t;
       if (pd < it.r * 0.6 + 0.45 && this.heldWeight + KINDS[it.kind].w <= HOLD_CAP + 1e-6) {
         let slot = 0;
         while (this.items.some((q) => q.st === 'held' && q.slot === slot)) slot++;
@@ -326,13 +318,12 @@ export class ClawSim {
 
   bankItem(it) {
     const K = KINDS[it.kind];
-    it.st = 'out'; it.dead = true;
+    it.st = 'out';
     this.cutLinks(it);
     // its chain partner follows
     let value = K.value, tags = [];
     if (K.mine) {
       this.bank = Math.max(0, this.bank - MINE_PENALTY);
-      this.banked.push({ kind: it.kind, value: -MINE_PENALTY });
       this.emit({ type: 'bank', item: it, value: -MINE_PENALTY, mult: 1, tags: ['MINE!'], x: DROP.x, y: DROP.y + 0.5, z: DROP.z });
       this.emit({ type: 'boom', x: DROP.x, y: DROP.y + 0.8, z: DROP.z, r: 1.6, dull: true });
       this.recent = [];
@@ -348,7 +339,6 @@ export class ClawSim {
     value = Math.round(value * mult);
     if (K.jackpot) tags.push('JACKPOT!');
     this.bank += value;
-    this.banked.push({ kind: it.kind, value });
     this.emit({ type: 'bank', item: it, value, mult, tags, x: DROP.x, y: DROP.y + 0.5, z: DROP.z });
   }
 
@@ -450,13 +440,11 @@ export class ClawSim {
   // ---------- blasts ----------
   fuseMine(m, why = '') { if (m.fuse < 0) { m.fuse = 0.12; this.emit({ type: 'fuse', why, item: m }); } }
 
-  explode(src, radius, force) {
-    const mine = KINDS[src.kind].mine;
+  explode(src, R, force) {
     const x = src.x, y = src.y, z = src.z;
-    src.st = 'out'; src.dead = true;
+    src.st = 'out';
     this.cutLinks(src);
-    this.emit({ type: 'boom', x, y, z, r: radius, kind: src.kind });
-    const R = radius;
+    this.emit({ type: 'boom', x, y, z, r: R, kind: src.kind });
     for (const it of this.items) {
       if (it === src || it.st === 'out') continue;
       const dx = it.x - x, dy = it.y - y, dz = it.z - z, d = Math.hypot(dx, dy, dz) || 1e-3;
@@ -476,15 +464,14 @@ export class ClawSim {
       c.stun = Math.max(c.stun, 1.7);
       const k = 1 - cd / (R * 1.05);
       c.vx += ((c.x - x) / (cd || 1)) * 5 * (0.4 + k); c.vy += ((c.y - y) / (cd || 1)) * 5 * (0.4 + k); c.vz += ((c.z - z) / (cd || 1)) * 5 * (0.4 + k);
-      for (const it of this.items) if (it.st === 'held') this.release(it);
+      for (const it of this.holding) this.release(it);
       this.emit({ type: 'stun' });
     }
-    void mine;
   }
 
   openBox(box) {
     if (box.st === 'out') return;
-    box.st = 'out'; box.dead = true;
+    box.st = 'out';
     this.cutLinks(box);
     const p = { x: box.x, y: box.y, z: box.z }, rng = this.rng;
     const burst = () => ({ x: (rng() - 0.5) * 3, y: (rng() - 0.5) * 3, z: (rng() - 0.5) * 2 });

@@ -62,6 +62,10 @@ export function arcDist(a, b) {
 export function tangent(v, up, out = new THREE.Vector3()) {
   return out.copy(v).addScaledVector(up, -v.dot(up));
 }
+// A random unit direction along the ground at up.
+export function randomTangent(up, out = new THREE.Vector3()) {
+  return tangent(out.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5), up, out).normalize();
+}
 
 // Quaternion whose local +Y is `up` and local +Z points along `fwd` (projected).
 const _m = new THREE.Matrix4(), _x = new THREE.Vector3(), _z = new THREE.Vector3();
@@ -79,6 +83,15 @@ export function greatCircle(dir, t, dist, out = new THREE.Vector3()) {
   const a = dist / R;
   const tn = _x.copy(t).addScaledVector(dir, -t.dot(dir)).normalize();
   return out.copy(dir).multiplyScalar(Math.cos(a)).addScaledVector(tn, Math.sin(a)).normalize();
+}
+
+// Projects world point v to normalised device coords in place. False when it is behind the camera: with the
+// renderer's reversed depth buffer (main.js) a point behind gets a small negative z, not one past 1, so z can't tell.
+const _ahead = new THREE.Vector3();
+export function toScreen(v, cam) {
+  if (_ahead.copy(v).applyMatrix4(cam.matrixWorldInverse).z > -cam.near) return false;
+  v.project(cam);
+  return true;
 }
 
 // Nodes under root that pass test, collected once so per-frame code (spinners, blinkers) needn't walk the tree.

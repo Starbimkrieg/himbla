@@ -47,21 +47,19 @@ export class SaveSlots {
     this.fresh = !!m.fresh; // new game, not yet played
   }
 
-  liveKeys() {
-    const L = ls();
-    if (!L) return [];
-    const out = [];
-    for (let i = 0; i < L.length; i++) {
+  // the live per-slot keys and their values
+  liveData() {
+    const L = ls(), out = {};
+    if (L) for (let i = 0; i < L.length; i++) {
       const k = L.key(i);
-      if (k && k.startsWith(PREFIX) && !GLOBAL_KEYS.has(k)) out.push(k);
+      if (k && k.startsWith(PREFIX) && !GLOBAL_KEYS.has(k)) out[k] = L.getItem(k);
     }
     return out;
   }
 
   clearLive() {
     const L = ls();
-    if (!L) return;
-    for (const k of this.liveKeys()) L.removeItem(k);
+    for (const k of Object.keys(this.liveData())) L.removeItem(k);
   }
 
   read(n) { return this.readKey(slotKey(n)); }
@@ -87,8 +85,7 @@ export class SaveSlots {
   // Restore the backup (the active slot reloads into it).
   restore(n) {
     const b = this.backup(n);
-    if (!b) return false;
-    if (!this.write(n, b, { noBackup: true })) return false;
+    if (!b || !this.write(n, b, { noBackup: true })) return false;
     if (n === this.active) this.activate(n, false);
     return true;
   }
@@ -96,8 +93,7 @@ export class SaveSlots {
   // The slot as a file: { format, version, slot data }.
   exportText(n) {
     const d = this.read(n);
-    if (!d) return null;
-    return JSON.stringify({ format: FILE_FORMAT, v: 1, exportedAt: Date.now(), save: d });
+    return d ? JSON.stringify({ format: FILE_FORMAT, v: 1, exportedAt: Date.now(), save: d }) : null;
   }
 
   // Import a save file into slot n. Returns an error message, or null on success (the active slot reloads).
@@ -137,8 +133,7 @@ export class SaveSlots {
       let any = false;
       for (let n = 1; n <= SLOT_COUNT; n++) if (L.getItem(slotKey(n))) any = true;
       if (!any && L.getItem(MAIN_KEY)) {
-        const data = {};
-        for (const k of this.liveKeys()) data[k] = L.getItem(k);
+        const data = this.liveData();
         this.write(1, { v: 1, data, meta: { ...liveMeta(data), playTime: 0, savedAt: Date.now() } });
         L.setItem(ACTIVE_KEY, '1');
       }
@@ -163,12 +158,8 @@ export class SaveSlots {
   // Copy the live keys into the active slot. `meta` comes from the running game.
   snapshot(meta = {}) {
     if (!this.active || this.switching) return false;
-    const L = ls();
-    if (!L) return false;
-    const data = {};
-    for (const k of this.liveKeys()) data[k] = L.getItem(k);
-    const base = liveMeta(data);
-    return this.write(this.active, { v: 1, data, meta: { ...base, ...meta, playTime: Math.round(this.playTime()), savedAt: Date.now() } });
+    const data = this.liveData(); // (no storage: write() says false)
+    return this.write(this.active, { v: 1, data, meta: { ...liveMeta(data), ...meta, playTime: Math.round(this.playTime()), savedAt: Date.now() } });
   }
 
   // Switch to slot n (fresh = start a new game there) and reload into play.

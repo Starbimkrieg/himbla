@@ -48,14 +48,14 @@ if (!process.argv.includes('--static')) {
   const build = (mode) => {
     const out = mkdtempSync(join(tmpdir(), `mr-${mode}-`));
     execFileSync(process.execPath, [join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js'), 'build', '--mode', mode, '--outDir', out, '--emptyOutDir', '--logLevel', 'error'], { cwd: ROOT, stdio: 'inherit' });
-    let text = '', bytes = 0;
-    const walk = (d) => { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) walk(p); else if (/\.(js|html)$/.test(e)) { const t = readFileSync(p, 'utf8'); text += t; bytes += t.length; } } };
+    let text = '';
+    const walk = (d) => { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) walk(p); else if (/\.(js|html)$/.test(e)) { text += readFileSync(p, 'utf8'); } } };
     walk(out);
     rmSync(out, { recursive: true, force: true });
-    return { text, bytes };
+    return { text, bytes: text.length };
   };
   // strings only the dev tools carry (menu titles, a storage key, the Asset Row's name...)
-  const MARKS = ['DEV MENU', 'RESET PROGRESS', 'mr-dev-unlocked', 'CLICK MAP TO TELEPORT', 'PIRATE SQUAD', 'INPUT & CONTROLLER MONITOR', 'ASSET ROW', 'DEBUG OVERLAY', 'CPU TIME BY STAGE', 'fetch & pull upstream', 'dev-btn-pause', 'Meteor Spawn (dev)', 'PREPARING THE TRAILER', 'FREE CAM'];
+  const MARKS = ['DEV MENU', 'RESET PROGRESS', 'mr-dev-unlocked', 'CLICK MAP TO TELEPORT', 'PIRATE SQUAD', 'INPUT & CONTROLLER MONITOR', 'ASSET ROW', 'DEBUG OVERLAY', 'CPU TIME BY STAGE', 'fetch, pull & switch branch', 'dev-btn-pause', 'Meteor Spawn (dev)', 'PREPARING THE TRAILER', 'FREE CAM'];
   const dev = build('production'), rel = build('release');
   for (const m of MARKS) {
     if (!dev.text.includes(m)) fail(`"${m}" is not in the normal build, so this check proves nothing about it (stale string?)`);

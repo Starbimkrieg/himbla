@@ -260,8 +260,7 @@ export function ink(mesh, t = 0.06) {
   const g = shellGeo(mesh.geometry, t);
   if (!g.boundingSphere) shellBounds(g);
   const hull = new THREE.Mesh(g, inkMat);
-  hull.castShadow = false;
-  hull.receiveShadow = false;
+
   hull.userData.isInk = true;
   mesh.add(hull);
   return mesh;

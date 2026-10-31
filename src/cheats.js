@@ -1,7 +1,7 @@
 import { FACTIONS, SHOPS } from './locations.js';
-import { OUTFITS, SKATES } from './cosmetics.js';
-import { spliceGenes, ensureStats } from './chimera.js';
-import { SEASON_RACES } from './chimerastats.js';
+import { OUTFITS, SKATES } from './cosmeticsData.js';
+import { spliceGenes } from './chimera.js';
+import { ensureStats, SEASON_RACES } from './chimerastats.js';
 import { SKILL_IDS } from './chimeraskills.js';
 import { pick } from './rng.js';
 import { VEHICLES } from './vehicles.js';
@@ -17,6 +17,7 @@ const DEV_KEY = 'mr-dev-unlocked';
 const METEOR_KEY = 'mr-dev-meteor-power';
 const GITCHIP_KEY = 'mr-dev-git-chip';
 const GIT_POLL = 90; // s between upstream checks while the upstream chip is on
+const onOff = (v) => (v ? 'ON' : 'OFF');
 
 // Testing menu on ` (backtick). Uses the normal dialog: number keys pick, Esc closes.
 export class Cheats {
@@ -95,12 +96,12 @@ export class Cheats {
     this.game.dialogButtons.dev = true; // F8 closes it
   }
 
-  // ---- git: run by the dev server (tools/devGit.mjs: fetch and fast-forward pull only), so `npm run dev` only ----
-  async gitCall(act) {
+  // ---- git: run by the dev server (tools/devGit.mjs: fetch, fast-forward pull, switch branch), so `npm run dev` only ----
+  async gitCall(act, body = null) {
     try {
-      const r = await fetch(`/__dev/git/${act}`, { method: 'POST', headers: { 'X-Dev-Git': '1' } });
+      const r = await fetch(`/__dev/git/${act}`, { method: 'POST', headers: { 'X-Dev-Git': '1', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
       return await r.json();
-    } catch (e) { return { ok: false, err: String((e && e.message) || e) }; }
+    } catch (e) { return { ok: false, lost: true, err: String((e && e.message) || e) }; } // (no answer: the server is down or restarting)
   }
 
   // The upstream chip (HUD top left): commits upstream has that this checkout lacks. While on, fetches every GIT_POLL s (and
@@ -144,11 +145,11 @@ export class Cheats {
     const show = (text, buttons, again = null) => {
       // the chip's switch goes just before BACK on every screen that can redraw itself
       const sw = dev && again ? [{
-        label: `UPSTREAM CHIP: ${this.gitChip ? 'ON' : 'OFF'}`,
+        label: `UPSTREAM CHIP: ${onOff(this.gitChip)}`,
         fn: () => { this.gitChip = !this.gitChip; try { localStorage.setItem(GITCHIP_KEY, this.gitChip ? '1' : '0'); } catch { /* unavailable */ } this.gitChipSync(); again(); },
       }] : [];
       const list = [...buttons, ...sw, { label: 'BACK', fn: () => this.dev() }, { label: 'CLOSE' }].map((b, i) => ({ ...b, label: `${i + 1} · ${b.label}` }));
-      g.dialog('GIT: FETCH & PULL', text, list);
+      g.dialog('GIT: FETCH, PULL & SWITCH', text, list);
       return list;
     };
     if (!dev) { show('<small>Only available when the game runs from the dev server (npm run dev).</small>', []); return; }
@@ -156,7 +157,8 @@ export class Cheats {
     const st = await this.gitCall('status');
     if (g.dialogButtons !== mine) return; // closed or changed meanwhile
     this.gitSeen(st);
-    const note = (msg) => { const again = () => note(msg); show(`<small>${msg}</small>`, [{ label: 'TRY AGAIN', fn: () => this.gitMenu() }], again); };
+    const branchBtn = { label: 'SWITCH BRANCH…', fn: () => this.gitBranches(show, esc) };
+    const note = (msg) => { const again = () => note(msg); show(`<small>${msg}</small>`, [{ label: 'TRY AGAIN', fn: () => this.gitMenu() }, branchBtn], again); };
     if (!st.ok) { note(esc(st.err || 'The dev server did not answer.')); return; }
     if (st.noUpstream) { note(`${esc(st.branch)} has no upstream branch. In a terminal: git branch -u origin/${esc(st.branch)}`); return; }
     const screen = () => {
@@ -169,10 +171,69 @@ export class Cheats {
       const buttons = [];
       if (st.behind && !st.ahead) buttons.push({ label: `PULL ${st.behind} COMMIT${st.behind === 1 ? '' : 'S'}`, fn: () => this.gitPull(show, esc) });
       else if (st.behind) lines.push('Diverged from upstream: pull it by hand (a merge or rebase is not for the game to choose).');
-      buttons.push({ label: 'CHECK AGAIN', fn: () => this.gitMenu() });
+      buttons.push({ label: 'CHECK AGAIN', fn: () => this.gitMenu() }, branchBtn);
       show(`<small>${lines.join('<br>')}</small>`, buttons, screen);
     };
     screen();
+  }
+
+  // Pick one of origin's branches (newest commit first, 8 a page) and switch this checkout to it. The dev server refuses
+  // while tracked files have uncommitted changes, so nothing of yours is lost; the page reloads on the new branch's files.
+  async gitBranches(show, esc, page = 0, list = null) {
+    const g = this.game;
+    if (!list) {
+      const mine = show('<small>Fetching branches…</small>', []);
+      const r = await this.gitCall('branches');
+      if (g.dialogButtons !== mine) return;
+      if (!r.ok) { show(`<small>${esc(r.err || 'The dev server did not answer.')}</small>`, [{ label: 'BACK TO GIT', fn: () => this.gitMenu() }]); return; }
+      list = r;
+    }
+    const PAGE = 8;
+    const all = list.branches;
+    const shown = all.slice(page * PAGE, page * PAGE + PAGE);
+    const lines = [`On <b>${esc(list.current)}</b>. Pick a branch from origin (newest first):`];
+    if (list.dirty) lines.push(`${list.dirty} uncommitted change${list.dirty === 1 ? '' : 's'} here: commit or stash first, or the switch is refused.`);
+    if (list.fetchError) lines.push(`Fetch failed (the list may be stale): ${esc(list.fetchError.split('\n')[0])}`);
+    const short = (t, n) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
+    const buttons = shown.map((b) => ({
+      label: `${b.name === list.current ? '● ' : ''}${short(b.name, 34)} · ${b.when}`,
+      fn: () => this.gitSwitch(show, esc, b, list),
+    }));
+    if (all.length > PAGE) buttons.push({ label: `MORE (${page + 1}/${Math.ceil(all.length / PAGE)})`, fn: () => this.gitBranches(show, esc, (page + 1) % Math.ceil(all.length / PAGE), list) });
+    buttons.push({ label: 'BACK TO GIT', fn: () => this.gitMenu() });
+    show(`<small>${lines.join('<br>')}</small>`, buttons);
+  }
+
+  async gitSwitch(show, esc, b, list) {
+    const g = this.game;
+    if (b.name === list.current) { this.gitMenu(); return; }
+    show(`<small>Switch this checkout from <b>${esc(list.current)}</b> to <b>${esc(b.name)}</b>?<br>Last commit ${esc(b.when)}: ${esc(b.subject)}<br>Your progress is saved first; the game reloads on that branch.</small>`, [
+      {
+        label: `SWITCH TO ${esc(b.name).toUpperCase()}`,
+        fn: async () => {
+          try { g.save(); } catch { /* the switch goes ahead without a fresh save */ }
+          const mine = show('<small>Switching…</small>', []);
+          const r = await this.gitCall('switch', { branch: b.name });
+          if (g.dialogButtons !== mine) return;
+          if (r.lost) {
+            // a branch whose dev-server config differs restarts the dev server mid-answer: the switch went through
+            show(`<small>The dev server restarted while switching to <b>${esc(b.name)}</b> (that branch changes its config).<br>Reloading when it is back…</small>`, [{ label: 'RELOAD NOW', fn: () => location.reload() }]);
+            const wait = async (n) => { try { await fetch('/', { cache: 'no-store' }); location.reload(); } catch { if (n) setTimeout(() => wait(n - 1), 1000); } };
+            setTimeout(() => wait(20), 2500);
+            return;
+          }
+          if (!r.ok) { show(`<small>Switch stopped: ${esc((r.err || 'git said no').split('\n').filter((l) => l && !/^hint:/.test(l)).slice(0, 4).join(' · '))}</small>`, [{ label: 'BACK TO BRANCHES', fn: () => this.gitBranches(show, esc) }]); return; }
+          const lines = [`Now on <b>${esc(r.branch)}</b> at ${esc(r.head)} · ${r.changed} file${r.changed === 1 ? '' : 's'} differ from ${esc(r.from)}.`];
+          if (r.ffError) lines.push(`Your local copy of it could not fast-forward to origin's: ${esc(r.ffError.split('\n')[0])}`);
+          if (r.deps) lines.push('package.json differs: run npm install, then restart the dev server.');
+          lines.push('The page reloads by itself when the dev server sees the files (if that branch has no branch switcher, switch back from a terminal).');
+          this.gitState = null;
+          this.gitChipSync();
+          show(`<small>${lines.join('<br>')}</small>`, [{ label: 'RELOAD NOW', fn: () => location.reload() }]);
+        },
+      },
+      { label: 'BACK TO BRANCHES', fn: () => this.gitBranches(show, esc, 0, list) },
+    ]);
   }
 
   async gitPull(show, esc) {
@@ -192,10 +253,9 @@ export class Cheats {
   // unlimited jet and health, speed multiplier
   boostMenu() {
     const g = this.game;
-    const on = (v) => (v ? 'ON' : 'OFF');
     g.dialog('UNLIMITED JET, HEALTH & SPEED', '<small>Toggles last until you reload.</small>', [
-      { label: `1 · UNLIMITED JET: ${on(this.infJet)}`, fn: () => { this.infJet = !this.infJet; this.tick(); this.boostMenu(); } },
-      { label: `2 · UNLIMITED HEALTH: ${on(this.god)}`, fn: () => { this.god = !this.god; this.tick(); this.boostMenu(); } },
+      { label: `1 · UNLIMITED JET: ${onOff(this.infJet)}`, fn: () => { this.infJet = !this.infJet; this.tick(); this.boostMenu(); } },
+      { label: `2 · UNLIMITED HEALTH: ${onOff(this.god)}`, fn: () => { this.god = !this.god; this.tick(); this.boostMenu(); } },
       { label: this.speedLabel(), fn: () => { this.setSpeed(this.speed >= 10 ? 1 : this.speed + 1); this.boostMenu(); } },
       { label: '4 · BACK', fn: () => this.dev() },
       { label: 'CLOSE' },
@@ -246,13 +306,12 @@ export class Cheats {
   // display tests: effects and render modes to look at (readouts are in the debug overlay)
   displayMenu() {
     const g = this.game;
-    const on = (v) => (v ? 'ON' : 'OFF');
     g.dialog('DISPLAY TESTS', '<small>Toggles last until you reload.</small>', [
-      { label: `1 · CRACKED VISOR: ${on(this.crackedVisor)}`, fn: () => { this.crackedVisor = !this.crackedVisor; g.hud.crackKey = -1; this.displayMenu(); } },
-      { label: `2 · SHOW EACH POLYGON: ${on(this.debugView === 'poly')}`, fn: () => { this.setDebugView(this.debugView === 'poly' ? null : 'poly'); this.displayMenu(); } },
-      { label: `3 · SHOW EACH DRAW CALL: ${on(this.debugView === 'draw')}`, fn: () => { this.setDebugView(this.debugView === 'draw' ? null : 'draw'); this.displayMenu(); } },
-      { label: `4 · STATIC SHADOW CACHE: ${g.shadowCache.failed ? 'FAILED (see console)' : on(g.shadowCache.enabled)}`, fn: () => { g.shadowCache.enabled = !g.shadowCache.enabled; g.shadowCache.failed = false; g.shadowCache.invalidate(); this.displayMenu(); } },
-      { label: `5 · FAR SHADOWS: ${on(g.farShadow.enabled)}`, fn: () => { g.farShadow.enabled = !g.farShadow.enabled; g.farShadow.invalidate(); this.displayMenu(); } },
+      { label: `1 · CRACKED VISOR: ${onOff(this.crackedVisor)}`, fn: () => { this.crackedVisor = !this.crackedVisor; g.hud.crackKey = -1; this.displayMenu(); } },
+      { label: `2 · SHOW EACH POLYGON: ${onOff(this.debugView === 'poly')}`, fn: () => { this.setDebugView(this.debugView === 'poly' ? null : 'poly'); this.displayMenu(); } },
+      { label: `3 · SHOW EACH DRAW CALL: ${onOff(this.debugView === 'draw')}`, fn: () => { this.setDebugView(this.debugView === 'draw' ? null : 'draw'); this.displayMenu(); } },
+      { label: `4 · STATIC SHADOW CACHE: ${g.shadowCache.failed ? 'FAILED (see console)' : onOff(g.shadowCache.enabled)}`, fn: () => { g.shadowCache.enabled = !g.shadowCache.enabled; g.shadowCache.failed = false; g.shadowCache.invalidate(); this.displayMenu(); } },
+      { label: `5 · FAR SHADOWS: ${onOff(g.farShadow.enabled)}`, fn: () => { g.farShadow.enabled = !g.farShadow.enabled; g.farShadow.invalidate(); this.displayMenu(); } },
       { label: '6 · BACK', fn: () => this.dev() },
       { label: 'CLOSE' },
     ]);
@@ -328,11 +387,10 @@ export class Cheats {
   // Dev menu → Debug overlay: master switch (F3 in play), free cam, and the overlay's sections. Each toggle re-opens the menu.
   overlayMenu() {
     const g = this.game, o = this.overlay, f = this.freeCam;
-    const on = (v) => (v ? 'ON' : 'OFF');
     g.dialog('DEBUG OVERLAY', '<small>Every on-screen readout in one panel. F3 shows or hides it in play; the sections you pick are remembered. Free cam flies the camera while the runner stands still (its controls are shown at the top of the screen); it is off after a reload.</small>', [
-      { label: `1 · OVERLAY: ${on(o.on)}`, fn: () => { o.toggle(); this.overlayMenu(); } },
-      { label: `2 · FREE CAM: ${on(f.on)}`, fn: () => { f.toggle(); this.overlayMenu(); } },
-      ...SECTIONS.map((s, i) => ({ label: `${i + 3} · ${s.name}: ${on(o.sec[s.key])}`, fn: () => { o.setSection(s.key, !o.sec[s.key]); this.overlayMenu(); } })),
+      { label: `1 · OVERLAY: ${onOff(o.on)}`, fn: () => { o.toggle(); this.overlayMenu(); } },
+      { label: `2 · FREE CAM: ${onOff(f.on)}`, fn: () => { f.toggle(); this.overlayMenu(); } },
+      ...SECTIONS.map((s, i) => ({ label: `${i + 3} · ${s.name}: ${onOff(o.sec[s.key])}`, fn: () => { o.setSection(s.key, !o.sec[s.key]); this.overlayMenu(); } })),
       { label: 'BACK', fn: () => this.dev() }, // rows past the ninth are mouse / pad only (number keys stop at 9)
       { label: 'CLOSE' },
     ]);
@@ -340,14 +398,13 @@ export class Cheats {
 
   open(page = 0) {
     const g = this.game;
-    const on = (v) => (v ? 'ON' : 'OFF');
     const stats = `${g.stats.events || 0} events · ${g.stats.meridianEvents || 0} Meridian · ${g.stats.darkDeliveries || 0} dark deliveries · ${g.stats.raceWins || 0} Derby wins`;
     this.grid('CHEAT MENU', () => [
       { icon: '💰', name: '+₵10,000', fn: () => { g.addCredits(10000, 'Cheat'); g.save(); }, keep: true },
       { icon: '🗺️', name: 'REVEAL MAP', fn: () => this.revealMap(), keep: true },
       { icon: '⭐', name: 'REPUTATION', fn: () => this.repMenu() },
       { icon: '🚀', name: 'TELEPORT', fn: () => this.teleportMenu() },
-      { icon: '🛡️', name: 'GOD MODE', sub: on(this.god), on: this.god, fn: () => { this.god = !this.god; g.player.health = g.player.maxHealth; }, keep: true },
+      { icon: '🛡️', name: 'GOD MODE', sub: onOff(this.god), on: this.god, fn: () => { this.god = !this.god; g.player.health = g.player.maxHealth; }, keep: true },
       { icon: '🔓', name: 'UNLOCK ALL', sub: 'gear, weapons, cosmetics', fn: () => this.unlockAll(), keep: true },
       { icon: '🧪', name: 'LAB & CHIMERAS', sub: 'lab kit, careers, skills', fn: () => this.chimeraMenu() },
       { icon: '🛴', name: 'SPAWN VEHICLE', fn: () => this.vehicleMenu() },
@@ -362,11 +419,11 @@ export class Cheats {
       { icon: '📖', name: 'STORY', sub: g.story.faction ? FACTIONS[g.story.faction].name : 'no faction yet', fn: () => this.storyMenu() },
       { icon: '♻️', name: 'RESET PROGRESS', sub: 'story, gear, standing', fn: () => this.confirmResetProgress() },
       // page 2: the dev tools
-      { icon: '🧭', name: 'CLICK MAP TO TELEPORT', sub: on(this.mapTeleport), on: this.mapTeleport, fn: () => { this.mapTeleport = !this.mapTeleport; }, keep: true },
-      { icon: '📊', name: 'DEBUG OVERLAY', sub: `${on(this.overlay.on)} (F3)`, on: this.overlay.on, fn: () => this.overlayMenu() },
+      { icon: '🧭', name: 'CLICK MAP TO TELEPORT', sub: onOff(this.mapTeleport), on: this.mapTeleport, fn: () => { this.mapTeleport = !this.mapTeleport; }, keep: true },
+      { icon: '📊', name: 'DEBUG OVERLAY', sub: `${onOff(this.overlay.on)} (F3)`, on: this.overlay.on, fn: () => this.overlayMenu() },
       { icon: '🖥️', name: 'DISPLAY TESTS', fn: () => this.displayMenu() },
-      { icon: '🤸', name: 'RAGDOLL', sub: on(this.ragdoll), on: this.ragdoll, fn: () => this.toggleRagdoll(), keep: true },
-      { icon: '🌿', name: 'GIT', sub: 'fetch & pull upstream', fn: () => this.gitMenu() },
+      { icon: '🤸', name: 'RAGDOLL', sub: onOff(this.ragdoll), on: this.ragdoll, fn: () => this.toggleRagdoll(), keep: true },
+      { icon: '🌿', name: 'GIT', sub: 'fetch, pull & switch branch', fn: () => this.gitMenu() },
       { icon: '🗑️', name: 'WIPE SAVE SLOT', sub: 'back to the menu', fn: () => this.confirmReset() },
     ], { note: stats, page });
   }
@@ -399,7 +456,7 @@ export class Cheats {
     const rows = keys.slice(page * per, page * per + per).map((k, i) => {
       const on = A.mutations.includes(k);
       return {
-        label: `${i + 1} · ${MUTATIONS[k].name}: ${on ? 'ON' : 'OFF'}`,
+        label: `${i + 1} · ${MUTATIONS[k].name}: ${onOff(on)}`,
         fn: () => {
           A.mutations = on ? A.mutations.filter((m) => m !== k) : A.mutations.concat(k);
           A.save();
@@ -454,15 +511,16 @@ export class Cheats {
 
   repFaction(f) {
     const g = this.game;
+    const to = (v) => { this.setRep(f, v); this.repFaction(f); };
     g.dialog(FACTIONS[f].name.toUpperCase(), `Current: <b>${g.rep.get(f)}</b> (${g.rep.tier(f).name})`, [
-      { label: '1 · +10', fn: () => { this.setRep(f, g.rep.get(f) + 10); this.repFaction(f); } },
-      { label: '2 · −10', fn: () => { this.setRep(f, g.rep.get(f) - 10); this.repFaction(f); } },
-      { label: '3 · FRIENDLY (10)', fn: () => { this.setRep(f, 10); this.repFaction(f); } },
-      { label: '4 · TRUSTED (25)', fn: () => { this.setRep(f, 25); this.repFaction(f); } },
-      { label: '5 · HONORED (50)', fn: () => { this.setRep(f, 50); this.repFaction(f); } },
-      { label: '6 · REVERED (80)', fn: () => { this.setRep(f, 80); this.repFaction(f); } },
-      { label: '7 · NEUTRAL (0)', fn: () => { this.setRep(f, 0); this.repFaction(f); } },
-      { label: '8 · HOSTILE (−30)', fn: () => { this.setRep(f, -30); this.repFaction(f); } },
+      { label: '1 · +10', fn: () => to(g.rep.get(f) + 10) },
+      { label: '2 · −10', fn: () => to(g.rep.get(f) - 10) },
+      { label: '3 · FRIENDLY (10)', fn: () => to(10) },
+      { label: '4 · TRUSTED (25)', fn: () => to(25) },
+      { label: '5 · HONORED (50)', fn: () => to(50) },
+      { label: '6 · REVERED (80)', fn: () => to(80) },
+      { label: '7 · NEUTRAL (0)', fn: () => to(0) },
+      { label: '8 · HOSTILE (−30)', fn: () => to(-30) },
       { label: '9 · BACK', fn: () => this.repMenu() },
     ]);
   }
@@ -493,16 +551,15 @@ export class Cheats {
 
   teleport(l) {
     const g = this.game;
-    const P = g.player;
     if (this.inRow()) g.assetRow.exit(); // back to the Moon first (the Row has its own flat ground)
-    const p = g.world.toWorld(l, 0, 0, Math.min(l.r * 0.8, 120));
-    const pos = g.planet.ground(p, p.clone(), 1.5);
-    g.planet.update(pos, { budgetMs: 1e9 });
+    const [ax, az] = l.arrive || [0, Math.min(l.r * 0.8, 120)]; // a place's own arrival spot (locations.js), else toward its edge
+    const p = g.world.toWorld(l, ax, 0, az);
+    g.planet.update(g.planet.ground(p, p.clone(), 1.5), { budgetMs: 1e9 });
     const ground = g.planet.ground(p, p.clone(), 1.5);
     const fwd = l.pos.clone().sub(ground);
     const up = ground.clone().normalize();
     fwd.addScaledVector(up, -fwd.dot(up)).normalize();
-    P.respawn(ground, fwd);
+    g.player.respawn(ground, fwd);
     g.cam.fwd.copy(fwd);
     g.globe.discover(l, true);
     g.fx.pop(`→ ${l.short || l.name}`, null, { color: '#2ee6ff', size: 50 });

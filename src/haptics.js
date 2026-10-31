@@ -17,6 +17,7 @@
 // TRIGGERS (DualSense, in play, pad in use): RT is the weapon (a click that gives way; stiff while recharging), LT the
 // thrusters (light spring, buzz while burning, a wall when locked out) or the Rail Lance's scope.
 import { WEAPONS } from './weapons.js';
+import { clamp01 } from './rng.js';
 import { feedback, weapon, vibration, TRIGGER_OFF } from './sonyout.js';
 
 const SEND_MS = 80;   // re-send a steady effect this often (each lasts LONG_MS: no gap)
@@ -38,6 +39,7 @@ const PRESETS = {
   rail:    [1.0, 0.55, 0.28],
   mortar:  [0.8, 0.3, 0.2],
   cannon:  [1.0, 0.7, 0.3],    // APC turret
+  rotary:  [0.3, 0.55, 0.05],  // War-Rig gun, a round
   pickup:  [0.0, 0.5, 0.09],
   cash:    [0.0, 0.45, 0.07],  // twice (ECHO)
   tick:    [0.0, 0.22, 0.04],  // menu highlight moves
@@ -45,8 +47,6 @@ const PRESETS = {
   test:    [0.7, 0.7, 0.3],    // Settings strength changed
 };
 const ECHO = { cash: 0.09 }; // presets replayed this many seconds later
-
-const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
 // trigger effects (built once, not per frame)
 const FIRE = { pulse: weapon(4, 6, 3), scatter: weapon(2, 7, 7), rail: weapon(3, 8, 8), mortar: weapon(3, 6, 5), cannon: weapon(2, 6, 7) };
@@ -260,12 +260,10 @@ export class Haptics {
     if (P.vehicle) return [P.vehicle.def.turret ? FIRE.cannon : TRIGGER_OFF, TRIGGER_OFF];
     const w = WEAPONS[P.weapon || 0], b = P.body;
     const rt = P.fireCd > 0 && w.delay > 0.7 ? COOLING : FIRE[w.key] || TRIGGER_OFF;
-    let lt;
-    if (w.key === 'rail') lt = SCOPE;
-    else if (b.jetLocked) lt = LOCKED;
-    else if (b.thrusting) lt = b.energy < b.maxEnergy * 0.25 ? LOW : BURN;
-    else lt = SPRING;
-    return [rt, lt];
+    if (w.key === 'rail') return [rt, SCOPE];
+    if (b.jetLocked) return [rt, LOCKED];
+    if (b.thrusting) return [rt, b.energy < b.maxEnergy * 0.25 ? LOW : BURN];
+    return [rt, SPRING];
   }
 
   // ---- browser rumble ----
@@ -287,13 +285,10 @@ export class Haptics {
     this.sentAt = now; this.sent = { s, w };
     const bad = (err) => { this.lastResult = `refused (${(err && err.message) || err})`; if (++this.fails >= 8) { this.failed = true; this.mode = 'none'; } };
     try {
-      if (this.mode === 'dual') {
-        const p = this.act.playEffect('dual-rumble', { startDelay: 0, duration: LONG_MS, strongMagnitude: s, weakMagnitude: w });
-        if (p && p.then) p.then((r) => { this.lastResult = String(r); this.fails = 0; }, bad);
-      } else {
-        const p = this.act.pulse(Math.max(s, w), LONG_MS);
-        if (p && p.then) p.then((r) => { this.lastResult = String(r); this.fails = 0; }, bad);
-      }
+      const p = this.mode === 'dual'
+        ? this.act.playEffect('dual-rumble', { startDelay: 0, duration: LONG_MS, strongMagnitude: s, weakMagnitude: w })
+        : this.act.pulse(Math.max(s, w), LONG_MS);
+      if (p && p.then) p.then((r) => { this.lastResult = String(r); this.fails = 0; }, bad);
     } catch (err) { bad(err); }
   }
 

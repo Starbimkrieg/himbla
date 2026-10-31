@@ -26,6 +26,7 @@ const BIG_AIR_MIN = BIG_AIR; // s airborne before an air scores, as BIG AIR (sho
 const WINCH_FAST = 50; // m/s on the Hitch-Line before it pays style...
 const WINCH_RATE = 7; // ...at this many points a second (a trick's air time pays 5)
 const SKY_HIGH_GAIN = 40; // m climbed (radially) above a jump's start before SKY-HIGH! is called
+const offTurn = (a) => Math.abs(a - Math.round(a / TAU) * TAU); // rad short of (or past) the nearest whole turn
 
 // What a trick scores if you land it now: whole flips and spins, plus air time (the combo applies the multiplier).
 // clean: upright enough to stick it; tilt: how far off that is (1 = the wipeout edge). Live and on landing.
@@ -145,19 +146,20 @@ export class Player {
   }
 
   respawn(pos, facing) {
-    this.body.pos.copy(pos);
-    this.body.vel.set(0, 0, 0);
-    this.body.platform = null; // drop any deck (or satellite) you were teleported off
-    this.body.velFrame = null;
+    const b = this.body;
+    b.pos.copy(pos);
+    b.vel.set(0, 0, 0);
+    b.platform = null; // drop any deck (or satellite) you were teleported off
+    b.velFrame = null;
     this.seat = null; // ...or ride (rides.js lets go too)
     if (this.game.grind) this.game.grind.active = null; // ...or grind rail
-    upAt(pos, this.body.up);
-    this.body.groundN.copy(this.body.up);
-    this.body.energy = this.body.maxEnergy;
+    upAt(pos, b.up);
+    b.groundN.copy(b.up);
+    b.energy = b.maxEnergy;
     this.health = this.maxHealth;
     this.dead = false;
     this.model.root.visible = true;
-    this.upSmooth.copy(this.body.up);
+    this.upSmooth.copy(b.up);
     if (facing) this.heading.copy(facing);
     this.resetTrick();
     this.airBase = null;
@@ -288,7 +290,7 @@ export class Player {
     }
 
     // Thrusters push mostly forward (where you aim / steer); only a little lift or dive.
-    const thrustDir = (wish.lengthSq() > 0 ? wish.clone() : cam.fwd.clone());
+    const thrustDir = (wish.lengthSq() > 0 ? wish : cam.fwd).clone();
     const tv = this.params.thrustVertical;
     // lift stays limited, but looking down lets the thrusters drive you down hard
     const pitchK = Math.sin(cam.pitch) * 0.6 + 0.06;
@@ -519,7 +521,6 @@ export class Player {
   updateWeapons(dt, input, cam) {
     const g = this.game;
     const b = this.body;
-    const up = b.up;
     // APC (vehicles.js): its turret replaces your weapons while driving
     if (this.vehicle && this.vehicle.def.turret) {
       if (this.scoped) { this.scoped = false; g.audio.tone(800, 0.06, 'square', 0.06); }
@@ -539,12 +540,11 @@ export class Player {
     this.fireCd -= dt;
     if (input.mouse[0] && this.fireCd <= 0 && input.locked && !this.rag) {
       this.fireCd = w.delay * (1 - 0.15 * (g.upgrades.overcharge || 0)) * (this.mutFire || 1);
-      const muzzle = this.center.clone().addScaledVector(cam.right, 0.5).addScaledVector(up, 0.3);
+      const muzzle = this.center.clone().addScaledVector(cam.right, 0.5).addScaledVector(b.up, 0.3);
       const aim = cam.position.clone().addScaledVector(cam.look, 350);
       const dir = aim.sub(muzzle).normalize();
       fireWeapon(g, w, muzzle, dir, b.vel, this.damageMult || 1, this.homing || 1.5);
     }
-
   }
 
   // --- mid-air tricks: hold Q + W/S to flip, A/D to spin ---
@@ -565,7 +565,7 @@ export class Player {
         t.spin += (ts - t.spin) * Math.min(1, dt * 5);
       }
       // tuck while the trick button is held, then until the model levels out (flip/spin never return to exactly 0)
-      const lf = Math.abs(t.flip - Math.round(t.flip / TAU) * TAU), ls = Math.abs(t.spin - Math.round(t.spin / TAU) * TAU);
+      const lf = offTurn(t.flip), ls = offTurn(t.spin);
       t.tucked = t.active && (held || lf > 0.2 || ls > 0.2);
       this.model.trick.rotation.set(t.flip, t.spin, 0, 'YXZ');
     }
@@ -608,7 +608,7 @@ export class Player {
 
   onImpact(it, skates) {
     const g = this.game;
-    let safe = (g.alchemy && g.alchemy.buffs.cushion > 0) ? 1e9 : skates ? this.params.skateSafeImpact * (g.cheats ? g.cheats.speed : 1) : this.params.bootSafeImpact * (g.cheats ? g.cheats.speed : 1);
+    let safe = (g.alchemy && g.alchemy.buffs.cushion > 0) ? 1e9 : (skates ? this.params.skateSafeImpact : this.params.bootSafeImpact) * (g.cheats ? g.cheats.speed : 1);
     if (g.winch && g.winch.on) safe += 14; // the winch's pull is controlled: hitting a wall at its pace is a bump, not a crash
     if (it.speed > 6) { g.audio.thud(it.speed); g.haptics.land(it.speed); }
     if (it.speed > 4 && this.model.halo) this.model.halo.kick(Math.min(1, it.speed / 25)); // a bump rings the halo
@@ -689,7 +689,7 @@ export class Player {
     const upT = b.grounded ? b.groundN : up;
     this.upSmooth.lerp(upT, Math.min(1, dt * 8)).normalize();
     frameQuat(this.upSmooth, this.heading, m.root.quaternion);
-    m.root.quaternion.multiply(_q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), this.roll));
+    m.root.quaternion.multiply(_q.setFromAxisAngle(_Z, this.roll));
     m.root.position.copy(b.pos);
 
     this.anim += dt * (2 + Math.min(sp, 10) * 1.1);

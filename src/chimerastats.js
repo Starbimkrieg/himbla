@@ -1,4 +1,4 @@
-import { mulberry32 } from './rng.js';
+import { mulberry32, clamp } from './rng.js';
 import { SEGS, LAP, R0, RAIL_IN, RAIL_OUT, LANES, FINISH_U } from './downsPlan.js';
 import { SKILLS, DIST_SKILL, activationChance } from './chimeraskills.js';
 
@@ -70,8 +70,6 @@ export const STYLES = {
   late: { name: 'LATE SURGER', short: 'LATE', cruise: [0.84, 0.865, 0.94], sprintAt: [0.5, 0.63], spurt: 1.11, band: [0.45, 1], blurb: 'saves itself in the pack, then a long late run on a full tank' },
 };
 export const STYLE_KEYS = Object.keys(STYLES);
-
-const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 
 // The stats its parts give it (no randomness: a chimera's luck is its growth and its style).
 export function computeBase(genes) {

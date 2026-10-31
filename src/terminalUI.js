@@ -25,7 +25,7 @@
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ---- icons: 12x12 pixel art as ASCII bitmaps. '#' body (--i1), '+' accent (--i2), 'o' shade (--i3), '.' empty ----
-export const ICONS = {
+const ICONS = {
   greenhouse: [
     '....####....',
     '..##oooo##..',
@@ -168,7 +168,7 @@ export const ICONS = {
 
 const iconCache = new Map(), warned = new Set();
 // One <svg> per icon, a path per tone: a tile recolours it by setting --i1 / --i2 / --i3.
-export function icon(name, cls = '') {
+function icon(name, cls = '') {
   const key = `${name}|${cls}`;
   let svg = iconCache.get(key);
   if (svg) return svg;

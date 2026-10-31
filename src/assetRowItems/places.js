@@ -1,9 +1,6 @@
 // Asset Row group: places (item format: index.js). Every settlement, HQ and landmark the World builds, each on a private
 // stub World (places-lib.js). w x d are measured footprints, including the floating name sign.
 import { buildPlace, buildZoneWall } from './places-lib.js';
-import { LOCATIONS } from '../locations.js';
-
-const loc = (id) => LOCATIONS.find((l) => l.id === id);
 
 // one place: id, label, w, d, build spec (places-lib buildPlace), extra item fields
 const P = (id, label, w, d, spec, extra = {}) => ({ id: `places.${id}`, label, w, d, big: Math.max(w, d) > 100, make: (ctx) => buildPlace(ctx, spec), ...extra });
@@ -50,7 +47,7 @@ const pirates = [
 ];
 const fun = [
   P('casino', 'LUCKY CRATER CASINO', 152, 174, { loc: 'casino' }),
-  P('downs', 'CHIMERA DOWNS', 470, 345, { loc: 'downs', race: true, yaw: Math.PI }),
+  P('downs', 'CHIMERA DOWNS', 560, 560, { loc: 'downs', race: true, yaw: Math.PI }), // (the glass dome's aprons reach r 280)
 ];
 
 const zones = [
