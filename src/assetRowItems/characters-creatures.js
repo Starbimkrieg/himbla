@@ -122,8 +122,7 @@ function looksItem() {
   return {
     id: 'creatures.looks', label: 'CHIMERA PARTS: THE THREE LOOKS', w: span(list.length, SP_W), d: SP_D,
     make() {
-      const R = chimeraCells(list);
-      return { root: line(R.cells).root, update: R.update };
+      return chimeraCells(list);
     },
   };
 }
@@ -132,8 +131,7 @@ function outfitsItem() {
   return {
     id: 'creatures.outfits', label: 'CHIMERA PEOPLE: THE SETTLERS\' OUTFITS', w: span(list.length, SP_W), d: SP_D,
     make() {
-      const R = chimeraCells(list);
-      return { root: line(R.cells).root, update: R.update };
+      return chimeraCells(list);
     },
   };
 }
