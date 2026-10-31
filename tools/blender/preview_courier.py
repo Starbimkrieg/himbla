@@ -1,11 +1,12 @@
-# Courier light-bike review sheet. Builds each proposal (build_courier.py) in a fresh scene and renders side, front
-# three-quarter and rear three-quarter views (with a light-trail mock-up and the runner on the seat) to
-# docs/courier-proposals/<variant>_<view>.jpg, plus a review sheet, courier_proposals.jpg.
-# Env: PREVIEW_OUT=<dir> output dir; PREVIEW_W / PREVIEW_H / PREVIEW_SAMPLES quality; PREVIEW_EXPORT=0 skips the GLBs;
-# PREVIEW_RIDER=0 leaves the runner off; PREVIEW_RENDER=0 renders nothing (builds, exports and runs the rider checks only).
+# Courier light-bike preview. Builds the bike (build_courier.py) in a fresh scene, seats the runner in its solved pose,
+# checks the fit (fists on the grips, soles on the pegs, legs clear of the shell and bags) and renders side, front
+# three-quarter, rear three-quarter and cockpit views (with a light-trail mock-up) to docs/lightbike/<view>.jpg.
+# Env: PREVIEW_OUT=<dir> output dir; PREVIEW_W / PREVIEW_H / PREVIEW_SAMPLES quality; PREVIEW_EXPORT=0 skips the GLB;
+# PREVIEW_RIDER=0 leaves the runner off; PREVIEW_RENDER=0 renders nothing (builds, exports and runs the rider checks only);
+# COURIER_POSE='{"knee": 1.0}' tries another rider pose (build_courier.py).
 #
-#   pip install bpy pillow numpy
-#   MOONRUNNER_REPO=. python3 tools/blender/preview_courier.py [a] [b]
+#   pip install bpy numpy
+#   MOONRUNNER_REPO=. python3 tools/blender/preview_courier.py
 #
 # Cycles on the CPU (no GPU or display needed); Freestyle draws the ink outline.
 
@@ -13,9 +14,8 @@ import bpy, math, os, sys
 from mathutils import Vector
 
 REPO = os.environ.get("MOONRUNNER_REPO") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-OUTDIR = os.environ.get("PREVIEW_OUT") or os.path.join(REPO, "docs", "courier-proposals")
+OUTDIR = os.environ.get("PREVIEW_OUT") or os.path.join(REPO, "docs", "lightbike")
 os.makedirs(OUTDIR, exist_ok=True)
-VARIANTS = [a for a in sys.argv[1:] if a in ("a", "b")] or ["a", "b"]
 RES = (int(os.environ.get("PREVIEW_W", 1280)), int(os.environ.get("PREVIEW_H", 720)))
 SAMPLES = int(os.environ.get("PREVIEW_SAMPLES", 40))
 def emissive(name, rgb, strength, alpha=1.0):
@@ -248,49 +248,27 @@ VIEWS = {
     "side": ((-8.8, 0.0, 1.55), (0, 0.0, 1.2), 42),
     "front": ((6.2, -7.8, 2.9), (0, 0.0, 1.3), 50),
     "rear": ((-6.2, 7.2, 2.9), (0, -0.2, 1.2), 50),
-    "detail": ((1.5, -3.0, 2.5), (0, -0.4, 1.45), 55),   # cockpit and front hub close-up (not on the sheet)
+    "detail": ((1.5, -3.0, 2.5), (0, -0.4, 1.45), 55),   # cockpit and front hub close-up
 }
 
-for v in VARIANTS:
-    sc = scene_setup()
-    g = {"__file__": os.path.join(REPO, "tools", "blender", "build_courier.py"), "VARIANT": v}
-    os.environ["MOONRUNNER_EXPORT"] = "1" if os.environ.get("PREVIEW_EXPORT", "1") == "1" else "0"
-    os.environ["MOONRUNNER_REPO"] = REPO
-    exec(open(g["__file__"], encoding="utf-8").read(), g)
-    dress_preview()
-    mock_trail(sc, (0.18, 0.78, 1.0))
-    trail_objs = [bpy.data.objects["wall"], bpy.data.objects["floor"]]
-    freestyle(sc, trail_objs + [bpy.data.objects["Plane"]])
-    seat = g["ROOT"]["seat"]
-    if os.environ.get("PREVIEW_RIDER", "1") == "1":
-        add_rider(sc, g, seat)
-    for name, (loc, tgt, lens) in (VIEWS.items() if os.environ.get("PREVIEW_RENDER", "1") == "1" else ()):
-        for o in [o for o in bpy.data.objects if o.type == "CAMERA"]:
-            bpy.data.objects.remove(o)
-        for o in trail_objs:
-            o.hide_render = name in ("side", "detail")   # side view is the clean silhouette, like the in-game shot
-        camera(sc, loc, tgt, lens)
-        sc.render.filepath = os.path.join(OUTDIR, f"{v}_{name}.jpg")
-        bpy.ops.render.render(write_still=True)
-        print("rendered", sc.render.filepath)
-
-
-# review sheet: a row per proposal, a column per view
-try:
-    from PIL import Image, ImageDraw
-    names = {"a": "A  SLIPSTREAM", "b": "B  PARCEL RUNNER"}
-    SHEET = ("side", "front", "rear")
-    rows = [v for v in VARIANTS if all(os.path.isfile(os.path.join(OUTDIR, f"{v}_{n}.jpg")) for n in SHEET)]
-    if rows:
-        w, h = RES[0] // 2, RES[1] // 2
-        sheet = Image.new("RGB", (w * len(SHEET), (h + 28) * len(rows)), (24, 20, 40))
-        d = ImageDraw.Draw(sheet)
-        for r, v in enumerate(rows):
-            d.text((10, r * (h + 28) + 8), names[v], fill=(255, 210, 63))
-            for c, n in enumerate(SHEET):
-                im = Image.open(os.path.join(OUTDIR, f"{v}_{n}.jpg")).convert("RGB").resize((w, h), Image.LANCZOS)
-                sheet.paste(im, (c * w, r * (h + 28) + 28))
-        sheet.save(os.path.join(OUTDIR, "courier_proposals.jpg"), quality=90)
-        print("sheet ->", os.path.join(OUTDIR, "courier_proposals.jpg"))
-except ImportError:
-    print("(pillow not installed: no contact sheet)")
+sc = scene_setup()
+g = {"__file__": os.path.join(REPO, "tools", "blender", "build_courier.py")}
+os.environ["MOONRUNNER_EXPORT"] = "1" if os.environ.get("PREVIEW_EXPORT", "1") == "1" else "0"
+os.environ["MOONRUNNER_REPO"] = REPO
+exec(open(g["__file__"], encoding="utf-8").read(), g)
+dress_preview()
+mock_trail(sc, (0.18, 0.78, 1.0))
+trail_objs = [bpy.data.objects["wall"], bpy.data.objects["floor"]]
+freestyle(sc, trail_objs + [bpy.data.objects["Plane"]])
+seat = g["ROOT"]["seat"]
+if os.environ.get("PREVIEW_RIDER", "1") == "1":
+    add_rider(sc, g, seat)
+for name, (loc, tgt, lens) in (VIEWS.items() if os.environ.get("PREVIEW_RENDER", "1") == "1" else ()):
+    for o in [o for o in bpy.data.objects if o.type == "CAMERA"]:
+        bpy.data.objects.remove(o)
+    for o in trail_objs:
+        o.hide_render = name in ("side", "detail")   # side view is the clean silhouette, like the in-game shot
+    camera(sc, loc, tgt, lens)
+    sc.render.filepath = os.path.join(OUTDIR, f"{name}.jpg")
+    bpy.ops.render.render(write_still=True)
+    print("rendered", sc.render.filepath)

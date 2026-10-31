@@ -14,8 +14,7 @@ const GLB = {
   runner: () => import('./assets/runner.glb?inline'),
   ships: () => import('./assets/ships.glb?inline'),
   skimmer: () => import('./assets/skimmer.glb?inline'),
-  lightbike_a: () => import('./assets/lightbike_a.glb?inline'),
-  lightbike_b: () => import('./assets/lightbike_b.glb?inline'),
+  lightbike: () => import('./assets/lightbike.glb?inline'),
   skimmer_a: () => import('./assets/skimmer_a.glb?inline'),
   skimmer_b: () => import('./assets/skimmer_b.glb?inline'),
   warrig: () => import('./assets/warrig.glb?inline'),
@@ -1460,7 +1459,7 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lba, lbb, ska, skb, pw, hb, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike_a', 'lightbike_b', 'skimmer_a', 'skimmer_b', 'power', 'habitat', ...ILMB_WINGS, ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, ska, skb, pw, hb, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'skimmer_a', 'skimmer_b', 'power', 'habitat', ...ILMB_WINGS, ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
   // a root node in a loaded file (`file`.glb), or a load error
   const named = (g, file, name) => {
     const o = g.scene.getObjectByName(name);
@@ -1478,7 +1477,7 @@ export async function loadShipParts({ ships } = {}) {
   // SPACECOM Lunar Interceptor (tools/blender/build_interceptor.py)
   SHIP_PARTS.interceptor = bakeShip(named(ic, 'interceptor', 'interceptor'));
   // Courier light-bike redesigns A and B (tools/blender/build_courier.py)
-  for (const [v, g] of [['a', lba], ['b', lbb]]) SHIP_PARTS['bike_' + v] = bakeShip(named(g, 'lightbike_' + v, 'courier'));
+  SHIP_PARTS.bike = bakeShip(named(lb, 'lightbike', 'courier'));
   // Phase Skimmer redesigns A Aegis and B Bulwark (tools/blender/build_skimmer_redesign.py)
   for (const [v, g] of [['a', ska], ['b', skb]]) SHIP_PARTS['skimmer_' + v] = bakeShip(named(g, 'skimmer_' + v, 'skimmer'));
   // the Vostok BTR-M Moon APC (tools/blender/build_apc.py)
@@ -2664,19 +2663,16 @@ export function makeShuttle({ color = 0xfff4e0, stripe = 0x2ec4ff } = {}) {
   return makeShip('shuttle', { color, stripe });
 }
 
-// Which Courier light-bike is built: redesigns 'a' (Slipstream) or 'b' (Parcel Runner) (docs/courier-proposals,
-// tools/blender/build_courier.py), or 'classic' (primitives, below). Saved; the dev menu's COURIER MODEL switches it for
-// the next bike.
-export const BIKE_STYLES = ['b', 'a', 'classic'];
-export const { get: getBikeStyle, set: setBikeStyle } = savedStyle('mr-courier-model', BIKE_STYLES);
-
-// A Blender light-bike (build_courier.py): shell, forks, fittings on a chassis, two wheels spun about x. Slots: glowing
-// livery `stripe` (bike colour) and `trim` (gold), fixed toons and glows below, `bag` (saddle bags, trim as toon). The
-// root carries the rider's solved pose (`pose_*`) and hip (`seat`), read by the Garage and the player.
+// Meridian Courier Light-Bike (tools/blender/build_courier.py -> lightbike.glb; docs/lightbike): shell, forks, fittings
+// on a chassis, two wheels spun about x. Slots: glowing livery `stripe` (bike colour) and `trim` (gold), fixed toons and
+// glows below, `bag` (saddle bags, trim as toon). The root carries the rider's solved pose (`pose_*`) and hip (`seat`),
+// read by the Garage and the player. Built 1:1, shown at 1.2x, +z forward. Returns { root, chassis, wheels, gun,
+// trailFrom (light-trail origin, bike frame), trailColor, wheelR, seat, pose }.
 const BIKE_TOON = { navy: 0x0d1428, panel: 0x1a2440, dark: 0x2a2540, metal: 0x5b5870, seat: 0x2a2540, tire: 0x1d1a29 };
 const BIKE_GLOW = { glass: 0x9be7ff, lamp: 0xfff6a8, tail: 0xff2a4a };
 const BIKE_SCALE = 1.2; // (built 1:1, shown at 1.2x)
-function makeBlenderBike(B, { color, trim }) {
+export function makeLightBike({ color = 0x2ec4ff, trim = 0xffd23f } = {}) {
+  const B = SHIP_PARTS.bike;
   const root = new THREE.Group();
   root.scale.setScalar(BIKE_SCALE);
   const matFor = (slot) => {
@@ -2690,7 +2686,7 @@ function makeBlenderBike(B, { color, trim }) {
   const chassis = new THREE.Group(), chassisNode = kidOf(B, 'chassis');
   dress(chassisNode, chassis);
   root.add(chassis);
-  // wheels hang off the root (as on the classic) so the chassis moves without them
+  // wheels hang off the root so the chassis moves without them
   const wheels = [];
   for (const k of chassisNode.kids.filter((n) => n.role === 'wheel')) {
     const w = new THREE.Group();
@@ -2710,91 +2706,14 @@ function makeBlenderBike(B, { color, trim }) {
   };
 }
 
-// Meridian Courier Light-Bike, classic (primitives; makeBlenderBike has the redesigns): a shell whose nose and tail ARE
-// the fairings over two hubless wheels (wells sweep over each wheel down to the axle), rider hump between. Flanks: side
-// panels, vents, glowing well arcs, a length seam; canopy, seat, clip-ons, pegs. Built 1:1, shown at 1.2x, +z forward.
-// Returns { root, chassis, wheels, gun, trailFrom, trailColor } (trailFrom: light-trail origin, bike frame).
-export function makeLightBike({ color = 0x2ec4ff, trim = 0xffd23f, style = getBikeStyle() } = {}) {
-  const B = style !== 'classic' && SHIP_PARTS && SHIP_PARTS['bike_' + style];
-  if (B) return makeBlenderBike(B, { color, trim });
-  const root = new THREE.Group();
-  root.scale.setScalar(1.2);
-  const chassis = new THREE.Group();
-  root.add(chassis);
-  const W = 0.5, WZ = 1.6, WY = 0.75, RO = 0.98, RI = 0.84; // shell width, wheel spots, fairing radii
-  chassis.add(baked(`bike2|${color}|${trim}`, (k) => {
-    // side profile (z, y): over the front wheel, rider hump, over the rear wheel, then back along the well insides and belly
-    const arc = (cz, r, a0, a1, n = 10) => Array.from({ length: n + 1 }, (_, i) => { const a = a0 + ((a1 - a0) * i) / n; return [cz + Math.cos(a) * r, WY + Math.sin(a) * r]; });
-    const outline = [
-      ...arc(WZ, RO, 0, 2.55),                    // nose: over the front wheel
-      [0.55, 1.5], [0.05, 1.58], [-0.35, 1.32], [-0.75, 1.22], // tank hump, then the seat dip
-      [-1.05, 1.42],                              // tail rise
-      ...arc(-WZ, RO, 0.6, Math.PI),              // tail: over the rear wheel
-      ...arc(-WZ, RI, Math.PI, 0),                // back along the inside of the rear well
-      [-0.6, 0.48], [0.6, 0.48],                  // the belly
-      ...arc(WZ, RI, Math.PI, 0),                 // the inside of the front well
-    ];
-    const shape = new THREE.Shape(outline.map(([z, y]) => new THREE.Vector2(z, y)));
-    const shell = new THREE.ExtrudeGeometry(shape, { depth: W, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.06, bevelSegments: 2, steps: 1, curveSegments: 4 });
-    shell.rotateY(-Math.PI / 2).translate(W / 2, 0, 0); // shape x -> +z, extrusion -> x, centred
-    k.add(shell, KT(0x0d1428), 0, 0, 0, { outline: 0.06 });
-    const side = W / 2 + 0.085; // flank outer face
-    const glowA = KG(color), glowB = KG(trim), panel = KT(0x1a2440), dark = KT(0x070a14);
-    for (const sx of [-1, 1]) {
-      // glowing well arcs and a length seam
-      for (const cz of [WZ, -WZ]) {
-        const span = cz > 0 ? 2.5 : Math.PI - 0.6, start = cz > 0 ? 0.05 : 0.6;
-        k.add(new THREE.TorusGeometry((RO + RI) / 2, 0.028, 4, 24, span).rotateZ(start).rotateY(-Math.PI / 2), glowA, sx * (side + 0.01), WY, cz, { outline: 0 });
-      }
-      k.add(new THREE.BoxGeometry(0.03, 0.06, 2.0), glowA, sx * (side + 0.01), 0.95, 0, { outline: 0 });
-      // raised side panel over the hump, gold pin-stripe on top
-      const ps = new THREE.Shape([[0.65, 0.98], [0.25, 1.38], [-0.3, 1.18], [-0.85, 1.12], [-0.9, 0.98]].map(([z, y]) => new THREE.Vector2(z, y)));
-      const pg = new THREE.ExtrudeGeometry(ps, { depth: 0.06, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 1 }).rotateY(-Math.PI / 2);
-      k.add(pg, panel, sx * (side + (sx > 0 ? 0.06 : 0)), 0, 0, { outline: 0.02 });
-      k.add(new THREE.BoxGeometry(0.03, 0.035, 1.05), glowB, sx * (side + 0.07), 1.2, -0.3, { rx: 0.08, outline: 0 });
-      // intake vents behind the front fairing
-      for (let i = 0; i < 3; i++) k.add(new THREE.BoxGeometry(0.03, 0.22, 0.06), dark, sx * (side + 0.02), 0.82, 0.62 - i * 0.12, { rx: -0.35, outline: 0 });
-      // Meridian chevron on the tail fairing
-      k.add(new THREE.BoxGeometry(0.03, 0.05, 0.28), glowB, sx * (side + 0.02), 1.32, -1.55, { rx: 0.5, outline: 0 });
-      k.add(new THREE.BoxGeometry(0.03, 0.05, 0.28), glowB, sx * (side + 0.02), 1.22, -1.55, { rx: -0.5, outline: 0 });
-      // footpegs
-      k.add(new THREE.CylinderGeometry(0.035, 0.035, 0.35, 6).rotateZ(Math.PI / 2), KT(0x5b5870), sx * 0.42, 0.66, -0.55, { outline: 0 });
-    }
-    // spine stripe, seat, canopy over the tank, headlight in the nose, light bar on the tail
-    k.add(new THREE.BoxGeometry(0.12, 0.04, 1.0), glowA, 0, 1.6, 0.25, { rx: -0.05, outline: 0 });
-    k.add(new THREE.BoxGeometry(W - 0.02, 0.1, 0.65), KT(0x2a2540), 0, 1.27, -0.6, { rx: 0.05, outline: 0.02 });
-    k.add(new THREE.SphereGeometry(0.5, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.72, 0.55, 1.45), KG(0x9be7ff), 0, 1.46, 0.55, { rx: -0.36, outline: 0.03 });
-    k.add(new THREE.BoxGeometry(0.34, 0.08, 0.1), KG(0xfff6a8), 0, 1.5, 2.36, { rx: -0.9, outline: 0 });
-    k.add(new THREE.BoxGeometry(W + 0.1, 0.08, 0.08), glowA, 0, 1.58, -2.12, { rx: 0.7, outline: 0 });
-    // clip-on bars
-    k.add(new THREE.CylinderGeometry(0.04, 0.04, 0.95, 6).rotateZ(Math.PI / 2), KT(0x3a3550), 0, 1.5, 0.75, { outline: 0.02 });
-    for (const sx of [-1, 1]) k.add(new THREE.CylinderGeometry(0.06, 0.06, 0.18, 6).rotateZ(Math.PI / 2), KT(0x5b5870), sx * 0.48, 1.5, 0.75, { outline: 0 });
-  }));
-  // hubless wheels: dark tyre, glowing rim each face (spun about x by the garage)
-  const wheels = [];
-  for (const z of [-WZ, WZ]) {
-    const w = new THREE.Group();
-    w.position.set(0, WY, z);
-    w.add(baked(`bikewheel2|${color}`, (k) => {
-      k.add(new THREE.TorusGeometry(0.62, 0.15, 8, 28).rotateY(Math.PI / 2), KT(0x0b0912), 0, 0, 0, { outline: 0.03 });
-      k.add(new THREE.CylinderGeometry(0.62, 0.62, 0.34, 28, 1, true).rotateZ(Math.PI / 2), KT(0x0b0912), 0, 0, 0, { outline: 0 });
-      for (const sx of [-1, 1]) k.add(new THREE.TorusGeometry(0.5, 0.045, 6, 28).rotateY(Math.PI / 2), KG(color), sx * 0.18, 0, 0, { outline: 0 });
-      for (let i = 0; i < 3; i++) k.add(new THREE.BoxGeometry(0.03, 0.06, 0.95), KG(color), 0, 0, 0, { rx: (i / 3) * Math.PI, outline: 0 });
-    }));
-    root.add(w);
-    wheels.push(w);
-  }
-  return { root, chassis, wheels, gun: new THREE.Group(), trailFrom: new THREE.Vector3(0, 0.15, -WZ), trailColor: color };
-}
-
 // Light trail: a glowing wall fading over `life` s, on a glowing floor strip `width` across so it has body from any
 // angle (a lone ribbon vanishes edge-on). Feed it a world point and local up each frame (world space). `max` points
-// `step` m apart must cover `life` s at top speed: 256 x 0.45 m = 115 m, 3.4 s at 34 m/s.
+// `step` m apart, or one a frame when faster, must cover `life` s: 512 is 4 s at up to 128 fps.
 // Hard light: points laid while `hard` is passed (the light-bike's fire button) also draw on a second, normally blended
 // mesh, so that stretch reads near-solid (still a little see-through) and fades by the same rule. pts[i].hard marks them
 // (vehicles.js makes them walls for others).
 export class LightTrail {
-  constructor(scene, color, { life = 4, height = 1.5, width = 0.6, max = 256, step = 0.45 } = {}) {
+  constructor(scene, color, { life = 4, height = 1.5, width = 0.6, max = 512, step = 0.45 } = {}) {
     this.life = life; this.height = height; this.width = width; this.max = max; this.step2 = step * step;
     this.pts = []; // { p, up, t }
     this.t = 0;
@@ -2824,12 +2743,22 @@ export class LightTrail {
   // p: world point at the ribbon foot, up: world up there, emit: false to fade out, hard: lay hard light
   update(dt, p, up, emit = true, hard = false) {
     this.t += dt;
-    const last = this.pts[this.pts.length - 1];
-    if (emit && p && (!last || last.p.distanceToSquared(p) > this.step2)) {
-      if (last) last.hard = last.hard || hard; // (a stretch starts at the point before, so it begins where you pressed)
-      this.pts.push({ p: p.clone(), up: up.clone(), t: this.t, hard });
-      if (this.pts.length > this.max) this.pts.shift();
-    } else if (emit && p && last) { last.p.copy(p); last.up.copy(up); last.t = this.t; last.hard = hard; } // the head follows the bike
+    // The last point is the head, riding on the bike; the rest are laid. Once the head is `step` from the last laid point it
+    // is laid where it is and a new head starts (measured from the laid point: from the head itself, which moves with the
+    // bike, it only ever happened above ~27 m/s, so a slow tight turn drew one straight line back to the last point).
+    if (emit && p) {
+      const n = this.pts.length, head = this.pts[n - 1], laid = this.pts[n - 2];
+      if (!head) {
+        this.pts.push({ p: p.clone(), up: up.clone(), t: this.t, hard }, { p: p.clone(), up: up.clone(), t: this.t, hard });
+      } else {
+        head.p.copy(p); head.up.copy(up); head.t = this.t; head.hard = hard;
+        if (!laid || laid.p.distanceToSquared(p) > this.step2) {
+          if (laid) laid.hard = laid.hard || hard; // (a stretch starts at the point before, so it begins where you pressed)
+          this.pts.push({ p: p.clone(), up: up.clone(), t: this.t, hard });
+          if (this.pts.length > this.max) this.pts.shift();
+        }
+      }
+    }
     while (this.pts.length && this.t - this.pts[0].t > this.life) this.pts.shift();
     const pos = this.mesh.geometry.attributes.position, col = this.mesh.geometry.attributes.color;
     const hc = this.hard.geometry.attributes.color;

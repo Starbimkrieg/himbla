@@ -418,7 +418,7 @@ src/
     idles.json       the runner's idle animations
     ships.glb        shuttle-bus and freighter
     skimmer.glb      Phase Skimmer classic; skimmer_a.glb, skimmer_b.glb the redesigns (dev menu picks)
-    lightbike_a.glb, lightbike_b.glb  Courier light-bike redesigns (dev menu picks)
+    lightbike.glb    the Meridian Courier Light-Bike (docs/lightbike)
     warrig.glb       Rustmoon War-Rig (and the pirates' rigs)
     rover.glb        civil buggy and military patrol car
     interceptor.glb  SPACECOM Lunar Interceptor
@@ -485,7 +485,7 @@ tools/
     build_ships.py         -> ships.glb (FREIGHTER_VARIANT=atlas|compact, SHIPS_OUT=<file>; docs/shuttle-design.md)
     build_skimmer.py       -> skimmer.glb
     build_skimmer_redesign.py -> skimmer_a.glb, skimmer_b.glb (MOONRUNNER_SKIMMER=a|b; preview_skimmer.py renders)
-    build_courier.py       -> lightbike_a.glb, lightbike_b.glb (MOONRUNNER_COURIER=a|b; preview_courier.py renders)
+    build_courier.py       -> lightbike.glb (preview_courier.py checks the rider's fit and renders docs/lightbike)
     build_engine.py        -> engine.glb (wreck drop)
     build_briefcase.py     -> briefcase.glb (wreck drop)
     build_hovercar.py      -> hovercar.glb

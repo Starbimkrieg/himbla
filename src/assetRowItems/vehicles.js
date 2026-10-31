@@ -137,11 +137,9 @@ const ground = {
       make: () => { const m = buildVehicleModel('carrier'); return { root: pose(m.root, YAW) }; },
     },
     {
-      // classic bike and the two Blender redesigns (A Slipstream, B Parcel Runner), as built (no rider)
-      id: 'veh.lightbike', label: 'MERIDIAN COURIER LIGHT-BIKE · CLASSIC, A, B', w: 22, d: 4,
-      make: () => ({
-        root: lineUp(['classic', 'a', 'b'].map((style) => part(pose(makeLightBike({ style }).root, YAW), 6, 4))).root,
-      }),
+      // as built (no rider)
+      id: 'veh.lightbike', label: 'MERIDIAN COURIER LIGHT-BIKE', w: 6, d: 4,
+      make: () => ({ root: pose(makeLightBike().root, YAW) }),
     },
     {
       id: 'veh.warrig', label: 'RUSTMOON WAR-RIG', w: 13, d: 12,

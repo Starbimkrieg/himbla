@@ -348,18 +348,17 @@ export class Player {
       if (this.vehicle.def.bike) {
         // motorcycle crouch: low over the tank, arms to the clip-ons, leaning into the turn
         m.root.quaternion.multiply(_q.setFromAxisAngle(_Z, -this.steerLean * 0.28));
-        // a Blender bike carries its own solved pose (hands on grips, legs clear of the shell): model.pose
+        // the bike carries its own solved pose (hands on the grips, feet on the pegs, legs clear of the shell): model.pose
         const bp = this.vehicle.model.pose;
-        m.torso.rotation.x = bp ? bp.lean : 0.95;
-        m.legL.rotation.x = m.legR.rotation.x = bp ? bp.thigh : -1.05;
-        m.legL.rotation.z = bp ? -bp.spread : 0; m.legR.rotation.z = bp ? bp.spread : 0; // knees out round the tank
-        m.shinL.rotation.x = m.shinR.rotation.x = bp ? bp.knee || 0 : 0.9; // feet back to the pegs
+        m.torso.rotation.x = bp.lean;
+        m.legL.rotation.x = m.legR.rotation.x = bp.thigh;
+        m.legL.rotation.z = -bp.spread; m.legR.rotation.z = bp.spread; // knees out round the tank
+        m.shinL.rotation.x = m.shinR.rotation.x = bp.knee;
         m.body.position.y = m.bodyBase - 0.62; m.body.position.z = 0;
         if (m.armL && m.armR) {
-          m.armL.rotation.x = m.armR.rotation.x = bp ? bp.armX : -0.75;
-          m.armL.rotation.z = bp ? -bp.armZ : -0.22; m.armR.rotation.z = bp ? bp.armZ : 0.22;
-          const el = bp ? bp.elbow : -0.55, lean = bp ? 0.12 : 0.2; // elbows bend into the turn; less when hands are on solved grips
-          m.foreL.rotation.x = el + lean * this.steerLean; m.foreR.rotation.x = el - lean * this.steerLean;
+          m.armL.rotation.x = m.armR.rotation.x = bp.armX;
+          m.armL.rotation.z = -bp.armZ; m.armR.rotation.z = bp.armZ;
+          m.foreL.rotation.x = bp.elbow + 0.12 * this.steerLean; m.foreR.rotation.x = bp.elbow - 0.12 * this.steerLean; // elbows bend into the turn
         }
       } else {
         m.torso.rotation.x = 0;

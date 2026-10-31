@@ -5,6 +5,17 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Light-bike: one bike, and a trail that follows tight turns.** **The trail:** it laid a new point only when the bike moved
+  more than 0.45 m in a single frame (it measured from its own head, which rides with the bike), so below about 27 m/s the
+  head just slid along and a slow, tight turn drew one straight line back to where the last point was. It now measures from
+  the last laid point, so it keeps its shape through any turn (a slow 3 m circle now lays a point every half metre round it,
+  where it laid two before), and it holds up to 512 points (from 256) so it still covers its 4 s at high frame rates.
+  **One bike:** the Parcel Runner (proposal B, the one in the game) is the Meridian Courier Light-Bike; the Slipstream (A) and
+  the primitive-built classic bike are gone, with the saved style switch and the classic rider pose. `src/assets/lightbike.glb`
+  (from `lightbike_b.glb`; `lightbike_a.glb` removed), `makeLightBike()` takes no style, the Asset Row shows the one bike
+  (`MERIDIAN COURIER LIGHT-BIKE`), `build_courier.py` builds only it, and `docs/courier-proposals/` is now `docs/lightbike/`:
+  the bike's README and four fresh renders (with the rider's bent knees on the pegs; the A renders, the review sheet and the
+  two loose GLBs removed).
 - **Light-bike: hard light, air carving, knees on the pegs, no dust.** **Hard light:** on the Meridian Courier Light-Bike the
   fire button (left mouse, RT) no longer fires your hand weapon; held, it lays hard light: the trail laid meanwhile turns
   near-solid (a second, normally blended pass over the glow, still a little see-through) and fades by the same 4 s rule. A
