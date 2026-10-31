@@ -69,6 +69,14 @@ addBox(LANE.x, -122, 0, 14, 9, 4.6, blockMat);
 addBox(LANE.x, -88, 0, 18, 14, 9.5, blockMat);
 addBox(LANE.x, -50, 0, 20, 8, 12, blockMat);
 addBox(LANE.x, -22, 0, 20, 6, 16, wallMat);
+// pairs of platforms with a gap between, to cross on top (the sweep's gap cases): 3 m between two 6 m ones, 5 m between an 8 m and an
+// 8.6 m one, 7 m between two 6 m ones
+const GAPS = [];
+for (const [x, z0, h0, h1, gap] of [[-60, -180, 6, 6, 3], [-95, -185, 8, 8.6, 5], [-130, -185, 6, 6, 7]]) {
+  GAPS.push([boxes.length, boxes.length + 1, gap]);
+  addBox(x, z0, 0, 12, 12, h0, blockMat);
+  addBox(x, z0 + 12 + gap, 0, 12, 12, h1, blockMat);
+}
 const groundGeo = new THREE.PlaneGeometry(420, 420, 300, 300).rotateX(-Math.PI / 2);
 {
   const P = groundGeo.attributes.position;
@@ -246,14 +254,16 @@ function drive(sim, dt, [self, ask, trigger, turn]) {
 const sim = { S, tank };
 
 // ---- the obstacle sweep (&sweep, or &sweep=quick): fresh tanks, unseen, driven straight at every box in the lab from 8 sides (box-on,
-// corner-on) at a walk and a run, and parked beside the sides of the tall blocks; each one over it, round it or stopped, against what
-// it should do (over anything up to tank.climbMax tall), with its hull and legs in things, steps and shuffling. Any row opens in the
+// corner-on) at a walk and a run, parked beside the sides of the tall blocks, sent across the gaps and turned on tops; each one over
+// it, round it or stopped, against what it should do (over anything up to tank.climbMax tall), with its hull and legs in things, legs
+// through the hull or across it, feet over nothing, jerk, steps and shuffling. Any row opens in the
 // lab as a replay (&case=box,side,speed; or stand,box,side), to watch. The table is in window.__sweep too.
 const BLOCKS = boxes.map((b, i) => i).filter((i) => i >= 20);          // (the blocks round about, and the lane's; quick: only these)
 // a case as a flight the lab replays: where it starts (out from the box, facing it, its middle on the line through the box's middle),
 // and its ticks, each asking the same speed, steering nowhere
 function sweepCase(spec) {
   const [kind, ...rest] = spec.split(','), stand = kind === 'stand';
+  if (kind === 'gap' || kind === 'spin') return topCase(spec, kind, rest.map(Number));
   const [i, side, speed, out = 4.2] = (stand ? [...rest.slice(0, 2), 0, ...rest.slice(2)] : [kind, ...rest]).map(Number);
   const b = boxes[i], ang = Math.atan2(b.s, b.c) + side * Math.PI / 4;  // (the box's yaw, and on round by eighths)
   const dx = Math.sin(ang), dz = Math.cos(ang);                         // (the way it heads: into the box)
@@ -281,7 +291,42 @@ function sweepCase(spec) {
   const crowded = boxes.some((o) => o !== b && o.top - b.top > 3 && Math.hypot(o.cx - b.cx, o.cz - b.cz) < Math.hypot(o.hx, o.hz) + Math.hypot(b.hx, b.hz) + 4);
   return { spec, i, side, speed, out, stand, b, crowded, dx, dz, reach, rise, flight: { kind: 'spidertank-flight', version: 1, query: '', start, frames } };
 }
-const _w = new THREE.Vector3(), _j0 = new THREE.Vector3(), _j1 = new THREE.Vector3();
+// on top of a box from the start: across a gap to another (gap,i,j,speed: from the middle of i toward the middle of j, over it if it
+// gets past j's middle), or turning on the spot on it (spin,i,turn: 7 s turning, then 7 standing)
+function topCase(spec, kind, [i, j, v]) {
+  const b = boxes[i], o = kind === 'gap' ? boxes[j] : null;
+  const ang = o ? Math.atan2(o.cx - b.cx, o.cz - b.cz) : 0, dx = Math.sin(ang), dz = Math.cos(ang);
+  const start = { x: b.cx, z: b.cz, yaw: ang, v: 0 };
+  const frames = kind === 'gap'
+    ? Array.from({ length: 30 * 20 }, (_, f) => [1 / 30, 0, f < 60 ? 0 : v, 0, 0])
+    : Array.from({ length: 30 * 16 }, (_, f) => [1 / 30, 0, 0, 0, f >= 60 && f < 270 ? Math.sign(j || 1) : 0]);
+  const rise = 0, gap = GAPS.find((g) => g[0] === i && g[1] === j);
+  return { spec, i, side: 0, speed: v || 0, stand: false, top: kind, b: o || b, from: b, crowded: false, dx, dz, reach: 0, rise, gap: gap ? gap[2] : 0,
+    flight: { kind: 'spidertank-flight', version: 1, query: '', start, frames } };
+}
+const _w = new THREE.Vector3(), _j0 = new THREE.Vector3(), _j1 = new THREE.Vector3(), _hf = new THREE.Matrix4(), _fv = new THREE.Vector3();
+// how the legs sit with the hull: any leg through it (a point of it past the hip's first third inside the hull's shell), any planted
+// foot across the body's middle from its hip, and any planted foot over nothing (above the top under it, and on no face)
+function legsAt(T) {
+  _hf.copy(T.inner.matrixWorld).invert();
+  let thru = 0, cross = 0, air = 0;
+  for (const c of T.gait.chains) {
+    const js = c.joints.map((jt) => jt.getWorldPosition(new THREE.Vector3()));
+    js.push(c.joints[c.joints.length - 1].children.find((x) => x.userData.role === 'foot').getWorldPosition(new THREE.Vector3()));
+    let inHull = false;
+    for (let k = 0; k + 1 < js.length && !inHull; k++) for (let q = k ? 0 : 2; q <= 6; q++) {
+      _w.lerpVectors(js[k], js[k + 1], q / 6).applyMatrix4(_hf);
+      if ((_w.x / 2.1) ** 2 + ((_w.y - 3.24) / 1.3) ** 2 + ((_w.z + 0.09) / 3.3) ** 2 < 1) { inHull = true; break; }
+    }
+    if (inHull) thru++;
+    if (c.stepping || c.hang) continue;                                  // (hanging, holding nothing: not standing anywhere)
+    _fv.copy(c.F).applyMatrix4(_hf);
+    if (Math.sign(_fv.x) !== Math.sign(c.hip.x) && Math.abs(_fv.x) > 0.3) cross++;
+    const top = topAt(c.F.x, c.F.z);
+    if (c.F.y > top + 0.3 && ![[0.15, 0], [-0.15, 0], [0, 0.15], [0, -0.15]].some(([a, z]) => topAt(c.F.x + a, c.F.z + z) > c.F.y - 0.3)) air++;
+  }
+  return [thru, cross, air];
+}
 function inBoxes(p, near) {                                             // m deep the point is inside a box, or under the ground (0: not)
   let worst = Math.max(0, terrain(p.x, p.z) - p.y);
   for (const b of near) {
@@ -293,13 +338,16 @@ function inBoxes(p, near) {                                             // m dee
 function runCase(spec) {
   const C = sweepCase(spec), T = makeSpiderTank(kit), s = { ...C.flight.start }, me = { S: s, tank: T };
   const near = boxes.filter((b) => Math.hypot(b.cx - C.b.cx, b.cz - C.b.cz) < 60);
-  const r = { spec, box: C.i, side: C.side, speed: C.speed, rise: C.rise, hull: 0, hullWorst: 0, bones: 0, bonesWorst: 0, steps: 0, roll: 0, pitch: 0, topW: -Infinity, inside: false };
+  const r = { spec, box: C.i, side: C.side, speed: C.speed, rise: C.rise, hull: 0, hullWorst: 0, bones: 0, bonesWorst: 0, steps: 0, roll: 0, pitch: 0, topW: -Infinity, inside: false,
+    thru: 0, cross: 0, air: 0, jerk: 0, frames: 0, took: 0, low: Infinity };
+  let p1 = null, p2 = null;
   const along = () => (s.x - C.b.cx) * C.dx + (s.z - C.b.cz) * C.dz;    // m past the box's middle, along the way
   const was = T.gait.chains.map(() => false);
   const end = C.flight.frames.length / 30;
   let last = null, tail = 0, tailSteps = 0, t = 0;
   for (const f of C.flight.frames) {
-    if (!C.stand && along() > C.reach + 10) break;                      // (well past it: done)
+    if (!C.stand && !C.top && along() > C.reach + 10) break;            // (well past it: done)
+    if (C.top === 'gap' && along() > 2) break;
     t += f[0];
     drive(me, f[0], [false, f[2], f[3], f[4]]);
     T.root.updateMatrixWorld(true);
@@ -322,6 +370,18 @@ function runCase(spec) {
       was[k] = c.stepping;
     });
     const p = T.pose;
+    if (T.fold === 0) {
+      const [th, cr, ai] = legsAt(T);
+      r.frames++;
+      if (th) r.thru++;
+      if (cr) r.cross++;
+      if (ai) r.air++;
+      // jerk: the pose's second difference a frame (m, and rad), summed
+      if (p2) r.jerk += Math.abs(p.W - 2 * p1[0] + p2[0]) + Math.abs(p.P - 2 * p1[1] + p2[1]) + Math.abs(p.R - 2 * p1[2] + p2[2]);
+      p2 = p1; p1 = [p.W, p.P, p.R];
+    }
+    if (t > 3) r.low = Math.min(r.low, p.W - T.hipY);                  // (once it has settled on its feet)
+    r.took = t;
     if (last && t > end - 6) tail += Math.abs(p.W - last[0]) + Math.abs(p.P - last[1]) + Math.abs(p.R - last[2]);
     last = [p.W, p.P, p.R];
     r.roll = Math.max(r.roll, Math.abs(p.R));
@@ -333,13 +393,19 @@ function runCase(spec) {
   const past = along() > C.reach + 1;
   r.tailSteps = tailSteps;                                              // steps begun in its last 6 s
   r.tailJitter = tail / 180;                                            // pose change a frame, its last 6 s (m and rad)
+  r.jerk = r.frames ? (1000 * r.jerk) / r.frames : 0;                  // (thousandths a frame)
   r.result = C.stand ? (r.tailSteps > 8 || r.tailJitter > 0.01 ? 'shuffles' : 'still') : past ? (r.inside ? 'over' : 'round') : 'stopped';
+  if (C.top === 'gap') r.result = along() > 2 ? 'over' : r.low < C.from.top - 3 ? 'fell' : 'stopped';
+  if (C.top === 'spin') r.result = r.low < C.from.top - 1 ? 'fell' : r.tailSteps > 8 || r.tailJitter > 0.01 ? 'shuffles' : 'still';
   // m past its near side (negative: short of it); standing, m it has drifted
   r.at = +(C.stand ? Math.hypot(s.x - C.flight.start.x, s.z - C.flight.start.z) : along() - C.reach).toFixed(1);
   // (within half a metre of its limit, either is right: the ground round a box isn't level)
   r.should = C.stand ? 'still' : Math.abs(C.rise - T.climbMax) < 0.5 || C.crowded ? 'either' : C.rise < T.climbMax ? 'over' : 'stopped';
+  if (C.top === 'gap') r.should = C.gap <= 5 ? 'over' : 'either';
+  if (C.top === 'spin') r.should = 'still';
   r.crowded = C.crowded;
-  r.ok = r.result === r.should || (r.should === 'either' && (C.crowded || r.result !== 'round')) || (r.should === 'stopped' && r.result === 'round');
+  r.ok = r.result === r.should || (r.should === 'either' && (C.crowded || r.result !== 'round') && r.result !== 'fell') || (r.should === 'stopped' && r.result === 'round');
+  r.clean = r.thru === 0 && r.cross === 0 && r.air === 0;
   r.form = T.form;
   return r;
 }
@@ -352,18 +418,24 @@ async function runSweep() {
     for (const side of quick ? [0, 2, 4, 6] : [0, 1, 2, 3, 4, 5, 6, 7]) for (const v of quick ? [10] : [4, 12]) specs.push(`${i},${side},${v}`);
     if (boxes[i].top - terrain(boxes[i].cx, boxes[i].cz) > 5) for (const side of quick ? [0] : [0, 2, 4, 6]) specs.push(`stand,${i},${side}`);
   }
+  if (!only) {                                                          // (across each gap both ways, and turning on top of a few)
+    for (const [i, j] of GAPS) for (const v of quick ? [8] : [4, 12]) specs.push(`gap,${i},${j},${v}`, `gap,${j},${i},${v}`);
+    for (const i of quick ? [32, GAPS[0][0]] : [21, 23, 32, GAPS[0][0], GAPS[1][1]]) specs.push(`spin,${i},1`);
+  }
   info.style.display = 'none';
   renderer.domElement.style.display = 'none';
   const pre = document.createElement('pre');
   pre.style.cssText = 'margin:0;padding:12px;color:#e8e4f0;font:12px/1.35 monospace;white-space:pre';
   document.body.append(pre);
-  const rows = [], head = `case            rise   should   got       at m   hull in  worst  bones in worst  steps  last6s  jit6s  roll  pitch  top W  form`;
-  const line = (r) => `<a href="?case=${r.spec}" style="color:${r.ok ? '#9fd39b' : '#ff8a7a'}">${r.spec.padEnd(14)}</a>  ${r.rise.toFixed(1).padStart(4)}  ${r.should.padEnd(7)}  ${r.result.padEnd(8)}  ${String(r.at).padStart(5)}  ${String(r.hull).padStart(7)}  ${r.hullWorst.toFixed(2)}  ${String(r.bones).padStart(8)}  ${r.bonesWorst.toFixed(2)}  ${String(r.steps).padStart(5)}  ${String(r.tailSteps).padStart(6)}  ${r.tailJitter.toFixed(3)}  ${(r.roll * 57.3).toFixed(0).padStart(4)}  ${(r.pitch * 57.3).toFixed(0).padStart(5)}  ${r.topW.toFixed(1).padStart(5)}  ${r.form}`;
+  // (legs: frames with a leg through the hull, a foot across its middle, a planted foot over nothing; jerk: the pose's second
+  // difference, thousandths a frame; took: s to get past it)
+  const rows = [], head = `case            rise   should   got       at m   hull in  worst  bones in worst  thru  cross  air   jerk  took  steps  last6s  jit6s  pitch`;
+  const line = (r) => `<a href="?case=${r.spec}" style="color:${r.ok && r.clean ? '#9fd39b' : r.ok ? '#e8d07a' : '#ff8a7a'}">${r.spec.padEnd(14)}</a>  ${r.rise.toFixed(1).padStart(4)}  ${r.should.padEnd(7)}  ${r.result.padEnd(8)}  ${String(r.at).padStart(5)}  ${String(r.hull).padStart(7)}  ${r.hullWorst.toFixed(2)}  ${String(r.bones).padStart(8)}  ${r.bonesWorst.toFixed(2)}  ${String(r.thru).padStart(4)}  ${String(r.cross).padStart(5)}  ${String(r.air).padStart(3)}  ${r.jerk.toFixed(1).padStart(5)}  ${r.took.toFixed(0).padStart(4)}  ${String(r.steps).padStart(5)}  ${String(r.tailSteps).padStart(6)}  ${r.tailJitter.toFixed(3)}  ${(r.pitch * 57.3).toFixed(0).padStart(5)}`;
   window.__sweep = { done: false, rows };
   for (const spec of specs) {
     rows.push(runCase(spec));
-    const bad = rows.filter((r) => !r.ok).length;
-    pre.innerHTML = `SPIDER TANK SWEEP${quick ? ' (quick)' : ''}: ${rows.length} / ${specs.length}, ${bad} not as they should be  (climbs up to ${tank.climbMax} m)\n\n${head}\n${rows.map(line).join('\n')}`;
+    const bad = rows.filter((r) => !r.ok).length, dirty = rows.filter((r) => !r.clean).length;
+    pre.innerHTML = `SPIDER TANK SWEEP${quick ? ' (quick)' : ''}: ${rows.length} / ${specs.length}, ${bad} not as they should be, ${dirty} with legs through the hull, across it or over nothing  (climbs up to ${tank.climbMax} m)\n\n${head}\n${rows.map(line).join('\n')}`;
     await new Promise((res) => setTimeout(res, 0));
   }
   window.__sweep.done = true;
@@ -467,6 +539,6 @@ function frame() {
   post.render(scene, camera);
   requestAnimationFrame(frame);
 }
-Object.assign(window.__lab, { drive, sweepCase, runCase, makeTank: () => makeSpiderTank(kit) });   // (for scripts: cases by hand)
+Object.assign(window.__lab, { drive, sweepCase, runCase, topAt, makeTank: () => makeSpiderTank(kit) });   // (for scripts: cases by hand)
 if (Q.has('sweep')) runSweep();
 else { await loadReplay(); frame(); }

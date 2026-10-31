@@ -30,7 +30,11 @@
               ?sweep=quick                    the blocks only (20 on), from 4 sides at 10 m/s, one stand each (about a minute)
               &box=i,j                        only those boxes
               ?case=box,side,speed            one approach (side: eighths round from the box's own facing; it starts 14 m out from it)
-              ?case=stand,box,side[,out]      standing beside a side, facing along it, out m from it (4.2) -->
+              ?case=stand,box,side[,out]      standing beside a side, facing along it, out m from it (4.2)
+              ?case=gap,i,j,speed             from the top of box i across the gap to box j (the pairs: 35-36, 37-38, 39-40)
+              ?case=spin,box,1                turning on the spot on top of a box
+       Its columns: legs through the hull (frames), a foot across the body's middle, a planted foot over nothing; the pose's jerk
+       (thousandths a frame); took (s). Green: as it should be and clean; yellow: as it should be; red: not. -->
   <div id="info"></div>
   <script type="module" src="./spidertank-lab.js"></script>
 </body>

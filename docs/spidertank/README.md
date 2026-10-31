@@ -22,9 +22,11 @@ among, and made the bead float higher on glowing jet trails. Not in the game yet
   `&cam=chase|side|front|rear|top|orbit` is where the camera starts. **F9** saves the flight (every tick's time and input since
   the page loaded, and the last 15 s of the tank's state); drop the file on the lab page to replay it frame for frame (pause, slow and
   look round as it plays; `&at=s` jumps in). `?sweep` (or `?sweep=quick`, about a minute) drives fresh tanks, unseen, straight at every
-  box from 8 sides at a walk and a run, and parks them beside the tall ones, then tables each: over it, round it or stopped against
-  what it should do (over anything up to `tank.climbMax`), its hull and leg bones in things, and the steps and pose change of its last
-  6 s (shuffling); each row's link (`?case=...`) replays it in the lab.
+  box from 8 sides at a walk and a run, parks them beside the tall ones, sends them across three gaps between pairs of platforms (3,
+  5 and 7 m) and turns them on the spot on tops, then tables each: over it, round it or stopped against what it should do (over
+  anything up to `tank.climbMax`), its hull and leg bones in things, frames with a leg through the hull, a foot across the body's
+  middle or a planted foot over nothing, the pose's jerk, how long it took, and the steps and pose change of its last 6 s
+  (shuffling); each row's link (`?case=...`) replays it in the lab.
 - **The Asset Row**, Ground Vehicles: walking, and closed up.
 
 ![Walking](walk.jpg)
@@ -79,28 +81,35 @@ tuned in Blender.
   reach ahead and the back ones behind, as a spider's do. Measured from above: no two neighbours cross at any pace, turning on the
   spot, circling or backing up. The cost is the stride: 2.96 m at most, so 1 step a second per leg walking at 3 m/s, 2 at 12 m/s, 3 at
   18 and nearly 4 at 24, just under where it closes up. Feet stay planted to the centimetre.
-- **It climbs as high as its legs reach (13 m):** each foot looks round where it would land, out to its leg's full reach and a
-  little ahead, and takes the highest spot it reaches: a top on a clear line from the hip, up to 3 m over the hip, with **leverage**
-  (it stands at least 0.7 m in from any edge between it and its hip, so no foot hooks a lip; past it the top may end, so it straddles a
-  narrow block), or, where what is there is too tall to stand on, its face, gripped as high as the leg reaches; each hip also looks
-  round itself for faces (out, in under the body, down, ahead and behind), so the side legs grip the sides of a block narrower than
-  the tank. Then **the hull is posed on them**, each frame (`bodyPose`): its height, pitch (nose up to 88 degrees) and roll (to 69) are
-  searched round the pose it has for one where, in order, no point of the hull is inside anything (`HULL3`: its bottom, three rings up
-  its sides, the cannon), every planted foot is in its leg's reach (and no closer than the leg folds), and, driven on, the hull would
-  be clear a step further that way; it sits at its height on its feet and tilts with them. The legs set how high it gets: a foot out
-  of reach holds nothing, steps, and doesn't hold the hull back. Each leg's lane goes with its hip, so pitched up the hips close in
-  over the middle and the back feet come in under the hull to hoist it. So pushed at something it rears up against it, legs on the
-  face, and hoists itself over the edge as fast as its legs let it, stopping wherever the driver stops (it rests at any angle,
-  gripping tops, sides and faces); held up, the legs keep reaching for better holds, so the rear legs come up the face behind it.
-  Nothing over 13 m above its **anchor**, the second lowest foot standing on a top (so two feet stand there; one foot in a hole
-  doesn't lower it, nor one on a ledge raise it), its hips kept under that: a wall taller, it gets as high up the face as it can and
-  stops there, and turns there if steered. Walking off something tall, the feet find the face below the edge and it climbs down; with
-  too few feet holding it, it drops. **Standing beside a wall it stands still:** a foot that would step back onto the hold it has
-  stays put, the one it has counts 0.3 m more than any other, and the hull doesn't bob to small changes in where its feet stand (it
-  used to take 50 steps every 8 s there, shuffling). Measured in the lab's sweep (585 cases): every block it should climb, from 8
-  sides, at 4 m/s 68 of 72 and at 12 m/s 62 of 72 (it used to stall on the narrow ones), 12 to 13 m walls mostly climbed, 13.9 and
-  15 m walls not, standing beside every tall block still in 39 of 41, and the hull in nothing anywhere; a leg can still pass through
-  an edge, cresting.
+- **It climbs as high as its legs reach (13 m), body first, then feet, then steps:**
+  - **The hull's pose comes from the ground, not its feet** (`target`): each half of its outline (front and back, left and right)
+    wants its hips its standing height over most of what is under it, and at least 1.65 m over the highest thing there; going, the
+    leading half looks 2.5 to 6 m ahead and the trailing half as far as it is long. So over a crate it rises just enough to clear it,
+    over a gap it keeps level with the tops either side, and at a wall it rears up toward the wall's top before its nose is there.
+    Each frame it goes as far toward that pose as it may (`bodyPose`): never deeper into anything (`HULL3`), and no planted foot
+    further out of reach, or folded in closer, than it is. The legs set how high it gets; the pose eases, so nothing jolts it.
+  - **Each foot takes the hold nearest the height that pose puts it at** (`foothold`), with some stretch and some fold left in hand,
+    among the spots round its lane, ahead of it (in line, to either side, and in line with its hip, for a narrow block), the faces
+    round its hip and the face below an edge going down. It may only take one in its leg's reach, in its lane, **on its own side of the
+    body**, with its foot and shin clear of the hull, no more than 3 m over its hip, and on a top with leverage (0.7 m in from any edge
+    on its hip's side; past it the top may end, so it straddles a narrow block). Over an edge above its hip it reaches knee-up, as a
+    leg does. A grip on a face is never higher than the face's top.
+  - **The legs keep clear of the hull:** a thigh never rises more than 69 degrees over the level (closer in, the ankle folds instead),
+    so the knee stays up and out over its foot; the leg solve turns a knee aside from the hull as from anything else; and with the
+    hull steep, a stepping foot lifts off the hull and out to its side rather than straight up along it.
+  - **Climbing, the legs step by need** (`gait.js` `free`, under 1.5 m/s and not turning): the neediest first (out of reach, near full
+    stretch, far off the height its hold should be, carried out of its lane or in toward the body's middle), at most two at once and
+    never two neighbours, and only while every corner of the body keeps a foot down. A leg with nothing it can reach to hold **hangs**
+    in its rest shape off the hull and keeps looking. Turning or moving faster, the walking rhythm takes over.
+  - Nothing over 13 m above its **anchor**, the second lowest foot standing on a top; a wall taller, it gets as high up the face as it
+    can and stops there. Walking off something tall, it climbs down nose first; with too few feet holding it, it drops. Standing beside a
+    wall it stands still (no shuffling between two holds as good).
+  - **Measured** (the lab's sweep, 742 cases, every box from 8 sides at 4 and 12 m/s, gaps, turning on tops, standing): blocks it
+    should climb, 119 of 125 approaches at 4 m/s and 117 of 125 at 12 m/s (head on, 63 and 64 of 65), each in about 2 to 3 s at the
+    face; every gap of 3 to 7 m crossed both ways; too-tall walls stopped at in all 48; standing beside tall blocks, still in all 69.
+    The hull is in nothing in any of them and no planted foot over nothing; a leg passes into the hull in 3.5% of frames (most of them
+    a thigh grazing its side, steep against a wall), and a foot is across the body's middle in 0.5%. What it still does wrong: driven
+    corner-first into a big block at 12 m/s it can glance off and slide round it, and on a few narrow block ends it stops at the face.
 - **Its height is its own:** kept in the world, so the caller can put the root on the ground under it or anything else; the caller's
   collision asks the tank (`tank.hits(x, y, z, yaw)`: how far into things the hull would be with the root there) and never moves or
   turns it deeper in, so it turns on the spot even face-down against a wall. In the lab it spins quick on its feet (2.6 rad/s at a

@@ -39,6 +39,11 @@ import * as THREE from 'three';
 //               reach, so a leg never flips between shapes from one frame to the next (FABRIK can, with three bones)
 //   solid(p)    (with pole) true where world point p is inside something: a knee or ankle that would be turns about its hip-to-foot line
 //               (forward, back, further) to the nearest way that is clear, and eases there
+//   free(), need(c), canLift(c)   (wave) while free() (the tank: climbing, slow), no rhythm: each planted leg steps as it needs to
+//               (need(c) past 0, the neediest first; FREE_MAX at once, never two neighbours), if the rest still hold the body
+//               (canLift(c)), and lands where it would in its lane, taking FREE_DUR; one needing to go (need(c) 3) with nowhere to go
+//               hangs (c.hang: the caller holds its foot where it hangs)
+//   liftDir(c, out)   the way a stepping foot lifts (world up, without it): the tank's, off the hull when it is steep
 
 const STRIDE = 0.5;     // a foot steps once its rest spot is this far from it (of the leg's span: hip to foot, along the ground)
 const LEAD = 0.55;      // walking, it lands this far ahead of its rest spot (of the stride)
@@ -65,12 +70,15 @@ const SLACK = 0.85;     // long: of a foot's room behind its rest spot, how much
 const SWIVELS = [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.2, -2.2];   // pole, solid: rad a leg may turn about its hip-to-foot line, nearest first
 const SWIVEL_RATE = 9;  // rad/s it eases to a new one
 const FOLD = 0.55;
+const FEMUR_UP = 1.2;   // pole, three bones: rad the thigh rises over the level at most (out from the hip); closer in, the ankle folds
 const GAP = 0.3;        // wave: m between two neighbours' lanes (the feet always in order along the body)
 const LANE_REACH = 0.9;  // wave: of the front leg's room ahead and the back leg's behind, how far the lanes reach
 const DUTY_RIPPLE = 0.75, DUTY_SETS = 0.5, DUTY_FAST = 0.45;   // wave: a foot's share of the rhythm down: a walk's ripple, a run's sets, flat out
 const WALK_SPANS = 1, RUN_SPANS = 2.4;   // wave: spans a second under which it ripples, and past which it runs in sets (blending between)
 const WAVE_STANCE = 0.75; // wave: s a foot stays down, walking, as long as its lane allows
 const SETTLE_SPEED = 0.3; // wave: of a span a second, the pace it steps at to settle its feet, standing      // pole: the ankle's bend at the shortest reach (of its rest angle; straighter out to 1.15 of it)
+const FREE_MAX = 2, FREE_DUR = 0.42;   // wave, free: legs stepping at once at most, and s a step takes
+const FIX_AT = 0.45;      // wave, free: of a step, after which its landing stays put (it no longer follows the best hold it sees)
 const SAME_HOLD = 0.12;   // wave, settling: of its span, the nearest to where a foot stands that a step may land (nearer: it stays put)
 
 const _p = new THREE.Vector3(), _up = new THREE.Vector3(), _g = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
@@ -78,10 +86,10 @@ const _vh = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _e = new THREE.Euler(), _X = new THREE.Vector3(1, 0, 0);
 const _t = new THREE.Vector3(), _d = new THREE.Vector3(), _r = new THREE.Matrix4(), _Y = new THREE.Vector3(0, 1, 0);
 const _vt = new THREE.Vector3(), _vs = new THREE.Vector3(), _vw = new THREE.Vector3();
-const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3();
+const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _ld = new THREE.Vector3();
 const smooth = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
 
-export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, body = null, followRate = FOLLOW, foothold = null, strain = null, urge = null, solid = null, bodyPose = null, long = false, wave = false, pole = false, pitchMax = TILT, rollMax = TILT } = {}) {
+export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, body = null, followRate = FOLLOW, foothold = null, strain = null, urge = null, solid = null, bodyPose = null, long = false, wave = false, pole = false, pitchMax = TILT, rollMax = TILT, free = null, need = null, canLift = null, liftDir = null } = {}) {
   root.updateMatrixWorld(true);
   const rootInv = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const chains = [];
@@ -150,6 +158,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
         c.sets = ((r + (side > 0 ? 1 : 0)) % 2) * 0.5;
         c.zHi = top - r * lane - (r ? GAP / 2 : 0);
         c.zLo = top - (r + 1) * lane + (r < row.length - 1 ? GAP / 2 : 0);
+        c.row = r;
         c.home = c.rest.clone().setZ((c.zHi + c.zLo) / 2);             // (where its stance centres: its lane's middle)
         c.rv = new THREE.Vector3();
       });
@@ -200,6 +209,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       drive = Math.max(drive, c.rv.length());
       if (!c.stepping) far = Math.max(far, along(_b.subVectors(c.F, _a.copy(c.home).applyMatrix4(root.matrixWorld))).length());
     }
+    if (free && free()) { freeStep(dt); return; }
     // (standing: it steps its feet back under it, or on to better holds the caller wants)
     const settle = SETTLE_SPEED * span;
     const settling = drive < 0.5 * settle && (far > 0.3 * strideMax || (strain && chains.some((c) => !c.stepping && strain(c) >= 1)));
@@ -229,7 +239,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
           continue;
         }
       }
-      if (c.own) { c.s = Math.min(1, c.s + dt / c.dur); if (c.s >= 1) c.own = false; continue; }
+      if (c.own) { c.s = Math.min(1, c.s + dt / c.dur); if (c.s >= 1) c.own = c.free = false; continue; }
       if (f > 0 && at < swing) {
         if (!c.stepping) {
           if (at > 0.3 * swing) continue;                            // (come into its swing late, as the rhythm changed: next time)
@@ -246,6 +256,29 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
         c.dur = swing / f;
         c.s = Math.max(c.s, Math.min(1, at / swing));
       } else if (c.stepping) c.s = f > 0 ? 1 : Math.min(1, c.s + dt / 0.35);   // (out of its swing: down; stopped mid-step: finishing it)
+    }
+  }
+  // wave, free: where a step lands: its lane's middle (which goes with its hip), where the body will have carried it
+  const landFree = (c, out) => restSpot(c, out).addScaledVector(c.rv, FREE_DUR * (1 - c.s));
+  // wave, free: the steps by need. Each leg's neighbours along its side, and its opposite, never step with it
+  const nextTo = (a, b) => (Math.sign(a.rest.x) === Math.sign(b.rest.x) ? Math.abs(a.row - b.row) === 1 : a.row === b.row);
+  function freeStep(dt) {
+    for (const c of chains) if (c.stepping) { c.s = Math.min(1, c.s + dt / c.dur); if (c.s >= 1) c.own = c.free = false; }
+    let lifted = chains.filter((c) => c.stepping && c.s < 1).length;
+    const want = chains.filter((c) => !c.stepping).map((c) => [c, need(c)]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+    for (const [c] of want) {
+      if (lifted >= FREE_MAX) break;
+      if (chains.some((o) => o.stepping && o.s < 1 && nextTo(o, c)) || !canLift(c)) continue;
+      const to = footAt(c, landFree(c, _r2), _r3);
+      // (nothing to hold, or nothing in its reach: it hangs, and keeps looking)
+      if (!to || (need(c) >= 3 && to.distanceTo(c.joints[0].getWorldPosition(_r1)) > c.reach)) { if (need(c) >= 3) c.hang = true; continue; }
+      if (to.distanceTo(c.F) < SAME_HOLD * c.span) continue;
+      Object.assign(c, { stepping: true, own: true, free: true, hang: false, s: 0, dur: FREE_DUR, lift: LIFT * c.span });
+      c.S0.copy(c.F);
+      (c.S0L ||= new THREE.Vector3()).copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert());
+      c.T.copy(to);
+      clear(c, c.T);
+      lifted++;
     }
   }
   const along = (v) => v.addScaledVector(_up, -v.dot(_up));          // (its part along the ground)
@@ -349,7 +382,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       if (!c.stepping) { c.at.copy(c.F); c.base.copy(c.F); continue; }
       if (!wave) c.s = Math.min(1, c.s + dt / c.dur);
       // (the landing follows the body; past SETTLED it keeps its height, unless the ground under it only rises or falls a little)
-      if (footAt(c, wave ? landWave(c, _r2) : landing(c, speed, _r2), _r3)) {
+      if ((!c.free || c.s < FIX_AT) && footAt(c, wave ? (c.free ? landFree(c, _r2) : landWave(c, _r2)) : landing(c, speed, _r2), _r3)) {
         const jump = _r3.dot(_up) - c.T.dot(_up);
         if (c.s < SETTLED || Math.abs(jump) < 0.15 * c.span || wave) c.T.copy(_r3);   // (wave: always where it will stand, up or down)
         else c.T.copy(_r3).addScaledVector(_up, -jump);
@@ -363,7 +396,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       } else c.base.lerpVectors(c.S0, c.T, eh);
       c.base.addScaledVector(_up, hS + rise * ev - c.base.dot(_up));
       const arc = Math.sin(Math.PI * c.s);
-      c.at.copy(c.base).addScaledVector(_up, c.over ? Math.max(c.lift * arc, c.over * Math.min(1, arc * 2.5)) : c.lift * arc);
+      c.at.copy(c.base).addScaledVector(liftDir ? liftDir(c, _ld) : _up, c.over ? Math.max(c.lift * arc, c.over * Math.min(1, arc * 2.5)) : c.lift * arc);
       if (c.s >= 1) { c.F.copy(c.T); c.stepping = false; }
     }
     // the body on its feet: their mean height off their rest spots lifts it, their slope across and along it rolls and pitches it
@@ -460,13 +493,27 @@ function solveBent(c, t, swivel = c.swivel) {
   if (b.lengthSq() < 1e-8) b.set(0, 1, 0).addScaledVector(a, -a.y);
   b.normalize();
   if (swivel) b.applyAxisAngle(a, swivel);
-  let Lv = L1;
+  let Lv = L1, th = 0;
   if (n === 3) {
-    const L2 = c.len[2], th = Math.min(Math.PI - 0.02, B.theta * THREE.MathUtils.clamp(FOLD + (1 - FOLD) * d / B.d0, FOLD, 1.15));
+    const L2 = c.len[2];
+    th = Math.min(Math.PI - 0.02, B.theta * THREE.MathUtils.clamp(FOLD + (1 - FOLD) * d / B.d0, FOLD, 1.15));
     Lv = Math.sqrt(L1 * L1 + L2 * L2 - 2 * L1 * L2 * Math.cos(th));
   }
-  const dd = THREE.MathUtils.clamp(d, Math.abs(L0 - Lv) + 1e-4, L0 + Lv - 1e-4);
-  const A = Math.acos(THREE.MathUtils.clamp((L0 * L0 + dd * dd - Lv * Lv) / (2 * L0 * dd), -1, 1));
+  let dd = THREE.MathUtils.clamp(d, Math.abs(L0 - Lv) + 1e-4, L0 + Lv - 1e-4);
+  let A = Math.acos(THREE.MathUtils.clamp((L0 * L0 + dd * dd - Lv * Lv) / (2 * L0 * dd), -1, 1));
+  // (the thigh no steeper than FEMUR_UP over the level, out from the hip: a foot drawn in close, the ankle folds further instead, so
+  // the knee stays up and out over its foot, never back over the body)
+  if (n === 3) {
+    const Amax = FEMUR_UP - Math.atan2(a.y, Math.hypot(a.x, a.z));
+    if (A > Amax && Amax > 0.05) {
+      const L2 = c.len[2];
+      Lv = Math.sqrt(Math.max(1e-6, L0 * L0 + dd * dd - 2 * L0 * dd * Math.cos(Amax)));
+      Lv = THREE.MathUtils.clamp(Lv, Math.abs(L1 - L2) + 0.05, L1 + L2 - 0.05);
+      th = Math.acos(THREE.MathUtils.clamp((L1 * L1 + L2 * L2 - Lv * Lv) / (2 * L1 * L2), -1, 1));
+      dd = THREE.MathUtils.clamp(d, Math.abs(L0 - Lv) + 1e-4, L0 + Lv - 1e-4);
+      A = Math.acos(THREE.MathUtils.clamp((L0 * L0 + dd * dd - Lv * Lv) / (2 * L0 * dd), -1, 1));
+    }
+  }
   p[1].copy(p[0]).addScaledVector(a, L0 * Math.cos(A)).addScaledVector(b, L0 * Math.sin(A));
   const end = _t.copy(p[0]).addScaledVector(a, dd);
   if (n === 3) {

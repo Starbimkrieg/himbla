@@ -5,6 +5,17 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Zbornak's spider tank: the climb rebuilt, body first, then feet, then steps** (`docs/spidertank/`; not in the game yet). The hull's
+  pose now comes from the ground under its outline and ahead of it (over a gap it stays level with the tops either side; at a wall it
+  rears toward the top), and goes as far toward it each frame as its legs allow, eased. Feet take the hold nearest the height that pose
+  puts them at, with stretch and fold in hand, on their own side of the body, foot and shin clear of the hull, reaching over an edge
+  knee-up; a face grip never rises past the face's top (no more feet planted in the air). Knees stay up and out (`gait.js` caps the
+  thigh at 69 degrees and folds the ankle instead, and lifts a stepping foot off a steep hull). Climbing slowly, legs step by need, two
+  at most and never neighbours, only while each corner of the body keeps a foot down (`gait.js` `free`); a leg with nothing in reach
+  hangs. Put down on top of something, it starts standing on it. The lab's sweep gains gaps (3, 5, 7 m), turning on tops, and counts of
+  legs through the hull, feet across it, feet over nothing and jerk: 742 cases, 22 wrong (corner-first glances at 12 m/s, a few narrow
+  ends), hull in nothing, no foot over nothing, legs through the hull in 3.5% of frames, feet across in 0.5%. Replayed, the recorded
+  lane runs that stuck at the 9.5 m block now get up it and on to the 12 m wall.
 - **Zbornak's spider tank climbs as high as its legs reach, 13 m, and stands still beside walls** (`docs/spidertank/`; not in the
   game yet). Beside a structure it no longer shuffles (a step back onto the hold a foot has is skipped, the hold it has counts more,
   and standing, the hull doesn't bob to its feet). Leverage now only asks that a foot stand 0.7 m in from an edge on its hip's side, so
