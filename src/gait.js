@@ -82,6 +82,7 @@ const FREE_MAX = 4, FREE_DUR = 0.32;   // wave, free: legs stepping at once at m
 const FOOT_SPEED = 9, FOOT_DUR = 0.9;  // wave, free and out of lane: m/s a stepping foot goes at most (a longer step takes longer), to FOOT_DUR s
 const RETARGET_AT = 0.2, RETARGET_JUMP = 0.5;   // wave: of a step, after which its landing moves no more than this (m) a frame
 const OVER_EDGE = 0.4;    // m the most a step up or down arcs over what is between (its rise or drop clears the edge)
+const SWING_REACH = 0.97; // wave: of a leg's reach, the furthest from its hip a foot in the air goes
 const FIX_AT = 0.45;      // wave, free: of a step, after which its landing stays put (it no longer follows the best hold it sees)
 const SAME_HOLD = 0.12;   // wave, settling: of its span, the nearest to where a foot stands that a step may land (nearer: it stays put)
 
@@ -90,7 +91,7 @@ const _vh = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _e = new THREE.Euler(), _X = new THREE.Vector3(1, 0, 0);
 const _t = new THREE.Vector3(), _d = new THREE.Vector3(), _r = new THREE.Matrix4(), _Y = new THREE.Vector3(0, 1, 0);
 const _vt = new THREE.Vector3(), _vs = new THREE.Vector3(), _vw = new THREE.Vector3();
-const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _ld = new THREE.Vector3();
+const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _r4 = new THREE.Vector3(), _ld = new THREE.Vector3();
 const smooth = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
 
 export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, body = null, followRate = FOLLOW, foothold = null, strain = null, urge = null, solid = null, bodyPose = null, long = false, wave = false, pole = false, pitchMax = TILT, rollMax = TILT, free = null, need = null, canLift = null, liftDir = null } = {}) {
@@ -302,9 +303,12 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       const durOf = (q) => THREE.MathUtils.clamp(q.distanceTo(c.F) / FOOT_SPEED, FREE_DUR, FOOT_DUR);
       const to = commit(c, durOf(landFree(c, _r1)), landFree, durOf);
       // (nothing to hold, or nothing in its reach from where its hip will be: it hangs, and keeps looking)
-      if (!to || (n >= 3 && to.distanceTo(c.joints[0].getWorldPosition(_r1).addScaledVector(G.vel, c.dur)) > c.reach)) { if (n >= 3) c.hang = true; continue; }
+      if (!to || (n >= 3 && to.distanceTo(c.joints[0].getWorldPosition(_r1).addScaledVector(G.vel, c.dur)) > c.reach)) {
+        if (n >= 3) { c.hang = true; (c.want ||= new THREE.Vector3()).copy(to || c.F); c.wanting = !!to; }   // (reaching for it, if it saw one)
+        continue;
+      }
       if (to.distanceTo(c.F) < SAME_HOLD * c.span) continue;
-      Object.assign(c, { stepping: true, own: true, free: true, held: true, hang: false, s: 0, dur: durOf(to), lift: LIFT * c.span });
+      Object.assign(c, { stepping: true, own: true, free: true, held: true, hang: false, wanting: false, s: 0, dur: durOf(to), lift: LIFT * c.span });
       c.S0.copy(c.F);
       (c.S0L ||= new THREE.Vector3()).copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert());
       c.T.copy(to);
@@ -431,6 +435,12 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       c.base.addScaledVector(_up, hS + rise * ev - c.base.dot(_up));
       const arc = Math.sin(Math.PI * c.s);
       c.at.copy(c.base).addScaledVector(liftDir ? liftDir(c, _ld) : _up, c.over ? Math.max(c.lift * arc, c.over * Math.min(1, arc * 2.5)) : c.lift * arc);
+      // (in the air, never past its leg's reach: a foot the body has run on from is drawn in after it rather than dragged out straight
+      // behind; easing off as it comes down, so it still lands on its hold)
+      if (wave) {
+        const far = c.joints[0].getWorldPosition(_r4).distanceTo(c.at), k = c.s < 0.85 ? 1 : (1 - c.s) / 0.15;
+        if (far > SWING_REACH * c.reach) c.at.lerp(_r4.addScaledVector(_r1.subVectors(c.at, _r4), SWING_REACH * c.reach / far), k);
+      }
       if (c.s >= 1) { c.F.copy(c.T); c.stepping = false; }
     }
     // the body on its feet: their mean height off their rest spots lifts it, their slope across and along it rolls and pitches it

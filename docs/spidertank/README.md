@@ -88,7 +88,8 @@ tuned in Blender.
     over a gap it keeps level with the tops either side, and at a wall it rears up toward the wall's top before its nose is there.
     **The lower half rides up** toward the higher, by up to 3 m: so at a step or a low block it lifts level, with room under it,
     rather than pitching its nose up at it and scraping over (not at a wall taller than it can climb, where it only rears as far as
-    it can).
+    it can). **At a taller face it rears up instead:** from 3 m taller than under its tail to 6 m, it rides up less (to 1 m) and pitches
+    more steeply (to about 73 degrees at an 8.6 m block), so its tail stays low on its back legs and its nose goes up the face.
   - **The body goes there on its own** (`bodyPose`): each frame toward that pose at its own rates (6 m/s up or down, 2.2 rad/s of
     pitch), only never deeper into anything (`HULL3`, 83 points round the bead, close enough that an edge can't slip between them).
     The legs don't hold it back, so it never waits on a foothold: the earlier climbs, where the body could only go as far as its
@@ -107,8 +108,15 @@ tuned in Blender.
     hip will be when it lands (on its way to the pose the hull wants, and carried on with the body), and keeps it, so the foot goes
     straight there rather than chasing a different best hold every frame (its landing moved 3 m on average after lift-off, up to 12;
     now 0.7). An out-of-turn step up or down does the same; on the level, walking, a landing still follows the body as the rhythm's do. A step up or down, or from or to a face, arcs no more than 0.4 m over what is between (it goes up
-    first, then over), so cresting a block the legs don't swing out into the air. A leg with nothing it can reach to hold **hangs**
-    off the hull, clear of what it is against, and keeps looking. Walking, feet land where the rhythm asks.
+    first, then over), so cresting a block the legs don't swing out into the air. A leg with nothing in reach to hold **reaches for the
+    hold it wants**, its foot most of its reach out toward it; with none in sight it hangs off the hull, clear of what it is against;
+    either way its foot moves there smoothly (8 m/s), never snapping from pose to pose. A foot in the air never goes past its leg's
+    reach: one the body has run on from (backing up fast down the lane, say) is drawn in after it rather than dragged out straight
+    behind. Walking, feet land where the rhythm asks.
+  - **Rearing up a face, some legs climb and some push** (`roles`): three rays ahead, low over its anchor, find the face and its angle;
+    the four legs whose hips are nearest it climb, the rest push, so coming at it corner first, its near side's legs climb. A pusher
+    keeps to what it stands on: a face counts less for it, and so does a hold higher up. Climbing, a hold within 2 m of another foot's
+    counts less, so the feet fan out up and along the face rather than bunch.
   - **The legs keep clear of the hull:** a thigh never rises more than 69 degrees over the level (closer in, the ankle folds instead),
     so the knee stays up and out over its foot; the leg solve turns a knee aside from the hull as from anything else; and with the
     hull steep, a stepping foot lifts off the hull and out to its side rather than straight up along it.
@@ -123,14 +131,14 @@ tuned in Blender.
   - **Measured** (the lab's sweep, 742 cases, every box from 8 sides at 4 and 12 m/s, gaps, turning on tops, standing): blocks it
     should climb, 510 of 512 approaches (255 of 256 at each speed, corner-first too); every gap of 3 to 7 m crossed both ways; too-tall
     walls stopped at in all 48; standing beside tall blocks, still in all 69; 2 cases wrong in all. The hull is in nothing in any of
-    them and no planted foot over nothing; a leg passes into the hull in 2.1% of frames (most of them a thigh grazing its side, steep
-    against a 12 to 14 m wall), and a foot is across the body's middle in 0.08%. Up the lab's climbing set (2.4 to 9 m blocks, at 4
-    and 10 m/s) it takes 1.3 s on average from meeting the face to standing on top (5.9 s when the legs led the body, 2.9 s just
-    before): a 3.5 m step at 10 m/s without slowing, a 9 m block at a steady 5 m/s. The lab's lane (a crate, a step, 4.6 and 9.5 m
-    blocks, a 12 m wall on and off, then a 16 m wall it stops at) goes at an unbroken 3 m/s. The cost: the body doesn't wait for its
-    feet, so now and then a foot is briefly past its leg's full length before it steps (0.7% of planted-foot frames on the climbing
-    set), and climbing tall blocks a leg with nothing in reach hangs more. What it still does wrong: a 1.2 m crate with a tall block just
-    behind it, from that side, it rears at the tall one and slides along it.
+    them and no planted foot over nothing; a leg passes into the hull in 2.7% of frames (most of them a thigh grazing its side, steep
+    against a face), and a foot is across the body's middle in 0.08%. Up the lab's climbing set (2.4 to 9 m blocks, at 4 and 10 m/s)
+    it takes 1.6 s on average from meeting the face to standing on top (5.9 s when the legs led the body): a 3.5 m step at 10 m/s
+    without slowing, a 9 m block reared up nearly upright. The lab's lane (a crate, a step, 4.6 and 9.5 m blocks, a 12 m wall on and
+    off, then a 16 m wall it stops at) goes at an unbroken 3 m/s. A climbing step's landing moves 0.6 m on average after lift-off; feet
+    on a face are 3 m apart on average. The cost of the body leading: now and then a foot is briefly past its leg's full length before
+    it steps (0.4% of planted-foot frames on the climbing set). What it still does wrong: a 1.2 m crate with a tall block just behind
+    it, from that side, it rears at the tall one and slides along it; some middle legs tuck in against the hull mid-climb.
 - **Its height is its own:** kept in the world, so the caller can put the root on the ground under it or anything else; the caller's
   collision asks the tank (`tank.hits(x, y, z, yaw)`: how far into things the hull would be with the root there) and never moves or
   turns it deeper in, so it turns on the spot even face-down against a wall. In the lab it spins quick on its feet (2.6 rad/s at a

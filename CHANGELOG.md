@@ -5,6 +5,16 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Spider tank: it rears up a face, back legs pushing, front legs reaching, and its feet keep up at speed**
+  (`docs/spidertank/`). At a face taller than a crate it now rears up instead of riding up level: the taller the face, the less its
+  tail rides up and the steeper it pitches (about 73 degrees at an 8.6 m block), so it stands on its back legs and its nose goes up the
+  face. Rearing, the four legs nearest the face (found by rays ahead, so at an angle its near side's) climb, and the rest push from
+  what they stand on; climbing holds within 2 m of another foot's count less, so the feet fan out (3 m apart on a face on average, from
+  2.2). A leg with nothing in reach reaches toward the hold it wants instead of snapping between hang poses, its foot moving there
+  smoothly. A foot in the air never goes past its leg's reach, so backing up fast over blocks its legs no longer trail out straight
+  behind it (feet in the air past full length: 1.5% of swing frames in the recorded run, from 11%). Climbs take 1.6 s on average, from
+  1.3 (rearing up takes a moment). Sweep: 742 cases, the same 2 wrong; legs into the hull 2.7% of frames (from 2.1%; steep against
+  faces). Walking is unchanged.
 - **Spider tank: climbing legs decide once** (`docs/spidertank/`). A climbing step used to pick "the best hold it sees" every frame
   for the first half of its swing, from where its hip was then; with the body now moving fast, the best hold jumped about and the foot
   swerved after it (its landing moved 3 m on average after lift-off, up to 12 m). Now it picks once, at lift-off, for where its hip
