@@ -5,6 +5,15 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Spider tank: a staged rear-up, leaning on what is beside it, no trailing legs at a run** (`docs/spidertank/`). Rearing up a
+  tall face is no longer a leap with every leg in the air: it pitches up at 1 rad/s and rises at 3 m/s at most, creeping meanwhile;
+  its tail stays down on its back legs and only its front rises while the face is still ahead, and once its nose is at the face it
+  hauls itself up, every leg following up the face; two feet always stay down. All round, something taller just beside it, behind it
+  or (standing) ahead leans that half of it up and the legs on that side take holds up its face and over its edge, the others staying
+  down (slowly only: none past 6 m/s). Running, the lanes now reach 78% of the way to full stretch (from 90%) and a swinging foot
+  leaves where it lifted quickly, so the back legs no longer trail out straight behind at speed or slowing down; walking steps and
+  joint speeds are as before. Climbs take 1.9 s on average (from 1.6). Sweep: 742 cases, the same 2 wrong; legs into the hull 2.7%
+  of frames, as before.
 - **Spider tank: it rears up a face, back legs pushing, front legs reaching, and its feet keep up at speed**
   (`docs/spidertank/`). At a face taller than a crate it now rears up instead of riding up level: the taller the face, the less its
   tail rides up and the steeper it pitches (about 73 degrees at an 8.6 m block), so it stands on its back legs and its nose goes up the

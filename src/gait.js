@@ -73,15 +73,17 @@ const SWIVEL_RATE = 9;  // rad/s it eases to a new one
 const FOLD = 0.55;
 const FEMUR_UP = 1.2;   // pole, three bones: rad the thigh rises over the level at most (out from the hip); closer in, the ankle folds
 const GAP = 0.3;        // wave: m between two neighbours' lanes (the feet always in order along the body)
-const LANE_REACH = 0.9;  // wave: of the front leg's room ahead and the back leg's behind, how far the lanes reach
+const LANE_REACH = 0.78; // wave: of the front leg's room ahead and the back leg's behind, how far the lanes reach
 const DUTY_RIPPLE = 0.75, DUTY_SETS = 0.5, DUTY_FAST = 0.45;   // wave: a foot's share of the rhythm down: a walk's ripple, a run's sets, flat out
 const WALK_SPANS = 1, RUN_SPANS = 2.4;   // wave: spans a second under which it ripples, and past which it runs in sets (blending between)
 const WAVE_STANCE = 0.75; // wave: s a foot stays down, walking, as long as its lane allows
 const SETTLE_SPEED = 0.3; // wave: of a span a second, the pace it steps at to settle its feet, standing      // pole: the ankle's bend at the shortest reach (of its rest angle; straighter out to 1.15 of it)
+const KEEP_DOWN = 2;      // wave, free: feet that stay down, even with more out of reach (they wait their turn)
 const FREE_MAX = 4, FREE_DUR = 0.32;   // wave, free: legs stepping at once at most, and s a step takes at least
 const FOOT_SPEED = 9, FOOT_DUR = 0.9;  // wave, free and out of lane: m/s a stepping foot goes at most (a longer step takes longer), to FOOT_DUR s
 const RETARGET_AT = 0.2, RETARGET_JUMP = 0.5;   // wave: of a step, after which its landing moves no more than this (m) a frame
 const OVER_EDGE = 0.4;    // m the most a step up or down arcs over what is between (its rise or drop clears the edge)
+const SWING_EASE = 1.5;   // wave: how quickly a foot in the air leaves where it lifted (the power its ease-out goes by)
 const SWING_REACH = 0.97; // wave: of a leg's reach, the furthest from its hip a foot in the air goes
 const FIX_AT = 0.45;      // wave, free: of a step, after which its landing stays put (it no longer follows the best hold it sees)
 const SAME_HOLD = 0.12;   // wave, settling: of its span, the nearest to where a foot stands that a step may land (nearer: it stays put)
@@ -298,7 +300,8 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     for (const [c, n] of want) {
       // (one out of reach holds nothing: it goes whatever else is stepping)
       const gone = n >= 3;
-      if (lifted >= FREE_MAX && !gone) continue;
+      // (but never all at once: KEEP_DOWN feet stay down whatever)
+      if ((lifted >= FREE_MAX && !gone) || lifted >= chains.length - KEEP_DOWN) continue;
       if (!gone && (chains.some((o) => o.stepping && o.s < 1 && nextTo(o, c)) || !canLift(c))) continue;
       const durOf = (q) => THREE.MathUtils.clamp(q.distanceTo(c.F) / FOOT_SPEED, FREE_DUR, FOOT_DUR);
       const to = commit(c, durOf(landFree(c, _r1)), landFree, durOf);
@@ -430,7 +433,8 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       const ev = rise > step ? smooth(c.s / 0.5) : rise < -step ? smooth((c.s - 0.5) / 0.5) : eh;
       if (c.S0L) {                                                   // (wave: carried with the body, so it only goes forward in its lane)
         _inv.copy(root.matrixWorld).invert();
-        c.base.lerpVectors(c.S0L, _vw.copy(c.T).applyMatrix4(_inv), smooth(c.s)).applyMatrix4(root.matrixWorld);
+        // (quick off the mark, settling as it lands: it doesn't hang back where it lifted, behind a body going on fast)
+        c.base.lerpVectors(c.S0L, _vw.copy(c.T).applyMatrix4(_inv), 1 - (1 - c.s) ** SWING_EASE).applyMatrix4(root.matrixWorld);
       } else c.base.lerpVectors(c.S0, c.T, eh);
       c.base.addScaledVector(_up, hS + rise * ev - c.base.dot(_up));
       const arc = Math.sin(Math.PI * c.s);

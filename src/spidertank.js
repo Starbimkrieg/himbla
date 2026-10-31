@@ -8,7 +8,8 @@ import { makeGait } from './gait.js';
 // up each side from the back leg to the front; running, two sets of four that take turns; each foot in its own lane, so the legs never
 // cross. The body leads and the legs follow. The hull wants a pose from the ground under its outline and ahead of it (over a crate
 // just clear of it, over a gap level with the tops either side, at a wall rearing up to its top; its lower half rides up to RIDE_ROOM
-// toward the higher, so it lifts level over a low block rather than pitching at it; at a taller face it rears up it, REAR_*) and goes
+// toward the higher, so it lifts level over a low block rather than pitching at it; at a taller face it rears up it, tail down till
+// its nose is at the face, then hauls itself up, REAR_*, HAUL_*; leaning toward anything tall beside it, LEAN_*) and goes
 // toward it at its own rates, only never into anything (bodyPose): its legs never hold it back. Each foot takes the hold nearest the
 // height that pose puts it at, in its leg's reach, on its own side of the body, its leg clear of the hull (gait.js keeps the knees up
 // and out), standing with leverage or gripping a face, reaching over an edge knee-up (a climbing step picks it once, at lift-off, for
@@ -66,6 +67,11 @@ const RIDE_ROOM = 3;            // m higher than its standing height the hull ri
 // at a face from REAR_FROM to REAR_FULL m taller than under its tail it rides up only REAR_RIDE (m) and pitches over REAR_ARM (m): it
 // rears up it
 const REAR_FROM = 3, REAR_FULL = 6, REAR_RIDE = 1, REAR_ARM = 2;
+// all round: what stands LEAN_X m out from its middle to either side, or LEAN_Z behind (and ahead) (and LEAN_OUT times that), from LEAN_FROM to LEAN_FULL m taller than
+// what it stands on, leans that half of it up to LEAN_MAX m higher; under LEAN_SLOW m/s (none by twice that)
+const LEAN_X = 3.8, LEAN_Z = 5, LEAN_OUT = [1, 1.3], LEAN_FROM = 1, LEAN_FULL = 4, LEAN_MAX = 1.6, LEAN_SLOW = 3, LEAN_FOOT = 1.2;
+const HAUL_NEAR = 0.5, HAUL_FAR = 2.5, NOSE = 3.5;   // m from its front (NOSE ahead of its middle) to the face: rearing, its tail stays down further, and is hauled up nearer
+const REAR_PITCH_RATE = 1, REAR_LIFT_RATE = 3, REAR_CREEP = 1.5;  // rad/s and m/s it pitches up and rises at most rearing up a tall face (a step at a time), and m/s it goes meanwhile
 const SUPPORT = 0.6;            // of the ground under a half of the hull's outline, the share the hull stands its height over (the rest higher)
 const CLEAR_HULL = 1.65;        // m its hips keep over the highest thing under the hull (its bottom 1.24 under them, and a margin)
 const LOOK_MIN = 2.5, LOOK_MAX = 8, LOOK_S = 0.6, TAIL_LOOK = 3.5;   // m ahead its leading half looks, going (LOOK_S s of its speed), for what to rise to (and slow for) before it gets there
@@ -99,6 +105,7 @@ const HOLD = 0.3;
 // climbing: a hold counts SPREAD_COST less a metre nearer than SPREAD to another foot's; rearing up a face, the CLIMBERS legs nearest it
 // climb, and the rest push: a face counts PUSH_FACE less for them, and a hold PUSH_HIGH less a metre over their anchor (and a metre)
 const SPREAD = 2, SPREAD_COST = 1, CLIMBERS = 4, PUSH_FACE = 2, PUSH_HIGH = 0.5;
+const PUSH_STRETCH = 0.95;      // of its reach, past which a pushing leg steps (it pushes from where it stands, at full stretch)
 const FACE_RAY = 10, FACE_RAY_UP = 1.5, FACE_RAY_SIDE = 2;   // m: how far ahead it looks for the face, how high over its anchor, how far to either side
 const STEEP = 0.9, LIFT_OUT = 0.6;   // rad of pitch by which a stepping foot lifts off the hull rather than straight up; and out to its side, of that
 const KNEE_UP = 1.2;            // m its knee rises over its hip (or the foot, the higher) reaching onto a top over an edge (and over its leg's middle, standing)
@@ -220,7 +227,7 @@ export function makeSpiderTank(kit) {
   const PIVOT = new THREE.Vector3(0, hipY, 0);
   // (H: over the root; W: the same, in the world; wH, wP, wR: the pose it wants, its hips' height in the world; tH, tP, tR: that eased,
   // over the root)
-  const body = { H: hipY, W: hipY, P: 0, R: 0, set: false, wH: hipY, wP: 0, wR: 0, tH: hipY, tP: 0, tR: 0 };
+  const body = { H: hipY, W: hipY, P: 0, R: 0, set: false, lean: { L: 0, R: 0, B: 0, F: 0 }, wH: hipY, wP: 0, wR: 0, tH: hipY, tP: 0, tR: 0 };
   const _q = new THREE.Quaternion(), _eu = new THREE.Euler(), _pos = new THREE.Vector3(), _w = new THREE.Vector3(), _m4 = new THREE.Matrix4();
   const _q2 = new THREE.Quaternion(), _eu2 = new THREE.Euler(), _pos2 = new THREE.Vector3(), _w2 = new THREE.Vector3();
   let footL = null, loose = null, dist0 = null;
@@ -271,11 +278,35 @@ export function makeSpiderTank(kit) {
     const ride = (lo, hi) => (over ? lo : Math.max(lo, Math.min(hi, lo + room)));
     if (hf > hb) hb = ride(hb, hf); else hf = ride(hf, hb);
     if (hr > hl) hl = ride(hl, hr); else hr = ride(hr, hl);
+    // (all round: something taller just outside its outline, beside it, behind or (standing) ahead, and it leans toward it, that half up
+    // to LEAN_MAX higher, so its legs on that side go up its face; going faster, less, so running past a wall it doesn't sway)
+    // (not rearing up something: then it climbs)
+    const slow = (1 - THREE.MathUtils.smoothstep(vel.length(), LEAN_SLOW, 2 * LEAN_SLOW)) * (1 - THREE.MathUtils.smoothstep(Math.abs(body.P), 0.3, 0.6));
+    if (slow > 0) {
+      const base = Math.min(hf, hb, hl, hr) - hipY;
+      const lean = (x0, z0, dx, dz) => {
+        let top = -Infinity;
+        for (const out of LEAN_OUT) for (const t of [-1, 0, 1]) {
+          _a.set(x0 * out + dx * t, 0, z0 * out + dz * t).applyMatrix4(root.matrixWorld);
+          if (ground(_a, _b)) top = Math.max(top, Math.min(_b.dot(_up), cap));
+        }
+        return slow * LEAN_MAX * THREE.MathUtils.smoothstep(top - base, LEAN_FROM, LEAN_FULL);
+      };
+      const L = body.lean;
+      L.L = lean(-LEAN_X, 0, 0, 2.5); L.R = lean(LEAN_X, 0, 0, 2.5); L.B = lean(0, -LEAN_Z, 1.5, 0); L.F = going ? 0 : lean(0, LEAN_Z + 1.2, 1.5, 0);
+      hl += L.L; hr += L.R; hb += L.B; hf += L.F;
+    } else body.lean.L = body.lean.R = body.lean.B = body.lean.F = 0;
     // (and its hips no more than HIPS_OVER over the climb's limit: a wall taller, it rears up its face but never gets its hull over it)
     const top = cap + HIPS_OVER;
     hf = Math.min(hf, top); hb = Math.min(hb, top); hl = Math.min(hl, top); hr = Math.min(hr, top);
-    body.wH = (hf + hb) / 2;
+    // (leaning to a side, it rises by half that: the near side goes up, the far side stays down)
+    body.wH = (hf + hb) / 2 + 0.5 * (body.lean.L + body.lean.R);
     body.wP = THREE.MathUtils.clamp(-Math.atan2(hf - hb, THREE.MathUtils.lerp(PITCH_ARM, REAR_ARM, rear)), -PITCH_MAX, PITCH_MAX);
+    // (rearing up a face still ahead of it, its tail stays down on its back legs and only its front rises: it hauls itself up only once
+    // its nose is at the face (HAUL_NEAR to HAUL_FAR m from it, roles found it))
+    const low = over ? 0 : rear * THREE.MathUtils.smoothstep(body.faceDist ?? 0, HAUL_NEAR, HAUL_FAR);
+    if (low > 0) body.wH = THREE.MathUtils.lerp(body.wH, Math.min(hf, hb) + 0.5 * PITCH_ARM * Math.sin(Math.abs(body.wP)), low);
+    body.rear = over ? 1 : rear;                                     // (for how fast it rears up: at a wall too tall, as slowly)
     body.wR = THREE.MathUtils.clamp(Math.atan2(hr - hl, ROLL_ARM), -ROLL_WANT, ROLL_WANT);
   }
   // rearing up a face: which legs climb it and which push from below. The face is where three rays ahead, low over its anchor, meet
@@ -284,11 +315,14 @@ export function makeSpiderTank(kit) {
   const _fa = new THREE.Vector3(), _fl = new THREE.Vector3(), _fr = new THREE.Vector3(), _fd = new THREE.Vector3(), _fo = new THREE.Vector3();
   function roles(chs, rootUp) {
     for (const c of chs) c.pusher = false;
+    body.faceDist = Infinity;
     if (!ray || Math.abs(body.tP) < STEEP_WANT) return;
     pushed(_probe);
     const across = _fd.crossVectors(_probe, _up).normalize();
     const at = (side, out) => ray(_fo.setFromMatrixPosition(root.matrixWorld).addScaledVector(_up, ref - rootUp + FACE_RAY_UP).addScaledVector(across, side), _probe, FACE_RAY, out);
     if (!at(0, _fa)) return;
+    body.faceDist = _fa.distanceTo(_fo.setFromMatrixPosition(root.matrixWorld).addScaledVector(_up, ref - rootUp + FACE_RAY_UP)) - NOSE;
+    if (body.faceDist < HAUL_NEAR) return;                             // (hauling itself up: they all climb)
     const l = at(-FACE_RAY_SIDE, _fl), r = at(FACE_RAY_SIDE, _fr);
     if (l || r) {                                                      // (its plane's way in: across it, flat)
       const t = l && r ? _fr.sub(_fl) : r ? _fr.sub(_fa) : _fa.clone().sub(_fl);
@@ -298,6 +332,8 @@ export function makeSpiderTank(kit) {
     const near = chs.map((c) => [c, c.joints[0].getWorldPosition(_fo).dot(_fd)]).sort((a, b) => b[1] - a[1]);
     near.forEach(([c], i) => { c.pusher = i >= CLIMBERS; });
   }
+  // how fast it pitches up: rearing up a tall face, slower (REAR_PITCH_RATE)
+  const pitchRate = () => THREE.MathUtils.lerp(PITCH_RATE, REAR_PITCH_RATE, body.rear || 0);
   function bodyPose(dt) {
     _up.setFromMatrixColumn(root.matrixWorld, 1).normalize();
     _inv.copy(root.matrixWorld).invert();
@@ -378,9 +414,11 @@ export function makeSpiderTank(kit) {
     body.tH += (body.wH - rootUp - body.tH) * k; body.tP += (body.wP - body.tP) * k; body.tR += (body.wR - body.tR) * k;
     // and the most of the way there it may go this frame, at its own rates: only the hull no deeper into anything. The legs don't hold it
     // back: they follow it, stepping to keep up (a planted foot left out of reach holds nothing, and steps at once)
-    const dH = THREE.MathUtils.clamp(body.tH - body.H, -LIFT_RATE * dt, LIFT_RATE * dt);
+    // (rearing up a tall face, slower: a step at a time, its legs going up the face with it, never a leap)
+    const lr = THREE.MathUtils.lerp(LIFT_RATE, REAR_LIFT_RATE, body.rear || 0);
+    const dH = THREE.MathUtils.clamp(body.tH - body.H, -LIFT_RATE * dt, lr * dt);
     // (levelling out, cresting an edge, slower than it rears up: the legs swing round with the hull)
-    const pr = Math.abs(body.tP) < Math.abs(body.P) ? LEVEL_RATE : PITCH_RATE;
+    const pr = Math.abs(body.tP) < Math.abs(body.P) ? LEVEL_RATE : pitchRate();
     const dP = THREE.MathUtils.clamp(body.tP - body.P, -pr * dt, pr * dt);
     const dR = THREE.MathUtils.clamp(body.tR - body.R, -ROLL_RATE * dt, ROLL_RATE * dt);
     let bH = body.H, bP = body.P, bR = body.R;
@@ -512,7 +550,8 @@ export function makeSpiderTank(kit) {
     // (climbing: it looks wider, and keeps stretch and fold in hand; walking, it lands where the rhythm asks)
     fRough = free();
     fCeil = Math.min(hipW.dot(up) + ABOVE, ref + CLIMB);
-    fWant = hipT.dot(up) - (c.hipY - c.rest.y);
+    // (on the side it leans to, toward something beside it, a hold up its face: LEAN_FOOT times the lean higher)
+    fWant = hipT.dot(up) - (c.hipY - c.rest.y) + LEAN_FOOT * Math.max(c.hip.x < 0 ? body.lean.L : body.lean.R, c.hip.z < -1 ? body.lean.B : c.hip.z > 1 ? body.lean.F : 0);
     const toHip = _b.subVectors(hipW, p).addScaledVector(up, -_b.subVectors(hipW, p).dot(up)).normalize();
     const across = _side.crossVectors(toHip, up);
     pushed(_ahead);
@@ -617,13 +656,15 @@ export function makeSpiderTank(kit) {
     c.joints[0].getWorldPosition(hipW);
     const far = hipW.distanceTo(c.F), k = far / c.reach;
     if (k > LOOSE) return 3;
-    let n = k > NEED_STRETCH ? 1 + (k - NEED_STRETCH) * 10 : 0;
+    // (pushing from below, rearing up a face: it stays where it stands, at full stretch, whatever height the pose would have it at)
+    const st = c.pusher ? PUSH_STRETCH : NEED_STRETCH;
+    let n = k > st ? 1 + (k - st) * 10 : 0;
     _q2.setFromEuler(_eu2.set(body.tP, 0, body.tR));
     _pos2.set(0, body.tH, 0).sub(_w2.copy(PIVOT).applyQuaternion(_q2));
     hipT.copy(c.hip).applyQuaternion(_q2).add(_pos2).applyMatrix4(root.matrixWorld);
     // (off the height it wants, no higher than it could stand: against a wall too tall, a foot as high as it reaches is where it belongs)
     const off = Math.abs(c.F.dot(_up) - Math.min(hipT.dot(_up) - (c.hipY - c.rest.y), hipW.dot(_up) + ABOVE, ref + CLIMB));
-    if (off > NEED_OFF) n = Math.max(n, 0.5 + 0.2 * off);
+    if (off > NEED_OFF && !c.pusher) n = Math.max(n, 0.5 + 0.2 * off);
     if (ray && far > 0.2 && ray(hipW, _f.subVectors(c.F, hipW).divideScalar(far), far - 0.15, _e) && !overEdge(c.F, hipW, _up)) n = Math.max(n, 2);
     // (carried out of its lane, or in toward the body's middle, sliding along a wall say: back where it belongs, the latter at once)
     const z = _f.copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert()).z;
@@ -789,13 +830,15 @@ export function makeSpiderTank(kit) {
       this.speedMax = hold || firing ? SKIM_AT - 0.5 : Infinity;
       // (climbing a face, steeply: no faster than CLIMB_SPEED)
       if (this.fold === 0 && (Math.abs(body.tP) > STEEP_WANT || Math.abs(body.P) > STEEP_WANT)) this.speedMax = Math.min(this.speedMax, CLIMB_SPEED);
+      // (still rearing up at a tall face: it creeps, so its back legs keep their footing while it lifts, and then it climbs)
+      if (this.fold === 0 && (body.rear || 0) > 0.5 && Math.abs(body.tP) - Math.abs(body.P) > 0.15) this.speedMax = Math.min(this.speedMax, REAR_CREEP);
       // (still rising to the pose it wants, pushed on: its legs step by need to keep up with it, gait.js free)
       rearing = Math.abs(push) > 0.5 && (body.tH - body.H > 0.5 || Math.abs(body.tP - body.P) > 0.25);
       // (and no faster than lets its hull rise clear of what is ahead before it gets there, at its own rates; or, what even the pose it wants
       // would meet, braking short of it: a wall taller than it climbs)
       if (this.fold === 0 && body.set && Math.abs(push) > 0.5 && ground) {
         pushed(_probe);
-        const turnT = Math.abs(body.tP - body.P) / PITCH_RATE;
+        const turnT = Math.abs(body.tP - body.P) / pitchRate(), lr = THREE.MathUtils.lerp(LIFT_RATE, REAR_LIFT_RATE, body.rear || 0);
         for (const d of BRAKE_AT) {
           _m4.copy(root.matrixWorld).setPosition(_w.setFromMatrixPosition(root.matrixWorld).addScaledVector(_probe, d));
           poseOf(body.tH, body.tP, body.tR);
@@ -805,7 +848,7 @@ export function makeSpiderTank(kit) {
             poseOf(body.H + lift, body.P, body.R);
             if (hullDepth(_m4) <= GRAZE) break;
           }
-          if (lift > 0) { this.speedMax = Math.min(this.speedMax, Math.max(TOUCH, d / Math.max(lift / LIFT_RATE, turnT, 0.05))); break; }
+          if (lift > 0) { this.speedMax = Math.min(this.speedMax, Math.max(TOUCH, d / Math.max(lift / lr, turnT, 0.05))); break; }
         }
       }
       // overdrive: close up past SKIM_AT, open out under SKIM_OFF (never while the beam is up or fire is held, nor start while it climbs

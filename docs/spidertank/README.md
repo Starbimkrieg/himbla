@@ -88,8 +88,14 @@ tuned in Blender.
     over a gap it keeps level with the tops either side, and at a wall it rears up toward the wall's top before its nose is there.
     **The lower half rides up** toward the higher, by up to 3 m: so at a step or a low block it lifts level, with room under it,
     rather than pitching its nose up at it and scraping over (not at a wall taller than it can climb, where it only rears as far as
-    it can). **At a taller face it rears up instead:** from 3 m taller than under its tail to 6 m, it rides up less (to 1 m) and pitches
-    more steeply (to about 73 degrees at an 8.6 m block), so its tail stays low on its back legs and its nose goes up the face.
+    it can). **At a taller face it rears up instead, in stages:** from 3 m taller than under its tail to 6 m, it rides up less (to 1 m)
+    and pitches more steeply (to about 73 degrees at an 8.6 m block). While the face is still ahead, its tail stays down on its back
+    legs and only its front rises (it creeps at 1.5 m/s meanwhile, pitching up at 1 rad/s and rising at 3 m/s at most); once its nose
+    is at the face it hauls itself up, every leg going up the face after it, crests and steps onto the top. No leap: two feet always
+    stay down. **All round, it leans toward what is beside it:** something taller just outside its outline (beside it, behind it, or
+    ahead while it stands) lifts that half of it up to 1.6 m, slowly only and not while rearing (none past 6 m/s, so running past a
+    wall it doesn't sway),
+    and the legs on that side take holds up its face and over its top edge, the others staying down.
   - **The body goes there on its own** (`bodyPose`): each frame toward that pose at its own rates (6 m/s up or down, 2.2 rad/s of
     pitch), only never deeper into anything (`HULL3`, 83 points round the bead, close enough that an edge can't slip between them).
     The legs don't hold it back, so it never waits on a foothold: the earlier climbs, where the body could only go as far as its
@@ -112,9 +118,12 @@ tuned in Blender.
     hold it wants**, its foot most of its reach out toward it; with none in sight it hangs off the hull, clear of what it is against;
     either way its foot moves there smoothly (8 m/s), never snapping from pose to pose. A foot in the air never goes past its leg's
     reach: one the body has run on from (backing up fast down the lane, say) is drawn in after it rather than dragged out straight
-    behind. Walking, feet land where the rhythm asks.
+    behind; it leaves where it lifted quickly and settles as it lands. Running, the lanes reach 78% of the way to full stretch at either
+    end, so the back legs don't trail out straight behind at speed or slowing down. Walking, feet land where the rhythm asks.
   - **Rearing up a face, some legs climb and some push** (`roles`): three rays ahead, low over its anchor, find the face and its angle;
     the four legs whose hips are nearest it climb, the rest push, so coming at it corner first, its near side's legs climb. A pusher
+    steps only at full stretch, never just for being off the height the pose would put it at; once the nose is at the face and it
+    hauls itself up, they all climb. A pusher
     keeps to what it stands on: a face counts less for it, and so does a hold higher up. Climbing, a hold within 2 m of another foot's
     counts less, so the feet fan out up and along the face rather than bunch.
   - **The legs keep clear of the hull:** a thigh never rises more than 69 degrees over the level (closer in, the ankle folds instead),
@@ -132,12 +141,12 @@ tuned in Blender.
     should climb, 510 of 512 approaches (255 of 256 at each speed, corner-first too); every gap of 3 to 7 m crossed both ways; too-tall
     walls stopped at in all 48; standing beside tall blocks, still in all 69; 2 cases wrong in all. The hull is in nothing in any of
     them and no planted foot over nothing; a leg passes into the hull in 2.7% of frames (most of them a thigh grazing its side, steep
-    against a face), and a foot is across the body's middle in 0.08%. Up the lab's climbing set (2.4 to 9 m blocks, at 4 and 10 m/s)
-    it takes 1.6 s on average from meeting the face to standing on top (5.9 s when the legs led the body): a 3.5 m step at 10 m/s
-    without slowing, a 9 m block reared up nearly upright. The lab's lane (a crate, a step, 4.6 and 9.5 m blocks, a 12 m wall on and
+    against a face), and a foot is across the body's middle in 0.10%. Up the lab's climbing set (2.4 to 9 m blocks, at 4 and 10 m/s)
+    it takes 1.9 s on average from meeting the face to standing on top (5.9 s when the legs led the body): a 3.5 m step at 10 m/s
+    without slowing, a 9 m block reared up nearly upright in stages. The lab's lane (a crate, a step, 4.6 and 9.5 m blocks, a 12 m wall on and
     off, then a 16 m wall it stops at) goes at an unbroken 3 m/s. A climbing step's landing moves 0.6 m on average after lift-off; feet
     on a face are 3 m apart on average. The cost of the body leading: now and then a foot is briefly past its leg's full length before
-    it steps (0.4% of planted-foot frames on the climbing set). What it still does wrong: a 1.2 m crate with a tall block just behind
+    it steps (1.7% of planted-foot frames on the climbing set). What it still does wrong: a 1.2 m crate with a tall block just behind
     it, from that side, it rears at the tall one and slides along it; some middle legs tuck in against the hull mid-climb.
 - **Its height is its own:** kept in the world, so the caller can put the root on the ground under it or anything else; the caller's
   collision asks the tank (`tank.hits(x, y, z, yaw)`: how far into things the hull would be with the root there) and never moves or
