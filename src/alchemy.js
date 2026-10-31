@@ -1063,10 +1063,12 @@ export function makeFollowerModel(kind) {
 
 // Mutation meshes for each owned mutation on runner model M, via add(parent, mesh). Used by applyMutations and the Asset Row.
 export function buildMutationMeshes(M, has, add) {
-  if (has('wheels')) for (const leg of [M.legL, M.legR]) {
+  // (wheels and roots on the shins, so they follow the feet: y in the knee's frame, 0.45 above the hip's)
+  const ky = M.shinL ? 0.45 : 0;
+  if (has('wheels')) for (const leg of [M.shinL || M.legL, M.shinR || M.legR]) {
     const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.22, 12).rotateZ(Math.PI / 2), toon(0x221d33));
     ink(w, 0.03);
-    w.position.set(0, -0.98, 0.05);
+    w.position.set(0, -0.98 + ky, 0.05);
     add(leg, w);
   }
   if (has('wings')) for (const s of [-1, 1]) {
@@ -1102,13 +1104,13 @@ export function buildMutationMeshes(M, has, add) {
     c.rotation.x = Math.PI;
     add(arm, c);
   }
-  if (has('roots')) for (const leg of [M.legL, M.legR]) for (let k = 0; k < 3; k++) {
+  if (has('roots')) for (const [leg, shin] of [[M.legL, M.shinL], [M.legR, M.shinR]]) for (let k = 0; k < 3; k++) {
     const r = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.5, 4), toon(0x6b4a2a));
-    r.position.set((k - 1) * 0.09, -0.7, -0.1);
+    r.position.set((k - 1) * 0.09, -0.7 + ky, -0.1);
     r.rotation.set(-0.5, 0, (k - 1) * 0.6);
-    add(leg, r);
+    add(shin || leg, r);
     const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.22, 4), toon(0x5fbf4a));
-    leaf.position.set((k - 1) * 0.12, -0.35, 0.12);
+    leaf.position.set((k - 1) * 0.12, -0.35, 0.12); // (on the thigh)
     leaf.rotation.z = (k - 1) * 0.8;
     add(leg, leaf);
   }

@@ -15,6 +15,7 @@ const ECHO_SIDE = [-2.4, 2.4]; // m to the side, so they don't stand in you
 const ECHO_KEEP = 2.5; // s of path kept
 const TELE_STILL = 0.25; // share of teleports arriving at rest
 const TELE_KMH = 300; // fastest launch (others 1 to this)
+const ECHO_LIMBS = ['legL', 'legR', 'shinL', 'shinR', 'armL', 'armR', 'foreL', 'foreR']; // pivots an echo copies from your pose
 const TELE_CUSHION = 8; // s of SOFT LANDING after a launch (else a 300 km/h arrival on foot is a wipe-out)
 
 export function monolithTouch(alch) {
@@ -161,7 +162,7 @@ export function updateEchoes(alch, dt) {
   if (last && last.pos.distanceTo(P.pos) > 40) S.length = 0; // teleport or recall: restart the path
   S.push({
     t: tr.t, pos: P.pos.clone(), quat: pm.root.quaternion.clone(), alt: Math.max(0, g.planet.altitude(P.pos)),
-    bodyY: pm.body ? pm.body.position.y : 0, limbs: ['legL', 'legR', 'armL', 'armR'].map((k) => (pm[k] ? pm[k].rotation.clone() : null)),
+    bodyY: pm.body ? pm.body.position.y : 0, limbs: ECHO_LIMBS.map((k) => (pm[k] ? pm[k].rotation.clone() : null)),
   });
   while (S.length > 2 && S[0].t < tr.t - ECHO_KEEP) S.shift();
   const up = P.up;
@@ -190,8 +191,8 @@ export function updateEchoes(alch, dt) {
     const m = d.model;
     m.root.position.copy(d.pos);
     m.root.quaternion.copy(tmpQ);
-    for (let i = 0; i < 4; i++) {
-      const key = ['legL', 'legR', 'armL', 'armR'][i], la = a.limbs[i], lb = b.limbs[i];
+    for (let i = 0; i < ECHO_LIMBS.length; i++) {
+      const key = ECHO_LIMBS[i], la = a.limbs[i], lb = b.limbs[i];
       if (m[key] && la && lb) { m[key].rotation.x = la.x + (lb.x - la.x) * f; m[key].rotation.y = la.y + (lb.y - la.y) * f; m[key].rotation.z = la.z + (lb.z - la.z) * f; }
     }
     if (m.body) m.body.position.y = a.bodyY + (b.bodyY - a.bodyY) * f;

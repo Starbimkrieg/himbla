@@ -102,7 +102,7 @@ await page.evaluate(async () => {
   material per mesh. `kit.mesh(name, geo, slot, parent, ink=...)` sets this up.
 - **Custom property `ink`** = outline thickness in metres (0 = none); `slot` is also stored. Export with custom
   properties on (`export_extras`).
-- **Pivot empties** are the animated parts (runner: legL, legR, torso, head, armL, armR, foreL, foreR (forearms, on the elbows, children of the arm pivots), scarfLinks). `padL`, `padR`, `band`, `crest` and `antenna` are outfit extras: baked apart from the always-worn parts and hung on by `cosmetics.js` only when an outfit asks (`runnerExtra` in `models.js`). Geometry is
+- **Pivot empties** are the animated parts (runner: legL, legR, shinL, shinR (shins, on the knees, children of the leg pivots), torso, head, armL, armR, foreL, foreR (forearms, on the elbows, children of the arm pivots), scarfLinks). `padL`, `padR`, `band`, `crest` and `antenna` are outfit extras: baked apart from the always-worn parts and hung on by `cosmetics.js` only when an outfit asks (`runnerExtra` in `models.js`). Geometry is
   read in its pivot's frame. Vehicles have named pivots for wheels, turret, barrel, gear and so on; check the
   builder and `src/models.js` for the names before renaming anything.
 - **Colliders** are empties with role `col` (Chimera Downs parts write them from their own primitives with `parts(..., solid=True)`:

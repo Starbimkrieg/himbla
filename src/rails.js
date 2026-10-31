@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { frameQuat, upAt } from './geo.js';
 import { ledgeRailsJob } from './ledges.js';
+import { plantLeg, leanDrops, flatFwd } from './models.js';
 
 // Grinding crater lips (planet.rimRails) and building ledges (ledges.js); planet.rails holds any other loose rail (none since
 // the snake rocks went: the tip and side-on grabs below were theirs). Land on one to lock on, carried by your speed (downhill
@@ -11,6 +12,7 @@ const _p = new THREE.Vector3(), _t = new THREE.Vector3(), _u = new THREE.Vector3
 const _q = new THREE.Quaternion(), _z = new THREE.Vector3(0, 0, 1), _r = new THREE.Vector3(), _v = new THREE.Vector3();
 const _hp = new THREE.Vector3(), _ht = new THREE.Vector3(), _hu = new THREE.Vector3(), _hn = new THREE.Vector3(), _ts = new THREE.Vector3(), _tf = new THREE.Vector3();
 const _near = [];
+const _ld = { L: 0, R: 0, extra: 0 }; // (leanDrops scratch)
 // places whose buildings' edges are rails (ledges.js), worked out when you first come near and again if their colliders change
 const LEDGE_PLACES = ['downs'];
 const LCELL = 12; // m: the ledge rails' lookup grid
@@ -236,11 +238,24 @@ export class Grinder {
     _r.set(1, 0, 0).applyQuaternion(m.root.quaternion);
     const trav = Math.sign(_v.copy(_t).multiplyScalar(A.dir).dot(_r)) || 1; // slide direction along the model's X
     const settle = Math.min(1, A.t * 6); // ease into the pose on landing
-    m.root.quaternion.multiply(_q.setFromAxisAngle(_z, trav * (0.2 + 0.08 * fast + 0.05 * w3) * settle));
+    const lean = trav * (0.2 + 0.08 * fast + 0.05 * w3) * settle;
+    m.root.quaternion.multiply(_q.setFromAxisAngle(_z, lean));
     if (m.trick) m.trick.rotation.set(0, 0, 0);
-    m.body.position.y = m.bodyBase - (0.3 + 0.08 * fast) * settle + 0.035 * w1;
     m.torso.rotation.x = (0.3 + 0.12 * fast + 0.04 * w2) * settle;
-    m.legL.rotation.x = (0.55 + 0.06 * w1) * settle; m.legR.rotation.x = (-0.55 + 0.06 * w1) * settle;
+    if (m.shinL) {
+      // knees bent low over the rail, hips sat back, both skates on it under the lean (the trailing knee folds, the
+      // leading leg reaches); the bob is in the knees
+      const ld = leanDrops(((0.2 + 0.06 * fast) * settle - 0.035 * w1), lean, _ld);
+      const fL = flatFwd(ld.L), fR = flatFwd(ld.R);
+      m.body.position.y = m.bodyBase - (0.2 + 0.06 * fast) * settle + 0.035 * w1 - ld.extra;
+      m.body.position.z = -0.5 * (fL + fR);
+      plantLeg(m.legL, m.shinL, ld.L, fL + (0.06 + 0.03 * w2) * settle);
+      plantLeg(m.legR, m.shinR, ld.R, fR + (-0.06 + 0.03 * w2) * settle);
+    } else {
+      m.body.position.y = m.bodyBase - (0.3 + 0.08 * fast) * settle + 0.035 * w1;
+      m.legL.rotation.x = (0.55 + 0.06 * w1) * settle; m.legR.rotation.x = (-0.55 + 0.06 * w1) * settle;
+    }
+    if (m.foreL) { m.foreL.rotation.x = -0.25 - 0.1 * w3; m.foreR.rotation.x = -0.25 + 0.1 * w3; } // soft elbows, balancing
     if (m.armL) { m.armL.rotation.z = -1.2 + 0.18 * w2 + 0.1 * fast; m.armL.rotation.x = 0.25 * w3 - 0.2 * fast; }
     if (m.armR) { m.armR.rotation.z = 1.2 + 0.18 * w1 - 0.1 * fast; m.armR.rotation.x = -0.25 * w3 - 0.2 * fast; }
     P.upSmooth.copy(_u);

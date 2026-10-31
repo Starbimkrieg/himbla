@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { makeBody, stepSkater } from './physics.js';
-import { makeRunner, makeCrate, ScarfSim } from './models.js';
+import { makeRunner, makeCrate, ScarfSim, plantLeg, leanDrops, flatFwd } from './models.js';
 import { frameQuat, upAt } from './geo.js';
 import { Ragdoll } from './ragdoll.js';
 import { Idle } from './idles.js';
@@ -54,6 +54,7 @@ const _Z = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3();
 const _sp = new THREE.Vector3(), _sf = new THREE.Vector3();
 const _tp = new THREE.Vector3(), _tl = new THREE.Vector3();
+const _lean = { L: 0, R: 0, extra: 0 }; // (leanDrops scratch)
 
 export class Player {
   constructor(game, spawn) {
@@ -263,7 +264,8 @@ export class Player {
       m.root.position.copy(b.pos);
       frameQuat(b.up, this.heading, m.root.quaternion);
       m.legL.rotation.x = m.legR.rotation.x = -1.4;
-      m.body.position.y = m.bodyBase - 0.55;
+      m.shinL.rotation.x = m.shinR.rotation.x = 1.35; // shins hang down off the seat
+      m.body.position.y = m.bodyBase - 0.55; m.body.position.z = 0;
       this.upSmooth.copy(b.up);
       return;
     }
@@ -349,7 +351,8 @@ export class Player {
         m.torso.rotation.x = bp ? bp.lean : 0.95;
         m.legL.rotation.x = m.legR.rotation.x = bp ? bp.thigh : -1.05;
         m.legL.rotation.z = bp ? -bp.spread : 0; m.legR.rotation.z = bp ? bp.spread : 0; // knees out round the tank
-        m.body.position.y = m.bodyBase - 0.62;
+        m.shinL.rotation.x = m.shinR.rotation.x = bp ? bp.knee || 0 : 0.9; // feet back to the pegs
+        m.body.position.y = m.bodyBase - 0.62; m.body.position.z = 0;
         if (m.armL && m.armR) {
           m.armL.rotation.x = m.armR.rotation.x = bp ? bp.armX : -0.75;
           m.armL.rotation.z = bp ? -bp.armZ : -0.22; m.armR.rotation.z = bp ? bp.armZ : 0.22;
@@ -360,7 +363,8 @@ export class Player {
         m.torso.rotation.x = 0;
         m.legL.rotation.x = m.legR.rotation.x = -1.3;
         m.legL.rotation.z = m.legR.rotation.z = 0;
-        m.body.position.y = m.bodyBase - 0.5;
+        m.shinL.rotation.x = m.shinR.rotation.x = 1.2; // seated: shins down to the pedals
+        m.body.position.y = m.bodyBase - 0.5; m.body.position.z = 0;
         if (m.armL && m.armR) {
           m.armL.rotation.x = -1.15 + 0.15 * this.steerLean; m.armR.rotation.x = -1.15 - 0.15 * this.steerLean;
           m.armL.rotation.z = -0.12; m.armR.rotation.z = 0.12;
@@ -645,9 +649,10 @@ export class Player {
     this.idle.cancel(m);
     m.torso.rotation.set(0, 0, 0);
     m.legL.rotation.set(0, 0, 0); m.legR.rotation.set(0, 0, 0);
+    m.shinL.rotation.set(0, 0, 0); m.shinR.rotation.set(0, 0, 0);
     m.foreL.rotation.set(0, 0, 0); m.foreR.rotation.set(0, 0, 0);
     m.armL.rotation.set(0, 0, -0.15); m.armR.rotation.set(0, 0, 0.15); // arms slightly out, as animate's idle pose
-    m.body.position.y = m.bodyBase;
+    m.body.position.y = m.bodyBase; m.body.position.z = 0;
     this.roll = 0;
     this.steerLean = 0;
     this.anim = 0;
@@ -692,10 +697,12 @@ export class Player {
     const base = m.bodyBase;
     this.idle.begin(m); // clear last frame's idle: the poses below only set the angles they use
     m.legL.rotation.z = m.legR.rotation.z = 0; // drop a bike's knees-out spread
+    m.body.position.z = 0; // (a crouch sits the hips back)
     if (!b.grounded && ctrl && ctrl.dive) {
       // dive: tuck, lean hard forward, arms swept back
       m.torso.rotation.x = 0.85;
       m.legL.rotation.x = m.legR.rotation.x = -0.35;
+      m.shinL.rotation.x = m.shinR.rotation.x = 0.35; // knees soft, skates trailing in line
       m.armL.rotation.x = m.armR.rotation.x = 0.9;
       m.armL.rotation.z = -0.25; m.armR.rotation.z = 0.25;
       m.foreL.rotation.x = m.foreR.rotation.x = -0.2; // hands streamlined, slight bend
@@ -703,16 +710,24 @@ export class Player {
     } else if (!b.grounded) {
       m.torso.rotation.x = 0.15;
       m.legL.rotation.x = -0.5; m.legR.rotation.x = 0.3;
+      m.shinL.rotation.x = 0.75; m.shinR.rotation.x = 0.45; // front knee up, back foot trailing
       m.armL.rotation.z = -1.1; m.armR.rotation.z = 1.1;
       m.armL.rotation.x = m.armR.rotation.x = 0;
       m.foreL.rotation.x = m.foreR.rotation.x = -0.35 + 0.1 * Math.sin(this.anim * 0.5); // loose elbows, balancing
       m.body.position.y = base;
-      if (this.trick.tucked) { m.legL.rotation.x = m.legR.rotation.x = -1.2; m.torso.rotation.x = 0.6; }
+      if (this.trick.tucked) { m.legL.rotation.x = m.legR.rotation.x = -1.2; m.shinL.rotation.x = m.shinR.rotation.x = 1.9; m.torso.rotation.x = 0.6; } // knees to the chest
     } else if (b.skating) {
       const crouch = Math.min(1, sp / 40);
-      m.body.position.y = base - 0.18 * crouch;
+      // knees bent (a little even at rest, more with speed), hips sat back over the skates, left skate a little back,
+      // right ahead; leaning into a turn the inside knee folds and the outside leg reaches, so both skates stay on the
+      // ground under the lean
+      const ld = leanDrops(0.05 + 0.15 * crouch, this.roll, _lean);
+      const fL = flatFwd(ld.L), fR = flatFwd(ld.R);
+      m.body.position.y = base - 0.05 - 0.15 * crouch - ld.extra;
+      m.body.position.z = -0.5 * (fL + fR);
       m.torso.rotation.x = 0.25 + 0.35 * crouch;
-      m.legL.rotation.x = 0.35 * crouch; m.legR.rotation.x = -0.35 * crouch;
+      plantLeg(m.legL, m.shinL, ld.L, fL - 0.04 - 0.1 * crouch);
+      plantLeg(m.legR, m.shinR, ld.R, fR + 0.04 + 0.1 * crouch);
       m.armL.rotation.x = m.armR.rotation.x = -0.9 * crouch;
       m.armL.rotation.z = -0.3; m.armR.rotation.z = 0.3;
       // elbows bent, hands forward; in a turn the inside arm tucks, the outside reaches
@@ -726,6 +741,9 @@ export class Player {
       m.body.position.y = base + Math.abs(s) * 0.12 * run;
       m.torso.rotation.x = 0.1 * run;
       m.legL.rotation.x = s * 0.9 * run; m.legR.rotation.x = -s * 0.9 * run;
+      // knees: straight to push off behind, most bent as the leg swings through, near straight again to land ahead
+      const c = Math.cos(this.anim);
+      m.shinL.rotation.x = run * (0.12 + 1.05 * Math.max(0, -c)); m.shinR.rotation.x = run * (0.12 + 1.05 * Math.max(0, c));
       m.armL.rotation.x = -s * 0.8 * run; m.armR.rotation.x = s * 0.8 * run;
       m.armL.rotation.z = -0.15; m.armR.rotation.z = 0.15;
       // elbows pump, most bent as the hand comes forward

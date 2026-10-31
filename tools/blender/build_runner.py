@@ -5,7 +5,7 @@
 # MOONRUNNER_REPO sets the checkout; MOONRUNNER_EXPORT=0 builds without exporting.
 #
 # Conventions the game relies on (loadRunnerParts in src/models.js):
-# - Every mesh is a child of a pivot empty: legL, legR, torso, head, armL, armR, scarfLinks. Geometry is read in the
+# - Every mesh is a child of a pivot empty: legL, legR, shinL, shinR, torso, head, armL, armR, foreL, foreR, scarfLinks. Geometry is read in the
 #   pivot's frame, so pivots can sit anywhere (posed here so the figure looks assembled in Blender).
 # - ONE material per mesh, named after a slot: suit, accent, helmet, visor, dark, metal, glow, skate, scarf, collar,
 #   lens, glint. The game swaps in its toon materials per slot (that's how outfits recolour).
@@ -269,25 +269,38 @@ for s in SLOT_COLORS:
 body = pivot("runner", (0, 0, 0))
 HIP = 0.95
 
-# ---- legs: smooth suit leg, knee guard, shin panel, side stripe, skate boot + mag-sled ----
-LEG_PROFILE = [(0, -0.8), (0.085, -0.79), (0.104, -0.72), (0.117, -0.62), (0.121, -0.54), (0.112, -0.47),
-               (0.118, -0.42), (0.128, -0.34), (0.146, -0.2), (0.157, -0.07), (0.15, 0.02), (0.11, 0.09), (0, 0.12)]
+# ---- legs: thigh on the hip pivot (legL / legR), shin on a knee pivot (shinL / shinR) ----
+# The knee is KN below the hip; a suit-coloured ball keeps the joint round at any bend (as the elbow's). Knee guard, shin
+# plate, boot and skate turn with the shin. Rest pose is straight (shin rotation 0), so leg-only poses work unchanged;
+# + rotation bends the knee (foot back).
+KN = 0.45
+THIGH = [(0, -KN), (0.111, -KN), (0.114, -0.42), (0.128, -0.34), (0.146, -0.2), (0.157, -0.07), (0.15, 0.02),
+         (0.11, 0.09), (0, 0.12)]
+# (shin frame: y 0 at the knee; the top runs up into the knee ball)
+CALF = [(0, -0.35), (0.085, -0.34), (0.104, -0.27), (0.117, -0.17), (0.121, -0.09), (0.113, -0.02), (0.106, 0.04),
+        (0, 0.07)]
+def lo(geo):
+    """leg-frame geometry (y 0 at the hip) into the shin's frame"""
+    return xf(geo, (0, KN, 0))
 for side, name in ((-1, "legL"), (1, "legR")):
     L = pivot(name, (side * 0.2, HIP, 0), body)
-    # calf bulges at the back, shin stays straight
+    # the back of the thigh rounds out, the front stays straight
     def calf(v):
         k = max(0.0, 1 - abs(v.y + 0.33) / 0.2)
         return (v.x, v.y, v.z - 0.022 * k if v.z < 0 else v.z)
-    mesh(name + "_leg", xf(lathe(LEG_PROFILE, 14), fn=calf), "suit", L, 0.04)
-    # accent piping down the outside of the leg
-    path = [(side * 0.15, 0.0, 0.0), (side * 0.147, -0.2, 0.0), (side * 0.13, -0.36, 0.0),
-            (side * 0.124, -0.5, 0.0), (side * 0.118, -0.64, 0.0)]
-    mesh(name + "_stripe", tube(path, [0.018] * 5, 6), "accent", L, 0)
+    mesh(name + "_leg", xf(lathe(THIGH, 14), fn=calf), "suit", L, 0.04)
+    mesh(name + "_kneeBall", xf(superquad(0.116, 0.116, 0.116, 1, 1, 12, 6), (0, -KN, 0)), "suit", L, 0.012)
+    # accent piping down the outside of the leg (thigh part, then shin part)
+    path = [(side * 0.15, 0.0, 0.0), (side * 0.147, -0.2, 0.0), (side * 0.13, -0.36, 0.0), (side * 0.118, -0.43, 0.0)]
+    mesh(name + "_stripe", tube(path, [0.018] * 4, 6), "accent", L, 0)
+    S = pivot("shin" + name[-1], (0, -KN, 0), L)
+    mesh(name + "_calf", lathe(CALF, 14), "suit", S, 0.04)
+    path = [(side * 0.118, 0.0, 0.0), (side * 0.122, -0.06, 0.0), (side * 0.118, -0.19, 0.0)]
+    mesh(name + "_shinStripe", tube(path, [0.018] * 3, 6), "accent", S, 0)
     # knee guard and shin plate, wrapped round the leg
-    mesh(name + "_knee", xf(superquad(0.1, 0.085, 0.022, 0.45, 0.4, 12, 6), (0, -0.45, 0), (0.08, 0, 0), fn=cwrap(0.128, 0.13)), "metal", L, 0.02)
-    mesh(name + "_kneeRidge", xf(superquad(0.075, 0.014, 0.012, 0.4, 0.4, 10, 4), (0, -0.425, 0), (0.08, 0, 0), fn=cwrap(0.152, 0.155)), "accent", L, 0)
-    mesh(name + "_shin", xf(superquad(0.08, 0.075, 0.016, 0.45, 0.4, 12, 6), (0, -0.6, 0), (-0.04, 0, 0), fn=cwrap(0.124, 0.126)), "metal", L, 0.015)
-
+    mesh(name + "_knee", lo(xf(superquad(0.1, 0.085, 0.022, 0.45, 0.4, 12, 6), (0, -0.45, 0), (0.08, 0, 0), fn=cwrap(0.128, 0.13))), "metal", S, 0.02)
+    mesh(name + "_kneeRidge", lo(xf(superquad(0.075, 0.014, 0.012, 0.4, 0.4, 10, 4), (0, -0.425, 0), (0.08, 0, 0), fn=cwrap(0.152, 0.155))), "accent", S, 0)
+    mesh(name + "_shin", lo(xf(superquad(0.08, 0.075, 0.016, 0.45, 0.4, 12, 6), (0, -0.6, 0), (-0.04, 0, 0), fn=cwrap(0.124, 0.126))), "metal", S, 0.015)
     # ---- the skate ----
     # high-top boot shell: wide sole, rounded sloping toe, slimmer ankle
     def boot_shape(v, grow=1.0):
@@ -298,14 +311,14 @@ for side, name in ((-1, "legL"), (1, "legR")):
             y -= (z - 0.05) * 0.35 * f
         return (x * grow, (y + 0.095) * grow - 0.095, z * grow)
     BOOT = superquad(0.135, 0.095, 0.22, 0.3, 0.32, 16, 8)
-    mesh(name + "_boot", xf(BOOT, (0, -0.82, 0.07), fn=boot_shape), "dark", L, 0.035)
+    mesh(name + "_boot", lo(xf(BOOT, (0, -0.82, 0.07), fn=boot_shape)), "dark", S, 0.035)
     # ankle collar and padded cuff
-    mesh(name + "_bootTop", xf(lathe([(0, -0.07), (0.128, -0.065), (0.134, -0.02), (0.13, 0.03), (0.118, 0.045), (0.1, 0.03)], 14, 1.0, 1.12), (0, -0.74, 0.0)), "dark", L, 0.025)
-    mesh(name + "_cuff", xf(torus(0.122, 0.028, 16, 6), (0, -0.69, 0.0), s=(1, 1, 1.1)), "accent", L, 0.02)
+    mesh(name + "_bootTop", lo(xf(lathe([(0, -0.07), (0.128, -0.065), (0.134, -0.02), (0.13, 0.03), (0.118, 0.045), (0.1, 0.03)], 14, 1.0, 1.12), (0, -0.74, 0.0))), "dark", S, 0.025)
+    mesh(name + "_cuff", lo(xf(torus(0.122, 0.028, 16, 6), (0, -0.69, 0.0), s=(1, 1, 1.1))), "accent", S, 0.02)
     # toe cap and heel counter: the shell grown a little and cut, in helmet colour (from a denser copy so edges are clean)
     shell = xf(superquad(0.135, 0.095, 0.22, 0.3, 0.32, 28, 18), (0, -0.82, 0.07), fn=lambda v: boot_shape(v, 1.03))
-    mesh(name + "_toe", keep(shell, lambda c: c[2] > 0.25 and c[1] < -0.77), "helmet", L, 0.012)
-    mesh(name + "_heel", keep(shell, lambda c: c[2] < -0.125 and c[1] < -0.76), "helmet", L, 0.012)
+    mesh(name + "_toe", lo(keep(shell, lambda c: c[2] > 0.25 and c[1] < -0.77)), "helmet", S, 0.012)
+    mesh(name + "_heel", lo(keep(shell, lambda c: c[2] < -0.125 and c[1] < -0.76)), "helmet", S, 0.012)
     # two instep straps (superellipse arch following the boot's taper), buckles outside
     def boot_top(zl):
         return -0.725 - max(0.0, zl - 0.05) * 0.35
@@ -319,27 +332,27 @@ for side, name in ((-1, "legL"), (1, "legR")):
             f = min(1.0, max(0.0, (y + 0.915) / 0.19))
             hw = 0.135 * (1 - 0.18 * f) + 0.014
             arc.append((hw * math.copysign(abs(c) ** 0.35, c), y, zz))
-        mesh(f"{name}_strap{k}", tube(arc, [0.02] * 13, 6), "accent", L, 0.01)
-        mesh(f"{name}_buckle{k}", xf(superquad(0.01, 0.026, 0.028, 0.3, 0.3, 8, 4), (side * 0.152, -0.84, zz)), "metal", L, 0)
+        mesh(f"{name}_strap{k}", lo(tube(arc, [0.02] * 13, 6)), "accent", S, 0.01)
+        mesh(f"{name}_buckle{k}", lo(xf(superquad(0.01, 0.026, 0.028, 0.3, 0.3, 8, 4), (side * 0.152, -0.84, zz))), "metal", S, 0)
     # mag-sled chassis: plate a little longer than the boot, nose upturned
     def sled(v):
         x, y, z = v
         if z > 0.2:
             y += (z - 0.2) ** 2 * 2.2
         return (x, y, z)
-    mesh(name + "_chassis", xf(superquad(0.105, 0.024, 0.32, 0.25, 0.3, 14, 6), (0, -0.935, 0.07), fn=sled), "metal", L, 0.02)
+    mesh(name + "_chassis", lo(xf(superquad(0.105, 0.024, 0.32, 0.25, 0.3, 14, 6), (0, -0.935, 0.07), fn=sled)), "metal", S, 0.02)
     # quantum-lock coil pods: three rings with glowing cores
     for k, zz in enumerate((-0.14, 0.07, 0.28)):
-        mesh(f"{name}_coil{k}", xf(torus(0.05, 0.02, 12, 6), (0, -0.962 + (0.02 if k == 2 else 0), zz), s=(1.3, 1, 1)), "dark", L, 0.012)
-        mesh(f"{name}_core{k}", xf(superquad(0.055, 0.016, 0.042, 0.6, 0.6, 10, 4), (0, -0.968 + (0.02 if k == 2 else 0), zz)), "skate", L, 0)
+        mesh(f"{name}_coil{k}", lo(xf(torus(0.05, 0.02, 12, 6), (0, -0.962 + (0.02 if k == 2 else 0), zz), s=(1.3, 1, 1))), "dark", S, 0.012)
+        mesh(f"{name}_core{k}", lo(xf(superquad(0.055, 0.016, 0.042, 0.6, 0.6, 10, 4), (0, -0.968 + (0.02 if k == 2 else 0), zz))), "skate", S, 0)
     # glide rail: the glowing blade the skate finish colours
-    mesh(name + "_rail", xf(superquad(0.03, 0.016, 0.33, 0.6, 0.25, 10, 6), (0, -0.986, 0.07), fn=sled), "skate", L, 0.015)
+    mesh(name + "_rail", lo(xf(superquad(0.03, 0.016, 0.33, 0.6, 0.25, 10, 6), (0, -0.986, 0.07), fn=sled)), "skate", S, 0.015)
     # heel fin with a glow strip; running lights along both sled edges
     fin = extrude([(-0.11, -0.04), (-0.2, 0.04), (-0.235, 0.1), (-0.19, 0.11), (-0.07, 0.02)], 0.03)
-    mesh(name + "_fin", xf(fin, (0, -0.86, 0)), "metal", L, 0.012)
-    mesh(name + "_finGlow", xf(superquad(0.018, 0.012, 0.04, 0.6, 0.6, 8, 4), (0, -0.765, -0.2), (-0.75, 0, 0)), "skate", L, 0)
+    mesh(name + "_fin", lo(xf(fin, (0, -0.86, 0))), "metal", S, 0.012)
+    mesh(name + "_finGlow", lo(xf(superquad(0.018, 0.012, 0.04, 0.6, 0.6, 8, 4), (0, -0.765, -0.2), (-0.75, 0, 0))), "skate", S, 0)
     for s2 in (-1, 1):
-        mesh(f"{name}_edge{'L' if s2 < 0 else 'R'}", xf(superquad(0.008, 0.009, 0.25, 0.5, 0.3, 6, 4), (s2 * 0.104, -0.933, 0.06)), "skate", L, 0)
+        mesh(f"{name}_edge{'L' if s2 < 0 else 'R'}", lo(xf(superquad(0.008, 0.009, 0.25, 0.5, 0.3, 6, 4), (s2 * 0.104, -0.933, 0.06))), "skate", S, 0)
 
 # ---- torso ----
 T = pivot("torso", (0, HIP, 0), body)
@@ -598,7 +611,7 @@ from mathutils.bvhtree import BVHTree
 MAX_PROUD = 0.006   # low-poly lathes sag 3 to 4 mm between vertices; any closer and the ribbon dips under the facets
 FLUSH = [("head_stripe", "head_helmet", 0.008), ("torso_seamL", "torso_trunk"), ("torso_seamR", "torso_trunk")]
 for tag in "LR":
-    FLUSH += [(f"leg{tag}_stripe", f"leg{tag}_leg"), (f"arm{tag}_stripe", f"arm{tag}_arm"), (f"arm{tag}_foreStripe", f"arm{tag}_fore")]
+    FLUSH += [(f"leg{tag}_stripe", f"leg{tag}_leg"), (f"leg{tag}_shinStripe", f"leg{tag}_calf"), (f"arm{tag}_stripe", f"arm{tag}_arm"), (f"arm{tag}_foreStripe", f"arm{tag}_fore")]
 _dg = bpy.context.evaluated_depsgraph_get()
 def flush(pname, bname, proud=MAX_PROUD):
     P, B = bpy.data.objects[pname], bpy.data.objects[bname]

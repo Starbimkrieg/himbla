@@ -103,6 +103,10 @@ function runnerGeo() {
     scarfLinks: links,
     // one smooth lathe per limb: hip/thigh/knee/calf/ankle, shoulder/bicep/elbow/forearm/wrist
     leg: new THREE.LatheGeometry(v2([[0, -0.8], [0.085, -0.79], [0.105, -0.72], [0.118, -0.62], [0.122, -0.54], [0.11, -0.45], [0.124, -0.36], [0.145, -0.2], [0.155, -0.06], [0.14, 0.04], [0.09, 0.1], [0, 0.12]]), 10),
+    // the courier's leg in two, at the knee (0.45 below the hip): thigh to the knee, calf from it (knee frame)
+    thigh: new THREE.LatheGeometry(v2([[0, -0.45], [0.112, -0.45], [0.124, -0.36], [0.145, -0.2], [0.155, -0.06], [0.14, 0.04], [0.09, 0.1], [0, 0.12]]), 10),
+    calf: new THREE.LatheGeometry(v2([[0, -0.35], [0.085, -0.34], [0.105, -0.27], [0.118, -0.17], [0.122, -0.09], [0.11, 0], [0.1, 0.05], [0, 0.07]]), 10),
+    kneeBall: new THREE.SphereGeometry(0.115, 10, 8),
     arm: new THREE.LatheGeometry(v2([[0, -0.56], [0.075, -0.55], [0.086, -0.48], [0.096, -0.4], [0.087, -0.3], [0.1, -0.22], [0.114, -0.1], [0.12, 0], [0.1, 0.08], [0, 0.12]]), 10),
     // pelvis, hips, waist, ribs, chest, shoulders, neck (the mesh flattens it front-to-back)
     torso: new THREE.LatheGeometry(v2([[0, -0.02], [0.16, -0.01], [0.25, 0.04], [0.29, 0.14], [0.255, 0.32], [0.29, 0.5], [0.34, 0.68], [0.335, 0.8], [0.29, 0.92], [0.2, 1.0], [0.14, 1.05], [0, 1.07]]), 16),
@@ -143,13 +147,13 @@ const GLINT_M = new THREE.MeshBasicMaterial({ color: 0xffffff });
 const LENS_M = new THREE.MeshBasicMaterial({ color: 0xfff6a8 });
 
 // ---- the Blender runner: tools/blender/build_runner.py exports src/assets/runner.glb ----
-// Each mesh hangs off a pivot empty (legL, legR, torso, head, armL, armR, scarfLinks), has one material named after a
+// Each mesh hangs off a pivot empty (legL, legR, shinL, shinR, torso, head, armL, armR, foreL, foreR, scarfLinks), has one material named after a
 // colour slot (suit, accent, helmet, visor, dark, metal, glow, skate, scarf, collar, lens, glint) and an "ink" extra
 // (outline thickness). At load parts are baked into their pivot's frame and merged per pivot and slot; inked parts grow a
 // shell along smoothed normals (hugs far better than ink()'s bbox scaling), merged per pivot. So ~40 draw calls however
 // detailed, and each slot keeps the runner's own material for outfit recolours. No file: makeRunner uses the primitives.
 let RUNNER_PARTS = null;
-const PIVOTS = ['legL', 'legR', 'torso', 'head', 'armL', 'armR', 'foreL', 'foreR']; // (foreL/foreR: forearms, on the elbows)
+const PIVOTS = ['legL', 'legR', 'shinL', 'shinR', 'torso', 'head', 'armL', 'armR', 'foreL', 'foreR']; // (shins on the knees, forearms on the elbows)
 const EXTRA_PIVOTS = ['padL', 'padR', 'band', 'antenna', 'crest']; // (outfit extras for cosmetics.js; optional)
 const NO_SHADOW = new Set(['glow', 'lens', 'glint']);
 export async function loadRunnerParts() {
@@ -312,7 +316,7 @@ function addBaked(target, key, mats) {
 }
 
 // The Moon-runner (also pirate skaters and story NPCs). Pivot at the feet. Keep the pivots (legL/legR at the hips,
-// armL/armR at the shoulders, head on the torso) and dimensions: cosmetics, mutations, cargo and story props hang off them.
+// shinL/shinR at the knees, armL/armR at the shoulders, foreL/foreR at the elbows, head on the torso) and dimensions: cosmetics, mutations, cargo and story props hang off them.
 // Scarf: a ribbon (12-point rope, verlet in the torso frame) leaving the collar off to one side so it trails down the side
 // of your back gear, not over it. Gravity, airflow, body acceleration and a flutter at speed move it; it stays behind your
 // back and out of the pack and crates. model.scarfStyle (dressRunner) sets length, width, one or two tails. Unsimulated
@@ -579,6 +583,34 @@ export class ScarfSim {
   }
 }
 
+// The courier's knee: KNEE below the hip pivot (legL/legR), where the shin pivot (shinL/shinR) hangs; tools/blender/build_runner.py's KN.
+export const KNEE = 0.45;
+const HIP_H = 0.95, SHIN_H = HIP_H - KNEE; // hip height over the soles (root y 0), and knee to sole
+// Two-bone leg solve for a courier's leg (legL/shinL or legR/shinR): the hip `drop` m below standing tall and the sole
+// `fwd` m ahead of the hip (body frame, +z forward), so a crouch bends the knees with the skate still on the ground.
+// Sets both pivots' x (the knee bends forward); leaves the thigh's z (a spread) alone.
+export function plantLeg(leg, shin, drop, fwd = 0) {
+  const h = HIP_H - drop;
+  const d = Math.min(HIP_H - 1e-4, Math.max(0.08, Math.hypot(h, fwd)));
+  const cosKnee = (KNEE * KNEE + SHIN_H * SHIN_H - d * d) / (2 * KNEE * SHIN_H);
+  const cosHip = (KNEE * KNEE + d * d - SHIN_H * SHIN_H) / (2 * KNEE * d);
+  leg.rotation.x = Math.atan2(-fwd, h) - Math.acos(Math.min(1, Math.max(-1, cosHip)));
+  shin.rotation.x = Math.PI - Math.acos(Math.min(1, Math.max(-1, cosKnee)));
+}
+// No ankle: the skate pitches with the shin (thigh + knee). The sole's place ahead of the hip that keeps it flat (shin
+// upright under the knee) for a hip `drop`; a crouch sits the hips back by about this, as a squat does.
+export function flatFwd(drop) {
+  const c = Math.min(1, Math.max(-1, (HIP_H - drop - SHIN_H) / KNEE));
+  return KNEE * Math.sqrt(1 - c * c);
+}
+// Leaning a figure by `roll` about its forward axis (at the feet) lifts one sole and sinks the other: the per-leg drops
+// that keep both on the ground, round a hip drop of `drop` (the body sinks the `extra` more so the high leg can reach)
+export function leanDrops(drop, roll, out) {
+  const t = Math.tan(Math.max(-0.75, Math.min(0.75, roll))) * 0.2; // hips 0.2 m either side
+  out.extra = Math.abs(t);
+  out.L = drop + out.extra + t; out.R = drop + out.extra - t;
+  return out;
+}
 export function makeRunner({
   suit = 0xff4f2e, accent = 0x2ee6ff, helmet = 0xfff4e0, visor = 0x241a5c,
   scarf = 0xffd23f, scale = 1, pirate = false, own = false,
@@ -602,23 +634,31 @@ export function makeRunner({
   const mats = { suit: suitM, accent: accentM, helmet: helmetM, visor: visorM, dark, metal, glow: glowM, skate: skateM, scarf: scarfM, collar: collarM, lens: LENS_M, glint: GLINT_M };
 
   const hip = 0.95;
-  const legs = [];
+  const legs = [], shins = [];
   for (const side of [-1, 1]) {
     const leg = new THREE.Group();
     leg.position.set(side * 0.2, hip, 0);
     body.add(leg);
     legs.push(leg);
-    if (baked) { addBaked(leg, side < 0 ? 'legL' : 'legR', mats); continue; }
-    leg.add(part(G.leg, suitM, 0, 0, 0, 0.045));
-    const pad = part(G.kneePad, metal, 0, -0.45, 0.095, 0.02);
+    // shin pivots at the knee, KNEE below the hip; straight at rotation 0, + bends it (foot back)
+    const shin = new THREE.Group();
+    shin.position.y = -KNEE;
+    leg.add(shin);
+    shins.push(shin);
+    if (baked) { addBaked(leg, side < 0 ? 'legL' : 'legR', mats); addBaked(shin, side < 0 ? 'shinL' : 'shinR', mats); continue; }
+    leg.add(part(G.thigh, suitM, 0, 0, 0, 0.045));
+    leg.add(part(G.kneeBall, suitM, 0, -KNEE, 0, 0.012));
+    shin.add(part(G.calf, suitM, 0, 0, 0, 0.045));
+    // (the rest in the shin's frame: leg-frame y + KNEE)
+    const pad = part(G.kneePad, metal, 0, 0, 0.095, 0.02);
     pad.scale.set(1.15, 1, 0.6);
-    leg.add(pad);
-    leg.add(part(G.cuff, accentM, 0, -0.73, 0.01, 0.025));
-    leg.add(part(G.boot, dark, 0, -0.83, 0.07, 0.04));
-    leg.add(part(G.chassis, metal, 0, -0.935, 0.07, 0.02));
-    const rail = part(G.rail, skateM, 0, -0.972, 0.07, 0.025);
+    shin.add(pad);
+    shin.add(part(G.cuff, accentM, 0, -0.28, 0.01, 0.025));
+    shin.add(part(G.boot, dark, 0, -0.38, 0.07, 0.04));
+    shin.add(part(G.chassis, metal, 0, -0.485, 0.07, 0.02));
+    const rail = part(G.rail, skateM, 0, -0.522, 0.07, 0.025);
     rail.scale.x = 1.6;
-    leg.add(rail);
+    shin.add(rail);
   }
   const torso = new THREE.Group();
   torso.position.y = hip;
@@ -722,7 +762,7 @@ export function makeRunner({
   }
 
   root.scale.setScalar(scale);
-  return { root, trick, body, bodyBase: -1.2, torso, head, legL: legs[0], legR: legs[1], antenna, armL: arms[0], armR: arms[1], foreL: fores[0], foreR: fores[1], scarf: scarfPivot, cargoSlot, glowM, accent, mats: { suit: suitM, accent: accentM, helmet: helmetM, visor: visorM, scarf: scarfM, collar: collarM, glow: glowM, skate: skateM } };
+  return { root, trick, body, bodyBase: -1.2, torso, head, legL: legs[0], legR: legs[1], shinL: shins[0], shinR: shins[1], antenna, armL: arms[0], armR: arms[1], foreL: fores[0], foreR: fores[1], scarf: scarfPivot, cargoSlot, glowM, accent, mats: { suit: suitM, accent: accentM, helmet: helmetM, visor: visorM, scarf: scarfM, collar: collarM, glow: glowM, skate: skateM } };
 }
 
 // ---- townsfolk ----
@@ -3083,6 +3123,7 @@ export function makeKadeTruck() {
   const kade = makeRunner({ suit: 0x1a1a1a, accent: 0xff2a3a, helmet: 0x2b2b2b, visor: 0xff2a3a, scarf: 0xd7263d, pirate: true });
   kade.root.position.set(-0.9, 4.0, 0.2);
   kade.legL.rotation.x = kade.legR.rotation.x = -1.4;
+  kade.shinL.rotation.x = kade.shinR.rotation.x = 1.1; // knees bent, feet to the pedals
   if (kade.armL) kade.armL.rotation.x = -1.2;
   if (kade.armR) kade.armR.rotation.x = -1.2;
   chassis.add(kade.root);

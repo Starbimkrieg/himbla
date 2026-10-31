@@ -264,6 +264,8 @@ export class Recall {
       // walk swing, fading as you arrive
       const w = Math.sin(t * 10) * 0.6 * (1 - k);
       P.model.legL.rotation.x = w; P.model.legR.rotation.x = -w;
+      const kb = 0.7 * (1 - k) * Math.cos(t * 10); // knee bends as the leg swings through
+      P.model.shinL.rotation.x = Math.max(0, -kb); P.model.shinR.rotation.x = Math.max(0, kb);
       P.model.armL.rotation.x = -w * 0.9; P.model.armR.rotation.x = w * 0.9;
     }
     P.updateScarf(dt); // nothing else steps it during the scene

@@ -11,6 +11,23 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
   turns or terrain chunks change) and blended into the sharp near map over its outer 16% so there is no visible seam. Terrain,
   boulders and every toon material read them; coarse terrain LODs cast into them (the near map still leaves those out). Shadow
   quality sets their size. Dev menu: Display tests, "Far shadows" switch; the F3 overlay counts their redraws.
+- **Courier: knees.** The legs now bend, as the arms do at the elbows. Each leg is a thigh on the hip pivot plus a shin on a
+  new knee pivot 0.45 m below it (`shinL`/`shinR` in the model), covered by a suit-coloured ball so the joint stays round at any
+  bend; the knee guard, shin plate, boot and skate turn with the shin. At rest the leg is straight, so every pose that only swings
+  legs (cutscenes, NPCs) looks as before. A two-bone solve (`plantLeg` in `src/models.js`) puts a sole where a pose wants it, and
+  as there is no ankle the skates stay flat by sitting the hips back over them (`flatFwd`), as a squat does. **Skating:** knees
+  soft even at rest, bending deeper with speed (the crouch is now in the knees rather than the skates sinking), left skate a
+  little back, right ahead. **The Quantum-Lock lean:** leaning into a turn, the inside knee folds and the outside leg reaches, so
+  both skates stay on the ground under the lean (they used to lift and sink). **Grinding:** low over the rail, knees bent, hips
+  back, both skates on the rail under the lean against travel, the bob in the knees; soft elbows. **Running and walking:** the
+  knee is straight pushing off behind, most bent as the leg swings through, near straight to land ahead (the recall shuttle's walk
+  too). **Air:** front knee up, back foot trailing; tucked, knees to the chest; the dive keeps them soft. **Pirate skaters** crouch the same way (knees up in the air). **Seated** (seats, the car,
+  the classic bike, Kade at his wheel): shins down. The Blender light-bikes keep their solved straight-leg pose. The idles use
+  them (the unweighted knee folds in the weight shift, the forward knee relaxes in the lean back), the wardrobe's skate crouch
+  bends the knees, Echo decoys copy the knees and elbows, and skate bling, Derby horseshoes and the wheel and root mutations
+  hang on the shins so they follow the boots. The ragdoll straightens the knees. `tools/viewer.html?m=runner` takes `&thigh=`
+  and `&knee=`. Runner triangles about the same (the leg lathe is two now, plus the knee ball).
+
 - **Spider tank: a staged rear-up, leaning on what is beside it, no trailing legs at a run** (`docs/spidertank/`). Rearing up a
   tall face is no longer a leap with every leg in the air: it pitches up at 1 rad/s and rises at 3 m/s at most, creeping meanwhile;
   its tail stays down on its back legs and only its front rises while the face is still ahead, and once its nose is at the face it

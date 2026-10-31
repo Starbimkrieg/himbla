@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeRunner, ScarfSim } from './models.js';
+import { makeRunner, ScarfSim, plantLeg, flatFwd } from './models.js';
 import { toon, glow } from './toon.js';
 import { OUTFITS, SKATES, LASERS, dressRunner, dressSkates, updateHalo } from './cosmetics.js';
 import { makeJarMesh } from './alchemy.js';
@@ -461,7 +461,7 @@ export class Wardrobe {
     if (T.jar) T.jar.removeFromParent();
     T.jar = makeJarMesh(g.alchemy ? g.alchemy.jar : [], g.alchemy && g.alchemy.artifact);
     M.cargoSlot.add(T.jar);
-    for (const k of ['legL', 'legR', 'torso', 'armL', 'armR', 'foreL', 'foreR', 'head', 'cargoSlot']) {
+    for (const k of ['legL', 'legR', 'shinL', 'shinR', 'torso', 'armL', 'armR', 'foreL', 'foreR', 'head', 'cargoSlot']) {
       for (const c of P[k].children) {
         if (!(muts.has(c) || k === 'cargoSlot') || c === (g.alchemy && g.alchemy.jarMesh)) continue;
         const cl = c.clone();
@@ -526,9 +526,11 @@ export class Wardrobe {
     const skating = this.tab === 'skates' ? 1 : 0;
     T.pose += (skating - T.pose) * Math.min(1, dt * 5);
     const p = T.pose, br = Math.sin(T.t * 2.2);
-    M.body.position.y = M.bodyBase - 0.14 * p + br * 0.008;
+    M.body.position.y = M.bodyBase - 0.12 * p + br * 0.008;
     M.torso.rotation.x = 0.04 + 0.3 * p + br * 0.015;
-    M.legL.rotation.x = 0.28 * p; M.legR.rotation.x = -0.28 * p;
+    const kd = 0.12 * p, kf = flatFwd(kd); // the crouch bends the knees, hips back over flat skates
+    M.body.position.z = -kf;
+    plantLeg(M.legL, M.shinL, kd, kf - 0.12 * p); plantLeg(M.legR, M.shinR, kd, kf + 0.12 * p);
     M.armL.rotation.x = M.armR.rotation.x = -0.6 * p;
     M.armL.rotation.z = -0.14 - 0.2 * p - br * 0.02; M.armR.rotation.z = 0.14 + 0.2 * p + br * 0.02;
     M.head.rotation.y = Math.sin(T.t * 0.7) * 0.12;

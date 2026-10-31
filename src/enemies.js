@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { makeBody, stepSkater } from './physics.js';
 import { Ragdoll } from './ragdoll.js';
-import { makeRunner, makeRover, makeTurret, makeCrate, makePylon, ScarfSim } from './models.js';
+import { makeRunner, makeRover, makeTurret, makeCrate, makePylon, ScarfSim, plantLeg, flatFwd } from './models.js';
 import { randRange } from './rng.js';
 import { FACTIONS } from './locations.js';
 import { frameQuat, greatCircle, arcDist, darkness, tangent } from './geo.js';
@@ -1264,6 +1264,14 @@ export class Enemies {
     } else m.torso.rotation.y = 0;
     m.torso.rotation.x = b.grounded ? 0.5 : 0.1;
     m.body.position.y = m.bodyBase + (b.grounded ? -0.15 : 0);
+    if (b.grounded) { // skating crouch: knees bent, hips back over flat skates
+      const f = flatFwd(0.15);
+      m.body.position.z = -f;
+      plantLeg(m.legL, m.shinL, 0.15, f - 0.08); plantLeg(m.legR, m.shinR, 0.15, f + 0.08);
+    } else {
+      m.body.position.z = 0;
+      m.legL.rotation.x = -0.3; m.legR.rotation.x = 0.15; m.shinL.rotation.x = 0.5; m.shinR.rotation.x = 0.35; // knees up in the air
+    }
     m.armL.rotation.z = -0.5; m.armR.rotation.z = 0.5;
     if (!e.scarfSim) e.scarfSim = new ScarfSim(m);
     e.scarfSim.update(dt, b.vel, up, e.carrying ? { cargo: 1 } : undefined);

@@ -286,13 +286,14 @@ if (m === 'shuttle' || m === 'freighter') {
   sun.shadow.camera.updateProjectionMatrix();
 } else if (m === 'runner') {
   // &outfit=courier|spacecom2|meridian2|daedalus2|rustmoon|rustmoon2|kepler2|vostok2...  &speed=m/s (scarf and halo simulated at that forward speed)
-  // &cargo=1|2 (a crate, or the Twin Cradle's two, on the back)  &manual=1 (the page steps window.scarfSim)  &stop=s (speed drops to 0 after this many simulated s)  &lean=rad (torso pitch)  &arms=rad (arm swing)  &fore=rad (forearm bend; negative bends the hand forward)  &armz=rad (arms out from the sides)
+  // &cargo=1|2 (a crate, or the Twin Cradle's two, on the back)  &manual=1 (the page steps window.scarfSim)  &stop=s (speed drops to 0 after this many simulated s)  &lean=rad (torso pitch)  &arms=rad (arm swing)  &fore=rad (forearm bend; negative bends the hand forward)  &thigh=rad (leg swing; negative lifts the knee)  &knee=rad (knee bend; positive brings the foot back)  &armz=rad (arms out from the sides)
   const R = makeRunner({ own: true });
   dressRunner(R, Q.get('outfit') || 'courier');
   R.torso.rotation.x = num('lean', 0);
   R.armL.rotation.set(num('arms', 0), 0, -num('armz', 0.15));
   R.armR.rotation.set(num('arms', 0), 0, num('armz', 0.15));
   if (R.foreL) { R.foreL.rotation.x = R.foreR.rotation.x = num('fore', 0); }
+  if (R.shinL) { R.legL.rotation.x = R.legR.rotation.x = num('thigh', 0); R.shinL.rotation.x = R.shinR.rotation.x = num('knee', 0); }
   const cargo = num('cargo', 0); // (as Player.setCargo)
   if (cargo) {
     const c = makeCrate(0xffd23f, 0.7);

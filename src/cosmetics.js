@@ -187,25 +187,27 @@ export function dressSkates(M, skatesId) {
   if (s.coins) {
     // casino bling: a medallion on each boot's outside, studs along the rail
     const face = s.coins === 'gold' ? COIN_GOLD : CHIP_GREEN;
-    for (const [leg, side] of [[M.legL, -1], [M.legR, 1]]) {
+    // (on the shins, so they follow the boots: y in the knee's frame, 0.45 above the hip's)
+    for (const [leg, side] of [[M.shinL || M.legL, -1], [M.shinR || M.legR, 1]]) {
+      const ky = M.shinL ? 0.45 : 0;
       const med = new THREE.Mesh(EXTRA_GEO().coin, face);
       med.rotation.z = Math.PI / 2;
-      med.position.set(side * 0.13, -0.86, 0.02);
+      med.position.set(side * 0.13, -0.86 + ky, 0.02);
       leg.add(med);
       M.hoofMeshes.push(med);
       for (let k = 0; k < 3; k++) {
         const stud = new THREE.Mesh(EXTRA_GEO().stud, s.coins === 'gold' ? COIN_RIM : CHIP_RIM);
-        stud.position.set(side * 0.09, -0.98, -0.12 + k * 0.12);
+        stud.position.set(side * 0.09, -0.98 + ky, -0.12 + k * 0.12);
         leg.add(stud);
         M.hoofMeshes.push(stud);
       }
     }
   }
   if (s.hooves) {
-    for (const leg of [M.legL, M.legR]) {
+    for (const leg of [M.shinL || M.legL, M.shinR || M.legR]) {
       const shoe = new THREE.Mesh(EXTRA_GEO().shoe, HOOF_M);
       shoe.rotation.set(Math.PI / 2, 0, Math.PI * 0.8);
-      shoe.position.set(0, -1.0, 0.1);
+      shoe.position.set(0, -1.0 + (M.shinL ? 0.45 : 0), 0.1);
       leg.add(shoe);
       M.hoofMeshes.push(shoe);
     }

@@ -12,7 +12,7 @@ const GAP_MIN = 10, GAP_MAX = 30; // s of breath between occasional idles
 const STOP_BELOW = 0.6, MOVE_ABOVE = 1.2; // m/s hysteresis: stopped / moving again
 const DEFAULT = 0;      // the breath
 
-const ROT = ['torso', 'head', 'armL', 'armR', 'foreL', 'foreR', 'legL', 'legR']; // pivots the clips turn
+const ROT = ['torso', 'head', 'armL', 'armR', 'foreL', 'foreR', 'legL', 'legR', 'shinL', 'shinR']; // pivots the clips turn
 const POS = ['body', 'torso'];                                   // ...and shift
 
 const CLIPS = data.anims.map(a => ({

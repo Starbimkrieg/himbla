@@ -1,7 +1,7 @@
 # Idle animations for the Moon-runner, authored in Blender (4.2+ / 5.x) and exported for the game.
 #
 # Builds the runner with build_runner.py (runner.glb untouched), keys the idles as actions on its pivots (runner = whole
-# body, torso, head, armL, armR, foreL, foreR (elbows), legL, legR) and writes src/assets/idles.json, which src/idles.js
+# body, torso, head, armL, armR, foreL, foreR (elbows), legL, legR, shinL, shinR (knees)) and writes src/assets/idles.json, which src/idles.js
 # plays while the courier stands still. Headless or from Blender's Scripting tab:
 #   python3 tools/blender/build_idles.py            (MOONRUNNER_REPO=<checkout> if not run from one)
 #   MOONRUNNER_IDLES_BLEND=idles.blend python3 ...  also saves the keyed scene for Blender
@@ -78,6 +78,8 @@ def weight_shift(u):
         "foreL": {"rot": (-0.2 - 0.18 * max(0.0, -s), 0, 0)}, "foreR": {"rot": (-0.2 - 0.18 * max(0.0, s), 0, 0)},
         "legL": {"rot": (-0.22 * left, 0, 0.02 * s)},
         "legR": {"rot": (-0.22 * right, 0, 0.02 * s)},
+        "shinL": {"rot": (0.42 * left, 0, 0)},     # the unweighted knee folds, the toe stays down
+        "shinR": {"rot": (0.42 * right, 0, 0)},
     }
 
 def stretch(u):
@@ -124,6 +126,7 @@ def lean_back(u):
         "foreL": {"rot": (-0.14 - 1.2 * k, 0, 0)},                      # hand at the belt
         "legL": {"rot": (0.12 * k, 0, -0.04 * k)},
         "legR": {"rot": (-0.14 * k, 0, 0.0)},
+        "shinR": {"rot": (0.3 * k, 0, 0)},                              # the forward knee relaxed
     }
 
 def shake_out(u):
@@ -154,7 +157,7 @@ ANIMS = [
 
 FPS = 30
 STEP = 3                                       # keys every STEP frames, as the game's file stores them
-NAMES = ["runner", "torso", "head", "armL", "armR", "foreL", "foreR", "legL", "legR"]
+NAMES = ["runner", "torso", "head", "armL", "armR", "foreL", "foreR", "legL", "legR", "shinL", "shinR"]
 GAME_NAME = {"runner": "body"}                 # whole-figure pivot is `body` in models.js
 OBJ = {n: bpy.data.objects[n] for n in NAMES}
 REST = {n: OBJ[n].location.copy() for n in NAMES}
