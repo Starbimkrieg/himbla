@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Chimera Lab</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #05030c; color: #fff4e0; font: 12px monospace; overflow: hidden; }
+    #ui { position: fixed; left: 8px; top: 8px; width: 230px; max-height: calc(100% - 16px); overflow: auto; background: #120a1ecc; padding: 8px 10px; border: 2px solid #ff2e88; }
+    #ui h1 { font-size: 13px; margin: 0 0 6px; color: #ffd23f; }
+    #ui label { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin: 3px 0; }
+    #ui select, #ui input[type=number] { width: 110px; background: #05030c; color: #fff4e0; border: 1px solid #5a3f8f; font: inherit; }
+    #ui .mods label { justify-content: flex-start; }
+    #ui button { width: 100%; margin: 3px 0; background: #2a1648; color: #fff4e0; border: 1px solid #ff2e88; font: inherit; padding: 4px; cursor: pointer; }
+    #ui button:hover { background: #3a2060; }
+    #ui small { color: #c9c3d9; display: block; margin-top: 6px; line-height: 1.4; }
+    #info { position: fixed; right: 8px; bottom: 8px; max-width: 46%; background: #120a1ecc; padding: 6px 8px; border: 2px solid #2ee6ff; white-space: pre-wrap; }
+    .tag { position: fixed; transform: translate(-50%, 0); background: #120a1ecc; padding: 1px 4px; border: 1px solid #5a3f8f; pointer-events: none; font-size: 10px; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <!-- Dev-only: the chimera builder's lab (npm run dev, then /tools/chimera-lab.html). Not part of the build.
+       Query: ?body=car&legs=mite&head=person&extra=sapling&mods=armor,crystal&seed=7&size=1.1&crown=1   one chimera
+              &outfit=lab &headgear=bowl     a settler's outfit (coveralls, engineer, lab, trader, elder, casual) and headgear (sealed, bowl)
+              ?grid=1 | ?modgrid=1 | ?kinds=1 | ?showcase=1                                       twelve random, each mutation, every kind, the showcase
+              &style=0,2,1 (a mite's, car's or sapling's looks: legs, body, head) &far=1 (the far LOD) &yaw=deg &pitch=deg &dist=m &ty=m (a close-up) &spin=1 &speed=m/s (walk) &ui=0 (hide the panel, for screenshots) -->
+  <div id="ui"></div>
+  <div id="info"></div>
+  <script type="module" src="./chimera-lab.js"></script>
+</body>
+</html>
