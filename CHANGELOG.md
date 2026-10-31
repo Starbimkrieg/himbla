@@ -5,6 +5,15 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Spider tank: smoother climbing legs, no snag at faces, front legs back in step** (`docs/spidertank/`). A climbing or out-of-lane
+  step now takes as long as its foot needs at 6 m/s (up to 1.1 s) instead of flinging it up a face in a quarter second, and once a
+  fifth of the way it no longer jumps to another hold: the stepping feet's worst jolts fell to a quarter, about walking's. Climbing it
+  goes no faster than 5 m/s, and rearing up at something ahead slower still (to a 1.5 m/s creep), looking 0.6 s of its speed ahead, so
+  it brakes into a face rather than hitting it and stopping dead; corner-first approaches at a run now climb (sweep: 5 cases wrong of
+  742, from 22; 115 of 117 climbs at 4 and 12 m/s). Walking, feet land where the rhythm asks again (the climbing preferences had the
+  front legs landing short and stepping half again as often). A leg with nothing to hold hangs clear of what it is against; no foot
+  stands where its knee would be in a wall. The lab's drive no longer builds up speed while held against something (it reached 70 m/s
+  pressed to a wall, then shot off), and the lane's 12 m wall moved off the self-drive's circle, which ran into its corner.
 - **Zbornak's spider tank: the climb rebuilt, body first, then feet, then steps** (`docs/spidertank/`; not in the game yet). The hull's
   pose now comes from the ground under its outline and ahead of it (over a gap it stays level with the tops either side; at a wall it
   rears toward the top), and goes as far toward it each frame as its legs allow, eased. Feet take the hold nearest the height that pose

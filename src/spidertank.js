@@ -13,8 +13,9 @@ import { makeGait } from './gait.js';
 // legs step by need rather than to the rhythm (gait.js free): out of reach, near full stretch, off the height, out of lane, and only
 // while every corner of the body keeps a foot down; a leg with nothing to hold hangs. So pushed at something it rears up, nose up as
 // steeply as it takes (to 88 degrees), and hoists itself over: up to CLIMB (13 m) over its anchor, the second lowest foot on a top;
-// taller, it gets as high up the face as it can and stops. Standing, it keeps its holds (no shuffling between two as good). With too
-// few feet holding it, it drops. Past SKIM_AT it closes up
+// taller, it gets as high up the face as it can and stops. Climbing it goes no faster than CLIMB_SPEED, and rearing up at something
+// ahead slower still (it closes on a face as fast as it rises to it). Standing, it keeps its holds (no shuffling between two as good).
+// With too few feet holding it, it drops. Past SKIM_AT it closes up
 // into a skimming bead (overdrive), unless it is climbing or gripping something, and opens out under SKIM_OFF: each leg zigzags
 // against the hull, slides in through its port and a hatch shuts over it, the cannon draws into the nose, the jets come out; every piece
 // follows its own share of the fold (the model's `fold`, `foldPos`, `foldScale` and their spans). Its rams (barrel and rod pivots) aim
@@ -29,7 +30,7 @@ import { makeGait } from './gait.js';
 // said) is what the driver asks for: pushed on but held up, it climbs. tank.hits(x, y, z, yaw) is how far into things the hull would be
 // with the root there (the caller's collision: never move or turn it deeper). tank.form ('walk', 'folding', 'skim'), tank.beam
 // ({ state: 'idle' | 'charge' | 'fire', t }), tank.speedCap (a fraction of the asked-for speed, while the beam is up), tank.speedMax (m/s
-// it keeps under while fire is held, walking), tank.climbing and tank.pose (the hull's: H over the root, W in the world, P, R) read back.
+// it keeps under while fire is held walking, or climbing), tank.climbing and tank.pose (the hull's: H over the root, W in the world, P, R) read back.
 
 const URL_GLB = new URL('./assets/spidertank.glb', import.meta.url).href;
 let KIT = null;
@@ -59,7 +60,7 @@ const FALL = 6;                 // m/s/s it drops at, with too few feet holding 
 const HIPS_OVER = 1.6;          // m the hips may stand over the climb's limit at most (reaching a top at it, never over a wall taller)
 const SUPPORT = 0.6;            // of the ground under a half of the hull's outline, the share the hull stands its height over (the rest higher)
 const CLEAR_HULL = 1.65;        // m its hips keep over the highest thing under the hull (its bottom 1.24 under them, and a margin)
-const LOOK_MIN = 2.5, LOOK_MAX = 6, TAIL_LOOK = 3.5;   // m ahead its leading half looks, going (more, faster), for what to rise to before it gets there
+const LOOK_MIN = 2.5, LOOK_MAX = 8, LOOK_S = 0.6, TAIL_LOOK = 3.5;   // m ahead its leading half looks, going (LOOK_S s of its speed), for what to rise to (and slow for) before it gets there
 const PITCH_ARM = 4, ROLL_ARM = 3.2;  // m between where the front and back halves' heights (and the sides') pitch and roll it
 const ROLL_WANT = 0.45;         // rad it rolls to the ground at most (rolled further, the feet on its low side end up under its belly)
 const TARGET_EASE = 0.15;       // s the pose it wants eases over (so a step or a crate coming under it doesn't jolt it)
@@ -68,7 +69,9 @@ const TRIES = [[1, 1, 1], [0.6, 0.6, 0.6], [0.3, 0.3, 0.3], [1, 1, 0], [1, 0, 1]
 const LEVER = 0.7;              // m in from an edge on its hip's side a foot must stand on a top: no hooking a lip (the far side may end)
 const REVERSE = 18;             // m/s the most it backs up at
 const STRETCH = 1;              // of a leg's reach, past which a trailing foot is due to step (the stride plans to 0.97; at 1.06 it goes at once)
-const HANG = 0.75;              // of the way from its hip to its rest spot, where the foot of a leg with nothing to hold hangs
+// where the foot of a leg with nothing to hold hangs: of the way from its hip to its rest spot, and m higher (in the hull's frame), the
+// first that is clear
+const HANGS = [[0.75, 0], [0.75, 1.5], [0.5, 2.5], [0.9, -1], [0.15, 2.5]];
 const LOOSE = 1.02;             // of a leg's reach, past which a planted foot holds nothing (it steps, and the hull isn't held to it)
 const NEAR = 0.3;               // of a leg's reach, the closest to its hip a foot stands (its ankle folded, gait.js FEMUR_UP)
 // the spots a foot looks at round where it would land (m toward its hip, m across), out to the leg's full reach: it takes the highest,
@@ -84,7 +87,11 @@ const FACE_RAYS = [[1, -0.3, 0], [1, -1, 0], [1, -0.3, 0.6], [1, -0.3, -0.6], [-
   [0, -0.3, 1], [0, -1, 1]];
 const HOLD = 0.3;
 const STEEP = 0.9, LIFT_OUT = 0.6;   // rad of pitch by which a stepping foot lifts off the hull rather than straight up; and out to its side, of that
-const KNEE_UP = 1.2;            // m its knee rises over its hip (or the foot, the higher) reaching onto a top over an edge
+const KNEE_UP = 1.2;            // m its knee rises over its hip (or the foot, the higher) reaching onto a top over an edge (and over its leg's middle, standing)
+const CLIMB_SPEED = 5;          // m/s the most it goes climbing, or rearing up at something (tank.speedMax)
+const STEEP_WANT = 0.5;         // rad of pitch (wanted, or had) that counts as climbing for that (a crate's is less)
+const REAR_LAG_P = 0.5, REAR_LAG_H = 1.5, CREEP = 0.3;    // rad and m behind the pose it wants at which it creeps (of CLIMB_SPEED)
+const LIFT_HELD = 5;            // feet still holding with which a leg may lift even though its corner of the body keeps none
 const FREE_SPIN = 0.3;          // rad/s turning, past which its legs step to the walking rhythm even while climbing (it turns on its feet)
 const FREE_SPEED = 1.5;         // m/s under which, climbing, its legs step by need (gait.js free) rather than to the walking rhythm
 const HEIGHT_COST = 1;          // a hold counts this much less a metre off the height the pose the hull wants puts its foot at
@@ -219,7 +226,7 @@ export function makeSpiderTank(kit) {
   // and goes on over it. Nothing counts higher than it can climb (CLIMB over its anchor): at a wall taller it rears up as far as that.
   function target(rootUp) {
     const going = Math.abs(push) > 0.5 || vel.lengthSq() > 0.25, ahead = pushed(_probe);
-    const look = going ? THREE.MathUtils.clamp(vel.length() * 0.4, LOOK_MIN, LOOK_MAX) : 0, lead = push < -0.5 ? -1 : 1, cap = ref + CLIMB;
+    const look = going ? THREE.MathUtils.clamp(vel.length() * LOOK_S, LOOK_MIN, LOOK_MAX) : 0, lead = push < -0.5 ? -1 : 1, cap = ref + CLIMB;
     for (const k in _h) _h[k].length = 0;
     for (const [x, z] of HULL) {
       // (the leading half looks ahead; the other as far on as it is long, so the hull's tail rises to clear an edge its front is over)
@@ -243,8 +250,21 @@ export function makeSpiderTank(kit) {
     _inv.copy(root.matrixWorld).invert();
     const chs = tank.gait.chains;
     footL ||= chs.map(() => new THREE.Vector3());
-    // (a leg with nothing to hold hangs in its rest shape off the hull, drawn in a little, until it finds a hold)
-    for (const c of chs) if (c.hang && !c.stepping) c.F.lerpVectors(c.hip, c.rest, HANG).applyQuaternion(_q.copy(inner.quaternion)).add(inner.position).applyMatrix4(root.matrixWorld);
+    // (a leg with nothing to hold hangs off the hull in its rest shape, drawn in a little, until it finds a hold: the first of HANGS with
+    // its foot in nothing and a clear line to it from its hip, so wedged against something it hangs clear of it)
+    for (const c of chs) {
+      if (!c.hang || c.stepping) continue;
+      c.joints[0].getWorldPosition(hipW);
+      for (let k = 0; k < HANGS.length; k++) {
+        const [f, dy] = HANGS[k];
+        _a.lerpVectors(c.hip, c.rest, f);
+        _a.y += dy;
+        _a.applyQuaternion(_q.copy(inner.quaternion)).add(inner.position).applyMatrix4(root.matrixWorld);
+        const far = _b.subVectors(_a, hipW).length();
+        if (k === 0) c.F.copy(_a);
+        if (!solid(_a) && !(ray && far > 0.1 && ray(hipW, _b.divideScalar(far), far, _c))) { c.F.copy(_a); break; }
+      }
+    }
     // the feet that hold it, in the root's frame; the plane through them tilts it; those standing on tops (not gripping faces) seat it
     let n = 0, sy = 0, nTop = 0, sx = 0, sz = 0, sxx = 0, szz = 0, sxy = 0, szy = 0, my = 0, mx = 0, mz = 0;
     gripping = false;
@@ -372,7 +392,7 @@ export function makeSpiderTank(kit) {
   // on its hip's side). Nothing it may take: the spot it can nearest reach, and the hull comes down to it.
   const hipW = new THREE.Vector3(), hipT = new THREE.Vector3(), _best = new THREE.Vector3(), _far = new THREE.Vector3(), _ahead = new THREE.Vector3();
   const _hullInv = new THREE.Matrix4(), _cand = new THREE.Vector3();
-  let fc = null, fUp = null, fCeil = 0, fWant = 0, fBest = -Infinity, fFar = Infinity, fGround = null, fSide = 1;
+  let fc = null, fUp = null, fCeil = 0, fWant = 0, fBest = -Infinity, fFar = Infinity, fGround = null, fSide = 1, fRough = false;
   // in the hull's own frame, is p inside its shell (k: of its size)
   const shell = (v, k) => (v.x / (2.1 * k)) ** 2 + ((v.y - 3.24) / (1.3 * k)) ** 2 + ((v.z + 0.09) / (3.3 * k)) ** 2 < 1;
   const inHull = (p) => shell(_l2.copy(p).applyMatrix4(_hullInv), 1);
@@ -385,7 +405,8 @@ export function makeSpiderTank(kit) {
     // (and less, past MARGIN of its leg's reach from where its hip will be, or folded in near the closest it goes: it keeps some stretch in
     // hand, and some fold, to hoist with)
     const dT = q.distanceTo(hipT) / fc.reach;
-    const score = -HEIGHT_COST * Math.abs(y - fWant) - cost - (face ? FACE_COST : 0) + bonus - MARGIN_COST * (Math.max(0, dT - MARGIN) + Math.max(0, FOLD_MARGIN * NEAR - dT));
+    const score = -HEIGHT_COST * Math.abs(y - fWant) - cost - (face ? FACE_COST : 0) + bonus
+      - (fRough ? MARGIN_COST * (Math.max(0, dT - MARGIN) + Math.max(0, FOLD_MARGIN * NEAR - dT)) : 0);
     if (score <= fBest) return;
     if (far > 0.96 * fc.reach) {                                                  // (out of reach: the nearest such, if nothing is in it)
       if (far < fFar && !face && !(ray && ray(hipW, _l1.subVectors(q, hipW).divideScalar(far), far - 0.05, _d) && !overEdge(q))) { fFar = far; _far.copy(q); }
@@ -397,6 +418,8 @@ export function makeSpiderTank(kit) {
     if (_f.copy(q).applyMatrix4(_hullInv).x * fSide < SIDE) return;               // (its own side of the body)
     for (let t = 0.65; t <= 1.001; t += 0.07) if (inHull(_l1.lerpVectors(hipW, q, t))) return;   // (its foot and shin clear of the hull)
     if (!face) {
+      // (its knee, up over the middle of its leg, in nothing: a foot right at the foot of a wall would put it into the wall)
+      if (fGround(_l1.lerpVectors(hipW, q, 0.5).addScaledVector(fUp, KNEE_UP), _l2) && _l2.dot(fUp) > _l1.dot(fUp)) return;
       // (leverage: LEVER in from any edge between it and its hip, so it pulls on the top, never hooks a lip; past it, away from its hip,
       // the top may end where it likes: it straddles a narrow block; something higher on its hip's side is a corner: fine)
       const toward = _l1.subVectors(hipW, q).addScaledVector(fUp, -_l1.dot(fUp));
@@ -433,6 +456,8 @@ export function makeSpiderTank(kit) {
     _pos2.set(0, body.tH, 0).sub(_w2.copy(PIVOT).applyQuaternion(_q2));
     hipT.copy(c.hip).applyQuaternion(_q2).add(_pos2).applyMatrix4(root.matrixWorld);
     fc = c; fUp = up; fGround = groundFn; fBest = -Infinity; fFar = Infinity; fSide = Math.sign(c.hip.x) || 1;
+    // (climbing: it looks wider, and keeps stretch and fold in hand; walking, it lands where the rhythm asks)
+    fRough = free();
     fCeil = Math.min(hipW.dot(up) + ABOVE, ref + CLIMB);
     fWant = hipT.dot(up) - (c.hipY - c.rest.y);
     const toHip = _b.subVectors(hipW, p).addScaledVector(up, -_b.subVectors(hipW, p).dot(up)).normalize();
@@ -441,6 +466,7 @@ export function makeSpiderTank(kit) {
     // (standing, the hold it has (or stepped off) counts HOLD more: it moves for a clearly better one, not one as good)
     if (Math.abs(push) < 0.5 && vel.lengthSq() < 0.25) consider(_cand.copy(c.stepping ? c.S0 : c.F), onFace(c, c.stepping ? c.S0 : c.F), 0, HOLD);
     for (let k = 0; k < AROUND.length + 3 * AHEAD.length; k++) {
+      if (!fRough && k >= AROUND.length && (k - AROUND.length) % 3 !== 1) continue;
       // (round where it was asked; and ahead of it, in line and a little to either side: onto a narrow block its lane runs beside)
       const j = k - AROUND.length, [a, s] = AROUND[k] || [0, ((j % 3) - 1) * AHEAD_SIDE], f = j < 0 ? 0 : AHEAD[Math.floor(j / 3)];
       _c.copy(p).addScaledVector(toHip, a).addScaledVector(across, s).addScaledVector(_ahead, f);
@@ -461,7 +487,7 @@ export function makeSpiderTank(kit) {
       }
     }
     // (in line with its hip, ahead of it: the top of a block narrower than its lanes are wide, that the spots out in its lane miss)
-    for (const f of HIP_AHEAD) {
+    for (const f of fRough ? HIP_AHEAD : []) {
       _c.copy(hipW).addScaledVector(up, -hipW.dot(up) + p.dot(up)).addScaledVector(_ahead, f);
       if (groundFn(_c, _e, fCeil)) consider(_e, false, REACH_COST * _c.distanceTo(p) * 0.5);
       else if (grip(c, _c, fCeil, _g)) consider(_g, true, REACH_COST * _c.distanceTo(p) * 0.5);
@@ -530,7 +556,8 @@ export function makeSpiderTank(kit) {
   // once out of reach, more the nearer its full stretch, the further its hold is from the height the pose wants it at, with something
   // come between its hip and its foot, carried out of its lane or in toward the body's middle; pushed on and held up, a front leg also
   // for a better hold. One may lift only while every corner
-  // of the body (front and back, each side) keeps a foot down (a foot out of reach, holding nothing, may always go)
+  // of the body (front and back, each side) keeps a foot down, or LIFT_HELD others hold (a foot out of reach, holding nothing, may
+  // always go)
   const free = () => vel.length() < FREE_SPEED && Math.abs(spin) < FREE_SPIN && (tank.climbing || stuck || Math.abs(body.tH - body.H) > 0.5 || Math.abs(body.tP - body.P) > 0.25);
   function need(c) {
     if (c.hang) return 3;
@@ -557,12 +584,14 @@ export function makeSpiderTank(kit) {
   function canLift(c) {
     const chs = tank.gait.chains, held = [false, false, false, false];
     if (loose && loose[chs.indexOf(c)]) return true;                  // (holding nothing, it may always go)
+    let n = 0;
     for (let i = 0; i < chs.length; i++) {
       const o = chs[i];
       if (o === c || o.stepping || (loose && loose[i])) continue;
       held[(o.hip.x > 0 ? 2 : 0) + (o.hip.z > 0 ? 1 : 0)] = true;
+      n++;
     }
-    return held.every(Boolean);
+    return held.every(Boolean) || n >= LIFT_HELD;                    // (or plenty else holding: a corner whose other leg hangs isn't stuck)
   }
   // a stepping foot lifts up off the ground; the hull steep, up off the hull and out to its own side, so its leg swings clear of the hull
   // rather than along it
@@ -703,6 +732,12 @@ export function makeSpiderTank(kit) {
       // (fire counts in spider form only: in the bead it does nothing; held walking, it stays a spider, under SKIM_AT)
       const hold = trigger && this.fold === 0;
       this.speedMax = hold || firing ? SKIM_AT - 0.5 : Infinity;
+      // (climbing, or about to rear up at something ahead: no faster than its legs climb, so it slows to a face rather than hitting it)
+      // (and the further its pose is from the one it wants, rearing up to it, the slower: it closes on a face as fast as it rises to it)
+      if (this.fold === 0 && (Math.abs(body.tP) > STEEP_WANT || Math.abs(body.P) > STEEP_WANT || body.tH - body.H > 1)) {
+        const behind = Math.max(Math.abs(body.tP - body.P) / REAR_LAG_P, (body.tH - body.H) / REAR_LAG_H);
+        this.speedMax = Math.min(this.speedMax, CLIMB_SPEED * THREE.MathUtils.clamp(1 - behind, CREEP, 1));
+      }
       // overdrive: close up past SKIM_AT, open out under SKIM_OFF (never while the beam is up or fire is held, nor start while it climbs
       // or grips)
       const skimWant = (this.fold > 0.5 ? speed > SKIM_OFF : speed >= SKIM_AT && !(this.fold === 0 && this.climbing)) && !firing && !hold;

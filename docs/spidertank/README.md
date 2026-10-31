@@ -17,7 +17,7 @@ among, and made the bead float higher on glowing jet trails. Not in the game yet
   A/D turn, hold SPACE for the beam. **Look round** with the mouse: drag to turn the camera round the tank, right-drag (or shift-drag) to slide
   what it looks at, wheel to zoom, H to stop it turning with the tank, R or double-click to put it back. **P** pauses, **.** steps a
   frame, **[ ]** slow the clock down to a tenth and back. `&demo=walk|climb|wall|run|skim|fold|beam` loops one part (`wall` walks
-  down the test lane: a 2.3 m crate, a 3.2 m step, a 4.6 m block, a 9.5 m block and a 12 m wall it climbs onto and down off, then a 16 m
+  down the test lane: a 2.3 m crate, a 3.2 m step, a 4.6 m block, a 9.5 m block and a 12 m wall it climbs onto and down off (all in about 70 s at 3 m/s), then a 16 m
   wall it gets as high up as it can and stops at); `&speed=` sets it; the blocks round the circle are platforms to climb (3 to 13 m) and walls;
   `&cam=chase|side|front|rear|top|orbit` is where the camera starts. **F9** saves the flight (every tick's time and input since
   the page loaded, and the last 15 s of the tank's state); drop the file on the lab page to replay it frame for frame (pause, slow and
@@ -99,17 +99,24 @@ tuned in Blender.
     hull steep, a stepping foot lifts off the hull and out to its side rather than straight up along it.
   - **Climbing, the legs step by need** (`gait.js` `free`, under 1.5 m/s and not turning): the neediest first (out of reach, near full
     stretch, far off the height its hold should be, carried out of its lane or in toward the body's middle), at most two at once and
-    never two neighbours, and only while every corner of the body keeps a foot down. A leg with nothing it can reach to hold **hangs**
-    in its rest shape off the hull and keeps looking. Turning or moving faster, the walking rhythm takes over.
+    never two neighbours, and only while every corner of the body keeps a foot down (or five other feet hold). A step takes as long as its foot needs at 6 m/s
+    (a long reach up a face takes up to 1.1 s, rather than flinging the foot there), and once a fifth of the way it no longer jumps to
+    another hold. A leg with nothing it can reach to hold **hangs** off the hull, clear of what it is against, and keeps looking.
+    Turning or moving faster, the walking rhythm takes over; walking, feet land where the rhythm asks (the climbing preferences for
+    stretch in hand and wider looks are for climbing only, so the front legs keep the rhythm).
+  - **It slows into a climb:** climbing, it goes no faster than 5 m/s, and rearing up at something ahead slower still, down to a
+    1.5 m/s creep while its pose is well behind the one it wants (it looks ahead 0.6 s of its speed, so from a run it brakes before
+    its nose gets there). So it meets a face gently rather than hitting it and stopping dead.
   - Nothing over 13 m above its **anchor**, the second lowest foot standing on a top; a wall taller, it gets as high up the face as it
     can and stops there. Walking off something tall, it climbs down nose first; with too few feet holding it, it drops. Standing beside a
     wall it stands still (no shuffling between two holds as good).
   - **Measured** (the lab's sweep, 742 cases, every box from 8 sides at 4 and 12 m/s, gaps, turning on tops, standing): blocks it
-    should climb, 119 of 125 approaches at 4 m/s and 117 of 125 at 12 m/s (head on, 63 and 64 of 65), each in about 2 to 3 s at the
-    face; every gap of 3 to 7 m crossed both ways; too-tall walls stopped at in all 48; standing beside tall blocks, still in all 69.
-    The hull is in nothing in any of them and no planted foot over nothing; a leg passes into the hull in 3.5% of frames (most of them
-    a thigh grazing its side, steep against a wall), and a foot is across the body's middle in 0.5%. What it still does wrong: driven
-    corner-first into a big block at 12 m/s it can glance off and slide round it, and on a few narrow block ends it stops at the face.
+    should climb, 115 of 117 approaches at both 4 and 12 m/s (corner-first too); every gap of 3 to 7 m crossed both ways; too-tall
+    walls stopped at in all 48; standing beside tall blocks, still in all 69; 5 cases wrong in all. The hull is in nothing in any of
+    them and no planted foot over nothing; a leg passes into the hull in 2.6% of frames (most of them a thigh grazing its side, steep
+    against a wall), and a foot is across the body's middle in 0.35%. Climbing, its stepping feet move about as smoothly as walking (at
+    worst a quarter of what they did). What it still does wrong: block 27 and the lane's 9.5 m block from one corner each stop at the
+    face, and turning on the spot pressed against a tall block, a leg can still pass into it.
 - **Its height is its own:** kept in the world, so the caller can put the root on the ground under it or anything else; the caller's
   collision asks the tank (`tank.hits(x, y, z, yaw)`: how far into things the hull would be with the root there) and never moves or
   turns it deeper in, so it turns on the spot even face-down against a wall. In the lab it spins quick on its feet (2.6 rad/s at a

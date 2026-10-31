@@ -77,7 +77,9 @@ const DUTY_RIPPLE = 0.75, DUTY_SETS = 0.5, DUTY_FAST = 0.45;   // wave: a foot's
 const WALK_SPANS = 1, RUN_SPANS = 2.4;   // wave: spans a second under which it ripples, and past which it runs in sets (blending between)
 const WAVE_STANCE = 0.75; // wave: s a foot stays down, walking, as long as its lane allows
 const SETTLE_SPEED = 0.3; // wave: of a span a second, the pace it steps at to settle its feet, standing      // pole: the ankle's bend at the shortest reach (of its rest angle; straighter out to 1.15 of it)
-const FREE_MAX = 2, FREE_DUR = 0.42;   // wave, free: legs stepping at once at most, and s a step takes
+const FREE_MAX = 2, FREE_DUR = 0.42;   // wave, free: legs stepping at once at most, and s a step takes at least
+const FOOT_SPEED = 6, FOOT_DUR = 1.1;  // wave, free and out of lane: m/s a stepping foot goes at most (a longer step takes longer), to FOOT_DUR s
+const RETARGET_AT = 0.2, RETARGET_JUMP = 0.5;   // wave: of a step, after which its landing moves no more than this (m) a frame
 const FIX_AT = 0.45;      // wave, free: of a step, after which its landing stays put (it no longer follows the best hold it sees)
 const SAME_HOLD = 0.12;   // wave, settling: of its span, the nearest to where a foot stands that a step may land (nearer: it stays put)
 
@@ -144,7 +146,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
   const vFull = (thr * growMax * (1 + LEAD)) / (STANCE * kd);        // long: m/s at which the stride is full
   const hipY = chains.reduce((s, c) => s + c.hipY, 0) / chains.length;
   const G = { w: 0, run: false, planted: false, seen: false, prev: new THREE.Vector3(), vel: new THREE.Vector3(), lift: 0, pitch: 0, roll: 0, h: 0,
-    phase: 0, yaw: null, drive: 0, stride: 0, run01: 0 };
+    phase: 0, yaw: null, drive: 0, stride: 0, run01: 0, turn: 0 };
   // wave: each side's legs front to back, their places in the rhythm (rippling up from the back; in sets), and their lanes
   let strideMax = 0;
   if (wave) {
@@ -202,6 +204,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     const yaw = Math.atan2(_vw.x, _vw.z);
     const turn = G.yaw === null || dt <= 0 ? 0 : (THREE.MathUtils.euclideanModulo(yaw - G.yaw + Math.PI, Math.PI * 2) - Math.PI) / dt;
     G.yaw = yaw;
+    G.turn = turn;
     let drive = 0, far = 0;
     for (const c of chains) {
       restSpot(c, _a).sub(_p);
@@ -231,7 +234,10 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
         if (z < c.zLo - 0.05 || z > c.zHi + 0.05) {
           const to = footAt(c, landWave(c, _r2), _r3);
           if (settling && to && to.distanceTo(c.F) < 0.5 * SAME_HOLD * c.span && !(strain && strain(c) >= 2)) continue;   // (standing: back where it is, no step)
-          Object.assign(c, { stepping: true, own: true, s: 0, dur: Math.max(0.25, Math.min(swing / f, 0.6)), lift: LIFT * c.span * (1 - 0.45 * run) });
+          // (as long as its foot takes to get there at FOOT_SPEED, a long one: no flinging it across)
+          // (slow, or a step longer than its stride, up onto something say; not turning, when it must keep up with the turn)
+          const far = to && Math.abs(turn) < 0.3 && (drive < WALK_SPANS * span || to.distanceTo(c.F) > 1.2 * G.stride) ? to.distanceTo(c.F) : 0;
+          Object.assign(c, { stepping: true, own: true, s: 0, dur: Math.max(0.25, Math.min(swing / f, 0.6), Math.min(FOOT_DUR, far / FOOT_SPEED)), lift: LIFT * c.span * (1 - 0.45 * run) });
           c.S0.copy(c.F);
           (c.S0L ||= new THREE.Vector3()).copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert());
           c.T.copy(to || c.F);
@@ -259,7 +265,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     }
   }
   // wave, free: where a step lands: its lane's middle (which goes with its hip), where the body will have carried it
-  const landFree = (c, out) => restSpot(c, out).addScaledVector(c.rv, FREE_DUR * (1 - c.s));
+  const landFree = (c, out) => restSpot(c, out).addScaledVector(c.rv, c.dur * (1 - c.s));
   // wave, free: the steps by need. Each leg's neighbours along its side, and its opposite, never step with it
   const nextTo = (a, b) => (Math.sign(a.rest.x) === Math.sign(b.rest.x) ? Math.abs(a.row - b.row) === 1 : a.row === b.row);
   function freeStep(dt) {
@@ -273,7 +279,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       // (nothing to hold, or nothing in its reach: it hangs, and keeps looking)
       if (!to || (need(c) >= 3 && to.distanceTo(c.joints[0].getWorldPosition(_r1)) > c.reach)) { if (need(c) >= 3) c.hang = true; continue; }
       if (to.distanceTo(c.F) < SAME_HOLD * c.span) continue;
-      Object.assign(c, { stepping: true, own: true, free: true, hang: false, s: 0, dur: FREE_DUR, lift: LIFT * c.span });
+      Object.assign(c, { stepping: true, own: true, free: true, hang: false, s: 0, dur: THREE.MathUtils.clamp(to.distanceTo(c.F) / FOOT_SPEED, FREE_DUR, FOOT_DUR), lift: LIFT * c.span });
       c.S0.copy(c.F);
       (c.S0L ||= new THREE.Vector3()).copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert());
       c.T.copy(to);
@@ -382,7 +388,8 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       if (!c.stepping) { c.at.copy(c.F); c.base.copy(c.F); continue; }
       if (!wave) c.s = Math.min(1, c.s + dt / c.dur);
       // (the landing follows the body; past SETTLED it keeps its height, unless the ground under it only rises or falls a little)
-      if ((!c.free || c.s < FIX_AT) && footAt(c, wave ? (c.free ? landFree(c, _r2) : landWave(c, _r2)) : landing(c, speed, _r2), _r3)) {
+      if ((!c.free || c.s < FIX_AT) && footAt(c, wave ? (c.free ? landFree(c, _r2) : landWave(c, _r2)) : landing(c, speed, _r2), _r3)
+        && !(wave && c.s > RETARGET_AT && Math.abs(G.turn) < 0.3 && _r3.distanceTo(c.T) > RETARGET_JUMP)) {   // (wave: on its way, it no longer jumps to another hold, unless keeping up with a turn)
         const jump = _r3.dot(_up) - c.T.dot(_up);
         if (c.s < SETTLED || Math.abs(jump) < 0.15 * c.span || wave) c.T.copy(_r3);   // (wave: always where it will stand, up or down)
         else c.T.copy(_r3).addScaledVector(_up, -jump);

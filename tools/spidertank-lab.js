@@ -67,7 +67,7 @@ addBox(LANE.x, -185, 0, 6, 3.5, 2.3, boxMat);
 addBox(LANE.x, -155, 0, 16, 16, 3.2, blockMat);
 addBox(LANE.x, -122, 0, 14, 9, 4.6, blockMat);
 addBox(LANE.x, -88, 0, 18, 14, 9.5, blockMat);
-addBox(LANE.x, -50, 0, 20, 8, 12, blockMat);
+addBox(LANE.x, -44, 0, 20, 8, 12, blockMat);                          // (clear of the circle: driving itself, it went into its corner)
 addBox(LANE.x, -22, 0, 20, 6, 16, wallMat);
 // pairs of platforms with a gap between, to cross on top (the sweep's gap cases): 3 m between two 6 m ones, 5 m between an 8 m and an
 // 8.6 m one, 7 m between two 6 m ones
@@ -221,9 +221,10 @@ function readInput(now) {
   return [false, keys.has('KeyW') ? 90 : keys.has('KeyS') ? -tank.reverseMax : S.v, keys.has('Space') ? 1 : 0,
     (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0)];
 }
-// one tick of dt for sim ({ S, tank }), given [driving itself, the speed asked, trigger, turn]: its speed eased to what is asked, moved
-// (round the circle or down the lane driving itself, else where it's steered), never deeper into anything (driven, it slides along what
-// it meets; driving itself, it stops), and the tank updated
+// one tick of dt for sim ({ S, tank }), given [driving itself, the speed asked, trigger, turn]: its speed eased to what is asked (no
+// more than tank.speedMax: climbing, slower), moved (round the circle or down the lane driving itself, else where it's steered), never
+// deeper into anything (driven, it slides along what it meets; driving itself, it stops; either way its speed is only what it made),
+// and the tank updated
 function drive(sim, dt, [self, ask, trigger, turn]) {
   const { S, tank } = sim;
   const want = THREE.MathUtils.clamp(ask, -tank.reverseMax, Math.min(90, tank.speedMax)) * tank.speedCap;
@@ -240,11 +241,17 @@ function drive(sim, dt, [self, ask, trigger, turn]) {
   }
   const sink = (x, z, yaw) => tank.hits(x, terrain(x, z), z, yaw);
   const deep = sink(S.x, S.z, S.yaw) + 1e-3, ok = (x, z, yaw) => sink(x, z, yaw) <= deep;
+  const x0 = S.x, z0 = S.z;
   if (ok(nx, nz, nyaw)) { S.x = nx; S.z = nz; S.yaw = nyaw; }
-  else if (!self && ok(nx, nz, S.yaw)) { S.x = nx; S.z = nz; }
-  else if (!self && ok(nx, S.z, S.yaw)) S.x = nx;
-  else if (!self && ok(S.x, nz, S.yaw)) S.z = nz;
-  else { S.v = 0; if (ok(S.x, S.z, nyaw)) S.yaw = nyaw; }
+  else {
+    if (!self && ok(nx, nz, S.yaw)) { S.x = nx; S.z = nz; }
+    else if (!self && ok(nx, S.z, S.yaw)) S.x = nx;
+    else if (!self && ok(S.x, nz, S.yaw)) S.z = nz;
+    else if (ok(S.x, S.z, nyaw)) S.yaw = nyaw;
+    // (held up, or sliding along what holds it: only as fast as it gets on the way it faces, so it doesn't build up speed it isn't making)
+    const on = ((S.x - x0) * Math.sin(S.yaw) + (S.z - z0) * Math.cos(S.yaw)) / dt * Math.sign(S.v);
+    S.v = Math.sign(S.v) * Math.min(Math.abs(S.v), Math.max(0, on));
+  }
   // on the terrain under its middle: it climbs over things on its own legs (spidertank.js); how far into things its hull, posed as it is,
   // would be at x, z, turned yaw is tank.hits
   tank.root.position.set(S.x, terrain(S.x, S.z), S.z);
@@ -287,7 +294,7 @@ function sweepCase(spec) {
   }
   // rise: the box's top over the ground round it (where its feet start)
   const rise = b.top - Math.min(...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([p, q]) => terrain(b.cx + (p * b.hx * b.c + q * b.hz * b.s), b.cz + (-p * b.hx * b.s + q * b.hz * b.c))));
-  // crowded: something it can't climb within 4 m of it (crates 11 and 12 lean on the lane's 12 m wall), so stopping or going round is right
+  // crowded: something it can't climb within 4 m of it, so stopping or going round is right
   const crowded = boxes.some((o) => o !== b && o.top - b.top > 3 && Math.hypot(o.cx - b.cx, o.cz - b.cz) < Math.hypot(o.hx, o.hz) + Math.hypot(b.hx, b.hz) + 4);
   return { spec, i, side, speed, out, stand, b, crowded, dx, dz, reach, rise, flight: { kind: 'spidertank-flight', version: 1, query: '', start, frames } };
 }
