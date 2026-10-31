@@ -103,8 +103,10 @@ tuned in Blender.
     whatever else is stepping. Climbing (steep, or still rising to the pose it wants), the legs step by need (`gait.js` `free`): the
     neediest first (past 80% of their reach, 0.6 m off the height their hold should be, carried out of their lane or in toward the
     body's middle), up to four at once but never two neighbours along a side, and while every corner of the body keeps a foot down.
-    A step takes as long as its foot needs at 9 m/s (up to 0.9 s), and once a fifth of the way it no longer jumps to another hold, nor
-    back down where it lifted from. A step up or down, or from or to a face, arcs no more than 0.4 m over what is between (it goes up
+    A step takes as long as its foot needs at 9 m/s (up to 0.9 s). **A climbing step picks its hold once, at lift-off,** for where its
+    hip will be when it lands (on its way to the pose the hull wants, and carried on with the body), and keeps it, so the foot goes
+    straight there rather than chasing a different best hold every frame (its landing moved 3 m on average after lift-off, up to 12;
+    now 0.7). An out-of-turn step up or down does the same; on the level, walking, a landing still follows the body as the rhythm's do. A step up or down, or from or to a face, arcs no more than 0.4 m over what is between (it goes up
     first, then over), so cresting a block the legs don't swing out into the air. A leg with nothing it can reach to hold **hangs**
     off the hull, clear of what it is against, and keeps looking. Walking, feet land where the rhythm asks.
   - **The legs keep clear of the hull:** a thigh never rises more than 69 degrees over the level (closer in, the ankle folds instead),
@@ -121,12 +123,12 @@ tuned in Blender.
   - **Measured** (the lab's sweep, 742 cases, every box from 8 sides at 4 and 12 m/s, gaps, turning on tops, standing): blocks it
     should climb, 510 of 512 approaches (255 of 256 at each speed, corner-first too); every gap of 3 to 7 m crossed both ways; too-tall
     walls stopped at in all 48; standing beside tall blocks, still in all 69; 2 cases wrong in all. The hull is in nothing in any of
-    them and no planted foot over nothing; a leg passes into the hull in 2.4% of frames (most of them a thigh grazing its side, steep
-    against a 12 to 14 m wall), and a foot is across the body's middle in 0.06%. Up the lab's climbing set (2.4 to 9 m blocks, at 4
+    them and no planted foot over nothing; a leg passes into the hull in 2.1% of frames (most of them a thigh grazing its side, steep
+    against a 12 to 14 m wall), and a foot is across the body's middle in 0.08%. Up the lab's climbing set (2.4 to 9 m blocks, at 4
     and 10 m/s) it takes 1.3 s on average from meeting the face to standing on top (5.9 s when the legs led the body, 2.9 s just
     before): a 3.5 m step at 10 m/s without slowing, a 9 m block at a steady 5 m/s. The lab's lane (a crate, a step, 4.6 and 9.5 m
     blocks, a 12 m wall on and off, then a 16 m wall it stops at) goes at an unbroken 3 m/s. The cost: the body doesn't wait for its
-    feet, so now and then a foot is briefly past its leg's full length before it steps (about 1% of planted-foot frames on the climbing
+    feet, so now and then a foot is briefly past its leg's full length before it steps (0.7% of planted-foot frames on the climbing
     set), and climbing tall blocks a leg with nothing in reach hangs more. What it still does wrong: a 1.2 m crate with a tall block just
     behind it, from that side, it rears at the tall one and slides along it.
 - **Its height is its own:** kept in the world, so the caller can put the root on the ground under it or anything else; the caller's

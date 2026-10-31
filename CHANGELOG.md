@@ -5,6 +5,13 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Spider tank: climbing legs decide once** (`docs/spidertank/`). A climbing step used to pick "the best hold it sees" every frame
+  for the first half of its swing, from where its hip was then; with the body now moving fast, the best hold jumped about and the foot
+  swerved after it (its landing moved 3 m on average after lift-off, up to 12 m). Now it picks once, at lift-off, for where its hip
+  will be when it lands, and keeps it; so does an out-of-turn step up or down (on the level, walking, a landing still follows the body).
+  After lift-off a landing now moves 0.7 m on average; legs hang 10% of the time climbing (from 15%), a foot is past its leg's full
+  length in 0.7% of planted-foot frames (from 1.1%), and the feet jolt less cresting. Walking is unchanged. Sweep: 742 cases, the same
+  2 wrong, legs into the hull 2.1% of frames (from 2.4%).
 - **Spider tank: the body leads, the legs follow** (`docs/spidertank/`). Till now the hull could only rise as far as its planted feet
   let it, so any leg out of reach, any missing hold, any slow step stalled the climb (and the caller's collision then stopped it
   dead). Now the hull goes straight for the pose it wants from the ground ahead, at its own rates (6 m/s up, 2.2 rad/s of pitch),

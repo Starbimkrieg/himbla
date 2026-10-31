@@ -11,7 +11,8 @@ import { makeGait } from './gait.js';
 // toward the higher, so it lifts level over what it can climb rather than pitching at it) and goes toward it at its own rates, only
 // never into anything (bodyPose): its legs never hold it back. Each foot takes the hold nearest the height that pose puts it at, in its
 // leg's reach, on its own side of the body, its leg clear of the hull (gait.js keeps the knees up and out), standing with leverage or
-// gripping a face, reaching over an edge knee-up; a planted foot the body has left out of reach holds nothing and steps at once,
+// gripping a face, reaching over an edge knee-up (a climbing step picks it once, at lift-off, for where its hip will be when it
+// lands, and keeps it); a planted foot the body has left out of reach holds nothing and steps at once,
 // whatever else is stepping. Climbing, the legs step by need rather than to the rhythm (gait.js free): out of reach, near full
 // stretch, off the height, out of lane; a leg with nothing to hold hangs. So pushed at something it rears up, nose up as steeply as
 // it takes (to 88 degrees), and goes up and over: up to CLIMB (13 m) over its anchor, the ground under it; taller, it rears up the face
@@ -66,6 +67,7 @@ const CLEAR_HULL = 1.65;        // m its hips keep over the highest thing under 
 const LOOK_MIN = 2.5, LOOK_MAX = 8, LOOK_S = 0.6, TAIL_LOOK = 3.5;   // m ahead its leading half looks, going (LOOK_S s of its speed), for what to rise to (and slow for) before it gets there
 const PITCH_ARM = 4, ROLL_ARM = 3.2;  // m between where the front and back halves' heights (and the sides') pitch and roll it
 const ROLL_WANT = 0.45;         // rad it rolls to the ground at most (rolled further, the feet on its low side end up under its belly)
+const POSE_T = 0.4;             // s the hull takes, about, to get most of the way to the pose it wants (for where a hip will be)
 const TARGET_EASE = 0.15;       // s the pose it wants eases over (so a step or a crate coming under it doesn't jolt it)
 // how much of the way to the pose it wants it tries to go each frame, all together and then each way alone; the first it may go wins
 const TRIES = [[1, 1, 1], [0.6, 0.6, 0.6], [0.3, 0.3, 0.3], [1, 1, 0], [1, 0, 1], [0, 1, 1], [1, 0, 0], [0, 1, 0], [0, 0, 1], [0.4, 0, 0], [0, 0.4, 0], [0, 0, 0.4]];
@@ -444,6 +446,13 @@ export function makeSpiderTank(kit) {
     _q2.setFromEuler(_eu2.set(body.tP, 0, body.tR));
     _pos2.set(0, body.tH, 0).sub(_w2.copy(PIVOT).applyQuaternion(_q2));
     hipT.copy(c.hip).applyQuaternion(_q2).add(_pos2).applyMatrix4(root.matrixWorld);
+    // (a step picking its hold at lift-off (c.landIn s before it lands): its hip where it will be by then, on its way to the pose the hull
+    // wants and carried on with the body, so it picks once and keeps it)
+    const lead = c.landIn || 0;
+    if (lead > 0) {
+      hipW.lerp(hipT, Math.min(1, lead / POSE_T)).addScaledVector(vel, lead);
+      hipT.addScaledVector(vel, lead);
+    }
     fc = c; fUp = up; fGround = groundFn; fBest = -Infinity; fFar = Infinity; fSide = Math.sign(c.hip.x) || 1;
     // (climbing: it looks wider, and keeps stretch and fold in hand; walking, it lands where the rhythm asks)
     fRough = free();

@@ -170,7 +170,16 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     strideMax = Math.min(...chains.map((c) => c.zHi - c.zLo));
   }
   let groundFn = null;
-  const footAt = foothold ? (c, p, out) => foothold(c, p, out, groundFn) : (c, p, out) => groundFn(p, out);
+  // (landIn: s until the foot lands, so the caller can pick a hold for where the body will be by then)
+  const footAt = foothold ? (c, p, out, landIn = 0) => { c.landIn = landIn; const r = foothold(c, p, out, groundFn); c.landIn = 0; return r; } : (c, p, out) => groundFn(p, out);
+  // (a step that picks its hold once, at lift-off (its landing predicted from where the body will be): as long as it takes at FOOT_SPEED,
+  // from est, then once more for that)
+  function commit(c, est, land, durOf) {
+    Object.assign(c, { s: 0, dur: est });
+    let to = footAt(c, land(c, _r2), _r3, est);
+    if (to && Math.abs(durOf(to) - est) > 0.1) { c.dur = durOf(to); to = footAt(c, land(c, _r2), _r3, c.dur); }
+    return to;
+  }
 
   const stepping = (group) => chains.some((c) => c.group === group && c.stepping);
   // what stands between a foot and where it will land (a crate, a wall top, a hump): the step goes over it, high early and late
@@ -239,14 +248,18 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       // steps at once, timed by itself)
       if (!c.stepping && f > 0 && !(at < swing)) {
         const z = _vw.copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert()).z;
-        if (z < c.zLo - 0.05 || z > c.zHi + 0.05 || (strain && strain(c) >= 2)) {
-          const to = footAt(c, landWave(c, _r2), _r3);
+        const gone = !!strain && strain(c) >= 2;
+        if (z < c.zLo - 0.05 || z > c.zHi + 0.05 || gone) {
+          // (it picks its hold for where the body will be when it lands, and keeps it if it goes up or down to it, climbing; on the level,
+          // walking, its landing follows the body as the rhythm's do)
+          const dur0 = Math.max(0.25, Math.min(swing / f, 0.6));
+          const to = commit(c, dur0, landWave, (q) => Math.max(dur0, Math.min(FOOT_DUR, q.distanceTo(c.F) / FOOT_SPEED)));
           // (standing: back where it is, no step; nor, strained, one that would put it down where it stands: that eases nothing)
           if (settling && to && to.distanceTo(c.F) < 0.5 * SAME_HOLD * c.span && (!(strain && strain(c) >= 2) || to.distanceTo(c.F) < 0.02 * c.span)) continue;
           // (as long as its foot takes to get there at FOOT_SPEED, a long one: no flinging it across)
           // (slow, or a step longer than its stride, up onto something say; not turning, when it must keep up with the turn)
           const far = to && Math.abs(turn) < 0.3 && (drive < WALK_SPANS * span || to.distanceTo(c.F) > 1.2 * G.stride) ? to.distanceTo(c.F) : 0;
-          Object.assign(c, { stepping: true, own: true, s: 0, dur: Math.max(0.25, Math.min(swing / f, 0.6), Math.min(FOOT_DUR, far / FOOT_SPEED)), lift: LIFT * c.span * (1 - 0.45 * run) });
+          Object.assign(c, { stepping: true, own: true, held: !!to && Math.abs(_r1.subVectors(to, c.F).dot(_up)) > 0.5, s: 0, dur: Math.max(0.25, Math.min(swing / f, 0.6), Math.min(FOOT_DUR, far / FOOT_SPEED)), lift: LIFT * c.span * (1 - 0.45 * run) });
           c.S0.copy(c.F);
           (c.S0L ||= new THREE.Vector3()).copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert());
           c.T.copy(to || c.F);
@@ -262,7 +275,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
           // (settling, standing: a foot that would land where it stands stays put, so one on a hold it keeps, a wall's face, never
           // shuffles on it; the others still come back under it; strained, it steps, unless only to where it stands)
           if (settling && (!to || to.distanceTo(c.F) < SAME_HOLD * c.span) && (!(strain && strain(c) >= 2) || !to || to.distanceTo(c.F) < 0.02 * c.span)) continue;
-          Object.assign(c, { stepping: true, s: at / swing, dur: swing / f, lift: LIFT * c.span * (1 - 0.45 * run) });
+          Object.assign(c, { stepping: true, held: false, s: at / swing, dur: swing / f, lift: LIFT * c.span * (1 - 0.45 * run) });
           c.S0.copy(c.F);
           (c.S0L ||= new THREE.Vector3()).copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert());
           c.T.copy(to || c.F);
@@ -286,11 +299,12 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       const gone = n >= 3;
       if (lifted >= FREE_MAX && !gone) continue;
       if (!gone && (chains.some((o) => o.stepping && o.s < 1 && nextTo(o, c)) || !canLift(c))) continue;
-      const to = footAt(c, landFree(c, _r2), _r3);
-      // (nothing to hold, or nothing in its reach: it hangs, and keeps looking)
-      if (!to || (need(c) >= 3 && to.distanceTo(c.joints[0].getWorldPosition(_r1)) > c.reach)) { if (need(c) >= 3) c.hang = true; continue; }
+      const durOf = (q) => THREE.MathUtils.clamp(q.distanceTo(c.F) / FOOT_SPEED, FREE_DUR, FOOT_DUR);
+      const to = commit(c, durOf(landFree(c, _r1)), landFree, durOf);
+      // (nothing to hold, or nothing in its reach from where its hip will be: it hangs, and keeps looking)
+      if (!to || (n >= 3 && to.distanceTo(c.joints[0].getWorldPosition(_r1).addScaledVector(G.vel, c.dur)) > c.reach)) { if (n >= 3) c.hang = true; continue; }
       if (to.distanceTo(c.F) < SAME_HOLD * c.span) continue;
-      Object.assign(c, { stepping: true, own: true, free: true, hang: false, s: 0, dur: THREE.MathUtils.clamp(to.distanceTo(c.F) / FOOT_SPEED, FREE_DUR, FOOT_DUR), lift: LIFT * c.span });
+      Object.assign(c, { stepping: true, own: true, free: true, held: true, hang: false, s: 0, dur: durOf(to), lift: LIFT * c.span });
       c.S0.copy(c.F);
       (c.S0L ||= new THREE.Vector3()).copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert());
       c.T.copy(to);
@@ -399,7 +413,8 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       if (!c.stepping) { c.at.copy(c.F); c.base.copy(c.F); continue; }
       if (!wave) c.s = Math.min(1, c.s + dt / c.dur);
       // (the landing follows the body; past SETTLED it keeps its height, unless the ground under it only rises or falls a little)
-      if ((!c.free || c.s < FIX_AT) && footAt(c, wave ? (c.free ? landFree(c, _r2) : landWave(c, _r2)) : landing(c, speed, _r2), _r3)
+      // (a step that picked its hold at lift-off, for where the body will be when it lands (held), keeps it)
+      if (!c.held && (!c.free || c.s < FIX_AT) && footAt(c, wave ? (c.free ? landFree(c, _r2) : landWave(c, _r2)) : landing(c, speed, _r2), _r3)
         && !(wave && c.s > RETARGET_AT && Math.abs(G.turn) < 0.3 && _r3.distanceTo(c.T) > RETARGET_JUMP)   // (wave: on its way, it no longer jumps to another hold, unless keeping up with a turn)
         && !(c.free && _r3.distanceTo(c.S0) < SAME_HOLD * c.span)) {   // (nor, stepped by need, back down where it came from)
         const jump = _r3.dot(_up) - c.T.dot(_up);
