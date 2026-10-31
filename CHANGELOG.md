@@ -5,6 +5,19 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Light-bike: hard light, air carving, knees on the pegs, no dust.** **Hard light:** on the Meridian Courier Light-Bike the
+  fire button (left mouse, RT) no longer fires your hand weapon; held, it lays hard light: the trail laid meanwhile turns
+  near-solid (a second, normally blended pass over the glow, still a little see-through) and fades by the same 4 s rule. A
+  **WAKE** bar under the bike's HP holds 3.5 s of it, refills in 6 s once you let go, and locks out when emptied until 30% is
+  back, as the jets do. Hard light is a wall for everyone else: enemies driven into it are pushed back and bounced, and hostile
+  ones take 18 damage plus 1.4 per m/s (twice a second at most, "WALLED!"); friendly patrols are only turned back; road traffic
+  takes a hit. Your own bike rides through it. The weapon row hides while you ride. **Air carving:** steering in the air now
+  turns the bike's flight with it (85% of the turn), so a jump carves and the trail curves with your steering; before, the bike
+  turned in place while flying straight on, and the trail ran out as a straight arc. Turn rate 2.7 to 3.0 and a little more
+  sideways bite. **No dust:** the light-bike leaves only its light trail. **Rider:** the knees bend (B: thighs near level, knees
+  0.8, spread 0.6; A: thigh -1.2, knee 1.0), the feet stand on the footpegs, which `build_courier.py` now places under the soles
+  from the pose (`sole_on_peg`; the old pegs were out of reach). `preview_courier.py` checks the soles against the pegs too,
+  takes `COURIER_POSE` to try poses and `PREVIEW_RENDER=0` to check without rendering.
 - **Shadows hold out to the horizon** (`src/farshadow.js`). The sun's shadow map only covered a 320 m box round you, so a
   hill's or crater rim's shadow ended where the box did, in ragged blobs that shifted as you moved. Two coarser maps of the
   same sun now cover 600 m (terrain, boulders and settlements) and 3.3 km (terrain), drawn rarely (when their box steps, the sun

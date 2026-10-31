@@ -53,7 +53,9 @@ function steerToward(heading, up, target, maxAngle) {
   const t = tangent(target, up).normalize();
   heading.addScaledVector(up, -heading.dot(up)).normalize();
   const ang = Math.atan2(_v.crossVectors(heading, t).dot(up), heading.dot(t));
-  heading.applyQuaternion(_q.setFromAxisAngle(up, THREE.MathUtils.clamp(ang, -maxAngle, maxAngle)));
+  const turned = THREE.MathUtils.clamp(ang, -maxAngle, maxAngle);
+  heading.applyQuaternion(_q.setFromAxisAngle(up, turned));
+  return turned;
 }
 
 // Wheeled vehicle on the sphere: engine along heading, strong lateral grip and downforce.
@@ -62,10 +64,13 @@ function steerToward(heading, up, target, maxAngle) {
 // solidPlatforms: moving decks (land-train cars, hover-cars, satellite) collide. Off by default (AI rovers drive through them).
 // crash: { speed } gets the hardest head-on hit this step (m/s closing on wall, building or deck); drivable ramps/roofs and
 // inflatables don't count.
-export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engine = 16, grip = 0, turn = 1.8, radius = 2.4, stick = false, traction = 0, weight = 1, solidPlatforms = false, crash = null } = {}) {
+// airSteer: share of a turn made in the air that the velocity takes too (0: it flies on as launched, only the nose turns;
+// the light-bike carves its jump, so its trail curves with the steering)
+export function stepRover(e, dt, planet, colliders, targetDir, maxSpeed, { engine = 16, grip = 0, turn = 1.8, radius = 2.4, stick = false, traction = 0, weight = 1, solidPlatforms = false, crash = null, airSteer = 0 } = {}) {
   const b = e.body;
   const up = b.up.copy(b.pos).normalize();
-  steerToward(e.heading, up, targetDir, (turn / (1 + b.vel.length() / 60)) * dt);
+  const turned = steerToward(e.heading, up, targetDir, (turn / (1 + b.vel.length() / 60)) * dt);
+  if (airSteer && !b.grounded && turned) b.vel.applyAxisAngle(up, turned * airSteer); // (about up: the climb or fall is kept)
   const launchy = stick && b.vel.length() > stick;
   // weight: a driven vehicle falls harder than a runner
   b.vel.addScaledVector(up, -PHYS.gravity * (stick && !b.grounded ? (launchy ? 2.2 : 5) : 1) * (b.grounded ? 1 : weight) * dt);

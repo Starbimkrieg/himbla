@@ -527,6 +527,12 @@ export class Player {
       g.garage.turretFire(dt, input);
       return;
     }
+    // the light-bike's fire button lays hard light (vehicles.js wakeHold) instead
+    if (this.vehicle && this.vehicle.def.bike) {
+      if (this.scoped) { this.scoped = false; g.audio.tone(800, 0.06, 'square', 0.06); }
+      g.garage.wakeHold(dt, input);
+      return;
+    }
     const wasScoped = this.scoped;
     // no scope or shooting while ragdolled
     this.scoped = WEAPONS[this.weapon || 0].key === 'rail' && input.mouse[2] && input.locked && !this.dead && !this.rag;

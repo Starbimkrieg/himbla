@@ -201,7 +201,7 @@ export class Gamepad {
   // crosshair (pad or mouse) shows while firing, fades AIM_SHOW s after the last shot; always up in a turret vehicle (APC)
   crosshair(dt) {
     const P = this.game.player;
-    const firing = this.game.state === 'play' && (this.input.mouse[0] || !!(P && P.vehicle && P.vehicle.def.turret));
+    const firing = this.game.state === 'play' && ((this.input.mouse[0] && !(P && P.vehicle && P.vehicle.def.bike)) || !!(P && P.vehicle && P.vehicle.def.turret)); // (the bike's fire lays hard light: nothing to aim)
     this.aimT = firing ? 0 : Math.min(this.aimT + dt, AIM_SHOW);
     document.body.classList.toggle('aim', this.aimT < AIM_SHOW);
   }

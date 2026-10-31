@@ -141,10 +141,10 @@ SPEC = {
               (-0.2, 0.50, 1.43, 0.30, 2.3, 3), (0.3, 0.50, 1.53, 0.30, 2.3, 3), (0.75, 0.56, 1.46, 0.25, 2.3, 3),
               (1.15, 0.76, 1.33, 0.17, 2.4, 3), (1.5, 0.92, 1.18, 0.06, 2.4, 3)],
         seat_y=1.36, seat_z=-0.7,
-        # clip-ons at z 0.42 so 0.6 m arms reach; the tall tank needs legs spread 0.5 rad
-        # (solved: fists within 9 mm of the grips, no leg vertex over 4 mm inside shell or bags)
-        peg=(0.56, 0.88, -0.16), grip=(0.46, 1.5, 0.42),
-        pose=dict(lean=1.186, thigh=-1.1, spread=0.5, arm_x=-1.908, arm_z=0.172, elbow=-0.678),
+        # clip-ons at z 0.42 so 0.6 m arms reach; the tall tank needs legs spread 0.5 rad; knees bent 1.0 over the pegs
+        # (solved: fists within 3 mm of the grips, soles on the pegs, no leg vertex over 4 mm inside shell or bags)
+        grip=(0.46, 1.5, 0.42),
+        pose=dict(lean=1.186, thigh=-1.2, spread=0.5, knee=1.0, arm_x=-1.908, arm_z=0.172, elbow=-0.678),
     ),
     "b": dict(
         name="Parcel Runner", tire_hw=0.27, tire_e=2.3,
@@ -152,14 +152,40 @@ SPEC = {
               (-0.2, 0.48, 1.30, 0.27, 2.2, 3), (0.3, 0.48, 1.40, 0.27, 2.2, 3), (0.75, 0.55, 1.45, 0.26, 2.2, 3),
               (1.15, 0.74, 1.30, 0.21, 2.2, 3), (1.5, 0.90, 1.14, 0.08, 2.2, 3)],
         seat_y=1.34, seat_z=-0.55,
-        # slim scooped tank (half width 0.27, top 1.30 at the seat) gives the thighs room; legs spread 0.35 rad clear shell
-        # and bags (checked in preview_courier.py). Pose is solved: fists land on the grips to a millimetre.
-        peg=(0.45, 0.8, 0.0), grip=(0.44, 1.6, 0.32), bag_x=0.36,
-        pose=dict(lean=0.752, thigh=-1.0, spread=0.35, arm_x=-1.179, arm_z=0.128, elbow=-0.704),
+        # slim scooped tank (half width 0.27, top 1.30 at the seat) gives the thighs room. The low belly and the panniers
+        # leave the feet only forward and out: thighs near level, knees bent 0.8, spread 0.6 (searched with
+        # COURIER_POSE; at most 5 mm into the shell). Fists land on the grips to 3 mm, soles on the pegs to 1 cm.
+        grip=(0.44, 1.6, 0.32), bag_x=0.36,
+        pose=dict(lean=0.752, thigh=-1.5, spread=0.6, knee=0.8, arm_x=-1.179, arm_z=0.128, elbow=-0.704),
     ),
 }[V]
 
 SECS = smooth_keys(SPEC["body"], 4)
+# COURIER_POSE='{"knee": 1.2, ...}' tries another rider pose (preview_courier.py's checks report how it fits)
+if os.environ.get("COURIER_POSE"):
+    import json
+    SPEC["pose"] = {**SPEC["pose"], **json.loads(os.environ["COURIER_POSE"])}
+
+
+def sole_on_peg(pose, seat_y, seat_z):
+    """Where the right skate's sole lands for the rider pose (bike frame, 1:1): the peg goes there, so the feet stand on it.
+    The runner (build_runner.py: hip 0.95 up, knee KN = 0.45 below it, the glide rail's middle 0.536 below the knee and
+    0.07 ahead, 0.016 deep) rides at 1/1.2
+    of the bike's scale with the hip on the seat spot; the leg turns three.js XYZ (spread about z, then thigh about x),
+    the shin by the knee about x."""
+    k, kn = 1 / 1.2, 0.45
+    def rx(a, v):
+        c, s_ = math.cos(a), math.sin(a)
+        return (v[0], v[1] * c - v[2] * s_, v[1] * s_ + v[2] * c)
+    def rz(a, v):
+        c, s_ = math.cos(a), math.sin(a)
+        return (v[0] * c - v[1] * s_, v[0] * s_ + v[1] * c, v[2])
+    v = rx(pose["knee"], (0, -0.536 - 0.016, 0.07))
+    v = rx(pose["thigh"], rz(pose["spread"], (v[0], v[1] - kn, v[2])))
+    return (0.2 * k + k * v[0], seat_y + 0.1 + k * v[1], seat_z + k * v[2])
+
+
+PEG = sole_on_peg(SPEC["pose"], SPEC["seat_y"], SPEC["seat_z"])   # (x, y top, z) of the right peg: under the rail's middle
 
 # ---- shell: one smooth loft, scooped round the wheels ----
 body = mesh("shell", loft(SECS, 24), "navy", CH, 0.06, sharp=0)
@@ -188,9 +214,10 @@ for sx in (-1, 1):
     mesh(f"forkCap{t}", xf(rbox(0.05, 0.05, 0.05, 0.4, 8, 4), (X, WY, WZ)), "dark", CH, 0.02)
     mesh(f"swing{t}", limb((X * 0.8, 0.86, -0.62), (X, WY, -WZ), 0.05, 0.085), "panel", CH, 0.03)
     mesh(f"swingStripe{t}", limb((X * 0.8 + sx * 0.04, 0.9, -0.7), (X + sx * 0.04, WY + 0.06, -WZ + 0.12), 0.008, 0.012), "stripe", CH, 0)
-    mesh(f"peg{t}", xf(rbox(0.1, 0.03, 0.03, 0.4, 6, 4), (sx * SPEC["peg"][0], SPEC["peg"][1], SPEC["peg"][2])), "metal", CH, 0)
-    # pegs on a bracket off the shell
-    mesh(f"pegBracket{t}", limb((sx * 0.2, SPEC["peg"][1] + 0.04, SPEC["peg"][2]), (sx * 0.4, SPEC["peg"][1], SPEC["peg"][2]), 0.025, 0.03), "metal", CH, 0.012)
+    # pegs under the rider's soles (sole_on_peg), on a bracket off the shell
+    py = PEG[1] - 0.03
+    mesh(f"peg{t}", xf(rbox(0.1, 0.03, 0.03, 0.4, 6, 4), (sx * PEG[0], py, PEG[2])), "metal", CH, 0)
+    mesh(f"pegBracket{t}", limb((sx * 0.18, py + 0.04, PEG[2]), (sx * (PEG[0] - 0.06), py, PEG[2]), 0.025, 0.03), "metal", CH, 0.012)
 
 # ---- rider's place: seat pad, bars, tail ----
 SY, SZ = SPEC["seat_y"], SPEC["seat_z"]
@@ -319,7 +346,7 @@ ROOT["proposal"] = SPEC["name"]
 # rider's hip in the bike frame (read by the preview and the game)
 ROOT["seat"] = [0.0, SY + 0.1, SZ]
 for _k, _v in SPEC["pose"].items():
-    ROOT["pose_" + _k] = _v   # rider pose: torso lean, legs (x swing, spread), arm (x, out), elbow
+    ROOT["pose_" + _k] = _v   # rider pose: torso lean, legs (x swing, spread), knee, arm (x, out), elbow
 audit_coplanar(C.objects, allow=ALLOW)
 _dg = bpy.context.evaluated_depsgraph_get()
 _tris = [(o.evaluated_get(_dg).to_mesh(), o["ink"]) for o in C.objects if o.type == "MESH"]

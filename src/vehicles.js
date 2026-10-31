@@ -17,7 +17,7 @@ export const VEHICLES = {
   // sold at Kepler Civic Center after the Council's Militia Pact: APC hull and cannon, militia paint, the Mule's padded bed
   carrier: { hp: 380, name: 'Kepler Militia Carrier', faction: 'kepler', max: 66, engine: 28, turn: 2.1, grip: 18, armor: 0.5, color: 0x5c8a2e, trim: 0xff9f1c, scale: 1.15, hideRider: true, turret: true, apcHull: true, cargoSafe: true, cannon: 'Militia 30 mm Cannon', desc: 'The Mule\'s big brother: a padded cargo bay, field armour and a turret cannon that follows where you look.' },
   // a light-bike; id 'van' kept for existing saves
-  van: { hp: 190, name: 'Meridian Courier Light-Bike', faction: 'meridian', max: 96, engine: 34, turn: 2.7, grip: 10, armor: 0.8, color: 0x2ec4ff, trim: 0xffd23f, bike: true, seat: 1.42, seatZ: -0.88, radius: 2.1, desc: 'A sleek light-bike that leaves a glowing trail. Fast, sharp, and very stylish.' },
+  van: { hp: 190, name: 'Meridian Courier Light-Bike', faction: 'meridian', max: 96, engine: 34, turn: 3.0, grip: 10, armor: 0.8, color: 0x2ec4ff, trim: 0xffd23f, bike: true, seat: 1.42, seatZ: -0.88, radius: 2.1, desc: 'A sleek light-bike that leaves a glowing trail. Fast, sharp, and very stylish.' },
   warrig: { hp: 340, name: 'Rustmoon War-Rig', faction: 'rustmoon', max: 78, engine: 32, turn: 2.4, grip: 14, armor: 0.6, color: 0x7b2ff7, trim: 0x7dff3a, scale: 1.35, radius: 4.6, cam: { lift: 3.2, dist: 14 }, pirate: true, hideRider: true, turret: true, burst: RIG_GUN, cannon: RIG_GUN.name, desc: 'A stolen big-rig on monster legs, a fusion core in the hood. Rams for damage; the pirate on the roof gun fires twenty-round tracer bursts where you look.' },
 };
 
@@ -31,6 +31,14 @@ const TURRET_PITCH_RATE = 1.7; // rad/s barrel elevation
 const TURRET_DOWN = -0.12, TURRET_UP = 0.75; // barrel travel (rad): slight depression, ~43 degrees up
 const AIM_RANGE = 300; // m along the aim ray for the turret's convergence point
 const SUMMON_MAX_SPEED = 2; // m/s: fastest you can move and still call a vehicle
+// Light-bike hard light (fire held): the trail laid meanwhile turns near-solid, a wall for everyone else, fading as the
+// trail does. A bar like the jets': WAKE_HOLD s of laying from full, WAKE_REFILL s to refill, locked out when emptied until
+// WAKE_UNLOCK of it is back.
+const WAKE_HOLD = 3.5, WAKE_REFILL = 6, WAKE_UNLOCK = 0.3;
+const WAKE_MIN = 3; // m/s: the trail lays nothing slower (vehicles.js trail())
+const WALL_H = 1.5; // m: the trail's wall height (LightTrail height)
+const WALL_DMG = 18, WALL_DMG_SPEED = 1.4; // a hit: damage plus this per m/s driven into it
+const _wa = new THREE.Vector3(), _wb = new THREE.Vector3(), _wc = new THREE.Vector3(), _wn = new THREE.Vector3(), _wu = new THREE.Vector3();
 
 // A faction vehicle's model as the Garage drives it (minus the light-bike's trail, which needs the live scene). Pure: the
 // Asset Row uses it too.
@@ -77,8 +85,85 @@ export class Garage {
     this.hpRow = document.createElement('div');
     this.hpRow.className = 'bar veh-row veh-hp hidden';
     this.hpRow.innerHTML = '<label>HP:</label><div class="track"><div class="fill vb-fill"></div></div><span class="vb-num"></span>';
-    this.jetRow.after(this.nameRow, this.hpRow);
+    // the light-bike's hard-light charge, under its HP
+    this.wakeRow = document.createElement('div');
+    this.wakeRow.className = 'bar veh-row veh-wake hidden';
+    this.wakeRow.innerHTML = '<label>WAKE:</label><div class="track"><div class="fill wk-fill"></div></div>';
+    this.jetRow.after(this.nameRow, this.hpRow, this.wakeRow);
+    this.wake = { e: 1, locked: false, on: false }; // e: charge 0..1
   }
+
+  // Fire held on the light-bike (player.js updateWeapons): lay hard light while there is charge and the trail is laying
+  wakeHold(dt, input) {
+    const g = this.game, P = g.player, v = P.vehicle, W = this.wake;
+    const held = input.mouse[0] && input.locked && !P.dead && !P.rag;
+    const moving = v.e.body.vel.length() > WAKE_MIN;
+    if (W.locked && W.e >= WAKE_UNLOCK) W.locked = false;
+    const was = W.on;
+    W.on = held && moving && !W.locked && W.e > 0;
+    if (W.on) {
+      W.e = Math.max(0, W.e - dt / WAKE_HOLD);
+      if (W.e <= 0) { W.locked = true; W.on = false; g.audio.tone(300, 0.12, 'square', 0.06); }
+    } else if (!held) W.e = Math.min(1, W.e + dt / WAKE_REFILL);
+    if (W.on && !was) g.audio.tone(1250, 0.07, 'triangle', 0.1);
+  }
+
+  // Hard-light walls (the trail's hard stretches) against everyone else: enemies on the move are pushed back out and
+  // bounced, and anything driven into one takes a hit (each at most twice a second); road traffic, which keeps to its path,
+  // just takes the hit. Your own bike rides through its trail.
+  wakeWalls(trail) {
+    const g = this.game, pts = trail && trail.pts;
+    if (!pts || pts.length < 2 || !this.wakeAny(pts)) return;
+    const P = g.player, life = trail.life, now = trail.t;
+    const near = (c, r, out) => { // closest point on a hard, still-standing stretch to c within r: distance, or Infinity
+      let best = Infinity;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        if (!a.hard || !b.hard || now - a.t > life * 0.92) continue; // (the last, faded bit is no wall)
+        if (Math.abs(a.p.x - c.x) > r + 2 && Math.abs(b.p.x - c.x) > r + 2) continue;
+        _wa.subVectors(b.p, a.p);
+        const L2 = _wa.lengthSq();
+        const f = L2 > 1e-8 ? Math.max(0, Math.min(1, _wb.subVectors(c, a.p).dot(_wa) / L2)) : 0;
+        _wb.copy(a.p).addScaledVector(_wa, f);
+        // within the wall's height above its foot
+        _wu.copy(a.up);
+        const h = _wc.subVectors(c, _wb).dot(_wu);
+        if (h < -1 || h > WALL_H + r) continue;
+        _wc.addScaledVector(_wu, -h);
+        const d = _wc.length();
+        if (d < best) { best = d; out.copy(_wc); }
+      }
+      return best;
+    };
+    for (const en of g.enemies.targets()) {
+      if (!en.body || en.kind === 'turret' || en.kind === 'core' || en.kind === 'ally' || !en.center) continue;
+      if (en.center.distanceToSquared(P.pos) > 180 * 180) continue;
+      const r = (en.radius || 1.5) * 0.8;
+      const d = near(en.body.pos, r, _wn);
+      if (d > r) continue;
+      if (d > 1e-4) _wn.divideScalar(d); else _wn.set(0, 0, 0);
+      const b = en.body, vn = b.vel.dot(_wn);
+      b.pos.addScaledVector(_wn, r - d);
+      if (vn < 0) b.vel.addScaledVector(_wn, -1.6 * vn); // bounce off
+      if ((en.wallT || 0) > g.time || !g.enemies.isHostileTarget(en)) continue; // (friendly patrols are only turned back)
+      en.wallT = g.time + 0.5;
+      g.enemies.damage(en, WALL_DMG + WALL_DMG_SPEED * Math.max(0, -vn));
+      g.fx.pop('WALLED!', en.center.clone(), { color: '#9be7ff', size: 48 });
+      g.audio.thud(Math.max(8, -vn));
+    }
+    const tr = g.world.traffic;
+    if (tr && tr.roadVehicles) for (const rv of tr.roadVehicles) {
+      if (!rv.maxHp || rv.hp <= 0 || rv.state === 'dead' || !rv.root.visible || (rv.wallT || 0) > g.time) continue;
+      if (rv.pos.distanceToSquared(P.pos) > 180 * 180) continue;
+      const c = tr.centre(rv, _wc.clone());
+      if (near(c, rv.hitR || 2.5, _wn) > (rv.hitR || 2.5)) continue;
+      rv.wallT = g.time + 1;
+      tr.damage(rv, WALL_DMG * 1.5);
+      g.fx.pop('WALLED!', c, { color: '#9be7ff', size: 48 });
+    }
+  }
+
+  wakeAny(pts) { for (const q of pts) if (q.hard) return true; return false; }
 
   maxHp(id) { return Math.round(VEHICLES[id].hp * (1 + 0.15 * (this.game.upgrades.plating || 0))); }
   cooldown(id) { return Math.max(0, (this.wreckedUntil[id] || 0) - this.game.time); }
@@ -322,7 +407,7 @@ export class Garage {
     // speed throws them); hover ones keep some drift
     const tune = def.hover
       ? { grip: Math.max(def.grip, 10), stick: 70, traction: 7 }
-      : { grip: Math.max(def.grip * 1.6, 24), stick: 55, traction: 15 };
+      : { grip: Math.max(def.grip * 1.6, 24), stick: 55, traction: def.bike ? 18 : 15, airSteer: def.bike ? 0.85 : 0 }; // (the bike bites a little harder and carves its jumps)
     const crash = { speed: 0 };
     for (let i = 0; i < steps; i++) stepRover(e, dt / steps, g.planet, g.colliders, target, max, { engine: fwdIn || back ? def.engine : 0, turn: def.turn, radius: def.radius || 3.2 * (def.scale || 1), weight: def.hover ? 1.5 : 1.7, solidPlatforms: true, crash, ...tune });
     // hard hits on walls, buildings or traffic damage the vehicle (hit())
@@ -388,7 +473,7 @@ export class Garage {
   // wheel dust at speed (same puff as the skates'). Rear wheels throw more and bigger puffs the faster you go, front
   // wheels a steady lighter one; hover vehicles puff from under their pads, the rear just behind the engine plumes.
   kickDust(v, dt, sp, up) {
-    if (sp < 18 || !v.e.body.grounded) return;
+    if (sp < 18 || !v.e.body.grounded || v.def.bike) return; // (the light-bike leaves only its light trail)
     const { def, model } = v;
     const sc = def.scale || 1;
     const k = Math.min(1, (sp - 18) / 60); // 0 at the dust threshold, 1 at 78 m/s
@@ -507,7 +592,10 @@ export class Garage {
   trail(model, dt, sp) {
     if (!model.trail) return;
     const p = model.root.localToWorld(model.trailFrom.clone());
-    model.trail.update(dt, p, model.root.position.clone().normalize(), sp > 3);
+    const P = this.game.player;
+    const hard = this.wake.on && P.vehicle && P.vehicle.model === model;
+    model.trail.update(dt, p, model.root.position.clone().normalize(), sp > WAKE_MIN, hard);
+    this.wakeWalls(model.trail);
   }
 
   update(dt) {
@@ -524,6 +612,19 @@ export class Garage {
       this.hullRow.classList.toggle('hidden', show);
       this.jetRow.classList.toggle('hidden', show);
     }
+    const bike = show && !!pv.def.bike;
+    if (bike !== this.wakeShown) { // (the weapon row goes: on the bike the fire button lays hard light)
+      this.wakeShown = bike;
+      this.wakeRow.classList.toggle('hidden', !bike);
+      const wc = document.getElementById('weaponchip');
+      if (wc) wc.style.display = bike ? 'none' : '';
+    }
+    if (bike) {
+      const W = this.wake, fill = this.wakeRow.querySelector('.wk-fill');
+      fill.style.width = `${W.e * 100}%`;
+      fill.style.opacity = W.locked ? 0.45 : ''; // dimmed while locked out, as the jets
+    }
+    if (!(pv && pv.def.bike)) { this.wake.on = false; if (this.wake.e < 1) this.wake.e = Math.min(1, this.wake.e + dt / WAKE_REFILL); }
     if (pv) {
       const max = this.maxHp(pv.id), hp = Math.max(0, this.hp[pv.id] ?? max);
       const k = hp / max;

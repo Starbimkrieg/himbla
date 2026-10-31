@@ -1031,6 +1031,7 @@ body.on-ride #hud > :not(#popups):not(#prompt):not(#splash):not(#dilate) { displ
 #speedo .veh-row.hidden { display: none; }
 #speedo .veh-name { height: 16px; line-height: 16px; flex: 1; min-width: 0; width: auto; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #speedo .veh-hp .vb-fill { transition: width 0.15s steps(4); background: #2ee6ff; }
+#speedo .veh-wake .wk-fill { background: #9be7ff; box-shadow: 0 0 6px #2ec4ff; }
 #speedo .veh-hp .vb-num { font-family: var(--comic); font-size: 8px; color: var(--ui-muted); min-width: 52px; text-align: right; }
 body.trailer #vehbar { display: none !important; }
 

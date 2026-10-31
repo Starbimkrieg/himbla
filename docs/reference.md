@@ -200,7 +200,8 @@ Farm, Motor Pool, Militia Barracks, Roads, Radio Tower (charts fog) and Shuttle 
 Garage, plus a second turret by the gate.
 
 **Vehicles** (`V`): SPACECOM Lunar Interceptor, Vostok BTR-M APC (turret cannon), Daedalus Phase Skimmer (hover),
-Kepler Homestead Mule, Kepler Militia Carrier, Meridian Courier Light-Bike (light trail), Rustmoon War-Rig (a pirate
+Kepler Homestead Mule, Kepler Militia Carrier, Meridian Courier Light-Bike (light trail; holding fire lays hard light, a
+near-solid stretch of trail that walls off pursuers and traffic, from a WAKE bar that refills like the jets), Rustmoon War-Rig (a pirate
 gunner on the roof turns its rotary gun where you look; left mouse fires a 20-round tracer burst, then it cools for 2 s).
 They have hull points, smoke when hurt, and take 90 s to rebuild if wrecked.
 

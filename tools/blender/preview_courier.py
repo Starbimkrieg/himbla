@@ -2,7 +2,7 @@
 # three-quarter and rear three-quarter views (with a light-trail mock-up and the runner on the seat) to
 # docs/courier-proposals/<variant>_<view>.jpg, plus a review sheet, courier_proposals.jpg.
 # Env: PREVIEW_OUT=<dir> output dir; PREVIEW_W / PREVIEW_H / PREVIEW_SAMPLES quality; PREVIEW_EXPORT=0 skips the GLBs;
-# PREVIEW_RIDER=0 leaves the runner off.
+# PREVIEW_RIDER=0 leaves the runner off; PREVIEW_RENDER=0 renders nothing (builds, exports and runs the rider checks only).
 #
 #   pip install bpy pillow numpy
 #   MOONRUNNER_REPO=. python3 tools/blender/preview_courier.py [a] [b]
@@ -191,6 +191,8 @@ def add_rider(sc, g, seat):
         byname[n].rotation_euler = (P["arm_x"], -sx * P["arm_z"], 0)
     for n in ("foreL", "foreR"):
         byname[n].rotation_euler = (P["elbow"], 0, 0)
+    for n in ("shinL", "shinR"):
+        byname[n].rotation_euler = (P.get("knee", 0), 0, 0)
     k = 1 / 1.2   # the 2 m runner beside a bike modelled 1:1, shown at 1.2x
     root.scale = (k, k, k)
     root.location = (seat[0], -seat[2], seat[1] - 0.95 * k)   # three.js (x, y, z) -> Blender (x, -z, y)
@@ -204,11 +206,17 @@ def add_rider(sc, g, seat):
         sel = [p for p in pts if (p - sh).length > far - 0.10]
         fist = sum(sel, Vector()) / len(sel)
         print(f"  fist {side} is {(fist - Vector((sx * GX, -(GZ + 0.035), GY))).length * 1000:.0f} mm from its grip")
+    # soles on the pegs: the underside of each skate's glide rail, at its middle, against the top of its peg
+    PX, PY, PZ = g["PEG"]
+    for side, sx in (("L", -1), ("R", 1)):
+        pts = [c.matrix_world @ v.co for c in byname["shin" + side].children_recursive if c.type == "MESH" and "_rail" in c.name for v in c.data.vertices]
+        mid = sum(pts, Vector()) / len(pts)   # (the rail's middle; its underside is 0.016 / 1.2 below)
+        print(f"  sole {side}: {(mid.z - 0.016 / 1.2 - PY) * 1000:+.0f} mm over its peg, {(mid.x - sx * PX) * sx * 1000:+.0f} mm outboard, {(-mid.y - PZ) * 1000:+.0f} mm ahead")
     dg = bpy.context.evaluated_depsgraph_get()
     solids = [o for o in g["C"].objects if o.name in ("shell", "bagL", "bagR", "bagFlapL", "bagFlapR")]   # closed solids only (straps and seams are open bands)
     bvhs = [BVHTree.FromObject(o, dg) for o in solids]
-    bad, deep = 0, 0.0
-    for n in ("legL", "legR"):
+    bad, deep, worst = 0, 0.0, {}
+    for n in ("legL", "legR"):   # (shins and skates are under the legs too)
         for c in byname[n].children_recursive:
             if c.type != "MESH":
                 continue
@@ -218,8 +226,11 @@ def add_rider(sc, g, seat):
                     r = b.find_nearest(p)
                     if r[0] is not None and (p - r[0]).dot(r[1]) < -0.004:
                         bad += 1
+                        worst[c.name] = max(worst.get(c.name, 0), (p - r[0]).length)
                         deep = max(deep, (p - r[0]).length)
     print(f"  legs: {bad} vertices more than 4 mm inside the shell or bags (deepest {deep * 1000:.0f} mm)")
+    if worst:
+        print("    worst:", ", ".join(f"{n} {d * 1000:.0f} mm" for n, d in sorted(worst.items(), key=lambda kv: -kv[1])[:6]))
     return root
 
 
@@ -253,7 +264,7 @@ for v in VARIANTS:
     seat = g["ROOT"]["seat"]
     if os.environ.get("PREVIEW_RIDER", "1") == "1":
         add_rider(sc, g, seat)
-    for name, (loc, tgt, lens) in VIEWS.items():
+    for name, (loc, tgt, lens) in (VIEWS.items() if os.environ.get("PREVIEW_RENDER", "1") == "1" else ()):
         for o in [o for o in bpy.data.objects if o.type == "CAMERA"]:
             bpy.data.objects.remove(o)
         for o in trail_objs:

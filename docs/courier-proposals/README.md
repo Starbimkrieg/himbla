@@ -49,10 +49,12 @@ out from the shell on brackets.
 The tank is slimmer and scooped (half width 0.27, top 1.30 m at the seat) so the rider's thighs clear it.
 
 **The rider's pose is solved against the geometry**, not eyeballed (`SPEC["pose"]` in `build_courier.py`, written to the GLB's
-root as `pose_*` extras): torso lean 0.752, thigh swing -1.0, **leg spread 0.35 rad** (about 20 degrees: the smallest that
-clears), arm swing -1.179 with 0.128 out, elbow -0.704. `preview_courier.py` checks it every run: both fists land within
-3 mm of the grips and no leg vertex is more than 4 mm inside the shell or bags. The game's `player.js` sets only torso, thigh
-swing and arm swing, so using this needs leg spread and elbow added there. Suggested `seat: 1.40, seatZ: -0.66`.
+root as `pose_*` extras): torso lean 0.752, thigh swing -1.5, leg spread 0.6 rad, **knees bent 0.8**, arm swing -1.179 with
+0.128 out, elbow -0.704. The low belly and the panniers leave the feet room only forward and out, so the thighs ride near level
+(A: thigh -1.2, spread 0.5, knee 1.0). The footpegs are placed under the soles from the pose (`sole_on_peg`), so the feet stand
+on them. `preview_courier.py` checks it every run: both fists land within 3 mm of the grips, each skate's rail within 1 cm of
+its peg, and no leg vertex is more than 4 mm inside the shell or bags (B: 6 vertices, 5 mm at worst). Try other poses with
+`COURIER_POSE='{"knee": 1.0}'`; `PREVIEW_RENDER=0` runs the checks without rendering (about 2 s).
 
 ## How the game uses them
 

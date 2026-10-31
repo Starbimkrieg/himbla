@@ -2706,7 +2706,7 @@ function makeBlenderBike(B, { color, trim }) {
     trailFrom: kidOf(B, 'trail').pos.clone(), trailColor: color, wheelR: 0.78 * BIKE_SCALE,
     // rider hip (bike frame, scaled) and the pose that puts hands on the grips and legs clear of the shell
     seat: new THREE.Vector3(...d.seat).multiplyScalar(BIKE_SCALE),
-    pose: { lean: P('lean'), thigh: P('thigh'), spread: P('spread'), armX: P('arm_x'), armZ: P('arm_z'), elbow: P('elbow') },
+    pose: { lean: P('lean'), thigh: P('thigh'), spread: P('spread'), knee: P('knee') || 0, armX: P('arm_x'), armZ: P('arm_z'), elbow: P('elbow') },
   };
 }
 
@@ -2790,6 +2790,9 @@ export function makeLightBike({ color = 0x2ec4ff, trim = 0xffd23f, style = getBi
 // Light trail: a glowing wall fading over `life` s, on a glowing floor strip `width` across so it has body from any
 // angle (a lone ribbon vanishes edge-on). Feed it a world point and local up each frame (world space). `max` points
 // `step` m apart must cover `life` s at top speed: 256 x 0.45 m = 115 m, 3.4 s at 34 m/s.
+// Hard light: points laid while `hard` is passed (the light-bike's fire button) also draw on a second, normally blended
+// mesh, so that stretch reads near-solid (still a little see-through) and fades by the same rule. pts[i].hard marks them
+// (vehicles.js makes them walls for others).
 export class LightTrail {
   constructor(scene, color, { life = 4, height = 1.5, width = 0.6, max = 256, step = 0.45 } = {}) {
     this.life = life; this.height = height; this.width = width; this.max = max; this.step2 = step * step;
@@ -2806,19 +2809,32 @@ export class LightTrail {
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 2;
     scene.add(this.mesh);
+    // the hard-light stretch: same vertices, its own alpha, drawn under the glow
+    const hg = new THREE.BufferGeometry();
+    hg.setAttribute('position', geo.attributes.position);
+    hg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(max * 4 * 4), 4));
+    hg.setIndex(geo.index);
+    this.hard = new THREE.Mesh(hg, new THREE.MeshBasicMaterial({ color: new THREE.Color(color).lerp(_white, 0.25), vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    this.hard.frustumCulled = false;
+    this.hard.renderOrder = 1;
+    this.hard.visible = false;
+    scene.add(this.hard);
   }
 
-  // p: world point at the ribbon foot, up: world up there, emit: false to fade out
-  update(dt, p, up, emit = true) {
+  // p: world point at the ribbon foot, up: world up there, emit: false to fade out, hard: lay hard light
+  update(dt, p, up, emit = true, hard = false) {
     this.t += dt;
     const last = this.pts[this.pts.length - 1];
     if (emit && p && (!last || last.p.distanceToSquared(p) > this.step2)) {
-      this.pts.push({ p: p.clone(), up: up.clone(), t: this.t });
+      if (last) last.hard = last.hard || hard; // (a stretch starts at the point before, so it begins where you pressed)
+      this.pts.push({ p: p.clone(), up: up.clone(), t: this.t, hard });
       if (this.pts.length > this.max) this.pts.shift();
-    } else if (emit && p && last) { last.p.copy(p); last.up.copy(up); last.t = this.t; } // the head follows the bike
+    } else if (emit && p && last) { last.p.copy(p); last.up.copy(up); last.t = this.t; last.hard = hard; } // the head follows the bike
     while (this.pts.length && this.t - this.pts[0].t > this.life) this.pts.shift();
     const pos = this.mesh.geometry.attributes.position, col = this.mesh.geometry.attributes.color;
+    const hc = this.hard.geometry.attributes.color;
     const n = this.pts.length;
+    let anyHard = false;
     for (let i = 0; i < this.max; i++) {
       const j = Math.min(i, Math.max(0, n - 1)), q = this.pts[j];
       const k = !q || i >= n ? 0 : Math.max(0, 1 - (this.t - q.t) / this.life);
@@ -2839,14 +2855,25 @@ export class LightTrail {
       col.setXYZW(i * 4 + 1, a * 0.45, a * 0.45, a * 0.45, a * 0.3);
       col.setXYZW(i * 4 + 2, a * 0.6, a * 0.6, a * 0.6, a * 0.6);
       col.setXYZW(i * 4 + 3, a * 0.6, a * 0.6, a * 0.6, a * 0.6);
+      // hard light: near-opaque wall (more so at the foot), a little lighter on the floor strip
+      const h = q && i < n && q.hard ? a : 0;
+      if (h > 0) anyHard = true;
+      hc.setXYZW(i * 4, 1, 1, 1, 0.88 * h);
+      hc.setXYZW(i * 4 + 1, 1, 1, 1, 0.7 * h);
+      hc.setXYZW(i * 4 + 2, 1, 1, 1, 0.75 * h);
+      hc.setXYZW(i * 4 + 3, 1, 1, 1, 0.75 * h);
     }
-    pos.needsUpdate = col.needsUpdate = true;
+    pos.needsUpdate = col.needsUpdate = hc.needsUpdate = true;
     this.mesh.visible = n > 1;
+    this.hard.visible = n > 1 && anyHard;
   }
 
-  dispose() { this.mesh.removeFromParent(); this.mesh.geometry.dispose(); this.mesh.material.dispose(); }
+  dispose() {
+    this.mesh.removeFromParent(); this.mesh.geometry.dispose(); this.mesh.material.dispose();
+    this.hard.removeFromParent(); this.hard.geometry.dispose(); this.hard.material.dispose();
+  }
 }
-const _tr = new THREE.Vector3();
+const _tr = new THREE.Vector3(), _white = new THREE.Color(0xffffff);
 
 // ---- hover-cars (build_hovercar.py) ----
 // Smallest road vehicle, one body style, ~6.5 m long, 3.9 m over the pods. FACTION car: low sharp hull in faction colours
