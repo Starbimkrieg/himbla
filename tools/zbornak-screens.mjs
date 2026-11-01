@@ -14,6 +14,7 @@ const SHOTS = [
   ['s=lab&tab=1', 1120, 640, 'screens/lab.png'],
   ['s=pen', 750, 450, 'screens/pen.png'],
   ['s=sec', 660, 450, 'screens/sec.png'],
+  ...[0, 1, 2, 3].map((k) => [`s=drone&k=${k}`, 780, 480, `screens/drone${k}.png`]),
 ];
 const b = await chromium.launch();
 for (const [q, w, h, file] of SHOTS) {

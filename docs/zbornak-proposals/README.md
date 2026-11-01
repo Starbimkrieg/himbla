@@ -1,6 +1,6 @@
 # Dr. Zbornak's Antimatter Lab: the rework
 
-![The draft: overview, the approach, the airlock, the cutaway, inside, the intake hatch, LABNET, the robots, the hydroponics habitat and its door, the stair, the cryo pods, exotic matter, the gallery, the walks, the containers, the ranch, the pen office](zbornak_proposals.jpg)
+![The draft: overview, the approach, the airlock, the cutaway, inside, the intake hatch, LABNET, the robots, the hydroponics habitat and its door, the stair, the cryo pods, exotic matter, the airlock's portal, a reactor strut, the drone wall and LABNET, the chemistry benches, the microscopes, the walks, the containers, the ranch, the pen office](zbornak_proposals.jpg)
 
 This is the draft picked from the first two proposals: **the Rotunda, with Zbornak "the Elder" and the LABNET terminal**, revised
 from the review. Proposal B (the Institute, Zbornak "the Singed", the SPECIMEN INDEX) is dropped.
@@ -8,14 +8,14 @@ from the review. Proposal B (the Institute, Zbornak "the Singed", the SPECIMEN I
 Everything is modelled in Blender from code (`tools/blender/build_zbornak_lab.py`, `zbornak_kit.py`, `zbornak_figure.py`) and
 rendered with Cycles and Freestyle (`tools/blender/preview_zbornak_lab.py`). **Nothing is in the game yet;** "Building it" below is
 what that takes. The chimeras in the pods, on the bench and in the corral are the game's own (`makeChimera`, exported for the
-renders). The courier and the gallery's stone couriers are `runner.glb`.
+renders). The courier is `runner.glb`. The drone feeds are filmed in the game too (`tools/zbornak-drones.mjs`).
 
 | | Today | The Rotunda |
 |---|---|---|
 | Main lab | 44 × 32 m box, 16 m tall | round, 64 m across; ribbed dome 27 m; the reactor's crown of rings 44 m up through an oculus |
 | Airlock | a doorway | ribbed tunnel (14 m) to a lock housing, round pressure door, ZBORNAK LABORATORIES over it |
 | Security | none | camera on a round wall mount and a two-link arm, a scan cone onto the stand plate, the photo on a screen beside the door |
-| Lab terminal | none | LABNET, on the wall right of the door as you come in |
+| Lab terminal | none | LABNET, the console before the drone wall, right of the door as you come in |
 | Ranch | gravel yard, one trough, kiosk at the gate | gambrel barn, pen office on its end (the pen terminal indoors), corral, silo feeding a roofed feed bunk |
 | Plateau | barrels, gas rack, generator | plaza, paved walks to the supply pad and the ranch, Zbornak containers, radiator field, solar array |
 
@@ -25,7 +25,32 @@ renders). The courier and the gallery's stone couriers are `runner.glb`.
 
 ![The plan](plan.jpg)
 
-## The last revision
+## The latest revision
+
+| Asked | Done |
+|---|---|
+| The yellow paint bands on the reactor's struts look off | They were short cylinders on axes of their own, set beside the masts, so they read as skewed blocks. Now each band is a sleeve on its mast's own axis, a little proud of it: one low on each mast and one near the head. |
+| The airlock's inner door clips through the wall's sides, with no wall above it; make it look part of things | The ring wall's gap was narrower than the tunnel, so the tunnel ran through the wall panels either side, and the gap was open up to the roof. Now the gap is wide enough and filled by a **portal wall** up to the wall's top. The tunnel's mouth is a round opening in it with a hazard frame and a ring of lime chase lights. The **inner door** is raised into a pocket in the wall above, its lower edge showing in the opening, with guide rails each side. AIRLOCK is lit over it, with a status lamp each side and pilasters where it meets the ring wall. |
+| Replace the gallery with lab equipment; a curved "drone view" screen of other settlements; the lab terminal built in | The gallery is gone, and so is LABNET's wall unit. Right of the door is now the **equipment corner**: |
+| | **Two chemistry benches:** a distillation rig (a flask over a burner's blue flame, a condenser coil to a collecting beaker) under an extraction hood; a flask rack; test-tube racks; a burner on a tripod; a sink with a swan-neck tap; reagent shelves of bottles. |
+| | **The magnet array:** four electromagnet coils on yokes holding a steel sphere in the air in cyan field loops, with a control pedestal. |
+| | **The drone wall:** four video panels fitted round the wall, each a **live drone feed** of a settlement, filmed in the game: Meridian Exchange, the ILMB, Bastion Vostok-9 and Kepler Civic Center. Each feed is under a drone's HUD (DRONE 0n, REC, altitude, heading and speed, a timestamp, a crosshair) and the wall's caption reads ZBORNAK DRONE NETWORK · 4 FEEDS LIVE. |
+| | **Battery chargers:** a cabinet under each end of the drone wall, with eight big cells in cradles, charge bars filling, status lamps and a bus bar into the cable tray. |
+| | **The LABNET console:** a curved desk on a low dais before the drone wall. LABNET is its main screen, with two feed monitors, a keyboard, a drone joystick and a stool. |
+| | **The microscope bench:** three microscopes, slide boxes, petri dishes, and a monitor showing a magnified cell. |
+
+| | |
+|---|---|
+| ![The airlock's inner end, the door raised into the wall](portal.jpg) | ![A reactor strut, its bands on the mast](pylon.jpg) |
+| ![The drone wall and the LABNET console](drones.jpg) | ![LABNET at the console](term.jpg) |
+| ![Chemistry benches and the magnet array](equipment.jpg) | ![The microscope bench](microscopes.jpg) |
+
+| Drone feeds | |
+|---|---|
+| ![Meridian Exchange](screens/drone0.png) | ![The ILMB](screens/drone1.png) |
+| ![Bastion Vostok-9](screens/drone2.png) | ![Kepler Civic Center](screens/drone3.png) |
+
+## The third revision
 
 | Asked | Done |
 |---|---|
@@ -50,7 +75,7 @@ renders). The courier and the gallery's stone couriers are `runner.glb`.
 | ![The weld: clamped, plate held, the bead halfway up](robots.jpg) | ![The stair along the catwalk](stair.jpg) |
 | ![The habitat, 4.5 m deep](hydro.jpg) | ![Its door and sign](hydro_door.jpg) |
 
-## The first review
+## The first review (some of it since changed: the gallery and LABNET's wall unit are now the equipment corner)
 
 | Asked | Done |
 |---|---|
@@ -103,8 +128,7 @@ it: *VISITOR · COURIER #0417 · MATCH 99% · ZBORNAK: "OH. YOU." · ACCESS GRAN
 
 | Spot | What is there |
 |---|---|
-| Right of the door | **LABNET** on the wall, then **Zbornak's dais** facing the door |
-| Front right | the **gallery of the petrified**: five stone couriers on plinths |
+| Right of the door | the **equipment corner**: chemistry benches, the magnet array, the drone wall with the **LABNET** console before it, battery chargers, the microscope bench; **Zbornak's dais** facing the door |
 | Right | the **robotics bay**: a junk-bot chimera on a jig, being armoured: a clamping arm, a plate arm and the **welder**, a plate carrier on the bench, an overhead gantry |
 | Back right | **exotic matter**: a wall of canister racks (void beads, crystals, plasma) and two magnetic cages with a floating black sphere in each |
 | Back | the **splice pod** under a 13 m projection of a double helix |
@@ -118,9 +142,9 @@ it: *VISITOR · COURIER #0417 · MATCH 99% · ZBORNAK: "OH. YOU." · ACCESS GRAN
 
 | | |
 |---|---|
-| ![The intake hatch, from the catwalk](intake.jpg) | ![LABNET on the wall right of the door](term.jpg) |
+| ![The intake hatch, from the catwalk](intake.jpg) | ![LABNET at the console before the drone wall](term.jpg) |
 | ![The robotics bay, the welder at work](robots.jpg) | ![Cryo pods, their lines into the wall](cryo.jpg) |
-| ![Exotic matter](exotic.jpg) | ![The gallery of the petrified](gallery.jpg) |
+| ![Exotic matter](exotic.jpg) | ![The drone wall](drones.jpg) |
 | ![Zbornak at his dais](zb.jpg) | |
 
 **Outside:**
@@ -162,7 +186,7 @@ the game's GLB contract as [zbornak.glb](zbornak.glb).
 
 ## LABNET
 
-Walk up to the wall unit and press F: the camera moves in to the screen. It is a green CRT log in the game's pixel faces, with
+Step up to the console and press F: the camera moves in to the screen. It is a green CRT log in the game's pixel faces, with
 these tabs:
 - **SPLICES:** each of the splice pod's ten mutations, with its source, effect, when it was spliced, whether it is active, your
   three mutation slots, and Zbornak's note.
@@ -194,7 +218,10 @@ are the game's own (`MUTATIONS`, `ITEMS` and the reactor's results in `src/alche
   and the times) kept in the save.
 - **The pen terminal** moves into the barn office, and `PEN` in `alchemy.js` moves to the corral, the residents gathering at the
   feed bunk.
-- **Statues:** `statue()` in `alchemy.js` puts each new statue on the next free plinth.
+- **The drone wall:** in the game each panel is a render target from a camera circling a settlement (the loading screen's
+  sweep), refreshed a few times a second while you are near.
+- **Statues:** `statue()` in `alchemy.js` still needs a spot for the petrified, now the gallery is gone (a corner of the
+  ranch, say).
 - **Zbornak:** the figure replaces `makeFigure` in `buildLab`, his name tag and talk prompt move with the dais, and the head turns
   toward the player.
 - **Cost:** the area is 178k triangles as built here, before outlines; the six containers are 35k of that, as `cargo.py`
@@ -209,6 +236,10 @@ npx vite --port 5199 --host 127.0.0.1
 
 ```bash
 node tools/zbornak-chimeras.mjs
+```
+
+```bash
+node tools/zbornak-drones.mjs
 ```
 
 ```bash

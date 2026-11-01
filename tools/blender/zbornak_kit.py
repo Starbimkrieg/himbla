@@ -204,7 +204,10 @@ def reactor(g, H, R=3.4, pylons=3, crown_y=None, collar_y=None):
         head = (s * (R + 1.35), cly, c * (R + 1.35))
         g("panel", 0.04).boxc(foot[0], 0.6, foot[2], 2.2, 1.2, 2.2, (0, a, 0))
         g("wall2", 0.05).bm((foot[0], 1.0, foot[2]), head, 0.5, 8)
-        g("hazard", 0.0).bm((s * (R + 4.9), 2.0, c * (R + 4.9)), (s * (R + 4.6), 2.9, c * (R + 4.6)), 0.52, 8)
+        f1 = Vector((foot[0], 1.0, foot[2]))
+        mast = Vector(head) - f1
+        for t0, t1 in ((0.14, 0.22), (0.78, 0.82)):                         # paint bands: sleeves on the mast's own axis
+            g("hazard", 0.0).bm(tuple(f1 + mast * t0), tuple(f1 + mast * t1), 0.515, 8)
         g("dark", 0.04).ball(*head, 0.75, 12, 8)
         g("steel", 0.03).boxc(s * (R + 0.75), cly, c * (R + 0.75), 0.7, 0.55, 1.2, (0, a, 0))     # bracket, head to collar
         for k in (-1, 1):                                                   # bolts through the bracket's flange
@@ -954,3 +957,260 @@ def zb_container(g, x, z, yaw=0.0, stack=1, number=417, scale=1.0):
             if o not in made and o.type == "MESH":
                 o.data.transform(T)
     gl["FACTIONS"] = keep
+
+
+# =====================================================================================================================
+# the lab's equipment corner (right of the door): benches, the magnet array, the chargers, the drone wall and its console
+# =====================================================================================================================
+LIQUIDS = ("lime", "pink", "cyan", "amber", "vio", "teal")
+
+
+def bench(g, L, depth=0.9, h=0.95):
+    """a lab bench against a wall (its back on local z = 0, the front toward +z): white cabinets with dark doors, a black
+    top, a kick plate, a backsplash"""
+    g("white", 0.03).boxc(0, (h - 0.05) / 2 + 0.05, depth / 2, L, h - 0.05, depth - 0.05)
+    g("dark", 0.0).boxc(0, 0.05, depth / 2 + 0.02, L - 0.1, 0.1, depth - 0.12)
+    n = max(1, int(L / 0.9))
+    for i in range(n):
+        x = -L / 2 + (i + 0.5) * L / n
+        g("panel", 0.0).boxc(x, h * 0.5, depth - 0.02, L / n - 0.08, h - 0.3, 0.02)
+        g("steel", 0.0).boxc(x, h - 0.2, depth + 0.0, 0.25, 0.03, 0.03)
+    g("dark", 0.02).boxc(0, h + 0.03, depth / 2, L + 0.06, 0.06, depth + 0.04)
+    g("white", 0.02).boxc(0, h + 0.36, 0.04, L, 0.6, 0.06)
+
+
+def flask(g, x, y, z, kind, c, s=1.0):
+    """glassware standing at (x, y, z): round-bottom (0), conical (1), beaker (2), graduated cylinder (3); coloured liquid in it"""
+    if kind == 0:
+        g("glass", 0.0).ball(x, y + 0.13 * s, z, 0.13 * s, 12, 8).cylc(x, y + 0.31 * s, z, 0.035 * s, 0.16 * s, 8)
+        g(c, 0.0).ball(x, y + 0.1 * s, z, 0.1 * s, 10, 6, s=(1, 0.7, 1))
+    elif kind == 1:
+        g("glass", 0.0).cylc(x, y + 0.12 * s, z, 0.13 * s, 0.24 * s, 12, rt=0.04 * s).cylc(x, y + 0.29 * s, z, 0.035 * s, 0.1 * s, 8)
+        g(c, 0.0).cylc(x, y + 0.05 * s, z, 0.12 * s, 0.1 * s, 12, rt=0.085 * s)
+    elif kind == 2:
+        g("glass", 0.0).cylc(x, y + 0.1 * s, z, 0.08 * s, 0.2 * s, 12)
+        g(c, 0.0).cylc(x, y + 0.06 * s, z, 0.075 * s, 0.12 * s, 12)
+    else:
+        g("glass", 0.0).cylc(x, y + 0.17 * s, z, 0.035 * s, 0.34 * s, 8).cylc(x, y + 0.01, z, 0.06 * s, 0.02, 8)
+        g(c, 0.0).cylc(x, y + 0.11 * s, z, 0.03 * s, 0.2 * s, 8)
+
+
+def chem_bench(g, x, z, yaw, L=3.8, kind=0, seed=0):
+    """A chemistry bench against the wall at (x, z) facing yaw. kind 0: a distillation rig (retort stand, a flask over a
+    burner's blue flame, a condenser coil down to a collecting beaker), a flask rack (round flasks upside down on pegs), an
+    extraction hood over it with its duct up to the tray; kind 1: test-tube racks, a reagent shelf of bottles, a burner, a
+    sink with a swan-neck tap. Glassware everywhere, liquids glowing."""
+    g.at(x, z, yaw)
+    bench(g, L)
+    top = 1.01
+    if kind == 0:
+        # retort stand, clamp, flask over a burner, the condenser coil, the collecting beaker
+        g("dark", 0.02).boxc(-1.1, top + 0.02, 0.45, 0.4, 0.04, 0.3)
+        g("steel", 0.0).cylc(-1.25, top + 0.55, 0.45, 0.02, 1.1, 6)
+        g("steel", 0.0).bm((-1.25, top + 0.62, 0.45), (-1.0, top + 0.62, 0.45), 0.015, 4)
+        g("steel", 0.0).tor(0.09, 0.012, (-1.0, top + 0.3, 0.45), n=12, rs=3)
+        flask(g, -1.0, top + 0.27, 0.45, 0, "pink", 1.3)
+        g("dark", 0.02).cylc(-1.0, top + 0.07, 0.45, 0.06, 0.14, 8)
+        g("cyan", 0.0).cylc(-1.0, top + 0.2, 0.45, 0.01, 0.1, 6, rt=0.045)                # the burner's blue flame
+        coil = [(-1.0 + 0.05 * k, top + 0.75 - 0.04 * k + 0.05 * math.sin(k * 1.2), 0.45 + 0.07 * math.cos(k * 1.2)) for k in range(14)]
+        g("glass", 0.0).path([(-1.0, top + 0.68, 0.45)] + coil + [(-0.3, top + 0.2, 0.45)], 0.025, 5)
+        g("pink", 0.0).path(coil[6:], 0.012, 4)
+        flask(g, -0.3, top, 0.45, 2, "pink", 1.0)
+        # a flask rack: a pegboard on legs, round flasks upside down on its pegs
+        g("white", 0.02).boxc(0.55, top + 0.45, 0.2, 0.9, 0.7, 0.05)
+        for i in range(3):
+            for j in range(2):
+                px, py = 0.25 + i * 0.3, top + 0.3 + j * 0.3
+                g("steel", 0.0).bm((px, py, 0.22), (px, py + 0.04, 0.32), 0.012, 4)
+                g("glass", 0.0).ball(px, py + 0.13, 0.36, 0.09, 10, 6)
+        for i, kd in enumerate((1, 2, 3, 2)):
+            flask(g, 1.25 + i * 0.16 - (0.4 if i > 1 else 0), top, 0.65 if i > 1 else 0.4, kd, LIQUIDS[(i + seed) % 6], 0.9)
+        # the extraction hood over the rig, its duct up into the cable tray's run
+        g("steel", 0.03).add(cylinder(0.3, 0.85, 0.5, 4)[:2], (-0.65, top + 1.75, 0.45), (0, PI / 4, 0), (1.3, 1, 0.8))
+        g("steel", 0.02).cylc(-0.65, top + 3.1, 0.3, 0.22, 2.3, 10)
+        g("lamp", 0.0).boxc(-0.65, top + 1.49, 0.45, 0.8, 0.03, 0.4)
+    else:
+        # test-tube racks
+        for r_, rx in enumerate((-1.3, -0.65)):
+            g("white", 0.02).boxc(rx, top + 0.1, 0.45, 0.55, 0.04, 0.2).boxc(rx, top + 0.22, 0.45, 0.55, 0.04, 0.2)
+            for k in (-1, 1):
+                g("white", 0.0).boxc(rx + k * 0.26, top + 0.12, 0.45, 0.03, 0.24, 0.2)
+            for i in range(6):
+                tx = rx - 0.22 + i * 0.088
+                g("glass", 0.0).cylc(tx, top + 0.2, 0.45, 0.025, 0.36, 6)
+                g(LIQUIDS[(i + r_ * 2 + seed) % 6], 0.0).cylc(tx, top + 0.12 + 0.02 * (i % 3), 0.45, 0.021, 0.12 + 0.04 * (i % 3), 6)
+        # a burner with a beaker on a tripod
+        g("dark", 0.02).cylc(0.1, top + 0.07, 0.5, 0.06, 0.14, 8)
+        g("cyan", 0.0).cylc(0.1, top + 0.2, 0.5, 0.01, 0.1, 6, rt=0.045)
+        for k in range(3):
+            a = TAU * k / 3
+            g("steel", 0.0).bm((0.1 + math.sin(a) * 0.14, top, 0.5 + math.cos(a) * 0.14), (0.1 + math.sin(a) * 0.1, top + 0.3, 0.5 + math.cos(a) * 0.1), 0.01, 4)
+        g("steel", 0.0).tor(0.11, 0.01, (0.1, top + 0.3, 0.5), n=12, rs=3)
+        flask(g, 0.1, top + 0.31, 0.5, 1, "lime", 1.0)
+        # the sink and its swan-neck tap
+        g("steel", 0.02).boxc(0.95, top + 0.01, 0.5, 0.75, 0.04, 0.55)
+        g("dark", 0.0).boxc(0.95, top + 0.035, 0.5, 0.6, 0.01, 0.42)
+        g("steel", 0.0).path([(0.95, top, 0.12), (0.95, top + 0.45, 0.12), (0.95, top + 0.5, 0.25), (0.95, top + 0.38, 0.32)], 0.025, 6)
+        for i, kd in enumerate((2, 0, 3)):
+            flask(g, 1.55 + (i % 2) * 0.15, top, 0.35 + i * 0.15, kd, LIQUIDS[(i + 3 + seed) % 6], 0.9)
+    # a reagent shelf on the wall above the bench: brown and blue bottles, a hazard lip
+    g("steel", 0.02).boxc(0, top + 1.1, 0.18, L - 0.2, 0.05, 0.3)
+    g("hazard", 0.0).boxc(0, top + 1.1, 0.335, L - 0.2, 0.05, 0.01)
+    for k in (-1, 1):
+        g("steel", 0.0).bm((k * (L / 2 - 0.3), top + 1.08, 0.04), (k * (L / 2 - 0.3), top + 0.85, 0.04), 0.02, 4)
+    for i in range(int(L / 0.22)):
+        bx = -L / 2 + 0.25 + i * 0.22
+        if kind == 0 and -1.15 < bx < -0.15:
+            continue
+        g(("copper", "dark", "steel")[i % 3], 0.008).cylc(bx, top + 1.24, 0.18, 0.06, 0.24, 8)
+        g("white", 0.0).cylc(bx, top + 1.39, 0.18, 0.03, 0.06, 6)
+    g.light((0, top + 1.6, 0.8), (0.9, 0.95, 1.0), 120, 0.3)
+    g.at()
+
+
+def microscope_bench(g, x, z, yaw, L=3.8):
+    """a bench of microscopes against the wall: three microscopes (foot, arm, stage with a slide, tube, eyepieces, an
+    objective turret), slide boxes, a stack of petri dishes, a monitor showing a magnified cell, a stool"""
+    g.at(x, z, yaw)
+    bench(g, L)
+    top = 1.01
+    for i, mx in enumerate((-1.2, 0.0, 1.2)):
+        g("white", 0.02).boxc(mx, top + 0.03, 0.5, 0.26, 0.06, 0.32)
+        g("white", 0.02).path([(mx, top + 0.05, 0.38), (mx, top + 0.35, 0.36), (mx, top + 0.5, 0.48)], 0.05, 6)
+        g("dark", 0.015).boxc(mx, top + 0.22, 0.55, 0.22, 0.03, 0.2)
+        g("glass", 0.0).boxc(mx, top + 0.24, 0.55, 0.16, 0.005, 0.06)
+        g(LIQUIDS[i], 0.0).cylc(mx, top + 0.245, 0.55, 0.012, 0.004, 8)
+        g("dark", 0.015).cylc(mx, top + 0.42, 0.55, 0.06, 0.12, 10)
+        for k in range(3):
+            a = TAU * k / 3
+            g("steel", 0.0).cylc(mx + math.sin(a) * 0.035, top + 0.33, 0.55 + math.cos(a) * 0.035, 0.012, 0.08, 6)
+        g("white", 0.015).path([(mx, top + 0.48, 0.55), (mx, top + 0.58, 0.5), (mx, top + 0.66, 0.6)], 0.04, 8)
+        for k in (-1, 1):
+            g("dark", 0.0).cylc(mx + k * 0.035, top + 0.7, 0.66, 0.018, 0.06, 6)
+        g("lamp", 0.0).cylc(mx, top + 0.11, 0.55, 0.03, 0.02, 8)
+    for i in range(4):
+        g(("dark", "white")[i % 2], 0.01).boxc(-0.6, top + 0.025 + i * 0.05, 0.25, 0.3, 0.05, 0.12)
+    for i in range(5):
+        g("glass", 0.0).cylc(0.6, top + 0.01 + i * 0.022, 0.3, 0.07, 0.02, 12)
+        g(LIQUIDS[(i + 2) % 6], 0.0).cylc(0.6, top + 0.016 + i * 0.022, 0.3, 0.055, 0.006, 12)
+    g("dark", 0.03).boxc(1.4, top + 0.62, 0.15, 0.9, 0.6, 0.05)
+    g("steel", 0.0).boxc(1.4, top + 0.18, 0.15, 0.06, 0.34, 0.04)
+    g("screenlit", 0.0).boxc(1.4, top + 0.62, 0.18, 0.8, 0.5, 0.01)
+    g("lime", 0.0).ball(1.4, top + 0.62, 0.19, 0.12, 12, 6, s=(1, 0.75, 0.05))
+    g("vio", 0.0).ball(1.43, top + 0.65, 0.195, 0.04, 8, 4, s=(1, 1, 0.1))
+    g("dark", 0.0).cylc(0.0, 0.32, 1.25, 0.05, 0.64, 6)
+    g("seat", 0.02).cylc(0.0, 0.66, 1.25, 0.24, 0.07, 12)
+    g("dark", 0.0).cylc(0.0, 0.02, 1.25, 0.24, 0.04, 10)
+    g.light((0, top + 1.3, 0.8), (0.9, 0.95, 1.0), 100, 0.3)
+    g.at()
+
+
+def magnet_array(g, x, z, yaw=0.0):
+    """four electromagnets on yokes about a ringed platform, aimed in at a steel sphere they hold in the air, cyan field loops
+    about it, a control pedestal and a power cable"""
+    g.at(x, z, yaw)
+    g("dark", 0.04).lath([(2.5, 0), (2.5, 0.25), (2.3, 0.3), (0.0, 0.3)], segs=32)
+    g("lime", 0.0).tor(2.35, 0.04, (0, 0.3, 0), n=36, rs=4)
+    g("hazard", 0.0).tor(1.0, 0.04, (0, 0.31, 0), n=24, rs=4, s=(1, 0.2, 1))
+    cy = 1.7
+    for k in range(4):
+        a = TAU * k / 4 + PI / 4
+        s, c = math.sin(a), math.cos(a)
+        g("steel", 0.03).boxc(s * 1.9, 0.85, c * 1.9, 0.5, 1.1, 0.5, (0, a, 0))                # the yoke's post
+        g("steel", 0.02).bm((s * 1.9, 1.3, c * 1.9), (s * 1.5, cy, c * 1.5), 0.14, 6)
+        coil = Vector((s * 1.25, cy, c * 1.25))
+        g("copper", 0.03).cylc(coil.x, coil.y, coil.z, 0.32, 0.7, 14, rot=(PI / 2, a, 0))
+        for j in range(5):
+            g("brass", 0.0).cylc(coil.x - s * (0.27 - j * 0.13), coil.y, coil.z - c * (0.27 - j * 0.13), 0.335, 0.03, 14, rot=(PI / 2, a, 0))
+        g("dark", 0.02).cylc(s * 0.82, cy, c * 0.82, 0.18, 0.18, 10, rot=(PI / 2, a, 0))       # the pole piece
+        g("cyan", 0.0).cylc(s * 0.72, cy, c * 0.72, 0.12, 0.02, 10, rot=(PI / 2, a, 0))
+    g("steel", 0.02).ball(0, cy, 0, 0.3, 16, 10)
+    for k, rot in enumerate(((0.3, 0, 0), (PI / 2, 0.4, 0), (0.9, 1.2, 0.3), (-0.6, 2.1, 0.5))):
+        g("cyan", 0.0).tor(0.55 + 0.08 * k, 0.012, (0, cy, 0), rot, n=32, rs=3)
+    g("panel", 0.03).boxc(0, 0.75, 2.9, 0.7, 0.9, 0.45)
+    g("dark", 0.0).boxc(0, 1.22, 2.95, 0.72, 0.06, 0.5, (0.35, 0, 0))
+    for i in range(3):
+        g(("lime", "amber", "red")[i], 0.0).ball(-0.2 + 0.2 * i, 1.27, 2.96, 0.035, 6, 4)
+    g("cable", 0.0).path([(0, 0.3, 2.5), (0, 0.1, 2.0), (0, 0.1, -2.5), (0, 0.1, -4.0)], 0.09, 6)
+    g.light((0, cy, 0), (0.4, 0.85, 1.0), 260, 0.3)
+    g.at()
+
+
+def battery_station(g, x, z, yaw):
+    """a battery charging cabinet on the wall: two rows of big cells in cradles, each with a charge bar (some full, some
+    filling), a status lamp per cell, a bus bar up into the cable tray, CHARGING over it"""
+    g.at(x, z, yaw)
+    g("panel", 0.04).boxc(0, 1.1, 0.3, 2.4, 2.2, 0.6)
+    g("dark", 0.0).boxc(0, 1.1, 0.61, 2.2, 2.0, 0.02)
+    for r in range(2):
+        for i in range(4):
+            bx, by = -0.8 + i * 0.53, 0.35 + r * 1.0
+            g("dark", 0.015).boxc(bx, by - 0.04, 0.45, 0.42, 0.06, 0.36)
+            g("steel", 0.02).cylc(bx, by + 0.3, 0.45, 0.16, 0.6, 14)
+            g("hazard", 0.0).cylc(bx, by + 0.3, 0.45, 0.165, 0.12, 14)
+            g("dark", 0.0).cylc(bx, by + 0.63, 0.45, 0.07, 0.06, 10)
+            lvl = (0.2, 0.55, 0.85, 1.0, 1.0, 0.4, 0.7, 1.0)[r * 4 + i]
+            g("dark", 0.0).boxc(bx + 0.18, by + 0.3, 0.63, 0.05, 0.5, 0.01)
+            g("lime" if lvl >= 1 else "amber", 0.0).boxc(bx + 0.18, by + 0.05 + 0.25 * lvl, 0.64, 0.035, 0.5 * lvl, 0.01)
+            g("lime" if lvl >= 1 else "red", 0.0).ball(bx - 0.15, by + 0.72, 0.62, 0.025, 6, 4)
+            g("cable", 0.0).path([(bx, by + 0.66, 0.45), (bx, by + 0.78, 0.4), (bx * 0.3, by + 0.85, 0.2)], 0.025, 4)
+    g("copper", 0.0).boxc(0, 2.3, 0.15, 2.2, 0.1, 0.1)
+    g("steel", 0.0).cylc(0.9, 4.15, 0.1, 0.09, 3.6, 8)
+    g("dark", 0.03).boxc(0, 2.5, 0.35, 2.0, 0.32, 0.06)
+    g.text("CHARGING", (0, 2.4, 0.39), 0, 0.2, "lime", 0.01)
+    g.at()
+
+
+def drone_wall(g, R, degs, y=4.9, w=3.9, h=2.4):
+    """the drone view: video panels fitted round the wall at angles degs (deg, radius R), each its own screen (`screen_drone<k>`),
+    in dark bezels joined by a frame along the top and bottom, REC lamps, a caption strip under it"""
+    for k, deg in enumerate(degs):
+        a = math.radians(deg)
+        g.at(math.sin(a) * R, math.cos(a) * R, a + PI, y)
+        g("dark", 0.03).boxc(0, 0, -0.08, w + 0.24, h + 0.24, 0.16)
+        g.screen(f"drone{k}", 0, 0, 0.01, w, h)
+        g("red", 0.0).ball(w / 2 - 0.12, h / 2 + 0.06, 0.02, 0.04, 6, 4)
+        for sx in (-1, 1):
+            g("steel", 0.0).boxc(sx * (w / 2 - 0.4), 0, -0.25, 0.1, 0.1, 0.2)
+        g.at()
+    a0, a1 = math.radians(degs[0]) - 0.075, math.radians(degs[-1]) + 0.075
+    n = 16
+    for i in range(n):
+        a = a0 + (a1 - a0) * (i + 0.5) / n
+        for yy, hh in ((y + h / 2 + 0.17, 0.1), (y - h / 2 - 0.17, 0.1)):
+            g("steel", 0.0).boxc(math.sin(a) * (R - 0.02), yy, math.cos(a) * (R - 0.02), (a1 - a0) * R / n * 1.02, hh, 0.12, (0, a, 0))
+        g("dark", 0.0).boxc(math.sin(a) * (R - 0.02), y - h / 2 - 0.5, math.cos(a) * (R - 0.02), (a1 - a0) * R / n * 1.02, 0.42, 0.1, (0, a, 0))
+    am = (a0 + a1) / 2
+    g.text("ZBORNAK DRONE NETWORK  ·  4 FEEDS LIVE", (math.sin(am) * (R - 0.22), y - h / 2 - 0.62, math.cos(am) * (R - 0.22)), am + PI, 0.2, "cyan", 0.01)
+
+
+def drone_console(g, x, z, yaw, sid="lab"):
+    """the console before the drone wall, with LABNET built in: a curved desk on a low dais (the operator stands on the
+    +z side, facing -z toward the wall), LABNET's screen in the middle, two feed monitors, a keyboard, a joystick for the
+    drones, a stool"""
+    g.at(x, z, yaw)
+    g("panel", 0.03).cylc(0, 0.09, 1.2, 3.0, 0.18, 32)
+    g("lime", 0.0).tor(3.0, 0.03, (0, 0.18, 1.2), n=36, rs=4)
+    for k in range(-2, 3):
+        a = k * 0.28
+        cx, cz = math.sin(a) * 2.6, 2.6 - math.cos(a) * 2.6
+        g("white", 0.03).boxc(cx, 0.65, cz, 1.0, 0.95, 0.75, (0, a, 0))
+        g("dark", 0.02).boxc(cx + math.sin(a) * 0.06, 1.15, cz + math.cos(a) * 0.06, 1.02, 0.06, 0.95, (0, a, 0))
+        g("cyan", 0.0).boxc(cx + math.sin(a) * 0.38, 0.55, cz + math.cos(a) * 0.38, 0.8, 0.04, 0.01, (0, a, 0))
+    g("dark", 0.03).boxc(0, 1.9, -0.18, 2.3, 1.45, 0.14, (-0.15, 0, 0))
+    g("dark", 0.02).boxc(0, 1.3, -0.25, 0.25, 0.3, 0.2)
+    g.screen(sid, 0, 1.92, -0.10, 2.1, 1.2, 0, 0.15)
+    for k in (-1, 1):
+        a = k * 0.5
+        g("dark", 0.02).boxc(k * 1.65, 1.68, 0.15 + 0.15, 1.0, 0.65, 0.08, (-0.15, -k * 0.5, 0))
+        g(("cyan" if k < 0 else "lime"), 0.0).boxc(k * 1.63, 1.68, 0.21 + 0.15, 0.85, 0.52, 0.01, (-0.15, -k * 0.5, 0))
+    g("dark", 0.0).boxc(0, 1.205, 0.32, 1.2, 0.03, 0.35)
+    for i in range(14):
+        g("white", 0.0).boxc(-0.5 + (i % 7) * 0.165, 1.23, 0.24 + (i // 7) * 0.14, 0.13, 0.015, 0.1)
+    g("dark", 0.0).cylc(0.95, 1.25, 0.4, 0.08, 0.06, 10)
+    g("steel", 0.0).bm((0.95, 1.27, 0.4), (0.95, 1.45, 0.38), 0.025, 6)
+    g("red", 0.0).ball(0.95, 1.47, 0.38, 0.035, 6, 4)
+    g("dark", 0.0).cylc(0, 0.5, 1.25, 0.05, 0.64, 6)
+    g("seat", 0.02).cylc(0, 0.84, 1.25, 0.26, 0.08, 12)
+    g.light((0, 2.0, 1.0), (0.45, 0.9, 1.0), 120, 0.3)
+    g.at()

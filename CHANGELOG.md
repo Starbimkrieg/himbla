@@ -30,7 +30,14 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
   - **Zbornak, an alien:** a clipboard and a scorched coat, 7.9k triangles, exported in the game's GLB contract as `zbornak.glb`
     (plain, in the docs folder).
   - `tools/zbornak-chimeras.mjs` exports game chimeras for the renders.
-  - **The last revision:**
+  - **The latest revision:**
+    - The reactor struts' yellow bands are sleeves on the masts' own axes.
+    - The airlock's inner end is a portal wall filling the ring wall's gap up to its top, the tunnel's mouth a round opening
+      in it, the inner door raised into a pocket above.
+    - The gallery is replaced by an equipment corner: chemistry benches, a magnet array, battery chargers, a microscope bench,
+      and a curved drone wall of four live drone feeds of settlements filmed in the game (`tools/zbornak-drones.mjs`), with
+      LABNET built into the console before it.
+  - **The third revision:**
     - The hydroponics sign fits its board.
     - The habitat stands half as far from the wall (4.5 m), with one row of ten pods.
     - The catwalk stair runs along the ring to a landing on the west, clear of the habitat's door.

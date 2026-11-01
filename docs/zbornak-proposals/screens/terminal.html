@@ -1,7 +1,8 @@
 <!doctype html>
 <!-- Mock-ups of the lab's screens for the Antimatter Lab draft (docs/zbornak-proposals/README.md). Served by the dev server
      (for the game's fonts) and shot by tools/zbornak-screens.mjs: ?s=full is the lab terminal's close-up (LABNET; &tab=0
-     splices, 1 reactor); ?s=lab, ?s=pen and ?s=sec are the pictures on the in-world screens. The entries are
+     splices, 1 reactor); ?s=lab, ?s=pen and ?s=sec are the pictures on the in-world screens; ?s=drone&k=0..3 the drone
+     wall's feeds (screens/feed_<id>.jpg, filmed in the game by tools/zbornak-drones.mjs). The entries are
      the game's own (alchemy.js MUTATIONS, ITEMS and the reactor's results), with a made-up save: what is unlocked and when. -->
 <html>
 <head>
@@ -42,6 +43,16 @@
   .slots span { width: 2.2vw; height: 2.2vw; border: 0.2vw solid #7dff3a; display: grid; place-items: center; font-size: 1.4vw; }
   .slots span.e { border-color: #2f6a3e; }
 
+  /* drone feeds (?s=drone&k=0..3): a settlement filmed in the game, under a drone's HUD */
+  .drone { position: absolute; inset: 0; background: #000; overflow: hidden; font-family: var(--d); color: #e8fff0; }
+  .drone img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.75) contrast(1.08) brightness(0.95); }
+  .drone::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0 1px, transparent 1px 3px), radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%); }
+  .drone .c { position: absolute; width: 5vw; height: 5vw; border: 0.45vw solid #7dff3a; z-index: 2; }
+  .drone .t { position: absolute; z-index: 2; font-size: 1.6vw; text-shadow: 0 0 0.4vw #000, 0.15vw 0.15vw 0 #000; }
+  .drone .x { position: absolute; left: 50%; top: 50%; width: 7vw; height: 7vw; margin: -3.5vw; border: 0.3vw solid rgba(125,255,58,0.8); border-radius: 50%; z-index: 2; }
+  .drone .x::before, .drone .x::after { content: ""; position: absolute; background: rgba(125,255,58,0.8); }
+  .drone .x::before { left: 50%; top: -2vw; bottom: -2vw; width: 0.3vw; margin-left: -0.15vw; }
+  .drone .x::after { top: 50%; left: -2vw; right: -2vw; height: 0.3vw; margin-top: -0.15vw; }
   /* the in-world screens */
   .sec { position: absolute; inset: 0; background: #06120a; color: #8dffb4; font-family: var(--d); }
   .sec img { position: absolute; object-fit: cover; filter: saturate(0.6) contrast(1.1); }
@@ -113,6 +124,18 @@ function labnet(tab) {
     <div class="foot"><span>↑↓ SELECT · ←→ TAB · F / ESC CLOSE</span><span>LAST ENTRY: MOON MITE → MEGA MITE ★ NEW</span></div></div>`;
 }
 
+function drone(k) {
+  const F = [['meridian', 'MERIDIAN EXCHANGE', 74, 212, 18], ['ilmb', 'INTERNATIONAL MOON BASE', 81, 147, 12], ['vostok', 'BASTION VOSTOK-9', 70, 305, 22], ['kepler', 'KEPLER CIVIC CENTER', 63, 38, 9]][k];
+  app.innerHTML = `<div class="drone"><img src="feed_${F[0]}.jpg">
+    <div class="c" style="left:2.5vw;top:2.5vw;border-right:none;border-bottom:none"></div><div class="c" style="right:2.5vw;top:2.5vw;border-left:none;border-bottom:none"></div>
+    <div class="c" style="left:2.5vw;bottom:2.5vw;border-right:none;border-top:none"></div><div class="c" style="right:2.5vw;bottom:2.5vw;border-left:none;border-top:none"></div>
+    <div class="x"></div>
+    <div class="t" style="left:5vw;top:5vw;color:#7dff3a">DRONE 0${k + 1} · ${F[1]}</div>
+    <div class="t" style="right:5vw;top:5vw;color:#ff3b5c">● REC</div>
+    <div class="t" style="left:5vw;bottom:5vw">ALT ${F[2]} M · HDG ${F[3]}° · ${F[4]} M/S</div>
+    <div class="t" style="right:5vw;bottom:5vw;color:#ffd23f">DAY 16 22:5${k}:0${k + 3}</div></div>`;
+}
+
 function inworld() {
   if (S === 'sec') {
     app.innerHTML = `<div class="sec"><img src="photo.jpg" style="left:3vw;top:3vw;width:52vw;height:55vw"><div class="cross" style="left:14vw;top:9vw;width:30vw;height:30vw"></div><div class="lbl" style="left:58vw;top:5vw;color:#ffd23f">VISITOR</div><div class="lbl" style="left:58vw;top:13vw">COURIER</div><div class="lbl" style="left:58vw;top:20vw">#0417</div><div class="lbl" style="left:58vw;top:30vw">MATCH 99%</div><div class="lbl" style="left:58vw;top:40vw;color:#c77dff">ZBORNAK:</div><div class="lbl" style="left:58vw;top:47vw;color:#c77dff">"OH. YOU."</div><div class="ok" style="top:61vw">ACCESS GRANTED</div></div>`;
@@ -123,7 +146,7 @@ function inworld() {
   }
 }
 
-if (S === 'full' || S === 'lab') labnet(Number(Q.get('tab') || 0)); else inworld();
+if (S === 'full' || S === 'lab') labnet(Number(Q.get('tab') || 0)); else if (S === 'drone') drone(Number(Q.get('k') || 0)); else inworld();
 </script>
 </body>
 </html>

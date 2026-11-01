@@ -469,6 +469,7 @@ tools/
   winch-ride.mjs           headless winch test; run --gate ring after touching src/winch.js
   zbornak-chimeras.mjs     exports a few game chimeras as GLBs for the Antimatter Lab draft's renders (docs/zbornak-proposals/)
   zbornak-screens.mjs      shoots the Antimatter Lab draft's screen mock-ups (docs/zbornak-proposals/screens/terminal.html)
+  zbornak-drones.mjs       films the Antimatter Lab draft's drone feeds: aerial shots of four settlements from the running game
   blender/
     kit.py                 shared helpers every builder execs
     hullkit.py             hull lofts and fittings (Courier, Skimmer redesigns)

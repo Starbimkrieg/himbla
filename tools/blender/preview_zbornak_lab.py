@@ -382,8 +382,8 @@ def animate_robots(G, N):
 TAU_ = 2 * math.pi
 # plan labels: (text, x, z) in the area's frame; placed in the margins by side
 PLAN = [("Rotunda: the reactor under the oculus", 0, -18), ("Stair to the catwalk", -12.45, -23.0), ("Intake hatch on the catwalk", -6.3, -18), ("Airlock tunnel + lock housing", 0, 22),
-        ("Security post: stand plate, camera, screen", 0, 35.6), ("Plaza", 0, 46), ("LABNET (on the wall)", 7.2, 11.1),
-        ("Zbornak's dais", 5.5, -5.7), ("Gallery of the petrified", 20.0, -9.0), ("Robotics bay", 20.7, -21.6), ("Exotic-matter wall", 15.5, -43),
+        ("Security post: stand plate, camera, screen", 0, 35.6), ("Plaza", 0, 46), ("Airlock portal (inner door raised)", 0, 11.5), ("Chemistry benches", 12.5, 7.0),
+        ("Zbornak's dais", 5.5, -5.7), ("Magnet array", 12.6, -0.6), ("Drone wall + LABNET console", 21.3, -3.5), ("Battery chargers", 27.5, -7.0), ("Microscopes", 29.0, -12.6), ("Robotics bay", 20.7, -21.6), ("Exotic-matter wall", 15.5, -43),
         ("Splice pod", 0, -41.5), ("Cryo pods (6)", -13.3, -41), ("Hydroponics habitat", -27.1, -13.2), ("Holotable", -12, -2.6),
         ("Ranch barn", 74, -26), ("Pen office: pen terminal", 57, -24.5), ("Silo + auger", 93.5, -30), ("Feed bunk", 93, 8),
         ("Corral", 80, 36), ("Training ring", 70, 26), ("Gate arch", 50, 16), ("Stock tank + sun-mill", 56, 39),
@@ -524,7 +524,7 @@ elif MODE == "plan":
 elif MODE == "sheet":
     from PIL import Image, ImageDraw, ImageFont
     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
-    views = ("over", "front", "gate", "cut", "inside", "intake", "term", "robots", "hydro", "hydro_door", "stair", "cryo", "exotic", "gallery", "walks", "crates", "ranch", "office")
+    views = ("over", "front", "gate", "cut", "inside", "portal", "pylon", "drones", "term", "equipment", "microscopes", "intake", "robots", "hydro", "hydro_door", "stair", "cryo", "exotic", "walks", "crates", "ranch", "office")
     w, h, cols = 640, 360, 3
     rows = (len(views) + cols - 1) // cols
     sheet = Image.new("RGB", (w * cols, (h + 34) * rows), (14, 10, 26))

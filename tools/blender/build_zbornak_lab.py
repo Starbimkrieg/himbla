@@ -10,8 +10,9 @@
 # The Rotunda: a domed round lab 64 m across, the reactor rising through an oculus to a crown of rings 44 m up. A ribbed
 # airlock tunnel runs to a lock housing (ZBORNAK LABORATORIES over a round pressure door; the security camera on a round
 # mount photographs the visitor on the stand plate). Inside, about the reactor (its catwalk, the stair up to it and the
-# bridge to the intake hatch), clockwise from the door: LABNET on the wall right of the door, Zbornak's dais, the petrified
-# gallery, the robotics bay, the exotic-matter wall and its magnetic cages, the splice pod, the cryo pods, the sealed
+# bridge to the intake hatch), clockwise from the door (its inner end a portal in the wall, the inner door raised into it): the
+# equipment corner (chemistry benches, the magnet array, the drone wall with the LABNET console before it, battery chargers,
+# microscopes), Zbornak's dais, the robotics bay, the exotic-matter wall and its magnetic cages, the splice pod, the cryo pods, the sealed
 # hydroponics habitat, the holotable. A cable tray runs round the wall at 6.2 m; every pipe and cable ends in it, a socket
 # or a flange. Outside: the plaza, paved walks to the supply pad and the ranch gate, the Zbornak containers (the standard
 # cargo box), a radiator field piped to the reactor, a solar array cabled in, gas racks, the generator. The ranch east of it.
@@ -229,8 +230,8 @@ def build_lab(root):
         return (CX + lx, CZ + lz)
 
     # ---- shell: plinth, wall with portholes, radiator fins, ring beam, ribbed dome, oculus
-    ring_wall(lab, R, T, H, gaps=[(0.0, 7.0)])
-    ring_wall(lab, R + T, 0.6, 1.2, gaps=[(0.0, 7.4)], slot="panel")
+    ring_wall(lab, R, T, H, gaps=[(0.0, 9.0)])                            # (the airlock's portal fills the gap)
+    ring_wall(lab, R + T, 0.6, 1.2, gaps=[(0.0, 9.4)], slot="panel")
     for i in range(48):
         a = TAU * (i + 0.5) / 48
         if abs((a + PI) % TAU - PI) * R < 6:
@@ -300,7 +301,27 @@ def build_lab(root):
     lab.text("ZBORNAK LABORATORIES", (0, 8.33, z1 + 6.19), 0, 0.68, "pink")
     plate = security_post(lab, 0, z1 + 6.0, 0, DY, DR, "sec")
     RUNNER["gate"] = ((plate[0] + CX, 0, plate[2] + CZ), PI)
-    lab("hazard", 0.02).tor(2.9, 0.22, (0, DY, R - 0.1), (PI / 2, 0, 0), n=40, rs=6)            # the inner door's frame
+    # the airlock's inner end: a portal wall filling the gap in the ring wall up to its top, the tunnel's mouth a round
+    # opening in it, the inner door raised into a pocket in the wall above it (its lower edge showing), guide rails each
+    # side, a lit hazard frame, pilasters where it meets the ring wall, AIRLOCK over it
+    PW, PZ, HR_, HY_ = 5.45, R + T / 2 - 0.25, 2.85, 2.85                  # half width, the portal's middle (z), the hole
+    lab("wall", 0.06).boxc(0, (HY_ + HR_ + H) / 2, PZ, 2 * PW, H - HY_ - HR_, T)
+    for sx in (-1, 1):
+        arc = [(sx * HR_ * math.cos(math.radians(f)), HY_ + HR_ * math.sin(math.radians(f))) for f in range(90, -91, -10)]
+        lab("wall", 0.06).polyz(arc + [(sx * PW, 0.0), (sx * PW, HY_ + HR_)], PZ - T / 2, PZ + T / 2)
+        lab("wall2", 0.04).boxc(sx * (PW - 0.05), H / 2, PZ - T / 2 - 0.15, 0.9, H, 0.3)
+        lab("steel", 0.02).boxc(sx * (HR_ + 0.35), (HY_ + HR_ + 1.0) / 2, PZ - T / 2 - 0.12, 0.18, HY_ + HR_ + 1.0, 0.18)
+    lab("door", 0.03).cylc(0, HY_ + 4.6, PZ, HR_ + 0.15, 0.3, 32, "z")      # the inner door, raised into its pocket
+    lab("dark", 0.0).boxc(0, HY_ + 4.6, PZ, 0.08, 2 * HR_, 0.34)
+    lab("hazard", 0.03).tor(HR_ + 0.15, 0.2, (0, HY_, PZ - T / 2 - 0.1), (PI / 2, 0, 0), n=40, rs=6)
+    for k in range(14):
+        f = PI * k / 13
+        lab("lime", 0.0).ball(math.cos(f) * (HR_ + 0.45), HY_ + math.sin(f) * (HR_ + 0.45), PZ - T / 2 - 0.05, 0.06, 6, 4)
+    lab("dark", 0.03).boxc(0, HY_ + HR_ + 1.25, PZ - T / 2 - 0.05, 3.6, 0.7, 0.1)
+    lab.text("AIRLOCK", (0, HY_ + HR_ + 1.05, PZ - T / 2 - 0.11), PI, 0.42, "lime")
+    for sx in (-1, 1):
+        lab("lime" if sx < 0 else "red", 0.0).ball(sx * 2.15, HY_ + HR_ + 1.25, PZ - T / 2 - 0.12, 0.09, 8, 6)
+    CAMS["portal"] = ((CX - 3.5, 2.6, CZ + 15.0), (CX + 0.6, 3.6, CZ + R), 30)
 
     # ---- floor: disc, bands, the reactor's pit and railing, the reactor, the catwalk, its stair, the intake bridge
     lab("floor", 0.0).cylc(0, 0.03, 0, R + 0.2, 0.06, 72)
@@ -345,13 +366,6 @@ def build_lab(root):
     CAMS["intake"] = ((CX + math.sin(ia) * 11.2, CW + 2.6, CZ + math.cos(ia) * 11.2), (CX - 5.4, CW + 0.7, CZ), 26)
 
     # ---- stations round the wall (angle from the door, clockwise seen from above)
-    # LABNET on the wall right of the door as you come in
-    x, z, yw = P(14, R)
-    lab_terminal_wall(lab, x, z, yw, "lab")
-    xa, za, _ = P(14, R - 6.5)
-    CAMS["term"] = ((CX + xa - 1.0, 2.4, CZ + za), (CX + x - math.sin(yw) * 0.3, 2.2, CZ + z - math.cos(yw) * 0.3), 32)
-    xr, zr, _ = P(19.5, R - 2.0)
-    RUNNER["term"] = ((CX + xr, 0, CZ + zr), math.radians(14) + 0.5)
     # Zbornak's dais: a round step, a workbench, a monitor on a post, the doctor facing the door
     x, z, _ = P(24, 13.5)
     lab("panel", 0.04).cylc(x, 0.18, z, 2.8, 0.36, 28)
@@ -372,22 +386,27 @@ def build_lab(root):
     lab.at()
     zbornak(lab.root, x, z, fy).root.location.z = 0.36
     CAMS["zb"] = ((CX + x + math.sin(fy) * 5.6 - math.cos(fy) * 1.8, 2.9, CZ + z + math.cos(fy) * 5.6 + math.sin(fy) * 1.8), (CX + x, 1.8, CZ + z), 45)
-    # the petrified gallery: plinths with brass plaques, a stone courier on each, a spot over each from the tray
-    for i, deg in enumerate((36, 46, 56, 66, 76)):
-        x, z, yw = P(deg, 26.6)
-        lab.at(x, z, yw)
-        lab("stone", 0.04).boxc(0, 0.45, 0, 1.6, 0.9, 1.6)
-        lab("panel", 0.02).boxc(0, 0.94, 0, 1.7, 0.08, 1.7)
-        lab("brass", 0.01).boxc(0, 0.5, 0.81, 0.9, 0.3, 0.02)
-        lab("dark", 0.0).boxc(0, 0.5, 0.825, 0.7, 0.04, 0.01).boxc(0, 0.43, 0.825, 0.5, 0.03, 0.01)
-        lab("dark", 0.02).boxc(0, 6.0, -3.0, 0.3, 0.3, 0.5)
-        lab("lamp", 0.0).cylc(0, 5.82, -2.8, 0.1, 0.06, 10)
-        lab.light((0, 5.6, -2.6), (1.0, 0.95, 0.85), 220, 0.15)
-        STATUES.append((lab.root, lab.pt((0, 0.98, 0)), yw))
-        lab.at()
-    a = math.radians(56)
-    lab.text("GALLERY OF THE PETRIFIED", (math.sin(a) * (R - 0.08), 4.4, math.cos(a) * (R - 0.08)), a + PI, 0.42, "amber")
-    CAMS["gallery"] = ((CX + P(50, 14)[0], 2.6, CZ + P(50, 14)[1]), (CX + P(58, 27)[0], 1.8, CZ + P(58, 27)[1]), 28)
+    # the equipment corner, right of the door: two chemistry benches, the magnet array, the drone wall with two battery
+    # chargers under its ends and the LABNET console before it, the microscope bench
+    for deg, kind in ((21.0, 0), (29.5, 1)):
+        x, z, yw = P(deg, R - 0.05)
+        chem_bench(lab, x, z, yw, 3.8, kind, int(deg))
+    x, z, yw = P(36, 21.5)
+    magnet_array(lab, x, z, yw)
+    drone_wall(lab, R - 0.25, (44.5, 52.5, 60.5, 68.5))
+    for deg in (44.5, 68.5):
+        x, z, yw = P(deg, R - 0.05)
+        battery_station(lab, x, z, yw)
+    x, z, yw = P(56.5, 25.0)
+    drone_console(lab, x, z, yw, "lab")
+    x, z, yw = P(79.5, R - 0.05)
+    microscope_bench(lab, x, z, yw, 3.8)
+    lab.light((P(56, 22)[0], 5.0, P(56, 22)[1]), (0.6, 0.85, 1.0), 900, 1.0)
+    CAMS["drones"] = ((CX + P(50, 11.5)[0], 3.4, CZ + P(50, 11.5)[1]), (CX + P(57, 27)[0], 3.4, CZ + P(57, 27)[1]), 26)
+    CAMS["term"] = ((CX + P(54.5, 22.0)[0], 2.5, CZ + P(54.5, 22.0)[1]), (CX + P(56.5, 25.6)[0], 1.75, CZ + P(56.5, 25.6)[1]), 32)
+    CAMS["equipment"] = ((CX + P(36, 13.0)[0], 3.0, CZ + P(36, 13.0)[1]), (CX + P(27, 27.0)[0], 1.5, CZ + P(27, 27.0)[1]), 26)
+    CAMS["microscopes"] = ((CX + P(72, 24.0)[0], 2.4, CZ + P(72, 24.0)[1]), (CX + P(80, 29.0)[0], 1.3, CZ + P(80, 29.0)[1]), 30)
+    CAMS["pylon"] = ((CX + P(80, 15.0)[0], 3.4, CZ + P(80, 15.0)[1]), (CX + P(60, 7.0)[0], 4.4, CZ + P(60, 7.0)[1]), 30)
     # robotics bay: three arms on joint pivots working one cell (CELL_KEYS): the left arm clamps the chimera on its jig, the
     # right one takes an armour plate from the carrier and holds it on the chimera's flank, the welder runs a bead up the
     # seam; an overhead gantry over it all
@@ -703,7 +722,7 @@ def build():
 
 ROOT = build()
 print(f"built: {len(C.objects)} objects, {sum(len(o.data.polygons) for o in C.objects if o.type == 'MESH')} faces, {len(CHIMS)} chimeras, "
-      f"{len(STATUES)} statues, {len(LIGHTS)} lights, {len(ARMS)} arms")
+      f"{len(LIGHTS)} lights, {len(ARMS)} arms")
 
 if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
     zb = next(o for o in C.objects if o.name == "zbornak" and o.type == "EMPTY")
