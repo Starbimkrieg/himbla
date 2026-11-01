@@ -5,6 +5,16 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Antimatter Lab: the fifth in-game review** (`docs/zbornak-proposals/`, "The fifth in-game review").
+  - **The whole lift is see-through to the camera,** not just its glass, so the camera no longer jumps about round it.
+    The builder's `col_extra` marks every collider of a stretch.
+  - **The wall screens keep draft A** (telemetry); B and its switch are gone.
+  - **The outer airlock door sinks into a slot in the ground** instead of rising over the housing's face. The portal's
+    guide rails stop under the cable tray.
+  - **The security camera's head follows you** within 14 m of the plate (`updateSecCam`).
+  - **The plaza no longer runs into the lock housing,** and the stand plate sits on it.
+  - **The windmill and the pad's windsock are gone.** The supply pad is the game's standard landing pad (`world.pad`),
+    left out of the place's pad list so no flights use it. The walk ends at its stairs.
 - **Antimatter Lab: the fourth in-game review** (`docs/zbornak-proposals/`, "The fourth in-game review").
   - **The walks meet what they join flush.** `path_ribbon` squared each end to the curve's last metre, a few degrees off
     the edge it meets, which left a wedge of a gap. It now takes the way the walk meets its platform (`start_dir`,
@@ -27,8 +37,7 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
     The bench gains the dock, the scanner's holder, a rack of spare cells and a parts bin. The jig is a turntable now.
     The gantry's hoist is a trolley with a cable and a hook.
-  - **The wall projections are live screens,** in two drafts (`labWorld.js` `drawHolo`; localStorage `zlab-holo` picks
-    `a` or `b`):
+  - **The wall projections are live screens,** in two drafts (`labWorld.js` `drawHolo`; draft A kept in the next round):
     - **A, TELEMETRY:** the drone net on a lunar map, the splicer's helix with the save's figures, and the robot cell's
       cycle, progress and each arm's job.
     - **B, SCHEMATIC:** a turning wireframe globe with the drones' orbits, a helix in perspective, and the right arm drawn

@@ -350,7 +350,10 @@ def build_lab(root):
         door("steel", 0.0).cylc(math.sin(a) * 2.3, math.cos(a) * 2.3, 0.15, 0.12, 0.06, 8, "z")
     door("dark", 0.02).cylc(0, 0, 0.2, 0.6, 0.15, 16, "z")
     door("lime", 0.0).tor(0.62, 0.05, (0, 0, 0.28), (PI / 2, 0, 0), n=20, rs=4)
-    door.root["travel"] = 5.4                                               # how far it rises into the housing's head
+    door.root["travel"] = -6.0                                              # it sinks into its slot in the ground, out of sight
+    lab("void", 0.0).boxc(0, 0.005, z1 + 6.05, 5.6, 0.01, 0.34)              # the slot, a hazard sill each side of it
+    for sz in (-1, 1):
+        lab("hazard", 0.0).boxc(0, 0.01, z1 + 6.05 + sz * 0.22, 5.8, 0.02, 0.1)
     for k in (-1, 1):
         lab("dark").boxc(k * 6.0, 9.0, z1 + 6.3, 0.6, 0.5, 0.6)
         lab("lamp", 0.0).boxc(k * 6.0, 8.8, z1 + 6.62, 0.45, 0.25, 0.04)
@@ -371,7 +374,7 @@ def build_lab(root):
         lab("wall", 0.06).polyz(arc + [(sx * PW, 0.0), (sx * PW, HY_ + HR_)], PZ - T / 2, PZ + T / 2)
         lab("wall2", 0.04).boxc(sx * (PW - 0.05), H / 2, PZ - T / 2 - 0.15, 0.9, H, 0.3)
         lab.col_box(sx * (HR_ + PW) / 2, (HY_ + HR_) / 2, PZ, PW - HR_, HY_ + HR_, T)
-        lab("steel", 0.02).boxc(sx * (HR_ + 0.8), (HY_ + HR_ + 1.0) / 2, PZ - T / 2 - 0.12, 0.18, HY_ + HR_ + 1.0, 0.18)  # guide rails
+        lab("steel", 0.02).boxc(sx * (HR_ + 0.8), 6.11 / 2, PZ - T / 2 - 0.12, 0.18, 6.11, 0.18)          # guide rails, up to the tray
     # the inner door: closed in the opening, it rises into its pocket in the wall to let you through (the game cycles it
     # with the outer door: one opens only once the other is shut)
     idoor = G("inner_door", lab.root, 0, HY_, PZ, solid=False, role="door")
@@ -430,6 +433,7 @@ def build_lab(root):
     # waist-high barrier across the shaft's opening at that level) rises only while the car is there. Below, the opening
     # faces out (-x), toward the lab's floor; above, it faces the bridge (+x).
     LX, LZ, LH = -13.95, 0.0, CW + 3.2                                     # the shaft's centre and its height
+    lab.col_extra = {"see": 1}                                              # (the camera sees through all of it: main.js)
     lab("panel", 0.03).boxc(-12.15, CW - 0.15, LZ, 1.4, 0.3, 2.0)          # the bridge
     lab("hazard", 0.0).boxc(-12.15, CW + 0.006, LZ + 0.9, 1.4, 0.01, 0.12).boxc(-12.15, CW + 0.006, LZ - 0.9, 1.4, 0.01, 0.12)
     for sz in (-1, 1):                                                     # its railings, from just past the top gate
@@ -448,13 +452,13 @@ def build_lab(root):
     # the glass: both sides whole; the back (-x) over the bottom opening; the front (+x) under the bridge and over its opening
     for sz in (-1, 1):
         lab("glass", 0.0).boxc(LX, LH / 2, LZ + sz * 1.15, 2.2, LH - 0.2, 0.04)
-        lab.col_box(LX, LH / 2, LZ + sz * 1.15, 2.46, LH, 0.12, see=1)
+        lab.col_box(LX, LH / 2, LZ + sz * 1.15, 2.46, LH, 0.12)
     lab("glass", 0.0).boxc(LX - 1.15, (2.6 + LH) / 2, LZ, 0.04, LH - 2.6, 2.2)
-    lab.col_box(LX - 1.15, (2.6 + LH) / 2, LZ, 0.12, LH - 2.6, 2.46, see=1)
+    lab.col_box(LX - 1.15, (2.6 + LH) / 2, LZ, 0.12, LH - 2.6, 2.46)
     lab("glass", 0.0).boxc(LX + 1.15, (CW - 0.3) / 2, LZ, 0.04, CW - 0.4, 2.2)
-    lab.col_box(LX + 1.15, (CW - 0.3) / 2, LZ, 0.12, CW - 0.3, 2.46, see=1)
+    lab.col_box(LX + 1.15, (CW - 0.3) / 2, LZ, 0.12, CW - 0.3, 2.46)
     lab("glass", 0.0).boxc(LX + 1.15, (CW + 2.6 + LH) / 2, LZ, 0.04, LH - CW - 2.6, 2.2)
-    lab.col_box(LX + 1.15, (CW + 2.6 + LH) / 2, LZ, 0.12, LH - CW - 2.6, 2.46, see=1)
+    lab.col_box(LX + 1.15, (CW + 2.6 + LH) / 2, LZ, 0.12, LH - CW - 2.6, 2.46)
     lab("steel", 0.02).boxc(LX - 1.15, 2.6, LZ, 0.16, 0.16, 2.46).boxc(LX + 1.15, CW + 2.6, LZ, 0.16, 0.16, 2.46)   # the openings' heads
     # the winding house on top, lamps over each opening, a hazard sill below, the shaft's pit
     lab("dark", 0.04).boxc(LX, LH + 0.4, LZ, 2.6, 0.7, 2.6)
@@ -482,6 +486,7 @@ def build_lab(root):
         gate("hazard", 0.0).boxc(0.055 if k else -0.055, 1.05, 0, 0.01, 0.06, 2.1)
         gate.root["travel"] = 2.3
     lab.mark("spot", (LX, 0.07, LZ), 0, spot="lift")
+    lab.col_extra = {}
     CAMS["stair"] = ((CX - 22.0, 4.5, CZ - 6.0), (CX - 13.0, 3.6, CZ), 30)
     reactor_intake(lab, RE, -PI / 2, CW, CI)
     lab.mark("spot", (-(RE + 1.75), CW, 0), -PI / 2, spot="intake")
@@ -732,7 +737,7 @@ def build_lab(root):
 
     # ---- outside: the plaza, walks, containers, gas racks piped in, the generator and the solar array cabled in
     out = G("outside", root)
-    PZ = (0.0, 40.0)
+    PZ = (0.0, -18.0 + 44.0 + 6.4 + 13.0)                                   # (its rim 0.4 m out from the lock housing: the door's slot)
     out("path", 0.0).cylc(PZ[0], 0.04, PZ[1], 13.0, 0.08, 48)
     out("hazard", 0.0).tor(12.9, 0.1, (PZ[0], 0.09, PZ[1]), n=48, rs=4, s=(1, 0.3, 1))
     walks = (math.radians(98.3), math.radians(-71.7))                       # where the two walks leave it
@@ -769,15 +774,15 @@ def build_lab(root):
     out("dark", 0.02).boxc(wx, 0.6, wz, 0.9, 1.2, 0.6, (0, d, 0))
     s0, u = from_plaza(walks[0]), (math.sin(walks[0]), math.cos(walks[0]))
     path_ribbon(out, bez(s0, (s0[0] + u[0] * 14, s0[1] + u[1] * 14), (35.55, 16.0), (48.55, 16.0)), 3.0, trim=plaza, end_dir=(1, 0))   # (radial off the
-    pe = (-51.4, 55.3)                                                     # plaza, square onto the cattle grid's frame)
-    a = math.atan2(-62.0 - pe[0], 58.0 - pe[1])                             # a ramp up onto the pad's deck
-    path_ribbon(out, [from_plaza(walks[1]), (-24.0, 49.0), (-38.0, 53.5), pe], 3.0, trim=plaza, end_dir=(math.sin(a), math.cos(a)))
-    out.at(pe[0] + math.sin(a) * 1.2, pe[1] + math.cos(a) * 1.2, a)
-    out("path", 0.0).polyx([(-1.3, 0), (1.3, 0), (1.3, 0.38), (-1.3, 0.04)], -1.5, 1.5)          # to the deck (PAD_Y)
-    for s in (-1, 1):
-        out("panel", 0.02).polyx([(-1.3, 0), (1.3, 0), (1.3, 0.4), (-1.3, 0.06)], s * 1.5, s * 1.8)
-    out.at()
-    landing_pad(out, -62.0, 58.0, 12.0, "Z")
+    # the supply pad is the game's standard landing pad (landingPad.js, built by labWorld.js from this spot: r, the stairs'
+    # way fx, fz), its stairs toward the plaza; the walk ends square at their foot (r + 12 steps x 0.34 m)
+    PADC, PADR = (-62.0, 58.0), 10.5
+    dv = (-40.0 - PADC[0], 53.5 - PADC[1])
+    dl = math.hypot(*dv)
+    dv = (dv[0] / dl, dv[1] / dl)
+    foot = (PADC[0] + dv[0] * (PADR + 12 * 0.34), PADC[1] + dv[1] * (PADR + 12 * 0.34))
+    path_ribbon(out, [from_plaza(walks[1]), (-24.0, 49.0), (-36.0, 53.0), foot], 3.0, trim=plaza, end_dir=(-dv[0], -dv[1]))
+    out.mark("spot", (PADC[0], 0, PADC[1]), 0, spot="pad", r=PADR, fx=dv[0], fz=dv[1])
     zb_container(out, -44.0, 67.0, 1.25, 2, 417)
     zb_container(out, -40.5, 74.5, 1.35, 1, 418)
     zb_container(out, -78.0, 70.0, 0.6, 1, 419)
@@ -902,10 +907,8 @@ def ranch_a(root):
     feed_bunk(r, 93.0, 8.0, -PI / 2, 15.0)
     for i, (x, z) in enumerate(((90.0, 1.5), (90.5, 12.5), (89.0, 7.2))):
         r.chim((x, 0.04, z), PI / 2 + (i - 1) * 0.3, 1.6, (1, 6, 3)[i], pen=True)
-    # water: stock tank and the sun-mill pump by the gate
+    # water: the stock tank by the gate
     stock_tank(r, 58.0, 36.0, 2.4)
-    wind_pump(r, 54.0, 41.5, 9.0, 0.6)
-    r("steel", 0.0).path([(54.0, 0.3, 41.5), (56.0, 0.3, 38.0), (57.0, 1.0, 36.8)], 0.08, 6)
     r.chim((61.5, 0.04, 34.0), -2.2, 1.6, 5, pen=True)
     # training ring, bales, saddle rack, lick posts
     fence_ring(r, 70.0, 26.0, 7.0, 1.4, gap=(-PI / 2, 3.0), step=2.8)

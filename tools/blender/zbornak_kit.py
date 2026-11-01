@@ -152,6 +152,7 @@ class G:
         self.accs, self.cur = {}, (0, 0, 0, 0, 1.0)
         # colliders from this group's boxes, upright cylinders and lathes (inherits the parent group's setting)
         self.solid = SOLID_DEFAULT[0] if solid is None else solid
+        self.col_extra = {}                                                 # flags every collider made meanwhile carries (see: glass)
 
     def _yaw_up(self):
         """this group's yaw about y in the export root's frame (the groups turn only about y)"""
@@ -171,12 +172,12 @@ class G:
         e = Rw.to_euler("XYZ")
         _ncol[0] += 1
         pivot(f"{self.root.name}_col{_ncol[0]}", self.pt((cx, cy, cz)), self.root, role="col", shape="box", hx=w / 2, hy=h / 2, hz=d / 2,
-              rx=e.x, ry=e.y, rz=e.z, **extra)
+              rx=e.x, ry=e.y, rz=e.z, **{**self.col_extra, **extra})
 
     def col_cyl(self, x, y0, z, r, h):
         """an upright cylinder collider, its base at (x, y0, z) in the current local frame"""
         _ncol[0] += 1
-        pivot(f"{self.root.name}_col{_ncol[0]}", self.pt((x, y0, z)), self.root, role="col", shape="cyl", r=r * self.cur[4], h=h * self.cur[4])
+        pivot(f"{self.root.name}_col{_ncol[0]}", self.pt((x, y0, z)), self.root, role="col", shape="cyl", r=r * self.cur[4], h=h * self.cur[4], **self.col_extra)
 
     def mark(self, role, p, yaw=0.0, **data):
         """a marker pivot for the game (a spot, a screen, a sign, a chimera) at p in the current local frame, facing yaw"""
@@ -705,10 +706,10 @@ def security_post(g, x, z, yaw, door_y, door_r, sid="sec", scr=(2.2, 1.5), scr_x
     screen beside the door that shows the picture (`screen_<sid>`). Returns the plate's centre."""
     g.at(x, z, yaw)
     px, pz = 0.0, 3.6
-    g("hazard", 0.0).cylc(px, 0.03, pz, 1.25, 0.06, 8)
-    g("dark", 0.0).cylc(px, 0.035, pz, 1.05, 0.06, 8)
+    g("hazard", 0.0).cylc(px, 0.09, pz, 1.25, 0.02, 8)                     # (on the plaza's top, 8 cm)
+    g("dark", 0.0).cylc(px, 0.095, pz, 1.05, 0.02, 8)
     for k in (-1, 1):
-        g("lime", 0.0).rb(px + k * 0.2, 0.07, pz + 0.05, 0.11, 0.01, 0.24, 0.5, nu=10, nv=4)
+        g("lime", 0.0).rb(px + k * 0.2, 0.105, pz + 0.05, 0.11, 0.01, 0.24, 0.5, nu=10, nv=4)
     my = door_y + door_r + 0.9                                              # the mount: above the frame's top, off to the side
     g("dark", 0.03).cylc(cam_x, my, 0.12, 0.65, 0.24, 20, "z")
     g("steel", 0.02).cylc(cam_x, my, 0.3, 0.38, 0.14, 16, "z")
@@ -722,10 +723,11 @@ def security_post(g, x, z, yaw, door_y, door_r, sid="sec", scr=(2.2, 1.5), scr_x
     g("arm").path([tuple(hub), tuple(j2)], 0.1, 8).path([tuple(j2), tuple(cam)], 0.08, 8)
     g("armdark").ball(*j2, 0.17, 10, 7)
     g("cable", 0.0).path([tuple(hub + Vector((0, -0.1, 0))), tuple((hub + j2) / 2 + Vector((0, -0.2, 0))), tuple(j2 + Vector((0, -0.12, 0)))], 0.03, 4)
-    g("white").rb(cam.x, cam.y, cam.z, 0.22, 0.2, 0.36, 0.4, rot=(-0.9, 0, 0))
+    head = G("seccam", g.root, *g.pt(tuple(cam)), yaw=g.cur[3], solid=False, role="seccam")   # (the game turns it to follow you)
+    head("white").rb(0, 0, 0, 0.22, 0.2, 0.36, 0.4, rot=(-0.9, 0, 0))
+    head("dark").cylc(0, -0.25, 0.22, 0.13, 0.16, 12, rot=(PI - 0.9, 0, 0))
+    head("red", 0.0).ball(0, -0.32, 0.28, 0.08, 8, 6)
     lens = Vector((cam.x, cam.y - 0.25, cam.z + 0.22))
-    g("dark").cylc(lens.x, lens.y, lens.z, 0.13, 0.16, 12, rot=(PI - 0.9, 0, 0))
-    g("red", 0.0).ball(lens.x, lens.y - 0.07, lens.z + 0.06, 0.08, 8, 6)
     top, foot = lens + Vector((0, -0.08, 0.04)), Vector((px, 0.06, pz))
     sc = G("scan", g.root, *g.pt((0, 0, 0)), yaw=g.cur[3], solid=False, role="scan")   # (the game shows it while it scans)
     sc("scan", 0.0).add(cylinder(0.08, 1.0, (top - foot).length, 16, True)[:2], tuple((top + foot) / 2), tuple(Vector((0, 1, 0)).rotation_difference(top - foot).to_euler()))
@@ -855,33 +857,6 @@ def stock_tank(g, x, z, r=2.2):
     g("steel").tor(r, 0.06, (0, 1.0, 0), n=32, rs=4)
     g("water", 0.0).cylc(0, 0.92, 0, r - 0.06, 0.04, 24)
     g("steel").cylc(r * 0.6, 1.05, 0, 0.12, 0.2, 8)
-    g.at()
-
-
-def wind_pump(g, x, z, h=9.0, yaw=0.0):
-    """A ranch wind pump (on the Moon a sun mill: the blades are solar vanes turning the pump) on a lattice tower"""
-    g.at(x, z, yaw)
-    b = 1.8
-    corners = [(-b, -b), (b, -b), (b, b), (-b, b)]
-    top = 0.35
-    for cx, cz in corners:
-        g("steel").bm((cx, 0, cz), (cx * top / b, h, cz * top / b), 0.07, 5)
-    for k in range(4):
-        y0, y1 = h * k / 4, h * (k + 1) / 4
-        f0, f1 = 1 - (1 - top / b) * k / 4, 1 - (1 - top / b) * (k + 1) / 4
-        for i in range(4):
-            (ax, az), (bx, bz) = corners[i], corners[(i + 1) % 4]
-            g("steel").bm((ax * f0, y0, az * f0), (bx * f1, y1, bz * f1), 0.035, 4)
-            g("steel").bm((ax * f1, y1, az * f1), (bx * f1, y1, bz * f1), 0.035, 4)
-    g("dark").boxc(0, h + 0.3, 0, 0.8, 0.6, 1.2)                            # the head, on the tower's four leg tops
-    g("steel").bm((0, h + 0.4, -0.6), (0, h + 0.4, -3.2), 0.06, 5)
-    g("barn").boxc(0, h + 0.6, -3.4, 0.05, 1.4, 1.6)
-    g("dark").cylc(0, h + 0.4, 0.75, 0.25, 0.3, 10, "z")
-    for i in range(14):
-        a = TAU * i / 14
-        g("solar", 0.0).boxc(math.sin(a) * 1.25, h + 0.4 + math.cos(a) * 1.25, 0.85, 0.45, 1.5, 0.04, (0, 0.25, -a))
-    g("steel").tor(1.9, 0.04, (0, h + 0.4, 0.85), (PI / 2, 0, 0), n=28, rs=4)
-    g("steel").bm((0, 0.3, 0), (0, h, 0), 0.05, 5)
     g.at()
 
 
@@ -1051,27 +1026,6 @@ def radiator_field(g, x, z, yaw, rows=2, cols=5, header_to=None):
             g("dark", 0.02).boxc(sx + (header_to[0] - sx) * t, 0.3, sz + (header_to[1] - sz) * t, 1.2, 0.6, 1.2)
 
 
-PAD_Y = 0.38                                                               # the supply pad's deck top
-
-
-def landing_pad(g, x, z, r=12.0, label="Z"):
-    """a supply pad: an octagonal deck on a low plinth, a painted ring and letter, edge lights, a fuel tank on skids, a
-    windsock (the containers beside it are zb_container's)"""
-    g.at(x, z)
-    # the deck tops out under 0.42 m (PAD_Y), so it is walked on as ground (the game's k.floorCols); its marks are painted on
-    g("panel", 0.05).cylc(0, 0.17, 0, r + 0.6, 0.34, 8, rt=r + 0.3)
-    g("path", 0.0).cylc(0, 0.36, 0, r, 0.04, 8)
-    g("hazard", 0.0).tor(r * 0.62, 0.22, (0, PAD_Y, 0), n=40, rs=4, s=(1, 0.05, 1))
-    rl = r * math.cos(PI / 8) - 0.35                                        # (inside the octagon's mid-edges too)
-    for i in range(16):
-        a = TAU * i / 16
-        g("lime" if i % 2 else "lamp", 0.0).boxc(math.sin(a) * rl, PAD_Y, math.cos(a) * rl, 0.35, 0.03, 0.35)
-    g("white", 0.04).cylc(r + 3.0, 1.3, 5.0, 1.0, 4.0, 14, "x")
-    g("dark", 0.02).boxc(r + 3.0, 0.15, 5.0, 4.4, 0.3, 1.6)
-    g("red", 0.0).tor(1.02, 0.06, (r + 3.0, 1.3, 5.0), (0, 0, PI / 2), n=16, rs=4)
-    g("steel", 0.02).cylc(-r - 2.0, 3.0, -r * 0.5, 0.08, 6.0, 6)
-    g("amber", 0.0).add(cylinder(0.12, 0.4, 1.6, 8, True)[:2], (-r - 2.0 + 0.8, 5.6, -r * 0.5), (0, 0, PI / 2 - 0.2))
-    g.at()
 
 
 def solar_array(g, x, z, yaw, rows=3, cols=4):

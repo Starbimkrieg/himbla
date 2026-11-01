@@ -15,7 +15,7 @@ import drone3 from './assets/zlab-drone3.jpg?inline';
 //   the robot cell works its cycle (CELL_KEYS, the builder's: tool points eased between keys, the joints solved by armIk);
 //   Dr. Zbornak turns his head to watch you;
 //   the airlock: step on the stand plate and the camera scans you, the screen shows your picture and ACCESS GRANTED, the
-//   outer door rises (its collider goes); 6 m into the tube it drops behind you, the tube cycles (a hiss) and the inner door
+//   outer door sinks into its slot (its collider goes); 6 m into the tube it rises behind you, the tube cycles (a hiss) and the inner door
 //   rises into the portal's wall. Going out, the inner door opens as you come to it and the outer once it has shut. A door
 //   opens only once the other has been shut a moment, and never shuts on you in its doorway;
 //   the screens: the security screen, LABNET's attract screen (the console; main.js opens LABNET itself, labnet.js), the
@@ -164,6 +164,7 @@ export function buildZbornakLab(world, loc) {
           Mk.decompose(_p, _q, _s);
           lab.local[d.spot] = _p.clone();
           lab.local[d.spot + 'Yaw'] = _e.setFromQuaternion(_q, 'YXZ').y;
+          (lab.spotData ||= {})[d.spot] = d;
         } else if (role === 'text') {
           Mk.decompose(_p, _q, _s);
           const c = '#' + (zlabMat(d.slot).color || new THREE.Color(0x7dff3a)).getHexString();
@@ -210,9 +211,22 @@ export function buildZbornakLab(world, loc) {
     else if (role === 'liftgate') (lab.liftGates ||= [])[g.name.endsWith('1') ? 1 : 0] = { g, y0: g.position.y, travel: g.userData.travel || 2.3, open: 0 };
     else if (role === 'door') lab.doors[g.name.startsWith('inner') ? 'inner' : 'outer'] = { g, y0: g.position.y, travel: g.userData.travel || 5.4, open: 0, shut: 99, dir: 0 };
     else if (role === 'scan') { lab.scan = g; g.visible = false; }
+    else if (role === 'seccam') lab.seccam = { g, q0: g.quaternion.clone(), yaw: 0, pitch: 0 };
     else if (role === 'doctor') { lab.doctor = g; lab.head = g.getObjectByName('head'); }
   }
   for (const [k, p] of Object.entries(lab.local)) if (p.isVector3) lab.spots[k] = world.toWorld(loc, p.x, p.y, p.z);
+  // the supply pad: the game's standard landing pad (world.pad), its stairs toward the plaza; no flights use it (it is not
+  // listed in loc.pads, so traffic neither lands there nor rebuilds it)
+  const pd = lab.spotData && lab.spotData.pad, pp = lab.local.pad;
+  if (pd && pp && world.pad) {
+    const rec = world.pad(loc, pp.x, pp.z, pd.r || 10.5, 0xffd23f, false, { face: Math.atan2(pd.fz, pd.fx) });
+    if (rec && loc.pads) loc.pads = loc.pads.filter((q) => q !== rec);
+  }
+  // the camera's rest aim (at the plate): what it turns from to follow you
+  if (lab.seccam && lab.spots.plate) {
+    const S = lab.seccam, d = S.g.parent.worldToLocal(lab.spots.plate.clone()).sub(S.g.position);
+    S.yaw0 = Math.atan2(d.x, d.z); S.el0 = Math.atan2(d.y, Math.hypot(d.x, d.z));
+  }
   // the robot cell's moving props: the chimera and the welded plate ride the jig; the cell starts on the hoist's hook
   if (lab.jig) {
     const J = lab.jig.g, root = J.parent;
@@ -243,10 +257,10 @@ export function buildZbornakLab(world, loc) {
     const c = lab.lift.g.position;
     for (const G of lab.liftGates || []) {
       if (!G) continue;
-      G.col = world.col(loc, { type: 'box', x: G.g.position.x, y: G.y0 + 0.6, z: G.g.position.z, hx: 0.1, hy: 0.6, hz: 1.1, yaw: 0 });
+      G.col = world.col(loc, { type: 'box', x: G.g.position.x, y: G.y0 + 0.6, z: G.g.position.z, hx: 0.1, hy: 0.6, hz: 1.1, yaw: 0, see: true });
       G.colOn = true;
     }
-    lab.lift.top = world.col(loc, { type: 'box', x: c.x, y: lab.lift.y0 + lab.lift.travel - 0.06, z: c.z, hx: 1.05, hy: 0.06, hz: 1.05, yaw: 0 });
+    lab.lift.top = world.col(loc, { type: 'box', x: c.x, y: lab.lift.y0 + lab.lift.travel - 0.06, z: c.z, hx: 1.05, hy: 0.06, hz: 1.05, yaw: 0, see: true });
     world.colliders.remove(lab.lift.top);
   }
   // screens: the drone feeds (pictures), the security screen, LABNET's attract screen, the pen's residents (canvases)
@@ -278,7 +292,6 @@ export function buildZbornakLab(world, loc) {
     lab.screens[sid] = Object.assign(sc, { mesh: m });
   }
   lab.holoT = 0;
-  try { lab.holoStyle = localStorage.getItem('zlab-holo') || 'a'; } catch { lab.holoStyle = 'a'; }
   lab.drawSec = (state, photo) => drawSecurity(lab.screens.sec, state, photo);
   lab.drawSec('idle');
   // the security camera's snapshot: a small render target, read back into the security screen's canvas
@@ -425,7 +438,27 @@ function updateLab(world, lab, dt, time, camPos) {
   }
   // the airlock
   if (P && lab.doors.outer) updateGate(world, lab, P, dt);
+  if (P && lab.seccam && lab.seccam.yaw0 !== undefined) updateSecCam(lab, P, dt);
   if (P && lab.lift) updateLift(world, lab, P, dt);
+}
+
+// The security camera follows you while you're in front of the lock (within 14 m of the plate), and swings back to the plate
+// when you go.
+const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), XA = new THREE.Vector3(1, 0, 0), YA = new THREE.Vector3(0, 1, 0);
+function updateSecCam(lab, P, dt) {
+  const S = lab.seccam, plate = lab.spots.plate;
+  let wy = 0, wp = 0;
+  if (P.pos.distanceTo(plate) < 14) {
+    const d = S.g.parent.worldToLocal(_w.copy(P.pos)).sub(S.g.position);
+    d.y += 1.2;                                                                       // (your head, not your feet)
+    const dy = Math.atan2(d.x, d.z) - S.yaw0;
+    wy = Math.max(-0.9, Math.min(0.9, Math.atan2(Math.sin(dy), Math.cos(dy))));
+    wp = Math.max(-0.5, Math.min(0.5, Math.atan2(d.y, Math.hypot(d.x, d.z)) - S.el0));
+  }
+  const k = Math.min(1, dt * 4);
+  S.yaw += (wy - S.yaw) * k; S.pitch += (wp - S.pitch) * k;
+  // turned about the parent's up, then tipped about its own x (+ about x lowers its +z: up is negative)
+  S.g.quaternion.copy(_qa.setFromAxisAngle(YA, S.yaw)).multiply(S.q0).multiply(_qb.setFromAxisAngle(XA, -S.pitch));
 }
 
 const DOOR_T = 1.6, CYCLE_T = 1.2;     // s for a door to rise or drop; s the tube cycles between one door shutting and the other opening
@@ -471,11 +504,8 @@ function updateGate(world, lab, P, dt) {
   }
 }
 
-// ---- the wall projections: two drafts of what they show (lab.holoStyle, the dev switch localStorage 'zlab-holo': 'a' or 'b')
-//   a  TELEMETRY  dense live data: the drone net on a lunar map, the splicer's helix and the save's splice figures, the robot
-//                 cell's cycle, progress and each arm's state
-//   b  SCHEMATIC  big line work, few words: a turning wireframe globe with the drones' orbits, a helix in perspective, the
-//                 right arm drawn live from its joint angles
+// ---- the wall projections, live telemetry: the drone net on a lunar map, the splicer's helix and the save's splice figures,
+// the robot cell's cycle, progress and each arm's state
 const HC = { cy: '#7fe8ff', lime: '#7dff3a', pink: '#ff4fa3', amber: '#ffd23f', dim: '#2a6f8a', vio: '#c77dff' };
 const DRONES = [['D1', 'meridian'], ['D2', 'ilmb'], ['D3', 'vostok'], ['D4', 'kepler']];
 
@@ -492,14 +522,13 @@ function holoFrame(g, w, h, title, sub) {
 }
 
 function drawHolo(world, lab, time) {
-  const game = world.game, b = lab.holoStyle === 'b';
-  const s0 = lab.screens.holo0, s1 = lab.screens.holo1, s2 = lab.screens.holo2;
-  if (s0 && s0.g) { (b ? holoGlobe : holoSurvey)(s0, world, time); s0.tex.needsUpdate = true; }
-  if (s1 && s1.g) { (b ? holoHelix3d : holoSplicer)(s1, game, time); s1.tex.needsUpdate = true; }
-  if (s2 && s2.g) { (b ? holoArm : holoCell)(s2, lab, time); s2.tex.needsUpdate = true; }
+  const game = world.game, s0 = lab.screens.holo0, s1 = lab.screens.holo1, s2 = lab.screens.holo2;
+  if (s0 && s0.g) { holoSurvey(s0, world, time); s0.tex.needsUpdate = true; }
+  if (s1 && s1.g) { holoSplicer(s1, game, time); s1.tex.needsUpdate = true; }
+  if (s2 && s2.g) { holoCell(s2, lab, time); s2.tex.needsUpdate = true; }
 }
 
-// a: the drone net on an equirectangular lunar map: every place a dot, the four watched ones ringed, a drone circling each
+// the drone net on an equirectangular lunar map: every place a dot, the four watched ones ringed, a drone circling each
 function holoSurvey(sc, world, time) {
   const { g, c } = sc, w = c.width, h = c.height;
   holoFrame(g, w, h, 'LUNAR SURVEY', null);
@@ -531,7 +560,7 @@ function holoSurvey(sc, world, time) {
   holoText(g, `UPLINK ${'|'.repeat(1 + (Math.floor(time * 3) % 6))}`, tx, my + mh - h * 0.05, h * 0.04, HC.amber);
 }
 
-// a: the splicer: a turning double helix with coloured base pairs, the save's splice figures beside it
+// the splicer: a turning double helix with coloured base pairs, the save's splice figures beside it
 function holoSplicer(sc, game, time) {
   const { g, c } = sc, w = c.width, h = c.height;
   const A = game && game.alchemy, log = (A && A.log) || {};
@@ -557,7 +586,7 @@ function holoSplicer(sc, game, time) {
   g.fillStyle = HC.amber; g.fillRect(tx + 3, h * 0.84 + 3, (w - tx - 36) * st, h * 0.06 - 6);
 }
 
-// a: the robot cell: the cycle running, its progress, the three cycles, each arm's job right now
+// the robot cell: the cycle running, its progress, the three cycles, each arm's job right now
 function holoCell(sc, lab, time) {
   const { g, c } = sc, w = c.width, h = c.height, now = lab.cellNow || { cycle: 0, name: 'WELD', t: 0 };
   holoFrame(g, w, h, 'ROBOTICS CELL', `CYCLE ${Math.floor(lab.t / CYCLE) + 1}`);
@@ -572,70 +601,6 @@ function holoCell(sc, lab, time) {
     holoText(g, n, tx, h * (0.22 + i * 0.22), h * 0.045, HC.dim);
     holoText(g, jobs[i], tx, h * (0.28 + i * 0.22), h * 0.06, i === 2 && wOn ? HC.amber : HC.cy);
   });
-}
-
-// b: a wireframe globe turning, the drones' orbits round it
-function holoGlobe(sc, world, time) {
-  const { g, c } = sc, w = c.width, h = c.height;
-  holoFrame(g, w, h, 'DRONE NET', null);
-  const cx = w * 0.5, cy = h * 0.56, R = h * 0.34, rot = time * 0.25;
-  g.strokeStyle = HC.cy; g.lineWidth = 1.5;
-  g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.stroke();
-  for (let k = 0; k < 8; k++) {                                              // meridians: ellipses turning
-    const a = rot + k * Math.PI / 8, rx = Math.abs(Math.cos(a)) * R;
-    g.strokeStyle = Math.sin(a) > 0 ? HC.cy : HC.dim; g.beginPath(); g.ellipse(cx, cy, rx, R, 0, 0, TAU); g.stroke();
-  }
-  for (let j = -2; j <= 2; j++) { const y = cy + R * j / 3, rx = Math.sqrt(Math.max(0, R * R - (R * j / 3) ** 2)); g.strokeStyle = HC.dim; g.beginPath(); g.ellipse(cx, y, rx, rx * 0.12, 0, 0, TAU); g.stroke(); }
-  DRONES.forEach(([id], i) => {
-    const tilt = 0.3 + i * 0.35, ra = R * (1.25 + i * 0.12), a = time * (0.6 + i * 0.15) + i;
-    g.strokeStyle = HC.dim; g.beginPath(); g.ellipse(cx, cy, ra, ra * 0.28, tilt, 0, TAU); g.stroke();
-    const x = cx + Math.cos(a) * ra * Math.cos(tilt) - Math.sin(a) * ra * 0.28 * Math.sin(tilt);
-    const y = cy + Math.cos(a) * ra * Math.sin(tilt) + Math.sin(a) * ra * 0.28 * Math.cos(tilt);
-    g.fillStyle = HC.lime; g.fillRect(x - 4, y - 4, 8, 8); holoText(g, id, x + 8, y - 6, h * 0.04, HC.lime);
-  });
-}
-
-// b: a helix in perspective, turning toward you
-function holoHelix3d(sc, game, time) {
-  const { g, c } = sc, w = c.width, h = c.height;
-  holoFrame(g, w, h, 'SPLICE', null);
-  const cy = h * 0.58, R = h * 0.28, n = 60;
-  const pts = [];
-  for (let i = 0; i <= n; i++) {
-    const u = i / n, x = 40 + (w - 80) * u, a = u * TAU * 3 + time * 1.2;
-    const za = Math.cos(a), zb = Math.cos(a + Math.PI);
-    pts.push([x, cy + Math.sin(a) * R * (0.8 + 0.2 * za), za, cy + Math.sin(a + Math.PI) * R * (0.8 + 0.2 * zb), zb]);
-  }
-  for (const [x, ya, za, yb] of pts) { g.strokeStyle = za > 0 ? 'rgba(127,232,255,0.5)' : 'rgba(42,111,138,0.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x, ya); g.lineTo(x, yb); g.stroke(); }
-  for (const k of [1, 3]) {
-    g.lineWidth = 4;
-    for (let i = 1; i < pts.length; i++) {
-      g.strokeStyle = pts[i][k + 1] > 0 ? (k === 1 ? HC.lime : HC.pink) : HC.dim;
-      g.beginPath(); g.moveTo(pts[i - 1][0], pts[i - 1][k]); g.lineTo(pts[i][0], pts[i][k]); g.stroke();
-    }
-  }
-}
-
-// b: the right arm drawn live from its joints: base, shoulder, elbow, wrist, tool, with the angles
-function holoArm(sc, lab, time) {
-  const { g, c } = sc, w = c.width, h = c.height, A = lab.arms.arm1;
-  holoFrame(g, w, h, 'ARM 1', (lab.cellNow && lab.cellNow.name) || '');
-  if (!A || !A.shoulder) return;
-  const sh = -A.shoulder.rotation.x, el = A.elbow.rotation.x, wr = A.wrist.rotation.x, k = h * 0.11;
-  const bx = w * 0.35, by = h * 0.9;
-  const p1 = [bx, by - 1.85 * k], a1 = sh, p2 = [p1[0] + Math.cos(a1) * 3.2 * k, p1[1] - Math.sin(a1) * 3.2 * k];
-  const a2 = a1 - el, p3 = [p2[0] + Math.cos(a2) * 2.8 * k, p2[1] - Math.sin(a2) * 2.8 * k];
-  const a3 = a2 - wr, p4 = [p3[0] + Math.cos(a3) * 1.05 * k, p3[1] - Math.sin(a3) * 1.05 * k];
-  g.strokeStyle = HC.dim; g.lineWidth = 2; g.beginPath(); g.moveTo(40, by); g.lineTo(w - 40, by); g.stroke();
-  g.fillStyle = HC.dim; g.fillRect(bx - 30, by - 1.85 * k, 60, 1.85 * k);
-  g.strokeStyle = HC.cy; g.lineWidth = 8; g.lineCap = 'round';
-  g.beginPath(); g.moveTo(...p1); g.lineTo(...p2); g.lineTo(...p3); g.stroke();
-  g.strokeStyle = HC.lime; g.lineWidth = 5; g.beginPath(); g.moveTo(...p3); g.lineTo(...p4); g.stroke(); g.lineCap = 'butt';
-  for (const [p, a, n] of [[p1, sh, 'SH'], [p2, el, 'EL'], [p3, wr, 'WR']]) {
-    g.fillStyle = HC.amber; g.beginPath(); g.arc(p[0], p[1], 9, 0, TAU); g.fill();
-    holoText(g, `${n} ${Math.round(a * 180 / Math.PI)}°`, p[0] + 14, p[1] - 10, h * 0.045, HC.amber);
-  }
-  holoText(g, `YAW ${Math.round(A.turret.rotation.y * 180 / Math.PI)}°`, w * 0.72, h * 0.25, h * 0.06, HC.cy);
 }
 
 // The lift to the catwalk: stand on the car a moment and it takes you to the other level, standing (player.seat, stand), and

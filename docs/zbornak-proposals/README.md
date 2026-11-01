@@ -25,6 +25,25 @@ renders). The courier is `runner.glb`. The drone feeds are filmed in the game to
 
 ![The plan](plan.jpg)
 
+## The fifth in-game review
+
+| Asked | Done |
+|---|---|
+| The lift: only the glass is see-through, so the camera jumps about | Every collider of the lift is marked `see`: shaft, frames, glass, bridge and its railings, gates and car deck (`lab.col_extra` in the builder; the game's own gate and deck colliders too). The camera passes through all of it. |
+| Keep draft A of the wall screens | Draft B is gone. A is all there is. |
+| The airlock portal's trim sticks out too far | The guide rails ran up past the cable tray. They stop under it now. |
+| The outer door clips through everything as it opens | It rose over the lock housing's face, across the sign. It now sinks into a slot in the ground (a dark slot with a hazard sill each side), out of sight. |
+| The wall camera should follow you | Its head is a pivot the game turns toward your head while you are within 14 m of the plate (up to about 50° either way), and back to the plate when you go. |
+| The round platform clips into the building | The plaza ran 5 m into the lock housing and the tunnel. Its rim is now 0.4 m out from the housing's front, leaving room for the door's slot. The stand plate is lifted onto it (it was buried under the plaza). |
+| No wind on the Moon: lose the windmill | Gone, with its pipe. The stock tank stays. |
+| The light pole by the pad; use a standard settlement pad | The windsock pole is gone, with the old pad. The supply pad is the game's standard landing pad (`landingPad.js`, built by `world.pad`, freighter size), its stairs toward the plaza and the walk ending square at their foot. It is not in the place's pad list, so no flights use it. |
+
+| | |
+|---|---|
+| ![The portal, its rails under the tray](game/portal_rails.jpg) | ![The outer door sunk, the camera on you](game/housing_open.jpg) |
+| ![The plaza meeting the housing](game/plaza_doorway.jpg) | ![The standard pad, the walk at its stairs](game/supply_pad.jpg) |
+| ![The ranch, no windmill](game/ranch_no_mill.jpg) | |
+
 ## The fourth in-game review
 
 | Asked | Done |
@@ -34,7 +53,7 @@ renders). The courier is `runner.glb`. The drone feeds are filmed in the game to
 | The floating "Z" on the pad | Gone. |
 | The cryo pods and the splice tube | Two threes of pods either side of the splice pod, which is centred between them with its back to the wall like them; its projection is over it. |
 | Two more robot cycles, things on the table, a moving hoist the arm reaches up to | The cell now runs three 16 s cycles in turn. **HOIST & DOCK:** the gantry's trolley runs out along its beam and lowers a power cell on its hook, the right arm reaches up and takes it, flips it and seats it in a charging dock on the bench, and the welder tacks it. **INSPECT:** the left arm takes a scanner wand from its holder and sweeps its beam over the chimera while the jig turns it a full turn, the right arm leaning in to watch. The bench gains the dock, the wand's holder, a rack of spare cells and a parts bin; the jig is a turntable. |
-| Touch up the wall screens, two drafts | They are live screens now. **Draft A, TELEMETRY:** the drone net on a lunar map with each drone circling its settlement and their signal figures; the splicer's helix with your splice, mutation, chimera and reactor figures and a stability bar; the robot cell's cycle, progress and each arm's job. **Draft B, SCHEMATIC:** a turning wireframe globe with the drones' orbits; a helix in perspective; the right arm drawn live from its joint angles. A is on; set `localStorage['zlab-holo'] = 'b'` to see B. |
+| Touch up the wall screens, two drafts | They are live screens now. **Draft A, TELEMETRY (kept):** the drone net on a lunar map with each drone circling its settlement and their signal figures; the splicer's helix with your splice, mutation, chimera and reactor figures and a stability bar; the robot cell's cycle, progress and each arm's job. **Draft B, SCHEMATIC:** a turning wireframe globe with the drones' orbits; a helix in perspective; the right arm drawn live from its joint angles. (B was dropped in the next round.) |
 | The lift's camera pulls in tight | The shaft's glass is marked `see`: the follow camera's wall sweep ignores it and looks through, so it holds its distance (8 m in the test). |
 | The catwalk is too narrow | 3 m wide now (from 2), with its inner railing, supports and the intake bridge moved in. |
 | Remove the magnet array | Gone. |
