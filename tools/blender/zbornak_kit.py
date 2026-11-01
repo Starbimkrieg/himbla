@@ -589,12 +589,15 @@ def holotable(g, x, z, yaw=0.0, r=2.4, shape="round", show="moon"):
     g.at()
 
 
-def projection(g, x, y, z, yaw, w, h, kind=0, color="holo", mount=0.0):
+def projection(g, x, y, z, yaw, w, h, kind=0, color="holo", mount=0.0, sid=None):
     """A holographic wall projection, w x h, centred at (x, y, z) facing yaw: a thin lit frame, a translucent panel and
     drawn content (bars and a curve, a helix, or a grid with blips); mount > 0: the wall is that far behind, and an emitter
     bar on two brackets along the top throws the picture down onto the panel."""
     g.at(x, z, yaw, y)
-    g(color, 0.0).boxc(0, 0, 0, w, h, 0.02)
+    if GAME[0] and sid:                                                     # (the game's screen is the panel: dark glass, drawn on)
+        g("dark", 0.0).boxc(0, 0, -0.01, w, h, 0.02)
+    else:
+        g(color, 0.0).boxc(0, 0, 0, w, h, 0.02)
     if mount:
         for sx in (-1, 1):
             g("steel", 0.02).boxc(sx * w * 0.35, h / 2 + 0.25, -mount / 2 + 0.05, 0.12, 0.12, mount + 0.1)
@@ -605,6 +608,10 @@ def projection(g, x, y, z, yaw, w, h, kind=0, color="holo", mount=0.0):
         g("cyan", 0.0).boxc(0, sy * h / 2, 0.02, w + 0.1, 0.06, 0.03)
     for sx in (-1, 1):
         g("cyan", 0.0).boxc(sx * w / 2, 0, 0.02, 0.06, h, 0.03)
+    if GAME[0] and sid:                                                     # the game draws the picture (labWorld.js holo screens)
+        g.screen(sid, 0, 0, 0.012, w - 0.12, h - 0.12)
+        g.at()
+        return
     if kind == 0:
         n = 9
         for i in range(n):
@@ -914,11 +921,13 @@ def lamp_post(g, x, z, h=5.0, color="lamp"):
     g(color, 0.0).boxc(x, h - 0.12, z, 0.45, 0.2, 0.45)
 
 
-def path_ribbon(g, pts, w=3.0, step=1.0, lights=6.0, light="lime", trim=()):
+def path_ribbon(g, pts, w=3.0, step=1.0, lights=6.0, light="lime", trim=(), start_dir=None, end_dir=None):
     """A paved walk along a smooth curve through pts [(x, z)] (Catmull-Rom), one continuous ribbon 6 cm thick with a raised
     kerb along each edge and flush lit studs set into the kerb tops every `lights` metres. Start and end it on the edges of
     the platforms it joins. trim: circles (x, z, r) of round platforms the walk runs onto: the ribbon runs on under the
-    platform's top (start or end it inside), the kerbs stop at its rim."""
+    platform's top (start or end it inside), the kerbs stop at its rim. start_dir, end_dir (x, z): the way the walk meets
+    what it joins at that end; the end is cut square to it, flush against a straight edge (else it is square to the curve's
+    last step, a few degrees off, which leaves a wedge of a gap)."""
     P = [Vector((p[0], 0, p[1])) for p in pts]
     P = [P[0] * 2 - P[1]] + P + [P[-1] * 2 - P[-2]]
     samples = []
@@ -929,11 +938,20 @@ def path_ribbon(g, pts, w=3.0, step=1.0, lights=6.0, light="lime", trim=()):
             t = k / n
             samples.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3))
     samples.append(P[-2])
+    ends = {}
+    if start_dir:
+        ends["s"] = (samples[0], Vector((start_dir[0], 0, start_dir[1])).normalized())
+    if end_dir:
+        ends["e"] = (samples[-1], Vector((end_dir[0], 0, end_dir[1])).normalized())
 
     def strip(off0, off1, y0, y1, slot, ink):
         verts, faces = [], []
         for i, p in enumerate(samples):
             d = (samples[min(i + 1, len(samples) - 1)] - samples[max(i - 1, 0)]).normalized()
+            if i == 0 and "s" in ends and samples[0] is ends["s"][0]:
+                d = ends["s"][1]
+            elif i == len(samples) - 1 and "e" in ends and samples[-1] is ends["e"][0]:
+                d = ends["e"][1]
             nrm = Vector((d.z, 0, -d.x))
             for off, y in ((off0, y0), (off1, y0), (off1, y1), (off0, y1)):
                 q = p + nrm * off
@@ -1048,7 +1066,6 @@ def landing_pad(g, x, z, r=12.0, label="Z"):
     for i in range(16):
         a = TAU * i / 16
         g("lime" if i % 2 else "lamp", 0.0).boxc(math.sin(a) * rl, PAD_Y, math.cos(a) * rl, 0.35, 0.03, 0.35)
-    g.text(label, (0, PAD_Y, 2.2), 0, 4.0, "hazard", 0.02)
     g("white", 0.04).cylc(r + 3.0, 1.3, 5.0, 1.0, 4.0, 14, "x")
     g("dark", 0.02).boxc(r + 3.0, 0.15, 5.0, 4.4, 0.3, 1.6)
     g("red", 0.0).tor(1.02, 0.06, (r + 3.0, 1.3, 5.0), (0, 0, PI / 2), n=16, rs=4)

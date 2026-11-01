@@ -412,18 +412,19 @@ def build_lab(root):
     RE = 3.4
     reactor(G("reactor", lab.root), 22, RE, 3, crown_y=H + 21, collar_y=8.6)
     CW = 6.6                                                                # catwalk deck height
-    lab("panel", 0.04).lath([(9.6, CW - 0.3), (11.6, CW - 0.3), (11.6, CW), (9.6, CW), (9.6, CW - 0.3)], segs=64)
+    CI, CO = 8.6, 11.6                                                      # the catwalk's inner and outer edge: 3 m to walk
+    lab("panel", 0.04).lath([(CI, CW - 0.3), (CO, CW - 0.3), (CO, CW), (CI, CW), (CI, CW - 0.3)], segs=64)
     lab("cyan", 0.0).tor(11.62, 0.05, (0, CW - 0.15, 0), n=64, rs=4)
     for i in range(40):                                                    # the ring deck collides as boxes round it
         a = TAU * (i + 0.5) / 40
         lab.at(0, 0, a)
-        lab.col_box(0, CW - 0.15, 10.6, TAU * 10.6 / 40 * 1.05, 0.3, 2.0)
+        lab.col_box(0, CW - 0.15, (CI + CO) / 2, TAU * CO / 40 * 1.05, 0.3, CO - CI)
         lab.at()
-    railing_ring(lab, 9.7, CW, gap=(-PI / 2, 2.0), step=1.6, solid=True)
+    railing_ring(lab, CI + 0.1, CW, gap=(-PI / 2, 2.0), step=1.6, solid=True)
     railing_ring(lab, 11.5, CW, gap=(-PI / 2, 2.1), step=1.6, solid=True)
     for i in range(6):
         a = TAU * i / 6 + 0.3
-        lab("steel", 0.03).cylc(math.sin(a) * 10.6, (CW - 0.3) / 2, math.cos(a) * 10.6, 0.22, CW - 0.3, 8)
+        lab("steel", 0.03).cylc(math.sin(a) * (CI + CO) / 2, (CW - 0.3) / 2, math.cos(a) * (CI + CO) / 2, 0.22, CW - 0.3, 8)
     # the lift to the catwalk, at the west: a glass shaft beside the ring, a short bridge from its top onto the catwalk. Its car
     # and its two gates are pivots the game moves (labWorld.js): the car carries you up or down, standing, and each gate (a
     # waist-high barrier across the shaft's opening at that level) rises only while the car is there. Below, the opening
@@ -447,13 +448,13 @@ def build_lab(root):
     # the glass: both sides whole; the back (-x) over the bottom opening; the front (+x) under the bridge and over its opening
     for sz in (-1, 1):
         lab("glass", 0.0).boxc(LX, LH / 2, LZ + sz * 1.15, 2.2, LH - 0.2, 0.04)
-        lab.col_box(LX, LH / 2, LZ + sz * 1.15, 2.46, LH, 0.12)
+        lab.col_box(LX, LH / 2, LZ + sz * 1.15, 2.46, LH, 0.12, see=1)
     lab("glass", 0.0).boxc(LX - 1.15, (2.6 + LH) / 2, LZ, 0.04, LH - 2.6, 2.2)
-    lab.col_box(LX - 1.15, (2.6 + LH) / 2, LZ, 0.12, LH - 2.6, 2.46)
+    lab.col_box(LX - 1.15, (2.6 + LH) / 2, LZ, 0.12, LH - 2.6, 2.46, see=1)
     lab("glass", 0.0).boxc(LX + 1.15, (CW - 0.3) / 2, LZ, 0.04, CW - 0.4, 2.2)
-    lab.col_box(LX + 1.15, (CW - 0.3) / 2, LZ, 0.12, CW - 0.3, 2.46)
+    lab.col_box(LX + 1.15, (CW - 0.3) / 2, LZ, 0.12, CW - 0.3, 2.46, see=1)
     lab("glass", 0.0).boxc(LX + 1.15, (CW + 2.6 + LH) / 2, LZ, 0.04, LH - CW - 2.6, 2.2)
-    lab.col_box(LX + 1.15, (CW + 2.6 + LH) / 2, LZ, 0.12, LH - CW - 2.6, 2.46)
+    lab.col_box(LX + 1.15, (CW + 2.6 + LH) / 2, LZ, 0.12, LH - CW - 2.6, 2.46, see=1)
     lab("steel", 0.02).boxc(LX - 1.15, 2.6, LZ, 0.16, 0.16, 2.46).boxc(LX + 1.15, CW + 2.6, LZ, 0.16, 0.16, 2.46)   # the openings' heads
     # the winding house on top, lamps over each opening, a hazard sill below, the shaft's pit
     lab("dark", 0.04).boxc(LX, LH + 0.4, LZ, 2.6, 0.7, 2.6)
@@ -482,7 +483,7 @@ def build_lab(root):
         gate.root["travel"] = 2.3
     lab.mark("spot", (LX, 0.07, LZ), 0, spot="lift")
     CAMS["stair"] = ((CX - 22.0, 4.5, CZ - 6.0), (CX - 13.0, 3.6, CZ), 30)
-    reactor_intake(lab, RE, -PI / 2, CW, 9.6)
+    reactor_intake(lab, RE, -PI / 2, CW, CI)
     lab.mark("spot", (-(RE + 1.75), CW, 0), -PI / 2, spot="intake")
     lab.mark("spot", (0, 11, 0), 0, spot="reactor")
     RUNNER["intake"] = ((CX - 7.4, CW, CZ + 0.35), PI / 2 + 0.3)
@@ -522,8 +523,6 @@ def build_lab(root):
     for deg, kind in ((17.5, 0), (27.0, 1)):
         x, z, yw = P(deg, R - 0.12)
         chem_bench(lab, x, z, yw, 3.8, kind, int(deg), s=ES)
-    x, z, yw = P(36, 21.5)
-    magnet_array(lab, x, z, yw, s=ES)
     for deg in labnet_wall(lab, R, 56.5, "lab"):
         x, z, yw = P(deg, R - 0.05)
         battery_station(lab, x, z, yw)
@@ -548,11 +547,37 @@ def build_lab(root):
     tw("panel", 0.04).boxc(0, 0.55, 0, 6.2, 1.1, 2.4)
     tw("hazard", 0.0).boxc(0, 1.12, 0, 6.3, 0.04, 2.5)
     tw("steel", 0.02).boxc(0, 1.2, 0, 5.6, 0.12, 1.9)
-    tw("dark", 0.03).cylc(0, 1.31, 0, 0.75, 0.1, 24)                      # the jig: a clamp ring under the chimera
-    tw("hazard", 0.0).tor(0.76, 0.03, (0, 1.31, 0), n=28, rs=4)
+    jig = G("jig", tw.root, 0, 1.31, 0, solid=False, role="jig")           # the jig: a turntable with clamps under the chimera
+    jig("dark", 0.03).cylc(0, 0, 0, 0.75, 0.1, 24)                         # (the game turns it, the chimera with it)
+    jig("hazard", 0.0).tor(0.76, 0.03, (0, 0, 0), n=28, rs=4)
     for k in (-1, 1):
-        tw("steel", 0.015).boxc(k * 0.45, 1.45, 0, 0.12, 0.2, 0.5)
+        jig("steel", 0.015).boxc(k * 0.45, 0.14, 0, 0.12, 0.2, 0.5)
+    tw("steel", 0.02).cylc(0, 1.285, 0, 0.3, 0.05, 16)                     # its bearing
     tw.chim((0, 1.36, 0), 0.0, 1.3, 4)
+    # the bench's other work: a charging dock for power cells (the hoist brings one, an arm seats it), the inspection
+    # scanner in its holder, a rack of spare cells, a parts bin; a cable from the dock to the jig
+    DX, DZ, BT = 1.6, -0.6, 1.26                                            # the dock, the bench's top
+    tw("dark", 0.03).boxc(DX, BT + 0.15, DZ, 0.5, 0.3, 0.5)
+    tw("lime", 0.0).tor(0.2, 0.025, (DX, BT + 0.3, DZ), n=20, rs=4)
+    tw("void", 0.0).cylc(DX, BT + 0.295, DZ, 0.18, 0.01, 16)
+    tw("cable", 0.0).path([(DX - 0.25, BT + 0.06, DZ), (0.9, BT + 0.04, -0.35), (0.6, BT + 0.06, -0.15)], 0.03, 5)
+    dockpt = G("cell_dock", tw.root, DX, BT + 0.3, DZ, solid=False, role="dockpt")   # (where a seated cell's foot is)
+    SX_, SZ_ = -2.3, 0.6                                                    # the scanner's holder
+    tw("dark", 0.02).boxc(SX_, BT + 0.1, SZ_, 0.3, 0.2, 0.3)
+    tw("steel", 0.0).cylc(SX_, BT + 0.21, SZ_, 0.08, 0.02, 10)
+    sc = G("scanner", tw.root, SX_, BT + 0.2 + 0.3, SZ_, solid=False, role="scanner")   # the wand, standing in it
+    sc("white", 0.02).cylc(0, 0.05, 0, 0.05, 0.5, 10)
+    sc("dark", 0.02).cylc(0, -0.25, 0, 0.09, 0.1, 12)
+    sc("cyan", 0.0).cylc(0, -0.305, 0, 0.07, 0.01, 12)
+    beam = G("scanner_beam", sc.root, 0, -0.31, 0, solid=False, role="beam")
+    beam("scan", 0.0).add(cylinder(0.06, 0.55, 1.1, 16, True)[:2], (0, -0.55, 0))
+    for i, (cx, cz) in enumerate(((-2.55, -0.55), (-2.3, -0.55), (-2.05, -0.55))):    # spare cells in their rack
+        tw("steel", 0.02).cylc(cx, BT + 0.25, cz, 0.1, 0.5, 12)
+        tw("lime" if i != 1 else "amber", 0.0).cylc(cx, BT + 0.25, cz, 0.105, 0.06, 12)
+    tw("dark", 0.02).boxc(-2.3, BT + 0.06, -0.55, 0.8, 0.12, 0.3)
+    tw("panel", 0.02).boxc(-1.3, BT + 0.1, 0.75, 0.5, 0.2, 0.3)             # a parts bin of bolts and brackets
+    for i in range(6):
+        tw(("steel", "brass", "dark")[i % 3], 0.0).ball(-1.45 + (i % 3) * 0.15, BT + 0.21, 0.7 + (i // 3) * 0.1, 0.035, 6, 4)
     # the plate carrier: a tray with slotted end frames holding the armour plates on edge
     rx, rz = 2.27, 0.75
     tw("steel", 0.03).boxc(rx, 1.32, rz, 0.8, 0.12, 0.72)
@@ -581,9 +606,23 @@ def build_lab(root):
             tw("dark", 0.02).boxc(sx, 0.05, sz, 0.7, 0.1, 0.7)
         tw("hazard", 0.03).boxc(sx, 8.1, 0, 0.4, 0.4, 9.4)
     tw("hazard", 0.03).boxc(0, 8.1, -1.8, 8.4, 0.5, 0.5)
-    tw("dark", 0.02).boxc(-2.6, 7.6, -1.8, 1.0, 0.6, 0.8)
-    tw("steel", 0.0).bm((-2.6, 7.3, -1.8), (-2.6, 6.3, -1.8), 0.03, 4)
-    tw("dark", 0.02).boxc(-2.6, 6.2, -1.8, 0.4, 0.3, 0.4)
+    # the hoist: a trolley on the cross beam (it carries the power cells: a magazine), its cable and hook; the game runs
+    # the trolley along the beam and pays out the cable
+    hz = G("hoist", tw.root, -2.6, 7.6, -1.8, solid=False, role="trolley")
+    hz("dark", 0.02).boxc(0, 0, 0, 1.0, 0.6, 0.8)
+    hz("steel", 0.0).boxc(0, 0.33, 0, 0.9, 0.06, 0.7)
+    for k in (-1, 1):
+        hz("dark", 0.0).cylc(k * 0.35, 0.36, 0, 0.09, 0.84, 10, "z")         # its wheels on the beam's flange
+    hz("amber", 0.0).boxc(0.505, 0.1, 0, 0.01, 0.12, 0.3)
+    cab = G("hoist_cable", hz.root, 0, -0.3, 0, solid=False, role="cable")  # 0.1 m paid out; the game scales it to the payout
+    cab("steel", 0.0).boxc(0, -0.05, 0, 0.04, 0.1, 0.04)
+    hk = G("hoist_hook", hz.root, 0, -0.55, 0, solid=False, role="hook")
+    hk("dark", 0.02).boxc(0, 0, 0, 0.3, 0.3, 0.3)
+    hk("hazard", 0.0).boxc(0, -0.16, 0, 0.32, 0.03, 0.32)
+    cell = G("cell", hk.root, 0, -0.4, 0, solid=False, role="cell")         # a power cell: the hoist brings it, an arm seats it
+    cell("steel", 0.02).cylc(0, 0, 0, 0.12, 0.5, 14)
+    cell("lime", 0.0).cylc(0, 0, 0, 0.125, 0.07, 14)
+    cell("dark", 0.0).cylc(0, 0.27, 0, 0.06, 0.04, 10).cylc(0, -0.27, 0, 0.06, 0.04, 10)
     CAMS["robots"] = ((CX + x + math.sin(yw) * 9.0 + math.cos(yw) * 9.0, 6.0, CZ + z + math.cos(yw) * 9.0 - math.sin(yw) * 9.0), (CX + x, 2.0, CZ + z), 30)
     # exotic matter: a wall of canister racks, two magnetic cages before it cabled to the wall, the sign over them
     for deg in (134, 149, 164):
@@ -604,20 +643,21 @@ def build_lab(root):
     lab.at()
     CAMS["exotic"] = ((CX + P(146, 12)[0], 3.0, CZ + P(146, 12)[1]), (CX + P(150, 27)[0], 2.4, CZ + P(150, 27)[1]), 26)
     # the splice pod at the back, under the helix projection
-    x, z, yw = P(180, 23.5)
+    x, z, yw = P(207, R - 3.1)                                             # centred between the cryo pods, its back to the wall
     splice_pod(lab, x, z, yw)
     lab.at(x, z, yw)
     lab.mark("spot", (0, 0, 4.0), PI, spot="pod")
     lab.at()
     # wall projections, on brackets from the wall, an emitter bar over each
-    for deg, w, h, kind in ((-31, 9.0, 4.2, 2), (180, 13.0, 5.0, 1), (100, 9.0, 3.4, 0)):          # (-31: over the holotable)
-        a = math.radians(deg)
-        projection(lab, math.sin(a) * (R - 0.4), 8.8, math.cos(a) * (R - 0.4), a + PI, w, h, kind, mount=0.4)
+    for k, (deg, w, h, kind) in enumerate(((-31, 9.0, 4.2, 2), (207, 9.0, 4.2, 1), (100, 9.0, 3.4, 0))):  # (over the holotable,
+        a = math.radians(deg)                                                                          # the splice pod, the robots)
+        py = 10.2 if k == 2 else 8.8                                                                   # (the robots': over the gantry)
+        projection(lab, math.sin(a) * (R - 0.4), py, math.cos(a) * (R - 0.4), a + PI, w, h, kind, mount=0.4, sid=f"holo{k}")
     # cryo-stasis pods, an arc of six, a chimera in each, their coolant lines into junction boxes under the tray
-    for i, deg in enumerate((-128, -137, -146, -155, -164, -173)):
+    for i, deg in enumerate((175, 184, 193, 221, 230, 239)):
         x, z, yw = P(deg, 26.6)
         cryo_pod(lab, x, z, yw, [0, 1, 2, 3, 5, 6][i], "cyan", wall=R - 26.6)
-    a0 = math.radians(-150)
+    a0 = math.radians(207)
     CAMS["cryo"] = ((CX + math.sin(a0) * 14, 2.6, CZ + math.cos(a0) * 14), (CX + math.sin(a0) * 26, 2.3, CZ + math.cos(a0) * 26), 30)
     # the hydroponics habitat: a sealed glass enclosure 4.5 m deep against the wall (kerb, mullions, beam, canopy, end walls,
     # an airlock door) holding one row of growth pods on a nutrient header along the wall, a nutrient tank behind the door,
@@ -697,14 +737,10 @@ def build_lab(root):
     out("hazard", 0.0).tor(12.9, 0.1, (PZ[0], 0.09, PZ[1]), n=48, rs=4, s=(1, 0.3, 1))
     walks = (math.radians(98.3), math.radians(-71.7))                       # where the two walks leave it
     mouth = math.asin(3.4 / 14.2)                                           # (a lamp 3.4 m either side of a walk's middle)
-    for i in range(12):
-        a = TAU * (i + 0.5) / 12
-        if abs((a + PI) % TAU - PI) > 2.4 or any(abs((a - wa + PI) % TAU - PI) < 0.35 for wa in walks):
-            continue
-        lamp_post(out, PZ[0] + math.sin(a) * 14.2, PZ[1] + math.cos(a) * 14.2, 5.0)
-    for wa in walks:
-        for sgn in (-1, 1):
-            lamp_post(out, PZ[0] + math.sin(wa + sgn * mouth) * 14.2, PZ[1] + math.cos(wa + sgn * mouth) * 14.2, 5.0)
+    for wa in walks + (PI,):                                                # six lamps, marking the ways in: each walk's mouth and
+        for sgn in (-1, 1):                                                 # the airlock's (PI: either side of the lock housing)
+            a = wa + sgn * (mouth if wa != PI else math.radians(35))
+            lamp_post(out, PZ[0] + math.sin(a) * 14.2, PZ[1] + math.cos(a) * 14.2, 5.0)
     plaza = ((PZ[0], PZ[1], 13.0),)
     def from_plaza(wa, r=11.0):
         return (PZ[0] + math.sin(wa) * r, PZ[1] + math.cos(wa) * r)
@@ -732,10 +768,10 @@ def build_lab(root):
     ground_run(out, [(gx + 2.0, gz - 2.0), (wx, wz)])
     out("dark", 0.02).boxc(wx, 0.6, wz, 0.9, 1.2, 0.6, (0, d, 0))
     s0, u = from_plaza(walks[0]), (math.sin(walks[0]), math.cos(walks[0]))
-    path_ribbon(out, bez(s0, (s0[0] + u[0] * 14, s0[1] + u[1] * 14), (35.55, 16.0), (48.55, 16.0)), 3.0, trim=plaza)   # (radial off the
+    path_ribbon(out, bez(s0, (s0[0] + u[0] * 14, s0[1] + u[1] * 14), (35.55, 16.0), (48.55, 16.0)), 3.0, trim=plaza, end_dir=(1, 0))   # (radial off the
     pe = (-51.4, 55.3)                                                     # plaza, square onto the cattle grid's frame)
-    path_ribbon(out, [from_plaza(walks[1]), (-24.0, 49.0), (-38.0, 53.5), pe], 3.0, trim=plaza)
     a = math.atan2(-62.0 - pe[0], 58.0 - pe[1])                             # a ramp up onto the pad's deck
+    path_ribbon(out, [from_plaza(walks[1]), (-24.0, 49.0), (-38.0, 53.5), pe], 3.0, trim=plaza, end_dir=(math.sin(a), math.cos(a)))
     out.at(pe[0] + math.sin(a) * 1.2, pe[1] + math.cos(a) * 1.2, a)
     out("path", 0.0).polyx([(-1.3, 0), (1.3, 0), (1.3, 0.38), (-1.3, 0.04)], -1.5, 1.5)          # to the deck (PAD_Y)
     for s in (-1, 1):

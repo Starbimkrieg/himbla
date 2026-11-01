@@ -58,6 +58,38 @@ const CELL_KEYS = {
     [0.74, [0.405, 2.52, 0.27], -0.35], [0.80, [0.9, 2.9, 1.0], -0.4], [0.88, [1.3, 3.0, 1.9], -0.5], [1.00, [1.3, 3.0, 1.9], -0.5]],
 };
 const PICK_T = 0.17, RELEASE_T = 0.82, WELD_T = [0.46, 0.74];
+// The cell runs three cycles in turn, CYCLE s each, every one starting and ending with the arms parked:
+//   WELD          (the builder's CELL_KEYS) the left arm clamps the chimera on the jig, the right one takes an armour plate
+//                 from the carrier and holds it on the flank, the welder runs a bead up the seam;
+//   HOIST & DOCK  the hoist's trolley runs out along the gantry and pays out a power cell on its hook; the right arm reaches
+//                 up under it, takes it, flips it and seats it in the charging dock on the bench; the welder tacks it twice;
+//   INSPECT       the left arm takes the scanner wand from its holder and sweeps it over the chimera while the jig turns it a
+//                 full turn; the right arm leans in to watch; the wand goes back, and the docked cell sinks into the dock.
+// Keys: [t, tool point (bench frame), pitch]; the trolley's: [t, [its x along the beam, cable paid out, 0], 0].
+const UP = Math.PI / 2;
+const P0 = [-1.3, 2.9, -1.4], P1 = [2.5, 2.6, 0.75], P2 = [1.3, 3.0, 1.9], CLAMP_A = [-0.38, 2.35, -0.62], CLAMP = [-0.22, 2.3, -0.34];
+const DOCK = [1.6, 1.76, -0.6], HOLD = [-2.3, 1.76, 0.6], HAND = [2.2, 4.5, -1.8];   // a seated cell's middle, the wand in its holder, the hand-off under the hook
+const CYCLES = [
+  { name: 'WELD', keys: CELL_KEYS, weld: [WELD_T] },
+  { name: 'HOIST & DOCK', weld: [[0.64, 0.67], [0.71, 0.74]], pick: 0.33, drop: 0.585, keys: {
+    arm0: [[0, P0, -0.6], [0.06, CLAMP_A, -0.25], [0.12, CLAMP, -0.25], [0.88, CLAMP, -0.25], [0.94, CLAMP_A, -0.25], [1, P0, -0.6]],
+    arm1: [[0, P1, DOWN], [0.10, P1, DOWN], [0.20, [2.3, 3.3, -1.4], 0], [0.27, [2.2, 3.9, -1.8], UP], [0.31, HAND, UP], [0.345, HAND, UP],
+      [0.41, [2.2, 3.8, -1.8], UP], [0.46, [1.9, 3.2, -1.0], 0], [0.52, [1.6, 2.4, -0.6], DOWN], [0.57, DOCK, DOWN], [0.60, DOCK, DOWN],
+      [0.64, [1.6, 2.45, -0.6], DOWN], [0.76, P1, DOWN], [1, P1, DOWN]],
+    arm2: [[0, P2, -0.5], [0.58, P2, -0.5], [0.63, [1.45, 1.62, -0.3], -0.35], [0.67, [1.45, 1.62, -0.3], -0.35], [0.70, [1.75, 1.62, -0.3], -0.35],
+      [0.74, [1.75, 1.62, -0.3], -0.35], [0.82, P2, -0.5], [1, P2, -0.5]],
+  }, trolley: [[0, [-2.6, 0.1, 0], 0], [0.04, [-2.6, 0.1, 0], 0], [0.16, [2.2, 0.1, 0], 0], [0.26, [2.2, 2.25, 0], 0], [0.345, [2.2, 2.25, 0], 0],
+    [0.44, [2.2, 0.1, 0], 0], [0.50, [2.2, 0.1, 0], 0], [0.62, [-2.6, 0.1, 0], 0], [1, [-2.6, 0.1, 0], 0]] },
+  { name: 'INSPECT', weld: [], pick: 0.155, drop: 0.835, beam: [0.30, 0.68], spin: [0.30, 0.68], keys: {
+    // (the sweep, 0.30 to 0.68: the wand 0.9 m short of the chimera on the line from the arm's base, tipped down at it)
+    arm0: [[0, P0, -0.6], [0.08, [-2.3, 2.5, 0.6], DOWN], [0.14, HOLD, DOWN], [0.17, HOLD, DOWN], [0.22, [-2.3, 2.6, 0.6], DOWN],
+      [0.30, [-0.62, 3.0, -0.62], -0.78], [0.40, [-0.30, 3.2, -0.78], -0.95], [0.50, [-0.62, 2.7, -0.62], -0.55], [0.60, [-0.75, 3.2, -0.40], -0.95],
+      [0.68, [-0.62, 3.0, -0.62], -0.78], [0.76, [-2.3, 2.6, 0.6], DOWN], [0.82, HOLD, DOWN], [0.85, HOLD, DOWN], [0.90, [-2.3, 2.5, 0.6], DOWN], [1, P0, -0.6]],
+    arm1: [[0, P1, DOWN], [0.25, [1.4, 3.4, -0.4], -0.7], [0.70, [1.4, 3.4, -0.4], -0.7], [0.85, P1, DOWN], [1, P1, DOWN]],
+    arm2: [[0, P2, -0.5], [0.45, [1.0, 3.2, 1.6], -0.6], [0.9, P2, -0.5], [1, P2, -0.5]],
+  } },
+];
+const _rx = new THREE.Quaternion(), _ry = new THREE.Quaternion(), X1 = new THREE.Vector3(1, 0, 0);
 const _tp = [0, 0, 0];
 function track(keys, t) {
   for (let i = 0; i < keys.length - 1; i++) {
@@ -126,7 +158,7 @@ export function buildZbornakLab(world, loc) {
         if (role === 'col') {
           _p.copy(kid.pos).applyMatrix4(M);
           if (d.shape === 'cyl') k.column(d.r, _p.y + d.h, _p.x, _p.z, _p.y);
-          else k.solidQ(d.hx, d.hy, d.hz, _p.x, _p.y, _p.z, _q.setFromEuler(_e.set(d.rx || 0, d.ry || 0, d.rz || 0, 'ZYX')), { auto: true, ...(d.stick ? { stick: true } : {}) });
+          else k.solidQ(d.hx, d.hy, d.hz, _p.x, _p.y, _p.z, _q.setFromEuler(_e.set(d.rx || 0, d.ry || 0, d.rz || 0, 'ZYX')), { auto: true, ...(d.stick ? { stick: true } : {}), ...(d.see ? { see: true } : {}) });   // (see: glass the camera looks through)
         } else if (FIXED.has(role)) bake(kid, Mk);
         else if (role === 'spot') {
           Mk.decompose(_p, _q, _s);
@@ -169,6 +201,10 @@ export function buildZbornakLab(world, loc) {
       lab.arms[n] = { turret: g.getObjectByName(n + '_turret'), shoulder: g.getObjectByName(n + '_shoulder'), elbow: g.getObjectByName(n + '_elbow'),
         wrist: g.getObjectByName(n + '_wrist'), roll: g.getObjectByName(n + '_roll'), weld: g.getObjectByName(n + '_weld'), carry: g.getObjectByName('plate_carry') };
     } else if (role === 'plate') lab[g.name.replace('plate_', 'plate')] = g;
+    else if (role === 'jig') lab.jig = { g, q0: g.quaternion.clone() };
+    else if (role === 'trolley') lab.hoist = { g, p0: g.position.clone(), ax: X1.clone().applyQuaternion(g.quaternion), cable: g.getObjectByName('hoist_cable'), hook: g.getObjectByName('hoist_hook') };
+    else if (role === 'scanner') lab.scanner = { g, parent: g.parent, p0: g.position.clone(), q0: g.quaternion.clone(), beam: g.getObjectByName('scanner_beam') };
+    else if (role === 'dockpt') lab.dock = g;
     else if (role === 'core') { lab.core = g; lab.coreY = g.position.y; lab.rings = g.children.filter((o) => o.userData.role === 'ring'); }
     else if (role === 'lift') lab.lift = { g, y0: g.position.y, travel: g.userData.travel || 6.5, pos: 0, lv: 0, state: 'idle', dwell: 0, armed: true, rider: false };
     else if (role === 'liftgate') (lab.liftGates ||= [])[g.name.endsWith('1') ? 1 : 0] = { g, y0: g.position.y, travel: g.userData.travel || 2.3, open: 0 };
@@ -177,6 +213,19 @@ export function buildZbornakLab(world, loc) {
     else if (role === 'doctor') { lab.doctor = g; lab.head = g.getObjectByName('head'); }
   }
   for (const [k, p] of Object.entries(lab.local)) if (p.isVector3) lab.spots[k] = world.toWorld(loc, p.x, p.y, p.z);
+  // the robot cell's moving props: the chimera and the welded plate ride the jig; the cell starts on the hoist's hook
+  if (lab.jig) {
+    const J = lab.jig.g, root = J.parent;
+    root.updateMatrixWorld(true);
+    const jp = J.getWorldPosition(new THREE.Vector3());
+    for (const c of lab.chims) if (c.root.getWorldPosition(_v).distanceTo(jp) < 0.6) J.attach(c.root);
+    if (lab.plateweld) J.attach(lab.plateweld);
+  }
+  if (lab.hoist) {
+    const cell = lab.hoist.hook && lab.hoist.hook.getObjectByName('cell');
+    if (cell) lab.cell = { g: cell, owner: 'hook', p0: cell.position.clone(), q0: cell.quaternion.clone() };
+  }
+  if (lab.scanner && lab.scanner.beam) lab.scanner.beam.visible = false;
   // Dr. Zbornak's name over him
   if (lab.doctor) {
     const tag = nameTag(textSprite('DR. ZBORNAK', { color: '#7dff3a', size: 50, scale: 0.35 }), 'DR. ZBORNAK', '#7dff3a');
@@ -217,6 +266,19 @@ export function buildZbornakLab(world, loc) {
     m.material = new THREE.MeshBasicMaterial({ map: s.tex });
     lab.screens[sid] = Object.assign(s, { mesh: m });
   }
+  // the wall projections (holo0 over the holotable, holo1 over the splice pod, holo2 over the robots): canvases glowing over
+  // the projector's blue panel, redrawn a few times a second while you're near (drawHolo)
+  for (const sid of ['holo0', 'holo1', 'holo2']) {
+    const m = lab.screens[sid];
+    if (!m) continue;
+    m.geometry.computeBoundingBox();
+    const bb = m.geometry.boundingBox, aspect = (bb.max.x - bb.min.x) / (bb.max.y - bb.min.y);
+    const sc = canvasScreen(1024, Math.round(1024 / aspect));
+    m.material = new THREE.MeshBasicMaterial({ map: sc.tex, transparent: true, depthWrite: false });
+    lab.screens[sid] = Object.assign(sc, { mesh: m });
+  }
+  lab.holoT = 0;
+  try { lab.holoStyle = localStorage.getItem('zlab-holo') || 'a'; } catch { lab.holoStyle = 'a'; }
   lab.drawSec = (state, photo) => drawSecurity(lab.screens.sec, state, photo);
   lab.drawSec('idle');
   // the security camera's snapshot: a small render target, read back into the security screen's canvas
@@ -272,6 +334,68 @@ function snapshot(world, lab) {
   return c;
 }
 
+// one frame of the robot cell: which cycle, where it is in it, the arms by IK, the props (lab.cellNow: { cycle, t })
+function updateCell(lab) {
+  const ct = lab.t / CYCLE, ci = Math.floor(ct) % CYCLES.length, t = ct % 1, C = CYCLES[ci];
+  lab.cellNow = { cycle: ci, name: C.name, t };
+  for (const [n, A] of Object.entries(lab.arms)) {
+    const phi = track(C.keys[n], t);
+    const [bx, bz, by] = ARM_BASES[n];
+    const lx = _tp[0] - bx, lz = _tp[2] - bz, c = Math.cos(-by), s = Math.sin(-by);
+    const [yaw, sh, el, wr] = armIk(lx * c + lz * s, _tp[1], -lx * s + lz * c, phi, ARM_TOOL[n]);
+    A.turret.rotation.y = yaw; A.shoulder.rotation.x = -sh; A.elbow.rotation.x = el; A.wrist.rotation.x = wr;
+    if (A.roll) A.roll.rotation.z = n === 'arm1' ? yaw + by : 0;
+    if (A.weld) {
+      const on = C.weld.some(([a, b]) => t >= a && t <= b);
+      A.weld.visible = on && Math.random() > 0.08;
+      if (on) A.weld.scale.setScalar(0.75 + Math.random() * 0.5);
+    }
+    if (A.carry) A.carry.visible = ci === 0 && t >= PICK_T && t < RELEASE_T;
+  }
+  if (lab.platerack) lab.platerack.visible = ci === 0 && t < PICK_T;
+  if (lab.plateweld) lab.plateweld.visible = ci > 0 || t >= RELEASE_T;
+  // the jig turns the chimera a full turn while it is scanned
+  if (lab.jig) {
+    const sp = C.spin, u = sp && t > sp[0] ? Math.min(1, (t - sp[0]) / (sp[1] - sp[0])) : 0;
+    lab.jig.g.quaternion.copy(lab.jig.q0).multiply(_ry.setFromAxisAngle(Y, TAU * u * u * (3 - 2 * u)));
+  }
+  // the hoist: its trolley along the beam, the cable paid out, the hook at its end
+  const H = lab.hoist;
+  if (H) {
+    let x = -2.6, L = 0.1;
+    if (C.trolley) { track(C.trolley, t); x = _tp[0]; L = _tp[1]; }
+    H.g.position.copy(H.p0).addScaledVector(H.ax, x + 2.6);
+    if (H.cable) H.cable.scale.y = L / 0.1;
+    if (H.hook) H.hook.position.y = -0.3 - L - 0.15;
+  }
+  // the power cell: on the hook, in the right arm's grip, seated in the dock (and sinking into it at INSPECT's end)
+  const cell = lab.cell;
+  if (cell) {
+    const owner = ci === 0 ? 'none' : ci === 1 ? (t < C.pick ? 'hook' : t < C.drop ? 'arm' : 'dock') : 'dock';
+    if (owner !== cell.owner) {
+      const A = lab.arms.arm1;
+      if (owner === 'hook' && H && H.hook) { H.hook.add(cell.g); cell.g.position.copy(cell.p0); cell.g.quaternion.copy(cell.q0); }
+      else if (owner === 'arm' && A && A.roll) { A.roll.add(cell.g); cell.g.position.copy(A.carry.position); cell.g.quaternion.copy(_rx.setFromAxisAngle(X1, Math.PI / 2)); }
+      else if (owner === 'dock' && lab.dock) { lab.dock.add(cell.g); cell.g.quaternion.identity(); }
+      cell.owner = owner;
+    }
+    cell.g.visible = owner !== 'none' && !(ci === 2 && t > 0.99);
+    if (owner === 'dock') cell.g.position.set(0, 0.2 - (ci === 2 && t > 0.88 ? 0.5 * Math.min(1, (t - 0.88) / 0.1) : 0), 0);
+  }
+  // the scanner: in its holder, or in the left arm's grip at INSPECT, its beam on while it sweeps
+  const S = lab.scanner;
+  if (S) {
+    const held = ci === 2 && t >= C.pick && t < C.drop;
+    if (held !== !!S.held) {
+      const A = lab.arms.arm0;
+      if (held && A && A.roll) { A.roll.add(S.g); S.g.position.copy(lab.arms.arm1.carry.position); S.g.quaternion.copy(_rx.setFromAxisAngle(X1, -Math.PI / 2)); }
+      else { S.parent.add(S.g); S.g.position.copy(S.p0); S.g.quaternion.copy(S.q0); }
+      S.held = held;
+    }
+    if (S.beam) S.beam.visible = !!(C.beam && t >= C.beam[0] && t <= C.beam[1]);
+  }
+}
+
 function updateLab(world, lab, dt, time, camPos) {
   const loc = lab.loc;
   if (!loc.active) return;
@@ -291,25 +415,8 @@ function updateLab(world, lab, dt, time, camPos) {
   }
   // the robot cell
   const near = camPos.distanceTo(lab.reactor) < 140;
-  if (near && lab.arms.arm0) {
-    const t = (lab.t / CYCLE) % 1;
-    for (const [n, A] of Object.entries(lab.arms)) {
-      const phi = track(CELL_KEYS[n], t);
-      const [bx, bz, by] = ARM_BASES[n];
-      const lx = _tp[0] - bx, lz = _tp[2] - bz, c = Math.cos(-by), s = Math.sin(-by);
-      const [yaw, sh, el, wr] = armIk(lx * c + lz * s, _tp[1], -lx * s + lz * c, phi, ARM_TOOL[n]);
-      A.turret.rotation.y = yaw; A.shoulder.rotation.x = -sh; A.elbow.rotation.x = el; A.wrist.rotation.x = wr;
-      if (A.roll) A.roll.rotation.z = n === 'arm1' ? yaw + by : 0;
-      if (A.weld) {
-        const on = t >= WELD_T[0] && t <= WELD_T[1];
-        A.weld.visible = on && Math.random() > 0.08;
-        if (on) A.weld.scale.setScalar(0.75 + Math.random() * 0.5);
-      }
-      if (A.carry) A.carry.visible = t >= PICK_T && t < RELEASE_T;
-    }
-    if (lab.platerack) lab.platerack.visible = t < PICK_T;
-    if (lab.plateweld) lab.plateweld.visible = t >= RELEASE_T;
-  }
+  if (near && lab.arms.arm0) updateCell(lab);
+  if (near && (lab.holoT -= dt) <= 0) { lab.holoT = 0.15; drawHolo(world, lab, time); }
   // Dr. Zbornak watches you
   if (lab.head && P) {
     lab.doctor.worldToLocal(_w.copy(P.pos));
@@ -362,6 +469,173 @@ function updateGate(world, lab, P, dt) {
     const e = D.open * D.open * (3 - 2 * D.open);
     D.g.position.y = D.y0 + e * D.travel;
   }
+}
+
+// ---- the wall projections: two drafts of what they show (lab.holoStyle, the dev switch localStorage 'zlab-holo': 'a' or 'b')
+//   a  TELEMETRY  dense live data: the drone net on a lunar map, the splicer's helix and the save's splice figures, the robot
+//                 cell's cycle, progress and each arm's state
+//   b  SCHEMATIC  big line work, few words: a turning wireframe globe with the drones' orbits, a helix in perspective, the
+//                 right arm drawn live from its joint angles
+const HC = { cy: '#7fe8ff', lime: '#7dff3a', pink: '#ff4fa3', amber: '#ffd23f', dim: '#2a6f8a', vio: '#c77dff' };
+const DRONES = [['D1', 'meridian'], ['D2', 'ilmb'], ['D3', 'vostok'], ['D4', 'kepler']];
+
+function holoText(g, t, x, y, size, col, align = 'left') {
+  g.font = pixelFont(Math.round(size)); g.fillStyle = col; g.textAlign = align; g.textBaseline = 'top'; g.fillText(t, x, y); g.textAlign = 'left';
+}
+function holoFrame(g, w, h, title, sub) {
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = 'rgba(6,24,44,0.88)'; g.fillRect(0, 0, w, h);                // dark glass, the projection's light on it
+  g.strokeStyle = HC.dim; g.lineWidth = 2; g.strokeRect(8, 8, w - 16, h - 16);
+  holoText(g, title, 24, 20, h * 0.075, HC.cy);
+  if (sub) holoText(g, sub, w - 24, 24, h * 0.05, HC.dim, 'right');
+  g.fillStyle = HC.dim; g.fillRect(24, 22 + h * 0.09, w - 48, 2);
+}
+
+function drawHolo(world, lab, time) {
+  const game = world.game, b = lab.holoStyle === 'b';
+  const s0 = lab.screens.holo0, s1 = lab.screens.holo1, s2 = lab.screens.holo2;
+  if (s0 && s0.g) { (b ? holoGlobe : holoSurvey)(s0, world, time); s0.tex.needsUpdate = true; }
+  if (s1 && s1.g) { (b ? holoHelix3d : holoSplicer)(s1, game, time); s1.tex.needsUpdate = true; }
+  if (s2 && s2.g) { (b ? holoArm : holoCell)(s2, lab, time); s2.tex.needsUpdate = true; }
+}
+
+// a: the drone net on an equirectangular lunar map: every place a dot, the four watched ones ringed, a drone circling each
+function holoSurvey(sc, world, time) {
+  const { g, c } = sc, w = c.width, h = c.height;
+  holoFrame(g, w, h, 'LUNAR SURVEY', null);
+  const mx = 24, my = h * 0.2, mw = w * 0.58, mh = h * 0.72;
+  g.strokeStyle = HC.dim; g.lineWidth = 1;
+  for (let i = 0; i <= 8; i++) { g.beginPath(); g.moveTo(mx + mw * i / 8, my); g.lineTo(mx + mw * i / 8, my + mh); g.stroke(); }
+  for (let j = 0; j <= 4; j++) { g.beginPath(); g.moveTo(mx, my + mh * j / 4); g.lineTo(mx + mw, my + mh * j / 4); g.stroke(); }
+  const at = (d) => [mx + mw * (0.5 + Math.atan2(d.z, d.x) / TAU), my + mh * (0.5 - Math.asin(Math.max(-1, Math.min(1, d.y))) / Math.PI)];
+  const locs = (world.locations || []).filter((l) => l.dir);
+  for (const l of locs) { const [x, y] = at(l.dir); g.fillStyle = HC.cy; g.fillRect(x - 2, y - 2, 4, 4); }
+  const lab = locs.find((l) => l.id === 'antimatter');
+  if (lab) { const [x, y] = at(lab.dir); g.strokeStyle = HC.pink; g.lineWidth = 2; g.strokeRect(x - 7, y - 7, 14, 14); holoText(g, 'LAB', x + 10, y - 8, h * 0.045, HC.pink); }
+  DRONES.forEach(([id, lid], i) => {
+    const l = locs.find((q) => q.id === lid);
+    if (!l) return;
+    const [x, y] = at(l.dir), a = time * 1.3 + i * 1.7;
+    g.strokeStyle = HC.lime; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 12, 0, TAU); g.stroke();
+    g.fillStyle = HC.lime; g.fillRect(x + Math.cos(a) * 12 - 3, y + Math.sin(a) * 12 - 3, 6, 6);
+    holoText(g, id, x + 16, y + 4, h * 0.04, HC.lime);
+  });
+  // the status column
+  const tx = mx + mw + 30;
+  holoText(g, 'FEEDS 4/4 LIVE', tx, my, h * 0.042, HC.lime);
+  DRONES.forEach(([id, lid], i) => {
+    const l = locs.find((q) => q.id === lid), y = my + h * 0.11 * (i + 1);
+    holoText(g, `${id} ${(l ? l.name : lid).toUpperCase()}`.slice(0, 15), tx, y, h * 0.036, HC.cy);
+    holoText(g, `ALT ${Math.round(60 + 8 * Math.sin(time * 0.7 + i))}M SIG ${88 + ((i * 7 + Math.floor(time)) % 11)}%`, tx, y + h * 0.05, h * 0.032, HC.dim);
+  });
+  holoText(g, `UPLINK ${'|'.repeat(1 + (Math.floor(time * 3) % 6))}`, tx, my + mh - h * 0.05, h * 0.04, HC.amber);
+}
+
+// a: the splicer: a turning double helix with coloured base pairs, the save's splice figures beside it
+function holoSplicer(sc, game, time) {
+  const { g, c } = sc, w = c.width, h = c.height;
+  const A = game && game.alchemy, log = (A && A.log) || {};
+  holoFrame(g, w, h, 'GENOME SPLICER', 'SEQ ' + String(Math.floor(time * 37) % 100000).padStart(5, '0'));
+  const x0 = 30, x1 = w * 0.6, cy = h * 0.58, amp = h * 0.26, cols = [HC.lime, HC.pink, HC.amber, HC.cy];
+  for (let i = 0; i <= 40; i++) {
+    const u = i / 40, x = x0 + (x1 - x0) * u, a = u * TAU * 2.2 + time * 1.4;
+    const ya = cy + Math.sin(a) * amp, yb = cy + Math.sin(a + Math.PI) * amp, front = Math.cos(a) > 0;
+    g.strokeStyle = front ? cols[i % 4] : HC.dim; g.lineWidth = front ? 3 : 1.5;
+    g.beginPath(); g.moveTo(x, ya); g.lineTo(x, yb); g.stroke();
+    g.fillStyle = HC.cy; g.fillRect(x - 3, ya - 3, 6, 6); g.fillStyle = HC.vio; g.fillRect(x - 3, yb - 3, 6, 6);
+  }
+  const tx = x1 + 30, rows = [
+    ['SPLICES', Object.keys(log.splices || {}).length],
+    ['MUTATIONS', A ? A.mutations.length : 0],
+    ['CHIMERAS', A ? A.chimeras.length : 0],
+    ['REACTOR RUNS', Object.keys(log.reactor || {}).length],
+  ];
+  rows.forEach(([k, v], i) => { holoText(g, k, tx, h * (0.22 + i * 0.13), h * 0.045, HC.dim); holoText(g, String(v), tx, h * (0.27 + i * 0.13), h * 0.06, HC.cy); });
+  const st = 0.78 + 0.12 * Math.sin(time * 0.9);
+  holoText(g, `STABILITY ${Math.round(st * 100)}%`, tx, h * 0.76, h * 0.045, HC.amber);
+  g.strokeStyle = HC.dim; g.strokeRect(tx, h * 0.84, w - tx - 30, h * 0.06);
+  g.fillStyle = HC.amber; g.fillRect(tx + 3, h * 0.84 + 3, (w - tx - 36) * st, h * 0.06 - 6);
+}
+
+// a: the robot cell: the cycle running, its progress, the three cycles, each arm's job right now
+function holoCell(sc, lab, time) {
+  const { g, c } = sc, w = c.width, h = c.height, now = lab.cellNow || { cycle: 0, name: 'WELD', t: 0 };
+  holoFrame(g, w, h, 'ROBOTICS CELL', `CYCLE ${Math.floor(lab.t / CYCLE) + 1}`);
+  holoText(g, now.name, 30, h * 0.22, h * 0.1, HC.lime);
+  g.strokeStyle = HC.dim; g.lineWidth = 2; g.strokeRect(30, h * 0.38, w * 0.55, h * 0.08);
+  g.fillStyle = HC.lime; g.fillRect(33, h * 0.38 + 3, (w * 0.55 - 6) * now.t, h * 0.08 - 6);
+  CYCLES.forEach((C, i) => holoText(g, `${i === now.cycle ? '>' : ' '} ${i + 1} ${C.name}`, 30, h * (0.54 + i * 0.12), h * 0.05, i === now.cycle ? HC.cy : HC.dim));
+  const C = CYCLES[now.cycle], t = now.t, wOn = C.weld.some(([a, b2]) => t >= a && t <= b2);
+  const jobs = now.cycle === 0 ? ['CLAMP', 'PLATE', wOn ? 'WELDING' : 'STANDBY'] : now.cycle === 1 ? ['CLAMP', t < 0.33 ? 'REACH' : t < 0.6 ? 'CARRY CELL' : 'PARK', wOn ? 'TACK' : 'STANDBY'] : ['SCAN', 'OBSERVE', 'STANDBY'];
+  const tx = w * 0.64;
+  ['ARM 0', 'ARM 1', 'WELDER'].forEach((n, i) => {
+    holoText(g, n, tx, h * (0.22 + i * 0.22), h * 0.045, HC.dim);
+    holoText(g, jobs[i], tx, h * (0.28 + i * 0.22), h * 0.06, i === 2 && wOn ? HC.amber : HC.cy);
+  });
+}
+
+// b: a wireframe globe turning, the drones' orbits round it
+function holoGlobe(sc, world, time) {
+  const { g, c } = sc, w = c.width, h = c.height;
+  holoFrame(g, w, h, 'DRONE NET', null);
+  const cx = w * 0.5, cy = h * 0.56, R = h * 0.34, rot = time * 0.25;
+  g.strokeStyle = HC.cy; g.lineWidth = 1.5;
+  g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.stroke();
+  for (let k = 0; k < 8; k++) {                                              // meridians: ellipses turning
+    const a = rot + k * Math.PI / 8, rx = Math.abs(Math.cos(a)) * R;
+    g.strokeStyle = Math.sin(a) > 0 ? HC.cy : HC.dim; g.beginPath(); g.ellipse(cx, cy, rx, R, 0, 0, TAU); g.stroke();
+  }
+  for (let j = -2; j <= 2; j++) { const y = cy + R * j / 3, rx = Math.sqrt(Math.max(0, R * R - (R * j / 3) ** 2)); g.strokeStyle = HC.dim; g.beginPath(); g.ellipse(cx, y, rx, rx * 0.12, 0, 0, TAU); g.stroke(); }
+  DRONES.forEach(([id], i) => {
+    const tilt = 0.3 + i * 0.35, ra = R * (1.25 + i * 0.12), a = time * (0.6 + i * 0.15) + i;
+    g.strokeStyle = HC.dim; g.beginPath(); g.ellipse(cx, cy, ra, ra * 0.28, tilt, 0, TAU); g.stroke();
+    const x = cx + Math.cos(a) * ra * Math.cos(tilt) - Math.sin(a) * ra * 0.28 * Math.sin(tilt);
+    const y = cy + Math.cos(a) * ra * Math.sin(tilt) + Math.sin(a) * ra * 0.28 * Math.cos(tilt);
+    g.fillStyle = HC.lime; g.fillRect(x - 4, y - 4, 8, 8); holoText(g, id, x + 8, y - 6, h * 0.04, HC.lime);
+  });
+}
+
+// b: a helix in perspective, turning toward you
+function holoHelix3d(sc, game, time) {
+  const { g, c } = sc, w = c.width, h = c.height;
+  holoFrame(g, w, h, 'SPLICE', null);
+  const cy = h * 0.58, R = h * 0.28, n = 60;
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const u = i / n, x = 40 + (w - 80) * u, a = u * TAU * 3 + time * 1.2;
+    const za = Math.cos(a), zb = Math.cos(a + Math.PI);
+    pts.push([x, cy + Math.sin(a) * R * (0.8 + 0.2 * za), za, cy + Math.sin(a + Math.PI) * R * (0.8 + 0.2 * zb), zb]);
+  }
+  for (const [x, ya, za, yb] of pts) { g.strokeStyle = za > 0 ? 'rgba(127,232,255,0.5)' : 'rgba(42,111,138,0.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x, ya); g.lineTo(x, yb); g.stroke(); }
+  for (const k of [1, 3]) {
+    g.lineWidth = 4;
+    for (let i = 1; i < pts.length; i++) {
+      g.strokeStyle = pts[i][k + 1] > 0 ? (k === 1 ? HC.lime : HC.pink) : HC.dim;
+      g.beginPath(); g.moveTo(pts[i - 1][0], pts[i - 1][k]); g.lineTo(pts[i][0], pts[i][k]); g.stroke();
+    }
+  }
+}
+
+// b: the right arm drawn live from its joints: base, shoulder, elbow, wrist, tool, with the angles
+function holoArm(sc, lab, time) {
+  const { g, c } = sc, w = c.width, h = c.height, A = lab.arms.arm1;
+  holoFrame(g, w, h, 'ARM 1', (lab.cellNow && lab.cellNow.name) || '');
+  if (!A || !A.shoulder) return;
+  const sh = -A.shoulder.rotation.x, el = A.elbow.rotation.x, wr = A.wrist.rotation.x, k = h * 0.11;
+  const bx = w * 0.35, by = h * 0.9;
+  const p1 = [bx, by - 1.85 * k], a1 = sh, p2 = [p1[0] + Math.cos(a1) * 3.2 * k, p1[1] - Math.sin(a1) * 3.2 * k];
+  const a2 = a1 - el, p3 = [p2[0] + Math.cos(a2) * 2.8 * k, p2[1] - Math.sin(a2) * 2.8 * k];
+  const a3 = a2 - wr, p4 = [p3[0] + Math.cos(a3) * 1.05 * k, p3[1] - Math.sin(a3) * 1.05 * k];
+  g.strokeStyle = HC.dim; g.lineWidth = 2; g.beginPath(); g.moveTo(40, by); g.lineTo(w - 40, by); g.stroke();
+  g.fillStyle = HC.dim; g.fillRect(bx - 30, by - 1.85 * k, 60, 1.85 * k);
+  g.strokeStyle = HC.cy; g.lineWidth = 8; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(...p1); g.lineTo(...p2); g.lineTo(...p3); g.stroke();
+  g.strokeStyle = HC.lime; g.lineWidth = 5; g.beginPath(); g.moveTo(...p3); g.lineTo(...p4); g.stroke(); g.lineCap = 'butt';
+  for (const [p, a, n] of [[p1, sh, 'SH'], [p2, el, 'EL'], [p3, wr, 'WR']]) {
+    g.fillStyle = HC.amber; g.beginPath(); g.arc(p[0], p[1], 9, 0, TAU); g.fill();
+    holoText(g, `${n} ${Math.round(a * 180 / Math.PI)}°`, p[0] + 14, p[1] - 10, h * 0.045, HC.amber);
+  }
+  holoText(g, `YAW ${Math.round(A.turret.rotation.y * 180 / Math.PI)}°`, w * 0.72, h * 0.25, h * 0.06, HC.cy);
 }
 
 // The lift to the catwalk: stand on the car a moment and it takes you to the other level, standing (player.seat, stand), and

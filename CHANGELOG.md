@@ -5,6 +5,34 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Antimatter Lab: the fourth in-game review** (`docs/zbornak-proposals/`, "The fourth in-game review").
+  - **The walks meet what they join flush.** `path_ribbon` squared each end to the curve's last metre, a few degrees off
+    the edge it meets, which left a wedge of a gap. It now takes the way the walk meets its platform (`start_dir`,
+    `end_dir`) and cuts the end square to that: flush on the cattle grid's frame and on the pad's ramp.
+  - **Six lamps on the plaza** (it had sixteen): a pair either side of each walk's mouth and a pair either side of the
+    airlock.
+  - **The landing pad's standing "Z" is gone, and so is the magnet array.**
+  - **The cryo pods and the splice pod:** two threes of pods either side of the splice pod, which stands centred between
+    them with its back to the wall. Its projection is moved over it.
+  - **The catwalk is 3 m wide** (it was 2 m, most of it taken by the railings and the bridge). Its inner railing, supports
+    and the intake bridge moved with it.
+  - **The lift's camera:** the shaft's glass no longer pulls the follow camera in. Colliders can be marked `see` (glass):
+    the camera's wall sweep (`main.js`) ignores them.
+  - **The robot cell runs three cycles in turn** (`labWorld.js` `CYCLES`, 16 s each):
+    - **WELD:** as before.
+    - **HOIST & DOCK:** the gantry's hoist trolley runs out along the beam and pays out a power cell on its hook. The right
+      arm reaches up, takes it, flips it and seats it in a charging dock on the bench, and the welder tacks it.
+    - **INSPECT:** the left arm takes a scanner wand from its holder and sweeps its beam over the chimera while the jig
+      turns it a full turn. The right arm leans in to watch, and the docked cell sinks into the dock.
+
+    The bench gains the dock, the scanner's holder, a rack of spare cells and a parts bin. The jig is a turntable now.
+    The gantry's hoist is a trolley with a cable and a hook.
+  - **The wall projections are live screens,** in two drafts (`labWorld.js` `drawHolo`; localStorage `zlab-holo` picks
+    `a` or `b`):
+    - **A, TELEMETRY:** the drone net on a lunar map, the splicer's helix with the save's figures, and the robot cell's
+      cycle, progress and each arm's job.
+    - **B, SCHEMATIC:** a turning wireframe globe with the drones' orbits, a helix in perspective, and the right arm drawn
+      live from its joint angles.
 - **Model structure: rules and an audit.** CLAUDE.md gains "Model structure (every Blender model)":
   - Supports are cut to what they hold.
   - The sign of a tilt is worked out, not guessed.

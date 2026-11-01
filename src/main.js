@@ -1683,7 +1683,7 @@ class Game {
     const probe = new THREE.Vector3(), nrm = new THREE.Vector3();
     const solid = (t) => {
       probe.copy(target).addScaledVector(span, t);
-      for (const col of this.colliders.query(probe, 1.6)) if (!col.platform && this.colliders.contact(col, probe, 0.65, nrm) > 0) return true;
+      for (const col of this.colliders.query(probe, 1.6)) if (!col.platform && !col.see && this.colliders.contact(col, probe, 0.65, nrm) > 0) return true;   // (see: glass, like the lab lift's shaft, the camera stays out of and looks through)
       return false;
     };
     const steps = Math.max(1, Math.ceil(L / 0.5));

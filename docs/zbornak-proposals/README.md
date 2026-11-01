@@ -25,6 +25,29 @@ renders). The courier is `runner.glb`. The drone feeds are filmed in the game to
 
 ![The plan](plan.jpg)
 
+## The fourth in-game review
+
+| Asked | Done |
+|---|---|
+| The walk still isn't flush at the gate: is it how the path is made? | Yes. `path_ribbon` cut each end square to the curve's last sampled metre, still a few degrees off the edge it meets, which left a wedge. It now takes the direction it meets its platform (`start_dir`, `end_dir`) and cuts the end square to that, flush on the cattle grid's frame and on the pad's ramp. |
+| Too many lamps at the plaza; re-place them all | Six instead of sixteen: a pair either side of each walk's mouth and a pair either side of the airlock, framing the ways in. |
+| The floating "Z" on the pad | Gone. |
+| The cryo pods and the splice tube | Two threes of pods either side of the splice pod, which is centred between them with its back to the wall like them; its projection is over it. |
+| Two more robot cycles, things on the table, a moving hoist the arm reaches up to | The cell now runs three 16 s cycles in turn. **HOIST & DOCK:** the gantry's trolley runs out along its beam and lowers a power cell on its hook, the right arm reaches up and takes it, flips it and seats it in a charging dock on the bench, and the welder tacks it. **INSPECT:** the left arm takes a scanner wand from its holder and sweeps its beam over the chimera while the jig turns it a full turn, the right arm leaning in to watch. The bench gains the dock, the wand's holder, a rack of spare cells and a parts bin; the jig is a turntable. |
+| Touch up the wall screens, two drafts | They are live screens now. **Draft A, TELEMETRY:** the drone net on a lunar map with each drone circling its settlement and their signal figures; the splicer's helix with your splice, mutation, chimera and reactor figures and a stability bar; the robot cell's cycle, progress and each arm's job. **Draft B, SCHEMATIC:** a turning wireframe globe with the drones' orbits; a helix in perspective; the right arm drawn live from its joint angles. A is on; set `localStorage['zlab-holo'] = 'b'` to see B. |
+| The lift's camera pulls in tight | The shaft's glass is marked `see`: the follow camera's wall sweep ignores it and looks through, so it holds its distance (8 m in the test). |
+| The catwalk is too narrow | 3 m wide now (from 2), with its inner railing, supports and the intake bridge moved in. |
+| Remove the magnet array | Gone. |
+
+| | |
+|---|---|
+| ![The walk on the cattle grid](game/ranch_walk2.jpg) | ![The plaza's six lamps](game/plaza_lamps.jpg) |
+| ![The cryo pods and the splice pod](game/cryo_splice.jpg) | ![The catwalk, 3 m](game/catwalk.jpg) |
+| ![HOIST & DOCK: the hand-off under the hook](game/robots_hoist.jpg) | ![INSPECT: the scan](game/robots_inspect.jpg) |
+| ![Draft A over the robots](game/holo_a_cell.jpg) | ![Draft B over the robots](game/holo_b_arm.jpg) |
+| ![Draft A over the holotable](game/holo_a_survey.jpg) | ![Draft B over the holotable](game/holo_b_globe.jpg) |
+| ![Draft A over the splice pod](game/holo_a_splicer.jpg) | ![Draft B over the splice pod](game/holo_b_helix.jpg) |
+
 ## The third in-game review
 
 | Asked | Done |

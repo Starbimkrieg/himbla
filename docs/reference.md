@@ -245,9 +245,10 @@ A walk-in hall with slot carousels out front. Press `F` at a station:
   picture shows on the screen by the door), and the outer door rises. 6 m in, it shuts behind you; the tube cycles and the
   inner door rises into the portal's wall. Going out runs the other way. Inside: the reactor and its catwalk (a glass
   lift on the west: stand on the car and it takes you up or down) with the intake hatch, sealed bioluminescent hydroponics, exotic-matter canister racks, cryo pods holding chimeras, a holotable, an
-  equipment corner (chemistry and microscope benches, a magnet array, battery chargers) round LABNET's wall display with
-  four live drone feeds of settlements at its sides, and a robot cell where three arms clamp a chimera, hold an armour plate
-  on and weld it.
+  equipment corner (chemistry and microscope benches, battery chargers) round LABNET's wall display with
+  four live drone feeds of settlements at its sides, and a robot cell whose three arms run three jobs in turn: weld an armour plate onto a chimera,
+  take a power cell from the gantry's hoist and seat it in a dock, and scan a chimera turning on its jig. Wall
+  projections show the drone net, the splicer and the cell live.
 - **Reactor** (`X` at the intake hatch): throw the jar in for credits, pets, low gravity, or a SINGULARITY.
 - **LABNET** (`F` at the desk before its wall display): your splices, everything you've thrown into the reactor (each
   result, how often, the first experiment number) and your chimeras, with full details once unlocked and the newest entry
