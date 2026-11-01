@@ -142,6 +142,79 @@ def ground_run(g, pts, y=0.15, r=0.14, slot="cable"):
             g("stone", 0.0).boxc(ax + (bx - ax) * t, y / 2, az + (bz - az) * t, 0.5, y, 0.5)
 
 
+# ---- the robot cell's work cycle (bench frame: the bench's middle at the origin, its long side along x, the welder's side +z)
+# One loop of t in [0, 1): the left arm (arm0) clamps the chimera; the right arm (arm1) lifts an armour plate out of the carrier,
+# swings it over and holds it flat on the chimera's flank; the welder (arm2) runs a bead up the plate's seam; arm1 lets go
+# (the plate stays, welded) and goes back to the carrier; arm0 lets go. Each arm's key is (t, tool point, tool pitch); between
+# keys the tool point moves in a straight line, eased, and arm_ik solves the joints, so the tools travel as a robot's do.
+PLATE_C = (0.355, 2.3, 0.0)            # the plate's middle where it is welded on (the chimera's body flank is x 0.31)
+ARM_BASES = {"arm0": (-2.2, -3.6, 0.0), "arm1": (2.2, -3.6, 0.0), "arm2": (0.5, 4.3, PI)}
+DOWN = -PI / 2
+CELL_KEYS = {
+    "arm0": [(0.00, (-1.3, 2.9, -1.4), -0.6), (0.05, (-1.3, 2.9, -1.4), -0.6), (0.14, (-0.38, 2.35, -0.62), -0.25),
+             (0.20, (-0.22, 2.3, -0.34), -0.25), (0.86, (-0.22, 2.3, -0.34), -0.25), (0.92, (-0.38, 2.35, -0.62), -0.25),
+             (1.00, (-1.3, 2.9, -1.4), -0.6)],
+    "arm1": [(0.00, (2.5, 2.6, 0.75), DOWN), (0.06, (2.5, 2.6, 0.75), DOWN), (0.13, (2.5, 1.91, 0.75), DOWN), (0.17, (2.5, 1.91, 0.75), DOWN),
+             (0.24, (2.5, 2.95, 0.75), DOWN), (0.34, (0.8, 2.95, 0.0), DOWN), (0.40, (0.355, 2.58, 0.0), DOWN),
+             (0.80, (0.355, 2.58, 0.0), DOWN), (0.84, (0.36, 2.85, 0.0), DOWN), (0.88, (0.9, 3.0, 0.2), DOWN), (1.00, (2.5, 2.6, 0.75), DOWN)],
+    "arm2": [(0.00, (1.3, 3.0, 1.9), -0.5), (0.36, (1.3, 3.0, 1.9), -0.5), (0.44, (0.44, 2.06, 0.34), -0.35),
+             (0.46, (0.405, 2.08, 0.27), -0.35), (0.74, (0.405, 2.52, 0.27), -0.35), (0.80, (0.9, 2.9, 1.0), -0.4),
+             (0.88, (1.3, 3.0, 1.9), -0.5), (1.00, (1.3, 3.0, 1.9), -0.5)],
+}
+PICK_T, RELEASE_T, WELD_T = 0.17, 0.82, (0.46, 0.74)
+STILL_T = 0.6                           # the pose the stills show: clamped, plate held, the weld halfway up the seam
+CELL = {}
+
+
+def track(keys, t):
+    """the tool point and pitch at t: straight between keys, eased in and out"""
+    for (t0, p0, f0), (t1, p1, f1) in zip(keys, keys[1:]):
+        if t0 <= t <= t1:
+            u = 0.0 if t1 == t0 else (t - t0) / (t1 - t0)
+            u = u * u * (3 - 2 * u)
+            return tuple(a + (b - a) * u for a, b in zip(p0, p1)), f0 + (f1 - f0) * u
+    return keys[-1][1], keys[-1][2]
+
+
+def apply_cell(t):
+    """pose the cell's arms for time t (IK on each arm's tool point) and show the one plate that is where it should be"""
+    for name, A in CELL["arms"].items():
+        (tx, ty, tz), phi = track(CELL_KEYS[name], t)
+        bx, bz, by = ARM_BASES[name]
+        local = rot_y((tx - bx, ty, tz - bz), -by)
+        yaw, sh, el, wr = arm_ik(local, phi, A["tool"], A["base_h"], A["reach"])
+        A["turret"].rotation_euler[2] = yaw
+        A["shoulder"].rotation_euler[0] = -sh
+        A["elbow"].rotation_euler[0] = el
+        A["wrist"].rotation_euler[0] = wr
+        A["roll"].rotation_euler[1] = -(yaw + by) if name == "arm1" else 0.0  # keep the held plate square to the chimera
+    state = "rack" if t < PICK_T else "carry" if t < RELEASE_T else "weld"
+    for k in ("rack", "carry", "weld"):
+        for o in [CELL[k].root] + list(CELL[k].root.children_recursive):
+            o.hide_render = k != state
+    return state, WELD_T[0] <= t <= WELD_T[1]
+
+
+def armour_plate(g, x, y, z, bead=False, held=False):
+    """an armour plate on edge (0.05 thick along x, 0.48 wide along z, 0.5 tall), riveted, a hazard edge; bead: the weld
+    bead up its +z seam, still glowing; held: as the gripper holds it (its long axes in the flange's frame: x thickness,
+    y width, z down the plate)"""
+    if held:
+        g("metal", 0.02).boxc(x, y, z, 0.05, 0.48, 0.5)
+        for i in (-1, 1):
+            for j in (-1, 1):
+                g("dark", 0.0).cylc(x + 0.03, y + i * 0.19, z + j * 0.19, 0.025, 0.02, 6, "x")
+        return
+    g("metal", 0.02).boxc(x, y, z, 0.05, 0.5, 0.48)
+    g("hazard", 0.0).boxc(x + 0.026, y + 0.22, z, 0.004, 0.04, 0.46)
+    for i in (-1, 1):
+        for j in (-1, 1):
+            g("dark", 0.0).cylc(x + 0.03, y + i * 0.19, z + j * 0.19, 0.025, 0.02, 6, "x")
+    if bead:
+        for k in range(9):
+            g("ember", 0.0).ball(x + 0.03, y - 0.22 + k * 0.055, z + 0.245, 0.022, 6, 4)
+
+
 def build_lab(root):
     CX, CZ, R, T, H = 0.0, -18.0, 30.0, 1.2, 12.0
     lab = G("lab", root, CX, 0, CZ)
@@ -248,14 +321,24 @@ def build_lab(root):
     for i in range(6):
         a = TAU * i / 6 + 0.3
         lab("steel", 0.03).cylc(math.sin(a) * 10.6, (CW - 0.3) / 2, math.cos(a) * 10.6, 0.22, CW - 0.3, 8)
-    lab.at(-11.6, 0, -PI / 2)                                              # the stair up to the catwalk, from the west
+    # the stair to the catwalk runs along the ring's outside (a tangent, rising toward the front) to a landing at the west,
+    # straight across from the intake bridge; its foot is toward the back, clear of the floor before the hydroponics' door
+    SX, SZ0, SZ1 = -12.45, -9.0, -1.0                                      # its centreline x, foot and top (lab frame)
     for k in range(26):
-        lab("panel", 0.02).boxc(0, CW / 26 * (k + 1) - 0.06, 7.8 - 0.3 * k, 1.4, 0.12, 0.34)
+        lab("panel", 0.02).boxc(SX, CW / 26 * (k + 1) - 0.06, SZ0 + 0.15 + (SZ1 - SZ0) / 26 * k, 1.4, 0.12, 0.34)
     for sx in (-0.75, 0.75):
-        lab("steel", 0.02).bm((sx, 0.0, 7.95), (sx, CW - 0.1, 0.0), 0.07, 5)
-        lab("hazard", 0.0).bm((sx, 1.1, 7.95), (sx, CW + 1.1, 0.0), 0.04, 5)
-        lab("steel", 0.0).bm((sx, 0.0, 7.95), (sx, 1.1, 7.95), 0.035, 4)
-    lab.at()
+        lab("steel", 0.02).bm((SX + sx, 0.0, SZ0 - 0.1), (SX + sx, CW - 0.1, SZ1), 0.07, 5)
+        lab("steel", 0.0).bm((SX + sx, 0.0, SZ0 - 0.1), (SX + sx, 1.1, SZ0 - 0.1), 0.035, 4)
+        lab("hazard", 0.0).bm((SX + sx, 1.1, SZ0 - 0.1), (SX + sx, CW + 1.1, SZ1), 0.04, 5)
+    lab("panel", 0.03).boxc(SX + 0.05, CW - 0.15, 0.0, 1.9, 0.3, 2.0)       # the landing, onto the catwalk's edge
+    for z_ in (-1.0, 1.0):
+        lab("steel", 0.03).cylc(SX - 0.8, (CW - 0.3) / 2, z_, 0.1, CW - 0.3, 8)
+    lab("hazard", 0.015).bm((SX - 0.85, CW + 1.1, -1.0), (SX - 0.85, CW + 1.1, 1.0), 0.045, 5).bm((SX - 0.85, CW + 1.1, 1.0), (-11.65, CW + 1.1, 1.0), 0.045, 5)
+    for z_ in (-1.0, 0.0, 1.0):
+        lab("steel", 0.015).cylc(SX - 0.85, CW + 0.55, z_, 0.035, 1.1, 5)
+    lab("steel", 0.015).cylc(-11.9, CW + 0.55, 1.0, 0.035, 1.1, 5)
+    lab("hazard", 0.0).boxc(SX + 0.05, CW + 0.006, -0.9, 1.8, 0.01, 0.15)
+    CAMS["stair"] = ((CX - 24.0, 4.2, CZ - 13.5), (CX - 13.0, 3.2, CZ - 3.0), 26)
     reactor_intake(lab, RE, -PI / 2, CW, 9.6)
     RUNNER["intake"] = ((CX - 7.4, CW, CZ + 0.35), PI / 2 + 0.3)
     ia = math.radians(-105)
@@ -305,27 +388,50 @@ def build_lab(root):
     a = math.radians(56)
     lab.text("GALLERY OF THE PETRIFIED", (math.sin(a) * (R - 0.08), 4.4, math.cos(a) * (R - 0.08)), a + PI, 0.42, "amber")
     CAMS["gallery"] = ((CX + P(50, 14)[0], 2.6, CZ + P(50, 14)[1]), (CX + P(58, 27)[0], 1.8, CZ + P(58, 27)[1]), 28)
-    # robotics bay: a bench with a chimera half built, two grab arms, a welder, an overhead gantry, all on joint pivots
+    # robotics bay: three arms on joint pivots working one cell (CELL_KEYS): the left arm clamps the chimera on its jig, the
+    # right one takes an armour plate from the carrier and holds it on the chimera's flank, the welder runs a bead up the
+    # seam; an overhead gantry over it all
     x, z, yw = P(100, 21.0)
     tw = G("robots", lab.root, x, 0, z, yw)
     tw("panel", 0.04).boxc(0, 0.55, 0, 6.2, 1.1, 2.4)
     tw("hazard", 0.0).boxc(0, 1.12, 0, 6.3, 0.04, 2.5)
     tw("steel", 0.02).boxc(0, 1.2, 0, 5.6, 0.12, 1.9)
-    tw.chim((0.4, 1.26, 0), 0.4, 1.1, 4)
-    for k in range(4):
-        tw("steel", 0.02).boxc(-2.4 + k * 0.4, 1.36, 0.7, 0.25, 0.2, 0.25)
-    robot_arm(tw, -2.2, -3.6, 0, 0.9, 1.75, 0.5, 0.25, "claw", name="arm0")
-    robot_arm(tw, 2.2, -3.6, 0, 0.95, 1.8, 0.5, -0.3, "claw", color="wall2", name="arm1")
-    robot_arm(tw, 0.5, 4.3, PI, 0.95, 1.75, 0.1, 0.05, "welder", name="arm2")
+    tw("dark", 0.03).cylc(0, 1.31, 0, 0.75, 0.1, 24)                      # the jig: a clamp ring under the chimera
+    tw("hazard", 0.0).tor(0.76, 0.03, (0, 1.31, 0), n=28, rs=4)
+    for k in (-1, 1):
+        tw("steel", 0.015).boxc(k * 0.45, 1.45, 0, 0.12, 0.2, 0.5)
+    tw.chim((0, 1.36, 0), 0.0, 1.3, 4)
+    # the plate carrier: a tray with slotted end frames holding the armour plates on edge
+    rx, rz = 2.27, 0.75
+    tw("steel", 0.03).boxc(rx, 1.32, rz, 0.8, 0.12, 0.72)
+    for sz in (-0.36, 0.36):
+        tw("dark", 0.02).boxc(rx, 1.62, rz + sz, 0.8, 0.6, 0.06)
+        for k in range(5):
+            tw("steel", 0.0).boxc(rx - 0.3 + k * 0.15, 1.62, rz + sz * 0.92, 0.02, 0.56, 0.04)
+    for k, px in enumerate((2.05, 2.2, 2.35)):
+        armour_plate(tw, px, 1.63, rz)
+    tw.text("ARMOUR PLATE", (rx, 1.47, rz + 0.395), 0, 0.07, "hazard", 0.005)
+    CELL["rack"] = G("plate_rack", tw.root, 2.5, 1.63, rz)
+    armour_plate(CELL["rack"], 0, 0, 0)
+    CELL["weld"] = G("plate_weld", tw.root, *PLATE_C)
+    armour_plate(CELL["weld"], 0, 0, 0, bead=True)
+    robot_arm(tw, -2.2, -3.6, 0, tool="claw", name="arm0")
+    robot_arm(tw, 2.2, -3.6, 0, tool="claw", color="wall2", name="arm1")
+    robot_arm(tw, 0.5, 4.3, PI, tool="welder", name="arm2")
+    arm1 = next(A for A in ARMS if A["name"] == "arm1")
+    CELL["carry"] = G("plate_carry", arm1["roll"], 0, 0, 0.5 + 0.28)      # its top edge 3 cm into the gripper
+    armour_plate(CELL["carry"], 0, 0, 0, held=True)
+    CELL["arms"] = {A["name"]: A for A in ARMS if A["name"] in ARM_BASES}
+    apply_cell(STILL_T)
     for sx in (-4.0, 4.0):
         for sz in (-4.5, 4.5):
             tw("steel", 0.03).boxc(sx, 4.0, sz, 0.3, 8.0, 0.3)
             tw("dark", 0.02).boxc(sx, 0.05, sz, 0.7, 0.1, 0.7)
         tw("hazard", 0.03).boxc(sx, 8.1, 0, 0.4, 0.4, 9.4)
-    tw("hazard", 0.03).boxc(0, 8.1, -1.0, 8.4, 0.5, 0.5)
-    tw("dark", 0.02).boxc(0.5, 7.6, -1.0, 1.0, 0.6, 0.8)
-    tw("steel", 0.0).bm((0.5, 7.3, -1.0), (0.5, 3.0, -1.0), 0.03, 4)
-    tw("dark", 0.02).boxc(0.5, 2.9, -1.0, 0.4, 0.3, 0.4)
+    tw("hazard", 0.03).boxc(0, 8.1, -1.8, 8.4, 0.5, 0.5)
+    tw("dark", 0.02).boxc(-2.6, 7.6, -1.8, 1.0, 0.6, 0.8)
+    tw("steel", 0.0).bm((-2.6, 7.3, -1.8), (-2.6, 6.3, -1.8), 0.03, 4)
+    tw("dark", 0.02).boxc(-2.6, 6.2, -1.8, 0.4, 0.3, 0.4)
     CAMS["robots"] = ((CX + x + math.sin(yw) * 9.0 + math.cos(yw) * 9.0, 6.0, CZ + z + math.cos(yw) * 9.0 - math.sin(yw) * 9.0), (CX + x, 2.0, CZ + z), 30)
     # exotic matter: a wall of canister racks, two magnetic cages before it cabled to the wall, the sign over them
     for deg in (134, 149, 164):
@@ -351,9 +457,10 @@ def build_lab(root):
         cryo_pod(lab, x, z, yw, [0, 1, 2, 3, 5, 6][i], "cyan", wall=R - 26.6)
     a0 = math.radians(-150)
     CAMS["cryo"] = ((CX + math.sin(a0) * 14, 2.6, CZ + math.cos(a0) * 14), (CX + math.sin(a0) * 26, 2.3, CZ + math.cos(a0) * 26), 30)
-    # the hydroponics habitat: a sealed glass enclosure (kerb, mullions, beam, canopy, end walls, an airlock door) holding
-    # two rows of growth pods on a nutrient header, grow-light strips under the canopy
-    h0, h1, RH, HY = math.radians(-106), math.radians(-54), 21.0, 5.0
+    # the hydroponics habitat: a sealed glass enclosure 4.5 m deep against the wall (kerb, mullions, beam, canopy, end walls,
+    # an airlock door) holding one row of growth pods on a nutrient header along the wall, a nutrient tank behind the door,
+    # grow-light strips under the canopy
+    h0, h1, RH, HY = math.radians(-106), math.radians(-54), 25.5, 5.0
     arc_box(lab, "white", 0.03, RH, h0, h1, 0.2, 0.4, 0.4, 1.0)
     arc_box(lab, "white", 0.03, RH, h0, h1, HY, 0.3, 0.4, 1.0)
     door = math.radians(-80)
@@ -383,30 +490,28 @@ def build_lab(root):
     lab("dark", 0.02).boxc(0, 1.25, 0.15, 1.4, 2.4, 0.16)
     lab("habglass", 0.0).cylc(0, 1.7, 0.24, 0.3, 0.02, 16, "z")
     lab("lime", 0.0).boxc(0.85, 1.4, 0.21, 0.12, 0.3, 0.02)
-    lab("dark", 0.03).boxc(0, 3.4, 0.1, 3.2, 0.6, 0.12)
+    lab("dark", 0.03).boxc(0, 3.35, 0.1, 3.0, 0.5, 0.12)
     lab.at()
-    lab.text("HYDROPONICS  ·  BIO-SEALED", (math.sin(door) * (RH - 0.18), 3.25, math.cos(door) * (RH - 0.18)), door + PI, 0.3, "teal")
+    lab.text("HYDROPONICS · BIO-SEALED", (math.sin(door) * (RH - 0.18), 3.27, math.cos(door) * (RH - 0.18)), door + PI, 0.17, "teal")
     arc_box(lab, "floorhab", 0.0, (RH + R) / 2, h0, h1, 0.07, 0.02, R - RH - 0.2, 1.0)
-    HR = 25.8                                                               # the nutrient header between the rows
+    HR = R - 0.7                                                            # the nutrient header along the wall
     arc_box(lab, "steel", 0.02, HR, h0 + 0.03, h1 - 0.03, 0.12, 0.16, 0.16, 0.8)
-    for i, deg in enumerate((-98, -90, -70, -62)):
-        x, z, yw = P(deg, 24.0)
-        growth_pod(lab, x, z, yw, i, 2.0, line=HR - 24.0)
-    for i, deg in enumerate((-101, -93, -85, -77, -69, -61)):
-        x, z, yw = P(deg, 27.6)
-        growth_pod(lab, x, z, yw + PI, i + 3, 2.0, line=27.6 - HR)
-    for deg in (-104, -56):                                                # nutrient tanks at the header's ends
-        x, z, yw = P(deg, HR)
-        lab("white", 0.03).cylc(x, 0.15, z, 0.75, 0.3, 16)
-        lab("glass", 0.0).cylc(x, 1.3, z, 0.65, 2.0, 16)
-        lab("teal", 0.0).cylc(x, 1.0, z, 0.6, 1.4, 16)
-        lab("white", 0.03).cylc(x, 2.4, z, 0.72, 0.2, 16)
-        lab("steel", 0.0).bm((x, 2.5, z), (x, HY + 0.1, z), 0.05, 5)
+    for i, deg in enumerate((-103, -98, -93, -88, -84, -76, -72, -67, -62, -57)):  # a lane behind the door (-80)
+        x, z, yw = P(deg, 27.5)
+        growth_pod(lab, x, z, yw, i, 2.0, line=HR - 27.5)
+    x, z, yw = P(-80, 28.4)                                                # the nutrient tank behind the door, on the header
+    lab("white", 0.03).cylc(x, 0.15, z, 0.75, 0.3, 16)
+    lab("glass", 0.0).cylc(x, 1.3, z, 0.65, 2.0, 16)
+    lab("teal", 0.0).cylc(x, 1.0, z, 0.6, 1.4, 16)
+    lab("white", 0.03).cylc(x, 2.4, z, 0.72, 0.2, 16)
+    lab("steel", 0.0).bm((x, 2.5, z), (x, HY + 0.1, z), 0.05, 5)
+    lab("steel", 0.02).bm((x, 0.12, z), (P(-80, HR)[0], 0.12, P(-80, HR)[1]), 0.07, 6)
     for k in range(4):
         a = h0 + (h1 - h0) * (k + 0.5) / 4
-        lab.light((math.sin(a) * 25.8, 3.6, math.cos(a) * 25.8), (0.45, 1.0, 0.85), 260, 0.5)
+        lab.light((math.sin(a) * 27.6, 3.8, math.cos(a) * 27.6), (0.45, 1.0, 0.85), 220, 0.5)
     a0 = math.radians(-80)
-    CAMS["hydro"] = ((CX + math.sin(a0) * 13.0 + 3.0, 4.2, CZ + math.cos(a0) * 13.0 + 5.0), (CX + math.sin(a0) * 25.0, 1.6, CZ + math.cos(a0) * 25.0), 28)
+    CAMS["hydro"] = ((CX + math.sin(a0) * 15.0 + 3.0, 4.0, CZ + math.cos(a0) * 15.0 + 5.0), (CX + math.sin(a0) * 27.0, 1.8, CZ + math.cos(a0) * 27.0), 28)
+    CAMS["hydro_door"] = ((CX + math.sin(a0) * 20.5 + 0.8, 2.4, CZ + math.cos(a0) * 20.5 + 1.2), (CX + math.sin(a0) * 25.5, 2.4, CZ + math.cos(a0) * 25.5), 32)
     # the holotable, front left
     x, z, yw = P(-38, 19.5)
     holotable(lab, x, z, yw, 2.6, "round", "moon")

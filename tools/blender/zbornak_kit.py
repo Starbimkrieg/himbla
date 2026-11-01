@@ -258,16 +258,34 @@ def reactor_intake(g, R, ang, y, r_out, w=1.8):
     g.at()
 
 
-ARMS = []      # robot arms for the preview to animate: dicts of their joint pivots and rest angles
-WELDS = []     # welders' glow parts and lights for the preview to flicker
+ARMS = []      # robot arms for the preview to animate: dicts of their joint pivots
+WELDS = []     # welders' tool flanges (their glow parts, sparks and light) for the preview to switch and flicker
 
 
-def robot_arm(g, x, z, yaw, sh=0.7, el=1.4, wr=0.5, turn=0.0, tool="claw", reach=(3.2, 2.8), base_h=0.9, color="arm", name="arm"):
+ARM_TOOL = {"claw": 1.05, "welder": 1.22, "drill": 1.15}   # wrist joint to the tool's working point (m)
+
+
+def arm_ik(target, phi, tool=1.05, base_h=0.9, reach=(3.2, 2.8)):
+    """Joint angles that put a robot_arm's tool point on `target` (the arm's base frame: base on the floor at the origin, facing
+    +z) with the tool pitched `phi` from level (-pi/2 points straight down), elbow up: (turret yaw, shoulder, elbow, wrist) in
+    robot_arm's convention (shoulder pitch up; elbow and wrist bend down)."""
+    tx, ty, tz = target
+    L1, L2 = reach
+    yaw = math.atan2(tx, tz)
+    d, h = math.hypot(tx, tz), ty - (base_h + 0.95)
+    wd, wh = d - tool * math.cos(phi), h - tool * math.sin(phi)
+    D = max(abs(L1 - L2) + 1e-3, min(math.hypot(wd, wh), L1 + L2 - 1e-3))
+    a1 = math.atan2(wh, wd) + math.acos(max(-1.0, min(1.0, (L1 * L1 + D * D - L2 * L2) / (2 * L1 * D))))
+    a2 = math.atan2(wh - L1 * math.sin(a1), wd - L1 * math.cos(a1))
+    return yaw, a1, a1 - a2, a2 - phi
+
+
+def robot_arm(g, x, z, yaw, sh=0.7, el=1.4, wr=0.5, turn=0.0, tool="claw", reach=(3.2, 2.8), base_h=0.9, color="arm", name="arm", roll=0.0):
     """An industrial arm on a pedestal at (x, z) in g's frame facing yaw, built as a chain of pivots the game turns: `turret`
-    (yaw on the turntable), `shoulder`, `elbow` and `wrist` (pitch, each about its own joint axis), the tool on the wrist (claw,
-    welder or drill). sh, el, wr: rest pitch up from level at each joint (rad, el and wr bending down); turn: the turntable's
-    rest yaw. Cables run along each link from joint to joint. A welder's tip burns blue-white in a halo, lights its work and
-    throws sparks."""
+    (yaw on the turntable), `shoulder`, `elbow` and `wrist` (pitch, each about its own joint axis) and `roll` (the tool flange
+    turning about the tool's axis), the tool on the flange (claw, welder or drill). sh, el, wr: pitch up from level at the
+    shoulder, bend down at the elbow and the wrist (rad; arm_ik solves them for a target); turn: the turntable's yaw. Cables
+    run along each link from joint to joint. A welder's tip burns blue-white in a halo, lights its work and throws sparks."""
     p = g.pt((x, 0, z))
     base = G(name, g.root, p[0], 0, p[2], yaw + g.cur[3])
     base.root["role"] = "arm"
@@ -297,25 +315,31 @@ def robot_arm(g, x, z, yaw, sh=0.7, el=1.4, wr=0.5, turn=0.0, tool="claw", reach
     wri.root["role"] = "wrist"
     wri.root.rotation_euler[0] = wr
     wri("armdark").ball(0, 0, 0, 0.2, 10, 7)
-    wri("steel").path([(0, 0, 0), (0, 0, 0.55)], [0.14, 0.12], 8)
+    wri("steel").path([(0, 0, 0), (0, 0, 0.5)], [0.14, 0.12], 8)
+    rol = G(name + "_roll", wri.root, 0, 0, 0.55)
+    rol.root["role"] = "roll"
+    rol.root.rotation_euler[1] = -roll                                     # (three.js +z is Blender -y)
+    rol("armdark").cylc(0, 0, 0, 0.17, 0.12, 12, "z")
     if tool == "welder":
-        wri("copper").path([(0, 0, 0.55), (0, 0, 1.1)], [0.1, 0.05], 8)
-        wri("weldcore", 0.0).ball(0, 0, 1.22, 0.14, 10, 7)
-        wri("weldhalo", 0.0).ball(0, 0, 1.22, 0.55, 14, 9)
-        wri("weldhalo", 0.0).ball(0, 0, 1.22, 0.3, 12, 8)
+        rol("copper").path([(0, 0, 0.0), (0, 0, 0.55)], [0.1, 0.05], 8)
+        rol("weldcore", 0.0).ball(0, 0, 0.67, 0.14, 10, 7)
+        rol("weldhalo", 0.0).ball(0, 0, 0.67, 0.36, 14, 9)
+        rol("weldhalo", 0.0).ball(0, 0, 0.67, 0.2, 12, 8)
         for k in range(16):                                                 # sparks fanning off the weld
             b = k * 2.39
             v = Vector((math.sin(b) * 0.9, 0.3 + 0.5 * math.sin(k * 1.7), math.cos(b) * 0.4 + 0.2))
-            p0 = Vector((0, 0, 1.22))
-            wri("spark", 0.0).path([tuple(p0), tuple(p0 + v * 0.5), tuple(p0 + v * 1.0 + Vector((0, -0.35, 0)))], 0.016, 3)
-        wri.light((0, 0.15, 1.15), (0.08, 0.3, 1.0), 3000, 0.08)
-        WELDS.append(wri.root)
+            p0 = Vector((0, 0, 0.67))
+            rol("spark", 0.0).path([tuple(p0), tuple(p0 + v * 0.5), tuple(p0 + v * 1.0 + Vector((0, -0.35, 0)))], 0.016, 3)
+        rol.light((0, 0.15, 0.6), (0.08, 0.3, 1.0), 3000, 0.08)
+        WELDS.append(rol.root)
     elif tool == "drill":
-        wri("steel").path([(0, 0, 0.55), (0, 0, 1.15)], [0.12, 0.02], 8)
+        rol("steel").path([(0, 0, 0.0), (0, 0, 0.6)], [0.12, 0.02], 8)
     else:
+        rol("steel", 0.02).boxc(0, 0, 0.08, 0.5, 0.16, 0.16)
         for k in (-1, 1):
-            wri("steel").path([(0, 0, 0.55), (k * 0.16, 0, 0.75), (k * 0.1, 0, 1.05)], 0.05, 5)
-    ARMS.append({"turret": tur.root, "shoulder": shl.root, "elbow": elb.root, "wrist": wri.root, "rest": (turn, -sh, el, wr)})
+            rol("steel").path([(k * 0.2, 0, 0.1), (k * 0.2, 0, 0.3), (k * 0.1, 0, 0.5)], 0.05, 5)
+    ARMS.append({"name": name, "base": base.root, "turret": tur.root, "shoulder": shl.root, "elbow": elb.root, "wrist": wri.root,
+                 "roll": rol.root, "tool": ARM_TOOL[tool], "base_h": base_h, "reach": reach})
     return base
 
 

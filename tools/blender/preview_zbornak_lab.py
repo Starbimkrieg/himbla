@@ -344,42 +344,47 @@ def setup_world(sc, G, runners=True):
 
 
 def animate_robots(G, N):
-    """a loop of N frames: each arm swings about its rest pose, the welder's halo, light and sparks flicker"""
+    """the robot cell's work cycle over N frames (the builder's CELL_KEYS through apply_cell: IK on each tool point): every
+    joint keyed per frame, the right plate shown (in the carrier, carried, welded on), the welder lit and flickering only
+    while it welds"""
     import random
     rnd = random.Random(7)
     sc = bpy.context.scene
     sc.frame_start, sc.frame_end = 1, N
-    for i, A in enumerate(G["ARMS"]):
-        turn, sh, el, wr = A["rest"]
-        for f in range(1, N + 1):
-            t = TAU_ * (f - 1) / N
-            A["turret"].rotation_euler[2] = turn + 0.32 * math.sin(t + i * 2.1)
-            A["shoulder"].rotation_euler[0] = sh + 0.14 * math.sin(t + i * 1.3 + 0.7)
-            A["elbow"].rotation_euler[0] = el + 0.22 * math.sin(t + i * 0.9 + 1.4)
-            A["wrist"].rotation_euler[0] = wr + 0.3 * math.sin(2 * t + i)
-            for k, piv in (("turret", A["turret"]), ("shoulder", A["shoulder"]), ("elbow", A["elbow"]), ("wrist", A["wrist"])):
-                piv.keyframe_insert("rotation_euler", frame=f)
-    for wri in G["WELDS"]:
-        parts = [o for o in wri.children_recursive if o.type == "MESH" and o.data.materials and o.data.materials[0].name.split(".")[0] in ("weldhalo", "spark")]
-        lamps = [o for o in bpy.data.objects if o.type == "LIGHT" and o.parent == wri]
-        for f in range(1, N + 1):
-            k = 0.7 + 0.6 * rnd.random()
+    arms = G["CELL"]["arms"].values()
+    plates = [o for k in ("rack", "carry", "weld") for o in [G["CELL"][k].root] + list(G["CELL"][k].root.children_recursive)]
+    welds = []
+    for rol in G["WELDS"]:
+        parts = [o for o in rol.children_recursive if o.type == "MESH" and o.data.materials and o.data.materials[0].name.split(".")[0] in ("weldhalo", "weldcore", "spark")]
+        lamps = [o for o in bpy.data.objects if o.type == "LIGHT" and o.parent == rol]
+        welds.append((parts, lamps))
+    for f in range(1, N + 1):
+        state, welding = G["apply_cell"]((f - 1) / N)
+        for A in arms:
+            A["turret"].keyframe_insert("rotation_euler", frame=f)
+            for k in ("shoulder", "elbow", "wrist", "roll"):
+                A[k].keyframe_insert("rotation_euler", frame=f)
+        for o in plates:
+            o.keyframe_insert("hide_render", frame=f)
+        k = 0.7 + 0.6 * rnd.random()
+        for parts, lamps in welds:
             for o in parts:
-                o.scale = (k, k, k) if o.data.materials[0].name.startswith("weldhalo") else (1, 1, 1)
-                o.hide_render = o.data.materials[0].name.startswith("spark") and rnd.random() < 0.35
+                nm = o.data.materials[0].name
+                o.hide_render = not welding or (nm.startswith("spark") and rnd.random() < 0.35)
+                o.scale = (k, k, k) if nm.startswith("weldhalo") else (1, 1, 1)
                 o.keyframe_insert("scale", frame=f)
                 o.keyframe_insert("hide_render", frame=f)
             for L in lamps:
-                L.data.energy = 3000 * k
+                L.data.energy = 3000 * k if welding else 0.0
                 L.data.keyframe_insert("energy", frame=f)
 
 
 TAU_ = 2 * math.pi
 # plan labels: (text, x, z) in the area's frame; placed in the margins by side
-PLAN = [("Rotunda: the reactor under the oculus", 0, -18), ("Intake hatch on the catwalk", -6.3, -18), ("Airlock tunnel + lock housing", 0, 22),
+PLAN = [("Rotunda: the reactor under the oculus", 0, -18), ("Stair to the catwalk", -12.45, -23.0), ("Intake hatch on the catwalk", -6.3, -18), ("Airlock tunnel + lock housing", 0, 22),
         ("Security post: stand plate, camera, screen", 0, 35.6), ("Plaza", 0, 46), ("LABNET (on the wall)", 7.2, 11.1),
         ("Zbornak's dais", 5.5, -5.7), ("Gallery of the petrified", 20.0, -9.0), ("Robotics bay", 20.7, -21.6), ("Exotic-matter wall", 15.5, -43),
-        ("Splice pod", 0, -41.5), ("Cryo pods (6)", -13.3, -41), ("Hydroponics habitat", -24.5, -14), ("Holotable", -12, -2.6),
+        ("Splice pod", 0, -41.5), ("Cryo pods (6)", -13.3, -41), ("Hydroponics habitat", -27.1, -13.2), ("Holotable", -12, -2.6),
         ("Ranch barn", 74, -26), ("Pen office: pen terminal", 57, -24.5), ("Silo + auger", 93.5, -30), ("Feed bunk", 93, 8),
         ("Corral", 80, 36), ("Training ring", 70, 26), ("Gate arch", 50, 16), ("Stock tank + sun-mill", 56, 39),
         ("Walk to the ranch", 30, 33), ("Walk to the pad", -30, 51), ("Supply pad", -62, 58), ("Zbornak containers", -43, 70),
@@ -389,7 +394,7 @@ def weld_cam(G):
     """the robots' view, aimed at the welder's tip: from the room's side of the bay, a little above"""
     bpy.context.view_layer.update()
     wri = G["WELDS"][0]
-    tip = wri.matrix_world @ Vector(tb((0, 0, 1.22)))
+    tip = wri.matrix_world @ Vector(tb((0, 0, 0.67)))
     t3 = (tip.x, tip.z, -tip.y)                                             # back to the area's (three.js) axes
     d = Vector((t3[0] - 0.0, 0, t3[2] + 18.0)).normalized()               # out from the rotunda's centre
     side = Vector((d.z, 0, -d.x))
@@ -519,7 +524,7 @@ elif MODE == "plan":
 elif MODE == "sheet":
     from PIL import Image, ImageDraw, ImageFont
     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
-    views = ("over", "front", "gate", "cut", "inside", "intake", "term", "robots", "hydro", "cryo", "exotic", "gallery", "walks", "crates", "ranch")
+    views = ("over", "front", "gate", "cut", "inside", "intake", "term", "robots", "hydro", "hydro_door", "stair", "cryo", "exotic", "gallery", "walks", "crates", "ranch", "office")
     w, h, cols = 640, 360, 3
     rows = (len(views) + cols - 1) // cols
     sheet = Image.new("RGB", (w * cols, (h + 34) * rows), (14, 10, 26))

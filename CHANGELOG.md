@@ -30,6 +30,13 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
   - **Zbornak, an alien:** a clipboard and a scorched coat, 7.9k triangles, exported in the game's GLB contract as `zbornak.glb`
     (plain, in the docs folder).
   - `tools/zbornak-chimeras.mjs` exports game chimeras for the renders.
+  - **The last revision:**
+    - The hydroponics sign fits its board.
+    - The habitat stands half as far from the wall (4.5 m), with one row of ten pods.
+    - The catwalk stair runs along the ring to a landing on the west, clear of the habitat's door.
+    - The robot arms work one cell together: one clamps the chimera, one takes an armour plate from a new plate carrier and
+      holds it on, and the welder runs a bead up the seam. Their tools move in straight lines with the joints solved by
+      inverse kinematics (`arm_ik`, `CELL_KEYS`), and a new wrist `roll` joint keeps the plate square.
   - **CLAUDE.md:** storage crates in every place are the standard cargo container in the owner's livery.
 
 - **Light-bike: one bike, and a trail that follows tight turns.** **The trail:** it laid a new point only when the bike moved
