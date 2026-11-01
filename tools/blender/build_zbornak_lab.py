@@ -76,15 +76,33 @@ def ring_wall(g, R, T, H, gaps=(), n=72, slot="wall"):
         g(slot).boxc(math.sin(a) * rr, H / 2, math.cos(a) * rr, TAU * rr / n * 1.04, H, T, (0, a, 0))
 
 
-def railing_ring(g, r, y, gap=None, step=1.4):
-    n = max(8, int(TAU * r / step))
-    for i in range(n):
-        a = TAU * i / n
-        if gap and abs((a - gap[0] + PI) % TAU - PI) * r < gap[1] / 2:
-            continue
+def railing_ring(g, r, y, gap=None, step=1.4, solid=False):
+    """a round railing of posts and two rails at radius r, standing on height y; gap = (angle, width) leaves an opening (the
+    rails stop at it, a post each side); solid: it collides, as a thin wall between each pair of posts"""
+    if not gap:
+        n = max(8, int(TAU * r / step))
+        a0, a1 = 0.0, TAU
+    else:
+        h = gap[1] / 2 / r
+        a0, a1 = gap[0] + h, gap[0] + TAU - h
+        n = max(8, int((a1 - a0) * r / step))
+    m = n if not gap else n + 1
+    for i in range(m):
+        a = a0 + (a1 - a0) * i / n
         g("steel", 0.015).cylc(math.sin(a) * r, y + 0.55, math.cos(a) * r, 0.035, 1.1, 5)
-    g("hazard", 0.015).tor(r, 0.045, (0, y + 1.1, 0), n=max(24, n), rs=5)
-    g("steel", 0.0).tor(r, 0.03, (0, y + 0.55, 0), n=max(24, n), rs=4)
+    if not gap:
+        g("hazard", 0.015).tor(r, 0.045, (0, y + 1.1, 0), n=max(24, n), rs=5)
+        g("steel", 0.0).tor(r, 0.03, (0, y + 0.55, 0), n=max(24, n), rs=4)
+    else:
+        k = max(12, int((a1 - a0) * r / 0.5))
+        for yy, rr, slot in ((y + 1.1, 0.045, "hazard"), (y + 0.55, 0.03, "steel")):
+            g(slot, 0.015 if slot == "hazard" else 0.0).path([(math.sin(a0 + (a1 - a0) * i / k) * r, yy, math.cos(a0 + (a1 - a0) * i / k) * r) for i in range(k + 1)], rr, 5)
+    if solid:
+        for i in range(n):
+            am = a0 + (a1 - a0) * (i + 0.5) / n
+            g.at(0, 0, am)
+            g.col_box(0, y + 0.6, r, (a1 - a0) * r / n * 1.02, 1.2, 0.12)
+            g.at()
 
 
 def slope_box(g, slot, p0, p1, x0, x1, t=0.25, ink=None):
@@ -399,32 +417,70 @@ def build_lab(root):
         lab.at(0, 0, a)
         lab.col_box(0, CW - 0.15, 10.6, TAU * 10.6 / 40 * 1.05, 0.3, 2.0)
         lab.at()
-    railing_ring(lab, 9.7, CW, gap=(-PI / 2, 2.0), step=1.6)
-    railing_ring(lab, 11.5, CW, gap=(-PI / 2, 1.5), step=1.6)
+    railing_ring(lab, 9.7, CW, gap=(-PI / 2, 2.0), step=1.6, solid=True)
+    railing_ring(lab, 11.5, CW, gap=(-PI / 2, 2.1), step=1.6, solid=True)
     for i in range(6):
         a = TAU * i / 6 + 0.3
         lab("steel", 0.03).cylc(math.sin(a) * 10.6, (CW - 0.3) / 2, math.cos(a) * 10.6, 0.22, CW - 0.3, 8)
-    # the stair to the catwalk runs along the ring's outside (a tangent, rising toward the front) to a landing at the west,
-    # straight across from the intake bridge; its foot is toward the back, clear of the floor before the hydroponics' door
-    SX, SZ0, SZ1 = -12.45, -9.0, -1.0                                      # its centreline x, foot and top (lab frame)
-    for k in range(26):
-        lab("panel", 0.02).boxc(SX, CW / 26 * (k + 1) - 0.06, SZ0 + 0.15 + (SZ1 - SZ0) / 26 * k, 1.4, 0.12, 0.34)
-    for sx in (-0.75, 0.75):
-        lab("steel", 0.02).bm((SX + sx, 0.0, SZ0 - 0.1), (SX + sx, CW - 0.1, SZ1), 0.07, 5)
-        lab("steel", 0.0).bm((SX + sx, 0.0, SZ0 - 0.1), (SX + sx, 1.1, SZ0 - 0.1), 0.035, 4)
-        lab("hazard", 0.0).bm((SX + sx, 1.1, SZ0 - 0.1), (SX + sx, CW + 1.1, SZ1), 0.04, 5)
-    lab("panel", 0.03).boxc(SX + 0.05, CW - 0.15, 0.0, 1.9, 0.3, 2.0)       # the landing, onto the catwalk's edge
-    for z_ in (-1.0, 1.0):
-        lab("steel", 0.03).cylc(SX - 0.8, (CW - 0.3) / 2, z_, 0.1, CW - 0.3, 8)
-    lab("hazard", 0.015).bm((SX - 0.85, CW + 1.1, -1.0), (SX - 0.85, CW + 1.1, 1.0), 0.045, 5).bm((SX - 0.85, CW + 1.1, 1.0), (-11.65, CW + 1.1, 1.0), 0.045, 5)
-    for z_ in (-1.0, 0.0, 1.0):
-        lab("steel", 0.015).cylc(SX - 0.85, CW + 0.55, z_, 0.035, 1.1, 5)
-    lab("steel", 0.015).cylc(-11.9, CW + 0.55, 1.0, 0.035, 1.1, 5)
-    lab("hazard", 0.0).boxc(SX + 0.05, CW + 0.006, -0.9, 1.8, 0.01, 0.15)
-    lab.at(SX, 0, 0)                                                       # the flight collides as one ramp, its top on the treads
-    slope_col(lab, 1.4, (SZ0, 0.0), (SZ1, CW), 0.4, stick=1)
-    lab.at()
-    CAMS["stair"] = ((CX - 24.0, 4.2, CZ - 13.5), (CX - 13.0, 3.2, CZ - 3.0), 26)
+    # the lift to the catwalk, at the west: a glass shaft beside the ring, a short bridge from its top onto the catwalk. Its car
+    # and its two gates are pivots the game moves (labWorld.js): the car carries you up or down, standing, and each gate (a
+    # waist-high barrier across the shaft's opening at that level) rises only while the car is there. Below, the opening
+    # faces out (-x), toward the lab's floor; above, it faces the bridge (+x).
+    LX, LZ, LH = -13.95, 0.0, CW + 3.2                                     # the shaft's centre and its height
+    lab("panel", 0.03).boxc(-12.15, CW - 0.15, LZ, 1.4, 0.3, 2.0)          # the bridge
+    lab("hazard", 0.0).boxc(-12.15, CW + 0.006, LZ + 0.9, 1.4, 0.01, 0.12).boxc(-12.15, CW + 0.006, LZ - 0.9, 1.4, 0.01, 0.12)
+    for sz in (-1, 1):
+        for x_ in (-12.8, -12.15, -11.5):
+            lab("steel", 0.015).cylc(x_, CW + 0.55, LZ + sz * 0.98, 0.035, 1.1, 5)
+        lab("hazard", 0.015).bm((-12.85, CW + 1.1, LZ + sz * 0.98), (-11.45, CW + 1.1, LZ + sz * 0.98), 0.045, 5)
+        lab("steel", 0.0).bm((-12.85, CW + 0.55, LZ + sz * 0.98), (-11.45, CW + 0.55, LZ + sz * 0.98), 0.03, 4)
+        lab.col_box(-12.15, CW + 0.6, LZ + sz * 0.98, 1.4, 1.2, 0.12)
+    for sx in (-1, 1):                                                     # corner posts, frames at each level and the top
+        for sz in (-1, 1):
+            lab("steel", 0.03).boxc(LX + sx * 1.15, LH / 2, LZ + sz * 1.15, 0.16, LH, 0.16)
+    for yy in (0.06, CW - 0.15, LH):
+        for sz in (-1, 1):
+            lab("steel", 0.02).boxc(LX, yy, LZ + sz * 1.15, 2.46, 0.14, 0.14)
+            lab("steel", 0.02).boxc(LX + sz * 1.15, yy, LZ, 0.14, 0.14, 2.46)
+    # the glass: both sides whole; the back (-x) over the bottom opening; the front (+x) under the bridge and over its opening
+    for sz in (-1, 1):
+        lab("glass", 0.0).boxc(LX, LH / 2, LZ + sz * 1.15, 2.2, LH - 0.2, 0.04)
+        lab.col_box(LX, LH / 2, LZ + sz * 1.15, 2.46, LH, 0.12)
+    lab("glass", 0.0).boxc(LX - 1.15, (2.6 + LH) / 2, LZ, 0.04, LH - 2.6, 2.2)
+    lab.col_box(LX - 1.15, (2.6 + LH) / 2, LZ, 0.12, LH - 2.6, 2.46)
+    lab("glass", 0.0).boxc(LX + 1.15, (CW - 0.3) / 2, LZ, 0.04, CW - 0.4, 2.2)
+    lab.col_box(LX + 1.15, (CW - 0.3) / 2, LZ, 0.12, CW - 0.3, 2.46)
+    lab("glass", 0.0).boxc(LX + 1.15, (CW + 2.6 + LH) / 2, LZ, 0.04, LH - CW - 2.6, 2.2)
+    lab.col_box(LX + 1.15, (CW + 2.6 + LH) / 2, LZ, 0.12, LH - CW - 2.6, 2.46)
+    lab("steel", 0.02).boxc(LX - 1.15, 2.6, LZ, 0.16, 0.16, 2.46).boxc(LX + 1.15, CW + 2.6, LZ, 0.16, 0.16, 2.46)   # the openings' heads
+    # the winding house on top, lamps over each opening, a hazard sill below, the shaft's pit
+    lab("dark", 0.04).boxc(LX, LH + 0.4, LZ, 2.6, 0.7, 2.6)
+    lab("lime", 0.0).boxc(LX, LH + 0.4, LZ + 1.31, 1.6, 0.12, 0.02).boxc(LX, LH + 0.4, LZ - 1.31, 1.6, 0.12, 0.02)
+    lab("cable", 0.0).path([(LX + 1.0, LH + 0.75, LZ), (LX + 1.0, LH + 1.3, LZ - 0.5), (LX + 1.6, 6.32, LZ - 2.0)], 0.06, 5)
+    for (x_, y_) in ((LX - 1.25, 2.85), (LX + 1.25, CW + 2.85)):
+        lab("dark", 0.0).boxc(x_, y_, LZ, 0.12, 0.2, 0.6)
+        lab("amber", 0.0).boxc(x_ + (0.065 if x_ > LX else -0.065), y_, LZ, 0.01, 0.12, 0.45)
+    lab("hazard", 0.0).boxc(LX - 1.35, 0.065, LZ, 0.3, 0.01, 2.2)
+    lab("void", 0.0).boxc(LX, 0.03, LZ, 2.2, 0.01, 2.2)
+    car = G("lift", lab.root, LX, 0.07, LZ, solid=False, role="lift")      # the car (its origin on its deck)
+    car("panel", 0.03).boxc(0, -0.06, 0, 2.1, 0.12, 2.1)
+    car("dark", 0.02).boxc(0, -0.3, 0, 1.9, 0.36, 1.9)
+    for sz in (-1, 1):
+        car("hazard", 0.0).boxc(0, 0.003, sz * 0.97, 2.0, 0.01, 0.12)
+    car("steel", 0.02).boxc(-0.85, 0.55, -0.85, 0.16, 1.1, 0.16)            # its call post: a lit button
+    car("dark", 0.0).boxc(-0.85, 1.05, -0.76, 0.2, 0.2, 0.04)
+    car("lime", 0.0).cylc(-0.85, 1.05, -0.73, 0.05, 0.03, 10, "z")
+    car.root["travel"] = CW - 0.07
+    for k, (gx, gy) in enumerate(((LX - 1.27, 0.0), (LX + 1.27, CW))):      # the gates, 1.1 m barriers that rise 2.3 m
+        gate = G(f"lift_gate{k}", lab.root, gx, gy, LZ, solid=False, role="liftgate")
+        gate("steel", 0.02).boxc(0, 1.05, 0, 0.1, 0.1, 2.2).boxc(0, 0.15, 0, 0.1, 0.1, 2.2)
+        for sz in (-1, 1):
+            gate("steel", 0.02).boxc(0, 0.6, sz * 1.05, 0.1, 1.0, 0.1)
+        gate("glass", 0.0).boxc(0, 0.6, 0, 0.03, 0.8, 2.0)
+        gate("hazard", 0.0).boxc(0.055 if k else -0.055, 1.05, 0, 0.01, 0.06, 2.1)
+        gate.root["travel"] = 2.3
+    lab.mark("spot", (LX, 0.07, LZ), 0, spot="lift")
+    CAMS["stair"] = ((CX - 22.0, 4.5, CZ - 6.0), (CX - 13.0, 3.6, CZ), 30)
     reactor_intake(lab, RE, -PI / 2, CW, 9.6)
     lab.mark("spot", (-(RE + 1.75), CW, 0), -PI / 2, spot="intake")
     lab.mark("spot", (0, 11, 0), 0, spot="reactor")
@@ -663,7 +719,7 @@ def build_lab(root):
     wx, wz = CX + math.sin(d) * (R + T + 0.7), CZ + math.cos(d) * (R + T + 0.7)
     ground_run(out, [(gx + 2.0, gz - 2.0), (wx, wz)])
     out("dark", 0.02).boxc(wx, 0.6, wz, 0.9, 1.2, 0.6, (0, d, 0))
-    path_ribbon(out, [(12.3, 38.2), (26.0, 35.0), (40.0, 24.0), (49.6, 16.0)], 3.0)
+    path_ribbon(out, [(12.3, 38.2), (26.0, 35.0), (37.0, 25.0), (44.0, 16.0), (48.55, 16.0)], 3.0)   # (square onto the cattle grid's frame)
     pe = (-51.4, 55.3)
     path_ribbon(out, [(-11.8, 43.9), (-24.0, 49.0), (-38.0, 53.5), pe], 3.0)
     a = math.atan2(-62.0 - pe[0], 58.0 - pe[1])                             # a ramp up onto the pad's deck
@@ -699,19 +755,22 @@ def ranch_a(root):
     BX, BZ = 74.0, -26.0
     # ---- the barn: gambrel ends, long walls with the big door open on the corral, roof slabs, cupola, solar strip
     b = G("A_barn", root, BX, 0, BZ)
-    gam = [(-8.0, 0), (8.0, 0), (8.0, 6.0), (6.2, 9.4), (0, 11.4), (-6.2, 9.4), (-8.0, 6.0)]
+    WH = 6.55                                                               # the wall's top: on the roof's line at z = 8
+    gam = [(-8.0, 0), (8.0, 0), (8.0, WH), (6.2, 9.4), (0, 11.4), (-6.2, 9.4), (-8.0, WH)]
     for x0, x1 in ((-13.0, -12.6), (12.6, 13.0)):
         b("barn").polyx(gam, x0, x1)
         b.col_box((x0 + x1) / 2, 3.0, 0, 0.4, 6.0, 16.0)
-    b("barn").boxc(0, 3.0, -7.8, 25.2, 6.0, 0.4)
+    b("barn").boxc(0, WH / 2, -7.8, 25.2, WH, 0.4)
     for x0, x1 in ((-12.6, -4.5), (4.5, 12.6)):
-        b("barn").boxc((x0 + x1) / 2, 3.0, 7.8, x1 - x0, 6.0, 0.4)
-    b("barn").boxc(0, 5.6, 7.8, 9.0, 0.8, 0.4)
+        b("barn").boxc((x0 + x1) / 2, WH / 2, 7.8, x1 - x0, WH, 0.4)
+    b("barn").boxc(0, (5.2 + WH) / 2, 7.8, 9.0, WH - 5.2, 0.4)
     b("barn2", 0.0).boxc(0, 0.6, 8.02, 26, 1.2, 0.05)
     for sz in (-1, 1):
         prof = [(sz * 8.6, 5.6), (sz * 6.2, 9.4), (0, 11.4)]
         for p0, p1 in zip(prof, prof[1:]):
             slope_box(b, "roof2", p0, p1, -13.6, 13.6, 0.28, 0.06)
+        b("trim", 0.02).boxc(0, 9.62, sz * 6.24, 27.3, 0.2, 0.42)          # a cap over the slopes' break
+    b("trim", 0.02).boxc(0, 11.68, 0, 27.3, 0.2, 0.6)                    # the ridge cap
     b("trim", 0.02).boxc(0, 5.75, 8.05, 9.4, 0.3, 0.2)
     for sx in (-4.6, 4.6):
         b("trim", 0.02).boxc(sx, 2.9, 8.05, 0.3, 5.8, 0.2)
@@ -745,25 +804,29 @@ def ranch_a(root):
         b("solar", 0.0).boxc(-10 + k * 5, 10.62, 3.15, 4.2, 0.06, 2.6, (-math.atan2(2.0, 6.2), 0, 0))
     # ---- the office on the west end: hollow, a big window and an open door onto the corral side, the pen terminal
     o = G("A_office", root, BX - 17.0, 0, BZ + 1.5)
-    o("floor", 0.0).boxc(0, 0.12, 0, 7.6, 0.24, 11.0)
-    o("wood", 0.04).boxc(0, 2.4, -5.3, 7.6, 4.8, 0.4)
-    o("wood", 0.04).boxc(-3.6, 2.4, 0, 0.4, 4.8, 11.0)
-    for x0, x1 in ((-3.8, -2.6), (-0.6, 0.6), (3.0, 3.8)):
-        o("wood", 0.04).boxc((x0 + x1) / 2, 2.4, 5.3, x1 - x0, 4.8, 0.4)
-    o("wood", 0.04).boxc(1.8, 0.5, 5.3, 2.4, 1.0, 0.4).boxc(1.8, 4.35, 5.3, 2.4, 0.9, 0.4).boxc(-1.6, 4.35, 5.3, 2.0, 0.9, 0.4)
+    # (east, x = 4.0, is the barn's gable: the office's walls and floor run up to it, its roof stops just short)
+    ry = lambda z: 4.8 + (z + 5.9) / 11.8 * 0.8                           # the roof's underside along z
+    o("floor", 0.0).boxc(0.1, 0.12, 0, 7.8, 0.24, 11.0)
+    o("wood", 0.04).boxc(0.1, ry(-5.5) / 2, -5.3, 7.8, ry(-5.5), 0.4)
+    o("wood", 0.04).polyx([(-5.5, 0), (5.5, 0), (5.5, ry(5.5)), (-5.5, ry(-5.5))], -3.8, -3.4)
+    o.col_box(-3.6, 2.4, 0, 0.4, 4.8, 11.0)
+    HF = ry(5.3)                                                            # the front wall's top
+    for x0, x1 in ((-3.8, -2.6), (-0.6, 0.6), (3.0, 4.0)):
+        o("wood", 0.04).boxc((x0 + x1) / 2, HF / 2, 5.3, x1 - x0, HF, 0.4)
+    o("wood", 0.04).boxc(1.8, 0.5, 5.3, 2.4, 1.0, 0.4).boxc(1.8, (3.9 + HF) / 2, 5.3, 2.4, HF - 3.9, 0.4).boxc(-1.6, (3.9 + HF) / 2, 5.3, 2.0, HF - 3.9, 0.4)
     o("glass", 0.0).boxc(1.8, 2.45, 5.3, 2.4, 2.9, 0.06)
     o("trim", 0.02).boxc(1.8, 1.0, 5.55, 2.6, 0.12, 0.3).boxc(-1.6, 4.0, 5.55, 2.3, 0.15, 0.2)
-    slope_box(o, "roof2", (-6.2, 4.8), (6.2, 5.6), -4.3, 4.3, 0.24, 0.05)
-    o("lamp", 0.0).ball(-1.6, 4.4, 6.0, 0.18, 8, 6)
-    o("dark", 0.0).bm((-1.6, 4.6, 5.5), (-1.6, 4.6, 6.0), 0.04, 5).bm((-1.6, 4.6, 6.0), (-1.6, 4.5, 6.0), 0.04, 5)   # its bracket
+    slope_box(o, "roof2", (-5.9, 4.8), (5.9, 5.6), -4.3, 3.95, 0.24, 0.05)
+    o("lamp", 0.0).ball(-1.6, 4.3, 5.95, 0.15, 8, 6)
+    o("dark", 0.0).bm((-1.6, 4.47, 5.5), (-1.6, 4.47, 5.95), 0.035, 5).bm((-1.6, 4.47, 5.95), (-1.6, 4.4, 5.95), 0.035, 5)   # its bracket
     pen_terminal(o, -0.6, -4.3, 0, "pen")
     o.mark("spot", (-0.6, 0.24, -3.0), PI, spot="pen")
     o("dark", 0.02).boxc(2.6, 1.6, -4.9, 1.6, 3.2, 0.7)
     o("wood2", 0.02).boxc(-2.8, 0.9, -1.0, 1.2, 0.08, 3.6)
     o("lamp", 0.0).boxc(-0.6, 4.5, -2.5, 1.8, 0.1, 0.3)
     o.light((-0.6, 4.0, -2.0), (1.0, 0.9, 0.7), 450, 0.3)
-    o("dark", 0.04).boxc(-1.6, 5.4, 5.75, 3.6, 0.8, 0.12)
-    o.text("HOLDING PEN", (-1.6, 5.22, 5.83), 0, 0.5, "lime")
+    o("dark", 0.04).boxc(-1.6, 4.9, 5.56, 3.4, 0.6, 0.12)                  # the sign, on the wall over the door
+    o.text("HOLDING PEN", (-1.6, 4.69, 5.63), 0, 0.42, "lime")
     for k in range(3):
         o("dark", 0.0).boxc(-3.38, 3.2, -3.5 + k * 0.6, 0.04, 0.5, 0.4)
         o("lime" if k != 1 else "pink", 0.0).boxc(-3.36, 3.2, -3.5 + k * 0.6, 0.02, 0.35, 0.3)

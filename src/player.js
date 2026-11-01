@@ -241,7 +241,8 @@ export class Player {
       return;
     }
 
-    // riding (transit ship, carousel horse, gondola: rides.js): the seat carries you, no physics; the ride decides where you get off
+    // riding (transit ship, carousel horse, gondola: rides.js; the lab's lift, standing: labWorld.js): the seat carries you, no
+    // physics; the ride decides where you get off
     if (this.seat) {
       const s = this.seat;
       this.idle.cancel(this.model);
@@ -265,9 +266,15 @@ export class Player {
       m.root.visible = !s.hidden;
       m.root.position.copy(b.pos);
       frameQuat(b.up, this.heading, m.root.quaternion);
-      m.legL.rotation.x = m.legR.rotation.x = -1.4;
-      m.shinL.rotation.x = m.shinR.rotation.x = 1.35; // shins hang down off the seat
-      m.body.position.y = m.bodyBase - 0.55; m.body.position.z = 0;
+      if (s.stand) { // standing aboard (the lab's lift: labWorld.js)
+        m.legL.rotation.x = m.legR.rotation.x = 0;
+        m.shinL.rotation.x = m.shinR.rotation.x = 0;
+        m.body.position.y = m.bodyBase; m.body.position.z = 0;
+      } else {
+        m.legL.rotation.x = m.legR.rotation.x = -1.4;
+        m.shinL.rotation.x = m.shinR.rotation.x = 1.35; // shins hang down off the seat
+        m.body.position.y = m.bodyBase - 0.55; m.body.position.z = 0;
+      }
       this.upSmooth.copy(b.up);
       return;
     }

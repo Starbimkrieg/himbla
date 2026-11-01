@@ -34,6 +34,15 @@ INK = {"wall": 0.07, "wall2": 0.05, "roof": 0.06, "panel": 0.04, "dark": 0.03, "
        "void": 0.02, "copper": 0.02, "plant": 0.015, "plant2": 0.015, "soil": 0.0, "stone": 0.03}
 
 
+def frustum(bw, bd, tw, td, h, off=(0.0, 0.0)):
+    """a box tapering from bw x bd at its foot (y = -h/2) to tw x td at its top, the top shifted by off = (x, z)"""
+    x0, z0, x1, z1, y = bw / 2, bd / 2, tw / 2, td / 2, h / 2
+    ox, oz = off
+    v = [(-x0, -y, -z0), (x0, -y, -z0), (ox + x1, y, oz - z1), (ox - x1, y, oz - z1),
+         (-x0, -y, z0), (x0, -y, z0), (ox + x1, y, oz + z1), (ox - x1, y, oz + z1)]
+    return v, [(4, 5, 6, 7), (1, 0, 3, 2), (5, 1, 2, 6), (0, 4, 7, 3), (3, 7, 6, 2), (0, 1, 5, 4)]
+
+
 def rot_y(p, a):
     c, s = math.cos(a), math.sin(a)
     return (p[0] * c + p[2] * s, p[1], -p[0] * s + p[2] * c)
@@ -262,13 +271,9 @@ def reactor(g, H, R=3.4, pylons=3, crown_y=None, collar_y=None):
     for k, (c, rr, w, rot) in enumerate((("lime", 0.66, 0.1, (0.5, 0, 0.3)), ("cyan", 0.78, 0.08, (-0.4, 0.6, -0.5)), ("vio", 0.55, 0.07, (1.2, 0.2, 0.1)))):
         ring = G(f"ring{k}", core.root, solid=False, role="ring")
         ring(c, 0.0).tor(R * rr, w, (0, 0, 0), rot, n=40)
-    for k in range(5):                                                      # arcs of plasma round the core
-        a = k * 1.3
-        p = [(math.sin(a + t * 0.9) * R * (0.45 + 0.4 * t), math.sin(t * 5 + k) * 0.7, math.cos(a + t * 0.9) * R * (0.45 + 0.4 * t)) for t in (0, 0.33, 0.66, 1)]
-        core("spark", 0.0).path(p, 0.035, 4)
     # the collar the pylons clamp to: a steel band round the glass, bolted flanges above and below
     cly = collar_y or cy - 2.6
-    g("steel", 0.04).cylc(0, cly, 0, R + 0.2, 0.8, 32)
+    g("steel", 0.04).lath([(R + 0.03, cly - 0.4), (R + 0.2, cly - 0.4), (R + 0.2, cly + 0.4), (R + 0.03, cly + 0.4), (R + 0.03, cly - 0.4)], segs=32)   # (a band: open inside the glass)
     for dy in (-0.42, 0.42):
         g("dark", 0.02).tor(R + 0.24, 0.07, (0, cly + dy, 0), n=32, rs=5)
     for i in range(pylons):
@@ -870,11 +875,19 @@ def gate_arch(g, x, z, yaw, w=8.0, h=6.0, sign="ZBORNAK RANCH"):
         g("steel").bm((k * w * 0.3, h - 0.75, 0), (k * w * 0.3, h - 1.1, 0), 0.03, 4)
     g.text(sign, (0, h - 1.95, 0.09), 0, 0.62, "amber")
     g.text(sign, (0, h - 1.95, -0.09), PI, 0.62, "amber")
+    # the cattle grid: bars over a dark pit in a steel frame, all flush with the walk's top (6 cm)
+    g("void", 0.0).boxc(0, 0.01, 0, w - 0.6, 0.02, 2.5)
     for i in range(9):
-        g("dark").boxc(0, 0.02, -1.2 + i * 0.3, w - 0.6, 0.06, 0.12)
-    for k in (-1, 1):                                                       # the gates, swung in (-z)
-        hx = k * w / 2
-        g("wood").bm((hx, 0.5, 0), (hx, 0.5, -3.6), 0.07, 5).bm((hx, 1.3, 0), (hx, 1.3, -3.6), 0.07, 5).bm((hx, 0.5, 0), (hx, 1.3, -3.6), 0.05, 4)
+        g("dark", 0.0).boxc(0, 0.03, -1.2 + i * 0.3, w - 0.6, 0.06, 0.12)
+    for sz in (-1, 1):
+        g("steel", 0.02).boxc(0, 0.03, sz * 1.34, w - 0.3, 0.06, 0.16)
+        g("steel", 0.02).boxc(sz * (w / 2 - 0.22), 0.03, 0, 0.16, 0.06, 2.84)
+    for k in (-1, 1):                                                       # the gates, swung in (-z): stiles at both ends,
+        hx = k * w / 2                                                      # two rails and a brace, strapped to the post
+        g("wood").bm((hx, 0.12, -0.42), (hx, 1.48, -0.42), 0.075, 6).bm((hx, 0.12, -3.6), (hx, 1.48, -3.6), 0.075, 6)
+        g("wood").bm((hx, 0.5, -0.42), (hx, 0.5, -3.6), 0.07, 5).bm((hx, 1.3, -0.42), (hx, 1.3, -3.6), 0.07, 5).bm((hx, 0.5, -0.42), (hx, 1.3, -3.6), 0.05, 4)
+        for y in (0.5, 1.3):
+            g("dark", 0.0).bm((hx, y, -0.1), (hx, y, -0.5), 0.03, 4)
     g.at()
 
 
@@ -1109,10 +1122,17 @@ def chem_bench(g, x, z, yaw, L=3.8, kind=0, seed=0, s=1.0):
                 g("glass", 0.0).ball(px, py + 0.13, 0.36, 0.09, 10, 6)
         for i, kd in enumerate((1, 2, 3, 2)):
             flask(g, 1.25 + i * 0.16 - (0.4 if i > 1 else 0), top, 0.65 if i > 1 else 0.4, kd, LIQUIDS[(i + seed) % 6], 0.9)
-        # the extraction hood over the rig, its duct up into the cable tray's run
-        g("steel", 0.03).add(cylinder(0.3, 0.85, 0.5, 4)[:2], (-0.65, top + 1.75, 0.45), (0, PI / 4, 0), (1.3, 1, 0.8))
-        g("steel", 0.02).cylc(-0.65, top + 3.1, 0.3, 0.22, 2.3, 10)
-        g("lamp", 0.0).boxc(-0.65, top + 1.49, 0.45, 0.8, 0.03, 0.4)
+        # the extraction hood over the rig: a rectangular hood on a rim, its round duct up and bent back into a flange in
+        # the wall (under the cable tray), a damper band on it
+        g("steel", 0.03).add(frustum(1.3, 0.8, 0.44, 0.44, 0.5, (0.0, -0.18)), (-0.65, top + 1.75, 0.45))
+        g("steel", 0.02).boxc(-0.65, top + 1.46, 0.45, 1.34, 0.08, 0.84)
+        g("lamp", 0.0).boxc(-0.65, top + 1.41, 0.45, 1.1, 0.02, 0.6)
+        g("steel", 0.02).path([(-0.65, top + 1.96, 0.27), (-0.65, top + 3.0, 0.27), (-0.65, top + 3.22, 0.2), (-0.65, top + 3.3, 0.05), (-0.65, top + 3.3, -0.08)], 0.2, 12)
+        g("dark", 0.02).cylc(-0.65, top + 2.5, 0.27, 0.215, 0.12, 12)
+        g("steel", 0.02).boxc(-0.65, top + 3.3, -0.06, 0.62, 0.62, 0.05)
+        for k in (-1, 1):
+            for j in (-1, 1):
+                g("dark", 0.0).ball(-0.65 + k * 0.24, top + 3.3 + j * 0.24, -0.03, 0.025, 6, 4)
     else:
         # test-tube racks
         for r_, rx in enumerate((-1.3, -0.65)):

@@ -5,6 +5,22 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Antimatter Lab: the second in-game review** (`docs/zbornak-proposals/`, "The second in-game review").
+  - **A lift replaces the catwalk stair.** The stair was too steep to climb without sliding off. Now a glass shaft stands
+    beside the catwalk with a short railed bridge onto the ring. Stand on the car for a moment and it carries you to the other
+    level, standing (`player.seat` gains `stand`). From the level it isn't at, it comes when you approach. A waist-high gate
+    at each level rises only while the car is there. The catwalk's railings now collide, and their rails stop at the
+    openings instead of crossing them.
+  - **The reactor's core bobs** in its column. The lightning arcs are gone. The collar is an open band: as a closed
+    cylinder it showed as a plate under the core.
+  - **The ranch:**
+    - The walk ends square on a framed cattle grid, flush with its top.
+    - The gate leaves have stiles at both ends.
+    - The barn's walls and gables meet its roof (a dark wedge showed between them), with ridge and break caps.
+    - The office's walls rise to its sloping roof, which no longer runs into the barn.
+    - Its HOLDING PEN sign is on the wall under the eave.
+  - **The fume hood** is rectangular (it was a skewed lozenge). Its duct bends back into a flange in the wall under the
+    cable tray.
 - **Antimatter Lab: the in-game review** (`docs/zbornak-proposals/`, "The in-game review", with shots from the game in
   `game/`).
   - **The airlock's inner door works.** It shuts in the portal's opening and rises out of sight into the wall. The two doors

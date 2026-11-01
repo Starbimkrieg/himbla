@@ -243,8 +243,8 @@ A walk-in hall with slot carousels out front. Press `F` at a station:
 - **The lab** (the Rotunda): a domed round lab 64 m across on the plateau, the antimatter reactor rising through its
   oculus. Walk up the ribbed airlock tunnel and stop on the plate: the security camera scans you, photographs you (the
   picture shows on the screen by the door), and the outer door rises. 6 m in, it shuts behind you; the tube cycles and the
-  inner door rises into the portal's wall. Going out runs the other way. Inside: the reactor and its catwalk with the
-  intake hatch, sealed bioluminescent hydroponics, exotic-matter canister racks, cryo pods holding chimeras, a holotable, an
+  inner door rises into the portal's wall. Going out runs the other way. Inside: the reactor and its catwalk (a glass
+  lift on the west: stand on the car and it takes you up or down) with the intake hatch, sealed bioluminescent hydroponics, exotic-matter canister racks, cryo pods holding chimeras, a holotable, an
   equipment corner (chemistry and microscope benches, a magnet array, battery chargers) round LABNET's wall display with
   four live drone feeds of settlements at its sides, and a robot cell where three arms clamp a chimera, hold an armour plate
   on and weld it.

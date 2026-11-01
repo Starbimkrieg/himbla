@@ -20,7 +20,8 @@ import drone3 from './assets/zlab-drone3.jpg?inline';
 //   opens only once the other has been shut a moment, and never shuts on you in its doorway;
 //   the screens: the security screen, LABNET's attract screen (the console; main.js opens LABNET itself, labnet.js), the
 //   holding pen's residents (the ranch office), four drone feeds (frames filmed in the game, tools/zbornak-drones.mjs).
-// Spots (lab.spots, world positions): plate, outer_door, inner_door, intake (the reactor's intake hatch, where X feeds the jar), reactor,
+//   the lift to the catwalk: its car carries you up or down, its gates rise only where it stands (updateLift);
+// Spots (lab.spots, world positions): plate, outer_door, inner_door, lift, intake (the reactor's intake hatch, where X feeds the jar), reactor,
 // doctor, labnet, pod, pen.
 
 const ROOTS = ['zl_lab', 'zl_roof', 'zl_out', 'zl_ranch'];
@@ -168,7 +169,9 @@ export function buildZbornakLab(world, loc) {
       lab.arms[n] = { turret: g.getObjectByName(n + '_turret'), shoulder: g.getObjectByName(n + '_shoulder'), elbow: g.getObjectByName(n + '_elbow'),
         wrist: g.getObjectByName(n + '_wrist'), roll: g.getObjectByName(n + '_roll'), weld: g.getObjectByName(n + '_weld'), carry: g.getObjectByName('plate_carry') };
     } else if (role === 'plate') lab[g.name.replace('plate_', 'plate')] = g;
-    else if (role === 'core') { lab.core = g; lab.rings = g.children.filter((o) => o.userData.role === 'ring'); }
+    else if (role === 'core') { lab.core = g; lab.coreY = g.position.y; lab.rings = g.children.filter((o) => o.userData.role === 'ring'); }
+    else if (role === 'lift') lab.lift = { g, y0: g.position.y, travel: g.userData.travel || 6.5, pos: 0, lv: 0, state: 'idle', dwell: 0, armed: true, rider: false };
+    else if (role === 'liftgate') (lab.liftGates ||= [])[g.name.endsWith('1') ? 1 : 0] = { g, y0: g.position.y, travel: g.userData.travel || 2.3, open: 0 };
     else if (role === 'door') lab.doors[g.name.startsWith('inner') ? 'inner' : 'outer'] = { g, y0: g.position.y, travel: g.userData.travel || 5.4, open: 0, shut: 99, dir: 0 };
     else if (role === 'scan') { lab.scan = g; g.visible = false; }
     else if (role === 'doctor') { lab.doctor = g; lab.head = g.getObjectByName('head'); }
@@ -184,6 +187,18 @@ export function buildZbornakLab(world, loc) {
   for (const [k, D] of Object.entries(lab.doors)) {
     const p = lab.local[k + '_door'];
     if (p) { D.col = world.col(loc, { type: 'box', x: p.x, y: p.y, z: p.z, hx: 2.9, hy: 2.95, hz: 0.3, yaw: 0 }); D.colOn = true; }
+  }
+  // the lift's colliders: each gate's (off while it is up), the car's deck at the top (on only while it is up there; below,
+  // the lab's floor holds you)
+  if (lab.lift) {
+    const c = lab.lift.g.position;
+    for (const G of lab.liftGates || []) {
+      if (!G) continue;
+      G.col = world.col(loc, { type: 'box', x: G.g.position.x, y: G.y0 + 0.6, z: G.g.position.z, hx: 0.1, hy: 0.6, hz: 1.1, yaw: 0 });
+      G.colOn = true;
+    }
+    lab.lift.top = world.col(loc, { type: 'box', x: c.x, y: lab.lift.y0 + lab.lift.travel - 0.06, z: c.z, hx: 1.05, hy: 0.06, hz: 1.05, yaw: 0 });
+    world.colliders.remove(lab.lift.top);
   }
   // screens: the drone feeds (pictures), the security screen, LABNET's attract screen, the pen's residents (canvases)
   const feeds = [drone0, drone1, drone2, drone3];
@@ -269,6 +284,8 @@ function updateLab(world, lab, dt, time, camPos) {
     lab.core.rotation.y += dt * 2.5 * k;
     lab.rings.forEach((g, i) => { g.rotation.x += dt * (1.7 + i) * k; g.rotation.y += dt * (2.1 - i * 0.5) * k; });
     lab.core.scale.setScalar(1 + Math.sin(time * 23) * 0.04 + r.flash * 0.25);
+    lab.core.position.y = lab.coreY + Math.sin(time * 0.8) * 0.45 + Math.sin(time * 2.1) * 0.07;   // it bobs in the column
+    lab.core.rotation.x = Math.sin(time * 0.6) * 0.07; lab.core.rotation.z = Math.cos(time * 0.5) * 0.07;
     r.flash = Math.max(0, r.flash - dt * 0.8);
     if (world.reactorLight) world.reactorLight.intensity = camPos.distanceTo(lab.reactor) < 90 ? (6 + r.flash * 30) * (0.8 + Math.random() * 0.4) : 0;
   }
@@ -301,6 +318,7 @@ function updateLab(world, lab, dt, time, camPos) {
   }
   // the airlock
   if (P && lab.doors.outer) updateGate(world, lab, P, dt);
+  if (P && lab.lift) updateLift(world, lab, P, dt);
 }
 
 const DOOR_T = 1.6, CYCLE_T = 1.2;     // s for a door to rise or drop; s the tube cycles between one door shutting and the other opening
@@ -344,6 +362,67 @@ function updateGate(world, lab, P, dt) {
     const e = D.open * D.open * (3 - 2 * D.open);
     D.g.position.y = D.y0 + e * D.travel;
   }
+}
+
+// The lift to the catwalk: stand on the car a moment and it takes you to the other level, standing (player.seat, stand), and
+// lets you off once the gate there is up; come to the shaft at the level it isn't at and it comes for you. A gate (the
+// barrier across the shaft's opening at each level) is up only while the car stands at that level, and drops before it
+// moves.
+const LIFT_T = 4.5, GATE_T = 0.6;     // s to travel; s for a gate to rise or drop
+const ease = (t) => t * t * (3 - 2 * t);
+
+function updateLift(world, lab, P, dt) {
+  const L = lab.lift, gates = lab.liftGates || [], c = L.g.position, audio = world.game && world.game.audio;
+  const l = lab.loc.group.worldToLocal(_v.copy(P.pos));
+  const dx = l.x - c.x, dz = l.z - c.z, carY = L.y0 + L.travel * ease(L.pos);
+  if (L.rider && P.seat !== L.seat) L.rider = false;                              // (knocked off: a K.O.)
+  const onCar = !P.seat && Math.abs(dx) < 0.95 && Math.abs(dz) < 0.95 && Math.abs(l.y - carY) < 0.8;
+  const near = (k) => !onCar && !P.seat && Math.abs(l.y - (L.y0 + L.travel * k)) < 1.5 && Math.hypot(dx, dz) < 4;
+  const go = (to) => { L.state = 'shut'; L.to = to; };
+  if (L.state === 'idle') {
+    if (onCar) {
+      if (L.armed && (L.dwell += dt) > 0.7) {
+        L.g.updateMatrixWorld(true);
+        const local = L.g.worldToLocal(P.pos.clone());
+        local.y = 0.02;
+        P.seat = L.seat = { obj: L.g, local, stand: true };
+        L.rider = true;
+        go(1 - L.lv);
+      }
+    } else {
+      L.armed = true; L.dwell = 0;
+      if (near(1 - L.lv)) go(1 - L.lv);                                           // called from the other level
+    }
+  } else if (L.state === 'shut') {
+    if (!gates[L.lv] || gates[L.lv].open === 0) {
+      L.state = 'go';
+      if (L.topOn) { world.colliders.remove(L.top); L.topOn = false; }
+      if (audio && audio.tone) audio.tone(62, LIFT_T, 'sawtooth', 0.04, 1.25);   // the winding motor
+    }
+  } else if (L.state === 'go') {
+    L.pos = Math.min(1, Math.max(0, L.pos + (L.to ? 1 : -1) * dt / LIFT_T));
+    if (L.pos === L.to) {
+      L.lv = L.to; L.state = 'open';
+      if (L.lv === 1 && !L.topOn) { world.colliders.add(L.top); L.topOn = true; }
+      if (audio && audio.tone) audio.tone(880, 0.25, 'triangle', 0.1);
+    }
+  } else if (L.state === 'open') {
+    if (!gates[L.lv] || gates[L.lv].open > 0.6) {
+      L.state = 'idle';
+      if (L.rider) { P.seat = null; L.rider = false; L.armed = false; }        // off you get (step off and on to go back)
+    }
+  }
+  L.g.position.y = L.y0 + L.travel * ease(L.pos);
+  gates.forEach((G, k) => {
+    if (!G) return;
+    const up = (L.state === 'idle' || L.state === 'open') && L.lv === k;
+    G.open = Math.min(1, Math.max(0, G.open + (up ? 1 : -1) * dt / GATE_T));
+    if (G.col) {
+      if (G.open > 0.5 && G.colOn) { world.colliders.remove(G.col); G.colOn = false; }
+      else if (G.open <= 0.5 && !G.colOn) { world.colliders.add(G.col); G.colOn = true; }
+    }
+    G.g.position.y = G.y0 + G.travel * ease(G.open);
+  });
 }
 
 // LABNET's attract screen and the pen's residents (repainted by main.js when they change)

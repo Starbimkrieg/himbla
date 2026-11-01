@@ -25,6 +25,24 @@ renders). The courier is `runner.glb`. The drone feeds are filmed in the game to
 
 ![The plan](plan.jpg)
 
+## The second in-game review
+
+| Asked | Done |
+|---|---|
+| The walk should meet the ranch's ground flush at the gate, not clip | It ran on over the cattle grid. Now it ends square on the grid's new steel frame. The grid's bars sit flush with the walk's top over a dark pit, and the corral's dirt carries on past it. |
+| The fence gates have no end posts | Each swung-open gate leaf has a stile at each end (it was two rails and a brace), strapped to its log post. |
+| The reactor: lose the lightning, no plate under the core, let it bob | The plasma arcs are gone. The "plate" was the collar round the column, a closed cylinder that read as a disc through the glass. It is an open band now. The core bobs up and down in the column (about half a metre, with a little sway) as it spins. |
+| The stair to the catwalk is hard to climb without sliding off | It is replaced by a **lift**: a glass shaft beside the catwalk on the west, a short railed bridge from its top onto the ring. Stand on the car a moment and it takes you to the other level, standing. Come to the shaft at the level it isn't at and it comes for you. Each level's opening has a waist-high gate that rises only while the car is there and drops before it moves. The catwalk's railings now collide too, and their rails stop at the openings instead of running across them. |
+| The barn and the office: things not flush, clipping | The barn's walls stopped at 6 m under a roof whose line meets them at 6.55 m. That left a dark wedge, and the gables' edges didn't follow the roof. Now walls and gables meet the roof's underside, with caps on the ridge and on the gambrel's break. The office's walls stopped at 4.8 m under a roof sloping to 5.6, which left the black gap. Now they rise to the roof's line. The roof stops short of the barn's gable instead of running into it, and the HOLDING PEN sign is on the wall over the door, under the eave. |
+| The fume hood's duct leads nowhere, and the hood is oblong | The hood was a square cone scaled before it was turned, a lozenge. It is now a rectangular hood (`frustum`) on a rim with a light under it. Its round duct rises, with a damper band, and bends back into a bolted flange in the wall under the cable tray. |
+
+| | |
+|---|---|
+| ![The walk onto the cattle grid, the gate leaves](game/ranch_gate.jpg) | ![The office and the barn](game/office.jpg) |
+| ![The barn's west end](game/barn_west.jpg) | ![The fume hood and its duct](game/fume_hood.jpg) |
+| ![The reactor from the catwalk](game/reactor.jpg) | ![The lift, from the floor](game/lift.jpg) |
+| ![The lift's top, from the catwalk](game/lift_top.jpg) | |
+
 ## The in-game review
 
 The first review of the lab in the game. The shots are the game's own (`game/`).
@@ -254,6 +272,10 @@ The draft is now the game's Antimatter Lab.
   - Going out, the inner door opens as you come within 5 m of it, and the outer door once the inner one has shut.
   - A door opens only once the other has been shut a moment. It stays up while you are within 4 m of its doorway.
 - **The intake hatch:** X feeds the reactor there, within 3.5 m.
+- **The lift** to the catwalk (`updateLift`): stand on its car for 0.7 s and it carries you (`player.seat` with `stand`) to
+  the other level in 4.5 s. It lets you off once that level's gate is up, and you must step off and on to go back. From the
+  level it isn't at, come within 4 m and it comes for you. The car's deck collides at the top only while the car is there.
+  Each gate's collider goes while it is up.
 - **LABNET:** `F` at the desk before the wall display opens it as a CRT terminal (`src/labnet.js`). The wall display itself shows your
   totals and the newest reactor results (`drawLabScreens`).
   - It has four tabs: SPLICES, REACTOR, CHIMERAS, PEN.
