@@ -5,7 +5,42 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
-- **Antimatter Lab rework: one draft, revised, not in the game yet (`docs/zbornak-proposals/`).** From the first two
+- **The Antimatter Lab rework is in the game.** The Rotunda, the ranch and Zbornak the Elder replace the old lab, its pen
+  terminal and the helmeted doctor. `build_zbornak_lab.py` with `ZB_GAME=1` exports them as `src/assets/zlab.glb` (2.2 MB
+  compressed, 197k triangles), which `src/labWorld.js` builds from:
+  - its 929 colliders (the dome, the tunnel, the catwalk, the stair and every part's own);
+  - its spots (the intake hatch, the doctor, LABNET, the splice pod, the pen terminal);
+  - its screens and lettering;
+  - its cryo-pod and pen chimeras;
+  - its moving parts.
+
+  What moves:
+  - The robot cell runs its 16 s weld cycle by the same inverse kinematics as the renders.
+  - The reactor's rings spin and flare with the reactor.
+  - Zbornak turns his head to you.
+  - **The airlock:** stop on the plate in the tunnel and the camera scans you (a cone of light). At 1.2 s it photographs
+    you: the picture, rendered from the camera, shows on the security screen with ACCESS GRANTED. Then the door rises and
+    its collider goes. It closes once you're 12 m off, reopens if you come back, and opens by itself from inside.
+
+  Gameplay changes:
+  - **LABNET** (`src/labnet.js`, `F` at the drone-wall console) is a CRT terminal with SPLICES, REACTOR, CHIMERAS and PEN
+    tabs. The jar's reactor results and your splices are now logged and saved (`alchemy.log`) to fill it.
+  - The drone wall shows four settlements filmed in the game (`src/assets/zlab-drone0..3.jpg`).
+  - The holding pen moved to the ranch east of the lab, and its residents graze at the feed bunk.
+  - The reactor is fed at the intake hatch on the catwalk.
+  - **The statue is gone:** a person thrown in with a rock still comes back PETRIFIED (and still costs Kepler rep), but no
+    stone figure is left standing in the lab.
+  - The old lab's builders (`dressLab`, `dressLabInside`, `penTerminal`) are removed.
+  - The Asset Row's DR. ZBORNAK is the Elder.
+  - **Collision checks** (`PLACE=antimatter node tools/downs-audit.mjs`): sunk floor is down from 626 to 67 m², the rest
+    slivers. Nothing floats.
+    - The supply pad's deck is lowered to 0.38 m (from 0.54), under the floor-collider limit, so you walk up its ramp onto
+      it.
+    - The silo's footing is 0.4 m.
+    - Pipes, tanks and augers lying down collide as boxes (the radiator headers, the fuel tank).
+    - The reactor's plinth collides from the ground.
+    - The airlock tunnel collides as slabs round its arc, not a flat roof box overhanging its shoulders.
+- **Antimatter Lab rework: one draft, revised (`docs/zbornak-proposals/`).** From the first two
   proposals, A was picked (the Rotunda, Zbornak "the Elder", the LABNET terminal); B is dropped. Modelled in Blender from code
   (`tools/blender/build_zbornak_lab.py`, `zbornak_kit.py`, `zbornak_figure.py`) and rendered with Cycles (`preview_zbornak_lab.py`,
   which also renders `robots.gif`). 178k triangles as built, the six containers 35k of it.

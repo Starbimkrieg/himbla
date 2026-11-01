@@ -240,12 +240,22 @@ A walk-in hall with slot carousels out front. Press `F` at a station:
 
 - **Containment jar** (Dr. Zbornak, 2-5 slots): `G` scoops rocks, dirt, black water, people, Moon Mites, dazed
   pirates or hover-cars. Things left together react (Moon Mud, Slick Rock, Void-Touched).
-- **Reactor** (`X`): throw the jar in for credits, pets, statues, low gravity, or a SINGULARITY.
+- **The lab** (the Rotunda): a domed round lab 64 m across on the plateau, the antimatter reactor rising through its
+  oculus. Walk up the ribbed airlock tunnel and stop on the plate: the security camera scans you, photographs you (the
+  picture shows on the screen by the door), and the door rises. Inside: the reactor and its catwalk with the intake hatch,
+  sealed bioluminescent hydroponics, exotic-matter canister racks, cryo pods holding chimeras, holotables, an equipment
+  corner (chemistry and microscope benches, a magnet array, battery chargers) under a curved drone wall showing four
+  settlements live, and a robot cell where three arms clamp a chimera, hold an armour plate on and weld it.
+- **Reactor** (`X` at the intake hatch): throw the jar in for credits, pets, low gravity, or a SINGULARITY.
+- **LABNET** (`F` at the console under the drone wall): your splices, everything you've thrown into the reactor (each
+  result, how often, the first experiment number) and your chimeras, with full details once unlocked and the newest entry
+  marked.
 - **Chimeras:** two or more different kinds of living thing make a chimera: body, legs and head drawn at random from
   them, mutations from anything non-living in the mix, a name, racing stats, a **growth** (one stat 25-40 % faster in
   training, or two 15-25 %) and a **running style**. Each is built from the Blender chimera kit (docs/chimera-builder/;
   a settler wears the outfit of the person you scooped). Three follow you at your sides; the rest live in the
-  **holding pen** (`P` with the remote pen link). Retired racers can be sold to the Lunar Stud Farm.
+  **holding pen** at the ranch east of the lab (the terminal is in the barn's office; `P` with the remote pen
+  link), where residents graze round the feed bunk. Retired racers can be sold to the Lunar Stud Farm.
 - **Solo results:** a lone mite becomes the **MEGA MITE** boss.
 - **Splice pod:** put the jar into yourself for up to 3 mutations (spoilers in-game). Zbornak cures them.
 
@@ -347,7 +357,10 @@ src/
   reputation.js    standing, tiers, unlocks, Rustmoon state
   events.js        faction events, fluid sloshing, escorts, Pirate Wreck
   mapview.js       globe map with fog of war, Radio Tower sweeps
-  alchemy.js       jar, reactor, mites, followers, mutations, Mega Mite
+  alchemy.js       jar, reactor, mites, followers, mutations, Mega Mite, the lab's log (splices, reactor results)
+  labWorld.js      the Antimatter Lab (zlab.glb): its colliders, spots, robot cell, reactor, airlock and security camera,
+                   screens
+  labnet.js        LABNET, the lab's terminal (splices, reactor, chimeras, pen)
   chimera.js       makeChimera, makeMite, splicing and stats re-exports
   chimerabuild.js  the chimera builder: every chimera from the kit (chimera.glb), looks, outfits, mutations, far LOD
   gait.js          walking on jointed legs (mites, mandrake roots, the spider tank): planted feet, steps, IK, the body on its feet
@@ -439,6 +452,8 @@ src/
     downs-*.glb      Chimera Downs kits (stand, club, course, stalls, arcade, screen, fair, stable, crowd, dome)
     chimera.glb      the chimera kit: every kind's parts in their looks, fitted mutations, far copies, devices
     spidertank.glb   Zbornak's spider tank (loaded by spidertank.js, not at boot)
+    zlab.glb         the Antimatter Lab and ranch, and Dr. Zbornak (build_zbornak_lab.py; colliders, spots, screens, the
+                     arms, reactor core, door and camera as pivots: labWorld.js); zlab-drone0..3.jpg the drone wall's feeds
     duck.glb         Duck Derby racers and track
     blackjack.glb    blackjack table and chip
     dish.glb         dish stations and dish heads
@@ -469,7 +484,8 @@ tools/
   winch-ride.mjs           headless winch test; run --gate ring after touching src/winch.js
   zbornak-chimeras.mjs     exports a few game chimeras as GLBs for the Antimatter Lab draft's renders (docs/zbornak-proposals/)
   zbornak-screens.mjs      shoots the Antimatter Lab draft's screen mock-ups (docs/zbornak-proposals/screens/terminal.html)
-  zbornak-drones.mjs       films the Antimatter Lab draft's drone feeds: aerial shots of four settlements from the running game
+  zbornak-drones.mjs       films the Antimatter Lab's drone feeds: aerial shots of four settlements from the running game
+                           (src/assets/zlab-drone0..3.jpg)
   blender/
     kit.py                 shared helpers every builder execs
     hullkit.py             hull lofts and fittings (Courier, Skimmer redesigns)
@@ -522,8 +538,8 @@ tools/
     build_spidertank.py    -> spidertank.glb (Zbornak's spider tank; docs/spidertank/)
     build_chimera.py       -> chimera.glb (about 6 min; CHIMERA_ONLY=car,mite; CHIMERA_PARTS=legs_mite_0 to splice with
                            tools/splice-chimera.mjs; chimera_common.py and chimera_*.py)
-    build_zbornak_lab.py   Antimatter Lab rework, the draft of the whole plateau and of Zbornak (not in the game;
-                           docs/zbornak-proposals/): zbornak_kit.py (set pieces, zb_container: the cargo box in Zbornak livery),
+    build_zbornak_lab.py   the Antimatter Lab, the whole plateau and Zbornak (docs/zbornak-proposals/); ZB_GAME=1 exports
+                           zlab.glb for the game (then node tools/optimize-glb.mjs src/assets/zlab.glb): zbornak_kit.py (set pieces, zb_container: the cargo box in Zbornak livery),
                            zbornak_figure.py (the doctor); preview_zbornak_lab.py renders the views, robots.gif, the plan, the
                            turnaround
     proposals/             freighter, Kepler Habitat and War-Rig design studies, Cycles preview renders

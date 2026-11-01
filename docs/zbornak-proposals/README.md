@@ -6,8 +6,8 @@ This is the draft picked from the first two proposals: **the Rotunda, with Zborn
 from the review. Proposal B (the Institute, Zbornak "the Singed", the SPECIMEN INDEX) is dropped.
 
 Everything is modelled in Blender from code (`tools/blender/build_zbornak_lab.py`, `zbornak_kit.py`, `zbornak_figure.py`) and
-rendered with Cycles and Freestyle (`tools/blender/preview_zbornak_lab.py`). **Nothing is in the game yet;** "Building it" below is
-what that takes. The chimeras in the pods, on the bench and in the corral are the game's own (`makeChimera`, exported for the
+rendered with Cycles and Freestyle (`tools/blender/preview_zbornak_lab.py`). It is now in the game: "In the game" below
+says how. The chimeras in the pods, on the bench and in the corral are the game's own (`makeChimera`, exported for the
 renders). The courier is `runner.glb`. The drone feeds are filmed in the game too (`tools/zbornak-drones.mjs`).
 
 | | Today | The Rotunda |
@@ -201,32 +201,40 @@ are the game's own (`MUTATIONS`, `ITEMS` and the reactor's results in `src/alche
 |---|---|
 | ![LABNET, splices](terminal_splices.png) | ![LABNET, reactor](terminal_reactor.png) |
 
-## Building it
+## In the game
 
-- **Models:** the builder makes one scene. For the game it splits into the place's parts as the Downs' do: shell, airlock,
-  interior stations, ranch buildings, kit pieces. Each part would be a `parts(..., solid=True)` build with its own colliders
-  (`docs/collision.md`): roofs collide at their drawn top, floors use `k.floorCols`, and the catwalk, the stair and the bridge are
-  walkable. The containers are the game's own `cargoStack`, with a Zbornak livery added to the cargo box's liveries.
-- **Moving parts:** the game plays the robot cell's cycle: `CELL_KEYS` per arm, the joints solved by `arm_ik` each frame and the
-  plate shown in the carrier, the gripper or welded on. It also turns the reactor's rings, the welder's flicker and the sun-mill.
-- **The intake hatch:** this is where X feeds the reactor (today it is anywhere within 11 m of it). The hopper's throat flashes on
-  a feed.
-- **The airlock:** standing on the plate starts the sequence. The arm swings out, the scan cone sweeps, and the screen shows the
-  courier as they are (a render-to-texture from the camera's spot, held as a still). A beat later comes Zbornak's line and ACCESS
-  GRANTED, then the door opens and closes behind you.
-- **LABNET:** a prompt and a close-up camera like the casino's seated games. It needs a small log of firsts (what was fed and when,
-  and the times) kept in the save.
-- **The pen terminal** moves into the barn office, and `PEN` in `alchemy.js` moves to the corral, the residents gathering at the
-  feed bunk.
-- **The drone wall:** in the game each panel is a render target from a camera circling a settlement (the loading screen's
-  sweep), refreshed a few times a second while you are near.
-- **Statues:** `statue()` in `alchemy.js` still needs a spot for the petrified, now the gallery is gone (a corner of the
-  ranch, say).
-- **Zbornak:** the figure replaces `makeFigure` in `buildLab`, his name tag and talk prompt move with the dais, and the head turns
-  toward the player.
-- **Cost:** the area is 178k triangles as built here, before outlines; the six containers are 35k of that, as `cargo.py`
-  details them. In the game the containers come from `cargoStack`, and the rest is baked and merged like the Downs, with the far
-  pieces (radiator field, solar array) culled with distance.
+The draft is now the game's Antimatter Lab.
+
+- **The model:** `ZB_GAME=1 MOONRUNNER_REPO=. python3 tools/blender/build_zbornak_lab.py`, then
+  `node tools/optimize-glb.mjs src/assets/zlab.glb`.
+  - It exports `src/assets/zlab.glb` (2.2 MB, 197k triangles) in four roots: `zl_lab`, `zl_roof`, `zl_out`, `zl_ranch`.
+  - The parts make their own colliders (929 `col` pivots: boxes and cylinders; the dome, the fins, the stair and the tunnel's arc as slabs
+    under their faces; pipes and tanks lying down as boxes). `k.floorCols` covers the floors.
+  - The containers are `zb_container`: the cargo box in Zbornak livery, one collider per stack.
+- **`src/labWorld.js`** bakes the static parts and keeps these live:
+  - the spots: intake, doctor, LABNET, splice pod, pen terminal, the plate, the door;
+  - the screens and lettering;
+  - the chimeras;
+  - the moving parts.
+- **Moving parts:**
+  - The robot cell plays `CELL_KEYS` with the joints solved each frame (`armIk`, the same solve as `arm_ik`).
+  - The welder's glow shows only while it welds.
+  - The plate is shown in the carrier, the gripper or welded on.
+  - The reactor's rings spin and flare with the reactor light.
+  - Zbornak's head turns to you within 30 m.
+- **The airlock:** stop on the plate and the scan cone lights.
+  - At 1.2 s the camera's view (a render target from the camera's spot) is held as a still on the security screen with ACCESS
+    GRANTED.
+  - At 2 s the door rises 5.4 m and its collider goes.
+  - It closes once you are 12 m off, reopens if you come back within 3.5 m, and opens by itself for you from inside.
+- **The intake hatch:** X feeds the reactor there, within 3.5 m.
+- **LABNET:** `F` at the console under the drone wall opens it as a CRT terminal (`src/labnet.js`).
+  - It has four tabs: SPLICES, REACTOR, CHIMERAS, PEN.
+  - `alchemy.js` keeps its log (splices, and each reactor result with its first experiment number and count) in the save.
+- **The pen terminal** is in the barn office. `PEN` in `alchemy.js` is the corral, and the residents graze at the feed bunk.
+- **The drone wall:** the four feeds are stills filmed in the game (`src/assets/zlab-drone0..3.jpg`, by
+  `tools/zbornak-drones.mjs`), not live cameras.
+- **Statues:** dropped. A person thrown in with a rock still comes back PETRIFIED, as a joke line, and leaves no figure.
 
 ## Making the renders again
 

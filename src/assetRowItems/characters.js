@@ -14,5 +14,5 @@ SKIPPED
 - The Spindle's drone (spindle.js makeDrone): in the props catalogue (spindle.drone).
 - Traffic pedestrians and buggy drivers (traffic.js), settlement crowds (world.js addFigures): same makeFigure looks as
   people.archetypes / people.special.
-- Dr. Zbornak's workbench and dais (world.js buildLab / settlements.js dressLabInside): part of the lab building.
+- Dr. Zbornak's dais and the rest of his lab (labWorld.js, zlab.glb): part of the lab building (the ANTIMATTER LAB place).
 */

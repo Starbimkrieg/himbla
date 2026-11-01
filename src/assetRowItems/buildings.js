@@ -8,7 +8,7 @@ import { DISH_SIZE } from '../models.js';
 import { buildHomeTown, addBuilding, slotAt } from '../hometown.js';
 import {
   habDome, cabin, warehouse, quonset, lattice, hortonSphere, floodMast, stack, ticker, conveyor, pipe, radar, searchlight, shanty,
-  wreckHull, penTerminal, jobTerminal, playground, waterTower, greenhouse, commsMast, townHall, towerCrane, gantryCrane, cargoStack, garage, dishStation, powerBlock, keplerHabitat, ilmbWing,
+  wreckHull, jobTerminal, playground, waterTower, greenhouse, commsMast, townHall, towerCrane, gantryCrane, cargoStack, garage, dishStation, powerBlock, keplerHabitat, ilmbWing,
 } from '../settlements.js';
 import { ferrisWheel, carousel } from '../downsFair.js';
 import { animate, together, lineUp, factionHex } from './common.js';
@@ -204,7 +204,6 @@ const parts = {
       kitPart((k) => shanty(k, 0, 0, 8, 4, 6, 0x6b5a3a, 0, () => 0.9)),
     ])),
     item('part.wreck-hull', 'WRECKED SHIP HULL', 33, 23, () => kitPart((k) => wreckHull(k, 0, 0, 0, 24, 0x6b4a32))),
-    item('part.pen-terminal', 'PEN TERMINAL', 4, 3, () => kitPart((k) => penTerminal(k, 0, 0, 0))),
     item('part.job-terminal', 'JOB TERMINAL', 20, 9, () => viaWorld((world, loc) => jobTerminal(world, loc, 0, 0, 0, YEL))),
     item('part.playground', 'PLAYGROUND', 26.5, 26.5, () => worldPart((world, loc, k) => playground(world, loc, k, 0, 0, 0))),
     item('part.water-tower', 'WATER TOWER', 9, 9, () => worldPart((world, loc, k) => waterTower(world, loc, k, 0, 0, 0xff9f1c))),

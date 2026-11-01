@@ -1675,3 +1675,31 @@ body.pad-on .otm-foot .foot-kb { display: none; }
 .job-kind.k-bounty { background: var(--red); color: #fff; }
 .job-kind.k-showpiece { background: var(--pink); color: #fff; }
 .job-blurb { font-family: var(--body); font-size: 15px; color: var(--ui-muted); margin: 2px 0 4px; }
+
+/* LABNET (labnet.js): Dr. Zbornak's research log, a green CRT in the lab */
+#dialog .dlg.labnet { width: min(980px, calc(100vw - 32px)); padding: 0; border-color: #7dff3a; background: radial-gradient(ellipse at center, #0c2414 0%, #06120a 70%, #030806 100%); color: #8dffb4; font-family: var(--body); position: relative; }
+.dlg.labnet::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0 1px, transparent 1px 4px); }
+.labnet .ln-head { display: flex; justify-content: space-between; background: #7dff3a; color: #06120a; font-family: var(--comic); font-size: 12px; padding: 9px 14px; }
+.labnet .ln-tabs { display: flex; gap: 8px; padding: 10px 14px 0; flex-wrap: wrap; }
+.labnet .ln-tab { font-family: var(--comic); font-size: 10px; padding: 7px 10px; border: 2px solid #2f6a3e; color: #4fae6e; background: transparent; cursor: pointer; }
+.labnet .ln-tab.on { border-color: #7dff3a; color: #06120a; background: #7dff3a; }
+.labnet .ln-cols { display: grid; grid-template-columns: 38% 1fr; gap: 12px; padding: 10px 14px; min-height: 340px; }
+.labnet .ln-list { border: 2px solid #2f6a3e; padding: 4px; max-height: 380px; overflow: auto; }
+.labnet .ln-row { display: flex; width: 100%; align-items: center; gap: 8px; font-family: var(--body); font-size: 19px; text-align: left; color: #8dffb4; background: transparent; border: 0; padding: 2px 6px; cursor: pointer; }
+.labnet .ln-row.lock { color: #2f6a3e; }
+.labnet .ln-row.sel { background: #1d4a2a; outline: 2px solid #7dff3a; }
+.labnet .ln-tag { margin-left: auto; font-style: normal; font-family: var(--comic); font-size: 8px; padding: 3px 5px; border: 1px solid #4fae6e; color: #4fae6e; }
+.labnet .ln-tag.on { background: #7dff3a; color: #06120a; border-color: #7dff3a; }
+.labnet .ln-tag.new { background: #ffd23f; color: #06120a; border-color: #ffd23f; }
+.labnet .ln-det { border: 2px solid #7dff3a; padding: 12px 14px; font-size: 19px; }
+.labnet .ln-det h3 { font-family: var(--comic); font-size: 16px; color: #ffd23f; margin: 0 0 10px; }
+.labnet .ln-det dl { display: grid; grid-template-columns: 110px 1fr; row-gap: 3px; margin: 0; }
+.labnet .ln-det dt { color: #4fae6e; }
+.labnet .ln-det dd { margin: 0; }
+.labnet .ln-slots { display: flex; gap: 5px; }
+.labnet .ln-slot { width: 22px; height: 22px; border: 2px solid #7dff3a; display: grid; place-items: center; font-family: var(--comic); font-size: 10px; }
+.labnet .ln-slot.e { border-color: #2f6a3e; }
+.labnet .ln-note { margin-top: 12px; color: #c9f7d8; border-left: 4px solid #ffd23f; padding-left: 10px; }
+.labnet .ln-dim { color: #4fae6e; }
+.labnet .ln-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-family: var(--comic); font-size: 9px; padding: 9px 14px; color: #4fae6e; border-top: 2px solid #2f6a3e; }
+.labnet .ln-close { font-family: var(--comic); font-size: 9px; color: #06120a; background: #7dff3a; border: 0; padding: 6px 8px; cursor: pointer; }

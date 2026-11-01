@@ -9,6 +9,7 @@ import { ensureStats, resaleValue, careerNext, SEASON_RACES } from './chimerasta
 import { chimeraCard, cardList, installTips } from './chimeracard.js';
 import { monolithTouch, updateEchoes } from './monolith.js';
 import { pixelFont } from './fonts.js';
+import { drawLabScreens } from './labWorld.js';
 
 const _seg = new THREE.Vector3(), _seg2 = new THREE.Vector3();
 
@@ -61,8 +62,10 @@ export const MUTATIONS = {
 };
 const MAX_MUTATIONS = 3;
 const MAX_FOLLOW = 3;
-// holding pen behind the lab (lab-local), and how many residents get models
-export const PEN = { x0: 28, z0: 22, x1: 62, z1: 64 };
+// holding pen: the ranch's corral east of the lab (location frame, zlab.glb's zl_ranch), how many residents get models; the
+// feed bunk along its east fence, where they go to eat now and then
+export const PEN = { x0: 53, z0: -14, x1: 90, z1: 43 };
+const BUNK = { x: 90.5, z0: 1.5, z1: 15 };
 
 // the RETIRED tag that floats over a retired racer in the pen (one canvas, shared)
 let retiredTex = null;
@@ -127,12 +130,12 @@ export class Alchemy {
     this.mixT = 0;
     this.followers = [];
     this.wanderers = [];
-    this.statues = 0;
     this.buffs = { lowGrav: 0, slick: 0, bouncy: 0, invert: 0, rain: 0, cushion: 0, dilate: 0, echo: 0 };
     this.monoCd = 0;
     this.jarMesh = null;
     this.chimeras = [];
     this.mutations = [];
+    this.log = { splices: {}, reactor: {}, last: null };                // LABNET's: firsts of each splice and reactor result
     this.mutMeshes = [];
     this.pen = [];
     this.loot = []; // salvage on the ground (wreck engines, depot wiring, saplings)
@@ -153,11 +156,14 @@ export class Alchemy {
       this.chimeras = (d.chimeras || []).filter(Boolean).map(ensureStats); // older saves: racing stats from genes + seed
       this.mutations = d.mutations || [];
       this.artifact = !!d.artifact;
+      this.log = d.log || { splices: {}, reactor: {}, last: null };
     } catch { /* fresh lab */ }
   }
 
   save() {
-    try { localStorage.setItem(KEY, JSON.stringify({ chimeras: this.chimeras, mutations: this.mutations, artifact: !!this.artifact })); } catch { /* unavailable */ }
+    try { localStorage.setItem(KEY, JSON.stringify({ chimeras: this.chimeras, mutations: this.mutations, artifact: !!this.artifact, log: this.log })); } catch { /* unavailable */ }
+    const lab = this.game.world && this.game.world.lab;
+    if (lab) drawLabScreens(lab, this);                               // (LABNET's attract screen and the pen's residents)
   }
 
   // called once the world and player exist
@@ -486,7 +492,7 @@ export class Alchemy {
     const g = this.game;
     if (!this.jar.length) { g.hud.toast(this.owned ? (this.artifact ? 'Only the alien artifact is left, and its compartment is sealed.' : 'The jar is empty. Press G to scoop something.') : 'You don\'t have a jar yet.', 1.8); return; }
     const lab = g.world.lab;
-    if (!forceDump && lab && g.player.pos.distanceTo(lab.reactor) < 11) { if (this.feedReactor() === 'kept') return; }
+    if (!forceDump && lab && g.player.pos.distanceTo(lab.intake) < 3.5) { if (this.feedReactor() === 'kept') return; }
     else this.dump();
     this.jar = [];
     this.refreshJarMesh();
@@ -568,12 +574,18 @@ export class Alchemy {
     g.cam.shake = Math.max(g.cam.shake, 0.6);
     const mods = this.jar.length - living.length;
     const unique = new Set(kinds);
-    let res;
-    if (living.length >= 2 || (living.length === 1 && living[0].kind !== 'person' && living[0].kind !== 'voidling' && mods > 0)) res = this.breed(this.jar);
-    else if (kinds.length >= 3 && unique.size === kinds.length) res = this.singularity();
-    else if (kinds.length >= 3 && unique.size === 1) res = this.resonance(kinds[0]);
-    else res = (RECIPES[key] || RECIPES._default).call(this, names);
+    let res, lk;
+    if (living.length >= 2 || (living.length === 1 && living[0].kind !== 'person' && living[0].kind !== 'voidling' && mods > 0)) { res = this.breed(this.jar); lk = 'chimera'; }
+    else if (kinds.length >= 3 && unique.size === kinds.length) { res = this.singularity(); lk = 'singularity'; }
+    else if (kinds.length >= 3 && unique.size === 1) { res = this.resonance(kinds[0]); lk = 'resonance'; }
+    else { res = (RECIPES[key] || RECIPES._default).call(this, names); lk = RECIPES[key] ? key : '_default'; }
     g.stats.experiments = (g.stats.experiments || 0) + 1;
+    // LABNET's log: the first time of each result, what went in, what Zbornak said; how many times since
+    const said = res.text.split('"')[1] || res.text.replace(/<[^>]+>/g, '');
+    const e = (this.log.reactor[lk] ||= { first: g.stats.experiments, times: 0, input: kinds.map((k) => ITEMS[k].name).join(' + '), title: res.title, text: said.replace(/<[^>]+>/g, '').slice(0, 260) });
+    e.times++;
+    this.log.last = `${kinds.map((k) => ITEMS[k].name).join(' + ')} → ${res.title}`;
+    this.save();
     const show = () => g.dialog('DR. ZBORNAK', `<b>${res.title}</b><br>${res.text}`, [{ label: 'FOR SCIENCE!' }]);
     // a new chimera hatches first; the dialog waits until it lands
     if (res.delay) g.schedule(res.delay, show); else show();
@@ -601,7 +613,7 @@ export class Alchemy {
     return {
       delay: hatching ? HATCH_T + 0.5 : 0,
       title: `BEHOLD: ${genes.name.toUpperCase()}`,
-      text: `"It has a ${parts}${genes.mods.length ? `, ${genes.mods.join(' and ')}-touched` : ''}. Speed ${st.speed}, power ${st.power}, stamina ${st.stamina}, wit ${st.wit}: a grade <b>${genes.tier}</b> racer, top speed about ${Math.round(genes.speed * 3.6)} km/h, chaos rating ${genes.chaos}. ${brag}. It loves you. ${genes.follow ? 'Race it at Chimera Downs!' : 'Three already follow you, so it\'s gone to the holding pen behind the lab.'}"${chimeraCard(g, genes, { status: genes.follow ? '★ WITH YOU' : 'IN PEN' })}`,
+      text: `"It has a ${parts}${genes.mods.length ? `, ${genes.mods.join(' and ')}-touched` : ''}. Speed ${st.speed}, power ${st.power}, stamina ${st.stamina}, wit ${st.wit}: a grade <b>${genes.tier}</b> racer, top speed about ${Math.round(genes.speed * 3.6)} km/h, chaos rating ${genes.chaos}. ${brag}. It loves you. ${genes.follow ? 'Race it at Chimera Downs!' : 'Three already follow you, so it\'s gone to the holding pen at my ranch, east of the lab.'}"${chimeraCard(g, genes, { status: genes.follow ? '★ WITH YOU' : 'IN PEN' })}`,
     };
   }
 
@@ -680,7 +692,7 @@ export class Alchemy {
   // ---------- chimeras: followers and the lab pen ----------
   followingCount() { return this.chimeras.filter((c) => c.follow).length; }
 
-  // Followers hop after you; everyone else lives in the holding pen behind the lab.
+  // Followers hop after you; everyone else lives in the holding pen, the ranch's corral east of the lab.
   syncChimeras() {
     const g = this.game;
     const lab = g.world.lab;
@@ -782,6 +794,9 @@ export class Alchemy {
       if (!key || this.mutations.includes(key) || this.mutations.length >= MAX_MUTATIONS) continue;
       this.mutations.push(key);
       got.push(MUTATIONS[key].name);
+      const e = (this.log.splices[key] ||= { first: (g.stats.experiments || 0) + 1, times: 0 });
+      e.times++; e.cured = false;
+      this.log.last = `${ITEMS[it.kind].name} → ${MUTATIONS[key].name}`;
     }
     this.jar = [];
     this.refreshJarMesh();
@@ -800,6 +815,7 @@ export class Alchemy {
   }
 
   cure() {
+    for (const k of this.mutations) if (this.log.splices[k]) this.log.splices[k].cured = true;
     this.mutations = [];
     this.save();
     this.applyMutations();
@@ -895,7 +911,9 @@ export class Alchemy {
         continue;
       }
       if (!p.goal) {
-        p.goal = new THREE.Vector3(PEN.x0 + 3 + Math.random() * (PEN.x1 - PEN.x0 - 6), 0, PEN.z0 + 3 + Math.random() * (PEN.z1 - PEN.z0 - 6));
+        p.goal = Math.random() < 0.3 // now and then off to the feed bunk to eat
+          ? new THREE.Vector3(BUNK.x - Math.random() * 0.8, 0, BUNK.z0 + Math.random() * (BUNK.z1 - BUNK.z0))
+          : new THREE.Vector3(PEN.x0 + 3 + Math.random() * (PEN.x1 - PEN.x0 - 6), 0, PEN.z0 + 3 + Math.random() * (PEN.z1 - PEN.z0 - 6));
         p.spd = 1.6 + (p.genes.stats ? p.genes.stats.speed / 40 : 1.2);
         p.walkT = 30;
       }
@@ -1162,7 +1180,7 @@ export function makeJarMesh(jar = [], artifact = false) {
 const BUFF_NAMES = { lowGrav: 'LOW-G', slick: 'MOON MUD', bouncy: 'SPRINGY', invert: 'NEGATIVE', rain: 'BLACK RAIN', cushion: 'SOFT LANDING', dilate: 'TIME DILATION', echo: 'ECHO FOLLOWERS' };
 
 // Reactor recipes, keyed by sorted item kinds joined with '+'.
-const RECIPES = {
+export const RECIPES = {
   sapling() { this.buffs.cushion = 40; return { title: 'MOON MOSS', text: '"The sapling went into the antimatter and came out as a fine green fuzz. It has settled on your boots. Landings will be very soft for a while."' }; },
   lens() {
     const g = this.game;
@@ -1218,18 +1236,8 @@ const RECIPES = {
   'dirt+dirt'() { this.game.addCredits(70, 'Concrete'); return { title: 'MOON CONCRETE', text: '"Congratulations, you invented concrete. Again."' }; },
   'dirt+rock'() { this.game.addCredits(90, 'Concrete'); return { title: 'REINFORCED MOON CONCRETE', text: '"Ah, aggregate. Very construction. Ninety credits."' }; },
   'dirt+person'() { this.addFollower('dirt'); return { title: 'DIRT GOLEM', text: '"The person is fine. The DIRT, however, has stood up and decided you are its parent."' }; },
-  'person+rock'(names) { this.game.rep.add('kepler', -2, 'Petrified a resident', { silent: true }); this.statue(names[0]); return { title: 'PETRIFIED', text: `"${names[0] || 'They'} turned to stone. Beautiful work. I'm putting them in the lab's gallery."` }; },
+  'person+rock'(names) { this.game.rep.add('kepler', -2, 'Petrified a resident', { silent: true }); return { title: 'PETRIFIED', text: `"${names[0] || 'They'} turned to stone. Beautiful work. I'm putting them in the lab's gallery."` }; },
   'water+water'() { this.buffs.invert = 40; return { title: 'DEEP BLACK', text: '"You have seen the other side of light. For the next forty seconds, so will your eyes."' }; },
   'mud+person'() { this.addFollower('dirt'); return RECIPES['dirt+person'].call(this); },
   _default() { this.game.addCredits(15, 'Fizzle'); this.game.fx.pop('FIZZLE', null, { color: '#c9c3d9', size: 50 }); return { title: 'FIZZLE', text: '"Hm. Nothing interesting. Try putting two living things in at once. Or three different things. No, wait—"' }; },
-};
-
-// statue for the lab gallery
-Alchemy.prototype.statue = function statue(name) {
-  const f = makeFigure({ suit: 0x9a9a9a, helmet: 0x9a9a9a, visor: 0x5b5870 });
-  const i = this.statues++;
-  f.root.position.set(-16 + (i % 6) * 3, 0, 10);
-  f.root.rotation.y = Math.PI;
-  f.root.userData.name = name;
-  this.game.world.lab.loc.group.add(f.root);
 };

@@ -27,6 +27,7 @@ import { Reputation } from './reputation.js';
 import { Events } from './events.js';
 import { GlobeMap } from './mapview.js';
 import { Alchemy, MUTATIONS } from './alchemy.js';
+import { Labnet } from './labnet.js';
 import { Race } from './race.js';
 import { Rides } from './rides.js';
 import { Meteors } from './meteors.js';
@@ -205,6 +206,7 @@ class Game {
     this.planet.colliders = this.colliders;
     await step('Building settlements…');
     this.world = new World(this.scene, this.planet, this.colliders, this.locations);
+    this.world.game = this; // (the lab's security camera renders a snapshot: labWorld.js)
     this.earthLight.position.copy(this.world.earthDir).multiplyScalar(1000);
 
     this.input = new Input(this.renderer.domElement);
@@ -233,6 +235,7 @@ class Game {
     this.enemies = new Enemies(this);
     this.globe = new GlobeMap(this);
     this.alchemy = new Alchemy(this);
+    this.labnet = new Labnet(this);
     this.civilians = this.world.civilians = new Civilians(this); // civilians can be hurt (blast hook + ragdolls)
     this.post = new ComicPost(this.renderer, this.camera);
 
@@ -548,7 +551,7 @@ class Game {
     const chims = this.alchemy.chimeras.length;
     if (chims) buttons.push({ label: `${buttons.length + 1} · HOLDING PEN (${chims})`, fn: () => this.alchemy.penMenu() });
     buttons.push({ label: `${buttons.length + 1} · HEARD ANY RUMOURS?`, fn: () => this.dialog('DR. ZBORNAK', '"Rumours? Science does not deal in rumours. But… <br><br>• <b>Moon Mites</b> herd together in the sunny craters, well away from settlements. Green dots on your minimap, if you\'re close.<br>• That old satellite, <b>SAT-7 \"Lantern\"</b>, swoops low over the ground just past the ILMB once a lap. Something on its deck glows. You would have to match its speed exactly to land on it. Ha!<br>• Bring me <b>three lengths of electrical wiring</b> from a supply depot, in your jar, and I will rewind your skate coils for extra grip.<br>• Saplings from the farm domes are alive, technically. They splice beautifully.<br>• On the twilight side there is a trench nobody dug: the <b>Whispering Fissure</b>. My instruments go strange near it. Something down there wants a key."', [{ label: 'SPOOKY', fn: back }]) });
-    buttons.push({ label: `${buttons.length + 1} · HOW DOES THIS WORK?`, fn: () => this.dialog('DR. ZBORNAK', `"Press <b>G</b> to scoop: rock samples (the glowing crystals on the sunny side), moon dirt (anywhere), black water (stand on a black lake), people, wild moon mites, a dazed pirate, even a whole hover-car if it fits. Things left together in a jar start to react. Bring the jar here and press <b>X</b> to throw everything into my reactor. <b>Two living things make a CHIMERA</b> — race it at Chimera Downs! One thing alone does… other things. Three different non-living things: don\'t. And the splice pod in the corner puts the jar into <i>you</i>."${lvl ? '' : '<br><br>"You don\'t have a jar yet, I notice. I happen to sell them."'}`, lvl ? [{ label: 'GOT IT', fn: back }] : [{ label: '1 · GIVE ME A JAR — ₵400', fn: () => this.buyJar(400, back) }, { label: '2 · GOT IT', fn: back }]) });
+    buttons.push({ label: `${buttons.length + 1} · HOW DOES THIS WORK?`, fn: () => this.dialog('DR. ZBORNAK', `"Press <b>G</b> to scoop: rock samples (the glowing crystals on the sunny side), moon dirt (anywhere), black water (stand on a black lake), people, wild moon mites, a dazed pirate, even a whole hover-car if it fits. Things left together in a jar start to react. Bring the jar here, up the stair to the catwalk and across to the intake hatch, and press <b>X</b> to throw everything into my reactor. <b>Two living things make a CHIMERA</b> — race it at Chimera Downs! One thing alone does… other things. Three different non-living things: don\'t. And the splice pod at the back puts the jar into <i>you</i>. LABNET, at the console by the drone wall, keeps track of it all."${lvl ? '' : '<br><br>"You don\'t have a jar yet, I notice. I happen to sell them."'}`, lvl ? [{ label: 'GOT IT', fn: back }] : [{ label: '1 · GIVE ME A JAR — ₵400', fn: () => this.buyJar(400, back) }, { label: '2 · GOT IT', fn: back }]) });
     buttons.push({ label: `${buttons.length + 1} · LEAVE` });
     const greet = lvl ? `"Back already? Your jar holds ${2 + lvl}. What have you brought me?"` : '"Ah, a runner! Want to help science? You will need a containment jar. Everything goes in the jar. EVERYTHING."';
     this.dialog('DR. ZBORNAK', greet, buttons);
@@ -1303,7 +1306,7 @@ class Game {
     const lab = w.lab;
     if (!where && lab && lab.loc.active) {
       const l = lab.loc.group.worldToLocal(_v.copy(p));
-      if (l.y > -3 && l.y < lab.half.h && Math.abs(l.x) < lab.half.w && Math.abs(l.z) < lab.half.d) where = 'lab';
+      if (lab.inside(l)) where = 'lab';
     }
     this.indoors = where;
     document.body.classList.toggle('in-casino', where === 'casino'); // style.css hides the HUD
@@ -1480,7 +1483,7 @@ class Game {
     if (this.input.down('KeyX') && A.jar.length && !this.player.dead && !this.jarHoldDone) {
       const force = this.input.down('ShiftLeft') || this.input.down('ShiftRight');
       const lab = this.world.lab;
-      const feed = !force && lab && this.player.pos.distanceTo(lab.reactor) < 11;
+      const feed = !force && lab && this.player.pos.distanceTo(lab.intake) < 3.5;
       this.jarHold = (this.jarHold || 0) + dt;
       this.hud.recallHold(this.jarHold / JAR_HOLD, null, `HOLD ${this.settings ? this.settings.label('KeyX') : 'X'} · ${feed ? 'FEED THE JAR TO THE REACTOR' : 'DUMP THE JAR'}`);
       if (this.jarHold >= JAR_HOLD) { this.jarHold = 0; this.jarHoldDone = true; this.hud.recallHold(0); A.empty(force); }
@@ -1569,10 +1572,12 @@ class Game {
     const canBoard = z && (this.jobsAt(z).length || (SHOPS[z.id] && (z.type !== 'pirate' || this.rep.aligned())));
     const canSwear = z && z.id === 'rustmoon' && z.type === 'pirate' && this.rep.rustmoon === 'known' && !FACTIONS.rustmoon.gone && !(this.story && this.story.kade.captured);
     const lab = this.world.lab;
-    const nearDoc = lab && z === lab.loc && P.pos.distanceTo(lab.scientist) < 8;
-    const nearReactor = lab && z === lab.loc && P.pos.distanceTo(lab.reactor) < 11;
-    const nearPod = lab && z === lab.loc && P.pos.distanceTo(lab.pod) < 4;
-    const nearPen = lab && z === lab.loc && P.pos.distanceTo(lab.penTerm) < 5;
+    const atLab = lab && z === lab.loc;
+    const nearDoc = atLab && P.pos.distanceTo(lab.scientist) < 3.5;
+    const nearReactor = atLab && P.pos.distanceTo(lab.intake) < 3.5;       // the intake hatch, on the catwalk's bridge
+    const nearPod = atLab && P.pos.distanceTo(lab.pod) < 3.5;
+    const nearPen = atLab && P.pos.distanceTo(lab.penTerm) < 3;           // the pen terminal, in the ranch office
+    const nearLabnet = atLab && P.pos.distanceTo(lab.labnet) < 2.5;
     const nearBooth = this.race.near(P.pos);
     const nearYard = this.race.nearYard(P.pos);
     if (this.rides.interact()) {
@@ -1587,6 +1592,9 @@ class Game {
       // your town's council hall
     } else if (this.casino.interact()) { // casino: walk-in game stations
     } else if (this.territory.interact()) { // raid a farm dome or supply depot
+    } else if (nearLabnet) {
+      this.hud.prompt('<b>F</b> — LABNET (your splices, the reactor log, your chimeras)');
+      if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.labnet.open();
     } else if (nearPen) {
       this.hud.prompt(`<b>F</b> — HOLDING PEN (${this.alchemy.chimeras.length} chimeras)`);
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.alchemy.penMenu();
@@ -1603,7 +1611,7 @@ class Game {
       this.hud.prompt('<b>F</b> — TALK TO DR. ZBORNAK');
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.talkScientist();
     } else if (nearReactor) {
-      this.hud.prompt(this.alchemy.jar.length ? '<b>X</b> — THROW THE JAR\'S CONTENTS INTO THE REACTOR' : 'THE REACTOR HUNGERS. FILL A JAR (<b>G</b>) AND BRING IT HERE.');
+      this.hud.prompt(this.alchemy.jar.length ? '<b>X</b> — THROW THE JAR\'S CONTENTS INTO THE INTAKE' : 'THE REACTOR\'S INTAKE. IT HUNGERS: FILL A JAR (<b>G</b>) AND BRING IT HERE.');
     } else if (canSwear) {
       this.hud.prompt('<b>F</b> — SWEAR IN WITH RUSTMOON');
       if (this.input.pressed('KeyF') && this.boardCooldown <= 0) this.wreckChoice();

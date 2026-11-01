@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeRunner, makeFigure, makeBouncer } from '../models.js';
+import { makeRunner, makeFigure, makeBouncer, makeZbornak } from '../models.js';
 import { glow } from '../toon.js';
 import { FACTIONS } from '../locations.js';
 import { LEADERS, Story } from '../story.js';
@@ -44,13 +44,13 @@ function specialItem() {
   };
 }
 
-// ---- Dr. Zbornak (world.js buildLab)
+// ---- Dr. Zbornak, "the Elder" (zlab.glb, tools/blender/zbornak_figure.py; the lab bakes its own: labWorld.js)
 function zbornakItem() {
   return {
     id: 'people.zbornak', label: 'DR. ZBORNAK', w: 3, d: 3,
     make() {
-      const f = makeFigure({ suit: 0xffffff, helmet: 0xfff4e0, visor: 0x7dff3a });
-      return { root: cell(f.root, 'DR. ZBORNAK', 3, 3, { color: '#7dff3a', h: 0.8 }).root };
+      const z = makeZbornak();
+      return { root: cell(z.root, 'DR. ZBORNAK', 3, 3, { color: '#7dff3a', h: 0.8 }).root, update: (dt, t) => { if (z.head) z.head.rotation.y = Math.sin(t * 0.6) * 0.6; } };
     },
   };
 }

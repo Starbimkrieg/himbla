@@ -105,15 +105,7 @@ export function buildPlace(ctx, spec) {
     for (const d of w.dishes) { d.yaw.rotation.y += d.speed * dt; d.tilt.rotation.x = -0.6 + Math.sin(t * d.speed * 2) * 0.25; }
     for (const b of w.blinkers) b.mat.color.copy(b.base).multiplyScalar(Math.sin(t * 3 + b.phase) > 0.2 ? 1 : 0.25);
     for (const z of w.zoneWalls) z.mat.uniforms.time.value = t;
-    if (w.reactor) {
-      const r = w.reactor, k = r.spin + r.flash * 6;
-      r.orb.rotation.x += dt * 9 * k; r.orb.rotation.y += dt * 13 * k;
-      r.ringA.rotation.x += dt * 17 * k; r.ringB.rotation.y += dt * 21 * k; r.ringB.rotation.z += dt * 5;
-      r.core.position.y = r.base + Math.sin(t * 37) * 0.25 * k;
-      r.core.position.x = -2 + (Math.random() - 0.5) * 0.25 * k;
-      r.orb.scale.setScalar(1 + Math.sin(t * 23) * 0.12 + r.flash * 0.8);
-      r.flash = Math.max(0, r.flash - dt * 0.8);
-    }
+    if (w.lab) w.lab.update(dt, t, cam); // the Antimatter Lab: reactor, robot cell (labWorld.js; no player here, so no gate)
     if (w.monolith) w.monolith.halo.material.opacity = 0.3 + 0.25 * Math.sin(t * 2);
     if (w.casino) w.casino.update(dt, t);
     if (w.rocket) World.prototype.updateRocket.call(w, dt);

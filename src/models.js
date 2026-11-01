@@ -54,6 +54,7 @@ const GLB = {
   hangar: () => import('./assets/hangar.glb?inline'),
   relay: () => import('./assets/relay.glb?inline'),
   chimera: () => import('./assets/chimera.glb?inline'),
+  zlab: () => import('./assets/zlab.glb?inline'),
 };
 
 // Models may be compressed (tools/optimize-glb.mjs: quantized + meshopt, ~1/3 size; the decoder ignores plain files).
@@ -1459,7 +1460,7 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, ska, skb, pw, hb, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'skimmer_a', 'skimmer_b', 'power', 'habitat', ...ILMB_WINGS, ...DOWNS_FILES].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, ska, skb, pw, hb, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'skimmer_a', 'skimmer_b', 'power', 'habitat', ...ILMB_WINGS, ...DOWNS_FILES, 'zlab'].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
   // a root node in a loaded file (`file`.glb), or a load error
   const named = (g, file, name) => {
     const o = g.scene.getObjectByName(name);
@@ -1526,6 +1527,8 @@ export async function loadShipParts({ ships } = {}) {
   for (const name of LOT_PROPS) SHIP_PARTS[name] = bakeShip(named(lo, 'lot', name));
   // Chimera Downs kits (tools/blender/build_downs_*.py): every top-level `dn_*` node
   for (const g of dn) for (const root of g.scene.children) if (root.name.startsWith('dn_')) SHIP_PARTS[root.name] = bakeShip(root);
+  // Dr. Zbornak's lab (tools/blender/build_zbornak_lab.py ZB_GAME=1): the zl_* roots, baked by labWorld.js
+  for (const root of more[more.length - 1].scene.children) if (root.name.startsWith('zl_')) SHIP_PARTS[root.name] = bakeShip(root);
   SHIP_PARTS.claw_engine = bakeShip(ENGINE_MODEL);
   SHIP_PARTS.claw_case = bakeShip(CASE_MODEL);
   for (const m of [ENGINE_MODEL, CASE_MODEL, PLINKO_CONSOLE, PLINKO_FRAME]) m.traverse((o) => { if (o.isMesh) { o.userData.slot = o.material.name; o.castShadow = true; } });
@@ -2582,6 +2585,70 @@ export function makeRacer(i = 1, color = 0xffd23f, bill = 0xff9f1c) {
   root.add(bob);
   bob.add(model);
   return { root, bob, head: model.getObjectByName('dd_duck' + i + '_head'), wings: [model.getObjectByName('dd_duck' + i + '_wingL'), model.getObjectByName('dd_duck' + i + '_wingR')] };
+}
+
+// ---- Dr. Zbornak's lab (tools/blender/build_zbornak_lab.py with ZB_GAME=1 -> zlab.glb; docs/zbornak-proposals/) ----
+// Four roots in the location's frame (zl_lab, zl_roof, zl_out, zl_ranch), baked by labWorld.js; pivots with a role are the moving
+// parts and the game's markers. Slot colours as the builder's HEX; ZLAB_GLOW slots are lit, ZLAB_SEE slots see-through (opacity).
+export const ZLAB_TOON = {
+  wall: 0xe8e4f4, wall2: 0xc9c4d8, roof: 0x3a3550, panel: 0x5b5870, dark: 0x2a2540, steel: 0x55607a, metal: 0x8a87a0, hazard: 0xffd23f,
+  floor: 0x6b6880, floor2: 0x403a58, floorhab: 0xa9d8cf, white: 0xf3eee4, arm: 0xff9f1c, armdark: 0x2a2540, cable: 0x1d1a29, copper: 0xb87333,
+  brass: 0xd8a060, seat: 0x6b6880, rubber: 0x1d1a29, stone: 0x9a94a8, void: 0x0e0814, plant: 0x3a6a4a, plant2: 0x2f5a5a, soil: 0x3a2a2a,
+  path: 0x7a7590, solar: 0x26325e, door: 0x8a87a0, body: 0x4b3a7a, stripe: 0x7dff3a, label: 0xf3eee4, barn: 0x8b4044, barn2: 0x6a2e33,
+  wood: 0x9a6a3a, wood2: 0x6e4a2a, trim: 0xf3eee4, corr: 0x9aa7bb, moss: 0x8aa860, moss2: 0x5a7a40, dirt: 0x8a7a6a, roof2: 0x3b393a,
+  barnint: 0x5a3a2a, coat: 0xf3eee4, coat2: 0xd6d0c2, scorch: 0x231c22, scorch2: 0x6b4a3a, shirt: 0xb8e0ff, tie: 0x2e8b57, trousers: 0x3a3550,
+  shoe: 0x1d1a29, eye: 0x0d0a14, soot: 0x3a3438, glove: 0xa0602a, board: 0xb07c57, paper: 0xfff8e8, inkline: 0x2a2540, skin: 0xa8d8a0, skin2: 0x6fae74,
+  glass: 0x9be7ff, glassg: 0xb8ffe0, frost: 0xd8f4ff, smoke: 0x9a94a8, habglass: 0xbff4ff,
+};
+export const ZLAB_GLOW = {
+  lime: 0x7dff3a, pink: 0xff2e88, pinkhot: 0xffd0f0, cyan: 0x2ec4ff, teal: 0x2ee6c0, vio: 0xc77dff, amber: 0xff9f1c, red: 0xff2a4a, lamp: 0xfff6a8,
+  spark: 0xcfe6ff, weldcore: 0x9cc4ff, weldhalo: 0x1648ff, screenlit: 0x8dffb4, holo: 0x2ec4ff, beam: 0x9be7ff, scan: 0x7dff3a, halo: 0xc77dff,
+  ember: 0xff7a1a, goggle: 0x7dff3a, feed: 0x7dff3a, feed2: 0xb8ff9e, water: 0x3a8bd5, window: 0xfff0b0, iris: 0xffd23f,
+};
+export const ZLAB_SEE = { glass: 0.25, glassg: 0.2, frost: 0.5, smoke: 0.35, habglass: 0.18, holo: 0.35, beam: 0.12, scan: 0.18, halo: 0.2, weldhalo: 0.45 };
+export function zlabNode(name) {
+  const n = SHIP_PARTS && SHIP_PARTS[name];
+  if (!n) throw new Error('no lab model ' + name);
+  return n;
+}
+// a slot's look: { color, glow, see } (see: its opacity when see-through)
+export const zlabSlot = (slot) => ({ color: ZLAB_GLOW[slot] ?? ZLAB_TOON[slot] ?? 0xff00ff, glow: slot in ZLAB_GLOW, see: ZLAB_SEE[slot] || 0 });
+const zlabMats = new Map();
+export function zlabMat(slot) {
+  let m = zlabMats.get(slot);
+  if (m) return m;
+  const c = zlabSlot(slot);
+  m = c.see ? (c.glow ? new THREE.MeshBasicMaterial({ color: c.color, transparent: true, opacity: c.see, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+    : new THREE.MeshToonMaterial({ color: c.color, gradientMap: toon(0).gradientMap, transparent: true, opacity: c.see, depthWrite: false, side: THREE.DoubleSide }))
+    : c.glow ? glowShared(c.color) : toon(c.color);
+  m.userData.shared = true;
+  zlabMats.set(slot, m);
+  return m;
+}
+// a node (and its pivots) as Groups with the lab's materials, its colliders' pivots left out
+export function zlabGroup(node) {
+  const g = pivotGroup(node);
+  Object.assign(g.userData, node.data);
+  if (node.role) g.userData.role = node.role;
+  dressNode(node, g, zlabMat, (slot) => !(slot in ZLAB_GLOW) && !ZLAB_SEE[slot]);
+  for (const k of node.kids) if (k.role !== 'col') g.add(zlabGroup(k));
+  return g;
+}
+// the node with this role anywhere under `node` (depth first)
+export function zlabFind(node, role) {
+  for (const k of node.kids) {
+    if (k.role === role) return k;
+    const f = zlabFind(k, role);
+    if (f) return f;
+  }
+  return null;
+}
+// Dr. Zbornak alone (the Asset Row's; the lab bakes its own): { root, head } standing on y = 0, facing +z
+export function makeZbornak() {
+  const root = zlabGroup(zlabFind(zlabNode('zl_lab'), 'doctor'));
+  root.position.set(0, 0, 0);
+  root.quaternion.identity();
+  return { root, head: root.getObjectByName('head') };
 }
 
 // ---- dish-array stations (build_dish.py) ----

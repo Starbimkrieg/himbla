@@ -26,7 +26,7 @@ const science = [
   P('shackleton', 'SHACKLETON RADAR ARRAY', 225, 229, { loc: 'shackleton' }),
   P('farside', 'FARSIDE LISTENING POST', 226, 234, { loc: 'farside' }),
   P('mine', 'HELIUM-3 EXCHANGE', 192, 153, { loc: 'mine' }),
-  P('antimatter', 'ANTIMATTER LAB', 124, 83, { loc: 'antimatter' }, { big: false }),
+  P('antimatter', 'ANTIMATTER LAB', 205, 175, { loc: 'antimatter' }, { big: false }),
   P('monolith', 'THE MONOLITH', 74, 78, { loc: 'monolith' }),
 ];
 const military = [

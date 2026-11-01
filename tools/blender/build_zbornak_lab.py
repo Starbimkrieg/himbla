@@ -111,6 +111,16 @@ def gas_rack(g, x, z, yaw):
 
 
 
+def slope_col(g, w, p0, p1, t, **extra):
+    """a slab collider t thick just under a sloped face running from p0 to p1 ((z, y) in g's current frame), w wide in x"""
+    dz, dy = p1[0] - p0[0], p1[1] - p0[1]
+    L = math.hypot(dz, dy)
+    ny, nz = dz / L, -dy / L
+    if ny < 0:
+        ny, nz = -ny, -nz
+    g.col_box(0, (p0[1] + p1[1]) / 2 - ny * t / 2, (p0[0] + p1[0]) / 2 - nz * t / 2, w, t, L, (math.atan2(-dy, dz), 0, 0), **extra)
+
+
 def dome_y(prof, r):
     """the dome's underside height at radius r (its profile runs outward-in)"""
     for (r0, y0), (r1, y1) in zip(prof, prof[1:]):
@@ -218,8 +228,9 @@ def armour_plate(g, x, y, z, bead=False, held=False):
 
 def build_lab(root):
     CX, CZ, R, T, H = 0.0, -18.0, 30.0, 1.2, 12.0
+    SOLID_DEFAULT[0] = True                                                # the place's groups make colliders from their parts
     lab = G("lab", root, CX, 0, CZ)
-    top = G("lab_roof", root, CX, 0, CZ)
+    top = G("lab_roof", root, CX, 0, CZ, solid=False)                      # (the dome's colliders are slabs under its facets)
     top.root["cutaway"] = 1
 
     def P(deg, r):
@@ -245,13 +256,22 @@ def build_lab(root):
             continue
         lab.at(math.sin(a) * (R + T), math.cos(a) * (R + T), a)
         lab("wall2", 0.05).polyx([(0, 0), (5.2, 0), (5.2, 1.6), (1.4, H + 1.2), (0, H + 1.2)], -0.55, 0.55)
+        lab.col_box(0, 0.8, 2.6, 1.1, 1.6, 5.2)
+        slope_col(lab, 1.1, (5.2, 1.6), (1.4, H + 1.2), 0.6)
         lab("cyan", 0.0).polyx([(4.0, 1.6), (4.25, 1.6), (0.9, H + 0.6), (0.65, H + 0.6)], -0.58, 0.58)
         for k in range(5):
             lab("steel", 0.0).boxc(0.0, 2.6 + k * 1.7, 2.2 - k * 0.25, 1.3, 0.08, 1.6 - k * 0.18)
         lab.at()
     top("wall2", 0.06).tor(R + T + 0.2, 0.55, (0, H + 0.1, 0), n=72, rs=8)
     prof = [(R + T + 0.3, H + 0.3), (R + 0.2, H + 4), (R - 2.5, H + 8.0), (R - 7.5, H + 11.5), (R - 15, H + 14), (7.0, H + 14.8)]
-    top("roof", 0.07).lath(prof, segs=72)
+    inner = [(r - 0.35, y - 0.35) for r, y in prof]
+    top("roof", 0.07).lath(prof + inner[::-1] + [prof[0]], segs=72)          # (closed: the game draws one side)
+    for i in range(36):                                                    # the dome collides as a slab under each facet
+        a = TAU * (i + 0.5) / 36
+        top.at(0, 0, a)
+        for p0, p1 in zip(prof, prof[1:]):
+            slope_col(top, TAU * (p0[0] + p1[0]) / 2 / 36 * 1.02, p0, p1, 0.4)
+        top.at()
     for i in range(24):
         a = TAU * i / 24
         pts = [(math.sin(a) * (r + 0.25), y + 0.2, math.cos(a) * (r + 0.25)) for r, y in prof]
@@ -275,24 +295,40 @@ def build_lab(root):
     arc_box(lab, "steel", 0.02, R - 0.25, 0.15, TAU - 0.15, 6.2, 0.18, 0.5)
     arc_box(lab, "dark", 0.0, R - 0.47, 0.15, TAU - 0.15, 6.32, 0.08, 0.04)
 
-    # ---- airlock: ribbed tunnel, lock housing, round pressure door, the sign, the security post
+    # ---- airlock: a ribbed tube from the portal through the lock housing to the round pressure door (it rises into the
+    # housing's head to let you in), the sign, the security post
     z0, z1 = R + T - 0.5, 44.0
-    lab("wall", 0.06).add(cylinder(3.6, 3.6, z1 - z0, 28, True)[:2], (0, 2.4, (z0 + z1) / 2), (PI / 2, 0, 0))
+    DY, DR = 3.0, 3.13
+    TL0, TL1 = z0, z1 + 5.6
+    lab("wall", 0.06).lath([(3.6, -(TL1 - TL0) / 2), (3.9, -(TL1 - TL0) / 2), (3.9, (TL1 - TL0) / 2), (3.6, (TL1 - TL0) / 2), (3.6, -(TL1 - TL0) / 2)],
+                           (0, 2.4, (TL0 + TL1) / 2), 28, (PI / 2, 0, 0))
+    lab("panel", 0.0).boxc(0, 0.03, (TL0 + TL1) / 2, 5.2, 0.06, TL1 - TL0)
     for k in range(9):
-        lab("wall2", 0.03).tor(3.75, 0.18, (0, 2.4, z0 + 1.0 + k * (z1 - z0 - 2) / 8), (PI / 2, 0, 0), n=28, rs=5)
-    lab("lime", 0.0).boxc(0, 6.04, (z0 + z1) / 2, 0.25, 0.06, z1 - z0 - 1)
-    lab("wall", 0.07).boxc(0, 5.0, z1 + 3, 13, 10, 6)
+        lab("wall2", 0.03).tor(3.95, 0.18, (0, 2.4, z0 + 1.0 + k * (z1 - z0 - 2) / 8), (PI / 2, 0, 0), n=28, rs=5)
+    lab("lime", 0.0).boxc(0, 5.98, (TL0 + TL1) / 2, 0.25, 0.04, TL1 - TL0 - 1)
+    for i in range(14):                                                    # the tube collides as slabs round its arc (hand: it's a
+        th = math.radians(-130 + i * 20)                                   # shell), each tangent, its outer face the drawn one
+        lab.col_box(math.sin(th) * 3.75, 2.4 + math.cos(th) * 3.75, (TL0 + TL1) / 2, 1.42, 0.3, TL1 - TL0, (0, 0, -th))
+    # the lock housing, hollow: side blocks, a head over the tube, a front wall round the door
+    for sx in (-1, 1):
+        lab("wall", 0.07).boxc(sx * 5.2, 5.0, z1 + 3, 2.6, 10, 6)
+    lab("wall", 0.07).boxc(0, 8.15, z1 + 3, 7.8, 3.7, 6)
+    for sx in (-1, 1):
+        arc = [(sx * 2.95 * math.cos(math.radians(f)), DY + 2.95 * math.sin(math.radians(f))) for f in range(90, -91, -10)]
+        lab("wall", 0.06).polyz(arc + [(sx * 3.9, DY - 2.95), (sx * 3.9, 6.3)], z1 + 5.6, z1 + 6.0)
+        lab.col_box(sx * 3.45, 3.15, z1 + 5.8, 0.9, 6.3, 0.4)
     lab("roof", 0.05).boxc(0, 10.2, z1 + 3, 13.6, 0.4, 6.6)
     lab("hazard", 0.02).boxc(0, 9.6, z1 + 6.05, 13.0, 0.5, 0.1)
-    DY, DR = 3.0, 3.13
     lab("hazard", 0.03).tor(2.85, 0.28, (0, DY, z1 + 6.05), (PI / 2, 0, 0), n=40, rs=6)
-    lab("door", 0.03).cylc(0, DY, z1 + 6.05, 2.6, 0.25, 32, "z")
-    lab("dark", 0.0).boxc(0, DY, z1 + 6.19, 5.1, 0.08, 0.04).boxc(0, DY, z1 + 6.19, 0.08, 5.1, 0.04)
+    door = G("outer_door", lab.root, 0, DY, z1 + 6.05, solid=False, role="door")
+    door("door", 0.03).cylc(0, 0, 0, 2.6, 0.25, 32, "z")
+    door("dark", 0.0).boxc(0, 0, 0.14, 5.1, 0.08, 0.04).boxc(0, 0, 0.14, 0.08, 5.1, 0.04)
     for k in range(8):
         a = TAU * k / 8
-        lab("steel", 0.0).cylc(math.sin(a) * 2.3, DY + math.cos(a) * 2.3, z1 + 6.2, 0.12, 0.06, 8, "z")
-    lab("dark", 0.02).cylc(0, DY, z1 + 6.25, 0.6, 0.15, 16, "z")
-    lab("lime", 0.0).tor(0.62, 0.05, (0, DY, z1 + 6.33), (PI / 2, 0, 0), n=20, rs=4)
+        door("steel", 0.0).cylc(math.sin(a) * 2.3, math.cos(a) * 2.3, 0.15, 0.12, 0.06, 8, "z")
+    door("dark", 0.02).cylc(0, 0, 0.2, 0.6, 0.15, 16, "z")
+    door("lime", 0.0).tor(0.62, 0.05, (0, 0, 0.28), (PI / 2, 0, 0), n=20, rs=4)
+    door.root["travel"] = 5.4                                               # how far it rises into the housing's head
     for k in (-1, 1):
         lab("dark").boxc(k * 6.0, 9.0, z1 + 6.3, 0.6, 0.5, 0.6)
         lab("lamp", 0.0).boxc(k * 6.0, 8.8, z1 + 6.62, 0.45, 0.25, 0.04)
@@ -300,6 +336,8 @@ def build_lab(root):
     lab("pink", 0.0).boxc(0, 9.22, z1 + 6.19, 8.8, 0.05, 0.02)
     lab.text("ZBORNAK LABORATORIES", (0, 8.33, z1 + 6.19), 0, 0.68, "pink")
     plate = security_post(lab, 0, z1 + 6.0, 0, DY, DR, "sec")
+    lab.mark("spot", plate, PI, spot="plate")
+    lab.mark("spot", (0, DY, z1 + 6.05), 0, spot="outer_door")
     RUNNER["gate"] = ((plate[0] + CX, 0, plate[2] + CZ), PI)
     # the airlock's inner end: a portal wall filling the gap in the ring wall up to its top, the tunnel's mouth a round
     # opening in it, the inner door raised into a pocket in the wall above it (its lower edge showing), guide rails each
@@ -310,6 +348,7 @@ def build_lab(root):
         arc = [(sx * HR_ * math.cos(math.radians(f)), HY_ + HR_ * math.sin(math.radians(f))) for f in range(90, -91, -10)]
         lab("wall", 0.06).polyz(arc + [(sx * PW, 0.0), (sx * PW, HY_ + HR_)], PZ - T / 2, PZ + T / 2)
         lab("wall2", 0.04).boxc(sx * (PW - 0.05), H / 2, PZ - T / 2 - 0.15, 0.9, H, 0.3)
+        lab.col_box(sx * (HR_ + PW) / 2, (HY_ + HR_) / 2, PZ, PW - HR_, HY_ + HR_, T)
         lab("steel", 0.02).boxc(sx * (HR_ + 0.35), (HY_ + HR_ + 1.0) / 2, PZ - T / 2 - 0.12, 0.18, HY_ + HR_ + 1.0, 0.18)
     lab("door", 0.03).cylc(0, HY_ + 4.6, PZ, HR_ + 0.15, 0.3, 32, "z")      # the inner door, raised into its pocket
     lab("dark", 0.0).boxc(0, HY_ + 4.6, PZ, 0.08, 2 * HR_, 0.34)
@@ -337,6 +376,11 @@ def build_lab(root):
     CW = 6.6                                                                # catwalk deck height
     lab("panel", 0.04).lath([(9.6, CW - 0.3), (11.6, CW - 0.3), (11.6, CW), (9.6, CW), (9.6, CW - 0.3)], segs=64)
     lab("cyan", 0.0).tor(11.62, 0.05, (0, CW - 0.15, 0), n=64, rs=4)
+    for i in range(40):                                                    # the ring deck collides as boxes round it
+        a = TAU * (i + 0.5) / 40
+        lab.at(0, 0, a)
+        lab.col_box(0, CW - 0.15, 10.6, TAU * 10.6 / 40 * 1.05, 0.3, 2.0)
+        lab.at()
     railing_ring(lab, 9.7, CW, gap=(-PI / 2, 2.0), step=1.6)
     railing_ring(lab, 11.5, CW, gap=(-PI / 2, 1.5), step=1.6)
     for i in range(6):
@@ -359,8 +403,13 @@ def build_lab(root):
         lab("steel", 0.015).cylc(SX - 0.85, CW + 0.55, z_, 0.035, 1.1, 5)
     lab("steel", 0.015).cylc(-11.9, CW + 0.55, 1.0, 0.035, 1.1, 5)
     lab("hazard", 0.0).boxc(SX + 0.05, CW + 0.006, -0.9, 1.8, 0.01, 0.15)
+    lab.at(SX, 0, 0)                                                       # the flight collides as one ramp, its top on the treads
+    slope_col(lab, 1.4, (SZ0, 0.0), (SZ1, CW), 0.4, stick=1)
+    lab.at()
     CAMS["stair"] = ((CX - 24.0, 4.2, CZ - 13.5), (CX - 13.0, 3.2, CZ - 3.0), 26)
     reactor_intake(lab, RE, -PI / 2, CW, 9.6)
+    lab.mark("spot", (-(RE + 1.75), CW, 0), -PI / 2, spot="intake")
+    lab.mark("spot", (0, 11, 0), 0, spot="reactor")
     RUNNER["intake"] = ((CX - 7.4, CW, CZ + 0.35), PI / 2 + 0.3)
     ia = math.radians(-105)
     CAMS["intake"] = ((CX + math.sin(ia) * 11.2, CW + 2.6, CZ + math.cos(ia) * 11.2), (CX - 5.4, CW + 0.7, CZ), 26)
@@ -384,7 +433,12 @@ def build_lab(root):
     lab("holo", 0.0).boxc(0, 2.4, -1.37, 2.0, 1.1, 0.02)
     lab("cable", 0.0).path([(0.1, 0.4, -1.5), (0.6, 0.38, -2.4), (1.0, 0.1, -3.0)], 0.05, 4)
     lab.at()
-    zbornak(lab.root, x, z, fy).root.location.z = 0.36
+    doc = zbornak(lab.root, x, z, fy)
+    doc.root.location.z = 0.36
+    doc.root["role"] = "doctor"
+    lab.at(x, z, fy)
+    lab.mark("spot", (0, 0.36, 3.6), PI, spot="doctor")                    # where you stand to talk to him (before the bench)
+    lab.at()
     CAMS["zb"] = ((CX + x + math.sin(fy) * 5.6 - math.cos(fy) * 1.8, 2.9, CZ + z + math.cos(fy) * 5.6 + math.sin(fy) * 1.8), (CX + x, 1.8, CZ + z), 45)
     # the equipment corner, right of the door: two chemistry benches, the magnet array, the drone wall with two battery
     # chargers under its ends and the LABNET console before it, the microscope bench
@@ -399,6 +453,9 @@ def build_lab(root):
         battery_station(lab, x, z, yw)
     x, z, yw = P(56.5, 25.0)
     drone_console(lab, x, z, yw, "lab")
+    lab.at(x, z, yw)
+    lab.mark("spot", (0, 0.18, 1.0), PI, spot="labnet")                    # the operator's spot, facing the console
+    lab.at()
     x, z, yw = P(79.5, R - 0.05)
     microscope_bench(lab, x, z, yw, 3.8)
     lab.light((P(56, 22)[0], 5.0, P(56, 22)[1]), (0.6, 0.85, 1.0), 900, 1.0)
@@ -430,15 +487,15 @@ def build_lab(root):
     for k, px in enumerate((2.05, 2.2, 2.35)):
         armour_plate(tw, px, 1.63, rz)
     tw.text("ARMOUR PLATE", (rx, 1.47, rz + 0.395), 0, 0.07, "hazard", 0.005)
-    CELL["rack"] = G("plate_rack", tw.root, 2.5, 1.63, rz)
+    CELL["rack"] = G("plate_rack", tw.root, 2.5, 1.63, rz, solid=False, role="plate")
     armour_plate(CELL["rack"], 0, 0, 0)
-    CELL["weld"] = G("plate_weld", tw.root, *PLATE_C)
+    CELL["weld"] = G("plate_weld", tw.root, *PLATE_C, solid=False, role="plate")
     armour_plate(CELL["weld"], 0, 0, 0, bead=True)
     robot_arm(tw, -2.2, -3.6, 0, tool="claw", name="arm0")
     robot_arm(tw, 2.2, -3.6, 0, tool="claw", color="wall2", name="arm1")
     robot_arm(tw, 0.5, 4.3, PI, tool="welder", name="arm2")
     arm1 = next(A for A in ARMS if A["name"] == "arm1")
-    CELL["carry"] = G("plate_carry", arm1["roll"], 0, 0, 0.5 + 0.28)      # its top edge 3 cm into the gripper
+    CELL["carry"] = G("plate_carry", arm1["roll"], 0, 0, 0.5 + 0.28, solid=False, role="plate")   # its top edge 3 cm into the gripper
     armour_plate(CELL["carry"], 0, 0, 0, held=True)
     CELL["arms"] = {A["name"]: A for A in ARMS if A["name"] in ARM_BASES}
     apply_cell(STILL_T)
@@ -466,6 +523,9 @@ def build_lab(root):
     # the splice pod at the back, under the helix projection
     x, z, yw = P(180, 23.5)
     splice_pod(lab, x, z, yw)
+    lab.at(x, z, yw)
+    lab.mark("spot", (0, 0, 4.0), PI, spot="pod")
+    lab.at()
     # wall projections, on brackets from the wall, an emitter bar over each
     for deg, w, h, kind in ((-38, 9.0, 4.2, 2), (180, 13.0, 5.0, 1), (100, 9.0, 3.4, 0)):
         a = math.radians(deg)
@@ -571,9 +631,9 @@ def build_lab(root):
     path_ribbon(out, [(-11.8, 43.9), (-24.0, 49.0), (-38.0, 53.5), pe], 3.0)
     a = math.atan2(-62.0 - pe[0], 58.0 - pe[1])                             # a ramp up onto the pad's deck
     out.at(pe[0] + math.sin(a) * 1.2, pe[1] + math.cos(a) * 1.2, a)
-    out("path", 0.0).polyx([(-1.3, 0), (1.3, 0), (1.3, 0.54), (-1.3, 0.06)], -1.5, 1.5)
+    out("path", 0.0).polyx([(-1.3, 0), (1.3, 0), (1.3, 0.38), (-1.3, 0.04)], -1.5, 1.5)          # to the deck (PAD_Y)
     for s in (-1, 1):
-        out("panel", 0.02).polyx([(-1.3, 0), (1.3, 0), (1.3, 0.62), (-1.3, 0.14)], s * 1.5, s * 1.8)
+        out("panel", 0.02).polyx([(-1.3, 0), (1.3, 0), (1.3, 0.4), (-1.3, 0.06)], s * 1.5, s * 1.8)
     out.at()
     landing_pad(out, -62.0, 58.0, 12.0, "Z")
     zb_container(out, -44.0, 67.0, 1.25, 2, 417)
@@ -605,6 +665,7 @@ def ranch_a(root):
     gam = [(-8.0, 0), (8.0, 0), (8.0, 6.0), (6.2, 9.4), (0, 11.4), (-6.2, 9.4), (-8.0, 6.0)]
     for x0, x1 in ((-13.0, -12.6), (12.6, 13.0)):
         b("barn").polyx(gam, x0, x1)
+        b.col_box((x0 + x1) / 2, 3.0, 0, 0.4, 6.0, 16.0)
     b("barn").boxc(0, 3.0, -7.8, 25.2, 6.0, 0.4)
     for x0, x1 in ((-12.6, -4.5), (4.5, 12.6)):
         b("barn").boxc((x0 + x1) / 2, 3.0, 7.8, x1 - x0, 6.0, 0.4)
@@ -632,7 +693,7 @@ def ranch_a(root):
         b("steel", 0.0).bm((x + 2, 4.75, -3.0), (x + 2, 5.98, -3.0), 0.02, 4)                 # its chain from the loft floor
         b.light((x + 2, 4.3, -2.0), (1.0, 0.75, 0.45), 160, 0.2)
     b("wood2", 0.03).boxc(0, 6.05, 0, 25.0, 0.15, 15.0)
-    b.chim((-2.0, 0.05, -1.0), 0.6, 1.5, 7)
+    b.chim((-2.0, 0.05, -1.0), 0.6, 1.5, 7, pen=True)
     # hayloft door and hoist beam on the east gable, cupola with a chimera weathervane, solar strip on the south slope
     b("barn2", 0.03).boxc(13.05, 7.6, 0, 0.2, 2.4, 2.6)
     b("trim", 0.0).boxc(13.17, 7.6, 0, 0.03, 2.6, 0.2).boxc(13.17, 7.6, 0, 0.03, 0.2, 2.8)
@@ -659,6 +720,7 @@ def ranch_a(root):
     o("lamp", 0.0).ball(-1.6, 4.4, 6.0, 0.18, 8, 6)
     o("dark", 0.0).bm((-1.6, 4.6, 5.5), (-1.6, 4.6, 6.0), 0.04, 5).bm((-1.6, 4.6, 6.0), (-1.6, 4.5, 6.0), 0.04, 5)   # its bracket
     pen_terminal(o, -0.6, -4.3, 0, "pen")
+    o.mark("spot", (-0.6, 0.24, -3.0), PI, spot="pen")
     o("dark", 0.02).boxc(2.6, 1.6, -4.9, 1.6, 3.2, 0.7)
     o("wood2", 0.02).boxc(-2.8, 0.9, -1.0, 1.2, 0.08, 3.6)
     o("lamp", 0.0).boxc(-0.6, 4.5, -2.5, 1.8, 0.1, 0.3)
@@ -681,16 +743,16 @@ def ranch_a(root):
     r("steel", 0.03).ball(93.3, 2.2, 0.4, 0.34, 10, 7)                                       # the elbow onto the bunk's auger
     feed_bunk(r, 93.0, 8.0, -PI / 2, 15.0)
     for i, (x, z) in enumerate(((90.0, 1.5), (90.5, 12.5), (89.0, 7.2))):
-        r.chim((x, 0.04, z), PI / 2 + (i - 1) * 0.3, 1.6, (1, 6, 3)[i])
+        r.chim((x, 0.04, z), PI / 2 + (i - 1) * 0.3, 1.6, (1, 6, 3)[i], pen=True)
     # water: stock tank and the sun-mill pump by the gate
     stock_tank(r, 58.0, 36.0, 2.4)
     wind_pump(r, 54.0, 41.5, 9.0, 0.6)
     r("steel", 0.0).path([(54.0, 0.3, 41.5), (56.0, 0.3, 38.0), (57.0, 1.0, 36.8)], 0.08, 6)
-    r.chim((61.5, 0.04, 34.0), -2.2, 1.6, 5)
+    r.chim((61.5, 0.04, 34.0), -2.2, 1.6, 5, pen=True)
     # training ring, bales, saddle rack, lick posts
     fence_ring(r, 70.0, 26.0, 7.0, 1.4, gap=(-PI / 2, 3.0), step=2.8)
     r("moss", 0.0).cylc(70.0, 0.03, 26.0, 6.8, 0.03, 32)
-    r.chim((70.0, 0.04, 26.0), 0.8, 1.6, 0)
+    r.chim((70.0, 0.04, 26.0), 0.8, 1.6, 0, pen=True)
     for i in range(3):                                                     # bales behind the barn, clear of it and the office
         for j in range(3 - i):
             bale(r, 64.0 + j * 1.5 + i * 0.75, -38.5, 0.0, i * 0.9)
@@ -705,8 +767,8 @@ def ranch_a(root):
         r("wood2", 0.02).cylc(x, 0.6, z, 0.18, 1.2, 8)
         r("stone", 0.02).boxc(x, 1.45, z, 0.6, 0.5, 0.6)
         r("cyan", 0.0).add(cylinder(0.0, 0.18, 0.5, 5)[:2], (x + 0.1, 1.95, z), (0.2, 0, 0.1))
-    r.chim((80.0, 0.04, 30.0), 1.9, 1.6, 7)
-    r.chim((66.0, 0.04, 2.0), -0.6, 1.6, 2)
+    r.chim((80.0, 0.04, 30.0), 1.9, 1.6, 7, pen=True)
+    r.chim((66.0, 0.04, 2.0), -0.6, 1.6, 2, pen=True)
     CAMS["ranch"] = ((40.0, 22.0, 70.0), (78.0, 2.0, 2.0), 30)
 
 
@@ -720,6 +782,7 @@ def build():
     return root
 
 
+GAME[0] = os.environ.get("ZB_GAME") == "1"
 ROOT = build()
 print(f"built: {len(C.objects)} objects, {sum(len(o.data.polygons) for o in C.objects if o.type == 'MESH')} faces, {len(CHIMS)} chimeras, "
       f"{len(LIGHTS)} lights, {len(ARMS)} arms")
@@ -732,3 +795,17 @@ if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
     zb.location, zb.rotation_euler = (0, 0, 0), (0, 0, 0)
     export(os.path.join(OUTDIR, "zbornak.glb"), keep_)
     zb.parent, zb.location, zb.rotation_euler = par, loc, rot
+
+# For the game (ZB_GAME=1): src/assets/zlab.glb, four roots at the area's origin baked by src/labWorld.js: zl_lab (the rotunda,
+# its airlock and everything inside), zl_roof (the dome), zl_out (plaza, walks, pad, containers, outworks), zl_ranch. Pivots
+# with a role inside them are what the game moves or reads (labWorld.js): core, ring, arm/turret/shoulder/elbow/wrist/roll,
+# weld, plate, door, scan, doctor/head; markers: spot, screen, text, chim; col: colliders (downs_common's form).
+if GAME[0] and os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
+    groups = {"zl_lab": ("lab",), "zl_roof": ("lab_roof",), "zl_out": ("outside",), "zl_ranch": ("A_ranch", "A_barn", "A_office")}
+    for rname, kids in groups.items():
+        er = pivot(rname, (0, 0, 0), None, role="export")
+        for o in list(ROOT.children):
+            if o.name in kids:
+                o.parent = er
+    keep_ = [o for o in C.objects if o is not ROOT]
+    export(os.path.join(REPO, "src", "assets", "zlab.glb"), keep_)

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { buildZbornakLab } from './labWorld.js';
 import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds, INK_DIST } from './toon.js';
 import { makeDish, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK, wingModel, HABITAT_DOCK } from './models.js';
 import { mulberry32, clamp } from './rng.js';
@@ -8,7 +9,7 @@ import { bendPoint, bendQuat, unbendPoint } from './curve.js';
 import { SUN, frameQuat, arcDist, dirFromAngles, tangent, collectNodes } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
 import { Traffic } from './traffic.js';
-import { buildHelium, buildMeridian, dressLab, dressLabInside, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot, settle, powerBlock, keplerHabitat, ilmbWing } from './settlements.js';
+import { buildHelium, buildMeridian, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot, settle, powerBlock, keplerHabitat, ilmbWing } from './settlements.js';
 import { makeProp } from './storyAssets.js';
 import { buildHomeTown } from './hometown.js';
 import { spindleGeometry } from './spindle.js';
@@ -1461,17 +1462,8 @@ export class World {
     }
     for (const z of this.zoneWalls) z.mat.uniforms.time.value = time;
     if (this.lakeMat) this.lakeMat.uniforms.time.value = time;
-    if (this.reactor && this.reactor.loc.active) {
-      const r = this.reactor;
-      const k = r.spin + r.flash * 6;
-      r.orb.rotation.x += dt * 9 * k; r.orb.rotation.y += dt * 13 * k;
-      r.ringA.rotation.x += dt * 17 * k; r.ringB.rotation.y += dt * 21 * k; r.ringB.rotation.z += dt * 5;
-      r.core.position.y = r.base + Math.sin(time * 37) * 0.25 * k;
-      r.core.position.x = -2 + (Math.random() - 0.5) * 0.25 * k;
-      r.orb.scale.setScalar(1 + Math.sin(time * 23) * 0.12 + r.flash * 0.8);
-      r.flash = Math.max(0, r.flash - dt * 0.8);
-      this.reactorLight.intensity = camPos.distanceTo(this.lab.reactor) < 80 ? (6 + r.flash * 30) * (0.8 + Math.random() * 0.4) : 0;
-    } else if (this.reactorLight) this.reactorLight.intensity = 0;
+    if (this.lab && this.lab.loc.active) this.lab.update(dt, time, camPos); // the lab: reactor, robots, Zbornak, the airlock (labWorld.js)
+    else if (this.reactorLight) this.reactorLight.intensity = 0;
     if (this.monolith && this.monolith.loc.active) this.monolith.halo.material.opacity = 0.3 + 0.25 * Math.sin(time * 2);
     if (this.casino && this.casino.loc.active) this.casino.update(dt, time); // casino
     if (this.crystals) for (const c of this.crystals) c.mesh.visible = !c.taken && c.pos.distanceToSquared(camPos) < 450 * 450;
@@ -1504,96 +1496,19 @@ export class World {
 
   // ---------- strange places ----------
 
-  // Dr. Zbornak's lab: a walk-in hollow building with a violently spinning antimatter reactor in a
-  // glass tube in the middle.
+  // Dr. Zbornak's lab: the Rotunda (labWorld.js, built in Blender: docs/zbornak-proposals/). this.lab holds its spots for
+  // main.js and alchemy.js (reactor, intake, scientist, pod, penTerm, labnet) and its update; this.reactor the feed flash.
   buildLab(loc) {
-    const W = 22, D = 16, H = 16, T = 1;
-    const wall = (x, z, w, d) => {
-      this.put(mesh(new THREE.BoxGeometry(w, H, d), toon(0xe8e4f4), 0.15), loc, x, z, H / 2);
-      this.col(loc, { type: 'box', x, y: H / 2, z, hx: w / 2, hy: H / 2, hz: d / 2 });
-    };
-    wall(0, -D, W * 2, T * 2);
-    wall(-W, 0, T * 2, D * 2);
-    wall(W, 0, T * 2, D * 2);
-    wall(-13, D, 18, T * 2);
-    wall(13, D, 18, T * 2);
-    this.put(mesh(new THREE.BoxGeometry(W * 2 + 2, 1.5, D * 2 + 2), toon(0x3a3550), 0.15), loc, 0, 0, H + 0.75);
-    this.col(loc, { type: 'box', x: 0, y: H + 0.75, z: 0, hx: W + 1, hy: 0.75, hz: D + 1 });
-    // hazard stripes over the door + a warning sign
-    this.put(mesh(new THREE.BoxGeometry(8, 1.2, 0.3), toon(0xffd23f), 0.05), loc, 0, D + 1.1, H - 2);
-    hang(loc, textSprite('☢ ANTIMATTER — KNOCK FIRST', { color: '#ffd23f', size: 60, scale: 0.55, bg: '#120a1e' }), 0, H + 5, D + 2);
-    // interior: checker floor, glowing strip lights, shelves
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W * 2 - 2, D * 2 - 2, 1, 1), new THREE.MeshToonMaterial({ map: this.checker(), gradientMap: toon(0).gradientMap }));
-    floor.rotation.x = -Math.PI / 2;
-    this.put(floor, loc, 0, 0, 0.06);
-    for (const z of [-10, 0, 10]) this.put(new THREE.Mesh(new THREE.BoxGeometry(W * 2 - 4, 0.3, 0.6), glow(0xc77dff)), loc, 0, z, H - 0.4);
-    for (const x of [-18, -12]) {
-      this.put(mesh(new THREE.BoxGeometry(4, 7, 2.5), toon(0x5b5870), 0.06), loc, x, -13, 3.5);
-      for (let k = 0; k < 3; k++) this.put(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.2, 8), glow([0x7dff3a, 0xff2e88, 0x2ec4ff][k])), loc, x - 1.2 + k * 1.2, -12, 5.5);
-    }
-    // Dr. Zbornak's station (dressed in settlements.js dressLabInside): low dais on the hall's right,
-    // behind his waist-high workbench, facing the door
-    const docX = 15.5, docZ = 1.6;
-    this.put(makeFigure({ suit: 0xffffff, helmet: 0xfff4e0, visor: 0x7dff3a }).root, loc, docX, docZ, 0.3, 0);
-    hang(loc, nameTag(textSprite('DR. ZBORNAK', { color: '#7dff3a', size: 50, scale: 0.35 }), 'DR. ZBORNAK', '#7dff3a'), docX, 3.1, docZ);
-    // the reactor
-    const rx = -2, rz = -3;
-    this.put(new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, H - 1, 28, 1, true), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })), loc, rx, rz, H / 2);
-    for (const y of [0.6, H - 1]) this.put(mesh(new THREE.CylinderGeometry(3.8, 3.8, 1.2, 28), toon(0x3a3550), 0.08), loc, rx, rz, y);
-    this.col(loc, { type: 'cyl', x: rx, z: rz, y0: -1, y1: H, r: 3.6 });
-    const core = new THREE.Group();
-    const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 1), glow(0xff2e88));
-    const ringA = new THREE.Mesh(new THREE.TorusGeometry(2.3, 0.18, 8, 32), glow(0x7dff3a));
-    const ringB = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.14, 8, 32), glow(0x2ee6ff));
-    core.add(orb, ringA, ringB);
-    this.put(core, loc, rx, rz, H / 2, 0, true);
-    this.reactor = { loc, core, orb, ringA, ringB, spin: 1, flash: 0, base: H / 2 };
-    loc.group.updateMatrixWorld(true);
-    // splice pod: step in with a full jar, come out… improved
-    const px = -16, pz = 1;
-    this.put(mesh(new THREE.CylinderGeometry(2.2, 2.4, 0.8, 20), toon(0x3a3550), 0.08), loc, px, pz, 0.4);
-    this.put(mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.6, 20), toon(0x3a3550), 0.08), loc, px, pz, 5.6);
-    this.put(new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 4.6, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x7dff3a, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })), loc, px, pz, 3.1);
-    this.put(new THREE.Mesh(new THREE.TorusGeometry(2, 0.12, 6, 24).rotateX(Math.PI / 2), glow(0x7dff3a)), loc, px, pz, 0.9);
-    hang(loc, textSprite('SPLICE POD', { color: '#7dff3a', size: 50, scale: 0.35 }), px, 7.4, pz);
-    // chimera holding pen out front, terminal at its gate
-    const pen = { x0: 28, z0: 22, x1: 62, z1: 64 };
-    const rail = toon(0xffd23f), postM = toon(0x3a3550);
-    const fence = (ax, az, bx, bz) => {
-      const len = Math.hypot(bx - ax, bz - az);
-      const n = Math.ceil(len / 4);
-      for (let i = 0; i <= n; i++) this.put(mesh(new THREE.CylinderGeometry(0.2, 0.2, 2.2, 6), postM, 0.04), loc, ax + ((bx - ax) * i) / n, az + ((bz - az) * i) / n, 1.1);
-      this.put(mesh(new THREE.BoxGeometry(0.15, 0.25, len), rail, 0.03), loc, (ax + bx) / 2, (az + bz) / 2, 1.7, Math.atan2(bx - ax, bz - az));
-      this.col(loc, { type: 'box', x: (ax + bx) / 2, y: 1.1, z: (az + bz) / 2, hx: Math.abs(bx - ax) / 2 + 0.2, hy: 1.1, hz: Math.abs(bz - az) / 2 + 0.2 });
-    };
-    fence(pen.x0, pen.z1, pen.x1, pen.z1);
-    fence(pen.x1, pen.z0, pen.x1, pen.z1);
-    fence(pen.x0, pen.z0 + 8, pen.x0, pen.z1);
-    fence(pen.x0 + 8, pen.z0, pen.x1, pen.z0);
-    // (gate terminal kiosk: settlements.js penTerminal)
-    hang(loc, textSprite('HOLDING PEN', { color: '#7dff3a', size: 50, scale: 0.35 }), pen.x0 - 2, 5.6, pen.z0 - 2);
-    loc.group.updateMatrixWorld(true);
-    this.lab = { loc, reactor: this.toWorld(loc, rx, 2, rz), scientist: this.toWorld(loc, docX, 0, docZ + 4.5), pod: this.toWorld(loc, px, 1, pz), penTerm: this.toWorld(loc, pen.x0 - 2, 0, pen.z0 - 2), half: { w: W, d: D, h: H } };
+    const lab = buildZbornakLab(this, loc);
+    const S = lab.spots;
+    lab.reactor = S.reactor; lab.intake = S.intake; lab.scientist = S.doctor; lab.pod = S.pod; lab.penTerm = S.pen; lab.labnet = S.labnet;
+    lab.inside = (l) => l.y > -3 && l.y < 26 && Math.hypot(l.x, l.z + 18) < 30;   // (location-local point in the rotunda)
+    this.lab = lab;
+    this.reactor = { loc, spin: 1, flash: 0 };
     // permanent scene light (never added/removed, so shaders don't recompile)
     this.reactorLight = new THREE.PointLight(0xff2e88, 0, 60, 1.5);
-    this.reactorLight.position.copy(this.toWorld(loc, rx, H / 2, rz));
+    this.reactorLight.position.copy(S.reactor);
     this.scene.add(this.reactorLight);
-    dressLab(this, loc, { W, D, H });
-    dressLabInside(this, loc, { W, D, H, docX, docZ });
-  }
-
-  checker() {
-    const c = document.createElement('canvas');
-    c.width = c.height = 64;
-    const x = c.getContext('2d');
-    x.fillStyle = '#e8e4f4'; x.fillRect(0, 0, 64, 64);
-    x.fillStyle = '#3a3550'; x.fillRect(0, 0, 32, 32); x.fillRect(32, 32, 32, 32);
-    const t = new THREE.CanvasTexture(c);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(10, 8);
-    t.magFilter = THREE.NearestFilter;
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
   }
 
   buildMonolith(loc) {

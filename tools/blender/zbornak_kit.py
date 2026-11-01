@@ -15,6 +15,13 @@ import math
 from mathutils import Vector
 
 PI, TAU = math.pi, 2 * math.pi
+GAME = [False]          # building for the game (build_zbornak_lab.py ZB_GAME=1): markers for screens, signs and chimeras
+SOLID_DEFAULT = [False]  # new groups make colliders (the builder turns it on for the place's solid groups)
+NOCOL = {"lime", "pink", "pinkhot", "cyan", "teal", "vio", "amber", "red", "lamp", "spark", "weldcore", "weldhalo", "screenlit", "holo",
+         "beam", "scan", "halo", "ember", "goggle", "feed", "feed2", "water", "window", "iris", "screen", "hazard", "cable", "soil",
+         "plant", "plant2", "inkline", "smoke"}     # glow, decals and wiring never collide (glass does: it is solid)
+COL_MIN, COL_LONG, COL_FLOOR, COL_WIDE = 0.12, 1.0, 0.9, 2.5   # downs_common's thresholds (its notes over Acc)
+_ncol = [0]
 CHIMS = []      # (parent, (x, y, z), yaw, scale, index)
 STATUES = []    # (parent, (x, y, z), yaw): petrified couriers on plinths
 LIGHTS = []     # (parent, (x, y, z), rgb, watts, radius): point lights for the preview's interior shots
@@ -48,7 +55,12 @@ class Acc:
         self.geos.append(geo)
         return self
 
+    def _solid(self):
+        return self.g.solid and self.slot not in NOCOL
+
     def boxc(self, cx, cy, cz, w, h, d, rot=(0, 0, 0)):
+        if self._solid() and min(w, h, d) >= COL_MIN and max(w, h, d) >= COL_LONG and not (not any(rot) and cy + h / 2 < COL_FLOOR and w >= COL_WIDE and d >= COL_WIDE):
+            self.g.col_box(cx, cy, cz, w, h, d, rot)
         return self._push(xf(cuboid(w, h, d)[:2], (cx, cy, cz), rot))
 
     def box(self, x0, x1, y0, y1, z0, z1):
@@ -56,6 +68,13 @@ class Acc:
 
     def cylc(self, cx, cy, cz, r, h, seg=12, axis="y", rt=None, rot=None):
         g = cylinder(r if rt is None else rt, r, h, seg)[:2]
+        rn = min(r, r if rt is None else rt)
+        if self._solid() and axis == "y" and not rot and seg >= 8 and min(2 * rn, h) >= COL_MIN and max(2 * rn, h) >= COL_LONG \
+                and not (cy + h / 2 < COL_FLOOR and 2 * rn >= COL_WIDE):
+            self.g.col_cyl(cx, cy - h / 2, cz, rn, h)
+        elif self._solid() and axis != "y" and not rot and seg >= 8 and 2 * rn >= COL_MIN and h >= COL_LONG:
+            # lying down (a pipe, a tank, an auger): the box round it, its top the drawn top
+            self.g.col_box(cx, cy, cz, *((h, 2 * rn, 2 * rn) if axis == "x" else (2 * rn, 2 * rn, h)))
         rot = rot or {"y": (0, 0, 0), "z": (PI / 2, 0, 0), "x": (0, 0, PI / 2)}[axis]
         return self._push(xf(g, (cx, cy, cz), rot))
 
@@ -75,6 +94,13 @@ class Acc:
         return self._push(xf(torus(R, r, n, rs), t, rot, s))
 
     def lath(self, profile, t=(0, 0, 0), segs=24, rot=(0, 0, 0), s=(1, 1, 1)):
+        # an upright solid of revolution collides as a cylinder per step of its profile, as wide as the step's narrower end;
+        # a closed ring (an annulus: a catwalk, a collar) or a shell makes none here (its colliders are written by hand)
+        closed = profile[0] == profile[-1]
+        if self._solid() and not any(rot) and s == (1, 1, 1) and not closed:
+            for (ra, ya), (rb, yb) in zip(profile, profile[1:]):
+                if yb - ya > 0.05 and min(ra, rb) * 2 >= COL_MIN and not (yb < COL_FLOOR and min(ra, rb) * 2 >= COL_WIDE):
+                    self.g.col_cyl(t[0], ya + t[1], t[2], min(ra, rb), yb - ya)
         return self._push(xf(lathe(profile, segs)[:2], t, rot, s))
 
     def add(self, geo, t=(0, 0, 0), rot=(0, 0, 0), s=(1, 1, 1)):
@@ -109,10 +135,44 @@ class G:
     """A pivot (at x, y, z, turned yaw about y) whose parts are merged per (slot, ink). g.at(x, z, yaw, y) moves the local
     origin for what follows (inside this pivot's frame); g.at() resets it."""
 
-    def __init__(self, name, parent=None, x=0.0, y=0.0, z=0.0, yaw=0.0):
+    def __init__(self, name, parent=None, x=0.0, y=0.0, z=0.0, yaw=0.0, solid=None, role=None):
         self.root = pivot(uname(name), (x, y, z), parent)
         self.root.rotation_euler[2] = yaw
+        if role:
+            self.root["role"] = role
         self.accs, self.cur = {}, (0, 0, 0, 0)
+        # colliders from this group's boxes, upright cylinders and lathes (inherits the parent group's setting)
+        self.solid = SOLID_DEFAULT[0] if solid is None else solid
+
+    def _yaw_up(self):
+        """this group's yaw about y in the export root's frame (the groups turn only about y)"""
+        a, o = 0.0, self.root
+        while o is not None and o.get("role") not in ("export",):
+            a += o.rotation_euler[2]
+            o = o.parent
+        return a
+
+    def col_box(self, cx, cy, cz, w, h, d, rot=(0, 0, 0), **extra):
+        """a box collider (centre, size, rotation as xf's euler) in the current local frame, as downs_common writes them"""
+        from mathutils import Euler, Matrix
+        x, y, z, a = self.cur
+        R = Euler((0, a, 0), "XYZ").to_matrix() @ Euler(rot, "XYZ").to_matrix()
+        Rw = Euler((0, self._yaw_up(), 0), "XYZ").to_matrix() @ R
+        e = Rw.to_euler("XYZ")
+        _ncol[0] += 1
+        pivot(f"{self.root.name}_col{_ncol[0]}", self.pt((cx, cy, cz)), self.root, role="col", shape="box", hx=w / 2, hy=h / 2, hz=d / 2,
+              rx=e.x, ry=e.y, rz=e.z, **extra)
+
+    def col_cyl(self, x, y0, z, r, h):
+        """an upright cylinder collider, its base at (x, y0, z) in the current local frame"""
+        _ncol[0] += 1
+        pivot(f"{self.root.name}_col{_ncol[0]}", self.pt((x, y0, z)), self.root, role="col", shape="cyl", r=r, h=h)
+
+    def mark(self, role, p, yaw=0.0, **data):
+        """a marker pivot for the game (a spot, a screen, a sign, a chimera) at p in the current local frame, facing yaw"""
+        o = pivot(uname(f"{self.root.name}_{role}"), self.pt(p), self.root, role=role, **data)
+        o.rotation_euler[2] = yaw + self.cur[3]
+        return o
 
     def __call__(self, slot, ink=None):
         ink = INK.get(slot, 0.0) if ink is None else ink
@@ -131,17 +191,25 @@ class G:
         q = rot_y(p, a)
         return (q[0] + x, q[1] + y, q[2] + z)
 
-    def chim(self, p, yaw, scale, idx):
+    def chim(self, p, yaw, scale, idx, pen=False):
+        """a chimera for the renders; for the game a marker, unless it is a pen resident (the game stands the player's own there)"""
         CHIMS.append((self.root, self.pt(p), yaw + self.cur[3], scale, idx))
+        if GAME[0] and not pen:
+            self.mark("chim", p, yaw, idx=idx, scale=scale)
 
     def light(self, p, rgb, watts, radius=0.3):
         LIGHTS.append((self.root, self.pt(p), rgb, watts, radius))
 
     def text(self, s, p, yaw, size, slot="lime", depth=0.05):
         TEXTS.append((self.root, s, self.pt(p), yaw + self.cur[3], size, slot, depth))
+        if GAME[0]:
+            self.mark("text", p, yaw, text=s, size=size, slot=slot)
 
     def screen(self, sid, cx, cy, cz, w, h, yaw=0.0, tilt=0.0):
-        """a picture quad facing +z (turned yaw, tipped back by tilt), its own mesh `screen_<sid>`"""
+        """a picture quad facing +z (turned yaw, tipped back by tilt), its own mesh `screen_<sid>`; for the game, a marker
+        (role screen: the game draws the picture)"""
+        if GAME[0]:
+            return self.mark("screen", (cx, cy, cz), yaw, sid=sid, w=w, h=h, tilt=tilt)
         v, f = plane(w, h)[:2]
         v, f = xf(xf((v, f), (0, 0, 0), (-tilt, 0, 0)), (cx, cy, cz), (0, yaw, 0))
         x, y, z, a = self.cur
@@ -174,6 +242,7 @@ def reactor(g, H, R=3.4, pylons=3, crown_y=None, collar_y=None):
     crown_y: the column carries on up through a roof to a crown of rings and a spire at that height. Returns the collar's
     height."""
     g("dark", 0.06).lath([(R + 2.2, 0), (R + 2.2, 0.5), (R + 1.6, 0.9), (R + 1.2, 1.3), (R + 0.4, 1.3)], segs=32)
+    g.col_cyl(0, 0, 0, R + 2.2, 0.5)                                       # the plinth's first step (too wide for lath's own)
     g("hazard", 0.0).tor(R + 1.9, 0.08, (0, 0.52, 0), n=40, rs=4)
     g("glass", 0.0).cylc(0, 1.3 + (H - 2.6) / 2, 0, R, H - 2.6, 32)
     g("dark", 0.06).lath([(R + 0.6, H - 1.3), (R + 0.9, H - 0.9), (R + 0.9, H - 0.3), (R + 0.3, H)], segs=32)
@@ -183,15 +252,16 @@ def reactor(g, H, R=3.4, pylons=3, crown_y=None, collar_y=None):
         a = TAU * i / 8
         g("steel", 0.02).bm((math.sin(a) * (R + 0.1), 1.3, math.cos(a) * (R + 0.1)), (math.sin(a) * (R + 0.1), H - 1.3, math.cos(a) * (R + 0.1)), 0.08, 5)
     cy = H * 0.5
-    g("pink", 0.0).ball(0, cy, 0, R * 0.42, 16, 12)
-    g("pinkhot", 0.0).ball(0, cy, 0, R * 0.26, 12, 8)
-    g("lime", 0.0).tor(R * 0.66, 0.1, (0, cy, 0), (0.5, 0, 0.3), n=40)
-    g("cyan", 0.0).tor(R * 0.78, 0.08, (0, cy, 0), (-0.4, 0.6, -0.5), n=40)
-    g("vio", 0.0).tor(R * 0.55, 0.07, (0, cy, 0), (1.2, 0.2, 0.1), n=40)
+    core = G("core", g.root, 0, cy, 0, solid=False, role="core")           # (the game spins it: orb, rings, arcs)
+    core("pink", 0.0).ball(0, 0, 0, R * 0.42, 16, 12)
+    core("pinkhot", 0.0).ball(0, 0, 0, R * 0.26, 12, 8)
+    for k, (c, rr, w, rot) in enumerate((("lime", 0.66, 0.1, (0.5, 0, 0.3)), ("cyan", 0.78, 0.08, (-0.4, 0.6, -0.5)), ("vio", 0.55, 0.07, (1.2, 0.2, 0.1)))):
+        ring = G(f"ring{k}", core.root, solid=False, role="ring")
+        ring(c, 0.0).tor(R * rr, w, (0, 0, 0), rot, n=40)
     for k in range(5):                                                      # arcs of plasma round the core
         a = k * 1.3
-        p = [(math.sin(a + t * 0.9) * R * (0.45 + 0.4 * t), cy + math.sin(t * 5 + k) * 0.7, math.cos(a + t * 0.9) * R * (0.45 + 0.4 * t)) for t in (0, 0.33, 0.66, 1)]
-        g("spark", 0.0).path(p, 0.035, 4)
+        p = [(math.sin(a + t * 0.9) * R * (0.45 + 0.4 * t), math.sin(t * 5 + k) * 0.7, math.cos(a + t * 0.9) * R * (0.45 + 0.4 * t)) for t in (0, 0.33, 0.66, 1)]
+        core("spark", 0.0).path(p, 0.035, 4)
     # the collar the pylons clamp to: a steel band round the glass, bolted flanges above and below
     cly = collar_y or cy - 2.6
     g("steel", 0.04).cylc(0, cly, 0, R + 0.2, 0.8, 32)
@@ -296,11 +366,11 @@ def robot_arm(g, x, z, yaw, sh=0.7, el=1.4, wr=0.5, turn=0.0, tool="claw", reach
     base("hazard", 0.0).cylc(0, base_h * 0.75, 0, 0.765, 0.16, 16)
     base("dark", 0.02).boxc(0, 0.25, -0.95, 0.7, 0.5, 0.5)
     base("cable", 0.0).path([(0, 0.15, -1.2), (0, 0.1, -2.2), (0.3, 0.1, -3.4)], 0.1, 6)
-    tur = G(name + "_turret", base.root, 0, base_h, 0, turn)
+    tur = G(name + "_turret", base.root, 0, base_h, 0, turn, solid=False)
     tur.root["role"] = "turret"
     tur(color).cylc(0, 0.35, 0, 0.62, 0.7, 14)
     tur("armdark").boxc(0, 0.95, 0, 0.9, 0.5, 0.6)
-    shl = G(name + "_shoulder", tur.root, 0, 0.95, 0)
+    shl = G(name + "_shoulder", tur.root, 0, 0.95, 0, solid=False)
     shl.root["role"] = "shoulder"
     shl.root.rotation_euler[0] = -sh
     L1, L2 = reach
@@ -308,31 +378,32 @@ def robot_arm(g, x, z, yaw, sh=0.7, el=1.4, wr=0.5, turn=0.0, tool="claw", reach
     shl("armdark").cylc(0, 0, 0, 0.3, 1.2, 10, "x")
     shl(color).path([(0, 0, 0), (0, 0, L1 * 0.5), (0, 0, L1)], [0.34, 0.3, 0.26], 8)
     shl("cable", 0.0).path([(0.4, 0.0, 0.2), (0.4, 0.28, L1 * 0.5), (0.36, 0.0, L1 - 0.2)], 0.05, 4)
-    elb = G(name + "_elbow", shl.root, 0, 0, L1)
+    elb = G(name + "_elbow", shl.root, 0, 0, L1, solid=False)
     elb.root["role"] = "elbow"
     elb.root.rotation_euler[0] = el
     elb("armdark").cylc(0, 0, 0, 0.32, 0.7, 12, "x")
     elb(color).path([(0, 0, 0), (0, 0, L2)], [0.24, 0.17], 8)
     elb("cable", 0.0).path([(0.3, 0.0, 0.15), (0.26, 0.2, L2 * 0.5), (0.2, 0.0, L2 - 0.15)], 0.04, 4)
-    wri = G(name + "_wrist", elb.root, 0, 0, L2)
+    wri = G(name + "_wrist", elb.root, 0, 0, L2, solid=False)
     wri.root["role"] = "wrist"
     wri.root.rotation_euler[0] = wr
     wri("armdark").ball(0, 0, 0, 0.2, 10, 7)
     wri("steel").path([(0, 0, 0), (0, 0, 0.5)], [0.14, 0.12], 8)
-    rol = G(name + "_roll", wri.root, 0, 0, 0.55)
+    rol = G(name + "_roll", wri.root, 0, 0, 0.55, solid=False)
     rol.root["role"] = "roll"
     rol.root.rotation_euler[1] = -roll                                     # (three.js +z is Blender -y)
     rol("armdark").cylc(0, 0, 0, 0.17, 0.12, 12, "z")
     if tool == "welder":
         rol("copper").path([(0, 0, 0.0), (0, 0, 0.55)], [0.1, 0.05], 8)
-        rol("weldcore", 0.0).ball(0, 0, 0.67, 0.14, 10, 7)
-        rol("weldhalo", 0.0).ball(0, 0, 0.67, 0.36, 14, 9)
-        rol("weldhalo", 0.0).ball(0, 0, 0.67, 0.2, 12, 8)
+        wg = G(name + "_weld", rol.root, solid=False, role="weld")           # (the game lights and flickers it while welding)
+        wg("weldcore", 0.0).ball(0, 0, 0.67, 0.14, 10, 7)
+        wg("weldhalo", 0.0).ball(0, 0, 0.67, 0.36, 14, 9)
+        wg("weldhalo", 0.0).ball(0, 0, 0.67, 0.2, 12, 8)
         for k in range(16):                                                 # sparks fanning off the weld
             b = k * 2.39
             v = Vector((math.sin(b) * 0.9, 0.3 + 0.5 * math.sin(k * 1.7), math.cos(b) * 0.4 + 0.2))
             p0 = Vector((0, 0, 0.67))
-            rol("spark", 0.0).path([tuple(p0), tuple(p0 + v * 0.5), tuple(p0 + v * 1.0 + Vector((0, -0.35, 0)))], 0.016, 3)
+            wg("spark", 0.0).path([tuple(p0), tuple(p0 + v * 0.5), tuple(p0 + v * 1.0 + Vector((0, -0.35, 0)))], 0.016, 3)
         rol.light((0, 0.15, 0.6), (0.08, 0.3, 1.0), 3000, 0.08)
         WELDS.append(rol.root)
     elif tool == "drill":
@@ -634,7 +705,8 @@ def security_post(g, x, z, yaw, door_y, door_r, sid="sec", scr=(2.2, 1.5), scr_x
     g("dark").cylc(lens.x, lens.y, lens.z, 0.13, 0.16, 12, rot=(PI - 0.9, 0, 0))
     g("red", 0.0).ball(lens.x, lens.y - 0.07, lens.z + 0.06, 0.08, 8, 6)
     top, foot = lens + Vector((0, -0.08, 0.04)), Vector((px, 0.06, pz))
-    g("scan", 0.0).add(cylinder(0.08, 1.0, (top - foot).length, 16, True)[:2], tuple((top + foot) / 2), tuple(Vector((0, 1, 0)).rotation_difference(top - foot).to_euler()))
+    sc = G("scan", g.root, *g.pt((0, 0, 0)), yaw=g.cur[3], solid=False, role="scan")   # (the game shows it while it scans)
+    sc("scan", 0.0).add(cylinder(0.08, 1.0, (top - foot).length, 16, True)[:2], tuple((top + foot) / 2), tuple(Vector((0, 1, 0)).rotation_difference(top - foot).to_euler()))
     w, h = scr
     g("dark", 0.04).boxc(scr_x, scr_y, 0.06, w + 0.3, h + 0.3, 0.12)
     g.screen(sid, scr_x, scr_y, 0.14, w, h)
@@ -659,6 +731,8 @@ def fence_run(g, pts, h=1.5, rails=3, step=3.2, post="wood2", rail="wood", lamps
         for r in range(rails):
             y = h * (0.35 + 0.6 * r / max(1, rails - 1))
             g(rail).bm((ax, y, az), (bx, y, bz), 0.06, 5)
+        if g.solid and L > 0.5:                                             # the run collides as one thin wall, rails high
+            g.col_box((ax + bx) / 2, h / 2, (az + bz) / 2, 0.25, h, L, (0, math.atan2(bx - ax, bz - az), 0))
     if lamps:
         for (x, z) in pts:
             g("dark").cylc(x, h + 0.25, z, 0.08, 0.4, 6)
@@ -697,15 +771,15 @@ def silo(g, x, z, r=3.0, h=14.0, chute_to=None):
     """A feed silo: a ribbed drum on a ring footing, a dome cap with a hatch, a caged ladder, a lit band; an auger chute
     from its foot to chute_to (x, y, z) when given."""
     g.at(x, z)
-    g("panel").cylc(0, 0.3, 0, r + 0.4, 0.6, 20)
-    g("corr").cylc(0, 0.6 + h / 2, 0, r, h, 24)
+    g("panel").cylc(0, 0.2, 0, r + 0.4, 0.4, 20)                          # the footing: 0.4 m, a step up (floor colliders)
+    g("corr").cylc(0, 0.4 + h / 2, 0, r, h, 24)
     for k in range(1, 6):
-        g("steel").tor(r + 0.04, 0.07, (0, 0.6 + h * k / 6, 0), n=32, rs=4)
-    g("barn").add(sphere(r + 0.15, 24, 8, PI / 2)[:2], (0, 0.6 + h, 0), s=(1, 0.55, 1))
-    g("steel").cylc(0, 0.6 + h + (r + 0.15) * 0.55 + 0.25, 0, 0.5, 0.5, 10)
-    g("lime", 0.0).tor(r + 0.06, 0.08, (0, 0.6 + h - 0.6, 0), n=32, rs=4)
+        g("steel").tor(r + 0.04, 0.07, (0, 0.4 + h * k / 6, 0), n=32, rs=4)
+    g("barn").add(sphere(r + 0.15, 24, 8, PI / 2)[:2], (0, 0.4 + h, 0), s=(1, 0.55, 1))
+    g("steel").cylc(0, 0.4 + h + (r + 0.15) * 0.55 + 0.25, 0, 0.5, 0.5, 10)
+    g("lime", 0.0).tor(r + 0.06, 0.08, (0, 0.4 + h - 0.6, 0), n=32, rs=4)
     for k in (-1, 1):
-        g("steel").bm((k * 0.3, 0.6, r + 0.25), (k * 0.3, h + 1.2, r + 0.25), 0.04, 4)
+        g("steel").bm((k * 0.3, 0.4, r + 0.25), (k * 0.3, h + 1.2, r + 0.25), 0.04, 4)
     for i in range(int(h / 0.4)):
         g("steel").bm((-0.3, 0.8 + i * 0.4, r + 0.25), (0.3, 0.8 + i * 0.4, r + 0.25), 0.025, 4)
     g.at()
@@ -717,9 +791,9 @@ def feed_bunk(g, x, z, yaw, L=14.0, roof=True):
     """The feed line: a long raised trough of glowing feed under a lean-to roof on posts, an auger tube over the trough
     with drop spouts, a lick block at each end, a CHOW board."""
     g.at(x, z, yaw)
-    g("wood2").boxc(0, 0.45, 0, L, 0.9, 1.4)
-    g("dark").boxc(0, 0.93, 0, L - 0.2, 0.06, 1.1)
-    g("feed", 0.0).boxc(0, 0.97, 0, L - 0.4, 0.04, 1.0)
+    g("wood2").boxc(0, 0.485, 0, L, 0.97, 1.4)                            # its collider's top 2.5 cm under the feed's
+    g("dark").boxc(0, 0.975, 0, L - 0.2, 0.02, 1.1)
+    g("feed", 0.0).boxc(0, 0.985, 0, L - 0.4, 0.02, 1.0)
     for i in range(int(L / 0.7)):
         g("feed2", 0.0).ball(-L / 2 + 0.4 + i * 0.7, 1.0, ((i * 5) % 3 - 1) * 0.25, 0.14, 6, 4, s=(1, 0.5, 1))
     for k in range(int(L / 3) + 1):
@@ -884,17 +958,21 @@ def radiator_field(g, x, z, yaw, rows=2, cols=5, header_to=None):
             g("dark", 0.02).boxc(sx + (header_to[0] - sx) * t, 0.3, sz + (header_to[1] - sz) * t, 1.2, 0.6, 1.2)
 
 
+PAD_Y = 0.38                                                               # the supply pad's deck top
+
+
 def landing_pad(g, x, z, r=12.0, label="Z"):
     """a supply pad: an octagonal deck on a low plinth, a painted ring and letter, edge lights, a fuel tank on skids, a
     windsock (the containers beside it are zb_container's)"""
     g.at(x, z)
-    g("panel", 0.05).cylc(0, 0.25, 0, r + 0.6, 0.5, 8, rt=r + 0.3)
-    g("path", 0.0).cylc(0, 0.52, 0, r, 0.04, 8)
-    g("hazard", 0.0).tor(r * 0.62, 0.22, (0, 0.55, 0), n=40, rs=4, s=(1, 0.2, 1))
+    # the deck tops out under 0.42 m (PAD_Y), so it is walked on as ground (the game's k.floorCols); its marks are painted on
+    g("panel", 0.05).cylc(0, 0.17, 0, r + 0.6, 0.34, 8, rt=r + 0.3)
+    g("path", 0.0).cylc(0, 0.36, 0, r, 0.04, 8)
+    g("hazard", 0.0).tor(r * 0.62, 0.22, (0, PAD_Y, 0), n=40, rs=4, s=(1, 0.05, 1))
     for i in range(16):
         a = TAU * i / 16
-        g("lime" if i % 2 else "lamp", 0.0).boxc(math.sin(a) * (r - 0.2), 0.6, math.cos(a) * (r - 0.2), 0.35, 0.12, 0.35)
-    g.text(label, (0, 0.55, 2.2), 0, 4.0, "hazard", 0.02)
+        g("lime" if i % 2 else "lamp", 0.0).boxc(math.sin(a) * (r - 0.2), PAD_Y, math.cos(a) * (r - 0.2), 0.35, 0.03, 0.35)
+    g.text(label, (0, PAD_Y, 2.2), 0, 4.0, "hazard", 0.02)
     g("white", 0.04).cylc(r + 3.0, 1.3, 5.0, 1.0, 4.0, 14, "x")
     g("dark", 0.02).boxc(r + 3.0, 0.15, 5.0, 4.4, 0.3, 1.6)
     g("red", 0.0).tor(1.02, 0.06, (r + 3.0, 1.3, 5.0), (0, 0, PI / 2), n=16, rs=4)
@@ -957,6 +1035,8 @@ def zb_container(g, x, z, yaw=0.0, stack=1, number=417, scale=1.0):
             if o not in made and o.type == "MESH":
                 o.data.transform(T)
     gl["FACTIONS"] = keep
+    if g.solid:
+        g.col_box(x, pitch * stack / 2, z, 3.5 * scale, pitch * stack, 7.9 * scale, (0, yaw, 0))
 
 
 # =====================================================================================================================
