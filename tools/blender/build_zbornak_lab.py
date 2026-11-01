@@ -123,7 +123,9 @@ def gas_rack(g, x, z, yaw):
         g(("panel", "white", "steel")[i % 3]).cylc(0, 1.5, -2.8 + i * 1.1, 0.4, 2.4, 10)
         g(("lime", "pink", "cyan")[i % 3], 0.0).tor(0.41, 0.05, (0, 2.2, -2.8 + i * 1.1), n=12, rs=4)
         g("steel").ball(0, 2.85, -2.8 + i * 1.1, 0.3, 8, 6)
-    g("hazard", 0.0).boxc(0.6, 1.8, 0, 0.2, 0.2, 8)
+    g("hazard", 0.0).boxc(0.48, 1.8, 0, 0.16, 0.16, 7.6)                   # the restraint bar, against the bottles
+    for z_ in (-3.6, 3.6):
+        g("steel", 0.0).boxc(0.48, 1.0, z_, 0.12, 1.4, 0.12)
     g.at()
 
 
@@ -395,7 +397,7 @@ def build_lab(root):
     lab("dark", 0.03).boxc(0, HY_ + HR_ + 1.25, PZ - T / 2 - 0.05, 3.6, 0.7, 0.1)
     lab.text("AIRLOCK", (0, HY_ + HR_ + 1.05, PZ - T / 2 - 0.11), PI, 0.42, "lime")
     for sx in (-1, 1):
-        lab("lime" if sx < 0 else "red", 0.0).ball(sx * 2.15, HY_ + HR_ + 1.25, PZ - T / 2 - 0.12, 0.09, 8, 6)
+        lab("lime" if sx < 0 else "red", 0.0).ball(sx * 2.15, HY_ + HR_ + 1.25, PZ - T / 2 - 0.07, 0.09, 8, 6)
     CAMS["portal"] = ((CX - 3.5, 2.6, CZ + 15.0), (CX + 0.6, 3.6, CZ + R), 30)
 
     # ---- floor: disc, bands, the reactor's pit and railing, the reactor, the catwalk, its stair, the intake bridge
@@ -429,12 +431,12 @@ def build_lab(root):
     LX, LZ, LH = -13.95, 0.0, CW + 3.2                                     # the shaft's centre and its height
     lab("panel", 0.03).boxc(-12.15, CW - 0.15, LZ, 1.4, 0.3, 2.0)          # the bridge
     lab("hazard", 0.0).boxc(-12.15, CW + 0.006, LZ + 0.9, 1.4, 0.01, 0.12).boxc(-12.15, CW + 0.006, LZ - 0.9, 1.4, 0.01, 0.12)
-    for sz in (-1, 1):
-        for x_ in (-12.8, -12.15, -11.5):
+    for sz in (-1, 1):                                                     # its railings, from just past the top gate
+        for x_ in (-12.5, -12.0, -11.5):
             lab("steel", 0.015).cylc(x_, CW + 0.55, LZ + sz * 0.98, 0.035, 1.1, 5)
-        lab("hazard", 0.015).bm((-12.85, CW + 1.1, LZ + sz * 0.98), (-11.45, CW + 1.1, LZ + sz * 0.98), 0.045, 5)
-        lab("steel", 0.0).bm((-12.85, CW + 0.55, LZ + sz * 0.98), (-11.45, CW + 0.55, LZ + sz * 0.98), 0.03, 4)
-        lab.col_box(-12.15, CW + 0.6, LZ + sz * 0.98, 1.4, 1.2, 0.12)
+        lab("hazard", 0.015).bm((-12.5, CW + 1.1, LZ + sz * 0.98), (-11.45, CW + 1.1, LZ + sz * 0.98), 0.045, 5)
+        lab("steel", 0.0).bm((-12.5, CW + 0.55, LZ + sz * 0.98), (-11.45, CW + 0.55, LZ + sz * 0.98), 0.03, 4)
+        lab.col_box(-12.0, CW + 0.6, LZ + sz * 0.98, 1.1, 1.2, 0.12)
     for sx in (-1, 1):                                                     # corner posts, frames at each level and the top
         for sz in (-1, 1):
             lab("steel", 0.03).boxc(LX + sx * 1.15, LH / 2, LZ + sz * 1.15, 0.16, LH, 0.16)
@@ -456,7 +458,6 @@ def build_lab(root):
     # the winding house on top, lamps over each opening, a hazard sill below, the shaft's pit
     lab("dark", 0.04).boxc(LX, LH + 0.4, LZ, 2.6, 0.7, 2.6)
     lab("lime", 0.0).boxc(LX, LH + 0.4, LZ + 1.31, 1.6, 0.12, 0.02).boxc(LX, LH + 0.4, LZ - 1.31, 1.6, 0.12, 0.02)
-    lab("cable", 0.0).path([(LX + 1.0, LH + 0.75, LZ), (LX + 1.0, LH + 1.3, LZ - 0.5), (LX + 1.6, 6.32, LZ - 2.0)], 0.06, 5)
     for (x_, y_) in ((LX - 1.25, 2.85), (LX + 1.25, CW + 2.85)):
         lab("dark", 0.0).boxc(x_, y_, LZ, 0.12, 0.2, 0.6)
         lab("amber", 0.0).boxc(x_ + (0.065 if x_ > LX else -0.065), y_, LZ, 0.01, 0.12, 0.45)
@@ -640,8 +641,8 @@ def build_lab(root):
     for k in range(12):                                                    # the canopy, glass panels on radial ribs
         a = h0 + (h1 - h0) * (k + 0.5) / 12
         lab.at(math.sin(a) * (RH + R) / 2, math.cos(a) * (RH + R) / 2, a)
-        lab("habglass", 0.0).boxc(0, HY + 0.12, 0, (h1 - h0) * (RH + R) / 2 / 12 * 0.98, 0.04, R - RH)
-        lab("vio", 0.0).boxc(0, HY - 0.05, 0, 0.12, 0.05, R - RH - 1.0)
+        lab("habglass", 0.0).boxc(0, HY + 0.21, 0, (h1 - h0) * (RH + R) / 2 / 12 * 0.98, 0.04, R - RH)   # (on the ribs)
+        lab("vio", 0.0).boxc(0, HY + 0.165, 0, 0.12, 0.05, R - RH - 1.0)                           # (under the glass)
         lab.at()
     for k in range(13):
         a = h0 + (h1 - h0) * k / 12
@@ -694,11 +695,22 @@ def build_lab(root):
     PZ = (0.0, 40.0)
     out("path", 0.0).cylc(PZ[0], 0.04, PZ[1], 13.0, 0.08, 48)
     out("hazard", 0.0).tor(12.9, 0.1, (PZ[0], 0.09, PZ[1]), n=48, rs=4, s=(1, 0.3, 1))
+    walks = (math.radians(98.3), math.radians(-71.7))                       # where the two walks leave it
+    mouth = math.asin(3.4 / 14.2)                                           # (a lamp 3.4 m either side of a walk's middle)
     for i in range(12):
         a = TAU * (i + 0.5) / 12
-        if abs((a + PI) % TAU - PI) > 2.4:
+        if abs((a + PI) % TAU - PI) > 2.4 or any(abs((a - wa + PI) % TAU - PI) < 0.35 for wa in walks):
             continue
         lamp_post(out, PZ[0] + math.sin(a) * 14.2, PZ[1] + math.cos(a) * 14.2, 5.0)
+    for wa in walks:
+        for sgn in (-1, 1):
+            lamp_post(out, PZ[0] + math.sin(wa + sgn * mouth) * 14.2, PZ[1] + math.cos(wa + sgn * mouth) * 14.2, 5.0)
+    plaza = ((PZ[0], PZ[1], 13.0),)
+    def from_plaza(wa, r=11.0):
+        return (PZ[0] + math.sin(wa) * r, PZ[1] + math.cos(wa) * r)
+    def bez(p0, p1, p2, p3, n=10):                                         # a smooth run: a cubic through its controls
+        return [tuple((1 - t) ** 3 * a + 3 * (1 - t) ** 2 * t * b + 3 * (1 - t) * t * t * c + t ** 3 * d for a, b, c, d in zip(p0, p1, p2, p3))
+                for t in (i / n for i in range(n + 1))]
     for x, z, yaw in ((-38.0, -6.0, 0.4), (36.0, -36.0, -0.8)):
         gas_rack(out, x, z, yaw)
         d = math.atan2(x - CX, z - CZ)
@@ -719,9 +731,10 @@ def build_lab(root):
     wx, wz = CX + math.sin(d) * (R + T + 0.7), CZ + math.cos(d) * (R + T + 0.7)
     ground_run(out, [(gx + 2.0, gz - 2.0), (wx, wz)])
     out("dark", 0.02).boxc(wx, 0.6, wz, 0.9, 1.2, 0.6, (0, d, 0))
-    path_ribbon(out, [(12.3, 38.2), (26.0, 35.0), (37.0, 25.0), (44.0, 16.0), (48.55, 16.0)], 3.0)   # (square onto the cattle grid's frame)
-    pe = (-51.4, 55.3)
-    path_ribbon(out, [(-11.8, 43.9), (-24.0, 49.0), (-38.0, 53.5), pe], 3.0)
+    s0, u = from_plaza(walks[0]), (math.sin(walks[0]), math.cos(walks[0]))
+    path_ribbon(out, bez(s0, (s0[0] + u[0] * 14, s0[1] + u[1] * 14), (35.55, 16.0), (48.55, 16.0)), 3.0, trim=plaza)   # (radial off the
+    pe = (-51.4, 55.3)                                                     # plaza, square onto the cattle grid's frame)
+    path_ribbon(out, [from_plaza(walks[1]), (-24.0, 49.0), (-38.0, 53.5), pe], 3.0, trim=plaza)
     a = math.atan2(-62.0 - pe[0], 58.0 - pe[1])                             # a ramp up onto the pad's deck
     out.at(pe[0] + math.sin(a) * 1.2, pe[1] + math.cos(a) * 1.2, a)
     out("path", 0.0).polyx([(-1.3, 0), (1.3, 0), (1.3, 0.38), (-1.3, 0.04)], -1.5, 1.5)          # to the deck (PAD_Y)
@@ -736,8 +749,8 @@ def build_lab(root):
     CAMS["crates"] = ((-30.0, 4.0, 82.0), (-46.0, 2.6, 68.0), 30)
     radiator_field(out, -4.0, -84.0, 0.0, 2, 5, (0.0, CZ - R - T - 0.2))
     wall_flange(out, 0.0, CZ - R - T - 0.1, 0.6, PI, 0.7)
-    solar_array(out, -84.0, 8.0, PI / 2, 3, 4)
-    cb = (-84.0, 8.0 - 15.5)
+    solar_array(out, -84.0, 8.0, 0.0, 3, 4)                                # (facing +z: the place's sunward side)
+    cb = (-84.0 + 15.5, 8.0)                                                # its combiner box
     d = math.atan2(cb[0] - CX, cb[1] - CZ)
     wx, wz = CX + math.sin(d) * (R + T + 0.7), CZ + math.cos(d) * (R + T + 0.7)
     ground_run(out, [cb, ((cb[0] + wx) / 2, (cb[1] + wz) / 2 - 2.0), (wx, wz)])
@@ -764,7 +777,8 @@ def ranch_a(root):
     for x0, x1 in ((-12.6, -4.5), (4.5, 12.6)):
         b("barn").boxc((x0 + x1) / 2, WH / 2, 7.8, x1 - x0, WH, 0.4)
     b("barn").boxc(0, (5.2 + WH) / 2, 7.8, 9.0, WH - 5.2, 0.4)
-    b("barn2", 0.0).boxc(0, 0.6, 8.02, 26, 1.2, 0.05)
+    for x0, x1 in ((-13.0, -4.5), (4.5, 13.0)):                              # the wainscot, either side of the door
+        b("barn2", 0.0).boxc((x0 + x1) / 2, 0.6, 8.02, x1 - x0, 1.2, 0.05)
     for sz in (-1, 1):
         prof = [(sz * 8.6, 5.6), (sz * 6.2, 9.4), (0, 11.4)]
         for p0, p1 in zip(prof, prof[1:]):
@@ -780,7 +794,12 @@ def ranch_a(root):
         b("trim", 0.0).boxc(0, 2.7, 0.12, 4.4, 0.25, 0.03).boxc(0, 0.12, 0.12, 4.4, 0.24, 0.03).boxc(0, 5.28, 0.12, 4.4, 0.24, 0.03)
         b("trim", 0.0).boxc(0, 2.7, 0.13, 0.22, 6.5, 0.03, (0, 0, 0.68)).boxc(0, 2.7, 0.13, 0.22, 6.5, 0.03, (0, 0, -0.68))
         b.at()
-    b("steel", 0.02).boxc(0, 5.6, 8.35, 20, 0.12, 0.15)
+    b("steel", 0.02).boxc(0, 5.6, 8.35, 20, 0.12, 0.15)                   # the door track, on brackets from the wall
+    for bx in (-9.5, -6.5, -2.0, 2.0, 6.5, 9.5):
+        b("steel", 0.0).boxc(bx, 5.6, 8.14, 0.12, 0.1, 0.34)
+    for sx in (-7.6, 7.6):                                                   # the leaves' rollers, up to the track
+        for k in (-1.4, 1.4):
+            b("dark", 0.0).boxc(sx + k, 5.47, 8.32, 0.1, 0.16, 0.06)
     b("barnint", 0.0).boxc(0, 0.04, 0, 25, 0.06, 15.2)
     for k in range(6):                                                       # stall partitions inside, a lantern each
         x = -10 + k * 4
@@ -795,13 +814,16 @@ def ranch_a(root):
     b("trim", 0.0).boxc(13.17, 7.6, 0, 0.03, 2.6, 0.2).boxc(13.17, 7.6, 0, 0.03, 0.2, 2.8)
     b("wood2", 0.03).boxc(14.0, 10.0, 0, 2.4, 0.3, 0.3)
     b("steel", 0.0).bm((14.9, 9.85, 0), (14.9, 7.5, 0), 0.02, 4)
+    b("dark", 0.0).tor(0.1, 0.025, (14.9, 7.42, 0), (PI / 2, 0, 0), n=10, rs=4)   # its hook
     b("trim", 0.04).boxc(0, 12.1, 0, 2.0, 1.6, 2.0)
     b("dark", 0.0).boxc(0, 12.1, 0, 2.05, 1.0, 1.6).boxc(0, 12.1, 0, 1.6, 1.0, 2.05)
     b("roof2", 0.03).add(cylinder(0.0, 1.8, 1.2, 4)[:2], (0, 13.5, 0), (0, PI / 4, 0))
     b("steel", 0.0).bm((0, 14.1, 0), (0, 15.6, 0), 0.03, 4)
     b("dark", 0.0).boxc(0, 15.6, 0, 1.4, 0.5, 0.06).ball(0.75, 15.75, 0, 0.18, 6, 4)
+    th = math.atan2(2.0, 6.2)                                               # the upper slope falls 2 m over 6.2 toward +z; +θ
+    up = 0.28 / math.cos(th) + 0.06                                          # about x lowers +z: the strip lies on the slab's top
     for k in range(5):
-        b("solar", 0.0).boxc(-10 + k * 5, 10.62, 3.15, 4.2, 0.06, 2.6, (-math.atan2(2.0, 6.2), 0, 0))
+        b("solar", 0.0).boxc(-10 + k * 5, 11.4 - 3.15 * 2.0 / 6.2 + up, 3.15, 4.2, 0.06, 2.6, (th, 0, 0))
     # ---- the office on the west end: hollow, a big window and an open door onto the corral side, the pen terminal
     o = G("A_office", root, BX - 17.0, 0, BZ + 1.5)
     # (east, x = 4.0, is the barn's gable: the office's walls and floor run up to it, its roof stops just short)
@@ -823,7 +845,7 @@ def ranch_a(root):
     o.mark("spot", (-0.6, 0.24, -3.0), PI, spot="pen")
     o("dark", 0.02).boxc(2.6, 1.6, -4.9, 1.6, 3.2, 0.7)
     o("wood2", 0.02).boxc(-2.8, 0.9, -1.0, 1.2, 0.08, 3.6)
-    o("lamp", 0.0).boxc(-0.6, 4.5, -2.5, 1.8, 0.1, 0.3)
+    o("lamp", 0.0).boxc(-0.6, ry(-2.5) - 0.05, -2.5, 1.8, 0.1, 0.3)       # (under the roof)
     o.light((-0.6, 4.0, -2.0), (1.0, 0.9, 0.7), 450, 0.3)
     o("dark", 0.04).boxc(-1.6, 4.9, 5.56, 3.4, 0.6, 0.12)                  # the sign, on the wall over the door
     o.text("HOLDING PEN", (-1.6, 4.69, 5.63), 0, 0.42, "lime")
@@ -859,10 +881,10 @@ def ranch_a(root):
     for i in range(4):
         bale(r, 71.0 + i * 1.5, -38.6 + (i % 2) * 0.3, 1.57, 0, True)
     for k in range(2):
-        r("wood2", 0.02).boxc(W_ + 6 + k * 2.6, 1.0, S_ - 0.4, 0.1, 2.0, 0.1)
+        r("wood2", 0.02).boxc(W_ + 6 + k * 2.6, 0.74, S_ - 0.4, 0.1, 1.48, 0.1)
     r("wood", 0.02).bm((W_ + 6, 1.4, S_ - 0.4), (W_ + 8.6, 1.4, S_ - 0.4), 0.08, 5)
-    r("barn2", 0.02).rb(W_ + 7.3, 1.62, S_ - 0.4, 0.45, 0.16, 0.35, 0.4)
-    r("lime", 0.0).boxc(W_ + 7.3, 1.84, S_ - 0.4, 0.3, 0.06, 0.25)
+    r("barn2", 0.02).rb(W_ + 7.3, 1.555, S_ - 0.4, 0.45, 0.16, 0.35, 0.4)   # a saddle on the rail, its blanket on it
+    r("lime", 0.0).boxc(W_ + 7.3, 1.655, S_ - 0.4, 0.3, 0.06, 0.25)
     for (x, z) in ((80.0, 38.0), (64.0, 10.0)):
         r("wood2", 0.02).cylc(x, 0.6, z, 0.18, 1.2, 8)
         r("stone", 0.02).boxc(x, 1.45, z, 0.6, 0.5, 0.6)
@@ -886,6 +908,12 @@ GAME[0] = os.environ.get("ZB_GAME") == "1"
 ROOT = build()
 print(f"built: {len(C.objects)} objects, {sum(len(o.data.polygons) for o in C.objects if o.type == 'MESH')} faces, {len(CHIMS)} chimeras, "
       f"{len(LIGHTS)} lights, {len(ARMS)} arms")
+
+if os.environ.get("STRUCT_AUDIT") == "1":                                  # does it hold together? (structure_audit.py)
+    sys.path.insert(0, os.path.join(REPO, "tools", "blender"))
+    from structure_audit import audit_structure
+    audit_structure([o for o in C.objects if o.type == "MESH"], skip_slots={"holo", "spark", "pinkhot", "pink", "glassg"},
+                    skip=lambda o: any(k in o.name for k in ("core", "ring", "scan", "weld", "zbornak")), label="(the lab)")
 
 if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
     zb = next(o for o in C.objects if o.name == "zbornak" and o.type == "EMPTY")

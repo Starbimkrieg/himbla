@@ -25,6 +25,27 @@ renders). The courier is `runner.glb`. The drone feeds are filmed in the game to
 
 ![The plan](plan.jpg)
 
+## The third in-game review
+
+| Asked | Done |
+|---|---|
+| The walk to the ranch gate zigzags | It is a smooth curve now (a cubic), running square onto the cattle grid's frame. |
+| At the plaza, the walk's end and a lamp clip | The walks run on under the plaza's top, and their kerbs and studs stop at its rim (`path_ribbon(trim=...)`). The lamps stand either side of each walk's mouth, and none is on a walk. |
+| The barn's solar panels face the wrong way | They were tipped against their roof slope, half sunk into it. Now they lie on the upper south slope's top at its own pitch. |
+| The little lip at the barn's door | It was the wainscot strip, run across the doorway. It stops either side of the door now. |
+| CHOW clips the feed bunk's roof; the posts don't match | The lean-to roof was tipped the wrong way: the tall back posts stuck through it and the short front ones fell short. Now it falls to the front and every post is cut to its underside. CHOW hangs on chains between the middle front posts. |
+| The solar tables' posts | Same fault: the tall posts were under the panels' low edge. Each post is now cut to the panel's underside above it, with a purlin along each row. The array faces +z, the place's sunward side (it faced +x). |
+| Bars randomly twisted (the splice pod's struts) | `kit.tube` picked each ring's frame afresh from a fixed axis. Where a path turned near that axis the frame flipped and twisted the segment. It now carries the frame along the path (parallel transport). |
+| A structure check for CLAUDE.md | CLAUDE.md, "Model structure": the rules, and `tools/blender/structure_audit.py`, which checks every part of a built model. It reports parts floating, bars with loose ends, bars poking through solid parts, and slabs cutting through slabs (`test_structure_audit.py` checks it on known faults). On this lab its first run found, among others: the bridge railings through the lift's gate, the silo's chute through its ladder, the dome lamps' rods out through the dome, the battery cells through their glass doors, the intake housing in the reactor collar's flange, the microscopes' stages off their arms, the hydroponics strips and canopy, the barn's door track on nothing, the radiator headers' open ends, and the reactor's top cap and crown off the glass and spire. All are fixed. It now reports nothing. |
+
+| | |
+|---|---|
+| ![The walk to the gate](game/ranch_walk.jpg) | ![The walks' mouths at the plaza](game/plaza_mouth.jpg) |
+| ![The solar array, facing the sun](game/solar_array.jpg) | ![Each post up to its panel](game/solar_posts.jpg) |
+| ![The barn's solar strip on its slope](game/barn_solar.jpg) | ![The barn's door, no lip](game/barn_door.jpg) |
+| ![The feed bunk and CHOW](game/feed_bunk.jpg) | ![The splice pod's cables, untwisted](game/splice_pod.jpg) |
+| ![The charger's cells in their bay](game/charger_bay.jpg) | ![The intake's housing under the collar](game/intake_port.jpg) |
+
 ## The second in-game review
 
 | Asked | Done |

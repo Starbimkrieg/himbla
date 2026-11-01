@@ -500,6 +500,9 @@ tools/
     wing_kit.py            ILMB wing parts: accumulator, frames and frusta, railings, ladders, the skywalk lobby, colliders
     habitat_kit.py         Kepler Habitat palette and orbit mark, on wing_kit.py (build_habitat.py, proposals/habitat_b.py)
     downs_common.py        Downs palette, merging, export, coplanar audit
+    structure_audit.py     does a model hold together? floating parts, loose bar ends, bars through solid parts, slabs
+                           through slabs (`python3 tools/blender/structure_audit.py tools/blender/build_<name>.py`;
+                           CLAUDE.md "Model structure"); test_structure_audit.py checks it on known faults
     audit_outline.py       lists runner parts missing an outline
     build_runner.py        -> runner.glb
     build_idles.py         -> idles.json (MOONRUNNER_IDLES_BLEND=<file> saves the scene)

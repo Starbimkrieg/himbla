@@ -254,11 +254,11 @@ def reactor(g, H, R=3.4, pylons=3, crown_y=None, collar_y=None):
     ends in an emitter head bolted to the collar by a bracket), cable runs from each footing to a socket on the plinth;
     crown_y: the column carries on up through a roof to a crown of rings and a spire at that height. Returns the collar's
     height."""
-    g("dark", 0.06).lath([(R + 2.2, 0), (R + 2.2, 0.5), (R + 1.6, 0.9), (R + 1.2, 1.3), (R + 0.4, 1.3)], segs=32)
+    g("dark", 0.06).lath([(R + 2.2, 0), (R + 2.2, 0.5), (R + 1.6, 0.9), (R + 1.2, 1.3), (0, 1.3)], segs=32)
     g.col_cyl(0, 0, 0, R + 2.2, 0.5)                                       # the plinth's first step (too wide for lath's own)
-    g("hazard", 0.0).tor(R + 1.9, 0.08, (0, 0.52, 0), n=40, rs=4)
+    g("hazard", 0.0).tor(R + 2.2, 0.06, (0, 0.46, 0), n=40, rs=4)          # a band round the plinth's rim
     g("glass", 0.0).cylc(0, 1.3 + (H - 2.6) / 2, 0, R, H - 2.6, 32)
-    g("dark", 0.06).lath([(R + 0.6, H - 1.3), (R + 0.9, H - 0.9), (R + 0.9, H - 0.3), (R + 0.3, H)], segs=32)
+    g("dark", 0.06).lath([(R, H - 1.3), (R + 0.6, H - 1.3), (R + 0.9, H - 0.9), (R + 0.9, H - 0.3), (R + 0.3, H), (R, H), (R, H - 1.3)], segs=32)
     for y in (1.6, H - 1.6):
         g("steel", 0.03).tor(R + 0.08, 0.14, (0, y, 0), n=32)
     for i in range(8):                                                      # the cage's ribs, up the glass
@@ -289,18 +289,19 @@ def reactor(g, H, R=3.4, pylons=3, crown_y=None, collar_y=None):
             g("hazard", 0.0).bm(tuple(f1 + mast * t0), tuple(f1 + mast * t1), 0.515, 8)
         g("dark", 0.04).ball(*head, 0.75, 12, 8)
         g("steel", 0.03).boxc(s * (R + 0.75), cly, c * (R + 0.75), 0.7, 0.55, 1.2, (0, a, 0))     # bracket, head to collar
-        for k in (-1, 1):                                                   # bolts through the bracket's flange
-            g("dark", 0.0).cylc(s * (R + 0.32) + c * 0.22 * k, cly, c * (R + 0.32) - s * 0.22 * k, 0.05, 0.08, 6, rot=(PI / 2, a, 0))
+        for k in (-1, 1):                                                   # bolt heads on the bracket's top, by the collar
+            g("dark", 0.0).cylc(s * (R + 0.38) + c * 0.22 * k, cly + 0.3, c * (R + 0.38) - s * 0.22 * k, 0.05, 0.06, 6)
         g("lime", 0.0).boxc(s * (R + 0.21), cly, c * (R + 0.21), 0.45, 0.3, 0.02, (0, a, 0))     # the emitter's lens on the collar
         g("cable", 0.0).path([(s * (R + 4.6), 0.12, c * (R + 4.6)), (s * (R + 3.0), 0.12, c * (R + 3.0)), (s * (R + 2.3), 0.3, c * (R + 2.3))], 0.12, 6)
         g("dark", 0.015).boxc(s * (R + 2.15), 0.35, c * (R + 2.15), 0.5, 0.4, 0.3, (0, a, 0))     # the cable's socket on the plinth
     if crown_y:
         g("glass", 0.0).cylc(0, (H + crown_y) / 2, 0, R * 0.7, crown_y - H, 24)
         g("pink", 0.0).cylc(0, (H + crown_y) / 2, 0, 0.35, crown_y - H, 10)
+        fl = G("crown_float", g.root, solid=False)                          # (its rings of light float round it)
         for k, y in enumerate((crown_y - 4, crown_y - 1.5, crown_y + 1)):
-            g(("lime", "cyan", "pink")[k], 0.0).tor(R * (1.3 - 0.25 * k), 0.22, (0, y, 0), (0.12 * (k - 1), 0, 0.1 * k), n=40)
-        g("dark", 0.05).lath([(R * 0.9, crown_y - 6), (R * 0.9, crown_y - 5), (R * 0.55, crown_y + 2.5), (0.3, crown_y + 3.2)], segs=24)
-        g("steel", 0.03).cylc(0, crown_y + 7, 0, 0.12, 8, 6, rt=0.05)
+            fl(("lime", "cyan", "pink")[k], 0.0).tor(R * (1.3 - 0.25 * k), 0.22, (0, y, 0), (0.12 * (k - 1), 0, 0.1 * k), n=40)
+        g("dark", 0.05).lath([(R * 0.9, crown_y - 6), (R * 0.9, crown_y - 5), (R * 0.55, crown_y + 2.5), (0.3, crown_y + 3.2), (0, crown_y + 3.25)], segs=24)
+        g("steel", 0.03).cylc(0, crown_y + 7.1, 0, 0.12, 8, 6, rt=0.05)            # (its foot set in the crown's top)
         g("red", 0.0).ball(0, crown_y + 11, 0, 0.35, 8, 6)
     g.light((0, cy, 0), (1.0, 0.25, 0.6), 9000 * (H / 14), 1.2)
     return cly
@@ -324,10 +325,10 @@ def reactor_intake(g, R, ang, y, r_out, w=1.8):
         g("steel", 0.0).bm((sx * (w / 2 - 0.05), y + 0.55, R + 1.0), (sx * (w / 2 - 0.05), y + 0.55, r_out), 0.03, 4)
         g("lime", 0.0).boxc(sx * (w / 2 - 0.02), y - 0.05, R + 0.9 + L / 2, 0.04, 0.06, L)
     # the port housing on the glass, its chute and the hopper
-    g("steel", 0.04).boxc(0, y + 0.8, R + 0.4, 1.7, 1.6, 0.9)
-    g("dark", 0.02).boxc(0, y + 0.8, R + 0.06, 1.9, 1.8, 0.2)
-    g("dark", 0.04).boxc(0, y + 1.75, R + 0.55, 1.2, 0.5, 0.5)
-    g.text("INTAKE", (0, y + 1.66, R + 0.81), 0, 0.3, "pink", 0.02)
+    g("steel", 0.04).boxc(0, y + 0.72, R + 0.4, 1.7, 1.4, 0.9)             # (its top clear under the collar's flange)
+    g("dark", 0.02).boxc(0, y + 0.73, R + 0.06, 1.9, 1.5, 0.2)
+    g("dark", 0.04).boxc(0, y + 1.67, R + 0.6, 1.2, 0.5, 0.5)
+    g.text("INTAKE", (0, y + 1.52, R + 0.86), 0, 0.3, "pink", 0.02)
     g("steel", 0.03).cylc(0, y + 0.85, R + 1.2, 0.35, 0.8, 12, "z")
     g("steel", 0.03).add(cylinder(0.75, 0.35, 0.7, 16, True)[:2], (0, y + 0.95, R + 1.75))
     g("hazard", 0.0).tor(0.75, 0.06, (0, y + 1.3, R + 1.75), n=20, rs=4)
@@ -487,7 +488,10 @@ def growth_pod(g, x, z, yaw=0.0, seed=0, h=2.0, line=1.6):
             else:
                 g("plant", 0.0).cylc(px, y + 0.1, pz, 0.025, 0.18, 6)
                 g(c, 0.0).ball(px, y + 0.2, pz, 0.1, 10, 5, s=(1, 0.45, 1))
-    g("steel", 0.0).cylc(0.62, 0.6 + h - 0.15, 0, 0.05, 0.12, 6)
+    g("steel", 0.0).cylc(0.65, 0.6 + h - 0.15, 0, 0.05, 0.12, 6)
+    for k in range(3):
+        a = TAU * k / 3
+        g("steel", 0.0).bm((0, 0.6 + h + 0.3, 0), (math.sin(a) * 0.48, 0.6 + h + 0.3, math.cos(a) * 0.48), 0.015, 4)
     g("steel", 0.02).path([(0, 0.25, -0.84), (0, 0.12, -1.0), (0, 0.12, -line)], 0.07, 6)
     g.light((0, 0.6 + h * 0.6, 0), (0.45, 1.0, 0.8), 60, 0.3)
     g.at()
@@ -539,10 +543,11 @@ def void_cage(g, x, z, yaw=0.0, r=1.6, y=2.4, feed=0.0):
         a = TAU * i / 3
         g("steel").bm((math.sin(a) * (r + 0.1), 0.8, math.cos(a) * (r + 0.1)), (math.sin(a) * (r + 0.1), y + r + 0.6, math.cos(a) * (r + 0.1)), 0.09, 6)
     g("dark").tor(r + 0.1, 0.14, (0, y + r + 0.6, 0), n=28)
-    g("void", 0.0).ball(0, y, 0, r * 0.45, 16, 10)
-    g("vio", 0.0).tor(r * 0.62, 0.05, (0, y, 0), (0.5, 0, 0.2), n=32, rs=4)
-    g("cyan", 0.0).tor(r * 0.75, 0.04, (0, y, 0), (-0.3, 0.8, -0.6), n=32, rs=4)
-    g("halo", 0.0).ball(0, y, 0, r * 0.58, 14, 9)
+    fl = G("cage_float", g.root, *g.pt((0, 0, 0)), yaw=g.cur[3], solid=False)    # (held in the cage's field: it floats)
+    fl("void", 0.0).ball(0, y, 0, r * 0.45, 16, 10)
+    fl("vio", 0.0).tor(r * 0.62, 0.05, (0, y, 0), (0.5, 0, 0.2), n=32, rs=4)
+    fl("cyan", 0.0).tor(r * 0.75, 0.04, (0, y, 0), (-0.3, 0.8, -0.6), n=32, rs=4)
+    fl("halo", 0.0).ball(0, y, 0, r * 0.58, 14, 9)
     g.light((0, y, 0), (0.75, 0.45, 1.0), 260, 0.3)
     g.at()
 
@@ -677,7 +682,8 @@ def pen_terminal(g, x, z, yaw, sid="pen"):
     g("dark").boxc(0, 0.6, -0.2, 1.8, 1.2, 0.8)
     g("cyan").boxc(0, 1.25, 0.15, 1.8, 0.16, 0.7, (0.35, 0, 0))
     for i in range(6):
-        g(("lime", "cyan", "amber")[i % 3], 0.0).boxc(-0.5 + (i % 3) * 0.5, 1.35, 0.1 + (i // 3) * 0.22, 0.18, 0.03, 0.14, (0.35, 0, 0))
+        bz = 0.1 + (i // 3) * 0.22                                          # (on the sloped desk's top at bz)
+        g(("lime", "cyan", "amber")[i % 3], 0.0).boxc(-0.5 + (i % 3) * 0.5, 1.25 + 0.08 / math.cos(0.35) - math.sin(0.35) * (bz - 0.15) + 0.005, bz, 0.18, 0.03, 0.14, (0.35, 0, 0))
     g("dark").boxc(0, 1.95, -0.45, 1.7, 1.1, 0.12)
     g.screen(sid, 0, 1.95, -0.385, 1.5, 0.9)
     g("lime", 0.0).boxc(0, 2.55, -0.45, 1.75, 0.08, 0.14)
@@ -719,7 +725,7 @@ def security_post(g, x, z, yaw, door_y, door_r, sid="sec", scr=(2.2, 1.5), scr_x
     w, h = scr
     g("dark", 0.04).boxc(scr_x, scr_y, 0.06, w + 0.3, h + 0.3, 0.12)
     g.screen(sid, scr_x, scr_y, 0.14, w, h)
-    g("lime", 0.0).boxc(scr_x, scr_y - h / 2 - 0.3, 0.08, w * 0.7, 0.12, 0.08)
+    g("lime", 0.0).boxc(scr_x, scr_y - h / 2 - 0.21, 0.04, w * 0.7, 0.12, 0.08)
     at = g.pt((px, 0, pz))
     g.at()
     return at
@@ -787,10 +793,13 @@ def silo(g, x, z, r=3.0, h=14.0, chute_to=None):
     g("barn").add(sphere(r + 0.15, 24, 8, PI / 2)[:2], (0, 0.4 + h, 0), s=(1, 0.55, 1))
     g("steel").cylc(0, 0.4 + h + (r + 0.15) * 0.55 + 0.25, 0, 0.5, 0.5, 10)
     g("lime", 0.0).tor(r + 0.06, 0.08, (0, 0.4 + h - 0.6, 0), n=32, rs=4)
-    for k in (-1, 1):
-        g("steel").bm((k * 0.3, 0.4, r + 0.25), (k * 0.3, h + 1.2, r + 0.25), 0.04, 4)
+    for k in (-1, 1):                                                       # the ladder, on the -x side (the chute leaves +z)
+        g("steel").bm((-r - 0.25, 0.4, k * 0.3), (-r - 0.25, h + 1.2, k * 0.3), 0.04, 4)
     for i in range(int(h / 0.4)):
-        g("steel").bm((-0.3, 0.8 + i * 0.4, r + 0.25), (0.3, 0.8 + i * 0.4, r + 0.25), 0.025, 4)
+        g("steel").bm((-r - 0.25, 0.8 + i * 0.4, -0.3), (-r - 0.25, 0.8 + i * 0.4, 0.3), 0.025, 4)
+    for y in (1.0, h * 0.5, h):                                             # its brackets to the drum
+        for k in (-1, 1):
+            g("steel").bm((-r + 0.02, y, k * 0.3), (-r - 0.25, y, k * 0.3), 0.03, 4)
     g.at()
     if chute_to:
         g("hazard").path([(x, 2.0, z), ((x + chute_to[0]) / 2, chute_to[1] + 2.5, (z + chute_to[2]) / 2), chute_to], 0.32, 8)
@@ -805,13 +814,18 @@ def feed_bunk(g, x, z, yaw, L=14.0, roof=True):
     g("feed", 0.0).boxc(0, 0.985, 0, L - 0.4, 0.02, 1.0)
     for i in range(int(L / 0.7)):
         g("feed2", 0.0).ball(-L / 2 + 0.4 + i * 0.7, 1.0, ((i * 5) % 3 - 1) * 0.25, 0.14, 6, 4, s=(1, 0.5, 1))
+    # the roof: a slab 3.4 deep tipped 0.15 rad about x (+θ lowers the +z end), so it falls toward the front; each post is
+    # cut to its underside right above
+    RT, RY, RZ, RD = 0.15, 3.2, 0.25, 3.4
+    under = lambda z: RY - math.sin(RT) * (z - RZ) - 0.06 / math.cos(RT)
     for k in range(int(L / 3) + 1):
         xx = -L / 2 + k * L / int(L / 3)
-        g("wood2").bm((xx, 0.0, -0.9), (xx, 3.4, -0.9), 0.11, 6)
-        g("wood2").bm((xx, 0.0, 1.4), (xx, 2.9, 1.4), 0.11, 6)
+        g("wood2").bm((xx, 0.0, -0.9), (xx, under(-0.9), -0.9), 0.11, 6)
+        g("wood2").bm((xx, 0.0, 1.4), (xx, under(1.4), 1.4), 0.11, 6)
     if roof:
-        g("corr").boxc(0, 3.2, 0.25, L + 1.2, 0.12, 3.4, (-0.15, 0, 0))
-        g("barn", 0.0).boxc(0, 3.42, -1.43, L + 1.2, 0.3, 0.05, (-0.15, 0, 0))
+        g("corr").boxc(0, RY, RZ, L + 1.2, 0.12, RD, (RT, 0, 0))
+        bz = RZ - RD / 2 * math.cos(RT)                                    # the back edge's fascia
+        g("barn", 0.0).boxc(0, RY + math.sin(RT) * RD / 2 + 0.02, bz - 0.03, L + 1.2, 0.3, 0.05, (RT, 0, 0))
     g("steel").cylc(0, 2.2, -0.3, 0.28, L, 12, "x")
     for k in range(int(L / 2.5)):
         xx = -L / 2 + 1.2 + k * 2.5
@@ -820,8 +834,10 @@ def feed_bunk(g, x, z, yaw, L=14.0, roof=True):
     for k in (-1, 1):
         g("stone").boxc(k * (L / 2 + 0.8), 0.5, 0.6, 0.6, 1.0, 0.6)
         g("cyan", 0.0).boxc(k * (L / 2 + 0.8), 1.15, 0.6, 0.45, 0.3, 0.45)
-    g("dark").boxc(0, 3.0, 1.55, 3.2, 0.9, 0.08)
-    g.text("CHOW", (0, 2.75, 1.62), 0, 0.7, "amber")
+    g("dark").boxc(0, 2.38, 1.4, 2.5, 0.8, 0.08)                          # CHOW, between the middle front posts, on chains
+    g.text("CHOW", (0, 2.08, 1.45), 0, 0.6, "amber")
+    for k in (-1, 1):
+        g("steel", 0.0).bm((k * 0.95, 2.78, 1.4), (k * 0.95, under(1.4) + 0.02, 1.4), 0.015, 4)
     g.at()
 
 
@@ -850,7 +866,7 @@ def wind_pump(g, x, z, h=9.0, yaw=0.0):
             (ax, az), (bx, bz) = corners[i], corners[(i + 1) % 4]
             g("steel").bm((ax * f0, y0, az * f0), (bx * f1, y1, bz * f1), 0.035, 4)
             g("steel").bm((ax * f1, y1, az * f1), (bx * f1, y1, bz * f1), 0.035, 4)
-    g("dark").boxc(0, h + 0.4, 0, 0.5, 0.6, 1.2)
+    g("dark").boxc(0, h + 0.3, 0, 0.8, 0.6, 1.2)                            # the head, on the tower's four leg tops
     g("steel").bm((0, h + 0.4, -0.6), (0, h + 0.4, -3.2), 0.06, 5)
     g("barn").boxc(0, h + 0.6, -3.4, 0.05, 1.4, 1.6)
     g("dark").cylc(0, h + 0.4, 0.75, 0.25, 0.3, 10, "z")
@@ -898,10 +914,11 @@ def lamp_post(g, x, z, h=5.0, color="lamp"):
     g(color, 0.0).boxc(x, h - 0.12, z, 0.45, 0.2, 0.45)
 
 
-def path_ribbon(g, pts, w=3.0, step=1.0, lights=6.0, light="lime"):
+def path_ribbon(g, pts, w=3.0, step=1.0, lights=6.0, light="lime", trim=()):
     """A paved walk along a smooth curve through pts [(x, z)] (Catmull-Rom), one continuous ribbon 6 cm thick with a raised
     kerb along each edge and flush lit studs set into the kerb tops every `lights` metres. Start and end it on the edges of
-    the platforms it joins."""
+    the platforms it joins. trim: circles (x, z, r) of round platforms the walk runs onto: the ribbon runs on under the
+    platform's top (start or end it inside), the kerbs stop at its rim."""
     P = [Vector((p[0], 0, p[1])) for p in pts]
     P = [P[0] * 2 - P[1]] + P + [P[-1] * 2 - P[-2]]
     samples = []
@@ -931,8 +948,40 @@ def path_ribbon(g, pts, w=3.0, step=1.0, lights=6.0, light="lime"):
         faces.append((e + 3, e + 2, e + 1, e))
         g(slot, ink).add((verts, faces))
     strip(-w / 2, w / 2, 0.0, 0.06, "path", 0.0)
-    for s in (-1, 1):
-        strip(s * w / 2, s * (w / 2 + 0.3), 0.0, 0.14, "panel", 0.02)
+    if trim:
+        def inside(p):
+            return any((p.x - cx) ** 2 + (p.z - cz) ** 2 < cr * cr for cx, cz, cr in trim)
+        def frame(i):
+            return (samples[min(i + 1, len(samples) - 1)] - samples[max(i - 1, 0)]).normalized()
+        full = samples
+        for s in (-1, 1):
+            off = s * (w / 2 + 0.15)
+            kp = lambda p, d: p + Vector((d.z, 0, -d.x)) * off
+            keep = [i for i in range(len(full)) if not inside(kp(full[i], frame(i)))]
+            if len(keep) < 2:
+                continue
+            i0, i1 = keep[0], keep[-1]
+            sub = full[i0:i1 + 1]
+            for end, j in ((0, i0), (1, i1)):                              # each cut end moved onto the rim (bisection)
+                nb = j - 1 if end == 0 else j + 1
+                if 0 <= nb < len(full):
+                    a_, b_ = full[nb], full[j]
+                    for _ in range(20):
+                        m = (a_ + b_) / 2
+                        if inside(kp(m, frame(j))):
+                            a_ = m
+                        else:
+                            b_ = m
+                    if end == 0:
+                        sub = [b_] + sub
+                    else:
+                        sub = sub + [b_]
+            samples = sub
+            strip(s * w / 2, s * (w / 2 + 0.3), 0.0, 0.14, "panel", 0.02)
+            samples = full
+    else:
+        for s in (-1, 1):
+            strip(s * w / 2, s * (w / 2 + 0.3), 0.0, 0.14, "panel", 0.02)
     acc, nxt = 0.0, lights / 2
     for i in range(1, len(samples)):
         acc += (samples[i] - samples[i - 1]).length
@@ -943,6 +992,8 @@ def path_ribbon(g, pts, w=3.0, step=1.0, lights=6.0, light="lime"):
             nrm = Vector((d.z, 0, -d.x))
             for s in (-1, 1):
                 q = p + nrm * s * (w / 2 + 0.15)
+                if trim and inside(q):
+                    continue
                 g(light, 0.0).cylc(q.x, 0.142, q.z, 0.08, 0.008, 10)
 
 
@@ -964,9 +1015,16 @@ def radiator_field(g, x, z, yaw, rows=2, cols=5, header_to=None):
             for i in range(5):
                 g("cyan", 0.0).boxc(xx - 2.2 + i * 1.1, 4.2, zz + 0.11, 0.12, 5.4, 0.02).boxc(xx - 2.2 + i * 1.1, 4.2, zz - 0.11, 0.12, 5.4, 0.02)
             g("dark", 0.02).boxc(xx, 7.35, zz, 5.8, 0.3, 0.4)
-        g("steel", 0.03).cylc(0, 0.6, zz, 0.35, cols * 6.5, 10, "x")
+        hx0, hx1 = -cols * 3.25 - 0.6, cols * 3.25                        # from the cross header to the end cap
+        g("steel", 0.03).cylc((hx0 + hx1) / 2, 0.6, zz, 0.35, hx1 - hx0, 10, "x")
         g("hazard", 0.0).cylc(-cols * 3.25 - 0.2, 0.6, zz, 0.38, 0.3, 10, "x")
-    g("steel", 0.03).cylc(-cols * 3.25 - 0.6, 0.6, 0, 0.4, rows * 9.0, 10, "z")
+        g("dark", 0.02).cylc(cols * 3.25, 0.6, zz, 0.42, 0.12, 10, "x")     # the end cap
+        for k in range(cols):                                              # a riser from it to each panel
+            g("steel", 0.0).bm((-cols * 3.25 + 3.25 + k * 6.5, 0.9, zz), (-cols * 3.25 + 3.25 + k * 6.5, 1.25, zz), 0.08, 6)
+    zr = (rows - 1) * 4.5
+    g("steel", 0.03).cylc(-cols * 3.25 - 0.6, 0.6, 0, 0.4, 2 * zr + 0.8, 10, "z")
+    for sz in (-1, 1):
+        g("dark", 0.02).cylc(-cols * 3.25 - 0.6, 0.6, sz * (zr + 0.4), 0.45, 0.12, 10, "z")
     g.at()
     if header_to:
         sx, sz = x + math.cos(yaw) * (-cols * 3.25 - 0.6), z - math.sin(yaw) * (-cols * 3.25 - 0.6)
@@ -986,9 +1044,10 @@ def landing_pad(g, x, z, r=12.0, label="Z"):
     g("panel", 0.05).cylc(0, 0.17, 0, r + 0.6, 0.34, 8, rt=r + 0.3)
     g("path", 0.0).cylc(0, 0.36, 0, r, 0.04, 8)
     g("hazard", 0.0).tor(r * 0.62, 0.22, (0, PAD_Y, 0), n=40, rs=4, s=(1, 0.05, 1))
+    rl = r * math.cos(PI / 8) - 0.35                                        # (inside the octagon's mid-edges too)
     for i in range(16):
         a = TAU * i / 16
-        g("lime" if i % 2 else "lamp", 0.0).boxc(math.sin(a) * (r - 0.2), PAD_Y, math.cos(a) * (r - 0.2), 0.35, 0.03, 0.35)
+        g("lime" if i % 2 else "lamp", 0.0).boxc(math.sin(a) * rl, PAD_Y, math.cos(a) * rl, 0.35, 0.03, 0.35)
     g.text(label, (0, PAD_Y, 2.2), 0, 4.0, "hazard", 0.02)
     g("white", 0.04).cylc(r + 3.0, 1.3, 5.0, 1.0, 4.0, 14, "x")
     g("dark", 0.02).boxc(r + 3.0, 0.15, 5.0, 4.4, 0.3, 1.6)
@@ -1001,14 +1060,22 @@ def landing_pad(g, x, z, r=12.0, label="Z"):
 def solar_array(g, x, z, yaw, rows=3, cols=4):
     """tilted solar tables on posts, a combiner box and a cable trench toward the lab"""
     g.at(x, z, yaw)
+    # each panel tips 0.35 rad about x: a turn of +θ about x lowers the +z end (y' = y cos θ - z sin θ), so the panel faces
+    # +z and its high edge is at -z; every post is cut to the panel's underside right above it
+    TH, PY, PT = 0.35, 1.55, 0.08                                          # tilt, the panel's centre height, its thickness
+    under = lambda dz: PY - math.sin(TH) * dz - PT / 2 / math.cos(TH)      # its underside dz from its centre (along z)
     for r in range(rows):
         for c in range(cols):
             xx, zz = (c - (cols - 1) / 2) * 7.0, (r - (rows - 1) / 2) * 7.5
-            for k in (-1, 1):
-                g("steel").bm((xx + k * 2.4, 0, zz + 0.8), (xx + k * 2.4, 2.0, zz + 0.8), 0.08, 5).bm((xx + k * 2.4, 0, zz - 1.2), (xx + k * 2.4, 1.0, zz - 1.2), 0.08, 5)
-            g("solar", 0.02).boxc(xx, 1.55, zz - 0.2, 6.2, 0.08, 3.4, (0.35, 0, 0))
+            pz = zz - 0.2                                                  # the panel's centre
+            for dz in (1.2, -1.2):
+                top = under(dz) - 0.06                                     # (the purlin's under the panel)
+                for k in (-1, 1):
+                    g("steel").bm((xx + k * 2.4, 0, pz + dz), (xx + k * 2.4, top, pz + dz), 0.08, 5)
+                g("steel", 0.02).bm((xx - 2.9, top + 0.03, pz + dz), (xx + 2.9, top + 0.03, pz + dz), 0.06, 4)
+            g("solar", 0.02).boxc(xx, PY, pz, 6.2, PT, 3.4, (TH, 0, 0))
             for i in range(1, 6):
-                g("steel", 0.0).boxc(xx - 3.1 + i * 1.03, 1.6, zz - 0.18, 0.03, 0.02, 3.3, (0.35, 0, 0))
+                g("steel", 0.0).boxc(xx - 3.1 + i * 1.03, PY + PT / 2 + 0.008, pz, 0.03, 0.016, 3.3, (TH, 0, 0))
     g("dark", 0.03).boxc(cols * 3.5 + 1.5, 0.9, 0, 1.0, 1.8, 1.4)
     g("lime", 0.0).boxc(cols * 3.5 + 1.0, 1.4, 0, 0.02, 0.3, 0.5)
     g.at()
@@ -1181,7 +1248,7 @@ def microscope_bench(g, x, z, yaw, L=3.8, s=1.0):
     for i, mx in enumerate((-1.2, 0.0, 1.2)):
         g("white", 0.02).boxc(mx, top + 0.03, 0.5, 0.26, 0.06, 0.32)
         g("white", 0.02).path([(mx, top + 0.05, 0.38), (mx, top + 0.35, 0.36), (mx, top + 0.5, 0.48)], 0.05, 6)
-        g("dark", 0.015).boxc(mx, top + 0.22, 0.55, 0.22, 0.03, 0.2)
+        g("dark", 0.015).boxc(mx, top + 0.22, 0.51, 0.22, 0.03, 0.2)
         g("glass", 0.0).boxc(mx, top + 0.24, 0.55, 0.16, 0.005, 0.06)
         g(LIQUIDS[i], 0.0).cylc(mx, top + 0.245, 0.55, 0.012, 0.004, 8)
         g("dark", 0.015).cylc(mx, top + 0.42, 0.55, 0.06, 0.12, 10)
@@ -1190,8 +1257,8 @@ def microscope_bench(g, x, z, yaw, L=3.8, s=1.0):
             g("steel", 0.0).cylc(mx + math.sin(a) * 0.035, top + 0.33, 0.55 + math.cos(a) * 0.035, 0.012, 0.08, 6)
         g("white", 0.015).path([(mx, top + 0.48, 0.55), (mx, top + 0.58, 0.5), (mx, top + 0.66, 0.6)], 0.04, 8)
         for k in (-1, 1):
-            g("dark", 0.0).cylc(mx + k * 0.035, top + 0.7, 0.66, 0.018, 0.06, 6)
-        g("lamp", 0.0).cylc(mx, top + 0.11, 0.55, 0.03, 0.02, 8)
+            g("dark", 0.0).cylc(mx + k * 0.025, top + 0.68, 0.6, 0.018, 0.08, 6)
+        g("lamp", 0.0).cylc(mx, top + 0.07, 0.55, 0.03, 0.02, 8)
     for i in range(4):
         g(("dark", "white")[i % 2], 0.01).boxc(-0.6, top + 0.025 + i * 0.05, 0.25, 0.3, 0.05, 0.12)
     for i in range(5):
@@ -1228,9 +1295,11 @@ def magnet_array(g, x, z, yaw=0.0, s=1.0):
             g("brass", 0.0).cylc(coil.x - s * (0.27 - j * 0.13), coil.y, coil.z - c * (0.27 - j * 0.13), 0.335, 0.03, 14, rot=(PI / 2, a, 0))
         g("dark", 0.02).cylc(s * 0.82, cy, c * 0.82, 0.18, 0.18, 10, rot=(PI / 2, a, 0))       # the pole piece
         g("cyan", 0.0).cylc(s * 0.72, cy, c * 0.72, 0.12, 0.02, 10, rot=(PI / 2, a, 0))
-    g("steel", 0.02).ball(0, cy, 0, 0.3, 16, 10)
+    fl = G("magnet_float", g.root, *g.pt((0, 0, 0)), yaw=g.cur[3], solid=False)   # (held in the field: it floats)
+    fl.at(s=g.cur[4])
+    fl("steel", 0.02).ball(0, cy, 0, 0.3, 16, 10)
     for k, rot in enumerate(((0.3, 0, 0), (PI / 2, 0.4, 0), (0.9, 1.2, 0.3), (-0.6, 2.1, 0.5))):
-        g("cyan", 0.0).tor(0.55 + 0.08 * k, 0.012, (0, cy, 0), rot, n=32, rs=3)
+        fl("cyan", 0.0).tor(0.55 + 0.08 * k, 0.012, (0, cy, 0), rot, n=32, rs=3)
     g("panel", 0.03).boxc(0, 0.75, 2.9, 0.7, 0.9, 0.45)
     g("dark", 0.0).boxc(0, 1.22, 2.95, 0.72, 0.06, 0.5, (0.35, 0, 0))
     for i in range(3):
@@ -1246,7 +1315,7 @@ def battery_station(g, x, z, yaw):
     back, a charge bar and a status lamp beside each), a header with the CHARGING plate and a meter set into its face, the
     feed cable out of its side into a floor junction box at the wall"""
     g.at(x, z, yaw)
-    W, D, B = 2.2, 0.85, 0.6                                                # width, depth, the bay's back
+    W, D, B = 2.2, 0.85, 0.45                                               # width, depth, the bay's back (0.4 m bay)
     g("dark", 0.03).boxc(0, 0.06, D / 2, W + 0.06, 0.12, D + 0.06)         # plinth
     g("panel", 0.04).boxc(0, 0.87, B / 2, W, 1.5, B)                       # the body behind the bay
     for sx in (-1, 1):
@@ -1266,13 +1335,14 @@ def battery_station(g, x, z, yaw):
         for i in range(3):
             bx = -0.62 + i * 0.62
             lvl = (0.25, 1.0, 0.6, 1.0, 0.85, 0.4)[r * 3 + i]
-            g("dark", 0.015).boxc(bx, fy + 0.03, 0.72, 0.46, 0.06, 0.22)     # the cradle
-            g("steel", 0.02).cylc(bx, fy + 0.29, 0.72, 0.2, 0.46, 16)       # the cell
-            g("hazard", 0.0).cylc(bx, fy + 0.2, 0.72, 0.205, 0.08, 16)
-            g("dark", 0.0).cylc(bx, fy + 0.54, 0.72, 0.17, 0.04, 14)
+            cz = 0.64                                                      # (the cell's middle, in the bay)
+            g("dark", 0.015).boxc(bx, fy + 0.03, cz, 0.42, 0.06, 0.34)       # the cradle
+            g("steel", 0.02).cylc(bx, fy + 0.29, cz, 0.17, 0.46, 16)        # the cell
+            g("hazard", 0.0).cylc(bx, fy + 0.2, cz, 0.175, 0.08, 16)
+            g("dark", 0.0).cylc(bx, fy + 0.54, cz, 0.14, 0.04, 14)
             for k, c in ((-1, "red"), (1, "dark")):                        # terminals, a cable from each into the back
-                g(c, 0.0).cylc(bx + k * 0.08, fy + 0.58, 0.72, 0.03, 0.05, 8)
-                g("cable", 0.0).path([(bx + k * 0.08, fy + 0.6, 0.72), (bx + k * 0.08, fy + 0.62, 0.66), (bx + k * 0.06, fy + 0.6, B + 0.01)], 0.015, 4)
+                g(c, 0.0).cylc(bx + k * 0.07, fy + 0.58, cz, 0.03, 0.05, 8)
+                g("cable", 0.0).path([(bx + k * 0.07, fy + 0.6, cz), (bx + k * 0.07, fy + 0.62, cz - 0.07), (bx + k * 0.06, fy + 0.6, B + 0.01)], 0.015, 4)
             g("dark", 0.0).boxc(bx + 0.27, fy + 0.29, B + 0.006, 0.05, 0.42, 0.01)    # the charge bar on the bay's back
             g("lime" if lvl >= 1 else "amber", 0.0).boxc(bx + 0.27, fy + 0.08 + 0.21 * lvl, B + 0.012, 0.035, 0.42 * lvl, 0.008)
             g("lime" if lvl >= 1 else "red", 0.0).ball(bx + 0.27, fy + 0.56, B + 0.015, 0.025, 6, 4)

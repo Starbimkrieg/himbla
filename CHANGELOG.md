@@ -5,6 +5,37 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Model structure: rules and an audit.** CLAUDE.md gains "Model structure (every Blender model)":
+  - Supports are cut to what they hold.
+  - The sign of a tilt is worked out, not guessed.
+  - Walls meet their roofs, signs and lamps are fixed to something, and openings stay open.
+  - Straight bars are straight, walks meet what they join, and floating is deliberate (`_float`).
+
+  `tools/blender/structure_audit.py` checks any builder's model: `python3 tools/blender/structure_audit.py
+  tools/blender/build_<name>.py` builds it without exporting. It reports parts that touch nothing, bars whose ends touch
+  nothing, bars poking through solid parts, and slabs cutting through slabs. `tools/blender/test_structure_audit.py`
+  checks it on a scene of known faults. **`kit.tube` no longer twists:** each ring's frame is carried along the path
+  (parallel transport), where it used to flip near a fixed reference axis (straight two-point bars are unchanged).
+- **Antimatter Lab: the third in-game review** (`docs/zbornak-proposals/`, "The third in-game review").
+  - **Walks:** the walk to the ranch is a smooth curve onto the cattle grid. Both walks run under the plaza's top with
+    their kerbs stopped at its rim, and lamps flank each walk's mouth.
+  - **Tilted parts:** three had their tilt backwards, so their supports were swapped.
+    - The barn's solar strip now lies on its slope.
+    - The solar tables (now facing the sun) have posts cut to the panels.
+    - The feed bunk's roof falls to the front on posts cut to it, with CHOW on chains below.
+  - **The barn door's lip is gone.**
+  - **The structure audit's first run found these, all fixed:**
+    - The bridge railings ran through the lift's gate, and the silo's chute through its ladder (the ladder moved).
+    - The dome lamps' rods poked out of the dome.
+    - The battery cells stood through their glass doors (the bay is deeper).
+    - The intake housing met the reactor collar's flange.
+    - The microscopes' stages, lamps and eyepieces floated.
+    - The hydroponics' grow strips floated, and the canopy glass cut its ribs.
+    - The barn's door track hung on nothing (it has brackets and rollers now).
+    - The radiator headers were open-ended.
+    - The reactor's plinth, top cap and crown didn't meet the glass and spire.
+    - Also: the AIRLOCK lamps, the pad's edge lights, the gas racks' bars, the pen terminal's keys, the saddle rack, the
+      wind pump's head and the hoist's hook.
 - **Antimatter Lab: the second in-game review** (`docs/zbornak-proposals/`, "The second in-game review").
   - **A lift replaces the catwalk stair.** The stair was too steep to climb without sliding off. Now a glass shaft stands
     beside the catwalk with a short railed bridge onto the ring. Stand on the car for a moment and it carries you to the other

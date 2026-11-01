@@ -19,6 +19,37 @@ Models are built from code by `tools/blender/build_*.py` and exported to `src/as
 missing, run that script. Use the `blender` skill (`.claude/skills/blender/SKILL.md`) for conventions and the
 build, compress and check workflow.
 
+## Model structure (every Blender model)
+
+A model has to hold together: everything stands on, hangs from or is fixed to something, and nothing passes through
+what it should meet. Work each support out from the thing it holds; never type a height by eye.
+
+- **Supports reach their load.** Every post, strut, leg, chain or bracket ends on the part it carries. Cut it to that part's
+  underside at the support's own x and z, computed from the part's centre, tilt and thickness (`solar_array`, `feed_bunk`
+  in `tools/blender/zbornak_kit.py`). A support never stops short of its load, and never pokes through it.
+- **Tilts: +θ about x lowers the +z end** (y' = y cos θ − z sin θ). Before placing anything against a tilted part, work out
+  from this which end is high. Put panels on a roof at the roof's own slope, on the slab's top surface (its line plus
+  thickness ÷ cos θ). Solar faces +z, the place's sunward side.
+- **Walls meet roofs.** Wall tops and gable edges follow the roof's underside line. Leave no gap (a dark wedge) and
+  nothing through the roof. A roof stops at a neighbouring building's wall, not inside it.
+- **Signs and lamps are fixed.** A board sits on a wall face or hangs on chains under a beam, clear of the roof's edge.
+  A lamp has a bracket or a cord. Nothing on a wall floats off it: put it within 2 cm of the face.
+- **Openings stay open.** Trim, wainscots, rails and lips stop at doorways and gates. A rail stops at a gate's opening,
+  with a post each side.
+- **Bars are straight.** Build a straight member with `bm` (two points), not a curved path. `kit.tube` carries each ring's
+  frame along the path (parallel transport), so paths don't twist; keep it that way.
+- **Walks meet what they join.** A walk ends square on a platform's edge, or runs under a round platform's top with its
+  kerbs stopped at the rim (`path_ribbon(trim=...)`). It curves smoothly (a cubic, not a kinked polyline), and nothing
+  (lamps, posts) stands on it.
+- **Contents sit in their containers,** and any glow ring or field floats inside what holds it. Anything meant to float
+  (a hologram, a levitated sphere) goes in a group whose name ends in `_float`.
+
+**Check it, every build:** `python3 tools/blender/structure_audit.py tools/blender/build_<name>.py` builds the model
+without exporting it and reports what is floating, the bars with loose ends, the bars passing through a solid part, and
+slabs cutting through slabs, each with where it is (`build_zbornak_lab.py` runs it with `STRUCT_AUDIT=1`). Read every
+finding. Fix it, or make it deliberate (`_float`) and say why. Then look at each changed part in the running game
+(free cam, close, from two sides). `python3 tools/blender/test_structure_audit.py` checks the audit itself.
+
 ## Collision and ledge grinds (every place)
 
 Trick thrust reaches every roof, and the top edges of colliders are grind rails, so each place follows the same rules.

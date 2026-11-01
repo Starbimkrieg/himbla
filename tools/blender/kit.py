@@ -131,12 +131,19 @@ def torus(R, r, seg=24, rseg=8):
 
 
 def tube(path, radii, seg=8, cap=True):
+    """A tube through path (three.js axes) with a radius per point. Each ring's frame is carried on from the one before
+    (parallel transport), so the tube never twists: a frame picked afresh at each point (from a fixed reference axis)
+    flips where the path turns near that axis and twists the segment between."""
     verts, faces = [], []
     P = [Vector(p) for p in path]
+    n = None
     for idx, p in enumerate(P):
         t = (P[min(idx + 1, len(P) - 1)] - P[max(idx - 1, 0)]).normalized()
-        ref = Vector((0, 1, 0)) if abs(t.y) < 0.95 else Vector((1, 0, 0))
-        n = t.cross(ref).normalized()
+        if n is None or abs(t.dot(n)) > 0.999:
+            ref = Vector((0, 1, 0)) if abs(t.y) < 0.95 else Vector((1, 0, 0))
+            n = t.cross(ref).normalized()
+        else:
+            n = (n - t * t.dot(n)).normalized()                             # the last frame, turned onto this tangent
         b = t.cross(n).normalized()
         for k in range(seg):
             a = 2 * math.pi * k / seg

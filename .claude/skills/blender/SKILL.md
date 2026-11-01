@@ -39,6 +39,8 @@ outposts, hall, lot, power, habitat (with `habitat_kit.py`), chimera (the chimer
    `runner.glb` and `outposts.glb` stay plain. A build overwrites a compressed file with a plain one, so a
    model you did not change shows as modified if you rebuilt it: `git checkout` it.
 2. `npm run check:outposts` after touching outposts.
+   Run the structure audit on what you built: `python3 tools/blender/structure_audit.py tools/blender/build_<name>.py`
+   (CLAUDE.md, "Model structure": floating parts, bars with loose ends, bars through solid parts, slabs through slabs).
 3. Check the diff touches only the models you meant to change. `runner.glb` can differ by a few bytes between
    runs; that is not a change.
 4. Update the source map in `docs/reference.md` if a model or builder was added or renamed.
