@@ -1,5 +1,5 @@
 // Dev-only: builds eight chimeras with the game's own makeChimera and saves each as a GLB (outline shells and far LODs left out) for
-// the Antimatter Lab drafts' renders (tools/blender/preview_zbornak_lab.py stands them in the cryo pods, on the robots' bench and in
+// the Antimatter Lab draft's renders (tools/blender/preview_zbornak_lab.py stands them in the cryo pods, on the robots' bench and in
 // the corrals). Not in the build. About 2.3 MB in all, so they are not kept in the repo.
 //   npx vite --port 5199 --host 127.0.0.1      (in one shell)
 //   node tools/zbornak-chimeras.mjs            -> $ZB_CHIMERAS (default /tmp/zb-chimeras)/c0.glb .. c7.glb

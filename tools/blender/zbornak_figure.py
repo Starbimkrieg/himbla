@@ -1,14 +1,9 @@
-# Dr. Zbornak, two looks (build_zbornak_lab.py execs this after zbornak_kit.py). An alien, so no helmet; a lab coat
-# scorched by his experiments (burnt hem, a hole, embers still glowing); a clipboard in the left arm and a pen
-# in the right hand. Standing at the origin facing +z, the feet on y = 0. Pivot `head` sits at the neck (the game turns it
-# to watch the player, as the casino's bouncer does).
-#   A "The Elder"   2.35 m: tall and thin, pale green; an egg of a cranium tipped back with brain ridges, three eyes (two
-#                   almond, one on the brow), brass goggles pushed up; long knee coat, the hem burnt ragged, one cuff
-#                   singed, a hole by the pocket.
-#   B "The Singed"  2.0 m: stocky, violet; a wide dome with seven frazzled head-fronds blown upright by the last blast (black
-#                   tips, embers), one big eye behind a brass loupe on a headband, a grin, fin ears with a bite out of one;
-#                   a shin-length coat with the left sleeve burnt off at the elbow and smoke still curling off the shoulder,
-#                   a welding glove on the right hand.
+# Dr. Zbornak, "The Elder" (build_zbornak_lab.py execs this after zbornak_kit.py). An alien, so no helmet; a lab coat
+# scorched by his experiments (a ragged burnt hem, flame-licks up the skirt, a hole, embers still glowing); a clipboard in the
+# left arm and a pen in the right hand. Standing at the origin facing +z, the feet on y = 0. Pivot `head` sits at the neck
+# (the game turns it to watch the player, as the casino's bouncer does).
+# 2.35 m: tall and thin, pale green; an egg of a cranium tipped back with brain ridges, three eyes (two almond, one on the
+# brow), brass goggles pushed up; a knee coat, one cuff singed, shirt and tie, pens in the breast pocket, a name badge.
 
 import math
 from mathutils import Vector
@@ -116,14 +111,8 @@ def pen(g, a, b, slot="pink"):
     g("steel", 0.0).bm(b, tuple(Vector(b) + (Vector(b) - Vector(a)).normalized() * 0.025), 0.006, 5)
 
 
-def zbornak(parent, variant, x=0.0, z=0.0, yaw=0.0):
-    if variant == "a":
-        return zbornak_a(parent, x, z, yaw)
-    return zbornak_b(parent, x, z, yaw)
-
-
-def zbornak_a(parent, x, z, yaw):
-    g = G("zbornak_a", parent, x, 0, z, yaw)
+def zbornak(parent, x=0.0, z=0.0, yaw=0.0):
+    g = G("zbornak", parent, x, 0, z, yaw)
     # feet and legs: long, thin, knees a touch bent
     for s in (-1, 1):
         g("shoe", 0.02).rb(s * 0.15, 0.06, 0.06, 0.09, 0.06, 0.19, 0.35)
@@ -242,101 +231,4 @@ def zbornak_a(parent, x, z, yaw):
     h("soot", 0.0).ball(0.115, 0.13, 0.17, 1.0, 8, 5, s=(0.045, 0.03, 0.008), rot=(0, 0.75, 0.3))
     p, e = on_head(*CR, (-0.8, 0.6, 0.2), 0.002)
     h("soot", 0.0).ball(*p, 1.0, 8, 5, s=(0.08, 0.055, 0.006), rot=e)
-    return g
-
-
-def zbornak_b(parent, x, z, yaw):
-    g = G("zbornak_b", parent, x, 0, z, yaw)
-    for s in (-1, 1):
-        g("shoe", 0.02).rb(s * 0.17, 0.07, 0.07, 0.11, 0.07, 0.2, 0.35)
-        g("trousers", 0.025).path([(s * 0.17, 0.1, 0.0), (s * 0.17, 0.45, 0.02), (s * 0.15, 0.8, 0.0)], [0.09, 0.1, 0.12], 10)
-    prof = [(0.48, 0.38), (0.46, 0.55), (0.44, 0.8), (0.42, 1.0), (0.41, 1.15), (0.39, 1.3), (0.33, 1.4), (0.2, 1.46), (0.1, 1.48)]
-    SZ = 0.8
-    g("coat", 0.03).lath(prof, segs=28, s=(1, 1, SZ))
-    # buttoned front, a belt of gadgets, a high collar
-    for y in (0.6, 0.78, 0.96, 1.14, 1.3):
-        p, yy = on_coat(prof, SZ, 0.08, y, 0.006)
-        g("steel", 0.0).cylc(p[0], p[1], p[2], 0.02, 0.012, 8, rot=(PI / 2, yy, 0))
-    g("coat2", 0.0).tor(0.425, 0.03, (0, 0.96, 0), n=28, rs=4, s=(1, 1, SZ))
-    for a, c in ((0.9, "lime"), (1.3, "amber"), (-1.0, "cyan")):
-        p, yy = on_coat(prof, SZ, a, 0.94, 0.02)
-        g("dark", 0.01).boxc(p[0], p[1], p[2], 0.08, 0.11, 0.05, (0, yy, 0))
-        g(c, 0.0).boxc(p[0] + 0.03 * math.sin(yy), p[1] + 0.02, p[2] + 0.03 * math.cos(yy), 0.04, 0.03, 0.005, (0, yy, 0))
-    g("coat", 0.02).lath([(0.21, 1.42), (0.24, 1.55), (0.2, 1.6)], segs=20, s=(1, 1, SZ))
-    # scorch: the whole skirt-back charred, blotches, a ragged hem, embers
-    for i in range(32):
-        a = TAU * i / 32
-        L = 0.04 + 0.06 * abs(math.sin(i * 1.9)) + (0.1 if i in (13, 17, 18, 21) else 0)
-        p, yy = on_coat(prof, SZ, a, 0.4, -0.004)
-        g("scorch", 0.0).add(cylinder(0.04, 0.0, L, 4)[:2], (p[0], 0.4 - L / 2 + 0.01, p[2]), (0, yy, 0), (1, 1, 0.35))
-    back = licks(0.4, 2.0, 4, 0.5, 0.08)
-    burn(g, prof, SZ, lambda a, y: back(a, y) or (dang(a, PI) < 0.8 and y < 0.4 + 0.55 * (1 - dang(a, PI) / 0.8) ** 0.7), 0.004, "scorch2")
-    back2 = licks(0.4, 2.0, 4, 0.3, 0.05)
-    burn(g, prof, SZ, lambda a, y: back2(a, y) or (dang(a, PI) < 0.55 and y < 0.4 + 0.38 * (1 - dang(a, PI) / 0.55) ** 0.7), 0.008, "scorch")
-    burn(g, prof, SZ, patch(PI + 0.25, 1.18, 0.3, 0.08), 0.004, "scorch2")
-    for a in (PI, PI - 0.4, PI + 0.5, 0.75):
-        p, yy = on_coat(prof, SZ, a, 0.39, 0.01)
-        g("ember", 0.0).ball(p[0], p[1] - 0.02, p[2], 0.02, 6, 4)
-    # arms: left (sleeve burnt off at the elbow, bare forearm) holds the clipboard up to read; right, gloved, holds the pen
-    shL, shR = Vector((-0.4, 1.33, 0.0)), Vector((0.4, 1.33, 0.0))
-    elL, elR = Vector((-0.46, 1.0, 0.12)), Vector((0.46, 1.0, 0.1))
-    wrL, wrR = Vector((-0.2, 1.22, 0.42)), Vector((0.16, 1.15, 0.44))
-    for sh_, el_ in ((shL, elL), (shR, elR)):
-        g("coat", 0.025).ball(*sh_, 0.12, 10, 7)
-        g("coat", 0.025).path([tuple(sh_), tuple(el_)], [0.115, 0.1], 10)
-    d = (elL - shL).normalized()
-    for i in range(10):                                                    # the burnt-off sleeve end
-        a = TAU * i / 10
-        n = d.orthogonal().normalized()
-        m = d.cross(n)
-        q = elL - d * 0.03 + (n * math.cos(a) + m * math.sin(a)) * 0.095
-        g("scorch", 0.0).bm(tuple(q), tuple(q + d * (0.03 + 0.05 * abs(math.sin(i * 2.3)))), 0.016, 3)
-    g("ember", 0.0).ball(*(elL + Vector((0.0, -0.02, 0.09))), 0.018, 6, 4)
-    g("skin", 0.02).ball(*elL, 0.075, 10, 7)
-    g("skin", 0.02).path([tuple(elL), tuple(wrL)], [0.07, 0.06], 10)
-    g("coat", 0.025).ball(*elR, 0.1, 10, 7)
-    g("coat", 0.025).path([tuple(elR), tuple(wrR + (elR - wrR).normalized() * 0.08)], [0.1, 0.09], 10)
-    g("glove", 0.015).path([tuple(wrR + (elR - wrR).normalized() * 0.12), tuple(wrR)], [0.11, 0.075], 10)
-    hand(g, tuple(wrL), (0.4, 0.35, 0.4), (0, 0.4, 1), 4, 0.12, 0.6)
-    hand(g, tuple(wrR), (-0.3, 0.25, 0.6), (0.1, 1, 0.2), 4, 0.12, 1.1, "glove", 0.028, 0.07)
-    clipboard(g, (-0.06, 1.3, 0.48), (-0.9, 0.2, 0.1))
-    pen(g, (0.12, 1.2, 0.56), (0.04, 1.3, 0.56), "lime")
-    # smoke still curling off the left shoulder
-    for k in range(5):
-        t = k / 4
-        g("smoke", 0.0).ball(-0.5 - t * 0.12 + math.sin(t * 5) * 0.05, 1.12 + t * 0.55, 0.1 + math.cos(t * 4) * 0.05, 0.035 + t * 0.06, 10, 7)
-    # head: a wide dome, frazzled fronds, one big eye behind a loupe, a grin, fin ears (one bitten)
-    g("skin", 0.02).cylc(0, 1.55, 0.0, 0.12, 0.2, 12)
-    h = G("head", g.root, 0, 1.6, 0.02)
-    h.root["role"] = "head"
-    h("skin", 0.03).ball(0, 0.25, 0.0, 0.32, 18, 12, s=(1.12, 0.92, 1.0))
-    h("skin", 0.03).ball(0, 0.1, 0.1, 0.22, 14, 10, s=(1.1, 0.7, 1.0))
-    for i in range(7):
-        a = -1.2 + 2.4 * i / 6
-        base = (math.sin(a) * 0.22, 0.45, -0.05 + math.cos(a) * 0.05)
-        pts = [base]
-        for k in range(1, 6):
-            t = k / 5
-            pts.append((base[0] * (1 + t * 1.3) + math.sin(t * 9 + i * 1.7) * 0.05, 0.45 + t * (0.28 + 0.06 * math.sin(i * 2.2)), base[2] + math.cos(t * 7 + i) * 0.06 - t * 0.05))
-        h("skin2", 0.012).path(pts[:-1], [0.04, 0.035, 0.03, 0.024, 0.018], 6)
-        h("scorch", 0.0).path(pts[-2:], [0.018, 0.012], 5)
-        h("ember", 0.0).ball(*pts[-1], 0.016, 6, 4)
-    for s in (-1, 1):
-        h("skin2", 0.012).add(cylinder(0.0, 0.1, 0.26, 6)[:2], (s * 0.38, 0.24, -0.02), (0, 0, -s * 1.2), (1, 1, 0.4))
-    h("void", 0.0).ball(-0.47, 0.32, -0.02, 0.035, 6, 4)                    # the bite out of the left fin
-    h("eye", 0.01).ball(0.0, 0.27, 0.27, 0.12, 14, 10, s=(1.0, 0.85, 0.5))
-    h("white", 0.0).ball(0.0, 0.27, 0.315, 0.075, 12, 8, s=(1, 1, 0.3))
-    h("iris", 0.0).ball(0.0, 0.27, 0.335, 0.04, 10, 6, s=(1, 1, 0.3))
-    h("eye", 0.0).ball(0.0, 0.27, 0.345, 0.018, 8, 4, s=(1, 1, 0.3))
-    for s in (-1, 1):
-        h("eye", 0.006).ball(s * 0.2, 0.33, 0.22, 0.035, 8, 6, s=(1, 0.7, 0.5))
-    h("dark", 0.008).tor(0.33, 0.02, (0, 0.38, 0.0), (0.18, 0, 0), n=32, rs=4, s=(1.12, 1, 1.0))
-    h("brass", 0.008).bm((0.33, 0.38, 0.14), (0.09, 0.32, 0.37), 0.012, 5)
-    h("brass", 0.01).tor(0.085, 0.016, (0.02, 0.29, 0.38), (PI / 2, 0, 0), n=20, rs=5)
-    h("glass", 0.0).cylc(0.02, 0.29, 0.38, 0.08, 0.012, 16, "z")
-    h("eye", 0.0).path([(-0.14, 0.08, 0.27), (-0.05, 0.03, 0.31), (0.05, 0.03, 0.31), (0.14, 0.08, 0.27)], 0.014, 4)
-    for s in (-1, 1):
-        h("white", 0.0).boxc(s * 0.035, 0.045, 0.315, 0.03, 0.03, 0.01)
-    h("soot", 0.0).ball(-0.17, 0.14, 0.24, 1.0, 8, 5, s=(0.07, 0.045, 0.012), rot=(0, -0.6, 0.2))
-    h("soot", 0.0).ball(0.12, 0.47, 0.13, 1.0, 8, 5, s=(0.09, 0.05, 0.012), rot=(-0.7, 0.4, 0.1))
     return g

@@ -38,6 +38,13 @@ Trick thrust reaches every roof, and the top edges of colliders are grind rails,
 - Check a place with `PLACE=<id> node tools/downs-audit.mjs coverage|floating|blocked|sunk|rails`: no floor the feet sink
   into, and every long rail should ride end to end.
 
+## Storage crates (every place)
+
+Storage crates are the standard cargo container, the land-train's box as stacked in Meridian's yard, never ad-hoc boxes: in the
+game `cargoStack` (`src/settlements.js`), in Blender `cargo_unit("box")` (`tools/blender/cargo.py`). Paint it in the owner's
+livery: a faction's, or the place's own branding on the flank plate (`zb_container` in `tools/blender/zbornak_kit.py` does Zbornak
+Laboratories'). Stack them at the yard's pitch.
+
 ## Screenshots in dev sessions
 
 When you start a game to test visuals or gameplay (headless or in the browser pane), skip the tutorial first, or BOLT's

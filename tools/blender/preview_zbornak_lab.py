@@ -1,14 +1,16 @@
-# Review renders for the Antimatter Lab drafts (build_zbornak_lab.py): builds a draft, dresses it for Cycles (glow slots
-# lit, glass see-through, the screens painted with their pictures), stands real chimeras in the pods, on the bench and in
-# the corrals (GLBs exported from the game by tools/zbornak-chimeras.mjs), the courier on the airlock's stand plate, and
-# renders each view in CAMS to docs/zbornak-proposals/<v>_<view>.jpg, Zbornak's turnaround to <v>_zbornak.jpg, and the
-# sheet zbornak_proposals.jpg.
+# Review renders for the Antimatter Lab draft (build_zbornak_lab.py): builds it, dresses it for Cycles (glow slots lit, glass
+# see-through, the screens painted with their pictures), stands real chimeras in the pods, on the bench and in the corral
+# (GLBs exported from the game by tools/zbornak-chimeras.mjs), the courier where the views want one, stone couriers on the
+# gallery's plinths, and renders each view in CAMS to docs/zbornak-proposals/<view>.jpg; the robots at work to robots.gif;
+# Zbornak's turnaround to zbornak.jpg and zbornak_face.jpg; the labelled plan to plan.jpg; the sheet to zbornak_proposals.jpg.
 #
 #   node tools/zbornak-chimeras.mjs                      (once, with the dev server up: the chimeras, to ZB_CHIMERAS)
-#   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py photo [a] [b]     the security camera's snapshot
-#   node tools/zbornak-screens.mjs                       (the screens' pictures, from docs/zbornak-proposals/screens/*.html)
-#   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py views [a] [b]     every view (PREVIEW_VIEWS=over,gate: some)
-#   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py zbornak [a] [b]   the turnaround
+#   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py photo      the security camera's snapshot
+#   node tools/zbornak-screens.mjs                       (the screens' pictures, from docs/zbornak-proposals/screens/terminal.html)
+#   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py views      every view (PREVIEW_VIEWS=over,gate: some)
+#   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py anim       the robots' loop (ANIM_FRAMES, default 24)
+#   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py zbornak    the turnaround
+#   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py plan
 #   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py sheet
 # PREVIEW_W / PREVIEW_H / PREVIEW_SAMPLES set the quality. Cycles on the CPU, Freestyle for the ink.
 
@@ -20,19 +22,17 @@ OUT = os.path.join(REPO, "docs", "zbornak-proposals")
 SCREENS = os.path.join(OUT, "screens")
 CHIMDIR = os.environ.get("ZB_CHIMERAS", "/tmp/zb-chimeras")
 MODE = sys.argv[1] if len(sys.argv) > 1 else "views"
-VARS = [a for a in sys.argv[2:] if a in ("a", "b")] or ["a", "b"]
 ONLY = [v for v in os.environ.get("PREVIEW_VIEWS", "").split(",") if v]
 RES = (int(os.environ.get("PREVIEW_W", 1280)), int(os.environ.get("PREVIEW_H", 720)))
-SAMPLES = int(os.environ.get("PREVIEW_SAMPLES", 48))
-GLOW_POWER = {"lamp": 6, "window": 3.5, "screen": 1.6, "spark": 12, "weld": 25, "pinkhot": 12, "holo": 2.5, "beam": 1.6, "scan": 1.0,
-              "halo": 2.0, "water": 0.8, "feed": 3, "feed2": 3, "ember": 8, "iris": 4, "goggle": 3, "screenlit": 3}
+SAMPLES = int(os.environ.get("PREVIEW_SAMPLES", 32))
+GLOW_POWER = {"lamp": 6, "window": 3.5, "screen": 1.6, "spark": 14, "weldcore": 14, "weldhalo": 6, "pinkhot": 12, "holo": 2.5, "beam": 1.6,
+              "scan": 1.0, "halo": 2.0, "water": 0.8, "feed": 3, "feed2": 3, "ember": 8, "iris": 4, "goggle": 3, "screenlit": 3}
+RUNNER_EXTRAS = ("padL", "padR", "band", "crest", "antenna")
+_chim_src = {}
 
 
 def tb(p):
     return (p[0], -p[2], p[1])
-
-
-_chim_src = {}
 
 
 def nodes_of(m):
@@ -77,33 +77,6 @@ def dress(G):
             b.inputs["Roughness"].default_value = 0.55
             b.inputs["Metallic"].default_value = 0.0
             nt.links.new(b.outputs[0], out.inputs[0])
-
-
-def paint_screens(variant):
-    for o in [o for o in bpy.data.objects if o.type == "MESH" and "screen" in o.keys()]:
-        sid = o["screen"]
-        path = os.path.join(SCREENS, f"{sid}_{variant}.png")
-        me = o.data
-        uv = me.uv_layers.new(name="uv")
-        vs = [v.co for v in me.vertices]
-        # the quad's own axes: first edge along u, the other along v (vertices 0..3 from plane())
-        o0, ou, ov = vs[0], vs[1] - vs[0], vs[3] - vs[0]
-        for li, loop in enumerate(me.loops):
-            d = vs[loop.vertex_index] - o0
-            uv.data[li].uv = (d.dot(ou) / ou.length_squared, d.dot(ov) / ov.length_squared)
-        m = bpy.data.materials.new(f"screen_{sid}")
-        nt, out = nodes_of(m)
-        em = nt.nodes.new("ShaderNodeEmission")
-        em.inputs["Strength"].default_value = GLOW_POWER["screen"]
-        if os.path.isfile(path):
-            tex = nt.nodes.new("ShaderNodeTexImage")
-            tex.image = bpy.data.images.load(path)
-            nt.links.new(tex.outputs["Color"], em.inputs["Color"])
-        else:
-            em.inputs["Color"].default_value = (0.05, 0.3, 0.12, 1)
-        nt.links.new(em.outputs[0], out.inputs[0])
-        me.materials.clear()
-        me.materials.append(m)
 
 
 def scene_setup():
@@ -198,21 +171,6 @@ def chimera(idx, parent, p, yaw, scale):
     return list(copy.values())
 
 
-def runner(p, yaw):
-    roots, new = import_glb(os.path.join(REPO, "src", "assets", "runner.glb"))
-    top = bpy.data.objects.new("runner", None)
-    bpy.context.scene.collection.objects.link(top)
-    for r in roots:
-        r.parent = top
-    top.location = tb(p)
-    top.rotation_euler = (0, 0, yaw)
-    extras = [o for o in new if o.name.split(".")[0] in ("padL", "padR", "band", "crest", "antenna")]
-    for e in extras:
-        for o in [e] + list(e.children_recursive):
-            o.hide_render = True
-    return top, new
-
-
 def texts(G):
     out = []
     for parent, s, p, yaw, size, slot, depth in G["TEXTS"]:
@@ -277,32 +235,6 @@ def camera(sc, loc, target, lens, name="cam"):
     sc.camera = cam
 
 
-def build(variant, figure_only=False):
-    sc = scene_setup()
-    G = {"__file__": os.path.join(REPO, "tools", "blender", "build_zbornak_lab.py"), "VARIANT": variant}
-    os.environ["MOONRUNNER_EXPORT"] = "0"
-    os.environ["MOONRUNNER_REPO"] = REPO
-    exec(open(G["__file__"], encoding="utf-8").read(), G)
-    dress(G)
-    return sc, G
-
-
-def setup_world(sc, G, variant):
-    skip = ground(sc)
-    paint_screens(variant)
-    lights(G)
-    skip += texts(G)
-    for parent, p, yaw, scale, idx in G["CHIMS"]:
-        chimera(idx, parent, p, yaw, scale)
-    rp, ryaw = G["RUNNER"]["gate"]
-    rt, rnew = runner(rp, ryaw)
-    for o in bpy.data.objects:
-        if o.type == "MESH" and o.get("ink", 1) == 0:
-            skip.append(o)
-    freestyle(sc, skip)
-    return rt
-
-
 def cutaway(hide):
     for o in bpy.data.objects:
         p, cut = o, False
@@ -322,148 +254,281 @@ def render(sc, path):
 
 
 # plan labels: (text, x, z, label dx, dy in pixels)
-PLAN = {
-    "a": [("Rotunda: reactor under the oculus", 0, -18, -60, -330), ("Airlock tunnel + lock housing", 0, 22, -180, 40), ("Security post (stand plate, camera)", 0, 35.6, -150, 110),
-          ("Plaza + specimen jar", 10.5, 37, 60, 140), ("Holotable", -12, -2.6, -160, 60), ("LABNET terminal", 14.4, -2, 140, 230), ("Zbornak's dais", 5.1, -5.5, 120, 160),
-          ("Robotics bay", 20.8, -20.9, 130, -170), ("Exotic matter vault", 13.5, -41.4, 140, -110), ("Splice pod", 0, -41.5, -20, -230), ("Cryo pods (6)", -13.3, -41, -160, -150),
-          ("Hydroponics", -24.5, -13.2, -120, -10), ("Ranch barn", 74, -26, 40, -150), ("Pen office: pen terminal", 57, -24.5, -30, -210), ("Silo + auger", 93.5, -30, 60, -90),
-          ("Feed bunk", 93, 8, 70, 40), ("Corral", 74, 30, 60, 210), ("Training ring", 70, 26, -120, 140), ("Gate arch", 50, 16, -160, 30), ("Stock tank + sun-mill", 56, 39, -150, 160),
-          ("Supply landing pad", -62, 58, -1, 0), ("Radiator field", -4, -84, -1, 0), ("Solar array", -84, 8, -1, 0)],
-    "b": [("Gatehouse: two-stage airlock", 0, 15, 150, 50), ("Iris door + security post", 0, 24, 170, 120), ("Hydroponics", -13, -7, -170, 10), ("Cryo gallery (8)", -14.6, -28, -170, -40),
-          ("SPECIMEN INDEX terminal", -12.6, -45, -170, 30), ("Exotic matter vault", 12.7, -8, 150, -20), ("Robot line", 12, -29, 170, -30), ("Splice pod", 12.5, -50, 170, 10),
-          ("Holotables", 0, -19, 120, -150), ("Zbornak's podium", 0, -50, 120, 120), ("Reactor tower", 0, -76, 140, -100), ("Bunkhouse: pen terminal", -70, -30, -40, -170),
-          ("Feed carousel", -72, 8, -150, -150), ("Round corral", -86, 18, -120, 70), ("Training ring", -74, 44, 120, 90), ("Water tower", -94, -12, -60, -170), ("Sun-mill", -98, -22, -100, -60),
-          ("Gate arch", -55, 8, 80, -120), ("Specimen jar", 17, 26, 150, 60),
-          ("Supply landing pad", 52, 42, 1, 0), ("Radiator field", 50, -40, 1, 0), ("Test Site 7", 58, -86, 1, 0)],
-}
+
+
+def paint_screens():
+    for o in [o for o in bpy.data.objects if o.type == "MESH" and "screen" in o.keys()]:
+        sid = o["screen"]
+        path = os.path.join(SCREENS, f"{sid}.png")
+        me = o.data
+        uv = me.uv_layers.new(name="uv")
+        vs = [v.co for v in me.vertices]
+        o0, ou, ov = vs[0], vs[1] - vs[0], vs[3] - vs[0]                    # the quad's own axes (plane()'s vertex order)
+        for li, loop in enumerate(me.loops):
+            d = vs[loop.vertex_index] - o0
+            uv.data[li].uv = (d.dot(ou) / ou.length_squared, d.dot(ov) / ov.length_squared)
+        m = bpy.data.materials.new(f"screen_{sid}")
+        nt, out = nodes_of(m)
+        em = nt.nodes.new("ShaderNodeEmission")
+        em.inputs["Strength"].default_value = GLOW_POWER["screen"]
+        if os.path.isfile(path):
+            tex = nt.nodes.new("ShaderNodeTexImage")
+            tex.image = bpy.data.images.load(path)
+            nt.links.new(tex.outputs["Color"], em.inputs["Color"])
+        else:
+            em.inputs["Color"].default_value = (0.05, 0.3, 0.12, 1)
+        nt.links.new(em.outputs[0], out.inputs[0])
+        me.materials.clear()
+        me.materials.append(m)
+
+
+def courier(p, yaw, parent=None, stone=None):
+    """runner.glb at p facing yaw (its outfit extras off); stone: one material over everything (a statue)"""
+    roots, new = import_glb(os.path.join(REPO, "src", "assets", "runner.glb"))
+    top = bpy.data.objects.new("courier", None)
+    bpy.context.scene.collection.objects.link(top)
+    for r in roots:
+        r.parent = top
+    top.parent = parent
+    top.location = tb(p)
+    top.rotation_euler = (0, 0, yaw)
+    for e in [o for o in new if o.name.split(".")[0] in RUNNER_EXTRAS]:
+        for o in [e] + list(e.children_recursive):
+            o.hide_render = True
+    if stone:
+        for o in new:
+            if o.type == "MESH":
+                o.data.materials.clear()
+                o.data.materials.append(stone)
+    return top, new
+
+
+def stone_material():
+    m = bpy.data.materials.new("statue")
+    nt, out = nodes_of(m)
+    b = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    b.inputs["Base Color"].default_value = (0.42, 0.4, 0.44, 1)
+    b.inputs["Roughness"].default_value = 0.9
+    nt.links.new(b.outputs[0], out.inputs[0])
+    return m
+
+
+def build():
+    sc = scene_setup()
+    G = {"__file__": os.path.join(REPO, "tools", "blender", "build_zbornak_lab.py")}
+    os.environ["MOONRUNNER_EXPORT"] = "0"
+    os.environ["MOONRUNNER_REPO"] = REPO
+    exec(open(G["__file__"], encoding="utf-8").read(), G)
+    dress(G)
+    return sc, G
+
+
+def setup_world(sc, G, runners=True):
+    skip = ground(sc)
+    paint_screens()
+    lights(G)
+    skip += texts(G)
+    for parent, p, yaw, scale, idx in G["CHIMS"]:
+        chimera(idx, parent, p, yaw, scale)
+    st = stone_material()
+    for parent, p, yaw in G["STATUES"]:
+        top, _ = courier(p, yaw, parent, st)
+        top.scale = (0.85, 0.85, 0.85)
+    if runners:
+        for p, yaw in G["RUNNER"].values():
+            courier(p, yaw)
+    for o in bpy.data.objects:
+        if o.type == "MESH" and o.get("ink", 1) == 0:
+            skip.append(o)
+    freestyle(sc, skip)
+
+
+def animate_robots(G, N):
+    """a loop of N frames: each arm swings about its rest pose, the welder's halo, light and sparks flicker"""
+    import random
+    rnd = random.Random(7)
+    sc = bpy.context.scene
+    sc.frame_start, sc.frame_end = 1, N
+    for i, A in enumerate(G["ARMS"]):
+        turn, sh, el, wr = A["rest"]
+        for f in range(1, N + 1):
+            t = TAU_ * (f - 1) / N
+            A["turret"].rotation_euler[2] = turn + 0.32 * math.sin(t + i * 2.1)
+            A["shoulder"].rotation_euler[0] = sh + 0.14 * math.sin(t + i * 1.3 + 0.7)
+            A["elbow"].rotation_euler[0] = el + 0.22 * math.sin(t + i * 0.9 + 1.4)
+            A["wrist"].rotation_euler[0] = wr + 0.3 * math.sin(2 * t + i)
+            for k, piv in (("turret", A["turret"]), ("shoulder", A["shoulder"]), ("elbow", A["elbow"]), ("wrist", A["wrist"])):
+                piv.keyframe_insert("rotation_euler", frame=f)
+    for wri in G["WELDS"]:
+        parts = [o for o in wri.children_recursive if o.type == "MESH" and o.data.materials and o.data.materials[0].name.split(".")[0] in ("weldhalo", "spark")]
+        lamps = [o for o in bpy.data.objects if o.type == "LIGHT" and o.parent == wri]
+        for f in range(1, N + 1):
+            k = 0.7 + 0.6 * rnd.random()
+            for o in parts:
+                o.scale = (k, k, k) if o.data.materials[0].name.startswith("weldhalo") else (1, 1, 1)
+                o.hide_render = o.data.materials[0].name.startswith("spark") and rnd.random() < 0.35
+                o.keyframe_insert("scale", frame=f)
+                o.keyframe_insert("hide_render", frame=f)
+            for L in lamps:
+                L.data.energy = 3000 * k
+                L.data.keyframe_insert("energy", frame=f)
+
+
+TAU_ = 2 * math.pi
+# plan labels: (text, x, z) in the area's frame; placed in the margins by side
+PLAN = [("Rotunda: the reactor under the oculus", 0, -18), ("Intake hatch on the catwalk", -6.3, -18), ("Airlock tunnel + lock housing", 0, 22),
+        ("Security post: stand plate, camera, screen", 0, 35.6), ("Plaza", 0, 46), ("LABNET (on the wall)", 7.2, 11.1),
+        ("Zbornak's dais", 5.5, -5.7), ("Gallery of the petrified", 20.0, -9.0), ("Robotics bay", 20.7, -21.6), ("Exotic-matter wall", 15.5, -43),
+        ("Splice pod", 0, -41.5), ("Cryo pods (6)", -13.3, -41), ("Hydroponics habitat", -24.5, -14), ("Holotable", -12, -2.6),
+        ("Ranch barn", 74, -26), ("Pen office: pen terminal", 57, -24.5), ("Silo + auger", 93.5, -30), ("Feed bunk", 93, 8),
+        ("Corral", 80, 36), ("Training ring", 70, 26), ("Gate arch", 50, 16), ("Stock tank + sun-mill", 56, 39),
+        ("Walk to the ranch", 30, 33), ("Walk to the pad", -30, 51), ("Supply pad", -62, 58), ("Zbornak containers", -43, 70),
+        ("Radiator field", -4, -84), ("Solar array", -84, 8), ("Generator", -30, 18)]
+
+def weld_cam(G):
+    """the robots' view, aimed at the welder's tip: from the room's side of the bay, a little above"""
+    bpy.context.view_layer.update()
+    wri = G["WELDS"][0]
+    tip = wri.matrix_world @ Vector(tb((0, 0, 1.22)))
+    t3 = (tip.x, tip.z, -tip.y)                                             # back to the area's (three.js) axes
+    d = Vector((t3[0] - 0.0, 0, t3[2] + 18.0)).normalized()               # out from the rotunda's centre
+    side = Vector((d.z, 0, -d.x))
+    loc = (t3[0] - d.x * 7.5 + side.x * 4.0, t3[1] + 2.6, t3[2] - d.z * 7.5 + side.z * 4.0)
+    return loc, (t3[0] + d.x * 1.0, t3[1] - 0.2, t3[2] + d.z * 1.0), 30
+
 
 if MODE == "photo":
     # what the airlock's camera sees: the courier on the stand plate, from the door, a little above
     os.makedirs(SCREENS, exist_ok=True)
-    for v in VARS:
-        sc, G = build(v)
-        setup_world(sc, G, v)
-        sc.render.use_freestyle = False
-        rp, _ = G["RUNNER"]["gate"]
-        sc.render.resolution_x, sc.render.resolution_y = 480, 360
-        camera(sc, (rp[0] + 0.25, 2.9, rp[2] - 2.9), (rp[0], 1.7, rp[2]), 44)
-        render(sc, os.path.join(SCREENS, f"photo_{v}.jpg"))
+    sc, G = build()
+    setup_world(sc, G)
+    sc.render.use_freestyle = False
+    rp, _ = G["RUNNER"]["gate"]
+    sc.render.resolution_x, sc.render.resolution_y = 480, 360
+    camera(sc, (rp[0] + 0.25, 2.9, rp[2] - 2.9), (rp[0], 1.7, rp[2]), 44)
+    render(sc, os.path.join(SCREENS, "photo.jpg"))
 elif MODE == "views":
-    for v in VARS:
-        sc, G = build(v)
-        setup_world(sc, G, v)
-        for name, (loc, tgt, lens) in G["CAMS"].items():
-            if ONLY and name not in ONLY:
-                continue
-            cutaway(name == "cut")
-            camera(sc, loc, tgt, lens)
-            render(sc, os.path.join(OUT, f"{v}_{name}.jpg"))
-elif MODE == "zbornak":
-    for v in VARS:
-        sc = scene_setup()
-        B = {"VARIANT": v, "__file__": os.path.join(REPO, "tools", "blender", "build_zbornak_lab.py")}
-        os.environ["MOONRUNNER_EXPORT"] = "0"
-        os.environ["MOONRUNNER_REPO"] = REPO
-        src = open(B["__file__"], encoding="utf-8").read().split("ROOT = build()")[0]
-        exec(src, B)
-        B["zbornak"](None, v, 0, 0, 0)
-        B["flush_all"]()
-        dress(B)
-        m = bpy.data.materials.new("floor")
-        nt, out = nodes_of(m)
-        b = nt.nodes.new("ShaderNodeBsdfPrincipled")
-        b.inputs["Base Color"].default_value = (0.16, 0.13, 0.22, 1)
-        nt.links.new(b.outputs[0], out.inputs[0])
-        bpy.ops.mesh.primitive_circle_add(vertices=64, radius=30, fill_type="NGON")
-        fl = bpy.context.object
-        fl.data.materials.append(m)
-        for name, loc, energy, col in (("key", (4, -5, 5), 900, (1.0, 0.95, 0.88)), ("fill", (-5, -3, 2.5), 350, (0.55, 0.6, 1.0)), ("rim", (-1, 5, 4), 600, (1.0, 0.7, 0.9))):
-            d = bpy.data.lights.new(name, "AREA")
-            d.energy, d.size, d.color = energy, 3, col
-            o = bpy.data.objects.new(name, d)
-            sc.collection.objects.link(o)
-            o.location = loc
-            o.rotation_euler = (Vector((0, 0, 1.2)) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
-        freestyle(sc, [fl] + [o for o in bpy.data.objects if o.type == "MESH" and o.get("ink", 1) == 0])
-        sc.render.resolution_x, sc.render.resolution_y = 640, 900
-        h = 1.25 if v == "a" else 1.1
-        shots = []
-        for k, (ang, el) in enumerate(((0.0, 0.0), (0.7, 0.05), (math.pi / 2, 0.0), (math.pi * 0.85, 0.0))):
-            d = 6.0
-            loc = (math.sin(ang) * d, h + 0.4 + el * d, math.cos(ang) * d)
-            camera(sc, loc, (0, h, 0), 50)
-            p = os.path.join(OUT, f"{v}_zbornak_{k}.jpg")
-            render(sc, p)
-            shots.append(p)
-        sc.render.resolution_x, sc.render.resolution_y = 900, 900
-        hy = 2.1 if v == "a" else 1.8
-        camera(sc, (0.55, hy + 0.05, 1.35), (0.0, hy - 0.05, 0.1), 50)
-        p = os.path.join(OUT, f"{v}_zbornak_face.jpg")
+    sc, G = build()
+    setup_world(sc, G)
+    G["CAMS"]["robots"] = weld_cam(G)
+    for name, (loc, tgt, lens) in G["CAMS"].items():
+        if ONLY and name not in ONLY:
+            continue
+        cutaway(name == "cut")
+        camera(sc, loc, tgt, lens)
+        render(sc, os.path.join(OUT, f"{name}.jpg"))
+elif MODE == "anim":
+    from PIL import Image
+    N = int(os.environ.get("ANIM_FRAMES", 24))
+    sc, G = build()
+    setup_world(sc, G)
+    animate_robots(G, N)
+    loc, tgt, lens = weld_cam(G)
+    camera(sc, loc, tgt, lens)
+    sc.render.resolution_x, sc.render.resolution_y = int(os.environ.get("PREVIEW_W", 800)), int(os.environ.get("PREVIEW_H", 450))
+    frames = []
+    for f in range(1, N + 1):
+        sc.frame_set(f)
+        p = f"/tmp/zb_anim_{f:03d}.jpg"
         render(sc, p)
-        from PIL import Image
-        ims = [Image.open(s) for s in shots]
-        sheet = Image.new("RGB", (640 * 4, 900))
-        for i, im in enumerate(ims):
-            sheet.paste(im, (640 * i, 0))
-        sheet.save(os.path.join(OUT, f"{v}_zbornak.jpg"), quality=90)
-        for s in shots:
-            os.remove(s)
+        frames.append(Image.open(p).convert("P", palette=Image.ADAPTIVE, colors=200))
+    frames[0].save(os.path.join(OUT, "robots.gif"), save_all=True, append_images=frames[1:], duration=90, loop=0)
+    print("gif written")
+elif MODE == "zbornak":
+    from PIL import Image
+    sc = scene_setup()
+    B = {"__file__": os.path.join(REPO, "tools", "blender", "build_zbornak_lab.py")}
+    os.environ["MOONRUNNER_EXPORT"] = "0"
+    os.environ["MOONRUNNER_REPO"] = REPO
+    exec(open(B["__file__"], encoding="utf-8").read().split("ROOT = build()")[0], B)
+    B["zbornak"](None, 0, 0, 0)
+    B["flush_all"]()
+    dress(B)
+    m = bpy.data.materials.new("floor")
+    nt, out = nodes_of(m)
+    b = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    b.inputs["Base Color"].default_value = (0.16, 0.13, 0.22, 1)
+    nt.links.new(b.outputs[0], out.inputs[0])
+    bpy.ops.mesh.primitive_circle_add(vertices=64, radius=30, fill_type="NGON")
+    fl = bpy.context.object
+    fl.data.materials.append(m)
+    for name, loc, energy, col in (("key", (4, -5, 5), 900, (1.0, 0.95, 0.88)), ("fill", (-5, -3, 2.5), 350, (0.55, 0.6, 1.0)), ("rim", (-1, 5, 4), 600, (1.0, 0.7, 0.9))):
+        d = bpy.data.lights.new(name, "AREA")
+        d.energy, d.size, d.color = energy, 3, col
+        o = bpy.data.objects.new(name, d)
+        sc.collection.objects.link(o)
+        o.location = loc
+        o.rotation_euler = (Vector((0, 0, 1.2)) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
+    freestyle(sc, [fl] + [o for o in bpy.data.objects if o.type == "MESH" and o.get("ink", 1) == 0])
+    sc.render.resolution_x, sc.render.resolution_y = 640, 900
+    shots = []
+    for k, ang in enumerate((0.0, 0.7, math.pi / 2, math.pi * 0.85)):
+        camera(sc, (math.sin(ang) * 6.0, 1.65, math.cos(ang) * 6.0), (0, 1.25, 0), 50)
+        p = os.path.join(OUT, f"zbornak_{k}.jpg")
+        render(sc, p)
+        shots.append(p)
+    sc.render.resolution_x, sc.render.resolution_y = 900, 900
+    camera(sc, (0.55, 2.15, 1.35), (0.0, 2.05, 0.1), 50)
+    render(sc, os.path.join(OUT, "zbornak_face.jpg"))
+    sheet = Image.new("RGB", (640 * 4, 900))
+    for i, s in enumerate(shots):
+        sheet.paste(Image.open(s), (640 * i, 0))
+        os.remove(s)
+    sheet.save(os.path.join(OUT, "zbornak.jpg"), quality=90)
 elif MODE == "plan":
     # top-down, roofs off, labelled: the plateau (r 120) fills the frame, +x right, +z (the front) down
     from PIL import Image, ImageDraw, ImageFont
     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 17)
     SPAN, PX = 250.0, 1400
-    for v in VARS:
-        sc, G = build(v)
-        setup_world(sc, G, v)
-        cutaway(True)
-        sc.render.resolution_x = sc.render.resolution_y = PX
-        sc.render.line_thickness = 1.0
-        for o in [o for o in bpy.data.objects if o.type == "CAMERA"]:
-            bpy.data.objects.remove(o)
-        cam = bpy.data.objects.new("plan", bpy.data.cameras.new("plan"))
-        cam.data.type, cam.data.ortho_scale = "ORTHO", SPAN
-        cam.data.clip_end = 1000
-        sc.collection.objects.link(cam)
-        cam.location = (0, 0, 300)
-        cam.rotation_euler = (0, 0, 0)
-        sc.camera = cam
-        path = os.path.join(OUT, f"plan_{v}.jpg")
-        render(sc, path)
-        im = Image.open(path).convert("RGB")
-        d = ImageDraw.Draw(im)
-        d.ellipse([PX / 2 - 120 / SPAN * PX, PX / 2 - 120 / SPAN * PX, PX / 2 + 120 / SPAN * PX, PX / 2 + 120 / SPAN * PX], outline=(255, 210, 63), width=2)
-        for side in (-1, 1):                                                # labels stacked in the margins, kept apart
-            items = sorted([(PX / 2 + z / SPAN * PX, PX / 2 + x / SPAN * PX, text) for text, x, z, dx, dy in PLAN[v] if (x < 0 or (x == 0 and dx < 0)) == (side < 0)])
-            ys, last = [], -1e9
-            for py, px, text in items:
-                last = max(py, last + 30)
-                ys.append(last)
-            shift = max(0, ys[-1] - (PX - 30)) if ys else 0
-            for (py, px, text), ty in zip(items, ys):
-                ty -= shift
-                w = d.textlength(text, font=font)
-                bx = 24 if side < 0 else PX - 24 - w - 8
-                tx = bx + w + 8 if side < 0 else bx
-                d.line([px, py, tx, ty], fill=(255, 210, 63), width=2)
-                d.ellipse([px - 4, py - 4, px + 4, py + 4], fill=(255, 210, 63))
-                d.rectangle([bx, ty - 12, bx + w + 8, ty + 12], fill=(14, 10, 26))
-                d.text((bx + 4, ty - 10), text, fill=(255, 240, 200), font=font)
-        d.text((16, 14), "plateau r 120 m (yellow ring) · top view, roofs off · the front (+z) is down · 250 m across", fill=(255, 240, 200), font=font)
-        im.save(path, quality=90)
+    sc, G = build()
+    setup_world(sc, G, runners=False)
+    cutaway(True)
+    sc.render.resolution_x = sc.render.resolution_y = PX
+    sc.render.line_thickness = 1.0
+    for o in [o for o in bpy.data.objects if o.type == "CAMERA"]:
+        bpy.data.objects.remove(o)
+    cam = bpy.data.objects.new("plan", bpy.data.cameras.new("plan"))
+    cam.data.type, cam.data.ortho_scale, cam.data.clip_end = "ORTHO", SPAN, 1000
+    sc.collection.objects.link(cam)
+    cam.location = (0, 0, 300)
+    sc.camera = cam
+    path = os.path.join(OUT, "plan.jpg")
+    render(sc, path)
+    im = Image.open(path).convert("RGB")
+    d = ImageDraw.Draw(im)
+    rr = 120 / SPAN * PX
+    d.ellipse([PX / 2 - rr, PX / 2 - rr, PX / 2 + rr, PX / 2 + rr], outline=(255, 210, 63), width=2)
+    for side in (-1, 1):                                                    # labels stacked in the margins, kept apart
+        items = sorted([(PX / 2 + z / SPAN * PX, PX / 2 + x / SPAN * PX, t) for t, x, z in PLAN if (x < 0 or (x == 0 and z < 30)) == (side < 0)])
+        ys, last = [], -1e9
+        for py, px, t in items:
+            last = max(py, last + 30)
+            ys.append(last)
+        shift = max(0, ys[-1] - (PX - 30)) if ys else 0
+        for (py, px, t), ty in zip(items, ys):
+            ty -= shift
+            w = d.textlength(t, font=font)
+            bx = 24 if side < 0 else PX - 24 - w - 8
+            tx = bx + w + 8 if side < 0 else bx
+            d.line([px, py, tx, ty], fill=(255, 210, 63), width=2)
+            d.ellipse([px - 4, py - 4, px + 4, py + 4], fill=(255, 210, 63))
+            d.rectangle([bx, ty - 12, bx + w + 8, ty + 12], fill=(14, 10, 26))
+            d.text((bx + 4, ty - 10), t, fill=(255, 240, 200), font=font)
+    d.text((16, 14), "plateau r 120 m (yellow ring) · top view, roofs off · the front (+z) is down · 250 m across", fill=(255, 240, 200), font=font)
+    im.save(path, quality=90)
 elif MODE == "sheet":
     from PIL import Image, ImageDraw, ImageFont
-    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
-    names = {"a": "A  THE ROTUNDA", "b": "B  THE INSTITUTE"}
-    views = ("over", "gate", "cut", "inside", "ranch", "term")
-    w, h = 640, 360
-    sheet = Image.new("RGB", (w * len(views), (h + 44) * 2), (14, 10, 26))
-    d = ImageDraw.Draw(sheet)
-    for r, v in enumerate(("a", "b")):
-        d.text((12, r * (h + 44) + 8), names[v], fill=(255, 210, 63), font=font)
-        for c, name in enumerate(views):
-            p = os.path.join(OUT, f"{v}_{name}.jpg")
-            if os.path.isfile(p):
-                sheet.paste(Image.open(p).resize((w, h)), (c * w, r * (h + 44) + 44))
+    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
+    views = ("over", "front", "gate", "cut", "inside", "intake", "term", "robots", "hydro", "cryo", "exotic", "gallery", "walks", "crates", "ranch")
+    w, h, cols = 640, 360, 3
+    rows = (len(views) + cols - 1) // cols
+    sheet = Image.new("RGB", (w * cols, (h + 34) * rows), (14, 10, 26))
+    dr = ImageDraw.Draw(sheet)
+    for i, name in enumerate(views):
+        p = os.path.join(OUT, f"{name}.jpg")
+        x, y = (i % cols) * w, (i // cols) * (h + 34)
+        dr.text((x + 10, y + 5), name.upper(), fill=(255, 210, 63), font=font)
+        if os.path.isfile(p):
+            sheet.paste(Image.open(p).resize((w, h)), (x, y + 34))
     sheet.save(os.path.join(OUT, "zbornak_proposals.jpg"), quality=88)
     print("sheet written")

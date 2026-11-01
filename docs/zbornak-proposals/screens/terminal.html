@@ -1,7 +1,7 @@
 <!doctype html>
-<!-- Mock-ups of the lab's screens for the Antimatter Lab drafts (docs/zbornak-proposals/README.md). Served by the dev server
-     (for the game's fonts) and shot by tools/zbornak-screens.mjs: ?s=full&d=a is draft A's lab terminal close-up (LABNET),
-     ?s=full&d=b draft B's (SPECIMEN INDEX); ?s=lab, ?s=pen and ?s=sec are the pictures on the in-world screens. The entries are
+<!-- Mock-ups of the lab's screens for the Antimatter Lab draft (docs/zbornak-proposals/README.md). Served by the dev server
+     (for the game's fonts) and shot by tools/zbornak-screens.mjs: ?s=full is the lab terminal's close-up (LABNET; &tab=0
+     splices, 1 reactor); ?s=lab, ?s=pen and ?s=sec are the pictures on the in-world screens. The entries are
      the game's own (alchemy.js MUTATIONS, ITEMS and the reactor's results), with a made-up save: what is unlocked and when. -->
 <html>
 <head>
@@ -42,32 +42,6 @@
   .slots span { width: 2.2vw; height: 2.2vw; border: 0.2vw solid #7dff3a; display: grid; place-items: center; font-size: 1.4vw; }
   .slots span.e { border-color: #2f6a3e; }
 
-  /* B: holographic codex */
-  .holo { position: absolute; inset: 0; background: radial-gradient(ellipse at 30% 20%, #102a4a 0%, #0a1026 55%, #05060f 100%); color: #cfefff; }
-  .holo::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(46,196,255,0.06) 0 1px, transparent 1px 3px); }
-  .hhead { display: flex; align-items: baseline; gap: 1.5vw; padding: 1.4vw 2vw 0.6vw; }
-  .hhead h1 { font-family: var(--d); font-size: 2vw; color: #2ec4ff; text-shadow: 0 0 0.6vw #2ec4ff; }
-  .hhead .sub { font-size: 1.7vw; color: #c77dff; }
-  .hhead .cnt { margin-left: auto; font-family: var(--d); font-size: 0.95vw; color: #7dff3a; }
-  .hgrid { display: grid; grid-template-columns: 1fr 34%; gap: 1.6vw; padding: 0.6vw 2vw; }
-  .sect { font-family: var(--d); font-size: 0.9vw; color: #c77dff; margin: 0.9vw 0 0.5vw; letter-spacing: 0.1vw; }
-  .cards { display: grid; grid-template-columns: repeat(8, 1fr); gap: 0.55vw; }
-  .card { aspect-ratio: 1 / 1.15; border: 0.15vw solid rgba(46,196,255,0.55); background: rgba(46,196,255,0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
-  .card .ic { font-size: 2.2vw; text-shadow: 0 0 0.5vw currentColor; }
-  .card .nm { font-size: 1.05vw; text-align: center; line-height: 1; margin-top: 0.3vw; padding: 0 0.2vw; }
-  .card.lock { border-style: dashed; border-color: rgba(120,140,180,0.35); background: transparent; color: #4a5878; }
-  .card.lock .ic { text-shadow: none; }
-  .card.sel { border-color: #7dff3a; box-shadow: 0 0 0.9vw #7dff3a; background: rgba(125,255,58,0.12); }
-  .card .nb { position: absolute; top: -0.5vw; right: -0.4vw; font-family: var(--d); font-size: 0.6vw; background: #ffd23f; color: #05060f; padding: 0.15vw 0.3vw; }
-  .card .on { position: absolute; bottom: 0.3vw; font-family: var(--d); font-size: 0.55vw; color: #7dff3a; }
-  .hdet { border: 0.2vw solid #7dff3a; background: rgba(10,30,20,0.4); padding: 1.3vw; position: relative; min-height: 34vw; }
-  .hdet .orb { width: 9vw; height: 9vw; border-radius: 50%; margin: 0 auto 1vw; display: grid; place-items: center; font-size: 5vw; border: 0.2vw solid #2ec4ff; box-shadow: 0 0 1.5vw #2ec4ff inset, 0 0 1vw #2ec4ff; }
-  .hdet h2 { font-family: var(--d); font-size: 1.35vw; color: #ffd23f; text-align: center; margin-bottom: 0.9vw; }
-  .hdet p { font-size: 1.6vw; line-height: 1.15; margin-bottom: 0.5vw; }
-  .hdet p b { color: #2ec4ff; font-weight: normal; }
-  .scrawl { margin-top: 1vw; font-family: var(--b); font-size: 1.7vw; color: #ffb347; transform: rotate(-1.5deg); border: 0.15vw dashed #ffb347; padding: 0.6vw; }
-  .ticker { position: absolute; left: 0; right: 0; bottom: 0; padding: 0.8vw 2vw; font-family: var(--d); font-size: 0.85vw; color: #05060f; background: linear-gradient(90deg, #2ec4ff, #c77dff); display: flex; justify-content: space-between; }
-
   /* the in-world screens */
   .sec { position: absolute; inset: 0; background: #06120a; color: #8dffb4; font-family: var(--d); }
   .sec img { position: absolute; object-fit: cover; filter: saturate(0.6) contrast(1.1); }
@@ -83,7 +57,7 @@
 <body>
 <div id="app"></div>
 <script>
-const Q = new URLSearchParams(location.search), D = Q.get('d') || 'a', S = Q.get('s') || 'full';
+const Q = new URLSearchParams(location.search), S = Q.get('s') || 'full';
 // the game's splices (alchemy.js MUTATIONS), with a made-up save
 const SPLICES = [
   ['wings', 'MITE WINGS', '✶', 'Moon Mite', 'Fall slowly: 80% gravity while airborne', 'active', 'Day 12, 21:04', 'Membranous. They itch. Do not scratch them in public.'],
@@ -139,45 +113,17 @@ function labnet(tab) {
     <div class="foot"><span>↑↓ SELECT · ←→ TAB · F / ESC CLOSE</span><span>LAST ENTRY: MOON MITE → MEGA MITE ★ NEW</span></div></div>`;
 }
 
-function codex() {
-  const card = (r, kind, i) => {
-    const lock = r[5] === 'lock';
-    const nm = lock ? '???' : r[1].replace('…', '');
-    return `<div class="card ${lock ? 'lock' : ''} ${kind === 'r' && i === 0 ? 'sel' : ''}">${r[5] === 'new' || r[4] === 'NEW' ? '<span class="nb">NEW</span>' : ''}<span class="ic" style="color:${lock ? '' : ['#7dff3a', '#2ec4ff', '#ff2e88', '#ffd23f', '#c77dff'][i % 5]}">${lock ? '?' : r[2]}</span><span class="nm">${nm}</span>${r[5] === 'active' ? '<span class="on">● ON YOU</span>' : ''}</div>`;
-  };
-  const chim = CHIMERAS.map((c, i) => `<div class="card">${c[4] === 'NEW' ? '<span class="nb">NEW</span>' : ''}<span class="ic" style="color:#7dff3a;font-size:1.4vw">${c[1]}</span><span class="nm">${c[0]}</span><span class="on">GRADE ${c[3]}</span></div>`).join('') + Array.from({ length: 4 }, () => '<div class="card lock"><span class="ic">?</span><span class="nm">EMPTY</span></div>').join('');
-  app.innerHTML = `<div class="holo">
-    <div class="hhead"><h1>SPECIMEN INDEX</h1><span class="sub">Zbornak Institute · courier file #0417</span><span class="cnt">16 / 42 CATALOGUED</span></div>
-    <div class="hgrid"><div>
-      <div class="sect">◇ SPLICES · 3 / 10</div><div class="cards">${SPLICES.slice(0, 8).map((r, i) => card(r, 's', i)).join('')}</div>
-      <div class="sect">◇ REACTOR · 9 / 24</div><div class="cards">${REACTOR.map((r, i) => card(r, 'r', i)).join('')}</div>
-      <div class="sect">◇ CHIMERAS · 4</div><div class="cards">${chim}</div>
-    </div>
-    <div class="hdet"><div class="orb" style="color:#b8e986">✶</div><h2>MEGA MITE</h2>
-      <p><b>INPUT</b> one Moon Mite, alone</p><p><b>RESULT</b> the mite takes the whole antimatter flux and comes out the size of a house. It waits outside. It is upset.</p>
-      <p><b>FIRST LOGGED</b> Day 16, 22:51 · <b>TIMES</b> 1</p><p><b>TRY NEXT</b> a mite with another creature makes a chimera.</p>
-      <div class="scrawl">Perhaps shoot it? Science!<br>— Z.</div></div></div>
-    <div class="ticker"><span>◀ ▶ BROWSE · F / ESC CLOSE</span><span>NEW: MOON MITE → MEGA MITE · CHIMERA "TOAST" HATCHED</span></div></div>`;
-}
-
 function inworld() {
   if (S === 'sec') {
-    const portrait = D === 'b';
-    app.innerHTML = portrait
-      ? `<div class="sec"><div class="lbl" style="left:4vw;top:3vw;font-size:4.6vw;color:#ffd23f">VISITOR PHOTOGRAPHED</div><img src="photo_b.jpg" style="left:4vw;top:12vw;width:92vw;height:70vw"><div class="cross" style="left:30vw;top:20vw;width:40vw;height:34vw"></div><div class="lbl" style="left:4vw;top:86vw;font-size:4.2vw">COURIER #0417</div><div class="lbl" style="left:4vw;top:93vw;font-size:4.2vw">MATCH 99%</div><div class="lbl" style="left:4vw;top:101vw;font-size:4.2vw;color:#c77dff">DR. ZBORNAK: "...FINE."</div><div class="ok" style="top:114vw;font-size:7vw">✔ ADMITTED</div></div>`
-      : `<div class="sec"><img src="photo_a.jpg" style="left:3vw;top:3vw;width:52vw;height:55vw"><div class="cross" style="left:14vw;top:9vw;width:30vw;height:30vw"></div><div class="lbl" style="left:58vw;top:5vw;color:#ffd23f">VISITOR</div><div class="lbl" style="left:58vw;top:13vw">COURIER</div><div class="lbl" style="left:58vw;top:20vw">#0417</div><div class="lbl" style="left:58vw;top:30vw">MATCH 99%</div><div class="lbl" style="left:58vw;top:40vw;color:#c77dff">ZBORNAK:</div><div class="lbl" style="left:58vw;top:47vw;color:#c77dff">"OH. YOU."</div><div class="ok" style="top:61vw">ACCESS GRANTED</div></div>`;
+    app.innerHTML = `<div class="sec"><img src="photo.jpg" style="left:3vw;top:3vw;width:52vw;height:55vw"><div class="cross" style="left:14vw;top:9vw;width:30vw;height:30vw"></div><div class="lbl" style="left:58vw;top:5vw;color:#ffd23f">VISITOR</div><div class="lbl" style="left:58vw;top:13vw">COURIER</div><div class="lbl" style="left:58vw;top:20vw">#0417</div><div class="lbl" style="left:58vw;top:30vw">MATCH 99%</div><div class="lbl" style="left:58vw;top:40vw;color:#c77dff">ZBORNAK:</div><div class="lbl" style="left:58vw;top:47vw;color:#c77dff">"OH. YOU."</div><div class="ok" style="top:61vw">ACCESS GRANTED</div></div>`;
   } else if (S === 'pen') {
     const rows = [['BISCUIT', 'B'], ['SIR STALKS', 'C'], ['VOLTAGE', 'A'], ['TOAST', 'B'], ['GRUMBLE', 'C'], ['NIBS (RETIRED)', 'A']];
     app.innerHTML = `<div class="pen"><div class="ph">HOLDING PEN · 6</div>${rows.map((r) => `<div class="pr"><span>▸</span><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}</div>`;
-  } else if (S === 'lab' && D === 'b') {
-    app.innerHTML = `<div class="holo"><div style="padding:6vw 6vw 0;font-family:var(--d);font-size:6.5vw;color:#2ec4ff;text-shadow:0 0 2vw #2ec4ff;line-height:1.3">SPECIMEN<br>INDEX</div>
-      <div style="margin:5vw 6vw;border:0.6vw solid #7dff3a;padding:5vw;text-align:center"><div style="font-size:30vw;color:#b8e986;text-shadow:0 0 4vw #7dff3a">✶</div><div style="font-family:var(--d);font-size:5vw;color:#ffd23f">MEGA MITE</div><div style="font-size:7vw;margin-top:3vw">NEW ENTRY · DAY 16</div></div>
-      <div style="padding:0 6vw;font-size:8vw;color:#c77dff">16 / 42 CATALOGUED</div>
-      <div style="position:absolute;bottom:6vw;left:6vw;right:6vw;font-family:var(--d);font-size:4.5vw;color:#05060f;background:#7dff3a;padding:3vw;text-align:center">PRESS F</div></div>`;
+
   }
 }
 
-if (S === 'full' || (S === 'lab' && D === 'a')) { if (D === 'a') labnet(Number(Q.get('tab') || 0)); else codex(); } else inworld();
+if (S === 'full' || S === 'lab') labnet(Number(Q.get('tab') || 0)); else inworld();
 </script>
 </body>
 </html>

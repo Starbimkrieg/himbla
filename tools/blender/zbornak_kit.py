@@ -1,19 +1,22 @@
-# Set pieces for the Antimatter Lab drafts (build_zbornak_lab.py execs this after kit.py): a grouping helper that places
-# primitives with a local transform, and the lab's furniture (reactor, robot arms, cryo pods, hydroponics, exotic-matter
-# storage, holotables, wall projections, splice pod, terminals, the airlock's security post) and the ranch's kit (fences,
-# silo, feed bunk, stock tank, wind pump, bales, gate arch, lamps).
+# Set pieces for the Antimatter Lab draft (build_zbornak_lab.py execs this after kit.py): a grouping helper that places
+# primitives with a local transform, and the lab's furniture (reactor and its intake hatch, robot arms on joint pivots,
+# cryo pods, growth pods, exotic-matter storage, holotables, wall projections, splice pod, terminals, the airlock's security
+# post) and the plateau's and the ranch's kit (paths, fences, silo, feed bunk, stock tank, sun-mill, bales, gate arch,
+# lamps, landing pad, radiator field, solar array).
 #
 # Three.js axes (x right, y up, +z forward), metres. One material per mesh, named after its slot (SLOT_COLORS in
-# build_zbornak_lab.py; the preview lights the GLOW slots and makes the GLASS slots see-through). `ink` as the house rules.
+# build_zbornak_lab.py; the preview lights the GLOW slots and makes the SEE slots see-through). `ink` as the house rules.
 # Screens that the preview paints with a picture are their own meshes named `screen_<id>` (a quad, slot `screen`).
-# Chimeras are not built here: CHIMS collects (parent, position, yaw, scale, which) and the preview puts real ones there
-# (exported from the game's makeChimera).
+# Chimeras and statues are not built here: CHIMS and STATUES collect where they stand and the preview puts real ones there
+# (chimeras exported from the game's makeChimera; the statues are runner.glb in stone, as the game's petrified gallery).
+# Every part rests on, hangs from or plugs into something: cables and pipes end in a socket, a junction box or a flange.
 
 import math
 from mathutils import Vector
 
 PI, TAU = math.pi, 2 * math.pi
 CHIMS = []      # (parent, (x, y, z), yaw, scale, index)
+STATUES = []    # (parent, (x, y, z), yaw): petrified couriers on plinths
 LIGHTS = []     # (parent, (x, y, z), rgb, watts, radius): point lights for the preview's interior shots
 CAMS = {}       # name -> ((x, y, z), (tx, ty, tz), lens): the preview's views, in the area's frame
 TEXTS = []      # (parent, text, (x, y, z), yaw, size, slot, depth)
@@ -164,10 +167,12 @@ def polar(c, th, r):
 # the lab's furniture
 # =====================================================================================================================
 
-def reactor(g, H, R=3.4, pylons=3, crown_y=None):
-    """The antimatter reactor at g's local origin: plinth, glass containment column H tall, the core (an orb in two
-    rings, lit), magnetic pylons leaning in with emitter claws, cable runs; crown_y: the column carries on up through a roof
-    to a crown of rings and a spire at that height."""
+def reactor(g, H, R=3.4, pylons=3, crown_y=None, collar_y=None):
+    """The antimatter reactor at g's local origin: plinth, glass containment column H tall, the core (an orb in rings,
+    lit), magnetic pylons leaning in from footings outside the pit to a steel collar clamped round the column (each mast
+    ends in an emitter head bolted to the collar by a bracket), cable runs from each footing to a socket on the plinth;
+    crown_y: the column carries on up through a roof to a crown of rings and a spire at that height. Returns the collar's
+    height."""
     g("dark", 0.06).lath([(R + 2.2, 0), (R + 2.2, 0.5), (R + 1.6, 0.9), (R + 1.2, 1.3), (R + 0.4, 1.3)], segs=32)
     g("hazard", 0.0).tor(R + 1.9, 0.08, (0, 0.52, 0), n=40, rs=4)
     g("glass", 0.0).cylc(0, 1.3 + (H - 2.6) / 2, 0, R, H - 2.6, 32)
@@ -187,22 +192,26 @@ def reactor(g, H, R=3.4, pylons=3, crown_y=None):
         a = k * 1.3
         p = [(math.sin(a + t * 0.9) * R * (0.45 + 0.4 * t), cy + math.sin(t * 5 + k) * 0.7, math.cos(a + t * 0.9) * R * (0.45 + 0.4 * t)) for t in (0, 0.33, 0.66, 1)]
         g("spark", 0.0).path(p, 0.035, 4)
-    # magnetic pylons: a footing outside the plinth, a leaning mast, an emitter claw aimed at the core
+    # the collar the pylons clamp to: a steel band round the glass, bolted flanges above and below
+    cly = collar_y or cy - 2.6
+    g("steel", 0.04).cylc(0, cly, 0, R + 0.2, 0.8, 32)
+    for dy in (-0.42, 0.42):
+        g("dark", 0.02).tor(R + 0.24, 0.07, (0, cly + dy, 0), n=32, rs=5)
     for i in range(pylons):
         a = TAU * i / pylons + PI / pylons
         s, c = math.sin(a), math.cos(a)
         foot = (s * (R + 5.5), 0, c * (R + 5.5))
-        head = (s * (R + 1.9), cy + 1.6, c * (R + 1.9))
+        head = (s * (R + 1.35), cly, c * (R + 1.35))
         g("panel", 0.04).boxc(foot[0], 0.6, foot[2], 2.2, 1.2, 2.2, (0, a, 0))
-        g("wall2", 0.05).bm((foot[0], 1.0, foot[2]), head, 0.55, 8)
-        g("hazard", 0.0).bm((s * (R + 4.6), 2.6, c * (R + 4.6)), (s * (R + 4.2), 3.6, c * (R + 4.2)), 0.57, 8)
-        g("dark", 0.04).ball(*head, 0.85, 12, 8)
-        for k in (-1, 1):                                                   # the two claw jaws
-            b = a + k * 0.32
-            tip = (math.sin(b) * (R + 0.5), cy + 1.6 + k * 0.5, math.cos(b) * (R + 0.5))
-            g("steel", 0.02).path([head, ((head[0] + tip[0]) / 2 + s * 0.3, head[1] + k * 0.6, (head[2] + tip[2]) / 2 + c * 0.3), tip], 0.16, 6)
-        g("lime", 0.0).ball(s * (R + 1.05), cy + 1.6, c * (R + 1.05), 0.22, 8, 6)
-        g("cable", 0.0).path([(foot[0] * 0.92, 0.12, foot[2] * 0.92), (s * (R + 2.6), 0.12, c * (R + 2.6)), (s * (R + 2.2), 0.6, c * (R + 2.2))], 0.12, 6)
+        g("wall2", 0.05).bm((foot[0], 1.0, foot[2]), head, 0.5, 8)
+        g("hazard", 0.0).bm((s * (R + 4.9), 2.0, c * (R + 4.9)), (s * (R + 4.6), 2.9, c * (R + 4.6)), 0.52, 8)
+        g("dark", 0.04).ball(*head, 0.75, 12, 8)
+        g("steel", 0.03).boxc(s * (R + 0.75), cly, c * (R + 0.75), 0.7, 0.55, 1.2, (0, a, 0))     # bracket, head to collar
+        for k in (-1, 1):                                                   # bolts through the bracket's flange
+            g("dark", 0.0).cylc(s * (R + 0.32) + c * 0.22 * k, cly, c * (R + 0.32) - s * 0.22 * k, 0.05, 0.08, 6, rot=(PI / 2, a, 0))
+        g("lime", 0.0).boxc(s * (R + 0.21), cly, c * (R + 0.21), 0.45, 0.3, 0.02, (0, a, 0))     # the emitter's lens on the collar
+        g("cable", 0.0).path([(s * (R + 4.6), 0.12, c * (R + 4.6)), (s * (R + 3.0), 0.12, c * (R + 3.0)), (s * (R + 2.3), 0.3, c * (R + 2.3))], 0.12, 6)
+        g("dark", 0.015).boxc(s * (R + 2.15), 0.35, c * (R + 2.15), 0.5, 0.4, 0.3, (0, a, 0))     # the cable's socket on the plinth
     if crown_y:
         g("glass", 0.0).cylc(0, (H + crown_y) / 2, 0, R * 0.7, crown_y - H, 24)
         g("pink", 0.0).cylc(0, (H + crown_y) / 2, 0, 0.35, crown_y - H, 10)
@@ -212,57 +221,108 @@ def reactor(g, H, R=3.4, pylons=3, crown_y=None):
         g("steel", 0.03).cylc(0, crown_y + 7, 0, 0.12, 8, 6, rt=0.05)
         g("red", 0.0).ball(0, crown_y + 11, 0, 0.35, 8, 6)
     g.light((0, cy, 0), (1.0, 0.25, 0.6), 9000 * (H / 14), 1.2)
+    return cly
 
 
-def robot_arm(g, x, z, yaw, sh=0.7, el=1.4, wr=0.5, turn=0.0, tool="claw", reach=(3.2, 2.8), base_h=0.9, color="arm"):
-    """An industrial arm on a pedestal at (x, z) facing yaw: turntable, shoulder, upper arm (reach[0]), elbow, forearm
-    (reach[1]), wrist and a tool (claw, welder or drill). sh, el, wr: pitch up from level at each joint (rad); turn: yaw of
-    the turntable. A welder throws sparks and lights its work."""
-    g.at(x, z, yaw + turn)
-    g("armdark").cylc(0, base_h / 2, 0, 0.75, base_h, 16, rt=0.6)
-    g("hazard", 0.0).cylc(0, base_h * 0.75, 0, 0.765, 0.16, 16)
-    g(color).cylc(0, base_h + 0.35, 0, 0.62, 0.7, 14)
-    S = Vector((0, base_h + 0.95, 0))
-    g(color).cylc(0, S.y, 0, 0.42, 1.05, 12, "x")
-    g("armdark").cylc(0, S.y, 0, 0.3, 1.2, 10, "x")
-    a1 = sh
-    E = S + Vector((0, math.sin(a1), math.cos(a1))) * reach[0]
-    a2 = a1 - el
-    W = E + Vector((0, math.sin(a2), math.cos(a2))) * reach[1]
-    a3 = a2 - wr
-    T = W + Vector((0, math.sin(a3), math.cos(a3))) * 0.55
-    g(color).path([tuple(S), tuple(S + (E - S) * 0.5), tuple(E)], [0.34, 0.3, 0.26], 8)
-    g("armdark").cylc(E.x, E.y, E.z, 0.32, 0.7, 12, "x")
-    g(color).path([tuple(E), tuple(W)], [0.24, 0.17], 8)
-    g("armdark").ball(W.x, W.y, W.z, 0.2, 10, 7)
-    g("steel").path([tuple(W), tuple(T)], [0.14, 0.12], 8)
-    g("cable", 0.0).path([tuple(S + Vector((0.32, 0, 0))), tuple((S + E) * 0.5 + Vector((0.36, 0.25, 0))), tuple(E + Vector((0.3, 0, 0)))], 0.05, 4)
-    d = (T - W).normalized()
-    if tool == "welder":
-        tip = T + d * 0.55
-        g("copper").path([tuple(T), tuple(tip)], [0.1, 0.05], 8)
-        g("weld", 0.0).ball(*(tip + d * 0.12), 0.16, 8, 6)
-        for k in range(9):                                                  # sparks fanning off the weld
-            b = k * 2.39
-            v = Vector((math.sin(b) * 0.9, 0.5 + 0.4 * math.sin(k * 1.7), math.cos(b) * 0.9))
-            p0 = tip + d * 0.12
-            g("spark", 0.0).path([tuple(p0), tuple(p0 + v * 0.45), tuple(p0 + v * 0.9 + Vector((0, -0.25, 0)))], 0.018, 3)
-        g.light(tuple(tip + d * 0.3), (0.6, 0.8, 1.0), 900, 0.15)
-    elif tool == "drill":
-        g("steel").path([tuple(T), tuple(T + d * 0.6)], [0.12, 0.02], 8)
-    else:
-        n = Vector((0, 1, 0)).cross(d)
-        n = n.normalized() if n.length > 1e-4 else Vector((1, 0, 0))
-        for k in (-1, 1):
-            p1 = T + n * (0.16 * k)
-            g("steel").path([tuple(T), tuple(p1 + d * 0.2), tuple(p1 + d * 0.5 - n * 0.06 * k)], 0.05, 5)
+def reactor_intake(g, R, ang, y, r_out, w=1.8):
+    """The intake hatch: a bridge from the catwalk's inner edge (r_out, deck at y) across to the column (radius R) at angle
+    ang, ending in a hopper with its lid swung up over a chute into a port housing clamped on the glass. Jars are thrown in
+    here. Railings along the bridge, a hazard strip at its end, an INTAKE board on the housing, the reactor's glow in the
+    throat."""
+    g.at(0, 0, ang)                                                         # local +z points out along the bridge
+    L = r_out - R - 0.9
+    g("panel", 0.03).boxc(0, y - 0.15, R + 0.9 + L / 2 + 0.05, w, 0.3, L + 0.1)
+    for k in range(int(L / 0.6)):
+        g("dark", 0.0).boxc(0, y + 0.005, R + 1.2 + k * 0.6, w - 0.2, 0.01, 0.08)
+    g("hazard", 0.0).boxc(0, y + 0.006, R + 1.15, w - 0.1, 0.01, 0.3)
+    for sx in (-1, 1):
+        for k in range(int(L / 1.2) + 1):
+            g("steel", 0.015).cylc(sx * (w / 2 - 0.05), y + 0.55, R + 1.1 + k * min(1.2, L / max(1, int(L / 1.2))), 0.035, 1.1, 5)
+        g("hazard", 0.015).bm((sx * (w / 2 - 0.05), y + 1.1, R + 1.0), (sx * (w / 2 - 0.05), y + 1.1, r_out), 0.045, 5)
+        g("steel", 0.0).bm((sx * (w / 2 - 0.05), y + 0.55, R + 1.0), (sx * (w / 2 - 0.05), y + 0.55, r_out), 0.03, 4)
+        g("lime", 0.0).boxc(sx * (w / 2 - 0.02), y - 0.05, R + 0.9 + L / 2, 0.04, 0.06, L)
+    # the port housing on the glass, its chute and the hopper
+    g("steel", 0.04).boxc(0, y + 0.8, R + 0.4, 1.7, 1.6, 0.9)
+    g("dark", 0.02).boxc(0, y + 0.8, R + 0.06, 1.9, 1.8, 0.2)
+    g("dark", 0.04).boxc(0, y + 1.75, R + 0.55, 1.2, 0.5, 0.5)
+    g.text("INTAKE", (0, y + 1.66, R + 0.81), 0, 0.3, "pink", 0.02)
+    g("steel", 0.03).cylc(0, y + 0.85, R + 1.2, 0.35, 0.8, 12, "z")
+    g("steel", 0.03).add(cylinder(0.75, 0.35, 0.7, 16, True)[:2], (0, y + 0.95, R + 1.75))
+    g("hazard", 0.0).tor(0.75, 0.06, (0, y + 1.3, R + 1.75), n=20, rs=4)
+    g("pink", 0.0).cylc(0, y + 0.66, R + 1.75, 0.36, 0.04, 16)
+    g("dark", 0.03).boxc(0, y + 1.82, R + 1.08, 1.5, 0.08, 1.2, (-1.2, 0, 0))   # the lid, swung up on its hinge
+    g("steel", 0.0).cylc(0, y + 1.32, R + 1.05, 0.06, 1.5, 8, "x")
+    for sx in (-1, 1):
+        g("steel", 0.0).cylc(sx * 0.62, y + 0.45, R + 1.75, 0.06, 0.9, 6)
+    g.light((0, y + 1.2, R + 1.75), (1.0, 0.3, 0.6), 160, 0.2)
     g.at()
-    return T + d * 0.67
 
 
-def cryo_pod(g, x, z, yaw, idx=None, tint="cyan", scale=0.95):
-    """An upright stasis pod at (x, z) facing yaw: plinth with a readout, a frosted glass capsule (a chimera inside, set by
-    the preview), a crown with cold pipes, a lit ring at the foot and the head."""
+ARMS = []      # robot arms for the preview to animate: dicts of their joint pivots and rest angles
+WELDS = []     # welders' glow parts and lights for the preview to flicker
+
+
+def robot_arm(g, x, z, yaw, sh=0.7, el=1.4, wr=0.5, turn=0.0, tool="claw", reach=(3.2, 2.8), base_h=0.9, color="arm", name="arm"):
+    """An industrial arm on a pedestal at (x, z) in g's frame facing yaw, built as a chain of pivots the game turns: `turret`
+    (yaw on the turntable), `shoulder`, `elbow` and `wrist` (pitch, each about its own joint axis), the tool on the wrist (claw,
+    welder or drill). sh, el, wr: rest pitch up from level at each joint (rad, el and wr bending down); turn: the turntable's
+    rest yaw. Cables run along each link from joint to joint. A welder's tip burns blue-white in a halo, lights its work and
+    throws sparks."""
+    p = g.pt((x, 0, z))
+    base = G(name, g.root, p[0], 0, p[2], yaw + g.cur[3])
+    base.root["role"] = "arm"
+    base("armdark").cylc(0, base_h / 2, 0, 0.75, base_h, 16, rt=0.6)
+    base("hazard", 0.0).cylc(0, base_h * 0.75, 0, 0.765, 0.16, 16)
+    base("dark", 0.02).boxc(0, 0.25, -0.95, 0.7, 0.5, 0.5)
+    base("cable", 0.0).path([(0, 0.15, -1.2), (0, 0.1, -2.2), (0.3, 0.1, -3.4)], 0.1, 6)
+    tur = G(name + "_turret", base.root, 0, base_h, 0, turn)
+    tur.root["role"] = "turret"
+    tur(color).cylc(0, 0.35, 0, 0.62, 0.7, 14)
+    tur("armdark").boxc(0, 0.95, 0, 0.9, 0.5, 0.6)
+    shl = G(name + "_shoulder", tur.root, 0, 0.95, 0)
+    shl.root["role"] = "shoulder"
+    shl.root.rotation_euler[0] = -sh
+    L1, L2 = reach
+    shl(color).cylc(0, 0, 0, 0.42, 1.05, 12, "x")
+    shl("armdark").cylc(0, 0, 0, 0.3, 1.2, 10, "x")
+    shl(color).path([(0, 0, 0), (0, 0, L1 * 0.5), (0, 0, L1)], [0.34, 0.3, 0.26], 8)
+    shl("cable", 0.0).path([(0.4, 0.0, 0.2), (0.4, 0.28, L1 * 0.5), (0.36, 0.0, L1 - 0.2)], 0.05, 4)
+    elb = G(name + "_elbow", shl.root, 0, 0, L1)
+    elb.root["role"] = "elbow"
+    elb.root.rotation_euler[0] = el
+    elb("armdark").cylc(0, 0, 0, 0.32, 0.7, 12, "x")
+    elb(color).path([(0, 0, 0), (0, 0, L2)], [0.24, 0.17], 8)
+    elb("cable", 0.0).path([(0.3, 0.0, 0.15), (0.26, 0.2, L2 * 0.5), (0.2, 0.0, L2 - 0.15)], 0.04, 4)
+    wri = G(name + "_wrist", elb.root, 0, 0, L2)
+    wri.root["role"] = "wrist"
+    wri.root.rotation_euler[0] = wr
+    wri("armdark").ball(0, 0, 0, 0.2, 10, 7)
+    wri("steel").path([(0, 0, 0), (0, 0, 0.55)], [0.14, 0.12], 8)
+    if tool == "welder":
+        wri("copper").path([(0, 0, 0.55), (0, 0, 1.1)], [0.1, 0.05], 8)
+        wri("weldcore", 0.0).ball(0, 0, 1.22, 0.14, 10, 7)
+        wri("weldhalo", 0.0).ball(0, 0, 1.22, 0.55, 14, 9)
+        wri("weldhalo", 0.0).ball(0, 0, 1.22, 0.3, 12, 8)
+        for k in range(16):                                                 # sparks fanning off the weld
+            b = k * 2.39
+            v = Vector((math.sin(b) * 0.9, 0.3 + 0.5 * math.sin(k * 1.7), math.cos(b) * 0.4 + 0.2))
+            p0 = Vector((0, 0, 1.22))
+            wri("spark", 0.0).path([tuple(p0), tuple(p0 + v * 0.5), tuple(p0 + v * 1.0 + Vector((0, -0.35, 0)))], 0.016, 3)
+        wri.light((0, 0.15, 1.15), (0.08, 0.3, 1.0), 3000, 0.08)
+        WELDS.append(wri.root)
+    elif tool == "drill":
+        wri("steel").path([(0, 0, 0.55), (0, 0, 1.15)], [0.12, 0.02], 8)
+    else:
+        for k in (-1, 1):
+            wri("steel").path([(0, 0, 0.55), (k * 0.16, 0, 0.75), (k * 0.1, 0, 1.05)], 0.05, 5)
+    ARMS.append({"turret": tur.root, "shoulder": shl.root, "elbow": elb.root, "wrist": wri.root, "rest": (turn, -sh, el, wr)})
+    return base
+
+
+def cryo_pod(g, x, z, yaw, idx=None, tint="cyan", scale=0.95, wall=3.4):
+    """An upright stasis pod at (x, z) facing yaw, its back to a wall `wall` behind it: plinth with a readout, a frosted
+    glass capsule (a chimera inside, set by the preview), a crown with a lit ring, two coolant lines from the crown up and
+    back into a junction box on the wall."""
     g.at(x, z, yaw)
     g("dark").cylc(0, 0.35, 0, 1.25, 0.7, 20, rt=1.15)
     g("white").cylc(0, 0.8, 0, 1.15, 0.2, 20)
@@ -272,7 +332,11 @@ def cryo_pod(g, x, z, yaw, idx=None, tint="cyan", scale=0.95):
     g("white").lath([(1.15, 3.75), (1.15, 4.0), (0.85, 4.4), (0.3, 4.6)], segs=20)
     g(tint, 0.0).tor(1.12, 0.05, (0, 3.85, 0), n=28, rs=4)
     for k in (-1, 1):
-        g("steel").path([(k * 0.5, 4.3, -0.3), (k * 0.8, 4.9, -0.8), (k * 0.9, 5.4, -1.6)], 0.09, 6)
+        g("steel").cylc(k * 0.45, 4.42, -0.35, 0.12, 0.25, 8)
+        g("steel").path([(k * 0.45, 4.5, -0.35), (k * 0.45, 5.2, -0.6), (k * 0.4, 5.5, -wall * 0.6), (k * 0.35, 5.5, -wall + 0.3)], 0.08, 6)
+    g("dark", 0.02).boxc(0, 5.5, -wall + 0.15, 1.3, 0.7, 0.3)
+    g("steel", 0.0).cylc(0, 5.98, -wall + 0.15, 0.08, 0.26, 8)              # conduit up into the cable tray
+    g(tint, 0.0).boxc(0, 5.5, -wall + 0.31, 0.9, 0.12, 0.02)
     g("dark", 0.015).boxc(0, 0.42, 1.18, 1.0, 0.45, 0.12, (-0.2, 0, 0))
     g("screenlit", 0.0).boxc(0, 0.44, 1.235, 0.8, 0.3, 0.02, (-0.2, 0, 0))
     for k in range(3):
@@ -283,45 +347,42 @@ def cryo_pod(g, x, z, yaw, idx=None, tint="cyan", scale=0.95):
     g.at()
 
 
-def hydro_rack(g, x, z, yaw, L=6.0, tiers=3, seed=1):
-    """A bioluminescent hydroponics rack L long at (x, z) facing yaw: tiers of trays on a steel frame, glowing bulbs,
-    fronds and caps in each, a grow light over each tray, a nutrient tank and pipe at one end."""
+def growth_pod(g, x, z, yaw=0.0, seed=0, h=2.0, line=1.6):
+    """A sealed growth pod: a white pedestal holding a nutrient bath, a glass capsule with a domed top, three tiers of
+    glowing plants on trays round a central stem, a grow-light ring under a white cap, a mister, and a nutrient line from the
+    pedestal into the floor header `line` behind it (local -z)."""
     g.at(x, z, yaw)
-    for sx in (-L / 2, L / 2):
-        for sz in (-0.55, 0.55):
-            g("steel").boxc(sx, tiers * 0.6 + 0.3, sz, 0.1, tiers * 1.2 + 0.6, 0.1)
-    for t in range(tiers):
-        y = 0.5 + t * 1.2
-        g("white").boxc(0, y, 0, L + 0.2, 0.24, 1.3)
-        g("soil", 0.0).boxc(0, y + 0.125, 0, L, 0.02, 1.15)
-        g("vio", 0.0).boxc(0, y + 1.02, 0, L - 0.2, 0.05, 0.16)
-        g("steel").boxc(0, y + 1.07, 0, L - 0.1, 0.06, 0.22)
-        n = int(L * 2.2)
+    g("white", 0.04).lath([(0.85, 0), (0.85, 0.35), (0.75, 0.55), (0.72, 0.6)], segs=20)
+    g("teal", 0.0).cylc(0, 0.62, 0, 0.66, 0.08, 20)
+    g("glassg", 0.0).cylc(0, 0.6 + h / 2, 0, 0.7, h, 20)
+    g("glassg", 0.0).add(sphere(0.7, 20, 6, PI / 2)[:2], (0, 0.6 + h, 0))
+    g("white", 0.03).tor(0.72, 0.06, (0, 0.6 + h, 0), n=24, rs=5)
+    g("vio", 0.0).tor(0.5, 0.04, (0, 0.6 + h + 0.3, 0), n=24, rs=4)
+    g("steel", 0.0).cylc(0, 0.6 + h / 2 + 0.3, 0, 0.04, h + 0.6, 6)
+    for t in range(3):
+        y = 0.9 + t * (h - 0.4) / 3
+        g("white", 0.0).cylc(0, y, 0, 0.55 - t * 0.06, 0.04, 16)
+        n = 7 - t
         for i in range(n):
-            px = -L / 2 + 0.3 + (L - 0.6) * i / max(1, n - 1)
-            pz = ((i * 37 + seed * 11 + t * 5) % 7 - 3) * 0.12
-            kind = (i + t + seed) % 4
-            c = ("lime", "cyan", "teal", "vio")[(i * 3 + t + seed) % 4]
-            if kind == 0:                                                   # a bulb on a stem
-                h = 0.35 + (i % 3) * 0.1
-                g("plant").bm((px, y + 0.13, pz), (px, y + 0.13 + h, pz), 0.025, 4)
-                g(c, 0.0).ball(px, y + 0.15 + h, pz, 0.11, 8, 6)
-            elif kind == 1:                                                 # fronds
+            a = TAU * i / n + seed + t
+            r = 0.38 - t * 0.05
+            px, pz = math.sin(a) * r, math.cos(a) * r
+            c = ("lime", "teal", "vio", "cyan")[(i + t + seed) % 4]
+            kind = (i + seed) % 3
+            if kind == 0:
+                g("plant", 0.0).bm((px, y, pz), (px, y + 0.22, pz), 0.02, 4)
+                g(c, 0.0).ball(px, y + 0.26, pz, 0.07, 8, 6)
+            elif kind == 1:
                 for k in range(3):
                     b = k * 2.1 + i
-                    g("plant2").path([(px, y + 0.13, pz), (px + math.sin(b) * 0.15, y + 0.4, pz + math.cos(b) * 0.15), (px + math.sin(b) * 0.3, y + 0.55, pz + math.cos(b) * 0.3)], [0.04, 0.03, 0.01], 4)
-                g(c, 0.0).ball(px, y + 0.22, pz, 0.06, 6, 4)
-            elif kind == 2:                                                 # a glowing cap (mushroom)
-                g("plant").cylc(px, y + 0.25, pz, 0.04, 0.24, 6)
-                g(c, 0.0).ball(px, y + 0.38, pz, 0.16, 10, 5, s=(1, 0.45, 1))
-            else:                                                           # a pitcher
-                g("plant2").cylc(px, y + 0.3, pz, 0.08, 0.34, 8, rt=0.12)
-                g(c, 0.0).cylc(px, y + 0.47, pz, 0.1, 0.02, 8)
-        g.light((0, y + 0.6, 0), (0.4, 1.0, 0.7), 70, 0.4)
-    g("glass", 0.0).cylc(L / 2 + 0.9, 1.1, 0, 0.6, 2.0, 16)
-    g("teal", 0.0).cylc(L / 2 + 0.9, 0.85, 0, 0.56, 1.5, 16)
-    g("white").cylc(L / 2 + 0.9, 2.15, 0, 0.66, 0.15, 16)
-    g("steel").path([(L / 2 + 0.9, 2.2, 0), (L / 2 + 0.9, 2.6, 0), (L / 2 - 0.2, 2.6, 0), (L / 2 - 0.2, tiers * 1.2 + 0.9, 0)], 0.06, 6)
+                    g("plant2", 0.0).path([(px, y, pz), (px + math.sin(b) * 0.08, y + 0.18, pz + math.cos(b) * 0.08), (px + math.sin(b) * 0.15, y + 0.26, pz + math.cos(b) * 0.15)], [0.025, 0.018, 0.008], 4)
+                g(c, 0.0).ball(px, y + 0.1, pz, 0.04, 6, 4)
+            else:
+                g("plant", 0.0).cylc(px, y + 0.1, pz, 0.025, 0.18, 6)
+                g(c, 0.0).ball(px, y + 0.2, pz, 0.1, 10, 5, s=(1, 0.45, 1))
+    g("steel", 0.0).cylc(0.62, 0.6 + h - 0.15, 0, 0.05, 0.12, 6)
+    g("steel", 0.02).path([(0, 0.25, -0.84), (0, 0.12, -1.0), (0, 0.12, -line)], 0.07, 6)
+    g.light((0, 0.6 + h * 0.6, 0), (0.45, 1.0, 0.8), 60, 0.3)
     g.at()
 
 
@@ -357,10 +418,14 @@ def canister_rack(g, x, z, yaw, L=5.0, rows=3, seed=0):
     g.at()
 
 
-def void_cage(g, x, z, yaw=0.0, r=1.6, y=2.4):
+def void_cage(g, x, z, yaw=0.0, r=1.6, y=2.4, feed=0.0):
     """A floating sphere of exotic matter held in a magnetic cage: a ringed plinth, three posts to a top ring, a black
-    sphere with a violet halo and two tilted containment rings."""
+    sphere with a violet halo and two tilted containment rings; feed > 0: a power cable from the plinth along the floor to
+    a socket that far behind (local -z)."""
     g.at(x, z, yaw)
+    if feed:
+        g("cable", 0.0).path([(0, 0.2, -r - 0.45), (0, 0.08, -r - 0.9), (0, 0.08, -feed + 0.3), (0, 0.4, -feed + 0.12)], 0.09, 6)
+        g("dark", 0.015).boxc(0, 0.45, -feed + 0.1, 0.45, 0.5, 0.2)
     g("dark").lath([(r + 0.5, 0), (r + 0.5, 0.4), (r + 0.1, 0.8), (r - 0.2, 0.8)], segs=24)
     g("vio", 0.0).tor(r + 0.3, 0.06, (0, 0.62, 0), n=28, rs=4)
     for i in range(3):
@@ -412,11 +477,18 @@ def holotable(g, x, z, yaw=0.0, r=2.4, shape="round", show="moon"):
     g.at()
 
 
-def projection(g, x, y, z, yaw, w, h, kind=0, color="holo"):
+def projection(g, x, y, z, yaw, w, h, kind=0, color="holo", mount=0.0):
     """A holographic wall projection, w x h, centred at (x, y, z) facing yaw: a thin lit frame, a translucent panel and
-    drawn content (bars and a curve, a helix, or a grid with blips)."""
+    drawn content (bars and a curve, a helix, or a grid with blips); mount > 0: the wall is that far behind, and an emitter
+    bar on two brackets along the top throws the picture down onto the panel."""
     g.at(x, z, yaw, y)
     g(color, 0.0).boxc(0, 0, 0, w, h, 0.02)
+    if mount:
+        for sx in (-1, 1):
+            g("steel", 0.02).boxc(sx * w * 0.35, h / 2 + 0.25, -mount / 2 + 0.05, 0.12, 0.12, mount + 0.1)
+            g("steel", 0.02).boxc(sx * w * 0.35, -h / 2 - 0.1, -mount / 2, 0.1, 0.1, mount)
+        g("dark", 0.02).boxc(0, h / 2 + 0.25, 0.1, w * 0.8, 0.22, 0.3)
+        g("cyan", 0.0).boxc(0, h / 2 + 0.135, 0.12, w * 0.75, 0.02, 0.2)
     for sy in (-1, 1):
         g("cyan", 0.0).boxc(0, sy * h / 2, 0.02, w + 0.1, 0.06, 0.03)
     for sx in (-1, 1):
@@ -454,7 +526,8 @@ def splice_pod(g, x, z, yaw):
     for i in range(4):
         a = TAU * i / 4 + PI / 4
         g("steel").bm((math.sin(a) * 1.8, 0.8, math.cos(a) * 1.8), (math.sin(a) * 1.8, 5.2, math.cos(a) * 1.8), 0.07, 6)
-        g("cable", 0.0).path([(math.sin(a) * 1.2, 6.2, math.cos(a) * 1.2), (math.sin(a) * 2.6, 6.8, math.cos(a) * 2.6), (math.sin(a) * 3.0, 0.1, math.cos(a) * 3.0)], 0.1, 6)
+        g("cable", 0.0).path([(math.sin(a) * 1.2, 6.2, math.cos(a) * 1.2), (math.sin(a) * 2.6, 6.8, math.cos(a) * 2.6), (math.sin(a) * 3.0, 0.3, math.cos(a) * 3.0)], 0.1, 6)
+        g("dark", 0.015).boxc(math.sin(a) * 3.0, 0.15, math.cos(a) * 3.0, 0.45, 0.3, 0.45, (0, a, 0))
     g("lime", 0.0).cylc(0, 3.0, 0, 0.12, 4.4, 8)
     g("panel").boxc(0, 0.55, 3.1, 1.2, 1.1, 0.7)
     g("dark").boxc(0, 1.15, 3.2, 1.3, 0.12, 0.9, (0.35, 0, 0))
@@ -463,51 +536,30 @@ def splice_pod(g, x, z, yaw):
     g.at()
 
 
-def lab_terminal_console(g, x, z, yaw, sid="lab"):
-    """Draft A's lab terminal (LABNET): a curved console desk with a keyboard ledge, a big tilted main screen (the
-    picture the player gets close to) between two side screens, a cable loom and a stool."""
+def lab_terminal_wall(g, x, z, yaw, sid="lab"):
+    """LABNET, the lab terminal, mounted on a wall (its face at the local origin's z = 0, the unit standing out toward +z):
+    a framed main screen (the picture the player gets close to), two side screens angled in, a keyboard shelf on brackets,
+    status lamps, a conduit up the wall into the cable tray, a lit strip and a painted stand-here mark on the floor."""
     g.at(x, z, yaw)
-    for k in range(-2, 3):
-        a = k * 0.28
-        g("panel").boxc(math.sin(a) * 3.2, 0.5, -3.2 + math.cos(a) * 3.2, 1.0, 1.0, 0.9, (0, a, 0))
-        g("dark").boxc(math.sin(a) * 3.25, 1.05, -3.2 + math.cos(a) * 3.25, 1.02, 0.1, 1.1, (0, a, 0))
-        g("cyan", 0.0).boxc(math.sin(a) * 3.72, 0.6, -3.2 + math.cos(a) * 3.72, 0.8, 0.05, 0.02, (0, a, 0))
-    g("dark").boxc(0, 1.13, 0.05, 1.4, 0.06, 0.5, (0.12, 0, 0))
+    g("dark", 0.04).boxc(0, 2.35, 0.12, 3.3, 2.1, 0.24)
+    g("wall2", 0.03).boxc(0, 2.35, 0.26, 3.1, 1.9, 0.06)
+    g.screen(sid, 0, 2.35, 0.30, 2.8, 1.6)
+    g("lime", 0.0).boxc(0, 3.44, 0.2, 3.1, 0.08, 0.1)
+    for k in (-1, 1):
+        g("dark", 0.03).boxc(k * 2.3, 2.3, 0.35, 1.2, 0.9, 0.12, (0, -k * 0.45, 0))
+        g(("pink" if k < 0 else "cyan"), 0.0).boxc(k * 2.3 - k * 0.03, 2.3, 0.42, 1.0, 0.7, 0.01, (0, -k * 0.45, 0))
+        g("steel", 0.0).boxc(k * 1.85, 2.3, 0.15, 0.12, 0.12, 0.3)
+    g("dark", 0.03).boxc(0, 1.1, 0.35, 2.4, 0.08, 0.6)
+    for k in (-1, 1):
+        g("steel", 0.02).bm((k * 1.0, 0.75, 0.02), (k * 1.0, 1.06, 0.55), 0.04, 5)
     for i in range(14):
-        g("white", 0.0).boxc(-0.6 + (i % 7) * 0.2, 1.17, -0.05 + (i // 7) * 0.18, 0.15, 0.02, 0.13, (0.12, 0, 0))
-    g("dark").boxc(0, 2.35, -0.55, 2.9, 1.9, 0.18, (-0.18, 0, 0))
-    g("dark").boxc(0, 1.35, -0.75, 0.3, 0.6, 0.3)
-    g.screen(sid, 0, 2.37, -0.43, 2.6, 1.5, 0, 0.18)
-    for k in (-1, 1):
-        g("dark").boxc(k * 2.1, 2.1, -0.25, 1.3, 1.0, 0.12, (-0.12, -k * 0.5, 0))
-        g(("lime" if k < 0 else "pink"), 0.0).boxc(k * 2.13, 2.1, -0.18, 1.1, 0.8, 0.01, (-0.12, -k * 0.5, 0))
-    g("cable", 0.0).path([(0.5, 0.1, -1.6), (0.9, 0.1, -3.0), (1.2, 0.1, -5.0)], 0.12, 6)
-    g("dark").cylc(0, 0.35, 1.2, 0.08, 0.7, 8)
-    g("seat").cylc(0, 0.75, 1.2, 0.35, 0.12, 12)
-    g.light((0, 2.4, 0.8), (0.4, 1.0, 0.6), 90, 0.3)
-    g.at()
-
-
-def lab_terminal_kiosk(g, x, z, yaw, sid="lab"):
-    """Draft B's lab terminal (SPECIMEN INDEX): a standing archive kiosk, a tall portrait screen in a ribbed white frame
-    on a plinth, a sloped palm reader, two holo emitters throwing a small projection of the entry over it, lit plinth."""
-    g.at(x, z, yaw)
-    g("dark").boxc(0, 0.15, 0.2, 3.2, 0.3, 2.4)
-    g("lime", 0.0).boxc(0, 0.31, 1.41, 3.0, 0.03, 0.02)
-    g("white").boxc(0, 2.2, -0.2, 2.6, 4.0, 0.6)
-    g("dark").boxc(0, 2.3, 0.11, 2.2, 3.4, 0.04)
-    for k in (-1, 1):
-        g("white").boxc(k * 1.45, 2.2, -0.2, 0.3, 4.3, 0.8)
-        g("cyan", 0.0).boxc(k * 1.62, 2.2, -0.2, 0.03, 3.6, 0.5)
-    g.screen(sid, 0, 2.35, 0.14, 2.0, 3.1)
-    g("panel").boxc(0, 0.95, 0.75, 1.4, 0.8, 0.6)
-    g("dark").boxc(0, 1.38, 0.85, 1.4, 0.1, 0.8, (0.45, 0, 0))
-    g("lime", 0.0).boxc(0, 1.43, 0.88, 0.5, 0.02, 0.4, (0.45, 0, 0))
-    g("white").boxc(0, 4.5, -0.2, 3.4, 0.4, 1.2)
-    for k in (-1, 1):
-        g("dark").cylc(k * 0.9, 4.25, 0.3, 0.12, 0.2, 10)
-        g("beam", 0.0).bm((k * 0.9, 4.15, 0.3), (0, 3.2, 1.2), 0.05, 6)
-    g.light((0, 2.4, 1.2), (0.4, 0.9, 1.0), 110, 0.3)
+        g("white", 0.0).boxc(-0.6 + (i % 7) * 0.2, 1.155, 0.25 + (i // 7) * 0.18, 0.15, 0.02, 0.13)
+    for i in range(4):
+        g(("lime", "lime", "amber", "red")[i], 0.0).ball(1.35 - i * 0.16, 1.2, 0.5, 0.035, 6, 4)
+    g("steel", 0.0).cylc(1.45, 4.75, 0.08, 0.1, 2.7, 8)                     # conduit up into the cable tray
+    g("hazard", 0.0).boxc(0, 0.01, 1.3, 1.6, 0.02, 1.0)
+    g("dark", 0.0).boxc(0, 0.02, 1.3, 1.4, 0.02, 0.8)
+    g.light((0, 2.4, 1.4), (0.4, 1.0, 0.6), 110, 0.3)
     g.at()
 
 
@@ -526,38 +578,40 @@ def pen_terminal(g, x, z, yaw, sid="pen"):
     g.at()
 
 
-def security_post(g, x, z, yaw, door_y, cam_side=1, sid="sec", scr=(3.0, 1.7), scr_pos=None):
-    """The airlock's security interface in front of the door at (x, z) (door face plane, facing yaw): a camera on a
-    jointed arm reaching out over a painted stand plate with two footprints, a lit scan cone down to the plate, the
-    screen that shows the picture (`screen_<sid>`), a status lamp bar and an intercom post with a call button."""
+def security_post(g, x, z, yaw, door_y, door_r, sid="sec", scr=(2.2, 1.5), scr_x=-4.6, scr_y=3.4, cam_x=4.7):
+    """The airlock's security interface at a door face (x, z), facing yaw: a round wall mount up and to one side, clear of
+    the door's frame (door_y its centre, door_r the frame's outer radius), a two-link arm off the mount's hub reaching out
+    over the stand plate, the camera with its red lens, a lit scan cone down to the plate (two lit footprints), and the
+    screen beside the door that shows the picture (`screen_<sid>`). Returns the plate's centre."""
     g.at(x, z, yaw)
-    px, pz = 0.0, 3.6                                                       # the stand plate, in front of the door
+    px, pz = 0.0, 3.6
     g("hazard", 0.0).cylc(px, 0.03, pz, 1.25, 0.06, 8)
     g("dark", 0.0).cylc(px, 0.035, pz, 1.05, 0.06, 8)
     for k in (-1, 1):
         g("lime", 0.0).rb(px + k * 0.2, 0.07, pz + 0.05, 0.11, 0.01, 0.24, 0.5, nu=10, nv=4)
-    bx = cam_side * 2.9
-    g("dark").boxc(bx, door_y + 1.6, 0.25, 0.6, 0.8, 0.5)
-    j1 = (bx, door_y + 1.7, 0.6)
-    j2 = (bx * 0.55, door_y + 1.9, 1.7)
-    cam = (bx * 0.25, door_y + 1.5, 2.3)
-    g("arm").path([j1, j2], 0.1, 8).path([j2, cam], 0.08, 8)
-    g("armdark").ball(*j2, 0.16, 8, 6)
-    g("white").rb(cam[0], cam[1], cam[2], 0.22, 0.2, 0.36, 0.4, rot=(-0.9, 0, 0))
-    lens = (cam[0], cam[1] - 0.25, cam[2] + 0.22)
-    g("dark").cylc(lens[0], lens[1], lens[2], 0.13, 0.16, 12, rot=(PI / 2 - 0.9 + PI / 2, 0, 0))
-    g("red", 0.0).ball(lens[0], lens[1] - 0.07, lens[2] + 0.06, 0.08, 8, 6)
-    top, foot = Vector(lens) + Vector((0, -0.06, 0)), Vector((px, 0.06, pz))
+    my = door_y + door_r + 0.9                                              # the mount: above the frame's top, off to the side
+    g("dark", 0.03).cylc(cam_x, my, 0.12, 0.65, 0.24, 20, "z")
+    g("steel", 0.02).cylc(cam_x, my, 0.3, 0.38, 0.14, 16, "z")
+    for i in range(6):
+        a = TAU * i / 6
+        g("steel", 0.0).cylc(cam_x + math.sin(a) * 0.52, my + math.cos(a) * 0.52, 0.25, 0.05, 0.03, 6, "z")
+    hub = Vector((cam_x, my, 0.42))
+    j2 = Vector((cam_x * 0.62, my + 0.35, 1.55))
+    cam = Vector((cam_x * 0.22, my - 0.15, 2.45))
+    g("armdark").ball(*hub, 0.22, 10, 7)
+    g("arm").path([tuple(hub), tuple(j2)], 0.1, 8).path([tuple(j2), tuple(cam)], 0.08, 8)
+    g("armdark").ball(*j2, 0.17, 10, 7)
+    g("cable", 0.0).path([tuple(hub + Vector((0, -0.1, 0))), tuple((hub + j2) / 2 + Vector((0, -0.2, 0))), tuple(j2 + Vector((0, -0.12, 0)))], 0.03, 4)
+    g("white").rb(cam.x, cam.y, cam.z, 0.22, 0.2, 0.36, 0.4, rot=(-0.9, 0, 0))
+    lens = Vector((cam.x, cam.y - 0.25, cam.z + 0.22))
+    g("dark").cylc(lens.x, lens.y, lens.z, 0.13, 0.16, 12, rot=(PI - 0.9, 0, 0))
+    g("red", 0.0).ball(lens.x, lens.y - 0.07, lens.z + 0.06, 0.08, 8, 6)
+    top, foot = lens + Vector((0, -0.08, 0.04)), Vector((px, 0.06, pz))
     g("scan", 0.0).add(cylinder(0.08, 1.0, (top - foot).length, 16, True)[:2], tuple((top + foot) / 2), tuple(Vector((0, 1, 0)).rotation_difference(top - foot).to_euler()))
     w, h = scr
-    sx, sy, sz = scr_pos or (0.0, door_y + 2.6, 0.06)
-    g("dark", 0.04).boxc(sx, sy, sz - 0.05, w + 0.3, h + 0.3, 0.12)
-    g.screen(sid, sx, sy, sz + 0.02, w, h)
-    g("lime", 0.0).boxc(sx, sy - h / 2 - 0.3, sz, w * 0.7, 0.12, 0.08)
-    g("dark").boxc(-cam_side * 3.0, 0.65, 2.4, 0.4, 1.3, 0.3)
-    g("dark").boxc(-cam_side * 3.0, 1.45, 2.45, 0.55, 0.6, 0.12)
-    g("screenlit", 0.0).boxc(-cam_side * 3.0, 1.5, 2.52, 0.4, 0.3, 0.02)
-    g("red", 0.0).cylc(-cam_side * 3.0, 1.25, 2.53, 0.06, 0.03, 10, "z")
+    g("dark", 0.04).boxc(scr_x, scr_y, 0.06, w + 0.3, h + 0.3, 0.12)
+    g.screen(sid, scr_x, scr_y, 0.14, w, h)
+    g("lime", 0.0).boxc(scr_x, scr_y - h / 2 - 0.3, 0.08, w * 0.7, 0.12, 0.08)
     at = g.pt((px, 0, pz))
     g.at()
     return at
@@ -726,18 +780,52 @@ def lamp_post(g, x, z, h=5.0, color="lamp"):
     g(color, 0.0).boxc(x, h - 0.12, z, 0.45, 0.2, 0.45)
 
 
-def path_strip(g, pts, w=3.0, y=0.03, edge="lime"):
-    """a paved walk along pts [(x, z)], kerb lights along both edges every 6 m"""
-    for (ax, az), (bx, bz) in zip(pts, pts[1:]):
-        L = math.hypot(bx - ax, bz - az)
-        a = math.atan2(bx - ax, bz - az)
-        g("path").boxc((ax + bx) / 2, y, (az + bz) / 2, w, 0.04, L + w, (0, a, 0))
-        n = max(1, int(L / 6))
-        for i in range(n + 1):
-            t = i / n
-            cx, cz = ax + (bx - ax) * t, az + (bz - az) * t
-            for k in (-1, 1):
-                g(edge, 0.0).boxc(cx + k * (w / 2 + 0.15) * math.cos(a), 0.08, cz - k * (w / 2 + 0.15) * math.sin(a), 0.2, 0.1, 0.2, (0, a, 0))
+def path_ribbon(g, pts, w=3.0, step=1.0, lights=6.0, light="lime"):
+    """A paved walk along a smooth curve through pts [(x, z)] (Catmull-Rom), one continuous ribbon 6 cm thick with a raised
+    kerb along each edge and flush lit studs set into the kerb tops every `lights` metres. Start and end it on the edges of
+    the platforms it joins."""
+    P = [Vector((p[0], 0, p[1])) for p in pts]
+    P = [P[0] * 2 - P[1]] + P + [P[-1] * 2 - P[-2]]
+    samples = []
+    for i in range(1, len(P) - 2):
+        p0, p1, p2, p3 = P[i - 1], P[i], P[i + 1], P[i + 2]
+        n = max(2, int((p2 - p1).length / step))
+        for k in range(n):
+            t = k / n
+            samples.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3))
+    samples.append(P[-2])
+
+    def strip(off0, off1, y0, y1, slot, ink):
+        verts, faces = [], []
+        for i, p in enumerate(samples):
+            d = (samples[min(i + 1, len(samples) - 1)] - samples[max(i - 1, 0)]).normalized()
+            nrm = Vector((d.z, 0, -d.x))
+            for off, y in ((off0, y0), (off1, y0), (off1, y1), (off0, y1)):
+                q = p + nrm * off
+                verts.append((q.x, y, q.z))
+        for i in range(len(samples) - 1):
+            a, b = i * 4, (i + 1) * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                faces.append((a + j, a + j2, b + j2, b + j))
+        faces.append((0, 1, 2, 3))
+        e = (len(samples) - 1) * 4
+        faces.append((e + 3, e + 2, e + 1, e))
+        g(slot, ink).add((verts, faces))
+    strip(-w / 2, w / 2, 0.0, 0.06, "path", 0.0)
+    for s in (-1, 1):
+        strip(s * w / 2, s * (w / 2 + 0.3), 0.0, 0.14, "panel", 0.02)
+    acc, nxt = 0.0, lights / 2
+    for i in range(1, len(samples)):
+        acc += (samples[i] - samples[i - 1]).length
+        if acc >= nxt:
+            nxt += lights
+            p = samples[i]
+            d = (samples[min(i + 1, len(samples) - 1)] - samples[i - 1]).normalized()
+            nrm = Vector((d.z, 0, -d.x))
+            for s in (-1, 1):
+                q = p + nrm * s * (w / 2 + 0.15)
+                g(light, 0.0).cylc(q.x, 0.142, q.z, 0.08, 0.008, 10)
 
 
 # =====================================================================================================================
@@ -770,8 +858,8 @@ def radiator_field(g, x, z, yaw, rows=2, cols=5, header_to=None):
 
 
 def landing_pad(g, x, z, r=12.0, label="Z"):
-    """a supply pad: an octagonal deck on a low plinth, a painted ring and letter, edge lights, a crate stack, a fuel tank
-    on skids, a windsock"""
+    """a supply pad: an octagonal deck on a low plinth, a painted ring and letter, edge lights, a fuel tank on skids, a
+    windsock (the containers beside it are zb_container's)"""
     g.at(x, z)
     g("panel", 0.05).cylc(0, 0.25, 0, r + 0.6, 0.5, 8, rt=r + 0.3)
     g("path", 0.0).cylc(0, 0.52, 0, r, 0.04, 8)
@@ -780,8 +868,6 @@ def landing_pad(g, x, z, r=12.0, label="Z"):
         a = TAU * i / 16
         g("lime" if i % 2 else "lamp", 0.0).boxc(math.sin(a) * (r - 0.2), 0.6, math.cos(a) * (r - 0.2), 0.35, 0.12, 0.35)
     g.text(label, (0, 0.55, 2.2), 0, 4.0, "hazard", 0.02)
-    for i, (cx, cz, h) in enumerate(((r + 3.0, -3.0, 0), (r + 3.0, -1.4, 0), (r + 3.0, -2.2, 1.4), (r + 4.6, -2.2, 0))):
-        g(("barn", "steel", "hazard", "panel")[i % 4], 0.03).boxc(cx, h + 0.7, cz, 1.5, 1.4, 1.5)
     g("white", 0.04).cylc(r + 3.0, 1.3, 5.0, 1.0, 4.0, 14, "x")
     g("dark", 0.02).boxc(r + 3.0, 0.15, 5.0, 4.4, 0.3, 1.6)
     g("red", 0.0).tor(1.02, 0.06, (r + 3.0, 1.3, 5.0), (0, 0, PI / 2), n=16, rs=4)
@@ -806,30 +892,41 @@ def solar_array(g, x, z, yaw, rows=3, cols=4):
     g.at()
 
 
-def test_site(g, x, z, r=11.0):
-    """Test Site 7: a scorched blast crater in a berm, a half-buried bunker with a lit slit, a blast wall, warning boards,
-    twisted debris and a target dummy that has seen better days"""
-    g.at(x, z)
-    g("dirt", 0.04).lath([(r + 3.0, 0), (r + 1.0, 1.4), (r - 0.5, 1.2), (r - 2.0, 0.1)], segs=36)
-    g("scorch", 0.0).cylc(0, 0.04, 0, r - 1.5, 0.04, 36)
-    for i in range(14):
-        a = TAU * i / 14 + 0.2
-        L = r * (0.7 + 0.5 * abs(math.sin(i * 1.9)))
-        g("scorch", 0.0).boxc(math.sin(a) * L / 2, 0.05, math.cos(a) * L / 2, 0.9 + 0.6 * (i % 3), 0.02, L, (0, a, 0))
-    g("ember", 0.0).ball(0, 0.1, 0, 0.6, 10, 4, s=(1, 0.3, 1))
-    for i in range(6):
-        a = i * 1.1
-        g("steel", 0.02).path([(math.sin(a) * 4.0, 0.05, math.cos(a) * 4.0), (math.sin(a + 0.2) * 4.6, 0.8, math.cos(a + 0.2) * 4.6), (math.sin(a + 0.5) * 5.4, 0.5, math.cos(a + 0.5) * 5.4)], 0.12, 5)
-    g("steel", 0.02).cylc(2.0, 1.2, -1.0, 0.1, 2.4, 6)
-    g("barn2", 0.02).boxc(2.0, 2.3, -1.0, 0.6, 0.8, 0.3)
-    g("scorch", 0.0).ball(2.0, 2.9, -1.0, 0.3, 8, 6)
-    g("stone", 0.06).boxc(0, 1.6, r + 9.0, 9.0, 3.2, 5.0)
-    g("void", 0.0).boxc(0, 2.3, r + 6.45, 6.0, 0.4, 0.1)
-    g("amber", 0.0).boxc(0, 2.3, r + 6.42, 5.6, 0.25, 0.04)
-    g("stone", 0.05).boxc(0, 2.0, r + 4.5, 12.0, 4.0, 1.0)
-    for k in (-1, 1):
-        g("dark", 0.02).cylc(k * (r + 4.0), 1.4, 0, 0.08, 2.8, 6)
-        g("hazard", 0.02).boxc(k * (r + 4.0), 2.6, 0, 0.1, 1.2, 2.2)
-    g.text("TEST SITE 7", (0, 4.25, r + 4.0), PI, 0.8, "amber")
-    g.text("STAND BEHIND THE WALL", (0, 3.4, r + 3.98), PI, 0.36, "lime")
-    g.at()
+def zb_container(g, x, z, yaw=0.0, stack=1, number=417, scale=1.0):
+    """The standard storage container (the land-train's cargo box, tools/blender/cargo.py cargo_unit("box"), as stacked in
+    Meridian's yard) in Zbornak Laboratories livery: violet body, the plate on each flank with a lime Z roundel, ZBORNAK over
+    LABORATORIES, and the container number above it. `stack` boxes high at the yard's pitch. Needs decals.py and cargo.py
+    exec'd (build_zbornak_lab.py does); the factions' liveries are left off."""
+    from mathutils import Matrix
+    gl = globals()
+    keep = gl["FACTIONS"]
+    gl["FACTIONS"] = ()
+    p = g.pt((x, 0, z))
+    pitch = 3.17 * scale
+    for j in range(stack):
+        before = set(C.objects)
+        name = uname(f"zbbox{number}")
+        R = cargo_unit("box", name, g.root, (p[0], j * pitch, p[2]), scale=scale)
+        R.rotation_euler[2] = yaw + g.cur[3] + (0.04 * j if j else 0)
+        code = f"ZBL {number:06d} {j + 2}"
+        made = set(C.objects)
+        for side in (-1, 1):
+            d = side_dec(side, 1.68, CARGO_PLATE_Y, 0.0)
+            d.rect(-1.7, -0.56, 1.7, 0.56, "stripe", 0)
+            d.rect(-1.66, -0.52, 1.66, 0.52, "dark", 1)
+            d.disc(-1.2, 0.0, 0.38, "stripe", 2)
+            d.disc(-1.2, 0.0, 0.32, "dark", 3)
+            d.bar(-1.37, 0.16, -1.03, 0.16, 0.08, "stripe", 4)
+            d.bar(-1.03, 0.16, -1.37, -0.16, 0.08, "stripe", 4)
+            d.bar(-1.37, -0.16, -1.03, -0.16, 0.08, "stripe", 4)
+            d.text("ZBORNAK", -0.7, 0.04, 0.05, "stripe", 2)
+            d.text("LABORATORIES", -0.7, -0.38, 0.034, "white", 2)
+            d.build(f"{name}_plate{'P' if side > 0 else 'S'}", R)
+            d2 = side_dec(side, 1.6, CARGO_NUM_Y, 0.0)
+            d2.text(code, -text_width(code, CARGO_NUM_PS) / 2, 0, CARGO_NUM_PS, "label", 0)
+            d2.build(f"{name}_id{'P' if side > 0 else 'S'}", R)
+        T = Matrix.Scale(scale, 4) @ Matrix.Translation((0, 0, -CARGO_BASE))
+        for o in C.objects:
+            if o not in made and o.type == "MESH":
+                o.data.transform(T)
+    gl["FACTIONS"] = keep
