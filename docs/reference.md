@@ -467,6 +467,8 @@ tools/
   make-credit-glyph.py     draws the credit sign for both pixel faces -> assets/fonts/credit-*.woff2
   meridian-layouts.mjs     Meridian Exchange layout study (docs/meridian-layouts.md)
   winch-ride.mjs           headless winch test; run --gate ring after touching src/winch.js
+  zbornak-chimeras.mjs     exports a few game chimeras as GLBs for the Antimatter Lab drafts' renders (docs/zbornak-proposals/)
+  zbornak-screens.mjs      shoots the Antimatter Lab drafts' screen mock-ups (docs/zbornak-proposals/screens/terminal.html)
   blender/
     kit.py                 shared helpers every builder execs
     hullkit.py             hull lofts and fittings (Courier, Skimmer redesigns)
@@ -519,6 +521,9 @@ tools/
     build_spidertank.py    -> spidertank.glb (Zbornak's spider tank; docs/spidertank/)
     build_chimera.py       -> chimera.glb (about 6 min; CHIMERA_ONLY=car,mite; CHIMERA_PARTS=legs_mite_0 to splice with
                            tools/splice-chimera.mjs; chimera_common.py and chimera_*.py)
+    build_zbornak_lab.py   Antimatter Lab rework, two drafts of the whole plateau and of Zbornak (ZB_VARIANT=a|b; not in the
+                           game; docs/zbornak-proposals/): zbornak_kit.py (set pieces), zbornak_figure.py (the doctor);
+                           preview_zbornak_lab.py renders the views, the plans and the turnarounds
     proposals/             freighter, Kepler Habitat and War-Rig design studies, Cycles preview renders
                            (warrig_b.py, the War-Rig's runner-up; preview_warrig.py renders both to docs/warrig-proposals)
 ```

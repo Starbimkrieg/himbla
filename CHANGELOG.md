@@ -5,6 +5,26 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Antimatter Lab rework: two drafts, not in the game yet (`docs/zbornak-proposals/`).** Both rework the whole plateau, and
+  both are modelled in Blender from code (`tools/blender/build_zbornak_lab.py`, `zbornak_kit.py`, `zbornak_figure.py`) and
+  rendered with Cycles (`preview_zbornak_lab.py`).
+  - **A, The Rotunda:** a domed round lab 64 m across, the reactor rising through an oculus to a crown 44 m up. A ribbed airlock
+    tunnel leads to a lock housing. Stations stand round the wall, with a ring catwalk. The ranch is east: a gambrel barn with the
+    pen office on its end, a silo feeding a roofed feed bunk, a stock tank and a sun-mill.
+  - **B, The Institute:** a vaulted hall on one axis from a two-stage gatehouse (iris door, decon vestibule) to a reactor tower
+    with its crown 52 m up, the bays down both aisles. The ranch is west: a bunkhouse, a round corral round a feed carousel, a
+    training ring and a water tower.
+  - **In both:** an airlock security post (a camera on an arm photographs the courier on a stand plate, and the picture shows on
+    a screen before the door opens); bioluminescent hydroponics, exotic-matter racks and magnetic cages, robot arms with a
+    welder, cryo pods holding real chimeras, holotables and wall projections; the pen terminal indoors at the ranch; and the
+    plateau filled out with a supply pad, a radiator field and (A) a solar array or (B) Test Site 7.
+  - **The lab terminal,** mocked up as A's LABNET console and B's SPECIMEN INDEX kiosk (`screens/terminal.html`, shot by
+    `tools/zbornak-screens.mjs`): your splices, everything thrown into the reactor and your chimeras, with full details once
+    unlocked and the newest entry marked.
+  - **Zbornak as an alien, two looks,** each with a clipboard and a scorched coat: A, "The Elder" (tall, three-eyed, goggles
+    pushed up); B, "The Singed" (stocky, frazzled smoking head-fronds, a loupe, a sleeve burnt off). 7.9k and 9.2k triangles,
+    exported in the game's GLB contract as `zbornak_a.glb` / `zbornak_b.glb` (plain, in the docs folder).
+  - `tools/zbornak-chimeras.mjs` exports game chimeras for the renders.
 - **Light-bike: one bike, and a trail that follows tight turns.** **The trail:** it laid a new point only when the bike moved
   more than 0.45 m in a single frame (it measured from its own head, which rides with the bike), so below about 27 m/s the
   head just slid along and a slow, tight turn drew one straight line back to where the last point was. It now measures from
