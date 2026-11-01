@@ -5,6 +5,26 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Antimatter Lab: the in-game review** (`docs/zbornak-proposals/`, "The in-game review", with shots from the game in
+  `game/`).
+  - **The airlock's inner door works.** It shuts in the portal's opening and rises out of sight into the wall. The two doors
+    cycle (`labWorld.js` `updateGate`): 6 m into the tube the outer door drops behind you, the tube cycles with a hiss, and
+    the inner door rises as you come to it. Going out runs the other way. A door opens only once the other has been shut
+    1.2 s, never shuts on you in its doorway, and each one's collider goes while it is up.
+  - **LABNET is a 9.6 × 5.5 m wall display.** It stands 1.3 m off the wall, past the cable tray, with the four drone feeds
+    two above each other at its sides. Its attract screen shows your totals and the newest reactor results.
+  - **LABNET's desk** curves round an office chair, with a keyboard, a touch panel and the drone joystick. It also holds a drone
+    on a repair mat, a soldering station, a desk lamp and a toolbox.
+  - **New battery chargers** stand under each feed column. Each cabinet has six cells in a 0.25 m bay behind a glass door,
+    the CHARGING plate and a meter set into the header (it floated before), and a feed to a floor junction box.
+  - **The equipment corner is life-size:** the chemistry benches, the microscope bench and the magnet array are 1.25×. The
+    Blender kit's `G.at(..., s=)` scales parts, colliders and markers together.
+  - **The exotic-matter sign** is on a flat board off the wall: its single long line used to run into the curved wall.
+  - **The hydroponics habitat** has a back-plate and vertical violet and teal grow-light bars.
+  - **The holotable** is centred between the floor rings and between the airlock and the habitat, with its wall projection
+    over it.
+  - **The portal's guide rails** clear its chase lights. The cable tray runs on across the portal instead of stopping short
+    of it.
 - **The Antimatter Lab rework is in the game.** The Rotunda, the ranch and Zbornak the Elder replace the old lab, its pen
   terminal and the helmeted doctor. `build_zbornak_lab.py` with `ZB_GAME=1` exports them as `src/assets/zlab.glb` (2.2 MB
   compressed, 197k triangles), which `src/labWorld.js` builds from:

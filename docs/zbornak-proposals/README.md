@@ -25,6 +25,29 @@ renders). The courier is `runner.glb`. The drone feeds are filmed in the game to
 
 ![The plan](plan.jpg)
 
+## The in-game review
+
+The first review of the lab in the game. The shots are the game's own (`game/`).
+
+| Asked | Done |
+|---|---|
+| The EXOTIC MATTER sign is cut off | It was one long line of lettering flat against the curved wall, so its ends went into the wall. It is now two lines (EXOTIC MATTER, then DO NOT LOOK DIRECTLY) on a flat board, stood off the wall on brackets above the cable tray. |
+| The hydroponics habitat needs a back of its own and vertical glow bars | A white back-plate runs along the wall behind the pods, with a cap rail. Fourteen vertical grow-light bars stand before it in dark channels, violet and teal in turn. |
+| Put the holotable between the green and blue floor rings, away from the hydroponics | It is now midway between the cyan ring (18 m) and the lime ring (28.5 m), and midway between the airlock and the habitat (31° left of the door). The wall projection above moved with it. |
+| The airlock's inner end: the trim either side clips the lights, and the trim and cables cut off there | The guide rails stood on the ring of chase lights. They are now 0.45 m further out. The cable tray stopped short of the portal. Now it runs straight across in front of the pilasters, joining the round run's ends, on brackets to the wall. |
+| The inner door doesn't open or close | It is a real door now. It shuts in the opening and rises out of sight into the wall. The two doors cycle like the Downs' airlocks. Walk 6 m into the tube and the outer door drops behind you. The tube cycles with a hiss, then the inner door rises. Going out runs the other way. A door opens only once the other has been shut a moment, and never shuts on you in its doorway. |
+| Rework LABNET and the equipment corner: LABNET a big wall display, the drone feeds at its sides | LABNET is now a **9.6 × 5.5 m wall display**, stood 1.3 m off the wall so it rises past the cable tray. The attract screen shows your research totals and the newest reactor results. The four **drone feeds** are 3.2 m panels, two above each other at each side, each turned to the wall's curve on a column frame. **LABNET's desk** curves round its chair, with a keyboard, a touch panel and the drone joystick. It also holds a drone on a repair mat with a screwdriver and a parts tray, a soldering station, a desk lamp and a red toolbox. |
+| Battery chargers: refine them (the CHARGING sign floated), more depth and detail | The chargers are new cabinets under each feed column, on a plinth with vented sides. Behind a glass door is a bay 0.25 m deep, holding two rows of three cells in cradles. Each cell has terminals with cables into the bay's back, a charge bar and a lamp. CHARGING and a meter are set into the header's face, and the feed runs to a floor junction box. |
+| Scale everything up: it looks miniature | The chemistry benches, the microscope bench and the magnet array are 1.25× (bench tops at 1.26 m), moved apart so they still fit along the wall. The kit's `G.at(..., s=)` scales parts, colliders and markers together. |
+
+| | |
+|---|---|
+| ![LABNET's wall display, the drone feeds, the desk and the chargers](game/labnet.jpg) | ![At LABNET's desk](game/labnet_desk.jpg) |
+| ![A battery charger under its feed column](game/charger.jpg) | ![The chemistry benches, life-size](game/chem.jpg) |
+| ![The microscope bench](game/microscopes.jpg) | ![The exotic-matter sign on its board](game/exotic.jpg) |
+| ![The hydroponics habitat's back-plate and glow bars](game/hydro.jpg) | ![The holotable between the rings](game/holotable.jpg) |
+| ![The airlock's inner door, shut](game/portal_shut.jpg) | ![The inner door rising as you come to it](game/portal_open.jpg) |
+
 ## The latest revision
 
 | Asked | Done |
@@ -212,7 +235,7 @@ The draft is now the game's Antimatter Lab.
     under their faces; pipes and tanks lying down as boxes). `k.floorCols` covers the floors.
   - The containers are `zb_container`: the cargo box in Zbornak livery, one collider per stack.
 - **`src/labWorld.js`** bakes the static parts and keeps these live:
-  - the spots: intake, doctor, LABNET, splice pod, pen terminal, the plate, the door;
+  - the spots: intake, doctor, LABNET, splice pod, pen terminal, the plate, the two doors;
   - the screens and lettering;
   - the chimeras;
   - the moving parts.
@@ -225,14 +248,18 @@ The draft is now the game's Antimatter Lab.
 - **The airlock:** stop on the plate and the scan cone lights.
   - At 1.2 s the camera's view (a render target from the camera's spot) is held as a still on the security screen with ACCESS
     GRANTED.
-  - At 2 s the door rises 5.4 m and its collider goes.
-  - It closes once you are 12 m off, reopens if you come back within 3.5 m, and opens by itself for you from inside.
+  - At 2 s the outer door rises 5.4 m and its collider goes.
+  - 6 m into the tube it drops behind you, and the tube cycles. 1.2 s after the outer door shuts, the inner door rises 6 m into
+    the portal's wall as you come within 6 m of it.
+  - Going out, the inner door opens as you come within 5 m of it, and the outer door once the inner one has shut.
+  - A door opens only once the other has been shut a moment. It stays up while you are within 4 m of its doorway.
 - **The intake hatch:** X feeds the reactor there, within 3.5 m.
-- **LABNET:** `F` at the console under the drone wall opens it as a CRT terminal (`src/labnet.js`).
+- **LABNET:** `F` at the desk before the wall display opens it as a CRT terminal (`src/labnet.js`). The wall display itself shows your
+  totals and the newest reactor results (`drawLabScreens`).
   - It has four tabs: SPLICES, REACTOR, CHIMERAS, PEN.
   - `alchemy.js` keeps its log (splices, and each reactor result with its first experiment number and count) in the save.
 - **The pen terminal** is in the barn office. `PEN` in `alchemy.js` is the corral, and the residents graze at the feed bunk.
-- **The drone wall:** the four feeds are stills filmed in the game (`src/assets/zlab-drone0..3.jpg`, by
+- **The drone feeds** (two at each side of LABNET's display) are stills filmed in the game (`src/assets/zlab-drone0..3.jpg`, by
   `tools/zbornak-drones.mjs`), not live cameras.
 - **Statues:** dropped. A person thrown in with a rock still comes back PETRIFIED, as a joke line, and leaves no figure.
 

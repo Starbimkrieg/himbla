@@ -242,12 +242,14 @@ A walk-in hall with slot carousels out front. Press `F` at a station:
   pirates or hover-cars. Things left together react (Moon Mud, Slick Rock, Void-Touched).
 - **The lab** (the Rotunda): a domed round lab 64 m across on the plateau, the antimatter reactor rising through its
   oculus. Walk up the ribbed airlock tunnel and stop on the plate: the security camera scans you, photographs you (the
-  picture shows on the screen by the door), and the door rises. Inside: the reactor and its catwalk with the intake hatch,
-  sealed bioluminescent hydroponics, exotic-matter canister racks, cryo pods holding chimeras, holotables, an equipment
-  corner (chemistry and microscope benches, a magnet array, battery chargers) under a curved drone wall showing four
-  settlements live, and a robot cell where three arms clamp a chimera, hold an armour plate on and weld it.
+  picture shows on the screen by the door), and the outer door rises. 6 m in, it shuts behind you; the tube cycles and the
+  inner door rises into the portal's wall. Going out runs the other way. Inside: the reactor and its catwalk with the
+  intake hatch, sealed bioluminescent hydroponics, exotic-matter canister racks, cryo pods holding chimeras, a holotable, an
+  equipment corner (chemistry and microscope benches, a magnet array, battery chargers) round LABNET's wall display with
+  four live drone feeds of settlements at its sides, and a robot cell where three arms clamp a chimera, hold an armour plate
+  on and weld it.
 - **Reactor** (`X` at the intake hatch): throw the jar in for credits, pets, low gravity, or a SINGULARITY.
-- **LABNET** (`F` at the console under the drone wall): your splices, everything you've thrown into the reactor (each
+- **LABNET** (`F` at the desk before its wall display): your splices, everything you've thrown into the reactor (each
   result, how often, the first experiment number) and your chimeras, with full details once unlocked and the newest entry
   marked.
 - **Chimeras:** two or more different kinds of living thing make a chimera: body, legs and head drawn at random from
@@ -453,7 +455,7 @@ src/
     chimera.glb      the chimera kit: every kind's parts in their looks, fitted mutations, far copies, devices
     spidertank.glb   Zbornak's spider tank (loaded by spidertank.js, not at boot)
     zlab.glb         the Antimatter Lab and ranch, and Dr. Zbornak (build_zbornak_lab.py; colliders, spots, screens, the
-                     arms, reactor core, door and camera as pivots: labWorld.js); zlab-drone0..3.jpg the drone wall's feeds
+                     arms, reactor core, door and camera as pivots: labWorld.js); zlab-drone0..3.jpg the drone feeds
     duck.glb         Duck Derby racers and track
     blackjack.glb    blackjack table and chip
     dish.glb         dish stations and dish heads

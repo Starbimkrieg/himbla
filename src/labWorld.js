@@ -15,10 +15,12 @@ import drone3 from './assets/zlab-drone3.jpg?inline';
 //   the robot cell works its cycle (CELL_KEYS, the builder's: tool points eased between keys, the joints solved by armIk);
 //   Dr. Zbornak turns his head to watch you;
 //   the airlock: step on the stand plate and the camera scans you, the screen shows your picture and ACCESS GRANTED, the
-//   outer door rises (its collider goes) and drops behind you; from inside it opens as you come to it;
+//   outer door rises (its collider goes); 6 m into the tube it drops behind you, the tube cycles (a hiss) and the inner door
+//   rises into the portal's wall. Going out, the inner door opens as you come to it and the outer once it has shut. A door
+//   opens only once the other has been shut a moment, and never shuts on you in its doorway;
 //   the screens: the security screen, LABNET's attract screen (the console; main.js opens LABNET itself, labnet.js), the
 //   holding pen's residents (the ranch office), four drone feeds (frames filmed in the game, tools/zbornak-drones.mjs).
-// Spots (lab.spots, world positions): plate, outer_door, intake (the reactor's intake hatch, where X feeds the jar), reactor,
+// Spots (lab.spots, world positions): plate, outer_door, inner_door, intake (the reactor's intake hatch, where X feeds the jar), reactor,
 // doctor, labnet, pod, pen.
 
 const ROOTS = ['zl_lab', 'zl_roof', 'zl_out', 'zl_ranch'];
@@ -95,7 +97,7 @@ function scanlines(g, w, h) {
   g.fillStyle = 'rgba(0,0,0,0.22)';
   for (let y = 0; y < h; y += 4) g.fillRect(0, y, w, 1);
 }
-function drawLines(g, w, h, head, hc, lines) {
+function drawLines(g, w, h, head, hc, lines, scan = true) {
   g.fillStyle = '#07120c'; g.fillRect(0, 0, w, h);
   g.fillStyle = hc; g.fillRect(0, 0, w, Math.round(h * 0.16));
   g.fillStyle = '#07120c'; g.font = pixelFont(Math.round(h * 0.075)); g.textBaseline = 'middle';
@@ -105,11 +107,11 @@ function drawLines(g, w, h, head, hc, lines) {
     g.fillStyle = ln.startsWith('!') ? '#ff3b5c' : ln.startsWith('*') ? '#ffd23f' : '#8dffb4';
     g.fillText(ln.replace(/^[!*]/, ''), w * 0.04, h * (0.22 + i * 0.11));
   });
-  scanlines(g, w, h);
+  if (scan) scanlines(g, w, h);
 }
 
 export function buildZbornakLab(world, loc) {
-  const lab = { loc, spots: {}, local: {}, screens: {}, arms: {}, chims: [], t: 0, door: null, gate: { state: 'idle', t: 0, open: 0, away: 0 } };
+  const lab = { loc, spots: {}, local: {}, screens: {}, arms: {}, chims: [], t: 0, doors: {}, gate: { state: 'idle', t: 0, granted: false } };
   const dyn = [];
   settle(world, loc, 6607, (k) => {
     k.floorCols = true;
@@ -167,7 +169,7 @@ export function buildZbornakLab(world, loc) {
         wrist: g.getObjectByName(n + '_wrist'), roll: g.getObjectByName(n + '_roll'), weld: g.getObjectByName(n + '_weld'), carry: g.getObjectByName('plate_carry') };
     } else if (role === 'plate') lab[g.name.replace('plate_', 'plate')] = g;
     else if (role === 'core') { lab.core = g; lab.rings = g.children.filter((o) => o.userData.role === 'ring'); }
-    else if (role === 'door') { lab.door = g; lab.doorY = g.position.y; lab.doorTravel = g.userData.travel || 5.4; }
+    else if (role === 'door') lab.doors[g.name.startsWith('inner') ? 'inner' : 'outer'] = { g, y0: g.position.y, travel: g.userData.travel || 5.4, open: 0, shut: 99, dir: 0 };
     else if (role === 'scan') { lab.scan = g; g.visible = false; }
     else if (role === 'doctor') { lab.doctor = g; lab.head = g.getObjectByName('head'); }
   }
@@ -178,9 +180,11 @@ export function buildZbornakLab(world, loc) {
     tag.position.set(0, 2.85, 0);
     lab.doctor.add(tag);
   }
-  // the outer door's collider: off while it is up (labWorld update)
-  const od = lab.local.outer_door;
-  if (od) lab.doorCol = world.col(loc, { type: 'box', x: od.x, y: 3.0, z: od.z, hx: 2.9, hy: 3.0, hz: 0.25, yaw: 0 });
+  // each door's collider: off while it is up (updateGate)
+  for (const [k, D] of Object.entries(lab.doors)) {
+    const p = lab.local[k + '_door'];
+    if (p) { D.col = world.col(loc, { type: 'box', x: p.x, y: p.y, z: p.z, hx: 2.9, hy: 2.95, hz: 0.3, yaw: 0 }); D.colOn = true; }
+  }
   // screens: the drone feeds (pictures), the security screen, LABNET's attract screen, the pen's residents (canvases)
   const feeds = [drone0, drone1, drone2, drone3];
   const loader = new THREE.TextureLoader();
@@ -191,7 +195,7 @@ export function buildZbornakLab(world, loc) {
     tex.colorSpace = THREE.SRGBColorSpace;
     m.material = new THREE.MeshBasicMaterial({ map: tex });
   }
-  for (const [sid, w, h] of [['sec', 512, 350], ['lab', 640, 366], ['pen', 500, 300]]) {
+  for (const [sid, w, h] of [['sec', 512, 350], ['lab', 1024, 587], ['pen', 500, 300]]) {
     const m = lab.screens[sid];
     if (!m) continue;
     const s = canvasScreen(w, h);
@@ -296,35 +300,50 @@ function updateLab(world, lab, dt, time, camPos) {
     lab.head.rotation.y += (want - lab.head.rotation.y) * Math.min(1, dt * 3);
   }
   // the airlock
-  if (P && lab.door) updateGate(world, lab, P, dt);
+  if (P && lab.doors.outer) updateGate(world, lab, P, dt);
 }
 
+const DOOR_T = 1.6, CYCLE_T = 1.2;     // s for a door to rise or drop; s the tube cycles between one door shutting and the other opening
+
 function updateGate(world, lab, P, dt) {
-  const G = lab.gate, plate = lab.spots.plate, door = lab.spots.outer_door;
+  const G = lab.gate, O = lab.doors.outer, I = lab.doors.inner, plate = lab.spots.plate;
+  const audio = world.game && world.game.audio;
+  const lo = lab.local.outer_door, li = lab.local.inner_door;
+  const l = lab.loc.group.worldToLocal(_v.copy(P.pos));
+  // where you are along the tube's line: outside the outer door, in the tube (or the housing), in the lab
+  const lane = Math.abs(l.x - lo.x) < 4.5 && l.y < lo.y + 6;
+  const zone = !lane ? 'off' : l.z > lo.z ? 'out' : (!li || l.z > li.z) ? 'tube' : 'lab';
+  const dO = Math.abs(l.z - lo.z), dI = li ? Math.abs(l.z - li.z) : 99;
+  // the scan: on the plate the camera looks you over and takes your picture, and the outer door is yours
   const onPlate = plate && P.pos.distanceTo(plate) < 1.6;
-  const local = lab.loc.group.worldToLocal(_v.copy(P.pos));
-  const inside = local.z < lab.local.outer_door.z && Math.abs(local.x) < 4 && local.z > lab.local.outer_door.z - 16;   // in the tube or the housing
-  const dDoor = P.pos.distanceTo(door);
-  if (G.state === 'idle') {
-    if (onPlate) { G.state = 'scan'; G.t = 0; if (lab.scan) lab.scan.visible = true; lab.drawSec('scan'); }
-    else if (inside && dDoor < 6) { G.state = 'open'; G.t = 0; }
-  } else if (G.state === 'scan') {
+  if (G.state === 'idle' && onPlate && !G.granted) { G.state = 'scan'; G.t = 0; if (lab.scan) lab.scan.visible = true; lab.drawSec('scan'); }
+  if (G.state === 'scan') {
     G.t += dt;
-    if (G.t > 1.2 && !G.shot) { G.shot = true; lab.drawSec('granted', snapshot(world, lab)); if (world.game.audio && world.game.audio.click) world.game.audio.click(); }
-    if (G.t > 2.0) { G.state = 'open'; G.t = 0; G.shot = false; if (lab.scan) lab.scan.visible = false; }
-  } else if (G.state === 'open') {
-    G.open = Math.min(1, G.open + dt / 1.6);
-    if (G.open > 0.4 && lab.doorCol && lab.doorColOn !== false) { world.colliders.remove(lab.doorCol); lab.doorColOn = false; }
-    G.away = dDoor > 12 && !onPlate ? G.away + dt : 0;
-    if (G.away > 2.5) { G.state = 'close'; }
-  } else if (G.state === 'close') {
-    if (dDoor < 3.5) { G.state = 'open'; return; }                     // (someone in the doorway)
-    G.open = Math.max(0, G.open - dt / 1.6);
-    if (G.open < 0.4 && lab.doorColOn === false) { world.colliders.add(lab.doorCol); lab.doorColOn = true; }
-    if (G.open <= 0) { G.state = 'idle'; lab.drawSec('idle'); }
+    if (G.t > 1.2 && !G.shot) { G.shot = true; lab.drawSec('granted', snapshot(world, lab)); if (audio && audio.click) audio.click(); }
+    if (G.t > 2.0) { G.state = 'idle'; G.shot = false; G.granted = true; if (lab.scan) lab.scan.visible = false; }
   }
-  const e = G.open * G.open * (3 - 2 * G.open);
-  lab.door.position.y = lab.doorY + e * lab.doorTravel;
+  if (G.granted && ((zone === 'tube' && dO > 6) || zone === 'lab' || P.pos.distanceTo(plate) > 18)) { G.granted = false; lab.drawSec('idle'); }
+  // what each door wants: the outer one for you granted outside or coming to it in the tube, the inner one for you coming
+  // to it from either side; either stays up while you're in its doorway
+  O.want = (zone === 'out' && G.granted) || (zone === 'tube' && dO < 6) || (O.open > 0 && lane && dO < 4);
+  if (I) I.want = (zone === 'tube' && dI < 6) || (zone === 'lab' && dI < 5) || (I.open > 0 && lane && dI < 4);
+  for (const [D, X] of [[O, I], [I, O]]) {
+    if (!D) continue;
+    const may = !X || (X.open === 0 && X.shut > CYCLE_T);
+    if (D.want && X && X.open === 0 && !may && !D.hiss) { D.hiss = true; if (audio && audio.burst) audio.burst(CYCLE_T, 2200, 0.14); }   // the tube cycles
+    if (!D.want) D.hiss = false;
+    const dir = D.want && may ? 1 : D.open > 0 && !D.want ? -1 : 0;
+    if (dir && dir !== D.dir && audio && audio.tone) audio.tone(dir > 0 ? 55 : 80, DOOR_T, 'sawtooth', 0.05, dir > 0 ? 1.6 : 0.6);   // the motor
+    D.dir = dir;
+    D.open = Math.min(1, Math.max(0, D.open + dir * dt / DOOR_T));
+    D.shut = D.open === 0 ? D.shut + dt : 0;
+    if (D.col) {
+      if (D.open > 0.4 && D.colOn) { world.colliders.remove(D.col); D.colOn = false; }
+      else if (D.open < 0.4 && !D.colOn) { world.colliders.add(D.col); D.colOn = true; }
+    }
+    const e = D.open * D.open * (3 - 2 * D.open);
+    D.g.position.y = D.y0 + e * D.travel;
+  }
 }
 
 // LABNET's attract screen and the pen's residents (repainted by main.js when they change)
@@ -333,7 +352,22 @@ export function drawLabScreens(lab, alchemy) {
   if (s && s.g) {
     const log = alchemy.log || {};
     const last = log.last || 'NO EXPERIMENTS YET';
-    drawLines(s.g, s.c.width, s.c.height, 'LABNET v3.1', '#7dff3a', ['RESEARCH LOG · DR. ZBORNAK', '', `SPLICES  ${Object.keys(log.splices || {}).length}`, `REACTOR  ${Object.keys(log.reactor || {}).length}`, `CHIMERAS ${alchemy.chimeras.length}`, '', `*LAST: ${last}`.slice(0, 34), '! F  OPEN LABNET']);
+    const { g, c } = s, w = c.width, h = c.height;
+    drawLines(g, w, h, 'LABNET v3.1 · ZBORNAK', '#7dff3a', ['RESEARCH LOG', '', `SPLICES  ${Object.keys(log.splices || {}).length}`, `REACTOR  ${Object.keys(log.reactor || {}).length}`, `CHIMERAS ${alchemy.chimeras.length}`, '! F: LABNET'], false);
+    // the wall display is big: the newest reactor results down the right, the last experiment along the foot
+    g.fillStyle = '#1d4a2c'; g.fillRect(w * 0.5, h * 0.21, 3, h * 0.6);
+    g.textBaseline = 'top'; g.font = pixelFont(Math.round(h * 0.05));
+    g.fillStyle = '#ffd23f'; g.fillText('REACTOR · NEWEST', w * 0.53, h * 0.22);
+    const rows = Object.values(log.reactor || {}).sort((x, y) => y.first - x.first).slice(0, 6);
+    g.font = pixelFont(Math.round(h * 0.036));                     // (a pixel face: each character as wide as the size)
+    rows.forEach((e, i) => {
+      g.fillStyle = '#4fa36b'; g.fillText(`#${e.first}`, w * 0.53, h * (0.31 + i * 0.08));
+      g.fillStyle = '#8dffb4'; g.fillText(`${e.title}`.slice(0, 16) + (e.times > 1 ? ` x${e.times}` : ''), w * 0.6, h * (0.31 + i * 0.08));
+    });
+    if (!rows.length) { g.fillStyle = '#4fa36b'; g.fillText('NOTHING THROWN IN YET', w * 0.53, h * 0.31); }
+    g.fillStyle = '#ffd23f'; g.font = pixelFont(Math.round(h * 0.05));
+    g.fillText(`LAST: ${last}`.slice(0, 33), w * 0.03, h * 0.88);
+    scanlines(g, w, h);
     s.tex.needsUpdate = true;
   }
   const p = lab.screens.pen;

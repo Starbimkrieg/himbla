@@ -10,9 +10,9 @@
 # The Rotunda: a domed round lab 64 m across, the reactor rising through an oculus to a crown of rings 44 m up. A ribbed
 # airlock tunnel runs to a lock housing (ZBORNAK LABORATORIES over a round pressure door; the security camera on a round
 # mount photographs the visitor on the stand plate). Inside, about the reactor (its catwalk, the stair up to it and the
-# bridge to the intake hatch), clockwise from the door (its inner end a portal in the wall, the inner door raised into it): the
-# equipment corner (chemistry benches, the magnet array, the drone wall with the LABNET console before it, battery chargers,
-# microscopes), Zbornak's dais, the robotics bay, the exotic-matter wall and its magnetic cages, the splice pod, the cryo pods, the sealed
+# bridge to the intake hatch), clockwise from the door (its inner end a portal in the wall, the inner door rising into it): the
+# equipment corner (chemistry benches, the magnet array, LABNET's wall display with the drone feeds at its sides and its desk
+# before it, battery chargers, microscopes), Zbornak's dais, the robotics bay, the exotic-matter wall and its magnetic cages, the splice pod, the cryo pods, the sealed
 # hydroponics habitat, the holotable. A cable tray runs round the wall at 6.2 m; every pipe and cable ends in it, a socket
 # or a flange. Outside: the plaza, paved walks to the supply pad and the ranch gate, the Zbornak containers (the standard
 # cargo box), a radiator field piped to the reactor, a solar array cabled in, gas racks, the generator. The ranch east of it.
@@ -292,8 +292,10 @@ def build_lab(root):
         a = TAU * (i + 0.5) / 8
         lab.light((math.sin(a) * 20, 11, math.cos(a) * 20), (0.92, 0.88, 1.0), 2500, 1.5)
     # the cable tray round the inner wall at 6.2 m (the door aside), every line in the lab ends in it
-    arc_box(lab, "steel", 0.02, R - 0.25, 0.15, TAU - 0.15, 6.2, 0.18, 0.5)
-    arc_box(lab, "dark", 0.0, R - 0.47, 0.15, TAU - 0.15, 6.32, 0.08, 0.04)
+    # (it runs on across the airlock's portal, straight in front of its pilasters: see the portal)
+    TA = math.asin(5.95 / (R - 0.25))
+    arc_box(lab, "steel", 0.02, R - 0.25, TA, TAU - TA, 6.2, 0.18, 0.5)
+    arc_box(lab, "dark", 0.0, R - 0.47, TA, TAU - TA, 6.32, 0.08, 0.04)
 
     # ---- airlock: a ribbed tube from the portal through the lock housing to the round pressure door (it rises into the
     # housing's head to let you in), the sign, the security post
@@ -349,9 +351,25 @@ def build_lab(root):
         lab("wall", 0.06).polyz(arc + [(sx * PW, 0.0), (sx * PW, HY_ + HR_)], PZ - T / 2, PZ + T / 2)
         lab("wall2", 0.04).boxc(sx * (PW - 0.05), H / 2, PZ - T / 2 - 0.15, 0.9, H, 0.3)
         lab.col_box(sx * (HR_ + PW) / 2, (HY_ + HR_) / 2, PZ, PW - HR_, HY_ + HR_, T)
-        lab("steel", 0.02).boxc(sx * (HR_ + 0.35), (HY_ + HR_ + 1.0) / 2, PZ - T / 2 - 0.12, 0.18, HY_ + HR_ + 1.0, 0.18)
-    lab("door", 0.03).cylc(0, HY_ + 4.6, PZ, HR_ + 0.15, 0.3, 32, "z")      # the inner door, raised into its pocket
-    lab("dark", 0.0).boxc(0, HY_ + 4.6, PZ, 0.08, 2 * HR_, 0.34)
+        lab("steel", 0.02).boxc(sx * (HR_ + 0.8), (HY_ + HR_ + 1.0) / 2, PZ - T / 2 - 0.12, 0.18, HY_ + HR_ + 1.0, 0.18)  # guide rails
+    # the inner door: closed in the opening, it rises into its pocket in the wall to let you through (the game cycles it
+    # with the outer door: one opens only once the other is shut)
+    idoor = G("inner_door", lab.root, 0, HY_, PZ, solid=False, role="door")
+    idoor("door", 0.03).cylc(0, 0, 0, HR_ + 0.15, 0.3, 32, "z")
+    idoor("dark", 0.0).boxc(0, 0, -0.16, 0.08, 2 * HR_, 0.04).boxc(0, 0, -0.16, 2 * HR_, 0.08, 0.04)
+    for k in range(8):
+        a = TAU * k / 8
+        idoor("steel", 0.0).cylc(math.sin(a) * 2.5, math.cos(a) * 2.5, -0.17, 0.12, 0.06, 8, "z")
+    idoor("dark", 0.02).cylc(0, 0, -0.2, 0.6, 0.15, 16, "z")
+    idoor("lime", 0.0).tor(0.62, 0.05, (0, 0, -0.28), (PI / 2, 0, 0), n=20, rs=4)
+    idoor.root["travel"] = 6.0                                              # up into the wall, out of sight
+    lab.mark("spot", (0, HY_, PZ), PI, spot="inner_door")
+    # the cable tray straight across, in front of the pilasters, joining the round run's ends, on brackets to the wall
+    TZ, TD = (R - 0.25) * math.cos(TA), (R - 0.47) * math.cos(TA)
+    lab("steel", 0.02).boxc(0, 6.2, TZ, 2 * (R - 0.25) * math.sin(TA), 0.18, 0.5)
+    lab("dark", 0.0).boxc(0, 6.32, TD, 2 * (R - 0.47) * math.sin(TA), 0.08, 0.04)
+    for bx in (-3.0, 0.0, 3.0):
+        lab("steel", 0.0).boxc(bx, 6.2, (TZ + 0.25 + PZ - T / 2) / 2, 0.12, 0.12, PZ - T / 2 - TZ - 0.25 + 0.02)
     lab("hazard", 0.03).tor(HR_ + 0.15, 0.2, (0, HY_, PZ - T / 2 - 0.1), (PI / 2, 0, 0), n=40, rs=6)
     for k in range(14):
         f = PI * k / 13
@@ -440,24 +458,25 @@ def build_lab(root):
     lab.mark("spot", (0, 0.36, 3.6), PI, spot="doctor")                    # where you stand to talk to him (before the bench)
     lab.at()
     CAMS["zb"] = ((CX + x + math.sin(fy) * 5.6 - math.cos(fy) * 1.8, 2.9, CZ + z + math.cos(fy) * 5.6 + math.sin(fy) * 1.8), (CX + x, 1.8, CZ + z), 45)
-    # the equipment corner, right of the door: two chemistry benches, the magnet array, the drone wall with two battery
-    # chargers under its ends and the LABNET console before it, the microscope bench
-    for deg, kind in ((21.0, 0), (29.5, 1)):
-        x, z, yw = P(deg, R - 0.05)
-        chem_bench(lab, x, z, yw, 3.8, kind, int(deg))
+    # the equipment corner, right of the door: two chemistry benches, the magnet array, LABNET's wall display (the big
+    # screen with the drone feeds two above each other at its sides), a battery charger under each feed column, LABNET's
+    # desk before it, the microscope bench. The benches and the magnet array are at 1.25 scale (ES): life-size beside you.
+    ES = 1.25
+    for deg, kind in ((17.5, 0), (27.0, 1)):
+        x, z, yw = P(deg, R - 0.12)
+        chem_bench(lab, x, z, yw, 3.8, kind, int(deg), s=ES)
     x, z, yw = P(36, 21.5)
-    magnet_array(lab, x, z, yw)
-    drone_wall(lab, R - 0.25, (44.5, 52.5, 60.5, 68.5))
-    for deg in (44.5, 68.5):
+    magnet_array(lab, x, z, yw, s=ES)
+    for deg in labnet_wall(lab, R, 56.5, "lab"):
         x, z, yw = P(deg, R - 0.05)
         battery_station(lab, x, z, yw)
-    x, z, yw = P(56.5, 25.0)
-    drone_console(lab, x, z, yw, "lab")
+    x, z, yw = P(56.5, 25.6)
+    labnet_desk(lab, x, z, yw)
     lab.at(x, z, yw)
-    lab.mark("spot", (0, 0.18, 1.0), PI, spot="labnet")                    # the operator's spot, facing the console
+    lab.mark("spot", (0, 0.18, 1.2), PI, spot="labnet")                    # the operator's spot, at the desk facing the wall
     lab.at()
-    x, z, yw = P(79.5, R - 0.05)
-    microscope_bench(lab, x, z, yw, 3.8)
+    x, z, yw = P(79.5, R - 0.12)
+    microscope_bench(lab, x, z, yw, 3.8, s=ES)
     lab.light((P(56, 22)[0], 5.0, P(56, 22)[1]), (0.6, 0.85, 1.0), 900, 1.0)
     CAMS["drones"] = ((CX + P(50, 11.5)[0], 3.4, CZ + P(50, 11.5)[1]), (CX + P(57, 27)[0], 3.4, CZ + P(57, 27)[1]), 26)
     CAMS["term"] = ((CX + P(54.5, 22.0)[0], 2.5, CZ + P(54.5, 22.0)[1]), (CX + P(56.5, 25.6)[0], 1.75, CZ + P(56.5, 25.6)[1]), 32)
@@ -517,8 +536,15 @@ def build_lab(root):
     for deg in (141, 157):
         x, z, yw = P(deg, 22.5)
         void_cage(lab, x, z, yw, 1.5, 2.6, feed=R - 22.5 - 0.05)
-    a = math.radians(149)
-    lab.text("EXOTIC MATTER  ·  DO NOT LOOK DIRECTLY", (math.sin(a) * (R - 0.08), 6.9, math.cos(a) * (R - 0.08)), a + PI, 0.4, "vio")
+    a = math.radians(149)                                                  # the sign: a flat board on brackets, clear of the
+    lab.at(math.sin(a) * (R - 0.35), math.cos(a) * (R - 0.35), a + PI)     # wall's curve and over the tray
+    lab("dark", 0.03).boxc(0, 7.2, 0, 4.3, 1.2, 0.1)
+    lab("vio", 0.0).boxc(0, 6.63, 0.04, 4.1, 0.03, 0.02).boxc(0, 7.77, 0.04, 4.1, 0.03, 0.02)
+    for bx in (-1.6, 1.6):
+        lab("steel", 0.0).boxc(bx, 7.2, -0.2, 0.12, 0.5, 0.3)
+    lab.text("EXOTIC MATTER", (0, 7.25, 0.06), 0, 0.42, "vio")
+    lab.text("DO NOT LOOK DIRECTLY", (0, 6.74, 0.06), 0, 0.24, "vio")
+    lab.at()
     CAMS["exotic"] = ((CX + P(146, 12)[0], 3.0, CZ + P(146, 12)[1]), (CX + P(150, 27)[0], 2.4, CZ + P(150, 27)[1]), 26)
     # the splice pod at the back, under the helix projection
     x, z, yw = P(180, 23.5)
@@ -527,7 +553,7 @@ def build_lab(root):
     lab.mark("spot", (0, 0, 4.0), PI, spot="pod")
     lab.at()
     # wall projections, on brackets from the wall, an emitter bar over each
-    for deg, w, h, kind in ((-38, 9.0, 4.2, 2), (180, 13.0, 5.0, 1), (100, 9.0, 3.4, 0)):
+    for deg, w, h, kind in ((-31, 9.0, 4.2, 2), (180, 13.0, 5.0, 1), (100, 9.0, 3.4, 0)):          # (-31: over the holotable)
         a = math.radians(deg)
         projection(lab, math.sin(a) * (R - 0.4), 8.8, math.cos(a) * (R - 0.4), a + PI, w, h, kind, mount=0.4)
     # cryo-stasis pods, an arc of six, a chimera in each, their coolant lines into junction boxes under the tray
@@ -573,6 +599,17 @@ def build_lab(root):
     lab.at()
     lab.text("HYDROPONICS · BIO-SEALED", (math.sin(door) * (RH - 0.18), 3.27, math.cos(door) * (RH - 0.18)), door + PI, 0.17, "teal")
     arc_box(lab, "floorhab", 0.0, (RH + R) / 2, h0, h1, 0.07, 0.02, R - RH - 0.2, 1.0)
+    # its own back: a white plate along the wall with a cap rail, vertical grow-light bars in dark channels before it
+    arc_box(lab, "white", 0.03, R - 0.1, h0, h1, HY / 2 + 0.1, HY - 0.2, 0.12, 1.0)
+    arc_box(lab, "white", 0.02, R - 0.2, h0, h1, HY - 0.05, 0.12, 0.2, 1.0)
+    for i in range(14):
+        a = h0 + (h1 - h0) * (i + 0.5) / 14
+        if abs(a - door) < 0.02:
+            continue
+        lab.at(math.sin(a) * (R - 0.18), math.cos(a) * (R - 0.18), a)       # (local +z: out to the wall)
+        lab("dark", 0.0).boxc(0, HY / 2 + 0.2, 0, 0.22, HY - 1.0, 0.04)
+        lab("vio" if i % 2 else "teal", 0.0).boxc(0, HY / 2 + 0.2, -0.03, 0.09, HY - 1.2, 0.03)
+        lab.at()
     HR = R - 0.7                                                            # the nutrient header along the wall
     arc_box(lab, "steel", 0.02, HR, h0 + 0.03, h1 - 0.03, 0.12, 0.16, 0.16, 0.8)
     for i, deg in enumerate((-103, -98, -93, -88, -84, -76, -72, -67, -62, -57)):  # a lane behind the door (-80)
@@ -592,8 +629,8 @@ def build_lab(root):
     CAMS["hydro"] = ((CX + math.sin(a0) * 15.0 + 3.0, 4.0, CZ + math.cos(a0) * 15.0 + 5.0), (CX + math.sin(a0) * 27.0, 1.8, CZ + math.cos(a0) * 27.0), 28)
     CAMS["hydro_door"] = ((CX + math.sin(a0) * 20.5 + 0.8, 2.4, CZ + math.cos(a0) * 20.5 + 1.2), (CX + math.sin(a0) * 25.5, 2.4, CZ + math.cos(a0) * 25.5), 32)
     # the holotable, front left
-    x, z, yw = P(-38, 19.5)
-    holotable(lab, x, z, yw, 2.6, "round", "moon")
+    x, z, yw = P(-31, 23.25)                                               # between the cyan and lime floor rings, between
+    holotable(lab, x, z, yw, 2.6, "round", "moon")                         # the airlock and the hydroponics
     CAMS["inside"] = ((CX + 7.5, 3.0, CZ + 26.5), (CX - 2.0, 6.5, CZ - 6.0), 22)
 
     # ---- outside: the plaza, walks, containers, gas racks piped in, the generator and the solar array cabled in

@@ -49,9 +49,9 @@ class Acc:
         Acc.all.append(self)
 
     def _push(self, geo):
-        x, y, z, a = self.g.cur
-        if x or y or z or a:
-            geo = xf(geo, (x, y, z), (0, a, 0))
+        x, y, z, a, k = self.g.cur
+        if x or y or z or a or k != 1:
+            geo = xf(geo, (x, y, z), (0, a, 0), (k, k, k))
         self.geos.append(geo)
         return self
 
@@ -140,7 +140,7 @@ class G:
         self.root.rotation_euler[2] = yaw
         if role:
             self.root["role"] = role
-        self.accs, self.cur = {}, (0, 0, 0, 0)
+        self.accs, self.cur = {}, (0, 0, 0, 0, 1.0)
         # colliders from this group's boxes, upright cylinders and lathes (inherits the parent group's setting)
         self.solid = SOLID_DEFAULT[0] if solid is None else solid
 
@@ -155,7 +155,8 @@ class G:
     def col_box(self, cx, cy, cz, w, h, d, rot=(0, 0, 0), **extra):
         """a box collider (centre, size, rotation as xf's euler) in the current local frame, as downs_common writes them"""
         from mathutils import Euler, Matrix
-        x, y, z, a = self.cur
+        x, y, z, a, k = self.cur
+        w, h, d = w * k, h * k, d * k
         R = Euler((0, a, 0), "XYZ").to_matrix() @ Euler(rot, "XYZ").to_matrix()
         Rw = Euler((0, self._yaw_up(), 0), "XYZ").to_matrix() @ R
         e = Rw.to_euler("XYZ")
@@ -166,7 +167,7 @@ class G:
     def col_cyl(self, x, y0, z, r, h):
         """an upright cylinder collider, its base at (x, y0, z) in the current local frame"""
         _ncol[0] += 1
-        pivot(f"{self.root.name}_col{_ncol[0]}", self.pt((x, y0, z)), self.root, role="col", shape="cyl", r=r, h=h)
+        pivot(f"{self.root.name}_col{_ncol[0]}", self.pt((x, y0, z)), self.root, role="col", shape="cyl", r=r * self.cur[4], h=h * self.cur[4])
 
     def mark(self, role, p, yaw=0.0, **data):
         """a marker pivot for the game (a spot, a screen, a sign, a chimera) at p in the current local frame, facing yaw"""
@@ -181,18 +182,20 @@ class G:
             self.accs[key] = Acc(self, f"{self.root.name}_{slot}{'' if ink == INK.get(slot, 0.0) else '_i' + str(int(ink * 1000))}", slot, ink)
         return self.accs[key]
 
-    def at(self, x=0.0, z=0.0, yaw=0.0, y=0.0):
-        self.cur = (x, y, z, yaw)
+    def at(self, x=0.0, z=0.0, yaw=0.0, y=0.0, s=1.0):
+        """s scales what follows (parts, colliders, markers' sizes) about the local origin"""
+        self.cur = (x, y, z, yaw, s)
         return self
 
     def pt(self, p):
         """a point in the current local frame -> this pivot's frame"""
-        x, y, z, a = self.cur
-        q = rot_y(p, a)
+        x, y, z, a, k = self.cur
+        q = rot_y((p[0] * k, p[1] * k, p[2] * k), a)
         return (q[0] + x, q[1] + y, q[2] + z)
 
     def chim(self, p, yaw, scale, idx, pen=False):
         """a chimera for the renders; for the game a marker, unless it is a pen resident (the game stands the player's own there)"""
+        scale *= self.cur[4]
         CHIMS.append((self.root, self.pt(p), yaw + self.cur[3], scale, idx))
         if GAME[0] and not pen:
             self.mark("chim", p, yaw, idx=idx, scale=scale)
@@ -201,6 +204,7 @@ class G:
         LIGHTS.append((self.root, self.pt(p), rgb, watts, radius))
 
     def text(self, s, p, yaw, size, slot="lime", depth=0.05):
+        size, depth = size * self.cur[4], depth * self.cur[4]
         TEXTS.append((self.root, s, self.pt(p), yaw + self.cur[3], size, slot, depth))
         if GAME[0]:
             self.mark("text", p, yaw, text=s, size=size, slot=slot)
@@ -209,12 +213,12 @@ class G:
         """a picture quad facing +z (turned yaw, tipped back by tilt), its own mesh `screen_<sid>`; for the game, a marker
         (role screen: the game draws the picture)"""
         if GAME[0]:
-            return self.mark("screen", (cx, cy, cz), yaw, sid=sid, w=w, h=h, tilt=tilt)
+            return self.mark("screen", (cx, cy, cz), yaw, sid=sid, w=w * self.cur[4], h=h * self.cur[4], tilt=tilt)
         v, f = plane(w, h)[:2]
         v, f = xf(xf((v, f), (0, 0, 0), (-tilt, 0, 0)), (cx, cy, cz), (0, yaw, 0))
-        x, y, z, a = self.cur
-        if x or y or z or a:
-            v, f = xf((v, f), (x, y, z), (0, a, 0))
+        x, y, z, a, k = self.cur
+        if x or y or z or a or k != 1:
+            v, f = xf((v, f), (x, y, z), (0, a, 0), (k, k, k))
         o = mesh("screen_" + sid, (v, f), "screen", self.root, 0.0, 0)
         o["screen"] = sid
         return o
@@ -1075,12 +1079,12 @@ def flask(g, x, y, z, kind, c, s=1.0):
         g(c, 0.0).cylc(x, y + 0.11 * s, z, 0.03 * s, 0.2 * s, 8)
 
 
-def chem_bench(g, x, z, yaw, L=3.8, kind=0, seed=0):
+def chem_bench(g, x, z, yaw, L=3.8, kind=0, seed=0, s=1.0):
     """A chemistry bench against the wall at (x, z) facing yaw. kind 0: a distillation rig (retort stand, a flask over a
     burner's blue flame, a condenser coil down to a collecting beaker), a flask rack (round flasks upside down on pegs), an
     extraction hood over it with its duct up to the tray; kind 1: test-tube racks, a reagent shelf of bottles, a burner, a
     sink with a swan-neck tap. Glassware everywhere, liquids glowing."""
-    g.at(x, z, yaw)
+    g.at(x, z, yaw, s=s)
     bench(g, L)
     top = 1.01
     if kind == 0:
@@ -1148,10 +1152,10 @@ def chem_bench(g, x, z, yaw, L=3.8, kind=0, seed=0):
     g.at()
 
 
-def microscope_bench(g, x, z, yaw, L=3.8):
+def microscope_bench(g, x, z, yaw, L=3.8, s=1.0):
     """a bench of microscopes against the wall: three microscopes (foot, arm, stage with a slide, tube, eyepieces, an
     objective turret), slide boxes, a stack of petri dishes, a monitor showing a magnified cell, a stool"""
-    g.at(x, z, yaw)
+    g.at(x, z, yaw, s=s)
     bench(g, L)
     top = 1.01
     for i, mx in enumerate((-1.2, 0.0, 1.2)):
@@ -1185,10 +1189,10 @@ def microscope_bench(g, x, z, yaw, L=3.8):
     g.at()
 
 
-def magnet_array(g, x, z, yaw=0.0):
+def magnet_array(g, x, z, yaw=0.0, s=1.0):
     """four electromagnets on yokes about a ringed platform, aimed in at a steel sphere they hold in the air, cyan field loops
     about it, a control pedestal and a power cable"""
-    g.at(x, z, yaw)
+    g.at(x, z, yaw, s=s)
     g("dark", 0.04).lath([(2.5, 0), (2.5, 0.25), (2.3, 0.3), (0.0, 0.3)], segs=32)
     g("lime", 0.0).tor(2.35, 0.04, (0, 0.3, 0), n=36, rs=4)
     g("hazard", 0.0).tor(1.0, 0.04, (0, 0.31, 0), n=24, rs=4, s=(1, 0.2, 1))
@@ -1217,80 +1221,180 @@ def magnet_array(g, x, z, yaw=0.0):
 
 
 def battery_station(g, x, z, yaw):
-    """a battery charging cabinet on the wall: two rows of big cells in cradles, each with a charge bar (some full, some
-    filling), a status lamp per cell, a bus bar up into the cable tray, CHARGING over it"""
+    """a battery charging cabinet against the wall (its back on local z = 0): a plinth, a steel body with vented sides, a bay
+    0.25 m deep behind a glass door holding two rows of three big cells in cradles (terminals, a cable each into the bay's
+    back, a charge bar and a status lamp beside each), a header with the CHARGING plate and a meter set into its face, the
+    feed cable out of its side into a floor junction box at the wall"""
     g.at(x, z, yaw)
-    g("panel", 0.04).boxc(0, 1.1, 0.3, 2.4, 2.2, 0.6)
-    g("dark", 0.0).boxc(0, 1.1, 0.61, 2.2, 2.0, 0.02)
+    W, D, B = 2.2, 0.85, 0.6                                                # width, depth, the bay's back
+    g("dark", 0.03).boxc(0, 0.06, D / 2, W + 0.06, 0.12, D + 0.06)         # plinth
+    g("panel", 0.04).boxc(0, 0.87, B / 2, W, 1.5, B)                       # the body behind the bay
+    for sx in (-1, 1):
+        g("panel", 0.03).boxc(sx * (W / 2 - 0.06), 0.87, D / 2, 0.12, 1.5, D)
+        for i in range(6):                                                 # vents down each side
+            g("dark", 0.0).boxc(sx * (W / 2 + 0.004), 0.42 + i * 0.18, D / 2, 0.01, 0.06, D - 0.3)
+    g("panel", 0.03).boxc(0, 0.17, (B + D) / 2, W - 0.24, 0.1, D - B)       # the sill
+    g("panel", 0.02).boxc(0, 0.87, (B + D) / 2, W - 0.24, 0.06, D - B)      # the shelf between the rows
+    g("panel", 0.04).boxc(0, 1.785, D / 2, W, 0.33, D)                     # the header
+    g("dark", 0.02).boxc(-0.2, 1.785, D + 0.01, 1.3, 0.24, 0.02)           # the CHARGING plate, set into the header's face
+    g.text("CHARGING", (-0.2, 1.7, D + 0.025), 0, 0.16, "lime", 0.01)
+    g("dark", 0.02).boxc(0.75, 1.785, D + 0.01, 0.42, 0.22, 0.02)          # the meter
+    g("screenlit", 0.0).boxc(0.75, 1.785, D + 0.022, 0.34, 0.14, 0.005)
+    g("lime", 0.0).boxc(0.68, 1.775, D + 0.026, 0.14, 0.04, 0.004)
     for r in range(2):
-        for i in range(4):
-            bx, by = -0.8 + i * 0.53, 0.35 + r * 1.0
-            g("dark", 0.015).boxc(bx, by - 0.04, 0.45, 0.42, 0.06, 0.36)
-            g("steel", 0.02).cylc(bx, by + 0.3, 0.45, 0.16, 0.6, 14)
-            g("hazard", 0.0).cylc(bx, by + 0.3, 0.45, 0.165, 0.12, 14)
-            g("dark", 0.0).cylc(bx, by + 0.63, 0.45, 0.07, 0.06, 10)
-            lvl = (0.2, 0.55, 0.85, 1.0, 1.0, 0.4, 0.7, 1.0)[r * 4 + i]
-            g("dark", 0.0).boxc(bx + 0.18, by + 0.3, 0.63, 0.05, 0.5, 0.01)
-            g("lime" if lvl >= 1 else "amber", 0.0).boxc(bx + 0.18, by + 0.05 + 0.25 * lvl, 0.64, 0.035, 0.5 * lvl, 0.01)
-            g("lime" if lvl >= 1 else "red", 0.0).ball(bx - 0.15, by + 0.72, 0.62, 0.025, 6, 4)
-            g("cable", 0.0).path([(bx, by + 0.66, 0.45), (bx, by + 0.78, 0.4), (bx * 0.3, by + 0.85, 0.2)], 0.025, 4)
-    g("copper", 0.0).boxc(0, 2.3, 0.15, 2.2, 0.1, 0.1)
-    g("steel", 0.0).cylc(0.9, 4.15, 0.1, 0.09, 3.6, 8)
-    g("dark", 0.03).boxc(0, 2.5, 0.35, 2.0, 0.32, 0.06)
-    g.text("CHARGING", (0, 2.4, 0.39), 0, 0.2, "lime", 0.01)
+        fy = 0.22 + r * 0.68                                               # the row's floor
+        for i in range(3):
+            bx = -0.62 + i * 0.62
+            lvl = (0.25, 1.0, 0.6, 1.0, 0.85, 0.4)[r * 3 + i]
+            g("dark", 0.015).boxc(bx, fy + 0.03, 0.72, 0.46, 0.06, 0.22)     # the cradle
+            g("steel", 0.02).cylc(bx, fy + 0.29, 0.72, 0.2, 0.46, 16)       # the cell
+            g("hazard", 0.0).cylc(bx, fy + 0.2, 0.72, 0.205, 0.08, 16)
+            g("dark", 0.0).cylc(bx, fy + 0.54, 0.72, 0.17, 0.04, 14)
+            for k, c in ((-1, "red"), (1, "dark")):                        # terminals, a cable from each into the back
+                g(c, 0.0).cylc(bx + k * 0.08, fy + 0.58, 0.72, 0.03, 0.05, 8)
+                g("cable", 0.0).path([(bx + k * 0.08, fy + 0.6, 0.72), (bx + k * 0.08, fy + 0.62, 0.66), (bx + k * 0.06, fy + 0.6, B + 0.01)], 0.015, 4)
+            g("dark", 0.0).boxc(bx + 0.27, fy + 0.29, B + 0.006, 0.05, 0.42, 0.01)    # the charge bar on the bay's back
+            g("lime" if lvl >= 1 else "amber", 0.0).boxc(bx + 0.27, fy + 0.08 + 0.21 * lvl, B + 0.012, 0.035, 0.42 * lvl, 0.008)
+            g("lime" if lvl >= 1 else "red", 0.0).ball(bx + 0.27, fy + 0.56, B + 0.015, 0.025, 6, 4)
+    g("glass", 0.0).boxc(0, 0.87, D - 0.01, W - 0.24, 1.42, 0.015)         # the door, a handle
+    g("steel", 0.0).boxc(W / 2 - 0.22, 0.95, D + 0.02, 0.04, 0.4, 0.04)
+    g("cable", 0.0).path([(W / 2, 0.3, 0.3), (W / 2 + 0.15, 0.2, 0.25), (W / 2 + 0.3, 0.08, 0.15)], 0.05, 6)
+    g("dark", 0.02).boxc(W / 2 + 0.35, 0.12, 0.12, 0.3, 0.24, 0.24)        # the floor junction box at the wall
     g.at()
 
 
-def drone_wall(g, R, degs, y=4.9, w=3.9, h=2.4):
-    """the drone view: video panels fitted round the wall at angles degs (deg, radius R), each its own screen (`screen_drone<k>`),
-    in dark bezels joined by a frame along the top and bottom, REC lamps, a caption strip under it"""
-    for k, deg in enumerate(degs):
-        a = math.radians(deg)
-        g.at(math.sin(a) * R, math.cos(a) * R, a + PI, y)
-        g("dark", 0.03).boxc(0, 0, -0.08, w + 0.24, h + 0.24, 0.16)
-        g.screen(f"drone{k}", 0, 0, 0.01, w, h)
-        g("red", 0.0).ball(w / 2 - 0.12, h / 2 + 0.06, 0.02, 0.04, 6, 4)
+def labnet_wall(g, R, deg, sid="lab"):
+    """LABNET's wall display at angle deg on the ring wall (inner radius R), facing the lab: one big screen (`screen_<sid>`)
+    in a deep bezel stood 1.3 m off the wall on long brackets (in front of the cable tray, which it rises past), a lit strip
+    and a row of status lamps under it, a cable from its back down into the tray; at each side the drone feeds two above
+    each other (`screen_drone0..3`), each panel turned to the wall's curve in its own bezel, on a column frame bracketed to
+    the wall, a REC lamp on each, its cable into the tray. Returns the angles of the two side columns."""
+    a = math.radians(deg)
+    SW, SH, SY, off = 9.6, 5.5, 4.5, 1.3                                    # (bottom 1.75 m, top 7.25 m)
+    wall = lambda bx, o: -(o - bx * bx / (2 * R))                          # the wall's local z behind x = bx
+    g.at(math.sin(a) * (R - off), math.cos(a) * (R - off), a + PI)
+    g("dark", 0.04).boxc(0, SY, -0.16, SW + 0.36, SH + 0.36, 0.3)
+    g("steel", 0.0).boxc(0, SY + SH / 2 + 0.2, -0.16, SW + 0.4, 0.06, 0.34).boxc(0, SY - SH / 2 - 0.2, -0.16, SW + 0.4, 0.06, 0.34)
+    g.screen(sid, 0, SY, 0.005, SW, SH)
+    g("lime", 0.0).boxc(0, SY - SH / 2 - 0.1, 0.0, SW - 0.4, 0.03, 0.02)
+    g("dark", 0.02).boxc(0, SY - SH / 2 - 0.4, -0.12, 4.6, 0.16, 0.14)
+    for i in range(11):
+        g(("lime", "cyan", "amber")[i % 3], 0.0).ball(-2.0 + i * 0.4, SY - SH / 2 - 0.4, -0.04, 0.04, 6, 4)
+    for bx in (-3.6, 3.6):
+        d = -wall(bx, off) - 0.31
+        for by in (SY - 1.8, SY + 1.8):
+            g("steel", 0.02).boxc(bx, by, -0.31 - d / 2, 0.18, 0.18, d + 0.04)
+    g("cable", 0.0).path([(0.0, SY + 1.9, -0.31), (0.0, 6.5, -0.7), (0.0, 6.32, -off + 0.25)], 0.06, 6)
+    g.at()
+    PW, PH, CY, off1 = 3.2, 1.97, SY + 0.1, 0.95
+    r1 = R - off1
+    dA = math.asin((SW / 2 + 0.18 + 0.35 + PW / 2 + 0.1) / r1)
+    cols = []
+    for k, side in enumerate((-1, 1)):
+        ac = a - side * dA                                                  # (-1: left as you face the wall)
+        cols.append(math.degrees(ac))
+        g.at(math.sin(ac) * r1, math.cos(ac) * r1, ac + PI)
+        for j, py in enumerate((CY + PH / 2 + 0.1, CY - PH / 2 - 0.1)):
+            g("dark", 0.03).boxc(0, py, -0.09, PW + 0.2, PH + 0.2, 0.18)
+            g.screen(f"drone{k * 2 + j}", 0, py, 0.005, PW, PH)
+            g("red", 0.0).ball(PW / 2 - 0.02, py + PH / 2 + 0.04, 0.0, 0.04, 6, 4)
+            for bx in (-1.0, 1.0):
+                d = -wall(bx, off1) - 0.18
+                g("steel", 0.0).boxc(bx, py, -0.18 - d / 2, 0.14, 0.14, d + 0.04)
         for sx in (-1, 1):
-            g("steel", 0.0).boxc(sx * (w / 2 - 0.4), 0, -0.25, 0.1, 0.1, 0.2)
+            g("steel", 0.02).boxc(sx * (PW / 2 + 0.16), CY, -0.12, 0.08, 2 * PH + 0.6, 0.1)
+        g("steel", 0.02).boxc(0, CY + PH + 0.34, -0.12, PW + 0.42, 0.08, 0.14).boxc(0, CY - PH - 0.34, -0.12, PW + 0.42, 0.08, 0.14)
+        g("cable", 0.0).path([(PW / 2 + 0.16, CY + PH + 0.34, -0.2), (PW / 2 + 0.16, CY + PH + 0.34, -0.6), (PW / 2 + 0.16, 6.32, -off1 + 0.2)], 0.04, 5)
         g.at()
-    a0, a1 = math.radians(degs[0]) - 0.075, math.radians(degs[-1]) + 0.075
-    n = 16
-    for i in range(n):
-        a = a0 + (a1 - a0) * (i + 0.5) / n
-        for yy, hh in ((y + h / 2 + 0.17, 0.1), (y - h / 2 - 0.17, 0.1)):
-            g("steel", 0.0).boxc(math.sin(a) * (R - 0.02), yy, math.cos(a) * (R - 0.02), (a1 - a0) * R / n * 1.02, hh, 0.12, (0, a, 0))
-        g("dark", 0.0).boxc(math.sin(a) * (R - 0.02), y - h / 2 - 0.5, math.cos(a) * (R - 0.02), (a1 - a0) * R / n * 1.02, 0.42, 0.1, (0, a, 0))
-    am = (a0 + a1) / 2
-    g.text("ZBORNAK DRONE NETWORK  ·  4 FEEDS LIVE", (math.sin(am) * (R - 0.22), y - h / 2 - 0.62, math.cos(am) * (R - 0.22)), am + PI, 0.2, "cyan", 0.01)
+    return cols
 
 
-def drone_console(g, x, z, yaw, sid="lab"):
-    """the console before the drone wall, with LABNET built in: a curved desk on a low dais (the operator stands on the
-    +z side, facing -z toward the wall), LABNET's screen in the middle, two feed monitors, a keyboard, a joystick for the
-    drones, a stool"""
+def labnet_desk(g, x, z, yaw):
+    """LABNET's desk before the wall display: a desk curving round the operator on a low dais (the operator sits on the +z
+    side facing -z, toward the wall), cabinets under its ends and open knee space in the middle; on it a keyboard, a tilted
+    touch panel and the drones' joystick, a drone on a repair mat with a screwdriver and a parts tray, a soldering station
+    with its iron in a coil stand, a desk lamp, a red toolbox; an office chair"""
     g.at(x, z, yaw)
-    g("panel", 0.03).cylc(0, 0.09, 1.2, 3.0, 0.18, 32)
-    g("lime", 0.0).tor(3.0, 0.03, (0, 0.18, 1.2), n=36, rs=4)
+    C, RD, top = 2.6, 2.6, 1.02                                             # the operator's spot (z), the desk's radius, top
+    g("panel", 0.03).cylc(0, 0.09, 1.4, 3.3, 0.18, 36)
+    g("lime", 0.0).tor(3.3, 0.03, (0, 0.18, 1.4), n=40, rs=4)
+    seg = []
     for k in range(-2, 3):
-        a = k * 0.28
-        cx, cz = math.sin(a) * 2.6, 2.6 - math.cos(a) * 2.6
-        g("white", 0.03).boxc(cx, 0.65, cz, 1.0, 0.95, 0.75, (0, a, 0))
-        g("dark", 0.02).boxc(cx + math.sin(a) * 0.06, 1.15, cz + math.cos(a) * 0.06, 1.02, 0.06, 0.95, (0, a, 0))
-        g("cyan", 0.0).boxc(cx + math.sin(a) * 0.38, 0.55, cz + math.cos(a) * 0.38, 0.8, 0.04, 0.01, (0, a, 0))
-    g("dark", 0.03).boxc(0, 1.9, -0.18, 2.3, 1.45, 0.14, (-0.15, 0, 0))
-    g("dark", 0.02).boxc(0, 1.3, -0.25, 0.25, 0.3, 0.2)
-    g.screen(sid, 0, 1.92, -0.10, 2.1, 1.2, 0, 0.15)
-    for k in (-1, 1):
-        a = k * 0.5
-        g("dark", 0.02).boxc(k * 1.65, 1.68, 0.15 + 0.15, 1.0, 0.65, 0.08, (-0.15, -k * 0.5, 0))
-        g(("cyan" if k < 0 else "lime"), 0.0).boxc(k * 1.63, 1.68, 0.21 + 0.15, 0.85, 0.52, 0.01, (-0.15, -k * 0.5, 0))
-    g("dark", 0.0).boxc(0, 1.205, 0.32, 1.2, 0.03, 0.35)
-    for i in range(14):
-        g("white", 0.0).boxc(-0.5 + (i % 7) * 0.165, 1.23, 0.24 + (i // 7) * 0.14, 0.13, 0.015, 0.1)
-    g("dark", 0.0).cylc(0.95, 1.25, 0.4, 0.08, 0.06, 10)
-    g("steel", 0.0).bm((0.95, 1.27, 0.4), (0.95, 1.45, 0.38), 0.025, 6)
-    g("red", 0.0).ball(0.95, 1.47, 0.38, 0.035, 6, 4)
-    g("dark", 0.0).cylc(0, 0.5, 1.25, 0.05, 0.64, 6)
-    g("seat", 0.02).cylc(0, 0.84, 1.25, 0.26, 0.08, 12)
-    g.light((0, 2.0, 1.0), (0.45, 0.9, 1.0), 120, 0.3)
+        a = k * 0.42
+        cx, cz = math.sin(a) * RD, C - math.cos(a) * RD
+        seg.append((cx, cz, a))
+        g("dark", 0.02).boxc(cx, top, cz, 1.12, 0.06, 0.85, (0, -a, 0))      # the top
+        if k:
+            g("white", 0.03).boxc(cx, 0.6, cz, 1.0, 0.84, 0.75, (0, -a, 0))  # cabinets under the ends
+            g("panel", 0.0).boxc(cx + math.sin(-a) * 0.38, 0.6, cz + math.cos(-a) * 0.38, 0.8, 0.6, 0.01, (0, -a, 0))
+        else:
+            for sx in (-0.48, 0.48):                                       # legs and a modesty panel in the middle
+                g("steel", 0.02).boxc(sx, 0.6, cz - 0.3, 0.06, 0.84, 0.06)
+            g("white", 0.02).boxc(0, 0.62, cz - 0.38, 1.0, 0.6, 0.04)
+            g.col_box(0, 0.615, cz, 1.12, 0.87, 0.85)                       # (its parts are too thin for their own)
+        g("cyan", 0.0).boxc(cx + math.sin(-a) * 0.43, top - 0.05, cz + math.cos(-a) * 0.43, 1.05, 0.02, 0.01, (0, -a, 0))
+    # the middle: keyboard, touch panel, joystick
+    cx, cz, _ = seg[2]
+    g("dark", 0.0).boxc(0, top + 0.04, cz + 0.12, 0.72, 0.03, 0.24)
+    for i in range(18):
+        g("white", 0.0).boxc(-0.3 + (i % 9) * 0.075, top + 0.06, cz + 0.06 + (i // 9) * 0.1, 0.06, 0.012, 0.07)
+    g("dark", 0.02).boxc(0, top + 0.22, cz - 0.28, 0.9, 0.42, 0.04, (-0.5, 0, 0))
+    g("screenlit", 0.0).boxc(0, top + 0.23, cz - 0.255, 0.8, 0.34, 0.005, (-0.5, 0, 0))
+    g("dark", 0.0).cylc(0.5, top + 0.04, cz + 0.1, 0.08, 0.05, 10)
+    g("steel", 0.0).bm((0.5, top + 0.06, cz + 0.1), (0.5, top + 0.24, cz + 0.08), 0.022, 6)
+    g("red", 0.0).ball(0.5, top + 0.26, cz + 0.08, 0.035, 6, 4)
+    # the left: a drone on a repair mat, a screwdriver, a tray of parts
+    cx, cz, a = seg[1]
+    g.at(x + rot_y((cx, 0, cz), yaw)[0], z + rot_y((cx, 0, cz), yaw)[2], yaw - a)
+    g("dark", 0.0).boxc(0, top + 0.035, 0.05, 0.85, 0.01, 0.6)
+    g("steel", 0.02).rb(0, top + 0.12, 0.05, 0.22, 0.08, 0.3, 0.3)
+    for k in range(4):
+        q = TAU * k / 4 + PI / 4
+        px, pz = math.sin(q) * 0.3, 0.05 + math.cos(q) * 0.3
+        g("dark", 0.0).bm((0, top + 0.12, 0.05), (px, top + 0.13, pz), 0.02, 5)
+        g("steel", 0.0).cylc(px, top + 0.15, pz, 0.035, 0.07, 8)
+        g("glass", 0.0).cylc(px, top + 0.195, pz, 0.14, 0.006, 16)
+    g("dark", 0.0).ball(0, top + 0.09, 0.22, 0.04, 8, 6)
+    g("cyan", 0.0).ball(0, top + 0.09, 0.255, 0.018, 6, 4)
+    g("amber", 0.0).bm((0.32, top + 0.045, -0.2), (0.32, top + 0.045, 0.0), 0.012, 5)
+    g("steel", 0.0).bm((0.32, top + 0.045, 0.0), (0.32, top + 0.045, 0.12), 0.004, 4)
+    g("steel", 0.02).boxc(-0.3, top + 0.05, -0.18, 0.25, 0.04, 0.16)
+    for i in range(5):
+        g(("copper", "steel", "red", "dark", "brass")[i], 0.0).ball(-0.36 + (i % 3) * 0.05, top + 0.08, -0.21 + (i // 3) * 0.06, 0.016, 5, 3)
+    # the right: a soldering station and its iron, a spool of solder
+    cx, cz, a = seg[3]
+    g.at(x + rot_y((cx, 0, cz), yaw)[0], z + rot_y((cx, 0, cz), yaw)[2], yaw - a)
+    g("steel", 0.02).boxc(-0.15, top + 0.1, -0.15, 0.32, 0.16, 0.24)
+    g("screenlit", 0.0).boxc(-0.2, top + 0.13, -0.025, 0.12, 0.06, 0.005)
+    g("red", 0.0).cylc(-0.04, top + 0.1, -0.02, 0.025, 0.02, 10, "z")
+    g("steel", 0.0).path([(0.15, top + 0.04, -0.1), (0.16, top + 0.1, -0.1), (0.17, top + 0.16, -0.1), (0.18, top + 0.22, -0.1)], 0.045, 8)
+    g("dark", 0.0).bm((0.18, top + 0.24, -0.1), (0.05, top + 0.34, 0.02), 0.018, 6)
+    g("amber", 0.0).bm((0.18, top + 0.24, -0.1), (0.21, top + 0.21, -0.12), 0.005, 4)
+    g("cable", 0.0).path([(-0.15, top + 0.05, -0.27), (-0.2, top + 0.02, -0.4)], 0.012, 4)
+    g("brass", 0.0).cylc(0.3, top + 0.06, 0.15, 0.06, 0.06, 12, "x")
+    # the far ends: a desk lamp, a red toolbox
+    cx, cz, a = seg[0]
+    g.at(x + rot_y((cx, 0, cz), yaw)[0], z + rot_y((cx, 0, cz), yaw)[2], yaw - a)
+    g("dark", 0.0).cylc(0.1, top + 0.04, -0.2, 0.1, 0.03, 12)
+    g("steel", 0.0).bm((0.1, top + 0.05, -0.2), (0.0, top + 0.45, -0.25), 0.015, 5).bm((0.0, top + 0.45, -0.25), (-0.15, top + 0.55, -0.05), 0.015, 5)
+    g("dark", 0.0).cylc(-0.18, top + 0.5, -0.02, 0.06, 0.14, 10, rt=0.03)
+    g("lamp", 0.0).cylc(-0.19, top + 0.43, -0.01, 0.055, 0.01, 10)
+    cx, cz, a = seg[4]
+    g.at(x + rot_y((cx, 0, cz), yaw)[0], z + rot_y((cx, 0, cz), yaw)[2], yaw - a)
+    g("red", 0.02).boxc(0.0, top + 0.13, -0.1, 0.5, 0.2, 0.24)
+    g("dark", 0.0).boxc(0.0, top + 0.235, -0.1, 0.52, 0.02, 0.26)
+    g("steel", 0.0).bm((-0.12, top + 0.25, -0.1), (-0.12, top + 0.3, -0.1), 0.012, 4).bm((0.12, top + 0.25, -0.1), (0.12, top + 0.3, -0.1), 0.012, 4)
+    g("steel", 0.0).bm((-0.12, top + 0.3, -0.1), (0.12, top + 0.3, -0.1), 0.012, 4)
+    # the office chair, turned a little
+    g.at(x + rot_y((0.15, 0, C - 0.7), yaw)[0], z + rot_y((0.15, 0, C - 0.7), yaw)[2], yaw + 0.25)
+    for k in range(5):
+        q = TAU * k / 5
+        g("dark", 0.0).bm((0, 0.26, 0), (math.sin(q) * 0.34, 0.24, math.cos(q) * 0.34), 0.025, 5)
+        g("rubber", 0.0).ball(math.sin(q) * 0.34, 0.215, math.cos(q) * 0.34, 0.035, 6, 4)
+    g("steel", 0.0).cylc(0, 0.45, 0, 0.035, 0.4, 8)
+    g("seat", 0.02).rb(0, 0.7, 0, 0.5, 0.1, 0.48, 0.3)
+    g("dark", 0.0).bm((0, 0.7, 0.24), (0, 0.9, 0.27), 0.03, 5)
+    g("seat", 0.02).rb(0, 1.12, 0.29, 0.46, 0.5, 0.08, 0.3, (-0.12, 0, 0))
+    g.at(x, z, yaw)
+    g.light((0, 2.2, 0.8), (0.45, 0.9, 1.0), 140, 0.3)
     g.at()
