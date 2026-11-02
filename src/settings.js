@@ -5,7 +5,7 @@ import { glyphHtml, tokensFor, esc } from './glyphs.js';
 import { gyroSupported } from './gyro.js';
 import { DEV_TOOLS } from './devtools.js';
 import { SKIN_FROM_URL } from './moonSkins.js';
-import { INK_U, inkMat, inkMatBaked, inkMatSolid, inkLineMat, TOON_LOOK, CLASSIC_LOOK, setToonBands } from './toon.js';
+import { INK_U, inkMat, inkMatBaked, inkMatSolid, inkLineMat, TOON_LOOK, CLASSIC_LOOK } from './toon.js';
 
 const KEY = 'moonrunner-settings-v1';
 const BINDS_V = 2; // 2: no thruster key (right mouse only); power on E, not Z
@@ -52,9 +52,9 @@ const RESERVED = ['Escape', 'Enter', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Di
 // texture (moonSkins.js; dev builds only, via its setting or ?moonskin=1), so release presets leave it out.
 const gd = (n) => (DEV_TOOLS ? { groundDetail: n } : {});
 const PRESETS = {
-  low: { antialias: '0', renderScale: 0.75, viewDist: 0.7, terrainDetail: 0.75, shadows: true, shadowRes: 1024, particles: 0.6, ...gd(0) },
-  medium: { antialias: '4', renderScale: 1, viewDist: 1, terrainDetail: 1, shadows: true, shadowRes: 2048, particles: 1, ...gd(1) },
-  high: { antialias: '4', renderScale: 1, viewDist: 1.3, terrainDetail: 1.3, shadows: true, shadowRes: 4096, particles: 1.3, ...gd(2) },
+  low: { smoothLines: false, antialias: '0', renderScale: 0.75, viewDist: 0.7, terrainDetail: 0.75, shadows: true, shadowRes: 1024, particles: 0.6, ...gd(0) },
+  medium: { smoothLines: true, antialias: '4', renderScale: 1, viewDist: 1, terrainDetail: 1, shadows: true, shadowRes: 2048, particles: 1, ...gd(1) },
+  high: { smoothLines: true, antialias: '4', renderScale: 1, viewDist: 1.3, terrainDetail: 1.3, shadows: true, shadowRes: 4096, particles: 1.3, ...gd(2) },
 };
 const PRESET_KEYS = Object.keys(PRESETS.medium);
 const pct = (v) => `${Math.round(v * 100)}%`;
@@ -65,6 +65,7 @@ const SCHEMA = {
   graphics: [
     { key: 'preset', label: 'Quality preset', type: 'choice', def: 'medium', options: [['low', 'LOW'], ['medium', 'MEDIUM'], ['high', 'HIGH'], ['custom', 'CUSTOM']], hint: 'Sets the options below in one go' },
     { key: 'antialias', label: 'Anti-aliasing', type: 'choice', def: '4', options: [['0', 'OFF'], ['2', '2×'], ['4', '4×']], hint: 'Smooths jagged edges and outlines; off is faster' },
+    { key: 'smoothLines', label: 'Smooth ink lines', type: 'toggle', def: true, hint: 'Smooths the comic pass\'s own lines and dots (FXAA)' },
     { key: 'renderScale', label: 'Render scale', type: 'range', min: 0.4, max: 1.5, step: 0.05, def: 1, fmt: pct, hint: 'Lower = faster, blurrier' },
     { key: 'fov', label: 'Field of view', type: 'range', min: 50, max: 100, step: 1, def: 72, fmt: (v) => `${v}°` },
     { key: 'viewDist', label: 'View distance', type: 'range', min: 0.4, max: 1.5, step: 0.05, def: 1, fmt: pct },
@@ -77,8 +78,8 @@ const SCHEMA = {
       { key: 'regolith', label: 'Regolith ground texture', type: 'toggle', def: false, hint: 'Lunar dust, pebbles and craters on the ground, and grain and dust on the rocks' },
       { key: 'groundDetail', label: 'Ground detail', type: 'choice', def: 1, options: [[0, 'LOW'], [1, 'MEDIUM'], [2, 'HIGH']], hint: 'How much of the regolith texture is drawn: lower is faster' },
     ] : []),
-    { key: 'toonBands', label: 'Toon bands', type: 'choice', def: '3', options: [['3', '3 · SHADE, MID, LIT'], ['2', '2 · SHADE, LIT']], hint: 'Two: one hard edge between light and shade' },
     { key: 'halftone', label: 'Comic halftone dots', type: 'toggle', def: true },
+    { key: 'glow', label: 'Glow', type: 'range', min: 0, max: 1, step: 0.05, def: 1, fmt: pct, hint: 'Halos round lamps, windows and neon' },
     { key: 'speedLines', label: 'Speed lines', type: 'toggle', def: true },
     { key: 'ink', label: 'Ink outline strength', type: 'range', min: 0, max: 2, step: 0.1, def: 1, fmt: pct },
     { key: 'particles', label: 'Particle density', type: 'range', min: 0, max: 2, step: 0.1, def: 1, fmt: pct },
@@ -305,6 +306,7 @@ export class Settings {
       }
     }
     if (g.post) g.post.setSamples(Number(v.antialias) || 0);
+    if (g.post) { g.post.setSmooth(v.smoothLines); g.post.setGlow(v.glow); }
     if (g.sun) {
       g.sun.castShadow = v.shadows;
       const sh = g.sun.shadow;
@@ -336,7 +338,6 @@ export class Settings {
     // every outline shell (toon.js inkMat and inkMatSolid, the boulders' ink) reads it; at 0 they aren't drawn at all
     INK_U.uInkK.value = v.ink;
     TOON_LOOK.dots = v.halftone && !CLASSIC_LOOK ? 1 : 0; // the dots across the shadow edge (toon.js)
-    setToonBands(Number(v.toonBands)); // (toon.js: the shared gradient, rewritten in place)
     inkMat.visible = inkMatBaked.visible = inkMatSolid.visible = inkLineMat.visible = v.ink > 0;
     if (g.planet && g.planet.boulderInk) g.planet.boulderInk.visible = v.ink > 0;
     if (g.haptics) g.haptics.configure(v.rumble, v.rumbleLevel, v.padLight, v.padTriggers);

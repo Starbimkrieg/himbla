@@ -342,7 +342,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
   refreshes); two wider, coarser maps of the same light (`src/farshadow.js`: 600 m and 3,300 m half-widths, terrain and static
   casters, terrain only) carry hill and rock shadows out to the horizon. Lit toon materials and the terrain read the finest map
   that holds them and blend at the seams. They redraw only when their box steps, the sun turns or chunks change.
-- **Comic look:** toon shading in 3 or 2 tone bands (the Toon bands setting, `toon.js` setToonBands) with chosen shade
+- **Comic look:** two-tone toon shading (`toon.js` setToonBands; three with `?look=classic`) with chosen shade
   colours (each colour's shade more saturated and turned toward violet, not dimmed) and halftone dots only across the
   shadow edge (`toon.js` TOON_LOOK; `?look=classic` brings back the old look: grey shading, the post pass's dots over
   every dark tone), weighted normals on the Blender models (`kit.py`), a per-vertex
@@ -351,7 +351,8 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
   shade of what they cross; the post pass's crease lines too, outlines staying ink), inverted-hull outlines (pushed out
   along each vertex's face planes, `toon.js` shellGeo, in the vertex shader so they hold their on-screen width at any
   distance and follow the Ink setting; far ink fades to indigo), a post pass
-  (`src/post.js`) for ink lines and speed lines (its scene pass multisampled: the Anti-aliasing setting), rocky crater rims
+  (`src/post.js`) for ink lines, speed lines and a hard-stepped glow round the lit parts (`toon.js` glowMark; the Glow
+  setting), with its scene pass multisampled (the Anti-aliasing setting) and an FXAA pass after it (Smooth ink lines), rocky crater rims
   drawn per pixel, and onomatopoeia pop-ups.
 
 ## Source map

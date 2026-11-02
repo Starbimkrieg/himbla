@@ -1,5 +1,28 @@
 import * as THREE from 'three';
-import { TOON_LOOK, CLASSIC_LOOK } from './toon.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+import { TOON_LOOK, CLASSIC_LOOK, GLOW_MARK } from './toon.js';
+
+// Glow: the marked pixels (toon.js glowMark: alpha GLOW_MARK) at a quarter of the size, averaged down, blurred across and
+// up; the post pass adds the halo in hard steps (two rings, not a soft bloom: comic glow). `k` the Glow setting.
+const GLOW_SHADER = {
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  // down: the 4 x 4 full-size pixels under a quarter-size one (four bilinear taps), only those marked
+  down: /* glsl */ `
+    uniform sampler2D tSrc; uniform vec2 px; varying vec2 vUv;
+    vec3 m(vec2 o){ vec4 c = texture2D(tSrc, vUv + o * px); return c.rgb * step(${(GLOW_MARK - 0.5).toFixed(1)}, c.a); }
+    void main(){ gl_FragColor = vec4((m(vec2(-1.0, -1.0)) + m(vec2(1.0, -1.0)) + m(vec2(-1.0, 1.0)) + m(vec2(1.0, 1.0))) * 0.25, 1.0); }`,
+  // blur: 9 taps along `dir` (in quarter-size pixels), a wide gaussian
+  blur: /* glsl */ `
+    uniform sampler2D tSrc; uniform vec2 px; uniform vec2 dir; varying vec2 vUv;
+    void main(){
+      vec3 c = texture2D(tSrc, vUv).rgb * 0.2;
+      c += (texture2D(tSrc, vUv + dir * px * 1.4).rgb + texture2D(tSrc, vUv - dir * px * 1.4).rgb) * 0.18;
+      c += (texture2D(tSrc, vUv + dir * px * 3.2).rgb + texture2D(tSrc, vUv - dir * px * 3.2).rgb) * 0.13;
+      c += (texture2D(tSrc, vUv + dir * px * 5.0).rgb + texture2D(tSrc, vUv - dir * px * 5.0).rgb) * 0.07;
+      c += (texture2D(tSrc, vUv + dir * px * 7.0).rgb + texture2D(tSrc, vUv - dir * px * 7.0).rgb) * 0.02;
+      gl_FragColor = vec4(c, 1.0);
+    }`,
+};
 
 // Comic-book post pass: depth ink lines, halftone shadows (?look=classic only: the toon materials draw theirs, toon.js), speed lines, damage vignette, paper grade.
 export class ComicPost {
@@ -33,6 +56,8 @@ export class ComicPost {
         fade: { value: 0 }, // fade to black (council chamber cutscene, chamber.js)
         halftone: { value: 1 }, lines: { value: 1 }, inkK: { value: 1 }, // settings
         creaseTint: { value: CLASSIC_LOOK ? 0 : 1 },
+        tGlow: { value: null }, glowK: { value: 0 }, // the Glow setting (glow passes, below)
+        encodeSRGB: { value: 0 }, // 1 when the FXAA pass follows: it wants the picture as it will be seen
       },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
       fragmentShader: /* glsl */ `
@@ -42,6 +67,7 @@ export class ComicPost {
         uniform float speed; uniform float damage; uniform float alert; uniform float boost; uniform float invert; uniform float fade;
         uniform float halftone; uniform float lines; uniform float inkK; // settings
         uniform float creaseTint;
+        uniform sampler2D tGlow; uniform float glowK; uniform float encodeSRGB;
         varying vec2 vUv;
         float lin(vec2 uv){ float d = texture2D(tDepth, uv).x; return -perspectiveDepthToViewZ(d, near, far); }
         float hash(float n){ return fract(sin(n) * 43758.5453123); }
@@ -103,10 +129,19 @@ export class ComicPost {
           col = mix(col, vec3(0.95, 0.05, 0.12), clamp(damage, 0.0, 1.0) * smoothstep(0.25, 0.85, rad));
           col = mix(col, vec3(1.0, 0.1, 0.15), alert * (0.5 + 0.5 * sin(time * 10.0)) * smoothstep(0.45, 0.9, rad) * 0.5);
 
+          // glow: the blurred lit parts in two hard rings (comic glow), screened over the picture in their own hue
+          if (glowK > 0.0) {
+            vec3 gl = texture2D(tGlow, vUv).rgb;
+            float gm = max(gl.r, max(gl.g, gl.b));
+            float ring = gm > 0.42 ? 0.55 : gm > 0.13 ? 0.26 : 0.0;
+            if (ring > 0.0) col = 1.0 - (1.0 - col) * (1.0 - clamp(gl / gm, 0.0, 1.0) * ring * glowK);
+          }
+
           col = mix(col, vec3(0.9, 0.85, 1.0) - col * 0.9, invert);
           col = mix(col, vec3(0.0), fade);
           gl_FragColor = vec4(col, 1.0);
           #include <colorspace_fragment>
+          if (encodeSRGB > 0.5) gl_FragColor = sRGBTransferOETF(gl_FragColor);
         }`,
       depthTest: false,
       depthWrite: false,
@@ -116,6 +151,35 @@ export class ComicPost {
     this.scene = new THREE.Scene();
     this.scene.add(this.quad);
     this.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+    // glow: two quarter-size targets and the passes between them (setGlow)
+    const q = this.quarter(size), rt = () => new THREE.WebGLRenderTarget(q.x, q.y, { type: THREE.HalfFloatType, depthBuffer: false });
+    this.glowA = rt(); this.glowB = rt();
+    const pass = (frag, extra = {}) => new THREE.ShaderMaterial({ uniforms: { tSrc: { value: null }, px: { value: new THREE.Vector2() }, ...extra }, vertexShader: GLOW_SHADER.vertexShader, fragmentShader: frag, depthTest: false, depthWrite: false });
+    this.downMat = pass(GLOW_SHADER.down);
+    this.blurMat = pass(GLOW_SHADER.blur, { dir: { value: new THREE.Vector2(1, 0) } });
+    this.glowK = 0;
+    // FXAA after the comic pass (setSmooth): smooths its own depth lines and the halftone's edges, which MSAA can't reach
+    this.smooth = false;
+    this.smoothTarget = new THREE.WebGLRenderTarget(size.x, size.y, { depthBuffer: false });
+    this.fxaaMat = new THREE.ShaderMaterial({ ...FXAAShader, uniforms: THREE.UniformsUtils.clone(FXAAShader.uniforms), depthTest: false, depthWrite: false });
+    this.fxaaMat.uniforms.tDiffuse.value = this.smoothTarget.texture;
+    this.fxaaMat.uniforms.resolution.value.set(1 / size.x, 1 / size.y);
+  }
+
+  quarter(size) { return new THREE.Vector2(Math.max(1, Math.round(size.x / 4)), Math.max(1, Math.round(size.y / 4))); }
+
+  // the Glow setting: 0 (off) to 1
+  setGlow(k) { this.glowK = k; this.material.uniforms.glowK.value = k; }
+  // the Smooth lines setting
+  setSmooth(on) { this.smooth = !!on; }
+
+  // a full-screen pass of `mat` into `target`
+  blit(mat, target) {
+    this.quad.material = mat;
+    this.renderer.setRenderTarget(target);
+    this.renderer.render(this.scene, this.ortho);
+    this.quad.material = this.material;
   }
 
   // MSAA on the scene pass (0, 2 or 4 samples): smooths every edge drawn into it, the outline shells' and where two
@@ -135,6 +199,10 @@ export class ComicPost {
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     this.target.setSize(size.x, size.y);
     this.material.uniforms.res.value.copy(size);
+    const q = this.quarter(size);
+    this.glowA.setSize(q.x, q.y); this.glowB.setSize(q.x, q.y);
+    this.smoothTarget.setSize(size.x, size.y);
+    this.fxaaMat.uniforms.resolution.value.set(1 / size.x, 1 / size.y);
     TOON_LOOK.cell = this.dotCell(size);
   }
 
@@ -144,8 +212,23 @@ export class ComicPost {
     u.far.value = camera.far;
     this.renderer.setRenderTarget(this.target);
     this.renderer.render(scene, camera);
-    this.renderer.setRenderTarget(output);
+    if (this.glowK > 0) {
+      const full = this.target.width, q = this.glowA;
+      this.downMat.uniforms.tSrc.value = this.target.texture;
+      this.downMat.uniforms.px.value.set(1 / full, 1 / this.target.height);
+      this.blit(this.downMat, this.glowA);
+      const b = this.blurMat.uniforms;
+      b.px.value.set(1 / q.width, 1 / q.height);
+      b.tSrc.value = this.glowA.texture; b.dir.value.set(1, 0); this.blit(this.blurMat, this.glowB);
+      b.tSrc.value = this.glowB.texture; b.dir.value.set(0, 1); this.blit(this.blurMat, this.glowA);
+      u.tGlow.value = this.glowA.texture;
+    }
+    // FXAA only on the way to the screen (a caller's own target gets the plain pass)
+    const smooth = this.smooth && !output;
+    u.encodeSRGB.value = smooth ? 1 : 0;
+    this.renderer.setRenderTarget(smooth ? this.smoothTarget : output);
     this.renderer.render(this.scene, this.ortho);
+    if (smooth) this.blit(this.fxaaMat, null);
     this.renderer.setRenderTarget(null);
   }
 }

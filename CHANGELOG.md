@@ -5,6 +5,12 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Two tone bands for good, glow, smooth ink lines.** Toon shading is two-tone (shade and lit, one hard edge) for good;
+  the Toon bands setting is gone (`?look=classic` keeps the three). New Graphics settings: **Glow** (0 to 100%): lamps,
+  windows, neon and the Blender models' glow slots get a halo in two hard rings, a comic glow rather than a soft bloom
+  (`toon.js` glowMark marks them in the scene target's alpha; `post.js` blurs what's marked at quarter size). **Smooth ink
+  lines** (on; off on low): an FXAA pass after the comic pass smooths its own depth lines and dots, which the
+  multisampling can't reach.
 - **Toon bands setting, anisotropic filtering.** Settings, Graphics, Toon bands: 3 (shade, mid, lit: as before) or 2
   (shade and lit, one hard edge just past side-on to the sun, the halftone dots running from it into the lit side), live
   (`toon.js` setToonBands rewrites the one gradient every toon material shares; the ground keeps its own ramp). Every

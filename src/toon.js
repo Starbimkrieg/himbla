@@ -55,6 +55,7 @@ import { receiveFar } from './farshadow.js';
 // gives the dots back to the post pass, the look before this (to compare).
 export const CLASSIC_LOOK = typeof location !== 'undefined' && new URLSearchParams(location.search).get('look') === 'classic';
 export const TOON_LOOK = { tint: CLASSIC_LOOK ? 0 : 1, dots: CLASSIC_LOOK ? 0 : 1, cell: 5, htLo: -0.05, htHi: 0.33, bands: 3 };
+// (two bands is the look; set once the gradient code below is defined: setToonBands)
 THREE.ShaderLib.toon.uniforms.uToonLook = { value: TOON_LOOK };
 const TOON_BIAS_K = 0.7;
 {
@@ -143,10 +144,11 @@ export function frontCaster(mat) {
   return mat;
 }
 
-// Tone bands (Settings: Toon bands), on the one gradient every toon material shares (the ground has its own ramp):
-//   3: shade, mid, lit (the light's dot product split in thirds, as ever);
-//   2: shade and lit, one hard edge at TWO_TONE_EDGE: the mid band's half that faced the sun turns lit, the rest shade.
-// Live: the texture is rewritten in place, and the halftone band moves with it (TOON_LOOK htLo, htHi).
+// Tone bands, on the one gradient every toon material shares (the ground has its own ramp):
+//   2 (the look): shade and lit, one hard edge at TWO_TONE_EDGE: the old mid band's half that faced the sun turns lit,
+//     the rest shade;
+//   3 (?look=classic): shade, mid, lit, the light's dot product split in thirds.
+// setToonBands is live: the texture is rewritten in place, and the halftone band moves with it (TOON_LOOK htLo, htHi).
 const GRAD_W = 64, TWO_TONE_EDGE = 0.1;
 let grad = null;
 function fillGradient(bands) {
@@ -175,6 +177,7 @@ export function setToonBands(n) {
   TOON_LOOK.bands = bands;
   if (grad) fillGradient(bands);
 }
+setToonBands(CLASSIC_LOOK ? 3 : 2);
 
 const cache = new Map();
 export function toon(color, opts) {
@@ -419,7 +422,7 @@ export function vcMaterial(m) {
   if (!v) {
     v = m.isMeshToonMaterial
       ? new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: gradientMap(), side: m.side })
-      : new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, side: m.side });
+      : glowMark(new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, side: m.side })); // (unlit = glow)
     vcCache.set(k, v);
   }
   return v;
@@ -466,8 +469,20 @@ export function dropFloorFaces(g, maxY = 0.05) {
   return g;
 }
 
+// Glow (post.js): an opaque material marked so writes alpha GLOW_MARK into the scene target (half float, so it can hold a
+// 2; every other opaque surface writes 1, the sky 0). The post pass blurs what is marked into a hard-stepped halo. Only the
+// lit parts made through glow() / vcMaterial get it: lamps, windows, neon, the Blender models' glow slots.
+export const GLOW_MARK = 2.0;
+export function glowMark(m) {
+  m.onBeforeCompile = (sh) => {
+    // (opaque only: a glow made see-through later blends by its alpha)
+    sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>\n\t#ifdef OPAQUE\n\tgl_FragColor.a = ${GLOW_MARK.toFixed(1)};\n\t#endif`);
+  };
+  m.customProgramCacheKey = () => 'glowMark';
+  return m;
+}
 export function glow(color) {
-  return new THREE.MeshBasicMaterial({ color });
+  return glowMark(new THREE.MeshBasicMaterial({ color }));
 }
 // Glow material shared by colour, so same-colour glows merge into one draw call (the world's static merge).
 const sharedGlows = new Map();
