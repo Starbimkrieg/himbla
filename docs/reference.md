@@ -351,8 +351,8 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
   shade of what they cross; the post pass's crease lines too, outlines staying ink), inverted-hull outlines (pushed out
   along each vertex's face planes, `toon.js` shellGeo, in the vertex shader so they hold their on-screen width at any
   distance and follow the Ink setting; far ink fades to indigo), a post pass
-  (`src/post.js`) for ink lines, speed lines, a hard-stepped glow round the lit parts (`toon.js` glowMark; the Glow
-  setting; crowded lights merge) and a colour grade (warm sun / cool shade by day, neon night on the dark side: GRADES), with its scene pass multisampled (the Anti-aliasing setting) and an FXAA pass after it (Smooth ink lines), rocky crater rims
+  (`src/post.js`) for ink lines, speed lines, a hard-stepped glow round light sources (`toon.js` HALO_SLOT, glowMark;
+  the Glow setting; crowded lights merge) and a colour grade (warm sun / cool shade by day, neon night on the dark side: GRADES), with its scene pass multisampled (the Anti-aliasing setting) and an FXAA pass after it (Smooth ink lines), rocky crater rims
   drawn per pixel, onomatopoeia pop-ups, and solid outlined puffs for dust, smoke and fire (`fx.js` puff).
 
 ## Source map

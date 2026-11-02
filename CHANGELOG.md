@@ -5,8 +5,13 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Glow only on light sources, and smoother.** The halo was on every unlit part: windscreens, windows, trim, card
+  panels, noisy everywhere (the casino most). Now only light sources get it: a Blender model's slots named as lamps,
+  bulbs, beacons, neon, LEDs, tail lights and exhausts (`toon.js` HALO_SLOT, haloize: through models.js dressNode,
+  buildPivots and perSlot, the Kit's baked parts and the outposts' bake), the lab's neon (`models.js` ZLAB_HALO) and
+  fire puffs. The blur is now close taps run twice, a smooth gaussian: halos were lumpy and splotchy round windows.
 - **Colour grade, calmer glow clusters, Wind Waker puffs.**
-  - **Colour grade** (Settings, Graphics, 0 to 100%): warm sun and cool shade on the sunlit side, neon night (violet
+  - **Colour grade** (on for good, no setting): warm sun and cool shade on the sunlit side, neon night (violet
     shade, cyan light, more saturated and contrasty) on the dark side, mixed by how dark it is where you are. It runs in
     the comic pass after the ink and before the overlays (speed lines, vignettes, damage). Tune it live from the console:
     `game.post.grade.day` / `.night` (`sh`, `hi`: shade and light tints; `amt`, `sat`, `con`) (`post.js` GRADES).

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { toon, glow, inkMat, textSprite, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds, withToonBias, inkLineMesh } from './toon.js';
+import { toon, glow, inkMat, textSprite, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds, withToonBias, inkLineMesh, haloize } from './toon.js';
 import { mulberry32 } from './rng.js';
 import { bakeStatic } from './staticBake.js';
 import { outpostAsset } from './outpostGlb.js';
@@ -132,7 +132,7 @@ class Kit {
     this.instN++;
     const w = new THREE.Matrix4().multiplyMatrices(this.base, m);
     for (const { slot, geo } of node.parts) {
-      const km = mat(slot);
+      const km = haloize(slot, mat(slot)); // (light-source slots glow: toon.js haloize)
       let list = this.byMat.get(km);
       if (!list) this.byMat.set(km, (list = []));
       const g = this.tagGeo(prep(geo.clone()).applyMatrix4(w));

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toon, ink, glow, glowShared, inkMat, inkMatNear, inkMatBaked, shellBounds, toonBiasOf, inkLineGeo, inkLineMesh } from './toon.js';
+import { toon, ink, glow, glowShared, inkMat, inkMatNear, inkMatBaked, shellBounds, toonBiasOf, inkLineGeo, inkLineMesh, haloize } from './toon.js';
 import { pixelFont } from './fonts.js';
 import { mulberry32, smoothstep } from './rng.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
@@ -1299,7 +1299,7 @@ function addInk(g, node) {
 // A baked node's parts on g, painted by matFor(slot) and casting shadow(slot), then its outline shell.
 function dressNode(node, g, matFor, shadow) {
   for (const { slot, geo } of node.parts) {
-    const m = new THREE.Mesh(geo, matFor(slot));
+    const m = new THREE.Mesh(geo, haloize(slot, matFor(slot))); // (light-source slots glow: toon.js haloize)
     m.castShadow = shadow(slot);
     g.add(m);
   }
@@ -1309,7 +1309,7 @@ function dressNode(node, g, matFor, shadow) {
 function perSlot(make) {
   const mats = new Map();
   return (slot) => {
-    if (!mats.has(slot)) mats.set(slot, make(slot));
+    if (!mats.has(slot)) mats.set(slot, haloize(slot, make(slot))); // (light-source slots glow: toon.js haloize)
     return mats.get(slot);
   };
 }
@@ -1325,7 +1325,7 @@ function buildPivots(B, { matFor, shadow, keep = () => true, onPivot = () => {},
     if (!keep(node)) return null;
     const g = pivotGroup(node);
     for (const { slot, geo } of node.parts) {
-      const mat = matFor(slot);
+      const mat = haloize(slot, matFor(slot)); // (light-source slots glow: toon.js haloize)
       if (!mat) continue;
       const m = new THREE.Mesh(geo, mat);
       m.castShadow = shadow(slot, node);
@@ -2621,13 +2621,15 @@ export function zlabNode(name) {
 // a slot's look: { color, glow, see } (see: its opacity when see-through)
 export const zlabSlot = (slot) => ({ color: ZLAB_GLOW[slot] ?? ZLAB_TOON[slot] ?? 0xff00ff, glow: slot in ZLAB_GLOW, see: ZLAB_SEE[slot] || 0 });
 const zlabMats = new Map();
+// the lab's light sources (its neon is named by colour): the halo's slots (toon.js glowMark)
+const ZLAB_HALO = new Set(['lime', 'cyan', 'pink', 'amber', 'red', 'lamp', 'vio', 'teal', 'ember', 'scan']);
 export function zlabMat(slot) {
   let m = zlabMats.get(slot);
   if (m) return m;
   const c = zlabSlot(slot);
   m = c.see ? (c.glow ? new THREE.MeshBasicMaterial({ color: c.color, transparent: true, opacity: c.see, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
     : new THREE.MeshToonMaterial({ color: c.color, gradientMap: toon(0).gradientMap, transparent: true, opacity: c.see, depthWrite: false, side: THREE.DoubleSide }))
-    : c.glow ? glowShared(c.color) : toon(c.color);
+    : c.glow ? glowShared(c.color, ZLAB_HALO.has(slot)) : toon(c.color);
   m.userData.shared = true;
   zlabMats.set(slot, m);
   return m;

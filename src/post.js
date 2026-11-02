@@ -5,7 +5,7 @@ import { TOON_LOOK, CLASSIC_LOOK, GLOW_MARK } from './toon.js';
 // Colour grade, in display colour (sRGB) after the ink and before the overlays (speed lines, vignettes, damage): a split
 // tone (shade toward `sh`, light toward `hi`, by `amt`), then saturation `sat` and contrast `con` round mid grey. Two
 // grades, the sunlit side's and the dark side's, mixed by how dark it is where you are (main.js updateLighting: gradeDay).
-// Live: edit post.grade.day / .night (or GRADES) from the console; the Colour grade setting scales the whole thing.
+// Live: edit post.grade.day / .night (or GRADES) from the console (post.setGrade(0 to 1) scales it; no setting).
 export const GRADES = {
   day: { sh: [0.35, 0.45, 0.75], hi: [0.78, 0.62, 0.42], amt: 0.3, sat: 1.1, con: 1.0 }, // warm sun, cool shade
   night: { sh: [0.55, 0.3, 0.75], hi: [0.4, 0.75, 0.8], amt: 0.28, sat: 1.3, con: 1.12 }, // neon night
@@ -26,15 +26,16 @@ const GLOW_SHADER = {
       vec3 c = max(max(m(vec2(-1.0, -1.0)), m(vec2(1.0, -1.0))), max(m(vec2(-1.0, 1.0)), m(vec2(1.0, 1.0))));
       gl_FragColor = vec4(c, (k(vec2(-1.0, -1.0)) + k(vec2(1.0, -1.0)) + k(vec2(-1.0, 1.0)) + k(vec2(1.0, 1.0))) * 0.25);
     }`,
-  // blur: 9 taps along `dir` (in quarter-size pixels), a wide gaussian
+  // blur: 9 close taps along `dir` (in quarter-size pixels), run twice each way: a smooth wide gaussian (one pass of
+  // spread-out taps left lumpy, splotchy halos)
   blur: /* glsl */ `
     uniform sampler2D tSrc; uniform vec2 px; uniform vec2 dir; varying vec2 vUv;
     void main(){
       vec4 c = texture2D(tSrc, vUv) * 0.2;
-      c += (texture2D(tSrc, vUv + dir * px * 2.0) + texture2D(tSrc, vUv - dir * px * 2.0)) * 0.18;
-      c += (texture2D(tSrc, vUv + dir * px * 4.6) + texture2D(tSrc, vUv - dir * px * 4.6)) * 0.13;
-      c += (texture2D(tSrc, vUv + dir * px * 7.4) + texture2D(tSrc, vUv - dir * px * 7.4)) * 0.07;
-      c += (texture2D(tSrc, vUv + dir * px * 10.4) + texture2D(tSrc, vUv - dir * px * 10.4)) * 0.02;
+      c += (texture2D(tSrc, vUv + dir * px * 1.3) + texture2D(tSrc, vUv - dir * px * 1.3)) * 0.18;
+      c += (texture2D(tSrc, vUv + dir * px * 3.0) + texture2D(tSrc, vUv - dir * px * 3.0)) * 0.13;
+      c += (texture2D(tSrc, vUv + dir * px * 4.8) + texture2D(tSrc, vUv - dir * px * 4.8)) * 0.07;
+      c += (texture2D(tSrc, vUv + dir * px * 6.8) + texture2D(tSrc, vUv - dir * px * 6.8)) * 0.02;
       gl_FragColor = c;
     }`,
 };
@@ -72,7 +73,7 @@ export class ComicPost {
         halftone: { value: 1 }, lines: { value: 1 }, inkK: { value: 1 }, // settings
         creaseTint: { value: CLASSIC_LOOK ? 0 : 1 },
         tGlow: { value: null }, glowK: { value: 0 }, // the Glow setting (glow passes, below)
-        gradeK: { value: CLASSIC_LOOK ? 0 : 1 }, gradeDay: { value: 1 }, // the Colour grade setting; 1 sunlit, 0 dark side
+        gradeK: { value: CLASSIC_LOOK ? 0 : 1 }, gradeDay: { value: 1 }, // the grade's strength; 1 sunlit, 0 dark side
         gDaySh: { value: new THREE.Vector3() }, gDayHi: { value: new THREE.Vector3() }, gDayP: { value: new THREE.Vector3() },
         gNightSh: { value: new THREE.Vector3() }, gNightHi: { value: new THREE.Vector3() }, gNightP: { value: new THREE.Vector3() },
         encodeSRGB: { value: 0 }, // 1 when the FXAA pass follows: it wants the picture as it will be seen
@@ -210,7 +211,8 @@ export class ComicPost {
 
   quarter(size) { return new THREE.Vector2(Math.max(1, Math.round(size.x / 4)), Math.max(1, Math.round(size.y / 4))); }
 
-  // the Colour grade setting (0 to 1) and where you are (1 sunlit, 0 the dark side); the grades read live each frame
+  // the grade's strength (0 to 1; on for good, no setting) and where you are (1 sunlit, 0 the dark side); the grades
+  // read live each frame
   setGrade(k) { this.material.uniforms.gradeK.value = CLASSIC_LOOK ? 0 : k; }
   setGradeDay(d) { this.material.uniforms.gradeDay.value = d; }
   pushGrades() {
@@ -270,8 +272,10 @@ export class ComicPost {
       this.blit(this.downMat, this.glowA);
       const b = this.blurMat.uniforms;
       b.px.value.set(1 / q.width, 1 / q.height);
-      b.tSrc.value = this.glowA.texture; b.dir.value.set(1, 0); this.blit(this.blurMat, this.glowB);
-      b.tSrc.value = this.glowB.texture; b.dir.value.set(0, 1); this.blit(this.blurMat, this.glowA);
+      for (let i = 0; i < 2; i++) {
+        b.tSrc.value = this.glowA.texture; b.dir.value.set(1, 0); this.blit(this.blurMat, this.glowB);
+        b.tSrc.value = this.glowB.texture; b.dir.value.set(0, 1); this.blit(this.blurMat, this.glowA);
+      }
       u.tGlow.value = this.glowA.texture;
     }
     // FXAA only on the way to the screen (a caller's own target gets the plain pass)

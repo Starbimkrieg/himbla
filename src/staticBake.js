@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { inkMat, vcMaterial, paintVertices, dropFloorFaces, shellBounds, toonBiasOf, inkLineGeo, inkLineMesh } from './toon.js';
+import { inkMat, vcMaterial, paintVertices, dropFloorFaces, shellBounds, toonBiasOf, inkLineGeo, inkLineMesh, HALO_SLOT, glowMark } from './toon.js';
 import { slotOf, roleOf, animOf, SHAPES } from './staticContract.js';
 
 // Static GLBs (outposts.glb): a Blender structure -> what the Kit (outpostModels.js) makes: { root, cols, hits, raid,
@@ -109,6 +109,7 @@ function addPart(group, mesh, groupInv, warn) {
   group.parts.push({
     geo,
     slot: slotOf(mat.name),
+    halo: HALO_SLOT.test(String(mat.name).replace(/[._]\d+$/, '')), // (a light source: its glow gets a halo, toon.js)
     side: mat.side === THREE.DoubleSide ? THREE.DoubleSide : THREE.FrontSide,
     color: mat.color ? mat.color.clone() : new THREE.Color(0xffffff),
     opacity: mat.transparent ? mat.opacity : 1, // used by `additive…` materials only
@@ -187,9 +188,9 @@ function inkShell(geo, t, w = null) {
 
 // stand-ins vcMaterial() derives its shared materials from (reads type and side only)
 const PROTO = new Map();
-const proto = (kind, side) => {
-  const k = `${kind}|${side}`;
-  if (!PROTO.has(k)) PROTO.set(k, kind === 'glow' ? new THREE.MeshBasicMaterial({ side }) : new THREE.MeshToonMaterial({ side }));
+const proto = (kind, side, halo = false) => {
+  const k = `${kind}|${side}|${halo ? 1 : 0}`;
+  if (!PROTO.has(k)) PROTO.set(k, kind === 'glow' ? (halo ? glowMark(new THREE.MeshBasicMaterial({ side })) : new THREE.MeshBasicMaterial({ side })) : new THREE.MeshToonMaterial({ side }));
   return PROTO.get(k);
 };
 
@@ -215,13 +216,14 @@ function bakeParts(parts, faction, fixed) {
     }
     const g = p.geo.clone();
     paintVertices(g, p.slot.faction ? faction : p.color);
-    const k = `${p.slot.kind}|${p.side}`;
-    if (!buckets.has(k)) buckets.set(k, { kind: p.slot.kind, side: p.side, list: [] });
+    const halo = p.slot.kind === 'glow' && p.halo;
+    const k = `${p.slot.kind}|${p.side}|${halo ? 1 : 0}`;
+    if (!buckets.has(k)) buckets.set(k, { kind: p.slot.kind, side: p.side, halo, list: [] });
     buckets.get(k).list.push(fixed && p.side === THREE.FrontSide ? dropFloorFaces(g) : g);
     if (p.ink) { const sh = inkShell(p.geo, p.ink, p.inkW); shells.push(fixed ? dropFloorFaces(sh) : sh); }
   }
   for (const b of buckets.values()) {
-    const m = new THREE.Mesh(mergeGeometries(b.list), vcMaterial(proto(b.kind, b.side)));
+    const m = new THREE.Mesh(mergeGeometries(b.list), vcMaterial(proto(b.kind, b.side, b.halo)));
     // moving parts only cast (like the Kit's flags and dishes): thin double-sided cloth receiving would self-speckle
     m.castShadow = b.kind === 'toon';
     m.receiveShadow = fixed && b.kind === 'toon';

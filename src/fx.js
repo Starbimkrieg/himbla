@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { upAt, toScreen } from './geo.js';
-import { gradientMap, INK_COLOR, inkMat, glow } from './toon.js';
+import { gradientMap, INK_COLOR, inkMat, glow, glowMark } from './toon.js';
 
 const MAX_P = 1200;
 // Puffs (Wind Waker's smoke): dust, smoke and fire as solid, toon-shaded, ink-outlined blobs that swell, hold and shrink
@@ -62,7 +62,7 @@ export class FX {
       for (const m of [mesh, ink]) { m.frustumCulled = false; m.count = 0; m.userData.persist = true; m.castShadow = m.receiveShadow = false; scene.add(m); }
       return { mesh, ink, list: [] };
     };
-    this.puffSets = { lit: set(new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gradientMap(), emissive: 0x2a2340 })), glow: set(glow(0xffffff)) };
+    this.puffSets = { lit: set(new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gradientMap(), emissive: 0x2a2340 })), glow: set(glowMark(glow(0xffffff))) };
     // (lit's emissive lifts the shade: smoke's dark side stays smoke, not rock)
     this.m4 = new THREE.Matrix4();
     this.q = new THREE.Quaternion();

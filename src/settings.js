@@ -79,7 +79,6 @@ const SCHEMA = {
       { key: 'groundDetail', label: 'Ground detail', type: 'choice', def: 1, options: [[0, 'LOW'], [1, 'MEDIUM'], [2, 'HIGH']], hint: 'How much of the regolith texture is drawn: lower is faster' },
     ] : []),
     { key: 'halftone', label: 'Comic halftone dots', type: 'toggle', def: true },
-    { key: 'grade', label: 'Colour grade', type: 'range', min: 0, max: 1, step: 0.05, def: 1, fmt: pct, hint: 'Warm sun and cool shade; neon on the dark side' },
     { key: 'glow', label: 'Glow', type: 'range', min: 0, max: 1, step: 0.05, def: 1, fmt: pct, hint: 'Halos round lamps, windows and neon' },
     { key: 'speedLines', label: 'Speed lines', type: 'toggle', def: true },
     { key: 'ink', label: 'Ink outline strength', type: 'range', min: 0, max: 2, step: 0.1, def: 1, fmt: pct },
@@ -307,7 +306,7 @@ export class Settings {
       }
     }
     if (g.post) g.post.setSamples(Number(v.antialias) || 0);
-    if (g.post) { g.post.setSmooth(v.smoothLines); g.post.setGlow(v.glow); g.post.setGrade(v.grade); }
+    if (g.post) { g.post.setSmooth(v.smoothLines); g.post.setGlow(v.glow); }
     if (g.sun) {
       g.sun.castShadow = v.shadows;
       const sh = g.sun.shadow;

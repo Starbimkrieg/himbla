@@ -417,12 +417,14 @@ export function ink(mesh, t = 0.06) {
 // world.mergeLocation). Only for never-animated colours (userData.shared).
 const vcCache = new Map();
 export function vcMaterial(m) {
-  const k = `${m.type}-${m.side}`;
+  const halo = !!m.userData.halo;
+  const k = `${m.type}-${m.side}-${halo ? 1 : 0}`;
   let v = vcCache.get(k);
   if (!v) {
     v = m.isMeshToonMaterial
       ? new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, gradientMap: gradientMap(), side: m.side })
-      : glowMark(new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, side: m.side })); // (unlit = glow)
+      : new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, side: m.side });
+    if (halo) glowMark(v); // (light sources keep their halo when merged)
     vcCache.set(k, v);
   }
   return v;
@@ -470,25 +472,40 @@ export function dropFloorFaces(g, maxY = 0.05) {
 }
 
 // Glow (post.js): an opaque material marked so writes alpha GLOW_MARK into the scene target (half float, so it can hold a
-// 2; every other opaque surface writes 1, the sky 0). The post pass blurs what is marked into a hard-stepped halo. Only the
-// lit parts made through glow() / vcMaterial get it: lamps, windows, neon, the Blender models' glow slots.
+// 2; every other opaque surface writes 1, the sky 0). The post pass blurs what is marked into a hard-stepped halo.
+// Opt-in: only light sources get it (a halo on every lit window, windscreen and trim strip was noise). glow() is plain;
+// haloize(slot, m) marks a Blender model's light-source slots (HALO_SLOT: lamps, bulbs, beacons, neon, LEDs, tail lights,
+// exhausts); glowShared(color, true) and glowMark(m) mark by hand.
 export const GLOW_MARK = 2.0;
+export const HALO_SLOT = /^(?:glow_)?(?:lamps?|bulbs?|beacon\w*|leds?\w?|laser|plasma\w*|ion|redlamp|tail|hot|neon\w*|underglow|element|lane\d|glow(?:cyan|pink|red|amber|green|gold|mint)|red|green)$/i;
 export function glowMark(m) {
   m.onBeforeCompile = (sh) => {
     // (opaque only: a glow made see-through later blends by its alpha)
     sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>\n\t#ifdef OPAQUE\n\tgl_FragColor.a = ${GLOW_MARK.toFixed(1)};\n\t#endif`);
   };
   m.customProgramCacheKey = () => 'glowMark';
+  m.userData.halo = true;
   return m;
 }
+// a slot's material with a halo if the slot is a light source: marked in place, or (shared by colour with other slots) a
+// marked copy, cached
+const haloCopies = new WeakMap();
+export function haloize(slot, m) {
+  if (!m || !m.isMeshBasicMaterial || m.transparent || m.userData.halo || !HALO_SLOT.test(String(slot))) return m;
+  if (!m.userData.shared) return glowMark(m);
+  let h = haloCopies.get(m);
+  if (!h) haloCopies.set(m, (h = glowMark(m.clone())));
+  return h;
+}
 export function glow(color) {
-  return glowMark(new THREE.MeshBasicMaterial({ color }));
+  return new THREE.MeshBasicMaterial({ color });
 }
 // Glow material shared by colour, so same-colour glows merge into one draw call (the world's static merge).
 const sharedGlows = new Map();
-export function glowShared(color) {
-  let m = sharedGlows.get(color);
-  if (!m) sharedGlows.set(color, m = glow(color));
+export function glowShared(color, halo = false) {
+  const k = `${color}|${halo ? 1 : 0}`;
+  let m = sharedGlows.get(k);
+  if (!m) sharedGlows.set(k, m = halo ? glowMark(glow(color)) : glow(color));
   return m;
 }
 
