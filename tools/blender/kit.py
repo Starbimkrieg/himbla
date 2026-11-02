@@ -490,6 +490,8 @@ def pack_toon_attrs(path):
     without the floats. One accessor a primitive instead of two (a file of 2,500 parts carries them in its JSON), four
     bytes a vertex instead of eight, aligned as glTF wants."""
     import json, struct
+    if not os.path.isfile(path):                                           # (export stubbed out: the audits)
+        return
     with open(path, "rb") as f:
         data = f.read()
     jl = struct.unpack_from("<I", data, 12)[0]

@@ -2312,7 +2312,7 @@ const CASINO_WATER = new Set(['water', 'curtain', 'streams']); // (pivot roles d
 
 // Casino slot colour and glow; `accent` is the caller's (lamp post rings, lantern, small lamp).
 export function casinoSlot(slot, accent = 0xff2e88) {
-  if (slot === 'accent') return { color: accent, glow: true };
+  if (slot === 'accent') return { color: accent, glow: true, halo: true }; // (the lamp posts' lamp and rings: light sources)
   if (slot in CASINO_GLOW) return { color: CASINO_GLOW[slot], glow: true };
   return { color: CASINO_TOON[slot] ?? 0xff00ff, glow: false };
 }
@@ -2327,7 +2327,7 @@ function casinoGroup(node, matFor, accent, keep = () => true) {
   for (const k of node.kids) if (!CASINO_WATER.has(k.role) && keep(k)) g.add(casinoGroup(k, matFor, accent, keep));
   return g;
 }
-const casinoMat = (c) => (c.glow ? glowShared(c.color) : toon(c.color));
+const casinoMat = (c) => (c.glow ? glowShared(c.color, !!c.halo) : toon(c.color));
 
 // Lamp post in `accent` (boulevard alternates pink / cyan), 9 m, small lamp toward +z.
 export const makeLampPost = (accent = 0xff2e88) => casinoGroup(casinoNode('lamp_post'), casinoMat, accent);

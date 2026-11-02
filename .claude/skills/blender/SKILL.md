@@ -39,6 +39,10 @@ outposts, hall, lot, power, habitat (with `habitat_kit.py`), chimera (the chimer
    `runner.glb` and `outposts.glb` stay plain. A build overwrites a compressed file with a plain one, so a
    model you did not change shows as modified if you rebuilt it: `git checkout` it.
 2. `npm run check:outposts` after touching outposts.
+   `python3 tools/blender/style_audit.py tools/blender/build_<name>.py` checks the model against the house style
+   (`style.py` holds the numbers: palette, ink by part size, triangle budgets, the glow slots that get a halo): ink too
+   heavy or far off its size class, big parts with no ink, pure blacks, parts the export left without weighted normals or
+   toon attributes, and per model its triangles and which glow slots will halo. Read each finding; some are deliberate.
    Run the structure audit on what you built: `python3 tools/blender/structure_audit.py tools/blender/build_<name>.py`
    (CLAUDE.md, "Model structure": floating parts, bars with loose ends, bars through solid parts, slabs through slabs).
 3. Check the diff touches only the models you meant to change. `runner.glb` can differ by a few bytes between

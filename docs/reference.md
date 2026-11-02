@@ -353,7 +353,8 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
   distance and follow the Ink setting; far ink fades to indigo), a post pass
   (`src/post.js`) for ink lines, speed lines, a hard-stepped glow round light sources (`toon.js` HALO_SLOT, glowMark;
   the Glow setting; crowded lights merge) and a colour grade (warm sun / cool shade by day, neon night on the dark side: GRADES), with its scene pass multisampled (the Anti-aliasing setting) and an FXAA pass after it (Smooth ink lines), rocky crater rims
-  drawn per pixel, onomatopoeia pop-ups, and solid outlined puffs for dust, smoke and fire (`fx.js` puff).
+  drawn per pixel, onomatopoeia pop-ups, solid outlined puffs for dust, smoke and fire and wind curls (`fx.js` puff, curl), and
+  figures animated on twos (`twos.js`).
 
 ## Source map
 
@@ -437,6 +438,7 @@ src/
   post.js          comic post-processing
   farshadow.js     the wide sun shadow maps (600 m and 3.3 km) and the receiving shader code
   fx.js, hud.js, audio.js, input.js, toon.js, locations.js, rng.js
+  twos.js          animating on twos: figures' poses held 12 a second (PoseHold, heldPhase)
   assets/
     runner.glb       the runner (player, pirate skaters, leaders)
     idles.json       the runner's idle animations
@@ -512,6 +514,10 @@ tools/
     structure_audit.py     does a model hold together? floating parts, loose bar ends, bars through solid parts, slabs
                            through slabs (`python3 tools/blender/structure_audit.py tools/blender/build_<name>.py`;
                            CLAUDE.md "Model structure"); test_structure_audit.py checks it on known faults
+    style.py               the house style's numbers: palette, ink by part size, triangle budgets, halo slot names
+    style_audit.py         does a model follow the house style? ink too heavy or off its class, big parts with no ink,
+                           blacks, parts without weighted normals or toon attributes; triangles and halo slots per model
+                           (`python3 tools/blender/style_audit.py tools/blender/build_<name>.py`)
     audit_outline.py       lists runner parts missing an outline
     build_runner.py        -> runner.glb
     build_idles.py         -> idles.json (MOONRUNNER_IDLES_BLEND=<file> saves the scene)

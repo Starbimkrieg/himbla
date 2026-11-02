@@ -1,5 +1,8 @@
 # Moon-Runner model style: the house rules
 
+The numbers below (palette, ink by size, budgets, halo slot names) are also in `tools/blender/style.py`, which builders can
+import and `style_audit.py` checks a built model against.
+
 These rules describe how the models look and hang together. They are worked out from what the builders already do
 (`kit.py`, `build_rover.py`, `build_interceptor.py`, `build_apc.py`, `build_crane.py`, `build_gantry.py`, `build_garage.py`,
 `build_ships.py`, `build_runner.py`) and from the CHANGELOG entries that explain why models were rebuilt. When a rule and
@@ -97,6 +100,10 @@ when in doubt:
   with `audit_coplanar()` and `audit_flips()` (both in `kit.py`; `build_hall.py`, the casino builders, `build_rover.py`); the first
   raises on overlaps above 1 cm², the second lists inside-out pieces. `slab()` in
   `build_crane.py` leaves 1 mm between its pieces so their corners are not welded together.
+- **Name glow slots for what they are.** The game gives a glow halo only to light sources, by slot name (`style.py` HALO,
+  `src/toon.js` HALO_SLOT): `lamp`, `bulb`, `beacon…`, `led…`, `neon…`, `tail`, `hot`, `glowcyan` / `glowpink` and the like.
+  Windows, glass, screens, card panels and trim that merely self-light (`window`, `glass`, `suitred`...) get none. A new
+  light source with another name needs adding to both lists.
 - **Glowing parts mostly carry no ink.** Give one a thin line (0.01 to 0.02) only when it is a shape of its own that stands out
   (light-bar lenses, lamps, a raked screen).
 - **No hidden inner surfaces.** A shell nobody can see still costs triangles and ink (the visor rebuild removed about 450).

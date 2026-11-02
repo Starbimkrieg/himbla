@@ -20,6 +20,33 @@ function puffGeometry() {
   g.computeVertexNormals();
   return g;
 }
+// Curls (Wind Waker's wind): a flat stroke that ends in a spiral, white with an ink edge, turned to the camera. A unit
+// curl runs from x 0 back along -x and rolls up at the end; `w` is its half width there. One ribbon for the fill and a
+// wider one for the ink, the ink a little behind (from the camera).
+const MAX_CURL = 160;
+function curlGeometry(widen) {
+  const pts = [];
+  const L = 0.55, R0 = 0.24, TURNS = 1.15, N = 34;
+  for (let i = 0; i <= 8; i++) pts.push([-L * (i / 8), 0]); // the straight stroke
+  for (let i = 1; i <= N; i++) { // then the spiral, curling up and in
+    const t = i / N, a = -Math.PI / 2 + t * TURNS * Math.PI * 2, r = R0 * (1 - 0.72 * t);
+    pts.push([-L - R0 * Math.cos(-Math.PI / 2) + r * Math.cos(a) - 0, R0 + r * Math.sin(a)]);
+  }
+  const pos = [], idx = [], n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+    let tx = b[0] - a[0], ty = b[1] - a[1];
+    const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+    const u = i / (n - 1), w = (0.075 * (1 - 0.75 * u) + 0.012) + widen; // (tapers to the tip)
+    pos.push(pts[i][0] - ty * w, pts[i][1] + tx * w, widen ? -0.03 : 0, pts[i][0] + ty * w, pts[i][1] - tx * w, widen ? -0.03 : 0);
+    if (i < n - 1) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  return g;
+}
+
 // size over a puff's life (0 to 1, stepped): pops up to full in the first fifth, swells a touch, shrinks away
 function puffScale(t) {
   if (t < 0.18) return 0.45 + 0.55 * (t / 0.18);
@@ -39,6 +66,8 @@ const GHOST_NEW = new THREE.Color(0xc77dff), GHOST_OLD = new THREE.Color(0x5b3bf
 const POP_MAX = 2, POP_QUEUE_MAX = 8, POP_WAIT_WORLD = 1.2, POP_WAIT_WORLD_PRIO = 3;
 
 const _pq = new THREE.Quaternion(), _pe = new THREE.Euler();
+const _cq = new THREE.Quaternion(), _cq2 = new THREE.Quaternion(), _cq3 = new THREE.Quaternion();
+const _cr = new THREE.Vector3(), _cu = new THREE.Vector3(), _cz = new THREE.Vector3(0, 0, 1);
 
 // Particles, explosions, warning rings, skate trails and comic onomatopoeia.
 export class FX {
@@ -62,6 +91,12 @@ export class FX {
       for (const m of [mesh, ink]) { m.frustumCulled = false; m.count = 0; m.userData.persist = true; m.castShadow = m.receiveShadow = false; scene.add(m); }
       return { mesh, ink, list: [] };
     };
+    // curls: the fill (unlit) and its ink, both instanced, double-sided (they face the camera anyway)
+    this.curls = [];
+    this.curlMesh = new THREE.InstancedMesh(curlGeometry(0), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }), MAX_CURL);
+    this.curlInk = new THREE.InstancedMesh(curlGeometry(0.035), new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.DoubleSide }), MAX_CURL);
+    this.curlMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_CURL * 3), 3);
+    for (const m of [this.curlMesh, this.curlInk]) { m.frustumCulled = false; m.count = 0; m.userData.persist = true; m.castShadow = m.receiveShadow = false; scene.add(m); }
     this.puffSets = { lit: set(new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gradientMap(), emissive: 0x2a2340 })), glow: set(glowMark(glow(0xffffff))) };
     // (lit's emissive lifts the shade: smoke's dark side stays smoke, not rock)
     this.m4 = new THREE.Matrix4();
@@ -159,6 +194,43 @@ export class FX {
         spin: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(2 * spin),
       });
     }
+  }
+
+  // A wind curl (curlGeometry): `size` its length, drifting with `vel` (slowing by `drag`), its stroke along the screen
+  // direction of `dir` (a world vector: the way it was thrown), `flip` rolls it the other way.
+  curl(pos, vel, dir, { color = 0xffffff, size = 1, life = 0.6, drag = 2.5, flip = false } = {}) {
+    if (this.curls.length >= MAX_CURL) this.curls.shift();
+    this.curls.push({ pos: pos.clone(), vel: vel.clone(), dir: dir.clone().normalize(), age: 0, life: life * (0.85 + Math.random() * 0.3), size: size * (0.8 + Math.random() * 0.4), color: new THREE.Color(color), drag, flip: flip ? -1 : 1 });
+  }
+
+  updateCurls(dt) {
+    const cam = this.camera, n0 = this.curls.length;
+    let n = 0;
+    _cq.copy(cam.quaternion);
+    _cr.set(1, 0, 0).applyQuaternion(_cq); _cu.set(0, 1, 0).applyQuaternion(_cq);
+    for (let i = n0 - 1; i >= 0; i--) {
+      const c = this.curls[i];
+      c.age += dt;
+      if (c.age >= c.life) { this.curls.splice(i, 1); continue; }
+      c.vel.multiplyScalar(Math.max(0, 1 - c.drag * dt));
+      c.pos.addScaledVector(c.vel, dt);
+      const t = Math.min(1, Math.floor(c.age * PUFF_FPS) / PUFF_FPS / c.life); // (held steps, as the puffs)
+      const k = c.size * puffScale(t);
+      if (k <= 0.005) continue;
+      // the stroke points back along the throw, as the camera sees it: the curl's +x is the throw's screen direction
+      const a = Math.atan2(c.dir.dot(_cu), c.dir.dot(_cr));
+      _cq2.setFromAxisAngle(_cz, a);
+      const q = _cq3.copy(_cq).multiply(_cq2);
+      this.s.set(k, k * c.flip, k);
+      this.curlMesh.setMatrixAt(n, this.m4.compose(c.pos, q, this.s));
+      this.curlInk.setMatrixAt(n, this.m4.compose(c.pos, q, this.s));
+      this.curlMesh.setColorAt(n, c.color);
+      n++;
+    }
+    this.curlMesh.count = n;
+    this.curlInk.count = inkMat.visible ? n : 0;
+    this.curlMesh.instanceMatrix.needsUpdate = this.curlInk.instanceMatrix.needsUpdate = true;
+    this.curlMesh.instanceColor.needsUpdate = true;
   }
 
   // kicked-up regolith: puffs that hop up and settle back (low gravity), a few grains with them
@@ -478,6 +550,7 @@ export class FX {
     if (this.pMesh.instanceColor) this.pMesh.instanceColor.needsUpdate = true;
 
     this.updatePuffs(dt);
+    this.updateCurls(dt);
 
     for (let i = this.booms.length - 1; i >= 0; i--) {
       const b = this.booms[i];

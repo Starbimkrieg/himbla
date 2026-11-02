@@ -1,3 +1,4 @@
+import { heldPhase } from './twos.js';
 import * as THREE from 'three';
 import { toon, glow, textSprite, setMask } from './toon.js';
 const VEH_DETAIL = 220; // m: past this a vehicle's small parts stop drawing
@@ -2195,9 +2196,10 @@ export class Traffic {
       p.y = a.g && b.g ? this.groundY(loc, p.x, p.z) : a.y + (b.y - a.y) * wk.t;
       if (Math.abs(b.x - a.x) + Math.abs(b.z - a.z) > 0.05) f.root.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
       f.phase += dt * 7;
-      f.legL.rotation.x = Math.sin(f.phase) * 0.6;
-      f.legR.rotation.x = -Math.sin(f.phase) * 0.6;
-      p.y += Math.abs(Math.sin(f.phase)) * 0.12;
+      const ph = heldPhase(f, f.phase, dt); // (the stride on twos: twos.js)
+      f.legL.rotation.x = Math.sin(ph) * 0.6;
+      f.legR.rotation.x = -Math.sin(ph) * 0.6;
+      p.y += Math.abs(Math.sin(ph)) * 0.12;
     }
   }
 

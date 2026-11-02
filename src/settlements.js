@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Kit, T, G, D, GLASS, BEAM, prism, sandbags, container, crate, tank, lightString, junkHeap, PALETTE } from './outpostModels.js';
 import { FACTIONS, ILMB_WINGS_AT } from './locations.js';
 import { pixelFont } from './fonts.js';
-import { glow, gradientMap } from './toon.js';
+import { glow, glowShared, gradientMap } from './toon.js';
 import { patchBermMaterial } from './moonSkins.js';
 import { market, tickerText } from './market.js';
 import { casinoNode, casinoSlot, lotNode, lotSlot } from './models.js';
@@ -19,7 +19,7 @@ const WHITE = 0xfff4e0, PANEL = 0x5b5870, ROOF = 0x3a3550, WARM = 0xfff6a8;
 const TAU = Math.PI * 2;
 const hex = (c) => new THREE.Color(c).getHex();
 // a Blender model's slot colour ({ color, glow }) as a Kit material
-const slotMat = (c) => (c.glow ? G(c.color) : T(c.color));
+const slotMat = (c) => (c.glow ? (c.halo ? glowShared(c.color, true) : G(c.color)) : T(c.color)); // (halo: a light source, toon.js)
 const ONE = new THREE.Vector3(1, 1, 1);
 // a model node's matrix under its parent's m
 const nodeMatrix = (n, m) => new THREE.Matrix4().compose(n.pos, n.quat, ONE).premultiply(m);

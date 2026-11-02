@@ -492,7 +492,8 @@ export function glowMark(m) {
 const haloCopies = new WeakMap();
 export function haloize(slot, m) {
   if (!m || !m.isMeshBasicMaterial || m.transparent || m.userData.halo || !HALO_SLOT.test(String(slot))) return m;
-  if (!m.userData.shared) return glowMark(m);
+  if (!m.userData.shared && !m.userData.sharedGlow) return glowMark(m); // (shared by colour: marking it would light up
+  // every other slot of that colour, a heart panel the same red as a nav light)
   let h = haloCopies.get(m);
   if (!h) haloCopies.set(m, (h = glowMark(m.clone())));
   return h;
@@ -505,7 +506,10 @@ const sharedGlows = new Map();
 export function glowShared(color, halo = false) {
   const k = `${color}|${halo ? 1 : 0}`;
   let m = sharedGlows.get(k);
-  if (!m) sharedGlows.set(k, m = halo ? glowMark(glow(color)) : glow(color));
+  if (!m) {
+    sharedGlows.set(k, m = halo ? glowMark(glow(color)) : glow(color));
+    m.userData.sharedGlow = true; // (haloize copies it rather than marking it)
+  }
   return m;
 }
 

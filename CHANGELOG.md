@@ -5,6 +5,20 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Wind curls, animating on twos, the style module and audit; glow fixes.**
+  - **Wind curls** (`fx.js` curl): Wind Waker's wind, a flat stroke rolling up into a spiral, white with an ink edge and
+    turned to the camera, popping in and shrinking away in held steps like the puffs. They peel off behind the skates at
+    speed (alternating sides, more the faster you go) and stream out of the thrusters.
+  - **Animate on twos** (Settings, Graphics; on): figures' poses step at 12 a second, as hand-drawn animation does, while
+    they move through the world every frame and the camera stays smooth (`src/twos.js`: PoseHold for the courier, which
+    keeps the live pose for the animation to work from and shows the held one; heldPhase for the walkers in places, on
+    the paths and round settlements).
+  - **`tools/blender/style.py` and `style_audit.py`:** the house style's numbers in one place (palette, ink by part size,
+    triangle budgets, the glow slots that get a halo), and an audit of a built model against them: ink too heavy or off
+    its size class, big parts with no ink, pure blacks, parts the export left without weighted normals or toon
+    attributes, and per model its triangles and which glow slots will halo.
+  - **Glow:** the red suit panels lost their halo (shared glow materials were marked in place, so every slot of a light
+    source's colour lit up: they're copied now), and the casino's lamp posts got one (their lamp slot is a light source).
 - **Glow only on light sources, and smoother.** The halo was on every unlit part: windscreens, windows, trim, card
   panels, noisy everywhere (the casino most). Now only light sources get it: a Blender model's slots named as lamps,
   bulbs, beacons, neon, LEDs, tail lights and exhausts (`toon.js` HALO_SLOT, haloize: through models.js dressNode,

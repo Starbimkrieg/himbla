@@ -1,3 +1,4 @@
+import { heldPhase } from './twos.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildZbornakLab } from './labWorld.js';
@@ -1222,10 +1223,11 @@ export class World {
         w.root.rotation.y = w.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
       }
       w.phase += dt * 4.5 * w.speed;
-      w.legL.rotation.x = Math.sin(w.phase) * 0.6;
-      w.legR.rotation.x = -Math.sin(w.phase) * 0.6;
-      if (w.armL) { w.armL.rotation.x = -Math.sin(w.phase) * w.swing; w.armR.rotation.x = Math.sin(w.phase) * w.swing; }
-      p.set(w.x, w.F + Math.abs(Math.sin(w.phase)) * 0.12, p.z + (w.lane - p.z) * Math.min(1, dt * 2));
+      const ph = heldPhase(w, w.phase, dt); // (the stride on twos: twos.js)
+      w.legL.rotation.x = Math.sin(ph) * 0.6;
+      w.legR.rotation.x = -Math.sin(ph) * 0.6;
+      if (w.armL) { w.armL.rotation.x = -Math.sin(ph) * w.swing; w.armR.rotation.x = Math.sin(ph) * w.swing; }
+      p.set(w.x, w.F + Math.abs(Math.sin(ph)) * 0.12, p.z + (w.lane - p.z) * Math.min(1, dt * 2));
     }
   }
 
@@ -1701,10 +1703,11 @@ export class World {
       f.yaw = Math.atan2(dx, dz);
       if (!R) f.root.rotation.y = f.yaw;
       f.phase += dt * 6;
-      f.legL.rotation.x = Math.sin(f.phase) * 0.6;
-      f.legR.rotation.x = -Math.sin(f.phase) * 0.6;
-      if (f.armL) { f.armL.rotation.x = -Math.sin(f.phase) * f.swing; f.armR.rotation.x = Math.sin(f.phase) * f.swing; }
-      if (f.kind !== 'kid') p.y = Math.abs(Math.sin(f.phase)) * 0.15;
+      const ph = heldPhase(f, f.phase, dt); // (the stride on twos: twos.js)
+      f.legL.rotation.x = Math.sin(ph) * 0.6;
+      f.legR.rotation.x = -Math.sin(ph) * 0.6;
+      if (f.armL) { f.armL.rotation.x = -Math.sin(ph) * f.swing; f.armR.rotation.x = Math.sin(ph) * f.swing; }
+      if (f.kind !== 'kid') p.y = Math.abs(Math.sin(ph)) * 0.15;
       if (R) this.poseFigure(f);
     }
   }
