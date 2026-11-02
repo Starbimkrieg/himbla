@@ -342,10 +342,12 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
   refreshes); two wider, coarser maps of the same light (`src/farshadow.js`: 600 m and 3,300 m half-widths, terrain and static
   casters, terrain only) carry hill and rock shadows out to the horizon. Lit toon materials and the terrain read the finest map
   that holds them and blend at the seams. They redraw only when their box steps, the sun turns or chunks change.
-- **Comic look:** toon shading, inverted-hull outlines (pushed out along each vertex's face planes, `toon.js` shellGeo,
-  in the vertex shader so they hold their on-screen width at any distance and follow the Ink setting; far ink fades to
-  indigo), a post pass (`src/post.js`) for ink lines, halftone and speed lines, rocky crater rims drawn per pixel, and
-  onomatopoeia pop-ups.
+- **Comic look:** toon shading with chosen shade colours (each colour's shade more saturated and turned toward violet, not
+  dimmed) and halftone dots only across the shadow edge (`toon.js` TOON_LOOK; `?look=classic` brings back the old look:
+  grey shading, the post pass's dots over every dark tone), weighted normals on the Blender models (`kit.py`),
+  inverted-hull outlines (pushed out along each vertex's face planes, `toon.js` shellGeo, in the vertex shader so they
+  hold their on-screen width at any distance and follow the Ink setting; far ink fades to indigo), a post pass
+  (`src/post.js`) for ink lines and speed lines, rocky crater rims drawn per pixel, and onomatopoeia pop-ups.
 
 ## Source map
 

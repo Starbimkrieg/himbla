@@ -49,6 +49,10 @@ material for that slot. To give a part two colours, make two meshes.
   segments round is **not** a box: it comes out as an octahedron or lozenge. The crane decks were diamonds for this reason
   (`box()` in `build_crane.py` and `_spr_box` in `spreader.py` fixed them). Keep `rbox` for deliberately soft shapes, with 8
   or more segments round.
+- **Weighted normals on export.** `kit.export()` (and the ships' export) adds a face-area Weighted Normal modifier to every
+  smooth-shaded part (`weighted_normals`), so big faces shade flat and bevels, chamfers and narrow lathe rings take the turn:
+  the toon bands fall as clean shapes. Sharp edges stay sharp; skinned parts are left alone. `MOONRUNNER_WNORMALS=0` builds
+  without them, to compare. Models built before this pick it up on their next rebuild.
 
 ## 2. Ink (outlines)
 

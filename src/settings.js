@@ -5,7 +5,7 @@ import { glyphHtml, tokensFor, esc } from './glyphs.js';
 import { gyroSupported } from './gyro.js';
 import { DEV_TOOLS } from './devtools.js';
 import { SKIN_FROM_URL } from './moonSkins.js';
-import { INK_U, inkMat, inkMatBaked, inkMatSolid } from './toon.js';
+import { INK_U, inkMat, inkMatBaked, inkMatSolid, TOON_LOOK, CLASSIC_LOOK } from './toon.js';
 
 const KEY = 'moonrunner-settings-v1';
 const BINDS_V = 2; // 2: no thruster key (right mouse only); power on E, not Z
@@ -326,12 +326,13 @@ export class Settings {
     if (g.fx) g.fx.density = v.particles;
     if (g.post) {
       const u = g.post.material.uniforms;
-      if (u.halftone) u.halftone.value = v.halftone ? 1 : 0;
+      if (u.halftone) u.halftone.value = v.halftone && CLASSIC_LOOK ? 1 : 0; // (the old look's dots over every dark tone)
       if (u.lines) u.lines.value = v.speedLines ? 1 : 0;
       if (u.inkK) u.inkK.value = v.ink;
     }
     // every outline shell (toon.js inkMat and inkMatSolid, the boulders' ink) reads it; at 0 they aren't drawn at all
     INK_U.uInkK.value = v.ink;
+    TOON_LOOK.dots = v.halftone && !CLASSIC_LOOK ? 1 : 0; // the dots across the shadow edge (toon.js)
     inkMat.visible = inkMatBaked.visible = inkMatSolid.visible = v.ink > 0;
     if (g.planet && g.planet.boulderInk) g.planet.boulderInk.visible = v.ink > 0;
     if (g.haptics) g.haptics.configure(v.rumble, v.rumbleLevel, v.padLight, v.padTriggers);

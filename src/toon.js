@@ -40,6 +40,54 @@ import { receiveFar } from './farshadow.js';
   } else console.warn('[toon] shadow line not found: grazing-shadow fade is off');
 }
 
+// The toon look, for every MeshToonMaterial (the ground's too):
+//   - shade in a chosen colour: what the sun doesn't reach shows each colour's shade, more saturated and turned toward the
+//     sky fill's violet (toonShade), not the colour dimmed; the mid band takes part of it, sunlit faces none;
+//   - halftone only across the shadow edge: screen dots in the light's mid band, biggest where it meets the shade, gone by
+//     the lit band (dotNL TOON_HT_LO to TOON_HT_HI; a material's `defines` can move them: planet.js). Cast shadows stay flat.
+// TOON_LOOK is a struct uniform shared by reference (a plain object survives ShaderLib's per-material clone), so it is live:
+// `dots` follows the halftone setting (settings.js), `cell` the screen size (post.js), `?look=classic` turns both off and
+// gives the dots back to the post pass, the look before this (to compare).
+export const CLASSIC_LOOK = typeof location !== 'undefined' && new URLSearchParams(location.search).get('look') === 'classic';
+export const TOON_LOOK = { tint: CLASSIC_LOOK ? 0 : 1, dots: CLASSIC_LOOK ? 0 : 1, cell: 5 };
+THREE.ShaderLib.toon.uniforms.uToonLook = { value: TOON_LOOK };
+{
+  const chunk = THREE.ShaderChunk.lights_toon_pars_fragment;
+  const DIRECT = 'vec3 irradiance = getGradientIrradiance( geometryNormal, directLight.direction ) * directLight.color;\n\treflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );';
+  const INDIRECT = 'reflectedLight.indirectDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );';
+  if (chunk.includes(DIRECT) && chunk.includes(INDIRECT)) {
+    THREE.ShaderChunk.lights_toon_pars_fragment = `struct ToonLook { float tint; float dots; float cell; };
+uniform ToonLook uToonLook;
+#ifndef TOON_HT_LO
+#define TOON_HT_LO -0.05
+#endif
+#ifndef TOON_HT_HI
+#define TOON_HT_HI 0.33
+#endif
+// a colour's shade: saturation x1.5 (greys stay grey), then cooled toward violet (the sky fill already tints it)
+vec3 toonShade( vec3 a ) {
+	float l = dot( a, vec3( 0.299, 0.587, 0.114 ) );
+	vec3 s = max( mix( vec3( l ), a, 1.5 ), 0.0 ) * vec3( 0.93, 0.9, 1.1 );
+	return mix( a, s, uToonLook.tint );
+}
+// halftone cover (0 to 1) across the shadow edge: 45 degree screen grid, dots growing from the lit band toward the shade
+float toonDots( float dotNL ) {
+	float amt = 1.0 - smoothstep( TOON_HT_LO, TOON_HT_HI, dotNL );
+	if ( uToonLook.dots <= 0.0 || amt <= 0.0 ) return 0.0;
+	vec2 g = mat2( 0.7071, -0.7071, 0.7071, 0.7071 ) * gl_FragCoord.xy / uToonLook.cell;
+	vec2 f = fract( g ) - 0.5;
+	return ( 1.0 - smoothstep( -0.06, 0.06, length( f ) - 0.62 * sqrt( amt ) ) ) * uToonLook.dots;
+}
+${chunk
+  .replace(DIRECT, `float toonL = dot( geometryNormal, directLight.direction );
+	vec3 toonG = getGradientIrradiance( geometryNormal, directLight.direction ) * ( 1.0 - toonDots( toonL ) );
+	vec3 irradiance = toonG * directLight.color;
+	vec3 toonC = mix( toonShade( material.diffuseColor ), material.diffuseColor, clamp( toonG.r, 0.0, 1.0 ) );
+	reflectedLight.directDiffuse += irradiance * BRDF_Lambert( toonC );`)
+  .replace(INDIRECT, 'reflectedLight.indirectDiffuse += irradiance * BRDF_Lambert( toonShade( material.diffuseColor ) );')}`;
+  } else console.warn('[toon] toon lighting lines not found: shade colours and edge halftone are off');
+}
+
 // Rocks cast their sun-facing sides into the shadow map (shadowSide FrontSide; by default a front-sided material casts its far
 // side, which comes down to the ground at a rock's foot level with it, so the bias let the ground there through: a lit line
 // between a rock and its shadow). Their own lit faces then shadow themselves in a fine hatch at the light's normal bias, so as

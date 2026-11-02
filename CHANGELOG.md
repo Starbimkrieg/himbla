@@ -5,6 +5,14 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Look: chosen shade colours, halftone only across the shadow edge, weighted normals.** Every toon surface (the ground too)
+  now shades to a chosen colour instead of a dimmed one: each colour's shade is more saturated and turned toward the sky
+  fill's violet (the mid band takes part of it, sunlit faces none). The halftone dots moved from the post pass, where they
+  covered every dark tone, into the toon shading: they now sit only across the shadow edge, biggest where the light meets the
+  shade and gone by the lit band; cast shadows and the shade itself stay flat. The Comic halftone setting still turns them
+  off. `?look=classic` brings back the old look to compare. The Blender export (`kit.py`, the ships) now adds face-area
+  weighted normals to smooth-shaded parts, so big faces shade flat and bevels and narrow rings take the turn; the outposts,
+  ships and hall are rebuilt with them, other models pick them up on their next rebuild (`MOONRUNNER_WNORMALS=0` to compare).
 - **Antimatter Lab: the fifth in-game review** (`docs/zbornak-proposals/`, "The fifth in-game review").
   - **The whole lift is see-through to the camera,** not just its glass, so the camera no longer jumps about round it.
     The builder's `col_extra` marks every collider of a stretch.

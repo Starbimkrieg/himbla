@@ -300,8 +300,24 @@ def plume(parent, name, pos, radius, length, axis="z"):
 
 
 
+def weighted_normals(objects):
+    """Face-area weighted normals (the Weighted Normal modifier; the export applies it) on every smooth-shaded part: big faces
+    shade flat and small ones (bevels, chamfers, a lathe's narrow rings) take the turn, so the toon bands fall in clean shapes
+    instead of smearing across a panel. Sharp edges stay sharp. MOONRUNNER_WNORMALS=0 leaves them out (to compare)."""
+    if os.environ.get("MOONRUNNER_WNORMALS", "1") != "1":
+        return
+    for o in objects:
+        if o.type != "MESH" or any(m.type in ("WEIGHTED_NORMAL", "ARMATURE") for m in o.modifiers):
+            continue
+        if not any(p.use_smooth for p in o.data.polygons):
+            continue
+        m = o.modifiers.new("wnormals", "WEIGHTED_NORMAL")
+        m.mode, m.weight, m.keep_sharp, m.thresh = "FACE_AREA", 50, True, 0.01
+
+
 def export(out, objects):
     """Export these objects as a GLB the game reads (extras carry roles, ink and numbers)."""
+    weighted_normals(objects)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     bpy.ops.object.select_all(action="DESELECT")
     for o in objects:

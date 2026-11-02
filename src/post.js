@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import { TOON_LOOK } from './toon.js';
 
-// Comic-book post pass: depth ink lines, halftone shadows, speed lines, damage vignette, paper grade.
+// Comic-book post pass: depth ink lines, halftone shadows (?look=classic only: the toon materials draw theirs, toon.js), speed lines, damage vignette, paper grade.
 export class ComicPost {
   constructor(renderer, camera, fixedSize = null) {
     this.renderer = renderer;
@@ -14,6 +15,7 @@ export class ComicPost {
     });
     this.target.depthTexture.format = THREE.DepthStencilFormat;
     this.target.depthTexture.type = THREE.UnsignedInt248Type;
+    if (!fixedSize) TOON_LOOK.cell = this.dotCell(size);
     this.material = new THREE.ShaderMaterial({
       uniforms: {
         tColor: { value: this.target.texture },
@@ -109,11 +111,15 @@ export class ComicPost {
     this.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   }
 
+  // the halftone grid's cell in pixels, as the post pass's own dots: 5 px at 900 px tall, scaled up beyond
+  dotCell(size) { return 5 * Math.max(1, size.y / 900); }
+
   setSize() {
     if (this.fixed) return;
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     this.target.setSize(size.x, size.y);
     this.material.uniforms.res.value.copy(size);
+    TOON_LOOK.cell = this.dotCell(size);
   }
 
   render(scene, camera, output = null) {

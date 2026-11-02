@@ -1217,6 +1217,7 @@ def export():
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     keep_loc = FR.location.copy()
     FR.location = (0, 0, 0)
+    weighted_normals(C.objects)   # (kit.py)
     bpy.ops.object.select_all(action="DESELECT")
     for o in C.objects:
         o.select_set(True)
