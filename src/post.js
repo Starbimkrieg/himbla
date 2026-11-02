@@ -6,20 +6,21 @@ import { TOON_LOOK, CLASSIC_LOOK, GLOW_MARK } from './toon.js';
 // up; the post pass adds the halo in hard steps (two rings, not a soft bloom: comic glow). `k` the Glow setting.
 const GLOW_SHADER = {
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-  // down: the 4 x 4 full-size pixels under a quarter-size one (four bilinear taps), only those marked
+  // down: the 4 x 4 full-size pixels under a quarter-size one (four bilinear taps), only those marked, the brightest
+  // kept (an average thinned a 2 px neon line to nothing)
   down: /* glsl */ `
     uniform sampler2D tSrc; uniform vec2 px; varying vec2 vUv;
-    vec3 m(vec2 o){ vec4 c = texture2D(tSrc, vUv + o * px); return c.rgb * step(${(GLOW_MARK - 0.5).toFixed(1)}, c.a); }
-    void main(){ gl_FragColor = vec4((m(vec2(-1.0, -1.0)) + m(vec2(1.0, -1.0)) + m(vec2(-1.0, 1.0)) + m(vec2(1.0, 1.0))) * 0.25, 1.0); }`,
+    vec3 m(vec2 o){ vec4 c = texture2D(tSrc, vUv + o * px); return c.rgb * clamp((c.a - 1.0) / ${(GLOW_MARK - 1).toFixed(1)}, 0.0, 1.0); }
+    void main(){ gl_FragColor = vec4(max(max(m(vec2(-1.0, -1.0)), m(vec2(1.0, -1.0))), max(m(vec2(-1.0, 1.0)), m(vec2(1.0, 1.0)))), 1.0); }`,
   // blur: 9 taps along `dir` (in quarter-size pixels), a wide gaussian
   blur: /* glsl */ `
     uniform sampler2D tSrc; uniform vec2 px; uniform vec2 dir; varying vec2 vUv;
     void main(){
       vec3 c = texture2D(tSrc, vUv).rgb * 0.2;
-      c += (texture2D(tSrc, vUv + dir * px * 1.4).rgb + texture2D(tSrc, vUv - dir * px * 1.4).rgb) * 0.18;
-      c += (texture2D(tSrc, vUv + dir * px * 3.2).rgb + texture2D(tSrc, vUv - dir * px * 3.2).rgb) * 0.13;
-      c += (texture2D(tSrc, vUv + dir * px * 5.0).rgb + texture2D(tSrc, vUv - dir * px * 5.0).rgb) * 0.07;
-      c += (texture2D(tSrc, vUv + dir * px * 7.0).rgb + texture2D(tSrc, vUv - dir * px * 7.0).rgb) * 0.02;
+      c += (texture2D(tSrc, vUv + dir * px * 2.0).rgb + texture2D(tSrc, vUv - dir * px * 2.0).rgb) * 0.18;
+      c += (texture2D(tSrc, vUv + dir * px * 4.6).rgb + texture2D(tSrc, vUv - dir * px * 4.6).rgb) * 0.13;
+      c += (texture2D(tSrc, vUv + dir * px * 7.4).rgb + texture2D(tSrc, vUv - dir * px * 7.4).rgb) * 0.07;
+      c += (texture2D(tSrc, vUv + dir * px * 10.4).rgb + texture2D(tSrc, vUv - dir * px * 10.4).rgb) * 0.02;
       gl_FragColor = vec4(c, 1.0);
     }`,
 };
@@ -133,7 +134,8 @@ export class ComicPost {
           if (glowK > 0.0) {
             vec3 gl = texture2D(tGlow, vUv).rgb;
             float gm = max(gl.r, max(gl.g, gl.b));
-            float ring = gm > 0.42 ? 0.55 : gm > 0.13 ? 0.26 : 0.0;
+            // (each ring's edge eased over a hair, so it stays hard but doesn't step with the quarter-size pixels)
+            float ring = 0.16 * smoothstep(0.1, 0.13, gm) + 0.2 * smoothstep(0.3, 0.34, gm);
             if (ring > 0.0) col = 1.0 - (1.0 - col) * (1.0 - clamp(gl / gm, 0.0, 1.0) * ring * glowK);
           }
 
