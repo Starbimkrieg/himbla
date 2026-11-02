@@ -66,14 +66,67 @@ for s in SLOT_COLORS:
 RUNNER = {}     # where the preview stands the courier: name -> ((x, y, z), yaw)
 
 
-def ring_wall(g, R, T, H, gaps=(), n=72, slot="wall"):
-    """a round wall of n flat panels (inner radius R, T thick, H tall); gaps [(angle, width)] left open"""
+SEAMS = []      # designed ink lines to draw on ring walls once their meshes exist: (acc, R, T, H, angles)
+
+
+def ring_wall(g, R, T, H, gaps=(), n=72, slot="wall", seam_every=0):
+    """a round wall of n flat panels (inner radius R, T thick, H tall); gaps [(angle, width)] left open. Each unbroken run
+    is one mesh (separate overlapping boxes left each panel's outline shell poking through its neighbour at the joins:
+    broken lines that came and went); each panel still collides as its own box. seam_every: a designed ink line at every
+    so many panel joints, on the outside (kit.ink_lines)."""
+    step = TAU / n
+    open_ = [any(abs((step * (i + 0.5) - ga + PI) % TAU - PI) * R < gw / 2 + 0.3 for ga, gw in gaps) for i in range(n)]
+    acc, rr = g(slot), R + T / 2
     for i in range(n):
-        a = TAU * (i + 0.5) / n
-        if any(abs((a - ga + PI) % TAU - PI) * R < gw / 2 + 0.3 for ga, gw in gaps):
+        a = step * (i + 0.5)
+        if open_[i]:
             continue
-        rr = R + T / 2
-        g(slot).boxc(math.sin(a) * rr, H / 2, math.cos(a) * rr, TAU * rr / n * 1.04, H, T, (0, a, 0))
+        w = TAU * rr / n * 1.04
+        if acc._solid() and min(w, H, T) >= COL_MIN and max(w, H, T) >= COL_LONG:
+            g.col_box(math.sin(a) * rr, H / 2, math.cos(a) * rr, w, H, T, (0, a, 0))
+    start = next((i for i in range(n) if open_[i]), None)               # runs start just after a gap (or anywhere: a full ring)
+    order = [(start + 1 + k) % n for k in range(n)] if start is not None else list(range(n))
+    runs, cur = [], []
+    for i in order:
+        if open_[i]:
+            if cur:
+                runs.append(cur)
+            cur = []
+        else:
+            cur.append(i)
+    if cur:
+        runs.append(cur)
+    for run in runs:
+        full = len(run) == n
+        k = len(run) if full else len(run) + 1                             # panel edges along the run
+        ang = [step * (run[0] + j) for j in range(k)]
+        verts = []
+        for a in ang:
+            for r in (R, R + T):
+                for y in (0.0, H):
+                    verts.append((math.sin(a) * r, y, math.cos(a) * r))
+        faces = []
+        segs = k if full else k - 1
+        for j in range(segs):
+            b, c = 4 * j, 4 * ((j + 1) % k)
+            faces += [(b, c, c + 1, b + 1), (b + 2, b + 3, c + 3, c + 2), (b + 1, c + 1, c + 3, b + 3), (b, b + 2, c + 2, c)]
+        if not full:                                                       # end caps
+            e = 4 * (k - 1)
+            faces += [(0, 1, 3, 2), (e, e + 2, e + 3, e + 1)]
+        acc._push((verts, faces))
+    if seam_every:
+        SEAMS.append((acc, R, T, H, [step * i for i in range(0, n, seam_every) if not open_[i % n] and not open_[i - 1]]))
+
+
+def ring_seams():
+    """the ring walls' designed seams (after flush_all: they need the walls' meshes)"""
+    for acc, R, T, H, angles in SEAMS:
+        o = bpy.data.objects.get(acc.name)
+        if o:
+            ink_lines(o, [((0, 0, 0), (math.cos(a), 0, -math.sin(a))) for a in angles], t=0.04,
+                      keep=lambda p, R=R, T=T, H=H, angles=angles: math.hypot(p[0], p[2]) > R + T * 0.75 and 0.05 < p[1] < H - 0.05
+                      and any(p[0] * math.sin(a) + p[2] * math.cos(a) > 0 and abs(p[0] * math.cos(a) - p[2] * math.sin(a)) < 0.2 for a in angles))
+    SEAMS.clear()
 
 
 def railing_ring(g, r, y, gap=None, step=1.4, solid=False):
@@ -261,7 +314,7 @@ def build_lab(root):
         return (CX + lx, CZ + lz)
 
     # ---- shell: plinth, wall with portholes, radiator fins, ring beam, ribbed dome, oculus
-    ring_wall(lab, R, T, H, gaps=[(0.0, 9.0)])                            # (the airlock's portal fills the gap)
+    ring_wall(lab, R, T, H, gaps=[(0.0, 9.0)], seam_every=3)              # (the airlock's portal fills the gap)
     ring_wall(lab, R + T, 0.6, 1.2, gaps=[(0.0, 9.4)], slot="panel")
     for i in range(48):
         a = TAU * (i + 0.5) / 48
@@ -940,6 +993,7 @@ def build():
     CAMS.clear(); RUNNER.clear()
     build_lab(root)
     flush_all()
+    ring_seams()
     return root
 
 
@@ -952,7 +1006,7 @@ if os.environ.get("STRUCT_AUDIT") == "1":                                  # doe
     sys.path.insert(0, os.path.join(REPO, "tools", "blender"))
     from structure_audit import audit_structure
     audit_structure([o for o in C.objects if o.type == "MESH"], skip_slots={"holo", "spark", "pinkhot", "pink", "glassg"},
-                    skip=lambda o: any(k in o.name for k in ("core", "ring", "scan", "weld", "zbornak")), label="(the lab)")
+                    skip=lambda o: any(k in o.name for k in ("core", "ring", "scan", "weld", "zbornak", "inkline")), label="(the lab)")
 
 if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
     zb = next(o for o in C.objects if o.name == "zbornak" and o.type == "EMPTY")

@@ -52,9 +52,9 @@ const RESERVED = ['Escape', 'Enter', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Di
 // texture (moonSkins.js; dev builds only, via its setting or ?moonskin=1), so release presets leave it out.
 const gd = (n) => (DEV_TOOLS ? { groundDetail: n } : {});
 const PRESETS = {
-  low: { renderScale: 0.75, viewDist: 0.7, terrainDetail: 0.75, shadows: true, shadowRes: 1024, particles: 0.6, ...gd(0) },
-  medium: { renderScale: 1, viewDist: 1, terrainDetail: 1, shadows: true, shadowRes: 2048, particles: 1, ...gd(1) },
-  high: { renderScale: 1, viewDist: 1.3, terrainDetail: 1.3, shadows: true, shadowRes: 4096, particles: 1.3, ...gd(2) },
+  low: { antialias: '0', renderScale: 0.75, viewDist: 0.7, terrainDetail: 0.75, shadows: true, shadowRes: 1024, particles: 0.6, ...gd(0) },
+  medium: { antialias: '4', renderScale: 1, viewDist: 1, terrainDetail: 1, shadows: true, shadowRes: 2048, particles: 1, ...gd(1) },
+  high: { antialias: '4', renderScale: 1, viewDist: 1.3, terrainDetail: 1.3, shadows: true, shadowRes: 4096, particles: 1.3, ...gd(2) },
 };
 const PRESET_KEYS = Object.keys(PRESETS.medium);
 const pct = (v) => `${Math.round(v * 100)}%`;
@@ -64,6 +64,7 @@ const mult = (v) => `×${v.toFixed(2).replace(/0$/, '')}`;
 const SCHEMA = {
   graphics: [
     { key: 'preset', label: 'Quality preset', type: 'choice', def: 'medium', options: [['low', 'LOW'], ['medium', 'MEDIUM'], ['high', 'HIGH'], ['custom', 'CUSTOM']], hint: 'Sets the options below in one go' },
+    { key: 'antialias', label: 'Anti-aliasing', type: 'choice', def: '4', options: [['0', 'OFF'], ['2', '2×'], ['4', '4×']], hint: 'Smooths jagged edges and outlines; off is faster' },
     { key: 'renderScale', label: 'Render scale', type: 'range', min: 0.4, max: 1.5, step: 0.05, def: 1, fmt: pct, hint: 'Lower = faster, blurrier' },
     { key: 'fov', label: 'Field of view', type: 'range', min: 50, max: 100, step: 1, def: 72, fmt: (v) => `${v}°` },
     { key: 'viewDist', label: 'View distance', type: 'range', min: 0.4, max: 1.5, step: 0.05, def: 1, fmt: pct },
@@ -302,6 +303,7 @@ export class Settings {
         if (g.post && g.resize) g.resize();
       }
     }
+    if (g.post) g.post.setSamples(Number(v.antialias) || 0);
     if (g.sun) {
       g.sun.castShadow = v.shadows;
       const sh = g.sun.shadow;

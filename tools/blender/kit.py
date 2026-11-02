@@ -358,7 +358,7 @@ def ink_lines(o, planes, t=0.02, lift=0.004, keep=None):
     for p in me.polygons:
         p.use_smooth = True
     me.normals_split_custom_set_from_vertices(nors)
-    m = bpy.data.materials.get("inkline") or bpy.data.materials.new("inkline")
+    m = bpy.data.materials.get("ink_ribbon") or bpy.data.materials.new("ink_ribbon")   # (not "inkline": a lab slot is)
     m.diffuse_color = (0.05, 0.03, 0.08, 1)
     me.materials.append(m)
     lo = bpy.data.objects.new(o.name + "_inkline", me)
@@ -373,11 +373,13 @@ def is_inkline(o):
 
 
 # Per-vertex toon controls, exported as vertex attributes the game reads (models.js bakedGeo, staticBake.js addPart):
-#   _TOONBIAS (0 to 1) how hemmed-in a vertex is: rays out over its hemisphere that hit the model within TOON_AO_R. The toon
+#   _TOONBIAS (0 to 1) how hemmed-in a vertex is: rays out over its hemisphere that hit its own model (root) between 15 cm
+#             (closer is trim on the surface) and TOON_AO_R. The toon
 #             shading moves its light-to-shade edge by that much (toon.js), so creases, inner corners and the gaps
 #             between parts fall into the shade band early, as clean shapes (Guilty Gear Xrd's painted threshold).
 #   _INKW     (0.45 to 1) the outline's weight there: long thin parts (masts, rails, pipes, struts) taper toward both
 #             ends, a brush stroke rather than a wire; everything else is 1.
+# The export folds both into one attribute, _TOON (bytes: bias, weight; pack_toon_attrs); the game reads `_toon`.
 # Every mesh gets both (merges need the same attributes on all). MOONRUNNER_TOONATTR=0 leaves them out.
 TOON_AO_R = 0.9          # m: how far a crease reaches (a doorway's reveal, under eaves; not across a yard)
 TOON_AO_DIRS = []
@@ -391,18 +393,31 @@ def toon_attrs(objects, ao_r=None):
     if os.environ.get("MOONRUNNER_TOONATTR", "1") != "1":
         return
     from mathutils.bvhtree import BVHTree
-    import numpy as np
+    import numpy as np, struct
     ao_r = ao_r or TOON_AO_R
     dg = bpy.context.evaluated_depsgraph_get()
     meshes = [o for o in objects if o.type == "MESH" and not is_inkline(o)]
-    verts, polys = [], []
-    for o in meshes:                      # one tree of the whole model, in world space
-        me = o.evaluated_get(dg).to_mesh()
-        mw, base = o.matrix_world, len(verts)
-        verts.extend(mw @ v.co for v in me.vertices)
-        polys.extend([base + i for i in p.vertices] for p in me.polygons)
-        o.evaluated_get(dg).to_mesh_clear()
-    tree = BVHTree.FromPolygons(verts, polys, epsilon=0.0) if polys else None
+
+    def root_of(o):
+        while o.parent:
+            o = o.parent
+        return o
+    # one tree per root, in world space: a file's roots are separate models (a kit's pieces all stand at the origin,
+    # overlapping, and must not shade each other)
+    by_root = {}
+    for o in meshes:
+        by_root.setdefault(root_of(o).name, []).append(o)
+    trees = {}
+    for rname, group in by_root.items():
+        verts, polys = [], []
+        for o in group:
+            me = o.evaluated_get(dg).to_mesh()
+            mw, base = o.matrix_world, len(verts)
+            verts.extend(mw @ v.co for v in me.vertices)
+            polys.extend([base + i for i in p.vertices] for p in me.polygons)
+            o.evaluated_get(dg).to_mesh_clear()
+        trees[rname] = BVHTree.FromPolygons(verts, polys, epsilon=0.0) if polys else None
+    vals = {}
     for o in meshes:
         me = o.data
         n = len(me.vertices)
@@ -411,6 +426,7 @@ def toon_attrs(objects, ao_r=None):
                 me.attributes.remove(me.attributes[name])
         bias = [0.0] * n
         skinned = any(m.type == "ARMATURE" for m in o.modifiers)
+        tree = trees.get(root_of(o).name)
         if tree and not skinned:
             mw = o.matrix_world
             nm = mw.to_3x3().inverted_safe().transposed()
@@ -424,8 +440,9 @@ def toon_attrs(objects, ao_r=None):
                 occ = 0.0
                 for d in TOON_AO_DIRS:
                     hit = tree.ray_cast(p, t * d.x + b * d.y + nw * d.z, ao_r)
-                    if hit[0] is not None:
-                        occ += 1.0 - 0.5 * hit[3] / ao_r     # (near walls count more)
+                    if hit[0] is not None:                  # (near walls count more; trim lying on the surface, a rib
+                        e = min(1.0, max(0.0, (hit[3] - 0.15) / 0.2))   # or band within 15 cm, not at all: a lathe's vertices
+                        occ += e * e * (3 - 2 * e) * (1.0 - 0.5 * hit[3] / ao_r)   # can all sit under its ribs)
                 bias[i] = min(1.0, occ / len(TOON_AO_DIRS) * 1.6)
         w = [1.0] * n
         if n >= 4:
@@ -439,9 +456,123 @@ def toon_attrs(objects, ao_r=None):
                 e = np.minimum(f, 1 - f)
                 s = np.clip(e / 0.25, 0, 1)
                 w = list(0.45 + 0.55 * s * s * (3 - 2 * s))
-        q = lambda x: round(float(x) * 16) / 16      # (sixteenths: floats with empty low bytes compress to almost nothing)
-        me.attributes.new("_TOONBIAS", "FLOAT", "POINT").data.foreach_set("value", [q(x) for x in bias])
-        me.attributes.new("_INKW", "FLOAT", "POINT").data.foreach_set("value", [q(x) for x in w])
+        vals[o.name] = (bias, list(w))
+    # identical meshes (a bolt, a leg, a lamp used twenty times) get the same values, their mean over every copy, so the
+    # compressor still stores them once (per-copy values made every copy unique: the ships' file grew by half)
+    import hashlib
+    same = {}
+    for o in meshes:
+        cs = [v.co for v in o.data.vertices]
+        if not cs:
+            continue
+        lo = [min(c[k] for c in cs) for k in range(3)]                     # (where and how big it is don't count: the
+        ext = max(max(c[k] for c in cs) - lo[k] for k in range(3)) or 1.0  # compressor moves both into the node, so
+        h = hashlib.sha1(b"".join(struct.pack("<3i", *(round((c[k] - lo[k]) / ext * 2000) for k in range(3))) for c in cs)).hexdigest()   # copies anywhere match)
+        same.setdefault(h, []).append(o)
+    for group in same.values():
+        if len(group) > 1:
+            bs = [vals[o.name][0] for o in group]
+            ws = [vals[o.name][1] for o in group]
+            mb = [sum(c) / len(c) for c in zip(*bs)]
+            mw_ = [sum(c) / len(c) for c in zip(*ws)]
+            for o in group:
+                vals[o.name] = (mb, mw_)
+    for o in meshes:
+        bias, w = vals[o.name]
+        me = o.data
+        me.attributes.new("_TOONBIAS", "FLOAT", "POINT").data.foreach_set("value", [float(x) for x in bias])
+        me.attributes.new("_INKW", "FLOAT", "POINT").data.foreach_set("value", [float(x) for x in w])
+
+
+def pack_toon_attrs(path):
+    """Fold a GLB's _TOONBIAS and _INKW (0 to 1; Blender writes every float attribute as float) into one attribute,
+    _TOON: normalized unsigned bytes (bias, weight, 0, 0), every primitive's in one shared buffer view, the buffer repacked
+    without the floats. One accessor a primitive instead of two (a file of 2,500 parts carries them in its JSON), four
+    bytes a vertex instead of eight, aligned as glTF wants."""
+    import json, struct
+    with open(path, "rb") as f:
+        data = f.read()
+    jl = struct.unpack_from("<I", data, 12)[0]
+    j = json.loads(data[20:20 + jl])
+    bl = struct.unpack_from("<I", data, 20 + jl)[0]
+    bin_ = data[28 + jl:28 + jl + bl]
+
+    def floats(ai):
+        a = j["accessors"][ai]
+        v = j["bufferViews"][a["bufferView"]]
+        return struct.unpack_from(f"<{a['count']}f", bin_, v.get("byteOffset", 0) + a.get("byteOffset", 0))
+    packed, dropped, done = bytearray(), set(), {}
+    for m in j.get("meshes", []):
+        for prim in m["primitives"]:
+            at = prim["attributes"]
+            if "_TOONBIAS" not in at or "_INKW" not in at:
+                continue
+            key = (at["_TOONBIAS"], at["_INKW"])
+            dropped.update(key)
+            if key not in done:
+                b, w = floats(key[0]), floats(key[1])
+                q = lambda x: max(0, min(255, round(x * 255)))
+                off = len(packed)
+                for x, y in zip(b, w):
+                    packed += bytes((q(x), q(y), 0, 0))
+                j["accessors"].append({"componentType": 5121, "normalized": True, "type": "VEC4", "count": len(b), "byteOffset": off})
+                done[key] = len(j["accessors"]) - 1
+            del at["_TOONBIAS"], at["_INKW"]
+            at["_TOON"] = done[key]
+    if not done:
+        return
+    # drop the float accessors (renumbering the rest) and every view only they read; then the packed view
+    keep = [i for i in range(len(j["accessors"])) if i not in dropped]
+    renum = {old: new for new, old in enumerate(keep)}
+    j["accessors"] = [j["accessors"][i] for i in keep]
+    for m in j.get("meshes", []):
+        for prim in m["primitives"]:
+            for k2, ai in list(prim["attributes"].items()):
+                prim["attributes"][k2] = renum[ai]
+            if "indices" in prim:
+                prim["indices"] = renum[prim["indices"]]
+            for tgt in prim.get("targets", []):
+                for k2, ai in list(tgt.items()):
+                    tgt[k2] = renum[ai]
+    for sk in j.get("skins", []):
+        if "inverseBindMatrices" in sk:
+            sk["inverseBindMatrices"] = renum[sk["inverseBindMatrices"]]
+    for an in j.get("animations", []):
+        for sm in an.get("samplers", []):
+            sm["input"], sm["output"] = renum[sm["input"]], renum[sm["output"]]
+    used = {a["bufferView"] for a in j["accessors"] if "bufferView" in a} | {im["bufferView"] for im in j.get("images", []) if "bufferView" in im}
+    views, out, remap = [], bytearray(), {}
+    for i, v in enumerate(j["bufferViews"]):
+        if i not in used:
+            continue
+        v = dict(v)
+        chunk = bin_[v.get("byteOffset", 0):v.get("byteOffset", 0) + v["byteLength"]]
+        out += b"\0" * (-len(out) % 4)
+        v["byteOffset"] = len(out)
+        out += chunk
+        remap[i] = len(views)
+        views.append(v)
+    out += b"\0" * (-len(out) % 4)
+    views.append({"buffer": 0, "byteOffset": len(out), "byteLength": len(packed), "byteStride": 4, "target": 34962})
+    out += packed
+    pv = len(views) - 1
+    for a in j["accessors"]:
+        if "bufferView" in a:
+            a["bufferView"] = remap[a["bufferView"]]
+        elif a.get("type") == "VEC4" and a.get("componentType") == 5121 and "byteOffset" in a and a.get("normalized"):
+            a["bufferView"] = pv
+    for im in j.get("images", []):
+        if "bufferView" in im:
+            im["bufferView"] = remap[im["bufferView"]]
+    j["bufferViews"] = views
+    out += b"\0" * (-len(out) % 4)
+    j["buffers"][0]["byteLength"] = len(out)
+    js = json.dumps(j, separators=(",", ":")).encode()
+    js += b" " * (-len(js) % 4)
+    with open(path, "wb") as f:
+        f.write(struct.pack("<III", 0x46546C67, 2, 28 + len(js) + len(out)))
+        f.write(struct.pack("<II", len(js), 0x4E4F534A) + js)
+        f.write(struct.pack("<II", len(out), 0x004E4942) + bytes(out))
 
 
 def export(out, objects):
@@ -457,6 +588,7 @@ def export(out, objects):
               export_animations=False, export_cameras=False, export_lights=False)
     props = bpy.ops.export_scene.gltf.get_rna_type().properties.keys()
     bpy.ops.export_scene.gltf(**{k: v for k, v in kw.items() if k in props})
+    pack_toon_attrs(out)
     print("exported", out, os.path.getsize(out), "bytes")
 
 

@@ -1232,6 +1232,7 @@ def export():
               export_animations=False, export_cameras=False, export_lights=False)
     props = bpy.ops.export_scene.gltf.get_rna_type().properties.keys()
     bpy.ops.export_scene.gltf(**{k: v for k, v in kw.items() if k in props})
+    pack_toon_attrs(OUT)   # (kit.py)
     FR.location = keep_loc
     print("exported", OUT, os.path.getsize(OUT), "bytes")
 

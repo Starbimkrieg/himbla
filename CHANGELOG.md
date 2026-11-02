@@ -5,6 +5,19 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Look fixes: anti-aliasing, clean line crossings, the lab's wall seams, smaller files.**
+  - **Anti-aliasing** (Settings, Graphics: off, 2x, 4x; 4x on medium and high, off on low). The scene pass was never
+    anti-aliased, so ink edges and the line where an outline shell cuts the wall behind it at a grazing angle came out
+    as staircases. It multisamples now (`post.js` setSamples); the post pass's own depth lines aren't smoothed.
+  - **Where two designed lines cross** (the shuttle's seam rings over its gutter line) the colour was darkened twice, a
+    square of harder colour. Each pixel is now darkened once (a stencil mark, `toon.js` inkLineMat).
+  - **The Antimatter Lab's round wall** was 72 overlapping boxes, and each box's outline shell poked through its
+    neighbour at the joins: broken seam lines that came and went. Each unbroken run is now one mesh (the colliders are as
+    they were), and the seams are designed lines, one every three panels (`build_zbornak_lab.py` ring_wall).
+  - **The toon attributes** are one byte-packed attribute, `_TOON` (`kit.py` pack_toon_attrs), and identical parts share
+    their values so the compressor still stores them once; occlusion is per model (a kit's pieces all stand at the origin)
+    and ignores trim lying on a surface (a dome's ribs). Ships.glb 1.67 to 1.94 MB, hall 0.32 to 0.37 MB, outposts 2.0 to
+    2.33 MB, zlab 2.3 to 2.64 MB.
 - **Look: per-vertex shade threshold and line weight, designed ink lines, tinted creases.** The Blender export now bakes two
   vertex attributes on every mesh (`kit.py` toon_attrs): how hemmed-in each vertex is, which moves the toon shading's
   light-to-shade edge so creases, inner corners and the gaps between parts fall into shade early as clean shapes; and the
@@ -13,7 +26,7 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
   and draws as a darker, cooler shade of the colour they cross (`toon.js` inkLineMat; the Ink setting covers them). The
   shuttle-bus has the first: plating rings between its portholes, a roof spine and a gutter line. The post pass's crease
   lines take the same tint; outlines (depth jumps and shells) stay ink. `?look=classic` turns the tint off. The outposts,
-  ships and hall are rebuilt with the attributes (ships.glb 1.7 to 2.6 MB; hall 0.31 to 0.38 MB; outposts 2.0 to 2.7 MB).
+  ships and hall are rebuilt with the attributes.
 - **Look: chosen shade colours, halftone only across the shadow edge, weighted normals.** Every toon surface (the ground too)
   now shades to a chosen colour instead of a dimmed one: each colour's shade is more saturated and turned toward the sky
   fill's violet (the mid band takes part of it, sunlit faces none). The halftone dots moved from the post pass, where they

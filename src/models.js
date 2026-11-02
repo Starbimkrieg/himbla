@@ -194,7 +194,7 @@ function bakeRunnerParts(scene) {
       if (!g.slots.has(slot)) g.slots.set(slot, []);
       g.slots.get(slot).push(geo);
       const t = o.userData.ink || 0;
-      if (t > 0) g.ink.push(inkShellGeo(geo, t, o.geometry.attributes._inkw));
+      if (t > 0) g.ink.push(inkShellGeo(geo, t, o.geometry.attributes._toon));
     }
   }
   const out = {};
@@ -223,7 +223,8 @@ function bakedGeo(src, m) {
 }
 
 // A part's outline shell: its triangles plus `off` = smoothed normal * thickness. Normals are averaged over shared
-// positions so seams don't crack. `w`: the Blender part's line weight per vertex (`_inkw`, kit.py toon_attrs), if it has one.
+// positions so seams don't crack. `w`: the Blender part's `_toon` attribute (its .y the line weight per vertex: kit.py
+// toon_attrs), if it has one.
 function inkShellGeo(geo, t, w = null) {
   const pos = geo.attributes.position, nor = geo.attributes.normal;
   const sum = new Map();
@@ -237,7 +238,7 @@ function inkShellGeo(geo, t, w = null) {
   const off = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
     const s = sum.get(keyOf(i));
-    const l = (Math.hypot(s[0], s[1], s[2]) || 1) / (w ? t * w.getX(i) : t);
+    const l = (Math.hypot(s[0], s[1], s[2]) || 1) / (w ? t * w.getY(i) : t);
     off[i * 3] = s[0] / l; off[i * 3 + 1] = s[1] / l; off[i * 3 + 2] = s[2] / l;
   }
   const g = new THREE.BufferGeometry();
@@ -1584,7 +1585,7 @@ function bakeShip(root, { near = false } = {}) {
           if (!slots.has(slot)) slots.set(slot, []);
           slots.get(slot).push(geo);
           const t = c.userData.ink || c.parent.userData.ink || 0;     // (a mesh of two materials loads as a group of two: its ink is the group's)
-          if (t > 0) inks.push(inkShellGeo(geo, t, c.geometry.attributes._inkw));
+          if (t > 0) inks.push(inkShellGeo(geo, t, c.geometry.attributes._toon));
           visit(c);
         } else if (isPivot(c)) kids.push(bake(c, inv));
         else visit(c);

@@ -57,6 +57,14 @@ material for that slot. To give a part two colours, make two meshes.
   (`toon_attrs`): `_TOONBIAS`, how hemmed-in each vertex is (rays out over its hemisphere hitting the model within 0.9 m),
   which moves the game's light-to-shade edge so creases and the gaps between parts shade early; and `_INKW`, the outline's
   weight, tapering toward both ends of long thin parts. Nothing to author; `MOONRUNNER_TOONATTR=0` leaves them out.
+  Occlusion is per export root (a kit's pieces at a shared origin don't shade each other) and ignores hits within 15 cm
+  (trim lying on a surface); identical parts get their mean, so the compressor still stores them once. After export
+  `pack_toon_attrs` folds both into one byte attribute, `_TOON` (the game reads `_toon`). A builder with its own export
+  (the ships') calls `weighted_normals`, `toon_attrs` and `pack_toon_attrs` itself.
+- **Touching parts that should read as one surface are one mesh.** Every mesh gets its own outline shell, so two boxes
+  overlapping at a joint (a round wall of panels) show each shell poking through the other: broken lines that come and
+  go with the angle. Build the run as one mesh and draw the seams you want with `ink_lines` (`build_zbornak_lab.py`
+  ring_wall).
 - **Designed ink lines** for what the shape alone doesn't draw: panel seams, plating rings, hatch outlines.
   `ink_lines(o, [(point, normal), ...], t=0.02, keep=...)` draws one where `o`'s surface meets each plane (three.js axes,
   `o`'s frame); `keep(p)` drops pieces. The game widens them like outlines and draws them as a darker shade of the colour

@@ -12,6 +12,7 @@ export class ComicPost {
       type: THREE.HalfFloatType,
       depthTexture: new THREE.DepthTexture(size.x, size.y),
       stencilBuffer: true, // (the rocks' ink marks: toon.js inkMarks)
+      samples: 0, // multisampling: the Anti-aliasing setting (setSamples)
     });
     this.target.depthTexture.format = THREE.DepthStencilFormat;
     this.target.depthTexture.type = THREE.UnsignedInt248Type;
@@ -115,6 +116,15 @@ export class ComicPost {
     this.scene = new THREE.Scene();
     this.scene.add(this.quad);
     this.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  }
+
+  // MSAA on the scene pass (0, 2 or 4 samples): smooths every edge drawn into it, the outline shells' and where two
+  // surfaces cut each other (a shell through the wall it's against, at a grazing angle: a staircase). The depth the lines
+  // are found from is resolved to one sample per pixel, so the post pass's own lines aren't smoothed.
+  setSamples(n) {
+    if (this.target.samples === n) return;
+    this.target.samples = n;
+    this.target.dispose(); // (made again, multisampled or not, on its next use)
   }
 
   // the halftone grid's cell in pixels, as the post pass's own dots: 5 px at 900 px tall, scaled up beyond

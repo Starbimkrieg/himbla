@@ -112,10 +112,11 @@ ${chunk
   } else console.warn('[toon] toon lighting lines not found: shade colours and edge halftone are off');
 }
 
-// A Blender mesh's shade threshold (`_toonbias`, kit.py toon_attrs) as the toon shader's `toonBias` (bias, 0.5): every
-// geometry taken from a GLB gets one, zero where the file has none, so a model's parts always merge.
+// A Blender mesh's shade threshold (`_toon`.x, kit.py toon_attrs: bytes of bias and line weight) as the toon shader's
+// `toonBias` (bias, 0.5): every geometry taken from a GLB gets one, zero where the file has none, so a model's parts
+// always merge.
 export function toonBiasOf(src) {
-  const n = src.attributes.position.count, a = new Float32Array(n * 2), b = src.attributes._toonbias;
+  const n = src.attributes.position.count, a = new Float32Array(n * 2), b = src.attributes._toon;
   for (let i = 0; i < n; i++) { a[i * 2] = b ? b.getX(i) : 0; a[i * 2 + 1] = 0.5; }
   return new THREE.BufferAttribute(a, 2);
 }
@@ -238,6 +239,9 @@ export const inkLineMat = new THREE.MeshBasicMaterial({
   color: new THREE.Color().setRGB(0.36, 0.32, 0.5, THREE.LinearSRGBColorSpace), side: THREE.DoubleSide,
   transparent: true, depthWrite: false, blending: THREE.MultiplyBlending, premultipliedAlpha: true,
   polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+  // each pixel multiplied once: where two lines cross (a seam ring over a gutter line) the second would darken it again,
+  // a square of harder colour. The first line there marks it LINE_MARK (kept out of inkMarks' range); others skip it.
+  stencilWrite: true, stencilRef: 255, stencilFunc: THREE.NotEqualStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
 });
 inkLineMat.onBeforeCompile = (sh) => {
   inkCompile(sh, 'normalize(normal) * inkPush(inkT, vInkD) * inkK', 'attribute float inkT;');
@@ -267,10 +271,10 @@ export function inkLineMesh(list) {
 // Ink marks (the stencil): a solid object writes its mark where it's drawn, and its shell, drawn after, only where that mark
 // isn't, so a shell pulled forward (inkCompile's pull) never covers its own object. A mark per object, cycling through 1 to 255:
 // two sharing one only lose the shell's line where they overlap (the post pass's line stays). Needs the stencil in the post
-// pass's target (post.js); without one the test always passes.
+// pass's target (post.js); without one the test always passes. Marks run 1 to 254 (255: inkLineMat's).
 let inkMarkN = 0;
 export function inkMarks(solid, shell) {
-  const mark = (inkMarkN = (inkMarkN % 255) + 1);
+  const mark = (inkMarkN = (inkMarkN % 254) + 1); // (1 to 254: 255 is inkLineMat's)
   for (const o of [solid, shell]) o.onBeforeRender = (r, s, c, g, m) => { m.stencilRef = mark; };
   const sm = solid.material;
   sm.stencilWrite = true; sm.stencilFunc = THREE.AlwaysStencilFunc; sm.stencilZPass = THREE.ReplaceStencilOp;

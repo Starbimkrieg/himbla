@@ -10,8 +10,8 @@ import { slotOf, roleOf, animOf, SHAPES } from './staticContract.js';
 //   parseStaticGlb(scene)         loaded glTF scene -> one neutral `asset` per root node
 //   bakeStatic(asset, { color })  asset -> template for one faction colour
 //
-// As in models.js only geometry is read: positions, normals, index, the toon attributes (`_toonbias`, `_inkw`: kit.py
-// toon_attrs), material name, flat base colour (and alpha for a beam), double-sided flag, and the `ink` and `inkline`
+// As in models.js only geometry is read: positions, normals, index, the toon attribute (`_toon`: kit.py toon_attrs),
+// material name, flat base colour (and alpha for a beam), double-sided flag, and the `ink` and `inkline`
 // extras; the toon material shades. The result is vertex-coloured, so hundreds
 // of Blender objects bake to a few meshes (lit, unlit, one outline hull, beams, a few per moving part), like Kit.finish.
 
@@ -113,7 +113,7 @@ function addPart(group, mesh, groupInv, warn) {
     color: mat.color ? mat.color.clone() : new THREE.Color(0xffffff),
     opacity: mat.transparent ? mat.opacity : 1, // used by `additive…` materials only
     ink: ink > 0 ? ink : 0,
-    inkW: src.attributes._inkw || null, // (the line's weight per vertex: kit.py toon_attrs)
+    inkW: src.attributes._toon || null, // (.y: the line's weight per vertex, kit.py toon_attrs)
   });
 }
 
@@ -175,7 +175,7 @@ function inkShell(geo, t, w = null) {
   for (let i = 0; i < n; i++) {
     const s = sum.get(key(i));
     dir[i * 3] = s[0] / s[4]; dir[i * 3 + 1] = s[1] / s[4]; dir[i * 3 + 2] = s[2] / s[4];
-    th[i] = (w ? t * w.getX(i) : t) / Math.max(MITRE_MIN, s[3]);
+    th[i] = (w ? t * w.getY(i) : t) / Math.max(MITRE_MIN, s[3]);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', pos.clone());
