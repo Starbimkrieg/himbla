@@ -5,10 +5,7 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
-- **Wind curls, animating on twos, the style module and audit; glow fixes.**
-  - **Wind curls** (`fx.js` curl): Wind Waker's wind, a flat stroke rolling up into a spiral, white with an ink edge and
-    turned to the camera, popping in and shrinking away in held steps like the puffs. They peel off behind the skates at
-    speed (alternating sides, more the faster you go) and stream out of the thrusters.
+- **Animating on twos, the style module and audit; glow fixes.**
   - **Animate on twos** (Settings, Graphics; on): figures' poses step at 12 a second, as hand-drawn animation does, while
     they move through the world every frame and the camera stays smooth (`src/twos.js`: PoseHold for the courier, which
     keeps the live pose for the animation to work from and shows the held one; heldPhase for the walkers in places, on

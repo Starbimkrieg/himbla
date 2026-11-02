@@ -58,7 +58,6 @@ const _sp = new THREE.Vector3(), _sf = new THREE.Vector3();
 const _tp = new THREE.Vector3(), _tl = new THREE.Vector3();
 const _lean = { L: 0, R: 0, extra: 0 }; // (leanDrops scratch)
 
-const _curlP = new THREE.Vector3(), _curlR = new THREE.Vector3(), _curlV = new THREE.Vector3(); // (wind curls: update)
 
 export class Player {
   constructor(game, spawn) {
@@ -517,21 +516,9 @@ export class Player {
     if (b.grounded && b.skating && this.speed > 25 && Math.random() < dt * 30) {
       g.fx.dust(b.pos, b.vel.clone().multiplyScalar(-0.2), 1, up, 0xe8e2d8);
     }
-    // wind curls (fx.js curl): peeling off behind the skates at speed, and out of the thrusters
-    if (b.grounded && b.skating && this.speed > 18 && Math.random() < dt * Math.min(9, this.speed * 0.2)) {
-      const side = (this._curlSide = -(this._curlSide || 1));
-      const at = _curlP.copy(b.pos).addScaledVector(up, 0.35).addScaledVector(b.vel, -0.03);
-      _curlR.crossVectors(up, b.vel).normalize();
-      at.addScaledVector(_curlR, 0.35 * side);
-      g.fx.curl(at, _curlV.copy(b.vel).multiplyScalar(0.35).addScaledVector(up, 0.6).addScaledVector(_curlR, 1.2 * side), b.vel, { color: 0xeafcff, size: 0.8 + this.speed * 0.012, life: 0.5, flip: side < 0 });
-    }
     if (b.thrusting && Math.random() < dt * 40) {
       const back = this.model.cargoSlot.getWorldPosition(new THREE.Vector3());
       g.fx.spawn(back, thrustDir.clone().normalize().multiplyScalar(-12).add(b.vel), { color: (g.upgrades.alien ? [0x7dffd4, 0xc77dff] : [0x2ee6ff, 0xffffff])[Math.random() < 0.5 ? 0 : 1], size: g.upgrades.alien ? 0.5 : 0.35, life: 0.35, spread: 2 });
-      if (Math.random() < 0.3) {
-        const out = _curlV.copy(thrustDir).normalize().multiplyScalar(-1);
-        g.fx.curl(back, out.clone().multiplyScalar(7).add(b.vel), out, { color: g.upgrades.alien ? 0x7dffd4 : 0x9bf3ff, size: 1.3, life: 0.45, flip: Math.random() < 0.5 });
-      }
     }
 
     this.center.copy(b.pos).addScaledVector(up, 1.3);
