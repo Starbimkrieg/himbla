@@ -5,7 +5,7 @@ import { glyphHtml, tokensFor, esc } from './glyphs.js';
 import { gyroSupported } from './gyro.js';
 import { DEV_TOOLS } from './devtools.js';
 import { SKIN_FROM_URL } from './moonSkins.js';
-import { INK_U, inkMat, inkMatBaked, inkMatSolid, inkLineMat, TOON_LOOK, CLASSIC_LOOK } from './toon.js';
+import { INK_U, inkMat, inkMatBaked, inkMatSolid, inkLineMat, TOON_LOOK, CLASSIC_LOOK, setToonBands } from './toon.js';
 
 const KEY = 'moonrunner-settings-v1';
 const BINDS_V = 2; // 2: no thruster key (right mouse only); power on E, not Z
@@ -77,6 +77,7 @@ const SCHEMA = {
       { key: 'regolith', label: 'Regolith ground texture', type: 'toggle', def: false, hint: 'Lunar dust, pebbles and craters on the ground, and grain and dust on the rocks' },
       { key: 'groundDetail', label: 'Ground detail', type: 'choice', def: 1, options: [[0, 'LOW'], [1, 'MEDIUM'], [2, 'HIGH']], hint: 'How much of the regolith texture is drawn: lower is faster' },
     ] : []),
+    { key: 'toonBands', label: 'Toon bands', type: 'choice', def: '3', options: [['3', '3 · SHADE, MID, LIT'], ['2', '2 · SHADE, LIT']], hint: 'Two: one hard edge between light and shade' },
     { key: 'halftone', label: 'Comic halftone dots', type: 'toggle', def: true },
     { key: 'speedLines', label: 'Speed lines', type: 'toggle', def: true },
     { key: 'ink', label: 'Ink outline strength', type: 'range', min: 0, max: 2, step: 0.1, def: 1, fmt: pct },
@@ -335,6 +336,7 @@ export class Settings {
     // every outline shell (toon.js inkMat and inkMatSolid, the boulders' ink) reads it; at 0 they aren't drawn at all
     INK_U.uInkK.value = v.ink;
     TOON_LOOK.dots = v.halftone && !CLASSIC_LOOK ? 1 : 0; // the dots across the shadow edge (toon.js)
+    setToonBands(Number(v.toonBands)); // (toon.js: the shared gradient, rewritten in place)
     inkMat.visible = inkMatBaked.visible = inkMatSolid.visible = inkLineMat.visible = v.ink > 0;
     if (g.planet && g.planet.boulderInk) g.planet.boulderInk.visible = v.ink > 0;
     if (g.haptics) g.haptics.configure(v.rumble, v.rumbleLevel, v.padLight, v.padTriggers);

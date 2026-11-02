@@ -44,7 +44,8 @@ import { receiveFar } from './farshadow.js';
 //   - shade in a chosen colour: what the sun doesn't reach shows each colour's shade, more saturated and turned toward the
 //     sky fill's violet (toonShade), not the colour dimmed; the mid band takes part of it, sunlit faces none;
 //   - halftone only across the shadow edge: screen dots in the light's mid band, biggest where it meets the shade, gone by
-//     the lit band (dotNL TOON_HT_LO to TOON_HT_HI; a material's `defines` can move them: planet.js). Cast shadows stay flat;
+//     the lit band (dotNL TOON_LOOK htLo to htHi, set with the tone bands; a material's `defines` TOON_HT_LO and TOON_HT_HI
+//     can pin them). Cast shadows stay flat;
 //   - a per-vertex shade threshold: geometry with a `toonBias` attribute (x the bias, y 0.5 marking it real: a vertex
 //     attribute a geometry lacks reads (0, 0, 0, 1), or (1, 1, 1) after a ShaderMaterial's default colour) moves its
 //     light-to-shade edge by x * TOON_BIAS_K, so creases and the gaps between parts shade early (the Blender models carry it:
@@ -53,7 +54,7 @@ import { receiveFar } from './farshadow.js';
 // `dots` follows the halftone setting (settings.js), `cell` the screen size (post.js), `?look=classic` turns both off and
 // gives the dots back to the post pass, the look before this (to compare).
 export const CLASSIC_LOOK = typeof location !== 'undefined' && new URLSearchParams(location.search).get('look') === 'classic';
-export const TOON_LOOK = { tint: CLASSIC_LOOK ? 0 : 1, dots: CLASSIC_LOOK ? 0 : 1, cell: 5 };
+export const TOON_LOOK = { tint: CLASSIC_LOOK ? 0 : 1, dots: CLASSIC_LOOK ? 0 : 1, cell: 5, htLo: -0.05, htHi: 0.33, bands: 3 };
 THREE.ShaderLib.toon.uniforms.uToonLook = { value: TOON_LOOK };
 const TOON_BIAS_K = 0.7;
 {
@@ -69,7 +70,7 @@ const TOON_BIAS_K = 0.7;
   const DIRECT = 'vec3 irradiance = getGradientIrradiance( geometryNormal, directLight.direction ) * directLight.color;\n\treflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );';
   const INDIRECT = 'reflectedLight.indirectDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );';
   if (chunk.includes(DIRECT) && chunk.includes(INDIRECT)) {
-    THREE.ShaderChunk.lights_toon_pars_fragment = `struct ToonLook { float tint; float dots; float cell; };
+    THREE.ShaderChunk.lights_toon_pars_fragment = `struct ToonLook { float tint; float dots; float cell; float htLo; float htHi; };
 uniform ToonLook uToonLook;
 varying float vToonBias;
 // getGradientIrradiance, from a dot product (so the per-vertex threshold can move it)
@@ -82,12 +83,6 @@ vec3 toonGradient( float dotNL ) {
 		return mix( vec3( 0.7 ), vec3( 1.0 ), smoothstep( 0.7 - fw.x, 0.7 + fw.x, coord.x ) );
 	#endif
 }
-#ifndef TOON_HT_LO
-#define TOON_HT_LO -0.05
-#endif
-#ifndef TOON_HT_HI
-#define TOON_HT_HI 0.33
-#endif
 // a colour's shade: saturation x1.5 (greys stay grey), then cooled toward violet (the sky fill already tints it)
 vec3 toonShade( vec3 a ) {
 	float l = dot( a, vec3( 0.299, 0.587, 0.114 ) );
@@ -96,7 +91,11 @@ vec3 toonShade( vec3 a ) {
 }
 // halftone cover (0 to 1) across the shadow edge: 45 degree screen grid, dots growing from the lit band toward the shade
 float toonDots( float dotNL ) {
+	#ifdef TOON_HT_LO
 	float amt = 1.0 - smoothstep( TOON_HT_LO, TOON_HT_HI, dotNL );
+	#else
+	float amt = 1.0 - smoothstep( uToonLook.htLo, uToonLook.htHi, dotNL );
+	#endif
 	if ( uToonLook.dots <= 0.0 || amt <= 0.0 ) return 0.0;
 	vec2 g = mat2( 0.7071, -0.7071, 0.7071, 0.7071 ) * gl_FragCoord.xy / uToonLook.cell;
 	vec2 f = fract( g ) - 0.5;
@@ -144,16 +143,37 @@ export function frontCaster(mat) {
   return mat;
 }
 
+// Tone bands (Settings: Toon bands), on the one gradient every toon material shares (the ground has its own ramp):
+//   3: shade, mid, lit (the light's dot product split in thirds, as ever);
+//   2: shade and lit, one hard edge at TWO_TONE_EDGE: the mid band's half that faced the sun turns lit, the rest shade.
+// Live: the texture is rewritten in place, and the halftone band moves with it (TOON_LOOK htLo, htHi).
+const GRAD_W = 64, TWO_TONE_EDGE = 0.1;
 let grad = null;
+function fillGradient(bands) {
+  const d = grad.image.data;
+  for (let i = 0; i < GRAD_W; i++) {
+    const c = (i + 0.5) / GRAD_W; // (texture coordinate: dotNL * 0.5 + 0.5)
+    const v = bands === 2 ? (c < 0.5 + 0.5 * TWO_TONE_EDGE ? 60 : 255) : c < 1 / 3 ? 60 : c < 2 / 3 ? 150 : 255;
+    d.set([v, v, v, 255], i * 4);
+  }
+  grad.needsUpdate = true;
+}
 export function gradientMap() {
   if (!grad) {
-    const data = new Uint8Array([60, 60, 60, 255, 150, 150, 150, 255, 255, 255, 255, 255]);
-    grad = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat);
+    grad = new THREE.DataTexture(new Uint8Array(GRAD_W * 4), GRAD_W, 1, THREE.RGBAFormat);
     grad.minFilter = THREE.NearestFilter;
     grad.magFilter = THREE.NearestFilter;
-    grad.needsUpdate = true;
+    fillGradient(TOON_LOOK.bands);
   }
   return grad;
+}
+export function setToonBands(n) {
+  const bands = n === 2 ? 2 : 3;
+  // the dots: across the mid band (3), or from the one edge into the lit side (2)
+  [TOON_LOOK.htLo, TOON_LOOK.htHi] = bands === 2 ? [TWO_TONE_EDGE, TWO_TONE_EDGE + 0.3] : [-0.05, 0.33];
+  if (TOON_LOOK.bands === bands) return;
+  TOON_LOOK.bands = bands;
+  if (grad) fillGradient(bands);
 }
 
 const cache = new Map();

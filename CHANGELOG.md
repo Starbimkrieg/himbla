@@ -5,6 +5,10 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Toon bands setting, anisotropic filtering.** Settings, Graphics, Toon bands: 3 (shade, mid, lit: as before) or 2
+  (shade and lit, one hard edge just past side-on to the sun, the halftone dots running from it into the lit side), live
+  (`toon.js` setToonBands rewrites the one gradient every toon material shares; the ground keeps its own ramp). Every
+  texture now gets 8x anisotropic filtering (`main.js`): signs, labels and screens stay crisp at a slant.
 - **Look fixes: anti-aliasing, clean line crossings, the lab's wall seams, smaller files.**
   - **Anti-aliasing** (Settings, Graphics: off, 2x, 4x; 4x on medium and high, off on low). The scene pass was never
     anti-aliased, so ink edges and the line where an outline shell cuts the wall behind it at a grazing angle came out

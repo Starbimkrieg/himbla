@@ -169,6 +169,8 @@ class Game {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', reversedDepthBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // anisotropic filtering for every texture made from here on (signs, labels, screens): crisp at a slant, not smeared
+    THREE.Texture.DEFAULT_ANISOTROPY = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this._frameMs = 16; // smoothed frame time (updateLighting uses it to throttle the shadow map)
