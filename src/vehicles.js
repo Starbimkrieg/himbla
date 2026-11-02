@@ -634,7 +634,7 @@ export class Garage {
       fill.style.background = k > 0.5 ? '#2ee6ff' : k > 0.25 ? '#ffd23f' : '#ff2a4a';
       this.hpRow.querySelector('.vb-num').textContent = `${Math.ceil(hp)}/${max}`;
       // smoke when badly damaged
-      if (k < 0.35 && Math.random() < dt * 20) g.fx.spawn(pv.model.root.position.clone().addScaledVector(pv.e.body.pos.clone().normalize(), 3), pv.e.body.pos.clone().normalize().multiplyScalar(4), { color: k < 0.15 ? 0xff6a2a : 0x3a3550, size: 0.9, life: 0.9, count: 1, spread: 1 });
+      if (k < 0.35 && Math.random() < dt * 20) g.fx.puff(pv.model.root.position.clone().addScaledVector(pv.e.body.pos.clone().normalize(), 3), pv.e.body.pos.clone().normalize().multiplyScalar(4), { color: k < 0.15 ? 0xff6a2a : 0xc4bcd6, to: k < 0.15 ? null : 0x8a80a3, size: 0.6, life: 0.9, count: 1, spread: 1, glow: k < 0.15 });
     }
     const v = this.active;
     if (!v || pv) return;

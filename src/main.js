@@ -1359,6 +1359,7 @@ class Game {
     const e = up.dot(SUN);
     const day = THREE.MathUtils.smoothstep(e, -0.06, 0.12);
     const dark = darkness(up);
+    if (this.post) this.post.setGradeDay(1 - dark); // (post.js colour grade: the sunlit side's, the dark side's)
     // lunar light (Settings, on by default): no air to scatter light into the shade, so the sky fill is cut to under half
     // (shade and shadows a deep indigo, never black: ink and shape still read), and the sun brightened and tinted with the
     // violet the fill gave lit ground, so sunlit ground keeps its colour; shadow edges are cut hard (a negative shadow

@@ -2,6 +2,15 @@ import * as THREE from 'three';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { TOON_LOOK, CLASSIC_LOOK, GLOW_MARK } from './toon.js';
 
+// Colour grade, in display colour (sRGB) after the ink and before the overlays (speed lines, vignettes, damage): a split
+// tone (shade toward `sh`, light toward `hi`, by `amt`), then saturation `sat` and contrast `con` round mid grey. Two
+// grades, the sunlit side's and the dark side's, mixed by how dark it is where you are (main.js updateLighting: gradeDay).
+// Live: edit post.grade.day / .night (or GRADES) from the console; the Colour grade setting scales the whole thing.
+export const GRADES = {
+  day: { sh: [0.35, 0.45, 0.75], hi: [0.78, 0.62, 0.42], amt: 0.3, sat: 1.1, con: 1.0 }, // warm sun, cool shade
+  night: { sh: [0.55, 0.3, 0.75], hi: [0.4, 0.75, 0.8], amt: 0.28, sat: 1.3, con: 1.12 }, // neon night
+};
+
 // Glow: the marked pixels (toon.js glowMark: alpha GLOW_MARK) at a quarter of the size, averaged down, blurred across and
 // up; the post pass adds the halo in hard steps (two rings, not a soft bloom: comic glow). `k` the Glow setting.
 const GLOW_SHADER = {
@@ -11,17 +20,22 @@ const GLOW_SHADER = {
   down: /* glsl */ `
     uniform sampler2D tSrc; uniform vec2 px; varying vec2 vUv;
     vec3 m(vec2 o){ vec4 c = texture2D(tSrc, vUv + o * px); return c.rgb * clamp((c.a - 1.0) / ${(GLOW_MARK - 1).toFixed(1)}, 0.0, 1.0); }
-    void main(){ gl_FragColor = vec4(max(max(m(vec2(-1.0, -1.0)), m(vec2(1.0, -1.0))), max(m(vec2(-1.0, 1.0)), m(vec2(1.0, 1.0)))), 1.0); }`,
+    float k(vec2 o){ return clamp((texture2D(tSrc, vUv + o * px).a - 1.0) / ${(GLOW_MARK - 1).toFixed(1)}, 0.0, 1.0); }
+    // alpha: how much of it is lit (blurred with the colour: how crowded with lights the neighbourhood is)
+    void main(){
+      vec3 c = max(max(m(vec2(-1.0, -1.0)), m(vec2(1.0, -1.0))), max(m(vec2(-1.0, 1.0)), m(vec2(1.0, 1.0))));
+      gl_FragColor = vec4(c, (k(vec2(-1.0, -1.0)) + k(vec2(1.0, -1.0)) + k(vec2(-1.0, 1.0)) + k(vec2(1.0, 1.0))) * 0.25);
+    }`,
   // blur: 9 taps along `dir` (in quarter-size pixels), a wide gaussian
   blur: /* glsl */ `
     uniform sampler2D tSrc; uniform vec2 px; uniform vec2 dir; varying vec2 vUv;
     void main(){
-      vec3 c = texture2D(tSrc, vUv).rgb * 0.2;
-      c += (texture2D(tSrc, vUv + dir * px * 2.0).rgb + texture2D(tSrc, vUv - dir * px * 2.0).rgb) * 0.18;
-      c += (texture2D(tSrc, vUv + dir * px * 4.6).rgb + texture2D(tSrc, vUv - dir * px * 4.6).rgb) * 0.13;
-      c += (texture2D(tSrc, vUv + dir * px * 7.4).rgb + texture2D(tSrc, vUv - dir * px * 7.4).rgb) * 0.07;
-      c += (texture2D(tSrc, vUv + dir * px * 10.4).rgb + texture2D(tSrc, vUv - dir * px * 10.4).rgb) * 0.02;
-      gl_FragColor = vec4(c, 1.0);
+      vec4 c = texture2D(tSrc, vUv) * 0.2;
+      c += (texture2D(tSrc, vUv + dir * px * 2.0) + texture2D(tSrc, vUv - dir * px * 2.0)) * 0.18;
+      c += (texture2D(tSrc, vUv + dir * px * 4.6) + texture2D(tSrc, vUv - dir * px * 4.6)) * 0.13;
+      c += (texture2D(tSrc, vUv + dir * px * 7.4) + texture2D(tSrc, vUv - dir * px * 7.4)) * 0.07;
+      c += (texture2D(tSrc, vUv + dir * px * 10.4) + texture2D(tSrc, vUv - dir * px * 10.4)) * 0.02;
+      gl_FragColor = c;
     }`,
 };
 
@@ -58,6 +72,9 @@ export class ComicPost {
         halftone: { value: 1 }, lines: { value: 1 }, inkK: { value: 1 }, // settings
         creaseTint: { value: CLASSIC_LOOK ? 0 : 1 },
         tGlow: { value: null }, glowK: { value: 0 }, // the Glow setting (glow passes, below)
+        gradeK: { value: CLASSIC_LOOK ? 0 : 1 }, gradeDay: { value: 1 }, // the Colour grade setting; 1 sunlit, 0 dark side
+        gDaySh: { value: new THREE.Vector3() }, gDayHi: { value: new THREE.Vector3() }, gDayP: { value: new THREE.Vector3() },
+        gNightSh: { value: new THREE.Vector3() }, gNightHi: { value: new THREE.Vector3() }, gNightP: { value: new THREE.Vector3() },
         encodeSRGB: { value: 0 }, // 1 when the FXAA pass follows: it wants the picture as it will be seen
       },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
@@ -69,6 +86,10 @@ export class ComicPost {
         uniform float halftone; uniform float lines; uniform float inkK; // settings
         uniform float creaseTint;
         uniform sampler2D tGlow; uniform float glowK; uniform float encodeSRGB;
+        uniform float gradeK; uniform float gradeDay;
+        uniform vec3 gDaySh; uniform vec3 gDayHi; uniform vec3 gDayP; uniform vec3 gNightSh; uniform vec3 gNightHi; uniform vec3 gNightP;
+        vec3 toDisplay(vec3 c){ return sRGBTransferOETF(vec4(max(c, 0.0), 1.0)).rgb; }
+        vec3 fromDisplay(vec3 c){ return sRGBTransferEOTF(vec4(clamp(c, 0.0, 1.0), 1.0)).rgb; }
         varying vec2 vUv;
         float lin(vec2 uv){ float d = texture2D(tDepth, uv).x; return -perspectiveDepthToViewZ(d, near, far); }
         float hash(float n){ return fract(sin(n) * 43758.5453123); }
@@ -109,6 +130,18 @@ export class ComicPost {
           vec3 creaseC = mix(inkC, col * vec3(0.36, 0.32, 0.5), creaseTint * (1.0 - smoothstep(40.0, 420.0, c)));
           col = mix(col, mix(creaseC, inkC, outline >= crease ? 1.0 : outline / max(crease, 1e-3)), clamp(edge * inkK, 0.0, 1.0)); // settings
 
+          // colour grade (GRADES), the day's and the night's mixed
+          if (gradeK > 0.0) {
+            vec3 sh = mix(gNightSh, gDaySh, gradeDay), hi = mix(gNightHi, gDayHi, gradeDay), gp = mix(gNightP, gDayP, gradeDay);
+            vec3 d = toDisplay(col);
+            float l = dot(d, vec3(0.299, 0.587, 0.114)), w = clamp(l * 1.6 - 0.3, 0.0, 1.0);
+            vec3 g = clamp(d + gp.x * ((1.0 - w) * (sh - 0.5) + w * (hi - 0.5)), 0.0, 1.0);
+            float lg = dot(g, vec3(0.299, 0.587, 0.114));
+            g = clamp(vec3(lg) + (g - lg) * gp.y, 0.0, 1.0);
+            g = clamp(0.5 + (g - 0.5) * gp.z, 0.0, 1.0);
+            col = mix(col, fromDisplay(g), gradeK);
+          }
+
           // speed lines
           vec2 p = vUv - 0.5; p.x *= res.x / res.y;
           float rad = length(p);
@@ -132,10 +165,15 @@ export class ComicPost {
 
           // glow: the blurred lit parts in two hard rings (comic glow), screened over the picture in their own hue
           if (glowK > 0.0) {
-            vec3 gl = texture2D(tGlow, vUv).rgb;
+            vec4 gw = texture2D(tGlow, vUv);
+            vec3 gl = gw.rgb;
             float gm = max(gl.r, max(gl.g, gl.b));
+            // crowded lights (a wall of windows) merge: their halos summed into one bright slab, so the field is taken
+            // down by how much of the neighbourhood is lit; the cluster keeps one calm outer ring, a lone lamp both
+            float field = gm / (1.0 + 2.0 * smoothstep(0.12, 0.5, gw.a));
             // (each ring's edge eased over a hair, so it stays hard but doesn't step with the quarter-size pixels)
-            float ring = 0.16 * smoothstep(0.1, 0.13, gm) + 0.2 * smoothstep(0.3, 0.34, gm);
+            float ring = 0.16 * smoothstep(0.1, 0.13, field) + 0.2 * smoothstep(0.3, 0.34, field);
+            ring *= 1.0 - 0.45 * smoothstep(0.25, 0.6, gw.a);
             if (ring > 0.0) col = 1.0 - (1.0 - col) * (1.0 - clamp(gl / gm, 0.0, 1.0) * ring * glowK);
           }
 
@@ -161,6 +199,7 @@ export class ComicPost {
     this.downMat = pass(GLOW_SHADER.down);
     this.blurMat = pass(GLOW_SHADER.blur, { dir: { value: new THREE.Vector2(1, 0) } });
     this.glowK = 0;
+    this.grade = GRADES;
     // FXAA after the comic pass (setSmooth): smooths its own depth lines and the halftone's edges, which MSAA can't reach
     this.smooth = false;
     this.smoothTarget = new THREE.WebGLRenderTarget(size.x, size.y, { depthBuffer: false });
@@ -170,6 +209,15 @@ export class ComicPost {
   }
 
   quarter(size) { return new THREE.Vector2(Math.max(1, Math.round(size.x / 4)), Math.max(1, Math.round(size.y / 4))); }
+
+  // the Colour grade setting (0 to 1) and where you are (1 sunlit, 0 the dark side); the grades read live each frame
+  setGrade(k) { this.material.uniforms.gradeK.value = CLASSIC_LOOK ? 0 : k; }
+  setGradeDay(d) { this.material.uniforms.gradeDay.value = d; }
+  pushGrades() {
+    const u = this.material.uniforms, g = this.grade;
+    u.gDaySh.value.fromArray(g.day.sh); u.gDayHi.value.fromArray(g.day.hi); u.gDayP.value.set(g.day.amt, g.day.sat, g.day.con);
+    u.gNightSh.value.fromArray(g.night.sh); u.gNightHi.value.fromArray(g.night.hi); u.gNightP.value.set(g.night.amt, g.night.sat, g.night.con);
+  }
 
   // the Glow setting: 0 (off) to 1
   setGlow(k) { this.glowK = k; this.material.uniforms.glowK.value = k; }
@@ -210,6 +258,7 @@ export class ComicPost {
 
   render(scene, camera, output = null) {
     const u = this.material.uniforms;
+    this.pushGrades();
     u.near.value = camera.near;
     u.far.value = camera.far;
     this.renderer.setRenderTarget(this.target);

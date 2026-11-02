@@ -1,7 +1,31 @@
 import * as THREE from 'three';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { upAt, toScreen } from './geo.js';
+import { gradientMap, INK_COLOR, inkMat, glow } from './toon.js';
 
 const MAX_P = 1200;
+// Puffs (Wind Waker's smoke): dust, smoke and fire as solid, toon-shaded, ink-outlined blobs that swell, hold and shrink
+// to nothing, never fading. Their size moves in held steps at PUFF_FPS (a hand-drawn beat; position stays smooth). One
+// instanced mesh for all, and one for their outlines (the same blob pushed out, drawn back faces only).
+const MAX_PUFF = 700, PUFF_FPS = 12, PUFF_INK = 0.07;
+// a lumpy ball: an icosphere with each vertex pushed in or out a little (fixed, so every puff shares it; turned at random)
+function puffGeometry() {
+  const g = mergeVertices(new THREE.IcosahedronGeometry(1, 2)); // (detail 2: round at any size; 1 read as rocks)
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const k = 0.9 + 0.1 * Math.sin(x * 3.1 + 1.3) * Math.sin(y * 2.7 + 0.4) * Math.sin(z * 3.3 + 2.2) + 0.06 * Math.sin(x * 7 + y * 5); // (soft lumps)
+    p.setXYZ(i, p.getX(i) * k, p.getY(i) * k, p.getZ(i) * k);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+// size over a puff's life (0 to 1, stepped): pops up to full in the first fifth, swells a touch, shrinks away
+function puffScale(t) {
+  if (t < 0.18) return 0.45 + 0.55 * (t / 0.18);
+  if (t < 0.6) return 1 + 0.12 * ((t - 0.18) / 0.42);
+  return 1.12 * Math.pow(1 - (t - 0.6) / 0.4, 1.4);
+}
 // skate trail ribbons: a point every 1/60 s, tail 40 points (2/3 s), up to 2 s while grinding
 const TRAIL_STEP = 1 / 60, TRAIL_LIFE = 40 * TRAIL_STEP, TRAIL_MAX = 2, TRAIL_N = Math.ceil(TRAIL_MAX / TRAIL_STEP) + 10;
 
@@ -13,6 +37,8 @@ const GHOST_NEW = new THREE.Color(0xc77dff), GHOST_OLD = new THREE.Color(0x5b3bf
 // that waits past POP_WAIT_WORLD is dropped (prio 1, the runner's own, waits longer; prio 2, the K.O., never goes stale);
 // one pinned off screen isn't shown. Past POP_QUEUE_MAX the oldest lowest-rank popup is shed.
 const POP_MAX = 2, POP_QUEUE_MAX = 8, POP_WAIT_WORLD = 1.2, POP_WAIT_WORLD_PRIO = 3;
+
+const _pq = new THREE.Quaternion(), _pe = new THREE.Euler();
 
 // Particles, explosions, warning rings, skate trails and comic onomatopoeia.
 export class FX {
@@ -28,6 +54,16 @@ export class FX {
     this.pMesh.count = 0;
     this.pMesh.userData.persist = true; // the Spindle hides the Moon's scene, not this
     scene.add(this.pMesh);
+    // two sets: lit (smoke, dust: toon-shaded by the sun) and glow (fire, flashes: unlit, and haloed by the post pass)
+    const pg = puffGeometry();
+    const set = (mat) => {
+      const mesh = new THREE.InstancedMesh(pg, mat, MAX_PUFF), ink = new THREE.InstancedMesh(pg, new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide }), MAX_PUFF);
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PUFF * 3), 3);
+      for (const m of [mesh, ink]) { m.frustumCulled = false; m.count = 0; m.userData.persist = true; m.castShadow = m.receiveShadow = false; scene.add(m); }
+      return { mesh, ink, list: [] };
+    };
+    this.puffSets = { lit: set(new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gradientMap(), emissive: 0x2a2340 })), glow: set(glow(0xffffff)) };
+    // (lit's emissive lifts the shade: smoke's dark side stays smoke, not rock)
     this.m4 = new THREE.Matrix4();
     this.q = new THREE.Quaternion();
     this.v = new THREE.Vector3();
@@ -107,24 +143,38 @@ export class FX {
     }
   }
 
-  dust(pos, vel, amount = 4, up = upAt(pos), color = 0xd8d0c4, size = 0.5) {
-    this.spawn(pos, vel.clone().multiplyScalar(0.25).addScaledVector(up, 2), { color, size, life: 1.2, gravity: 1.62, drag: 0.6, count: amount, spread: 4 });
+  // A puff (see puffScale): `color` (to `to` over its life, if given), `size` its radius at full, `rise` m/s² along up
+  // (negative falls), `drag` per second, `spin` rad/s at most, `count` puffs `spread` m/s apart; `glow`: unlit and haloed
+  // (fire), else toon-shaded (smoke, dust).
+  puff(pos, vel, { color = 0xd8d0c4, to = null, size = 0.6, life = 1, rise = 0, drag = 1.5, spin = 1.2, count = 1, spread = 1, glow = false } = {}) {
+    if (this.density !== 1) count = Math.floor(count * this.density + Math.random()); // settings
+    const list = this.puffSets[glow ? 'glow' : 'lit'].list;
+    for (let i = 0; i < count; i++) {
+      if (list.length >= MAX_PUFF) list.shift();
+      const v = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(spread).add(vel);
+      list.push({
+        pos: pos.clone(), vel: v, age: 0, life: life * (0.8 + Math.random() * 0.4), size: size * (0.7 + Math.random() * 0.6),
+        from: new THREE.Color(color), to: to === null ? null : new THREE.Color(to), rise, drag,
+        q: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random() * 6.3, Math.random() * 6.3, Math.random() * 6.3)),
+        spin: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(2 * spin),
+      });
+    }
   }
 
+  // kicked-up regolith: puffs that hop up and settle back (low gravity), a few grains with them
+  dust(pos, vel, amount = 4, up = upAt(pos), color = 0xd8d0c4, size = 0.5) {
+    this.puff(pos, vel.clone().multiplyScalar(0.25).addScaledVector(up, 1.6), { color, size: size * 1.5, life: 0.9, rise: -1.2, drag: 1.4, count: Math.max(1, Math.round(amount * 0.6)), spread: 3 });
+    if (amount > 2) this.spawn(pos, vel.clone().multiplyScalar(0.25).addScaledVector(up, 2), { color, size: size * 0.4, life: 0.8, gravity: 1.62, drag: 0.6, count: Math.round(amount * 0.5), spread: 4 });
+  }
+
+  // A fireball in solid layers (Wind Waker): a yellow core that turns orange, a ring of orange puffs going red, dark smoke
+  // rolling up after, and sparks. Nothing fades: every piece swells and shrinks away.
   explosion(pos, radius = 6, big = false) {
-    const g = new THREE.Group();
-    const core = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true }));
-    const outer = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xff4f2e, transparent: true }));
-    const ink = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide, transparent: true }));
-    outer.scale.setScalar(1.3);
-    ink.scale.setScalar(1.42);
-    g.add(core, outer, ink);
-    g.position.copy(pos);
-    this.scene.add(g);
-    this.booms.push({ g, t: 0, dur: big ? 0.7 : 0.45, radius, mats: [core.material, outer.material, ink.material] });
-    const up = upAt(pos);
-    this.spawn(pos, up.clone().multiplyScalar(3), { color: 0xffd23f, size: radius * 0.08, life: 0.7, gravity: 1, count: big ? 26 : 12, spread: radius * 4 });
-    this.spawn(pos, up.clone().multiplyScalar(2), { color: 0x3a3550, size: radius * 0.1, life: 1.4, gravity: 1.62, count: big ? 18 : 8, spread: radius * 2.5 });
+    const up = upAt(pos), r = radius, n = big ? 1.6 : 1;
+    this.puff(pos, up.clone().multiplyScalar(r * 0.3), { color: 0xfff1a8, to: 0xffb02e, size: r * 0.55, life: big ? 0.55 : 0.4, drag: 4, spin: 0.6, count: 1, spread: 0, glow: true });
+    this.puff(pos, up.clone().multiplyScalar(r * 0.4), { color: 0xffd23f, to: 0xff4f2e, size: r * 0.34, life: big ? 0.7 : 0.5, drag: 3.5, count: Math.round(6 * n), spread: r * 2.2, glow: true });
+    this.puff(pos, up.clone().multiplyScalar(r * 0.35), { color: 0xc4bcd6, to: 0x8a80a3, size: r * 0.3, life: big ? 1.8 : 1.3, rise: 1.2, drag: 2.2, spin: 0.8, count: Math.round(7 * n), spread: r * 1.6 });
+    this.spawn(pos, up.clone().multiplyScalar(3), { color: 0xffd23f, size: r * 0.06, life: 0.7, gravity: 1, count: big ? 22 : 10, spread: r * 4 });
   }
 
   // White phosphorus: white-hot fragments arcing down on smoke trails, plus a hanging cloud. Burns out over ~2 s.
@@ -136,8 +186,8 @@ export class FX {
       this.embers.push({ pos: pos.clone(), vel: dir.multiplyScalar((7 + Math.random() * 7) * power), life: 1.4 + Math.random() * 0.9, max: 2.3, smoke: 0 });
     }
     // the cloud and a white-hot flash
-    this.spawn(pos, up.clone().multiplyScalar(0.6), { color: 0xe9e4f2, size: 2.2 * power, life: 2.2, drag: 2.2, count: 7, spread: 3 });
-    this.spawn(pos, up.clone(), { color: 0xfffbe6, size: 1.6 * power, life: 0.35, drag: 3, count: 4, spread: 1.5 });
+    this.puff(pos, up.clone().multiplyScalar(0.6), { color: 0xf2eef8, to: 0xc9c3d6, size: 1.7 * power, life: 2.4, rise: 0.3, drag: 2.2, count: 7, spread: 3 });
+    this.puff(pos, up.clone(), { color: 0xfffbe6, size: 1.3 * power, life: 0.35, drag: 3, count: 3, spread: 1.5, glow: true });
   }
 
   updateEmbers(dt) {
@@ -153,8 +203,8 @@ export class FX {
       // smoke trail
       e.smoke -= dt;
       if (e.smoke <= 0) {
-        e.smoke = 0.055;
-        this.spawn(e.pos, upAt(e.pos, this.v).multiplyScalar(0.4), { color: k > 0.5 ? 0xf2eef8 : 0xc9c3d6, size: 0.8 + 0.9 * (1 - k), life: 1.2 + Math.random() * 0.6, drag: 2.5, count: 1, spread: 0.3 });
+        e.smoke = 0.07;
+        this.puff(e.pos, upAt(e.pos, this.v).multiplyScalar(0.4), { color: k > 0.5 ? 0xf2eef8 : 0xc9c3d6, size: 0.45 + 0.5 * (1 - k), life: 1.2 + Math.random() * 0.6, drag: 2.5, count: 1, spread: 0.3 });
       }
     }
   }
@@ -376,6 +426,33 @@ export class FX {
   }
 
   // popDt: real time, like the popups' CSS; pause or Monolith time dilation mustn't stall them or the queue never drains
+  updatePuffs(dt) {
+    const show = inkMat.visible; // (the Ink setting at 0 hides every outline)
+    for (const { mesh, ink, list } of Object.values(this.puffSets)) {
+      let n = 0;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const p = list[i];
+        p.age += dt;
+        if (p.age >= p.life) { list.splice(i, 1); continue; }
+        if (p.rise) p.vel.addScaledVector(upAt(p.pos, this.v), p.rise * dt);
+        p.vel.multiplyScalar(Math.max(0, 1 - p.drag * dt));
+        p.pos.addScaledVector(p.vel, dt);
+        p.q.multiply(_pq.setFromEuler(_pe.set(p.spin.x * dt, p.spin.y * dt, p.spin.z * dt)));
+        const t = Math.min(1, Math.floor(p.age * PUFF_FPS) / PUFF_FPS / p.life); // (held steps)
+        const r = p.size * puffScale(t);
+        if (r <= 0.005) continue;
+        mesh.setMatrixAt(n, this.m4.compose(p.pos, p.q, this.s.setScalar(r)));
+        ink.setMatrixAt(n, this.m4.compose(p.pos, p.q, this.s.setScalar(r + PUFF_INK + r * 0.06)));
+        mesh.setColorAt(n, p.to ? this.c.copy(p.from).lerp(p.to, t) : p.from);
+        n++;
+      }
+      mesh.count = n;
+      ink.count = show ? n : 0;
+      mesh.instanceMatrix.needsUpdate = ink.instanceMatrix.needsUpdate = true;
+      mesh.instanceColor.needsUpdate = true;
+    }
+  }
+
   update(dt, popDt = dt) {
     this.updateEmbers(dt);
     this.updateShells(dt);
@@ -399,6 +476,8 @@ export class FX {
     this.pMesh.count = n;
     this.pMesh.instanceMatrix.needsUpdate = true;
     if (this.pMesh.instanceColor) this.pMesh.instanceColor.needsUpdate = true;
+
+    this.updatePuffs(dt);
 
     for (let i = this.booms.length - 1; i >= 0; i--) {
       const b = this.booms[i];

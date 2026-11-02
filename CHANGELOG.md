@@ -5,6 +5,19 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Colour grade, calmer glow clusters, Wind Waker puffs.**
+  - **Colour grade** (Settings, Graphics, 0 to 100%): warm sun and cool shade on the sunlit side, neon night (violet
+    shade, cyan light, more saturated and contrasty) on the dark side, mixed by how dark it is where you are. It runs in
+    the comic pass after the ink and before the overlays (speed lines, vignettes, damage). Tune it live from the console:
+    `game.post.grade.day` / `.night` (`sh`, `hi`: shade and light tints; `amt`, `sat`, `con`) (`post.js` GRADES).
+  - **Glow clusters merge:** a wall of lit windows summed every halo into one bright slab. The glow passes now carry how
+    much of the neighbourhood is lit, and the halo is taken down by it: a crowd of lights gets one calm outer ring, a
+    lone lamp keeps both.
+  - **Puffs** (`fx.js` puff): dust, smoke and fire are solid, toon-shaded, ink-outlined lumpy blobs that pop up, swell
+    and shrink to nothing in held steps (12 a second), never fading, as in Wind Waker. Smoke is lit by the sun (its shade
+    kept light); fire and flashes are unlit and glow. Explosions are a yellow core going orange, a ring of orange puffs
+    going red and smoke rolling up after (no more fading spheres); dust kicks, white phosphorus clouds and trails,
+    burning vehicles and wrecks use them too.
 - **Two tone bands for good, glow, smooth ink lines.** Toon shading is two-tone (shade and lit, one hard edge) for good;
   the Toon bands setting is gone (`?look=classic` keeps the three). New Graphics settings: **Glow** (0 to 100%): lamps,
   windows, neon and the Blender models' glow slots get a halo in two hard rings, a comic glow rather than a soft bloom

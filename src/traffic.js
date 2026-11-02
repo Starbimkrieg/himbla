@@ -2350,7 +2350,7 @@ export class Traffic {
     v.smokeT = wrecked ? 0.12 : v.hp < v.maxHp * 0.3 ? 0.15 : 0.3;
     const c = this.centre(v, _a), up = _u.copy(c).normalize();
     c.addScaledVector(up, v.kind === 'buggy' ? 1.5 : 2.5);
-    g.fx.spawn(c, up.clone().multiplyScalar(2.5), { color: 0x3a3550, size: wrecked ? 1.3 : 0.9, life: 2.2, gravity: -0.2, drag: 0.3, count: 1, spread: 0.8 });
+    g.fx.puff(c, up.clone().multiplyScalar(2.5), { color: 0xc4bcd6, to: 0x8a80a3, size: wrecked ? 0.9 : 0.6, life: 2.2, rise: 0.2, drag: 0.3, count: 1, spread: 0.8 });
     if (wrecked ? v.wreckT > 25 : v.hp < v.maxHp * 0.3) g.fx.spawn(c, up.clone().multiplyScalar(3), { color: this.r() < 0.5 ? 0xff4f2e : 0xffd23f, size: 0.5, life: 0.5, gravity: -0.5, count: 1, spread: 1.2 });
   }
 
