@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { toon, glow, inkMat, textSprite, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds } from './toon.js';
+import { toon, glow, inkMat, textSprite, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds, withToonBias, inkLineMesh } from './toon.js';
 import { mulberry32 } from './rng.js';
 import { bakeStatic } from './staticBake.js';
 import { outpostAsset } from './outpostGlb.js';
@@ -47,10 +47,11 @@ const _m = new THREE.Matrix4(), _r = new THREE.Matrix4();
 const _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _d = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _e = new THREE.Euler();
 const UP = new THREE.Vector3(0, 1, 0);
-// in place: indexed, position + normal only, no groups (so everything merges)
+// in place: indexed, position + normal (+ a Blender part's toon shade threshold, toon.js toonBiasOf) only, no groups (so
+// everything merges; finish() gives the rest of a merge a zero threshold)
 function prep(g) {
   if (!g.index) { const n = g.attributes.position.count, idx = new (n > 65535 ? Uint32Array : Uint16Array)(n); for (let i = 0; i < n; i++) idx[i] = i; g.setIndex(new THREE.BufferAttribute(idx, 1)); }
-  for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+  for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'toonBias') g.deleteAttribute(k);
   g.clearGroups();
   return g;
 }
@@ -86,6 +87,7 @@ class Kit {
     this.drop = null; // open apron spot loot can be thrown to
     this.byMat = new Map();
     this.ink = [];
+    this.lines = []; // designed ink lines of baked Blender parts (toon.js inkLineMat)
     this.base = new THREE.Matrix4();
     this.yaw = 0;
     this.root = new THREE.Group();
@@ -144,6 +146,7 @@ class Kit {
       hg.applyMatrix4(w);
       this.ink.push(this.onGround ? dropFloorFaces(hg) : hg);
     }
+    if (node.lines) this.lines.push(node.lines.clone().applyMatrix4(w)); // (models.js bakeShip: inkLineMat's form)
     return this;
   }
 
@@ -341,6 +344,7 @@ class Kit {
       const len = this.bendLen || 8;
       for (const list of this.byMat.values()) for (let i = 0; i < list.length; i++) list[i] = bendGeometry(list[i], this.curveR, len);
       for (let i = 0; i < this.ink.length; i++) this.ink[i] = bendGeometry(this.ink[i], this.curveR, len);
+      for (let i = 0; i < this.lines.length; i++) this.lines[i] = bendGeometry(this.lines[i], this.curveR, len);
     }
     // shared plain colours: one vertex-coloured mesh per kind (toon / glow) and side
     const vc = new Map();
@@ -353,6 +357,9 @@ class Kit {
     }
     for (const [v, list] of vc) this.byMat.set(v, list);
     for (const [mat, list] of this.byMat) {
+      // the toon shade threshold: all of a toon merge carry it once one does; nothing else needs it
+      if (mat.isMeshToonMaterial && list.some((g) => g.attributes.toonBias)) for (const g of list) withToonBias(g);
+      else for (const g of list) if (g.attributes.toonBias) g.deleteAttribute('toonBias');
       const m = new THREE.Mesh(mergeGeometries(list), mat);
       const lit = mat.isMeshToonMaterial && !mat.transparent;
       m.castShadow = m.receiveShadow = lit;
@@ -368,8 +375,11 @@ class Kit {
       this.root.add(h);
       for (const g of this.ink) g.dispose();
     }
+    const lines = inkLineMesh(this.lines);
+    if (lines) this.root.add(lines);
     this.byMat.clear();
     this.ink.length = 0;
+    this.lines.length = 0;
     return { root: this.root, cols: this.cols, hits: this.hits, raid: this.raid, smoke: this.smoke, drop: this.drop };
   }
 }

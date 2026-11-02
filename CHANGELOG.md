@@ -14,6 +14,8 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
   - **The Antimatter Lab's round wall** was 72 overlapping boxes, and each box's outline shell poked through its
     neighbour at the joins: broken seam lines that came and went. Each unbroken run is now one mesh (the colliders are as
     they were), and the seams are designed lines, one every three panels (`build_zbornak_lab.py` ring_wall).
+  - **Places built by the settlement Kit** (the lab's static parts: `outpostModels.js` Kit.baked) now keep the Blender
+    parts' shade threshold and draw their designed lines; both were dropped there.
   - **The toon attributes** are one byte-packed attribute, `_TOON` (`kit.py` pack_toon_attrs), and identical parts share
     their values so the compressor still stores them once; occlusion is per model (a kit's pieces all stand at the origin)
     and ignores trim lying on a surface (a dome's ribs). Ships.glb 1.67 to 1.94 MB, hall 0.32 to 0.37 MB, outposts 2.0 to
