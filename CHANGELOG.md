@@ -5,6 +5,15 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Look: per-vertex shade threshold and line weight, designed ink lines, tinted creases.** The Blender export now bakes two
+  vertex attributes on every mesh (`kit.py` toon_attrs): how hemmed-in each vertex is, which moves the toon shading's
+  light-to-shade edge so creases, inner corners and the gaps between parts fall into shade early as clean shapes; and the
+  outline's weight, tapering toward both ends of long thin parts (masts, rails, struts) like a brush stroke. Models can
+  carry designed ink lines (`kit.py` ink_lines): ribbons on the surface the game widens to the outlines' screen weight
+  and draws as a darker, cooler shade of the colour they cross (`toon.js` inkLineMat; the Ink setting covers them). The
+  shuttle-bus has the first: plating rings between its portholes, a roof spine and a gutter line. The post pass's crease
+  lines take the same tint; outlines (depth jumps and shells) stay ink. `?look=classic` turns the tint off. The outposts,
+  ships and hall are rebuilt with the attributes (ships.glb 1.7 to 2.6 MB; hall 0.31 to 0.38 MB; outposts 2.0 to 2.7 MB).
 - **Look: chosen shade colours, halftone only across the shadow edge, weighted normals.** Every toon surface (the ground too)
   now shades to a chosen colour instead of a dimmed one: each colour's shade is more saturated and turned toward the sky
   fill's violet (the mid band takes part of it, sunlit faces none). The halftone dots moved from the post pass, where they

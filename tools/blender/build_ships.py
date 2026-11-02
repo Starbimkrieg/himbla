@@ -599,7 +599,12 @@ SHUTTLE_SECS = [
 ]
 # nose rounded off: sections from z 2.0 forward re-cut every 0.4 m along smooth curves
 HS = smooth_sections(SHUTTLE_SECS, 2.0, 0.4)
-mesh("s_hull", loft(HS, 56), "body", SH, 0.13)
+S_HULL = mesh("s_hull", loft(HS, 56), "body", SH, 0.13)
+# plating seams (kit.ink_lines): rings round the hull between the portholes, a spine along the roof and a gutter line
+# above the windows; the belt and pinstripe ride over them
+ink_lines(S_HULL, [((0, 0, z), (0, 0, 1)) for z in (-7.6, -4.25, -1.25, 1.75, 6.2)]
+          + [((0, 0, 0), (1, 0, 0)), ((0, 1.75, 0), (0, 1, 0))], t=0.035,
+          keep=lambda p: -9.0 < p[2] < 8.4 and p[1] > -1.9)
 # livery: broad level belt and pinstripe, stopping short of the flat tail cap (kept level: a belt sweeping up the
 # tail would cut the faces diagonally into ragged splotches)
 mesh("s_belt", cband(HS, 0.03, -1.35, -0.6, -9.2, 9.0), "stripe", SH, 0)
@@ -1218,11 +1223,12 @@ def export():
     keep_loc = FR.location.copy()
     FR.location = (0, 0, 0)
     weighted_normals(C.objects)   # (kit.py)
+    toon_attrs(C.objects)
     bpy.ops.object.select_all(action="DESELECT")
     for o in C.objects:
         o.select_set(True)
     kw = dict(filepath=OUT, export_format="GLB", use_selection=True, export_yup=True, export_apply=True,
-              export_extras=True, export_normals=True, export_texcoords=False, export_materials="EXPORT",
+              export_extras=True, export_normals=True, export_texcoords=False, export_attributes=True, export_materials="EXPORT",
               export_animations=False, export_cameras=False, export_lights=False)
     props = bpy.ops.export_scene.gltf.get_rna_type().properties.keys()
     bpy.ops.export_scene.gltf(**{k: v for k, v in kw.items() if k in props})

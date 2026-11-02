@@ -44,13 +44,26 @@ import { receiveFar } from './farshadow.js';
 //   - shade in a chosen colour: what the sun doesn't reach shows each colour's shade, more saturated and turned toward the
 //     sky fill's violet (toonShade), not the colour dimmed; the mid band takes part of it, sunlit faces none;
 //   - halftone only across the shadow edge: screen dots in the light's mid band, biggest where it meets the shade, gone by
-//     the lit band (dotNL TOON_HT_LO to TOON_HT_HI; a material's `defines` can move them: planet.js). Cast shadows stay flat.
+//     the lit band (dotNL TOON_HT_LO to TOON_HT_HI; a material's `defines` can move them: planet.js). Cast shadows stay flat;
+//   - a per-vertex shade threshold: geometry with a `toonBias` attribute (x the bias, y 0.5 marking it real: a vertex
+//     attribute a geometry lacks reads (0, 0, 0, 1), or (1, 1, 1) after a ShaderMaterial's default colour) moves its
+//     light-to-shade edge by x * TOON_BIAS_K, so creases and the gaps between parts shade early (the Blender models carry it:
+//     kit.py toon_attrs, models.js bakedGeo).
 // TOON_LOOK is a struct uniform shared by reference (a plain object survives ShaderLib's per-material clone), so it is live:
 // `dots` follows the halftone setting (settings.js), `cell` the screen size (post.js), `?look=classic` turns both off and
 // gives the dots back to the post pass, the look before this (to compare).
 export const CLASSIC_LOOK = typeof location !== 'undefined' && new URLSearchParams(location.search).get('look') === 'classic';
 export const TOON_LOOK = { tint: CLASSIC_LOOK ? 0 : 1, dots: CLASSIC_LOOK ? 0 : 1, cell: 5 };
 THREE.ShaderLib.toon.uniforms.uToonLook = { value: TOON_LOOK };
+const TOON_BIAS_K = 0.7;
+{
+  const v = THREE.ShaderLib.toon.vertexShader;
+  if (v.includes('#include <common>') && v.includes('#include <begin_vertex>')) {
+    THREE.ShaderLib.toon.vertexShader = v
+      .replace('#include <common>', '#include <common>\nattribute vec2 toonBias;\nvarying float vToonBias;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvToonBias = abs( toonBias.y - 0.5 ) < 0.01 ? toonBias.x : 0.0;');
+  } else console.warn('[toon] toon vertex shader changed: no per-vertex shade threshold');
+}
 {
   const chunk = THREE.ShaderChunk.lights_toon_pars_fragment;
   const DIRECT = 'vec3 irradiance = getGradientIrradiance( geometryNormal, directLight.direction ) * directLight.color;\n\treflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );';
@@ -58,6 +71,17 @@ THREE.ShaderLib.toon.uniforms.uToonLook = { value: TOON_LOOK };
   if (chunk.includes(DIRECT) && chunk.includes(INDIRECT)) {
     THREE.ShaderChunk.lights_toon_pars_fragment = `struct ToonLook { float tint; float dots; float cell; };
 uniform ToonLook uToonLook;
+varying float vToonBias;
+// getGradientIrradiance, from a dot product (so the per-vertex threshold can move it)
+vec3 toonGradient( float dotNL ) {
+	vec2 coord = vec2( dotNL * 0.5 + 0.5, 0.0 );
+	#ifdef USE_GRADIENTMAP
+		return vec3( texture2D( gradientMap, coord ).r );
+	#else
+		vec2 fw = fwidth( coord ) * 0.5;
+		return mix( vec3( 0.7 ), vec3( 1.0 ), smoothstep( 0.7 - fw.x, 0.7 + fw.x, coord.x ) );
+	#endif
+}
 #ifndef TOON_HT_LO
 #define TOON_HT_LO -0.05
 #endif
@@ -79,13 +103,26 @@ float toonDots( float dotNL ) {
 	return ( 1.0 - smoothstep( -0.06, 0.06, length( f ) - 0.62 * sqrt( amt ) ) ) * uToonLook.dots;
 }
 ${chunk
-  .replace(DIRECT, `float toonL = dot( geometryNormal, directLight.direction );
-	vec3 toonG = getGradientIrradiance( geometryNormal, directLight.direction ) * ( 1.0 - toonDots( toonL ) );
+  .replace(DIRECT, `float toonL = dot( geometryNormal, directLight.direction ) - vToonBias * ${TOON_BIAS_K.toFixed(2)};
+	vec3 toonG = toonGradient( toonL ) * ( 1.0 - toonDots( toonL ) );
 	vec3 irradiance = toonG * directLight.color;
 	vec3 toonC = mix( toonShade( material.diffuseColor ), material.diffuseColor, clamp( toonG.r, 0.0, 1.0 ) );
 	reflectedLight.directDiffuse += irradiance * BRDF_Lambert( toonC );`)
   .replace(INDIRECT, 'reflectedLight.indirectDiffuse += irradiance * BRDF_Lambert( toonShade( material.diffuseColor ) );')}`;
   } else console.warn('[toon] toon lighting lines not found: shade colours and edge halftone are off');
+}
+
+// A Blender mesh's shade threshold (`_toonbias`, kit.py toon_attrs) as the toon shader's `toonBias` (bias, 0.5): every
+// geometry taken from a GLB gets one, zero where the file has none, so a model's parts always merge.
+export function toonBiasOf(src) {
+  const n = src.attributes.position.count, a = new Float32Array(n * 2), b = src.attributes._toonbias;
+  for (let i = 0; i < n; i++) { a[i * 2] = b ? b.getX(i) : 0; a[i * 2 + 1] = 0.5; }
+  return new THREE.BufferAttribute(a, 2);
+}
+// zero bias on a geometry that has none (before merging it with ones that do)
+export function withToonBias(g) {
+  if (!g.attributes.toonBias) g.setAttribute('toonBias', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+  return g;
 }
 
 // Rocks cast their sun-facing sides into the shadow map (shadowSide FrontSide; by default a front-sided material casts its far
@@ -193,6 +230,40 @@ export function inkCompile(sh, push, decl = '', pull = null, pullK = '1.0') {
 }
 inkMat.onBeforeCompile = (sh) => inkCompile(sh, 'normalize(normal) * inkPush(inkT, vInkD) * inkK', 'attribute float inkT;');
 inkMat.customProgramCacheKey = () => 'inkShell';
+// Designed ink lines (kit.py ink_lines: panel seams, plating rings): ribbons on a model's surface, `normal` across them, that
+// the vertex shader widens like a shell (inkPush: the outlines' screen weight, the Ink setting). They multiply what they're
+// drawn over, so a line is a darker, cooler shade of the colour it crosses, not black (black is for silhouettes), and they
+// fade out from INK_EASE to twice INK_DIST, where they'd only shimmer.
+export const inkLineMat = new THREE.MeshBasicMaterial({
+  color: new THREE.Color().setRGB(0.36, 0.32, 0.5, THREE.LinearSRGBColorSpace), side: THREE.DoubleSide,
+  transparent: true, depthWrite: false, blending: THREE.MultiplyBlending, premultipliedAlpha: true,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+});
+inkLineMat.onBeforeCompile = (sh) => {
+  inkCompile(sh, 'normalize(normal) * inkPush(inkT, vInkD) * inkK', 'attribute float inkT;');
+  sh.fragmentShader = sh.fragmentShader.replace('diffuseColor.rgb = inkTint(diffuseColor.rgb, vInkD);',
+    `diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), smoothstep(${INK_EASE.toFixed(1)}, ${(INK_DIST * 2).toFixed(1)}, vInkD));`);
+};
+inkLineMat.customProgramCacheKey = () => 'inkLine';
+// a GLB ink-line ribbon (custom property `inkline` = t) in inkLineMat's form, moved by m
+export function inkLineGeo(src, m, t) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', src.attributes.position.clone());
+  g.setAttribute('normal', src.attributes.normal.clone());
+  g.setAttribute('inkT', new THREE.BufferAttribute(new Float32Array(src.attributes.position.count).fill(t), 1));
+  g.setIndex(src.index.clone());
+  return g.applyMatrix4(m);
+}
+// merged ribbons -> a mesh (null for none)
+export function inkLineMesh(list) {
+  if (!list || !list.length) return null;
+  const m = new THREE.Mesh(shellBounds(list.length > 1 ? mergeGeometries(list) : list[0]), inkLineMat);
+  m.castShadow = m.receiveShadow = false;
+  m.renderOrder = 2;
+  m.userData.isInkLine = true;
+  return m;
+}
+
 // Ink marks (the stencil): a solid object writes its mark where it's drawn, and its shell, drawn after, only where that mark
 // isn't, so a shell pulled forward (inkCompile's pull) never covers its own object. A mark per object, cycling through 1 to 255:
 // two sharing one only lose the shell's line where they overlap (the post pass's line stays). Needs the stencil in the post

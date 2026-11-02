@@ -53,6 +53,15 @@ material for that slot. To give a part two colours, make two meshes.
   smooth-shaded part (`weighted_normals`), so big faces shade flat and bevels, chamfers and narrow lathe rings take the turn:
   the toon bands fall as clean shapes. Sharp edges stay sharp; skinned parts are left alone. `MOONRUNNER_WNORMALS=0` builds
   without them, to compare. Models built before this pick it up on their next rebuild.
+- **Toon attributes on export.** `kit.export()` (and the ships') also bakes two vertex attributes on every mesh
+  (`toon_attrs`): `_TOONBIAS`, how hemmed-in each vertex is (rays out over its hemisphere hitting the model within 0.9 m),
+  which moves the game's light-to-shade edge so creases and the gaps between parts shade early; and `_INKW`, the outline's
+  weight, tapering toward both ends of long thin parts. Nothing to author; `MOONRUNNER_TOONATTR=0` leaves them out.
+- **Designed ink lines** for what the shape alone doesn't draw: panel seams, plating rings, hatch outlines.
+  `ink_lines(o, [(point, normal), ...], t=0.02, keep=...)` draws one where `o`'s surface meets each plane (three.js axes,
+  `o`'s frame); `keep(p)` drops pieces. The game widens them like outlines and draws them as a darker shade of the colour
+  they cross. Use them sparingly, on big plain surfaces (the shuttle's hull: `build_ships.py`), never on small parts: a
+  line every few metres reads as plating, one every metre as noise. Only `bakeShip` and outposts' `staticBake` draw them.
 
 ## 2. Ink (outlines)
 

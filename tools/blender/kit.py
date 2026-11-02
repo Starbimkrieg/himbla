@@ -307,7 +307,7 @@ def weighted_normals(objects):
     if os.environ.get("MOONRUNNER_WNORMALS", "1") != "1":
         return
     for o in objects:
-        if o.type != "MESH" or any(m.type in ("WEIGHTED_NORMAL", "ARMATURE") for m in o.modifiers):
+        if o.type != "MESH" or is_inkline(o) or any(m.type in ("WEIGHTED_NORMAL", "ARMATURE") for m in o.modifiers):
             continue
         if not any(p.use_smooth for p in o.data.polygons):
             continue
@@ -315,15 +315,145 @@ def weighted_normals(objects):
         m.mode, m.weight, m.keep_sharp, m.thresh = "FACE_AREA", 50, True, 0.01
 
 
+# Designed ink lines: panel seams, plating rings, hatch outlines, lines the shape alone wouldn't give the post pass. Each is
+# where `o`'s surface meets a plane, as a ribbon (a child mesh `<name>_inkline`, custom property `inkline` = its weight in m
+# at the follow camera's distance, like `ink`) only 1 mm wide, 4 mm off the surface: its normals point across it, and the
+# game widens it along them like an outline shell (toon.js inkLineMat: the outlines' screen weight and Ink setting), drawn
+# multiplied into what it crosses, a darker, cooler shade of that colour rather than black. Readers: models.js bakeShip,
+# staticBake.js. Return the ribbon object (None if no plane met the surface).
+def ink_lines(o, planes, t=0.02, lift=0.004, keep=None):
+    """planes: [(point, normal)] in three.js axes, in o's own frame; keep(p) (three.js axes) can drop pieces."""
+    dg = bpy.context.evaluated_depsgraph_get()
+    ev = o.evaluated_get(dg)
+    src = ev.to_mesh()
+    faces = [([v.co.copy() for v in (src.vertices[i] for i in p.vertices)], p.normal.copy()) for p in src.polygons]
+    ev.to_mesh_clear()
+    verts, quads, nors = [], [], []
+    for co, no in planes:
+        c, n = Vector(tb(co)), Vector(tb(no)).normalized()
+        for pts, fn in faces:
+            ds = [n.dot(p - c) for p in pts]
+            cut = []
+            for i in range(len(pts)):
+                da, db = ds[i], ds[(i + 1) % len(pts)]
+                if (da < 0) != (db < 0):
+                    a, b = pts[i], pts[(i + 1) % len(pts)]
+                    cut.append(a + (b - a) * (da / (da - db)))
+            if len(cut) != 2 or (cut[1] - cut[0]).length < 1e-5:
+                continue
+            a, b = cut
+            if keep and not keep(((a[0] + b[0]) / 2, (a[2] + b[2]) / 2, -(a[1] + b[1]) / 2)):
+                continue
+            s = fn.cross(b - a).normalized()
+            k = len(verts)
+            for p in (a, b):
+                q = p + fn * lift
+                verts += [q + s * 0.0005, q - s * 0.0005]
+                nors += [s, -s]
+            quads.append((k, k + 2, k + 3, k + 1))
+    if not quads:
+        return None
+    me = bpy.data.meshes.new(o.name + "_inkline")
+    me.from_pydata(verts, [], quads)
+    for p in me.polygons:
+        p.use_smooth = True
+    me.normals_split_custom_set_from_vertices(nors)
+    m = bpy.data.materials.get("inkline") or bpy.data.materials.new("inkline")
+    m.diffuse_color = (0.05, 0.03, 0.08, 1)
+    me.materials.append(m)
+    lo = bpy.data.objects.new(o.name + "_inkline", me)
+    C.objects.link(lo)
+    lo.parent = o
+    lo["inkline"] = float(t)
+    return lo
+
+
+def is_inkline(o):
+    return o.type == "MESH" and "inkline" in o.keys()
+
+
+# Per-vertex toon controls, exported as vertex attributes the game reads (models.js bakedGeo, staticBake.js addPart):
+#   _TOONBIAS (0 to 1) how hemmed-in a vertex is: rays out over its hemisphere that hit the model within TOON_AO_R. The toon
+#             shading moves its light-to-shade edge by that much (toon.js), so creases, inner corners and the gaps
+#             between parts fall into the shade band early, as clean shapes (Guilty Gear Xrd's painted threshold).
+#   _INKW     (0.45 to 1) the outline's weight there: long thin parts (masts, rails, pipes, struts) taper toward both
+#             ends, a brush stroke rather than a wire; everything else is 1.
+# Every mesh gets both (merges need the same attributes on all). MOONRUNNER_TOONATTR=0 leaves them out.
+TOON_AO_R = 0.9          # m: how far a crease reaches (a doorway's reveal, under eaves; not across a yard)
+TOON_AO_DIRS = []
+for i in range(14):      # cosine-weighted hemisphere about +z (a Fibonacci spiral), turned onto each normal
+    r = math.sqrt((i + 0.5) / 14)
+    a = i * 2.39996323
+    TOON_AO_DIRS.append(Vector((r * math.cos(a), r * math.sin(a), math.sqrt(max(0.0, 1 - r * r)))))
+
+
+def toon_attrs(objects, ao_r=None):
+    if os.environ.get("MOONRUNNER_TOONATTR", "1") != "1":
+        return
+    from mathutils.bvhtree import BVHTree
+    import numpy as np
+    ao_r = ao_r or TOON_AO_R
+    dg = bpy.context.evaluated_depsgraph_get()
+    meshes = [o for o in objects if o.type == "MESH" and not is_inkline(o)]
+    verts, polys = [], []
+    for o in meshes:                      # one tree of the whole model, in world space
+        me = o.evaluated_get(dg).to_mesh()
+        mw, base = o.matrix_world, len(verts)
+        verts.extend(mw @ v.co for v in me.vertices)
+        polys.extend([base + i for i in p.vertices] for p in me.polygons)
+        o.evaluated_get(dg).to_mesh_clear()
+    tree = BVHTree.FromPolygons(verts, polys, epsilon=0.0) if polys else None
+    for o in meshes:
+        me = o.data
+        n = len(me.vertices)
+        for name in ("_TOONBIAS", "_INKW"):
+            if name in me.attributes:
+                me.attributes.remove(me.attributes[name])
+        bias = [0.0] * n
+        skinned = any(m.type == "ARMATURE" for m in o.modifiers)
+        if tree and not skinned:
+            mw = o.matrix_world
+            nm = mw.to_3x3().inverted_safe().transposed()
+            for i, v in enumerate(me.vertices):
+                nw = (nm @ v.normal).normalized()
+                if nw.length < 0.5:
+                    continue
+                p = mw @ v.co + nw * 0.004
+                t = nw.orthogonal().normalized()
+                b = nw.cross(t)
+                occ = 0.0
+                for d in TOON_AO_DIRS:
+                    hit = tree.ray_cast(p, t * d.x + b * d.y + nw * d.z, ao_r)
+                    if hit[0] is not None:
+                        occ += 1.0 - 0.5 * hit[3] / ao_r     # (near walls count more)
+                bias[i] = min(1.0, occ / len(TOON_AO_DIRS) * 1.6)
+        w = [1.0] * n
+        if n >= 4:
+            co = np.array([v.co[:] for v in me.vertices]) * np.array(o.matrix_world.to_scale()[:])
+            c = co - co.mean(axis=0)
+            ev, evec = np.linalg.eigh(c.T @ c / n)
+            u = c @ evec[:, 2]
+            length, thick = u.max() - u.min(), 2 * math.sqrt(max(ev[1], 1e-12)) * 1.7
+            if length > 4 * thick and length > 0.3:
+                f = (u - u.min()) / length
+                e = np.minimum(f, 1 - f)
+                s = np.clip(e / 0.25, 0, 1)
+                w = list(0.45 + 0.55 * s * s * (3 - 2 * s))
+        q = lambda x: round(float(x) * 16) / 16      # (sixteenths: floats with empty low bytes compress to almost nothing)
+        me.attributes.new("_TOONBIAS", "FLOAT", "POINT").data.foreach_set("value", [q(x) for x in bias])
+        me.attributes.new("_INKW", "FLOAT", "POINT").data.foreach_set("value", [q(x) for x in w])
+
+
 def export(out, objects):
     """Export these objects as a GLB the game reads (extras carry roles, ink and numbers)."""
     weighted_normals(objects)
+    toon_attrs(objects)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     bpy.ops.object.select_all(action="DESELECT")
     for o in objects:
         o.select_set(True)
     kw = dict(filepath=out, export_format="GLB", use_selection=True, export_yup=True, export_apply=True,
-              export_extras=True, export_normals=True, export_texcoords=False, export_materials="EXPORT",
+              export_extras=True, export_normals=True, export_texcoords=False, export_attributes=True, export_materials="EXPORT",
               export_animations=False, export_cameras=False, export_lights=False)
     props = bpy.ops.export_scene.gltf.get_rna_type().properties.keys()
     bpy.ops.export_scene.gltf(**{k: v for k, v in kw.items() if k in props})

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TOON_LOOK } from './toon.js';
+import { TOON_LOOK, CLASSIC_LOOK } from './toon.js';
 
 // Comic-book post pass: depth ink lines, halftone shadows (?look=classic only: the toon materials draw theirs, toon.js), speed lines, damage vignette, paper grade.
 export class ComicPost {
@@ -31,6 +31,7 @@ export class ComicPost {
         invert: { value: 0 },
         fade: { value: 0 }, // fade to black (council chamber cutscene, chamber.js)
         halftone: { value: 1 }, lines: { value: 1 }, inkK: { value: 1 }, // settings
+        creaseTint: { value: CLASSIC_LOOK ? 0 : 1 },
       },
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
       fragmentShader: /* glsl */ `
@@ -39,6 +40,7 @@ export class ComicPost {
         uniform vec2 res; uniform float near; uniform float far; uniform float time;
         uniform float speed; uniform float damage; uniform float alert; uniform float boost; uniform float invert; uniform float fade;
         uniform float halftone; uniform float lines; uniform float inkK; // settings
+        uniform float creaseTint;
         varying vec2 vUv;
         float lin(vec2 uv){ float d = texture2D(tDepth, uv).x; return -perspectiveDepthToViewZ(d, near, far); }
         float hash(float n){ return fract(sin(n) * 43758.5453123); }
@@ -54,7 +56,8 @@ export class ComicPost {
           // angle (plain depth curves at grazing angles, which inked false lines across distant slopes)
           float lap = abs(c / l + c / r + c / u + c / d - 4.0);
           float jump = max(max(abs(l - c), abs(r - c)), max(abs(u - c), abs(d - c))) / c;
-          float edge = max(smoothstep(0.03, 0.09, lap), smoothstep(0.12, 0.3, jump));
+          float crease = smoothstep(0.03, 0.09, lap), outline = smoothstep(0.12, 0.3, jump);
+          float edge = max(crease, outline);
           edge *= 1.0 - smoothstep(1400.0, 3200.0, c);
           bool sky = c > far * 0.95;
 
@@ -73,7 +76,10 @@ export class ComicPost {
 
           // ink, far lines shifting toward the shade's deep indigo so far shapes recede (as the shells do: toon.js inkTint)
           vec3 inkC = mix(vec3(0.03, 0.015, 0.05), vec3(0.16, 0.13, 0.30), 0.75 * smoothstep(40.0, 420.0, c));
-          col = mix(col, inkC, clamp(edge * inkK, 0.0, 1.0)); // settings
+          // a crease inside a shape is a darker, cooler shade of its own colour, as the designed lines are (toon.js
+          // inkLineMat); a depth jump (an outline) stays ink. (?look=classic: all ink)
+          vec3 creaseC = mix(inkC, col * vec3(0.36, 0.32, 0.5), creaseTint * (1.0 - smoothstep(40.0, 420.0, c)));
+          col = mix(col, mix(creaseC, inkC, outline >= crease ? 1.0 : outline / max(crease, 1e-3)), clamp(edge * inkK, 0.0, 1.0)); // settings
 
           // speed lines
           vec2 p = vUv - 0.5; p.x *= res.x / res.y;

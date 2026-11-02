@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildZbornakLab } from './labWorld.js';
-import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds, INK_DIST } from './toon.js';
+import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds, INK_DIST, withToonBias } from './toon.js';
 import { makeDish, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK, wingModel, HABITAT_DOCK } from './models.js';
 import { mulberry32, clamp } from './rng.js';
 import { FACTIONS, defenseSpots, ILMB_WINGS_AT } from './locations.js';
@@ -313,7 +313,9 @@ export class World {
       gr.objs.push(o);
       const keepUv = !!o.material.map, keepCol = !!o.material.vertexColors && !vc;
       const g = geo.index ? geo.toNonIndexed() : geo.clone();
-      for (const k of Object.keys(g.attributes)) if (!(k === 'position' || k === 'normal' || (k === 'uv' && keepUv) || (k === 'color' && keepCol) || (k === 'inkT' && ink))) g.deleteAttribute(k);
+      const toonish = !ink && gr.mat.isMeshToonMaterial;
+      for (const k of Object.keys(g.attributes)) if (!(k === 'position' || k === 'normal' || (k === 'uv' && keepUv) || (k === 'color' && keepCol) || (k === 'inkT' && ink) || (k === 'toonBias' && toonish))) g.deleteAttribute(k);
+      if (toonish) withToonBias(g); // (the Blender parts' shade threshold, toon.js: all of a merge need it once one has)
       g.morphAttributes = {};
       g.clearGroups();
       if (!g.attributes.normal) g.computeVertexNormals();

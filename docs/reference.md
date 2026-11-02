@@ -344,8 +344,10 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
   that holds them and blend at the seams. They redraw only when their box steps, the sun turns or chunks change.
 - **Comic look:** toon shading with chosen shade colours (each colour's shade more saturated and turned toward violet, not
   dimmed) and halftone dots only across the shadow edge (`toon.js` TOON_LOOK; `?look=classic` brings back the old look:
-  grey shading, the post pass's dots over every dark tone), weighted normals on the Blender models (`kit.py`),
-  inverted-hull outlines (pushed out along each vertex's face planes, `toon.js` shellGeo, in the vertex shader so they
+  grey shading, the post pass's dots over every dark tone), weighted normals on the Blender models (`kit.py`), a per-vertex
+  shade threshold and line weight baked by the Blender export (`_TOONBIAS`: creases shade early; `_INKW`: long thin parts'
+  lines taper; `kit.py` toon_attrs), designed ink lines (panel seams, `kit.py` ink_lines, drawn by `toon.js` inkLineMat as a
+  darker shade of what they cross; the post pass's crease lines too, outlines staying ink), inverted-hull outlines (pushed out along each vertex's face planes, `toon.js` shellGeo, in the vertex shader so they
   hold their on-screen width at any distance and follow the Ink setting; far ink fades to indigo), a post pass
   (`src/post.js`) for ink lines and speed lines, rocky crater rims drawn per pixel, and onomatopoeia pop-ups.
 

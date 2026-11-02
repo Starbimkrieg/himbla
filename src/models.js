@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toon, ink, glow, glowShared, inkMat, inkMatNear, inkMatBaked, shellBounds } from './toon.js';
+import { toon, ink, glow, glowShared, inkMat, inkMatNear, inkMatBaked, shellBounds, toonBiasOf, inkLineGeo, inkLineMesh } from './toon.js';
 import { pixelFont } from './fonts.js';
 import { mulberry32, smoothstep } from './rng.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
@@ -194,7 +194,7 @@ function bakeRunnerParts(scene) {
       if (!g.slots.has(slot)) g.slots.set(slot, []);
       g.slots.get(slot).push(geo);
       const t = o.userData.ink || 0;
-      if (t > 0) g.ink.push(inkShellGeo(geo, t));
+      if (t > 0) g.ink.push(inkShellGeo(geo, t, o.geometry.attributes._inkw));
     }
   }
   const out = {};
@@ -212,18 +212,19 @@ function bakeRunnerParts(scene) {
   return out;
 }
 
-// a mesh's positions, normals and index (glTF export is always indexed triangles), moved by m
+// a mesh's positions, normals, index (glTF export is always indexed triangles) and toon shade threshold (toonBiasOf), moved by m
 function bakedGeo(src, m) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', src.attributes.position.clone());
   geo.setAttribute('normal', src.attributes.normal.clone());
+  geo.setAttribute('toonBias', toonBiasOf(src));
   geo.setIndex(src.index.clone());
   return geo.applyMatrix4(m);
 }
 
 // A part's outline shell: its triangles plus `off` = smoothed normal * thickness. Normals are averaged over shared
-// positions so seams don't crack.
-function inkShellGeo(geo, t) {
+// positions so seams don't crack. `w`: the Blender part's line weight per vertex (`_inkw`, kit.py toon_attrs), if it has one.
+function inkShellGeo(geo, t, w = null) {
   const pos = geo.attributes.position, nor = geo.attributes.normal;
   const sum = new Map();
   const keyOf = (i) => `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
@@ -236,8 +237,8 @@ function inkShellGeo(geo, t) {
   const off = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
     const s = sum.get(keyOf(i));
-    const l = Math.hypot(s[0], s[1], s[2]) || 1;
-    off[i * 3] = (s[0] / l) * t; off[i * 3 + 1] = (s[1] / l) * t; off[i * 3 + 2] = (s[2] / l) * t;
+    const l = (Math.hypot(s[0], s[1], s[2]) || 1) / (w ? t * w.getX(i) : t);
+    off[i * 3] = s[0] / l; off[i * 3 + 1] = s[1] / l; off[i * 3 + 2] = s[2] / l;
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', pos.clone());
@@ -1286,8 +1287,9 @@ function pivotGroup(node) {
   g.quaternion.copy(node.quat);
   return g;
 }
-// A baked node's outline shell on g, if it has one.
+// A baked node's outline shell and designed ink lines on g, if it has them.
 function addInk(g, node) {
+  if (node.lines) g.add(inkLineMesh([node.lines]));
   if (!node.ink) return;
   const m = new THREE.Mesh(node.ink, inkMat);
   m.userData.isInk = true;
@@ -1570,16 +1572,19 @@ function bakeShip(root, { near = false } = {}) {
   const isPivot = (o) => o === root || (!o.isMesh && o.userData.role);
   const bake = (pivot, parentWorldInv) => {
     const inv = new THREE.Matrix4().copy(pivot.matrixWorld).invert();
-    const slots = new Map(), inks = [], kids = [];
+    const slots = new Map(), inks = [], lines = [], kids = [];
     const visit = (o) => {
       for (const c of o.children) {
-        if (c.isMesh) {
+        if (c.isMesh && c.userData.inkline > 0) { // designed ink lines (kit.py ink_lines): drawn by inkLineMat, not a slot
+          lines.push(inkLineGeo(c.geometry, rel.multiplyMatrices(inv, c.matrixWorld), c.userData.inkline));
+          visit(c);
+        } else if (c.isMesh) {
           const slot = c.material.name;
           const geo = bakedGeo(c.geometry, rel.multiplyMatrices(inv, c.matrixWorld));
           if (!slots.has(slot)) slots.set(slot, []);
           slots.get(slot).push(geo);
           const t = c.userData.ink || c.parent.userData.ink || 0;     // (a mesh of two materials loads as a group of two: its ink is the group's)
-          if (t > 0) inks.push(inkShellGeo(geo, t));
+          if (t > 0) inks.push(inkShellGeo(geo, t, c.geometry.attributes._inkw));
           visit(c);
         } else if (isPivot(c)) kids.push(bake(c, inv));
         else visit(c);
@@ -1593,6 +1598,7 @@ function bakeShip(root, { near = false } = {}) {
       parts: [...slots].map(([slot, geos]) => ({ slot, geo: mergeGeometries(geos) })),
       // the outline in inkMat's form (toon.js: distance-scaled, the Ink setting); `inkNear` is kept for callers that ask
       ink: inks.length ? shellOff(mergeGeometries(inks), 1) : null, inkNear: near, kids,
+      lines: lines.length ? (lines.length > 1 ? mergeGeometries(lines) : lines[0]) : null, // (inkLineMat's form)
     };
   };
   return bake(root, new THREE.Matrix4().copy(root.matrixWorld).invert());

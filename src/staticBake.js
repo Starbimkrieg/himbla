@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { inkMat, vcMaterial, paintVertices, dropFloorFaces, shellBounds } from './toon.js';
+import { inkMat, vcMaterial, paintVertices, dropFloorFaces, shellBounds, toonBiasOf, inkLineGeo, inkLineMesh } from './toon.js';
 import { slotOf, roleOf, animOf, SHAPES } from './staticContract.js';
 
 // Static GLBs (outposts.glb): a Blender structure -> what the Kit (outpostModels.js) makes: { root, cols, hits, raid,
@@ -10,8 +10,9 @@ import { slotOf, roleOf, animOf, SHAPES } from './staticContract.js';
 //   parseStaticGlb(scene)         loaded glTF scene -> one neutral `asset` per root node
 //   bakeStatic(asset, { color })  asset -> template for one faction colour
 //
-// As in models.js only geometry is read: positions, normals, index, material name, flat base colour (and alpha for a
-// beam), double-sided flag, and the `ink` extra; the toon material shades. The result is vertex-coloured, so hundreds
+// As in models.js only geometry is read: positions, normals, index, the toon attributes (`_toonbias`, `_inkw`: kit.py
+// toon_attrs), material name, flat base colour (and alpha for a beam), double-sided flag, and the `ink` and `inkline`
+// extras; the toon material shades. The result is vertex-coloured, so hundreds
 // of Blender objects bake to a few meshes (lit, unlit, one outline hull, beams, a few per moving part), like Kit.finish.
 
 const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _z = new THREE.Vector3();
@@ -83,10 +84,15 @@ function parseRoot(root, warn) {
 function addPart(group, mesh, groupInv, warn) {
   const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
   const src = mesh.geometry;
+  if (mesh.userData.inkline > 0) { // designed ink lines (kit.py ink_lines): drawn by inkLineMat, not a part
+    (group.lines || (group.lines = [])).push(inkLineGeo(src, new THREE.Matrix4().multiplyMatrices(groupInv, mesh.matrixWorld), mesh.userData.inkline));
+    return;
+  }
   if (!src.attributes.position || !src.attributes.normal) { warn(`mesh "${mesh.name}" has no normals: skipped`); return; }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', src.attributes.position.clone());
   geo.setAttribute('normal', src.attributes.normal.clone());
+  geo.setAttribute('toonBias', toonBiasOf(src)); // (the toon shade threshold: toon.js)
   if (src.index) geo.setIndex(src.index.clone());
   else {
     const n = src.attributes.position.count, idx = new (n > 65535 ? Uint32Array : Uint16Array)(n);
@@ -107,6 +113,7 @@ function addPart(group, mesh, groupInv, warn) {
     color: mat.color ? mat.color.clone() : new THREE.Color(0xffffff),
     opacity: mat.transparent ? mat.opacity : 1, // used by `additive…` materials only
     ink: ink > 0 ? ink : 0,
+    inkW: src.attributes._inkw || null, // (the line's weight per vertex: kit.py toon_attrs)
   });
 }
 
@@ -149,7 +156,7 @@ function gameplay(asset, role, node, inv, warn) {
 // shared position (seams stay closed), as models.js does for the runner. Hard edges and corners are mitred (at most 2x) so
 // each face moves the full `t`; the plain average would move only t/sqrt(3) (corner) or t/sqrt(2) (edge), a thinner line.
 const MITRE_MIN = 0.5;
-function inkShell(geo, t) {
+function inkShell(geo, t, w = null) {
   const pos = geo.attributes.position, nor = geo.attributes.normal, n = pos.count;
   const key = (i) => `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
   const sum = new Map();
@@ -168,7 +175,7 @@ function inkShell(geo, t) {
   for (let i = 0; i < n; i++) {
     const s = sum.get(key(i));
     dir[i * 3] = s[0] / s[4]; dir[i * 3 + 1] = s[1] / s[4]; dir[i * 3 + 2] = s[2] / s[4];
-    th[i] = t / Math.max(MITRE_MIN, s[3]);
+    th[i] = (w ? t * w.getX(i) : t) / Math.max(MITRE_MIN, s[3]);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', pos.clone());
@@ -211,7 +218,7 @@ function bakeParts(parts, faction, fixed) {
     const k = `${p.slot.kind}|${p.side}`;
     if (!buckets.has(k)) buckets.set(k, { kind: p.slot.kind, side: p.side, list: [] });
     buckets.get(k).list.push(fixed && p.side === THREE.FrontSide ? dropFloorFaces(g) : g);
-    if (p.ink) { const sh = inkShell(p.geo, p.ink); shells.push(fixed ? dropFloorFaces(sh) : sh); }
+    if (p.ink) { const sh = inkShell(p.geo, p.ink, p.inkW); shells.push(fixed ? dropFloorFaces(sh) : sh); }
   }
   for (const b of buckets.values()) {
     const m = new THREE.Mesh(mergeGeometries(b.list), vcMaterial(proto(b.kind, b.side)));
@@ -245,12 +252,14 @@ export function bakeStatic(asset, { color, textMat }) {
   const root = new THREE.Group();
   root.name = `static:${asset.name}`;
   for (const g of asset.groups) {
-    if (!g.anim) { for (const m of bakeParts(g.parts, faction, true)) root.add(m); continue; }
+    const lines = inkLineMesh(g.lines);
+    if (!g.anim) { for (const m of bakeParts(g.parts, faction, true)) root.add(m); if (lines) root.add(lines); continue; }
     // holder (placed, turned) > pivot (territory.js swings / spins / blinks it) > meshes
     const holder = new THREE.Group(), pivot = new THREE.Group();
     g.matrix.decompose(holder.position, holder.quaternion, holder.scale);
     pivot.userData[g.anim] = true;
     for (const m of bakeParts(g.parts, faction, false)) pivot.add(m);
+    if (lines) pivot.add(lines);
     holder.add(pivot);
     root.add(holder);
   }
