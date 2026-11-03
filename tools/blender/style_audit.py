@@ -27,12 +27,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import style  # noqa: E402
 
 
+# pivot roles whose meshes the game draws with a shader of its own and never inks (the casino fountain's water: fountainFx.js)
+SHADER_ROLES = {"water", "curtain", "streams"}
+
+
 def glow_slots(repo):
     """every slot name a factory in src/models.js draws as glow (its *_GLOW maps), and the halo pattern from toon.js"""
     src = open(os.path.join(repo, "src", "models.js"), encoding="utf-8").read()
     names = set()
     for body in re.findall(r"_GLOW\s*=\s*\{(.*?)\};", src, re.S):
         names.update(re.findall(r"(\w+)\s*:", body))
+    names.update(re.findall(r"slot === '(\w+)'\) return \{[^}]*glow: true", src))     # (a slot function's own glow: casinoSlot's accent)
     toon = open(os.path.join(repo, "src", "toon.js"), encoding="utf-8").read()
     m = re.search(r"HALO_SLOT = /(.*?)/i;", toon)
     return names, (m.group(1).replace("\\\\", "\\") if m else None)
@@ -68,6 +73,8 @@ def audit_style(objects, repo, label=""):
     for o in objects:
         if o.type != "MESH" or "inkline" in o.keys() or (o.name.startswith("Cube") and not o.parent and len(o.data.polygons) == 6):
             continue                                                        # (ribbons; Blender's startup cube)
+        if o.parent and o.parent.get("role") in SHADER_ROLES:
+            continue                                                        # (the game dresses these with its own shader, no ink)
         r = o
         while r.parent:
             r = r.parent

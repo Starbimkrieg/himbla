@@ -131,18 +131,19 @@ def front_panel(part, c, hw, hh, face_z, frame=0.035, lip=0.016, inset=0.018, em
     # plum face slightly proud, brass frame (four bars) further out, so the plum reads as recessed
     place_box("plum", 0, 0, 0, inset / 2 - 0.004, hw - frame, hh - frame, inset / 2)
     d = lip / 2 + 0.012
-    place_box("brass", 0, 0, hh - frame / 2, d, hw, frame / 2, lip / 2)
-    place_box("brass", 0, 0, -hh + frame / 2, d, hw, frame / 2, lip / 2)
-    place_box("brass", 0, -hw + frame / 2, 0, d, frame / 2, hh - frame, lip / 2)
-    place_box("brass", 0, hw - frame / 2, 0, d, frame / 2, hh - frame, lip / 2)
+    place_box("brass", 0.01, 0, hh - frame / 2, d, hw, frame / 2, lip / 2)      # (the frame stands 2.8 cm proud: inked, as the hall's)
+    place_box("brass", 0.01, 0, -hh + frame / 2, d, hw, frame / 2, lip / 2)
+    place_box("brass", 0.01, -hw + frame / 2, 0, d, frame / 2, hh - frame, lip / 2)
+    place_box("brass", 0.01, hw - frame / 2, 0, d, frame / 2, hh - frame, lip / 2)
     if emblem:
         kind, eslot = emblem
         z = face_z + side * (inset + 0.0)
+        eink = 0.01 if eslot == "gold" else 0                                        # (the glow emblems carry none)
         for g in suit_geos(kind, size, 0.02):
             if axis == "z":
-                part.add(eslot, 0, xf(g, (c[0], c[1], z + side * 0.01), (0, 0 if side > 0 else PI, 0)))
+                part.add(eslot, eink, xf(g, (c[0], c[1], z + side * 0.01), (0, 0 if side > 0 else PI, 0)))
             else:
-                part.add(eslot, 0, xf(g, (z + side * 0.01, c[1], c[0]), (0, (PI / 2) if side > 0 else -PI / 2, 0)))
+                part.add(eslot, eink, xf(g, (z + side * 0.01, c[1], c[0]), (0, (PI / 2) if side > 0 else -PI / 2, 0)))
 
 
 # =====================================================================================================

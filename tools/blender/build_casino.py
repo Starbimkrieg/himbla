@@ -132,7 +132,7 @@ def lamp_post():
     A = Acc("lampPole", "post", root, 0.035)
     A.add(lathe([(0.4, 0.5), (0.3, 0.75), (0.26, 1.1), (0.23, 2.5), (0.2, 4.5), (0.18, 6.3), (0.22, 6.62), (0.3, 6.78), (0.1, 6.78)], 12))
     A.flush()
-    A = Acc("lampBands", "gold", root, 0.0)
+    A = Acc("lampBands", "gold", root, 0.012)
     for y, R in ((0.8, 0.3), (3.7, 0.215), (6.4, 0.2)):
         ring_around(A, R, 0.045, y, 14, 5)
     # lantern cup, orb's gold belt, finial
@@ -147,7 +147,7 @@ def lamp_post():
         ring_around(A, 0.55, 0.1, y, 20, 6)
     A.ball(0, 7.78, 0, 0.68, 14, 10)
     A.flush()
-    A = Acc("lampCoils", "gold", root, 0.0)
+    A = Acc("lampCoils", "gold", root, 0.01)
     for y in (1.95, 4.35):
         ring_around(A, 0.24, 0.05, y, 12, 5)
         for x, yy, z in spin_pts(0.3, y + 0.15, 3, 0.0):      # three pins holding the ring
@@ -158,7 +158,7 @@ def lamp_post():
     A = Acc("miniPole", "post", root, 0.02)
     A.add(lathe([(0.16, 0.2), (0.09, 0.3), (0.06, 1.0), (0.08, 1.06), (0.03, 1.06)], 8), (0, 0, mz))
     A.flush()
-    A = Acc("miniGold", "gold", root, 0.0)
+    A = Acc("miniGold", "gold", root, 0.01)
     ring_around(A, 0.075, 0.018, 0.4, 10, 4, 0, mz)
     A.add(lathe([(0.06, 1.05), (0.12, 1.12), (0.2, 1.24), (0.17, 1.25), (0.1, 1.15)], 10), (0, 0, mz))
     A.cylc(0, 1.78, mz, 0.04, 0.2, 6, "y", rt=0.0)
@@ -186,7 +186,7 @@ def fountain():
         a = 2 * PI * i / 12
         A.boxc(math.sin(a) * 9.18, 0.52, math.cos(a) * 9.18, 0.7, 0.62, 0.32, rot=(0, a, 0))
     A.flush()
-    A = Acc("basinGold", "gold", root, 0.0)
+    A = Acc("basinGold", "gold", root, 0.012)
     ring_around(A, 8.85, 0.09, 1.05, 48, 5)
     for i in range(16):
         a = 2 * PI * (i + 0.5) / 16
@@ -199,7 +199,7 @@ def fountain():
     A = Acc("bowl", "cream", root, 0.05)
     A.add(lathe([(0, 3.9), (2.6, 3.9), (3.2, 4.05), (3.62, 4.3), (3.72, 4.66), (3.5, 4.66), (3.3, 4.45), (0, 4.4)], 28))
     A.flush()
-    A = Acc("pedestalGold", "gold", root, 0.0)
+    A = Acc("pedestalGold", "gold", root, 0.012)
     ring_around(A, 1.45, 0.07, 1.5, 24, 5)
     ring_around(A, 1.32, 0.06, 3.0, 24, 5)
     ring_around(A, 3.6, 0.1, 4.68, 36, 5)
@@ -412,7 +412,7 @@ def chandelier():
     A = Acc("chHub", "gold", spin, 0.025)
     A.add(lathe([(0.0, 0.62), (0.12, 0.6), (0.3, 0.45), (0.36, 0.25), (0.24, 0.08), (0.0, 0.0)], 12))
     A.flush()
-    A = Acc("chGold", "gold", spin, 0.0)
+    A = Acc("chGold", "gold", spin, 0.01)
     ring_around(A, 0.95, 0.05, 0.12, 22, 5)
     ring_around(A, 1.75, 0.06, -0.38, 28, 5)
     for i in range(6):
@@ -500,7 +500,7 @@ def welcome_sign():
     root = pivot("welcome_sign", (0, 0, 0), None)
     sign_frame(root, 9.6, 2.5, 0.2, "wel")
     # three finials, chains up to the ceiling plates (6.4 m above)
-    A = Acc("welTop", "gold", root, 0.0)
+    A = Acc("welTop", "gold", root, 0.012)
     for x in (-3.0, 0.0, 3.0):
         A.cylc(x, 1.43, 0.0, 0.1, 0.34, 6, "y", rt=0.0)
         A.ball(x, 1.25, 0.0, 0.1, 6, 4)

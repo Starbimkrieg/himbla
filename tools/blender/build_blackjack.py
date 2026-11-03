@@ -140,7 +140,7 @@ A.flush()
 A = Acc("railLeather", "leather", table, 0.04)
 A.path([(RAIL_R * math.cos(a), 1.255, RAIL_R * math.sin(a)) for a in [PI * i / 40 for i in range(41)]], [0.12] * 41, 8)
 A.flush()
-A = Acc("railGold", "gold", table, 0.0)
+A = Acc("railGold", "gold", table, 0.012)
 A.path([(RAIL_R * math.cos(a), 1.125, RAIL_R * math.sin(a)) for a in [0.004 + (PI - 0.008) * i / 40 for i in range(41)]], [0.05] * 41, 5)   # ends 1.4 cm short of the leather's
 for i in range(30):
     a = PI * (i + 0.5) / 30
@@ -151,11 +151,11 @@ arc_tube(A, 3.285, 1.035, 0.012, 0.0, PI, 48, 4)
 A.flush()
 
 # apron: eight suit panels (tools/blender/suits.py) between gold pilasters
-AF = Acc("apronFrames", "brass", table, 0.0)
+AF = Acc("apronFrames", "brass", table, 0.01)   # (as the hall's suit panels: inked frame, recessed fill)
 AP = Acc("apronPanels", "dark", table, 0.0)
 AR = Acc("apronRed", "suitred", table, 0.012)
 AC = Acc("apronCream", "suitcream", table, 0.012)
-A3 = Acc("apronPilasters", "gold", table, 0.0)
+A3 = Acc("apronPilasters", "gold", table, 0.01)
 for i in range(8):
     a = PI * (i + 0.5) / 8
     suit_panel(AF, AP, AR, AC, i % 4, (3.2 * math.cos(a), 0.56, 3.2 * math.sin(a)), PI / 2 - a, 0.9, 0.66, 0.34)

@@ -5,6 +5,21 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Casino models follow the style audit.** `style_audit.py` run over the casino's builders (casino, hall, blackjack,
+  plinko, claw), every finding fixed or kept on purpose:
+  - **Proud trim gets its own ink** (an ink-0 detail must lie flush, or its colour crosses the outline): the lamp posts'
+    gold bands, lift coils and small lamp's gold, the fountain basin's and pedestal's gold rings and studs, the
+    chandelier's gold tiers and arms, the welcome sign's finials and chains (0.01 to 0.012); the suit-panel frames on the
+    blackjack apron, the claw's base and the Plinko console, the blackjack's pilasters and gold rail and Plinko's gold
+    stars (0.01 to 0.012, as the hall's own suit panels).
+  - **Ink to size in the hall:** the outside wall's suit panels 0.04 and 0.03 (boards seen from the street, were 0.012),
+    the doors' pediment field and the Chip Bar's back ring 0.02, as the parts round them.
+  - **Kept:** the suit panels' recessed dark fills stay without ink inside their inked frames (as in the hall), and the
+    filler wainscot keeps the bays' 0.012.
+  - **The audit:** it reads a slot function's own glow (`casinoSlot`'s `accent`, the lamp posts' rings and lantern) and
+    skips pivots the game dresses with its own shader (the fountain's water, curtain and streams).
+  - The casino, blackjack, claw and Plinko GLBs predated the weighted normals and toon attributes and pick them up with
+    this rebuild (about 20 to 45 KB more each, compressed).
 - **Animating on twos, the style module and audit; glow fixes.**
   - **Animate on twos** (Settings, Graphics; on): figures' poses step at 12 a second, as hand-drawn animation does, while
     they move through the world every frame and the camera stays smooth (`src/twos.js`: PoseHold for the courier, which

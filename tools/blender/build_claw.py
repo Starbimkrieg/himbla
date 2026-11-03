@@ -111,7 +111,7 @@ A.boxc(0, H0 + 0.05, 2.1, W + 0.2, 0.12, 4.2)
 A.boxc(0, 0.15, 2.2, W + 0.1, 0.3, 4.5)
 A.flush()
 # card-suit trim (suits.py): along the front either side of the console, one on each end
-AF = Acc("baseFrames", "brass", m, 0.0); AP = Acc("basePanels", "dark", m, 0.0); AR = Acc("baseRed", "suitred", m, 0.012); AC = Acc("baseCream", "suitcream", m, 0.012)
+AF = Acc("baseFrames", "brass", m, 0.01); AP = Acc("basePanels", "dark", m, 0.0); AR = Acc("baseRed", "suitred", m, 0.012); AC = Acc("baseCream", "suitcream", m, 0.012)
 for k, x in enumerate((-6.3, -4.7, -3.1, 3.1, 4.7, 6.3)):
     suit_panel(AF, AP, AR, AC, k % 4, (x, 0.78, D - 1.1), 0, 1.5, 0.66, 0.34)
 suit_panel(AF, AP, AR, AC, 1, (-W / 2, 0.78, 2.0), -PI / 2, 2.8, 0.66, 0.34)
