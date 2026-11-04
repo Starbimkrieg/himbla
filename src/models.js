@@ -1172,6 +1172,9 @@ export function figureSpec({ suit, helmet, visor, scale = 1, seed, kind, look, a
 // The fishbowl helmet's glass material (and its globe), for the chimera builder's settlers who wear one.
 export const figureGlass = () => { figMats(); return { geo: figGeo().bowl, mat: FIG_GLASS }; };
 
+// (for the townsfolk drafts, src/figureDrafts.js)
+export { PAL as FIG_PAL, ARCH as FIG_ARCH, figRng, bakeFigure, figMat, figMats, figGeo };
+
 // Cheap NPC townsperson for ambient life. Pivot at the feet; legL/legR pivot at the hips and
 // armL/armR at the shoulders (Bones: animate them by rotation.x).
 export function makeFigure(opts = {}) {

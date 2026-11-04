@@ -376,6 +376,7 @@ src/
   labnet.js        LABNET, the lab's terminal (splices, reactor, chimeras, pen)
   chimera.js       makeChimera, makeMite, splicing and stats re-exports
   chimerabuild.js  the chimera builder: every chimera from the kit (chimera.glb), looks, outfits, mutations, far LOD
+  figureDrafts.js  townsfolk drafts A (rounded) and B (lean): knees, elbows, builds, helmets that read from behind; not in the game yet
   gait.js          walking on jointed legs (mites, mandrake roots, the spider tank): planted feet, steps, IK, the body on its feet
   spidertank.js    Zbornak's spider tank (docs/spidertank/; not in the game yet): eight-legged gait, closing up to skim, reactor beam
   chimeragenes.js  splicing (no three.js)
@@ -481,6 +482,7 @@ tools/
   optimize-glb.mjs         compresses src/assets models (npm run optimize:glb)
   splice-chimera.mjs       puts chimera kit parts built on their own into chimera.glb, the rest untouched
   icons/faction_icons.py   faction emblem proposals as SVG (docs/icon-proposals/; `python3 tools/icons/faction_icons.py`)
+  figure-drafts.js         the townsfolk drafts beside today's figures, in the running game (lineUp; see its header)
   viewer.html              dev model viewer (/tools/viewer.html?m=<model>; options at the top of the file)
   casino-layouts.mjs       casino plan study and spacing check (docs/casino-layouts.md)
   casino-forecourt.mjs     forecourt plans and Valet Court check (docs/casino-forecourt.md)
