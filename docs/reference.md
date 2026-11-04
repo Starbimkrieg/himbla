@@ -376,7 +376,6 @@ src/
   labnet.js        LABNET, the lab's terminal (splices, reactor, chimeras, pen)
   chimera.js       makeChimera, makeMite, splicing and stats re-exports
   chimerabuild.js  the chimera builder: every chimera from the kit (chimera.glb), looks, outfits, mutations, far LOD
-  figureDrafts.js  townsfolk drafts A (rounded) and B (lean): knees, elbows, builds, helmets that read from behind; not in the game yet
   gait.js          walking on jointed legs (mites, mandrake roots, the spider tank): planted feet, steps, IK, the body on its feet
   spidertank.js    Zbornak's spider tank (docs/spidertank/; not in the game yet): eight-legged gait, closing up to skim, reactor beam
   chimeragenes.js  splicing (no three.js)
@@ -439,10 +438,11 @@ src/
   wardrobe.js      wardrobe screen (main.js builds it on the first C)
   trailer.js       trailer director (?trailer)
   models.js        characters and vehicles; loads the Blender models
+  townsfolk.js     the generic NPC (makeFigure): outfits, builds, helmets and fishbowls, aliens; ten bones, a walk; holds its pose on twos
   post.js          comic post-processing
   farshadow.js     the wide sun shadow maps (600 m and 3.3 km) and the receiving shader code
   fx.js, hud.js, audio.js, input.js, toon.js, locations.js, rng.js
-  twos.js          animating on twos: figures' poses held 12 a second (PoseHold, heldPhase)
+  twos.js          animating on twos: figures' poses held 12 a second (PoseHold; the townsfolk hold their own)
   assets/
     runner.glb       the runner (player, pirate skaters, leaders)
     idles.json       the runner's idle animations
@@ -482,7 +482,6 @@ tools/
   optimize-glb.mjs         compresses src/assets models (npm run optimize:glb)
   splice-chimera.mjs       puts chimera kit parts built on their own into chimera.glb, the rest untouched
   icons/faction_icons.py   faction emblem proposals as SVG (docs/icon-proposals/; `python3 tools/icons/faction_icons.py`)
-  figure-drafts.js         the townsfolk drafts beside today's figures, in the running game (lineUp; see its header)
   viewer.html              dev model viewer (/tools/viewer.html?m=<model>; options at the top of the file)
   casino-layouts.mjs       casino plan study and spacing check (docs/casino-layouts.md)
   casino-forecourt.mjs     forecourt plans and Valet Court check (docs/casino-forecourt.md)

@@ -49,12 +49,4 @@ export function holdOf(root) {
   return root.userData.poseHold || (root.userData.poseHold = new PoseHold(null, root));
 }
 
-// For gaits drawn straight from a phase (the simple walkers): the phase to draw, held on `f` (f.twosT, f.twosPh) and
-// caught up TWOS.fps times a second. The walker keeps moving smoothly; only its stride steps.
-export function heldPhase(f, phase, dt) {
-  if (!TWOS.on) return phase;
-  if (f.twosPh === undefined) { f.twosPh = phase; f.twosT = Math.random() / TWOS.fps; }
-  f.twosT += dt;
-  if (f.twosT >= 1 / TWOS.fps) { f.twosT %= 1 / TWOS.fps; f.twosPh = phase; }
-  return f.twosPh;
-}
+// (The townsfolk hold their own pose: townsfolk.js holdOnTwos, on the skeleton's update.)

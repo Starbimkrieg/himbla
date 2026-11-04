@@ -208,7 +208,7 @@ export function toon(color, opts) {
 //   - from INK_EASE to INK_DIST it eases to INK_FAR of that, near the post pass's depth line (post.js), which carries the
 //     silhouettes where a place's merged shells stop drawing (world.js INK_DIST); props out in the open keep theirs, thinning.
 // Every shell (toon.ink, the Kit's, world.js's batches, models.js's Blender ones, downsKit, staticBake) is made this way, so
-// one weight rule holds for all. The skinned figures' hulls (models.js bakeFigure) stay baked: inkMatBaked.
+// one weight rule holds for all. The skinned figures' hulls (townsfolk.js bakeFigure) stay baked: inkMatBaked.
 export const INK_REF = 9, INK_MIN = 0.3, INK_GROW = 4, INK_CAP = 0.012, INK_EASE = 60, INK_DIST = 110, INK_FAR = 0.45;
 // (live uniform: settings.js) the Ink strength
 export const INK_U = { uInkK: { value: 1 } };

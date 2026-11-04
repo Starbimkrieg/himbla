@@ -1,9 +1,8 @@
-import { heldPhase } from './twos.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildZbornakLab } from './labWorld.js';
 import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds, INK_DIST, withToonBias } from './toon.js';
-import { makeDish, makeFigure, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK, wingModel, HABITAT_DOCK } from './models.js';
+import { makeDish, makeFigure, figureWalk, figureStand, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK, wingModel, HABITAT_DOCK } from './models.js';
 import { mulberry32, clamp } from './rng.js';
 import { FACTIONS, defenseSpots, ILMB_WINGS_AT } from './locations.js';
 import { bendPoint, bendQuat, unbendPoint } from './curve.js';
@@ -1209,8 +1208,7 @@ export class World {
       const p = w.root.position;
       if (w.wait > 0) {
         w.wait -= dt;
-        w.legL.rotation.x = w.legR.rotation.x = 0;
-        if (w.armL) w.armL.rotation.x = w.armR.rotation.x = 0;
+        figureStand(w);
         p.y = w.F;
         continue;
       }
@@ -1223,11 +1221,9 @@ export class World {
         w.root.rotation.y = w.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
       }
       w.phase += dt * 4.5 * w.speed;
-      const ph = heldPhase(w, w.phase, dt); // (the stride on twos: twos.js)
-      w.legL.rotation.x = Math.sin(ph) * 0.6;
-      w.legR.rotation.x = -Math.sin(ph) * 0.6;
-      if (w.armL) { w.armL.rotation.x = -Math.sin(ph) * w.swing; w.armR.rotation.x = Math.sin(ph) * w.swing; }
-      p.set(w.x, w.F + Math.abs(Math.sin(ph)) * 0.12, p.z + (w.lane - p.z) * Math.min(1, dt * 2));
+      const ph = w.phase; // (the figure holds its own pose on twos: townsfolk.js)
+      figureWalk(w, ph);
+      p.set(w.x, w.F + Math.abs(Math.sin(ph)) * 0.08, p.z + (w.lane - p.z) * Math.min(1, dt * 2));
     }
   }
 
@@ -1703,11 +1699,9 @@ export class World {
       f.yaw = Math.atan2(dx, dz);
       if (!R) f.root.rotation.y = f.yaw;
       f.phase += dt * 6;
-      const ph = heldPhase(f, f.phase, dt); // (the stride on twos: twos.js)
-      f.legL.rotation.x = Math.sin(ph) * 0.6;
-      f.legR.rotation.x = -Math.sin(ph) * 0.6;
-      if (f.armL) { f.armL.rotation.x = -Math.sin(ph) * f.swing; f.armR.rotation.x = Math.sin(ph) * f.swing; }
-      if (f.kind !== 'kid') p.y = Math.abs(Math.sin(ph)) * 0.15;
+      const ph = f.phase; // (the figure holds its own pose on twos: townsfolk.js)
+      figureWalk(f, ph);
+      if (f.kind !== 'kid') p.y = Math.abs(Math.sin(ph)) * 0.1;
       if (R) this.poseFigure(f);
     }
   }

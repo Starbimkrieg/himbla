@@ -1,8 +1,7 @@
-import { heldPhase } from './twos.js';
 import * as THREE from 'three';
 import { toon, glow, textSprite, setMask } from './toon.js';
 const VEH_DETAIL = 220; // m: past this a vehicle's small parts stop drawing
-import { part, makeFigure, makeShuttle, makeRover, makeHoverCar, makeFreighter, makeLandTrain, LAND_TRAIN_FACTIONS, GARAGE_HALL, GARAGE_BAYS, GARAGE_FLOOR } from './models.js';
+import { part, makeFigure, figureWalk, figureStand, figureSit, makeShuttle, makeRover, makeHoverCar, makeFreighter, makeLandTrain, LAND_TRAIN_FACTIONS, GARAGE_HALL, GARAGE_BAYS, GARAGE_FLOOR } from './models.js';
 import { mulberry32, clamp01 } from './rng.js';
 import { defenseSpots } from './locations.js';
 import { SUN, frameQuat, arcDist } from './geo.js';
@@ -226,9 +225,9 @@ export function buildBuggyRig(k) {
   r.root.scale.setScalar(1.3);
   // driver on the left of the bench, legs under the dash, hands on the wheel
   const drv = makeFigure({ seed: 4100 + k });
-  drv.root.position.set(0.6, 1.12, -0.32);
-  drv.legL.rotation.x = drv.legR.rotation.x = -1.45;
-  drv.armL.rotation.x = drv.armR.rotation.x = -1.0;
+  drv.root.position.set(0.6, 1.17, -0.32);
+  figureSit(drv); // (thighs under the dash, shins down)
+  drv.armL.rotation.x = drv.armR.rotation.x = -0.75; drv.foreL.rotation.x = drv.foreR.rotation.x = -0.45; // (hands on the wheel)
   r.chassis.add(drv.root);
   return r;
 }
@@ -2179,7 +2178,7 @@ export class Traffic {
       const f = wk.fig, p = f.root.position;
       if (wk.idle || wk.delay > 0) {
         wk.delay -= dt;
-        f.legL.rotation.x = f.legR.rotation.x = 0;
+        figureStand(f);
         continue;
       }
       const a = wk.pts[wk.seg], b = wk.pts[wk.seg + 1];
@@ -2196,10 +2195,9 @@ export class Traffic {
       p.y = a.g && b.g ? this.groundY(loc, p.x, p.z) : a.y + (b.y - a.y) * wk.t;
       if (Math.abs(b.x - a.x) + Math.abs(b.z - a.z) > 0.05) f.root.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
       f.phase += dt * 7;
-      const ph = heldPhase(f, f.phase, dt); // (the stride on twos: twos.js)
-      f.legL.rotation.x = Math.sin(ph) * 0.6;
-      f.legR.rotation.x = -Math.sin(ph) * 0.6;
-      p.y += Math.abs(Math.sin(ph)) * 0.12;
+      const ph = f.phase; // (the figure holds its own pose on twos: townsfolk.js)
+      figureWalk(f, ph);
+      p.y += Math.abs(Math.sin(ph)) * 0.08;
     }
   }
 

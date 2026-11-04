@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PHYS } from './config.js';
-import { makeFigure, engineModel, caseModel } from './models.js';
+import { makeFigure, figureWalk, engineModel, caseModel } from './models.js';
 import { toon, glow, ink } from './toon.js';
 import { frameQuat, tangent, randomTangent, greatCircle, SUN, arcDist } from './geo.js';
 import { pick, mulberry32 } from './rng.js';
@@ -1025,7 +1025,7 @@ export class Alchemy {
       const next = greatCircle(up, w.dir, 1.2 * dt);
       p.copy(this.game.planet.ground(next, new THREE.Vector3()));
       frameQuat(next, w.dir, w.root.quaternion);
-      w.legL.rotation.x = Math.sin(w.t * 6) * 0.5; w.legR.rotation.x = -Math.sin(w.t * 6) * 0.5;
+      figureWalk(w, w.t * 6, 0.9);
     }
   }
 

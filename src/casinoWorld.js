@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { toon, ink, glow, glowShared, textSprite, nameTag } from './toon.js';
-import { makeFigure, makeSlotCabinet, SLOT_LAMP_OFF, plinkoConsoleModel, plinkoFrameModel, makeBouncer, makeChandelier, makeCasinoSign, makeBlackjackTable, makeClawMachine, makeDerbyPart, makeHallPart, makeRacer } from './models.js';
+import { makeFigure, figureWalk, figureStand, makeSlotCabinet, SLOT_LAMP_OFF, plinkoConsoleModel, plinkoFrameModel, makeBouncer, makeChandelier, makeCasinoSign, makeBlackjackTable, makeClawMachine, makeDerbyPart, makeHallPart, makeRacer } from './models.js';
 import { pxCanvas } from './pixelIcons.js';
 import { pixelFont } from './fonts.js';
 import { faceInfo, glyphState } from './glyphs.js';
@@ -1237,10 +1237,8 @@ export function buildCasino(w, loc) {
         p.x += dx * k; p.z += dz * k;
         pt.root.rotation.y = Math.atan2(dx, dz);
         pt.phase += dt * 6;
-        pt.legL.rotation.x = Math.sin(pt.phase) * 0.6;
-        pt.legR.rotation.x = -Math.sin(pt.phase) * 0.6;
-        if (pt.armL) { pt.armL.rotation.x = -Math.sin(pt.phase) * pt.swing; pt.armR.rotation.x = Math.sin(pt.phase) * pt.swing; }
-        p.y = Math.abs(Math.sin(pt.phase)) * 0.12;
+        figureWalk(pt, pt.phase);
+        p.y = Math.abs(Math.sin(pt.phase)) * 0.08;
         continue;
       }
       // arrived: face the attraction
@@ -1248,7 +1246,7 @@ export function buildCasino(w, loc) {
       let dy = sp.yaw - pt.root.rotation.y;
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       pt.root.rotation.y += dy * Math.min(1, dt * 5);
-      pt.legL.rotation.x = pt.legR.rotation.x = 0;
+      figureStand(pt);
       p.y = 0;
       if (sp.kind === 'slot') {
         // yank the handle every few seconds

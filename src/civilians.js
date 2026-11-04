@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { FACTIONS } from './locations.js';
 import { frameQuat } from './geo.js';
+import { figureKnees, figureStand } from './townsfolk.js';
 
 // Civilian harm. Only three crowd lists can be hurt:
 //   - settlement residents  (world.figures,        src 'res')
@@ -475,6 +476,7 @@ export class Civilians {
     if (mode === 'flail') {
       f.legL.rotation.set(Math.sin(t * 13) * 1.1, 0, -0.3 + Math.sin(t * 7) * 0.3);
       f.legR.rotation.set(Math.cos(t * 11) * 1.1, 0, 0.3 + Math.cos(t * 9) * 0.3);
+      figureKnees(f, t * 12, 0.8); // (kicking)
       if (f.armL) {
         f.armL.rotation.set(-1.5 + Math.sin(t * 15) * 1.4, 0, -1.2 + Math.sin(t * 10) * 0.6);
         f.armR.rotation.set(-1.5 + Math.cos(t * 14) * 1.4, 0, 1.2 + Math.cos(t * 12) * 0.6);
@@ -482,12 +484,14 @@ export class Civilians {
     } else if (mode === 'sprawl') {
       f.legL.rotation.set(0.15, 0, -0.35);
       f.legR.rotation.set(-0.1, 0, 0.3);
+      figureKnees(f, 0, 0.4);
       if (f.armL) { f.armL.rotation.set(-0.3, 0, -1.4); f.armR.rotation.set(0.2, 0, 1.3); }
     } else if (mode === 'up') {
       const ph = f.phase || 0;
       const a = c.state === 'flee' ? 0.9 : 0;
       f.legL.rotation.set(Math.sin(ph) * a, 0, 0);
       f.legR.rotation.set(-Math.sin(ph) * a, 0, 0);
+      figureKnees(f, ph, a > 0 ? 1.1 : 0);
       if (f.armL) {
         const k = Math.min(1, dt * 10);
         f.armL.rotation.x += (HANDS_UP + Math.sin(ph * 1.3) * 0.15 - f.armL.rotation.x) * k;
@@ -499,6 +503,7 @@ export class Civilians {
       const ph = f.phase || 0;
       f.legL.rotation.set(Math.sin(ph) * 0.6, 0, 0);
       f.legR.rotation.set(-Math.sin(ph) * 0.6, 0, 0);
+      figureKnees(f, ph);
       if (f.armL) {
         const k = Math.min(1, dt * 5);
         f.armL.rotation.x += (-Math.sin(ph) * (f.swing || 0.3) - f.armL.rotation.x) * k;
@@ -563,9 +568,7 @@ export class Civilians {
   }
 
   limbsReset(f) {
-    f.legL.rotation.set(0, 0, 0);
-    f.legR.rotation.set(0, 0, 0);
-    if (f.armL) { f.armL.rotation.set(0, 0, -0.07); f.armR.rotation.set(0, 0, 0.07); }
+    figureStand(f);
   }
 
   // cleared residents return as someone new once unobserved
