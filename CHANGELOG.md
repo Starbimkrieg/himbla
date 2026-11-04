@@ -5,6 +5,7 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Asset Row and the Spindle draw again (`src/farshadow.js`):** since the far sun shadows, every frame in the Asset Row (and in the Spindle) threw `planet.farCasters is not a function` and the picture froze: both swap in a flat stand-in world, which has no terrain chunks to cast. The far pass now skips that step when the world has none. Checked headless: the Row's 261 items build, and with the Row open frames keep coming with no page errors.
 - **The small outposts are rebuilt (the picked drafts are in).** Trading Kiosk: the Market Cross; Watchtower: the
   Lattice Camp; Supply Depot: the Silo Depot; Farm Dome: the Greenhouse Row; Relay Mast: the Guyed Relay; Junk Pile:
   Scrap Mountain; Scrap Shack: a new mix of both drafts, the crashed hull hollowed out and lived in (its flank stripped

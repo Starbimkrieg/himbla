@@ -223,10 +223,10 @@ export class FarShadow {
     sh.camera.updateProjectionMatrix();
     if (c.cfg.statics) this.tag(scene);
     this.cam.layers.mask = c.layers.mask;
-    planet.farCasters(true);
+    planet.farCasters?.(true); // (the Asset Row's and the Spindle's flat stand-in worlds have no terrain chunks)
     const wasNeeded = sm.needsUpdate;
     sm.needsUpdate = true; // (the stock pass runs only when asked)
-    try { orig.call(sm, [L], scene, this.cam); } finally { planet.farCasters(false); sm.needsUpdate = wasNeeded; }
+    try { orig.call(sm, [L], scene, this.cam); } finally { planet.farCasters?.(false); sm.needsUpdate = wasNeeded; }
     // the receivers switch to the new map in the same breath
     const U = FAR_U, i = c.i;
     U[`uFarM${i}`].value.copy(sh.matrix);
