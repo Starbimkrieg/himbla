@@ -5,6 +5,13 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **The small outposts are rebuilt (the picked drafts are in).** Trading Kiosk: the Market Cross; Watchtower: the
+  Lattice Camp; Supply Depot: the Silo Depot; Farm Dome: the Greenhouse Row; Relay Mast: the Guyed Relay; Junk Pile:
+  Scrap Mountain; Scrap Shack: a new mix of both drafts, the crashed hull hollowed out and lived in (its flank stripped
+  open on two decks with the ribs standing, container rooms and a mezzanine inside, a porch roof, the bow boarded and
+  the stern walled), with the first draft's bunkhouse, derrick and press. No name boards or lettering saying what a place
+  is, on any draft. `OUTPOST_PICK` (`src/outpostModels.js`); `?outpostDraft=off` brings the old builds back, and
+  `a|b|c` or `kind:x` show the others. The Asset Row's outposts are the picks; the viewer has `&compare=1`.
 - **Weapons in hand** (`src/weaponView.js`; models `tools/blender/build_weapons.py` -> `src/assets/weapons.glb`, picked from
   the drafts in `docs/weapon-proposals/`): the courier now holds the weapon he fires. The SPACECOM Disc Blaster (Pulse
   Spinner; its disc in your laser colour), the Vostok Breaker (Scattergun), the Daedalus Rail Lance with violet coil rings,

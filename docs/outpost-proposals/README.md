@@ -5,18 +5,48 @@ Shack, Junk Pile) at a believable scale (the buildings were tiny: the Watchtower
 more detail and the owner faction's look. Make the Trading Kiosk work like a grand exchange: a central kiosk with
 vendors, people about and places to sit. Two near-full drafts of each.
 
-All fourteen are built in code with the outpost Kit (`src/outpostDrafts.js`), so they run in the game today. They are
-**off by default**:
+**Picked and in the game** (`OUTPOST_PICK` in `src/outpostModels.js`):
 
-- `?outpostDraft=a` or `?outpostDraft=b` swaps every small outpost for that draft;
-- `?outpostDraft=kiosk:a,tower:b,farm:a` picks per kind (kinds not named stay as they are);
+| Kind | Pick |
+|---|---|
+| Trading Kiosk | B, the Market Cross |
+| Watchtower | B, the Lattice Camp |
+| Supply Depot | B, the Silo Depot |
+| Farm Dome | B, the Greenhouse Row |
+| Relay Mast | A, the Guyed Relay |
+| Junk Pile | A, Scrap Mountain |
+| Scrap Shack | **C, a mix of A and B** (below) |
+
+Every name board and building lettering that said what a place is (the gate signs, MERIDIAN MARKET, SCRAP & SPARES, THE HULK
+and so on) is gone from all the drafts; faction marks, flags and warning signs stay.
+
+All the drafts are built in code with the outpost Kit (`src/outpostDrafts.js`). The picks are the default; to look at
+another:
+
+- `?outpostDraft=a`, `b` or `c` shows that draft of every kind that has one (the pick for the rest);
+- `?outpostDraft=kiosk:a,tower:a` picks per kind;
+- `?outpostDraft=off` brings back the old Kit builds;
 - `localStorage['mr-outpost-draft']` takes the same values and sticks.
 
-With a draft on, the flattened plateau under each outpost grows from 30 to 44 m. The viewer shows one draft on its own
-(`/tools/viewer.html?m=outpost&kind=kiosk&draft=a`, `&wreck=1`, `&color=rrggbb` for the owner), and the Asset Row's
-08 · OUTPOSTS has each as `<KIND> · DRAFT A` / `DRAFT B`, intact and wrecked.
+The flattened plateau under each outpost is 44 m (30 with `off`). The viewer shows any draft
+(`/tools/viewer.html?m=outpost&kind=kiosk&draft=a`, `&wreck=1`, `&color=rrggbb` for the owner; `&compare=1` puts the old
+build and A and B side by side), and the Asset Row's 08 · OUTPOSTS shows the picks and the drafts not picked.
 
-## What all fourteen share
+## Scrap Shack C: the Hulk, hollowed out (the pick)
+
+![Scrap Shack C: overview, the open flank, from the east, wrecked](shack_mix.jpg)
+
+B's crashed freighter, but stripped and lived in rather than whole. The plating is gone along the yard side of its four middle
+sections, so the hold stands open on two decks with the ribs standing bare across the gap; a few more plates are missing
+elsewhere and window holes are cut in the back, lit from inside. The lower deck (a step up from the yard) has three
+containers along the back as rooms with lit doors, a workbench and hanging chains; a railed mezzanine runs over them with a
+stair up and a lamp strip under it. A corrugated porch roof leans out over two sections of the opening on posts cut to its
+underside, with pirate lights along its edge. The bow is boarded over with a lit window, the stern walled off round a big
+lit doorway; a crow's nest, banner and dish ride on the spine. The plating rack (raid) stands in the hold's mouth. Round
+it: B's stockade and watch boxes on stilts and its cook fire with tyre seats; A's container bunkhouse with its stair and
+balcony, the derrick over the heap and the scrap press; tyre stacks, burning barrels, stolen containers.
+
+## What all the drafts share
 
 | | Before | Drafts |
 |---|---|---|

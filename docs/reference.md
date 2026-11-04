@@ -395,7 +395,7 @@ src/
   kade.js          Kade's gun truck
   monolith.js      the Monolith's spells
   territory.js     territory, small outposts, patrols
-  outpostDrafts.js draft reworks of the small outposts, A and B each (?outpostDraft=a|b; docs/outpost-proposals)
+  outpostDrafts.js the small outposts (the picks, OUTPOST_PICK in outpostModels.js) and their other drafts (docs/outpost-proposals)
   vehicles.js      drivable vehicles
   settings.js      settings menu and key remapping
   casino.js        casino games, VIP, prizes (casinoWorld.js: building; casinoPlan.js: plan numbers)

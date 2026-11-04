@@ -133,12 +133,6 @@ function lampPost(k, x, z, h = 5.5, color = WARM, arm = true) {
   k.column(0.2, F + h, x, z);
 }
 function flagPole(k, x, z, h = 11) { k.flag(x, z, h, k.c, F); k.column(0.15, F + h, x, z); }
-// sign board on two posts, its top at y (Kit.sign stands on y = 0)
-function gateSign(k, str, z, w, y, s) {
-  k.sign(str, 0, z, { w, y, fg: '#' + s.trim.toString(16).padStart(6, '0'), bg: '#' + s.dark.toString(16).padStart(6, '0') });
-  for (const sx of [-1, 1]) k.column(0.2, y + 1, sx * (w / 2 - 0.6), z);
-}
-// a painted ring on the paving (2 cm, no ink)
 // The yard's paving: the Kit apron, with floor colliders laid by hand in 2.5 m bands across the disc (each band's box as wide as
 // its narrower edge's chord, so nothing stands in the air past the rim) instead of the floor pass's hundreds of row boxes; the
 // apron and the paint on it are left out of that pass (Kit.noFloor).
@@ -268,7 +262,6 @@ function kioskA(k) {
     // name boards hung under the ring beam, four ways
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * TAU + TAU / 24;
-      within(k, ...polar(RCOL + 0.5, a), a, () => k.text(i % 2 ? 'BUY · SELL · SWAP' : 'THE EXCHANGE', 0, F + HC - 1.1, 0, 0, 6.2, { fg: '#' + c.toString(16).padStart(6, '0'), bg: '#1b2440', off: 0.05, back: false }));
     }
   } else {
     ruin(k, 0, 0, RC * 1.8, RC * 1.8, 5, 0, s.body, k.wr, { roof: s.roof });
@@ -324,7 +317,6 @@ function kioskA(k) {
   strollers(k, 12.6, 9, 0.09, rr);
   strollers(k, 23, 11, -0.055, rr);
   // the gate: arch sign, flags, hover-cart park
-  gateSign(k, 'TRADING EXCHANGE', 38.4, 15, 6.4, s);
   flagPole(k, -9.5, 37.3); flagPole(k, 9.5, 37.3);
   for (const [x, z, ry] of [[19, 32, 2.6], [23, 28, 2.4]]) hoverCart(k, x, z, ry, s, rr);
 }
@@ -412,7 +404,6 @@ function kioskB(k) {
     k.blinker(0, Y3 + 10.4, 0, c, 0.3);
     k.solid(2.2, 2.1, 2.2, 0, 0, 0, Y3);
     k.column(2.4, Y3 + 5.6, 0, 0, Y3 + 4.2);
-    k.text('MERIDIAN MARKET', 0, Y2 + H2 + 0.3, W / 2 + 0.31, 0, 8, { fg: '#' + c.toString(16).padStart(6, '0'), bg: '#1b2440', back: false, off: 0.02 });
   } else {
     ruin(k, 0, 0, W - 2, W - 2, 6, 0, s.body, k.wr, { roof: s.roof });
     const wr = k.wr;
@@ -462,7 +453,6 @@ function kioskB(k) {
   if (!k.wreck) for (const [x, z] of [[2, 15], [-2.5, 22], [16, -2], [-15, 2.5], [1.5, -16]]) { person(k, x, z, rr() * TAU, rr); person(k, x + 0.9, z + 0.4, face(0.9, 0.4), rr); }
   mysteryCrates(k, 12.5, -10.5, -0.6);
   k.raidAt(10.5, -12.5, 0xff2e88);
-  gateSign(k, 'MARKET CROSS', 38.4, 12, 6.2, s);
   flagPole(k, -6.5, 37.4); flagPole(k, 6.5, 37.4);
   hoverCart(k, 24, 30, 2.5, s, rr);
 }
@@ -683,7 +673,6 @@ function towerA(k) {
   if (!k.wreck) for (let i = 0; i < 6; i++) guard(k, BX - 5 + (i % 3) * 1.4, BZ + BD / 2 + 6 + Math.floor(i / 3) * 1.4, 0, rr, s);
   if (!k.wreck) guard(k, BX - 5 + 1.4, BZ + BD / 2 + 9.5, Math.PI, rr, s, 'wave');
   sentries(k, 33.5, 5, -0.05, s, rr);
-  gateSign(k, factionOf(c, 'spacecom') === 'vostok' ? 'VOSTOK POST' : factionOf(c, 'spacecom') === 'daedalus' ? 'DAEDALUS WATCH' : 'WATCHTOWER', 39.6, 12, 6.0, s);
   flagPole(k, -8.5, 35); flagPole(k, 8.5, 35);
 }
 function sentries(k, r, n, rate, s, rr) {
@@ -814,7 +803,6 @@ function towerB(k) {
   // a squad drilling on the square in front of the barracks
   if (!k.wreck) { for (let i = 0; i < 8; i++) guard(k, 2 + (i % 4) * 1.4, -2 + Math.floor(i / 4) * 1.4, Math.PI / 2, rr, s); guard(k, 9, -1.3, -Math.PI / 2, rr, s, 'wave'); }
   sentries(k, 33, 4, 0.06, s, rr);
-  gateSign(k, factionOf(c, 'spacecom') === 'vostok' ? 'VOSTOK CAMP' : factionOf(c, 'spacecom') === 'daedalus' ? 'DAEDALUS WATCH' : 'WATCH CAMP', 39.4, 12, 6.0, s);
   flagPole(k, -10, 36); flagPole(k, 10, 36);
 }
 // a six-wheeled patrol rover in the owner's colours, facing local +z
@@ -903,7 +891,6 @@ function depotA(k) {
     k.solid(W / 2, 0.15, 2.3, WX, fz + 2.3, 0, F + 7.5);
     for (let i = -2; i <= 2; i++) k.beam([WX + i * 8, F + 7.5, fz + 4.4], [WX + i * 8, F + H - 0.5, fz + 0.1], 0.08, T(s.dark), { outline: 0.02 });
     for (let i = -1; i <= 1; i++) k.box(0.6, 0.3, 0.5, G(WARM), WX + i * 10, F + 7.3, fz + 3, { outline: 0 });
-    k.text('SUPPLY DEPOT', WX, F + H - 1.2, fz + 0.07, 0, 10, { fg: '#' + s.dark.toString(16).padStart(6, '0'), bg: '#' + c.toString(16).padStart(6, '0'), back: false, off: 0.02 });
     emblem(k, WX - 13, F + H - 1.2, fz, 0, 1.6, 'spacecom');
     // roof vents and a rooftop plant
     for (const vx of [-10, 0, 10]) k.cyl(0.5, 0.6, 1.0, 8, T(s.dark), WX + vx, F + H + th, WZ - Dp / 2 + tw * 5.5, { outline: 0.03 });
@@ -958,7 +945,6 @@ function depotA(k) {
   // a forklift crew between the yard and the shed
   if (!k.wreck) for (const [x, z, a] of [[14, 6, -1.5], [15, 7, 2], [-14, 6, 0.4], [-13.2, 7, 3.4], [-26, 4, 0]]) person(k, x, z, a, rr, { suit: YEL, helmet: c });
   strollers(k, 30, 3, 0.04, rr);
-  gateSign(k, 'SUPPLY DEPOT', 39.6, 12, 6, s);
   flagPole(k, -8, 37); flagPole(k, 8, 37);
 }
 // a parked supply lander on four legs
@@ -1056,7 +1042,6 @@ function depotB(k) {
   tank(k, 25, 21, 2.4, 4.5, s.body, c);
   for (const [x, z] of [[-30, 14], [12, 14], [32, -18], [-20, 28]]) lampPost(k, x, z, 8, s.glow);
   if (!k.wreck) for (const [x, z, a] of [[1.5, 3, -1.6], [2.4, 3.5, 2.2], [17, 8, -1.2], [-6, -1, 0.5]]) person(k, x, z, a, rr, { suit: YEL, helmet: c });
-  gateSign(k, 'SUPPLY DEPOT', 39.6, 12, 6, s);
   flagPole(k, -8, 37); flagPole(k, 8, 37);
 }
 // a bulk hauler truck (cab forward, hopper behind), facing local +z
@@ -1138,7 +1123,6 @@ function farmA(k) {
   // farmers and a hand cart
   if (!k.wreck) for (const [x, z, a] of [[0, 14, 0.4], [1, 14.6, 3.6], [-14, 6, 1.2], [16, -10, 2], [-10, 8, 0]]) person(k, x, z, a, rr, { suit: [c, 0x6a8f3a, 0xfff0d8][Math.floor(rr() * 3)] });
   for (const [x, z] of [[-14, -30], [10, 4], [-30, 0], [26, 30]]) lampPost(k, x, z, 6, s.glow);
-  gateSign(k, 'FARM DOME', 39.5, 11, 5.8, s);
   flagPole(k, -7.5, 37); flagPole(k, 7.5, 37);
   strollers(k, 33, 4, 0.04, rr);
 }
@@ -1259,7 +1243,6 @@ function farmB(k) {
   k.raidAt(1, GZ + L / 2 + 4.2, 0x7dff3a);
   if (!k.wreck) for (const [x, z, a] of [[-6, 13, 0.3], [-5.2, 13.7, 3.4], [7, 14, 2], [18, 2, -1.6], [-19, 2, 1.4]]) person(k, x, z, a, rr, { suit: [c, 0x6a8f3a, 0xfff0d8][Math.floor(rr() * 3)] });
   for (const [x, z] of [[-18, 14], [18, 14], [-30, -12], [30, -12]]) lampPost(k, x, z, 6, s.glow);
-  gateSign(k, 'GREENHOUSE ROW', 39.5, 13, 5.8, s);
   flagPole(k, -8.5, 37); flagPole(k, 8.5, 37);
 }
 
@@ -1361,7 +1344,7 @@ function mastA(k) {
   k.hit(2.0, 8, 2.0, MX, MZ);
   k.smoke = new THREE.Vector3(MX, 3, MZ);
   k.drop = new THREE.Vector3(-14, F, 16);
-  shelter(k, 13, -4, -Math.PI / 2, 9, 6, s, 'RELAY');
+  shelter(k, 13, -4, -Math.PI / 2, 9, 6, s, null);
   k.hit(4.5, 2, 3, 13, -4);
   shelter(k, 20, 12, Math.PI, 6, 4.5, s, null);
   // generator and battery bank
@@ -1378,7 +1361,6 @@ function mastA(k) {
   solarRows(k, -22, 16, 2, 3, s);
   if (!k.wreck) for (const [x, z, a] of [[8, 2, 2.8], [10.5, -1, -1.4], [-16, -13.5, 0], [-2, 10, 0.4]]) person(k, x, z, a, rr, { suit: c });
   for (const [x, z] of [[-28, -10], [26, -18], [-8, 26], [24, 26]]) lampPost(k, x, z, 6, s.glow);
-  gateSign(k, 'RELAY MAST', 39.5, 11, 5.8, s);
   flagPole(k, -7, 36.5); flagPole(k, 7, 36.5);
 }
 
@@ -1440,7 +1422,6 @@ function mastB(k) {
     k.dishHead(0.5, F + 7.7, 2, 0.7, fac, { az: Math.PI * 1.2, el: -0.6 });
     k.solid(7, (F + 4.1) / 2, 4, 0, 0);
     k.solid(4.8, (3.6) / 2, 4.3, -2.5, 0, 0, F + 4.1);
-    k.text(fac === 'meridian' ? 'MERIDIAN UPLINK' : 'KEPLER UPLINK', 2, F + 3.85, 4.06, 0, 7, { fg: '#' + s.dark.toString(16).padStart(6, '0'), bg: '#' + c.toString(16).padStart(6, '0'), back: false, off: 0.02 });
     emblem(k, 6, F + 5.6, 4.03, 0, 1.4, 'kepler');
   });
   k.hit(4, 3, 7, 14, 8);
@@ -1458,7 +1439,6 @@ function mastB(k) {
   cargoStack(k, 28, -22, 1, cargoFor(k, 'kepler'), 0.3, F);
   if (!k.wreck) for (const [x, z, a] of [[6, 11, 2.8], [8.5, 3, 0.2], [-2, 4, -1.2], [20, -8, 2]]) person(k, x, z, a, rr, { suit: c });
   for (const [x, z] of [[-28, -4], [0, -30], [-8, 26], [26, 26]]) lampPost(k, x, z, 6, s.glow);
-  gateSign(k, 'UPLINK STATION', 39.5, 12, 5.8, s);
   flagPole(k, -7.5, 36.5); flagPole(k, 7.5, 36.5);
 }
 
@@ -1526,8 +1506,6 @@ function shackA(k) {
       k.box(13, 0.08, 0.08, T(c), -3.2, F + 3.75, 2.75, { outline: 0 });
       k.solid(6.5, 0.08, 0.8, -3.2, 2.0, 0, F + 2.6);
       // clan neon on top
-      k.box(7, 1.4, 0.2, T(DARK), -0.5, F + 5.5, 0.6, { outline: 0.04 });
-      k.text('SCRAP & SPARES', -0.5, F + 6.2, 0.6, 0, 6.6, { fg: '#7dff3a', bg: '#1a1426', back: true, off: 0.12 });
       emblem(k, 10.6, F + 1.5, 8.1, 0, 1.6, 'rustmoon');
       for (let i = 0; i < 5; i++) patch(k, -8 + rr() * 16, F + 0.6 + rr() * 3, 1.32, 1 + rr() * 1.5, 0.6 + rr(), rr);
       // satellite dish and a stovepipe on the roof
@@ -1592,7 +1570,6 @@ function shackA(k) {
   const poles = [[-14, 10], [-2, 16], [10, 22], [20, 26]];
   for (const [x, z] of poles) { k.cyl(0.1, 0.13, 6, 6, T(DARK), x, F, z, { outline: 0.03 }); k.column(0.15, F + 6, x, z); }
   lightString(k, poles.map(([x, z]) => [x, F + 5.8, z]), [0x7dff3a, 0xff2e88, YEL, 0x7dff3a]);
-  gateSign(k, 'SCRAP SHACK', 39.4, 11, 5.6, s);
   flagPole(k, -7, 36.5); flagPole(k, 7, 36.5);
 }
 
@@ -1647,7 +1624,6 @@ function shackB(k) {
       for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU; k.box(0.08, 1.0, 0.08, T(DARK), 4 + Math.sin(a) * 1.7, r * 1.65 + 2, Math.cos(a) * 1.7, { outline: 0 }); }
       k.add(new THREE.TorusGeometry(1.7, 0.05, 3, 16).rotateX(Math.PI / 2), T(c), 4, r * 1.65 + 3.0, 0, { outline: 0 });
       k.flag(5, -1, 6, c, r * 1.6 + 2);
-      k.text('THE HULK', 3, r * 0.7 + 2.2, Math.sqrt(r * r - 4.84), -0.15, 7, { fg: '#7dff3a', bg: '#1a1426', back: false, off: 0.08 });
       emblem(k, -11, r * 0.7, r + 0.02, 0, 2.4, 'rustmoon');
       k.solid(len * 0.48, r * 0.6, r * 0.9, 0, 0, 0, 0);
       k.hcyl(r * 0.92, len * 0.75, 0, 0, Math.PI / 2, r * 0.7);
@@ -1688,10 +1664,181 @@ function shackB(k) {
   const poles = [[-20, 16], [-8, 24], [8, 24], [22, 14]];
   for (const [x, z] of poles) { k.cyl(0.1, 0.13, 6, 6, T(DARK), x, F, z, { outline: 0.03 }); k.column(0.15, F + 6, x, z); }
   lightString(k, poles.map(([x, z]) => [x, F + 5.8, z]), [0x7dff3a, 0xff2e88, YEL]);
-  gateSign(k, 'SCRAP SHACK', 39.6, 11, 6.2, s);
 }
 
-DRAFT_BUILD.shack = { a: shackA, b: shackB };
+
+// =====================================================================================================================
+// SCRAP SHACK (the pick: a mix of A and B). The crashed freighter's hull, hollowed out and lived in: its plating stripped
+// along the yard side so the hold stands open on two decks, the ribs left standing across the gap, rooms of containers on the
+// lower deck and a railed mezzanine above, a corrugated porch roof out over the opening, the bow boarded up with a lit window,
+// the stern walled off with a big lit doorway, holes cut for windows. Round it: B's stockade and watch boxes, A's container
+// bunkhouse with its stair and balcony, the derrick over the heap and the scrap press, the cook-fire ring, pirate lights.
+// =====================================================================================================================
+function shackMix(k) {
+  const s = style(k, 'rustmoon'), c = k.c, rr = k.rr, wr = k.wr;
+  yard(k, 0x6f6878, 0x3a3540);
+  // the stockade and the two watch boxes at the gate (B)
+  for (let a = 0.28; a < TAU - 0.28; a += 2.4 / 37) {
+    const [x, z] = polar(37, a), h = 3.2 + rr() * 1.2;
+    k.box(2.5, h, 0.2, T([0x6b5a4a, 0x7a3a2a, 0x5a5f6e, 0x8a8698, 0x4a6a5a][Math.floor(rr() * 5)]), x, F, z, { ry: a, rz: (rr() - 0.5) * 0.08, outline: 0.04 });
+    k.add(new THREE.ConeGeometry(0.2, 0.7, 4), T(STEEL), x, F + h + 0.3, z, { outline: 0.02 });
+    k.solid(1.25, (F + h) / 2, 0.2, x, z, a);
+  }
+  for (const sd of [-1, 1]) within(k, sd * 7.5, 36, 0, () => {
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.beam([sx * 1.4, F, sz * 1.4], [sx * 1.0, F + 6, sz * 1.0], 0.1, T(DARK), { outline: 0.02 });
+    k.box(2.8, 2.2, 2.8, T(RUST), 0, F + 6, 0, { outline: 0.05 });
+    k.box(2.6, 0.7, 0.1, G(s.glow), 0, F + 7.0, 1.42, { outline: 0 });
+    k.add(new THREE.ConeGeometry(2.4, 1.2, 4).rotateY(Math.PI / 4), T(0x5a3a2a), 0, F + 8.8, 0, { outline: 0.04 });
+    k.solid(1.4, 0.5 + (F + 8.2) / 2, 1.4, 0, 0);
+  });
+  // the hull: local x along the keel, +z the open flank toward the yard
+  const HX = -4, HZ = -13, HY = 0.25, r = 7.5, cy = 4.0, L = 30, NS = 6, NA = 28, DECK = 0.4;
+  const secL = L / NS, hullC = [0xa8a2b4, 0x948ea2, 0xb4a890];
+  within(k, HX, HZ, HY, () => {
+    const q = new THREE.Quaternion(), e = new THREE.Euler();
+    // plates: NA round the hull per section; phi from straight up (0) toward +z (pi/2); none under the ground
+    for (let si = 0; si < NS; si++) {
+      const x = -L / 2 + secL * (si + 0.5);
+      for (let i = 0; i < NA; i++) {
+        const phi = (i / NA) * TAU, y = cy + r * Math.cos(phi), z = r * Math.sin(phi);
+        if (y < 0.1) continue;
+        const open = z > 0.5 && y > DECK - 0.5 && y < cy + r * 0.8 && si > 0 && si < NS - 1; // the stripped flank
+        const gone = k.wreck ? wr() < 0.55 : open || rr() < 0.05; // (and the odd missing plate)
+        if (gone) continue;
+        const w = (TAU * r) / NA + 0.06;
+        const lean = k.wreck ? (wr() - 0.5) * 0.3 : 0;
+        k.add(new THREE.BoxGeometry(secL - 0.08, 0.22, w), T(hullC[(si + i) % 3]), x, y, z, { rx: phi + lean, outline: 0.04 });
+        // a few window holes cut in the upper plates, lit from inside
+        if (!k.wreck && z < -1 && y > cy && y < cy + 5 && (si + i) % 4 === 0) k.add(new THREE.BoxGeometry(1.4, 0.24, 0.8), G(0xffb347), x, y, z, { rx: phi, outline: 0 });
+        if (y > DECK + 0.3) { q.setFromEuler(e.set(phi, 0, 0)); k.solidQ((secL - 0.08) / 2, 0.15, w / 2, x, y, z, q); }
+      }
+    }
+    // ribs at every section joint: full rings, standing bare across the open flank
+    for (let si = 0; si <= NS; si++) {
+      const x = -L / 2 + secL * si;
+      if (k.wreck && wr() < 0.4) continue;
+      k.add(new THREE.TorusGeometry(r + 0.05, 0.28, 5, 28, k.wreck ? Math.PI * (0.6 + wr() * 0.5) : TAU).rotateY(Math.PI / 2), T(0x4a4660), x, cy, 0, { outline: 0.04 });
+    }
+    k.beam([-L / 2, cy + r + 0.1, 0], [L / 2, cy + r + 0.1, 0], 0.35, T(0x4a4660), { outline: 0.04 }); // the spine
+    k.beam([-L / 2 + secL, DECK + 0.1, r * 0.9], [L / 2 - secL, DECK + 0.1, r * 0.9], 0.3, T(0x4a4660), { outline: 0.03 }); // the sill
+    // the lower deck: plate floor at a step's height, hazard edge along the opening
+    k.box(L - 0.4, DECK, 13, T(0x5a5f6e), 0, 0, -0.3, { outline: 0.03 });
+    for (let i = 0; i < 12; i++) k.box(1.2, 0.006, 0.3, T(i % 2 ? YEL : DARK), -L / 2 + secL + 0.8 + i * 1.65, DECK, 6.0, { outline: 0 });
+    if (!k.wreck) {
+      // bow boarded over with a lit window; stern walled with a big doorway
+      k.add(new THREE.SphereGeometry(r, 16, 10, 0, TAU, 0, Math.PI / 2).rotateZ(-Math.PI / 2).scale(0.55, 1, 1), T(0x6b5a4a), L / 2, cy, 0, { outline: 0.1 });
+      for (let i = 0; i < 6; i++) k.box(0.1, 1.2 + rr() * 1.2, 2 + rr() * 2, T([0x8a8698, 0x9a6a3a, 0x5a5f6e][i % 3]), L / 2 + 3.6 + rr() * 0.3, cy - 2 + rr() * 5, (rr() - 0.5) * 7, { outline: 0.02 });
+      k.box(0.1, 1.4, 2.4, G(s.glow), L / 2 + 4.1, cy + 1.5, 1.2, { outline: 0 });
+      k.add(new THREE.CylinderGeometry(r, r, 0.3, 28).rotateZ(Math.PI / 2), T(0x5a5f6e), -L / 2 - 0.1, cy, 0, { outline: 0.06 });
+      k.box(0.32, 4, 6, G(0xffb347), -L / 2 - 0.16, DECK, 0, { outline: 0 });
+      for (const sd of [-1, 1]) k.cyl(1.2, 1.7, 1.8, 12, T(DARK), -L / 2 - 1.2, cy + 3.2, sd * 3.6, { rz: Math.PI / 2, outline: 0.04 });
+      k.solid(0.2, cy, r * 0.9, -L / 2, 0); k.solid(3.6, cy, r * 0.9, L / 2 + 2, 0);
+      // rooms: three containers along the back of the lower deck, lit doors facing the hold
+      const cols = [0x4a6a5a, 0x7a3a2a, 0x5a5f6e];
+      for (let i = 0; i < 3; i++) {
+        const x = -9 + i * 7.5;
+        scrapBox(k, x, DECK, -3.6, Math.PI / 2, cols[i], rr);
+        k.box(1.4, 2.2, 0.1, G(i === 1 ? s.glow : 0xffb347), x - 1.6, DECK, -2.33, { outline: 0 });
+        k.box(1.6, 0.8, 0.1, G(0xffe6a8), x + 1.4, DECK + 1.2, -2.33, { outline: 0 });
+      }
+      // the mezzanine: a plate deck on the containers' roofs and posts, a rail along its edge, a stair up
+      const MY = DECK + 2.7;
+      k.box(L - 2 * secL + 2, 0.2, 4.4, T(0x55505e), 0, MY, -3.0, { outline: 0.03 });
+      k.solid((L - 2 * secL + 2) / 2, 0.1, 2.2, 0, -3.0, 0, MY);
+      for (let x = -10; x <= 10; x += 2) k.box(0.06, 1.0, 0.06, T(DARK), x, MY + 0.2, -0.85, { outline: 0 });
+      k.box(L - 2 * secL + 2, 0.08, 0.08, T(c), 0, MY + 1.2, -0.85, { outline: 0 });
+      for (let i = 0; i < 9; i++) k.box(1.2, 0.18, 0.4, T(DARK), 10.2 - i * 0.36, DECK + 0.3 + i * 0.3, 0.4, { ry: Math.PI / 2, outline: 0.02 });
+      // a workshop on the deck: bench, lamp strip under the mezzanine, hanging chains
+      k.box(4, 0.9, 1.2, T(STEEL), -4, DECK, 1.5, { outline: 0.04 });
+      k.solid(2, (DECK + 0.9) / 2, 0.6, -4, 1.5);
+      k.box(L - 2 * secL, 0.12, 0.3, G(0xfff3b0), 0, MY - 0.1, -0.9, { outline: 0 });
+      for (const x of [-6, 2]) { k.beam([x, cy + r - 0.4, 2], [x, MY + 1.4, 2], 0.03, T(DARK), { outline: 0 }); k.box(0.6, 0.5, 0.4, T(YEL), x, MY + 0.9, 2, { outline: 0.02 }); }
+      // the porch: a corrugated roof from over the opening out across the yard, falling to +z, posts cut to its underside
+      const z0 = r * 0.92, z1 = r + 5, y0 = cy + 2.4, y1 = 3.6, sl = Math.atan2(y0 - y1, z1 - z0), len = Math.hypot(z1 - z0, y0 - y1);
+      k.add(new THREE.BoxGeometry(2 * secL, 0.14, len + 0.4), T(RUST), -secL / 2, (y0 + y1) / 2 + 0.07, (z0 + z1) / 2, { rx: sl, outline: 0.05 });
+      for (let i = -3; i <= 2; i++) k.add(new THREE.BoxGeometry(0.05, 0.04, len), T(0x5a3a2a), i * 1.8, (y0 + y1) / 2 + 0.16, (z0 + z1) / 2, { rx: sl, outline: 0 });
+      for (const x of [-secL * 1.5 + 0.3, secL / 2 - 0.3]) { const zz = z1 - 0.4, top = y1 + (y0 - y1) * ((z1 - zz) / (z1 - z0)); k.box(0.22, top - F, 0.22, T(DARK), x, F, zz, { outline: 0.02 }); k.column(0.16, top, x, zz); }
+      k.solidQ(secL, 0.1, len / 2 + 0.2, -secL / 2, (y0 + y1) / 2, (z0 + z1) / 2, new THREE.Quaternion().setFromEuler(new THREE.Euler(sl, 0, 0)));
+      lightString(k, [[-secL * 1.5 + 0.3, y1 - 0.2, z1 - 0.4], [secL / 2 - 0.3, y1 - 0.2, z1 - 0.4]], [0x7dff3a, 0xff2e88, YEL], 8, 0.5);
+      // the crow's nest and banner on its back, a dish beside it, a clan stripe
+      k.cyl(1.6, 1.8, 2, 10, T(RUST), 6, cy + r, 0, { outline: 0.05 });
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU; k.box(0.08, 1.0, 0.08, T(DARK), 6 + Math.sin(a) * 1.7, cy + r + 2, Math.cos(a) * 1.7, { outline: 0 }); }
+      k.add(new THREE.TorusGeometry(1.7, 0.05, 3, 16).rotateX(Math.PI / 2), T(c), 6, cy + r + 3.0, 0, { outline: 0 });
+      k.flag(7, -1, 6, c, cy + r + 2);
+      k.dishHead(-6, cy + r + 0.2, -1, 1.0, 'rustmoon', { az: Math.PI * 0.8, el: -0.6 });
+      k.column(1.8, cy + r + 2, 6, 0);
+      emblem(k, -12.5, cy + 0.5, r + 0.05, 0, 2.4, 'rustmoon');
+      // people at home in the hold
+      for (const [x, z, a, pose] of [[-4, 0.4, Math.PI, 'stand'], [-1, 2.6, -2, 'stand'], [5, 1.2, 2.2, 'wave'], [-7, -3.0, 0.1, 'stand']]) pirate(k, x, z, a, rr, s, pose);
+      person(k, 3, -3.4, 0.2, rr, { y: MY + 0.2, suit: 0x3a2b4f, helmet: s.trim });
+    } else {
+      scatterDebris(k, 0, 0, L * 0.4, 5, 30, wr);
+      k.box(9, 0.3, 7, T(RUST), 4, F + 1.2, r + 2, { rx: 0.5, rz: 0.2, outline: 0.05 });
+      k.solid(4.5, 1.0, 3.5, 4, r + 2);
+      for (let i = 0; i < 6; i++) k.box(0.3, 0.12, 0.3, G(i % 2 ? 0xff7a1a : 0xffb347), (wr() - 0.5) * L * 0.6, DECK + 0.1, (wr() - 0.5) * 8, { outline: 0 });
+    }
+  });
+  k.hit(L / 2, cy, r, HX, HZ, HY);
+  k.smoke = new THREE.Vector3(HX, 3, HZ);
+  k.drop = new THREE.Vector3(16, F, 18);
+  // the plating rack in the hold's mouth: the raid spot
+  within(k, HX, HZ, HY, () => within(k, 6, 6.5, 0, () => {
+    for (let i = 0; i < 5; i++) k.box(2.0, 1.6, 0.08, T([0x8a8698, 0x9a6a3a, 0x5a5f6e][i % 3]), 0, DECK + 0.2, -0.6 + i * 0.3, { rx: -0.25, outline: 0.02 });
+    k.box(2.4, 0.3, 2.0, T(DARK), 0, DECK, 0, { outline: 0.03 });
+    k.solid(1.2, (DECK + 1.8) / 2, 1.0, 0, 0);
+  }));
+  within(k, HX, HZ, HY, () => k.raidAt(6, 9.3, 0x7dff3a));
+  // A's bunkhouse: two boxes with one on top, a stair and a railed balcony, lit doors (west of the gate road)
+  within(k, -24, 10, 1.25, () => {
+    const cols = [0x6b5a4a, 0x8a5a3a, 0x5a5f6e];
+    if (k.wreck) { scrapBox(k, 0, F, 0, Math.PI / 2 + 0.2, CHAR, wr); scrapBox(k, 0.5, F, 3.2, Math.PI / 2 - 0.3, 0x3a3540, wr); return; }
+    scrapBox(k, -3.2, F, 0, Math.PI / 2, cols[0], rr);
+    scrapBox(k, 3.2, F, 0, Math.PI / 2, cols[1], rr);
+    scrapBox(k, 0, F + 2.6, 0.2, Math.PI / 2, cols[2], rr);
+    for (const x of [-3.2, 3.2]) k.box(1.6, 2.3, 0.1, G(0xffb347), x, F, 1.29, { outline: 0 });
+    k.box(2.2, 1.0, 0.1, G(s.glow), 0, F + 3.8, 1.49, { outline: 0 });
+    for (let i = 0; i < 9; i++) k.box(1.2, 0.18, 0.4, T(DARK), -7.0, F + 0.3 + i * 0.3, 3.4 - i * 0.36, { outline: 0.02 });
+    k.box(9, 0.15, 1.6, T(DARK), -2.2, F + 2.6, 2.0, { outline: 0.03 });
+    for (let x = -6.5; x <= 2; x += 1.5) k.box(0.08, 1.0, 0.08, T(DARK), x, F + 2.75, 2.75, { outline: 0 });
+    k.box(9, 0.08, 0.08, T(c), -2.2, F + 3.75, 2.75, { outline: 0 });
+    k.solid(4.5, 0.08, 0.8, -2.2, 2.0, 0, F + 2.6);
+    k.cyl(0.25, 0.25, 3, 6, T(DARK), 2, F + 5.2, 0.4, { outline: 0.02 });
+    pirate(k, -1, 2.0, 0.3, rr, s);
+  });
+  // A's derrick over the heap and the scrap press (east)
+  junkHeap(k, 22, -6, 6.5, 3.8, 36, k.rr);
+  within(k, 15, 6, 0, () => {
+    lattice(k, 0, 0, 12, 1.0, 0.6, 4, T(RUST), T(DARK), { r: 0.14 });
+    k.beam([0, 11.6, 0], [6, 13, -8], 0.22, T(YEL), { outline: 0.03 });
+    k.beam([0, 9, 0], [6, 13, -8], 0.08, T(DARK), { outline: 0 });
+    k.beam([6, 13, -8], [6, 8.5, -8], 0.03, T(DARK), { outline: 0 });
+    k.box(0.6, 0.8, 0.3, T(YEL), 6, 7.7, -8, { outline: 0.03 });
+  });
+  within(k, 27, 8, -0.9, () => {
+    k.box(5, 3.2, 4, T(0x5a5f6e), 0, F, 0, { outline: 0.08 });
+    k.box(4.6, 1.6, 3.6, T(RUST), 0, F + 3.2, 0, { outline: 0.05 });
+    for (const sd of [-1, 1]) k.box(0.5, 4.4, 0.5, T(YEL), sd * 2.4, F + 3.2, 0, { outline: 0.03 });
+    k.box(5.4, 0.6, 0.8, T(YEL), 0, F + 7.4, 0, { outline: 0.03 });
+    k.box(1.4, 1.4, 1.4, T(0x6b5a4a), 0, F, 3, { ry: 0.3, outline: 0.04 });
+    k.solid(2.7, (F + 8) / 2, 2.0, 0, 0);
+  });
+  // B's cook fire with tyre seats, burning barrels, tyre stacks, stolen containers, pirate lights
+  k.cyl(2.2, 2.4, 0.4, 12, T(0x3a3540), 6, F, 18, { outline: 0.03 });
+  const pit = new THREE.Mesh(new THREE.ConeGeometry(1.0, 1.6, 7), G(0xff7a1a)); pit.userData.blink = true; k.dyn(pit, 6, F + 1.2, 18);
+  k.column(2.4, F + 0.4, 6, 18);
+  for (let i = 0; i < 5; i++) { const a = (i / 5) * TAU; const [x, z] = polar(3.8, a); k.cyl(0.45, 0.45, 0.5, 8, T(TYRE), 6 + x, F, 18 + z, { outline: 0.03 }); if (!k.wreck && i % 2 === 0) pirate(k, 6 + x, 18 + z, a + Math.PI, rr, s, 'sit'); }
+  burnBarrel(k, -10, 20);
+  burnBarrel(k, 20, 20);
+  for (const [x, z] of [[-16, 24], [-14, 26], [-17.5, 26.5]]) { for (let i = 0; i < 3; i++) k.add(new THREE.TorusGeometry(0.75, 0.32, 6, 12).rotateX(Math.PI / 2), T(TYRE), x, F + 0.32 + i * 0.6, z, { outline: 0.03 }); k.column(1.05, F + 1.8, x, z); }
+  cargoStack(k, -28, -12, 1, cargoFor(k, 'rustmoon'), 1.2, F);
+  cargoStack(k, -29, -3, 2, cargoFor(k, 'rustmoon').slice(1), 1.4, F);
+  if (!k.wreck) for (const [x, z, a] of [[-9, 21.5, 3.4], [21, 21.3, 0.6], [-2, 28, 2.8], [-1, 28.8, 0.4], [18, 12, 2]]) pirate(k, x, z, a, rr, s, rr() < 0.2 ? 'wave' : 'stand');
+  const poles = [[-20, 16], [-8, 30], [8, 30], [22, 16]];
+  for (const [x, z] of poles) { k.cyl(0.1, 0.13, 6, 6, T(DARK), x, F, z, { outline: 0.03 }); k.column(0.15, F + 6, x, z); }
+  lightString(k, poles.map(([x, z]) => [x, F + 5.8, z]), [0x7dff3a, 0xff2e88, YEL]);
+}
+
+DRAFT_BUILD.shack = { a: shackA, b: shackB, c: shackMix };
 
 // =====================================================================================================================
 // JUNK PILE A: Scrap Mountain. A 13 m mound of wreckage worked by an electromagnet crane on a turning lattice boom, a sorting
@@ -1789,7 +1936,6 @@ function junkA(k) {
   if (!k.wreck) for (const [x, z, a] of [[10, 18, 2.6], [-24, 14, 1.2], [6, -24, 0.4]]) pirate(k, x, z, a, rr, s);
   burnBarrel(k, -12, 24);
   for (const [x, z] of [[-30, -8], [28, 20], [-8, 30]]) lampPost(k, x, z, 7, s.glow);
-  gateSign(k, 'JUNK PILE', 39.6, 10, 5.6, s);
   flagPole(k, -6.5, 37); flagPole(k, 6.5, 37);
 }
 // a little junk bot: a box body on two legs, a dome head with one glowing eye
@@ -1821,7 +1967,6 @@ function junkB(k) {
   // the gate: two car stacks and a beam with a hanging skull sign
   for (const sd of [-1, 1]) { const [x, z] = polar(WR, sd * 0.2); for (let j = 0; j < 5; j++) k.box(2.4, 1.2, 1.8, T([0xd9482b, 0x8a8698, 0x2b59c3, 0x5a5f6e, 0xffb347][j]), x, F + j * 1.2, z, { ry: (rr() - 0.5) * 0.3, outline: 0.04 }); k.solid(1.3, (F + 6) / 2, 1, x, z); }
   k.box(15, 0.6, 0.6, T(RUST), 0, F + 6.0, polar(WR, 0.2)[1], { outline: 0.05 });
-  k.text('JUNK RING', 0, F + 5.0, polar(WR, 0.2)[1] + 0.35, 0, 7, { fg: '#7dff3a', bg: '#1a1426', back: true, off: 0.06 });
   // the central heap and the lookout on stilts over it
   const MX = 0, MZ = -4;
   if (!k.wreck) {
@@ -1898,4 +2043,4 @@ DRAFT_BUILD.junk = { a: junkA, b: junkB };
 
 
 
-export { within, person, strollers, bench, tree, lampPost, flagPole, gateSign, paint, paintStrip, ruin, style, STYLE, factionOf, polar, face, R, F };
+export { within, person, strollers, bench, tree, lampPost, flagPole, paint, paintStrip, ruin, style, STYLE, factionOf, polar, face, R, F };

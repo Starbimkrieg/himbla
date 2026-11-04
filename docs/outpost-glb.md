@@ -1,5 +1,8 @@
 # Outposts from Blender (`src/assets/outposts.glb`)
 
+> **Superseded for now:** the small outposts are built from the picked drafts in `src/outpostDrafts.js`
+> (docs/outpost-proposals). This pilot, and the Kit builders it mirrors, only run with `?outpostDraft=off`.
+
 The small faction structures (watchtower, depot, farm dome, relay mast, kiosk, scrap shack, junk pile) are built in
 code by `Kit` (`src/outpostModels.js`). This is the contract for building one in Blender instead. It is a **pilot**:
 two kinds have gone through it so far, the Relay Mast (`mast`) and the Watchtower (`tower`), the other five are still

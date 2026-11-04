@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Kit, T, outpostTemplate, container, crate, tank, junkHeap, sandbags, lightString } from '../outpostModels.js';
+import { Kit, T, outpostTemplate, OUTPOST_PICK, container, crate, tank, junkHeap, sandbags, lightString } from '../outpostModels.js';
 import '../outpostDrafts.js'; // (the draft reworks: docs/outpost-proposals)
 import { foundedTemplate } from '../storyAssets.js';
 import { rubbleModel } from '../territory.js';
@@ -105,7 +105,7 @@ function row(parts, gap = 3) {
 const item = (id, label, w, d, make, extra = {}) => ({ id, label, w, d, make, ...extra });
 
 // ---------------------------------------------------------------------------------------------
-// 08 OUTPOSTS: seven small faction kinds, intact and wrecked (Kit build, src 'kit')
+// 08 OUTPOSTS: seven small faction kinds, intact and wrecked (the picked drafts, src/outpostDrafts.js)
 // ---------------------------------------------------------------------------------------------
 const OUTPOSTS = [
   // kind, label, owner (a faction that has one in game), w, d
@@ -119,8 +119,8 @@ const OUTPOSTS = [
 ];
 
 function outpostItem(kind, label, faction, w, d, wreck) {
-  return item(`outpost.${kind}${wreck ? '.wreck' : ''}`, `${label}${wreck ? ' (WRECK)' : ''}`, w, d, () => {
-    const t = outpostTemplate(kind, factionHex(faction), 0, wreck, 'kit');
+  return item(`outpost.${kind}${wreck ? '.wreck' : ''}`, `${label}${wreck ? ' (WRECK)' : ''}`, 84, 84, () => {
+    const t = outpostTemplate(kind, factionHex(faction), 0, wreck, 'kit', OUTPOST_PICK[kind]); // (the picked draft, as in the game)
     const root = t.root.clone();
     return { root, cols: fixCols(t.cols), update: animate(root) };
   });
@@ -154,7 +154,8 @@ const outposts = {
   title: '08 · OUTPOSTS',
   items: [
     ...OUTPOSTS.flatMap(([kind, label, faction, w, d]) => [outpostItem(kind, label, faction, w, d, false), outpostItem(kind, label, faction, w, d, true)]),
-    ...OUTPOSTS.flatMap(([kind, label, faction]) => ['a', 'b'].flatMap((dr) => [draftItem(kind, label, faction, dr, false), draftItem(kind, label, faction, dr, true)])),
+    // the drafts not picked (docs/outpost-proposals)
+    ...OUTPOSTS.flatMap(([kind, label, faction]) => ['a', 'b', 'c'].filter((dr) => dr !== OUTPOST_PICK[kind] && (dr !== 'c' || kind === 'shack')).flatMap((dr) => [draftItem(kind, label, faction, dr, false), draftItem(kind, label, faction, dr, true)])),
     foundedItem('homestead', 'FOUNDED HOMESTEAD', [], 74, 74),
     foundedItem('homestead', 'FOUNDED HOMESTEAD', MODULES, 74, 74),
     foundedItem('lab', 'FOUNDED FIELD LAB', [], 74, 74),

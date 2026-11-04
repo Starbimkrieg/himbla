@@ -9,19 +9,23 @@ import { bendPoint, bendQuat, bendGeometry } from './curve.js';
 // Small faction outposts (watchtowers, depots, farm domes, relay masts, kiosks, scrap shacks, junk piles): ~50 m
 // compounds on flattened plateaus. Baked once per kind / faction colour / variant into a few merged meshes (one per
 // material plus one ink hull) that every outpost of that look clones. Flags, lamps, dishes, searchlights stay separate.
-// Draft reworks (docs/outpost-proposals): `?outpostDraft=a|b` (or per kind, `kiosk:a,tower:b`) or
-// localStorage['mr-outpost-draft'] builds the small kinds from src/outpostDrafts.js instead. They are larger (a 40 m yard).
+// The small outposts are built from src/outpostDrafts.js (docs/outpost-proposals): the picked draft of each kind (OUTPOST_PICK,
+// on a 40 m yard). `?outpostDraft=a|b|c` (or per kind, `kiosk:a,tower:b`) or localStorage['mr-outpost-draft'] shows another
+// draft instead; `?outpostDraft=off` brings back the old Kit builders below (and the Blender pilot, ?outpostGlb).
+export const OUTPOST_PICK = { kiosk: 'b', tower: 'b', depot: 'b', farm: 'b', mast: 'a', junk: 'a', shack: 'c' };
 function readDraft() {
-  let v = '';
-  try { v = new URLSearchParams(globalThis.location?.search || '').get('outpostDraft') ?? globalThis.localStorage?.getItem('mr-outpost-draft') ?? ''; } catch { v = ''; }
+  let v = null;
+  try { v = new URLSearchParams(globalThis.location?.search || '').get('outpostDraft') ?? globalThis.localStorage?.getItem('mr-outpost-draft'); } catch { v = null; }
+  if (v == null || v === '') return OUTPOST_PICK;
   v = String(v).toLowerCase();
-  if (v === 'a' || v === 'b') return v;
-  const m = {};
-  for (const p of v.split(',')) { const [kind, d] = p.split(':'); if (d === 'a' || d === 'b') m[kind] = d; }
-  return Object.keys(m).length ? m : null;
+  if (['off', 'kit', 'old', '0', 'no'].includes(v)) return null;
+  if (v === 'a' || v === 'b' || v === 'c') return v;
+  const m = { ...OUTPOST_PICK };
+  for (const p of v.split(',')) { const [kind, d] = p.split(':'); if (d === 'a' || d === 'b' || d === 'c') m[kind] = d; else if (d === 'off') delete m[kind]; }
+  return m;
 }
 export const OUTPOST_DRAFT = readDraft();
-export const draftFor = (kind) => (!OUTPOST_DRAFT ? null : typeof OUTPOST_DRAFT === 'string' ? OUTPOST_DRAFT : OUTPOST_DRAFT[kind] || null);
+export const draftFor = (kind) => (!OUTPOST_DRAFT ? null : typeof OUTPOST_DRAFT === 'string' ? (DRAFT_BUILD[kind]?.[OUTPOST_DRAFT] ? OUTPOST_DRAFT : OUTPOST_PICK[kind]) : OUTPOST_DRAFT[kind] || null);
 export const DRAFT_BUILD = {}; // kind -> { a, b }: filled by outpostDrafts.js
 export const FLAT_R = OUTPOST_DRAFT ? 44 : 30; // flattened core radius (terrain blends back out to ~2x this)
 export const SMALL_KINDS = new Set(['tower', 'depot', 'farm', 'mast', 'kiosk', 'shack', 'junk']);
