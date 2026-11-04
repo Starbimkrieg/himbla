@@ -85,7 +85,8 @@ export class WeaponView {
     this.out = !!want;
     const switching = want && this.key && want !== this.key;        // switching: the one in hand goes down, the new one comes up
     const target = want && !switching ? 1 : 0;
-    this.k = target > this.k ? Math.min(1, this.k + dt / DRAW_T) : Math.max(0, this.k - dt / (switching ? DRAW_T : HOLSTER_T));
+    if (target > this.k) this.k = Math.min(1, this.k + dt / DRAW_T);
+    else if (target < this.k) this.k = Math.max(0, this.k - dt / (switching ? DRAW_T : HOLSTER_T));
     if (want && (!this.key || (switching && this.k === 0))) this.key = want;
     for (const [k, w] of Object.entries(this.weapons)) w.visible = k === this.key && this.k > 0.02;
     if (this.k <= 0) return;
@@ -131,7 +132,7 @@ export class WeaponView {
     }
     if (e < 1) {
       const pairs = two ? [[m.armL, 0], [m.foreL, 1], [m.armR, 2], [m.foreR, 3]] : [[this.handArm, S < 0 ? 0 : 2], [this.hand, S < 0 ? 1 : 3]];
-      for (const [o, i] of pairs) o.quaternion.copy(from[i]).slerp(_q2.copy(o.quaternion), e);
+      for (const [o, i] of pairs) { _q2.copy(o.quaternion); o.quaternion.copy(from[i]).slerp(_q2, e); }   // (the solved turn kept before the animated one goes back)
     }
   }
 
