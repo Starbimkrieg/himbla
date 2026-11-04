@@ -323,7 +323,7 @@ for name, wr in weapons.items():
         sh = hold_weapon(P, wr, hold)
         report.append((tag, stance, {k: round(v, 3) for k, v in sh.items()}))
         hz = 1.25 if stance == "stand" else 1.05
-        camera(sc, (2.3, -3.3, hz + 0.55), (0.15, -0.25, hz), 42)
+        camera(sc, (3.6, -1.7, hz + 0.45), (0.05, -0.4, hz - 0.05), 40)       # from his right, a little ahead: the weapon side on
         render(sc, f"{tag}_{stance}")
 for r in report:
     print("fit", *r)

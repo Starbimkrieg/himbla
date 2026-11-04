@@ -122,7 +122,7 @@ def pulse_b():
         g("c_cream", 0.01).tor(0.13, 0.016, (0, 0, z), (PI / 2, 0, 0), n=24, rs=5)
     # the cradle: two cream cheeks round the disc, on an orange pillar off the sleeve
     g("c_orange", 0.015).boxc(0, 0.155, -0.16, 0.085, 0.07, 0.15)
-    cheek = [(-0.16 + 0.118 * math.cos(a), 0.245 + 0.118 * math.sin(a)) for a in [PI + PI * i / 14 for i in range(15)]] + [(-0.042, 0.19), (-0.278, 0.19)]
+    cheek = [(-0.16 + 0.118 * math.cos(a), 0.245 + 0.118 * math.sin(a)) for a in [PI + PI * i / 14 for i in range(15)]]   # a half-disc under the disc's middle
     for x0 in (0.034, -0.044):
         g("c_cream", 0.012).polyx(cheek, x0, x0 + 0.01)
     g("laser", 0.0).cylc(0, 0.245, -0.16, 0.1, 0.024, 28, "x")                       # the disc, upright, its rim proud of the cheeks
