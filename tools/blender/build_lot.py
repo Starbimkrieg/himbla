@@ -42,7 +42,7 @@ def S(h):
 
 HEX = {
     "plum": "4a1766", "plum2": "6a2a8f", "gold": "ffd23f", "brass": "c79a1f", "cream": "fff4e0", "dark": "1a1030", "red": "d7263d", "pink": "ff2e88",
-    "suitred": "ff2a4a", "suitcream": "fff4e0", "lamp": "fff6a8", "glowcyan": "2ee6ff", "cardface": "d9d2ee",
+    "suitred": "ff2a4a", "suitcream": "fff4e0", "suitblack": "1d1a29", "lamp": "fff6a8", "glowcyan": "2ee6ff", "cardface": "d9d2ee",
 }
 SLOT_COLORS = {k: S(v) for k, v in HEX.items()}
 exec(open(os.path.join(REPO, "tools", "blender", "kit.py"), encoding="utf-8").read(), globals())
@@ -123,7 +123,7 @@ plum = Acc("lot_card_wall_plum", "plum", root, 0.02)
 gold = Acc("lot_card_wall_gold", "gold", root, 0.012)
 cream = Acc("lot_card_wall_cream", "cardface", root, 0.012)       # (card faces are lit, or a wall in shade reads as dark plates)
 red = Acc("lot_card_wall_suitred", "suitred", root, 0.0)
-suitc = Acc("lot_card_wall_suitcream", "suitcream", root, 0.0)
+suitc = Acc("lot_card_wall_suitblack", "suitblack", root, 0.0)    # (spades and clubs printed black, as on a card)
 plum.box(-1.2, 1.2, 0.0, 0.34, -0.3, 0.3)                                          # kerb
 gold.box(-1.19, 1.19, 0.34, 0.40, -0.25, 0.25)                                     # cap
 CW, CH, CT = 0.5, 0.95, 0.05                                                       # card: 0.5 x 0.95 m, 5 cm thick

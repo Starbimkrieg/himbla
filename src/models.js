@@ -2519,7 +2519,7 @@ export const makeHallPart = (name) => ddGroup(SHIP_PARTS[name], null, HALL_TOON,
 // (Asset Row); lotNode / lotSlot: for baking into a settlement kit (settlements.js dressCasinoLot).
 const LOT_PROPS = ['lot_card_wall', 'lot_card_post', 'lot_chip_bollard', 'lot_pylon_p', 'lot_bay_stud'];
 const LOT_TOON = { plum: 0x4a1766, plum2: 0x6a2a8f, gold: 0xffd23f, brass: 0xc79a1f, cream: 0xfff4e0, dark: 0x1a1030, red: 0xd7263d, pink: 0xff2e88 };
-const LOT_GLOW = { suitred: 0xff2a4a, suitcream: 0xfff4e0, lamp: 0xfff6a8, glowcyan: 0x2ee6ff, cardface: 0xd9d2ee };
+const LOT_GLOW = { suitred: 0xff2a4a, suitcream: 0xfff4e0, suitblack: 0x1d1a29, lamp: 0xfff6a8, glowcyan: 0x2ee6ff, cardface: 0xd9d2ee }; // (self-lit like the card faces they're printed on; suitblack the palette's deepest: black is the ink's)
 export const makeLotPart = (name) => ddGroup(SHIP_PARTS[name], null, LOT_TOON, LOT_GLOW);
 export const lotNode = (name) => SHIP_PARTS[name];
 export function lotSlot(slot) {

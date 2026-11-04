@@ -5,6 +5,9 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **The casino forecourt's card wall prints its spades and clubs black** (they were cream), as on a playing card; the hearts
+  and diamonds stay red (`build_lot.py`: a `suitblack` slot, self-lit like the card faces, in the palette's deepest
+  `1d1a29`; `models.js` LOT_GLOW). The other casino pieces keep their cream suits.
 - **Neon glow.** Light sources glowed in two hard rings, which came out wavy and lumpy round thin neon and lay as a
   translucent smear over whatever stood in front. Now the halo is tight, falling away within a few pixels of the light,
   and the light's own core runs white-hot where it is thick, the way real neon reads (`post.js`; picked from four looks
