@@ -476,7 +476,7 @@ export function dropFloorFaces(g, maxY = 0.05) {
 }
 
 // Glow (post.js): an opaque material marked so writes alpha GLOW_MARK into the scene target (half float, so it can hold a
-// 2; every other opaque surface writes 1, the sky 0). The post pass blurs what is marked into a hard-stepped halo.
+// 2; every other opaque surface writes 1, the sky 0). The post pass blurs what is marked into a neon halo.
 // Opt-in: only light sources get it (a halo on every lit window, windscreen and trim strip was noise). glow() is plain;
 // haloize(slot, m) marks a Blender model's light-source slots (HALO_SLOT: lamps, bulbs, beacons, neon, LEDs, tail lights,
 // exhausts); glowShared(color, true) and glowMark(m) mark by hand.

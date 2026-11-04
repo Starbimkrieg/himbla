@@ -12,7 +12,8 @@ export const GRADES = {
 };
 
 // Glow: the marked pixels (toon.js glowMark: alpha GLOW_MARK) at a quarter of the size, averaged down, blurred across and
-// up; the post pass adds the halo in hard steps (two rings, not a soft bloom: comic glow). `k` the Glow setting.
+// up; the post pass adds it as neon: a tight halo that falls away within a few pixels and the tube's core run white-hot.
+// `k` the Glow setting.
 const GLOW_SHADER = {
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   // down: the 4 x 4 full-size pixels under a quarter-size one (four bilinear taps), only those marked, the brightest
@@ -76,7 +77,7 @@ export class ComicPost {
         fade: { value: 0 }, // fade to black (council chamber cutscene, chamber.js)
         halftone: { value: 1 }, lines: { value: 1 }, inkK: { value: 1 }, // settings
         creaseTint: { value: CLASSIC_LOOK ? 0 : 1 },
-        tGlow: { value: null }, glowK: { value: 0 }, glowStyle: { value: 0 }, // the Glow setting (glow passes, below); glowStyle: a look on trial
+        tGlow: { value: null }, glowK: { value: 0 }, // the Glow setting (glow passes, below)
         gradeK: { value: CLASSIC_LOOK ? 0 : 1 }, gradeDay: { value: 1 }, // the grade's strength; 1 sunlit, 0 dark side
         gDaySh: { value: new THREE.Vector3() }, gDayHi: { value: new THREE.Vector3() }, gDayP: { value: new THREE.Vector3() },
         gNightSh: { value: new THREE.Vector3() }, gNightHi: { value: new THREE.Vector3() }, gNightP: { value: new THREE.Vector3() },
@@ -90,7 +91,7 @@ export class ComicPost {
         uniform float speed; uniform float damage; uniform float alert; uniform float boost; uniform float invert; uniform float fade;
         uniform float halftone; uniform float lines; uniform float inkK; // settings
         uniform float creaseTint;
-        uniform sampler2D tGlow; uniform float glowK; uniform float glowStyle; uniform float encodeSRGB;
+        uniform sampler2D tGlow; uniform float glowK; uniform float encodeSRGB;
         uniform float gradeK; uniform float gradeDay;
         uniform vec3 gDaySh; uniform vec3 gDayHi; uniform vec3 gDayP; uniform vec3 gNightSh; uniform vec3 gNightHi; uniform vec3 gNightP;
         vec3 toDisplay(vec3 c){ return sRGBTransferOETF(vec4(max(c, 0.0), 1.0)).rgb; }
@@ -168,31 +169,20 @@ export class ComicPost {
           col = mix(col, vec3(0.95, 0.05, 0.12), clamp(damage, 0.0, 1.0) * smoothstep(0.25, 0.85, rad));
           col = mix(col, vec3(1.0, 0.1, 0.15), alert * (0.5 + 0.5 * sin(time * 10.0)) * smoothstep(0.45, 0.9, rad) * 0.5);
 
-          // glow: the blurred lit parts in two hard rings (comic glow), screened over the picture in their own hue
+          // glow: neon (a tight halo and a white-hot core), screened over the picture in the light's own hue
           if (glowK > 0.0) {
             vec4 gw = texture2D(tGlow, vUv);
             vec3 gl = gw.rgb;
             float gm = max(gl.r, max(gl.g, gl.b));
             // crowded lights (a wall of windows) merge: their halos summed into one bright slab, so the field is taken
-            // down by how much of the neighbourhood is lit; the cluster keeps one calm outer ring, a lone lamp both
+            // down by how much of the neighbourhood is lit, and a cluster's halo is calmer than a lone lamp's
             float field = gm / (1.0 + 2.0 * smoothstep(0.12, 0.5, gw.a));
-            // (each ring's edge eased over a hair, so it stays hard but doesn't step with the quarter-size pixels)
+            // neon: a tight halo hugging the tube (the field cubed: it falls away within a few pixels of the light, so it
+            // never lies as a haze over what stands in front), and the tube's own core run white-hot where it is thick
             vec3 hue = clamp(gl / max(gm, 1e-4), 0.0, 1.0);
-            float crowd = 1.0 - 0.45 * smoothstep(0.25, 0.6, gw.a);
-            float amt = 0.0;
-            if (glowStyle < 0.5) {               // RINGS: two hard rings
-              amt = (0.16 * smoothstep(0.1, 0.13, field) + 0.2 * smoothstep(0.3, 0.34, field)) * crowd;
-            } else if (glowStyle < 1.5) {        // HALFTONE: dots in the light's hue, bigger nearer it (the shading's grid, turned)
-              vec2 g = mat2(0.8660, -0.5, 0.5, 0.8660) * gl_FragCoord.xy / (max(res.y / 900.0, 1.0) * 6.0);
-              float r = 0.62 * sqrt(clamp(field * 1.6, 0.0, 1.0));
-              amt = 0.55 * (1.0 - smoothstep(r - 0.08, r + 0.02, length(fract(g) - 0.5))) * step(0.04, field) * crowd;
-            } else if (glowStyle < 2.5) {        // SOFT: a smooth falloff, no edges
-              amt = 0.5 * pow(clamp(field * 1.3, 0.0, 1.0), 1.6) * crowd;
-            } else {                             // NEON: a tight halo hugging the tube, and the tube's own core run white-hot
-              amt = 0.45 * pow(clamp(field * 1.2, 0.0, 1.0), 3.0) * crowd;
-              float mk = clamp((texture2D(tColor, vUv).a - 1.0) / ${(GLOW_MARK - 1).toFixed(1)}, 0.0, 1.0);
-              col = mix(col, mix(col, vec3(1.0), 0.55), mk * smoothstep(0.25, 0.7, field) * glowK);
-            }
+            float amt = 0.45 * pow(clamp(field * 1.2, 0.0, 1.0), 3.0) * (1.0 - 0.45 * smoothstep(0.25, 0.6, gw.a));
+            float mk = clamp((texture2D(tColor, vUv).a - 1.0) / ${(GLOW_MARK - 1).toFixed(1)}, 0.0, 1.0);
+            col = mix(col, mix(col, vec3(1.0), 0.55), mk * smoothstep(0.25, 0.7, field) * glowK);
             if (amt > 0.0) col = 1.0 - (1.0 - col) * (1.0 - hue * amt * glowK);
           }
 
