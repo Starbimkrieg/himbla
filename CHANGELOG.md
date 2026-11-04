@@ -5,6 +5,16 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Weapons in hand** (`src/weaponView.js`; models `tools/blender/build_weapons.py` -> `src/assets/weapons.glb`, picked from
+  the drafts in `docs/weapon-proposals/`): the courier now holds the weapon he fires. The SPACECOM Disc Blaster (Pulse
+  Spinner; its disc in your laser colour), the Vostok Breaker (Scattergun), the Daedalus Rail Lance with violet coil rings,
+  the Rustmoon Junk Hopper (Junk Mortar). It comes up when you fire and is put away with the crosshair, 10 s after the last
+  shot (`gamepad.js` AIM_SHOW), never in a vehicle, a ragdoll, a dive or a trick; switching weapons puts one away and
+  brings the other up. An aim layer over walking, running and skating: the torso turns into a right-handed stance and
+  toward the aim (pitch and yaw, within limits), the shoulders roll forward for the two-handed ones (the arms stay their
+  length: no spot in front of the chest is in both hands' reach otherwise, and the hands met inside the torso), and both
+  arms are solved to the grips by two-bone IK, the elbows bending as the pivots can. On foot he faces where you aim while it
+  is out. Shots leave from the weapon's muzzle. New Asset Row item WEAPONS IN HAND (234 items).
 - **Freighter: no side wings, a style pass and lighter cargo (`tools/blender/build_ships.py`, `cargo.py`, `decals.py`):**
   - **The radiator wings are gone.** The ship's heat now goes out through **radiator panels on the stern block's flanks**: a
     backplate set into the flank over the cooling ribs, a trim frame, nine vertical fins in the livery stripe between top and

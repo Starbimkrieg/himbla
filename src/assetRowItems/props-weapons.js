@@ -5,11 +5,12 @@ import { mulberry32 } from '../rng.js';
 import { FX } from '../fx.js';
 import { Projectiles } from '../projectiles.js';
 import { Winch } from '../winch.js';
-import { LightTrail, makeRunner } from '../models.js';
+import { LightTrail, makeRunner, makeWeapon, WEAPON_KEYS } from '../models.js';
+import { WeaponView } from '../weaponView.js';
 import { SKATES, LASERS } from '../cosmeticsData.js';
 import { scorchTex, meteorMats } from '../meteors.js';
 
-// 05 · WEAPONS & FX. Weapons have no model, so each is shown as its shot: the game's Projectiles.fire builds it (on a scene of
+// 05 · WEAPONS & FX. The weapons in hand first (their models), then each as its shot: the game's Projectiles.fire builds it (on a scene of
 // its own) and a loop flies it down a test range to a target and bursts it with the game's FX. Shots fly at about a quarter
 // speed so the eye can follow (the stretch still uses the real speed). Each effect has a private FX drawing into the item.
 
@@ -347,10 +348,35 @@ function meteorImpact() {
   return { root, update: (dt, t) => { const u = t % 8; ember.material.opacity = Math.max(0, 0.6 * (1 - u / 6)) * (0.8 + 0.2 * Math.sin(u * 9)); } };
 }
 
+// The weapons in hand (build_weapons.py, weaponView.js): a courier holding each, solved by the game's own aim layer, and
+// each model alone at 1.6x on a stand in front of him.
+function weaponsInHand() {
+  const root = new THREE.Group();
+  root.add(plate(14, 7));
+  WEAPON_KEYS.forEach((k, i) => {
+    const x = -5.25 + i * 3.5;
+    const r = makeRunner({ suit: 0xff4f2e, accent: 0x2ee6ff, scarf: 0xffd23f });
+    r.root.position.set(x, 0.12, 0.6);
+    root.add(r.root);
+    r.root.updateMatrixWorld(true);
+    new WeaponView(r).apply(k, Z, 1, 0x9be7ff);
+    const w = makeWeapon(k);
+    w.scale.setScalar(1.6);
+    w.rotation.y = -Math.PI / 2;                         // side on to the walkway
+    w.position.set(x + (k === 'rail' ? 0.6 : 0.2), 0.9, 2.8);
+    root.add(w);
+    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.12, 0.7, 8), toon(0x3a3550));
+    stand.position.set(x, 0.47, 2.8);
+    root.add(stand);
+  });
+  return { root };
+}
+
 export default {
   id: 'props.weapons',
   title: '05 · WEAPONS & FX',
   items: [
+    { id: 'weapon.in-hand', label: 'WEAPONS IN HAND', w: 14, d: 7, solid: false, make: weaponsInHand },
     { id: 'weapon.pulse-spinner', label: 'PULSE SPINNER (8 COLOURS)', w: 36, d: 15, solid: false, make: pulseSpinner },
     { id: 'weapon.scattergun', label: 'VOSTOK SCATTERGUN', w: 36, d: 9, solid: false, make: scattergun },
     { id: 'weapon.rail-lance', label: 'DAEDALUS RAIL LANCE', w: 40, d: 7, solid: false, make: railLance },

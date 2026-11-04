@@ -328,7 +328,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (233 in 26 sections) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (234 in 26 sections) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).
@@ -423,6 +423,7 @@ src/
   fonts.js         the bundled pixel faces (Press Start 2P, Jersey 15) and the credit sign (assets/fonts/)
   physics.js       collider hash and shared skater movement
   player.js        input, movement, weapons, animation, style
+  weaponView.js    the weapon in hand: drawn with the crosshair, the aim layer (stance, shoulder roll, two-bone IK to the grips)
   combo.js         the style run: moves, multiplier, landing window, bank or wipe
   stylemeter.js    the style meter (the run, live, bottom right)
   idles.js         standing idle animations
@@ -464,6 +465,7 @@ src/
     claw.glb         Zero-G claw machine and its contents
     hall.glb         casino hall kit
     lot.glb          casino forecourt kit
+    weapons.glb      the courier's weapons (the pick; makeWeapon, weaponView.js)
     downs-*.glb      Chimera Downs kits (stand, club, course, stalls, arcade, screen, fair, stable, crowd, dome)
     chimera.glb      the chimera kit: every kind's parts in their looks, fitted mutations, far copies, devices
     spidertank.glb   Zbornak's spider tank (loaded by spidertank.js, not at boot)
@@ -550,6 +552,8 @@ tools/
     build_claw.py          -> claw.glb
     build_hall.py          -> hall.glb
     build_lot.py           -> lot.glb
+    build_weapons.py       -> weapons.glb (the pick; sets A and B are the drafts: docs/weapon-proposals; preview_weapons.py
+                           renders them held, the arms solved to the grips and checked against the torso)
     build_duck.py          -> duck.glb
     build_blackjack.py     -> blackjack.glb
     build_dish.py          -> dish.glb
