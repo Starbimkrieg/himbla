@@ -16,7 +16,7 @@
 # The skinned meshes carry the custom property `skin` (1); the preview (preview_runner.py) deforms them as the game will:
 # each vertex by its weights' blend of its pivots' moves from rest.
 
-SKIN_KIND = os.environ.get("RUNNER_SKIN", "")
+SKIN_KIND = os.environ.get("RUNNER_SKIN", "b")
 SKIN_PIVOTS = ["torso", "legL", "shinL", "legR", "shinR", "armL", "foreL", "armR", "foreR"]
 # the rigid suit pieces the skin replaces (the piping too: it is redrawn on the skin)
 SKIN_DROP = ("torso_trunk", "hips_", "_arm", "_elbowBall", "_fore", "_leg", "_kneeBall", "_calf", "_stripe", "_shinStripe",
@@ -38,7 +38,7 @@ def skin_obj(name, verts, faces):
     return o
 
 
-def skin_union(parts, voxel=0.011):
+def skin_union(parts, voxel=0.014):
     """the parts (lists of (verts, faces) in world) joined into one watertight solid: voxel remesh, then smoothed"""
     vs, fs = [], []
     for v, f in parts:
@@ -83,7 +83,7 @@ def skin_rig():
         bones["leg" + s] = (pw("leg" + s), pw("shin" + s))
         bones["shin" + s] = (pw("shin" + s), pw("shin" + s) - Vector((0, 0, 0.36)))
         bones["arm" + s] = (pw("arm" + s), pw("fore" + s))
-        bones["fore" + s] = (pw("fore" + s), pw("fore" + s) - Vector((0, 0, 0.3)))
+        bones["fore" + s] = (pw("fore" + s), pw("fore" + s) - Vector((0, 0, 0.3 + FL)))
     for n, (h, t) in bones.items():
         b = ad.edit_bones.new(n)
         b.head, b.tail = h, t
@@ -104,7 +104,7 @@ def skin_weights(objs, rig):
         o.matrix_parent_inverse.identity()
 
 
-def skin_ribbon(name, pts, width, body, slot, off=0.005):
+def skin_ribbon(name, pts, width, body, slot, off=0.008):
     """a flat strip along `pts` (three axes, world) laid onto the body's surface (shrinkwrapped, `off` proud: flush, it takes
     no ink of its own), its weights copied from the body's nearest faces"""
     # resampled every 5 mm (straight runs between few points dipped under the curved suit: dashes)
@@ -183,6 +183,25 @@ def skin_concertina(body, tw):
     body.data.update()
 
 
+def skin_shoulders(body, tw):
+    """everything under a shoulder pad (within 0.19 of the shoulder, 0.3 out from the middle, no lower than 0.1 under the joint)
+    follows the arm alone, as the pad does, and its top is tucked in under the pad: suit poked out through the pad when the
+    arm came up; the armpit below still blends"""
+    gi = {g.name: g.index for g in body.vertex_groups}
+    for s_ in "LR":
+        a = tw("arm" + s_)
+        arm = body.vertex_groups["arm" + s_]
+        for v in body.data.vertices:
+            x, y, z = v.co.x, v.co.z, -v.co.y
+            if abs(x) > 0.30 and y > a[1] - 0.1 and math.dist((x, y, z), a) < 0.19:
+                for g in list(v.groups):
+                    body.vertex_groups[g.group].remove([v.index])
+                arm.add([v.index], 1.0, "REPLACE")
+                if y > a[1] - 0.02:                                       # tucked in under the pad (the merged shoulder rose
+                    k = 0.72                                              # through its top), pulled toward the joint
+                    v.co = Vector(tb((a[0] + (x - a[0]) * k, a[1] + (y - a[1]) * k, a[2] + (z - a[2]) * k)))
+
+
 def build_skin(kind):
     bpy.context.view_layer.update()
     # the rigid suit pieces go (and the stripes and seams drawn on them)
@@ -214,6 +233,7 @@ def build_skin(kind):
     body["ink"], body["slot"], body["skin"] = 0.04, "suit", 1
     rig = skin_rig()
     skin_weights([body], rig)
+    skin_shoulders(body, tw)
     extras = []
     # the piping: a continuous line down the outside of each arm and leg and up each side, flush on the suit
     for s, sx in (("L", -1), ("R", 1)):
@@ -236,5 +256,28 @@ def build_skin(kind):
     return body, extras
 
 
+def skin_for_game(objs):
+    """for the game: the skinned meshes under a `skin` pivot at the body's origin, each vertex's four strongest pivots and
+    their weights as point attributes _SKJ0.._SKJ3 (an index into SKIN_PIVOTS) and _SKW0.._SKW3 (models.js reads them)"""
+    sk = pivot("skin", (0, 0, 0), bpy.data.objects["runner"])
+    for o in objs:
+        me = o.data
+        names = [g.name for g in o.vertex_groups]
+        J = [me.attributes.new(f"_SKJ{i}", "FLOAT", "POINT") for i in range(4)]
+        Wa = [me.attributes.new(f"_SKW{i}", "FLOAT", "POINT") for i in range(4)]
+        for v in me.vertices:
+            ws = sorted(((g.weight, SKIN_PIVOTS.index(names[g.group])) for g in v.groups if g.weight > 1e-4 and names[g.group] in SKIN_PIVOTS), reverse=True)[:4]
+            if not ws:
+                ws = [(1.0, 0)]
+            t = sum(w for w, _ in ws)
+            ws = [(w / t, j) for w, j in ws] + [(0.0, 0)] * (4 - len(ws))
+            for i, (w, j) in enumerate(ws):
+                J[i].data[v.index].value = j
+                Wa[i].data[v.index].value = w
+        o.parent = sk
+        o.matrix_parent_inverse.identity()
+
+
 if SKIN_KIND:
     SKIN = build_skin(SKIN_KIND)
+    skin_for_game([SKIN[0]] + SKIN[1])

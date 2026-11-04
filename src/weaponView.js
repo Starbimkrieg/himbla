@@ -27,12 +27,12 @@ const HOLDS = {
   // straight behind the torso hides them: they show side on and in turns)
   pistol: { twist: -0.2, slide: 0, grip: [0.15, 0.45, -0.35] },
   hip: { twist: -0.15, slide: 0, grip: [0.12, 0.3, -0.5] },
-  chest: { twist: 0.6, slide: 0.24, grip: [-0.2, 0.4, -0.3] },
-  under: { twist: 0.6, slide: 0.24, grip: [-0.2, 0.4, -0.3] },
+  chest: { twist: 0.6, slide: 0.24, grip: [-0.05, 0.4, -0.3] },   // (0.4 m out to the side: the longer forearms reach it)
+  under: { twist: 0.6, slide: 0.24, grip: [-0.05, 0.4, -0.3] },
 };
 const AIM_YAW = 1.0, AIM_PITCH = 0.7;          // rad: how far the aim turns the hold from the body
 const DRAW_T = 0.15, HOLSTER_T = 0.35;         // s to bring it up, to put it away
-const GLOVE = new THREE.Vector3(0, -0.325, 0.01); // the glove's middle in the forearm's frame
+const GLOVE = new THREE.Vector3(0, -0.405, 0.01); // the glove's middle in the forearm's frame (the forearm 0.08 longer than it was)
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qr = new THREE.Quaternion();

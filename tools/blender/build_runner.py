@@ -505,7 +505,9 @@ mesh("head_lens", xf(superquad(0.05, 0.05, 0.03, 1, 1, 12, 6), (0.3, 0.15, 0.225
 # and thumb turn with the forearm. Rest pose is straight (forearm rotation 0), so arm-only poses work unchanged.
 EL = 0.31
 ARM_UP = [(0, -EL), (0.091, -EL), (0.094, -0.27), (0.108, -0.17), (0.118, -0.06), (0.12, 0.02), (0.1, 0.08), (0, 0.12)]
-FORE = [(0, -0.25), (0.072, -0.24), (0.084, -0.18), (0.093, -0.11), (0.088, -0.02), (0.091, 0.02), (0.085, 0.05), (0, 0.07)]
+# the forearm 0.08 longer than it was (FL: the reach for two-handed holds; everything below the elbow moved down with it)
+FL = 0.08
+FORE = [(r, y * (0.25 + FL) / 0.25 if y < 0 else y) for r, y in [(0, -0.25), (0.072, -0.24), (0.084, -0.18), (0.093, -0.11), (0.088, -0.02), (0.091, 0.02), (0.085, 0.05), (0, 0.07)]]
 for side, name in ((-1, "armL"), (1, "armR")):
     A = pivot(name, (side * 0.45, 0.85, 0), T)
     mesh(name + "_arm", lathe(ARM_UP, 14), "suit", A, 0.04)
@@ -521,12 +523,12 @@ for side, name in ((-1, "armL"), (1, "armR")):
     mesh(name + "_foreStripe", tube(fp, [0.015] * 2, 6), "accent", F, 0)
     mesh(name + "_elbowRing", xf(lathe([(0.0945, 0.046), (0.0955, 0.042), (0.0955, 0.03), (0.0935, 0.024)], 14)), "accent", F, 0)
     mesh(name + "_elbow", xf(superquad(0.06, 0.07, 0.045, 0.6, 0.6, 12, 6), (0, 0.0, -0.08), (0.1, 0, 0)), "metal", F, 0.015)
-    mesh(name + "_cuff", xf(lathe([(0.098, -0.04), (0.104, -0.03), (0.104, 0.03), (0.096, 0.04)], 14), (0, -0.2, 0)), "accent", F, 0.02)
-    mesh(name + "_cuffLight", xf(superquad(0.025, 0.012, 0.01, 0.5, 0.5, 8, 4), (0, -0.2, 0.104)), "glow", F, 0)
+    mesh(name + "_cuff", xf(lathe([(0.098, -0.04), (0.104, -0.03), (0.104, 0.03), (0.096, 0.04)], 14), (0, -0.2 - FL, 0)), "accent", F, 0.02)
+    mesh(name + "_cuffLight", xf(superquad(0.025, 0.012, 0.01, 0.5, 0.5, 8, 4), (0, -0.2 - FL, 0.104)), "glow", F, 0)
     # glove: mitten, knuckle plate, thumb
-    mesh(name + "_glove", xf(superquad(0.105, 0.13, 0.09, 0.55, 0.65, 12, 8), (0, -0.325, 0.01)), "dark", F, 0.03)
-    mesh(name + "_knuckle", xf(superquad(0.08, 0.035, 0.03, 0.4, 0.4, 10, 4), (0, -0.35, 0.085), (-0.15, 0, 0)), "metal", F, 0.01)
-    mesh(name + "_thumb", xf(superquad(0.04, 0.065, 0.04, 0.8, 0.8, 8, 6), (-side * 0.06, -0.29, 0.08), (0.4, 0, side * 0.4)), "dark", F, 0.02)
+    mesh(name + "_glove", xf(superquad(0.105, 0.13, 0.09, 0.55, 0.65, 12, 8), (0, -0.325 - FL, 0.01)), "dark", F, 0.03)
+    mesh(name + "_knuckle", xf(superquad(0.08, 0.035, 0.03, 0.4, 0.4, 10, 4), (0, -0.35 - FL, 0.085), (-0.15, 0, 0)), "metal", F, 0.01)
+    mesh(name + "_thumb", xf(superquad(0.04, 0.065, 0.04, 0.8, 0.8, 8, 6), (-side * 0.06, -0.29 - FL, 0.08), (0.4, 0, side * 0.4)), "dark", F, 0.02)
 
 # ---- outfit extras, shown only when an outfit asks (cosmetics.js) ----
 # Each on its own pivot (padL/padR on the shoulders, band and crest on the head), so the baker keeps them apart from the
@@ -682,15 +684,16 @@ def export():
     for o in C.objects:
         o.select_set(True)
     kw = dict(filepath=OUT, export_format="GLB", use_selection=True, export_yup=True, export_apply=True,
-              export_extras=True, export_normals=True, export_texcoords=False, export_materials="EXPORT",
+              export_extras=True, export_normals=True, export_texcoords=False, export_materials="EXPORT", export_attributes=True,
               export_animations=False, export_cameras=False, export_lights=False)
     props = bpy.ops.export_scene.gltf.get_rna_type().properties.keys()
     bpy.ops.export_scene.gltf(**{k: v for k, v in kw.items() if k in props})
     print("exported", OUT, os.path.getsize(OUT), "bytes")
 
 
-# the skinned suit (drafts: RUNNER_SKIN=a|b; runner_skin.py)
-if os.environ.get("RUNNER_SKIN"):
+# the skinned suit (runner_skin.py; docs/runner-skin): B, the pressure suit, is the game's; RUNNER_SKIN=a the other draft,
+# RUNNER_SKIN=none the rigid suit it replaced
+if os.environ.get("RUNNER_SKIN", "b") != "none":
     exec(open(os.path.join(REPO, "tools", "blender", "runner_skin.py"), encoding="utf-8").read(), globals())
 
 if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":

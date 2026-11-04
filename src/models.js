@@ -178,10 +178,10 @@ function bakeRunnerParts(scene) {
     return groups.get(key);
   };
   const inv = new THREE.Matrix4(), rel = new THREE.Matrix4();
-  for (const name of [...PIVOTS, ...EXTRA_PIVOTS, 'scarfLinks']) {
+  for (const name of [...PIVOTS, ...EXTRA_PIVOTS, 'scarfLinks', 'skin']) {
     const pivot = scene.getObjectByName(name);
     if (!pivot) {
-      if (EXTRA_PIVOTS.includes(name)) continue;
+      if (EXTRA_PIVOTS.includes(name) || name === 'skin') continue;
       throw new Error('runner.glb has no pivot ' + name);
     }
     inv.copy(pivot.matrixWorld).invert();
@@ -191,6 +191,7 @@ function bakeRunnerParts(scene) {
       const key = name === 'scarfLinks' ? 'scarf' + (/^scarf(\d)/.exec(o.name) || [0, 0])[1] : name;
       const slot = o.material.name;
       const geo = bakedGeo(o.geometry, rel.multiplyMatrices(inv, o.matrixWorld));
+      if (name === 'skin') skinAttrs(o.geometry, geo); // (the suit: weighted to the pivots, see makeRunner)
       const g = group(key);
       if (!g.slots.has(slot)) g.slots.set(slot, []);
       g.slots.get(slot).push(geo);
@@ -223,6 +224,24 @@ function bakedGeo(src, m) {
   return geo.applyMatrix4(m);
 }
 
+// The skinned suit's weights (build_runner.py / runner_skin.py: per vertex its four pivots' indices into SKIN_PIVOTS, as
+// _SKJ0..3, and their weights, _SKW0..3) as three.js skin attributes on geo.
+const SKIN_PIVOTS = ['torso', 'legL', 'shinL', 'legR', 'shinR', 'armL', 'foreL', 'armR', 'foreR'];
+function skinAttrs(src, geo) {
+  const n = src.attributes.position.count, idx = new Uint16Array(n * 4), w = new Float32Array(n * 4);
+  for (let k = 0; k < 4; k++) {
+    const J = src.attributes['_skj' + k], W = src.attributes['_skw' + k];
+    for (let i = 0; i < n; i++) { idx[i * 4 + k] = Math.round(J.getX(i)); w[i * 4 + k] = W.getX(i); }
+  }
+  geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+  geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(w, 4));
+}
+// a shell keeps its surface's vertex order, so it takes the surface's skin attributes as they are
+function keepSkin(from, to) {
+  if (from.attributes.skinIndex) { to.setAttribute('skinIndex', from.attributes.skinIndex); to.setAttribute('skinWeight', from.attributes.skinWeight); }
+  return to;
+}
+
 // A part's outline shell: its triangles plus `off` = smoothed normal * thickness. Normals are averaged over shared
 // positions so seams don't crack. `w`: the Blender part's `_toon` attribute (its .y the line weight per vertex: kit.py
 // toon_attrs), if it has one.
@@ -246,7 +265,7 @@ function inkShellGeo(geo, t, w = null) {
   g.setAttribute('position', pos.clone());
   g.setAttribute('off', new THREE.BufferAttribute(off, 3));
   g.setIndex(geo.index.clone());
-  return g;
+  return keepSkin(geo, g);
 }
 
 // the shell in inkMat's form (toon.js): `position` = surface, `normal` = the way out, `inkT` = k x its thickness
@@ -261,7 +280,7 @@ function shellOff(base, k) {
   g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   g.setAttribute('inkT', new THREE.BufferAttribute(th, 1));
   g.setIndex(base.index);
-  return shellBounds(g);
+  return shellBounds(keepSkin(base, g));
 }
 
 // the shell pushed out k * thickness (k = 4: a marked enemy's fat red outline)
@@ -273,7 +292,7 @@ function shellAt(base, k) {
   g.setAttribute('position', new THREE.BufferAttribute(a, 3));
   g.setIndex(base.index);
   g.computeBoundingSphere();
-  return g;
+  return keepSkin(base, g);
 }
 
 // Outline shell for any indexed geometry, along smoothed normals, its push baked into its positions (the chimeras' layered
@@ -302,6 +321,7 @@ export function runnerExtra(key, mats, fallback = null) {
 // Hang a baked pivot's parts and outline shell on a group.
 function addBaked(target, key, mats) {
   const B = RUNNER_PARTS[key];
+  if (!B) return; // (a pivot with nothing rigid on it: the thighs, now all suit)
   for (const { slot, geo } of B.parts) {
     const m = new THREE.Mesh(geo, mats[slot]);
     m.castShadow = !NO_SHADOW.has(slot);
@@ -737,11 +757,11 @@ export function makeRunner({
     if (baked) { addBaked(arm, side < 0 ? 'armL' : 'armR', mats); addBaked(fore, side < 0 ? 'foreL' : 'foreR', mats); continue; }
     arm.add(part(G.arm, suitM, 0, 0, 0, 0.04));
     arm.add(part(G.shoulder, helmetM, side * 0.01, 0.0, 0, 0.03));
-    fore.add(part(G.wristCuff, accentM, 0, -0.21, 0, 0.02));
-    const glove = part(G.glove, dark, 0, -0.32, 0.01, 0.03);
+    fore.add(part(G.wristCuff, accentM, 0, -0.29, 0, 0.02));
+    const glove = part(G.glove, dark, 0, -0.4, 0.01, 0.03);
     glove.scale.set(0.95, 1.15, 0.85);
     fore.add(glove);
-    fore.add(part(G.thumb, dark, -side * 0.05, -0.29, 0.08, 0.02));
+    fore.add(part(G.thumb, dark, -side * 0.05, -0.37, 0.08, 0.02));
   }
 
   // Comic scarf, kept clear of what's worn on the back (pack, crates, jar): see ScarfSim.
@@ -772,6 +792,25 @@ export function makeRunner({
   }
 
   root.scale.setScalar(scale);
+  // the suit: one body that bends (runner_skin.py), skinned to the pivots in the rest pose (as the townsfolk are: makeFigure),
+  // so whatever turns them (the animations, the ragdoll, the weapons' arm solving, a seat's pose, animating on twos) bends it
+  if (baked && RUNNER_PARTS.skin) {
+    const B = RUNNER_PARTS.skin, ms = [];
+    for (const { slot, geo } of B.parts) {
+      const m = new THREE.SkinnedMesh(geo, mats[slot]);
+      m.castShadow = !NO_SHADOW.has(slot);
+      ms.push(m);
+    }
+    if (B.ink) {
+      const h = new THREE.SkinnedMesh(B.ink.thin, inkMatNear);
+      h.userData.isInk = true; h.userData.inkGeo = B.ink; h.userData.inkMat = inkMatNear;
+      ms.push(h);
+    }
+    for (const m of ms) { m.frustumCulled = false; body.add(m); }
+    root.updateMatrixWorld(true);
+    const skeleton = new THREE.Skeleton([torso, legs[0], shins[0], legs[1], shins[1], arms[0], fores[0], arms[1], fores[1]]);
+    for (const m of ms) m.bind(skeleton, m.matrixWorld);
+  }
   return { root, trick, body, bodyBase: -1.2, torso, head, legL: legs[0], legR: legs[1], shinL: shins[0], shinR: shins[1], antenna, armL: arms[0], armR: arms[1], foreL: fores[0], foreR: fores[1], scarf: scarfPivot, cargoSlot, glowM, accent, mats: { suit: suitM, accent: accentM, helmet: helmetM, visor: visorM, scarf: scarfM, collar: collarM, glow: glowM, skate: skateM } };
 }
 

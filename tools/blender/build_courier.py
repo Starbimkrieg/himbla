@@ -137,7 +137,7 @@ SPEC = dict(
     # leave the feet only forward and out: thighs near level, knees bent 0.8, spread 0.6 (searched with
     # COURIER_POSE; at most 5 mm into the shell). Fists land on the grips to 3 mm, soles on the pegs to 1 cm.
     grip=(0.44, 1.6, 0.32), bag_x=0.36,
-    pose=dict(lean=0.752, thigh=-1.5, spread=0.6, knee=0.8, arm_x=-1.179, arm_z=0.128, elbow=-0.704),
+    pose=dict(lean=0.752, thigh=-1.5, spread=0.6, knee=0.8, arm_x=-0.919, arm_z=0.148, elbow=-1.079),   # (arms re-solved for the 0.08 longer forearms: fists 15 mm from the grips)
 )
 
 SECS = smooth_keys(SPEC["body"], 4)

@@ -39,8 +39,8 @@ HOLDS = {
     # two hands: the shoulders roll forward and in (`slide`): from where they stand, no spot in front of the chest is in
     # both hands' reach, so the hands met inside the torso. Searched (twist, slide, grip; standing and skating together)
     # for no arm deeper than 1.5 cm in the body (half an ink line) with both hands on
-    "chest": {"twist": 0.6, "slide": 0.24, "grip": (-0.2, 0.4, -0.3)},
-    "under": {"twist": 0.6, "slide": 0.24, "grip": (-0.2, 0.4, -0.3)},
+    "chest": {"twist": 0.6, "slide": 0.24, "grip": (-0.05, 0.4, -0.3)},
+    "under": {"twist": 0.6, "slide": 0.24, "grip": (-0.05, 0.4, -0.3)},
     "shoulder": {"twist": 0.7, "grip": (-0.16, 0.22, -0.27)},
 }
 STANCES = {   # torso lean, body drop, (thigh, shin) left and right: three.js rotation.x (thigh negative: forward)
@@ -188,7 +188,7 @@ def solve_arm(P, side, target, pole):
     S = arm.matrix_world.translation.copy()
     k = arm.matrix_world.to_scale()[0]
     a = (fore.matrix_world.translation - S).length                          # shoulder to elbow
-    b = 0.325 * k                                                            # elbow to the glove's middle
+    b = 0.405 * k                                                            # elbow to the glove's middle
     d = target - S
     L = d.length
     short = max(0.0, L - (a + b) * 0.999)
@@ -260,7 +260,7 @@ def hold_weapon(P, wroot, hold):
         F = P["foreR"].matrix_world
         k = F.to_scale()[0]
         R3 = F.to_3x3().normalized()
-        glove = F @ (tb((0, -0.325, 0.0)))
+        glove = F @ (tb((0, -0.405, 0.0)))
         # the weapon's frame is the forearm's: its +z (Blender -y) toward the hand, its +y (Blender z) the forearm's front
         zf = (R3 @ Vector((0, 0, -1))).normalized()                          # along the forearm toward the hand
         yf = (R3 @ Vector((0, -1, 0))).normalized()                          # the forearm's front (knuckles)

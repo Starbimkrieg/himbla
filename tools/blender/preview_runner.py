@@ -158,7 +158,7 @@ def solve(arm, fore, target, pole):
     bpy.context.view_layer.update()
     S = arm.matrix_world.translation.copy()
     a = (fore.matrix_world.translation - S).length
-    b = 0.325
+    b = 0.405                                                    # (elbow to the glove's middle: build_runner.py FL)
     d = target - S
     L = min(d.length, (a + b) * 0.999)
     dn = d.normalized()
@@ -231,7 +231,7 @@ for name, views in VIEWS.items():
     if ONLY and name not in ONLY:
         continue
     if name == "aim2":       # two hands, across the chest (the Scattergun's hold), the shoulders rolled forward
-        hold({"legL": R3(-0.28), "legR": R3(0.22), "shinL": R3(0.2), "shinR": R3(0.12)}, (-0.2, 0.4, -0.3), (-0.02, 0.0, 0.24), 0.6, 0.24)
+        hold({"legL": R3(-0.28), "legR": R3(0.22), "shinL": R3(0.2), "shinR": R3(0.12)}, (-0.05, 0.4, -0.3), (-0.02, 0.0, 0.24), 0.6, 0.24)
     elif name == "aim1":     # one hand, out to the side (the Disc Blaster's)
         hold({"legL": R3(-0.28), "legR": R3(0.22), "shinL": R3(0.2), "shinR": R3(0.12)}, (0.15, 0.45, -0.35), None, -0.2, 0.0)
     else:
