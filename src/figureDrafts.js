@@ -18,8 +18,8 @@ import { FIG_PAL as PAL, FIG_ARCH as ARCH, figRng, bakeFigure, figMat, figMats, 
 // Nothing in the game uses these yet: the Asset Row-free comparison is `tools/figure-drafts.mjs`.
 
 export const FIG_DRAFTS = {
-  a: { name: 'A · ROUNDED', hip: 0.78, thigh: 0.36, torso: 0.6, headR: 0.275, chest: 0.24, waist: 0.215, hipW: 0.215, flat: 0.8, leg: 0.105, arm: 0.08, upper: 0.26, fore: 0.24, seg: 12, limbSeg: 10, lean: false },
-  b: { name: 'B · LEAN', hip: 0.97, thigh: 0.46, torso: 0.64, headR: 0.205, chest: 0.245, waist: 0.155, hipW: 0.185, flat: 0.66, leg: 0.082, arm: 0.06, upper: 0.31, fore: 0.28, seg: 14, limbSeg: 10, lean: true },
+  a: { name: 'A · ROUNDED', hip: 0.78, thigh: 0.36, torso: 0.6, headR: 0.275, chest: 0.24, waist: 0.215, hipW: 0.215, flat: 0.8, leg: 0.105, arm: 0.08, upper: 0.235, fore: 0.24, face: 0.165, seg: 12, limbSeg: 10, lean: false },
+  b: { name: 'B · LEAN', hip: 0.97, thigh: 0.46, torso: 0.64, headR: 0.205, chest: 0.245, waist: 0.155, hipW: 0.185, flat: 0.66, leg: 0.082, arm: 0.06, upper: 0.31, fore: 0.28, face: 0.135, seg: 14, limbSeg: 10, lean: true },
 };
 const BUILDS = {
   slim: { w: 0.86, h: 1.03, belly: 0 }, average: { w: 1, h: 1, belly: 0 }, broad: { w: 1.13, h: 1.02, belly: 0.01 },
@@ -111,6 +111,8 @@ export function figureDraftSpec(draft = 'a', { suit, helmet, visor, scale = 1, s
 
   const H = D.hip * hl, T = D.torso * tl, thigh = D.thigh * hl, shin = H - thigh - 0.085;
   const R = D.headR * hs;
+  // a bare head under a fishbowl or bubble: radius fr, centred fc over the neck; the glass round it (radius gR) and its ring (gRing)
+  const fr = D.face * hs, fc = [0, 0.05 + fr * 1.06, 0.015], gR = fr * 1.6, gRing = Math.sqrt(gR * gR - (fc[1] - 0.01) ** 2);
   const acc = {
     bag: (arch === 'trader' || arch === 'casual') && chance(0.4),
     scarf: (arch === 'casual' || arch === 'elder' || arch === 'trader') && chance(0.3),
@@ -125,8 +127,10 @@ export function figureDraftSpec(draft = 'a', { suit, helmet, visor, scale = 1, s
   // torso: one lathe from below the crotch to the neck (torso frame: y 0 = hip pivots), flattened front to back
   const hp = D.hipW * w * hpR, wa = D.waist * w * (0.5 + 0.5 * hpR) + belly * 0.6, ch = D.chest * w * shR;
   const beltY = 0.27 * T;
-  const tProf = [[0, -0.08], [hp * 0.72, -0.075], [hp * 0.96, -0.03], [hp, 0.05], [(hp + wa) / 2 + belly * 0.7, 0.16 * T], [wa + belly, 0.34 * T], [(wa + ch) / 2 + belly * 0.3, 0.5 * T],
-    [ch * 0.99, 0.66 * T], [ch * 1.02, 0.76 * T], [ch * 0.96, 0.86 * T], [ch * 0.72, 0.93 * T], [0.11 * w, 0.985 * T], [0, T]];
+  // (the seat runs down to the crotch, 14 cm under the hip pivots, as wide as the thighs' outsides, so their domed tops sit inside it;
+  // the shoulders run square out to the arms, then round over to the neck, so the shoulder balls sit in the line, not on top of it)
+  const tProf = [[0, -0.14], [hp * 0.55, -0.135], [hp * 0.9, -0.095], [hp * 1.05, -0.03], [hp * 1.05, 0.05], [(hp + wa) / 2 + belly * 0.7, 0.16 * T], [wa + belly, 0.34 * T], [(wa + ch) / 2 + belly * 0.3, 0.5 * T],
+    [ch * 0.99, 0.66 * T], [ch * 1.02, 0.76 * T], [ch, 0.84 * T], [ch * 0.9, 0.9 * T], [ch * 0.62, 0.955 * T], [0.11 * w, 0.99 * T], [0, T]];
   const torso = cutProfile(tProf, arch === 'lab' || arch === 'eva' ? [] : [beltY]);
   const flat = D.flat * (arch === 'eva' ? 1.1 : 1);
   const front = (y) => torso.rAt(y) * flat; // the torso's front surface (z) at height y
@@ -134,9 +138,9 @@ export function figureDraftSpec(draft = 'a', { suit, helmet, visor, scale = 1, s
   // pivots (bind pose, root at the feet)
   const torsoM = figMat([0, H, 0], [stoop, 0, 0]);
   const inTorso = (x, y, z) => new THREE.Vector3(x, y, z).applyMatrix4(torsoM);
-  const shX = ch + D.arm * limb * 0.55;
-  const legX = hp * 0.52;
-  const shoulder = (s) => inTorso(s * shX, 0.84 * T, 0);
+  const shX = ch * 0.98 + D.arm * limb * 0.15; // the shoulder ball mostly inside the torso's edge
+  const legX = hp * 0.5;
+  const shoulder = (s) => inTorso(s * shX, 0.76 * T, 0);
   const neck = inTorso(0, T - 0.01, 0.01);
   const P = [
     new THREE.Vector3(0, 0, 0),
@@ -238,24 +242,24 @@ export function figureDraftSpec(draft = 'a', { suit, helmet, visor, scale = 1, s
     else if (sealed) helmetHead(add, M, { R, hatC, stripeC, visorC, trooper: arch === 'trooper', lean, seg });
     else {
       // a face in a fishbowl (or a kid's bubble): head, eyes, brows, nose, ears, hair; the glass is its own mesh (makeFigureDraft)
-      const r = 0.12 * hs;
-      const hc = [0, r * 1.25, 0.015];
+      const r = fr, hc = fc, k = r / 0.12; // (k: the features' scale, drawn for a 12 cm head)
+      add(cyl(r * 0.42, r * 0.5, fc[1] - r * 0.6, 8), 9, skin, M([0, (fc[1] - r * 0.6) / 2, 0.005]));
       add(sph(r, seg, 10), 9, skin, M(hc, [0, 0, 0], [0.92, 1.06, 0.98]), 0.025);
       for (const s of [-1, 1]) {
-        add(sph(0.016 * hs, 6, 4), 9, 0x120a1e, M([hc[0] + s * 0.042 * hs, hc[1] + 0.015 * hs, hc[2] + r * 0.9], [0, 0, 0], [1, 1.3, 0.6]));
-        if (lean) add(box(0.04 * hs, 0.009, 0.01), 9, hair, M([hc[0] + s * 0.044 * hs, hc[1] + 0.045 * hs, hc[2] + r * 0.88], [0, 0, -s * 0.12]));
-        add(sph(0.026 * hs, 6, 4), 9, skin, M([s * r * 0.93, hc[1], hc[2]], [0, 0, 0], [0.5, 1, 0.8]), 0.008);
+        add(sph(0.016 * k, 6, 4), 9, 0x120a1e, M([hc[0] + s * 0.042 * k, hc[1] + 0.015 * k, hc[2] + r * 0.9], [0, 0, 0], [1, 1.3, 0.6]));
+        add(box(0.04 * k, 0.009 * k, 0.01), 9, hair, M([hc[0] + s * 0.044 * k, hc[1] + 0.045 * k, hc[2] + r * 0.88], [0, 0, -s * 0.12]));
+        add(sph(0.026 * k, 6, 4), 9, skin, M([s * r * 0.93, hc[1], hc[2]], [0, 0, 0], [0.5, 1, 0.8]), 0.008);
       }
-      add(sph(0.02 * hs, 6, 4), 9, skin, M([0, hc[1] - 0.012 * hs, hc[2] + r * 0.98], [0, 0, 0], [0.9, 1.1, 1]), 0.006);
-      if (lean) add(box(0.03 * hs, 0.006, 0.008), 9, 0x7a3a3a, M([0, hc[1] - 0.05 * hs, hc[2] + r * 0.9]));
+      add(sph(0.02 * k, 6, 4), 9, skin, M([0, hc[1] - 0.012 * k, hc[2] + r * 0.98], [0, 0, 0], [0.9, 1.1, 1]), 0.006);
+      add(box(0.03 * k, 0.006 * k, 0.008), 9, 0x7a3a3a, M([0, hc[1] - 0.05 * k, hc[2] + r * 0.9]));
       hairOn(add, M, hairStyle, hair, r, hc, seg);
-      add(tor(0.17 * hs, 0.035, 5, seg + 2), 9, headgear === 'bowl' ? (helmet !== undefined ? hatC : METAL) : hatC, M([0, 0.01, 0]), 0.015);
+      add(tor(gRing, 0.035, 5, seg + 2), 9, headgear === 'bowl' ? (helmet !== undefined ? hatC : METAL) : hatC, M([0, 0.01, 0]), 0.015);
     }
 
     // ---------- legs: thigh (legL/R), knee and shin (shinL/R), shoe or boot ----------
     const L = D.leg * limb * (0.94 + B.w * 0.06);
     const bootTop = booted ? -shin * 0.58 : -shin + 0.02;
-    const thighP = cutProfile([[0, 0.07], [L * 1.08, 0.055], [L * 1.18, 0], [L * 1.1, -thigh * 0.4], [L * 0.86, -thigh * 0.92], [0, -thigh - 0.01]], [-thigh * 0.55]).pts; // (the cut: a kid's shorts)
+    const thighP = cutProfile([[0, 0.1], [L * 0.75, 0.09], [L * 1.06, 0.04], [L * 1.14, -0.02], [L * 1.1, -thigh * 0.4], [L * 0.86, -thigh * 0.92], [0, -thigh - 0.01]], [-thigh * 0.55]).pts; // (the cut: a kid's shorts)
     const shinP = cutProfile(lean
       ? [[0, 0.03], [L * 0.84, 0.02], [L * 0.86, -shin * 0.18], [L * 0.9, -shin * 0.32], [L * 0.7, -shin * 0.75], [L * 0.62, -shin * 0.93], [0, -shin - 0.005]]
       : [[0, 0.03], [L * 0.86, 0.02], [L * 0.84, -shin * 0.3], [L * 0.7, -shin * 0.85], [L * 0.66, -shin * 0.95], [0, -shin - 0.005]], [bootTop]).pts;
@@ -291,7 +295,7 @@ export function figureDraftSpec(draft = 'a', { suit, helmet, visor, scale = 1, s
       const armB = s < 0 ? 3 : 4, foreB = s < 0 ? 7 : 8;
       const upC = arch === 'kid' ? (y) => (y > sleeve ? C : skin) : C;
       add(lathe(`upper|${A.toFixed(3)}|${upper.toFixed(3)}|${sleeve}`, upperP, ls), armB, upC, M(), 0.024);
-      add(sph(A * 1.22, ls, 6), armB, arch === 'trooper' ? 0x3a3f50 : C, M([s * 0.008, 0.005, 0], [0, 0, 0], arch === 'trooper' ? [1.35, 1.1, 1.3] : 1), 0.018);
+      add(sph(A * 1.18, ls, 6), armB, arch === 'trooper' ? 0x3a3f50 : C, M([s * 0.008, 0, 0], [0, 0, 0], arch === 'trooper' ? [1.35, 1.05, 1.3] : [1.04, 0.92, 1]), 0.018);
       const foreC = arch === 'kid' ? skin : sleeve !== null ? (y) => (y > sleeve ? C : skin) : C;
       add(lathe(`fore|${lean}|${A.toFixed(3)}|${fore.toFixed(3)}|${sleeve}`, foreP, ls), foreB, foreC, M(), 0.022);
       add(sph(A * 0.9, ls, 6), foreB, arch === 'kid' ? skin : C, M());
@@ -316,7 +320,7 @@ export function figureDraftSpec(draft = 'a', { suit, helmet, visor, scale = 1, s
     }
     return parts;
   };
-  return { key, build, P, R, headgear, arch, alien, species, kid, scale, sealed, C, skin, pants, hatC, visorC, bk };
+  return { key, build, P, R, fc, gR, headgear, arch, alien, species, kid, scale, sealed, C, skin, pants, hatC, visorC, bk };
 }
 
 // A sealed helmet that reads as one from every side: shell, wide visor in a frame and a glint; a stripe over the crown in the
@@ -415,8 +419,8 @@ export function makeFigureDraft(draft = 'a', opts = {}) {
     figMats();
     const g = figGeo();
     const glass = new THREE.Mesh(g.bowl, bowlGlass());
-    glass.position.set(0, 0.17 * (S.kid ? 1.28 : 1) + 0.02, 0.015);
-    glass.scale.setScalar((S.kid ? 1.28 : 1) * (S.headgear === 'bubble' ? 0.6 : 0.62) * (FIG_DRAFTS[draft].lean ? 0.92 : 1));
+    glass.position.set(...S.fc);
+    glass.scale.setScalar(S.gR / 0.4); // (figGeo's bowl is 0.4 m round)
     glass.renderOrder = 2;
     bones[9].add(glass);
   }
