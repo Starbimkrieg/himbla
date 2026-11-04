@@ -9,7 +9,21 @@ import { bendPoint, bendQuat, bendGeometry } from './curve.js';
 // Small faction outposts (watchtowers, depots, farm domes, relay masts, kiosks, scrap shacks, junk piles): ~50 m
 // compounds on flattened plateaus. Baked once per kind / faction colour / variant into a few merged meshes (one per
 // material plus one ink hull) that every outpost of that look clones. Flags, lamps, dishes, searchlights stay separate.
-export const FLAT_R = 30; // flattened core radius (terrain blends back out to ~2x this)
+// Draft reworks (docs/outpost-proposals): `?outpostDraft=a|b` (or per kind, `kiosk:a,tower:b`) or
+// localStorage['mr-outpost-draft'] builds the small kinds from src/outpostDrafts.js instead. They are larger (a 40 m yard).
+function readDraft() {
+  let v = '';
+  try { v = new URLSearchParams(globalThis.location?.search || '').get('outpostDraft') ?? globalThis.localStorage?.getItem('mr-outpost-draft') ?? ''; } catch { v = ''; }
+  v = String(v).toLowerCase();
+  if (v === 'a' || v === 'b') return v;
+  const m = {};
+  for (const p of v.split(',')) { const [kind, d] = p.split(':'); if (d === 'a' || d === 'b') m[kind] = d; }
+  return Object.keys(m).length ? m : null;
+}
+export const OUTPOST_DRAFT = readDraft();
+export const draftFor = (kind) => (!OUTPOST_DRAFT ? null : typeof OUTPOST_DRAFT === 'string' ? OUTPOST_DRAFT : OUTPOST_DRAFT[kind] || null);
+export const DRAFT_BUILD = {}; // kind -> { a, b }: filled by outpostDrafts.js
+export const FLAT_R = OUTPOST_DRAFT ? 44 : 30; // flattened core radius (terrain blends back out to ~2x this)
 export const SMALL_KINDS = new Set(['tower', 'depot', 'farm', 'mast', 'kiosk', 'shack', 'junk']);
 
 const STEEL = 0x55607a, DARK = 0x3a3550, LIGHT = 0xd8d4e8, CREAM = 0xfff4e0, CONC = 0x8a8698, YEL = 0xffd23f;
@@ -288,6 +302,7 @@ class Kit {
     for (const [mat, list] of this.byMat) {
       if (mat.transparent) continue;
       for (const g of list) {
+        if (this.noFloor && this.noFloor.has(g)) continue; // (its floor is laid by hand: a draft outpost's apron and paint)
         const pos = g.attributes.position, idx = g.index, n = idx ? idx.count : pos.count;
         for (let t = 0; t < n; t += 3) {
           const a = idx ? idx.getX(t) : t, b = idx ? idx.getX(t + 1) : t + 1, c = idx ? idx.getX(t + 2) : t + 2;
@@ -318,6 +333,18 @@ class Kit {
         const h = Math.round((l1 * tris[p + 1] + l2 * tris[p + 4] + l3 * tris[p + 7]) * 100);
         if (h > H[j * nx + i]) H[j * nx + i] = h;                        // the highest surface over the cell
       }
+    }
+    // `floorTol` (m, a draft outpost's kit): heights this close fold into the highest of their run, so 1 to 2 cm paint on the
+    // paving doesn't split the floor into hundreds of boxes
+    if (this.floorTol) {
+      const hs = [...new Set(H)].filter((h) => h >= 0).sort((a, b) => a - b), to = new Map();
+      for (let i = 0; i < hs.length;) {
+        let j = i;
+        while (j + 1 < hs.length && hs[j + 1] - hs[i] <= this.floorTol * 100) j++; // (from the run's lowest: no creeping chain)
+        for (let q = i; q <= j; q++) to.set(hs[q], hs[j]);
+        i = j + 1;
+      }
+      for (let i = 0; i < H.length; i++) if (H[i] >= 0) H[i] = to.get(H[i]);
     }
     // greedy: a run along x, then as many rows as match it
     const used = new Uint8Array(nx * nz);
@@ -1324,8 +1351,23 @@ const templates = new Map();
 // wreck = true: same compound, main building reduced to rubble.
 // src: 'auto' (Blender GLB if switched on, loaded and has this kind, outpostGlb.js; else Kit), 'kit', or 'glb'
 // (any kind in the file, switched on or not; throws if missing; for the viewer).
-export function outpostTemplate(kind, color, variant = 0, wreck = false, src = 'auto') {
+export function outpostTemplate(kind, color, variant = 0, wreck = false, src = 'auto', draft = src === 'auto' ? draftFor(kind) : null) {
   variant %= VARIANTS;
+  const dfn = draft && DRAFT_BUILD[kind] && DRAFT_BUILD[kind][draft];
+  if (dfn) {
+    const key = `${kind}|${color}|${variant}|${wreck ? 1 : 0}|draft-${draft}`;
+    let t = templates.get(key);
+    if (!t) {
+      const k = new Kit(color, KIND_SEED[kind] * 977 + variant * 131 + (draft === 'b' ? 7 : 3), wreck);
+      k.onGround = true;
+      k.floorCols = true;
+      k.floorTol = 0.03;
+      dfn(k, wreck);
+      t = k.finish();
+      templates.set(key, t);
+    }
+    return t;
+  }
   const asset = src === 'kit' ? null : outpostAsset(kind, wreck, src === 'glb');
   if (src === 'glb' && !asset) throw new Error(`no GLB outpost for ${kind}${wreck ? ' wreck' : ''}`);
   const key = `${kind}|${color}|${variant}|${wreck ? 1 : 0}|${asset ? 'glb' : 'kit'}`;
@@ -1351,5 +1393,5 @@ export function outpostTemplate(kind, color, variant = 0, wreck = false, src = '
 }
 
 // the kit and shared props also build the bigger settlements (settlements.js)
-export { Kit, T, G, D, GLASS, BEAM, prism, sandbags, crate, container, tank, junkHeap, lightString };
+export { Kit, T, G, D, GLASS, BEAM, prism, sandbags, crate, container, tank, junkHeap, lightString, scatterDebris, damage, KIND_SEED };
 export const PALETTE = { STEEL, DARK, LIGHT, CREAM, CONC, YEL, WOOD, RUST, TYRE, CHAR };

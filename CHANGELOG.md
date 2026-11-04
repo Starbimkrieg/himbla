@@ -5,6 +5,20 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Small outposts: two draft reworks of each, to scale.** All seven small kinds (Trading Kiosk, Watchtower, Supply
+  Depot, Farm Dome, Relay Mast, Scrap Shack, Junk Pile) have a draft A and a draft B, near-full reworks on a 40 m yard
+  (was 24 to 27 m) with buildings at human scale (doors 2.6 m and up, storeys 3.5 to 4 m; the Watchtower's bunker is
+  20 x 12 x 5 m), people about (vendors, queues, people at tables and benches, strollers on slow turning rings, guards,
+  farmers, pirates) and the owner's look (`STYLE`: SpaceCom cream and navy, Vostok raw concrete and red stars, Daedalus
+  violet-black, Meridian white and cyan, Kepler cream and orange, Rustmoon scrap). The Trading Kiosk drafts work like a
+  grand exchange: a round vendor rotunda (A) or a trading house on a crossing (B) in a plaza with seating. Off by
+  default: `?outpostDraft=a` or `b` (or per kind, `?outpostDraft=kiosk:a,tower:b`, or localStorage `mr-outpost-draft`);
+  the flattened plateau grows to 44 m with it. Each keeps the raid spot, blast boxes, smoke and loot drop, and has a
+  wreck. `src/outpostDrafts.js`; renders and notes in `docs/outpost-proposals/README.md`; Asset Row items
+  `outpost.<kind>.draftA` / `draftB` (and `.wreck`); the viewer takes `&draft=a|b`.
+  - Placed outposts now hand their floor colliders' `floor` flag to the physics (`territory.place`), and a spin rate
+    on a mover (`userData.spin` as a number) is kept. `Kit.floorTol` folds floor heights a few cm apart into one, and
+    `Kit.noFloor` leaves geometry whose floor is laid by hand out of the floor pass (a draft yard's paving is 32 bands).
 - **The casino forecourt's card wall prints its spades and clubs black** (they were cream), as on a playing card; the hearts
   and diamonds stay red (`build_lot.py`: a `suitblack` slot, self-lit like the card faces, in the palette's deepest
   `1d1a29`; `models.js` LOT_GLOW). The other casino pieces keep their cream suits.

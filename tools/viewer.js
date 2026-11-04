@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { loadFonts } from '../src/fonts.js';
 import { loadRunnerParts, loadShipParts, makeRunner, makeCrate, ScarfSim, makeShuttle, makeFreighter, makeHoverCar, makeRover, makeInterceptor, makeApc, makeLandTrain, makeTowerCrane, CRANE_TROLLEY_MIN, CRANE_TROLLEY_SPAN, makeGantryCrane, makeCargoBox, GANTRY_TROLLEY_SPAN, makeGarage, makeDishStation, DISH_SIZE, makeLampPost, makeFountain, makeBouncer, makeChandelier, makeCasinoSign, makeChipStack, makeClawMachine, makeClawHead, clawKindParts, makeDerbyPart, makeRacer } from '../src/models.js';
 import { outpostTemplate } from '../src/outpostModels.js';
+import '../src/outpostDrafts.js';
 import { loadOutpostParts, GLB_KINDS } from '../src/outpostGlb.js';
 import { makeChimera, makeMite, LIVING, MODIFIERS, spliceGenes } from '../src/chimera.js';
 import { ComicPost } from '../src/post.js';
@@ -324,13 +325,14 @@ if (m === 'shuttle' || m === 'freighter') {
 } else if (m === 'outpost') {
   // &kind=mast|tower (any kind in outposts.glb; src=kit takes any Kit kind)  &src=kit|glb|both (default both, side by side)  &wreck=1  &color=rrggbb  &cols=0 hides the colliders
   const kind = Q.get('kind') || 'mast', wreck = Q.get('wreck') === '1', color = hex('color', 0x2ec4ff);
-  const srcs = Q.get('src') === 'kit' ? ['kit'] : Q.get('src') === 'glb' ? ['glb'] : ['kit', 'glb'];
+  // &draft=a|b: the draft rework (src/outpostDrafts.js, docs/outpost-proposals) on its own
+  const srcs = Q.get('draft') || Q.get('src') === 'kit' ? ['kit'] : Q.get('src') === 'glb' ? ['glb'] : ['kit', 'glb'];
   model = new THREE.Group();
   const lines = [];
   const stats = {}, tpls = {};
   srcs.forEach((s, i) => {
     let t;
-    try { t = outpostTemplate(kind, color, 0, wreck, s); } catch (e) { lines.push(`${s}: ${e.message}`); return; }
+    try { t = outpostTemplate(kind, color, 0, wreck, s, Q.get('draft') || null); } catch (e) { lines.push(`${s}: ${e.message}`); return; }
     const g = new THREE.Group();
     g.position.x = (i - (srcs.length - 1) / 2) * 70;
     g.add(t.root.clone());
@@ -352,7 +354,7 @@ if (m === 'shuttle' || m === 'freighter') {
   model.traverse((o) => { if (o.userData.spin || o.userData.blink || o.userData.flag) swing.push(o); });
   anim = (t) => { // (what territory.js does to a placed outpost)
     for (const o of swing) {
-      if (o.userData.spin) o.rotation.y = t * 0.6;
+      if (o.userData.spin) o.rotation.y = t * (o.userData.spin === true ? 0.6 : o.userData.spin);
       if (o.userData.blink) o.visible = Math.sin(t * 4) > -0.3;
       if (o.userData.flag) o.rotation.y = Math.sin(t * 2) * 0.25;
     }
@@ -360,6 +362,7 @@ if (m === 'shuttle' || m === 'freighter') {
   Object.assign(sun.shadow.camera, { left: -90, right: 90, top: 90, bottom: -90, far: 400 });
   sun.shadow.camera.updateProjectionMatrix();
   window.outpostStats = stats;
+  window.outpostTpls = tpls; // (the templates shown, for test scripts: cols, hits, raid, drop)
 } else {
   let genes;
   if (m === 'mite') genes = null;

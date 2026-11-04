@@ -5,6 +5,7 @@ import { arcDist, tangent, frameQuat, greatCircle, SUN, R as PLANET_R, collectNo
 import { mulberry32, clamp, pick } from './rng.js';
 import { ITEMS } from './alchemy.js';
 import { outpostTemplate, SMALL_KINDS, FLAT_R } from './outpostModels.js';
+import './outpostDrafts.js'; // (registers the draft reworks: outpostModels.js OUTPOST_DRAFT)
 import { foundedTemplate, TERMINAL_Z, BUILT_R, OUTPOST_GUN as GUN } from './storyAssets.js';
 
 // Every square metre of the Moon belongs to somebody: a weighted Voronoi split round faction settlements and outposts.
@@ -424,7 +425,7 @@ export class Territory {
       if (b.type === 'cyl') return g.colliders.add({ type: 'cyl', c: root.localToWorld(new THREE.Vector3(b.x, 0, b.z)), axis: o.dir.clone(), y0: b.y0, y1: b.y1, r: b.r });
       const q = root.quaternion.clone().multiply(_q.setFromAxisAngle(_w.set(0, 1, 0), b.yaw));
       return g.colliders.add({
-        type: 'box', c: root.localToWorld(new THREE.Vector3(b.x, b.y, b.z)), hx: b.hx, hy: b.hy, hz: b.hz,
+        type: 'box', c: root.localToWorld(new THREE.Vector3(b.x, b.y, b.z)), hx: b.hx, hy: b.hy, hz: b.hz, floor: !!b.floor, // (a walking floor: physics.js floorUnder)
         ax: new THREE.Vector3(1, 0, 0).applyQuaternion(q), ay: new THREE.Vector3(0, 1, 0).applyQuaternion(q), az: new THREE.Vector3(0, 0, 1).applyQuaternion(q),
       });
     });
@@ -603,7 +604,7 @@ export class Territory {
       if (o.model && d < 400) {
         const movers = (o.model.userData.movers ||= collectNodes(o.model, (m) => m.userData.spin || m.userData.blink || m.userData.flag));
         for (const m of movers) {
-          if (m.userData.spin) m.rotation.y += dt * 0.6;
+          if (m.userData.spin) m.rotation.y += dt * (m.userData.spin === true ? 0.6 : m.userData.spin); // (a number: its own rate, e.g. a draft's strollers)
           if (m.userData.blink) m.visible = Math.sin(this.t * 4 + o.seed) > -0.3;
           if (m.userData.flag) m.rotation.y = Math.sin(this.t * 2 + o.seed) * 0.25;
         }
