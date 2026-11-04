@@ -18,7 +18,10 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
   Spinner; its disc in your laser colour), the Vostok Breaker (Scattergun), the Daedalus Rail Lance with violet coil rings,
   the Rustmoon Junk Hopper (Junk Mortar). It comes up when you fire and is put away with the crosshair, 10 s after the last
   shot (`gamepad.js` AIM_SHOW), never in a vehicle, a ragdoll, a dive or a trick; switching weapons puts one away and
-  brings the other up. An aim layer over walking, running and skating: the torso turns into a right-handed stance and
+  brings the other up. The Disc Blaster and the Junk Hopper are held one-handed out to the side, so they show past him
+  from the play camera; the Scattergun and the Rail Lance two-handed across the chest (only there do both hands reach: from
+  straight behind they're hidden, side on and in turns they show). No idles while a weapon is up. An aim layer over
+  walking, running and skating: the torso turns into a right-handed stance and
   toward the aim (pitch and yaw, within limits), the shoulders roll forward for the two-handed ones (the arms stay their
   length: no spot in front of the chest is in both hands' reach otherwise, and the hands met inside the torso), and both
   arms are solved to the grips by two-bone IK, the elbows bending as the pivots can. On foot he faces where you aim while it

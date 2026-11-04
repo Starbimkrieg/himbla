@@ -773,7 +773,7 @@ export class Player {
       m.foreL.rotation.x = -run * (0.45 + 0.55 * Math.max(0, s)); m.foreR.rotation.x = -run * (0.45 + 0.55 * Math.max(0, -s));
     }
     // stopped: breathing and occasional idles (idles.js) over the rest pose
-    this.idle.apply(m, dt, b.grounded && !b.skating && !this.rag && !!ctrl && ctrl.wish.lengthSq() === 0, sp, !b.grounded || !!this.rag);
+    this.idle.apply(m, dt, b.grounded && !b.skating && !this.rag && !!ctrl && ctrl.wish.lengthSq() === 0 && !this.weaponView.out, sp, !b.grounded || !!this.rag); // (no idles with a weapon up)
     // the weapon in hand: up while the crosshair is (gamepad.js), not in a vehicle, a dive or a trick
     const gm = this.game, aiming = gm.pad ? gm.pad.aimT < AIM_SHOW : false;
     if (this.rag || this.dead) this.weaponView.hide();

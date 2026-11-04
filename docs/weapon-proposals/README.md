@@ -86,10 +86,11 @@ every hand reaches its grip, standing and skating.
 
 | Hold | Weapons | Body |
 |---|---|---|
-| pistol | Disc Blaster | right arm out toward the aim, the left out for balance |
+| pistol | Disc Blaster | one hand, the arm out to the side and forward, the gun beside the body (it shows from behind) |
+| hip | Junk Hopper (as picked) | one hand, low and out to the side (it shows from behind) |
 | wrist | Wrist Spinner | the same, the gauntlet riding the forearm |
-| chest | Breaker, Hedgehog, Junk Hopper | both hands, held across the body; torso turned 0.65 rad |
-| under | Rail Lance, Coil Lance | tucked under the right arm, the left hand on the fore grip |
+| chest | Breaker, Hedgehog (and the Junk Hopper in set B) | both hands, held across the body; torso turned 0.6 rad, the shoulders rolled forward |
+| under | Rail Lance, Coil Lance | tucked under the right arm, the left hand on the fore grip; as chest |
 | shoulder | Pipe Mortar | the tube on the right shoulder, both hands on the grips under it |
 
 Each weapon's frame: the right hand's grip at the origin, +z the way it fires, +y up; `fore` is the left hand's point,
@@ -103,3 +104,10 @@ Each weapon's frame: the right hand's grip at the origin, +z the way it fires, +
   the walk, run and skate poses in `player.js animate`), both arms solved to the grips as here.
 - Shown only in combat, as the crosshair is: drawn while firing and for a while after the last shot, then put away
   (`gamepad.js crosshair`, the same timer).
+
+## In the game
+
+The pick is in (`src/assets/weapons.glb`, `src/weaponView.js`). The weapon is in the hand on screen right from behind
+(where the shots leave). The two-handed ones (Scattergun, Rail Lance) are held in front of the chest, the only place both
+hands reach: from straight behind the courier hides them; they show side on and in turns. The Disc Blaster and the Junk
+Hopper are held one-handed out to the side, so they show past him from the play camera.

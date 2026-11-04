@@ -17,7 +17,7 @@
 #
 # Each weapon is a root pivot `wpn_<set>_<key>` in its own frame (three.js axes, metres): the right hand's grip at the
 # origin, +z the way it fires, +y up. Its properties say how it's held (the preview's poses solve the arms to them):
-#   hold     pistol (one hand, arm out), wrist (strapped to the right forearm: its frame is the forearm's, +z toward the
+#   hold     pistol (one hand, arm out to the side), hip (one hand, low and out to the side), wrist (strapped to the right forearm: its frame is the forearm's, +z toward the
 #            hand), chest (two hands, held across the body), under (a long lance tucked under the right arm), shoulder
 #            (a tube on the right shoulder)
 #   fore     where the left hand holds it (absent: one-handed)
@@ -380,7 +380,8 @@ def mortar_a():
 def mortar_b(set_="b"):
     """JUNK HOPPER: a stubby flared cannon at the hip, a hopper on top full of scrap (bolts, a gear, a can), a crank on the
     right, a stovepipe exhaust, acid-green stripes and a violet patch"""
-    g = root(set_, "mortar", "chest", (-0.13, 0.15, 0.2), (0, 0.15, 0.62))
+    # (as picked it is held one-handed at the hip, out to the side, so it shows from behind: the side handle stays, unused)
+    g = root(set_, "mortar", "hip", None, (0, 0.15, 0.62)) if set_ == "pick" else root(set_, "mortar", "chest", (-0.13, 0.15, 0.2), (0, 0.15, 0.62))
     ax = (0, 0.15, 0)
     g("r_rust", 0.02).lath([(0.0, -0.22), (0.11, -0.22), (0.11, 0.06), (0.085, 0.1), (0.085, 0.42), (0.15, 0.56), (0.14, 0.58), (0.0, 0.5)], ax, 24, (PI / 2, 0, 0))
     g("rubber", 0.0).cylc(0, 0.15, 0.555, 0.12, 0.004, 20, "z")

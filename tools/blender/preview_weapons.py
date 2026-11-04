@@ -32,7 +32,9 @@ FWD, UP, RIGHT = Vector((0, -1, 0)), Vector((0, 0, 1)), Vector((1, 0, 0))
 # how each hold sets the body: torso twist (left shoulder forward) and the grip's place from the posed right shoulder
 # (right, forward, up, metres); `free`: the left hand's place from the left shoulder when the weapon is one-handed
 HOLDS = {
-    "pistol": {"twist": -0.25, "grip": (-0.08, 0.55, -0.12), "free": (-0.22, 0.12, -0.5)},
+    # one hand, out to the side of the body (so it shows past him from the play camera, behind and above)
+    "pistol": {"twist": -0.2, "grip": (0.15, 0.45, -0.35), "free": (-0.22, 0.12, -0.5)},
+    "hip": {"twist": -0.15, "grip": (0.12, 0.3, -0.5), "free": (-0.22, 0.12, -0.5)},
     "wrist": {"twist": -0.25, "grip": (-0.08, 0.55, -0.08), "free": (-0.22, 0.12, -0.5)},
     # two hands: the shoulders roll forward and in (`slide`): from where they stand, no spot in front of the chest is in
     # both hands' reach, so the hands met inside the torso. Searched (twist, slide, grip; standing and skating together)

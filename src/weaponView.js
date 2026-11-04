@@ -23,7 +23,10 @@ import { AIM_SHOW } from './gamepad.js';
 
 const S = -1;                                  // the weapon hand's side (x sign)
 const HOLDS = {
-  pistol: { twist: -0.25, slide: 0, grip: [-0.08, 0.55, -0.12] },
+  // one hand, out to the side (it shows past him from the play camera); two hands, held in front of the chest (from
+  // straight behind the torso hides them: they show side on and in turns)
+  pistol: { twist: -0.2, slide: 0, grip: [0.15, 0.45, -0.35] },
+  hip: { twist: -0.15, slide: 0, grip: [0.12, 0.3, -0.5] },
   chest: { twist: 0.6, slide: 0.24, grip: [-0.2, 0.4, -0.3] },
   under: { twist: 0.6, slide: 0.24, grip: [-0.2, 0.4, -0.3] },
 };
