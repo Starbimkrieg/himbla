@@ -158,7 +158,7 @@ const LENS_M = new THREE.MeshBasicMaterial({ color: 0xfff6a8 });
 // shell along smoothed normals (hugs far better than ink()'s bbox scaling), merged per pivot. So ~40 draw calls however
 // detailed, and each slot keeps the runner's own material for outfit recolours. No file: makeRunner uses the primitives.
 let RUNNER_PARTS = null;
-const PIVOTS = ['legL', 'legR', 'shinL', 'shinR', 'torso', 'head', 'armL', 'armR', 'foreL', 'foreR']; // (shins on the knees, forearms on the elbows)
+const PIVOTS = ['legL', 'legR', 'shinL', 'shinR', 'hips', 'torso', 'head', 'armL', 'armR', 'foreL', 'foreR']; // (shins on the knees, forearms on the elbows; hips: the seat the torso turns in)
 const EXTRA_PIVOTS = ['padL', 'padR', 'band', 'antenna', 'crest']; // (outfit extras for cosmetics.js; optional)
 const NO_SHADOW = new Set(['glow', 'lens', 'glint']);
 export async function loadRunnerParts() {
@@ -662,6 +662,13 @@ export function makeRunner({
     const rail = part(G.rail, skateM, 0, -0.522, 0.07, 0.025);
     rail.scale.x = 1.6;
     shin.add(rail);
+  }
+  // the hips (Blender runner only): the seat the torso's ball turns in, staying with the legs
+  if (baked && RUNNER_PARTS.hips) {
+    const hips = new THREE.Group();
+    hips.position.y = hip;
+    body.add(hips);
+    addBaked(hips, 'hips', mats);
   }
   const torso = new THREE.Group();
   torso.position.y = hip;

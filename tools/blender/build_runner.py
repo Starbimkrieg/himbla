@@ -354,9 +354,23 @@ for side, name in ((-1, "legL"), (1, "legR")):
     for s2 in (-1, 1):
         mesh(f"{name}_edge{'L' if s2 < 0 else 'R'}", lo(xf(superquad(0.008, 0.009, 0.25, 0.5, 0.3, 6, 4), (s2 * 0.104, -0.933, 0.06))), "skate", S, 0)
 
+# ---- hips: the seat the trunk's ball turns in, on its own pivot on the body (it stays with the legs) ----
+# Suit-coloured shorts round the thighs' tops (a little wider than them, so the thighs leave it through its underside as legs
+# from shorts) and the trunk's ball; at the waist it stands a hair proud of the ball's equator, a seam that can't open.
+H = pivot("hips", (0, HIP, 0), body)
+HIPS = [(0, -0.22), (0.14, -0.215), (0.26, -0.185), (0.33, -0.13), (0.35, -0.075), (0.325, -0.035), (0.28, -0.012),
+        (0.262, -0.003), (0.2, 0.02), (0, 0.03)]
+mesh("hips_shorts", xf(lathe(HIPS, 20), s=(1, 1, 0.7)), "suit", H, 0.04)   # (0.7 deep: no deeper than the trunk above it)
+
 # ---- torso ----
 T = pivot("torso", (0, HIP, 0), body)
-TORSO = [(0, -0.02), (0.16, -0.01), (0.25, 0.04), (0.285, 0.14), (0.262, 0.3), (0.268, 0.4), (0.3, 0.52),
+# The trunk's lower half is a ball on the waist pivot: an ellipsoid as deep as it is tall (0.26 wide, 0.203 deep and high,
+# the lathe's 0.78 depth included), which a lean (a turn about x) leaves exactly where it was, so the trunk stays seated in
+# the hips however far forward he leans (the bottom used to swing up and back, baring the thighs' tops). Above it the
+# trunk is as before.
+WAIST_R, WAIST_D = 0.26, 0.26 * 0.78
+TORSO = [(WAIST_R * math.sin(math.radians(a)), -WAIST_D * math.cos(math.radians(a))) for a in range(0, 91, 10)] + [
+         (0.272, 0.06), (0.285, 0.14), (0.262, 0.3), (0.268, 0.4), (0.3, 0.52),
          (0.338, 0.66), (0.338, 0.78), (0.3, 0.9), (0.21, 0.99), (0.15, 1.04), (0, 1.07)]
 def chest(v):
     # broader back, a small chest shelf at the front

@@ -5,6 +5,12 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **The courier's legs stay joined to his body when he leans** (`tools/blender/build_runner.py` -> `runner.glb`, `models.js`
+  makeRunner). He is rigid parts on pivots, and the torso turned on a pivot at the bottom of its egg-shaped trunk: leaning
+  into a skate (up to 0.6 rad) swung its lower back up 10 cm, baring the thighs' tops. Now the trunk's lower half is a ball
+  centred on that pivot (as deep as it is tall), which a lean leaves exactly where it was, and it sits in a new hip piece
+  (`hips`, suit-coloured shorts round the thighs' tops, on its own pivot with the legs). The poses are unchanged; nothing in
+  the game that turns the pivots changes.
 - **Asset Row and the Spindle draw again (`src/farshadow.js`):** since the far sun shadows, every frame in the Asset Row (and in the Spindle) threw `planet.farCasters is not a function` and the picture froze: both swap in a flat stand-in world, which has no terrain chunks to cast. The far pass now skips that step when the world has none. Checked headless: the Row's 261 items build, and with the Row open frames keep coming with no page errors.
 - **The small outposts are rebuilt (the picked drafts are in).** Trading Kiosk: the Market Cross; Watchtower: the
   Lattice Camp; Supply Depot: the Silo Depot; Farm Dome: the Greenhouse Row; Relay Mast: the Guyed Relay; Junk Pile:
