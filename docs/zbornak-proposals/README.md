@@ -25,6 +25,33 @@ renders). The courier is `runner.glb`. The drone feeds are filmed in the game to
 
 ![The plan](plan.jpg)
 
+## The airlock's doors: two drafts
+
+The doors in the game are plain discs: the outer one sinks 6 m into a slot in the plaza, past the hazard ring and the sill,
+and the inner one rises into the portal's wall. Two drafts replace them, the same style on both sides of the airlock
+(`tools/blender/lab_doors.py`; `LAB_DOOR=split` or `vault` builds the lab with one, unset keeps today's doors;
+`LAB_DOOR=<draft> python3 tools/blender/preview_zbornak_lab.py doors` renders these). Nothing moving cuts through
+anything: both drafts were swept open in steps and each moving part checked against the rest of the lab. The only
+contact is the vault's pin in its own knuckles. Halfway through its swing the outer hatch also passes through the
+security camera's scan beam, a light the game shows only while it scans you, before the door opens.
+
+![Both drafts, outside and inside, shut, half open and open](doors/doors_sheet.jpg)
+
+- **A · Chevron split.** Each door is two leaves meeting on a stepped seam: a chevron tooth above the lock hub and one below
+  it, interlocked, lit lime along the seam, with the hub's halves and their lit half-rings parting with the leaves. They
+  slide sideways into pockets inside the wall: outside into the housing's front wall and its side blocks, inside into
+  the portal wall and on into the ring wall. The hazard ring stands clear in front of them; the ground slot and the
+  inner guide rails go.
+- **B · Vault hatch.** A thick stepped plug seated in the hazard ring, a lock wheel on its face (six spokes, a lit core and
+  a lit channel round the step), twelve locking-dog heads, two hinge straps to a pin in three knuckles on wall brackets
+  beside the ring. It swings 100 degrees about the pin: outside onto the plaza on the camera's side (clear of the stand
+  plate and the screen), inside into the lab away from the equipment corner, and stands open beside the doorway with
+  its braced back and lit gauge showing. The hinge sits in front of the ring, so the plug's near edge moves inward as it
+  turns and never touches the ring. The guide rails go.
+
+Neither is in the game yet. The game moves each door straight up or down (`labWorld.js updateGate`); the split would
+move two leaves sideways and the vault would turn about its pin, and each needs its door colliders to follow.
+
 ## The fifth in-game review
 
 | Asked | Done |
