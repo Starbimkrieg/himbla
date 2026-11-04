@@ -5,6 +5,27 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Freighter: no side wings, a style pass and lighter cargo (`tools/blender/build_ships.py`, `cargo.py`, `decals.py`):**
+  - **The radiator wings are gone.** The ship's heat now goes out through **radiator panels on the stern block's flanks**: a
+    backplate set into the flank over the cooling ribs, a trim frame, nine vertical fins in the livery stripe between top and
+    bottom headers. The red and green **running lights** moved from the wing tips to housings on the ends of each cargo cage's top
+    beam (bow and stern). With no wing in the way, the **gantry cranes run the whole length of their rails**, up to new **end stops**
+    (a block with a hazard buffer at each rail end). The wings' six collision slabs are replaced by one box per panel (64 boxes).
+    The ship is now as wide as its cages (about 26 m, was 41 m).
+  - **Structure:** the engine actuators now reach the bell walls (they stopped 0.45 m short); the exhaust manifolds, which ended
+    in the air beside the bells, now run from the block's aft shoulders round the heat shield's edge into the upper pumps; the
+    crane chassis bumpers, hand-rail posts, mast stays and dish yoke now meet what they are fixed to, and the dish has a feed horn.
+    The structure audit finds nothing but the crane's cable falls (stretched by the game).
+  - **Style:** outlines thinned on the hull (0.28 to 0.14 m), bridge tower (0.2 to 0.12), pilot house (0.18 to 0.10) and stern
+    block (0.22 to 0.12); the deck kerbs and bell rings, which stand proud, have a thin outline of their own; the bridge's livery
+    band lies on the tower (it stood 5 cm off); the stern block is squarer, to match the hull; the frame rib on the nose taper is gone.
+  - **Lighter cargo:** the bays' units are built `lite` (`cargo_unit(..., lite=True)`): the container doors keep their leaves,
+    corrugations and locking bars but not the cams, keepers, guides, handles, hinges, plates, seal or stencils; corrugations and
+    castings are plain boxes; tankers' rings have fewer segments and their rear valve gear and ladder, like the magazines' end
+    signs, are left off (the ends face the bay frames). The land-train, cranes and gantry build exactly as before. The freighter
+    is about 91k triangles drawn (was about 150k; 114k in the file with every faction's livery, was 172k); `ships.glb` is
+    1.55 MB (was 1.94 MB). Asset Row: DEEP-HAUL FREIGHTER is 78 x 66 m.
+
 - **Small outposts: two draft reworks of each, to scale.** All seven small kinds (Trading Kiosk, Watchtower, Supply
   Depot, Farm Dome, Relay Mast, Scrap Shack, Junk Pile) have a draft A and a draft B, near-full reworks on a 40 m yard
   (was 24 to 27 m) with buildings at human scale (doors 2.6 m and up, storeys 3.5 to 4 m; the Watchtower's bunker is

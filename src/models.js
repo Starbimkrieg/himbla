@@ -2918,7 +2918,7 @@ export function makeHoverCar({ faction = null, paint = 0 } = {}) {
 }
 
 // Freighter: deep-haul hammerhead with a rideable flat deck, raked bow bridge tower, flank container racks, swept
-// radiator wings, four-bell engine cluster, four folding legs, belly ramp.
+// radiator panels on the stern block, four-bell engine cluster, four folding legs, belly ramp.
 export function makeFreighter({ color = 0xb8b4c8, stripe = 0xff9f1c, faction = 'kepler' } = {}) {
   return makeShip('freighter', { color, stripe, faction });
 }

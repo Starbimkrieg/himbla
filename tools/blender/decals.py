@@ -321,8 +321,8 @@ CARGO_PLATE_Y = 3.3 - _CARGO_STACK / 2 + CARGO_PLATE_HALF[1]
 CARGO_NUM_Y = 3.3 - _CARGO_STACK / 2 + 2 * CARGO_PLATE_HALF[1] + CARGO_GAP
 
 
-def cargo_decals(f, piv, prefix):
-    """Faction plate and container number on both flanks, built under `piv`."""
+def cargo_decals(f, piv, prefix, marks=True):
+    """Faction plate and container number on both flanks, built under `piv`; `marks` adds the stencils on the doors."""
     s = NAMES[f]
     code = f"{CODES[f]} 204117 6"
     ps, ps2 = 0.045, 0.035
@@ -342,7 +342,7 @@ def cargo_decals(f, piv, prefix):
         d2.build(f"{prefix}id{'P' if side > 0 else 'S'}_{f}", piv)
     # door ends: number and size-type code on the reader's right leaf, weights on the left, stencilled on the leaf face
     # between the top corrugation and the header (under the locking bars)
-    for sz in (-1, 1):
+    for sz in ((-1, 1) if marks else ()):
         d = Dec("+z" if sz > 0 else "-z", (0, 0, sz * (CARGO_END + CD_LEAF_D)))
         d.text(code, 0.1, 4.19, 0.016, "label", 0)
         d.text("22G1", 0.1, 4.04, 0.016, "label", 0)
@@ -370,8 +370,9 @@ def _cd_box(x0, x1, y0, y1, d0, d1, sz):
     return v, [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
 
 
-def container_doors(body):
-    """Both door ends: a list of (name, geo, slot, ink); `body` is the box's body slot."""
+def container_doors(body, lite=False):
+    """Both door ends: a list of (name, geo, slot, ink); `body` is the box's body slot. `lite` keeps the frame, leaves,
+    corrugations and locking bars and leaves out the small hardware (for a container seen among many, from a distance)."""
     out = []
 
     def add(name, geo, slot, ink):
@@ -393,6 +394,8 @@ def container_doors(body):
             for j, bx in enumerate(_CD_BARS):
                 x = sx * bx
                 add(f"{L}bar{j}", beam((x, 2.0, Z(0.12)), (x, 4.56, Z(0.12)), 0.03, 6), "metal", 0.015)
+                if lite:
+                    continue
                 for y, cy in ((2.24, "B"), (4.31, "T")):
                     add(f"{L}cam{j}{cy}", _cd_box(x - 0.05, x + 0.05, y - 0.06, y + 0.06, 0.08, 0.17, sz), "steel", 0.01)
                 add(f"{L}keeperT{j}", _cd_box(x - 0.07, x + 0.07, 4.42, 4.6, 0.07, 0.17, sz), "steel", 0.01)
@@ -404,10 +407,12 @@ def container_doors(body):
                 add(f"{L}hub{j}", _cd_box(x - 0.06, x + 0.06, 2.71, 2.85, 0.08, 0.18, sz), "steel", 0.01)
                 add(f"{L}handle{j}", beam((x, 2.78, Z(0.17)), (tip, 2.75, Z(0.17)), 0.025, 6), "metal", 0.01)
                 add(f"{L}retainer{j}", _cd_box(tip - 0.03, tip + 0.03, 2.69, 2.81, 0.04, 0.2, sz), "steel", 0.01)
-            for k, y in enumerate(_CD_HINGES):
+            for k, y in enumerate(() if lite else _CD_HINGES):
                 add(f"{L}hinge{k}", _cd_box(sx * 1.15, sx * 1.3, y - 0.045, y + 0.045, 0.03, 0.085, sz), "dark", 0.01)
                 add(f"{L}knuckle{k}", beam((sx * 1.3, y - 0.07, Z(0.1)), (sx * 1.3, y + 0.07, Z(0.1)), 0.035, 6), "dark", 0.01)
                 add(f"{L}lug{k}", _cd_box(sx * 1.3, sx * 1.42, y - 0.05, y + 0.05, 0.06, 0.11, sz), "dark", 0.01)
+        if lite:
+            continue
         # reader's left leaf: -x on the front end, +x on the rear
         add(f"door{e}_csc", _cd_box(-sz * 0.45, -sz * 0.8, 2.27, 2.45, 0.04, 0.065, sz), "steel", 0.01)
         add(f"door{e}_seal", _cd_box(sz * 0.54, sz * 0.58, 2.6, 2.7, 0.15, 0.23, sz), "stripe", 0.01)

@@ -233,7 +233,7 @@ const ships = {
       make: () => ({ root: pose(pruneHidden(park(makeShuttle({ color: 0xfff4e0, stripe: 0x2ec4ff })).root), YAW, 0) }),
     },
     {
-      id: 'ship.freighter', label: 'DEEP-HAUL FREIGHTER', w: 86, d: 79,
+      id: 'ship.freighter', label: 'DEEP-HAUL FREIGHTER', w: 78, d: 66,
       make: () => ({ root: pose(pruneHidden(park(makeFreighter({ stripe: 0xff9f1c })).root), YAW, 0) }),
     },
     {

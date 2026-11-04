@@ -506,7 +506,7 @@ tools/
     hullkit.py             hull lofts and fittings (Courier, Skimmer redesigns)
     dishkit.py             dish geometry (build_dish.py, build_outposts.py)
     decals.py              lettering, emblems, hazard stripes, container markings
-    cargo.py               land-train cargo units for other models to carry
+    cargo.py               land-train cargo units for other models to carry (lite=True: trimmed for distant units, the freighter's bays)
     spreader.py            crane container spreader
     hookblock.py           the cranes' hook block (tower crane, gantry, the Vostok Hangar's bridge crane)
     suits.py               card-suit trim (blackjack, claw, duck)

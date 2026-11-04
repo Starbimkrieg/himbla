@@ -696,8 +696,8 @@ SR["padR"] = 11.0
 # FREIGHTER ("Atlas"): ~66 m armoured deep-haul hammerhead. Squared plated hull; raked bridge tower running into the bow with a
 # lofted pilot house; rideable dorsal landing deck (kerb, tie-down rails, big pad, approach lights); a gantry cage round each side's
 # four cargo bays (portal frames, header truss, crane rail and trolley, status lamps, roller cradles) holding land-train cargo units
-# (corrugated box, Helium-3 tanker, explosives magazine; cargo.py) in the served faction's paint; short bolted radiator wings;
-# four-bell armoured stern block; four folding legs; belly ramp. Origin = hull centre; deck top y = +5, belly y = -5.
+# (corrugated box, Helium-3 tanker, explosives magazine; cargo.py, built lite) in the served faction's paint, running lights on the
+# cage ends; four-bell armoured stern block with radiator panels on its flanks; four folding legs; belly ramp. Origin = hull centre; deck top y = +5, belly y = -5.
 #
 # FREIGHTER_VARIANT (environment) picks the build: "stacked" (in game: full size, bays two crates high, Helium-3 tankers in ISO
 # frames so they stack), "atlas" (one crate high) or "compact" (three bays a side, hull 15% smaller). The last two are studies.
@@ -739,14 +739,14 @@ FSECS = [
     {"z": zf(33.0), "w": 2.3, "t": 1.0, "b": 2.2, "eT": 3, "eB": 3.5},
     {"z": zf(33.8), "w": 1.0, "t": 0.6, "b": 1.0, "eT": 2.4, "eB": 2.4},
 ]
-FM("hull", loft(FSECS, 48), "body", FH, 0.28)
+FM("hull", loft(FSECS, 48), "body", FH, 0.14)
 # livery: broad belt, trim pinstripe above, hazard sill below, right round the bow
 FM("belt", cband(FSECS, 0.05, 0.4, 2.0, zlo=-26.5, zhi=zf(31.0), step=0.5, n=170), "stripe", FH, 0)
 FM("pin", cband(FSECS, 0.055, 2.3, 2.55, zlo=-26.5, zhi=zf(30.6), step=0.5, n=170), "trim", FH, 0)
 FM("sill", cband(FSECS, 0.05, -3.7, -3.35, zlo=-26.5, zhi=zf(29.0), step=0.5, n=170), "hazard", FH, 0)
 # frame ribs down the whole hull and onto the bow
 RIBS = [z for z in (-24, -18, -12, -6, 0, 6, 12, 18) if z <= zf(18)]
-RIBS += [z for z in (zf(24), zf(29)) if z - RIBS[-1] > 2.5]
+RIBS += [z for z in (zf(24),) if z - RIBS[-1] > 2.5]     # (none on the nose taper: it crowded the tip)
 for k, z in enumerate(RIBS):
     # each rib uses the hull's section at both edges, so it lies flat on the tapering bow
     FM(f"rib{k}", keep(loft(grow([lerp_sec(FSECS, z - 0.5), lerp_sec(FSECS, z + 0.5)], 0.08), 48, False, False), lambda c: c[1] < 4.6), "trim", FH, 0.05)
@@ -765,7 +765,7 @@ DK0, DK1 = -25.6, zf(19.6)
 DZC, DZH = (DK0 + DK1) / 2, (DK1 - DK0) / 2
 FM("deck", xf(rbox(6.9, 0.14, DZH, 0.08, 16, 4), (0, 5.0, DZC)), "deck", FH, 0.06)
 for side in (-1, 1):
-    FM(f"kerb{side}", xf(rbox(0.22, 0.2, DZH - 0.1, 0.3, 8, 4), (side * 6.75, 5.12, DZC)), "hazard", FH, 0)
+    FM(f"kerb{side}", xf(rbox(0.22, 0.2, DZH - 0.1, 0.3, 8, 4), (side * 6.75, 5.12, DZC)), "hazard", FH, 0.02)
     for k in range(int((DK1 - 1.5 + 23.5) / 4.9) + 1):
         z = -23.5 + k * 4.9
         FM(f"kerbLamp{side}{k}", xf(superquad(0.2, 0.2, 0.2, 1, 1, 8, 4), (side * 6.75, 5.45, z)), "window", FH, 0)
@@ -802,8 +802,8 @@ BRIDGE = [
     {"z": zf(29.0), "w": 4.4, "t": 1.6, "b": 3.2, "eT": 4, "eB": 8, "yc": 4.0},
     {"z": zf(31.0), "w": 3.2, "t": 0.5, "b": 2.4, "eT": 3, "eB": 5, "yc": 2.0},
 ]
-FM("bridgeLo", loft(BRIDGE, 40), "trim", FH, 0.2)
-FM("bridgeBelt", cband(BRIDGE, 0.05, 6.1, 6.8, zlo=zf(12.3), zhi=zf(26.5), step=0.4, n=160), "stripe", FH, 0)
+FM("bridgeLo", loft(BRIDGE, 40), "trim", FH, 0.12)
+FM("bridgeBelt", cband(BRIDGE, 0.015, 6.1, 6.8, zlo=zf(12.3), zhi=zf(26.5), step=0.4, n=160), "stripe", FH, 0)
 # lit sign on the raked face; windows and vents on flanks and back
 FRB("sign", (2.4, 0.5, 0.08), (0, 7.0, zf(27.15)), "dark", ink=0.04, e=0.2, rot=(-0.75, 0, 0))
 FRB("signLit", (2.2, 0.36, 0.1), (0, 7.05, zf(27.2)), "sign", ink=0, e=0.25, rot=(-0.75, 0, 0))
@@ -843,7 +843,7 @@ PH = [
     {"z": zf(24.0), "w": 3.7, "t": 1.5, "b": 2.1, "eT": 5, "eB": 12, "yc": 10.9},
     {"z": zf(25.6), "w": 2.9, "t": 0.8, "b": 2.2, "eT": 4, "eB": 10, "yc": 10.3},
 ]
-FM("pilotHouse", loft(PH, 40), "trim", FH, 0.18)
+FM("pilotHouse", loft(PH, 40), "trim", FH, 0.10)
 FM("pilotPlinth", cband(PH, 0.09, 9.4, 10.05, zlo=zf(15.8), zhi=zf(25.0), step=0.3, n=140), "stripe", FH, 0)
 FM("pilotGlass", cband(PH, 0.07, 10.55, 12.3, zlo=zf(16.8), zhi=zf(26.0), step=0.2, n=180), "glass", FH, 0)
 FM("pilotFrameTop", cband(PH, 0.075, 12.3, 12.55, zlo=zf(16.8), zhi=zf(26.0), step=0.2, n=180), "dark", FH, 0)
@@ -855,14 +855,15 @@ for k, (z, x) in enumerate(((zf(22.4), 3.97), (zf(19.4), 4.0), (zf(17.4), 4.0)))
 # dish: pedestal and yoke on the roof, tilted dish
 FM("dishPed", xf(lathe([(0, 0), (0.7, 0), (0.6, 0.15), (0.38, 0.6), (0.3, 1.0), (0, 1.0)], 16), (-1.5, 13.15, zf(19.7))), "steel", FH, 0.04)
 for s in (-1, 1):
-    FM(f"dishYoke{s}", beam((-1.5 + s * 0.35, 14.1, zf(19.7)), (-1.5 + s * 0.8, 14.7, zf(19.7)), 0.07, 6), "dark", FH, 0.02)
+    FM(f"dishYoke{s}", beam((-1.5 + s * 0.35, 14.1, zf(19.7)), (-1.5 + s * 0.8, 14.8 + s * 0.16, zf(19.7)), 0.07, 6), "dark", FH, 0.02)
 FM("dish", xf(lathe([(0, 0.0), (1.4, 0.15), (2.1, 0.58), (2.15, 0.65), (0, 0.22)], 22), (-1.5, 14.75, zf(19.7)), (0.45, 0, 0.2)), "white", FH, 0.05)
 FM("dishFeed", beam((-1.5, 14.95, zf(19.7)), (-1.35, 15.75, zf(19.4)), 0.05, 5), "dark", FH, 0)
+FM("dishHorn", xf(lathe([(0, 0), (0.12, 0), (0.16, 0.18), (0, 0.18)], 8), (-1.35, 15.7, zf(19.4))), "dark", FH, 0.01)   # feed horn on the boom's tip
 # mast: plinth with stays, light on top
 FM("mastPlinth", xf(lathe([(0, 0), (0.55, 0), (0.5, 0.12), (0.3, 0.3), (0, 0.3)], 8), (1.8, 13.15, zf(17.4))), "steel", FH, 0.03)
 FM("mast", beam((1.8, 13.4, zf(17.4)), (1.8, 19.4, zf(17.0)), 0.12, 6), "dark", FH, 0.03)
 for z0 in (-1.6, 1.6):
-    FM(f"stay{z0}", beam((1.8, 17.2, zf(17.1)), (1.8 + 0.5 * (1 if z0 > 0 else -1), 13.3, zf(17.4) + z0), 0.025, 4), "dark", FH, 0)
+    FM(f"stay{z0}", beam((1.8, 17.2, zf(17.1)), (1.8 + 0.5 * (1 if z0 > 0 else -1), 13.1, zf(17.4) + z0), 0.025, 4), "dark", FH, 0)
 BEACON = pivot("f_beacon", (1.8, 19.6, zf(17.0)), FH, role="blinker", phase=0.0)   # game flashes it (models.js setThrust)
 FM("beaconLamp", superquad(0.34, 0.34, 0.34, 1, 1, 10, 6), "red", BEACON, 0)
 FM("beaconHalo", superquad(1.0, 1.0, 1.0, 1, 1, 10, 6), "beacon", BEACON, 0)
@@ -874,31 +875,6 @@ for side in (-1, 1):
 for side in (-1, 1):
     FM(f"head{side}", xf(superquad(0.75, 0.32, 0.18, 0.4, 0.5, 12, 6), (side * 2.4, -1.7, zf(32.2)), (0.1, side * 0.5, 0)), "window", FH, 0)
     FM(f"towLug{side}", xf(torus(0.5, 0.12, 12, 5), (side * 3.0, -3.3, zf(30.4)), (0, 0, math.pi / 2)), "steel", FH, 0.03)
-
-# ---- radiator wings: short, swept, bolted frame, striped fins (up on the shoulder when bays are two high) ----
-RAD_DIH = 0.2
-WY = 3.8 if STACK == 1 else 4.7
-
-
-def wing_pt(span, up, chord, side):
-    p = Vector((span, up, -chord))
-    p.rotate(Euler((0, 0, RAD_DIH)))
-    return (side * (p.x + 7.6), p.y + WY, p.z - 6.0)
-
-
-for side in (-1, 1):
-    wing = [(0.0, 0.0), (6.0, 0.0), (13.0, 3.0), (13.0, 7.2), (5.5, 9.2), (0.0, 9.2)]
-    verts, faces = extrude(wing, 0.55, "y")
-    out = [wing_pt(vx, vy, vz, side) for vx, vy, vz in verts]
-    FM(f"rad{side}", (out, [tuple(reversed(f)) for f in faces] if side < 0 else faces), "steel", FH, 0.12)
-    for k in range(6):
-        sp = 1.6 + k * 2.0
-        lead = 3.0 * max(0.0, sp - 6.0) / 7.0 + 0.5
-        trail = 9.0 if sp < 5.5 else 9.0 - (sp - 5.5) * (1.8 / 7.5)
-        FM(f"radFin{side}{k}", beam(wing_pt(sp, 0.34, lead, side), wing_pt(sp, 0.34, trail, side), 0.14, 4), "stripe", FH, 0)
-    FM(f"radEdge{side}", beam(wing_pt(6.0, 0.0, 0.0, side), wing_pt(13.0, 0.0, 3.0, side), 0.32, 6), "trim", FH, 0.04)
-    FM(f"radRoot{side}", xf(rbox(1.5, 1.1, 5.0, 0.2), (side * 8.0, WY - 0.1, -10.2), (0, 0, side * 0.15)), "steel", FH, 0.06)
-    FM(f"navLight{side}", xf(superquad(0.5, 0.5, 0.5, 1, 1, 10, 6), wing_pt(13.2, 0.0, 5.0, side)), "green" if side > 0 else "red", FH, 0)
 
 # ---- pipe runs and junction boxes down the upper shoulders (outside the walkable roof) ----
 PIPE_Y = (4.0, 3.4) if STACK == 1 else (4.55, 4.0)
@@ -918,30 +894,47 @@ for side in (-1, 1):
 
 # ---- stern: armoured thrust block, manifold, four bells ----
 FM("thrustFrame", loft([
-    {"z": -31.8, "w": 8.0, "t": 5.2, "b": 5.2, "eT": 7, "eB": 7},
-    {"z": -31.0, "w": 8.8, "t": 5.8, "b": 5.8, "eT": 7, "eB": 7},
-    {"z": -27.4, "w": 8.8, "t": 5.8, "b": 5.8, "eT": 7, "eB": 7},
-    {"z": -26.2, "w": 7.6, "t": 4.8, "b": 4.8, "eT": 7, "eB": 7},
-], 32), "steel", FH, 0.22)
-FM("frameBand", keep(loft(grow([{"z": -30.6, "w": 8.8, "t": 5.8, "b": 5.8, "eT": 7, "eB": 7}, {"z": -29.2, "w": 8.8, "t": 5.8, "b": 5.8, "eT": 7, "eB": 7}], 0.07), 32, False, False), lambda c: True), "hazard", FH, 0)
+    {"z": -31.8, "w": 8.0, "t": 5.2, "b": 5.2, "eT": 10, "eB": 10},
+    {"z": -31.0, "w": 8.8, "t": 5.8, "b": 5.8, "eT": 10, "eB": 10},
+    {"z": -27.4, "w": 8.8, "t": 5.8, "b": 5.8, "eT": 10, "eB": 10},
+    {"z": -26.2, "w": 7.6, "t": 4.8, "b": 4.8, "eT": 10, "eB": 10},
+], 32), "steel", FH, 0.12)
+FM("frameBand", keep(loft(grow([{"z": -30.6, "w": 8.8, "t": 5.8, "b": 5.8, "eT": 10, "eB": 10}, {"z": -29.2, "w": 8.8, "t": 5.8, "b": 5.8, "eT": 10, "eB": 10}], 0.07), 32, False, False), lambda c: True), "hazard", FH, 0)
 for k in range(5):               # cooling ribs on the block
     FM(f"blockRib{k}", xf(rbox(8.95, 5.9, 0.16, 0.12, 12, 4), (0, 0, -27.8 - k * 0.5)), "dark", FH, 0.02)
+# radiator panels: the ship's heat goes out through the stern block's flanks. A backplate set into the flank over the
+# cooling ribs, a trim frame, vertical fins in the livery stripe between a header along the top and one along the bottom.
+RAD_Z0, RAD_Z1, RAD_H = -27.6, -30.8, 4.3
+RAD_ZC, RAD_ZH = (RAD_Z0 + RAD_Z1) / 2, (RAD_Z0 - RAD_Z1) / 2
+for side in (-1, 1):
+    FRB(f"radPlate{side}", (0.23, RAD_H, RAD_ZH), (side * 8.83, 0, RAD_ZC), "dark", ink=0.04, e=0.15)
+    for sy in (-1, 1):
+        FRB(f"radFrameH{side}{sy}", (0.06, 0.1, RAD_ZH), (side * 9.1, sy * (RAD_H - 0.1), RAD_ZC), "trim", ink=0.02, e=0.3)
+        FRB(f"radHeader{side}{sy}", (0.18, 0.16, RAD_ZH - 0.25), (side * 9.22, sy * (RAD_H - 0.42), RAD_ZC), "steel", ink=0.02, e=0.3)
+    for sz in (-1, 1):
+        FRB(f"radFrameV{side}{sz}", (0.06, RAD_H, 0.1), (side * 9.1, 0, RAD_ZC + sz * (RAD_ZH - 0.1)), "trim", ink=0.02, e=0.3)
+    for k in range(9):           # fins run header to header, standing on the plate
+        z = RAD_Z0 - 0.3 - k * (RAD_Z0 - RAD_Z1 - 0.6) / 8
+        v, f, _ = cuboid(0.3, 2 * (RAD_H - 0.5), 0.07)     # crisp: a thin rbox comes out a lozenge
+        FM(f"radFin{side}{k}", xf((v, f), (side * 9.2, 0, z)), "stripe", FH, 0.01)
 FM("heatShield", xf(rbox(8.0, 5.2, 0.28, 0.12, 16, 6), (0, 0, -32.0)), "dark", FH, 0.06)
 THROAT_Z, BELL_L = -33.4, 5.0
 bell = [(1.2, 0.0), (1.25, 0.5), (1.5, 1.8), (1.85, 3.2), (2.2, 4.4), (2.35, 4.85), (2.35, BELL_L)]
 for i, (x, y) in enumerate([(-4.2, 2.6), (4.2, 2.6), (-4.2, -2.6), (4.2, -2.6)]):
     FM(f"pump{i}", xf(lathe([(r, -h) for r, h in [(0, 0), (1.8, 0), (1.85, 0.3), (1.7, 1.0), (1.4, 1.25), (1.25, 1.5), (0, 1.5)]], 20), (x, y, -32.1), (math.pi / 2, 0, 0)), "steel", FH, 0.06)
     FM(f"gimbal{i}", xf(torus(1.4, 0.24, 20, 6), (x, y, THROAT_Z + 0.15), (math.pi / 2, 0, 0)), "stripe", FH, 0.02)
-    for k in range(3):           # hydraulic actuators
+    for k in range(3):           # hydraulic actuators, pump to the bell wall (r 1.46 there)
         a = k * 2 * math.pi / 3 + 0.5
-        FM(f"act{i}{k}", beam((x + math.cos(a) * 1.7, y + math.sin(a) * 1.7, -32.2), (x + math.cos(a) * 1.95, y + math.sin(a) * 1.95, THROAT_Z - 1.6), 0.13, 6), "metal", FH, 0.02)
+        FM(f"act{i}{k}", beam((x + math.cos(a) * 1.7, y + math.sin(a) * 1.7, -32.2), (x + math.cos(a) * 1.56, y + math.sin(a) * 1.56, THROAT_Z - 1.6), 0.13, 6), "metal", FH, 0.02)
     FM(f"bell{i}", xf(lathe([(r, -h) for r, h in bell], 24), (x, y, THROAT_Z), (math.pi / 2, 0, 0)), "dark", FH, 0.1)
-    FM(f"bellRing{i}", xf(torus(2.35, 0.15, 24, 6), (x, y, THROAT_Z - BELL_L), (math.pi / 2, 0, 0)), "stripe", FH, 0)
+    FM(f"bellRing{i}", xf(torus(2.35, 0.15, 24, 6), (x, y, THROAT_Z - BELL_L), (math.pi / 2, 0, 0)), "stripe", FH, 0.02)
     FM(f"bellGlow{i}", xf(lathe([(0, 0), (1.3, 0), (1.3, 0.06), (0, 0.06)], 20), (x, y, THROAT_Z - 0.4), (math.pi / 2, 0, 0)), "engine", FH, 0)
     FM(f"bellCore{i}", xf(lathe([(0, 0), (0.7, 0), (0.7, 0.08), (0, 0.08)], 16), (x, y, THROAT_Z - 0.5), (math.pi / 2, 0, 0)), "core", FH, 0)
     plume(FR, f"f_plume{i}", (x, y, THROAT_Z - BELL_L - 0.05), 2.0, 13.0)
-for side in (-1, 1):             # exhaust manifold: block shoulders to outer bells
-    FM(f"manifold{side}", beam((side * 8.6, 0.0, -29.0), (side * 8.6, 2.6, -31.0), 0.4, 8), "steel", FH, 0.04)
+for side in (-1, 1):             # manifold: out of the block's aft shoulder, round the heat shield's edge, into the upper pump
+    P0, P1, P2 = Vector((8.45, 2.6, -31.2)), Vector((8.9, 2.6, -33.4)), Vector((5.85, 2.6, -32.9))
+    path = [(1 - t) ** 2 * P0 + 2 * t * (1 - t) * P1 + t * t * P2 for t in (i / 12 for i in range(13))]
+    FM(f"manifold{side}", tube([(side * q.x, q.y, q.z) for q in path], [0.3] * 13, 8), "steel", FH, 0.04)
 FM("tailLight", xf(superquad(0.35, 0.35, 0.35, 1, 1, 10, 6), (0, 6.2, -30.2)), "white", FH, 0)
 
 # ---- belly: lift-jet grilles, skid keels, four hydraulic legs, ramp ----
@@ -1040,6 +1033,14 @@ for side in (-1, 1):
     FRB(f"railTop{side}", (0.4, 0.3, ZLH), (side * RX, BAY_TOP, ZLC), "trim", ink=0.06, e=0.3)
     FRB(f"railTopH{side}", (0.42, 0.05, ZLH), (side * RX, BAY_TOP + 0.33, ZLC), "hazard", ink=0, e=0.4)
     FRB(f"craneRail{side}", (0.12, 0.1, ZLH - 0.3), (side * RX, BAY_TOP + 0.5, ZLC), "dark", ink=0.02, e=0.4)
+    for sz in (-1, 1):
+        ze = ZLC + sz * ZLH      # the top beam's end face
+        # crane end stop: a block standing on the hazard cap at the rail's end, a buffer pad facing the crane
+        FRB(f"railStop{side}{sz}", (0.4, 0.5, 0.15), (side * RX, BAY_TOP + 0.88, ze - sz * 0.45), "dark", ink=0.03, e=0.25)
+        FRB(f"railBuffer{side}{sz}", (0.3, 0.3, 0.06), (side * RX, BAY_TOP + 0.95, ze - sz * 0.66), "hazard", ink=0.01, e=0.3)
+        # running light (red to port, green to starboard) in a housing bolted to the beam's end face
+        FRB(f"navHousing{side}{sz}", (0.32, 0.28, 0.14), (side * RX, BAY_TOP, ze + sz * 0.13), "dark", ink=0.02, e=0.25)
+        FM(f"navLight{side}{sz}", xf(superquad(0.3, 0.3, 0.3, 1, 1, 10, 6), (side * RX, BAY_TOP, ze + sz * 0.4)), "green" if side > 0 else "red", FH, 0)
     FRB(f"railLow{side}", (0.34, 0.28, ZLH), (side * RX, FOOT_Y + 0.12, ZLC), "steel", ink=0.05, e=0.3)
     FRB(f"railIn{side}", (0.3, 0.26, ZLH - 0.2), (side * (HW + 0.3), UY - 0.32, ZLC), "steel", ink=0.05, e=0.3)
     for zi, z in enumerate(FRAME_Z):
@@ -1081,19 +1082,18 @@ for side in (-1, 1):
         if not stack:
             empty_slot(side, k, z)
         for j, kind in enumerate(stack):
-            cargo_unit(kind, f"f_cargo{'P' if side > 0 else 'S'}{k}{'ab'[j]}", FH, (side * UX, UY + j * UNIT_H, z), 1.1, low=(STACK == 2))
+            cargo_unit(kind, f"f_cargo{'P' if side > 0 else 'S'}{k}{'ab'[j]}", FH, (side * UX, UY + j * UNIT_H, z), 1.1, low=(STACK == 2), lite=True)
 # Gantry crane on each side's rail: chassis on four flanged wheels, cab, boom over the bays stayed to the cab roof, sheave bar with two
 # cables to a spreader. While docked the game moves the `trolley` pivot along z (extras: travelMin / travelMax in metres from its
 # build spot, over the first empty bay; `home` that spot; `dropMax` how far the spreader lowers into a bay), scales the `cable`
 # pivots' y to the cable paid out, and lowers the `hoist` pivot (the spreader).
 RAIL_TOP = BAY_TOP + 0.6
-WING_STOP = -6.5 * K + 2.3          # works only as far aft as the radiator wing's leading edge
 for side in (-1, 1):
     tk = next((k for k in range(NB) if not CARGO[(side, k)]), None)
     if tk is None:
         continue
     TZ = SLOT_Z[tk]
-    zmin, zmax = max(FRAME_Z[0] + 1.9, WING_STOP), FRAME_Z[-1] - 1.9
+    zmin, zmax = FRAME_Z[0] + 1.9, FRAME_Z[-1] - 1.9     # the bumpers come up against the rail's end stops
     inn = -side                      # inboard, over the bays
     reach = RX - UX                  # boom reach: out to the crate column
     DROP = RAIL_TOP + 0.7 - 0.98 - (UY + 0.9)
@@ -1106,7 +1106,7 @@ for side in (-1, 1):
         FM(f"craneAxle{side}{sz}", beam((-0.4, 0.3, sz * 1.1), (0.4, 0.3, sz * 1.1), 0.07, 6), "steel", T, 0.01)
     FM(f"craneChassis{side}", xf(rbox(0.8, 0.2, 1.55, 0.25, 8, 4), (0, 0.78, 0)), "hazard", T, 0.07)
     for sz in (-1, 1):               # end bumpers and the chassis skirts
-        FM(f"craneBumper{side}{sz}", xf(rbox(0.8, 0.14, 0.12, 0.3, 6, 3), (0, 0.62, sz * 1.68)), "dark", T, 0.03)
+        FM(f"craneBumper{side}{sz}", xf(rbox(0.68, 0.14, 0.12, 0.3, 6, 3), (0, 0.62, sz * 1.62)), "dark", T, 0.03)
     for sx in (-1, 1):
         FM(f"craneSkirt{side}{sx}", xf(rbox(0.05, 0.16, 1.5, 0.3, 4, 3), (sx * 0.84, 0.66, 0)), "dark", T, 0.02)
     FM(f"craneCab{side}", xf(rbox(0.62, 0.52, 0.72, 0.2, 8, 4), (-inn * 0.12, 1.5, 0.6)), "trim", T, 0.06)
@@ -1114,7 +1114,7 @@ for side in (-1, 1):
     FM(f"craneCabRoof{side}", xf(rbox(0.7, 0.07, 0.8, 0.3, 6, 3), (-inn * 0.12, 2.06, 0.6)), "dark", T, 0.03)
     FM(f"craneCabLamp{side}", xf(superquad(0.1, 0.1, 0.1, 1, 1, 8, 4), (-inn * 0.12, 2.2, 0.6)), "window", T, 0)
     for sz in (-1, 1):               # hand-rail round the chassis deck
-        FM(f"craneRailPost{side}{sz}", beam((-inn * 0.7, 0.95, sz * 1.45), (-inn * 0.7, 1.55, sz * 1.45), 0.035, 5), "metal", T, 0)
+        FM(f"craneRailPost{side}{sz}", beam((-inn * 0.7, 0.75, sz * 1.45), (-inn * 0.7, 1.55, sz * 1.45), 0.035, 5), "metal", T, 0)
     FM(f"craneHandRail{side}", beam((-inn * 0.7, 1.55, -1.45), (-inn * 0.7, 1.55, 1.45), 0.035, 5), "metal", T, 0)
     # boom: box beam over the bays, braced below, stayed from the cab roof, sheave bar at the tip
     FM(f"craneBoom{side}", xf(rbox(reach / 2 - 0.2, 0.15, 0.28, 0.3, 8, 4), (inn * (0.7 + (reach - 0.7) / 2), 0.9, 0)), "steel", T, 0.05)
@@ -1144,7 +1144,7 @@ for side in (-1, 1):
             FM(f"spreaderHinge{side}{sx}{sz}", xf(rbox(0.2, 0.06, 0.3, 0.3, 4, 3), (sx * 1.85, -0.38, sz * 3.9)), "steel", H_, 0.01)
 
 # ---- collision: solid boxes in ship frame (hx, hy, hz, x, y, z) the game keeps while the ship is near, so hull, tower, nose,
-# bells, wings, cages and crates are solid and standable ----
+# bells, radiator panels, cages and crates are solid and standable ----
 _solid = []
 
 
@@ -1183,10 +1183,8 @@ slabs(PH, zf(15.6), zf(25.6), 1.7)                       # pilot house
 solid(8.8, 5.8, 2.8, 0, 0, -29.0, K)                     # stern block
 for bx, by in ((-4.2, 2.6), (4.2, 2.6), (-4.2, -2.6), (4.2, -2.6)):
     solid(2.1, 2.1, 2.55, bx, by, -35.9, K)              # four engine bells
-for sx in (-1, 1):                                       # radiator wings: slabs tipped to the dihedral, a smooth ramp to walk up
-    for s0, s1, lo_, hi_ in ((0.0, 6.0, 0.0, 9.2), (6.0, 9.5, 1.3, 8.3), (9.5, 13.0, 2.5, 7.5)):
-        sp_ = (s0 + s1) / 2
-        solid((s1 - s0) / 2, 0.42, (hi_ - lo_) / 2, sx * (7.6 + sp_ * math.cos(RAD_DIH)), WY + sp_ * math.sin(RAD_DIH), -6.0 - (lo_ + hi_) / 2, K, sx * RAD_DIH)
+for sx in (-1, 1):                                       # stern radiator panels, fins and all
+    solid(0.36, RAD_H, RAD_ZH, sx * 9.0, 0, RAD_ZC, K)
 # cargo cages (absolute sizes): posts, two long rails, each bay floor, a block per crate stack
 for side in (-1, 1):
     ph_ = (BAY_TOP + 0.2 - FOOT_Y) / 2

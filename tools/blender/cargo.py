@@ -9,6 +9,9 @@
 #   (low=True omits roof clutter (tanker walk, rails, manways, vent; magazine vents, strobes, rod), so every unit is a
 #   flat-topped 3.5 m and they stack. A low tanker also gets an ISO frame at the box's outside size with corner castings,
 #   so it stacks like a box, including at the bottom)
+#   (lite=True is for a unit seen from a distance among others (the freighter's bays, 13 of them): the door ends keep their
+#   leaves, corrugations and locking bars but lose the small hardware (cams, keepers, guides, handles, hinges, plates, seal) and
+#   the stencilled marks, the corrugations and castings are plain boxes, the tanker's rings and bands have fewer segments)
 #
 # Each unit is a pivot with role "cargo" (extra `kind`) at `pos` in three.js axes; origin mid-footprint on the underside
 # of its rack, length along z. It holds one `livery` pivot per faction (extra `faction`; the game keeps the matching one),
@@ -20,7 +23,7 @@ import bpy, math
 from mathutils import Matrix
 
 CARGO_BASE = 1.62   # land-train frame: underside of the deck plate (centre 1.72, half 0.1); the unit is lowered by this
-_cargo_ctx = {"pfx": "", "low": False}
+_cargo_ctx = {"pfx": "", "low": False, "lite": False}
 
 
 def _cM(name, geo, slot, parent, ink=0.04):
@@ -29,6 +32,19 @@ def _cM(name, geo, slot, parent, ink=0.04):
 
 def _crb(name, hx, hy, hz, pos, slot, parent, ink=0.04, e=0.12, rot=(0, 0, 0), nu=8, nv=4):
     return _cM(name, xf(rbox(hx, hy, hz, e, nu, nv), pos, rot), slot, parent, ink)
+
+
+def _cbx(name, hx, hy, hz, pos, slot, parent, ink=0.04):
+    """A plain six-sided box (12 triangles), for small parts in lite units."""
+    v = [(pos[0] + sx * hx, pos[1] + sy * hy, pos[2] + sz * hz) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
+    return _cM(name, (v, [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]), slot, parent, ink)
+
+
+def _cpart(name, hx, hy, hz, pos, slot, parent, ink=0.04, e=0.12, nu=8, nv=4):
+    """A small rounded box, or a plain one in a lite unit."""
+    if _cargo_ctx["lite"]:
+        return _cbx(name, hx, hy, hz, pos, slot, parent, ink)
+    return _crb(name, hx, hy, hz, pos, slot, parent, ink, e, nu=nu, nv=nv)
 
 
 def _cbm(name, a, b, r, slot, parent, ink=0.0, seg=6):
@@ -59,23 +75,23 @@ def _container_frame(R, body_slot, ribbed):
     if ribbed:
         for sx in (-1, 1):
             for k in range(18):
-                _crb(f"rib{sx}_{k}", 0.035, 1.28, 0.055, (sx * 1.57, 3.3, -3.3 + k * 0.388), body_slot, R, 0.02, 0.3, nu=6, nv=4)
+                _cpart(f"rib{sx}_{k}", 0.035, 1.28, 0.055, (sx * 1.57, 3.3, -3.3 + k * 0.388), body_slot, R, 0.02, 0.3, nu=6, nv=4)
         for k in range(10):
-            _crb(f"roofRib{k}", 1.42, 0.03, 0.06, (0, 4.72, -3.2 + k * 0.7), body_slot, R, 0.02, 0.3, nu=6, nv=4)
+            _cpart(f"roofRib{k}", 1.42, 0.03, 0.06, (0, 4.72, -3.2 + k * 0.7), body_slot, R, 0.02, 0.3, nu=6, nv=4)
     for sx in (-1, 1):
         _crb(f"roofRail{sx}", 0.08, 0.06, 3.62, (sx * 1.52, 4.74, 0), "dark", R, 0.03, 0.2)
         for sz in (-1, 1):
-            _crb(f"cast{sx}{sz}", 0.2, 0.17, 0.22, (sx * 1.5, 1.95, sz * 3.55), "dark", R, 0.03, 0.2)
-            _crb(f"castT{sx}{sz}", 0.2, 0.17, 0.22, (sx * 1.5, 4.62, sz * 3.55), "dark", R, 0.03, 0.2)
+            _cpart(f"cast{sx}{sz}", 0.2, 0.17, 0.22, (sx * 1.5, 1.95, sz * 3.55), "dark", R, 0.03, 0.2)
+            _cpart(f"castT{sx}{sz}", 0.2, 0.17, 0.22, (sx * 1.5, 4.62, sz * 3.55), "dark", R, 0.03, 0.2)
 
 
 def _cargo_box(R):
     _container_frame(R, "body", True)
-    for name, geo, slot, ink in container_doors("body"):     # decals.py: a pair of doors at each end
+    for name, geo, slot, ink in container_doors("body", lite=_cargo_ctx["lite"]):     # decals.py: a pair of doors at each end
         _cM(name, geo, slot, R, ink)
     for sx in (-1, 1):
         _crb(f"plate{sx}", 0.04, CARGO_PLATE_HALF[1], CARGO_PLATE_HALF[0], (sx * 1.64, CARGO_PLATE_Y, 0.0), "dark", R, 0.03, 0.08)
-    _cliveries(R, "livery", lambda f, piv: cargo_decals(f, piv, _cargo_ctx["pfx"]))
+    _cliveries(R, "livery", lambda f, piv: cargo_decals(f, piv, _cargo_ctx["pfx"], marks=not _cargo_ctx["lite"]))
 
 
 _BLV, _BLH = 0.075, 3.25      # magazine sign stack: lift onto the box's middle; half the band's length
@@ -89,7 +105,7 @@ def _cargo_blast(R):
             _crb(f"post{sx}{sz}", 0.13, 1.4, 0.13, (sx * 1.55, 3.3, sz * 3.6), "dark", R, 0.04, 0.15)
     for y in (3.25, 4.45):
         for sx in (-1, 1):
-            _crb(f"hinge{sx}_{y}", 0.14, 0.1, 0.06, (sx * 1.42, y, -3.68), "dark", R, 0.02, 0.2)
+            _cpart(f"hinge{sx}_{y}", 0.14, 0.1, 0.06, (sx * 1.42, y, -3.68), "dark", R, 0.02, 0.2)
     if not _cargo_ctx["low"]:
         for k, z in enumerate((-1.4, 1.2)):
             _crb(f"vent{k}", 0.9, 0.09, 0.55, (0, 4.8, z), "dark", R, 0.03, 0.15)
@@ -112,6 +128,9 @@ def _cargo_blast(R):
         prohibition(d, 1.54, -0.05, 0.42, "smoke", 0)
         prohibition(d, 2.68, -0.05, 0.42, "flame", 0)
         d.build(f"{pfx}signs{'P' if side > 0 else 'S'}", R)
+    if _cargo_ctx["lite"]:
+        _cliveries(R, "livery", _blast_livery)
+        return
     d = Dec("-z", (0, 3.3 - 0.035, -3.62))
     danger_sign(d, -1.1, 0.05, 2.2, 1.3, 0)
     placard(d, 0, -0.72, 0.6, 0)
@@ -122,21 +141,23 @@ def _cargo_blast(R):
     placard(d, 0, 0.2, 0.85, 0)
     d.hazard(-1.45, -1.3, 1.45, -1.0, "dark", "hazard", 0, 0.2)
     d.build(f"{pfx}signsFront", R)
+    _cliveries(R, "livery", _blast_livery)
 
-    def livery(f, piv):
-        s = NAMES[f]
-        ps_e, ps_n, r, gap = 0.06, 0.035, 0.21, 0.1
-        total = text_width("EXPLOSIVES", ps_e) + 0.3 + 2 * r + gap + text_width(s, ps_n)
-        u0 = -total / 2
-        for side in (-1, 1):
-            d = side_dec(side, 1.55, 3.3 + _BLV, 0.0)
-            d.text("EXPLOSIVES", u0, 0.78, ps_e, "redsafe", 1)
-            cu = u0 + text_width("EXPLOSIVES", ps_e) + 0.3 + r
-            emblem(d, f, cu, 0.975, r, 1)
-            d.text(s, cu + r + gap, 0.975 - 3.5 * ps_n, ps_n, "dark", 1)
-            d.build(f"{pfx}band{'P' if side > 0 else 'S'}_{f}", piv)
 
-    _cliveries(R, "livery", livery)
+# the magazine's flank band: EXPLOSIVES, the faction's mark and name
+def _blast_livery(f, piv):
+    pfx = _cargo_ctx["pfx"]
+    s = NAMES[f]
+    ps_e, ps_n, r, gap = 0.06, 0.035, 0.21, 0.1
+    total = text_width("EXPLOSIVES", ps_e) + 0.3 + 2 * r + gap + text_width(s, ps_n)
+    u0 = -total / 2
+    for side in (-1, 1):
+        d = side_dec(side, 1.55, 3.3 + _BLV, 0.0)
+        d.text("EXPLOSIVES", u0, 0.78, ps_e, "redsafe", 1)
+        cu = u0 + text_width("EXPLOSIVES", ps_e) + 0.3 + r
+        emblem(d, f, cu, 0.975, r, 1)
+        d.text(s, cu + r + gap, 0.975 - 3.5 * ps_n, ps_n, "dark", 1)
+        d.build(f"{pfx}band{'P' if side > 0 else 'S'}_{f}", piv)
 
 
 def _cargo_tank(R):
@@ -148,18 +169,19 @@ def _cargo_tank(R):
     _cM("shell", xf(lathe(SHELL, 22), (0, 3.3, 0), (math.pi / 2, 0, 0)), "tank", R, 0.09)
     _cM("domeF", xf(lathe([(1.512, 2.9), (1.462, 3.3), (1.262, 3.58), (0.862, 3.72), (0, 3.79)], 22), (0, 3.3, 0), (math.pi / 2, 0, 0)), "body", R, 0.05)
     _cM("domeR", xf(lathe([(0, -3.79), (0.862, -3.72), (1.262, -3.58), (1.462, -3.3), (1.512, -2.9)], 22), (0, 3.3, 0), (math.pi / 2, 0, 0)), "body", R, 0.05)
+    rs = 14 if _cargo_ctx["lite"] else 22
     for z in (-2.9, 2.9):
-        _cM(f"ring{z}", xf(torus(1.52, 0.06, 22, 4), (0, 3.3, z), (math.pi / 2, 0, 0)), "accent", R, 0.02)
+        _cM(f"ring{z}", xf(torus(1.52, 0.06, rs, 4), (0, 3.3, z), (math.pi / 2, 0, 0)), "accent", R, 0.02)
     for z in (-1.8, -0.6, 0.6, 1.8):
-        _cM(f"band{z}", xf(torus(1.52, 0.06, 22, 4), (0, 3.3, z), (math.pi / 2, 0, 0)), "steel", R, 0.02)
+        _cM(f"band{z}", xf(torus(1.52, 0.06, rs, 4), (0, 3.3, z), (math.pi / 2, 0, 0)), "steel", R, 0.02)
     if _cargo_ctx["low"]:
         # ISO frame at the container's outside size (castings at x +-1.5, z +-3.55, y 1.95 to 4.62): four posts, side rails
         # top and bottom, end frames with crossed braces, so it stacks like a box
         for sx in (-1, 1):
             for sz in (-1, 1):
                 _crb(f"fpost{sx}{sz}", 0.11, 1.37, 0.11, (sx * 1.6, 3.3, sz * 3.55), "steel", R, 0.04, 0.2)
-                _crb(f"cast{sx}{sz}", 0.2, 0.17, 0.22, (sx * 1.5, 1.95, sz * 3.55), "dark", R, 0.03, 0.2)
-                _crb(f"castT{sx}{sz}", 0.2, 0.17, 0.22, (sx * 1.5, 4.62, sz * 3.55), "dark", R, 0.03, 0.2)
+                _cpart(f"cast{sx}{sz}", 0.2, 0.17, 0.22, (sx * 1.5, 1.95, sz * 3.55), "dark", R, 0.03, 0.2)
+                _cpart(f"castT{sx}{sz}", 0.2, 0.17, 0.22, (sx * 1.5, 4.62, sz * 3.55), "dark", R, 0.03, 0.2)
             _crb(f"fRailT{sx}", 0.09, 0.09, 3.62, (sx * 1.6, 4.66, 0), "steel", R, 0.03, 0.3)
             _crb(f"fRailB{sx}", 0.09, 0.09, 3.62, (sx * 1.6, 1.95, 0), "steel", R, 0.03, 0.3)
         for sz in (-1, 1):
@@ -182,7 +204,7 @@ def _cargo_tank(R):
         _crb(f"panel{sx}", 0.07, 0.8, 1.4, (sx * 1.64, 3.3, -0.2), "dark", R, 0.04, 0.08)
         for y in (2.65, 3.95):
             for z in (-1.2, 0.8):
-                _crb(f"bracket{sx}_{y}_{z}", 0.15, 0.07, 0.09, (sx * 1.45, y, z), "steel", R, 0.02, 0.2)
+                _cpart(f"bracket{sx}_{y}_{z}", 0.15, 0.07, 0.09, (sx * 1.45, y, z), "steel", R, 0.02, 0.2)
         d = Dec("+x" if sx > 0 else "-x", (sx * 1.71, 3.3, -0.2))
         d.rect(-1.3, -0.72, 1.3, 0.72, "brand", 0)
         d.rect(-1.24, -0.66, 1.24, 0.66, "dark", 1)
@@ -194,12 +216,15 @@ def _cargo_tank(R):
         d.build(f"{pfx}brand{'P' if sx > 0 else 'S'}", R)
     # rear: valve cabinet with gauges, hand-wheel valves, pipes to the tank, a ladder, the NFPA diamond
     _crb("cabinet", 1.1, 0.75, 0.28, (0, 2.55, -4.05), "dark", R, 0.05, 0.1)
-    for sx in (-1, 1):
+    for sx in ((-1, 1) if not _cargo_ctx["lite"] else ()):
         _cM(f"gauge{sx}", xf(lathe([(0.0, 0), (0.2, 0), (0.2, 0.05), (0.0, 0.05)], 14), (sx * 0.62, 3.08, -4.335), (-math.pi / 2, 0, 0)), "white", R, 0.02)
         _cbm(f"needle{sx}", (sx * 0.62, 3.08, -4.36), (sx * 0.62 + sx * 0.1, 3.16, -4.36), 0.02, "tail", R)
         _cM(f"valveW{sx}", xf(torus(0.2, 0.035, 14, 4), (sx * 0.85, 2.45, -4.36), (math.pi / 2, 0, 0)), "hazard", R, 0)
         _cbm(f"valveS{sx}", (sx * 0.85, 2.45, -4.33), (sx * 0.85, 2.45, -4.36), 0.035, "metal", R)
+    for sx in (-1, 1):
         _cM(f"pipe{sx}", tube([(sx * 0.8, 3.0, -3.8), (sx * 0.8, 3.3, -4.05), (sx * 0.8, 3.45, -4.05)], [0.07, 0.07, 0.07], 6), "steel", R, 0.02)
+    if _cargo_ctx["lite"]:
+        return _tank_front(R, pfx)
     for x in (1.05, 1.55):
         _cbm(f"ladRail{x}", (x, 1.9, -3.93), (x, 4.9, -3.93), 0.045, "metal", R, 0.01)
     for k in range(8):
@@ -208,6 +233,10 @@ def _cargo_tank(R):
     dn.hazard(-1.1, -0.74, 1.1, -0.5, "dark", "hazard", 0, 0.14)
     nfpa(dn, 0, -0.02, 0.4, 3, 0, 0, "SA", 2)
     dn.build(f"{pfx}cabinetSign", R)
+    _tank_front(R, pfx)
+
+
+def _tank_front(R, pfx):
     # front: a bulkhead plate with the faction's mark
     _crb("bulkhead", 1.5, 1.05, 0.06, (0, 3.35, 3.93), "steel", R, 0.05, 0.1)
     _crb("bulkheadTop", 1.55, 0.07, 0.15, (0, 4.45, 3.9), "dark", R, 0.03, 0.15)
@@ -222,13 +251,14 @@ def _cargo_tank(R):
     _cliveries(R, "livery", livery)
 
 
-def cargo_unit(kind, name, parent, pos, scale=1.1, low=False):
+def cargo_unit(kind, name, parent, pos, scale=1.1, low=False, lite=False):
     """One cargo unit ('box', 'tank' or 'blast') at `pos` under `parent`, `scale` x land-train size, length along z, origin
     mid-underside of its rack. Returns its pivot (role "cargo")."""
     before = set(C.objects)
     R = pivot(name, pos, parent, role="cargo", kind=kind)
     _cargo_ctx["pfx"] = name + "_"
     _cargo_ctx["low"] = low
+    _cargo_ctx["lite"] = lite
     {"box": _cargo_box, "tank": _cargo_tank, "blast": _cargo_blast}[kind](R)
     T = Matrix.Scale(scale, 4) @ Matrix.Translation((0, 0, -CARGO_BASE))   # blender z is up (three.js y)
     for o in C.objects:
