@@ -9,6 +9,35 @@ yet.
 |---|---|
 | ![Set A](a_sheet.jpg) | ![Set B](b_sheet.jpg) |
 
+## The pick
+
+![The pick](pick_sheet.jpg)
+
+| Weapon | From | Changes |
+|---|---|---|
+| Pulse Spinner | A (Disc Blaster) | in **SPACECOM's colours** (`pulse_spacecom`): cream body, yellow ring, cover and flank stripe, navy fittings, a white star on a navy roundel each side, a red and blue light bar on its back; the disc still in the player's laser colour |
+| Scattergun | A (Breaker) | as drawn |
+| Rail Lance | A with B's rings (`rail_mix`) | A's faceted body, rails, pointed tips, scope and fin; the collars swapped for B's five violet coil rings round both rails, each on four spokes to the rails' corners; no forked tip |
+| Junk Mortar | B (Junk Hopper) | as drawn |
+
+`preview_weapons.py` renders the pick with `WPN_SETS=pick`.
+
+### The arms no longer go through the torso
+
+The first poses had the arms up to 24 cm into the body (`preview_weapons.py` now measures it: an arm vertex is in a
+body part when a ray from it crosses that part an odd number of times; what is inside already at rest, the shoulder
+balls under the pads, doesn't count). It isn't the pose's fault but the build: the torso is 0.66 m wide and about 0.6 m
+deep with its chest plate, the shoulders 0.9 m apart and the arms reach 0.64 m, so no spot in front of the chest is in
+reach of both hands. The two-handed holds met inside the torso.
+
+The fix, arms unchanged: **the shoulders roll forward and in while aiming** (`slide`, 0.24 m forward, 0.07 m in, a
+little down, the arm pivots moved in the torso's frame), as real shoulders do when you bring a gun up, with the torso
+turned 0.6 rad into a right-handed stance. Found by search (twist, slide and the grip's place, standing and skating
+together, every hand on its grip): the deepest any arm goes now is 1.6 cm, the shoulder ball where it meets the trunk
+under the pad (half an ink line; 3 cm for the one-handed Disc Blaster's free arm, the same ball). No forearm, glove or
+elbow is in the body. In the game this is the arm pivots' positions as well as their turns, eased in as the weapon comes
+up.
+
 ## Who makes what, and how it looks
 
 Each weapon wears its maker's colours and style (`.claude/skills/blender/style.md`, "Faction palettes"):

@@ -37,6 +37,8 @@ HEX = {
     "dark": "2a2540", "metal": "8a87a0", "steel": "55607a", "rubber": "1d1a29",
     # courier (Pulse Spinner)
     "c_orange": "ff4f2e", "c_cream": "fff4e0", "c_cyan": "2ee6ff", "c_yellow": "ffd23f", "c_navy": "241a5c", "laser": "9be7ff",
+    # SPACECOM (the Pulse Spinner as picked: style.md, "Faction palettes")
+    "s_cream": "f2ecdc", "s_yellow": "ffd23f", "s_navy": "2a3a6b", "s_white": "ffffff", "s_red": "ff2a4a", "s_blue": "2e8bff",
     # Vostok
     "v_slate": "6b6f78", "v_red": "ff3b5c", "v_dark": "2c2f38", "v_cream": "f3eee4",
     # Daedalus
@@ -45,7 +47,7 @@ HEX = {
     "r_rust": "6a5a48", "r_rust2": "8a5a3a", "r_green": "7dff3a", "r_violet": "7b2ff7", "r_cream": "f3eee4", "r_glow": "7dff3a",
 }
 SLOT_COLORS = {k: S(v) for k, v in HEX.items()}
-GLOW = {"laser", "c_cyan", "d_violet", "r_glow"}      # lit in the preview (and glow slots in the game, if they go in)
+GLOW = {"laser", "c_cyan", "d_violet", "r_glow", "s_red", "s_blue"}      # lit in the preview (and glow slots in the game, if they go in)
 
 for f in ("kit.py", "zbornak_kit.py"):
     exec(open(os.path.join(REPO, "tools", "blender", f), encoding="utf-8").read(), globals())
@@ -138,6 +140,40 @@ def pulse_b():
     return g
 
 
+def pulse_spacecom(set_="pick"):
+    """DISC BLASTER in SPACECOM's colours (the pick): A's blaster, cream with a yellow ring and cover, navy fittings, a white
+    star on a navy roundel each side, a yellow flank stripe, a red and blue light bar on its back; the disc still lit in
+    the player's laser colour"""
+    g = root(set_, "pulse", "pistol", None, (0, 0.15, 0.36))
+    g("s_cream", 0.02).rb(0, 0.15, 0.07, 0.075, 0.07, 0.2, 0.22)                      # body, z -0.13 .. 0.27
+    g("s_yellow", 0.012).rb(0, 0.2, 0.0, 0.06, 0.035, 0.12, 0.3)                      # top cover, under the ring
+    g("s_navy", 0.012).rb(0, 0.15, 0.3, 0.06, 0.055, 0.05, 0.25)                      # muzzle block
+    g("laser", 0.0).boxc(0, 0.15, 0.349, 0.08, 0.016, 0.006)
+    for y in (0.135, 0.165):
+        g("s_yellow", 0.0).boxc(0, y, 0.349, 0.09, 0.008, 0.004)
+    g("s_navy", 0.012).cylc(0, 0.245, 0.02, 0.05, 0.03, 16)                            # the disc magazine
+    g("s_yellow", 0.012).tor(0.105, 0.018, (0, 0.255, 0.02), n=28, rs=6)
+    for k in range(3):
+        a = TAU * k / 3 + PI / 6
+        g("s_yellow", 0.008).bm((0.105 * math.sin(a), 0.255, 0.02 + 0.105 * math.cos(a)), (0.06 * math.sin(a), 0.225, 0.02 + 0.06 * math.cos(a)), 0.012, 6)
+    g("laser", 0.0).cylc(0, 0.255, 0.02, 0.088, 0.012, 24)
+    g("s_navy", 0.0).cylc(0, 0.263, 0.02, 0.025, 0.006, 12)
+    for x in (-0.075, 0.075):                                                         # the roundel and star, the stripe (flush)
+        sx = 1 if x > 0 else -1
+        g("s_navy", 0.0).cylc(x + sx * 0.0015, 0.16, 0.1, 0.042, 0.003, 20, "x")
+        g("s_white", 0.0).polyx([(0.1 + b, 0.16 + a) for a, b in [(p[1], p[0]) for p in star(0.03)]], x + sx * 0.003, x + sx * 0.005)
+        g("s_yellow", 0.0).boxc(x, 0.105, 0.07, 0.004, 0.014, 0.3)
+    g("s_navy", 0.012).cylc(0, 0.15, -0.15, 0.045, 0.06, 14, "z")                     # the back cap
+    g("s_navy", 0.01).boxc(0, 0.2, -0.1, 0.1, 0.02, 0.05)                             # light bar on top at the back
+    g("s_red", 0.0).boxc(-0.026, 0.213, -0.1, 0.044, 0.008, 0.04)
+    g("s_blue", 0.0).boxc(0.026, 0.213, -0.1, 0.044, 0.008, 0.04)
+    g("dark", 0.015).rb(0, 0.0, -0.03, 0.036, 0.1, 0.048, 0.3, rot=(0.25, 0, 0))     # grip, trigger, guard
+    g("s_yellow", 0.0).boxc(0, 0.01, -0.078, 0.03, 0.12, 0.004, rot=(0.25, 0, 0))
+    g("s_white", 0.008).boxc(0, 0.065, 0.05, 0.016, 0.04, 0.016, rot=(-0.3, 0, 0))
+    g("dark", 0.008).path([(0, 0.085, 0.0), (0, 0.035, 0.03), (0, 0.035, 0.1), (0, 0.085, 0.12)], 0.011, 6)
+    return g
+
+
 # =====================================================================================================================
 # VOSTOK SCATTERGUN
 # =====================================================================================================================
@@ -151,9 +187,9 @@ def vostok_star(g, x, y, z, r, face="x"):
         g("v_red", 0.0).polyz([(x + p[0], y + p[1]) for p in pts], z, z + 0.004)
 
 
-def scatter_a():
+def scatter_a(set_="a"):
     """BREAKER: a slab-sided box shotgun, a flared slot muzzle for the spread, a drum underneath, a red star each side"""
-    g = root("a", "scatter", "chest", (0, 0.03, 0.24), (0, 0.14, 0.57))
+    g = root(set_, "scatter", "chest", (0, 0.03, 0.24), (0, 0.14, 0.57))
     g("v_slate", 0.02).boxc(0, 0.135, 0.02, 0.1, 0.15, 0.36)                          # receiver, z -0.16 .. 0.2
     g("v_dark", 0.012).boxc(0, 0.222, 0.02, 0.06, 0.025, 0.3)                         # top rail
     for z in (-0.08, 0.04, 0.14):
@@ -241,6 +277,35 @@ def rail_a():
     return g
 
 
+def rail_mix(set_="pick"):
+    """RAIL LANCE with coil rings (the pick): A's faceted body, rails, pointed tips, scope and fin, the collars swapped for
+    B's five violet coil rings round both rails, each on four spokes to the rails' corners; no forked tip"""
+    g = root(set_, "rail", "under", (0, 0.0, 0.22), (0, 0.105, 1.15))
+    g("d_body", 0.02).polyz(HEXB, -0.55, 0.3)
+    for s in (-1, 1):
+        g("d_violet", 0.0).boxc(s * 0.066, 0.135, -0.1, 0.004, 0.008, 0.7, rot=(0, 0, s * 0.95))
+        g("d_body", 0.012).boxc(s * 0.045, 0.105, 0.72, 0.03, 0.07, 0.84)
+        g("d_violet", 0.0).boxc(s * 0.0285, 0.105, 0.72, 0.004, 0.03, 0.8)
+        g("d_panel", 0.008).polyx([(1.14, 0.07), (1.2, 0.105), (1.14, 0.14)], s * 0.03, s * 0.06)
+    for i in range(5):                                                                # the coil rings, on spokes to the rails
+        z = 0.38 + 0.16 * i
+        g("d_violet", 0.0).tor(0.095, 0.016, (0, 0.105, z), (PI / 2, 0, 0), n=28, rs=5)
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                a = math.atan2(sy, sx)
+                g("d_panel", 0.006).bm((sx * 0.055, 0.105 + sy * 0.03, z), (0.081 * math.cos(a), 0.105 + 0.081 * math.sin(a), z), 0.008, 5)
+    g("d_panel", 0.012).polyx([(-0.62, 0.17), (-0.36, 0.17), (-0.3, 0.3), (-0.5, 0.33)], -0.012, 0.012)
+    for s in (-1, 1):
+        delta_eye(g, s * 0.012, s * 0.016, 0.235, -0.45, 1.1)
+    g("d_body", 0.012).boxc(0, 0.215, 0.02, 0.04, 0.05, 0.24)
+    g("d_panel", 0.008).boxc(0, 0.183, 0.02, 0.025, 0.02, 0.06)
+    g("d_violet", 0.0).cylc(0, 0.215, 0.142, 0.015, 0.006, 10, "z")
+    g("d_body", 0.015).rb(0, -0.01, -0.01, 0.03, 0.1, 0.042, 0.3, rot=(0.25, 0, 0))
+    g("d_body", 0.012).cylc(0, 0.0, 0.22, 0.027, 0.1, 10)
+    g("d_violet", 0.0).boxc(0, 0.06, 0.08, 0.012, 0.03, 0.012)
+    return g
+
+
 def rail_b():
     """COIL LANCE: a slender spine through five violet coil rings on spoked cradles, a forked blade tip, a faceted power core
     at the hands with the delta-eye on its flanks"""
@@ -301,10 +366,10 @@ def mortar_a():
     return g
 
 
-def mortar_b():
+def mortar_b(set_="b"):
     """JUNK HOPPER: a stubby flared cannon at the hip, a hopper on top full of scrap (bolts, a gear, a can), a crank on the
     right, a stovepipe exhaust, acid-green stripes and a violet patch"""
-    g = root("b", "mortar", "chest", (-0.13, 0.15, 0.2), (0, 0.15, 0.62))
+    g = root(set_, "mortar", "chest", (-0.13, 0.15, 0.2), (0, 0.15, 0.62))
     ax = (0, 0.15, 0)
     g("r_rust", 0.02).lath([(0.0, -0.22), (0.11, -0.22), (0.11, 0.06), (0.085, 0.1), (0.085, 0.42), (0.15, 0.56), (0.14, 0.58), (0.0, 0.5)], ax, 24, (PI / 2, 0, 0))
     g("rubber", 0.0).cylc(0, 0.15, 0.555, 0.12, 0.004, 20, "z")
@@ -333,7 +398,8 @@ def mortar_b():
     return g
 
 
-WEAPONS = {"a": [pulse_a(), scatter_a(), rail_a(), mortar_a()], "b": [pulse_b(), scatter_b(), rail_b(), mortar_b()]}
+WEAPONS = {"a": [pulse_a(), scatter_a(), rail_a(), mortar_a()], "b": [pulse_b(), scatter_b(), rail_b(), mortar_b()],
+           "pick": [pulse_spacecom(), scatter_a("pick"), rail_mix(), mortar_b("pick")]}       # the set as picked
 flush_all()
 print("weapons:", {k: [g.root.name for g in v] for k, v in WEAPONS.items()},
       sum(len(o.data.polygons) for o in C.objects if o.type == "MESH"), "faces")

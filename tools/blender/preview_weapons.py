@@ -21,6 +21,7 @@ os.makedirs(OUT, exist_ok=True)
 RES = (int(os.environ.get("PREVIEW_W", 560)), int(os.environ.get("PREVIEW_H", 560)))
 SAMPLES = int(os.environ.get("PREVIEW_SAMPLES", 24))
 ONLY = [v for v in os.environ.get("WPN_ONLY", "").split(",") if v]
+SETS = [v for v in os.environ.get("WPN_SETS", "a,b,pick").split(",") if v]
 RENDER = os.environ.get("WPN_RENDER", "1") == "1"
 RUNNER_EXTRAS = ("padL", "padR", "band", "crest", "antenna")
 RUNNER_GLOW = {"glow": 6.0, "lens": 6.0, "glint": 8.0}
@@ -33,8 +34,11 @@ FWD, UP, RIGHT = Vector((0, -1, 0)), Vector((0, 0, 1)), Vector((1, 0, 0))
 HOLDS = {
     "pistol": {"twist": -0.25, "grip": (-0.08, 0.55, -0.12), "free": (-0.22, 0.12, -0.5)},
     "wrist": {"twist": -0.25, "grip": (-0.08, 0.55, -0.08), "free": (-0.22, 0.12, -0.5)},
-    "chest": {"twist": 0.65, "grip": (-0.28, 0.34, -0.36)},
-    "under": {"twist": 0.65, "grip": (-0.28, 0.3, -0.34)},
+    # two hands: the shoulders roll forward and in (`slide`): from where they stand, no spot in front of the chest is in
+    # both hands' reach, so the hands met inside the torso. Searched (twist, slide, grip; standing and skating together)
+    # for no arm deeper than 1.5 cm in the body (half an ink line) with both hands on
+    "chest": {"twist": 0.6, "slide": 0.24, "grip": (-0.2, 0.4, -0.3)},
+    "under": {"twist": 0.6, "slide": 0.24, "grip": (-0.2, 0.4, -0.3)},
     "shoulder": {"twist": 0.7, "grip": (-0.16, 0.22, -0.27)},
 }
 STANCES = {   # torso lean, body drop, (thigh, shin) left and right: three.js rotation.x (thigh negative: forward)
@@ -214,6 +218,11 @@ def pose(P, new, rest, stance, hold):
         o.matrix_basis = m.copy()
     st, ho = STANCES[stance], HOLDS[hold]
     P["torso"].matrix_basis = Matrix.Translation(P["torso"].matrix_basis.to_translation()) @ (Matrix.Rotation(ho["twist"], 3, "Z") @ Matrix.Rotation(st["lean"], 3, "X")).to_4x4()
+    # the shoulders roll forward and in (`slide`, metres, in the torso's frame: the arms keep their length)
+    sl = ho.get("slide", 0.0)
+    for side, sx in (("L", -1), ("R", 1)):
+        A = P["arm" + side]
+        A.matrix_basis = Matrix.Translation(rest[A].to_translation() + Vector((-sx * 0.3 * sl, -sl, -0.25 * sl))) @ rest[A].to_3x3().to_4x4()
     for side in ("L", "R"):
         th, sh = st["leg" + side]
         P["leg" + side].matrix_basis = Matrix.Translation(P["leg" + side].matrix_basis.to_translation()) @ Matrix.Rotation(th, 4, "X")
@@ -270,6 +279,59 @@ def hold_weapon(P, wroot, hold):
     return shorts
 
 
+CLIP_REST = {}
+
+
+def clip(P, new, rest=False):
+    """how far the arms go into the body: each body part is a closed mesh, and an arm vertex is inside one when a ray
+    from it crosses that part an odd number of times. Returns the deepest (m, to the part's nearest surface), how many
+    vertices are in, and where. Vertices already inside at rest (the shoulder balls sit in the torso by design) don't
+    count: clip(rest=True) in the rest pose records them."""
+    from mathutils.bvhtree import BVHTree
+    bpy.context.view_layer.update()
+    arms = {P[n] for n in ("armL", "armR")}
+    def under(o, roots):
+        return any(p in roots for p in parents(o))
+    parts = []
+    for o in new:
+        if o.type == "MESH" and not o.hide_render and under(o, {P["torso"]}) and not under(o, arms) and not under(o, {P["head"]}):
+            m = o.matrix_world
+            vs = [m @ v.co for v in o.data.vertices]
+            lo = Vector((min(v.x for v in vs), min(v.y for v in vs), min(v.z for v in vs)))
+            hi = Vector((max(v.x for v in vs), max(v.y for v in vs), max(v.z for v in vs)))
+            parts.append((o.name.split(".")[0], BVHTree.FromPolygons(vs, [tuple(f.vertices) for f in o.data.polygons]), lo, hi))
+    def inside(T, p):
+        n, q, d = 0, p.copy(), Vector((0.577, 0.577, 0.577))
+        for _ in range(40):
+            hit = T.ray_cast(q, d, 5.0)
+            if hit[0] is None:
+                break
+            n += 1
+            q = hit[0] + d * 1e-4
+        return n % 2 == 1
+    worst, cnt, where = 0.0, 0, ""
+    for o in new:
+        if o.type != "MESH" or o.hide_render or not under(o, arms):
+            continue
+        m = o.matrix_world
+        for v in o.data.vertices:
+            key = (o.name, v.index)
+            if not rest and key in CLIP_REST:
+                continue
+            p = m @ v.co
+            for name, T, lo, hi in parts:
+                if lo.x <= p.x <= hi.x and lo.y <= p.y <= hi.y and lo.z <= p.z <= hi.z and inside(T, p):
+                    if rest:
+                        CLIP_REST[key] = True
+                        break
+                    d = (T.find_nearest(p)[0] - p).length
+                    cnt += 1
+                    if d > worst:
+                        worst, where = d, f"{o.name.split('.')[0]} in {name}"
+                    break
+    return round(worst, 3), cnt, where
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 sc, ground = scene_setup()
 B = {"__file__": os.path.join(REPO, "tools", "blender", "build_weapons.py")}
@@ -280,6 +342,7 @@ for s, hx in B["HEX"].items():                                               # w
     if m:
         (emissive(m, B["SLOT_COLORS"][s], 5.0) if s in B["GLOW"] else toon(m, B["SLOT_COLORS"][s], 0.35 if s.endswith(("dark", "body", "rubber")) else 0.5, 0.3 if s in ("metal", "steel") else 0.0))
 P, rnew, rrest = import_runner()
+clip(P, rnew, rest=True)                                                     # what's inside already at rest
 freestyle(sc, [ground])
 weapons = {g.root.name: g.root for lst in B["WEAPONS"].values() for g in lst}
 meshes_of = {n: [o for o in bpy.data.objects if o.type == "MESH" and r in parents(o)] for n, r in weapons.items()}
@@ -299,8 +362,8 @@ def show_runner(on):
 
 report = []
 for name, wr in weapons.items():
-    tag = name[4:]                                                           # a_pulse
-    if ONLY and tag not in ONLY:
+    tag = name[4:]                                                           # a_pulse, pick_rail
+    if (ONLY and tag not in ONLY) or tag.split("_")[0] not in SETS:
         continue
     hold = wr["hold"]
     show(name)
@@ -321,7 +384,7 @@ for name, wr in weapons.items():
     for stance in ("stand", "skate"):
         pose(P, rnew, rrest, stance, hold)
         sh = hold_weapon(P, wr, hold)
-        report.append((tag, stance, {k: round(v, 3) for k, v in sh.items()}))
+        report.append((tag, stance, {k: round(v, 3) for k, v in sh.items()}, "clip", clip(P, rnew)))
         hz = 1.25 if stance == "stand" else 1.05
         camera(sc, (3.6, -1.7, hz + 0.45), (0.05, -0.4, hz - 0.05), 40)       # from his right, a little ahead: the weapon side on
         render(sc, f"{tag}_{stance}")
@@ -332,7 +395,7 @@ if RENDER and not ONLY:
     from PIL import Image, ImageDraw, ImageFont
     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
     names = {"pulse": "PULSE SPINNER", "scatter": "VOSTOK SCATTERGUN", "rail": "DAEDALUS RAIL LANCE", "mortar": "RUSTMOON JUNK MORTAR"}
-    for set_, title in (("a", "SET A · ISSUE"), ("b", "SET B · SIGNATURE")):
+    for set_, title in [(k, t) for k, t in (("a", "SET A · ISSUE"), ("b", "SET B · SIGNATURE"), ("pick", "THE PICK · SPACECOM SPINNER, A'S SCATTERGUN, A + B LANCE, B'S MORTAR")) if k in SETS]:
         w, h, lab = 420, 420, 30
         sheet = Image.new("RGB", (w * 4, lab + (h + lab) * 3), (14, 10, 26))
         d = ImageDraw.Draw(sheet)
