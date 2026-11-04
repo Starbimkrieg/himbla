@@ -326,16 +326,19 @@ if (m === 'shuttle' || m === 'freighter') {
   // &kind=mast|tower (any kind in outposts.glb; src=kit takes any Kit kind)  &src=kit|glb|both (default both, side by side)  &wreck=1  &color=rrggbb  &cols=0 hides the colliders
   const kind = Q.get('kind') || 'mast', wreck = Q.get('wreck') === '1', color = hex('color', 0x2ec4ff);
   // &draft=a|b: the draft rework (src/outpostDrafts.js, docs/outpost-proposals) on its own
-  const srcs = Q.get('draft') || Q.get('src') === 'kit' ? ['kit'] : Q.get('src') === 'glb' ? ['glb'] : ['kit', 'glb'];
+  // &compare=1: the Kit original and drafts A and B side by side at the same scale, the courier at each gate
+  const compare = Q.get('compare') === '1';
+  const srcs = compare ? ['kit', 'a', 'b'] : Q.get('draft') || Q.get('src') === 'kit' ? ['kit'] : Q.get('src') === 'glb' ? ['glb'] : ['kit', 'glb'];
   model = new THREE.Group();
   const lines = [];
   const stats = {}, tpls = {};
   srcs.forEach((s, i) => {
     let t;
-    try { t = outpostTemplate(kind, color, 0, wreck, s, Q.get('draft') || null); } catch (e) { lines.push(`${s}: ${e.message}`); return; }
+    try { t = s === 'a' || s === 'b' ? outpostTemplate(kind, color, 0, wreck, 'kit', s) : outpostTemplate(kind, color, 0, wreck, s, Q.get('draft') || null); } catch (e) { lines.push(`${s}: ${e.message}`); return; }
     const g = new THREE.Group();
-    g.position.x = (i - (srcs.length - 1) / 2) * 70;
+    g.position.x = (i - (srcs.length - 1) / 2) * (compare ? 90 : 70);
     g.add(t.root.clone());
+    if (compare) { const r = makeRunner({ own: true }); r.root.position.set(0, 0.3, s === 'kit' ? 26 : 36); g.add(r.root); }
     if (Q.get('cols') !== '0') g.add(outpostOverlay(t));
     model.add(g);
     tpls[s] = t;

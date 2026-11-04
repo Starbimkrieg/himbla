@@ -27,8 +27,37 @@ With a draft on, the flattened plateau under each outpost grows from 30 to 44 m.
 | Storage | ad-hoc boxes | the standard cargo container (`cargoStack`) in the owner's livery (Daedalus has none of its own: it buys Meridian's; Rustmoon's are stolen, mixed) |
 | Gameplay | raid spot, blast boxes, smoke, loot drop, wreck | the same, kept for every draft: each has a raid spot with its loot on show, blast boxes on the main building and a wreck |
 
-Images below: the Kit original (left), draft A, draft B from the same height; then each draft close up, and each wrecked.
+Images in the sections below: the Kit original (left), draft A, draft B, each framed to fit (so **not** to the same scale: see the sheets above for that); then each draft close up, and each wrecked.
 The colours are the kind's real owners (two military kinds are shown in more than one livery).
+
+## Scale: before and after, side by side
+
+Each sheet puts the Kit original, draft A and draft B next to each other **at the same scale** (top), then looks at each
+from the same spot 62 m in front of its centre, with the courier (1.8 m) standing at its gate (bottom). The viewer does
+this for any kind: `/tools/viewer.html?m=outpost&kind=tower&compare=1`.
+
+| | Before | Draft A | Draft B |
+|---|---|---|---|
+| Yard across | 48 to 56 m | 80 m | 80 m |
+| Trading Kiosk | kiosk 9 x 5 m, 3.6 m tall (billboard to 13 m) | rotunda 21 m across the columns, 17 m to the lantern | trading house 13 m square, two storeys, 18 m to the clock |
+| Watchtower | lattice tower to 26 m; Quonset 6.8 m wide, 11 m long, 3.4 m tall | concrete tower to 29 m; bunker 20 x 12 m, 5 m tall | lattice tower to 36 m; barracks 13 m wide, 26 m long, 6.5 m tall |
+| Supply Depot | warehouse 20 x 11 m, 8 m to the eaves | warehouse 34 x 16 m, 9 m to the eaves | three silos 8.4 m across, 19 m tall |
+| Farm Dome | domes 20 and 14 m across | dome 30 m across | three greenhouses 28 m long; barn 34 x 9 m |
+| Relay Mast | mast 41 m | mast 52 m | dish mount 26 m, monopole 36 m |
+| Scrap Shack | huts about 11 x 8 m, 4.6 m tall | two-high container block 19 m long, 5.2 m to the roof | hull 34 m long, 15 m to the crow's nest |
+| Junk Pile | heap 24 m across, 6 m tall | heap 30 m across, 11 m tall | heap 24 m across, 8 m tall, lookout to 18 m |
+
+For the bigger places: a Kepler town's flattened plateau is 110 to 150 m in radius (220 to 300 m across) with a hub dome
+44 m across (60 m for a civic hub), and the HQs run to 280 m. So a draft outpost is about a third of a town across, where the
+originals were about a fifth.
+
+![Trading Kiosk at the same scale](scale_kiosk.jpg)
+![Watchtower at the same scale](scale_tower.jpg)
+![Supply Depot at the same scale](scale_depot.jpg)
+![Farm Dome at the same scale](scale_farm.jpg)
+![Relay Mast at the same scale](scale_mast.jpg)
+![Scrap Shack at the same scale](scale_shack.jpg)
+![Junk Pile at the same scale](scale_junk.jpg)
 
 ## Trading Kiosk (Meridian)
 
