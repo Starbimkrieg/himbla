@@ -5,6 +5,10 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Glow looks on trial** (`post.js` glowStyle, from the console: `game.post.material.uniforms.glowStyle.value = 0..3`):
+  0 the two hard rings (still the default), 1 halftone dots in the light's hue, 2 a soft bloom, 3 neon (a tight halo, the
+  tube's core run white-hot). The glow's downsample now looks at every full-size pixel under each quarter-size one (four
+  taps over a 4 x 4 block saw thin neon lines unevenly: lumpy, wavy halos).
 - **Antimatter Lab: the airlock's doors are vault hatches** (`tools/blender/lab_doors.py`, `src/labWorld.js`; the drafts and
   the notes in `docs/zbornak-proposals/README.md`, "The airlock's doors"). The outer door used to sink through the hazard
   ring and the sill into a slot in the plaza, and the inner one rose into the portal's wall. Now each is a thick plug seated
