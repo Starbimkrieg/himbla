@@ -5,6 +5,11 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Softer halftone on the shadow edge.** When two tone bands became the look for good, the edge's dots moved with them
+  into the sunlit side, 0.3 deep, each one taking full sun straight down to shade and growing until they merged: whole
+  sunlit slopes and walls in low sun read as heavy dots. With two bands the dots now darken about as much as they did in
+  the old mid band, stay apart, and cover a narrower stretch (`toon.js` TOON_LOOK `dotR`, `dotK`; `?look=classic` keeps
+  the old values). Live from the console: `(await import('/src/toon.js')).TOON_LOOK`.
 - **Casino models follow the style audit.** `style_audit.py` run over the casino's builders (casino, hall, blackjack,
   plinko, claw), every finding fixed or kept on purpose:
   - **Proud trim gets its own ink** (an ink-0 detail must lie flush, or its colour crosses the outline): the lamp posts'

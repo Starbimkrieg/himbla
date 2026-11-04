@@ -44,7 +44,7 @@ import { receiveFar } from './farshadow.js';
 //   - shade in a chosen colour: what the sun doesn't reach shows each colour's shade, more saturated and turned toward the
 //     sky fill's violet (toonShade), not the colour dimmed; the mid band takes part of it, sunlit faces none;
 //   - halftone only across the shadow edge: screen dots in the light's mid band, biggest where it meets the shade, gone by
-//     the lit band (dotNL TOON_LOOK htLo to htHi, set with the tone bands; a material's `defines` TOON_HT_LO and TOON_HT_HI
+//     the lit band (dotNL TOON_LOOK htLo to htHi, dot size dotR and darkness dotK, set with the tone bands; a material's `defines` TOON_HT_LO and TOON_HT_HI
 //     can pin them). Cast shadows stay flat;
 //   - a per-vertex shade threshold: geometry with a `toonBias` attribute (x the bias, y 0.5 marking it real: a vertex
 //     attribute a geometry lacks reads (0, 0, 0, 1), or (1, 1, 1) after a ShaderMaterial's default colour) moves its
@@ -54,7 +54,7 @@ import { receiveFar } from './farshadow.js';
 // `dots` follows the halftone setting (settings.js), `cell` the screen size (post.js), `?look=classic` turns both off and
 // gives the dots back to the post pass, the look before this (to compare).
 export const CLASSIC_LOOK = typeof location !== 'undefined' && new URLSearchParams(location.search).get('look') === 'classic';
-export const TOON_LOOK = { tint: CLASSIC_LOOK ? 0 : 1, dots: CLASSIC_LOOK ? 0 : 1, cell: 5, htLo: -0.05, htHi: 0.33, bands: 3 };
+export const TOON_LOOK = { tint: CLASSIC_LOOK ? 0 : 1, dots: CLASSIC_LOOK ? 0 : 1, cell: 5, htLo: -0.05, htHi: 0.33, dotR: 0.62, dotK: 1, bands: 3 };
 // (two bands is the look; set once the gradient code below is defined: setToonBands)
 THREE.ShaderLib.toon.uniforms.uToonLook = { value: TOON_LOOK };
 const TOON_BIAS_K = 0.7;
@@ -71,7 +71,7 @@ const TOON_BIAS_K = 0.7;
   const DIRECT = 'vec3 irradiance = getGradientIrradiance( geometryNormal, directLight.direction ) * directLight.color;\n\treflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );';
   const INDIRECT = 'reflectedLight.indirectDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );';
   if (chunk.includes(DIRECT) && chunk.includes(INDIRECT)) {
-    THREE.ShaderChunk.lights_toon_pars_fragment = `struct ToonLook { float tint; float dots; float cell; float htLo; float htHi; };
+    THREE.ShaderChunk.lights_toon_pars_fragment = `struct ToonLook { float tint; float dots; float cell; float htLo; float htHi; float dotR; float dotK; };
 uniform ToonLook uToonLook;
 varying float vToonBias;
 // getGradientIrradiance, from a dot product (so the per-vertex threshold can move it)
@@ -100,7 +100,7 @@ float toonDots( float dotNL ) {
 	if ( uToonLook.dots <= 0.0 || amt <= 0.0 ) return 0.0;
 	vec2 g = mat2( 0.7071, -0.7071, 0.7071, 0.7071 ) * gl_FragCoord.xy / uToonLook.cell;
 	vec2 f = fract( g ) - 0.5;
-	return ( 1.0 - smoothstep( -0.06, 0.06, length( f ) - 0.62 * sqrt( amt ) ) ) * uToonLook.dots;
+	return ( 1.0 - smoothstep( -0.06, 0.06, length( f ) - uToonLook.dotR * sqrt( amt ) ) ) * uToonLook.dots * uToonLook.dotK;
 }
 ${chunk
   .replace(DIRECT, `float toonL = dot( geometryNormal, directLight.direction ) - vToonBias * ${TOON_BIAS_K.toFixed(2)};
@@ -171,8 +171,12 @@ export function gradientMap() {
 }
 export function setToonBands(n) {
   const bands = n === 2 ? 2 : 3;
-  // the dots: across the mid band (3), or from the one edge into the lit side (2)
-  [TOON_LOOK.htLo, TOON_LOOK.htHi] = bands === 2 ? [TWO_TONE_EDGE, TWO_TONE_EDGE + 0.3] : [-0.05, 0.33];
+  // the dots: across the mid band (3), or from the one edge into the lit side (2). With two bands a dot takes full sun
+  // straight to shade, so there they stay apart (dotR, in grid cells: 0.62 merges them solid at the edge) and darken
+  // about as much as they did in the old mid band (dotK), over a narrower stretch: at full strength whole sunlit
+  // slopes read as dotted.
+  [TOON_LOOK.htLo, TOON_LOOK.htHi, TOON_LOOK.dotR, TOON_LOOK.dotK] = bands === 2
+    ? [TWO_TONE_EDGE, TWO_TONE_EDGE + 0.2, 0.5, 0.55] : [-0.05, 0.33, 0.62, 1];
   if (TOON_LOOK.bands === bands) return;
   TOON_LOOK.bands = bands;
   if (grad) fillGradient(bands);
