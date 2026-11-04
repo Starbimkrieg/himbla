@@ -416,7 +416,10 @@ def build_lab(root):
     lab("dark", 0.04).boxc(0, 8.65, z1 + 6.1, 9.0, 1.2, 0.16)
     lab("pink", 0.0).boxc(0, 9.22, z1 + 6.19, 8.8, 0.05, 0.02)
     lab.text("ZBORNAK LABORATORIES", (0, 8.33, z1 + 6.19), 0, 0.68, "pink")
-    plate = security_post(lab, 0, z1 + 6.0, 0, DY, DR, "sec")
+    # the stand plate: out of the vault's swing (the far edge sweeps 6 m round the pin; the plate's trigger reaches 1.6 m and
+    # you stand on its edge, so 8 m from the pin, straight back from the door: 7.7 m out from the wall)
+    pz_ = 3.6 if DOOR_VARIANT != "vault" else 0.5 + math.sqrt(8.0 ** 2 - 3.45 ** 2)        # (the pin 0.5 m out, 3.45 m aside)
+    plate = security_post(lab, 0, z1 + 6.0, 0, DY, DR, "sec", plate_z=pz_)
     lab.mark("spot", plate, PI, spot="plate")
     lab.mark("spot", (0, DY, z1 + 6.05), 0, spot="outer_door")
     RUNNER["gate"] = ((plate[0] + CX, 0, plate[2] + CZ), PI)

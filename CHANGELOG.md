@@ -5,10 +5,14 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
-- **Antimatter Lab: two drafts for the airlock's doors** (`tools/blender/lab_doors.py`, `LAB_DOOR=split|vault`; renders
-  and notes in `docs/zbornak-proposals/README.md`, "The airlock's doors"): A, chevron split leaves that part into pockets in
-  the wall; B, a vault hatch that swings on a hinge pin. Both replace the outer door that sank through the trim into the
-  plaza, and the inner one in the same style. Not in the game yet: the game's doors are unchanged.
+- **Antimatter Lab: the airlock's doors are vault hatches** (`tools/blender/lab_doors.py`, `src/labWorld.js`; the drafts and
+  the notes in `docs/zbornak-proposals/README.md`, "The airlock's doors"). The outer door used to sink through the hazard
+  ring and the sill into a slot in the plaza, and the inner one rose into the portal's wall. Now each is a thick plug seated
+  in its hazard ring, with a lit lock wheel, swinging 100 degrees on a hinge pin beside the doorway: the outer one onto the
+  plaza on the camera's side, the inner one into the lab away from the equipment corner. The stand plate moved back to
+  7.7 m from the wall (it was 3.6), out of the hatch's 6 m sweep. A dashed hazard arc on the floor marks each sweep, and a
+  hatch waits while anyone stands where it has yet to swing. The open hatch has its own collider. Drafts kept to compare:
+  `LAB_DOOR=split` (chevron leaves into wall pockets) and `slot` (the old doors).
 - **Softer halftone on the shadow edge.** When two tone bands became the look for good, the edge's dots moved with them
   into the sunlit side, 0.3 deep, each one taking full sun straight down to shade and growing until they merged: whole
   sunlit slopes and walls in low sun read as heavy dots. With two bands the dots now darken about as much as they did in

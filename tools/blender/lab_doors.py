@@ -1,5 +1,5 @@
-# Door drafts for the Antimatter Lab's airlock (build_zbornak_lab.py execs this; LAB_DOOR picks one, LAB_DOOR_OPEN poses it).
-# The doors in the game (LAB_DOOR unset, "slot") are a plain disc: the outer one sinks 6 m into a slot in the plaza, past the
+# The Antimatter Lab's airlock doors (build_zbornak_lab.py execs this; LAB_DOOR picks one, LAB_DOOR_OPEN poses it). The game
+# has the vault (the default). The first doors ("slot", kept to compare) were a plain disc: the outer one sinks 6 m into a slot in the plaza, past the
 # hazard ring and the sill, the inner one rises into the portal's wall. These two drafts keep every moving part where it
 # can't cut through anything:
 #
@@ -16,7 +16,7 @@
 # DOORS holds each moving part (pivot, kind, amount) so a preview can pose it: kind "slide" moves the pivot along x by
 # amount * t, "swing" turns it about the vertical by amount * t (radians). t = LAB_DOOR_OPEN (0 shut, 1 open).
 
-DOOR_VARIANT = os.environ.get("LAB_DOOR", "slot")
+DOOR_VARIANT = os.environ.get("LAB_DOOR", "vault")                         # (the one in the game)
 DOOR_OPEN = float(os.environ.get("LAB_DOOR_OPEN", "0"))
 DOORS = []
 
@@ -87,14 +87,19 @@ def split_door(parent, name, x, y, z, r, yb, th, faces, travel):
 
 
 # ---- VAULT HATCH --------------------------------------------------------------------------------------------------------
-def vault_door(lab, parent, name, cy, zc, r, f, s, hx, zwall, swing=math.radians(100)):
+def vault_door(lab, parent, name, cy, zc, r, f, s, hx, zwall, floor_y, swing=math.radians(100)):
     """a vault hatch of radius r centred (0, cy, zc), its face toward f (+1 = +z), hinged on side s (+1 = +x) about a pin at
     x = hx, a hinge offset in front of the plug; the wall's face (where the brackets stand) at z = zwall. The pivot is the
-    pin (role door, `swing` radians); everything that turns hangs from it."""
+    pin (role door, `swing` radians); everything that turns hangs from it. On the floor (its top at floor_y) a dashed hazard
+    arc marks where the far edge sweeps."""
     hz = zc + f * 0.45
     g = G(name, parent, hx, 0.0, hz, solid=False, role="door")
-    g.root["swing"] = swing
     cx, dz = -hx, zc - hz                                                     # the plug's centre in the pin's frame
+    # for the game (labWorld.js): the turn (signed: about +y, three.js), the plug's centre and radius in the pin's frame, and
+    # how far its far edge reaches from the pin (the swept circle, kept clear of the stand plate)
+    g.root["swing"], g.root["dcx"], g.root["dcz"], g.root["dr"] = s * f * swing, cx, dz, r
+    g.root["reach"] = math.hypot(abs(cx) + r, abs(dz) + 0.32)
+    lab.mark("spot", (hx, cy, hz), 0, spot=name.split("_")[0] + "_hinge")
     rot = (f * PI / 2, 0, 0)                                                  # (a lathe's y along the face normal)
     # the plug: stepped, its back sunk in the ring, a raised boss in front
     prof = [(0.0, -0.25), (r - 0.1, -0.25), (r, -0.15), (r, 0.12), (r - 0.15, 0.25), (r - 0.65, 0.25), (r - 0.75, 0.32), (0.0, 0.32)]
@@ -128,6 +133,22 @@ def vault_door(lab, parent, name, cy, zc, r, f, s, hx, zwall, swing=math.radians
         g("steel", 0.02).cylc(0.0, cy + dy, 0.0, 0.18, 0.5, 12)
     g("metal", 0.012).cylc(0.0, cy, 0.0, 0.09, 4.85, 10)                         # (from the lowest knuckle to the highest)
     DOORS.append((g.root, "swing", s * f * swing))                           # (the far edge out, away from the wall)
+    # the sweep, painted on the floor just outside the far edge's arc: hazard dashes on dark, an end tick (1.8 cm proud: over
+    # the lab floor's strips); none within 0.5 m of the wall (outside, that's off the plaza)
+    reach = g.root["reach"]
+    d0 = math.atan2(cx, dz)                                                   # (about +y a turn takes (z, x) round: angle atan2(x, z))
+    sw = s * f * swing
+    n = 22
+    for i in range(n):
+        a0, a1 = d0 + sw * i / n, d0 + sw * (i + 1) / n
+        am, ln = (a0 + a1) / 2, (reach + 0.15) * abs(a1 - a0)
+        px, pz = hx + math.sin(am) * (reach + 0.15), hz + math.cos(am) * (reach + 0.15)
+        if f * (pz - zwall) < 0.5 + 0.07 * abs(math.cos(am)):
+            continue
+        lab("hazard" if i % 2 == 0 else "dark", 0.0).boxc(px, floor_y + 0.009, pz, 0.14, 0.018, ln + 0.004, (0, am, 0))
+    a = d0 + sw
+    px, pz = hx + math.sin(a) * (reach + 0.15), hz + math.cos(a) * (reach + 0.15)
+    lab("hazard", 0.0).boxc(px, floor_y + 0.009, pz, 0.6, 0.018, 0.1, (0, a, 0))
     # the wall's knuckles: a bracket from the wall to each, on a plate (static: the lab's)
     zb = (zwall + hz) / 2
     for dy in (-2.2, 0.0, 2.2):
@@ -146,7 +167,7 @@ def outer_door_draft(lab, z1, DY):
         split_door(lab.root, "outer_door", 0, DY, z1 + 5.76, 3.05, -DY + 0.02, 0.16, (1, -1), 3.1)
     else:
         lab("hazard", 0.03).tor(2.85, 0.28, (0, DY, z1 + 6.05), (PI / 2, 0, 0), n=40, rs=6)
-        vault_door(lab, lab.root, "outer_door", DY, z1 + 6.05, 2.55, 1, 1, 3.45, z1 + 6.0)
+        vault_door(lab, lab.root, "outer_door", DY, z1 + 6.05, 2.55, 1, 1, 3.45, z1 + 6.0, 0.08)        # (on the plaza's top)
 
 
 def inner_door_draft(lab, PZ, T, HY, HR):
@@ -154,7 +175,7 @@ def inner_door_draft(lab, PZ, T, HY, HR):
     if DOOR_VARIANT == "split":
         split_door(lab.root, "inner_door", 0, HY, PZ, HR + 0.15, -HY + 0.01, 0.16, (1, -1), 3.05)
     else:
-        vault_door(lab, lab.root, "inner_door", HY, PZ - T / 2 - 0.1, HR - 0.1, -1, -1, -3.5, PZ - T / 2)
+        vault_door(lab, lab.root, "inner_door", HY, PZ - T / 2 - 0.1, HR - 0.1, -1, -1, -3.5, PZ - T / 2, 0.06)    # (on the floor's top)
 
 
 def pose_doors(t):

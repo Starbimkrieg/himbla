@@ -25,6 +25,14 @@ renders). The courier is `runner.glb`. The drone feeds are filmed in the game to
 
 ![The plan](plan.jpg)
 
+## The airlock's doors: the vault hatch is in
+
+| Asked | Done |
+|---|---|
+| Go with the vault hatch | It is the lab's door now, both sides of the airlock (`LAB_DOOR` defaults to `vault`; `split` and `slot` still build the others). In the game (`labWorld.js`) each hatch turns about its pin; its collider in the doorway goes once it is under way, and one where it stands open comes on once it is there. |
+| Move the stand plate back so the hatch can't hit you | The far edge sweeps 6 m round the pin. The plate's trigger reaches 1.6 m from its centre, so the plate is 8 m from the pin, straight back from the door: 7.7 m out from the wall (it was 3.6 m), well clear of the swing. |
+| | A dashed hazard arc on the floor marks each hatch's sweep, and a hatch waits while anyone stands in the part of its sweep it has yet to pass through. From the lab the inner one swings toward you, so it starts opening from 9 m away and stays open while you're within 7 m of it. Checked in the game: scan, open, through, shut, cycle, inner open, and the inner one waiting with the courier in its sweep. |
+
 ## The airlock's doors: two drafts
 
 The doors in the game are plain discs: the outer one sinks 6 m into a slot in the plaza, past the hazard ring and the sill,
@@ -49,8 +57,7 @@ security camera's scan beam, a light the game shows only while it scans you, bef
   its braced back and lit gauge showing. The hinge sits in front of the ring, so the plug's near edge moves inward as it
   turns and never touches the ring. The guide rails go.
 
-Neither is in the game yet. The game moves each door straight up or down (`labWorld.js updateGate`); the split would
-move two leaves sideways and the vault would turn about its pin, and each needs its door colliders to follow.
+B went in (above). The renders show the plate where it stands now, out of the hatch's sweep; A is kept to compare.
 
 ## The fifth in-game review
 

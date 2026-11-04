@@ -15,9 +15,10 @@ import drone3 from './assets/zlab-drone3.jpg?inline';
 //   the robot cell works its cycle (CELL_KEYS, the builder's: tool points eased between keys, the joints solved by armIk);
 //   Dr. Zbornak turns his head to watch you;
 //   the airlock: step on the stand plate and the camera scans you, the screen shows your picture and ACCESS GRANTED, the
-//   outer door sinks into its slot (its collider goes); 6 m into the tube it rises behind you, the tube cycles (a hiss) and the inner door
-//   rises into the portal's wall. Going out, the inner door opens as you come to it and the outer once it has shut. A door
-//   opens only once the other has been shut a moment, and never shuts on you in its doorway;
+//   outer vault hatch swings open onto the plaza on its pin (its collider moves to where it stands open); 6 m into the tube
+//   it swings shut behind you, the tube cycles (a hiss) and the inner hatch swings into the lab. Going out, the inner one
+//   opens as you come to it and the outer once it has shut. A door opens only once the other has been shut a moment, never
+//   shuts on you in its doorway, and a hatch waits while anyone stands where it would swing (inSweep);
 //   the screens: the security screen, LABNET's attract screen (the console; main.js opens LABNET itself, labnet.js), the
 //   holding pen's residents (the ranch office), four drone feeds (frames filmed in the game, tools/zbornak-drones.mjs).
 //   the lift to the catwalk: its car carries you up or down, its gates rise only where it stands (updateLift);
@@ -209,7 +210,11 @@ export function buildZbornakLab(world, loc) {
     else if (role === 'core') { lab.core = g; lab.coreY = g.position.y; lab.rings = g.children.filter((o) => o.userData.role === 'ring'); }
     else if (role === 'lift') lab.lift = { g, y0: g.position.y, travel: g.userData.travel || 6.5, pos: 0, lv: 0, state: 'idle', dwell: 0, armed: true, rider: false };
     else if (role === 'liftgate') (lab.liftGates ||= [])[g.name.endsWith('1') ? 1 : 0] = { g, y0: g.position.y, travel: g.userData.travel || 2.3, open: 0 };
-    else if (role === 'door') lab.doors[g.name.startsWith('inner') ? 'inner' : 'outer'] = { g, y0: g.position.y, travel: g.userData.travel || 5.4, open: 0, shut: 99, dir: 0 };
+    else if (role === 'door') {
+      const u = g.userData;                                          // a vault hatch turns about its pin (swing), the old doors slid (travel)
+      lab.doors[g.name.startsWith('inner') ? 'inner' : 'outer'] = { g, y0: g.position.y, travel: u.travel || 5.4, q0: g.quaternion.clone(), swing: u.swing || 0,
+        dcx: u.dcx || 0, dcz: u.dcz || 0, dr: u.dr || 2.6, reach: u.reach || 6, open: 0, shut: 99, dir: 0 };
+    }
     else if (role === 'scan') { lab.scan = g; g.visible = false; }
     else if (role === 'seccam') lab.seccam = { g, q0: g.quaternion.clone(), yaw: 0, pitch: 0 };
     else if (role === 'doctor') { lab.doctor = g; lab.head = g.getObjectByName('head'); }
@@ -246,10 +251,18 @@ export function buildZbornakLab(world, loc) {
     tag.position.set(0, 2.85, 0);
     lab.doctor.add(tag);
   }
-  // each door's collider: off while it is up (updateGate)
+  // each door's collider: shut, in the doorway (off once it is under way: updateGate); a hatch's also where it stands open
+  // (on once it is there): the plug's centre turned about the pin
   for (const [k, D] of Object.entries(lab.doors)) {
     const p = lab.local[k + '_door'];
     if (p) { D.col = world.col(loc, { type: 'box', x: p.x, y: p.y, z: p.z, hx: 2.9, hy: 2.95, hz: 0.3, yaw: 0 }); D.colOn = true; }
+    const h = lab.local[k + '_hinge'];
+    if (h && D.swing) {
+      D.hinge = h;
+      const c = Math.cos(D.swing), sn = Math.sin(D.swing);
+      D.colOpen = world.col(loc, { type: 'box', x: h.x + D.dcx * c + D.dcz * sn, y: h.y, z: h.z - D.dcx * sn + D.dcz * c, hx: D.dr, hy: D.dr, hz: 0.33, yaw: D.swing });
+      world.colliders.remove(D.colOpen);
+    }
   }
   // the lift's colliders: each gate's (off while it is up), the car's deck at the top (on only while it is up there; below,
   // the lab's floor holds you)
@@ -484,13 +497,14 @@ function updateGate(world, lab, P, dt) {
   // what each door wants: the outer one for you granted outside or coming to it in the tube, the inner one for you coming
   // to it from either side; either stays up while you're in its doorway
   O.want = (zone === 'out' && G.granted) || (zone === 'tube' && dO < 6) || (O.open > 0 && lane && dO < 4);
-  if (I) I.want = (zone === 'tube' && dI < 6) || (zone === 'lab' && dI < 5) || (I.open > 0 && lane && dI < 4);
+  if (I) I.want = (zone === 'tube' && dI < 6) || (zone === 'lab' && dI < (I.swing ? 9 : 5)) || (I.open > 0 && lane && dI < (I.swing ? 7 : 4));   // (a hatch swings toward you from the lab: it opens early, and stays open while you're in its sweep)
   for (const [D, X] of [[O, I], [I, O]]) {
     if (!D) continue;
     const may = !X || (X.open === 0 && X.shut > CYCLE_T);
     if (D.want && X && X.open === 0 && !may && !D.hiss) { D.hiss = true; if (audio && audio.burst) audio.burst(CYCLE_T, 2200, 0.14); }   // the tube cycles
     if (!D.want) D.hiss = false;
-    const dir = D.want && may ? 1 : D.open > 0 && !D.want ? -1 : 0;
+    let dir = D.want && may ? 1 : D.open > 0 && !D.want ? -1 : 0;
+    if (dir && D.hinge && inSweep(D, l, dir)) dir = 0;                // a hatch waits while you stand where it has yet to swing
     if (dir && dir !== D.dir && audio && audio.tone) audio.tone(dir > 0 ? 55 : 80, DOOR_T, 'sawtooth', 0.05, dir > 0 ? 1.6 : 0.6);   // the motor
     D.dir = dir;
     D.open = Math.min(1, Math.max(0, D.open + dir * dt / DOOR_T));
@@ -499,9 +513,26 @@ function updateGate(world, lab, P, dt) {
       if (D.open > 0.4 && D.colOn) { world.colliders.remove(D.col); D.colOn = false; }
       else if (D.open < 0.4 && !D.colOn) { world.colliders.add(D.col); D.colOn = true; }
     }
+    if (D.colOpen) {
+      if (D.open > 0.95 && !D.colOpenOn) { world.colliders.add(D.colOpen); D.colOpenOn = true; }
+      else if (D.open < 0.95 && D.colOpenOn) { world.colliders.remove(D.colOpen); D.colOpenOn = false; }
+    }
     const e = D.open * D.open * (3 - 2 * D.open);
-    D.g.position.y = D.y0 + e * D.travel;
+    if (D.swing) D.g.quaternion.copy(D.q0).multiply(_qa.setFromAxisAngle(YA, e * D.swing));
+    else D.g.position.y = D.y0 + e * D.travel;
   }
+}
+
+// is l (the place's frame) where a hatch moving dir (+1 opening, -1 shutting) has yet to swing through: within its reach of
+// the pin (and a body's width), ahead of the door in its sweep (the floor's hazard arc)? (about +y a turn takes (z, x) round
+// as z + ix times e^(i angle): the angle is atan2(x, z))
+function inSweep(D, l, dir) {
+  const vx = l.x - D.hinge.x, vz = l.z - D.hinge.z;
+  if (Math.hypot(vx, vz) > D.reach + 0.3 || Math.abs(l.y - D.hinge.y) > 4) return false;
+  let a = Math.atan2(vx, vz) - Math.atan2(D.dcx, D.dcz);
+  a = Math.atan2(Math.sin(a), Math.cos(a)) * Math.sign(D.swing);
+  const sw = Math.abs(D.swing), at = D.open * D.open * (3 - 2 * D.open) * sw, body = 0.3 / Math.max(1, Math.hypot(vx, vz));
+  return dir > 0 ? a > at - body && a < sw + body : a > -0.05 && a < at + body;
 }
 
 // ---- the wall projections, live telemetry: the drone net on a lunar map, the splicer's helix and the save's splice figures,

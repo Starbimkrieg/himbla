@@ -699,13 +699,13 @@ def pen_terminal(g, x, z, yaw, sid="pen"):
     g.at()
 
 
-def security_post(g, x, z, yaw, door_y, door_r, sid="sec", scr=(2.2, 1.5), scr_x=-4.6, scr_y=3.4, cam_x=4.7):
+def security_post(g, x, z, yaw, door_y, door_r, sid="sec", scr=(2.2, 1.5), scr_x=-4.6, scr_y=3.4, cam_x=4.7, plate_z=3.6):
     """The airlock's security interface at a door face (x, z), facing yaw: a round wall mount up and to one side, clear of
     the door's frame (door_y its centre, door_r the frame's outer radius), a two-link arm off the mount's hub reaching out
     over the stand plate, the camera with its red lens, a lit scan cone down to the plate (two lit footprints), and the
-    screen beside the door that shows the picture (`screen_<sid>`). Returns the plate's centre."""
+    screen beside the door that shows the picture (`screen_<sid>`); the plate plate_z out from the door. Returns the plate's centre."""
     g.at(x, z, yaw)
-    px, pz = 0.0, 3.6
+    px, pz = 0.0, plate_z
     g("hazard", 0.0).cylc(px, 0.09, pz, 1.25, 0.02, 8)                     # (on the plaza's top, 8 cm)
     g("dark", 0.0).cylc(px, 0.095, pz, 1.05, 0.02, 8)
     for k in (-1, 1):

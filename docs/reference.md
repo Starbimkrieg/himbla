@@ -242,8 +242,9 @@ A walk-in hall with slot carousels out front. Press `F` at a station:
   pirates or hover-cars. Things left together react (Moon Mud, Slick Rock, Void-Touched).
 - **The lab** (the Rotunda): a domed round lab 64 m across on the plateau, the antimatter reactor rising through its
   oculus. Walk up the ribbed airlock tunnel and stop on the plate: the security camera scans you, photographs you (the
-  picture shows on the screen by the door), and the outer door rises. 6 m in, it shuts behind you; the tube cycles and the
-  inner door rises into the portal's wall. Going out runs the other way. Inside: the reactor and its catwalk (a glass
+  picture shows on the screen by the door), and the outer vault hatch swings open on its hinge. 6 m in, it swings shut
+  behind you; the tube cycles and the inner hatch swings into the lab. A hatch waits while you stand in its sweep (the
+  hazard arc on the floor). Going out runs the other way. Inside: the reactor and its catwalk (a glass
   lift on the west: stand on the car and it takes you up or down) with the intake hatch, sealed bioluminescent hydroponics, exotic-matter canister racks, cryo pods holding chimeras, a holotable, an
   equipment corner (chemistry and microscope benches, battery chargers) round LABNET's wall display with
   four live drone feeds of settlements at its sides, and a robot cell whose three arms run three jobs in turn: weld an armour plate onto a chimera,
@@ -560,8 +561,9 @@ tools/
                            tools/splice-chimera.mjs; chimera_common.py and chimera_*.py)
     build_zbornak_lab.py   the Antimatter Lab, the whole plateau and Zbornak (docs/zbornak-proposals/); ZB_GAME=1 exports
                            zlab.glb for the game (then node tools/optimize-glb.mjs src/assets/zlab.glb): zbornak_kit.py (set pieces, zb_container: the cargo box in Zbornak livery),
-                           zbornak_figure.py (the doctor); preview_zbornak_lab.py renders the views, robots.gif, the plan, the
-                           turnaround
+                           zbornak_figure.py (the doctor), lab_doors.py (the airlock's vault hatches; LAB_DOOR=split or
+                           slot builds the other drafts); preview_zbornak_lab.py renders the views, robots.gif, the plan, the
+                           turnaround, the door drafts (doors)
     proposals/             freighter, Kepler Habitat and War-Rig design studies, Cycles preview renders
                            (warrig_b.py, the War-Rig's runner-up; preview_warrig.py renders both to docs/warrig-proposals)
 ```
