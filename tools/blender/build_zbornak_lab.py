@@ -58,7 +58,7 @@ GLOW = {"lime", "pink", "pinkhot", "cyan", "teal", "vio", "amber", "red", "lamp"
 SEE = {"glass": 0.18, "glassg": 0.14, "frost": 0.5, "smoke": 0.35, "habglass": 0.12, "holo": 0.35, "beam": 0.1, "scan": 0.12,
        "halo": 0.18, "weldhalo": 0.55}
 
-for f in ("kit.py", "decals.py", "cargo.py", "zbornak_kit.py", "zbornak_figure.py"):
+for f in ("kit.py", "decals.py", "cargo.py", "zbornak_kit.py", "zbornak_figure.py", "lab_doors.py"):
     exec(open(os.path.join(REPO, "tools", "blender", f), encoding="utf-8").read(), globals())
 C = coll()
 for s in SLOT_COLORS:
@@ -394,19 +394,22 @@ def build_lab(root):
         lab.col_box(sx * 3.45, 3.15, z1 + 5.8, 0.9, 6.3, 0.4)
     lab("roof", 0.05).boxc(0, 10.2, z1 + 3, 13.6, 0.4, 6.6)
     lab("hazard", 0.02).boxc(0, 9.6, z1 + 6.05, 13.0, 0.5, 0.1)
-    lab("hazard", 0.03).tor(2.85, 0.28, (0, DY, z1 + 6.05), (PI / 2, 0, 0), n=40, rs=6)
-    door = G("outer_door", lab.root, 0, DY, z1 + 6.05, solid=False, role="door")
-    door("door", 0.03).cylc(0, 0, 0, 2.6, 0.25, 32, "z")
-    door("dark", 0.0).boxc(0, 0, 0.14, 5.1, 0.08, 0.04).boxc(0, 0, 0.14, 0.08, 5.1, 0.04)
-    for k in range(8):
-        a = TAU * k / 8
-        door("steel", 0.0).cylc(math.sin(a) * 2.3, math.cos(a) * 2.3, 0.15, 0.12, 0.06, 8, "z")
-    door("dark", 0.02).cylc(0, 0, 0.2, 0.6, 0.15, 16, "z")
-    door("lime", 0.0).tor(0.62, 0.05, (0, 0, 0.28), (PI / 2, 0, 0), n=20, rs=4)
-    door.root["travel"] = -6.0                                              # it sinks into its slot in the ground, out of sight
-    lab("void", 0.0).boxc(0, 0.005, z1 + 6.05, 5.6, 0.01, 0.34)              # the slot, a hazard sill each side of it
-    for sz in (-1, 1):
-        lab("hazard", 0.0).boxc(0, 0.01, z1 + 6.05 + sz * 0.22, 5.8, 0.02, 0.1)
+    if DOOR_VARIANT != "slot":                                              # a door draft (lab_doors.py)
+        outer_door_draft(lab, z1, DY)
+    else:
+        lab("hazard", 0.03).tor(2.85, 0.28, (0, DY, z1 + 6.05), (PI / 2, 0, 0), n=40, rs=6)
+        door = G("outer_door", lab.root, 0, DY, z1 + 6.05, solid=False, role="door")
+        door("door", 0.03).cylc(0, 0, 0, 2.6, 0.25, 32, "z")
+        door("dark", 0.0).boxc(0, 0, 0.14, 5.1, 0.08, 0.04).boxc(0, 0, 0.14, 0.08, 5.1, 0.04)
+        for k in range(8):
+            a = TAU * k / 8
+            door("steel", 0.0).cylc(math.sin(a) * 2.3, math.cos(a) * 2.3, 0.15, 0.12, 0.06, 8, "z")
+        door("dark", 0.02).cylc(0, 0, 0.2, 0.6, 0.15, 16, "z")
+        door("lime", 0.0).tor(0.62, 0.05, (0, 0, 0.28), (PI / 2, 0, 0), n=20, rs=4)
+        door.root["travel"] = -6.0                                              # it sinks into its slot in the ground, out of sight
+        lab("void", 0.0).boxc(0, 0.005, z1 + 6.05, 5.6, 0.01, 0.34)              # the slot, a hazard sill each side of it
+        for sz in (-1, 1):
+            lab("hazard", 0.0).boxc(0, 0.01, z1 + 6.05 + sz * 0.22, 5.8, 0.02, 0.1)
     for k in (-1, 1):
         lab("dark").boxc(k * 6.0, 9.0, z1 + 6.3, 0.6, 0.5, 0.6)
         lab("lamp", 0.0).boxc(k * 6.0, 8.8, z1 + 6.62, 0.45, 0.25, 0.04)
@@ -427,18 +430,22 @@ def build_lab(root):
         lab("wall", 0.06).polyz(arc + [(sx * PW, 0.0), (sx * PW, HY_ + HR_)], PZ - T / 2, PZ + T / 2)
         lab("wall2", 0.04).boxc(sx * (PW - 0.05), H / 2, PZ - T / 2 - 0.15, 0.9, H, 0.3)
         lab.col_box(sx * (HR_ + PW) / 2, (HY_ + HR_) / 2, PZ, PW - HR_, HY_ + HR_, T)
-        lab("steel", 0.02).boxc(sx * (HR_ + 0.8), 6.11 / 2, PZ - T / 2 - 0.12, 0.18, 6.11, 0.18)          # guide rails, up to the tray
+        if DOOR_VARIANT == "slot":
+            lab("steel", 0.02).boxc(sx * (HR_ + 0.8), 6.11 / 2, PZ - T / 2 - 0.12, 0.18, 6.11, 0.18)          # guide rails, up to the tray
     # the inner door: closed in the opening, it rises into its pocket in the wall to let you through (the game cycles it
     # with the outer door: one opens only once the other is shut)
-    idoor = G("inner_door", lab.root, 0, HY_, PZ, solid=False, role="door")
-    idoor("door", 0.03).cylc(0, 0, 0, HR_ + 0.15, 0.3, 32, "z")
-    idoor("dark", 0.0).boxc(0, 0, -0.16, 0.08, 2 * HR_, 0.04).boxc(0, 0, -0.16, 2 * HR_, 0.08, 0.04)
-    for k in range(8):
-        a = TAU * k / 8
-        idoor("steel", 0.0).cylc(math.sin(a) * 2.5, math.cos(a) * 2.5, -0.17, 0.12, 0.06, 8, "z")
-    idoor("dark", 0.02).cylc(0, 0, -0.2, 0.6, 0.15, 16, "z")
-    idoor("lime", 0.0).tor(0.62, 0.05, (0, 0, -0.28), (PI / 2, 0, 0), n=20, rs=4)
-    idoor.root["travel"] = 6.0                                              # up into the wall, out of sight
+    if DOOR_VARIANT != "slot":
+        inner_door_draft(lab, PZ, T, HY_, HR_)
+    else:
+        idoor = G("inner_door", lab.root, 0, HY_, PZ, solid=False, role="door")
+        idoor("door", 0.03).cylc(0, 0, 0, HR_ + 0.15, 0.3, 32, "z")
+        idoor("dark", 0.0).boxc(0, 0, -0.16, 0.08, 2 * HR_, 0.04).boxc(0, 0, -0.16, 2 * HR_, 0.08, 0.04)
+        for k in range(8):
+            a = TAU * k / 8
+            idoor("steel", 0.0).cylc(math.sin(a) * 2.5, math.cos(a) * 2.5, -0.17, 0.12, 0.06, 8, "z")
+        idoor("dark", 0.02).cylc(0, 0, -0.2, 0.6, 0.15, 16, "z")
+        idoor("lime", 0.0).tor(0.62, 0.05, (0, 0, -0.28), (PI / 2, 0, 0), n=20, rs=4)
+        idoor.root["travel"] = 6.0                                              # up into the wall, out of sight
     lab.mark("spot", (0, HY_, PZ), PI, spot="inner_door")
     # the cable tray straight across, in front of the pilasters, joining the round run's ends, on brackets to the wall
     TZ, TD = (R - 0.25) * math.cos(TA), (R - 0.47) * math.cos(TA)
@@ -999,6 +1006,8 @@ def build():
 
 GAME[0] = os.environ.get("ZB_GAME") == "1"
 ROOT = build()
+if DOORS and DOOR_OPEN:                                                     # a door draft posed (lab_doors.py)
+    pose_doors(DOOR_OPEN)
 print(f"built: {len(C.objects)} objects, {sum(len(o.data.polygons) for o in C.objects if o.type == 'MESH')} faces, {len(CHIMS)} chimeras, "
       f"{len(LIGHTS)} lights, {len(ARMS)} arms")
 

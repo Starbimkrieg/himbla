@@ -8,6 +8,7 @@
 #   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py photo      the security camera's snapshot
 #   node tools/zbornak-screens.mjs                       (the screens' pictures, from docs/zbornak-proposals/screens/terminal.html)
 #   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py views      every view (PREVIEW_VIEWS=over,gate: some)
+#   LAB_DOOR=split MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py doors   the door drafts (lab_doors.py)
 #   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py anim       the robots' loop (ANIM_FRAMES, default 24)
 #   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py zbornak    the turnaround
 #   MOONRUNNER_REPO=. python3 tools/blender/preview_zbornak_lab.py plan
@@ -422,6 +423,21 @@ elif MODE == "views":
         cutaway(name == "cut")
         camera(sc, loc, tgt, lens)
         render(sc, os.path.join(OUT, f"{name}.jpg"))
+elif MODE == "doors":
+    # the airlock's door drafts (lab_doors.py; LAB_DOOR=split|vault picks one): outside and inside, shut, half open and open,
+    # to docs/zbornak-proposals/doors/<draft>_<view>_<t>.jpg
+    os.makedirs(os.path.join(OUT, "doors"), exist_ok=True)
+    sc, G = build()
+    setup_world(sc, G)
+    v = G["DOOR_VARIANT"]
+    cams = {"out": ((-8.0, 3.4, 46.5), (0.8, 3.0, 32.0), 26), "in": ((7.5, 3.0, -1.0), (-1.0, 2.9, 12.0), 26)}
+    for t in [float(x) for x in os.environ.get("DOOR_STEPS", "0,0.5,1").split(",")]:
+        G["pose_doors"](t)
+        for name, (loc, tgt, lens) in cams.items():
+            if ONLY and name not in ONLY:
+                continue
+            camera(sc, loc, tgt, lens)
+            render(sc, os.path.join(OUT, "doors", f"{v}_{name}_{int(t * 100):03d}.jpg"))
 elif MODE == "anim":
     from PIL import Image
     N = int(os.environ.get("ANIM_FRAMES", 24))
