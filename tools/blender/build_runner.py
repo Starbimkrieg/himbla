@@ -354,24 +354,42 @@ for side, name in ((-1, "legL"), (1, "legR")):
     for s2 in (-1, 1):
         mesh(f"{name}_edge{'L' if s2 < 0 else 'R'}", lo(xf(superquad(0.008, 0.009, 0.25, 0.5, 0.3, 6, 4), (s2 * 0.104, -0.933, 0.06))), "skate", S, 0)
 
-# ---- hips: the seat the trunk's ball turns in, on its own pivot on the body (it stays with the legs) ----
-# Suit-coloured shorts round the thighs' tops (a little wider than them, so the thighs leave it through its underside as legs
-# from shorts) and the trunk's ball; at the waist it stands a hair proud of the ball's equator, a seam that can't open.
-H = pivot("hips", (0, HIP, 0), body)
-HIPS = [(0, -0.22), (0.14, -0.215), (0.26, -0.185), (0.33, -0.13), (0.35, -0.075), (0.325, -0.035), (0.28, -0.012),
-        (0.262, -0.003), (0.2, 0.02), (0, 0.03)]
-mesh("hips_shorts", xf(lathe(HIPS, 20), s=(1, 1, 0.7)), "suit", H, 0.04)   # (0.7 deep: no deeper than the trunk above it)
+# ---- hips and waist (RUNNER_HIPS picks how the trunk meets the legs; drafts compared in docs/runner-hips/) ----
+# He is rigid parts on pivots, the torso turning (leaning into a skate, up to 0.6 rad) on a pivot at the hip joints, at the
+# bottom of its egg-shaped trunk: the lean swung the trunk's lower back up 10 cm and bared the thighs' tops.
+#   orig    as it was
+#   shorts  the trunk's lower half a ball on the pivot (a lean leaves it where it was) in a hip piece, suit-coloured shorts
+#   ball    the ball alone, no wider than the thighs: no hip piece, the legs their full length
+#   waist   the egg as it was, cut at the belt: below it a pelvis that stays with the legs (belt, buckle, pouches on it); the
+#           chest turns on a ball at the belt (the torso pivot moved up to it), its seam under the belt
+HIPS_KIND = os.environ.get("RUNNER_HIPS", "shorts")
+WAIST_Y = 0.3                                                         # the belt's height over the hip pivot ("waist")
+EGG = [(0, -0.02), (0.16, -0.01), (0.25, 0.04), (0.285, 0.14), (0.262, 0.3), (0.268, 0.4), (0.3, 0.52),
+       (0.338, 0.66), (0.338, 0.78), (0.3, 0.9), (0.21, 0.99), (0.15, 1.04), (0, 1.07)]
+
+
+def ball_rows(r, y0, step=10):
+    """the lower half of a ball under y0 for a lathe scaled 0.78 deep: x radius r, as deep as it is tall (0.78 r), so a
+    turn about x through its middle leaves it where it was"""
+    return [(r * math.sin(math.radians(a)), y0 - 0.78 * r * math.cos(math.radians(a))) for a in range(0, 91, step)]
+
+
+Hp = pivot("hips", (0, HIP, 0), body)
+if HIPS_KIND == "shorts":
+    HIPS = [(0, -0.22), (0.14, -0.215), (0.26, -0.185), (0.33, -0.13), (0.35, -0.075), (0.325, -0.035), (0.28, -0.012),
+            (0.262, -0.003), (0.2, 0.02), (0, 0.03)]
+    mesh("hips_shorts", xf(lathe(HIPS, 20), s=(1, 1, 0.7)), "suit", Hp, 0.04)
+    TORSO = ball_rows(0.26, 0.0) + [(0.272, 0.06)] + EGG[3:]
+elif HIPS_KIND == "ball":
+    TORSO = ball_rows(0.22, 0.0) + [(0.25, 0.05)] + EGG[3:]
+elif HIPS_KIND == "waist":
+    mesh("hips_pelvis", xf(lathe(EGG[:5] + [(0.2, WAIST_Y + 0.03), (0, WAIST_Y + 0.04)], 18), s=(1, 1, 0.78)), "suit", Hp, 0.04)
+    TORSO = ball_rows(0.262, WAIST_Y) + EGG[5:]
+else:
+    TORSO = EGG
 
 # ---- torso ----
 T = pivot("torso", (0, HIP, 0), body)
-# The trunk's lower half is a ball on the waist pivot: an ellipsoid as deep as it is tall (0.26 wide, 0.203 deep and high,
-# the lathe's 0.78 depth included), which a lean (a turn about x) leaves exactly where it was, so the trunk stays seated in
-# the hips however far forward he leans (the bottom used to swing up and back, baring the thighs' tops). Above it the
-# trunk is as before.
-WAIST_R, WAIST_D = 0.26, 0.26 * 0.78
-TORSO = [(WAIST_R * math.sin(math.radians(a)), -WAIST_D * math.cos(math.radians(a))) for a in range(0, 91, 10)] + [
-         (0.272, 0.06), (0.285, 0.14), (0.262, 0.3), (0.268, 0.4), (0.3, 0.52),
-         (0.338, 0.66), (0.338, 0.78), (0.3, 0.9), (0.21, 0.99), (0.15, 1.04), (0, 1.07)]
 def chest(v):
     # broader back, a small chest shelf at the front
     x, y, z = v
@@ -382,7 +400,7 @@ def chest(v):
 mesh("torso_trunk", xf(lathe(TORSO, 18), s=(1, 1, 0.78), fn=chest), "suit", T, 0.04)
 # side seams in accent
 for s in (-1, 1):
-    path = [(s * 0.29, 0.14, 0), (s * 0.262, 0.3, 0), (s * 0.27, 0.42, 0), (s * 0.31, 0.56, 0), (s * 0.338, 0.68, 0)]
+    path = ([(s * 0.29, 0.14, 0), (s * 0.262, 0.3, 0)] if HIPS_KIND != "waist" else [(s * 0.266, 0.36, 0)]) + [(s * 0.27, 0.42, 0), (s * 0.31, 0.56, 0), (s * 0.338, 0.68, 0)]
     mesh(f"torso_seam{'L' if s < 0 else 'R'}", tube(path, [0.016] * 5, 6), "accent", T, 0)
 # chest plate: curved shield, raised rim, courier chevron
 mesh("torso_plate", xf(superquad(0.215, 0.145, 0.035, 0.3, 0.3, 16, 8), (0, 0.65, 0), (-0.06, 0, 0), fn=cwrap(0.33, 0.29)), "accent", T, 0.03)
@@ -623,6 +641,14 @@ for i in range(5):
 # (tools/blender/audit_outline.py lists what is still proud.)
 from mathutils.bvhtree import BVHTree
 MAX_PROUD = 0.006   # low-poly lathes sag 3 to 4 mm between vertices; any closer and the ribbon dips under the facets
+if HIPS_KIND == "waist":
+    # the belt and what hangs on it go with the pelvis; the torso pivot up to the belt, everything on it kept in place
+    for o in list(T.children):
+        if o.name.split(".")[0] in ("torso_belt", "torso_buckle", "torso_buckleCore", "torso_pouchL", "torso_pouchR", "torso_pouchFlapL", "torso_pouchFlapR"):
+            o.parent = Hp
+    T.location = tb((0, HIP + WAIST_Y, 0))
+    for o in T.children:
+        o.location = o.location - Vector(tb((0, WAIST_Y, 0)))
 FLUSH = [("head_stripe", "head_helmet", 0.008), ("torso_seamL", "torso_trunk"), ("torso_seamR", "torso_trunk")]
 for tag in "LR":
     FLUSH += [(f"leg{tag}_stripe", f"leg{tag}_leg"), (f"leg{tag}_shinStripe", f"leg{tag}_calf"), (f"arm{tag}_stripe", f"arm{tag}_arm"), (f"arm{tag}_foreStripe", f"arm{tag}_fore")]
