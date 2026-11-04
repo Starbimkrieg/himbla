@@ -525,7 +525,8 @@ tools/
                            blacks, parts without weighted normals or toon attributes; triangles and halo slots per model
                            (`python3 tools/blender/style_audit.py tools/blender/build_<name>.py`)
     audit_outline.py       lists runner parts missing an outline
-    build_runner.py        -> runner.glb
+    build_runner.py        -> runner.glb (the suit one skinned body: runner_skin.py, docs/runner-skin; preview_runner.py
+                           renders it posed as the game poses him)
     build_idles.py         -> idles.json (MOONRUNNER_IDLES_BLEND=<file> saves the scene)
     build_ships.py         -> ships.glb (FREIGHTER_VARIANT=atlas|compact, SHIPS_OUT=<file>; docs/shuttle-design.md)
     build_skimmer.py       -> skimmer.glb

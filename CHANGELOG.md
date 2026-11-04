@@ -6,12 +6,18 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 ## Unreleased
 
 - **Townsfolk drafts (`src/figureDrafts.js`, not in the game yet):** two proposals to replace the generic NPC (`makeFigure`), on the same palette and outfits. Both fix the proportions (the torso, 0.97 m, outran the 0.84 m legs; the head and helmet were oversized), add knees and elbows (ten bones; `figureWalk` bends them, drawn on twos through `heldPhase`), vary the build (slim, average, broad, stout, tall, petite), shoulder and hip widths and leg length, paint the helmets (never skin-toned cream) with a crown stripe, rear vent plate and ear pods so they read as helmets from behind, and keep every human sealed or in a fishbowl while aliens go bare-headed (the Vrill plus a crested kind and a one-eyed kind). **A · Rounded** keeps the toy look (big helmet, chunky limbs, mitten hands, ~3.9k triangles; its shoulders sit in the shoulder line and its thighs rise out of a deeper seat, and the faces under the fishbowls are sized to the body, the glass fitted round them); **B · Lean** is the courier's family (taller and slimmer, small helmet with a wraparound visor, shaped calves and forearms, glove cuffs, soled shoes, an air pack and hose on every sealed suit, ~5k). Today's figure is ~2.5k. `tools/figure-drafts.js` stands them beside today's figures in the running game.
-- **The courier's legs stay joined to his body when he leans** (`tools/blender/build_runner.py` -> `runner.glb`, `models.js`
-  makeRunner). He is rigid parts on pivots, and the torso turned on a pivot at the bottom of its egg-shaped trunk: leaning
-  into a skate (up to 0.6 rad) swung its lower back up 10 cm, baring the thighs' tops. Now the trunk's lower half is a ball
-  centred on that pivot (as deep as it is tall), which a lean leaves exactly where it was, and it sits in a new hip piece
-  (`hips`, suit-coloured shorts round the thighs' tops, on its own pivot with the legs). The poses are unchanged; nothing in
-  the game that turns the pivots changes.
+- **The courier is one body that bends** (`tools/blender/runner_skin.py`, `build_runner.py` -> `runner.glb`; `models.js`
+  makeRunner; drafts and renders in `docs/runner-skin/`). His suit was rigid pieces on pivots: they parted at every bend (a
+  lean bared the thighs' tops), each drew its own outline (broken lines at the elbows and knees) and the piping stopped at
+  every joint. Now the suit is one continuous body (armpits, crotch, elbows, knees joined and smoothed), each vertex weighted
+  to the pivots it follows and skinned to them in the game as the townsfolk are, so every animation, the ragdoll, the
+  weapons' arm solving, the light-bike's pose and animating on twos bend it unchanged. Picked from two drafts: the pressure
+  suit, with soft concertina folds round the elbows, knees and waist pressed into its surface; the piping continuous strips
+  laid on it. The helmet, pads, gloves, belt, pack, guards, boots and skates stay rigid on their pivots; the suit under the
+  pads follows the arm, tucked in so it can't poke through. About 61k triangles for the suit (the rigid one was 6k).
+  **The forearms are 0.08 m longer** (everything below the elbow moved down with them): the two-handed weapons are now held
+  0.4 m out to the side (0.25 before), and the light-bike's rider pose is re-solved for them (fists 15 mm from the grips).
+  The first fix (a ball and a hip piece, "shorts") and its two drafts are gone.
 - **Asset Row and the Spindle draw again (`src/farshadow.js`):** since the far sun shadows, every frame in the Asset Row (and in the Spindle) threw `planet.farCasters is not a function` and the picture froze: both swap in a flat stand-in world, which has no terrain chunks to cast. The far pass now skips that step when the world has none. Checked headless: the Row's 261 items build, and with the Row open frames keep coming with no page errors.
 - **The small outposts are rebuilt (the picked drafts are in).** Trading Kiosk: the Market Cross; Watchtower: the
   Lattice Camp; Supply Depot: the Silo Depot; Farm Dome: the Greenhouse Row; Relay Mast: the Guyed Relay; Junk Pile:

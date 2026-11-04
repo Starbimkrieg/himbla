@@ -1,4 +1,4 @@
-# The courier as one bending body: two drafts
+# The courier as one bending body: two drafts (B is in the game)
 
 ![Now, A and B: standing, from behind, running, skating (behind and side), on the light-bike, holding a weapon two-handed
 and one-handed, the hips and a knee close up](skin_sheet.jpg)
@@ -34,3 +34,17 @@ weapons' arm solving, the light-bike pose, animating on twos) bends the suit unc
 
 `RUNNER_SKIN=a|b MOONRUNNER_REPO=. python3 tools/blender/build_runner.py` (`tools/blender/runner_skin.py`);
 `RUNNER_SKIN=a|b MOONRUNNER_REPO=. python3 tools/blender/preview_runner.py` renders these (`RUNNER_CLOSE=1` the close-ups).
+
+## Picked: B, with longer forearms
+
+B, the pressure suit, is the courier now (`RUNNER_SKIN` defaults to `b`; `a` builds the other, `none` the rigid suit).
+In the game the suit is skinned to his pivots (`models.js makeRunner`; the GLB carries each vertex's four pivots and
+weights as `_SKJ0..3` / `_SKW0..3`), with a skinned outline shell. On the way in:
+
+- **Longer forearms:** 0.08 m (`build_runner.py FL`), everything below the elbow moved down with them. The two-handed
+  weapons sit 0.4 m out to the side (0.25 before; `weaponView.js` HOLDS), and the light-bike's rider pose is re-solved
+  (`build_courier.py`: fists 15 mm from the grips; its preview now bends the suit too).
+- **Shoulders:** the suit under each pad follows the arm alone and is tucked in under it: it poked out through the pad when
+  the arm came up.
+- **Piping:** laid 8 mm proud and sampled every 5 mm, so it doesn't break where the suit folds.
+- **Size:** about 61k triangles for the suit (built on a 1.4 cm grid), 122k with its outline.

@@ -182,6 +182,17 @@ def add_rider(sc, g, seat):
     root = next(o for o in new if o.parent is None)
     byname = {o.name: o for o in new}
     P = g["SPEC"]["pose"]
+    # the skinned suit (runner_skin.py): its rest, to bend it with the pose below as the game does
+    bpy.context.view_layer.update()
+    SKP = ["torso", "legL", "shinL", "legR", "shinR", "armL", "foreL", "armR", "foreR"]
+    rest_w = {n: byname[n].matrix_world.copy() for n in SKP if n in byname}
+    skins = []
+    for o in new:
+        if o.type == "MESH" and o.parent is not None and o.parent.name.split(".")[0] == "skin":
+            me = o.data
+            att = [me.attributes.get(f"_SKJ{i}") for i in range(4)] + [me.attributes.get(f"_SKW{i}") for i in range(4)]
+            if all(att):
+                skins.append((o, [o.matrix_world @ v.co for v in me.vertices], [[(int(att[i].data[k].value), att[4 + i].data[k].value) for i in range(4)] for k in range(len(me.vertices))]))
     for o in new:
         o.rotation_mode = "ZYX"   # the glTF importer leaves nodes in quaternion mode
     byname["torso"].rotation_euler = (P["lean"], 0, 0)
@@ -196,6 +207,18 @@ def add_rider(sc, g, seat):
     k = 1 / 1.2   # the 2 m runner beside a bike modelled 1:1, shown at 1.2x
     root.scale = (k, k, k)
     root.location = (seat[0], -seat[2], seat[1] - 0.95 * k)   # three.js (x, y, z) -> Blender (x, -z, y)
+    bpy.context.view_layer.update()
+    # bend the suit: each vertex by its pivots' moves from rest, weighted (linear blend skinning, as the game)
+    D = [byname[n].matrix_world @ rest_w[n].inverted() for n in SKP]
+    for o, rest, ws in skins:
+        inv = o.matrix_world.inverted()
+        for v, p, w in zip(o.data.vertices, rest, ws):
+            q = Vector()
+            for j, wt in w:
+                if wt:
+                    q += (D[j] @ p) * wt
+            v.co = inv @ q
+        o.data.update()
     bpy.context.view_layer.update()
     # --- checks: fists on the grips, legs clear of the shell and bags
     GX, GY, GZ = g["SPEC"]["grip"]
@@ -216,8 +239,8 @@ def add_rider(sc, g, seat):
     solids = [o for o in g["C"].objects if o.name in ("shell", "bagL", "bagR", "bagFlapL", "bagFlapR")]   # closed solids only (straps and seams are open bands)
     bvhs = [BVHTree.FromObject(o, dg) for o in solids]
     bad, deep, worst = 0, 0.0, {}
-    for n in ("legL", "legR"):   # (shins and skates are under the legs too)
-        for c in byname[n].children_recursive:
+    for n in ("legL", "legR", "skin"):   # (shins and skates are under the legs; the suit's thighs are on the skin)
+        for c in (byname[n].children_recursive if n in byname else []):
             if c.type != "MESH":
                 continue
             for v in c.data.vertices:

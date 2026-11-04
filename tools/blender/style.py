@@ -40,7 +40,7 @@ def ink_class(breadth):
 
 
 # triangles per model (export root), by class
-BUDGET = {"vehicle": 11000, "courier": 15000, "ship": 25000, "building": 35000, "setpiece": 40000, "prop": 5000}
+BUDGET = {"vehicle": 11000, "courier": 75000, "ship": 25000, "building": 35000, "setpiece": 40000, "prop": 5000}
 
 # glow slots that get the game's halo (light sources): keep in step with HALO_SLOT in src/toon.js
 HALO = re.compile(r"^(?:glow_)?(?:lamps?|bulbs?|beacon\w*|leds?\w?|laser|plasma\w*|ion|redlamp|tail|hot|neon\w*|underglow|element"
