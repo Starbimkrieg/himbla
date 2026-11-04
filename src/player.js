@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { makeBody, stepSkater } from './physics.js';
 import { makeRunner, makeCrate, ScarfSim, plantLeg, leanDrops, flatFwd } from './models.js';
+import { WeaponView } from './weaponView.js';
+import { AIM_SHOW } from './gamepad.js';
 import { frameQuat, upAt } from './geo.js';
 import { Ragdoll } from './ragdoll.js';
 import { Idle } from './idles.js';
@@ -63,6 +65,7 @@ export class Player {
   constructor(game, spawn) {
     this.game = game;
     this.model = makeRunner({ suit: 0xff4f2e, accent: 0x2ee6ff, scarf: 0xffd23f, own: true });
+    this.weaponView = new WeaponView(this.model, 0x9be7ff); // the weapon in hand while fighting (weaponView.js)
     game.scene.add(this.model.root);
     this.body = makeBody(spawn);
     this.maxHealth = 100;
@@ -557,7 +560,8 @@ export class Player {
     this.fireCd -= dt;
     if (input.mouse[0] && this.fireCd <= 0 && input.locked && !this.rag) {
       this.fireCd = w.delay * (1 - 0.15 * (g.upgrades.overcharge || 0)) * (this.mutFire || 1);
-      const muzzle = this.center.clone().addScaledVector(cam.right, 0.5).addScaledVector(b.up, 0.3);
+      // from the weapon's muzzle once it's up (weaponView.js), else beside the courier as it comes up
+      const muzzle = this.weaponView.muzzle(new THREE.Vector3()) || this.center.clone().addScaledVector(cam.right, 0.5).addScaledVector(b.up, 0.3);
       const aim = cam.position.clone().addScaledVector(cam.look, 350);
       const dir = aim.sub(muzzle).normalize();
       fireWeapon(g, w, muzzle, dir, b.vel, this.damageMult || 1, this.homing || 1.5);
@@ -681,6 +685,7 @@ export class Player {
   animate(dt, cam, ctrl) {
     const b = this.body;
     const m = this.model;
+    this.weaponView.restore(); // (last frame's aim layer off: the poses below set only the angles they use)
     const up = b.up;
     const sp = this.speed;
     // keep heading tangent to the sphere
@@ -692,6 +697,7 @@ export class Player {
     if (b.skating && hv.length() > 4) target = hv.normalize();
     else if (ctrl.wish.lengthSq() > 0) target = ctrl.wish.clone().normalize();
     else if (!b.skating) target = cam.fwd;
+    if (this.weaponView.out && !b.skating) target = cam.fwd; // weapon out on foot: face where you aim (strafe)
     let turnRate = 0;
     if (target) {
       const cross = new THREE.Vector3().crossVectors(this.heading, target).dot(up);
@@ -768,6 +774,11 @@ export class Player {
     }
     // stopped: breathing and occasional idles (idles.js) over the rest pose
     this.idle.apply(m, dt, b.grounded && !b.skating && !this.rag && !!ctrl && ctrl.wish.lengthSq() === 0, sp, !b.grounded || !!this.rag);
+    // the weapon in hand: up while the crosshair is (gamepad.js), not in a vehicle, a dive or a trick
+    const gm = this.game, aiming = gm.pad ? gm.pad.aimT < AIM_SHOW : false;
+    if (this.rag || this.dead) this.weaponView.hide();
+    else this.weaponView.apply(aiming && gm.state === 'play' && !this.vehicle && !(ctrl && ctrl.dive && !b.grounded) && !this.trick.active ? WEAPONS[this.weapon || 0].key : null,
+      cam.look, dt, gm.cosmetics ? gm.cosmetics.laserColor : null);
     if (this.rag) {
       this.game.devOverlay.lap('animate');
       if (!this.rag.update(dt)) { this.rag.release(); this.rag = null; }

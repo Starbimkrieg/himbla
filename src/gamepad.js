@@ -53,7 +53,7 @@ import { DEV_TOOLS } from './devtools.js';
 import { radialFill, wedgeAt } from './powers.js';
 
 const DEAD = 0.18; // stick deadzone (radial)
-const AIM_SHOW = 10; // s the crosshair stays up after the last shot
+export const AIM_SHOW = 10; // s the crosshair stays up after the last shot (and the weapon in hand: weaponView.js)
 const B = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8, START: 9, L3: 10, R3: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
 // buttons held as default key codes in play
 const HOLD = { [B.A]: 'ShiftLeft', [B.B]: 'KeyQ', [B.X]: 'KeyF', [B.Y]: 'KeyV', [B.LB]: 'Space', [B.RB]: 'KeyE', [B.L3]: 'Thrust', [B.R3]: 'KeyG' };

@@ -336,6 +336,7 @@ def clip(P, new, rest=False):
 sc, ground = scene_setup()
 B = {"__file__": os.path.join(REPO, "tools", "blender", "build_weapons.py")}
 os.environ["MOONRUNNER_REPO"] = REPO
+os.environ["MOONRUNNER_EXPORT"] = "0"                                         # (the builder exports the pick otherwise)
 exec(open(B["__file__"], encoding="utf-8").read(), B)
 for s, hx in B["HEX"].items():                                               # weapon materials: lit slots glow
     m = bpy.data.materials.get(s)

@@ -1,7 +1,10 @@
-# Weapon models for the courier: two sets of proposals (docs/weapon-proposals/; preview_weapons.py renders them). Not in the
-# game yet: the game draws no weapon, only the shot.
+# Weapon models for the courier: two sets of proposals and the pick from them (docs/weapon-proposals/; preview_weapons.py
+# renders them). The pick is in the game.
 #
-#   MOONRUNNER_REPO=. python3 tools/blender/build_weapons.py       builds both sets into the scene (exports nothing)
+#   MOONRUNNER_REPO=. python3 tools/blender/build_weapons.py       builds every set, exports the pick to src/assets/weapons.glb
+#                                                                    (roots wpn_pulse, wpn_scatter, wpn_rail, wpn_mortar; the
+#                                                                    game: models.js makeWeapon, weaponView.js); MOONRUNNER_EXPORT=0
+#                                                                    builds without exporting (the preview, the audits)
 #
 # Four weapons (src/weapons.js WEAPONS), each in its maker's colours and style (.claude/skills/blender/style.md, "Faction
 # palettes"):
@@ -38,22 +41,30 @@ HEX = {
     # courier (Pulse Spinner)
     "c_orange": "ff4f2e", "c_cream": "fff4e0", "c_cyan": "2ee6ff", "c_yellow": "ffd23f", "c_navy": "241a5c", "laser": "9be7ff",
     # SPACECOM (the Pulse Spinner as picked: style.md, "Faction palettes")
-    "s_cream": "f2ecdc", "s_yellow": "ffd23f", "s_navy": "2a3a6b", "s_white": "ffffff", "s_red": "ff2a4a", "s_blue": "2e8bff",
+    "s_cream": "f2ecdc", "s_yellow": "ffd23f", "s_navy": "2a3a6b", "s_white": "ffffff", "ledr": "ff2a4a", "ledb": "2e8bff",
     # Vostok
     "v_slate": "6b6f78", "v_red": "ff3b5c", "v_dark": "2c2f38", "v_cream": "f3eee4",
     # Daedalus
-    "d_body": "1a1426", "d_panel": "4a4660", "d_violet": "c77dff", "d_cream": "f3eee4",
+    "d_body": "1a1426", "d_panel": "4a4660", "plasma": "c77dff", "d_cream": "f3eee4",
     # Rustmoon
-    "r_rust": "6a5a48", "r_rust2": "8a5a3a", "r_green": "7dff3a", "r_violet": "7b2ff7", "r_cream": "f3eee4", "r_glow": "7dff3a",
+    "r_rust": "6a5a48", "r_rust2": "8a5a3a", "r_green": "7dff3a", "r_violet": "7b2ff7", "r_cream": "f3eee4", "ledg": "7dff3a",
 }
 SLOT_COLORS = {k: S(v) for k, v in HEX.items()}
-GLOW = {"laser", "c_cyan", "d_violet", "r_glow", "s_red", "s_blue"}      # lit in the preview (and glow slots in the game, if they go in)
+GLOW = {"laser", "c_cyan", "plasma", "ledg", "ledr", "ledb"}      # lit (the preview); glow slots in the game, named as its light sources (toon.js HALO_SLOT)
 
 for f in ("kit.py", "zbornak_kit.py"):
     exec(open(os.path.join(REPO, "tools", "blender", f), encoding="utf-8").read(), globals())
 C = coll()
 for s in SLOT_COLORS:
     material(s)
+
+
+def parents_of(o):
+    out, p = [], o.parent
+    while p is not None:
+        out.append(p)
+        p = p.parent
+    return out
 
 
 def star(r, k=0.42, n=5, rot=0.0):
@@ -79,7 +90,7 @@ def delta_eye(g, x0, x1, y, z, s=1.0):
     g("d_cream", 0.0).polyx(tri, x0, x1)
     eye = [(z + 0.02 * s * math.cos(a), y + 0.0 + 0.011 * s * math.sin(a)) for a in [TAU * i / 12 for i in range(12)]]
     xs = 1 if x1 > 0 else -1
-    g("d_violet", 0.0).polyx(eye, x1, x1 + xs * 0.002)
+    g("plasma", 0.0).polyx(eye, x1, x1 + xs * 0.002)
 
 
 # =====================================================================================================================
@@ -165,8 +176,8 @@ def pulse_spacecom(set_="pick"):
         g("s_yellow", 0.0).boxc(x, 0.105, 0.07, 0.004, 0.014, 0.3)
     g("s_navy", 0.012).cylc(0, 0.15, -0.15, 0.045, 0.06, 14, "z")                     # the back cap
     g("s_navy", 0.01).boxc(0, 0.2, -0.1, 0.1, 0.02, 0.05)                             # light bar on top at the back
-    g("s_red", 0.0).boxc(-0.026, 0.213, -0.1, 0.044, 0.008, 0.04)
-    g("s_blue", 0.0).boxc(0.026, 0.213, -0.1, 0.044, 0.008, 0.04)
+    g("ledr", 0.0).boxc(-0.026, 0.213, -0.1, 0.044, 0.008, 0.04)
+    g("ledb", 0.0).boxc(0.026, 0.213, -0.1, 0.044, 0.008, 0.04)
     g("dark", 0.015).rb(0, 0.0, -0.03, 0.036, 0.1, 0.048, 0.3, rot=(0.25, 0, 0))     # grip, trigger, guard
     g("s_yellow", 0.0).boxc(0, 0.01, -0.078, 0.03, 0.12, 0.004, rot=(0.25, 0, 0))
     g("s_white", 0.008).boxc(0, 0.065, 0.05, 0.016, 0.04, 0.016, rot=(-0.3, 0, 0))
@@ -256,10 +267,10 @@ def rail_a():
     g = root("a", "rail", "under", (0, 0.0, 0.22), (0, 0.105, 1.15))
     g("d_body", 0.02).polyz(HEXB, -0.55, 0.3)
     for s in (-1, 1):                                                                 # violet seams along the upper facets
-        g("d_violet", 0.0).boxc(s * 0.066, 0.135, -0.1, 0.004, 0.008, 0.7, rot=(0, 0, s * 0.95))
+        g("plasma", 0.0).boxc(s * 0.066, 0.135, -0.1, 0.004, 0.008, 0.7, rot=(0, 0, s * 0.95))
         # the rails
         g("d_body", 0.012).boxc(s * 0.045, 0.105, 0.72, 0.03, 0.07, 0.84)
-        g("d_violet", 0.0).boxc(s * 0.0285, 0.105, 0.72, 0.004, 0.03, 0.8)
+        g("plasma", 0.0).boxc(s * 0.0285, 0.105, 0.72, 0.004, 0.03, 0.8)
         g("d_panel", 0.008).polyx([(1.14, 0.07), (1.2, 0.105), (1.14, 0.14)], s * 0.03, s * 0.06)   # pointed tips
     for z in (0.36, 0.66, 0.96):                                                      # collars binding the rails
         g("d_panel", 0.01).boxc(0, 0.105, z, 0.13, 0.1, 0.035)
@@ -270,10 +281,10 @@ def rail_a():
     # scope
     g("d_body", 0.012).boxc(0, 0.215, 0.02, 0.04, 0.05, 0.24)
     g("d_panel", 0.008).boxc(0, 0.183, 0.02, 0.025, 0.02, 0.06)
-    g("d_violet", 0.0).cylc(0, 0.215, 0.142, 0.015, 0.006, 10, "z")
+    g("plasma", 0.0).cylc(0, 0.215, 0.142, 0.015, 0.006, 10, "z")
     g("d_body", 0.015).rb(0, -0.01, -0.01, 0.03, 0.1, 0.042, 0.3, rot=(0.25, 0, 0))  # pistol grip
     g("d_body", 0.012).cylc(0, 0.0, 0.22, 0.027, 0.1, 10)                             # fore grip
-    g("d_violet", 0.0).boxc(0, 0.06, 0.08, 0.012, 0.03, 0.012)                        # trigger, lit
+    g("plasma", 0.0).boxc(0, 0.06, 0.08, 0.012, 0.03, 0.012)                        # trigger, lit
     return g
 
 
@@ -283,13 +294,13 @@ def rail_mix(set_="pick"):
     g = root(set_, "rail", "under", (0, 0.0, 0.22), (0, 0.105, 1.15))
     g("d_body", 0.02).polyz(HEXB, -0.55, 0.3)
     for s in (-1, 1):
-        g("d_violet", 0.0).boxc(s * 0.066, 0.135, -0.1, 0.004, 0.008, 0.7, rot=(0, 0, s * 0.95))
+        g("plasma", 0.0).boxc(s * 0.066, 0.135, -0.1, 0.004, 0.008, 0.7, rot=(0, 0, s * 0.95))
         g("d_body", 0.012).boxc(s * 0.045, 0.105, 0.72, 0.03, 0.07, 0.84)
-        g("d_violet", 0.0).boxc(s * 0.0285, 0.105, 0.72, 0.004, 0.03, 0.8)
+        g("plasma", 0.0).boxc(s * 0.0285, 0.105, 0.72, 0.004, 0.03, 0.8)
         g("d_panel", 0.008).polyx([(1.14, 0.07), (1.2, 0.105), (1.14, 0.14)], s * 0.03, s * 0.06)
     for i in range(5):                                                                # the coil rings, on spokes to the rails
         z = 0.38 + 0.16 * i
-        g("d_violet", 0.0).tor(0.095, 0.016, (0, 0.105, z), (PI / 2, 0, 0), n=28, rs=5)
+        g("plasma", 0.0).tor(0.095, 0.016, (0, 0.105, z), (PI / 2, 0, 0), n=28, rs=5)
         for sx in (-1, 1):
             for sy in (-1, 1):
                 a = math.atan2(sy, sx)
@@ -299,10 +310,10 @@ def rail_mix(set_="pick"):
         delta_eye(g, s * 0.012, s * 0.016, 0.235, -0.45, 1.1)
     g("d_body", 0.012).boxc(0, 0.215, 0.02, 0.04, 0.05, 0.24)
     g("d_panel", 0.008).boxc(0, 0.183, 0.02, 0.025, 0.02, 0.06)
-    g("d_violet", 0.0).cylc(0, 0.215, 0.142, 0.015, 0.006, 10, "z")
+    g("plasma", 0.0).cylc(0, 0.215, 0.142, 0.015, 0.006, 10, "z")
     g("d_body", 0.015).rb(0, -0.01, -0.01, 0.03, 0.1, 0.042, 0.3, rot=(0.25, 0, 0))
     g("d_body", 0.012).cylc(0, 0.0, 0.22, 0.027, 0.1, 10)
-    g("d_violet", 0.0).boxc(0, 0.06, 0.08, 0.012, 0.03, 0.012)
+    g("plasma", 0.0).boxc(0, 0.06, 0.08, 0.012, 0.03, 0.012)
     return g
 
 
@@ -312,25 +323,25 @@ def rail_b():
     g = root("b", "rail", "under", (0, 0.0, 0.22), (0, 0.12, 1.25))
     core = [(-0.07, 0.04), (0.07, 0.04), (0.07, 0.16), (0.04, 0.2), (-0.04, 0.2), (-0.07, 0.16)]
     g("d_body", 0.02).polyz(core, -0.4, 0.18)
-    g("d_violet", 0.0).boxc(0, 0.2025, -0.12, 0.05, 0.004, 0.36)                      # the core's lit window on top
+    g("plasma", 0.0).boxc(0, 0.2025, -0.12, 0.05, 0.004, 0.36)                      # the core's lit window on top
     for s in (-1, 1):
         delta_eye(g, s * 0.07, s * 0.074, 0.11, -0.12, 1.3)
     g("d_panel", 0.012).polyz([(-0.05, 0.06), (0.05, 0.06), (0.03, 0.18), (-0.03, 0.18)], -0.56, -0.4)   # tapered tail
     g("d_body", 0.012).boxc(0, 0.12, 0.6, 0.044, 0.044, 0.84)                          # the spine, z 0.18 .. 1.02
     for i in range(5):
         z = 0.3 + 0.16 * i
-        g("d_violet", 0.0).tor(0.075, 0.016, (0, 0.12, z), (PI / 2, 0, 0), n=24, rs=5)
+        g("plasma", 0.0).tor(0.075, 0.016, (0, 0.12, z), (PI / 2, 0, 0), n=24, rs=5)
         for k in range(3):                                                            # the ring's cradle: three spokes
             a = TAU * k / 3 + PI / 2
             g("d_panel", 0.006).bm((0.02 * math.cos(a), 0.12 + 0.02 * math.sin(a), z), (0.062 * math.cos(a), 0.12 + 0.062 * math.sin(a), z), 0.008, 5)
     for s in (-1, 1):                                                                 # the forked tip: two blades
         g("d_panel", 0.012).polyx([(1.0, 0.1 + s * 0.012), (1.32, 0.12 + s * 0.085), (1.25, 0.12 + s * 0.05), (1.0, 0.12 + s * 0.022)], -0.015, 0.015)
-        g("d_violet", 0.0).polyx([(1.04, 0.12 + s * 0.022), (1.26, 0.12 + s * 0.052), (1.25, 0.12 + s * 0.047), (1.04, 0.12 + s * 0.017)], -0.017, 0.017)
+        g("plasma", 0.0).polyx([(1.04, 0.12 + s * 0.022), (1.26, 0.12 + s * 0.052), (1.25, 0.12 + s * 0.047), (1.04, 0.12 + s * 0.017)], -0.017, 0.017)
     g("d_body", 0.015).rb(0, -0.01, -0.01, 0.03, 0.1, 0.042, 0.3, rot=(0.25, 0, 0))
     g("d_body", 0.012).cylc(0, 0.0, 0.22, 0.027, 0.1, 10)
     g("d_panel", 0.008).boxc(0, 0.06, 0.22, 0.06, 0.02, 0.06)                          # the fore grip's mount under the spine
     g("d_panel", 0.008).boxc(0, 0.085, 0.22, 0.02, 0.03, 0.03)
-    g("d_violet", 0.0).boxc(0, 0.06, 0.08, 0.012, 0.03, 0.012)
+    g("plasma", 0.0).boxc(0, 0.06, 0.08, 0.012, 0.03, 0.012)
     return g
 
 
@@ -358,11 +369,11 @@ def mortar_a():
         g("dark", 0.008).path([(0.0, 0.035, z), (0.105, 0.16, z), (0.108, 0.24, z), (0.0, 0.345, z), (-0.108, 0.24, z), (-0.105, 0.16, z), (0.0, 0.035, z)], 0.008, 4)
     # sight: a bent rod with a green bead
     g("steel", 0.008).path([(0, 0.335, 0.3), (0, 0.39, 0.32), (0, 0.39, 0.38)], 0.008, 5)
-    g("r_glow", 0.0).ball(0, 0.39, 0.385, 0.014, 8, 6)
+    g("ledg", 0.0).ball(0, 0.39, 0.385, 0.014, 8, 6)
     # grips: bent pipe, the rear one with a trigger
     g("steel", 0.015).path([(0, 0.15, 0.02), (0, 0.05, 0.0), (0, -0.07, -0.03)], 0.026, 8)
     g("steel", 0.015).path([(0, 0.15, 0.2), (0, 0.0, 0.2)], 0.024, 8)
-    g("r_green", 0.008).boxc(0, 0.11, 0.06, 0.014, 0.035, 0.014)
+    g("r_green", 0.005).boxc(0, 0.11, 0.06, 0.014, 0.035, 0.014)
     return g
 
 
@@ -394,7 +405,7 @@ def mortar_b(set_="b"):
     g("dark", 0.0).cylc(0, 0.362, -0.33, 0.022, 0.004, 10)
     g("steel", 0.015).path([(0, 0.06, 0.02), (0, 0.0, 0.0), (0, -0.08, -0.03)], 0.026, 8)   # pistol grip, bent pipe
     g("steel", 0.012).bm((-0.07, 0.15, 0.2), (-0.17, 0.15, 0.2), 0.025, 10)           # side handle
-    g("r_glow", 0.0).ball(0.0, 0.26, 0.04, 0.016, 8, 6)                               # a ready lamp
+    g("ledg", 0.0).ball(0.0, 0.26, 0.04, 0.016, 8, 6)                               # a ready lamp
     return g
 
 
@@ -403,3 +414,12 @@ WEAPONS = {"a": [pulse_a(), scatter_a(), rail_a(), mortar_a()], "b": [pulse_b(),
 flush_all()
 print("weapons:", {k: [g.root.name for g in v] for k, v in WEAPONS.items()},
       sum(len(o.data.polygons) for o in C.objects if o.type == "MESH"), "faces")
+
+if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
+    roots = []
+    for g in WEAPONS["pick"]:
+        g.root.name = "wpn_" + g.root.name.split("_")[-1]                       # wpn_pick_pulse -> wpn_pulse
+        g.root["role"] = "export"
+        roots.append(g.root)
+    keep = [o for o in C.objects if any(o is r or r in parents_of(o) for r in roots)]
+    export(os.path.join(REPO, "src", "assets", "weapons.glb"), keep)

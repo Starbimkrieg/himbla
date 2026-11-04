@@ -29,6 +29,7 @@ const GLB = {
   casino: () => import('./assets/casino.glb?inline'),
   blackjack: () => import('./assets/blackjack.glb?inline'),
   claw: () => import('./assets/claw.glb?inline'),
+  weapons: () => import('./assets/weapons.glb?inline'),
   dish: () => import('./assets/dish.glb?inline'),
   engine: () => import('./assets/engine.glb?inline'),
   briefcase: () => import('./assets/briefcase.glb?inline'),
@@ -1463,7 +1464,7 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, ska, skb, pw, hb, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'skimmer_a', 'skimmer_b', 'power', 'habitat', ...ILMB_WINGS, ...DOWNS_FILES, 'zlab'].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, wp, ska, skb, pw, hb, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'weapons', 'skimmer_a', 'skimmer_b', 'power', 'habitat', ...ILMB_WINGS, ...DOWNS_FILES, 'zlab'].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
   // a root node in a loaded file (`file`.glb), or a load error
   const named = (g, file, name) => {
     const o = g.scene.getObjectByName(name);
@@ -1506,6 +1507,8 @@ export async function loadShipParts({ ships } = {}) {
   const dn = more.slice(ILMB_WINGS.length);
   // the casino's slot-machine cabinet (tools/blender/build_slots.py)
   SHIP_PARTS.slot = bakeShip(named(sl, 'slots', 'slot'));
+  // the courier's weapons (tools/blender/build_weapons.py; weaponView.js holds them)
+  for (const k of WEAPON_KEYS) SHIP_PARTS['wpn_' + k] = bakeShip(named(wp, 'weapons', 'wpn_' + k));
   // casino lamp post, fountain, bouncer, chandelier, signs (tools/blender/build_casino.py)
   for (const name of CASINO_PROPS) SHIP_PARTS['casino_' + name] = bakeShip(named(cs, 'casino', name));
   // the blackjack table and its chip (tools/blender/build_blackjack.py)
@@ -2295,6 +2298,32 @@ export function makeSlotCabinet(color) {
     }
   }
   return { stat, dyn, pull, lamp, spots };
+}
+
+// ---- the courier's weapons (build_weapons.py, docs/weapon-proposals/: the pick) ----
+// Roots `wpn_pulse` (SPACECOM Disc Blaster), `wpn_scatter` (Vostok Breaker), `wpn_rail` (Daedalus Rail Lance with coil rings),
+// `wpn_mortar` (Rustmoon Junk Hopper). Each in its own frame: the right hand's grip at the origin, +z the way it fires, +y
+// up; extras `hold` (pistol, chest, under), `fore` (the left hand's grip, two-handed ones) and `muzzle`. The disc's `laser`
+// slot takes the player's laser colour (cosmetics.laserColor); the lit parts are named as light sources (they glow).
+export const WEAPON_KEYS = ['pulse', 'scatter', 'rail', 'mortar'];
+const WEAPON_TOON = {
+  dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55607a, rubber: 0x1d1a29,
+  s_cream: 0xf2ecdc, s_yellow: 0xffd23f, s_navy: 0x2a3a6b, s_white: 0xffffff,
+  v_slate: 0x6b6f78, v_red: 0xff3b5c, v_dark: 0x2c2f38, v_cream: 0xf3eee4,
+  d_body: 0x1a1426, d_panel: 0x4a4660, d_cream: 0xf3eee4,
+  r_rust: 0x6a5a48, r_rust2: 0x8a5a3a, r_green: 0x7dff3a, r_violet: 0x7b2ff7, r_cream: 0xf3eee4,
+};
+const WEAPON_GLOW = { plasma: 0xc77dff, ledg: 0x7dff3a, ledr: 0xff2a4a, ledb: 0x2e8bff };
+// A weapon as a Group (its extras in userData; userData.laserMat the disc's own material, to recolour).
+export function makeWeapon(key, laser = 0x9be7ff) {
+  const node = SHIP_PARTS['wpn_' + key];
+  const g = pivotGroup(node);
+  Object.assign(g.userData, node.data);
+  const laserMat = glow(laser);
+  dressNode(node, g, (slot) => (slot === 'laser' ? laserMat : slot in WEAPON_GLOW ? glowShared(WEAPON_GLOW[slot], true) : toon(WEAPON_TOON[slot] ?? 0xff00ff)),
+    (slot) => slot !== 'laser' && !(slot in WEAPON_GLOW));
+  g.userData.laserMat = laserMat; // (haloize marks it in place)
+  return g;
 }
 
 // ---- casino props (build_casino.py) ----
