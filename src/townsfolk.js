@@ -10,7 +10,7 @@ import { TWOS } from './twos.js';
 // Callers animate by rotation (legs and arms about x; figureWalk below poses a stride, figureStand straightens). One shared material;
 // baked geometry cached by look, so identical figures (soldiers, crowds) share it. Looks are random (or opts.seed); explicit colours
 // win: suit = main clothing, helmet = headgear, visor = sealed helmet.
-//   - Proportions: legs longer than the torso, a helmet about a head and a half across; an adult stands about 2 m.
+//   - Proportions: legs longer than the torso, a helmet about a head and a half across; an adult stands about 2.4 m (FIG_SCALE).
 //   - Variety: six builds (slim, average, broad, stout, tall, petite), shoulder and hip widths, leg length, helmet paints, hair.
 //   - Every human keeps a helmet: sealed (painted, never skin-toned, with a crown stripe, a rear vent plate and ear pods, so it reads
 //     as a helmet from behind) or a fishbowl over a face sized to the body. Aliens go bare-headed: the Vrill, a crested kind and a
@@ -45,6 +45,9 @@ const DARK = 0x221d33, METAL = 0x5b5870;
 // body (metres, before the build): hip pivots, thigh, hips to neck, helmet radius, chest/waist/hip half-widths, torso depth (fraction of
 // width), leg and arm radii, upper arm and forearm, a bare head's radius; lathe segments round the torso and round the limbs
 const D = { hip: 0.78, thigh: 0.36, torso: 0.6, headR: 0.275, chest: 0.24, waist: 0.215, hipW: 0.215, flat: 0.8, leg: 0.105, arm: 0.08, upper: 0.235, fore: 0.24, face: 0.165, seg: 12, limbSeg: 10 };
+// every figure is built at these proportions and drawn this much bigger: an adult about 2.4 m to the helmet's top, the courier's height or a
+// touch under (callers' `scale` multiplies it: kids, bouncers)
+const FIG_SCALE = 1.2;
 const PARENT = [-1, 0, 0, 0, 0, 1, 2, 3, 4, 0]; // bones: 0 root, 1 legL, 2 legR, 3 armL, 4 armR, 5 shinL, 6 shinR, 7 foreL, 8 foreR, 9 head
 
 function figRng(seed) {
@@ -540,7 +543,7 @@ export function makeFigure(opts = {}) {
     outfit: S.alien ? { skin: S.skin } : { arch: S.arch, headgear: S.headgear === 'sealed' ? 'sealed' : 'bowl', suit: S.C, pants: S.pants, helmet: S.hatC, visor: S.visorC, skin: S.skin },
   };
   figureStand(f);
-  root.scale.setScalar(S.scale);
+  root.scale.setScalar(S.scale * FIG_SCALE);
   return f;
 }
 

@@ -225,7 +225,7 @@ export function buildBuggyRig(k) {
   r.root.scale.setScalar(1.3);
   // driver on the left of the bench, legs under the dash, hands on the wheel
   const drv = makeFigure({ seed: 4100 + k });
-  drv.root.position.set(0.6, 1.17, -0.32);
+  drv.root.position.set(0.6, 1.04, -0.32); // (seated on the bench: the figure's thighs at FIG_SCALE)
   figureSit(drv); // (thighs under the dash, shins down)
   drv.armL.rotation.x = drv.armR.rotation.x = -0.75; drv.foreL.rotation.x = drv.foreR.rotation.x = -0.45; // (hands on the wheel)
   r.chassis.add(drv.root);
