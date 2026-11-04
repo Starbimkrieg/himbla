@@ -689,5 +689,9 @@ def export():
     print("exported", OUT, os.path.getsize(OUT), "bytes")
 
 
+# the skinned suit (drafts: RUNNER_SKIN=a|b; runner_skin.py)
+if os.environ.get("RUNNER_SKIN"):
+    exec(open(os.path.join(REPO, "tools", "blender", "runner_skin.py"), encoding="utf-8").read(), globals())
+
 if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
     export()
