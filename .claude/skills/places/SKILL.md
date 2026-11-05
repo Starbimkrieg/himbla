@@ -55,3 +55,23 @@ PLACE=<id> node tools/downs-audit.mjs coverage    # solid surfaces nothing colli
 unwalkable) and `floating` (collider tops over nothing drawn) need a place built with `settle()`. Stop the server after.
 
 Expect no floor the feet sink into, and every long rail riding end to end. Then look at it in the game (playtest skill).
+
+### The small outposts
+
+The seven small outposts (`src/outpostDrafts.js`, placed by `territory.js`) are Kit code but not places, so `downs-audit.mjs`
+doesn't reach them. They have their own audit, to run on every change to one (same dev server):
+
+```bash
+node tools/outpost-audit.mjs                # all seven; or name kinds: tower junk
+```
+
+```bash
+WRECK=1 node tools/outpost-audit.mjs        # their wrecks
+```
+
+It lists loose pieces (a barrel off its gun), solid parts with no collider within 0.35 m, collider tops over air, and the
+walking NPCs' routes through colliders. Read every finding and fix it or say why it stays; then look at the outpost in the
+viewer (`/tools/viewer.html?m=outpost&kind=<kind>&draft=<letter>`, `&compare=1` beside the old build) from two sides and
+close. Outposts are placed with every collider's yaw, pitch and roll (`territory.place`), so a sloped part's collider is a
+`k.solidQ` lying as the part lies. Buildings grown in a scaled frame (`within(..., sc)`, `grow`) scale their colliders with
+them (`Kit.sc`); helpers that call `Kit.at` (`quonset`, `habDome`, `cargoStack`'s standard boxes) stay outside such frames.

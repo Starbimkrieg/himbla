@@ -1535,7 +1535,7 @@ export function quonset(k, x, z, r, len, color, yaw, trim) {
   k.add(new THREE.CircleGeometry(r, 18, 0, Math.PI), T(LIGHT), 0, 0.4, -len / 2, { ry: Math.PI, outline: 0 });
   k.box(r * 0.8, r * 0.75, 0.2, T(0x2a2540), 0, 0.4, len / 2 + 0.05, { outline: 0.02 });
   for (const s of [-1, 1]) k.add(new THREE.CylinderGeometry(0.35, 0.35, 0.1, 10).rotateX(Math.PI / 2), G(WARM), s * r * 0.6, r * 0.6, len / 2 + 0.06, { outline: 0 });
-  k.box(0.6, 0.25, 0.3, G(WARM), 0, r * 0.75 + 0.6, len / 2 + 0.2, { outline: 0 });
+  k.box(0.6, 0.25, 0.3, G(WARM), 0, r * 0.75 + 0.6, len / 2 + 0.15, { outline: 0 }); // (on the end wall)
   k.solid(r + 0.5, 0.2, len / 2 + 0.5, 0, 0); // concrete pad
   k.hcyl(r + 0.1, len, 0, 0, 0, 0.4); // round roof you can roll over
   k.at();

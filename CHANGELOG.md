@@ -5,6 +5,24 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Small outposts: audited, walking NPCs, bigger buildings.**
+  - **`tools/outpost-audit.mjs`** checks each outpost's template (and its wreck) for loose pieces, solid parts with no
+    collider, collider tops over air and NPC routes through colliders; `CLAUDE.md` asks for it on every outpost change.
+    All seven and their wrecks are clean. Fixed on the way: **placed outposts dropped every tilted collider's tilt**
+    (`territory.place` kept only the yaw); **`sandbags()`'s colliders stood across the wall** (old outposts and settlements
+    too), its bags now lie along it and are rounder; the Quonset door lamp off its wall; `lattice()`'s mid-height ledge in
+    the air; pyramid roofs, sloping roofs, panels and the heap given colliders that follow them; missing colliders added;
+    loose goods, boards, tyres and treads seated.
+  - **The gun pit** rebuilt as a tripod-mounted machine gun put together from the pedestal up, firing over the bags.
+    **The lattice tower's stair**: 15 switchback flights with stringers, treads, handrails and landings tied to the braces.
+  - **NPCs:** the static figures are gone; two or three townsfolk in the owner's colours walk routes about each outpost
+    (`src/outpostWalkers.js`; troopers, traders, loaders, farmhands, technicians, clan riggers), junk bots at the junk
+    pile. Shown in the viewer and the Asset Row too.
+  - **Rustmoon's containers** are looted: a different faction's livery box by box.
+  - **Buildings 1.25 to 1.45x bigger** in the same 40 m yards (a scaled Kit frame, `Kit.sc`: colliders, text and moving
+    parts grow with it).
+  - The drafts not picked are removed from the code (git history and the proposals README keep them); the viewer's
+    `&compare=1` shows the old build beside the new.
 - **Claude Code setup: a short CLAUDE.md, rules in skills, checks in hooks.** CLAUDE.md is down from 114 lines to about 40:
   commands, conventions and a table of which skill to use for which job. Its task rules moved, unchanged, to where they load
   when the task comes up: Model structure into the `blender` skill; collision, ledge grinds and storage crates into a new

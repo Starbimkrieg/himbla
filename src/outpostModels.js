@@ -10,8 +10,8 @@ import { bendPoint, bendQuat, bendGeometry } from './curve.js';
 // compounds on flattened plateaus. Baked once per kind / faction colour / variant into a few merged meshes (one per
 // material plus one ink hull) that every outpost of that look clones. Flags, lamps, dishes, searchlights stay separate.
 // The small outposts are built from src/outpostDrafts.js (docs/outpost-proposals): the picked draft of each kind (OUTPOST_PICK,
-// on a 40 m yard). `?outpostDraft=a|b|c` (or per kind, `kiosk:a,tower:b`) or localStorage['mr-outpost-draft'] shows another
-// draft instead; `?outpostDraft=off` brings back the old Kit builders below (and the Blender pilot, ?outpostGlb).
+// on a 40 m yard). `?outpostDraft=off` (or localStorage['mr-outpost-draft'] = 'off', or per kind `kiosk:off`) brings back the
+// old Kit builders below (and the Blender pilot, ?outpostGlb); the drafts not picked are in git history.
 export const OUTPOST_PICK = { kiosk: 'b', tower: 'b', depot: 'b', farm: 'b', mast: 'a', junk: 'a', shack: 'c' };
 function readDraft() {
   let v = null;
@@ -81,11 +81,15 @@ class Kit {
   tag = '';
   instN = 0;
   // each piece's box in the kit frame, for the near-miss audit (globalThis.__kitBoxes)
-  boxOf(g, inst) {
-    if (!Kit.tags || !this.tag) return;
+  // (and, for the outpost audit, the piece's instance id on its vertices and its colour and kind of material: tools/outpost-audit.mjs)
+  boxOf(g, inst, mat) {
+    if (!Kit.tags) return;
+    g.setAttribute('inst', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count).fill(inst), 1));
+    if (!this.tag) return;
     g.computeBoundingBox();
     const b = g.boundingBox;
-    (globalThis.__kitBoxes ||= []).push({ i: inst, t: this.tag, a: [b.min.x, b.min.y, b.min.z], b: [b.max.x, b.max.y, b.max.z] });
+    const pr = g.parameters || {}; // (a beam or tube: a thin cylinder, which wants no collider)
+    (globalThis.__kitBoxes ||= []).push({ i: inst, t: this.tag, a: [b.min.x, b.min.y, b.min.z], b: [b.max.x, b.max.y, b.max.z], c: mat && mat.color ? mat.color.getHex() : 0, glow: !!(mat && (mat.isMeshBasicMaterial || mat.transparent)), tube: g.type === 'TorusGeometry' || (g.type === 'CylinderGeometry' && Math.max(pr.radiusTop, pr.radiusBottom) < 0.36 && (pr.height > 1.5 || Math.max(pr.radiusTop, pr.radiusBottom) <= 0.3)) });
   }
   tagGeo(g) {
     if (!Kit.tags) return g;
@@ -113,6 +117,8 @@ class Kit {
     this.floorCols = false; // settlement kit: colliders under its drawn floors at finish() (floorColliders)
     this.hits = []; // boxes a blast has to reach to damage the main building
     this.raid = null; // where you stand to raid it
+    this.sc = 1; // the current frame's uniform scale (a draft outpost's scaled frames: outpostDrafts.js within); colliders, text, moving parts and ink follow it
+    this.walkers = null; // a draft outpost's walking NPCs: { look, kind, routes } (outpostWalkers.js)
     this.smoke = null; // where a wreck smoulders
   }
 
@@ -133,12 +139,12 @@ class Kit {
     if (!list) this.byMat.set(mat, (list = []));
     prep(geo);
     if (outline) { // (toon.js shellGeo, placed: its thickness stays `outline`)
-      const hg = shellGeo(geo, outline).clone().applyMatrix4(_m);
+      const hg = shellGeo(geo, outline / this.sc).clone().applyMatrix4(_m); // (ink stays its thickness in a scaled frame)
       this.ink.push(this.onGround ? dropFloorFaces(hg) : hg);
     }
     geo.applyMatrix4(_m);
     this.tagGeo(geo);
-    this.boxOf(geo, ++this.instN);
+    this.boxOf(geo, ++this.instN, mat);
     list.push(mat.side === THREE.FrontSide && this.onGround ? dropFloorFaces(geo) : geo);
     return this;
   }
@@ -154,7 +160,7 @@ class Kit {
       let list = this.byMat.get(km);
       if (!list) this.byMat.set(km, (list = []));
       const g = this.tagGeo(prep(geo.clone()).applyMatrix4(w));
-      this.boxOf(g, this.instN);
+      this.boxOf(g, this.instN, km);
       list.push(km.side === THREE.FrontSide && this.onGround ? dropFloorFaces(g) : g);
     }
     if (node.ink) { // (models.js shellOff: inkMat's form, carried whole)
@@ -197,6 +203,7 @@ class Kit {
       return obj;
     }
     obj.position.copy(this.P(x, y, z));
+    if (this.sc !== 1) obj.scale.multiplyScalar(this.sc);
     obj.rotation.y += this.yaw + ry;
     this.root.add(obj);
     return obj;
@@ -220,6 +227,7 @@ class Kit {
   // a text panel (both faces); returns its height
   text(str, x, y, z, ry, w, { fg = '#ffd23f', bg = '#241a3a', stroke = '#120a1e', rz = 0, back = true, off = 0.17 } = {}) {
     const mat = textMat(str, fg, bg, stroke);
+    w *= this.sc; off *= this.sc;
     const h = w / mat.userData.aspect;
     const geo = new THREE.PlaneGeometry(w, h, this.curveR ? Math.ceil(w / 5) : 1, 1);
     for (const side of back ? [0, 1] : [0]) {
@@ -281,19 +289,26 @@ class Kit {
 
   // colliders / blast boxes, given in the current frame (a box with a pitch, tilted about its x after the yaw, is centred hy
   // above y0 rather than standing on it)
-  solid(hx, hy, hz, x, z, ry = 0, y0 = 0, pitch = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'box', hx, hy, hz, x: p.x, y: y0 + hy, z: p.z, yaw: this.yaw + ry, pitch, tag: this.tag }); }
+  solid(hx, hy, hz, x, z, ry = 0, y0 = 0, pitch = 0) {
+    const s = this.sc;
+    if (s !== 1) { const p = this.P(x, y0, z); this.cols.push({ type: 'box', hx: hx * s, hy: hy * s, hz: hz * s, x: p.x, y: p.y + hy * s, z: p.z, yaw: this.yaw + ry, pitch, tag: this.tag }); return; } // (a scaled frame: its heights go through it too)
+    const p = this.P(x, 0, z); this.cols.push({ type: 'box', hx, hy, hz, x: p.x, y: y0 + hy, z: p.z, yaw: this.yaw + ry, pitch, tag: this.tag });
+  }
   // a box turned any way: centre (x, y, z) and turn q in the current frame (Blender-authored colliders: downsKit.bake). `extra`
   // goes onto the collider spec (auto: true marks the ones from a part's geometry)
   solidQ(hx, hy, hz, x, y, z, q, extra) {
     const p = this.P(x, y, z);
     _e.setFromQuaternion(_q.setFromRotationMatrix(_r.extractRotation(this.base)).multiply(q), 'YXZ');
-    this.cols.push({ type: 'box', hx, hy, hz, x: p.x, y: p.y, z: p.z, pitch: _e.x, yaw: _e.y, roll: _e.z, tag: this.tag, ...extra });
+    this.cols.push({ type: 'box', hx: hx * this.sc, hy: hy * this.sc, hz: hz * this.sc, x: p.x, y: p.y, z: p.z, pitch: _e.x, yaw: _e.y, roll: _e.z, tag: this.tag, ...extra });
   }
-  sphere(r, x, y, z) { const p = this.P(x, y, z); this.cols.push({ type: 'sphere', r, x: p.x, y: p.y, z: p.z, tag: this.tag }); }
-  column(r, h, x, z, y0 = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'cyl', r, y0, y1: h, x: p.x, z: p.z, tag: this.tag }); }
+  sphere(r, x, y, z) { const p = this.P(x, y, z); this.cols.push({ type: 'sphere', r: r * this.sc, x: p.x, y: p.y, z: p.z, tag: this.tag }); }
+  column(r, h, x, z, y0 = 0) {
+    if (this.sc !== 1) { const p = this.P(x, y0, z); this.cols.push({ type: 'cyl', r: r * this.sc, y0: p.y, y1: this.P(x, h, z).y, x: p.x, z: p.z, tag: this.tag }); return; }
+    const p = this.P(x, 0, z); this.cols.push({ type: 'cyl', r, y0, y1: h, x: p.x, z: p.z, tag: this.tag });
+  }
   // lying cylinder (quonsets, hangars, pipes): axis along local z (turned by ry), centre at height y
-  hcyl(r, len, x, z, ry = 0, y = 0) { const p = this.P(x, 0, z); this.cols.push({ type: 'hcyl', r, len, x: p.x, y, z: p.z, yaw: this.yaw + ry }); }
-  hit(hx, hy, hz, x, z, ry = 0) { const p = this.P(x, 0, z); this.hits.push({ hx, hy, hz, x: p.x, y: hy, z: p.z, yaw: this.yaw + ry }); }
+  hcyl(r, len, x, z, ry = 0, y = 0) { const p = this.P(x, y, z); this.cols.push({ type: 'hcyl', r: r * this.sc, len: len * this.sc, x: p.x, y: this.sc !== 1 ? p.y : y, z: p.z, yaw: this.yaw + ry }); }
+  hit(hx, hy, hz, x, z, ry = 0) { const p = this.P(x, 0, z), s = this.sc; this.hits.push({ hx: hx * s, hy: hy * s, hz: hz * s, x: p.x, y: hy * s, z: p.z, yaw: this.yaw + ry }); }
 
   // Colliders under the drawn floors (docs/collision.md): every up-facing surface whose top stands FLOOR_MIN to FLOOR_MAX over the
   // ground (a step the runner takes, so it never stops him) rasterized onto a FLOOR_CELL grid at its height, cells of one height
@@ -411,7 +426,7 @@ class Kit {
     this.byMat.clear();
     this.ink.length = 0;
     this.lines.length = 0;
-    return { root: this.root, cols: this.cols, hits: this.hits, raid: this.raid, smoke: this.smoke, drop: this.drop };
+    return { root: this.root, cols: this.cols, hits: this.hits, raid: this.raid, smoke: this.smoke, drop: this.drop, walkers: this.walkers };
   }
 }
 
@@ -420,14 +435,14 @@ function sandbags(k, cx, cz, r, a0, a1, rows = 2) {
   for (let row = 0; row < rows; row++) {
     const step = 1.25 / r;
     for (let a = a0 + (row % 2) * step * 0.5; a <= a1; a += step) {
-      k.add(new THREE.SphereGeometry(0.66, 6, 3).scale(1, 0.5, 0.62), T(0xb59f74), cx + Math.sin(a) * r, F + 0.28 + row * 0.5, cz + Math.cos(a) * r, { ry: a + Math.PI / 2, outline: 0.03 });
+      k.add(new THREE.SphereGeometry(0.66, 10, 5).scale(1, 0.5, 0.62), T(0xb59f74), cx + Math.sin(a) * r, F + 0.28 + row * 0.5, cz + Math.cos(a) * r, { ry: a, outline: 0.03 }); // (lying along the wall: its long x on the tangent)
     }
   }
   // wall: a chain of blocks along the arc, as high as the stack
-  const n = Math.max(1, Math.ceil(((a1 - a0) * r) / 2.4)), da = (a1 - a0) / n;
+  const n = Math.max(1, Math.ceil(((a1 - a0) * r) / 1.2)), da = (a1 - a0) / n; // (short enough to follow a tight ring)
   for (let i = 0; i < n; i++) {
     const a = a0 + (i + 0.5) * da;
-    k.solid((da * r) / 2 + 0.35, (F + rows * 0.5 + 0.1) / 2, 0.42, cx + Math.sin(a) * r, cz + Math.cos(a) * r, a + Math.PI / 2);
+    k.solid((da * r) / 2 + 0.15, (F + rows * 0.5 - 0.2) / 2, 0.3, cx + Math.sin(a) * r, cz + Math.cos(a) * r, a); // (yaw a: its x along the wall, it stood across it; its top midway up the top bags, which dip between them)
   }
 }
 function crate(k, x, y0, z, s = 1.2, color = 0x9a6a3a, ry = 0) {
@@ -1366,6 +1381,7 @@ export function outpostTemplate(kind, color, variant = 0, wreck = false, src = '
       k.onGround = true;
       k.floorCols = true;
       k.floorTol = 0.03;
+      if (Kit.tags) k.tag = kind; // (dev audit: the pieces' boxes, tools/outpost-audit.mjs)
       dfn(k, wreck);
       t = k.finish();
       templates.set(key, t);

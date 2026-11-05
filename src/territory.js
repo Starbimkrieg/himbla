@@ -5,7 +5,8 @@ import { arcDist, tangent, frameQuat, greatCircle, SUN, R as PLANET_R, collectNo
 import { mulberry32, clamp, pick } from './rng.js';
 import { ITEMS } from './alchemy.js';
 import { outpostTemplate, SMALL_KINDS, FLAT_R } from './outpostModels.js';
-import './outpostDrafts.js'; // (registers the draft reworks: outpostModels.js OUTPOST_DRAFT)
+import './outpostDrafts.js'; // (registers the outposts' builders: outpostModels.js OUTPOST_PICK)
+import { spawnWalkers } from './outpostWalkers.js';
 import { foundedTemplate, TERMINAL_Z, BUILT_R, OUTPOST_GUN as GUN } from './storyAssets.js';
 
 // Every square metre of the Moon belongs to somebody: a weighted Voronoi split round faction settlements and outposts.
@@ -41,7 +42,7 @@ const MAP_GRID = 96; // owner cells per cube-face edge for the globe map's terri
 const TOWN_R = 120; // your town's flat radius (worldstate.js); blend reaches 1.95x
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
-const _w = new THREE.Vector3();
+const _w = new THREE.Vector3(), _eul = new THREE.Euler();
 const _gp = new THREE.Vector3(), _gt = new THREE.Vector3(), _gl = new THREE.Vector3(), _gf = new THREE.Vector3();
 const wrapPi = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -423,7 +424,7 @@ export class Territory {
     o.cols = tpl.cols.map((b) => {
       if (b.type === 'sphere') return g.colliders.add({ type: 'sphere', c: root.localToWorld(new THREE.Vector3(b.x, b.y, b.z)), r: b.r });
       if (b.type === 'cyl') return g.colliders.add({ type: 'cyl', c: root.localToWorld(new THREE.Vector3(b.x, 0, b.z)), axis: o.dir.clone(), y0: b.y0, y1: b.y1, r: b.r });
-      const q = root.quaternion.clone().multiply(_q.setFromAxisAngle(_w.set(0, 1, 0), b.yaw));
+      const q = root.quaternion.clone().multiply(_q.setFromEuler(_eul.set(b.pitch || 0, b.yaw || 0, b.roll || 0, 'YXZ'))); // (yaw, then the tilt of a sloped roof or plate: world.colAdd)
       return g.colliders.add({
         type: 'box', c: root.localToWorld(new THREE.Vector3(b.x, b.y, b.z)), hx: b.hx, hy: b.hy, hz: b.hz, floor: !!b.floor, // (a walking floor: physics.js floorUnder)
         ax: new THREE.Vector3(1, 0, 0).applyQuaternion(q), ay: new THREE.Vector3(0, 1, 0).applyQuaternion(q), az: new THREE.Vector3(0, 0, 1).applyQuaternion(q),
@@ -433,6 +434,7 @@ export class Territory {
     o.raidPoint = tpl.raid ? root.localToWorld(tpl.raid.clone()) : null;
     o.mainC = tpl.smoke ? root.localToWorld(tpl.smoke.clone()) : root.position.clone().addScaledVector(o.dir, 2);
     o.dropPoint = tpl.drop ? root.localToWorld(tpl.drop.clone()) : null;
+    o.walkers = tpl.walkers ? spawnWalkers(root, tpl.walkers, o.seed) : null; // (the people walking about it: outpostWalkers.js)
   }
 
   // ---------- shooting them up ----------
@@ -527,6 +529,7 @@ export class Territory {
     o.rubble = false;
     o.raidPoint = null;
     o.guns = [];
+    o.walkers = null;
     if (o.model) { o.model.removeFromParent(); o.model = null; }
     for (const c of o.cols) this.game.colliders.remove(c);
     o.cols = [];
@@ -602,6 +605,7 @@ export class Territory {
       if (o.guns && o.guns.length && o.model && !o.rubble) this.updateGuns(o, dt);
       if (o.rubble && o.model && d < 500 && Math.random() < dt * 6) g.fx.spawn((o.mainC || o.model.position).clone().addScaledVector(o.dir, 1.5), o.dir.clone().multiplyScalar(5), { color: 0x2a2433, size: 1.4, life: 1.6, count: 1, spread: 3 });
       if (o.model && d < 400) {
+        if (o.walkers) o.walkers.update(dt);
         const movers = (o.model.userData.movers ||= collectNodes(o.model, (m) => m.userData.spin || m.userData.blink || m.userData.flag));
         for (const m of movers) {
           if (m.userData.spin) m.rotation.y += dt * (m.userData.spin === true ? 0.6 : m.userData.spin); // (a number: its own rate, e.g. a draft's strollers)

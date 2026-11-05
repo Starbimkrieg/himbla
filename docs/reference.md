@@ -395,7 +395,8 @@ src/
   kade.js          Kade's gun truck
   monolith.js      the Monolith's spells
   territory.js     territory, small outposts, patrols
-  outpostDrafts.js the small outposts (the picks, OUTPOST_PICK in outpostModels.js) and their other drafts (docs/outpost-proposals)
+  outpostDrafts.js the small outposts (the picks, OUTPOST_PICK in outpostModels.js; docs/outpost-proposals)
+  outpostWalkers.js the two or three NPCs walking about each small outpost
   vehicles.js      drivable vehicles
   settings.js      settings menu and key remapping
   casino.js        casino games, VIP, prizes (casinoWorld.js: building; casinoPlan.js: plan numbers)
@@ -493,6 +494,7 @@ tools/
   check-claw.mjs           bots play the claw to tune its payout
   downs-audit.mjs          a place's audit (Chimera Downs, or PLACE=<id>): zfight, colliders, text, gaps; coverage, blocked,
                            floating, sunk, rails (named only; the rules they check: docs/collision.md)
+  outpost-audit.mjs        the small outposts' audit: loose pieces, uncovered solids, colliders over air, NPC routes (WRECK=1)
   downs-layouts.mjs        Chimera Downs layout study (docs/downs-layouts.md)
   stable-layouts.mjs       the stable yard's layouts: clearance and walk checks, plans (docs/stable-proposals/)
   race-sim.mjs             runs the race model headless and reports the balance

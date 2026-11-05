@@ -2,8 +2,9 @@
 import * as THREE from 'three';
 import { loadFonts } from '../src/fonts.js';
 import { loadRunnerParts, loadShipParts, makeRunner, makeCrate, ScarfSim, makeShuttle, makeFreighter, makeHoverCar, makeRover, makeInterceptor, makeApc, makeLandTrain, makeTowerCrane, CRANE_TROLLEY_MIN, CRANE_TROLLEY_SPAN, makeGantryCrane, makeCargoBox, GANTRY_TROLLEY_SPAN, makeGarage, makeDishStation, DISH_SIZE, makeLampPost, makeFountain, makeBouncer, makeChandelier, makeCasinoSign, makeChipStack, makeClawMachine, makeClawHead, clawKindParts, makeDerbyPart, makeRacer } from '../src/models.js';
-import { outpostTemplate } from '../src/outpostModels.js';
+import { outpostTemplate, OUTPOST_PICK } from '../src/outpostModels.js';
 import '../src/outpostDrafts.js';
+import { spawnWalkers } from '../src/outpostWalkers.js';
 import { loadOutpostParts, GLB_KINDS } from '../src/outpostGlb.js';
 import { makeChimera, makeMite, LIVING, MODIFIERS, spliceGenes } from '../src/chimera.js';
 import { ComicPost } from '../src/post.js';
@@ -325,19 +326,21 @@ if (m === 'shuttle' || m === 'freighter') {
 } else if (m === 'outpost') {
   // &kind=mast|tower (any kind in outposts.glb; src=kit takes any Kit kind)  &src=kit|glb|both (default both, side by side)  &wreck=1  &color=rrggbb  &cols=0 hides the colliders
   const kind = Q.get('kind') || 'mast', wreck = Q.get('wreck') === '1', color = hex('color', 0x2ec4ff);
-  // &draft=a|b: the draft rework (src/outpostDrafts.js, docs/outpost-proposals) on its own
-  // &compare=1: the Kit original and drafts A and B side by side at the same scale, the courier at each gate
+  // &draft=<letter>: the outpost as the game builds it (src/outpostDrafts.js: OUTPOST_PICK's letter), on its own; src=kit alone: the old Kit build
+  // &compare=1: the old Kit build and the outpost as built now side by side at the same scale, the courier at each gate
   const compare = Q.get('compare') === '1';
-  const srcs = compare ? ['kit', 'a', 'b'] : Q.get('draft') || Q.get('src') === 'kit' ? ['kit'] : Q.get('src') === 'glb' ? ['glb'] : ['kit', 'glb'];
+  const srcs = compare ? ['kit', OUTPOST_PICK[kind]] : Q.get('draft') || Q.get('src') === 'kit' ? ['kit'] : Q.get('src') === 'glb' ? ['glb'] : ['kit', 'glb'];
   model = new THREE.Group();
   const lines = [];
-  const stats = {}, tpls = {};
+  const stats = {}, tpls = {}, walkerSets = [];
   srcs.forEach((s, i) => {
     let t;
-    try { t = s === 'a' || s === 'b' ? outpostTemplate(kind, color, 0, wreck, 'kit', s) : outpostTemplate(kind, color, 0, wreck, s, Q.get('draft') || null); } catch (e) { lines.push(`${s}: ${e.message}`); return; }
+    try { t = s === 'a' || s === 'b' || s === 'c' ? outpostTemplate(kind, color, 0, wreck, 'kit', s) : outpostTemplate(kind, color, 0, wreck, s, Q.get('draft') || null); } catch (e) { lines.push(`${s}: ${e.message}`); return; }
     const g = new THREE.Group();
     g.position.x = (i - (srcs.length - 1) / 2) * (compare ? 90 : 70);
     g.add(t.root.clone());
+    const wk = t.walkers ? spawnWalkers(g, t.walkers, 7 + i) : null; // (the outpost's walking NPCs)
+    if (wk) walkerSets.push(wk);
     if (compare) { const r = makeRunner({ own: true }); r.root.position.set(0, 0.3, s === 'kit' ? 26 : 36); g.add(r.root); }
     if (Q.get('cols') !== '0') g.add(outpostOverlay(t));
     model.add(g);
@@ -355,7 +358,10 @@ if (m === 'shuttle' || m === 'freighter') {
   ui.textContent = [`${kind}${wreck ? ' (wreck)' : ''}${GLB_KINDS.has(kind) ? '' : ' (not in GLB_KINDS: the game would not use the GLB for it yet)'}`, ...lines, 'cyan = collider, orange = blast box, green = raid, red = smoke, blue = drop'].join('\n');
   const swing = [];
   model.traverse((o) => { if (o.userData.spin || o.userData.blink || o.userData.flag) swing.push(o); });
+  let lastT = 0;
   anim = (t) => { // (what territory.js does to a placed outpost)
+    const dt = Math.min(0.1, t - lastT); lastT = t;
+    for (const w of walkerSets) w.update(dt);
     for (const o of swing) {
       if (o.userData.spin) o.rotation.y = t * (o.userData.spin === true ? 0.6 : o.userData.spin);
       if (o.userData.blink) o.visible = Math.sin(t * 4) > -0.3;
@@ -414,4 +420,4 @@ function frame() {
   requestAnimationFrame(frame);
 }
 frame();
-window.viewer = { scene, camera, model, rig };
+window.viewer = { scene, camera, model, rig, THREE }; // (THREE for test scripts: tools/outpost-audit.mjs)

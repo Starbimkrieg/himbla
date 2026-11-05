@@ -20,19 +20,83 @@ vendors, people about and places to sit. Two near-full drafts of each.
 Every name board and building lettering that said what a place is (the gate signs, MERIDIAN MARKET, SCRAP & SPARES, THE HULK
 and so on) is gone from all the drafts; faction marks, flags and warning signs stay.
 
-All the drafts are built in code with the outpost Kit (`src/outpostDrafts.js`). The picks are the default; to look at
-another:
+The picks are built in code with the outpost Kit (`src/outpostDrafts.js`) and are what the game builds. The drafts not picked
+are gone from the code (they're in git history, and the sections further down keep their renders as they were). To compare,
+`?outpostDraft=off` (or localStorage `mr-outpost-draft` = `off`, or per kind `kiosk:off`) brings back the old Kit builds, and
+the viewer's `&compare=1` puts the old build beside the new one at the same scale
+(`/tools/viewer.html?m=outpost&kind=tower&compare=1`; `&draft=<letter>&wreck=1&color=rrggbb` for one alone). The flattened
+plateau under each outpost is 44 m (30 with `off`). The Asset Row's 08 · OUTPOSTS shows them, intact and wrecked, NPCs walking.
 
-- `?outpostDraft=a`, `b` or `c` shows that draft of every kind that has one (the pick for the rest);
-- `?outpostDraft=kiosk:a,tower:a` picks per kind;
-- `?outpostDraft=off` brings back the old Kit builds;
-- `localStorage['mr-outpost-draft']` takes the same values and sticks.
+## Round three: audited, people who walk, bigger buildings
 
-The flattened plateau under each outpost is 44 m (30 with `off`). The viewer shows any draft
-(`/tools/viewer.html?m=outpost&kind=kiosk&draft=a`, `&wreck=1`, `&color=rrggbb` for the owner; `&compare=1` puts the old
-build and A and B side by side), and the Asset Row's 08 · OUTPOSTS shows the picks and the drafts not picked.
+**Asked:** audit collision and broken parts on every outpost (the gun pit's barrel wasn't attached and the gun was a cone, a
+block and a plate); replace every placed figure with real NPCs in faction colours who walk about, two or three per outpost,
+junk bots at the junk pile; detail the lattice tower's stair; mixed-faction containers in Rustmoon territory; the buildings
+bigger again, the yards the same.
 
-## Scrap Shack C: the Hulk, hollowed out (the pick)
+**The audit was missing.** The rules in `CLAUDE.md` ("Model structure", "Collision and ledge grinds") are checked by
+`structure_audit.py` for Blender models and by `downs-audit.mjs` for places (locations). The small outposts are neither: Kit
+code, placed by `territory.js`. Nothing checked them, and I didn't check them by hand either. Now `tools/outpost-audit.mjs`
+does, and `CLAUDE.md` says to run it on every change to an outpost:
+
+- **floating:** pieces that touch nothing (a barrel off its gun, a tread off its stair);
+- **uncovered:** solid parts with no collider within 0.35 m (thin rails, beams and tubes left out, as `docs/collision.md`
+  says);
+- **overair:** collider tops with nothing drawn under them;
+- **routes:** NPC routes that run through a collider.
+
+All seven outposts and their seven wrecks audit clean. What it found and what was fixed:
+
+| Found | Fix |
+|---|---|
+| **The game dropped every tilted collider's tilt** (`territory.place` kept only the yaw, so sloped roofs, the porch, the hull's plates stood flat in play) | Pitch and roll are kept, as `world.colAdd` does for places |
+| **Sandbag walls' colliders stood across the wall**, not along it, in `sandbags()` (the old outposts and the settlements too); the bags lay radially, as 6-sided lumps | Along the wall, short enough to follow a tight ring, its top midway up the top bags; the bags lie along it, rounder |
+| The Quonset helper's door lamp floated 5 cm off its wall (settlements too) | On the wall |
+| `lattice()`'s two stepped cylinders left a 1.3 m ledge in the air halfway up a tower | A box a bay following the taper (tower, derrick) |
+| Pyramid roofs (cafés, the clock lantern, watch boxes) had cylinder colliders standing out past the slopes | Square steps up the roof, each as wide as the roof at its top |
+| Barn roof, solar panels, conveyor, porch: upright boxes round sloping parts | Each a tilted box lying as the part lies |
+| The junk heap had two cylinders and no collider on any piece in it | The mound stepped every 0.7 m across or 1 m up, every piece you could stand on boxed as it lies |
+| Missing colliders: tower footings, boom posts, the crane's tracks, the press frame, the mast's foot and anchors, AC units, the hover-cart's nose and cockpit, the chute and its hopper, tree canopies, stall awnings | Added |
+| Colliders over air: the rover (its whole length at cab height), the depot's battery cabinet (gaps between doors), the anchor blocks, the bund's hazard stripes over its gap | Fitted to what's drawn |
+| Floating: the goods on stall counters, the bow boards, stacked tyres, embers, the bunkhouse stair's treads (no stringers) | Seated; the stair has stringers |
+| Wrecks: tilted rubble with upright colliders, the fallen silo drawn 5.5 m up in the air, hull plates and hoops left hanging, no colliders on rubble | Rubble has colliders as it lies; the silo is down; what's left stands on something |
+
+**The gun pit** is rebuilt from the pedestal up: a tripod into a collar on the post, a traverse ring and yoke, the receiver
+between the yoke's cheeks on a trunnion pin, a jacketed barrel out of the receiver's front to a muzzle brake, spade grips,
+an ammunition box with its belt into the feed, a notched shield on two arms. The bags are along the wall with the way in at
+the back, and the gun fires over them from a gunner's step.
+
+**The stair** in the Lattice Camp's 39 m tower: 15 flights of 13 risers, switching back in two lanes, two stringers and a
+tread per riser, a handrail on posts, a landing at every bay tied to the tower's braces. It's drawn, not walked: the tower
+is one solid to the runner.
+
+**NPCs:** every placed figure (the vendors, queues, diners, squads, strollers) is gone. Each outpost has two or three
+townsfolk (`makeFigure`, the 2.4 m townsfolk) in the owner's colours walking routes through the yard and back
+(`src/outpostWalkers.js`): troopers at the Lattice Camp (SpaceCom navy, Vostok slate and red, Daedalus violet), traders at
+the Market Cross, loaders at the depot, farmhands, technicians at the mast, clan riggers at the Hulk, and three **junk bots**
+(the chimera kit's) at Scrap Mountain. They're made per placed outpost and stepped while it's within 400 m; none walks
+through a collider (the audit checks every route).
+
+**Rustmoon's containers** are looted: each box in a stack is a different faction's livery (Vostok, Meridian, Kepler,
+SpaceCom), three stacks at each Rustmoon outpost.
+
+**Bigger buildings, same yards:** most buildings are drawn at their old size and grown in place by a scaled frame (its
+colliders, text and moving parts grow with it). The Market Cross house 1.45x (19 m square, the clock 27 m up), its cafés
+1.25x and stalls 1.3x; the Lattice Camp's tower 39 m (was 30) with a 1.3x cab, a 30 m barracks of 8.2 m radius; the silos
+1.3x (11 m across, 24 m to the caps), a 26 m store; the greenhouses, barn and silo 1.3x (vaults 12 m wide, 36 m long); the
+relay's shelters 1.45x; the junk crane 1.35x (its boom's tip 23 m out), the sorting line, crusher and bench 1.3x, the heap
+13 m tall; the hull 1.3x (39 m long, 19.5 m across), the bunkhouse 1.35x, the derrick and press 1.3x.
+
+| | |
+|---|---|
+| ![](built_kiosk.jpg) | ![](built_tower.jpg) |
+| ![](built_depot.jpg) | ![](built_farm.jpg) |
+| ![](built_mast.jpg) | ![](built_junk.jpg) |
+| ![](built_shack.jpg) | ![](built_details.jpg) |
+
+Sizes and counts now (intact): 25k to 126k triangles, 67 to 284 colliders (about 30 of them the yard's floor), three walkers.
+
+## Round two: Scrap Shack C, the Hulk hollowed out (the pick)
 
 ![Scrap Shack C: overview, the open flank, from the east, wrecked](shack_mix.jpg)
 
@@ -46,7 +110,7 @@ lit doorway; a crow's nest, banner and dish ride on the spine. The plating rack 
 it: B's stockade and watch boxes on stilts and its cook fire with tyre seats; A's container bunkhouse with its stair and
 balcony, the derrick over the heap and the scrap press; tyre stacks, burning barrels, stolen containers.
 
-## What all the drafts share
+## Round one: what all the drafts shared
 
 | | Before | Drafts |
 |---|---|---|
