@@ -1,18 +1,15 @@
 # Outposts from Blender (`src/assets/outposts.glb`)
 
-> **Superseded for now:** the small outposts are built from the picked drafts in `src/outpostDrafts.js`
-> (docs/outpost-proposals). This pilot, and the Kit builders it mirrors, only run with `?outpostDraft=off`.
-
-The small faction structures (watchtower, depot, farm dome, relay mast, kiosk, scrap shack, junk pile) are built in
-code by `Kit` (`src/outpostModels.js`). This is the contract for building one in Blender instead. It is a **pilot**:
-two kinds have gone through it so far, the Relay Mast (`mast`) and the Watchtower (`tower`), the other five are still
-Kit-built, and it is **off by default** (see "Switching it on").
+The seven small faction outposts (Watchtower, Supply Depot, Farm Dome, Relay Mast, Trading Kiosk, Scrap Shack, Junk Pile)
+are being moved from code (`src/outpostDrafts.js`, the picked drafts of docs/outpost-proposals) to Blender
+(`tools/blender/build_outposts.py`). The kinds in `GLB_KINDS` (`src/staticContract.js`) come from this file: the
+**Watchtower** (`tower`), **Trading Kiosk** (`kiosk`), **Supply Depot** (`depot`) and **Farm Dome** (`farm`) so far. The rest are still code-built, and the code-built ones stay as the fallback.
 
 Read the file with `src/outpostGlb.js`, bake it with `src/staticBake.js`, check it with `npm run check:outposts`.
 
 ## What the game does with the file
 
-An outpost template is `{ root, cols, hits, raid, smoke, drop }` in the outpost's own frame (metres, +y up, ground at
+An outpost template is `{ root, cols, hits, raid, smoke, drop, walkers }` in the outpost's own frame (metres, +y up, ground at
 y = 0, the yard's centre at the origin, +z towards the gate). `territory.js` clones `root`, drops a collider for
 every entry of `cols`, damages the building when a blast reaches a box in `hits`, lets you raid it at `raid`, makes
 the wreck smoulder at `smoke` and throws loot to `drop`. A GLB supplies all of that:
@@ -20,8 +17,8 @@ the wreck smoulder at `smoke` and throws loot to `drop`. A GLB supplies all of t
 - **Geometry** is baked once per kind × faction colour × wreck into a handful of merged meshes: vertex-coloured toon
   and unlit glow meshes (one more of each for a double-sided material), one outline hull, one mesh per `additive…`
   colour and opacity, a set of its own for every moving part, and a face or two per sign. Hundreds of Blender objects
-  cost the same as a Kit build: 8 to 13 draw calls (the Relay Mast 13, the Watchtower 11, the Relay Mast wreck 7 and the Watchtower's 8;
-  `npm run check:outposts` prints the count for each root).
+  cost about what a code build does (the Watchtower 16 draw calls, its wreck 10; `npm run check:outposts` prints the count
+  for each root).
 - **Gameplay data** (`cols`, `hits`, `raid`, `smoke`, `drop`) comes from **empties**, not from the visible meshes.
   Collision is never read from a mesh: draw the building however you like, then place the colliders by hand.
 
@@ -36,15 +33,18 @@ Scene roots, one empty at the origin per variant, everything else a descendant:
 
 | Root | Meaning |
 |---|---|
-| `<kind>` | the intact compound (`mast`, `tower`) |
-| `<kind>_wreck` | the same compound with the main building in ruins (shared yard props are repeated) |
+| `<kind>` | the intact compound (`tower`, ...) |
+| `<kind>_wreck` | the same compound with the main building in ruins (the yard's meshes are the intact root's, shared) |
+
+A root may carry the custom property `walkers`: the walking NPCs (`src/outpostWalkers.js`), as JSON text
+`{"kind": "person" | "junkbot", "routes": [[[x, z], ...], ...]}`, each route walked there and back. Their look is the
+owner's (`WALK_LOOK` in `src/outpostLooks.js`).
 
 Blender appends `.001` to duplicate names; the game strips a trailing `.NNN` from material names, but keep node names
-unique anyway. Object names are unique across the whole file, so the wreck root cannot reuse `raid`, `smoke` or `drop`:
-name them `smoke_wreck`, `col_shed_wreck` and so on, and give every kind after the first a marker of its own, role word
-first (the Watchtower's are `raid_tower`, `col_tower_lattice`, `smoke_tower_wreck`, `tower_apron`; the Relay Mast keeps
-the plain names). The role is read from the custom property `role` (always set it), or failing that from the name up to
-the first `_` or digit.
+unique anyway. Object names are unique across the whole file: the kit names everything `<role>_<kind>_<n>` (gameplay
+empties: `col_tower_12_wreck`, `smoke_tower`) or `<kind>_<group>_<material>_<ink in mm>` (meshes:
+`tower_yard_style_dark_20`), with `_wreck` on the wreck's. The role is read from the custom property `role` (always set
+it), or failing that from the name up to the first `_` or digit.
 
 ## Meshes
 
@@ -55,7 +55,10 @@ the first `_` or digit.
   out by that much, edges and corners included, like the Kit's outline hull. Absent or 0 = none. It belongs to that
   mesh alone: a mesh parented under an inked one gets no outline of its own.
 - Flat colours only. The look is the game's 3-step toon ramp over the material's **base colour**.
-- Do not use alpha blending, except on an `additive…` material (see below): anywhere else the checker warns and the mesh renders opaque.
+- Do not use alpha blending, except on an `additive…` or `glass…` material (see below): anywhere else the checker warns
+  and the mesh renders opaque.
+- The kit merges parts into one mesh per material, outline and moving part: loose parts inside a mesh are still parts
+  to the structure audit. The file is compressed (`npm run optimize:glb`: quantized, meshopt); the game decodes it.
 
 ### Materials
 
@@ -65,6 +68,9 @@ The material **name** (a trailing `.NNN` is ignored) picks the treatment; everyt
 |---|---|
 | `faction…` (`faction`, `faction_cloth`, …) | lit toon in the owning faction's accent colour |
 | `faction_glow…` | unlit, in the faction's accent colour |
+| `style_<key>…` (`style_body`, `style_dark_2s`, …) | lit toon in the owner's palette colour for that key (`STYLE` in `src/outpostLooks.js`: `body`, `panel`, `dark`, `roof`, `trim`, `glow`, `conc`, `metal`, `hut`) |
+| `style_glow…`, `style_trim_glow…` | unlit, in the owner's glow or trim colour |
+| `glass…` (`glass_9be7ff_45`) | see-through glazing: lit toon, its **alpha** the opacity, double-sided, writes no depth, gets no outline |
 | `glow…` (`glow`, `glow_red`, …) | unlit, in the material's own base colour (lamps, screens) |
 | `additive…` (`additive_searchlight`) | a light beam: unlit, additive and see-through, in the base colour, with the material's **alpha** as its opacity. Double-sided, writes no depth, casts no shadow, gets no outline |
 | anything else | lit toon in the material's own base colour |
@@ -86,17 +92,20 @@ empty are ordinary geometry and are drawn.
 
 | Role | Meaning | How it is read |
 |---|---|---|
-| `col` | collider | custom property `shape` = `box` \| `cyl` \| `sphere` (default `box`) |
+| `col` | collider | custom property `shape` = `box` \| `cyl` \| `sphere` \| `hcyl` (default `box`); `floor` = 1 makes a box a walking floor (ground to the runner, not an obstacle), `lattice` = 1 marks an open truss's box (the outpost audit skips its top) |
 | `hit` | blast box that damages the building | a `box`, as below |
 | `raid` | where you stand to raid (intact only) | position |
 | `smoke` | where the wreck smoulders; also the building's centre for damage pops | position |
 | `drop` | open apron spot where loot lands | position |
 | `text` | a sign face (a canvas-texture plane drawn at runtime, so the font can change) | see below |
+| `stack` | a stack of the game's standard cargo boxes, with their collider (`settlements.js` cargoStack) | position and turn (the boxes' base); `n` boxes; `factions` = `owner` (the owner's livery, `CARGO_OF`) or the liveries named, comma separated, box by box |
 
-A **box** is an empty (cube display, size 1) whose **scale is the half-extents**, rotated about Y only; its position is
-the box's centre. A **cyl** is a vertical cylinder: radius = scale.x, its axis runs from `y - scale.y` to `y + scale.y`
-at the node's x/z. A **sphere** takes its radius from scale.x. Colliders are always upright and round: a tilt on a box
-or cylinder, or an uneven sphere, is flattened to that (the checker warns), so build a lying pipe from boxes.
+A **box** is an empty (cube display, size 1) whose **scale is the half-extents**; its position is the box's centre. A
+collider box keeps any turn (a sloping roof, a fallen slab); a `hit` box only its turn about the vertical. A **cyl** is a
+vertical cylinder: radius = scale.x, its axis runs from `y - scale.y` to `y + scale.y` at the node's x/z. An **hcyl** is
+a lying cylinder (a Quonset's roof you roll over): radius = scale.x, length = 2 × scale.z along the node's z, turned
+about the vertical only. A **sphere** takes its radius from scale.x. A tilt on a cylinder, or an uneven sphere, is
+flattened (the checker warns).
 
 In Blender's z-up axes the half-extents `(hx, hy, hz)` go in as `scale = (hx, hz, hy)` and a turn of `θ` about the
 game's vertical is `rotation_euler.z = θ`; the exporter converts them back (the build script's helpers do this).
@@ -115,46 +124,48 @@ separate object that the game animates, instead of merging them into the static 
 |---|---|
 | `flag` | swings it ±0.25 rad about Y (put the node at the hinge, the cloth to one side) |
 | `blink` | shows and hides it |
-| `spin` | turns it 0.6 rad/s about Y (put the node on the spin axis) |
+| `spin` | turns it about Y (put the node on the spin axis): custom property `speed` in rad/s, default 0.6 |
 
-Author an animated part's meshes relative to the node's origin. Apply any non-uniform scale on its parents in Blender: a
+Author an animated part's meshes relative to the node's origin.
+
+A node (empty) with the custom property `only_faction` (comma separated: `vostok`, `spacecom,meridian`) has its meshes
+drawn only for those owners: an emblem drawn once per faction, the owner's showing. Apply any non-uniform scale on its parents in Blender: a
 turned moving part under a stretched parent cannot be placed correctly (the checker warns).
 
-## Switching it on
+## Switching it off
 
-Off by default. Turn it on with `?outpostGlb` in the URL or `localStorage['mr-outpost-glb'] = '1'`. In the URL,
-`?outpostGlb=0` (or `false`, `off`, `no`) turns it off again, and the URL beats the saved setting. A missing or broken
-file, kind or wreck quietly gives the Kit-built outpost. (The file is a separate chunk fetched while the game starts,
-so a very slow request delays the start; a failed one never stops it.)
+On by default for the kinds in `GLB_KINDS`. `?outpostGlb=0` (or `false`, `off`, `no`) in the URL, or
+`localStorage['mr-outpost-glb'] = '0'`, gives the code-built outposts; the URL beats the saved setting. A missing or
+broken file, kind or wreck quietly gives the code-built outpost. (The file is a separate chunk fetched while the game
+starts, so a very slow request delays the start; a failed one never stops it.)
 
-The dev viewer (`/tools/viewer.html?m=outpost&kind=mast` or `kind=tower`) shows it beside the Kit build with every collider drawn and
-checks that the two hold the same gameplay data (`&src=kit|glb|both`, `&wreck=1`, `&cols=0`). `src=glb` shows any kind in
-the file, whether or not it is in `GLB_KINDS` yet.
+The dev viewer (`/tools/viewer.html?m=outpost&kind=tower`) shows the code-built pick beside the Blender-built one, every
+collider drawn, and checks that the two hold the same gameplay data: colliders, hit boxes, raid, smoke, drop, walkers'
+routes (`&src=kit|glb|both`, `&wreck=1`, `&cols=0`). `src=glb` shows any kind in the file, whether or not it is in
+`GLB_KINDS` yet.
 
 ## Rebuilding the file
 
-`tools/blender/build_outposts.py` builds the roots in code (a port of the Kit builders, like the other `build_*.py`) and
-exports the GLB. Run it inside Blender, or with Blender as a Python module (`pip install bpy` in a venv):
+`tools/blender/build_outposts.py` builds the roots in code with the outpost kit (`tools/blender/outpost_kit.py`: the
+game's Kit and the builders' helpers ported, call for call, random streams included), then
+`npm run optimize:glb` compresses it:
 
 ```
-MOONRUNNER_REPO=<repo> python tools/blender/build_outposts.py     # MOONRUNNER_EXPORT=0 builds without writing
+MOONRUNNER_REPO=<repo> python tools/blender/build_outposts.py     # MOONRUNNER_EXPORT=0 builds without writing; OUTPOSTS=tower
+npm run optimize:glb
+npm run check:outposts
 ```
 
-The Relay Mast's dishes are the game's dish head (`head_pieces()` in `tools/blender/dishkit.py`, which `build_dish.py` uses for the dish
-stations and `models.js` bakes into the Kit-built mast): three on arms up the mast, one turning on a boom at the top (the `spin` node), a big one
-on the ground, and two flung off the wreck. The file cannot know the owner's full livery, so a head's body (cowl, trusses, quadpod, feed cabin,
-half the rim blocks) is the material `faction` and its stripe a cream `dish_cream`; the Kit build paints the head in the faction's own body and
-stripe colours (`dishSlot` in `models.js`), and a wreck's heads are grey in both.
-
-It is deterministic: running it again reproduces `src/assets/outposts.glb` byte for byte, so a diff in the committed file
-means the script or Blender changed. Nothing in CI runs it; `npm run check:outposts` checks the committed file.
+Check every build with the structure and style audits (`python3 tools/blender/structure_audit.py
+tools/blender/build_outposts.py`, `style_audit.py`; the blender skill). Nothing in CI runs it; `npm run check:outposts`
+checks the committed file.
 
 ## Adding a kind
 
-1. Add its builder to `tools/blender/build_outposts.py` (or author it in Blender) with both roots: a Kit with its own
-   `tag=`, registered in `BUILDERS` with its seed in `KIND_SEED` (the one in `src/outpostModels.js`).
-2. Run the script, commit `src/assets/outposts.glb`.
-3. `npm run check:outposts -- --kind <name>` (or `-- --all`): by default it checks only the kinds in `GLB_KINDS`.
-   It exits 0 when the file is fine, 1 with errors, 2 on bad usage.
-4. Open `/tools/viewer.html?m=outpost&kind=<name>` (and `&wreck=1`): it should say the gameplay data is the same.
-5. Add the kind to `GLB_KINDS` in `src/staticContract.js`, and to the pilot sentence at the top of this file.
+1. Port its builder from `src/outpostDrafts.js` into `tools/blender/build_outposts.py` as `build_<kind>(k)`, call for
+   call (the kit's helpers have the same names in snake case), with the main building's parts in `with k.group("main"):`
+   so the yard is shared with the wreck. Register it in `BUILDERS` with its draft letter.
+2. Build, audit (structure and style), compress, `npm run check:outposts -- --kind <name>`.
+3. Open `/tools/viewer.html?m=outpost&kind=<name>` (and `&wreck=1`): it should say the gameplay data is the same. A fix
+   that moves a collider goes into both builders.
+4. Add the kind to `GLB_KINDS` in `src/staticContract.js` and to the list at the top of this file; look at it in the game.

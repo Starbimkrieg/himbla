@@ -1370,8 +1370,43 @@ const templates = new Map();
 // wreck = true: same compound, main building reduced to rubble.
 // src: 'auto' (Blender GLB if switched on, loaded and has this kind, outpostGlb.js; else Kit), 'kit', or 'glb'
 // (any kind in the file, switched on or not; throws if missing; for the viewer).
+// What a Blender-built outpost needs from the game once baked (set by outpostDrafts.js, which has the settlement kit):
+// stack(k, st, color) draws a `stack` point's standard cargo boxes into a Kit; look(color, kind) is the walkers' look
+export const GLB_HOOKS = {};
+function glbExtras(t, color) {
+  if (t.stacks && t.stacks.length && GLB_HOOKS.stack) {
+    const k = new Kit(color, 1, false);
+    k.onGround = true;
+    for (const st of t.stacks) GLB_HOOKS.stack(k, st, color);
+    const extra = k.finish();
+    for (const m of [...extra.root.children]) t.root.add(m);
+    t.cols.push(...extra.cols);
+  }
+  if (t.walkers && !t.walkers.look && GLB_HOOKS.look) t.walkers.look = GLB_HOOKS.look(color, t.walkers.kind);
+  return t;
+}
+
 export function outpostTemplate(kind, color, variant = 0, wreck = false, src = 'auto', draft = src === 'auto' ? draftFor(kind) : null) {
   variant %= VARIANTS;
+  // Blender-built (tools/blender/build_outposts.py -> outposts.glb): the default for the kinds in GLB_KINDS while the picks are
+  // on (?outpostGlb=0 gives the code-built picks below, ?outpostDraft=off the old Kit ones); src 'glb' asks for it outright
+  const asset = src === 'glb' || (src === 'auto' && draft) ? outpostAsset(kind, wreck, src === 'glb') : null;
+  if (src === 'glb' && !asset) throw new Error(`no GLB outpost for ${kind}${wreck ? ' wreck' : ''}`);
+  if (asset) {
+    const key = `${kind}|${color}|${variant}|${wreck ? 1 : 0}|glb`;
+    let t = templates.get(key);
+    if (!t) {
+      try {
+        t = glbExtras(bakeStatic(asset, { color, textMat }), color);
+        templates.set(key, t);
+      } catch (e) {
+        if (src === 'glb') throw e;
+        console.warn(`GLB ${kind}${wreck ? ' wreck' : ''} failed to bake, using the code-built one`, e);
+        t = null;
+      }
+    }
+    if (t) return t;
+  }
   const dfn = draft && DRAFT_BUILD[kind] && DRAFT_BUILD[kind][draft];
   if (dfn) {
     const key = `${kind}|${color}|${variant}|${wreck ? 1 : 0}|draft-${draft}`;
@@ -1388,20 +1423,8 @@ export function outpostTemplate(kind, color, variant = 0, wreck = false, src = '
     }
     return t;
   }
-  const asset = src === 'kit' ? null : outpostAsset(kind, wreck, src === 'glb');
-  if (src === 'glb' && !asset) throw new Error(`no GLB outpost for ${kind}${wreck ? ' wreck' : ''}`);
-  const key = `${kind}|${color}|${variant}|${wreck ? 1 : 0}|${asset ? 'glb' : 'kit'}`;
+  const key = `${kind}|${color}|${variant}|${wreck ? 1 : 0}|kit`;
   let t = templates.get(key);
-  if (!t && asset) {
-    try {
-      t = bakeStatic(asset, { color, textMat });
-    } catch (e) {
-      if (src === 'glb') throw e;
-      console.warn(`GLB ${kind}${wreck ? ' wreck' : ''} failed to bake, using the Kit-built one`, e);
-      t = outpostTemplate(kind, color, variant, wreck, 'kit');
-    }
-    templates.set(key, t);
-  }
   if (!t) {
     const k = new Kit(color, KIND_SEED[kind] * 977 + variant * 131, wreck);
     k.onGround = true;

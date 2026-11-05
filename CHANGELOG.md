@@ -5,6 +5,25 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Small outposts built in Blender** (`tools/blender/build_outposts.py` -> `src/assets/outposts.glb`, now on by default;
+  `?outpostGlb=0` gives the code-built ones). The Watchtower, Trading Kiosk, Supply Depot and Farm Dome so far, each with
+  its wreck, ported call for call from `src/outpostDrafts.js` by a new outpost kit (`tools/blender/outpost_kit.py`):
+  the same colliders, blast boxes, raid spot, walkers and random details (the viewer's `?m=outpost&kind=<kind>` compares
+  the two and finds them the same). The owner's colours are palette materials the game paints (`style_body`...), the
+  emblem is drawn per owner, containers are stack points the game fills in the owner's livery, the walkers' routes ride
+  along. Parts merge into one mesh per material and outline, each yard is shared with its wreck, and the file is
+  compressed (about 1.5 MB for four kinds).
+  - **The contract grew** (`docs/outpost-glb.md`): tilted colliders, floor and lattice boxes, lying cylinders, spin
+    speeds, see-through `glass…` materials, `style_<key>` palette materials (`STYLE` in the new `src/outpostLooks.js`,
+    with `metal` and `hut` keys), `only_faction` parts, `stack` points, a root's `walkers`; compressed files load.
+  - **Fixed on the way** (the structure audit on every build): the stair's first flight's treads under their stringers;
+    the gun's front sight off its barrel; the watch cab's rail turned off its deck and its lit room short of the roof;
+    the gate boom short of its rest post; the barracks windows cut by the hut's ribs and the Quonset doors through the end
+    walls; the fallen truss's legs in the air and the burnt barracks laid across where it stood; the hover-cart's
+    windscreen off its cab; the market stalls' back posts short of their awnings; the silo catwalk's handrails with no
+    posts; the greenhouse vaults' glass, which the code drew underground; the grow lights and the barn's lamp in the air;
+    the farm's solar table off the apron's edge.
+  - The Asset Row shows the outposts as the game builds them.
 - **Blender is the default for models, enforced.** Unless the user says otherwise, a new model or any refinement of how one
   looks is built in Blender, even when it's code-built today: port it, then refine it (the blender skill's new "Blender by
   default" section has the port routes; CLAUDE.md says so first among its conventions). `.claude/rules/code-models.md` puts

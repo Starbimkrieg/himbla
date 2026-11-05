@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { inkMat, vcMaterial, paintVertices, dropFloorFaces, shellBounds, toonBiasOf, inkLineGeo, inkLineMesh, HALO_SLOT, glowMark } from './toon.js';
+import { inkMat, vcMaterial, paintVertices, dropFloorFaces, shellBounds, toonBiasOf, inkLineGeo, inkLineMesh, HALO_SLOT, glowMark, gradientMap } from './toon.js';
+import { STYLE, factionOf } from './outpostLooks.js';
 import { slotOf, roleOf, animOf, SHAPES } from './staticContract.js';
 
 // Static GLBs (outposts.glb): a Blender structure -> what the Kit (outpostModels.js) makes: { root, cols, hits, raid,
@@ -15,7 +16,7 @@ import { slotOf, roleOf, animOf, SHAPES } from './staticContract.js';
 // extras; the toon material shades. The result is vertex-coloured, so hundreds
 // of Blender objects bake to a few meshes (lit, unlit, one outline hull, beams, a few per moving part), like Kit.finish.
 
-const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _z = new THREE.Vector3();
+const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _z = new THREE.Vector3(), _e = new THREE.Euler();
 const ZAXIS = new THREE.Vector3(0, 0, 1), YAXIS = new THREE.Vector3(0, 1, 0);
 
 const IDENTITY = new THREE.Matrix4(), XAXIS = new THREE.Vector3(1, 0, 0);
@@ -50,12 +51,18 @@ export function parseStaticGlb(scene, { warn = console.warn } = {}) {
 
 function parseRoot(root, warn) {
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
-  const asset = { name: root.name, groups: [], cols: [], hits: [], raid: null, smoke: null, drop: null, texts: [] };
+  const asset = { name: root.name, groups: [], cols: [], hits: [], raid: null, smoke: null, drop: null, texts: [], stacks: [], walkers: null };
+  // the walking NPCs' routes (root extra `walkers`: { kind, routes: [[[x, z], ...], ...] }, as JSON text or an object)
+  if (root.userData.walkers) {
+    try { asset.walkers = typeof root.userData.walkers === 'string' ? JSON.parse(root.userData.walkers) : root.userData.walkers; } catch { warn('walkers: not readable JSON, left out'); }
+  }
   // groups[0]: static body (root frame). Each animated node adds a group in its own frame.
   const body = { anim: null, matrix: null, parts: [] };
   asset.groups.push(body);
-  const walk = (o, group, groupInv) => {
+  // `only`: the owners a node is drawn for (extra `only_faction`, comma separated: an emblem per faction), passed down to its meshes
+  const walk = (o, group, groupInv, only = null) => {
     for (const c of o.children) {
+      const own = c.userData.only_faction ? String(c.userData.only_faction).split(',').map((f) => f.trim()) : only;
       const meshNode = c.isMesh || isPrimitiveGroup(c);
       if (meshNode) {
         const stray = animOf(c.userData) || roleOf(c.name, c.userData);
@@ -64,16 +71,16 @@ function parseRoot(root, warn) {
       const anim = meshNode ? null : animOf(c.userData);
       if (anim) {
         if (group !== body) { warn(`animated node "${c.name}" inside another animated node: treated as part of it`); walk(c, group, groupInv); continue; }
-        const g = { anim, matrix: new THREE.Matrix4().multiplyMatrices(inv, c.matrixWorld), parts: [] };
+        const g = { anim, speed: Number(c.userData.speed) || 0, matrix: new THREE.Matrix4().multiplyMatrices(inv, c.matrixWorld), parts: [] }; // (speed: a spin's rate, rad/s)
         if (!isPlainTRS(g.matrix)) warn(`animated node "${c.name}" sits under a non-uniformly scaled parent and is turned: its meshes would land wrong (apply the scale in Blender)`);
         asset.groups.push(g);
-        walk(c, g, new THREE.Matrix4().copy(c.matrixWorld).invert());
+        walk(c, g, new THREE.Matrix4().copy(c.matrixWorld).invert(), own);
         continue;
       }
       const role = meshNode ? null : roleOf(c.name, c.userData);
-      if (role) { gameplay(asset, role, c, inv, warn); walk(c, group, groupInv); continue; } // its child meshes are ordinary geometry
-      if (c.isMesh) addPart(group, c, groupInv, warn);
-      walk(c, group, groupInv);
+      if (role) { gameplay(asset, role, c, inv, warn); walk(c, group, groupInv, own); continue; } // its child meshes are ordinary geometry
+      if (c.isMesh) addPart(group, c, groupInv, warn, own);
+      walk(c, group, groupInv, own);
     }
   };
   walk(root, body, inv);
@@ -81,7 +88,15 @@ function parseRoot(root, warn) {
   return asset;
 }
 
-function addPart(group, mesh, groupInv, warn) {
+// a plain float copy of an attribute (a compressed file's are quantized: 16-bit positions, 8-bit normals, tools/optimize-glb.mjs)
+function f32(a) {
+  if (a.array instanceof Float32Array && !a.normalized && !a.isInterleavedBufferAttribute) return a.clone();
+  const out = new Float32Array(a.count * a.itemSize);
+  for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) out[i * a.itemSize + c] = a.getComponent(i, c);
+  return new THREE.BufferAttribute(out, a.itemSize);
+}
+
+function addPart(group, mesh, groupInv, warn, only = null) {
   const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
   const src = mesh.geometry;
   if (mesh.userData.inkline > 0) { // designed ink lines (kit.py ink_lines): drawn by inkLineMat, not a part
@@ -90,8 +105,8 @@ function addPart(group, mesh, groupInv, warn) {
   }
   if (!src.attributes.position || !src.attributes.normal) { warn(`mesh "${mesh.name}" has no normals: skipped`); return; }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', src.attributes.position.clone());
-  geo.setAttribute('normal', src.attributes.normal.clone());
+  geo.setAttribute('position', f32(src.attributes.position));
+  geo.setAttribute('normal', f32(src.attributes.normal));
   geo.setAttribute('toonBias', toonBiasOf(src)); // (the toon shade threshold: toon.js)
   if (src.index) geo.setIndex(src.index.clone());
   else {
@@ -112,9 +127,10 @@ function addPart(group, mesh, groupInv, warn) {
     halo: HALO_SLOT.test(String(mat.name).replace(/[._]\d+$/, '')), // (a light source: its glow gets a halo, toon.js)
     side: mat.side === THREE.DoubleSide ? THREE.DoubleSide : THREE.FrontSide,
     color: mat.color ? mat.color.clone() : new THREE.Color(0xffffff),
-    opacity: mat.transparent ? mat.opacity : 1, // used by `additive…` materials only
+    opacity: mat.transparent ? mat.opacity : 1, // used by `additive…` and `glass…` materials only
     ink: ink > 0 ? ink : 0,
-    inkW: src.attributes._toon || null, // (.y: the line's weight per vertex, kit.py toon_attrs)
+    inkW: src.attributes._toon ? f32(src.attributes._toon) : null, // (.y: the line's weight per vertex, kit.py toon_attrs)
+    only, // (drawn only for these owners, or null: everyone)
   });
 }
 
@@ -127,15 +143,28 @@ function gameplay(asset, role, node, inv, warn) {
   if (role === 'col' || role === 'hit') {
     const shape = role === 'hit' ? 'box' : (SHAPES.includes(u.shape) ? u.shape : 'box');
     if (u.shape !== undefined && role === 'col' && !SHAPES.includes(u.shape)) warn(`collider "${node.name}": unknown shape "${u.shape}", using box`);
-    if (shape === 'box' && _z.copy(YAXIS).applyQuaternion(_q).y < 0.9998) warn(`${role} "${node.name}" is tilted: only its turn about the vertical is used`);
+    if (shape === 'box' && role === 'hit' && _z.copy(YAXIS).applyQuaternion(_q).y < 0.9998) warn(`hit "${node.name}" is tilted: only its turn about the vertical is used`);
     if (shape === 'cyl' && _z.copy(YAXIS).applyQuaternion(_q).y < 0.9998) warn(`cylinder "${node.name}" is tilted: a cylinder collider is always upright (use boxes for a lying one)`);
     if (shape === 'cyl' && Math.abs(sx - sz) > 0.01 * Math.max(sx, sz)) warn(`cylinder "${node.name}": scale x and z differ: the radius is scale x`);
     if (shape === 'sphere' && Math.max(sx, sy, sz) - Math.min(sx, sy, sz) > 0.01 * Math.max(sx, sy, sz)) warn(`sphere "${node.name}" is scaled unevenly: the radius is scale x`);
     if (shape === 'box') {
       const b = { hx: sx, hy: sy, hz: sz, x: _p.x, y: _p.y, z: _p.z, yaw: yawOf(_q) };
-      if (role === 'hit') asset.hits.push(b); else asset.cols.push({ type: 'box', ...b });
+      if (role === 'hit') asset.hits.push(b);
+      else { // a collider keeps its tilt (a sloping roof, a fallen slab: territory.place turns it by yaw, pitch and roll) and its flags
+        _e.setFromQuaternion(_q, 'YXZ');
+        const c = { type: 'box', ...b, pitch: _e.x, yaw: _e.y, roll: _e.z };
+        if (u.floor) c.floor = true;     // a walking floor (physics.js floorUnder): ground, not an obstacle
+        if (u.lattice) c.lattice = true; // an open truss's box (the audit skips its top)
+        asset.cols.push(c);
+      }
     } else if (shape === 'cyl') asset.cols.push({ type: 'cyl', r: sx, y0: _p.y - sy, y1: _p.y + sy, x: _p.x, z: _p.z });
+    else if (shape === 'hcyl') { // a lying cylinder (a Quonset's roof): radius scale x, length 2 x scale z along the empty's z, turned about the vertical only
+      if (_z.copy(YAXIS).applyQuaternion(_q).y < 0.9998) warn(`lying cylinder "${node.name}" is tilted: only its turn about the vertical is used`);
+      asset.cols.push({ type: 'hcyl', r: sx, len: sz * 2, x: _p.x, y: _p.y, z: _p.z, yaw: yawOf(_q) });
+    }
     else asset.cols.push({ type: 'sphere', r: sx, x: _p.x, y: _p.y, z: _p.z });
+  } else if (role === 'stack') { // a stack of standard cargo boxes the game adds (settlements.js cargoStack): extras n, factions ('owner' or a list)
+    asset.stacks.push({ x: _p.x, y: _p.y, z: _p.z, yaw: yawOf(_q), n: Math.max(1, Number(u.n) || 1), factions: String(u.factions || 'owner').split(',').map((f) => f.trim()) });
   } else if (role === 'raid' || role === 'smoke' || role === 'drop') {
     if (asset[role]) warn(`more than one "${role}" point: the last one wins`);
     asset[role] = _p.clone();
@@ -202,20 +231,30 @@ function additiveMaterial(color, opacity) {
   return ADDITIVE.get(k);
 }
 
+// see-through glazing (`glass…`): toon, transparent, no depth write, both sides, like the Kit's GLASS; one per colour and opacity
+const GLASSM = new Map();
+function glassMaterial(color, opacity) {
+  const k = `${color.getHexString()}|${opacity.toFixed(3)}`;
+  if (!GLASSM.has(k)) GLASSM.set(k, new THREE.MeshToonMaterial({ color: color.clone(), gradientMap: gradientMap(), transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }));
+  return GLASSM.get(k);
+}
+
 // parts -> merged meshes: one vertex-coloured mesh per (lit | unlit, side), plus one outline hull.
 // `fixed`: the static body on the ground (y = 0); as with a Kit built onGround, unseen down-facing faces on it
 // (and their shells) are dropped (toon.dropFloorFaces).
-function bakeParts(parts, faction, fixed) {
+function bakeParts(parts, faction, fixed, owner = null) {
   const buckets = new Map(), beams = new Map(), shells = [], out = [];
+  const pal = STYLE[owner] || STYLE.spacecom;
   for (const p of parts) {
-    if (p.slot.kind === 'additive') { // beam: own material, no vertex colours, no outline
-      const mat = additiveMaterial(p.color, p.opacity);
+    if (p.only && !p.only.includes(owner)) continue; // another owner's emblem
+    if (p.slot.kind === 'additive' || p.slot.kind === 'glass') { // beam or glazing: own material, no vertex colours, no outline
+      const mat = p.slot.kind === 'glass' ? glassMaterial(p.color, p.opacity < 1 ? p.opacity : 0.35) : additiveMaterial(p.color, p.opacity);
       if (!beams.has(mat)) beams.set(mat, []);
       beams.get(mat).push(p.geo.clone());
       continue;
     }
     const g = p.geo.clone();
-    paintVertices(g, p.slot.faction ? faction : p.color);
+    paintVertices(g, p.slot.style ? new THREE.Color(pal[p.slot.style]) : p.slot.faction ? faction : p.color);
     const halo = p.slot.kind === 'glow' && p.halo;
     const k = `${p.slot.kind}|${p.side}|${halo ? 1 : 0}`;
     if (!buckets.has(k)) buckets.set(k, { kind: p.slot.kind, side: p.side, halo, list: [] });
@@ -233,7 +272,7 @@ function bakeParts(parts, faction, fixed) {
   }
   for (const [mat, list] of beams) {
     const m = new THREE.Mesh(mergeGeometries(list), mat);
-    m.renderOrder = 3; // after lit scenery, like the Kit's beams
+    m.renderOrder = mat.blending === THREE.AdditiveBlending ? 3 : 2; // after lit scenery, like the Kit's beams and glass
     for (const g of list) g.dispose();
     out.push(m);
   }
@@ -250,17 +289,17 @@ function bakeParts(parts, faction, fixed) {
 // asset -> template. `textMat(str, fg, bg, stroke)` makes a sign face's canvas material (outpostModels.js owns it,
 // so signs match the Kit's).
 export function bakeStatic(asset, { color, textMat }) {
-  const faction = new THREE.Color(color);
+  const faction = new THREE.Color(color), owner = factionOf(color, null);
   const root = new THREE.Group();
   root.name = `static:${asset.name}`;
   for (const g of asset.groups) {
     const lines = inkLineMesh(g.lines);
-    if (!g.anim) { for (const m of bakeParts(g.parts, faction, true)) root.add(m); if (lines) root.add(lines); continue; }
+    if (!g.anim) { for (const m of bakeParts(g.parts, faction, true, owner)) root.add(m); if (lines) root.add(lines); continue; }
     // holder (placed, turned) > pivot (territory.js swings / spins / blinks it) > meshes
     const holder = new THREE.Group(), pivot = new THREE.Group();
     g.matrix.decompose(holder.position, holder.quaternion, holder.scale);
-    pivot.userData[g.anim] = true;
-    for (const m of bakeParts(g.parts, faction, false)) pivot.add(m);
+    pivot.userData[g.anim] = g.anim === 'spin' && g.speed ? g.speed : true; // (a spin's own rate: territory.js movers)
+    for (const m of bakeParts(g.parts, faction, false, owner)) pivot.add(m);
     if (lines) pivot.add(lines);
     holder.add(pivot);
     root.add(holder);
@@ -282,5 +321,7 @@ export function bakeStatic(asset, { color, textMat }) {
     raid: asset.raid ? asset.raid.clone() : null,
     smoke: asset.smoke ? asset.smoke.clone() : null,
     drop: asset.drop ? asset.drop.clone() : null,
+    stacks: asset.stacks.map((st) => ({ ...st, factions: [...st.factions] })), // (added by outpostModels.outpostTemplate)
+    walkers: asset.walkers ? { ...asset.walkers } : null, // (its look is the owner's: outpostModels.outpostTemplate)
   };
 }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { Kit, T, G, D, GLASS, sandbags, crate, tank, lightString, PALETTE, DRAFT_BUILD } from './outpostModels.js';
+import { Kit, T, G, D, GLASS, sandbags, crate, tank, lightString, PALETTE, DRAFT_BUILD, GLB_HOOKS } from './outpostModels.js';
 import { cargoStack, lattice, quonset } from './settlements.js';
-import { FACTIONS } from './locations.js';
+import { STYLE, factionOf, WALK_LOOK, CARGO_OF, looted } from './outpostLooks.js';
 
 // The seven small outposts as the game builds them (docs/outpost-proposals/README.md): the picked draft of each kind (its letter
 // is the draft's, from the proposals: OUTPOST_PICK in outpostModels.js, which builds them; `?outpostDraft=off` brings back the
@@ -16,29 +16,8 @@ const TAU = Math.PI * 2;
 const WARM = 0xfff6a8, GLASSC = 0x9be7ff;
 
 // ---------- faction look ----------
-const STYLE = {
-  spacecom: { body: 0xf3eee4, panel: 0xd8d2c4, dark: 0x1b2a5a, roof: 0x3a4a78, trim: 0xffd23f, glow: 0xfff3b0, conc: 0xb8b2a6 },
-  vostok: { body: 0x8f8a84, panel: 0x77736e, dark: 0x3a3a34, roof: 0x55524c, trim: 0xff3b5c, glow: 0xffb27a, conc: 0x8a8680 },
-  daedalus: { body: 0x3a3450, panel: 0x2c2740, dark: 0x1a1626, roof: 0x241f34, trim: 0xc77dff, glow: 0xd9a8ff, conc: 0x4a4560 },
-  meridian: { body: 0xf2f4fa, panel: 0xd6dcea, dark: 0x1b3a8f, roof: 0x2a4aa0, trim: 0x2ec4ff, glow: 0xbff0ff, conc: 0xc8c2b8 },
-  kepler: { body: 0xfff0d8, panel: 0xe8d4b4, dark: 0x5a3a2a, roof: 0x8a4a2a, trim: 0xff9f1c, glow: 0xffe6a8, conc: 0xbcae98 },
-  rustmoon: { body: 0x6b5a4a, panel: 0x7a4a32, dark: 0x2a2433, roof: 0x5a3a2a, trim: 0x7dff3a, glow: 0x7dff3a, conc: 0x6f6878 },
-};
-const FAC_BY_COLOR = new Map(Object.entries(FACTIONS).map(([id, f]) => [new THREE.Color(f.color).getHex(), id]));
-const factionOf = (c, fallback) => FAC_BY_COLOR.get(c) || fallback;
 const style = (k, fallback) => STYLE[factionOf(k.c, fallback)] || STYLE[fallback];
 
-// The walking NPCs (outpostWalkers.js): two or three per outpost in the owner's colours, each on its own loop of open yard
-// points (tools/outpost-audit.mjs checks no loop runs through a collider). Troopers for the military, traders, farmhands
-// and clan riggers for the rest; junk bots at a junk pile.
-const WALK_LOOK = {
-  spacecom: { kind: 'soldier', suit: 0x2a3a6b, helmet: 0xf3eee4 },
-  vostok: { kind: 'soldier', suit: 0x6b6f78, helmet: 0xff3b5c },
-  daedalus: { kind: 'soldier', suit: 0x3a3450, helmet: 0xc77dff },
-  meridian: { look: 'trader', suit: 0x2ec4ff, helmet: 0xf2f4fa },
-  kepler: { look: 'coveralls', suit: 0xff9f1c, helmet: 0xfff4e0 },
-  rustmoon: { look: 'engineer', suit: 0x3a2b4f, helmet: 0x7dff3a },
-};
 function walkers(k, fallback, routes, kind = 'person') {
   if (k.wreck) return; // (they've fled)
   k.walkers = { kind, look: WALK_LOOK[factionOf(k.c, fallback)] || WALK_LOOK[fallback], routes };
@@ -314,10 +293,6 @@ function stall(k, x, z, ry, awn, rr, sc = 1.3) {
 }
 
 // ---------- faction marks and shared military pieces ----------
-// (Rustmoon's are taken off everyone's trains: a mix of liveries, a different owner box by box)
-const CARGO_OF = { spacecom: ['spacecom'], vostok: ['vostok'], kepler: ['kepler'], meridian: ['meridian'], daedalus: ['meridian'], rustmoon: ['vostok', 'meridian', 'kepler', 'spacecom'] };
-// a salvage stack: n boxes, each in a different looted livery (the mix turned by `turn` so stacks side by side differ)
-const looted = (turn) => { const l = CARGO_OF.rustmoon; return l.map((_, i) => l[(i + turn) % l.length]); };
 const cargoFor = (k, fb) => CARGO_OF[factionOf(k.c, fb)] || [fb];
 function starShape(r, inner = 0.42, n = 5) {
   const sh = new THREE.Shape();
@@ -388,7 +363,7 @@ function gunPit(k, x, z, s, rr, face0 = 0) {
     for (let t = 0.6; t < 1.25; t += 0.16) k.add(new THREE.TorusGeometry(0.078, 0.012, 3, 10), Dk, 0, Y, t, { outline: 0 });
     k.beam([0, Y, 1.25], [0, Y, 1.95], 0.035, GUN, { outline: 0.012, seg: 6 }); // barrel
     k.beam([0, Y, 1.95], [0, Y, 2.12], 0.055, Dk, { outline: 0.012, seg: 8 }); // muzzle brake
-    k.box(0.04, 0.08, 0.04, Dk, 0, Y + 0.06, 1.85, { outline: 0 }); // front sight
+    k.box(0.04, 0.08, 0.04, Dk, 0, Y + 0.02, 1.85, { outline: 0 }); // front sight, on the barrel
     for (const sd of [-1, 1]) k.beam([sd * 0.08, Y - 0.08, -0.65], [sd * 0.14, Y - 0.08, -0.88], 0.025, Dk, { outline: 0.01 }); // spade grips
     k.beam([-0.14, Y - 0.08, -0.88], [0.14, Y - 0.08, -0.88], 0.025, Dk, { outline: 0.01 });
     k.box(0.32, 0.26, 0.22, T(0x5a6a48), -0.31, Y - 0.2, 0.0, { outline: 0.015 }); // ammunition box on the feed side
@@ -425,7 +400,7 @@ function towerB(k) {
   // the tower: 39 m of lattice in 15 bays of 2.6 m, a switchback stair up its middle, a gallery halfway, the hexagonal cab
   const TX = -19, TZ = -6, H = 39, W0 = 5.4, W1 = 3.2, BAYS = 15, BAY = H / BAYS;
   const hw = (y) => W0 + (W1 - W0) * (y / H);
-  const legM = T(s.panel === STYLE.spacecom.panel ? STEEL : s.panel);
+  const legM = T(s.metal);
   if (!k.wreck) {
     for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { k.box(2.4, 0.9, 2.4, T(s.conc), TX + sx * W0, 0, TZ + sz * W0, { outline: 0.04 }); k.box(1.0, 0.25, 1.0, T(s.dark), TX + sx * W0, 0.9, TZ + sz * W0, { outline: 0.02 }); k.solid(1.2, 0.575, 1.2, TX + sx * W0, TZ + sz * W0); }
     lattice(k, TX, TZ, H, W0, W1, BAYS, legM, T(s.dark), { r: 0.3 });
@@ -440,7 +415,8 @@ function towerB(k) {
       const x0 = -dir * RUN / 2, x1 = dir * RUN / 2, n = 13;
       within(k, TX, TZ, 0, () => {
         for (const e of [-1, 1]) k.beam([x0, y0 + (i ? 0.08 : F), lz + e * LW / 2], [x1, y1, lz + e * LW / 2], 0.06, Dk, { outline: 0.012, seg: 4 }); // stringers
-        for (let j = 1; j <= n - 1; j++) { const t = j / n; k.box(RUN / n + 0.04, 0.05, LW, TREAD, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t - 0.02, lz, { outline: 0 }); }
+        const ys = y0 + (i ? 0.08 : F); // (where the stringers start: the first flight's on the apron)
+        for (let j = 1; j <= n - 1; j++) { const t = j / n; k.box(RUN / n + 0.04, 0.05, LW, TREAD, x0 + (x1 - x0) * t, ys + (y1 - ys) * t - 0.02, lz, { outline: 0 }); }
         const oz = lz + Math.sign(lz) * LW / 2; // the outer side's handrail on three posts
         for (const t of [0, 0.5, 1]) { const px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t; k.beam([px, py, oz], [px, py + 1.0, oz], 0.025, Dk, { outline: 0 }); }
         k.beam([x0, y0 + 1.0, oz], [x1, y1 + 1.0, oz], 0.03, RAIL, { outline: 0 });
@@ -508,7 +484,7 @@ function towerB(k) {
   // the barracks: a 30 m Quonset (8.2 m radius) along x, windows set into its shell, a porch and the mark on the door end
   const QX = 6, QZ = -20, QR = 8.2, QL = 30;
   if (!k.wreck) {
-    quonset(k, QX, QZ, QR, QL, s.panel === STYLE.spacecom.panel ? 0x6f7a5a : s.body, Math.PI / 2, c);
+    quonset(k, QX, QZ, QR, QL, s.hut, Math.PI / 2, c);
     within(k, QX, QZ, Math.PI / 2, () => {
       const wa = 1.0; // windows a radian down from the crown each side, their frames on the shell
       for (const sd of [-1, 1]) for (let t = -QL / 2 + 3.5; t <= QL / 2 - 3; t += 4) {
@@ -522,7 +498,7 @@ function towerB(k) {
       emblem(k, 0, F + 6.8, QL / 2 + 0.03, 0, 2.0, 'spacecom');
     });
   } else {
-    ruin(k, QX, QZ, QL, QR * 2, 5, Math.PI / 2, 0x4f5a42, k.wr);
+    ruin(k, QX, QZ, QL, QR * 2, 5, 0, 0x4f5a42, k.wr); // (its length along x, where the barracks stood)
     for (let i = 0; i < 7; i++) k.add(new THREE.TorusGeometry(QR, 0.18, 4, 16, Math.PI * (0.3 + k.wr() * 0.5)), T(0x3a3f30), QX - 12 + i * 4, 0.3, QZ, { ry: Math.PI / 2, outline: 0.03 }); // (ribs still standing from the pad)
   }
   k.hit(QL / 2, QR / 2, QR, QX, QZ);
@@ -803,7 +779,7 @@ function farmB(k) {
   tank(k, 29, 12, 2.4, 5, 0xd8d4e8, c);
   tank(k, 29, 19, 2.0, 4, 0x7dd87a, c);
   pipeRun(k, [[26.6, 12], [21.5, 12]], 1.0);
-  solarRows(k, -20, 28, 2, 4, s);
+  solarRows(k, -18.5, 26.5, 2, 4, s); // (its corner posts on the apron)
   for (const [x, z] of [[-27, 16], [11, 24], [-31, -16], [31, -6]]) lampPost(k, x, z, 6, s.glow);
   flagPole(k, -8.5, 37); flagPole(k, 8.5, 37);
   // three farmhands: gate to the vaults' doors, up the gap between two vaults to the barn, down the east side by the tanks
@@ -1295,3 +1271,8 @@ DRAFT_BUILD.farm = { b: farmB };
 DRAFT_BUILD.mast = { a: mastA };
 DRAFT_BUILD.junk = { a: junkA };
 DRAFT_BUILD.shack = { c: shackMix };
+
+// what the Blender-built outposts take from here once baked (outpostModels.js glbExtras): their container stacks (a `stack`
+// point: 'owner' boxes in the owner's livery, else the named ones) and their walkers' look
+GLB_HOOKS.stack = (k, st, color) => cargoStack(k, st.x, st.z, st.n, st.factions[0] === 'owner' ? CARGO_OF[factionOf(color, 'spacecom')] || ['spacecom'] : st.factions, st.yaw, st.y);
+GLB_HOOKS.look = (color) => WALK_LOOK[factionOf(color, 'spacecom')] || WALK_LOOK.spacecom;

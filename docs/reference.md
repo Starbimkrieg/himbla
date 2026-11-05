@@ -395,7 +395,9 @@ src/
   kade.js          Kade's gun truck
   monolith.js      the Monolith's spells
   territory.js     territory, small outposts, patrols
-  outpostDrafts.js the small outposts (the picks, OUTPOST_PICK in outpostModels.js; docs/outpost-proposals)
+  outpostDrafts.js the small outposts (the picks, OUTPOST_PICK in outpostModels.js; docs/outpost-proposals), code-built: the
+                   kinds not yet in outposts.glb, and the fallback
+  outpostLooks.js  the small outposts' looks by owner: palettes (STYLE), walkers' looks, container liveries
   outpostWalkers.js the two or three NPCs walking about each small outpost
   vehicles.js      drivable vehicles
   settings.js      settings menu and key remapping
@@ -478,7 +480,8 @@ src/
     dish.glb         dish stations and dish heads
     winch.glb        winch grapple and cable
     towmark.png      winch HUD marker
-    outposts.glb     Relay Mast and Watchtower (pilot, ?outpostGlb; spec in docs/outpost-glb.md)
+    outposts.glb     the small outposts built in Blender (the kinds in staticContract.js GLB_KINDS; ?outpostGlb=0 for the
+                     code-built ones; spec in docs/outpost-glb.md)
 tools/
   claude-hooks.mjs         Claude Code hooks (.claude/settings.json): blocks a push that bumps the version without [release],
                            skips CHANGELOG.md or the source map; blocks adding code-built geometry to src/ (Blender is the
@@ -513,6 +516,7 @@ tools/
     kit.py                 shared helpers every builder execs
     hullkit.py             hull lofts and fittings (Courier, Skimmer redesigns)
     dishkit.py             dish geometry (build_dish.py, build_outposts.py)
+    outpost_kit.py         the small outposts' kit: the game's Kit and the outpost builders' helpers, ported (build_outposts.py)
     decals.py              lettering, emblems, hazard stripes, container markings
     cargo.py               land-train cargo units for other models to carry (lite=True: trimmed for distant units, the freighter's bays)
     spreader.py            crane container spreader
@@ -565,7 +569,8 @@ tools/
     build_blackjack.py     -> blackjack.glb
     build_dish.py          -> dish.glb
     build_winch.py         -> winch.glb, towmark.png
-    build_outposts.py      -> outposts.glb (check with npm run check:outposts)
+    build_outposts.py      -> outposts.glb, the small outposts (check with npm run check:outposts; compare with the code-built
+                              ones in the viewer: ?m=outpost&kind=tower)
     build_downs_*.py       -> downs-*.glb (build_downs_dome.py -> downs-dome.glb; preview_dome.py renders it over a block model
                               of the Downs)
     build_spidertank.py    -> spidertank.glb (Zbornak's spider tank; docs/spidertank/)
@@ -581,8 +586,8 @@ tools/
 ```
 
 **Blender models:** each builder runs in Blender's Scripting tab or headless (`tools/setup-blender.sh` installs
-`bpy`; some builders want `MOONRUNNER_REPO=.`). After re-exporting, run `npm run optimize:glb` (`runner.glb`,
-`outposts.glb` and `winch.glb` stay uncompressed). Material names on the runner are colour slots that outfits
+`bpy`; some builders want `MOONRUNNER_REPO=.`). After re-exporting, run `npm run optimize:glb` (`runner.glb` and
+`winch.glb` stay uncompressed). Material names on the runner are colour slots that outfits
 recolour. Each model is its own chunk, inlined as a data URI so the desktop build needs no fetch.
 
 **Claude Code:** `CLAUDE.md` holds only what every task needs (commands, conventions, which skill for which job). The

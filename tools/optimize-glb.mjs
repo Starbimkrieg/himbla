@@ -6,8 +6,8 @@
 //   npm run optimize:glb                 the models the world is built from at boot
 //   node tools/optimize-glb.mjs a.glb b.glb
 //
-// Already-compressed files are skipped. Not run on runner.glb (its outline follows the stored normals closely) or
-// outposts.glb (checked by tools/check-outposts.mjs, loaded on request). glTF-Transform comes via npx at a pinned version.
+// Already-compressed files are skipped. Not run on runner.glb (its outline follows the stored normals closely).
+// glTF-Transform comes via npx at a pinned version.
 import { execFileSync, execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const CLI = '@gltf-transform/cli@4.5.1';
 const ASSETS = fileURLToPath(new URL('../src/assets/', import.meta.url));
-const DEFAULT = ['ships', 'skimmer', 'lightbike', 'skimmer_a', 'skimmer_b', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'gantry', 'garage', 'slots', 'casino', 'blackjack', 'claw', 'duck', 'dish', 'engine', 'briefcase', 'hovercar', 'weapons', 'plinko', 'hall', 'lot', 'downs-stand', 'downs-club', 'downs-course', 'downs-stalls', 'downs-arcade', 'downs-screen', 'downs-fair', 'downs-stable', 'downs-crowd', 'downs-dome', 'power', 'habitat', 'hydroponics', 'labs', 'hangar', 'relay', 'chimera'].map((n) => `${ASSETS}${n}.glb`);
+const DEFAULT = ['ships', 'skimmer', 'lightbike', 'skimmer_a', 'skimmer_b', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'gantry', 'garage', 'slots', 'casino', 'blackjack', 'claw', 'duck', 'dish', 'engine', 'briefcase', 'hovercar', 'weapons', 'plinko', 'hall', 'lot', 'downs-stand', 'downs-club', 'downs-course', 'downs-stalls', 'downs-arcade', 'downs-screen', 'downs-fair', 'downs-stable', 'downs-crowd', 'downs-dome', 'power', 'habitat', 'hydroponics', 'labs', 'hangar', 'relay', 'chimera', 'outposts'].map((n) => `${ASSETS}${n}.glb`);
 const files = process.argv.length > 2 ? process.argv.slice(2) : DEFAULT;
 
 const extensionsOf = (file) => {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Kit, T, outpostTemplate, OUTPOST_PICK, container, crate, tank, junkHeap, sandbags, lightString } from '../outpostModels.js';
+import { Kit, T, outpostTemplate, container, crate, tank, junkHeap, sandbags, lightString } from '../outpostModels.js';
 import '../outpostDrafts.js'; // (the outposts' builders: docs/outpost-proposals)
 import { spawnWalkers } from '../outpostWalkers.js';
 import { foundedTemplate } from '../storyAssets.js';
@@ -106,7 +106,8 @@ function row(parts, gap = 3) {
 const item = (id, label, w, d, make, extra = {}) => ({ id, label, w, d, make, ...extra });
 
 // ---------------------------------------------------------------------------------------------
-// 08 OUTPOSTS: seven small faction kinds, intact and wrecked (the picked drafts, src/outpostDrafts.js)
+// 08 OUTPOSTS: seven small faction kinds, intact and wrecked, as the game builds them (Blender-built from outposts.glb for the
+// kinds in GLB_KINDS, the picked drafts in src/outpostDrafts.js for the rest)
 // ---------------------------------------------------------------------------------------------
 const OUTPOSTS = [
   // kind, label, owner (a faction that has one in game), w, d
@@ -121,7 +122,7 @@ const OUTPOSTS = [
 
 function outpostItem(kind, label, faction, w, d, wreck) {
   return item(`outpost.${kind}${wreck ? '.wreck' : ''}`, `${label}${wreck ? ' (WRECK)' : ''}`, 84, 84, () => {
-    const t = outpostTemplate(kind, factionHex(faction), 0, wreck, 'kit', OUTPOST_PICK[kind]); // (the picked draft, as in the game)
+    const t = outpostTemplate(kind, factionHex(faction), 0, wreck); // (as the game builds it: outpostModels.js)
     const root = t.root.clone();
     const wk = spawnWalkers(root, t.walkers, 5); // (its walking NPCs: outpostWalkers.js)
     return { root, cols: fixCols(t.cols), update: together(animate(root), wk && wk.update) };
@@ -306,8 +307,6 @@ const hometown = {
 export default [outposts, parts, hometown];
 
 // SKIPPED
-// - outpost.mast.glb / outpost.tower.glb (Blender-GLB pilot outposts): the live game's GLB path must stay untouched, and
-//   outpostTemplate(.., 'glb') needs loadOutpostParts({ force }), which flips the game's own outposts.
 // - plain models.js makeTowerCrane / makeGarage (live crane rig, garage doors; settlements never use them): the Kit-baked
 //   towerCrane / garage are shown instead, same Blender models.
 // - outpost faction colour variants: each kind shows in its owner's colour (territory.js KINDS); others only change trim and flags.

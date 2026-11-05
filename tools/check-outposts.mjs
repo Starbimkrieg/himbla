@@ -72,7 +72,8 @@ const W = (m, key = m) => { const w = warns.get(key); if (w) w.n++; else warns.s
 
 for (const k of ['images', 'textures', 'skins', 'animations', 'cameras']) if (j[k]?.length) W(`${j[k].length} ${k} in the file: ignored by the game`);
 for (const x of j.extensionsRequired || []) {
-  if (x === 'KHR_draco_mesh_compression' || x === 'EXT_meshopt_compression') E(`the file needs ${x}, and the game's loader has no decoder for it (export without compression)`);
+  if (x === 'KHR_draco_mesh_compression') E(`the file needs ${x}, and the game's loader has no decoder for it (compress with tools/optimize-glb.mjs: meshopt)`);
+  else if (x === 'EXT_meshopt_compression' || x === 'KHR_mesh_quantization') continue; // (tools/optimize-glb.mjs; outpostGlb.js decodes it)
   else W(`required extension ${x}: the game's loader may not support it`);
 }
 if (!(j.extensionsRequired || []).length && j.extensionsUsed?.length) W(`extensions used: ${j.extensionsUsed.join(', ')}`);
@@ -159,11 +160,11 @@ function mesh(n, x, group, e, w, st) {
     if (slot.kind === 'additive') {
       if (mat.alphaMode !== 'BLEND') w(`material "${label}": an additive beam needs alpha blending (alphaMode BLEND), or it draws at full strength`, `addblend:${label}`);
       else if (!(alpha > 0 && alpha < 1)) w(`material "${label}": an additive beam with alpha ${alpha} draws at full strength or not at all`, `addalpha:${label}`);
-    } else if (mat.alphaMode === 'BLEND' || mat.alphaMode === 'MASK') w(`material "${label}": ${mat.alphaMode} is not supported: it renders opaque (only an additive… material may be see-through)`, `alpha:${label}`);
+    } else if (slot.kind !== 'glass' && (mat.alphaMode === 'BLEND' || mat.alphaMode === 'MASK')) w(`material "${label}": ${mat.alphaMode} is not supported: it renders opaque (only an additive… or glass… material may be see-through)`, `alpha:${label}`);
     if (mat.emissiveFactor && mat.emissiveFactor.some((v) => v > 0)) w(`material "${label}": emission is ignored (use a glow* material for unlit)`, `emit:${label}`);
     const rgb = base.slice(0, 3).map((v) => +v.toFixed(3));
-    st.materials[label] = { treatment: `${slot.faction ? 'faction ' : ''}${slot.kind}${slot.kind === 'additive' ? ` (alpha ${+alpha.toFixed(3)})` : ''}`, color: slot.faction ? null : rgb, doubleSided: !!mat.doubleSided };
-    st.buckets.add(slot.kind === 'additive' ? `${group}|additive|${rgb.join(',')}|${alpha.toFixed(3)}` : `${group}|${slot.kind}|${side}`);
+    st.materials[label] = { treatment: `${slot.style ? `style ${slot.style} ` : slot.faction ? 'faction ' : ''}${slot.kind}${slot.kind === 'additive' || slot.kind === 'glass' ? ` (alpha ${+alpha.toFixed(3)})` : ''}`, color: slot.faction || slot.style ? null : rgb, doubleSided: !!mat.doubleSided };
+    st.buckets.add(slot.kind === 'additive' || slot.kind === 'glass' ? `${group}|${slot.kind}|${rgb.join(',')}|${alpha.toFixed(3)}` : `${group}|${slot.kind}|${side}`);
   }
   st.meshes++;
   if (x.ink !== undefined) {
@@ -171,7 +172,7 @@ function mesh(n, x, group, e, w, st) {
     else if (x.ink < 0) w(`mesh "${nm}": a negative ink is ignored`, 'inkneg');
   }
   if (Number(x.ink) > 0) {
-    const onBeam = md.primitives.every((p) => p.material !== undefined && slotOf(j.materials[p.material]?.name).kind === 'additive');
+    const onBeam = md.primitives.every((p) => p.material !== undefined && ['additive', 'glass'].includes(slotOf(j.materials[p.material]?.name).kind));
     if (onBeam) w(`mesh "${nm}": a beam gets no outline: its ink is ignored`, 'beamink');
     else { st.inkMeshes++; st.buckets.add(`${group}|ink`); }
   }
@@ -181,12 +182,14 @@ function gameplay(role, n, m, x, e, w, st) {
   const d = decompose(m), nm = n.name, [sx, sy, sz] = d.scale, r3 = (v) => +v.toFixed(4);
   if (role === 'col' || role === 'hit') {
     const shape = role === 'hit' ? 'box' : (x.shape === undefined ? 'box' : x.shape);
-    if (!SHAPES.includes(shape)) { e(`collider "${nm}": unknown shape "${shape}" (box, cyl or sphere)`); return; }
+    if (!SHAPES.includes(shape)) { e(`collider "${nm}": unknown shape "${shape}" (box, cyl, sphere or hcyl)`); return; }
     if (![sx, sy, sz].every((v) => v > 1e-6 && Number.isFinite(v))) e(`${role} "${nm}": zero or invalid scale (scale = half-extents)`);
-    if (shape === 'box' && d.yaxis[1] < 0.9998) w(`${role} "${nm}" is tilted: only its turn about the vertical is used`);
+    if (shape === 'box' && role === 'hit' && d.yaxis[1] < 0.9998) w(`hit "${nm}" is tilted: only its turn about the vertical is used`); // (a collider keeps its tilt)
     if (shape === 'cyl' && d.yaxis[1] < 0.9998) w(`cylinder "${nm}" is tilted: a cylinder collider is always upright (use boxes for a lying one)`);
     if (shape === 'cyl' && Math.abs(sx - sz) > 0.01 * Math.max(sx, sz)) w(`cylinder "${nm}": scale x and z differ: the radius is scale x`);
     if (shape === 'sphere' && Math.max(sx, sy, sz) - Math.min(sx, sy, sz) > 0.01 * Math.max(sx, sy, sz)) w(`sphere "${nm}" is scaled unevenly: the radius is scale x`);
+    if (shape === 'hcyl' && d.yaxis[1] < 0.9998) w(`lying cylinder "${nm}" is tilted: only its turn about the vertical is used`);
+    if (shape === 'hcyl') { st.cols.push({ type: 'hcyl', r: r3(sx), len: r3(sz * 2), x: r3(d.pos[0]), y: r3(d.pos[1]), z: r3(d.pos[2]), yaw: r3(yawOf(d.zaxis)) }); return; }
     const rec = shape === 'box'
       ? { type: 'box', hx: r3(sx), hy: r3(sy), hz: r3(sz), x: r3(d.pos[0]), y: r3(d.pos[1]), z: r3(d.pos[2]), yaw: r3(yawOf(d.zaxis)) }
       : shape === 'cyl' ? { type: 'cyl', r: r3(sx), y0: r3(d.pos[1] - sy), y1: r3(d.pos[1] + sy), x: r3(d.pos[0]), z: r3(d.pos[2]) }

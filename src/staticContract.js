@@ -1,12 +1,12 @@
 // Rules for static GLBs (outposts.glb), shared by the loader/bake (staticBake.js) and tools/check-outposts.mjs so they
 // can't drift. No imports: runs in Node too. Artist-facing contract: docs/outpost-glb.md.
 
-// Kinds built from the GLB (pilot on and the file has them). A kind joins once its gameplay data matches the Kit
-// version's; tools/viewer.html?m=outpost&src=both compares them.
-export const GLB_KINDS = new Set(['mast', 'tower']);
+// Kinds built from the GLB (on by default: ?outpostGlb=0 gives the code-built ones, outpostDrafts.js). A kind joins once it
+// audits clean (tools/outpost-audit.mjs) with the same gameplay data as its code-built version (viewer ?m=outpost&src=both).
+export const GLB_KINDS = new Set(['tower', 'kiosk', 'depot', 'farm']);
 
-export const ROLES = ['col', 'hit', 'raid', 'smoke', 'drop', 'text'];
-export const SHAPES = ['box', 'cyl', 'sphere'];
+export const ROLES = ['col', 'hit', 'raid', 'smoke', 'drop', 'text', 'stack'];
+export const SHAPES = ['box', 'cyl', 'sphere', 'hcyl']; // (hcyl: a lying cylinder, its axis along the empty's z)
 const ANIMS = ['flag', 'blink', 'spin'];
 
 // Blender appends .001, .002... to duplicate names: ignore it on materials.
@@ -16,8 +16,18 @@ export const stripSuffix = (name) => String(name || '').replace(/\.\d{3,}$/, '')
 //   faction*       lit toon, faction accent colour      faction_glow*  same, unlit
 //   glow*          unlit, own colour                    anything else  lit toon, own colour
 //   additive*      light beam: unlit, additive, see-through, own colour, alpha = opacity
+//   glass*         see-through toon (windows, glazing, mesh fences), own colour, alpha = opacity, no outline
+//   style_<key>*   lit toon in the owner's palette (outpostLooks.js STYLE: body, panel, dark, roof, trim, conc, metal, hut);
+//                  style_glow* and style_trim_glow* unlit in its glow or trim colour
+export const STYLE_KEYS = ['body', 'panel', 'dark', 'roof', 'trim', 'glow', 'conc', 'metal', 'hut'];
 export function slotOf(materialName) {
   const n = stripSuffix(materialName).toLowerCase();
+  if (n.startsWith('style_')) {
+    const glow = n.startsWith('style_glow') || n.startsWith('style_trim_glow');
+    const key = n.startsWith('style_trim_glow') ? 'trim' : STYLE_KEYS.find((k) => n.startsWith(`style_${k}`));
+    if (key) return { kind: glow ? 'glow' : 'toon', faction: false, style: key };
+  }
+  if (n.startsWith('glass')) return { kind: 'glass', faction: false };
   if (n.startsWith('faction_glow')) return { kind: 'glow', faction: true };
   if (n.startsWith('faction')) return { kind: 'toon', faction: true };
   if (n.startsWith('glow')) return { kind: 'glow', faction: false };
@@ -29,7 +39,7 @@ export function slotOf(materialName) {
 // GLTFLoader strips dots (`col.001` arrives as `col001`), so a prefix may be followed by `_`, a digit, or nothing.
 export function roleOf(name, extras) {
   if (extras && typeof extras.role === 'string' && ROLES.includes(extras.role)) return extras.role;
-  const m = /^(col|hit|raid|smoke|drop|text)(?:[_\d]|$)/i.exec(String(name || ''));
+  const m = /^(col|hit|raid|smoke|drop|text|stack)(?:[_\d]|$)/i.exec(String(name || ''));
   return m ? m[1].toLowerCase() : null;
 }
 

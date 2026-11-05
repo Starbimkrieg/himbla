@@ -93,8 +93,8 @@ outposts, hall, lot, power, habitat (with `habitat_kit.py`), chimera (the chimer
 
 ## After a build
 
-1. `npm run optimize:glb` for the compressed models (ships, skimmer, warrig, rover, interceptor, apc, landtrain, crane, garage, slots, casino, blackjack, claw, duck, dish, hall, lot, power, habitat, hydroponics, labs, hangar, relay, the `downs-*` files, chimera).
-   `runner.glb` and `outposts.glb` stay plain. A build overwrites a compressed file with a plain one, so a
+1. `npm run optimize:glb` for the compressed models (ships, skimmer, warrig, rover, interceptor, apc, landtrain, crane, garage, slots, casino, blackjack, claw, duck, dish, hall, lot, power, habitat, hydroponics, labs, hangar, relay, the `downs-*` files, chimera, outposts).
+   `runner.glb` stays plain. A build overwrites a compressed file with a plain one, so a
    model you did not change shows as modified if you rebuilt it: `git checkout` it.
 2. `npm run check:outposts` after touching outposts.
    `python3 tools/blender/style_audit.py tools/blender/build_<name>.py` checks the model against the house style

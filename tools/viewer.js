@@ -62,8 +62,11 @@ function outpostParity(a, b, tol = 0.01) {
   const same = (x, y) => Math.abs(x - y) <= tol;
   const turn = (p, q) => Math.abs(Math.sin(p - q)) <= tol;
   const eq = {
-    box: (p, q) => same(p.x, q.x) && same(p.y, q.y) && same(p.z, q.z) && same(p.hy, q.hy) &&
-      ((same(p.hx, q.hx) && same(p.hz, q.hz) && turn(p.yaw, q.yaw)) || (same(p.hx, q.hz) && same(p.hz, q.hx) && turn(p.yaw + Math.PI / 2, q.yaw))),
+    box: (p, q) => same(p.x, q.x) && same(p.y, q.y) && same(p.z, q.z) && same(p.hy, q.hy) && !p.floor === !q.floor && !p.lattice === !q.lattice &&
+      (p.pitch || p.roll || q.pitch || q.roll // (tilted: the same turn, read back from its matrix)
+        ? new THREE.Quaternion().setFromEuler(new THREE.Euler(p.pitch || 0, p.yaw || 0, p.roll || 0, 'YXZ')).angleTo(new THREE.Quaternion().setFromEuler(new THREE.Euler(q.pitch || 0, q.yaw || 0, q.roll || 0, 'YXZ'))) <= tol * 2 && same(p.hx, q.hx) && same(p.hz, q.hz)
+        : (same(p.hx, q.hx) && same(p.hz, q.hz) && turn(p.yaw, q.yaw)) || (same(p.hx, q.hz) && same(p.hz, q.hx) && turn(p.yaw + Math.PI / 2, q.yaw))),
+    hcyl: (p, q) => same(p.r, q.r) && same(p.len, q.len) && same(p.x, q.x) && same(p.y, q.y) && same(p.z, q.z) && turn(p.yaw, q.yaw),
     cyl: (p, q) => same(p.r, q.r) && same(p.y0, q.y0) && same(p.y1, q.y1) && same(p.x, q.x) && same(p.z, q.z),
     sphere: (p, q) => same(p.r, q.r) && same(p.x, q.x) && same(p.y, q.y) && same(p.z, q.z),
   };
@@ -76,7 +79,9 @@ function outpostParity(a, b, tol = 0.01) {
     return { what, of: xs.length, matched: xs.length - miss.length, missing: miss, extra: left };
   };
   const pt = (what, p, q) => { const ok = !!(p && q && p.distanceTo(q) <= tol); return { what, of: p ? 1 : 0, matched: ok ? 1 : 0, missing: p && !ok ? [p] : [], extra: q && !ok ? [q] : [] }; };
-  const rows = [lists('colliders', a.cols, b.cols, true), lists('hit boxes', a.hits, b.hits, false), pt('raid', a.raid, b.raid), pt('smoke', a.smoke, b.smoke), pt('drop', a.drop, b.drop)];
+  const routes = (p) => JSON.stringify(p.walkers ? p.walkers.routes : null);
+  const rows = [lists('colliders', a.cols, b.cols, true), lists('hit boxes', a.hits, b.hits, false), pt('raid', a.raid, b.raid), pt('smoke', a.smoke, b.smoke), pt('drop', a.drop, b.drop),
+    { what: 'walkers', of: 1, matched: routes(a) === routes(b) ? 1 : 0, missing: routes(a) === routes(b) ? [] : [routes(a)], extra: routes(a) === routes(b) ? [] : [routes(b)] }];
   return { ok: rows.every((r) => !r.missing.length && !r.extra.length), rows };
 }
 function outpostStats(t) {
@@ -324,12 +329,13 @@ if (m === 'shuttle' || m === 'freighter') {
   });
   anim = (t, sp) => anims.forEach((a) => a(t, sp));
 } else if (m === 'outpost') {
-  // &kind=mast|tower (any kind in outposts.glb; src=kit takes any Kit kind)  &src=kit|glb|both (default both, side by side)  &wreck=1  &color=rrggbb  &cols=0 hides the colliders
+  // &kind=mast|tower (any kind in outposts.glb; src=kit takes any Kit kind)  &src=kit|glb|both (default both: the code-built pick and the
+  // Blender-built one side by side, their gameplay data compared)  &wreck=1  &color=rrggbb  &cols=0 hides the colliders
   const kind = Q.get('kind') || 'mast', wreck = Q.get('wreck') === '1', color = hex('color', 0x2ec4ff);
   // &draft=<letter>: the outpost as the game builds it (src/outpostDrafts.js: OUTPOST_PICK's letter), on its own; src=kit alone: the old Kit build
   // &compare=1: the old Kit build and the outpost as built now side by side at the same scale, the courier at each gate
   const compare = Q.get('compare') === '1';
-  const srcs = compare ? ['kit', OUTPOST_PICK[kind]] : Q.get('draft') || Q.get('src') === 'kit' ? ['kit'] : Q.get('src') === 'glb' ? ['glb'] : ['kit', 'glb'];
+  const srcs = compare ? ['kit', OUTPOST_PICK[kind]] : Q.get('draft') || Q.get('src') === 'kit' ? ['kit'] : Q.get('src') === 'glb' ? ['glb'] : [OUTPOST_PICK[kind] || 'kit', 'glb'];
   model = new THREE.Group();
   const lines = [];
   const stats = {}, tpls = {}, walkerSets = [];
@@ -348,10 +354,11 @@ if (m === 'shuttle' || m === 'freighter') {
     stats[s] = outpostStats(t);
     lines.push(`${s}: ${stats[s].draws} draws, ${stats[s].tris} tris, ${t.cols.length} colliders, ${t.hits.length} hit boxes`);
   });
-  if (tpls.kit && tpls.glb) {
-    const par = outpostParity(tpls.kit, tpls.glb);
+  const code = tpls[srcs[0]];
+  if (code && tpls.glb && srcs[0] !== 'glb') {
+    const par = outpostParity(code, tpls.glb);
     window.outpostParity = par;
-    lines.push(`GLB vs Kit gameplay data: ${par.ok ? 'same' : 'DIFFERENT'} (${par.rows.map((r) => `${r.what} ${r.matched}/${r.of}${r.extra.length ? ' +' + r.extra.length : ''}`).join(', ')})`);
+    lines.push(`GLB vs code-built gameplay data: ${par.ok ? 'same' : 'DIFFERENT'} (${par.rows.map((r) => `${r.what} ${r.matched}/${r.of}${r.extra.length ? ' +' + r.extra.length : ''}`).join(', ')})`);
   }
   const ui = document.getElementById('ui'); // (text, not HTML: `kind` comes from the URL)
   ui.style.whiteSpace = 'pre-line';
