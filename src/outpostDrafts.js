@@ -46,16 +46,6 @@ const grow = (k, px, pz, sc, fn) => within(k, px, pz, 0, () => within(k, -px, -p
 const polar = (r, a) => [Math.sin(a) * r, Math.cos(a) * r];
 
 // ---------- yard furniture ----------
-function tree(k, x, z, s = 1, leaf = 0x5fbf4a) {
-  k.cyl(1.1 * s, 1.2 * s, 0.7, 12, T(0xd8d0c0), x, F, z, { outline: 0.04 });
-  k.cyl(1.0 * s, 1.0 * s, 0.04, 12, T(0x4a3a2a), x, F + 0.7, z, { outline: 0 });
-  k.cyl(0.14 * s, 0.2 * s, 2.6 * s, 6, T(WOOD), x, F + 0.7, z, { outline: 0.03 });
-  k.add(new THREE.IcosahedronGeometry(1.5 * s, 0), T(leaf), x, F + 0.7 + 3.2 * s, z, { outline: 0.05 });
-  k.add(new THREE.IcosahedronGeometry(1.0 * s, 0), T(0x4aa83a), x + 0.8 * s, F + 0.7 + 2.6 * s, z + 0.3 * s, { ry: 0.6, outline: 0.04 });
-  k.column(1.2 * s, F + 0.7, x, z);
-  k.sphere(1.35 * s, x, F + 0.7 + 3.2 * s, z); // (the canopy: you can land on a tree)
-  k.sphere(0.9 * s, x + 0.8 * s, F + 0.7 + 2.6 * s, z + 0.3 * s);
-}
 // colliders for a square pyramid roof (a 4-sided cone turned 45°, its square edge-on to x and z: corner radius R at y0, apex h
 // above): square boxes stepped up it, each as wide as the roof at its top, so none stands out past the slopes
 function pyramidCols(k, x, z, y0, R, h, steps = 8) {
@@ -231,7 +221,7 @@ function kioskB(k) {
   });
   k.smoke = new THREE.Vector3(0, 4, 0);
   k.drop = new THREE.Vector3(0, F, 20);
-  // corner cafés: an open pavilion with a pyramid roof over tables, planters at its corners
+  // corner cafés: an open pavilion with a pyramid roof over tables, lamps at its corners
   for (const [qx, qz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
     const cx = qx * 20, cz = qz * 20;
     if (qx > 0 && qz < 0) { // the back-right corner is the stock yard
@@ -253,7 +243,7 @@ function kioskB(k) {
       k.column(0.6, F + 0.78, cx + tx, cz + tz);
       for (let j = 0; j < 2; j++) { const a = j * Math.PI + 0.4, sx = cx + tx + Math.sin(a) * 1.0, sz = cz + tz + Math.cos(a) * 1.0; k.cyl(0.22, 0.2, 0.46, 8, T(DARK), sx, F, sz, { outline: 0.02 });  }
     }
-    for (const [sx, sz] of [[qx, -qz], [-qx, qz]]) tree(k, cx + sx * (P + 2.4), cz + sz * (P + 2.4), 0.95); // (out by the lanes and the rim, clear of the walk round the house)
+    for (const [sx, sz] of [[qx, -qz], [-qx, qz]]) lampPost(k, cx + sx * (P + 2.4), cz + sz * (P + 2.4), 4.5, s.glow, false); // (out by the lanes and the rim, clear of the walk round the house; no trees in the vacuum)
     });
   }
   // stall rows along the lanes: small awning stalls facing the lane, two each side

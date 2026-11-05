@@ -9,8 +9,8 @@
 # skywalks dock into the core at r = DOCK_R on the wings' angles and run out to each wing's lobby (WING_END).
 #
 # Roots (each an empty at the origin, its own model; src/ilmbCore.js bakes them):
-#   ilmb_core_a, ilmb_core_b   the central complex, the two proposals (docs/ilmb-proposals)
-#   ilmb_wall_a, ilmb_wall_b   the fortress wall, gates, gate towers and bastions, one continuous ring, the two proposals
+#   ilmb_core_a                the central complex, "the Crown" (proposal A of docs/ilmb-proposals, the one chosen)
+#   ilmb_wall_a                the fortress wall, gates, gate towers and bastions, one continuous ring (proposal A)
 #   ilmb_skywalks              the six glass skywalks
 #   ... and the base's other pieces (see the end of the file)
 # Pivots (empties with a `role`): col (a collider: wing_kit.col shapes), blinker (an aircraft lamp, extra radius), fan (turns
@@ -59,7 +59,7 @@ WINGS = [(0.0, 116, 24.0), (0.62, 122, 18.6), (2.2, 124, 21.6), (3.8, 120, 14.0)
 DOCK_R = 56.0                                                      # the core's lobby faces: where each skywalk starts
 WING_END = [d - e + 1.2 for _, d, e in WINGS]                      # where each ends (1.2 m into the wing's lobby)
 DOCK_A = [a for a, _, _ in WINGS]
-MAIN_A = math.pi / 2                                               # the main entrance faces the job terminal at (0, 76)
+MAIN_A = math.pi / 2                                               # the main entrance, toward the south gate and arrivals
 WALL_R = 248.0
 GATES = [0.0, math.pi / 2, math.pi, 3 * math.pi / 2]
 BASTIONS = [(q + f) * (math.pi / 2) for q in range(4) for f in (1 / 3, 2 / 3)]
@@ -222,55 +222,68 @@ def build_core_a():
     begin("ilmb_core_a", draft="a")
     RI, RO, H = 31.0, 50.5, 12.2                 # the ring: inner and outer faces, roof
     full = (0.0, TAU)
-    # the ring's body in bands, outside: plinth, base wall, the glazed band set back with its dark backing and fins, the upper
-    # band with a gold string course, the roof, a parapet
+    # the ring's body in bands, outside: plinth, base wall, the glazed band, the upper band with a gold string course, the roof,
+    # a parapet. Behind each glazed band (outside and toward the courtyard) a lit gallery 2 m deep: a pale back wall, a
+    # mezzanine slab with its white edge, and warm cove lights under the slab and the ceiling, so the band reads as lit floors
+    # rather than a dark backing
     Acc.of("panel2", 0.1).put(ring_sector([(RO - 1.0, 0), (RO + 0.8, 0), (RO + 0.8, 1.2), (RO - 1.0, 1.2)], *full))
     Acc.of("cream", 0.12).put(ring_sector([(RI, 0), (RO, 0), (RO, 3.6), (RI, 3.6)], *full))
-    Acc.of("roof", 0.0).put(ring_sector([(RI + 0.6, 3.6), (RO - 0.6, 3.6), (RO - 0.6, 9.6), (RI + 0.6, 9.6)], *full))
+    GD = 2.2                                     # the galleries' depth behind the glass
+    Acc.of("light", 0.0).put(ring_sector([(RI + GD, 3.6), (RO - GD, 3.6), (RO - GD, 9.6), (RI + GD, 9.6)], *full))
+    for r0, r1 in ((RO - GD, RO - 0.4), (RI + 0.4, RI + GD)):
+        Acc.of("white", 0.03).put(ring_sector([(r0, 6.4), (r1, 6.4), (r1, 6.9), (r0, 6.9)], *full))
+        c = (r0 + r1) / 2
+        for y in (6.37, 9.57):                   # (cove lights on the slab's and the ceiling's undersides)
+            Acc.of("lamp", 0.0).put(ring_sector([(c - 0.25, y), (c + 0.25, y), (c + 0.25, y + 0.03), (c - 0.25, y + 0.03)], *full))
     Acc.of("glass", 0.0).put(ring_sector([(RO - 0.3, 3.6), (RO - 0.25, 3.6), (RO - 0.25, 9.6), (RO - 0.3, 9.6)], *full))
     Acc.of("glass", 0.0).put(ring_sector([(RI + 0.25, 3.6), (RI + 0.3, 3.6), (RI + 0.3, 9.6), (RI + 0.25, 9.6)], *full))
-    Acc.of("window", 0.0).put(ring_sector([(RO - 0.62, 4.0), (RO - 0.6, 4.0), (RO - 0.6, 5.0), (RO - 0.62, 5.0)], *full))
-    Acc.of("window", 0.0).put(ring_sector([(RO - 0.62, 7.4), (RO - 0.6, 7.4), (RO - 0.6, 8.2), (RO - 0.62, 8.2)], *full))
     Acc.of("cream", 0.12).put(ring_sector([(RI, 9.6), (RO + 0.2, 9.6), (RO + 0.2, H), (RI, H)], *full))
     Acc.of("gold", 0.0).put(ring_sector([(RO + 0.2, 10.6), (RO + 0.3, 10.6), (RO + 0.3, 11.2), (RO + 0.2, 11.2)], *full))
     Acc.of("roof", 0.04).put(ring_sector([(RI, H), (RO + 0.2, H), (RO + 0.2, H + 0.15), (RI, H + 0.15)], *full))
     Acc.of("white", 0.04).put(ring_sector([(RO - 0.4, H + 0.15), (RO + 0.2, H + 0.15), (RO + 0.2, H + 1.2), (RO - 0.4, H + 1.2)], *full))
     Acc.of("white", 0.04).put(ring_sector([(RI, H + 0.15), (RI + 0.5, H + 0.15), (RI + 0.5, H + 1.0), (RI, H + 1.0)], *full))
-    # the glazing's fins, outside every 4 degrees and inside every 6, clear of the lobbies
+    # the glazing's bars, set in the glass (flush with the bands above and below, nothing standing proud to cast a shadow):
+    # outside every 4 degrees and inside every 6, clear of the lobbies and the atrium
     busy = DOCK_A + [MAIN_A]
-    fin = Acc.of("white", 0.02)
+    bar = Acc.of("white", 0.0)
     for k in range(90):
         th = TAU * k / 90
-        if any(abs(math.atan2(math.sin(th - a), math.cos(th - a))) < (0.16 if a != MAIN_A else 0.32) for a in busy):
+        if any(abs(math.atan2(math.sin(th - a), math.cos(th - a))) < (0.16 if a != MAIN_A else 0.27) for a in busy):
             continue
-        fin.put(radial(box(RO - 0.1, 6.6, 0, 1.0, 6.0, 0.3), th))
+        bar.put(radial(box(RO - 0.24, 6.6, 0, 0.16, 6.0, 0.3), th))
     for k in range(60):
-        fin.put(radial(box(RI + 0.1, 6.6, 0, 0.6, 6.0, 0.25), TAU * k / 60))
+        bar.put(radial(box(RI + 0.24, 6.6, 0, 0.16, 6.0, 0.25), TAU * k / 60))
     # the six docking lobbies
     for th in DOCK_A:
         lobby_r(th, RO - 1.0, DOCK_R, 10.0, 8.4)
-    # the main atrium toward the job terminal: a glazed hall out to r 61, a cantilevered canopy to 66, three lit doors
+    # the main atrium toward the arrival plaza: a glazed hall run back into the ring (its sides meet the ring's curved face
+    # across their full width), out to r 61 under a canopy cantilevered to 67.5. Each side is one flush face from the ground
+    # to the canopy's top: a cream wall, the canopy's end in the same plane above it. Inside: a pale back wall, a mezzanine.
     th = MAIN_A
-    Acc.of("cream", 0.1).put(radial(box(55.5, 0.6, 0, 11, 1.2, 26), th))
-    Acc.of("glass", 0.0).put(radial(box(56.0, 7.0, 0, 10.0, 12.0, 24.0), th))
-    Acc.of("roof", 0.0).put(radial(box(55.0, 7.0, 0, 7.0, 11.6, 23.0), th))
-    gf = Acc.of("navy", 0.03)
-    for zz in [-12 + 2.4 * k for k in range(11)]:
-        gf.put(radial(box(61.0, 7.0, zz, 0.3, 12.0, 0.25), th))
-    for yy in (1.2, 5.0, 9.0, 13.0):
-        gf.put(radial(box(61.0, yy, 0, 0.3, 0.25, 24.2), th))
+    A0, A1, AF, AW, AH, CT = 47.6, 61.0, 67.5, 12.4, 13.1, 14.1   # back (in the ring), glass front, canopy front, half width, eaves, top
+    Acc.of("glass", 0.0).put(radial(box((A0 + A1) / 2, AH / 2, 0, A1 - A0, AH, 2 * AW - 0.8), th))
+    Acc.of("light", 0.0).put(radial(box((A0 + 55.0) / 2, AH / 2, 0, 55.0 - A0, AH - 0.02, 2 * AW - 0.84), th))
+    Acc.of("white", 0.03).put(radial(box(57.6, 6.65, 0, 5.2, 0.5, 2 * AW - 0.84), th))
+    Acc.of("lamp", 0.0).put(radial(box(58.0, 6.385, 0, 0.5, 0.03, 2 * AW - 1.2), th))
     for sz in (-1, 1):
-        gf.put(radial(box(56.0, 7.0, sz * 12.0, 10.0, 12.0, 0.3), th))
-    Acc.of("cream", 0.1).put(radial(box(58.5, 13.6, 0, 18.0, 1.0, 27.0), th))
-    Acc.of("gold", 0.0).put(radial(box(58.5, 13.0, 0, 18.1, 0.3, 27.1), th))
+        Acc.of("cream", 0.1).put(radial(box((A0 + A1) / 2, AH / 2, sz * (AW - 0.2), A1 - A0, AH, 0.4), th))
+    Acc.of("cream", 0.1).put(radial(box((A0 + AF) / 2, (AH + CT) / 2, 0, AF - A0, CT - AH, 2 * AW), th))
+    for sz in (-1, 1):                           # (a gold line painted round the canopy's edge)
+        Acc.of("gold", 0.0).put(radial(box((A0 + AF) / 2 + 0.003, 13.55, sz * (AW + 0.003), AF - A0 + 0.006, 0.3, 0.006), th))
+    Acc.of("gold", 0.0).put(radial(box(AF + 0.003, 13.55, 0, 0.006, 0.3, 2 * AW + 0.006), th))
+    gf = Acc.of("navy", 0.03)
+    for zz in [-(AW - 0.4) + (2 * AW - 0.8) * k / 10 for k in range(1, 10)]:
+        gf.put(radial(box(A1, AH / 2, zz, 0.3, AH, 0.25), th))
+    for yy in (1.2, 5.0, 9.0):
+        gf.put(radial(box(A1, yy, 0, 0.3, 0.25, 2 * AW - 0.8), th))
     for zz in (-5.5, 0, 5.5):
-        Acc.of("door", 0.0).put(radial(box(61.06, 2.8, zz, 0.1, 3.4, 3.6), th))
-        Acc.of("lamp", 0.0).put(radial(box(61.12, 4.75, zz, 0.06, 0.2, 3.4), th))
-    Acc.of("lamp", 0.0).put(radial(box(58.5, 13.05, 0, 14.0, 0.06, 0.4), th))
-    x, z = at_r(55.75, th)
-    col((x, 0, z), shape="box", hx=13.2, hy=7.0, hz=5.75, yaw=math.atan2(math.cos(th), math.sin(th)))
-    x, z = at_r(58.5, th)
-    col((x, 13.1, z), shape="box", hx=13.5, hy=0.5, hz=9.0, yaw=math.atan2(math.cos(th), math.sin(th)))
+        Acc.of("door", 0.0).put(radial(box(A1 + 0.06, 2.8, zz, 0.1, 3.4, 3.6), th))
+        Acc.of("lamp", 0.0).put(radial(box(A1 + 0.12, 4.75, zz, 0.06, 0.2, 3.4), th))
+    Acc.of("lamp", 0.0).put(radial(box((A1 + AF) / 2, AH - 0.03, 0, AF - A1 - 1.0, 0.06, 0.4), th))   # (under the canopy)
+    x, z = at_r((A0 + A1) / 2, th)
+    col((x, 0, z), shape="box", hx=AW, hy=AH / 2, hz=(A1 - A0) / 2, yaw=math.atan2(math.cos(th), math.sin(th)))
+    x, z = at_r((A0 + AF) / 2, th)
+    col((x, AH, z), shape="box", hx=AW, hy=(CT - AH) / 2, hz=(AF - A0) / 2, yaw=math.atan2(math.cos(th), math.sin(th)))
     # the courtyard: a garden under the glass dome, paths, a pool, trees
     Acc.of("grass", 0.0).put(xf(cylinder(RI - 0.1, RI - 0.1, 0.3, 48)[:2], (0, 0.15, 0)))
     for k in range(3):
@@ -283,22 +296,25 @@ def build_core_a():
         x, z = at_r(12 + (k % 3) * 5, a)
         tree_r(x, z, 1.3 + 0.2 * (k % 2), "ball" if k % 3 else "cone")
     glass_dome(RI, H, 18, rings=(0.32, 0.66, 1.0))
-    # the command tower: three canted legs from pads on the ring roof to a collar under the saucer
+    # the command tower: three canted octagonal legs from footings on the ring roof to a collar under the saucer. Each leg is
+    # cut level where it meets its footing, and the footing is the leg's own section there, a little larger, so the leg
+    # stands flush in it; the gold bands are octagonal sleeves on the leg's own faces, a few millimetres proud
     LEG_A = [MAIN_A + 0.55 + TAU * k / 3 for k in range(3)]
-    foot_r, top_r, top_y = 41.0, 5.0, 60.0
+    foot_r, top_r, top_y, pad_y = 41.0, 5.0, 60.0, H + 1.4
     for a in LEG_A:
         fx, fz = at_r(foot_r, a)
         tx, tz = at_r(top_r, a)
-        Acc.of("roof", 0.06).put(radial(box(foot_r, H + 1.0, 0, 7.0, 2.0, 6.0), a))
-        Acc.of("gold", 0.0).put(radial(box(foot_r, H + 2.05, 0, 7.1, 0.12, 6.1), a))
-        Acc.of("white", 0.1).put(tube([(fx, H + 1.8, fz), (tx, top_y, tz)], [1.7, 1.0], 8, True))
+        A, Bv = Vector((fx, pad_y, fz)), Vector((tx, top_y, tz))
+        Acc.of("white", 0.1).put(oct_strut(A, Bv, 1.7, 1.0, cut_y=pad_y - 0.1))   # (its foot 10 cm into the footing)
+        Acc.of("roof", 0.06).put(oct_footing(A, Bv, 1.7, pad_y, pad_y, H + 0.15, 1.3))
+        Acc.of("gold", 0.0).put(oct_footing(A, Bv, 1.7, pad_y, pad_y - 0.25, pad_y - 0.45, 1.3, grow=0.006))  # (painted on)
         for t in (0.25, 0.5, 0.75):
-            Acc.of("gold", 0.0).put(xf(ring_band_on(fx, H + 1.8, fz, tx, top_y, tz, t, 1.7 + (1.0 - 1.7) * t), (0, 0, 0)))
-        dx, dy, dz = tx - fx, top_y - H - 1.8, tz - fz
+            Acc.of("gold", 0.0).put(oct_band(A, Bv, 1.7, 1.0, t, 0.5, 0.006))
+        dx, dy, dz = tx - fx, top_y - pad_y, tz - fz
         ln = math.sqrt(dx * dx + dy * dy + dz * dz)
         mx, mz = (fx + tx) / 2, (fz + tz) / 2
-        col((mx, (H + 1.8 + top_y) / 2 - ln / 2, mz), shape="box", hx=1.6, hy=ln / 2, hz=1.6, yaw=math.atan2(-math.cos(a), -math.sin(a)), pitch=math.atan2(math.hypot(dx, dz), dy))
-        col_box_r(foot_r, a, H, 2.0, 3.5, 3.0)
+        col((mx, (pad_y + top_y) / 2 - ln / 2, mz), shape="box", hx=1.6, hy=ln / 2, hz=1.6, yaw=math.atan2(-math.cos(a), -math.sin(a)), pitch=math.atan2(math.hypot(dx, dz), dy))
+        col((fx, H, fz), shape="cyl", r=3.2, h=pad_y - H)
     # the saucer: a lathe from the collar out to its rim, a glazed band, a stepped roof; the spire, the radar, the beacon
     sau = [(0.0, top_y - 1.0), (5.5, top_y - 1.0), (16.0, top_y + 3.6), (16.8, top_y + 4.4), (16.8, top_y + 4.9), (16.0, top_y + 5.0)]
     Acc.of("white", 0.14).put(lathe(sau + [(0.0, top_y + 5.0)], 40))
@@ -338,15 +354,60 @@ def build_core_a():
     return end()
 
 
-def ring_band_on(ax, ay, az, bx, by, bz, t, r):
-    """a band round a straight member from a to b, t along it, the member's radius there r"""
-    A, Bv = Vector((ax, ay, az)), Vector((bx, by, bz))
+def oct_frame(A, Bv, n=8):
+    """the eight corner directions round the member from A to B (one corner kept on the member's upper side, so every
+    piece on it shares its faces)"""
     d = (Bv - A).normalized()
-    c = A + (Bv - A) * t
-    rot = Vector((0, 1, 0)).rotation_difference(d).to_euler("XYZ")
-    v, f = cylinder(r + 0.08, r + 0.08, 0.5, 10)[:2]
-    M = Matrix.Translation(c) @ rot.to_matrix().to_4x4()
-    return [tuple(M @ Vector(p)) for p in v], f
+    u = (Vector((0, 1, 0)) - d * d.y).normalized()
+    v = d.cross(u)
+    return d, [u * math.cos(TAU * (i + 0.5) / n) + v * math.sin(TAU * (i + 0.5) / n) for i in range(n)]
+
+
+def oct_prism(lo, hi):
+    """faces for two rings of corners (lo, hi), capped"""
+    n = len(lo)
+    verts = [tuple(p) for p in lo] + [tuple(p) for p in hi]
+    faces = [(i, (i + 1) % n, n + (i + 1) % n, n + i) for i in range(n)]
+    faces += [tuple(range(n - 1, -1, -1)), tuple(range(n, 2 * n))]
+    return verts, faces
+
+
+def oct_strut(A, Bv, ra, rb, cut_y=None):
+    """a tapered octagonal member from A (radius ra) to B (rb); with cut_y its foot is cut level at that height"""
+    d, cs = oct_frame(A, Bv)
+    lo = []
+    for c in cs:
+        p = A + c * ra
+        if cut_y is not None:
+            p = p + d * ((cut_y - p.y) / d.y)
+        lo.append(p)
+    return oct_prism(lo, [Bv + c * rb for c in cs])
+
+
+def oct_footing(A, Bv, ra, y_sec, y_top, y_bot, scale, grow=0.0):
+    """the member's level section at y_sec, scaled about its axis by `scale` (plus grow), as a block from y_bot to y_top"""
+    d, cs = oct_frame(A, Bv)
+    ctr = A + d * ((y_sec - A.y) / d.y)
+    top = []
+    for c in cs:
+        p = A + c * ra
+        p = p + d * ((y_sec - p.y) / d.y)
+        q = ctr + (p - ctr) * scale
+        q = q + (q - ctr).normalized() * grow
+        top.append(Vector((q.x, y_top, q.z)))
+    return oct_prism([Vector((p.x, y_bot, p.z)) for p in top], top)
+
+
+def oct_band(A, Bv, ra, rb, t, w, proud):
+    """a sleeve round the member at t along it, w long, its faces `proud` off the member's"""
+    d, cs = oct_frame(A, Bv)
+    L = (Bv - A).length
+    rings = []
+    for tt in (t - w / 2 / L, t + w / 2 / L):
+        c0 = A + (Bv - A) * tt
+        r = ra + (rb - ra) * tt
+        rings.append([c0 + c * (r + proud / math.cos(math.pi / 8)) for c in cs])
+    return oct_prism(*rings)
 
 
 # =====================================================================================================================
@@ -439,250 +500,6 @@ def build_wall_a():
 
 
 # =====================================================================================================================
-# CORE B: "the Arcology". A stepped mesa of four battered terraces, each with its glazing band and a planted edge, rising to a
-# glass lantern; round the lantern six canted blades meet a halo ring 70 m up, the spire over it. Two inclined glass
-# elevators climb the terraces' edges either side of a glazed prow, the main entrance toward the job terminal. Tall and
-# stepped, a landmark from anywhere on the plain.
-# =====================================================================================================================
-TIERS = [(52.0, 0.0, 9.0), (43.0, 9.0, 18.0), (34.0, 18.0, 27.0), (25.0, 27.0, 36.0)]  # outer radius, foot, top
-
-
-def build_core_b():
-    begin("ilmb_core_b", draft="b")
-    full = (0.0, TAU)
-    for i, (r, y0, y1) in enumerate(TIERS):
-        rin = TIERS[i + 1][0] - 1.0 if i + 1 < len(TIERS) else 0.0
-        bat = 0.9                                       # each tier's face leans in this much
-        Acc.of("cream", 0.14).put(ring_sector([(max(rin, 0.0), y0), (r + bat, y0), (r + bat * 0.82, y0 + 2.0), (max(rin, 0.0), y0 + 2.0)], *full))
-        Acc.of("roof", 0.0).put(ring_sector([(max(rin, 0.0), y0 + 2.0), (r + bat * 0.5, y0 + 2.0), (r + bat * 0.2, y0 + 6.2), (max(rin, 0.0), y0 + 6.2)], *full))
-        Acc.of("glass", 0.0).put(ring_sector([(r + bat * 0.62, y0 + 2.0), (r + bat * 0.66, y0 + 2.0), (r + bat * 0.36, y0 + 6.2), (r + bat * 0.32, y0 + 6.2)], *full))
-        Acc.of("window", 0.0).put(ring_sector([(r + bat * 0.48, y0 + 3.2), (r + bat * 0.52, y0 + 3.2), (r + bat * 0.44, y0 + 4.0), (r + bat * 0.4, y0 + 4.0)], *full))
-        Acc.of("cream", 0.14).put(ring_sector([(max(rin, 0.0), y0 + 6.2), (r + bat * 0.2, y0 + 6.2), (r, y1), (max(rin, 0.0), y1)], *full))
-        Acc.of("gold", 0.0).put(ring_sector([(r + bat * 0.1, y1 - 1.4), (r + bat * 0.1 + 0.12, y1 - 1.4), (r + 0.12, y1 - 0.9), (r, y1 - 0.9)], *full))
-        # the terrace deck's edge: a planter round the rim, its shrubs, an aluminium rail (the top tier's round the lantern)
-        Acc.of("panel", 0.04).put(ring_sector([(r - 2.2, y1), (r - 0.2, y1), (r - 0.2, y1 + 0.8), (r - 2.2, y1 + 0.8)], *full))
-        Acc.of("grass", 0.0).put(ring_sector([(r - 2.0, y1 + 0.8), (r - 0.4, y1 + 0.8), (r - 0.4, y1 + 0.9), (r - 2.0, y1 + 0.9)], *full))
-        nb = int(TAU * r / 6.0)
-        for k in range(nb):
-            th = TAU * (k + 0.5 * (i % 2)) / nb
-            x, z = at_r(r - 1.2, th)
-            Acc.of("leaf2" if k % 3 else "leaf", 0.03).put(ball(x, y1 + 1.3, z, 0.6 + 0.15 * (k % 2), 6, 4))
-        rail = [(math.cos(TAU * k / 96) * (r - 0.35), y1 + 1.5, math.sin(TAU * k / 96) * (r - 0.35)) for k in range(97)]
-        Acc.of("alu", 0.02).put(path_tube(rail, 0.06, 4))
-        for k in range(48):
-            x, z = at_r(r - 0.35, TAU * k / 48)
-            Acc.of("alu", 0.0).put(cyl(x, y1 + 1.15, z, 0.05, 0.7, 4))
-        # mullions on the glazing every 4 degrees
-        for k in range(90):
-            th = TAU * k / 90
-            Acc.of("white", 0.015).put(radial(box(r + bat * 0.45, y0 + 4.1, 0, 0.5, 4.2, 0.22), th))
-        col((0, y0, 0), shape="cyl", r=r + 0.9, h=(y1 + 0.9) - y0)
-    # the lantern on the top terrace: a glass drum round a lit core, white mullions, a navy cap
-    L0, L1, LR = 36.0, 58.0, 15.0
-    Acc.of("roof", 0.0).put(xf(cylinder(LR - 1.6, LR - 1.6, L1 - L0, 40)[:2], (0, (L0 + L1) / 2, 0)))
-    Acc.of("glass", 0.0).put(xf(cylinder(LR, LR, L1 - L0, 40, open_ended=True)[:2], (0, (L0 + L1) / 2, 0)))
-    for y in (40.0, 45.5, 51.0):
-        Acc.of("window", 0.0).put(xf(cylinder(LR - 1.58, LR - 1.58, 1.0, 40, open_ended=True)[:2], (0, y, 0)))
-        Acc.of("white", 0.03).put(ring(LR + 0.1, 0.18, y + 2.6, 64, 4))
-    for k in range(24):
-        Acc.of("white", 0.03).put(radial(box(LR + 0.05, (L0 + L1) / 2, 0, 0.35, L1 - L0, 0.3), TAU * k / 24))
-    Acc.of("navy", 0.12).put(lathe([(0.0, L1), (LR + 1.2, L1), (LR + 1.2, L1 + 1.0), (LR - 2.0, L1 + 3.5), (4.0, L1 + 5.5), (0.0, L1 + 6.0)], 40))
-    Acc.of("gold", 0.0).put(ring(LR + 1.25, 0.2, L1 + 0.6, 64, 4))
-    col((0, L0, 0), shape="cyl", r=LR + 0.2, h=L1 + 6.0 - L0)
-    # the crown: six blades from the top terrace leaning in to a halo ring, the spire over the cap
-    HY, HR = 72.0, 12.0
-    for k in range(6):
-        th = TAU * k / 6 + 0.25
-        fx, fz = at_r(21.5, th)
-        tx, tz = at_r(HR, th)
-        bot = [(-0.7, -1.6), (0.7, -1.6), (0.7, 1.6), (-0.7, 1.6)]
-        top = [(-0.35, -0.6), (0.35, -0.6), (0.35, 0.6), (-0.35, 0.6)]
-        # a blade: a tapered slab along the line from foot to top (frustum in its own upright frame, then leaned and turned)
-        ln = math.hypot(21.5 - HR, HY - 36.9)
-        lean = math.atan2(21.5 - HR, HY - 36.9)
-        g = frustum(bot, top, 0.0, ln)
-        g = xf(g, (0, 0, 0), (0, 0, lean))           # (leans its top toward -x: inward once turned to theta)
-        Acc.of("white", 0.08).put(radial(xf(g, (21.5, 36.9, 0)), th))
-        Acc.of("gold", 0.0).put(radial(xf(xf(frustum([(-0.72, -0.2), (0.72, -0.2), (0.72, 0.2), (-0.72, 0.2)], [(-0.4, -0.2), (0.4, -0.2), (0.4, 0.2), (-0.4, 0.2)], 0.0, ln), (0, 0, 1.45), (0, 0, lean)), (21.5, 36.9, 0)), th))
-        Acc.of("roof", 0.04).put(radial(box(21.5, 36.6, 0, 3.0, 1.2, 4.0), th))
-        mx, mz = at_r((21.5 + HR) / 2, th)
-        col((mx, (36.9 + HY) / 2 - ln / 2, mz), shape="box", hx=1.6, hy=ln / 2, hz=0.8, yaw=math.atan2(-math.cos(th), -math.sin(th)), pitch=lean)
-    Acc.of("gold", 0.1).put(ring(HR, 0.9, HY, 64, 8))
-    Acc.of("amber", 0.0).put(ring(HR, 0.95, HY - 0.3, 64, 4))
-    for k in range(8):
-        x, z = at_r(HR, TAU * k / 8)
-        col((x, HY - 1.0, z), shape="sphere", r=1.2)
-    Acc.of("white", 0.06).put(tube([(0, L1 + 5.6, 0), (0, 98.0, 0)], [1.2, 0.3], 8, True))
-    for y, rr in ((70.0, 1.0), (78.0, 0.8), (86.0, 0.6)):
-        Acc.of("gold", 0.0).put(ring(rr + 0.1, 0.16, y, 16, 4))
-    for k in range(4):  # four struts from the halo to the spire
-        x, z = at_r(HR - 0.6, TAU * k / 4 + 0.6)
-        Acc.of("white", 0.03).put(path_tube([(x, HY, z), (0, 80.0, 0)], 0.22, 6))
-    blinker((0, 98.6, 0), 0.9)
-    col((0, L1 + 6.0, 0), shape="cyl", r=1.2, h=98.0 - L1 - 6.0)
-    # the inclined elevators either side of the prow: glass shafts on the terraces' edges, a cabin in each
-    for s in (-1, 1):
-        th = MAIN_A + s * 0.42
-        foot, head = (66.0, 0.0), (30.0, 36.0)  # (3.5 m out from the line of the tiers' edges, clear of their rails)
-        dr, dy = head[0] - foot[0], head[1] - foot[1]
-        ln = math.hypot(dr, dy)
-        ang = math.atan2(-dr, dy)                      # (leans toward the core)
-        g = box(0, ln / 2, 0, 3.4, ln, 3.2)
-        Acc.of("glass", 0.0).put(radial(xf(xf(g, (0, 0, 0), (0, 0, ang)), (foot[0], foot[1], 0)), th))
-        for sz in (-1, 1):
-            for sx in (-1, 1):
-                Acc.of("white", 0.04).put(radial(xf(xf(box(sx * 1.7, ln / 2, sz * 1.6, 0.25, ln, 0.25), (0, 0, 0), (0, 0, ang)), (foot[0], foot[1], 0)), th))
-        for t in [k / 8 for k in range(9)]:
-            Acc.of("white", 0.03).put(radial(xf(xf(box(0, ln * t, 0, 3.6, 0.25, 3.4), (0, 0, 0), (0, 0, ang)), (foot[0], foot[1], 0)), th))
-        tt = 0.35 if s < 0 else 0.7
-        Acc.of("window", 0.0).put(radial(xf(xf(box(0, ln * tt, 0, 3.2, 2.6, 3.0), (0, 0, 0), (0, 0, ang)), (foot[0], foot[1], 0)), th))  # (the cabin, on the shaft's rails)
-        Acc.of("roof", 0.04).put(radial(box(foot[0] + 1.0, 1.0, 0, 5.0, 2.0, 5.0), th))
-        Acc.of("roof", 0.04).put(radial(box((head[0] + 23.8) / 2, 36.0 - 0.2, 0, head[0] - 23.8 + 1.0, 0.4, 3.4), th))  # (the bridge to the top deck)
-        for sz in (-1, 1):
-            Acc.of("alu", 0.02).put(radial(path_tube([(23.8, 37.3, sz * 1.6), (head[0] + 0.5, 37.3, sz * 1.6)], 0.06, 4), th))
-            for xx in (24.0, (24.0 + head[0]) / 2, head[0] + 0.4):
-                Acc.of("alu", 0.0).put(radial(cyl(xx, 36.65, sz * 1.6, 0.05, 1.3, 4), th))
-        mx, mz = at_r(foot[0] + dr / 2, th)
-        col((mx, dy / 2 - ln / 2, mz), shape="box", hx=1.8, hy=ln / 2, hz=1.8, yaw=math.atan2(-math.cos(th), -math.sin(th)), pitch=-ang)
-    # the prow: a glazed wedge out of the first two tiers toward the job terminal, its ridge falling from 16 m to 10
-    th = MAIN_A
-    pf = [(-9.0, 0.0), (9.0, 0.0), (9.0, 0.0), (-9.0, 0.0)]
-    prow = lambda x0, x1, h0, h1, w: ([(x0, 0, -w), (x1, 0, -w), (x1, 0, w), (x0, 0, w), (x0, h0, -w), (x1, h1, -w), (x1, h1, w), (x0, h0, w)], [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)])
-    Acc.of("glass", 0.0).put(radial(prow(44.0, 61.0, 17.0, 10.0, 9.0), th))
-    Acc.of("roof", 0.0).put(radial(prow(44.0, 59.0, 16.0, 9.0, 8.0), th))
-    fr = Acc.of("navy", 0.04)
-    for zz in [-9 + 2.25 * k for k in range(9)]:  # (the verticals stop at the transom over the doors)
-        fr.put(radial(path_tube([(44.0, 17.0, zz), (61.0, 10.0, zz), (61.0, 4.2 if abs(zz) < 7 else 0.0, zz)], 0.18, 4), th))
-    fr.put(radial(box(61.0, 4.2, 0, 0.36, 0.36, 18.0), th))
-    for xx in (48.0, 52.0, 56.0):
-        h = 17.0 - (xx - 44.0) * 7.0 / 17.0
-        fr.put(radial(box(xx, h, 0, 0.3, 0.3, 18.2), th))
-    for zz in (-4.5, 0, 4.5):
-        Acc.of("door", 0.0).put(radial(box(61.06, 1.9, zz, 0.1, 3.4, 3.4), th))
-        Acc.of("lamp", 0.0).put(radial(box(61.03, 3.92, zz, 0.06, 0.2, 3.2), th))  # (on the glass, under the transom)
-    Acc.of("gold", 0.0).put(radial(path_tube([(44.0, 17.1, -9.1), (61.1, 10.1, -9.1), (61.1, 10.1, 9.1), (44.0, 17.1, 9.1)], 0.22, 4), th))
-    x, z = at_r(56.5, th)
-    col((x, 0, z), shape="box", hx=9.2, hy=5.0, hz=4.6, yaw=math.atan2(math.cos(th), math.sin(th)))
-    # the six docking lobbies
-    for th in DOCK_A:
-        lobby_r(th, 51.0, DOCK_R, 10.0, 7.6)
-    return end()
-
-
-# =====================================================================================================================
-# WALL B: "the Earthwork". An armoured wall with a regolith berm banked against its outside, so from the plain it reads as one
-# long grey earthwork with a crenellated parapet along its crest; buttress pilasters and a lit band inside. Eight arrowhead
-# bastions jut from it like a star fort's, a gun on each point; each gate is one gatehouse, two massive piers and a lintel
-# block over a 50 m opening, a gun on each pier.
-# =====================================================================================================================
-def build_wall_b():
-    begin("ilmb_wall_b", draft="b")
-    R = WALL_R
-    gaps = spans(GATES, 0.105)
-    for a0, a1 in gaps:
-        Acc.of("panel", 0.18).put(ring_sector([(R - 3.0, 0), (R, 0), (R, 10.6), (R - 3.0, 10.6)], a0, a1))
-        Acc.of("regolith", 0.12).put(ring_sector([(R - 0.2, 0), (R + 15.0, 0), (R + 1.0, 9.4), (R - 0.2, 9.4)], a0, a1))
-        Acc.of("panel2", 0.0).put(ring_sector([(R + 7.4, 4.4), (R + 7.6, 4.4), (R + 6.0, 5.5), (R + 5.8, 5.5)], a0, a1))
-        Acc.of("pave", 0.0).put(ring_sector([(R - 2.9, 10.6), (R - 0.1, 10.6), (R - 0.1, 10.72), (R - 2.9, 10.72)], a0, a1))
-        Acc.of("lamp", 0.0).put(ring_sector([(R - 3.06, 6.0), (R - 3.0, 6.0), (R - 3.0, 6.4), (R - 3.06, 6.4)], a0, a1))
-        Acc.of("gold", 0.0).put(ring_sector([(R - 3.08, 9.4), (R - 3.0, 9.4), (R - 3.0, 9.8), (R - 3.08, 9.8)], a0, a1))
-        Acc.of("panel2", 0.04).put(ring_sector([(R - 3.0, 10.6), (R - 2.5, 10.6), (R - 2.5, 11.4), (R - 3.0, 11.4)], a0, a1))
-        # crenellations: merlons along the crest every 1.6 degrees (as long as half a step)
-        n = int((a1 - a0) / math.radians(1.6))
-        for k in range(n):
-            th = a0 + (a1 - a0) * (k + 0.5) / n
-            Acc.of("panel", 0.05).put(radial(box(R - 0.45, 11.6, 0, 0.9, 2.0, (a1 - a0) / n * R * 0.55), th))
-            if k % 2 == 0:
-                Acc.of("gold", 0.0).put(radial(box(R - 0.45, 12.65, 0, 0.95, 0.12, (a1 - a0) / n * R * 0.56), th))
-        # inner pilasters every 3 degrees
-        m = int((a1 - a0) / math.radians(3))
-        for k in range(1, m):
-            th = a0 + (a1 - a0) * k / m
-            Acc.of("panel2", 0.05).put(radial(box(R - 3.4, 5.0, 0, 0.8, 10.0, 1.6), th))
-            if k % 4 == 0:
-                Acc.of("redlamp", 0.0).put(radial(box(R + 0.14, 10.2, 0, 0.3, 0.3, 0.8), th))  # (on the wall's face over the berm)
-        col_ring(R - 3.0, R + 1.0, 0.0, 12.6, a0, a1, math.radians(3))
-        # the berm's slope, so it holds the runner as it is drawn
-        nb = int(math.ceil((a1 - a0) / math.radians(3)))
-        for k in range(nb):
-            th = a0 + (a1 - a0) * (k + 0.5) / nb
-            dr, dy = 14.0, 9.4
-            ln = math.hypot(dr, dy)
-            x, z = at_r(R + 1.0 + dr / 2, th)
-            col((x, dy / 2 - 0.5 - 0.0, z), shape="box", hx=(R + 8.0) * math.sin((a1 - a0) / nb / 2) + 0.2, hy=0.5, hz=ln / 2, yaw=math.atan2(math.cos(th), math.sin(th)), pitch=-math.atan2(dy, dr))
-    # the arrowhead bastions: a flank back to the wall either side, two faces to the point; battered, a parapet, the gun on the point
-    for b in BASTIONS:
-        def P(u, v):
-            return (math.cos(b) * (R + u) - math.sin(b) * v, math.sin(b) * (R + u) + math.cos(b) * v)
-        plan = [(-1.0, -16.0), (10.0, -16.0), (24.0, 0.0), (10.0, 16.0), (-1.0, 16.0)]
-        topp = [(-1.0, -15.0), (9.6, -15.0), (22.6, 0.0), (9.6, 15.0), (-1.0, 15.0)]
-        Acc.of("panel", 0.18).put(frustum([P(u, v) for u, v in plan], [P(u, v) for u, v in topp], 0.0, 11.0))
-        Acc.of("pave", 0.0).put(frustum([P(u, v) for u, v in topp], [P(u, v) for u, v in topp], 11.0, 11.12))
-        t = 7.2 / 11.0  # (a gold band round the faces at 7.2 m, on the batter)
-        band = [((1 - t) * a[0] + t * b2[0], (1 - t) * a[1] + t * b2[1]) for a, b2 in zip(plan, topp)][1:4]
-        pts = []
-        for u, v in band:
-            x, z = P(u + 0.12, v * 1.006)
-            pts.append((x, 7.2, z))
-        Acc.of("gold", 0.0).put(path_tube(pts, 0.2, 4))
-        edge = [P(u, v) for u, v in [(0.0, -14.6), (9.4, -14.6), (22.0, 0.0), (9.4, 14.6), (0.0, 14.6)]]
-        Acc.of("panel", 0.04).put(path_tube([(x, 11.55, z) for x, z in edge], 0.45, 4))
-        gx, gz = P(15.0, 0.0)
-        Acc.of("roof", 0.06).put(xf(cylinder(2.4, 2.7, 2.0, 12)[:2], (gx, 12.0, gz)))
-        Acc.of("gold", 0.0).put(xf(cylinder(2.5, 2.5, 0.3, 12)[:2], (gx, 12.85, gz)))
-        Acc.of("amber", 0.0).put(ring(2.85, 0.14, 11.25, 24, 4, t=(gx, 0, gz)))
-        mx, mz = P(3.0, 0.0)
-        Acc.of("dark", 0.03).put(cyl(mx, 12.6, mz, 0.16, 3.0, 6))
-        blinker((mx, 14.5, mz), 0.6)
-        for u, v, hl in ((4.5, -16.0, 11.0), (4.5, 16.0, 11.0)):
-            pass
-        cx, cz = P(10.0, 0.0)
-        col((cx, 0.0, cz), shape="box", hx=15.5, hy=5.9, hz=6.0, yaw=math.atan2(math.cos(b), math.sin(b)))
-        tx, tz = P(18.0, 0.0)
-        col((tx, 0.0, tz), shape="box", hx=6.0, hy=5.9, hz=3.5, yaw=math.atan2(math.cos(b), math.sin(b)))
-        col((gx, 11.0, gz), shape="cyl", r=2.7, h=3.0)
-        mount((gx, 13.0, gz))
-    # the gatehouses: two piers and the lintel block between, the opening framed in hazard stripes and lamps
-    for g in GATES:
-        piers = []
-        for s in (-1, 1):
-            a = g + s * 0.13
-            def Q(u, v, a=a):
-                return (math.cos(a) * (R + u) - math.sin(a) * v, math.sin(a) * (R + u) + math.cos(a) * v)
-            base = [Q(u, v) for u, v in [(-6.0, -7.0), (12.0, -7.0), (12.0, 7.0), (-6.0, 7.0)]]
-            topq = [Q(u, v) for u, v in [(-5.6, -6.6), (11.0, -6.6), (11.0, 6.6), (-5.6, 6.6)]]
-            Acc.of("panel", 0.2).put(frustum(base, topq, 0.0, 21.0))
-            Acc.of("navy", 0.06).put(frustum(topq, [Q(u, v) for u, v in [(-5.8, -6.8), (11.2, -6.8), (11.2, 6.8), (-5.8, 6.8)]], 21.0, 22.2))
-            Acc.of("gold", 0.0).put(frustum([Q(u, v) for u, v in [(-5.75, -6.75), (11.15, -6.75), (11.15, 6.75), (-5.75, 6.75)]], [Q(u, v) for u, v in [(-5.75, -6.75), (11.15, -6.75), (11.15, 6.75), (-5.75, 6.75)]], 16.0, 16.5))
-            for vv in (-3.0, 3.0):
-                wx, wz = Q(12.0 - 12.0 / 21.0 + 0.05, vv)
-                Acc.of("window", 0.0).put(xf(box(0, 0, 0, 0.12, 2.4, 0.8), (wx, 12.0, wz), (0, -a, 0)))
-            gx, gz = Q(3.0, 0.0)
-            Acc.of("roof", 0.06).put(xf(cylinder(2.4, 2.7, 1.4, 12)[:2], (gx, 22.9, gz)))
-            cx, cz = Q(3.0, 0.0)
-            col((cx, 0.0, cz), shape="box", hx=7.0, hy=11.1, hz=9.0, yaw=math.atan2(math.cos(a), math.sin(a)))
-            mount((gx, 23.6, gz))
-            piers.append(Q(3.0, -s * 7.0))
-        (ax, az), (bx, bz) = piers
-        mx, mz = (ax + bx) / 2, (az + bz) / 2
-        span = math.hypot(bx - ax, bz - az)
-        yaw = math.atan2(bx - ax, bz - az)
-        brot = lambda gg: xf(gg, (mx, 0, mz), (0, yaw, 0))
-        Acc.of("panel", 0.16).put(brot(box(0, 17.0, 0, 16.0, 8.0, span + 0.4)))
-        Acc.of("navy", 0.06).put(brot(box(0, 21.6, 0, 16.4, 1.2, span + 0.8)))
-        for i in range(int(span / 2.5)):
-            z = -span / 2 + 1.25 + i * 2.5
-            Acc.of("hazard" if i % 2 else "dark", 0.0).put(brot(box(8.06, 13.4, z, 0.1, 0.8, 2.5)))
-        z = -span / 2 + 3
-        while z < span / 2 - 2:
-            Acc.of("lamp", 0.0).put(brot(box(0, 12.98, z, 10.0, 0.06, 0.8)))
-            z += 5
-        Acc.of("cyan", 0.0).put(brot(box(-8.06, 17.0, 0, 0.1, 0.4, span)))
-        col((mx, 13.0, mz), shape="box", hx=8.1, hy=4.6, hz=span / 2, yaw=yaw)
-    return end()
-
-
-# =====================================================================================================================
 # The base's other pieces, each in its own frame (origin on the ground at its place, +z its front; src/ilmbCore.js puts each
 # where the code-built one stood).
 # =====================================================================================================================
@@ -692,7 +509,8 @@ def tapered(a, b, ra, rb, seg=8):
 
 def build_terminal():
     """The job board: a navy console under a curved aluminium canopy, its main screen and two angled side screens (the game
-    draws the screens and the holo ring over the canopy: settlements.jobTerminal), a lit plinth, queue rails in front."""
+    draws the screens a few centimetres in front of their dark plates, and the holo ring over the canopy: settlements.jobTerminal),
+    a lit plinth, queue rails in front."""
     begin("ilmb_terminal")
     Acc.of("concrete", 0.05).put(xf(rbox(9.0, 0.25, 4.5, 0.15, 24, 6), (0, 0.25, 0)))
     Acc.of("panel", 0.03).put(box(0, 0.6, 0.4, 15, 0.2, 7))
@@ -708,7 +526,7 @@ def build_terminal():
     for sd in (-1, 1):
         rot = (0, -sd * 0.45, 0)
         Acc.of("navy", 0.08).put(xf(rbox(2.5, 3.2, 0.6, 0.1, 12, 6), (sd * 7.4, 5.4, 0), rot))
-        Acc.of("dark", 0.0).put(xf(box(0, 0, 0.6, 4.3, 5.5, 0.04), (sd * 7.4, 5.4, 0), rot))
+        Acc.of("dark", 0.0).put(xf(box(0, 0, 0.61, 4.3, 5.5, 0.02), (sd * 7.4, 5.4, 0), rot))  # (the game's screen hangs 4 cm in front)
         Acc.of("gold", 0.03).put(xf(box(0, 3.35, 0, 5.2, 0.3, 1.3), (sd * 7.4, 5.4, 0), rot))
         for sx in (-1.4, 1.4):
             Acc.of("alu", 0.02).put(xf(cyl(sx, -3.0, 0, 0.18, 1.6, 8), (sd * 7.4, 5.4, 0), rot))
@@ -1014,8 +832,6 @@ def build_pylon():
 build_skywalks()
 build_core_a()
 build_wall_a()
-build_core_b()
-build_wall_b()
 build_terminal()
 build_repair()
 build_gantry()

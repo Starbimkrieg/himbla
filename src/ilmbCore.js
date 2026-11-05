@@ -3,13 +3,14 @@ import { GLASS, G, T } from './outpostModels.js';
 import { ilmbModel, ilmbSlot } from './models.js';
 import { settle, part } from './settlements.js';
 
-// The ILMB's core from Blender (tools/blender/build_ilmb.py -> src/assets/ilmb.glb; docs/ilmb-proposals): the central complex
-// and the fortress wall, in two proposals, the glass skywalks to the wings and the base's other pieces. world.js buildHub and
-// fortify, and settlements.js dressIlmb, hand over to this unless the old code-built core is asked for.
+// The ILMB's core from Blender (tools/blender/build_ilmb.py -> src/assets/ilmb.glb): the central complex and the fortress wall
+// (proposal A of docs/ilmb-proposals, "the Crown" and "the Rampart", the one chosen), the glass skywalks to the wings and the
+// base's other pieces. world.js buildHub and fortify, and settlements.js dressIlmb, hand over to this unless the old
+// code-built core is asked for.
 //
-//   ?ilmbCore=a | b      the proposal shown (the URL beats the saved setting, localStorage['mr-ilmb-core']); default a
-//   ?ilmbCore=old        the code-built dome, spire and wall as they were
-export const ILMB_DRAFTS = ['a', 'b'];
+//   ?ilmbCore=old        the code-built dome, spire and wall as they were (the URL beats the saved setting,
+//                        localStorage['mr-ilmb-core'])
+export const ILMB_DRAFTS = ['a'];
 export const ILMB_CORE = (() => {
   try {
     const v = new URLSearchParams(location.search).get('ilmbCore') || localStorage.getItem('mr-ilmb-core');

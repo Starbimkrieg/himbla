@@ -2069,21 +2069,21 @@ function jobTerminalScreens(k, color) {
       k.dyn(m, px, py, pz, ry);
       return m;
     };
-    scr(screenTex(['> CONTRACTS ONLINE', '  PRESS F AT THE BOARD', '', '*  PRIORITY RUNS PAY MORE', '  CARGO · ROUTE · CLOCK', '! HOT CARGO DRAWS PIRATES', '  DELIVER IN STYLE'], { head: 'JOB BOARD', hc: '#ffd23f' }), 9, 5.6, 0, 6, 0.33);
+    scr(screenTex(['> CONTRACTS ONLINE', '  PRESS F AT THE BOARD', '', '*  PRIORITY RUNS PAY MORE', '  CARGO · ROUTE · CLOCK', '! HOT CARGO DRAWS PIRATES', '  DELIVER IN STYLE'], { head: 'JOB BOARD', hc: '#ffd23f' }), 9, 5.6, 0, 6, 0.38);
     const feed = screenTex(['UPLINK 7 ... OK', 'SAT-7 ...... DRIFT', 'MERIDIAN .... 1204.5', 'KEPLER ...... OPEN', '!DARK SIDE .. HOSTILE', 'VOSTOK ...... ARMED', 'DAEDALUS .... ????', 'TRAFFIC ..... HEAVY', 'UPLINK 7 ... OK', 'SAT-7 ...... DRIFT', 'MERIDIAN .... 1204.5', 'KEPLER ...... OPEN'], { w: 256, h: 512 });
     feed.wrapT = THREE.RepeatWrapping;
     feed.repeat.set(1, 0.6);
-    const f = scr(feed, 4.2, 5.4, -7.4 + Math.sin(0.45) * 0.62, 5.4, Math.cos(0.45) * 0.62, 0.45);
+    const f = scr(feed, 4.2, 5.4, -7.4 + Math.sin(0.45) * 0.66, 5.4, Math.cos(0.45) * 0.66, 0.45);
     f.userData.tick = (o, dt) => { feed.offset.y = (feed.offset.y - dt * 0.05 + 1) % 1; };
-    scr(screenTex(['  ILMB ─┬─ TRANQ', '        ├─ MERIDIAN', '        ├─ KEPLER', '        └─ TWILIGHT', '', '* ROUTES CLEAR', '! PIRATE ACTIVITY', '! PAST THE TERMINATOR'], { head: 'ROUTES', hc: '#2ee6ff', w: 384, h: 480 }), 4.2, 5.4, 7.4 - Math.sin(0.45) * 0.62, 5.4, Math.cos(0.45) * 0.62, -0.45);
-    // holo ring above the canopy
+    scr(screenTex(['  ILMB ─┬─ TRANQ', '        ├─ MERIDIAN', '        ├─ KEPLER', '        └─ TWILIGHT', '', '* ROUTES CLEAR', '! PIRATE ACTIVITY', '! PAST THE TERMINATOR'], { head: 'ROUTES', hc: '#2ee6ff', w: 384, h: 480 }), 4.2, 5.4, 7.4 - Math.sin(0.45) * 0.66, 5.4, Math.cos(0.45) * 0.66, -0.45);
+    // holo ring above the canopy, its lowest point (bobbing) clear of the canopy's crown (13.4 m) by half a metre
     const holo = new THREE.Group();
     const ring = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.12, 6, 32), glow(0x2ee6ff));
     const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.08, 6, 28), glow(color));
     ring2.rotation.x = Math.PI / 2;
     holo.add(ring, ring2);
-    holo.userData.tick = (o, dt, t) => { ring.rotation.y += dt * 1.2; ring2.rotation.z += dt * 0.8; o.position.y = 15.2 + Math.sin(t * 1.5) * 0.25; };
-    k.dyn(holo, 0, 15.2, 0.8);
+    holo.userData.tick = (o, dt, t) => { ring.rotation.y += dt * 1.2; ring2.rotation.z += dt * 0.8; o.position.y = 16.5 + Math.sin(t * 1.5) * 0.25; };
+    k.dyn(holo, 0, 16.5, 0.8);
 }
 
 // =============================================================================================

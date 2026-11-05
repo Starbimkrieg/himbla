@@ -17,6 +17,7 @@ import { spliceGenes } from './chimera.js';
 import { clearEchoes } from './monolith.js';
 import { DEV_TOOLS } from './devtools.js';
 import { railAt } from './rails.js';
+import { ilmbBoardFront, ILMB_BOARD } from './locations.js';
 
 const Q = new URLSearchParams(location.search);
 export const TRAILER = DEV_TOOLS && Q.has('trailer'); // dev tool: off in a release build
@@ -598,8 +599,9 @@ const SHOTS = [
     dur: 3.4,
     setup(T) {
       T.music('menu');
-      T.place(T.at('ilmb', 0, 0, 84), T.along('ilmb', 0, 0, -1));
-      T.out = T.along('ilmb', 0.12, 0, 1);
+      const [fx, fz] = ilmbBoardFront(8), s = Math.sin(ILMB_BOARD[2]), c = Math.cos(ILMB_BOARD[2]);
+      T.place(T.at('ilmb', fx, 0, fz), T.along('ilmb', -s, 0, -c));
+      T.out = T.along('ilmb', s + 0.12 * c, 0, c - 0.12 * s);
       T.kicked = false;
     },
     update(T, t) {

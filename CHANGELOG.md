@@ -12,8 +12,19 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
   gates under lit bridges) and **Draft B, the Arcology** (four planted terraces rising to a glass lantern in a crown of
   blades and a halo ring, a glazed prow and two inclined elevators; the Earthwork wall, a regolith berm against an
   armoured, crenellated wall, arrowhead bastions, pier-and-lintel gatehouses). Both walls run unbroken round the base; both
-  dock the six skywalks, face the job terminal and keep the gates and the sixteen wall guns where they were. `?ilmbCore=a`
-  (default for now) or `b` switches, `?ilmbCore=old` brings back the code-built core.
+  dock the six skywalks and keep the gates and the sixteen wall guns where they were. **Draft A was picked**; B is out of the
+  build (the Asset Row loses ILMB CORE B), and `?ilmbCore=old` still brings back the code-built core.
+  - **A, revised after the pick:** the glazed band's fins, which stood a metre proud and threw a comb of shadows, are flush
+    bars in the glass, and behind it is a lit gallery (pale back wall, a mezzanine slab's white edge, warm cove lights) in
+    place of the dark backing with rows of lit windows. The main atrium runs back into the ring, so it meets the ring's face
+    across its whole width, and each side is one flush face from the ground to the canopy's top (no plinth lip). The saucer's
+    legs are cut level into footings shaped like their own octagonal section, and their gold bands are octagonal sleeves a
+    few millimetres proud of the leg's faces.
+  - **The job board moved** off the entrance's axis to the plaza on its right, between the atrium and the Meridian Labs
+    skywalk, facing out from the core (`locations.js` ILMB_BOARD; the tutorial's arrow follows it). Its side screens no
+    longer flicker against their housings' plates (they were in the same plane), and the holo ring floats clear of the canopy.
+  - **No plants out in the vacuum:** the Meridian Labs' arrival plaza planters are bench blocks now, and the Trading Kiosk's
+    café trees are lamp posts; plants stay under glass (a new house rule in `.claude/skills/blender/style.md`).
   - **Everything else in the core went to Blender too, refined:** the six skywalks, the job terminal (screens and holo ring
     still the game's), the repair bay, the launch gantry, the two fuel spheres, the two family domes, the barracks, the
     vehicle depot, the comms mast with its turning dish, the inner defence pylons. All pass the structure audit; the Asset

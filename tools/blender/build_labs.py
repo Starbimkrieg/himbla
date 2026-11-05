@@ -21,7 +21,7 @@
 #   blinker  the aircraft lamp over the globe (extra `radius`)
 #   col      a collider (wing_kit.col: box (the pylon's pitched) / cyl)
 # Each mesh has ONE material named after a slot (WING_TOON / WING_GLOW in src/models.js): toon wall white light cyan navy gold
-# roof dark metal steel concrete door hazard leaf2 planter; glow pane lamp; `glass` see-through. Fixed palette
+# roof dark metal steel concrete door hazard planter; glow pane lamp; `glass` see-through. Fixed palette
 # (Meridian: cream, cyan, navy, gold). Ink (metres) per style.md.
 
 import bpy, math, os
@@ -227,13 +227,12 @@ Acc.of("dark", 0.015, parent=GLOBE).put(cyl(0, -1.75, 0, 0.18, 1.7, 8))
 Acc.of("dark", 0.015, parent=GLOBE).put(cyl(0, 3.2, 0, 0.14, 1.2, 8, rt=0.08))
 pivot(f"{PFX}lamp", (T.x, GY + 4.05, 0), ROOT, role="blinker", radius=0.35)
 
-# ================= the arrival plaza: planters, lamp bollards =================
-plant, shrub, bol, bulb = Acc.of("planter", 0.03), Acc.of("leaf2", 0.02), Acc.of("steel", 0.012), Acc.of("lamp", 0.0)
+# ================= the arrival plaza: bench blocks (no plants out in the vacuum), lamp bollards =================
+plant, seat, bol, bulb = Acc.of("planter", 0.03), Acc.of("concrete", 0.0), Acc.of("steel", 0.012), Acc.of("lamp", 0.0)
 for sz in (-1, 1):
     for x in (-21.5, -27.0):
         plant.put(box(x, 0.45, sz * 6.5, 3.0, 0.9, 1.6))
-        for dx in (-0.8, 0.8):
-            shrub.put(ball(x + dx, 1.15, sz * 6.5, 0.75, 8, 5, (1, 0.8, 1)))
+        seat.put(box(x, 0.92, sz * 6.5, 2.8, 0.04, 1.4))      # (a seat pad on the block's top)
     for x in (-24.2, -29.6):
         bol.put(cyl(x, 0.55, sz * 4.2, 0.16, 1.1, 8))
         bulb.put(cyl(x, 1.17, sz * 4.2, 0.17, 0.14, 8))

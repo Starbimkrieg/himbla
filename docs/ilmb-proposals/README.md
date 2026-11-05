@@ -5,8 +5,30 @@ boxes with gaps between them, separate bastions and gate towers. Both are replac
 (`tools/blender/build_ilmb.py` -> `src/assets/ilmb.glb`, placed by `src/ilmbCore.js`), in two proposals. Each is a whole: a
 central complex that still docks the six wings' skywalks, and a wall that reads as one continuous ring.
 
-Switch between them in the game with `?ilmbCore=a` or `?ilmbCore=b` (or `localStorage['mr-ilmb-core']`); `?ilmbCore=old`
-brings back the code-built dome and wall. Both are in the Asset Row (buildings: ILMB CORE A / B; places: the whole base).
+**Picked: Draft A** (the Crown and the Rampart). Draft B was taken out of the build after the pick; its builder is in the
+history (commit e350a68, `build_core_b` and `build_wall_b` in `tools/blender/build_ilmb.py`). `?ilmbCore=old` still brings
+back the code-built dome and wall. The Crown is in the Asset Row (buildings: ILMB CORE; places: the whole base).
+
+Revisions to A after the pick (the pictures below are from before them):
+
+- **Glazed band**: the fins that stood a metre proud (and cast a comb of shadows) are flush bars set in the glass; behind the
+  glass, instead of the dark backing with its rows of lit windows, a lit gallery 2 m deep: a pale back wall, a mezzanine
+  slab with its white edge, warm cove lights under the slab and the ceiling.
+- **Main atrium**: run back into the ring, so its sides meet the ring's curved face across their whole width; each side is one
+  flush face from the ground to the canopy's top (no plinth lip, no canopy overhang at the sides). Inside, a pale back wall
+  and a mezzanine.
+- **Saucer legs**: each is cut level where it meets its footing, and the footing is the leg's own octagonal section a little
+  larger, so the leg stands flush in it; the gold bands are octagonal sleeves on the leg's faces, a few millimetres proud.
+- **Job terminal**: moved off the entrance's axis to the plaza on its right (seen from the south gate), between it and the
+  Meridian Labs skywalk, facing out from the core (`locations.js` ILMB_BOARD); the side screens hang 4 cm off their dark
+  plates (they were in the same plane, and flickered); the holo ring floats clear of the canopy.
+- **No plants out in the vacuum**: the Labs' arrival plaza planters are bench blocks now (plants stay under glass: the
+  courtyard, the Habitat's park, the Hydroponics dome).
+
+| A, revised | |
+|---|---|
+| ![The revised Crown from the south: the board right of the atrium](a2_overview.jpg) | ![The atrium run into the ring, its side one flush face](a2_atrium.jpg) |
+| ![The saucer legs in their octagonal footings, the flush glazing bars](a2_legs.jpg) | ![The job board, its holo ring clear of the canopy](a2_board.jpg) |
 
 | | Draft A: **the Crown** | Draft B: **the Arcology** |
 |---|---|---|

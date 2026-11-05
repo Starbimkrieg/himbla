@@ -43,6 +43,13 @@ const ILMB_GUNS = ILMB_WINGS_AT.map(([a, d], i) => {
   return [a + ((a2 - a + Math.PI * 2) % (Math.PI * 2)) / 2, ILMB_GUN_R[i] ?? (d + d2) / 2];
 });
 
+// The ILMB's job board: on the arrival plaza to the right of the main entrance (seen coming in from the south gate), between
+// it and the Meridian Labs skywalk, facing out from the core: [x, z, yaw] in the hub's frame (its front, +z, turned by yaw)
+const BOARD_A = 1.1, BOARD_R = 80;
+export const ILMB_BOARD = [Math.cos(BOARD_A) * BOARD_R, Math.sin(BOARD_A) * BOARD_R, Math.PI / 2 - BOARD_A];
+// a point n metres in front of it, and the way it faces
+export const ilmbBoardFront = (n) => [ILMB_BOARD[0] + Math.sin(ILMB_BOARD[2]) * n, ILMB_BOARD[1] + Math.cos(ILMB_BOARD[2]) * n];
+
 export const LOCATIONS = [
   {
     id: 'ilmb', name: 'International Moon Base', short: 'ILMB', type: 'hub', faction: 'spacecom', hq: true,

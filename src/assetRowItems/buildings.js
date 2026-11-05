@@ -241,10 +241,9 @@ const parts = {
     item('part.hangar', 'ILMB VOSTOK HANGAR', 67, 50, () => kitPart((k) => ilmbWing(k, 'hangar', -11.55, 2.0, 0))),
     // Daedalus's wing (41 x 34 m, lobby at x -14.3, the fence out to x 26): the delta array station (the game adds the dish)
     item('part.relay', 'ILMB DAEDALUS RELAY', 41, 34, () => kitPart((k) => ilmbWing(k, 'relay', -6.0, 0, 0))),
-    // the ILMB's core from Blender (tools/blender/build_ilmb.py; docs/ilmb-proposals): the two proposals for the central complex
-    // (their docking lobbies out to r 56, A's atrium canopy to 66, B's inclined elevators to 68), then the base's other pieces
-    item('part.ilmb-core-a', 'ILMB CORE A: THE CROWN', 134, 134, () => kitPart((k) => bakeIlmbInto(k, 'core_a')), { big: true }),
-    item('part.ilmb-core-b', 'ILMB CORE B: THE ARCOLOGY', 140, 140, () => kitPart((k) => bakeIlmbInto(k, 'core_b')), { big: true }),
+    // the ILMB's core from Blender (tools/blender/build_ilmb.py; docs/ilmb-proposals, A chosen): the central complex (its
+    // docking lobbies out to r 56, the atrium's canopy to 67.5), then the base's other pieces
+    item('part.ilmb-core-a', 'ILMB CORE: THE CROWN', 136, 136, () => kitPart((k) => bakeIlmbInto(k, 'core_a')), { big: true }),
     item('part.ilmb-terminal', 'ILMB JOB TERMINAL', 20, 20, () => viaWorld((world, loc) => jobTerminal(world, loc, 0, -5, 0, YEL, (k) => bakeIlmbInto(k, 'terminal')))),
     item('part.ilmb-repair', 'ILMB REPAIR BAY', 44, 42, () => kitPart((k) => { k.at(-2.6, -2.5); bakeIlmbInto(k, 'repair'); })),
     item('part.ilmb-gantry', 'ILMB LAUNCH GANTRY', 24, 10, () => kitPart((k) => { k.at(5.5, 0); bakeIlmbInto(k, 'gantry'); })),

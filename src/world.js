@@ -4,7 +4,7 @@ import { buildZbornakLab } from './labWorld.js';
 import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds, INK_DIST, withToonBias } from './toon.js';
 import { makeDish, makeFigure, figureWalk, figureStand, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK, wingModel, HABITAT_DOCK } from './models.js';
 import { mulberry32, clamp } from './rng.js';
-import { FACTIONS, defenseSpots, ILMB_WINGS_AT } from './locations.js';
+import { FACTIONS, defenseSpots, ILMB_WINGS_AT, ILMB_BOARD } from './locations.js';
 import { buildIlmbCore, buildIlmbWall, buildIlmbPieces, bakeIlmbInto, bakeIlmbPiece, ilmbBlender } from './ilmbCore.js';
 import { bendPoint, bendQuat, unbendPoint } from './curve.js';
 import { SUN, frameQuat, arcDist, dirFromAngles, tangent, collectNodes } from './geo.js';
@@ -1027,10 +1027,11 @@ export class World {
     if (ilmbBlender()) { buildIlmbCore(this, loc); buildIlmbPieces(this, loc); } // the complex, skywalks and pieces from Blender (ilmbCore.js)
     const B = new Batch();
     this.buildIlmbWings(loc, B);
-    // job terminal: a kiosk of screens facing the arrival point (settlements.jobTerminal); the Hall of
-    // Highlights is on the board's own screen (hud.openBoard)
-    jobTerminal(this, loc, 0, 76, 0, 0xffd23f, ilmbBlender() ? (k) => bakeIlmbInto(k, 'terminal') : null);
-    hang(loc, textSprite('JOB BOARD', { color: '#ffffff', size: 80, scale: 0.6 }), 0, 21, 76);
+    // job terminal: a kiosk of screens on the plaza right of the main entrance (locations.ILMB_BOARD, settlements.jobTerminal);
+    // the Hall of Highlights is on the board's own screen (hud.openBoard)
+    const [bx, bz, byaw] = ILMB_BOARD;
+    jobTerminal(this, loc, bx, bz, byaw, 0xffd23f, ilmbBlender() ? (k) => bakeIlmbInto(k, 'terminal') : null);
+    hang(loc, textSprite('JOB BOARD', { color: '#ffffff', size: 80, scale: 0.6 }), bx, 22, bz);
 
     // repair bay hangar (past the Daedalus relay, clear of the wings; built in settlements.js)
     hang(loc, textSprite('REPAIR BAY', { color: '#ff9f1c', size: 70, scale: 0.6 }), -168, 24, -98);

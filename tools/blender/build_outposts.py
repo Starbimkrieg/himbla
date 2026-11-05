@@ -371,7 +371,7 @@ def build_kiosk(k):
         k.hit(W / 2, 3, W / 2, 0, 0)
     k.point("smoke", 0, 4, 0)
     k.point("drop", 0, F, 20)
-    # corner cafés: an open pavilion with a pyramid roof over tables, trees by it; the back-right corner is the stock yard
+    # corner cafés: an open pavilion with a pyramid roof over tables, lamps by it; the back-right corner is the stock yard
     for qx, qz in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
         cx, cz = qx * 20, qz * 20
         if qx > 0 and qz < 0:
@@ -395,8 +395,8 @@ def build_kiosk(k):
                 for j in range(2):
                     a = j * math.pi + 0.4
                     k.cyl(0.22, 0.2, 0.46, 8, T(DARK), cx + tx + math.sin(a) * 1.0, F, cz + tz + math.cos(a) * 1.0, ink=0.02)
-            for sx, sz in ((qx, -qz), (-qx, qz)):  # (out by the lanes and the rim, clear of the walk round the house)
-                tree(k, cx + sx * (P + 2.4), cz + sz * (P + 2.4), 0.95)
+            for sx, sz in ((qx, -qz), (-qx, qz)):  # (lamps out by the lanes and the rim, clear of the walk round the house: no
+                lamp_post(k, cx + sx * (P + 2.4), cz + sz * (P + 2.4), 4.5, S.glow, arm=False)  # trees out in the vacuum)
     # stall rows along the lanes: awning stalls facing the lane, two each side
     for i in range(4):
         a = i / 4 * TAU

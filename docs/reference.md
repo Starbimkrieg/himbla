@@ -328,7 +328,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (242 in 26 sections) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (241 in 26 sections) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).
@@ -397,8 +397,9 @@ src/
   territory.js     territory, small outposts, patrols
   outpostDrafts.js the small outposts (the picks, OUTPOST_PICK in outpostModels.js; docs/outpost-proposals), code-built: the
                    kinds not yet in outposts.glb, and the fallback
-  ilmbCore.js      the ILMB's core from Blender (ilmb.glb): the central complex and wall (two proposals, ?ilmbCore=a|b|old;
-                   docs/ilmb-proposals), skywalks, job terminal, repair bay, gantry, spheres, domes, barracks, depot, mast, pylons
+  ilmbCore.js      the ILMB's core from Blender (ilmb.glb): the central complex and wall (proposal A of docs/ilmb-proposals;
+                   ?ilmbCore=old the code-built one), skywalks, job terminal, repair bay, gantry, spheres, domes, barracks, depot,
+                   mast, pylons
   outpostLooks.js  the small outposts' looks by owner: palettes (STYLE), walkers' looks, container liveries
   outpostWalkers.js the two or three NPCs walking about each small outpost, and those who keep a post (traders, stallholders)
   vehicles.js      drivable vehicles
@@ -482,7 +483,7 @@ src/
     dish.glb         dish stations and dish heads
     winch.glb        winch grapple and cable
     towmark.png      winch HUD marker
-    ilmb.glb         the ILMB's core: the central complex and wall (two proposals), skywalks and the base's other pieces
+    ilmb.glb         the ILMB's core: the central complex and wall ("the Crown", "the Rampart"), skywalks and the base's other pieces
     outposts.glb     the small outposts built in Blender (the kinds in staticContract.js GLB_KINDS; ?outpostGlb=0 for the
                      code-built ones; spec in docs/outpost-glb.md)
 tools/

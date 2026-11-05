@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { arcDist, frameQuat } from './geo.js';
+import { ilmbBoardFront } from './locations.js';
 import { toon, glow, ink } from './toon.js';
 
 // Guided first shift with BOLT, a courier-school drone at your shoulder. Teaches the controls (each step waits until
@@ -247,7 +248,7 @@ export class Tutorial {
   objective() {
     if (!this.active) return null;
     const g = this.game;
-    return STEPS[this.step].id === 'board' ? { pos: g.world.toWorld(g.hub, 0, 0, 84), label: 'JOB BOARD' } : null;
+    return STEPS[this.step].id === 'board' ? { pos: g.world.toWorld(g.hub, ilmbBoardFront(8)[0], 0, ilmbBoardFront(8)[1]), label: 'JOB BOARD' } : null;
   }
 
   // world-pausing screens report in here

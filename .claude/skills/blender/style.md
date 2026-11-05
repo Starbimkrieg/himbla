@@ -163,6 +163,9 @@ Every model should work like the real thing, at the level a player can see. Most
   (`0x7A4A32`) means rusted steel, not wood. Inside a pressurised dome or hall (Chimera Downs, the casino's hall, a hab's
   interior) wood is fine. When porting or revising a model that has wood outdoors, change it as part of the port (the
   Trading Kiosk's market stalls went from timber to aluminium-framed kiosks).
+- **No plants in vacuum.** Trees, shrubs, lawns and planted beds only grow under glass or a roof: a dome, a greenhouse, a hall.
+  Outside, a planter becomes a bench block, a bollard or a bit of kit (the ILMB's Meridian Labs plaza lost its shrubs this
+  way). Same rule when porting or revising.
 - **Animated parts pivot where they turn:** wheels at the axle, antennas at the base, doors and legs at the hinge. Author them
   at the stated rest pose (legs deployed, gear doors closed, ramp open-flat, sectional doors as their `state`).
 
