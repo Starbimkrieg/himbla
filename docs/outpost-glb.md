@@ -1,9 +1,9 @@
 # Outposts from Blender (`src/assets/outposts.glb`)
 
 The seven small faction outposts (Watchtower, Supply Depot, Farm Dome, Relay Mast, Trading Kiosk, Scrap Shack, Junk Pile)
-are being moved from code (`src/outpostDrafts.js`, the picked drafts of docs/outpost-proposals) to Blender
-(`tools/blender/build_outposts.py`). The kinds in `GLB_KINDS` (`src/staticContract.js`) come from this file: the
-**Watchtower** (`tower`), **Trading Kiosk** (`kiosk`), **Supply Depot** (`depot`) and **Farm Dome** (`farm`) so far. The rest are still code-built, and the code-built ones stay as the fallback.
+are built in Blender (`tools/blender/build_outposts.py`), ported from the code that drew them (`src/outpostDrafts.js`, the
+picked drafts of docs/outpost-proposals), which stays as the fallback. All seven are in `GLB_KINDS`
+(`src/staticContract.js`): `tower`, `kiosk`, `depot`, `farm`, `mast`, `junk`, `shack`, each with its `_wreck`.
 
 Read the file with `src/outpostGlb.js`, bake it with `src/staticBake.js`, check it with `npm run check:outposts`.
 
@@ -68,7 +68,7 @@ The material **name** (a trailing `.NNN` is ignored) picks the treatment; everyt
 |---|---|
 | `faction…` (`faction`, `faction_cloth`, …) | lit toon in the owning faction's accent colour |
 | `faction_glow…` | unlit, in the faction's accent colour |
-| `style_<key>…` (`style_body`, `style_dark_2s`, …) | lit toon in the owner's palette colour for that key (`STYLE` in `src/outpostLooks.js`: `body`, `panel`, `dark`, `roof`, `trim`, `glow`, `conc`, `metal`, `hut`) |
+| `style_<key>…` (`style_body`, `style_dark_2s`, …) | lit toon in the owner's palette colour for that key (`STYLE` in `src/outpostLooks.js`: `body`, `panel`, `dark`, `roof`, `trim`, `glow`, `conc`, `metal`, `hut`, and `livery` and `stripe` for dish heads) |
 | `style_glow…`, `style_trim_glow…` | unlit, in the owner's glow or trim colour |
 | `glass…` (`glass_9be7ff_45`) | see-through glazing: lit toon, its **alpha** the opacity, double-sided, writes no depth, gets no outline |
 | `glow…` (`glow`, `glow_red`, …) | unlit, in the material's own base colour (lamps, screens) |

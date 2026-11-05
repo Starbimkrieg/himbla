@@ -3,7 +3,7 @@
 
 // Kinds built from the GLB (on by default: ?outpostGlb=0 gives the code-built ones, outpostDrafts.js). A kind joins once it
 // audits clean (tools/outpost-audit.mjs) with the same gameplay data as its code-built version (viewer ?m=outpost&src=both).
-export const GLB_KINDS = new Set(['tower', 'kiosk', 'depot', 'farm']);
+export const GLB_KINDS = new Set(['tower', 'kiosk', 'depot', 'farm', 'mast', 'junk', 'shack']);
 
 export const ROLES = ['col', 'hit', 'raid', 'smoke', 'drop', 'text', 'stack'];
 export const SHAPES = ['box', 'cyl', 'sphere', 'hcyl']; // (hcyl: a lying cylinder, its axis along the empty's z)
@@ -17,9 +17,10 @@ export const stripSuffix = (name) => String(name || '').replace(/\.\d{3,}$/, '')
 //   glow*          unlit, own colour                    anything else  lit toon, own colour
 //   additive*      light beam: unlit, additive, see-through, own colour, alpha = opacity
 //   glass*         see-through toon (windows, glazing, mesh fences), own colour, alpha = opacity, no outline
-//   style_<key>*   lit toon in the owner's palette (outpostLooks.js STYLE: body, panel, dark, roof, trim, conc, metal, hut);
+//   style_<key>*   lit toon in the owner's palette (outpostLooks.js STYLE: body, panel, dark, roof, trim, conc, metal, hut,
+//                  livery, stripe);
 //                  style_glow* and style_trim_glow* unlit in its glow or trim colour
-export const STYLE_KEYS = ['body', 'panel', 'dark', 'roof', 'trim', 'glow', 'conc', 'metal', 'hut'];
+export const STYLE_KEYS = ['body', 'panel', 'dark', 'roof', 'trim', 'glow', 'conc', 'metal', 'hut', 'livery', 'stripe'];
 export function slotOf(materialName) {
   const n = stripSuffix(materialName).toLowerCase();
   if (n.startsWith('style_')) {

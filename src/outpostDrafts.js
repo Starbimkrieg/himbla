@@ -966,13 +966,21 @@ function shackMix(k) {
     const q = new THREE.Quaternion(), e = new THREE.Euler();
     // plates: NA round the hull per section; phi from straight up (0) toward +z (pi/2); none under the ground
     for (let si = 0; si < NS; si++) {
-      const x = -L / 2 + secL * (si + 0.5);
+      const x = -L / 2 + secL * (si + 0.5), gone = [];
       for (let i = 0; i < NA; i++) {
         const phi = (i / NA) * TAU, y = cy + r * Math.cos(phi), z = r * Math.sin(phi);
-        if (y < 0.1) continue;
+        if (y < 0.1) { gone[i] = true; continue; }
         const open = z > 0.5 && y > DECK - 0.5 && y < cy + r * 0.8 && si > 0 && si < NS - 1; // the stripped flank
-        const gone = k.wreck ? y > cy + 1 || wr() < 0.3 : open || rr() < 0.05; // (and the odd missing plate; a wreck keeps its lower hull)
-        if (gone) continue;
+        gone[i] = k.wreck ? y > cy + 1 || wr() < 0.3 : open || rr() < 0.05; // (and the odd missing plate; a wreck keeps its lower hull)
+      }
+      if (k.wreck) for (const side of [1, -1]) { // (nothing hangs over a burnt-away plate: up each side from the ground)
+        const up = [...Array(NA).keys()].filter((i) => cy + r * Math.cos((i / NA) * TAU) >= 0.1 && Math.sin((i / NA) * TAU) * side > 1e-9).sort((a, b) => Math.cos((a / NA) * TAU) - Math.cos((b / NA) * TAU));
+        let lost = false;
+        for (const i of up) { if (gone[i]) lost = true; else if (lost) gone[i] = true; }
+      }
+      for (let i = 0; i < NA; i++) {
+        const phi = (i / NA) * TAU, y = cy + r * Math.cos(phi), z = r * Math.sin(phi);
+        if (gone[i]) continue;
         const w = (TAU * r) / NA + 0.06;
         const lean = 0;
         k.add(new THREE.BoxGeometry(secL - 0.08, 0.22, w), T(hullC[(si + i) % 3]), x, y, z, { rx: phi + lean, outline: 0.04 });
@@ -1247,7 +1255,7 @@ function junkA(k) {
   }, 1.3);
   k.raidAt(19.8, 8.0, 0xffb347);
   // the foreman's hut and junk bots pottering
-  within(k, -22, -22, 0.8, () => { scrapBox(k, 0, F, 0, Math.PI / 2, 0x4a6a5a, rr); k.box(1.4, 0.8, 0.1, G(s.glow), 1.2, F + 1.3, 1.27, { outline: 0 }); k.add(new THREE.BoxGeometry(7.2, 0.15, 3.6), T(RUST), 0, F + 2.9, 0.6, { rx: 0.15, outline: 0.04 }); k.solidQ(3.6, 0.08, 1.8, 0, F + 2.9, 0.6, new THREE.Quaternion().setFromEuler(new THREE.Euler(0.15, 0, 0))); }, 1.35);
+  within(k, -22, -22, 0.8, () => { scrapBox(k, 0, F, 0, Math.PI / 2, 0x4a6a5a, rr); k.box(1.4, 0.8, 0.1, G(s.glow), 1.2, F + 1.3, 1.27, { outline: 0 }); k.add(new THREE.BoxGeometry(7.2, 0.15, 3.6), T(RUST), 0, F + 2.77, 0.6, { rx: 0.15, outline: 0.04 }); k.solidQ(3.6, 0.08, 1.8, 0, F + 2.77, 0.6, new THREE.Quaternion().setFromEuler(new THREE.Euler(0.15, 0, 0))); }, 1.35);
   burnBarrel(k, -12, 24);
   for (const [x, z] of [[-30, -8], [28, 20], [-8, 30]]) lampPost(k, x, z, 7, s.glow);
   flagPole(k, -6.5, 37); flagPole(k, 6.5, 37);

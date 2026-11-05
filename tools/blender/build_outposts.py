@@ -39,6 +39,7 @@ COLL = "MoonOutposts"
 SLOT_COLORS = {}
 
 exec(open(os.path.join(REPO, "tools", "blender", "kit.py"), encoding="utf-8").read(), globals())
+exec(open(os.path.join(REPO, "tools", "blender", "dishkit.py"), encoding="utf-8").read(), globals())   # the dish heads
 exec(open(os.path.join(REPO, "tools", "blender", "outpost_kit.py"), encoding="utf-8").read(), globals())
 
 C = coll()
@@ -651,7 +652,528 @@ def build_farm(k):
     ])
 
 
-BUILDERS = {"tower": ("b", build_tower), "kiosk": ("b", build_kiosk), "depot": ("b", build_depot), "farm": ("b", build_farm)}  # kind -> (draft letter, build(k))
+# =====================================================================================================================
+# RELAY MAST: the Guyed Relay. A 52 m guyed lattice mast in red and white bands with three tiers of dish heads, a dish
+# turning on a boom at the top, three guy anchors, two equipment shelters and the cable bridge, a generator, the battery
+# cabinet, the transponder rack (raid), a solar row, a mesh fence. Wreck: the mast down across the yard, its dishes flung.
+# =====================================================================================================================
+def build_mast(k):
+    rr = k.rr
+    yard(k, 0x7A7686, S.dark)
+    mesh_fence(k, 37, 0.2)
+    MX, MZ, H = -4, -6, 52
+    with k.group("main"):
+        if not k.wreck:
+            k.box(5, 0.9, 5, T(S.conc), MX, 0, MZ, ink=0.05)
+            k.solid(2.5, 0.45, 2.5, MX, MZ)
+            legs = [(MX + math.cos(i * TAU / 3 + 0.3) * 1.3, MZ + math.sin(i * TAU / 3 + 0.3) * 1.3) for i in range(3)]
+            seg = 6.5
+            for sg in range(math.ceil(H / seg)):
+                for lx, lz in legs:
+                    k.beam((lx, 0.9 + sg * seg, lz), (lx, 0.9 + (sg + 1) * seg, lz), 0.17, T(0xFF4F2E if sg % 2 else 0xF5F5F5), ink=0.03)
+            for l in range(math.ceil(H / 3.25)):
+                for f in range(3):
+                    a, b = legs[f], legs[(f + 1) % 3]
+                    y0 = 0.9 + l * 3.25
+                    y1 = y0 + 3.25
+                    p0, p1 = ((a[0], y0, a[1]), (b[0], y1, b[1])) if l % 2 else ((b[0], y0, b[1]), (a[0], y1, a[1]))
+                    k.beam(p0, p1, 0.06, T(STEEL), ink=0)
+                    if l % 2 == 0:
+                        k.beam((a[0], y0, a[1]), (b[0], y0, b[1]), 0.07, T(STEEL), ink=0)
+            # service platforms (a beacon on a corner of each) and three tiers of dish heads on arms off the legs, hung
+            # clear under the platforms
+            LEG = [math.pi / 2 - (i * TAU / 3 + 0.3) for i in range(3)]  # (the legs' turns from +z, as within() takes them)
+            for y in (18, 34, 46):
+                k.add(cylinder(3.2, 3.2, 0.25, 3), T(S.dark), MX, y, MZ, ry=0.3, ink=0.04)
+                bx, bz = polar(2.6, 0.3)
+                k.blinker(MX + bx, y + 0.125 + 0.33, MZ + bz, 0xFF2A4A, 0.35)
+            for h, leg, rim in ((18, 0, 1.6), (18, 2, 1.4), (34, 1, 1.8), (34, 0, 1.5), (46, 2, 1.3)):
+                with k.within(MX, MZ, LEG[leg]):
+                    k.beam((0, h - 2.6, 1.3), (0, h - 2.6, 2.2), 0.1, T(DARK))
+                    k.dish_head(0, h - 2.6, 2.2, rim, "owner", az=math.pi, el=-1.3)
+            for i in range(3):  # (each on a leg)
+                with k.within(MX, MZ, LEG[i]):
+                    k.box(0.7, 3.6, 0.25, T(LIGHT), 0, 40, 1.55, ink=0.03)
+            k.dish_head(MX, 46.2, MZ, 1.4, "owner", az=math.pi, el=-0.7, spin=0.5, arm=2.2)
+            k.add(cylinder(1.6, 1.6, 0.2, 3), T(S.dark), MX, H + 0.9, MZ, ry=LEG[0], ink=0.03)  # (the cap over the legs' tops)
+            k.cyl(0.1, 0.15, 4, 5, T(LIGHT), MX, H + 1.0, MZ, ink=0.02)
+            k.blinker(MX, H + 5.2, MZ, 0xFF2A4A, 0.5)
+            # guys to three anchors, each a concrete block with a cap
+            for i in range(3):
+                a = 0.3 + i * TAU / 3 + math.pi / 3
+                ax, az = MX + math.cos(a) * 24, MZ + math.sin(a) * 24
+                k.box(2.6, 1.3, 2.6, T(S.conc), ax, 0, az, ink=0.04)
+                k.box(1.4, 0.4, 1.4, T(FAC), ax, 1.3, az, ink=0.02)
+                k.solid(1.3, 0.65, 1.3, ax, az)
+                k.solid(0.7, 0.15, 0.7, ax, az, 0, 1.3)
+                for h in (20.4, 33.4, 39.9):  # (to the middle of a face, on its horizontal brace, under the platforms)
+                    k.beam((ax, 1.6, az), (MX + math.cos(a) * 0.65, h, MZ + math.sin(a) * 0.65), 0.05, T(0x2A2540), ink=0, seg=3)
+            k.column(1.6, 46.1, MX, MZ)  # (to the top platform; the pole and the boom above it are thin)
+            # the cable bridge from the mast to the shelter
+            k.strip((MX + 1.5, MZ + 0.5), (8.4, -4), 0.7, 0.15, T(S.dark), F + 3.2)
+            for t in (0.33, 0.66):
+                x, z = MX + 1.5 + (8.4 - MX - 1.5) * t, MZ + 0.5 + (-4 - MZ - 0.5) * t
+                k.beam((x, F, z), (x, F + 3.2, z), 0.08, T(STEEL), ink=0)
+        else:
+            wr = k.wr
+            k.box(5, 0.9, 5, T(S.conc), MX, 0, MZ, ink=0.05)
+            k.solid(2.5, 0.45, 2.5, MX, MZ)
+            for i in range(3):
+                a = i * TAU / 3 + 0.3
+                h = 3 + wr() * 4
+                k.beam((MX + math.cos(a) * 1.3, 0.9, MZ + math.sin(a) * 1.3), (MX + math.cos(a) * 1.4, h, MZ + math.sin(a) * 1.4), 0.17, T(0x9A948E), ink=0.03)
+            with k.within(MX, MZ, 2.2):
+                # (the legs down: from the base's top to lying on the apron, braced leg to leg)
+                leg = lambda i, z: ((i - 1) * 1.1 + ((i - 1) * 0.9 + 0.5 - (i - 1) * 1.1) * (z - 2) / 28, 0.9 + 0.17 + (F - 0.9) * (z - 2) / 28, z)
+                for i in range(3):
+                    k.beam(leg(i, 2), leg(i, 30), 0.17, T(0xFF4F2E if i % 2 else 0xD8D4E8), ink=0.03)
+                t = 4
+                while t < 28:
+                    k.beam(leg(0, t), leg(2, t + 1.5), 0.06, T(STEEL), ink=0)
+                    t += 3
+                k.solidQ(1.4, 0.5, 14, 0, 0.9, 16, lattice=True)  # (the mast down: its legs and bracing)
+                k.dish_head(2.5, 0.4, 20, 1.6, "none", el=-0.3)
+                k.dish_head(-3, 0.4, 26, 1.4, "none", el=-0.6)
+            debris(k, MX, MZ, 4, 4, 10, wr)
+    k.hit(2.0, 8, 2.0, MX, MZ)
+    k.point("smoke", MX, 3, MZ)
+    k.point("drop", -14, F, 16)
+    shelter(k, 13, -4, -math.pi / 2, 9, 6)
+    k.hit(4.4, 2.9, 6.5, 13, -4)
+    shelter(k, 20, 12, math.pi, 6, 4.5)
+    # generator and battery bank
+    with k.within(11.5, 8.5, 0.2, 1.3):
+        k.box(4.2, 2.2, 2.2, T(S.trim), 0, F, 0, ink=0.05)
+        k.cyl(0.25, 0.3, 2, 6, T(DARK), 1.4, F + 2.2, 0, ink=0.02)
+        k.solid(2.1, (F + 2.2) / 2, 1.1, 0, 0)
+    # the battery cabinet: one steel case, four doors with their charge lamps
+    k.box(5.2, 1.8, 2.2, T(S.panel), -14.05, F, -16, ink=0.04)
+    for i in range(4):
+        k.box(1.1, 1.6, 0.04, T(S.dark), -16 + i * 1.3, F + 0.1, -14.89, ink=0)
+        k.box(0.6, 0.2, 0.05, G(0x7DFF6A), -16 + i * 1.3, F + 1.4, -14.86, ink=0)
+    k.solid(2.6, (F + 1.8) / 2, 1.1, -14.05, -16)
+    # the transponder rack (raid)
+    with k.within(6, 4, 0.3):
+        k.box(2.2, 2.4, 0.9, T(S.dark), 0, F, 0, ink=0.05)
+        for i in range(4):
+            k.box(1.6, 0.3, 0.05, G(FAC if i % 2 else 0x7DFF6A), 0, F + 0.5 + i * 0.45, 0.46, ink=0)
+        k.solid(1.1, (F + 2.4) / 2, 0.45, 0, 0)
+    k.raid_at(6.8, 6.3, 0x2EE6FF)
+    solar_rows(k, -22, 16, 2, 3)
+    for x, z in ((-28, -10), (26, -18), (-8, 26), (24, 26)):
+        lamp_post(k, x, z, 6, S.glow)
+    flag_pole(k, -7, 36.5)
+    flag_pole(k, 7, 36.5)
+    # three technicians: gate past the rack to the shelter's door, the battery bank and the mast's foot, the east fence line
+    k.walkers([
+        [(0, 34), (-3, 20), (4, 0), (7.4, -7.3)],
+        [(-10, 10), (-16, -4), (-10, -12)],
+        [(6, 30), (20, 24), (30, 16), (30, 0)],
+    ])
+
+
+# =====================================================================================================================
+# JUNK PILE: Scrap Mountain. A 13 m mound of wreckage worked by an electromagnet crane on a turning lattice boom, a sorting
+# line into bins, a crusher, the junk-bot repair bench (raid), the yard foreman's hut, salvage stacks, junk bots pottering.
+# Wreck: the heap slumped, the crane's cab tipped and its boom down.
+# =====================================================================================================================
+def build_junk(k):
+    rr = k.rr
+    yard(k, 0x6F6878, 0x3A3540)
+    # a rim of scrap blocks, gaps here and there, the gate open at +z
+    a = 0.3
+    while a < TAU - 0.3:
+        if rr() >= 0.15:
+            x, z = polar(37.5, a)
+            h = 1.0 + rr() * 0.8
+            ry = a + (rr() - 0.5) * 0.3
+            k.box(2.6, h, 1.2, T((0x5A5F6E, 0x6B5A4A, 0x7A3A2A)[math.floor(rr() * 3)]), x, F, z, ry=ry, ink=0.04)
+            k.solid(1.3, h / 2, 0.6, x, z, ry, F)
+        a += 2.8 / 37
+    MX, MZ = -6, -10
+    with k.group("main"):
+        if not k.wreck:
+            scrap_heap(k, MX, MZ, 15, 13, 130, k.mr)
+            # a car body, a ship's fin and a dish poking out of the top
+            k.box(2.4, 1.4, 4.6, T(0xD9482B), MX + 1, F + 12.2, MZ - 1, rx=0.5, rz=0.3, ink=0.06)
+            k.solidQ(1.2, 0.7, 2.3, MX + 1, F + 12.9, MZ - 1, euler(0.5, 0, 0.3))
+            k.add(cylinder(0.1, 3, 5, 3), T(0x8A8698), MX - 3, F + 11.5, MZ + 2, rz=0.5, ink=0.06)
+            k.dish_head(MX + 3, F + 10.2, MZ + 3, 1.4, "none", el=-0.2, az=0.8)
+            k.column(3.4, F + 13, MX, MZ, F + 11)
+        else:
+            scrap_heap(k, MX, MZ, 17, 5, 90, k.wr)
+    k.hit(10, 5, 10, MX, MZ)
+    k.point("smoke", MX, 4, MZ)
+    k.point("drop", 16, F, 18)
+    # the magnet crane: tracks, a turning cab on a ring with a lattice boom and the magnet disc hanging over the heap
+    CX, CZ = 16, -14
+    with k.within(CX, CZ, 0, 1.35):  # (the crane at 1.35x)
+        for sd in (-1, 1):
+            k.box(1.4, 1.4, 7, T(TYRE), sd * 2.2, F, 0, ink=0.05)
+            for i in range(-3, 4):
+                k.box(1.5, 0.15, 0.4, T(DARK), sd * 2.2, F + 1.35, i, ink=0)
+        k.box(3.6, 0.8, 5, T(S.dark), 0, F + 1.0, 0, ink=0.04)
+        for sd in (-1, 1):
+            k.solid(0.7, 0.7, 3.5, sd * 2.2, 0, 0, F)
+        k.solid(1.8, 0.4, 2.5, 0, 0, 0, F + 1.0)
+        with k.group("main"):
+            if not k.wreck:
+                cab = k.dyn("spin", 0, F + 1.8, 0, speed=0.12)
+                with k.into(cab):
+                    k.cyl(2.2, 2.2, 0.5, 16, T(DARK), 0, 0, 0, ink=0.04)
+                    k.box(4.4, 3.2, 3.6, T(YEL), 0, 0.5, -0.6, ink=0.06)
+                    k.box(1.8, 1.2, 0.08, GLASS(GLASSC, 0.6), 1.0, 2.2, 1.21, ink=0.02)
+                    k.box(4.6, 0.3, 3.8, T(FAC), 0, 3.7, -0.6, ink=0)
+                    k.box(3.4, 1.8, 2.2, T(0x5A5F6E), 0, 0.5, -3.3, ink=0.04)
+                    # boom up and out over the heap (local -x), the magnet hanging from its tip
+                    tip, foot = (-17, 15, 0), (-1, 2.0, 0)
+                    for sz in (-0.6, 0.6):
+                        for dy in (0, 1.0):
+                            k.beam((foot[0], foot[1] + dy, sz), (tip[0], tip[1] + dy * 0.3, sz * 0.4), 0.12, T(YEL), ink=0.03)
+                    # the webs: from a lower chord to the upper chord across, a tenth further out, each end on its chord
+                    chord = lambda sd, dy, t: (foot[0] + (tip[0] - foot[0]) * t, foot[1] + (tip[1] - foot[1]) * t + dy * (1 - 0.7 * t), sd * 0.6 * (1 - 0.6 * t))
+                    t = 0.0
+                    while t < 0.95:
+                        k.beam(chord(-1, 0, t), chord(1, 1.0, t + 0.1), 0.05, T(DARK), ink=0)
+                        t += 0.1
+                    k.box(0.6, 0.6, 0.7, T(DARK), tip[0], tip[1] - 0.15, 0, ink=0.02)  # (the head block the chords meet in)
+                    k.beam((0, 3.8, -0.6), (0, 7, -0.6), 0.15, T(DARK), ink=0.02)
+                    k.beam((0, 7, -0.6), (tip[0], tip[1] + 0.3, 0), 0.04, T(DARK), ink=0)
+                    k.beam((tip[0], tip[1], 0), (tip[0], tip[1] - 5.5, 0), 0.05, T(DARK), ink=0)
+                    k.cyl(1.6, 1.6, 0.6, 16, T(0x3A3550), tip[0], tip[1] - 6.1, 0, ink=0.04)
+                    k.cyl(1.62, 1.62, 0.1, 16, G(0xFF7A1A), tip[0], tip[1] - 6.15, 0, ink=0)
+                    for i in range(3):
+                        k.box(1.2, 0.6, 1.6, T((0x6B5A4A, 0x8A8698, 0xA05A2A)[i]), tip[0] + (i - 1) * 0.6, tip[1] - 6.8 - i * 0.2, (i - 1) * 0.3, rx=i * 0.4, ink=0.04)
+                k.column(2.4, F + 5.5, 0, 0, F + 1.8)
+            else:
+                q = euler(0, 0, 0.5)  # (the cab, tipped on its deck)
+                k.add(cuboid(4.4, 3.2, 3.6), T(0x8A6A2A), 1, F + 3.2, 0, q=q, ink=0.06)
+                k.solidQ(2.2, 1.6, 1.8, 1, F + 3.2, 0, q)
+                for sz in (-0.6, 0.6):  # (the boom down, its end on the apron)
+                    k.beam((-1, F + 2.6, sz), (4, F + 0.12, 15 + sz), 0.12, T(0x8A6A2A), ink=0.03)
+    # the sorting line: a hopper, a belt on trestles to three bins (metal, plastics, parts)
+    with k.within(8, 14, -0.3, 1.3):
+        k.add(cylinder(2.4, 1.0, 2.4, 4), T(S.panel), -8, F + 3.8, 0, ry=math.pi / 4, ink=0.05)
+        k.solid(1.5, 1.2, 1.5, -8, 0, 0, F + 2.6)
+        for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1)):  # (the legs up to the hopper's flaring corners)
+            k.box(0.2, 3.8, 0.2, T(DARK), -8 + sx * 1.2, F, sz * 1.2, ink=0)
+        k.add(cuboid(14, 0.3, 1.6), T(DARK), 0, F + 2.0, 0, rz=-0.1, ink=0.03)
+        for sd in (-1, 1):
+            k.add(cuboid(14, 0.4, 0.12), T(YEL), 0, F + 2.25, sd * 0.85, rz=-0.1, ink=0)
+        for x in range(-6, 7, 3):
+            for sd in (-1, 1):
+                k.box(0.15, 2.0 - 0.15 / math.cos(0.1) - x * math.tan(0.1), 0.15, T(STEEL), x, F, sd * 0.7, ink=0)  # (to the belt's underside, falling to +x)
+        for i in range(6):
+            gz = (rr() - 0.5) * 0.6
+            gry = rr()
+            k.box(0.5, 0.4, 0.5, T((0x8A8698, 0xA05A2A, 0x5A5F6E)[i % 3]), -5 + i * 2, F + 2.0 + 0.15 / math.cos(0.1) - 0.01 - (-5 + i * 2) * math.tan(0.1), gz, ry=gry, ink=0.02)  # (on the belt)
+        k.solidQ(7, 0.2, 0.9, 0, F + 2.0, 0, euler(0, 0, -0.1))
+        for i in range(3):
+            bx = 4 + i * 3.4
+            k.box(3, 1.8, 3, T((0x5A5F6E, 0x4A6A5A, 0x7A3A2A)[i]), bx, F, 3.2, ink=0.05)
+            k.box(2.6, 0.3, 2.6, T((0x8A8698, 0x7DD87A, 0xA05A2A)[i]), bx, F + 1.6, 3.2, ink=0)
+            k.solid(1.5, (F + 1.8) / 2, 1.5, bx, 3.2)
+    # the crusher
+    with k.within(-26, 10, 0.6, 1.35):
+        k.box(5, 4, 4.5, T(0x5A5F6E), 0, F, 0, ink=0.08)
+        k.add(cylinder(3, 1.6, 2.4, 4), T(RUST), 0, F + 5.2, 0, ry=math.pi / 4, ink=0.05)
+        k.box(2.4, 1.2, 2.4, T(0x7A3A2A), 0, F, 3.4, ry=0.2, ink=0.04)
+        k.solid(1.2, 0.6, 1.2, 0, 3.4, 0.2, F)
+        k.solid(2.5, (F + 4) / 2, 2.3, 0, 0)
+        k.solid(1.8, 1.2, 1.8, 0, 0, 0, F + 4)
+    # the junk-bot bench under an awning (raid): a half-built bot, spare heads and a welder's spark
+    with k.within(18, 6, -0.9, 1.3):
+        for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+            k.box(0.15, 3.2, 0.15, T(DARK), sx * 2.4, F, sz * 1.6, ink=0.02)
+        k.box(5.4, 0.15, 3.8, T(RUST), 0, F + 3.2, 0, ink=0.04)
+        k.solid(2.7, 0.1, 1.9, 0, 0, 0, F + 3.2)
+        k.box(3.2, 0.9, 1.2, T(STEEL), 0, F, -0.8, ink=0.04)
+        k.solid(1.6, (F + 0.9) / 2, 0.6, 0, -0.8)
+        k.box(0.9, 0.9, 0.9, T(0xFFB347), -0.6, F + 1.35, -0.8, ink=0.03)
+        k.solid(0.45, 0.45, 0.45, -0.6, -0.8, 0, F + 1.35)
+        k.ball(0.35, G(0x2EE6FF), -0.6, F + 1.5, -0.33, ink=0)
+        for i in range(3):
+            k.ball(0.3, T((0xFFB347, 0x8A8698, 0xA05A2A)[i]), 0.6 + i * 0.5, F + 1.2, -0.8, ink=0.02)
+        if not k.wreck:
+            sp = k.dyn("blink", -0.2, F + 1.4, -0.5)
+            k.part(sp, sphere(0.15, 6, 4), G(0xFFF3B0))
+    k.raid_at(19.8, 8.0, 0xFFB347)
+    # the foreman's hut
+    with k.within(-22, -22, 0.8, 1.35):
+        scrap_box(k, 0, F, 0, math.pi / 2, 0x4A6A5A, rr)
+        k.box(1.4, 0.8, 0.1, G(S.glow), 1.2, F + 1.3, 1.27, ink=0)
+        k.add(cuboid(7.2, 0.15, 3.6), T(RUST), 0, F + 2.77, 0.6, rx=0.15, ink=0.04)  # (the lean-to roof, on the box's front edge)
+        k.solidQ(3.6, 0.08, 1.8, 0, F + 2.77, 0.6, euler(0.15, 0, 0))
+    burn_barrel(k, -12, 24)
+    for x, z in ((-30, -8), (28, 20), (-8, 30)):
+        lamp_post(k, x, z, 7, S.glow)
+    flag_pole(k, -6.5, 37)
+    flag_pole(k, 6.5, 37)
+    # salvage stacks round the rim: containers off everyone's trains, each box another livery
+    k.stack(27, -12, 2, looted(0), math.atan2(27, -12) + math.pi / 2, F)
+    k.stack(19, -25, 1, looted(2), math.atan2(19, -25) + math.pi / 2, F)
+    k.stack(-28, 0, 3, looted(1), math.atan2(-28, 0) + math.pi / 2, F)
+    # three junk bots pottering about the yard
+    k.walkers([
+        [(0, 30), (10, 27), (22, 27)],
+        [(-8, 22), (-16, 16), (-22, 4)],
+        [(28, 4), (28, -4), (24, 0)],
+    ], "junkbot")
+
+
+# =====================================================================================================================
+# SCRAP SHACK: the crashed freighter's hull, hollowed out and lived in. Its plating stripped along the yard side so the hold
+# stands open, the ribs left standing across the gap, three container rooms on the lower deck and a railed mezzanine on
+# them, a corrugated porch roof out over the opening, the bow boarded up with a lit window, the stern walled off round a big
+# lit doorway, window holes cut and lit. Round it: a stockade with two watch boxes at the gate, a container bunkhouse with
+# its stair and balcony, a derrick over a scrap heap and a scrap press, the cook fire with tyre seats, burning barrels,
+# stolen containers, pirate lights. Wreck: the hull burnt down to its lower plates, the bunkhouse tumbled.
+# =====================================================================================================================
+def build_shack(k):
+    rr, wr = k.rr, k.wr
+    yard(k, 0x6F6878, 0x3A3540)
+    # the stockade and the two watch boxes at the gate
+    a = 0.28
+    while a < TAU - 0.28:
+        x, z = polar(37, a)
+        h = 3.2 + rr() * 1.2
+        col = (0x6B5A4A, 0x7A3A2A, 0x5A5F6E, 0x8A8698, 0x4A6A5A)[math.floor(rr() * 5)]
+        rz = (rr() - 0.5) * 0.08
+        k.box(2.5, h, 0.2, T(col), x, F, z, ry=a, rz=rz, ink=0.04)
+        k.add(cylinder(0.0, 0.2, 0.7, 4), T(STEEL), x, F + h + 0.3, z, ink=0.02)
+        k.solid(1.25, (F + h) / 2, 0.12, x, z, a)
+        a += 2.4 / 37
+    for sd in (-1, 1):
+        with k.within(sd * 7.5, 36, 0):
+            for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+                k.beam((sx * 1.4, F, sz * 1.4), (sx * 1.0, F + 6, sz * 1.0), 0.1, T(DARK), ink=0.02)
+            k.box(2.8, 2.2, 2.8, T(RUST), 0, F + 6, 0, ink=0.05)
+            k.box(2.6, 0.7, 0.1, G(S.glow), 0, F + 7.0, 1.42, ink=0)
+            k.add(cylinder(0.0, 2.4, 1.2, 4), T(0x5A3A2A), 0, F + 8.8, 0, ry=math.pi / 4, ink=0.04)
+            k.solid(1.4, 1.1, 1.4, 0, 0, 0, F + 6)
+            pyramid_cols(k, 0, 0, F + 8.2, 2.4, 1.2, 4)
+    # the hull: local x along the keel, +z the open flank toward the yard (at 1.3x: 39 m long, 19.5 m across)
+    HX, HZ, HY, r, cy, L, NS, NA, DECK = -4, -13, 0.25, 7.5, 4.0, 30, 6, 28, 0.4
+    secL, hullC = L / NS, (0xA8A2B4, 0x948EA2, 0xB4A890)
+    with k.within(HX, HZ, HY, 1.3), k.group("main"):
+        # plates: NA round the hull per section; phi from straight up (0) toward +z (pi/2); none under the ground
+        for si in range(NS):
+            x = -L / 2 + secL * (si + 0.5)
+            gone = [True] * NA
+            for i in range(NA):
+                phi = i / NA * TAU
+                y, z = cy + r * math.cos(phi), r * math.sin(phi)
+                if y < 0.1:
+                    continue
+                opened = z > 0.5 and DECK - 0.5 < y < cy + r * 0.8 and 0 < si < NS - 1  # the stripped flank
+                gone[i] = (y > cy + 1 or wr() < 0.3) if k.wreck else (opened or rr() < 0.05)  # (and the odd missing plate)
+            if k.wreck:  # (nothing hangs over a burnt-away plate: up each side from the ground)
+                for side in (1, -1):
+                    up = sorted((i for i in range(NA) if cy + r * math.cos(i / NA * TAU) >= 0.1 and math.sin(i / NA * TAU) * side > 1e-9), key=lambda i: math.cos(i / NA * TAU))
+                    lost = False
+                    for i in up:
+                        if gone[i]:
+                            lost = True
+                        elif lost:
+                            gone[i] = True
+            for i in range(NA):
+                phi = i / NA * TAU
+                y, z = cy + r * math.cos(phi), r * math.sin(phi)
+                if gone[i]:
+                    continue
+                w = TAU * r / NA + 0.06
+                k.add(cuboid(secL - 0.08, 0.22, w), T(hullC[(si + i) % 3]), x, y, z, rx=phi, ink=0.04)
+                if not k.wreck and z < -1 and cy < y < cy + 5 and (si + i) % 4 == 0:  # (window holes, lit from inside)
+                    k.add(cuboid(1.4, 0.24, 0.8), G(0xFFB347), x, y, z, rx=phi, ink=0)
+                if y > DECK + 0.3:
+                    k.solidQ((secL - 0.08) / 2, 0.15, w / 2, x, y, z, euler(phi, 0, 0))
+        # ribs at every section joint: full rings, standing bare across the open flank
+        for si in range(NS + 1):
+            x = -L / 2 + secL * si
+            if k.wreck and wr() < 0.4:
+                continue
+            arc = math.pi * (0.6 + wr() * 0.5) if k.wreck else TAU
+            k.add(torus_xy(r + 0.05, 0.28, 5, 28, arc), T(0x4A4660), x, cy, 0, ry=math.pi / 2, ink=0.04)
+        k.beam((-L / 2, cy + r + 0.1, 0), (L / 2, cy + r + 0.1, 0), 0.35, T(0x4A4660), ink=0.04)  # the spine
+        k.beam((-L / 2 + secL, DECK + 0.1, r * 0.9), (L / 2 - secL, DECK + 0.1, r * 0.9), 0.3, T(0x4A4660), ink=0.03)  # the sill
+        # the lower deck: plate floor at a step's height, hazard edge along the opening
+        k.box(L - 0.4, DECK, 13, T(0x5A5F6E), 0, 0, -0.3, ink=0.03)
+        for i in range(12):
+            k.box(1.2, 0.006, 0.3, T(YEL if i % 2 else DARK), -L / 2 + secL + 0.8 + i * 1.65, DECK, 6.0, ink=0)
+        if not k.wreck:
+            # bow boarded over with a lit window (a spherical cap 0.55 r deep on the hull's rim: its collider the same sphere)
+            RB, BC = r * 1.184, L / 2 - r * 0.634
+            k.add(sphere(RB, 36, 12, math.acos(0.634 / 1.184)), T(0x6B5A4A), BC, cy, 0, rz=-math.pi / 2, ink=0.1)  # (fine enough that boards lie on it)
+            bow_x = lambda y, zz: BC + math.sqrt(max(0, RB ** 2 - (y - cy) ** 2 - zz ** 2))
+            for i in range(8):  # (boards nailed flat on its face)
+                y = cy - 2.5 + rr() * 6
+                zz = (rr() - 0.5) * 8
+                bx = bow_x(y, zz)
+                n = Vector((bx - BC, y - cy, zz)).normalized()
+                bh = 1.0 + rr() * 0.8
+                bd = 1.2 + rr() * 0.8
+                q = Vector((1, 0, 0)).rotation_difference(n).to_matrix().to_4x4()
+                k.add(cuboid(0.1, bh, bd), T((0x8A8698, 0x9A6A3A, 0x5A5F6E)[i % 3]), bx + n.x * 0.03, y + n.y * 0.03, zz + n.z * 0.03, q=q, ink=0.02)
+            k.box(0.1, 1.4, 2.4, G(S.glow), bow_x(cy + 1.5, 1.2) + 0.08, cy + 1.5, 1.2, ink=0)
+            # the stern walled with a big lit doorway, the engine bells
+            k.add(cylinder(r, r, 0.3, 28), T(0x5A5F6E), -L / 2 - 0.1, cy, 0, rz=math.pi / 2, ink=0.06)
+            k.box(0.32, 4, 6, G(0xFFB347), -L / 2 - 0.16, DECK, 0, ink=0)
+            for sd in (-1, 1):
+                k.cyl(1.2, 1.7, 1.8, 12, T(DARK), -L / 2 - 1.1, cy + 3.2, sd * 3.6, rz=math.pi / 2, ink=0.04)  # (into the stern wall)
+            for y0, y1 in ((0, cy + 2), (cy + 2, cy + 4), (cy + 4, cy + 5.5), (cy + 5.5, cy + 6.7)):  # (the stern wall in bands)
+                dy = max(abs(y0 - cy), abs(y1 - cy))
+                e = math.sqrt(max(0, 1 - (dy / r) ** 2))
+                k.solid(0.3, (y1 - y0) / 2, r * e, -L / 2 - 0.1, 0, 0, y0)
+            k.sphere_col(RB, BC, cy, 0)
+            for sd in (-1, 1):
+                k.hcyl(1.6, 1.8, -L / 2 - 1.2, sd * 3.6, math.pi / 2, cy + 3.2)
+            # rooms: three containers along the back of the lower deck, lit doors facing the hold
+            cols = (0x4A6A5A, 0x7A3A2A, 0x5A5F6E)
+            for i in range(3):
+                x = -9 + i * 7.5
+                scrap_box(k, x, DECK, -3.6, math.pi / 2, cols[i], rr)
+                k.box(1.4, 2.2, 0.1, G(S.glow if i == 1 else 0xFFB347), x - 1.6, DECK, -2.33, ink=0)
+                k.box(1.6, 0.8, 0.1, G(0xFFE6A8), x + 1.4, DECK + 1.2, -2.33, ink=0)
+            # the mezzanine: a plate deck on the containers' roofs, a rail along its edge, a stair up
+            MY = DECK + 2.7
+            k.box(L - 2 * secL + 2, 0.2, 4.4, T(0x55505E), 0, MY, -3.0, ink=0.03)
+            k.solid((L - 2 * secL + 2) / 2, 0.1, 2.2, 0, -3.0, 0, MY)
+            for x in range(-10, 11, 2):
+                k.box(0.06, 1.0, 0.06, T(DARK), x, MY + 0.2, -0.85, ink=0)
+            k.box(L - 2 * secL + 2, 0.08, 0.08, T(FAC), 0, MY + 1.2, -0.85, ink=0)
+            for i in range(9):  # the stair up, on two stringers, its top at the mezzanine's edge
+                k.box(1.2, 0.18, 0.4, T(DARK), 10.2 - i * 0.36, DECK + 0.3 + i * 0.3, -0.2, ry=math.pi / 2, ink=0.02)
+            for sd in (-1, 1):
+                k.beam((10.49, DECK, -0.2 + sd * 0.5), (7.32, DECK + 2.64, -0.2 + sd * 0.5), 0.06, T(DARK), ink=0.01)
+            # a workshop on the deck: bench, lamp strip under the mezzanine, hanging chains
+            k.box(4, 0.9, 1.2, T(STEEL), -4, DECK, 1.5, ink=0.04)
+            k.solid(2, (DECK + 0.9) / 2, 0.6, -4, 1.5)
+            k.box(L - 2 * secL, 0.12, 0.3, G(0xFFF3B0), 0, MY - 0.1, -0.9, ink=0)
+            for x in (-6, 2):
+                k.beam((x, cy + r - 0.4, 2), (x, MY + 1.4, 2), 0.03, T(DARK), ink=0)
+                k.box(0.6, 0.5, 0.4, T(YEL), x, MY + 0.9, 2, ink=0.02)
+            # the porch: a corrugated roof from over the opening out across the yard, falling to +z, posts cut to its underside
+            z0, z1, y0, y1 = r * 0.92, r + 5, cy + 2.4, 3.6
+            sl, ln = math.atan2(y0 - y1, z1 - z0), math.hypot(z1 - z0, y0 - y1)
+            k.add(cuboid(2 * secL, 0.14, ln + 0.4), T(RUST), -secL / 2, (y0 + y1) / 2 + 0.07, (z0 + z1) / 2, rx=sl, ink=0.05)
+            for i in range(-3, 3):  # (ribs across the porch roof)
+                k.add(cuboid(0.05, 0.04, ln), T(0x5A3A2A), -secL / 2 + i * 1.6 + 0.8, (y0 + y1) / 2 + 0.16, (z0 + z1) / 2, rx=sl, ink=0)
+            for x in (-secL * 1.5 + 0.3, secL / 2 - 0.3):
+                zz = z1 - 0.4
+                top = y1 + (y0 - y1) * ((z1 - zz) / (z1 - z0))
+                k.box(0.22, top - F, 0.22, T(DARK), x, F, zz, ink=0.02)
+                k.column(0.16, top, x, zz)
+            k.solidQ(secL, 0.1, ln / 2 + 0.2, -secL / 2, (y0 + y1) / 2, (z0 + z1) / 2, euler(sl, 0, 0))
+            light_string(k, [(-secL * 1.5 + 0.3, y1 - 0.2, z1 - 0.4), (secL / 2 - 0.3, y1 - 0.2, z1 - 0.4)], (0x7DFF3A, 0xFF2E88, YEL), 8, 0.5)
+            # the crow's nest and banner on its back, a dish beside it, the clan mark
+            k.cyl(1.6, 1.8, 2, 10, T(RUST), 6, cy + r, 0, ink=0.05)
+            for i in range(8):  # (the rail's posts on the nest's rim)
+                a = i / 8 * TAU
+                k.box(0.08, 1.0, 0.08, T(DARK), 6 + math.sin(a) * 1.52, cy + r + 2, math.cos(a) * 1.52, ink=0)
+            k.add(torus_xy(1.52, 0.05, 3, 16), T(FAC), 6, cy + r + 3.0, 0, rx=math.pi / 2, ink=0)
+            k.flag(7, -1, 6, FAC, cy + r + 2)
+            k.dish_head(-6, cy + r + 0.2, -1, 1.0, "rustmoon", az=math.pi * 0.8, el=-0.6)
+            k.column(1.8, cy + r + 2, 6, 0)
+            emblem(k, -12.5, cy + 0.5, r + 0.05, 0, 2.4)
+        else:
+            debris(k, 0, 0, L * 0.4, 5, 30, wr)
+            q = euler(0.5, 0, 0.2)  # (the porch roof, down)
+            k.add(cuboid(9, 0.3, 7), T(RUST), 4, F + 1.6, r + 2, q=q, ink=0.05)
+            k.solidQ(4.5, 0.15, 3.5, 4, F + 1.6, r + 2, q)
+            for i in range(6):
+                ex = (wr() - 0.5) * L * 0.6
+                ez = (wr() - 0.5) * 8
+                k.box(0.3, 0.12, 0.3, G(0xFF7A1A if i % 2 else 0xFFB347), ex, DECK, ez, ink=0)
+    k.hit(L / 2 * 1.3, cy * 1.3, r * 1.3, HX, HZ, HY)
+    k.point("smoke", HX, 3, HZ)
+    k.point("drop", 16, F, 18)
+    # the plating rack in the hold's mouth: the raid spot
+    with k.within(HX, HZ, HY, 1.3), k.within(6, 6.5, 0):
+        for i in range(9):
+            k.box(2.0 - (i % 2) * 0.1, 0.09, 1.4 - (i % 3) * 0.05, T((0x8A8698, 0x9A6A3A, 0x5A5F6E)[i % 3]), (i % 2) * 0.06, DECK + 0.3 + i * 0.1, 0, ry=(i % 3 - 1) * 0.04, ink=0.015)
+        k.box(2.4, 0.3, 2.0, T(DARK), 0, DECK, 0, ink=0.03)
+        k.solid(1.0, (DECK + 1.2) / 2, 0.7, 0, 0)
+    with k.within(HX, HZ, HY, 1.3):
+        k.raid_at(6, 9.3, 0x7DFF3A)
+    # the bunkhouse: two boxes with one on top, a stair and a railed balcony, lit doors (west of the gate road)
+    with k.within(-24, 10, 1.25, 1.35), k.group("main"):
+        cols = (0x6B5A4A, 0x8A5A3A, 0x5A5F6E)
+        if k.wreck:
+            scrap_box(k, 0, F, 0, math.pi / 2 + 0.2, CHAR, wr)
+            scrap_box(k, 0.5, F, 3.2, math.pi / 2 - 0.3, 0x3A3540, wr)
+        else:
+            scrap_box(k, -3.2, F, 0, math.pi / 2, cols[0], rr)
+            scrap_box(k, 3.2, F, 0, math.pi / 2, cols[1], rr)
+            scrap_box(k, 0, F + 2.6, 0.2, math.pi / 2, cols[2], rr)
+            for x in (-3.2, 3.2):
+                k.box(1.6, 2.3, 0.1, G(0xFFB347), x, F, 1.29, ink=0)
+            k.box(2.2, 1.0, 0.1, G(S.glow), 0, F + 3.8, 1.49, ink=0)
+            for i in range(9):
+                k.box(1.2, 0.18, 0.4, T(DARK), -7.0, F + 0.3 + i * 0.3, 3.4 - i * 0.36, ink=0.02)
+            for sd in (-1, 1):  # (the stringers the treads sit on)
+                k.beam((-7.0 + sd * 0.62, F, 3.75), (-7.0 + sd * 0.62, F + 2.75, 0.5), 0.06, T(DARK), ink=0.01)
+            k.box(9, 0.15, 1.6, T(DARK), -2.2, F + 2.6, 2.0, ink=0.03)
+            x = -6.5
+            while x <= 2:
+                k.box(0.08, 1.0, 0.08, T(DARK), x, F + 2.75, 2.75, ink=0)
+                x += 1.5
+            k.box(9, 0.08, 0.08, T(FAC), -2.2, F + 3.75, 2.75, ink=0)
+            k.solid(4.5, 0.08, 0.8, -2.2, 2.0, 0, F + 2.6)
+            k.cyl(0.25, 0.25, 3, 6, T(DARK), 2, F + 5.2, 0.4, ink=0.02)
+    # the derrick over the heap and the scrap press (east)
+    scrap_heap(k, 23, -6, 7, 4.5, 36, k.rr)
+    with k.within(15, 6, 0, 1.3):
+        lattice(k, 0, 0, 12, 1.0, 0.6, 4, T(RUST), T(DARK), r=0.14, core=False)
+        for i in range(4):
+            w = 1.0 - 0.4 * (i / 4) + 0.15
+            k.solidQ(w, 1.5, w, 0, i * 3 + 1.5, 0, lattice=True)
+        k.beam((0, 11.6, 0), (6, 13, -8), 0.22, T(YEL), ink=0.03)
+        k.beam((0, 9, 0), (6, 13, -8), 0.08, T(DARK), ink=0)
+        k.beam((6, 13, -8), (6, 8.5, -8), 0.03, T(DARK), ink=0)
+        k.box(0.6, 0.8, 0.3, T(YEL), 6, 7.7, -8, ink=0.03)
+    with k.within(27, 8, -0.9, 1.3):
+        k.box(5, 3.2, 4, T(0x5A5F6E), 0, F, 0, ink=0.08)
+        k.box(4.6, 1.6, 3.6, T(RUST), 0, F + 3.2, 0, ink=0.05)
+        for sd in (-1, 1):
+            k.box(0.5, 4.4, 0.5, T(YEL), sd * 2.4, F + 3.2, 0, ink=0.03)
+            k.solid(0.25, 2.2, 0.25, sd * 2.4, 0, 0, F + 3.2)
+        k.box(5.4, 0.6, 0.8, T(YEL), 0, F + 7.4, 0, ink=0.03)
+        k.box(1.4, 1.4, 1.4, T(0x6B5A4A), 0, F, 3, ry=0.3, ink=0.04)
+        k.solid(0.7, 0.7, 0.7, 0, 3, 0.3, F)
+        k.solid(2.5, 2.4, 2.0, 0, 0, 0, F)
+        k.solid(2.7, 0.3, 0.4, 0, 0, 0, F + 7.4)
+    # the cook fire with tyre seats, burning barrels, tyre stacks, stolen containers, pirate lights
+    k.cyl(2.2, 2.4, 0.4, 12, T(0x3A3540), 6, F, 18, ink=0.03)
+    pit = k.dyn("blink", 6, F + 1.2, 18)
+    k.part(pit, cylinder(0.0, 1.0, 1.6, 7), G(0xFF7A1A))
+    k.column(2.4, F + 0.4, 6, 18)
+    for i in range(5):
+        x, z = polar(3.8, i / 5 * TAU)
+        k.cyl(0.45, 0.45, 0.5, 8, T(TYRE), 6 + x, F, 18 + z, ink=0.03)
+    burn_barrel(k, -10, 20)
+    burn_barrel(k, 20, 20)
+    for x, z in ((-16, 24), (-14, 26), (-17.5, 26.5)):  # (each tyre on the one under it)
+        for i in range(3):
+            k.add(torus_xy(0.75, 0.32, 6, 12), T(TYRE), x, F + 0.28 + i * 0.54, z, rx=math.pi / 2, ink=0.03)
+        k.column(1.05, F + 1.8, x, z)
+    # stolen containers, each box another faction's livery
+    k.stack(-31, -6, 2, looted(0), math.atan2(-31, -6) + math.pi / 2, F)
+    k.stack(-20, -28, 1, looted(1), math.atan2(-20, -28) + math.pi / 2, F)
+    k.stack(-2, -33, 2, looted(2), math.atan2(-2, -33) + math.pi / 2, F)
+    poles = ((-20, 16), (-8, 30), (8, 30), (22, 16))
+    for x, z in poles:
+        k.cyl(0.1, 0.13, 6, 6, T(DARK), x, F, z, ink=0.03)
+        k.column(0.15, F + 6, x, z)
+    light_string(k, [(x, F + 5.8, z) for x, z in poles], (0x7DFF3A, 0xFF2E88, YEL))
+    # three clan riggers: the gate to the hold, round the cook fire, between the derrick and the press
+    k.walkers([
+        [(0, 34), (-2, 12), (-4, 3)],
+        [(-14, 19), (-4, 26), (14, 25)],
+        [(14, 13), (30, 13)],
+    ])
+
+
+BUILDERS = {"tower": ("b", build_tower), "kiosk": ("b", build_kiosk), "depot": ("b", build_depot), "farm": ("b", build_farm), "mast": ("a", build_mast), "junk": ("a", build_junk), "shack": ("c", build_shack)}  # kind -> (draft letter, build(k))
 
 
 def share_yard(kind):

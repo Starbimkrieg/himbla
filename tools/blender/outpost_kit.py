@@ -50,7 +50,7 @@ S = _Style()     # S.body, S.panel, S.dark, S.roof, S.trim, S.glow, S.conc, S.me
 FAC = Key("faction")
 # SpaceCom's palette: the preview colours of the style_ materials in Blender (outpostLooks.js STYLE.spacecom)
 PREVIEW = {"body": 0xF3EEE4, "panel": 0xD8D2C4, "dark": 0x1B2A5A, "roof": 0x3A4A78, "trim": 0xFFD23F, "glow": 0xFFF3B0,
-           "conc": 0xB8B2A6, "metal": 0x55607A, "hut": 0x6F7A5A, "faction": 0xFFD23F}
+           "conc": 0xB8B2A6, "metal": 0x55607A, "hut": 0x6F7A5A, "livery": 0xF2ECDC, "stripe": 0xFFD23F, "faction": 0xFFD23F}
 
 MATS = {}  # name -> (preview hex, double sided, alpha or None)
 
@@ -245,6 +245,7 @@ class Kit:
         self.sfx = "_wreck" if wreck else ""
         self.base, self.yaw, self.sc = Matrix.Identity(4), 0.0, 1.0
         self.grp = "yard"
+        self.target = None           # a moving node the parts go into (k.into)
         self.only = None             # owners the parts drawn now are for (an emblem each): a tuple, or None for all
         self.buckets = {}            # (grp, mat, ink, node id, only) -> [geo, ...]
         self.nodes = {}              # node id -> Node
@@ -321,16 +322,33 @@ class Kit:
         return _O()
 
     # -- parts
-    def _put(self, geo, mat, ink, node=None, floor=True):
+    def _put(self, geo, mat, ink, node=None, floor=True, raw=False):
         if kind_of(mat) != "other":
             ink = 0  # (glass and light beams get no outline)
-        key = (self.grp, mat, round(float(ink), 4), node, self.only)
+        key = (self.grp, mat, round(float(ink), 4), node, self.only, raw)
         self.buckets.setdefault(key, []).append(geo)
         if node is None and floor and kind_of(mat) == "other":
             self.floor_parts.append(geo)
 
+    def into(self, node):
+        """`with k.into(node):` draws the following parts into a moving node, in its own frame (a sub-kit's, as the JS builds
+        a moving piece in its own Kit)"""
+        k = self
+
+        class _I:
+            def __enter__(s):
+                s.save = (k.base, k.yaw, k.sc, k.target)
+                k.base, k.yaw, k.sc, k.target = Matrix.Identity(4), 0.0, 1.0, node
+
+            def __exit__(s, *a):
+                k.base, k.yaw, k.sc, k.target = s.save
+        return _I()
+
     def add(self, geo, mat, x=0, y=0, z=0, rx=0, ry=0, rz=0, q=None, ink=0.06, floor=True):
         m = self.base @ Matrix.Translation((x, y, z)) @ (q if q is not None else euler(rx, ry, rz))
+        if self.target:
+            self.part(self.target, geo, mat, m, ink)
+            return None
         g = place(geo, m)
         self._put(g, mat, ink, floor=floor)
         return g
@@ -370,6 +388,36 @@ class Kit:
         """geometry in a moving node's frame (m places it there; the frame's scale is baked in)."""
         sc = self.nodes[node].sc
         self._put(place(geo, Matrix.Scale(sc, 4) @ m), mat, ink, node=node)
+
+    def add_raw(self, geo, mat, m, ink=0.0, node=None):
+        """kit.py-style geometry ((verts, faces), shaded by angle like kit.mesh) placed by m (in a moving node's frame if node)"""
+        verts, faces = geo
+        if node:
+            m = Matrix.Scale(self.nodes[node].sc, 4) @ m
+        self._put(([tuple(m @ Vector(v)) for v in verts], [tuple(reversed(f)) for f in faces], None), mat, ink, node=node, raw=True)
+
+    def dish_head(self, x, y, z, rim, livery="owner", az=0.0, el=-0.5, spin=0.0, arm=0.0):
+        """models.js Kit.dishHead: the light dish head (dishkit.py head_pieces) with its neck foot at (x, y, z), rim `rim` m
+        from the axis, turned az (0 opens towards -z, pi +z), nodded el; livery 'owner' (the owner's dish livery) or 'none'
+        (plain, a wreck's). With spin (rad/s) it turns about the vertical through (x, y, z) at the end of an `arm` m boom."""
+        kk = rim / RIM
+        own = livery == "owner"
+        body, stripe = {"none": (0xC9C3D9, 0xFFF4E0), "rustmoon": (0x6A5A48, 0x7DFF3A)}.get(livery, (0, 0))
+        slots = {"body": T(S.livery) if own else T(body), "stripe": T(S.stripe) if own else T(stripe), "steel": T(0x55607A),
+                 "dark": T(0x2A2540), "white": T(0xF3EEE4), "dish": T(0xFFF4E0), "hazard": T(0xFFD23F), "green": G(0x7DFF6A)}
+        node = None
+        if spin:
+            node = self.dyn("spin", x, y, z, speed=spin)
+            m0 = Matrix.Translation((0, (YP - NECK) * kk, arm))
+            if arm:
+                self.part(node, cylinder(1.2 * kk, 1.2 * kk, arm, 5), T(0x3A3550), Matrix.Translation((0, 0, arm / 2)) @ Matrix.Rotation(math.pi / 2, 4, "X"), ink=0.03)
+        else:
+            m0 = self.base @ Matrix.Translation((x, y + (YP - NECK) * kk, z))
+        turn, nod, Sk = Matrix.Rotation(az, 4, "Y"), Matrix.Rotation(el, 4, "X"), Matrix.Scale(kk, 4)
+        frames = {"yaw": m0 @ turn @ Sk, "tilt": m0 @ turn @ nod @ Sk}
+        for _piece, geo, slot, ink, part in head_pieces():
+            self.add_raw(geo, slots[slot], frames[part], ink * kk if ink >= 0.04 else 0, node=node)
+        return node
 
     def blinker(self, x, y, z, color=0xFF2A4A, r=0.4):
         nd = self.dyn("blink", x, y, z)
@@ -533,8 +581,8 @@ class Kit:
     def finish(self):
         if self.floor_cols:
             self._floor_colliders()
-        holders = {}
-        for (grp, mat, ink, node, only), geos in self.buckets.items():
+        holders, used = {}, set()
+        for (grp, mat, ink, node, only, raw), geos in self.buckets.items():
             parent = self.nodes[node].obj if node else self.root
             if only:
                 hk = (node, only)
@@ -547,9 +595,18 @@ class Kit:
                 o = len(verts)
                 verts.extend(v)
                 faces.extend(tuple(i + o for i in fc) for fc in f)
-                smooth.extend(s)
-            name = f"{self.kind}_{grp}_{mat}_{int(round(ink * 1000))}" + (f"_{'_'.join(only)}" if only else "") + (f"_{node}" if node else self.sfx)
-            mesh_smooth(name, (verts, faces, smooth), mat, parent, ink)
+                if s:
+                    smooth.extend(s)
+            name = f"{self.kind}_{grp}_{mat}_{int(round(ink * 1000))}" + ("_dish" if raw else "") + (f"_{'_'.join(only)}" if only else "") + (f"_{node}" if node else self.sfx)
+            base, n = name, 1
+            while name in used:  # (two outline weights that round to the same millimetre)
+                n += 1
+                name = f"{base}_{n}"
+            used.add(name)
+            if raw:  # (kit.py geometry: smoothed by angle, normals recalculated)
+                mesh(name, (verts, [tuple(reversed(f)) for f in faces]), mat, parent, ink)
+            else:
+                mesh_smooth(name, (verts, faces, smooth), mat, parent, ink)
         for i, c in enumerate(self.cols):
             name = f"col_{self.kind}_{i}{self.sfx}"
             if c["type"] == "box":
@@ -990,3 +1047,139 @@ def pipe_run(k, pts, y, r=0.3, color=0xD8D4E8):
             px, pz = a[0] + (b[0] - a[0]) * t / ln, a[1] + (b[1] - a[1]) * t / ln
             k.box(0.5, y - r, 0.2, T(STEEL), px, F, pz, ry=math.atan2(b[0] - a[0], b[1] - a[1]), ink=0)
             t += 4
+
+
+def shelter(k, x, z, ry, w, d, label=None, sc=1.45):
+    """an equipment shelter: a squat block hut with a door, AC units on a frame, a door canopy, vents; door to local +z"""
+    with k.within(x, z, ry, sc):
+        k.box(w + 0.8, 0.4, d + 0.8, T(S.conc), 0, 0, 0, ink=0.04)
+        k.box(w, 3.4, d, T(S.body), 0, F, 0, ink=0.08)
+        k.box(w + 0.4, 0.4, d + 0.4, T(S.roof), 0, F + 3.4, 0, ink=0.04)
+        k.box(w + 0.42, 0.14, d + 0.42, T(S.trim), 0, F + 3.8, 0, ink=0)
+        k.box(1.3, 2.4, 0.1, T(S.dark), -w / 4, F, d / 2 + 0.03, ink=0.02)
+        k.box(0.4, 0.2, 0.2, G(WARM), -w / 4, F + 2.6, d / 2 + 0.12, ink=0)
+        # two air-conditioning units stacked on a steel frame against the end wall, their fans out
+        for sz in (-1, 1):
+            for sx in (0.05, 0.75):
+                k.box(0.08, 2.05, 0.08, T(STEEL), w / 2 + sx, F, -d / 4 + sz * 0.4, ink=0)
+        for i in range(2):
+            k.box(0.7, 0.95, 1.4, T(LIGHT), w / 2 + 0.4, F + 0.05 + i * 1.0, -d / 4, ink=0.03)
+            k.add(cylinder(0.36, 0.36, 0.06, 12), T(DARK), w / 2 + 0.77, F + 0.52 + i * 1.0, -d / 4, rz=math.pi / 2, ink=0)
+        k.solid(0.35, 1.0, 0.7, w / 2 + 0.4, -d / 4, 0, F)
+        # a door canopy, a vent hood, a cable entry box on the roof
+        k.box(1.9, 0.12, 0.9, T(S.roof), -w / 4, F + 2.75, d / 2 + 0.45, ink=0.02)
+        for sd in (-1, 1):
+            k.beam((-w / 4 + sd * 0.85, F + 2.75, d / 2 + 0.85), (-w / 4 + sd * 0.85, F + 2.2, d / 2 + 0.02), 0.03, T(DARK), ink=0)
+        k.box(0.9, 0.5, 0.35, T(STEEL), w / 4, F + 2.3, d / 2 + 0.17, ink=0.02)
+        k.solid(0.45, 0.25, 0.18, w / 4, d / 2 + 0.17, 0, F + 2.3)
+        k.box(0.8, 0.35, 0.8, T(STEEL), -w / 2 + 1.2, F + 3.8, 0, ink=0.02)
+        k.solid(0.4, 0.17, 0.4, -w / 2 + 1.2, 0, 0, F + 3.8)
+        k.solid(w / 2, (F + 3.9) / 2, d / 2, 0, 0)
+
+
+def mesh_fence(k, r, gap, h=2.8):
+    """a security fence of posts, rails and mesh round the yard, a gap at the gate (+z) between two gateposts"""
+    step = 3.2 / r
+    a = gap
+    while a < TAU - gap - 1e-3:
+        x, z = polar(r, a)
+        b = min(a + step, TAU - gap)
+        x2, z2 = polar(r, b)
+        k.cyl(0.07, 0.07, h + 0.4, 5, T(S.dark), x, F, z, ink=0.02)
+        if b - a >= 1e-3:
+            for y in (0.2, h):
+                k.beam((x, F + y, z), (x2, F + y, z2), 0.03, T(S.dark), ink=0, seg=3)
+            k.add(plane(math.hypot(x2 - x, z2 - z), h - 0.2), GLASS(0x3A3550, 0.3), (x + x2) / 2, F + h / 2 + 0.1, (z + z2) / 2, ry=math.atan2(x2 - x, z2 - z) + math.pi / 2, ink=0)
+            k.solid(math.hypot(x2 - x, z2 - z) / 2, (F + h) / 2, 0.1, (x + x2) / 2, (z + z2) / 2, math.atan2(x2 - x, z2 - z) - math.pi / 2)
+        a += step
+    for sd in (-1, 1):
+        x, z = polar(r, gap if sd > 0 else TAU - gap)
+        k.box(0.4, h + 1, 0.4, T(S.trim), x, F, z, ink=0.03)
+        k.column(0.25, F + h + 1, x, z)
+
+
+def light_string(k, pts, colors, n=8, sag=1.1):
+    """party / pirate lights sagging between posts"""
+    for i in range(len(pts) - 1):
+        (ax, ay, az), (bx, by, bz) = pts[i], pts[i + 1]
+        prev = (ax, ay, az)
+        for j in range(1, n + 1):
+            t = j / n
+            p = (ax + (bx - ax) * t, ay + (by - ay) * t - sag * 4 * t * (1 - t), az + (bz - az) * t)
+            k.beam(prev, p, 0.03, T(0x1A1428), ink=0, seg=3)
+            if j < n:
+                k.ball(0.17, G(colors[(i * n + j) % len(colors)]), p[0], p[1] - 0.15, p[2], ink=0)
+            prev = p
+
+
+def scrap_box(k, x, y0, z, ry, color, rr, ln=6.1):
+    """a scrap-built container: a box body, ribs, rust patches; local +z the doors"""
+    with k.within(x, z, ry):
+        k.box(2.45, 2.6, ln, T(color), 0, y0, 0, ink=0.06)
+        for i in range(-2, 3):
+            k.box(2.53, 2.4, 0.08, T(color), 0, y0 + 0.1, i * ln / 5.5, ink=0)
+        for sd in (-1, 1):
+            k.box(2.55, 2.66, 0.2, T(DARK), 0, y0 - 0.03, sd * ln / 2, ink=0)
+        for i in range(2):
+            h = 0.8 + rr()
+            d = 1 + rr() * 2
+            px = 1.24 * (-1 if rr() < 0.5 else 1)
+            py = y0 + 0.3 + rr() * 1.2
+            pz = (rr() - 0.5) * ln * 0.7
+            k.box(0.08, min(h, y0 + 2.5 - py), d, T(RUST), px, py, pz, ink=0)  # (on the side, not over the roof)
+        k.solid(1.25, 1.3, ln / 2, 0, 0, 0, y0)
+
+
+def burn_barrel(k, x, z):
+    k.cyl(0.45, 0.45, 1.1, 10, T(RUST), x, F, z, ink=0.03)
+    nd = k.dyn("blink", x, F + 1.5, z)
+    k.part(nd, cylinder(0.0, 0.35, 0.9, 6), G(0xFF9F1C))
+    k.column(0.45, F + 1.1, x, z)
+
+
+def scrap_heap(k, cx, cz, Rr, H, n, rr):
+    """a heap of wreckage with colliders that follow it: the mound in steps, each piece big enough to stand on boxed as it lies"""
+    top = Rr * 0.22
+    k.add(cylinder(top, Rr, H, 20), T(0x75685A), cx, F + H / 2 - 0.05, cz, ink=0.06)
+    steps = max(math.ceil(H), math.ceil((Rr - top) / 0.7))
+    for i in range(steps):
+        y1 = (i + 1) / steps * H
+        k.column(Rr - (Rr - top) * (y1 / H), F + y1 - 0.05, cx, cz, F + i / steps * H - 0.05)
+    hh = lambda r: H if r < top else H * (Rr - r) / (Rr - top)
+    cols = (0x6B5A4A, 0x7A3A2A, 0x5A5F6E, 0x8A8698, 0x3A3550, 0xA05A2A, 0x4A6A5A, 0xC9A227)
+    for i in range(n):
+        r = math.sqrt(rr()) * Rr * 0.9
+        a = rr() * TAU
+        x, z, y = cx + math.sin(a) * r, cz + math.cos(a) * r, F + hh(r) - 0.2
+        rx = (rr() - 0.5) * 1.2
+        ry = rr() * 6.3
+        rz = (rr() - 0.5) * 1.2
+        col = cols[math.floor(rr() * len(cols))]
+        q = euler(rx, ry, rz)
+        kind = math.floor(rr() * 6)
+        if kind == 0:
+            w = 1.8 + rr() * 2.5
+            h = 1.1 + rr() * 1.2
+            d = 1.4 + rr()
+            k.add(cuboid(w, h, d), T(col), x, y + 0.3, z, q=q, ink=0.05)
+            k.solidQ(w / 2, h / 2, d / 2, x, y + 0.3, z, q)
+        elif kind == 1:  # (a half-pipe: the box over its half)
+            rad = 1 + rr()
+            ln = 2.5 + rr() * 2
+            o = q.to_3x3() @ Vector((rad / 2, 0, 0))
+            k.add(cylinder_arc(rad, rad, ln, 10, 0, math.pi), D(col), x, y + 0.4, z, q=q, ink=0.05)
+            k.solidQ(rad / 2, ln / 2, rad, x + o.x, y + 0.4 + o.y, z + o.z, q)
+        elif kind == 2:
+            k.add(torus_xy(0.85, 0.36, 6, 12), T(TYRE), x, y + 0.3, z, q=q, ink=0.05)
+        elif kind == 3:
+            k.add(cylinder(0.12, 0.12, 3 + rr() * 3, 5), T(STEEL), x, y + 0.2, z, rx=rx * 0.6, ry=ry, rz=rz, ink=0.03)  # (a bar stuck in the heap)
+        elif kind == 4:
+            k.add(cuboid(2.4, 0.16, 1.6), T(col), x, y + 0.2, z, q=q, ink=0.05)
+            k.solidQ(1.2, 0.1, 0.8, x, y + 0.2, z, q)
+        else:
+            k.add(cylinder(0.45, 0.45, 1.1, 8), T(col), x, y + 0.4, z, q=q, ink=0.05)
+            k.solidQ(0.45, 0.55, 0.45, x, y + 0.4, z, q)
+
+
+LOOTED = ("vostok", "meridian", "kepler", "spacecom")
+looted = lambda turn: [LOOTED[(i + turn) % 4] for i in range(4)]  # (outpostLooks.js looted: each box another livery)
