@@ -159,6 +159,7 @@ export function stepMover(o, dt, t, seed) {
   else if (u.spin) o.rotation.y += dt * (u.spin === true ? 0.6 : u.spin);
   else if (u.blink) o.visible = Math.sin(t * 4 + seed) > -0.3;
   else if (u.flag) o.rotation.y = Math.sin(t * 2 + seed) * 0.25;
+  else if (u.ticker) o.material.map.offset.x = (t * u.ticker) % 1; // (a price tape: outpostModels.js tickerMat)
 }
 
 // the black lakes' rippling surface (buildLakes; the Asset Row's lake too)

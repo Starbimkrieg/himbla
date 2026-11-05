@@ -10,7 +10,7 @@
 # Run it with any Python that has the bpy module (pip install bpy):
 #     MOONRUNNER_REPO=<checkout> python tools/blender/build_outposts.py
 # or inside Blender:  exec(open(r"<repo>/tools/blender/build_outposts.py").read())
-# MOONRUNNER_EXPORT=0 builds the scene without writing the file; OUTPOSTS=tower,mast builds some kinds only.
+# MOONRUNNER_EXPORT=0 builds the scene without writing the file; OUTPOSTS=tower,mast builds some kinds only (and never writes it).
 #
 # To add a kind: write build_<kind>(k) below, register it in BUILDERS with its draft letter (src/outpostModels.js
 # OUTPOST_PICK, which seeds the random streams), and add it to GLB_KINDS in src/staticContract.js once it audits clean.
@@ -271,50 +271,84 @@ def build_kiosk(k):
     with k.grow(0, 0, HS):
         with k.group("main"):
             if not k.wreck:
-                # ground floor: a solid core with four counters, a canopy each side
-                k.box(W - 3, H1, W - 3, T(S.body), 0, F, 0, ink=0.1)
+                # ground floor: a stock room in the middle, a corner pier at each corner, and on each face a secured shopfront:
+                # a glazed bay 6.8 m wide and 1.6 m deep with its trader behind reinforced glass, goods on lit shelves, a steel
+                # counter and a deal tray under the glass; a canopy over each face
+                C2, PZ = 3.4, (W - 3) / 2  # (the stock room's half width; the faces)
+                k.box(C2 * 2, H1, C2 * 2, T(S.body), 0, F, 0, ink=0.1)
+                GY0, GY1 = F + 0.7, F + 3.3  # (the glass, from the counter's top (1 m up, grown) to the lintel)
+                CT = F + H1 - 0.17  # (the canopies' top: under the trading floor's base slab, not level with it)
                 for i in range(4):
                     with k.within(0, 0, i / 4 * TAU):
-                        fz = (W - 3) / 2
-                        k.box(7.4, 1.8, 0.1, G(S.glow), 0, F + 1.3, fz + 0.03, ink=0)
-                        k.box(8.6, 1.08, 1.0, T(S.body), 0, F, fz + 0.9, ink=0.05)
-                        k.box(8.8, 0.1, 1.3, T(WOOD), 0, F + 1.08, fz + 0.9, ink=0.02)
-                        k.box(8.6, 0.25, 0.05, T(FAC), 0, F + 0.6, fz + 1.41, ink=0)
-                        k.solid(4.4, (F + 1.18) / 2, 0.65, 0, fz + 0.9)
-                        # the canopy: a cantilevered slab with a fascia
-                        k.box(W + 2, 0.35, 3.6, T(S.roof), 0, F + H1 - 0.1, fz + 1.8, ink=0.06)
-                        k.box(W + 2.1, 0.5, 0.12, T(FAC), 0, F + H1 - 0.25, fz + 3.62, ink=0.02)
-                        k.solid((W + 2) / 2, 0.18, 1.8, 0, fz + 1.8, 0, F + H1 - 0.1)
-                        for j in range(6):  # goods along the counter
-                            geo = cuboid(0.4, 0.35, 0.4) if j % 2 else sphere(0.2, 6, 4)
-                            k.add(geo, T(GOODS5[math.floor(rr() * 5)]), -3.6 + j * 1.45, F + 1.3, fz + 0.9, ink=0.02)
+                        k.box(PZ - C2, H1, PZ - C2, T(S.body), (C2 + PZ) / 2, F, (C2 + PZ) / 2, ink=0.08)  # (this face's right-hand corner pier)
+                        k.box(C2 * 2, F + H1 - GY1, PZ - C2, T(S.body), 0, GY1, (C2 + PZ) / 2, ink=0.06)  # lintel
+                        k.box(C2 * 2, 0.06, PZ - C2 - 0.4, G(0xFFF3B0), 0, GY1 - 0.06, (C2 + PZ) / 2 - 0.2, ink=0)  # the bay's ceiling light
+                        # the counter: a low wall in the face, a steel top with a ledge out front, the deal tray under the glass
+                        k.box(C2 * 2, 0.62, 0.4, T(S.panel), 0, F, PZ - 0.2, ink=0.05)
+                        k.box(C2 * 2, 0.08, 0.8, T(0xC9CED8), 0, F + 0.62, PZ - 0.15, ink=0.02)
+                        k.box(C2 * 2, 0.18, 0.04, T(FAC), 0, F + 0.3, PZ + 0.02, ink=0)
+                        k.box(1.0, 0.05, 0.36, T(0x8A8698), 0, F + 0.65, PZ + 0.02, ink=0)  # (the deal tray, through under the glass)
+                        k.solid(C2, (F + 0.7) / 2, 0.1, 0, PZ + 0.15)  # (the counter's front and ledge, out past the house's block)
+                        # the glass: reinforced panes in a steel frame, mullions every 1.36 m, a transom, a speaking grille
+                        k.box(C2 * 2, GY1 - GY0, 0.05, GLASS(0xBFEFFF, 0.28), 0, GY0, PZ - 0.2, ink=0)
+                        for x in (-C2 + 0.06, C2 - 0.06):
+                            k.box(0.12, GY1 - GY0, 0.16, T(S.dark), x, GY0, PZ - 0.2, ink=0.02)
+                        for n in range(1, 5):
+                            k.box(0.08, GY1 - GY0, 0.12, T(S.dark), -C2 + n * C2 * 2 / 5, GY0, PZ - 0.2, ink=0.015)
+                        k.box(C2 * 2, 0.08, 0.12, T(S.dark), 0, GY0 + 1.7, PZ - 0.2, ink=0.015)  # transom
+                        k.box(C2 * 2, 0.1, 0.16, T(S.dark), 0, GY0 - 0.02, PZ - 0.2, ink=0.02)
+                        for gx in (-C2 + C2 * 2 / 5 * 1.5, C2 - C2 * 2 / 5 * 1.5):  # (a speaking grille in a pane each side of the middle)
+                            k.add(cylinder(0.12, 0.12, 0.03, 12), T(0x55607A), gx, GY0 + 0.75, PZ - 0.16, rx=math.pi / 2, ink=0)
+                        # inside: the lit back wall, three shelves of goods on it, the trader at the counter
+                        k.box(C2 * 2 - 0.6, 2.4, 0.04, G(S.glow), 0, F + 0.6, C2 + 0.02, ink=0)
+                        for sy in (F + 1.0, F + 1.75, F + 2.5):
+                            k.box(C2 * 2 - 0.8, 0.06, 0.42, T(WOOD), 0, sy, C2 + 0.25, ink=0.015)
+                            for j in range(7):
+                                gx = -C2 + 0.75 + j * (C2 * 2 - 1.5) / 6
+                                col = GOODS5[math.floor(rr() * 5)]
+                                if j % 2:
+                                    k.box(0.32, 0.3, 0.3, T(col), gx, sy + 0.06, C2 + 0.25, ink=0.015)
+                                else:
+                                    k.add(sphere(0.17, 8, 5), T(col), gx, sy + 0.06 + 0.16, C2 + 0.25, ink=0.015)
+                        k.stand(1.2 if i % 2 else -1.2, F, C2 + 0.75, scale=1.3)
+                        # the canopy: a slab cantilevered from the face, its fascia; the front and back ones run past the corners
+                        # over the side ones' ends, so no two overlap
+                        cw = 2 * (PZ + 3.6) if i % 2 == 0 else 2 * PZ
+                        k.box(cw, 0.35, 3.6, T(S.roof), 0, CT - 0.35, PZ + 1.8, ink=0.06)
+                        k.box(2 * (PZ + 3.62) + 0.06 if i % 2 == 0 else 2 * (PZ + 3.56), 0.5, 0.12, T(FAC), 0, CT - 0.5, PZ + 3.62, ink=0.02)
+                        k.solid(cw / 2, 0.18, 1.8, 0, PZ + 1.8, 0, CT - 0.36)
                 k.solid((W - 3) / 2, (F + H1) / 2, (W - 3) / 2, 0, 0)
-                # upper floor: the glazed trading floor, price boards on its faces
+                # upper floor: the glazed trading floor, price tickers on its faces
                 Y2 = F + H1 + 0.25
                 k.box(W, 0.4, W, T(S.body), 0, Y2 - 0.4, 0, ink=0.06)
                 k.box(W - 1, H2, W - 1, GLASS(GLASSC, 0.35), 0, Y2, 0, ink=0)
                 k.box(W - 2.2, H2 - 0.2, W - 2.2, T(S.panel), 0, Y2, 0, ink=0)
                 for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
                     k.box(0.5, H2, 0.5, T(S.body), sx * (W - 1) / 2, Y2, sz * (W - 1) / 2, ink=0.03)
+                QUOTES = "HE3:+412.50,ICE:-88.20,REG:+21.75,ORE:-5.40,CRYO:+133.00,FUEL:+64.10,SALV:-12.30,MEDS:+97.80,CHIP:-41.25,AIR:+8.90"
                 for i in range(4):
                     with k.within(0, 0, i / 4 * TAU):
-                        k.box(7.2, 2.0, 0.1, G(0x0D1A2A), 0, Y2 + 0.9, (W - 1) / 2 + 0.06, ink=0)
-                        for j in range(5):
-                            bw = 1.0 + rr() * 2.4
-                            bx = -2.6 + rr() * 2
-                            k.box(bw, 0.14, 0.04, G(0x7DFF6A if j % 2 else 0xFF3B5C), bx, Y2 + 1.2 + j * 0.34, (W - 1) / 2 + 0.12, ink=0)
+                        k.box(7.2, 2.0, 0.1, T(0x0D1A2A), 0, Y2 + 0.9, (W - 1) / 2 + 0.06, ink=0.02)  # (the screen's housing)
+                        k.ticker(0, Y2 + 1.9, (W - 1) / 2 + 0.115, 0, 7.0, 1.8, QUOTES, rows=3, speed=0.012 + 0.003 * i)
                 k.box(W + 0.6, 0.6, W + 0.6, T(S.roof), 0, Y2 + H2, 0, ink=0.08)
                 k.box(W + 0.7, 0.2, W + 0.7, T(FAC), 0, Y2 + H2 + 0.6, 0, ink=0)
                 k.solid(W / 2 + 0.3, (H2 + 1.2) / 2, W / 2 + 0.3, 0, 0, 0, Y2 - 0.4)
-                # the clock lantern on the roof: four faces, a cupola and the ring
+                # the clock lantern on the roof: four faces whose hands go round, a cupola and the ring
                 Y3 = Y2 + H2 + 0.6
                 k.box(4.4, 4.2, 4.4, T(S.body), 0, Y3, 0, ink=0.06)
                 for i in range(4):
                     with k.within(0, 0, i / 4 * TAU):
-                        k.add(cylinder(1.5, 1.5, 0.12, 24), G(0xFFF8E0), 0, Y3 + 2.3, 2.23, rx=math.pi / 2, ink=0.02)
-                        k.add(torus_xy(1.55, 0.12, 4, 24), T(S.dark), 0, Y3 + 2.3, 2.27, ink=0)
-                        k.box(0.1, 1.1, 0.06, T(S.dark), 0, Y3 + 2.75, 2.32, ink=0)
-                        k.box(0.8, 0.1, 0.06, T(S.dark), 0.35, Y3 + 2.3, 2.32, ink=0)
+                        k.add(cylinder(1.5, 1.5, 0.12, 24), G(0xFFF8E0), 0, Y3 + 2.3, 2.26, rx=math.pi / 2, ink=0.02)
+                        k.add(torus_xy(1.55, 0.12, 4, 24), T(S.dark), 0, Y3 + 2.3, 2.3, ink=0)
+                        for n in range(12):  # (the hour marks)
+                            a = n / 12 * TAU
+                            k.box(0.07 if n % 3 else 0.12, 0.26 if n % 3 else 0.36, 0.02, T(S.dark), math.sin(a) * 1.22, Y3 + 2.3 + math.cos(a) * 1.22 - (0.13 if n % 3 else 0.18), 2.33, rz=-a, ink=0)
+                        k.add(cylinder(0.11, 0.11, 0.08, 12), T(S.dark), 0, Y3 + 2.3, 2.36, rx=math.pi / 2, ink=0)  # (the hands' boss)
+                        # the hands: each on a node turned so its y runs out of the face (the game spins a node about its y);
+                        # clockwise is about -y. Minute hand a lap a minute, the hour hand a twelfth of that
+                        for hl, hw, dz, sp, a0 in ((1.2, 0.08, 0.36, -TAU / 60, 0.0), (0.8, 0.13, 0.33, -TAU / 720, 1.9 + i)):
+                            nd = k.dyn("spin", 0, Y3 + 2.3, 2.33 + dz - 0.33, speed=sp, rot=Matrix.Rotation(math.pi / 2, 4, "X") @ Matrix.Rotation(-a0, 4, "Y"))
+                            k.part(nd, cuboid(hw, 0.03, hl), T(S.dark), Matrix.Translation((0, 0.02, -hl / 2 + 0.12)), ink=0)
                 k.add(cylinder(0.0, 3.6, 3.0, 4), T(S.roof), 0, Y3 + 4.2 + 1.5, 0, ry=math.pi / 4, ink=0.06)
                 k.add(torus_xy(0.9, 0.12, 6, 20), T(FAC), 0, Y3 + 8.6, 0, ink=0.03)
                 k.cyl(0.06, 0.09, 3.2, 6, T(LIGHT), 0, Y3 + 7.0, 0, ink=0.02)
@@ -371,7 +405,7 @@ def build_kiosk(k):
                 if i == 1 and sd < 0:
                     continue  # (keeps the stock yard's corner open)
                 with k.within(0, 0, a):
-                    stall(k, sd * 7.6, r2, -math.pi / 2 if sd > 0 else math.pi / 2, (FAC, 0xFF5C8A, YEL, 0x7DFF3A)[(i + (1 if r2 > 30 else 0)) % 4], rr)
+                    stall(k, sd * 7.6, r2, -math.pi / 2 if sd > 0 else math.pi / 2, (FAC, 0xFF5C8A, YEL, 0x7DFF3A)[(i + (1 if r2 > 30 else 0)) % 4], rr, vendor=(i + sd + (1 if r2 > 30 else 0)) % 2 == 0)
     # lamps along the lanes, past the canopies
     for i in range(4):
         for sd in (-1, 1):
@@ -381,7 +415,7 @@ def build_kiosk(k):
     k.raid_at(15.6, -15.4, 0xFF2E88)
     flag_pole(k, -6.5, 37.4)
     flag_pole(k, 6.5, 37.4)
-    hover_cart(k, 24, 30, 2.5, rr)
+    hover_forklift(k, 24, 30, 2.5)
     # three traders: round the house under its canopies and out along the lanes
     k.walkers([
         [(0, 36), (0, 11.5), (11.5, 11.5), (11.5, -11.5), (-11.5, -11.5), (-11.5, 11.5), (-1, 11.5)],
@@ -1211,5 +1245,7 @@ _clash = [o.name for o in C.objects if o.name[-4:-3] == "." and o.name[-3:].isdi
 assert not _clash, f"object names must be unique across the file, Blender renamed {_clash[:3]}"
 print("built", len(C.objects), "objects:", sum(o.type == "MESH" for o in C.objects), "meshes,", sum(o.type == "EMPTY" for o in C.objects), "empties")
 
-if os.environ.get("MOONRUNNER_EXPORT", "1") == "1":
+if os.environ.get("MOONRUNNER_EXPORT", "1") == "1" and not only:  # (some kinds only: never written over the whole file)
     export(OUT, C.objects)
+elif only:
+    print("OUTPOSTS set: built", ", ".join(only), "without writing the file")

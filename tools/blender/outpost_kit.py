@@ -249,7 +249,7 @@ class Kit:
         self.only = None             # owners the parts drawn now are for (an emblem each): a tuple, or None for all
         self.buckets = {}            # (grp, mat, ink, node id, only) -> [geo, ...]
         self.nodes = {}              # node id -> Node
-        self.cols, self.hits, self.stacks, self.points, self.texts = [], [], [], {}, []
+        self.cols, self.hits, self.stacks, self.points, self.texts, self.tickers, self.stands = [], [], [], {}, [], [], []
         self.walk = None
         self.floor_cols, self.floor_tol = True, 0.03
         self.floor_parts = []        # (geo) every part the floor pass reads
@@ -322,10 +322,10 @@ class Kit:
         return _O()
 
     # -- parts
-    def _put(self, geo, mat, ink, node=None, floor=True, raw=False):
+    def _put(self, geo, mat, ink, node=None, floor=True, raw=False, ao=True):
         if kind_of(mat) != "other":
             ink = 0  # (glass and light beams get no outline)
-        key = (self.grp, mat, round(float(ink), 4), node, self.only, raw)
+        key = (self.grp, mat, round(float(ink), 4), node, self.only, raw, ao)
         self.buckets.setdefault(key, []).append(geo)
         if node is None and floor and kind_of(mat) == "other":
             self.floor_parts.append(geo)
@@ -344,13 +344,13 @@ class Kit:
                 k.base, k.yaw, k.sc, k.target = s.save
         return _I()
 
-    def add(self, geo, mat, x=0, y=0, z=0, rx=0, ry=0, rz=0, q=None, ink=0.06, floor=True):
+    def add(self, geo, mat, x=0, y=0, z=0, rx=0, ry=0, rz=0, q=None, ink=0.06, floor=True, ao=True):
         m = self.base @ Matrix.Translation((x, y, z)) @ (q if q is not None else euler(rx, ry, rz))
         if self.target:
             self.part(self.target, geo, mat, m, ink)
             return None
         g = place(geo, m)
-        self._put(g, mat, ink, floor=floor)
+        self._put(g, mat, ink, floor=floor, ao=ao)
         return g
 
     def box(self, w, h, d, mat, x, y0, z, ink=0.06, **o):
@@ -374,12 +374,17 @@ class Kit:
         return self.box(w, h, math.hypot(dx, dz), mat, (a[0] + b[0]) / 2, y0, (a[1] + b[1]) / 2, ink=ink, ry=math.atan2(dx, dz), **o)
 
     # -- moving parts
-    def dyn(self, anim, x, y, z, ry=0.0, speed=None):
+    def dyn(self, anim, x, y, z, ry=0.0, speed=None, rot=None):
+        """rot: a full turn in the current frame (the game spins a node about its own y: a clock hand's node has its y out of
+        the face)"""
         p = self.P(x, y, z)
         e = pivot(self.uid(anim), (p.x, p.y, p.z), self.root, anim=anim)
         if speed:
             e["speed"] = float(speed)
-        e.rotation_euler = (0, 0, self.yaw + ry)
+        if rot is not None:
+            e.matrix_basis = CB @ (Matrix.Translation(p) @ self._rot_q(rot)) @ CB_INV
+        else:
+            e.rotation_euler = (0, 0, self.yaw + ry)
         node = Node(e, self.sc)
         self.nodes[e.name] = node
         return e.name
@@ -495,6 +500,18 @@ class Kit:
         p = self.P(x, y0, z)
         self.stacks.append(dict(p=(p.x, p.y, p.z), yaw=self.yaw + ry, n=n, factions=factions if isinstance(factions, str) else ",".join(factions)))
 
+    def ticker(self, x, y, z, ry, w, h, items, rows=1, speed=0.03):
+        """a price screen the game draws: a tape of quotes (\"SYM:+1.5,...\") scrolling across w x h m, facing local +z"""
+        p = self.P(x, y, z)
+        self.tickers.append(dict(p=(p.x, p.y, p.z), yaw=self.yaw + ry, w=w * self.sc, h=h * self.sc, items=items, rows=rows, speed=speed))
+
+    def stand(self, x, y, z, yaw=0.0, scale=1.0):
+        """someone who keeps their post here (a trader behind a counter), facing local +z turned yaw (outpostWalkers.js stands)"""
+        if self.wreck:
+            return
+        p = self.P(x, y, z)
+        self.stands.append([round(p.x, 3), round(p.y, 3), round(p.z, 3), round(self.yaw + yaw, 4), scale])
+
     def text(self, words, x, y, z, ry, w, fg="#ffd23f", bg="#241a3a", stroke="#120a1e", rz=0, back=True, off=0.17):
         """a sign face the game draws (canvas text), facing local +z turned ry, w m wide"""
         p = self.P(x, y, z)
@@ -582,7 +599,7 @@ class Kit:
         if self.floor_cols:
             self._floor_colliders()
         holders, used = {}, set()
-        for (grp, mat, ink, node, only, raw), geos in self.buckets.items():
+        for (grp, mat, ink, node, only, raw, ao), geos in self.buckets.items():
             parent = self.nodes[node].obj if node else self.root
             if only:
                 hk = (node, only)
@@ -597,16 +614,18 @@ class Kit:
                 faces.extend(tuple(i + o for i in fc) for fc in f)
                 if s:
                     smooth.extend(s)
-            name = f"{self.kind}_{grp}_{mat}_{int(round(ink * 1000))}" + ("_dish" if raw else "") + (f"_{'_'.join(only)}" if only else "") + (f"_{node}" if node else self.sfx)
+            name = f"{self.kind}_{grp}_{mat}_{int(round(ink * 1000))}" + ("_dish" if raw else "") + ("" if ao else "_paint") + (f"_{'_'.join(only)}" if only else "") + (f"_{node}" if node else self.sfx)
             base, n = name, 1
             while name in used:  # (two outline weights that round to the same millimetre)
                 n += 1
                 name = f"{base}_{n}"
             used.add(name)
             if raw:  # (kit.py geometry: smoothed by angle, normals recalculated)
-                mesh(name, (verts, [tuple(reversed(f)) for f in faces]), mat, parent, ink)
+                o = mesh(name, (verts, [tuple(reversed(f)) for f in faces]), mat, parent, ink)
             else:
-                mesh_smooth(name, (verts, faces, smooth), mat, parent, ink)
+                o = mesh_smooth(name, (verts, faces, smooth), mat, parent, ink)
+            if not ao:
+                o["ao"] = 0
         for i, c in enumerate(self.cols):
             name = f"col_{self.kind}_{i}{self.sfx}"
             if c["type"] == "box":
@@ -637,6 +656,12 @@ class Kit:
             _empty(f"text_{self.kind}_{i}{self.sfx}", m, self.root, "PLAIN_AXES", role="text", str=t["str"], w=t["w"], off=t["off"], fg=t["fg"], bg=t["bg"], stroke=t["stroke"], back=t["back"])
         for role, p in self.points.items():
             _empty(f"{role}_{self.kind}{self.sfx}", Matrix.Translation(p), self.root, "ARROWS", role=role)
+        for i, t in enumerate(self.tickers):
+            m = Matrix.Translation(t["p"]) @ Matrix.Rotation(t["yaw"], 4, "Y")
+            _empty(f"ticker_{self.kind}_{i}{self.sfx}", m, self.root, "PLAIN_AXES", role="ticker", w=t["w"], h=t["h"], items=t["items"], rows=t["rows"], speed=t["speed"])
+        if self.stands and not self.wreck:
+            self.walk = self.walk or {"kind": "person", "routes": []}
+            self.walk["stands"] = self.stands
         if self.walk:
             self.root["walkers"] = json.dumps(self.walk, separators=(",", ":"))
 
@@ -675,11 +700,11 @@ def yard(k, color, edge):
 
 def paint_at(k, x, z, r, w, color, y=0):
     """a painted ring on the ground, 4 mm proud"""
-    k.add(ring_flat(r - w, r + w, max(24, js_round(r * 4))), T(color), x, F + y + 0.004, z, ink=0)
+    k.add(ring_flat(r - w, r + w, max(24, js_round(r * 4))), T(color), x, F + y + 0.004, z, ink=0, ao=False)
 
 
 def paint_strip(k, a, b, w, color, lift=0):
-    k.strip(a, b, w, 0.01, T(color), F - 0.006 + lift, ink=0, floor=bool(lift and lift >= 0.05))
+    k.strip(a, b, w, 0.01, T(color), F + 0.002 + (lift if lift >= 0.05 else lift * 4), ink=0, floor=bool(lift and lift >= 0.05), ao=False)  # (12 mm proud and more for each layer over it: none shimmers against the apron; no contact shade, which a strip 80 m long smeared from its ends)
 
 
 def lamp_post(k, x, z, h=5.5, color=WARM, arm=True):
@@ -945,27 +970,85 @@ def mystery_crates(k, x, z, yaw):
             k.text("?", cx + math.sin(ry) * (s / 2 + 0.01), F + cy + s * 0.5, cz + math.cos(ry) * (s / 2 + 0.01), ry, s * 0.62, fg="#ff2e88", bg="#2a1240", back=False, off=0.02)
 
 
-def hover_cart(k, x, z, ry, rr):
-    """a hover-cart (Meridian trade runabout) with a load of crates"""
-    with k.within(x, z, ry):
-        k.box(2.6, 1.0, 4.8, T(YEL), 0, 0.8, 0, ink=0.06)
-        k.box(2.62, 0.24, 4.82, T(S.trim), 0, 1.3, 0, ink=0)
-        k.box(2.3, 0.7, 1.3, T(YEL), 0, 1.05, 2.6, rx=0.5, ink=0.04)
-        k.box(1.6, 0.9, 1.0, T(DARK), 0, 1.8, 0.8, ink=0.03)
-        k.solid(0.8, 0.45, 0.5, 0, 0.8, 0, 1.8)
-        k.solid(1.15, 0.4, 0.55, 0, 2.75, 0, 0.8)
-        k.box(1.9, 0.8, 0.08, GLASS(GLASSC, 0.5), 0, 1.77, 1.46, rx=-0.4, ink=0.02)  # (leaning back: foot on the deck, top on the cab)
-        crate(k, -0.45, 1.8, -1.3, 1.0, 0x9A6A3A, 0.2)
-        crate(k, 0.55, 1.8, -1.5, 0.85, 0x2B59C3, -0.3)
+def hover_forklift(k, x, z, ry, sc=1.35):
+    """a Meridian hover-forklift, forks to local +z: a rounded chassis riding on four lit hover pads, the counterweight at the
+    back, the operator's seat and controls under a roll-over guard, the mast with its lift ram, carriage and forks, and on
+    them a pallet of crates; a beacon on the guard"""
+    with k.within(x, z, ry, sc):
+        DK, Y0 = 0.95, 0.55  # (the deck's top; the chassis' underside, over the pads)
+        m = lambda px, py, pz: k.base @ Matrix.Translation((px, py, pz))
+        # chassis: a rounded body, a stripe round it, a deck plate on it
+        k.add_raw(rbox(1.2, (DK - Y0) / 2, 1.75, 0.22, 20, 8), T(YEL), m(0, (DK + Y0) / 2, -0.1), ink=0.05)
+        k.box(2.42, 0.12, 3.2, T(S.trim), 0, Y0 + 0.12, -0.1, ink=0)
+        k.box(2.0, 0.04, 2.7, T(0x55505E), 0, DK - 0.035, -0.25, ink=0.01)
+        # four hover pads under the corners, each a ring housing with a lit disc and a faint downwash
         for sx in (-1, 1):
             for sz in (-1, 1):
-                k.cyl(0.5, 0.55, 0.28, 10, T(DARK), sx * 1.05, 0.5, sz * 1.75, ink=0.02)
-                k.cyl(0.45, 0.45, 0.05, 10, G(0x2EE6FF), sx * 1.05, 0.45, sz * 1.75, ink=0)
-        k.solid(1.3, 0.75, 2.4, 0, 0, 0, 0.3)
+                px, pz = sx * 0.85, -0.1 + sz * 1.25
+                k.cyl(0.48, 0.42, 0.22, 14, T(DARK), px, Y0 - 0.2, pz, ink=0.02)
+                k.cyl(0.36, 0.36, 0.03, 14, G(0x2EE6FF), px, Y0 - 0.215, pz, ink=0)
+                k.add(cone_open(0.5, 0.3, 14), BEAM(0x2EE6FF, 0.1), px, Y0 - 0.37, pz, rx=math.pi, ink=0)
+        # the counterweight across the back, its tow eye
+        k.add_raw(rbox(1.15, 0.5, 0.4, 0.3, 16, 8), T(0x3A3550), m(0, DK + 0.45, -1.55), ink=0.04)
+        k.cyl(0.12, 0.12, 0.2, 8, T(STEEL), 0, DK - 0.05, -2.0, rx=math.pi / 2, ink=0.01)
+        # the operator: a seat on its box, a control column with a little screen, the guard's four posts and its roof
+        k.box(1.0, 0.45, 0.8, T(0x3A3550), 0, DK, -0.75, ink=0.03)
+        k.box(0.8, 0.12, 0.7, T(0x2A2540), 0, DK + 0.45, -0.72, ink=0.015)
+        k.box(0.8, 0.8, 0.12, T(0x2A2540), 0, DK + 0.5, -1.08, rx=-0.15, ink=0.015)
+        k.box(0.5, 0.75, 0.35, T(S.dark), 0, DK, 0.45, ink=0.02)
+        k.box(0.42, 0.28, 0.05, G(0x7DFF6A), 0, DK + 0.62, 0.64, rx=-0.5, ink=0)
+        for sd in (-1, 1):
+            k.beam((sd * 0.12, DK + 0.75, 0.5), (sd * 0.16, DK + 1.05, 0.25), 0.03, T(DARK), ink=0.01)
+        RY = DK + 2.05
+        for sx in (-1, 1):
+            k.beam((sx * 0.95, DK, -1.15), (sx * 0.95, RY, -1.05), 0.06, T(S.dark), ink=0.015)
+            k.beam((sx * 0.95, DK, 0.75), (sx * 0.85, RY, 0.45), 0.06, T(S.dark), ink=0.015)
+        k.box(2.06, 0.1, 1.78, T(S.trim), 0, RY, -0.3, ink=0.02)
+        for n in range(4):
+            k.box(0.08, 0.06, 1.7, T(S.dark), -0.75 + n * 0.5, RY + 0.1, -0.3, ink=0)
+        k.box(1.78, 0.85, 0.04, GLASS(GLASSC, 0.35), 0, DK + 1.05, 0.54, rx=-0.145, ink=0)  # (the screen between the front posts, leaning with them)
+        nd = k.dyn("blink", 0, RY + 0.32, -0.3)
+        k.part(nd, sphere(0.12, 8, 6), G(0xFFB347))
+        k.cyl(0.08, 0.1, 0.12, 8, T(DARK), 0, RY + 0.1, -0.3, ink=0.01)
+        # the mast: two channels from the chassis' front, cross-heads, the ram up its middle, headlamps on top
+        MZ = 1.7
+        for sx in (-0.55, 0.55):
+            k.box(0.14, 3.2, 0.2, T(S.dark), sx, Y0, MZ, ink=0.02)
+        for my in (Y0 + 0.05, Y0 + 3.05):
+            k.box(1.3, 0.14, 0.2, T(S.dark), 0, my, MZ, ink=0.015)
+        k.cyl(0.08, 0.08, 2.85, 8, T(0xC9CED8), 0, Y0 + 0.2, MZ - 0.05, ink=0.01)  # (up into the cross-head)
+        k.cyl(0.12, 0.12, 1.2, 8, T(0x55607A), 0, Y0 + 0.2, MZ - 0.05, ink=0.01)
+        for sx in (-0.45, 0.45):
+            k.box(0.3, 0.2, 0.18, T(DARK), sx, Y0 + 3.19, MZ + 0.05, ink=0.01)
+            k.box(0.22, 0.13, 0.03, G(WARM), sx, Y0 + 3.22, MZ + 0.15, ink=0)
+        k.box(0.8, 0.8, 0.12, T(S.dark), 0, DK - 0.35, MZ - 0.16, ink=0.01)  # (the mast's foot on the chassis' nose)
+        # the carriage on the channels' fronts, the backrest grille, the forks: shanks down its face, tines out low
+        CY = 0.62
+        k.box(1.5, 0.75, 0.1, T(0x3A3550), 0, CY, MZ + 0.15, ink=0.02)
+        for n in range(5):
+            k.box(0.06, 0.9, 0.05, T(0x3A3550), -0.6 + n * 0.3, CY + 0.75, MZ + 0.15, ink=0)
+        k.box(1.5, 0.06, 0.05, T(0x3A3550), 0, CY + 1.62, MZ + 0.15, ink=0)
+        for sx in (-0.4, 0.4):
+            k.box(0.14, 0.75, 0.07, T(STEEL), sx, CY, MZ + 0.235, ink=0.01)
+            k.box(0.14, 0.07, 1.6, T(STEEL), sx, CY, MZ + 0.27 + 0.8, ink=0.01)
+        # the load: a pallet on the tines, crates on it
+        PY = CY + 0.07
+        for n in range(3):
+            k.box(0.12, 0.1, 1.2, T(WOOD), -0.55 + n * 0.55, PY, MZ + 1.1, ink=0.01)
+        for n in range(5):
+            k.box(1.3, 0.04, 0.2, T(0x9A6A3A), 0, PY + 0.1, MZ + 0.6 + n * 0.25, ink=0.01)
+        crate(k, -0.28, PY + 0.14, MZ + 1.15, 0.6, 0x9A6A3A, 0.15)
+        crate(k, 0.33, PY + 0.14, MZ + 1.0, 0.5, 0x2B59C3, -0.2)
+        crate(k, 0.0, PY + 0.74, MZ + 1.12, 0.45, 0xC9A227, 0.4)
+        # colliders: the chassis to its deck, the counterweight, the guard's roof, the mast and the load
+        k.solid(1.2, (DK - Y0 + 0.4) / 2, 1.75, 0, -0.1, 0, Y0 - 0.4)
+        k.solid(1.15, 0.5, 0.4, 0, -1.55, 0, DK - 0.05)
+        k.solid(1.03, 0.05, 0.89, 0, -0.3, 0, RY)
+        k.solid(0.7, 1.6, 0.25, 0, MZ + 0.05, 0, Y0)
 
 
-def stall(k, x, z, ry, awn, rr, sc=1.3):
-    """a market stall facing local +z: counter, posts, striped awning, goods"""
+def stall(k, x, z, ry, awn, rr, sc=1.3, vendor=False):
+    """a market stall facing local +z: counter, posts, striped awning, goods; `vendor`: its stallholder behind the counter"""
     with k.within(x, z, ry, sc):
         # posts under the awning's ends, each cut to its underside (the awning slopes down to the front: +0.28 about x)
         under = lambda z: F + 3.09 - (z - 0.4) * math.tan(0.28) - 0.04 / math.cos(0.28)
@@ -985,6 +1068,8 @@ def stall(k, x, z, ry, awn, rr, sc=1.3):
             k.add(sphere(r0, 6, 4) if ball else cuboid(0.36, 0.3, 0.36), T(col), -1.4 + j * 0.56, F + 1.0 + (r0 * 0.85 if ball else 0.15), gz, ink=0.02)
         crate(k, 2.6, F, -0.6, 1.0, 0x9A6A3A, 0.3)
         k.solid(1.9, (F + 1.0) / 2, 0.6, 0, 0.5)
+        if vendor:
+            k.stand(-0.6, F, -0.45, scale=1.3)  # (taller than walkers, to clear the counter, as the Downs' vendors)
 
 
 def tank(k, x, z, r, h, color, band):

@@ -7,13 +7,34 @@ import { mulberry32 } from './rng.js';
 // points per walker in the outpost's frame, walked there and back, laid through open yard so nobody walks through a wall). They are made per
 // placed outpost (skinned figures don't survive a template's clone), live under its root and go with it; the game steps them
 // while the outpost is near (territory.js), the viewer and the Asset Row the same way.
+// `stands`: [[x, y, z, yaw, scale], ...], people who keep their post (traders behind a counter, stallholders): standing at (x, y, z)
+// facing yaw, serving with their forearms forward and a slow swing, now and then looking round.
 const SPEED = { person: 1.3, junkbot: 0.9 };
 const F = 0.3; // apron top
 
 export function spawnWalkers(root, spec, seed = 1) {
-  if (!spec || !spec.routes || !spec.routes.length) return null;
+  if (!spec || !((spec.routes && spec.routes.length) || (spec.stands && spec.stands.length))) return null;
   const rr = mulberry32(seed * 7 + 13);
-  const list = spec.routes.map((route, i) => {
+  const posts = (spec.stands || []).map(([x, y, z, yaw, scale = 1], i) => {
+    const fig = makeFigure({ ...spec.look, seed: seed * 17 + i * 53, scale: (spec.look && spec.look.scale || 1) * scale }); // (scale: taller, to clear a counter, as the Downs' vendors)
+    fig.root.userData.walker = true;
+    fig.root.position.set(x, y, z);
+    fig.root.rotation.y = yaw;
+    root.add(fig.root);
+    figureStand(fig);
+    return { fig, yaw, phase: rr() * 6, look: 0, t: 3 + rr() * 6 };
+  });
+  const serve = (dt) => {
+    for (const s of posts) {
+      const f = s.fig;
+      s.phase += dt * 2.2;
+      if (f.armL) { f.armL.rotation.x = -0.7 + Math.sin(s.phase) * 0.3; f.armR.rotation.x = -0.7 + Math.sin(s.phase + 1.9) * 0.3; }
+      s.t -= dt;
+      if (s.t <= 0) { s.look = s.look ? 0 : (rr() - 0.5) * 1.4; s.t = 2 + rr() * 5; } // (a look along the counter, then back)
+      if (f.head) f.head.rotation.y += (s.look - f.head.rotation.y) * Math.min(1, dt * 3);
+    }
+  };
+  const list = (spec.routes || []).map((route, i) => {
     let model, anim = null, fig = null;
     if (spec.kind === 'junkbot') {
       const c = makeChimera({ seed: seed + i * 31, body: 'junkbot', legs: 'junkbot', head: 'junkbot', extraHead: null, mods: [], size: 0.9 + rr() * 0.25, tint: [0xffb347, 0x8a8698, 0x7dd87a, 0xd9482b][i % 4] });
@@ -29,6 +50,7 @@ export function spawnWalkers(root, spec, seed = 1) {
     return { model, fig, anim, route, next: start < route.length - 1 ? start + 1 : start - 1, dir: start < route.length - 1 ? 1 : -1, wait: rr() * 2, phase: rr() * 6, t: 0, speed: SPEED[spec.kind] || 1.3 };
   });
   const update = (dt) => {
+    serve(dt);
     for (const w of list) {
       w.t += dt;
       const p = w.model.position;
@@ -56,5 +78,5 @@ export function spawnWalkers(root, spec, seed = 1) {
       else if (w.anim) w.anim(w.t, w.speed);
     }
   };
-  return { list, update };
+  return { list: [...list, ...posts.map((s) => ({ model: s.fig.root, fig: s.fig }))], update };
 }

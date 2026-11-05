@@ -51,7 +51,7 @@ export function parseStaticGlb(scene, { warn = console.warn } = {}) {
 
 function parseRoot(root, warn) {
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
-  const asset = { name: root.name, groups: [], cols: [], hits: [], raid: null, smoke: null, drop: null, texts: [], stacks: [], walkers: null };
+  const asset = { name: root.name, groups: [], cols: [], hits: [], raid: null, smoke: null, drop: null, texts: [], tickers: [], stacks: [], walkers: null };
   // the walking NPCs' routes (root extra `walkers`: { kind, routes: [[[x, z], ...], ...] }, as JSON text or an object)
   if (root.userData.walkers) {
     try { asset.walkers = typeof root.userData.walkers === 'string' ? JSON.parse(root.userData.walkers) : root.userData.walkers; } catch { warn('walkers: not readable JSON, left out'); }
@@ -165,6 +165,9 @@ function gameplay(asset, role, node, inv, warn) {
     else asset.cols.push({ type: 'sphere', r: sx, x: _p.x, y: _p.y, z: _p.z });
   } else if (role === 'stack') { // a stack of standard cargo boxes the game adds (settlements.js cargoStack): extras n, factions ('owner' or a list)
     asset.stacks.push({ x: _p.x, y: _p.y, z: _p.z, yaw: yawOf(_q), n: Math.max(1, Number(u.n) || 1), factions: String(u.factions || 'owner').split(',').map((f) => f.trim()) });
+  } else if (role === 'ticker') { // a scrolling price tape (outpostModels.js tickerMat): extras w, h (m), items, rows, speed (tapes a second)
+    if (!(Number(u.w) > 0) || !(Number(u.h) > 0) || typeof u.items !== 'string') { warn(`ticker "${node.name}" needs w, h and items: skipped`); return; }
+    asset.tickers.push({ w: Number(u.w), h: Number(u.h), items: u.items, rows: Math.max(1, Number(u.rows) || 1), speed: Number(u.speed) || 0.05, x: _p.x, y: _p.y, z: _p.z, yaw: yawOf(_q) });
   } else if (role === 'raid' || role === 'smoke' || role === 'drop') {
     if (asset[role]) warn(`more than one "${role}" point: the last one wins`);
     asset[role] = _p.clone();
@@ -288,7 +291,7 @@ function bakeParts(parts, faction, fixed, owner = null) {
 
 // asset -> template. `textMat(str, fg, bg, stroke)` makes a sign face's canvas material (outpostModels.js owns it,
 // so signs match the Kit's).
-export function bakeStatic(asset, { color, textMat }) {
+export function bakeStatic(asset, { color, textMat, tickerMat }) {
   const faction = new THREE.Color(color), owner = factionOf(color, null);
   const root = new THREE.Group();
   root.name = `static:${asset.name}`;
@@ -313,6 +316,16 @@ export function bakeStatic(asset, { color, textMat }) {
       m.rotation.set(0, t.yaw + (side ? Math.PI : 0), side ? -t.rz : t.rz);
       root.add(m);
     }
+  }
+  for (const k of asset.tickers || []) { // (the tape shows as much of itself as fits the screen's shape; territory.js slides it)
+    if (!tickerMat) break;
+    const mat = tickerMat(k.items, k.rows), geo = new THREE.PlaneGeometry(k.w, k.h), uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * ((k.w / k.h) / mat.userData.aspect));
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(k.x, k.y, k.z);
+    m.rotation.y = k.yaw;
+    m.userData.ticker = k.speed;
+    root.add(m);
   }
   return {
     root,

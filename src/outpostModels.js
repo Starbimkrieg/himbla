@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { toon, glow, inkMat, textSprite, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds, withToonBias, inkLineMesh, haloize } from './toon.js';
 import { mulberry32 } from './rng.js';
+import { pixelFont } from './fonts.js';
 import { bakeStatic } from './staticBake.js';
 import { outpostAsset } from './outpostGlb.js';
 import { bendPoint, bendQuat, bendGeometry } from './curve.js';
@@ -53,6 +54,43 @@ function textMat(text, fg, bg, stroke) {
   });
 }
 const FLAG_GEO = new THREE.PlaneGeometry(3, 1.8).translate(1.55, 0, 0);
+// A price ticker's tape (staticBake.js `ticker`): the quotes, "SYM:+12.5,SYM:-3.1,...", each a symbol and a price with a green up or
+// red down arrow, on a dark strip that repeats round, so the screen scrolls by sliding the texture (territory.js movers)
+function tickerMat(items, rows = 1) {
+  return memo(`k${items}|${rows}`, () => {
+    const q = String(items).split(',').map((s) => s.split(':')).filter((x) => x.length === 2), H = 64, font = pixelFont(26);
+    const c = document.createElement('canvas'), ctx = c.getContext('2d');
+    ctx.font = font;
+    const cell = (sym, v) => ctx.measureText(`${sym} ${v.replace(/^[+-]/, '')}`).width + 90;
+    const lines = [...Array(rows)].map((_, r) => q.map((_, i) => q[(i + r * 3) % q.length])); // (each row starts further along)
+    const w = Math.ceil(Math.max(...lines.map((l) => l.reduce((a, [s, v]) => a + cell(s, v), 0))));
+    c.width = w; c.height = H * rows;
+    ctx.fillStyle = '#0d1a2a'; ctx.fillRect(0, 0, w, H * rows);
+    ctx.font = font; ctx.textBaseline = 'middle';
+    lines.forEach((l, r) => {
+      let x = 16;
+      const y = H * r + H / 2;
+      for (const [sym, v] of l) {
+        const up = !v.startsWith('-'), col = up ? '#7dff6a' : '#ff3b5c';
+        ctx.fillStyle = '#e8f4ff'; ctx.fillText(sym, x, y);
+        x += ctx.measureText(sym + ' ').width;
+        ctx.fillStyle = col; ctx.beginPath(); // (the arrow, drawn: the pixel font has none)
+        if (up) { ctx.moveTo(x, y + 9); ctx.lineTo(x + 18, y + 9); ctx.lineTo(x + 9, y - 9); } else { ctx.moveTo(x, y - 9); ctx.lineTo(x + 18, y - 9); ctx.lineTo(x + 9, y + 9); }
+        ctx.fill();
+        x += 26;
+        ctx.fillText(v.replace(/^[+-]/, ''), x, y);
+        x += ctx.measureText(v.replace(/^[+-]/, '')).width + 64;
+      }
+    });
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.anisotropy = 4;
+    const m = new THREE.MeshBasicMaterial({ map: tex });
+    m.userData.aspect = w / (H * rows);
+    return m;
+  });
+}
 
 // a triangular prism lying along x, base on y=0: gable roofs and tents
 function prism(len, width, height) {
@@ -1397,7 +1435,7 @@ export function outpostTemplate(kind, color, variant = 0, wreck = false, src = '
     let t = templates.get(key);
     if (!t) {
       try {
-        t = glbExtras(bakeStatic(asset, { color, textMat }), color);
+        t = glbExtras(bakeStatic(asset, { color, textMat, tickerMat }), color);
         templates.set(key, t);
       } catch (e) {
         if (src === 'glb') throw e;

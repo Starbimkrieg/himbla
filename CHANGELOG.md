@@ -5,6 +5,15 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **The Trading Kiosk, refined in Blender.** Each face of the trading house is now a secured shopfront: a glazed bay with a
+  trader behind reinforced glass (steel mullions, speaking grilles, a deal tray under it), goods on lit shelves, a steel
+  counter. The clock's hands go round (a lap a minute; moving parts can now turn about any axis), and the trading floor's
+  price boards are scrolling tickers of quotes (a new `ticker` role, `tickerMat`). The canopies no longer overlap the
+  trading floor's slab or each other (the shimmer round the house), and the paved lanes sit 12 mm proud without the contact
+  shade that darkened them end to end. The hover-cart is a proper hover-forklift: rounded chassis on four lit hover pads,
+  counterweight, seat and controls under a roll-over guard, mast, carriage and forks with a loaded pallet, a beacon.
+  Stallholders stand behind half the market stalls (walkers' new `stands`: people who keep their post and serve). The
+  code-built kiosk is now the older fallback (`GLB_REFINED`).
 - **The small outposts are built in Blender** (`tools/blender/build_outposts.py` -> `src/assets/outposts.glb`, on by
   default; `?outpostGlb=0` gives the code-built ones). All seven (Watchtower, Trading Kiosk, Supply Depot, Farm Dome, Relay
   Mast, Junk Pile, Scrap Shack), each with its wreck, ported call for call from `src/outpostDrafts.js` by a new outpost kit (`tools/blender/outpost_kit.py`):

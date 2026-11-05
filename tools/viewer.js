@@ -5,7 +5,7 @@ import { loadRunnerParts, loadShipParts, makeRunner, makeCrate, ScarfSim, makeSh
 import { outpostTemplate, OUTPOST_PICK } from '../src/outpostModels.js';
 import '../src/outpostDrafts.js';
 import { spawnWalkers } from '../src/outpostWalkers.js';
-import { loadOutpostParts, GLB_KINDS } from '../src/outpostGlb.js';
+import { loadOutpostParts, GLB_KINDS, GLB_REFINED } from '../src/outpostGlb.js';
 import { makeChimera, makeMite, LIVING, MODIFIERS, spliceGenes } from '../src/chimera.js';
 import { ComicPost } from '../src/post.js';
 import { dressRunner } from '../src/cosmetics.js';
@@ -358,13 +358,13 @@ if (m === 'shuttle' || m === 'freighter') {
   if (code && tpls.glb && srcs[0] !== 'glb') {
     const par = outpostParity(code, tpls.glb);
     window.outpostParity = par;
-    lines.push(`GLB vs code-built gameplay data: ${par.ok ? 'same' : 'DIFFERENT'} (${par.rows.map((r) => `${r.what} ${r.matched}/${r.of}${r.extra.length ? ' +' + r.extra.length : ''}`).join(', ')})`);
+    lines.push(`GLB vs code-built gameplay data: ${par.ok ? 'same' : GLB_REFINED.has(kind) ? 'different (refined in Blender since the port: the code-built one is the older fallback)' : 'DIFFERENT'} (${par.rows.map((r) => `${r.what} ${r.matched}/${r.of}${r.extra.length ? ' +' + r.extra.length : ''}`).join(', ')})`);
   }
   const ui = document.getElementById('ui'); // (text, not HTML: `kind` comes from the URL)
   ui.style.whiteSpace = 'pre-line';
   ui.textContent = [`${kind}${wreck ? ' (wreck)' : ''}${GLB_KINDS.has(kind) ? '' : ' (not in GLB_KINDS: the game would not use the GLB for it yet)'}`, ...lines, 'cyan = collider, orange = blast box, green = raid, red = smoke, blue = drop'].join('\n');
   const swing = [];
-  model.traverse((o) => { if (o.userData.spin || o.userData.blink || o.userData.flag) swing.push(o); });
+  model.traverse((o) => { if (o.userData.spin || o.userData.blink || o.userData.flag || o.userData.ticker) swing.push(o); });
   let lastT = 0;
   anim = (t) => { // (what territory.js does to a placed outpost)
     const dt = Math.min(0.1, t - lastT); lastT = t;
@@ -373,6 +373,7 @@ if (m === 'shuttle' || m === 'freighter') {
       if (o.userData.spin) o.rotation.y = t * (o.userData.spin === true ? 0.6 : o.userData.spin);
       if (o.userData.blink) o.visible = Math.sin(t * 4) > -0.3;
       if (o.userData.flag) o.rotation.y = Math.sin(t * 2) * 0.25;
+      if (o.userData.ticker) o.material.map.offset.x = (t * o.userData.ticker) % 1;
     }
   };
   Object.assign(sun.shadow.camera, { left: -90, right: 90, top: 90, bottom: -90, far: 400 });

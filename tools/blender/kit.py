@@ -427,7 +427,7 @@ def toon_attrs(objects, ao_r=None):
         bias = [0.0] * n
         skinned = any(m.type == "ARMATURE" for m in o.modifiers)
         tree = trees.get(root_of(o).name)
-        if tree and not skinned:
+        if tree and not skinned and o.get("ao", 1):  # (ao = 0: no contact shade, e.g. paint on the ground)
             mw = o.matrix_world
             nm = mw.to_3x3().inverted_safe().transposed()
             for i, v in enumerate(me.vertices):

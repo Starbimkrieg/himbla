@@ -1,7 +1,7 @@
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { parseStaticGlb } from './staticBake.js';
-import { rootName, GLB_KINDS } from './staticContract.js';
+import { rootName, GLB_KINDS, GLB_REFINED } from './staticContract.js';
 
 // Blender-built outposts (src/assets/outposts.glb from tools/blender/build_outposts.py; contract in docs/outpost-glb.md), for
 // the kinds in GLB_KINDS (src/staticContract.js); the rest, and any kind the file lacks or that fails to bake, are code-built
@@ -13,7 +13,7 @@ import { rootName, GLB_KINDS } from './staticContract.js';
 //                outpost. A failed load never stops the game starting, even with no file in the checkout (glob import); a
 //                hanging request does hold it up (no timeout)
 //   cost:        a separate chunk, fetched while the game starts
-export { GLB_KINDS };
+export { GLB_KINDS, GLB_REFINED };
 
 let ASSETS = null; // Map(root name -> parsed asset), null until loaded
 

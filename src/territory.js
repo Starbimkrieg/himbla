@@ -606,11 +606,12 @@ export class Territory {
       if (o.rubble && o.model && d < 500 && Math.random() < dt * 6) g.fx.spawn((o.mainC || o.model.position).clone().addScaledVector(o.dir, 1.5), o.dir.clone().multiplyScalar(5), { color: 0x2a2433, size: 1.4, life: 1.6, count: 1, spread: 3 });
       if (o.model && d < 400) {
         if (o.walkers) o.walkers.update(dt);
-        const movers = (o.model.userData.movers ||= collectNodes(o.model, (m) => m.userData.spin || m.userData.blink || m.userData.flag));
+        const movers = (o.model.userData.movers ||= collectNodes(o.model, (m) => m.userData.spin || m.userData.blink || m.userData.flag || m.userData.ticker));
         for (const m of movers) {
           if (m.userData.spin) m.rotation.y += dt * (m.userData.spin === true ? 0.6 : m.userData.spin); // (a number: its own rate, e.g. a draft's strollers)
           if (m.userData.blink) m.visible = Math.sin(this.t * 4 + o.seed) > -0.3;
           if (m.userData.flag) m.rotation.y = Math.sin(this.t * 2 + o.seed) * 0.25;
+          if (m.userData.ticker) m.material.map.offset.x = (this.t * m.userData.ticker) % 1; // (a price tape: shared, so every one of its kind in step)
         }
       }
     }

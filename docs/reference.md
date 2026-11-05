@@ -398,7 +398,7 @@ src/
   outpostDrafts.js the small outposts (the picks, OUTPOST_PICK in outpostModels.js; docs/outpost-proposals), code-built: the
                    kinds not yet in outposts.glb, and the fallback
   outpostLooks.js  the small outposts' looks by owner: palettes (STYLE), walkers' looks, container liveries
-  outpostWalkers.js the two or three NPCs walking about each small outpost
+  outpostWalkers.js the two or three NPCs walking about each small outpost, and those who keep a post (traders, stallholders)
   vehicles.js      drivable vehicles
   settings.js      settings menu and key remapping
   casino.js        casino games, VIP, prizes (casinoWorld.js: building; casinoPlan.js: plan numbers)

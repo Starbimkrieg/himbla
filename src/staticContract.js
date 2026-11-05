@@ -4,8 +4,11 @@
 // Kinds built from the GLB (on by default: ?outpostGlb=0 gives the code-built ones, outpostDrafts.js). A kind joins once it
 // audits clean (tools/outpost-audit.mjs) with the same gameplay data as its code-built version (viewer ?m=outpost&src=both).
 export const GLB_KINDS = new Set(['tower', 'kiosk', 'depot', 'farm', 'mast', 'junk', 'shack']);
+// Kinds refined in Blender since their port: their code builders (outpostDrafts.js) are the older fallback, so the viewer's
+// comparison no longer expects the same gameplay data
+export const GLB_REFINED = new Set(['kiosk']);
 
-export const ROLES = ['col', 'hit', 'raid', 'smoke', 'drop', 'text', 'stack'];
+export const ROLES = ['col', 'hit', 'raid', 'smoke', 'drop', 'text', 'stack', 'ticker'];
 export const SHAPES = ['box', 'cyl', 'sphere', 'hcyl']; // (hcyl: a lying cylinder, its axis along the empty's z)
 const ANIMS = ['flag', 'blink', 'spin'];
 
@@ -40,7 +43,7 @@ export function slotOf(materialName) {
 // GLTFLoader strips dots (`col.001` arrives as `col001`), so a prefix may be followed by `_`, a digit, or nothing.
 export function roleOf(name, extras) {
   if (extras && typeof extras.role === 'string' && ROLES.includes(extras.role)) return extras.role;
-  const m = /^(col|hit|raid|smoke|drop|text|stack)(?:[_\d]|$)/i.exec(String(name || ''));
+  const m = /^(col|hit|raid|smoke|drop|text|stack|ticker)(?:[_\d]|$)/i.exec(String(name || ''));
   return m ? m[1].toLowerCase() : null;
 }
 

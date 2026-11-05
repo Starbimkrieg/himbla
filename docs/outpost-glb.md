@@ -37,8 +37,9 @@ Scene roots, one empty at the origin per variant, everything else a descendant:
 | `<kind>_wreck` | the same compound with the main building in ruins (the yard's meshes are the intact root's, shared) |
 
 A root may carry the custom property `walkers`: the walking NPCs (`src/outpostWalkers.js`), as JSON text
-`{"kind": "person" | "junkbot", "routes": [[[x, z], ...], ...]}`, each route walked there and back. Their look is the
-owner's (`WALK_LOOK` in `src/outpostLooks.js`).
+`{"kind": "person" | "junkbot", "routes": [[[x, z], ...], ...], "stands": [[x, y, z, yaw, scale], ...]}`, each route walked
+there and back; each stand someone who keeps their post (a trader behind a counter: standing at x, y, z facing yaw, serving,
+`scale` taller to clear the counter). Their look is the owner's (`WALK_LOOK` in `src/outpostLooks.js`).
 
 Blender appends `.001` to duplicate names; the game strips a trailing `.NNN` from material names, but keep node names
 unique anyway. Object names are unique across the whole file: the kit names everything `<role>_<kind>_<n>` (gameplay
@@ -98,6 +99,7 @@ empty are ordinary geometry and are drawn.
 | `smoke` | where the wreck smoulders; also the building's centre for damage pops | position |
 | `drop` | open apron spot where loot lands | position |
 | `text` | a sign face (a canvas-texture plane drawn at runtime, so the font can change) | see below |
+| `ticker` | a scrolling price screen (`tickerMat` in `src/outpostModels.js`: a tape of quotes on a dark strip) | position and turn (the screen's middle, facing its +z); `w`, `h` in m; `items` = `SYM:+12.5,SYM:-3.1,...` (green up, red down); `rows`; `speed` (tapes a second) |
 | `stack` | a stack of the game's standard cargo boxes, with their collider (`settlements.js` cargoStack) | position and turn (the boxes' base); `n` boxes; `factions` = `owner` (the owner's livery, `CARGO_OF`) or the liveries named, comma separated, box by box |
 
 A **box** is an empty (cube display, size 1) whose **scale is the half-extents**; its position is the box's centre. A
@@ -124,7 +126,7 @@ separate object that the game animates, instead of merging them into the static 
 |---|---|
 | `flag` | swings it ±0.25 rad about Y (put the node at the hinge, the cloth to one side) |
 | `blink` | shows and hides it |
-| `spin` | turns it about Y (put the node on the spin axis): custom property `speed` in rad/s, default 0.6 |
+| `spin` | turns it about its own Y (put the node on the spin axis): custom property `speed` in rad/s (negative: the other way), default 0.6. The node may be turned any way: a clock hand's node has its Y out of the face |
 
 Author an animated part's meshes relative to the node's origin.
 
@@ -169,3 +171,6 @@ checks the committed file.
 3. Open `/tools/viewer.html?m=outpost&kind=<name>` (and `&wreck=1`): it should say the gameplay data is the same. A fix
    that moves a collider goes into both builders.
 4. Add the kind to `GLB_KINDS` in `src/staticContract.js` and to the list at the top of this file; look at it in the game.
+5. Refine it in Blender from then on. A kind whose gameplay data no longer matches its code builder goes in `GLB_REFINED`
+   (`src/staticContract.js`: the Trading Kiosk), and the viewer says so instead of flagging it; check its walkers' routes
+   against its own colliders.

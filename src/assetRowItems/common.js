@@ -13,7 +13,7 @@ export const factionHex = (f) => new THREE.Color(FACTIONS[f].color).getHex();
 // update(dt, t) for all of them under root.
 export function animate(root, seed = 3) {
   const movers = [];
-  root.traverse((o) => { const u = o.userData; if (u.spin || u.blink || u.flag || u.tick) movers.push(o); });
+  root.traverse((o) => { const u = o.userData; if (u.spin || u.blink || u.flag || u.tick || u.ticker) movers.push(o); });
   if (!movers.length) return undefined;
   return (dt, t) => { for (const o of movers) stepMover(o, dt, t, seed); };
 }
