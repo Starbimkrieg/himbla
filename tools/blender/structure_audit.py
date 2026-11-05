@@ -1,4 +1,4 @@
-"""Structure audit: does a built model hold together? (CLAUDE.md, "Model structure").
+"""Structure audit: does a built model hold together? (the blender skill, "Model structure").
 
 Run it on the meshes a builder made, after it has built them (any builder, any place). Each mesh's loose parts are the
 primitives the builder merged (a post, a beam, a panel, a sign board), and each part is checked against all the others:

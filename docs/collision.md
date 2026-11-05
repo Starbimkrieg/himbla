@@ -2,7 +2,7 @@
 
 The rules every place follows, worked out on Chimera Downs (October 2026). Trick thrust puts every roof within reach, so
 anything solid the runner can get to needs a collider that matches what's drawn, and the top edges of those colliders are
-grind rails. `CLAUDE.md` has the short version; this is the long one, with the reasons.
+grind rails. The places skill (`.claude/skills/places/SKILL.md`) has the short version; this is the long one, with the reasons.
 
 ## The physics that sets the rules
 

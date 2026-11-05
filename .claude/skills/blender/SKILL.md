@@ -1,6 +1,6 @@
 ---
 name: blender
-description: Build, change, compress and check the game's Blender-made models (src/assets/*.glb, idles.json) with headless bpy, and the GLB contract the game relies on. Use for any edit under tools/blender or any .glb in src/assets. A commit that adds, renames, removes or visibly changes a model also updates the Asset Row (the dev showroom of every asset): see "Keep the Asset Row in step".
+description: Build, change, compress and check the game's Blender-made models (src/assets/*.glb, idles.json) with headless bpy, the structure rules every model must hold to (supports, tilts, walls meeting roofs, fixings), and the GLB contract the game relies on. Use for any edit under tools/blender or any .glb in src/assets, before writing the code. A commit that adds, renames, removes or visibly changes a model also updates the Asset Row (the dev showroom of every asset): see "Keep the Asset Row in step".
 ---
 
 # Blender models
@@ -13,6 +13,40 @@ and gun pivot), mechanical plausibility, triangle budgets by model class, factio
 slot, a resized frame. Also read it when you are unsure of an ink value or a budget. A fix that touches only the build
 pipeline, the export or a number the game reads does not need it. Generic DCC rules (quads only, no n-gons, UVs, texel
 density) do not apply to these code-built, untextured, toon-shaded meshes.
+
+## Model structure (every model, every build)
+
+A model has to hold together: everything stands on, hangs from or is fixed to something, and nothing passes through
+what it should meet. Work each support out from the thing it holds; never type a height by eye.
+
+- **Supports reach their load.** Every post, strut, leg, chain or bracket ends on the part it carries. Cut it to that part's
+  underside at the support's own x and z, computed from the part's centre, tilt and thickness (`solar_array`, `feed_bunk`
+  in `tools/blender/zbornak_kit.py`). A support never stops short of its load, and never pokes through it.
+- **Tilts: +θ about x lowers the +z end** (y' = y cos θ − z sin θ). Before placing anything against a tilted part, work out
+  from this which end is high. Put panels on a roof at the roof's own slope, on the slab's top surface (its line plus
+  thickness ÷ cos θ). Solar faces +z, the place's sunward side.
+- **Walls meet roofs.** Wall tops and gable edges follow the roof's underside line. Leave no gap (a dark wedge) and
+  nothing through the roof. A roof stops at a neighbouring building's wall, not inside it.
+- **Signs and lamps are fixed.** A board sits on a wall face or hangs on chains under a beam, clear of the roof's edge.
+  A lamp has a bracket or a cord. Nothing on a wall floats off it: put it within 2 cm of the face.
+- **Openings stay open.** Trim, wainscots, rails and lips stop at doorways and gates. A rail stops at a gate's opening,
+  with a post each side.
+- **Bars are straight.** Build a straight member with `bm` (two points), not a curved path. `kit.tube` carries each ring's
+  frame along the path (parallel transport), so paths don't twist; keep it that way.
+- **Walks meet what they join.** A walk ends square on a platform's edge, or runs under a round platform's top with its
+  kerbs stopped at the rim (`path_ribbon(trim=...)`). It curves smoothly (a cubic, not a kinked polyline), and nothing
+  (lamps, posts) stands on it.
+- **Contents sit in their containers,** and any glow ring or field floats inside what holds it. Anything meant to float
+  (a hologram, a levitated sphere) goes in a group whose name ends in `_float`.
+- **Storage crates** are `cargo_unit("box")` (`tools/blender/cargo.py`) in the owner's livery, never ad-hoc boxes (places skill).
+- **A place model** (anything the runner can reach) also follows the places skill: colliders, floors, painted-on details.
+
+**Check it, every build:** `python3 tools/blender/structure_audit.py tools/blender/build_<name>.py` builds the model
+without exporting it and reports what is floating, the bars with loose ends, the bars passing through a solid part, and
+slabs cutting through slabs, each with where it is (`build_zbornak_lab.py` runs it with `STRUCT_AUDIT=1`; on a whole place
+it takes a minute or so). Read every finding. Fix it, or make it deliberate (`_float`) and say why. Then look at each
+changed part in the running game (playtest skill: free cam, close, from two sides).
+`python3 tools/blender/test_structure_audit.py` checks the audit itself.
 
 ## Setup
 
@@ -43,8 +77,8 @@ outposts, hall, lot, power, habitat (with `habitat_kit.py`), chimera (the chimer
    (`style.py` holds the numbers: palette, ink by part size, triangle budgets, the glow slots that get a halo): ink too
    heavy or far off its size class, big parts with no ink, pure blacks, parts the export left without weighted normals or
    toon attributes, and per model its triangles and which glow slots will halo. Read each finding; some are deliberate.
-   Run the structure audit on what you built: `python3 tools/blender/structure_audit.py tools/blender/build_<name>.py`
-   (CLAUDE.md, "Model structure": floating parts, bars with loose ends, bars through solid parts, slabs through slabs).
+   Run the structure audit on what you built (Model structure, above). A hook reminds you of these steps after each build
+   (`tools/claude-hooks.mjs`).
 3. Check the diff touches only the models you meant to change. `runner.glb` can differ by a few bytes between
    runs; that is not a change.
 4. Update the source map in `docs/reference.md` if a model or builder was added or renamed.
@@ -131,4 +165,4 @@ Every inked part is drawn with a black shell round it (the `ink` custom property
 
 ## Not covered
 
-Rendering previews from headless Blender is untried. To look at a model, use `tools/viewer.html` (three.js, `?m=runner&outfit=...` for the courier) or the game's Asset Row. Screenshots from headless Chromium work (swiftshader, a few seconds a frame).
+Rendering previews from headless Blender is untried. To look at a model, use `tools/viewer.html` (three.js, `?m=runner&outfit=...` for the courier), the game's Asset Row, or the playtest skill. Screenshots from headless Chromium work (swiftshader, a few seconds a frame).

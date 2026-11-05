@@ -74,6 +74,20 @@ export class FreeCam {
     document.body.classList.toggle('hud-off', off);
   }
 
+  // screenshot setup in one call (console and test harnesses): fly cam on at (x, y, z) looking along (dx, dy, dz) tipped by
+  // `pitch` rad, with the HUD, this hint and the git chip hidden so only the world shows. stop() brings the HUD back (the hint
+  // and chip stay hidden until a reload). Let a frame or two run before the shot.
+  shot(x, y, z, dx, dy, dz, pitch = -0.3) {
+    if (!this.on) this.start();
+    this.setHud(true);
+    for (const id of ['free-cam', 'gitchip']) { const el = document.getElementById(id); if (el) el.style.visibility = 'hidden'; }
+    this.pos.set(x, y, z);
+    this.fwd.set(dx, dy, dz);
+    this.pitch = clamp(pitch, -PITCH, PITCH);
+    this.level();
+    return this;
+  }
+
   // keep the heading along the ground below (it turns away as you go round the sphere)
   level() {
     const f = this.fwd;

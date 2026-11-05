@@ -381,7 +381,7 @@ src/
   chimeragenes.js  splicing (no three.js)
   cheats.js        cheat menu
   devoverlay.js    F3 dev overlay (perfgraph.js draws its graphs)
-  freecam.js       dev free cam
+  freecam.js       dev free cam (`game.cheats.freeCam.shot(...)`: screenshot setup in one call)
   story.js         leaders, chapters, founded outposts, tech, Kade
   storyAssets.js   troops, bosses, mission props, outpost compounds
   hometown.js      your town and the Moon Council
@@ -479,6 +479,8 @@ src/
     towmark.png      winch HUD marker
     outposts.glb     Relay Mast and Watchtower (pilot, ?outpostGlb; spec in docs/outpost-glb.md)
 tools/
+  claude-hooks.mjs         Claude Code hooks (.claude/settings.json): blocks a push that bumps the version without [release],
+                           skips CHANGELOG.md or the source map; reminds after a Blender build and after a commit
   optimize-glb.mjs         compresses src/assets models (npm run optimize:glb)
   splice-chimera.mjs       puts chimera kit parts built on their own into chimera.glb, the rest untouched
   icons/faction_icons.py   faction emblem proposals as SVG (docs/icon-proposals/; `python3 tools/icons/faction_icons.py`)
@@ -518,7 +520,7 @@ tools/
     downs_common.py        Downs palette, merging, export, coplanar audit
     structure_audit.py     does a model hold together? floating parts, loose bar ends, bars through solid parts, slabs
                            through slabs (`python3 tools/blender/structure_audit.py tools/blender/build_<name>.py`;
-                           CLAUDE.md "Model structure"); test_structure_audit.py checks it on known faults
+                           the blender skill, "Model structure"); test_structure_audit.py checks it on known faults
     style.py               the house style's numbers: palette, ink by part size, triangle budgets, halo slot names
     style_audit.py         does a model follow the house style? ink too heavy or off its class, big parts with no ink,
                            blacks, parts without weighted normals or toon attributes; triangles and halo slots per model
@@ -579,3 +581,10 @@ tools/
 `bpy`; some builders want `MOONRUNNER_REPO=.`). After re-exporting, run `npm run optimize:glb` (`runner.glb`,
 `outposts.glb` and `winch.glb` stay uncompressed). Material names on the runner are colour slots that outfits
 recolour. Each model is its own chunk, inlined as a data URI so the desktop build needs no fetch.
+
+**Claude Code:** `CLAUDE.md` holds only what every task needs (commands, conventions, which skill for which job). The
+task rules live in skills under `.claude/skills/`: `blender` (models, their structure rules, the GLB contract, the Asset
+Row), `places` (colliders, floors, ledge grinds, cargo), `playtest` (running the game, screenshots) and `coding-standards`.
+`.claude/rules/` loads a short pointer to the first two when their files are opened. `.claude/settings.json` runs
+`tools/setup-blender.sh` and `tools/setup-node.sh` (npm ci when `node_modules` is missing) at session start and `tools/claude-hooks.mjs` around Bash calls (push checks, build and commit
+reminders).

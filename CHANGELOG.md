@@ -5,6 +5,20 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Claude Code setup: a short CLAUDE.md, rules in skills, checks in hooks.** CLAUDE.md is down from 114 lines to about 40:
+  commands, conventions and a table of which skill to use for which job. Its task rules moved, unchanged, to where they load
+  when the task comes up: Model structure into the `blender` skill; collision, ledge grinds and storage crates into a new
+  `places` skill; the screenshot recipe into a new `playtest` skill. `.claude/rules/` adds short path-scoped pointers to
+  them. The `coding-standards` skill is cut from 569 lines of generic React, REST and TypeScript advice to the 40 that
+  apply here.
+  - **Hooks** (`tools/claude-hooks.mjs`, `.claude/settings.json`): a push is held back when it bumps the version without
+    `[release]`, changes `src/` or `tools/` without CHANGELOG.md (`[no-changelog]` waives it), or adds or removes a file
+    the source map doesn't reflect (`[no-docs]`). After a Blender build, the audits and after-build steps are added to
+    Claude's context; after a commit, the dev servers still running and a `.glb` changed without the Asset Row.
+  - **`game.cheats.freeCam.shot(x, y, z, dx, dy, dz, pitch)`:** free cam on, HUD, cam hint and git chip hidden, camera
+    placed, in one call (was a five-line snippet).
+  - **`tools/setup-node.sh`** (session start): runs `npm ci` when `node_modules` is missing, so a fresh cloud checkout can
+    run the game, the checks and the audits straight away (skipping Electron's binary there).
 - **Townsfolk rebuilt (`src/townsfolk.js`, was in `models.js`; `makeFigure` keeps its name and options):** every generic NPC in the game (walkers, passengers, crowds, casino staff and patrons, the chamber's delegates, medics, pirates, the reactor's freed people, drivers) is the new figure, the rounded draft picked from two. **Proportions:** the torso (0.97 m) used to outrun the legs (0.84 m) under an oversized head; now the legs are longer than the torso and an adult stands about 2.4 m to the helmet's top, the courier's height or a touch under. The shoulders sit in the shoulder line and the thighs rise out of a seat, so nothing juts or shows a seam. **Knees and elbows:** ten bones (root, legs, shins, arms, forearms, head), and a stride that folds each knee as its leg comes through and bends the elbows (`figureWalk`, `figureKnees`, `figureStand`, `figureSit`; the walkers, passengers, casino patrons, fleeing civilians and the buggy's driver use them). **On twos:** each figure's skeleton shows a pose held 12 times a second, out of step with its neighbours, while the figure moves smoothly through the world, like the courier, whatever code poses it (it replaces `heldPhase`). **Variety:** six builds (slim, average, broad, stout, tall, petite), shoulder and hip widths, leg length, helmet paints and more hair. **Helmets:** every human keeps one; sealed helmets are painted (never the cream that read as a bald head from behind) with a crown stripe, a rear vent plate and ear pods, and the faces under fishbowls are sized to the body, the glass fitted round them. **Aliens** go bare-headed: the Vrill, a crested kind and a one-eyed kind. About 3.9k triangles a figure (was 2.5k), still one draw call and an ink hull each, shared between identical looks.
 - **The courier is one body that bends** (`tools/blender/runner_skin.py`, `build_runner.py` -> `runner.glb`; `models.js`
   makeRunner; drafts and renders in `docs/runner-skin/`). His suit was rigid pieces on pivots: they parted at every bend (a
