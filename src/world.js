@@ -5,6 +5,7 @@ import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcab
 import { makeDish, makeFigure, figureWalk, figureStand, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK, wingModel, HABITAT_DOCK } from './models.js';
 import { mulberry32, clamp } from './rng.js';
 import { FACTIONS, defenseSpots, ILMB_WINGS_AT } from './locations.js';
+import { buildIlmbCore, buildIlmbWall, buildIlmbPieces, bakeIlmbInto, bakeIlmbPiece, ilmbBlender } from './ilmbCore.js';
 import { bendPoint, bendQuat, unbendPoint } from './curve.js';
 import { SUN, frameQuat, arcDist, dirFromAngles, tangent, collectNodes } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
@@ -699,6 +700,11 @@ export class World {
           if (free(tx, tz)) { x = tx; z = tz; break search; }
         }
       }
+      if (loc.id === 'ilmb' && ilmbBlender()) { // (the ILMB's from Blender: ilmb_pylon, its collider with it)
+        bakeIlmbPiece(this, loc, 'pylon', { x, z, yaw: Math.atan2(-x, -z), seed: 7790 });
+        this.mount(loc, x, z, h);
+        continue;
+      }
       // armoured pylon: octagonal column with bands and ladder, railed deck, faction ring
       const fcol = new THREE.Color(FACTIONS[loc.faction].color).getHex();
       const B = new Batch();
@@ -1017,12 +1023,13 @@ export class World {
   }
 
   buildHub(loc) {
-    dressIlmb(this, loc); // dome, spire, repair hangar, gantry, fuel spheres, outer domes, barracks
+    dressIlmb(this, loc, { core: !ilmbBlender(), features: !ilmbBlender() }); // (the old code-built core and pieces: ?ilmbCore=old)
+    if (ilmbBlender()) { buildIlmbCore(this, loc); buildIlmbPieces(this, loc); } // the complex, skywalks and pieces from Blender (ilmbCore.js)
     const B = new Batch();
     this.buildIlmbWings(loc, B);
     // job terminal: a kiosk of screens facing the arrival point (settlements.jobTerminal); the Hall of
     // Highlights is on the board's own screen (hud.openBoard)
-    jobTerminal(this, loc, 0, 76, 0, 0xffd23f);
+    jobTerminal(this, loc, 0, 76, 0, 0xffd23f, ilmbBlender() ? (k) => bakeIlmbInto(k, 'terminal') : null);
     hang(loc, textSprite('JOB BOARD', { color: '#ffffff', size: 80, scale: 0.6 }), 0, 21, 76);
 
     // repair bay hangar (past the Daedalus relay, clear of the wings; built in settlements.js)
@@ -1054,6 +1061,16 @@ export class World {
   // SPACECOM fortress ring, the Moon's most defended place. Every gun is on the wall: one per gate
   // tower and two bastions per quarter between gates.
   fortify(loc, B) {
+    if (ilmbBlender()) buildIlmbWall(this, loc); // (the wall, gates and bastions from Blender: ilmbCore.js)
+    else this.fortifyOld(loc, B);
+    // inner guns on pylons, one in each gap between the wings (locations.js ILMB_WINGS_AT; defenseSpots lists the outer ring's
+    // turrets first)
+    this.defensePylons(loc, defenseSpots(loc).slice(loc.defense.turrets), 7);
+    this.fortifyRest(loc);
+  }
+
+  // (the code-built wall: ?ilmbCore=old)
+  fortifyOld(loc, B) {
     const R = 248, segs = 40;
     const gates = [0.25 * Math.PI * 2, 0.5 * Math.PI * 2, 0.75 * Math.PI * 2, Math.PI * 2];
     for (let i = 0; i < segs; i++) {
@@ -1087,9 +1104,9 @@ export class World {
       for (const sz of [-1, 1]) B.add(new THREE.BoxGeometry(half * 2, 0.3, 0.2), this.glowM(0x2ee6ff), 0, 15, sz * 1.4, { outline: 0 });
       this.col(loc, { type: 'box', x: Math.cos(g) * gr, y: 15.3, z: Math.sin(g) * gr, hx: half, hy: 1.1, hz: 1.4, yaw: -g + Math.PI / 2 });
     }
-    // inner guns on pylons, one in each gap between the wings (locations.js ILMB_WINGS_AT; defenseSpots lists the outer ring's
-    // turrets first)
-    this.defensePylons(loc, defenseSpots(loc).slice(loc.defense.turrets), 7);
+  }
+
+  fortifyRest(loc) {
     // (barracks and vehicle depot: settlements.dressIlmb)
     for (let i = 0; i < 3; i++) {
       const r = makeRover({ color: 0x55607a, trim: 0xffd23f, pirate: false, flag: 0xffd23f });
@@ -1115,7 +1132,8 @@ export class World {
       const [a, d] = ILMB_WINGS_AT[i];
       const w = this.wing(loc, a, d);
       const E = s.build(w); // wing centre to the face its skywalk docks into
-      this.skywalk(loc, B, a, 53, d - E + 1.2, s.walkers);
+      if (ilmbBlender()) this.skywalk(loc, B, a, 56, d - E + 1.2, s.walkers, false); // (the glass is Blender's: ilmb_skywalks)
+      else this.skywalk(loc, B, a, 53, d - E + 1.2, s.walkers);
     });
   }
 
@@ -1137,10 +1155,16 @@ export class World {
 
   // Enclosed glass skywalk from the main dome along angle a (radius r0 → r1): floor slab, inked ribs
   // every few metres, see-through walls and vaulted roof, a few walkers. Solid from outside.
-  skywalk(loc, B, a, r0, r1, walkers = 2) {
+  skywalk(loc, B, a, r0, r1, walkers = 2, geom = true) {
     const len = r1 - r0, yaw = -a, W = 5.6, F = 0.6, wallH = 2.0, R = W / 2, top = F + wallH + R;
     const x0 = Math.cos(a) * r0, z0 = Math.sin(a) * r0;
     const mid = len / 2;
+    if (geom) this.skywalkGlass(loc, B, a, r0, len, { yaw, W, F, wallH, R, top, x0, z0, mid });
+    this.skywalkWalkers(loc, a, r0, len, walkers, { yaw, F, x0, z0, mid });
+  }
+
+  // (the code-built skywalk: ?ilmbCore=old)
+  skywalkGlass(loc, B, a, r0, len, { yaw, W, F, wallH, R, top, x0, z0, mid }) {
     const rib = toon(0xfff4e0), trim = toon(0xffd23f), glass = this.glassM(0x9be7ff, 0.17);
     B.at(x0, z0, yaw);
     B.add(new THREE.BoxGeometry(len, F, W + 0.8), toon(0x3a3550), mid, F / 2, 0, { outline: 0.1 });
@@ -1182,8 +1206,11 @@ export class World {
     // straight glass walls, then a round vault on top (a box would square the roof's shoulders)
     this.col(loc, { type: 'box', x: Math.cos(a) * cm, y: (F + wallH) / 2, z: Math.sin(a) * cm, hx: mid, hy: (F + wallH) / 2, hz: R + 0.4, yaw });
     this.col(loc, { type: 'hcyl', x: Math.cos(a) * cm, y: F + wallH, z: Math.sin(a) * cm, r: R + 0.3, len, yaw: yaw + Math.PI / 2 });
+  }
 
-    // foot traffic pacing between dome and wing, seen through the glass
+  // foot traffic pacing between the core and a wing, seen through the skywalk's glass
+  skywalkWalkers(loc, a, r0, len, walkers, { yaw, F, x0, z0, mid }) {
+    const cm = r0 + mid, lo = r0 < 55 ? 6.5 : 1.5; // (the old glass starts inside the dome; the Blender skywalk's at the lobby)
     const grp = new THREE.Group();
     this.put(grp, loc, x0, z0, 0, yaw);
     const center = this.toWorld(loc, Math.cos(a) * cm, 2, Math.sin(a) * cm);
@@ -1192,12 +1219,12 @@ export class World {
       const f = makeFigure({ suit: suits[(k * 3 + Math.round(a * 5)) % suits.length], helmet: 0xfff4e0 });
       const dir = k % 2 ? 1 : -1;
       const lane = dir * 0.9;
-      const x = 7 + this.r() * (len - 13);
+      const x = lo + 0.5 + this.r() * (len - lo - 6.5);
       f.root.position.set(x, F, lane);
       f.root.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
       f.root.traverse((o) => { o.castShadow = false; }); // under glass: skip the shadow pass
       grp.add(f.root);
-      this.walkers.push({ ...f, loc, center, x, lane, dir, min: 6.5, max: len - 3.2, F, speed: 1.1 + this.r() * 0.7, wait: this.r() * 2, phase: this.r() * 6 });
+      this.walkers.push({ ...f, loc, center, x, lane, dir, min: lo, max: len - 3.2, F, speed: 1.1 + this.r() * 0.7, wait: this.r() * 2, phase: this.r() * 6 });
     }
   }
 

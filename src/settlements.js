@@ -1571,22 +1571,29 @@ export function searchlight(k, x, y, z, reach = 40) {
 // ILMB core (wings, skywalks, walls and boards are in world.js): great dome, control spire through its crown, repair-bay
 // hangar, launch gantry with fuel spheres, two outlying domes, comms mast, barracks.
 // =============================================================================================
-export function dressIlmb(world, loc) {
+// the code-built great dome and control spire (?ilmbCore=old)
+function ilmbOldCore(k) {
+  // berm cut where the six wing skywalks dock (world.js buildIlmbWings: wing angle a runs along (cos a, sin a), dome azimuth pi/2 - a)
+  habDome(k, 0, 0, 58, 0x9be7ff, { door: 0, trim: 0xffd23f, cupola: false, gaps: ILMB_WINGS_AT.map(([a]) => Math.PI / 2 - a) });
+  // control spire: banded shaft, observation pod, antenna, beacon
+  k.at(0, 0);
+  k.cyl(2.6, 4.2, 70, 14, T(WHITE), 0, 0, 0, { outline: 0.12 });
+  for (const y of [60, 64, 68]) k.ring(3.05 - (y - 60) * 0.03, 0.25, T(YEL), 0, y, 0);
+  k.cyl(6.5, 4, 3, 18, T(WHITE), 0, 70, 0, { outline: 0.1 });
+  k.cyl(6.6, 6.6, 2.2, 18, G(0xbfe9ff), 0, 73, 0, { outline: 0 });
+  k.cyl(4.6, 6.8, 2.2, 18, T(0x2ec4ff), 0, 75.2, 0, { outline: 0.08 });
+  k.cyl(0.4, 0.8, 9, 8, T(LIGHT), 0, 77.4, 0, { outline: 0.04 });
+  k.blinker(0, 87, 0, 0xffd23f, 0.9);
+  radar(k, 3.4, 77.4, 0, 4, 0x2ec4ff, 0.6);
+  k.column(4.2, 82, 0, 0);
+  k.at();
+}
+
+export function dressIlmb(world, loc, { core = true, features = true } = {}) {
   settle(world, loc, 9203, (k) => {
-    // berm cut where the six wing skywalks dock (world.js buildIlmbWings: wing angle a runs along (cos a, sin a), dome azimuth pi/2 - a)
-    habDome(k, 0, 0, 58, 0x9be7ff, { door: 0, trim: 0xffd23f, cupola: false, gaps: ILMB_WINGS_AT.map(([a]) => Math.PI / 2 - a) });
-    // control spire: banded shaft, observation pod, antenna, beacon
-    k.at(0, 0);
-    k.cyl(2.6, 4.2, 70, 14, T(WHITE), 0, 0, 0, { outline: 0.12 });
-    for (const y of [60, 64, 68]) k.ring(3.05 - (y - 60) * 0.03, 0.25, T(YEL), 0, y, 0);
-    k.cyl(6.5, 4, 3, 18, T(WHITE), 0, 70, 0, { outline: 0.1 });
-    k.cyl(6.6, 6.6, 2.2, 18, G(0xbfe9ff), 0, 73, 0, { outline: 0 });
-    k.cyl(4.6, 6.8, 2.2, 18, T(0x2ec4ff), 0, 75.2, 0, { outline: 0.08 });
-    k.cyl(0.4, 0.8, 9, 8, T(LIGHT), 0, 77.4, 0, { outline: 0.04 });
-    k.blinker(0, 87, 0, 0xffd23f, 0.9);
-    radar(k, 3.4, 77.4, 0, 4, 0x2ec4ff, 0.6);
-    k.column(4.2, 82, 0, 0);
+    if (core) ilmbOldCore(k); // (else the Blender core: ilmbCore.js)
     k.at();
+    if (!features) return; // (the Blender pieces: ilmbCore.js buildIlmbPieces)
     // repair bay: ribbed arched hangar, lit doorway (+z faces the base)
     k.at(-168, -98, 1.05);
     k.box(36, 0.5, 36, T(CONC), 0, 0, 0, { outline: 0.05 });
@@ -2020,9 +2027,17 @@ function screenTex(lines, { fg = '#8dffb4', bg = '#07120c', head = null, hc = '#
 // Job terminal (ILMB): kiosk on a stepped plinth, main contract screen between two angled side screens (scrolling uplink feed,
 // route map), lit canopy, turning holo ring, antenna. Faces local +z.
 // =============================================================================================
-export function jobTerminal(world, loc, x, z, yaw = 0, color = 0xffd23f) {
+export function jobTerminal(world, loc, x, z, yaw = 0, color = 0xffd23f, shell = null) {
   settle(world, loc, 1201, (k) => {
     k.at(x, z, yaw);
+    if (shell) shell(k); // (the Blender-built kiosk: ilmbCore.js; the screens and the holo ring are drawn below as ever)
+    else jobTerminalShell(k, color);
+    jobTerminalScreens(k, color);
+  });
+}
+
+// the code-built kiosk round the screens
+function jobTerminalShell(k, color) {
     k.box(18, 0.5, 9, T(CONC), 0, 0, 0, { outline: 0.06 });
     k.box(15, 0.4, 7, T(PANEL), 0, 0.5, 0.4, { outline: 0.04 });
     k.box(15.2, 0.12, 0.2, G(0x2ee6ff), 0, 0.9, 3.9, { outline: 0 });
@@ -2045,7 +2060,10 @@ export function jobTerminal(world, loc, x, z, yaw = 0, color = 0xffd23f) {
     k.cyl(0.12, 0.18, 5, 6, T(DARK), 6.5, 13.1, -1, { outline: 0.02 });
     k.blinker(6.5, 18.4, -1, 0xff2a4a, 0.35);
     k.solid(9.2, 6.6, 4.5, 0, 0);
-    // screens
+}
+
+// the job board's screens and the holo ring over the canopy (canvas faces: they stay code)
+function jobTerminalScreens(k, color) {
     const scr = (tex, w, h, px, py, pz, ry = 0) => {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
       k.dyn(m, px, py, pz, ry);
@@ -2066,7 +2084,6 @@ export function jobTerminal(world, loc, x, z, yaw = 0, color = 0xffd23f) {
     holo.add(ring, ring2);
     holo.userData.tick = (o, dt, t) => { ring.rotation.y += dt * 1.2; ring2.rotation.z += dt * 0.8; o.position.y = 15.2 + Math.sin(t * 1.5) * 0.25; };
     k.dyn(holo, 0, 15.2, 0.8);
-  });
 }
 
 // =============================================================================================

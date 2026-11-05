@@ -22,6 +22,7 @@ has. They give a rough sense of how big each conversion is.
 | **Whole places** | the Antimatter Lab and ranch (`zlab.glb`), Chimera Downs (ten `downs-*.glb` kits) |
 | **Casino** | the hall and the forecourt kit (`hall.glb`, `lot.glb`), lamp posts, fountains, bouncers, chandeliers, sign frames (`casino.glb`), slot cabinets, the claw machine and its prizes, the blackjack table and chips, Plinko |
 | **Items** | the courier's weapons, the salvaged engine and the briefcase (wreck drops), the winch grapple |
+| **ILMB core** | the central complex and the fortress wall (two proposals: docs/ilmb-proposals), the skywalks, job terminal (its screens stay canvas), repair bay, launch gantry, fuel spheres, family domes, barracks, vehicle depot, comms mast, inner defence pylons (`ilmb.glb`, `tools/blender/build_ilmb.py`) |
 | **Small outposts** | all seven kinds and their wrecks (`outposts.glb`, `tools/blender/build_outposts.py` with `outpost_kit.py`): Market Cross, Lattice Camp, Silo Depot, Greenhouse Row, Guyed Relay, Scrap Mountain, the Hulk. The code builders in `outpostDrafts.js` stay as the fallback (`?outpostGlb=0`) |
 
 ## Code-built: places
@@ -29,7 +30,6 @@ has. They give a rough sense of how big each conversion is.
 | Place | What's code | Where | Build calls |
 |---|---|---|---|
 | **Kepler towns** (Tranquility, Aldrin, Kepler Civic Center, Twilight, Hertzsprung) | hab domes with berms, airlocks and cupolas (the biggest single builder), connecting tunnels, prefab cabins, playground, greenhouse, water tower, comms mast, the Civic Center's town hall with its clock tower | `settlements.js` habDome, cabin, tunnel, playground, greenhouse, waterTower, townHall | ~200 |
-| **ILMB** (the first place most players see) | the great dome, control spire, repair hangar, launch gantry and fuel spheres, outer domes, barracks; the fortress walls, gate towers and bastions; the glass skywalks to the wings; the job terminal kiosk; defence pylons | `settlements.js` dressIlmb, jobTerminal; `world.js` wallB, gateTowerB, bastion, skywalk, defensePylons | ~150 |
 | **Meridian Exchange** | the stepped glass trading tower, trade halls, warehouses, gate arch, plaza paving (its gantry, garage, cranes and fountain are already Blender) | `settlements.js` buildMeridian, tradeHall, warehouse | ~65 |
 | **Helium-3 Exchange** | bucket-wheel excavator, conveyor, pumping derrick, Horton spheres, ticker hall, exhaust stacks, pipes | `settlements.js` buildHelium, hortonSphere, conveyor, stack, pipe | ~70 |
 | **Shackleton Radar Array** | observatory, labs, control centre, cable runs (the four dish stations are Blender) | `settlements.js` dressArray | ~40 |
@@ -73,7 +73,7 @@ These are procedural or effects, and Blender would only make them worse or slowe
 1. ~~**The small outposts**~~: done (November 2026). Their kit (`tools/blender/outpost_kit.py`, the game's Kit ported) and
    contract (`docs/outpost-glb.md`) are the route for the other places' code builders: port call for call, compare the
    gameplay data in the viewer, then refine in Blender.
-2. **The ILMB core** (dome, spire, walls, gates, skywalks, job terminal): the start of the game and its busiest place.
+2. ~~**The ILMB core**~~: done (November 2026), in two proposals for the central complex and wall (docs/ilmb-proposals).
 3. **Kepler towns' kit**: hab dome, tunnel, cabin, town hall, playground, water tower. One kit covers five towns and your
    own town.
 4. **Military bases**: bunker, barracks, searchlight tower, defences, and the defence **turret** with them.

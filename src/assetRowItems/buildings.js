@@ -7,6 +7,7 @@ import { rubbleModel } from '../territory.js';
 import { mulberry32 } from '../rng.js';
 import { World } from '../world.js';
 import { DISH_SIZE } from '../models.js';
+import { bakeIlmbInto } from '../ilmbCore.js';
 import { buildHomeTown, addBuilding, slotAt } from '../hometown.js';
 import {
   habDome, cabin, warehouse, quonset, lattice, hortonSphere, floodMast, stack, ticker, conveyor, pipe, radar, searchlight, shanty,
@@ -208,7 +209,7 @@ const parts = {
       kitPart((k) => shanty(k, 0, 0, 8, 4, 6, 0x6b5a3a, 0, () => 0.9)),
     ])),
     item('part.wreck-hull', 'WRECKED SHIP HULL', 33, 23, () => kitPart((k) => wreckHull(k, 0, 0, 0, 24, 0x6b4a32))),
-    item('part.job-terminal', 'JOB TERMINAL', 20, 9, () => viaWorld((world, loc) => jobTerminal(world, loc, 0, 0, 0, YEL))),
+    item('part.job-terminal', 'JOB TERMINAL (CODE-BUILT, ?ilmbCore=old)', 20, 9, () => viaWorld((world, loc) => jobTerminal(world, loc, 0, 0, 0, YEL))),
     item('part.playground', 'PLAYGROUND', 26.5, 26.5, () => worldPart((world, loc, k) => playground(world, loc, k, 0, 0, 0))),
     item('part.water-tower', 'WATER TOWER', 9, 9, () => worldPart((world, loc, k) => waterTower(world, loc, k, 0, 0, 0xff9f1c))),
     item('part.greenhouse', 'GREENHOUSE', 7.5, 18.5, () => worldPart((world, loc, k) => greenhouse(world, loc, k, 0, 0, 0))),
@@ -240,6 +241,17 @@ const parts = {
     item('part.hangar', 'ILMB VOSTOK HANGAR', 67, 50, () => kitPart((k) => ilmbWing(k, 'hangar', -11.55, 2.0, 0))),
     // Daedalus's wing (41 x 34 m, lobby at x -14.3, the fence out to x 26): the delta array station (the game adds the dish)
     item('part.relay', 'ILMB DAEDALUS RELAY', 41, 34, () => kitPart((k) => ilmbWing(k, 'relay', -6.0, 0, 0))),
+    // the ILMB's core from Blender (tools/blender/build_ilmb.py; docs/ilmb-proposals): the two proposals for the central complex
+    // (their docking lobbies out to r 56, A's atrium canopy to 66, B's inclined elevators to 68), then the base's other pieces
+    item('part.ilmb-core-a', 'ILMB CORE A: THE CROWN', 134, 134, () => kitPart((k) => bakeIlmbInto(k, 'core_a')), { big: true }),
+    item('part.ilmb-core-b', 'ILMB CORE B: THE ARCOLOGY', 140, 140, () => kitPart((k) => bakeIlmbInto(k, 'core_b')), { big: true }),
+    item('part.ilmb-terminal', 'ILMB JOB TERMINAL', 20, 20, () => viaWorld((world, loc) => jobTerminal(world, loc, 0, -5, 0, YEL, (k) => bakeIlmbInto(k, 'terminal')))),
+    item('part.ilmb-repair', 'ILMB REPAIR BAY', 44, 42, () => kitPart((k) => { k.at(-2.6, -2.5); bakeIlmbInto(k, 'repair'); })),
+    item('part.ilmb-gantry', 'ILMB LAUNCH GANTRY', 24, 10, () => kitPart((k) => { k.at(5.5, 0); bakeIlmbInto(k, 'gantry'); })),
+    item('part.ilmb-spheres', 'ILMB FUEL SPHERES', 32, 17, () => row([kitPart((k) => bakeIlmbInto(k, 'horton_red')), kitPart((k) => bakeIlmbInto(k, 'horton_blue'))])),
+    item('part.ilmb-domes', 'ILMB FAMILY DOMES', 74, 44, () => row([kitPart((k) => bakeIlmbInto(k, 'dome_pink')), kitPart((k) => bakeIlmbInto(k, 'dome_gold'))])),
+    item('part.ilmb-barracks', 'ILMB BARRACKS · DEPOT', 50, 36, () => row([kitPart((k) => bakeIlmbInto(k, 'barracks')), kitPart((k) => bakeIlmbInto(k, 'depot'))])),
+    item('part.ilmb-mast', 'ILMB COMMS MAST · PYLON', 14, 6, () => row([kitPart((k) => bakeIlmbInto(k, 'mast')), kitPart((k) => bakeIlmbInto(k, 'pylon'))])),
     item('part.dish-stations', 'DISH STATIONS (CRYO · GANTRY)', 66, 30, () => row([
       kitPart((k) => dishStation(k, 0, 0, DISH_SIZE, 'cryo', 'meridian', '01', { speed: 0.1 })),
       kitPart((k) => dishStation(k, 0, 0, DISH_SIZE, 'gantry', 'kepler', '02', { speed: 0.1, phase: 1 })),

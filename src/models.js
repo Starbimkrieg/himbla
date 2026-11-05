@@ -50,6 +50,7 @@ const GLB = {
   'downs-dome': () => import('./assets/downs-dome.glb?inline'),
   power:() => import('./assets/power.glb?inline'),
   habitat: () => import('./assets/habitat.glb?inline'),
+  ilmb: () => import('./assets/ilmb.glb?inline'),
   hydroponics: () => import('./assets/hydroponics.glb?inline'),
   labs: () => import('./assets/labs.glb?inline'),
   hangar: () => import('./assets/hangar.glb?inline'),
@@ -1073,7 +1074,7 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, wp, ska, skb, pw, hb, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'weapons', 'skimmer_a', 'skimmer_b', 'power', 'habitat', ...ILMB_WINGS, ...DOWNS_FILES, 'zlab'].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, wp, ska, skb, pw, hb, il, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'weapons', 'skimmer_a', 'skimmer_b', 'power', 'habitat', 'ilmb', ...ILMB_WINGS, ...DOWNS_FILES, 'zlab'].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
   // a root node in a loaded file (`file`.glb), or a load error
   const named = (g, file, name) => {
     const o = g.scene.getObjectByName(name);
@@ -1111,6 +1112,8 @@ export async function loadShipParts({ ships } = {}) {
   SHIP_PARTS.power = bakeShip(named(pw, 'power', 'power_b'));
   // the ILMB's Kepler Habitat, "Orrery" (tools/blender/build_habitat.py)
   SHIP_PARTS.habitat = bakeShip(named(hb, 'habitat', 'habitat'));
+  // the ILMB's core: the central complex and wall (two proposals), skywalks and the base's other pieces (tools/blender/build_ilmb.py)
+  for (const o of il.scene.children) if (o.name.startsWith('ilmb_')) SHIP_PARTS[o.name] = bakeShip(o);
   // the ILMB's other wings (tools/blender/build_<name>.py)
   ILMB_WINGS.forEach((name, i) => { SHIP_PARTS[name] = bakeShip(named(more[i], name, name)); });
   const dn = more.slice(ILMB_WINGS.length);
@@ -1860,6 +1863,29 @@ export function wingModel(name) {
   if (!root) throw new Error(`${name}.glb not loaded`);
   const kids = (role) => root.kids.filter((k) => k.role === role);
   return { root, dock: root.data.dock, blinkers: kids('blinker'), fans: kids('fan'), cols: kids('col') };
+}
+
+// ---- the ILMB's core (build_ilmb.py; docs/ilmb-proposals) ----
+// Roots `ilmb_<piece>`, each in the hub's frame or its own (src/ilmbCore.js places them). Tree: root meshes = everything static;
+// `blinker` = aircraft lamps (extra `radius`); `fan` = parts that turn about y (extra `spin`); `col` = colliders (as the wings');
+// `mount` = turret mounts (the gun's foot). `glass` is see-through.
+const ILMB_TOON = {
+  white: 0xf3eee4, cream: 0xfff4e0, light: 0xd8d4e8, panel: 0x5b5870, panel2: 0x4a4660, roof: 0x3a3550, dark: 0x2a2540, metal: 0x8a87a0,
+  steel: 0x55607a, alu: 0xc9ced8, concrete: 0xb8b2cc, pave: 0x9d97b0, navy: 0x2a3a6b, blue: 0x2ec4ff, gold: 0xffd23f, hazard: 0xffd23f,
+  red: 0xff3b5c, orange: 0xff9f1c, grass: 0x5cc94a, leaf: 0x1f8a3a, leaf2: 0x5cc94a, soil: 0x4a4660, water: 0x2ec4ff, regolith: 0xb7b0c3,
+  door: 0x2a2540, pink: 0xff7ad9, bark: 0x6b4a32,
+};
+const ILMB_GLOW = { window: 0xfff6a8, lamp: 0xfff6a8, pane: 0xbfefff, redlamp: 0xff2a4a, cyan: 0x2ee6ff, screen: 0x0d1a2a, amber: 0xff9f1c, beacon: 0xffd23f };
+export function ilmbSlot(slot) {
+  if (slot in ILMB_GLOW) return { color: ILMB_GLOW[slot], glow: true };
+  return { color: ILMB_TOON[slot] ?? 0xff00ff, glow: false };
+}
+// a baked piece: static root, lamps, turning parts, colliders, turret mounts
+export function ilmbModel(name) {
+  const root = SHIP_PARTS?.[`ilmb_${name}`];
+  if (!root) throw new Error(`ilmb.glb has no ilmb_${name}`);
+  const kids = (role) => root.kids.filter((k) => k.role === role);
+  return { root, data: root.data, blinkers: kids('blinker'), fans: kids('fan'), cols: kids('col'), mounts: kids('mount') };
 }
 
 // ---- casino slot-machine cabinet (build_slots.py) ----

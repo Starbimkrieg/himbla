@@ -5,6 +5,19 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **The ILMB's core, in Blender, in two proposals** (`tools/blender/build_ilmb.py` -> `src/assets/ilmb.glb`, placed by the new
+  `src/ilmbCore.js`; docs/ilmb-proposals). The great dome and its spire, and the wall of forty separate boxes, are replaced
+  whole: **Draft A, the Crown** (a ring concourse with a continuous glazed band round a garden under a glass dome, the
+  command saucer and spire on three canted legs over it; the Rampart wall, battered, with round bastions and drum-towered
+  gates under lit bridges) and **Draft B, the Arcology** (four planted terraces rising to a glass lantern in a crown of
+  blades and a halo ring, a glazed prow and two inclined elevators; the Earthwork wall, a regolith berm against an
+  armoured, crenellated wall, arrowhead bastions, pier-and-lintel gatehouses). Both walls run unbroken round the base; both
+  dock the six skywalks, face the job terminal and keep the gates and the sixteen wall guns where they were. `?ilmbCore=a`
+  (default for now) or `b` switches, `?ilmbCore=old` brings back the code-built core.
+  - **Everything else in the core went to Blender too, refined:** the six skywalks, the job terminal (screens and holo ring
+    still the game's), the repair bay, the launch gantry, the two fuel spheres, the two family domes, the barracks, the
+    vehicle depot, the comms mast with its turning dish, the inner defence pylons. All pass the structure audit; the Asset
+    Row has both proposals and every piece.
 - **The Trading Kiosk, refined in Blender.** Each face of the trading house is now a secured shopfront: a glazed bay with a
   trader behind reinforced glass (steel mullions, speaking grilles, a deal tray under it), goods on lit shelves, a steel
   counter. The clock's hands go round (a lap a minute; moving parts can now turn about any axis), and the trading floor's
