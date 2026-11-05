@@ -23,6 +23,15 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/tools/claude-hooks.mjs\" pre"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/claude-hooks.mjs\" geo"
+          }
+        ]
       }
     ],
     "PostToolUse": [

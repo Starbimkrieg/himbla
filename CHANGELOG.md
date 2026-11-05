@@ -5,6 +5,14 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Blender is the default for models, enforced.** Unless the user says otherwise, a new model or any refinement of how one
+  looks is built in Blender, even when it's code-built today: port it, then refine it (the blender skill's new "Blender by
+  default" section has the port routes; CLAUDE.md says so first among its conventions). `.claude/rules/code-models.md` puts
+  the rule in front of Claude whenever a code-built model's file is opened, and a new hook (`tools/claude-hooks.mjs geo`)
+  blocks an edit that adds 3 or more code-built primitives to a game file in `src/`, unless the session is waived (the user
+  asked for code, or it isn't a model: effects, terrain, the kits' own helpers are exempt anyway). The after-build reminder
+  now fires only when a builder actually runs, not when one is read.
+
 - **Small outposts: audited, walking NPCs, bigger buildings.**
   - **`tools/outpost-audit.mjs`** checks each outpost's template (and its wreck) for loose pieces, solid parts with no
     collider, collider tops over air and NPC routes through colliders; `CLAUDE.md` asks for it on every outpost change.

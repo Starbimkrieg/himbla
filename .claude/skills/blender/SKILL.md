@@ -1,6 +1,6 @@
 ---
 name: blender
-description: Build, change, compress and check the game's Blender-made models (src/assets/*.glb, idles.json) with headless bpy, the structure rules every model must hold to (supports, tilts, walls meeting roofs, fixings), and the GLB contract the game relies on. Use for any edit under tools/blender or any .glb in src/assets, before writing the code. A commit that adds, renames, removes or visibly changes a model also updates the Asset Row (the dev showroom of every asset): see "Keep the Asset Row in step".
+description: Build, change, compress and check the game's Blender-made models (src/assets/*.glb, idles.json) with headless bpy, the structure rules every model must hold to (supports, tilts, walls meeting roofs, fixings), and the GLB contract the game relies on. Use for any edit under tools/blender or any .glb in src/assets, and for making or refining ANY model, including ones built in code today (Blender is the default), before writing the code. A commit that adds, renames, removes or visibly changes a model also updates the Asset Row (the dev showroom of every asset): see "Keep the Asset Row in step".
 ---
 
 # Blender models
@@ -13,6 +13,30 @@ and gun pivot), mechanical plausibility, triangle budgets by model class, factio
 slot, a resized frame. Also read it when you are unsure of an ink value or a budget. A fix that touches only the build
 pipeline, the export or a number the game reads does not need it. Generic DCC rules (quads only, no n-gons, UVs, texel
 density) do not apply to these code-built, untextured, toon-shaded meshes.
+
+## Blender by default
+
+**Unless the user says otherwise, every new model and every rework or refinement of how a model looks (its shape, parts,
+proportions or detail) is built in Blender, even when the model is code-built today.** `docs/code-vs-blender.md` lists
+what is still code. A model being in code now is not a reason to keep refining it there.
+
+- **Port first, then refine.** Write `tools/blender/build_<name>.py` that reproduces the code model, check it matches, then
+  make the change in the builder. `kit.py`'s three.js-style primitives (`place`, `cylinder`, `sphere`, `plane`,
+  `mesh_smooth`) use the game's vertex layouts, so a port lines up (`build_outposts.py` ported the Kit's mast and tower that
+  way). Then load it through the route that fits:
+  - Kit-built places and outposts: bake Blender parts into the Kit (`k.baked`, as `downsKit.js` `bake` does), colliders from
+    `parts(..., solid=True)`, or the whole outpost through `docs/outpost-glb.md` (`outpostGlb.js`, `staticBake.js`).
+  - Props, vehicles and characters: the `GLB` map in `src/models.js` and a factory.
+  - Gameplay data (colliders, raid spots, smoke, drops, moving parts) goes in empties, per the contract.
+- **Say so up front.** When the model is code-built, your first reply says you're porting it to Blender first, and roughly how
+  big the port is. Then go ahead in Blender unless the user redirects you.
+- **Stays in code:** changes that aren't the model's look (a collider, placement, gameplay numbers, a colour the game
+  sets at run time), and the "Should stay code" list in `docs/code-vs-blender.md` (terrain, sky, effects, canvas text).
+- **The hook:** an edit that adds 3 or more code-built primitives to a game file in `src/` is blocked
+  (`tools/claude-hooks.mjs geo`). Waive it for the session only if the user asked for code or it isn't a model; the block
+  message gives the command. Tell the user which reason applied.
+- **After a port**, move the model to "Already Blender" in `docs/code-vs-blender.md` and take out the code builder it
+  replaces (or leave it only as a fallback the contract asks for).
 
 ## Model structure (every model, every build)
 

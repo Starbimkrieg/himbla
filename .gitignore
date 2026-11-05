@@ -8,3 +8,6 @@ trailer-out/
 
 # local agent skill installs
 .agents/
+
+# Claude Code: sessions waived from the Blender-by-default check (tools/claude-hooks.mjs geo)
+.claude/.code-models-ok

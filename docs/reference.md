@@ -481,7 +481,8 @@ src/
     outposts.glb     Relay Mast and Watchtower (pilot, ?outpostGlb; spec in docs/outpost-glb.md)
 tools/
   claude-hooks.mjs         Claude Code hooks (.claude/settings.json): blocks a push that bumps the version without [release],
-                           skips CHANGELOG.md or the source map; reminds after a Blender build and after a commit
+                           skips CHANGELOG.md or the source map; blocks adding code-built geometry to src/ (Blender is the
+                           default for models); reminds after a Blender build and after a commit
   optimize-glb.mjs         compresses src/assets models (npm run optimize:glb)
   splice-chimera.mjs       puts chimera kit parts built on their own into chimera.glb, the rest untouched
   icons/faction_icons.py   faction emblem proposals as SVG (docs/icon-proposals/; `python3 tools/icons/faction_icons.py`)
@@ -589,4 +590,4 @@ task rules live in skills under `.claude/skills/`: `blender` (models, their stru
 Row), `places` (colliders, floors, ledge grinds, cargo), `playtest` (running the game, screenshots) and `coding-standards`.
 `.claude/rules/` loads a short pointer to the first two when their files are opened. `.claude/settings.json` runs
 `tools/setup-blender.sh` and `tools/setup-node.sh` (npm ci when `node_modules` is missing) at session start and `tools/claude-hooks.mjs` around Bash calls (push checks, build and commit
-reminders).
+reminders) and file edits (Blender by default: no new code-built geometry in `src/` unless waived).

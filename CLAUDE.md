@@ -17,15 +17,19 @@ the part you need. `README.md` is only the pitch and downloads.
 
 | When you are... | Use |
 |---|---|
-| editing `tools/blender/` or any `.glb` (models are built from code there) | **blender** skill |
+| making or refining any model, even one built in code today, or editing `tools/blender/` or a `.glb` | **blender** skill |
 | adding or moving anything solid, a floor, a rail or cargo in a place | **places** skill |
 | starting the game to look at or test something | **playtest** skill |
 | writing or reviewing code | **coding-standards** skill |
 
-`.claude/rules/` loads a short version of the first two when you open those files.
+`.claude/rules/` loads a short version of the first two when you open their files, and of "Blender by default" when you
+open a code-built model's file.
 
 ## Conventions
 
+- **Models are made in Blender.** Unless the user says otherwise, a new model or any refinement of how one looks is built
+  in Blender, even if it's code-built today: port it first (blender skill, "Blender by default"). A hook blocks adding
+  code-built geometry to `src/` (below).
 - Work on the branch the session names. Don't open a PR unless asked.
 - Keep `CHANGELOG.md` (under "Unreleased") and the source map in `docs/reference.md` in step with every change.
 - Don't touch `package.json`'s version except to release (a `Release x.y.z [release]` commit triggers the workflow).
@@ -37,6 +41,8 @@ the part you need. `README.md` is only the pitch and downloads.
   `tools/` without `CHANGELOG.md` (`[no-changelog]` in a message to waive), or add or remove a source file the source
   map doesn't reflect (`[no-docs]` to waive). Run `git commit` and `git push` as separate commands. When blocked, fix it in
   a new commit; don't waive a rule that applies.
+- **Before an edit**: adding 3 or more code-built primitives (`k.box`, `new THREE.BoxGeometry`, ...) to a game file in `src/`
+  is blocked. The message says how to waive it for the session, when the user asked for code or it isn't a model.
 - **After a Blender build**: the audit and after-build steps are added to your context. **After a commit**: any servers
   still running, and a `.glb` changed without the Asset Row.
 - **Session start**: installs headless Blender (`tools/setup-blender.sh`) and, if missing, `node_modules` (`tools/setup-node.sh`).

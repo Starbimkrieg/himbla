@@ -7,6 +7,11 @@
 //                                        - src/ or tools/ changed and CHANGELOG.md didn't (unless a message says [no-changelog])
 //                                        - a file was added to or removed from src/ or tools/ and docs/reference.md's source map
 //                                          doesn't say so (unless a message says [no-docs])
+//   node tools/claude-hooks.mjs geo    PreToolUse, Edit|Write|MultiEdit. Blender is the default for models: blocks an edit that
+//                                      adds 3 or more code-built primitives (k.box, k.cyl, new THREE.BoxGeometry, ...) to a game
+//                                      file in src/ (effects, terrain and the Kit's own helpers are exempt), unless this session
+//                                      is waived in .claude/.code-models-ok (gitignored): the user asked for code, or it isn't a
+//                                      model (docs/code-vs-blender.md, "Should stay code")
 //   node tools/claude-hooks.mjs post   PostToolUse, Bash. Adds a reminder to Claude's context:
 //                                        - after a tools/blender/build_*.py run: the audits and the after-build steps
 //                                        - after a `git commit`: the dev servers still running, and a .glb changed without
@@ -14,8 +19,8 @@
 //
 // Exits 0 (no output) when there is nothing to say. Never fails a tool call over its own errors.
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { readFileSync, existsSync } from 'node:fs';
+import { basename, relative, isAbsolute, join } from 'node:path';
 
 const ROOT = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -30,14 +35,6 @@ const bare = cmd.replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2(?=\n|$)/g
 const mode = process.argv[2];
 // `git <sub>` as a command (at the start, or after ; && || | ( or a newline, maybe with env vars or -C dir), not as text in a string
 const runs = (sub) => new RegExp(`(^|[;&|(\\n])\\s*(\\w+=\\S*\\s+)*git(\\s+-C\\s+\\S+)?\\s+${sub}\\b`).test(bare);
-
-try {
-  if (mode === 'pre') pre();
-  else if (mode === 'post') post();
-} catch (e) {
-  process.stderr.write(`claude-hooks: ${e.message}\n`);
-  process.exit(0); // a broken check never blocks work
-}
 
 function pre() {
   if (!runs('push')) return;
@@ -78,6 +75,38 @@ function pre() {
   if (problems.length) block(`Push held back by tools/claude-hooks.mjs (${range}):\n- ${problems.join('\n- ')}\nFix with a new commit, then push again.`);
 }
 
+// ---- Blender by default (CLAUDE.md; blender skill, "Blender by default")
+// visible primitives built in code: the Kit's shape helpers and three.js solids (not colliders, text, lines or buffers)
+const PRIM = /\bk\.(box|cyl|ball|ring|beam|strip|add)\(|new THREE\.(Box|Cylinder|Sphere|Torus|TorusKnot|Cone|Lathe|Extrude|Octahedron|Capsule|Tube|Dodecahedron|Icosahedron|Tetrahedron|Ring|Circle|Plane)Geometry\(/g;
+// files whose geometry is meant to stay code: the kits' own helpers, effects, terrain and sky, the render passes, the dev showroom
+const STAY_CODE = /^src\/(outpostModels|downsKit|staticBake|fx|fountainFx|projectiles|meteors|rocks|boulders|planet|terrain\w*|spindleTerrain|spindleWorker|roadplan|post|farshadow|shadowcache|toon|devoverlay|freecam|cheats|perfgraph|mapview|hud|assetRow)\.js$|^src\/assetRowItems\//;
+const WAIVER = '.claude/.code-models-ok';
+const prims = (t) => (String(t || '').match(PRIM) || []).length;
+
+function geo() {
+  const ti = input.tool_input || {};
+  const fp = String(ti.file_path || '');
+  const rel = (isAbsolute(fp) ? relative(ROOT, fp) : fp).replace(/\\/g, '/');
+  if (!/^src\/.*\.js$/.test(rel) || STAY_CODE.test(rel)) return;
+  let added = 0;
+  if (typeof ti.content === 'string') {
+    const abs = join(ROOT, rel);
+    added = prims(ti.content) - (existsSync(abs) ? prims(readFileSync(abs, 'utf8')) : 0);
+  } else {
+    const edits = Array.isArray(ti.edits) ? ti.edits : [ti];
+    for (const e of edits) added += prims(e.new_string) - prims(e.old_string);
+  }
+  if (added < 3) return;
+  const sid = String(input.session_id || 'default');
+  const waived = existsSync(join(ROOT, WAIVER)) && readFileSync(join(ROOT, WAIVER), 'utf8').split(/\s+/).includes(sid);
+  if (waived) return;
+  block(`Blender is the default for models (CLAUDE.md; blender skill, "Blender by default"). This edit adds ${added} code-built primitives to ${rel}.
+If it makes or refines how a model looks, build it in Blender instead: port the model to tools/blender/build_<name>.py and refine it there, even though it is code-built today.
+Go ahead in code only if (a) the user asked for code for this, or (b) it isn't a model (an effect, terrain, a debug marker: docs/code-vs-blender.md, "Should stay code"). Then run
+  echo ${sid} >> ${WAIVER}
+tell the user which of (a) or (b) it was, and retry the edit.`);
+}
+
 // tests, generated or binary files the source map doesn't list one by one
 function isAsset(p) {
   return /^src\/assets\//.test(p) || /\.(glb|png|jpe?g|svg|json|wav|ogg|mp3|webp)$/.test(p) || /__pycache__|\/proposals\//.test(p);
@@ -91,8 +120,8 @@ function upstreamBase() {
 
 function post() {
   const notes = [];
-  const build = cmd.match(/tools\/blender\/(build_\w+)\.py/);
-  if (build && !/(structure|style)_audit\.py/.test(cmd)) {
+  const build = cmd.match(/\bpython[\d.]*\s+(?:-\S+\s+)*\S*tools\/blender\/(build_\w+)\.py/) || cmd.match(/exec\(open\([^)]*(build_\w+)\.py/);
+  if (build) {
     const b = build[1];
     notes.push(`After building ${b}: (1) python3 tools/blender/structure_audit.py tools/blender/${b}.py and python3 tools/blender/style_audit.py tools/blender/${b}.py, and read every finding (fix it or make it deliberate and say why); (2) npm run optimize:glb unless it is runner.glb or outposts.glb (npm run check:outposts after outposts); (3) git checkout any .glb you rebuilt but did not mean to change; (4) a visible change updates the Asset Row (src/assetRowItems/) in the same commit; (5) look at it in the game: free cam, close, from two sides (game.cheats.freeCam.shot(...)). The blender skill has the details.`);
   }
@@ -118,4 +147,14 @@ function devServers() {
 function block(why) {
   process.stderr.write(why + '\n');
   process.exit(2);
+}
+
+// run last, once every constant above is defined
+try {
+  if (mode === 'pre') pre();
+  else if (mode === 'geo') geo();
+  else if (mode === 'post') post();
+} catch (e) {
+  process.stderr.write(`claude-hooks: ${e.message}\n`);
+  process.exit(0); // a broken check never blocks work
 }

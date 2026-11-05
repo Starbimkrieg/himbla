@@ -3,7 +3,9 @@
 An inventory of every visible object in the game and how it's made: **Blender**, a model built by a Python script in
 `tools/blender/` and loaded from `src/assets/*.glb`, or **code**, built at load time from three.js primitives (boxes,
 cylinders, lathes) in `src/`. The long-term aim is to move nearly everything in the second group into the first. The
-order at the end is a suggestion.
+order at the end is a suggestion. Meanwhile, **Blender is the default for any new model or any rework of one's look**, so a
+code-built model is ported when it is next refined (the blender skill, "Blender by default"; `tools/claude-hooks.mjs geo`
+blocks adding code-built geometry to `src/`). When a model moves, move its row to "Already Blender".
 
 How to read the "build calls" figures: they count the primitive calls in a builder's source (`k.box`, `k.cyl`,
 `new THREE.*Geometry` and so on). Many sit in loops, so they measure how much code builds a thing, not how many pieces it
