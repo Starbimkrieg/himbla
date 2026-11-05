@@ -302,7 +302,7 @@ def build_kiosk(k):
                         # inside: the lit back wall, three shelves of goods on it, the trader at the counter
                         k.box(C2 * 2 - 0.6, 2.4, 0.04, G(S.glow), 0, F + 0.6, C2 + 0.02, ink=0)
                         for sy in (F + 1.0, F + 1.75, F + 2.5):
-                            k.box(C2 * 2 - 0.8, 0.06, 0.42, T(WOOD), 0, sy, C2 + 0.25, ink=0.015)
+                            k.box(C2 * 2 - 0.8, 0.06, 0.42, T(AL), 0, sy, C2 + 0.25, ink=0.015)
                             for j in range(7):
                                 gx = -C2 + 0.75 + j * (C2 * 2 - 1.5) / 6
                                 col = GOODS5[math.floor(rr() * 5)]

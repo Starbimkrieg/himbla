@@ -325,6 +325,11 @@ class Kit:
     def _put(self, geo, mat, ink, node=None, floor=True, raw=False, ao=True):
         if kind_of(mat) != "other":
             ink = 0  # (glass and light beams get no outline)
+        if ao:  # (contact shade is per vertex: a big part with few vertices, a 34 m slab with eight, would carry its corners'
+            # shade across the whole of it, dark from end to end; such parts get none)
+            vs = geo[0]
+            ext = max(max(v[i] for v in vs) - min(v[i] for v in vs) for i in range(3)) if vs else 0
+            ao = not (ext > 6 and len(vs) < ext * 12)
         key = (self.grp, mat, round(float(ink), 4), node, self.only, raw, ao)
         self.buckets.setdefault(key, []).append(geo)
         if node is None and floor and kind_of(mat) == "other":
@@ -805,9 +810,12 @@ def sandbags(k, cx, cz, r, a0, a1, rows=2):
         k.solid(da * r / 2 + 0.15, (F + rows * 0.5 - 0.2) / 2, 0.3, cx + math.sin(a) * r, cz + math.cos(a) * r, a)
 
 
-def crate(k, x, y0, z, s=1.2, color=0x9A6A3A, ry=0):
+AL, AL_DARK = 0xC9CED8, 0x8A93A6  # brushed and anodised aluminium (style.md: no wood in vacuum)
+
+
+def crate(k, x, y0, z, s=1.2, color=0x9A6A3A, ry=0, band=0x5A3A22):
     k.box(s, s, s, T(color), x, y0, z, ry=ry, ink=0.04)
-    k.box(s * 1.02, s * 0.14, s * 1.02, T(0x5A3A22), x, y0 + s * 0.43, z, ry=ry, ink=0)
+    k.box(s * 1.02, s * 0.14, s * 1.02, T(band), x, y0 + s * 0.43, z, ry=ry, ink=0)
     k.solid(s / 2, s / 2, s / 2, x, z, ry, y0)
 
 
@@ -966,7 +974,7 @@ def mystery_crates(k, x, z, yaw):
     """the kiosk's raid loot: purple crates marked '?'"""
     with k.within(x, z, yaw):
         for cx, cy, cz, s, ry in ((-0.7, 0, 0, 1.2, 0.2), (0.65, 0, 0.1, 1.1, -0.3), (0, 1.15, 0.05, 1.0, 0.5)):
-            crate(k, cx, F + cy, cz, s, 0x7B2FF7, ry)
+            crate(k, cx, F + cy, cz, s, 0x7B2FF7, ry, band=0x3A3F4A)
             k.text("?", cx + math.sin(ry) * (s / 2 + 0.01), F + cy + s * 0.5, cz + math.cos(ry) * (s / 2 + 0.01), ry, s * 0.62, fg="#ff2e88", bg="#2a1240", back=False, off=0.02)
 
 
@@ -1033,13 +1041,13 @@ def hover_forklift(k, x, z, ry, sc=1.35):
             k.box(0.14, 0.07, 1.6, T(STEEL), sx, CY, MZ + 0.27 + 0.8, ink=0.01)
         # the load: a pallet on the tines, crates on it
         PY = CY + 0.07
-        for n in range(3):
-            k.box(0.12, 0.1, 1.2, T(WOOD), -0.55 + n * 0.55, PY, MZ + 1.1, ink=0.01)
+        for n in range(3):  # (an aluminium pallet: three runners, a slatted deck)
+            k.box(0.12, 0.1, 1.2, T(AL_DARK), -0.55 + n * 0.55, PY, MZ + 1.1, ink=0.01)
         for n in range(5):
-            k.box(1.3, 0.04, 0.2, T(0x9A6A3A), 0, PY + 0.1, MZ + 0.6 + n * 0.25, ink=0.01)
-        crate(k, -0.28, PY + 0.14, MZ + 1.15, 0.6, 0x9A6A3A, 0.15)
-        crate(k, 0.33, PY + 0.14, MZ + 1.0, 0.5, 0x2B59C3, -0.2)
-        crate(k, 0.0, PY + 0.74, MZ + 1.12, 0.45, 0xC9A227, 0.4)
+            k.box(1.3, 0.04, 0.2, T(AL), 0, PY + 0.1, MZ + 0.6 + n * 0.25, ink=0.01)
+        crate(k, -0.28, PY + 0.14, MZ + 1.15, 0.6, AL_DARK, 0.15, band=0x3A3F4A)
+        crate(k, 0.33, PY + 0.14, MZ + 1.0, 0.5, 0x2B59C3, -0.2, band=0x3A3F4A)
+        crate(k, 0.0, PY + 0.74, MZ + 1.12, 0.45, 0xC9A227, 0.4, band=0x3A3F4A)
         # colliders: the chassis to its deck, the counterweight, the guard's roof, the mast and the load
         k.solid(1.2, (DK - Y0 + 0.4) / 2, 1.75, 0, -0.1, 0, Y0 - 0.4)
         k.solid(1.15, 0.5, 0.4, 0, -1.55, 0, DK - 0.05)
@@ -1048,14 +1056,24 @@ def hover_forklift(k, x, z, ry, sc=1.35):
 
 
 def stall(k, x, z, ry, awn, rr, sc=1.3, vendor=False):
-    """a market stall facing local +z: counter, posts, striped awning, goods; `vendor`: its stallholder behind the counter"""
+    """a market kiosk facing local +z, aluminium-framed (nothing wooden out in vacuum): square-tube posts on foot plates,
+    an anodised counter with a steel top and a coloured kick panel, a striped awning of polymer slats on side rails, a light
+    bar under its front rail, goods, a metal stock case; `vendor`: its stallholder behind the counter"""
     with k.within(x, z, ry, sc):
         # posts under the awning's ends, each cut to its underside (the awning slopes down to the front: +0.28 about x)
         under = lambda z: F + 3.09 - (z - 0.4) * math.tan(0.28) - 0.04 / math.cos(0.28)
+        z0, z1 = 0.4 - 1.45 * math.cos(0.28), 0.4 + 1.45 * math.cos(0.28)  # (the awning's back and front edges)
         for sx in (-1, 1):
             for pz in (-0.85, 1.2):
-                k.box(0.14, under(pz) - F, 0.14, T(WOOD), sx * 1.9, F, pz, ink=0.02)
-        k.box(3.8, 1.0, 1.2, T(WOOD), 0, F, 0.5, ink=0.04)
+                k.box(0.1, under(pz) - F - 0.08, 0.1, T(AL), sx * 1.9, F, pz, ink=0.015)
+                k.box(0.24, 0.04, 0.24, T(AL_DARK), sx * 1.9, F, pz, ink=0.01)
+            k.beam((sx * 1.9, under(z0) - 0.045, z0), (sx * 1.9, under(z1) - 0.045, z1), 0.045, T(AL_DARK), ink=0.01, seg=4)  # side rail
+        k.beam((-1.9, under(1.75) - 0.045, 1.75), (1.9, under(1.75) - 0.045, 1.75), 0.045, T(AL_DARK), ink=0.01, seg=4)  # front rail
+        k.box(3.0, 0.05, 0.07, G(WARM), 0, under(1.75) - 0.115, 1.75, ink=0)  # (the light bar, set into its underside)
+        k.box(3.8, 0.94, 1.2, T(AL_DARK), 0, F, 0.5, ink=0.04)
+        k.box(3.9, 0.06, 1.3, T(0x55607A), 0, F + 0.94, 0.5, ink=0.02)
+        for sx in (-1, 1):
+            k.box(0.06, 0.94, 0.06, T(AL), sx * 1.9, F, 1.1, ink=0)  # (the counter's front corner trims)
         k.box(3.82, 0.4, 0.05, T(awn), 0, F + 0.5, 1.11, ink=0)
         for i in range(5):
             k.box(0.78, 0.08, 2.9, T(0xFFFFFF if i % 2 else awn), -1.6 + i * 0.8, F + 3.05, 0.4, rx=0.28, ink=0.02)
@@ -1066,7 +1084,7 @@ def stall(k, x, z, ry, awn, rr, sc=1.3, vendor=False):
             col = (0xFF4F2E, YEL, 0x7DFF3A, 0xFF7AD9, 0xFF9F1C, 0x2EC4FF)[math.floor(rr() * 6)]
             gz = 0.5 + (rr() - 0.5) * 0.5
             k.add(sphere(r0, 6, 4) if ball else cuboid(0.36, 0.3, 0.36), T(col), -1.4 + j * 0.56, F + 1.0 + (r0 * 0.85 if ball else 0.15), gz, ink=0.02)
-        crate(k, 2.6, F, -0.6, 1.0, 0x9A6A3A, 0.3)
+        crate(k, 2.6, F, -0.6, 1.0, AL_DARK, 0.3, band=0x3A3F4A)  # (the stock case)
         k.solid(1.9, (F + 1.0) / 2, 0.6, 0, 0.5)
         if vendor:
             k.stand(-0.6, F, -0.45, scale=1.3)  # (taller than walkers, to clear the counter, as the Downs' vendors)

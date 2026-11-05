@@ -10,8 +10,15 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
   counter. The clock's hands go round (a lap a minute; moving parts can now turn about any axis), and the trading floor's
   price boards are scrolling tickers of quotes (a new `ticker` role, `tickerMat`). The canopies no longer overlap the
   trading floor's slab or each other (the shimmer round the house), and the paved lanes sit 12 mm proud without the contact
-  shade that darkened them end to end. The hover-cart is a proper hover-forklift: rounded chassis on four lit hover pads,
+  shade that darkened them end to end. Nor does the paved square round the house, nor any other big part with too few
+  vertices to carry it (the outpost kit leaves contact shade off those: a 34 m slab with eight vertices took its corners'
+  shade across the whole of it, sat in the toon's darkest band with halftone dots everywhere and swallowed the shadows on
+  it; silo walls, Quonset shells, lattice legs and the yard aprons of every outpost were smeared the same way). The hover-cart is a proper hover-forklift: rounded chassis on four lit hover pads,
   counterweight, seat and controls under a roll-over guard, mast, carriage and forks with a loaded pallet, a beacon.
+  The market stalls are aluminium-framed kiosks now (square-tube posts on foot plates, anodised counters with steel tops,
+  polymer awning slats on side rails, a light bar under the front, a metal stock case), and the shopfront shelves, the
+  forklift's pallet and the crates went from timber to metal: **a new house rule, no wood in vacuum** (the blender skill's
+  style.md: anything exposed to space is metal or painted panel; only the insides of domes and halls may use wood).
   Stallholders stand behind half the market stalls (walkers' new `stands`: people who keep their post and serve). The
   code-built kiosk is now the older fallback (`GLB_REFINED`).
 - **The small outposts are built in Blender** (`tools/blender/build_outposts.py` -> `src/assets/outposts.glb`, on by

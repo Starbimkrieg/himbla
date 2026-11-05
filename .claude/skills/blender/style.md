@@ -156,6 +156,13 @@ Every model should work like the real thing, at the level a player can see. Most
   inner knees were cut back so the trolley could pass.
 - **Lunar logic over car logic.** Radiator panels dump heat (the buggy's bonnet), solar canopies supply power, berms and
   bunds protect things. Give each part a reason to be there.
+- **No wood in vacuum.** Anything out in the open on the Moon (exposed to space) is built in metal or composite, never wood:
+  posts, frames, counters, shelving, pallets, crates, fences, decks, benches. Use brushed aluminium (`0xC9CED8`), anodised or
+  dark aluminium (`0x8A93A6`), steel (`0x55607A`) or painted panels in the owner's palette; trims and kick panels may carry
+  colour. Brown is not a material on the Moon: a brown that read as timber becomes metal or a painted colour, and rust
+  (`0x7A4A32`) means rusted steel, not wood. Inside a pressurised dome or hall (Chimera Downs, the casino's hall, a hab's
+  interior) wood is fine. When porting or revising a model that has wood outdoors, change it as part of the port (the
+  Trading Kiosk's market stalls went from timber to aluminium-framed kiosks).
 - **Animated parts pivot where they turn:** wheels at the axle, antennas at the base, doors and legs at the hinge. Author them
   at the stated rest pose (legs deployed, gear doors closed, ramp open-flat, sectional doors as their `state`).
 

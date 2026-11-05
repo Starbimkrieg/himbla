@@ -13,6 +13,9 @@ and gun pivot), mechanical plausibility, triangle budgets by model class, factio
 slot, a resized frame. Also read it when you are unsure of an ink value or a budget. A fix that touches only the build
 pipeline, the export or a number the game reads does not need it. Generic DCC rules (quads only, no n-gons, UVs, texel
 density) do not apply to these code-built, untextured, toon-shaded meshes.
+**No wood in vacuum** (style.md, Mechanical plausibility): anything exposed to space is metal (aluminium, steel) or painted
+panel, never timber or a timber brown; only the insides of domes and halls (the Downs, the casino hall) may use wood. Apply it
+whenever you port or revise a model.
 
 ## Blender by default
 
