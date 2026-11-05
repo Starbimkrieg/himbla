@@ -9,6 +9,8 @@ the part you need. `README.md` is only the pitch and downloads.
 - `npm run build:release`: the release bundle, without the dev tools (F8 menu, cheats, F3, git menu, Asset Row, `?trailer`,
   `window.game`). `npm run check:dev-strip` proves they're gone.
 - `npm run check:outposts`: checks `src/assets/outposts.glb` against `docs/outpost-glb.md`.
+- `node tools/outpost-audit.mjs` (and `WRECK=1`): the small outposts' audit, on every change to one (dev server on 5199; the
+  places skill says how).
 - `npm run optimize:glb`: compresses the models in `src/assets`.
 
 ## Before you start, use the skill for the job
