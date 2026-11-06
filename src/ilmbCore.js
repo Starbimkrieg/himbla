@@ -20,10 +20,17 @@ export const ILMB_CORE = (() => {
 })();
 export const ilmbBlender = () => ILMB_CORE !== 'old';
 
+const PAINT = new Map();
 const slotMat = (slot) => {
   if (slot === 'glass') return GLASS(0x9be7ff, 0.22);
   const c = ilmbSlot(slot);
-  return c.glow ? G(c.color) : T(c.color);
+  if (!c.paint) return c.glow ? G(c.color) : T(c.color);
+  if (!PAINT.has(slot)) {            // (models.js ilmbSlot: painted on, pulled toward the camera like the ink lines)
+    const m = (c.glow ? G(c.color) : T(c.color)).clone();
+    Object.assign(m, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+    PAINT.set(slot, m);
+  }
+  return PAINT.get(slot);
 };
 
 // Bake one piece (`ilmb_<name>`) into a kit's current frame: its meshes, lamps, turning parts and colliders. Returns the model.

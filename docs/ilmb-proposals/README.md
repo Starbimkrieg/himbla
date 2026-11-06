@@ -22,6 +22,9 @@ Revisions to A after the pick (the pictures below are from before them):
 - **Job terminal**: moved off the entrance's axis to the plaza on its right (seen from the south gate), between it and the
   Meridian Labs skywalk, facing out from the core (`locations.js` ILMB_BOARD); the side screens hang 4 cm off their dark
   plates (they were in the same plane, and flickered); the holo ring floats clear of the canopy.
+- **The Rampart's trim**: each bastion's red band painted flush on its drum at the height of the wall's lit inside band,
+  with warning stripes above and below; the gate towers' bands flush on their batter; the parapet and coping stop at the
+  bastions' drums (they ran across the gun decks); the plinth's gold line painted on its face, wrapping each buttress.
 - **No plants out in the vacuum**: the Labs' arrival plaza planters are bench blocks now (plants stay under glass: the
   courtyard, the Habitat's park, the Hydroponics dome).
 
@@ -29,6 +32,8 @@ Revisions to A after the pick (the pictures below are from before them):
 |---|---|
 | ![The revised Crown from the south: the board right of the atrium](a2_overview.jpg) | ![The atrium run into the ring, its side one flush face](a2_atrium.jpg) |
 | ![The saucer legs in their octagonal footings, the flush glazing bars](a2_legs.jpg) | ![The job board, its holo ring clear of the canopy](a2_board.jpg) |
+| ![A bastion: the parapet stops at its drum, the red band and warning stripes](a2_bastion.jpg) | ![Inside: the lit band runs into the bastion's red band](a2_wall_inside.jpg) |
+| ![The plinth's gold line wrapping the buttresses](a2_plinth.jpg) | |
 
 | | Draft A: **the Crown** | Draft B: **the Arcology** |
 |---|---|---|

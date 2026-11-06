@@ -1876,7 +1876,10 @@ const ILMB_TOON = {
   door: 0x2a2540, pink: 0xff7ad9, bark: 0x6b4a32,
 };
 const ILMB_GLOW = { window: 0xfff6a8, lamp: 0xfff6a8, pane: 0xbfefff, redlamp: 0xff2a4a, cyan: 0x2ee6ff, screen: 0x0d1a2a, amber: 0xff9f1c, beacon: 0xffd23f };
+// `paint_<slot>`: a part painted on another a few millimetres off its face (a band on a drum, warning stripes): <slot>'s
+// colour, drawn pulled toward the camera (ilmbCore.js) so it never flickers through the face under it
 export function ilmbSlot(slot) {
+  if (slot.startsWith('paint_')) return { ...ilmbSlot(slot.slice(6)), paint: true };
   if (slot in ILMB_GLOW) return { color: ILMB_GLOW[slot], glow: true };
   return { color: ILMB_TOON[slot] ?? 0xff00ff, glow: false };
 }

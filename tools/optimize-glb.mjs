@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Compresses the game's models: vertex data quantized (16-bit positions, 8-bit normals) and meshopt-coded with
+// Compresses the game's models: vertex data quantized (14-bit positions, 16 for POSITION_BITS; 8-bit normals) and meshopt-coded with
 // glTF-Transform, about a quarter of the size. src/models.js (loadGlb) decodes them and reads plain files too, so this
 // is optional: a fresh Blender export is just bigger until run through here.
 //
@@ -11,11 +11,14 @@
 import { execFileSync, execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CLI = '@gltf-transform/cli@4.5.1';
 const ASSETS = fileURLToPath(new URL('../src/assets/', import.meta.url));
+// Positions are snapped to 2^14 steps across each mesh by default: 3 cm on a mesh as wide as the ILMB's wall, too coarse for
+// its painted lines a centimetre or so off their faces. These files get finer steps.
+const POSITION_BITS = { 'ilmb.glb': 16 };
 const DEFAULT = ['ships', 'skimmer', 'lightbike', 'skimmer_a', 'skimmer_b', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'gantry', 'garage', 'slots', 'casino', 'blackjack', 'claw', 'duck', 'dish', 'engine', 'briefcase', 'hovercar', 'weapons', 'plinko', 'hall', 'lot', 'downs-stand', 'downs-club', 'downs-course', 'downs-stalls', 'downs-arcade', 'downs-screen', 'downs-fair', 'downs-stable', 'downs-crowd', 'downs-dome', 'power', 'habitat', 'hydroponics', 'labs', 'hangar', 'relay', 'chimera', 'outposts', 'ilmb'].map((n) => `${ASSETS}${n}.glb`);
 const files = process.argv.length > 2 ? process.argv.slice(2) : DEFAULT;
 
@@ -32,6 +35,8 @@ try {
     if (extensionsOf(file).includes('EXT_meshopt_compression')) { console.log(`${file}: already compressed`); continue; }
     const out = join(tmp, 'out.glb');
     const args = ['--yes', CLI, 'meshopt', file, out, '--level', 'high'], opts = { stdio: ['ignore', 'ignore', 'inherit'] };
+    const bits = POSITION_BITS[basename(file)];
+    if (bits) args.push('--quantize-position', String(bits));
     // npx is a .cmd on Windows, which Node runs only through a shell
     if (process.platform === 'win32') execSync(`npx ${args.map((a) => `"${a}"`).join(' ')}`, opts);
     else execFileSync('npx', args, opts);

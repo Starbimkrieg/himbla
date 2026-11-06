@@ -54,12 +54,14 @@ def mesh_raw(name, geo, slot, parent, ink=0.04, sharp=SHARP):
 
 class Acc:
     """Parts merged per (slot, ink, parent): one mesh each at flush. raw=True keeps the winding (open sweeps); parent puts the
-    mesh under a pivot (built in its frame) instead of flush_all's."""
+    mesh under a pivot (built in its frame) instead of flush_all's. tag keeps a group apart in a mesh of its own: the
+    compressed file snaps each mesh's vertices to a grid of 1/16384 of its size (optimize-glb.mjs), so a part painted a few
+    millimetres off another needs both in small meshes (build_ilmb.py's drums and wall)."""
     all = {}
 
     @classmethod
-    def of(cls, slot, ink=0.02, raw=False, sharp=SHARP, parent=None):
-        k = (slot, ink, raw, sharp, parent.name if parent else "")
+    def of(cls, slot, ink=0.02, raw=False, sharp=SHARP, parent=None, tag=""):
+        k = (slot, ink, raw, sharp, parent.name if parent else "", tag)
         if k not in cls.all:
             cls.all[k] = cls(slot, ink, raw, sharp, parent)
         return cls.all[k]
@@ -74,10 +76,10 @@ class Acc:
 
 def flush_all(parent, prefix):
     made = []
-    for i, ((slot, ink, raw, sharp, _), a) in enumerate(sorted(Acc.all.items(), key=lambda kv: (kv[0][4], kv[0][0], kv[0][1], kv[0][2]))):
+    for i, ((slot, ink, raw, sharp, _, tag), a) in enumerate(sorted(Acc.all.items(), key=lambda kv: (kv[0][4], kv[0][5], kv[0][0], kv[0][1], kv[0][2]))):
         if not a.geos:
             continue
-        name = f"{prefix}{slot}_{i}"
+        name = f"{prefix}{slot}_{i}" + (f"_{tag}" if tag else "")
         g = join(a.geos)
         made.append((mesh_raw if raw else mesh)(name, g, slot, a.parent or parent, ink, sharp))
     Acc.all.clear()

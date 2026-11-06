@@ -187,6 +187,13 @@ Every inked part is drawn with a black shell round it (the `ink` custom property
   lathes, so a flat ribbon closer than ~6 mm to the nearest vertex surface dips under the facets.
 - A part that enters another (the crest into the helmet) must have its base INSIDE it all along its length: a base that stops above the
   surface shows its own outline under it as a second line.
+- **Paint in a compressed file:** `optimize:glb` snaps each mesh's vertices to a grid of 1/16384 of that mesh's size (14-bit
+  positions). A stripe a few millimetres off a face that is merged into a 500 m mesh (a wall ring) is snapped by 3 cm and
+  bitten into in triangles. Keep paint and the face under it in small meshes (`wing_kit` Acc `tag`; `build_ilmb.py` TAG),
+  or give the file finer steps (`POSITION_BITS` in `tools/optimize-glb.mjs`: 16 bits for `ilmb.glb`); stand paint about
+  1 cm off, on the same chords as its face (`build_ilmb.py` ring_sector's angle grid), and draw it pulled toward the camera
+  (`paint_<slot>` slots in `ilmb.glb`, `src/ilmbCore.js`). Don't split a long inked body into pieces (each piece's outline
+  shows as a seam at the joints), and don't groove an inked face for a line (its outline bulges over the groove).
 - The courier's shells are thinned with the camera's distance (`inkMatNear` in `src/toon.js`; full thickness from 7 m). Anything built the
   baked way (`bakeRunnerParts`) gets that for free.
 

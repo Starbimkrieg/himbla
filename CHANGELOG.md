@@ -20,6 +20,16 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
     across its whole width, and each side is one flush face from the ground to the canopy's top (no plinth lip). The saucer's
     legs are cut level into footings shaped like their own octagonal section, and their gold bands are octagonal sleeves a
     few millimetres proud of the leg's faces.
+  - **The Rampart's trim, flush:** each bastion's red band is painted on the drum at the height of the wall's lit inside
+    band (it was a ring standing 23 cm off the batter, a metre higher), with yellow-and-dark warning stripes above and below
+    it; the gate towers' gold bands and crown band follow their batter too. The parapet and its gold coping stop at each
+    bastion's drum instead of running across its gun deck past the turret. The plinth's gold line is painted on its sloped
+    face and wraps round each buttress, where it used to sit on the plinth's edge and cut through the buttresses' feet.
+    Painted parts sit a centimetre or so off their faces and are drawn pulled toward the camera (`paint_*` slots); every arc
+    of the wall shares one grid of angles, so a line's chords match its face's. The compressed file snapped each mesh's
+    vertices to 1/16384 of its size, 3 cm on a mesh as wide as the wall, which bit into thin bands: `ilmb.glb` is compressed
+    at 16 bits now (`optimize-glb.mjs` POSITION_BITS), and the drums, buttresses, atrium and legs keep their paint in small
+    meshes of their own (`wing_kit` Acc `tag`).
   - **The job board moved** off the entrance's axis to the plaza on its right, between the atrium and the Meridian Labs
     skywalk, facing out from the core (`locations.js` ILMB_BOARD; the tutorial's arrow follows it). Its side screens no
     longer flicker against their housings' plates (they were in the same plane), and the holo ring floats clear of the canopy.

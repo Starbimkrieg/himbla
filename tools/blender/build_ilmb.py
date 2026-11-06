@@ -48,11 +48,40 @@ HEX = {
     # see-through
     "glass": 0x9BE7FF,
 }
+for _s in ("gold", "redlamp", "hazard", "dark", "lamp"):   # painted on another part's face: src/models.js ilmbSlot
+    HEX["paint_" + _s] = HEX[_s]
 PFX = "ilmb_"
 ROOT = None
 exec(open(os.path.join(REPO, "tools", "blender", "wing_kit.py"), encoding="utf-8").read(), globals())
 exec(open(os.path.join(REPO, "tools", "blender", "dishkit.py"), encoding="utf-8").read(), globals())   # the comms mast's dish head
 from mathutils import Vector, Matrix
+from contextlib import contextmanager
+
+# While TAG[0] is set, paint (`paint_*` slots) and the parts it is painted on (CARRIERS: slot and ink) go to meshes of their
+# own (wing_kit Acc tag): small meshes, so the compressed file's grid (1/16384 of a mesh's size, optimize-glb.mjs) stays
+# finer than the centimetre paint stands off a face. Everything else merges as ever.
+TAG = [""]
+CARRIERS = {("panel", 0.2), ("panel", 0.18), ("panel2", 0.1), ("panel2", 0.06), ("navy", 0.1), ("cream", 0.1),
+            ("white", 0.1), ("roof", 0.06)}                      # (the drums', the buttresses', the atrium's, the legs')
+_acc_of = Acc.of.__func__
+
+
+def _of(cls, slot, ink=0.02, raw=False, sharp=SHARP, parent=None, tag=None):
+    if tag is None:
+        tag = TAG[0] if (slot.startswith("paint_") or (slot, ink) in CARRIERS) else ""
+    return _acc_of(cls, slot, ink, raw, sharp, parent, tag)
+
+
+Acc.of = classmethod(_of)
+
+
+@contextmanager
+def tagged(t):
+    old, TAG[0] = TAG[0], t
+    try:
+        yield
+    finally:
+        TAG[0] = old
 
 # ---------------- the base's layout (src/locations.js, src/world.js) ----------------
 WINGS = [(0.0, 116, 24.0), (0.62, 122, 18.6), (2.2, 124, 21.6), (3.8, 120, 14.0), (4.5, 110, 12.6), (5.2, 120, 28.6)]  # angle, distance, dock
@@ -64,6 +93,7 @@ WALL_R = 248.0
 GATES = [0.0, math.pi / 2, math.pi, 3 * math.pi / 2]
 BASTIONS = [(q + f) * (math.pi / 2) for q in range(4) for f in (1 / 3, 2 / 3)]
 GATE_HALF = 0.13                                                   # the gate towers stand at gate +- this (radians)
+GATE_TOWERS = [g + s * GATE_HALF for g in GATES for s in (-1, 1)]
 SW_F, SW_W, SW_WALL = 0.6, 5.6, 2.0                                # skywalk floor, width, glass wall height (vault radius W / 2)
 
 
@@ -77,8 +107,24 @@ def at_r(r, th):
 
 
 def ring_sector(profile, a0, a1, step=math.radians(2)):
-    """a closed (r, y) section swept from a0 to a1 (full circle if they span 2 pi)"""
-    return sector(profile, a0, a1, max(3, int(round(abs(a1 - a0) / step))))
+    """a closed (r, y) section swept from a0 to a1 (full circle if they span 2 pi). A part of a turn has its vertices on one
+    grid of angles (multiples of step), and its ends on the grid's chords, so arcs over the same angles, cut anywhere, follow
+    the same polyline (a line painted on a face never dips behind it)."""
+    if abs(a1 - a0) >= TAU - 1e-9:
+        return sector(profile, a0, a1, max(3, int(round(abs(a1 - a0) / step))))
+    k0, k1 = math.floor(a0 / step + 1e-6) + 1, math.ceil(a1 / step - 1e-6) - 1
+    ts = [a0] + [k * step for k in range(k0, k1 + 1) if a0 + 0.2 * step < k * step < a1 - 0.2 * step] + [a1]
+    n = len(profile)
+
+    def at(t, r, y):              # on the grid's chord through t (an end between grid angles lies on its chord, not the arc)
+        k = math.floor(t / step + 1e-9)
+        f = t / step - k
+        c0, s0, c1, s1 = math.cos(k * step), math.sin(k * step), math.cos((k + 1) * step), math.sin((k + 1) * step)
+        return ((c0 + (c1 - c0) * f) * r, y, (s0 + (s1 - s0) * f) * r)
+    verts = [at(t, r, y) for t in ts for r, y in profile]
+    faces = [(i * n + j, i * n + (j + 1) % n, (i + 1) * n + (j + 1) % n, (i + 1) * n + j) for i in range(len(ts) - 1) for j in range(n)]
+    faces += [tuple(range(n)), tuple((len(ts) - 1) * n + j for j in range(n))]
+    return verts, faces
 
 
 def spans(skip, half):
@@ -260,6 +306,7 @@ def build_core_a():
     # across their full width), out to r 61 under a canopy cantilevered to 67.5. Each side is one flush face from the ground
     # to the canopy's top: a cream wall, the canopy's end in the same plane above it. Inside: a pale back wall, a mezzanine.
     th = MAIN_A
+    TAG[0] = "atrium"                            # (its own meshes: wing_kit Acc tag)
     A0, A1, AF, AW, AH, CT = 47.6, 61.0, 67.5, 12.4, 13.1, 14.1   # back (in the ring), glass front, canopy front, half width, eaves, top
     Acc.of("glass", 0.0).put(radial(box((A0 + A1) / 2, AH / 2, 0, A1 - A0, AH, 2 * AW - 0.8), th))
     Acc.of("light", 0.0).put(radial(box((A0 + 55.0) / 2, AH / 2, 0, 55.0 - A0, AH - 0.02, 2 * AW - 0.84), th))
@@ -268,9 +315,9 @@ def build_core_a():
     for sz in (-1, 1):
         Acc.of("cream", 0.1).put(radial(box((A0 + A1) / 2, AH / 2, sz * (AW - 0.2), A1 - A0, AH, 0.4), th))
     Acc.of("cream", 0.1).put(radial(box((A0 + AF) / 2, (AH + CT) / 2, 0, AF - A0, CT - AH, 2 * AW), th))
-    for sz in (-1, 1):                           # (a gold line painted round the canopy's edge)
-        Acc.of("gold", 0.0).put(radial(box((A0 + AF) / 2 + 0.003, 13.55, sz * (AW + 0.003), AF - A0 + 0.006, 0.3, 0.006), th))
-    Acc.of("gold", 0.0).put(radial(box(AF + 0.003, 13.55, 0, 0.006, 0.3, 2 * AW + 0.006), th))
+    for sz in (-1, 1):                           # (a gold line painted round the canopy's edge, 8 mm proud)
+        Acc.of("paint_gold", 0.0).put(radial(box((A0 + AF) / 2 + 0.008, 13.55, sz * (AW + 0.004), AF - A0 + 0.016, 0.3, 0.008), th))
+    Acc.of("paint_gold", 0.0).put(radial(box(AF + 0.004, 13.55, 0, 0.008, 0.3, 2 * AW + 0.016), th))
     gf = Acc.of("navy", 0.03)
     for zz in [-(AW - 0.4) + (2 * AW - 0.8) * k / 10 for k in range(1, 10)]:
         gf.put(radial(box(A1, AH / 2, zz, 0.3, AH, 0.25), th))
@@ -284,6 +331,7 @@ def build_core_a():
     col((x, 0, z), shape="box", hx=AW, hy=AH / 2, hz=(A1 - A0) / 2, yaw=math.atan2(math.cos(th), math.sin(th)))
     x, z = at_r((A0 + AF) / 2, th)
     col((x, AH, z), shape="box", hx=AW, hy=(CT - AH) / 2, hz=(AF - A0) / 2, yaw=math.atan2(math.cos(th), math.sin(th)))
+    TAG[0] = ""
     # the courtyard: a garden under the glass dome, paths, a pool, trees
     Acc.of("grass", 0.0).put(xf(cylinder(RI - 0.1, RI - 0.1, 0.3, 48)[:2], (0, 0.15, 0)))
     for k in range(3):
@@ -301,20 +349,22 @@ def build_core_a():
     # stands flush in it; the gold bands are octagonal sleeves on the leg's own faces, a few millimetres proud
     LEG_A = [MAIN_A + 0.55 + TAU * k / 3 for k in range(3)]
     foot_r, top_r, top_y, pad_y = 41.0, 5.0, 60.0, H + 1.4
-    for a in LEG_A:
+    for li, a in enumerate(LEG_A):
+        TAG[0] = f"leg{li}"
         fx, fz = at_r(foot_r, a)
         tx, tz = at_r(top_r, a)
         A, Bv = Vector((fx, pad_y, fz)), Vector((tx, top_y, tz))
         Acc.of("white", 0.1).put(oct_strut(A, Bv, 1.7, 1.0, cut_y=pad_y - 0.1))   # (its foot 10 cm into the footing)
         Acc.of("roof", 0.06).put(oct_footing(A, Bv, 1.7, pad_y, pad_y, H + 0.15, 1.3))
-        Acc.of("gold", 0.0).put(oct_footing(A, Bv, 1.7, pad_y, pad_y - 0.25, pad_y - 0.45, 1.3, grow=0.006))  # (painted on)
+        Acc.of("paint_gold", 0.0).put(oct_footing(A, Bv, 1.7, pad_y, pad_y - 0.25, pad_y - 0.45, 1.3, grow=0.01))  # (painted on)
         for t in (0.25, 0.5, 0.75):
-            Acc.of("gold", 0.0).put(oct_band(A, Bv, 1.7, 1.0, t, 0.5, 0.006))
+            Acc.of("paint_gold", 0.0).put(oct_band(A, Bv, 1.7, 1.0, t, 0.5, 0.01))
         dx, dy, dz = tx - fx, top_y - pad_y, tz - fz
         ln = math.sqrt(dx * dx + dy * dy + dz * dz)
         mx, mz = (fx + tx) / 2, (fz + tz) / 2
         col((mx, (pad_y + top_y) / 2 - ln / 2, mz), shape="box", hx=1.6, hy=ln / 2, hz=1.6, yaw=math.atan2(-math.cos(a), -math.sin(a)), pitch=math.atan2(math.hypot(dx, dz), dy))
         col((fx, H, fz), shape="cyl", r=3.2, h=pad_y - H)
+    TAG[0] = ""
     # the saucer: a lathe from the collar out to its rim, a glazed band, a stepped roof; the spire, the radar, the beacon
     sau = [(0.0, top_y - 1.0), (5.5, top_y - 1.0), (16.0, top_y + 3.6), (16.8, top_y + 4.4), (16.8, top_y + 4.9), (16.0, top_y + 5.0)]
     Acc.of("white", 0.14).put(lathe(sau + [(0.0, top_y + 5.0)], 40))
@@ -410,6 +460,82 @@ def oct_band(A, Bv, ra, rb, t, w, proud):
     return oct_prism(*rings)
 
 
+DRUM_SEG = 48                                    # the drums' facets (the painted bands are shells on the same facets)
+TRIM_Y = (6.3, 6.7)                              # the inside lit band's height, which the drums' red bands continue
+SKIRT_Y = (1.3, 1.55)                            # the gold line round the plinths, wrapping the buttresses
+
+
+def drum_band(slot, c, r_at, y0, y1, off=0.008, ink=0.0):
+    """a band from y0 to y1 painted round a drum centred on c (x, z) whose face is r_at(y) (its vertex radius, DRUM_SEG
+    facets from +z like kit.cylinder): an open shell on the same facets, following the face's batter, off proud of it"""
+    Acc.of(slot, ink).put(xf(cylinder(r_at(y1) + off, r_at(y0) + off, y1 - y0, DRUM_SEG, open_ended=True)[:2],
+                             (c[0], (y0 + y1) / 2, c[1])))
+
+
+def in_wall(x, y, z, pad=0.1):
+    """inside the Rampart's solid (its battered body, to the walk) at that point: where paint on a drum can't be seen"""
+    r = math.hypot(x, z)
+    return y < 10.0 - pad and WALL_R - 3.0 + pad < r < WALL_R + 2.6 - 0.12 * y - pad
+
+
+def facet_r(r, t, off):
+    """the radius at angle t (as (cos t, sin t)) of a DRUM_SEG-faceted drum of vertex radius r, plus off"""
+    step = TAU / DRUM_SEG
+    u = (math.pi / 2 - t) % step - step / 2              # (kit.cylinder's vertices are at pi/2 - k step)
+    return (r * math.cos(step / 2) + off) / math.cos(u)
+
+
+def hazard_band(c, r_at, y0, y1, w=0.4, off=0.012):
+    """warning stripes (yellow and dark, slanting at 45 degrees) painted round a drum, as drum_band: one quad each, those
+    buried in the wall left out"""
+    rm = r_at((y0 + y1) / 2)
+    n = 2 * max(4, round(TAU * rm / (2 * w)))
+    da, ds = TAU / n, (y1 - y0) / rm
+    for i in range(n):
+        a = i * da
+        q = [Vector((c[0] + math.cos(t) * facet_r(r_at(y), t, off), y, c[1] + math.sin(t) * facet_r(r_at(y), t, off)))
+             for t, y in ((a, y0), (a + da, y0), (a + da + ds, y1), (a + ds, y1))]
+        m = sum(q, Vector()) / 4
+        if in_wall(m.x, m.y, m.z):
+            continue
+        out = Vector((m.x - c[0], 0, m.z - c[1]))
+        if (q[1] - q[0]).cross(q[3] - q[0]).dot(out) < 0:      # (counter-clockwise seen from outside)
+            q.reverse()
+        Acc.of("paint_hazard" if i % 2 == 0 else "paint_dark", 0.0, raw=True).put(([tuple(v) for v in q], [(0, 1, 2, 3)]))
+
+
+def cut_spans(a0, a1, holes, half):
+    """the arc a0..a1 without (h - half, h + half) round each angle in holes (and its turns)"""
+    out = [(a0, a1)]
+    for h in holes:
+        for c in (h - TAU, h, h + TAU):
+            nxt = []
+            for p0, p1 in out:
+                if c + half <= p0 or c - half >= p1:
+                    nxt.append((p0, p1))
+                    continue
+                if c - half > p0:
+                    nxt.append((p0, c - half))
+                if c + half < p1:
+                    nxt.append((c + half, p1))
+            out = nxt
+    return out
+
+
+def clear(a0, a1, *cuts):
+    """the arc a0..a1 without each (angles, half) cut's arcs"""
+    out = [(a0, a1)]
+    for holes, half in cuts:
+        out = [q for p0, p1 in out for q in cut_spans(p0, p1, holes, half)]
+    return out
+
+
+def chunks(a0, a1, most=math.radians(20)):
+    """a0..a1 in equal pieces of at most `most`"""
+    n = max(1, math.ceil((a1 - a0) / most - 1e-9))
+    return [(a0 + (a1 - a0) * i / n, a0 + (a1 - a0) * (i + 1) / n) for i in range(n)]
+
+
 # =====================================================================================================================
 # WALL A: "the Rampart". One wall all the way round, its outer face battered, on a plinth, with buttress fins and red lamps
 # outside, a lit band inside, a parapet with a gold coping and a walk behind it. At each of the eight bastions the wall
@@ -420,34 +546,60 @@ def build_wall_a():
     begin("ilmb_wall_a", draft="a")
     R = WALL_R
     gaps = spans(GATES, GATE_HALF)
+    pr = lambda y: R + 4.2 - 0.2 * y / 1.8      # the plinth's sloped outer face
+    P = 0.015                                    # how far the long painted lines stand off their faces (ilmb.glb is
+    #                                              compressed at 16 bits: a 7.6 mm grid over the wall: optimize-glb.mjs)
     wall = [(R - 3.0, 0), (R + 2.6, 0), (R + 1.4, 10.0), (R - 3.0, 10.0)]
+    plinth = [(R + 1.6, 0), (R + 4.2, 0), (R + 4.0, 1.8), (R + 1.9, 1.8)]
     for a0, a1 in gaps:
-        Acc.of("panel", 0.2).put(ring_sector(wall, a0, a1))
-        Acc.of("panel2", 0.1).put(ring_sector([(R + 1.6, 0), (R + 4.2, 0), (R + 4.0, 1.8), (R + 1.9, 1.8)], a0, a1))
+        Acc.of("panel", 0.2, tag="").put(ring_sector(wall, a0, a1))
+        Acc.of("panel2", 0.1, tag="").put(ring_sector(plinth, a0, a1))
         Acc.of("pave", 0.0).put(ring_sector([(R - 2.9, 10.0), (R + 0.6, 10.0), (R + 0.6, 10.12), (R - 2.9, 10.12)], a0, a1))
-        Acc.of("panel", 0.08).put(ring_sector([(R + 0.6, 10.0), (R + 1.6, 10.0), (R + 1.6, 11.8), (R + 0.9, 11.8)], a0, a1))
-        Acc.of("gold", 0.06).put(ring_sector([(R + 0.75, 11.8), (R + 1.75, 11.8), (R + 1.75, 12.2), (R + 0.75, 12.2)], a0, a1))
+        # the parapet and its coping stop where they meet a bastion's drum (its gun deck is clear of them)
+        for b0, b1 in cut_spans(a0, a1, BASTIONS, 0.026):
+            Acc.of("panel", 0.08).put(ring_sector([(R + 0.6, 10.0), (R + 1.6, 10.0), (R + 1.6, 11.8), (R + 0.9, 11.8)], b0, b1))
+            Acc.of("gold", 0.06).put(ring_sector([(R + 0.75, 11.8), (R + 1.75, 11.8), (R + 1.75, 12.2), (R + 0.75, 12.2)], b0, b1))
         Acc.of("panel2", 0.04).put(ring_sector([(R - 3.0, 10.0), (R - 2.5, 10.0), (R - 2.5, 11.0), (R - 3.0, 11.0)], a0, a1))
-        Acc.of("lamp", 0.0).put(ring_sector([(R - 3.06, 6.3), (R - 3.0, 6.3), (R - 3.0, 6.7), (R - 3.06, 6.7)], a0, a1))
-        Acc.of("gold", 0.0).put(ring_sector([(R + 4.05, 1.8), (R + 4.25, 1.8), (R + 4.25, 2.05), (R + 4.05, 2.05)], a0, a1))
-        # buttress fins every 4 degrees (not in the drums), a red lamp on every third
+        # the lit band painted along the inner face and the gold line round the plinth's sloped face, on the same chords as
+        # their faces (ring_sector's grid), each stopping where it meets a drum's face (the drums carry their own)
+        for d0, d1 in clear(a0, a1, (BASTIONS, 0.016), (GATE_TOWERS, 0.027)):
+            Acc.of("paint_lamp", 0.0).put(ring_sector([(R - 3.0 - P, TRIM_Y[0]), (R - 2.97, TRIM_Y[0]), (R - 2.97, TRIM_Y[1]), (R - 3.0 - P, TRIM_Y[1])], d0, d1))
+        for d0, d1 in clear(a0, a1, (BASTIONS, 0.032), (GATE_TOWERS, 0.027)):
+            Acc.of("paint_gold", 0.0).put(ring_sector([(pr(SKIRT_Y[0]) - 0.03, SKIRT_Y[0]), (pr(SKIRT_Y[0]) + P, SKIRT_Y[0]),
+                                                       (pr(SKIRT_Y[1]) + P, SKIRT_Y[1]), (pr(SKIRT_Y[1]) - 0.03, SKIRT_Y[1])], d0, d1))
+        pieces = chunks(a0, a1)
+        # buttress fins every 4 degrees (not in the drums), a red lamp on every third; each stretch of up to 20 degrees of
+        # them, with the gold sleeves painted round them, in meshes of their own (TAG)
         n = int((a1 - a0) / math.radians(4))
         for k in range(1, n):
             th = a0 + (a1 - a0) * k / n
             if any(abs(math.atan2(math.sin(th - b), math.cos(th - b))) < 0.05 for b in BASTIONS):
                 continue
+            TAG[0] = f"w{gaps.index((a0, a1))}_{min(len(pieces) - 1, int((th - a0) / (pieces[0][1] - pieces[0][0])))}"
             Acc.of("panel2", 0.06).put(radial(frustum([(-0.1, -0.7), (3.4, -0.7), (3.4, 0.7), (-0.1, 0.7)], [(-0.1, -0.5), (0.4, -0.5), (0.4, 0.5), (-0.1, 0.5)], 0.0, 9.0), th, R + 1.4))
+            # the plinth's gold line wrapped round the buttress: a sleeve of its own section, 1 cm proud on the sides and front
+            sec = lambda y, g: [(-0.1, -(0.7 - 0.2 * y / 9.0) - g), (3.4 - 3.0 * y / 9.0 + g, -(0.7 - 0.2 * y / 9.0) - g),
+                                (3.4 - 3.0 * y / 9.0 + g, 0.7 - 0.2 * y / 9.0 + g), (-0.1, 0.7 - 0.2 * y / 9.0 + g)]
+            Acc.of("paint_gold", 0.0).put(radial(frustum(sec(SKIRT_Y[0], 0.01), sec(SKIRT_Y[1], 0.01), *SKIRT_Y), th, R + 1.4))
             if k % 3 == 0:
                 Acc.of("redlamp", 0.0).put(radial(box(R + 2.6 - 1.2 * 0.76 + 0.05, 7.6, 1.2, 0.12, 0.3, 0.6), th))  # (on the battered face)
+        TAG[0] = ""
         # colliders: the wall to its coping in boxes of 3 degrees
         col_ring(R - 3.0, R + 2.6, 0.0, 12.2, a0, a1, math.radians(3))
     # the bastions: drums swelling out of the wall, a gun deck on top, a beacon mast on the inner side
-    for b in BASTIONS:
+    for bi, b in enumerate(BASTIONS):
+        TAG[0] = f"b{bi}"                       # (each drum its own meshes, as the wall's pieces)
         cx, cz = at_r(R + 3.0, b)
-        Acc.of("panel", 0.18).put(xf(cylinder(7.0, 7.6, 11.0, 24)[:2], (cx, 5.5, cz)))
-        Acc.of("panel2", 0.1).put(xf(cylinder(8.2, 8.4, 1.8, 24)[:2], (cx, 0.9, cz)))
-        Acc.of("gold", 0.06).put(xf(cylinder(7.5, 7.1, 1.0, 24)[:2], (cx, 11.5, cz)))
-        Acc.of("redlamp", 0.0).put(xf(cylinder(7.43, 7.43, 0.35, 24, open_ended=True)[:2], (cx, 7.4, cz)))
+        Acc.of("panel", 0.18).put(xf(cylinder(7.0, 7.6, 11.0, DRUM_SEG)[:2], (cx, 5.5, cz)))
+        Acc.of("panel2", 0.1).put(xf(cylinder(8.2, 8.4, 1.8, DRUM_SEG)[:2], (cx, 0.9, cz)))
+        Acc.of("gold", 0.06).put(xf(cylinder(7.5, 7.1, 1.0, DRUM_SEG)[:2], (cx, 11.5, cz)))
+        # a red lit band painted round the drum at the inside band's height, warning stripes above and below it, the
+        # plinth's gold line
+        dr = lambda y: 7.6 - 0.6 * y / 11.0
+        drum_band("paint_redlamp", (cx, cz), dr, *TRIM_Y)
+        hazard_band((cx, cz), dr, TRIM_Y[0] - 0.5, TRIM_Y[0] - 0.1)
+        hazard_band((cx, cz), dr, TRIM_Y[1] + 0.1, TRIM_Y[1] + 0.5)
+        drum_band("paint_gold", (cx, cz), lambda y: 8.4 - 0.2 * y / 1.8, *SKIRT_Y)
         for k in range(8):
             th = TAU * k / 8 + 0.2
             Acc.of("window", 0.0).put(xf(radial(box(7.6 - 0.6 * 9.0 / 11.0 + 0.03, 9.0, 0, 0.12, 1.4, 0.45), th), (cx, 0, cz)))
@@ -462,19 +614,21 @@ def build_wall_a():
         col((gx, 12.0, gz), shape="cyl", r=2.6, h=2.0)
         mount((gx, 14.0, gz))
     # the gates: two drum towers either side, a lit bridge between them high enough to ride (or fly) under
-    for g in GATES:
+    for gi, g in enumerate(GATES):
         pts = []
         for s in (-1, 1):
+            TAG[0] = f"g{gi}{'ab'[s > 0]}"
             a = g + s * GATE_HALF
             cx, cz = at_r(R, a)
             pts.append((cx, cz))
-            Acc.of("panel", 0.2).put(xf(cylinder(6.8, 7.6, 18.0, 28)[:2], (cx, 9.0, cz)))
-            Acc.of("panel2", 0.1).put(xf(cylinder(8.0, 8.3, 2.0, 28)[:2], (cx, 1.0, cz)))
-            for y in (6.5, 12.5):  # (bands on the drum's batter)
-                rr = 7.6 - 0.8 * y / 18.0 + 0.08
-                Acc.of("gold", 0.0).put(xf(cylinder(rr, rr, 0.5, 28)[:2], (cx, y, cz)))
-            Acc.of("navy", 0.1).put(xf(cylinder(7.6, 6.9, 1.6, 28)[:2], (cx, 18.8, cz)))
-            Acc.of("redlamp", 0.0).put(ring(7.52, 0.18, 19.2, 40, 4, t=(cx, 0, cz)))  # (on the crown's flare)
+            Acc.of("panel", 0.2).put(xf(cylinder(6.8, 7.6, 18.0, DRUM_SEG)[:2], (cx, 9.0, cz)))
+            Acc.of("panel2", 0.1).put(xf(cylinder(8.0, 8.3, 2.0, DRUM_SEG)[:2], (cx, 1.0, cz)))
+            dr = lambda y: 7.6 - 0.8 * y / 18.0
+            for y0, y1 in (TRIM_Y, (12.25, 12.75)):  # (gold bands painted on the drum's batter, the lower one at the inside band's height)
+                drum_band("paint_gold", (cx, cz), dr, y0, y1)
+            drum_band("paint_gold", (cx, cz), lambda y: 8.3 - 0.3 * y / 2.0, *SKIRT_Y)
+            Acc.of("navy", 0.1).put(xf(cylinder(7.6, 6.9, 1.6, DRUM_SEG)[:2], (cx, 18.8, cz)))
+            drum_band("paint_redlamp", (cx, cz), lambda y: 6.9 + 0.7 * (y - 18.0) / 1.6, 19.05, 19.35)  # (painted on the crown's flare)
             for k in range(10):
                 th = TAU * k / 10
                 Acc.of("window", 0.0).put(xf(radial(box(7.6 - 0.8 * 9.5 / 18.0 + 0.03, 9.5, 0, 0.12, 1.6, 0.5), th), (cx, 0, cz)))
@@ -482,6 +636,7 @@ def build_wall_a():
             Acc.of("roof", 0.06).put(xf(cylinder(2.4, 2.7, 1.4, 12)[:2], (gx, 20.3, gz)))
             col((cx, -2.0, cz), shape="cyl", r=7.7, h=21.6)
             mount((gx, 21.0, gz))
+        TAG[0] = ""
         (ax, az), (bx, bz) = pts
         mx, mz = (ax + bx) / 2, (az + bz) / 2
         span = math.hypot(bx - ax, bz - az) - 13.0
