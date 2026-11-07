@@ -4,7 +4,7 @@ import { makeBody } from './physics.js';
 import { stepRover, beaconCrate } from './enemies.js';
 import { tangent, frameQuat, greatCircle } from './geo.js';
 import { pick } from './rng.js';
-import { shatterEcho } from './monolith.js';
+import { fireFlak as flakShot } from './flak.js';
 
 // Captain Kade's monster truck. Never rams: circles you at 45-80 m, swapping direction now and then, while his gunner's
 // turret has two modes:
@@ -13,7 +13,7 @@ import { shatterEcho } from './monolith.js';
 // Wreck it and Kade bails out on foot (caught, in SPACECOM's showdown); the first time he drops his Rustmoon Junk Mortar.
 
 const ORBIT = [45, 80];
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+const _a = new THREE.Vector3();
 
 export function spawnKadeTruck(story, final) {
   const g = story.game, P = g.player;
@@ -104,43 +104,9 @@ function fireFlak(g, e, dt, T) {
   if (e.flakCd > 0) return;
   e.flakCd = 0.6;
   const from = m.flakMuzzle.getWorldPosition(new THREE.Vector3());
-  const speed = 210;
-  // lead solved over a few passes (so a fast runner is led properly); fuse bursts there, or as soon as it's close to you
-  let t = T.center.distanceTo(from) / speed;
-  for (let i = 0; i < 3; i++) t = T.center.clone().addScaledVector(T.vel, t).distanceTo(from) / speed;
-  const at = T.center.clone().addScaledVector(T.vel, t).add(_c.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(3));
-  const dir = at.clone().sub(from).normalize();
-  g.projectiles.fire('kade', from, dir.multiplyScalar(speed), { color: 0xff4f2e, size: 0.6, life: t + 0.4, fuse: t, proxy: 7, burst: (pos) => flakBurst(g, pos) });
+  // lead solved over a few passes; fuse bursts there, or as soon as it's close to you (flak.js)
+  flakShot(g, 'kade', from, T.center, T.vel, { speed: 210 });
   g.audio.tone(90, 0.25, 'sawtooth', 0.2, 0.5);
-}
-
-// A flak burst. Within 11 m it stings and shoves you away (FLAK_PUSH m/s point-blank, fading to 0 at 11 m, softened by
-// the Flak Weave), bleeds speed and pulls you down. A shove, not a launch: at most FLAK_PUSH per burst, one per 0.6 s.
-const FLAK_PUSH = 20;
-function flakBurst(g, pos) {
-  const P = g.player;
-  g.fx.explosion(pos, 3.5, false);
-  g.fx.spawn(pos, new THREE.Vector3(), { color: 0x2a2433, size: 1.6, life: 1.2, count: 6, spread: 3 });
-  // white phosphorus: burning, smoking fragments
-  g.fx.phosphor(pos, 10);
-  g.audio.burst(0.35, 900, 0.35);
-  for (const d of g.decoys.slice()) if (pos.distanceTo(d.center) < 6) shatterEcho(g, d);
-  if (P.dead) return;
-  const dist = pos.distanceTo(P.center);
-  if (dist > 11) return;
-  const f = 1 - dist / 11;
-  g.damagePlayer(4 + 12 * f, 'kade');
-  const up = _b.copy(P.pos).normalize();
-  const vUp = P.vel.dot(up);
-  P.vel.addScaledVector(up, -vUp).multiplyScalar(1 - 0.18 * f).addScaledVector(up, vUp - 3.5 * f);
-  P.vel.add(_c.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(2.5 * f));
-  const away = _c.copy(P.center).sub(pos);
-  if (away.lengthSq() < 0.01) away.copy(up);
-  P.vel.addScaledVector(away.normalize(), FLAK_PUSH * f * (P.knockResist || 1));
-  P.body.grounded = false; // (else the skates iron out the shove)
-  P.body.sinceContact = 1;
-  g.cam.shake = Math.max(g.cam.shake, 0.3 * f);
-  if (Math.random() < 0.4) g.fx.pop('FLAK!', pos.clone(), { color: '#ff9f1c', size: 34, life: 0.6 });
 }
 
 function despawn(story, e) {

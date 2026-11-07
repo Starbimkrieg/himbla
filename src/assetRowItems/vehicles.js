@@ -4,7 +4,7 @@
 // no thrust. Only cheap cosmetic updates run (flag cloth, gatling, phase coils, land-train beacon). Built with the pure
 // model factories, never through Garage, Traffic or Enemies.
 import * as THREE from 'three';
-import { makeLightBike, makeSkimmer, makeRover, makeHoverCar, makeKadeTruck, makeTurret, makeLandTrain, makeShuttle, makeFreighter, makeRocket } from '../models.js';
+import { makeLightBike, makeSkimmer, makeRover, makeHoverCar, makeKadeTruck, makeTurret, turretTick, makeLandTrain, makeShuttle, makeFreighter, makeRocket } from '../models.js';
 import { buildVehicleModel, VEHICLES } from '../vehicles.js';
 import { buildBuggyRig, linkBar } from '../traffic.js';
 import { BOSS_MODELS, FOES } from '../storyAssets.js';
@@ -195,6 +195,22 @@ const ground = {
       trainItem('moonliner', f, ['pax', 'pax', 'pax'], `MOONLINER LAND-TRAIN · ${n}`, 39, 6)),
     ...[['spacecom', 'SPACECOM', ['tank', 'cargo', 'blast']], ['vostok', 'VOSTOK', ['cargo', 'tank', 'blast']], ['kepler', 'KEPLER', ['tank', 'tank', 'blast']], ['meridian', 'MERIDIAN', ['tank', 'cargo', 'cargo']]].map(([f, n, cars]) =>
       trainItem('prospector', f, cars, `PROSPECTOR FREIGHT TRAIN · ${n}`, 39, 6)),
+    {
+      // the defence turret's proposals (tools/blender/build_turret.py; docs/turret-proposals) and the code-built one, in
+      // SPACECOM's colour: each turning, its gun nodding through its range (to +1.25 rad, flak), B's rotor spinning
+      id: 'veh.turret-drafts', label: 'TURRET PROPOSALS · A BASTION · B AEGIS · OLD', w: 22, d: 8,
+      make: () => {
+        const ts = ['a', 'b', 'old'].map((draft) => makeTurret({ color: FACTION_COLOR.spacecom, draft }));
+        return {
+          root: lineUp(ts.map((t) => part(t.root, 6.5, 6.5)), 0.6).root,
+          update: (dt, t) => ts.forEach((r, i) => {
+            r.head.rotation.y = Math.sin(t * 0.5 + i * 2) * 1.4;
+            r.gun.rotation.x = -0.45 + Math.sin(t * 0.8 + i) * 0.8;
+            turretTick(r, dt, Math.sin(t * 1.3 + i) > 0);
+          }),
+        };
+      },
+    },
     {
       // base gun turrets in each faction's colour, then the ILMB's heavy x1.35
       id: 'veh.turrets', label: 'BASE TURRETS · 5 FACTIONS · ILMB HEAVY', w: 44, d: 11,

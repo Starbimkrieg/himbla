@@ -23,6 +23,7 @@ has. They give a rough sense of how big each conversion is.
 | **Casino** | the hall and the forecourt kit (`hall.glb`, `lot.glb`), lamp posts, fountains, bouncers, chandeliers, sign frames (`casino.glb`), slot cabinets, the claw machine and its prizes, the blackjack table and chips, Plinko |
 | **Items** | the courier's weapons, the salvaged engine and the briefcase (wreck drops), the winch grapple |
 | **ILMB core** | the central complex and the fortress wall (two proposals: docs/ilmb-proposals), the skywalks, job terminal (its screens stay canvas), repair bay, launch gantry, fuel spheres, family domes, barracks, vehicle depot, comms mast, inner defence pylons (`ilmb.glb`, `tools/blender/build_ilmb.py`) |
+| **Defence turret** | every base gun: defence rings and walls, the ILMB's, restricted zones, founded outposts' militia guns, the hometown barracks (two proposals: docs/turret-proposals; `turret.glb`, `tools/blender/build_turret.py`; the code-built one is `?turret=old`) |
 | **Small outposts** | all seven kinds and their wrecks (`outposts.glb`, `tools/blender/build_outposts.py` with `outpost_kit.py`): Market Cross, Lattice Camp, Silo Depot, Greenhouse Row, Guyed Relay, Scrap Mountain, the Hulk. The code builders in `outpostDrafts.js` stay as the fallback (`?outpostGlb=0`) |
 
 ## Code-built: places
@@ -48,7 +49,6 @@ has. They give a rough sense of how big each conversion is.
 | **Townsfolk** (every resident, passenger and outpost NPC) | `townsfolk.js`: rounded lathed parts baked into one skinned mesh per look | ~20 (a parametric body) |
 | **The three chapter bosses**: SPACECOM convoy rig, Daedalus Warden, Vostok Hammer | `storyAssets.js` | part of ~200 |
 | **Captain Kade's monster truck** and his gunner's turret | `models.js` makeKadeTruck | ~45 |
-| **Defence turrets** (settlements, outposts, militia guns) | `models.js` turretParts | ~25 |
 | **Chapter and mission props**: relays, generators, the Black Sun reactor, charges, sensor pylons, ballot stands, phase emitters, rocket, seismometer, sample tube | `storyAssets.js`, `models.js` makeRocket, makePylon, makeSeismo, makeTube | ~60 |
 | **Event props** (each faction's posted jobs) | `events.js` | ~30 |
 | **The Spindle's mothership** and extraction pad, **the med-evac craft** and stretcher | `spindle.js`, `medevac.js` | ~40 |
@@ -76,7 +76,7 @@ These are procedural or effects, and Blender would only make them worse or slowe
 2. ~~**The ILMB core**~~: done (November 2026), in two proposals for the central complex and wall (docs/ilmb-proposals).
 3. **Kepler towns' kit**: hab dome, tunnel, cabin, town hall, playground, water tower. One kit covers five towns and your
    own town.
-4. **Military bases**: bunker, barracks, searchlight tower, defences, and the defence **turret** with them.
+4. **Military bases**: bunker, barracks, searchlight tower, defences (the defence turret is done: docs/turret-proposals).
 5. **Pirate dens**: shanties, wreck hulls, lookout, heaps (it can share parts with the Scrap Shack and Junk Pile).
 6. **Meridian Exchange tower and halls**, then the **Helium-3 Exchange** (excavator, derrick, spheres).
 7. **The bosses and Kade's truck**: vehicles, where Blender shows most against code.

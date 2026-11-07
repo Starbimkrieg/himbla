@@ -8,6 +8,7 @@ import { outpostTemplate, SMALL_KINDS, FLAT_R } from './outpostModels.js';
 import './outpostDrafts.js'; // (registers the outposts' builders: outpostModels.js OUTPOST_PICK)
 import { spawnWalkers } from './outpostWalkers.js';
 import { foundedTemplate, TERMINAL_Z, BUILT_R, OUTPOST_GUN as GUN } from './storyAssets.js';
+import { turretRig, turretTick } from './models.js';
 
 // Every square metre of the Moon belongs to somebody: a weighted Voronoi split round faction settlements and outposts.
 // Small faction structures dot the countryside, with military patrols between them.
@@ -357,8 +358,8 @@ export class Territory {
     o.model.updateMatrixWorld(true);
     o.model.traverse((m) => {
       if (!m.userData.outpostGun) return;
-      m.rotation.order = 'YXZ'; // clone() drops Euler order: pitch about the head's x, then yaw
-      o.guns.push({ head: m, root: m.parent, cd: 0.5 + 0.45 * o.guns.length, scanT: 0, target: null, skips: new WeakMap(), side: 1 });
+      // the head, its gun (pitched), muzzles and spinners (models.js turretRig: tagged, so found again in the clone)
+      o.guns.push({ head: m, root: m.parent, rig: turretRig(m.parent), cd: 0.5 + 0.45 * o.guns.length, scanT: 0, target: null, skips: new WeakMap(), barrel: 0, firing: 0 });
     });
   }
 
@@ -367,7 +368,7 @@ export class Territory {
   updateGuns(o, dt) {
     const g = this.game, E = g.enemies;
     for (const gun of o.guns) {
-      const head = gun.head;
+      const head = gun.head, rig = gun.rig;
       head.updateWorldMatrix(true, false);
       head.getWorldPosition(_gp);
       let tg = gun.target;
@@ -389,24 +390,28 @@ export class Territory {
         _gl.copy(tg.center).addScaledVector(tg.body.vel, _gp.distanceTo(tg.center) / GUN.speed);
         gun.root.worldToLocal(_gl).sub(head.position); // never read root.rotation.y: clone() re-decomposes it
         yawErr = wrapPi(Math.atan2(_gl.x, _gl.z) - head.rotation.y);
-        // pitch clamped to the mount, -0.5..0.6 rad (lower stop clears the deck rail). Raiders within ~10 m or well above are still
-        // engaged: the shell leaves along the aim-lead line, not exactly the barrel
-        pitchErr = THREE.MathUtils.clamp(Math.atan2(-_gl.y, Math.hypot(_gl.x, _gl.z)), -0.5, 0.6) - head.rotation.x; // +rotation.x = barrel down
+        // the gun pitches within the mount's stops. Raiders within ~10 m or well above are still engaged: the round leaves
+        // along the aim-lead line, not exactly the barrel
+        pitchErr = -THREE.MathUtils.clamp(Math.atan2(_gl.y, Math.hypot(_gl.x, _gl.z)), GUN.pitch[0], GUN.pitch[1]) - rig.gun.rotation.x; // (rotation.x < 0 raises it)
         head.rotation.y += THREE.MathUtils.clamp(yawErr, -GUN.turn * dt, GUN.turn * dt);
-        head.rotation.x += THREE.MathUtils.clamp(pitchErr, -GUN.pitchTurn * dt, GUN.pitchTurn * dt);
+        rig.gun.rotation.x += THREE.MathUtils.clamp(pitchErr, -GUN.pitchTurn * dt, GUN.pitchTurn * dt);
       } else {
         head.rotation.y = wrapPi(head.rotation.y + dt * 0.3);
-        head.rotation.x -= THREE.MathUtils.clamp(head.rotation.x, -dt, dt);
+        rig.gun.rotation.x -= THREE.MathUtils.clamp(rig.gun.rotation.x, -dt, dt);
       }
+      gun.firing = Math.max(0, gun.firing - dt);
+      turretTick(rig, dt, gun.firing > 0);
       if (!tg || gun.cd > 0 || Math.abs(yawErr) > GUN.cone || Math.abs(pitchErr) > GUN.pitchCone) continue;
-      head.updateWorldMatrix(false, false); // rotation just changed: keep the muzzle current
-      gun.side = -gun.side;
-      head.localToWorld(_gt.set(gun.side * GUN.tip[0], GUN.tip[1], GUN.tip[2]));
+      gun.barrel = (gun.barrel + 1) % rig.muzzles.length;
+      const mz = rig.muzzles[gun.barrel];
+      mz.updateWorldMatrix(true, false); // rotation just changed: keep the muzzle current
+      mz.getWorldPosition(_gt);
       gun.cd = GUN.interval;
+      gun.firing = 0.5;
       if (!E.clearShot(_gt, tg.center)) { gun.cd = 0.3; gun.skips.set(tg, g.time + 3); gun.target = null; continue; }
       const dir = E.aimLead(_gt, GUN.speed, 0.01, tg.center, tg.body.vel);
-      g.projectiles.fire('mil', _gt, dir.multiplyScalar(GUN.speed), { damage: GUN.damage, splash: GUN.splash, color: 0xffb02e, size: 0.5, knock: 0.6, spare: true });
-      g.fx.spawn(_gt, _gf.set(0, 0, 1).transformDirection(head.matrixWorld).multiplyScalar(5), { color: 0xffe08a, size: 0.9, life: 0.12, count: 3, spread: 1.5, drag: 3 });
+      g.projectiles.fire('mil', _gt, dir.multiplyScalar(GUN.speed), { type: 'round', damage: GUN.damage, splash: GUN.splash, color: 0xffb02e, size: 0.3, knock: 0.6, spare: true });
+      g.fx.spawn(_gt, _gf.set(0, 0, 1).transformDirection(rig.gun.matrixWorld).multiplyScalar(5), { color: 0xffe08a, size: 0.9, life: 0.12, count: 3, spread: 1.5, drag: 3 });
       if (_gt.distanceTo(g.player.center) < 300) g.audio.tone(300, 0.1, 'square', 0.07, 0.4);
     }
   }

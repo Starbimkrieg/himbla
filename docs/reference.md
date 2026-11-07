@@ -328,7 +328,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (241 in 26 sections) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (242 in 26 sections) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).
@@ -393,6 +393,7 @@ src/
   medevac.js       the Spindle's K.O. cutscene
   worldstate.js    permanent finale changes
   kade.js          Kade's gun truck
+  flak.js          flak shells and bursts (Kade's, and the base turrets' high-angle mode)
   monolith.js      the Monolith's spells
   territory.js     territory, small outposts, patrols
   outpostDrafts.js the small outposts (the picks, OUTPOST_PICK in outpostModels.js; docs/outpost-proposals), code-built: the
@@ -483,6 +484,7 @@ src/
     dish.glb         dish stations and dish heads
     winch.glb        winch grapple and cable
     towmark.png      winch HUD marker
+    turret.glb       the defence turret, two proposals (docs/turret-proposals; models.js makeTurret, ?turret=a|b|old)
     ilmb.glb         the ILMB's core: the central complex and wall ("the Crown", "the Rampart"), skywalks and the base's other pieces
     outposts.glb     the small outposts built in Blender (the kinds in staticContract.js GLB_KINDS; ?outpostGlb=0 for the
                      code-built ones; spec in docs/outpost-glb.md)
@@ -573,6 +575,7 @@ tools/
     build_blackjack.py     -> blackjack.glb
     build_dish.py          -> dish.glb
     build_winch.py         -> winch.glb, towmark.png
+    build_turret.py        -> turret.glb, the defence turret's two proposals (docs/turret-proposals; wing_kit.py)
     build_ilmb.py          -> ilmb.glb, the ILMB's core (docs/ilmb-proposals; wing_kit.py, dishkit.py)
     build_outposts.py      -> outposts.glb, the small outposts (check with npm run check:outposts; compare with the code-built
                               ones in the viewer: ?m=outpost&kind=tower)

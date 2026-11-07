@@ -330,9 +330,9 @@ export function makeProp(kind) {
 // ---------------------------------------------------------------------------------------------
 export const BUILT_R = 40, TERMINAL_Z = 16.4, PLOTS = 6;
 const MOD_R = 26, TURRET_H = 8;
-// shared by the gun logic (territory.js) and terminal page (story.js); tip is head-local (twin barrels at x +-0.42,
-// ending ~z 4.1: models.js turretParts)
-export const OUTPOST_GUN = { range: 300, turn: 2.5, pitchTurn: 1.5, interval: 0.9, speed: 150, damage: 26, splash: 5, cone: 0.2, pitchCone: 0.25, tip: [0.42, -0.1, 4.1] };
+// shared by the gun logic (territory.js) and terminal page (story.js); the rounds leave from the model's muzzles
+// (models.js turretRig), tracers at `speed`; the gun pitches within `pitch` (rad up: the lower stop clears the deck rail)
+export const OUTPOST_GUN = { range: 300, turn: 2.5, pitchTurn: 1.5, interval: 0.9, speed: 180, damage: 26, splash: 5, cone: 0.2, pitchCone: 0.25, pitch: [-0.35, 1.25] };
 // modules with their own stand, outside the six plots (never count against PLOTS)
 const T2_A = 0.6 + Math.PI / 6, T2_R = 30;
 export const EXTRA_MODS = { turret2: { as: 'turret', x: Math.cos(T2_A) * T2_R, z: Math.sin(T2_A) * T2_R } };

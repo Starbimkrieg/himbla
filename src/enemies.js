@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { PHYS } from './config.js';
 import { makeBody, stepSkater } from './physics.js';
 import { Ragdoll } from './ragdoll.js';
-import { makeRunner, makeRover, makeTurret, makeCrate, makePylon, ScarfSim, plantLeg, flatFwd } from './models.js';
+import { makeRunner, makeRover, makeTurret, turretTick, makeCrate, makePylon, ScarfSim, plantLeg, flatFwd } from './models.js';
+import { fireFlak } from './flak.js';
 import { randRange } from './rng.js';
 import { FACTIONS, defenseSpots } from './locations.js';
 import { frameQuat, greatCircle, arcDist, darkness, tangent, randomTangent } from './geo.js';
@@ -23,6 +24,12 @@ const _n = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _near = [];
 const _sv = new THREE.Vector3();
+const _tl = new THREE.Vector3(), _tf = new THREE.Vector3();
+// Base turrets (updateTurret): tracer rounds at TURRET_SHOT m/s (heavy: the ILMB's); against a runner more than FLAK_ALT m
+// over the ground, flak instead (flak.js, as Kade's), its bursts fused at the runner's lead point
+const TURRET_SHOT = 180, TURRET_SHOT_HEAVY = 205, FLAK_ALT = 30;
+const TURRET_PITCH = [-0.35, 1.25]; // rad the gun can depress / raise
+
 const _sn = new THREE.Vector3();
 
 // a faction's own armoured car (FOES[foe].rover), else a pirate war-rig
@@ -1129,7 +1136,7 @@ export class Enemies {
     } else e.grab = Math.max(0, e.grab - dt * 0.6);
   }
 
-  shoot(e, from, speed, dmg, color, inaccuracy) {
+  shoot(e, from, speed, dmg, color, inaccuracy, opts = {}) {
     const g = this.game;
     const P = g.player;
     const obj = this.victim(e);
@@ -1144,7 +1151,7 @@ export class Enemies {
     }
     const dir = this.aimLead(from, speed, inaccuracy, center, vel);
     if (obj) dmg *= 0.6;
-    g.projectiles.fire(e.faction, from, dir.multiplyScalar(speed), { damage: dmg, splash: 3, color, size: 0.5, knock: 0.6 });
+    g.projectiles.fire(e.faction, from, dir.multiplyScalar(speed), { damage: dmg, splash: 3, color, size: 0.5, knock: 0.6, ...opts });
     if (from.distanceTo(P.center) < 300) g.audio.enemyShot();
   }
 
@@ -1495,6 +1502,15 @@ export class Enemies {
     return dir.multiplyScalar(k + 0.3).add(e.center);
   }
 
+  // Where a turret's next round leaves: its muzzles in turn (models.js turretRig), else the old muzzle() point.
+  turretMuzzle(e) {
+    const ms = e.model.muzzles;
+    if (!ms || !ms.length) return this.muzzle(e, this.game.player.center);
+    e.barrel = ((e.barrel || 0) + 1) % ms.length;
+    ms[e.barrel].updateWorldMatrix(true, false);
+    return ms[e.barrel].getWorldPosition(new THREE.Vector3());
+  }
+
   // Friendly-gun targets (outpost turrets, territory.updateGuns): raiders only. Not den cores, not other factions' troops
   // (main.explode deals no 'mil' damage to non-rustmoon foes), not pirates friendly to an aligned player.
   gunTarget(e) { return e.faction === 'pirate' && !e.dead && e.kind !== 'core' && !!e.center && !!e.body && !(e.foe && e.foe !== 'rustmoon') && !this.friendly(e); }
@@ -1550,30 +1566,48 @@ export class Enemies {
       if (e.pirateT) { target = e.pirateT.center; tvel = e.pirateT.body.vel; }
     }
     const look = target || ((base.inside && base.time > 2) ? P.center : null);
+    const M = e.model, gun = M.gun;
+    let yawErr = 0, pitchErr = 0;
     if (look) {
-      e.model.root.updateMatrixWorld();
-      const local = e.model.root.worldToLocal(look.clone());
-      let dd = Math.atan2(local.x, local.z) - head.rotation.y;
-      dd = Math.atan2(Math.sin(dd), Math.cos(dd));
-      head.rotation.y += THREE.MathUtils.clamp(dd, -2.5 * dt, 2.5 * dt);
-    } else head.rotation.y += dt * 0.3;
+      // the head turns, the gun pitches, onto the target (flak: at the lead point it bursts at)
+      M.root.updateMatrixWorld();
+      const local = M.root.worldToLocal(_tl.copy(look)).sub(head.position);
+      yawErr = Math.atan2(local.x, local.z) - head.rotation.y;
+      yawErr = Math.atan2(Math.sin(yawErr), Math.cos(yawErr));
+      head.rotation.y += THREE.MathUtils.clamp(yawErr, -2.5 * dt, 2.5 * dt);
+      const want = THREE.MathUtils.clamp(Math.atan2(local.y, Math.hypot(local.x, local.z)), TURRET_PITCH[0], TURRET_PITCH[1]);
+      pitchErr = -want - gun.rotation.x; // (rotation.x < 0 raises the gun)
+      gun.rotation.x += THREE.MathUtils.clamp(pitchErr, -1.8 * dt, 1.8 * dt);
+    } else {
+      head.rotation.y += dt * 0.3;
+      gun.rotation.x -= THREE.MathUtils.clamp(gun.rotation.x, -dt, dt);
+    }
+    e.firing = Math.max(0, (e.firing || 0) - dt);
+    turretTick(M, dt, e.firing > 0);
     if (!target) return;
     e.fireCd -= dt;
-    if (e.fireCd > 0) return;
-    e.fireCd = e.heavy ? 0.65 : 0.9;
-    const from = this.muzzle(e, target);
+    if (e.fireCd > 0 || Math.abs(yawErr) > 0.35 || Math.abs(pitchErr) > 0.4) return; // (not on target yet)
+    const atRunner = target === P.center || (dc && target === dc.center);
+    const flak = atRunner && !dc && g.planet.altitude(P.center) > FLAK_ALT;
+    e.fireCd = flak ? (e.heavy ? 1.0 : 1.3) : e.heavy ? 0.65 : 0.9;
+    const from = this.turretMuzzle(e);
     if (!this.clearShot(from, target)) {
       // blocked: hold fire, look for another pirate
       e.fireCd = 0.3;
       if (target !== P.center) { e.skipT = e.pirateT; e.skipCd = 3; e.pirateT = null; }
       return;
     }
-    if (target === P.center || (dc && target === dc.center)) {
-      this.shoot(e, from, e.heavy ? 170 : 150, e.heavy ? 15 : 12, 0xff2a4a, 0.012);
+    e.firing = 0.5;
+    const speed = e.heavy ? TURRET_SHOT_HEAVY : TURRET_SHOT;
+    if (flak) {
+      fireFlak(g, 'mil', from, P.center, P.vel, { speed: e.heavy ? 230 : 210, scatter: 4, proxy: 6, color: 0xff6a2a, size: 0.55, burst: { cause: 'mil', dmg: e.heavy ? 5 : 4, close: e.heavy ? 13 : 11 } });
+      if (from.distanceTo(P.center) < 400) g.audio.tone(80, 0.3, 'sawtooth', 0.18, 0.5);
+    } else if (atRunner) {
+      this.shoot(e, from, speed, e.heavy ? 15 : 12, 0xff3b2e, 0.012, { type: 'round', size: 0.3 });
     } else {
-      const speed = e.heavy ? 170 : 150;
       const dir = this.aimLead(from, speed, 0.01, target, tvel);
-      g.projectiles.fire('mil', from, dir.multiplyScalar(speed), { damage: e.heavy ? 34 : 26, splash: 5, color: 0xffb02e, size: 0.5, knock: 0.6, spare: true });
+      g.projectiles.fire('mil', from, dir.multiplyScalar(speed), { type: 'round', damage: e.heavy ? 34 : 26, splash: 5, color: 0xffb02e, size: 0.3, knock: 0.6, spare: true });
     }
+    g.fx.spawn(from, _tf.set(0, 0, 1).transformDirection(gun.matrixWorld).multiplyScalar(6), { color: flak ? 0xffb347 : 0xffe08a, size: flak ? 1.3 : 0.9, life: 0.12, count: flak ? 5 : 3, spread: 1.5, drag: 3 });
   }
 }

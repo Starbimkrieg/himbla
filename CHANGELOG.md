@@ -5,6 +5,20 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **The defence turret, in Blender, in two proposals** (`tools/blender/build_turret.py` -> `src/assets/turret.glb`, 108 KB;
+  `models.js` makeTurret; docs/turret-proposals), for every base gun in the game: defence rings and walls, the ILMB's,
+  restricted zones, founded outposts' militia guns, the hometown barracks. **A, "Bastion"** (1.3k triangles): a twin
+  autocannon in a sloped armoured head on an octagonal pedestal, the guns on a trunnion in cheek brackets behind a drum
+  mantlet, belt chutes from ammo boxes on the flanks, a roof sight and a turning search radar. **B, "Aegis"** (2.0k): a
+  radome gun on a yoke, the dome riding over a six-barrel rotary gun that spins up while it fires, an ammo drum under it,
+  equipment pods on the arms. Both keep the old one's footprint and head height, and both now pitch their guns (to 70
+  degrees up). `?turret=a` (default for now) or `b` switches, `?turret=old` brings back the code-built one; the Asset Row
+  has TURRET PROPOSALS beside the faction line-up.
+  - **Tracer rounds:** base turrets and outpost militia guns fire tracers (a glowing streak, as the War-Rig's) from their
+    muzzles in turn, 20% faster than the old bolts (180 m/s, the ILMB's 205); damage as before. A turret now fires only
+    once its gun is on the target.
+  - **Flak mode:** against a runner more than 30 m over the ground, base turrets switch to flak (Kade's, now `flak.js`):
+    shells fused to burst at your lead point, a sting and a shove within 11 m, one every 1.3 s (the ILMB's 1.0 s).
 - **The ILMB's core, in Blender, in two proposals** (`tools/blender/build_ilmb.py` -> `src/assets/ilmb.glb`, placed by the new
   `src/ilmbCore.js`; docs/ilmb-proposals). The great dome and its spire, and the wall of forty separate boxes, are replaced
   whole: **Draft A, the Crown** (a ring concourse with a continuous glazed band round a garden under a glass dome, the
@@ -23,7 +37,7 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
   - **The Rampart's trim, flush:** each bastion's red band is painted on the drum at the height of the wall's lit inside
     band (it was a ring standing 23 cm off the batter, a metre higher), with yellow-and-dark warning stripes above and below
     it; the gate towers' gold bands and crown band follow their batter too. The parapet and its gold coping stop at each
-    bastion's drum instead of running across its gun deck past the turret. The plinth's gold line is painted on its sloped
+    bastion's drum instead of running across its gun deck past the turret (the coping at the deck's rim). The plinth's gold line is painted on its sloped
     face and wraps round each buttress, where it used to sit on the plinth's edge and cut through the buttresses' feet.
     Painted parts sit a centimetre or so off their faces and are drawn pulled toward the camera (`paint_*` slots); every arc
     of the wall shares one grid of angles, so a line's chords match its face's. The compressed file snapped each mesh's

@@ -555,9 +555,10 @@ def build_wall_a():
         Acc.of("panel", 0.2, tag="").put(ring_sector(wall, a0, a1))
         Acc.of("panel2", 0.1, tag="").put(ring_sector(plinth, a0, a1))
         Acc.of("pave", 0.0).put(ring_sector([(R - 2.9, 10.0), (R + 0.6, 10.0), (R + 0.6, 10.12), (R - 2.9, 10.12)], a0, a1))
-        # the parapet and its coping stop where they meet a bastion's drum (its gun deck is clear of them)
+        # the parapet stops inside a bastion's drum, its coping at the rim of the drum's gun deck (the deck is clear of them)
         for b0, b1 in cut_spans(a0, a1, BASTIONS, 0.026):
             Acc.of("panel", 0.08).put(ring_sector([(R + 0.6, 10.0), (R + 1.6, 10.0), (R + 1.6, 11.8), (R + 0.9, 11.8)], b0, b1))
+        for b0, b1 in cut_spans(a0, a1, BASTIONS, 0.0293):
             Acc.of("gold", 0.06).put(ring_sector([(R + 0.75, 11.8), (R + 1.75, 11.8), (R + 1.75, 12.2), (R + 0.75, 12.2)], b0, b1))
         Acc.of("panel2", 0.04).put(ring_sector([(R - 3.0, 10.0), (R - 2.5, 10.0), (R - 2.5, 11.0), (R - 3.0, 11.0)], a0, a1))
         # the lit band painted along the inner face and the gold line round the plinth's sloped face, on the same chords as

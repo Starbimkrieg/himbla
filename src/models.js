@@ -57,6 +57,7 @@ const GLB = {
   relay: () => import('./assets/relay.glb?inline'),
   chimera: () => import('./assets/chimera.glb?inline'),
   zlab: () => import('./assets/zlab.glb?inline'),
+  turret: () => import('./assets/turret.glb?inline'),
 };
 
 // Models may be compressed (tools/optimize-glb.mjs: quantized + meshopt, ~1/3 size; the decoder ignores plain files).
@@ -1074,7 +1075,7 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, wp, ska, skb, pw, hb, il, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'weapons', 'skimmer_a', 'skimmer_b', 'power', 'habitat', 'ilmb', ...ILMB_WINGS, ...DOWNS_FILES, 'zlab'].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, wp, ska, skb, tu, pw, hb, il, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'weapons', 'skimmer_a', 'skimmer_b', 'turret', 'power', 'habitat', 'ilmb', ...ILMB_WINGS, ...DOWNS_FILES, 'zlab'].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
   // a root node in a loaded file (`file`.glb), or a load error
   const named = (g, file, name) => {
     const o = g.scene.getObjectByName(name);
@@ -1108,6 +1109,8 @@ export async function loadShipParts({ ships } = {}) {
   // the Meridian motor pool garage (tools/blender/build_garage.py)
   SHIP_PARTS.garage = bakeShip(named(ga, 'garage', 'garage'));
   SHIP_PARTS.garage_small = bakeShip(named(ga, 'garage', 'garage_small'));
+  // the defence turret, two proposals (tools/blender/build_turret.py; makeTurret)
+  for (const d of TURRET_DRAFTS) SHIP_PARTS['turret_' + d] = bakeShip(named(tu, 'turret', 'turret_' + d));
   // the ILMB's Power Block, a D-He3 fusion plant (tools/blender/build_power.py, proposal B)
   SHIP_PARTS.power = bakeShip(named(pw, 'power', 'power_b'));
   // the ILMB's Kepler Habitat, "Orrery" (tools/blender/build_habitat.py)
@@ -2692,9 +2695,73 @@ export function makeKadeTruck() {
   return { root, chassis, wheels, turret, pitch, gatSpin, gatMuzzle, flakMuzzle, flag, kade, gunner };
 }
 
-// Defence turret: octagonal base with a glowing collar; head (yawed by enemies.updateTurret about its pivot at y 3.1,
-// barrels along +z) with cupola, twin braked barrels, fins, ammo pods, sensor eye. Baked per faction colour with the
-// outpost Kit, cloned per turret.
+// Defence turret (tools/blender/build_turret.py; docs/turret-proposals), every base gun in the game: two proposals, A
+// "Bastion" (a twin autocannon in a sloped armoured head) and B "Aegis" (a radome gun on a yoke), and the code-built one
+// they replace. Each has a head turned about y at (0, 3.1, 0), a gun pitched about x under it (rotation.x < 0 raises it,
+// to +1.25 rad for flak), muzzle empties where rounds leave, and spinners (A's radar, B's rotor). The pivots are tagged in
+// userData (turretHead, turretGun, turretMuzzle, turretSpin), so turretRig finds them again in a clone.
+//   ?turret=a | b | old    the proposal shown (the URL beats localStorage['mr-turret']); default a
+export const TURRET_DRAFTS = ['a', 'b'];
+export const TURRET_DRAFT = (() => {
+  try {
+    const v = new URLSearchParams(location.search).get('turret') || localStorage.getItem('mr-turret');
+    if (v === 'old' || TURRET_DRAFTS.includes(v)) return v;
+  } catch { /* (no location or storage: the default) */ }
+  return 'a';
+})();
+const TURRET_TOON = { dark: 0x2a2540, steel: 0x55607a, metal: 0x8a87a0, panel: 0x4a4660, white: 0xf3eee4, tire: 0x1d1a29, hazard: 0xffd23f };
+const TURRET_GLOW = { red: 0xff2a4a, amber: 0xffd23f };
+const TURRET_MATS = new Map();
+// body takes the faction's colour, lens glows in it, the rest fixed
+function turretMats(color) {
+  let m = TURRET_MATS.get(color);
+  if (!m) {
+    m = perSlot((slot) => slot === 'body' ? toon(color) : slot === 'lens' ? glow(color) : slot in TURRET_GLOW ? glow(TURRET_GLOW[slot]) : toon(TURRET_TOON[slot] ?? 0xff00ff));
+    TURRET_MATS.set(color, m);
+  }
+  return m;
+}
+export function makeTurret({ color = 0x2b59c3, draft = TURRET_DRAFT } = {}) {
+  if (draft === 'old') return oldTurret(color);
+  const root = buildPivots(SHIP_PARTS['turret_' + draft], {
+    matFor: turretMats(color),
+    shadow: (slot) => !(slot in TURRET_GLOW) && slot !== 'lens',
+    onPivot(node, g) {
+      if (node.role === 'head') g.userData.turretHead = true;
+      else if (node.role === 'barrel') g.userData.turretGun = true;
+      else if (node.role === 'muzzle') g.userData.turretMuzzle = node.data.index || 0;
+      else if (node.role === 'spin') g.userData.turretSpin = { axis: node.data.axis || 'y', speed: node.data.speed || 0 };
+    },
+  });
+  return { root, ...turretRig(root) };
+}
+// A turret's moving parts, found by tag under `root` (a turret, or anything holding one, cloned or not): head, gun (the
+// head itself on the old model), muzzles in index order, spinners.
+export function turretRig(root) {
+  let head = null, gun = null;
+  const muzzles = [], spins = [];
+  root.traverse((o) => {
+    const u = o.userData;
+    if (u.turretHead && !head) head = o;
+    if (u.turretGun && !gun) gun = o;
+    if (u.turretMuzzle !== undefined) muzzles[u.turretMuzzle] = o;
+    if (u.turretSpin) spins.push(o);
+  });
+  if (head) head.rotation.order = 'YXZ'; // (clone() drops Euler order: on the old model the head pitches as well as turns)
+  return { head, gun: gun || head, muzzles: muzzles.filter(Boolean), spins, rotorV: 0 };
+}
+// Turn a rig's spinners: the radar always, a rotor only while `firing` (spinning up and down over about half a second).
+export function turretTick(rig, dt, firing = false) {
+  rig.rotorV += ((firing ? 28 : 0) - rig.rotorV) * Math.min(1, dt * (firing ? 6 : 1.5));
+  for (const s of rig.spins) {
+    const { axis, speed } = s.userData.turretSpin;
+    s.rotation[axis] += (speed || rig.rotorV) * dt;
+  }
+}
+
+// The code-built turret the proposals replace (?turret=old): octagonal base with a glowing collar; head with cupola, twin
+// braked barrels, fins, ammo pods, sensor eye. Baked per faction colour with the outpost Kit, cloned per turret; its
+// muzzles are empties at the barrels' ends.
 const TURRET_PARTS = new Map();
 function turretParts(color) {
   let t = TURRET_PARTS.get(color);
@@ -2736,15 +2803,22 @@ function turretParts(color) {
   TURRET_PARTS.set(color, t);
   return t;
 }
-export function makeTurret({ color = 0x2b59c3 } = {}) {
+function oldTurret(color) {
   const P = turretParts(color);
   const root = new THREE.Group();
   root.add(P.base.clone());
   const head = new THREE.Group();
   head.position.y = 3.1;
   head.add(P.head.clone());
+  head.userData.turretHead = true;
+  for (const [i, sx] of [-0.42, 0.42].entries()) {
+    const m = new THREE.Object3D();
+    m.position.set(sx, -0.1, 4.1);
+    m.userData.turretMuzzle = i;
+    head.add(m);
+  }
   root.add(head);
-  return { root, head };
+  return { root, ...turretRig(root) };
 }
 
 export function makeCrate(color = 0xffd23f, size = 0.9) {
