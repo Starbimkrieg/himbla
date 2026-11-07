@@ -12,16 +12,18 @@ one. The Asset Row has Bastion and the old one side by side (vehicles: DEFENCE T
 TURRETS).
 
 **The ILMB's towers, fitted to it** (`build_ilmb.py` tower): with the pick, the guns on the Rampart's bastions and gate
-towers moved to the middle of their drums (they stood 2.6 m and 1.6 m outboard of it), and each tower's top now tapers:
-the drum curves in from the wall's height in a shoulder (a quarter ellipse, leaving the drum upright) to a seat just wider
-than the turret's foot (3.75 m; the ILMB's guns are scaled 1.35, a 3.4 m foot), a navy collar with a red lit band round
-it. The flat gun decks, the separate gun plinths and the gate towers' overhanging crowns are gone; the parapet and its
-coping run into a bastion's shoulder, and its beacon mast stands on the shoulder's inboard slope, clear of the gun.
+towers moved to the middle of their drums (they stood 2.6 m and 1.6 m outboard of it), and each tower's top now tapers
+straight in, from a crisp edge at the drum's top, to a seat just wider than the turret's foot (3.75 m; the ILMB's guns are
+scaled 1.35, a 3.4 m foot), a navy collar with a red lit band round it. The flat gun decks, the separate gun plinths and
+the gate towers' overhanging crowns are gone. The wall's gold coping is carried round every tower as a flush band at its
+own height, the bastions' tapers starting just above it, so the trim runs on unbroken; the bastions' beacon masts stand on
+the taper's inboard slope, clear of the gun.
 
 | Before | After |
 |---|---|
-| ![A bastion before: a flat deck, the gun off centre](../ilmb-proposals/a2_bastion.jpg) | ![A bastion after: the shoulder and seat](tops_bastion.jpg) |
+| ![A bastion before: a flat deck, the gun off centre](../ilmb-proposals/a2_bastion.jpg) | ![A bastion after: the taper and seat](tops_bastion.jpg) |
 | ![The wall from outside](tops_wall.jpg) | ![A gate tower's top](tops_gate.jpg) |
+| ![The coping running into a bastion's gold band](tops_coping.jpg) | |
 
 | | A: **Bastion** | B: **Aegis** |
 |---|---|---|

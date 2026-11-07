@@ -15,10 +15,11 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
   degrees up). **A was picked**; B is out of the build, `?turret=old` brings back the code-built one; the Asset Row has
   DEFENCE TURRET (Bastion and the old one) beside the faction line-up.
   - **The ILMB's towers fitted to it:** the guns on the Rampart's bastions and gate towers stand in the middle of their
-    drums (they were 2.6 m and 1.6 m outboard), and each tower's top tapers in a curved shoulder to a seat just wider than
-    the turret's foot, with a navy collar and a red lit band; the flat gun decks, the gun plinths and the gate towers'
-    overhanging crowns are gone. The parapet runs into the bastions' shoulders, and their beacon masts stand on the
-    shoulders' inboard slope. The wall is 40k triangles.
+    drums (they were 2.6 m and 1.6 m outboard), and each tower's top tapers straight in, from a crisp edge at the drum's top,
+    to a seat just wider than the turret's foot, with a navy collar and a red lit band; the flat gun decks, the gun plinths
+    and the gate towers' overhanging crowns are gone. The wall's gold coping is carried round every tower as a flush band at
+    its own height (the bastions' tapers start just above it), so the trim runs unbroken instead of poking into the tower;
+    the bastions' beacon masts stand on the taper's inboard slope. The wall is 34k triangles.
   - **Tracer rounds:** base turrets and outpost militia guns fire tracers (a glowing streak, as the War-Rig's) from their
     muzzles in turn, 20% faster than the old bolts (180 m/s, the ILMB's 205); damage as before. A turret now fires only
     once its gun is on the target.
