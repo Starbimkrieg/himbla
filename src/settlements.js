@@ -1589,46 +1589,9 @@ function ilmbOldCore(k) {
   k.at();
 }
 
-export function dressIlmb(world, loc, { core = true, features = true } = {}) {
-  settle(world, loc, 9203, (k) => {
-    if (core) ilmbOldCore(k); // (else the Blender core: ilmbCore.js)
-    k.at();
-    if (!features) return; // (the Blender pieces: ilmbCore.js buildIlmbPieces)
-    // repair bay: ribbed arched hangar, lit doorway (+z faces the base)
-    k.at(-168, -98, 1.05);
-    k.box(36, 0.5, 36, T(CONC), 0, 0, 0, { outline: 0.05 });
-    k.add(new THREE.CylinderGeometry(16, 16, 34, 24, 1, true, Math.PI / 2, Math.PI).rotateX(Math.PI / 2), D(0xff9f1c), 0, 0.5, 0, { outline: 0.25 });
-    k.hcyl(16.2, 34, 0, 0, 0, 0.5);
-    for (let t = -15; t <= 15; t += 5) k.add(new THREE.TorusGeometry(16.1, 0.4, 4, 24, Math.PI), T(0xd8d4e8), 0, 0.5, t, { outline: 0 });
-    k.add(new THREE.CircleGeometry(16, 24, 0, Math.PI), T(0xd8d4e8), 0, 0.5, -17, { ry: Math.PI, outline: 0 });
-    k.add(new THREE.CircleGeometry(16, 24, 0, Math.PI), T(0x1d1a29), 0, 0.5, 16.95, { outline: 0 });
-    k.add(new THREE.TorusGeometry(16.2, 0.6, 4, 24, Math.PI), T(YEL), 0, 0.5, 17, { outline: 0.05 });
-    for (let i = -3; i <= 3; i++) k.box(1.6, 0.08, 6, T(i % 2 ? YEL : DARK), i * 3, 0.5, 21, { outline: 0 });
-    for (const s of [-1, 1]) k.box(0.4, 0.4, 0.4, G(0xff9f1c), s * 15, 4, 17.4, { outline: 0 });
-    k.at();
-    // launch gantry: lattice umbilical tower with two swing arms; fuel spheres
-    const gx = 60, gz = -185;
-    k.at(gx, gz);
-    k.box(10, 1, 10, T(CONC), 0, 0, 0, { outline: 0.06 });
-    lattice(k, 0, 0, 54, 2.8, 2.8, 12, T(0xff4f2e), T(WHITE), { r: 0.32 });
-    for (const y of [24, 40]) {
-      k.box(16, 1.4, 2, T(DARK), -8, y, 0, { outline: 0.06 });
-      k.box(16, 0.2, 2.2, T(YEL), -8, y + 1.4, 0, { outline: 0 });
-    }
-    k.cyl(0.3, 0.4, 8, 6, T(DARK), 0, 54, 0, { outline: 0.03 });
-    k.blinker(0, 62.5, 0, 0xff2a4a, 0.5);
-    k.solid(2.9, 27, 2.9, 0, 0);
-    k.at();
-    hortonSphere(k, -20, -173, 6.5, WHITE, 0xff4f2e);
-    hortonSphere(k, -20, -197, 6.5, WHITE, 0x2ec4ff);
-    habDome(k, 70, 140, 16, 0xff7ad9, { door: Math.PI, trim: YEL });
-    habDome(k, -60, 145, 14, 0xffd23f, { door: Math.PI, trim: 0xff7ad9 });
-    commsMast(world, loc, k, 140, -120, 30, 0xffd23f, 'spacecom');
-    // barracks and vehicle depot
-    quonset(k, 175, 120, 7, 34, 0x5b5870, -0.6 + Math.PI, YEL);
-    quonset(k, -175, 125, 7, 34, 0x5b5870, 0.6 + Math.PI, YEL);
-    cabin(k, 190, -40, 26, 26, 11, 0x4a4660, 0.3 - Math.PI / 2, { roof: 0x2a2540, trim: YEL });
-  });
+export function dressIlmb(world, loc, { core = true } = {}) {
+  if (!core) return; // (the Blender core: ilmbCore.js; the rest of the base is Blender's whichever core: buildIlmbQuarters)
+  settle(world, loc, 9203, (k) => ilmbOldCore(k));
 }
 
 // =============================================================================================

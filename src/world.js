@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildZbornakLab } from './labWorld.js';
 import { toon, ink, inkMat, glow, textSprite, nameTag, setMask, vcMaterial, vcable, paintVertices, dropFloorFaces, shellGeo, shellBounds, INK_DIST, withToonBias } from './toon.js';
-import { makeDish, makeFigure, figureWalk, figureStand, makeRover, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK, wingModel, HABITAT_DOCK } from './models.js';
+import { fixtureModel, makeDish, makeFigure, figureWalk, figureStand, makeRocket, makeShuttle, makePlanets, makeHoverCar, POWER_DOCK, wingModel, HABITAT_DOCK } from './models.js';
 import { mulberry32, clamp } from './rng.js';
 import { FACTIONS, defenseSpots, ILMB_WINGS_AT, ILMB_BOARD } from './locations.js';
-import { buildIlmbCore, buildIlmbWall, buildIlmbPieces, bakeIlmbInto, bakeIlmbPiece, ilmbBlender } from './ilmbCore.js';
+import { buildIlmbCore, buildIlmbWall, buildIlmbQuarters, buildIlmbRocketPad, bakeIlmbInto, bakeIlmbPiece, ilmbBlender } from './ilmbCore.js';
+import { LOOP_R, GATES, AVENUE, INNER_STOPS, BUS_PADS, SHIP_PADS, ROCKET, QUARTERS, at as ilmbAt, yawFor } from './ilmbLayout.js';
 import { bendPoint, bendQuat, unbendPoint } from './curve.js';
 import { SUN, frameQuat, arcDist, dirFromAngles, tangent, collectNodes } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
@@ -14,8 +15,7 @@ import { buildHelium, buildMeridian, dressMonolith, buildTown, dressIlmb, dressB
 import { makeProp } from './storyAssets.js';
 import { buildHomeTown } from './hometown.js';
 import { spindleGeometry } from './spindle.js';
-import { T as KT, G as KG } from './outpostModels.js';
-import { padPlan, padKit, padCols, padToFrame, colToFrame, padStairs } from './landingPad.js';
+import { padPlan, padKit, padCols, padToFrame, colToFrame, padStairs, fixtureMat } from './landingPad.js';
 
 function mesh(geo, mat, outline = 0.15) {
   const m = new THREE.Mesh(geo, mat);
@@ -741,27 +741,10 @@ export class World {
 
   // Shuttle / freighter landing pad (landingPad.js): raised railed deck, stairs down on the side facing `opts.face` (angle in
   // the settlement's x-z plane, as Math.atan2(z, x); default toward the middle, and traffic.js turns it to the nearest road
-  // once the roads are down: faceSettlementPads). spare: kept only if transit uses it
-  // (traffic.js dropSparePads). opts.r is not needed; opts.flat: a flat ground disc (the ILMB rocket pad, no shuttles).
+  // once the roads are down: faceSettlementPads). spare: kept only if transit uses it (traffic.js dropSparePads).
   // Returns the loc.pads record ({ x, z, r, top, stairs, mesh, cols, keep }), or null for a previously dropped spare.
   pad(loc, dx, dz, r, color = 0xffd23f, spare = false, opts = {}) {
     if (spare && (loc.droppedPads || []).some((p) => Math.hypot(p.x - dx, p.z - dz) < 1)) return null;
-    if (opts.flat) {
-      const g = new THREE.Group();
-      g.add(mesh(new THREE.CylinderGeometry(r, r * 1.05, 0.5, 32), toon(0x4a4660), 0.08));
-      const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.65, r * 0.8, 32), toon(color));
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.y = 0.27;
-      g.add(ring);
-      const bar = new THREE.Mesh(new THREE.PlaneGeometry(r * 0.15, r * 0.9), toon(color));
-      bar.rotation.x = -Math.PI / 2;
-      bar.position.y = 0.28;
-      g.add(bar);
-      this.put(g, loc, dx, dz, 0);
-      const rec = { x: dx, z: dz, r, spare, mesh: g, top: 0.27, cols: [], keep: null, flat: true };
-      (loc.pads ||= []).push(rec);
-      return rec;
-    }
     const face = opts.face ?? Math.atan2(-dz, -dx);
     const yaw = Math.PI / 2 - face; // (stairs run along pad +z, which yaw turns to (sin yaw, cos yaw))
     const ground = opts.ground || ((x, z) => {
@@ -811,43 +794,15 @@ export class World {
     return g;
   }
 
-  // Solar farm: rows of tilted panels on posts and footings, a torque tube per row, gravel bed with
-  // curb, inverter cabinet with conduit at each row's end.
+  // Solar farm (build_fixtures.py fx_solar_<rows>x<cols>: 4 x 6 or 3 x 8): rows of tilted panels on posts and footings, a
+  // torque tube per row, gravel bed with curb, inverter cabinet with conduit at each row's end; one block collider over the
+  // panels and inverters (ride over or round it), from the model
   solarField(loc, dx, dz, rows, cols, yaw = 0) {
-    const TILT = -0.5, PD = 3, H = 1.35; // panel depth and centre height
-    const W = cols * 6, D = rows * 5;
-    const g = kitPart(0x2b3a8f, (k) => {
-      k.box(W + 3, 0.12, D + 2, KT(0x8a8698), -3, 0, -2.5, { outline: 0.04 });
-      for (const s of [-1, 1]) {
-        k.box(W + 3.2, 0.3, 0.3, KT(0x5b5870), -3, 0, -2.5 + s * (D / 2 + 1), { outline: 0.02 });
-        k.box(0.3, 0.3, D + 2.2, KT(0x5b5870), -3 + s * (W / 2 + 1.5), 0, -2.5, { outline: 0.02 });
-      }
-      for (let i = 0; i < rows; i++) {
-        const lz = (i - rows / 2) * 5;
-        for (let j = 0; j < cols; j++) {
-          const lx = (j - cols / 2) * 6;
-          k.add(new THREE.BoxGeometry(5, 0.14, PD), KT(0x2b3a8f), lx, H, lz, { rx: TILT, outline: 0.05 });
-          for (let c = -1; c <= 1; c++) k.add(new THREE.BoxGeometry(0.06, 0.16, PD - 0.1), KT(0xd8d4e8), lx + c * 1.65, H + 0.01, lz, { rx: TILT, outline: 0 });
-          k.add(new THREE.BoxGeometry(5.04, 0.16, 0.08), KT(0xd8d4e8), lx, H + 0.01, lz, { rx: TILT, outline: 0 });
-          // two posts (back one taller) on footings under the panel frame
-          for (const sz of [-1, 1]) {
-            const pz = sz * PD * 0.32, top = H + pz * Math.tan(-TILT) - 0.1;
-            k.box(0.7, 0.25, 0.7, KT(0x8a8698), lx, 0, lz + pz, { outline: 0.02 });
-            k.box(0.16, top, 0.16, KT(0x55607a), lx, 0, lz + pz, { outline: 0.02 });
-          }
-        }
-        // torque tube along the row; inverter box with conduit at its end
-        k.beam([-W / 2 - 3, H - 0.25, lz], [W / 2 - 3, H - 0.25, lz], 0.08, KT(0x55607a), { outline: 0.015 });
-        k.box(1.1, 1.4, 0.8, KT(0xd8d4e8), -W / 2 - 4.3, 0, lz, { outline: 0.04 });
-        k.box(0.5, 0.18, 0.06, KG(0x7dff6a), -W / 2 - 4.3, 1.0, lz + 0.42, { outline: 0 });
-        k.box(W - 1, 0.12, 0.25, KT(0x3a3550), -3, 0.12, lz + 1.2, { outline: 0 });
-      }
-    });
-    this.put(g, loc, dx, dz, 0, yaw);
-    // one block over panels and inverters (ride over or round it)
-    const c = Math.cos(yaw), sn = Math.sin(yaw), lx = -2.7, lz = -2.5;
-    this.col(loc, { type: 'box', x: dx + lx * c + lz * sn, y: 1.05, z: dz - lx * sn + lz * c, hx: W / 2 + 2.2, hy: 1.05, hz: D / 2 - 1, yaw });
-    (loc.keep ||= []).push({ x: dx, z: dz, r: Math.hypot(W + 4, D + 2) / 2 + 2 });
+    const M = fixtureModel(`solar_${rows}x${cols}`);
+    this.put(kitPart(0x2b3a8f, (k) => k.baked(M.root, fixtureMat(0x2b3a8f), new THREE.Matrix4())), loc, dx, dz, 0, yaw);
+    const c = Math.cos(yaw), sn = Math.sin(yaw);
+    for (const { pos: p, data: d } of M.cols) this.col(loc, { type: 'box', x: dx + p.x * c + p.z * sn, y: p.y + d.hy, z: dz - p.x * sn + p.z * c, hx: d.hx, hy: d.hy, hz: d.hz, yaw });
+    (loc.keep ||= []).push({ x: dx, z: dz, r: Math.hypot(cols * 6 + 4, rows * 5 + 2) / 2 + 2 });
   }
 
   // Lamp post with a fake additive light pool: cheap "lighting" for the dark.
@@ -1022,9 +977,13 @@ export class World {
     }
   }
 
+  // The ILMB (Draft A of docs/ilmb-layouts.md; the positions are ilmbLayout.js): the Crown, its wings and the wall, and round
+  // them the four quarters on the inner ring road: transit at the main gate, the motor pool west, power and industry south,
+  // the civilian quarter east.
   buildHub(loc) {
-    dressIlmb(this, loc, { core: !ilmbBlender(), features: !ilmbBlender() }); // (the old code-built core and pieces: ?ilmbCore=old)
-    if (ilmbBlender()) { buildIlmbCore(this, loc); buildIlmbPieces(this, loc); } // the complex, skywalks and pieces from Blender (ilmbCore.js)
+    dressIlmb(this, loc, { core: !ilmbBlender() }); // (the old code-built core: ?ilmbCore=old)
+    if (ilmbBlender()) buildIlmbCore(this, loc); // the complex and skywalks from Blender (ilmbCore.js)
+    buildIlmbQuarters(this, loc);
     const B = new Batch();
     this.buildIlmbWings(loc, B);
     // job terminal: a kiosk of screens on the plaza right of the main entrance (locations.ILMB_BOARD, settlements.jobTerminal);
@@ -1033,23 +992,41 @@ export class World {
     jobTerminal(this, loc, bx, bz, byaw, 0xffd23f, ilmbBlender() ? (k) => bakeIlmbInto(k, 'terminal') : null);
     hang(loc, textSprite('JOB BOARD', { color: '#ffffff', size: 80, scale: 0.6 }), bx, 22, bz);
 
-    // repair bay hangar (past the Daedalus relay, clear of the wings; built in settlements.js)
-    hang(loc, textSprite('REPAIR BAY', { color: '#ff9f1c', size: 70, scale: 0.6 }), -168, 24, -98);
-    this.pad(loc, 95, -60, 16);
-    this.pad(loc, -120, 40, 16, 0x2ec4ff);
-    this.solarField(loc, 150, 60, 4, 6, 0.4);
-    const dish = makeDish(14, 'spacecom');
-    this.put(dish.root, loc, -150, -40);
-    this.addDish(dish, 0.2, loc);
-    for (const c of dish.cols) this.col(loc, { ...c, x: -150 + c.x, z: -40 + c.z });
+    // the roads inside, driven by traffic.js (buildGateRoads): the inner ring road and a gate road out through each gate to the
+    // ring road outside; Arrivals Avenue carries the main gate's road on to the atrium (drawn, not driven), the inner ring's
+    // inner edge open for it
+    loc.inner = { r: LOOP_R, gates: GATES, stops: INNER_STOPS, openIn: [90] };
+    (loc.paved ||= []).push({ x0: 0, z0: AVENUE.r0, x1: 0, z1: AVENUE.r1 });
+    // the transit quarter's pads: four bus decks behind the passenger terminal, their stairs toward it; two freighter decks
+    // either side of the container yard. The ILMB's lines land on these (traffic.js buildFlights, loc.transitPads).
+    const RAD = Math.PI / 180;
+    for (const [list, kind, face, color] of [[BUS_PADS, 'bus', (p) => p.a + 180, 0x2ec4ff], [SHIP_PADS, 'ship', (p) => (p.a < 120 ? p.a - 90 : p.a + 180), 0xff9f1c]]) {
+      for (const p of list) {
+        const [x, z] = ilmbAt(p.a, p.r), rec = this.pad(loc, x, z, p.deck, color, false, { face: face(p) * RAD });
+        rec.kind = kind;
+        (loc.transitPads ||= []).push(rec);
+      }
+    }
+    for (const e of QUARTERS) {
+      const [x, z] = ilmbAt(e.a, e.r);
+      if (e.kind === 'solar') this.solarField(loc, x, z, 4, 6, yawFor(e.a, e.face));
+      else if (e.kind === 'dish') {
+        const dish = makeDish(14, 'spacecom');
+        this.put(dish.root, loc, x, z);
+        this.addDish(dish, 0.2, loc);
+        for (const c of dish.cols) this.col(loc, { ...c, x: x + c.x, z: z + c.z });
+      }
+    }
+    const [mx, mz] = ilmbAt(162, 236);
+    hang(loc, textSprite('MOTOR POOL', { color: '#ff9f1c', size: 70, scale: 0.6 }), mx, 24, mz);
 
-    // Launch complex: where most new arrivals land
-    const lp = { x: 20, z: -185 };
-    this.pad(loc, lp.x, lp.z, 30, 0xff4f2e, false, { flat: true }); // (rocket pad: flat, no shuttles)
-    // (gantry and fuel spheres: settlements.dressIlmb)
-    hang(loc, textSprite('ARRIVALS', { color: '#ff4f2e', size: 70, scale: 0.6 }), lp.x, 30, lp.z + 20);
+    // the Earth rocket's flat pad in the transit quarter, its launch gantry on the pad's outer edge (ilmbCore.js): where most new
+    // arrivals land. The ship stands with its hatch toward the gantry's access arm.
+    const rp = buildIlmbRocketPad(this, loc), lp = { x: rp.x, z: rp.z };
+    const [sx, sz] = ilmbAt(ROCKET.a, ROCKET.r - ROCKET.padR + 2);   // (over the pad's inner edge, clear of the ship)
+    hang(loc, textSprite('ARRIVALS', { color: '#ff4f2e', size: 70, scale: 0.6 }), sx, 16, sz);
     const rocket = makeRocket();
-    this.put(rocket.root, loc, lp.x, lp.z, 900, 0, true);
+    this.put(rocket.root, loc, lp.x, lp.z, 900, Math.PI / 2 - (ROCKET.a * Math.PI) / 180, true);
     this.rocket = { ...rocket, loc, lp, t: 0, alt: 900, period: 76 };
     this.launchPad = { loc, x: lp.x, z: lp.z };
 
@@ -1108,13 +1085,7 @@ export class World {
   }
 
   fortifyRest(loc) {
-    // (barracks and vehicle depot: settlements.dressIlmb)
-    for (let i = 0; i < 3; i++) {
-      const r = makeRover({ color: 0x55607a, trim: 0xffd23f, pirate: false, flag: 0xffd23f });
-      r.root.scale.setScalar(1.15);
-      this.put(r.root, loc, 150 + i * 12, -95 + i * 6, 0, 1.2);
-      this.col(loc, { type: 'box', x: 150 + i * 12, y: 1.5, z: -95 + i * 6, hx: 2.5, hy: 1.5, hz: 3.0, yaw: 1.2 });
-    }
+    // (the barracks, depot and patrol rovers: the motor pool, ilmbCore.js buildIlmbQuarters)
     hang(loc, loc.lawless ? textSprite('RUSTMOON', { color: '#7dff3a', size: 90, scale: 1.1 }) : textSprite('SPACECOM', { color: '#ffd23f', size: 90, scale: 1.1 }), 0, 132, 0);
   }
 
@@ -1520,6 +1491,12 @@ export class World {
     r.root.position.y = alt;
     r.flame.visible = r.core.visible = flame > 0;
     r.flame.scale.set(1, flame * (0.8 + Math.random() * 0.4), 1);
+    // landing legs: down below 40 m, folded against the hull (straight down beside it) above 160 m, about the tangent at each
+    const fold = Math.min(1, Math.max(0, (alt - 40) / 120));
+    if (fold !== r.fold) {
+      r.fold = fold;
+      for (const L of r.legs) L.g.quaternion.setFromAxisAngle(_v.set(-Math.sin(L.yaw), 0, Math.cos(L.yaw)), -0.36 * fold);
+    }
     r.firing = flame > 0.5 && alt < 120;
     if (r.loc.active) r.worldPos = r.loc.group.localToWorld(new THREE.Vector3(r.lp.x, alt + 20, r.lp.z));
   }

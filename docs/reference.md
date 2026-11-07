@@ -212,7 +212,7 @@ Wreck it for ₵800 and, the first time, his Junk Mortar. Not while you ride wit
 
 | Location | Faction | Notes |
 | --- | --- | --- |
-| International Moon Base (ILMB) | SPACECOM | Fortress, job board, repair bay, launch pad, six buildings joined by skywalks: Hydroponics (a greenhouse dome lit by heliostats), Meridian Labs (a sky lab on a leaning pylon), the Vostok Hangar (open to skate into), the Daedalus Relay (phased arrays), the Power Block (a D-He3 fusion plant you can drive under) and the Kepler Habitat (the Orrery ring) |
+| International Moon Base (ILMB) | SPACECOM | Fortress with an inner ring road through its four gates, driven by its own traffic; four quarters round it: transit (passenger terminal, bus and freighter pads, the Earth rocket on its gantry, cargo shed and container yard), the motor pool (the repair bay: a garage with vehicles up on lifts, depot, barracks, patrol rovers), power and industry (tank farm, pipe bridge, solar fields) and the civilian quarter (houses, shops on a market lane, the family domes); parking lots with faction cars; job board, six buildings joined by skywalks: Hydroponics (a greenhouse dome lit by heliostats), Meridian Labs (a sky lab on a leaning pylon), the Vostok Hangar (open to skate into), the Daedalus Relay (phased arrays), the Power Block (a D-He3 fusion plant you can drive under) and the Kepler Habitat (the Orrery ring) |
 | Meridian Exchange · Shackleton Radar Array · Helium-3 Exchange | Meridian | Trade hub with live ticker and motor pool; radar dishes; strip-mine |
 | Kepler Civic Center · Tranquility Commons · Aldrin Heights · Twilight Waystation · Hertzsprung Refuge | Kepler | Towns, rest and repair |
 | Farside Listening Post | SPACECOM (dark side) | Hazard-pay dish array |
@@ -328,7 +328,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (242 in 26 sections) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (248 in 26 sections) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).
@@ -399,8 +399,11 @@ src/
   outpostDrafts.js the small outposts (the picks, OUTPOST_PICK in outpostModels.js; docs/outpost-proposals), code-built: the
                    kinds not yet in outposts.glb, and the fallback
   ilmbCore.js      the ILMB's core from Blender (ilmb.glb): the central complex and wall (proposal A of docs/ilmb-proposals;
-                   ?ilmbCore=old the code-built one), skywalks, job terminal, repair bay, gantry, spheres, domes, barracks, depot,
-                   mast, pylons
+                   ?ilmbCore=old the code-built one), skywalks, job terminal, pylons; the quarters (buildIlmbQuarters: the
+                   motor pool and its vehicles on the lifts, terminal, cargo shed, houses and shops, parking lots with parked
+                   cars, tank farm, container yard...), the rocket's pad and gantry (rocket.glb)
+  ilmbLayout.js    the ILMB's grounds as built (Draft A of docs/ilmb-layouts.md): the inner ring road, gates, pads, the rocket,
+                   every quarter's pieces and parking lots, the inner stops; read by the game and tools/ilmb-layouts.mjs
   outpostLooks.js  the small outposts' looks by owner: palettes (STYLE), walkers' looks, container liveries
   outpostWalkers.js the two or three NPCs walking about each small outpost, and those who keep a post (traders, stallholders)
   vehicles.js      drivable vehicles
@@ -439,8 +442,9 @@ src/
   world.js         sky, settlement layout, colliders, ambient life
   settlements.js   detailed settlements and landmarks
   market.js        Meridian stock market for the ticker
-  traffic.js       pads, flights, passengers, roads, land-trains, cars
-  landingPad.js    landing pad geometry and waypoints
+  traffic.js       pads, flights, passengers, roads, land-trains, cars; roads inside a place (loc.inner: the ILMB's inner
+                   ring and gate roads, driven by cars and buggies) and its own traffic
+  landingPad.js    landing pad layout, colliders and waypoints; the pad assembled from fixtures.glb's kit
   roadplan.js      least-cost road routing
   wardrobe.js      wardrobe screen (main.js builds it on the first C)
   trailer.js       trailer director (?trailer)
@@ -485,7 +489,10 @@ src/
     winch.glb        winch grapple and cable
     towmark.png      winch HUD marker
     turret.glb       the defence turret, "Bastion" (docs/turret-proposals; models.js makeTurret, ?turret=old the code-built one)
-    ilmb.glb         the ILMB's core: the central complex and wall ("the Crown", "the Rampart"), skywalks and the base's other pieces
+    ilmb.glb         the ILMB's core: the central complex and wall ("the Crown", "the Rampart"), skywalks and the base's other pieces,
+                     its quarters (motor pool, terminal, cargo shed, houses, shops, tanks, pipe bridge, parking bays...)
+    fixtures.glb     shared fixtures: the landing pad kit (decks, drums, treads, rails), the stop shelter, solar fields
+    rocket.glb       the ILMB's Earth rocket "Kestrel" (models.js makeRocket), its launch gantry, the flat pad
     outposts.glb     the small outposts built in Blender (the kinds in staticContract.js GLB_KINDS; ?outpostGlb=0 for the
                      code-built ones; spec in docs/outpost-glb.md)
 tools/
@@ -513,6 +520,8 @@ tools/
                            to replay, ?sweep drives it at every box and tables it (/tools/spidertank-lab.html)
   make-credit-glyph.py     draws the credit sign for both pixel faces -> assets/fonts/credit-*.woff2
   meridian-layouts.mjs     Meridian Exchange layout study (docs/meridian-layouts.md)
+  ilmb-layouts.mjs         the ILMB's quarters and roads: clearance check and plans of today's (src/ilmbLayout.js) and Draft B
+                           (docs/ilmb-layouts.md)
   winch-ride.mjs           headless winch test; run --gate ring after touching src/winch.js
   zbornak-chimeras.mjs     exports a few game chimeras as GLBs for the Antimatter Lab draft's renders (docs/zbornak-proposals/)
   zbornak-screens.mjs      shoots the Antimatter Lab draft's screen mock-ups (docs/zbornak-proposals/screens/terminal.html)
@@ -576,7 +585,12 @@ tools/
     build_dish.py          -> dish.glb
     build_winch.py         -> winch.glb, towmark.png
     build_turret.py        -> turret.glb, the defence turret (docs/turret-proposals; wing_kit.py)
-    build_ilmb.py          -> ilmb.glb, the ILMB's core (docs/ilmb-proposals; wing_kit.py, dishkit.py)
+    build_ilmb.py          -> ilmb.glb, the ILMB's core (docs/ilmb-proposals; wing_kit.py, dishkit.py) and its quarters
+                              (ilmb_quarters.py, docs/ilmb-layouts.md)
+    ilmb_quarters.py       the ILMB's quarters' pieces (exec'd by build_ilmb.py): motor pool with its interior, passenger
+                              terminal, cargo shed, fuel island, tank, pump house, pipe bridge, shops, houses, parking bays
+    build_fixtures.py      -> fixtures.glb, shared fixtures: the landing pad kit, the stop shelter, solar fields
+    build_rocket.py        -> rocket.glb, the ILMB's Earth rocket, its gantry and pad
     build_outposts.py      -> outposts.glb, the small outposts (check with npm run check:outposts; compare with the code-built
                               ones in the viewer: ?m=outpost&kind=tower)
     build_downs_*.py       -> downs-*.glb (build_downs_dome.py -> downs-dome.glb; preview_dome.py renders it over a block model

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { T, G } from './outpostModels.js';
+import { fixtureModel, fixtureSlot } from './models.js';
 
 // The shuttle / freighter landing pad: a round deck 3 m up on a clad base, a railing all round, and one straight flight of
 // stairs for walkers. The base (panels, ribs, back door) and the space under the stairs are closed and solid, so nobody
@@ -17,7 +18,7 @@ const RAIL_IN = 0.35;        // ...and its inset from the deck edge
 const SKIRT_IN = 0.45;       // base panel inset from the deck edge
 const STAIR_W = 2.6;         // flight width (between handrails)
 const RISE = 0.25, RUN = 0.34; // per step: ~36 degrees, gentle enough for physics to count as ground
-const STEEL = 0x55607a, DARK = 0x3a3550, DECK = 0x5b5870, TOP = 0x4a4660, YEL = 0xffd23f, CONC = 0x8a8698, LIGHT = 0xd8d4e8, PANEL = 0x6a6680;
+const YEL = 0xffd23f;  // (the markings' colour unless the caller gives one)
 
 // The layout, read by the builder, the colliders and the walkers.
 // r: deck radius. top: deck height (null: PAD_H over the highest ground under it).
@@ -58,78 +59,53 @@ export function padPlan(r, ground = () => 0, top = null) {
   };
 }
 
-// Draws the pad into a Kit (outpostModels.js) in the Kit's frame. color: markings and lamps.
+// A fixture's material for a slot (models.js fixtureSlot): `mark` and `markglow` in `color`, the rest fixed. Shared by
+// the pad, the stop shelter (traffic.js) and the solar fields (world.js).
+export const fixtureMat = (color) => (slot) => { const s = fixtureSlot(slot, color); return s.glow ? G(s.color) : T(s.color); };
+
+// The decks built (tools/blender/build_fixtures.py PAD_RADII): a pad takes the nearest and scales it across to its radius
+const PAD_DECKS = [10.5, 12, 13, 14, 14.3, 16, 21];
+const _v = new THREE.Vector3(), _s = new THREE.Vector3(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _up = new THREE.Vector3(0, 1, 0);
+const at = (x, y, z, sx = 1, sy = 1, sz = 1, q = _q.identity()) => new THREE.Matrix4().compose(_v.set(x, y, z), q, _s.set(sx, sy, sz));
+
+// Builds the pad into a Kit (outpostModels.js) in the Kit's frame from the Blender kit (build_fixtures.py fx_pad_*), fitted to
+// `plan` (the ground under it): the deck at its height, the base drum down to the lowest ground, one tread per step, stringers,
+// handrails and posts along the flight, the plates closing the space under it, the slab at its foot. color: markings and lamps.
 export function padKit(k, plan, color = YEL) {
-  const { r, top, posts, baseY, stairs: S } = plan;
-  const bot = top - DECK_T;
-  const seg = Math.max(32, Math.round(r * 3));
-  // deck: slab, darker landing surface, hazard band round the edge, markings
-  k.cyl(r, r * 0.97, DECK_T, seg, T(DECK), 0, bot, 0, { outline: 0.08 });
-  k.cyl(r - 0.25, r - 0.25, 0.04, seg, T(TOP), 0, top, 0, { outline: 0 });
-  const bands = Math.round(seg / 2) * 2;
-  for (let i = 0; i < bands; i++) k.add(new THREE.CylinderGeometry(r + 0.03, r * 0.97 + 0.03, 0.3, 2, 1, true, (i / bands) * Math.PI * 2, (Math.PI * 2) / bands), T(i % 2 ? DARK : YEL), 0, top - 0.17, 0, { outline: 0 });
-  k.ring(r * 0.72, Math.max(0.12, r * 0.022), T(color), 0, top + 0.05, 0);
-  k.ring(r * 0.56, Math.max(0.08, r * 0.012), T(color), 0, top + 0.05, 0);
-  // an H in the middle (its foot toward the stairs), and a chevron pointing to the stairs
-  const h = r * 0.34, bw = Math.max(0.5, r * 0.06);
-  for (const s of [-1, 1]) k.box(bw, 0.05, h, T(LIGHT), s * h * 0.36, top + 0.02, 0, { outline: 0 });
-  k.box(h * 0.72, 0.05, bw, T(LIGHT), 0, top + 0.02, 0, { outline: 0 });
-  for (const s of [-1, 1]) k.box(0.35, 0.05, 1.6, T(YEL), s * 0.55, top + 0.02, r - 2.2, { ry: s * 0.6, outline: 0 });
-  // base: panel drum, concrete course at its foot, ribs every ~2.8 m, glow strip under the deck lip, service door at the
-  // back (opposite the stairs)
-  const rs = r - SKIRT_IN, hb = bot - baseY;
-  k.add(new THREE.CylinderGeometry(rs, rs, hb, seg, 1, true), T(PANEL), 0, baseY + hb / 2, 0, { outline: 0.06 });
-  k.add(new THREE.CylinderGeometry(rs + 0.15, rs + 0.2, 1.75, seg, 1, true), T(CONC), 0, baseY + 0.875, 0, { outline: 0.04 });
-  const ribs = Math.max(12, Math.round((Math.PI * 2 * rs) / 2.8));
-  for (let i = 0; i < ribs; i++) {
-    const a = ((i + 0.5) / ribs) * Math.PI * 2;
-    k.box(0.32, hb, 0.2, T(DARK), Math.cos(a) * (rs + 0.08), baseY, Math.sin(a) * (rs + 0.08), { ry: -a, outline: 0.02 });
-  }
-  k.ring(rs + 0.06, 0.05, G(color), 0, bot - 0.3, 0);
-  const dy = plan.doorY;
-  k.box(1.9, 2.5, 0.16, T(YEL), 0, dy, -rs - 0.04, { outline: 0.03 });
-  k.box(1.5, 2.25, 0.2, T(DARK), 0, dy, -rs - 0.06, { outline: 0 });
-  k.ball(0.14, G(color), 0, dy + 2.75, -rs - 0.15, { outline: 0 });
-  // railing: posts, top rail, knee rail, a lamp on every third post
-  const pTop = top + RAIL_H;
-  posts.forEach((p, i) => {
-    k.cyl(0.07, 0.07, RAIL_H, 5, T(STEEL), p.x, top, p.z, { outline: 0.02 });
-    if (i % 3 === 0) k.add(new THREE.SphereGeometry(0.15, 6, 4), G(color), p.x, pTop + 0.1, p.z, { outline: 0 });
-    const q = posts[i + 1];
-    if (!q) return;
-    k.beam([p.x, pTop, p.z], [q.x, pTop, q.z], 0.06, T(YEL), { outline: 0.02, seg: 4 });
-    k.beam([p.x, top + 0.55, p.z], [q.x, top + 0.55, q.z], 0.04, T(STEEL), { outline: 0, seg: 3 });
-    k.box(Math.hypot(q.x - p.x, q.z - p.z), 0.12, 0.04, T(YEL), (p.x + q.x) / 2, top + 0.06, (p.z + q.z) / 2, { ry: -Math.atan2(q.z - p.z, q.x - p.x), outline: 0 }); // (kick plate)
-  });
-  // stairs: landing plate at the top, treads between two stringers, handrails both sides, slab at the foot
+  const { r, top, baseY, stairs: S } = plan;
+  const bot = top - DECK_T, mat = fixtureMat(color);
+  const put = (name, m) => k.baked(fixtureModel(name).root, mat, m);
+  const was = k.tag;
+  k.tag = 'pad';                                              // (the dev audits name it)
+  const R = PAD_DECKS.reduce((a, b) => (Math.abs(b - r) < Math.abs(a - r) ? b : a)), sx = r / R, tag = R.toFixed(1).replace('.', '_');
+  put(`pad_deck_${tag}`, at(0, top, 0, sx, 1, sx));
+  put(`pad_drum_${tag}`, at(0, bot, 0, sx, bot - baseY, sx));
+  put(`pad_course_${tag}`, at(0, baseY, 0, sx, 1, sx));
+  put('pad_door', at(0, plan.doorY, -(r - SKIRT_IN)));
+  // the flight: a tread per step (the bottom one yellow), a stringer, handrail and knee rail each side on three posts, the
+  // plates that close the space under it (sheared to run under the stringer), the slab at its foot
   const { w, n, rise, run, z0, footY } = S, hw = w / 2;
-  k.box(w + 0.3, 0.12, 1.2, T(DECK), 0, top - 0.12, z0 - 0.3, { outline: 0.03 });
-  for (let i = 0; i < n; i++) {
-    const y = top - (i + 1) * rise, z = z0 + i * RUN + RUN / 2;
-    k.box(w, 0.08, RUN + 0.04, T(i === n - 1 ? YEL : STEEL), 0, y - 0.04, z, { outline: 0.015 });
-    k.box(w - 0.2, 0.03, 0.08, T(YEL), 0, y + 0.01, z + RUN / 2 - 0.06, { outline: 0 }); // (nosing stripe)
-  }
+  for (let i = 0; i < n; i++) put(i === n - 1 ? 'pad_tread_end' : 'pad_tread', at(0, top - (i + 1) * rise + 0.04, z0 + i * RUN + RUN / 2));
   const pitch = Math.atan2(top - footY, run), len = Math.hypot(top - footY, run);
+  const rail = (name, x, a, b) => {
+    const d = _v.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length(), q = new THREE.Quaternion().setFromUnitVectors(_up, d.divideScalar(L));
+    put(name, at(a[0], a[1], a[2], 1, L, 1, q));
+  };
   for (const s of [-1, 1]) {
-    // stringer (deep plate under the tread ends), handrail 0.95 m over the step line, posts at both ends and middle
-    k.add(new THREE.BoxGeometry(0.14, 0.4, len), T(DARK), s * (hw + 0.07), (top + footY) / 2 - 0.25, z0 + run / 2, { rx: pitch, outline: 0.03 });
-    k.beam([s * (hw + 0.07), top + 0.95, z0 - 0.4], [s * (hw + 0.07), footY + 0.95, z0 + run + 0.2], 0.06, T(YEL), { outline: 0.02 });
-    k.beam([s * (hw + 0.07), top + 0.5, z0 - 0.4], [s * (hw + 0.07), footY + 0.5, z0 + run + 0.2], 0.04, T(STEEL), { outline: 0 });
+    const x = s * (hw + 0.07);
+    put('pad_stringer', at(x, (top + footY) / 2 - 0.25, z0 + run / 2, 1, 1, len, _q.setFromEuler(_e.set(pitch, 0, 0))));
+    rail('pad_rail', x, [x, top + 0.95, z0 - 0.4], [x, footY + 0.95, z0 + run + 0.2]);
+    rail('pad_knee', x, [x, top + 0.5, z0 - 0.4], [x, footY + 0.5, z0 + run + 0.2]);
     for (const t of [0, 0.5, 1]) {
       const z = z0 - 0.4 + t * (run + 0.6), y = top + (footY - top) * Math.min(1, Math.max(0, (z - z0) / run));
-      k.cyl(0.07, 0.07, 0.95, 6, T(STEEL), s * (hw + 0.07), y, z, { outline: 0.02 });
+      put('pad_post', at(x, y, z));
     }
+    // (the plate's y runs up its height, its z along the stringer: from under the stair head to the foot)
+    const zA = z0 - SKIRT_IN, zB = z0 + run, yA = S.headY - 0.4, H = top - 0.55 - yA;
+    put('pad_panel', new THREE.Matrix4().set(1, 0, 0, x + s * 0.04, 0, H, footY - 0.25 - (top - 0.55), yA, 0, 0, zB - zA, zA, 0, 0, 0, 1));
   }
-  // close the space under the flight: a panel each side, ground to stringer
-  const under = new THREE.Shape([new THREE.Vector2(z0 - SKIRT_IN, S.headY - 0.4), new THREE.Vector2(z0 - SKIRT_IN, top - 0.55), new THREE.Vector2(z0 + run, footY - 0.25), new THREE.Vector2(z0 + run, footY - 0.4)]);
-  const ug = new THREE.ExtrudeGeometry(under, { depth: 0.08, bevelEnabled: false }).rotateY(-Math.PI / 2);
-  for (const s of [-1, 1]) k.add(ug.clone(), T(PANEL), s * (hw + 0.07) + 0.04, 0, 0, { outline: 0.03 });
-  k.box(w + 1.2, 0.18, 1.8, T(CONC), 0, footY - 0.08, z0 + run + 0.8, { outline: 0.04 });
-  // a lamp each side of the stair head, so the way down reads at night
-  for (const s of [-1, 1]) {
-    k.cyl(0.09, 0.09, 1.6, 6, T(STEEL), s * (hw + 0.3), top, z0 - 0.75, { outline: 0.02 });
-    k.ball(0.22, G(color), s * (hw + 0.3), top + 1.7, z0 - 0.75, { outline: 0 });
-  }
+  put('pad_foot', at(0, footY, z0 + run + 0.8));
+  k.tag = was;
 }
 
 // Colliders in the pad frame (world.col specs): deck + base as one solid drum from below ground to the deck, the railing,

@@ -194,14 +194,15 @@ function turrets() {
   return { root, update: (dt, t) => { hs.forEach((h, i) => { h.rotation.y = Math.sin(t * 0.7 + i * 2) * 1.2; }); } };
 }
 
-// The ILMB arrivals rocket (world.js updateRocket): stands, lifts off on its flame, comes back down.
+// The ILMB arrivals rocket, "Kestrel" (build_rocket.py; world.js updateRocket): stands, lifts off on its flame with its legs
+// folding, comes back down.
 function rocket() {
   const r = makeRocket();
   const p = seat(r.root);
-  const y0 = r.root.position.y, cyc = 16;
+  const y0 = r.root.position.y, cyc = 16, axis = new THREE.Vector3();
   return {
     root: p.root,
-    cols: [{ type: 'cyl', x: 0, z: 0, y0: 0, y1: 40, r: 4.6 }],
+    cols: [],
     update: (dt, t) => {
       const u = t % cyc;
       let alt = 0, flame = 0;
@@ -209,6 +210,8 @@ function rocket() {
       r.root.position.y = y0 + alt;
       r.flame.visible = r.core.visible = flame > 0;
       r.flame.scale.set(1, flame * (0.8 + Math.random() * 0.4), 1);
+      const fold = Math.min(1, alt / 12);
+      for (const g of r.legs) g.g.quaternion.setFromAxisAngle(axis.set(-Math.sin(g.yaw), 0, Math.cos(g.yaw)), -0.36 * fold);
     },
   };
 }
@@ -233,11 +236,6 @@ function landingPads() {
   const w = stubWorld(), loc = stubLoc();
   let x = 0;
   for (const [r, c] of [[14.2, 0x2ec4ff], [21, 0xff9f1c]]) { x += r; padFn(w, loc, x, 0, r, c, false, { face: Math.PI / 2 }); x += r + 5; }
-  return { root: seat(loc.group, { lift: false }).root };
-}
-function rocketPad() {
-  const w = stubWorld(), loc = stubLoc();
-  padFn(w, loc, 0, 0, 30, 0xff4f2e, false, { flat: true }); // world.js, the ILMB rocket's launch pad
   return { root: seat(loc.group, { lift: false }).root };
 }
 
@@ -559,9 +557,8 @@ export default {
     { id: 'prop.signal-pylon', label: 'SIGNAL PYLON', w: 7, d: 7, make: signalPylon },
     { id: 'prop.dish', label: 'DISHES', w: 110, d: 30, make: dishes },
     { id: 'prop.turret', label: 'TURRETS', w: 26, d: 9, make: turrets },
-    { id: 'prop.rocket', label: 'ILMB ROCKET', w: 11, d: 11, make: rocket },
+    { id: 'prop.rocket', label: 'ILMB ROCKET', w: 16, d: 16, make: rocket },
     { id: 'prop.landing-pads', label: 'LANDING PADS', w: 76, d: 49, solid: false, make: landingPads },
-    { id: 'prop.rocket-pad', label: 'ROCKET PAD', w: 62, d: 62, solid: false, make: rocketPad },
     { id: 'prop.solar-field', label: 'SOLAR FIELD', w: 52, d: 16, make: solarField },
     { id: 'prop.site-furniture', label: 'FLAGS · LAMPS · TOWER · PYLON · STOP', w: 124, d: 40, make: furniture },
     { id: 'prop.stretcher', label: 'STRETCHER', w: 1, d: 2.7, make: stretcher },

@@ -41,14 +41,14 @@ HEX = {
     "dark": 0x2A2540, "metal": 0x8A87A0, "steel": 0x55607A, "alu": 0xC9CED8, "concrete": 0xB8B2CC, "pave": 0x9D97B0,
     "navy": 0x2A3A6B, "blue": 0x2EC4FF, "gold": 0xFFD23F, "hazard": 0xFFD23F, "red": 0xFF3B5C, "orange": 0xFF9F1C,
     "grass": 0x5CC94A, "leaf": 0x1F8A3A, "leaf2": 0x5CC94A, "soil": 0x4A4660, "water": 0x2EC4FF, "regolith": 0xB7B0C3,
-    "door": 0x2A2540, "pink": 0xFF7AD9, "bark": 0x6B4A32,
+    "door": 0x2A2540, "pink": 0xFF7AD9, "bark": 0x6B4A32, "tire": 0x1D1A29, "mint": 0x8EE6C0,
     # glow
     "window": 0xFFF6A8, "lamp": 0xFFF6A8, "pane": 0xBFEFFF, "redlamp": 0xFF2A4A, "cyan": 0x2EE6FF, "screen": 0x0D1A2A,
-    "amber": 0xFF9F1C, "beacon": 0xFFD23F, "green": 0x7DFF6A,
+    "amber": 0xFF9F1C, "beacon": 0xFFD23F, "green": 0x7DFF6A, "shop": 0xC4BED6, "shopfloor": 0x6E6A82,
     # see-through
     "glass": 0x9BE7FF,
 }
-for _s in ("gold", "redlamp", "hazard", "dark", "lamp"):   # painted on another part's face: src/models.js ilmbSlot
+for _s in ("gold", "redlamp", "hazard", "dark", "lamp", "white"):   # painted on another part's face: src/models.js ilmbSlot
     HEX["paint_" + _s] = HEX[_s]
 PFX = "ilmb_"
 ROOT = None
@@ -743,50 +743,6 @@ def strip_box(prof, z0, z1, t):
     return verts, faces
 
 
-def build_repair():
-    """The repair bay: an arched hangar 34 m long on a slab, orange skin on aluminium ribs, the door end open on a lit bay with
-    a bridge crane, a gold arch round the door, hazard stripes on the apron, an office annex on its side."""
-    begin("ilmb_repair")
-    r, L = 16.0, 34.0
-    Acc.of("concrete", 0.05).put(box(0, 0.25, 0, 36, 0.5, 36))
-    Acc.of("orange", 0.25).put(xf(cylinder_arc(r, r, L, 28, math.pi / 2, math.pi)[:2], (0, 0.5, 0), (math.pi / 2, 0, 0)))
-    for k in range(8):
-        z = -L / 2 + 0.6 + k * (L - 1.2) / 7
-        arc = [(math.cos(a) * (r + 0.12), 0.5 + math.sin(a) * (r + 0.12), z) for a in [math.pi * j / 20 for j in range(21)]]
-        Acc.of("alu", 0.04).put(path_tube(arc, 0.35, 5))
-    Acc.of("light", 0.0).put(xf(circle_disc(r, 28), (0, 0.5, -L / 2), (0, math.pi, 0)))
-    Acc.of("dark", 0.0).put(xf(circle_disc(r - 0.4, 28), (0, 0.5, L / 2 - 6.0)))
-    arc = [(math.cos(a) * (r + 0.3), 0.5 + math.sin(a) * (r + 0.3), L / 2) for a in [math.pi * j / 24 for j in range(25)]]
-    Acc.of("gold", 0.06).put(path_tube(arc, 0.6, 6))
-    # inside the open end: a lit floor, the bridge crane on its rails, work lamps
-    Acc.of("pave", 0.0).put(box(0, 0.52, L / 2 - 3.0, 2 * r - 4, 0.04, 6.0))
-    for sd in (-1, 1):
-        Acc.of("steel", 0.04).put(box(sd * 11.0, 11.0, L / 2 - 3.0, 0.6, 0.8, 6.0))
-    Acc.of("hazard", 0.04).put(box(0, 11.6, L / 2 - 2.0, 22.6, 0.9, 1.0))
-    Acc.of("dark", 0.02).put(box(0, 10.6, L / 2 - 2.0, 1.4, 1.1, 1.4))
-    Acc.of("dark", 0.0).put(cyl(0, 7.5, L / 2 - 2.0, 0.05, 5.0, 4))
-    Acc.of("gold", 0.02).put(box(0, 4.8, L / 2 - 2.0, 1.0, 0.5, 0.6))
-    for x in (-8.0, 0.0, 8.0):  # (work lamps under the bridge)
-        Acc.of("lamp", 0.0).put(box(x, 11.09, L / 2 - 2.0, 2.4, 0.12, 0.6))
-    for sd in (-1, 1):  # (the rails hung from the roof)
-        for zz in (L / 2 - 5.5, L / 2 - 0.5):
-            Acc.of("steel", 0.0).put(B((sd * 11.0, 11.3, zz), (sd * 11.0, 12.6, zz), 0.08, 4, True))
-    for i in range(-3, 4):
-        Acc.of("hazard" if i % 2 else "dark", 0.0).put(box(i * 3.0, 0.52, L / 2 + 4.0, 1.6, 0.04, 6.0))
-    for sd in (-1, 1):  # (beacons on the door's arch)
-        Acc.of("amber", 0.0).put(box(sd * (r + 0.3) * math.cos(0.44), 0.5 + (r + 0.3) * math.sin(0.44), L / 2 + 0.75, 0.45, 0.45, 0.45))
-    # the office annex on the +x side
-    Acc.of("cream", 0.08).put(box(r + 2.6, 2.4, -4.0, 5.0, 4.8, 12.0))
-    Acc.of("navy", 0.04).put(box(r + 2.6, 5.0, -4.0, 5.6, 0.4, 12.6))
-    for zz in (-8.0, -4.0, 0.0):
-        Acc.of("window", 0.0).put(box(r + 5.12, 2.8, zz, 0.06, 1.2, 2.4))
-    Acc.of("door", 0.0).put(box(r + 2.6, 1.6, 2.04, 1.4, 2.6, 0.06))
-    col((0, 0, 0), shape="box", hx=18.0, hy=0.25, hz=18.0, yaw=0.0)
-    col((0, 0.5, 0), shape="hcyl", r=r + 0.2, len=L, yaw=0.0)
-    col((r + 2.6, 0, -4.0), shape="box", hx=2.8, hy=2.6, hz=6.3, yaw=0.0)
-    return end()
-
-
 def circle_disc(r, n):
     v = [(0.0, 0.0, 0.0)] + [(math.cos(math.pi * i / n) * r, math.sin(math.pi * i / n) * r, 0.0) for i in range(n + 1)]
     return v, [(0, i, i + 1) for i in range(1, n + 1)]
@@ -805,29 +761,6 @@ def lattice_tower(legs, braces, h, w0, w1, bays, r=0.3):
             braces.put(B((ax * a, y0, az * a), (bx * b, y1, bz * b), r * 0.4, 4, True))
             braces.put(B((bx * a, y0, bz * a), (ax * b, y1, az * b), r * 0.4, 4, True))
             legs.put(B((ax * b, y1, az * b), (bx * b, y1, bz * b), r * 0.5, 4, True))
-
-
-def build_gantry():
-    """The launch gantry by the arrivals pad: a 54 m red and white lattice umbilical tower on a slab, two swing arms out over
-    the pad (-x) with their hinge drums, a lift cage up one face, the mast and beacon on top."""
-    begin("ilmb_gantry")
-    Acc.of("concrete", 0.06).put(box(0, 0.5, 0, 10, 1.0, 10))
-    lattice_tower(Acc.of("red", 0.05), Acc.of("white", 0.02), 54.0, 2.8, 2.8, 12, 0.32)
-    for y in (24.0, 40.0):
-        Acc.of("roof", 0.06).put(box(-9.4, y + 0.7, 0, 13.0, 1.4, 2.0))
-        Acc.of("hazard", 0.0).put(box(-9.4, y + 1.5, 0, 13.0, 0.2, 2.2))
-        Acc.of("steel", 0.04).put(cyl(-2.6, y + 0.7, 0, 1.0, 2.6, 12))
-        Acc.of("gold", 0.0).put(cyl(-2.6, y + 2.05, 0, 1.05, 0.1, 12))
-        Acc.of("dark", 0.02).put(B((-15.9, y + 0.7, 0), (-15.9, y - 1.6, 0), 0.25, 6, True))
-        col((-9.4, y, 0), shape="box", hx=6.5, hy=0.8, hz=1.0, yaw=math.pi / 2)
-    Acc.of("glass", 0.0).put(box(3.6, 27.0, 0, 1.6, 54.0, 1.8))
-    Acc.of("window", 0.0).put(box(3.6, 31.0, 0, 1.4, 2.4, 1.6))
-    Acc.of("roof", 0.05).put(box(0, 54.3, 0, 6.6, 0.6, 6.6))
-    Acc.of("dark", 0.03).put(cyl(0, 58.6, 0, 0.3, 8.0, 6, rt=0.2))
-    blinker((0, 62.9, 0), 0.5)
-    col((0, 0, 0), shape="box", hx=5.0, hy=0.5, hz=5.0, yaw=0.0)
-    col((0, 1.0, 0), shape="box", hx=3.1, hy=26.9, hz=3.1, yaw=0.0)
-    return end()
 
 
 def build_horton(name, band):
@@ -1009,8 +942,6 @@ build_skywalks()
 build_core_a()
 build_wall_a()
 build_terminal()
-build_repair()
-build_gantry()
 build_horton("horton_red", "red")
 build_horton("horton_blue", "blue")
 build_outdome("dome_pink", 16.0, "pink")
@@ -1019,6 +950,8 @@ build_barracks()
 build_depot()
 build_mast()
 build_pylon()
+exec(open(os.path.join(REPO, "tools", "blender", "ilmb_quarters.py"), encoding="utf-8").read(), globals())   # the quarters' pieces
+build_quarters()
 
 _clash = [o.name for o in C.objects if o.name[-4:-3] == "." and o.name[-3:].isdigit()]
 assert not _clash, f"object names must be unique, Blender renamed {_clash[:3]}"

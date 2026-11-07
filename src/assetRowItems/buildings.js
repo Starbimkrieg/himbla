@@ -7,7 +7,7 @@ import { rubbleModel } from '../territory.js';
 import { mulberry32 } from '../rng.js';
 import { World } from '../world.js';
 import { DISH_SIZE } from '../models.js';
-import { bakeIlmbInto } from '../ilmbCore.js';
+import { bakeIlmbInto, bakeIlmbExtras, bakeUnitRow, parkingLot, bakeRocketPad } from '../ilmbCore.js';
 import { buildHomeTown, addBuilding, slotAt } from '../hometown.js';
 import {
   habDome, cabin, warehouse, quonset, lattice, hortonSphere, floodMast, stack, ticker, conveyor, pipe, radar, searchlight, shanty,
@@ -245,8 +245,22 @@ const parts = {
     // docking lobbies out to r 56, the atrium's canopy to 67.5), then the base's other pieces
     item('part.ilmb-core-a', 'ILMB CORE: THE CROWN', 136, 136, () => kitPart((k) => bakeIlmbInto(k, 'core_a')), { big: true }),
     item('part.ilmb-terminal', 'ILMB JOB TERMINAL', 20, 20, () => viaWorld((world, loc) => jobTerminal(world, loc, 0, -5, 0, YEL, (k) => bakeIlmbInto(k, 'terminal')))),
-    item('part.ilmb-repair', 'ILMB REPAIR BAY', 44, 42, () => kitPart((k) => { k.at(-2.6, -2.5); bakeIlmbInto(k, 'repair'); })),
-    item('part.ilmb-gantry', 'ILMB LAUNCH GANTRY', 24, 10, () => kitPart((k) => { k.at(5.5, 0); bakeIlmbInto(k, 'gantry'); })),
+    // the quarters (tools/blender/ilmb_quarters.py; src/ilmbLayout.js): the motor pool with its vehicles up on the lifts, the
+    // passenger terminal, the cargo shed, the fuel island, the tank farm's tank, pump house and pipe bridge, shops, houses, a lot
+    item('part.ilmb-motorpool', 'ILMB MOTOR POOL', 32, 57, () => kitPart((k) => { k.at(0, -2.3); bakeIlmbInto(k, 'motorpool'); bakeIlmbExtras(k, 'motorpool'); })),
+    item('part.ilmb-terminal-pax', 'ILMB PASSENGER TERMINAL', 63, 16, () => kitPart((k) => { k.at(0, -0.2); bakeIlmbInto(k, 'terminal_pax'); bakeIlmbExtras(k, 'terminal_pax'); })),
+    item('part.ilmb-cargo-shed', 'ILMB CARGO SHED', 43, 19, () => kitPart((k) => { k.at(0, -0.3); bakeIlmbInto(k, 'cargo_shed'); bakeIlmbExtras(k, 'cargo_shed'); })),
+    item('part.ilmb-tank-farm', 'ILMB TANK · PUMP HOUSE · FUEL ISLAND', 44, 15, () => row([
+      kitPart((k) => bakeIlmbInto(k, 'tank')), kitPart((k) => bakeIlmbInto(k, 'pump_house')), kitPart((k) => bakeIlmbInto(k, 'fuel_island')),
+    ], 4)),
+    item('part.ilmb-pipe-bridge', 'ILMB PIPE BRIDGE', 4, 73, () => kitPart((k) => { k.at(0, 1.2); bakeIlmbInto(k, 'pipe_bridge'); })),
+    item('part.ilmb-shops', 'ILMB SHOPS', 50, 11, () => kitPart((k) => bakeUnitRow(k, ['shop_canteen', 'shop_suits', 'shop_parts', 'shop_noodle', 'shop_clinic'], 10))),
+    item('part.ilmb-houses', 'ILMB HOUSES', 31, 11, () => kitPart((k) => bakeUnitRow(k, ['house_a', 'house_b', 'house_c'], 10))),
+    item('part.ilmb-parking', 'ILMB PARKING (FACTION CARS · PATROL ROVERS)', 50, 10, () => row([
+      kitPart((k) => { k.floorCols = true; parkingLot(k, { cars: 'SKMVc.', a: 1 }); }),
+      kitPart((k) => { k.floorCols = true; parkingLot(k, { cars: 'RR.', bay: [4.4, 8.4], a: 2 }); }),
+    ], 4)),
+    item('part.ilmb-rocket-pad', 'ILMB ROCKET PAD · GANTRY', 60, 60, () => kitPart((k) => bakeRocketPad(k))),
     item('part.ilmb-spheres', 'ILMB FUEL SPHERES', 32, 17, () => row([kitPart((k) => bakeIlmbInto(k, 'horton_red')), kitPart((k) => bakeIlmbInto(k, 'horton_blue'))])),
     item('part.ilmb-domes', 'ILMB FAMILY DOMES', 74, 44, () => row([kitPart((k) => bakeIlmbInto(k, 'dome_pink')), kitPart((k) => bakeIlmbInto(k, 'dome_gold'))])),
     item('part.ilmb-barracks', 'ILMB BARRACKS · DEPOT', 50, 36, () => row([kitPart((k) => bakeIlmbInto(k, 'barracks')), kitPart((k) => bakeIlmbInto(k, 'depot'))])),

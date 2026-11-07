@@ -51,6 +51,8 @@ const GLB = {
   power:() => import('./assets/power.glb?inline'),
   habitat: () => import('./assets/habitat.glb?inline'),
   ilmb: () => import('./assets/ilmb.glb?inline'),
+  fixtures: () => import('./assets/fixtures.glb?inline'),
+  rocket: () => import('./assets/rocket.glb?inline'),
   hydroponics: () => import('./assets/hydroponics.glb?inline'),
   labs: () => import('./assets/labs.glb?inline'),
   hangar: () => import('./assets/hangar.glb?inline'),
@@ -1075,7 +1077,7 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, wp, ska, skb, tu, pw, hb, il, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'weapons', 'skimmer_a', 'skimmer_b', 'turret', 'power', 'habitat', 'ilmb', ...ILMB_WINGS, ...DOWNS_FILES, 'zlab'].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, wp, ska, skb, tu, pw, hb, il, fx, rk, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'weapons', 'skimmer_a', 'skimmer_b', 'turret', 'power', 'habitat', 'ilmb', 'fixtures', 'rocket', ...ILMB_WINGS, ...DOWNS_FILES, 'zlab'].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
   // a root node in a loaded file (`file`.glb), or a load error
   const named = (g, file, name) => {
     const o = g.scene.getObjectByName(name);
@@ -1117,6 +1119,10 @@ export async function loadShipParts({ ships } = {}) {
   SHIP_PARTS.habitat = bakeShip(named(hb, 'habitat', 'habitat'));
   // the ILMB's core: the central complex and wall (two proposals), skywalks and the base's other pieces (tools/blender/build_ilmb.py)
   for (const o of il.scene.children) if (o.name.startsWith('ilmb_')) SHIP_PARTS[o.name] = bakeShip(o);
+  // the shared fixtures: the landing pad kit, the stop shelter, solar fields (tools/blender/build_fixtures.py)
+  for (const o of fx.scene.children) if (o.name.startsWith('fx_')) SHIP_PARTS[o.name] = bakeShip(o);
+  // the ILMB's Earth rocket, its gantry and pad (tools/blender/build_rocket.py)
+  for (const o of rk.scene.children) if (o.name.startsWith('rocket_')) SHIP_PARTS[o.name] = bakeShip(o);
   // the ILMB's other wings (tools/blender/build_<name>.py)
   ILMB_WINGS.forEach((name, i) => { SHIP_PARTS[name] = bakeShip(named(more[i], name, name)); });
   const dn = more.slice(ILMB_WINGS.length);
@@ -1875,10 +1881,11 @@ export function wingModel(name) {
 const ILMB_TOON = {
   white: 0xf3eee4, cream: 0xfff4e0, light: 0xd8d4e8, panel: 0x5b5870, panel2: 0x4a4660, roof: 0x3a3550, dark: 0x2a2540, metal: 0x8a87a0,
   steel: 0x55607a, alu: 0xc9ced8, concrete: 0xb8b2cc, pave: 0x9d97b0, navy: 0x2a3a6b, blue: 0x2ec4ff, gold: 0xffd23f, hazard: 0xffd23f,
-  red: 0xff3b5c, orange: 0xff9f1c, grass: 0x5cc94a, leaf: 0x1f8a3a, leaf2: 0x5cc94a, soil: 0x4a4660, water: 0x2ec4ff, regolith: 0xb7b0c3,
+  red: 0xff3b5c, orange: 0xff9f1c, grass: 0x5cc94a, leaf: 0x1f8a3a, leaf2: 0x5cc94a, soil: 0x4a4660, water: 0x2ec4ff, regolith: 0xb7b0c3, tire: 0x1d1a29, mint: 0x8ee6c0,
   door: 0x2a2540, pink: 0xff7ad9, bark: 0x6b4a32,
 };
-const ILMB_GLOW = { window: 0xfff6a8, lamp: 0xfff6a8, pane: 0xbfefff, redlamp: 0xff2a4a, cyan: 0x2ee6ff, screen: 0x0d1a2a, amber: 0xff9f1c, beacon: 0xffd23f };
+// (shop, shopfloor: the motor pool's lining and floor, self-lit so its bays read as a lit workshop, as the garage's interior)
+const ILMB_GLOW = { window: 0xfff6a8, lamp: 0xfff6a8, pane: 0xbfefff, redlamp: 0xff2a4a, cyan: 0x2ee6ff, screen: 0x0d1a2a, amber: 0xff9f1c, beacon: 0xffd23f, green: 0x7dff6a, shop: 0xc4bed6, shopfloor: 0x6e6a82 };
 // `paint_<slot>`: a part painted on another a few millimetres off its face (a band on a drum, warning stripes): <slot>'s
 // colour, drawn pulled toward the camera (ilmbCore.js) so it never flickers through the face under it
 export function ilmbSlot(slot) {
@@ -1886,6 +1893,23 @@ export function ilmbSlot(slot) {
   if (slot in ILMB_GLOW) return { color: ILMB_GLOW[slot], glow: true };
   return { color: ILMB_TOON[slot] ?? 0xff00ff, glow: false };
 }
+// ---- shared fixtures (tools/blender/build_fixtures.py -> fixtures.glb): the landing pad kit, the stop shelter, solar fields ----
+// Fixed slots below; `mark` (toon) and `markglow` (glow) are the pad's or shelter's colour, the caller's.
+const FX_TOON = { steel: 0x55607a, dark: 0x3a3550, deck: 0x5b5870, top: 0x4a4660, gold: 0xffd23f, conc: 0x8a8698, light: 0xd8d4e8, panel: 0x6a6680, cream: 0xfff4e0, navy: 0x2a2540, frame: 0xd8d4e8, cell: 0x2b3a8f };
+const FX_GLOW = { lamp: 0xfff6a8, green: 0x7dff6a };
+export function fixtureSlot(slot, mark) {
+  if (slot === 'mark') return { color: mark, glow: false };
+  if (slot === 'markglow') return { color: mark, glow: true };
+  if (slot in FX_GLOW) return { color: FX_GLOW[slot], glow: true };
+  return { color: FX_TOON[slot] ?? 0xff00ff, glow: false };
+}
+// a fixture's root (`fx_<name>`) and its colliders
+export function fixtureModel(name) {
+  const root = SHIP_PARTS?.[`fx_${name}`];
+  if (!root) throw new Error(`fixtures.glb has no fx_${name}`);
+  return { root, data: root.data, cols: root.kids.filter((k) => k.role === 'col') };
+}
+
 // a baked piece: static root, lamps, turning parts, colliders, turret mounts
 export function ilmbModel(name) {
   const root = SHIP_PARTS?.[`ilmb_${name}`];
@@ -2569,6 +2593,29 @@ const CAR_PAINTS = [
   { name: 'Seafoam', body: 0x8ee6c0, roof: 0xffffff, stripe: 0xffb3a1 },
 ];
 const CAR_GLOW = { glass: 0x9be7ff, lamp: 0xfff6a8, tail: 0xff2a4a, beaconA: 0xff2a4a, beaconB: 0x2e7bff };
+// A road vehicle standing still in a place (a parked car, one up on a lift), to bake into the place's Kit: its tree, a
+// material per slot and which pivots to keep (ilmbCore.js bakeVehicle). kind 'car' ({ faction } or { paint }, as
+// makeHoverCar), 'rover' ({ style, color, trim }, as makeRover), 'interceptor' ({ color, trim })
+const PARKED_MATS = new Map();
+const parkedMat = (key, make) => { let m = PARKED_MATS.get(key); if (!m) PARKED_MATS.set(key, (m = make())); return m; };
+export function vehicleParts(kind, { faction = null, paint = 0, style = 'civil', color = 0xfff4e0, trim = 0xffd23f } = {}) {
+  if (kind === 'rover') return { node: SHIP_PARTS[style === 'military' ? 'rover_military' : 'rover_civil'], mat: (slot) => roverMat(slot, color, trim), keep: () => true };
+  if (kind === 'interceptor') {
+    const fx = new Set(['plume', 'plumeCore']); // (no flames standing still)
+    return {
+      node: SHIP_PARTS.interceptor, keep: () => true,
+      mat: (slot) => (fx.has(slot) ? null : parkedMat(`i|${slot}|${color}|${trim}`, () => (slot === 'body' ? toon(color) : slot === 'stripe' ? toon(trim) : INTERCEPTOR_GLOW[slot] !== undefined ? glow(INTERCEPTOR_GLOW[slot]) : toon(INTERCEPTOR_TOON[slot] ?? 0xff00ff)))),
+    };
+  }
+  const fac = CAR_FACTIONS[faction];
+  const pal = fac ? { ...fac, trim: 0x8a87a0, dark: 0x2a2540, lift: 0x7be0ff } : { ...CAR_PAINTS[((paint % CAR_PAINTS.length) + CAR_PAINTS.length) % CAR_PAINTS.length], trim: 0xd8d4e8, dark: 0x5b5870, lift: 0xffe6a8 };
+  return {
+    node: SHIP_PARTS[fac ? 'car_faction' : 'car_civilian'],
+    mat: (slot) => parkedMat(`c|${slot}|${pal[slot] ?? CAR_GLOW[slot] ?? 0xff00ff}|${slot === 'lift' || slot in CAR_GLOW}`, () => (slot === 'lift' || slot in CAR_GLOW ? glow(pal[slot] ?? CAR_GLOW[slot]) : toon(pal[slot] ?? 0xff00ff))),
+    keep: (node) => node.role !== 'livery' || node.data.faction === faction,
+  };
+}
+
 // faction: one of CAR_FACTIONS, else civilian; paint: CAR_PAINTS index for civilians.
 // Returns { root, size, beacons } (light-bar lamp groups, userData.phase 0 or 1, alternated by traffic).
 export function makeHoverCar({ faction = null, paint = 0 } = {}) {
@@ -2870,26 +2917,39 @@ export function makeDish(size = 10, faction = 'none') {
 
 
 
-export function makeRocket({ color = 0xfff4e0, stripe = 0xff4f2e } = {}) {
-  const root = new THREE.Group();
-  const bodyM = toon(color), stripeM = toon(stripe);
-  root.add(part(new THREE.CylinderGeometry(4, 4.4, 30, 18), bodyM, 0, 19, 0, 0.25));
-  root.add(part(new THREE.ConeGeometry(4, 10, 18), stripeM, 0, 39, 0, 0.25));
-  root.add(part(new THREE.CylinderGeometry(4.45, 4.45, 3, 18), stripeM, 0, 22, 0, 0));
-  root.add(part(new THREE.CylinderGeometry(1.4, 1.4, 0.4, 12).rotateX(Math.PI / 2), toon(0x9be7ff), 0, 30, 4.3, 0.05));
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2;
-    const fin = part(new THREE.BoxGeometry(0.6, 9, 5), stripeM, Math.cos(a) * 5, 6, Math.sin(a) * 5, 0.1);
-    fin.rotation.y = -a;
-    root.add(fin);
-    root.add(part(new THREE.CylinderGeometry(0.3, 0.3, 6), toon(0x4a4660), Math.cos(a + 0.78) * 5.5, 2.5, Math.sin(a + 0.78) * 5.5, 0.05));
-  }
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(3.2, 14, 14, 1, true).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85, depthWrite: false }));
-  flame.position.y = -4;
-  const core = new THREE.Mesh(new THREE.ConeGeometry(1.8, 9, 12, 1, true).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-  core.position.y = -2;
+// ---- the ILMB's Earth rocket (tools/blender/build_rocket.py -> rocket.glb): the crew ship "Kestrel" (tall, slim, four legs;
+// picked from two proposals), its launch gantry, and the flat pad ----
+const ROCKET_TOON = { hull: 0xf3eee4, steel: 0x55607a, dark: 0x2a2540, metal: 0x8a87a0, red: 0xff4f2e, white: 0xf3eee4, gold: 0xffd23f, foil: 0xe8b23a, navy: 0x2a3a6b, concrete: 0xb8b2cc, pave: 0x9d97b0, hazard: 0xffd23f, roof: 0x3a3550, alu: 0xc9ced8 };
+const ROCKET_GLOW = { window: 0xfff6a8, lamp: 0xfff6a8, hot: 0xff9f1c, redlamp: 0xff2a4a, cyan: 0x2ee6ff };
+export function rocketSlot(slot) {
+  if (slot === 'glass') return { color: 0x9be7ff, glass: true };
+  return slot in ROCKET_GLOW ? { color: ROCKET_GLOW[slot], glow: true } : { color: ROCKET_TOON[slot] ?? 0xff00ff, glow: false };
+}
+// a static piece of rocket.glb (the gantries, the pad) to bake: its root, lamps and colliders
+export function rocketModel(name) {
+  const root = SHIP_PARTS?.[`rocket_${name}`];
+  if (!root) throw new Error(`rocket.glb has no rocket_${name}`);
+  const kids = (role) => root.kids.filter((k) => k.role === role);
+  return { root, data: root.data, blinkers: kids('blinker'), fans: [], cols: kids('col'), mounts: [] };
+}
+
+// The ship, ready to fly (world.js updateRocket): its root on its feet, the exhaust under its bells (an effect, so code: a flame
+// cone and a white core, each with its origin at the top so it stretches downward), the landing legs (hinged at their tops,
+// `yaw` the angle each stands out at: folded against the hull in flight). The hatch faces +z.
+export function makeRocket() {
+  const B = SHIP_PARTS.rocket_ship;
+  const legs = [];
+  const root = buildPivots(B, {
+    matFor: perSlot((slot) => { const s = rocketSlot(slot); return s.glow ? glow(s.color) : toon(s.color); }),
+    shadow: (slot) => !(slot in ROCKET_GLOW),
+    onPivot(node, g) { if (node.role === 'leg') legs.push({ g, yaw: node.data.yaw || 0 }); },
+  });
+  const { flameY = 0.6, flameR = 2.6 } = B.data;
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(flameR, 14, 14, 1, true).rotateX(Math.PI).translate(0, -7, 0), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85, depthWrite: false }));
+  const core = new THREE.Mesh(new THREE.ConeGeometry(flameR * 0.55, 9, 12, 1, true).rotateX(Math.PI).translate(0, -4.5, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  flame.position.y = core.position.y = flameY;
   root.add(flame, core);
-  return { root, flame, core };
+  return { root, flame, core, legs, data: B.data };
 }
 
 // Pirate den signal pylon: destructible heart of a den.

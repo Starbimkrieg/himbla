@@ -265,7 +265,7 @@ const ships = {
       },
     },
     {
-      id: 'ship.rocket', label: 'ARRIVALS ROCKET', w: 11, d: 11,
+      id: 'ship.rocket', label: 'ARRIVALS ROCKET', w: 16, d: 16,
       make: () => {
         const r = makeRocket();
         r.flame.visible = r.core.visible = false; // (on its pad, not flying)

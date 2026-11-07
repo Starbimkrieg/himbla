@@ -22,7 +22,9 @@ has. They give a rough sense of how big each conversion is.
 | **Whole places** | the Antimatter Lab and ranch (`zlab.glb`), Chimera Downs (ten `downs-*.glb` kits) |
 | **Casino** | the hall and the forecourt kit (`hall.glb`, `lot.glb`), lamp posts, fountains, bouncers, chandeliers, sign frames (`casino.glb`), slot cabinets, the claw machine and its prizes, the blackjack table and chips, Plinko |
 | **Items** | the courier's weapons, the salvaged engine and the briefcase (wreck drops), the winch grapple |
-| **ILMB core** | the central complex and the fortress wall (two proposals: docs/ilmb-proposals), the skywalks, job terminal (its screens stay canvas), repair bay, launch gantry, fuel spheres, family domes, barracks, vehicle depot, comms mast, inner defence pylons (`ilmb.glb`, `tools/blender/build_ilmb.py`) |
+| **ILMB core** | the central complex and the fortress wall (two proposals: docs/ilmb-proposals), the skywalks, job terminal (its screens stay canvas), fuel spheres, family domes, barracks, vehicle depot, comms mast, inner defence pylons (`ilmb.glb`, `tools/blender/build_ilmb.py`) |
+| **ILMB quarters** | Draft A of docs/ilmb-layouts.md: the motor pool (the repair bay rebuilt, its interior: lifts, tool walls, cabinets, benches, tyre rack, parts cage, mezzanine office, bridge crane), passenger terminal, cargo shed, fuel island, tank, pump house, pipe bridge, five shopfronts, three houses, parking bays and lamps (`ilmb.glb`, `tools/blender/ilmb_quarters.py`); the Earth rocket ("Kestrel", picked from two proposals) with its launch gantry and the flat pad (`rocket.glb`, `tools/blender/build_rocket.py`; the exhaust stays code) |
+| **Shared fixtures** | the landing pad (a kit the game fits to the ground: decks, drums, treads, rails, plates; its colliders stay code, `landingPad.js` padCols), the transit stop shelter (its sign stays canvas), solar fields (`fixtures.glb`, `tools/blender/build_fixtures.py`) |
 | **Defence turret** | every base gun: defence rings and walls, the ILMB's, restricted zones, founded outposts' militia guns, the hometown barracks ("Bastion", picked from two proposals: docs/turret-proposals; `turret.glb`, `tools/blender/build_turret.py`; the code-built one is `?turret=old`) |
 | **Small outposts** | all seven kinds and their wrecks (`outposts.glb`, `tools/blender/build_outposts.py` with `outpost_kit.py`): Market Cross, Lattice Camp, Silo Depot, Greenhouse Row, Guyed Relay, Scrap Mountain, the Hulk. The code builders in `outpostDrafts.js` stay as the fallback (`?outpostGlb=0`) |
 
@@ -40,7 +42,7 @@ has. They give a rough sense of how big each conversion is.
 | **Lucky Crater Casino, outside the Blender hall** | the giant tumbling die, the upright roulette wheel, the neon avenue, carousel shelters | `casinoWorld.js`, `settlements.js` dressCasinoLot | ~120 |
 | **Your town** (Kepler finale) and its eight buildings, the Moon Council chamber set | the council hall, every buildable building, the chamber's tiers, desks and gavel | `hometown.js`, `chamber.js` | ~90 |
 | **Founded outposts** (homestead, field lab and their six modules) | all of it | `storyAssets.js` | part of ~200 |
-| **Shared props used in many places** | landing pads (every settlement's shuttle pad), lamp posts and light pools, solar fields, floodlight masts, lattice towers, flags, Quonsets, radar heads, searchlights | `landingPad.js`, `world.js`, `settlements.js` | ~100 |
+| **Shared props used in many places** | lamp posts and light pools, floodlight masts, lattice towers, flags, Quonsets, radar heads, searchlights | `world.js`, `settlements.js` | ~90 |
 
 ## Code-built: things that move or that you meet
 
@@ -49,7 +51,7 @@ has. They give a rough sense of how big each conversion is.
 | **Townsfolk** (every resident, passenger and outpost NPC) | `townsfolk.js`: rounded lathed parts baked into one skinned mesh per look | ~20 (a parametric body) |
 | **The three chapter bosses**: SPACECOM convoy rig, Daedalus Warden, Vostok Hammer | `storyAssets.js` | part of ~200 |
 | **Captain Kade's monster truck** and his gunner's turret | `models.js` makeKadeTruck | ~45 |
-| **Chapter and mission props**: relays, generators, the Black Sun reactor, charges, sensor pylons, ballot stands, phase emitters, rocket, seismometer, sample tube | `storyAssets.js`, `models.js` makeRocket, makePylon, makeSeismo, makeTube | ~60 |
+| **Chapter and mission props**: relays, generators, the Black Sun reactor, charges, sensor pylons, ballot stands, phase emitters, seismometer, sample tube | `storyAssets.js`, `models.js` makePylon, makeSeismo, makeTube | ~55 |
 | **Event props** (each faction's posted jobs) | `events.js` | ~30 |
 | **The Spindle's mothership** and extraction pad, **the med-evac craft** and stretcher | `spindle.js`, `medevac.js` | ~40 |
 | **SAT-7 "Lantern"** (the satellite), **the Whispering Fissure's** alien gate and shrine, the **Xenoglide skates** on the pedestal | `secrets.js` | ~70 |
@@ -81,5 +83,5 @@ These are procedural or effects, and Blender would only make them worse or slowe
 6. **Meridian Exchange tower and halls**, then the **Helium-3 Exchange** (excavator, derrick, spheres).
 7. **The bosses and Kade's truck**: vehicles, where Blender shows most against code.
 8. **Townsfolk**: a skinned Blender body like the courier's, with the outfit looks as slots.
-9. Story and event props, the Monolith dig, the Shackleton buildings, the landing pad, the casino's die and wheel, the
-   Spindle's mothership, SAT-7, the hometown and chamber sets.
+9. Story and event props, the Monolith dig, the Shackleton buildings, the casino's die and wheel, the Spindle's mothership,
+   SAT-7, the hometown and chamber sets. (~~The landing pad~~: done, November 2026, with the ILMB's quarters.)

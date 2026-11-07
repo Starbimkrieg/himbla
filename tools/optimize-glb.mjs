@@ -19,7 +19,7 @@ const ASSETS = fileURLToPath(new URL('../src/assets/', import.meta.url));
 // Positions are snapped to 2^14 steps across each mesh by default: 3 cm on a mesh as wide as the ILMB's wall, too coarse for
 // its painted lines a centimetre or so off their faces. These files get finer steps.
 const POSITION_BITS = { 'ilmb.glb': 16 };
-const DEFAULT = ['ships', 'skimmer', 'lightbike', 'skimmer_a', 'skimmer_b', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'gantry', 'garage', 'slots', 'casino', 'blackjack', 'claw', 'duck', 'dish', 'engine', 'briefcase', 'hovercar', 'weapons', 'plinko', 'hall', 'lot', 'downs-stand', 'downs-club', 'downs-course', 'downs-stalls', 'downs-arcade', 'downs-screen', 'downs-fair', 'downs-stable', 'downs-crowd', 'downs-dome', 'power', 'habitat', 'hydroponics', 'labs', 'hangar', 'relay', 'chimera', 'outposts', 'ilmb', 'turret'].map((n) => `${ASSETS}${n}.glb`);
+const DEFAULT = ['ships', 'skimmer', 'lightbike', 'skimmer_a', 'skimmer_b', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'gantry', 'garage', 'slots', 'casino', 'blackjack', 'claw', 'duck', 'dish', 'engine', 'briefcase', 'hovercar', 'weapons', 'plinko', 'hall', 'lot', 'downs-stand', 'downs-club', 'downs-course', 'downs-stalls', 'downs-arcade', 'downs-screen', 'downs-fair', 'downs-stable', 'downs-crowd', 'downs-dome', 'power', 'habitat', 'hydroponics', 'labs', 'hangar', 'relay', 'chimera', 'outposts', 'ilmb', 'turret', 'fixtures', 'rocket'].map((n) => `${ASSETS}${n}.glb`);
 const files = process.argv.length > 2 ? process.argv.slice(2) : DEFAULT;
 
 const extensionsOf = (file) => {
