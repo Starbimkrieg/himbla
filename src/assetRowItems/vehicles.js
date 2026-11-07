@@ -196,11 +196,11 @@ const ground = {
     ...[['spacecom', 'SPACECOM', ['tank', 'cargo', 'blast']], ['vostok', 'VOSTOK', ['cargo', 'tank', 'blast']], ['kepler', 'KEPLER', ['tank', 'tank', 'blast']], ['meridian', 'MERIDIAN', ['tank', 'cargo', 'cargo']]].map(([f, n, cars]) =>
       trainItem('prospector', f, cars, `PROSPECTOR FREIGHT TRAIN · ${n}`, 39, 6)),
     {
-      // the defence turret's proposals (tools/blender/build_turret.py; docs/turret-proposals) and the code-built one, in
-      // SPACECOM's colour: each turning, its gun nodding through its range (to +1.25 rad, flak), B's rotor spinning
-      id: 'veh.turret-drafts', label: 'TURRET PROPOSALS · A BASTION · B AEGIS · OLD', w: 22, d: 8,
+      // the defence turret (tools/blender/build_turret.py; docs/turret-proposals, A Bastion picked) and the code-built one it
+      // replaced, in SPACECOM's colour: each turning, its gun nodding through its range (to +1.25 rad, flak), its radar turning
+      id: 'veh.turret-drafts', label: 'DEFENCE TURRET · BASTION · OLD', w: 15, d: 8,
       make: () => {
-        const ts = ['a', 'b', 'old'].map((draft) => makeTurret({ color: FACTION_COLOR.spacecom, draft }));
+        const ts = ['a', 'old'].map((draft) => makeTurret({ color: FACTION_COLOR.spacecom, draft }));
         return {
           root: lineUp(ts.map((t) => part(t.root, 6.5, 6.5)), 0.6).root,
           update: (dt, t) => ts.forEach((r, i) => {

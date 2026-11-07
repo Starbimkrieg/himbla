@@ -1109,7 +1109,7 @@ export async function loadShipParts({ ships } = {}) {
   // the Meridian motor pool garage (tools/blender/build_garage.py)
   SHIP_PARTS.garage = bakeShip(named(ga, 'garage', 'garage'));
   SHIP_PARTS.garage_small = bakeShip(named(ga, 'garage', 'garage_small'));
-  // the defence turret, two proposals (tools/blender/build_turret.py; makeTurret)
+  // the defence turret (tools/blender/build_turret.py; makeTurret)
   for (const d of TURRET_DRAFTS) SHIP_PARTS['turret_' + d] = bakeShip(named(tu, 'turret', 'turret_' + d));
   // the ILMB's Power Block, a D-He3 fusion plant (tools/blender/build_power.py, proposal B)
   SHIP_PARTS.power = bakeShip(named(pw, 'power', 'power_b'));
@@ -2695,13 +2695,12 @@ export function makeKadeTruck() {
   return { root, chassis, wheels, turret, pitch, gatSpin, gatMuzzle, flakMuzzle, flag, kade, gunner };
 }
 
-// Defence turret (tools/blender/build_turret.py; docs/turret-proposals), every base gun in the game: two proposals, A
-// "Bastion" (a twin autocannon in a sloped armoured head) and B "Aegis" (a radome gun on a yoke), and the code-built one
-// they replace. Each has a head turned about y at (0, 3.1, 0), a gun pitched about x under it (rotation.x < 0 raises it,
-// to +1.25 rad for flak), muzzle empties where rounds leave, and spinners (A's radar, B's rotor). The pivots are tagged in
+// Defence turret (tools/blender/build_turret.py; docs/turret-proposals, A "Bastion" picked: a twin autocannon in a sloped
+// armoured head), every base gun in the game, and the code-built one it replaces. Each has a head turned about y at (0, 3.1, 0), a gun pitched about x under it (rotation.x < 0 raises it,
+// to +1.25 rad for flak), muzzle empties where rounds leave, and spinners (the radar; a rotor would turn while firing). The pivots are tagged in
 // userData (turretHead, turretGun, turretMuzzle, turretSpin), so turretRig finds them again in a clone.
-//   ?turret=a | b | old    the proposal shown (the URL beats localStorage['mr-turret']); default a
-export const TURRET_DRAFTS = ['a', 'b'];
+//   ?turret=old    the code-built one (the URL beats localStorage['mr-turret'])
+export const TURRET_DRAFTS = ['a'];
 export const TURRET_DRAFT = (() => {
   try {
     const v = new URLSearchParams(location.search).get('turret') || localStorage.getItem('mr-turret');

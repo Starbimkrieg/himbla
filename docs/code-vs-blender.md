@@ -23,7 +23,7 @@ has. They give a rough sense of how big each conversion is.
 | **Casino** | the hall and the forecourt kit (`hall.glb`, `lot.glb`), lamp posts, fountains, bouncers, chandeliers, sign frames (`casino.glb`), slot cabinets, the claw machine and its prizes, the blackjack table and chips, Plinko |
 | **Items** | the courier's weapons, the salvaged engine and the briefcase (wreck drops), the winch grapple |
 | **ILMB core** | the central complex and the fortress wall (two proposals: docs/ilmb-proposals), the skywalks, job terminal (its screens stay canvas), repair bay, launch gantry, fuel spheres, family domes, barracks, vehicle depot, comms mast, inner defence pylons (`ilmb.glb`, `tools/blender/build_ilmb.py`) |
-| **Defence turret** | every base gun: defence rings and walls, the ILMB's, restricted zones, founded outposts' militia guns, the hometown barracks (two proposals: docs/turret-proposals; `turret.glb`, `tools/blender/build_turret.py`; the code-built one is `?turret=old`) |
+| **Defence turret** | every base gun: defence rings and walls, the ILMB's, restricted zones, founded outposts' militia guns, the hometown barracks ("Bastion", picked from two proposals: docs/turret-proposals; `turret.glb`, `tools/blender/build_turret.py`; the code-built one is `?turret=old`) |
 | **Small outposts** | all seven kinds and their wrecks (`outposts.glb`, `tools/blender/build_outposts.py` with `outpost_kit.py`): Market Cross, Lattice Camp, Silo Depot, Greenhouse Row, Guyed Relay, Scrap Mountain, the Hulk. The code builders in `outpostDrafts.js` stay as the fallback (`?outpostGlb=0`) |
 
 ## Code-built: places

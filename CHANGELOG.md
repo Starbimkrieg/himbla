@@ -5,15 +5,20 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
-- **The defence turret, in Blender, in two proposals** (`tools/blender/build_turret.py` -> `src/assets/turret.glb`, 108 KB;
+- **The defence turret, in Blender, in two proposals** (`tools/blender/build_turret.py` -> `src/assets/turret.glb`, 62 KB;
   `models.js` makeTurret; docs/turret-proposals), for every base gun in the game: defence rings and walls, the ILMB's,
   restricted zones, founded outposts' militia guns, the hometown barracks. **A, "Bastion"** (1.3k triangles): a twin
   autocannon in a sloped armoured head on an octagonal pedestal, the guns on a trunnion in cheek brackets behind a drum
   mantlet, belt chutes from ammo boxes on the flanks, a roof sight and a turning search radar. **B, "Aegis"** (2.0k): a
   radome gun on a yoke, the dome riding over a six-barrel rotary gun that spins up while it fires, an ammo drum under it,
   equipment pods on the arms. Both keep the old one's footprint and head height, and both now pitch their guns (to 70
-  degrees up). `?turret=a` (default for now) or `b` switches, `?turret=old` brings back the code-built one; the Asset Row
-  has TURRET PROPOSALS beside the faction line-up.
+  degrees up). **A was picked**; B is out of the build, `?turret=old` brings back the code-built one; the Asset Row has
+  DEFENCE TURRET (Bastion and the old one) beside the faction line-up.
+  - **The ILMB's towers fitted to it:** the guns on the Rampart's bastions and gate towers stand in the middle of their
+    drums (they were 2.6 m and 1.6 m outboard), and each tower's top tapers in a curved shoulder to a seat just wider than
+    the turret's foot, with a navy collar and a red lit band; the flat gun decks, the gun plinths and the gate towers'
+    overhanging crowns are gone. The parapet runs into the bastions' shoulders, and their beacon masts stand on the
+    shoulders' inboard slope. The wall is 40k triangles.
   - **Tracer rounds:** base turrets and outpost militia guns fire tracers (a glowing streak, as the War-Rig's) from their
     muzzles in turn, 20% faster than the old bolts (180 m/s, the ILMB's 205); damage as before. A turret now fires only
     once its gun is on the target.

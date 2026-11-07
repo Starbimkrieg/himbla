@@ -484,7 +484,7 @@ src/
     dish.glb         dish stations and dish heads
     winch.glb        winch grapple and cable
     towmark.png      winch HUD marker
-    turret.glb       the defence turret, two proposals (docs/turret-proposals; models.js makeTurret, ?turret=a|b|old)
+    turret.glb       the defence turret, "Bastion" (docs/turret-proposals; models.js makeTurret, ?turret=old the code-built one)
     ilmb.glb         the ILMB's core: the central complex and wall ("the Crown", "the Rampart"), skywalks and the base's other pieces
     outposts.glb     the small outposts built in Blender (the kinds in staticContract.js GLB_KINDS; ?outpostGlb=0 for the
                      code-built ones; spec in docs/outpost-glb.md)
@@ -575,7 +575,7 @@ tools/
     build_blackjack.py     -> blackjack.glb
     build_dish.py          -> dish.glb
     build_winch.py         -> winch.glb, towmark.png
-    build_turret.py        -> turret.glb, the defence turret's two proposals (docs/turret-proposals; wing_kit.py)
+    build_turret.py        -> turret.glb, the defence turret (docs/turret-proposals; wing_kit.py)
     build_ilmb.py          -> ilmb.glb, the ILMB's core (docs/ilmb-proposals; wing_kit.py, dishkit.py)
     build_outposts.py      -> outposts.glb, the small outposts (check with npm run check:outposts; compare with the code-built
                               ones in the viewer: ?m=outpost&kind=tower)

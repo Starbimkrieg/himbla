@@ -6,9 +6,22 @@ militia guns, and at the hometown barracks. It is replaced by a Blender model (`
 `src/assets/turret.glb`, 113 KB compressed; `models.js` makeTurret), in two proposals. Both keep the old one's footprint (about 2.5 m
 round) and head height (the head turns at 3.1 m), so the colliders and every placement stand.
 
-Switch in the game with `?turret=a` or `?turret=b` (or `localStorage['mr-turret']`); `?turret=old` brings back the
-code-built one. The Asset Row has all three side by side (vehicles: TURRET PROPOSALS), turning, their guns nodding through
-their range and B's rotor spinning, beside the faction line-up (BASE TURRETS).
+**Picked: A, Bastion.** B was taken out of the build after the pick; its builder is in the history (commit c993625,
+`build_b` in `tools/blender/build_turret.py`). `?turret=old` (or `localStorage['mr-turret']`) brings back the code-built
+one. The Asset Row has Bastion and the old one side by side (vehicles: DEFENCE TURRET), beside the faction line-up (BASE
+TURRETS).
+
+**The ILMB's towers, fitted to it** (`build_ilmb.py` tower): with the pick, the guns on the Rampart's bastions and gate
+towers moved to the middle of their drums (they stood 2.6 m and 1.6 m outboard of it), and each tower's top now tapers:
+the drum curves in from the wall's height in a shoulder (a quarter ellipse, leaving the drum upright) to a seat just wider
+than the turret's foot (3.75 m; the ILMB's guns are scaled 1.35, a 3.4 m foot), a navy collar with a red lit band round
+it. The flat gun decks, the separate gun plinths and the gate towers' overhanging crowns are gone; the parapet and its
+coping run into a bastion's shoulder, and its beacon mast stands on the shoulder's inboard slope, clear of the gun.
+
+| Before | After |
+|---|---|
+| ![A bastion before: a flat deck, the gun off centre](../ilmb-proposals/a2_bastion.jpg) | ![A bastion after: the shoulder and seat](tops_bastion.jpg) |
+| ![The wall from outside](tops_wall.jpg) | ![A gate tower's top](tops_gate.jpg) |
 
 | | A: **Bastion** | B: **Aegis** |
 |---|---|---|

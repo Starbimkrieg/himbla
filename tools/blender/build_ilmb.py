@@ -62,7 +62,7 @@ from contextlib import contextmanager
 # finer than the centimetre paint stands off a face. Everything else merges as ever.
 TAG = [""]
 CARRIERS = {("panel", 0.2), ("panel", 0.18), ("panel2", 0.1), ("panel2", 0.06), ("navy", 0.1), ("cream", 0.1),
-            ("white", 0.1), ("roof", 0.06)}                      # (the drums', the buttresses', the atrium's, the legs')
+            ("white", 0.1), ("roof", 0.06), ("navy", 0.06)}                      # (the drums', the buttresses', the atrium's, the legs')
 _acc_of = Acc.of.__func__
 
 
@@ -504,6 +504,33 @@ def hazard_band(c, r_at, y0, y1, w=0.4, off=0.012):
         Acc.of("paint_hazard" if i % 2 == 0 else "paint_dark", 0.0, raw=True).put(([tuple(v) for v in q], [(0, 1, 2, 3)]))
 
 
+SEAT_R, COLLAR = 3.75, 0.25                      # the turret seat atop each tower: a collar just wider than the gun's foot
+
+
+def tower(c, foot, top, wall_r, wall_y, n=5):
+    """a drum tower as one lathe (DRUM_SEG facets, as kit.cylinder): battered from radius `foot` at the ground to wall_r at
+    wall_y, then a shoulder curving in (a quarter ellipse, leaving the drum upright) to the seat at SEAT_R, its navy collar
+    on top up to `top`, where the turret stands. Returns the shoulder's radius at a height, for colliders and fittings."""
+    y1 = top - COLLAR
+    sh = [(SEAT_R + (wall_r - SEAT_R) * math.cos(math.pi / 2 * i / n), wall_y + (y1 - wall_y) * math.sin(math.pi / 2 * i / n)) for i in range(1, n + 1)]
+    Acc.of("panel", 0.18).put(xf(lathe([(0.0, 0.0), (foot, 0.0), (wall_r, wall_y)] + sh + [(0.0, y1)], DRUM_SEG), (c[0], 0, c[1])))
+    Acc.of("navy", 0.06).put(xf(cylinder(SEAT_R, SEAT_R, COLLAR, DRUM_SEG)[:2], (c[0], y1 + COLLAR / 2, c[1])))
+    drum_band("paint_redlamp", c, lambda y: SEAT_R, y1 + 0.05, top - 0.04)          # (the collar's red lit band)
+
+    def r_at(y):
+        if y <= wall_y:
+            return foot + (wall_r - foot) * y / wall_y
+        t = min(1.0, (y - wall_y) / (y1 - wall_y))
+        return SEAT_R + (wall_r - SEAT_R) * math.sqrt(max(0.0, 1 - t * t))
+    # colliders: the drum to the shoulder, the shoulder in three steps (each as wide as its middle), the collar
+    col((c[0], -2.0, c[1]), shape="cyl", r=foot + 0.1, h=wall_y + 2.0)
+    for k in range(3):
+        ya, yb = wall_y + (y1 - wall_y) * k / 3, wall_y + (y1 - wall_y) * (k + 1) / 3
+        col((c[0], ya, c[1]), shape="cyl", r=r_at((ya + yb) / 2), h=yb - ya)
+    col((c[0], y1, c[1]), shape="cyl", r=SEAT_R, h=COLLAR)
+    return r_at
+
+
 def cut_spans(a0, a1, holes, half):
     """the arc a0..a1 without (h - half, h + half) round each angle in holes (and its turns)"""
     out = [(a0, a1)]
@@ -539,8 +566,9 @@ def chunks(a0, a1, most=math.radians(20)):
 # =====================================================================================================================
 # WALL A: "the Rampart". One wall all the way round, its outer face battered, on a plinth, with buttress fins and red lamps
 # outside, a lit band inside, a parapet with a gold coping and a walk behind it. At each of the eight bastions the wall
-# swells into a drum with a gun deck; at each of the four gates it rises into two drum towers with a lit bridge between.
-# The gun mounts are where the game's were (two per gate, one per bastion).
+# swells into a drum; at each of the four gates it rises into two drum towers with a lit bridge between. Each tower's top
+# tapers in a curved shoulder to a seat fitted to the turret's foot, its gun mount at the seat's middle (two per gate, one
+# per bastion, as the game's were).
 # =====================================================================================================================
 def build_wall_a():
     begin("ilmb_wall_a", draft="a")
@@ -555,10 +583,9 @@ def build_wall_a():
         Acc.of("panel", 0.2, tag="").put(ring_sector(wall, a0, a1))
         Acc.of("panel2", 0.1, tag="").put(ring_sector(plinth, a0, a1))
         Acc.of("pave", 0.0).put(ring_sector([(R - 2.9, 10.0), (R + 0.6, 10.0), (R + 0.6, 10.12), (R - 2.9, 10.12)], a0, a1))
-        # the parapet stops inside a bastion's drum, its coping at the rim of the drum's gun deck (the deck is clear of them)
-        for b0, b1 in cut_spans(a0, a1, BASTIONS, 0.026):
+        # the parapet and its coping run into a bastion's shoulder and stop inside it
+        for b0, b1 in cut_spans(a0, a1, BASTIONS, 0.024):
             Acc.of("panel", 0.08).put(ring_sector([(R + 0.6, 10.0), (R + 1.6, 10.0), (R + 1.6, 11.8), (R + 0.9, 11.8)], b0, b1))
-        for b0, b1 in cut_spans(a0, a1, BASTIONS, 0.0293):
             Acc.of("gold", 0.06).put(ring_sector([(R + 0.75, 11.8), (R + 1.75, 11.8), (R + 1.75, 12.2), (R + 0.75, 12.2)], b0, b1))
         Acc.of("panel2", 0.04).put(ring_sector([(R - 3.0, 10.0), (R - 2.5, 10.0), (R - 2.5, 11.0), (R - 3.0, 11.0)], a0, a1))
         # the lit band painted along the inner face and the gold line round the plinth's sloped face, on the same chords as
@@ -591,12 +618,13 @@ def build_wall_a():
     for bi, b in enumerate(BASTIONS):
         TAG[0] = f"b{bi}"                       # (each drum its own meshes, as the wall's pieces)
         cx, cz = at_r(R + 3.0, b)
-        Acc.of("panel", 0.18).put(xf(cylinder(7.0, 7.6, 11.0, DRUM_SEG)[:2], (cx, 5.5, cz)))
+        # the drum, its top tapering from the wall's height to the turret's seat (13.6 m), centred on the drum
+        sh = tower((cx, cz), 7.6, 13.6, 7.0, 11.0)
         Acc.of("panel2", 0.1).put(xf(cylinder(8.2, 8.4, 1.8, DRUM_SEG)[:2], (cx, 0.9, cz)))
-        Acc.of("gold", 0.06).put(xf(cylinder(7.5, 7.1, 1.0, DRUM_SEG)[:2], (cx, 11.5, cz)))
-        # a red lit band painted round the drum at the inside band's height, warning stripes above and below it, the
-        # plinth's gold line
+        # a gold band at the shoulder's foot, a red lit band painted round the drum at the inside band's height, warning
+        # stripes above and below it, the plinth's gold line
         dr = lambda y: 7.6 - 0.6 * y / 11.0
+        drum_band("paint_gold", (cx, cz), dr, 10.5, 10.9)
         drum_band("paint_redlamp", (cx, cz), dr, *TRIM_Y)
         hazard_band((cx, cz), dr, TRIM_Y[0] - 0.5, TRIM_Y[0] - 0.1)
         hazard_band((cx, cz), dr, TRIM_Y[1] + 0.1, TRIM_Y[1] + 0.5)
@@ -604,16 +632,13 @@ def build_wall_a():
         for k in range(8):
             th = TAU * k / 8 + 0.2
             Acc.of("window", 0.0).put(xf(radial(box(7.6 - 0.6 * 9.0 / 11.0 + 0.03, 9.0, 0, 0.12, 1.4, 0.45), th), (cx, 0, cz)))
-        gx, gz = at_r(R + 5.6, b)
-        Acc.of("roof", 0.06).put(xf(cylinder(2.3, 2.6, 2.0, 12)[:2], (gx, 13.0, gz)))
-        Acc.of("gold", 0.0).put(xf(cylinder(2.4, 2.4, 0.3, 12)[:2], (gx, 13.85, gz)))
-        Acc.of("amber", 0.0).put(ring(2.75, 0.14, 12.15, 24, 4, t=(gx, 0, gz)))
-        mx, mz = at_r(R + 0.6, b)
-        Acc.of("dark", 0.03).put(cyl(mx, 13.5, mz, 0.16, 3.0, 6))
-        blinker((mx, 15.4, mz), 0.6)
-        col((cx, -2.0, cz), shape="cyl", r=7.7, h=14.0)
-        col((gx, 12.0, gz), shape="cyl", r=2.6, h=2.0)
-        mount((gx, 14.0, gz))
+        # the beacon mast on the shoulder's inboard slope, clear of the turret's swing; the turret on the seat
+        mr = 4.9
+        my = 11.0 + (13.6 - COLLAR - 11.0) * math.sqrt(max(0.0, 1 - ((mr - SEAT_R) / (7.0 - SEAT_R)) ** 2))   # (the slope's height there)
+        mx, mz = at_r(R + 3.0 - mr, b)
+        Acc.of("dark", 0.03).put(cyl(mx, my + 1.3, mz, 0.16, 3.0, 6))
+        blinker((mx, my + 2.95, mz), 0.6)
+        mount((cx, 13.6, cz))
     # the gates: two drum towers either side, a lit bridge between them high enough to ride (or fly) under
     for gi, g in enumerate(GATES):
         pts = []
@@ -622,21 +647,18 @@ def build_wall_a():
             a = g + s * GATE_HALF
             cx, cz = at_r(R, a)
             pts.append((cx, cz))
-            Acc.of("panel", 0.2).put(xf(cylinder(6.8, 7.6, 18.0, DRUM_SEG)[:2], (cx, 9.0, cz)))
-            Acc.of("panel2", 0.1).put(xf(cylinder(8.0, 8.3, 2.0, DRUM_SEG)[:2], (cx, 1.0, cz)))
+            # the drum, its top tapering to the turret's seat (21 m), centred on the drum
             dr = lambda y: 7.6 - 0.8 * y / 18.0
+            tower((cx, cz), 7.6, 21.0, dr(18.6), 18.6)
+            Acc.of("panel2", 0.1).put(xf(cylinder(8.0, 8.3, 2.0, DRUM_SEG)[:2], (cx, 1.0, cz)))
+            drum_band("paint_redlamp", (cx, cz), dr, 18.1, 18.4)                     # (the red band at the crown)
             for y0, y1 in (TRIM_Y, (12.25, 12.75)):  # (gold bands painted on the drum's batter, the lower one at the inside band's height)
                 drum_band("paint_gold", (cx, cz), dr, y0, y1)
             drum_band("paint_gold", (cx, cz), lambda y: 8.3 - 0.3 * y / 2.0, *SKIRT_Y)
-            Acc.of("navy", 0.1).put(xf(cylinder(7.6, 6.9, 1.6, DRUM_SEG)[:2], (cx, 18.8, cz)))
-            drum_band("paint_redlamp", (cx, cz), lambda y: 6.9 + 0.7 * (y - 18.0) / 1.6, 19.05, 19.35)  # (painted on the crown's flare)
             for k in range(10):
                 th = TAU * k / 10
                 Acc.of("window", 0.0).put(xf(radial(box(7.6 - 0.8 * 9.5 / 18.0 + 0.03, 9.5, 0, 0.12, 1.6, 0.5), th), (cx, 0, cz)))
-            gx, gz = at_r(R + 1.6, a)
-            Acc.of("roof", 0.06).put(xf(cylinder(2.4, 2.7, 1.4, 12)[:2], (gx, 20.3, gz)))
-            col((cx, -2.0, cz), shape="cyl", r=7.7, h=21.6)
-            mount((gx, 21.0, gz))
+            mount((cx, 21.0, cz))
         TAG[0] = ""
         (ax, az), (bx, bz) = pts
         mx, mz = (ax + bx) / 2, (az + bz) / 2
