@@ -98,7 +98,8 @@ def build_terminal_pax():
     the loop (+z) on a row of columns, gate doors toward the bus pads behind (-z), a gold band, departure boards and seats
     inside, check-in desks along the front."""
     begin("ilmb_terminal_pax")
-    W, Z0, Z1, H = 30.0, -7.0, 3.0, 7.0          # hall: x +-W, z Z0 (airside) to Z1 (landside), walls H tall
+    W, Z0, Z1, H = 22.0, -7.0, 3.0, 7.0          # hall: x +-W, z Z0 (airside) to Z1 (landside), walls H tall
+    GATES = (-16.3, 13.9)                         # gate doors: where the two bus pads behind it bring their stairs in (ilmbLayout.js)
     Acc.of("concrete", 0.05).put(bx(-W - 0.6, 0, Z0 - 0.6, W + 0.6, 0.3, 7.0))
     colbx(-W - 0.6, 0, Z0 - 0.6, W + 0.6, 0.3, 7.0)
     Acc.of("pave", 0.0).put(bx(-W, 0.305, 3.3, W, 0.315, 6.8))                             # (the kerb's walk, on the plinth)
@@ -108,20 +109,20 @@ def build_terminal_pax():
     Acc.of("glass", 0.0).put(bx(-W + 0.05, 1.2, Z0 + 0.05, W - 0.05, H, Z1 - 0.05))
     Acc.of("pave", 0.0).put(bx(-W + 0.3, 0.305, Z0 + 0.3, W - 0.3, 0.315, Z1 - 0.3))
     mull = Acc.of("alu", 0.02)
-    x = -W
-    while x <= W + 0.01:
+    nm = round(2 * W / 3.0)                       # (a mullion every ~3 m, one at each corner)
+    for k in range(nm + 1):
+        x = -W + 2 * W * k / nm
         mull.put(bx(x - 0.12, 1.2, Z1 - 0.12, x + 0.12, H, Z1 + 0.12)).put(bx(x - 0.12, 1.2, Z0 - 0.12, x + 0.12, H, Z0 + 0.12))
-        x += 3.0
     for z in (Z0 + 3.33, Z0 + 6.66):
         for sx in (-W, W):
             mull.put(bx(sx - 0.12, 1.2, z - 0.12, sx + 0.12, H, z + 0.12))
     for z in (Z0, Z1):
         mull.put(bx(-W, 4.0, z - 0.1, W, 4.16, z + 0.1))
     # doors: three pairs on the landside, a gate door at each pad behind (x where the pads' stairs come in), one at each end
-    for dxx in (-15.0, 0.0, 15.0):
+    for dxx in (-11.0, 0.0, 11.0):
         Acc.of("door", 0.0).put(bx(dxx - 1.6, 0.3, Z1 + 0.12, dxx + 1.6, 3.6, Z1 + 0.13))
         Acc.of("lamp", 0.0).put(bx(dxx - 1.6, 3.86, Z1 - 0.04, dxx + 1.6, 4.0, Z1 + 0.1))   # (under the transom)
-    for dxx in (-23.8, 6.8):
+    for dxx in GATES:
         Acc.of("door", 0.0).put(bx(dxx - 1.4, 0.3, Z0 - 0.13, dxx + 1.4, 3.6, Z0 - 0.12))
         Acc.of("gold", 0.02).put(bx(dxx - 1.7, 3.6, Z0 - 0.5, dxx + 1.7, 3.9, Z0 - 0.12))
         Acc.of("lamp", 0.0).put(bx(dxx - 1.2, 3.55, Z0 - 0.42, dxx + 1.2, 3.6, Z0 - 0.15))
@@ -144,7 +145,7 @@ def build_terminal_pax():
     yr = lambda z: H + 0.6 + 1.6 * (z - Z0) / (7.6 - Z0)
     Acc.of("gold", 0.0).put(bx(-W - 1.0, yr(8.0) - 0.42, 7.99, W + 1.0, yr(8.0) - 0.1, 8.02))             # (the fascia, on its front)
     Acc.of("navy", 0.04).put(sloped_box(-W - 0.2, W + 0.2, Z0 - 0.2, Z1 + 0.2, H, lambda z: yr(z) - 0.48))   # (the walls closed up to its underside)
-    for xx in [-27.0 + 6.0 * k for k in range(10)]:
+    for xx in [-W + 4.0 + (2 * W - 8.0) * k / 6 for k in range(7)]:
         top = yr(6.0) - 0.48
         Acc.of("alu", 0.03).put(cyl(xx, 0.3 + (top - 0.3) / 2, 6.0, 0.22, top - 0.3, 8))
         col((xx, 0.3, 6.0), shape="cyl", r=0.24, h=top - 0.3)
@@ -152,22 +153,22 @@ def build_terminal_pax():
     colbx(-W, 0.3, Z0, W, H + 0.1, Z1)
     slope_col(0.0, 2 * W + 2.0, Z0 - 1.0, yr(Z0 - 1.0), 8.0, yr(8.0), 0.5)
     # inside: check-in desks along the landside, rows of seats, departure boards hung from the ceiling
-    for dxx in (-21.0, -9.0, 9.0, 21.0):
+    for dxx in (-15.0, -5.0, 5.0, 15.0):
         Acc.of("cream", 0.02).put(bx(dxx - 3.0, 0.315, 0.4, dxx + 3.0, 1.4, 1.2))
         Acc.of("gold", 0.0).put(bx(dxx - 3.0, 1.4, 0.4, dxx + 3.0, 1.46, 1.2))
-    for dxx in (-21.0, -9.0, 9.0, 21.0):
+    for dxx in (-15.0, -5.0, 5.0, 15.0):
         for zz in (-4.8, -3.0):
             Acc.of("blue", 0.01).put(bx(dxx - 3.5, 0.75, zz - 0.3, dxx + 3.5, 0.83, zz + 0.3))
             Acc.of("blue", 0.0).put(bx(dxx - 3.5, 0.83, zz + 0.2, dxx + 3.5, 1.45, zz + 0.3))
             Acc.of("steel", 0.0).put(bx(dxx - 3.4, 0.315, zz - 0.1, dxx + 3.4, 0.75, zz + 0.1))
-    for dxx in (-15.0, 0.0, 15.0):
+    for dxx in (-11.0, 0.0, 11.0):
         Acc.of("dark", 0.02).put(bx(dxx - 2.6, 4.6, -2.2, dxx + 2.6, 6.0, -1.9))
         for k in range(4):
             Acc.of(("amber", "cyan", "amber", "green")[k], 0.0).put(bx(dxx - 2.3, 4.8 + k * 0.3, -1.89, dxx + 2.3 - (k % 2) * 1.2, 4.95 + k * 0.3, -1.88))
         for sx in (-2.0, 2.0):
             Acc.of("steel", 0.0).put(B((dxx + sx, 6.0, -2.05), (dxx + sx, H, -2.05), 0.03, 4, True))
     # rooftop plant and the beacon
-    for x0 in (-20.0, 14.0):
+    for x0 in (-16.0, 10.0):
         Acc.of("panel", 0.04).put(bx(x0, yr(-4) - 0.05, -6.0, x0 + 6.0, yr(-4) + 1.4, -2.0))
         colbx(x0, yr(-4) - 0.05, -6.0, x0 + 6.0, yr(-4) + 1.4, -2.0)
     blinker((0.0, yr(0) + 0.3, 0.0), 0.4)
@@ -177,11 +178,12 @@ def build_terminal_pax():
 # =====================================================================================================================
 def build_cargo_shed():
     """The cargo shed: a portal-framed shed 42 x 16 m, navy cladding on white frames, three roller doors on its front (+z)
-    toward the gate road, a loading dock and dock lamps, a gold eave, roof vents, an office in one corner."""
+    toward the gate road and three on its back toward the freighter pads, each under a lamp between buffers, a gold eave,
+    roof vents, an office in one corner."""
     begin("ilmb_cargo_shed")
     W, Z0, Z1, H = 21.0, -9.0, 7.0, 11.0
-    Acc.of("concrete", 0.05).put(bx(-W - 0.5, 0, Z0 - 0.5, W + 0.5, 0.3, 9.6))
-    colbx(-W - 0.5, 0, Z0 - 0.5, W + 0.5, 0.3, 9.6)
+    Acc.of("concrete", 0.05).put(bx(-W - 0.5, 0, Z0 - 1.4, W + 0.5, 0.3, 9.6))
+    colbx(-W - 0.5, 0, Z0 - 1.4, W + 0.5, 0.3, 9.6)
     Acc.of("navy", 0.1).put(bx(-W, 0.3, Z0, W, H, Z1))
     for k in range(8):                                      # portal frames standing proud of the cladding
         x = -W + k * (2 * W) / 7
@@ -191,16 +193,19 @@ def build_cargo_shed():
     verts = [(-W - 0.4, H, Z0 - 0.4), (W + 0.4, H, Z0 - 0.4), (W + 0.4, H, Z1 + 0.4), (-W - 0.4, H, Z1 + 0.4),
              (-W - 0.4, H + pitch_h, (Z0 + Z1) / 2), (W + 0.4, H + pitch_h, (Z0 + Z1) / 2)]
     Acc.of("roof", 0.06).put((verts, [(0, 1, 2, 3), (0, 4, 5, 1), (3, 2, 5, 4), (0, 3, 4), (1, 5, 2)]))
-    Acc.of("gold", 0.0).put(bx(-W - 0.45, H - 0.4, Z1 - 0.1, W + 0.45, H - 0.004, Z1 + 0.45))
-    for x in (-13.0, 0.0, 13.0):
-        Acc.of("dark", 0.02).put(bx(x - 4.0, 0.3, Z1 + 0.02, x + 4.0, 7.3, Z1 + 0.14))
-        for k in range(11):
-            Acc.of("panel", 0.0).put(bx(x - 3.9, 0.7 + k * 0.6, Z1 + 0.14, x + 3.9, 0.76 + k * 0.6, Z1 + 0.18))
-        Acc.of("hazard", 0.0).put(bx(x - 4.3, 7.3, Z1 + 0.02, x + 4.3, 7.65, Z1 + 0.2))
-        Acc.of("lamp", 0.0).put(bx(x - 0.8, 8.0, Z1 + 0.15, x + 0.8, 8.2, Z1 + 0.6))
-        Acc.of("steel", 0.0).put(bx(x - 0.1, 8.0, Z1 + 0.15, x + 0.1, 8.4, Z1 + 0.6))
-        for sx in (-4.4, 4.4):                               # buffers either side of each door
-            Acc.of("hazard", 0.02).put(bx(x + sx - 0.25, 0.3, Z1 + 0.15, x + sx + 0.25, 1.4, Z1 + 0.65))
+    for zf, s in ((Z1, 1), (Z0, -1)):                      # front and back alike: eave, three roller doors
+        zz = lambda a, b: (zf + s * a, zf + s * b) if s > 0 else (zf + s * b, zf + s * a)   # (an offset band out from the face)
+        e0, e1 = zz(-0.1, 0.45)
+        Acc.of("gold", 0.0).put(bx(-W - 0.45, H - 0.4, e0, W + 0.45, H - 0.004, e1))
+        for x in (-13.0, 0.0, 13.0):
+            Acc.of("dark", 0.02).put(bx(x - 4.0, 0.3, zz(0.02, 0.14)[0], x + 4.0, 7.3, zz(0.02, 0.14)[1]))
+            for k in range(11):
+                Acc.of("panel", 0.0).put(bx(x - 3.9, 0.7 + k * 0.6, zz(0.14, 0.18)[0], x + 3.9, 0.76 + k * 0.6, zz(0.14, 0.18)[1]))
+            Acc.of("hazard", 0.0).put(bx(x - 4.3, 7.3, zz(0.02, 0.2)[0], x + 4.3, 7.65, zz(0.02, 0.2)[1]))
+            Acc.of("lamp", 0.0).put(bx(x - 0.8, 8.0, zz(0.15, 0.6)[0], x + 0.8, 8.2, zz(0.15, 0.6)[1]))
+            Acc.of("steel", 0.0).put(bx(x - 0.1, 8.0, zz(0.15, 0.6)[0], x + 0.1, 8.4, zz(0.15, 0.6)[1]))
+            for sx in (-4.4, 4.4):                           # buffers either side of each door
+                Acc.of("hazard", 0.02).put(bx(x + sx - 0.25, 0.3, zz(0.15, 0.65)[0], x + sx + 0.25, 1.4, zz(0.15, 0.65)[1]))
     # the office: a glazed corner, its door
     Acc.of("window", 0.0).put(bx(W + 0.0, 3.0, -6.0, W + 0.04, 4.6, -1.0))
     Acc.of("door", 0.0).put(bx(W + 0.0, 0.3, 1.0, W + 0.04, 2.75, 2.2))

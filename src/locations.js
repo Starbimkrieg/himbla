@@ -33,7 +33,7 @@ export const FACTIONS = {
 // The ILMB's six wings round its dome, in the order world.js buildIlmbWings builds them (Hydroponics, Meridian Labs, Vostok
 // Hangar, Daedalus Relay, Power Block, Kepler Habitat): [angle in the hub's x-z plane (as Math.atan2(z, x)), distance out to
 // the wing's centre]. settlements.js dressIlmb cuts the dome's berm where their skywalks dock.
-export const ILMB_WINGS_AT = [[0.0, 116], [0.62, 122], [2.2, 124], [3.8, 120], [4.5, 110], [5.2, 120]];
+export const ILMB_WINGS_AT = [[0.0, 116], [0.62, 122], [2.2, 112], [3.8, 120], [4.5, 110], [5.2, 120]];   // (the hangar in 12 m: its apron stops short of the inner ring road)
 // Its inner guns: one in each gap between neighbouring wings, on the gap's bisector at the pair's mean distance, unless a
 // shuttle pad (world.js buildHub) holds that spot: then nearer the dome (Hangar-Relay, the pad at (-120, 40)) or out past
 // the pad (Habitat-Hydroponics, the pad at (95, -60)).

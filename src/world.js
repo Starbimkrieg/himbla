@@ -993,10 +993,10 @@ export class World {
     hang(loc, textSprite('JOB BOARD', { color: '#ffffff', size: 80, scale: 0.6 }), bx, 22, bz);
 
     // the roads inside, driven by traffic.js (buildGateRoads): the inner ring road and a gate road out through each gate to the
-    // ring road outside; Arrivals Avenue carries the main gate's road on to the atrium (drawn, not driven), the inner ring's
-    // inner edge open for it
-    loc.inner = { r: LOOP_R, gates: GATES, stops: INNER_STOPS, openIn: [90] };
-    (loc.paved ||= []).push({ x0: 0, z0: AVENUE.r0, x1: 0, z1: AVENUE.r1 });
+    // ring road outside; Arrivals Avenue carries the main gate's road on to the atrium (drawn, not driven), flared into the
+    // inner ring as a road into a ring is
+    loc.inner = { r: LOOP_R, gates: GATES, stops: INNER_STOPS };
+    (loc.paved ||= []).push({ x0: 0, z0: AVENUE.r0, x1: 0, z1: AVENUE.r1, ring: 'inner' });
     // the transit quarter's pads: four bus decks behind the passenger terminal, their stairs toward it; two freighter decks
     // either side of the container yard. The ILMB's lines land on these (traffic.js buildFlights, loc.transitPads).
     const RAD = Math.PI / 180;

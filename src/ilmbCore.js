@@ -60,9 +60,10 @@ function bakeModelInto(k, M, slotMat, dx = 0) {
 // Bake one piece into the place at (x, z) turned by yaw (the hub's frame when all three are 0); its turret mounts go to
 // world.mount. Returns the model.
 // floor: colliders under its low drawn floors (Kit.floorColliders: plinths, footings, slabs the feet would sink into)
-export function bakeIlmbPiece(world, loc, name, { x = 0, z = 0, yaw = 0, seed = 7700, floor = false } = {}) {
+// scale: the piece that many times its built size (its colliders too: Kit.sc)
+export function bakeIlmbPiece(world, loc, name, { x = 0, z = 0, yaw = 0, seed = 7700, floor = false, scale = 1 } = {}) {
   let M;
-  settle(world, loc, seed, (k) => { k.tag = name; k.floorCols = floor; k.at(x, z, yaw); M = bakeIlmbInto(k, name); });   // (tag: the dev audits name the piece)
+  settle(world, loc, seed, (k) => { k.tag = name; k.floorCols = floor; atScaled(k, x, z, yaw, scale); M = bakeIlmbInto(k, name); });   // (tag: the dev audits name the piece)
   const c = Math.cos(yaw), s = Math.sin(yaw);
   for (const m of M.mounts) world.mount(loc, x + m.pos.x * c + m.pos.z * s, z - m.pos.x * s + m.pos.z * c, m.pos.y, { wall: !!m.data.wall });
   return M;
@@ -105,8 +106,9 @@ export function parkingLot(k, e) {
     // backed in, nose to the lane; a hover-car rests low on its pads, a rover on its wheels
     const [kind, opts] = c === 'c' ? ['car', { paint: (i * 3 + e.a) | 0 }] : PARKED[c];
     const cz = -bd / 2 + 1.0 + (kind === 'car' ? 3.45 : 3.7);   // (its tail a metre off the kerb: a hover-car 6.9 m long, a rover 7.4)
-    bakeVehicle(k, kind, opts, x, kind === 'car' ? 0.4 : 0.06, cz, 0, kind === 'rover' ? 1.15 : 1);
-    if (kind === 'car') k.solid(1.8, 1.0, 3.4, x, cz, 0, 0.4);
+    // (a hover-car's pods reach 0.9 m under its origin and its roof 1.61 over: it rests on its pads, lift low, 15 cm up)
+    bakeVehicle(k, kind, opts, x, kind === 'car' ? 0.06 + 0.9 + 0.15 : 0.06, cz, 0, kind === 'rover' ? 1.15 : 1);
+    if (kind === 'car') k.solid(1.8, 1.26, 3.4, x, cz, 0, 0.2);
     else k.solid(1.9, 1.45, 3.6, x, cz, 0, 0.06);
   }
   // a lamp and charge point at each end, behind the kerb
@@ -150,13 +152,22 @@ export function bakeIlmbExtras(k, piece) {
 }
 
 // A row of units (houses, shops) side by side along x from (x, z) turned by yaw, each `unit` m wide; shops get their names
-export function bakeUnitRow(k, units, unit, x = 0, z = 0, yaw = 0) {
+export function bakeUnitRow(k, units, unit, x = 0, z = 0, yaw = 0, scale = 1) {
   units.forEach((u, i) => {
-    const lx = (i - (units.length - 1) / 2) * unit;
-    k.tag = u; k.at(x + lx * Math.cos(yaw), z - lx * Math.sin(yaw), yaw);
+    const lx = (i - (units.length - 1) / 2) * unit * scale;
+    k.tag = u;
+    atScaled(k, x + lx * Math.cos(yaw), z - lx * Math.sin(yaw), yaw, scale);
     bakeIlmbInto(k, u);
     if (SHOP_NAMES[u]) k.text(SHOP_NAMES[u], SHOP_SIGN[0], SHOP_SIGN[1], SHOP_SIGN[2], 0, fit(SHOP_NAMES[u], 0.75, SHOP_SIGN[3]), { back: false, off: 0.02 });
   });
+  k.sc = 1;
+}
+
+// a kit frame at (x, z) turned by yaw and scaled by s (Kit.sc: its colliders, text and ink follow); Kit.at leaves sc alone
+function atScaled(k, x, z, yaw, s = 1) {
+  k.at(x, z, yaw);
+  if (s !== 1) k.base.multiply(new THREE.Matrix4().makeScale(s, s, s));
+  k.sc = s;
 }
 
 // The rocket's pad in the kit's current frame and its gantry on its edge, out along +x (its arms reach back in to the ship at
@@ -172,13 +183,13 @@ export function buildIlmbQuarters(world, loc) {
   QUARTERS.forEach((e, n) => {
     const [x, z] = at(e.a, e.r), yaw = yawFor(e.a, e.face), seed = 7720 + n;
     if (e.kind === 'piece') {
-      bakeIlmbPiece(world, loc, e.piece, { x, z, yaw, seed, floor: true });
+      bakeIlmbPiece(world, loc, e.piece, { x, z, yaw, seed, floor: true, scale: e.scale || 1 });
       if (SIGNS[e.piece] || e.piece === 'motorpool') settle(world, loc, seed + 500, (k) => { k.at(x, z, yaw); bakeIlmbExtras(k, e.piece); });
       return;
     }
     settle(world, loc, seed, (k) => {
       k.tag = e.kind; k.floorCols = true; k.at(x, z, yaw);
-      if (e.kind === 'row') bakeUnitRow(k, e.units, e.unit, x, z, yaw);
+      if (e.kind === 'row') bakeUnitRow(k, e.units, e.unit, x, z, yaw, e.scale || 1);
       else if (e.kind === 'lot') {
         k.floorCols = true;  // (the bays' slabs: walked on at their drawn height)
         parkingLot(k, e);

@@ -812,8 +812,6 @@ export class Traffic {
     const TAU = Math.PI * 2, r = loc.inner.r;
     const M = 4 * Math.ceil((TAU * r) / 16), step = (TAU * r) / M;   // (a multiple of 4: a sample at every gate)
     const IR = { loc, M, Rb: r, step, rad: new Float64Array(M).fill(r), maxR: r, kd: Math.max(3, Math.round(JOIN / step)), gates: [], inner: true };
-    // where something drawn comes in from inside (Arrivals Avenue), the loop's inner berm opens
-    IR.cutIn = (loc.inner.openIn || []).map((a) => wrap(Math.round((a / 360) * M), M));
     this.innerRoads = this.innerRoads || [];
     for (const e of R.gates) {
       if (!e.inward) continue;
@@ -1582,7 +1580,8 @@ export class Traffic {
   pavedStrip(loc, spec) {
     let { x0, z0, x1, z1 } = spec;
     // a road out to the ring runs a little past where the join's sweeps start (inletFor), at full strength
-    const e = spec.ring ? (this.rings.get(loc)?.inlets || []).find((q) => q.spec === spec) : null;
+    const R = spec.ring === 'inner' ? (this.innerRings || []).find((q) => q.loc === loc) : spec.ring ? this.rings.get(loc) : null;
+    const e = R ? (R.inlets || []).find((q) => q.spec === spec) : null;
     if (e) { x1 = x0 + e.ux * (e.tq + 8); z1 = z0 + e.uz * (e.tq + 8); }   // 8 m past the sweeps' start, berms fading, so no bare ground shows between
     const n = Math.max(2, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 4));
     const g = [];
@@ -1688,11 +1687,12 @@ export class Traffic {
     const c0 = this.w.toWorld(loc, 0, 0, 0);
     R.din = side[0].dot(_a.copy(c0).sub(W[0])) > 0 ? 1 : -1;
     // paved roads out to the ring (`loc.paved` with `ring`: the casino's car-park roads): where they meet it, for the sweeps
-    R.inlets = R.inner ? [] : (loc.paved || []).filter((s) => s.ring).map((s) => this.inletFor(loc, R, s));
+    // (`ring: 'inner'`: the place's inner ring, buildGateRoads)
+    R.inlets = (loc.paved || []).filter((s) => (R.inner ? s.ring === 'inner' : s.ring === true)).map((s) => this.inletFor(loc, R, s));
     // the Meridian Exchange's garage road: laid first so the ring's inner berm can stop for it
     const gj = loc.garage && !R.inner ? this.garageRoad(loc, R, W, side, tan) : null;
-    // junctions of roads from inside (reserveGateRoads) and roads drawn in from inside (cutIn) open the inner edge instead
-    const outGates = R.gates.filter((e) => !e.inward), inCuts = [...R.gates.filter((e) => e.inward).map((e) => e.i), ...(R.cutIn || [])];
+    // junctions of roads from inside (reserveGateRoads) open the inner edge instead
+    const outGates = R.gates.filter((e) => !e.inward), inCuts = R.gates.filter((e) => e.inward).map((e) => e.i);
     R.garageJoin = gj;
     // closed strip (the last row repeats the first)
     {

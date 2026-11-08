@@ -12,7 +12,7 @@
 #   rocket_gantry   its launch gantry: a red and white lattice tower 54 m tall, its crew access arm
 #                   out (-x) to the ship's hatch, ending in a white room against the hull, a propellant arm lower down, a lift
 #                   cage up one face; it stands on the pad's edge, the ship 14.5 m from it (src/ilmbLayout.js ROCKET.gantryOff)
-#   rocket_pad      the flat landing pad, 30 m round: a slab with a blast-proof centre plate over a flame trench cross, the
+#   rocket_pad      the flat landing pad, 26 m round: a slab with a blast-proof centre plate over a flame trench cross, the
 #                   painted ring and a target bar, edge lamps; the gantry stands on it
 # Ship roots' extras: `flameY` (where the exhaust leaves, under the bells), `flameR` (its radius), `hatchY` (the hatch's sill),
 # `R` (the hull's radius at the hatch). Pivots: leg (a landing leg, hinged at its top, extra `yaw` the angle it stands out at;
@@ -53,6 +53,7 @@ exec(open(os.path.join(REPO, "tools", "blender", "wing_kit.py"), encoding="utf-8
 from mathutils import Vector, Matrix
 
 GANTRY_OFF = 14.5            # the gantry tower's middle from the ship's axis (ilmbLayout.js ROCKET.gantryOff)
+PAD_R = 26.0                 # the flat pad's radius (ilmbLayout.js ROCKET.padR)
 TOWER_W = 2.8                # the tower's half width
 
 
@@ -237,7 +238,7 @@ def build_gantry(name, hatch_y, R):
 # =====================================================================================================================
 def build_pad():
     begin("rocket_pad")
-    r = 30.0
+    r = PAD_R
     Acc.of("concrete", 0.08).put(cyl(0, 0.0, 0, r, 0.5, 64, rt=r))
     Acc.of("red", 0.0).put(ring_flat(r * 0.65, r * 0.8, 0.252))
     Acc.of("red", 0.0).put(box(0, 0.252, 0, r * 0.15, 0.004, r * 0.9))

@@ -30,10 +30,10 @@ const shipPad = (id, x, z) => circ(id, x, z, 21, { cls: 'freight', pad: true, cl
 // ---- what every layout keeps (locations.js ILMB_WINGS_AT, build_ilmb.py, the wings' .glb bounds) ----
 // wing: angle (deg), distance, out (radial extent each side of the centre, from the model), across (half width), centre shift
 const WINGS = [
-  ['Hydroponics', 0.0, 116, 30.5, 28.5, 0], ['Meridian Labs', 0.62, 122, 25, 13, 5], ['Vostok Hangar', 2.2, 124, 32, 22.5, 0],
+  ['Hydroponics', 0.0, 116, 30.5, 28.5, 0], ['Meridian Labs', 0.62, 122, 25, 13, 5], ['Vostok Hangar', 2.2, 112, 34, 27, 11.5],
   ['Daedalus Relay', 3.8, 120, 17.5, 17, 0], ['Power Block', 4.5, 110, 16.5, 22, 0], ['Kepler Habitat', 5.2, 120, 27.5, 27.5, 0],
 ];
-const SKYWALK_END = [93.2, 104.6, 103.6, 107.2, 98.6, 92.6]; // d - dock + 1.2 (build_ilmb.py WING_END)
+const SKYWALK_END = [93.2, 104.6, 91.6, 107.2, 98.6, 92.6]; // d - dock + 1.2 (build_ilmb.py WING_END)
 const BOARD = [Math.cos(1.1) * 80, Math.sin(1.1) * 80];  // locations.js ILMB_BOARD
 const fixed = () => [
   circ('the Crown', 0, 0, 53, { cls: 'core', fixed: true }),
@@ -265,7 +265,8 @@ function svg(L) {
 }
 
 let bad = 0;
-for (const L of [draftA, draftB]) bad += check(L); // (today's plan is drawn, not checked: the wings' footprints are their models' bounds, a few metres generous)
+bad += check(draftA);  // (as built: a finding fails the check)
+check(draftB);         // (the draft not taken, for the record: drawn and listed, not failed; today's plan is drawn, not checked)
 const outDir = process.argv[2];
 if (outDir) {
   writeFileSync(`${outDir}/ilmb-layout-current.svg`, svg(current));

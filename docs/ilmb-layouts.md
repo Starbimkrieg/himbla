@@ -2,8 +2,11 @@
 
 **Draft A, "the Circle", was picked and is built** (November 2026): the positions are `src/ilmbLayout.js`, which the game
 builds from (ilmbCore.js buildIlmbQuarters, world.js buildHub, traffic.js) and `tools/ilmb-layouts.mjs` checks and draws as
-the A plan; it differs from the draft below only in detail (five parking lots added, the cargo shed's doors toward the gate
-road, the shop and house rows as 10 m units). Traffic drives the inside roads (the open question at the end). Draft B stays
+the A plan; it differs from the draft below in detail: five parking lots added; the passenger side reworked for room (a
+44 m terminal along the inner ring, the four bus pads in a row along the wall 8 m apart with an 8 m concourse to the
+terminal, the rocket's pad 26 m round at 41°); the cargo shed's doors toward the gate road and the freighters both; the shop
+and house rows as 10 m units at 1.25 times their size; the barracks end-on to the road; and **the Vostok Hangar 12 m nearer
+the Crown** (at 112, not 124: its apron, 45 m out from the wing's centre, ran under the inner ring road). Traffic drives the inside roads (the open question at the end). Draft B stays
 here for the record.
 
 Two drafts for the International Moon Base's grounds. The Crown, its six wings and their skywalks, the job board and the

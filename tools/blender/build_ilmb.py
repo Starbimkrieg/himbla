@@ -84,7 +84,7 @@ def tagged(t):
         TAG[0] = old
 
 # ---------------- the base's layout (src/locations.js, src/world.js) ----------------
-WINGS = [(0.0, 116, 24.0), (0.62, 122, 18.6), (2.2, 124, 21.6), (3.8, 120, 14.0), (4.5, 110, 12.6), (5.2, 120, 28.6)]  # angle, distance, dock
+WINGS = [(0.0, 116, 24.0), (0.62, 122, 18.6), (2.2, 112, 21.6), (3.8, 120, 14.0), (4.5, 110, 12.6), (5.2, 120, 28.6)]  # angle, distance, dock
 DOCK_R = 56.0                                                      # the core's lobby faces: where each skywalk starts
 WING_END = [d - e + 1.2 for _, d, e in WINGS]                      # where each ends (1.2 m into the wing's lobby)
 DOCK_A = [a for a, _, _ in WINGS]

@@ -10,28 +10,32 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
   is regrouped into four quarters on a **ring road inside the wall** (r 170), each in the band behind its own gate:
   - **Roads you can drive, and traffic on them:** a gate road out through each of the four gates to the ring road outside
     (joining it as any road does; the ring's other junctions keep 90 m clear of them), the inner ring with a junction at
-    each gate road, and Arrivals Avenue from the main gate on to the atrium (drawn, not driven). Hover-cars and buggies
+    each gate road, and Arrivals Avenue from the main gate on to the atrium (drawn, not driven, swept into the inner ring
+    with flared joins like a road into a ring). Hover-cars and buggies
     bound for the ILMB drive in half the time and pull in by a quarter for a while; five hover-cars (SPACECOM, Meridian,
     civilian) and two buggies are the base's own and never leave it. Land-trains keep to the ring road outside
     (`traffic.js` buildGateRoads, innerStops, populateInner).
-  - **Transit at the main gate:** passengers east of the gate road (the new **passenger terminal**, a glazed hall with
-    check-in desks, departure boards and a drop-off canopy, its gate doors toward four bus pads behind it), freight west
-    (a **cargo shed** with three roller doors, two freighter pads, a container yard), and the Earth rocket's pad. The
+  - **Transit at the main gate:** passengers east of the gate road (the new **passenger terminal**, a 44 m glazed hall
+    with check-in desks, departure boards and a drop-off canopy along the inner ring road, its gate doors onto an 8 m
+    concourse; four bus pads in a row along the wall behind it, 8 m between decks; the Earth rocket at the far end, its pad
+    26 m round), freight west (a **cargo shed** with three roller doors front and back, two freighter pads, a container
+    yard). The
     ILMB's four bus lines and two freighter lines now land on these pads (`loc.transitPads`) instead of wherever there was
     room at load.
   - **The motor pool at the west gate:** the repair bay rebuilt as a working garage (52 x 30 m, three bays behind open roller
     doors): a buggy up on a two-post lift with a wheel off, a SPACECOM patrol car on a four-post lift, the Interceptor on a
     scissor lift; tool walls and roll cabinets down both sides, workbenches with vices, a tyre rack, a compressor and hose
     reels, a parts cage, an office on a mezzanine up a flight of stairs, the bridge crane; lit inside. Beside it the
-    vehicle depot, a fuel and charge island, the barracks and the patrol rover lot.
+    vehicle depot, a fuel and charge island, the patrol rover lot, and the two barracks (a fifth bigger) end-on to the
+    road, their doors facing it.
   - **Power and industry at the south gate:** the fuel spheres with three new **tanks** and a **pump house** as a tank farm,
     a **pipe bridge** from it over the ring road into the Power Block, the solar fields and the comms mast.
   - **The civilian quarter at the east gate:** **shops** (a canteen, a suit and seal shop, a parts counter, a noodle bar, a
     clinic) in two rows on a market lane, **houses** (a stacked two-storey hab, a pair of hab drums, a tower and a wing) in
-    four rows, the two family domes.
+    four rows, both at 1.25 times their built size, the two family domes.
   - **Parking:** five lots in dead corners (the arrivals car park, two visitor lots by the Crown, the works car park, the
     patrol lot), bays with painted lines, wheel stops, kerbs and a lamp and charge point at each end, some with parked
-    SPACECOM, Kepler, Meridian, Vostok and civilian hover-cars or patrol rovers, some empty.
+    SPACECOM, Kepler, Meridian, Vostok and civilian hover-cars resting on their pads or patrol rovers, some empty.
   - **The Earth rocket, reworked: "Kestrel"** (`tools/blender/build_rocket.py` -> `src/assets/rocket.glb`; `models.js`
     makeRocket), picked from two proposals (B, "Lantern", a squat lander-ship on six legs, is out of the build): a 46 m
     white ship (3.0k triangles) with an ogive nose, a band of cabin windows, canards and fins, four landing legs, three
@@ -42,7 +46,8 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
     1.2): motor pool 7.5k triangles, terminal 2.0k, cargo shed 0.9k, tank 2.6k, pipe bridge 1.8k, shops 0.4-0.9k and houses
     0.6-1.1k each, parking bays and lamps. The old repair bay and launch gantry are gone. Everything you can reach collides
     (the places audit's coverage and sunk floors checked); the shop and building signs are canvas.
-  - The inner guns, the job board and the spawn point are where they were. Asset Row: ILMB MOTOR POOL, PASSENGER TERMINAL,
+  - The Vostok Hangar stands 12 m nearer the Crown (its skywalk shorter), so its apron ends short of the inner ring road
+    instead of running under it. The inner guns, the job board and the spawn point are where they were. Asset Row: ILMB MOTOR POOL, PASSENGER TERMINAL,
     CARGO SHED, TANK · PUMP HOUSE · FUEL ISLAND, PIPE BRIDGE, SHOPS, HOUSES, PARKING, ROCKET PAD · GANTRY, the new rocket
     (REPAIR BAY, LAUNCH GANTRY and ROCKET PAD are gone).
 - **Landing pads, stop shelters and solar fields in Blender** (`tools/blender/build_fixtures.py` -> `src/assets/fixtures.glb`,
