@@ -30,6 +30,11 @@ open a code-built model's file.
 - **Models are made in Blender.** Unless the user says otherwise, a new model or any refinement of how one looks is built
   in Blender, even if it's code-built today: port it first (blender skill, "Blender by default"). A hook blocks adding
   code-built geometry to `src/` (below).
+- **Stick to the agreed plan; ask before deviating.** Once the user has approved a plan or proposal, don't change its approach,
+  drop or merge a step, or skip a promised check-in without asking first: say what you'd change and why, and wait for an answer.
+  Small implementation details are fine. In the final report, name any way the result differs from the plan, and describe only
+  behaviour you have measured or seen, never what the code is meant to do. (The spider tank's climb was planned as explicit stages,
+  built as a general solver without asking, and reported as if the stages existed.)
 - Work on the branch the session names. Don't open a PR unless asked.
 - Keep `CHANGELOG.md` (under "Unreleased") and the source map in `docs/reference.md` in step with every change.
 - Don't touch `package.json`'s version except to release (a `Release x.y.z [release]` commit triggers the workflow).
