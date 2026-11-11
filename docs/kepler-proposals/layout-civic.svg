@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 986 1136" width="986" height="1136">
+<rect width="986" height="1136" fill="#c9c1d8"/>
+<circle cx="492.8" cy="492.8" r="448" fill="none" stroke="#8a87a0" stroke-dasharray="6 6"/>
+<circle cx="492.8" cy="492.8" r="380.8" fill="none" stroke="#8a87a0" stroke-dasharray="2 6"/>
+<polygon points="473.6,352 512,352 512,134.4 473.6,134.4" fill="#9d97b0" stroke="none" stroke-width="1.2" />
+<line x1="282.2" y1="569.3" x2="364.2" y2="676.2" stroke="#2a2540" stroke-width="10.88"/>
+<line x1="282.2" y1="569.3" x2="364.2" y2="676.2" stroke="#fff4e0" stroke-width="8.959999999999999"/>
+<line x1="364.2" y1="676.2" x2="492.8" y2="716.8" stroke="#2a2540" stroke-width="10.88"/>
+<line x1="364.2" y1="676.2" x2="492.8" y2="716.8" stroke="#fff4e0" stroke-width="8.959999999999999"/>
+<line x1="492.8" y1="716.8" x2="621.4" y2="676.2" stroke="#2a2540" stroke-width="10.88"/>
+<line x1="492.8" y1="716.8" x2="621.4" y2="676.2" stroke="#fff4e0" stroke-width="8.959999999999999"/>
+<line x1="621.4" y1="676.2" x2="703.4" y2="569.3" stroke="#2a2540" stroke-width="10.88"/>
+<line x1="621.4" y1="676.2" x2="703.4" y2="569.3" stroke="#fff4e0" stroke-width="8.959999999999999"/>
+<circle cx="284.8" cy="316.8" r="50.24" fill="none" stroke="#ff3b5c" stroke-dasharray="3 4"/>
+<polygon points="561.6,492.8 559.9,477.5 554.8,462.9 546.6,449.9 535.7,439 522.7,430.8 508.1,425.7 492.8,424 477.5,425.7 462.9,430.8 449.9,439 439,449.9 430.8,462.9 425.7,477.5 424,492.8 425.7,508.1 430.8,522.7 439,535.7 449.9,546.6 462.9,554.8 477.5,559.9 492.8,561.6 508.1,559.9 522.7,554.8 535.7,546.6 546.6,535.7 554.8,522.7 559.9,508.1" fill="#b8b2cc" stroke="#2a2540" stroke-width="1.2" />
+<circle cx="492.8" cy="492.8" r="43.2" fill="#fff4e0" stroke="#ff9f1c" stroke-width="2"/>
+<polygon points="547.2,403.2 560,403.2 560,390.4 547.2,390.4" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<text x="492.8" y="496" font-size="10" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">TOWN HALL</text>
+<polygon points="426.9,300.8 426.9,326.4 454.4,326.4 454.4,300.8" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="558.7,326.4 558.7,300.8 531.2,300.8 531.2,326.4" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="426.9,273.3 426.9,298.9 454.4,298.9 454.4,273.3" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="558.7,298.9 558.7,273.3 531.2,273.3 531.2,298.9" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="426.9,245.8 426.9,271.4 454.4,271.4 454.4,245.8" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="558.7,271.4 558.7,245.8 531.2,245.8 531.2,271.4" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="426.9,218.2 426.9,243.8 454.4,243.8 454.4,218.2" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="558.7,243.8 558.7,218.2 531.2,218.2 531.2,243.8" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="279.7,562.4 284.8,576.2 347.9,553.2 342.9,539.4" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="301.5,622.2 316.9,613.7 328.9,600.8 336.4,584.8 338.5,567.3 335.2,550 326.6,534.6 313.7,522.6 297.8,515.1 280.3,513 263,516.4 247.6,524.9 235.5,537.8 228.1,553.8 226,571.2 229.3,588.5 237.9,604 250.7,616 266.7,623.4 284.2,625.6" fill="#8a8296" stroke="#2a2540" stroke-width="1.2" />
+<circle cx="282.2" cy="569.3" r="44.800000000000004" fill="#fff4e0" stroke="#ff9f1c" stroke-width="2"/>
+<text x="282.2" y="572.5" font-size="9" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">A 14</text>
+<polygon points="358.1,671.9 370.2,680.4 409.7,624.1 397.7,615.6" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="407.4,706.5 414.6,691.7 417,675.3 414.1,659.1 406.4,644.5 394.5,633 379.7,625.7 363.3,623.4 347.1,626.2 332.5,633.9 321,645.8 313.7,660.6 311.4,677 314.2,693.3 321.9,707.9 333.8,719.4 348.6,726.6 365,729 381.3,726.1 395.9,718.4" fill="#f3eee4" stroke="#2a2540" stroke-width="1.2" />
+<text x="364.2" y="679.4" font-size="9" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">B 16</text>
+<polygon points="485.4,716.8 500.2,716.8 500.2,636.8 485.4,636.8" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="561.9,716.8 558.5,695.4 548.7,676.2 533.4,660.9 514.2,651.1 492.8,647.7 471.4,651.1 452.2,660.9 436.9,676.2 427.1,695.4 423.7,716.8 427.1,738.2 436.9,757.4 452.2,772.7 471.4,782.5 492.8,785.9 514.2,782.5 533.4,772.7 548.7,757.4 558.5,738.2" fill="#8a8296" stroke="#2a2540" stroke-width="1.2" />
+<circle cx="492.8" cy="716.8" r="57.6" fill="#fff4e0" stroke="#ff9f1c" stroke-width="2"/>
+<text x="492.8" y="720" font-size="9" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">A 18</text>
+<polygon points="615.4,680.4 627.5,671.9 587.9,615.6 575.9,624.1" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="664.6,645.8 653.1,633.9 638.5,626.2 622.3,623.4 605.9,625.7 591.1,633 579.2,644.5 571.5,659.1 568.6,675.3 571,691.7 578.2,706.5 589.7,718.4 604.3,726.1 620.6,729 637,726.6 651.8,719.4 663.7,707.9 671.4,693.3 674.2,677 671.9,660.6" fill="#f3eee4" stroke="#2a2540" stroke-width="1.2" />
+<text x="621.4" y="679.4" font-size="9" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">B 16</text>
+<polygon points="700.8,576.2 705.9,562.4 642.7,539.4 637.7,553.2" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="722.6,516.4 705.3,513 687.8,515.1 671.9,522.6 659,534.6 650.4,550 647.1,567.3 649.2,584.8 656.7,600.8 668.7,613.7 684.1,622.2 701.4,625.6 718.9,623.4 734.9,616 747.7,604 756.3,588.5 759.6,571.2 757.5,553.8 750.1,537.8 738,524.9" fill="#8a8296" stroke="#2a2540" stroke-width="1.2" />
+<circle cx="703.4" cy="569.3" r="44.800000000000004" fill="#fff4e0" stroke="#ff9f1c" stroke-width="2"/>
+<text x="703.4" y="572.5" font-size="9" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">A 14</text>
+<polygon points="673.3,310.4 673.3,278.4 615,278.4 615,310.4" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="673.3,252.8 673.3,220.8 615,220.8 615,252.8" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="312.3,208 312.3,240 370.6,240 370.6,208" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="318.7,160 318.7,192 377,192 377,160" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="711,471 735.4,471 735.4,412.2 711,412.2" fill="#9be7ff" stroke="#2a2540" stroke-width="1.2" />
+<text x="723.2" y="444.8" font-size="8" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">GH</text>
+<polygon points="749.4,471 773.8,471 773.8,412.2 749.4,412.2" fill="#9be7ff" stroke="#2a2540" stroke-width="1.2" />
+<text x="761.6" y="444.8" font-size="8" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">GH</text>
+<polygon points="251.5,467.2 249.5,459.8 244.2,454.5 236.8,452.5 229.4,454.5 224.1,459.8 222.1,467.2 224.1,474.6 229.4,479.9 236.8,481.9 244.2,479.9 249.5,474.6" fill="#d8d4e8" stroke="#2a2540" stroke-width="1.2" />
+<text x="236.8" y="444.8" font-size="8" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">WATER</text>
+<polygon points="775,531.2 773,526.2 768,524.2 763,526.2 761,531.2 763,536.2 768,538.2 773,536.2" fill="#8a87a0" stroke="#2a2540" stroke-width="1.2" />
+<text x="768" y="516.8" font-size="8" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">MAST</text>
+<polygon points="449.6,843.8 536,843.8 536,833 449.6,833" fill="#1d2f6b" stroke="#2a2540" stroke-width="1.2" />
+<text x="492.8" y="827.2" font-size="8" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">SOLAR</text>
+<circle cx="467.2" cy="332.8" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<circle cx="518.4" cy="332.8" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<circle cx="467.2" cy="268.8" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<circle cx="518.4" cy="268.8" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<circle cx="467.2" cy="204.8" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<circle cx="518.4" cy="204.8" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<circle cx="467.2" cy="140.8" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<circle cx="518.4" cy="140.8" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<polygon points="326.4,316.8 325,306 320.8,296 314.2,287.4 305.6,280.8 295.6,276.6 284.8,275.2 274,276.6 264,280.8 255.4,287.4 248.8,296 244.6,306 243.2,316.8 244.6,327.6 248.8,337.6 255.4,346.2 264,352.8 274,357 284.8,358.4 295.6,357 305.6,352.8 314.2,346.2 320.8,337.6 325,327.6" fill="#b8b2cc" stroke="#2a2540" stroke-width="1.2" />
+<text x="284.8" y="320" font-size="9" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">PAD</text>
+<text x="12.8" y="28.8" font-size="17" fill="#2a2540" text-anchor="start" font-family="Verdana, sans-serif">Kepler Civic Center</text>
+<line x1="793.6" y1="960" x2="953.6" y2="960" stroke="#2a2540" stroke-width="2"/>
+<text x="873.6" y="952" font-size="10" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">50 m</text>
+<text x="960" y="28.8" font-size="10" fill="#55607a" text-anchor="end" font-family="Verdana, sans-serif">+z: sunward</text>
+<rect x="14" y="1002" width="14" height="12" fill="#8a8296" stroke="#2a2540"/>
+<text x="34" y="1012" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Dome A (terraced)</text>
+<rect x="260.5" y="1002" width="14" height="12" fill="#f3eee4" stroke="#2a2540"/>
+<text x="280.5" y="1012" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Dome B (geodesic on a drum)</text>
+<rect x="507" y="1002" width="14" height="12" fill="#fff4e0" stroke="#2a2540"/>
+<text x="527" y="1012" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Raised module / longhouse</text>
+<rect x="753.5" y="1002" width="14" height="12" fill="#ff9f1c" stroke="#2a2540"/>
+<text x="773.5" y="1012" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Shop; the commons module</text>
+<rect x="14" y="1024" width="14" height="12" fill="#ffd23f" stroke="#2a2540"/>
+<text x="34" y="1034" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Market stall</text>
+<rect x="260.5" y="1024" width="14" height="12" fill="#9be7ff" stroke="#2a2540"/>
+<text x="280.5" y="1034" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Greenhouse</text>
+<rect x="507" y="1024" width="14" height="12" fill="#9d97b0" stroke="#2a2540"/>
+<text x="527" y="1034" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Paving</text>
+<rect x="753.5" y="1024" width="14" height="12" fill="#1d2f6b" stroke="#2a2540"/>
+<text x="773.5" y="1034" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Solar</text>
+<text x="14" y="1064" font-size="11" fill="#55607a" font-family="Verdana, sans-serif">Dashed: the town's radius (140 m) and 0.85 of it. Red: the pad's flight disc. Thick cream lines: tunnels.</text>
+<text x="14" y="1086" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">The new hall stands where the gold council dome is, replacing it and the clock-tower hall both. Civic Avenue runs 70 m from the arrivals side to its</text>
+<text x="14" y="1101" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">forecourt between two rows of shops; the big family domes close the back in an arc.</text>
+</svg>

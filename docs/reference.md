@@ -518,6 +518,8 @@ tools/
   meridian-layouts.mjs     Meridian Exchange layout study (docs/meridian-layouts.md)
   ilmb-layouts.mjs         the ILMB's quarters and roads: clearance check and plans of today's (src/ilmbLayout.js) and Draft B
                            (docs/ilmb-layouts.md)
+  kepler-layouts.mjs       the Kepler towns' three layout proposals and the Civic Center's: clearance check, plans and
+                           layouts.json (docs/kepler-proposals/)
   winch-ride.mjs           headless winch test; run --gate ring after touching src/winch.js
   zbornak-chimeras.mjs     exports a few game chimeras as GLBs for the Antimatter Lab draft's renders (docs/zbornak-proposals/)
   zbornak-screens.mjs      shoots the Antimatter Lab draft's screen mock-ups (docs/zbornak-proposals/screens/terminal.html)
@@ -599,7 +601,11 @@ tools/
                            slot builds the other drafts); preview_zbornak_lab.py renders the views, robots.gif, the plan, the
                            turnaround, the door drafts (doors)
     proposals/             freighter, Kepler Habitat and War-Rig design studies, Cycles preview renders
-                           (warrig_b.py, the War-Rig's runner-up; preview_warrig.py renders both to docs/warrig-proposals)
+                           (warrig_b.py, the War-Rig's runner-up; preview_warrig.py renders both to docs/warrig-proposals);
+                           the Kepler town kit's drafts (docs/kepler-proposals): kepler_kit.py (two hab-dome remodels, the
+                           station pieces), kepler_domes.py (them lined up), kepler_hall_a.py and kepler_hall_b.py (the two
+                           town halls), kepler_town.py (a layout from tools/kepler-layouts.mjs stood up in 3D),
+                           preview_kepler.py (renders them all)
 ```
 
 **Blender models:** each builder runs in Blender's Scripting tab or headless (`tools/setup-blender.sh` installs

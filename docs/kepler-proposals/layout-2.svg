@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 826 976" width="826" height="976">
+<rect width="826" height="976" fill="#c9c1d8"/>
+<circle cx="412.8" cy="412.8" r="368" fill="none" stroke="#8a87a0" stroke-dasharray="6 6"/>
+<circle cx="412.8" cy="412.8" r="312.8" fill="none" stroke="#8a87a0" stroke-dasharray="2 6"/>
+<polygon points="246.4,393.6 579.2,393.6 579.2,361.6 246.4,361.6" fill="#9d97b0" stroke="none" stroke-width="1.2" />
+<polygon points="368,361.6 457.6,361.6 457.6,265.6 368,265.6" fill="#9d97b0" stroke="none" stroke-width="1.2" />
+<circle cx="204.8" cy="236.8" r="50.24" fill="none" stroke="#ff3b5c" stroke-dasharray="3 4"/>
+<polygon points="259.8,465.3 292.4,448.2 280.5,425.5 247.9,442.6" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="291.4,448.7 325.8,435.7 318.5,416.5 284.1,429.6" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="324.4,436.1 360.2,427.3 354,402.4 318.3,411.3" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="359,427.4 395.5,423 393,402.7 356.5,407.1" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="394.4,423 431.2,423 431.2,397.4 394.4,397.4" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="430.1,423 466.6,427.4 469.1,407.1 432.6,402.7" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="465.4,427.3 501.2,436.1 507.3,411.3 471.6,402.4" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="499.8,435.7 534.2,448.7 541.5,429.6 507.1,416.5" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="533.2,448.2 565.8,465.3 577.7,442.6 545.1,425.5" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="340.5,331.2 340.5,356.8 368,356.8 368,331.2" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="485.1,356.8 485.1,331.2 457.6,331.2 457.6,356.8" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="340.5,303.7 340.5,329.3 368,329.3 368,303.7" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="485.1,329.3 485.1,303.7 457.6,303.7 457.6,329.3" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="340.5,276.2 340.5,301.8 368,301.8 368,276.2" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="485.1,301.8 485.1,276.2 457.6,276.2 457.6,301.8" fill="#ff9f1c" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="390.1,340.6 403.5,340.6 403.5,331.4 390.1,331.4" fill="#ffd23f" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="422.1,318.2 435.5,318.2 435.5,309 422.1,309" fill="#ffd23f" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="390.1,295.8 403.5,295.8 403.5,286.6 390.1,286.6" fill="#ffd23f" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="173.8,393 178.2,407 240.7,387.1 236.3,373" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="191.1,447.3 204.9,440.3 216,429.4 223.1,415.6 225.6,400.3 223.3,384.9 216.3,371.1 205.4,360 191.6,352.9 176.3,350.4 160.9,352.7 147.1,359.7 136,370.6 128.9,384.4 126.4,399.7 128.7,415.1 135.7,428.9 146.6,440 160.4,447.1 175.7,449.6" fill="#f3eee4" stroke="#2a2540" stroke-width="1.2" />
+<text x="176" y="403.2" font-size="9" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">B 15</text>
+<polygon points="640.8,406.9 645.6,393.1 592.8,374.5 587.9,388.4" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="656.4,362.2 644.1,360 631.7,361.7 620.4,367.1 611.4,375.8 605.4,386.8 603.2,399.1 604.9,411.5 610.3,422.8 619,431.8 630,437.8 642.3,440 654.7,438.3 666,432.9 675,424.2 681,413.2 683.2,400.9 681.5,388.5 676.1,377.2 667.4,368.2" fill="#f3eee4" stroke="#2a2540" stroke-width="1.2" />
+<text x="643.2" y="403.2" font-size="9" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">B 12</text>
+<polygon points="405.4,579.2 420.2,579.2 420.2,515.2 405.4,515.2" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="465.9,579.2 463.3,562.8 455.8,548 444,536.2 429.2,528.7 412.8,526.1 396.4,528.7 381.6,536.2 369.8,548 362.3,562.8 359.7,579.2 362.3,595.6 369.8,610.4 381.6,622.2 396.4,629.7 412.8,632.3 429.2,629.7 444,622.2 455.8,610.4 463.3,595.6" fill="#8a8296" stroke="#2a2540" stroke-width="1.2" />
+<circle cx="412.8" cy="579.2" r="41.6" fill="#fff4e0" stroke="#ff9f1c" stroke-width="2"/>
+<text x="412.8" y="582.4" font-size="9" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">A 13</text>
+<polygon points="257.9,288 257.9,320 316.2,320 316.2,288" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="567.7,320 567.7,288 509.4,288 509.4,320" fill="#fff4e0" stroke="#2a2540" stroke-width="1.2" />
+<polygon points="287.4,509.4 287.4,533.8 346.2,533.8 346.2,509.4" fill="#9be7ff" stroke="#2a2540" stroke-width="1.2" />
+<text x="316.8" y="524.8" font-size="8" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">GH</text>
+<polygon points="479.4,509.4 479.4,533.8 538.2,533.8 538.2,509.4" fill="#9be7ff" stroke="#2a2540" stroke-width="1.2" />
+<text x="508.8" y="524.8" font-size="8" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">GH</text>
+<polygon points="625.9,508.8 623.9,501.4 618.6,496.1 611.2,494.1 603.8,496.1 598.5,501.4 596.5,508.8 598.5,516.2 603.8,521.5 611.2,523.5 618.6,521.5 623.9,516.2" fill="#d8d4e8" stroke="#2a2540" stroke-width="1.2" />
+<text x="611.2" y="486.4" font-size="8" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">WATER</text>
+<polygon points="221.4,515.2 219.4,510.2 214.4,508.2 209.4,510.2 207.4,515.2 209.4,520.2 214.4,522.2 219.4,520.2" fill="#8a87a0" stroke="#2a2540" stroke-width="1.2" />
+<text x="214.4" y="500.8" font-size="8" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">MAST</text>
+<polygon points="378.2,674.2 447.4,674.2 447.4,663.4 378.2,663.4" fill="#1d2f6b" stroke="#2a2540" stroke-width="1.2" />
+<text x="412.8" y="657.6" font-size="8" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">SOLAR</text>
+<circle cx="265.6" cy="356.8" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<circle cx="316.8" cy="356.8" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<circle cx="508.8" cy="356.8" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<circle cx="560" cy="356.8" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<circle cx="371.2" cy="259.2" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<circle cx="454.4" cy="259.2" r="2.2" fill="#fff6a8" stroke="#2a2540" stroke-width="0.8"/>
+<polygon points="246.4,236.8 245,226 240.8,216 234.2,207.4 225.6,200.8 215.6,196.6 204.8,195.2 194,196.6 184,200.8 175.4,207.4 168.8,216 164.6,226 163.2,236.8 164.6,247.6 168.8,257.6 175.4,266.2 184,272.8 194,277 204.8,278.4 215.6,277 225.6,272.8 234.2,266.2 240.8,257.6 245,247.6" fill="#b8b2cc" stroke="#2a2540" stroke-width="1.2" />
+<text x="204.8" y="240" font-size="9" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">PAD</text>
+<text x="12.8" y="28.8" font-size="17" fill="#2a2540" text-anchor="start" font-family="Verdana, sans-serif">Layout 2: The Caterpillar</text>
+<line x1="633.6" y1="800" x2="793.6" y2="800" stroke="#2a2540" stroke-width="2"/>
+<text x="713.6" y="792" font-size="10" fill="#2a2540" text-anchor="middle" font-family="Verdana, sans-serif">50 m</text>
+<text x="800" y="28.8" font-size="10" fill="#55607a" text-anchor="end" font-family="Verdana, sans-serif">+z: sunward</text>
+<rect x="14" y="842" width="14" height="12" fill="#8a8296" stroke="#2a2540"/>
+<text x="34" y="852" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Dome A (terraced)</text>
+<rect x="220.5" y="842" width="14" height="12" fill="#f3eee4" stroke="#2a2540"/>
+<text x="240.5" y="852" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Dome B (geodesic on a drum)</text>
+<rect x="427" y="842" width="14" height="12" fill="#fff4e0" stroke="#2a2540"/>
+<text x="447" y="852" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Raised module / longhouse</text>
+<rect x="633.5" y="842" width="14" height="12" fill="#ff9f1c" stroke="#2a2540"/>
+<text x="653.5" y="852" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Shop; the commons module</text>
+<rect x="14" y="864" width="14" height="12" fill="#ffd23f" stroke="#2a2540"/>
+<text x="34" y="874" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Market stall</text>
+<rect x="220.5" y="864" width="14" height="12" fill="#9be7ff" stroke="#2a2540"/>
+<text x="240.5" y="874" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Greenhouse</text>
+<rect x="427" y="864" width="14" height="12" fill="#9d97b0" stroke="#2a2540"/>
+<text x="447" y="874" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Paving</text>
+<rect x="633.5" y="864" width="14" height="12" fill="#1d2f6b" stroke="#2a2540"/>
+<text x="653.5" y="874" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Solar</text>
+<text x="14" y="904" font-size="11" fill="#55607a" font-family="Verdana, sans-serif">Dashed: the town's radius (115 m) and 0.85 of it. Red: the pad's flight disc. Thick cream lines: tunnels.</text>
+<text x="14" y="926" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">Nine raised modules on hydraulic legs, chained in a shallow arc 100 m long, the orange commons module in the middle: the</text>
+<text x="14" y="941" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">polar-station type. A promenade runs along the chain and a market court opens off it, under the commons' stair. Three domes anchor</text>
+<text x="14" y="956" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">the ends and the back.</text>
+</svg>

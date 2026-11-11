@@ -5,6 +5,14 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Kepler town kit: proposals, nothing in the game yet** (docs/kepler-proposals). Drafts in Blender for the next item of
+  docs/code-vs-blender.md: two hab-dome remodels in a quieter palette (A "the Shield", terraced; B "the Geode", a geodesic
+  shell on a drum), two town halls for the Civic Center (A "Earthrise Hall", B "Founders' Landing", both with the Earth
+  dial in place of the clock), the station pieces (a raised module on legs, a longhouse, a shop unit, a stall, a
+  greenhouse, a water tank, a mast, a tunnel), and three town layouts without the hub dome (Main Street, the Caterpillar,
+  the Courtyard) plus the Civic Center's, drawn and clearance-checked by the new `tools/kepler-layouts.mjs` and stood up in
+  3D by `tools/blender/proposals/kepler_town.py`. `preview_kepler.py` renders the pictures.
+
 - **Zbornak's spider tank is gone.** It never reached the game, and its walking and climbing never came right, so it is removed:
   its model (`spidertank.glb`, `build_spidertank.py`), `spidertank.js` and `spiderwalk.js`, its lab, its page (`docs/spidertank/`)
   and its Asset Row entry, and with it this list's notes on it. `gait.js` keeps only what walks the mites and chimeras (`makeGait`

@@ -77,7 +77,8 @@ These are procedural or effects, and Blender would only make them worse or slowe
    gameplay data in the viewer, then refine in Blender.
 2. ~~**The ILMB core**~~: done (November 2026), in two proposals for the central complex and wall (docs/ilmb-proposals).
 3. **Kepler towns' kit**: hab dome, tunnel, cabin, town hall, playground, water tower. One kit covers five towns and your
-   own town.
+   own town. Proposed (November 2026), waiting on the picks: two dome remodels, two town halls and three layouts without
+   the hub dome, in docs/kepler-proposals.
 4. **Military bases**: bunker, barracks, searchlight tower, defences (the defence turret is done: docs/turret-proposals).
 5. **Pirate dens**: shanties, wreck hulls, lookout, heaps (it can share parts with the Scrap Shack and Junk Pile).
 6. **Meridian Exchange tower and halls**, then the **Helium-3 Exchange** (excavator, derrick, spheres).

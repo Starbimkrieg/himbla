@@ -1,0 +1,1037 @@
+{
+ "pad": {
+  "k": "pad",
+  "x": -65,
+  "z": 55,
+  "r": 13
+ },
+ "layouts": [
+  {
+   "id": "1",
+   "name": "Main Street",
+   "r": 110,
+   "idea": "One paved street, 144 m end to end, in place of the hub dome. Shops line the sunward side, a market square opens off the other; homes stand in rows behind: longhouses on the back lane, domes at the corners.",
+   "pieces": [
+    {
+     "k": "pave",
+     "x0": -72,
+     "z0": -5,
+     "x1": 72,
+     "z1": 5
+    },
+    {
+     "k": "pave",
+     "x0": -70,
+     "z0": 5,
+     "x1": -62,
+     "z1": 42
+    },
+    {
+     "k": "plaza",
+     "x": 0,
+     "z": 19,
+     "r": 14
+    },
+    {
+     "k": "shop",
+     "x": -21.5,
+     "z": -9.4,
+     "yaw": 0,
+     "accent": "orange",
+     "name": "NOODLE BAR"
+    },
+    {
+     "k": "shop",
+     "x": -12.9,
+     "z": -9.4,
+     "yaw": 0,
+     "accent": "green",
+     "name": "CANTEEN"
+    },
+    {
+     "k": "shop",
+     "x": -4.3,
+     "z": -9.4,
+     "yaw": 0,
+     "accent": "teal",
+     "name": "SUIT SHOP"
+    },
+    {
+     "k": "shop",
+     "x": 4.3,
+     "z": -9.4,
+     "yaw": 0,
+     "accent": "ochre",
+     "name": "PARTS"
+    },
+    {
+     "k": "shop",
+     "x": 12.9,
+     "z": -9.4,
+     "yaw": 0,
+     "accent": "sage",
+     "name": "CLINIC"
+    },
+    {
+     "k": "shop",
+     "x": 21.5,
+     "z": -9.4,
+     "yaw": 0,
+     "accent": "dusk",
+     "name": "POST"
+    },
+    {
+     "k": "shop",
+     "x": -30.6,
+     "z": 9.4,
+     "yaw": 180,
+     "accent": "ochre",
+     "name": "GROCER"
+    },
+    {
+     "k": "shop",
+     "x": -22,
+     "z": 9.4,
+     "yaw": 180,
+     "accent": "sage",
+     "name": "TOOL LIBRARY"
+    },
+    {
+     "k": "shop",
+     "x": 22,
+     "z": 9.4,
+     "yaw": 180,
+     "accent": "dusk",
+     "name": "BARBER"
+    },
+    {
+     "k": "shop",
+     "x": 30.6,
+     "z": 9.4,
+     "yaw": 180,
+     "accent": "rose",
+     "name": "BAKERY"
+    },
+    {
+     "k": "stall",
+     "x": -7,
+     "z": 26,
+     "yaw": 180,
+     "accent": "orange"
+    },
+    {
+     "k": "stall",
+     "x": 0,
+     "z": 29,
+     "yaw": 180,
+     "accent": "green"
+    },
+    {
+     "k": "stall",
+     "x": 7,
+     "z": 26,
+     "yaw": 180,
+     "accent": "orange"
+    },
+    {
+     "k": "longhouse",
+     "x": -27,
+     "z": -30,
+     "yaw": 0,
+     "len": 16,
+     "door": "ochre"
+    },
+    {
+     "k": "longhouse",
+     "x": -9,
+     "z": -30,
+     "yaw": 0,
+     "len": 16,
+     "door": "rose"
+    },
+    {
+     "k": "longhouse",
+     "x": 9,
+     "z": -30,
+     "yaw": 0,
+     "len": 16,
+     "door": "teal"
+    },
+    {
+     "k": "longhouse",
+     "x": 27,
+     "z": -30,
+     "yaw": 0,
+     "len": 16,
+     "door": "sage"
+    },
+    {
+     "k": "domeA",
+     "x": -30,
+     "z": 48,
+     "r": 11,
+     "yaw": 180,
+     "door": "sage"
+    },
+    {
+     "k": "domeB",
+     "x": 4,
+     "z": 60,
+     "r": 15,
+     "yaw": 180,
+     "door": "dusk"
+    },
+    {
+     "k": "domeA",
+     "x": 40,
+     "z": 46,
+     "r": 12,
+     "yaw": 180,
+     "door": "ochre"
+    },
+    {
+     "k": "link",
+     "a": 0,
+     "b": 1
+    },
+    {
+     "k": "link",
+     "a": 1,
+     "b": 2
+    },
+    {
+     "k": "domeA",
+     "x": 58,
+     "z": -34,
+     "r": 12,
+     "yaw": -45,
+     "door": "rose"
+    },
+    {
+     "k": "domeB",
+     "x": -58,
+     "z": -34,
+     "r": 11,
+     "yaw": 45,
+     "door": "teal"
+    },
+    {
+     "k": "greenhouse",
+     "x": -49,
+     "z": 24,
+     "yaw": 90
+    },
+    {
+     "k": "greenhouse",
+     "x": 62,
+     "z": 22,
+     "yaw": 90
+    },
+    {
+     "k": "tank",
+     "x": 84,
+     "z": 0
+    },
+    {
+     "k": "mast",
+     "x": -84,
+     "z": -12
+    },
+    {
+     "k": "solar",
+     "x": 0,
+     "z": -62,
+     "yaw": 0,
+     "n": 4
+    },
+    {
+     "k": "lamp",
+     "x": -68,
+     "z": -6.5
+    },
+    {
+     "k": "lamp",
+     "x": -52,
+     "z": -6.5
+    },
+    {
+     "k": "lamp",
+     "x": -34,
+     "z": -6.5
+    },
+    {
+     "k": "lamp",
+     "x": 34,
+     "z": -6.5
+    },
+    {
+     "k": "lamp",
+     "x": 52,
+     "z": -6.5
+    },
+    {
+     "k": "lamp",
+     "x": 68,
+     "z": -6.5
+    },
+    {
+     "k": "lamp",
+     "x": -56,
+     "z": 6.5
+    },
+    {
+     "k": "lamp",
+     "x": -44,
+     "z": 6.5
+    },
+    {
+     "k": "lamp",
+     "x": 44,
+     "z": 6.5
+    },
+    {
+     "k": "lamp",
+     "x": 60,
+     "z": 6.5
+    }
+   ]
+  },
+  {
+   "id": "2",
+   "name": "The Caterpillar",
+   "r": 115,
+   "idea": "Nine raised modules on hydraulic legs, chained in a shallow arc 100 m long, the orange commons module in the middle: the polar-station type. A promenade runs along the chain and a market court opens off it, under the commons' stair. Three domes anchor the ends and the back.",
+   "pieces": [
+    {
+     "k": "pave",
+     "x0": -52,
+     "z0": 6,
+     "x1": 52,
+     "z1": 16
+    },
+    {
+     "k": "pave",
+     "x0": -14,
+     "z0": 16,
+     "x1": 14,
+     "z1": 46
+    },
+    {
+     "k": "stilt",
+     "x": -44.2,
+     "z": -10.9,
+     "yaw": -27.7,
+     "feature": false,
+     "stairs": true,
+     "door": "sage"
+    },
+    {
+     "k": "stilt",
+     "x": -33.7,
+     "z": -6.2,
+     "yaw": -20.8,
+     "feature": false,
+     "stairs": false,
+     "door": "dusk"
+    },
+    {
+     "k": "stilt",
+     "x": -22.8,
+     "z": -2.8,
+     "yaw": -13.9,
+     "feature": false,
+     "stairs": true,
+     "door": "ochre"
+    },
+    {
+     "k": "stilt",
+     "x": -11.5,
+     "z": -0.7,
+     "yaw": -6.9,
+     "feature": false,
+     "stairs": false,
+     "door": "rose"
+    },
+    {
+     "k": "stilt",
+     "x": 0,
+     "z": 0,
+     "yaw": 0,
+     "feature": true,
+     "stairs": true,
+     "door": "teal"
+    },
+    {
+     "k": "stilt",
+     "x": 11.5,
+     "z": -0.7,
+     "yaw": 6.9,
+     "feature": false,
+     "stairs": false,
+     "door": "sage"
+    },
+    {
+     "k": "stilt",
+     "x": 22.8,
+     "z": -2.8,
+     "yaw": 13.9,
+     "feature": false,
+     "stairs": true,
+     "door": "dusk"
+    },
+    {
+     "k": "stilt",
+     "x": 33.7,
+     "z": -6.2,
+     "yaw": 20.8,
+     "feature": false,
+     "stairs": false,
+     "door": "ochre"
+    },
+    {
+     "k": "stilt",
+     "x": 44.2,
+     "z": -10.9,
+     "yaw": 27.7,
+     "feature": false,
+     "stairs": true,
+     "door": "rose"
+    },
+    {
+     "k": "shop",
+     "x": -18.4,
+     "z": 21.5,
+     "yaw": 90,
+     "accent": "orange",
+     "name": "NOODLE BAR"
+    },
+    {
+     "k": "shop",
+     "x": 18.4,
+     "z": 21.5,
+     "yaw": -90,
+     "accent": "ochre",
+     "name": "PARTS"
+    },
+    {
+     "k": "shop",
+     "x": -18.4,
+     "z": 30.1,
+     "yaw": 90,
+     "accent": "green",
+     "name": "CANTEEN"
+    },
+    {
+     "k": "shop",
+     "x": 18.4,
+     "z": 30.1,
+     "yaw": -90,
+     "accent": "sage",
+     "name": "CLINIC"
+    },
+    {
+     "k": "shop",
+     "x": -18.4,
+     "z": 38.7,
+     "yaw": 90,
+     "accent": "teal",
+     "name": "SUIT SHOP"
+    },
+    {
+     "k": "shop",
+     "x": 18.4,
+     "z": 38.7,
+     "yaw": -90,
+     "accent": "dusk",
+     "name": "POST"
+    },
+    {
+     "k": "stall",
+     "x": -5,
+     "z": 24,
+     "yaw": 0,
+     "accent": "orange"
+    },
+    {
+     "k": "stall",
+     "x": 5,
+     "z": 31,
+     "yaw": 0,
+     "accent": "green"
+    },
+    {
+     "k": "stall",
+     "x": -5,
+     "z": 38,
+     "yaw": 0,
+     "accent": "orange"
+    },
+    {
+     "k": "domeB",
+     "x": -74,
+     "z": 4,
+     "r": 15,
+     "yaw": 72.3,
+     "door": "sage"
+    },
+    {
+     "k": "domeB",
+     "x": 72,
+     "z": 4,
+     "r": 12,
+     "yaw": -70.7,
+     "door": "dusk"
+    },
+    {
+     "k": "domeA",
+     "x": 0,
+     "z": -52,
+     "r": 13,
+     "yaw": 0,
+     "door": "ochre"
+    },
+    {
+     "k": "longhouse",
+     "x": -40,
+     "z": 34,
+     "yaw": 90,
+     "len": 16,
+     "door": "ochre"
+    },
+    {
+     "k": "longhouse",
+     "x": 40,
+     "z": 34,
+     "yaw": -90,
+     "len": 16,
+     "door": "rose"
+    },
+    {
+     "k": "greenhouse",
+     "x": -30,
+     "z": -34,
+     "yaw": 90
+    },
+    {
+     "k": "greenhouse",
+     "x": 30,
+     "z": -34,
+     "yaw": 90
+    },
+    {
+     "k": "tank",
+     "x": 62,
+     "z": -30
+    },
+    {
+     "k": "mast",
+     "x": -62,
+     "z": -32
+    },
+    {
+     "k": "solar",
+     "x": 0,
+     "z": -80,
+     "yaw": 0,
+     "n": 4
+    },
+    {
+     "k": "lamp",
+     "x": -46,
+     "z": 17.5
+    },
+    {
+     "k": "lamp",
+     "x": -30,
+     "z": 17.5
+    },
+    {
+     "k": "lamp",
+     "x": 30,
+     "z": 17.5
+    },
+    {
+     "k": "lamp",
+     "x": 46,
+     "z": 17.5
+    },
+    {
+     "k": "lamp",
+     "x": -13,
+     "z": 48
+    },
+    {
+     "k": "lamp",
+     "x": 13,
+     "z": 48
+    }
+   ]
+  },
+  {
+   "id": "3",
+   "name": "The Courtyard",
+   "r": 110,
+   "idea": "Six domes in a ring 120 m across, joined by tunnels into one wall with a single gate toward the landing pad; inside, a paved market court round the water tank, the shops along its far side facing the gate.",
+   "pieces": [
+    {
+     "k": "plaza",
+     "x": 0,
+     "z": 0,
+     "r": 38
+    },
+    {
+     "k": "walk",
+     "x": -23,
+     "z": 19.3,
+     "x2": -54,
+     "z2": 46,
+     "w": 8
+    },
+    {
+     "k": "domeB",
+     "x": 38.6,
+     "z": 46,
+     "r": 11,
+     "yaw": -140,
+     "door": "sage"
+    },
+    {
+     "k": "domeA",
+     "x": -20.5,
+     "z": 56.4,
+     "r": 12,
+     "yaw": 160,
+     "door": "dusk"
+    },
+    {
+     "k": "domeB",
+     "x": -59.1,
+     "z": 10.4,
+     "r": 13,
+     "yaw": 100,
+     "door": "ochre"
+    },
+    {
+     "k": "domeA",
+     "x": -38.6,
+     "z": -46,
+     "r": 14,
+     "yaw": 40,
+     "door": "rose"
+    },
+    {
+     "k": "domeB",
+     "x": 20.5,
+     "z": -56.4,
+     "r": 12,
+     "yaw": -20,
+     "door": "teal"
+    },
+    {
+     "k": "domeA",
+     "x": 59.1,
+     "z": -10.4,
+     "r": 13,
+     "yaw": -80,
+     "door": "sage"
+    },
+    {
+     "k": "link",
+     "a": 0,
+     "b": 1
+    },
+    {
+     "k": "link",
+     "a": 2,
+     "b": 3
+    },
+    {
+     "k": "link",
+     "a": 3,
+     "b": 4
+    },
+    {
+     "k": "link",
+     "a": 4,
+     "b": 5
+    },
+    {
+     "k": "link",
+     "a": 5,
+     "b": 0
+    },
+    {
+     "k": "shop",
+     "x": 2.8,
+     "z": -31.9,
+     "yaw": -5,
+     "accent": "orange",
+     "name": "NOODLE BAR"
+    },
+    {
+     "k": "shop",
+     "x": 12.5,
+     "z": -29.5,
+     "yaw": -23,
+     "accent": "green",
+     "name": "CANTEEN"
+    },
+    {
+     "k": "shop",
+     "x": 21,
+     "z": -24.2,
+     "yaw": -41,
+     "accent": "teal",
+     "name": "SUIT SHOP"
+    },
+    {
+     "k": "shop",
+     "x": 27.4,
+     "z": -16.5,
+     "yaw": -58.9,
+     "accent": "ochre",
+     "name": "PARTS"
+    },
+    {
+     "k": "shop",
+     "x": 31.2,
+     "z": -7.2,
+     "yaw": -77,
+     "accent": "sage",
+     "name": "CLINIC"
+    },
+    {
+     "k": "shop",
+     "x": 31.9,
+     "z": 2.8,
+     "yaw": -95,
+     "accent": "dusk",
+     "name": "POST"
+    },
+    {
+     "k": "stall",
+     "x": 7,
+     "z": 12.1,
+     "yaw": 30,
+     "accent": "orange"
+    },
+    {
+     "k": "stall",
+     "x": -2.4,
+     "z": 13.8,
+     "yaw": -9.9,
+     "accent": "green"
+    },
+    {
+     "k": "stall",
+     "x": -14,
+     "z": 0,
+     "yaw": -90,
+     "accent": "orange"
+    },
+    {
+     "k": "stall",
+     "x": -10.7,
+     "z": -9,
+     "yaw": -130.1,
+     "accent": "green"
+    },
+    {
+     "k": "tank",
+     "x": 0,
+     "z": 0
+    },
+    {
+     "k": "greenhouse",
+     "x": 7.8,
+     "z": 29,
+     "yaw": -75
+    },
+    {
+     "k": "greenhouse",
+     "x": -28.2,
+     "z": -10.3,
+     "yaw": 160
+    },
+    {
+     "k": "mast",
+     "x": -84,
+     "z": -30
+    },
+    {
+     "k": "solar",
+     "x": 10,
+     "z": 88,
+     "yaw": 0,
+     "n": 3
+    },
+    {
+     "k": "lamp",
+     "x": 34.8,
+     "z": 12.7
+    },
+    {
+     "k": "lamp",
+     "x": -21.2,
+     "z": 30.3
+    },
+    {
+     "k": "lamp",
+     "x": -33.5,
+     "z": 15.6
+    },
+    {
+     "k": "lamp",
+     "x": -12.7,
+     "z": -34.8
+    }
+   ]
+  },
+  {
+   "id": "civic",
+   "name": "Kepler Civic Center",
+   "r": 140,
+   "idea": "The new hall stands where the gold council dome is, replacing it and the clock-tower hall both. Civic Avenue runs 70 m from the arrivals side to its forecourt between two rows of shops; the big family domes close the back in an arc.",
+   "pieces": [
+    {
+     "k": "hall",
+     "x": 0,
+     "z": 0,
+     "yaw": 0
+    },
+    {
+     "k": "pave",
+     "x0": -6,
+     "z0": 44,
+     "x1": 6,
+     "z1": 112
+    },
+    {
+     "k": "shop",
+     "x": -16.4,
+     "z": 56,
+     "yaw": 90,
+     "accent": "orange",
+     "name": "NOODLE BAR"
+    },
+    {
+     "k": "shop",
+     "x": 16.4,
+     "z": 56,
+     "yaw": -90,
+     "accent": "sage",
+     "name": "CLINIC"
+    },
+    {
+     "k": "shop",
+     "x": -16.4,
+     "z": 64.6,
+     "yaw": 90,
+     "accent": "green",
+     "name": "CANTEEN"
+    },
+    {
+     "k": "shop",
+     "x": 16.4,
+     "z": 64.6,
+     "yaw": -90,
+     "accent": "dusk",
+     "name": "POST"
+    },
+    {
+     "k": "shop",
+     "x": -16.4,
+     "z": 73.2,
+     "yaw": 90,
+     "accent": "teal",
+     "name": "SUIT SHOP"
+    },
+    {
+     "k": "shop",
+     "x": 16.4,
+     "z": 73.2,
+     "yaw": -90,
+     "accent": "rose",
+     "name": "GROCER"
+    },
+    {
+     "k": "shop",
+     "x": -16.4,
+     "z": 81.8,
+     "yaw": 90,
+     "accent": "ochre",
+     "name": "PARTS"
+    },
+    {
+     "k": "shop",
+     "x": 16.4,
+     "z": 81.8,
+     "yaw": -90,
+     "accent": "orange",
+     "name": "TOOL LIBRARY"
+    },
+    {
+     "k": "domeA",
+     "x": -65.8,
+     "z": -23.9,
+     "r": 14,
+     "yaw": 70,
+     "door": "sage"
+    },
+    {
+     "k": "domeB",
+     "x": -40.2,
+     "z": -57.3,
+     "r": 16,
+     "yaw": 35.1,
+     "door": "dusk"
+    },
+    {
+     "k": "domeA",
+     "x": 0,
+     "z": -70,
+     "r": 18,
+     "yaw": 0,
+     "door": "ochre"
+    },
+    {
+     "k": "domeB",
+     "x": 40.2,
+     "z": -57.3,
+     "r": 16,
+     "yaw": -35.1,
+     "door": "rose"
+    },
+    {
+     "k": "domeA",
+     "x": 65.8,
+     "z": -23.9,
+     "r": 14,
+     "yaw": -70,
+     "door": "teal"
+    },
+    {
+     "k": "link",
+     "a": 0,
+     "b": 1
+    },
+    {
+     "k": "link",
+     "a": 1,
+     "b": 2
+    },
+    {
+     "k": "link",
+     "a": 2,
+     "b": 3
+    },
+    {
+     "k": "link",
+     "a": 3,
+     "b": 4
+    },
+    {
+     "k": "longhouse",
+     "x": 48,
+     "z": 62,
+     "yaw": -90,
+     "len": 16,
+     "door": "ochre"
+    },
+    {
+     "k": "longhouse",
+     "x": 48,
+     "z": 80,
+     "yaw": -90,
+     "len": 16,
+     "door": "rose"
+    },
+    {
+     "k": "longhouse",
+     "x": -48,
+     "z": 84,
+     "yaw": 90,
+     "len": 16,
+     "door": "teal"
+    },
+    {
+     "k": "longhouse",
+     "x": -46,
+     "z": 99,
+     "yaw": 90,
+     "len": 16,
+     "door": "sage"
+    },
+    {
+     "k": "greenhouse",
+     "x": 72,
+     "z": 16,
+     "yaw": 0
+    },
+    {
+     "k": "greenhouse",
+     "x": 84,
+     "z": 16,
+     "yaw": 0
+    },
+    {
+     "k": "tank",
+     "x": -80,
+     "z": 8
+    },
+    {
+     "k": "mast",
+     "x": 86,
+     "z": -12
+    },
+    {
+     "k": "solar",
+     "x": 0,
+     "z": -108,
+     "yaw": 0,
+     "n": 5
+    },
+    {
+     "k": "lamp",
+     "x": -8,
+     "z": 50
+    },
+    {
+     "k": "lamp",
+     "x": 8,
+     "z": 50
+    },
+    {
+     "k": "lamp",
+     "x": -8,
+     "z": 70
+    },
+    {
+     "k": "lamp",
+     "x": 8,
+     "z": 70
+    },
+    {
+     "k": "lamp",
+     "x": -8,
+     "z": 90
+    },
+    {
+     "k": "lamp",
+     "x": 8,
+     "z": 90
+    },
+    {
+     "k": "lamp",
+     "x": -8,
+     "z": 110
+    },
+    {
+     "k": "lamp",
+     "x": 8,
+     "z": 110
+    }
+   ]
+  }
+ ]
+}
