@@ -10,7 +10,6 @@ import { buildBuggyRig, linkBar } from '../traffic.js';
 import { BOSS_MODELS, FOES } from '../storyAssets.js';
 import { makeMothership } from '../spindle.js';
 import { lineUp, together } from './common.js';
-import { loadSpiderTank, makeSpiderTank } from '../spidertank.js';
 
 const FACTION_COLOR = { spacecom: 0xffd23f, vostok: 0xff3b5c, meridian: 0x2ec4ff, kepler: 0xff9f1c, daedalus: 0xc77dff };
 
@@ -218,18 +217,6 @@ const ground = {
         const ts = [...Object.values(FACTION_COLOR).map((c) => makeTurret({ color: c })), makeTurret({ color: FACTION_COLOR.spacecom })];
         ts[5].root.scale.setScalar(1.35);
         return { root: lineUp(ts.map((t, i) => part(pose(t.root, 0.5), i === 5 ? 8 : 6.5, i === 5 ? 8 : 6.5)), 0.5).root };
-      },
-    },
-    {
-      // Zbornak's spider tank, the Triple Crown's reward (docs/spidertank/): walking, and closed up into its skimming bead
-      id: 'veh.spidertank', label: 'ZBORNAK SPIDER TANK · WALK, OVERDRIVE', w: 22, d: 12,
-      make: () => {
-        const root = new THREE.Group();
-        loadSpiderTank().then((kit) => {
-          const cells = [[0, 12], [1, 8]].map(([f, w]) => part(pose(makeSpiderTank(kit).folded(f).root, YAW), w, 12));
-          root.add(lineUp(cells).root);
-        });
-        return { root };
       },
     },
   ],

@@ -16,10 +16,7 @@ import * as THREE from 'three';
 // makeGait(root, inner, legs) -> null (no jointed legs) or { update(dt, ground, gap), chains, vmax, weight }, called by anim after the
 // swing is set (each jointed leg's swing angle in L.swing). ground(p, out) puts the ground point under world point p in out and returns
 // it. The root's world transform must be this frame's (the caller places it before calling anim).
-//
-// The spider tank walks its own way (src/spiderwalk.js) on this file's legs: legChain (a leg's chain), solveLeg and solveBent (its
-// joints reaching a foot; solveBent exactly, the knee bent up as built, the ankle folding with the reach, so a three-bone leg never
-// flips between shapes), poseLeg.
+
 
 const STRIDE = 0.5;     // a foot steps once its rest spot is this far from it (of the leg's span: hip to foot, along the ground)
 const LEAD = 0.55;      // walking, it lands this far ahead of its rest spot (of the stride)
@@ -39,13 +36,11 @@ const TILT = 0.45;      // rad the most the body pitches or rolls to its feet
 const SETTLED = 0.4;    // of a step, after which its landing keeps its height (a foot doesn't flop between two)
 const ITER = 24;        // FABRIK passes at most (a mite's leg is within a tenth of a millimetre in three; a long leg swung far takes more)
 const OVER_EDGE = 0.4;  // m the most a step up or down arcs over what is between (its rise or drop clears the edge)
-const FOLD = 0.55;      // solveBent: the ankle's bend at the shortest reach (of its rest angle; straighter out to 1.15 of it)
-const FEMUR_UP = 1.2;   // solveBent, three bones: rad the thigh rises over the level at most (out from the hip); closer in, the ankle folds
 
 const _p = new THREE.Vector3(), _up = new THREE.Vector3(), _g = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 const _vh = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4(), _inv = new THREE.Matrix4(), _q = new THREE.Quaternion();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _e = new THREE.Euler(), _X = new THREE.Vector3(1, 0, 0);
-const _t = new THREE.Vector3(), _d = new THREE.Vector3(), _r = new THREE.Matrix4(), _Y = new THREE.Vector3(0, 1, 0);
+const _t = new THREE.Vector3(), _d = new THREE.Vector3(), _r = new THREE.Matrix4();
 const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3();
 const smooth = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
 
@@ -214,9 +209,8 @@ export function makeGait(root, inner, legs) {
 }
 
 // a jointed leg's chain: its joints from the hip (L.node) down its `knee` pivots to its `foot`, their rest places (in the legs part's
-// frame and the root's), bone lengths and rest frames, and its reach; null where L.node has no knees or no foot. pole: solved exactly
-// (solveBent). Also for callers that walk the legs themselves (src/spiderwalk.js), with solveLeg and poseLeg
-export function legChain(L, rootInv, pole = false) {
+// frame and the root's), bone lengths and rest frames, and its reach; null where L.node has no knees or no foot
+function legChain(L, rootInv) {
   const joints = [L.node];
   let foot = null;
   for (let n = L.node; n && !foot;) {
@@ -246,11 +240,10 @@ export function legChain(L, rootInv, pole = false) {
   const ux = rest.x - hip.x, uz = rest.z - hip.z, room = Math.sqrt(Math.max(0, reach * reach - (hip.y - rest.y) ** 2 - ux * ux));
   const grow = Math.min((uz + room) / (STRIDE * span), (room - uz) / (LEAD * STRIDE * span));     // (the stride it allows, of a walk's)
   return {
-    L, joints, space, pts, len, dir, W, nRest, basis, rest, span, grow, reach, back: 0.95 * (uz + room), fwd: 0.95 * (room - uz),
-    bend: pole && nRest && pts.length <= 4 ? bendOf(pts) : null,
+    L, joints, space, pts, len, dir, W, nRest, basis, rest, span, grow, reach,
     thr: STRIDE * span, hipY: hip.y, hip, group: L.ph ? 1 : 0,
     bind: joints.map((j) => j.quaternion.clone()), work: pts.map((p) => p.clone()), ik: joints.map(() => new THREE.Quaternion()),
-    turned: joints.map(() => new THREE.Quaternion()), lead: 0, trip: 0, swivel: 0,
+    turned: joints.map(() => new THREE.Quaternion()), lead: 0, trip: 0,
     F: new THREE.Vector3(), S0: new THREE.Vector3(), T: new THREE.Vector3(), at: new THREE.Vector3(), base: new THREE.Vector3(), s: 0, dur: DUR_MAX, lift: 0, over: 0, stepping: false,
   };
 }
@@ -263,89 +256,21 @@ function frameOf(d, n, out) {
   return out.makeBasis(_x, _y, _z);
 }
 
-// a two- or three-bone leg's rest shape, for the exact solve: its hip-to-foot line, the knee's side of it (the pole), and the ankle's
-// angle and side (all in the legs part's frame, y up)
-function bendOf(pts) {
-  const n = pts.length - 1, ax = new THREE.Vector3().subVectors(pts[n], pts[0]), d0 = ax.length();
-  ax.divideScalar(d0);
-  const k = new THREE.Vector3().subVectors(pts[1], pts[0]);
-  const pole = k.addScaledVector(ax, -k.dot(ax)).normalize();
-  const B = { pole, h0: Math.atan2(ax.x, ax.z), d0, theta: Math.PI, side: 1 };
-  if (n === 3) {
-    _a.subVectors(pts[1], pts[2]).normalize(); _b.subVectors(pts[3], pts[2]).normalize();
-    B.theta = Math.acos(THREE.MathUtils.clamp(_a.dot(_b), -1, 1));
-    const kf = _d.subVectors(pts[3], pts[1]).normalize(), e = _x.copy(pole).addScaledVector(kf, -pole.dot(kf)).normalize();
-    B.side = Math.sign(_y.subVectors(pts[2], pts[1]).dot(e)) || 1;
-  }
-  return B;
-}
-
-// the joints of a bent leg reaching t, exactly: in the upright plane through its hip and t (turned from the rest one about up, and by
-// swivel about the hip-to-t line), the knee on its pole's side, the ankle's angle folding as t comes in; returns the plane's normal (as
-// the rest one's sign)
-export function solveBent(c, t, swivel = c.swivel) {
-  const p = c.work, B = c.bend, n = p.length - 1, L0 = c.len[0], L1 = c.len[1];
-  p[0].copy(c.pts[0]);
-  const a = _a.subVectors(t, p[0]), d = a.length();
-  a.divideScalar(Math.max(d, 1e-6));
-  const b = _b.copy(B.pole).applyAxisAngle(_Y, Math.atan2(a.x, a.z) - B.h0);
-  b.addScaledVector(a, -b.dot(a));
-  if (b.lengthSq() < 1e-8) b.set(0, 1, 0).addScaledVector(a, -a.y);
-  b.normalize();
-  if (swivel) b.applyAxisAngle(a, swivel);
-  let Lv = L1, th = 0;
-  if (n === 3) {
-    const L2 = c.len[2];
-    th = Math.min(Math.PI - 0.02, B.theta * THREE.MathUtils.clamp(FOLD + (1 - FOLD) * d / B.d0, FOLD, 1.15));
-    Lv = Math.sqrt(L1 * L1 + L2 * L2 - 2 * L1 * L2 * Math.cos(th));
-  }
-  let dd = THREE.MathUtils.clamp(d, Math.abs(L0 - Lv) + 1e-4, L0 + Lv - 1e-4);
-  let A = Math.acos(THREE.MathUtils.clamp((L0 * L0 + dd * dd - Lv * Lv) / (2 * L0 * dd), -1, 1));
-  // (the thigh no steeper than FEMUR_UP over the level, out from the hip: a foot drawn in close, the ankle folds further instead, so
-  // the knee stays up and out over its foot, never back over the body)
-  if (n === 3) {
-    const Amax = FEMUR_UP - Math.atan2(a.y, Math.hypot(a.x, a.z));
-    if (A > Amax && Amax > 0.05) {
-      const L2 = c.len[2];
-      Lv = Math.sqrt(Math.max(1e-6, L0 * L0 + dd * dd - 2 * L0 * dd * Math.cos(Amax)));
-      Lv = THREE.MathUtils.clamp(Lv, Math.abs(L1 - L2) + 0.05, L1 + L2 - 0.05);
-      th = Math.acos(THREE.MathUtils.clamp((L1 * L1 + L2 * L2 - Lv * Lv) / (2 * L1 * L2), -1, 1));
-      dd = THREE.MathUtils.clamp(d, Math.abs(L0 - Lv) + 1e-4, L0 + Lv - 1e-4);
-      A = Math.acos(THREE.MathUtils.clamp((L0 * L0 + dd * dd - Lv * Lv) / (2 * L0 * dd), -1, 1));
-    }
-  }
-  p[1].copy(p[0]).addScaledVector(a, L0 * Math.cos(A)).addScaledVector(b, L0 * Math.sin(A));
-  const end = _t.copy(p[0]).addScaledVector(a, dd);
-  if (n === 3) {
-    const L2 = c.len[2], kf = _d.subVectors(end, p[1]).normalize(), e = _x.copy(b).addScaledVector(kf, -b.dot(kf));
-    if (e.lengthSq() < 1e-8) e.crossVectors(kf, a).cross(kf);                            // (the shin along the pole: any way across)
-    e.normalize();
-    const Bk = Math.acos(THREE.MathUtils.clamp((L1 * L1 + Lv * Lv - L2 * L2) / (2 * L1 * Lv), -1, 1));
-    p[2].copy(p[1]).addScaledVector(kf, L1 * Math.cos(Bk)).addScaledVector(e, B.side * L1 * Math.sin(Bk));
-    p[3].copy(end);
-  } else p[2].copy(end);
-  return _n.crossVectors(b, a).normalize();
-}
-
-// FABRIK from the rest pose to target t (in the legs part's frame), or the exact solve; then each bone turned from its rest frame to its
+// FABRIK from the rest pose to target t (in the legs part's frame); then each bone turned from its rest frame to its
 // new one
 function solve(c, t) {
   const p = c.work, n = p.length - 1;
-  let plane, flat;
-  if (c.bend) { plane = solveBent(c, t); flat = false; }
-  else {
-    for (let i = 0; i <= n; i++) p[i].copy(c.pts[i]);
-    for (let it = 0; it < ITER; it++) {
-      p[n].copy(t);
-      for (let i = n - 1; i >= 0; i--) p[i].sub(p[i + 1]).normalize().multiplyScalar(c.len[i]).add(p[i + 1]);
-      p[0].copy(c.pts[0]);
-      for (let i = 0; i < n; i++) p[i + 1].sub(p[i]).normalize().multiplyScalar(c.len[i]).add(p[i]);
-      if (p[n].distanceToSquared(t) < 1e-8) break;
-    }
-    plane = _n.crossVectors(_a.subVectors(p[1], p[0]), _b.subVectors(p[n], p[0]));
-    flat = !c.nRest || plane.lengthSq() < 1e-10;
-    if (!flat) plane.normalize();
+  for (let i = 0; i <= n; i++) p[i].copy(c.pts[i]);
+  for (let it = 0; it < ITER; it++) {
+    p[n].copy(t);
+    for (let i = n - 1; i >= 0; i--) p[i].sub(p[i + 1]).normalize().multiplyScalar(c.len[i]).add(p[i + 1]);
+    p[0].copy(c.pts[0]);
+    for (let i = 0; i < n; i++) p[i + 1].sub(p[i]).normalize().multiplyScalar(c.len[i]).add(p[i]);
+    if (p[n].distanceToSquared(t) < 1e-8) break;
   }
+  const plane = _n.crossVectors(_a.subVectors(p[1], p[0]), _b.subVectors(p[n], p[0]));
+  const flat = !c.nRest || plane.lengthSq() < 1e-10;
+  if (!flat) plane.normalize();
   for (let i = 0; i < n; i++) {
     const d = _d.subVectors(p[i + 1], p[i]).normalize();
     const q = c.turned[i];                                           // (the bone's new orientation in the part's frame)
@@ -366,4 +291,3 @@ function pose(c, w) {
   });
 }
 
-export { solve as solveLeg, pose as poseLeg };

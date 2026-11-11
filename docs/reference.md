@@ -328,7 +328,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (248 in 26 sections) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (247 in 26 sections) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).
@@ -376,9 +376,7 @@ src/
   labnet.js        LABNET, the lab's terminal (splices, reactor, chimeras, pen)
   chimera.js       makeChimera, makeMite, splicing and stats re-exports
   chimerabuild.js  the chimera builder: every chimera from the kit (chimera.glb), looks, outfits, mutations, far LOD
-  gait.js          walking on jointed legs (mites, mandrake roots): planted feet, steps, IK, the body on its feet; the leg solve (the spider tank's too)
-  spidertank.js    Zbornak's spider tank (docs/spidertank/; not in the game yet): the model, closing up to skim, reactor beam
-  spiderwalk.js    its legs and the hull on them: walking any way, the hull's pose within its planted legs' reach, footholds, climbing
+  gait.js          walking on jointed legs (mites, mandrake roots): planted feet, steps, IK, the body on its feet
   chimeragenes.js  splicing (no three.js)
   cheats.js        cheat menu
   devoverlay.js    F3 dev overlay (perfgraph.js draws its graphs)
@@ -481,7 +479,6 @@ src/
     weapons.glb      the courier's weapons (the pick; makeWeapon, weaponView.js)
     downs-*.glb      Chimera Downs kits (stand, club, course, stalls, arcade, screen, fair, stable, crowd, dome)
     chimera.glb      the chimera kit: every kind's parts in their looks, fitted mutations, far copies, devices
-    spidertank.glb   Zbornak's spider tank (loaded by spidertank.js, not at boot)
     zlab.glb         the Antimatter Lab and ranch, and Dr. Zbornak (build_zbornak_lab.py; colliders, spots, screens, the
                      arms, reactor core, door and camera as pivots: labWorld.js); zlab-drone0..3.jpg the drone feeds
     duck.glb         Duck Derby racers and track
@@ -517,9 +514,6 @@ tools/
   stable-layouts.mjs       the stable yard's layouts: clearance and walk checks, plans (docs/stable-proposals/)
   race-sim.mjs             runs the race model headless and reports the balance
   chimera-lab.html         the chimera builder's lab (/tools/chimera-lab.html; docs/chimera-builder/)
-  spidertank-lab.html      the spider tank driving: walk, strafe, climb, run, close up and skim, the beam; aimed by the camera; look
-                           round, pause; F9 saves a flight to replay, ?sweep drives it at every box and tables it
-                           (/tools/spidertank-lab.html)
   make-credit-glyph.py     draws the credit sign for both pixel faces -> assets/fonts/credit-*.woff2
   meridian-layouts.mjs     Meridian Exchange layout study (docs/meridian-layouts.md)
   ilmb-layouts.mjs         the ILMB's quarters and roads: clearance check and plans of today's (src/ilmbLayout.js) and Draft B
@@ -597,7 +591,6 @@ tools/
                               ones in the viewer: ?m=outpost&kind=tower)
     build_downs_*.py       -> downs-*.glb (build_downs_dome.py -> downs-dome.glb; preview_dome.py renders it over a block model
                               of the Downs)
-    build_spidertank.py    -> spidertank.glb (Zbornak's spider tank; docs/spidertank/)
     build_chimera.py       -> chimera.glb (about 6 min; CHIMERA_ONLY=car,mite; CHIMERA_PARTS=legs_mite_0 to splice with
                            tools/splice-chimera.mjs; chimera_common.py and chimera_*.py)
     build_zbornak_lab.py   the Antimatter Lab, the whole plateau and Zbornak (docs/zbornak-proposals/); ZB_GAME=1 exports

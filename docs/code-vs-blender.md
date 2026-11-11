@@ -15,7 +15,7 @@ has. They give a rough sense of how big each conversion is.
 
 | Group | Models (`src/assets`) |
 |---|---|
-| **Characters** | the courier (`runner.glb`, also pirates, faction troops and the leaders), Dr. Zbornak (`zlab.glb`), every chimera kind (`chimera.glb`), the derby ducks (`duck.glb`), the spider tank (`spidertank.glb`), idle poses (`idles.json`) |
+| **Characters** | the courier (`runner.glb`, also pirates, faction troops and the leaders), Dr. Zbornak (`zlab.glb`), every chimera kind (`chimera.glb`), the derby ducks (`duck.glb`), idle poses (`idles.json`) |
 | **Vehicles** | civil buggy and patrol car (`rover.glb`), Interceptor, Vostok APC, War-Rig, Phase Skimmer and its redesigns, Light-Bike, hover-car, Moonliner and Prospector land-trains, shuttle-bus and freighter (`ships.glb`) |
 | **Industrial kit** | tower crane, container gantry and the standard cargo box (`gantry.glb`, used by every container stack), motor-pool garages, dish stations and dish heads (`dish.glb`, also the heads on masts and roofs) |
 | **ILMB** | five of its six wings: Hydroponics, Meridian Labs, Vostok Hangar, Daedalus Relay, the Power Block (`power.glb`), the Kepler Habitat (`habitat.glb`) |
