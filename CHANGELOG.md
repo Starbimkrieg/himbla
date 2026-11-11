@@ -5,6 +5,11 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **`gait.js` cut down to what walks the chimeras.** The spider tank walks by `spiderwalk.js` now, so `makeGait` loses every option
+  only it used (`wave`, `free`, `long`, `pole`, `foothold`, `strain`, `urge`, `solid`, `bodyPose`, `liftDir` and the rest) and takes
+  just `(root, inner, legs)`; the leg solve it lends the tank stays (`legChain`, `solveLeg`, `solveBent`, `poseLeg`). 369 lines from
+  628. Mites and chimeras pose exactly as before (the old and new compared frame for frame on a test rig), and the tank's sweep
+  is unchanged.
 - **Spider tank: it stands on its feet, strafes, aims by the reticle, and climbs what its legs reach** (`docs/spidertank/`; not
   in the game yet). How it walks and climbs is rebuilt in the new `src/spiderwalk.js`; `spidertank.js` keeps the model, the fold
   and the beam, and `gait.js` now only lends it the leg solve (`legChain`, `solveLeg`, `solveBent`, `poseLeg` are exported).
@@ -29,7 +34,7 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
     through the hull in 1.4% of frames (from 2.7%), in limbo 3.7%, a foot across the body's middle 1.1% (from 0.1%, crabbed at
     corners). Slower than before, as the hull waits on its legs: 25 s over a 7 to 10.5 m block and off its far side. Still wrong:
     corner-first above about 7 m it mostly gives up, and having given up it won't go round to the next thing while pushed the
-    same way. `gait.js` still carries the options only the tank used (`wave`, `free`, `long` and the rest), now unused.
+    same way.
 - **The ILMB, laid out anew: Draft A, "the Circle"** (docs/ilmb-layouts.md; the positions are the new `src/ilmbLayout.js`,
   which `tools/ilmb-layouts.mjs` checks and draws). The Crown, its wings and the wall stay; the scatter of buildings round them
   is regrouped into four quarters on a **ring road inside the wall** (r 170), each in the band behind its own gate:

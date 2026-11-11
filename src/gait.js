@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 // Walking on jointed legs: the kit's `leg` pivots that have `knee` pivots down them and a `foot` at the ground contact (the mites' legs,
-// the mandrake's roots; tools/blender/chimera_common.py limb_chain; the spider tank's). Each foot stays planted where it last stepped until
+// the mandrake's roots; tools/blender/chimera_common.py limb_chain). Each foot stays planted where it last stepped until
 // the body has carried its rest spot a stride away, then steps to just ahead of that spot in an arc. The legs step in two sets that take
 // turns (the builder's two swing phases: a tripod on six legs, every other root round a tuber, a tetrapod on eight). Each leg reaches its
 // foot by IK (FABRIK along its joints, started from the rest pose each frame so the knees bend the way they were built), and the body rides
@@ -13,41 +13,13 @@ import * as THREE from 'three';
 // taller (a crate, a wall top, a hump) arcs over it. Its landing's height is settled part way through, so a foot never flops between two.
 // Big legs step slower, as a pendulum swings (DUR_REF).
 //
-// (The spider tank walks by src/spiderwalk.js now, with this file's leg solve: legChain, solveLeg, solveBent, poseLeg. The options below
-// that only it used, from `foothold` on, have no caller left.)
+// makeGait(root, inner, legs) -> null (no jointed legs) or { update(dt, ground, gap), chains, vmax, weight }, called by anim after the
+// swing is set (each jointed leg's swing angle in L.swing). ground(p, out) puts the ground point under world point p in out and returns
+// it. The root's world transform must be this frame's (the caller places it before calling anim).
 //
-// makeGait(root, inner, legs, opts) -> null (no jointed legs) or { update(dt, ground, gap), chains, vmax, weight }, called by anim after
-// the swing is set (each jointed leg's swing angle in L.swing). ground(p, out[, ceil]) puts the ground point under world point p in out
-// and returns it (with ceil: the highest one no higher than ceil, or null where p is inside something taller). The root's world transform
-// must be this frame's (the caller places it before calling anim). opts:
-//   lift        how far the feet may raise or lower the body (of the hip height; 0.4)
-//   air         false: never off the ground (the caller says when it is: the spider tank sets its own ride height)
-//   body(h)     the body's lift, given its feet's mean height off their rest spots (replaces lift's clamp)
-//   followRate  1/s the body follows (FOLLOW)
-//   bodyPose(dt)   sets the body (inner) itself, from the feet as they are this frame, in place of the lift, pitch and roll above
-//               (the spider tank's climb)
-//   pitchMax, rollMax   rad the most the body pitches and rolls to its feet (TILT; the tank's climbs at a steeper pitch)
-//   foothold(c, p, out, ground)   where foot c may stand near p (null: nowhere); the tank's keeps to what the leg can reach
-//   strain(c)   how badly planted foot c wants to step, besides its stride (past 1 it is due; past 2 it goes even while the other set
-//               is stepping): the tank's, when a leg nears its full stretch or something comes between its hip and its foot
-//   long        true: each leg strides as far as it can reach ahead and behind (not only as far as the tightest leg), and the steps
-//               are timed by a duty factor (the share of a stride a foot is down, DUTY_WALK to DUTY_TOP): from a walk to a run each
-//               foot's swing grows as long as its stance, then a little longer (a moment with no foot down: the tank's jets carry it)
-//   wave        true: the legs step to one rhythm, each at its own place in it: walking, a ripple up each side from the back leg to
-//               the front (the sides half a stride apart), running, two sets of four that take turns; and each foot keeps to its own
-//               lane along the body, so the legs never cross (the strides stay short: the tank's). strain(c) past 1 keeps it stepping.
-//   urge()      (wave) +1 or -1 while the caller pushes ahead or back and the body is held up: each foot lands at that end of its lane,
-//               drawing the legs under the body so it can hoist itself over what holds it (the tank's climb)
-//   pole        true: two- and three-bone legs are solved exactly with the knee bent up (as built), the ankle folding with the
-//               reach, so a leg never flips between shapes from one frame to the next (FABRIK can, with three bones)
-//   solid(p)    (with pole) true where world point p is inside something: a knee or ankle that would be turns about its hip-to-foot line
-//               (forward, back, further) to the nearest way that is clear, and eases there
-//   free(), need(c), canLift(c)   (wave) while free() (the tank: climbing, slow), no rhythm: each planted leg steps as it needs to
-//               (need(c) past 0, the neediest first; FREE_MAX at once, never two neighbours), if the rest still hold the body
-//               (need(c) 3 or more, out of reach and holding nothing: at once, whatever else is stepping)
-//               (canLift(c)), and lands where it would in its lane, taking FREE_DUR; one needing to go (need(c) 3) with nowhere to go
-//               hangs (c.hang: the caller holds its foot where it hangs)
-//   liftDir(c, out)   the way a stepping foot lifts (world up, without it): the tank's, off the hull when it is steep
+// The spider tank walks its own way (src/spiderwalk.js) on this file's legs: legChain (a leg's chain), solveLeg and solveBent (its
+// joints reaching a foot; solveBent exactly, the knee bent up as built, the ankle folding with the reach, so a three-bone leg never
+// flips between shapes), poseLeg.
 
 const STRIDE = 0.5;     // a foot steps once its rest spot is this far from it (of the leg's span: hip to foot, along the ground)
 const LEAD = 0.55;      // walking, it lands this far ahead of its rest spot (of the stride)
@@ -62,49 +34,27 @@ const RUN = 13.5;       // spans a second past which it runs on the plain swing 
 const AIR = 0.04;       // m above the ground (of the span) that counts as off it
 const BLEND = 7;        // 1/s the ease between the IK and the plain swing
 const FOLLOW = 12;      // 1/s the body follows its feet
+const LIFT_MAX = 0.4;   // of the hip height, how far the feet may raise or lower the body
 const TILT = 0.45;      // rad the most the body pitches or rolls to its feet
 const SETTLED = 0.4;    // of a step, after which its landing keeps its height (a foot doesn't flop between two)
 const ITER = 24;        // FABRIK passes at most (a mite's leg is within a tenth of a millimetre in three; a long leg swung far takes more)
-const STANCE = 0.3;     // s (of the pendulum's scale) a long stride's foot stays down, walking: the stride grows to keep it so
-const DUTY_WALK = 0.65, DUTY_RUN = 0.5, DUTY_TOP = 0.42;   // long: a foot's share of the stride down, walking, at full stride, flat out
-const FLAT_OUT = 3;     // long: of the speed the stride is full at, where the duty reaches DUTY_TOP
-const LONG_REACH = 0.82; // long: of the room a foot has ahead and behind, the most a stride uses (the legs stay bent at its ends)
-const LOW = 0.4;        // long: how much flatter the arc gets per full-stride speed past it
-const SLACK = 0.85;     // long: of a foot's room behind its rest spot, how much a stride plans to use
-const SWIVELS = [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.2, -2.2];   // pole, solid: rad a leg may turn about its hip-to-foot line, nearest first
-const SWIVEL_RATE = 9;  // rad/s it eases to a new one
-const FOLD = 0.55;
-const FEMUR_UP = 1.2;   // pole, three bones: rad the thigh rises over the level at most (out from the hip); closer in, the ankle folds
-const GAP = 0.3;        // wave: m between two neighbours' lanes (the feet always in order along the body)
-const LANE_REACH = 0.78; // wave: of the front leg's room ahead and the back leg's behind, how far the lanes reach
-const DUTY_RIPPLE = 0.75, DUTY_SETS = 0.5, DUTY_FAST = 0.45;   // wave: a foot's share of the rhythm down: a walk's ripple, a run's sets, flat out
-const WALK_SPANS = 1, RUN_SPANS = 2.4;   // wave: spans a second under which it ripples, and past which it runs in sets (blending between)
-const WAVE_STANCE = 0.75; // wave: s a foot stays down, walking, as long as its lane allows
-const SETTLE_SPEED = 0.3; // wave: of a span a second, the pace it steps at to settle its feet, standing      // pole: the ankle's bend at the shortest reach (of its rest angle; straighter out to 1.15 of it)
-const KEEP_DOWN = 2;      // wave, free: feet that stay down, even with more out of reach (they wait their turn)
-const FREE_MAX = 4, FREE_DUR = 0.32;   // wave, free: legs stepping at once at most, and s a step takes at least
-const FOOT_SPEED = 9, FOOT_DUR = 0.9;  // wave, free and out of lane: m/s a stepping foot goes at most (a longer step takes longer), to FOOT_DUR s
-const RETARGET_AT = 0.2, RETARGET_JUMP = 0.5;   // wave: of a step, after which its landing moves no more than this (m) a frame
-const OVER_EDGE = 0.4;    // m the most a step up or down arcs over what is between (its rise or drop clears the edge)
-const SWING_EASE = 1.5;   // wave: how quickly a foot in the air leaves where it lifted (the power its ease-out goes by)
-const SWING_REACH = 0.97; // wave: of a leg's reach, the furthest from its hip a foot in the air goes
-const FIX_AT = 0.45;      // wave, free: of a step, after which its landing stays put (it no longer follows the best hold it sees)
-const SAME_HOLD = 0.12;   // wave, settling: of its span, the nearest to where a foot stands that a step may land (nearer: it stays put)
+const OVER_EDGE = 0.4;  // m the most a step up or down arcs over what is between (its rise or drop clears the edge)
+const FOLD = 0.55;      // solveBent: the ankle's bend at the shortest reach (of its rest angle; straighter out to 1.15 of it)
+const FEMUR_UP = 1.2;   // solveBent, three bones: rad the thigh rises over the level at most (out from the hip); closer in, the ankle folds
 
 const _p = new THREE.Vector3(), _up = new THREE.Vector3(), _g = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 const _vh = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4(), _inv = new THREE.Matrix4(), _q = new THREE.Quaternion();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _e = new THREE.Euler(), _X = new THREE.Vector3(1, 0, 0);
 const _t = new THREE.Vector3(), _d = new THREE.Vector3(), _r = new THREE.Matrix4(), _Y = new THREE.Vector3(0, 1, 0);
-const _vt = new THREE.Vector3(), _vs = new THREE.Vector3(), _vw = new THREE.Vector3();
-const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _r4 = new THREE.Vector3(), _ld = new THREE.Vector3();
+const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3();
 const smooth = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
 
-export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, body = null, followRate = FOLLOW, foothold = null, strain = null, urge = null, solid = null, bodyPose = null, long = false, wave = false, pole = false, pitchMax = TILT, rollMax = TILT, free = null, need = null, canLift = null, liftDir = null } = {}) {
+export function makeGait(root, inner, legs) {
   root.updateMatrixWorld(true);
   const rootInv = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const chains = [];
   for (const L of legs) {
-    const c = legChain(L, rootInv, pole);
+    const c = legChain(L, rootInv);
     if (c) chains.push(c);
   }
   if (!chains.length) return null;
@@ -112,46 +62,12 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
   const thr = STRIDE * span;
   const kd = Math.max(1, Math.sqrt(span / DUR_REF));                 // (big legs swing slower)
   const durMin = DUR_MIN * kd, durMax = DUR_MAX * kd, durFast = DUR_FAST * kd;
-  // the longest stride, of a walk's: as far as the tightest leg reaches both ways, or (long) as far as each reaches ahead and behind
-  const growMax = long
-    ? THREE.MathUtils.clamp((LONG_REACH * Math.min(...chains.map((c) => (c.back + c.fwd) / c.span))) / (STRIDE * (1 + LEAD)), 1, 2 * STRIDE_MAX / STRIDE)
-    : THREE.MathUtils.clamp(Math.min(...chains.map((c) => c.grow)), 1, STRIDE_MAX / STRIDE);
+  // the longest stride, of a walk's: as far as the tightest leg reaches both ways
+  const growMax = THREE.MathUtils.clamp(Math.min(...chains.map((c) => c.grow)), 1, STRIDE_MAX / STRIDE);
   const vmax = RUN * span;                                           // m/s past which it runs on the swing (it scales with the legs)
-  const vFull = (thr * growMax * (1 + LEAD)) / (STANCE * kd);        // long: m/s at which the stride is full
   const hipY = chains.reduce((s, c) => s + c.hipY, 0) / chains.length;
-  const G = { w: 0, run: false, planted: false, seen: false, prev: new THREE.Vector3(), vel: new THREE.Vector3(), lift: 0, pitch: 0, roll: 0, h: 0,
-    phase: 0, yaw: null, drive: 0, stride: 0, run01: 0, turn: 0 };
-  // wave: each side's legs front to back, their places in the rhythm (rippling up from the back; in sets), and their lanes
-  let strideMax = 0;
-  if (wave) {
-    for (const side of [-1, 1]) {
-      const row = chains.filter((c) => Math.sign(c.rest.x) === side).sort((a, b) => b.rest.z - a.rest.z);
-      // (the side's reach, front leg's furthest ahead to the back leg's furthest behind, cut into even lanes with a GAP between)
-      const top = row[0].rest.z + LANE_REACH * row[0].fwd, end = row[row.length - 1].rest.z - LANE_REACH * row[row.length - 1].back;
-      const lane = (top - end) / row.length;
-      row.forEach((c, r) => {
-        c.ripple = ((row.length - 1 - r) / row.length + (side > 0 ? 0.5 : 0)) % 1;
-        c.sets = ((r + (side > 0 ? 1 : 0)) % 2) * 0.5;
-        c.zHi = top - r * lane - (r ? GAP / 2 : 0);
-        c.zLo = top - (r + 1) * lane + (r < row.length - 1 ? GAP / 2 : 0);
-        c.row = r;
-        c.home = c.rest.clone().setZ((c.zHi + c.zLo) / 2);             // (where its stance centres: its lane's middle)
-        c.rv = new THREE.Vector3();
-      });
-    }
-    strideMax = Math.min(...chains.map((c) => c.zHi - c.zLo));
-  }
+  const G = { w: 0, run: false, planted: false, seen: false, prev: new THREE.Vector3(), vel: new THREE.Vector3(), lift: 0, pitch: 0, roll: 0 };
   let groundFn = null;
-  // (landIn: s until the foot lands, so the caller can pick a hold for where the body will be by then)
-  const footAt = foothold ? (c, p, out, landIn = 0) => { c.landIn = landIn; const r = foothold(c, p, out, groundFn); c.landIn = 0; return r; } : (c, p, out) => groundFn(p, out);
-  // (a step that picks its hold once, at lift-off (its landing predicted from where the body will be): as long as it takes at FOOT_SPEED,
-  // from est, then once more for that)
-  function commit(c, est, land, durOf) {
-    Object.assign(c, { s: 0, dur: est });
-    let to = footAt(c, land(c, _r2), _r3, est);
-    if (to && Math.abs(durOf(to) - est) > 0.1) { c.dur = durOf(to); to = footAt(c, land(c, _r2), _r3, c.dur); }
-    return to;
-  }
 
   const stepping = (group) => chains.some((c) => c.group === group && c.stepping);
   // what stands between a foot and where it will land (a crate, a wall top, a hump): the step goes over it, high early and late
@@ -174,120 +90,7 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     if (speed > 1e-3) out.addScaledVector(_vh, c.lead / speed);
     return out;
   }
-  const restSpot = (c, out) => out.copy(c.home || c.rest).applyMatrix4(root.matrixWorld);   // (wave: its lane's middle)
-  // wave: where a stepping foot lands: its rest spot where the body will have carried it, and half a stride on (in its lane)
-  function landWave(c, out) {
-    out.copy(c.home).applyMatrix4(root.matrixWorld).addScaledVector(c.rv, c.dur * (1 - c.s));
-    const v = c.rv.length();
-    if (v > 1e-3) out.addScaledVector(c.rv, (0.5 * G.stride * Math.min(1, G.drive / (0.5 * SETTLE_SPEED * span + 1e-6))) / v);
-    _vw.copy(out).applyMatrix4(_inv.copy(root.matrixWorld).invert());
-    const u = urge ? urge() : 0;
-    const z = u ? (u > 0 ? c.zHi - 0.05 : c.zLo + 0.05) : THREE.MathUtils.clamp(_vw.z, c.zLo, c.zHi);
-    return z === _vw.z ? out : out.copy(_vw.setZ(z)).applyMatrix4(root.matrixWorld);
-  }
-  // wave: the rhythm. How fast each rest spot goes (the body's way, and its turn) drives it; the stride grows with the pace to the
-  // lanes' length; walking it ripples, running it steps in sets; a leg swings while its place in the rhythm is in its swing
-  function waveStep(dt) {
-    _vw.setFromMatrixColumn(root.matrixWorld, 2);
-    const yaw = Math.atan2(_vw.x, _vw.z);
-    const turn = G.yaw === null || dt <= 0 ? 0 : (THREE.MathUtils.euclideanModulo(yaw - G.yaw + Math.PI, Math.PI * 2) - Math.PI) / dt;
-    G.yaw = yaw;
-    G.turn = turn;
-    let drive = 0, far = 0;
-    for (const c of chains) {
-      restSpot(c, _a).sub(_p);
-      along(c.rv.set(G.vel.x + turn * _a.z, G.vel.y, G.vel.z - turn * _a.x));
-      drive = Math.max(drive, c.rv.length());
-      if (!c.stepping) far = Math.max(far, along(_b.subVectors(c.F, _a.copy(c.home).applyMatrix4(root.matrixWorld))).length());
-    }
-    if (free && free()) { freeStep(dt); return; }
-    // (standing: it steps its feet back under it, or on to better holds the caller wants)
-    const settle = SETTLE_SPEED * span;
-    const settling = drive < 0.5 * settle && (far > 0.3 * strideMax || (strain && chains.some((c) => !c.stepping && strain(c) >= 1)));
-    if (settling) drive = settle;
-    const run = smooth((drive - WALK_SPANS * span) / ((RUN_SPANS - WALK_SPANS) * span));
-    const duty = THREE.MathUtils.lerp(DUTY_RIPPLE, DUTY_SETS, run) - (DUTY_SETS - DUTY_FAST) * THREE.MathUtils.clamp((drive - RUN_SPANS * span) / (4 * RUN_SPANS * span), 0, 1);
-    G.stride = THREE.MathUtils.clamp(drive * WAVE_STANCE, 0.35 * strideMax, strideMax);
-    G.drive = drive;
-    G.run01 = run;
-    const f = drive > 0.05 ? (drive * duty) / G.stride : 0;          // (strides a second)
-    G.phase = (G.phase + f * dt) % 1;
-    const swing = 1 - duty;
-    for (const c of chains) {
-      const d = THREE.MathUtils.euclideanModulo(c.sets - c.ripple + 0.5, 1) - 0.5;   // (its place, eased from ripple to sets)
-      const at = THREE.MathUtils.euclideanModulo(G.phase - (c.ripple + d * run), 1);
-      // (a planted foot carried out of its lane, by a turn or a change of pace, or left out of its leg's reach as the body goes on up,
-      // steps at once, timed by itself)
-      if (!c.stepping && f > 0 && !(at < swing)) {
-        const z = _vw.copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert()).z;
-        const gone = !!strain && strain(c) >= 2;
-        if (z < c.zLo - 0.05 || z > c.zHi + 0.05 || gone) {
-          // (it picks its hold for where the body will be when it lands, and keeps it if it goes up or down to it, climbing; on the level,
-          // walking, its landing follows the body as the rhythm's do)
-          const dur0 = Math.max(0.25, Math.min(swing / f, 0.6));
-          const to = commit(c, dur0, landWave, (q) => Math.max(dur0, Math.min(FOOT_DUR, q.distanceTo(c.F) / FOOT_SPEED)));
-          // (standing: back where it is, no step; nor, strained, one that would put it down where it stands: that eases nothing)
-          if (settling && to && to.distanceTo(c.F) < 0.5 * SAME_HOLD * c.span && (!(strain && strain(c) >= 2) || to.distanceTo(c.F) < 0.02 * c.span)) continue;
-          // (as long as its foot takes to get there at FOOT_SPEED, a long one: no flinging it across)
-          // (slow, or a step longer than its stride, up onto something say; not turning, when it must keep up with the turn)
-          const far = to && Math.abs(turn) < 0.3 && (drive < WALK_SPANS * span || to.distanceTo(c.F) > 1.2 * G.stride) ? to.distanceTo(c.F) : 0;
-          Object.assign(c, { stepping: true, own: true, held: !!to && Math.abs(_r1.subVectors(to, c.F).dot(_up)) > 0.5, s: 0, dur: Math.max(0.25, Math.min(swing / f, 0.6), Math.min(FOOT_DUR, far / FOOT_SPEED)), lift: LIFT * c.span * (1 - 0.45 * run) });
-          c.S0.copy(c.F);
-          (c.S0L ||= new THREE.Vector3()).copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert());
-          c.T.copy(to || c.F);
-          clear(c, c.T);
-          continue;
-        }
-      }
-      if (c.own) { c.s = Math.min(1, c.s + dt / c.dur); if (c.s >= 1) c.own = c.free = false; continue; }
-      if (f > 0 && at < swing) {
-        if (!c.stepping) {
-          if (at > 0.3 * swing) continue;                            // (come into its swing late, as the rhythm changed: next time)
-          const to = footAt(c, landWave(c, _r2), _r3);
-          // (settling, standing: a foot that would land where it stands stays put, so one on a hold it keeps, a wall's face, never
-          // shuffles on it; the others still come back under it; strained, it steps, unless only to where it stands)
-          if (settling && (!to || to.distanceTo(c.F) < SAME_HOLD * c.span) && (!(strain && strain(c) >= 2) || !to || to.distanceTo(c.F) < 0.02 * c.span)) continue;
-          Object.assign(c, { stepping: true, held: false, s: at / swing, dur: swing / f, lift: LIFT * c.span * (1 - 0.45 * run) });
-          c.S0.copy(c.F);
-          (c.S0L ||= new THREE.Vector3()).copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert());
-          c.T.copy(to || c.F);
-          clear(c, c.T);
-        }
-        c.dur = swing / f;
-        c.s = Math.max(c.s, Math.min(1, at / swing));
-      } else if (c.stepping) c.s = f > 0 ? 1 : Math.min(1, c.s + dt / 0.35);   // (out of its swing: down; stopped mid-step: finishing it)
-    }
-  }
-  // wave, free: where a step lands: its lane's middle (which goes with its hip), where the body will have carried it
-  const landFree = (c, out) => restSpot(c, out).addScaledVector(c.rv, c.dur * (1 - c.s));
-  // wave, free: the steps by need. Each leg's neighbours along its side never step with it
-  const nextTo = (a, b) => Math.sign(a.rest.x) === Math.sign(b.rest.x) && Math.abs(a.row - b.row) === 1;
-  function freeStep(dt) {
-    for (const c of chains) if (c.stepping) { c.s = Math.min(1, c.s + dt / c.dur); if (c.s >= 1) c.own = c.free = false; }
-    let lifted = chains.filter((c) => c.stepping && c.s < 1).length;
-    const want = chains.filter((c) => !c.stepping).map((c) => [c, need(c)]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
-    for (const [c, n] of want) {
-      // (one out of reach holds nothing: it goes whatever else is stepping)
-      const gone = n >= 3;
-      // (but never all at once: KEEP_DOWN feet stay down whatever)
-      if ((lifted >= FREE_MAX && !gone) || lifted >= chains.length - KEEP_DOWN) continue;
-      if (!gone && (chains.some((o) => o.stepping && o.s < 1 && nextTo(o, c)) || !canLift(c))) continue;
-      const durOf = (q) => THREE.MathUtils.clamp(q.distanceTo(c.F) / FOOT_SPEED, FREE_DUR, FOOT_DUR);
-      const to = commit(c, durOf(landFree(c, _r1)), landFree, durOf);
-      // (nothing to hold, or nothing in its reach from where its hip will be: it hangs, and keeps looking)
-      if (!to || (n >= 3 && to.distanceTo(c.joints[0].getWorldPosition(_r1).addScaledVector(G.vel, c.dur)) > c.reach)) {
-        if (n >= 3) { c.hang = true; (c.want ||= new THREE.Vector3()).copy(to || c.F); c.wanting = !!to; }   // (reaching for it, if it saw one)
-        continue;
-      }
-      if (to.distanceTo(c.F) < SAME_HOLD * c.span) continue;
-      Object.assign(c, { stepping: true, own: true, free: true, held: true, hang: false, wanting: false, s: 0, dur: durOf(to), lift: LIFT * c.span });
-      c.S0.copy(c.F);
-      (c.S0L ||= new THREE.Vector3()).copy(c.F).applyMatrix4(_inv.copy(root.matrixWorld).invert());
-      c.T.copy(to);
-      clear(c, c.T);
-      lifted++;
-    }
-  }
+  const restSpot = (c, out) => out.copy(c.rest).applyMatrix4(root.matrixWorld);
   const along = (v) => v.addScaledVector(_up, -v.dot(_up));          // (its part along the ground)
 
   function update(dt, ground, gap) {
@@ -304,11 +107,8 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     G.run = speed > (G.run ? 0.85 : 1) * vmax;                          // (a little either way, so it doesn't flicker at the edge)
     let want = 0;
     if (ground && !G.run) {
-      if (!air) want = 1;
-      else {
-        ground(_p, _g);
-        if (_a.subVectors(_p, _g).dot(_up) < AIR * span) want = 1;
-      }
+      ground(_p, _g);
+      if (_a.subVectors(_p, _g).dot(_up) < AIR * span) want = 1;
     }
     G.w = want ? Math.min(1, G.w + dt * BLEND) : Math.max(0, G.w - dt * BLEND);
     if (G.w === 0 || !ground) {
@@ -320,105 +120,70 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
     // (back on the ground: the feet go down under the body)
     if (!G.planted) {
       for (const c of chains) {
-        if (!footAt(c, restSpot(c, _r2), c.F)) c.F.copy(_r2);
+        if (!ground(restSpot(c, _r2), c.F)) c.F.copy(_r2);
         c.stepping = false;
       }
       G.planted = true;
     }
-    if (wave) waveStep(dt);
-    else {
     // the stride: each leg's lead ahead of its rest spot, and how far behind it it may go (trip) before its set steps
     const moving = speed > 0.1 * thr / durMax;
-    const grow = long
-      ? THREE.MathUtils.clamp((speed * STANCE * kd) / (thr * (1 + LEAD)), 1, growMax)
-      : THREE.MathUtils.clamp((speed * durMin) / (0.8 * thr), 1, growMax);
-    // (long: the share of the stride a foot is down, from a walk's to a run's as the stride grows, then less, flat out)
-    const duty = speed < vFull
-      ? THREE.MathUtils.lerp(DUTY_WALK, DUTY_RUN, (grow - 1) / Math.max(1e-6, growMax - 1))
-      : THREE.MathUtils.lerp(DUTY_RUN, DUTY_TOP, THREE.MathUtils.clamp((speed / vFull - 1) / (FLAT_OUT - 1), 0, 1));
+    const grow = THREE.MathUtils.clamp((speed * durMin) / (0.8 * thr), 1, growMax);
     const slow = Math.min(1, speed / (2 * thr * grow));                // (barely moving, it lands on its rest spot, not ahead)
-    const back = moving && _vh.dot(_a.setFromMatrixColumn(root.matrixWorld, 2)) < 0;   // (backing up)
     for (const c of chains) {
-      const D = c.thr * grow * (1 + LEAD);                             // (how far the body carries a planted foot between steps)
-      // (long: landing far enough ahead that it trails no further than SLACK of its room behind, left for waiting on the other set;
-      // backing up, ahead is behind it, and the other way round)
-      const [ahead, behind] = back ? [c.back, c.fwd] : [c.fwd, c.back];
-      const lead = long ? THREE.MathUtils.clamp(LEAD * c.thr * grow, D - SLACK * behind, ahead) : LEAD * c.thr * grow;
-      c.trip = D - lead;
+      const lead = LEAD * c.thr * grow;
+      c.trip = c.thr * grow * (1 + LEAD) - lead;                       // (how far the body carries a planted foot between steps, less the lead)
       c.lead = lead * slow;
     }
-    // which set steps: the one whose feet are furthest behind, once the other set is down (or half way through its step, running at
-    // full stride; or at once, if it is stretched past reach)
+    // which set steps: the one whose feet are furthest behind, once the other set is down (or at once, if it is stretched past reach)
     // (how far behind its rest spot a foot is, or to the side: one landed far ahead isn't due, unless it is stretched past its stride)
     if (moving) _g.copy(_vh).normalize();
     const due = (c) => {
-      const d = along(_a.subVectors(c.F, restSpot(c, _b))), len = d.length(), more = strain ? strain(c) : 0;
-      if (!moving) return Math.max(more, len / c.trip);
+      const d = along(_a.subVectors(c.F, restSpot(c, _b))), len = d.length();
+      if (!moving) return len / c.trip;
       const ahead = d.dot(_g);
-      return Math.max(more, ahead <= 0 ? len / c.trip : Math.max(d.addScaledVector(_g, -ahead).length() / c.trip, len / (1.25 * Math.max(c.trip, c.lead))));
+      return ahead <= 0 ? len / c.trip : Math.max(d.addScaledVector(_g, -ahead).length() / c.trip, len / (1.25 * Math.max(c.trip, c.lead)));
     };
     for (const group of [0, 1]) {
       if (stepping(group)) continue;
       let worst = 0;
       for (const c of chains) if (c.group === group) worst = Math.max(worst, due(c));
       const other = chains.find((c) => c.group !== group && c.stepping);
-      // (long, under half the stride down: it lifts as the other set is that far through its swing, so both are up a moment)
-      const overlap = long && moving && other && other.s >= Math.min(1, 0.5 / (1 - duty)) - 0.03;
-      if (!(worst > 1 || (!moving && worst > SETTLE)) || (other && worst < 2 && !overlap)) continue;
-      const dur = long && moving
-        ? THREE.MathUtils.clamp((thr * grow * (1 + LEAD) / speed) * (1 - duty) / duty, durMin, durMax * 1.5)
-        : THREE.MathUtils.clamp((0.8 * thr * grow) / Math.max(speed, 1e-3), durFast, durMax);
-      // (a longer stride, a higher arc; long, running, a flatter one: the feet skim forward rather than climb)
-      const lift = long ? (LIFT * Math.min(Math.sqrt(grow), 1.3)) / (1 + LOW * Math.max(0, speed / vFull - 1)) : LIFT * Math.sqrt(grow);
+      if (!(worst > 1 || (!moving && worst > SETTLE)) || (other && worst < 2)) continue;
+      const dur = THREE.MathUtils.clamp((0.8 * thr * grow) / Math.max(speed, 1e-3), durFast, durMax);
+      const lift = LIFT * Math.sqrt(grow);                             // (a longer stride, a higher arc)
       let moves = moving;
       for (const c of chains) {
         if (c.group !== group) continue;
         Object.assign(c, { stepping: true, s: 0, dur, lift: lift * c.span });
         c.S0.copy(c.F);
         c.T.copy(c.F);
-        if (footAt(c, landing(c, speed, _r2), _r3)) c.T.copy(_r3);
+        if (ground(landing(c, speed, _r2), _r3)) c.T.copy(_r3);
         if (c.T.distanceTo(c.F) > 0.1 * c.thr) moves = true;
         clear(c, landing(c, speed, _r1));
       }
       // (standing, a set whose feet would only land where they are doesn't step: it would never stop, nor let the other set go)
       if (!moves) for (const c of chains) if (c.group === group) c.stepping = false;
     }
-    }
     // the feet: planted, or along their arcs: up first onto something higher, over first and then down onto something lower
     for (const c of chains) {
       if (!c.stepping) { c.at.copy(c.F); c.base.copy(c.F); continue; }
-      if (!wave) c.s = Math.min(1, c.s + dt / c.dur);
+      c.s = Math.min(1, c.s + dt / c.dur);
       // (the landing follows the body; past SETTLED it keeps its height, unless the ground under it only rises or falls a little)
-      // (a step that picked its hold at lift-off, for where the body will be when it lands (held), keeps it)
-      if (!c.held && (!c.free || c.s < FIX_AT) && footAt(c, wave ? (c.free ? landFree(c, _r2) : landWave(c, _r2)) : landing(c, speed, _r2), _r3)
-        && !(wave && c.s > RETARGET_AT && Math.abs(G.turn) < 0.3 && _r3.distanceTo(c.T) > RETARGET_JUMP)   // (wave: on its way, it no longer jumps to another hold, unless keeping up with a turn)
-        && !(c.free && _r3.distanceTo(c.S0) < SAME_HOLD * c.span)) {   // (nor, stepped by need, back down where it came from)
+      if (ground(landing(c, speed, _r2), _r3)) {
         const jump = _r3.dot(_up) - c.T.dot(_up);
-        if (c.s < SETTLED || Math.abs(jump) < 0.15 * c.span || wave) c.T.copy(_r3);   // (wave: always where it will stand, up or down)
+        if (c.s < SETTLED || Math.abs(jump) < 0.15 * c.span) c.T.copy(_r3);
         else c.T.copy(_r3).addScaledVector(_up, -jump);
       }
       const hS = c.S0.dot(_up), hT = c.T.dot(_up), rise = hT - hS, step = 0.1 * c.span;
       const eh = smooth((c.s - 0.1) / 0.8);
       const ev = rise > step ? smooth(c.s / 0.5) : rise < -step ? smooth((c.s - 0.5) / 0.5) : eh;
-      if (c.S0L) {                                                   // (wave: carried with the body, so it only goes forward in its lane)
-        _inv.copy(root.matrixWorld).invert();
-        // (quick off the mark, settling as it lands: it doesn't hang back where it lifted, behind a body going on fast)
-        c.base.lerpVectors(c.S0L, _vw.copy(c.T).applyMatrix4(_inv), 1 - (1 - c.s) ** SWING_EASE).applyMatrix4(root.matrixWorld);
-      } else c.base.lerpVectors(c.S0, c.T, eh);
+      c.base.lerpVectors(c.S0, c.T, eh);
       c.base.addScaledVector(_up, hS + rise * ev - c.base.dot(_up));
       const arc = Math.sin(Math.PI * c.s);
-      c.at.copy(c.base).addScaledVector(liftDir ? liftDir(c, _ld) : _up, c.over ? Math.max(c.lift * arc, c.over * Math.min(1, arc * 2.5)) : c.lift * arc);
-      // (in the air, never past its leg's reach: a foot the body has run on from is drawn in after it rather than dragged out straight
-      // behind; easing off as it comes down, so it still lands on its hold)
-      if (wave) {
-        const far = c.joints[0].getWorldPosition(_r4).distanceTo(c.at), k = c.s < 0.85 ? 1 : (1 - c.s) / 0.15;
-        if (far > SWING_REACH * c.reach) c.at.lerp(_r4.addScaledVector(_r1.subVectors(c.at, _r4), SWING_REACH * c.reach / far), k);
-      }
+      c.at.copy(c.base).addScaledVector(_up, c.over ? Math.max(c.lift * arc, c.over * Math.min(1, arc * 2.5)) : c.lift * arc);
       if (c.s >= 1) { c.F.copy(c.T); c.stepping = false; }
     }
     // the body on its feet: their mean height off their rest spots lifts it, their slope across and along it rolls and pitches it
-    if (bodyPose) bodyPose(dt);
-    else {
     _inv.copy(root.matrixWorld).invert();
     let h = 0, sx = 0, sz = 0, sxx = 0, szz = 0, mx = 0, mz = 0;
     for (const c of chains) { mx += c.rest.x; mz += c.rest.z; }
@@ -429,47 +194,23 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
       const d = _a.copy(c.base).applyMatrix4(_inv).y - c.rest.y - h, x = c.rest.x - mx, z = c.rest.z - mz;
       sx += x * d; sz += z * d; sxx += x * x; szz += z * z;
     }
-    G.h = h;
-    const k = Math.min(1, dt * followRate);                           // (leaving the ground, it eases back level)
-    const target = body ? body(h) : THREE.MathUtils.clamp(h, -follow * hipY, follow * hipY);
+    const k = Math.min(1, dt * FOLLOW);                               // (leaving the ground, it eases back level)
+    const target = THREE.MathUtils.clamp(h, -LIFT_MAX * hipY, LIFT_MAX * hipY);
     G.lift += (want ? target - G.lift : -G.lift) * k;
-    G.pitch += (want ? THREE.MathUtils.clamp(-Math.atan(szz > 1e-6 ? sz / szz : 0), -pitchMax, pitchMax) - G.pitch : -G.pitch) * k;
-    G.roll += (want ? THREE.MathUtils.clamp(Math.atan(sxx > 1e-6 ? sx / sxx : 0), -rollMax, rollMax) - G.roll : -G.roll) * k;
+    G.pitch += (want ? THREE.MathUtils.clamp(-Math.atan(szz > 1e-6 ? sz / szz : 0), -TILT, TILT) - G.pitch : -G.pitch) * k;
+    G.roll += (want ? THREE.MathUtils.clamp(Math.atan(sxx > 1e-6 ? sx / sxx : 0), -TILT, TILT) - G.roll : -G.roll) * k;
     inner.position.y += (G.lift - inner.position.y) * G.w;
     inner.quaternion.setFromEuler(_e.set(G.pitch * G.w, 0, G.roll * G.w));
-    }
     // the legs reach their feet
     let space = null;
     for (const c of chains) {
       if (c.space !== space) { space = c.space; space.updateWorldMatrix(true, false); _m.copy(space.matrixWorld).invert(); }
-      _t.copy(c.at).applyMatrix4(_m);
-      if (c.bend && solid) {                                         // (the nearest turn that keeps it out of things, eased to)
-        const T = _vt.copy(_t);
-        let want = c.swivel;                                           // (straight back when it can; else as it is, if that is clear)
-        solveBent(c, T, 0);
-        if (inside(c)) {
-          solveBent(c, T, c.swivel);
-          if (inside(c)) for (const sw of SWIVELS) { solveBent(c, T, sw); if (!inside(c)) { want = sw; break; } }
-        } else want = 0;
-        c.swivel += THREE.MathUtils.clamp(want - c.swivel, -SWIVEL_RATE * dt, SWIVEL_RATE * dt);
-        _t.copy(T);
-      }
-      solve(c, _t);
+      solve(c, _t.copy(c.at).applyMatrix4(_m));
       pose(c, G.w);
     }
   }
 
-  // (pole, solid: is any of the leg's joints or bones, as just solved, inside something)
-  function inside(c) {
-    const p = c.work, w = c.space.matrixWorld;
-    for (let i = 1; i < p.length; i++) {
-      if (i < p.length - 1 && solid(_vs.copy(p[i]).applyMatrix4(w))) return true;
-      for (const k of [0.25, 0.5, 0.75]) if (solid(_vs.lerpVectors(p[i - 1], p[i], k).applyMatrix4(w))) return true;
-    }
-    return false;
-  }
-
-  return { update, chains, vmax, growMax, vFull, strideMax, get stride() { return G.stride; }, get drive() { return G.drive; }, get weight() { return G.w; }, get lift() { return G.lift; }, get pitch() { return G.pitch * G.w; }, get roll() { return G.roll * G.w; } };
+  return { update, chains, vmax, get weight() { return G.w; } };
 }
 
 // a jointed leg's chain: its joints from the hip (L.node) down its `knee` pivots to its `foot`, their rest places (in the legs part's
