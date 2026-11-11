@@ -13,6 +13,9 @@ import * as THREE from 'three';
 // taller (a crate, a wall top, a hump) arcs over it. Its landing's height is settled part way through, so a foot never flops between two.
 // Big legs step slower, as a pendulum swings (DUR_REF).
 //
+// (The spider tank walks by src/spiderwalk.js now, with this file's leg solve: legChain, solveLeg, solveBent, poseLeg. The options below
+// that only it used, from `foothold` on, have no caller left.)
+//
 // makeGait(root, inner, legs, opts) -> null (no jointed legs) or { update(dt, ground, gap), chains, vmax, weight }, called by anim after
 // the swing is set (each jointed leg's swing angle in L.swing). ground(p, out[, ceil]) puts the ground point under world point p in out
 // and returns it (with ceil: the highest one no higher than ceil, or null where p is inside something taller). The root's world transform
@@ -101,42 +104,8 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
   const rootInv = new THREE.Matrix4().copy(root.matrixWorld).invert();
   const chains = [];
   for (const L of legs) {
-    const joints = [L.node];
-    let foot = null;
-    for (let n = L.node; n && !foot;) {
-      foot = n.children.find((c) => c.userData.role === 'foot') || null;
-      const knee = n.children.find((c) => c.userData.role === 'knee');
-      if (!foot && knee) joints.push(knee);
-      n = knee;
-    }
-    if (!foot || joints.length < 2) continue;
-    L.chain = true;
-    const space = L.node.parent;                                      // (the legs part: the hips' frame, where the IK works)
-    const toSpace = new THREE.Matrix4().copy(space.matrixWorld).invert();
-    const pts = [...joints, foot].map((o) => new THREE.Vector3().setFromMatrixPosition(_m.multiplyMatrices(toSpace, o.matrixWorld)));
-    const inRoot = [...joints, foot].map((o) => new THREE.Vector3().setFromMatrixPosition(_m.multiplyMatrices(rootInv, o.matrixWorld)));
-    const len = pts.slice(1).map((p, i) => p.distanceTo(pts[i]));
-    const dir = pts.slice(1).map((p, i) => p.clone().sub(pts[i]).normalize());
-    // each bone's rest orientation in the legs part's frame, and its frame (along it; across it, in the leg's plane) to turn from
-    const W = [];
-    joints.forEach((j, i) => W.push(i ? W[i - 1].clone().multiply(j.quaternion) : j.quaternion.clone()));
-    const plane = _n.crossVectors(_a.subVectors(pts[1], pts[0]), _b.subVectors(pts[pts.length - 1], pts[0]));
-    const nRest = plane.lengthSq() > 1e-10 ? plane.clone().normalize() : null;
-    const basis = dir.map((d) => (nRest ? frameOf(d, nRest, new THREE.Matrix4()).transpose() : null));
-    const hip = inRoot[0], rest = inRoot[inRoot.length - 1];
-    const span = Math.hypot(rest.x - hip.x, rest.z - hip.z);
-    // how far its foot can go ahead of its rest spot and behind it, along the ground, before the leg is straight
-    const reach = REACH * inRoot.slice(1).reduce((s, p, i) => s + p.distanceTo(inRoot[i]), 0);
-    const ux = rest.x - hip.x, uz = rest.z - hip.z, room = Math.sqrt(Math.max(0, reach * reach - (hip.y - rest.y) ** 2 - ux * ux));
-    const grow = Math.min((uz + room) / (STRIDE * span), (room - uz) / (LEAD * STRIDE * span));     // (the stride it allows, of a walk's)
-    chains.push({
-      L, joints, space, pts, len, dir, W, nRest, basis, rest, span, grow, reach, back: 0.95 * (uz + room), fwd: 0.95 * (room - uz),
-      bend: pole && nRest && pts.length <= 4 ? bendOf(pts) : null,
-      thr: STRIDE * span, hipY: hip.y, hip, group: L.ph ? 1 : 0,
-      bind: joints.map((j) => j.quaternion.clone()), work: pts.map((p) => p.clone()), ik: joints.map(() => new THREE.Quaternion()),
-      turned: joints.map(() => new THREE.Quaternion()), lead: 0, trip: 0, swivel: 0,
-      F: new THREE.Vector3(), S0: new THREE.Vector3(), T: new THREE.Vector3(), at: new THREE.Vector3(), base: new THREE.Vector3(), s: 0, dur: DUR_MAX, lift: 0, over: 0, stepping: false,
-    });
+    const c = legChain(L, rootInv, pole);
+    if (c) chains.push(c);
   }
   if (!chains.length) return null;
   const span = chains.reduce((s, c) => s + c.span, 0) / chains.length;
@@ -503,6 +472,48 @@ export function makeGait(root, inner, legs, { lift: follow = 0.4, air = true, bo
   return { update, chains, vmax, growMax, vFull, strideMax, get stride() { return G.stride; }, get drive() { return G.drive; }, get weight() { return G.w; }, get lift() { return G.lift; }, get pitch() { return G.pitch * G.w; }, get roll() { return G.roll * G.w; } };
 }
 
+// a jointed leg's chain: its joints from the hip (L.node) down its `knee` pivots to its `foot`, their rest places (in the legs part's
+// frame and the root's), bone lengths and rest frames, and its reach; null where L.node has no knees or no foot. pole: solved exactly
+// (solveBent). Also for callers that walk the legs themselves (src/spiderwalk.js), with solveLeg and poseLeg
+export function legChain(L, rootInv, pole = false) {
+  const joints = [L.node];
+  let foot = null;
+  for (let n = L.node; n && !foot;) {
+    foot = n.children.find((c) => c.userData.role === 'foot') || null;
+    const knee = n.children.find((c) => c.userData.role === 'knee');
+    if (!foot && knee) joints.push(knee);
+    n = knee;
+  }
+  if (!foot || joints.length < 2) return null;
+  L.chain = true;
+  const space = L.node.parent;                                      // (the legs part: the hips' frame, where the IK works)
+  const toSpace = new THREE.Matrix4().copy(space.matrixWorld).invert();
+  const pts = [...joints, foot].map((o) => new THREE.Vector3().setFromMatrixPosition(_m.multiplyMatrices(toSpace, o.matrixWorld)));
+  const inRoot = [...joints, foot].map((o) => new THREE.Vector3().setFromMatrixPosition(_m.multiplyMatrices(rootInv, o.matrixWorld)));
+  const len = pts.slice(1).map((p, i) => p.distanceTo(pts[i]));
+  const dir = pts.slice(1).map((p, i) => p.clone().sub(pts[i]).normalize());
+  // each bone's rest orientation in the legs part's frame, and its frame (along it; across it, in the leg's plane) to turn from
+  const W = [];
+  joints.forEach((j, i) => W.push(i ? W[i - 1].clone().multiply(j.quaternion) : j.quaternion.clone()));
+  const plane = _n.crossVectors(_a.subVectors(pts[1], pts[0]), _b.subVectors(pts[pts.length - 1], pts[0]));
+  const nRest = plane.lengthSq() > 1e-10 ? plane.clone().normalize() : null;
+  const basis = dir.map((d) => (nRest ? frameOf(d, nRest, new THREE.Matrix4()).transpose() : null));
+  const hip = inRoot[0], rest = inRoot[inRoot.length - 1];
+  const span = Math.hypot(rest.x - hip.x, rest.z - hip.z);
+  // how far its foot can go ahead of its rest spot and behind it, along the ground, before the leg is straight
+  const reach = REACH * inRoot.slice(1).reduce((s, p, i) => s + p.distanceTo(inRoot[i]), 0);
+  const ux = rest.x - hip.x, uz = rest.z - hip.z, room = Math.sqrt(Math.max(0, reach * reach - (hip.y - rest.y) ** 2 - ux * ux));
+  const grow = Math.min((uz + room) / (STRIDE * span), (room - uz) / (LEAD * STRIDE * span));     // (the stride it allows, of a walk's)
+  return {
+    L, joints, space, pts, len, dir, W, nRest, basis, rest, span, grow, reach, back: 0.95 * (uz + room), fwd: 0.95 * (room - uz),
+    bend: pole && nRest && pts.length <= 4 ? bendOf(pts) : null,
+    thr: STRIDE * span, hipY: hip.y, hip, group: L.ph ? 1 : 0,
+    bind: joints.map((j) => j.quaternion.clone()), work: pts.map((p) => p.clone()), ik: joints.map(() => new THREE.Quaternion()),
+    turned: joints.map(() => new THREE.Quaternion()), lead: 0, trip: 0, swivel: 0,
+    F: new THREE.Vector3(), S0: new THREE.Vector3(), T: new THREE.Vector3(), at: new THREE.Vector3(), base: new THREE.Vector3(), s: 0, dur: DUR_MAX, lift: 0, over: 0, stepping: false,
+  };
+}
+
 // the frame of a bone along d, across it toward the leg's plane normal n (columns: along, across, their cross)
 function frameOf(d, n, out) {
   _x.copy(d);
@@ -531,7 +542,7 @@ function bendOf(pts) {
 // the joints of a bent leg reaching t, exactly: in the upright plane through its hip and t (turned from the rest one about up, and by
 // swivel about the hip-to-t line), the knee on its pole's side, the ankle's angle folding as t comes in; returns the plane's normal (as
 // the rest one's sign)
-function solveBent(c, t, swivel = c.swivel) {
+export function solveBent(c, t, swivel = c.swivel) {
   const p = c.work, B = c.bend, n = p.length - 1, L0 = c.len[0], L1 = c.len[1];
   p[0].copy(c.pts[0]);
   const a = _a.subVectors(t, p[0]), d = a.length();
@@ -613,3 +624,5 @@ function pose(c, w) {
     if (w > 0) j.quaternion.slerp(c.ik[i], w);
   });
 }
+
+export { solve as solveLeg, pose as poseLeg };

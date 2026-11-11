@@ -376,8 +376,9 @@ src/
   labnet.js        LABNET, the lab's terminal (splices, reactor, chimeras, pen)
   chimera.js       makeChimera, makeMite, splicing and stats re-exports
   chimerabuild.js  the chimera builder: every chimera from the kit (chimera.glb), looks, outfits, mutations, far LOD
-  gait.js          walking on jointed legs (mites, mandrake roots, the spider tank): planted feet, steps, IK, the body on its feet
-  spidertank.js    Zbornak's spider tank (docs/spidertank/; not in the game yet): eight-legged gait, closing up to skim, reactor beam
+  gait.js          walking on jointed legs (mites, mandrake roots): planted feet, steps, IK, the body on its feet; the leg solve (the spider tank's too)
+  spidertank.js    Zbornak's spider tank (docs/spidertank/; not in the game yet): the model, closing up to skim, reactor beam
+  spiderwalk.js    its legs and the hull on them: walking any way, the hull's pose within its planted legs' reach, footholds, climbing
   chimeragenes.js  splicing (no three.js)
   cheats.js        cheat menu
   devoverlay.js    F3 dev overlay (perfgraph.js draws its graphs)
@@ -516,8 +517,9 @@ tools/
   stable-layouts.mjs       the stable yard's layouts: clearance and walk checks, plans (docs/stable-proposals/)
   race-sim.mjs             runs the race model headless and reports the balance
   chimera-lab.html         the chimera builder's lab (/tools/chimera-lab.html; docs/chimera-builder/)
-  spidertank-lab.html      the spider tank driving: walk, climb, run, close up and skim, the beam; look round, pause; F9 saves a flight
-                           to replay, ?sweep drives it at every box and tables it (/tools/spidertank-lab.html)
+  spidertank-lab.html      the spider tank driving: walk, strafe, climb, run, close up and skim, the beam; aimed by the camera; look
+                           round, pause; F9 saves a flight to replay, ?sweep drives it at every box and tables it
+                           (/tools/spidertank-lab.html)
   make-credit-glyph.py     draws the credit sign for both pixel faces -> assets/fonts/credit-*.woff2
   meridian-layouts.mjs     Meridian Exchange layout study (docs/meridian-layouts.md)
   ilmb-layouts.mjs         the ILMB's quarters and roads: clearance check and plans of today's (src/ilmbLayout.js) and Draft B

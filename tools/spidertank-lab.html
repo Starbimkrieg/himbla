@@ -8,12 +8,14 @@
     #info { position: fixed; left: 8px; top: 8px; background: #120a1ecc; padding: 6px 8px; border: 2px solid #ff2e88; white-space: pre-wrap; line-height: 1.5; }
     #info b { color: #ffd23f; }
     #info .dim { color: #b8a8d8; }
+    #reticle { position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; margin: -8px 0 0 -8px; border: 2px solid #ffd23f; border-radius: 50%; display: none; pointer-events: none; }
   </style>
 </head>
 <body>
   <!-- Dev-only: Zbornak's spider tank (npm run dev, then /tools/spidertank-lab.html). Not part of the build.
        Query: ?auto=0                         drive it yourself from the start (it drives itself until you press a key, and again
-                                              after a few seconds without one): W ahead (it closes up past 25 m/s, unless climbing), S brakes and backs up (to 18 m/s), A/D turn, hold SPACE: the beam
+                                              after a few seconds without one): W ahead (it closes up past 25 m/s, unless climbing), S brakes and backs up (to 18 m/s), A/D sideways (to 12 m/s),
+                                              hold SPACE: the beam. It turns to where the camera looks (the reticle): drag to aim it. H gives the camera back to the tank; then Q/E turn it
               &demo=walk|run|skim|beam|fold   one part of the drive, looped, for screenshots (else the whole drive: walk, run, close
                                               up and skim, open out, stop and fire)
               &demo=climb|wall                round the crates on the circle; down the test lane: a crate, a 3.2 m step, 4.6 m and 9.5 m blocks, a 12 m wall it climbs, a 16 m one it can't
@@ -26,16 +28,21 @@
               &replay=url                     replay a saved flight from a url (&replay=session: the one dropped on the page)
               &at=s                           start the replay there (run up to it unseen)
        The obstacle sweep, unseen and with fresh tanks, as a table (window.__sweep too); each row's link replays that case here:
-              ?sweep                          every box from 8 sides at 4 and 12 m/s, and standing beside the tall ones
+              ?sweep                          every box from 8 sides at 4 and 12 m/s, the blocks crabbed (diagonal, sideways, backwards) and parked half on, and standing beside the tall ones
               ?sweep=quick                    the blocks only (20 on), from 4 sides at 10 m/s, one stand each (about a minute)
               &box=i,j                        only those boxes
-              ?case=box,side,speed            one approach (side: eighths round from the box's own facing; it starts 14 m out from it)
+              ?case=box,side,speed[,crab]     one approach (side: eighths round from the box's own facing; it starts 14 m out from it; crab: degrees its
+                                              nose is turned from the way it goes: 90 comes at it sideways, 180 backwards)
+              ?case=park,box,side,crab        the same at 4 m/s, the stick let go with its middle at the near face: standing half on it (in the sweep;
+                                              as a replay it goes on over)
               ?case=stand,box,side[,out]      standing beside a side, facing along it, out m from it (4.2)
               ?case=gap,i,j,speed             from the top of box i across the gap to box j (the pairs: 35-36, 37-38, 39-40)
               ?case=spin,box,1                turning on the spot on top of a box
-       Its columns: legs through the hull (frames), a foot across the body's middle, a planted foot over nothing; the pose's jerk
+       Its columns: legs through the hull (frames), a foot across the body's middle, a planted foot over nothing, a planted foot off its hold (float),
+       a leg neither planted nor stepping (limbo: reaching for a hold it has not found); the pose's jerk
        (thousandths a frame); took (s). Green: as it should be and clean; yellow: as it should be; red: not. -->
   <div id="info"></div>
+  <div id="reticle"></div>
   <script type="module" src="./spidertank-lab.js"></script>
 </body>
 </html>

@@ -1,20 +1,24 @@
 # Zbornak's spider tank: ARACHNE
 
 The end-game reward. Win the Triple Crown, bring the champion to Dr. Zbornak, and he keeps it "for research"; in return he hands over
-the walking tank he has been building round a mini antimatter reactor. It walks on eight armoured legs by the same IK the mites and
-chimeras use (`src/gait.js`), to a spider's rhythm: a ripple walking, two sets of four running, the legs never crossing. It climbs
-anything up to 13 m, its body gliding up and over and its legs stepping after it. Past 25 m/s it closes up by itself into a hovering bead (overdrive; never while it climbs), and when it
-slows under 21 m/s the legs come back out and stand it up. It fires a reactor beam from a central cannon. The runner rides inside, out of sight.
+the walking tank he has been building round a mini antimatter reactor. It walks on eight armoured legs (`src/spiderwalk.js`; the
+leg solve is the chimeras', `src/gait.js`) any way it is driven, ahead, back or sideways, turning to where it is aimed: a ripple
+walking, two sets of four running, the legs never crossing. Its hull stands on its feet and goes only as far as its planted legs
+reach, so it climbs what its legs can: about 10 m nose first, its rear legs straightening under it and its front pair hooking the
+top. Past 25 m/s it closes up by itself into a hovering bead (overdrive; never while it climbs), and when it slows under 21 m/s the
+legs come back out and stand it up. It fires a reactor beam from a central cannon. The runner rides inside, out of sight.
 
 Built in Blender (`tools/blender/build_spidertank.py` -> `src/assets/spidertank.glb`, 12.0k triangles, 312 KB) and driven by
 `src/spidertank.js`. Revision 4: of the two first proposals the white one (A) was kept, bulkier and more mechanical, without its
 abdomen; B was dropped. Round three made it close up by itself, stride longer, grip and climb, and drive its rams, and took the fins
 off. Round four smoothed its run, solved its legs exactly, kept its feet below its hips and its hull and legs out of what it walks
-among, and made the bead float higher on glowing jet trails. Not in the game yet.
+among, and made the bead float higher on glowing jet trails. Round five rebuilt how it walks and climbs (below): the hull on its
+feet, strafing, aimed by the reticle. Not in the game yet.
 
 - **The lab:** `npm run dev`, then `/tools/spidertank-lab.html`. It drives itself round a circle of crates and low walls: walking,
   running, closing up past 25 m/s and skimming, opening out, stopping to fire the beam. Press a key to drive it: W ahead, S back (to 18 m/s),
-  A/D turn, hold SPACE for the beam. **Look round** with the mouse: drag to turn the camera round the tank, right-drag (or shift-drag) to slide
+  A/D sideways (to 12 m/s), hold SPACE for the beam; **it turns to where the camera looks** (the reticle), so drag to aim it (H gives
+  the camera back to the tank, and then Q/E turn it). **Look round** with the mouse: drag to turn the camera round the tank, right-drag (or shift-drag) to slide
   what it looks at, wheel to zoom, H to stop it turning with the tank, R or double-click to put it back. **P** pauses, **.** steps a
   frame, **[ ]** slow the clock down to a tenth and back. `&demo=walk|climb|wall|run|skim|fold|beam` loops one part (`wall` walks
   down the test lane: a 2.3 m crate, a 3.2 m step, a 4.6 m block, a 9.5 m block and a 12 m wall it climbs onto and down off (all in about 70 s at 3 m/s), then a 16 m
@@ -22,10 +26,12 @@ among, and made the bead float higher on glowing jet trails. Not in the game yet
   `&cam=chase|side|front|rear|top|orbit` is where the camera starts. **F9** saves the flight (every tick's time and input since
   the page loaded, and the last 15 s of the tank's state); drop the file on the lab page to replay it frame for frame (pause, slow and
   look round as it plays; `&at=s` jumps in). `?sweep` (or `?sweep=quick`, about a minute) drives fresh tanks, unseen, straight at every
-  box from 8 sides at a walk and a run, parks them beside the tall ones, sends them across three gaps between pairs of platforms (3,
-  5 and 7 m) and turns them on the spot on tops, then tables each: over it, round it or stopped against what it should do (over
-  anything up to `tank.climbMax`), its hull and leg bones in things, frames with a leg through the hull, a foot across the body's
-  middle or a planted foot over nothing, the pose's jerk, how long it took, and the steps and pose change of its last 6 s
+  box from 8 sides at a walk and a run, at the blocks crabbed (its nose turned 45, 90, 135 or 180 degrees from the way it goes) and
+  stopped half on them, parks them beside the tall ones, sends them across three gaps between pairs of platforms (3, 5 and 7 m) and
+  turns them on the spot on tops, then tables each: over it, round it or stopped against what it should do (over anything up to
+  `tank.climbMax` nose or tail first; sideways on, what it can step up without rearing), its hull and leg bones in things, frames
+  with a leg through the hull, a foot across the body's middle, a planted foot over nothing, a planted foot off its hold, or a leg
+  in limbo (neither planted nor stepping), the pose's jerk, how long it took, and the steps and pose change of its last 6 s
   (shuffling); each row's link (`?case=...`) replays it in the lab.
 - **The Asset Row**, Ground Vehicles: walking, and closed up.
 
@@ -68,96 +74,67 @@ tuned in Blender.
 
 ## Walking and the beam
 
-- **Its legs are solved exactly** (`makeGait`'s `pole`): each three-bone leg bends its knee up, as built, in the upright plane
-  through its hip and foot, the ankle folding as the foot comes in, so a leg never flips from one shape to another.
-- **A spider's rhythm** (`wave`): one beat for all eight legs, each at its own place in it. Walking, a **ripple** runs up each side
-  from the back leg to the front, a quarter of a stride apart, the two sides half a stride out (three quarters of each stride a foot
-  is down, so six or seven feet hold it at once). From 3.8 m/s to 9 m/s it blends into the **run**: two sets of four (left front,
-  right second, left third, right back; then the others) that take turns, half the stride down, a little less flat out. Turning on
-  the spot drives the same beat.
-- **The legs never cross:** each side's reach, from its front leg's furthest ahead to its back leg's furthest behind, is cut into four
-  even lanes along the body with a gap between them, and each foot lands in, stands in and swings within its own (a stepping foot is
-  carried with the body, so it only ever goes forward in its lane; one carried out of it by a turn steps at once). The front legs
-  reach ahead and the back ones behind, as a spider's do. Measured from above: no two neighbours cross at any pace, turning on the
-  spot, circling or backing up. The cost is the stride: 2.96 m at most, so 1 step a second per leg walking at 3 m/s, 2 at 12 m/s, 3 at
-  18 and nearly 4 at 24, just under where it closes up. Feet stay planted to the centimetre.
-- **It climbs up to 13 m. The body leads and the legs follow:**
-  - **The hull's pose comes from the ground, not its feet** (`target`): each half of its outline (front and back, left and right)
-    wants its hips its standing height over most of what is under it, and at least 1.65 m over the highest thing there; going, the
-    leading half looks 2.5 to 8 m ahead and the trailing half as far as it is long. So over a crate it rises just enough to clear it,
-    over a gap it keeps level with the tops either side, and at a wall it rears up toward the wall's top before its nose is there.
-    **The lower half rides up** toward the higher, by up to 3 m: so at a step or a low block it lifts level, with room under it,
-    rather than pitching its nose up at it and scraping over (not at a wall taller than it can climb, where it only rears as far as
-    it can). **At a taller face it rears up instead, in stages:** from 3 m taller than under its tail to 6 m, it rides up less (to 1 m)
-    and pitches more steeply (to about 73 degrees at an 8.6 m block). While the face is still ahead, its tail stays down on its back
-    legs and only its front rises (it creeps at 1.5 m/s meanwhile, pitching up at 1 rad/s and rising at 3 m/s at most); once its nose
-    is at the face it hauls itself up, every leg going up the face after it, crests and steps onto the top. No leap: two feet always
-    stay down. **All round, it leans toward what is beside it:** something taller just outside its outline (beside it, behind it, or
-    ahead while it stands) lifts that half of it up to 1.6 m, slowly only and not while rearing (none past 6 m/s, so running past a
-    wall it doesn't sway),
-    and the legs on that side take holds up its face and over its top edge, the others staying down.
-  - **The body goes there on its own** (`bodyPose`): each frame toward that pose at its own rates (6 m/s up or down, 2.2 rad/s of
-    pitch), only never deeper into anything (`HULL3`, 83 points round the bead, close enough that an edge can't slip between them).
-    The legs don't hold it back, so it never waits on a foothold: the earlier climbs, where the body could only go as far as its
-    planted feet let it, stalled whenever a leg ran out of reach or a step took too long.
-  - **Each foot takes the hold nearest the height that pose puts it at** (`foothold`), with some stretch and some fold left in hand,
-    among the spots round its lane, ahead of it (in line, to either side, and in line with its hip, for a narrow block), the faces
-    round its hip and the face below an edge going down. It may only take one in its leg's reach, in its lane, **on its own side of the
-    body**, with its foot and shin clear of the hull, no more than 3 m over its hip, and on a top with leverage (0.7 m in from any edge
-    on its hip's side; past it the top may end, so it straddles a narrow block). Over an edge above its hip it reaches knee-up, as a
-    leg does. A grip on a face is never higher than the face's top.
-  - **The legs keep up:** a planted foot the body has left out of its leg's reach holds nothing and steps at once, out of turn and
-    whatever else is stepping. Climbing (steep, or still rising to the pose it wants), the legs step by need (`gait.js` `free`): the
-    neediest first (past 80% of their reach, 0.6 m off the height their hold should be, carried out of their lane or in toward the
-    body's middle), up to four at once but never two neighbours along a side, and while every corner of the body keeps a foot down.
-    A step takes as long as its foot needs at 9 m/s (up to 0.9 s). **A climbing step picks its hold once, at lift-off,** for where its
-    hip will be when it lands (on its way to the pose the hull wants, and carried on with the body), and keeps it, so the foot goes
-    straight there rather than chasing a different best hold every frame (its landing moved 3 m on average after lift-off, up to 12;
-    now 0.7). An out-of-turn step up or down does the same; on the level, walking, a landing still follows the body as the rhythm's do. A step up or down, or from or to a face, arcs no more than 0.4 m over what is between (it goes up
-    first, then over), so cresting a block the legs don't swing out into the air. A leg with nothing in reach to hold **reaches for the
-    hold it wants**, its foot most of its reach out toward it; with none in sight it hangs off the hull, clear of what it is against;
-    either way its foot moves there smoothly (8 m/s), never snapping from pose to pose. A foot in the air never goes past its leg's
-    reach: one the body has run on from (backing up fast down the lane, say) is drawn in after it rather than dragged out straight
-    behind; it leaves where it lifted quickly and settles as it lands. Running, the lanes reach 78% of the way to full stretch at either
-    end, so the back legs don't trail out straight behind at speed or slowing down. Walking, feet land where the rhythm asks.
-  - **Rearing up a face, some legs climb and some push** (`roles`): three rays ahead, low over its anchor, find the face and its angle;
-    the four legs whose hips are nearest it climb, the rest push, so coming at it corner first, its near side's legs climb. A pusher
-    steps only at full stretch, never just for being off the height the pose would put it at; once the nose is at the face and it
-    hauls itself up, they all climb. A pusher
-    keeps to what it stands on: a face counts less for it, and so does a hold higher up. Climbing, a hold within 2 m of another foot's
-    counts less, so the feet fan out up and along the face rather than bunch.
-  - **The legs keep clear of the hull:** a thigh never rises more than 69 degrees over the level (closer in, the ankle folds instead),
-    so the knee stays up and out over its foot; the leg solve turns a knee aside from the hull as from anything else; and with the
-    hull steep, a stepping foot lifts off the hull and out to its side rather than straight up along it.
-  - **It slows only for its own body:** climbing a face steeply, it goes no faster than 5 m/s. It looks 1, 2.5 and 4.5 m ahead: what
-    even the pose it wants would meet there (a wall taller than it climbs), it brakes short of (at 10 m/s/s, the last metre at
-    0.6 m/s); what it only has to rise to clear, no faster than lets its hull get that much higher first, at its own rates. So a crate
-    or a step it takes at a run, and a tall block at 5 m/s.
-  - Nothing over 13 m above its **anchor**, the ground under its outline (as high as 30% of it is lower, so a hole under a corner
-    doesn't lower it, nor its nose over a top raise it); its hips never more than 1.45 m over that, so at a wall taller it rears up the
-    face as far as it can and stops there. Walking off something tall, it climbs down nose first. Standing beside a wall it stands
-    still (no shuffling between two holds as good, nor stepping back onto the spot a foot is on).
-  - **Measured** (the lab's sweep, 742 cases, every box from 8 sides at 4 and 12 m/s, gaps, turning on tops, standing): blocks it
-    should climb, 510 of 512 approaches (255 of 256 at each speed, corner-first too); every gap of 3 to 7 m crossed both ways; too-tall
-    walls stopped at in all 48; standing beside tall blocks, still in all 69; 2 cases wrong in all. The hull is in nothing in any of
-    them and no planted foot over nothing; a leg passes into the hull in 2.7% of frames (most of them a thigh grazing its side, steep
-    against a face), and a foot is across the body's middle in 0.10%. Up the lab's climbing set (2.4 to 9 m blocks, at 4 and 10 m/s)
-    it takes 1.9 s on average from meeting the face to standing on top (5.9 s when the legs led the body): a 3.5 m step at 10 m/s
-    without slowing, a 9 m block reared up nearly upright in stages. The lab's lane (a crate, a step, 4.6 and 9.5 m blocks, a 12 m wall on and
-    off, then a 16 m wall it stops at) goes at an unbroken 3 m/s. A climbing step's landing moves 0.6 m on average after lift-off; feet
-    on a face are 3 m apart on average. The cost of the body leading: now and then a foot is briefly past its leg's full length before
-    it steps (1.7% of planted-foot frames on the climbing set). What it still does wrong: a 1.2 m crate with a tall block just behind
-    it, from that side, it rears at the tall one and slides along it; some middle legs tuck in against the hull mid-climb.
+- **Its legs are solved exactly** (`gait.js` `solveBent`): each three-bone leg bends its knee up, as built, in the upright plane
+  through its hip and foot, the ankle folding as the foot comes in, so a leg never flips from one shape to another; a knee that would
+  be in something turns aside from it.
+- **The hull stands on its feet** (`spiderwalk.js`). Each leg has a home: its rest stance, carried with the hull and dropped onto
+  whatever is under it. The pose the hull wants is the one that puts every home nearest its foot's hold (`fitPose`: height, pitch
+  and roll together), raised to clear what is under it and just ahead; and it goes toward that only as far as its planted legs
+  reach (`constrain`: none past its length, none folded closer than it folds). So feet up on a block and feet down on the ground
+  tilt and raise it between them, some legs half folded and some stretched, from any side; and **a planted foot never leaves its
+  hold**. The root is slowed, or stopped, where going on would take the hull out of a planted leg's reach whatever its pose
+  (`tank.speedMax`), till that leg has stepped.
+- **Every leg is planted, stepping or reaching.** A step is a timed arc to a hold chosen at lift-off (for where its hip will be when
+  it lands), up first onto something higher, over first and then down; it lands only on a hold in its reach. A leg with nothing in
+  reach to stand on reaches for where it would, probing, and steps the moment a hold comes in reach.
+- **Any way it goes.** It is driven by a velocity across the ground and turned separately (to the reticle): ahead, back to 18 m/s,
+  sideways to 12 m/s, or any mix. **A spider's rhythm** on easy ground: one beat for all eight legs, a ripple up each side at a
+  walk (six or seven feet down), two sets of four at a run from 3.8 to 9 m/s; each foot keeps to its own lane of the hull, so
+  **the legs never cross**. Turning on the spot (1.8 rad/s) drives the same beat. On rough ground (tilted, feet at different
+  heights, held up against something) they step by need instead: the leg that holds the hull back the most goes first, never two
+  neighbours or a pair across the hull at once, four always down.
+- **Climbing, nose or tail first.** Pushed at something and held up, its feet look further on and the hull leans into it.
+  - A leg whose home comes over the thing steps up onto its top if it reaches it (3 m over its hip at most, 0.7 m in from the edge).
+  - **A reaching leg may take a hold on the face instead; a leg that carries it never does:** a face hold needs four other feet on
+    tops (the ground, or the thing's top). So the front legs go up the face while the rear four stand on the ground.
+  - The hull follows its feet up: **its rear legs straighten together under it**, as far as they go.
+  - **Once the reaching pair has hooked the top, one foot each side, the haul begins:** they pull, and the legs below may let go of
+    the ground and come up the face after the hull, in order, the leg ahead always higher.
+  - **About 10 m** is what that reaches (`tank.climbMax`, measured: the lab's 9.7 m block, from meeting its face to walking on
+    top, in about 8 s). Corner first it often hooks only one side, so above about 7 m it mostly gives up that way.
+- **Against a wall too tall** the same thing happens short of the top: it rears up on its straightened rear legs, its front legs
+  pawing up the face (a new hold every second or so). After 4 s of getting nowhere it gives up: its feet let go of the face, it
+  backs off (`tank.shove`, a velocity it asks its driver for) and stands down level, and it won't try again till it is pushed
+  another way or let go.
+- **Sideways on it only leans:** its flank is too close to a face for a leg to fold to, so pushed sideways it rolls toward the thing
+  (to 34 degrees), steps its near legs up onto what they reach (about 5 m) and goes over that; anything taller it gives up at. Its
+  hull's collision keeps its legs' room beside it, so it never stands flank-on against a wall with its legs crushed between.
+- **Coming down** is the climb reversed. At an edge over a drop its front feet go down the face, the hull following them; its
+  middle goes no more than 3 m out past the edge till the hull is down near the ground below; any leg may walk down the face
+  after it (the four-on-tops rule is the climb's), and a leg left stretched behind with nowhere better lets go and reaches down.
+- **Measured** (the lab's sweep; see the lab's table for every case): 952 cases.
+  - **Right in 939** (it went over what it should, stopped at what it can't, stood still where it should).
+  - Blocks of 2 to 7 m: all 80 face-on approaches over, 74 of 80 corner-first. Blocks of 7 to 10.5 m: 35 of 40 face-on, 12 of 40
+    corner-first. All 112 approaches to walls over 11.5 m stopped. Crabbed (nose turned from the way it goes) at blocks under
+    5.5 m: 27 of 28 over. Standing beside tall blocks: still in all 69. All 12 gap crossings and 5 turns on tops right.
+  - **The hull is in nothing, no planted foot is over nothing and none is off its hold, in any frame** (a planted foot was past
+    its leg's length in 1.7% before). A leg is in limbo, reaching, in 3.7% of frames; a leg passes into the hull in 1.4% (2.7%
+    before) and a foot is across the body's middle in 1.1% (0.1% before: nearly all of it crabbed diagonally at a corner).
+  - The cost of the hull waiting on its legs: a climb and the walk off the far side take 18 s on average for a 2 to 7 m
+    block and 25 s for a 7 to 10.5 m one, at 4 m/s at most on rough ground.
+  - **What it still does wrong** (the 13): corner-first at the 6 m blocks and platforms it gives up, or stalls coming down off
+    them (5); having given up at one thing it will not go round it to the next while pushed the same way (3); parked half on
+    a block, turned from the way it came, it sometimes keeps shuffling (4); one 4.8 m block sideways and corner-first (1).
 - **Its height is its own:** kept in the world, so the caller can put the root on the ground under it or anything else; the caller's
-  collision asks the tank (`tank.hits(x, y, z, yaw)`: how far into things the hull would be with the root there) and never moves or
-  turns it deeper in, so it turns on the spot even face-down against a wall. In the lab it spins quick on its feet (2.6 rad/s at a
-  standstill, slower as it speeds up).
-- **It backs up**, to 18 m/s (`tank.reverseMax`): the gait's strides mirror, the rear legs leading.
+  collision asks the tank (`tank.hits(x, y, z, yaw)`: how far into things the hull, and its legs' room beside it, would be with the
+  root there) and never moves or turns it deeper in. It turns at 1.8 rad/s at a standstill (`tank.turnMax`), slower as it speeds
+  up, and at 0.6 picking its footing on rough ground.
+- **It backs up**, to 18 m/s (`tank.reverseMax`), and goes sideways, to 12 m/s (`tank.strafeMax`): the same legs, the same rules.
 - **The reactor beam:** hold fire. The reactor and the muzzle brighten for a second (let go and it fizzles), then a condensed beam
   channels for four seconds, 420 m long. In spider form only: held in the bead, fire does nothing; held walking, it keeps it a spider
   (under 25 m/s, so it never closes up). While charging and firing it keeps 30% of its speed.
 
-![Up the lane's 12 m wall: all but upright against the face, front feet over the edge, the rear legs following up it](wall.jpg)
+![A 9.7 m block: reared up on its rear legs with its front pair reaching the edge; hauled up, the rest coming up the face; and down the far side, hanging from the top (headless stills: the tank renders dark there)](wall.jpg)
 
 ![The beam](beam.jpg)
 
@@ -167,11 +144,12 @@ tuned in Blender.
    instead of a URL.
 2. **Footholds on structures.** The lab's ground knows its crates; the game's would cast down onto the place's colliders (their tops are
    the drawn tops: `docs/collision.md`; `rayCollider`, `colliders.query`) and fall back to `planet.ground`, keep feet off edges (try a
-   few spots near the wanted one: `spidertank.js` does, given a `ground(p, out, ceil)` that skips what is taller than `ceil`, and a
+   few spots near the wanted one: `spiderwalk.js` does, given a `ground(p, out, ceil)` that skips what is taller than `ceil`, and a
    `ray(from, dir, far, out)` for faces); the tank poses its own hull. The drive moves the root only where `tank.hits` says the hull
-   goes no deeper into things (the legs never block it), and passes `push` (what the driver asks for).
+   goes no deeper into things, no faster than `tank.speedMax`, adds `tank.shove`, and passes `push` (what the driver asks for:
+   `{ x, z }` across and ahead).
 3. **The mount.** A `VEHICLES` entry for it (`hideRider`), summoned and entered from the Garage like the others, with its own drive:
-   walking (its acceleration, turning that slows as it speeds up), closing up past 25 m/s, and overdrive on the Skimmer's hover drive.
+   walking (its acceleration, strafing, turning to the reticle at `tank.turnMax`), closing up past 25 m/s, and overdrive on the Skimmer's hover drive.
    Outdoors only: it is too big for the casino or the Downs' halls.
 4. **The beam in play.** A long ray from the muzzle against enemies, meteors, colliders and the ground (stopping where it hits, with a
    splash there), its damage, a charge meter on the HUD, sound, and the slowdown; the fire button as the turrets' (left mouse).

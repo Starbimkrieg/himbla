@@ -5,6 +5,31 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
+- **Spider tank: it stands on its feet, strafes, aims by the reticle, and climbs what its legs reach** (`docs/spidertank/`; not
+  in the game yet). How it walks and climbs is rebuilt in the new `src/spiderwalk.js`; `spidertank.js` keeps the model, the fold
+  and the beam, and `gait.js` now only lends it the leg solve (`legChain`, `solveLeg`, `solveBent`, `poseLeg` are exported).
+  - **The hull follows its feet.** Its pose (height, pitch and roll together) is the one that fits its feet's holds, and it goes
+    there only as far as its planted legs reach, so a planted foot no longer leaves its hold when the hull moves on (off its hold
+    in no frame of the sweep, from 1.7%); the root is slowed or stopped till the leg that holds it back has stepped. Legs up on a block
+    are half folded, legs on the ground below stretched, from any side.
+  - **Every leg is planted, stepping or reaching**; the hanging pose is gone.
+  - **Driven any way:** `push` is now a velocity across the ground (`{ x, z }`; a number still means ahead), so it goes sideways (to
+    12 m/s, `tank.strafeMax`) and diagonally as well as ahead and back, and turns separately (`tank.turnMax`, 1.8 rad/s; 0.6 on
+    rough ground). In the lab A/D strafe and it turns to where the camera looks.
+  - **Climbing by reach, not a set height:** front legs take holds up a face only while four others stand on tops; the rear legs
+    straighten together under the hull; once the front pair has hooked the top, one foot each side, the rest may come up the face
+    after it. That gets it up about 10 m nose or tail first (`tank.climbMax`, was 13 with every leg on the wall). Sideways on it
+    leans and steps up what it can without rearing, about 5 m.
+  - **A wall too tall:** it rears on its rear legs with its front legs pawing up the face, then after 4 s gives up, lets go, backs
+    off (`tank.shove`, new: a velocity it asks its driver for) and stands down level.
+  - **Coming down** it goes over an edge front feet first down the face, its middle no more than 3 m out past the edge till the
+    hull is down.
+  - **The lab's sweep** now also comes at the blocks crabbed (45, 90, 135, 180 degrees) and parks half on them, and counts planted
+    feet off their holds and legs in limbo. 952 cases: 939 right; the hull in nothing and no foot over nothing in any frame; legs
+    through the hull in 1.4% of frames (from 2.7%), in limbo 3.7%, a foot across the body's middle 1.1% (from 0.1%, crabbed at
+    corners). Slower than before, as the hull waits on its legs: 25 s over a 7 to 10.5 m block and off its far side. Still wrong:
+    corner-first above about 7 m it mostly gives up, and having given up it won't go round to the next thing while pushed the
+    same way. `gait.js` still carries the options only the tank used (`wave`, `free`, `long` and the rest), now unused.
 - **The ILMB, laid out anew: Draft A, "the Circle"** (docs/ilmb-layouts.md; the positions are the new `src/ilmbLayout.js`,
   which `tools/ilmb-layouts.mjs` checks and draws). The Crown, its wings and the wall stay; the scatter of buildings round them
   is regrouped into four quarters on a **ring road inside the wall** (r 170), each in the band behind its own gate:
