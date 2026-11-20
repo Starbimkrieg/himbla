@@ -1,5 +1,5 @@
 # Review renders for the Kepler town kit proposals (docs/kepler-proposals): the dome remodels and station pieces
-# (kepler_domes.py), the two town halls (kepler_hall_a.py, kepler_hall_b.py) and the three town layouts stood up in 3D
+# (kepler_domes.py), the two town halls (kepler_domes.py KEPLER_SET=hall, kepler_hall_b.py) and the three town layouts stood up in 3D
 # (kepler_town.py), each in a fresh scene. Writes <target>_<view>.jpg into docs/kepler-proposals.
 #
 #   MOONRUNNER_REPO=<repo> blender -b --factory-startup --python tools/blender/proposals/preview_kepler.py -- [target ...]
@@ -52,7 +52,7 @@ TARGETS = {
         "shops": orbit(100, 7, 36, (19, 3, 5)),
         "longhouse": orbit(62, 9, 36, (-6, 3, 0)),
     }),
-    "hall_a": ("kepler_hall_a.py", {}, {
+    "hall_a": ("kepler_domes.py", {"KEPLER_SET": "hall"}, {
         "hero": orbit(66, 9, 92, (4, 11, 12)),
         "front": orbit(92, 5, 98, (3, 12, 10)),
         "top": orbit(112, 52, 112, (3, 4, 12)),

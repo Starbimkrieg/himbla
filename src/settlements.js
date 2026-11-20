@@ -7,6 +7,9 @@ import { glow, glowShared, gradientMap } from './toon.js';
 import { patchBermMaterial } from './moonSkins.js';
 import { market, tickerText } from './market.js';
 import { casinoNode, casinoSlot, lotNode, lotSlot } from './models.js';
+import { keplerModel, keplerSlot } from './models.js';
+import { KEPLER_PAD, DOOR_HEX, TUNNEL, HALL_FLAGS, SHOP_SCALE, SHOP_OFF, SHOP_UNITS, TOWN_LAYOUT, keplerLayout } from './keplerLayout.js';
+import { bakeUnitRow } from './ilmbCore.js';
 import { waterMesh } from './fountainFx.js';
 import { craneModel, craneSlot, CRANE_H, CRANE_LOAD_DROP, CRANE_TROLLEY_MIN, CRANE_TROLLEY_SPAN, gantryModel, cargoSlot, CARGO_BOX, garageModel, garageSlot, dishModel, dishSlot, DISH_KINDS, powerModel, powerSlot, POWER_PULSE, habitatModel, habitatSlot, wingModel, wingSlot, WING_GLASS } from './models.js';
 
@@ -1155,7 +1158,7 @@ export function buildMeridian(world, loc) {
     towerCrane(k, -54, -72, 34, 30, YEL, { speed: 0.09, phase: 0 });
     towerCrane(k, 62, -78, 34, 30, YEL, { speed: 0.11, phase: 2.2 });
     // lab dome west of the avenue, trade hall east, both facing it
-    habDome(k, -58, 40, 22, 0x9be7ff, { door: Math.PI / 2, trim: blue });
+    keplerDome(k, 'B', -58, 40, 22, Math.PI / 2, blue);
     tradeHall(k, 64, 24, 24, 56, blue);
     // plaza well out from the steps for the fountain: paving, the casino's fountain with a Meridian-blue dollar on top, benches, lamps
     k.at(0, 34);
@@ -1305,18 +1308,6 @@ export function dressMonolith(world, loc) {
   });
 }
 
-// Ribbed connector tunnel between two ground points (radius r), lit window strips.
-function tunnel(world, loc, k, ax, az, bx, bz, r = 1.6) {
-  const len = Math.hypot(bx - ax, bz - az), yaw = Math.atan2(bx - ax, bz - az);
-  k.at((ax + bx) / 2, (az + bz) / 2, yaw);
-  k.add(new THREE.CylinderGeometry(r, r, len, 14).rotateX(Math.PI / 2), T(WHITE), 0, r * 0.8, 0, { outline: 0.1 });
-  for (let t = -len / 2 + 1.5; t < len / 2 - 1; t += 3) k.add(new THREE.TorusGeometry(r + 0.06, 0.14, 4, 16), T(PANEL), 0, r * 0.8, t, { outline: 0 });
-  for (const s of [-1, 1]) k.box(0.1, 0.4, len - 1, G(WARM), s * r * 0.93, r * 1.15, 0, { rz: s * 0.5, outline: 0 });
-  k.box(r * 1.6, 0.3, len, T(PANEL), 0, 0, 0, { outline: 0 });
-  k.at();
-  world.col(loc, { type: 'box', x: (ax + bx) / 2, y: r * 0.8, z: (az + bz) / 2, hx: r, hy: r, hz: len / 2, yaw });
-}
-
 // free spot for radius r on the ring rmin..rmax, clear of the circles in occ
 function freeSpot(occ, r, rmin, rmax, rr, tries = 60) {
   for (let i = 0; i < tries; i++) {
@@ -1325,96 +1316,6 @@ function freeSpot(occ, r, rmin, rmax, rr, tries = 60) {
     if (occ.every(([ox, oz, or]) => Math.hypot(x - ox, z - oz) > r + or + 3)) { occ.push([x, z, r]); return [x, z]; }
   }
   return null;
-}
-
-// Playground on a rubber pad (local frame at x, z): merry-go-round, swings, slide, climbing dome, sandpit.
-export function playground(world, loc, k, x, z, yaw = 0) {
-  const pk = 0xff7ad9, cy = 0x2ec4ff;
-  k.at(x, z, yaw);
-  k.cyl(13, 13.2, 0.15, 28, T(0x3ad1a0), 0, 0, 0, { outline: 0.04 });
-  k.ring(13.05, 0.15, T(YEL), 0, 0.15, 0);
-  // swings: A-frame, three swinging seats
-  for (const s of [-1, 1]) for (const t of [-1, 1]) k.beam([s * 4.5, 0, t * 1.6 - 5], [s * 4.5, 4.5, -5], 0.12, T(cy), { outline: 0.03 });
-  k.beam([-4.7, 4.5, -5], [4.7, 4.5, -5], 0.14, T(cy), { outline: 0.03 });
-  for (const sx of [-1, 1]) k.solid(0.3, 2.25, 1.75, sx * 4.5, -5);
-  k.at();
-  const c = Math.cos(yaw), s = Math.sin(yaw);
-  const L = (lx, lz) => [x + lx * c + lz * s, z - lx * s + lz * c];
-  for (let i = 0; i < 3; i++) {
-    const sw = part(pk, (q) => {
-      for (const t of [-0.4, 0.4]) q.beam([t, 0, 0], [t, -3.4, 0], 0.025, T(DARK), { outline: 0 });
-      q.box(1, 0.12, 0.45, T([pk, YEL, 0x7dff6a][i]), 0, -3.5, 0, { outline: 0.02 });
-    });
-    sw.userData.tick = (o, dt, t) => { o.rotation.x = Math.sin(t * 1.6 + i * 2) * 0.45; };
-    const [px, pz] = L(-3 + i * 3, -5);
-    k.at(px, pz, yaw);
-    k.dyn(sw, 0, 4.5, 0);
-    k.at();
-  }
-  k.at(x, z, yaw);
-  // slide: roofed ladder tower and chute
-  k.box(2, 3, 2, T(YEL), 5, 0, 4, { outline: 0.05 });
-  k.add(new THREE.ConeGeometry(1.7, 1.4, 4), T(pk), 5, 3.7, 4, { ry: Math.PI / 4, outline: 0.04 });
-  k.add(new THREE.BoxGeometry(1.2, 0.2, 5.4), T(cy), 5, 1.6, 7.6, { rx: 0.55, outline: 0.04 });
-  for (const t of [-0.5, 0.5]) k.add(new THREE.BoxGeometry(0.12, 0.5, 5.4), T(cy), 5 + t, 1.85, 7.6, { rx: 0.55, outline: 0 });
-  // climbing dome
-  k.add(new THREE.IcosahedronGeometry(2.6, 1), new THREE.MeshBasicMaterial({ color: 0x7dff6a, wireframe: true }), -6, 0.4, 5, { outline: 0 });
-  k.add(new THREE.SphereGeometry(2.62, 12, 6, 0, TAU, 0, Math.PI / 2), inkShell(), -6, 0.2, 5, { outline: 0.05 });
-  // sandpit
-  k.cyl(2.6, 2.7, 0.35, 16, T(0xe8c98a), 1, 0, 9, { outline: 0.03 });
-  k.ring(2.7, 0.15, T(0x8a5a3a), 1, 0.35, 9);
-  k.solid(1, 1.5, 1, 5, 4);
-  k.solid(0.6, 0.9, 2.5, 5, 7.6, 0, 0.2); // chute
-  k.sphere(2.6, -6, 0.4, 5); // climbing dome
-  k.at();
-  // merry-go-round
-  const [mx, mz] = L(0, 0);
-  k.at(mx, mz);
-  k.cyl(0.4, 0.5, 0.6, 10, T(DARK), 0, 0, 0, { outline: 0.03 });
-  k.column(2.6, 0.85, 0, 0);
-  k.column(0.6, 1.8, 0, 0);
-  k.at();
-  const mgr = part(pk, (q) => {
-    q.cyl(2.6, 2.6, 0.2, 18, T(pk), 0, 0, 0, { outline: 0.04 });
-    for (let i = 0; i < 6; i++) q.add(new THREE.BoxGeometry(2.6, 0.04, 0.4), T(i % 2 ? YEL : cy), Math.cos((i / 6) * TAU) * 1.3, 0.21, Math.sin((i / 6) * TAU) * 1.3, { ry: -(i / 6) * TAU, outline: 0 });
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * TAU;
-      q.beam([Math.cos(a) * 2.2, 0.2, Math.sin(a) * 2.2], [Math.cos(a) * 0.4, 1.2, Math.sin(a) * 0.4], 0.06, T(YEL), { outline: 0 });
-    }
-  });
-  mgr.userData.spin = 1.2;
-  k.dyn(mgr, mx, 0.6, mz);
-}
-
-// Water tower: tank on four legs, ladder, town colour band.
-export function waterTower(world, loc, k, x, z, color) {
-  k.at(x, z);
-  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-    k.beam([sx * 3, 0, sz * 3], [sx * 2, 10, sz * 2], 0.25, T(STEEL), { outline: 0.04 });
-    k.beam([sx * 2.8, 2, sz * 2.8], [-sz * 2.4, 7, sx * 2.4], 0.07, T(DARK), { outline: 0 });
-  }
-  k.cyl(4, 4, 5, 18, T(LIGHT), 0, 10, 0, { outline: 0.1 });
-  k.add(new THREE.ConeGeometry(4.3, 2.2, 18), T(color), 0, 16.1, 0, { outline: 0.06 });
-  k.ring(4.05, 0.3, T(color), 0, 12.5, 0);
-  k.ring(4.4, 0.08, T(DARK), 0, 10.2, 0);
-  for (const t of [-0.3, 0.3]) k.beam([3.3 + t, 0, 0], [4.1 + t, 10, 0], 0.04, T(DARK), { outline: 0 });
-  k.blinker(0, 17.6, 0, 0xff2a4a, 0.3);
-  k.column(4.1, 15, 0, 0);
-  k.at();
-}
-
-// Greenhouse: glass barrel vault over planter rows and violet grow-lights.
-export function greenhouse(world, loc, k, x, z, yaw, len = 18) {
-  k.at(x, z, yaw);
-  k.box(7.4, 0.5, len + 0.4, T(CONC), 0, 0, 0, { outline: 0.05 });
-  k.add(new THREE.CylinderGeometry(3.4, 3.4, len, 16, 1, true, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2), GLASS(0x8dffb0, 0.25), 0, 0.5, 0, { outline: 0 });
-  for (let t = -len / 2; t <= len / 2 + 0.01; t += 3) k.add(new THREE.TorusGeometry(3.42, 0.12, 4, 14, Math.PI), T(WHITE), 0, 0.5, t, { outline: 0.02 });
-  for (const s of [-1, 1]) k.add(new THREE.BoxGeometry(1.6, 0.6, len - 1.5), T(0x6b4a2a), s * 1.6, 0.8, 0, { outline: 0.02 });
-  for (let t = -len / 2 + 1.5; t < len / 2 - 1; t += 1.5) for (const s of [-1, 1]) k.ball(0.45, T(t % 3 ? 0x3ad15a : 0x7dff6a), s * 1.6, 1.5, t, { outline: 0 });
-  k.box(0.3, 0.15, len - 2, G(0xd8a0ff), 0, 3.2, 0, { outline: 0 });
-  for (const sz of [-1, 1]) k.add(new THREE.CircleGeometry(3.4, 16, 0, Math.PI), GLASS(0x8dffb0, 0.25), 0, 0.5, sz * len / 2, { outline: 0 });
-  k.solid(3.6, 2, len / 2, 0, 0);
-  k.at();
 }
 
 // Comms mast with a turning dish head on a boom, in `faction` paint.
@@ -1430,98 +1331,140 @@ export function commsMast(world, loc, k, x, z, h, color, faction) {
 }
 
 // =============================================================================================
-// Kepler towns (Tranquility, Aldrin, Kepler, Twilight, Hertzsprung): hub dome ringed by family domes on tunnels, edge cabins
-// facing the square, playground, greenhouse, water tower, comms mast. Kepler Civic Center has a gold council dome and the town
-// hall with its clock tower.
+// Kepler towns (Tranquility, Aldrin, Kepler Civic Center, Twilight, Hertzsprung): laid out from keplerLayout.js (three
+// layouts and the Civic Center's, docs/kepler-proposals) with the pieces of kepler.glb (tools/blender/build_kepler.py): the
+// two hab domes, Earthrise Hall, raised modules, longhouses, stalls, greenhouses, the water tank, tunnels, and the ILMB
+// quarter's shop units. The towns' lanes and courts are cleared regolith, walked, not driven; only the Civic Center's
+// avenue is a road.
 // =============================================================================================
-export function buildTown(world, loc, { civic = false } = {}) {
-  const palette = [0xff9f1c, 0xff7ad9, 0x2ec4ff, 0xffd23f, 0x7dff6a, 0xc77dff];
-  const occ = [];
-  settle(world, loc, 8101 + loc.id.length * 31, (k, { rr }) => {
-    const hubR = civic ? 30 : 22;
-    habDome(k, 0, 0, hubR, civic ? 0xffd23f : 0xb8ffb0, { door: Math.PI, trim: 0xff9f1c, yard: false }); // tunnels come in from every side
-    occ.push([0, 0, hubR + 4], [0, -hubR - 4, 4]);
-    if (civic) occ.push([0, 52, 20], [-20, 64, 2], [20, 64, 2]);
-    const n = loc.id === 'tranq' ? 8 : 6;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * TAU + rr() * 0.3;
-      const d = (civic ? 50 : 40) + rr() * 35;
-      const r = 11 + rr() * 9;
-      const dx = Math.cos(a) * d, dz = Math.sin(a) * d;
-      if (civic && Math.hypot(dx, dz - 52) < r + 22) continue;
-      habDome(k, dx, dz, r, palette[i % palette.length], { door: Math.atan2(dx, dz), trim: palette[(i + 3) % palette.length] });
-      occ.push([dx, dz, r + 5]);
-      const k1 = hubR / d, k2 = 1 - r / d;
-      tunnel(world, loc, k, dx * k1, dz * k1, dx * k2, dz * k2, 1.6);
-      // keep the tunnel line clear too
-      for (let t = k1 + 0.1; t < k2; t += 0.15) occ.push([dx * t, dz * t, 2.5]);
-    }
-    for (const p of loc.pads || []) occ.push([p.x, p.z, p.r + 2]);
-    occ.push([-65, 55, 15]);
-    // edge cabins, doors to the square
-    for (let i = 0; i < 5; i++) {
-      const sp = freeSpot(occ, 7, 80, Math.min(98, loc.r * 0.85), rr);
-      if (!sp) continue;
-      cabin(k, sp[0], sp[1], 10, 8, 4.6, palette[(i + 2) % palette.length], Math.atan2(-sp[0], -sp[1]), { trim: palette[i % palette.length], solar: i % 2 === 1 });
-    }
-    const pg = freeSpot(occ, 15, 50, 85, rr);
-    if (pg) playground(world, loc, k, pg[0], pg[1], Math.atan2(-pg[0], -pg[1]));
-    const gh = freeSpot(occ, 11, 45, 90, rr);
-    if (gh) greenhouse(world, loc, k, gh[0], gh[1], Math.atan2(gh[0], gh[1]) + Math.PI / 2);
-    const wt = freeSpot(occ, 5, 50, 90, rr);
-    if (wt) waterTower(world, loc, k, wt[0], wt[1], palette[loc.id.length % 6]);
-    const cm = freeSpot(occ, 3, 60, 95, rr);
-    if (cm) commsMast(world, loc, k, cm[0], cm[1], 16, 0xff9f1c, 'kepler');
-    for (let i = 0; i < 6; i++) { const sp = freeSpot(occ, 1.5, 30, 95, rr); if (sp) k.lamp(sp[0], sp[1], 7); }
-    // town sign by the hub door
-    k.at(0, -hubR - 9, Math.PI);
-    k.sign(loc.name.toUpperCase(), 0, 0, { w: Math.max(10, loc.name.length * 0.75), y: 4, fg: '#ff9f1c' });
-    k.at();
-    if (civic) townHall(world, loc, k);
-  });
-  world.pad(loc, -65, 55, 13, 0xffd23f, true);
+const rad = (d) => (d * Math.PI) / 180;
+let clearedMat = null;
+// cleared ground: the ground's own grain and stones (moonSkins.js patchBermMaterial), a shade paler
+const CLEARED = () => (clearedMat ||= patchBermMaterial(new THREE.MeshToonMaterial({ color: keplerSlot('cleared').color, gradientMap: gradientMap() })));
+const keplerMat = (door) => (slot) => (slot === 'household' ? T(door) : slot === 'glass' ? GLASS(0x9be7ff, 0.22) : slot === 'cleared' ? CLEARED() : slotMat(keplerSlot(slot)));
+
+// Bake a kepler.glb piece (`kepler_<name>`) into the kit at (x, z) turned by yaw (radians), with its colliders; leaves the kit
+// at the origin. door: the household's door colour; turn: a geodesic dome's lock (airlock, portholes) turned that far about
+// the piece's centre while its shell stays as built; s: [x, z] stretch (ground tiles, which have no colliders); scale: the
+// whole piece that many times its built size, colliders too (Kit.sc: your town's small domes). Returns the model.
+export function keplerPiece(k, name, x, z, yaw = 0, { door = DOOR_HEX.sage, turn = 0, s = null, scale = 1 } = {}) {
+  const M = keplerModel(name), mat = keplerMat(door);
+  k.at(x, z, yaw);
+  if (scale !== 1) { k.base.multiply(new THREE.Matrix4().makeScale(scale, scale, scale)); k.sc = scale; }
+  k.baked(M.root, mat, s ? new THREE.Matrix4().makeScale(s[0], 1, s[1]) : new THREE.Matrix4());
+  if (M.lock) k.baked(M.lock, mat, nodeMatrix(M.lock, new THREE.Matrix4().makeRotationY(turn)));
+  for (const { pos: p, data: d } of M.cols) {
+    const t = d.lock ? turn : 0, c = Math.cos(t), sn = Math.sin(t);
+    const px = p.x * c + p.z * sn, pz = -p.x * sn + p.z * c;
+    if (d.shape === 'box') k.solid(d.hx, d.hy, d.hz, px, pz, (d.yaw || 0) + t, p.y, d.pitch || 0);
+    else if (d.shape === 'cyl') k.column(d.r, p.y + d.h, px, pz, p.y);
+    else if (d.shape === 'hcyl') k.hcyl(d.r, d.len, px, pz, (d.yaw || 0) + t, p.y);
+    else if (d.shape === 'sphere') k.sphere(d.r, px, p.y, pz);
+  }
+  k.at();
+  k.sc = 1;
+  return M;
 }
 
-// Kepler town hall: colonnaded block under a pediment, steps, a clock tower with turning hands. The colonnade faces out of
-// town, toward arrivals.
-export function townHall(world, loc, k) {
-  const x = 0, z = 52, orange = 0xff9f1c;
-  k.at(x, z, Math.PI);
-  k.box(32, 1.2, 14, T(CONC), 0, 0, 0, { outline: 0.06 });
-  for (let i = 0; i < 3; i++) k.box(14 - i * 1.2, 0.4, 2, T(LIGHT), 0, 0.4 * i, -7 - 1 + i * 0.6, { outline: 0.02 });
-  k.box(30, 11, 11, T(WHITE), 0, 1.2, 0.8, { outline: 0.15 });
-  for (let i = 0; i < 8; i++) {
-    const cx = -12.25 + i * 3.5;
-    k.cyl(0.6, 0.7, 10, 12, T(0xfffaf0), cx, 1.2, -5.4, { outline: 0.04 });
-    k.box(1.6, 0.5, 1.6, T(LIGHT), cx, 10.9, -5.4, { outline: 0 });
-  }
-  k.box(31, 1.2, 13, T(orange), 0, 12.2, 0, { outline: 0.08 });
-  k.add(prism(31, 13, 3.6), T(WHITE), 0, 13.4, 0, { outline: 0.1 });
-  for (let i = 0; i < 6; i++) k.box(2.2, 3, 0.2, G(WARM), -10 + i * 4, 5, -5.0, { outline: 0 });
-  k.box(3, 5, 0.3, T(0x2a2540), 0, 1.2, -5.0, { outline: 0.02 });
-  k.solid(15.5, 8, 6.5, 0, 0.8);
-  // clock tower
-  k.box(6, 14, 6, T(WHITE), 0, 13.4, 2, { outline: 0.1 });
-  k.box(6.6, 0.8, 6.6, T(orange), 0, 27.4, 2, { outline: 0.05 });
-  k.add(new THREE.ConeGeometry(4.6, 6, 4), T(orange), 0, 31.2, 2, { ry: Math.PI / 4, outline: 0.08 });
-  k.cyl(0.1, 0.12, 3, 6, T(DARK), 0, 34.2, 2, { outline: 0.02 });
-  k.ball(0.3, G(YEL), 0, 37.3, 2, { outline: 0 });
-  k.solid(3, 10, 3, 0, 2, 0, 13.4);
+// A hab dome: 'A' the Shield (turns whole to its door), 'B' the Geode (its solar facets keep facing +z, the sunward side;
+// only the airlock and portholes turn to the door). r: a size kepler.glb holds (keplerLayout.js DOME_A, DOME_B).
+export function keplerDome(k, kind, x, z, r, yaw, door = DOOR_HEX.sage, scale = 1) {
+  return kind === 'A' ? keplerPiece(k, `dome_a_${r}`, x, z, yaw, { door, scale }) : keplerPiece(k, `dome_b_${r}`, x, z, 0, { door, turn: yaw, scale });
+}
+
+// A connecting tube between two ground points: whole segments end to end, stretched a little to fit; one lying collider
+export function keplerTunnel(k, ax, az, bx, bz) {
+  const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.round(L / TUNNEL.seg)), M = keplerModel('tunnel'), mat = keplerMat(0);
+  k.at((ax + bx) / 2, (az + bz) / 2, Math.atan2(bx - ax, bz - az));
+  const st = new THREE.Matrix4().makeScale(1, 1, L / n / TUNNEL.seg);
+  for (let i = 0; i < n; i++) k.baked(M.root, mat, new THREE.Matrix4().makeTranslation(0, 0, ((i - (n - 1) / 2) * L) / n).multiply(st));
+  k.hcyl(TUNNEL.r, L, 0, 0, 0, TUNNEL.y);
   k.at();
-  for (const s of [-1, 1]) {
-    k.at(x, z - 2 + s * 3.05, s > 0 ? 0 : Math.PI);
-    k.add(new THREE.CylinderGeometry(2.2, 2.2, 0.2, 24).rotateX(Math.PI / 2), T(0xfffaf0), 0, 22.5, 0, { outline: 0.04 });
-    k.add(new THREE.TorusGeometry(2.25, 0.18, 4, 24), T(orange), 0, 22.5, 0.05, { outline: 0 });
-    for (let h = 0; h < 12; h++) { const a = (h / 12) * TAU; k.box(0.12, 0.35, 0.05, T(DARK), Math.sin(a) * 1.85, 22.5 + Math.cos(a) * 1.85, 0.13, { rz: -a, outline: 0 }); }
-    const hands = new THREE.Group();
-    const mins = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.7, 0.05).translate(0, 0.75, 0), T(DARK));
-    const hrs = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.1, 0.05).translate(0, 0.45, 0), T(DARK));
-    hands.add(mins, hrs);
-    hands.userData.tick = (o, dt, t) => { mins.rotation.z = -t * 0.2 * s; hrs.rotation.z = (-t * 0.2 * s) / 12; };
-    k.dyn(hands, 0, 22.5, 0.2);
-    k.at();
+}
+
+// Earthrise Hall at (x, z) turned by yaw: the piece, its Earth dial's hands turning (the minute hand at 0.2 rad/s, the hour
+// hand a twelfth of that; the back face's hands turned half round), the two flags on their masts
+export function keplerHall(world, loc, k, x, z, yaw = 0) {
+  const M = keplerPiece(k, 'hall', x, z, yaw), mat = keplerMat(0);
+  for (const h of M.hands) {
+    const hand = part(0xffffff, (q) => q.baked(h, mat, new THREE.Matrix4()));
+    const rate = h.data.rate || 1;
+    hand.userData.tick = (o, dt, t) => { o.rotation.z = -t * 0.2 * rate; };
+    k.at(x, z, yaw);
+    k.dyn(hand, h.pos.x, h.pos.y, h.pos.z, (h.data.side || 1) < 0 ? Math.PI : 0);
   }
-  for (const sx of [-1, 1]) world.flag(loc, sx * 20, 64, [0xff9f1c, 0xffffff, 0xff9f1c], 18);
+  k.at();
+  const c = Math.cos(yaw), sn = Math.sin(yaw);
+  for (const [fx, fz] of HALL_FLAGS) world.flag(loc, x + fx * c + fz * sn, z - fx * sn + fz * c, [0xff9f1c, 0xffffff, 0xff9f1c], 16);
+}
+
+// cleared ground from (ax, az) to (bx, bz), w wide; markers: route markers down both edges, about 9 m apart
+function clearLane(k, ax, az, bx, bz, w, markers) {
+  const L = Math.hypot(bx - ax, bz - az), yaw = Math.atan2(bx - ax, bz - az);
+  keplerPiece(k, 'clear', (ax + bx) / 2, (az + bz) / 2, yaw, { s: [w, L] });
+  if (!markers) return;
+  const n = Math.max(1, Math.round(L / 9)), c = Math.cos(yaw), sn = Math.sin(yaw);
+  for (let i = 0; i <= n; i++) for (const side of [-1, 1]) {
+    const lx = side * (w / 2 + 0.4), lz = (i / n - 0.5) * (L - 2);
+    keplerPiece(k, 'marker', (ax + bx) / 2 + lx * c + lz * sn, (az + bz) / 2 - lx * sn + lz * c, yaw + (side < 0 ? Math.PI : 0));
+  }
+}
+
+// a random spot on a layout's cleared ground (its lanes, courts, paths): where the townsfolk walk. r: a random stream.
+export function townSpot(L, r, out) {
+  const g = L.pieces.filter((q) => q.k === 'clear' || q.k === 'clearing' || q.k === 'path');
+  if (!g.length) return out.set(0, 0, 0);
+  const q = g[Math.floor(r() * g.length)];
+  if (q.k === 'clear') return out.set(q.x0 + r() * (q.x1 - q.x0), 0, q.z0 + r() * (q.z1 - q.z0));
+  if (q.k === 'clearing') { const a = r() * TAU, d = Math.sqrt(r()) * (q.r - 1); return out.set(q.x + Math.cos(a) * d, 0, q.z + Math.sin(a) * d); }
+  const t = r();
+  return out.set(q.x + (q.x2 - q.x) * t, 0, q.z + (q.z2 - q.z) * t);
+}
+
+// Lay a town from its layout (keplerLayout.js TOWN_LAYOUT); returns the layout
+export function buildTown(world, loc) {
+  const L = keplerLayout(TOWN_LAYOUT[loc.id] || '1');
+  const domes = L.pieces.filter((q) => q.k === 'domeA' || q.k === 'domeB');
+  settle(world, loc, 8101 + loc.id.length * 31, (k) => {
+    k.floorCols = true; // (dome footings, the hall's podium, shop plinths: walked on at their drawn height)
+    for (const q of L.pieces) {
+      const yaw = rad(q.yaw || 0), door = DOOR_HEX[q.door];
+      k.tag = q.k;
+      switch (q.k) {
+        case 'domeA': case 'domeB': keplerDome(k, q.k[4], q.x, q.z, q.r, yaw, door); break;
+        case 'link': { // shell to shell, running in under both
+          const a = domes[q.a], b = domes[q.b], l = Math.hypot(b.x - a.x, b.z - a.z), ux = (b.x - a.x) / l, uz = (b.z - a.z) / l;
+          keplerTunnel(k, a.x + ux * a.r * 0.9, a.z + uz * a.r * 0.9, b.x - ux * b.r * 0.9, b.z - uz * b.r * 0.9);
+          break;
+        }
+        case 'stilt': keplerPiece(k, q.feature ? 'stilt_commons' : q.stairs ? 'stilt' : 'stilt_plain', q.x, q.z, yaw, { door }); break;
+        case 'longhouse': keplerPiece(k, 'longhouse', q.x, q.z, yaw, { door }); break;
+        case 'stall': case 'bench': case 'greenhouse': case 'tank': keplerPiece(k, q.k, q.x, q.z, yaw); break;
+        case 'solar': keplerPiece(k, `solar_${q.n}`, q.x, q.z, yaw); break;
+        case 'shop': // (set forward of its spot: keplerLayout.js SHOP_OFF)
+          bakeUnitRow(k, [SHOP_UNITS[q.name]], 10, q.x + SHOP_OFF * Math.sin(yaw), q.z + SHOP_OFF * Math.cos(yaw), yaw, SHOP_SCALE, [q.name]);
+          k.at();
+          break;
+        case 'hall': // (the leader stands on the forecourt, facing the doors)
+          keplerHall(world, loc, k, q.x, q.z, yaw);
+          loc.leaderSpot = { x: q.x + 5 * Math.cos(yaw) + 31 * Math.sin(yaw), z: q.z - 5 * Math.sin(yaw) + 31 * Math.cos(yaw), yaw: yaw + Math.PI };
+          break;
+        case 'mast': commsMast(world, loc, k, q.x, q.z, 16, 0xff9f1c, 'kepler'); break;
+        case 'lamp': k.lamp(q.x, q.z, 7); break;
+        case 'sign':
+          k.at(q.x, q.z, yaw);
+          k.sign(loc.name.toUpperCase(), 0, 0, { w: Math.max(10, loc.name.length * 0.75), y: 4, fg: '#ff9f1c', solid: true });
+          k.at();
+          break;
+        case 'clear': clearLane(k, (q.x0 + q.x1) / 2, q.z0, (q.x0 + q.x1) / 2, q.z1, q.x1 - q.x0, q.markers); break;
+        case 'clearing': keplerPiece(k, 'clear_round', q.x, q.z, 0, { s: [q.r, q.r] }); break;
+        case 'path': clearLane(k, q.x, q.z, q.x2, q.z2, q.w, q.markers); break;
+        case 'road': (loc.paved ||= []).push({ x0: q.x0, z0: q.z0, x1: q.x1, z1: q.z1 }); break; // (traffic.js pavedStrip lays it)
+      }
+    }
+  });
+  world.pad(loc, KEPLER_PAD.x, KEPLER_PAD.z, KEPLER_PAD.r, 0xffd23f, true);
+  return L;
 }
 
 // Quonset hut (barracks, garages): ribbed half-barrel, end wall, door, lamps; door end faces local +z.

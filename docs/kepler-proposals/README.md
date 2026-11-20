@@ -5,8 +5,14 @@ Hertzsprung), all code-built today by `settlements.js` buildTown: a hub dome, si
 tunnels, each shell painted whole in one of six saturated colours, and at the Civic Center a colonnaded town hall with a
 pediment and a clock tower.
 
-**Nothing here is in the game yet.** These are drafts built in Blender to choose from: three questions, each with its
-options below.
+**Picked (November 2026) and built:** both domes as a family, hall A (Earthrise Hall), and the three layouts, with one
+change asked for: **no roads in the towns**. Their streets, courts and paths are cleared regolith, walked rather than
+driven, lined with route markers; only the Civic Center keeps a road, its avenue. The ILMB's two family domes became
+geodes (B) in their families' colours. The game's kit is `tools/blender/build_kepler.py` -> `src/assets/kepler.glb` and
+the layouts `src/keplerLayout.js`; the plans below are redrawn from it (cleared ground pale, the one road dark), while the
+renders show the drafts as proposed, paved.
+
+The three questions as they were put:
 
 1. **The hab dome:** A (the Shield) or B (the Geode), or both as a family.
 2. **The town hall:** A (Earthrise Hall) or B (Founders' Landing).
@@ -206,6 +212,8 @@ ILMB's two family domes are already Blender, in pink and gold: say if they shoul
 
 ## After the picks
 
+The plan was:
+
 1. `tools/blender/build_kepler.py` -> `src/assets/kepler.glb`: the picked dome(s) at the sizes the towns use, the hall, the
    pieces, with colliders as `col` empties and the clock's hands and the orbit ring as pivots. The tunnel, cabin,
    playground, greenhouse and water tower are ported at the same time (the playground is not drafted here).
@@ -213,16 +221,22 @@ ILMB's two family domes are already Blender, in pink and gold: say if they shoul
    Kit the way the ILMB's quarters are; the code builders go, or stay behind a flag.
 3. Asset Row items, the source map, the collider checklist of `docs/collision.md`, and a look at each town in the game.
 
+As built, it differs in these ways: the cabin and the playground were not ported, because the picked layouts use neither
+(the towns lose their playgrounds; the code-built cabin stays for the other places that use it); the code builders are
+gone rather than behind a flag (the code-built hab dome stays only for `?ilmbCore=old`'s great dome); hall A has no orbit
+ring, so its only moving parts are the dial's hands; and the kit gained what the game needed beyond the drafts: cleared
+ground tiles, route markers, a bench and solar rows with colliders.
+
 ## The files
 
 | | |
 |---|---|
-| `tools/blender/proposals/kepler_kit.py` | the palette, the two domes, the station pieces, the Earth dial |
-| `tools/blender/proposals/kepler_domes.py` | the domes, or the pieces (`KEPLER_SET=pieces`), lined up |
-| `tools/blender/proposals/kepler_hall_a.py`, `kepler_hall_b.py` | the two halls |
+| `tools/blender/kepler_kit.py` | the palette, the two domes, the station pieces, the Earth dial, hall A (now the game's kit) |
+| `tools/blender/proposals/kepler_domes.py` | the domes, the pieces (`KEPLER_SET=pieces`) or hall A (`KEPLER_SET=hall`), lined up |
+| `tools/blender/proposals/kepler_hall_b.py` | hall B, not picked |
 | `tools/blender/proposals/kepler_town.py` | a layout stood up in 3D (`KEPLER_LAYOUT=1`, `2`, `3`, `civic`; `KEPLER_HALL=a`, `b`) |
 | `tools/blender/proposals/preview_kepler.py` | the renders: `blender -b --factory-startup --python tools/blender/proposals/preview_kepler.py -- [target ...]` |
-| `tools/kepler-layouts.mjs` | the layouts' data, the clearance check, the plans, `layouts.json` |
+| `tools/kepler-layouts.mjs` | the clearance check on `src/keplerLayout.js`, the plans, `layouts.json` |
 
 The structure audit (`tools/blender/structure_audit.py`) on the halls, the domes and the pieces leaves only what is meant:
 the clock hands' free tips, the arbor through the Earth's disc, and paint bands lying on a roof's edge.

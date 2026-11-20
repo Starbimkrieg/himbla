@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { GLASS, G, T } from './outpostModels.js';
 import { ilmbModel, ilmbSlot, vehicleParts, rocketModel, rocketSlot } from './models.js';
-import { settle, part, cargoStack } from './settlements.js';
+import { settle, part, cargoStack, keplerDome } from './settlements.js';
+import { DOOR_HEX } from './keplerLayout.js';
 import { QUARTERS, ROCKET, LOT_BAY, at, yawFor } from './ilmbLayout.js';
 
 // The ILMB's core from Blender (tools/blender/build_ilmb.py -> src/assets/ilmb.glb): the central complex and the fortress wall
@@ -152,13 +153,14 @@ export function bakeIlmbExtras(k, piece) {
 }
 
 // A row of units (houses, shops) side by side along x from (x, z) turned by yaw, each `unit` m wide; shops get their names
-export function bakeUnitRow(k, units, unit, x = 0, z = 0, yaw = 0, scale = 1) {
+// (`names`, one per unit, else the ILMB's own)
+export function bakeUnitRow(k, units, unit, x = 0, z = 0, yaw = 0, scale = 1, names = null) {
   units.forEach((u, i) => {
-    const lx = (i - (units.length - 1) / 2) * unit * scale;
+    const lx = (i - (units.length - 1) / 2) * unit * scale, name = names?.[i] ?? SHOP_NAMES[u];
     k.tag = u;
     atScaled(k, x + lx * Math.cos(yaw), z - lx * Math.sin(yaw), yaw, scale);
     bakeIlmbInto(k, u);
-    if (SHOP_NAMES[u]) k.text(SHOP_NAMES[u], SHOP_SIGN[0], SHOP_SIGN[1], SHOP_SIGN[2], 0, fit(SHOP_NAMES[u], 0.75, SHOP_SIGN[3]), { back: false, off: 0.02 });
+    if (name) k.text(name, SHOP_SIGN[0], SHOP_SIGN[1], SHOP_SIGN[2], 0, fit(name, 0.75, SHOP_SIGN[3]), { back: false, off: 0.02 });
   });
   k.sc = 1;
 }
@@ -182,6 +184,10 @@ export function bakeRocketPad(k) {
 export function buildIlmbQuarters(world, loc) {
   QUARTERS.forEach((e, n) => {
     const [x, z] = at(e.a, e.r), yaw = yawFor(e.a, e.face), seed = 7720 + n;
+    if (e.kind === 'kepler') {        // a family dome from the Kepler town kit (settlements.js keplerDome), its door its family's colour
+      settle(world, loc, seed, (k) => { k.tag = e.piece; k.floorCols = true; keplerDome(k, e.dome, x, z, e.size, yaw, DOOR_HEX[e.door]); });
+      return;
+    }
     if (e.kind === 'piece') {
       bakeIlmbPiece(world, loc, e.piece, { x, z, yaw, seed, floor: true, scale: e.scale || 1 });
       if (SIGNS[e.piece] || e.piece === 'motorpool') settle(world, loc, seed + 500, (k) => { k.at(x, z, yaw); bakeIlmbExtras(k, e.piece); });

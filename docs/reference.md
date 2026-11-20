@@ -214,7 +214,7 @@ Wreck it for ₵800 and, the first time, his Junk Mortar. Not while you ride wit
 | --- | --- | --- |
 | International Moon Base (ILMB) | SPACECOM | Fortress with an inner ring road through its four gates, driven by its own traffic; four quarters round it: transit (passenger terminal, bus and freighter pads, the Earth rocket on its gantry, cargo shed and container yard), the motor pool (the repair bay: a garage with vehicles up on lifts, depot, barracks, patrol rovers), power and industry (tank farm, pipe bridge, solar fields) and the civilian quarter (houses, shops on a market lane, the family domes); parking lots with faction cars; job board, six buildings joined by skywalks: Hydroponics (a greenhouse dome lit by heliostats), Meridian Labs (a sky lab on a leaning pylon), the Vostok Hangar (open to skate into), the Daedalus Relay (phased arrays), the Power Block (a D-He3 fusion plant you can drive under) and the Kepler Habitat (the Orrery ring) |
 | Meridian Exchange · Shackleton Radar Array · Helium-3 Exchange | Meridian | Trade hub with live ticker and motor pool; radar dishes; strip-mine |
-| Kepler Civic Center · Tranquility Commons · Aldrin Heights · Twilight Waystation · Hertzsprung Refuge | Kepler | Towns, rest and repair |
+| Kepler Civic Center · Tranquility Commons · Aldrin Heights · Twilight Waystation · Hertzsprung Refuge | Kepler | Towns, rest and repair: hab domes, raised modules and longhouses round lanes and courts of cleared regolith, shops and market stalls (Main Street at Twilight, the Caterpillar at Aldrin, the Courtyard at Tranquility and Hertzsprung); the Civic Center has Earthrise Hall and the one road |
 | Farside Listening Post | SPACECOM (dark side) | Hazard-pay dish array |
 | Bastion Vostok-9 · Vostok-4 Outpost | Vostok | Restricted |
 | Daedalus Citadel · Forward Post | Daedalus (dark side) | Restricted |
@@ -328,7 +328,7 @@ Touch it (90 s cooldown) for **Time Dilation**, **Echo Followers** (holograms th
 
 - **Cheat menu:** hold `=` and `` ` `` together in play: credits, map reveal, reputation, teleport, god mode,
   unlocks, spawns, mutations, reset.
-- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (247 in 26 sections) with
+- **Asset Row:** F8 → Full cheat menu → Teleport → ASSET ROW. A showroom of every asset (244 in 26 sections) with
   terminals to jump between sections. Nothing there is saved. The catalogue is `src/assetRowItems/` (format at the
   top of its `index.js`).
 - **F3** overlay and the free cam (`src/freecam.js`).
@@ -403,6 +403,9 @@ src/
                    cars, tank farm, container yard...), the rocket's pad and gantry (rocket.glb)
   ilmbLayout.js    the ILMB's grounds as built (Draft A of docs/ilmb-layouts.md): the inner ring road, gates, pads, the rocket,
                    every quarter's pieces and parking lots, the inner stops; read by the game and tools/ilmb-layouts.mjs
+  keplerLayout.js  the Kepler towns' layouts (docs/kepler-proposals): Main Street, the Caterpillar, the Courtyard and the
+                   Civic Center's, which town takes which, the kit's sizes; read by settlements.js buildTown and
+                   tools/kepler-layouts.mjs
   outpostLooks.js  the small outposts' looks by owner: palettes (STYLE), walkers' looks, container liveries
   outpostWalkers.js the two or three NPCs walking about each small outpost, and those who keep a post (traders, stallholders)
   vehicles.js      drivable vehicles
@@ -439,7 +442,8 @@ src/
   enemies.js       pirates, bases, turrets, artillery, theft
   missions.js      contracts, pickup and delivery, payouts
   world.js         sky, settlement layout, colliders, ambient life
-  settlements.js   detailed settlements and landmarks
+  settlements.js   detailed settlements and landmarks; the Kepler towns laid out from keplerLayout.js with kepler.glb's
+                   pieces (buildTown, keplerPiece, keplerDome, keplerHall, keplerTunnel)
   market.js        Meridian stock market for the ticker
   traffic.js       pads, flights, passengers, roads, land-trains, cars; roads inside a place (loc.inner: the ILMB's inner
                    ring and gate roads, driven by cars and buggies) and its own traffic
@@ -491,6 +495,9 @@ src/
                      its quarters (motor pool, terminal, cargo shed, houses, shops, tanks, pipe bridge, parking bays...)
     fixtures.glb     shared fixtures: the landing pad kit (decks, drums, treads, rails), the stop shelter, solar fields
     rocket.glb       the ILMB's Earth rocket "Kestrel" (models.js makeRocket), its launch gantry, the flat pad
+    kepler.glb       the Kepler town kit: hab domes A and B at the sizes the towns use, Earthrise Hall (its clock hands as
+                     pivots), raised modules, longhouse, stall, bench, greenhouse, water tank, tunnel, solar rows, cleared
+                     ground tiles, route markers (colliders as pivots; models.js keplerModel)
     outposts.glb     the small outposts built in Blender (the kinds in staticContract.js GLB_KINDS; ?outpostGlb=0 for the
                      code-built ones; spec in docs/outpost-glb.md)
 tools/
@@ -518,8 +525,8 @@ tools/
   meridian-layouts.mjs     Meridian Exchange layout study (docs/meridian-layouts.md)
   ilmb-layouts.mjs         the ILMB's quarters and roads: clearance check and plans of today's (src/ilmbLayout.js) and Draft B
                            (docs/ilmb-layouts.md)
-  kepler-layouts.mjs       the Kepler towns' three layout proposals and the Civic Center's: clearance check, plans and
-                           layouts.json (docs/kepler-proposals/)
+  kepler-layouts.mjs       the Kepler towns' layouts (src/keplerLayout.js): clearance check, plans and layouts.json
+                           (docs/kepler-proposals/)
   winch-ride.mjs           headless winch test; run --gate ring after touching src/winch.js
   zbornak-chimeras.mjs     exports a few game chimeras as GLBs for the Antimatter Lab draft's renders (docs/zbornak-proposals/)
   zbornak-screens.mjs      shoots the Antimatter Lab draft's screen mock-ups (docs/zbornak-proposals/screens/terminal.html)
@@ -589,6 +596,10 @@ tools/
                               terminal, cargo shed, fuel island, tank, pump house, pipe bridge, shops, houses, parking bays
     build_fixtures.py      -> fixtures.glb, shared fixtures: the landing pad kit, the stop shelter, solar fields
     build_rocket.py        -> rocket.glb, the ILMB's Earth rocket, its gantry and pad
+    build_kepler.py        -> kepler.glb, the Kepler town kit (docs/kepler-proposals: both domes and hall A picked), its
+                              pieces kepler_kit.py's (on wing_kit.py)
+    kepler_kit.py          the Kepler town kit's palette and pieces: dome A "the Shield", dome B "the Geode", Earthrise
+                              Hall and its Earth dial, the station pieces (also the proposals' kit)
     build_outposts.py      -> outposts.glb, the small outposts (check with npm run check:outposts; compare with the code-built
                               ones in the viewer: ?m=outpost&kind=tower)
     build_downs_*.py       -> downs-*.glb (build_downs_dome.py -> downs-dome.glb; preview_dome.py renders it over a block model
@@ -602,10 +613,9 @@ tools/
                            turnaround, the door drafts (doors)
     proposals/             freighter, Kepler Habitat and War-Rig design studies, Cycles preview renders
                            (warrig_b.py, the War-Rig's runner-up; preview_warrig.py renders both to docs/warrig-proposals);
-                           the Kepler town kit's drafts (docs/kepler-proposals): kepler_kit.py (two hab-dome remodels, the
-                           station pieces), kepler_domes.py (them lined up), kepler_hall_a.py and kepler_hall_b.py (the two
-                           town halls), kepler_town.py (a layout from tools/kepler-layouts.mjs stood up in 3D),
-                           preview_kepler.py (renders them all)
+                           the Kepler town kit's drafts (docs/kepler-proposals, on ../kepler_kit.py): kepler_domes.py (the
+                           domes, the pieces or hall A lined up), kepler_hall_b.py (the hall not picked), kepler_town.py (a
+                           layout stood up in 3D), preview_kepler.py (renders them all)
 ```
 
 **Blender models:** each builder runs in Blender's Scripting tab or headless (`tools/setup-blender.sh` installs

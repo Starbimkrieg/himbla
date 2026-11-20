@@ -34,7 +34,8 @@ export const ROCKET = { a: 41, r: 212, padR: 26, gantryOff: 14.5 };   // (padR: 
 // Everything else. kind: 'piece' (an ilmb.glb piece), 'row' (units of one kind side by side round the circle, each `unit`
 // m wide, `scale` times their built size: houses, shops), 'lot' (parking: `cars` one letter per bay, a faction's hover-car (S SPACECOM, K Kepler, M
 // Meridian, V Vostok), c a civilian one, R a SPACECOM patrol rover, . empty), 'yard' (container stacks under a gantry
-// crane), 'solar' (a solar field), 'dish' (the SPACECOM dish).
+// crane), 'solar' (a solar field), 'dish' (the SPACECOM dish), 'kepler' (a hab dome from the Kepler town kit, kepler.glb:
+// `dome` 'A' or 'B', `size` its radius, `door` its family's colour, keplerLayout.js DOOR_HEX; `piece` names it for the audits).
 export const QUARTERS = [
   // ---- transit, the main gate (33° to 141°): passengers east of the gate road, freight west ----
   { name: 'passenger terminal', kind: 'piece', piece: 'terminal_pax', a: 68.5, r: 187.5, face: 'in', foot: [14, 44], q: 'pass' },
@@ -64,12 +65,12 @@ export const QUARTERS = [
   // ---- the civilian quarter, the east gate (312° to 33°): shops on a market lane north of the gate road, houses south ----
   { name: 'shops', kind: 'row', units: ['shop_canteen', 'shop_suits', 'shop_parts', 'shop_noodle'], unit: 10, scale: 1.25, a: 12, r: 191, face: 'out', foot: [14, 50], q: 'civ' },
   { name: 'shops', kind: 'row', units: ['shop_clinic', 'shop_noodle', 'shop_canteen', 'shop_suits'], unit: 10, scale: 1.25, a: 12, r: 223, face: 'in', foot: [14, 50], q: 'civ' },
-  { name: 'family dome (pink)', kind: 'piece', piece: 'dome_pink', a: 27, r: 207, face: 'cw', foot: 19, q: 'civ' },
+  { name: 'family dome (pink)', kind: 'kepler', piece: 'dome_pink', dome: 'B', size: 16, door: 'pink', a: 27, r: 207, face: 'cw', foot: 19, q: 'civ' },
   { name: 'houses', kind: 'row', units: ['house_a', 'house_b', 'house_c', 'house_a'], unit: 10, scale: 1.25, a: 348, r: 191, face: 'out', foot: [14, 50], q: 'civ' },
   { name: 'houses', kind: 'row', units: ['house_b', 'house_c', 'house_a', 'house_b'], unit: 10, scale: 1.25, a: 348, r: 223, face: 'in', foot: [14, 50], q: 'civ' },
   { name: 'houses', kind: 'row', units: ['house_c', 'house_a', 'house_b'], unit: 10, scale: 1.25, a: 333, r: 191, face: 'out', foot: [14, 37.5], q: 'civ' },
   { name: 'houses', kind: 'row', units: ['house_a', 'house_c', 'house_b'], unit: 10, scale: 1.25, a: 333, r: 223, face: 'in', foot: [14, 37.5], q: 'civ' },
-  { name: 'family dome (gold)', kind: 'piece', piece: 'dome_gold', a: 318, r: 206, face: 'ccw', foot: 17, q: 'civ' },
+  { name: 'family dome (gold)', kind: 'kepler', piece: 'dome_gold', dome: 'B', size: 13, door: 'gold', a: 318, r: 206, face: 'ccw', foot: 17, q: 'civ' },
   // ---- inside the loop ----
   { name: 'SPACECOM dish', kind: 'dish', a: 184, r: 128, face: 'out', foot: 14, q: 'ind' },
   { name: 'visitor parking', kind: 'lot', a: 75, r: 147, face: 'out', cars: 'M.Sc.', foot: [9, 24], q: 'pass' },

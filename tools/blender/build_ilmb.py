@@ -794,45 +794,6 @@ def build_horton(name, band):
     return end()
 
 
-def build_outdome(name, r, shell):
-    """A family dome: a shell on a concrete footing ring, white ribs and rings, a band of lit windows, a berm round its foot,
-    the airlock tunnel out of the +z side with its door and lamp, a cupola."""
-    begin(f"ilmb_{name}")
-    C0 = 1.0
-    Acc.of("concrete", 0.08).put(cyl(0, C0 / 2, 0, r + 0.45, C0, 40, rt=r + 0.2))
-    Acc.of("regolith", 0.08).put(sector([(r - 0.2, 0), (r + 3.0, 0), (r + 0.6, 2.0), (r - 0.2, 2.0)], math.pi / 2 + 0.35, math.pi / 2 + TAU - 0.35, 40))
-    Acc.of(shell, 0.2).put(xf(sphere(r, 40, 12, math.pi / 2)[:2], (0, C0, 0)))
-    rib = Acc.of("white", 0.03)
-    for i in range(12):
-        th = TAU * (i + 0.5) / 12
-        pts = [(math.cos(th) * (r + 0.1) * math.cos(e), C0 + (r + 0.1) * math.sin(e), math.sin(th) * (r + 0.1) * math.cos(e)) for e in [1.35 * k / 8 for k in range(9)]]
-        rib.put(path_tube(pts, 0.2, 5))
-    for e in (0.42, 0.86):
-        rib.put(ring((r + 0.1) * math.cos(e), 0.18, C0 + (r + 0.1) * math.sin(e), 48, 5))
-    e = 0.2
-    for i in range(16):
-        th = TAU * (i + 0.5) / 16
-        if abs(math.atan2(math.sin(th - math.pi / 2), math.cos(th - math.pi / 2))) < 0.4:
-            continue
-        x, z = at_r((r + 0.02) * math.cos(e), th)
-        Acc.of("window", 0.0).put(xf(box(0, 0, 0, 1.4, 1.0, 0.1), (x, C0 + r * math.sin(e), z), (-e, math.pi / 2 - th, 0)))
-    Acc.of("gold", 0.0).put(ring((r + 0.05) * math.cos(0.1), 0.2, C0 + r * math.sin(0.1), 48, 4))
-    # the airlock toward +z: a tunnel, its housing and door, a lamp
-    Acc.of("light", 0.06).put(xf(cylinder(2.4, 2.4, 5.0, 16)[:2], (0, 2.6, r + 1.6), (math.pi / 2, 0, 0)))
-    Acc.of("cream", 0.06).put(box(0, 3.0, r + 4.2, 6.0, 6.0, 1.8))
-    Acc.of("door", 0.0).put(box(0, 2.1, r + 5.12, 2.6, 3.4, 0.06))
-    Acc.of("gold", 0.02).put(box(0, 6.1, r + 4.2, 6.4, 0.3, 2.2))
-    Acc.of("lamp", 0.0).put(box(0, 4.3, r + 5.14, 1.8, 0.2, 0.06))
-    Acc.of("navy", 0.06).put(cyl(0, C0 + r + 0.6, 0, r * 0.18, 1.6, 16, rt=r * 0.14))
-    blinker((0, C0 + r + 1.8, 0), 0.4)
-    for y0, y1 in ((0.0, C0 + r * 0.35), (C0 + r * 0.35, C0 + r * 0.7), (C0 + r * 0.7, C0 + r * 0.92), (C0 + r * 0.92, C0 + r)):
-        rr = math.sqrt(max(0.0, r * r - max(0.0, y0 - C0) ** 2))
-        col((0, y0, 0), shape="cyl", r=rr + 0.3, h=y1 - y0)
-    col((0, 0, r + 4.2), shape="box", hx=3.1, hy=3.0, hz=1.0, yaw=0.0)
-    col((0, 0, r + 1.6), shape="box", hx=2.5, hy=2.5, hz=2.6, yaw=0.0)
-    return end()
-
-
 def build_barracks():
     """A barracks Quonset (7 m radius, 34 m) on its pad: grey skin on aluminium ribs, the lit end wall with its door, lamps
     and a gold arch, a strip of windows along each side."""
@@ -944,8 +905,6 @@ build_wall_a()
 build_terminal()
 build_horton("horton_red", "red")
 build_horton("horton_blue", "blue")
-build_outdome("dome_pink", 16.0, "pink")
-build_outdome("dome_gold", 14.0, "gold")
 build_barracks()
 build_depot()
 build_mast()

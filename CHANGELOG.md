@@ -5,13 +5,37 @@ contains `[release]` (see Run and build in `docs/reference.md`). Newest first.
 
 ## Unreleased
 
-- **Kepler town kit: proposals, nothing in the game yet** (docs/kepler-proposals). Drafts in Blender for the next item of
-  docs/code-vs-blender.md: two hab-dome remodels in a quieter palette (A "the Shield", terraced; B "the Geode", a geodesic
-  shell on a drum), two town halls for the Civic Center (A "Earthrise Hall", B "Founders' Landing", both with the Earth
-  dial in place of the clock), the station pieces (a raised module on legs, a longhouse, a shop unit, a stall, a
-  greenhouse, a water tank, a mast, a tunnel), and three town layouts without the hub dome (Main Street, the Caterpillar,
-  the Courtyard) plus the Civic Center's, drawn and clearance-checked by the new `tools/kepler-layouts.mjs` and stood up in
-  3D by `tools/blender/proposals/kepler_town.py`. `preview_kepler.py` renders the pictures.
+- **The Kepler towns, rebuilt in Blender** (docs/kepler-proposals: both hab domes, hall A and the three layouts picked).
+  The new kit is `tools/blender/build_kepler.py` -> `kepler.glb` (57,340 triangles, 859 KB compressed), its pieces in
+  `tools/blender/kepler_kit.py` (moved out of `proposals/`), every one with its own colliders. The towns are laid out from
+  the new `src/keplerLayout.js` (checked and drawn by `tools/kepler-layouts.mjs`):
+  - **The domes** in a quieter palette: A "the Shield" (a low cream shell behind three regolith terraces) and B "the Geode"
+    (a geodesic shell on a drum, its solar facets kept facing the sun while its airlock turns to the door's side), in five
+    sizes each, one orange band a building and the household's own colour only on its door. The hub dome and the six
+    candy-coloured shells are gone.
+  - **The layouts, with no roads**: Main Street at Twilight, the Caterpillar (nine raised modules on legs, the orange
+    commons in the middle) at Aldrin, the Courtyard (six domes joined by tunnels round a market court) at Tranquility and
+    Hertzsprung. Their streets, courts and paths are cleared regolith (the ground's own grain, a shade paler), walked not
+    driven, the paths lined with route markers. Shops are the ILMB quarter's units at 0.86 with their own names (noodle
+    bar, canteen, suit shop, post, grocer, tool library...), with market stalls, benches, longhouses, greenhouses, the water
+    tank, solar rows and the comms mast. Twelve adults and six children (were eight and seven) walk the cleared ground.
+  - **Kepler Civic Center**: Earthrise Hall replaces the gold council dome and the clock-tower hall: a domed chamber on a
+    podium, a glazed foyer under a solar canopy, terraces round the back, and a campanile carrying the Earth dial, whose
+    hands turn; its two flags fly on the forecourt, where Mayor Pike now stands. Civic Avenue is the one road in the
+    Kepler towns (traffic.js lays it, as Meridian's), between two rows of shops; the big family domes close the back.
+  - **The same domes elsewhere**: your town's housing plot (three geodes, shrunk to the plot), the founded homestead (a
+    shield), Meridian's lab dome (a 22 m geode) and the ILMB's two family domes (geodes with pink and gold doors; their old
+    models are gone from `ilmb.glb`, 1,605 to 1,520 KB).
+  - **Gone with the old towns**: the code-built tunnel, playground, water tower, greenhouse and town hall
+    (`settlements.js`); the towns have no playground now. The code-built hab dome stays only for `?ilmbCore=old`.
+    `Kit.sign` takes `solid` (the town signs collide).
+  - **Asset Row**: KEPLER DOME A, KEPLER DOME B, EARTHRISE HALL and KEPLER STATION PIECES replace the hab domes, playground,
+    water tower, greenhouse and town hall items; the ILMB family domes show the geodes (244 items).
+  - **Checks**: coverage leaves 0.9% of the Civic Center's solid surface bare (522 of 59,248 m2), 0.6% of Tranquility's,
+    0.8% of Aldrin's and of Twilight's, most of it the townsfolk, the pylons on the ring, the landing pads and lamp heads;
+    the bare rest is handrails, marker posts, the water tank's braces and the hall's roof trims. No collider top floats that isn't inside another (the raised
+    modules' chamfers leave 7 m2). What `sunk` still lists is slab rims under 0.5 m (footings, podium, longhouse bases),
+    the modules' foot pads, the shops' window sills and the tunnel saddles inside the tube.
 
 - **Zbornak's spider tank is gone.** It never reached the game, and its walking and climbing never came right, so it is removed:
   its model (`spidertank.glb`, `build_spidertank.py`), `spidertank.js` and `spiderwalk.js`, its lab, its page (`docs/spidertank/`)

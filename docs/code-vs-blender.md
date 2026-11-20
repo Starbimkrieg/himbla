@@ -22,26 +22,26 @@ has. They give a rough sense of how big each conversion is.
 | **Whole places** | the Antimatter Lab and ranch (`zlab.glb`), Chimera Downs (ten `downs-*.glb` kits) |
 | **Casino** | the hall and the forecourt kit (`hall.glb`, `lot.glb`), lamp posts, fountains, bouncers, chandeliers, sign frames (`casino.glb`), slot cabinets, the claw machine and its prizes, the blackjack table and chips, Plinko |
 | **Items** | the courier's weapons, the salvaged engine and the briefcase (wreck drops), the winch grapple |
-| **ILMB core** | the central complex and the fortress wall (two proposals: docs/ilmb-proposals), the skywalks, job terminal (its screens stay canvas), fuel spheres, family domes, barracks, vehicle depot, comms mast, inner defence pylons (`ilmb.glb`, `tools/blender/build_ilmb.py`) |
+| **ILMB core** | the central complex and the fortress wall (two proposals: docs/ilmb-proposals), the skywalks, job terminal (its screens stay canvas), fuel spheres, barracks, vehicle depot, comms mast, inner defence pylons (`ilmb.glb`, `tools/blender/build_ilmb.py`) |
 | **ILMB quarters** | Draft A of docs/ilmb-layouts.md: the motor pool (the repair bay rebuilt, its interior: lifts, tool walls, cabinets, benches, tyre rack, parts cage, mezzanine office, bridge crane), passenger terminal, cargo shed, fuel island, tank, pump house, pipe bridge, five shopfronts, three houses, parking bays and lamps (`ilmb.glb`, `tools/blender/ilmb_quarters.py`); the Earth rocket ("Kestrel", picked from two proposals) with its launch gantry and the flat pad (`rocket.glb`, `tools/blender/build_rocket.py`; the exhaust stays code) |
 | **Shared fixtures** | the landing pad (a kit the game fits to the ground: decks, drums, treads, rails, plates; its colliders stay code, `landingPad.js` padCols), the transit stop shelter (its sign stays canvas), solar fields (`fixtures.glb`, `tools/blender/build_fixtures.py`) |
 | **Defence turret** | every base gun: defence rings and walls, the ILMB's, restricted zones, founded outposts' militia guns, the hometown barracks ("Bastion", picked from two proposals: docs/turret-proposals; `turret.glb`, `tools/blender/build_turret.py`; the code-built one is `?turret=old`) |
 | **Small outposts** | all seven kinds and their wrecks (`outposts.glb`, `tools/blender/build_outposts.py` with `outpost_kit.py`): Market Cross, Lattice Camp, Silo Depot, Greenhouse Row, Guyed Relay, Scrap Mountain, the Hulk. The code builders in `outpostDrafts.js` stay as the fallback (`?outpostGlb=0`) |
+| **Kepler towns** | the hab domes A and B, Earthrise Hall (the Civic Center's), raised modules, longhouses, stalls, benches, greenhouses, the water tank, tunnels, solar rows, cleared ground and route markers (`kepler.glb`, `tools/blender/build_kepler.py` with `kepler_kit.py`; laid out from `src/keplerLayout.js`, docs/kepler-proposals). Also the domes of your own town, the founded homestead, Meridian's lab dome and the ILMB's family domes. The shops are the ILMB quarter's units; the comms mast, lamps and sign stay code |
 
 ## Code-built: places
 
 | Place | What's code | Where | Build calls |
 |---|---|---|---|
-| **Kepler towns** (Tranquility, Aldrin, Kepler Civic Center, Twilight, Hertzsprung) | hab domes with berms, airlocks and cupolas (the biggest single builder), connecting tunnels, prefab cabins, playground, greenhouse, water tower, comms mast, the Civic Center's town hall with its clock tower | `settlements.js` habDome, cabin, tunnel, playground, greenhouse, waterTower, townHall | ~200 |
-| **Meridian Exchange** | the stepped glass trading tower, trade halls, warehouses, gate arch, plaza paving (its gantry, garage, cranes and fountain are already Blender) | `settlements.js` buildMeridian, tradeHall, warehouse | ~65 |
+| **Meridian Exchange** | the stepped glass trading tower, trade halls, warehouses, gate arch, plaza paving (its gantry, garage, cranes, fountain and lab dome are already Blender) | `settlements.js` buildMeridian, tradeHall, warehouse | ~65 |
 | **Helium-3 Exchange** | bucket-wheel excavator, conveyor, pumping derrick, Horton spheres, ticker hall, exhaust stacks, pipes | `settlements.js` buildHelium, hortonSphere, conveyor, stack, pipe | ~70 |
 | **Shackleton Radar Array** | observatory, labs, control centre, cable runs (the four dish stations are Blender) | `settlements.js` dressArray | ~40 |
 | **Military bases** (Bastion Vostok-9, Vostok-4 Outpost, Daedalus Citadel, Daedalus Forward Post) | sloped command bunker, Quonset barracks, searchlight tower, tank traps, sandbag nests, fuel and ammo dumps | `settlements.js` dressBase, quonset, radar, searchlight | ~60 |
 | **Pirate dens** (Scrapjaw Gulch, Blackrock Den, Gloom Harbor, Rustmoon Hold), camps, the ruined den, the clans' ILMB | container shanties, scrap huts, gutted wreck hulls, junk heaps, lookout tower, tents and fire pits, barricades | `settlements.js` shanty, wreckHull, buildDen, buildPirateCamp, buildRuin, dressScrap | ~45 |
 | **The Monolith** | the slab and the survey dig: berm, floodlight tripods, scaffold, tents, generator, theodolite | `world.js` buildMonolith; `settlements.js` dressMonolith | ~35 |
 | **Lucky Crater Casino, outside the Blender hall** | the giant tumbling die, the upright roulette wheel, the neon avenue, carousel shelters | `casinoWorld.js`, `settlements.js` dressCasinoLot | ~120 |
-| **Your town** (Kepler finale) and its eight buildings, the Moon Council chamber set | the council hall, every buildable building, the chamber's tiers, desks and gavel | `hometown.js`, `chamber.js` | ~90 |
-| **Founded outposts** (homestead, field lab and their six modules) | all of it | `storyAssets.js` | part of ~200 |
+| **Your town** (Kepler finale) and its eight buildings, the Moon Council chamber set | the council hall, every buildable building (the housing plot's domes are Blender), the chamber's tiers, desks and gavel | `hometown.js`, `chamber.js` | ~90 |
+| **Founded outposts** (homestead, field lab and their six modules) | all of it but the homestead's dome (the Kepler kit's) | `storyAssets.js` | part of ~200 |
 | **Shared props used in many places** | lamp posts and light pools, floodlight masts, lattice towers, flags, Quonsets, radar heads, searchlights | `world.js`, `settlements.js` | ~90 |
 
 ## Code-built: things that move or that you meet
@@ -76,9 +76,8 @@ These are procedural or effects, and Blender would only make them worse or slowe
    contract (`docs/outpost-glb.md`) are the route for the other places' code builders: port call for call, compare the
    gameplay data in the viewer, then refine in Blender.
 2. ~~**The ILMB core**~~: done (November 2026), in two proposals for the central complex and wall (docs/ilmb-proposals).
-3. **Kepler towns' kit**: hab dome, tunnel, cabin, town hall, playground, water tower. One kit covers five towns and your
-   own town. Proposed (November 2026), waiting on the picks: two dome remodels, two town halls and three layouts without
-   the hub dome, in docs/kepler-proposals.
+3. ~~**Kepler towns' kit**~~: done (November 2026): both dome remodels, hall A and the three layouts (docs/kepler-proposals).
+   The code-built hab dome stays only for the old ILMB great dome (`?ilmbCore=old`); the cabin for the other places using it.
 4. **Military bases**: bunker, barracks, searchlight tower, defences (the defence turret is done: docs/turret-proposals).
 5. **Pirate dens**: shanties, wreck hulls, lookout, heaps (it can share parts with the Scrap Shack and Junk Pile).
 6. **Meridian Exchange tower and halls**, then the **Helium-3 Exchange** (excavator, derrick, spheres).

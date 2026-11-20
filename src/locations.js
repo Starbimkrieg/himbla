@@ -60,7 +60,7 @@ export const LOCATIONS = [
   {
     id: 'tranq', name: 'Tranquility Commons', short: 'TRANQ', type: 'civilian', faction: 'kepler',
     theta: 33, phi: 48, r: 130, jobs: ['kepler', 'kepler'], safe: true, repair: 8, defense: { ring: 100, turrets: 2 },
-    blurb: 'Family habitat domes joined by tunnels: a playground, greenhouses, and the best noodle bar on the Moon.',
+    blurb: 'Family domes joined by tunnels round a market court: greenhouses, and the best noodle bar on the Moon.',
   },
   {
     id: 'aldrin', name: 'Aldrin Heights', short: 'ALDRIN', type: 'civilian', faction: 'kepler',
@@ -75,7 +75,7 @@ export const LOCATIONS = [
   {
     id: 'kepler', name: 'Kepler Civic Center', short: 'KEPLER', type: 'civilian', faction: 'kepler', hq: true,
     theta: 24, phi: -75, r: 140, jobs: ['kepler', 'kepler', 'spacecom'], safe: true, repair: 10, defense: { ring: 115, turrets: 4 },
-    blurb: 'Seat of the Kepler councils: the gold council dome, the clock-tower town hall and a very long queue.',
+    blurb: 'Seat of the Kepler councils: Earthrise Hall, its Earth clock and a very long queue.',
   },
   {
     id: 'mine', name: 'Helium-3 Exchange', short: 'HE3', type: 'industrial', faction: 'meridian',

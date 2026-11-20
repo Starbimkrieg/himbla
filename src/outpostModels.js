@@ -283,8 +283,8 @@ class Kit {
     }
     return h;
   }
-  // name board on two posts, facing local +z (rotated by ry)
-  sign(str, x, z, { ry = 0, w = 8, y = 3.4, rz = 0, fg, bg, stroke } = {}) {
+  // name board on two posts, facing local +z (rotated by ry); solid: with colliders (the posts, and the board up to its cap)
+  sign(str, x, z, { ry = 0, w = 8, y = 3.4, rz = 0, fg, bg, stroke, solid = false } = {}) {
     const mat = textMat(str, fg || '#ffd23f', bg || '#241a3a', stroke || '#120a1e');
     const pw = w - 0.5, ph = pw / mat.userData.aspect;
     const save = this.base.clone(), saveYaw = this.yaw;
@@ -294,6 +294,11 @@ class Kit {
     this.box(w, ph + 0.5, 0.26, T(DARK), 0, y - ph / 2 - 0.25, 0, { rz, outline: 0.06 });
     this.box(w + 0.2, 0.3, 0.4, T(this.c), 0, y + ph / 2 + 0.2, 0, { rz, outline: 0.04 });
     this.text(str, 0, y, 0, 0, pw, { fg, bg, stroke, rz });
+    if (solid) {
+      const b0 = y - ph / 2 - 0.25;
+      for (const s of [-1, 1]) this.column(0.2, b0, s * (w / 2 - 0.6), 0);
+      this.solid(w / 2 + 0.1, (ph + 0.6) / 2, 0.2, 0, 0, 0, b0);
+    }
     this.base.copy(save); this.yaw = saveYaw;
   }
   lamp(x, z, h = 7, color = 0xfff3b0) {

@@ -17,7 +17,7 @@ REPO = os.environ.get("MOONRUNNER_REPO") or os.path.abspath(os.path.join(os.path
 COLL = "KeplerHallB"
 PART = "put" in globals()            # exec()'d by kepler_town.py, which has the kit and stands the hall in a town
 if not PART:
-    exec(open(os.path.join(REPO, "tools", "blender", "proposals", "kepler_kit.py"), encoding="utf-8").read(), globals())
+    exec(open(os.path.join(REPO, "tools", "blender", "kepler_kit.py"), encoding="utf-8").read(), globals())
     ROOT = pivot("kepler_hall_b", (0, 0, 0), None, proposal="b")
 IN = math.cos(PI / 8)                # an octagon's face is this fraction of its corner radius out
 

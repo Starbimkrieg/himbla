@@ -1,131 +1,22 @@
-// The Kepler towns: three layout proposals, and the Civic Center's (docs/kepler-proposals). The layouts are the data here.
+// The Kepler towns' layouts (src/keplerLayout.js: the three the towns take, and the Civic Center's; docs/kepler-proposals).
 //
 //   node tools/kepler-layouts.mjs         checks every layout: 2 m between footprints, everything inside 0.85 of the town's
-//                                         radius, the landing pad's flight disc clear
+//                                         radius, the landing pad's flight disc clear, each dome a size kepler.glb holds
 //   node tools/kepler-layouts.mjs docs    also writes docs/kepler-proposals/layout-<id>.svg and layouts.json (the pieces,
 //                                         which tools/blender/proposals/kepler_town.py stands up in 3D)
 //
-// Frame: the town's own (settlements.js buildTown), metres, +x right and +z up the plan; +z is the sunward side. A piece's
-// yaw (degrees) turns its front (+z, its door) toward (sin yaw, cos yaw). The landing pad stays where buildTown lays it
-// today, (-65, 55), r 13.
+// Frame: the town's own (settlements.js buildTown), metres, +x right and +z up the plan; +z is the sunward side.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { KEPLER_LAYOUTS as LAYOUTS, KEPLER_PAD, DOME_A, DOME_B } from '../src/keplerLayout.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'docs', 'kepler-proposals');
-const rad = (d) => (d * Math.PI) / 180, deg = (r) => (r * 180) / Math.PI;
+const rad = (d) => (d * Math.PI) / 180;
 const r1 = (v) => Math.round(v * 10) / 10;
-const DOORS = ['sage', 'dusk', 'ochre', 'rose', 'teal'];
-const ACCENTS = ['orange', 'green', 'teal', 'ochre', 'sage', 'dusk', 'rose'];
-const PAD = { k: 'pad', x: -65, z: 55, r: 13 };
+const PAD = { k: 'pad', ...KEPLER_PAD };
 const FLIGHT = 15.7; // a bus's flight disc (traffic.js addFlyer)
-
-// ---- piece makers ----
-const dome = (kind, x, z, r, yaw, i = 0) => ({ k: 'dome' + kind, x, z, r, yaw, door: DOORS[i % DOORS.length] });
-const shop = (x, z, yaw, i = 0, name = '') => ({ k: 'shop', x, z, yaw, accent: ACCENTS[i % ACCENTS.length], name });
-const stall = (x, z, yaw, i = 0) => ({ k: 'stall', x, z, yaw, accent: ACCENTS[i % 2] });
-const longhouse = (x, z, yaw, i = 0) => ({ k: 'longhouse', x, z, yaw, len: 16, door: DOORS[(i + 2) % DOORS.length] });
-const pave = (x0, z0, x1, z1) => ({ k: 'pave', x0, z0, x1, z1 });
-const plaza = (x, z, r) => ({ k: 'plaza', x, z, r });
-const walk = (x, z, x2, z2, w = 8) => ({ k: 'walk', x, z, x2, z2, w });
-const lamp = (x, z) => ({ k: 'lamp', x, z });
-const link = (a, b) => ({ k: 'link', a, b }); // a tunnel between two domes (indices into the layout's domes, in order)
-const toward = (x, z, tx = 0, tz = 0) => r1(deg(Math.atan2(tx - x, tz - z)));
-const SHOPS = ['NOODLE BAR', 'CANTEEN', 'SUIT SHOP', 'PARTS', 'CLINIC', 'POST', 'GROCER', 'TOOL LIBRARY', 'BARBER', 'BAKERY'];
-
-// ---- 1: Main Street ----
-function mainStreet() {
-  const p = [pave(-72, -5, 72, 5), pave(-70, 5, -62, 42), plaza(0, 19, 14)];
-  [-21.5, -12.9, -4.3, 4.3, 12.9, 21.5].forEach((x, i) => p.push(shop(x, -9.4, 0, i, SHOPS[i])));
-  [-30.6, -22, 22, 30.6].forEach((x, i) => p.push(shop(x, 9.4, 180, i + 3, SHOPS[6 + i])));
-  [[-7, 26], [0, 29], [7, 26]].forEach(([x, z], i) => p.push(stall(x, z, 180, i)));
-  [-27, -9, 9, 27].forEach((x, i) => p.push(longhouse(x, -30, 0, i)));
-  p.push(dome('A', -30, 48, 11, 180, 0), dome('B', 4, 60, 15, 180, 1), dome('A', 40, 46, 12, 180, 2), link(0, 1), link(1, 2));
-  p.push(dome('A', 58, -34, 12, -45, 3), dome('B', -58, -34, 11, 45, 4));
-  p.push({ k: 'greenhouse', x: -49, z: 24, yaw: 90 }, { k: 'greenhouse', x: 62, z: 22, yaw: 90 });
-  p.push({ k: 'tank', x: 84, z: 0 }, { k: 'mast', x: -84, z: -12 }, { k: 'solar', x: 0, z: -62, yaw: 0, n: 4 });
-  for (const x of [-68, -52, -34, 34, 52, 68]) p.push(lamp(x, -6.5));
-  for (const x of [-56, -44, 44, 60]) p.push(lamp(x, 6.5));
-  return {
-    id: '1', name: 'Main Street', r: 110,
-    idea: 'One paved street, 144 m end to end, in place of the hub dome. Shops line the sunward side, a market square opens off the other; homes stand in rows behind: longhouses on the back lane, domes at the corners.',
-    pieces: p,
-  };
-}
-
-// ---- 2: the Caterpillar ----
-function caterpillar() {
-  const p = [pave(-52, 6, 52, 16), pave(-14, 16, 14, 46)];
-  for (let i = 0; i < 9; i++) {
-    const f = (i - 4) * (11.5 / 95);
-    p.push({ k: 'stilt', x: r1(95 * Math.sin(f)), z: r1(-95 + 95 * Math.cos(f)), yaw: r1(deg(f)), feature: i === 4, stairs: i % 2 === 0, door: DOORS[i % DOORS.length] });
-  }
-  [21.5, 30.1, 38.7].forEach((z, i) => p.push(shop(-18.4, z, 90, i, SHOPS[i]), shop(18.4, z, -90, i + 3, SHOPS[i + 3])));
-  [[-5, 24], [5, 31], [-5, 38]].forEach(([x, z], i) => p.push(stall(x, z, 0, i)));
-  p.push(dome('B', -74, 4, 15, toward(-74, 4, -52, 11), 0), dome('B', 72, 4, 12, toward(72, 4, 52, 11), 1), dome('A', 0, -52, 13, 0, 2));
-  p.push(longhouse(-40, 34, 90, 0), longhouse(40, 34, -90, 1));
-  p.push({ k: 'greenhouse', x: -30, z: -34, yaw: 90 }, { k: 'greenhouse', x: 30, z: -34, yaw: 90 });
-  p.push({ k: 'tank', x: 62, z: -30 }, { k: 'mast', x: -62, z: -32 }, { k: 'solar', x: 0, z: -80, yaw: 0, n: 4 });
-  for (const x of [-46, -30, 30, 46]) p.push(lamp(x, 17.5));
-  p.push(lamp(-13, 48), lamp(13, 48));
-  return {
-    id: '2', name: 'The Caterpillar', r: 115,
-    idea: 'Nine raised modules on hydraulic legs, chained in a shallow arc 100 m long, the orange commons module in the middle: the polar-station type. A promenade runs along the chain and a market court opens off it, under the commons\' stair. Three domes anchor the ends and the back.',
-    pieces: p,
-  };
-}
-
-// ---- 3: the Courtyard ----
-function courtyard() {
-  const R = 60, p = [plaza(0, 0, 38)];
-  const gate = [R * Math.cos(rad(140)), R * Math.sin(rad(140))];
-  p.push(walk(r1(gate[0] * 0.5), r1(gate[1] * 0.5), PAD.x + 11, PAD.z - 9, 8));
-  [50, 110, 170, 230, 290, 350].forEach((t, i) => {
-    const x = r1(R * Math.cos(rad(t))), z = r1(R * Math.sin(rad(t)));
-    p.push(dome(i % 2 ? 'A' : 'B', x, z, [11, 12, 13, 14, 12, 13][i], toward(x, z), i));
-  });
-  p.push(link(0, 1), link(2, 3), link(3, 4), link(4, 5), link(5, 0));
-  [275, 293, 311, 329, 347, 365].forEach((t, i) => {
-    const x = r1(32 * Math.cos(rad(t))), z = r1(32 * Math.sin(rad(t)));
-    p.push(shop(x, z, toward(x, z), i, SHOPS[i]));
-  });
-  [60, 100, 180, 220].forEach((t, i) => {
-    const x = r1(14 * Math.cos(rad(t))), z = r1(14 * Math.sin(rad(t)));
-    p.push(stall(x, z, toward(0, 0, x, z), i));
-  });
-  p.push({ k: 'tank', x: 0, z: 0 });
-  p.push({ k: 'greenhouse', x: 7.8, z: 29, yaw: -75 }, { k: 'greenhouse', x: -28.2, z: -10.3, yaw: 160 });
-  p.push({ k: 'mast', x: -84, z: -30 }, { k: 'solar', x: 10, z: 88, yaw: 0, n: 3 });
-  for (const t of [20, 125, 155, 250]) p.push(lamp(r1(37 * Math.cos(rad(t))), r1(37 * Math.sin(rad(t)))));
-  return {
-    id: '3', name: 'The Courtyard', r: 110,
-    idea: 'Six domes in a ring 120 m across, joined by tunnels into one wall with a single gate toward the landing pad; inside, a paved market court round the water tank, the shops along its far side facing the gate.',
-    pieces: p,
-  };
-}
-
-// ---- the Civic Center ----
-function civic() {
-  const p = [{ k: 'hall', x: 0, z: 0, yaw: 0 }, pave(-6, 44, 6, 112)];
-  [56, 64.6, 73.2, 81.8].forEach((z, i) => p.push(shop(-16.4, z, 90, i, SHOPS[i]), shop(16.4, z, -90, i + 4, SHOPS[i + 4])));
-  [200, 235, 270, 305, 340].forEach((t, i) => {
-    const x = r1(70 * Math.cos(rad(t))), z = r1(70 * Math.sin(rad(t)));
-    p.push(dome(i % 2 ? 'B' : 'A', x, z, [14, 16, 18, 16, 14][i], toward(x, z), i));
-  });
-  p.push(link(0, 1), link(1, 2), link(2, 3), link(3, 4));
-  p.push(longhouse(48, 62, -90, 0), longhouse(48, 80, -90, 1), longhouse(-48, 84, 90, 2), longhouse(-46, 99, 90, 3));
-  p.push({ k: 'greenhouse', x: 72, z: 16, yaw: 0 }, { k: 'greenhouse', x: 84, z: 16, yaw: 0 });
-  p.push({ k: 'tank', x: -80, z: 8 }, { k: 'mast', x: 86, z: -12 }, { k: 'solar', x: 0, z: -108, yaw: 0, n: 5 });
-  for (const z of [50, 70, 90, 110]) p.push(lamp(-8, z), lamp(8, z));
-  return {
-    id: 'civic', name: 'Kepler Civic Center', r: 140,
-    idea: 'The new hall stands where the gold council dome is, replacing it and the clock-tower hall both. Civic Avenue runs 70 m from the arrivals side to its forecourt between two rows of shops; the big family domes close the back in an arc.',
-    pieces: p,
-  };
-}
-
-const LAYOUTS = [mainStreet(), caterpillar(), courtyard(), civic()];
 
 // ---- footprints: polygons in the town's frame ----
 function turn(pts, x, z, yaw) {
@@ -143,10 +34,12 @@ function footprints(q) {
     case 'domeA': case 'domeB': return [T(circle(domeR(q))), T(rect(-2.3, 0, 2.3, lockEnd(q)))];
     case 'stilt': return [T(rect(-5.75, -3.2, 5.75, q.stairs ? 4.8 : 3.2))];
     case 'longhouse': return [T(rect(-5, -q.len / 2 - 0.4, 5, q.len / 2 + 1.8))];
-    case 'shop': return [T(rect(-4, -4.2, 4, 4.4))];
+    case 'shop': return [T(rect(-4.3, -4.5, 4.3, 4.45))];      // (an ILMB shop unit at 0.86, 0.25 m forward)
     case 'stall': return [T(rect(-2.1, -1.45, 2.1, 1.45))];
+    case 'bench': return [T(rect(-1.2, -0.4, 1.2, 0.4))];
+    case 'sign': return [T(rect(-7.2, -0.4, 7.2, 0.4))];
     case 'greenhouse': return [T(rect(-3.8, -9.2, 3.8, 9.2))];
-    case 'tank': return [T(circle(4.6, 12))];
+    case 'tank': return [T(circle(5.4, 12))];
     case 'mast': return [T(circle(2.2, 8))];
     case 'solar': return [T(rect(-q.n * 2.7, -1.7, q.n * 2.7, 1.7))];
     case 'hall': return [T(circle(21.5, 28)), T(rect(17, 28, 21, 32))];
@@ -187,17 +80,19 @@ function check(L) {
       for (const P of footprints(a)) for (const Q of footprints(b)) d = Math.min(d, polyDist(P, Q));
       if (a.k === 'stilt' && b.k === 'stilt') continue; // chained: their collars meet
       const row = a.k === 'shop' && b.k === 'shop'; // a row of shops stands wall to wall
-      const need = a.k === 'pad' || b.k === 'pad' ? FLIGHT - PAD.r : row ? 0.5 : a.k === 'stall' || b.k === 'stall' ? 1.5 : 2;
+      const small = (q) => q.k === 'stall' || q.k === 'bench';
+      const need = a.k === 'pad' || b.k === 'pad' ? FLIGHT - PAD.r : row ? 0 : small(a) || small(b) ? 1.5 : 2;
       if (d < need) bad.push(`${label(a)} and ${label(b)}: ${d.toFixed(1)} m apart, want ${need.toFixed(1)}`);
     }
   }
+  for (const q of L.pieces) if ((q.k === 'domeA' && !DOME_A.includes(q.r)) || (q.k === 'domeB' && !DOME_B.includes(q.r))) bad.push(`${label(q)}: kepler.glb has no ${q.k} of r ${q.r}`);
   return bad;
 }
 
 // ---- the plan, as SVG ----
 const FILL = {
   domeA: '#fff4e0', domeB: '#f3eee4', stilt: '#fff4e0', longhouse: '#fff4e0', shop: '#ff9f1c', stall: '#ffd23f', greenhouse: '#9be7ff',
-  tank: '#d8d4e8', mast: '#8a87a0', solar: '#1d2f6b', hall: '#fff4e0', pad: '#b8b2cc',
+  tank: '#d8d4e8', mast: '#8a87a0', solar: '#1d2f6b', hall: '#fff4e0', pad: '#b8b2cc', bench: '#c9ced8', sign: '#2a2540',
 };
 function svg(L) {
   const S = 3.2, R = L.r + 14, W = Math.round(2 * R * S), H = W + 150;
@@ -209,9 +104,10 @@ function svg(L) {
   o.push(`<circle cx="${X(0)}" cy="${Z(0)}" r="${L.r * 0.85 * S}" fill="none" stroke="#8a87a0" stroke-dasharray="2 6"/>`);
   const domes = L.pieces.filter((q) => q.k.startsWith('dome'));
   for (const q of L.pieces) {
-    if (q.k === 'pave') o.push(poly(rect(q.x0, q.z0, q.x1, q.z1), '#9d97b0', 'none'));
-    if (q.k === 'plaza') o.push(`<circle cx="${X(q.x)}" cy="${Z(q.z)}" r="${q.r * S}" fill="#9d97b0"/>`);
-    if (q.k === 'walk') o.push(`<line x1="${X(q.x)}" y1="${Z(q.z)}" x2="${X(q.x2)}" y2="${Z(q.z2)}" stroke="#9d97b0" stroke-width="${q.w * S}"/>`);
+    if (q.k === 'clear') o.push(poly(rect(q.x0, q.z0, q.x1, q.z1), '#b3adc2', 'none'));
+    if (q.k === 'clearing') o.push(`<circle cx="${X(q.x)}" cy="${Z(q.z)}" r="${q.r * S}" fill="#b3adc2"/>`);
+    if (q.k === 'path') o.push(`<line x1="${X(q.x)}" y1="${Z(q.z)}" x2="${X(q.x2)}" y2="${Z(q.z2)}" stroke="#b3adc2" stroke-width="${q.w * S}"/>`);
+    if (q.k === 'road') o.push(poly(rect(q.x0 - 6, q.z0, q.x1 + 6, q.z1), '#6f6a80', 'none'));
   }
   for (const q of L.pieces) if (q.k === 'link') {
     const a = domes[q.a], b = domes[q.b];
@@ -241,7 +137,7 @@ function svg(L) {
   o.push(text(R - 8, R - 9, '+z: sunward', 10, '#55607a', 'end'));
   // legend
   const leg = [['#8a8296', 'Dome A (terraced)'], ['#f3eee4', 'Dome B (geodesic on a drum)'], ['#fff4e0', 'Raised module / longhouse'], ['#ff9f1c', 'Shop; the commons module'],
-    ['#ffd23f', 'Market stall'], ['#9be7ff', 'Greenhouse'], ['#9d97b0', 'Paving'], ['#1d2f6b', 'Solar']];
+    ['#ffd23f', 'Market stall'], ['#9be7ff', 'Greenhouse'], ['#b3adc2', 'Cleared ground (no road)'], ['#6f6a80', 'Road (Civic only)']];
   leg.forEach(([c, s], i) => {
     const lx = 14 + (i % 4) * (W / 4), ly = W + 26 + Math.floor(i / 4) * 22;
     o.push(`<rect x="${lx}" y="${ly - 10}" width="14" height="12" fill="${c}" stroke="#2a2540"/>`, `<text x="${lx + 20}" y="${ly}" font-size="11" fill="#2a2540" font-family="Verdana, sans-serif">${s}</text>`);

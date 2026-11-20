@@ -10,24 +10,35 @@
    "id": "1",
    "name": "Main Street",
    "r": 110,
-   "idea": "One paved street, 144 m end to end, in place of the hub dome. Shops line the sunward side, a market square opens off the other; homes stand in rows behind: longhouses on the back lane, domes at the corners.",
+   "idea": "One street of cleared regolith, 144 m end to end, in place of the hub dome. Shops line the sunward side, a market square opens off the other; homes stand in rows behind: longhouses on the back lane, domes at the corners.",
    "pieces": [
     {
-     "k": "pave",
+     "k": "clear",
      "x0": -72,
      "z0": -5,
      "x1": 72,
-     "z1": 5
+     "z1": 5,
+     "markers": false
     },
     {
-     "k": "pave",
-     "x0": -70,
+     "k": "clear",
+     "x0": -67,
      "z0": 5,
-     "x1": -62,
-     "z1": 42
+     "x1": -61,
+     "z1": 32,
+     "markers": true
     },
     {
-     "k": "plaza",
+     "k": "path",
+     "x": -64,
+     "z": 31,
+     "x2": -52,
+     "z2": 42,
+     "w": 5,
+     "markers": true
+    },
+    {
+     "k": "clearing",
      "x": 0,
      "z": 19,
      "r": 14
@@ -37,7 +48,6 @@
      "x": -21.5,
      "z": -9.4,
      "yaw": 0,
-     "accent": "orange",
      "name": "NOODLE BAR"
     },
     {
@@ -45,7 +55,6 @@
      "x": -12.9,
      "z": -9.4,
      "yaw": 0,
-     "accent": "green",
      "name": "CANTEEN"
     },
     {
@@ -53,7 +62,6 @@
      "x": -4.3,
      "z": -9.4,
      "yaw": 0,
-     "accent": "teal",
      "name": "SUIT SHOP"
     },
     {
@@ -61,7 +69,6 @@
      "x": 4.3,
      "z": -9.4,
      "yaw": 0,
-     "accent": "ochre",
      "name": "PARTS"
     },
     {
@@ -69,7 +76,6 @@
      "x": 12.9,
      "z": -9.4,
      "yaw": 0,
-     "accent": "sage",
      "name": "CLINIC"
     },
     {
@@ -77,7 +83,6 @@
      "x": 21.5,
      "z": -9.4,
      "yaw": 0,
-     "accent": "dusk",
      "name": "POST"
     },
     {
@@ -85,7 +90,6 @@
      "x": -30.6,
      "z": 9.4,
      "yaw": 180,
-     "accent": "ochre",
      "name": "GROCER"
     },
     {
@@ -93,7 +97,6 @@
      "x": -22,
      "z": 9.4,
      "yaw": 180,
-     "accent": "sage",
      "name": "TOOL LIBRARY"
     },
     {
@@ -101,7 +104,6 @@
      "x": 22,
      "z": 9.4,
      "yaw": 180,
-     "accent": "dusk",
      "name": "BARBER"
     },
     {
@@ -109,36 +111,43 @@
      "x": 30.6,
      "z": 9.4,
      "yaw": 180,
-     "accent": "rose",
      "name": "BAKERY"
     },
     {
      "k": "stall",
      "x": -7,
      "z": 26,
-     "yaw": 180,
-     "accent": "orange"
+     "yaw": 180
     },
     {
      "k": "stall",
      "x": 0,
      "z": 29,
-     "yaw": 180,
-     "accent": "green"
+     "yaw": 180
     },
     {
      "k": "stall",
      "x": 7,
      "z": 26,
-     "yaw": 180,
-     "accent": "orange"
+     "yaw": 180
+    },
+    {
+     "k": "bench",
+     "x": -9,
+     "z": 13,
+     "yaw": 90
+    },
+    {
+     "k": "bench",
+     "x": 9,
+     "z": 13,
+     "yaw": -90
     },
     {
      "k": "longhouse",
      "x": -27,
      "z": -30,
      "yaw": 0,
-     "len": 16,
      "door": "ochre"
     },
     {
@@ -146,7 +155,6 @@
      "x": -9,
      "z": -30,
      "yaw": 0,
-     "len": 16,
      "door": "rose"
     },
     {
@@ -154,7 +162,6 @@
      "x": 9,
      "z": -30,
      "yaw": 0,
-     "len": 16,
      "door": "teal"
     },
     {
@@ -162,14 +169,13 @@
      "x": 27,
      "z": -30,
      "yaw": 0,
-     "len": 16,
      "door": "sage"
     },
     {
      "k": "domeA",
      "x": -30,
      "z": 48,
-     "r": 11,
+     "r": 12,
      "yaw": 180,
      "door": "sage"
     },
@@ -177,7 +183,7 @@
      "k": "domeB",
      "x": 4,
      "z": 60,
-     "r": 15,
+     "r": 16,
      "yaw": 180,
      "door": "dusk"
     },
@@ -218,7 +224,7 @@
     {
      "k": "greenhouse",
      "x": -49,
-     "z": 24,
+     "z": 22,
      "yaw": 90
     },
     {
@@ -243,6 +249,12 @@
      "z": -62,
      "yaw": 0,
      "n": 4
+    },
+    {
+     "k": "sign",
+     "x": -74,
+     "z": 22,
+     "yaw": 26.6
     },
     {
      "k": "lamp",
@@ -300,21 +312,32 @@
    "id": "2",
    "name": "The Caterpillar",
    "r": 115,
-   "idea": "Nine raised modules on hydraulic legs, chained in a shallow arc 100 m long, the orange commons module in the middle: the polar-station type. A promenade runs along the chain and a market court opens off it, under the commons' stair. Three domes anchor the ends and the back.",
+   "idea": "Nine raised modules on hydraulic legs, chained in a shallow arc 100 m long, the orange commons module in the middle: the polar-station type. A cleared promenade runs along the chain and a market court opens off it, under the commons' stair. Three domes anchor the ends and the back.",
    "pieces": [
     {
-     "k": "pave",
+     "k": "clear",
      "x0": -52,
      "z0": 6,
      "x1": 52,
-     "z1": 16
+     "z1": 16,
+     "markers": false
     },
     {
-     "k": "pave",
+     "k": "clear",
      "x0": -14,
      "z0": 16,
      "x1": 14,
-     "z1": 46
+     "z1": 46,
+     "markers": false
+    },
+    {
+     "k": "path",
+     "x": -50,
+     "z": 42,
+     "x2": -44,
+     "z2": 16,
+     "w": 6,
+     "markers": true
     },
     {
      "k": "stilt",
@@ -402,7 +425,6 @@
      "x": -18.4,
      "z": 21.5,
      "yaw": 90,
-     "accent": "orange",
      "name": "NOODLE BAR"
     },
     {
@@ -410,7 +432,6 @@
      "x": 18.4,
      "z": 21.5,
      "yaw": -90,
-     "accent": "ochre",
      "name": "PARTS"
     },
     {
@@ -418,7 +439,6 @@
      "x": -18.4,
      "z": 30.1,
      "yaw": 90,
-     "accent": "green",
      "name": "CANTEEN"
     },
     {
@@ -426,7 +446,6 @@
      "x": 18.4,
      "z": 30.1,
      "yaw": -90,
-     "accent": "sage",
      "name": "CLINIC"
     },
     {
@@ -434,7 +453,6 @@
      "x": -18.4,
      "z": 38.7,
      "yaw": 90,
-     "accent": "teal",
      "name": "SUIT SHOP"
     },
     {
@@ -442,35 +460,55 @@
      "x": 18.4,
      "z": 38.7,
      "yaw": -90,
-     "accent": "dusk",
      "name": "POST"
     },
     {
      "k": "stall",
      "x": -5,
      "z": 24,
-     "yaw": 0,
-     "accent": "orange"
+     "yaw": 0
     },
     {
      "k": "stall",
      "x": 5,
      "z": 31,
-     "yaw": 0,
-     "accent": "green"
+     "yaw": 0
     },
     {
      "k": "stall",
      "x": -5,
      "z": 38,
-     "yaw": 0,
-     "accent": "orange"
+     "yaw": 0
+    },
+    {
+     "k": "bench",
+     "x": -8,
+     "z": 10,
+     "yaw": 0
+    },
+    {
+     "k": "bench",
+     "x": 8,
+     "z": 10,
+     "yaw": 0
+    },
+    {
+     "k": "bench",
+     "x": -30,
+     "z": 10,
+     "yaw": 0
+    },
+    {
+     "k": "bench",
+     "x": 30,
+     "z": 10,
+     "yaw": 0
     },
     {
      "k": "domeB",
      "x": -74,
      "z": 4,
-     "r": 15,
+     "r": 16,
      "yaw": 72.3,
      "door": "sage"
     },
@@ -478,7 +516,7 @@
      "k": "domeB",
      "x": 72,
      "z": 4,
-     "r": 12,
+     "r": 11,
      "yaw": -70.7,
      "door": "dusk"
     },
@@ -486,7 +524,7 @@
      "k": "domeA",
      "x": 0,
      "z": -52,
-     "r": 13,
+     "r": 14,
      "yaw": 0,
      "door": "ochre"
     },
@@ -495,7 +533,6 @@
      "x": -40,
      "z": 34,
      "yaw": 90,
-     "len": 16,
      "door": "ochre"
     },
     {
@@ -503,7 +540,6 @@
      "x": 40,
      "z": 34,
      "yaw": -90,
-     "len": 16,
      "door": "rose"
     },
     {
@@ -534,6 +570,12 @@
      "z": -80,
      "yaw": 0,
      "n": 4
+    },
+    {
+     "k": "sign",
+     "x": -34,
+     "z": 52,
+     "yaw": -108.4
     },
     {
      "k": "lamp",
@@ -571,21 +613,22 @@
    "id": "3",
    "name": "The Courtyard",
    "r": 110,
-   "idea": "Six domes in a ring 120 m across, joined by tunnels into one wall with a single gate toward the landing pad; inside, a paved market court round the water tank, the shops along its far side facing the gate.",
+   "idea": "Six domes in a ring 120 m across, joined by tunnels into one wall with a single gate toward the landing pad; inside, a cleared market court round the water tank, the shops along its far side facing the gate.",
    "pieces": [
     {
-     "k": "plaza",
+     "k": "clearing",
      "x": 0,
      "z": 0,
      "r": 38
     },
     {
-     "k": "walk",
-     "x": -23,
-     "z": 19.3,
-     "x2": -54,
-     "z2": 46,
-     "w": 8
+     "k": "path",
+     "x": -25.3,
+     "z": 21.2,
+     "x2": -52,
+     "z2": 44,
+     "w": 7,
+     "markers": true
     },
     {
      "k": "domeB",
@@ -623,7 +666,7 @@
      "k": "domeB",
      "x": 20.5,
      "z": -56.4,
-     "r": 12,
+     "r": 13,
      "yaw": -20,
      "door": "teal"
     },
@@ -631,7 +674,7 @@
      "k": "domeA",
      "x": 59.1,
      "z": -10.4,
-     "r": 13,
+     "r": 12,
      "yaw": -80,
      "door": "sage"
     },
@@ -665,7 +708,6 @@
      "x": 2.8,
      "z": -31.9,
      "yaw": -5,
-     "accent": "orange",
      "name": "NOODLE BAR"
     },
     {
@@ -673,7 +715,6 @@
      "x": 12.5,
      "z": -29.5,
      "yaw": -23,
-     "accent": "green",
      "name": "CANTEEN"
     },
     {
@@ -681,7 +722,6 @@
      "x": 21,
      "z": -24.2,
      "yaw": -41,
-     "accent": "teal",
      "name": "SUIT SHOP"
     },
     {
@@ -689,7 +729,6 @@
      "x": 27.4,
      "z": -16.5,
      "yaw": -58.9,
-     "accent": "ochre",
      "name": "PARTS"
     },
     {
@@ -697,7 +736,6 @@
      "x": 31.2,
      "z": -7.2,
      "yaw": -77,
-     "accent": "sage",
      "name": "CLINIC"
     },
     {
@@ -705,36 +743,49 @@
      "x": 31.9,
      "z": 2.8,
      "yaw": -95,
-     "accent": "dusk",
      "name": "POST"
     },
     {
      "k": "stall",
      "x": 7,
      "z": 12.1,
-     "yaw": 30,
-     "accent": "orange"
+     "yaw": 30
     },
     {
      "k": "stall",
      "x": -2.4,
      "z": 13.8,
-     "yaw": -9.9,
-     "accent": "green"
+     "yaw": -9.9
     },
     {
      "k": "stall",
      "x": -14,
      "z": 0,
-     "yaw": -90,
-     "accent": "orange"
+     "yaw": -90
     },
     {
      "k": "stall",
      "x": -10.7,
      "z": -9,
-     "yaw": -130.1,
-     "accent": "green"
+     "yaw": -130.1
+    },
+    {
+     "k": "bench",
+     "x": -16.9,
+     "z": 14.1,
+     "yaw": 129.8
+    },
+    {
+     "k": "bench",
+     "x": -3.8,
+     "z": -21.7,
+     "yaw": 9.9
+    },
+    {
+     "k": "bench",
+     "x": 11,
+     "z": -19.1,
+     "yaw": -29.9
     },
     {
      "k": "tank",
@@ -755,8 +806,8 @@
     },
     {
      "k": "mast",
-     "x": -84,
-     "z": -30
+     "x": -82,
+     "z": -28
     },
     {
      "k": "solar",
@@ -764,6 +815,12 @@
      "z": 88,
      "yaw": 0,
      "n": 3
+    },
+    {
+     "k": "sign",
+     "x": -64,
+     "z": 32,
+     "yaw": 45
     },
     {
      "k": "lamp",
@@ -791,7 +848,7 @@
    "id": "civic",
    "name": "Kepler Civic Center",
    "r": 140,
-   "idea": "The new hall stands where the gold council dome is, replacing it and the clock-tower hall both. Civic Avenue runs 70 m from the arrivals side to its forecourt between two rows of shops; the big family domes close the back in an arc.",
+   "idea": "The new hall stands where the gold council dome was, replacing it and the clock-tower hall both. Civic Avenue, the one road in the Kepler towns, runs from the arrivals side to its forecourt between two rows of shops; the big family domes close the back in an arc.",
    "pieces": [
     {
      "k": "hall",
@@ -800,18 +857,17 @@
      "yaw": 0
     },
     {
-     "k": "pave",
-     "x0": -6,
+     "k": "road",
+     "x0": 0,
      "z0": 44,
-     "x1": 6,
-     "z1": 112
+     "x1": 0,
+     "z1": 140
     },
     {
      "k": "shop",
      "x": -16.4,
      "z": 56,
      "yaw": 90,
-     "accent": "orange",
      "name": "NOODLE BAR"
     },
     {
@@ -819,7 +875,6 @@
      "x": 16.4,
      "z": 56,
      "yaw": -90,
-     "accent": "sage",
      "name": "CLINIC"
     },
     {
@@ -827,7 +882,6 @@
      "x": -16.4,
      "z": 64.6,
      "yaw": 90,
-     "accent": "green",
      "name": "CANTEEN"
     },
     {
@@ -835,7 +889,6 @@
      "x": 16.4,
      "z": 64.6,
      "yaw": -90,
-     "accent": "dusk",
      "name": "POST"
     },
     {
@@ -843,7 +896,6 @@
      "x": -16.4,
      "z": 73.2,
      "yaw": 90,
-     "accent": "teal",
      "name": "SUIT SHOP"
     },
     {
@@ -851,7 +903,6 @@
      "x": 16.4,
      "z": 73.2,
      "yaw": -90,
-     "accent": "rose",
      "name": "GROCER"
     },
     {
@@ -859,7 +910,6 @@
      "x": -16.4,
      "z": 81.8,
      "yaw": 90,
-     "accent": "ochre",
      "name": "PARTS"
     },
     {
@@ -867,7 +917,6 @@
      "x": 16.4,
      "z": 81.8,
      "yaw": -90,
-     "accent": "orange",
      "name": "TOOL LIBRARY"
     },
     {
@@ -935,7 +984,6 @@
      "x": 48,
      "z": 62,
      "yaw": -90,
-     "len": 16,
      "door": "ochre"
     },
     {
@@ -943,7 +991,6 @@
      "x": 48,
      "z": 80,
      "yaw": -90,
-     "len": 16,
      "door": "rose"
     },
     {
@@ -951,7 +998,6 @@
      "x": -48,
      "z": 84,
      "yaw": 90,
-     "len": 16,
      "door": "teal"
     },
     {
@@ -959,8 +1005,24 @@
      "x": -46,
      "z": 99,
      "yaw": 90,
-     "len": 16,
      "door": "sage"
+    },
+    {
+     "k": "path",
+     "x": -50,
+     "z": 44,
+     "x2": -24,
+     "z2": 40,
+     "w": 6,
+     "markers": true
+    },
+    {
+     "k": "clear",
+     "x0": -24,
+     "z0": 38,
+     "x1": -8,
+     "z1": 50,
+     "markers": false
     },
     {
      "k": "greenhouse",
@@ -990,6 +1052,12 @@
      "z": -108,
      "yaw": 0,
      "n": 5
+    },
+    {
+     "k": "sign",
+     "x": -16,
+     "z": 100,
+     "yaw": 0
     },
     {
      "k": "lamp",

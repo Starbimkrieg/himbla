@@ -1,16 +1,14 @@
-# The Kepler town kit, as PROPOSALS (docs/kepler-proposals): two hab-dome remodels, the station pieces the three town layouts
-# are made of (a raised module on legs, a longhouse, a shop unit, a market stall, a greenhouse, a water tank, a mast, a
-# connecting tunnel, a landing pad). Concepts for review: no colliders, pivots or export yet. kepler_domes.py lines the
-# pieces up, kepler_town.py stands them on a layout (kepler_layouts.json), kepler_hall_a.py / _b.py are the two town halls;
-# preview_kepler.py renders them all.
+# The Kepler town kit (docs/kepler-proposals): the two hab domes, the town hall, the station pieces the towns are laid out
+# from. build_kepler.py builds each piece as a root of kepler.glb; proposals/kepler_domes.py, kepler_town.py and
+# kepler_hall_b.py (the hall not picked) use the same pieces for the review renders.
 #
 # exec() it with REPO and COLL set; it execs wing_kit.py (the accumulator and geometry every ILMB wing shares), which execs
 # kit.py. three.js axes (x right, y up, +z forward), metres. Every piece is built at the origin of the current frame (at()),
-# its front (door) toward +z.
+# its front (door) toward +z. With BUILD[0] set (build_kepler.py) the pieces also write their colliders (`col` pivots under
+# ROOT, wing_kit col()) and the clock's hands as pivots, and leave the scale figures out.
 #
-# The palette is the point of the remodel: cream, white and aluminium shells, plum darks, ONE Kepler orange band per
-# building, and a household's own colour only on its door (the DOORS slots, all muted). Today's domes are painted whole in six
-# saturated colours (settlements.js buildTown's palette).
+# The palette: cream, white and aluminium shells, plum darks, ONE Kepler orange band per building, and a household's own
+# colour only on its door (slot `household`, which the game paints per home: settlements.js keplerDome; DOORS are the drafts').
 
 import math, os
 from contextlib import contextmanager
@@ -20,8 +18,9 @@ HEX = {
     "cream": 0xFFF4E0, "white": 0xF3EEE4, "light": 0xD8D4E8, "alu": 0xC9CED8, "metal": 0x8A87A0, "steel": 0x55607A,
     "panel": 0x5B5870, "roof": 0x3A3550, "dark": 0x2A2540, "door": 0x2A2540, "concrete": 0xB8B2CC, "pave": 0x9D97B0,
     "regolith": 0x8A8296, "orange": 0xFF9F1C, "green": 0x6A8F3A, "gold": 0xFFD23F, "solar": 0x1D2F6B, "blue": 0x2EC4FF,
-    "soil": 0x4A4660, "leaf": 0x1F8A3A, "leaf2": 0x5CC94A, "suit": 0xFF9F1C,
-    # a household's door colour: muted, never the whole shell
+    "soil": 0x4A4660, "leaf": 0x1F8A3A, "leaf2": 0x5CC94A, "suit": 0xFF9F1C, "household": 0x8FB28A,
+    "cleared": 0x9A94A8,     # regolith graded flat for walking (the game draws it with the ground's grain: settlements.js)
+    # a household's door colour in the drafts: muted, never the whole shell
     "sage": 0x8FB28A, "dusk": 0x6F8FB8, "ochre": 0xE0B050, "rose": 0xC98A9A, "teal": 0x5FA8A0,
     # glow
     "window": 0xFFF6A8, "lamp": 0xFFF6A8, "pane": 0xBFEFFF, "beacon": 0xFF9F1C, "redlamp": 0xFF2A4A, "earth": 0x4FA8FF,
@@ -33,7 +32,10 @@ GLOW_SLOTS = {"window": 2.0, "lamp": 5.0, "pane": 1.1, "beacon": 6.0, "redlamp":
 DOORS = ["sage", "dusk", "ochre", "rose", "teal"]
 exec(open(os.path.join(REPO, "tools", "blender", "wing_kit.py"), encoding="utf-8").read(), globals())
 
+BUILD = [False]          # build_kepler.py: write colliders and pivots
+PARENT = [None]          # the pivot put() builds under (a dome's `lock`), else the root
 _M = [Matrix.Identity(4)]
+_N = [0]
 
 
 @contextmanager
@@ -46,10 +48,22 @@ def at(x=0.0, z=0.0, yaw=0.0, y=0.0):
         _M.pop()
 
 
+@contextmanager
+def under(piv):
+    """put() and the colliders go under this pivot (colliders are marked `lock`: they turn with it)"""
+    PARENT[0] = piv
+    try:
+        yield
+    finally:
+        PARENT[0] = None
+
+
 def put(slot, ink, geo, sharp=None):
     m = _M[-1]
-    a = Acc.of(slot, ink) if sharp is None else Acc.of(slot, ink, sharp=sharp)
-    a.put(([tuple(m @ Vector(p)) for p in geo[0]], geo[1]))
+    kw = {"parent": PARENT[0]}
+    if sharp is not None:
+        kw["sharp"] = sharp
+    Acc.of(slot, ink, **kw).put(([tuple(m @ Vector(p)) for p in geo[0]], geo[1]))
 
 
 def bx(x0, y0, z0, x1, y1, z1):
@@ -70,6 +84,59 @@ def strut(a, b, r, seg=6):
     return B(a, b, r, seg, cap=True)
 
 
+# ---- colliders, in the current frame (no-ops in a draft) ----
+
+def _yaw():
+    m = _M[-1]
+    return math.atan2(m[0][2], m[2][2])
+
+
+def _col(p, **extras):
+    if PARENT[0] is not None:
+        extras["lock"] = 1
+    col(tuple(_M[-1] @ Vector(p)), **extras)
+
+
+def cbox(x0, y0, z0, x1, y1, z1):
+    if BUILD[0]:
+        _col(((x0 + x1) / 2, min(y0, y1), (z0 + z1) / 2), shape="box", hx=abs(x1 - x0) / 2, hy=abs(y1 - y0) / 2, hz=abs(z1 - z0) / 2, yaw=_yaw())
+
+
+def cslope(x0, x1, za, ya, zb, yb, thick=0.3):
+    """a slab whose top runs from (za, ya) to (zb, yb), za < zb, x0 to x1 wide: a stair, a raked wall's top"""
+    if not BUILD[0]:
+        return
+    p = math.atan2(ya - yb, zb - za)                       # (+ about x lowers the +z end)
+    cy, cz = (ya + yb) / 2 - thick / 2 * math.cos(p), (za + zb) / 2 - thick / 2 * math.sin(p)
+    _col(((x0 + x1) / 2, cy - thick / 2, cz), shape="box", hx=abs(x1 - x0) / 2, hy=thick / 2, hz=math.hypot(zb - za, yb - ya) / 2, yaw=_yaw(), pitch=p)
+
+
+def ccyl(x, z, r, y0, y1):
+    if BUILD[0]:
+        _col((x, y0, z), shape="cyl", r=r, h=y1 - y0)
+
+
+def csphere(x, y, z, r):
+    if BUILD[0]:
+        _col((x, y, z), shape="sphere", r=r)
+
+
+def chcyl(x, y, z, r, length):
+    """a cylinder lying along the frame's z"""
+    if BUILD[0]:
+        _col((x, y, z), shape="hcyl", r=r, len=length, yaw=_yaw())
+
+
+def carc(r0, r1, y0, y1, a0, a1, step=math.radians(12)):
+    """an annulus sector between radii r0 and r1 as boxes, a0 to a1 measured from +x toward +z"""
+    n = max(1, math.ceil((a1 - a0) / step))
+    da = (a1 - a0) / n
+    for i in range(n):
+        th = a0 + (i + 0.5) * da
+        with at(0, 0, PI / 2 - th):
+            cbox(-r1 * math.sin(da / 2) - 0.1, y0, r0, r1 * math.sin(da / 2) + 0.1, y1, r1)
+
+
 def rail(slot, pts, h=1.1, r=0.05, every=1.5):
     """a handrail: a top rail h over the base points, a knee rail, posts"""
     top = [(p[0], p[1] + h, p[2]) for p in pts]
@@ -85,7 +152,9 @@ def rail(slot, pts, h=1.1, r=0.05, every=1.5):
 
 
 def figure(x, z, slot="suit"):
-    """a courier-sized figure, for scale"""
+    """a courier-sized figure, for scale (drafts only)"""
+    if BUILD[0]:
+        return
     put(slot, 0.03, cyl(x, 0.85, z, 0.3, 1.4, 10, rt=0.26))
     put("dark", 0.0, ball(x, 1.75, z, 0.25, 10, 7))
 
@@ -94,6 +163,7 @@ def lamp(x, z, h=5.0):
     put("steel", 0.02, cyl(x, h / 2, z, 0.11, h, 6, rt=0.07))
     put("steel", 0.0, cyl(x, 0.15, z, 0.28, 0.3, 8))
     put("lamp", 0.0, ball(x, h + 0.22, z, 0.32, 8, 6))
+    ccyl(x, z, 0.2, 0, h)
 
 
 def paving(x0, z0, x1, z1, slot="pave", y=0.04):
@@ -121,6 +191,8 @@ def airlock(r_in, z_out, door_slot):
     put("lamp", 0.0, bx(-0.9, 3.2, z_out + 0.3, 0.9, 3.3, z_out + 0.6))             # (under the roof's overhang)
     for sx in (-1, 1):                                             # the step's handrails
         rail("orange", [(sx * 1.55, 0.25, z_out + 0.2), (sx * 1.55, 0.25, z_out + 2.0)], every=1.7)
+    cbox(-w / 2 - 0.15, 0, r_in, w / 2 + 0.15, h + 0.3, z_out + 0.16)
+    cbox(-w / 2 - 0.15, h, z_out, w / 2 + 0.15, h + 0.3, z_out + 0.7)
 
 
 def crown(y, r, glazed=True):
@@ -130,61 +202,72 @@ def crown(y, r, glazed=True):
         put("pane", 0.0, ball(0, y + 0.25, 0, r * 0.92, 16, 6, (1, 0.55, 1)))
         for i in range(8):
             a = TAU * i / 8
-            put("alu", 0.0, strut((math.sin(a) * r * 0.92, y + 0.25, math.cos(a) * r * 0.92), (0, y + 0.25 + r * 0.52, 0), 0.05, 4))
+            put("alu", 0.0, strut((math.sin(a) * r * 0.92, y + 0.25, math.cos(a) * r * 0.92), (0, y + 0.25 + r * 0.5, 0), 0.05, 4))
+        put("alu", 0.0, ball(0, y + 0.25 + r * 0.5, 0, 0.12, 8, 6))               # the hub the ribs meet in
     else:
         put("roof", 0.04, cyl(0, y + 0.45, 0, r * 0.95, 0.4, 20, rt=r * 0.5))
     top = y + 0.25 + r * 0.5 if glazed else y + 0.6
     put("steel", 0.02, cyl(0, top + 1.2, 0, 0.07, 2.6, 6, rt=0.04))
     put("redlamp", 0.0, ball(0, top + 2.6, 0, 0.2, 8, 6))
+    ccyl(0, 0, r * 1.1, y - 0.45, top)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# DOME A, "the Shield": a low cream shell behind three terraces of sintered-regolith block (the radiation cover, built
-# rather than heaped), one orange band where shell meets block, a ring of portholes, a glazed lantern at the crown.
+# DOME A, "the Shield": a low cream shell (a cap of a sphere, its rise 0.8 of its radius) behind three terraces of
+# sintered-regolith block (the radiation cover, built rather than heaped), one orange band where shell meets block, a ring
+# of portholes, a glazed lantern at the crown. The whole piece turns with its door.
 
 def dome_a(r, door_slot="sage"):
     y0, hh = 0.5, r * 0.8                                           # footing height, the shell's rise over it
-    rs = lambda y: r * math.sqrt(max(0.0, 1 - ((y - y0) / hh) ** 2))
-    pt = lambda a, t, k=1.0: (math.sin(a) * r * math.cos(t) * k, y0 + hh * math.sin(t) * k, math.cos(a) * r * math.cos(t) * k)
+    rho = (r * r + hh * hh) / (2 * hh)                              # the sphere the shell is a cap of, and its centre's height
+    cy = y0 + hh - rho
+    rs = lambda y: math.sqrt(max(0.0, rho * rho - (y - cy) ** 2))
+    phi = lambda y: math.acos(max(-1.0, min(1.0, (y - cy) / rho)))  # angle from the crown, of the shell at height y
+    pt = lambda a, f, k=1.0: (math.sin(a) * rho * math.sin(f) * k, cy + rho * math.cos(f) * k, math.cos(a) * rho * math.sin(f) * k)
     seg = 32 if r < 12 else 40 if r < 20 else 56
     put("concrete", 0.05, cyl(0, y0 / 2, 0, r + 0.35, y0, seg))
-    n = 9
-    put("cream", min(0.14, 0.07 + r * 0.004), lathe([(r * math.cos(PI / 2 * i / n), y0 + hh * math.sin(PI / 2 * i / n)) for i in range(n)] + [(0, y0 + hh)], seg))
+    n, f0 = 9, phi(y0)
+    put("cream", min(0.14, 0.07 + r * 0.004), lathe([(rho * math.sin(f0 * (1 - i / n)), cy + rho * math.cos(f0 * (1 - i / n))) for i in range(n)] + [(0, y0 + hh)], seg))
     # the terraces, open at the airlock
     bh = min(4.5, 1.5 + r * 0.12)
-    r1 = rs(y0 + bh * 2 / 3) + 0.9
+    r1 = rs(bh * 2 / 3) + 0.9
     r2, r3 = r1 + 1.2, r1 + 2.4
     prof = [(r * 0.8, 0), (r3, 0), (r3 - 0.25, bh / 3), (r2, bh / 3), (r2 - 0.25, bh * 2 / 3), (r1, bh * 2 / 3), (r1 - 0.25, bh), (r * 0.8, bh)]
     gap = math.asin(min(0.9, 3.1 / r3))
     put("regolith", 0.06, sector(prof, PI / 2 + gap, PI / 2 + TAU - gap, seg))
     for sx in (-1, 1):                                              # a concrete cheek each side of the cut
         put("concrete", 0.04, bx(sx * 2.0, 0, r * 0.8, sx * 2.5, bh + 0.3, r3 + 0.3))
+        cbox(sx * 2.0, 0, r * 0.8, sx * 2.5, bh + 0.3, r3 + 0.3)
     # the band, the seams, the portholes
-    tb_ = math.asin(min(0.95, (bh - y0) / hh))
-    put("orange", 0.0, ring(rs(bh) + 0.02, 0.2, y=bh + 0.12, n=seg, rs=6))
+    fb = phi(bh)
+    put("orange", 0.03, ring(rs(bh) + 0.02, 0.2, y=bh + 0.12, n=seg, rs=6))
     M = 8 if r < 10 else 12 if r < 18 else 16
-    t1 = math.acos(min(1.0, (r * 0.2) / r))
+    f1 = math.asin(r * 0.2 / rho)
     for i in range(M):
         a = TAU * (i + 0.5) / M
-        put("white", 0.0, path_tube([pt(a, tb_ + (t1 - tb_) * j / 6, 1.002) for j in range(7)], 0.07, 4))
-    put("white", 0.0, ring(r * math.cos((tb_ + t1) / 2) + 0.02, 0.07, y=y0 + hh * math.sin((tb_ + t1) / 2), n=seg, rs=4))
-    tw = tb_ + 1.7 / hh
+        put("white", 0.015, path_tube([pt(a, fb + (f1 - fb) * j / 6, 1.002) for j in range(7)], 0.07, 4))
+    fm = (fb + f1) / 2
+    put("white", 0.015, ring(rho * math.sin(fm) + 0.02, 0.07, y=cy + rho * math.cos(fm), n=seg, rs=4))
+    fw = phi(bh + 1.3)
     nw = max(6, round(r * 0.9))
     for i in range(nw):
         a = TAU * (i + 0.5) / nw
         if abs(math.atan2(math.sin(a), math.cos(a))) < 4.0 / r:
             continue
-        p, q = pt(a, tw, 1.0), pt(a, tw, 1.004)
-        el = math.atan2(r * math.sin(tw), hh * math.cos(tw))        # the shell's normal there
-        put("alu", 0.015, xf(cylinder(0.62, 0.62, 0.16, 12)[:2], p, (PI / 2 - el, a, 0)))
-        put("window", 0.0, xf(cylinder(0.46, 0.46, 0.2, 12)[:2], q, (PI / 2 - el, a, 0)))
-    crown(y0 + hh * math.sin(t1), r * 0.2)
+        put("alu", 0.015, xf(cylinder(0.62, 0.62, 0.16, 12)[:2], pt(a, fw), (fw, a, 0)))
+        put("window", 0.0, xf(cylinder(0.46, 0.46, 0.2, 12)[:2], pt(a, fw, 1.004), (fw, a, 0)))
+    crown(cy + rho * math.cos(f1), r * 0.2)
     airlock(r * 0.8, r3 + 1.2, door_slot)
+    csphere(0, cy, 0, rho)
+    for rr, ya, yb in ((r3, 0, bh / 3), (r2, bh / 3, bh * 2 / 3), (r1, bh * 2 / 3, bh)):
+        ccyl(0, 0, rr, ya, yb)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
 # DOME B, "the Geode": a faceted geodesic shell on a regolith-filled drum (the cover is in the drum's double wall), its
-# sunward facets photovoltaic, a few panels a shade paler, one orange band at the springing, a dark cap at the crown.
+# sunward (+z) facets photovoltaic, a few panels a shade paler, one orange band at the springing, a dark cap at the crown.
+# The shell keeps its place; `lock` (a pivot; None in a draft) carries the airlock and the drum's portholes, which the
+# game turns to the door's side (the drum is round).
 
 def _geodesic(freq4):
     s5 = 1 / math.sqrt(5)
@@ -210,10 +293,12 @@ def _geodesic(freq4):
             nf += [(a, ab, ca), (b, bc, ab), (c, ca, bc), (ab, bc, ca)]
         f = nf
     f = [t for t in f if sum(v[i][1] for i in t) / 3 > 0.02]
-    return v, f
+    used = sorted({i for t in f for i in t})                         # (the lower half's points go: no loose vertices)
+    at_ = {i: n for n, i in enumerate(used)}
+    return [v[i] for i in used], [tuple(at_[i] for i in t) for t in f]
 
 
-def dome_b(r, door_slot="dusk", sun=PI):
+def dome_b(r, door_slot="dusk", sun=0.0, lock=None):
     hd = 2.8 if r >= 10 else 2.3                                     # the drum
     seg = 32 if r < 12 else 40 if r < 20 else 56
     put("concrete", 0.05, cyl(0, 0.2, 0, r + 0.5, 0.4, seg))
@@ -221,11 +306,11 @@ def dome_b(r, door_slot="dusk", sun=PI):
     put("orange", 0.03, lathe([(r - 0.1, 0.4 + hd), (r + 0.22, 0.4 + hd), (r + 0.22, 0.75 + hd), (r - 0.1, 0.75 + hd)], seg))
     yb, rr = 0.75 + hd, r - 0.12
     v, f = _geodesic(r >= 12)
-    V = [(p[0] * rr, yb + p[1] * rr * 0.92, p[2] * rr) for p in v]
+    V = [(p[0] * rr, yb + p[1] * rr, p[2] * rr) for p in v]          # a true hemisphere: its collider is a sphere
     put("white", min(0.14, 0.07 + r * 0.004), (V, f), sharp=0.01)
     edges = {(min(a, b), max(a, b)) for t in f for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0]))}
     for a, b in edges:
-        put("alu", 0.0, B(V[a], V[b], 0.055 if r < 12 else 0.07, 4))
+        put("alu", 0.015, B(V[a], V[b], 0.055 if r < 12 else 0.07, 4))
     sd = Vector((math.sin(sun) * 0.75, 0.66, math.cos(sun) * 0.75)).normalized()
     for i, t in enumerate(f):                                        # panels: each a facet shrunk toward its middle, 2 cm proud
         P = [Vector(V[k]) for k in t]
@@ -236,19 +321,22 @@ def dome_b(r, door_slot="dusk", sun=PI):
         h = math.sin(i * 12.9898 + r * 3.1) * 43758.5453
         h -= math.floor(h)
         slot = "solar" if nrm.dot(sd) > 0.9 else "light" if h < 0.16 else None
-        if not slot or c.y > yb + rr * 0.82:
+        if not slot or c.y > yb + rr * 0.86:
             continue
         Q = [c + (p - c) * 0.84 + nrm * 0.02 for p in P]
         put(slot, 0.0, ([tuple(q) for q in Q] + [tuple(q - nrm * 0.03) for q in Q], [(0, 1, 2), (5, 4, 3), (0, 3, 4, 1), (1, 4, 5, 2), (2, 5, 3, 0)]))
-    nw = max(6, round(r * 0.8))
-    for i in range(nw):
-        a = TAU * (i + 0.5) / nw
-        if abs(math.atan2(math.sin(a), math.cos(a))) < 3.4 / r:
-            continue
-        put("alu", 0.015, disc(math.sin(a) * r, 0.4 + hd * 0.56, math.cos(a) * r, 0.6, 0.16, a))
-        put("window", 0.0, disc(math.sin(a) * r, 0.4 + hd * 0.56, math.cos(a) * r, 0.44, 0.2, a))
-    crown(yb + rr * 0.92 - 0.25, r * 0.16, glazed=False)
-    airlock(r - 0.6, r + 3.2, door_slot)
+    crown(yb + rr - 0.25, r * 0.16, glazed=False)
+    ccyl(0, 0, r + 0.22, 0, yb)
+    csphere(0, yb, 0, rr)
+    with under(lock):
+        nw = max(6, round(r * 0.8))
+        for i in range(nw):
+            a = TAU * (i + 0.5) / nw
+            if abs(math.atan2(math.sin(a), math.cos(a))) < 3.4 / r:
+                continue
+            put("alu", 0.015, disc(math.sin(a) * r, 0.4 + hd * 0.56, math.cos(a) * r, 0.6, 0.16, a))
+            put("window", 0.0, disc(math.sin(a) * r, 0.4 + hd * 0.56, math.cos(a) * r, 0.44, 0.2, a))
+        airlock(r - 0.6, r + 3.2, door_slot)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -263,13 +351,19 @@ def stilt(feature=False, door_slot="sage", stairs=True):
     put(body, 0.08, extrude(sec, 10.0, "x"))
     put("white" if feature else "orange", 0.0, bx(-5.004, 3.35, -3.205, 5.004, 3.65, 3.205))
     put("light", 0.03, bx(-4.6, 6.2, -2.3, 4.6, 6.32, 2.3))
+    cbox(-5.0, 2.4, -3.2, 5.0, 5.4, 3.2)                                                # the body to its roof's edges,
+    cbox(-5.0, 5.4, -2.5, 5.0, 6.32, 2.5)                                               # the roof, and its chamfers
+    cslope(-5.0, 5.0, 2.5, 6.2, 3.2, 5.4, 0.6)
+    cslope(-5.0, 5.0, -3.2, 5.4, -2.5, 6.2, 0.6)
     for sx in (-1, 1):
         put("panel", 0.04, xf(cylinder(1.55, 1.55, 0.8, 14)[:2], (sx * 5.35, 4.2, 0), (0, 0, PI / 2)))
+        cbox(sx * 5.0, 2.7, -1.5, sx * 5.75, 5.75, 1.5)
         for sz in (-1, 1):
             x, z = sx * 3.6, sz * 2.3
             put("steel", 0.03, cyl(x, 1.35, z, 0.2, 2.3, 8))
             put("alu", 0.03, cyl(x, 0.85, z, 0.32, 1.2, 8))
             put("dark", 0.03, cyl(x, 0.12, z, 0.85, 0.24, 10, rt=0.6))
+            ccyl(x, z, 0.4, 0, 2.4)
     for sz in (-1, 1):
         for i in range(4):
             x = -3.6 + i * 2.4
@@ -279,14 +373,17 @@ def stilt(feature=False, door_slot="sage", stairs=True):
     if feature:
         put("panel", 0.03, cyl(0, 6.4, 0, 1.9, 0.4, 16))
         put("pane", 0.0, ball(0, 6.6, 0, 1.7, 14, 6, (1, 0.7, 1)))
+        ccyl(0, 0, 1.9, 6.2, 7.6)
     else:
         put("alu", 0.03, bx(-3.6, 6.32, -0.9, -1.8, 7.1, 0.9))                         # a roof unit, a vent
         put("steel", 0.02, cyl(2.6, 6.8, 0.6, 0.25, 1.0, 8))
+        cbox(-3.6, 6.32, -0.9, -1.8, 7.1, 0.9)
     if stairs:
         put("orange", 0.02, bx(-1.0, 3.2, 3.2, 1.0, 5.5, 3.26))
         put(door_slot, 0.0, bx(-0.75, 3.2, 3.26, 0.75, 5.25, 3.29))
         put("lamp", 0.0, bx(-0.5, 5.3, 3.26, 0.5, 5.4, 3.4))
         put("steel", 0.03, bx(-1.2, 3.05, 3.2, 1.2, 3.2, 4.7))                         # the landing, on two posts
+        cbox(-1.2, 3.05, 3.2, 1.2, 3.2, 4.7)
         for x in (-1.1, 1.1):
             put("steel", 0.0, strut((x, 0, 4.55), (x, 3.06, 4.55), 0.07, 5))
         rail("orange", [(-1.15, 3.2, 3.3), (-1.15, 3.2, 4.65), (1.15, 3.2, 4.65)], every=1.3)
@@ -296,6 +393,8 @@ def stilt(feature=False, door_slot="sage", stairs=True):
         for i in range(n):
             put("steel", 0.0, bx(1.25 + i * 0.5, 3.2 - (i + 1) * 0.32 - 0.05, 3.5, 1.65 + i * 0.5, 3.2 - (i + 1) * 0.32, 4.6))
         rail("orange", [(1.2, 3.2, 4.65), (1.2 + n * 0.5, 0.0, 4.65)], every=1.8)
+        with at(0, 0, PI / 2):                                                          # (this frame's +z is the module's +x)
+            cslope(-4.6, -3.5, 1.2, 3.2, 1.2 + n * 0.5, 0.0)
 
 
 def longhouse(length=16.0, door_slot="ochre"):
@@ -305,6 +404,8 @@ def longhouse(length=16.0, door_slot="ochre"):
     arc = [(3.6 * math.cos(PI - PI * i / 12), 1.2 + 3.6 * math.sin(PI * i / 12)) for i in range(13)]
     put("concrete", 0.04, bx(-4.0, 0, -L / 2 - 0.4, 4.0, 0.3, L / 2 + 1.8))
     put("cream", 0.08, xf(extrude([(-3.6, 0.3)] + arc + [(3.6, 0.3)], L, "z"), (0, 0, 0)))
+    chcyl(0, 1.2, 0, 3.6, L)
+    cbox(-3.6, 0, -L / 2, 3.6, 1.2, L / 2)
     rib = [(3.69 * math.cos(PI - PI * i / 12), 1.2 + 3.69 * math.sin(PI * i / 12)) for i in range(13)]
     k = max(2, round(L / 3.4))
     for i in range(k + 1):
@@ -313,10 +414,13 @@ def longhouse(length=16.0, door_slot="ochre"):
     for sx in (-1, 1):
         put("regolith", 0.05, bx(sx * 3.5, 0, -L / 2 + 0.6, sx * 5.0, 0.9, L / 2 - 1.2))
         put("regolith", 0.05, bx(sx * 3.5, 0.9, -L / 2 + 1.0, sx * 4.3, 1.7, L / 2 - 1.6))
+        cbox(sx * 3.5, 0, -L / 2 + 0.6, sx * 5.0, 0.9, L / 2 - 1.2)
+        cbox(sx * 3.5, 0.9, -L / 2 + 1.0, sx * 4.3, 1.7, L / 2 - 1.6)
         for i in range(k):
             z = -L / 2 + 0.2 + (L - 0.4) * (i + 0.5) / k
             put("cream", 0.03, bx(sx * 2.4, 2.5, z - 0.8, sx * 3.5, 3.6, z + 0.8))
             put("window", 0.0, bx(sx * 3.5, 2.75, z - 0.55, sx * 3.506, 3.35, z + 0.55))
+            cbox(sx * 2.4, 2.5, z - 0.8, sx * 3.5, 3.6, z + 0.8)
     zf = L / 2
     put("orange", 0.03, bx(-1.0, 0.3, zf, 1.0, 2.9, zf + 0.1))
     put(door_slot, 0.0, bx(-0.75, 0.3, zf + 0.1, 0.75, 2.65, zf + 0.13))
@@ -328,8 +432,8 @@ def longhouse(length=16.0, door_slot="ochre"):
 
 
 def shop(accent="orange"):
-    """A shop unit 8 m wide: a module with a lit glazed front, an awning on two posts, the board its name goes on. (The
-    built ones would be the ILMB quarter's five shop units, ilmb_quarters.py, in this palette.)"""
+    """A shop unit 8 m wide, for the drafts: a module with a lit glazed front, an awning on two posts, the board its name
+    goes on. (The game's are the ILMB quarter's five shop units, ilmb_quarters.py.)"""
     put("concrete", 0.03, bx(-4.0, 0, -4.2, 4.0, 0.25, 4.4))
     put("cream", 0.08, bx(-3.8, 0.25, -4.0, 3.8, 4.0, 1.8))
     put("roof", 0.04, bx(-3.9, 4.0, -4.1, 3.9, 4.35, 1.9))
@@ -353,19 +457,36 @@ def stall(accent="orange"):
     for x in (-1.8, 1.8):
         put("alu", 0.02, strut((x, 0, 1.1), (x, 2.5, 1.1), 0.06, 4))
         put("alu", 0.02, strut((x, 0, -1.1), (x, 3.0, -1.1), 0.06, 4))
-    put(accent, 0.03, xf(box(0, 0, 0, 4.2, 0.1, 2.9), (0, 2.82, 0), (math.atan2(0.5, 2.2), 0, 0)))
+        ccyl(x, 1.1, 0.12, 0, 2.5)
+        ccyl(x, -1.1, 0.12, 0, 3.0)
+    tilt = math.atan2(0.5, 2.2)
+    put(accent, 0.03, xf(box(0, 0, 0, 4.2, 0.1, 2.9), (0, 2.82, 0), (tilt, 0, 0)))
+    cslope(-2.1, 2.1, -1.45, 2.87 + 1.45 * math.tan(tilt), 1.45, 2.87 - 1.45 * math.tan(tilt), 0.12)
     put("alu", 0.03, bx(-1.8, 0, 0.5, 1.8, 1.0, 1.1))
+    cbox(-1.8, 0, 0.5, 1.8, 1.0, 1.1)
     put("cream", 0.02, bx(-1.5, 1.0, 0.55, -0.5, 1.4, 1.05))
     put("lamp", 0.0, bx(-1.2, 2.35, 0.2, 1.2, 2.42, 0.32))
     for x in (-1.2, 1.2):
-        put("steel", 0.0, strut((x, 2.42, 0.26), (x, 2.82 - math.tan(math.atan2(0.5, 2.2)) * 0.26, 0.26), 0.02, 4))
+        put("steel", 0.0, strut((x, 2.42, 0.26), (x, 2.82 - math.tan(tilt) * 0.26, 0.26), 0.02, 4))
+
+
+def bench():
+    """An aluminium bench on two block feet, 2.4 m long, facing +z."""
+    put("alu", 0.02, bx(-1.2, 0.42, -0.3, 1.2, 0.52, 0.3))
+    put("alu", 0.02, xf(box(0, 0.25, 0, 2.4, 0.5, 0.08), (0, 0.52, -0.3), (-0.2, 0, 0)))
+    for x in (-0.9, 0.9):
+        put("concrete", 0.02, bx(x - 0.12, 0, -0.26, x + 0.12, 0.42, 0.26))
+    cbox(-1.2, 0, -0.34, 1.2, 0.52, 0.3)
 
 
 def greenhouse(length=18.0):
+    """A glass barrel vault over two planting beds, a grow lamp along the crown (plants only under glass)."""
     L = length
     arc = lambda R: [(R * math.cos(PI - PI * i / 12), 0.5 + R * math.sin(PI * i / 12)) for i in range(13)]
     put("concrete", 0.04, bx(-3.8, 0, -L / 2 - 0.2, 3.8, 0.5, L / 2 + 0.2))
+    cbox(-3.8, 0, -L / 2 - 0.2, 3.8, 0.5, L / 2 + 0.2)
     put("glass", 0.0, extrude(arc(3.4), L, "z"))
+    chcyl(0, 0.5, 0, 3.4, L)
     for i in range(7):
         z = -L / 2 + L * i / 6
         put("alu", 0.02, xf(extrude(arc(3.47) + [(3.3, 0.5)] + list(reversed(arc(3.3)))[1:], 0.16, "z"), (0, 0, z)))
@@ -381,21 +502,24 @@ def greenhouse(length=18.0):
 
 
 def water_tank():
-    """The town's water tank: a banded sphere on four braced legs, a ladder, a lamp."""
+    """The town's water tank: a banded sphere on four braced legs, a riser, a lamp."""
     cy, R = 12.0, 3.8
     put("cream", 0.09, ball(0, cy, 0, R, 20, 12))
+    csphere(0, cy, 0, R)
     put("orange", 0.0, ring(R + 0.02, 0.22, y=cy, n=28, rs=6))
     for sx, sz in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
         put("steel", 0.04, strut((sx * 3.2, 0.3, sz * 3.2), (sx * 2.2, cy - 1.4, sz * 2.2), 0.22, 6))
         put("concrete", 0.03, bx(sx * 3.2 - 0.6, 0, sz * 3.2 - 0.6, sx * 3.2 + 0.6, 0.35, sz * 3.2 + 0.6))
         put("steel", 0.0, strut((sx * 3.0, 2.2, sz * 3.0), (-sz * 2.55, 7.0, sx * 2.55), 0.07, 4))
+        ccyl(sx * 2.8, sz * 2.8, 0.55, 0, cy - 2.6)
     put("alu", 0.03, cyl(0, 4.3, 0, 0.3, 8.0, 8))                                       # the riser
+    ccyl(0, 0, 0.35, 0, 8.3)
     put("steel", 0.02, cyl(0, cy + R + 0.5, 0, 0.06, 1.2, 6))
     put("redlamp", 0.0, ball(0, cy + R + 1.2, 0, 0.22, 8, 6))
 
 
 def mast(h=20.0):
-    """The comms mast: a tripod, a dish on a bracket, a lamp."""
+    """A comms mast for the drafts: a tripod, a dish on a bracket, a lamp. (The game keeps settlements.js commsMast.)"""
     put("concrete", 0.03, cyl(0, 0.2, 0, 2.2, 0.4, 12))
     for i in range(3):
         a = TAU * i / 3
@@ -411,23 +535,53 @@ def mast(h=20.0):
     put("redlamp", 0.0, ball(0, h + 0.15, 0, 0.22, 8, 6))
 
 
-def tunnel(ax, az, bx_, bz_, r=1.5):
-    """A connecting tube between two ground points, on saddles, a lit strip along each side."""
+TUNNEL_R, TUNNEL_Y, TUNNEL_SEG = 1.5, 1.75, 4.5     # a tunnel's radius, its axis' height, one segment's length
+
+
+def tunnel_seg(L=TUNNEL_SEG):
+    """One length of connecting tube along z, centred: the tube, a rib and a saddle at its middle, a lit strip each side.
+    The game lays them end to end, stretched a little to fit (settlements.js keplerTunnel)."""
+    r = TUNNEL_R
+    put("cream", 0.07, xf(cylinder(r, r, L, 12)[:2], (0, TUNNEL_Y, 0), (PI / 2, 0, 0)))
+    put("panel", 0.02, xf(cylinder(r + 0.07, r + 0.07, 0.3, 12)[:2], (0, TUNNEL_Y, 0), (PI / 2, 0, 0)))
+    put("concrete", 0.03, bx(-r * 0.8, 0, -0.35, r * 0.8, 0.7, 0.35))
+    for sx in (-1, 1):
+        for z in (-L / 4 - 0.1, L / 4 + 0.1):
+            put("window", 0.0, bx(sx * (r + 0.004), r + 0.05, z - 0.75, sx * (r - 0.1), r + 0.5, z + 0.75))
+
+
+def tunnel(ax, az, bx_, bz_):
+    """A connecting tube between two ground points (drafts: whole segments, stretched to fit, as the game lays them)."""
     L = math.hypot(bx_ - ax, bz_ - az)
+    n = max(1, round(L / TUNNEL_SEG))
     with at((ax + bx_) / 2, (az + bz_) / 2, math.atan2(bx_ - ax, bz_ - az)):
-        put("cream", 0.07, xf(cylinder(r, r, L, 12)[:2], (0, r + 0.25, 0), (PI / 2, 0, 0)))
-        n = max(1, round(L / 4.5))
-        for i in range(n + 1):
-            z = -L / 2 + 0.3 + (L - 0.6) * i / n
-            put("panel", 0.02, xf(cylinder(r + 0.07, r + 0.07, 0.3, 12)[:2], (0, r + 0.25, z), (PI / 2, 0, 0)))
-            put("concrete", 0.03, bx(-r * 0.8, 0, z - 0.35, r * 0.8, 0.7, z + 0.35))
-        for sx in (-1, 1):
-            for i in range(n):
-                z = -L / 2 + 0.3 + (L - 0.6) * (i + 0.5) / n
-                put("window", 0.0, bx(sx * (r + 0.004), r + 0.05, z - 1.0, sx * (r - 0.1), r + 0.5, z + 1.0))
+        for i in range(n):
+            with at(0, (i - (n - 1) / 2) * L / n):
+                tunnel_seg(L / n)
+
+
+def clear_tile():
+    """Cleared ground, 1 m square and 2 cm thick: regolith graded flat where people walk (the game stretches it to a lane or
+    a yard; nothing drives there)."""
+    put("cleared", 0.0, bx(-0.5, 0, -0.5, 0.5, 0.02, 0.5))
+
+
+def clear_disc():
+    """Cleared ground, a disc 1 m in radius (the game stretches it to a court)."""
+    put("cleared", 0.0, cyl(0, 0.01, 0, 1.0, 0.02, 48))
+
+
+def route_marker():
+    """A route marker, the polar stations' flag line: an aluminium post on a small foot, a rigid orange plate (no air to fly
+    a flag in) and a lamp on top. Too thin to collide."""
+    put("concrete", 0.02, cyl(0, 0.06, 0, 0.18, 0.12, 8))
+    put("alu", 0.0, cyl(0, 0.76, 0, 0.035, 1.28, 6))
+    put("orange", 0.02, bx(0.035, 1.02, -0.012, 0.4, 1.34, 0.012))
+    put("lamp", 0.0, ball(0, 1.45, 0, 0.065, 6, 4))
 
 
 def pad(r=13.0):
+    """A landing pad, for the drafts (the game's is landingPad.js)."""
     put("concrete", 0.05, cyl(0, 0.3, 0, r, 0.6, 40))
     put("gold", 0.0, lathe([(r - 1.4, 0.6), (r - 1.4, 0.615), (r - 0.9, 0.615), (r - 0.9, 0.6)], 40))
     put("white", 0.0, bx(-2.6, 0.6, -0.4, 2.6, 0.615, 0.4))
@@ -439,6 +593,8 @@ def pad(r=13.0):
 
 
 def solar_row(n=3):
+    """A row of n panels 5.4 m apart along x, each 5 by 3.2 m, tilted 0.5 rad toward +z (the sun) on two posts. (The
+    fixtures' solar fields are 36 m and more across; a town's rows are these.)"""
     for i in range(n):
         x = (i - (n - 1) / 2) * 5.4
         T = Matrix.Translation((x, 1.9, 0)) @ Matrix.Rotation(0.5, 4, "X")
@@ -447,15 +603,19 @@ def solar_row(n=3):
         put("solar", 0.0, tr(xf(cuboid(4.7, 0.04, 2.9)[:2], (0, 0.06, 0))))
         for sx in (-1.6, 1.6):
             put("steel", 0.0, strut((x + sx, 0, 0), tuple(T @ Vector((sx, -0.04, 0))), 0.08, 4))
+        if BUILD[0]:                                                # the panel, lying as it lies (+ about x lowers +z)
+            _col((x, 1.9 - 0.05, 0), shape="box", hx=2.5, hy=0.05, hz=1.6, yaw=_yaw(), pitch=0.5)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# what both town halls share
+# the Earth dial, and the town hall
 
 def earth_dial(cx, cy, cz, R, backed=False):
     """The hall's clock, told the lunar way: a ring with the Earth at its centre (it hangs still in the Moon's sky, and its
-    phase is the time of the month), hour marks on the ring, two hands (the game turns them: settlements.js townHall's
-    tick). It faces +z; when not backed it is open and reads from behind too, its marks and hands pale against the sky."""
+    phase is the time of the month), hour marks on the ring, two hands. It faces +z; when not backed it is open and reads
+    from behind too, its marks and hands pale against the sky. In a build the hands are `hand` pivots at the dial's centre
+    (extras `rate`: 1 the minute hand, 1 / 12 the hour hand; `side`: 1 the front, -1 the back, which the game turns half
+    round), each drawn pointing up; the game turns them (settlements.js keplerHall)."""
     ink = "dark" if backed else "white"
     put("orange", 0.04, vring(cx, cy, cz, R, R * 0.1))
     for i in range(12):
@@ -479,16 +639,134 @@ def earth_dial(cx, cy, cz, R, backed=False):
             a = TAU * (i + 0.5) / 4
             put("steel", 0.0, strut((cx + math.sin(a) * R * 0.38, cy + math.cos(a) * R * 0.38, cz), (cx + math.sin(a) * R * 0.95, cy + math.cos(a) * R * 0.95, cz), R * 0.02, 4))
     for sz in ((1,) if backed else (1, -1)):
-        z = cz + sz * R * 0.2
-        for a, ln, w in ((1.05, 0.74, 0.05), (-0.7, 0.5, 0.07)):
-            put(ink, 0.0, xf(box(0, R * ln / 2, 0, R * w, R * ln, R * 0.03), (cx, cy, z), (0, 0, -a * sz)))
-        put("orange", 0.0, disc(cx, cy, z, R * 0.07, R * 0.05, 0, 10))
+        z = R * 0.2
+        for rate, a, ln, w in ((1.0, 1.05, 0.74, 0.05), (1 / 12, -0.7, 0.5, 0.07)):
+            hand = box(0, R * ln / 2, z, R * w, R * ln, R * 0.03)
+            if BUILD[0]:
+                _N[0] += 1
+                piv = pivot(f"{PFX}hand{_N[0]}", tuple(_M[-1] @ Vector((cx, cy, cz))), ROOT, role="hand", rate=rate, side=sz)
+                Acc.of(ink, 0.0, parent=piv).put(hand)
+            else:
+                put(ink, 0.0, xf(xf(hand, (0, 0, 0), (0, 0, -a)), (cx, cy, cz), (0, PI if sz < 0 else 0, 0)))
+        put("orange", 0.0, disc(cx, cy, cz + sz * z, R * 0.07, R * 0.05, 0, 10))
     put("steel", 0.0, strut((cx, cy, cz - R * (0.1 if backed else 0.2)), (cx, cy, cz + R * 0.2), R * 0.025, 5))   # the arbor the hands turn on
+    # colliders (it stands where trick thrust reaches): the ring as spheres along it, the Earth as a lying cylinder
+    for i in range(24):
+        a = TAU * i / 24
+        csphere(cx + math.sin(a) * R, cy + math.cos(a) * R, cz, R * 0.12)
+    chcyl(cx, cy, cz, er, t)
 
 
 def flagpole(x, z, h=16.0):
-    """A flag mast (the game hangs the waving cloth: world.flag; the stripes here stand in for it)."""
+    """A flag mast, for the drafts (the game's are world.flag's, with the waving cloth)."""
+    if BUILD[0]:
+        return
     put("concrete", 0.03, cyl(x, 0.3, z, 0.7, 0.6, 10))
     put("alu", 0.03, cyl(x, h / 2, z, 0.12, h, 6, rt=0.07))
     for i, s in enumerate(("orange", "white", "orange")):
         put(s, 0.0, bx(x + 0.1, h - 0.9 - i * 0.9, z - 0.02, x + 4.6, h - i * 0.9, z + 0.02))
+
+
+HALL_POD = 0.4                       # the hall's podium: low enough to step onto (the game's floor colliders carry it)
+HALL_FRONT = math.radians(60)        # the foyer's half angle about +z
+HALL_FLAGS = [(-12.5, 25.0), (12.5, 25.0)]
+HALL_CAMPANILE = (-19.0, 30.0, 26.0, 3.4)   # x, z, the dial's centre height, its radius
+
+
+def hall():
+    """EARTHRISE HALL, the Civic Center's town hall (proposal A of docs/kepler-proposals): a round council chamber (r 12)
+    dug in behind terraces of sintered-regolith block under a shallow white saucer roof with a clerestory and a glazed
+    oculus; its front opens in a crescent of glass, the foyer, under a canopy on eight columns that carries the hall's solar
+    array; an orange portal is the way in. Beside the forecourt the campanile: a pylon holding the Earth dial.
+    Origin on the ground at the chamber's centre, the entrance toward +z (arrivals). Roof crown 15.1 m; the campanile at
+    (-19, 30), 31 m to its lamp; forecourt out to z 44."""
+    POD, FRONT = HALL_POD, HALL_FRONT
+    A0, A1 = PI / 2 - FRONT, PI / 2 + FRONT
+    # podium, forecourt, the two low steps up
+    put("concrete", 0.06, cyl(0, POD / 2, 0, 21.5, POD, 56))
+    plaza(0, 30, 14.5)
+    put("gold", 0.0, xf(lathe([(10.0, 0.04), (10.0, 0.055), (10.4, 0.055), (10.4, 0.04)], 48), (0, 0, 30)))
+    put("light", 0.02, bx(-7, 0, 20.6, 7, POD / 2, 22.4))
+    # the chamber: drum, clerestory, eave, saucer roof, oculus
+    put("cream", 0.1, cyl(0, POD + 4.5, 0, 12.0, 9.0, 56))
+    put("window", 0.0, lathe([(11.9, POD + 7.3), (12.05, POD + 7.3), (12.05, POD + 8.6), (11.9, POD + 8.6)], 56))
+    for i in range(28):
+        with at(0, 0, TAU * (i + 0.5) / 28):
+            put("alu", 0.0, bx(-0.1, POD + 7.3, 12.0, 0.1, POD + 8.6, 12.12))
+    put("orange", 0.04, lathe([(11.9, POD + 9.0), (13.7, POD + 9.0), (13.7, POD + 9.5), (11.9, POD + 9.5)], 56))
+    n, RR, RISE = 8, 13.4, 4.6
+    roof = lambda t: (RR * math.cos(t), POD + 9.5 + RISE * math.sin(t))
+    put("white", 0.1, lathe([roof(PI / 2 * i / n) for i in range(n)] + [(0, POD + 9.5 + RISE)], 56))
+    crown(POD + 9.5 + RISE - 0.15, 2.6)
+    ccyl(0, 0, 12.0, 0, POD + 9.0)
+    ccyl(0, 0, 13.7, POD + 9.0, POD + 9.5)
+    for i in range(5):                                             # the saucer, stepped: each ring's top is the roof there
+        t0, t1 = PI / 2 * i / 5, PI / 2 * (i + 1) / 5
+        ccyl(0, 0, roof(t0)[0], POD + 9.5, roof((t0 + t1) / 2)[1])
+    # the terraces round the back, a concrete wing wall where they stop
+    T = [(19.9, POD + 2.2), (17.3, POD + 4.4), (14.7, POD + 6.6)]
+    prof = [(11.5, POD), (T[0][0], POD), (T[0][0] - 0.4, T[0][1]), (T[1][0], T[0][1]), (T[1][0] - 0.4, T[1][1]), (T[2][0], T[1][1]), (T[2][0] - 0.4, T[2][1]), (11.5, T[2][1])]
+    put("regolith", 0.07, sector(prof, A1 + 0.03, A0 + TAU - 0.03, 44))
+    for (r_out, top), base in zip(T, (POD, T[0][1], T[1][1])):
+        carc(11.8, r_out - 0.2, base, top, A1 + 0.03, A0 + TAU - 0.03)
+    for a in (A0, A1):
+        with at(0, 0, PI / 2 - a):
+            put("concrete", 0.06, extrude([(11.5, POD), (21.0, POD), (21.0, POD + 1.6), (14.0, POD + 7.2), (11.5, POD + 7.2)], 0.8, "x"))
+            cslope(-0.4, 0.4, 14.0, POD + 7.2, 21.0, POD + 1.6, 0.6)
+            cbox(-0.4, 0, 11.5, 0.4, POD + 7.2, 14.0)
+            cbox(-0.4, 0, 14.0, 0.4, POD + 1.6, 21.0)
+    # the foyer: a lit floor, the glass crescent and its mullions, the canopy on its columns, the array on the canopy
+    put("shop", 0.0, sector([(12.0, POD), (16.4, POD), (16.4, POD + 0.03), (12.0, POD + 0.03)], A0 + 0.03, A1 - 0.03, 20))
+    put("glass", 0.0, sector([(16.4, POD), (16.5, POD), (16.5, POD + 6.2), (16.4, POD + 6.2)], A0 + 0.03, A1 - 0.03, 24))
+    nm = 18
+    for i in range(nm + 1):
+        a = -FRONT + 0.03 + (2 * FRONT - 0.06) * i / nm
+        if abs(a) < 0.12:
+            continue
+        with at(0, 0, a):
+            put("alu", 0.02, bx(-0.09, POD, 16.38, 0.09, POD + 6.2, 16.62))
+    put("alu", 0.0, sector([(16.36, POD + 3.0), (16.6, POD + 3.0), (16.6, POD + 3.14), (16.36, POD + 3.14)], A0 + 0.03, A1 - 0.03, 24))
+    put("roof", 0.06, sector([(11.9, POD + 6.2), (19.2, POD + 6.2), (19.2, POD + 6.75), (11.9, POD + 6.75)], A0 - 0.02, A1 + 0.02, 24))
+    put("orange", 0.0, sector([(19.2, POD + 6.3), (19.215, POD + 6.3), (19.215, POD + 6.65), (19.2, POD + 6.65)], A0 - 0.02, A1 + 0.02, 24))
+    carc(11.9, 16.5, POD, POD + 6.2, A0, A1)                        # the foyer, shut behind its glass
+    carc(11.9, 19.2, POD + 6.2, POD + 6.8, A0 - 0.02, A1 + 0.02)    # the canopy
+    for k in range(6):
+        a0 = A0 + 0.04 + (2 * FRONT - 0.08) * k / 6
+        put("solar", 0.0, sector([(13.4, POD + 6.75), (18.6, POD + 6.75), (18.6, POD + 6.8), (13.4, POD + 6.8)], a0 + 0.02, a0 + (2 * FRONT - 0.08) / 6 - 0.02, 4))
+    for i in range(8):
+        a = -FRONT + 0.1 + (2 * FRONT - 0.2) * i / 7
+        put("alu", 0.03, cyl(math.sin(a) * 18.4, POD + 3.11, math.cos(a) * 18.4, 0.2, 6.22, 8, rt=0.14))
+        put("lamp", 0.0, cyl(math.sin(a) * 17.4, POD + 6.17, math.cos(a) * 17.4, 0.3, 0.06, 8))
+        ccyl(math.sin(a) * 18.4, math.cos(a) * 18.4, 0.25, POD, POD + 6.2)
+    # the way in: an orange portal through the glass, the chamber's lit doorways behind it
+    put("orange", 0.05, bx(-2.7, POD, 15.8, 2.7, POD + 4.4, 17.3))
+    put("door", 0.0, bx(-2.1, POD, 17.3, 2.1, POD + 3.6, 17.33))
+    put("lamp", 0.0, bx(-2.1, POD + 3.75, 17.3, 2.1, POD + 4.05, 17.33))
+    put("dark", 0.0, bx(-0.03, POD, 17.33, 0.03, POD + 3.6, 17.335))
+    cbox(-2.7, POD, 15.8, 2.7, POD + 4.4, 17.33)
+    for a in (-0.5, 0.5):
+        with at(0, 0, a):
+            put("window", 0.0, bx(-1.2, POD, 11.9, 1.2, POD + 4.2, 12.03))
+    # the campanile: a pylon carrying the Earth dial, a lamp over it
+    cx, cz, cy, R = HALL_CAMPANILE
+    put("concrete", 0.05, bx(cx - 2.0, 0, cz - 2.0, cx + 2.0, 0.8, cz + 2.0))
+    put("cream", 0.08, xf(frustum(ngon(1.7, 4, PI / 4), ngon(0.75, 4, PI / 4), 0.8, cy - R + 0.1), (cx, 0, cz)))
+    put("orange", 0.02, xf(frustum(ngon(1.62, 4, PI / 4), ngon(1.56, 4, PI / 4), 4.0, 4.7), (cx, 0, cz)))
+    put("window", 0.0, bx(cx - 0.12, 6.0, cz + 0.6, cx + 0.12, 18.0, cz + 1.0))
+    cbox(cx - 2.0, 0, cz - 2.0, cx + 2.0, 0.8, cz + 2.0)
+    for y0, y1 in ((0.8, 8.0), (8.0, 15.0), (15.0, cy - R + 0.1)):  # the pylon, stepped in as it tapers
+        h = 1.2 - 0.67 * (y0 - 0.8) / (cy - R - 0.7)
+        cbox(cx - h, y0, cz - h, cx + h, y1, cz + h)
+    with at(cx, cz):
+        earth_dial(0, cy, 0, R)
+        put("steel", 0.02, cyl(0, cy + R + 0.9, 0, 0.08, 1.4, 6))
+        put("redlamp", 0.0, ball(0, cy + R + 1.7, 0, 0.24, 8, 6))
+    # flags, lamps, people
+    for x, z in HALL_FLAGS:
+        flagpole(x, z)
+    for sx in (-1, 1):
+        lamp(sx * 9.0, 38.0)
+        lamp(sx * 13.5, 33.0)
+    figure(1.5, 24.0)
+    figure(-3.0, 31.0, "sage")
+    figure(-16.0, 32.5, "dusk")

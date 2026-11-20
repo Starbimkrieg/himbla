@@ -11,7 +11,7 @@ import bpy, json, math, os
 
 REPO = os.environ.get("MOONRUNNER_REPO") or os.path.abspath(os.path.join(os.path.dirname(globals().get("__file__", ".")), "..", "..", ".."))
 COLL = "KeplerTown"
-exec(open(os.path.join(REPO, "tools", "blender", "proposals", "kepler_kit.py"), encoding="utf-8").read(), globals())
+exec(open(os.path.join(REPO, "tools", "blender", "kepler_kit.py"), encoding="utf-8").read(), globals())
 
 WHICH = os.environ.get("KEPLER_LAYOUT", "1")
 DATA = json.load(open(os.path.join(REPO, "docs", "kepler-proposals", "layouts.json"), encoding="utf-8"))
@@ -24,14 +24,16 @@ def build_town(L):
     domes = [q for q in L["pieces"] if q["k"].startswith("dome")]
     for q in L["pieces"] + [DATA["pad"]]:
         k = q["k"]
-        if k == "pave":
-            paving(q["x0"], q["z0"], q["x1"], q["z1"])
-        elif k == "plaza":
-            plaza(q["x"], q["z"], q["r"])
-        elif k == "walk":
+        if k in ("pave", "clear"):                             # (the picked layouts: cleared ground, `cleared`)
+            paving(q["x0"], q["z0"], q["x1"], q["z1"], "pave" if k == "pave" else "cleared")
+        elif k == "road":
+            paving(q["x0"] - 6, q["z0"], q["x1"] + 6, q["z1"], "dark")
+        elif k in ("plaza", "clearing"):
+            plaza(q["x"], q["z"], q["r"], "pave" if k == "plaza" else "cleared")
+        elif k in ("walk", "path"):
             dx, dz = q["x2"] - q["x"], q["z2"] - q["z"]
             with at((q["x"] + q["x2"]) / 2, (q["z"] + q["z2"]) / 2, math.atan2(dx, dz)):
-                paving(-q["w"] / 2, -math.hypot(dx, dz) / 2, q["w"] / 2, math.hypot(dx, dz) / 2, y=0.035)
+                paving(-q["w"] / 2, -math.hypot(dx, dz) / 2, q["w"] / 2, math.hypot(dx, dz) / 2, "pave" if k == "walk" else "cleared", y=0.035)
         elif k == "lamp":
             lamp(q["x"], q["z"])
         elif k == "link":                                       # shell to shell: the tube runs in under both
@@ -48,11 +50,13 @@ def build_town(L):
                 elif k == "stilt":
                     stilt(q["feature"], q["door"], q["stairs"])
                 elif k == "longhouse":
-                    longhouse(q["len"], q["door"])
+                    longhouse(q.get("len", 16.0), q["door"])
                 elif k == "shop":
-                    shop(q["accent"])
+                    shop(q.get("accent", "orange"))
                 elif k == "stall":
-                    stall(q["accent"])
+                    stall(q.get("accent", "orange"))
+                elif k == "bench":
+                    bench()
                 elif k == "greenhouse":
                     greenhouse(18)
                 elif k == "tank":
@@ -64,9 +68,11 @@ def build_town(L):
                 elif k == "pad":
                     pad(q["r"])
                 elif k == "hall":
-                    f = os.path.join(REPO, "tools", "blender", "proposals", "kepler_hall_%s.py" % os.environ.get("KEPLER_HALL", "a"))
-                    exec(open(f, encoding="utf-8").read(), globals())
-                    (build_hall_a if "hall_a" in f else build_hall_b)()
+                    if os.environ.get("KEPLER_HALL", "a") == "a":
+                        hall()
+                    else:
+                        exec(open(os.path.join(REPO, "tools", "blender", "proposals", "kepler_hall_b.py"), encoding="utf-8").read(), globals())
+                        build_hall_b()
 
 
 build_town(LAYOUT)

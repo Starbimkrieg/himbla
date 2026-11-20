@@ -11,7 +11,7 @@ import { bendPoint, bendQuat, unbendPoint } from './curve.js';
 import { SUN, frameQuat, arcDist, dirFromAngles, tangent, collectNodes } from './geo.js';
 import { buildCasino } from './casinoWorld.js'; // casino
 import { Traffic } from './traffic.js';
-import { buildHelium, buildMeridian, dressMonolith, buildTown, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot, settle, powerBlock, keplerHabitat, ilmbWing } from './settlements.js';
+import { buildHelium, buildMeridian, dressMonolith, buildTown, townSpot, dressIlmb, dressBase, dressArray, ARRAY_DISHES, buildDen, buildPirateCamp, buildRuin, dressScrap, jobTerminal, part as kitPart, dressCasinoLot, settle, powerBlock, keplerHabitat, ilmbWing } from './settlements.js';
 import { makeProp } from './storyAssets.js';
 import { buildHomeTown } from './hometown.js';
 import { spindleGeometry } from './spindle.js';
@@ -1316,13 +1316,15 @@ export class World {
     this.addFigures(loc, 12, { kind: 'worker', look: (i) => ({ suit: cols[i % cols.length] }) });
   }
 
-  // Kepler towns (settlements.js): hab domes and tunnels, cabins, playground, greenhouse, water tower;
-  // Kepler Civic Center adds the council dome and clock-tower town hall.
+  // Kepler towns (settlements.js buildTown, keplerLayout.js): hab domes and tunnels, raised modules, longhouses, shops and
+  // stalls round cleared lanes and courts; Kepler Civic Center has Earthrise Hall and the one road. The townsfolk walk the
+  // cleared ground.
   buildCivilian(loc) {
-    buildTown(this, loc, { civic: loc.id === 'kepler' });
+    const L = buildTown(this, loc);
     const palette = [0xff9f1c, 0xff7ad9, 0x2ec4ff, 0xffd23f, 0x7dff6a, 0xc77dff];
-    this.addFigures(loc, 8, { kind: 'worker', look: (i) => ({ suit: palette[i % palette.length] }) });
-    this.addFigures(loc, 7, { kind: 'kid', look: (i) => ({ suit: palette[(i + 3) % palette.length], scale: 0.55 }) });
+    const area = (p) => townSpot(L, () => this.r(), p);
+    this.addFigures(loc, 12, { kind: 'worker', look: (i) => ({ suit: palette[i % palette.length] }), area });
+    this.addFigures(loc, 6, { kind: 'kid', look: (i) => ({ suit: palette[(i + 3) % palette.length], scale: 0.55 }), area });
   }
 
   buildArray(loc) {

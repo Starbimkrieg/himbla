@@ -9,9 +9,10 @@ import { World } from '../world.js';
 import { DISH_SIZE } from '../models.js';
 import { bakeIlmbInto, bakeIlmbExtras, bakeUnitRow, parkingLot, bakeRocketPad } from '../ilmbCore.js';
 import { buildHomeTown, addBuilding, slotAt } from '../hometown.js';
+import { DOOR_HEX } from '../keplerLayout.js';
 import {
   habDome, cabin, warehouse, quonset, lattice, hortonSphere, floodMast, stack, ticker, conveyor, pipe, radar, searchlight, shanty,
-  wreckHull, jobTerminal, playground, waterTower, greenhouse, commsMast, townHall, towerCrane, gantryCrane, cargoStack, garage, dishStation, powerBlock, keplerHabitat, ilmbWing,
+  wreckHull, jobTerminal, commsMast, keplerPiece, keplerDome, keplerHall, towerCrane, gantryCrane, cargoStack, garage, dishStation, powerBlock, keplerHabitat, ilmbWing,
 } from '../settlements.js';
 import { ferrisWheel, carousel } from '../downsFair.js';
 import { animate, together, lineUp, factionHex } from './common.js';
@@ -167,14 +168,13 @@ const parts = {
   id: 'buildings.parts',
   title: '09 · BUILDING PARTS',
   items: [
-    item('part.habdome.family', 'HAB DOMES 6 · 12 · 16 M', 89, 41, () => row([
-      kitPart((k) => habDome(k, 0, 0, 6, 0xff7ad9, { trim: 0xff9f1c })),
-      kitPart((k) => habDome(k, 0, 0, 12, 0x2ec4ff, { trim: 0xffd23f })),
-      kitPart((k) => habDome(k, 0, 0, 16, 0xb8ffb0, { trim: 0xff9f1c, glass: true })),
-    ])),
-    item('part.habdome.hub', 'HAB DOME 22 M (TOWN HUB)', 51, 54, () => kitPart((k) => habDome(k, 0, 0, 22, 0xb8ffb0, { trim: 0xff9f1c }))),
-    item('part.habdome.council', 'HAB DOME 30 M (COUNCIL)', 68, 71, () => kitPart((k) => habDome(k, 0, 0, 30, 0xffd23f, { trim: 0xff9f1c }))),
-    item('part.habdome.great', 'HAB DOME 58 M (ILMB GREAT DOME)', 124, 128, () => kitPart((k) => habDome(k, 0, 0, 58, 0x9be7ff, { trim: YEL, cupola: false })), { big: true }),
+    // the Kepler town kit (kepler.glb, tools/blender/build_kepler.py; docs/kepler-proposals), as the towns bake it
+    item('part.kepler.dome-a', 'KEPLER DOME A, THE SHIELD: 6 · 10 · 12 · 14 · 18 M', 161, 45, () => row([6, 10, 12, 14, 18].map((r, i) => kitPart((k) => keplerDome(k, 'A', 0, 0, r, 0, Object.values(DOOR_HEX)[i]))))),
+    item('part.kepler.dome-b', 'KEPLER DOME B, THE GEODE: 6 · 11 · 13 · 16 · 22 M', 153, 50, () => row([6, 11, 13, 16, 22].map((r, i) => kitPart((k) => keplerDome(k, 'B', 0, 0, r, 0, Object.values(DOOR_HEX)[i]))))),
+    item('part.kepler.hall', 'EARTHRISE HALL (KEPLER CIVIC CENTER)', 45, 66, () => worldPart((world, loc, k) => keplerHall(world, loc, k, 0, 0, 0))),
+    item('part.kepler.station', 'KEPLER STATION PIECES', 123, 19, () => row(['stilt', 'stilt_plain', 'stilt_commons', 'longhouse', 'stall', 'bench', 'greenhouse', 'tank', 'tunnel', 'marker', 'solar_4']
+      .map((name) => kitPart((k) => keplerPiece(k, name, 0, 0, 0))))),
+    item('part.habdome.great', 'HAB DOME 58 M (OLD ILMB GREAT DOME, ?ilmbCore=old)', 124, 128, () => kitPart((k) => habDome(k, 0, 0, 58, 0x9be7ff, { trim: YEL, cupola: false })), { big: true }),
     item('part.cabin', 'PREFAB CABINS', 38, 9, () => row([
       kitPart((k) => cabin(k, 0, 0, 10, 8, 4.6, 0xff9f1c, 0, { trim: 0xffd23f })),
       kitPart((k) => cabin(k, 0, 0, 10, 8, 4.6, 0x2ec4ff, 0, { trim: 0xff7ad9, solar: true })),
@@ -210,14 +210,10 @@ const parts = {
     ])),
     item('part.wreck-hull', 'WRECKED SHIP HULL', 33, 23, () => kitPart((k) => wreckHull(k, 0, 0, 0, 24, 0x6b4a32))),
     item('part.job-terminal', 'JOB TERMINAL (CODE-BUILT, ?ilmbCore=old)', 20, 9, () => viaWorld((world, loc) => jobTerminal(world, loc, 0, 0, 0, YEL))),
-    item('part.playground', 'PLAYGROUND', 26.5, 26.5, () => worldPart((world, loc, k) => playground(world, loc, k, 0, 0, 0))),
-    item('part.water-tower', 'WATER TOWER', 9, 9, () => worldPart((world, loc, k) => waterTower(world, loc, k, 0, 0, 0xff9f1c))),
-    item('part.greenhouse', 'GREENHOUSE', 7.5, 18.5, () => worldPart((world, loc, k) => greenhouse(world, loc, k, 0, 0, 0))),
     item('part.comms-mast', 'COMMS MASTS 16 · 30 M', 12, 3, () => row([
       worldPart((world, loc, k) => commsMast(world, loc, k, 0, 0, 16, 0xff9f1c, 'kepler')),
       worldPart((world, loc, k) => commsMast(world, loc, k, 0, 0, 30, 0xffd23f, 'spacecom')),
     ], 6)),
-    item('part.town-hall', 'KEPLER TOWN HALL', 44, 19, () => worldPart((world, loc, k) => townHall(world, loc, k))),
     item('part.ferris-wheel', 'FERRIS WHEEL', 50, 12, () => worldPart((world, loc, k) => ferrisWheel(world, loc, k, 0, 0))),
     item('part.carousel', 'CAROUSEL', 22, 22, () => worldPart((world, loc, k) => carousel(world, loc, k, 0, 0))),
     item('part.tower-crane', 'TOWER CRANE', 44, 9, () => kitPart((k) => towerCrane(k, 0, 0, 34, 30, YEL, { speed: 0.12 }))),
@@ -262,7 +258,7 @@ const parts = {
     ], 4)),
     item('part.ilmb-rocket-pad', 'ILMB ROCKET PAD · GANTRY', 52, 52, () => kitPart((k) => bakeRocketPad(k))),
     item('part.ilmb-spheres', 'ILMB FUEL SPHERES', 32, 17, () => row([kitPart((k) => bakeIlmbInto(k, 'horton_red')), kitPart((k) => bakeIlmbInto(k, 'horton_blue'))])),
-    item('part.ilmb-domes', 'ILMB FAMILY DOMES', 74, 44, () => row([kitPart((k) => bakeIlmbInto(k, 'dome_pink')), kitPart((k) => bakeIlmbInto(k, 'dome_gold'))])),
+    item('part.ilmb-domes', 'ILMB FAMILY DOMES (KEPLER GEODES)', 63, 38, () => row([kitPart((k) => keplerDome(k, 'B', 0, 0, 16, 0, DOOR_HEX.pink)), kitPart((k) => keplerDome(k, 'B', 0, 0, 13, 0, DOOR_HEX.gold))])),
     item('part.ilmb-barracks', 'ILMB BARRACKS · DEPOT', 50, 36, () => row([kitPart((k) => bakeIlmbInto(k, 'barracks')), kitPart((k) => bakeIlmbInto(k, 'depot'))])),
     item('part.ilmb-mast', 'ILMB COMMS MAST · PYLON', 14, 6, () => row([kitPart((k) => bakeIlmbInto(k, 'mast')), kitPart((k) => bakeIlmbInto(k, 'pylon'))])),
     item('part.dish-stations', 'DISH STATIONS (CRYO · GANTRY)', 66, 30, () => row([

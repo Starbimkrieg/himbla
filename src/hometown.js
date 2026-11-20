@@ -6,7 +6,7 @@
 // the next load, after a "one week later" cut).
 import * as THREE from 'three';
 import { Kit, T, G, GLASS, crate, sandbags } from './outpostModels.js';
-import { habDome, cabin, quonset, lattice, warehouse } from './settlements.js';
+import { keplerDome, cabin, quonset, lattice, warehouse } from './settlements.js';
 import { makeTurret, makeRover } from './models.js';
 import { FACTIONS } from './locations.js';
 import { saveWorldState } from './worldstate.js';
@@ -159,9 +159,10 @@ function buildingKit(type) {
     k.cyl(13, 13.5, 0.3, 32, T(0xb8b4c8), 0, 0, 0, { outline: 0.04 });
     switch (type) {
       case 'housing':
-        habDome(k, -5, -2, 6.5, 0x9be7ff, { door: Math.PI, trim: KEP });
-        habDome(k, 6, -1, 5.5, 0xffd23f, { door: Math.PI, trim: GRN });
-        habDome(k, 0, 7, 5, 0xff7ad9, { door: Math.PI, trim: KEP });
+        // three geodesic domes from the Kepler town kit, shrunk to the plot (kepler.glb has 6 m as its smallest)
+        keplerDome(k, 'B', -5, -2, 6, Math.PI, 0x9be7ff, 0.9);
+        keplerDome(k, 'B', 6, -1, 6, Math.PI, 0xffd23f, 0.75);
+        keplerDome(k, 'B', 0, 7, 6, Math.PI, 0xff7ad9, 0.65);
         break;
       case 'market':
         warehouse(k, 0, 2, 16, 11, 6, 0xd8d4e8, 0, KEP);

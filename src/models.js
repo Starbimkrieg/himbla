@@ -53,6 +53,7 @@ const GLB = {
   ilmb: () => import('./assets/ilmb.glb?inline'),
   fixtures: () => import('./assets/fixtures.glb?inline'),
   rocket: () => import('./assets/rocket.glb?inline'),
+  kepler: () => import('./assets/kepler.glb?inline'),
   hydroponics: () => import('./assets/hydroponics.glb?inline'),
   labs: () => import('./assets/labs.glb?inline'),
   hangar: () => import('./assets/hangar.glb?inline'),
@@ -1077,7 +1078,7 @@ const SHIP_TOON = { trim: 0xd8d4e8, dark: 0x2a2540, metal: 0x8a87a0, steel: 0x55
 const SHIP_FX = new Set(['plume', 'plumeCore', 'lift', 'engine', 'core', 'beacon']); // per-ship materials (they pulse)
 const FLAMES = new Set(['plume', 'plumeCore', 'lift', 'beacon']);
 export async function loadShipParts({ ships } = {}) {
-  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, wp, ska, skb, tu, pw, hb, il, fx, rk, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'weapons', 'skimmer_a', 'skimmer_b', 'turret', 'power', 'habitat', 'ilmb', 'fixtures', 'rocket', ...ILMB_WINGS, ...DOWNS_FILES, 'zlab'].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
+  const [gltf, sk, wr, rv, ic, ap, lt, cr, ga, di, en, bc, hc, sl, pk, cs, bj, gy, cl, dd, hl, lo, lb, wp, ska, skb, tu, pw, hb, il, fx, rk, kp, ...more] = await Promise.all(['ships', 'skimmer', 'warrig', 'rover', 'interceptor', 'apc', 'landtrain', 'crane', 'garage', 'dish', 'engine', 'briefcase', 'hovercar', 'slots', 'plinko', 'casino', 'blackjack', 'gantry', 'claw', 'duck', 'hall', 'lot', 'lightbike', 'weapons', 'skimmer_a', 'skimmer_b', 'turret', 'power', 'habitat', 'ilmb', 'fixtures', 'rocket', 'kepler', ...ILMB_WINGS, ...DOWNS_FILES, 'zlab'].map((n) => loadGlb(n, n === 'ships' ? ships : undefined)));
   // a root node in a loaded file (`file`.glb), or a load error
   const named = (g, file, name) => {
     const o = g.scene.getObjectByName(name);
@@ -1123,6 +1124,8 @@ export async function loadShipParts({ ships } = {}) {
   for (const o of fx.scene.children) if (o.name.startsWith('fx_')) SHIP_PARTS[o.name] = bakeShip(o);
   // the ILMB's Earth rocket, its gantry and pad (tools/blender/build_rocket.py)
   for (const o of rk.scene.children) if (o.name.startsWith('rocket_')) SHIP_PARTS[o.name] = bakeShip(o);
+  // the Kepler town kit: the hab domes, the town hall, the station pieces (tools/blender/build_kepler.py)
+  for (const o of kp.scene.children) if (o.name.startsWith('kepler_')) SHIP_PARTS[o.name] = bakeShip(o);
   // the ILMB's other wings (tools/blender/build_<name>.py)
   ILMB_WINGS.forEach((name, i) => { SHIP_PARTS[name] = bakeShip(named(more[i], name, name)); });
   const dn = more.slice(ILMB_WINGS.length);
@@ -1908,6 +1911,29 @@ export function fixtureModel(name) {
   const root = SHIP_PARTS?.[`fx_${name}`];
   if (!root) throw new Error(`fixtures.glb has no fx_${name}`);
   return { root, data: root.data, cols: root.kids.filter((k) => k.role === 'col') };
+}
+
+// ---- the Kepler town kit (build_kepler.py; docs/kepler-proposals) ----
+// Roots `kepler_<piece>`, each its own model at the origin, its door toward +z (src/settlements.js keplerPiece places them).
+// Tree: root meshes = everything static; `lock` = a geodesic dome's airlock and portholes (the game turns it to the door's
+// side, the shell keeps facing the sun); `hand` = the town hall's clock hands (extras `rate`, `side`); `col` = colliders
+// (extra `lock` on those that turn with the lock). Slot `household` is a home's door (the caller's colour), `cleared` the
+// graded ground (the caller's material), `glass` see-through.
+const KEPLER_TOON = {
+  cream: 0xfff4e0, white: 0xf3eee4, light: 0xd8d4e8, alu: 0xc9ced8, metal: 0x8a87a0, steel: 0x55607a, panel: 0x5b5870, roof: 0x3a3550,
+  dark: 0x2a2540, door: 0x2a2540, concrete: 0xb8b2cc, pave: 0x9d97b0, regolith: 0x8a8296, orange: 0xff9f1c, green: 0x6a8f3a,
+  gold: 0xffd23f, solar: 0x1d2f6b, blue: 0x2ec4ff, soil: 0x4a4660, leaf: 0x1f8a3a, leaf2: 0x5cc94a, cleared: 0x9a94a8,
+};
+const KEPLER_GLOW = { window: 0xfff6a8, lamp: 0xfff6a8, pane: 0xbfefff, beacon: 0xff9f1c, redlamp: 0xff2a4a, earth: 0x4fa8ff, shop: 0xe8dcc0, grow: 0xd8a0ff };
+export function keplerSlot(slot) {
+  if (slot in KEPLER_GLOW) return { color: KEPLER_GLOW[slot], glow: true };
+  return { color: KEPLER_TOON[slot] ?? 0xff00ff, glow: false };
+}
+export function keplerModel(name) {
+  const root = SHIP_PARTS?.[`kepler_${name}`];
+  if (!root) throw new Error(`kepler.glb has no kepler_${name}`);
+  const kids = (role) => root.kids.filter((k) => k.role === role);
+  return { root, data: root.data, cols: kids('col'), lock: kids('lock')[0] || null, hands: kids('hand') };
 }
 
 // a baked piece: static root, lamps, turning parts, colliders, turret mounts

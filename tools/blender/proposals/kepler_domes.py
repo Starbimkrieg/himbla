@@ -1,16 +1,17 @@
 # PROPOSAL sheet for the Kepler town kit (docs/kepler-proposals): the two hab-dome remodels at three sizes, and the station
-# pieces the town layouts use, lined up for review. Pieces are kepler_kit.py's.
+# pieces the town layouts use, lined up for review. Pieces are kepler_kit.py's (tools/blender/, which build_kepler.py exports).
 #
 #   MOONRUNNER_REPO=<repo> blender -b --factory-startup --python tools/blender/proposals/kepler_domes.py
 #   (preview_kepler.py builds it and renders the review pictures)
 #
-# KEPLER_SET picks what is lined up: "domes" (default: A and B at r 8, 14 and 22), "pieces" (the station pieces).
+# KEPLER_SET picks what is lined up: "domes" (default: A and B at r 8, 14 and 22), "pieces" (the station pieces), "hall"
+# (hall A, Earthrise Hall: the one built).
 
 import bpy, math, os
 
 REPO = os.environ.get("MOONRUNNER_REPO") or os.path.abspath(os.path.join(os.path.dirname(globals().get("__file__", ".")), "..", "..", ".."))
 COLL = "KeplerKit"
-exec(open(os.path.join(REPO, "tools", "blender", "proposals", "kepler_kit.py"), encoding="utf-8").read(), globals())
+exec(open(os.path.join(REPO, "tools", "blender", "kepler_kit.py"), encoding="utf-8").read(), globals())
 
 ROOT = pivot("kepler_kit", (0, 0, 0), None, proposal="kit")
 SET = os.environ.get("KEPLER_SET", "domes")
@@ -24,6 +25,9 @@ if SET == "domes":
         with at(x, -62):
             dome_b(r, DOORS[i + 2])
             figure(2.6, r + 6)
+elif SET == "hall":
+    hall()
+    figure(4, 30)
 else:
     with at(-40, 0):                                      # three modules chained, the commons in the middle
         for i, f in enumerate((False, True, False)):

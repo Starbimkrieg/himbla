@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { Kit, T, G, GLASS, BEAM, crate, sandbags } from './outpostModels.js';
 import { rWheel, makeTurret, RUSTMOON_LOOK } from './models.js';
-import { habDome, cabin, lattice, quonset } from './settlements.js';
+import { keplerDome, cabin, lattice, quonset } from './settlements.js';
 
 const DK = 0x1d1a29, ST = 0x55607a, LT = 0xd8d4e8, CONC = 0x8a8698, CREAM = 0xfff4e0, WARM = 0xfff6a8;
 const cache = new Map();
@@ -357,7 +357,7 @@ export function foundedTemplate(kind, color, modules) {
       k.box(10, 0.8, 0.12, G(WARM), 0, 3.4, 5.06, { outline: 0 });
       k.solid(8, 3.5, 5, 0, 0);
     } else {
-      habDome(k, 0, 0, 10, kind === 'homestead' ? 0xb8ffb0 : 0xeeecf6, { door: 0, trim: color });
+      keplerDome(k, 'A', 0, 0, 10, 0, color);   // (the Kepler town kit's: its door in the founder's colour)
       k.at();
     }
     // terminal at the path's end
